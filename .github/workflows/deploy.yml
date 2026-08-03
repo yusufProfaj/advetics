@@ -1,0 +1,163 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_verify:
+        description: 'Doğrulama adımını atla (yalnızca acil durumda)'
+        type: boolean
+        default: false
+
+# Aynı anda yalnızca TEK dağıtım çalışır.
+# cancel-in-progress KASITLI olarak false: yarıda kesilen bir dağıtım,
+# migration'ı uygulanmış ama kodu derlenmemiş bir sunucu bırakabilir.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) Doğrulama — sunucuya dokunmadan önce runner'da derle.
+  #    Derlenmeyen kod sunucuya hiç gitmez.
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Doğrula (tip + derleme)
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_verify }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Bağımlılıkları kur
+        run: pnpm install --frozen-lockfile
+
+      - name: Paylaşılan paketi derle
+        run: pnpm --filter @advetics/shared build
+
+      - name: Prisma istemcisini üret
+        run: pnpm --filter @advetics/api exec prisma generate
+
+      - name: Tip kontrolü
+        run: pnpm typecheck
+
+      - name: Derle
+        run: |
+          pnpm --filter @advetics/api build
+          pnpm --filter @advetics/web build
+        env:
+          # NEXT_PUBLIC_* değerleri build anında gömülür. Burada yalnızca
+          # derlemenin geçtiğini doğruluyoruz; sunucudaki gerçek build kendi
+          # .env dosyasını kullanır.
+          NEXT_PUBLIC_API_URL: https://advetics.com/api
+          NEXT_PUBLIC_ROOT_DOMAIN: advetics.com
+
+      - name: RLS kapsama kontrolü
+        # Prisma şemasındaki her model, RLS dosyasındaki tablo listesinde
+        # olmalı. Yeni bir tablo eklenip politikası yazılmazsa dağıtım DURUR —
+        # korumasız bir tablonun üretime çıkmasındansa build'in patlaması iyidir.
+        run: |
+          set -euo pipefail
+          missing=0
+          while read -r table; do
+            if ! grep -q "'${table}'" apps/api/prisma/sql/02_rls.sql; then
+              echo "::error::Tablo '${table}' için RLS politikası tanımlı değil (apps/api/prisma/sql/02_rls.sql)"
+              missing=1
+            fi
+          done < <(grep -oE '@@map\("([a-z_]+)"\)' apps/api/prisma/schema.prisma | sed -E 's/@@map\("(.*)"\)/\1/')
+          if [ "$missing" -eq 1 ]; then
+            exit 1
+          fi
+          echo "Tüm tablolar RLS listesinde tanımlı."
+
+  # ---------------------------------------------------------------------------
+  # 2) Dağıtım — SSH ile sunucuya bağlan, kodu çek, scripts/deploy.sh çalıştır.
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Sunucuya dağıt
+    needs: [verify]
+    # always() + doğrulama başarılı ya da atlanmış: skip_verify kullanıldığında
+    # needs başarısız sayılmasın diye.
+    if: ${{ always() && (needs.verify.result == 'success' || inputs.skip_verify) }}
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://advetics.com
+
+    steps:
+      - name: SSH ile dağıt
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          command_timeout: 20m
+          script_stop: true
+          script: |
+            set -Eeuo pipefail
+
+            APP_DIR="${{ secrets.VPS_APP_PATH }}"
+            cd "$APP_DIR"
+
+            # CloudPanel'in site kullanıcısı genelde login shell kullanmaz;
+            # nvm/pnpm PATH'ini açıkça yüklüyoruz.
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            export PATH="$HOME/.local/share/pnpm:$PATH"
+
+            echo "▸ Kod güncelleniyor"
+            git fetch --all --prune
+            git reset --hard origin/main
+            git clean -fd -e .env -e logs -e .last-deployed-sha
+
+            chmod +x scripts/deploy.sh
+            ./scripts/deploy.sh
+
+      - name: Dışarıdan doğrula
+        run: |
+          set -euo pipefail
+          echo "https://advetics.com/api/health kontrol ediliyor…"
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /tmp/health.json -w '%{http_code}' --max-time 10 https://advetics.com/api/health || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "API sağlıklı:"; cat /tmp/health.json; echo
+              break
+            fi
+            echo "  deneme $i/10 → HTTP $code"; sleep 6
+            if [ "$i" = "10" ]; then
+              echo "::error::API dışarıdan erişilemiyor. Nginx yapılandırmasını kontrol et (docs/DEPLOYMENT.md)."
+              exit 1
+            fi
+          done
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://advetics.com/login || echo 000)
+          [ "$code" = "200" ] || { echo "::error::Panel yanıt vermedi (HTTP $code)"; exit 1; }
+          echo "Panel sağlıklı."
+
+      - name: Özet
+        if: always()
+        run: |
+          {
+            echo "### Dağıtım — ${{ job.status }}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Mesaj | ${{ github.event.head_commit.message }} |"
+            echo "| Tetikleyen | @${{ github.actor }} |"
+            echo "| Panel | https://advetics.com |"
+            echo "| API | https://advetics.com/api/health |"
+          } >> "$GITHUB_STEP_SUMMARY"

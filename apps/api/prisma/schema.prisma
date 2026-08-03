@@ -1,0 +1,323 @@
+// =============================================================================
+// Advetics — Prisma Şeması
+// Modül 1: Kiracılık, Kimlik Doğrulama, RBAC, White-Label Marka, Denetim
+//
+// NOT: RLS politikaları, partial unique index'ler ve CHECK constraint'leri
+// Prisma ile ifade edilemez. Bunlar prisma/sql/ altında elle yazılmıştır ve
+// `pnpm db:rls` ile uygulanır. Migration'dan sonra o adımı ATLAMA.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Runtime: advetics_app rolü — RLS UYGULANIR
+  url       = env("DATABASE_URL")
+  // Migration + seed: advetics_migrator rolü — tablo sahibi, BYPASSRLS
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Enum'lar
+// -----------------------------------------------------------------------------
+
+enum OrgPlan {
+  starter
+  pro
+  enterprise
+}
+
+enum OrgStatus {
+  active
+  suspended
+}
+
+enum UserStatus {
+  active
+  invited
+  disabled
+}
+
+enum ClientStatus {
+  active
+  paused
+  archived
+}
+
+enum Role {
+  owner
+  admin
+  manager
+  analyst
+  client_viewer
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  revoked
+  expired
+}
+
+enum ActorType {
+  user
+  rule
+  system
+}
+
+// Kapsam kilidi: yalnızca Meta ve Google Ads.
+enum Platform {
+  meta
+  google
+}
+
+// -----------------------------------------------------------------------------
+// Kiracılık
+// -----------------------------------------------------------------------------
+
+/// Ajansın kendisi. MVP'de tek satır; reseller/white-label satışı için gerekli.
+model Organization {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @db.VarChar(120)
+  slug      String    @unique @db.VarChar(60)
+  plan      OrgPlan   @default(starter)
+  status    OrgStatus @default(active)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  users       User[]
+  clients     Client[]
+  memberships Membership[]
+  branding    BrandingProfile[]
+  invitations Invitation[]
+  auditLogs   AuditLog[]
+
+  @@map("organizations")
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  orgId        String     @map("org_id") @db.Uuid
+  /// Daima küçük harfe normalize edilerek saklanır (Zod `toLowerCase`).
+  email        String     @db.VarChar(255)
+  /// argon2id hash. SSO ile gelen kullanıcılarda null.
+  passwordHash String?    @map("password_hash") @db.Text
+  fullName     String     @map("full_name") @db.VarChar(120)
+  avatarUrl    String?    @map("avatar_url") @db.VarChar(1024)
+  locale       String     @default("tr") @db.VarChar(10)
+  /// TOTP secret — AES-256-GCM ile şifreli. (MFA Modül 1.5'te aktifleşir.)
+  mfaSecretEnc Bytes?     @map("mfa_secret_enc")
+  mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
+  status       UserStatus @default(invited)
+  lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz(6)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization       Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  memberships        Membership[]
+  refreshTokens      RefreshToken[]
+  passwordResets     PasswordResetToken[]
+  invitationsCreated Invitation[]        @relation("InvitationCreatedBy")
+
+  @@unique([orgId, email])
+  @@index([orgId, status])
+  @@map("users")
+}
+
+/// Ajansın müşterileri. Tüm reklam verisi bu düğüme asılır.
+model Client {
+  id                String       @id @default(uuid()) @db.Uuid
+  orgId             String       @map("org_id") @db.Uuid
+  name              String       @db.VarChar(120)
+  slug              String       @db.VarChar(60)
+  /// IANA timezone. "Bugünün harcaması" tanımı buna bağlıdır.
+  timezone          String       @default("Europe/Istanbul") @db.VarChar(64)
+  /// Çok para birimli toplamada hedef kur (fx_rates ile çevrilir).
+  reportingCurrency String       @default("TRY") @map("reporting_currency") @db.Char(3)
+  status            ClientStatus @default(active)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt        DateTime?    @map("archived_at") @db.Timestamptz(6)
+
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  memberships  Membership[]
+  branding     BrandingProfile?
+  invitations  Invitation[]
+
+  @@unique([orgId, slug])
+  @@index([orgId, status])
+  @@map("clients")
+}
+
+/// Kullanıcı ↔ erişim yetkisi. RLS'in dayandığı tablodur.
+model Membership {
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @map("user_id") @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  /// null => org geneli erişim (yalnızca owner/admin).
+  /// Bunun tekilliği partial unique index ile korunur — bkz. prisma/sql/01_constraints.sql
+  clientId String? @map("client_id") @db.Uuid
+  role     Role
+  /// Yetki override: { "rule.activate": false }. Rolü daima ezer.
+  permissions Json? @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+  @@index([orgId])
+  @@index([clientId])
+  @@map("memberships")
+}
+
+// -----------------------------------------------------------------------------
+// White-Label
+// -----------------------------------------------------------------------------
+
+/// clientId null => organizasyon varsayılanı.
+/// Bir client'a özel profil yoksa org varsayılanına geri düşülür.
+model BrandingProfile {
+  id       String  @id @default(uuid()) @db.Uuid
+  orgId    String  @map("org_id") @db.Uuid
+  clientId String? @unique @map("client_id") @db.Uuid
+
+  logoUrl     String? @map("logo_url") @db.VarChar(1024)
+  logoDarkUrl String? @map("logo_dark_url") @db.VarChar(1024)
+  faviconUrl  String? @map("favicon_url") @db.VarChar(1024)
+
+  primaryColor String @default("#2563EB") @map("primary_color") @db.VarChar(9)
+  accentColor  String @default("#0EA5E9") @map("accent_color") @db.VarChar(9)
+  fontFamily   String @default("Inter") @map("font_family") @db.VarChar(120)
+
+  /// Rapor paylaşım linklerinin servis edileceği alan adı.
+  customDomain     String?   @unique @map("custom_domain") @db.VarChar(255)
+  domainVerifiedAt DateTime? @map("domain_verified_at") @db.Timestamptz(6)
+  /// DNS TXT doğrulaması için tek kullanımlık değer.
+  domainVerifyToken String?  @map("domain_verify_token") @db.VarChar(64)
+
+  emailFromName    String  @default("Advetics") @map("email_from_name") @db.VarChar(120)
+  emailFromAddress String? @map("email_from_address") @db.VarChar(255)
+  footerText       String? @map("footer_text") @db.VarChar(500)
+  hidePoweredBy    Boolean @default(false) @map("hide_powered_by")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("branding_profiles")
+}
+
+// -----------------------------------------------------------------------------
+// Oturum ve kimlik doğrulama
+// -----------------------------------------------------------------------------
+
+/// Refresh token'ın kendisi DEĞİL, SHA-256 hash'i saklanır.
+/// `familyId` rotasyon zinciridir: kullanılmış bir token tekrar sunulursa
+/// (token theft göstergesi) tüm aile iptal edilir.
+model RefreshToken {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+  tokenHash String @unique @map("token_hash") @db.VarChar(64)
+  familyId  String @map("family_id") @db.Uuid
+
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedReason String?  @map("revoked_reason") @db.VarChar(64)
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+
+  ip        String?  @db.Inet
+  userAgent String?  @map("user_agent") @db.VarChar(512)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model Invitation {
+  id        String           @id @default(uuid()) @db.Uuid
+  orgId     String           @map("org_id") @db.Uuid
+  clientId  String?          @map("client_id") @db.Uuid
+  email     String           @db.VarChar(255)
+  role      Role
+  tokenHash String           @unique @map("token_hash") @db.VarChar(64)
+  status    InvitationStatus @default(pending)
+
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdById String    @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("InvitationCreatedBy", fields: [createdById], references: [id])
+
+  @@index([orgId, status])
+  @@index([email])
+  @@map("invitations")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  ip        String?   @db.Inet
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// -----------------------------------------------------------------------------
+// Denetim
+// -----------------------------------------------------------------------------
+
+/// Kim, ne zaman, neyi değiştirdi.
+/// Bu üründe bütçeler değişiyor — bu tablo pazarlık konusu değildir.
+/// Modül 5'te kural motoru buraya actorType='rule' ile yazacak.
+model AuditLog {
+  id       BigInt    @id @default(autoincrement())
+  orgId    String    @map("org_id") @db.Uuid
+  clientId String?   @map("client_id") @db.Uuid
+
+  actorType ActorType @default(user) @map("actor_type")
+  actorId   String?   @map("actor_id") @db.Uuid
+  actorLabel String?  @map("actor_label") @db.VarChar(255)
+
+  /// Nokta ile ayrılmış eylem anahtarı: `client.created`, `budget.increased`
+  action     String  @db.VarChar(80)
+  targetType String? @map("target_type") @db.VarChar(60)
+  targetId   String? @map("target_id") @db.VarChar(128)
+
+  before Json? @db.JsonB
+  after  Json? @db.JsonB
+
+  ip        String?  @db.Inet
+  userAgent String?  @map("user_agent") @db.VarChar(512)
+  requestId String?  @map("request_id") @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([clientId, createdAt(sort: Desc)])
+  @@index([action])
+  @@map("audit_logs")
+}

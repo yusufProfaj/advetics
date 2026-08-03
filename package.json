@@ -1,0 +1,27 @@
+{
+  "name": "advetics",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm --filter @advetics/shared build && pnpm --filter \"./apps/*\" build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d",
+    "db:migrate": "pnpm --filter @advetics/api db:migrate",
+    "db:rls": "pnpm --filter @advetics/api db:rls",
+    "db:seed": "pnpm --filter @advetics/api db:seed",
+    "db:setup": "pnpm db:migrate && pnpm db:rls && pnpm db:seed",
+    "db:studio": "pnpm --filter @advetics/api db:studio"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  }
+}
