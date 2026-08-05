@@ -94,7 +94,10 @@ DECLARE
     -- Modül 2
     'platform_connections', 'ad_accounts', 'social_profiles', 'oauth_states',
     -- Politikası KASITLI olarak yok — aşağıdaki nota bak.
-    'data_deletion_requests'
+    'data_deletion_requests',
+    -- Modül 3
+    'campaigns', 'ad_groups', 'ads', 'creatives', 'insights_daily',
+    'fx_rates', 'sync_jobs', 'api_usage_log'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -323,6 +326,84 @@ CREATE POLICY adv_oauth_states_insert ON oauth_states
     org_id = app.current_org_id()
     AND created_by_user_id = app.current_user_id()
     AND app.can_access_client(client_id)
+  );
+
+-- =============================================================================
+-- MODÜL 3 — Reklam hiyerarşisi ve metrikler
+-- =============================================================================
+--
+-- Hepsi müşteri düzeyi veri. `client_id` bilerek DENORMALİZE edildi: politikayı
+-- join'siz yazmak, her satır için üst tabloya gitmek zorunda kalmamak demek.
+-- 47 milyon satırlı bir tabloda politika içindeki bir join, sorgu planını
+-- mahveder.
+
+CREATE POLICY adv_campaigns_select ON campaigns
+  FOR SELECT USING (app.can_access_client(client_id));
+CREATE POLICY adv_campaigns_write ON campaigns
+  FOR ALL USING (app.can_access_client(client_id))
+          WITH CHECK (app.can_access_client(client_id));
+
+CREATE POLICY adv_ad_groups_select ON ad_groups
+  FOR SELECT USING (app.can_access_client(client_id));
+CREATE POLICY adv_ad_groups_write ON ad_groups
+  FOR ALL USING (app.can_access_client(client_id))
+          WITH CHECK (app.can_access_client(client_id));
+
+CREATE POLICY adv_ads_select ON ads
+  FOR SELECT USING (app.can_access_client(client_id));
+CREATE POLICY adv_ads_write ON ads
+  FOR ALL USING (app.can_access_client(client_id))
+          WITH CHECK (app.can_access_client(client_id));
+
+CREATE POLICY adv_creatives_select ON creatives
+  FOR SELECT USING (app.can_access_client(client_id));
+CREATE POLICY adv_creatives_write ON creatives
+  FOR ALL USING (app.can_access_client(client_id))
+          WITH CHECK (app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- insights_daily — partitioned tablo
+--
+-- Politika ANA tabloda tanımlı. Postgres'te ana tablo üzerinden yapılan
+-- sorgularda bu politikalar partition'lara da uygulanır. Bir partition'a
+-- DOĞRUDAN erişim ana tablonun politikalarını atladığı için 03_partitions.sql
+-- her partition'a ayrıca politika ekliyor — ileride biri optimizasyon adına
+-- doğrudan partition sorgusu yazarsa izolasyon sessizce kaybolmasın.
+--
+-- Yazma yalnızca worker'ın işi ve o BYPASSRLS rolüyle bağlanıyor; yine de
+-- politika yazıyoruz ki uygulama rolü kazara yazmaya çalışırsa engellensin.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_insights_select ON insights_daily
+  FOR SELECT USING (app.can_access_client(client_id));
+CREATE POLICY adv_insights_write ON insights_daily
+  FOR ALL USING (app.can_access_client(client_id))
+          WITH CHECK (app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- fx_rates — müşteriye bağlı DEĞİL, tüm organizasyonlar için ortak referans veri.
+-- Okuma serbest, yazma yalnızca worker'ın (BYPASSRLS) işi.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_fx_rates_select ON fx_rates
+  FOR SELECT USING (app.has_context());
+
+CREATE POLICY adv_sync_jobs_select ON sync_jobs
+  FOR SELECT USING (app.can_access_client(client_id));
+-- Kullanıcı elle senkronizasyon tetikleyebiliyor; kayıt oluşturmasına izin var.
+CREATE POLICY adv_sync_jobs_insert ON sync_jobs
+  FOR INSERT WITH CHECK (app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- api_usage_log — kota telemetrisi.
+--
+-- client_id NULL olabilir (henüz hesaba bağlanmamış çağrılar). Org yöneticisi
+-- kendi organizasyonunun tüketimini görmeli; müşteri düzeyi kullanıcının
+-- kota telemetrisine ihtiyacı yok.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_api_usage_select ON api_usage_log
+  FOR SELECT USING (
+    app.is_org_admin()
+    AND client_id IS NOT NULL
+    AND client_id = ANY (app.current_client_ids())
   );
 
 -- -----------------------------------------------------------------------------

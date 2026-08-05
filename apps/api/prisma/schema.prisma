@@ -152,6 +152,13 @@ model Client {
   adAccounts     AdAccount[]
   socialProfiles SocialProfile[]
 
+  // Modül 3
+  campaigns Campaign[]
+  adGroups  AdGroup[]
+  ads       Ad[]
+  creatives Creative[]
+  syncJobs  SyncJob[]
+
   @@unique([orgId, slug])
   @@index([orgId, status])
   @@map("clients")
@@ -445,6 +452,7 @@ model AdAccount {
   client     Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   connection PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   boostTargets SocialProfile[]  @relation("BoostBillingAccount")
+  campaigns  Campaign[]
 
   @@unique([platform, externalId, clientId])
   @@index([clientId, syncEnabled])
@@ -556,4 +564,376 @@ model DataDeletionRequest {
   @@index([externalUserId])
   @@index([requestedAt])
   @@map("data_deletion_requests")
+}
+
+// =============================================================================
+// MODÜL 3 — Birleşik Reklam Hiyerarşisi ve Metrikler
+// =============================================================================
+//
+// TASARIM KARARI: Meta ve Google TEK şemaya normalize edilir
+// (Campaign → AdGroup → Ad). Meta'nın "Ad Set"i ve Google'ın "Ad Group"u aynı
+// tabloya oturur. "Unified Workspace" ve "Ads Explorer"ı mümkün kılan şey budur.
+// Platforma özgü her şey `raw` JSONB'de yaşar.
+
+enum EntityStatus {
+  active
+  paused
+  deleted
+  pending_review
+  ended
+  unknown
+}
+
+enum BudgetMode {
+  daily
+  lifetime
+  /// Bütçe üst seviyede tanımlı (Meta CBO / Google kampanya bütçesi).
+  none
+}
+
+enum EntityLevel {
+  account
+  campaign
+  ad_group
+  ad
+}
+
+enum SyncJobType {
+  /// L1 — kampanya/adset/ad meta verisi, durum, bütçe
+  structure
+  /// L2 — bugünün metrikleri, yalnızca account + campaign
+  insights_realtime
+  /// L3 — dün, tüm seviyeler
+  insights_daily
+  /// L4 — atıf penceresi geri düzeltmesi
+  insights_backfill
+  /// L5 — kırılımlar (opt-in)
+  insights_breakdown
+  /// L6 — organik post metrikleri (Auto-Boost)
+  organic_posts
+  /// L7 — yeni hesap bağlandığında geçmiş
+  initial_backfill
+}
+
+enum SyncJobStatus {
+  queued
+  running
+  succeeded
+  /// Kota nedeniyle geri çekildi; next_retry_at sonra tekrar denenir.
+  throttled
+  failed
+  cancelled
+}
+
+model Campaign {
+  id           String @id @default(uuid()) @db.Uuid
+  adAccountId  String @map("ad_account_id") @db.Uuid
+  /// Denormalize — RLS ve hızlı filtre için. Join'siz sorgu maliyeti düşer.
+  clientId     String @map("client_id") @db.Uuid
+  platform     Platform
+
+  externalId String @map("external_id") @db.VarChar(128)
+  name       String @db.VarChar(512)
+
+  /// Normalize edilmiş amaç. Platformların ham değerleri `raw` içinde.
+  objective       String? @db.VarChar(60)
+  status          EntityStatus @default(unknown)
+  /// Platformun ham durumu — "PAUSED" ile "CAMPAIGN_PAUSED" farkını korur.
+  effectiveStatus String? @map("effective_status") @db.VarChar(60)
+
+  budgetMode         BudgetMode @default(none) @map("budget_mode")
+  /// Para MICROS cinsinden. Float ile para tutmak toplama sırasına göre
+  /// kuruş kaymaları üretir; Google Ads API zaten micros kullanıyor.
+  budgetAmountMicros BigInt?    @map("budget_amount_micros")
+  bidStrategy        String?    @map("bid_strategy") @db.VarChar(60)
+
+  startTime DateTime? @map("start_time") @db.Timestamptz(6)
+  stopTime  DateTime? @map("stop_time") @db.Timestamptz(6)
+
+  raw Json? @db.JsonB
+  /// Delta senkronizasyonun anahtarı: bundan yenisini çekmek yeter.
+  platformUpdatedAt DateTime? @map("platform_updated_at") @db.Timestamptz(6)
+  syncedAt          DateTime  @default(now()) @map("synced_at") @db.Timestamptz(6)
+  /// Soft delete — platformda silinen kampanyanın geçmiş metrikleri korunur.
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  adGroups  AdGroup[]
+
+  @@unique([platform, externalId])
+  @@index([clientId, status])
+  @@index([adAccountId, platformUpdatedAt])
+  @@map("campaigns")
+}
+
+/// Meta'da "Ad Set", Google'da "Ad Group". Aynı tablo.
+model AdGroup {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @map("campaign_id") @db.Uuid
+  adAccountId String @map("ad_account_id") @db.Uuid
+  clientId    String @map("client_id") @db.Uuid
+  platform    Platform
+
+  externalId String @map("external_id") @db.VarChar(128)
+  name       String @db.VarChar(512)
+
+  status          EntityStatus @default(unknown)
+  effectiveStatus String?      @map("effective_status") @db.VarChar(60)
+
+  budgetMode         BudgetMode @default(none) @map("budget_mode")
+  budgetAmountMicros BigInt?    @map("budget_amount_micros")
+  bidAmountMicros    BigInt?    @map("bid_amount_micros")
+  optimizationGoal   String?    @map("optimization_goal") @db.VarChar(60)
+  /// Hedefleme spec'i — Modül 8 toplu oluşturucuda şablon olarak kullanılacak.
+  targeting Json? @db.JsonB
+
+  startTime DateTime? @map("start_time") @db.Timestamptz(6)
+  stopTime  DateTime? @map("stop_time") @db.Timestamptz(6)
+
+  raw               Json?     @db.JsonB
+  platformUpdatedAt DateTime? @map("platform_updated_at") @db.Timestamptz(6)
+  syncedAt          DateTime  @default(now()) @map("synced_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  client   Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  ads      Ad[]
+
+  @@unique([platform, externalId])
+  @@index([clientId, status])
+  @@index([campaignId])
+  @@map("ad_groups")
+}
+
+model Ad {
+  id          String @id @default(uuid()) @db.Uuid
+  adGroupId   String @map("ad_group_id") @db.Uuid
+  adAccountId String @map("ad_account_id") @db.Uuid
+  clientId    String @map("client_id") @db.Uuid
+  platform    Platform
+
+  externalId String @map("external_id") @db.VarChar(128)
+  name       String @db.VarChar(512)
+
+  status          EntityStatus @default(unknown)
+  effectiveStatus String?      @map("effective_status") @db.VarChar(60)
+
+  creativeId String? @map("creative_id") @db.Uuid
+  previewUrl String? @map("preview_url") @db.VarChar(1024)
+  /// Reklam reddedildiyse sebepleri — Ads Explorer'da (Modül 4) gösterilecek.
+  reviewStatus       String? @map("review_status") @db.VarChar(60)
+  disapprovalReasons Json?   @map("disapproval_reasons") @db.JsonB
+
+  raw               Json?     @db.JsonB
+  platformUpdatedAt DateTime? @map("platform_updated_at") @db.Timestamptz(6)
+  syncedAt          DateTime  @default(now()) @map("synced_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adGroup  AdGroup   @relation(fields: [adGroupId], references: [id], onDelete: Cascade)
+  creative Creative? @relation(fields: [creativeId], references: [id], onDelete: SetNull)
+
+  @@unique([platform, externalId])
+  @@index([clientId, status])
+  @@index([adGroupId])
+  @@map("ads")
+}
+
+model Creative {
+  id          String @id @default(uuid()) @db.Uuid
+  adAccountId String @map("ad_account_id") @db.Uuid
+  clientId    String @map("client_id") @db.Uuid
+  platform    Platform
+
+  externalId   String  @map("external_id") @db.VarChar(128)
+  creativeType String? @map("creative_type") @db.VarChar(40)
+
+  headline       String? @db.VarChar(512)
+  primaryText    String? @map("primary_text") @db.Text
+  description    String? @db.Text
+  ctaType        String? @map("cta_type") @db.VarChar(60)
+  destinationUrl String? @map("destination_url") @db.VarChar(2048)
+  displayUrl     String? @map("display_url") @db.VarChar(512)
+  assetUrls      Json?   @map("asset_urls") @db.JsonB
+
+  raw       Json?    @db.JsonB
+  syncedAt  DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  ads    Ad[]
+
+  @@unique([platform, externalId])
+  @@index([clientId])
+  @@map("creatives")
+}
+
+/// Günlük metrikler — SİSTEMİN KALBİ.
+///
+/// Bu tablo `date` üzerinden AYLIK PARTITIONED'dır. Prisma partitioning'i ifade
+/// edemediği için migration elle düzenlendi ve partition yönetimi
+/// prisma/sql/03_partitions.sql içinde yaşıyor.
+///
+/// Birincil anahtar DOĞAL anahtardır: (date, entity_level, entity_id,
+/// breakdown_key). Vekil bir id yok — partition anahtarının PK'nın parçası
+/// olması zorunlu ve doğal anahtar zaten tekilliği sağlıyor. Bu, ayrı bir
+/// UNIQUE index taşımaktan tasarruf ettiriyor ve `ON CONFLICT` ile idempotent
+/// upsert'i doğrudan mümkün kılıyor.
+///
+/// TÜRETİLMİŞ METRİKLER (CPA, ROAS, CTR, CPM, CPC) BURADA SAKLANMAZ.
+/// Sorgu anında hesaplanır. Sebep: bölme işlemi toplama sırasına duyarlıdır.
+/// SUM(spend)/SUM(conv) ≠ AVG(cpa). Saklanan bir CPA, gruplandığında yanlış
+/// sayı üretir ve o yanlış sayıyla kural motoru bütçe kapatır.
+model InsightsDaily {
+  clientId    String @map("client_id") @db.Uuid
+  adAccountId String @map("ad_account_id") @db.Uuid
+  platform    Platform
+
+  entityLevel EntityLevel @map("entity_level")
+  /// İlgili tablonun id'si (campaign/ad_group/ad) veya ad_account id'si.
+  entityId String @map("entity_id") @db.Uuid
+  /// Join'siz sorgu için — Ads Explorer'da platform kimliğiyle arama yapılıyor.
+  entityExternalId String @map("entity_external_id") @db.VarChar(128)
+
+  /// HESABIN KENDİ zaman diliminde. "Bugün"ün tanımı buna bağlı.
+  date DateTime @db.Date
+
+  /// '' = toplam. Aksi hâlde `device:mobile|country:TR` gibi kanonik bir dize.
+  /// Boş dize kullanmak NULL'dan iyidir: NULL'lar PK'da eşleşmez ve mükerrer
+  /// satır üretir.
+  breakdownKey String @default("") @map("breakdown_key") @db.VarChar(255)
+  breakdown    Json?  @db.JsonB
+
+  impressions Int    @default(0)
+  clicks      Int    @default(0)
+  /// Hesabın para biriminde, micros.
+  spendMicros BigInt @default(0) @map("spend_micros")
+  /// Müşterinin rapor para birimine çevrilmiş — fx_rates ile.
+  spendMicrosReporting BigInt? @map("spend_micros_reporting")
+
+  /// Google kesirli dönüşüm döndürür (0.75 gibi) — integer olamaz.
+  conversions          Decimal @default(0) @db.Decimal(14, 4)
+  conversionValueMicros BigInt @default(0) @map("conversion_value_micros")
+
+  videoViews  Int      @default(0) @map("video_views")
+  engagements Int      @default(0)
+  reach       Int      @default(0)
+  frequency   Decimal? @db.Decimal(10, 4)
+
+  /// Platforma özgü tüm alanlar. Yeni metrik desteği migration gerektirmiyor.
+  rawMetrics Json?  @map("raw_metrics") @db.JsonB
+  currency   String @db.Char(3)
+  /// Bayatlık göstergesi — kural motoru bunu okuyup eski veriyle aksiyon almayı reddediyor.
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  @@id([date, entityLevel, entityId, breakdownKey])
+  @@index([clientId, date(sort: Desc), entityLevel])
+  @@index([adAccountId, date(sort: Desc)])
+  @@map("insights_daily")
+}
+
+/// Döviz kurları — çok para birimli "kümülatif harcama" ancak bununla doğru olur.
+/// Meta hesabı TRY, Google hesabı USD ise toplamak matematiksel olarak anlamsızdır.
+model FxRate {
+  date          DateTime @db.Date
+  baseCurrency  String   @map("base_currency") @db.Char(3)
+  quoteCurrency String   @map("quote_currency") @db.Char(3)
+  rate          Decimal  @db.Decimal(18, 8)
+  source        String   @db.VarChar(40)
+  fetchedAt     DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  @@id([date, baseCurrency, quoteCurrency])
+  @@map("fx_rates")
+}
+
+/// Senkronizasyon işi — kuyruk durumunun kalıcı izi.
+///
+/// BullMQ işleri Redis'te yaşıyor ve Redis temizlendiğinde kaybolur. Bu tablo
+/// "en son ne zaman senkronize edildi", "neden başarısız oldu", "kaç API çağrısı
+/// harcandı" sorularının cevabını kalıcı tutuyor.
+model SyncJob {
+  id       BigInt @id @default(autoincrement())
+  clientId String @map("client_id") @db.Uuid
+
+  adAccountId     String? @map("ad_account_id") @db.Uuid
+  socialProfileId String? @map("social_profile_id") @db.Uuid
+
+  jobType     SyncJobType   @map("job_type")
+  entityLevel EntityLevel?  @map("entity_level")
+  dateFrom    DateTime?     @map("date_from") @db.Date
+  dateTo      DateTime?     @map("date_to") @db.Date
+
+  status SyncJobStatus @default(queued)
+  /// 1 = kullanıcı tetiklemeli (interaktif) … 10 = backfill. Düşük sayı önce.
+  priority Int @default(5)
+
+  attempts    Int @default(0)
+  maxAttempts Int @default(5) @map("max_attempts")
+
+  apiCallsUsed Int @default(0) @map("api_calls_used")
+  rowsUpserted Int @default(0) @map("rows_upserted")
+
+  /// Meta async insights job kimliği — worker yeniden başlasa bile polling sürer.
+  platformJobId String? @map("platform_job_id") @db.VarChar(255)
+  /// BullMQ iş kimliği — kuyruktaki işle veritabanı kaydını eşleştirir.
+  queueJobId String? @map("queue_job_id") @db.VarChar(255)
+
+  errorCode    String? @map("error_code") @db.VarChar(80)
+  errorMessage String? @map("error_message") @db.VarChar(1000)
+
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
+  nextRetryAt DateTime? @map("next_retry_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt(sort: Desc)])
+  @@index([status, nextRetryAt])
+  @@index([adAccountId, jobType, createdAt(sort: Desc)])
+  @@map("sync_jobs")
+}
+
+/// API kota tüketimi — adaptif hız sınırlayıcının gözü.
+///
+/// Meta kotayı `X-Business-Use-Case-Usage` header'ında ÜÇ yüzde olarak veriyor;
+/// Google hiç vermiyor, yalnızca tükendiğinde hata döndürüyor. Bu tablo ikisini
+/// aynı yerde tutuyor ve "hangi müşteri kotayı yiyor" sorusunu cevaplıyor.
+model ApiUsageLog {
+  id          BigInt   @id @default(autoincrement())
+  platform    Platform
+  clientId    String?  @map("client_id") @db.Uuid
+  adAccountId String?  @map("ad_account_id") @db.Uuid
+
+  endpoint String @db.VarChar(255)
+
+  /// Meta BUC yüzdeleri.
+  callCountPct Int? @map("call_count_pct")
+  cpuTimePct   Int? @map("cpu_time_pct")
+  totalTimePct Int? @map("total_time_pct")
+  /// Üçünün en yükseği — adaptif eşikler bunu okuyor.
+  usagePercent Int? @map("usage_percent")
+  /// Google: bu istekte tüketilen operasyon sayısı.
+  operationsUsed Int? @map("operations_used")
+
+  httpStatus Int?    @map("http_status")
+  errorCode  String? @map("error_code") @db.VarChar(80)
+  latencyMs  Int?    @map("latency_ms")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([adAccountId, createdAt(sort: Desc)])
+  @@index([platform, createdAt(sort: Desc)])
+  @@map("api_usage_log")
 }
