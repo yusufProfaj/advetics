@@ -4,7 +4,23 @@ const ACCESS_COOKIE = 'adv_at';
 const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'localhost:3000';
 
 /** Oturum gerektirmeyen yollar. */
-const PUBLIC_PATHS = ['/login', '/davet', '/sifre-sifirla', '/r'];
+/**
+ * Oturum gerektirmeyen yollar.
+ *
+ * Yasal sayfalar (`/gizlilik`, `/kosullar`, `/veri-silme`) burada olmak
+ * ZORUNDA: Meta App Review ve Google OAuth Verification bu adresleri kendi
+ * crawler'larıyla ziyaret ediyor. Login'e yönlendirilirlerse başvuru
+ * reddedilir — "privacy policy not publicly accessible".
+ */
+const PUBLIC_PATHS = [
+  '/login',
+  '/davet',
+  '/sifre-sifirla',
+  '/r',
+  '/gizlilik',
+  '/kosullar',
+  '/veri-silme',
+];
 
 /**
  * İki iş yapar:
