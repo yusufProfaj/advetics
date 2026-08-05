@@ -257,11 +257,31 @@ export class ConnectionsService {
    */
   async handleCallback(
     platform: Platform,
-    params: { code?: string; state?: string; error?: string; errorDescription?: string },
+    params: {
+      code?: string;
+      state?: string;
+      error?: string;
+      errorDescription?: string;
+      errorCode?: string;
+      errorMessage?: string;
+    },
     meta: Meta,
   ): Promise<{ redirectPath: string }> {
+    // Platform hatası standart VEYA standart dışı isimlerle gelebilir.
+    const platformError = params.error ?? params.errorCode;
+    const platformErrorText = params.errorDescription ?? params.errorMessage;
+
+    // State yoksa panele okunabilir bir mesajla dönüyoruz. Ham 400 fırlatmak,
+    // kullanıcıyı JSON hata sayfasında bırakıyordu — hangi ayarın eksik
+    // olduğunu anlamasının hiçbir yolu yoktu.
     if (!params.state) {
-      throw new BadRequestException('State parametresi eksik');
+      const reason = platformError
+        ? describePlatformOAuthError(platform, platformError, platformErrorText)
+        : 'Yetkilendirme yanıtı eksik döndü (state parametresi yok).';
+      this.logger.warn(`OAuth callback state'siz döndü: ${platformError ?? 'bilinmiyor'} — ${reason}`);
+      return {
+        redirectPath: `/ayarlar/baglantilar?connection=hata&platform=${platform}&mesaj=${encodeURIComponent(reason)}`,
+      };
     }
 
     const state = await this.admin.oAuthState.findUnique({
@@ -286,21 +306,37 @@ export class ConnectionsService {
 
     const backTo = state.redirectTo ?? '/ayarlar/baglantilar';
 
-    // Kullanıcı izin ekranında "İptal" dediyse.
-    if (params.error) {
+    // Platform hata döndürdüyse: kullanıcı izni reddetti VEYA yapılandırma hatası.
+    if (platformError) {
+      const declined = platformError === 'access_denied';
       await this.audit.recordUnauthenticated(state.orgId, {
-        action: 'connection.oauth_declined',
+        action: declined ? 'connection.oauth_declined' : 'connection.oauth_failed',
         targetType: 'platform',
         targetId: platform,
         clientId: state.clientId,
         actorId: state.createdByUserId,
-        after: { error: params.error, description: params.errorDescription },
+        after: { error: platformError, description: platformErrorText },
         ...meta,
       });
-      return { redirectPath: `${backTo}?connection=iptal&platform=${platform}` };
+
+      if (declined) {
+        return { redirectPath: `${backTo}?connection=iptal&platform=${platform}` };
+      }
+
+      const reason = describePlatformOAuthError(platform, platformError, platformErrorText);
+      this.logger.error(`OAuth başarısız (${platform}): ${platformError} — ${platformErrorText ?? ''}`);
+      return {
+        redirectPath: `${backTo}?connection=hata&platform=${platform}&mesaj=${encodeURIComponent(reason)}`,
+      };
     }
 
-    if (!params.code) throw new BadRequestException('Yetkilendirme kodu eksik');
+    if (!params.code) {
+      return {
+        redirectPath: `${backTo}?connection=hata&platform=${platform}&mesaj=${encodeURIComponent(
+          'Yetkilendirme kodu dönmedi. Platform izin ekranını tamamlamadan geri dönülmüş olabilir.',
+        )}`,
+      };
+    }
 
     const provider = this.provider(platform);
 
@@ -687,4 +723,48 @@ export class ConnectionsService {
   private hash(token: string): string {
     return createHash('sha256').update(token).digest('hex');
   }
+}
+
+/**
+ * Platform OAuth hatasını, kullanıcının ne yapacağını bilebileceği bir mesaja
+ * çevirir.
+ *
+ * Ham kodu ("1349048") göstermek kimseye yardım etmiyor. Bu kodların çoğu
+ * Meta/Google panelinde eksik BİR ayara işaret ediyor; hangisi olduğunu
+ * söylemek dakikalar yerine saniyeler kazandırıyor.
+ */
+export function describePlatformOAuthError(
+  platform: string,
+  code: string,
+  detail?: string,
+): string {
+  const known: Record<string, string> = {
+    // Meta — "URL Yüklenemedi": redirect_uri'nin alan adı App Domains'te yok.
+    '1349048':
+      'Meta uygulama ayarlarında "App Domains" alanı eksik. ' +
+      'App settings → Basic → App Domains alanına advetics.com ekleyip kaydet.',
+    // Meta — redirect_uri kayıtlı değil.
+    '191':
+      'Yönlendirme adresi Meta uygulamasında kayıtlı değil. ' +
+      'Facebook Login for Business → Settings → Valid OAuth Redirect URIs alanına ' +
+      'https://advetics.com/api/connections/meta/callback ekle.',
+    // Google — redirect_uri eşleşmiyor.
+    redirect_uri_mismatch:
+      'Yönlendirme adresi Google OAuth istemcisinde kayıtlı değil. ' +
+      'Google Cloud Console → Credentials → OAuth client → Authorized redirect URIs ' +
+      'alanına https://advetics.com/api/connections/google/callback ekle.',
+    // Google — uygulama doğrulanmadı / test kullanıcısı değil.
+    access_blocked:
+      'Google uygulaması henüz doğrulanmadı. OAuth consent screen → Test users ' +
+      'listesine kendi hesabını ekle veya doğrulama başvurusunu tamamla.',
+    admin_policy_enforced:
+      'Google Workspace yöneticisi bu uygulamaya erişimi engelliyor. ' +
+      'Yönetici konsolundan izin verilmesi gerekiyor.',
+  };
+
+  const hit = known[code];
+  if (hit) return hit;
+
+  const suffix = detail ? ` — ${detail}` : '';
+  return `${platform === 'meta' ? 'Meta' : 'Google'} yetkilendirmeyi reddetti (kod ${code})${suffix}`;
 }

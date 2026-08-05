@@ -109,12 +109,22 @@ export class ConnectionsController {
     @Query('state') state?: string,
     @Query('error') error?: string,
     @Query('error_description') errorDescription?: string,
+    // Meta bu iki parametreyi STANDART DIŞI olarak gönderiyor.
+    //
+    // OAuth 2.0 hata için `error` + `error_description` tanımlar ve kullanıcı
+    // izni reddettiğinde Meta da onları kullanır. Ama "URL Yüklenemedi" gibi
+    // yapılandırma hatalarında `error_code` + `error_message` gönderiyor.
+    // Yalnızca standart isimleri okumak, bu hataları görünmez kılıyordu:
+    // callback "kod yok" yoluna düşüp ham 400 döndürüyordu ve kullanıcı
+    // panelde değil bir JSON hata sayfasında kalıyordu.
+    @Query('error_code') errorCode?: string,
+    @Query('error_message') errorMessage?: string,
   ) {
     const platform = this.assertPlatform(platformParam);
 
     const { redirectPath } = await this.connections.handleCallback(
       platform,
-      { code, state, error, errorDescription },
+      { code, state, error, errorDescription, errorCode, errorMessage },
       this.meta(req),
     );
 

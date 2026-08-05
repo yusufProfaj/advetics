@@ -13,7 +13,8 @@ export function CallbackBanner() {
   const result = params.get('connection');
   if (!result) return null;
 
-  const platform = params.get('platform') ?? '';
+  const raw = params.get('platform') ?? '';
+  const platform = raw === 'meta' ? 'Meta' : raw === 'google' ? 'Google Ads' : raw;
   const accounts = params.get('hesap');
   const message = params.get('mesaj');
 
