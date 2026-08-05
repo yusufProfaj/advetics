@@ -60,7 +60,7 @@ const envSchema = z.object({
    * kapatır. CANLIYA ALMADAN ÖNCE güncel sürümü doğrula:
    * https://developers.facebook.com/docs/graph-api/changelog
    */
-  META_API_VERSION: z.string().default('v23.0'),
+  META_API_VERSION: z.string().default('v25.0'),
 
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
