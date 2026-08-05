@@ -64,8 +64,16 @@ export interface ConnectionSummary {
   platform: 'meta' | 'google';
   accountLabel: string;
   status: ConnectionStatusValue;
-  /** Zorunlu ama verilmemiş scope'lar. Dolu ise bağlantı iş görmez. */
+  /** ÇEKİRDEK izinlerden eksik olanlar. Dolu ise bağlantı iş görmez. */
   missingScopes: string[];
+  /**
+   * ÖZELLİK izinlerinden eksik olanlar (Auto-Boost).
+   *
+   * Bunlar bağlantıyı bozmaz — yalnızca ilgili özellik kullanılamaz. Meta App
+   * Review izinleri tek tek onayladığı için aşamalı başvuru normaldir ve
+   * kullanıcıya "bozuk" gibi gösterilmemeli.
+   */
+  missingOptionalScopes: string[];
   tokenExpiresAt: string | null;
   lastVerifiedAt: string | null;
   lastErrorCode: string | null;
@@ -81,4 +89,6 @@ export interface ProviderAvailability {
   /** Yapılandırma eksikse ne gerektiği. */
   missingConfig: string[];
   requiredScopes: string[];
+  /** Özellik bazlı ek izinler (Meta: Auto-Boost). */
+  optionalScopes: string[];
 }

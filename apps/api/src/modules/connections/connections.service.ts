@@ -89,12 +89,14 @@ export class ConnectionsService {
         configured: metaMissing.length === 0,
         missingConfig: metaMissing,
         requiredScopes: [...this.providers.meta.requiredScopes],
+        optionalScopes: [...this.providers.meta.optionalScopes],
       },
       {
         platform: 'google',
         configured: googleMissing.length === 0,
         missingConfig: googleMissing,
         requiredScopes: [...this.providers.google.requiredScopes],
+        optionalScopes: [...this.providers.google.optionalScopes],
       },
     ];
   }
@@ -140,8 +142,11 @@ export class ConnectionsService {
       include: { adAccounts: true; socialProfiles: true };
     }>,
   ): ConnectionSummary {
-    const required = this.provider(c.platform as Platform).requiredScopes;
-    const missingScopes = required.filter((s) => !c.grantedScopes.includes(s));
+    const prov = this.provider(c.platform as Platform);
+    const missingScopes = prov.requiredScopes.filter((s) => !c.grantedScopes.includes(s));
+    const missingOptionalScopes = prov.optionalScopes.filter(
+      (s) => !c.grantedScopes.includes(s),
+    );
 
     return {
       id: c.id,
@@ -149,6 +154,7 @@ export class ConnectionsService {
       accountLabel: c.accountLabel,
       status: c.status,
       missingScopes,
+      missingOptionalScopes,
       tokenExpiresAt: c.tokenExpiresAt?.toISOString() ?? null,
       lastVerifiedAt: c.lastVerifiedAt?.toISOString() ?? null,
       lastErrorCode: c.lastErrorCode,

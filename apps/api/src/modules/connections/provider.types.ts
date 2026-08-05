@@ -158,8 +158,22 @@ export interface DiscoveredSocialProfile {
 export interface IAdPlatformProvider {
   readonly platform: Platform;
 
-  /** Bu platformun iş görmesi için zorunlu scope'lar. */
+  /**
+   * Çekirdek işlev için ZORUNLU scope'lar. Eksikse bağlantı iş görmez ve
+   * `needs_reauth` gibi davranır.
+   */
   readonly requiredScopes: readonly string[];
+
+  /**
+   * Belirli özellikleri açan, olmadan da temel işlevin çalıştığı scope'lar.
+   *
+   * Neden ayrı: Meta App Review izinleri TEK TEK onaylıyor ve her biri ayrı
+   * ekran kaydı + API testi istiyor. Aşamalı başvuru yapmak (önce çekirdek,
+   * sonra Auto-Boost) tek büyük başvurudan çok daha az riskli. Hepsini zorunlu
+   * saymak, henüz onaylanmamış bir izin yüzünden çalışan bağlantıyı bozuk
+   * göstermek demek olurdu.
+   */
+  readonly optionalScopes: readonly string[];
 
   /** Yapılandırma eksikse (app id/secret yok) false — UI butonu pasif gösterir. */
   isConfigured(): boolean;

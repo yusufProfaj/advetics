@@ -87,7 +87,9 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
           >
             {busy === 'refresh' ? '…' : 'Hesapları yenile'}
           </button>
-          {(connection.status === 'needs_reauth' || connection.missingScopes.length > 0) && (
+          {(connection.status === 'needs_reauth' ||
+            connection.missingScopes.length > 0 ||
+            connection.missingOptionalScopes.length > 0) && (
             <button
               type="button"
               onClick={() => void run('reauth', reauthorize)}
@@ -117,11 +119,26 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
         </div>
       )}
 
+      {/* Çekirdek izin eksiği = bağlantı iş görmez → uyarı */}
       {connection.missingScopes.length > 0 && (
         <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2 text-sm text-amber-900">
-          <strong>Eksik izinler:</strong> {connection.missingScopes.join(', ')}
+          <strong>Eksik çekirdek izinler:</strong> {connection.missingScopes.join(', ')}
           <p className="mt-1 text-xs">
             Bu izinler olmadan senkronizasyon ve otomasyon çalışmaz.
+          </p>
+        </div>
+      )}
+
+      {/* Özellik izin eksiği = bağlantı çalışır, özellik kapalı → bilgi.
+          Meta App Review izinleri tek tek onayladığı için aşamalı başvuru
+          normaldir; bunu hata gibi göstermek kullanıcıyı yanıltır. */}
+      {connection.missingOptionalScopes.length > 0 && connection.missingScopes.length === 0 && (
+        <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm">
+          <strong>Auto-Boost için ek izin bekliyor</strong>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            Bağlantı çalışıyor. Eksik: {connection.missingOptionalScopes.join(', ')} — bu izinler
+            Meta App Review&apos;dan onaylandıktan sonra &quot;Yeniden yetkilendir&quot; ile
+            eklenebilir.
           </p>
         </div>
       )}

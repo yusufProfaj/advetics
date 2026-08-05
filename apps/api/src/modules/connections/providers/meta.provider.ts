@@ -37,21 +37,35 @@ export class MetaProvider implements IAdPlatformProvider {
   private readonly logger = new Logger(MetaProvider.name);
 
   /**
-   * Zorunlu scope'lar. Her biri App Review'da ayrı ayrı gerekçelendirilmeli.
+   * ÇEKİRDEK izinler — Modül 3-6 (senkronizasyon, Ads Explorer, kurallar,
+   * raporlar) bunlar olmadan çalışmaz.
    *
-   * `ads_management` yazma (bütçe/durum değiştirme, Modül 5) için,
-   * `ads_read` okuma için, `business_management` müşteri Business Manager'ına
-   * erişim için, `pages_*` + `instagram_*` Auto-Boost (Modül 7) için.
+   *   ads_read            → insight ve yapı okuma
+   *   ads_management      → bütçe/durum değiştirme (Modül 5 kural aksiyonları)
+   *   business_management → müşterinin Business Manager varlıklarına erişim
    */
-  readonly requiredScopes = [
-    'ads_management',
-    'ads_read',
-    'business_management',
+  readonly requiredScopes = ['ads_read', 'ads_management', 'business_management'] as const;
+
+  /**
+   * ÖZELLİK izinleri — yalnızca Auto-Boost (Modül 7) için.
+   *
+   * Ayrı tutulmalarının sebebi App Review sürecidir: Meta her izni tek tek
+   * onaylıyor ve her biri için ayrı ekran kaydı ile API testi istiyor. Auto-Boost
+   * henüz yazılmadığı için gösterilemez; bu izinleri ilk başvuruya koymak
+   * reddedilme riski demek. Onaylanana kadar bağlantı çalışmaya devam eder,
+   * yalnızca Auto-Boost kullanılamaz.
+   */
+  readonly optionalScopes = [
     'pages_show_list',
     'pages_read_engagement',
     'instagram_basic',
     'instagram_manage_insights',
   ] as const;
+
+  /** İzin ekranında istenen tüm scope'lar. */
+  private get allScopes(): string[] {
+    return [...this.requiredScopes, ...this.optionalScopes];
+  }
 
   constructor(@Inject(CONFIG) private readonly config: AppConfig) {}
 
@@ -85,7 +99,7 @@ export class MetaProvider implements IAdPlatformProvider {
     url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('state', state);
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', this.requiredScopes.join(','));
+    url.searchParams.set('scope', this.allScopes.join(','));
     // Kullanıcı daha önce izin verdiyse Meta ekranı atlar; yeniden
     // yetkilendirmede (needs_reauth) bu istenmez — eksik scope'u düzeltmek için
     // ekranın gösterilmesi gerekir.
@@ -199,6 +213,8 @@ export class MetaProvider implements IAdPlatformProvider {
 
       const d = data.data;
       const granted = d.scopes ?? [];
+      // Yalnızca ÇEKİRDEK eksikler "missing" sayılır — özellik izinlerinin
+      // eksikliği bağlantıyı bozmaz, sadece Auto-Boost'u kapatır.
       const missing = this.requiredScopes.filter((s) => !granted.includes(s));
 
       return {

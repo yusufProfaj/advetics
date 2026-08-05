@@ -33,6 +33,9 @@ export class GoogleProvider implements IAdPlatformProvider {
   /** Google Ads API için tek scope yeterli. */
   readonly requiredScopes = ['https://www.googleapis.com/auth/adwords'] as const;
 
+  /** Google'da özellik bazlı ek scope yok — tek scope her şeyi kapsıyor. */
+  readonly optionalScopes = [] as const;
+
   constructor(@Inject(CONFIG) private readonly config: AppConfig) {}
 
   private get google() {
