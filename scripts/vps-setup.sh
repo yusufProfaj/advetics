@@ -85,34 +85,56 @@ log "Node.js ${NODE_MAJOR}"
 # SSH ile non-interactive shell açıyor ve orada `node` bulunamıyor — dağıtımın
 # en sık takıldığı yer burasıdır. Sistem geneli kurulum /usr/bin'e yazar ve
 # her shell türünde çalışır.
-node_major_of() { command -v "$1" >/dev/null 2>&1 && "$1" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
+#
+# DİKKAT — `node` yerine `/usr/bin/node` kontrol ediliyor.
+#
+# root'un kendi nvm kurulumu olabilir ve PATH'te /usr/bin/node'un önüne geçer.
+# Bu script root olarak çalıştığı için PATH'teki `node` root'un nvm sürümünü
+# gösterir; oysa uygulamayı çalıştıracak olan site kullanıcısı /usr/bin/node
+# kullanır. Yanlış ikiliyi ölçmek, ilk kurulumda tam olarak bu karışıklığa yol
+# açtı: script "v20" raporladı, sistemde ise v23 vardı.
+SYS_NODE=/usr/bin/node
+sys_major() { [[ -x "$SYS_NODE" ]] && "$SYS_NODE" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
 
-if [[ "$(node_major_of node)" -ge "$NODE_MAJOR" ]]; then
-  skip "zaten kurulu: $(node -v)"
+CUR_MAJOR="$(sys_major)"
+
+# Kabul kriteri: sürüm >= istenen VE ÇİFT (Node'da yalnızca çift majörler LTS'tir).
+# Tek majörler (23, 25...) güvenlik yaması almadan ömrünü tamamlar; OAuth token'ı
+# saklayan bir üretim sisteminde çalıştırılmamalıdır.
+if [[ "$CUR_MAJOR" -ge "$NODE_MAJOR" && $((CUR_MAJOR % 2)) -eq 0 ]]; then
+  skip "sistem node'u uygun: $("$SYS_NODE" -v) (LTS)"
 else
-  CURRENT="$(command -v node >/dev/null 2>&1 && node -v || echo 'yok')"
-  echo "  mevcut: ${CURRENT} → NodeSource ${NODE_MAJOR}.x kuruluyor"
-
-  # Çıktıyı BASTIRMIYORUZ. Önceki sürüm hatayı /dev/null'a gönderiyordu ve
-  # depo eklenemediğinde apt sessizce Ubuntu'nun eski nodejs'ini bırakıyordu —
-  # script yine de "kuruldu" diyordu. Sessiz başarısızlık en kötü hata türü.
-  if ! curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -; then
-    die "NodeSource deposu eklenemedi. Yukarıdaki hataya bak."
+  if [[ "$CUR_MAJOR" -gt 0 && $((CUR_MAJOR % 2)) -ne 0 ]]; then
+    warn "sistemde LTS olmayan Node $("$SYS_NODE" -v) var — ${NODE_MAJOR} LTS'e sabitleniyor"
+  else
+    echo "  mevcut sistem node: ${CUR_MAJOR:-yok} → NodeSource ${NODE_MAJOR}.x kuruluyor"
   fi
 
-  apt-get install -y nodejs || die "apt-get install nodejs başarısız"
+  # Çıktı BASTIRILMIYOR: ilk sürümde hata /dev/null'a gidiyor ve script yine
+  # "kuruldu" diyordu. Sessiz başarısızlık en kötü hata türüdür.
+  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - \
+    || die "NodeSource deposu eklenemedi. Yukarıdaki hataya bak."
 
-  # KRİTİK: kurulumun gerçekten 22'ye çıktığını doğrula.
-  INSTALLED="$(node_major_of node)"
-  if [[ "$INSTALLED" -lt "$NODE_MAJOR" ]]; then
-    printf '\n' >&2
-    echo "  Teşhis:" >&2
-    echo "    which -a node : $(which -a node 2>/dev/null | tr '\n' ' ')" >&2
-    echo "    apt policy    : $(apt-cache policy nodejs 2>/dev/null | head -3 | tr '\n' ' ')" >&2
-    echo "    nodesource    : $(ls /etc/apt/sources.list.d/ 2>/dev/null | grep -i node | tr '\n' ' ')" >&2
-    die "Node hâlâ $(node -v) — ${NODE_MAJOR}+ gerekliydi. Muhtemel sebep: PATH'te nvm ile kurulmuş eski bir node öncelikli, ya da apt Ubuntu deposundaki sürümü tercih etti."
+  # Sürümü AÇIKÇA sabitliyoruz. Depoda daha yeni bir majör kuruluysa
+  # (örn. 23), düz `apt-get install nodejs` düşürme yapmaz ve eski sürüm kalır.
+  PIN="$(apt-cache madison nodejs 2>/dev/null | awk -v m="^${NODE_MAJOR}\\\\." '$3 ~ m {print $3; exit}')"
+  if [[ -n "$PIN" ]]; then
+    apt-get install -y --allow-downgrades "nodejs=${PIN}" || die "nodejs=${PIN} kurulamadı"
+  else
+    apt-get install -y nodejs || die "apt-get install nodejs başarısız"
   fi
-  ok "kuruldu: $(node -v)"
+
+  NEW_MAJOR="$(sys_major)"
+  if [[ "$NEW_MAJOR" -ne "$NODE_MAJOR" ]]; then
+    {
+      echo "  Teşhis:"
+      echo "    /usr/bin/node : $("$SYS_NODE" -v 2>/dev/null || echo yok)"
+      echo "    apt policy    : $(apt-cache policy nodejs 2>/dev/null | tr '\n' ' ')"
+      echo "    depo dosyaları: $(ls /etc/apt/sources.list.d/ 2>/dev/null | grep -i node | tr '\n' ' ')"
+    } >&2
+    die "Sistem node'u ${NODE_MAJOR}.x olmadı (şu an majör=${NEW_MAJOR})."
+  fi
+  ok "kuruldu: $("$SYS_NODE" -v)"
 fi
 
 # Site kullanıcısının node'u AYRI olabilir: CloudPanel "Node.js Site" tipinde
