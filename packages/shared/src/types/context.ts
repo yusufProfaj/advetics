@@ -60,4 +60,13 @@ export interface SessionResponse {
   activeClientId: string | null;
   permissions: Permission[];
   isOrgAdmin: boolean;
+  /**
+   * Kullanıcının seçebileceği müşteriler, isimleriyle.
+   *
+   * `memberships`ten TÜRETİLEMEZ: org geneli yetkili bir kullanıcının
+   * (owner/admin) tek bir membership satırı vardır ve `clientId` null'dır.
+   * Listeyi membership'lerden çıkarmak, yöneticiye boş bir seçici gösteriyordu
+   * — müşteri seçilemediği için bağlantı kurmak imkânsız hâle geliyordu.
+   */
+  availableClients: Array<{ id: string; name: string; status: string }>;
 }

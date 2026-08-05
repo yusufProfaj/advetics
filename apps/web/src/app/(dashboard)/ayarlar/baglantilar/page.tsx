@@ -23,7 +23,7 @@ export default async function ConnectionsPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Platform Bağlantıları</h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
+        <p className="mt-1 text-sm text-ink-muted">
           Meta ve Google Ads hesaplarını bağla, hangi reklam hesaplarının izleneceğini seç.
         </p>
       </div>
@@ -41,7 +41,7 @@ export default async function ConnectionsPage() {
         </div>
       ) : (
         <>
-          <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+          <section className="rounded-xl border border-line bg-surface p-5">
             <h2 className="text-sm font-semibold">
               Yeni bağlantı{activeClient?.clientName ? ` — ${activeClient.clientName}` : ''}
             </h2>
@@ -49,8 +49,8 @@ export default async function ConnectionsPage() {
           </section>
 
           {connections.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center">
-              <p className="text-sm text-[var(--text-muted)]">
+            <div className="rounded-xl border border-dashed border-line p-8 text-center">
+              <p className="text-sm text-ink-muted">
                 Bu müşteri için henüz bağlantı yok. Yukarıdan başla.
               </p>
             </div>
@@ -65,9 +65,9 @@ export default async function ConnectionsPage() {
       )}
 
       {/* Onay süreçleri koda paralel yürümek zorunda — bu yüzden panelde görünür. */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
+      <section className="rounded-xl border border-line bg-surface-muted p-5">
         <h2 className="text-sm font-semibold">Platform onayları</h2>
-        <p className="mt-1.5 text-sm text-[var(--text-muted)]">
+        <p className="mt-1.5 text-sm text-ink-muted">
           Bağlantılar teknik olarak hazır, ama platformlar üretim erişimi için onay ister.
           Bu süreçler 2–6 hafta sürüyor ve geliştirmeye paralel yürütülmeli.
         </p>

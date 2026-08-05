@@ -27,6 +27,8 @@ export interface ResolvedIdentity {
     clientName: string | null;
     role: Role;
   }>;
+  /** Seçilebilir müşteriler — org yöneticisi için org'daki tümü. */
+  availableClients: Array<{ id: string; name: string; status: string }>;
 }
 
 /**
@@ -89,16 +91,28 @@ export class TenantContextService {
     // AÇIKÇA genişletiyoruz. RLS'te "hepsi" anlamına gelen bir joker değer
     // tanımlamak, politikalarda kolayca yanlış yerde eşleşen bir kaçak yaratır.
     let clientIds: string[];
+    let availableClients: Array<{ id: string; name: string; status: string }>;
+
     if (isOrgAdmin) {
       const all = await this.db.client.findMany({
         where: { orgId: user.orgId, status: { not: 'archived' } },
-        select: { id: true },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, status: true },
       });
       clientIds = all.map((c) => c.id);
+      availableClients = all;
     } else {
       clientIds = scopedMemberships
         .map((m) => m.clientId)
         .filter((id): id is string => id !== null);
+      availableClients = scopedMemberships
+        .filter((m) => m.client !== null)
+        .map((m) => ({
+          id: m.client!.id,
+          name: m.client!.name,
+          status: m.client!.status,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
     }
 
     // Aktif müşteri seçimi: istenen değer daima erişim listesine karşı doğrulanır.
@@ -151,6 +165,7 @@ export class TenantContextService {
         clientName: m.client?.name ?? null,
         role: m.role as Role,
       })),
+      availableClients,
     };
   }
 }

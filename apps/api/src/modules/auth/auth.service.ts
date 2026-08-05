@@ -241,6 +241,7 @@ export class AuthService {
       },
       organization: org,
       memberships: identity.memberships,
+      availableClients: identity.availableClients,
       activeClientId: identity.context.activeClientId,
       permissions: identity.context.permissions,
       isOrgAdmin: identity.context.isOrgAdmin,

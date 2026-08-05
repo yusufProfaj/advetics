@@ -94,8 +94,8 @@ async function main(): Promise<void> {
       data: {
         orgId: org.id,
         clientId: null,
-        primaryColor: '#2563EB',
-        accentColor: '#0EA5E9',
+        primaryColor: '#E11D2E',
+        accentColor: '#F97316',
         emailFromName: orgName,
         hidePoweredBy: false,
       },

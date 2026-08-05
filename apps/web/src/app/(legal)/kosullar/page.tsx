@@ -15,7 +15,7 @@ export default function TermsPage() {
   return (
     <>
       <h1 className="text-2xl font-semibold">Kullanım Koşulları</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">Son güncelleme: 5 Ağustos 2026</p>
+      <p className="mt-1 text-sm text-ink-muted">Son güncelleme: 5 Ağustos 2026</p>
 
       <Section title="1. Hizmetin tanımı">
         <p>
@@ -116,7 +116,7 @@ export default function TermsPage() {
         </p>
       </Section>
 
-      <hr className="my-10 border-[var(--border)]" />
+      <hr className="my-10 border-line" />
 
       <h2 className="text-xl font-semibold" id="english">
         Terms of Service (English)
@@ -191,7 +191,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section className="mt-7">
       <h2 className="text-base font-semibold">{title}</h2>
-      <div className="mt-2 space-y-2 text-sm leading-relaxed text-[var(--text)]">{children}</div>
+      <div className="mt-2 space-y-2 text-sm leading-relaxed text-ink">{children}</div>
     </section>
   );
 }

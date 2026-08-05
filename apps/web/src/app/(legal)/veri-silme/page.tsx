@@ -16,7 +16,7 @@ export default function DataDeletionPage() {
   return (
     <>
       <h1 className="text-2xl font-semibold">Veri Silme Talimatları</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">Son güncelleme: 5 Ağustos 2026</p>
+      <p className="mt-1 text-sm text-ink-muted">Son güncelleme: 5 Ağustos 2026</p>
 
       <Section title="Seçenek 1 — Reklam hesabı bağlantısını kaldır">
         <p>
@@ -98,7 +98,7 @@ export default function DataDeletionPage() {
         </p>
       </Section>
 
-      <hr className="my-10 border-[var(--border)]" />
+      <hr className="my-10 border-line" />
 
       <h2 className="text-xl font-semibold" id="english">
         Data Deletion Instructions (English)
@@ -161,7 +161,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section className="mt-7">
       <h2 className="text-base font-semibold">{title}</h2>
-      <div className="mt-2 space-y-2 text-sm leading-relaxed text-[var(--text)]">{children}</div>
+      <div className="mt-2 space-y-2 text-sm leading-relaxed text-ink">{children}</div>
     </section>
   );
 }

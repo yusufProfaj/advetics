@@ -13,23 +13,23 @@ import Link from 'next/link';
  */
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--surface-muted)]">
-      <header className="border-b border-[var(--border)] bg-[var(--surface)]">
+    <div className="min-h-screen bg-surface-muted">
+      <header className="border-b border-line bg-surface">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand-primary)] text-sm font-semibold text-white">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-semibold text-white">
               A
             </span>
             <span className="text-sm font-semibold">Advetics</span>
           </Link>
-          <nav className="flex gap-4 text-xs text-[var(--text-muted)]">
-            <Link href="/gizlilik" className="hover:text-[var(--text)]">
+          <nav className="flex gap-4 text-xs text-ink-muted">
+            <Link href="/gizlilik" className="hover:text-ink">
               Gizlilik
             </Link>
-            <Link href="/kosullar" className="hover:text-[var(--text)]">
+            <Link href="/kosullar" className="hover:text-ink">
               Koşullar
             </Link>
-            <Link href="/veri-silme" className="hover:text-[var(--text)]">
+            <Link href="/veri-silme" className="hover:text-ink">
               Veri Silme
             </Link>
           </nav>
@@ -37,12 +37,12 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <article className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 sm:p-8">
+        <article className="rounded-xl border border-line bg-surface p-6 sm:p-8">
           {children}
         </article>
       </main>
 
-      <footer className="border-t border-[var(--border)] px-6 py-6 text-center text-xs text-[var(--text-muted)]">
+      <footer className="border-t border-line px-6 py-6 text-center text-xs text-ink-muted">
         Advetics · Meta ve Google Ads reklam yönetim platformu ·{' '}
         <a href="mailto:hello@profaj.com" className="underline">
           hello@profaj.com

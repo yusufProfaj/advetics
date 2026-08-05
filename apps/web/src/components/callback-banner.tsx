@@ -31,7 +31,7 @@ export function CallbackBanner() {
       body: 'Bazı zorunlu izinler verilmedi. Aşağıdaki karttan "Yeniden yetkilendir" ile eksik izinleri tamamla.',
     },
     iptal: {
-      cls: 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text)]',
+      cls: 'border-line bg-surface-muted text-ink',
       title: 'Yetkilendirme iptal edildi',
       body: 'İzin ekranında iptal ettin, hiçbir şey değişmedi.',
     },

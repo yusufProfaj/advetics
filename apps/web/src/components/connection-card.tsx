@@ -17,7 +17,7 @@ const STATUS: Record<
   active: { label: 'Aktif', cls: 'text-emerald-700', dot: 'bg-emerald-500' },
   needs_reauth: { label: 'Yeniden yetkilendirme gerekli', cls: 'text-amber-700', dot: 'bg-amber-500' },
   error: { label: 'Hata', cls: 'text-red-700', dot: 'bg-red-500' },
-  revoked: { label: 'Kaldırıldı', cls: 'text-[var(--text-muted)]', dot: 'bg-slate-400' },
+  revoked: { label: 'Kaldırıldı', cls: 'text-ink-muted', dot: 'bg-slate-400' },
 };
 
 export function ConnectionCard({ connection }: { connection: ConnectionSummary }) {
@@ -51,7 +51,7 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
   }
 
   return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+    <section className="rounded-xl border border-line bg-surface p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -75,7 +75,7 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
             type="button"
             onClick={() => void run('verify', () => apiFetch(`/connections/${connection.id}/verify`, { method: 'POST' }))}
             disabled={busy !== null || isPending}
-            className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
+            className="rounded-lg border border-line px-2.5 py-1.5 text-xs transition hover:bg-surface-muted disabled:opacity-50"
           >
             {busy === 'verify' ? '…' : 'Doğrula'}
           </button>
@@ -83,7 +83,7 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
             type="button"
             onClick={() => void run('refresh', () => apiFetch(`/connections/${connection.id}/refresh-accounts`, { method: 'POST' }))}
             disabled={busy !== null || isPending}
-            className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
+            className="rounded-lg border border-line px-2.5 py-1.5 text-xs transition hover:bg-surface-muted disabled:opacity-50"
           >
             {busy === 'refresh' ? '…' : 'Hesapları yenile'}
           </button>
@@ -133,9 +133,9 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
           Meta App Review izinleri tek tek onayladığı için aşamalı başvuru
           normaldir; bunu hata gibi göstermek kullanıcıyı yanıltır. */}
       {connection.missingOptionalScopes.length > 0 && connection.missingScopes.length === 0 && (
-        <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm">
+        <div className="mt-3 rounded-lg border border-line bg-surface-muted px-3 py-2 text-sm">
           <strong>Auto-Boost için ek izin bekliyor</strong>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">
+          <p className="mt-1 text-xs text-ink-muted">
             Bağlantı çalışıyor. Eksik: {connection.missingOptionalScopes.join(', ')} — bu izinler
             Meta App Review&apos;dan onaylandıktan sonra &quot;Yeniden yetkilendir&quot; ile
             eklenebilir.
@@ -146,30 +146,30 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
       {/* Reklam hesapları */}
       <div className="mt-4">
         <div className="flex items-baseline justify-between">
-          <h4 className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+          <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
             Reklam hesapları ({syncedCount}/{connection.adAccounts.length} izleniyor)
           </h4>
         </div>
 
         {connection.adAccounts.length === 0 ? (
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
+          <p className="mt-2 text-sm text-ink-muted">
             Hesap bulunamadı. Google&apos;da bu genelde developer token&apos;ın Basic Access
             onayı olmadığını gösterir.
           </p>
         ) : (
-          <ul className="mt-2 divide-y divide-[var(--border)]">
+          <ul className="mt-2 divide-y divide-line">
             {connection.adAccounts.map((a) => (
               <li key={a.id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">
                     {a.name}
                     {a.isManager && (
-                      <span className="ml-2 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
+                      <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] text-ink-muted">
                         yönetici hesabı
                       </span>
                     )}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)]">
+                  <p className="text-xs text-ink-muted">
                     {a.externalId} · {a.currency} · {a.timezone} · {a.status}
                   </p>
                 </div>
@@ -188,15 +188,15 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
                         }),
                       )
                     }
-                    className="h-4 w-4 accent-[var(--brand-primary)] disabled:opacity-40"
+                    className="h-4 w-4 accent-brand disabled:opacity-40"
                   />
-                  <span className={a.isManager ? 'text-[var(--text-muted)]' : ''}>İzle</span>
+                  <span className={a.isManager ? 'text-ink-muted' : ''}>İzle</span>
                 </label>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-2 text-xs text-[var(--text-muted)]">
+        <p className="mt-2 text-xs text-ink-muted">
           Her izlenen hesap API kotası tüketir. Keşfedilen hesaplar bu yüzden kapalı başlar.
         </p>
       </div>
@@ -204,24 +204,24 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
       {/* Sosyal profiller — yalnızca Meta */}
       {connection.socialProfiles.length > 0 && (
         <div className="mt-4">
-          <h4 className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+          <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
             Sayfalar & Instagram ({connection.socialProfiles.length})
           </h4>
           <ul className="mt-2 flex flex-wrap gap-2">
             {connection.socialProfiles.map((p) => (
               <li
                 key={p.id}
-                className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs"
+                className="flex items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-xs"
               >
-                <span className="text-[var(--text-muted)]">
+                <span className="text-ink-muted">
                   {p.profileType === 'instagram_business' ? 'IG' : 'FB'}
                 </span>
                 <span className="font-medium">{p.name}</span>
-                {p.username && <span className="text-[var(--text-muted)]">@{p.username}</span>}
+                {p.username && <span className="text-ink-muted">@{p.username}</span>}
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-[var(--text-muted)]">
+          <p className="mt-2 text-xs text-ink-muted">
             Auto-Boost (Modül 7) bu profilleri kullanacak.
           </p>
         </div>

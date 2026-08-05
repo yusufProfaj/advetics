@@ -19,7 +19,7 @@ export default function PrivacyPage() {
         güncellenmeli; aksi halde beyan ile gerçek ayrışır.
       */}
       <h1 className="text-2xl font-semibold">Gizlilik Politikası</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
+      <p className="mt-1 text-sm text-ink-muted">
         Son güncelleme: {UPDATED}
       </p>
 
@@ -231,12 +231,12 @@ export default function PrivacyPage() {
           çoğunlukla İngilizce çalışıyor. Ayrı bir sayfa yerine aynı URL'de
           İngilizce özet vermek, "policy not accessible/understandable"
           gerekçesiyle reddedilme riskini düşürüyor. */}
-      <hr className="my-10 border-[var(--border)]" />
+      <hr className="my-10 border-line" />
 
       <h2 className="text-xl font-semibold" id="english">
         Privacy Policy (English)
       </h2>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">Last updated: 5 August 2026</p>
+      <p className="mt-1 text-sm text-ink-muted">Last updated: 5 August 2026</p>
 
       <Section title="Who we are">
         <p>
@@ -331,7 +331,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section className="mt-7">
       <h2 className="text-base font-semibold">{title}</h2>
-      <div className="mt-2 space-y-2 text-sm leading-relaxed text-[var(--text)]">{children}</div>
+      <div className="mt-2 space-y-2 text-sm leading-relaxed text-ink">{children}</div>
     </section>
   );
 }

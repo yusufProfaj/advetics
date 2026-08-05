@@ -1,43 +1,54 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Role } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 
-interface Membership {
+interface AvailableClient {
   id: string;
-  clientId: string | null;
-  clientName: string | null;
-  role: Role;
+  name: string;
+  status: string;
 }
 
 /**
  * Aktif müşteri seçici.
  *
- * Seçim sunucuya bildirilir ve bir cookie'de saklanır. Cookie'yi elle
- * değiştirmek erişim kazandırmaz: API her istekte seçimi kullanıcının gerçek
- * membership listesine karşı doğrular ve geçersizse organizasyon geneli
- * görünüme düşer (bkz. TenantContextService.resolve).
+ * Liste `session.availableClients`ten gelir, membership'lerden TÜRETİLMEZ:
+ * org geneli yetkili bir kullanıcının tek membership satırı vardır ve
+ * `clientId` null'dır. Listeyi membership'lerden çıkarmak, yöneticiye boş bir
+ * seçici gösteriyordu ve müşteri seçilemediği için bağlantı kurmak imkânsız
+ * hâle geliyordu.
+ *
+ * Seçim sunucuya bildirilir ve cookie'de saklanır. Cookie'yi elle değiştirmek
+ * erişim kazandırmaz: API her istekte seçimi kullanıcının gerçek erişim
+ * listesine karşı doğrular ve geçersizse org geneli görünüme düşer.
  */
 export function ClientSwitcher({
-  memberships,
+  availableClients,
   activeClientId,
   isOrgAdmin,
 }: {
-  memberships: Membership[];
+  availableClients: AvailableClient[];
   activeClientId: string | null;
   isOrgAdmin: boolean;
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
 
-  const clients = memberships
-    .filter((m) => m.clientId !== null)
-    .map((m) => ({ id: m.clientId as string, name: m.clientName ?? 'İsimsiz müşteri' }));
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
 
-  async function onChange(value: string) {
-    const clientId = value === '__all__' ? null : value;
+  const active = availableClients.find((c) => c.id === activeClientId) ?? null;
+
+  async function select(clientId: string | null) {
+    setOpen(false);
     setPending(true);
     try {
       await apiFetch('/auth/switch-client', {
@@ -50,31 +61,130 @@ export function ClientSwitcher({
     }
   }
 
-  // Org yöneticisi değilse ve tek müşterisi varsa seçici anlamsız.
-  if (!isOrgAdmin && clients.length <= 1) {
+  if (availableClients.length === 0) {
     return (
-      <span className="text-sm font-medium">
-        {clients[0]?.name ?? 'Müşteri atanmamış'}
-      </span>
+      <div className="rounded-lg border border-dashed border-line px-3 py-2 text-sm text-ink-muted">
+        Henüz müşteri yok —{' '}
+        <a href="/ayarlar/musteriler" className="text-brand underline">
+          müşteri ekle
+        </a>
+      </div>
+    );
+  }
+
+  // Tek müşterisi olan ve org geneli yetkisi olmayan kullanıcıya seçici gösterme.
+  if (!isOrgAdmin && availableClients.length === 1) {
+    return (
+      <div className="flex items-center gap-2.5">
+        <Avatar name={availableClients[0]!.name} />
+        <span className="text-sm font-medium">{availableClients[0]!.name}</span>
+      </div>
     );
   }
 
   return (
-    <label className="flex items-center gap-2 text-sm">
-      <span className="text-[var(--text-muted)]">Müşteri:</span>
-      <select
-        value={activeClientId ?? '__all__'}
+    <div ref={boxRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
         disabled={pending}
-        onChange={(e) => void onChange(e.target.value)}
-        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-sm outline-none transition focus:border-[var(--brand-primary)] disabled:opacity-60"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className="flex min-w-[13rem] items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 text-left transition hover:bg-surface-muted disabled:opacity-60"
       >
-        {isOrgAdmin && <option value="__all__">Tüm müşteriler</option>}
-        {clients.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
-    </label>
+        <Avatar name={active?.name ?? '∗'} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium leading-tight">
+            {active?.name ?? 'Tüm müşteriler'}
+          </span>
+          <span className="block text-[11px] leading-tight text-ink-muted">
+            {active ? 'Müşteri görünümü' : `${availableClients.length} müşteri`}
+          </span>
+        </span>
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          className={`h-4 w-4 shrink-0 text-ink-muted transition ${open ? 'rotate-180' : ''}`}
+          aria-hidden
+        >
+          <path d="m6 8 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 top-full z-30 mt-1.5 w-72 overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
+        >
+          {isOrgAdmin && (
+            <>
+              <Option
+                label="Tüm müşteriler"
+                hint="Organizasyon geneli görünüm"
+                selected={activeClientId === null}
+                onSelect={() => void select(null)}
+              />
+              <div className="h-px bg-line" />
+            </>
+          )}
+          <div className="max-h-72 overflow-y-auto">
+            {availableClients.map((c) => (
+              <Option
+                key={c.id}
+                label={c.name}
+                hint={c.status === 'paused' ? 'Duraklatıldı' : undefined}
+                selected={c.id === activeClientId}
+                onSelect={() => void select(c.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Option({
+  label,
+  hint,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  hint?: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={selected}
+      onClick={onSelect}
+      className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition ${
+        selected ? 'bg-brand-soft' : 'hover:bg-surface-muted'
+      }`}
+    >
+      <Avatar name={label} />
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate text-sm ${selected ? 'font-semibold text-brand' : ''}`}>
+          {label}
+        </span>
+        {hint && <span className="block text-[11px] text-ink-muted">{hint}</span>}
+      </span>
+      {selected && (
+        <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 text-brand" aria-hidden>
+          <path d="m5 10 3.5 3.5L15 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+function Avatar({ name }: { name: string }) {
+  return (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand text-[11px] font-semibold uppercase text-white">
+      {name.slice(0, 2)}
+    </span>
   );
 }

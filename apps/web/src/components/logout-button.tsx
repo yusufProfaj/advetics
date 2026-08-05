@@ -26,9 +26,19 @@ export function LogoutButton() {
       type="button"
       onClick={logout}
       disabled={pending}
-      className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-muted)] transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
+      title="Çıkış yap"
+      aria-label="Çıkış yap"
+      className="shrink-0 rounded-lg p-1.5 text-ink-muted transition hover:bg-surface-muted hover:text-danger disabled:opacity-50"
     >
-      {pending ? '…' : 'Çıkış'}
+      <svg viewBox="0 0 20 20" fill="none" className="h-[18px] w-[18px]" aria-hidden>
+        <path
+          d="M12.5 6.5V4.5h-8v11h8v-2M9 10h7.5m0 0-2.5-2.5M16.5 10 14 12.5"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
     </button>
   );
 }

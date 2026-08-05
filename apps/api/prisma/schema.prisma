@@ -197,8 +197,8 @@ model BrandingProfile {
   logoDarkUrl String? @map("logo_dark_url") @db.VarChar(1024)
   faviconUrl  String? @map("favicon_url") @db.VarChar(1024)
 
-  primaryColor String @default("#2563EB") @map("primary_color") @db.VarChar(9)
-  accentColor  String @default("#0EA5E9") @map("accent_color") @db.VarChar(9)
+  primaryColor String @default("#E11D2E") @map("primary_color") @db.VarChar(9)
+  accentColor  String @default("#F97316") @map("accent_color") @db.VarChar(9)
   fontFamily   String @default("Inter") @map("font_family") @db.VarChar(120)
 
   /// Rapor paylaşım linklerinin servis edileceği alan adı.

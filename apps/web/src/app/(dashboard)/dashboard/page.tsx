@@ -22,7 +22,7 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-semibold">
           Merhaba, {session.user.fullName.split(' ')[0]}
         </h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
+        <p className="mt-1 text-sm text-ink-muted">
           {activeClient?.clientName
             ? `${activeClient.clientName} görünümündesiniz.`
             : 'Organizasyon geneli görünümdesiniz.'}
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Modül 1 durum kartı */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <section className="rounded-xl border border-line bg-surface p-5">
         <h2 className="text-sm font-semibold">Modül 1 — Kiracılık & Güvenlik</h2>
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
           <Stat label="Organizasyon" value={session.organization.name} />
@@ -52,7 +52,7 @@ export default async function DashboardPage() {
             : 'border-amber-300 bg-amber-50/60'
         }`}
       >
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
           <span
             className={`inline-block h-2 w-2 rounded-full ${
               rls?.healthy ? 'bg-emerald-500' : 'bg-amber-500'
@@ -63,7 +63,7 @@ export default async function DashboardPage() {
 
         {rls ? (
           <div className="mt-3 space-y-2 text-sm">
-            <p className="text-[var(--text-muted)]">
+            <p className="text-ink-muted">
               {rls.protectedTables.length} tablo politika ile korunuyor · Bağlam{' '}
               {rls.contextApplied ? 'uygulanıyor' : 'UYGULANMIYOR'}
             </p>
@@ -82,7 +82,7 @@ export default async function DashboardPage() {
       </section>
 
       {/* Yol haritası */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <section className="rounded-xl border border-line bg-surface p-5">
         <h2 className="text-sm font-semibold">Yol haritası</h2>
         <ol className="mt-4 space-y-2.5 text-sm">
           <RoadmapItem n={1} title="Auth + multi-tenant iskelet + RLS" done />
@@ -102,7 +102,7 @@ export default async function DashboardPage() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-[var(--text-muted)]">{label}</dt>
+      <dt className="text-xs uppercase tracking-wide text-ink-muted">{label}</dt>
       <dd className="mt-0.5 text-sm font-medium">{value}</dd>
     </div>
   );
@@ -114,13 +114,13 @@ function RoadmapItem({ n, title, done }: { n: number; title: string; done?: bool
       <span
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium ${
           done
-            ? 'bg-[var(--brand-primary)] text-white'
-            : 'bg-[var(--surface-muted)] text-[var(--text-muted)]'
+            ? 'bg-brand text-white'
+            : 'bg-surface-muted text-ink-muted'
         }`}
       >
         {done ? '✓' : n}
       </span>
-      <span className={done ? 'font-medium' : 'text-[var(--text-muted)]'}>{title}</span>
+      <span className={done ? 'font-medium' : 'text-ink-muted'}>{title}</span>
     </li>
   );
 }

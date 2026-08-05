@@ -43,7 +43,7 @@ export function ConnectButtons({ availability }: { availability: ProviderAvailab
 
       <div className="grid gap-3 sm:grid-cols-2">
         {availability.map((a) => (
-          <div key={a.platform} className="rounded-lg border border-[var(--border)] p-4">
+          <div key={a.platform} className="rounded-lg border border-line p-4">
             <p className="text-sm font-medium">{LABELS[a.platform]}</p>
 
             {a.configured ? (
@@ -51,7 +51,7 @@ export function ConnectButtons({ availability }: { availability: ProviderAvailab
                 type="button"
                 onClick={() => void connect(a.platform)}
                 disabled={pending !== null}
-                className="mt-3 w-full rounded-lg bg-[var(--brand-primary)] px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-3 w-full rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {pending === a.platform ? 'Yönlendiriliyor…' : 'Bağlan'}
               </button>
@@ -61,11 +61,11 @@ export function ConnectButtons({ availability }: { availability: ProviderAvailab
                   type="button"
                   disabled
                   title={`Eksik yapılandırma: ${a.missingConfig.join(', ')}`}
-                  className="w-full cursor-not-allowed rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-muted)] opacity-60"
+                  className="w-full cursor-not-allowed rounded-lg border border-line px-3 py-2 text-sm text-ink-muted opacity-60"
                 >
                   Yapılandırılmadı
                 </button>
-                <p className="mt-2 text-xs text-[var(--text-muted)]">
+                <p className="mt-2 text-xs text-ink-muted">
                   Eksik: {a.missingConfig.join(', ')}
                 </p>
               </div>
