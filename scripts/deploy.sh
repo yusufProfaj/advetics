@@ -77,6 +77,14 @@ ok "kuruldu"
 # -----------------------------------------------------------------------------
 log "Derleme"
 # -----------------------------------------------------------------------------
+# Kök .env'i ortama aktar — Prisma CLI kendi dizinindeki .env'i yükler ve
+# apps/api/.env ile ayrışırsa yanlış veritabanına bağlanır. Ortam değişkeni
+# dosyadan önce geldiği için export etmek tek doğruluk kaynağını dayatır.
+set -a
+# shellcheck disable=SC1091
+. ./.env
+set +a
+
 # Sıra önemli: shared paketi diğer ikisinin tip kaynağı.
 pnpm --filter @advetics/shared build
 pnpm --filter @advetics/api exec prisma generate

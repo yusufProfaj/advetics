@@ -132,6 +132,29 @@ ok "kuruldu"
 log "Veritabanı şeması"
 # -----------------------------------------------------------------------------
 pnpm --filter @advetics/shared build >/dev/null
+
+# Kök .env'i ortama aktar.
+#
+# Prisma CLI, ÇALIŞTIĞI DİZİNDEKİ .env'i yükler — yani apps/api/.env. Bu
+# monorepo'da tek doğruluk kaynağı kökteki .env; ikisi ayrışırsa Prisma başka
+# bir veritabanına bağlanır. Gerçek sunucuda tam olarak bu oldu: kök .env
+# `advetics`i, apps/api/.env ise `advetics_db`yi gösteriyordu ve migration
+# yanlış veritabanına uygulandı.
+#
+# Ortam değişkeni dosyadan ÖNCE gelir (dotenv mevcut değişkeni ezmez), bu
+# yüzden export etmek apps/api/.env'i etkisiz kılar.
+set -a
+# shellcheck disable=SC1091
+. ./.env
+set +a
+ok "kök .env ortama aktarıldı → $(sed -E 's#.*/([^/?]+)(\?.*)?$#\1#' <<< "${DIRECT_DATABASE_URL%%\?*}")"
+
+# Ayrışmaya yol açan artık dosyayı temizle.
+if [[ -f apps/api/.env ]]; then
+  mv apps/api/.env "apps/api/.env.yedek.$(date +%s)"
+  warn "apps/api/.env bulundu ve kenara alındı — Prisma'nın kök .env'i kullanması için"
+fi
+
 pnpm --filter @advetics/api exec prisma generate >/dev/null
 ok "prisma istemcisi üretildi"
 
