@@ -13,6 +13,40 @@ set -Eeuo pipefail
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$APP_DIR"
 
+# ROOT İLE ÇALIŞTIRMA YASAK.
+#
+# Bu sunucu paylaşımlıdır ve root'un pm2'si başka sitelerin canlı süreçlerini
+# yönetir. Bu script root olarak çalışırsa `pm2 startOrReload` ve `pm2 save`
+# root'un süreç listesine ve /root/.pm2/dump.pm2 dosyasına yazar — yani
+# başkasının üretimine. Bir kez oldu: root'un dump'ı yalnızca Advetics'in iki
+# süreciyle kaldı, sunucu yeniden başladığında diğer 6 site kalkmayacaktı.
+if [[ $EUID -eq 0 ]]; then
+  printf '\n\033[0;31m✗ Bu script root ile çalıştırılamaz.\033[0m\n' >&2
+  cat >&2 <<'EOF'
+
+  Sunucu paylaşımlı: root'un pm2'si başka sitelerin süreçlerini yönetiyor.
+  Root olarak çalıştırmak onların süreç listesini ve kayıtlı dump'ını bozar.
+
+  Site kullanıcısına geç:
+      su - advetics
+      cd ~/htdocs/advetics.com && ./scripts/deploy.sh
+
+EOF
+  exit 1
+fi
+
+# nvm ile kurulmuş Node'u yükle.
+#
+# Sistem Node'u diğer sitelere ait; Advetics kendi sürümünü site kullanıcısının
+# nvm'inde tutuyor. nvm yalnızca interaktif login shell'de PATH'e girer, oysa
+# GitHub Actions SSH ile non-interactive shell açar — bu yüzden burada açıkça
+# yüklüyoruz.
+if [[ -s "$HOME/.nvm/nvm.sh" ]]; then
+  export NVM_DIR="$HOME/.nvm"
+  # shellcheck disable=SC1091
+  . "$NVM_DIR/nvm.sh"
+fi
+
 API_PORT="${API_PORT:-3599}"
 WEB_PORT="${WEB_PORT:-3598}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-60}"

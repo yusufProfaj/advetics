@@ -1,56 +1,45 @@
 #!/usr/bin/env bash
 #
-# Hostinger VPS (CloudPanel) — bir kerelik sunucu hazırlığı.
+# Hostinger VPS (CloudPanel) — Advetics için sunucu hazırlığı.
 #
-# ROOT olarak çalıştırılır. DEPLOYMENT.md'deki 3–5. adımları otomatikleştirir:
-# Node.js 22, pnpm, pm2, PostgreSQL 16 (+ üç rol), Redis ve güvenlik duvarı.
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  BU SUNUCU PAYLAŞIMLIDIR.                                                ║
+# ║                                                                          ║
+# ║  Aynı makinede başka canlı üretim siteleri çalışıyor ve bunlar sistem     ║
+# ║  geneli kaynakları paylaşıyor: /usr/bin/node, PostgreSQL, Redis, Nginx,   ║
+# ║  root'un pm2'si, UFW.                                                    ║
+# ║                                                                          ║
+# ║  Bu script VARSAYILAN OLARAK paylaşılan hiçbir şeyi değiştirmez ve        ║
+# ║  hiçbir paylaşılan servisi yeniden başlatmaz. Yalnızca Advetics'e ait     ║
+# ║  olanı kurar:                                                            ║
+# ║    · `advetics` veritabanı ve `advetics_*` rolleri                        ║
+# ║    · site kullanıcısının kendi home'una nvm + Node                        ║
+# ║                                                                          ║
+# ║  Eksik bir sistem bileşeni varsa KURMAZ — bildirir ve durur. Kararı       ║
+# ║  sen verirsin.                                                           ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
 #
-# CloudPanel PostgreSQL ile GELMEZ (MySQL/MariaDB ile gelir) — bu script onu kurar.
-#
-# Kullanım (CloudPanel'de siteyi oluşturduktan SONRA):
-#
+# Kullanım:
 #   ssh root@VPS_IP
-#   curl -fsSL https://raw.githubusercontent.com/KULLANICI/advetics/main/scripts/vps-setup.sh -o vps-setup.sh
 #   bash vps-setup.sh --site-user advetics
 #
-# Idempotenttir: tekrar çalıştırmak zarar vermez, eksikleri tamamlar.
-# Şifreler yalnızca ilk çalıştırmada üretilir; sonraki çalıştırmalar korur.
+# Idempotenttir. Şifreler yalnızca ilk çalıştırmada üretilir.
 #
 set -Eeuo pipefail
 
 SITE_USER=""
 DB_NAME="advetics"
 CRED_FILE="/root/advetics-db-credentials.txt"
-SKIP_FIREWALL=0
 NODE_MAJOR=22
-PG_MAJOR=16
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --site-user) SITE_USER="${2:-}"; shift 2 ;;
     --db-name)   DB_NAME="${2:-}"; shift 2 ;;
-    # Güvenlik duvarına hiç dokunma. CloudPanel kendi UFW kurallarını yönetiyorsa
-    # veya özel bir ağ yapılandırman varsa kullan.
-    --skip-firewall) SKIP_FIREWALL=1; shift ;;
-    -h|--help)
-      sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
-      exit 0 ;;
+    -h|--help)   sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Bilinmeyen argüman: $1" >&2; exit 1 ;;
   esac
 done
-
-# psql'i postgres kullanıcısı olarak çalıştırır.
-#
-# CloudPanel kurulu sistemlerde `sudo` genelde vardır, ama minimal Debian
-# imajlarında bulunmayabilir. Zaten root olduğumuz için `su` ile geri düşmek
-# güvenli — sadece kullanıcı değiştiriyoruz, yetki yükseltmiyoruz.
-as_postgres() {
-  if command -v sudo >/dev/null 2>&1; then
-    sudo -u postgres "$@"
-  else
-    su -s /bin/sh postgres -c "$(printf '%q ' "$@")"
-  fi
-}
 
 log()  { printf '\n\033[1;34m▸ %s\033[0m\n' "$*"; }
 ok()   { printf '  \033[0;32m✓\033[0m %s\n' "$*"; }
@@ -58,152 +47,143 @@ skip() { printf '  \033[0;90m·\033[0m %s\n' "$*"; }
 warn() { printf '  \033[0;33m!\033[0m %s\n' "$*"; }
 die()  { printf '\n\033[0;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
-[[ $EUID -eq 0 ]] || die "Bu script root olarak çalıştırılmalı:  sudo bash $0 --site-user <kullanıcı>"
-[[ -n "$SITE_USER" ]] || die "--site-user zorunlu. CloudPanel'de siteyi oluştururken belirlediğin kullanıcı adı (örn: advetics)."
-id "$SITE_USER" >/dev/null 2>&1 || die "'$SITE_USER' kullanıcısı yok. Önce CloudPanel'de Node.js sitesini oluştur (DEPLOYMENT.md adım 2)."
+as_postgres() {
+  if command -v sudo >/dev/null 2>&1; then sudo -u postgres "$@"
+  else su -s /bin/sh postgres -c "$(printf '%q ' "$@")"; fi
+}
 
-command -v apt-get >/dev/null || die "Bu script Debian/Ubuntu içindir. CloudPanel zaten bu dağıtımlarda çalışır."
+[[ $EUID -eq 0 ]] || die "root olarak çalıştır: sudo bash $0 --site-user <kullanıcı>"
+[[ -n "$SITE_USER" ]] || die "--site-user zorunlu (CloudPanel'deki Site User, örn: advetics)"
+id "$SITE_USER" >/dev/null 2>&1 || die "'$SITE_USER' kullanıcısı yok. Önce CloudPanel'de siteyi oluştur."
 
-export DEBIAN_FRONTEND=noninteractive
-
-# -----------------------------------------------------------------------------
-log "Sistem bilgisi"
-# -----------------------------------------------------------------------------
-. /etc/os-release
-ok "$PRETTY_NAME"
-ok "site kullanıcısı: $SITE_USER (home: $(getent passwd "$SITE_USER" | cut -d: -f6))"
-
-apt-get update -qq
-apt-get install -y -qq curl ca-certificates gnupg lsb-release ufw >/dev/null
+SITE_HOME="$(getent passwd "$SITE_USER" | cut -d: -f6)"
+[[ -d "$SITE_HOME" ]] || die "$SITE_USER kullanıcısının home dizini bulunamadı"
 
 # -----------------------------------------------------------------------------
-log "Node.js ${NODE_MAJOR}"
+log "Paylaşımlı sunucu taraması"
 # -----------------------------------------------------------------------------
-# nvm YERİNE NodeSource ile sistem geneli kurulum.
+# Bu bölüm hiçbir şey yapmaz — sadece neyi riske attığımızı görünür kılar.
+# Kör gitmek bir kez pahalıya geldi.
+OTHER_USERS="$(find /home -maxdepth 2 -type d -name htdocs 2>/dev/null \
+  | sed 's#/home/\([^/]*\)/htdocs#\1#' | grep -vx "$SITE_USER" | sort || true)"
+
+if [[ -n "$OTHER_USERS" ]]; then
+  warn "Bu sunucuda BAŞKA siteler var — hiçbirine dokunulmayacak:"
+  while read -r u; do [[ -n "$u" ]] && printf '        · %s\n' "$u"; done <<< "$OTHER_USERS"
+else
+  skip "başka site kullanıcısı bulunamadı"
+fi
+
+ROOT_PM2_COUNT=0
+if command -v pm2 >/dev/null 2>&1 && [[ -f /root/.pm2/dump.pm2 ]]; then
+  ROOT_PM2_COUNT="$(pm2 jlist 2>/dev/null | grep -o '"name"' | wc -l | tr -d ' ' || echo 0)"
+fi
+if [[ "${ROOT_PM2_COUNT:-0}" -gt 0 ]]; then
+  warn "root'un pm2'sinde ${ROOT_PM2_COUNT} süreç var — bu script ona DOKUNMAZ"
+  warn "Advetics daima '$SITE_USER' kullanıcısının pm2'si altında çalışır"
+fi
+
+# -----------------------------------------------------------------------------
+log "Sistem bileşenleri (yalnızca kontrol — kurulum YOK)"
+# -----------------------------------------------------------------------------
+# Eksik bir bileşeni kurmak apt deposu eklemek, paket yüklemek ve servis
+# başlatmak demek — hepsi paylaşılan alanda. Bu yüzden kurmuyoruz, bildiriyoruz.
+MISSING=""
+
+if command -v psql >/dev/null 2>&1; then
+  ok "PostgreSQL: $(psql --version | awk '{print $3}')"
+else
+  MISSING+="  · PostgreSQL — kur: apt install postgresql-16\n"
+fi
+
+if systemctl is-active --quiet postgresql 2>/dev/null; then
+  ok "PostgreSQL servisi çalışıyor"
+else
+  MISSING+="  · PostgreSQL servisi çalışmıyor — systemctl start postgresql\n"
+fi
+
+# listen_addresses'i DEĞİŞTİRMİYORUZ, yalnızca rapor ediyoruz. Bu ayar tüm
+# veritabanlarını etkiler; değiştirip servisi yeniden başlatmak başka sitelerin
+# bağlantılarını keser.
+PG_LISTEN="$(as_postgres psql -tAc 'SHOW listen_addresses' 2>/dev/null || echo '?')"
+if [[ "$PG_LISTEN" == "localhost" || "$PG_LISTEN" == "127.0.0.1" ]]; then
+  ok "PostgreSQL yalnızca localhost dinliyor"
+else
+  warn "PostgreSQL listen_addresses = '$PG_LISTEN' (yalnızca localhost olması önerilir)"
+  warn "DEĞİŞTİRMEDİM — bu ayar tüm veritabanlarını etkiler, servisi yeniden başlatmak gerekir"
+fi
+
+if command -v redis-server >/dev/null 2>&1; then
+  ok "Redis: $(redis-server --version | grep -oE 'v=[0-9.]+' | cut -d= -f2)"
+  systemctl is-active --quiet redis-server 2>/dev/null \
+    && ok "Redis servisi çalışıyor" \
+    || MISSING+="  · Redis servisi çalışmıyor — systemctl start redis-server\n"
+else
+  MISSING+="  · Redis — kur: apt install redis-server  (Modül 3'te gerekli olacak)\n"
+fi
+
+if [[ -n "$MISSING" ]]; then
+  printf '\n\033[0;31m✗ Eksik sistem bileşenleri var. Bunları KURMUYORUM — paylaşılan alanda değişiklik yapmak senin kararın.\033[0m\n\n' >&2
+  printf "$MISSING" >&2
+  printf '\n  Kurduktan sonra bu script’i tekrar çalıştır.\n\n' >&2
+  exit 1
+fi
+
+# -----------------------------------------------------------------------------
+log "Node.js ${NODE_MAJOR} — yalnızca $SITE_USER için (nvm)"
+# -----------------------------------------------------------------------------
+# Sistem Node'una KESİNLİKLE dokunmuyoruz: /usr/bin/node başka sitelerin
+# runtime'ı ve majör sürüm değişikliği onların native modüllerini (bcrypt,
+# sharp, canvas...) ABI uyumsuzluğuyla kırar. Bir kez oldu, dört site düştü.
 #
-# Sebep: nvm yalnızca interaktif login shell'lerde PATH'e girer. GitHub Actions
-# SSH ile non-interactive shell açıyor ve orada `node` bulunamıyor — dağıtımın
-# en sık takıldığı yer burasıdır. Sistem geneli kurulum /usr/bin'e yazar ve
-# her shell türünde çalışır.
-#
-# DİKKAT — `node` yerine `/usr/bin/node` kontrol ediliyor.
-#
-# root'un kendi nvm kurulumu olabilir ve PATH'te /usr/bin/node'un önüne geçer.
-# Bu script root olarak çalıştığı için PATH'teki `node` root'un nvm sürümünü
-# gösterir; oysa uygulamayı çalıştıracak olan site kullanıcısı /usr/bin/node
-# kullanır. Yanlış ikiliyi ölçmek, ilk kurulumda tam olarak bu karışıklığa yol
-# açtı: script "v20" raporladı, sistemde ise v23 vardı.
-SYS_NODE=/usr/bin/node
-sys_major() { [[ -x "$SYS_NODE" ]] && "$SYS_NODE" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
+# Advetics kendi Node'unu site kullanıcısının nvm'inde tutar. İzole ve geri
+# alınabilir: /home/$SITE_USER/.nvm silinince eski hale döner.
+SYS_NODE_V="$(/usr/bin/node -v 2>/dev/null || echo 'yok')"
+skip "sistem node'u: ${SYS_NODE_V} — DOKUNULMUYOR (diğer sitelerin runtime'ı)"
 
-CUR_MAJOR="$(sys_major)"
+SITE_NODE_MAJOR="$(su - "$SITE_USER" -c '
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" 2>/dev/null
+  command -v node >/dev/null 2>&1 && node -p "process.versions.node.split(\".\")[0]" || echo 0
+' 2>/dev/null || echo 0)"
 
-# Kabul kriteri: sürüm >= istenen VE ÇİFT (Node'da yalnızca çift majörler LTS'tir).
-# Tek majörler (23, 25...) güvenlik yaması almadan ömrünü tamamlar; OAuth token'ı
-# saklayan bir üretim sisteminde çalıştırılmamalıdır.
-if [[ "$CUR_MAJOR" -ge "$NODE_MAJOR" && $((CUR_MAJOR % 2)) -eq 0 ]]; then
-  skip "sistem node'u uygun: $("$SYS_NODE" -v) (LTS)"
+if [[ "${SITE_NODE_MAJOR:-0}" -eq "$NODE_MAJOR" ]]; then
+  skip "$SITE_USER zaten Node ${NODE_MAJOR} kullanıyor"
 else
-  if [[ "$CUR_MAJOR" -gt 0 && $((CUR_MAJOR % 2)) -ne 0 ]]; then
-    warn "sistemde LTS olmayan Node $("$SYS_NODE" -v) var — ${NODE_MAJOR} LTS'e sabitleniyor"
-  else
-    echo "  mevcut sistem node: ${CUR_MAJOR:-yok} → NodeSource ${NODE_MAJOR}.x kuruluyor"
-  fi
+  echo "  $SITE_USER için nvm + Node ${NODE_MAJOR} kuruluyor (yalnızca $SITE_HOME altına)"
+  su - "$SITE_USER" -c "
+    set -e
+    export NVM_DIR=\"\$HOME/.nvm\"
+    if [ ! -s \"\$NVM_DIR/nvm.sh\" ]; then
+      curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash >/dev/null 2>&1
+    fi
+    . \"\$NVM_DIR/nvm.sh\"
+    nvm install ${NODE_MAJOR} >/dev/null 2>&1
+    nvm alias default ${NODE_MAJOR} >/dev/null 2>&1
+  " || die "nvm/Node kurulumu başarısız"
 
-  # Çıktı BASTIRILMIYOR: ilk sürümde hata /dev/null'a gidiyor ve script yine
-  # "kuruldu" diyordu. Sessiz başarısızlık en kötü hata türüdür.
-  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - \
-    || die "NodeSource deposu eklenemedi. Yukarıdaki hataya bak."
-
-  # Sürümü AÇIKÇA sabitliyoruz. Depoda daha yeni bir majör kuruluysa
-  # (örn. 23), düz `apt-get install nodejs` düşürme yapmaz ve eski sürüm kalır.
-  PIN="$(apt-cache madison nodejs 2>/dev/null | awk -v m="^${NODE_MAJOR}\\\\." '$3 ~ m {print $3; exit}')"
-  if [[ -n "$PIN" ]]; then
-    apt-get install -y --allow-downgrades "nodejs=${PIN}" || die "nodejs=${PIN} kurulamadı"
-  else
-    apt-get install -y nodejs || die "apt-get install nodejs başarısız"
-  fi
-
-  NEW_MAJOR="$(sys_major)"
-  if [[ "$NEW_MAJOR" -ne "$NODE_MAJOR" ]]; then
-    {
-      echo "  Teşhis:"
-      echo "    /usr/bin/node : $("$SYS_NODE" -v 2>/dev/null || echo yok)"
-      echo "    apt policy    : $(apt-cache policy nodejs 2>/dev/null | tr '\n' ' ')"
-      echo "    depo dosyaları: $(ls /etc/apt/sources.list.d/ 2>/dev/null | grep -i node | tr '\n' ' ')"
-    } >&2
-    die "Sistem node'u ${NODE_MAJOR}.x olmadı (şu an majör=${NEW_MAJOR})."
-  fi
-  ok "kuruldu: $("$SYS_NODE" -v)"
+  INSTALLED="$(su - "$SITE_USER" -c 'export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; node -v' 2>/dev/null || echo '?')"
+  ok "kuruldu: ${INSTALLED} (yalnızca $SITE_USER)"
 fi
 
-# Site kullanıcısının node'u AYRI olabilir: CloudPanel "Node.js Site" tipinde
-# Node'u site kullanıcısının home'una nvm ile kurar ve o PATH'te öncelikli olur.
-# site-setup.sh o kullanıcı olarak çalışacağı için asıl önemli olan bu sürüm.
-SITE_NODE_MAJOR="$(su - "$SITE_USER" -c 'command -v node >/dev/null 2>&1 && node -p "process.versions.node.split(\".\")[0]" || echo 0' 2>/dev/null || echo 0)"
-if [[ "${SITE_NODE_MAJOR:-0}" -lt "$NODE_MAJOR" ]]; then
-  warn "$SITE_USER kullanıcısının node sürümü yetersiz (major=${SITE_NODE_MAJOR:-yok})"
-  warn "CloudPanel siteye özel nvm node'u kurmuş olabilir ve PATH'te öne geçiyor."
-  echo "      Düzeltmek için:"
-  echo "        su - $SITE_USER -c 'nvm alias default system 2>/dev/null; node -v'"
-  echo "      ya da site kullanıcısının ~/.bashrc içindeki nvm satırlarını kaldır."
-else
-  ok "$SITE_USER kullanıcısı için de uygun (major=$SITE_NODE_MAJOR)"
-fi
+# pnpm ve pm2: sistem geneli kurulum YAPMIYORUZ (npm install -g root'a yazar ve
+# diğer sitelerin sürümünü değiştirebilir). Site kullanıcısının nvm'i içine
+# kuruyoruz — orası yalnızca ona ait.
+su - "$SITE_USER" -c "
+  export NVM_DIR=\"\$HOME/.nvm\"
+  [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
+  command -v pnpm >/dev/null 2>&1 || npm install -g pnpm@9 >/dev/null 2>&1
+  command -v pm2  >/dev/null 2>&1 || npm install -g pm2  >/dev/null 2>&1
+" 2>/dev/null || warn "pnpm/pm2 kurulumu kısmen başarısız — elle kontrol et"
+
+TOOLS="$(su - "$SITE_USER" -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; echo "node $(node -v 2>/dev/null) · pnpm $(pnpm -v 2>/dev/null) · pm2 $(pm2 -v 2>/dev/null)"' 2>/dev/null || echo '?')"
+ok "$SITE_USER araçları → $TOOLS"
 
 # -----------------------------------------------------------------------------
-log "pnpm ve pm2"
+log "Veritabanı: '$DB_NAME' ve advetics_* rolleri"
 # -----------------------------------------------------------------------------
-if command -v pnpm >/dev/null; then
-  skip "pnpm zaten kurulu: $(pnpm -v)"
-else
-  npm install -g pnpm@9 >/dev/null 2>&1
-  ok "pnpm $(pnpm -v)"
-fi
-
-if command -v pm2 >/dev/null; then
-  skip "pm2 zaten kurulu: $(pm2 -v)"
-else
-  npm install -g pm2 >/dev/null 2>&1
-  ok "pm2 $(pm2 -v)"
-fi
-
-# -----------------------------------------------------------------------------
-log "PostgreSQL ${PG_MAJOR}"
-# -----------------------------------------------------------------------------
-if command -v psql >/dev/null && psql --version | grep -qE "\s${PG_MAJOR}\."; then
-  skip "zaten kurulu: $(psql --version)"
-else
-  install -d /usr/share/postgresql-common/pgdg
-  curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-    https://www.postgresql.org/media/keys/ACCC4CF8.asc
-  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-    > /etc/apt/sources.list.d/pgdg.list
-  apt-get update -qq
-  apt-get install -y -qq "postgresql-${PG_MAJOR}" >/dev/null
-  ok "kuruldu: $(psql --version)"
-fi
-
-systemctl enable --now postgresql >/dev/null 2>&1
-ok "servis aktif"
-
-# Yalnızca localhost dinlesin — veritabanı asla internete açılmamalı.
-PG_CONF="/etc/postgresql/${PG_MAJOR}/main/postgresql.conf"
-if [[ -f "$PG_CONF" ]]; then
-  if grep -qE "^\s*listen_addresses\s*=\s*'localhost'" "$PG_CONF"; then
-    skip "listen_addresses = localhost"
-  else
-    sed -i "s/^#\?\s*listen_addresses\s*=.*/listen_addresses = 'localhost'/" "$PG_CONF"
-    systemctl restart postgresql
-    ok "listen_addresses = localhost olarak ayarlandı"
-  fi
-fi
-
-# -----------------------------------------------------------------------------
-log "Veritabanı ve roller"
-# -----------------------------------------------------------------------------
-# Şifreler yalnızca İLK çalıştırmada üretilir. Sonraki çalıştırmalarda mevcut
-# dosyadan okunur — aksi halde her çalıştırma .env'i geçersiz kılardı.
+# Buradaki her şey isim bazında Advetics'e özgü. Başka veritabanına, role veya
+# şemaya dokunulmaz.
 if [[ -f "$CRED_FILE" ]]; then
   skip "mevcut şifreler kullanılıyor ($CRED_FILE)"
   # shellcheck disable=SC1090
@@ -215,7 +195,6 @@ else
   umask 077
   cat > "$CRED_FILE" <<EOF
 # Advetics veritabanı şifreleri — $(date -Iseconds)
-# Bu dosyayı SİLME. .env yeniden oluşturulurken gerekir.
 PW_MIGRATOR='${PW_MIGRATOR}'
 PW_APP='${PW_APP}'
 PW_WORKER='${PW_WORKER}'
@@ -230,10 +209,6 @@ else
   ok "veritabanı '${DB_NAME}' oluşturuldu"
 fi
 
-# Üç rol. RLS'in çalışması bu ayrıma bağlı:
-#   migrator → tablo sahibi, BYPASSRLS  (migration + seed)
-#   app      → BYPASSRLS YOK            (API runtime — politikalar buna uygulanır)
-#   worker   → BYPASSRLS                (auth öncesi akışlar, arka plan işleri)
 as_postgres psql -q -v ON_ERROR_STOP=1 -d "$DB_NAME" <<EOF
 DO \$\$
 BEGIN
@@ -268,23 +243,14 @@ ALTER DEFAULT PRIVILEGES FOR ROLE advetics_migrator IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE advetics_migrator IN SCHEMA app
   GRANT EXECUTE ON FUNCTIONS TO advetics_app, advetics_worker;
 
-REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 REVOKE CREATE ON SCHEMA public FROM advetics_app, advetics_worker;
 EOF
-ok "üç rol hazır"
+ok "üç rol hazır (yalnızca '${DB_NAME}' veritabanında)"
 
-# En kritik doğrulama: advetics_app RLS'i ATLAYAMAMALI.
 APP_BYPASS="$(as_postgres psql -tAc "SELECT rolbypassrls FROM pg_roles WHERE rolname='advetics_app'")"
-[[ "$APP_BYPASS" == "f" ]] || die "advetics_app rolünde BYPASSRLS açık — RLS hiç çalışmaz. Elle düzelt: ALTER ROLE advetics_app NOBYPASSRLS;"
+[[ "$APP_BYPASS" == "f" ]] || die "advetics_app rolünde BYPASSRLS açık — RLS çalışmaz. ALTER ROLE advetics_app NOBYPASSRLS;"
 ok "advetics_app → BYPASSRLS kapalı (RLS uygulanacak)"
 
-# Site kullanıcısına devir.
-#
-# $CRED_FILE yalnızca root tarafından okunabilir; site kullanıcısı .env'i
-# oluştururken bu değerlere ihtiyaç duyuyor. Elle kopyala-yapıştır yerine
-# yalnızca o kullanıcının okuyabileceği bir dosyaya yazıyoruz — böylece
-# şifreler shell geçmişine veya terminal kaydına düşmez.
-SITE_HOME="$(getent passwd "$SITE_USER" | cut -d: -f6)"
 HANDOFF="${SITE_HOME}/.advetics-db.env"
 umask 077
 cat > "$HANDOFF" <<EOF
@@ -295,77 +261,40 @@ REDIS_URL="redis://127.0.0.1:6379"
 EOF
 chown "${SITE_USER}:${SITE_USER}" "$HANDOFF"
 chmod 600 "$HANDOFF"
-ok "bağlantı bilgileri devredildi → $HANDOFF (yalnızca $SITE_USER okuyabilir)"
+ok "bağlantı bilgileri devredildi → $HANDOFF"
 
 # -----------------------------------------------------------------------------
-log "Redis"
+log "pm2 açılışta başlatma — yalnızca $SITE_USER"
 # -----------------------------------------------------------------------------
-if command -v redis-server >/dev/null; then
-  skip "zaten kurulu: $(redis-server --version | grep -oE 'v=[0-9.]+')"
+# Bu, /etc/systemd/system/pm2-$SITE_USER.service dosyasını oluşturur. Eklemeli
+# bir işlem: mevcut pm2-root veya başka bir birimi değiştirmez, devre dışı
+# bırakmaz.
+if systemctl list-unit-files 2>/dev/null | grep -q "pm2-${SITE_USER}.service"; then
+  skip "pm2-${SITE_USER}.service zaten kayıtlı"
 else
-  apt-get install -y -qq redis-server >/dev/null
-  ok "kuruldu"
+  SITE_PATH="$(su - "$SITE_USER" -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; echo "$PATH"' 2>/dev/null || echo "$PATH")"
+  su - "$SITE_USER" -c "export NVM_DIR=\"\$HOME/.nvm\"; . \"\$NVM_DIR/nvm.sh\"; pm2 startup systemd -u ${SITE_USER} --hp ${SITE_HOME}" 2>/dev/null \
+    | grep -E '^sudo env' | bash >/dev/null 2>&1 \
+    || env PATH="$SITE_PATH" pm2 startup systemd -u "$SITE_USER" --hp "$SITE_HOME" >/dev/null 2>&1 \
+    || warn "pm2 systemd birimi kaydedilemedi — elle: su - $SITE_USER -c 'pm2 startup'"
+  systemctl list-unit-files 2>/dev/null | grep -q "pm2-${SITE_USER}.service" \
+    && ok "pm2-${SITE_USER}.service kaydedildi" \
+    || warn "birim doğrulanamadı"
 fi
-# appendonly: sunucu yeniden başladığında kuyruktaki işler kaybolmasın (Modül 3).
-if ! grep -qE '^appendonly yes' /etc/redis/redis.conf 2>/dev/null; then
-  sed -i 's/^appendonly no/appendonly yes/' /etc/redis/redis.conf 2>/dev/null || true
-fi
-systemctl enable --now redis-server >/dev/null 2>&1
-ok "servis aktif"
 
 # -----------------------------------------------------------------------------
-log "Güvenlik duvarı"
+log "Güvenlik duvarı — yalnızca rapor"
 # -----------------------------------------------------------------------------
-# 3598/3599/5432/6379 KASITLI olarak açılmıyor — hepsi yalnızca localhost.
-#
-# DİKKAT: UFW'yi yanlış kurallarla açmak seni sunucudan KİLİTLER. Bu yüzden
-# sabit port varsaymıyoruz; gerçekte dinlenen SSH ve CloudPanel portlarını
-# sistemden okuyup açıyoruz.
-if [[ "$SKIP_FIREWALL" -eq 1 ]]; then
-  skip "--skip-firewall verildi, dokunulmuyor"
-else
-  # SSH portu: sshd_config'te değiştirilmiş olabilir. 22 varsayıp UFW açmak,
-  # özel port kullanan bir sunucuda oturumu anında keser.
-  # awk kullanıyoruz (grep değil): varsayılan sshd_config'te Port satırı
-  # yorumlanmış olduğu için grep hiç eşleşme bulamaz, 1 döner ve `set -e`
-  # script'i tam burada öldürür. awk eşleşme bulamasa da 0 döner.
-  SSH_PORTS="$(awk '/^[[:space:]]*Port[[:space:]]+[0-9]+/ {print $2}' \
-      /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null | sort -u || true)"
-  [[ -z "$SSH_PORTS" ]] && SSH_PORTS="22"
-  # Şu an bağlı olduğumuz oturumun portu — en güvenilir kaynak.
-  if [[ -n "${SSH_CONNECTION:-}" ]]; then
-    ACTIVE_SSH_PORT="$(awk '{print $4}' <<< "$SSH_CONNECTION")"
-    [[ -n "$ACTIVE_SSH_PORT" ]] && SSH_PORTS="$(printf '%s\n%s\n' "$SSH_PORTS" "$ACTIVE_SSH_PORT" | sort -u)"
-  fi
-  for p in $SSH_PORTS; do
-    ufw allow "${p}/tcp" >/dev/null 2>&1 || true
-    ok "SSH portu açıldı: ${p}"
-  done
-
-  # CloudPanel yönetim arayüzü (varsayılan 8443). Kapatmak paneli erişilemez kılar.
-  ufw allow 8443/tcp >/dev/null 2>&1 || true
-  ok "CloudPanel portu açıldı: 8443"
-
-  ufw allow 80,443/tcp >/dev/null 2>&1 || true
-
-  if ufw status 2>/dev/null | grep -q "Status: active"; then
-    skip "UFW zaten aktifti — kurallar eklendi, yeniden etkinleştirilmedi"
+# UFW kurallarını DEĞİŞTİRMİYORUZ. Kuralları eklemek/etkinleştirmek tüm
+# sunucuyu etkiler; yanlış bir kural SSH'ı veya CloudPanel'i (8443) keser.
+if command -v ufw >/dev/null 2>&1; then
+  UFW_STATE="$(ufw status 2>/dev/null | head -1 || echo 'okunamadı')"
+  skip "$UFW_STATE — DEĞİŞTİRİLMEDİ"
+  if ss -tln 2>/dev/null | grep -qE '0\.0\.0\.0:(5432|6379|3598|3599)'; then
+    warn "Bir uygulama/DB portu tüm arayüzlerde dinliyor — yalnızca 127.0.0.1 olmalı"
   else
-    ufw --force enable >/dev/null 2>&1 || warn "UFW etkinleştirilemedi"
-    ok "UFW etkinleştirildi"
+    ok "Advetics portları ve DB yalnızca localhost"
   fi
-  ok "açık: SSH(${SSH_PORTS//$'\n'/,}), 80, 443, 8443 · uygulama ve DB portları kapalı"
-fi
-
-# -----------------------------------------------------------------------------
-log "pm2 açılışta başlatma"
-# -----------------------------------------------------------------------------
-SITE_HOME="$(getent passwd "$SITE_USER" | cut -d: -f6)"
-if systemctl list-unit-files 2>/dev/null | grep -q "pm2-${SITE_USER}"; then
-  skip "systemd birimi zaten kayıtlı"
-else
-  env PATH="$PATH:/usr/bin" pm2 startup systemd -u "$SITE_USER" --hp "$SITE_HOME" >/dev/null 2>&1 || true
-  ok "pm2-${SITE_USER} systemd birimi kaydedildi"
 fi
 
 # -----------------------------------------------------------------------------
@@ -373,27 +302,23 @@ log "Hazır"
 # -----------------------------------------------------------------------------
 cat <<EOF
 
-  Kurulanlar
+  DEĞİŞTİRİLENLER (hepsi Advetics'e özgü)
   ──────────────────────────────────────────────────────────
-    Node.js       $(node -v)
-    pnpm          $(pnpm -v)
-    pm2           $(pm2 -v)
-    PostgreSQL    $(as_postgres psql -tAc 'SHOW server_version' | xargs)
-    Redis         $(redis-server --version | grep -oE 'v=[0-9.]+' | cut -d= -f2)
+    · '${DB_NAME}' veritabanı + advetics_* rolleri
+    · ${SITE_HOME}/.nvm  (Node ${NODE_MAJOR}, pnpm, pm2)
+    · ${HANDOFF}
+    · /etc/systemd/system/pm2-${SITE_USER}.service
 
-  .env için veritabanı satırları (kopyala)
+  DOKUNULMAYANLAR
   ──────────────────────────────────────────────────────────
-DATABASE_URL="postgresql://advetics_app:${PW_APP}@127.0.0.1:5432/${DB_NAME}?schema=public&connection_limit=10"
-DIRECT_DATABASE_URL="postgresql://advetics_migrator:${PW_MIGRATOR}@127.0.0.1:5432/${DB_NAME}?schema=public"
-WORKER_DATABASE_URL="postgresql://advetics_worker:${PW_WORKER}@127.0.0.1:5432/${DB_NAME}?schema=public&connection_limit=10"
-REDIS_URL="redis://127.0.0.1:6379"
-
-  Bu satırlar $CRED_FILE dosyasından her zaman yeniden üretilebilir.
+    · /usr/bin/node (${SYS_NODE_V}) ve diğer tüm sistem paketleri
+    · PostgreSQL / Redis / Nginx yapılandırmaları ve servisleri
+    · root'un pm2'si ve diğer site kullanıcıları
+    · UFW kuralları
 
   Sıradaki adım
   ──────────────────────────────────────────────────────────
     su - ${SITE_USER}
-    cd ~/htdocs/<domain> && git clone git@github.com:KULLANICI/advetics.git .
-    ./scripts/site-setup.sh
+    cd ~/htdocs/<domain> && ./scripts/site-setup.sh --domain <domain>
 
 EOF
