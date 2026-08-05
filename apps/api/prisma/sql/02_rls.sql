@@ -27,6 +27,15 @@
 -- Bağlam okuyucu yardımcı fonksiyonlar
 -- -----------------------------------------------------------------------------
 
+-- Şemayı burada da oluşturuyoruz.
+--
+-- `app` şeması normalde sunucu hazırlığında (infra/postgres/init/01-roles.sql)
+-- açılır, ama o script belirli bir veritabanına uygulanır. Uygulama başka bir
+-- veritabanına bağlanıyorsa şema orada bulunmaz ve bu dosya
+-- "schema app does not exist" ile patlar. Bu dosyanın hangi veritabanına
+-- uygulanırsa uygulansın kendi başına çalışması gerekir.
+CREATE SCHEMA IF NOT EXISTS app;
+
 CREATE OR REPLACE FUNCTION app.current_org_id() RETURNS uuid
 LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('app.current_org_id', true), '')::uuid;
@@ -244,12 +253,28 @@ CREATE POLICY adv_audit_insert ON audit_logs
 -- Yetkiler (yeni tablolar için ALTER DEFAULT PRIVILEGES zaten çalışıyor;
 -- bu satırlar mevcut tabloları da kapsar)
 -- -----------------------------------------------------------------------------
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public
-  TO advetics_app, advetics_worker;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public
-  TO advetics_app, advetics_worker;
-GRANT USAGE ON SCHEMA app TO advetics_app, advetics_worker;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app TO advetics_app, advetics_worker;
+-- Roller yoksa GRANT'ler hata verir ve bu dosya tek bir sorgu olarak
+-- çalıştırıldığı için TÜM politikalar geri alınır — yani sessizce korumasız
+-- bir veritabanı kalırdı. Rol varlığını kontrol edip koşullu uyguluyoruz.
+DO $$
+DECLARE
+  r text;
+  roles text[] := ARRAY['advetics_app', 'advetics_worker'];
+BEGIN
+  FOREACH r IN ARRAY roles LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', r);
+      EXECUTE format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', r);
+      EXECUTE format('GRANT USAGE ON SCHEMA app TO %I', r);
+      EXECUTE format('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app TO %I', r);
+    ELSE
+      RAISE WARNING 'Rol % bulunamadı — yetkiler atlandı. Uygulama bu rolle bağlanacaksa scripts/vps-setup.sh çalıştırılmalı.', r;
+    END IF;
+  END LOOP;
 
--- audit_logs append-only: uygulama rolüne UPDATE/DELETE yetkisi hiç verilmez.
-REVOKE UPDATE, DELETE ON audit_logs FROM advetics_app;
+  -- audit_logs append-only: uygulama rolüne UPDATE/DELETE yetkisi hiç verilmez.
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'advetics_app') THEN
+    EXECUTE 'REVOKE UPDATE, DELETE ON audit_logs FROM advetics_app';
+  END IF;
+END
+$$;
