@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
   Inject,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -32,11 +34,13 @@ import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import type { AuthedRequest } from '../../common/types/request';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { ConnectionsService } from './connections.service';
+import { MetaWebhookService } from './meta-webhook.service';
 
 @Controller('connections')
 export class ConnectionsController {
   constructor(
     private readonly connections: ConnectionsService,
+    private readonly metaWebhook: MetaWebhookService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -199,4 +203,66 @@ export class ConnectionsController {
   ) {
     return this.connections.disconnect(ctx, id, this.meta(req));
   }
+
+  // ---------------------------------------------------------------------------
+  // Meta sunucudan sunucuya çağrıları
+  //
+  // @Public: Meta'nın bizim oturumumuz yok. Kimlik doğrulama gövdedeki
+  // `signed_request` HMAC imzasıyla yapılıyor — imzayı yalnızca app secret'a
+  // sahip olan üretebilir.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Kullanıcı Facebook'tan uygulamayı kaldırdı.
+   *
+   * Bu uç nokta olmadan iptal edilmiş bir bağlantı sistemde "aktif" görünmeye
+   * devam ediyor ve senkronizasyon her denemede 401 alıyor.
+   */
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('meta/deauthorize')
+  async metaDeauthorize(
+    @Body('signed_request') signedRequest: string | undefined,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!signedRequest) throw new BadRequestException('signed_request gerekli');
+    const payload = this.metaWebhook.verifySignedRequest(signedRequest);
+    const result = await this.metaWebhook.handleDeauthorize(payload.user_id!, {
+      ip: req.ip ?? null,
+    });
+    return { ok: true, ...result };
+  }
+
+  /**
+   * Kullanıcı verilerinin silinmesini talep etti.
+   *
+   * Meta bu yanıt biçimini bekliyor: `{ url, confirmation_code }`. Kullanıcı
+   * `url` adresinden talebin durumunu görebiliyor.
+   */
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('meta/data-deletion')
+  async metaDataDeletion(
+    @Body('signed_request') signedRequest: string | undefined,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!signedRequest) throw new BadRequestException('signed_request gerekli');
+    const payload = this.metaWebhook.verifySignedRequest(signedRequest);
+    const { confirmationCode, statusUrl } = await this.metaWebhook.handleDataDeletion(
+      payload.user_id!,
+      { ip: req.ip ?? null },
+    );
+    // Alan adları Meta'nın şartnamesine göre snake_case olmak ZORUNDA.
+    return { url: statusUrl, confirmation_code: confirmationCode };
+  }
+
+  /** Silme talebinin durumu — kullanıcı Meta'dan gelen kodla sorgular. */
+  @Public()
+  @Get('meta/data-deletion/:code')
+  async metaDataDeletionStatus(@Param('code') code: string) {
+    const status = await this.metaWebhook.getDeletionStatus(code);
+    if (!status) throw new NotFoundException('Bu koda ait talep bulunamadı');
+    return status;
+  }
+
 }

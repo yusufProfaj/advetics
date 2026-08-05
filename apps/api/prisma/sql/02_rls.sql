@@ -92,7 +92,9 @@ DECLARE
     'organizations', 'users', 'clients', 'memberships', 'branding_profiles',
     'refresh_tokens', 'password_reset_tokens', 'invitations', 'audit_logs',
     -- Modül 2
-    'platform_connections', 'ad_accounts', 'social_profiles', 'oauth_states'
+    'platform_connections', 'ad_accounts', 'social_profiles', 'oauth_states',
+    -- Politikası KASITLI olarak yok — aşağıdaki nota bak.
+    'data_deletion_requests'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -322,6 +324,22 @@ CREATE POLICY adv_oauth_states_insert ON oauth_states
     AND created_by_user_id = app.current_user_id()
     AND app.can_access_client(client_id)
   );
+
+-- -----------------------------------------------------------------------------
+-- data_deletion_requests — POLİTİKA YOK, kasıtlı
+--
+-- RLS açık ama hiçbir politika tanımlı değil. Sonuç: `advetics_app` rolü bu
+-- tabloda HİÇBİR satır göremez ve yazamaz. Doğru davranış bu:
+--
+--   · Kayıtları oluşturan Meta'nın imzalı webhook'u — kimlik doğrulaması yok,
+--     yönetim bağlantısını kullanıyor.
+--   · Durumu okuyan herkese açık sorgu sayfası — oturum yok, o da yönetim
+--     bağlantısını kullanıyor.
+--
+-- Bir tenant'ın başka bir kullanıcının silme talebini görmesi için hiçbir sebep
+-- yok. Politika yazmak yerine erişimi tamamen kapatmak, en küçük yetki
+-- ilkesinin doğru uygulaması.
+-- -----------------------------------------------------------------------------
 
 -- -----------------------------------------------------------------------------
 -- Yetkiler (yeni tablolar için ALTER DEFAULT PRIVILEGES zaten çalışıyor;

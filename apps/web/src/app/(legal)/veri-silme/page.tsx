@@ -12,11 +12,97 @@ export const metadata: Metadata = {
  * geri arama uç noktası istiyor. Bu sayfa o gereksinimi karşılar ve App Review
  * formunda bu adres verilir.
  */
-export default function DataDeletionPage() {
+interface DeletionStatus {
+  confirmationCode: string;
+  platform: string;
+  status: 'received' | 'completed' | 'failed';
+  deletedConnections: number;
+  requestedAt: string;
+  completedAt: string | null;
+}
+
+/**
+ * Meta'nın veri silme akışı, kullanıcıyı buraya `?talep=<kod>` ile yönlendirir.
+ * Meta bu durum sayfasını şart koşuyor: kullanıcı talebinin ne olduğunu
+ * görebilmeli.
+ */
+async function fetchStatus(code: string): Promise<DeletionStatus | null> {
+  const base = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL;
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/connections/meta/data-deletion/${encodeURIComponent(code)}`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as DeletionStatus;
+  } catch {
+    return null;
+  }
+}
+
+export default async function DataDeletionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ talep?: string }>;
+}) {
+  const { talep } = await searchParams;
+  const status = talep ? await fetchStatus(talep) : null;
+
   return (
     <>
       <h1 className="text-2xl font-semibold">Veri Silme Talimatları</h1>
       <p className="mt-1 text-sm text-ink-muted">Son güncelleme: 5 Ağustos 2026</p>
+
+      {talep && (
+        <div
+          className={`mt-5 rounded-xl border p-4 ${
+            status?.status === 'completed'
+              ? 'border-emerald-300 bg-emerald-50/70 text-emerald-900'
+              : status?.status === 'failed'
+                ? 'border-red-300 bg-red-50/70 text-red-900'
+                : 'border-amber-300 bg-amber-50/70 text-amber-900'
+          }`}
+        >
+          <p className="text-sm font-semibold">Silme talebi durumu</p>
+          {status ? (
+            <div className="mt-2 space-y-1 text-sm">
+              <p>
+                Onay kodu: <code className="text-xs">{status.confirmationCode}</code>
+              </p>
+              <p>
+                Durum:{' '}
+                <strong>
+                  {status.status === 'completed'
+                    ? 'Tamamlandı'
+                    : status.status === 'failed'
+                      ? 'Başarısız — lütfen bizimle iletişime geçin'
+                      : 'Alındı, işleniyor'}
+                </strong>
+              </p>
+              {status.status === 'completed' && (
+                <p>
+                  {status.deletedConnections} platform bağlantısı ve bunlara bağlı tüm reklam
+                  hesabı kayıtları silindi.
+                </p>
+              )}
+              <p className="text-xs opacity-80">
+                Talep tarihi: {new Date(status.requestedAt).toLocaleString('tr-TR')}
+                {status.completedAt
+                  ? ` · Tamamlanma: ${new Date(status.completedAt).toLocaleString('tr-TR')}`
+                  : ''}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-1 text-sm">
+              Bu koda ait bir talep bulunamadı. Kodu doğru kopyaladığından emin ol veya{' '}
+              <a href="mailto:hello@profaj.com" className="underline">
+                hello@profaj.com
+              </a>{' '}
+              adresine yaz.
+            </p>
+          )}
+        </div>
+      )}
 
       <Section title="Seçenek 1 — Reklam hesabı bağlantısını kaldır">
         <p>

@@ -516,3 +516,44 @@ model OAuthState {
   @@index([clientId])
   @@map("oauth_states")
 }
+
+enum DataDeletionStatus {
+  received
+  completed
+  failed
+}
+
+/// Platform tarafından tetiklenen veri silme talebi.
+///
+/// Meta, veri işleyen uygulamalardan makineyle çağrılabilir bir silme uç noktası
+/// istiyor: imzalı istek gelir, veri silinir, kullanıcının durumu
+/// sorgulayabileceği bir onay kodu ve URL döndürülür.
+///
+/// RLS: bu tabloda POLİTİKA YOK — `advetics_app` rolü hiçbir satır göremez.
+/// Kasıtlı: kayıtlar yalnızca (a) kimlik doğrulamasız webhook ve (b) herkese
+/// açık durum sorgusu tarafından okunur, ikisi de yönetim bağlantısını kullanır.
+/// Bir tenant'ın bu tabloyu görmesi için hiçbir sebep yok.
+model DataDeletionRequest {
+  id       String   @id @default(uuid()) @db.Uuid
+  platform Platform
+
+  /// Platform tarafındaki kullanıcı kimliği (Meta user_id).
+  externalUserId String @map("external_user_id") @db.VarChar(128)
+  /// Kullanıcının durumu sorgulayacağı kod. URL'de görünür, tahmin edilemez olmalı.
+  confirmationCode String @unique @map("confirmation_code") @db.VarChar(64)
+
+  status DataDeletionStatus @default(received)
+
+  /// Silinen bağlantı sayısı ve etkilenen müşteriler — hesap verebilirlik için.
+  deletedConnections Int   @default(0) @map("deleted_connections")
+  affectedClientIds  Json? @map("affected_client_ids") @db.JsonB
+
+  errorMessage String?   @map("error_message") @db.VarChar(500)
+  requestedAt  DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(6)
+  ip           String?   @db.Inet
+
+  @@index([externalUserId])
+  @@index([requestedAt])
+  @@map("data_deletion_requests")
+}

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConnectionsController } from './connections.controller';
 import { ConnectionsService } from './connections.service';
+import { MetaWebhookService } from './meta-webhook.service';
 import { GoogleProvider } from './providers/google.provider';
 import { MetaProvider } from './providers/meta.provider';
 import { TokenVaultService } from './token-vault.service';
@@ -14,7 +15,8 @@ import { TokenVaultService } from './token-vault.service';
  */
 @Module({
   controllers: [ConnectionsController],
-  providers: [ConnectionsService, TokenVaultService, MetaProvider, GoogleProvider],
+  providers: [
+    MetaWebhookService,ConnectionsService, TokenVaultService, MetaProvider, GoogleProvider],
   exports: [ConnectionsService, TokenVaultService, MetaProvider, GoogleProvider],
 })
 export class ConnectionsModule {}
