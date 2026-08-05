@@ -63,8 +63,17 @@ function publicOrigin(req: NextRequest): string {
     return `https://${ROOT_DOMAIN}`;
   }
 
-  const proto =
-    first(req.headers.get('x-forwarded-proto')) || (isInternal ? 'http' : 'https');
+  // Protokol için X-Forwarded-Proto'ya GÜVENİLMEZ.
+  //
+  // CloudPanel'in vekili bu başlığı `http` olarak gönderiyor (TLS'i kendisi
+  // sonlandırıp uygulamaya düz HTTP ile bağlandığı için). Başlığa güvenmek
+  // üretimde `http://advetics.com/login` gibi Location değerleri üretiyordu:
+  // tarayıcı bunu ikinci bir yönlendirmeyle düzeltiyor ama crawler'lar ve
+  // OAuth doğrulayıcıları güvensiz şemayı olduğu gibi görüyor.
+  //
+  // Kural basit: gerçek bir public domain her zaman https ile servis edilir;
+  // düz HTTP yalnızca yerel geliştirmede geçerlidir.
+  const proto = isInternal ? 'http' : 'https';
   return `${proto}://${host}`;
 }
 
