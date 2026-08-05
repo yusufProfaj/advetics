@@ -120,6 +120,7 @@ model User {
   refreshTokens      RefreshToken[]
   passwordResets     PasswordResetToken[]
   invitationsCreated Invitation[]        @relation("InvitationCreatedBy")
+  connectionsCreated PlatformConnection[]
 
   @@unique([orgId, email])
   @@index([orgId, status])
@@ -145,6 +146,11 @@ model Client {
   memberships  Membership[]
   branding     BrandingProfile?
   invitations  Invitation[]
+
+  // Modül 2
+  connections    PlatformConnection[]
+  adAccounts     AdAccount[]
+  socialProfiles SocialProfile[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -320,4 +326,193 @@ model AuditLog {
   @@index([clientId, createdAt(sort: Desc)])
   @@index([action])
   @@map("audit_logs")
+}
+
+// =============================================================================
+// MODÜL 2 — Platform Bağlantıları
+// =============================================================================
+
+enum ConnectionStatus {
+  active
+  /// Token geçersiz (Meta #190 / Google AUTHENTICATION_ERROR). Kullanıcı
+  /// yeniden yetkilendirene kadar tüm senkronizasyon durur.
+  needs_reauth
+  /// Kullanıcı bağlantıyı kaldırdı. Kayıt silinmez — denetim izi ve
+  /// yeniden bağlanmada aynı hesapları tanımak için tutulur.
+  revoked
+  /// Tekrarlayan API hatası. Circuit breaker bu durumu kullanır.
+  error
+}
+
+enum AdAccountStatus {
+  active
+  paused
+  /// Platform tarafında kapatılmış/askıya alınmış.
+  disabled
+  closed
+  unknown
+}
+
+enum SocialProfileType {
+  facebook_page
+  instagram_business
+}
+
+/// Bir OAuth yetkilendirmesi = bir Meta Business veya Google Ads kullanıcı izni.
+///
+/// Token'lar ASLA düz metin saklanmaz: CryptoService (AES-256-GCM) ile
+/// şifrelenir ve her değerin başına anahtar sürümü yazılır, böylece anahtar
+/// rotasyonu eski kayıtları okunamaz hale getirmez.
+model PlatformConnection {
+  id       String   @id @default(uuid()) @db.Uuid
+  clientId String   @map("client_id") @db.Uuid
+  platform Platform
+
+  /// Platform tarafındaki kullanıcı/işletme kimliği. Aynı hesabın iki kez
+  /// bağlanmasını tespit etmek için kullanılır.
+  externalUserId String  @map("external_user_id") @db.VarChar(128)
+  /// UI'da gösterilen ad — "Advetics Business Manager" gibi.
+  accountLabel   String  @map("account_label") @db.VarChar(200)
+
+  accessTokenEnc  Bytes     @map("access_token_enc")
+  /// Google için zorunlu (access token 1 saatte dolar). Meta long-lived
+  /// token'da null olabilir.
+  refreshTokenEnc Bytes?    @map("refresh_token_enc")
+  keyVersion      Int       @default(1) @map("key_version")
+  tokenExpiresAt  DateTime? @map("token_expires_at") @db.Timestamptz(6)
+
+  grantedScopes String[] @map("granted_scopes")
+
+  status        ConnectionStatus @default(active)
+  lastErrorCode String?          @map("last_error_code") @db.VarChar(80)
+  lastErrorAt   DateTime?        @map("last_error_at") @db.Timestamptz(6)
+  /// Token'ın en son doğrulandığı an. Sağlık göstergesi.
+  lastVerifiedAt DateTime?       @map("last_verified_at") @db.Timestamptz(6)
+  /// Ardışık hata sayacı. Circuit breaker eşiği.
+  failureCount  Int              @default(0) @map("failure_count")
+
+  connectedByUserId String   @map("connected_by_user_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  connectedBy    User            @relation(fields: [connectedByUserId], references: [id])
+  adAccounts     AdAccount[]
+  socialProfiles SocialProfile[]
+
+  @@unique([clientId, platform, externalUserId])
+  @@index([clientId, status])
+  @@index([status, tokenExpiresAt])
+  @@map("platform_connections")
+}
+
+/// Reklam hesabı. Meta `act_123456789`, Google `1234567890`.
+model AdAccount {
+  id           String @id @default(uuid()) @db.Uuid
+  clientId     String @map("client_id") @db.Uuid
+  connectionId String @map("connection_id") @db.Uuid
+  platform     Platform
+
+  externalId String @map("external_id") @db.VarChar(128)
+  name       String @db.VarChar(200)
+
+  /// Hesabın kendi para birimi. Rapor para biriminden FARKLI olabilir;
+  /// kümülatif harcama fx_rates ile çevrilerek hesaplanır.
+  currency String @db.Char(3)
+  /// Insight tarihleri bu zaman diliminde. "Bugün"ün tanımı buna bağlı.
+  timezone String @db.VarChar(64)
+
+  status AdAccountStatus @default(unknown)
+  /// Google MCC / Meta Business Manager kimliği.
+  managerExternalId String? @map("manager_external_id") @db.VarChar(128)
+
+  /// Kullanıcı bu hesabı senkronize etmek istiyor mu. Bağlantı kurulduğunda
+  /// hesaplar KEŞFEDİLİR ama varsayılan olarak KAPALIDIR — 40 hesaplı bir
+  /// Business Manager'ı bağlayan biri istemeden 40 hesabın kotasını yakmasın.
+  syncEnabled Boolean @default(false) @map("sync_enabled")
+
+  lastStructureSyncAt DateTime? @map("last_structure_sync_at") @db.Timestamptz(6)
+  lastInsightsSyncAt  DateTime? @map("last_insights_sync_at") @db.Timestamptz(6)
+  /// Son kota okuması (Meta BUC yüzdeleri / Google operasyon sayacı).
+  /// Modül 3'teki adaptif hız sınırlayıcı bunu kullanır.
+  rateLimitState Json? @map("rate_limit_state") @db.JsonB
+
+  raw       Json?    @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  client     Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  connection PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  boostTargets SocialProfile[]  @relation("BoostBillingAccount")
+
+  @@unique([platform, externalId, clientId])
+  @@index([clientId, syncEnabled])
+  @@index([connectionId])
+  @@map("ad_accounts")
+}
+
+/// Facebook sayfası veya Instagram Business hesabı — Auto-Boost (Modül 7) için.
+/// SADECE Meta. Google'da karşılığı yoktur.
+model SocialProfile {
+  id           String @id @default(uuid()) @db.Uuid
+  clientId     String @map("client_id") @db.Uuid
+  connectionId String @map("connection_id") @db.Uuid
+
+  profileType SocialProfileType @map("profile_type")
+  externalId  String            @map("external_id") @db.VarChar(128)
+  username    String?           @db.VarChar(200)
+  name        String            @db.VarChar(200)
+  pictureUrl  String?           @map("picture_url") @db.VarChar(1024)
+
+  /// Boost'un faturalanacağı reklam hesabı. Kullanıcı seçer.
+  linkedAdAccountId String? @map("linked_ad_account_id") @db.Uuid
+
+  /// Sayfa token'ı kullanıcı token'ından AYRIDIR ve ayrı şifrelenir.
+  pageAccessTokenEnc Bytes? @map("page_access_token_enc")
+  keyVersion         Int    @default(1) @map("key_version")
+
+  syncEnabled Boolean   @default(false) @map("sync_enabled")
+  lastSyncAt  DateTime? @map("last_sync_at") @db.Timestamptz(6)
+
+  raw       Json?    @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  client         Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  connection     PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  linkedAdAccount AdAccount?        @relation("BoostBillingAccount", fields: [linkedAdAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([connectionId, externalId])
+  @@index([clientId, syncEnabled])
+  @@map("social_profiles")
+}
+
+/// OAuth `state` parametresi — CSRF koruması ve tek kullanımlık eşleştirme.
+///
+/// Neden tablo, neden imzalı JWT değil: callback'te tek kullanımlığı
+/// GARANTİ etmek gerekiyor. İmzalı bir token tekrar sunulabilir; veritabanı
+/// satırı `consumedAt` ile bir kez tüketilir. Token'ın kendisi değil SHA-256
+/// hash'i saklanır.
+model OAuthState {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  clientId  String   @map("client_id") @db.Uuid
+  platform  Platform
+  tokenHash String   @unique @map("token_hash") @db.VarChar(64)
+
+  /// Yetkilendirme sonrası dönülecek panel yolu.
+  redirectTo String? @map("redirect_to") @db.VarChar(512)
+  /// Talep edilen scope'lar — callback'te platformun verdikleriyle karşılaştırılır.
+  requestedScopes String[] @map("requested_scopes")
+
+  createdByUserId String    @map("created_by_user_id") @db.Uuid
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt      DateTime? @map("consumed_at") @db.Timestamptz(6)
+  ip              String?   @db.Inet
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@index([clientId])
+  @@map("oauth_states")
 }

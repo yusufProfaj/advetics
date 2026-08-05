@@ -86,7 +86,7 @@ export default async function DashboardPage() {
         <h2 className="text-sm font-semibold">Yol haritası</h2>
         <ol className="mt-4 space-y-2.5 text-sm">
           <RoadmapItem n={1} title="Auth + multi-tenant iskelet + RLS" done />
-          <RoadmapItem n={2} title="Platform bağlantıları (Meta & Google OAuth)" />
+          <RoadmapItem n={2} title="Platform bağlantıları (Meta & Google OAuth)" done />
           <RoadmapItem n={3} title="Sync worker'ları + Unified Dashboard" />
           <RoadmapItem n={4} title="Ads Explorer" />
           <RoadmapItem n={5} title="Kurallar Motoru" />

@@ -1,0 +1,165 @@
+import type { Platform } from '@advetics/shared';
+import { PlatformApiError, type RateLimitSnapshot } from '../provider.types';
+
+/**
+ * Platform HTTP çağrıları için ince sarmalayıcı.
+ *
+ * SDK yerine bunu kullanıyoruz çünkü Modül 3'te kota header'larını HAM olarak
+ * okumamız gerekiyor — SDK'lar onları soyutlayıp gizliyor. Ayrıca tek bir yerde
+ * timeout, hata normalizasyonu ve telemetri toplama imkânı veriyor.
+ */
+
+export interface PlatformResponse<T> {
+  data: T;
+  rateLimit?: RateLimitSnapshot;
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+export async function platformFetch<T>(
+  platform: Platform,
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+  parseRateLimit?: (headers: Headers) => RateLimitSnapshot | undefined,
+): Promise<PlatformResponse<T>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, ...rest } = init;
+
+  // AbortSignal.timeout: ağ takılmasında worker'ın süresiz beklemesini önler.
+  // Modül 3'te tek takılı istek, o hesabın tüm senkronizasyonunu durdurabilir.
+  let res: Response;
+  try {
+    res = await fetch(url, { ...rest, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (err) {
+    const aborted = err instanceof Error && err.name === 'TimeoutError';
+    throw new PlatformApiError(
+      platform,
+      'transient',
+      aborted ? `İstek ${timeoutMs}ms içinde tamamlanmadı` : 'Ağ hatası',
+      { raw: err instanceof Error ? err.message : String(err) },
+    );
+  }
+
+  const rateLimit = parseRateLimit?.(res.headers);
+  const text = await res.text();
+
+  let body: unknown = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text;
+    }
+  }
+
+  if (!res.ok) {
+    throw normalizeError(platform, res, body);
+  }
+
+  return { data: body as T, rateLimit };
+}
+
+/**
+ * HTTP durumunu ve platforma özgü hata gövdesini ortak dile çevirir.
+ *
+ * Meta hata kodlarını gövdede `error.code`/`error_subcode` olarak verir;
+ * Google gRPC benzeri `error.status` + `details[].errors[].errorCode` yapısı
+ * kullanır. İkisini de aynı beş kategoriye indiriyoruz.
+ */
+function normalizeError(platform: Platform, res: Response, body: unknown): PlatformApiError {
+  const retryAfter = Number(res.headers.get('retry-after') ?? '') || undefined;
+  const b = (body ?? {}) as Record<string, unknown>;
+  const err = (b.error ?? {}) as Record<string, unknown>;
+
+  const code = err.code as number | string | undefined;
+  const subcode = (err.error_subcode ?? err.status) as number | string | undefined;
+  const message =
+    (typeof err.message === 'string' && err.message) ||
+    (typeof b.message === 'string' && b.message) ||
+    `${res.status} ${res.statusText}`;
+
+  const detail = {
+    httpStatus: res.status,
+    platformCode: code,
+    platformSubcode: subcode,
+    retryAfterSeconds: retryAfter,
+    raw: body,
+  };
+
+  // --- Meta ---
+  if (platform === 'meta') {
+    // 190: geçersiz/süresi dolmuş token · 102: oturum geçersiz
+    if (code === 190 || code === 102) {
+      return new PlatformApiError(platform, 'invalid_token', message, detail);
+    }
+    // 4/17/32/613: uygulama veya kullanıcı düzeyi kota · 80000+: BUC kotaları
+    if (code === 4 || code === 17 || code === 32 || code === 613 || Number(code) >= 80000) {
+      return new PlatformApiError(platform, 'rate_limited', message, detail);
+    }
+    // 10 ve 200-299: izin hatası
+    if (code === 10 || (Number(code) >= 200 && Number(code) <= 299)) {
+      return new PlatformApiError(platform, 'permission_denied', message, detail);
+    }
+    // 1/2: geçici platform hatası
+    if (code === 1 || code === 2 || res.status >= 500) {
+      return new PlatformApiError(platform, 'transient', message, detail);
+    }
+  }
+
+  // --- Google ---
+  if (platform === 'google') {
+    const status = String(subcode ?? '');
+    if (res.status === 401 || status === 'UNAUTHENTICATED') {
+      return new PlatformApiError(platform, 'invalid_token', message, detail);
+    }
+    if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
+      return new PlatformApiError(platform, 'rate_limited', message, detail);
+    }
+    if (res.status === 403 || status === 'PERMISSION_DENIED') {
+      return new PlatformApiError(platform, 'permission_denied', message, detail);
+    }
+    if (res.status >= 500 || status === 'UNAVAILABLE' || status === 'INTERNAL') {
+      return new PlatformApiError(platform, 'transient', message, detail);
+    }
+  }
+
+  // Sınıflandırılamayan 4xx'ler kalıcı sayılır: tekrar denemek aynı sonucu verir
+  // ve kotayı boşa harcar.
+  return new PlatformApiError(platform, 'permanent', message, detail);
+}
+
+/**
+ * Meta'nın `X-Business-Use-Case-Usage` header'ını okur.
+ *
+ * Format: {"<ad_account_id>":[{"type":"ads_management","call_count":12,
+ * "total_cputime":8,"total_time":5,"estimated_time_to_regain_access":0}]}
+ *
+ * Üç yüzdenin EN YÜKSEĞİ belirleyicidir — biri %100'e ulaşınca hesap bloklanır.
+ */
+export function parseMetaRateLimit(headers: Headers): RateLimitSnapshot | undefined {
+  const raw = headers.get('x-business-use-case-usage') ?? headers.get('x-app-usage');
+  if (!raw) return undefined;
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    // x-app-usage düz bir nesne, x-business-use-case-usage hesap→dizi eşlemesi.
+    const entry = Array.isArray(Object.values(parsed)[0])
+      ? ((Object.values(parsed)[0] as Record<string, number>[])[0] ?? {})
+      : (parsed as unknown as Record<string, number>);
+
+    const callCountPct = Number(entry.call_count ?? 0);
+    const cpuTimePct = Number(entry.total_cputime ?? 0);
+    const totalTimePct = Number(entry.total_time ?? 0);
+    const regain = Number(entry.estimated_time_to_regain_access ?? 0);
+
+    return {
+      callCountPct,
+      cpuTimePct,
+      totalTimePct,
+      usagePercent: Math.max(callCountPct, cpuTimePct, totalTimePct),
+      retryAfterSeconds: regain > 0 ? regain * 60 : undefined,
+      observedAt: new Date().toISOString(),
+    };
+  } catch {
+    return undefined;
+  }
+}

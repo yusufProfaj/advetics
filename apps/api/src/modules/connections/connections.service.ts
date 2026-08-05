@@ -1,0 +1,684 @@
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { Platform as PrismaPlatform, type Prisma } from '@prisma/client';
+import { createHash, randomBytes } from 'node:crypto';
+import type {
+  AdAccountSummary,
+  ConnectionSummary,
+  Platform,
+  ProviderAvailability,
+  SocialProfileSummary,
+  TenantContext,
+} from '@advetics/shared';
+import { CONFIG, type AppConfig } from '../../config/configuration';
+import { PrismaAdminService } from '../../prisma/prisma-admin.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
+import { GoogleProvider } from './providers/google.provider';
+import { MetaProvider } from './providers/meta.provider';
+import { PlatformApiError, type IAdPlatformProvider } from './provider.types';
+import { TokenVaultService } from './token-vault.service';
+
+interface Meta {
+  ip?: string | null;
+  userAgent?: string | null;
+  requestId?: string | null;
+}
+
+/** OAuth state ömrü. Kısa tutuluyor: bu pencere bir CSRF fırsat penceresidir. */
+const STATE_TTL_MS = 10 * 60 * 1000;
+
+@Injectable()
+export class ConnectionsService {
+  private readonly logger = new Logger(ConnectionsService.name);
+  private readonly providers: Record<Platform, IAdPlatformProvider>;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly admin: PrismaAdminService,
+    private readonly vault: TokenVaultService,
+    private readonly audit: AuditService,
+    meta: MetaProvider,
+    google: GoogleProvider,
+    @Inject(CONFIG) private readonly config: AppConfig,
+  ) {
+    this.providers = { meta, google };
+  }
+
+  private provider(platform: Platform): IAdPlatformProvider {
+    return this.providers[platform];
+  }
+
+  /** OAuth callback adresi. Meta/Google konsolunda BİREBİR kayıtlı olmalı. */
+  private redirectUri(platform: Platform): string {
+    const base = this.config.platforms.oauthRedirectBaseUrl;
+    if (!base) {
+      throw new BadRequestException(
+        'OAUTH_REDIRECT_BASE_URL tanımlı değil. Üretimde https://advetics.com olmalı.',
+      );
+    }
+    return `${base.replace(/\/$/, '')}/${this.config.globalPrefix}/connections/${platform}/callback`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Yapılandırma durumu
+  // ---------------------------------------------------------------------------
+
+  availability(): ProviderAvailability[] {
+    const { meta, google, oauthRedirectBaseUrl } = this.config.platforms;
+
+    const metaMissing: string[] = [];
+    if (!meta.appId) metaMissing.push('META_APP_ID');
+    if (!meta.appSecret) metaMissing.push('META_APP_SECRET');
+    if (!oauthRedirectBaseUrl) metaMissing.push('OAUTH_REDIRECT_BASE_URL');
+
+    const googleMissing: string[] = [];
+    if (!google.clientId) googleMissing.push('GOOGLE_CLIENT_ID');
+    if (!google.clientSecret) googleMissing.push('GOOGLE_CLIENT_SECRET');
+    if (!google.developerToken) googleMissing.push('GOOGLE_ADS_DEVELOPER_TOKEN');
+    if (!oauthRedirectBaseUrl) googleMissing.push('OAUTH_REDIRECT_BASE_URL');
+
+    return [
+      {
+        platform: 'meta',
+        configured: metaMissing.length === 0,
+        missingConfig: metaMissing,
+        requiredScopes: [...this.providers.meta.requiredScopes],
+      },
+      {
+        platform: 'google',
+        configured: googleMissing.length === 0,
+        missingConfig: googleMissing,
+        requiredScopes: [...this.providers.google.requiredScopes],
+      },
+    ];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Listeleme
+  // ---------------------------------------------------------------------------
+
+  async list(ctx: TenantContext, clientId: string | null): Promise<ConnectionSummary[]> {
+    const targetClientId = clientId ?? ctx.activeClientId;
+    if (!targetClientId) {
+      throw new BadRequestException(
+        'Bağlantılar müşteri bazlıdır. Önce bir müşteri seçin.',
+      );
+    }
+    if (!ctx.clientIds.includes(targetClientId)) {
+      throw new NotFoundException('Müşteri bulunamadı');
+    }
+
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const rows = await tx.platformConnection.findMany({
+        where: { clientId: targetClientId, status: { not: 'revoked' } },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          adAccounts: { orderBy: { name: 'asc' } },
+          socialProfiles: { orderBy: { name: 'asc' } },
+        },
+      });
+
+      return rows.map((c) => this.toSummary(c));
+    });
+  }
+
+  /**
+   * Şifreli token kolonları BU FONKSİYONDAN GEÇMEZ.
+   *
+   * `accessTokenEnc` / `refreshTokenEnc` hiçbir API yanıtında yer almaz;
+   * yalnızca TokenVaultService içinde çözülür. Yeni bir alan eklerken bu
+   * kuralın korunduğunu kontrol et.
+   */
+  private toSummary(
+    c: Prisma.PlatformConnectionGetPayload<{
+      include: { adAccounts: true; socialProfiles: true };
+    }>,
+  ): ConnectionSummary {
+    const required = this.provider(c.platform as Platform).requiredScopes;
+    const missingScopes = required.filter((s) => !c.grantedScopes.includes(s));
+
+    return {
+      id: c.id,
+      platform: c.platform as Platform,
+      accountLabel: c.accountLabel,
+      status: c.status,
+      missingScopes,
+      tokenExpiresAt: c.tokenExpiresAt?.toISOString() ?? null,
+      lastVerifiedAt: c.lastVerifiedAt?.toISOString() ?? null,
+      lastErrorCode: c.lastErrorCode,
+      connectedAt: c.createdAt.toISOString(),
+      adAccounts: c.adAccounts.map(
+        (a): AdAccountSummary => ({
+          id: a.id,
+          platform: a.platform as Platform,
+          externalId: a.externalId,
+          name: a.name,
+          currency: a.currency,
+          timezone: a.timezone,
+          status: a.status,
+          syncEnabled: a.syncEnabled,
+          isManager: a.managerExternalId === a.externalId,
+          lastInsightsSyncAt: a.lastInsightsSyncAt?.toISOString() ?? null,
+        }),
+      ),
+      socialProfiles: c.socialProfiles.map(
+        (p): SocialProfileSummary => ({
+          id: p.id,
+          profileType: p.profileType,
+          externalId: p.externalId,
+          name: p.name,
+          username: p.username,
+          pictureUrl: p.pictureUrl,
+          linkedAdAccountId: p.linkedAdAccountId,
+          syncEnabled: p.syncEnabled,
+        }),
+      ),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // OAuth başlatma
+  // ---------------------------------------------------------------------------
+
+  async startOAuth(
+    ctx: TenantContext,
+    platform: Platform,
+    opts: { redirectTo?: string; forceReconsent?: boolean },
+    meta: Meta,
+  ): Promise<{ authorizeUrl: string }> {
+    const clientId = ctx.activeClientId;
+    if (!clientId) {
+      throw new BadRequestException(
+        'Bağlantı bir müşteriye kurulur. Önce üstteki seçiciden müşteri seçin.',
+      );
+    }
+
+    const provider = this.provider(platform);
+    if (!provider.isConfigured()) {
+      const missing = this.availability().find((a) => a.platform === platform)?.missingConfig ?? [];
+      throw new BadRequestException(
+        `${platform} yapılandırılmamış. Eksik: ${missing.join(', ')}`,
+      );
+    }
+
+    // State: rastgele token, veritabanında yalnızca SHA-256 hash'i saklanır.
+    // Tek kullanımlık olması `consumedAt` ile garanti edilir — imzalı bir
+    // token tekrar sunulabilirdi.
+    const rawState = randomBytes(32).toString('base64url');
+
+    await this.prisma.withTenant(ctx, (tx) =>
+      tx.oAuthState.create({
+        data: {
+          orgId: ctx.orgId,
+          clientId,
+          platform: platform as PrismaPlatform,
+          tokenHash: this.hash(rawState),
+          redirectTo: opts.redirectTo ?? null,
+          requestedScopes: [...provider.requiredScopes],
+          createdByUserId: ctx.userId,
+          expiresAt: new Date(Date.now() + STATE_TTL_MS),
+          ip: meta.ip ?? null,
+        },
+      }),
+    );
+
+    return {
+      authorizeUrl: provider.buildAuthorizeUrl({
+        state: rawState,
+        redirectUri: this.redirectUri(platform),
+        forceReconsent: opts.forceReconsent,
+      }),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // OAuth callback
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Platformdan dönüş.
+   *
+   * Kimlik doğrulaması YOKTUR ve olamaz: kullanıcı Meta/Google'dan üst düzey bir
+   * GET yönlendirmesiyle döner ve access token o sırada dolmuş olabilir. Yetki
+   * kaynağı `state` satırıdır — kim, hangi müşteri için, ne zaman başlattı.
+   * Bu yüzden PrismaAdminService kullanılıyor.
+   */
+  async handleCallback(
+    platform: Platform,
+    params: { code?: string; state?: string; error?: string; errorDescription?: string },
+    meta: Meta,
+  ): Promise<{ redirectPath: string }> {
+    if (!params.state) {
+      throw new BadRequestException('State parametresi eksik');
+    }
+
+    const state = await this.admin.oAuthState.findUnique({
+      where: { tokenHash: this.hash(params.state) },
+    });
+
+    if (!state) throw new BadRequestException('Geçersiz veya bilinmeyen state');
+    if (state.consumedAt) throw new BadRequestException('Bu yetkilendirme bağlantısı zaten kullanıldı');
+    if (state.expiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException('Yetkilendirme süresi doldu, tekrar deneyin');
+    }
+    if (state.platform !== platform) {
+      throw new BadRequestException('State platformla uyuşmuyor');
+    }
+
+    // Tek kullanımlık: başarısız olsa bile tüketiyoruz. Aksi halde aynı state
+    // ile tekrar denenebilir ve CSRF penceresi açık kalır.
+    await this.admin.oAuthState.update({
+      where: { id: state.id },
+      data: { consumedAt: new Date() },
+    });
+
+    const backTo = state.redirectTo ?? '/ayarlar/baglantilar';
+
+    // Kullanıcı izin ekranında "İptal" dediyse.
+    if (params.error) {
+      await this.audit.recordUnauthenticated(state.orgId, {
+        action: 'connection.oauth_declined',
+        targetType: 'platform',
+        targetId: platform,
+        clientId: state.clientId,
+        actorId: state.createdByUserId,
+        after: { error: params.error, description: params.errorDescription },
+        ...meta,
+      });
+      return { redirectPath: `${backTo}?connection=iptal&platform=${platform}` };
+    }
+
+    if (!params.code) throw new BadRequestException('Yetkilendirme kodu eksik');
+
+    const provider = this.provider(platform);
+
+    try {
+      const tokens = await provider.exchangeCode(params.code, this.redirectUri(platform));
+
+      const missing = provider.requiredScopes.filter((s) => !tokens.grantedScopes.includes(s));
+      const connectionId = await this.persistConnection(
+        state.clientId,
+        state.createdByUserId,
+        platform,
+        tokens,
+      );
+
+      // Hesap keşfi bağlantıyı bozmamalı: token kaydedildi, kullanıcı zaten
+      // bağlandı. Keşif başarısız olursa sonradan "Hesapları yenile" ile
+      // tekrar denenebilir.
+      let discovered = { adAccounts: 0, socialProfiles: 0 };
+      try {
+        discovered = await this.discoverAndStore(connectionId, platform, tokens.accessToken);
+      } catch (err) {
+        this.logger.warn(
+          `Hesap keşfi başarısız (bağlantı ${connectionId}): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+
+      await this.audit.recordUnauthenticated(state.orgId, {
+        action: 'connection.created',
+        targetType: 'platform_connection',
+        targetId: connectionId,
+        clientId: state.clientId,
+        actorId: state.createdByUserId,
+        after: {
+          platform,
+          accountLabel: tokens.accountLabel,
+          grantedScopes: tokens.grantedScopes,
+          missingScopes: missing,
+          ...discovered,
+        },
+        ...meta,
+      });
+
+      const q = new URLSearchParams({
+        connection: missing.length ? 'eksik_izin' : 'basarili',
+        platform,
+        hesap: String(discovered.adAccounts),
+      });
+      return { redirectPath: `${backTo}?${q.toString()}` };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`OAuth callback başarısız (${platform}): ${message}`);
+
+      await this.audit.recordUnauthenticated(state.orgId, {
+        action: 'connection.oauth_failed',
+        targetType: 'platform',
+        targetId: platform,
+        clientId: state.clientId,
+        actorId: state.createdByUserId,
+        after: {
+          platform,
+          kind: err instanceof PlatformApiError ? err.kind : 'unknown',
+          message: message.slice(0, 500),
+        },
+        ...meta,
+      });
+
+      const q = new URLSearchParams({
+        connection: 'hata',
+        platform,
+        mesaj: message.slice(0, 200),
+      });
+      return { redirectPath: `${backTo}?${q.toString()}` };
+    }
+  }
+
+  /**
+   * Bağlantıyı kaydeder. Aynı platform hesabı yeniden bağlanırsa GÜNCELLENİR —
+   * yeni satır açmak, aynı reklam hesabının iki bağlantı altında görünmesine ve
+   * çift senkronizasyona yol açardı.
+   */
+  private async persistConnection(
+    clientId: string,
+    userId: string,
+    platform: Platform,
+    tokens: {
+      accessToken: string;
+      refreshToken?: string;
+      expiresAt?: Date;
+      grantedScopes: string[];
+      externalUserId: string;
+      accountLabel: string;
+    },
+  ): Promise<string> {
+    const access = this.vault.encrypt(tokens.accessToken);
+    const refresh = tokens.refreshToken ? this.vault.encrypt(tokens.refreshToken) : null;
+
+    const saved = await this.admin.platformConnection.upsert({
+      where: {
+        clientId_platform_externalUserId: {
+          clientId,
+          platform: platform as PrismaPlatform,
+          externalUserId: tokens.externalUserId,
+        },
+      },
+      create: {
+        clientId,
+        platform: platform as PrismaPlatform,
+        externalUserId: tokens.externalUserId,
+        accountLabel: tokens.accountLabel,
+        accessTokenEnc: access.data,
+        refreshTokenEnc: refresh?.data ?? null,
+        keyVersion: access.keyVersion,
+        tokenExpiresAt: tokens.expiresAt ?? null,
+        grantedScopes: tokens.grantedScopes,
+        status: 'active',
+        lastVerifiedAt: new Date(),
+        connectedByUserId: userId,
+      },
+      update: {
+        accountLabel: tokens.accountLabel,
+        accessTokenEnc: access.data,
+        // Google yenileme yanıtında refresh token göndermez; mevcut olanı
+        // null ile ezmek bağlantıyı kurtarılamaz hale getirir.
+        ...(refresh ? { refreshTokenEnc: refresh.data } : {}),
+        keyVersion: access.keyVersion,
+        tokenExpiresAt: tokens.expiresAt ?? null,
+        grantedScopes: tokens.grantedScopes,
+        status: 'active',
+        failureCount: 0,
+        lastErrorCode: null,
+        lastErrorAt: null,
+        lastVerifiedAt: new Date(),
+        revokedAt: null,
+      },
+      select: { id: true },
+    });
+
+    return saved.id;
+  }
+
+  /**
+   * Reklam hesaplarını ve sosyal profilleri keşfeder.
+   *
+   * KRİTİK: keşfedilen hesaplar `syncEnabled: false` ile kaydedilir. 40 hesaplı
+   * bir Business Manager'ı bağlayan biri istemeden 40 hesabın API kotasını
+   * yakmasın — hangi hesapların izleneceğini kullanıcı açıkça seçer.
+   */
+  private async discoverAndStore(
+    connectionId: string,
+    platform: Platform,
+    accessToken: string,
+  ): Promise<{ adAccounts: number; socialProfiles: number }> {
+    const provider = this.provider(platform);
+    const conn = await this.admin.platformConnection.findUniqueOrThrow({
+      where: { id: connectionId },
+      select: { clientId: true },
+    });
+
+    const accounts = await provider.listAdAccounts(accessToken);
+    for (const a of accounts) {
+      await this.admin.adAccount.upsert({
+        where: {
+          platform_externalId_clientId: {
+            platform: platform as PrismaPlatform,
+            externalId: a.externalId,
+            clientId: conn.clientId,
+          },
+        },
+        create: {
+          clientId: conn.clientId,
+          connectionId,
+          platform: platform as PrismaPlatform,
+          externalId: a.externalId,
+          name: a.name,
+          currency: a.currency,
+          timezone: a.timezone,
+          status: a.status,
+          managerExternalId: a.managerExternalId ?? null,
+          syncEnabled: false,
+          raw: a.raw as Prisma.InputJsonValue,
+        },
+        update: {
+          // syncEnabled KASITLI olarak güncellenmiyor — kullanıcının seçimi
+          // her yenilemede sıfırlanmamalı.
+          connectionId,
+          name: a.name,
+          currency: a.currency,
+          timezone: a.timezone,
+          status: a.status,
+          managerExternalId: a.managerExternalId ?? null,
+          raw: a.raw as Prisma.InputJsonValue,
+        },
+      });
+    }
+
+    let socialCount = 0;
+    if (platform === 'meta') {
+      const profiles = await provider.listSocialProfiles(accessToken);
+      for (const p of profiles) {
+        const pageToken = p.pageAccessToken ? this.vault.encrypt(p.pageAccessToken) : null;
+        await this.admin.socialProfile.upsert({
+          where: { connectionId_externalId: { connectionId, externalId: p.externalId } },
+          create: {
+            clientId: conn.clientId,
+            connectionId,
+            profileType: p.profileType,
+            externalId: p.externalId,
+            name: p.name,
+            username: p.username ?? null,
+            pictureUrl: p.pictureUrl ?? null,
+            pageAccessTokenEnc: pageToken?.data ?? null,
+            keyVersion: pageToken?.keyVersion ?? 1,
+            syncEnabled: false,
+            raw: p.raw as Prisma.InputJsonValue,
+          },
+          update: {
+            name: p.name,
+            username: p.username ?? null,
+            pictureUrl: p.pictureUrl ?? null,
+            ...(pageToken
+              ? { pageAccessTokenEnc: pageToken.data, keyVersion: pageToken.keyVersion }
+              : {}),
+            raw: p.raw as Prisma.InputJsonValue,
+          },
+        });
+        socialCount++;
+      }
+    }
+
+    return { adAccounts: accounts.length, socialProfiles: socialCount };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Yönetim
+  // ---------------------------------------------------------------------------
+
+  /** Hesap listesini platformdan yeniden çeker. Kullanıcı seçimleri korunur. */
+  async refreshAccounts(ctx: TenantContext, connectionId: string, meta: Meta) {
+    const conn = await this.prisma.withTenant(ctx, (tx) =>
+      tx.platformConnection.findUnique({
+        where: { id: connectionId },
+        select: { id: true, platform: true, clientId: true },
+      }),
+    );
+    if (!conn) throw new NotFoundException('Bağlantı bulunamadı');
+
+    const platform = conn.platform as Platform;
+    const provider = this.provider(platform);
+
+    try {
+      const token = await this.vault.getAccessToken(conn.id, provider);
+      const result = await this.discoverAndStore(conn.id, platform, token);
+      await this.vault.recordSuccess(conn.id);
+
+      await this.prisma.withTenant(ctx, (tx) =>
+        this.audit.record(tx, ctx, {
+          action: 'connection.accounts_refreshed',
+          targetType: 'platform_connection',
+          targetId: conn.id,
+          clientId: conn.clientId,
+          after: result,
+          ...meta,
+        }),
+      );
+
+      return result;
+    } catch (err) {
+      await this.vault.recordFailure(conn.id, err);
+      throw err;
+    }
+  }
+
+  /** Token'ı platforma karşı doğrular. Sağlık göstergesini tazeler. */
+  async verify(ctx: TenantContext, connectionId: string) {
+    const conn = await this.prisma.withTenant(ctx, (tx) =>
+      tx.platformConnection.findUnique({
+        where: { id: connectionId },
+        select: { id: true, platform: true },
+      }),
+    );
+    if (!conn) throw new NotFoundException('Bağlantı bulunamadı');
+
+    const provider = this.provider(conn.platform as Platform);
+    try {
+      const token = await this.vault.getAccessToken(conn.id, provider);
+      const result = await provider.verifyToken(token);
+      if (result.valid) await this.vault.recordSuccess(conn.id);
+      else await this.vault.recordFailure(conn.id, new PlatformApiError(conn.platform as Platform, 'invalid_token', 'Token geçersiz'));
+      return result;
+    } catch (err) {
+      await this.vault.recordFailure(conn.id, err);
+      throw err;
+    }
+  }
+
+  async setAccountSync(
+    ctx: TenantContext,
+    adAccountId: string,
+    syncEnabled: boolean,
+    meta: Meta,
+  ) {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const before = await tx.adAccount.findUnique({ where: { id: adAccountId } });
+      if (!before) throw new NotFoundException('Reklam hesabı bulunamadı');
+
+      const after = await tx.adAccount.update({
+        where: { id: adAccountId },
+        data: { syncEnabled },
+      });
+
+      await this.audit.record(tx, ctx, {
+        action: syncEnabled ? 'ad_account.sync_enabled' : 'ad_account.sync_disabled',
+        targetType: 'ad_account',
+        targetId: adAccountId,
+        clientId: before.clientId,
+        before: { syncEnabled: before.syncEnabled },
+        after: { syncEnabled: after.syncEnabled, name: after.name },
+        ...meta,
+      });
+
+      return { id: after.id, syncEnabled: after.syncEnabled };
+    });
+  }
+
+  /**
+   * Bağlantıyı kaldırır.
+   *
+   * Kayıt SİLİNMEZ, `revoked` işaretlenir ve token'lar temizlenir. Sebep:
+   * denetim izi korunmalı ve aynı hesap yeniden bağlanırsa geçmiş reklam
+   * verisiyle eşleşmeli. Reklam hesabı satırları da kalır — üzerlerindeki
+   * geçmiş metrikler (Modül 3) bir müşteriye ait finansal kayıttır.
+   */
+  async disconnect(ctx: TenantContext, connectionId: string, meta: Meta) {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const conn = await tx.platformConnection.findUnique({ where: { id: connectionId } });
+      if (!conn) throw new NotFoundException('Bağlantı bulunamadı');
+
+      await tx.adAccount.updateMany({
+        where: { connectionId },
+        data: { syncEnabled: false },
+      });
+      await tx.socialProfile.updateMany({
+        where: { connectionId },
+        data: { syncEnabled: false },
+      });
+
+      await tx.platformConnection.update({
+        where: { id: connectionId },
+        data: {
+          status: 'revoked',
+          revokedAt: new Date(),
+          // Token'lar okunamaz hale getirilir. Boş buffer, "şifreli veri bozuk"
+          // hatası verir ve kazara kullanım imkânsızlaşır.
+          accessTokenEnc: new Uint8Array(0),
+          refreshTokenEnc: null,
+          tokenExpiresAt: null,
+          grantedScopes: [],
+        },
+      });
+
+      await this.audit.record(tx, ctx, {
+        action: 'connection.revoked',
+        targetType: 'platform_connection',
+        targetId: connectionId,
+        clientId: conn.clientId,
+        before: { platform: conn.platform, accountLabel: conn.accountLabel },
+        ...meta,
+      });
+
+      return { ok: true };
+    });
+  }
+
+  /** Süresi geçmiş state kayıtlarını temizler. Modül 3'te cron'a bağlanacak. */
+  async pruneExpiredStates(): Promise<number> {
+    const { count } = await this.admin.oAuthState.deleteMany({
+      where: { expiresAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    });
+    return count;
+  }
+
+  private hash(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+}

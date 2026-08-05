@@ -69,6 +69,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <p className="px-3 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
               Yönetim
             </p>
+            <NavItem href="/ayarlar/baglantilar" label="Platform Bağlantıları" module={2} />
             <NavItem href="/ayarlar/ekip" label="Ekip & Yetkiler" module={1} />
             <NavItem href="/ayarlar/musteriler" label="Müşteriler" module={1} />
             <NavItem href="/ayarlar/marka" label="Marka (White-Label)" module={1} />
@@ -110,7 +111,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 function NavItem({ href, label, module }: { href: string; label: string; module: number }) {
   // Henüz yazılmamış modüller görünür ama pasif — yol haritası kullanıcıya
   // görünür olsun, tıklanınca 404 almasın.
-  const isReady = module === 1;
+  const isReady = module === 1 || module === 2;
 
   if (!isReady) {
     return (

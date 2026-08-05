@@ -90,7 +90,9 @@ DECLARE
   t text;
   tables text[] := ARRAY[
     'organizations', 'users', 'clients', 'memberships', 'branding_profiles',
-    'refresh_tokens', 'password_reset_tokens', 'invitations', 'audit_logs'
+    'refresh_tokens', 'password_reset_tokens', 'invitations', 'audit_logs',
+    -- Modül 2
+    'platform_connections', 'ad_accounts', 'social_profiles', 'oauth_states'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -248,6 +250,78 @@ CREATE POLICY adv_audit_select ON audit_logs
 
 CREATE POLICY adv_audit_insert ON audit_logs
   FOR INSERT WITH CHECK (org_id = app.current_org_id());
+
+-- =============================================================================
+-- MODÜL 2 — Platform Bağlantıları
+-- =============================================================================
+--
+-- Üçü de müşteri düzeyinde veri: bir müşterinin Meta/Google bağlantısı, reklam
+-- hesapları ve sosyal profilleri. Erişim `app.can_access_client()` ile
+-- belirlenir — org yöneticisi hepsini, müşteri düzeyi kullanıcı yalnızca
+-- yetkili olduklarını görür.
+--
+-- Şifreli token kolonları (access_token_enc vb.) bu politikalarla korunur ama
+-- ASIL koruma uygulama katmanındadır: bu kolonlar hiçbir API yanıtında
+-- döndürülmez ve yalnızca CryptoService içinde çözülür.
+
+-- -----------------------------------------------------------------------------
+-- platform_connections
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_connections_select ON platform_connections
+  FOR SELECT USING (app.can_access_client(client_id));
+
+CREATE POLICY adv_connections_write ON platform_connections
+  FOR ALL USING (app.can_access_client(client_id))
+          WITH CHECK (app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- ad_accounts
+--
+-- Yazma yetkisi de müşteri erişimine bağlı: `sync_enabled` bayrağını
+-- değiştirmek kota tüketimini etkiler, o yüzden müşterisine erişimi olan
+-- kullanıcı bunu yapabilir. Hangi ROLÜN yapabileceğini PermissionsGuard belirler.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_ad_accounts_select ON ad_accounts
+  FOR SELECT USING (app.can_access_client(client_id));
+
+CREATE POLICY adv_ad_accounts_write ON ad_accounts
+  FOR ALL USING (app.can_access_client(client_id))
+          WITH CHECK (app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- social_profiles  (yalnızca Meta — Auto-Boost, Modül 7)
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_social_profiles_select ON social_profiles
+  FOR SELECT USING (app.can_access_client(client_id));
+
+CREATE POLICY adv_social_profiles_write ON social_profiles
+  FOR ALL USING (app.can_access_client(client_id))
+          WITH CHECK (app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- oauth_states
+--
+-- Kısa ömürlü CSRF kayıtları. Kullanıcı yalnızca KENDİ başlattığı akışı
+-- görebilir — başkasının state satırını okumak, onun adına bağlantı kurma
+-- denemesine kapı açardı.
+--
+-- UPDATE/DELETE politikası KASITLI olarak yok: state'i tüketmek (consumed_at)
+-- ve süresi geçmişleri temizlemek yönetim bağlantısının işi. Callback zaten
+-- kimlik doğrulamasız çalışır (kullanıcı platformdan geri döner) ve
+-- PrismaAdminService kullanır.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_oauth_states_select ON oauth_states
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND created_by_user_id = app.current_user_id()
+  );
+
+CREATE POLICY adv_oauth_states_insert ON oauth_states
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND created_by_user_id = app.current_user_id()
+    AND app.can_access_client(client_id)
+  );
 
 -- -----------------------------------------------------------------------------
 -- Yetkiler (yeni tablolar için ALTER DEFAULT PRIVILEGES zaten çalışıyor;

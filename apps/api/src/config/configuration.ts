@@ -41,6 +41,37 @@ const envSchema = z.object({
 
   ENCRYPTION_KEY_V1: z.string().min(1),
   ENCRYPTION_ACTIVE_KEY_VERSION: z.coerce.number().int().min(1).default(1),
+
+  // ---------------------------------------------------------------------------
+  // Modül 2 — Platform kimlik bilgileri
+  //
+  // Hepsi OPSİYONEL: uygulama bunlar olmadan da açılır, ilgili platformun
+  // "Bağlan" butonu pasif görünür. Böylece Meta App Review / Google Developer
+  // Token onayı beklenirken geliştirme durmaz.
+  // ---------------------------------------------------------------------------
+
+  /** OAuth callback'lerin döneceği kök adres. Üretimde https://advetics.com */
+  OAUTH_REDIRECT_BASE_URL: z.string().url().optional(),
+
+  META_APP_ID: z.string().optional(),
+  META_APP_SECRET: z.string().optional(),
+  /**
+   * Graph API sürümü. Meta her ~3 ayda yeni sürüm çıkarır ve eskiyi ~2 yılda
+   * kapatır. CANLIYA ALMADAN ÖNCE güncel sürümü doğrula:
+   * https://developers.facebook.com/docs/graph-api/changelog
+   */
+  META_API_VERSION: z.string().default('v23.0'),
+
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  /** Google Ads API developer token. Basic Access onayı gerekir. */
+  GOOGLE_ADS_DEVELOPER_TOKEN: z.string().optional(),
+  /**
+   * Google Ads API sürümü. Yılda ~3 sürüm, eskiler ~1 yılda kapanır.
+   * CANLIYA ALMADAN ÖNCE doğrula:
+   * https://developers.google.com/google-ads/api/docs/release-notes
+   */
+  GOOGLE_ADS_API_VERSION: z.string().default('v21'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -62,6 +93,17 @@ export interface AppConfig {
   };
   cookie: { domain: string; secure: boolean };
   encryption: { keys: Record<number, string>; activeVersion: number };
+  /** Modül 2 — platform kimlik bilgileri. Eksikse ilgili provider devre dışı. */
+  platforms: {
+    oauthRedirectBaseUrl?: string;
+    meta: { appId?: string; appSecret?: string; apiVersion: string };
+    google: {
+      clientId?: string;
+      clientSecret?: string;
+      developerToken?: string;
+      apiVersion: string;
+    };
+  };
 }
 
 export function loadConfig(): AppConfig {
@@ -113,6 +155,20 @@ export function loadConfig(): AppConfig {
     encryption: {
       keys: { 1: env.ENCRYPTION_KEY_V1 },
       activeVersion: env.ENCRYPTION_ACTIVE_KEY_VERSION,
+    },
+    platforms: {
+      oauthRedirectBaseUrl: env.OAUTH_REDIRECT_BASE_URL,
+      meta: {
+        appId: env.META_APP_ID,
+        appSecret: env.META_APP_SECRET,
+        apiVersion: env.META_API_VERSION,
+      },
+      google: {
+        clientId: env.GOOGLE_CLIENT_ID,
+        clientSecret: env.GOOGLE_CLIENT_SECRET,
+        developerToken: env.GOOGLE_ADS_DEVELOPER_TOKEN,
+        apiVersion: env.GOOGLE_ADS_API_VERSION,
+      },
     },
   };
 }

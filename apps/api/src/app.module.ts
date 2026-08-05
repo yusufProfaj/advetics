@@ -8,6 +8,7 @@ import { AppConfigModule } from './config/config.module';
 import { CryptoModule } from './crypto/crypto.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ConnectionsModule } from './modules/connections/connections.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { HealthController } from './modules/health/health.controller';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
@@ -26,6 +27,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AuditModule,
     AuthModule,
     TenancyModule,
+    ConnectionsModule,
   ],
   controllers: [HealthController],
   providers: [
