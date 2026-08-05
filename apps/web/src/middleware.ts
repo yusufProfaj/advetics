@@ -113,10 +113,15 @@ export const config = {
    * crawler'ları robots.txt'yi hiç okuyamıyordu. Sharing Debugger'ın
    * "403, robots.txt engeli olabilir" uyarısının bir parçası da buydu.
    *
+   * `opengraph-image` ve `twitter-image` de aynı sebeple dışlandı. Next.js bu
+   * yolları uzantısız üretiyor (`/opengraph-image?<hash>`), dolayısıyla dosya
+   * uzantısı eleği onları yakalamıyordu: Meta og:image adresini alıyor, adrese
+   * gidiyor ve 307 ile login'e yönlendiriliyordu. Etiket doğru, görsel yok.
+   *
    * Statik dosya uzantıları da dışlandı; bunlar için oturum mantığı çalıştırmak
    * gereksiz maliyet.
    */
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|txt|xml|webmanifest)$).*)',
+    '/((?!api|_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml|opengraph-image|twitter-image|icon|apple-icon|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|txt|xml|webmanifest)$).*)',
   ],
 };
