@@ -35,9 +35,43 @@ const PUBLIC_PATHS = [
  *     gelen istekleri işaretler. Rapor paylaşım sayfaları (Modül 6) bu
  *     başlığı okuyup ilgili markayı render eder.
  */
+/**
+ * Dışarıya verilecek yönlendirme adresinin kökü.
+ *
+ * `req.url` KULLANILMAZ. Ters vekil arkasında o adres iç adrestir: Nginx
+ * `proxy_set_header Host $host` göndermezse varsayılanı `$proxy_host` olur ve
+ * Next.js host'u `localhost:3598` görür. Sonuç: üretimde
+ * `https://advetics.com/` isteği `http://localhost:3598/login` adresine
+ * yönlendiriliyordu. Meta'nın crawler'ı oraya bağlanamadığı için "domain
+ * uygulamanın domainlerinde yer almıyor" hatası veriyordu — App Domains doğru
+ * girilse bile.
+ *
+ * Sıra: X-Forwarded-Host → Host → yapılandırılmış kök domain.
+ * Host iç bir adres ise (localhost/127.0.0.1) yapılandırılmış domaine düşülür;
+ * dışarıya iç adres yazmak her koşulda hatalıdır.
+ */
+function publicOrigin(req: NextRequest): string {
+  const first = (v: string | null) => v?.split(',')[0]?.trim() ?? '';
+  const forwardedHost = first(req.headers.get('x-forwarded-host'));
+  const host = forwardedHost || first(req.headers.get('host')) || req.nextUrl.host;
+
+  const isInternal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
+  const configuredIsLocal = /^(localhost|127\.0\.0\.1)/.test(ROOT_DOMAIN);
+
+  // Yerel geliştirmede ROOT_DOMAIN de localhost'tur; orada iç adres doğrudur.
+  if (isInternal && !configuredIsLocal) {
+    return `https://${ROOT_DOMAIN}`;
+  }
+
+  const proto =
+    first(req.headers.get('x-forwarded-proto')) || (isInternal ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
 export function middleware(req: NextRequest): NextResponse {
   const { pathname } = req.nextUrl;
   const host = req.headers.get('host') ?? '';
+  const origin = publicOrigin(req);
 
   const isCustomDomain =
     host.length > 0 &&
@@ -49,20 +83,20 @@ export function middleware(req: NextRequest): NextResponse {
   // Panelin kendisi kök domain'de yaşar — müşterinin alan adı üzerinden
   // ajans paneline erişilmesini istemiyoruz.
   if (isCustomDomain && !pathname.startsWith('/r/')) {
-    return NextResponse.redirect(new URL('/r/bulunamadi', req.url));
+    return NextResponse.redirect(new URL('/r/bulunamadi', origin));
   }
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const hasSessionCookie = req.cookies.has(ACCESS_COOKIE);
 
   if (!isPublic && !hasSessionCookie) {
-    const loginUrl = new URL('/login', req.url);
+    const loginUrl = new URL('/login', origin);
     if (pathname !== '/') loginUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
   if (pathname === '/login' && hasSessionCookie) {
-    return NextResponse.redirect(new URL('/dashboard', req.url));
+    return NextResponse.redirect(new URL('/dashboard', origin));
   }
 
   const res = NextResponse.next();
@@ -71,5 +105,18 @@ export function middleware(req: NextRequest): NextResponse {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|svg|webp)$).*)'],
+  /**
+   * `robots.txt` ve `sitemap.xml` KASITLI olarak dışlandı.
+   *
+   * Middleware bunları da kapsadığında, oturumu olmayan bir istemci
+   * `/robots.txt` yerine `/login`'e yönlendiriliyordu — yani Meta ve Google
+   * crawler'ları robots.txt'yi hiç okuyamıyordu. Sharing Debugger'ın
+   * "403, robots.txt engeli olabilir" uyarısının bir parçası da buydu.
+   *
+   * Statik dosya uzantıları da dışlandı; bunlar için oturum mantığı çalıştırmak
+   * gereksiz maliyet.
+   */
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|txt|xml|webmanifest)$).*)',
+  ],
 };
