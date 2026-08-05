@@ -144,7 +144,7 @@ ok "RLS politikaları ve kısıtlar uygulandı"
 
 # Gerçekten uygulandığını doğrula — sessizce atlanması en pahalı hatadır.
 if command -v psql >/dev/null; then
-  DIRECT_URL="$(grep -E '^DIRECT_DATABASE_URL=' .env | cut -d'"' -f2)"
+  DIRECT_URL="$(grep -E '^DIRECT_DATABASE_URL=' .env | cut -d'"' -f2 || true)"
   N="$(psql "$DIRECT_URL" -tAc "SELECT count(*) FROM pg_policies WHERE schemaname='public' AND policyname LIKE 'adv_%'" 2>/dev/null || echo '?')"
   U="$(psql "$DIRECT_URL" -tAc "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity=false AND c.relname NOT LIKE '_prisma%'" 2>/dev/null || echo '?')"
   if [[ "$N" == "?" ]]; then
@@ -168,8 +168,8 @@ if [[ "$DO_SEED" -eq 1 ]]; then
 log "İlk hesap"
 # -----------------------------------------------------------------------------
   if grep -q '^SEED_ADMIN_PASSWORD=' .env; then
-    ADMIN_EMAIL="$(grep -E '^SEED_ADMIN_EMAIL=' .env | cut -d'"' -f2)"
-    ADMIN_PW="$(grep -E '^SEED_ADMIN_PASSWORD=' .env | cut -d'"' -f2)"
+    ADMIN_EMAIL="$(grep -E '^SEED_ADMIN_EMAIL=' .env | cut -d'"' -f2 || true)"
+    ADMIN_PW="$(grep -E '^SEED_ADMIN_PASSWORD=' .env | cut -d'"' -f2 || true)"
     pnpm --filter @advetics/api db:seed
     # Şifre artık argon2 hash olarak veritabanında; düz metin .env'de kalmamalı.
     sed -i '/^SEED_ADMIN_PASSWORD=/d' .env

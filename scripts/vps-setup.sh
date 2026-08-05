@@ -21,6 +21,7 @@ set -Eeuo pipefail
 SITE_USER=""
 DB_NAME="advetics"
 CRED_FILE="/root/advetics-db-credentials.txt"
+SKIP_FIREWALL=0
 NODE_MAJOR=22
 PG_MAJOR=16
 
@@ -28,12 +29,28 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --site-user) SITE_USER="${2:-}"; shift 2 ;;
     --db-name)   DB_NAME="${2:-}"; shift 2 ;;
+    # Güvenlik duvarına hiç dokunma. CloudPanel kendi UFW kurallarını yönetiyorsa
+    # veya özel bir ağ yapılandırman varsa kullan.
+    --skip-firewall) SKIP_FIREWALL=1; shift ;;
     -h|--help)
       sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     *) echo "Bilinmeyen argüman: $1" >&2; exit 1 ;;
   esac
 done
+
+# psql'i postgres kullanıcısı olarak çalıştırır.
+#
+# CloudPanel kurulu sistemlerde `sudo` genelde vardır, ama minimal Debian
+# imajlarında bulunmayabilir. Zaten root olduğumuz için `su` ile geri düşmek
+# güvenli — sadece kullanıcı değiştiriyoruz, yetki yükseltmiyoruz.
+as_postgres() {
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -u postgres "$@"
+  else
+    su -s /bin/sh postgres -c "$(printf '%q ' "$@")"
+  fi
+}
 
 log()  { printf '\n\033[1;34m▸ %s\033[0m\n' "$*"; }
 ok()   { printf '  \033[0;32m✓\033[0m %s\n' "$*"; }
@@ -148,10 +165,10 @@ EOF
   ok "şifreler üretildi → $CRED_FILE"
 fi
 
-if sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" | grep -q 1; then
+if as_postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" | grep -q 1; then
   skip "veritabanı '${DB_NAME}' mevcut"
 else
-  sudo -u postgres psql -qc "CREATE DATABASE ${DB_NAME};"
+  as_postgres psql -qc "CREATE DATABASE ${DB_NAME};"
   ok "veritabanı '${DB_NAME}' oluşturuldu"
 fi
 
@@ -159,7 +176,7 @@ fi
 #   migrator → tablo sahibi, BYPASSRLS  (migration + seed)
 #   app      → BYPASSRLS YOK            (API runtime — politikalar buna uygulanır)
 #   worker   → BYPASSRLS                (auth öncesi akışlar, arka plan işleri)
-sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d "$DB_NAME" <<EOF
+as_postgres psql -q -v ON_ERROR_STOP=1 -d "$DB_NAME" <<EOF
 DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='advetics_migrator') THEN
@@ -199,7 +216,7 @@ EOF
 ok "üç rol hazır"
 
 # En kritik doğrulama: advetics_app RLS'i ATLAYAMAMALI.
-APP_BYPASS="$(sudo -u postgres psql -tAc "SELECT rolbypassrls FROM pg_roles WHERE rolname='advetics_app'")"
+APP_BYPASS="$(as_postgres psql -tAc "SELECT rolbypassrls FROM pg_roles WHERE rolname='advetics_app'")"
 [[ "$APP_BYPASS" == "f" ]] || die "advetics_app rolünde BYPASSRLS açık — RLS hiç çalışmaz. Elle düzelt: ALTER ROLE advetics_app NOBYPASSRLS;"
 ok "advetics_app → BYPASSRLS kapalı (RLS uygulanacak)"
 
@@ -242,15 +259,45 @@ ok "servis aktif"
 log "Güvenlik duvarı"
 # -----------------------------------------------------------------------------
 # 3598/3599/5432/6379 KASITLI olarak açılmıyor — hepsi yalnızca localhost.
-ufw allow OpenSSH >/dev/null 2>&1 || true
-ufw allow 80,443/tcp >/dev/null 2>&1 || true
-if ufw status | grep -q "Status: active"; then
-  skip "zaten aktif"
+#
+# DİKKAT: UFW'yi yanlış kurallarla açmak seni sunucudan KİLİTLER. Bu yüzden
+# sabit port varsaymıyoruz; gerçekte dinlenen SSH ve CloudPanel portlarını
+# sistemden okuyup açıyoruz.
+if [[ "$SKIP_FIREWALL" -eq 1 ]]; then
+  skip "--skip-firewall verildi, dokunulmuyor"
 else
-  ufw --force enable >/dev/null
-  ok "etkinleştirildi"
+  # SSH portu: sshd_config'te değiştirilmiş olabilir. 22 varsayıp UFW açmak,
+  # özel port kullanan bir sunucuda oturumu anında keser.
+  # awk kullanıyoruz (grep değil): varsayılan sshd_config'te Port satırı
+  # yorumlanmış olduğu için grep hiç eşleşme bulamaz, 1 döner ve `set -e`
+  # script'i tam burada öldürür. awk eşleşme bulamasa da 0 döner.
+  SSH_PORTS="$(awk '/^[[:space:]]*Port[[:space:]]+[0-9]+/ {print $2}' \
+      /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null | sort -u || true)"
+  [[ -z "$SSH_PORTS" ]] && SSH_PORTS="22"
+  # Şu an bağlı olduğumuz oturumun portu — en güvenilir kaynak.
+  if [[ -n "${SSH_CONNECTION:-}" ]]; then
+    ACTIVE_SSH_PORT="$(awk '{print $4}' <<< "$SSH_CONNECTION")"
+    [[ -n "$ACTIVE_SSH_PORT" ]] && SSH_PORTS="$(printf '%s\n%s\n' "$SSH_PORTS" "$ACTIVE_SSH_PORT" | sort -u)"
+  fi
+  for p in $SSH_PORTS; do
+    ufw allow "${p}/tcp" >/dev/null 2>&1 || true
+    ok "SSH portu açıldı: ${p}"
+  done
+
+  # CloudPanel yönetim arayüzü (varsayılan 8443). Kapatmak paneli erişilemez kılar.
+  ufw allow 8443/tcp >/dev/null 2>&1 || true
+  ok "CloudPanel portu açıldı: 8443"
+
+  ufw allow 80,443/tcp >/dev/null 2>&1 || true
+
+  if ufw status 2>/dev/null | grep -q "Status: active"; then
+    skip "UFW zaten aktifti — kurallar eklendi, yeniden etkinleştirilmedi"
+  else
+    ufw --force enable >/dev/null 2>&1 || warn "UFW etkinleştirilemedi"
+    ok "UFW etkinleştirildi"
+  fi
+  ok "açık: SSH(${SSH_PORTS//$'\n'/,}), 80, 443, 8443 · uygulama ve DB portları kapalı"
 fi
-ok "açık portlar: 22, 80, 443 (uygulama portları dışarı kapalı)"
 
 # -----------------------------------------------------------------------------
 log "pm2 açılışta başlatma"
@@ -273,7 +320,7 @@ cat <<EOF
     Node.js       $(node -v)
     pnpm          $(pnpm -v)
     pm2           $(pm2 -v)
-    PostgreSQL    $(sudo -u postgres psql -tAc 'SHOW server_version' | xargs)
+    PostgreSQL    $(as_postgres psql -tAc 'SHOW server_version' | xargs)
     Redis         $(redis-server --version | grep -oE 'v=[0-9.]+' | cut -d= -f2)
 
   .env için veritabanı satırları (kopyala)
