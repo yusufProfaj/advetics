@@ -192,6 +192,23 @@ export class MetaProvider implements IAdPlatformProvider {
     };
   }
 
+  /**
+   * Meta'da izinleri geri alır.
+   *
+   * `DELETE /me/permissions` kullanıcının uygulamaya verdiği tüm izinleri
+   * kaldırır — Facebook ayarlarından elle kaldırmakla aynı etki. Bu, Meta'nın
+   * deauthorize webhook'unu da tetikler; bizim tarafta bağlantı zaten
+   * kaldırıldığı için webhook eşleşme bulamaz ve sessizce geçer.
+   */
+  async revokeToken(tokens: { accessToken: string }): Promise<void> {
+    await platformFetch(
+      'meta',
+      `${this.graph}/me/permissions?access_token=${encodeURIComponent(tokens.accessToken)}`,
+      { method: 'DELETE' },
+      parseMetaRateLimit,
+    );
+  }
+
   async verifyToken(accessToken: string): Promise<TokenVerification> {
     const { appId, appSecret } = this.assertConfigured();
 

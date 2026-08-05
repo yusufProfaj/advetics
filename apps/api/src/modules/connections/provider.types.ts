@@ -193,6 +193,20 @@ export interface IAdPlatformProvider {
 
   verifyToken(accessToken: string): Promise<TokenVerification>;
 
+  /**
+   * Token'ı PLATFORM TARAFINDA iptal eder.
+   *
+   * Yalnızca kendi kaydımızı silmek yetmez: token platformda geçerli kalır.
+   * Gizlilik politikamız bağlantı kaldırıldığında "erişimin durduğunu" beyan
+   * ediyor — bunu gerçekten yapmak için platformun iptal uç noktasını çağırmak
+   * gerekiyor.
+   *
+   * Başarısız olması bağlantının kaldırılmasını ENGELLEMEMELİ: token zaten
+   * geçersiz olabilir, ya da platform erişilemez olabilir. İptal en iyi
+   * çabadır, kaydı silmek kesindir.
+   */
+  revokeToken(tokens: { accessToken: string; refreshToken?: string }): Promise<void>;
+
   listAdAccounts(accessToken: string): Promise<DiscoveredAdAccount[]>;
 
   /**

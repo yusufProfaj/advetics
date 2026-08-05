@@ -672,6 +672,22 @@ export class ConnectionsService {
    * geçmiş metrikler (Modül 3) bir müşteriye ait finansal kayıttır.
    */
   async disconnect(ctx: TenantContext, connectionId: string, meta: Meta) {
+    // Token'ı PLATFORM TARAFINDA iptal et — kendi kaydımızı silmek yetmez.
+    //
+    // Sıra önemli: iptal önce yapılır, çünkü şifreli token'a hâlâ ihtiyacımız
+    // var. Ama başarısız olması bağlantının kaldırılmasını ENGELLEMEZ: token
+    // zaten geçersiz olabilir ya da platform erişilemez olabilir. İptal en iyi
+    // çabadır, kaydı silmek kesindir. Aksi hâlde kullanıcı bir platform
+    // kesintisi yüzünden bağlantısını kaldıramaz hâle gelirdi.
+    const target = await this.prisma.withTenant(ctx, (tx) =>
+      tx.platformConnection.findUnique({
+        where: { id: connectionId },
+        select: { platform: true },
+      }),
+    );
+    if (!target) throw new NotFoundException('Bağlantı bulunamadı');
+    await this.vault.revokeOnPlatform(connectionId, this.provider(target.platform as Platform));
+
     return this.prisma.withTenant(ctx, async (tx) => {
       const conn = await tx.platformConnection.findUnique({ where: { id: connectionId } });
       if (!conn) throw new NotFoundException('Bağlantı bulunamadı');
@@ -723,6 +739,8 @@ export class ConnectionsService {
   private hash(token: string): string {
     return createHash('sha256').update(token).digest('hex');
   }
+
+
 }
 
 /**

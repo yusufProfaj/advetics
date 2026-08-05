@@ -71,7 +71,7 @@ const envSchema = z.object({
    * CANLIYA ALMADAN ÖNCE doğrula:
    * https://developers.google.com/google-ads/api/docs/release-notes
    */
-  GOOGLE_ADS_API_VERSION: z.string().default('v21'),
+  GOOGLE_ADS_API_VERSION: z.string().default('v25'),
 });
 
 export type Env = z.infer<typeof envSchema>;

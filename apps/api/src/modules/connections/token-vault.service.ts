@@ -183,6 +183,51 @@ export class TokenVaultService {
     }
   }
 
+  /**
+   * Token'ı platform tarafında iptal eder.
+   *
+   * Bu metod kasada duruyor çünkü şifre çözme yalnızca burada olur — sınıfın
+   * belgelenmiş değişmezi bu. Çağıranın şifreli byte'larla uğraşması gerekmiyor.
+   *
+   * Hata FIRLATMAZ: iptal en iyi çabadır. Token zaten geçersiz olabilir ya da
+   * platform erişilemez olabilir; bir platform kesintisi yüzünden kullanıcının
+   * bağlantısını kaldıramaması kabul edilemez.
+   */
+  async revokeOnPlatform(
+    connectionId: string,
+    provider: IAdPlatformProvider,
+  ): Promise<{ revoked: boolean; reason?: string }> {
+    try {
+      const conn = await this.db.platformConnection.findUnique({
+        where: { id: connectionId },
+        select: { status: true, accessTokenEnc: true, refreshTokenEnc: true },
+      });
+
+      if (!conn || conn.status === 'revoked') {
+        return { revoked: false, reason: 'bağlantı zaten iptal edilmiş' };
+      }
+
+      const accessBuf = Buffer.from(conn.accessTokenEnc);
+      if (accessBuf.length === 0) {
+        return { revoked: false, reason: 'saklanan token boş' };
+      }
+
+      await provider.revokeToken({
+        accessToken: this.crypto.decrypt(accessBuf),
+        refreshToken: conn.refreshTokenEnc
+          ? this.crypto.decrypt(Buffer.from(conn.refreshTokenEnc))
+          : undefined,
+      });
+
+      this.logger.log(`${provider.platform} token'ı platform tarafında iptal edildi`);
+      return { revoked: true };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Platform tarafında iptal başarısız (bağlantı yine kaldırılıyor): ${reason}`);
+      return { revoked: false, reason };
+    }
+  }
+
   async recordSuccess(connectionId: string): Promise<void> {
     await this.db.platformConnection.update({
       where: { id: connectionId },

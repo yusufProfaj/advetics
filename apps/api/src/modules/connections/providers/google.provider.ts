@@ -169,7 +169,7 @@ export class GoogleProvider implements IAdPlatformProvider {
         externalUserId = externalUserId || customers[0]!;
         accountLabel =
           customers.length === 1
-            ? `Google Ads ${this.formatCustomerId(customers[0]!)}`
+            ? `Google Ads ${customerLabel(customers[0]!)}`
             : `Google Ads (${customers.length} hesap)`;
       }
     } catch (err) {
@@ -194,6 +194,21 @@ export class GoogleProvider implements IAdPlatformProvider {
       externalUserId,
       accountLabel,
     };
+  }
+
+  /**
+   * Google'ın iptal uç noktası.
+   *
+   * Refresh token iptal edilirse ona bağlı TÜM access token'lar da geçersiz
+   * olur — o yüzden refresh token varsa onu tercih ediyoruz.
+   */
+  async revokeToken(tokens: { accessToken: string; refreshToken?: string }): Promise<void> {
+    const target = tokens.refreshToken ?? tokens.accessToken;
+    await platformFetch('google', 'https://oauth2.googleapis.com/revoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token: target }).toString(),
+    });
   }
 
   async verifyToken(accessToken: string): Promise<TokenVerification> {
@@ -250,65 +265,146 @@ export class GoogleProvider implements IAdPlatformProvider {
     return (data.resourceNames ?? []).map((n) => n.split('/')[1] ?? '').filter(Boolean);
   }
 
-  async listAdAccounts(accessToken: string): Promise<DiscoveredAdAccount[]> {
+  /**
+   * GAQL sorgusu çalıştırır.
+   *
+   * `login-customer-id` başlığı KRİTİK: bir MCC'nin altındaki hesaba erişirken
+   * Google, hangi yönetici hesabı üzerinden yetkilendiğini bilmek ister.
+   * Başlık olmadan alt hesap sorguları PERMISSION_DENIED döner.
+   */
+  private async searchGaql<T>(
+    accessToken: string,
+    customerId: string,
+    query: string,
+    loginCustomerId?: string,
+  ): Promise<T[]> {
     const { developerToken } = this.assertConfigured();
-    const customerIds = await this.listAccessibleCustomerIds(accessToken);
-    const accounts: DiscoveredAdAccount[] = [];
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      'developer-token': developerToken,
+      'Content-Type': 'application/json',
+    };
+    if (loginCustomerId) headers['login-customer-id'] = loginCustomerId;
 
-    // İkinci adım: her müşteri için detay. Tek bir GAQL sorgusu ile hepsini
-    // birden almak mümkün değil — `customer` kaynağı yalnızca sorgulanan
-    // müşterinin kendisini döndürür.
-    for (const customerId of customerIds) {
+    const { data } = await platformFetch<{ results?: T[] }>(
+      'google',
+      `${this.adsBase}/customers/${customerId}/googleAds:search`,
+      { method: 'POST', headers, body: JSON.stringify({ query: query.trim() }) },
+    );
+    return data.results ?? [];
+  }
+
+  /**
+   * Reklam hesaplarını keşfeder — MCC hiyerarşisi dâhil.
+   *
+   * İki adımlı olmak zorunda:
+   *
+   *   1. `listAccessibleCustomers` yalnızca kullanıcıya DOĞRUDAN bağlı hesapları
+   *      verir. Bir ajansta bu genelde MCC'nin (yönetici hesabın) kendisidir.
+   *   2. MCC reklam yayınlamaz. Gerçek reklam hesapları onun altındadır ve
+   *      `customer_client` kaynağıyla, `login-customer-id` başlığı verilerek
+   *      ayrıca sorgulanmalıdır.
+   *
+   * Bu adım atlanırsa ajans kullanıcısı yalnızca boş bir yönetici hesabı görür.
+   */
+  async listAdAccounts(accessToken: string): Promise<DiscoveredAdAccount[]> {
+    const rootIds = await this.listAccessibleCustomerIds(accessToken);
+    const accounts = new Map<string, DiscoveredAdAccount>();
+
+    for (const rootId of rootIds) {
+      let root: Record<string, unknown> | undefined;
       try {
-        const { data } = await platformFetch<{
-          results?: Array<{ customer?: Record<string, unknown> }>;
-        }>('google', `${this.adsBase}/customers/${customerId}/googleAds:search`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'developer-token': developerToken,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            query: `
-              SELECT customer.id, customer.descriptive_name, customer.currency_code,
-                     customer.time_zone, customer.manager, customer.status
-              FROM customer
-              LIMIT 1
-            `.trim(),
-          }),
-        });
-
-        const c = data.results?.[0]?.customer;
-        if (!c) continue;
-
-        // Yönetici (MCC) hesapları reklam yayınlamaz — listeye alıyoruz ama
-        // senkronizasyon için anlamsız oldukları not düşülüyor.
-        const isManager = c.manager === true;
-
-        accounts.push({
-          externalId: customerId,
-          name: String(c.descriptiveName ?? c.descriptive_name ?? this.formatCustomerId(customerId)),
-          currency: String(c.currencyCode ?? c.currency_code ?? 'USD')
-            .toUpperCase()
-            .slice(0, 3),
-          timezone: String(c.timeZone ?? c.time_zone ?? 'UTC'),
-          status: this.mapAccountStatus(String(c.status ?? ''), isManager),
-          managerExternalId: isManager ? customerId : undefined,
-          raw: c,
-        });
+        const rows = await this.searchGaql<{ customer?: Record<string, unknown> }>(
+          accessToken,
+          rootId,
+          `SELECT customer.id, customer.descriptive_name, customer.currency_code,
+                  customer.time_zone, customer.manager, customer.status
+           FROM customer LIMIT 1`,
+          rootId,
+        );
+        root = rows[0]?.customer;
       } catch (err) {
-        // Bir hesabın detayı alınamazsa (izin yok, hesap kapanmış) diğerlerini
-        // düşürmüyoruz — kısmi liste, boş listeden iyidir.
         this.logger.warn(
-          `Google müşteri ${customerId} detayı alınamadı: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
+          `Google müşteri ${customerLabel(rootId)} okunamadı: ${errText(err)}`,
+        );
+        continue;
+      }
+      if (!root) continue;
+
+      const isManager = root.manager === true;
+
+      if (!isManager) {
+        // Doğrudan erişilen normal reklam hesabı.
+        accounts.set(rootId, this.toAdAccount(rootId, root, undefined));
+        continue;
+      }
+
+      // Yönetici hesap: altındaki tüm hesapları çıkar.
+      //
+      // customer_client hiyerarşinin TAMAMINI döndürür (level>1 dâhil), yani
+      // MCC altındaki alt-MCC'lerin hesapları da tek sorguda gelir. Ayrı ayrı
+      // dolaşmak gereksiz kota harcamak olurdu.
+      try {
+        const children = await this.searchGaql<{
+          customerClient?: Record<string, unknown>;
+        }>(
+          accessToken,
+          rootId,
+          `SELECT customer_client.client_customer, customer_client.descriptive_name,
+                  customer_client.currency_code, customer_client.time_zone,
+                  customer_client.manager, customer_client.status, customer_client.level
+           FROM customer_client
+           WHERE customer_client.status = 'ENABLED'`,
+          rootId,
+        );
+
+        let added = 0;
+        for (const row of children) {
+          const c = row.customerClient;
+          if (!c) continue;
+          // Yönetici hesapları listeye alınmaz — reklam yayınlamazlar ve
+          // senkronize etmek anlamsız kota tüketimi olur.
+          if (c.manager === true) continue;
+
+          // "customers/1234567890" → "1234567890"
+          const resource = String(c.clientCustomer ?? '');
+          const childId = resource.includes('/') ? resource.split('/')[1]! : resource;
+          if (!childId) continue;
+
+          accounts.set(childId, this.toAdAccount(childId, c, rootId));
+          added++;
+        }
+        this.logger.log(
+          `Google MCC ${customerLabel(rootId)} altında ${added} reklam hesabı bulundu`,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Google MCC ${customerLabel(rootId)} alt hesapları okunamadı: ${errText(err)}`,
         );
       }
     }
 
-    return accounts;
+    return [...accounts.values()];
+  }
+
+  /** Hem `customer` hem `customer_client` satırlarını tek şekle indirger. */
+  private toAdAccount(
+    id: string,
+    raw: Record<string, unknown>,
+    managerId?: string,
+  ): DiscoveredAdAccount {
+    return {
+      externalId: id,
+      name: String(raw.descriptiveName ?? raw.descriptive_name ?? customerLabel(id)),
+      currency: String(raw.currencyCode ?? raw.currency_code ?? 'USD')
+        .toUpperCase()
+        .slice(0, 3),
+      timezone: String(raw.timeZone ?? raw.time_zone ?? 'UTC'),
+      status: this.mapAccountStatus(String(raw.status ?? ''), raw.manager === true),
+      // Modül 3 bu hesaba erişirken login-customer-id olarak bunu kullanacak.
+      managerExternalId: managerId,
+      raw,
+    };
   }
 
   private mapAccountStatus(status: string, isManager: boolean): NormalizedAccountStatus {
@@ -327,13 +423,17 @@ export class GoogleProvider implements IAdPlatformProvider {
     }
   }
 
-  /** 1234567890 → 123-456-7890 (Google arayüzündeki gösterim). */
-  private formatCustomerId(id: string): string {
-    return id.length === 10 ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id;
-  }
-
   /** Google'da sosyal profil kavramı yok — Auto-Boost yalnızca Meta'da. */
   async listSocialProfiles(): Promise<DiscoveredSocialProfile[]> {
     return [];
   }
+}
+
+/** 1234567890 → 123-456-7890 (Google arayüzündeki gösterim). */
+function customerLabel(id: string): string {
+  return id.length === 10 ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id;
+}
+
+function errText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
