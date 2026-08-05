@@ -85,12 +85,48 @@ log "Node.js ${NODE_MAJOR}"
 # SSH ile non-interactive shell açıyor ve orada `node` bulunamıyor — dağıtımın
 # en sık takıldığı yer burasıdır. Sistem geneli kurulum /usr/bin'e yazar ve
 # her shell türünde çalışır.
-if command -v node >/dev/null && [[ "$(node -p 'process.versions.node.split(".")[0]')" -ge "$NODE_MAJOR" ]]; then
+node_major_of() { command -v "$1" >/dev/null 2>&1 && "$1" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
+
+if [[ "$(node_major_of node)" -ge "$NODE_MAJOR" ]]; then
   skip "zaten kurulu: $(node -v)"
 else
-  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/dev/null 2>&1
-  apt-get install -y -qq nodejs >/dev/null
+  CURRENT="$(command -v node >/dev/null 2>&1 && node -v || echo 'yok')"
+  echo "  mevcut: ${CURRENT} → NodeSource ${NODE_MAJOR}.x kuruluyor"
+
+  # Çıktıyı BASTIRMIYORUZ. Önceki sürüm hatayı /dev/null'a gönderiyordu ve
+  # depo eklenemediğinde apt sessizce Ubuntu'nun eski nodejs'ini bırakıyordu —
+  # script yine de "kuruldu" diyordu. Sessiz başarısızlık en kötü hata türü.
+  if ! curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -; then
+    die "NodeSource deposu eklenemedi. Yukarıdaki hataya bak."
+  fi
+
+  apt-get install -y nodejs || die "apt-get install nodejs başarısız"
+
+  # KRİTİK: kurulumun gerçekten 22'ye çıktığını doğrula.
+  INSTALLED="$(node_major_of node)"
+  if [[ "$INSTALLED" -lt "$NODE_MAJOR" ]]; then
+    printf '\n' >&2
+    echo "  Teşhis:" >&2
+    echo "    which -a node : $(which -a node 2>/dev/null | tr '\n' ' ')" >&2
+    echo "    apt policy    : $(apt-cache policy nodejs 2>/dev/null | head -3 | tr '\n' ' ')" >&2
+    echo "    nodesource    : $(ls /etc/apt/sources.list.d/ 2>/dev/null | grep -i node | tr '\n' ' ')" >&2
+    die "Node hâlâ $(node -v) — ${NODE_MAJOR}+ gerekliydi. Muhtemel sebep: PATH'te nvm ile kurulmuş eski bir node öncelikli, ya da apt Ubuntu deposundaki sürümü tercih etti."
+  fi
   ok "kuruldu: $(node -v)"
+fi
+
+# Site kullanıcısının node'u AYRI olabilir: CloudPanel "Node.js Site" tipinde
+# Node'u site kullanıcısının home'una nvm ile kurar ve o PATH'te öncelikli olur.
+# site-setup.sh o kullanıcı olarak çalışacağı için asıl önemli olan bu sürüm.
+SITE_NODE_MAJOR="$(su - "$SITE_USER" -c 'command -v node >/dev/null 2>&1 && node -p "process.versions.node.split(\".\")[0]" || echo 0' 2>/dev/null || echo 0)"
+if [[ "${SITE_NODE_MAJOR:-0}" -lt "$NODE_MAJOR" ]]; then
+  warn "$SITE_USER kullanıcısının node sürümü yetersiz (major=${SITE_NODE_MAJOR:-yok})"
+  warn "CloudPanel siteye özel nvm node'u kurmuş olabilir ve PATH'te öne geçiyor."
+  echo "      Düzeltmek için:"
+  echo "        su - $SITE_USER -c 'nvm alias default system 2>/dev/null; node -v'"
+  echo "      ya da site kullanıcısının ~/.bashrc içindeki nvm satırlarını kaldır."
+else
+  ok "$SITE_USER kullanıcısı için de uygun (major=$SITE_NODE_MAJOR)"
 fi
 
 # -----------------------------------------------------------------------------
