@@ -7,7 +7,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "dev": "pnpm --filter @advetics/shared build && pnpm --parallel --filter \"./apps/*\" dev",
     "build": "pnpm --filter @advetics/shared build && pnpm --filter \"./apps/*\" build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",

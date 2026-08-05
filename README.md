@@ -186,7 +186,18 @@ denetim kaydı denetim kaydı değildir.
 3. **Doğrula** (dışarıdan) — `https://advetics.com/api/health` + `/login`
 
 Sunucuda iki pm2 süreci çalışır ([`ecosystem.config.js`](ecosystem.config.js)):
-`advetics-web` (3598, Nginx `/`) ve `advetics-api` (3599, Nginx `/api`).
+`advetics-web` (3598) ve `advetics-api` (3599). Next.js `/api/*` isteklerini kendi içinden
+API'ye yönlendirdiği için **CloudPanel'in ürettiği varsayılan vhost düzenlenmeden çalışır**;
+Nginx'e ayrı bir `/api` bloğu eklemek isteğe bağlı bir optimizasyondur.
+
+### Sunucu script'leri
+
+| Script | Nerede | Ne yapar |
+|---|---|---|
+| [`scripts/vps-setup.sh`](scripts/vps-setup.sh) | root, **bir kez** | Node 22, pnpm, pm2, PostgreSQL 16 + üç rol, Redis, UFW |
+| [`scripts/site-setup.sh`](scripts/site-setup.sh) | site kullanıcısı, **bir kez** | `.env` üretir, şema + RLS, derleme, seed, pm2 |
+| [`scripts/deploy.sh`](scripts/deploy.sh) | her dağıtımda (Actions tetikler) | install → build → migrate → **RLS** → reload → health |
+| [`scripts/preflight.sh`](scripts/preflight.sh) | ne zaman istersen | Teşhis — hiçbir şeyi değiştirmez, sorunları ve çözümlerini listeler |
 
 Kurulum adımlarının tamamı: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 

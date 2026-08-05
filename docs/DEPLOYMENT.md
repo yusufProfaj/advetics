@@ -1,48 +1,69 @@
 # Dağıtım Rehberi — Hostinger VPS + CloudPanel
 
-`advetics.com` için üretim kurulumu. Bu rehberi **sırayla** uygula; her adım bir öncekine bağlı.
+`advetics.com` üretim kurulumu. Üç script sayesinde manuel adım sayısı azdır;
+sırayla uygula.
+
+```
+1. DNS                    ~2 dk    Hostinger paneli
+2. CloudPanel'de site      ~2 dk   CloudPanel arayüzü
+3. Sunucu hazırlığı        ~5 dk   scripts/vps-setup.sh      (root)
+4. Repo klonla             ~3 dk   deploy key + git clone
+5. Uygulama kurulumu       ~5 dk   scripts/site-setup.sh     (site kullanıcısı)
+6. SSL                     ~2 dk   CloudPanel arayüzü
+7. GitHub Actions          ~5 dk   5 secret
+```
+
+Teşhis her aşamada: `./scripts/preflight.sh advetics.com`
 
 ---
 
-## 0. Mimari — neden iki port var
+## 0. Mimari — ve neden vhost'a dokunmuyorsun
 
-Verdiğin tek port (`3598`) panele ayrıldı. Sebep: bu monorepo **iki ayrı Node süreci**
-çalıştırıyor ve ikisi de kendi portuna ihtiyaç duyuyor.
+Bu monorepo **iki Node süreci** çalıştırıyor. Sen tek port verdin (`3598`);
+onu panele ayırdık, API'yi `3599`'a aldık.
 
 ```
-                    ┌──────────────────────────────────────────┐
-   İnternet         │            Hostinger VPS                 │
-      │             │                                          │
-      │  :443       │   ┌─────────────────────────────────┐    │
-      └────────────►│   │  Nginx (CloudPanel yönetiyor)   │    │
-   advetics.com     │   └───────┬──────────────┬──────────┘    │
-                    │           │              │               │
-                    │      /api │              │ /  (diğer)    │
-                    │           ▼              ▼               │
-                    │   ┌──────────────┐  ┌──────────────┐     │
-                    │   │ advetics-api │  │ advetics-web │     │
-                    │   │  NestJS      │  │  Next.js     │     │
-                    │   │  :3599       │  │  :3598       │     │
-                    │   └──────┬───────┘  └──────────────┘     │
-                    │          │                               │
-                    │   ┌──────▼───────┐  ┌──────────────┐     │
-                    │   │ PostgreSQL 16│  │  Redis 7     │     │
-                    │   │  :5432       │  │  :6379       │     │
-                    │   └──────────────┘  └──────────────┘     │
-                    └──────────────────────────────────────────┘
+                 ┌──────────────────────────────────────────────┐
+  İnternet       │              Hostinger VPS                   │
+     │  :443     │  ┌────────────────────────────────────────┐  │
+     └──────────►│  │  Nginx  (CloudPanel yönetiyor)         │  │
+ advetics.com    │  └──────────────────┬─────────────────────┘  │
+                 │                     │ hepsi :3598            │
+                 │            ┌────────▼────────┐               │
+                 │            │  advetics-web   │               │
+                 │            │  Next.js :3598  │               │
+                 │            └────────┬────────┘               │
+                 │                     │ /api/* yönlendirmesi   │
+                 │            ┌────────▼────────┐               │
+                 │            │  advetics-api   │               │
+                 │            │  NestJS :3599   │               │
+                 │            └────────┬────────┘               │
+                 │        ┌────────────┴────────────┐           │
+                 │  ┌─────▼──────┐          ┌───────▼──────┐    │
+                 │  │ PostgreSQL │          │    Redis     │    │
+                 │  │   :5432    │          │    :6379     │    │
+                 │  └────────────┘          └──────────────┘    │
+                 └──────────────────────────────────────────────┘
 ```
 
-| Süreç | Port | Dışarıya açık | Görev |
-|---|---|---|---|
-| `advetics-web` | 3598 | Hayır (yalnızca Nginx) | Next.js paneli |
-| `advetics-api` | 3599 | Hayır (yalnızca Nginx) | NestJS API |
-| PostgreSQL | 5432 | **Hayır** | Veritabanı |
-| Redis | 6379 | **Hayır** | Kuyruk (Modül 3'ten itibaren) |
+**Kritik nokta:** Next.js, `/api/*` isteklerini kendi içinden NestJS'e yönlendiriyor
+([`apps/web/next.config.ts`](../apps/web/next.config.ts) → `rewrites`). Yani CloudPanel'in
+"Node.js Site" tipiyle otomatik ürettiği vhost — tek upstream, `127.0.0.1:3598` — **hiç
+düzenlenmeden çalışır.**
 
-Her iki uygulama da `127.0.0.1` üzerinde dinler. Dışarıya açılan tek şey Nginx'tir.
+> Test edildi: GET, POST, istek gövdesi ve `Set-Cookie` başlığı bu yönlendirmeden
+> sorunsuz geçiyor. `Set-Cookie` özellikle önemli — oturum yönetimi buna bağlı.
 
-> **Redis şu an kullanılmıyor** ama Modül 3'te (sync worker'ları) zorunlu hale gelecek.
-> Şimdi kurmak, o modülde kurulum adımı ile uğraşmamanı sağlar.
+Adım 7'deki Nginx bloğu **isteğe bağlı bir optimizasyondur**: API trafiğinden bir Node
+atlaması siler. İkisi birden yapılandırılmış olması sorun değil — isteği hangi katman
+önce görürse o işler.
+
+| Süreç | Port | Dışarı açık |
+|---|---|---|
+| `advetics-web` (Next.js) | 3598 | Hayır — yalnızca Nginx erişir |
+| `advetics-api` (NestJS) | 3599 | Hayır — yalnızca localhost |
+| PostgreSQL | 5432 | **Hayır** |
+| Redis | 6379 | **Hayır** (Modül 3'te kullanılacak) |
 
 ---
 
@@ -50,361 +71,173 @@ Her iki uygulama da `127.0.0.1` üzerinde dinler. Dışarıya açılan tek şey 
 
 Hostinger DNS panelinde:
 
-| Tip | İsim | Değer | TTL |
-|---|---|---|---|
-| A | `@` | VPS IP adresin | 3600 |
-| A | `www` | VPS IP adresin | 3600 |
+| Tip | İsim | Değer |
+|---|---|---|
+| A | `@` | VPS IP adresin |
+| A | `www` | VPS IP adresin |
 
-Yayılmayı kontrol et (VPS IP'sini döndürmeli):
+VPS IP'sini döndürmeli:
 
 ```bash
 dig +short advetics.com
 ```
 
-> **White-label custom domain'ler** (Modül 6) müşterinin kendi DNS'inde
-> `advetics.com`'a CNAME olarak tanımlanacak. Şimdilik yapılacak bir şey yok.
-
 ---
 
 ## 2. CloudPanel'de site oluştur
 
-CloudPanel arayüzünde: **Sites → Add Site → Create a Node.js Site**
+**Sites → Add Site → Create a Node.js Site**
 
 | Alan | Değer |
 |---|---|
 | Domain Name | `advetics.com` |
-| Node.js Version | 22 (listede yoksa en yükseği seç, adım 3'te düzelteceğiz) |
+| Node.js Version | listedeki en yüksek (adım 3 sistem geneli 22 kuracak) |
 | App Port | `3598` |
 | Site User | `advetics` |
-| Site User Password | güçlü bir şifre üret ve sakla |
+| Site User Password | güçlü bir şifre üret, sakla |
 
-Bu işlem şunları oluşturur:
-- Sistem kullanıcısı: `advetics`
-- Uygulama dizini: `/home/advetics/htdocs/advetics.com`
-- `3598`'e yönlendiren bir Nginx vhost (adım 10'da düzenleyeceğiz)
-
-Bundan sonraki komutların **tamamı** site kullanıcısı olarak çalıştırılır:
-
-```bash
-ssh root@VPS_IP -t 'su - advetics'
-```
+Bu işlem `advetics` sistem kullanıcısını, `/home/advetics/htdocs/advetics.com` dizinini
+ve `3598`'e yönlendiren bir Nginx vhost'u oluşturur.
 
 ---
 
-## 3. Node.js 22, pnpm ve pm2
-
-CloudPanel'in verdiği Node sürümü 22'nin altındaysa `nvm` ile kur:
+## 3. Sunucu hazırlığı (root)
 
 ```bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+ssh root@VPS_IP
 ```
 
 ```bash
-export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm install 22 && nvm alias default 22
+curl -fsSL https://raw.githubusercontent.com/KULLANICI/advetics/main/scripts/vps-setup.sh -o /tmp/vps-setup.sh && bash /tmp/vps-setup.sh --site-user advetics
 ```
 
-pnpm (workspace protokolü için zorunlu — `npm install` bu monorepo'da çalışmaz):
+> `KULLANICI/advetics` yerine kendi repo yolunu yaz. Repo private ise script'i
+> yerelden kopyala: `scp scripts/vps-setup.sh root@VPS_IP:/tmp/`
 
-```bash
-corepack enable pnpm && corepack prepare pnpm@9 --activate
-```
+[`scripts/vps-setup.sh`](../scripts/vps-setup.sh) şunları yapar:
 
-pm2:
+- **Node.js 22** — NodeSource ile **sistem geneli** (`/usr/bin/node`)
+- **pnpm 9** ve **pm2** — global
+- **PostgreSQL 16** — PGDG deposundan, `listen_addresses = localhost`
+- **Veritabanı + üç rol** — şifreler otomatik üretilir
+- **Redis 7** — `appendonly yes`
+- **UFW** — yalnızca 22/80/443 açık
+- **pm2 systemd birimi** — sunucu yeniden başlayınca süreçler kalkar
 
-```bash
-npm install -g pm2
-```
+Idempotenttir; tekrar çalıştırmak zarar vermez.
 
-Doğrula — üçü de sürüm yazdırmalı:
+### Neden nvm değil de sistem geneli Node
 
-```bash
-node -v && pnpm -v && pm2 -v
-```
+nvm yalnızca **interaktif login shell**'lerde PATH'e girer. GitHub Actions SSH ile
+**non-interactive** shell açar ve orada `node` bulunamaz — otomatik dağıtımın en sık
+takıldığı yer tam olarak budur. `/usr/bin/node` her shell türünde çalışır.
+
+### Script ne üretir
+
+Veritabanı şifreleri iki yere yazılır:
+
+- `/root/advetics-db-credentials.txt` — kalıcı kayıt, **silme**
+- `/home/advetics/.advetics-db.env` — site kullanıcısına devir (mod 600)
+
+Adım 5'teki script ikincisini otomatik okur; elle kopyalaman gerekmez.
+
+Script bitiminde `advetics_app` rolünde **BYPASSRLS kapalı** olduğunu doğrular.
+Açık olsaydı RLS hiç çalışmazdı — dağıtım orada dururdu.
 
 ---
 
-## 4. PostgreSQL 16
-
-> CloudPanel MySQL/MariaDB ile gelir, **PostgreSQL gelmez**. Elle kurulacak.
-> Bu komutlar `root` gerektirir.
+## 4. Repo'yu klonla (site kullanıcısı)
 
 ```bash
-sudo apt update && sudo apt install -y curl ca-certificates gnupg lsb-release
+su - advetics
 ```
 
-```bash
-sudo install -d /usr/share/postgresql-common/pgdg && sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
-```
+GitHub'a salt-okunur erişim için deploy key üret:
 
 ```bash
-echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
-```
-
-```bash
-sudo apt update && sudo apt install -y postgresql-16
-```
-
-### Veritabanı ve roller
-
-Üç rol oluşturulacak — RLS'in çalışması bu ayrıma bağlı (bkz. `README.md → Güvenlik mimarisi`).
-
-Önce üç güçlü şifre üret ve **sakla**:
-
-```bash
-openssl rand -base64 24; openssl rand -base64 24; openssl rand -base64 24
-```
-
-```bash
-sudo -u postgres psql -c "CREATE DATABASE advetics;"
-```
-
-Şimdi rolleri kur. `01-roles.sql` dosyası repodan gelecek, ama repo henüz klonlanmadı —
-bu yüzden bu adımı **adım 5'ten sonra** tamamlayacağız. Şimdilik yalnızca servisi doğrula:
-
-```bash
-sudo systemctl enable --now postgresql && sudo -u postgres psql -c "SELECT version();"
-```
-
-### Redis
-
-```bash
-sudo apt install -y redis-server && sudo systemctl enable --now redis-server
-```
-
-### Dışarıya kapalı olduklarını doğrula
-
-Her ikisi de yalnızca `127.0.0.1` dinlemeli:
-
-```bash
-sudo ss -tlnp | grep -E ':(5432|6379|3598|3599)'
-```
-
-`0.0.0.0:5432` görürsen `/etc/postgresql/16/main/postgresql.conf` içinde
-`listen_addresses = 'localhost'` yap ve `sudo systemctl restart postgresql` çalıştır.
-
-Güvenlik duvarı (yalnızca 80/443/SSH açık olmalı):
-
-```bash
-sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp && sudo ufw --force enable && sudo ufw status
-```
-
----
-
-## 5. Repo'yu klonla
-
-GitHub'da **deploy key** oluştur (şifre gerektirmeyen, salt-okunur erişim).
-
-Sunucuda, `advetics` kullanıcısı olarak:
-
-```bash
-ssh-keygen -t ed25519 -C "advetics-vps-deploy" -f ~/.ssh/id_ed25519 -N ""
-```
-
-```bash
-cat ~/.ssh/id_ed25519.pub
+ssh-keygen -t ed25519 -C "advetics-vps" -f ~/.ssh/id_ed25519 -N "" && cat ~/.ssh/id_ed25519.pub
 ```
 
 Çıkan anahtarı GitHub'da **repo → Settings → Deploy keys → Add deploy key** altına ekle.
-İsim: `Hostinger VPS`. **"Allow write access" işaretleme.**
+İsim: `Hostinger VPS`. **"Allow write access" İŞARETLEME.**
 
-Bağlantıyı test et (`Hi <repo>! You've successfully authenticated` görmelisin):
+Bağlantıyı test et (`Hi ...! You've successfully authenticated` görmelisin):
 
 ```bash
 ssh -T git@github.com
 ```
 
-Klonla — dizin CloudPanel tarafından oluşturulduğu için içine klonluyoruz:
+Klonla — CloudPanel dizini zaten oluşturduğu için içine klonluyoruz:
 
 ```bash
-cd ~/htdocs/advetics.com && git clone git@github.com:KULLANICI_ADIN/advetics.git . && git checkout main
+cd ~/htdocs/advetics.com && git clone git@github.com:KULLANICI/advetics.git . && git checkout main
 ```
 
-> `KULLANICI_ADIN/advetics` yerine kendi repo yolunu yaz.
-> Dizin boş değilse önce içini temizle: `rm -rf ~/htdocs/advetics.com/{*,.*} 2>/dev/null`
-
-### Veritabanı rollerini şimdi kur
-
-```bash
-sudo -u postgres psql -d advetics -f ~/htdocs/advetics.com/infra/postgres/init/01-roles.sql
-```
-
-Şifreleri üretim değerleriyle değiştir (adım 4'te ürettiklerini kullan):
-
-```bash
-sudo -u postgres psql -d advetics -c "ALTER ROLE advetics_migrator PASSWORD 'ÜRETTİĞİN_ŞİFRE_1'; ALTER ROLE advetics_app PASSWORD 'ÜRETTİĞİN_ŞİFRE_2'; ALTER ROLE advetics_worker PASSWORD 'ÜRETTİĞİN_ŞİFRE_3';"
-```
-
-Üç rolün de doğru yetkilerle oluştuğunu doğrula:
-
-```bash
-sudo -u postgres psql -d advetics -c "SELECT rolname, rolbypassrls, rolcreatedb FROM pg_roles WHERE rolname LIKE 'advetics%' ORDER BY 1;"
-```
-
-`advetics_app` satırında `rolbypassrls` **f (false)** olmalı. `t` ise RLS hiç çalışmaz.
+> Dizin boş değil hatası alırsan: `rm -rf ~/htdocs/advetics.com/* ~/htdocs/advetics.com/.[!.]*`
 
 ---
 
-## 6. Ortam değişkenleri
+## 5. Uygulama kurulumu (site kullanıcısı)
 
 ```bash
-cd ~/htdocs/advetics.com && cp .env.example .env && chmod 600 .env
+cd ~/htdocs/advetics.com && ./scripts/site-setup.sh --domain advetics.com
 ```
 
-Sırları üret:
+[`scripts/site-setup.sh`](../scripts/site-setup.sh) şunları yapar:
 
-```bash
-openssl rand -base64 48   # JWT_ACCESS_SECRET
-```
+1. `.env` üretir — DB bilgilerini devir dosyasından alır, JWT sırlarını ve
+   AES şifreleme anahtarını `openssl` ile üretir (mod 600)
+2. `pnpm install --frozen-lockfile`
+3. `prisma migrate deploy` → şema
+4. **`db:rls`** → RLS politikaları ve kısıtlar
+5. Politika sayısını ve korumasız tablo olmadığını **doğrular** (yoksa durur)
+6. API ve paneli derler
+7. Owner hesabını oluşturur, şifreyi **bir kez** ekrana yazar ve `.env`'den siler
+8. pm2 süreçlerini başlatır, yerel sağlık kontrolü yapar
 
-```bash
-openssl rand -base64 48   # JWT_REFRESH_SECRET
-```
+> **Ekrana yazılan giriş şifresini kaydet.** Bir daha gösterilmez; `.env`'den silinir
+> ve veritabanında yalnızca argon2 hash'i kalır. Kaybedersen şifre sıfırlama akışını
+> kullanman gerekir.
 
-```bash
-openssl rand -base64 32   # ENCRYPTION_KEY_V1  (tam 32 byte olmalı)
-```
-
-`nano .env` ile aşağıdaki değerleri yaz:
-
-```bash
-NODE_ENV=production
-
-# Veritabanı — adım 5'teki şifreler
-DATABASE_URL="postgresql://advetics_app:ŞİFRE_2@127.0.0.1:5432/advetics?schema=public&connection_limit=10"
-DIRECT_DATABASE_URL="postgresql://advetics_migrator:ŞİFRE_1@127.0.0.1:5432/advetics?schema=public"
-WORKER_DATABASE_URL="postgresql://advetics_worker:ŞİFRE_3@127.0.0.1:5432/advetics?schema=public&connection_limit=10"
-
-REDIS_URL="redis://127.0.0.1:6379"
-
-# API — ecosystem.config.js ile aynı port
-API_PORT=3599
-API_GLOBAL_PREFIX=api
-CORS_ORIGINS="https://advetics.com,https://www.advetics.com"
-
-# Auth
-JWT_ACCESS_SECRET="<openssl çıktısı>"
-JWT_REFRESH_SECRET="<openssl çıktısı>"
-JWT_ACCESS_TTL="15m"
-JWT_REFRESH_TTL="30d"
-AUTH_COOKIE_DOMAIN="advetics.com"
-AUTH_COOKIE_SECURE=true
-
-# Şifreleme (Modül 2'de OAuth token'ları için)
-ENCRYPTION_KEY_V1="<openssl çıktısı>"
-ENCRYPTION_ACTIVE_KEY_VERSION=1
-
-# Frontend
-NEXT_PUBLIC_API_URL="https://advetics.com/api"
-NEXT_PUBLIC_ROOT_DOMAIN="advetics.com"
-INTERNAL_API_URL="http://127.0.0.1:3599/api"
-
-# İlk owner hesabı — seed'den SONRA bu iki satırı sil
-SEED_ORG_NAME="Advetics"
-SEED_ADMIN_EMAIL="yusuf@profaj.com"
-SEED_ADMIN_PASSWORD="<güçlü bir şifre, en az 12 karakter>"
-```
-
-> **Üç kritik nokta:**
-> 1. `AUTH_COOKIE_SECURE=true` zorunlu — `false` bırakılırsa uygulama üretimde açılmaz
->    (`configuration.ts` bunu kontrol ediyor).
-> 2. `NEXT_PUBLIC_*` değerleri **build anında** koda gömülür. Sonradan değiştirirsen
->    `pm2 restart` yetmez, yeniden `pnpm build` almak gerekir.
-> 3. `INTERNAL_API_URL` Next.js sunucusunun API'ye Nginx'i atlayarak ulaşmasını sağlar.
+Mevcut bir `.env` varsa **üzerine yazmaz** — tekrar çalıştırmak güvenlidir.
 
 ---
 
-## 7. İlk kurulum
+## 6. SSL
+
+**Sites → advetics.com → SSL/TLS → New Let's Encrypt Certificate**
+
+Domain listesine `advetics.com` ve `www.advetics.com` ekle → **Create and Install**.
+DNS'in yayılmış olması gerekir (adım 1).
+
+Şimdi çalışıyor olmalı:
 
 ```bash
-cd ~/htdocs/advetics.com && pnpm install --frozen-lockfile
+curl -s https://advetics.com/api/health
 ```
 
 ```bash
-pnpm --filter @advetics/shared build && pnpm --filter @advetics/api exec prisma generate
-```
-
-Şemayı oluştur ve **RLS politikalarını uygula**:
-
-```bash
-pnpm --filter @advetics/api exec prisma migrate deploy
-```
-
-```bash
-pnpm --filter @advetics/api db:rls
-```
-
-Owner hesabını ve demo müşterileri oluştur (**yalnızca bir kez**):
-
-```bash
-pnpm --filter @advetics/api db:seed
-```
-
-Seed bittikten sonra `.env` içinden `SEED_ADMIN_PASSWORD` satırını **sil**:
-
-```bash
-sed -i '/^SEED_ADMIN_PASSWORD=/d' .env
-```
-
-Derle:
-
-```bash
-pnpm --filter @advetics/api build && pnpm --filter @advetics/web build
+./scripts/preflight.sh advetics.com
 ```
 
 ---
 
-## 8. pm2 ile başlat
+## 7. Nginx optimizasyonu (isteğe bağlı)
 
-```bash
-cd ~/htdocs/advetics.com && mkdir -p logs && pm2 start ecosystem.config.js
-```
+Adım 0'da anlatıldığı gibi sistem bu adım olmadan çalışır. Bu blok yalnızca API
+trafiğinden bir Node atlaması siler — yükseldiğinde fark eder, MVP'de zorunlu değildir.
 
-```bash
-pm2 status
-```
+**Sites → advetics.com → Vhost**
 
-İki süreç de `online` olmalı. Değilse:
+> ⚠️ Dosyanın tamamını değiştirme. CloudPanel `{{ssl_certificate}}`, `{{root}}`,
+> `{{nginx_access_log}}` gibi yer tutucuları kendisi yönetir; silersen SSL yenilemesi
+> ve log rotasyonu bozulur. **Yalnızca `location` blokları ekle.**
 
-```bash
-pm2 logs --lines 50
-```
-
-Sunucu yeniden başladığında süreçlerin otomatik kalkması için:
-
-```bash
-pm2 save && pm2 startup
-```
-
-Son komut ekrana `sudo env PATH=... pm2 startup systemd -u advetics --hp /home/advetics`
-benzeri bir satır yazar — **onu kopyalayıp root olarak çalıştır**.
-
-Yerelde çalıştıklarını doğrula (`{"status":"ok",...}` dönmeli):
-
-```bash
-curl -s http://127.0.0.1:3599/api/health
-```
-
-```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3598/login
-```
-
----
-
-## 9. Nginx vhost
-
-CloudPanel arayüzünde: **Sites → advetics.com → Vhost**
-
-> ⚠️ **Dosyanın tamamını benim verdiğimle DEĞİŞTİRME.** CloudPanel `{{ssl_certificate}}`,
-> `{{root}}`, `{{nginx_access_log}}` gibi yer tutucuları kendisi yönetir; onları silersen
-> SSL yenilemesi ve log rotasyonu bozulur. **Yalnızca `location` bloklarını** düzenle.
-
-Mevcut `location / { ... proxy_pass http://127.0.0.1:3598; }` bloğunu bul ve
-**onun ÜSTÜNE** API bloğunu ekle, ardından `location /` bloğunu aşağıdaki gibi güncelle:
+Mevcut `location / { ... }` bloğunun **ÜSTÜNE**:
 
 ```nginx
-    # --- API → NestJS (3599) ----------------------------------------------
-    # proxy_pass'te sondaki eğik çizgi YOK: /api öneki korunmalı,
-    # çünkü NestJS globalPrefix olarak 'api' kullanıyor.
+    # API → NestJS. proxy_pass sonunda eğik çizgi YOK:
+    # /api öneki korunmalı, NestJS globalPrefix olarak 'api' kullanıyor.
     location /api/ {
         proxy_pass http://127.0.0.1:3599;
 
@@ -413,80 +246,44 @@ Mevcut `location / { ... proxy_pass http://127.0.0.1:3598; }` bloğunu bul ve
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host  $host;
-        proxy_set_header Upgrade           $http_upgrade;
-        proxy_set_header Connection        "upgrade";
 
-        # Modül 6'da PDF üretimi ve Modül 3'te toplu senkronizasyon
-        # uzun sürebilir; varsayılan 60s yetmez.
-        proxy_connect_timeout 10s;
-        proxy_send_timeout   300s;
-        proxy_read_timeout   300s;
+        # Modül 6 PDF üretimi ve Modül 3 toplu senkronizasyon uzun sürer
+        proxy_connect_timeout  10s;
+        proxy_read_timeout    300s;
+        proxy_send_timeout    300s;
 
-        # Logo ve reklam görseli yüklemeleri (Modül 1 marka, Modül 8 toplu yükleme)
         client_max_body_size 25m;
-
         proxy_buffering off;
     }
-
-    # --- Panel → Next.js (3598) -------------------------------------------
-    location / {
-        proxy_pass http://127.0.0.1:3598;
-
-        proxy_http_version 1.1;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade           $http_upgrade;
-        proxy_set_header Connection        "upgrade";
-
-        proxy_connect_timeout 10s;
-        proxy_read_timeout    120s;
-        client_max_body_size  25m;
-    }
-
-    # Next.js statik varlıkları — uzun süreli önbellek.
-    # Dosya adlarında içerik hash'i var, bayatlama riski yok.
-    location /_next/static/ {
-        proxy_pass http://127.0.0.1:3598;
-        proxy_set_header Host $host;
-        proxy_cache_valid 200 365d;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-    }
 ```
 
-**Save** de. CloudPanel Nginx'i kendi yeniden yükler. Elle doğrulamak istersen:
+**Save** de — CloudPanel Nginx'i kendisi yeniden yükler. Doğrula:
 
 ```bash
-sudo nginx -t && sudo systemctl reload nginx
+sudo nginx -t && curl -s https://advetics.com/api/health
 ```
 
-### SSL
-
-**Sites → advetics.com → SSL/TLS → New Let's Encrypt Certificate**
-
-Domain listesine `advetics.com` ve `www.advetics.com` ekle, **Create and Install** de.
-DNS'in yayılmış olması gerekir (adım 1).
+Sorun çıkarsa bloğu sil, kaydet — Next.js yönlendirmesi devralır, sistem çalışmaya
+devam eder.
 
 ---
 
-## 10. GitHub Secrets
+## 8. GitHub Actions
 
-Repo → **Settings → Secrets and variables → Actions → New repository secret**
+Repo → **Settings → Secrets and variables → Actions**
 
-| Secret | Değer | Nasıl bulunur |
-|---|---|---|
-| `VPS_HOST` | VPS IP adresin | Hostinger paneli |
-| `VPS_USER` | `advetics` | Adım 2'deki site kullanıcısı |
-| `VPS_SSH_PORT` | `22` | Değiştirdiysen kendi portun |
-| `VPS_SSH_KEY` | Özel anahtarın **tamamı** | Aşağıya bak |
-| `VPS_APP_PATH` | `/home/advetics/htdocs/advetics.com` | Adım 5 |
+| Secret | Değer |
+|---|---|
+| `VPS_HOST` | VPS IP adresin |
+| `VPS_USER` | `advetics` |
+| `VPS_SSH_PORT` | `22` |
+| `VPS_SSH_KEY` | Özel anahtarın tamamı (aşağıya bak) |
+| `VPS_APP_PATH` | `/home/advetics/htdocs/advetics.com` |
 
-### VPS_SSH_KEY nasıl üretilir
+### VPS_SSH_KEY
 
-GitHub Actions'ın sunucuya bağlanması için **ayrı** bir anahtar çifti üret
-(adım 5'teki deploy key GitHub'a erişim içindi, bu tersi yönde).
+Adım 4'teki deploy key **GitHub'a erişim** içindi; bu **tersi yönde** — Actions'ın
+sunucuya bağlanması için. Ayrı bir çift üret.
 
 **Kendi bilgisayarında:**
 
@@ -494,103 +291,92 @@ GitHub Actions'ın sunucuya bağlanması için **ayrı** bir anahtar çifti üre
 ssh-keygen -t ed25519 -C "github-actions-advetics" -f ~/.ssh/advetics_deploy -N ""
 ```
 
-Açık anahtarı sunucuya yetkilendir:
-
 ```bash
 ssh-copy-id -i ~/.ssh/advetics_deploy.pub advetics@VPS_IP
 ```
-
-Özel anahtarı kopyala ve `VPS_SSH_KEY` secret'ına yapıştır — `-----BEGIN` ve `-----END`
-satırları **dahil**, sondaki boş satır dahil:
-
-```bash
-cat ~/.ssh/advetics_deploy
-```
-
-Bağlantıyı test et:
 
 ```bash
 ssh -i ~/.ssh/advetics_deploy advetics@VPS_IP 'echo baglanti-ok'
 ```
 
-### Production environment (opsiyonel ama önerilir)
+Özel anahtarı `VPS_SSH_KEY` secret'ına yapıştır — `-----BEGIN` / `-----END` satırları
+ve sondaki boş satır **dahil**:
 
-Repo → **Settings → Environments → New environment → `production`**
+```bash
+cat ~/.ssh/advetics_deploy
+```
 
-**Required reviewers** ekleyerek her dağıtımın senin onayınla gitmesini sağlayabilirsin.
-Bütçelere dokunan bir sistemde bu, yanlışlıkla `main`'e push etmenin maliyetini düşürür.
+### İlk otomatik dağıtım
+
+```bash
+git commit --allow-empty -m "chore: dağıtımı tetikle" && git push origin main
+```
+
+**Actions** sekmesinden izle. Akış:
+
+1. **Doğrula** (runner) — tip kontrolü, derleme, **RLS kapsama kontrolü**
+   (Prisma şemasındaki her tablo `02_rls.sql` içinde tanımlı mı?)
+2. **Dağıt** (SSH) — `git reset --hard origin/main` → [`scripts/deploy.sh`](../scripts/deploy.sh)
+3. **Doğrula** (dışarıdan) — `/api/health` + `/login`
+
+### Onaylı dağıtım (önerilir)
+
+Repo → **Settings → Environments → New environment → `production`** →
+**Required reviewers** ekle. Bütçelere dokunan bir sistemde bu, yanlışlıkla `main`'e
+push etmenin maliyetini düşürür.
 
 ---
 
-## 11. İlk otomatik dağıtım
+## 9. Doğrulama
 
 ```bash
-git commit --allow-empty -m "chore: ilk dağıtımı tetikle" && git push origin main
+cd ~/htdocs/advetics.com && ./scripts/preflight.sh advetics.com
 ```
 
-GitHub → **Actions** sekmesinden izle. Akış:
+[`scripts/preflight.sh`](../scripts/preflight.sh) hiçbir şeyi değiştirmez; kontrol eder
+ve her sorun için düzeltme komutunu yazar:
 
-1. **Doğrula** — runner'da tip kontrolü + derleme + RLS kapsama kontrolü
-2. **Sunucuya dağıt** — SSH → `git reset --hard origin/main` → `scripts/deploy.sh`
-3. **Dışarıdan doğrula** — `https://advetics.com/api/health` ve `/login`
+- Araçlar ve sürümler · **nvm tuzağı** (SSH dağıtımında `node` bulunamaması)
+- `.env` — zorunlu anahtarlar, izinler, `ENCRYPTION_KEY_V1` gerçekten 32 byte mı,
+  `SEED_ADMIN_PASSWORD` silinmiş mi
+- Veritabanı — bağlantı, **`advetics_app` BYPASSRLS kapalı mı**, politika sayısı,
+  korumasız tablo, tablo/organizasyon sayısı
+- Derleme çıktıları — **`NEXT_PUBLIC_API_URL` gerçekten build'e gömülmüş mü**
+- pm2 süreçleri ve systemd birimi
+- Yerel portlar, Next.js yedek yönlendirmesi, portların dışarı kapalı olması
+- Dışarıdan HTTPS erişimi
 
-`scripts/deploy.sh` sunucuda sırasıyla şunları yapar:
-bağımlılıklar → derleme → `prisma migrate deploy` → **`db:rls`** → `pm2 startOrReload`
-→ sağlık kontrolü.
+Elle son kontrol:
 
----
-
-## 12. Doğrulama listesi
-
-```bash
-curl -s https://advetics.com/api/health
-```
-
-- [ ] `{"status":"ok","database":{"status":"ok",...}}` dönüyor
 - [ ] `https://advetics.com/login` açılıyor, sertifika geçerli
 - [ ] Owner hesabıyla giriş yapılabiliyor
 - [ ] Panelde **"Veritabanı satır güvenliği (RLS)"** kartı **yeşil**
 - [ ] Kartta "korumasız tablo" uyarısı **yok**
 - [ ] Müşteri değiştirici çalışıyor
-- [ ] `pm2 status` → iki süreç de `online`
-- [ ] Sunucuyu yeniden başlattıktan sonra süreçler kendiliğinden kalkıyor
-
-RLS'i sunucuda doğrudan doğrula — `advetics_app` satırında `rolbypassrls` **f** olmalı,
-politika sayısı **19** olmalı:
-
-```bash
-sudo -u postgres psql -d advetics -c "SELECT count(*) AS politika_sayisi FROM pg_policies WHERE schemaname='public' AND policyname LIKE 'adv_%';"
-```
-
-Korumasız tablo kalmadığını doğrula — **0 satır** dönmeli:
-
-```bash
-sudo -u postgres psql -d advetics -c "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity=false AND c.relname NOT LIKE '_prisma%';"
-```
+- [ ] `sudo reboot` sonrası her şey kendiliğinden kalkıyor
 
 ---
 
-## 13. Sorun giderme
+## 10. Sorun giderme
+
+Önce `./scripts/preflight.sh advetics.com` çalıştır — aşağıdakilerin çoğunu kendi yakalar.
 
 | Belirti | Sebep | Çözüm |
 |---|---|---|
-| `502 Bad Gateway` | pm2 süreci ölü | `pm2 logs advetics-api --lines 50` |
-| Panel açılıyor, API 404 | Nginx `/api/` bloğu eksik veya `proxy_pass` sonunda `/` var | Adım 9'u tekrar oku |
-| `Can't reach database server` | Şifre yanlış veya PostgreSQL kapalı | `sudo systemctl status postgresql`, `.env` şifrelerini kontrol et |
-| Giriş yapılıyor ama hemen çıkıyor | `AUTH_COOKIE_DOMAIN` yanlış veya `AUTH_COOKIE_SECURE=false` | `.env` → `advetics.com` / `true`, sonra `pm2 restart all` |
-| Panelde RLS kartı **sarı** | `db:rls` çalışmamış | `pnpm --filter @advetics/api db:rls` |
-| Frontend eski API adresine gidiyor | `NEXT_PUBLIC_API_URL` build'e gömülü | `.env`'i düzelt → `pnpm --filter @advetics/web build` → `pm2 restart advetics-web` |
-| `ERR_PNPM_OUTDATED_LOCKFILE` | `package.json` değişti, lockfile commit edilmedi | Yerelde `pnpm install` → `pnpm-lock.yaml`'ı commit et |
-| Actions `Permission denied (publickey)` | `VPS_SSH_KEY` eksik/bozuk | Anahtarın tamamını (BEGIN/END dahil) yeniden yapıştır |
-| Actions "RLS politikası tanımlı değil" | Yeni tablo eklendi, politikası yazılmadı | `apps/api/prisma/sql/02_rls.sql` içine tablo + politika ekle |
-
-Canlı log:
+| `502 Bad Gateway` | pm2 süreci ölü | `pm2 logs advetics-web --lines 50` |
+| Panel açılıyor, `/api/health` 404 | Next.js yönlendirmesi yok **ve** Nginx bloğu yok | `.env`'de `INTERNAL_API_URL` var mı → `pnpm --filter @advetics/web build` |
+| Actions: `node: command not found` | nvm ile kurulmuş Node | root: `bash scripts/vps-setup.sh --site-user advetics` |
+| `Can't reach database server` | PostgreSQL kapalı / şifre yanlış | `systemctl status postgresql` · `/root/advetics-db-credentials.txt` |
+| Giriş yapılıyor, hemen çıkıyor | `AUTH_COOKIE_DOMAIN` veya `AUTH_COOKIE_SECURE` yanlış | `.env` → `advetics.com` / `true` → `pm2 restart all` |
+| RLS kartı **sarı** | `db:rls` çalışmamış | `pnpm --filter @advetics/api db:rls` |
+| Panel eski API adresine gidiyor | `NEXT_PUBLIC_API_URL` build'e gömülü | `.env` düzelt → `pnpm --filter @advetics/web build` → `pm2 restart advetics-web` |
+| `ERR_PNPM_OUTDATED_LOCKFILE` | `package.json` değişti, lockfile commit edilmedi | Yerelde `pnpm install` → `pnpm-lock.yaml` commit |
+| Actions `Permission denied (publickey)` | `VPS_SSH_KEY` eksik/bozuk | Anahtarı BEGIN/END dahil yeniden yapıştır |
+| Actions "RLS politikası tanımlı değil" | Yeni tablo eklendi, politikası yazılmadı | `apps/api/prisma/sql/02_rls.sql`'e tablo + politika ekle |
 
 ```bash
 pm2 logs
 ```
-
-Kaynak kullanımı:
 
 ```bash
 pm2 monit
@@ -598,33 +384,32 @@ pm2 monit
 
 ---
 
-## 14. Geri alma (rollback)
+## 11. Geri alma
 
-`scripts/deploy.sh` başarısız olursa ekrana önceki commit'i ve geri alma komutunu yazar.
-Elle geri almak için sunucuda:
+`scripts/deploy.sh` başarısız olursa ekrana önceki commit'i ve komutu yazar. Elle:
 
 ```bash
 cd ~/htdocs/advetics.com && git reset --hard $(cat .last-deployed-sha) && ./scripts/deploy.sh
 ```
 
-> ⚠️ Bu yalnızca **kodu** geri alır. Uygulanmış veritabanı migration'ları geri alınmaz.
-> Şema değişikliği içeren bir sürümden dönüyorsan, önceki kodun yeni şemayla çalışıp
-> çalışmadığını kontrol et. Bu yüzden migration'ları **geriye uyumlu** yazmak önemlidir:
-> kolon silmek yerine önce kullanımdan kaldır, bir sonraki sürümde sil.
+> ⚠️ Bu yalnızca **kodu** geri alır; uygulanmış migration'lar geri alınmaz. Bu yüzden
+> migration'ları **geriye uyumlu** yaz: kolon silmek yerine önce kullanımdan kaldır,
+> bir sonraki sürümde sil.
 
 ---
 
-## 15. Bakım
+## 12. Bakım
 
 ### Veritabanı yedeği
 
-Günlük yedek için cron (root olarak `crontab -e`):
+Root olarak `crontab -e`:
 
 ```bash
 0 3 * * * sudo -u postgres pg_dump -Fc advetics > /var/backups/advetics-$(date +\%F).dump && find /var/backups -name 'advetics-*.dump' -mtime +14 -delete
 ```
 
-> Yedekleri **sunucu dışına** da kopyala. Aynı diskteki yedek, disk arızasına karşı koruma sağlamaz.
+> Yedekleri **sunucu dışına** da kopyala. Aynı diskteki yedek disk arızasına karşı
+> koruma sağlamaz.
 
 ### Log rotasyonu
 
@@ -636,24 +421,25 @@ pm2 install pm2-logrotate && pm2 set pm2-logrotate:max_size 50M && pm2 set pm2-l
 
 ### Sır rotasyonu
 
-`JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` değiştirilirse tüm oturumlar düşer — kullanıcılar
+`JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` değişirse tüm oturumlar düşer — kullanıcılar
 yeniden giriş yapar, veri kaybı olmaz.
 
-`ENCRYPTION_KEY_V1` **asla silinmemelidir**. Rotasyon için yeni anahtarı `ENCRYPTION_KEY_V2`
-olarak ekle ve `ENCRYPTION_ACTIVE_KEY_VERSION=2` yap; eski kayıtlar v1 ile açılmaya devam
-eder (`crypto.service.ts` her şifreli değerin başına anahtar sürümünü yazar). Eski anahtarı
-silmek, o anahtarla şifrelenmiş **tüm OAuth token'larını kalıcı olarak okunamaz kılar**.
+`ENCRYPTION_KEY_V1` **asla silinmemelidir.** Rotasyon için `ENCRYPTION_KEY_V2` ekle ve
+`ENCRYPTION_ACTIVE_KEY_VERSION=2` yap; eski kayıtlar V1 ile açılmaya devam eder
+([`crypto.service.ts`](../apps/api/src/crypto/crypto.service.ts) her şifreli değerin
+başına anahtar sürümünü yazar). Eski anahtarı silmek, o anahtarla şifrelenmiş **tüm
+OAuth token'larını kalıcı olarak okunamaz kılar**.
 
 ---
 
-## 16. Modül 3'e geçmeden önce
+## 13. Modül 3'e geçmeden önce
 
-Sync worker'ları eklendiğinde bu rehbere iki şey eklenecek:
+Sync worker'ları eklendiğinde:
 
-1. **Üçüncü bir pm2 süreci** — `advetics-worker` (BullMQ tüketicisi). API ile aynı kod
-   tabanı, farklı entrypoint. `ecosystem.config.js`'e eklenecek.
-2. **Redis kalıcılığı** — `appendonly yes` açılmalı, aksi halde sunucu yeniden başladığında
-   kuyruktaki işler kaybolur.
+1. **Üçüncü pm2 süreci** — `advetics-worker` (BullMQ tüketicisi), aynı kod tabanı,
+   farklı entrypoint. `ecosystem.config.js`'e eklenecek.
+2. Worker **cluster modunda çalıştırılmamalı** — zamanlanmış kurallar instance sayısı
+   kadar tetiklenir ve bütçeler birden fazla kez değiştirilir. (Mevcut iki süreç de bu
+   yüzden `fork` modunda.)
 
-Worker **cluster modunda çalıştırılmamalıdır**: zamanlanmış kurallar instance sayısı kadar
-tetiklenir ve bütçeler birden fazla kez değiştirilir.
+Redis `appendonly` ayarı `vps-setup.sh` tarafından zaten açıldı.

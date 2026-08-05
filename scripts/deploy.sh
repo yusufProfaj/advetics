@@ -129,7 +129,7 @@ wait_for "Panel" "http://127.0.0.1:${WEB_PORT}/login"
 
 # RLS'in gerçekten devrede olduğunu doğrula. /api/health/rls oturum gerektirdiği
 # için 401 beklenir — 401 ALMAK BAŞARIDIR: endpoint ayakta ve korunuyor demektir.
-RLS_STATUS="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${API_PORT}/api/health/rls" || echo '000')"
+RLS_STATUS="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${API_PORT}/api/health/rls" || true)"
 if [[ "$RLS_STATUS" == "401" ]]; then
   ok "RLS endpoint'i korunuyor (401)"
 else
