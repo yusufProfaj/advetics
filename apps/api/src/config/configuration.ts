@@ -16,6 +16,15 @@ const envSchema = z.object({
   REDIS_URL: z.string().url().optional(),
 
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+  /**
+   * Dinlenecek arayüz. Varsayılan olarak YALNIZCA localhost.
+   *
+   * API'ye tek meşru giriş Nginx'tir. 0.0.0.0'a bağlanmak, API'yi güvenlik
+   * duvarının insafına bırakır — tek bir yanlış UFW kuralı OAuth token'ları ve
+   * müşteri verisini internete açar. Nginx başka bir makinedeyse burayı
+   * bilinçli olarak değiştir.
+   */
+  API_HOST: z.string().default('127.0.0.1'),
   API_GLOBAL_PREFIX: z.string().default('api'),
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
 
@@ -40,6 +49,7 @@ export interface AppConfig {
   env: Env['NODE_ENV'];
   isProduction: boolean;
   port: number;
+  host: string;
   globalPrefix: string;
   corsOrigins: string[];
   database: { url: string; directUrl: string; workerUrl: string };
@@ -79,6 +89,7 @@ export function loadConfig(): AppConfig {
     env: env.NODE_ENV,
     isProduction: env.NODE_ENV === 'production',
     port: env.API_PORT,
+    host: env.API_HOST,
     globalPrefix: env.API_GLOBAL_PREFIX,
     corsOrigins: env.CORS_ORIGINS.split(',')
       .map((o) => o.trim())

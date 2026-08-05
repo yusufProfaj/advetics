@@ -55,9 +55,14 @@ async function bootstrap(): Promise<void> {
 
   app.enableShutdownHooks();
 
-  await app.listen(config.port);
+  // İkinci argüman ŞART: verilmezse Node 0.0.0.0'a bağlanır ve API'yi tüm
+  // arayüzlerde açar. Tek meşru giriş Nginx'tir.
+  await app.listen(config.port, config.host);
 
-  logger.log(`API hazır → http://localhost:${config.port}/${config.globalPrefix}`);
+  logger.log(`API hazır → http://${config.host}:${config.port}/${config.globalPrefix}`);
+  if (config.host === '0.0.0.0') {
+    logger.warn('API TÜM arayüzlerde dinliyor. Üretimde API_HOST=127.0.0.1 olmalı.');
+  }
   logger.log(`Ortam: ${config.env} | CORS: ${config.corsOrigins.join(', ')}`);
   if (!config.isProduction) {
     logger.warn('Geliştirme modu: davet ve şifre sıfırlama token\'ları log\'a yazılıyor.');

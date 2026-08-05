@@ -30,6 +30,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         API_PORT: '3599',
+        API_HOST: '127.0.0.1',
       },
       max_memory_restart: '512M',
       autorestart: true,
