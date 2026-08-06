@@ -1,0 +1,10 @@
+{
+  // Üretim derlemesi — testler dist/ içine GİRMEZ.
+  //
+  // Testler `vitest` ile TypeScript kaynağından çalışıyor; derlemeye dahil
+  // etmek hem dist'i şişirir hem de `ioredis-mock` gibi geliştirme
+  // bağımlılıklarını üretim çalışma zamanına taşır (sunucuda `--prod` kurulum
+  // yapılırsa "Cannot find module" ile patlar).
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "test", "src/**/*.spec.ts"]
+}

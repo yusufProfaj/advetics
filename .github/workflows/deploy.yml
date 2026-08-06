@@ -52,6 +52,12 @@ jobs:
       - name: Tip kontrolü
         run: pnpm typecheck
 
+      # Birim testler: veritabanı/Redis gerektirmeyen karar mantığı.
+      # Kota bekçisi burada üç kez sessiz hata verdi; bu adım onların
+      # geri dönmesini engelliyor.
+      - name: Testler
+        run: pnpm test
+
       - name: Derle
         run: |
           pnpm --filter @advetics/api build

@@ -643,27 +643,50 @@ Kural motorunun gün içi kararları için campaign seviyesi yeterlidir; ad-leve
 
 ### 3.4 Kota Yönetimi
 
-**Redis token bucket, `ad_account_id` başına.** Her worker API çağrısından önce lease alır:
+**Sabit pencere sayacı + adaptif eşik, `ad_account_id` başına.** Her API çağrısından önce
+`QuotaGuardService.acquire()` çağrılır:
 
-1. Redis'ten hesabın bucket'ını al
-2. Token yoksa → job'ı `next_retry_at` ile geri kuyruğa koy, **worker'ı bloklama**
-3. Çağrıyı yap
-4. Meta: `X-Business-Use-Case-Usage` header'ını parse et / Google: hata kodunu ve operasyon sayısını kaydet
-5. Bucket kapasitesini gerçek tüketime göre ayarla (adaptif)
-6. `api_usage_log`'a yaz
+1. Circuit breaker açık mı — açıksa iş kalan süre kadar geciktirilir
+2. Katmanın eşiği, hesabın bilinen kota yüzdesini aşıyor mu
+3. Dakikalık sayaç kovası dolmuş mu
+4. Reddedilirse → iş `moveToDelayed` ile kuyruğa iade, **worker bloklanmaz**
+5. Çağrı yapılır; Meta `X-Business-Use-Case-Usage` header'ı / Google hata kodu okunur
+6. `record()` Redis durumunu ve `api_usage_log` satırını yazar
 
-**Adaptif eşikler** (üç yüzdenin en yükseğine göre):
+*Token bucket değil, sabit pencere sayacı:* dakika başına sıfırlanan bir `INCR` sayacı,
+token doldurma zamanlayıcısı gerektirmiyor ve tek Redis komutuna iniyor. Pencere sınırında
+iki katı çağrı yapılabilmesi teorik olarak mümkün; adaptif eşik ikinci savunma olarak
+durduğu için bu risk kabul edildi.
+
+**Adaptif eşikler** (üç yüzdenin en yükseğine göre). Kod: `LAYER_MAX_USAGE`.
 
 | Tüketim | Davranış |
 |---|---|
 | < %60 | Normal hız |
-| %60–75 | Concurrency yarıya iner, L5/L7 duraklar |
-| %75–90 | Sadece L1 + L2 + kullanıcı tetiklemeli işler |
-| > %90 | **Tam fren** — sadece kural aksiyonları (yazma) geçer, tüm okuma durur |
-| %100 / blok | Circuit breaker açılır, 15 dk cooldown, admin'e bildirim |
+| %60–75 | Dakikalık bütçe yarıya iner, L5/L7 duraklar |
+| %75–90 | Dakikalık bütçe çeyreğe iner; L4/L6 de durur |
+| > %90 | **Tam fren** — sadece kural aksiyonları ve kullanıcı istekleri geçer |
+| %100 / blok | Circuit breaker açılır, 15 dk cooldown |
 
-**Kural aksiyonları en yüksek önceliktedir ve kota rezervinde tutulur.** Kota bittiği için bütçe
-artıramamak, veri güncellenememekten çok daha pahalıdır.
+**Kota rezervi — dakikalık bütçe iki ayrı kovaya bölünür:**
+
+| Kova | Pay | Katmanlar |
+|---|---|---|
+| Senkronizasyon | %65 | L1–L7 |
+| Öncelikli | %35 | `rule_action`, `interactive` |
+
+Kota bittiği için bütçe artıramamak, veri güncellenememekten çok daha pahalıdır.
+
+Kovaların **ayrı sayaçlar** olması şart. Tek sayaçla rezerv işlemiyor: sınırı aşan sync
+denemeleri de sayacı artırıyor (sayacı geri almak yarış koşulu yaratır), sayaç öncelikli
+limiti de geçiyor ve kural aksiyonu — eşiği izin vermesine rağmen — reddediliyor.
+
+**Kota durumunun TTL'i (10 dk) aynı zamanda kurtarma mekanizmasıdır.** Platform %100
+bildirirse hiçbir katman çalışamaz (en yüksek eşik %98); çağrı yapılamayınca yeni yüzde de
+öğrenilemez. Tek çıkış yolu durumun süresinin dolması: yüzde bilinmiyor sayılır, bir yoklama
+çağrısı gider ve platform güncel yüzdeyi bildirir. Bu yüzden circuit breaker **kota yüzdesi
+yazmaz** — yazsaydı blok kalktıktan sonra da eşikten reddedilmeye devam eder ve 15 dakikalık
+kesinti saatlere çıkardı.
 
 ### 3.5 Çağrı Sayısını Azaltan Teknikler
 
@@ -689,8 +712,10 @@ artıramamak, veri güncellenememekten çok daha pahalıdır.
 | Aynı işin iki kez çalışması | BullMQ `jobId` deduplication + DB `ON CONFLICT` idempotency |
 | Uzun süren Meta async job | `platform_job_id` kaydedilir; worker yeniden başlasa bile polling sürer |
 
-**Circuit breaker `platform_connections` seviyesindedir.** Bir müşterinin bozuk bağlantısı,
-diğer müşterilerin senkronizasyonunu yavaşlatamaz.
+**Circuit breaker `ad_account_id` seviyesindedir** (`platform:hesap` anahtarı). Bağlantı
+seviyesinden daha ince: Meta'nın BUC kotası hesap bazlı olduğu için bir hesabın bloklanması
+aynı bağlantıdaki diğer 39 hesabı durdurmamalı. Bir müşterinin bozuk bağlantısı da diğer
+müşterilerin senkronizasyonunu yavaşlatamaz.
 
 ### 3.7 Kullanıcı Tarafında Şeffaflık
 

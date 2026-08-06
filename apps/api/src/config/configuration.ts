@@ -13,7 +13,26 @@ const envSchema = z.object({
   DIRECT_DATABASE_URL: z.string().url(),
   WORKER_DATABASE_URL: z.string().url(),
 
+  /**
+   * Redis bağlantısı. Modül 3'ten itibaren ZORUNLU.
+   *
+   * DİKKAT — PAYLAŞIMLI SUNUCU: bu Redis'i başka canlı siteler de kullanıyor
+   * (db0'da 400+ anahtar). Advetics kendi veritabanı numarasını kullanıyor ve
+   * tüm anahtarlarını önekliyor. Redis'in kendi yapılandırmasına dokunmuyoruz.
+   */
   REDIS_URL: z.string().url().optional(),
+  /** Ayrı Redis veritabanı — diğer sitelerin anahtarlarıyla çakışmayı önler. */
+  REDIS_DB: z.coerce.number().int().min(0).max(15).default(3),
+  /** BullMQ anahtar öneki. Aynı veritabanını paylaşsak bile izolasyon sağlar. */
+  REDIS_KEY_PREFIX: z.string().default('advetics'),
+
+  /**
+   * Hesap başına dakikadaki azami API çağrısı — mutlak taban.
+   *
+   * Asıl sinyal platformun bildirdiği kota yüzdesi; bu sayaç ilk çağrılarda
+   * (henüz yüzde bilgisi yokken) ve yüzde bildirmeyen Google için tabanı tutuyor.
+   */
+  QUOTA_CALLS_PER_MINUTE: z.coerce.number().int().min(1).default(60),
 
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   /**
@@ -84,7 +103,12 @@ export interface AppConfig {
   globalPrefix: string;
   corsOrigins: string[];
   database: { url: string; directUrl: string; workerUrl: string };
-  redisUrl?: string;
+  redis: {
+    url?: string;
+    db: number;
+    keyPrefix: string;
+  };
+  quota: { callsPerMinute: number };
   jwt: {
     accessSecret: string;
     refreshSecret: string;
@@ -141,7 +165,12 @@ export function loadConfig(): AppConfig {
       directUrl: env.DIRECT_DATABASE_URL,
       workerUrl: env.WORKER_DATABASE_URL,
     },
-    redisUrl: env.REDIS_URL,
+    redis: {
+      url: env.REDIS_URL,
+      db: env.REDIS_DB,
+      keyPrefix: env.REDIS_KEY_PREFIX,
+    },
+    quota: { callsPerMinute: env.QUOTA_CALLS_PER_MINUTE },
     jwt: {
       accessSecret: env.JWT_ACCESS_SECRET,
       refreshSecret: env.JWT_REFRESH_SECRET,

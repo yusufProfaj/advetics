@@ -7,6 +7,8 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
@@ -14,7 +16,9 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
-    "db:set-password": "tsx prisma/set-password.ts"
+    "db:set-password": "tsx prisma/set-password.ts",
+    "worker": "node dist/worker.js",
+    "worker:dev": "tsx watch src/worker.ts"
   },
   "dependencies": {
     "@advetics/shared": "workspace:*",
@@ -25,8 +29,10 @@
     "@nestjs/platform-express": "^11.0.1",
     "@prisma/client": "^6.2.1",
     "argon2": "^0.41.1",
+    "bullmq": "^5.34.0",
     "cookie-parser": "^1.4.7",
     "helmet": "^8.0.0",
+    "ioredis": "^5.4.2",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "zod": "^3.23.8"
@@ -36,12 +42,15 @@
     "@nestjs/schematics": "^11.0.0",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.0",
+    "@types/ioredis-mock": "^8.2.8",
     "@types/node": "^22.10.5",
-    "dotenv": "^16.4.7",
-    "pg": "^8.13.1",
     "@types/pg": "^8.11.10",
+    "dotenv": "^16.4.7",
+    "ioredis-mock": "^8.9.0",
+    "pg": "^8.13.1",
     "prisma": "^6.2.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.4"
   }
 }

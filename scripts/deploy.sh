@@ -148,7 +148,7 @@ log "Süreçler yeniden başlatılıyor"
 # --update-env: .env'deki değişikliklerin görülmesi için gerekli.
 pm2 startOrReload ecosystem.config.js --update-env
 pm2 save --force >/dev/null
-ok "advetics-api · advetics-web"
+ok "advetics-api · advetics-web · advetics-worker"
 
 # -----------------------------------------------------------------------------
 log "Sağlık kontrolü"
@@ -168,6 +168,26 @@ wait_for() {
 
 wait_for "API"   "http://127.0.0.1:${API_PORT}/api/health"
 wait_for "Panel" "http://127.0.0.1:${WEB_PORT}/login"
+
+# Worker HTTP dinlemiyor — sağlığı pm2 durumundan okunuyor.
+#
+# Redis eksik veya erişilemezse worker kasıtlı olarak ölüyor (Redis'siz worker
+# hiçbir iş almaz; sessizce ayakta durup boş beklemesi en zor teşhis edilen
+# arıza olurdu). API böyle davranmıyor — o Redis olmadan da çalışır.
+WORKER_STATUS="$(pm2 jlist 2>/dev/null \
+  | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const a=JSON.parse(d).find(x=>x.name==="advetics-worker");console.log(a?a.pm2_env.status:"yok")}catch{console.log("okunamadı")}})' \
+  || echo 'okunamadı')"
+if [[ "$WORKER_STATUS" == "online" ]]; then
+  ok "Worker çalışıyor (senkronizasyon kuyruğu aktif)"
+else
+  warn "advetics-worker durumu: $WORKER_STATUS"
+  warn "Senkronizasyon işleri ÇALIŞMIYOR. Log: pm2 logs advetics-worker --lines 40"
+  # En sık nedeni bu, kontrol etmek ucuz.
+  if ! grep -qE '^\s*REDIS_URL\s*=\s*".+"' .env 2>/dev/null; then
+    warn ".env dosyasında REDIS_URL yok — worker Redis olmadan başlayamaz."
+    warn "Örnek satırlar için: .env.example (Modül 3 bölümü)"
+  fi
+fi
 
 # RLS'in gerçekten devrede olduğunu doğrula. /api/health/rls oturum gerektirdiği
 # için 401 beklenir — 401 ALMAK BAŞARIDIR: endpoint ayakta ve korunuyor demektir.

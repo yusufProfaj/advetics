@@ -11,6 +11,7 @@
     "build": "pnpm --filter @advetics/shared build && pnpm --filter \"./apps/*\" build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:reset": "docker compose down -v && docker compose up -d",
