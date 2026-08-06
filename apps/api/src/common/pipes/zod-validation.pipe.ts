@@ -36,3 +36,14 @@ export class ZodValidationPipe<T> implements PipeTransform<unknown, T> {
 export function zodBody<T>(schema: ZodSchema<T>): ZodValidationPipe<T> {
   return new ZodValidationPipe(schema);
 }
+
+/**
+ * Kısayol: `@Query(zodQuery(metricsQuerySchema)) q: MetricsQuery`
+ *
+ * `zodBody` ile aynı doğrulayıcı ama niyeti okunur kılıyor: query string'ten
+ * gelen her değer STRING, bu yüzden sayısal alanların şemada `z.coerce`
+ * kullanması zorunlu. `zodBody` ile aynı adı paylaşmak bu farkı gizlerdi.
+ */
+export function zodQuery<T>(schema: ZodSchema<T>): ZodValidationPipe<T> {
+  return new ZodValidationPipe(schema);
+}
