@@ -97,7 +97,9 @@ DECLARE
     'data_deletion_requests',
     -- Modül 3
     'campaigns', 'ad_groups', 'ads', 'creatives', 'insights_daily',
-    'fx_rates', 'sync_jobs', 'api_usage_log'
+    'fx_rates', 'sync_jobs', 'api_usage_log',
+    -- Modül 6
+    'report_templates', 'report_shares'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -421,6 +423,77 @@ CREATE POLICY adv_api_usage_select ON api_usage_log
 -- yok. Politika yazmak yerine erişimi tamamen kapatmak, en küçük yetki
 -- ilkesinin doğru uygulaması.
 -- -----------------------------------------------------------------------------
+
+-- =============================================================================
+-- MODÜL 6 — White-label raporlama
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- report_templates
+--
+-- Şablon müşteri bazında ya da organizasyon geneli (client_id IS NULL) olabilir.
+-- Organizasyon geneli şablonu HERKES OKUR (varsayılan olarak kullanılıyor) ama
+-- yalnızca org yöneticisi DEĞİŞTİRİR: bir müşteri temsilcisinin varsayılan
+-- şablonu bozması tüm müşterilerin raporunu etkilerdi.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_report_tpl_select ON report_templates
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND (
+      app.is_org_admin()
+      OR client_id IS NULL
+      OR client_id = ANY (app.current_client_ids())
+    )
+  );
+
+CREATE POLICY adv_report_tpl_insert ON report_templates
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND (app.is_org_admin() OR (client_id IS NOT NULL AND app.can_access_client(client_id)))
+  );
+
+CREATE POLICY adv_report_tpl_update ON report_templates
+  FOR UPDATE USING (
+    org_id = app.current_org_id()
+    AND (app.is_org_admin() OR (client_id IS NOT NULL AND app.can_access_client(client_id)))
+  );
+
+CREATE POLICY adv_report_tpl_delete ON report_templates
+  FOR DELETE USING (
+    org_id = app.current_org_id()
+    AND (app.is_org_admin() OR (client_id IS NOT NULL AND app.can_access_client(client_id)))
+  );
+
+-- -----------------------------------------------------------------------------
+-- report_shares
+--
+-- Paylaşım linkleri müşteri bazında ve panelden yönetiliyor.
+--
+-- Linkin KENDİSİYLE yapılan anonim okuma bu politikalardan GEÇMİYOR: oturum
+-- yok, dolayısıyla `app.current_org_id()` boş ve hiçbir satır görünmüyor. O yol
+-- yönetim bağlantısını kullanıyor ve token hash'i ile TEK satır çekiyor —
+-- `data_deletion_requests` ile aynı desen. Buradaki politikalar panelden
+-- yapılan listeleme, oluşturma ve iptal için.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_report_share_select ON report_shares
+  FOR SELECT USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_report_share_insert ON report_shares
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_report_share_update ON report_shares
+  FOR UPDATE USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_report_share_delete ON report_shares
+  FOR DELETE USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
 
 -- -----------------------------------------------------------------------------
 -- Yetkiler (yeni tablolar için ALTER DEFAULT PRIVILEGES zaten çalışıyor;

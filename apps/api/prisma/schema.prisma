@@ -93,6 +93,7 @@ model Organization {
   branding    BrandingProfile[]
   invitations Invitation[]
   auditLogs   AuditLog[]
+  reportTemplates ReportTemplate[]
 
   @@map("organizations")
 }
@@ -158,6 +159,9 @@ model Client {
   ads       Ad[]
   creatives Creative[]
   syncJobs  SyncJob[]
+
+  reportTemplates ReportTemplate[]
+  reportShares    ReportShare[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -598,6 +602,13 @@ enum EntityLevel {
   ad
 }
 
+enum ReportStatus {
+  draft
+  /// Paylaşım linki üretilmiş.
+  published
+  archived
+}
+
 enum SyncJobType {
   /// L1 — kampanya/adset/ad meta verisi, durum, bütçe
   structure
@@ -862,6 +873,91 @@ model FxRate {
 /// BullMQ işleri Redis'te yaşıyor ve Redis temizlendiğinde kaybolur. Bu tablo
 /// "en son ne zaman senkronize edildi", "neden başarısız oldu", "kaç API çağrısı
 /// harcandı" sorularının cevabını kalıcı tutuyor.
+/// Rapor şablonu — hangi bölümler, hangi sırada, hangi başlıklarla.
+///
+/// Şablon MÜŞTERİ BAZINDA saklanıyor (clientId zorunlu) çünkü ajans her
+/// müşteriye farklı şeyler gösteriyor: birinde WhatsApp mesajları önemli,
+/// diğerinde anahtar kelimeler. Organizasyon geneli varsayılan şablon
+/// `clientId = null` ile tutuluyor.
+model ReportTemplate {
+  id       String  @id @default(uuid()) @db.Uuid
+  orgId    String  @map("org_id") @db.Uuid
+  /// null = organizasyon varsayılanı.
+  clientId String? @map("client_id") @db.Uuid
+
+  name String @db.VarChar(160)
+  /// Kapakta görünen başlık. Boşsa "Dijital Pazarlama Raporu".
+  title String? @db.VarChar(200)
+  /// Kapanış sayfası metni.
+  closingText String? @map("closing_text") @db.Text
+
+  /// Bölümler SIRALI dizi olarak: ["cover","summary",...].
+  ///
+  /// Geçerli değerler `packages/shared` içindeki REPORT_SECTIONS listesinde ve
+  /// Zod ile doğrulanıyor. Prisma enum'u OLARAK tanımlanmadı: hiçbir kolonun
+  /// tipi olmadığı için Prisma onu veritabanında oluşturmuyor ve şemada
+  /// karşılığı olmayan bir enum bildirmek yanlış izlenim verirdi.
+  ///
+  /// Neden ayrı tablo değil: sıra bir dizinin doğal özelliği ve satır bazlı
+  /// `order` kolonu her yeniden sıralamada N satır güncellemek demek. Bölüm
+  /// sayısı tek haneli, JSONB burada daha basit ve atomik.
+  sections Json @db.JsonB
+
+  /// Bölüm bazlı ayarlar: hangi metrik sütunları, kaç satır, hangi eşik.
+  options Json? @db.JsonB
+
+  status ReportStatus @default(draft)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  shares       ReportShare[]
+
+  @@index([orgId, clientId])
+  @@map("report_templates")
+}
+
+/// Paylaşım linki — müşteriye gönderilen, oturum GEREKTİRMEYEN adres.
+///
+/// Token ayrı bir tabloda ve HASH'lenerek saklanıyor: veritabanı sızarsa
+/// linkler geçersiz kalır. Aynı mantık refresh token'larda da var.
+model ReportShare {
+  id         String @id @default(uuid()) @db.Uuid
+  templateId String @map("template_id") @db.Uuid
+  orgId      String @map("org_id") @db.Uuid
+  clientId   String @map("client_id") @db.Uuid
+
+  /// SHA-256. Ham token yalnızca üretim anında bir kez gösterilir.
+  tokenHash String @unique @map("token_hash") @db.VarChar(64)
+
+  /// Raporun kapsadığı aralık — link SABİT bir dönemi gösteriyor.
+  ///
+  /// "Son 30 gün" gibi kayan bir aralık paylaşmak, müşterinin bir hafta sonra
+  /// açtığında farklı sayılar görmesi demek. Rapor bir belge, canlı panel değil.
+  dateFrom DateTime @map("date_from") @db.Date
+  dateTo   DateTime @map("date_to") @db.Date
+
+  /// Süresi dolmuş link 410 döner. null = süresiz.
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  /// Erişim izleme — müşteri raporu açtı mı.
+  viewCount  Int       @default(0) @map("view_count")
+  lastViewAt DateTime? @map("last_view_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  template ReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  client   Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt(sort: Desc)])
+  @@map("report_shares")
+}
+
 model SyncJob {
   id       BigInt @id @default(autoincrement())
   clientId String @map("client_id") @db.Uuid
