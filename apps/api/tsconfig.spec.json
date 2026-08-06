@@ -13,5 +13,8 @@
     "rootDir": ".",
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+  // `prisma/*.ts` de dâhil: ops script'leri (set-password, sync-cli) buraya
+  // kadar hiç tip kontrolünden geçmiyordu. Yalnızca üretimde, çalıştırıldıkları
+  // anda patlarlardı — ve tam olarak bir şeyler ters gittiği anda çalıştırılıyorlar.
+  "include": ["src/**/*.ts", "test/**/*.ts", "prisma/*.ts", "vitest.config.ts"]
 }
