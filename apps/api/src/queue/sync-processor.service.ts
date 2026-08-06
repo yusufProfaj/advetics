@@ -263,6 +263,19 @@ export class SyncProcessorService {
     const platformError = err instanceof PlatformApiError ? err : undefined;
     const retryable = platformError?.retryable ?? !(err instanceof UnrecoverableError);
 
+    // Ham platform gövdesini LOGLA.
+    //
+    // `errorMessage` kolonu 1000 karakterle sınırlı ve normalize edilmiş mesajı
+    // taşıyor. Meta'nın tam yanıtı (hangi alan reddedildi, fbtrace_id) yalnızca
+    // `detail.raw` içinde ve oraya kimse bakamıyor — kalıcı bir hatayı teşhis
+    // etmek için tek elimizdeki şey bu.
+    if (platformError && !platformError.retryable) {
+      this.logger.error(
+        `Platform hatası (${platformError.platform}/${platformError.kind}): ` +
+          JSON.stringify(platformError.detail?.raw ?? {}).slice(0, 2000),
+      );
+    }
+
     await this.db.syncJob.update({
       where: { id: syncJobId },
       data: {

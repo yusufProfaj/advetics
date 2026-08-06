@@ -65,17 +65,48 @@ export async function platformFetch<T>(
  * Google gRPC benzeri `error.status` + `details[].errors[].errorCode` yapısı
  * kullanır. İkisini de aynı beş kategoriye indiriyoruz.
  */
-function normalizeError(platform: Platform, res: Response, body: unknown): PlatformApiError {
+export function normalizeError(
+  platform: Platform,
+  res: Response,
+  body: unknown,
+): PlatformApiError {
   const retryAfter = Number(res.headers.get('retry-after') ?? '') || undefined;
   const b = (body ?? {}) as Record<string, unknown>;
   const err = (b.error ?? {}) as Record<string, unknown>;
 
   const code = err.code as number | string | undefined;
   const subcode = (err.error_subcode ?? err.status) as number | string | undefined;
-  const message =
+
+  // MESAJI ZENGİNLEŞTİR.
+  //
+  // Meta kod 100 için yalnızca "Invalid parameter" diyor — hangi parametrenin
+  // reddedildiğini söylemiyor. Gerçek bilgi yan alanlarda: `error_user_title`,
+  // `error_user_msg`, `error_data` ve `fbtrace_id`. Bunları mesaja katmazsak
+  // `sync_jobs.error_message` "Invalid parameter" olarak kalıyor ve arıza
+  // teşhis edilemez hâle geliyor — ham gövde `detail.raw` içinde duruyor ama
+  // oraya kimse bakmıyor.
+  const parts: string[] = [];
+  const base =
     (typeof err.message === 'string' && err.message) ||
     (typeof b.message === 'string' && b.message) ||
     `${res.status} ${res.statusText}`;
+  parts.push(base);
+
+  for (const key of ['error_user_title', 'error_user_msg'] as const) {
+    const value = err[key];
+    if (typeof value === 'string' && value.length > 0 && !base.includes(value)) {
+      parts.push(value);
+    }
+  }
+  // `error_data` bazen hangi alanın sorunlu olduğunu taşıyor.
+  if (err.error_data !== undefined && err.error_data !== null) {
+    parts.push(`error_data=${JSON.stringify(err.error_data).slice(0, 300)}`);
+  }
+  if (subcode !== undefined) parts.push(`subcode=${subcode}`);
+  // fbtrace_id Meta desteğiyle konuşurken tek kullanışlı referans.
+  if (typeof err.fbtrace_id === 'string') parts.push(`fbtrace=${err.fbtrace_id}`);
+
+  const message = parts.join(' · ');
 
   const detail = {
     httpStatus: res.status,

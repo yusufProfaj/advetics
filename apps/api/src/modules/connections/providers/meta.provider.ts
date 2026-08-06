@@ -34,44 +34,6 @@ interface GraphPage {
 }
 
 /**
- * Edge başına geçerli `effective_status` değerleri.
- *
- * Meta bu enum'u seviyeye göre farklı tanımlıyor: üst seviyeden miras alınan
- * durumlar (`CAMPAIGN_PAUSED`, `ADSET_PAUSED`) yalnızca alt seviyelerde
- * geçerli. Hepsini her seviyeye geçmek "Invalid parameter" hatası veriyor.
- */
-const EFFECTIVE_STATUS = {
-  campaigns: ['ACTIVE', 'PAUSED', 'DELETED', 'ARCHIVED', 'IN_PROCESS', 'WITH_ISSUES'],
-  adsets: [
-    'ACTIVE',
-    'PAUSED',
-    'DELETED',
-    'ARCHIVED',
-    'IN_PROCESS',
-    'WITH_ISSUES',
-    'PENDING_REVIEW',
-    'DISAPPROVED',
-    'PREAPPROVED',
-    'PENDING_BILLING_INFO',
-    'CAMPAIGN_PAUSED',
-  ],
-  ads: [
-    'ACTIVE',
-    'PAUSED',
-    'DELETED',
-    'ARCHIVED',
-    'IN_PROCESS',
-    'WITH_ISSUES',
-    'PENDING_REVIEW',
-    'DISAPPROVED',
-    'PREAPPROVED',
-    'PENDING_BILLING_INFO',
-    'CAMPAIGN_PAUSED',
-    'ADSET_PAUSED',
-  ],
-} as const satisfies Record<'campaigns' | 'adsets' | 'ads', readonly string[]>;
-
-/**
  * Meta (Facebook / Instagram) — Marketing API adapter'ı.
  *
  * Kapsam: reklam hesabı keşfi, sayfa/Instagram profili keşfi, token yaşam
@@ -611,15 +573,21 @@ export class MetaProvider implements IAdPlatformProvider {
     url.searchParams.set('fields', fields.join(','));
     url.searchParams.set('limit', '500');
     url.searchParams.set('access_token', ctx.accessToken);
-    // Silinen ve arşivlenen varlıklar da gelsin: geçmiş metrikleri onlara bağlı
-    // ve soft delete için platformdaki durumu görmemiz gerekiyor. Filtre
-    // verilmezse Meta arşivlenmiş varlıkları atlıyor ve bizim tarafta
-    // "platformdan kayboldu" sayılıp silinmiş işaretlenirlerdi.
+    // `effective_status` FİLTRESİ KULLANMIYORUZ — kasıtlı.
     //
-    // DEĞERLER SEVİYEYE GÖRE FARKLI. Aynı listeyi üç seviyeye de geçmek
-    // kampanya edge'inde hata 100 (Invalid parameter) veriyor: `ADSET_PAUSED`
-    // ve `PENDING_REVIEW` gibi değerler kampanya için tanımlı değil.
-    url.searchParams.set('effective_status', JSON.stringify(EFFECTIVE_STATUS[edge]));
+    // Amaç arşivlenmiş varlıkları da çekmekti (soft delete kararını
+    // etkiliyor). Ama bu enum'un geçerli değerleri hem SEVİYEYE hem API
+    // SÜRÜMÜNE göre değişiyor ve tek yanlış değer tüm isteği hata 100
+    // (Invalid parameter) ile düşürüyor. Üç edge için doğru listeyi ezberden
+    // tahmin etmek, her sürüm yükseltmesinde senkronizasyonun sessizce
+    // durması riskini taşıyor.
+    //
+    // Filtre olmadan Meta arşivlenmiş varlıkları döndürmüyor. Sonuç: onlar
+    // bizim tarafta "platformdan kayboldu" sayılıp `deleted_at` alıyor.
+    // Bu kabul edilebilir bir sadeleştirme — arşivlenmiş bir kampanya artık
+    // yayında değil ve geçmiş metrikleri `insights_daily`'de korunuyor.
+    // Arşiv/silinme ayrımı gerekirse (Modül 4 Ads Explorer) o zaman seviyeye
+    // özel doğrulanmış listelerle geri eklenir.
 
     if (since) {
       // Meta filtering: alan + operatör + değer. `updated_time` epoch saniye.
