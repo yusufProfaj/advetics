@@ -62,7 +62,10 @@ export default async function DashboardPage({
   // alınamadı" demeli, 500 sayfası göstermemeli.
   const [summary, series, breakdown] = await Promise.all([
     serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch(() => null),
-    serverApiFetch<MetricsTimeseriesPoint[]>(`/metrics/timeseries?${base}`).catch(() => null),
+    // Tek günlük aralıkta grafik çizilmiyor; sorguyu da atlıyoruz.
+    range.days > 1
+      ? serverApiFetch<MetricsTimeseriesPoint[]>(`/metrics/timeseries?${base}`).catch(() => null)
+      : Promise.resolve<MetricsTimeseriesPoint[]>([]),
     serverApiFetch<MetricsBreakdownRow[]>(`/metrics/breakdown?${breakdownQs}`).catch(() => null),
   ]);
 
@@ -108,16 +111,22 @@ export default async function DashboardPage({
 
           <Cards summary={summary} />
 
-          {series === null ? (
-            <Notice tone="error">Grafik verisi alınamadı.</Notice>
-          ) : (
-            <MetricsChart
-              points={series}
-              from={range.from}
-              to={range.to}
-              currency={summary.currency}
-            />
-          )}
+          {/* TEK GÜNLÜK ARALIKTA GRAFİK YOK.
+              Bir gün için zaman serisi tek bir bar demek: kocaman boş bir
+              kutuda hiçbir eğilim göstermeyen tek çubuk. Kartlar aynı bilgiyi
+              daha okunur veriyor. Saat bazlı kırılım olsa anlamlı olurdu ama
+              `insights_daily` günlük granülerlikte. */}
+          {range.days > 1 &&
+            (series === null ? (
+              <Notice tone="error">Grafik verisi alınamadı.</Notice>
+            ) : (
+              <MetricsChart
+                points={series}
+                from={range.from}
+                to={range.to}
+                currency={summary.currency}
+              />
+            ))}
 
           {breakdown === null ? (
             <Notice tone="error">Dağılım verisi alınamadı.</Notice>

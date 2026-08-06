@@ -446,6 +446,28 @@ describe('MetricsService', () => {
       expect(rows[0]!.parentName).toBe('Kampanya A');
     });
 
+    it('üst ad varlık adıyla AYNIYSA gösterilmez', async () => {
+      // Meta öne çıkarılan gönderilerde reklamı ad set'le aynı adlandırıyor;
+      // aynı metni iki satırda tekrarlamak yalnızca gürültü.
+      await h.q(`UPDATE ads SET name = 'Aynı Ad'`);
+      await h.q(`UPDATE ad_groups SET name = 'Aynı Ad'`);
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+      });
+      const rows = await svc.breakdown(CTX, {
+        from: '2026-08-05',
+        to: '2026-08-05',
+        level: 'ad',
+        limit: 50,
+      });
+      expect(rows[0]!.name).toBe('Aynı Ad');
+      expect(rows[0]!.parentName).toBeNull();
+    });
+
     it('harcamaya göre azalan sıralı ve limitli', async () => {
       await h.q(
         `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, updated_at)

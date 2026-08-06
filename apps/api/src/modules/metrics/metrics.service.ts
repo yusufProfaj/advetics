@@ -228,7 +228,14 @@ export class MetricsService {
         // hiçbir zaman boş değil ve kullanıcıya "isimsiz satır" göstermekten
         // iyi.
         name: r.name ?? r.entity_external_id,
-        parentName: r.parent_name,
+        // Üst ad ile varlık adı AYNIYSA gösterilmiyor.
+        //
+        // Meta öne çıkarılan gönderilerde reklamı ad set'le aynı adlandırıyor
+        // (ikisi de "18615114154063776 - 29 Tem 2026"). Aynı metni iki satırda
+        // tekrarlamak bilgi taşımıyor, yalnızca gürültü. Kararı burada
+        // veriyoruz çünkü bu bir VERİ gözlemi; her arayüzde tekrar etmek
+        // gerekmesin.
+        parentName: r.parent_name === r.name ? null : r.parent_name,
         platform: r.platform,
         status: r.status ?? 'unknown',
         currency: r.currency,
