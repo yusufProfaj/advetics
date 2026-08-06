@@ -790,15 +790,17 @@ export function mapMetaCreativeFields(
       // `call_to_action_types` ÇOĞUL ve düz string dizisi. Tekil `call_to_action_type`
       // alanını okumak dinamik creative'lerde CTA'yı hep boş bırakıyordu.
       assetValue(feed?.call_to_action_types, []),
-    destinationUrl:
+    destinationUrl: realUrl(
       text(c.link_url ?? link?.link) ??
-      // `link_urls` girişleri `{ website_url, display_url }` biçiminde —
-      // `{ text }` DEĞİL. Yalnızca `text` anahtarına bakmak hedef URL'i her
-      // dinamik creative'de kaçırıyordu.
-      assetValue(feed?.link_urls, ['website_url', 'url', 'link']),
-    displayUrl:
+        // `link_urls` girişleri `{ website_url, display_url }` biçiminde —
+        // `{ text }` DEĞİL. Yalnızca `text` anahtarına bakmak hedef URL'i her
+        // dinamik creative'de kaçırıyordu.
+        assetValue(feed?.link_urls, ['website_url', 'url', 'link']),
+    ),
+    displayUrl: realUrl(
       text(link?.caption ?? c.link_destination_display_url) ??
-      assetValue(feed?.link_urls, ['display_url']),
+        assetValue(feed?.link_urls, ['display_url']),
+    ),
     assetUrls: assetUrls.length > 0 ? assetUrls : undefined,
     raw: c,
   };
@@ -844,6 +846,39 @@ function asObject(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+/**
+ * Meta'nın YER TUTUCU URL'lerini ayıklar.
+ *
+ * Anlık form (lead) ve Click-to-WhatsApp reklamlarında gerçek bir açılış
+ * sayfası yok — kullanıcı bir forma ya da sohbete gidiyor. Meta bu durumda
+ * `link_urls` alanına `http://fb.me/` koyuyor.
+ *
+ * Bunu `destinationUrl` olarak saklamak veriyi kirletiyor: Ads Explorer
+ * (Modül 4) "hedef: http://fb.me/" gösterir, raporlar onu açılış sayfası
+ * sayar, açılış sayfası bazlı bir kural (Modül 5) yanlış eşleşir. Gerçek gibi
+ * görünen çöp veri, boş veriden kötüdür — boş olduğunda en azından
+ * "bilinmiyor" olduğu belli.
+ *
+ * Yalnızca YOLU OLMAYAN fb.me adresleri ayıklanıyor: `http://fb.me/abc`
+ * gerçek bir kısa link olabilir, `http://fb.me/` olamaz. Ham değer `raw`
+ * içinde korunuyor.
+ */
+function realUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    // Ayrıştırılamayan değeri olduğu gibi bırakıyoruz: bozuk da olsa
+    // platformun söylediği şey bu ve sessizce silmek bilgi kaybı olur.
+    return value;
+  }
+  const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+  const hasPath = parsed.pathname.replace(/\/+$/, '').length > 0;
+  if (host === 'fb.me' && !hasPath) return undefined;
+  return value;
 }
 
 /** Boş ve yalnızca boşluktan oluşan değerleri `undefined`a indirger. */

@@ -135,6 +135,58 @@ describe('mapMetaCreativeFields', () => {
     });
   });
 
+  describe('yer tutucu URL ayıklaması', () => {
+    /**
+     * Canlı veride görülen: anlık form ve WhatsApp reklamlarında Meta
+     * `link_urls` alanına `http://fb.me/` koyuyor. Gerçek bir açılış sayfası
+     * yok — kullanıcı forma ya da sohbete gidiyor.
+     */
+    it('REGRESYON: yolu olmayan fb.me hedef URL sayılmaz', () => {
+      const c = mapMetaCreativeFields('cr10', {
+        object_type: 'SHARE',
+        asset_feed_spec: {
+          link_urls: [{ website_url: 'http://fb.me/' }],
+          call_to_action_types: ['SIGN_UP'],
+        },
+      });
+      expect(c.destinationUrl).toBeUndefined();
+      // CTA gerçek — anlık formun düğme metni.
+      expect(c.ctaType).toBe('SIGN_UP');
+      // Ham değer korunuyor: bilgi silinmiyor, yalnızca alana yazılmıyor.
+      expect(JSON.stringify(c.raw)).toContain('fb.me');
+    });
+
+    it('www ve https varyantları da ayıklanır', () => {
+      for (const url of ['https://fb.me/', 'http://www.fb.me/', 'https://fb.me']) {
+        const c = mapMetaCreativeFields('x', { link_url: url });
+        expect(c.destinationUrl, url).toBeUndefined();
+      }
+    });
+
+    it('YOLU OLAN fb.me korunur — gerçek kısa link olabilir', () => {
+      const c = mapMetaCreativeFields('cr11', { link_url: 'http://fb.me/kampanya123' });
+      expect(c.destinationUrl).toBe('http://fb.me/kampanya123');
+    });
+
+    it('gerçek açılış sayfası dokunulmadan geçer', () => {
+      const c = mapMetaCreativeFields('cr12', {
+        asset_feed_spec: {
+          link_urls: [
+            { website_url: 'https://gardenvillaskusadasi.com/', display_url: 'gardenvillaskusadasi.com' },
+          ],
+        },
+      });
+      expect(c.destinationUrl).toBe('https://gardenvillaskusadasi.com/');
+      expect(c.displayUrl).toBe('gardenvillaskusadasi.com');
+    });
+
+    it('ayrıştırılamayan değer silinmez', () => {
+      // Bozuk da olsa platformun söylediği şey bu; sessizce atmak bilgi kaybı.
+      const c = mapMetaCreativeFields('cr13', { link_url: 'bu-bir-url-değil' });
+      expect(c.destinationUrl).toBe('bu-bir-url-değil');
+    });
+  });
+
   describe('dayanıklılık', () => {
     it('boş nesne çökmez', () => {
       const c = mapMetaCreativeFields('cr5', {});
