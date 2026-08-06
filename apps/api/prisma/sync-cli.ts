@@ -27,12 +27,21 @@ loadEnv({ path: resolve(__dirname, '../../../.env') });
 
 const prisma = new PrismaClient({ datasourceUrl: process.env.DIRECT_DATABASE_URL });
 
+/**
+ * Argümanlar — çıplak `--` ayıklanmış.
+ *
+ * pnpm 9, `pnpm ... sync -- list` çağrısında `--`'yı GERÇEK bir argüman olarak
+ * geçiriyor: script `["--", "list"]` alıyor. Konumsal komutu argv[2]'den
+ * okumak bu yüzden `--` buluyor ve her komut yardım ekranına düşüyordu.
+ */
+const ARGV = process.argv.slice(2).filter((a) => a !== '--');
+
 function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i !== -1 ? process.argv[i + 1] : undefined;
+  const i = ARGV.indexOf(`--${name}`);
+  return i !== -1 ? ARGV[i + 1] : undefined;
 }
 
-const COMMAND = process.argv[2];
+const COMMAND = ARGV[0];
 const REDIS_URL = process.env.REDIS_URL;
 const REDIS_DB = Number(process.env.REDIS_DB ?? 3);
 const PREFIX = process.env.REDIS_KEY_PREFIX ?? 'advetics';
@@ -367,6 +376,9 @@ Senkronizasyon ops aracı
   pnpm --filter @advetics/api sync -- list
   pnpm --filter @advetics/api sync -- enable --account 1234abcd-...
   pnpm --filter @advetics/api sync -- run --account 1234abcd-...
+
+pnpm'in \`--\` aktarımıyla uğraşmadan, doğrudan:
+  cd apps/api && pnpm exec tsx prisma/sync-cli.ts list
 `);
   }
 }
