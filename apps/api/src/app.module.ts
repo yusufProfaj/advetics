@@ -13,6 +13,7 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { HealthController } from './modules/health/health.controller';
 import { AdsModule } from './modules/ads/ads.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
@@ -34,6 +35,7 @@ import { QueueModule } from './queue/queue.module';
     ConnectionsModule,
     MetricsModule,
     AdsModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
   providers: [
