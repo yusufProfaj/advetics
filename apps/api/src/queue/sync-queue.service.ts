@@ -143,11 +143,33 @@ export class SyncQueueService implements OnModuleDestroy {
       interactive: params.interactive,
     };
 
-    await this.queue.add(params.jobType, payload, {
-      jobId,
-      priority: record.priority,
-      delay: params.delayMs,
-    });
+    // Kuyruğa ekleme başarısız olursa tablo kaydını ÖKSÜZ BIRAKMA.
+    //
+    // Kayıt kuyruktan önce oluşuyor (worker'ın syncJobId'yi bulabilmesi için).
+    // `queue.add` fırlatırsa satır sonsuza kadar `queued` kalıyor: hiçbir
+    // worker onu almıyor, kimse hata görmüyor ve "en son ne zaman senkronize
+    // edildi" telemetrisi yalan söylüyor. Bir kez oldu — geçersiz bir jobId
+    // yüzünden tarih taşıyan tüm işler bu şekilde birikiyordu.
+    try {
+      await this.queue.add(params.jobType, payload, {
+        jobId,
+        priority: record.priority,
+        delay: params.delayMs,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await this.db.syncJob.update({
+        where: { id: record.id },
+        data: {
+          status: 'failed',
+          finishedAt: new Date(),
+          errorCode: 'enqueue_failed',
+          errorMessage: message.slice(0, 1000),
+        },
+      });
+      this.logger.error(`İş kuyruğa eklenemedi (${jobId}): ${message}`);
+      throw err;
+    }
 
     return { enqueued: true, syncJobId: record.id.toString() };
   }

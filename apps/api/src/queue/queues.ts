@@ -97,6 +97,15 @@ export function buildJobId(p: {
   dateTo?: string;
   entityLevel?: EntityLevel;
 }): string {
+  // AYIRICI `:` DEĞİL.
+  //
+  // BullMQ özel iş kimliğinde `:` yasaklıyor — tek istisna TAM ÜÇ parçalı
+  // kimlikler (eski repeatable job'lar için bırakılmış bir muafiyet). Bu
+  // fonksiyon 2 ilâ 5 parça üretiyor: `structure:<uuid>:all` tesadüfen üçe
+  // denk gelip çalışıyordu, ama tarih taşıyan işler (`insights_daily` →
+  // 5 parça) `Custom Id cannot contain :` ile patlıyordu.
+  //
+  // Muafiyete yaslanmak kırılgan: parça sayısı değiştiği anda geri döner.
   return [
     p.jobType,
     p.adAccountId ?? p.socialProfileId ?? 'na',
@@ -105,5 +114,5 @@ export function buildJobId(p: {
     p.dateTo ?? '',
   ]
     .filter((s) => s !== '')
-    .join(':');
+    .join('__');
 }

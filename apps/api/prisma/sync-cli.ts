@@ -184,9 +184,10 @@ async function runStructure(): Promise<void> {
   const connection = new Redis(REDIS_URL, { db: REDIS_DB, maxRetriesPerRequest: null });
   const queue = new Queue('sync', { connection, prefix: PREFIX });
 
-  // jobId'ye zaman damgası koyuyoruz: aynı hesap için tamamlanmış bir işin
-  // kimliğini yeniden kullanmak BullMQ tarafında sessizce yok sayılabiliyor.
-  const jobId = `manual:structure:${account.id}:${record.id}`;
+  // Ayırıcı `:` DEĞİL: BullMQ özel iş kimliğinde `:` yasaklıyor (bkz. queues.ts).
+  // İş numarasını kimliğe katıyoruz — tamamlanmış bir işin kimliğini yeniden
+  // kullanmak BullMQ tarafında sessizce yok sayılabiliyor.
+  const jobId = `manual__structure__${account.id}__${record.id}`;
   await queue.add(
     'structure',
     {
