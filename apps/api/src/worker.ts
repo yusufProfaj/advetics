@@ -32,7 +32,23 @@ import { SYNC_QUEUE, type SyncJobPayload } from './queue/queues';
  */
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Worker');
-  const app = await NestFactory.createApplicationContext(AppModule, { bufferLogs: true });
+  // `bufferLogs: true` KULLANMIYORUZ — kullanmak worker'ı log'suz bırakıyor.
+  //
+  // `bufferLogs` tüm log'ları Logger sınıfının STATİK tamponuna alıyor ve
+  // tamponu yalnızca `flushLogs()` boşaltıyor. HTTP uygulamasında bunu
+  // `listen()` kendisi yapıyor (bkz. main.ts, orada bufferLogs güvenli), ama
+  // `createApplicationContext` yalnızca "logger override edilirse boşalt"
+  // bayrağını kuruyor. Worker `useLogger()` çağırmadığı için boşaltma hiç
+  // olmuyor: açılış satırları, kota uyarıları, iş sonuçları — hiçbiri
+  // stdout'a düşmüyor ve pm2 log dosyaları BOŞ kalıyor.
+  //
+  // Bir kez yaşandı: worker Redis'e bağlanıp 5 zamanlayıcıyı kurdu, pm2
+  // "online" gösterdi, log dosyaları tamamen boştu. Çalıştığını yalnızca
+  // Redis anahtarlarına bakarak doğrulayabildik.
+  //
+  // Tampon ayrıca hiç boşaltılmadığı için sınırsız büyüyor (5.000 satır
+  // ~184 KB) — 7/24 çalışan bir süreçte yavaş bir bellek sızıntısı.
+  const app = await NestFactory.createApplicationContext(AppModule);
   app.enableShutdownHooks();
 
   const config = app.get<AppConfig>(CONFIG);
