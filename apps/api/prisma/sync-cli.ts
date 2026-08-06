@@ -648,6 +648,77 @@ async function printMetrics(adAccountId: string, dateFrom: string, dateTo: strin
   }
 }
 
+/**
+ * Ham Meta aksiyon türlerini döker.
+ *
+ * NEDEN GEREKLİ: "dönüşüm" tanımı bir KARAR ve Meta aynı olayı birden fazla
+ * aksiyon türü altında raporlayabiliyor (`lead`, `leadgen_grouped`,
+ * `onsite_conversion.lead_grouped` çoğu zaman AYNI lead'i anlatıyor). Hangi
+ * türlerin gerçekten geldiğini ve değerlerinin nasıl örtüştüğünü görmeden
+ * kova tanımı yapmak tahmin olur — ve tahmin, müşteriye çift sayılmış dönüşüm
+ * raporlamakla sonuçlanır.
+ */
+async function dumpActions(): Promise<void> {
+  const id = arg('account') ?? die('--account <uuid> zorunlu.');
+  const from = arg('from') ?? isoDate(-7);
+  const to = arg('to') ?? isoDate(-1);
+
+  const rows = await prisma.$queryRaw<
+    Array<{ action_type: string; total: string; days: number; entities: number }>
+  >`
+    SELECT act->>'action_type' AS action_type,
+           SUM(COALESCE((act->>'value')::numeric, 0))::text AS total,
+           COUNT(DISTINCT i.date)::int AS days,
+           COUNT(DISTINCT i.entity_id)::int AS entities
+    FROM insights_daily i
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE WHEN jsonb_typeof(i.raw_metrics -> 'actions') = 'array'
+           THEN i.raw_metrics -> 'actions' ELSE '[]'::jsonb END
+    ) AS act
+    WHERE i.ad_account_id = ${id}::uuid
+      AND i.entity_level = 'campaign'
+      AND i.date BETWEEN ${from}::date AND ${to}::date
+    GROUP BY act->>'action_type'
+    ORDER BY SUM(COALESCE((act->>'value')::numeric, 0)) DESC
+  `;
+
+  if (rows.length === 0) {
+    console.log('\nBu aralıkta aksiyon verisi yok.\n');
+    return;
+  }
+
+  console.log(`\n${from} .. ${to} · kampanya seviyesi ham aksiyon türleri\n`);
+  console.log('  DEĞER      GÜN  VARLIK  AKSİYON TÜRÜ');
+  for (const r of rows) {
+    const value = Number(r.total).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+    console.log(
+      `  ${value.padStart(9)}  ${String(r.days).padStart(3)}  ${String(r.entities).padStart(6)}  ${r.action_type}`,
+    );
+  }
+
+  // Örtüşme şüphesi: lead ve mesaj aileleri.
+  const value = (type: string) => Number(rows.find((r) => r.action_type === type)?.total ?? 0);
+  const lead = value('lead');
+  const onsiteLead = value('onsite_conversion.lead_grouped');
+  const pixelLead = value('offsite_conversion.fb_pixel_lead');
+  const groupedLead = value('leadgen_grouped');
+
+  console.log('\n  ÖRTÜŞME KONTROLÜ');
+  console.log(`    lead                            ${lead}`);
+  console.log(`    onsite_conversion.lead_grouped  ${onsiteLead}`);
+  console.log(`    offsite_conversion.fb_pixel_lead ${pixelLead}`);
+  console.log(`    leadgen_grouped                 ${groupedLead}`);
+  if (lead > 0 && Math.abs(lead - (onsiteLead + pixelLead)) < 0.51) {
+    console.log(
+      '\n    → `lead` = onsite + offsite. Üçünü TOPLAMAK çift sayım.\n' +
+        '      Kova tanımı yalnızca `lead` kullanmalı.',
+    );
+  } else if (lead > 0 && onsiteLead > 0) {
+    console.log('\n    → `lead` ve onsite ikisi de dolu; örtüşme el ile doğrulanmalı.');
+  }
+  console.log('');
+}
+
 async function listJobs(): Promise<void> {
   const jobs = await prisma.syncJob.findMany({
     select: {
@@ -725,6 +796,9 @@ async function main(): Promise<void> {
     case 'inspect':
       await inspect();
       break;
+    case 'actions':
+      await dumpActions();
+      break;
     case 'jobs':
       await listJobs();
       break;
@@ -740,6 +814,7 @@ Senkronizasyon ops aracı
   sync -- realtime --account <uuid>   bugünün metriklerini çeker (hesap + kampanya)
   sync -- backfill --account <uuid>   geri düzeltme (--from/--to zorunlu değil, varsayılan dün)
   sync -- inspect --account <uuid>    senkronize edilen veriyi ham alanlarla inceler
+  sync -- actions --account <uuid>    ham Meta aksiyon türlerini ve değerlerini döker
   sync -- jobs                        son 20 senkronizasyon işini gösterir
 
 Örnek:

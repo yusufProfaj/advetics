@@ -523,7 +523,13 @@ export class ReportsService {
     currency: string | null,
   ): ReportPlatformBlock | null {
     if (blocks.length === 0) return null;
-    if (currency === null && blocks.length > 1) return null;
+    // TEK PLATFORM VARSA TOPLAM YOK.
+    //
+    // Aynı sayıları iki kez göstermek yer kaplıyor ve "bunlar neden farklı?"
+    // sorusunu doğuruyor. Referans belgede TOPLAM bloğu var çünkü orada iki
+    // platform yan yana duruyor.
+    if (blocks.length === 1) return null;
+    if (currency === null) return null;
 
     let impressions = 0;
     let clicks = 0;
