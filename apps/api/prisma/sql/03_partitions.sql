@@ -15,6 +15,15 @@
 -- İhtiyaç doğarsa sonra geçilebilir.
 -- =============================================================================
 
+-- `app` şemasını KENDİSİ oluşturuyor.
+--
+-- Bu şema 02_rls.sql'de de oluşturuluyor ve üretimde dosyalar sırayla
+-- uygulandığı için orada sorun çıkmıyor. Ama bu dosyanın 02'nin yan etkisine
+-- bağımlı olması gizli bir bağlılık: 03'ü tek başına uygulamak (test koşum
+-- ortamı, elle onarım, kısmi dağıtım) "schema app does not exist" ile
+-- düşüyordu. Aynı hata 02_rls.sql'de de yaşandı.
+CREATE SCHEMA IF NOT EXISTS app;
+
 -- -----------------------------------------------------------------------------
 -- Belirli bir ay için partition oluşturur.
 --

@@ -4,6 +4,7 @@ import { PlatformApiError } from '../modules/connections/provider.types';
 import type { Platform } from '@advetics/shared';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
 import { QuotaGuardService, type QuotaLayer } from './quota-guard.service';
+import { InsightsSyncService } from './insights-sync.service';
 import { StructureSyncService } from './structure-sync.service';
 import { SyncQueueService } from './sync-queue.service';
 import { layerForJob, type SyncJobPayload } from './queues';
@@ -33,6 +34,7 @@ export class SyncProcessorService {
     private readonly quota: QuotaGuardService,
     private readonly queue: SyncQueueService,
     private readonly structure: StructureSyncService,
+    private readonly insights: InsightsSyncService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -224,6 +226,38 @@ export class SyncProcessorService {
           // Kullanıcı elle tetiklediyse tam tarama yap: "yenile"ye basan biri
           // silinmiş kampanyanın kaybolmasını bekliyor.
           full: payload.interactive === true,
+        });
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        return { rows: result.rows, note: result.note };
+      } catch (err) {
+        await this.recordFailure(syncJobId, err);
+        throw err;
+      }
+    }
+
+    if (
+      payload.jobType === 'insights_realtime' ||
+      payload.jobType === 'insights_daily' ||
+      payload.jobType === 'insights_backfill' ||
+      payload.jobType === 'initial_backfill'
+    ) {
+      if (!payload.adAccountId) {
+        await this.markFailed(syncJobId, 'missing_account', `${payload.jobType} hesap kimliği olmadan geldi`);
+        throw new UnrecoverableError(`${payload.jobType} hesap kimliği olmadan geldi`);
+      }
+      // Tarih olmadan metrik çekilemez. Süpürme işi tarihleri hesabın zaman
+      // dilimine göre hesaplıyor; elle tetiklenen bir işte eksik olabilir.
+      if (!payload.dateFrom || !payload.dateTo) {
+        await this.markFailed(syncJobId, 'missing_dates', `${payload.jobType} tarih aralığı olmadan geldi`);
+        throw new UnrecoverableError(`${payload.jobType} tarih aralığı olmadan geldi`);
+      }
+
+      try {
+        const result = await this.insights.syncAccount({
+          adAccountId: payload.adAccountId,
+          jobType: payload.jobType,
+          dateFrom: payload.dateFrom,
+          dateTo: payload.dateTo,
         });
         await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
         return { rows: result.rows, note: result.note };

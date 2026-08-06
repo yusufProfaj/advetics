@@ -268,6 +268,74 @@ export interface PlatformStructure {
 }
 
 // -----------------------------------------------------------------------------
+// Metrikler (L2 / L3 / L4)
+// -----------------------------------------------------------------------------
+
+/** Hangi seviyede metrik isteniyor. `insights_daily.entity_level` ile aynı. */
+export type InsightsLevel = 'account' | 'campaign' | 'ad_group' | 'ad';
+
+export interface InsightsRequest {
+  level: InsightsLevel;
+  /**
+   * YYYY-MM-DD. Date nesnesi DEĞİL.
+   *
+   * Postgres `DATE` → JS `Date` çevrimi saat dilimine göre bir gün kaydırıyor
+   * ve metrikler yanlış güne yazılıyor. Tarihler baştan sona string taşınıyor.
+   */
+  dateFrom: string;
+  dateTo: string;
+  /** Hesabın zaman dilimi — "gün"ün tanımı buna bağlı. */
+  timezone: string;
+}
+
+/**
+ * Tek bir varlığın tek bir gününe ait metrikler.
+ *
+ * Para birimi satır başına taşınıyor: bir müşterinin farklı hesapları farklı
+ * para biriminde olabiliyor ve harcamayı çevirmeden toplamak sessizce yanlış
+ * sonuç üretir.
+ */
+export interface DiscoveredInsightRow {
+  /** Platform tarafındaki varlık kimliği — iç UUID'ye üst katman çeviriyor. */
+  entityExternalId: string;
+  level: InsightsLevel;
+  /** YYYY-MM-DD. */
+  date: string;
+  currency: string;
+
+  impressions: number;
+  clicks: number;
+  /** Hesabın para biriminde, micros. */
+  spendMicros: bigint;
+  conversions: number;
+  conversionValueMicros: bigint;
+  videoViews: number;
+  engagements: number;
+  reach: number;
+  frequency?: number;
+
+  /**
+   * Platformun ham metrik gövdesi.
+   *
+   * Saklamak zorunlu: "dönüşüm" tanımı kampanya amacına göre değişiyor ve
+   * bizim seçtiğimiz aksiyon türleri ileride yanlış çıkabilir. Ham gövde
+   * durursa geçmiş veriyi yeniden çekmeden yeniden hesaplayabiliriz.
+   */
+  raw: unknown;
+}
+
+export interface PlatformInsights {
+  rows: DiscoveredInsightRow[];
+  apiCalls: number;
+  /**
+   * `false` ise sonuç kısmi (sayfalama kesildi, kota bitti). Kısmi sonuç
+   * yazılabilir — metrikler upsert, silme kararı yok — ama işin başarılı
+   * sayılmaması gerekiyor, yoksa eksik gün "senkronize edildi" görünür.
+   */
+  complete: boolean;
+}
+
+// -----------------------------------------------------------------------------
 // Adapter
 // -----------------------------------------------------------------------------
 
@@ -344,6 +412,14 @@ export interface IAdPlatformProvider {
    * yapılabilir — bkz. `PlatformStructure.complete`.
    */
   fetchStructure(ctx: FetchContext, since?: Date): Promise<PlatformStructure>;
+
+  /**
+   * L2/L3/L4 — günlük metrikleri çeker.
+   *
+   * Tarih aralığı GÜN GÜN dönüyor (tek toplam değil): `insights_daily` günlük
+   * granülerlikte ve tek bir toplam satırı geri düzeltmeyi imkânsız kılardı.
+   */
+  fetchInsights(ctx: FetchContext, request: InsightsRequest): Promise<PlatformInsights>;
 }
 
 export const AD_PLATFORM_PROVIDERS = 'AD_PLATFORM_PROVIDERS';

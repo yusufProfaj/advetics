@@ -10,8 +10,12 @@ import {
   type DiscoveredCampaign,
   type DiscoveredCreative,
   type DiscoveredSocialProfile,
+  type DiscoveredInsightRow,
   type FetchContext,
   type IAdPlatformProvider,
+  type InsightsLevel,
+  type InsightsRequest,
+  type PlatformInsights,
   type NormalizedAccountStatus,
   type NormalizedBudgetMode,
   type NormalizedEntityStatus,
@@ -584,6 +588,86 @@ export class GoogleProvider implements IAdPlatformProvider {
     return { campaigns, adGroups, ads, creatives, complete: true, apiCalls: calls.n };
   }
 
+  // ---------------------------------------------------------------------------
+  // L2 / L3 / L4 — metrikler
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Günlük metrikleri çeker.
+   *
+   * `segments.date` KRİTİK: bu olmadan Google tüm aralık için tek toplam satır
+   * döndürüyor. Segment ile 30 gün tek sorguda geliyor.
+   *
+   * Meta'dan iki önemli fark:
+   *   · Google `metrics.cost_micros` veriyor — zaten micros, çevrim YOK.
+   *     (Meta'nın `spend` alanı ondalık string; ikisini aynı sanmak
+   *     harcamayı 10.000 kat yanlış gösterir.)
+   *   · `conversions` doğrudan bir metrik. Hangi eylemin dönüşüm sayıldığı
+   *     Google Ads arayüzünde tanımlı, bizim seçmemize gerek yok.
+   */
+  async fetchInsights(ctx: FetchContext, request: InsightsRequest): Promise<PlatformInsights> {
+    const { accessToken, accountExternalId: customerId, loginCustomerId } = ctx;
+    const calls = { n: 0 };
+    const view = GOOGLE_VIEW[request.level];
+
+    // Tarihler sabit biçimde ve tırnaklı: GAQL enjeksiyonuna kapalı olması için
+    // biçimi doğruluyoruz (dışarıdan gelen bir değer sorguya giriyor).
+    for (const d of [request.dateFrom, request.dateTo]) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        throw new PlatformApiError('google', 'permanent', `Geçersiz tarih biçimi: ${d}`);
+      }
+    }
+
+    const rows = await this.searchGaqlPaged<Record<string, unknown>>(
+      accessToken,
+      customerId,
+      `SELECT ${view.idField}, segments.date, customer.currency_code,
+              metrics.impressions, metrics.clicks, metrics.cost_micros,
+              metrics.conversions, metrics.conversions_value,
+              metrics.video_views, metrics.engagements, metrics.impressions
+       FROM ${view.resource}
+       WHERE segments.date BETWEEN '${request.dateFrom}' AND '${request.dateTo}'`,
+      loginCustomerId,
+      calls,
+    );
+
+    const mapped: DiscoveredInsightRow[] = [];
+    for (const row of rows) {
+      const segments = this.obj(row.segments);
+      const metrics = this.obj(row.metrics);
+      const date = this.str(segments?.date);
+      if (!date) continue;
+
+      const entityExternalId =
+        request.level === 'account' ? customerId : view.readId(row, this);
+      if (!entityExternalId) continue;
+
+      mapped.push({
+        entityExternalId,
+        level: request.level,
+        date,
+        currency: (this.str(this.obj(row.customer)?.currencyCode) ?? 'USD')
+          .toUpperCase()
+          .slice(0, 3),
+        impressions: Number(metrics?.impressions ?? 0) || 0,
+        clicks: Number(metrics?.clicks ?? 0) || 0,
+        // Zaten micros — çevrim yok.
+        spendMicros: this.micros(metrics?.costMicros) ?? 0n,
+        conversions: Number(metrics?.conversions ?? 0) || 0,
+        conversionValueMicros: googleValueToMicros(metrics?.conversionsValue),
+        videoViews: Number(metrics?.videoViews ?? 0) || 0,
+        engagements: Number(metrics?.engagements ?? 0) || 0,
+        // Google `reach` vermiyor — bu metrik Meta'ya özgü. 0 bırakıyoruz;
+        // 0 ile "bilinmiyor" arasındaki fark rapor katmanında platforma göre
+        // ele alınacak.
+        reach: 0,
+        raw: row,
+      });
+    }
+
+    return { rows: mapped, apiCalls: calls.n, complete: true };
+  }
+
   /**
    * GAQL sorgusunu SAYFALAYARAK çalıştırır.
    *
@@ -727,6 +811,23 @@ export class GoogleProvider implements IAdPlatformProvider {
     return parts[parts.length - 1] ?? '';
   }
 
+  /**
+   * İç içe alanı okur: `readNested(row, ['adGroupAd','ad','id'])`.
+   *
+   * `public` çünkü GOOGLE_VIEW haritası sınıfın dışında ve okuma mantığını
+   * seviye başına orada tutmak, dört ayrı `if` dalından okunaklı.
+   */
+  readNested(row: Record<string, unknown>, path: readonly string[]): string | undefined {
+    let cursor: Record<string, unknown> | undefined = row;
+    for (const key of path.slice(0, -1)) {
+      cursor = this.obj(cursor?.[key]);
+      if (!cursor) return undefined;
+    }
+    const last = path[path.length - 1];
+    const value = last ? cursor?.[last] : undefined;
+    return value === undefined || value === null ? undefined : String(value);
+  }
+
   private obj(value: unknown): Record<string, unknown> | undefined {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
@@ -771,6 +872,56 @@ export class GoogleProvider implements IAdPlatformProvider {
         return 'unknown';
     }
   }
+}
+
+/**
+ * Seviye → GAQL kaynağı ve kimlik alanı.
+ *
+ * Google'da hesap seviyesi metrikleri `customer` kaynağından geliyor; alt
+ * seviyeler kendi kaynaklarından. Kimlik alanı da her seviyede farklı adlanıyor,
+ * bu yüzden okuma fonksiyonu haritada tutuluyor.
+ */
+const GOOGLE_VIEW: Record<
+  InsightsLevel,
+  {
+    resource: string;
+    idField: string;
+    readId: (row: Record<string, unknown>, p: GoogleProvider) => string | undefined;
+  }
+> = {
+  account: {
+    resource: 'customer',
+    idField: 'customer.id',
+    readId: (row, p) => p.readNested(row, ['customer', 'id']),
+  },
+  campaign: {
+    resource: 'campaign',
+    idField: 'campaign.id',
+    readId: (row, p) => p.readNested(row, ['campaign', 'id']),
+  },
+  ad_group: {
+    resource: 'ad_group',
+    idField: 'ad_group.id',
+    readId: (row, p) => p.readNested(row, ['adGroup', 'id']),
+  },
+  ad: {
+    resource: 'ad_group_ad',
+    idField: 'ad_group_ad.ad.id',
+    readId: (row, p) => p.readNested(row, ['adGroupAd', 'ad', 'id']),
+  },
+};
+
+/**
+ * Google dönüşüm DEĞERİ micros değil — ondalık `double`.
+ *
+ * `cost_micros` micros ama `conversions_value` para birimi biriminde geliyor.
+ * İkisini aynı sanmak dönüşüm değerini 1.000.000 kat yanlış gösterir.
+ */
+function googleValueToMicros(value: unknown): bigint {
+  if (value === null || value === undefined || value === '') return 0n;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0n;
+  return BigInt(Math.round(n * 1_000_000));
 }
 
 /** 1234567890 → 123-456-7890 (Google arayüzündeki gösterim). */

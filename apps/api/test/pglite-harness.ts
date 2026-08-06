@@ -48,6 +48,7 @@ function normalize(v: unknown): unknown {
 }
 
 const MIGRATIONS_DIR = join(__dirname, '..', 'prisma', 'migrations');
+const SQL_DIR = join(__dirname, '..', 'prisma', 'sql');
 
 export async function createHarness(): Promise<Harness> {
   const pg = new PGlite();
@@ -59,6 +60,46 @@ export async function createHarness(): Promise<Harness> {
   for (const dir of dirs) {
     await pg.exec(readFileSync(join(MIGRATIONS_DIR, dir, 'migration.sql'), 'utf8'));
   }
+
+  // ÜRETİMDEKİ TÜM SQL ADIMLARINI UYGULA.
+  //
+  // Prisma migration'ları şemanın tamamı DEĞİL. `insights_daily` partition'lı
+  // bir tablo ve partition'lar `03_partitions.sql` ile geliyor (üretimde
+  // `db:rls` adımı). Bu dosya atlandığında tabloya hiçbir satır yazılamıyor;
+  // hata "no partition of relation found for row" oluyor ve sebebi hiç
+  // anlatmıyor — arıza kodda sanılıyor.
+  //
+  // Dosyalar arası bağımlılık var ve SIRA ÖNEMLİ: 03'ün partition'lara kurduğu
+  // RLS politikaları 02'deki `app.can_access_client()` yardımcısını çağırıyor.
+  // 03'ü tek başına uygulamak "function app.can_access_client(uuid) does not
+  // exist" ile düşüyor.
+  for (const file of ['01_constraints.sql', '02_rls.sql', '03_partitions.sql']) {
+    await pg.exec(readFileSync(join(SQL_DIR, file), 'utf8'));
+  }
+  // Test aralığını kapsayan partition'lar (24 ay geri, 24 ay ileri).
+  await pg.exec('SELECT app.ensure_insights_partitions(24, 24);');
+
+  // RLS ZORLAMASINI KAPAT — üretimi doğru taklit etmek için.
+  //
+  // Bu koşum ortamı `advetics_worker` bağlantısını temsil ediyor ve o rol
+  // üretimde BYPASSRLS. `02_rls.sql` ise `FORCE ROW LEVEL SECURITY` kuruyor;
+  // bu, tablo SAHİBİNE de politika uyguluyor ve PGlite'ta tek bağlantı
+  // sahibin kendisi. Kapatmazsak testler kiracı bağlamı kurmadıkları için
+  // hiçbir satır göremezdi — RLS'in kendisi doğru çalışsa bile.
+  //
+  // RLS'in gerçekten çalıştığı ayrı bir test paketiyle doğrulanıyor; orada
+  // rol bazlı bağlantı taklit ediliyor.
+  await pg.exec(`
+    DO $$
+    DECLARE t record;
+    BEGIN
+      FOR t IN SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'public'
+      LOOP
+        EXECUTE format('ALTER TABLE %I.%I NO FORCE ROW LEVEL SECURITY', t.schemaname, t.tablename);
+        EXECUTE format('ALTER TABLE %I.%I DISABLE ROW LEVEL SECURITY', t.schemaname, t.tablename);
+      END LOOP;
+    END $$;
+  `);
 
   const q = async <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
     const res = await pg.query<T>(sql, params.map(normalize));
@@ -92,7 +133,10 @@ export async function createHarness(): Promise<Harness> {
           platform: a.platform,
           externalId: a.external_id,
           managerExternalId: a.manager_external_id,
+          timezone: a.timezone,
+          currency: a.currency,
           lastStructureSyncAt: a.last_structure_sync_at,
+          lastInsightsSyncAt: a.last_insights_sync_at,
         };
       },
       findUnique: async ({ where }: { where: { id: string } }) => {
@@ -107,11 +151,17 @@ export async function createHarness(): Promise<Harness> {
         data,
       }: {
         where: { id: string };
-        data: { lastStructureSyncAt?: Date };
+        data: { lastStructureSyncAt?: Date; lastInsightsSyncAt?: Date };
       }) => {
         if (data.lastStructureSyncAt) {
           await q('UPDATE ad_accounts SET last_structure_sync_at = $1 WHERE id = $2', [
             data.lastStructureSyncAt,
+            where.id,
+          ]);
+        }
+        if (data.lastInsightsSyncAt) {
+          await q('UPDATE ad_accounts SET last_insights_sync_at = $1 WHERE id = $2', [
+            data.lastInsightsSyncAt,
             where.id,
           ]);
         }
@@ -122,6 +172,9 @@ export async function createHarness(): Promise<Harness> {
     ...externalIdLookup('campaign', 'campaigns', q),
     ...externalIdLookup('adGroup', 'ad_groups', q),
     ...externalIdLookup('creative', 'creatives', q),
+    // `ad` de gerekli: metrik senkronizasyonu reklam seviyesinde dış kimlik
+    // eşlemesi yapıyor ve bu satır olmadan `db.ad` undefined kalıyor.
+    ...externalIdLookup('ad', 'ads', q),
 
     platformConnection: { update: async () => ({}) },
     syncJob: { update: async () => ({}), findUnique: async () => null },

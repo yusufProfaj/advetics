@@ -10,8 +10,12 @@ import {
   type DiscoveredCampaign,
   type DiscoveredCreative,
   type DiscoveredSocialProfile,
+  type DiscoveredInsightRow,
   type FetchContext,
   type IAdPlatformProvider,
+  type InsightsLevel,
+  type InsightsRequest,
+  type PlatformInsights,
   type NormalizedAccountStatus,
   type NormalizedBudgetMode,
   type NormalizedEntityStatus,
@@ -32,6 +36,38 @@ interface GraphPage {
   data?: Array<Record<string, unknown>>;
   paging?: { next?: string };
 }
+
+/** Ortak seviye adlarımız → Meta'nın `level` parametresi. */
+const META_LEVEL: Record<InsightsLevel, string> = {
+  account: 'account',
+  campaign: 'campaign',
+  ad_group: 'adset',
+  ad: 'ad',
+};
+
+/**
+ * "Dönüşüm" sayılan Meta aksiyon türleri.
+ *
+ * Meta tek bir "conversions" metriği vermiyor; onlarca aksiyon türü döndürüyor
+ * ve hangisinin dönüşüm olduğu kampanya amacına göre değişiyor. Bu liste
+ * KARARDIR, gerçek değil: lead formu, pixel dönüşümleri ve mesajlaşma
+ * başlatmaları sayılıyor; sayfa beğenisi veya video görüntüleme sayılmıyor.
+ *
+ * Ham aksiyon dizisi `raw_metrics` içinde saklanıyor — liste yanlış çıkarsa
+ * geçmiş veriyi yeniden ÇEKMEDEN yeniden hesaplayabiliyoruz.
+ */
+const CONVERSION_ACTION_TYPES = [
+  'lead',
+  'onsite_conversion.lead_grouped',
+  'offsite_conversion.fb_pixel_lead',
+  'offsite_conversion.fb_pixel_purchase',
+  'offsite_conversion.fb_pixel_complete_registration',
+  'onsite_conversion.messaging_conversation_started_7d',
+  'onsite_conversion.purchase',
+  'purchase',
+  'complete_registration',
+  'submit_application',
+] as const;
 
 /**
  * Meta (Facebook / Instagram) — Marketing API adapter'ı.
@@ -683,6 +719,133 @@ export class MetaProvider implements IAdPlatformProvider {
     return Number.isNaN(d.getTime()) ? undefined : d;
   }
 
+  // ---------------------------------------------------------------------------
+  // L2 / L3 / L4 — metrikler
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Günlük metrikleri çeker.
+   *
+   * `time_increment=1` KRİTİK: bu olmadan Meta tüm aralık için TEK toplam satır
+   * döndürüyor. Günlük satır istemek 30 günü tek çağrıda almamızı sağlıyor —
+   * gün başına ayrı çağrı yapmak 30× kota demek olurdu.
+   */
+  async fetchInsights(ctx: FetchContext, request: InsightsRequest): Promise<PlatformInsights> {
+    const act = ctx.accountExternalId.startsWith('act_')
+      ? ctx.accountExternalId
+      : `act_${ctx.accountExternalId}`;
+
+    const url = new URL(`${this.graph}/${act}/insights`);
+    url.searchParams.set('level', META_LEVEL[request.level]);
+    url.searchParams.set('time_increment', '1');
+    url.searchParams.set(
+      'time_range',
+      JSON.stringify({ since: request.dateFrom, until: request.dateTo }),
+    );
+    url.searchParams.set('limit', '500');
+    url.searchParams.set('access_token', ctx.accessToken);
+    url.searchParams.set(
+      'fields',
+      [
+        'date_start',
+        'account_currency',
+        request.level === 'campaign' ? 'campaign_id' : '',
+        request.level === 'ad_group' ? 'adset_id' : '',
+        request.level === 'ad' ? 'ad_id' : '',
+        'impressions',
+        'clicks',
+        'spend',
+        'reach',
+        'frequency',
+        'inline_post_engagement',
+        // Dönüşümler aksiyon dizilerinde; hangi aksiyonun "dönüşüm" sayıldığı
+        // kampanya amacına göre değişiyor, bu yüzden hepsini alıp saklıyoruz.
+        'actions',
+        'action_values',
+        'video_thruplay_watched_actions',
+        'video_play_actions',
+      ]
+        .filter(Boolean)
+        .join(','),
+    );
+
+    const rows: DiscoveredInsightRow[] = [];
+    let next: string | undefined = url.toString();
+    let pages = 0;
+    let calls = 0;
+    const MAX_PAGES = 60;
+
+    while (next && pages < MAX_PAGES) {
+      const res = await platformFetch<GraphPage>('meta', next, {}, parseMetaRateLimit);
+      calls++;
+      if (res.rateLimit && ctx.onRateLimit) await ctx.onRateLimit(res.rateLimit);
+
+      // Adlandırılmış tip bağı koparıyor — bkz. GraphPage yorumundaki TS7022.
+      const body: GraphPage = res.data;
+      for (const raw of body.data ?? []) {
+        const row = this.mapMetaInsightRow(raw, request.level, act);
+        if (row) rows.push(row);
+      }
+      next = body.paging?.next;
+      pages++;
+    }
+
+    if (next) {
+      this.logger.warn(
+        `Meta insights ${MAX_PAGES} sayfada bitmedi (${act}, ${request.dateFrom}..${request.dateTo}) — KISMİ`,
+      );
+      return { rows, apiCalls: calls, complete: false };
+    }
+
+    return { rows, apiCalls: calls, complete: true };
+  }
+
+  private mapMetaInsightRow(
+    raw: Record<string, unknown>,
+    level: InsightsLevel,
+    act: string,
+  ): DiscoveredInsightRow | null {
+    const date = text(raw.date_start);
+    if (!date) return null;
+
+    // Hesap seviyesinde Meta varlık kimliği döndürmüyor — hesabın kendisi.
+    const entityExternalId =
+      level === 'account'
+        ? act
+        : text(raw.campaign_id ?? raw.adset_id ?? raw.ad_id);
+    if (!entityExternalId) return null;
+
+    const actions = countActions(raw.actions, CONVERSION_ACTION_TYPES);
+    const values = sumActionValues(raw.action_values, CONVERSION_ACTION_TYPES);
+
+    return {
+      entityExternalId,
+      level,
+      date,
+      currency: (text(raw.account_currency) ?? 'USD').toUpperCase().slice(0, 3),
+      impressions: int(raw.impressions),
+      clicks: int(raw.clicks),
+      // HARCAMA BÜTÇEDEN FARKLI BİRİMDE.
+      //
+      // Bütçe alanları (daily_budget) hesabın en küçük biriminde (kuruş) gelir;
+      // insights `spend` ise ONDALIK bir string ("1234.56"). İkisini aynı
+      // sanmak harcamayı 10.000 kat yanlış gösterir — bütçe 100 TRY iken
+      // harcama 1.000.000 TRY görünürdü.
+      spendMicros: decimalToMicros(raw.spend),
+      conversions: actions,
+      conversionValueMicros: decimalToMicros(values),
+      // ThruPlay tercih ediliyor: "video görüntüleme" olarak anlamlı olan
+      // 15 saniye/tamamlanma eşiği, 3 saniyelik oynatma değil.
+      videoViews:
+        countActions(raw.video_thruplay_watched_actions, null) ||
+        countActions(raw.video_play_actions, null),
+      engagements: int(raw.inline_post_engagement),
+      reach: int(raw.reach),
+      frequency: raw.frequency !== undefined ? Number(raw.frequency) || undefined : undefined,
+      raw,
+    };
+  }
+
   /**
    * `effective_status`tan YALNIZCA inceleme ile ilgili durumları çıkarır.
    *
@@ -886,4 +1049,60 @@ function text(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * Aksiyon dizisindeki değerleri toplar.
+ *
+ * `types` null ise TÜM aksiyonlar toplanıyor (video metriklerinde dizi tek
+ * türden oluşuyor). Aksi hâlde yalnızca listedeki türler.
+ *
+ * Meta aynı aksiyonu farklı atıf pencereleriyle tekrarlayabiliyor; biz
+ * varsayılan pencereyi (`value`) kullanıyoruz — `1d_view`/`7d_click` gibi
+ * alanlar ham gövdede duruyor ve gerekirse oradan okunur.
+ */
+function countActions(value: unknown, types: readonly string[] | null): number {
+  if (!Array.isArray(value)) return 0;
+  let total = 0;
+  for (const item of value) {
+    const record = asObject(item);
+    if (!record) continue;
+    const actionType = text(record.action_type);
+    if (types && (!actionType || !types.includes(actionType))) continue;
+    total += Number(record.value ?? 0) || 0;
+  }
+  return total;
+}
+
+/** Aksiyon DEĞERLERİNİ (para) toplar; ondalık string olarak döner. */
+function sumActionValues(value: unknown, types: readonly string[]): string {
+  return String(countActions(value, types));
+}
+
+/**
+ * Ondalık para string'ini micros'a çevirir: "1234.56" → 1_234_560_000n.
+ *
+ * `Number` üzerinden çarpmak kayan nokta hatası üretiyor (0.1 * 1e6 =
+ * 100000.00000000001), bu yüzden string olarak ayrıştırıyoruz. Para hatasının
+ * bedeli yüksek: kuruş kaymaları raporlarda toplandığında görünür fark yapıyor.
+ */
+function decimalToMicros(value: unknown): bigint {
+  if (value === null || value === undefined || value === '') return 0n;
+  const raw = String(value).trim();
+  const match = /^(-?)(\d*)(?:[.,](\d*))?$/.exec(raw);
+  if (!match) {
+    // Beklenmeyen biçim — sessizce 0 yazmak harcamayı kaybetmek olurdu.
+    const fallback = Number(raw);
+    return Number.isFinite(fallback) ? BigInt(Math.round(fallback * 1_000_000)) : 0n;
+  }
+  const [, sign, whole = '', frac = ''] = match;
+  const micros = `${whole || '0'}${frac.padEnd(6, '0').slice(0, 6)}`;
+  return BigInt(`${sign}${micros}`);
+}
+
+/** Tam sayıya çevirir; Meta sayıları string olarak döndürüyor. */
+function int(value: unknown): number {
+  if (value === null || value === undefined || value === '') return 0;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n) : 0;
 }
