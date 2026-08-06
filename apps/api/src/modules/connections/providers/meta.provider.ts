@@ -634,60 +634,15 @@ export class MetaProvider implements IAdPlatformProvider {
     return { rows, complete: true };
   }
 
-  /** Gömülü creative nesnesini ortak şekle çevirir. */
+  /**
+   * Gömülü creative nesnesini ortak şekle çevirir.
+   *
+   * Gerçek iş modül seviyesindeki `mapMetaCreativeFields` fonksiyonunda —
+   * saf ve export edilmiş olması birim testi mümkün kılıyor. Bu eşleme iki kez
+   * yanlış çıktı ve her ikisinde de hata ancak canlı veriyle görüldü.
+   */
   private mapMetaCreative(id: string, c: Record<string, unknown>): DiscoveredCreative {
-    // Meta creative'i üç ayrı şekilde taşıyor:
-    //   · düz alanlar (title/body) — eski tekil creative'ler
-    //   · object_story_spec.link_data — sayfa gönderisi tabanlı creative'ler
-    //   · asset_feed_spec — dinamik/çoklu varyasyonlu creative'ler
-    // Hepsini denemek zorundayız; tek şekle güvenmek çoğu reklamda boş
-    // metin göstermek olurdu.
-    const story =
-      c.object_story_spec && typeof c.object_story_spec === 'object'
-        ? (c.object_story_spec as Record<string, unknown>)
-        : undefined;
-    const link =
-      story?.link_data && typeof story.link_data === 'object'
-        ? (story.link_data as Record<string, unknown>)
-        : undefined;
-    const feed =
-      c.asset_feed_spec && typeof c.asset_feed_spec === 'object'
-        ? (c.asset_feed_spec as Record<string, unknown>)
-        : undefined;
-
-    const firstText = (value: unknown): string | undefined => {
-      if (!Array.isArray(value) || value.length === 0) return undefined;
-      const first = value[0];
-      if (typeof first === 'string') return first;
-      if (first && typeof first === 'object') {
-        const text = (first as Record<string, unknown>).text;
-        if (typeof text === 'string') return text;
-      }
-      return undefined;
-    };
-
-    const cta =
-      link?.call_to_action && typeof link.call_to_action === 'object'
-        ? String((link.call_to_action as Record<string, unknown>).type ?? '') || undefined
-        : undefined;
-
-    const assetUrls = [c.image_url, c.thumbnail_url, link?.picture].filter(
-      (u): u is string => typeof u === 'string' && u.length > 0,
-    );
-
-    return {
-      externalId: id,
-      creativeType: c.object_type ? String(c.object_type) : undefined,
-      headline: this.str(c.title ?? link?.name ?? firstText(feed?.titles)),
-      primaryText: this.str(c.body ?? link?.message ?? firstText(feed?.bodies)),
-      description: this.str(link?.description ?? firstText(feed?.descriptions)),
-      ctaType: cta ?? (c.call_to_action_type ? String(c.call_to_action_type) : undefined),
-      destinationUrl: this.str(c.link_url ?? link?.link ?? firstText(feed?.link_urls)),
-      // Sayfa gönderisi creative'lerinde tek elimizdeki URL bilgisi bu.
-      displayUrl: this.str(link?.caption ?? c.link_destination_display_url),
-      assetUrls: assetUrls.length > 0 ? assetUrls : undefined,
-      raw: c,
-    };
+    return mapMetaCreativeFields(id, c);
   }
 
   /**
@@ -793,4 +748,107 @@ export class MetaProvider implements IAdPlatformProvider {
         return 'unknown';
     }
   }
+}
+
+/**
+ * Meta creative'ini ortak şekle çevirir — SAF FONKSİYON.
+ *
+ * Meta içeriği ÜÇ ayrı yapıda taşıyor ve hangisini kullandığı creative'in
+ * nasıl oluşturulduğuna bağlı:
+ *
+ *   1. Düz alanlar (`title`, `body`, `link_url`) — eski tekil creative'ler
+ *   2. `object_story_spec.link_data` — elle yazılmış link reklamları
+ *   3. `asset_feed_spec` — dinamik/Advantage+ creative'ler
+ *
+ * Canlı veride görülen bir tuzak: mevcut bir sayfa gönderisinden üretilmiş
+ * creative'lerde `object_story_spec` GELİYOR ama içinde yalnızca `page_id` ve
+ * `instagram_user_id` var — `link_data` YOK. İçerik `asset_feed_spec`te.
+ * Yalnızca `object_story_spec.link_data`ya güvenmek bu creative'lerde her şeyi
+ * boş bırakıyordu.
+ */
+export function mapMetaCreativeFields(
+  id: string,
+  c: Record<string, unknown>,
+): DiscoveredCreative {
+  const story = asObject(c.object_story_spec);
+  const link = asObject(story?.link_data);
+  const feed = asObject(c.asset_feed_spec);
+
+  const assetUrls = [c.image_url, c.thumbnail_url, link?.picture].filter(
+    (u): u is string => typeof u === 'string' && u.length > 0,
+  );
+
+  return {
+    externalId: id,
+    creativeType: c.object_type ? String(c.object_type) : undefined,
+    headline: text(c.title ?? link?.name) ?? assetValue(feed?.titles, ['text']),
+    primaryText: text(c.body ?? link?.message) ?? assetValue(feed?.bodies, ['text']),
+    description: text(link?.description) ?? assetValue(feed?.descriptions, ['text']),
+    ctaType:
+      text(asObject(link?.call_to_action)?.type) ??
+      text(c.call_to_action_type) ??
+      // `call_to_action_types` ÇOĞUL ve düz string dizisi. Tekil `call_to_action_type`
+      // alanını okumak dinamik creative'lerde CTA'yı hep boş bırakıyordu.
+      assetValue(feed?.call_to_action_types, []),
+    destinationUrl:
+      text(c.link_url ?? link?.link) ??
+      // `link_urls` girişleri `{ website_url, display_url }` biçiminde —
+      // `{ text }` DEĞİL. Yalnızca `text` anahtarına bakmak hedef URL'i her
+      // dinamik creative'de kaçırıyordu.
+      assetValue(feed?.link_urls, ['website_url', 'url', 'link']),
+    displayUrl:
+      text(link?.caption ?? c.link_destination_display_url) ??
+      assetValue(feed?.link_urls, ['display_url']),
+    assetUrls: assetUrls.length > 0 ? assetUrls : undefined,
+    raw: c,
+  };
+}
+
+/**
+ * `asset_feed_spec` dizilerinden ilk anlamlı değeri çeker.
+ *
+ * Meta bu dizilerin girişlerini alana göre FARKLI şekillerde veriyor:
+ *
+ *   titles / bodies / descriptions →  [{ text: '…' }]
+ *   link_urls                      →  [{ website_url: '…', display_url: '…' }]
+ *   call_to_action_types           →  ['LEARN_MORE']            (düz string)
+ *
+ * Tek bir anahtara bakmak diğer şekilleri sessizce kaçırmak demek. Aday
+ * anahtar listesi geçerek şekle bağımlılığı kaldırıyoruz; boş dizi geçmek
+ * "girişler düz string" anlamına geliyor.
+ *
+ * İlk DOLU değeri alıyoruz, ilk girişi değil: dinamik creative'lerde ilk
+ * varyasyonun bir alanı boş olabiliyor.
+ */
+function assetValue(value: unknown, keys: readonly string[]): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  for (const item of value) {
+    if (typeof item === 'string') {
+      const trimmed = item.trim();
+      if (trimmed.length > 0) return trimmed;
+      continue;
+    }
+    const record = asObject(item);
+    if (!record) continue;
+    for (const key of keys) {
+      const candidate = record[key];
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+    }
+  }
+  return undefined;
+}
+
+function asObject(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/** Boş ve yalnızca boşluktan oluşan değerleri `undefined`a indirger. */
+function text(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
