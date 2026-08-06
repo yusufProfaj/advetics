@@ -434,30 +434,40 @@ export class ReportsService {
   /**
    * Aksiyon kovalarını AYRI bir alt sorguda topluyor.
    *
-   * KRİTİK: `jsonb_array_elements` bir LATERAL join ve satırları ÇOĞALTIYOR —
+   * KRİTİK 1 — LATERAL ÇOĞALTMASI. `jsonb_array_elements` satırları çoğaltıyor:
    * 5 aksiyon taşıyan bir gün 5 satıra açılıyor. Metrik toplamlarını aynı
    * sorguda yapmak harcamayı 5 katına çıkarırdı ve hata hiçbir yere hata
-   * olarak düşmezdi; müşteriye 5 kat harcama raporlanırdı.
+   * olarak düşmezdi. Bu yüzden metrikler ve kovalar ayrı CTE'lerde.
    *
-   * Bu yüzden iki ayrı CTE: biri metrikleri (join'siz), diğeri kovaları
-   * (LATERAL ile), sonra `grp` üzerinden birleştiriliyor.
+   * KRİTİK 2 — ÖNCELİK TOPLANABİLİR DEĞİL. Kova çözümü (ilk dolu tür kazanır)
+   * SATIR BAZLI bir işlem; önce toplayıp sonra çözmek yanlış sonuç veriyor.
    *
-   * Aksiyon türü listeleri `packages/shared`'daki tek kaynaktan geliyor —
-   * SQL'e elle yazmak iki listenin zamanla ayrışması demek olurdu.
+   * Örnek: kampanya A'da `lead=68`, kampanya D'de `lead=0` ama
+   * `onsite_conversion.lead_grouped=7`.
+   *   · Satır bazlı çöz, sonra topla:  68 + 7 = 75   ✅
+   *   · Topla, sonra çöz:              SUM(lead)=68 dolu → 68   ❌ (7 kayıp)
+   *
+   * Canlı raporda tam bu oldu: `Dönüşüm 132` ile `Form 86 + Mesaj 39 = 125`
+   * çelişiyordu, çünkü `conversions` satır bazlı çözülüp saklanıyor, rapor ise
+   * toplandıktan sonra çözüyordu.
+   *
+   * Bu yüzden iki aşama: ÖNCE `(entity_id, date)` greninde — yani
+   * `raw_metrics`in doğal greninde — çözülüyor, SONRA istenen gruba toplanıyor.
+   *
+   * Aksiyon türü listeleri `packages/shared`'daki tek kaynaktan geliyor; SQL'e
+   * elle yazmak iki listenin zamanla ayrışması demek olurdu.
    */
   private bucketSelect(
     params: { clientId: string; from: string; to: string },
     groupBy: Prisma.Sql,
   ): Prisma.Sql {
     /**
-     * Kovayı ÖNCELİK SIRASIYLA çözer, türleri TOPLAMAZ.
+     * Tek satırda kovayı öncelik sırasıyla çözer.
      *
-     * Her tür için ayrı bir koşullu toplam alınıp `COALESCE` ile ilk DOLU
-     * olanı seçiliyor. `NULLIF(x, 0)` sıfırı da "dolu değil" sayıyor: sıfır
-     * değerli bir tür, dolu olan bir yedeği engellememeli.
-     *
-     * `SUM(CASE WHEN ... THEN v END)` hiç eşleşme yoksa NULL döndürüyor —
-     * `ELSE 0` YAZMAMAK kasıtlı, aksi hâlde COALESCE hep ilk türde dururdu.
+     * `NULLIF(x, 0)` sıfırı da "dolu değil" sayıyor: sıfır değerli bir tür,
+     * dolu olan bir yedeği engellememeli. `SUM(CASE WHEN ... THEN v END)`
+     * eşleşme yoksa NULL döndürüyor — `ELSE 0` YAZMAMAK kasıtlı, aksi hâlde
+     * COALESCE hep ilk türde dururdu.
      */
     const pickFor = (bucket: ConversionBucket): Prisma.Sql => {
       const candidates = CONVERSION_BUCKETS[bucket].actionTypes.map(
@@ -471,25 +481,29 @@ export class ReportsService {
     };
 
     return Prisma.sql`
-      SELECT ${groupBy} AS grp,
-             ${pickFor('form')} AS form,
-             ${pickFor('message')} AS message,
-             ${pickFor('purchase')} AS purchase
-      FROM insights_daily i2
-      -- jsonb_array_elements boş/eksik dizide satır üretmiyor; COALESCE
-      -- olmadan aksiyonsuz günler tamamen kayboluyor.
-      CROSS JOIN LATERAL jsonb_array_elements(
-        COALESCE(
+      SELECT grp, SUM(form) AS form, SUM(message) AS message, SUM(purchase) AS purchase
+      FROM (
+        -- 1. AŞAMA: satır greninde (varlık + gün) öncelik çözümü.
+        SELECT ${groupBy} AS grp,
+               ${pickFor('form')} AS form,
+               ${pickFor('message')} AS message,
+               ${pickFor('purchase')} AS purchase
+        FROM insights_daily i2
+        -- jsonb_array_elements boş/eksik dizide satır üretmiyor; CASE olmadan
+        -- aksiyonsuz günler tamamen kayboluyor.
+        CROSS JOIN LATERAL jsonb_array_elements(
           CASE WHEN jsonb_typeof(i2.raw_metrics -> 'actions') = 'array'
                THEN i2.raw_metrics -> 'actions'
-               ELSE '[]'::jsonb END,
-          '[]'::jsonb
-        )
-      ) AS act
-      WHERE i2.client_id = ${params.clientId}::uuid
-        AND i2.date BETWEEN ${params.from}::date AND ${params.to}::date
-        AND i2.entity_level = ${LEVEL}
-      GROUP BY ${groupBy}
+               ELSE '[]'::jsonb END
+        ) AS act
+        WHERE i2.client_id = ${params.clientId}::uuid
+          AND i2.date BETWEEN ${params.from}::date AND ${params.to}::date
+          AND i2.entity_level = ${LEVEL}
+        -- Gren: istenen grup + varlık + gün. Böylece öncelik her ham satırda
+        -- ayrı çözülüyor, sonra 2. aşamada toplanıyor.
+        GROUP BY ${groupBy}, i2.entity_id, i2.date
+      ) resolved
+      GROUP BY grp
     `;
   }
 
