@@ -187,6 +187,34 @@ describe('mapMetaCreativeFields', () => {
     });
   });
 
+  describe('görsel sırası', () => {
+    it('REGRESYON: thumbnail EN SONDA — tam boyutlu görsel önce', () => {
+      // Meta thumbnail'i ~64px küçük bir önizleme. Önce koymak panelde
+      // bulanık görsel göstermek demekti.
+      const c = mapMetaCreativeFields('x', {
+        thumbnail_url: 'https://img/kucuk.jpg',
+        image_url: 'https://img/tam.jpg',
+      });
+      expect(c.assetUrls).toEqual(['https://img/tam.jpg', 'https://img/kucuk.jpg']);
+    });
+
+    it('dinamik creative görselleri asset_feed_spec.images içinden okunur', () => {
+      const c = mapMetaCreativeFields('x', {
+        thumbnail_url: 'https://img/kucuk.jpg',
+        asset_feed_spec: {
+          images: [{ url: 'https://img/feed1.jpg' }, { url: 'https://img/feed2.jpg' }],
+        },
+      });
+      expect(c.assetUrls?.[0]).toBe('https://img/feed1.jpg');
+      expect(c.assetUrls).toHaveLength(3);
+    });
+
+    it('yalnızca thumbnail varsa o kullanılıyor', () => {
+      const c = mapMetaCreativeFields('x', { thumbnail_url: 'https://img/kucuk.jpg' });
+      expect(c.assetUrls).toEqual(['https://img/kucuk.jpg']);
+    });
+  });
+
   describe('dayanıklılık', () => {
     it('boş nesne çökmez', () => {
       const c = mapMetaCreativeFields('cr5', {});

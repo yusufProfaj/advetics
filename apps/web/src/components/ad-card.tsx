@@ -37,10 +37,24 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
   const image = ad.creative?.assetUrls[0];
   const hasIssues = ad.issues.length > 0;
 
+  /**
+   * Reklamın platformdaki önizlemesi.
+   *
+   * Kendi çizdiğimiz kart reklamın NASIL GÖRÜNDÜĞÜNÜ tam olarak gösteremiyor:
+   * yerleşim (feed, story, reels), kırpma ve biçim kurallarını platform
+   * uyguluyor. Bu yüzden "gerçekten neye benziyor" sorusunun cevabı Meta'nın
+   * kendi önizlemesi — biz oraya götürüyoruz.
+   *
+   * `preview_shareable_link` yapı senkronizasyonunda geliyor. Eski senkronize
+   * edilmiş reklamlarda boş olabilir; o durumda kart tıklanabilir olmuyor —
+   * hiçbir yere gitmeyen bir bağlantı vermekten iyi.
+   */
+  const preview = ad.previewUrl;
+
   return (
     <article
-      className={`overflow-hidden rounded-xl border bg-surface ${
-        hasIssues ? 'border-red-500/40' : 'border-line'
+      className={`group overflow-hidden rounded-xl border bg-surface transition ${
+        hasIssues ? 'border-red-500/40' : 'border-line hover:border-brand/40'
       }`}
     >
       <div className="flex flex-col gap-4 p-4 sm:flex-row">
@@ -50,7 +64,7 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
             kırpıyor — creative inceleme aracında reklamın okunamaması, aracın
             hiç olmaması kadar kötü. `contain` kenarlarda boşluk bırakıyor ama
             reklamın TAMAMI görünüyor. */}
-        <div className="relative aspect-[4/5] w-full shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:w-36">
+        <PreviewLink href={preview} className="relative aspect-[4/5] w-full shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:w-36">
           {image ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
@@ -72,7 +86,16 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
               +{ad.creative!.assetUrls.length - 1}
             </span>
           )}
-        </div>
+          {preview && (
+            // Tıklanabilir olduğu GÖRÜNMELİ: fareyle üzerine gelmeden
+            // anlaşılmayan bir bağlantı, olmayan bir bağlantı gibidir.
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/45 group-hover:opacity-100">
+              <span className="rounded-md bg-white/95 px-2 py-1 text-[11px] font-semibold text-slate-900">
+                Önizlemeyi aç ↗
+              </span>
+            </span>
+          )}
+        </PreviewLink>
 
         {/* İçerik */}
         <div className="min-w-0 flex-1">
@@ -97,7 +120,20 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
           </div>
 
           <h3 className="mt-1.5 truncate text-sm font-semibold text-ink" title={ad.name}>
-            {ad.creative?.headline ?? ad.name}
+            {preview ? (
+              <a
+                href={preview}
+                target="_blank"
+                // `noreferrer` de gerekli: platforma hangi panelden
+                // gelindiğini sızdırmaya gerek yok.
+                rel="noopener noreferrer"
+                className="hover:text-brand hover:underline"
+              >
+                {ad.creative?.headline ?? ad.name}
+              </a>
+            ) : (
+              (ad.creative?.headline ?? ad.name)
+            )}
           </h3>
           <p className="truncate text-xs text-ink-muted">
             {ad.campaignName} · {ad.adGroupName}
@@ -160,6 +196,29 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
         </div>
       )}
     </article>
+  );
+}
+
+/**
+ * Önizleme varsa bağlantı, yoksa düz kutu.
+ *
+ * Aynı görseli iki ayrı JSX dalında tekrarlamamak için sarmalayıcı: kopyala
+ * yapıştır iki dalın zamanla ayrışmasına yol açıyor.
+ */
+function PreviewLink({
+  href,
+  className,
+  children,
+}: {
+  href: string | null;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (!href) return <div className={className}>{children}</div>;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+      {children}
+    </a>
   );
 }
 

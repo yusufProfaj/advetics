@@ -240,7 +240,14 @@ export interface DiscoveredCreative {
   ctaType?: string;
   destinationUrl?: string;
   displayUrl?: string;
-  assetUrls?: unknown;
+  /**
+   * Görsel adresleri — KALİTEYE GÖRE SIRALI, en iyisi başta.
+   *
+   * `unknown` değil `string[]`: tür belirsizliği çağıran tarafta gereksiz
+   * daraltma zorunluluğu üretiyordu ve bu alan hiçbir zaman başka bir şey
+   * olmuyor.
+   */
+  assetUrls?: string[];
   raw: unknown;
 }
 

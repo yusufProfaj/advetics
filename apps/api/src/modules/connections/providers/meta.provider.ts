@@ -543,6 +543,14 @@ export class MetaProvider implements IAdPlatformProvider {
         'status',
         'effective_status',
         'updated_time',
+        // ÖNİZLEME BAĞLANTISI — reklamın Meta'daki gerçek görünümü.
+        //
+        // Alternatifi `/{ad_id}/previews` uç noktası ve o reklam başına AYRI
+        // bir çağrı demek (500 reklamlı hesapta kotanın tamamı). Bu alan aynı
+        // istekte geliyor ve kullanıcıyı Meta'nın kendi önizlemesine
+        // götürüyor — bizim yeniden çizmeye çalışmamızdan her zaman daha
+        // doğru, çünkü yerleşim ve biçim kurallarını Meta uyguluyor.
+        'preview_shareable_link',
         // Creative'i GÖMÜLÜ istiyoruz — ad başına ayrı çağrı kotayı bitirir.
         // Sayfa gönderisi tabanlı creative'lerde (object_type=SHARE) link
         // `object_story_spec` içinde DEĞİL, gönderinin kendisinde. O yüzden
@@ -550,7 +558,10 @@ export class MetaProvider implements IAdPlatformProvider {
         // isteniyor — aynı çağrıda geliyorlar, ek kota maliyeti yok.
         'creative{id,name,object_type,title,body,link_url,call_to_action_type,' +
           'image_url,thumbnail_url,object_story_spec,asset_feed_spec,' +
-          'object_story_id,effective_object_story_id,link_destination_display_url,url_tags}',
+          'object_story_id,effective_object_story_id,link_destination_display_url,url_tags,' +
+          // `images` dinamik creative'lerin TAM BOYUTLU görsellerini taşıyor;
+          // `thumbnail_url` yalnızca küçük bir önizleme.
+          'images}',
         // Reddedilme sebepleri Modül 4'te (Ads Explorer) gösterilecek.
         'ad_review_feedback',
       ],
@@ -576,6 +587,7 @@ export class MetaProvider implements IAdPlatformProvider {
         status: this.mapEntityStatus(raw.effective_status ?? raw.status),
         effectiveStatus: raw.effective_status ? String(raw.effective_status) : undefined,
         creativeExternalId: creativeId,
+        previewUrl: text(raw.preview_shareable_link),
         reviewStatus: this.reviewStatusFrom(raw.effective_status),
         disapprovalReasons: raw.ad_review_feedback,
         platformUpdatedAt: this.parseDate(raw.updated_time),
@@ -614,6 +626,17 @@ export class MetaProvider implements IAdPlatformProvider {
     url.searchParams.set('fields', fields.join(','));
     url.searchParams.set('limit', '500');
     url.searchParams.set('access_token', ctx.accessToken);
+    // THUMBNAIL BOYUTU.
+    //
+    // Meta `thumbnail_url` alanını varsayılan olarak ~64px döndürüyor ve
+    // sayfa gönderisi tabanlı creative'lerde `image_url` hiç gelmediği için
+    // panelde gösterilen tek görsel o oluyordu — okunamayacak kadar bulanık.
+    // Bu parametreler yalnızca reklam edge'inde geçerli.
+    if (edge === 'ads') {
+      url.searchParams.set('thumbnail_width', '600');
+      url.searchParams.set('thumbnail_height', '600');
+    }
+
     // `effective_status` FİLTRESİ KULLANMIYORUZ — kasıtlı.
     //
     // Amaç arşivlenmiş varlıkları da çekmekti (soft delete kararını
@@ -937,7 +960,18 @@ export function mapMetaCreativeFields(
   const link = asObject(story?.link_data);
   const feed = asObject(c.asset_feed_spec);
 
-  const assetUrls = [c.image_url, c.thumbnail_url, link?.picture].filter(
+  // GÖRSEL SIRASI KALİTEYE GÖRE — `thumbnail_url` EN SONDA.
+  //
+  // Meta'nın thumbnail'i küçük bir önizleme; tam boyutlu görsel `image_url`
+  // ya da dinamik creative'lerde `asset_feed_spec.images[].url` içinde.
+  // Önce thumbnail'i koymak panelde bulanık görsel göstermek demekti.
+  const feedImages = Array.isArray(feed?.images)
+    ? feed.images
+        .map((i) => text(asObject(i)?.url ?? asObject(i)?.permalink_url))
+        .filter((u): u is string => u !== undefined)
+    : [];
+
+  const assetUrls = [c.image_url, ...feedImages, link?.picture, c.thumbnail_url].filter(
     (u): u is string => typeof u === 'string' && u.length > 0,
   );
 
