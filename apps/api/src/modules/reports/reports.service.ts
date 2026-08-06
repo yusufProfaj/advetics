@@ -99,6 +99,7 @@ export class ReportsService {
         from: params.from,
         to: params.to,
         sections: template.sections,
+        rangeDays: this.dayCount(params.from, params.to),
         currency,
         platforms: platformBlocks,
         total: this.totalBlock(platformBlocks, currency),
@@ -314,6 +315,7 @@ export class ReportsService {
           objective: r.objective,
           reach: reachSum === null || days === 0 ? null : Math.round(reachSum / days),
           reachIsDailyAverage: days > 1,
+          dayCount: days,
           conversionCounts: roundCounts({
             form: Number(r.form ?? 0),
             message: Number(r.message ?? 0),
@@ -593,6 +595,15 @@ export class ReportsService {
       cpa: conversions > 0 ? spend / conversions : null,
       roas: spend > 0 && value > 0 ? value / spend : null,
     };
+  }
+
+  /** Aralıktaki gün sayısı, iki uç dâhil. */
+  private dayCount(from: string, to: string): number {
+    return (
+      Math.round(
+        (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000,
+      ) + 1
+    );
   }
 
   private bigintText(value: string | number | bigint | null | undefined): string {

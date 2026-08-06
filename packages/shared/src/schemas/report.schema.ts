@@ -215,6 +215,15 @@ export interface ReportCampaignRow extends MetricTotals {
   reach: number | null;
   reachIsDailyAverage: boolean;
   conversionCounts: ConversionCounts;
+  /**
+   * VERİ KAPSAMASI — bu kampanyanın aralıkta kaç günü var.
+   *
+   * Yeni senkronize edilmiş bir kampanya aralığın yalnızca bir gününü
+   * kapsayabiliyor. Rapor "1-6 Ağustos" derken o satır tek günü gösteriyor ve
+   * müşteri bunu "bu kampanya neredeyse hiç harcamamış" diye okuyor — oysa
+   * veri eksik. Farkı göstermeden rapor göndermek yanıltıcı olur.
+   */
+  dayCount: number;
 }
 
 export interface ReportPlatformBlock extends MetricTotals {
@@ -245,6 +254,8 @@ export interface ReportData {
   from: string;
   to: string;
   sections: ReportSection[];
+  /** Aralıktaki gün sayısı — kampanya kapsamasıyla karşılaştırmak için. */
+  rangeDays: number;
   currency: string | null;
   /** Platform blokları + TOPLAM. */
   platforms: ReportPlatformBlock[];

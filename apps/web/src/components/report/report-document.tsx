@@ -69,6 +69,7 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   platform="Meta Ads"
                   rows={data.metaCampaigns}
                   currency={data.currency}
+                  rangeDays={data.rangeDays}
                   daily={data.daily}
                   from={data.from}
                   to={data.to}
@@ -83,6 +84,7 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   platform="Google Ads"
                   rows={data.googleCampaigns}
                   currency={data.currency}
+                  rangeDays={data.rangeDays}
                 />
               );
             case 'google_keywords':
@@ -214,6 +216,7 @@ function CampaignPage({
   platform,
   rows,
   currency,
+  rangeDays,
   daily,
   from,
   to,
@@ -223,6 +226,7 @@ function CampaignPage({
   platform: string;
   rows: ReportCampaignRow[];
   currency: string | null;
+  rangeDays: number;
   daily?: ReportData['daily'];
   from?: string;
   to?: string;
@@ -243,6 +247,14 @@ function CampaignPage({
   const money = currency;
   // Erişim en az bir satırda günlük ortalamaysa dipnot gerekiyor.
   const anyAverage = rows.some((r) => r.reachIsDailyAverage);
+
+  // EKSİK KAPSAMA. Yeni senkronize edilmiş bir kampanya aralığın yalnızca bir
+  // kısmını kapsıyor ve harcaması düşük görünüyor — müşteri bunu "bu kampanya
+  // çalışmamış" diye okuyor. Farkı göstermeden rapor göndermek yanıltıcı.
+  //
+  // Eşik yarım aralık: bir iki günlük eksik veri normal (gün dönümü, geri
+  // düzeltme), yarısından azı ise gerçek bir boşluk.
+  const partial = rows.filter((r) => r.dayCount > 0 && r.dayCount < rangeDays / 2);
 
   return (
     <section className="rpt-page pt-10">
@@ -276,6 +288,14 @@ function CampaignPage({
                 <td className="max-w-[220px] py-2.5 pr-3 font-medium">
                   <span className="block truncate" title={r.name}>
                     {r.name}
+                    {r.dayCount > 0 && r.dayCount < rangeDays / 2 && (
+                      <span
+                        className="ml-1 align-middle text-[10px] font-semibold text-amber-600"
+                        title={`Yalnızca ${r.dayCount} günlük veri var`}
+                      >
+                        †
+                      </span>
+                    )}
                   </span>
                 </td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums">
@@ -357,11 +377,18 @@ function CampaignPage({
 
       <Footnotes
         keys={showBuckets ? ['ctr', 'cpc'] : ['ctr', 'cpc', 'cpa']}
-        extra={
+        extra={[
           anyAverage
             ? '* Erişim tekil kişi sayısıdır ve günler arasında toplanamaz; bu sütun günlük ortalamayı gösterir.'
-            : undefined
-        }
+            : null,
+          partial.length > 0
+            ? `† Bu kampanyaların raporlanan dönemde yalnızca bir bölümü ölçülmüştür (${partial
+                .map((r) => `${r.dayCount}/${rangeDays} gün`)
+                .join(', ')}); rakamlar tüm dönemi temsil etmez.`
+            : null,
+        ]
+          .filter((v): v is string => v !== null)
+          .join('\n')}
         buckets={showBuckets}
       />
     </section>
@@ -603,7 +630,8 @@ function Footnotes({
     lines.push(`Form: ${CONVERSION_BUCKETS.form.hint}`);
     lines.push(`Mesaj: ${CONVERSION_BUCKETS.message.hint}`);
   }
-  if (extra) lines.push(extra);
+  // `extra` birden fazla not taşıyabiliyor; satır satır ayrılıyor.
+  if (extra) lines.push(...extra.split('\n').filter((l) => l.length > 0));
   if (lines.length === 0) return null;
 
   return (

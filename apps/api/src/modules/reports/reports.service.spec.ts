@@ -255,6 +255,25 @@ describe('ReportsService — erişim', () => {
   });
 });
 
+describe('ReportsService — veri kapsaması', () => {
+  it('kampanyanın kaç günü ölçüldüğünü bildiriyor', async () => {
+    // CANLI DURUM: Ege Birlik kampanyaları 6 günün çoğunu kapsıyor, yeni
+    // senkronize edilen Fenbay kampanyaları yalnızca 1 gününü. Farkı
+    // göstermeden rapor göndermek "bu kampanya çalışmamış" izlenimi veriyor.
+    for (const date of ['2026-08-01', '2026-08-02']) {
+      await seedRow({ entityId: CAMP_A, date, actions: [{ action_type: 'lead', value: '5' }] });
+    }
+    await seedRow({ entityId: CAMP_B, date: '2026-08-02' });
+
+    const data = await svc.build(CTX, RANGE);
+    const byName = new Map(data.metaCampaigns.map((c) => [c.name, c]));
+
+    expect(data.rangeDays).toBe(2);
+    expect(byName.get('Kampanya A')!.dayCount).toBe(2);
+    expect(byName.get('Kampanya B')!.dayCount).toBe(1);
+  });
+});
+
 describe('ReportsService — yapı', () => {
   it('tek platformda TOPLAM bloğu YOK', async () => {
     // Aynı sayıları iki kez göstermek "bunlar neden farklı?" sorusunu doğuruyor.
