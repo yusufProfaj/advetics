@@ -54,6 +54,15 @@ export function BreakdownTable({
   rangeKey: string;
   currency: string | null;
 }) {
+  // ÖLÜ KOLONU GÖSTERMİYORUZ.
+  //
+  // Hiçbir satırda dönüşüm değeri yoksa ROAS kolonu baştan sona "—" oluyor:
+  // yatay yer kaplıyor, göz taramasını uzatıyor ve hiçbir şey söylemiyor.
+  // Kartta ROAS yerine erişim gösterme kararının tablodaki karşılığı bu.
+  //
+  // Tek satırda bile gelir varsa kolon kalıyor — o zaman karşılaştırma anlamlı.
+  const showRoas = rows.some((r) => r.roas !== null);
+
   return (
     <section className="rounded-xl border border-line bg-surface">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
@@ -83,7 +92,7 @@ export function BreakdownTable({
       ) : (
         // Yatay kaydırma KENDİ kabında: sayfanın gövdesi yatay kaymamalı.
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className={`w-full text-sm ${showRoas ? 'min-w-[820px]' : 'min-w-[740px]'}`}>
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-muted">
                 <th className="px-4 py-2 font-semibold">Ad</th>
@@ -92,8 +101,12 @@ export function BreakdownTable({
                 <th className="px-3 py-2 text-right font-semibold">Tık</th>
                 <th className="px-3 py-2 text-right font-semibold">CTR</th>
                 <th className="px-3 py-2 text-right font-semibold">Dönüşüm</th>
-                <th className="px-3 py-2 text-right font-semibold">CPA</th>
-                <th className="px-4 py-2 text-right font-semibold">ROAS</th>
+                <th
+                  className={`px-3 py-2 text-right font-semibold ${showRoas ? '' : 'pr-4'}`}
+                >
+                  CPA
+                </th>
+                {showRoas && <th className="px-4 py-2 text-right font-semibold">ROAS</th>}
               </tr>
             </thead>
             <tbody>
@@ -129,15 +142,21 @@ export function BreakdownTable({
                   <td className="px-3 py-2.5 text-right tabular-nums text-ink">
                     {formatDecimal(r.conversions, 0)}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-ink-muted">
+                  <td
+                    className={`px-3 py-2.5 text-right tabular-nums text-ink-muted ${
+                      showRoas ? '' : 'pr-4'
+                    }`}
+                  >
                     {formatMoney(
                       r.cpa === null ? null : String(Math.round(r.cpa * 1_000_000)),
                       currency ?? r.currency,
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
-                    {formatRoas(r.roas)}
-                  </td>
+                  {showRoas && (
+                    <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
+                      {formatRoas(r.roas)}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
