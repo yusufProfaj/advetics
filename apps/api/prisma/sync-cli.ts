@@ -410,14 +410,18 @@ async function inspect(): Promise<void> {
   const creatives = await prisma.creative.findMany({
     where: { adAccountId: id },
     select: {
+      externalId: true,
       creativeType: true,
       headline: true,
       primaryText: true,
       ctaType: true,
       destinationUrl: true,
+      displayUrl: true,
       assetUrls: true,
+      raw: true,
+      ads: { select: { adGroup: { select: { campaign: { select: { name: true } } } } }, take: 1 },
     },
-    take: 5,
+    take: 6,
   });
 
   // Creative tipi dağılımı ve URL kapsaması: "hedef URL yok" ne zaman DOĞRU
@@ -436,8 +440,12 @@ async function inspect(): Promise<void> {
     const withCta = await prisma.creative.count({
       where: { adAccountId: id, creativeType: t.creativeType, ctaType: { not: null } },
     });
+    const withDisplay = await prisma.creative.count({
+      where: { adAccountId: id, creativeType: t.creativeType, displayUrl: { not: null } },
+    });
     console.log(
-      `    ${t.creativeType ?? '(tip yok)'}: ${t._count} · hedef URL ${withUrl}/${t._count} · CTA ${withCta}/${t._count}`,
+      `    ${t.creativeType ?? '(tip yok)'}: ${t._count} · hedef URL ${withUrl}/${t._count}` +
+        ` · görünen URL ${withDisplay}/${t._count} · CTA ${withCta}/${t._count}`,
     );
   }
 
@@ -454,14 +462,48 @@ async function inspect(): Promise<void> {
     );
   }
   for (const c of creatives) {
-    console.log(`  · [${c.creativeType ?? 'tip yok'}] ${c.headline ?? '\x1b[90m(başlık yok)\x1b[0m'}`);
+    const campaign = c.ads[0]?.adGroup.campaign.name ?? '?';
+    console.log(`  · [${c.creativeType ?? 'tip yok'}] ${c.headline ?? '\x1b[90m(başlık yok)\x1b[0m'}   \x1b[90m← ${campaign}\x1b[0m`);
     console.log(
-      `      metin: ${c.primaryText ? `${c.primaryText.slice(0, 70)}${c.primaryText.length > 70 ? '…' : ''}` : '\x1b[90myok\x1b[0m'}`,
+      `      metin: ${c.primaryText ? `${c.primaryText.replace(/\s+/g, ' ').slice(0, 70)}${c.primaryText.length > 70 ? '…' : ''}` : '\x1b[90myok\x1b[0m'}`,
     );
     console.log(
       `      CTA: ${c.ctaType ?? '—'}  ·  hedef: ${c.destinationUrl?.slice(0, 60) ?? '—'}` +
+        `  ·  görünen: ${c.displayUrl?.slice(0, 40) ?? '—'}` +
         `  ·  görsel: ${Array.isArray(c.assetUrls) ? c.assetUrls.length : 0}`,
     );
+
+    // HAM ALANLAR — hedef URL'in gerçekten yok mu, yoksa okumadığımız bir
+    // yerde mi durduğunu yalnızca bu gösterir. Bütçe sorusunu çözen yöntem.
+    const raw = (c.raw ?? {}) as Record<string, unknown>;
+    const linkFields: Record<string, unknown> = {};
+    for (const k of [
+      'object_type',
+      'link_url',
+      'call_to_action_type',
+      'object_story_id',
+      'effective_object_story_id',
+      'link_destination_display_url',
+      'url_tags',
+    ]) {
+      if (raw[k] !== undefined && raw[k] !== null && raw[k] !== '') linkFields[k] = raw[k];
+    }
+    // Hangi yapılar GELDİ, hangileri gelmedi — Meta üç ayrı şekilde taşıyor.
+    const shapes = [
+      raw.object_story_spec ? 'object_story_spec✓' : 'object_story_spec✗',
+      raw.asset_feed_spec ? 'asset_feed_spec✓' : 'asset_feed_spec✗',
+    ].join(' ');
+    console.log(`      \x1b[90mham: ${JSON.stringify(linkFields)}\x1b[0m`);
+    console.log(`      \x1b[90m     ${shapes}\x1b[0m`);
+    // object_story_spec varsa içindeki link_data'ya bak: URL orada olmalı.
+    const story = raw.object_story_spec as Record<string, unknown> | undefined;
+    if (story) {
+      const linkData = story.link_data as Record<string, unknown> | undefined;
+      console.log(
+        `      \x1b[90m     object_story_spec anahtarları: ${Object.keys(story).join(', ')}` +
+          `${linkData ? ` · link_data: ${Object.keys(linkData).join(', ')}` : ''}\x1b[0m`,
+      );
+    }
   }
 
   // Reklam inceleme durumu — Modül 4 bunu gösterecek.
