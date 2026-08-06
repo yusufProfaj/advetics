@@ -44,21 +44,33 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
       }`}
     >
       <div className="flex flex-col gap-4 p-4 sm:flex-row">
-        {/* Görsel */}
-        <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:h-28 sm:w-28">
+        {/* GÖRSEL — `object-contain`, `object-cover` DEĞİL.
+            Meta creative'leri çoğunlukla dikey (4:5 ya da 9:16) ve kare bir
+            kutuya `cover` ile sığdırmak üstteki başlığı ve alttaki fiyatı
+            kırpıyor — creative inceleme aracında reklamın okunamaması, aracın
+            hiç olmaması kadar kötü. `contain` kenarlarda boşluk bırakıyor ama
+            reklamın TAMAMI görünüyor. */}
+        <div className="relative aspect-[4/5] w-full shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:w-36">
           {image ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={image}
-              alt=""
+              alt={ad.creative?.headline ?? ad.name}
               referrerPolicy="no-referrer"
               loading="lazy"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain"
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-[11px] text-ink-muted">
+            <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-ink-muted">
               görsel yok
             </div>
+          )}
+          {/* Birden fazla görsel varsa (karusel / dinamik creative) sayısı
+              belirtiliyor — tek kare tüm varyasyonları temsil etmiyor. */}
+          {(ad.creative?.assetUrls.length ?? 0) > 1 && (
+            <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+              +{ad.creative!.assetUrls.length - 1}
+            </span>
           )}
         </div>
 
@@ -92,9 +104,10 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
           </p>
 
           {ad.creative?.primaryText && (
-            // `line-clamp-2`: creative metni bazen 500 karakter ve kartı
-            // uzatmak listeyi taramayı imkânsız kılıyor.
-            <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-ink-muted">
+            // Üç satırda kırpılıyor: creative metni bazen 500 karakter ve
+            // kartı uzatmak listeyi taramayı imkânsız kılıyor. Görsel 4:5
+            // olduğu için kart zaten yüksek — üç satır boşluğu dolduruyor.
+            <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-ink-muted">
               {ad.creative.primaryText}
             </p>
           )}

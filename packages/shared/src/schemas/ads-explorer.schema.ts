@@ -154,6 +154,14 @@ export interface AdsExploreResult {
   currency: string | null;
   /** Süzgeç panelini doldurmak için. */
   facets: {
+    /**
+     * Reklam hesapları.
+     *
+     * Kampanya süzgecinden ÖNCE gelmesi gerekiyor: bir ajans görünümünde
+     * onlarca kampanya var ve hangi müşteriye ait olduğu ancak hesaptan
+     * anlaşılıyor. Hesap seçilmeden kampanya listesi anlamsız uzunlukta.
+     */
+    adAccounts: Array<{ id: string; name: string; platform: string; adCount: number }>;
     campaigns: Array<{ id: string; name: string; adCount: number }>;
     statuses: Array<{ status: AdStatus; count: number }>;
     issueCount: number;

@@ -427,6 +427,31 @@ describe('AdsService.explore', () => {
       expect(res.facets.issueCount).toBe(1);
     });
 
+    it('reklam hesabı facet sayımı verilir', async () => {
+      await seedAd({ id: 'a1111111-1111-1111-1111-111111111111', externalId: 'a1', name: 'A' });
+      await seedAd({ id: 'a2222222-2222-2222-2222-222222222222', externalId: 'a2', name: 'B' });
+
+      const res = await svc.explore(CTX, QUERY_BASE);
+      expect(res.facets.adAccounts).toEqual([
+        { id: IDS.adAccount, name: 'Hesap', platform: 'meta', adCount: 2 },
+      ]);
+    });
+
+    it('hesap seçiliyse kampanya listesi O HESABA daralıyor', async () => {
+      // Ajans görünümünde onlarca kampanya var; hepsini listelemek süzgeç
+      // panelini kullanılamaz hâle getiriyor.
+      await seedAd({ id: 'a1111111-1111-1111-1111-111111111111', externalId: 'a1', name: 'A' });
+
+      const scoped = await svc.explore(CTX, { ...QUERY_BASE, adAccountId: IDS.adAccount });
+      expect(scoped.facets.campaigns).toHaveLength(1);
+
+      const other = await svc.explore(CTX, {
+        ...QUERY_BASE,
+        adAccountId: '00000000-0000-0000-0000-000000000000',
+      });
+      expect(other.facets.campaigns).toHaveLength(0);
+    });
+
     it('facet sayımları TARİH ARALIĞINDAN bağımsız', async () => {
       // Süzgeç panelinde bir kampanyanın "dün harcama yoktu" diye kaybolması
       // kullanıcıyı şaşırtıyor.

@@ -51,6 +51,7 @@ export default async function AdsExplorerPage({
   const sort = pick(first(params.sirala), AD_SORT_FIELDS, 'spend');
   const dir = first(params.yon) === 'asc' ? 'asc' : 'desc';
   const status = pick(first(params.durum), AD_STATUSES, undefined);
+  const adAccountId = first(params.hesap);
   const campaignId = first(params.kampanya);
   const q = first(params.ara)?.trim() || undefined;
   const onlyIssues = first(params.sorunlu) === '1';
@@ -65,6 +66,7 @@ export default async function AdsExplorerPage({
     pageSize: '25',
   });
   if (status) qs.set('status', status);
+  if (adAccountId) qs.set('adAccountId', adAccountId);
   if (campaignId) qs.set('campaignId', campaignId);
   if (q) qs.set('q', q);
   if (onlyIssues) qs.set('onlyIssues', 'true');
@@ -79,6 +81,7 @@ export default async function AdsExplorerPage({
       sirala: sort,
       yon: dir,
       durum: status,
+      hesap: adAccountId,
       kampanya: campaignId,
       ara: q,
       sorunlu: onlyIssues ? '1' : undefined,
@@ -120,6 +123,7 @@ export default async function AdsExplorerPage({
         <input type="hidden" name="sirala" value={sort} />
         <input type="hidden" name="yon" value={dir} />
         {status && <input type="hidden" name="durum" value={status} />}
+        {adAccountId && <input type="hidden" name="hesap" value={adAccountId} />}
         {campaignId && <input type="hidden" name="kampanya" value={campaignId} />}
         {onlyIssues && <input type="hidden" name="sorunlu" value="1" />}
         <input
@@ -149,6 +153,36 @@ export default async function AdsExplorerPage({
         <Notice>Reklamlar alınamadı. API çalışıyor mu?</Notice>
       ) : (
         <>
+          {/* REKLAM HESABI SÜZGECİ — kampanyalardan önce ve AYRI satırda.
+              Ajans görünümünde onlarca kampanya var ve hangi müşteriye ait
+              olduğu ancak hesaptan anlaşılıyor. Hesap seçilince kampanya
+              listesi de o hesaba daralıyor. */}
+          {result.facets.adAccounts.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-ink-muted">Hesap:</span>
+              <FilterChip
+                href={linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined })}
+                active={!adAccountId}
+              >
+                Tümü
+              </FilterChip>
+              {result.facets.adAccounts.map((acc) => (
+                <FilterChip
+                  key={acc.id}
+                  href={linkWith({
+                    hesap: adAccountId === acc.id ? undefined : acc.id,
+                    // Hesap değişince kampanya seçimi geçersiz kalıyor.
+                    kampanya: undefined,
+                    sayfa: undefined,
+                  })}
+                  active={adAccountId === acc.id}
+                >
+                  {acc.name} ({acc.adCount})
+                </FilterChip>
+              ))}
+            </div>
+          )}
+
           {/* Süzgeçler */}
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             <FilterChip href={linkWith({ durum: undefined, sorunlu: undefined, sayfa: undefined })} active={!status && !onlyIssues}>
@@ -180,7 +214,7 @@ export default async function AdsExplorerPage({
             {result.facets.campaigns.length > 1 && (
               <>
                 <span className="mx-1 h-4 w-px bg-line" />
-                {result.facets.campaigns.slice(0, 6).map((c) => (
+                {result.facets.campaigns.slice(0, adAccountId ? 20 : 6).map((c) => (
                   <FilterChip
                     key={c.id}
                     href={linkWith({

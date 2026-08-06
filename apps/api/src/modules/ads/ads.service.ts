@@ -363,10 +363,36 @@ export class AdsService {
       }
     `;
 
+    const adAccounts = await tx.$queryRaw<
+      Array<{ id: string; name: string; platform: string; ad_count: string }>
+    >(
+      Prisma.sql`
+        SELECT acc.id, acc.name, acc.platform::text AS platform, COUNT(a.id) AS ad_count
+        FROM ads a
+        JOIN ad_accounts acc ON acc.id = a.ad_account_id
+        WHERE ${
+          query.platform ? Prisma.sql`a.platform = ${query.platform}::"Platform"` : Prisma.sql`TRUE`
+        }
+        GROUP BY acc.id, acc.name, acc.platform
+        ORDER BY COUNT(a.id) DESC, acc.name
+        LIMIT 50
+      `,
+    );
+
+    // Kampanya listesi SEÇİLİ HESABA göre daralıyor.
+    //
+    // Ajans görünümünde onlarca kampanya var; hepsini listelemek süzgeç
+    // panelini kullanılamaz hâle getiriyor. Hesap seçiliyse yalnızca o hesabın
+    // kampanyaları gösteriliyor.
+    const campaignScope = query.adAccountId
+      ? Prisma.sql`AND a.ad_account_id = ${query.adAccountId}::uuid`
+      : Prisma.empty;
+
     const campaigns = await tx.$queryRaw<Array<{ id: string; name: string; ad_count: string }>>(
       Prisma.sql`
         SELECT c.id, c.name, COUNT(a.id) AS ad_count
         ${base}
+        ${campaignScope}
         GROUP BY c.id, c.name
         ORDER BY COUNT(a.id) DESC, c.name
         LIMIT 50
@@ -392,6 +418,12 @@ export class AdsService {
     );
 
     return {
+      adAccounts: adAccounts.map((a) => ({
+        id: a.id,
+        name: a.name,
+        platform: a.platform,
+        adCount: Number(a.ad_count),
+      })),
       campaigns: campaigns.map((c) => ({ id: c.id, name: c.name, adCount: Number(c.ad_count) })),
       statuses: statuses.map((s) => ({ status: s.status as AdStatus, count: Number(s.count) })),
       issueCount: Number(issues?.count ?? 0),
