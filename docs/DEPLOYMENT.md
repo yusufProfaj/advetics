@@ -201,6 +201,42 @@ cd ~/htdocs/advetics.com && ./scripts/site-setup.sh --domain advetics.com
 
 Mevcut bir `.env` varsa **üzerine yazmaz** — tekrar çalıştırmak güvenlidir.
 
+### 5b. Redis anahtarları (Modül 3 — senkronizasyon kuyruğu)
+
+Modül 3'ün worker'ı Redis olmadan başlamıyor. Anahtarları elle yazmak yerine:
+
+```bash
+cd ~/htdocs/advetics.com && ./scripts/add-redis-env.sh
+```
+
+Script `REDIS_URL`, `REDIS_DB`, `REDIS_KEY_PREFIX` ve `QUOTA_CALLS_PER_MINUTE`
+değerlerini `.env`'e ekler. Tekrar çalıştırmak güvenlidir: mevcut anahtarları
+çoğaltmıyor, yanlışsa düzeltiyor.
+
+**Script'in asıl işi anahtar yazmak değil, yazmadan önce kontrol etmek.**
+Redis bu sunucuda 11+ siteyle paylaşılıyor. Hedef veritabanı (varsayılan 3)
+boş değilse ve içindeki anahtarlar `advetics` önekli DEĞİLSE script duruyor —
+başka bir uygulamanın kullandığı bir db'ye BullMQ kurmak o uygulamanın
+verisini silebilir. O durumda başka bir numara ver:
+
+```bash
+REDIS_DB=4 ./scripts/add-redis-env.sh
+```
+
+Redis şifre istiyorsa şifreyi komut geçmişine yazmadan geç:
+
+```bash
+read -rs REDIS_PASSWORD && export REDIS_PASSWORD && ./scripts/add-redis-env.sh
+```
+
+Script Redis'i yalnızca OKUR. Yapılandırmasına dokunmaz, servisi yeniden
+başlatmaz, başka db'lere yazmaz.
+
+`.env` her koşuda `.env.bak-<zaman>` olarak yedekleniyor (son 5 tutulur, izin 600).
+
+**Sıra önemli:** bu script'i `deploy.sh`'den ÖNCE çalıştır. Worker süreci
+dağıtımla birlikte geliyor ve ilk açılışında Redis'i bulamazsa ölür.
+
 ---
 
 ## 6. SSL

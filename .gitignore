@@ -7,6 +7,8 @@ coverage/
 *.tsbuildinfo
 
 .env
+# Kurulum script'lerinin aldığı .env yedekleri — sır içerir.
+.env.bak-*
 .env.local
 .env.*.local
 !.env.example
