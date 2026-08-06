@@ -157,7 +157,14 @@ export type ReportTemplateInput = z.infer<typeof reportTemplateInputSchema>;
 
 export const shareInputSchema = z
   .object({
-    templateId: z.string().uuid(),
+    /**
+     * Şablon — VERİLMEZSE sunucu bulur ya da oluşturur.
+     *
+     * Zorunlu tutmak, ilk raporu göndermek isteyen kullanıcıyı önce şablon
+     * oluşturmaya zorlardı. Varsayılan şablon tüm bölümleri içeriyor ve
+     * sonradan düzenlenebiliyor.
+     */
+    templateId: z.string().uuid().optional(),
     clientId: z.string().uuid(),
     from: isoDate,
     to: isoDate,

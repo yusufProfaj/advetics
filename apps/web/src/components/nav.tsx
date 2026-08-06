@@ -21,8 +21,9 @@ export interface NavEntry {
   module: number;
 }
 
-// Modül 4 (Ads Explorer) hazır. Kurallar (5) ve sonrası hâlâ pasif.
-const READY_MODULES = new Set([1, 2, 3, 4]);
+// Modül 6 (Raporlar) hazır. Kurallar (5), Auto-Boost (7) ve Toplu Oluşturucu
+// (8) hâlâ pasif.
+const READY_MODULES = new Set([1, 2, 3, 4, 6]);
 
 export function NavSection({ title, items }: { title?: string; items: NavEntry[] }) {
   const pathname = usePathname();

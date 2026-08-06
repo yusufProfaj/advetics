@@ -1,6 +1,6 @@
 import { ForbiddenException, GoneException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import type { ReportData, ShareInput, TenantContext } from '@advetics/shared';
+import { REPORT_SECTIONS, type ReportData, type ShareInput, type TenantContext } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { ReportsService } from './reports.service';
@@ -50,9 +50,11 @@ export class ShareService {
         : new Date(Date.now() + input.expiresInDays * 86_400_000);
 
     const share = await this.prisma.withTenant(ctx, async (tx) => {
+      const templateId = input.templateId ?? (await this.resolveTemplate(tx, ctx, input.clientId));
+
       const created = await tx.reportShare.create({
         data: {
-          templateId: input.templateId,
+          templateId,
           orgId: ctx.orgId,
           clientId: input.clientId,
           tokenHash,
@@ -67,6 +69,44 @@ export class ShareService {
     });
 
     return { token, id: share.id, expiresAt: share.expiresAt };
+  }
+
+  /**
+   * Şablonu bulur, yoksa VARSAYILAN OLUŞTURUR.
+   *
+   * `report_shares.template_id` zorunlu bir yabancı anahtar. Kullanıcıyı önce
+   * şablon oluşturmaya zorlamak, ilk raporu göndermenin önüne gereksiz bir adım
+   * koymak olurdu — varsayılan şablon tüm bölümleri içeriyor ve sonradan
+   * düzenlenebiliyor.
+   *
+   * Arama sırası: müşteriye özel şablon, sonra organizasyon varsayılanı
+   * (`clientId = null`). İkisi de yoksa müşteriye özel bir tane oluşturuluyor.
+   */
+  private async resolveTemplate(
+    tx: TenantTx,
+    ctx: TenantContext,
+    clientId: string,
+  ): Promise<string> {
+    const existing = await tx.reportTemplate.findFirst({
+      where: { OR: [{ clientId }, { clientId: null }] },
+      // Müşteriye özel olan önce: `nulls: 'last'` org varsayılanını sona atıyor.
+      orderBy: { clientId: { sort: 'asc', nulls: 'last' } },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+
+    const created = await tx.reportTemplate.create({
+      data: {
+        orgId: ctx.orgId,
+        clientId,
+        name: 'Varsayılan rapor',
+        sections: [...REPORT_SECTIONS],
+        status: 'published',
+        createdBy: ctx.userId,
+      },
+      select: { id: true },
+    });
+    return created.id;
   }
 
   async revoke(ctx: TenantContext, shareId: string): Promise<void> {
@@ -169,3 +209,15 @@ export class ShareService {
  * yalnızca bağlamı dolduruyor. Erişim kararını token veriyor.
  */
 const SHARE_READER_ID = '00000000-0000-0000-0000-000000000001';
+
+/** `withTenant` içindeki istemcinin bu servisin kullandığı yüzeyi. */
+interface TenantTx {
+  reportShare: {
+    create(args: unknown): Promise<{ id: string; expiresAt: Date | null }>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
+  reportTemplate: {
+    findFirst(args: unknown): Promise<{ id: string } | null>;
+    create(args: unknown): Promise<{ id: string }>;
+  };
+}

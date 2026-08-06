@@ -1,0 +1,698 @@
+import type {
+  ConversionCounts,
+  MetricTotals,
+  ReportCampaignRow,
+  ReportData,
+  ReportPlatformBlock,
+} from '@advetics/shared';
+import { CONVERSION_BUCKETS, METRIC_LABELS } from '@advetics/shared';
+import { formatDayLong, formatMoney, formatNumber, formatPercent } from '@/lib/format';
+import { ConversionChart } from './conversion-chart';
+
+/**
+ * Rapor belgesi — YAZDIRMAYA HAZIR.
+ *
+ * Ekranda okunabilir, `Ctrl+P` ile PDF'e basılabilir. Sunucu tarafı PDF
+ * üretimi (Puppeteer/Chrome) kasıtlı olarak YOK: o sunucuda 11 canlı site var
+ * ve headless Chrome 200-300 MB RAM demek. Yazdırma CSS'i sayfa sonlarını,
+ * kenar boşluklarını ve renk basımını ayarlıyor.
+ *
+ * Marka renkleri `branding_profiles`tan geliyor ve satır içi CSS değişkeni
+ * olarak basılıyor — Tailwind sınıfları derleme anında sabit, müşteri bazlı
+ * renk ancak çalışma anında enjekte edilebilir.
+ *
+ * Bölüm sırası ŞABLONDAN geliyor. Bileşen kendi sırasını dayatmıyor: ajans
+ * bir müşteride anahtar kelimeleri öne, diğerinde hiç göstermek istemeyebilir.
+ */
+export function ReportDocument({ data }: { data: ReportData }) {
+  const { branding } = data;
+
+  return (
+    <>
+      {/* Marka renkleri + yazdırma kuralları. Satır içi çünkü değerler
+          çalışma anında müşteriden geliyor. */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            .rpt {
+              --rpt-brand: ${escapeCss(branding.primaryColor)};
+              --rpt-accent: ${escapeCss(branding.accentColor)};
+            }
+            @media print {
+              /* Her bölüm yeni sayfada — referans belgede de böyle. */
+              .rpt-page { break-before: page; }
+              .rpt-page:first-of-type { break-before: auto; }
+              /* Tablo satırı iki sayfaya BÖLÜNMESİN: yarım satır okunamaz. */
+              .rpt tr, .rpt .rpt-card { break-inside: avoid; }
+              /* Tarayıcı varsayılanı arka planları basmıyor; marka rengi ve
+                 vurgular kaybolurdu. */
+              .rpt { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .rpt-noprint { display: none !important; }
+            }
+            @page { margin: 14mm; }
+          `,
+        }}
+      />
+
+      <div className="rpt mx-auto max-w-[880px] bg-white px-8 py-10 text-slate-900 print:px-0 print:py-0">
+        {data.sections.map((section) => {
+          switch (section) {
+            case 'cover':
+              return <Cover key={section} data={data} />;
+            case 'summary':
+              return <Summary key={section} data={data} />;
+            case 'meta_campaigns':
+              return (
+                <CampaignPage
+                  key={section}
+                  title="Kampanyalar"
+                  platform="Meta Ads"
+                  rows={data.metaCampaigns}
+                  currency={data.currency}
+                  daily={data.daily}
+                  from={data.from}
+                  to={data.to}
+                  showBuckets
+                />
+              );
+            case 'google_campaigns':
+              return (
+                <CampaignPage
+                  key={section}
+                  title="Kampanyalar"
+                  platform="Google Ads"
+                  rows={data.googleCampaigns}
+                  currency={data.currency}
+                />
+              );
+            case 'google_keywords':
+              return <Keywords key={section} data={data} />;
+            case 'top_ads':
+              return <TopAds key={section} data={data} />;
+            case 'closing':
+              return <Closing key={section} data={data} />;
+            default:
+              return null;
+          }
+        })}
+      </div>
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Bölümler                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function Cover({ data }: { data: ReportData }) {
+  return (
+    <section className="rpt-page flex min-h-[70vh] flex-col justify-between print:min-h-[240mm]">
+      <div className="flex items-start justify-between gap-6">
+        <DateBadge from={data.from} to={data.to} />
+        {data.branding.logoUrl && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={data.branding.logoUrl}
+            alt=""
+            className="max-h-14 max-w-[180px] object-contain"
+          />
+        )}
+      </div>
+
+      <div className="py-16">
+        <h1 className="text-[52px] font-bold uppercase leading-[0.95] tracking-tight text-slate-900">
+          {data.title.split(' ').map((word, i) => (
+            <span key={i} className="block">
+              {word}
+            </span>
+          ))}
+        </h1>
+        <p
+          className="mt-6 text-2xl font-semibold"
+          style={{ color: 'var(--rpt-brand)' }}
+        >
+          {data.client.name}
+        </p>
+      </div>
+
+      <div className="h-1.5 w-24 rounded-full" style={{ background: 'var(--rpt-brand)' }} />
+    </section>
+  );
+}
+
+function Summary({ data }: { data: ReportData }) {
+  const blocks = [...data.platforms, ...(data.total ? [data.total] : [])];
+
+  return (
+    <section className="rpt-page pt-10">
+      <PageHead title="Reklam Özet Raporu" subtitle={platformNames(data)} data={data} />
+
+      {blocks.length === 0 ? (
+        <Empty>Bu dönemde harcama kaydı yok.</Empty>
+      ) : (
+        <div className="mt-6 grid gap-4">
+          {blocks.map((block) => (
+            <SummaryBlock key={block.label} block={block} currency={data.currency} />
+          ))}
+        </div>
+      )}
+
+      {data.currency === null && data.platforms.length > 1 && (
+        <Note>
+          Hesaplar farklı para birimlerinde olduğu için genel toplam
+          birleştirilmedi. Tutarlar platform bazında ayrı verilmiştir.
+        </Note>
+      )}
+
+      <Footnotes keys={['cpa']} />
+    </section>
+  );
+}
+
+function SummaryBlock({
+  block,
+  currency,
+}: {
+  block: ReportPlatformBlock;
+  currency: string | null;
+}) {
+  const isTotal = block.label === 'TOPLAM';
+  const money = currency ?? block.currency;
+
+  return (
+    <div
+      className={`rpt-card rounded-xl border p-5 ${
+        isTotal ? 'border-transparent text-white' : 'border-slate-200 bg-white'
+      }`}
+      style={isTotal ? { background: 'var(--rpt-brand)' } : undefined}
+    >
+      <p
+        className={`text-xs font-bold uppercase tracking-[0.12em] ${
+          isTotal ? 'text-white/85' : 'text-slate-500'
+        }`}
+      >
+        {block.label}
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-5">
+        <Stat label="Maliyet" value={formatMoney(block.spendMicros, money)} dark={isTotal} big />
+        <Stat label="Gösterim" value={formatNumber(block.impressions)} dark={isTotal} />
+        <Stat label="Tıklama" value={formatNumber(block.clicks)} dark={isTotal} />
+        <Stat label="Dönüşüm" value={formatNumber(block.conversions)} dark={isTotal} />
+        <Stat
+          label={METRIC_LABELS.cpa.label}
+          value={formatMoney(microsOf(block.cpa), money)}
+          dark={isTotal}
+        />
+      </dl>
+      <BucketLine counts={block.conversionCounts} dark={isTotal} />
+    </div>
+  );
+}
+
+function CampaignPage({
+  title,
+  platform,
+  rows,
+  currency,
+  daily,
+  from,
+  to,
+  showBuckets = false,
+}: {
+  title: string;
+  platform: string;
+  rows: ReportCampaignRow[];
+  currency: string | null;
+  daily?: ReportData['daily'];
+  from?: string;
+  to?: string;
+  showBuckets?: boolean;
+}) {
+  if (rows.length === 0) {
+    return (
+      <section className="rpt-page pt-10">
+        <PageHead title={title} subtitle={platform} />
+        <Empty>Bu dönemde {platform} verisi yok.</Empty>
+      </section>
+    );
+  }
+
+  const totals = sumRows(rows);
+  // Karışık para biriminde `currency` null geliyor ve `formatMoney` sembol
+  // basmıyor — tek bir sembol göstermek yanlış olurdu.
+  const money = currency;
+  // Erişim en az bir satırda günlük ortalamaysa dipnot gerekiyor.
+  const anyAverage = rows.some((r) => r.reachIsDailyAverage);
+
+  return (
+    <section className="rpt-page pt-10">
+      <PageHead title={title} subtitle={platform} />
+
+      <div className="mt-6 overflow-x-auto">
+        <table className="w-full min-w-[620px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b-2 border-slate-300 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+              <th className="py-2 pr-3">Kampanya Adı</th>
+              <th className="px-2 py-2 text-right">Harcama</th>
+              <th className="px-2 py-2 text-right">Gösterim</th>
+              <th className="px-2 py-2 text-right">Erişim</th>
+              <th className="px-2 py-2 text-right">Tıklama</th>
+              {showBuckets ? (
+                <>
+                  <th className="px-2 py-2 text-right">Form</th>
+                  <th className="py-2 pl-2 text-right">Mesaj</th>
+                </>
+              ) : (
+                <>
+                  <th className="px-2 py-2 text-right">{METRIC_LABELS.ctr.label}</th>
+                  <th className="py-2 pl-2 text-right">Dönüşüm</th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-slate-100">
+                <td className="max-w-[220px] py-2.5 pr-3 font-medium">
+                  <span className="block truncate" title={r.name}>
+                    {r.name}
+                  </span>
+                </td>
+                <td className="px-2 py-2.5 text-right font-semibold tabular-nums">
+                  {formatMoney(r.spendMicros, money, { decimals: 2 })}
+                </td>
+                <td className="px-2 py-2.5 text-right tabular-nums">
+                  {formatNumber(r.impressions)}
+                </td>
+                <td className="px-2 py-2.5 text-right tabular-nums">
+                  {formatNumber(r.reach)}
+                  {r.reachIsDailyAverage && <span className="text-slate-400">*</span>}
+                </td>
+                <td className="px-2 py-2.5 text-right tabular-nums">{formatNumber(r.clicks)}</td>
+                {showBuckets ? (
+                  <>
+                    <td className="px-2 py-2.5 text-right tabular-nums">
+                      {formatNumber(r.conversionCounts.form)}
+                    </td>
+                    <td className="py-2.5 pl-2 text-right tabular-nums">
+                      {formatNumber(r.conversionCounts.message)}
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-2 py-2.5 text-right tabular-nums">
+                      {formatPercent(r.ctr)}
+                    </td>
+                    <td className="py-2.5 pl-2 text-right tabular-nums">
+                      {formatNumber(r.conversions)}
+                    </td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-slate-300 font-semibold">
+              <td className="py-2.5 pr-3 text-[11px] uppercase tracking-wide text-slate-500">
+                Genel toplam
+              </td>
+              <td className="px-2 py-2.5 text-right tabular-nums">
+                {formatMoney(totals.spendMicros, money, { decimals: 2 })}
+              </td>
+              <td className="px-2 py-2.5 text-right tabular-nums">
+                {formatNumber(totals.impressions)}
+              </td>
+              {/* Erişim TOPLANMIYOR: tekil kullanıcı sayısı toplanamaz. */}
+              <td className="px-2 py-2.5 text-right text-slate-400">—</td>
+              <td className="px-2 py-2.5 text-right tabular-nums">{formatNumber(totals.clicks)}</td>
+              {showBuckets ? (
+                <>
+                  <td className="px-2 py-2.5 text-right tabular-nums">
+                    {formatNumber(totals.counts.form)}
+                  </td>
+                  <td className="py-2.5 pl-2 text-right tabular-nums">
+                    {formatNumber(totals.counts.message)}
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td className="px-2 py-2.5 text-right tabular-nums">
+                    {formatPercent(totals.ctr)}
+                  </td>
+                  <td className="py-2.5 pl-2 text-right tabular-nums">
+                    {formatNumber(totals.conversions)}
+                  </td>
+                </>
+              )}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {daily && daily.length > 1 && from && to && (
+        <div className="mt-8">
+          <ConversionChart points={daily} from={from} to={to} />
+        </div>
+      )}
+
+      <Footnotes
+        keys={showBuckets ? ['ctr', 'cpc'] : ['ctr', 'cpc', 'cpa']}
+        extra={
+          anyAverage
+            ? '* Erişim tekil kişi sayısıdır ve günler arasında toplanamaz; bu sütun günlük ortalamayı gösterir.'
+            : undefined
+        }
+        buckets={showBuckets}
+      />
+    </section>
+  );
+}
+
+function Keywords({ data }: { data: ReportData }) {
+  return (
+    <section className="rpt-page pt-10">
+      <PageHead title="Anahtar Kelime Performansı" subtitle="Google Ads" />
+      {data.keywords === null ? (
+        // "Veri yok" DEĞİL "bu yetenek henüz yok". Boş tablo göstermek
+        // müşteriye "anahtar kelimen yok" demek olurdu.
+        <Note>
+          Anahtar kelime verisi henüz toplanmıyor. Google Ads API erişimi
+          onaylandığında bu bölüm otomatik olarak dolacak.
+        </Note>
+      ) : data.keywords.length === 0 ? (
+        <Empty>Bu dönemde anahtar kelime verisi yok.</Empty>
+      ) : (
+        <div className="mt-6 overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b-2 border-slate-300 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                <th className="py-2 pr-3">Anahtar Kelime</th>
+                <th className="px-2 py-2 text-right">Harcama</th>
+                <th className="px-2 py-2 text-right">Gösterim</th>
+                <th className="px-2 py-2 text-right">Tıklama</th>
+                <th className="px-2 py-2 text-right">{METRIC_LABELS.ctr.label}</th>
+                <th className="py-2 pl-2 text-right">{METRIC_LABELS.cpc.label}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.keywords.map((k) => (
+                <tr key={k.keyword} className="border-b border-slate-100">
+                  <td className="py-2.5 pr-3">{k.keyword}</td>
+                  <td className="px-2 py-2.5 text-right tabular-nums">
+                    {formatMoney(k.spendMicros, data.currency, { decimals: 2 })}
+                  </td>
+                  <td className="px-2 py-2.5 text-right tabular-nums">
+                    {formatNumber(k.impressions)}
+                  </td>
+                  <td className="px-2 py-2.5 text-right tabular-nums">{formatNumber(k.clicks)}</td>
+                  <td className="px-2 py-2.5 text-right tabular-nums">{formatPercent(k.ctr)}</td>
+                  <td className="py-2.5 pl-2 text-right tabular-nums">
+                    {formatMoney(microsOf(k.cpc), data.currency)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TopAds({ data }: { data: ReportData }) {
+  if (data.topAds.length === 0) return null;
+
+  return (
+    <section className="rpt-page pt-10">
+      <PageHead title="Öne Çıkan Reklamlar" subtitle="En yüksek harcamaya göre" />
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        {data.topAds.map((ad) => (
+          <div key={ad.id} className="rpt-card flex gap-4 rounded-xl border border-slate-200 p-4">
+            <div className="aspect-[4/5] w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+              {ad.imageUrl && (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={ad.imageUrl}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="h-full w-full object-contain"
+                />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[11px] uppercase tracking-wide text-slate-500">
+                {ad.campaignName}
+              </p>
+              <p className="mt-0.5 line-clamp-2 text-sm font-semibold">
+                {ad.headline ?? ad.name}
+              </p>
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                <Stat label="Harcama" value={formatMoney(ad.spendMicros, data.currency)} />
+                <Stat label="Dönüşüm" value={formatNumber(ad.conversions)} />
+                <Stat label={METRIC_LABELS.ctr.label} value={formatPercent(ad.ctr)} />
+                <Stat
+                  label={METRIC_LABELS.cpa.label}
+                  value={formatMoney(microsOf(ad.cpa), data.currency)}
+                />
+              </dl>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Closing({ data }: { data: ReportData }) {
+  return (
+    <section className="rpt-page flex min-h-[50vh] flex-col items-center justify-center pt-10 text-center print:min-h-[200mm]">
+      <h2 className="text-4xl font-bold uppercase tracking-tight">Teşekkür Ederiz</h2>
+      {data.closingText && (
+        <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-600">{data.closingText}</p>
+      )}
+      <div
+        className="mt-8 h-1.5 w-16 rounded-full"
+        style={{ background: 'var(--rpt-brand)' }}
+      />
+      <div className="mt-10 text-xs text-slate-400">
+        {data.branding.footerText && <p>{data.branding.footerText}</p>}
+        {!data.branding.hidePoweredBy && <p className="mt-1">Advetics ile hazırlanmıştır</p>}
+      </div>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Parçalar                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function PageHead({
+  title,
+  subtitle,
+  data,
+}: {
+  title: string;
+  subtitle: string;
+  data?: ReportData;
+}) {
+  return (
+    <header className="flex items-end justify-between gap-4 border-b border-slate-200 pb-3">
+      <div>
+        <h2 className="text-2xl font-bold uppercase tracking-tight">{title}</h2>
+        <p
+          className="mt-0.5 text-sm font-semibold uppercase tracking-wide"
+          style={{ color: 'var(--rpt-brand)' }}
+        >
+          {subtitle}
+        </p>
+      </div>
+      {data && <DateBadge from={data.from} to={data.to} />}
+    </header>
+  );
+}
+
+function DateBadge({ from, to }: { from: string; to: string }) {
+  return (
+    <span className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-500">
+      {formatDayLong(from)} — {formatDayLong(to)}
+    </span>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  dark = false,
+  big = false,
+}: {
+  label: string;
+  value: string;
+  dark?: boolean;
+  big?: boolean;
+}) {
+  return (
+    <div>
+      <dt
+        className={`text-[10px] font-semibold uppercase tracking-wide ${
+          dark ? 'text-white/75' : 'text-slate-500'
+        }`}
+      >
+        {label}
+      </dt>
+      <dd
+        className={`tabular-nums ${big ? 'text-xl font-bold' : 'text-sm font-semibold'} ${
+          dark ? 'text-white' : 'text-slate-900'
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * Dönüşüm kovaları satırı.
+ *
+ * Hepsi sıfırsa hiç gösterilmiyor: "Form 0 · Mesaj 0 · Satış 0" satırı yer
+ * kaplayıp bilgi taşımıyor ve müşteriye başarısızlık gibi okunuyor. Tek
+ * "Dönüşüm" sayısı zaten yukarıda.
+ */
+function BucketLine({ counts, dark = false }: { counts: ConversionCounts; dark?: boolean }) {
+  const shown = (Object.keys(CONVERSION_BUCKETS) as Array<keyof typeof CONVERSION_BUCKETS>).filter(
+    (k) => counts[k] > 0,
+  );
+  if (shown.length === 0) return null;
+
+  return (
+    <p className={`mt-3 text-xs ${dark ? 'text-white/85' : 'text-slate-600'}`}>
+      {shown.map((k, i) => (
+        <span key={k}>
+          {i > 0 && <span className={dark ? 'text-white/40' : 'text-slate-300'}> · </span>}
+          <span className="font-semibold">{CONVERSION_BUCKETS[k].label}:</span>{' '}
+          <span className="tabular-nums">{formatNumber(counts[k])}</span>
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/**
+ * Metrik tanımları.
+ *
+ * Referans belgede her sayfanın altında var ve bu iyi bir alışkanlık: müşteri
+ * EBM'nin ne olduğunu hatırlamak zorunda kalmıyor, kısaltmanın yanında tanımı
+ * duruyor.
+ */
+function Footnotes({
+  keys,
+  extra,
+  buckets = false,
+}: {
+  keys: Array<keyof typeof METRIC_LABELS>;
+  extra?: string;
+  buckets?: boolean;
+}) {
+  const lines = keys
+    .map((k) => {
+      const m = METRIC_LABELS[k];
+      return 'hint' in m && m.hint ? `${m.label} (${m.tr}): ${m.hint}` : null;
+    })
+    .filter((v): v is string => v !== null);
+
+  if (buckets) {
+    lines.push(`Form: ${CONVERSION_BUCKETS.form.hint}`);
+    lines.push(`Mesaj: ${CONVERSION_BUCKETS.message.hint}`);
+  }
+  if (extra) lines.push(extra);
+  if (lines.length === 0) return null;
+
+  return (
+    <div className="mt-6 space-y-1 border-t border-slate-100 pt-3 text-[11px] leading-relaxed text-slate-500">
+      {lines.map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+    </div>
+  );
+}
+
+function Note({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="mt-6 rounded-lg border-l-[3px] bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      style={{ borderLeftColor: 'var(--rpt-accent)' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-8 rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-slate-500">
+      {children}
+    </p>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Yardımcılar                                                                 */
+/* -------------------------------------------------------------------------- */
+
+function platformNames(data: ReportData): string {
+  const names = data.platforms.map((p) => p.label.toUpperCase());
+  return names.length > 0 ? names.join(' + ') : 'PLATFORM YOK';
+}
+
+/** Kampanya satırlarının toplamı — erişim HARİÇ (toplanamaz). */
+function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: ConversionCounts } {
+  let impressions = 0;
+  let clicks = 0;
+  let spend = 0n;
+  let conversions = 0;
+  let value = 0n;
+  const counts: ConversionCounts = { form: 0, message: 0, purchase: 0 };
+
+  for (const r of rows) {
+    impressions += r.impressions;
+    clicks += r.clicks;
+    spend += BigInt(r.spendMicros);
+    conversions += r.conversions;
+    value += BigInt(r.conversionValueMicros);
+    counts.form += r.conversionCounts.form;
+    counts.message += r.conversionCounts.message;
+    counts.purchase += r.conversionCounts.purchase;
+  }
+
+  const spendUnits = Number(spend) / 1_000_000;
+  const valueUnits = Number(value) / 1_000_000;
+
+  return {
+    impressions,
+    clicks,
+    spendMicros: spend.toString(),
+    conversions,
+    conversionValueMicros: value.toString(),
+    ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
+    cpc: clicks > 0 ? spendUnits / clicks : null,
+    cpm: impressions > 0 ? (spendUnits / impressions) * 1000 : null,
+    cpa: conversions > 0 ? spendUnits / conversions : null,
+    roas: spendUnits > 0 && valueUnits > 0 ? valueUnits / spendUnits : null,
+    counts,
+  };
+}
+
+function microsOf(value: number | null): string | null {
+  if (value === null) return null;
+  return String(Math.round(value * 1_000_000));
+}
+
+/**
+ * Marka renginin CSS'e enjeksiyonunu güvenli kılar.
+ *
+ * Değer veritabanından geliyor ve `<style>` içine basılıyor; kaçırılmamış bir
+ * değer CSS enjeksiyonuna açık olurdu. Yalnızca hex renk biçimine izin
+ * veriyoruz, aksi hâlde varsayılana düşüyoruz.
+ */
+function escapeCss(value: string): string {
+  return /^#[0-9a-fA-F]{3,8}$/.test(value) ? value : '#E11D2E';
+}
