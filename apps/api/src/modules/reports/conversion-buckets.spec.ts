@@ -24,15 +24,64 @@ describe('bucketsFromRaw', () => {
     expect(counts.purchase).toBe(0);
   });
 
-  it('aynı kovaya düşen farklı türleri toplar', () => {
-    // Meta lead'i iki ayrı türde bildirebiliyor (anlık form vs pixel).
+  it('REGRESYON: örtüşen türleri TOPLAMAZ, önceliklisini seçer', () => {
+    // CANLI VERİDEN: Ege Birlik Yapı, 1-6 Ağustos 2026.
+    //   lead                            40
+    //   onsite_conversion.lead_grouped  40   ← AYNI 40 lead
+    // İlk hâlinde toplanıyordu ve rapor 80 gösteriyordu.
     const counts = bucketsFromRaw({
       actions: [
-        { action_type: 'lead', value: '10' },
-        { action_type: 'offsite_conversion.fb_pixel_lead', value: '5' },
+        { action_type: 'lead', value: '40' },
+        { action_type: 'onsite_conversion.lead_grouped', value: '40' },
       ],
     });
-    expect(counts.form).toBe(15);
+    expect(counts.form).toBe(40);
+  });
+
+  it('REGRESYON: mesaj ailesinde üçlü sayım yok', () => {
+    // CANLI VERİDEN:
+    //   messaging_conversation_started_7d      20
+    //   total_messaging_connection             20   ← AYNI 20
+    //   messaging_first_reply                  19   ← BAŞKA olay, dönüşüm değil
+    // İlk hâlinde üçü toplanıp "Mesaj: 59" gösteriliyordu.
+    const counts = bucketsFromRaw({
+      actions: [
+        { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: '20' },
+        { action_type: 'onsite_conversion.total_messaging_connection', value: '20' },
+        { action_type: 'onsite_conversion.messaging_first_reply', value: '19' },
+      ],
+    });
+    expect(counts.message).toBe(20);
+  });
+
+  it('öncelikli tür yoksa yedeğe düşer', () => {
+    // `lead` gelmeyen bir hesapta onsite değeri kullanılıyor.
+    const counts = bucketsFromRaw({
+      actions: [{ action_type: 'onsite_conversion.lead_grouped', value: '7' }],
+    });
+    expect(counts.form).toBe(7);
+  });
+
+  it('öncelikli tür SIFIRSA yedeğe düşer', () => {
+    // Sıfır "dolu değil": dolu bir yedeği engellememeli.
+    const counts = bucketsFromRaw({
+      actions: [
+        { action_type: 'lead', value: '0' },
+        { action_type: 'offsite_conversion.fb_pixel_lead', value: '9' },
+      ],
+    });
+    expect(counts.form).toBe(9);
+  });
+
+  it('aynı tür birden fazla girdi olarak gelirse toplanır', () => {
+    // Meta atıf penceresine göre bölebiliyor; bu ikisi AYNI türün parçaları.
+    const counts = bucketsFromRaw({
+      actions: [
+        { action_type: 'lead', value: '3' },
+        { action_type: 'lead', value: '4' },
+      ],
+    });
+    expect(counts.form).toBe(7);
   });
 
   it('KESİRLİ atıf değerlerini korur', () => {
@@ -42,6 +91,29 @@ describe('bucketsFromRaw', () => {
       actions: [{ action_type: 'lead', value: '0.5' }],
     });
     expect(counts.form).toBeCloseTo(0.5, 6);
+  });
+
+  it('CANLI ŞEKİL: tüm aksiyon türleriyle doğru sayılar', () => {
+    // Ege Birlik Yapı hesabının gerçek aksiyon dizisi (kısaltılmış).
+    // Doğru cevap: Form 40, Mesaj 20, Satış 0.
+    const counts = bucketsFromRaw({
+      actions: [
+        { action_type: 'page_engagement', value: '9594' },
+        { action_type: 'post_engagement', value: '9590' },
+        { action_type: 'video_view', value: '6859' },
+        { action_type: 'link_click', value: '2394' },
+        { action_type: 'landing_page_view', value: '1231' },
+        { action_type: 'onsite_conversion.lead_grouped', value: '40' },
+        { action_type: 'lead', value: '40' },
+        { action_type: 'onsite_conversion.total_messaging_connection', value: '20' },
+        { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: '20' },
+        { action_type: 'onsite_conversion.messaging_first_reply', value: '19' },
+        { action_type: 'offsite_conversion.fb_pixel_custom', value: '1' },
+      ],
+    });
+    expect(counts).toEqual({ form: 40, message: 20, purchase: 0 });
+    // Toplam dönüşüm 60 — rapordaki 153 değil.
+    expect(counts.form + counts.message + counts.purchase).toBe(60);
   });
 
   it('bilinmeyen aksiyon türünü SAYMAZ', () => {

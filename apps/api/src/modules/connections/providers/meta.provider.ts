@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Platform } from '@advetics/shared';
+import { CONVERSION_BUCKETS, type Platform } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
@@ -46,28 +46,19 @@ const META_LEVEL: Record<InsightsLevel, string> = {
 };
 
 /**
- * "Dönüşüm" sayılan Meta aksiyon türleri.
+ * Dönüşüm sayısı KOVALARDAN türetiliyor — ayrı bir liste YOK.
  *
- * Meta tek bir "conversions" metriği vermiyor; onlarca aksiyon türü döndürüyor
- * ve hangisinin dönüşüm olduğu kampanya amacına göre değişiyor. Bu liste
- * KARARDIR, gerçek değil: lead formu, pixel dönüşümleri ve mesajlaşma
- * başlatmaları sayılıyor; sayfa beğenisi veya video görüntüleme sayılmıyor.
+ * Önce iki ayrı liste vardı: burada `CONVERSION_ACTION_TYPES`, raporda
+ * `CONVERSION_BUCKETS`. Sonuç iki farklı "dönüşüm" tanımıydı ve panel ile
+ * rapor farklı sayılar gösteriyordu (114 karşı 153). Üstelik ikisi de aynı
+ * olayı iki kez sayıyordu: canlı hesapta `lead` ve
+ * `onsite_conversion.lead_grouped` ikisi de 40 döndürüyor ve bunlar AYNI
+ * 40 lead.
  *
- * Ham aksiyon dizisi `raw_metrics` içinde saklanıyor — liste yanlış çıkarsa
- * geçmiş veriyi yeniden ÇEKMEDEN yeniden hesaplayabiliyoruz.
+ * Tek tanım: `CONVERSION_BUCKETS` (form + mesaj + satış), her kova öncelik
+ * sırasıyla çözülüp toplanıyor. Kovalar birbirini kesmiyor, dolayısıyla
+ * toplamak güvenli.
  */
-const CONVERSION_ACTION_TYPES = [
-  'lead',
-  'onsite_conversion.lead_grouped',
-  'offsite_conversion.fb_pixel_lead',
-  'offsite_conversion.fb_pixel_purchase',
-  'offsite_conversion.fb_pixel_complete_registration',
-  'onsite_conversion.messaging_conversation_started_7d',
-  'onsite_conversion.purchase',
-  'purchase',
-  'complete_registration',
-  'submit_application',
-] as const;
 
 /**
  * Meta (Facebook / Instagram) — Marketing API adapter'ı.
@@ -841,8 +832,12 @@ export class MetaProvider implements IAdPlatformProvider {
         : text(raw.campaign_id ?? raw.adset_id ?? raw.ad_id);
     if (!entityExternalId) return null;
 
-    const actions = countActions(raw.actions, CONVERSION_ACTION_TYPES);
-    const values = sumActionValues(raw.action_values, CONVERSION_ACTION_TYPES);
+    // Kova bazında çözülüp toplanıyor — tek dönüşüm tanımı.
+    const buckets = bucketsFromActions(raw.actions);
+    const conversions = buckets.form + buckets.message + buckets.purchase;
+    // Dönüşüm DEĞERİ yalnızca satış kovasından anlamlı: lead ve mesajın
+    // parasal değeri yok ve `action_values` içinde de gelmiyor.
+    const values = pickActionValue(raw.action_values, CONVERSION_BUCKETS.purchase.actionTypes);
 
     return {
       entityExternalId,
@@ -858,13 +853,12 @@ export class MetaProvider implements IAdPlatformProvider {
       // sanmak harcamayı 10.000 kat yanlış gösterir — bütçe 100 TRY iken
       // harcama 1.000.000 TRY görünürdü.
       spendMicros: decimalToMicros(raw.spend),
-      conversions: actions,
+      conversions,
       conversionValueMicros: decimalToMicros(values),
       // ThruPlay tercih ediliyor: "video görüntüleme" olarak anlamlı olan
       // 15 saniye/tamamlanma eşiği, 3 saniyelik oynatma değil.
       videoViews:
-        countActions(raw.video_thruplay_watched_actions, null) ||
-        countActions(raw.video_play_actions, null),
+        sumAll(raw.video_thruplay_watched_actions) || sumAll(raw.video_play_actions),
       engagements: int(raw.inline_post_engagement),
       reach: int(raw.reach),
       frequency: raw.frequency !== undefined ? Number(raw.frequency) || undefined : undefined,
@@ -1089,31 +1083,74 @@ function text(value: unknown): string | undefined {
 }
 
 /**
- * Aksiyon dizisindeki değerleri toplar.
+ * Aksiyon dizisini tür → değer haritasına indirger.
  *
- * `types` null ise TÜM aksiyonlar toplanıyor (video metriklerinde dizi tek
- * türden oluşuyor). Aksi hâlde yalnızca listedeki türler.
- *
- * Meta aynı aksiyonu farklı atıf pencereleriyle tekrarlayabiliyor; biz
- * varsayılan pencereyi (`value`) kullanıyoruz — `1d_view`/`7d_click` gibi
- * alanlar ham gövdede duruyor ve gerekirse oradan okunur.
+ * Aynı tür birden fazla girdi olarak gelebiliyor (Meta atıf penceresine göre
+ * bölüyor); o durumda toplanıyor. Varsayılan pencere (`value`) kullanılıyor —
+ * `1d_view`/`7d_click` gibi alanlar ham gövdede duruyor ve gerekirse oradan
+ * okunabilir.
  */
-function countActions(value: unknown, types: readonly string[] | null): number {
-  if (!Array.isArray(value)) return 0;
-  let total = 0;
+function actionMap(value: unknown): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!Array.isArray(value)) return out;
   for (const item of value) {
     const record = asObject(item);
     if (!record) continue;
-    const actionType = text(record.action_type);
-    if (types && (!actionType || !types.includes(actionType))) continue;
-    total += Number(record.value ?? 0) || 0;
+    const type = text(record.action_type);
+    if (!type) continue;
+    const n = Number(record.value ?? 0);
+    if (Number.isFinite(n)) out.set(type, (out.get(type) ?? 0) + n);
   }
-  return total;
+  return out;
 }
 
-/** Aksiyon DEĞERLERİNİ (para) toplar; ondalık string olarak döner. */
-function sumActionValues(value: unknown, types: readonly string[]): string {
-  return String(countActions(value, types));
+/**
+ * Kova sayılarını ÖNCELİK SIRASIYLA çözer.
+ *
+ * `packages/shared`'daki tanımla aynı mantık; orada rapor için sorgu anında,
+ * burada senkronizasyon anında uygulanıyor. Mantığı iki yerde tutmak hoş değil
+ * ama sağlayıcı katmanının `modules/reports`a bağımlı olması daha kötü —
+ * sağlayıcılar hiçbir üst katmanı tanımıyor. TANIM tek yerde (shared), yalnızca
+ * uygulama tekrar ediyor ve testler ikisini de aynı canlı şekle karşı
+ * doğruluyor.
+ */
+function bucketsFromActions(value: unknown): { form: number; message: number; purchase: number } {
+  const map = actionMap(value);
+  const pick = (types: readonly string[]): number => {
+    for (const t of types) {
+      const v = map.get(t);
+      // Sıfır "dolu değil" sayılıyor: dolu bir yedeği engellememeli.
+      if (v !== undefined && v !== 0) return v;
+    }
+    return 0;
+  };
+  return {
+    form: pick(CONVERSION_BUCKETS.form.actionTypes),
+    message: pick(CONVERSION_BUCKETS.message.actionTypes),
+    purchase: pick(CONVERSION_BUCKETS.purchase.actionTypes),
+  };
+}
+
+/** Aksiyon DEĞERLERİNDEN (para) öncelik sırasıyla seçer; ondalık string döner. */
+function pickActionValue(value: unknown, types: readonly string[]): string {
+  const map = actionMap(value);
+  for (const t of types) {
+    const v = map.get(t);
+    if (v !== undefined && v !== 0) return String(v);
+  }
+  return '0';
+}
+
+/**
+ * Video görüntüleme gibi TEK TÜRLÜ dizilerin toplamı.
+ *
+ * `video_thruplay_watched_actions` tek bir aksiyon türü taşıyor; orada öncelik
+ * sırası anlamsız, toplam doğru.
+ */
+function sumAll(value: unknown): number {
+  let total = 0;
+  for (const v of actionMap(value).values()) total += v;
+  return total;
 }
 
 /**

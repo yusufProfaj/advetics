@@ -19,14 +19,6 @@ import { CONVERSION_BUCKETS, type ConversionBucket, type ConversionCounts } from
  * bir dönüşüm iki reklama 0.5/0.5 dağıtılabiliyor).
  */
 
-/** Aksiyon türü → kova. Ters indeks, her satırda liste taramamak için. */
-const TYPE_TO_BUCKET = new Map<string, ConversionBucket>();
-for (const [bucket, def] of Object.entries(CONVERSION_BUCKETS)) {
-  for (const type of def.actionTypes) {
-    TYPE_TO_BUCKET.set(type, bucket as ConversionBucket);
-  }
-}
-
 export function emptyCounts(): ConversionCounts {
   return { form: 0, message: 0, purchase: 0 };
 }
@@ -37,6 +29,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Tek bir `raw_metrics` gövdesinden kova sayılarını çıkarır.
+ *
+ * Her kova için ÖNCELİK SIRASI izleniyor: listedeki ilk DOLU tür kazanıyor,
+ * geri kalanı yok sayılıyor. Toplamak çift sayım demek — canlı hesapta `lead`
+ * ve `onsite_conversion.lead_grouped` ikisi de 40 döndürüyor ve bunlar AYNI
+ * 40 lead.
  *
  * Beklenmeyen şekilde SIFIR döndürüyor, fırlatmıyor: bir bozuk satır tüm
  * raporun üretilmesini engellememeli. Rapor müşteriye gidiyor ve "rapor
@@ -49,16 +46,28 @@ export function bucketsFromRaw(raw: unknown): ConversionCounts {
   const actions = raw.actions;
   if (!Array.isArray(actions)) return counts;
 
+  // Tür → değer haritası. Aynı tür birden fazla girdi olarak gelirse
+  // toplanıyor (Meta atıf penceresine göre bölebiliyor).
+  const byType = new Map<string, number>();
   for (const item of actions) {
     if (!isRecord(item)) continue;
     const type = typeof item.action_type === 'string' ? item.action_type : null;
     if (!type) continue;
-
-    const bucket = TYPE_TO_BUCKET.get(type);
-    if (!bucket) continue;
-
     const value = Number(item.value ?? 0);
-    if (Number.isFinite(value)) counts[bucket] += value;
+    if (!Number.isFinite(value)) continue;
+    byType.set(type, (byType.get(type) ?? 0) + value);
+  }
+
+  for (const [bucket, def] of Object.entries(CONVERSION_BUCKETS)) {
+    for (const type of def.actionTypes) {
+      const value = byType.get(type);
+      // Sıfır da "dolu değil" sayılıyor: sıfır değerli bir tür, dolu olan bir
+      // yedeği engellememeli.
+      if (value !== undefined && value !== 0) {
+        counts[bucket as ConversionBucket] = value;
+        break;
+      }
+    }
   }
 
   return counts;

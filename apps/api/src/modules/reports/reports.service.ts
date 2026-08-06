@@ -449,21 +449,32 @@ export class ReportsService {
     params: { clientId: string; from: string; to: string },
     groupBy: Prisma.Sql,
   ): Prisma.Sql {
-    const sumFor = (bucket: ConversionBucket): Prisma.Sql => {
-      const types = CONVERSION_BUCKETS[bucket].actionTypes.map((t) => Prisma.sql`${t}`);
-      return Prisma.sql`
-        SUM(
-          CASE WHEN act->>'action_type' IN (${Prisma.join(types)})
-               THEN COALESCE((act->>'value')::numeric, 0)
-               ELSE 0 END
-        )`;
+    /**
+     * Kovayı ÖNCELİK SIRASIYLA çözer, türleri TOPLAMAZ.
+     *
+     * Her tür için ayrı bir koşullu toplam alınıp `COALESCE` ile ilk DOLU
+     * olanı seçiliyor. `NULLIF(x, 0)` sıfırı da "dolu değil" sayıyor: sıfır
+     * değerli bir tür, dolu olan bir yedeği engellememeli.
+     *
+     * `SUM(CASE WHEN ... THEN v END)` hiç eşleşme yoksa NULL döndürüyor —
+     * `ELSE 0` YAZMAMAK kasıtlı, aksi hâlde COALESCE hep ilk türde dururdu.
+     */
+    const pickFor = (bucket: ConversionBucket): Prisma.Sql => {
+      const candidates = CONVERSION_BUCKETS[bucket].actionTypes.map(
+        (t) => Prisma.sql`NULLIF(
+          SUM(CASE WHEN act->>'action_type' = ${t}
+                   THEN COALESCE((act->>'value')::numeric, 0) END),
+          0
+        )`,
+      );
+      return Prisma.sql`COALESCE(${Prisma.join(candidates, ', ')}, 0)`;
     };
 
     return Prisma.sql`
       SELECT ${groupBy} AS grp,
-             ${sumFor('form')} AS form,
-             ${sumFor('message')} AS message,
-             ${sumFor('purchase')} AS purchase
+             ${pickFor('form')} AS form,
+             ${pickFor('message')} AS message,
+             ${pickFor('purchase')} AS purchase
       FROM insights_daily i2
       -- jsonb_array_elements boş/eksik dizide satır üretmiyor; COALESCE
       -- olmadan aksiyonsuz günler tamamen kayboluyor.

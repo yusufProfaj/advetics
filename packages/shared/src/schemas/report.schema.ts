@@ -72,19 +72,37 @@ export const SECTION_LABELS: Record<ReportSection, string> = {
  * ADLANDIRILMIŞ DÖNÜŞÜM KOVALARI.
  *
  * Referans raporun Meta tablosunda "Form" ve "Mesaj" AYRI sütunlar — tek bir
- * "Dönüşüm" sayısı değil. Bu doğru: bir lead formu doldurmakla WhatsApp
- * konuşması başlatmak farklı işler ve müşteri ikisini ayrı görmek istiyor.
+ * "Dönüşüm" sayısı değil. Bir lead formu doldurmakla WhatsApp konuşması
+ * başlatmak farklı işler ve müşteri ikisini ayrı görmek istiyor.
  *
- * Kovalar `insights_daily.raw_metrics` içindeki ham Meta aksiyon dizisinden
- * TÜRETİLİYOR, ayrı bir kolonda saklanmıyor. Sebep: hangi aksiyon türünün
- * hangi kovaya girdiği bir KARAR ve zamanla değişiyor. Kolon olsaydı her
- * değişiklikte 90 günlük veriyi yeniden çekmek gerekirdi; ham gövde durduğu
- * için sorgu anında yeniden hesaplıyoruz.
+ * `actionTypes` bir ÖNCELİK SIRASI, toplanacak liste DEĞİL. İlk DOLU olan
+ * kazanıyor, diğerleri yok sayılıyor.
+ *
+ * NEDEN: Meta aynı olayı birden fazla aksiyon türü altında raporluyor. Canlı
+ * hesapta ölçülen değerler (Ege Birlik Yapı, 1-6 Ağustos 2026):
+ *
+ *     lead                                        40
+ *     onsite_conversion.lead_grouped              40   ← AYNI 40 lead
+ *     onsite_conversion.messaging_conversation_started_7d   20
+ *     onsite_conversion.total_messaging_connection          20   ← AYNI 20
+ *     onsite_conversion.messaging_first_reply               19   ← BAŞKA olay
+ *
+ * İlk hâlinde bunlar TOPLANIYORDU ve rapor "Mesaj: 59" gösteriyordu — gerçek
+ * sayı 20. Müşteriye üç kat konuşma raporlanıyordu.
+ *
+ * Kovalar `insights_daily.raw_metrics` içindeki ham aksiyon dizisinden sorgu
+ * anında türetiliyor, kolonda saklanmıyor: bu liste bir KARAR ve değiştiğinde
+ * 90 günlük veriyi yeniden çekmek gerekmesin.
  */
 export const CONVERSION_BUCKETS = {
   form: {
     label: 'Form',
     hint: 'Anlık form ve web sitesi form gönderimleri.',
+    /**
+     * `lead` Meta'nın toplayıcı metriği: onsite (anlık form) + offsite (pixel)
+     * lead'lerinin toplamı. Varsa tek başına doğru sayıyı veriyor; yoksa
+     * bileşenlerine düşülüyor.
+     */
     actionTypes: [
       'lead',
       'onsite_conversion.lead_grouped',
@@ -96,20 +114,25 @@ export const CONVERSION_BUCKETS = {
   message: {
     label: 'Mesaj',
     hint: 'Başlatılan WhatsApp ve Messenger konuşmaları.',
+    /**
+     * "Başlatılan konuşma" ölçülen şey. `total_messaging_connection` aynı
+     * değeri veriyor, `messaging_first_reply` ise SONRAKİ bir olay (kullanıcı
+     * cevap verdi) — onu eklemek aynı konuşmayı iki kez saymak olur.
+     */
     actionTypes: [
       'onsite_conversion.messaging_conversation_started_7d',
       'onsite_conversion.total_messaging_connection',
-      'onsite_conversion.messaging_first_reply',
     ],
   },
   purchase: {
     label: 'Satış',
     hint: 'Tamamlanan satın almalar.',
+    /** `omni_purchase` kanallar arası toplayıcı; varsa en kapsayıcı olan o. */
     actionTypes: [
-      'purchase',
-      'onsite_conversion.purchase',
-      'offsite_conversion.fb_pixel_purchase',
       'omni_purchase',
+      'purchase',
+      'offsite_conversion.fb_pixel_purchase',
+      'onsite_conversion.purchase',
     ],
   },
 } as const;
