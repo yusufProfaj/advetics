@@ -188,20 +188,39 @@ async function runStructure(): Promise<void> {
   // İş numarasını kimliğe katıyoruz — tamamlanmış bir işin kimliğini yeniden
   // kullanmak BullMQ tarafında sessizce yok sayılabiliyor.
   const jobId = `manual__structure__${account.id}__${record.id}`;
-  await queue.add(
-    'structure',
-    {
-      syncJobId: record.id.toString(),
-      clientId: account.clientId,
-      platform: account.platform,
-      jobType: 'structure',
-      adAccountId: account.id,
-      // interactive: worker'a TAM TARAMA yaptırıyor. Elle tetikleyen biri
-      // silinmiş kampanyaların da kaybolmasını bekliyor; delta bunu yapamaz.
-      interactive: true,
-    },
-    { jobId, priority: 1 },
-  );
+  // Kuyruğa ekleme başarısız olursa tablo kaydını öksüz bırakma: satır
+  // sonsuza kadar `queued` kalır, hiçbir worker almaz ve `sync -- jobs`
+  // çıktısında hiç sonuçlanmayan bir iş olarak durur.
+  try {
+    await queue.add(
+      'structure',
+      {
+        syncJobId: record.id.toString(),
+        clientId: account.clientId,
+        platform: account.platform,
+        jobType: 'structure',
+        adAccountId: account.id,
+        // interactive: worker'a TAM TARAMA yaptırıyor. Elle tetikleyen biri
+        // silinmiş kampanyaların da kaybolmasını bekliyor; delta bunu yapamaz.
+        interactive: true,
+      },
+      { jobId, priority: 1 },
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await prisma.syncJob.update({
+      where: { id: record.id },
+      data: {
+        status: 'failed',
+        finishedAt: new Date(),
+        errorCode: 'enqueue_failed',
+        errorMessage: message.slice(0, 1000),
+      },
+    });
+    await queue.close();
+    await connection.quit().catch(() => connection.disconnect());
+    die(`İş kuyruğa eklenemedi: ${message}`);
+  }
 
   console.log(`\n▸ İş kuyruğa eklendi`);
   console.log(`  hesap:   ${account.name} (${account.platform} ${account.externalId})`);
@@ -344,6 +363,20 @@ async function listJobs(): Promise<void> {
     if (j.errorCode) console.log(`      \x1b[90m${j.errorCode}: ${j.errorMessage ?? ''}\x1b[0m`);
   }
   console.log('');
+
+  // Uzun süredir `queued` duran işler öksüz kalmış olabilir: kayıt oluşmuş
+  // ama kuyruğa ekleme başarısız olmuş. Yeni kodda bu `enqueue_failed` olarak
+  // işaretleniyor; eski satırlar için uyarı veriyoruz.
+  const stale = jobs.filter(
+    (j) => j.status === 'queued' && Date.now() - j.createdAt.getTime() > 600_000,
+  );
+  if (stale.length > 0) {
+    console.log(
+      `  ! ${stale.length} iş 10 dakikadan uzun süredir "queued": ${stale.map((j) => j.id).join(', ')}\n` +
+        '    Worker çalışmıyor olabilir ya da kuyruğa ekleme başarısız olmuş.\n' +
+        '    Kontrol:  pm2 logs advetics-worker --lines 40 --nostream\n',
+    );
+  }
 }
 
 async function main(): Promise<void> {
