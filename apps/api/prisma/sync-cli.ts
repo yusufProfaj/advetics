@@ -571,6 +571,7 @@ async function printMetrics(adAccountId: string, dateFrom: string, dateTo: strin
     Array<{
       entity_level: string;
       name: string | null;
+      parent: string | null;
       date: Date;
       impressions: number;
       clicks: number;
@@ -582,11 +583,17 @@ async function printMetrics(adAccountId: string, dateFrom: string, dateTo: strin
   >`
     SELECT i.entity_level::text, i.date, i.impressions, i.clicks, i.spend_micros,
            i.conversions::text, i.conversion_value_micros, i.currency,
-           COALESCE(c.name, g.name, a.name, 'Hesap') AS name
+           COALESCE(c.name, g.name, a.name, 'Hesap') AS name,
+           -- Reklam adları ad set'ler arasında TEKRAR EDİYOR (aynı creative
+           -- birden fazla sette kullanılıyor). Üst varlık olmadan çıktıda
+           -- hangi satırın hangisi olduğu ayırt edilemiyor.
+           COALESCE(ag.name, gc.name) AS parent
     FROM insights_daily i
     LEFT JOIN campaigns c ON i.entity_level = 'campaign' AND c.id = i.entity_id
     LEFT JOIN ad_groups g ON i.entity_level = 'ad_group' AND g.id = i.entity_id
     LEFT JOIN ads a       ON i.entity_level = 'ad'       AND a.id = i.entity_id
+    LEFT JOIN ad_groups ag ON i.entity_level = 'ad' AND ag.id = a.ad_group_id
+    LEFT JOIN campaigns gc ON i.entity_level = 'ad_group' AND gc.id = g.campaign_id
     WHERE i.ad_account_id = ${adAccountId}::uuid
       AND i.date BETWEEN ${dateFrom}::date AND ${dateTo}::date
     ORDER BY i.entity_level, i.date DESC, i.spend_micros DESC
@@ -614,10 +621,19 @@ async function printMetrics(adAccountId: string, dateFrom: string, dateTo: strin
       const value = Number(r.conversion_value_micros) / 1_000_000;
       const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : 0;
       const cpa = conv > 0 ? spend / conv : null;
-      const roas = spend > 0 ? value / spend : null;
+      // ROAS yalnızca DEĞER varsa anlamlı.
+      //
+      // `value === 0` iki farklı şey olabiliyor: gelir takip edilmiyor (lead
+      // formu, WhatsApp — bu hesabın tamamı böyle) ya da gerçekten sıfır
+      // getiri. Ayırt edemiyoruz, ama "0.00×" göstermek ikinci anlamı
+      // dayatıyor ve müşteriye kampanyanın battığını söylüyor. "—" ise
+      // "bu metrik burada geçerli değil" diyor — dürüst olan bu.
+      const roas = spend > 0 && value > 0 ? value / spend : null;
       const day = r.date.toISOString().slice(0, 10);
 
-      console.log(`  · ${day}  ${r.name ?? '?'}`);
+      console.log(
+        `  · ${day}  ${r.name ?? '?'}${r.parent ? `   \x1b[90m← ${r.parent}\x1b[0m` : ''}`,
+      );
       console.log(
         `      ${r.impressions.toLocaleString('tr-TR')} gösterim  ·  ${r.clicks} tık  ·  ` +
           `CTR ${ctr.toFixed(2)}%  ·  harcama ${spend.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ${r.currency}`,
