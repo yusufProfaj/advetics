@@ -558,10 +558,13 @@ export class MetaProvider implements IAdPlatformProvider {
         // isteniyor — aynı çağrıda geliyorlar, ek kota maliyeti yok.
         'creative{id,name,object_type,title,body,link_url,call_to_action_type,' +
           'image_url,thumbnail_url,object_story_spec,asset_feed_spec,' +
-          'object_story_id,effective_object_story_id,link_destination_display_url,url_tags,' +
-          // `images` dinamik creative'lerin TAM BOYUTLU görsellerini taşıyor;
-          // `thumbnail_url` yalnızca küçük bir önizleme.
-          'images}',
+          // `asset_feed_spec` BÜTÜN OLARAK isteniyor ve içindeki `images`
+          // kendiliğinden geliyor. Bir tur önce `images`i ayrı bir alan gibi
+          // listeye eklemiştim; Meta onu `adcreative` alanı sanıp
+          // "(#100) Tried accessing nonexisting field (images)" ile tüm
+          // senkronizasyonu düşürdü. İç içe bir alanın alt alanı, üst nesne
+          // istendiğinde ayrıca istenmez.
+          'object_story_id,effective_object_story_id,link_destination_display_url,url_tags}',
         // Reddedilme sebepleri Modül 4'te (Ads Explorer) gösterilecek.
         'ad_review_feedback',
       ],

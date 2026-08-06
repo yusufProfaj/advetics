@@ -209,6 +209,17 @@ describe('mapMetaCreativeFields', () => {
       expect(c.assetUrls).toHaveLength(3);
     });
 
+    it('asset_feed_spec.images ALT ALAN olarak okunuyor, ayrı istenmiyor', () => {
+      // Meta `adcreative` nesnesinin `images` alanı YOK; `asset_feed_spec`
+      // bütün olarak istendiğinde içinden geliyor. Ayrı istemek
+      // "(#100) Tried accessing nonexisting field (images)" ile tüm
+      // senkronizasyonu düşürüyor.
+      const c = mapMetaCreativeFields('x', {
+        asset_feed_spec: { images: [{ url: 'https://img/feed.jpg' }] },
+      });
+      expect(c.assetUrls).toEqual(['https://img/feed.jpg']);
+    });
+
     it('yalnızca thumbnail varsa o kullanılıyor', () => {
       const c = mapMetaCreativeFields('x', { thumbnail_url: 'https://img/kucuk.jpg' });
       expect(c.assetUrls).toEqual(['https://img/kucuk.jpg']);
