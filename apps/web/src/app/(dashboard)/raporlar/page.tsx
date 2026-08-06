@@ -94,6 +94,14 @@ export default async function ReportsPage({
             hasData={report.platforms.length > 0}
           />
 
+          {selected.ongoing && (
+            <div className="rounded-lg border border-sky-300 bg-sky-50 px-3.5 py-2.5 text-sm text-sky-900">
+              Bu ay <strong>henüz bitmedi</strong>. Rapor {formatDayLong(selected.to)} tarihine
+              kadar olan tamamlanmış günleri kapsıyor; bugünün verisi gün içinde değiştiği için
+              dâhil edilmedi — panelde de aynı kural geçerli.
+            </div>
+          )}
+
           {report.platforms.length === 0 && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900">
               Bu dönemde harcama kaydı yok — rapor boş görünecek. Senkronizasyonun
@@ -116,27 +124,44 @@ export default async function ReportsPage({
 /**
  * Son N takvim ayı.
  *
- * Bugünün ayı DA dâhil ama etiketinde "(devam eden)" yazıyor: ayın ortasında
- * gönderilen bir rapor eksik veri içeriyor ve bunu ajansın bilmesi gerekiyor.
+ * BUGÜN HİÇBİR ARALIĞA DÂHİL DEĞİL — panelle aynı kural.
+ *
+ * Panel "Bugün dâhil değil, tamamlanmamış bir gün tüm oranları aşağı çeker"
+ * diyor ve rapor bunun tersini yapıyordu: devam eden ayda `to = bugün`. Sonuç,
+ * aynı müşteri için panelde 25.350 ₺ raporda 32.638 ₺ görünmesiydi. İkisi de
+ * doğruydu ama farklı soruya cevap veriyordu ve kullanıcı bunu bilmek zorunda
+ * kalıyordu.
+ *
+ * Devam eden ay artık düne kadar. Ayın 1'indeyken tamamlanmış gün olmadığı
+ * için o ay HİÇ listelenmiyor — boş bir rapor sunmak yerine önceki ayla
+ * başlıyor.
  */
-function recentMonths(count: number): Array<{ key: string; label: string; from: string; to: string }> {
-  const out: Array<{ key: string; label: string; from: string; to: string }> = [];
-  const now = new Date();
+function recentMonths(
+  count: number,
+): Array<{ key: string; label: string; from: string; to: string; ongoing: boolean }> {
+  const out: Array<{ key: string; label: string; from: string; to: string; ongoing: boolean }> = [];
 
-  for (let i = 0; i < count; i++) {
+  const now = new Date();
+  const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+  for (let i = 0; i < count + 1 && out.length < count; i++) {
     const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
     const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0));
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
     const ongoing = i === 0;
+
+    // Devam eden ay düne kadar; dün bu aydan önceyse (ayın 1'i) ay atlanıyor.
+    const to = ongoing ? yesterday : last;
+    if (to < first) continue;
 
     out.push({
       key: iso(first).slice(0, 7),
       label:
         first.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric', timeZone: 'UTC' }) +
-        (ongoing ? ' (devam eden)' : ''),
+        (ongoing ? ` (${iso(to).slice(8)} güne kadar)` : ''),
       from: iso(first),
-      // Devam eden ayda bugüne kadar; geçmiş ayda ayın sonuna kadar.
-      to: ongoing ? iso(now) : iso(last),
+      to: iso(to),
+      ongoing,
     });
   }
 

@@ -159,6 +159,17 @@ function Summary({ data }: { data: ReportData }) {
         </div>
       )}
 
+      {/* EKSİK DÖNEM UYARISI — belgenin kendisinde.
+          Panelde uyarı görmek yetmiyor: müşteriye giden PDF'te de yazmalı,
+          yoksa alan kişi elindeki belgenin tam ayı kapsadığını sanıyor. */}
+      {!coversWholeMonth(data.from, data.to) && (
+        <Note>
+          Bu rapor <strong>{formatDayLong(data.from)} — {formatDayLong(data.to)}</strong> arasını
+          kapsar; ay tamamlanmadan hazırlanmıştır. Devam eden günün verisi gün içinde
+          değiştiği için dâhil edilmemiştir.
+        </Note>
+      )}
+
       {data.currency === null && data.platforms.length > 1 && (
         <Note>
           Hesaplar farklı para birimlerinde olduğu için genel toplam
@@ -665,6 +676,25 @@ function Empty({ children }: { children: React.ReactNode }) {
 /* -------------------------------------------------------------------------- */
 /* Yardımcılar                                                                 */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Aralık tam bir takvim ayını kapsıyor mu.
+ *
+ * Kapsamıyorsa belgeye uyarı düşüyor: müşteri elindeki raporun "Ağustos
+ * raporu" mu yoksa "Ağustos'un ilk yarısı" mı olduğunu bilmeli. Aradaki fark
+ * bütçe konuşmasında doğrudan yanlış anlaşılma üretiyor.
+ */
+function coversWholeMonth(from: string, to: string): boolean {
+  const start = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  if (start.getUTCDate() !== 1) return false;
+  if (start.getUTCMonth() !== end.getUTCMonth() || start.getUTCFullYear() !== end.getUTCFullYear()) {
+    // Ay sınırını aşan aralıklar (örneğin son 30 gün) bu uyarının konusu değil.
+    return true;
+  }
+  const lastDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0)).getUTCDate();
+  return end.getUTCDate() === lastDay;
+}
 
 function platformNames(data: ReportData): string {
   const names = data.platforms.map((p) => p.label.toUpperCase());
