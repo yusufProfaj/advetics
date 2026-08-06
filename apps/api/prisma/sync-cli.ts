@@ -143,9 +143,28 @@ async function setEnabled(enabled: boolean): Promise<void> {
   }
 }
 
-async function runStructure(): Promise<void> {
+/** YYYY-MM-DD, UTC. Tarihler string taşınıyor — bkz. queues.ts saat dilimi notu. */
+function isoDate(offsetDays = 0): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + offsetDays);
+  return d.toISOString().slice(0, 10);
+}
+
+async function runJob(jobType: 'structure' | 'insights_realtime' | 'insights_daily' | 'insights_backfill'): Promise<void> {
   const id = arg('account') ?? die('--account <uuid> zorunlu.');
   if (!REDIS_URL) die('REDIS_URL tanımlı değil — kuyruğa iş konulamaz.');
+
+  // Metrik işleri tarih ZORUNLU. Varsayılan: realtime bugün, daily dün.
+  let dateFrom: string | undefined;
+  let dateTo: string | undefined;
+  if (jobType !== 'structure') {
+    dateFrom = arg('from') ?? (jobType === 'insights_realtime' ? isoDate(0) : isoDate(-1));
+    dateTo = arg('to') ?? dateFrom;
+    for (const d of [dateFrom, dateTo]) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) die(`Geçersiz tarih: ${d} (YYYY-MM-DD bekleniyor)`);
+    }
+    if (dateFrom > dateTo) die(`--from (${dateFrom}) --to (${dateTo}) tarihinden sonra olamaz.`);
+  }
 
   const account = await prisma.adAccount.findUnique({
     where: { id },
@@ -173,10 +192,12 @@ async function runStructure(): Promise<void> {
     data: {
       clientId: account.clientId,
       adAccountId: account.id,
-      jobType: 'structure',
+      jobType,
       status: 'queued',
       priority: 1,
       queueJobId: null,
+      dateFrom: dateFrom ? new Date(`${dateFrom}T00:00:00Z`) : null,
+      dateTo: dateTo ? new Date(`${dateTo}T00:00:00Z`) : null,
     },
     select: { id: true },
   });
@@ -187,21 +208,24 @@ async function runStructure(): Promise<void> {
   // Ayırıcı `:` DEĞİL: BullMQ özel iş kimliğinde `:` yasaklıyor (bkz. queues.ts).
   // İş numarasını kimliğe katıyoruz — tamamlanmış bir işin kimliğini yeniden
   // kullanmak BullMQ tarafında sessizce yok sayılabiliyor.
-  const jobId = `manual__structure__${account.id}__${record.id}`;
+  const jobId = `manual__${jobType}__${account.id}__${record.id}`;
   // Kuyruğa ekleme başarısız olursa tablo kaydını öksüz bırakma: satır
   // sonsuza kadar `queued` kalır, hiçbir worker almaz ve `sync -- jobs`
   // çıktısında hiç sonuçlanmayan bir iş olarak durur.
   try {
     await queue.add(
-      'structure',
+      jobType,
       {
         syncJobId: record.id.toString(),
         clientId: account.clientId,
         platform: account.platform,
-        jobType: 'structure',
+        jobType,
         adAccountId: account.id,
-        // interactive: worker'a TAM TARAMA yaptırıyor. Elle tetikleyen biri
-        // silinmiş kampanyaların da kaybolmasını bekliyor; delta bunu yapamaz.
+        dateFrom,
+        dateTo,
+        // interactive: yapı işinde worker'a TAM TARAMA yaptırıyor. Elle
+        // tetikleyen biri silinmiş kampanyaların da kaybolmasını bekliyor;
+        // delta bunu yapamaz.
         interactive: true,
       },
       { jobId, priority: 1 },
@@ -224,8 +248,11 @@ async function runStructure(): Promise<void> {
 
   console.log(`\n▸ İş kuyruğa eklendi`);
   console.log(`  hesap:   ${account.name} (${account.platform} ${account.externalId})`);
+  console.log(`  iş:      ${jobType}`);
   console.log(`  iş no:   ${record.id}`);
-  console.log(`  mod:     tam tarama\n`);
+  console.log(
+    `  mod:     ${jobType === 'structure' ? 'tam tarama' : `${dateFrom}${dateFrom === dateTo ? '' : ` .. ${dateTo}`}`}\n`,
+  );
 
   // Sonucu bekle. Worker ayrı süreçte çalışıyor; tabloyu yoklayarak izliyoruz.
   const deadline = Date.now() + 180_000;
@@ -255,7 +282,8 @@ async function runStructure(): Promise<void> {
       const elapsed =
         job.finishedAt && job.startedAt ? job.finishedAt.getTime() - job.startedAt.getTime() : 0;
       console.log(`\n\x1b[32m✓ Tamamlandı\x1b[0m — ${job.rowsUpserted} satır, ${job.apiCallsUsed} API çağrısı, ${elapsed}ms\n`);
-      await printHierarchy(account.id);
+      if (jobType === 'structure') await printHierarchy(account.id);
+      else await printMetrics(account.id, dateFrom!, dateTo!);
       break;
     }
     if (job.status === 'failed') {
@@ -531,6 +559,79 @@ async function inspect(): Promise<void> {
   console.log('');
 }
 
+/**
+ * Yazılan metrikleri türetilmiş oranlarla gösterir.
+ *
+ * CPA / ROAS / CTR KAYDEDİLMİYOR, sorgu anında hesaplanıyor. Saklamak, bölen
+ * değiştiğinde (geri düzeltme dönüşümleri yukarı çektiğinde) bayat bir değer
+ * bırakır ve iki kaynak arasında tutarsızlık üretir.
+ */
+async function printMetrics(adAccountId: string, dateFrom: string, dateTo: string): Promise<void> {
+  const rows = await prisma.$queryRaw<
+    Array<{
+      entity_level: string;
+      name: string | null;
+      date: Date;
+      impressions: number;
+      clicks: number;
+      spend_micros: bigint;
+      conversions: string;
+      conversion_value_micros: bigint;
+      currency: string;
+    }>
+  >`
+    SELECT i.entity_level::text, i.date, i.impressions, i.clicks, i.spend_micros,
+           i.conversions::text, i.conversion_value_micros, i.currency,
+           COALESCE(c.name, g.name, a.name, 'Hesap') AS name
+    FROM insights_daily i
+    LEFT JOIN campaigns c ON i.entity_level = 'campaign' AND c.id = i.entity_id
+    LEFT JOIN ad_groups g ON i.entity_level = 'ad_group' AND g.id = i.entity_id
+    LEFT JOIN ads a       ON i.entity_level = 'ad'       AND a.id = i.entity_id
+    WHERE i.ad_account_id = ${adAccountId}::uuid
+      AND i.date BETWEEN ${dateFrom}::date AND ${dateTo}::date
+    ORDER BY i.entity_level, i.date DESC, i.spend_micros DESC
+    LIMIT 40
+  `;
+
+  if (rows.length === 0) {
+    console.log('  Bu aralıkta metrik satırı yok.\n');
+    console.log('  Bu beklenebilir: harcaması olmayan günlerde platform satır döndürmüyor.\n');
+    return;
+  }
+
+  const byLevel = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const list = byLevel.get(r.entity_level) ?? [];
+    list.push(r);
+    byLevel.set(r.entity_level, list);
+  }
+
+  for (const [level, list] of byLevel) {
+    console.log(`  ${level.toUpperCase()}\n`);
+    for (const r of list) {
+      const spend = Number(r.spend_micros) / 1_000_000;
+      const conv = Number(r.conversions);
+      const value = Number(r.conversion_value_micros) / 1_000_000;
+      const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : 0;
+      const cpa = conv > 0 ? spend / conv : null;
+      const roas = spend > 0 ? value / spend : null;
+      const day = r.date.toISOString().slice(0, 10);
+
+      console.log(`  · ${day}  ${r.name ?? '?'}`);
+      console.log(
+        `      ${r.impressions.toLocaleString('tr-TR')} gösterim  ·  ${r.clicks} tık  ·  ` +
+          `CTR ${ctr.toFixed(2)}%  ·  harcama ${spend.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ${r.currency}`,
+      );
+      console.log(
+        `      ${conv} dönüşüm  ·  CPA ${cpa === null ? '—' : `${cpa.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ${r.currency}`}` +
+          `  ·  değer ${value.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ${r.currency}` +
+          `  ·  ROAS ${roas === null ? '—' : `${roas.toFixed(2)}×`}`,
+      );
+    }
+    console.log('');
+  }
+}
+
 async function listJobs(): Promise<void> {
   const jobs = await prisma.syncJob.findMany({
     select: {
@@ -594,7 +695,16 @@ async function main(): Promise<void> {
       await setEnabled(false);
       break;
     case 'run':
-      await runStructure();
+      await runJob('structure');
+      break;
+    case 'insights':
+      await runJob('insights_daily');
+      break;
+    case 'realtime':
+      await runJob('insights_realtime');
+      break;
+    case 'backfill':
+      await runJob('insights_backfill');
       break;
     case 'inspect':
       await inspect();
@@ -609,7 +719,10 @@ Senkronizasyon ops aracı
   sync -- list                        reklam hesaplarını ve sync durumunu listeler
   sync -- enable  --account <uuid>    hesabı senkronizasyona açar
   sync -- disable --account <uuid>    hesabı kapatır
-  sync -- run     --account <uuid>    yapı senkronizasyonunu ŞİMDİ tetikler (tam tarama)
+  sync -- run      --account <uuid>   yapı senkronizasyonunu ŞİMDİ tetikler (tam tarama)
+  sync -- insights --account <uuid>   dünün metriklerini çeker (--from/--to ile aralık)
+  sync -- realtime --account <uuid>   bugünün metriklerini çeker (hesap + kampanya)
+  sync -- backfill --account <uuid>   geri düzeltme (--from/--to zorunlu değil, varsayılan dün)
   sync -- inspect --account <uuid>    senkronize edilen veriyi ham alanlarla inceler
   sync -- jobs                        son 20 senkronizasyon işini gösterir
 
@@ -617,6 +730,7 @@ Senkronizasyon ops aracı
   pnpm --filter @advetics/api sync -- list
   pnpm --filter @advetics/api sync -- enable --account 1234abcd-...
   pnpm --filter @advetics/api sync -- run --account 1234abcd-...
+  pnpm --filter @advetics/api sync -- insights --account 1234abcd-... --from 2026-08-01 --to 2026-08-05
 
 pnpm'in \`--\` aktarımıyla uğraşmadan, doğrudan:
   cd apps/api && pnpm exec tsx prisma/sync-cli.ts list
