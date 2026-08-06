@@ -508,8 +508,13 @@ export class MetaProvider implements IAdPlatformProvider {
         'effective_status',
         'updated_time',
         // Creative'i GÖMÜLÜ istiyoruz — ad başına ayrı çağrı kotayı bitirir.
+        // Sayfa gönderisi tabanlı creative'lerde (object_type=SHARE) link
+        // `object_story_spec` içinde DEĞİL, gönderinin kendisinde. O yüzden
+        // `link_destination_display_url` ve `effective_object_story_id` de
+        // isteniyor — aynı çağrıda geliyorlar, ek kota maliyeti yok.
         'creative{id,name,object_type,title,body,link_url,call_to_action_type,' +
-          'image_url,thumbnail_url,object_story_spec,asset_feed_spec}',
+          'image_url,thumbnail_url,object_story_spec,asset_feed_spec,' +
+          'object_story_id,effective_object_story_id,link_destination_display_url,url_tags}',
         // Reddedilme sebepleri Modül 4'te (Ads Explorer) gösterilecek.
         'ad_review_feedback',
       ],
@@ -535,7 +540,7 @@ export class MetaProvider implements IAdPlatformProvider {
         status: this.mapEntityStatus(raw.effective_status ?? raw.status),
         effectiveStatus: raw.effective_status ? String(raw.effective_status) : undefined,
         creativeExternalId: creativeId,
-        reviewStatus: raw.effective_status ? String(raw.effective_status) : undefined,
+        reviewStatus: this.reviewStatusFrom(raw.effective_status),
         disapprovalReasons: raw.ad_review_feedback,
         platformUpdatedAt: this.parseDate(raw.updated_time),
         raw,
@@ -678,7 +683,8 @@ export class MetaProvider implements IAdPlatformProvider {
       description: this.str(link?.description ?? firstText(feed?.descriptions)),
       ctaType: cta ?? (c.call_to_action_type ? String(c.call_to_action_type) : undefined),
       destinationUrl: this.str(c.link_url ?? link?.link ?? firstText(feed?.link_urls)),
-      displayUrl: this.str(link?.caption),
+      // Sayfa gönderisi creative'lerinde tek elimizdeki URL bilgisi bu.
+      displayUrl: this.str(link?.caption ?? c.link_destination_display_url),
       assetUrls: assetUrls.length > 0 ? assetUrls : undefined,
       raw: c,
     };
@@ -720,6 +726,33 @@ export class MetaProvider implements IAdPlatformProvider {
     if (typeof value !== 'string' || value.length === 0) return undefined;
     const d = new Date(value);
     return Number.isNaN(d.getTime()) ? undefined : d;
+  }
+
+  /**
+   * `effective_status`tan YALNIZCA inceleme ile ilgili durumları çıkarır.
+   *
+   * Önce `effective_status` doğrudan `reviewStatus` alanına yazılıyordu ve
+   * sonuç anlamsızdı: duraklatılmış bir reklamın "inceleme durumu"
+   * `ADSET_PAUSED` görünüyordu. `reviewStatus` reklamın Meta incelemesinden
+   * geçip geçmediğini anlatmalı; duraklatılmış olmak bir inceleme durumu değil.
+   *
+   * Meta'da Google'ın `approval_status`ına karşılık gelen ayrı bir alan yok;
+   * inceleme bilgisi `effective_status`un içine gömülü. Bu yüzden süzüyoruz —
+   * inceleme dışı durumlarda alan NULL kalıyor ve Modül 4 "inceleme bilgisi
+   * yok" ile "reddedildi" arasını ayırt edebiliyor. Reddedilme SEBEPLERİ
+   * ayrıca `disapprovalReasons` alanında (`ad_review_feedback`).
+   */
+  private reviewStatusFrom(value: unknown): string | undefined {
+    const s = String(value ?? '').toUpperCase();
+    const REVIEW_STATES = [
+      'PENDING_REVIEW',
+      'DISAPPROVED',
+      'PREAPPROVED',
+      'PENDING_BILLING_INFO',
+      'WITH_ISSUES',
+      'IN_PROCESS',
+    ];
+    return REVIEW_STATES.includes(s) ? s : undefined;
   }
 
   /**

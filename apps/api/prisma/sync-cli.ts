@@ -420,6 +420,27 @@ async function inspect(): Promise<void> {
     take: 5,
   });
 
+  // Creative tipi dağılımı ve URL kapsaması: "hedef URL yok" ne zaman DOĞRU
+  // (lead formu, WhatsApp) ne zaman EKSİK (trafik kampanyası) — ayırt etmek
+  // için tip bazında bakmak gerekiyor.
+  const byType = await prisma.creative.groupBy({
+    by: ['creativeType'],
+    where: { adAccountId: id },
+    _count: true,
+  });
+  console.log('\n  CREATIVE TİPİ DAĞILIMI');
+  for (const t of byType) {
+    const withUrl = await prisma.creative.count({
+      where: { adAccountId: id, creativeType: t.creativeType, destinationUrl: { not: null } },
+    });
+    const withCta = await prisma.creative.count({
+      where: { adAccountId: id, creativeType: t.creativeType, ctaType: { not: null } },
+    });
+    console.log(
+      `    ${t.creativeType ?? '(tip yok)'}: ${t._count} · hedef URL ${withUrl}/${t._count} · CTA ${withCta}/${t._count}`,
+    );
+  }
+
   console.log(`\n  CREATIVE'LER (ilk ${creatives.length})\n`);
   const emptyText = await prisma.creative.count({
     where: { adAccountId: id, headline: null, primaryText: null },
@@ -451,7 +472,16 @@ async function inspect(): Promise<void> {
   });
   console.log(`\n  REKLAM İNCELEME DURUMU`);
   for (const r of review) {
-    console.log(`    ${r.reviewStatus ?? '(yok)'}: ${r._count}`);
+    // NULL = inceleme ile ilgili bir durum bildirilmemiş, yani reklam normal
+    // akışta. "Reddedildi" ile "bilgi yok" arasındaki fark önemli.
+    console.log(`    ${r.reviewStatus ?? 'inceleme bilgisi yok (normal)'}: ${r._count}`);
+  }
+
+  const disapproved = await prisma.ad.count({
+    where: { adAccountId: id, disapprovalReasons: { not: null } },
+  });
+  if (disapproved > 0) {
+    console.log(`    ! ${disapproved} reklamda inceleme geri bildirimi var (ad_review_feedback)`);
   }
   console.log('');
 }
