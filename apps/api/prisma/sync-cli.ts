@@ -328,6 +328,134 @@ async function printHierarchy(adAccountId: string): Promise<void> {
   console.log('');
 }
 
+/**
+ * Senkronize edilen veriyi derinlemesine gösterir.
+ *
+ * NEDEN GEREKLİ: `run` çıktısı kampanya seviyesinde özet veriyor ve ilk gerçek
+ * senkronizasyonda tüm kampanyalar `bütçe: none` göründü. Bu ya ABO (bütçe ad
+ * set seviyesinde) demek ya da bütçe ayrıştırmamızın bozuk olduğu anlamına
+ * geliyor — ikisini ayırt etmeden Modül 5'in kural motoruna geçilemez, çünkü
+ * kural motorunun değiştireceği şey tam olarak bu alan.
+ */
+async function inspect(): Promise<void> {
+  const id = arg('account') ?? die('--account <uuid> zorunlu.');
+  const account = await prisma.adAccount.findUnique({
+    where: { id },
+    select: { id: true, name: true, currency: true, platform: true },
+  });
+  if (!account) die(`Hesap bulunamadı: ${id}`);
+
+  // Bütçe hangi seviyede? Boş/dolu sayıları sorunun cevabı.
+  const [campTotal, campWithBudget, groupTotal, groupWithBudget, groupWithBid] = await Promise.all([
+    prisma.campaign.count({ where: { adAccountId: id } }),
+    prisma.campaign.count({ where: { adAccountId: id, budgetAmountMicros: { not: null } } }),
+    prisma.adGroup.count({ where: { adAccountId: id } }),
+    prisma.adGroup.count({ where: { adAccountId: id, budgetAmountMicros: { not: null } } }),
+    prisma.adGroup.count({ where: { adAccountId: id, bidAmountMicros: { not: null } } }),
+  ]);
+
+  console.log(`\n${account.name} (${account.platform}, ${account.currency})\n`);
+  console.log('  BÜTÇE DAĞILIMI');
+  console.log(`    kampanya:  ${campWithBudget}/${campTotal} bütçeli`);
+  console.log(`    ad group:  ${groupWithBudget}/${groupTotal} bütçeli · ${groupWithBid}/${groupTotal} teklifli`);
+  if (campWithBudget === 0 && groupWithBudget === 0) {
+    console.log(
+      '\n    ! HİÇBİR SEVİYEDE BÜTÇE YOK. Bu beklenmeyen bir durum: her aktif\n' +
+        '      Meta kampanyasının ya kendi bütçesi (CBO) ya da ad set bütçesi\n' +
+        '      (ABO) olmak zorunda. Ayrıştırma hatası olabilir — aşağıdaki ham\n' +
+        '      alanlara bak.',
+    );
+  } else if (campWithBudget === 0) {
+    console.log('\n    → ABO: bütçe ad set seviyesinde. Normal.');
+  }
+
+  const groups = await prisma.adGroup.findMany({
+    where: { adAccountId: id },
+    select: {
+      name: true,
+      status: true,
+      budgetMode: true,
+      budgetAmountMicros: true,
+      bidAmountMicros: true,
+      optimizationGoal: true,
+      raw: true,
+      campaign: { select: { name: true } },
+      _count: { select: { ads: true } },
+    },
+    orderBy: { name: 'asc' },
+    take: 12,
+  });
+
+  console.log(`\n  AD GROUP'LAR (ilk ${groups.length})\n`);
+  for (const g of groups) {
+    console.log(`  · ${g.name}   \x1b[90m← ${g.campaign.name}\x1b[0m`);
+    console.log(
+      `      ${g.status}  ·  bütçe: ${g.budgetMode} ${money(g.budgetAmountMicros, account.currency)}` +
+        `  ·  teklif: ${money(g.bidAmountMicros, account.currency)}` +
+        `  ·  ${g.optimizationGoal ?? 'hedef yok'}  ·  ${g._count.ads} reklam`,
+    );
+    // HAM ALANLAR: ayrıştırma hatasını yalnızca bunlar kanıtlar. Platformun
+    // gönderdiği değeri bizim okuduğumuzla yan yana görmek gerekiyor.
+    const raw = (g.raw ?? {}) as Record<string, unknown>;
+    const rawBudget = {
+      daily_budget: raw.daily_budget,
+      lifetime_budget: raw.lifetime_budget,
+      bid_amount: raw.bid_amount,
+    };
+    if (Object.values(rawBudget).some((v) => v !== undefined)) {
+      console.log(`      \x1b[90mham: ${JSON.stringify(rawBudget)}\x1b[0m`);
+    }
+  }
+
+  const creatives = await prisma.creative.findMany({
+    where: { adAccountId: id },
+    select: {
+      creativeType: true,
+      headline: true,
+      primaryText: true,
+      ctaType: true,
+      destinationUrl: true,
+      assetUrls: true,
+    },
+    take: 5,
+  });
+
+  console.log(`\n  CREATIVE'LER (ilk ${creatives.length})\n`);
+  const emptyText = await prisma.creative.count({
+    where: { adAccountId: id, headline: null, primaryText: null },
+  });
+  const totalCreatives = await prisma.creative.count({ where: { adAccountId: id } });
+  if (emptyText > 0) {
+    console.log(
+      `    ! ${emptyText}/${totalCreatives} creative'de hem başlık hem metin BOŞ.\n` +
+        '      Meta creative metnini üç ayrı şekilde taşıyor (düz alanlar,\n' +
+        '      object_story_spec, asset_feed_spec); biri kaçırılmış olabilir.\n',
+    );
+  }
+  for (const c of creatives) {
+    console.log(`  · [${c.creativeType ?? 'tip yok'}] ${c.headline ?? '\x1b[90m(başlık yok)\x1b[0m'}`);
+    console.log(
+      `      metin: ${c.primaryText ? `${c.primaryText.slice(0, 70)}${c.primaryText.length > 70 ? '…' : ''}` : '\x1b[90myok\x1b[0m'}`,
+    );
+    console.log(
+      `      CTA: ${c.ctaType ?? '—'}  ·  hedef: ${c.destinationUrl?.slice(0, 60) ?? '—'}` +
+        `  ·  görsel: ${Array.isArray(c.assetUrls) ? c.assetUrls.length : 0}`,
+    );
+  }
+
+  // Reklam inceleme durumu — Modül 4 bunu gösterecek.
+  const review = await prisma.ad.groupBy({
+    by: ['reviewStatus'],
+    where: { adAccountId: id },
+    _count: true,
+  });
+  console.log(`\n  REKLAM İNCELEME DURUMU`);
+  for (const r of review) {
+    console.log(`    ${r.reviewStatus ?? '(yok)'}: ${r._count}`);
+  }
+  console.log('');
+}
+
 async function listJobs(): Promise<void> {
   const jobs = await prisma.syncJob.findMany({
     select: {
@@ -393,6 +521,9 @@ async function main(): Promise<void> {
     case 'run':
       await runStructure();
       break;
+    case 'inspect':
+      await inspect();
+      break;
     case 'jobs':
       await listJobs();
       break;
@@ -404,6 +535,7 @@ Senkronizasyon ops aracı
   sync -- enable  --account <uuid>    hesabı senkronizasyona açar
   sync -- disable --account <uuid>    hesabı kapatır
   sync -- run     --account <uuid>    yapı senkronizasyonunu ŞİMDİ tetikler (tam tarama)
+  sync -- inspect --account <uuid>    senkronize edilen veriyi ham alanlarla inceler
   sync -- jobs                        son 20 senkronizasyon işini gösterir
 
 Örnek:
