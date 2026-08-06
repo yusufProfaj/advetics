@@ -21,9 +21,8 @@ export interface NavEntry {
   module: number;
 }
 
-// Modül 3'ün panel kısmı hazır (Unified Dashboard). Ads Explorer (4) ve
-// sonrası hâlâ pasif.
-const READY_MODULES = new Set([1, 2, 3]);
+// Modül 4 (Ads Explorer) hazır. Kurallar (5) ve sonrası hâlâ pasif.
+const READY_MODULES = new Set([1, 2, 3, 4]);
 
 export function NavSection({ title, items }: { title?: string; items: NavEntry[] }) {
   const pathname = usePathname();

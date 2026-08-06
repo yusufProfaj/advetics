@@ -15,7 +15,7 @@ interface Branding {
 
 const MAIN: NavEntry[] = [
   { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1 },
-  { href: '/kampanyalar', label: 'Ads Explorer', icon: 'explorer', module: 4 },
+  { href: '/ads-explorer', label: 'Ads Explorer', icon: 'explorer', module: 4 },
   { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5 },
   { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6 },
   { href: '/auto-boost', label: 'Auto-Boost', icon: 'boost', module: 7 },
