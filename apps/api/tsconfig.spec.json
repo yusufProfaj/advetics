@@ -1,0 +1,17 @@
+{
+  // Tip kontrolü — testler DÂHİL.
+  //
+  // Ana tsconfig.json `rootDir: "./src"` kullanıyor çünkü derleme çıktısının
+  // dist/ altında düz durması gerekiyor. Test yardımcıları src/ dışında
+  // (test/) yaşıyor ve bu kısıt onları TS6059 ile reddediyor.
+  //
+  // Bu dosya rootDir'i proje köküne alıyor ve emit YAPMIYOR — yalnızca tip
+  // kontrolü için. Üretim derlemesi tsconfig.build.json ile yapılıyor ve
+  // testleri hiç görmüyor.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+}

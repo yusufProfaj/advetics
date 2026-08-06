@@ -152,6 +152,122 @@ export interface DiscoveredSocialProfile {
 }
 
 // -----------------------------------------------------------------------------
+// Yapı senkronizasyonu (L1)
+// -----------------------------------------------------------------------------
+
+/**
+ * Bir API çağrısı için gereken her şey.
+ *
+ * `onRateLimit` geri çağrısı bilinçli bir tercih: sağlayıcı kota bekçisini
+ * TANIMIYOR. Tanısaydı `providers/` katmanı `queue/` katmanına bağımlı olurdu
+ * ve sağlayıcıları izole test etmek imkânsızlaşırdı. Sağlayıcı yalnızca
+ * "platform şu yüzdeyi bildirdi" diyor; bununla ne yapılacağına üst katman
+ * karar veriyor.
+ */
+export interface FetchContext {
+  accessToken: string;
+  /** Meta: `act_<id>` olmadan ham hesap kimliği. Google: `customerId`. */
+  accountExternalId: string;
+  /**
+   * Google MCC kimliği — `login-customer-id` header'ı için.
+   *
+   * Alt hesap sorgularında ZORUNLU: MCC altındaki bir müşteriyi sorgularken bu
+   * header olmadan Google `USER_PERMISSION_DENIED` döner (bkz. google.provider).
+   */
+  loginCustomerId?: string;
+  /** Her yanıttan okunan kota telemetrisi buradan yukarı akar. */
+  onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
+}
+
+/** Platformların ham durum sözlüklerinden normalize edilmiş durum. */
+export type NormalizedEntityStatus =
+  | 'active'
+  | 'paused'
+  | 'deleted'
+  | 'pending_review'
+  | 'ended'
+  | 'unknown';
+
+export type NormalizedBudgetMode = 'daily' | 'lifetime' | 'none';
+
+/** Hiyerarşinin her seviyesinde tekrar eden alanlar. */
+interface StructureEntityBase {
+  externalId: string;
+  name: string;
+  status: NormalizedEntityStatus;
+  /** Platformun ham durumu — "PAUSED" ile "CAMPAIGN_PAUSED" farkı korunur. */
+  effectiveStatus?: string;
+  /** Delta senkronizasyonun anahtarı. */
+  platformUpdatedAt?: Date;
+  raw: unknown;
+}
+
+export interface DiscoveredCampaign extends StructureEntityBase {
+  objective?: string;
+  budgetMode: NormalizedBudgetMode;
+  budgetAmountMicros?: bigint;
+  bidStrategy?: string;
+  startTime?: Date;
+  stopTime?: Date;
+}
+
+export interface DiscoveredAdGroup extends StructureEntityBase {
+  campaignExternalId: string;
+  budgetMode: NormalizedBudgetMode;
+  budgetAmountMicros?: bigint;
+  bidAmountMicros?: bigint;
+  optimizationGoal?: string;
+  /** Modül 8 toplu oluşturucuda şablon olarak kullanılacak. */
+  targeting?: unknown;
+  startTime?: Date;
+  stopTime?: Date;
+}
+
+export interface DiscoveredAd extends StructureEntityBase {
+  adGroupExternalId: string;
+  creativeExternalId?: string;
+  previewUrl?: string;
+  reviewStatus?: string;
+  disapprovalReasons?: unknown;
+}
+
+export interface DiscoveredCreative {
+  externalId: string;
+  creativeType?: string;
+  headline?: string;
+  primaryText?: string;
+  description?: string;
+  ctaType?: string;
+  destinationUrl?: string;
+  displayUrl?: string;
+  assetUrls?: unknown;
+  raw: unknown;
+}
+
+/**
+ * Bir hesabın tüm reklam hiyerarşisi.
+ *
+ * Neden seviye seviye değil de TEK çağrıda: her platformun en verimli sorgu
+ * şekli farklı. Google tek GAQL'de ad_group_ad üzerinden kampanyaya kadar
+ * join'liyor; Meta ise edge'leri ayrı ayrı ama Batch API ile tek HTTP
+ * isteğinde çekiyor. Seviye başına ayrı metot dayatmak ikisini de en verimsiz
+ * biçime zorlardı — Google için 3 ayrı sorgu, Meta için batch'in iptali.
+ *
+ * `complete: false` kısmi sonucu işaretler (kota tükendi, sayfalama yarıda
+ * kaldı). Kısmi sonuçta EKSİK VARLIKLAR SİLİNMİŞ SAYILMAZ — yoksa kotası
+ * dolan bir hesabın tüm kampanyaları silinmiş görünürdü.
+ */
+export interface PlatformStructure {
+  campaigns: DiscoveredCampaign[];
+  adGroups: DiscoveredAdGroup[];
+  ads: DiscoveredAd[];
+  creatives: DiscoveredCreative[];
+  complete: boolean;
+  /** Kaç HTTP çağrısı harcandı — `sync_jobs.api_calls_used` için. */
+  apiCalls: number;
+}
+
+// -----------------------------------------------------------------------------
 // Adapter
 // -----------------------------------------------------------------------------
 
@@ -214,6 +330,20 @@ export interface IAdPlatformProvider {
    * Google için daima boş dizi döner — orada karşılığı yok.
    */
   listSocialProfiles(accessToken: string): Promise<DiscoveredSocialProfile[]>;
+
+  /**
+   * L1 — hesabın reklam hiyerarşisini çeker.
+   *
+   * `since` verilirse yalnızca o andan sonra değişen varlıklar istenir. Bu
+   * DELTA senkronizasyondur ve maliyeti belirleyen tek şeydir: 6 saatte bir
+   * 500 kampanyanın tamamını çekmek yerine değişen 3'ünü çekmek kotayı
+   * ~%95 azaltıyor.
+   *
+   * Delta sonucu KISMİDİR: dönmeyen varlık "silinmiş" değil "değişmemiş"
+   * demektir. Silinme tespiti yalnızca `since` verilmediğinde (tam tarama)
+   * yapılabilir — bkz. `PlatformStructure.complete`.
+   */
+  fetchStructure(ctx: FetchContext, since?: Date): Promise<PlatformStructure>;
 }
 
 export const AD_PLATFORM_PROVIDERS = 'AD_PLATFORM_PROVIDERS';

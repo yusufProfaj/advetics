@@ -4,11 +4,19 @@ import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
   type AuthorizeUrlParams,
+  type DiscoveredAd,
   type DiscoveredAdAccount,
+  type DiscoveredAdGroup,
+  type DiscoveredCampaign,
+  type DiscoveredCreative,
   type DiscoveredSocialProfile,
+  type FetchContext,
   type IAdPlatformProvider,
   type NormalizedAccountStatus,
+  type NormalizedBudgetMode,
+  type NormalizedEntityStatus,
   type OAuthTokens,
+  type PlatformStructure,
   type TokenVerification,
 } from '../provider.types';
 import { parseMetaRateLimit, platformFetch } from './http';
@@ -29,7 +37,7 @@ interface GraphPage {
  * Meta (Facebook / Instagram) — Marketing API adapter'ı.
  *
  * Kapsam: reklam hesabı keşfi, sayfa/Instagram profili keşfi, token yaşam
- * döngüsü. Kampanya okuma/yazma Modül 3–4'te bu sınıfa eklenecek.
+ * döngüsü, L1 yapı okuma. Yazma aksiyonları Modül 5'te eklenecek.
  */
 @Injectable()
 export class MetaProvider implements IAdPlatformProvider {
@@ -371,5 +379,389 @@ export class MetaProvider implements IAdPlatformProvider {
     }
 
     return profiles;
+  }
+
+  // ---------------------------------------------------------------------------
+  // L1 — yapı senkronizasyonu
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Kampanya → ad set → ad → creative hiyerarşisini çeker.
+   *
+   * SEVİYE BAŞINA BİR EDGE ÇAĞRISI, ad başına ayrı creative çağrısı DEĞİL.
+   * Meta'nın `adcreatives` alanını ad edge'i içine gömebilmesi (`creative{...}`)
+   * burada kritik: 500 reklamlı bir hesapta ad başına creative çekmek 500 ek
+   * çağrı, yani kotanın tamamı demek olurdu.
+   *
+   * `since` verildiğinde `filtering` ile sunucu tarafında süzüyoruz. Meta'nın
+   * `updated_time` filtresi ad set ve ad seviyesinde çalışıyor; kampanya
+   * seviyesinde de destekli. Delta sonucu KISMİDİR — dönmeyen varlık silinmiş
+   * sayılmaz.
+   */
+  async fetchStructure(ctx: FetchContext, since?: Date): Promise<PlatformStructure> {
+    // Hesap kimliği `act_` prefix'i ile gelmeli; keşifte öyle kaydediyoruz ama
+    // dışarıdan ham kimlik gelme ihtimaline karşı normalize ediyoruz.
+    const act = ctx.accountExternalId.startsWith('act_')
+      ? ctx.accountExternalId
+      : `act_${ctx.accountExternalId}`;
+
+    const calls = { n: 0 };
+    const campaigns: DiscoveredCampaign[] = [];
+    const adGroups: DiscoveredAdGroup[] = [];
+    const ads: DiscoveredAd[] = [];
+    // Aynı creative birden fazla reklamda kullanılabilir; Map ile tekilleştiriyoruz.
+    const creatives = new Map<string, DiscoveredCreative>();
+    let complete = true;
+
+    const campaignPages = await this.pagedEdge(
+      ctx,
+      act,
+      'campaigns',
+      [
+        'id',
+        'name',
+        'objective',
+        'status',
+        'effective_status',
+        'daily_budget',
+        'lifetime_budget',
+        'bid_strategy',
+        'start_time',
+        'stop_time',
+        'updated_time',
+      ],
+      since,
+      calls,
+    );
+    if (!campaignPages.complete) complete = false;
+    for (const raw of campaignPages.rows) {
+      const budget = this.readMetaBudget(raw);
+      campaigns.push({
+        externalId: String(raw.id),
+        name: String(raw.name ?? raw.id),
+        objective: raw.objective ? String(raw.objective) : undefined,
+        status: this.mapEntityStatus(raw.effective_status ?? raw.status),
+        effectiveStatus: raw.effective_status ? String(raw.effective_status) : undefined,
+        budgetMode: budget.mode,
+        budgetAmountMicros: budget.micros,
+        bidStrategy: raw.bid_strategy ? String(raw.bid_strategy) : undefined,
+        startTime: this.parseDate(raw.start_time),
+        stopTime: this.parseDate(raw.stop_time),
+        platformUpdatedAt: this.parseDate(raw.updated_time),
+        raw,
+      });
+    }
+
+    const adSetPages = await this.pagedEdge(
+      ctx,
+      act,
+      'adsets',
+      [
+        'id',
+        'name',
+        'campaign_id',
+        'status',
+        'effective_status',
+        'daily_budget',
+        'lifetime_budget',
+        'bid_amount',
+        'optimization_goal',
+        'targeting',
+        'start_time',
+        'end_time',
+        'updated_time',
+      ],
+      since,
+      calls,
+    );
+    if (!adSetPages.complete) complete = false;
+    for (const raw of adSetPages.rows) {
+      const budget = this.readMetaBudget(raw);
+      adGroups.push({
+        externalId: String(raw.id),
+        name: String(raw.name ?? raw.id),
+        campaignExternalId: String(raw.campaign_id ?? ''),
+        status: this.mapEntityStatus(raw.effective_status ?? raw.status),
+        effectiveStatus: raw.effective_status ? String(raw.effective_status) : undefined,
+        budgetMode: budget.mode,
+        budgetAmountMicros: budget.micros,
+        bidAmountMicros: this.centsToMicros(raw.bid_amount),
+        optimizationGoal: raw.optimization_goal ? String(raw.optimization_goal) : undefined,
+        targeting: raw.targeting,
+        startTime: this.parseDate(raw.start_time),
+        // Meta ad set seviyesinde `end_time`, kampanyada `stop_time` diyor.
+        stopTime: this.parseDate(raw.end_time),
+        platformUpdatedAt: this.parseDate(raw.updated_time),
+        raw,
+      });
+    }
+
+    const adPages = await this.pagedEdge(
+      ctx,
+      act,
+      'ads',
+      [
+        'id',
+        'name',
+        'adset_id',
+        'status',
+        'effective_status',
+        'updated_time',
+        // Creative'i GÖMÜLÜ istiyoruz — ad başına ayrı çağrı kotayı bitirir.
+        'creative{id,name,object_type,title,body,link_url,call_to_action_type,' +
+          'image_url,thumbnail_url,object_story_spec,asset_feed_spec}',
+        // Reddedilme sebepleri Modül 4'te (Ads Explorer) gösterilecek.
+        'ad_review_feedback',
+      ],
+      since,
+      calls,
+    );
+    if (!adPages.complete) complete = false;
+    for (const raw of adPages.rows) {
+      const creative =
+        raw.creative && typeof raw.creative === 'object'
+          ? (raw.creative as Record<string, unknown>)
+          : undefined;
+      const creativeId = creative?.id ? String(creative.id) : undefined;
+
+      if (creative && creativeId && !creatives.has(creativeId)) {
+        creatives.set(creativeId, this.mapMetaCreative(creativeId, creative));
+      }
+
+      ads.push({
+        externalId: String(raw.id),
+        name: String(raw.name ?? raw.id),
+        adGroupExternalId: String(raw.adset_id ?? ''),
+        status: this.mapEntityStatus(raw.effective_status ?? raw.status),
+        effectiveStatus: raw.effective_status ? String(raw.effective_status) : undefined,
+        creativeExternalId: creativeId,
+        reviewStatus: raw.effective_status ? String(raw.effective_status) : undefined,
+        disapprovalReasons: raw.ad_review_feedback,
+        platformUpdatedAt: this.parseDate(raw.updated_time),
+        raw,
+      });
+    }
+
+    return {
+      campaigns,
+      adGroups,
+      ads,
+      creatives: [...creatives.values()],
+      complete,
+      apiCalls: calls.n,
+    };
+  }
+
+  /**
+   * Bir edge'in tüm sayfalarını toplar.
+   *
+   * `limit=500`: Meta bu edge'lerde 500'e izin veriyor ve sayfa sayısını 5×
+   * azaltmak kotanın `call_count` bileşenini doğrudan düşürüyor.
+   *
+   * Sayfa üst sınırı aşılırsa `complete: false` dönüyor — sessizce kesilmiş bir
+   * liste, eksik varlıkların silinmiş sanılmasına yol açar.
+   */
+  private async pagedEdge(
+    ctx: FetchContext,
+    act: string,
+    edge: 'campaigns' | 'adsets' | 'ads',
+    fields: string[],
+    since: Date | undefined,
+    calls: { n: number },
+  ): Promise<{ rows: Array<Record<string, unknown>>; complete: boolean }> {
+    const url = new URL(`${this.graph}/${act}/${edge}`);
+    url.searchParams.set('fields', fields.join(','));
+    url.searchParams.set('limit', '500');
+    url.searchParams.set('access_token', ctx.accessToken);
+    // Silinen ve arşivlenen varlıklar da gelsin: geçmiş metrikleri onlara bağlı
+    // ve soft delete için platformdaki durumu görmemiz gerekiyor.
+    url.searchParams.set(
+      'effective_status',
+      JSON.stringify([
+        'ACTIVE',
+        'PAUSED',
+        'DELETED',
+        'PENDING_REVIEW',
+        'DISAPPROVED',
+        'PREAPPROVED',
+        'PENDING_BILLING_INFO',
+        'CAMPAIGN_PAUSED',
+        'ARCHIVED',
+        'ADSET_PAUSED',
+        'IN_PROCESS',
+        'WITH_ISSUES',
+      ]),
+    );
+
+    if (since) {
+      // Meta filtering: alan + operatör + değer. `updated_time` epoch saniye.
+      url.searchParams.set(
+        'filtering',
+        JSON.stringify([
+          {
+            field: 'updated_time',
+            operator: 'GREATER_THAN',
+            value: Math.floor(since.getTime() / 1000),
+          },
+        ]),
+      );
+    }
+
+    const rows: Array<Record<string, unknown>> = [];
+    let next: string | undefined = url.toString();
+    let pages = 0;
+    const MAX_PAGES = 40;
+
+    while (next && pages < MAX_PAGES) {
+      const res = await platformFetch<GraphPage>('meta', next, {}, parseMetaRateLimit);
+      calls.n++;
+      if (res.rateLimit && ctx.onRateLimit) await ctx.onRateLimit(res.rateLimit);
+
+      const body: GraphPage = res.data;
+      rows.push(...(body.data ?? []));
+      next = body.paging?.next;
+      pages++;
+    }
+
+    if (next) {
+      this.logger.warn(
+        `Meta ${edge} listesi ${MAX_PAGES} sayfada kesildi (${act}) — sonuç KISMİ işaretlendi`,
+      );
+      return { rows, complete: false };
+    }
+
+    return { rows, complete: true };
+  }
+
+  /** Gömülü creative nesnesini ortak şekle çevirir. */
+  private mapMetaCreative(id: string, c: Record<string, unknown>): DiscoveredCreative {
+    // Meta creative'i üç ayrı şekilde taşıyor:
+    //   · düz alanlar (title/body) — eski tekil creative'ler
+    //   · object_story_spec.link_data — sayfa gönderisi tabanlı creative'ler
+    //   · asset_feed_spec — dinamik/çoklu varyasyonlu creative'ler
+    // Hepsini denemek zorundayız; tek şekle güvenmek çoğu reklamda boş
+    // metin göstermek olurdu.
+    const story =
+      c.object_story_spec && typeof c.object_story_spec === 'object'
+        ? (c.object_story_spec as Record<string, unknown>)
+        : undefined;
+    const link =
+      story?.link_data && typeof story.link_data === 'object'
+        ? (story.link_data as Record<string, unknown>)
+        : undefined;
+    const feed =
+      c.asset_feed_spec && typeof c.asset_feed_spec === 'object'
+        ? (c.asset_feed_spec as Record<string, unknown>)
+        : undefined;
+
+    const firstText = (value: unknown): string | undefined => {
+      if (!Array.isArray(value) || value.length === 0) return undefined;
+      const first = value[0];
+      if (typeof first === 'string') return first;
+      if (first && typeof first === 'object') {
+        const text = (first as Record<string, unknown>).text;
+        if (typeof text === 'string') return text;
+      }
+      return undefined;
+    };
+
+    const cta =
+      link?.call_to_action && typeof link.call_to_action === 'object'
+        ? String((link.call_to_action as Record<string, unknown>).type ?? '') || undefined
+        : undefined;
+
+    const assetUrls = [c.image_url, c.thumbnail_url, link?.picture].filter(
+      (u): u is string => typeof u === 'string' && u.length > 0,
+    );
+
+    return {
+      externalId: id,
+      creativeType: c.object_type ? String(c.object_type) : undefined,
+      headline: this.str(c.title ?? link?.name ?? firstText(feed?.titles)),
+      primaryText: this.str(c.body ?? link?.message ?? firstText(feed?.bodies)),
+      description: this.str(link?.description ?? firstText(feed?.descriptions)),
+      ctaType: cta ?? (c.call_to_action_type ? String(c.call_to_action_type) : undefined),
+      destinationUrl: this.str(c.link_url ?? link?.link ?? firstText(feed?.link_urls)),
+      displayUrl: this.str(link?.caption),
+      assetUrls: assetUrls.length > 0 ? assetUrls : undefined,
+      raw: c,
+    };
+  }
+
+  /**
+   * Meta'nın bütçe alanlarını okur.
+   *
+   * Meta bütçeyi hesabın para biriminin EN KÜÇÜK BİRİMİNDE (kuruş/cent) veriyor,
+   * Google ise micros. İkisini micros'a çeviriyoruz: 1 cent = 10.000 micros.
+   * Bunu karıştırmak bütçeleri 10.000 kat yanlış gösterir.
+   */
+  private readMetaBudget(raw: Record<string, unknown>): {
+    mode: NormalizedBudgetMode;
+    micros?: bigint;
+  } {
+    const daily = this.centsToMicros(raw.daily_budget);
+    if (daily !== undefined && daily > 0n) return { mode: 'daily', micros: daily };
+    const lifetime = this.centsToMicros(raw.lifetime_budget);
+    if (lifetime !== undefined && lifetime > 0n) return { mode: 'lifetime', micros: lifetime };
+    // Bütçe yok demek CBO/üst seviye bütçe demek — hata değil.
+    return { mode: 'none' };
+  }
+
+  private centsToMicros(value: unknown): bigint | undefined {
+    if (value === null || value === undefined || value === '') return undefined;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return undefined;
+    return BigInt(Math.round(n)) * 10_000n;
+  }
+
+  private str(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private parseDate(value: unknown): Date | undefined {
+    if (typeof value !== 'string' || value.length === 0) return undefined;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  }
+
+  /**
+   * Meta'nın `effective_status` sözlüğünü ortak dile çevirir.
+   *
+   * `effective_status` üst seviyeden miras alınan durumu da içeriyor
+   * (CAMPAIGN_PAUSED, ADSET_PAUSED): kampanya duraklatıldığında altındaki
+   * reklamın kendi `status`u ACTIVE kalır ama gerçekte yayında değildir.
+   * Kural motorunun (Modül 5) "aktif" tanımı bu yüzden effective_status'a
+   * dayanmalı.
+   */
+  private mapEntityStatus(value: unknown): NormalizedEntityStatus {
+    const s = String(value ?? '').toUpperCase();
+    switch (s) {
+      case 'ACTIVE':
+        return 'active';
+      case 'PAUSED':
+      case 'CAMPAIGN_PAUSED':
+      case 'ADSET_PAUSED':
+        return 'paused';
+      case 'DELETED':
+      case 'ARCHIVED':
+        return 'deleted';
+      case 'PENDING_REVIEW':
+      case 'IN_PROCESS':
+      case 'PREAPPROVED':
+      case 'PENDING_BILLING_INFO':
+        return 'pending_review';
+      case 'DISAPPROVED':
+      case 'WITH_ISSUES':
+        // Reddedilen reklam yayında değil ama "silinmiş" de değil; durumu
+        // `effectiveStatus` alanında ham hâliyle korunuyor.
+        return 'paused';
+      case 'CAMPAIGN_ENDED':
+      case 'ADSET_ENDED':
+        return 'ended';
+      default:
+        return 'unknown';
+    }
   }
 }

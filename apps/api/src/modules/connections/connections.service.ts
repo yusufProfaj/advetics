@@ -19,8 +19,7 @@ import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { GoogleProvider } from './providers/google.provider';
-import { MetaProvider } from './providers/meta.provider';
+import { ProviderRegistry } from './provider.registry';
 import { PlatformApiError, type IAdPlatformProvider } from './provider.types';
 import { TokenVaultService } from './token-vault.service';
 
@@ -36,22 +35,18 @@ const STATE_TTL_MS = 10 * 60 * 1000;
 @Injectable()
 export class ConnectionsService {
   private readonly logger = new Logger(ConnectionsService.name);
-  private readonly providers: Record<Platform, IAdPlatformProvider>;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly admin: PrismaAdminService,
     private readonly vault: TokenVaultService,
     private readonly audit: AuditService,
-    meta: MetaProvider,
-    google: GoogleProvider,
+    private readonly registry: ProviderRegistry,
     @Inject(CONFIG) private readonly config: AppConfig,
-  ) {
-    this.providers = { meta, google };
-  }
+  ) {}
 
   private provider(platform: Platform): IAdPlatformProvider {
-    return this.providers[platform];
+    return this.registry.get(platform);
   }
 
   /** OAuth callback adresi. Meta/Google konsolunda BİREBİR kayıtlı olmalı. */
@@ -88,15 +83,15 @@ export class ConnectionsService {
         platform: 'meta',
         configured: metaMissing.length === 0,
         missingConfig: metaMissing,
-        requiredScopes: [...this.providers.meta.requiredScopes],
-        optionalScopes: [...this.providers.meta.optionalScopes],
+        requiredScopes: [...this.provider('meta').requiredScopes],
+        optionalScopes: [...this.provider('meta').optionalScopes],
       },
       {
         platform: 'google',
         configured: googleMissing.length === 0,
         missingConfig: googleMissing,
-        requiredScopes: [...this.providers.google.requiredScopes],
-        optionalScopes: [...this.providers.google.optionalScopes],
+        requiredScopes: [...this.provider('google').requiredScopes],
+        optionalScopes: [...this.provider('google').optionalScopes],
       },
     ];
   }

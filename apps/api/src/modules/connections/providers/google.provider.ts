@@ -4,11 +4,19 @@ import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
   type AuthorizeUrlParams,
+  type DiscoveredAd,
   type DiscoveredAdAccount,
+  type DiscoveredAdGroup,
+  type DiscoveredCampaign,
+  type DiscoveredCreative,
   type DiscoveredSocialProfile,
+  type FetchContext,
   type IAdPlatformProvider,
   type NormalizedAccountStatus,
+  type NormalizedBudgetMode,
+  type NormalizedEntityStatus,
   type OAuthTokens,
+  type PlatformStructure,
   type TokenVerification,
 } from '../provider.types';
 import { platformFetch } from './http';
@@ -426,6 +434,342 @@ export class GoogleProvider implements IAdPlatformProvider {
   /** Google'da sosyal profil kavramı yok — Auto-Boost yalnızca Meta'da. */
   async listSocialProfiles(): Promise<DiscoveredSocialProfile[]> {
     return [];
+  }
+
+  // ---------------------------------------------------------------------------
+  // L1 — yapı senkronizasyonu
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Kampanya → ad group → ad hiyerarşisini çeker.
+   *
+   * ÜÇ GAQL SORGUSU, seviye başına bir tane. Tek sorguda `ad_group_ad`'den
+   * kampanyaya kadar join'lemek teknik olarak mümkün ama sonuç kartezyen
+   * olurdu: reklamı olmayan kampanya/ad group hiç dönmez ve her reklam satırı
+   * kampanya alanlarını tekrar taşır. Duraklatılmış ama reklamı olmayan bir
+   * kampanyayı kaçırmak, kural motorunun (Modül 5) onu görememesi demek.
+   *
+   * `since` KULLANILMIYOR ve bu kasıtlı. Google Ads'te varlıkların
+   * `updated_at` alanı yok; delta için ayrı `change_status` kaynağı sorgulanır,
+   * o da yalnızca son 90 günü kapsıyor ve yalnızca kaynak ADLARINI döndürüyor
+   * — ardından değişen varlıkları ayrı sorguyla çekmek gerekir. Google'ın
+   * kotası Meta gibi çağrı sayısına değil operasyona dayandığı ve tam tarama
+   * zaten tek sorgu olduğu için kazanç ek karmaşıklığı hak etmiyor. Ayrıca tam
+   * tarama silinme tespitini güvenilir kılıyor.
+   */
+  async fetchStructure(ctx: FetchContext): Promise<PlatformStructure> {
+    const { accessToken, accountExternalId: customerId, loginCustomerId } = ctx;
+    const calls = { n: 0 };
+
+    const campaignRows = await this.searchGaqlPaged<{
+      campaign?: Record<string, unknown>;
+      campaignBudget?: Record<string, unknown>;
+    }>(
+      accessToken,
+      customerId,
+      `SELECT campaign.id, campaign.name, campaign.status, campaign.serving_status,
+              campaign.advertising_channel_type, campaign.bidding_strategy_type,
+              campaign.start_date, campaign.end_date,
+              campaign_budget.amount_micros, campaign_budget.total_amount_micros,
+              campaign_budget.period
+       FROM campaign`,
+      loginCustomerId,
+      calls,
+    );
+
+    const campaigns: DiscoveredCampaign[] = [];
+    for (const row of campaignRows) {
+      const c = row.campaign;
+      if (!c?.id) continue;
+      const budget = this.readGoogleBudget(row.campaignBudget);
+      campaigns.push({
+        externalId: String(c.id),
+        name: this.str(c.name) ?? String(c.id),
+        // Google'ın "objective" karşılığı kanal türü: SEARCH, PERFORMANCE_MAX…
+        objective: this.str(c.advertisingChannelType),
+        status: this.mapEntityStatus(c.status),
+        effectiveStatus: this.str(c.servingStatus) ?? this.str(c.status),
+        budgetMode: budget.mode,
+        budgetAmountMicros: budget.micros,
+        bidStrategy: this.str(c.biddingStrategyType),
+        startTime: this.parseGoogleDate(c.startDate),
+        stopTime: this.parseGoogleDate(c.endDate),
+        // Google `updated_at` vermiyor — delta anahtarı yok.
+        raw: row,
+      });
+    }
+
+    const adGroupRows = await this.searchGaqlPaged<{
+      adGroup?: Record<string, unknown>;
+    }>(
+      accessToken,
+      customerId,
+      `SELECT ad_group.id, ad_group.name, ad_group.campaign, ad_group.status,
+              ad_group.type, ad_group.cpc_bid_micros, ad_group.cpm_bid_micros,
+              ad_group.target_cpa_micros
+       FROM ad_group`,
+      loginCustomerId,
+      calls,
+    );
+
+    const adGroups: DiscoveredAdGroup[] = [];
+    for (const row of adGroupRows) {
+      const g = row.adGroup;
+      if (!g?.id) continue;
+      adGroups.push({
+        externalId: String(g.id),
+        name: this.str(g.name) ?? String(g.id),
+        // `campaign` bir kaynak adı: "customers/123/campaigns/456"
+        campaignExternalId: this.lastPathSegment(g.campaign),
+        status: this.mapEntityStatus(g.status),
+        effectiveStatus: this.str(g.status),
+        // Google'da bütçe KAMPANYA seviyesinde; ad group'un kendi bütçesi yok.
+        budgetMode: 'none',
+        bidAmountMicros:
+          this.micros(g.cpcBidMicros) ??
+          this.micros(g.cpmBidMicros) ??
+          this.micros(g.targetCpaMicros),
+        optimizationGoal: this.str(g.type),
+        raw: row,
+      });
+    }
+
+    const adRows = await this.searchGaqlPaged<{
+      adGroupAd?: Record<string, unknown>;
+    }>(
+      accessToken,
+      customerId,
+      `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type,
+              ad_group_ad.ad.final_urls, ad_group_ad.ad.display_url,
+              ad_group_ad.ad.responsive_search_ad.headlines,
+              ad_group_ad.ad.responsive_search_ad.descriptions,
+              ad_group_ad.ad.responsive_display_ad.headlines,
+              ad_group_ad.ad.responsive_display_ad.descriptions,
+              ad_group_ad.ad.responsive_display_ad.marketing_images,
+              ad_group_ad.ad_group, ad_group_ad.status,
+              ad_group_ad.policy_summary.approval_status,
+              ad_group_ad.policy_summary.policy_topic_entries
+       FROM ad_group_ad`,
+      loginCustomerId,
+      calls,
+    );
+
+    const ads: DiscoveredAd[] = [];
+    const creatives: DiscoveredCreative[] = [];
+    for (const row of adRows) {
+      const aga = row.adGroupAd;
+      const ad = this.obj(aga?.ad);
+      if (!ad?.id) continue;
+      const id = String(ad.id);
+      const policy = this.obj(aga?.policySummary);
+
+      ads.push({
+        externalId: id,
+        name: this.str(ad.name) ?? String(ad.type ?? 'ad') + ' ' + id,
+        adGroupExternalId: this.lastPathSegment(aga?.adGroup),
+        status: this.mapEntityStatus(aga?.status),
+        effectiveStatus: this.str(aga?.status),
+        // GOOGLE'DA AYRI CREATIVE VARLIĞI YOK: reklamın kendisi creative'dir.
+        // Metinler `ad` nesnesinin içinde. Ortak modeli koruyabilmek için
+        // reklamla AYNI kimlikte bir creative satırı üretiyoruz; böylece
+        // Ads Explorer ve raporlar iki platformda tek sorguyla çalışıyor.
+        creativeExternalId: id,
+        reviewStatus: this.str(policy?.approvalStatus),
+        disapprovalReasons: policy?.policyTopicEntries,
+        raw: row,
+      });
+      creatives.push(this.mapGoogleCreative(id, ad));
+    }
+
+    return { campaigns, adGroups, ads, creatives, complete: true, apiCalls: calls.n };
+  }
+
+  /**
+   * GAQL sorgusunu SAYFALAYARAK çalıştırır.
+   *
+   * `searchGaql` tek sayfa döndürüyor ve keşif için yeterliydi (hesap sayısı
+   * küçük). Yapı senkronizasyonunda değil: binlerce reklamlı bir hesapta ilk
+   * sayfayla yetinmek varlıkların çoğunu görmemek, dolayısıyla onları silinmiş
+   * sanmak demek.
+   */
+  private async searchGaqlPaged<T>(
+    accessToken: string,
+    customerId: string,
+    query: string,
+    loginCustomerId: string | undefined,
+    calls: { n: number },
+  ): Promise<T[]> {
+    const { developerToken } = this.assertConfigured();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      'developer-token': developerToken,
+      'Content-Type': 'application/json',
+    };
+    if (loginCustomerId) headers['login-customer-id'] = loginCustomerId;
+
+    const rows: T[] = [];
+    let pageToken: string | undefined;
+    let pages = 0;
+    const MAX_PAGES = 100;
+
+    do {
+      const { data } = await platformFetch<{ results?: T[]; nextPageToken?: string }>(
+        'google',
+        `${this.adsBase}/customers/${customerId}/googleAds:search`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            query: query.trim(),
+            // 10.000 Google'ın izin verdiği üst sınır. Sayfa sayısını
+            // düşürmek hem gecikmeyi hem operasyon maliyetini azaltıyor.
+            pageSize: 10_000,
+            ...(pageToken ? { pageToken } : {}),
+          }),
+        },
+      );
+      calls.n++;
+      rows.push(...(data.results ?? []));
+      pageToken = data.nextPageToken;
+      pages++;
+    } while (pageToken && pages < MAX_PAGES);
+
+    if (pageToken) {
+      throw new PlatformApiError(
+        'google',
+        'transient',
+        `Google sorgusu ${MAX_PAGES} sayfada bitmedi (müşteri ${customerLabel(customerId)}). ` +
+          'Kısmi sonucu kaydetmek varlıkları silinmiş gösterirdi.',
+      );
+    }
+
+    return rows;
+  }
+
+  /**
+   * Google reklamını ortak creative şekline çevirir.
+   *
+   * RSA/RDA'da başlık ve açıklama LİSTE hâlinde geliyor (Google kombinasyonları
+   * kendisi kuruyor). Birincisini alıp tamamını `raw` içinde saklıyoruz:
+   * tek bir "headline" göstermek zorundayız ama bilgiyi kaybetmemeliyiz.
+   */
+  private mapGoogleCreative(id: string, ad: Record<string, unknown>): DiscoveredCreative {
+    const rsa = this.obj(ad.responsiveSearchAd);
+    const rda = this.obj(ad.responsiveDisplayAd);
+    const source = rsa ?? rda;
+
+    const firstAssetText = (value: unknown): string | undefined => {
+      if (!Array.isArray(value)) return undefined;
+      for (const item of value) {
+        const text = this.obj(item)?.text;
+        if (typeof text === 'string' && text.trim().length > 0) return text.trim();
+      }
+      return undefined;
+    };
+
+    const finalUrls = Array.isArray(ad.finalUrls) ? ad.finalUrls : [];
+    const images = Array.isArray(rda?.marketingImages)
+      ? rda.marketingImages
+          .map((i) => this.str(this.obj(i)?.asset))
+          .filter((u): u is string => u !== undefined)
+      : [];
+
+    return {
+      externalId: id,
+      creativeType: this.str(ad.type),
+      headline: firstAssetText(source?.headlines),
+      primaryText: firstAssetText(source?.descriptions),
+      description: undefined,
+      // Google'da CTA metni reklam türüne gömülü; ayrı alan yok.
+      ctaType: undefined,
+      destinationUrl: typeof finalUrls[0] === 'string' ? finalUrls[0] : undefined,
+      displayUrl: this.str(ad.displayUrl),
+      assetUrls: images.length > 0 ? images : undefined,
+      raw: ad,
+    };
+  }
+
+  /**
+   * Google'ın kampanya bütçesini okur.
+   *
+   * Google zaten micros kullanıyor — Meta'daki cent→micros çevrimi burada YOK.
+   * `period` DAILY ise günlük, aksi hâlde toplam bütçe alanına bakıyoruz.
+   */
+  private readGoogleBudget(budget: Record<string, unknown> | undefined): {
+    mode: NormalizedBudgetMode;
+    micros?: bigint;
+  } {
+    if (!budget) return { mode: 'none' };
+    const daily = this.micros(budget.amountMicros);
+    const total = this.micros(budget.totalAmountMicros);
+    if (String(budget.period ?? '').toUpperCase() === 'DAILY' && daily !== undefined) {
+      return { mode: 'daily', micros: daily };
+    }
+    if (total !== undefined && total > 0n) return { mode: 'lifetime', micros: total };
+    if (daily !== undefined) return { mode: 'daily', micros: daily };
+    return { mode: 'none' };
+  }
+
+  /** Google int64 alanlarını JSON'da STRING olarak döndürür. */
+  private micros(value: unknown): bigint | undefined {
+    if (value === null || value === undefined || value === '') return undefined;
+    try {
+      return BigInt(String(value));
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** "customers/123/campaigns/456" → "456" */
+  private lastPathSegment(value: unknown): string {
+    if (typeof value !== 'string') return '';
+    const parts = value.split('/');
+    return parts[parts.length - 1] ?? '';
+  }
+
+  private obj(value: unknown): Record<string, unknown> | undefined {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined;
+  }
+
+  private str(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  /**
+   * Google tarihleri "YYYY-MM-DD" (saat yok) veriyor.
+   *
+   * UTC gün başına sabitliyoruz. Yerel saat kullanmak sunucu zaman dilimine
+   * göre bir gün kaydırırdı.
+   */
+  private parseGoogleDate(value: unknown): Date | undefined {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(value)) return undefined;
+    const d = new Date(`${value.slice(0, 10)}T00:00:00Z`);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  }
+
+  /**
+   * Google durum sözlüğünü ortak dile çevirir.
+   *
+   * Meta'nın aksine Google üst seviye durumu MİRAS ETTİRMİYOR: duraklatılmış
+   * bir kampanyanın altındaki ad group ENABLED kalır. "Gerçekten yayında mı"
+   * sorusunu yanıtlamak için hiyerarşiyi yukarı doğru kontrol etmek gerekir —
+   * bunu sorgu katmanı yapıyor, adapter ham durumu bildiriyor.
+   */
+  private mapEntityStatus(value: unknown): NormalizedEntityStatus {
+    switch (String(value ?? '').toUpperCase()) {
+      case 'ENABLED':
+        return 'active';
+      case 'PAUSED':
+        return 'paused';
+      case 'REMOVED':
+        return 'deleted';
+      default:
+        return 'unknown';
+    }
   }
 }
 

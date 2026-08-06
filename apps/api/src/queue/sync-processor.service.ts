@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { UnrecoverableError } from 'bullmq';
+import { PlatformApiError } from '../modules/connections/provider.types';
 import type { Platform } from '@advetics/shared';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
 import { QuotaGuardService, type QuotaLayer } from './quota-guard.service';
+import { StructureSyncService } from './structure-sync.service';
 import { SyncQueueService } from './sync-queue.service';
 import { layerForJob, type SyncJobPayload } from './queues';
 
@@ -30,6 +32,7 @@ export class SyncProcessorService {
     private readonly db: PrismaAdminService,
     private readonly quota: QuotaGuardService,
     private readonly queue: SyncQueueService,
+    private readonly structure: StructureSyncService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -202,23 +205,100 @@ export class SyncProcessorService {
       }
     }
 
-    // ---------------------------------------------------------------------
-    // Gerçek senkronizasyon mantığı henüz yazılmadı.
+    // -----------------------------------------------------------------------
+    // Katman yönlendirmesi.
     //
-    // UnrecoverableError kullanıyoruz: retry etmek anlamsız, kota harcar ve
-    // başarısız kuyruğu şişirir. sync_jobs tablosunda `not_implemented` olarak
-    // görünüyor — hangi katmanın eksik olduğu teşhiste net.
-    // ---------------------------------------------------------------------
+    // Yazılmamış katmanlar UnrecoverableError fırlatıyor: retry etmek anlamsız,
+    // kota harcar ve başarısız kuyruğu şişirir. `sync_jobs.error_code` =
+    // `not_implemented` — hangi katmanın eksik olduğu teşhiste net.
+    // -----------------------------------------------------------------------
+    if (payload.jobType === 'structure') {
+      if (!payload.adAccountId) {
+        await this.markFailed(syncJobId, 'missing_account', 'structure işi hesap kimliği olmadan geldi');
+        throw new UnrecoverableError('structure işi hesap kimliği olmadan geldi');
+      }
+
+      try {
+        const result = await this.structure.syncAccount({
+          adAccountId: payload.adAccountId,
+          // Kullanıcı elle tetiklediyse tam tarama yap: "yenile"ye basan biri
+          // silinmiş kampanyanın kaybolmasını bekliyor.
+          full: payload.interactive === true,
+        });
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        return { rows: result.rows, note: result.note };
+      } catch (err) {
+        await this.recordFailure(syncJobId, err);
+        throw err;
+      }
+    }
+
+    await this.markFailed(
+      syncJobId,
+      'not_implemented',
+      `${payload.jobType} işleyicisi henüz yazılmadı`,
+    );
+    throw new UnrecoverableError(`${payload.jobType} işleyicisi henüz yazılmadı`);
+  }
+
+  private async markFailed(syncJobId: bigint, code: string, message: string): Promise<void> {
     await this.db.syncJob.update({
       where: { id: syncJobId },
       data: {
         status: 'failed',
         finishedAt: new Date(),
-        errorCode: 'not_implemented',
-        errorMessage: `${payload.jobType} işleyicisi henüz yazılmadı`,
+        errorCode: code.slice(0, 80),
+        errorMessage: message.slice(0, 1000),
       },
     });
-    throw new UnrecoverableError(`${payload.jobType} işleyicisi henüz yazılmadı`);
+  }
+
+  /**
+   * Hatayı tabloya yazar ve tekrar denenebilirliğini işaretler.
+   *
+   * `throttled` ile `failed` ayrımı önemli: throttled bir iş normal işleyişin
+   * parçası ve panelde alarm üretmemeli, failed ise müdahale gerektiriyor.
+   */
+  private async recordFailure(syncJobId: bigint, err: unknown): Promise<void> {
+    const platformError = err instanceof PlatformApiError ? err : undefined;
+    const retryable = platformError?.retryable ?? !(err instanceof UnrecoverableError);
+
+    await this.db.syncJob.update({
+      where: { id: syncJobId },
+      data: {
+        status: platformError?.kind === 'rate_limited' ? 'throttled' : 'failed',
+        finishedAt: retryable ? null : new Date(),
+        nextRetryAt: retryable
+          ? new Date(Date.now() + (platformError?.detail?.retryAfterSeconds ?? 300) * 1000)
+          : null,
+        errorCode: (platformError?.kind ?? 'unknown').slice(0, 80),
+        errorMessage: (err instanceof Error ? err.message : String(err)).slice(0, 1000),
+      },
+    });
+
+    // Token geçersizse bağlantıyı işaretle: aynı token'la 5 kez daha denemek
+    // kotayı boşa harcıyor ve kullanıcı sorunu hiç görmüyor.
+    if (platformError?.kind === 'invalid_token') {
+      const job = await this.db.syncJob.findUnique({
+        where: { id: syncJobId },
+        select: { adAccountId: true },
+      });
+      if (job?.adAccountId) {
+        const account = await this.db.adAccount.findUnique({
+          where: { id: job.adAccountId },
+          select: { connectionId: true },
+        });
+        if (account) {
+          await this.db.platformConnection.update({
+            where: { id: account.connectionId },
+            data: { status: 'needs_reauth' },
+          });
+          this.logger.warn(
+            `Bağlantı ${account.connectionId} needs_reauth olarak işaretlendi: ${platformError.message}`,
+          );
+        }
+      }
+    }
   }
 
   async markSucceeded(syncJobId: string, rows: number, apiCalls: number): Promise<void> {
