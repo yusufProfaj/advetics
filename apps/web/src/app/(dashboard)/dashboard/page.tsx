@@ -21,6 +21,7 @@ import {
   isStale,
 } from '@/lib/format';
 import { MetricCard } from '@/components/metric-card';
+import { MetricStrip } from '@/components/metric-strip';
 import { MetricsChart } from '@/components/metrics-chart';
 import { BreakdownTable } from '@/components/breakdown-table';
 
@@ -110,6 +111,7 @@ export default async function DashboardPage({
           )}
 
           <Cards summary={summary} />
+          <SecondaryStrip summary={summary} />
 
           {/* TEK GÜNLÜK ARALIKTA GRAFİK YOK.
               Bir gün için zaman serisi tek bir bar demek: kocaman boş bir
@@ -183,35 +185,64 @@ function Cards({ summary }: { summary: MetricsSummary }) {
         change={summary.cpa === null ? null : changePercent(summary.cpa, prev?.cpa)}
         hint={summary.cpa === null ? 'dönüşüm yok' : undefined}
       />
-      <MetricCard
-        label="ROAS"
-        value={formatRoas(summary.roas)}
-        change={summary.roas === null ? null : changePercent(summary.roas, prev?.roas)}
-        hint={summary.roas === null ? 'gelir takip edilmiyor' : undefined}
-      />
-
-      <MetricCard
-        label="Gösterim"
-        value={formatNumber(summary.impressions)}
-        change={changePercent(summary.impressions, prev?.impressions)}
-      />
-      <MetricCard
-        label="Tık"
-        value={formatNumber(summary.clicks)}
-        change={changePercent(summary.clicks, prev?.clicks)}
-      />
-      <MetricCard
-        label="CTR"
-        value={formatPercent(summary.ctr)}
-        change={summary.ctr === null ? null : changePercent(summary.ctr, prev?.ctr)}
-      />
-      <MetricCard
-        label="CPC"
-        value={formatMoney(microsOf(summary.cpc), currency)}
-        inverse
-        change={summary.cpc === null ? null : changePercent(summary.cpc, prev?.cpc)}
-      />
+      {/* ROAS YERİNE ERİŞİM — gelir takip edilmiyorsa.
+          Lead formu ve mesajlaşma kampanyalarında gelir değeri hiç yok ve
+          ROAS kartı sürekli "—" gösteriyor: bir kart boyunca yer kaplayıp
+          hiçbir şey söylemiyor. Erişim o hesaplarda anlamlı bir dördüncü
+          metrik. Gelir varsa ROAS geri geliyor — asıl karar metriği o. */}
+      {summary.roas === null ? (
+        <MetricCard
+          label={summary.reachKind === 'exact' ? 'Erişim' : 'Günlük ort. erişim'}
+          value={formatNumber(summary.reach)}
+          hint={
+            summary.reach === null
+              ? 'platform bildirmiyor'
+              : summary.reachAcrossAccounts
+                ? 'hesaplar arası mükerrer olabilir'
+                : summary.reachKind === 'daily_average'
+                  ? 'tekil erişim toplanamaz'
+                  : undefined
+          }
+        />
+      ) : (
+        <MetricCard label="ROAS" value={formatRoas(summary.roas)} change={changePercent(summary.roas, prev?.roas)} />
+      )}
     </div>
+  );
+}
+
+/** İkincil metrikler — bağlam veriyor, karar verdirmiyor. */
+function SecondaryStrip({ summary }: { summary: MetricsSummary }) {
+  const prev = summary.previous;
+  const currency = summary.currency;
+
+  return (
+    <MetricStrip
+      items={[
+        {
+          label: 'Gösterim',
+          value: formatNumber(summary.impressions),
+          change: changePercent(summary.impressions, prev?.impressions),
+        },
+        {
+          label: 'Tık',
+          value: formatNumber(summary.clicks),
+          change: changePercent(summary.clicks, prev?.clicks),
+        },
+        {
+          label: 'CTR',
+          value: formatPercent(summary.ctr),
+          change: summary.ctr === null ? null : changePercent(summary.ctr, prev?.ctr),
+        },
+        {
+          label: 'CPC',
+          value: formatMoney(microsOf(summary.cpc), currency),
+          // Artış kötü: tık başına maliyet yükselmesi iyi haber değil.
+          inverse: true,
+          change: summary.cpc === null ? null : changePercent(summary.cpc, prev?.cpc),
+        },
+      ]}
+    />
   );
 }
 

@@ -131,9 +131,36 @@ export interface CurrencyBreakdown {
   byCurrency: Array<{ currency: string; spendMicros: string }>;
 }
 
+/**
+ * Erişim nasıl hesaplandı.
+ *
+ * Erişim TEKİL KULLANICI sayısı ve TOPLANAMAZ — iki günün erişimini toplamak
+ * aynı kişiyi iki kez sayar. `insights_daily` günlük granülerlikte, yani çok
+ * günlü bir aralık için gerçek tekil erişimi hesaplamak imkânsız; onu
+ * platformdan o aralıkla sormak gerekir.
+ *
+ *   'exact'        → aralık tek gün, değer platformun bildirdiği tekil erişim
+ *   'daily_average' → çok günlü aralık, değer GÜNLÜK ORTALAMA
+ *
+ * Arayüz etiketi buna göre değişmek zorunda: "Erişim: 106.412" ile "Günlük
+ * ort. erişim: 106.412" farklı şeyler ve ikincisini birincisi gibi sunmak
+ * müşteriye yanlış kitle büyüklüğü söylemek olur.
+ */
+export type ReachKind = 'exact' | 'daily_average';
+
 export interface MetricsSummary extends MetricTotals, CurrencyBreakdown {
   from: string;
   to: string;
+  /**
+   * Erişim — hesap seviyesi satırlarından.
+   *
+   * Kampanya seviyesinden toplamak mükerrer sayardı: aynı kişi iki kampanyayı
+   * da görmüş olabilir. Hesap seviyesi satırı yoksa (bazı platformlarda) null.
+   */
+  reach: number | null;
+  reachKind: ReachKind;
+  /** Birden fazla hesap varsa erişim hesaplar arası mükerrer olabilir. */
+  reachAcrossAccounts: boolean;
   /** Önceki eşit uzunluktaki dönem — yüzde değişim için. */
   previous: MetricTotals | null;
   /** Metriklerin en son ne zaman doğrulandığı (ISO). Bayat veri uyarısı için. */

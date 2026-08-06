@@ -60,6 +60,7 @@ async function seedMetrics(params: {
   conversions: number;
   valueMicros?: string;
   currency?: string;
+  reach?: number;
 }): Promise<void> {
   const levels: Array<[string, string, string]> = [
     ['account', IDS.adAccount, 'act_999'],
@@ -72,8 +73,8 @@ async function seedMetrics(params: {
       `INSERT INTO insights_daily
          (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
           date, breakdown_key, impressions, clicks, spend_micros, conversions,
-          conversion_value_micros, currency)
-       VALUES ($1, $2, 'meta', $3::"EntityLevel", $4, $5, $6::date, '', $7, $8, $9, $10, $11, $12)`,
+          conversion_value_micros, currency, reach)
+       VALUES ($1, $2, 'meta', $3::"EntityLevel", $4, $5, $6::date, '', $7, $8, $9, $10, $11, $12, $13)`,
       [
         IDS.client,
         IDS.adAccount,
@@ -87,6 +88,7 @@ async function seedMetrics(params: {
         params.conversions,
         params.valueMicros ?? '0',
         params.currency ?? 'TRY',
+        params.reach ?? 0,
       ],
     );
   }
@@ -272,6 +274,92 @@ describe('MetricsService', () => {
       const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
       // Sıfırlı bir nesne döndürmek "%100 düşüş" gibi görünürdü.
       expect(s.previous).toBeNull();
+    });
+  });
+
+  describe('erişim — toplanamayan metrik', () => {
+    it('tek günde erişim TAM ve hesap seviyesinden okunur', async () => {
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000',
+        impressions: 1000,
+        clicks: 10,
+        conversions: 0,
+        reach: 800,
+      });
+      const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      // Dört seviyeye de 800 yazıldı; kampanya seviyesinden toplamak 800'ü
+      // mükerrer sayardı. Hesap seviyesinden okumak doğru olan.
+      expect(s.reach).toBe(800);
+      expect(s.reachKind).toBe('exact');
+    });
+
+    it('REGRESYON: çok günde erişim TOPLANMIYOR, ortalama alınıyor', async () => {
+      // Aynı kişi iki gün de reklamı görmüş olabilir; 800+800=1600 demek
+      // müşteriye iki kat kitle büyüklüğü söylemek olur.
+      for (const date of ['2026-08-04', '2026-08-05']) {
+        await seedMetrics({
+          date,
+          spendMicros: '1000000',
+          impressions: 1000,
+          clicks: 10,
+          conversions: 0,
+          reach: 800,
+        });
+      }
+      const s = await svc.summary(CTX, { from: '2026-08-04', to: '2026-08-05' });
+      expect(s.reach).toBe(800);
+      expect(s.reachKind).toBe('daily_average');
+    });
+
+    it('farklı günlerde farklı erişim → günlük ortalama', async () => {
+      await seedMetrics({
+        date: '2026-08-04',
+        spendMicros: '1000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+        reach: 600,
+      });
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+        reach: 1000,
+      });
+      const s = await svc.summary(CTX, { from: '2026-08-04', to: '2026-08-05' });
+      expect(s.reach).toBe(800);
+    });
+
+    it('hesap seviyesi satırı yoksa erişim null', async () => {
+      // Bazı platformlar hesap seviyesi erişim bildirmiyor. Kampanyalardan
+      // türetmeye çalışmak yanlış bir sayı üretirdi.
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+        reach: 500,
+      });
+      await h.q(`DELETE FROM insights_daily WHERE entity_level = 'account'`);
+      const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      expect(s.reach).toBeNull();
+    });
+
+    it('tek hesapta hesaplar arası mükerrerlik bayrağı kapalı', async () => {
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+        reach: 500,
+      });
+      const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      expect(s.reachAcrossAccounts).toBe(false);
     });
   });
 

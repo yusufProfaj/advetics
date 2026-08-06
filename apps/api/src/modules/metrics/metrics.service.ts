@@ -9,6 +9,7 @@ import type {
   MetricsSummary,
   MetricsTimeseriesPoint,
   Platform,
+  ReachKind,
   TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -127,6 +128,39 @@ export class MetricsService {
         `,
       );
 
+      // ERİŞİM HESAP SEVİYESİNDEN OKUNUYOR.
+      //
+      // Kampanya seviyesinden toplamak mükerrer sayardı: aynı kişi iki
+      // kampanyayı da görmüş olabilir ve platform hesap seviyesinde bunu
+      // tekilleştirerek bildiriyor.
+      //
+      // Günler arası da toplanamıyor (aynı kişi iki gün de görmüş olabilir),
+      // bu yüzden çok günlü aralıkta GÜNLÜK ORTALAMA veriliyor ve `reachKind`
+      // ile işaretleniyor. Arayüz etiketi buna göre değişmek zorunda.
+      const [reachRow] = await tx.$queryRaw<
+        Array<{ total_reach: string | number | null; day_count: string | number }>
+      >(
+        Prisma.sql`
+          SELECT SUM(reach) AS total_reach, COUNT(DISTINCT date) AS day_count
+          FROM insights_daily
+          WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
+            AND entity_level = 'account'::"EntityLevel"
+            ${filters}
+        `,
+      );
+
+      const reachDays = Number(reachRow?.day_count ?? 0);
+      const reachTotal = reachRow?.total_reach === null || reachRow?.total_reach === undefined
+        ? null
+        : Number(reachRow.total_reach);
+      const reachKind: ReachKind = reachDays <= 1 ? 'exact' : 'daily_average';
+      const reach =
+        reachTotal === null || reachDays === 0
+          ? null
+          : reachKind === 'exact'
+            ? reachTotal
+            : Math.round(reachTotal / reachDays);
+
       const byCurrency = currencies.map((c) => ({
         currency: c.currency,
         spendMicros: this.bigintText(c.spend_micros),
@@ -140,6 +174,11 @@ export class MetricsService {
         // Tek para birimi varsa toplam anlamlı; birden fazlaysa null.
         currency: byCurrency.length === 1 ? byCurrency[0]!.currency : null,
         byCurrency,
+        reach,
+        reachKind,
+        // Birden fazla hesapta erişim hesaplar arası tekilleştirilemiyor;
+        // platform yalnızca hesap içinde tekilleştiriyor.
+        reachAcrossAccounts: Number(meta?.account_count ?? 0) > 1,
         lastFetchedAt: meta?.last_fetched_at ? meta.last_fetched_at.toISOString() : null,
         accountCount: Number(meta?.account_count ?? 0),
       };
