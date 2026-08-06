@@ -19,7 +19,7 @@
  */
 import { resolve } from 'node:path';
 import { config as loadEnv } from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 
@@ -477,8 +477,11 @@ async function inspect(): Promise<void> {
     console.log(`    ${r.reviewStatus ?? 'inceleme bilgisi yok (normal)'}: ${r._count}`);
   }
 
+  // Json kolonunda NULL sorgusu: Prisma `null` kabul etmiyor, `Prisma.DbNull`
+  // (SQL NULL) ile `Prisma.JsonNull` (JSON `null` değeri) ayrımını zorunlu
+  // kılıyor. Bize gereken SQL NULL.
   const disapproved = await prisma.ad.count({
-    where: { adAccountId: id, disapprovalReasons: { not: null } },
+    where: { adAccountId: id, disapprovalReasons: { not: Prisma.DbNull } },
   });
   if (disapproved > 0) {
     console.log(`    ! ${disapproved} reklamda inceleme geri bildirimi var (ad_review_feedback)`);

@@ -20,5 +20,13 @@ export default defineConfig({
     setupFiles: ['./test/setup.ts'],
     // Testler saniyeler içinde bitmeli; takılan bir test CI'ı bekletmesin.
     testTimeout: 10_000,
+    // Hook'lar İÇİN AYRI ve daha cömert sınır.
+    //
+    // PGlite koşum ortamı `beforeAll` içinde kuruluyor: WASM Postgres açılışı
+    // + dört migration'ın tamamı. Boş makinede ~2 saniye, yüklü makinede
+    // 10 saniyeyi aşıyor ve test dosyası "Hook timed out" ile düşüyor.
+    // Kırılgan bir test, testsizlikten kötüdür — gerçek bir regresyon sanılıp
+    // zaman kaybettirir.
+    hookTimeout: 60_000,
   },
 });
