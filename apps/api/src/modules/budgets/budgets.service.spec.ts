@@ -41,13 +41,27 @@ const CAMPAIGN = '66666666-6666-6666-6666-666666666666';
 const CAMPAIGN_B = '66666666-6666-6666-6666-66666666666b';
 
 /** İkinci reklam hesabı — bir müşterinin birden fazla projesi olabiliyor. */
-async function seedSecondAccount(currency = 'TRY'): Promise<void> {
+async function seedSecondAccount(currency = 'TRY', platform: 'meta' | 'google' = 'meta'): Promise<void> {
+  // Google hesabı AYRI bir bağlantıya bağlı: platform_connections tek
+  // platformu temsil ediyor ve Meta bağlantısına Google hesabı asmak
+  // gerçekte olmayan bir durumu test etmek olurdu.
+  let connectionId = IDS.connection;
+  if (platform === 'google') {
+    connectionId = '33333333-3333-3333-3333-33333333333b';
+    await h.q(
+      `INSERT INTO platform_connections
+         (id, client_id, platform, status, external_user_id, account_label,
+          access_token_enc, granted_scopes, connected_by_user_id, updated_at)
+       VALUES ($1, $2, 'google', 'active', 'g1', 'Google', '\\x00', '{}', $3, now())`,
+      [connectionId, IDS.client, IDS.user],
+    );
+  }
   await h.q(
     `INSERT INTO ad_accounts
        (id, client_id, connection_id, platform, external_id, name, currency,
         timezone, sync_enabled, updated_at)
-     VALUES ($1, $2, $3, 'meta', 'ext-b', 'Proje B', $4, 'Europe/Istanbul', true, now())`,
-    [ACCOUNT_B, IDS.client, IDS.connection, currency],
+     VALUES ($1, $2, $3, $4, 'ext-b', $5, $6, 'Europe/Istanbul', true, now())`,
+    [ACCOUNT_B, IDS.client, connectionId, platform, platform === 'google' ? 'Google Ads' : 'Proje B', currency],
   );
 }
 
@@ -58,13 +72,14 @@ async function seedSpend(params: {
   level?: string;
   entityId?: string;
   currency?: string;
+  platform?: 'meta' | 'google';
 }): Promise<void> {
   await h.q(
     `INSERT INTO insights_daily
        (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
         date, breakdown_key, impressions, clicks, spend_micros, conversions,
         conversion_value_micros, currency, raw_metrics)
-     VALUES ($1, $2, 'meta', $3::"EntityLevel", $4, 'ext', $5::date, '', 100, 10, $6, 0, 0, $7, '{}'::jsonb)`,
+     VALUES ($1, $2, $8::"Platform", $3::"EntityLevel", $4, 'ext', $5::date, '', 100, 10, $6, 0, 0, $7, '{}'::jsonb)`,
     [
       IDS.client,
       params.adAccountId ?? IDS.adAccount,
@@ -73,6 +88,7 @@ async function seedSpend(params: {
       params.date,
       params.spendMicros,
       params.currency ?? 'TRY',
+      params.platform ?? 'meta',
     ],
   );
 }
@@ -424,6 +440,60 @@ describe('pacing', () => {
     const sum = p.accounts.reduce((acc, a) => acc + BigInt(a.spentMicros), 0n);
     expect(sum.toString()).toBe(p.overall.spentMicros);
     expect(p.overall.spentMicros).toBe('5000000000');
+  });
+
+  it('GOOGLE + META harcaması AYNI şemsiye bütçede toplanıyor', async () => {
+    // Ajansın asıl istediği bu: "müşteri bazlı Google + Meta ayda 300 bin".
+    // Şemsiye bütçe sorgusu PLATFORM FİLTRESİ YAPMIYOR; iki platformun
+    // kampanya seviyesi satırları aynı toplama giriyor.
+    await seedSecondAccount('TRY', 'google');
+    await seedSpend({ date: '2026-08-04', spendMicros: '3000000000', platform: 'meta' });
+    await seedSpend({
+      adAccountId: ACCOUNT_B,
+      entityId: CAMPAIGN_B,
+      date: '2026-08-04',
+      spendMicros: '2000000000',
+      platform: 'google',
+    });
+    await svc.upsert(CTX, {
+      clientId: IDS.client,
+      month: '2026-08',
+      amount: '300000',
+      alertThresholdPct: 80,
+    });
+
+    const p = await svc.pacing(CTX, { clientId: IDS.client, month: '2026-08' }, new Date('2026-08-07T10:00:00Z'));
+    expect(p.overall.spentMicros).toBe('5000000000');
+    expect(p.overall.excludedCurrencies).toEqual([]);
+    // İki platform da ayrı satır olarak görünüyor.
+    expect(p.accounts.map((a) => a.adAccountName).sort()).toEqual(['Google Ads', 'Hesap']);
+  });
+
+  it('GOOGLE hesabı FARKLI para birimindeyse toplama girmiyor', async () => {
+    // Google müşterisi USD faturalandırılıyorsa TRY bütçeye eklenemez.
+    // Sessizce toplamak "300 bin TL bütçenin 250 bini harcandı" gibi
+    // uydurma bir sayı üretirdi.
+    await seedSecondAccount('USD', 'google');
+    await seedSpend({ date: '2026-08-04', spendMicros: '3000000000', platform: 'meta' });
+    await seedSpend({
+      adAccountId: ACCOUNT_B,
+      entityId: CAMPAIGN_B,
+      date: '2026-08-04',
+      spendMicros: '2000000000',
+      platform: 'google',
+      currency: 'USD',
+    });
+    await svc.upsert(CTX, {
+      clientId: IDS.client,
+      month: '2026-08',
+      amount: '300000',
+      currency: 'TRY',
+      alertThresholdPct: 80,
+    });
+
+    const p = await svc.pacing(CTX, { clientId: IDS.client, month: '2026-08' }, new Date('2026-08-07T10:00:00Z'));
+    expect(p.overall.spentMicros).toBe('3000000000');
+    expect(p.overall.excludedCurrencies).toEqual(['USD']);
   });
 
   it('BÜTÇESİ OLMAYAN hesap da listeleniyor', async () => {
