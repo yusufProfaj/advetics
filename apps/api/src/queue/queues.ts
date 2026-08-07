@@ -57,6 +57,14 @@ export interface SyncJobPayload {
   dateTo?: string;
   /** Kullanıcı tetiklemeli mi — kota katmanı buna göre yükseliyor. */
   interactive?: boolean;
+  /**
+   * Modül 5 — değerlendirilecek kural.
+   *
+   * Dolu olması işin bir KURAL işi olduğunu söylüyor: hesap işiyle aynı
+   * yolu izlemiyor çünkü bir kural birden fazla hesaba dokunabiliyor ve
+   * kota kontrolü aksiyon başına, uygulayıcının içinde yapılıyor.
+   */
+  ruleId?: string;
 }
 
 /** İşin hangi kota katmanına ait olduğunu belirler. */
@@ -77,6 +85,8 @@ export function layerForJob(payload: SyncJobPayload): keyof typeof JOB_PRIORITY 
       return 'organic_posts';
     case 'initial_backfill':
       return 'initial_backfill';
+    case 'rules_evaluate':
+      return 'rule_action';
     default:
       return 'insights_daily';
   }
@@ -93,6 +103,7 @@ export function buildJobId(p: {
   jobType: SyncJobType;
   adAccountId?: string;
   socialProfileId?: string;
+  ruleId?: string;
   dateFrom?: string;
   dateTo?: string;
   entityLevel?: EntityLevel;
@@ -108,7 +119,7 @@ export function buildJobId(p: {
   // Muafiyete yaslanmak kırılgan: parça sayısı değiştiği anda geri döner.
   return [
     p.jobType,
-    p.adAccountId ?? p.socialProfileId ?? 'na',
+    p.adAccountId ?? p.socialProfileId ?? p.ruleId ?? 'na',
     p.entityLevel ?? 'all',
     p.dateFrom ?? '',
     p.dateTo ?? '',

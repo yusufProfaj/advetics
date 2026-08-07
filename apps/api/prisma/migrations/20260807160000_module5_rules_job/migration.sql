@@ -1,0 +1,12 @@
+-- Modül 5 — kural değerlendirmesi iş türü
+--
+-- Kural motoru kendi kuyruğunu AÇMIYOR, mevcut süpürme altyapısını kullanıyor.
+-- Ayrı kuyruk açmak worker slotlarını bölerdi: boş bir kural kuyruğu için
+-- ayrılan slot, senkronizasyon sıkışırken boş beklerdi. Aynı gerekçeyle
+-- katmanlar da tek kuyrukta öncelikle ayrılıyor (bkz. queues.ts).
+--
+-- ALTER TYPE ... ADD VALUE tek başına çalışır ama AYNI TRANSACTION içinde
+-- kullanılamaz (PG 12+ dışında). Prisma her migration dosyasını tek
+-- transaction'da çalıştırıyor; bu yüzden komut tek başına ve dosyada
+-- başka bir şey yok.
+ALTER TYPE "SyncJobType" ADD VALUE IF NOT EXISTS 'rules_evaluate';

@@ -628,6 +628,10 @@ enum SyncJobType {
   insights_breakdown
   /// L6 — organik post metrikleri (Auto-Boost)
   organic_posts
+  /// Modül 5 — kural değerlendirmesi. Platform verisi ÇEKMİYOR, mevcut
+  /// veriyi okuyup karar veriyor; API çağrısı yalnızca aksiyon uygulanırken
+  /// ve kuralın kendi `rule_action` kota katmanından yapılıyor.
+  rules_evaluate
   /// L7 — yeni hesap bağlandığında geçmiş
   initial_backfill
 }

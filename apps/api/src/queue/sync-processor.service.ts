@@ -8,6 +8,19 @@ import { InsightsSyncService } from './insights-sync.service';
 import { StructureSyncService } from './structure-sync.service';
 import { SyncQueueService } from './sync-queue.service';
 import { layerForJob, type SyncJobPayload } from './queues';
+import type { TenantContext } from '@advetics/shared';
+import { RulesService } from '../modules/rules/rules.service';
+import { RuleExecutorService } from '../modules/rules/rule-executor.service';
+
+/**
+ * Worker'ın sentetik kiracı bağlamındaki kullanıcı kimliği.
+ *
+ * Gerçek bir kullanıcı DEĞİL ve olmamalı: kuralın aldığı aksiyonun failini
+ * bir kişiye yazmak yanlış olurdu. Denetim kaydına zaten `actorType='rule'`
+ * ve kuralın adı yazılıyor; bu kimlik yalnızca bağlam nesnesini doldurmak
+ * için var ve `rule_runs`/`audit_logs` içinde hiçbir yere düşmüyor.
+ */
+const SYSTEM_ACTOR_ID = '00000000-0000-0000-0000-000000000002';
 
 /**
  * İş işleyicisi.
@@ -35,11 +48,18 @@ export class SyncProcessorService {
     private readonly queue: SyncQueueService,
     private readonly structure: StructureSyncService,
     private readonly insights: InsightsSyncService,
+    private readonly rules: RulesService,
+    private readonly executor: RuleExecutorService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
     // Süpürme işi: clientId boş gelir.
     if (!payload.clientId) return this.fanOut(payload);
+    // KURAL İŞİ hesap işinden AYRI yol izliyor: bir kural birden fazla
+    // hesaba dokunabiliyor, dolayısıyla iş seviyesinde tek bir hesabın
+    // kotasına bakmak yanlış olurdu. Kota kontrolü aksiyon başına,
+    // uygulayıcının içinde.
+    if (payload.ruleId) return this.processRuleJob(payload);
     return this.processAccountJob(payload);
   }
 
@@ -51,6 +71,8 @@ export class SyncProcessorService {
    * biri istemeden 40 hesabın kotasını yakmasın diye.
    */
   private async fanOut(payload: SyncJobPayload): Promise<{ rows: number; note: string }> {
+    if (payload.jobType === 'rules_evaluate') return this.fanOutRules();
+
     const accounts = await this.db.adAccount.findMany({
       where: {
         syncEnabled: true,
@@ -176,6 +198,98 @@ export class SyncProcessorService {
    * dönüyor — worker BEKLEMİYOR. Beklemek o worker slotunu başka hesapların
    * işlerine kapatırdı.
    */
+  /**
+   * Kural süpürmesi — etkin kuralları bulup KURAL BAŞINA iş açar.
+   *
+   * Tek bir dev iş yazıp içinde tüm kuralları dolaşmak cazip ama yanlış:
+   * bir kuralın patlaması kalan kuralları durdururdu. Ayrı işler ayrıca
+   * BullMQ'nun tekrar deneme mekanizmasını kural başına veriyor.
+   */
+  private async fanOutRules(): Promise<{ rows: number; note: string }> {
+    const rules = await this.db.rule.findMany({
+      where: {
+        enabled: true,
+        client: { status: 'active' },
+      },
+      select: { id: true, clientId: true },
+    });
+
+    let enqueued = 0;
+    let skipped = 0;
+    for (const r of rules) {
+      const res = await this.queue.enqueue({
+        clientId: r.clientId,
+        // Kural değerlendirmesi platformdan BAĞIMSIZ: aynı kural hem Meta
+        // hem Google varlıklarını kapsayabiliyor. Alan zorunlu olduğu için
+        // bir değer vermek gerekiyor ve bu değer hiçbir yerde kota anahtarı
+        // olarak kullanılmıyor — kota aksiyon anında, varlığın GERÇEK
+        // platformuyla alınıyor.
+        platform: 'meta',
+        jobType: 'rules_evaluate',
+        ruleId: r.id,
+      });
+      if (res.enqueued) enqueued++;
+      else skipped++;
+    }
+
+    return {
+      rows: enqueued,
+      note: `${rules.length} kural · ${enqueued} kuyruğa alındı · ${skipped} zaten kuyrukta`,
+    };
+  }
+
+  /**
+   * Tek bir kuralı değerlendirir.
+   *
+   * KİRACI BAĞLAMI SENTETİK. Worker'ın oturumu yok; bağlam kuralın kendi
+   * org/client değerlerinden kuruluyor ve `PrismaAdminService` (BYPASSRLS)
+   * ile çalışıyor. Bu, senkronizasyon işlerinin izlediği yolun aynısı —
+   * worker RLS'e tabi olsaydı hiçbir satır göremezdi.
+   */
+  private async processRuleJob(payload: SyncJobPayload): Promise<{ rows: number; note: string }> {
+    const syncJobId = BigInt(payload.syncJobId);
+    await this.db.syncJob.update({
+      where: { id: syncJobId },
+      data: { status: 'running', startedAt: new Date(), attempts: { increment: 1 } },
+    });
+
+    const rule = await this.rules.getForWorker(this.db, payload.ruleId!);
+    if (!rule) {
+      // Kural silinmiş olabilir: iş kuyruğa girdikten sonra silinen bir kural
+      // için hata fırlatmak, tekrar denemelerle sonsuza kadar başarısız bir iş
+      // bırakırdı. Sessizce başarılı saymak da yanlış — sebebi not düşüyoruz.
+      await this.db.syncJob.update({
+        where: { id: syncJobId },
+        data: { status: 'succeeded', finishedAt: new Date(), rowsUpserted: 0 },
+      });
+      return { rows: 0, note: 'kural bulunamadı (silinmiş olabilir)' };
+    }
+
+    const ctx = {
+      userId: SYSTEM_ACTOR_ID,
+      orgId: rule.orgId,
+      clientIds: [rule.clientId],
+      activeClientId: rule.clientId,
+      role: 'owner',
+      isOrgAdmin: true,
+      permissions: [],
+    } as unknown as TenantContext;
+
+    const res = await this.executor.execute(this.db, ctx, rule.record);
+
+    await this.db.syncJob.update({
+      where: { id: syncJobId },
+      data: { status: 'succeeded', finishedAt: new Date(), rowsUpserted: res.actionCount },
+    });
+
+    return {
+      rows: res.actionCount,
+      note: `${rule.record.name}: ${res.matchedCount} eşleşme · ${res.actionCount} aksiyon${
+        rule.record.dryRun ? ' (prova)' : ''
+      }`,
+    };
+  }
+
   private async processAccountJob(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
     const syncJobId = BigInt(payload.syncJobId);
 

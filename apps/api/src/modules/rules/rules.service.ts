@@ -152,6 +152,30 @@ export class RulesService {
     });
   }
 
+  /**
+   * Worker için kural okuma — KİRACI BAĞLAMI OLMADAN.
+   *
+   * Zamanlanmış değerlendirme worker'da çalışıyor ve orada oturum yok.
+   * `withTenant` kullanan `get()` bu bağlamda hiçbir satır göremezdi (RLS
+   * boş sonuç döndürür, hata değil — sessiz bir boşluk).
+   *
+   * `orgId` ve `clientId` AYRICA dönüyor: çağıran bunlardan sentetik bir
+   * kiracı bağlamı kuruyor ve uygulayıcı o bağlamla yazıyor.
+   */
+  async getForWorker(
+    tx: TxLike,
+    ruleId: string,
+  ): Promise<{ record: RuleRecord; orgId: string; clientId: string } | null> {
+    const [row] = await tx.$queryRaw<RuleRow[]>(Prisma.sql`
+      SELECT r.*, a.name AS ad_account_name
+      FROM rules r
+      LEFT JOIN ad_accounts a ON a.id = r.ad_account_id
+      WHERE r.id = ${ruleId}::uuid
+    `);
+    if (!row) return null;
+    return { record: this.toRecord(row), orgId: row.org_id, clientId: row.client_id };
+  }
+
   async create(ctx: TenantContext, input: RuleInput): Promise<RuleRecord> {
     return this.prisma.withTenant(ctx, async (tx) => {
       await this.assertScope(tx, input);

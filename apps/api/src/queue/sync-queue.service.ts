@@ -92,6 +92,8 @@ export class SyncQueueService implements OnModuleDestroy {
     jobType: SyncJobType;
     adAccountId?: string;
     socialProfileId?: string;
+    /** Modül 5 — kural işi. Bkz. SyncJobPayload.ruleId */
+    ruleId?: string;
     entityLevel?: EntityLevel;
     /** YYYY-MM-DD. Date nesnesi DEĞİL — saat dilimi kayması için bkz. queues.ts */
     dateFrom?: string;
@@ -137,6 +139,7 @@ export class SyncQueueService implements OnModuleDestroy {
       jobType: params.jobType,
       adAccountId: params.adAccountId,
       socialProfileId: params.socialProfileId,
+      ruleId: params.ruleId,
       entityLevel: params.entityLevel,
       dateFrom: params.dateFrom,
       dateTo: params.dateTo,
@@ -197,6 +200,14 @@ export class SyncQueueService implements OnModuleDestroy {
       { name: 'sweep:backfill', pattern: '23 3 * * *', jobType: 'insights_backfill' },
       // L6 — organik postlar: saatte bir
       { name: 'sweep:organic', pattern: '41 * * * *', jobType: 'organic_posts' },
+      // Modül 5 — kural değerlendirmesi: saatte bir.
+      //
+      // Veri günlük granülerlikte, yani saatte birden sık değerlendirmenin
+      // dayanağı yok. Ama günde bir de yetmiyor: L3 senkronizasyonu hesabın
+      // KENDİ zaman dilimine göre farklı saatlerde tamamlanıyor ve kural o
+      // veri düştüğü anda çalışabilmeli. Saatlik tarama, bekleme süresiyle
+      // birlikte hem duyarlı hem sakin bir davranış veriyor.
+      { name: 'sweep:rules', pattern: '13 * * * *', jobType: 'rules_evaluate' },
     ];
 
     for (const s of schedules) {

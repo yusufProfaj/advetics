@@ -121,3 +121,38 @@ describe('layerForJob', () => {
     expect(JOB_PRIORITY.insights_daily).toBeLessThan(JOB_PRIORITY.initial_backfill);
   });
 });
+
+/**
+ * Modül 5 — kural işleri.
+ *
+ * Kural işleri aynı kuyruğu ve aynı kimlik üretecini kullanıyor; kimlik
+ * kuralında bir istisna yapmak, BullMQ'nun `:` yasağına tekrar yakalanmanın
+ * en kolay yolu olurdu.
+ */
+describe('kural işleri', () => {
+  it('kural kimliği iş kimliğine giriyor', () => {
+    const id = buildJobId({ jobType: 'rules_evaluate', ruleId: 'aaaa-bbbb' });
+    expect(id).toBe('rules_evaluate__aaaa-bbbb__all');
+    expect(id).not.toContain(':');
+  });
+
+  it('AYNI KURAL için ikinci iş aynı kimliği üretiyor', () => {
+    // Mükerrer değerlendirme demek, aynı varlığa iki kez aksiyon denemek
+    // demek. BullMQ aynı kimliği reddederek bunu engelliyor.
+    const a = buildJobId({ jobType: 'rules_evaluate', ruleId: 'r1' });
+    const b = buildJobId({ jobType: 'rules_evaluate', ruleId: 'r1' });
+    expect(a).toBe(b);
+  });
+
+  it('FARKLI kurallar farklı kimlik alıyor', () => {
+    expect(buildJobId({ jobType: 'rules_evaluate', ruleId: 'r1' })).not.toBe(
+      buildJobId({ jobType: 'rules_evaluate', ruleId: 'r2' }),
+    );
+  });
+
+  it('kural aksiyonu ÖNCELİKLİ kota katmanına düşüyor', () => {
+    // Senkronizasyon kotayı doldurmuş olsa bile kural aksiyonu geçmeli:
+    // veri güncellenememek, bütçe değiştirilememekten ucuz.
+    expect(layerForJob({ jobType: 'rules_evaluate' } as never)).toBe('rule_action');
+  });
+});

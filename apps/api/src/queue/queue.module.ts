@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { ConnectionsModule } from '../modules/connections/connections.module';
+import { RulesModule } from '../modules/rules/rules.module';
 import { InsightsSyncService } from './insights-sync.service';
 import { QuotaGuardService } from './quota-guard.service';
 import { StructureSyncService } from './structure-sync.service';
@@ -19,7 +20,7 @@ import { SyncProcessorService } from './sync-processor.service';
  */
 @Global()
 @Module({
-  imports: [ConnectionsModule],
+  imports: [ConnectionsModule, RulesModule],
   providers: [
     QuotaGuardService,
     SyncQueueService,
