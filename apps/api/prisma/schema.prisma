@@ -99,6 +99,7 @@ model Organization {
   organicPosts    OrganicPost[]
   boostRules      BoostRule[]
   boosts          Boost[]
+  bulkBatches     BulkBatch[]
 
   @@map("organizations")
 }
@@ -172,6 +173,7 @@ model Client {
   organicPosts    OrganicPost[]
   boostRules      BoostRule[]
   boosts          Boost[]
+  bulkBatches     BulkBatch[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -470,6 +472,7 @@ model AdAccount {
   budgets    MonthlyBudget[]
   rules      Rule[]
   boosts     Boost[]
+  bulkBatches BulkBatch[]
 
   @@unique([platform, externalId, clientId])
   @@index([clientId, syncEnabled])
@@ -1358,6 +1361,103 @@ model Boost {
   @@index([clientId, status, createdAt(sort: Desc)])
   @@index([boostRuleId, createdAt(sort: Desc)])
   @@map("boosts")
+}
+
+/// Toplu oluşturma partisi — Modül 8.
+///
+/// PARTİ VE SATIR AYRI TABLOLARDA. Tek bir JSONB dizisi olarak saklamak
+/// cazip ama yanlış: 60 reklamlık bir partide 3'ü başarısız olduğunda
+/// hangilerinin platformda oluştuğunu satır bazında bilmek gerekiyor.
+/// Diziyi güncellemek, kısmi başarıyı takip edilemez kılardı.
+model BulkBatch {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+  adAccountId String @map("ad_account_id") @db.Uuid
+
+  name String @db.VarChar(160)
+
+  /// draft | validated | publishing | published | failed
+  status String @default("draft") @db.VarChar(16)
+
+  /// Partinin tamamına uygulanan ayarlar: hedefleme, hedef, bütçe modeli.
+  /// Satır bazında değişenler `BulkItem.overrides` içinde.
+  defaults Json @db.JsonB
+
+  /// Mevcut bir kampanyaya mı ekleniyor, yoksa yenisi mi açılıyor.
+  ///
+  /// Var olan kampanyaya eklemek en yaygın kullanım: ajans zaten kurulu bir
+  /// yapıya 40 varyasyon ekliyor. Kampanya kimliği boşsa yeni açılıyor.
+  targetCampaignExternalId String? @map("target_campaign_external_id") @db.VarChar(128)
+
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  publishedBy String?   @map("published_by") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount    AdAccount    @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  items        BulkItem[]
+
+  @@index([clientId, createdAt(sort: Desc)])
+  @@map("bulk_batches")
+}
+
+/// Partideki tek bir reklam.
+model BulkItem {
+  id      String @id @default(uuid()) @db.Uuid
+  orgId   String @map("org_id") @db.Uuid
+  batchId String @map("batch_id") @db.Uuid
+
+  /// Satır numarası — kullanıcının yapıştırdığı tablodaki sıra.
+  /// Hata mesajlarında "3. satır" demek için gerekli.
+  rowNumber Int @map("row_number")
+
+  name        String  @db.VarChar(300)
+  /// KOLONLAR PLATFORM SINIRINDAN GENİŞ ve bu bilinçli.
+  ///
+  /// Sınırı aşan metin REDDEDİLMİYOR, SAKLANIYOR — doğrulayıcı onu
+  /// "45 karakter fazla" diye işaretliyor ve kullanıcı düzeltebiliyor.
+  /// Kolonu tam sınırda tutmak, geçersiz satırı hiç kaydedememek demekti:
+  /// kullanıcı satır bazında bir uyarı yerine tüm parti için anlaşılmaz bir
+  /// veritabanı hatası alırdı.
+  primaryText String? @map("primary_text") @db.VarChar(8000)
+  headline    String? @db.VarChar(2000)
+  description String? @db.VarChar(2000)
+  linkUrl     String? @map("link_url") @db.VarChar(2048)
+  callToAction String? @map("call_to_action") @db.VarChar(60)
+  /// Görsel/video kimliği ya da URL'si. Yükleme AYRI bir adım.
+  mediaRef    String? @map("media_ref") @db.VarChar(1024)
+
+  /// Bu satıra özel ayarlar — partinin `defaults` değerlerini eziyor.
+  overrides Json? @db.JsonB
+
+  /// pending | invalid | publishing | published | failed
+  status String @default("pending") @db.VarChar(16)
+
+  /// Doğrulama hataları — satır bazında, insan okunur.
+  ///
+  /// DİZİ, tek bir string değil: bir satırda birden fazla sorun olabiliyor
+  /// ve kullanıcıya hepsini birden göstermek, düzeltip yeniden denemeyi
+  /// tek turda bitiriyor.
+  issues Json? @db.JsonB
+
+  externalAdId       String? @map("external_ad_id") @db.VarChar(128)
+  externalCreativeId String? @map("external_creative_id") @db.VarChar(128)
+  externalAdSetId    String? @map("external_ad_set_id") @db.VarChar(128)
+  error              String? @db.VarChar(1000)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  batch BulkBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@map("bulk_items")
 }
 
 model SyncJob {

@@ -103,7 +103,9 @@ DECLARE
     -- Modül 5
     'monthly_budgets', 'rules', 'rule_runs', 'rule_action_logs',
     -- Modül 7
-    'organic_posts', 'boost_rules', 'boosts'
+    'organic_posts', 'boost_rules', 'boosts',
+    -- Modül 8
+    'bulk_batches', 'bulk_items'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -697,6 +699,67 @@ CREATE POLICY adv_boosts_update ON boosts
 
 -- boosts'a DELETE politikası YOK: bir boost para taahhüdü ve kaydı denetim
 -- izidir. İptal etmek `status = 'rejected'` demek, satırı silmek değil.
+
+-- =============================================================================
+-- MODÜL 8 — Toplu Oluşturucu
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- bulk_batches: standart kiracı deseni.
+--
+-- bulk_items'ın kendi client_id'si YOK ve olması da gerekmiyor: satır her
+-- zaman bir partiye ait ve parti müşteriye. Kolonu tekrarlamak, iki kaynağın
+-- ayrışması riski demek olurdu (satır bir partiye, client_id başka müşteriye
+-- işaret edebilir). Kiracı kontrolü partinin üzerinden yapılıyor.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_bulk_batches_select ON bulk_batches
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_bulk_batches_insert ON bulk_batches
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_bulk_batches_update ON bulk_batches
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_bulk_batches_delete ON bulk_batches
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_bulk_items_select ON bulk_items
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM bulk_batches b
+      WHERE b.id = bulk_items.batch_id AND app.can_access_client(b.client_id)
+    )
+  );
+
+CREATE POLICY adv_bulk_items_insert ON bulk_items
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM bulk_batches b
+      WHERE b.id = bulk_items.batch_id AND app.can_access_client(b.client_id)
+    )
+  );
+
+CREATE POLICY adv_bulk_items_update ON bulk_items
+  FOR UPDATE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM bulk_batches b
+      WHERE b.id = bulk_items.batch_id AND app.can_access_client(b.client_id)
+    )
+  );
+
+CREATE POLICY adv_bulk_items_delete ON bulk_items
+  FOR DELETE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM bulk_batches b
+      WHERE b.id = bulk_items.batch_id AND app.can_access_client(b.client_id)
+    )
+  );
 
 -- -----------------------------------------------------------------------------
 -- Yetkiler (yeni tablolar için ALTER DEFAULT PRIVILEGES zaten çalışıyor;

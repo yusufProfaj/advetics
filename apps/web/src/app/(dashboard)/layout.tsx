@@ -19,8 +19,8 @@ const MAIN: NavEntry[] = [
   { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true },
   { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true },
   { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6 },
-  { href: '/auto-boost', label: 'Auto-Boost', icon: 'boost', module: 7 },
-  { href: '/toplu-olustur', label: 'Toplu Oluşturucu', icon: 'bulk', module: 8 },
+  { href: '/auto-boost', label: 'Auto-Boost', icon: 'boost', module: 7, ready: true },
+  { href: '/toplu-olustur', label: 'Toplu Oluşturucu', icon: 'bulk', module: 8, ready: true },
 ];
 
 const SETTINGS: NavEntry[] = [

@@ -431,6 +431,34 @@ export interface BoostResult {
   externalAdId: string;
 }
 
+/**
+ * Toplu oluşturma isteği — Modül 8.
+ *
+ * TEK BİR REKLAM. Meta'nın toplu uç noktası yok; parti döngüsü çağıranın
+ * işi. Burada tek satırı almak, kısmi başarıyı satır bazında takip
+ * edilebilir kılıyor: 60 satırlık bir istekte 41. satır patlarsa ilk 40'ın
+ * ne olduğunu bilmek imkânsız olurdu.
+ */
+export interface CreateAdRequest {
+  adAccountExternalId: string;
+  /** Reklamın ekleneceği ad set. */
+  adSetExternalId: string;
+  pageExternalId: string;
+  name: string;
+  primaryText?: string;
+  headline?: string;
+  description?: string;
+  linkUrl?: string;
+  callToAction?: string;
+  /** Meta görsel hash'i ya da video kimliği. */
+  mediaRef: string;
+}
+
+export interface CreateAdResult {
+  externalAdId: string;
+  externalCreativeId: string;
+}
+
 export interface IAdPlatformProvider {
   readonly platform: Platform;
 
@@ -561,6 +589,14 @@ export interface IAdPlatformProvider {
    * `ads_management` gerektiriyor — `canWrite()` önce sorulmalı.
    */
   createBoost(ctx: FetchContext, request: BoostRequest): Promise<BoostResult>;
+
+  /**
+   * Tek bir reklam oluşturur (Modül 8).
+   *
+   * `ads_management` gerektiriyor. Parti döngüsü çağıranda: her satır ayrı
+   * çağrı olduğu için birinin patlaması diğerlerini durdurmuyor.
+   */
+  createAd(ctx: FetchContext, request: CreateAdRequest): Promise<CreateAdResult>;
 }
 
 export const AD_PLATFORM_PROVIDERS = 'AD_PLATFORM_PROVIDERS';

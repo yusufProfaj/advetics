@@ -16,6 +16,8 @@ import {
   type InsightsLevel,
   type InsightsRequest,
   type BoostRequest,
+  type CreateAdRequest,
+  type CreateAdResult,
   type BoostResult,
   type DiscoveredOrganicPost,
   type PlatformActionRequest,
@@ -1193,6 +1195,75 @@ export class MetaProvider implements IAdPlatformProvider {
             `Boost geri alınamadı: ${entity.label} ${entity.id} platformda kaldı`,
           );
         }
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Tek bir reklam oluşturur: creative + ad.
+   *
+   * İKİ ÇAĞRI. Meta'da reklam bir creative'e işaret ediyor ve creative ayrı
+   * bir varlık. Gömülü creative göndermek de mümkün ama o zaman yeniden
+   * kullanılamıyor ve Ads Manager'da isimsiz görünüyor.
+   *
+   * CREATIVE BAŞARILI OLUP AD BAŞARISIZ OLURSA creative siliniyor. Yetim
+   * creative zarar vermiyor ama her başarısız satır bir tane bırakırsa hesap
+   * birkaç partide çöplüğe dönüyor.
+   */
+  async createAd(ctx: FetchContext, request: CreateAdRequest): Promise<CreateAdResult> {
+    const act = `act_${request.adAccountExternalId}`;
+    const fallbackLink = `https://facebook.com/${request.pageExternalId}`;
+    const link = request.linkUrl ?? fallbackLink;
+
+    const linkData: Record<string, unknown> = {
+      // GÖRSEL HASH'İ Mİ VİDEO MU: Meta ikisini farklı alanlarda istiyor ve
+      // yanlış alan "Invalid parameter" ile dönüyor — hangi alanın sorunlu
+      // olduğunu söylemeden. Hash 32 haneli onaltılık, video kimliği sayısal.
+      ...(/^[0-9a-f]{32}$/i.test(request.mediaRef)
+        ? { image_hash: request.mediaRef }
+        : { video_id: request.mediaRef }),
+      link,
+      message: request.primaryText ?? '',
+    };
+    if (request.headline) linkData.name = request.headline;
+    if (request.description) linkData.description = request.description;
+    if (request.callToAction) {
+      linkData.call_to_action = {
+        type: request.callToAction.toUpperCase(),
+        value: { link },
+      };
+    }
+
+    const creative = await this.graphPost<{ id: string }>(ctx, `${act}/adcreatives`, {
+      name: `${request.name} — creative`,
+      object_story_spec: JSON.stringify({
+        page_id: request.pageExternalId,
+        link_data: linkData,
+      }),
+    });
+
+    try {
+      const ad = await this.graphPost<{ id: string }>(ctx, `${act}/ads`, {
+        name: request.name,
+        adset_id: request.adSetExternalId,
+        creative: JSON.stringify({ creative_id: creative.id }),
+        // PAUSED AÇILIYOR ve bu bilinçli.
+        //
+        // 60 reklamlık bir parti ACTIVE açılırsa hepsi anında harcamaya
+        // başlıyor ve yanlış bir satır fark edilmeden para yakıyor. Ajans
+        // partiyi gözden geçirip topluca açıyor.
+        status: 'PAUSED',
+      });
+      return { externalAdId: ad.id, externalCreativeId: creative.id };
+    } catch (err) {
+      try {
+        await platformFetch('meta', `${this.graph}/${creative.id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${ctx.accessToken}` },
+        });
+      } catch {
+        this.logger.warn(`Yetim creative kaldı: ${creative.id}`);
       }
       throw err;
     }

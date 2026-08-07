@@ -15,6 +15,7 @@ import { AdsModule } from './modules/ads/ads.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { RulesModule } from './modules/rules/rules.module';
 import { BoostsModule } from './modules/boosts/boosts.module';
+import { BulkModule } from './modules/bulk/bulk.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
@@ -42,6 +43,7 @@ import { QueueModule } from './queue/queue.module';
     BudgetsModule,
     RulesModule,
     BoostsModule,
+    BulkModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -303,3 +303,64 @@ ALTER TABLE organic_posts ADD CONSTRAINT organic_posts_counts_chk
     impressions >= 0 AND reach >= 0 AND likes >= 0 AND comments >= 0
     AND shares >= 0 AND saves >= 0 AND video_views >= 0 AND engagements >= 0
   );
+
+-- =============================================================================
+-- MODÜL 8 — Toplu Oluşturucu
+-- =============================================================================
+
+ALTER TABLE bulk_batches DROP CONSTRAINT IF EXISTS bulk_batches_status_chk;
+ALTER TABLE bulk_batches ADD CONSTRAINT bulk_batches_status_chk
+  CHECK (status IN ('draft', 'validated', 'publishing', 'published', 'failed'));
+
+ALTER TABLE bulk_items DROP CONSTRAINT IF EXISTS bulk_items_status_chk;
+ALTER TABLE bulk_items ADD CONSTRAINT bulk_items_status_chk
+  CHECK (status IN ('pending', 'invalid', 'publishing', 'published', 'failed'));
+
+-- -----------------------------------------------------------------------------
+-- bulk_items: YAYINLANMIŞ satırın platform kimliği OLMALI.
+--
+-- Kimliksiz "yayınlandı" kaydı, yeniden yayınlamada o satırın atlanmasına yol
+-- açar ama platformda karşılığı bulunamaz — reklam ya vardır ve
+-- bulunamıyordur, ya da hiç oluşmamıştır. İkisi de sessiz.
+-- -----------------------------------------------------------------------------
+ALTER TABLE bulk_items DROP CONSTRAINT IF EXISTS bulk_items_published_chk;
+ALTER TABLE bulk_items ADD CONSTRAINT bulk_items_published_chk
+  CHECK (status <> 'published' OR external_ad_id IS NOT NULL);
+
+-- -----------------------------------------------------------------------------
+-- bulk_items: BAŞARISIZ satırda sebep zorunlu.
+-- -----------------------------------------------------------------------------
+ALTER TABLE bulk_items DROP CONSTRAINT IF EXISTS bulk_items_error_chk;
+ALTER TABLE bulk_items ADD CONSTRAINT bulk_items_error_chk
+  CHECK (status <> 'failed' OR error IS NOT NULL);
+
+-- -----------------------------------------------------------------------------
+-- bulk_items: GEÇERSİZ satırda sorun listesi zorunlu ve boş olamaz.
+--
+-- "Geçersiz" deyip nedenini söylememek, kullanıcıyı satırı tahminle
+-- düzeltmeye zorlar.
+-- -----------------------------------------------------------------------------
+ALTER TABLE bulk_items DROP CONSTRAINT IF EXISTS bulk_items_issues_chk;
+ALTER TABLE bulk_items ADD CONSTRAINT bulk_items_issues_chk
+  CHECK (
+    status <> 'invalid'
+    OR (jsonb_typeof(issues) = 'array' AND jsonb_array_length(issues) > 0)
+  );
+
+ALTER TABLE bulk_items DROP CONSTRAINT IF EXISTS bulk_items_row_chk;
+ALTER TABLE bulk_items ADD CONSTRAINT bulk_items_row_chk
+  CHECK (row_number > 0);
+
+-- -----------------------------------------------------------------------------
+-- bulk_batches: YAYINLANMIŞ partide yayınlayan ve zaman zorunlu.
+--
+-- bulk.publish ayrı bir yetki; kimin yayınladığı kaydedilmezse o yetkinin
+-- denetlenebilir bir karşılığı olmaz. Modül 7'deki onaydan farkı: burada
+-- otomatik yayın YOK, her yayın bir insanın kararı.
+-- -----------------------------------------------------------------------------
+ALTER TABLE bulk_batches DROP CONSTRAINT IF EXISTS bulk_batches_published_chk;
+ALTER TABLE bulk_batches ADD CONSTRAINT bulk_batches_published_chk
+  CHECK (
+    status NOT IN ('published', 'publishing')
+    OR (published_by IS NOT NULL AND published_at IS NOT NULL)
+  );

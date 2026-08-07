@@ -16,6 +16,7 @@ import {
   type InsightsLevel,
   type InsightsRequest,
   type BoostResult,
+  type CreateAdResult,
   type DiscoveredOrganicPost,
   type PlatformActionRequest,
   type PlatformActionResult,
@@ -944,6 +945,21 @@ export class GoogleProvider implements IAdPlatformProvider {
    * doğru; bir boost isteğinin buraya ulaşması ise çağıranın hatası ve
    * sessizce yutmak, oluşturulduğu sanılan bir boost bırakırdı.
    */
+  /**
+   * Toplu reklam oluşturma — Google'da HENÜZ UYGULANMADI.
+   *
+   * applyAction ile aynı gerekçe: Google bağlantısı canlı API'ye hiç çıkmadı
+   * ve test edilmemiş kodun müşterinin hesabında 60 reklam oluşturması kabul
+   * edilemez.
+   */
+  async createAd(): Promise<CreateAdResult> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      'Google Ads toplu oluşturma henüz uygulanmadı — Basic Access ve canlı doğrulama bekleniyor.',
+    );
+  }
+
   async createBoost(): Promise<BoostResult> {
     throw new PlatformApiError(
       'google',
