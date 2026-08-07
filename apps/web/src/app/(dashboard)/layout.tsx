@@ -13,22 +13,83 @@ interface Branding {
   footerText: string | null;
 }
 
-const MAIN: NavEntry[] = [
-  { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1 },
-  { href: '/ads-explorer', label: 'Ads Explorer', icon: 'explorer', module: 4 },
-  { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true },
-  { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true },
-  { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6 },
-  { href: '/auto-boost', label: 'Auto-Boost', icon: 'boost', module: 7, ready: true },
-  { href: '/toplu-olustur', label: 'Toplu Oluşturucu', icon: 'bulk', module: 8, ready: true },
-];
-
-const SETTINGS: NavEntry[] = [
-  { href: '/ayarlar/baglantilar', label: 'Platform Bağlantıları', icon: 'plug', module: 2 },
-  { href: '/ayarlar/musteriler', label: 'Müşteriler', icon: 'clients', module: 1 },
-  { href: '/ayarlar/ekip', label: 'Ekip & Yetkiler', icon: 'team', module: 1 },
-  { href: '/ayarlar/marka', label: 'Marka', icon: 'brand', module: 1 },
-  { href: '/ayarlar/denetim', label: 'Denetim Kaydı', icon: 'audit', module: 1 },
+/**
+ * Kenar çubuğu — mimari dokümandaki 7 bölüm.
+ *
+ * BÖLÜM ADLARI TÜRKÇE ve İŞ DİLİNDE. "CENTRAL" ya da "OPTIMISE" bir yazılım
+ * mimarisi terimi; panelde oturan kişi reklam uzmanı bile olsa bunlar ona bir
+ * şey söylemiyor. Bölüm adı "orada ne yapacağımı" anlatmalı.
+ *
+ * SIRA DA BİR ANLAM TAŞIYOR: yukarıdan aşağı bir iş akışı — önce bakarsın
+ * (Merkez), sonra yaparsın (Oluştur), sonra kontrol edersin (Yönet),
+ * iyileştirirsin, en son raporlarsın.
+ */
+const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
+  {
+    // 3 CENTRAL — en sık açılan ekran en üstte.
+    title: 'Merkez',
+    items: [
+      { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1 },
+      { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4 },
+      { href: '/saglik', label: 'Sağlık Skoru', icon: 'health', module: 3 },
+    ],
+  },
+  {
+    // 4 CREATE
+    title: 'Oluştur',
+    items: [
+      {
+        href: '/reklam-olustur',
+        label: 'Reklam Oluştur',
+        icon: 'create',
+        module: 4,
+        ready: true,
+      },
+      { href: '/auto-boost', label: 'Akıllı Boost', icon: 'boost', module: 7, ready: true },
+      { href: '/toplu-olustur', label: 'Toplu Oluşturucu', icon: 'bulk', module: 8, ready: true },
+    ],
+  },
+  {
+    // 5 MANAGE
+    title: 'Yönet',
+    items: [
+      { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true },
+      { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true },
+    ],
+  },
+  {
+    // 6 OPTIMISE
+    title: 'İyileştir',
+    items: [
+      { href: '/yorgunluk', label: 'Reklam Yorgunluğu', icon: 'fatigue', module: 6 },
+      { href: '/ab-test', label: 'A/B Test', icon: 'abtest', module: 6 },
+    ],
+  },
+  {
+    // 7 REPORT
+    title: 'Raporla',
+    items: [{ href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6 }],
+  },
+  {
+    // 2 BASE — henüz tamamen boş, ama yol haritası görünür olsun.
+    title: 'Kütüphane',
+    items: [
+      { href: '/kutuphane/gorseller', label: 'Görsel Arşivi', icon: 'assets', module: 2 },
+      { href: '/kutuphane/kitleler', label: 'Kitleler', icon: 'audience', module: 2 },
+      { href: '/kutuphane/bilgi', label: 'Bilgi Bankası', icon: 'knowledge', module: 2 },
+    ],
+  },
+  {
+    // 1 WORKSPACE — en altta çünkü en seyrek açılıyor.
+    title: 'Çalışma Alanı',
+    items: [
+      { href: '/ayarlar/baglantilar', label: 'Platform Bağlantıları', icon: 'plug', module: 2 },
+      { href: '/ayarlar/musteriler', label: 'Müşteriler', icon: 'clients', module: 1 },
+      { href: '/ayarlar/ekip', label: 'Ekip & Yetkiler', icon: 'team', module: 1 },
+      { href: '/ayarlar/marka', label: 'Marka', icon: 'brand', module: 1 },
+      { href: '/ayarlar/denetim', label: 'Denetim Kaydı', icon: 'audit', module: 1 },
+    ],
+  },
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -70,8 +131,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 pb-4">
-          <NavSection items={MAIN} />
-          <NavSection title="Yönetim" items={SETTINGS} />
+          {SECTIONS.map((section) => (
+            <NavSection key={section.title} title={section.title} items={section.items} />
+          ))}
         </nav>
 
         <div className="border-t border-line p-3">

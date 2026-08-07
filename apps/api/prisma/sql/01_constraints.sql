@@ -364,3 +364,67 @@ ALTER TABLE bulk_batches ADD CONSTRAINT bulk_batches_published_chk
     status NOT IN ('published', 'publishing')
     OR (published_by IS NOT NULL AND published_at IS NOT NULL)
   );
+
+-- =============================================================================
+-- Reklam Oluşturucu — Modül 4 (CREATE)
+-- =============================================================================
+
+ALTER TABLE ad_drafts DROP CONSTRAINT IF EXISTS ad_drafts_goal_chk;
+ALTER TABLE ad_drafts ADD CONSTRAINT ad_drafts_goal_chk
+  CHECK (goal IN ('form', 'whatsapp', 'website'));
+
+ALTER TABLE ad_drafts DROP CONSTRAINT IF EXISTS ad_drafts_status_chk;
+ALTER TABLE ad_drafts ADD CONSTRAINT ad_drafts_status_chk
+  CHECK (status IN ('draft', 'publishing', 'published', 'failed'));
+
+-- -----------------------------------------------------------------------------
+-- ad_drafts: WEB SİTESİ tipinde adres ZORUNLU.
+--
+-- Adressiz bir web sitesi kampanyası Meta tarafından reddedilir, ama reddi
+-- yayın anında görmek geç: kullanıcı taslağı tamamladığını sanıp bekliyor.
+-- Kayıt anında engellemek, hatayı yazarken göstermek demek.
+-- -----------------------------------------------------------------------------
+ALTER TABLE ad_drafts DROP CONSTRAINT IF EXISTS ad_drafts_website_link_chk;
+ALTER TABLE ad_drafts ADD CONSTRAINT ad_drafts_website_link_chk
+  CHECK (goal <> 'website' OR (link_url IS NOT NULL AND link_url <> ''));
+
+ALTER TABLE ad_drafts DROP CONSTRAINT IF EXISTS ad_drafts_budget_chk;
+ALTER TABLE ad_drafts ADD CONSTRAINT ad_drafts_budget_chk
+  CHECK (daily_budget_micros > 0 AND duration_days BETWEEN 0 AND 90);
+
+-- -----------------------------------------------------------------------------
+-- ad_drafts: BAŞARISIZ kayıtta sebep, YAYINDA kimlik zorunlu.
+--
+-- Sebepsiz başarısızlık "çalışmadı"dan fazlasını söylemiyor; kimliksiz bir
+-- "yayında" kaydı ise panelde çalışıyor görünen ama bulunamayan bir harcama.
+-- -----------------------------------------------------------------------------
+ALTER TABLE ad_drafts DROP CONSTRAINT IF EXISTS ad_drafts_error_chk;
+ALTER TABLE ad_drafts ADD CONSTRAINT ad_drafts_error_chk
+  CHECK (status <> 'failed' OR error IS NOT NULL);
+
+ALTER TABLE ad_drafts DROP CONSTRAINT IF EXISTS ad_drafts_published_chk;
+ALTER TABLE ad_drafts ADD CONSTRAINT ad_drafts_published_chk
+  CHECK (
+    status <> 'published'
+    OR (external_campaign_id IS NOT NULL AND external_ad_id IS NOT NULL
+        AND published_at IS NOT NULL)
+  );
+
+-- -----------------------------------------------------------------------------
+-- ad_draft_assets: oran bilinen bir değer, boyutlar makul.
+--
+-- Sıfır boyut, boyut okuyucusunun başarısız olduğu anlamına geliyor ve o
+-- görsel oran doğrulamasından geçemez — kaydetmek, yayın anında patlamak
+-- demek olurdu.
+-- -----------------------------------------------------------------------------
+ALTER TABLE ad_draft_assets DROP CONSTRAINT IF EXISTS ad_draft_assets_ratio_chk;
+ALTER TABLE ad_draft_assets ADD CONSTRAINT ad_draft_assets_ratio_chk
+  CHECK (ratio IN ('square', 'vertical', 'horizontal'));
+
+ALTER TABLE ad_draft_assets DROP CONSTRAINT IF EXISTS ad_draft_assets_dims_chk;
+ALTER TABLE ad_draft_assets ADD CONSTRAINT ad_draft_assets_dims_chk
+  CHECK (width > 0 AND height > 0 AND byte_size > 0);
+
+ALTER TABLE ad_draft_assets DROP CONSTRAINT IF EXISTS ad_draft_assets_mime_chk;
+ALTER TABLE ad_draft_assets ADD CONSTRAINT ad_draft_assets_mime_chk
+  CHECK (mime_type IN ('image/jpeg', 'image/png'));

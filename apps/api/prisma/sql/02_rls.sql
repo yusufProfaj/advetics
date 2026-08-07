@@ -104,6 +104,8 @@ DECLARE
     'monthly_budgets', 'rules', 'rule_runs', 'rule_action_logs',
     -- Modül 7
     'organic_posts', 'boost_rules', 'boosts',
+    -- Modül 4 — reklam oluşturucu
+    'ad_drafts', 'ad_draft_assets',
     -- Modül 8
     'bulk_batches', 'bulk_items'
   ];
@@ -758,6 +760,69 @@ CREATE POLICY adv_bulk_items_delete ON bulk_items
     AND EXISTS (
       SELECT 1 FROM bulk_batches b
       WHERE b.id = bulk_items.batch_id AND app.can_access_client(b.client_id)
+    )
+  );
+
+-- =============================================================================
+-- Reklam Oluşturucu — Modül 4 (CREATE)
+-- =============================================================================
+
+CREATE POLICY adv_ad_drafts_select ON ad_drafts
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_ad_drafts_insert ON ad_drafts
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_ad_drafts_update ON ad_drafts
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_ad_drafts_delete ON ad_drafts
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- ad_draft_assets
+--
+-- Kiracı kontrolü TASLAK ÜZERİNDEN. Satırın kendi org_id'si var ama tek başına
+-- yetmez: org içindeki başka bir müşterinin taslağına ait görsel görünürdü.
+--
+-- Bu tabloda sızıntı diğerlerinden farklı bir şey demek: görseller müşterinin
+-- henüz yayınlamadığı kreatifleri ve rakip bir müşterinin bunları görmesi
+-- ticari bir sorun.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_ad_draft_assets_select ON ad_draft_assets
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM ad_drafts d
+      WHERE d.id = ad_draft_assets.draft_id AND app.can_access_client(d.client_id)
+    )
+  );
+
+CREATE POLICY adv_ad_draft_assets_insert ON ad_draft_assets
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM ad_drafts d
+      WHERE d.id = ad_draft_assets.draft_id AND app.can_access_client(d.client_id)
+    )
+  );
+
+CREATE POLICY adv_ad_draft_assets_update ON ad_draft_assets
+  FOR UPDATE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM ad_drafts d
+      WHERE d.id = ad_draft_assets.draft_id AND app.can_access_client(d.client_id)
+    )
+  );
+
+CREATE POLICY adv_ad_draft_assets_delete ON ad_draft_assets
+  FOR DELETE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM ad_drafts d
+      WHERE d.id = ad_draft_assets.draft_id AND app.can_access_client(d.client_id)
     )
   );
 

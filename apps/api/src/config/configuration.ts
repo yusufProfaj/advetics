@@ -34,6 +34,16 @@ const envSchema = z.object({
    */
   QUOTA_CALLS_PER_MINUTE: z.coerce.number().int().min(1).default(60),
 
+  /**
+   * Yüklenen reklam görsellerinin kök dizini.
+   *
+   * VARSAYILAN PROJE İÇİNDE ve bu bilinçli: sunucuda 11 başka site var ve
+   * yazma yetkisi olan bir dizini varsayılan yapmak, o dizinin yanlışlıkla
+   * paylaşımlı bir yer olması riskini taşır. Üretimde
+   * /home/advetics/uploads olarak veriliyor.
+   */
+  UPLOAD_DIR: z.string().default('var/uploads'),
+
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   /**
    * Dinlenecek arayüz. Varsayılan olarak YALNIZCA localhost.
@@ -109,6 +119,7 @@ export interface AppConfig {
     keyPrefix: string;
   };
   quota: { callsPerMinute: number };
+  uploads: { dir: string };
   jwt: {
     accessSecret: string;
     refreshSecret: string;
@@ -171,6 +182,7 @@ export function loadConfig(): AppConfig {
       keyPrefix: env.REDIS_KEY_PREFIX,
     },
     quota: { callsPerMinute: env.QUOTA_CALLS_PER_MINUTE },
+    uploads: { dir: env.UPLOAD_DIR },
     jwt: {
       accessSecret: env.JWT_ACCESS_SECRET,
       refreshSecret: env.JWT_REFRESH_SECRET,

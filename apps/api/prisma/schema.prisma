@@ -100,6 +100,7 @@ model Organization {
   boostRules      BoostRule[]
   boosts          Boost[]
   bulkBatches     BulkBatch[]
+  adDrafts        AdDraft[]
 
   @@map("organizations")
 }
@@ -174,6 +175,7 @@ model Client {
   boostRules      BoostRule[]
   boosts          Boost[]
   bulkBatches     BulkBatch[]
+  adDrafts        AdDraft[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -472,6 +474,7 @@ model AdAccount {
   budgets    MonthlyBudget[]
   rules      Rule[]
   boosts     Boost[]
+  adDrafts   AdDraft[]
   bulkBatches BulkBatch[]
 
   @@unique([platform, externalId, clientId])
@@ -512,6 +515,7 @@ model SocialProfile {
   linkedAdAccount AdAccount?        @relation("BoostBillingAccount", fields: [linkedAdAccountId], references: [id], onDelete: SetNull)
   organicPosts   OrganicPost[]
   boostRules     BoostRule[]
+  adDrafts       AdDraft[]
 
   @@unique([connectionId, externalId])
   @@index([clientId, syncEnabled])
@@ -1458,6 +1462,106 @@ model BulkItem {
   @@unique([batchId, rowNumber])
   @@index([batchId, status])
   @@map("bulk_items")
+}
+
+/// Reklam taslağı — Modül 4 (CREATE), Reklam Oluşturucu.
+///
+/// TOPLU OLUŞTURUCUDAN (bulk_batches) AYRI. İkisi de reklam üretiyor ama
+/// farklı işler: toplu oluşturucu deneyimli kullanıcı için, elektronik tablo
+/// mantığında, onlarca satır. Bu ise reklamcılık bilmeyen biri için, tek
+/// reklam, adım adım.
+///
+/// Tek tabloda birleştirmek her ikisinin de doğrulamasını bozardı: toplu
+/// oluşturucu satır satır hata veriyor ve kısmi başarıyı yönetiyor, burada
+/// ise tek bir sonuç var — yayınlandı ya da yayınlanmadı.
+model AdDraft {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+  adAccountId     String @map("ad_account_id") @db.Uuid
+  /// Reklamın yayınlanacağı Facebook sayfası.
+  socialProfileId String @map("social_profile_id") @db.Uuid
+
+  /// form | whatsapp | website — kullanıcının verdiği TEK stratejik karar.
+  goal String @db.VarChar(16)
+  name String @db.VarChar(200)
+
+  primaryText String  @map("primary_text") @db.VarChar(2000)
+  headline    String? @db.VarChar(255)
+  description String? @db.VarChar(255)
+
+  /// website tipi için.
+  linkUrl String? @map("link_url") @db.VarChar(2048)
+  /// whatsapp tipi için. Boşsa sayfaya bağlı numara kullanılıyor.
+  whatsappNumber String? @map("whatsapp_number") @db.VarChar(20)
+
+  dailyBudgetMicros BigInt @map("daily_budget_micros")
+  /// 0 = süresiz.
+  durationDays      Int    @default(7) @map("duration_days")
+
+  /// draft | publishing | published | failed
+  status String @default("draft") @db.VarChar(16)
+
+  externalCampaignId String? @map("external_campaign_id") @db.VarChar(128)
+  externalAdSetId    String? @map("external_ad_set_id") @db.VarChar(128)
+  externalCreativeId String? @map("external_creative_id") @db.VarChar(128)
+  externalAdId       String? @map("external_ad_id") @db.VarChar(128)
+  /// Anlık form tipinde Meta'da oluşturulan formun kimliği.
+  externalLeadFormId String? @map("external_lead_form_id") @db.VarChar(128)
+
+  error       String?   @db.VarChar(2000)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization  Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount     AdAccount     @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  assets        AdDraftAsset[]
+
+  @@index([clientId, createdAt(sort: Desc)])
+  @@map("ad_drafts")
+}
+
+/// Taslağa yüklenen görsel.
+///
+/// DOSYA DİSKTE, VERİTABANINDA DEĞİL. 30 MB'a kadar görselleri JSONB ya da
+/// bytea olarak saklamak yedekleri şişirir ve her sorguyu yavaşlatır.
+/// `storageKey` diskteki yolu işaret ediyor.
+model AdDraftAsset {
+  id      String @id @default(uuid()) @db.Uuid
+  orgId   String @map("org_id") @db.Uuid
+  draftId String @map("draft_id") @db.Uuid
+
+  /// square | vertical | horizontal
+  ratio String @db.VarChar(12)
+
+  fileName String @map("file_name") @db.VarChar(300)
+  mimeType String @map("mime_type") @db.VarChar(60)
+  byteSize Int    @map("byte_size")
+  width    Int
+  height   Int
+
+  /// Disk üzerindeki göreli yol. Kök dizin yapılandırmadan geliyor.
+  storageKey String @map("storage_key") @db.VarChar(500)
+
+  /// Meta'ya yüklendikten sonra dönen hash.
+  ///
+  /// YAYINDA DOLUYOR, yüklemede değil: her yüklemede Meta'ya da göndermek,
+  /// yayınlanmayan taslaklar için boşuna kota harcamak olurdu.
+  metaImageHash String? @map("meta_image_hash") @db.VarChar(128)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  draft AdDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  /// Oran başına TEK görsel. İkinci kare görsel yüklemek öncekini
+  /// değiştirmeli, yanına eklenmemeli — arayüzde de üç kutu var.
+  @@unique([draftId, ratio])
+  @@map("ad_draft_assets")
 }
 
 model SyncJob {
