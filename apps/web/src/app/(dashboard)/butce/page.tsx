@@ -315,15 +315,73 @@ function AccountTable({
     );
   }
 
+  /**
+   * HESAPLAR İKİYE AYRILIYOR.
+   *
+   * Meta bağlantısı business manager'daki TÜM reklam hesaplarını içeri
+   * alıyor; bir müşterinin yüzlerce hesabı olabiliyor ve bunların çoğu boş,
+   * kapalı ya da başka bir dönemden kalma. Hepsini tek listede göstermek
+   * sayfayı sonsuz bir tabloya çeviriyor ve asıl iş yapan üç beş hesap
+   * kayboluyor.
+   *
+   * Ölçüt: bu ayda BÜTÇESİ ya da HARCAMASI olan hesap "aktif". Geri kalanı
+   * silinmiyor, katlanıyor — bütçe tanımlanmamış bir hesabı tamamen gizlemek,
+   * tam da fark edilmesi gereken durumu görünmez kılardı.
+   */
+  const active = data.accounts.filter((a) => a.budget !== null || BigInt(a.spentMicros) > 0n);
+  const idle = data.accounts.filter((a) => a.budget === null && BigInt(a.spentMicros) === 0n);
+
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-surface">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <h2 className="text-sm font-semibold text-ink">Reklam hesabı bazında</h2>
         <span className="text-[11px] text-ink-muted">
-          {data.accounts.length} hesap
+          {active.length} aktif
+          {idle.length > 0 && ` · ${idle.length} hareketsiz`}
         </span>
       </div>
 
+      {active.length === 0 ? (
+        <p className="px-4 py-8 text-center text-sm text-ink-muted">
+          Bu ay hiçbir hesabın bütçesi ya da harcaması yok.
+        </p>
+      ) : (
+        <AccountRows rows={active} data={data} month={month} canWrite={canWrite} />
+      )}
+
+      {idle.length > 0 && (
+        // `details` KULLANILIYOR, useState değil: bu sayfa sunucu bileşeni ve
+        // yalnızca aç/kapa için istemciye JS indirmek gereksiz.
+        <details className="border-t border-line">
+          <summary className="cursor-pointer px-4 py-2.5 text-xs text-ink-muted transition hover:bg-surface-sunken">
+            Bu ay hareketi olmayan {idle.length} hesabı göster
+          </summary>
+          <AccountRows rows={idle} data={data} month={month} canWrite={canWrite} />
+        </details>
+      )}
+
+      <p className="border-t border-line px-4 py-2.5 text-[11px] text-ink-muted">
+        Tüketim çubuğundaki dikey çizgi ayın geçen kısmını gösteriyor. Çubuk çizginin
+        sağındaysa bütçe hedeften hızlı tüketiliyor. Hesaplar{' '}
+        <strong>bugün hariç</strong>, dünün sonuna kadar olan veriyle hesaplanıyor — gün
+        bitmeden gelen kısmi veri her sabah &quot;yavaş gidiyoruz&quot; dedirtirdi.
+      </p>
+    </section>
+  );
+}
+
+function AccountRows({
+  rows,
+  data,
+  month,
+  canWrite,
+}: {
+  rows: ClientPacing['accounts'];
+  data: ClientPacing;
+  month: string;
+  canWrite: boolean;
+}) {
+  return (
       <div className="overflow-x-auto">
         <table className="w-full min-w-[860px] text-sm">
           <thead>
@@ -339,7 +397,7 @@ function AccountTable({
             </tr>
           </thead>
           <tbody>
-            {data.accounts.map((a) => {
+            {rows.map((a) => {
               const cur = a.budget?.currency ?? data.currency;
               return (
                 <tr key={a.adAccountId} className="border-b border-line/60 last:border-0">
@@ -395,14 +453,6 @@ function AccountTable({
           </tbody>
         </table>
       </div>
-
-      <p className="border-t border-line px-4 py-2.5 text-[11px] text-ink-muted">
-        Tüketim çubuğundaki dikey çizgi ayın geçen kısmını gösteriyor. Çubuk çizginin
-        sağındaysa bütçe hedeften hızlı tüketiliyor. Hesaplar{' '}
-        <strong>bugün hariç</strong>, dünün sonuna kadar olan veriyle hesaplanıyor — gün
-        bitmeden gelen kısmi veri her sabah &quot;yavaş gidiyoruz&quot; dedirtirdi.
-      </p>
-    </section>
   );
 }
 
