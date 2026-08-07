@@ -459,6 +459,61 @@ export interface CreateAdResult {
   externalCreativeId: string;
 }
 
+/**
+ * Taslaktan TAM reklam üretme — Modül 4 (CREATE).
+ *
+ * `CreateAdRequest`ten FARKLI ve ayrı olması gerekiyor: o, MEVCUT bir ad
+ * set'e reklam ekliyor (toplu oluşturucu, kampanya yapısı zaten kurulu).
+ * Bu ise kampanya + ad set + kreatif + reklam zincirinin TAMAMINI kuruyor.
+ *
+ * İkisini tek tipte birleştirmek, yarısı opsiyonel bir alan kümesi üretirdi
+ * ve hangi alanın hangi akışta zorunlu olduğu tipten okunamaz olurdu.
+ */
+export interface PublishDraftRequest {
+  adAccountExternalId: string;
+  pageExternalId: string;
+  name: string;
+  /**
+   * Kampanya kararları — `goal-mapping.ts` üretiyor.
+   *
+   * Sağlayıcı bu kararları SORGULAMIYOR, yalnızca Meta'nın anlayacağı biçime
+   * çeviriyor. Karar mantığını sağlayıcıya taşımak, onu test edilemez
+   * kılardı.
+   */
+  spec: {
+    objective: string;
+    optimizationGoal: string;
+    billingEvent: string;
+    destinationType?: string;
+    promotedObject?: Record<string, string>;
+    callToAction: string;
+  };
+  primaryText: string;
+  headline?: string;
+  description?: string;
+  linkUrl?: string;
+  whatsappNumber?: string;
+  dailyBudgetMicros: bigint;
+  /** null = süresiz. */
+  endTime: Date | null;
+  currency: string;
+  /** İlk eleman DAİMA kare — tek görselli yolda o kullanılıyor. */
+  images: Array<{ ratio: 'square' | 'vertical' | 'horizontal'; hash: string }>;
+  targeting: Record<string, unknown>;
+  placements: Record<string, string[]>;
+  /** Tek görselde null — basit kreatif yeterli. */
+  customizationRules: Array<Record<string, unknown>> | null;
+}
+
+export interface PublishDraftResult {
+  campaignId: string;
+  adSetId: string;
+  creativeId: string;
+  adId: string;
+  /** Yalnızca anlık form tipinde. */
+  leadFormId?: string;
+}
+
 export interface IAdPlatformProvider {
   readonly platform: Platform;
 
@@ -589,6 +644,24 @@ export interface IAdPlatformProvider {
    * `ads_management` gerektiriyor — `canWrite()` önce sorulmalı.
    */
   createBoost(ctx: FetchContext, request: BoostRequest): Promise<BoostResult>;
+
+  /**
+   * Görseli reklam hesabına yükler ve hash döner (Modül 4).
+   *
+   * Meta kreatifte görseli hash ile istiyor, URL ile değil: görselin
+   * platformda durması gerekiyor. `name` etiketi
+   * `asset_customization_rules` ile eşleşmek zorunda.
+   */
+  uploadAdImage(ctx: FetchContext, params: { name: string; bytes: Buffer }): Promise<string>;
+
+  /**
+   * Taslaktan tam bir reklam üretir (Modül 4).
+   *
+   * Ara adımlardan biri başarısız olursa öncekiler GERİ ALINMALI: yarım
+   * kalmış bir kampanya Ads Manager'ı kirletiyor ve kullanıcı onu elle
+   * temizlemek zorunda kalıyor.
+   */
+  publishDraft(ctx: FetchContext, request: PublishDraftRequest): Promise<PublishDraftResult>;
 
   /**
    * Tek bir reklam oluşturur (Modül 8).

@@ -21,6 +21,8 @@ import {
   type BoostResult,
   type DiscoveredOrganicPost,
   type PlatformActionRequest,
+  type PublishDraftRequest,
+  type PublishDraftResult,
   type PlatformActionResult,
   type PlatformInsights,
   type NormalizedAccountStatus,
@@ -1293,6 +1295,191 @@ export class MetaProvider implements IAdPlatformProvider {
     return res.data;
   }
 
+
+  // ---------------------------------------------------------------------------
+  // MODÜL 4 — Reklam Oluşturucu
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Görseli reklam hesabına yükler.
+   *
+   * MULTIPART DEĞİL, form-encoded base64. Meta ikisini de kabul ediyor ama
+   * multipart Node'da elle sınır (boundary) üretmeyi gerektiriyor ve tek bir
+   * yanlış bayt "geçersiz istek" ile dönüyor — mesaj hangi baytın yanlış
+   * olduğunu söylemiyor. Base64 %33 daha büyük gidiyor; 30 MB sınırında bu
+   * kabul edilebilir bir maliyet.
+   *
+   * YANIT ŞEKLİ TUZAKLI: Meta hash'i `images.<gönderdiğin ad>.hash` altında
+   * dönüyor, sabit bir anahtarda değil. Şekle göre okumak, adı değiştirdiğin
+   * gün sessizce undefined döndürür.
+   */
+  async uploadAdImage(
+    ctx: FetchContext,
+    params: { name: string; bytes: Buffer },
+  ): Promise<string> {
+    const body = new URLSearchParams({ bytes: params.bytes.toString('base64') });
+
+    const res = await platformFetch<{ images?: Record<string, { hash?: string }> }>(
+      'meta',
+      `${this.graph}/act_${ctx.accountExternalId}/adimages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ctx.accessToken}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+        // Görsel yüklemesi normal çağrılardan yavaş; varsayılan 30 sn
+        // 20 MB'lık bir dosyada yetmiyor.
+        timeoutMs: 120_000,
+      },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+
+    const images = res.data.images ?? {};
+    // Anahtar adı Meta tarafından belirleniyor; ilk (ve tek) girdiyi alıyoruz.
+    const hash = Object.values(images)[0]?.hash;
+    if (!hash) {
+      throw new PlatformApiError(
+        'meta',
+        'permanent',
+        'Görsel yüklendi ama Meta hash döndürmedi — yanıt beklenmedik şekilde geldi.',
+      );
+    }
+    return hash;
+  }
+
+  /**
+   * Taslaktan tam reklam: kampanya + ad set + kreatif + reklam.
+   *
+   * SIRA VE DURUMLAR ÖNEMLİ. Kampanya PAUSED açılıyor, en sonda ACTIVE'e
+   * alınıyor: üçü de ACTIVE açılsaydı ad set hazır olmadan kampanya yayına
+   * girer ve Meta bunu eksik yapılandırma diye reddedebilirdi.
+   *
+   * Anlık form tipinde ÖNCE FORM oluşturuluyor: kreatif forma referans
+   * veriyor ve form yoksa kreatif reddediliyor.
+   */
+  async publishDraft(
+    ctx: FetchContext,
+    req: PublishDraftRequest,
+  ): Promise<PublishDraftResult> {
+    const act = `act_${req.adAccountExternalId}`;
+    const created: Array<{ id: string; label: string }> = [];
+
+    try {
+      let leadFormId: string | undefined;
+      if (req.spec.destinationType === 'ON_AD') {
+        leadFormId = await this.createLeadForm(ctx, req);
+        // Form SAYFAYA ait, reklam hesabına değil; geri alma listesine
+        // eklenmiyor çünkü silinmesi sayfa token'ı gerektiriyor ve boş bir
+        // form zararsız.
+      }
+
+      const campaign = await this.graphPost<{ id: string }>(ctx, `${act}/campaigns`, {
+        name: req.name,
+        objective: req.spec.objective,
+        status: 'PAUSED',
+        special_ad_categories: '[]',
+      });
+      created.push({ id: campaign.id, label: 'kampanya' });
+
+      const adSetFields: Record<string, string> = {
+        name: `${req.name} — ad set`,
+        campaign_id: campaign.id,
+        daily_budget: toMinorUnits(req.dailyBudgetMicros, req.currency).toString(),
+        billing_event: req.spec.billingEvent,
+        optimization_goal: req.spec.optimizationGoal,
+        targeting: JSON.stringify({ ...req.targeting, ...req.placements }),
+        status: 'ACTIVE',
+      };
+      if (req.spec.destinationType) adSetFields.destination_type = req.spec.destinationType;
+      if (req.spec.promotedObject) {
+        adSetFields.promoted_object = JSON.stringify(
+          leadFormId
+            ? { ...req.spec.promotedObject, leadgen_form_id: leadFormId }
+            : req.spec.promotedObject,
+        );
+      }
+      if (req.endTime) adSetFields.end_time = req.endTime.toISOString();
+
+      const adSet = await this.graphPost<{ id: string }>(ctx, `${act}/adsets`, adSetFields);
+      created.push({ id: adSet.id, label: 'ad set' });
+
+      const creative = await this.graphPost<{ id: string }>(ctx, `${act}/adcreatives`, {
+        name: `${req.name} — kreatif`,
+        object_story_spec: JSON.stringify({ page_id: req.pageExternalId }),
+        ...buildCreativeSpec(req, leadFormId),
+      });
+      created.push({ id: creative.id, label: 'kreatif' });
+
+      const ad = await this.graphPost<{ id: string }>(ctx, `${act}/ads`, {
+        name: req.name,
+        adset_id: adSet.id,
+        creative: JSON.stringify({ creative_id: creative.id }),
+        status: 'ACTIVE',
+      });
+      created.push({ id: ad.id, label: 'reklam' });
+
+      await this.graphPost(ctx, campaign.id, { status: 'ACTIVE' });
+
+      return {
+        campaignId: campaign.id,
+        adSetId: adSet.id,
+        creativeId: creative.id,
+        adId: ad.id,
+        leadFormId,
+      };
+    } catch (err) {
+      // GERİ ALMA — ters sırada. En iyi çaba: silme de başarısız olabilir ve
+      // o zaman yapılacak bir şey yok. Ama denememek, her başarısız yayında
+      // Ads Manager'da yarım bir kampanya bırakmak demek.
+      for (const entity of created.reverse()) {
+        try {
+          await platformFetch('meta', `${this.graph}/${entity.id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${ctx.accessToken}` },
+          });
+        } catch {
+          this.logger.warn(`Geri alınamadı: ${entity.label} ${entity.id} platformda kaldı`);
+        }
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Anlık form oluşturur.
+   *
+   * ALANLAR SABİT: ad, e-posta, telefon. Form alanlarını kullanıcıya
+   * seçtirmek ayrı bir ekran demek ve bu üründe hedef kitle formu
+   * tasarlamak istemiyor — iletişim bilgisi topluyor.
+   *
+   * Form SAYFAYA ait olduğu için sayfa üzerinden oluşturuluyor.
+   */
+  private async createLeadForm(ctx: FetchContext, req: PublishDraftRequest): Promise<string> {
+    const form = await this.graphPost<{ id: string }>(
+      ctx,
+      `${req.pageExternalId}/leadgen_forms`,
+      {
+        name: `${req.name} — form`,
+        // Gizlilik politikası ZORUNLU ve Meta bunu doğruluyor. Müşterinin
+        // sitesi yoksa kendi gizlilik sayfamız kullanılıyor.
+        privacy_policy: JSON.stringify({
+          url: req.linkUrl ?? 'https://advetics.com/gizlilik',
+          link_text: 'Gizlilik Politikası',
+        }),
+        questions: JSON.stringify([
+          { type: 'FULL_NAME' },
+          { type: 'EMAIL' },
+          { type: 'PHONE' },
+        ]),
+        follow_up_action_url: req.linkUrl ?? 'https://advetics.com',
+      },
+    );
+    return form.id;
+  }
+
 }
 
 /**
@@ -1628,6 +1815,67 @@ function num(v: unknown): number {
 
 function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
+/**
+ * Kreatif alanlarını kurar.
+ *
+ * İKİ YOL:
+ *   · TEK GÖRSEL → basit `object_story_spec`. En güvenilir yol ve Meta'nın
+ *     en iyi desteklediği biçim.
+ *   · ÇOK GÖRSEL → `asset_feed_spec` + yerleşim kuralları. Her yerleşime
+ *     kendi oranındaki görsel gidiyor.
+ *
+ * Tek görselde de `asset_feed_spec` kullanmak "tutarlı" görünürdü ama o
+ * biçim daha kırılgan: eksik bir alan Meta tarafından anlaşılmaz bir hatayla
+ * reddediliyor. Basit yol basit kalmalı.
+ */
+function buildCreativeSpec(
+  req: PublishDraftRequest,
+  leadFormId: string | undefined,
+): Record<string, string> {
+  const link = req.spec.destinationType === 'WHATSAPP'
+    // WhatsApp reklamında bağlantı, numaraya giden wa.me adresi. Numara
+    // verilmemişse Meta sayfaya bağlı numarayı kullanıyor.
+    ? (req.whatsappNumber ? `https://wa.me/${req.whatsappNumber}` : `https://wa.me/`)
+    : (req.linkUrl ?? `https://facebook.com/${req.pageExternalId}`);
+
+  if (req.images.length <= 1) {
+    const hash = req.images[0]?.hash;
+    return {
+      object_story_spec: JSON.stringify({
+        page_id: req.pageExternalId,
+        link_data: {
+          message: req.primaryText,
+          ...(req.headline ? { name: req.headline } : {}),
+          ...(req.description ? { description: req.description } : {}),
+          link,
+          ...(hash ? { image_hash: hash } : {}),
+          call_to_action: {
+            type: req.spec.callToAction,
+            value: leadFormId ? { lead_gen_form_id: leadFormId } : { link },
+          },
+        },
+      }),
+    };
+  }
+
+  return {
+    object_story_spec: JSON.stringify({ page_id: req.pageExternalId }),
+    asset_feed_spec: JSON.stringify({
+      images: req.images.map((img) => ({
+        hash: img.hash,
+        adlabels: [{ name: `advetics_${img.ratio}` }],
+      })),
+      bodies: [{ text: req.primaryText }],
+      ...(req.headline ? { titles: [{ text: req.headline }] } : {}),
+      ...(req.description ? { descriptions: [{ text: req.description }] } : {}),
+      link_urls: [{ website_url: link }],
+      call_to_action_types: [req.spec.callToAction],
+      ad_formats: ['SINGLE_IMAGE'],
+      asset_customization_rules: req.customizationRules ?? [],
+    }),
+  };
 }
 
 /**

@@ -73,11 +73,13 @@ gösteriliyor, ama kimseye **bildirim gitmiyor**.
 
 | Yetenek | Durum | Nerede |
 |---|---|---|
+| **Reklam Oluşturucu** (form/WhatsApp/site) | 🟡 | `/reklam-olustur` — yayın yolu doğrulanmadı |
+| Görsel yükleme (3 oran) + boyut doğrulama | ✅ | `image-probe.ts`, `asset-storage.service.ts` |
 | Toplu reklam oluşturucu | 🟡 | `/toplu-olustur` — yayın yolu doğrulanmadı |
 | Yayın öncesi doğrulama | ✅ | Karakter sınırı, URL, CTA, mükerrer ad |
 | Auto-Boost (organik → reklam) | 🟡 | `/auto-boost` — oluşturma yolu doğrulanmadı |
 | Organik gönderi senkronizasyonu | ✅ | `queue/organic-sync.service.ts` |
-| Görsel/video yükleme | ❌ | Varlık arşivi (BASE) olmadan eksik |
+| Görsel/video yükleme | 🟡 | Reklam Oluşturucu'da var; kalıcı arşiv (BASE) hâlâ yok |
 
 ### 5 — MANAGE (Bütçe, Kill-Switch, Teklif) 🟡
 
@@ -166,6 +168,7 @@ Bunlar **yazıldı, test edildi, ama canlı Meta API'sinde bir kez bile
 | Bütçe değiştirme | aynı | **Yüksek** — para birimi çevrimi hatası bütçeyi 1.000.000 katına çıkarır |
 | Boost oluşturma | `meta.provider.ts` → `createBoost` | **Yüksek** — 3 varlık, geri alma yolu var ama denenmedi |
 | Toplu reklam oluşturma | `meta.provider.ts` → `createAd` vb. | **Yüksek** — kısmi başarı yönetimi denenmedi |
+| Reklam Oluşturucu yayını | `meta.provider.ts` → `publishDraft` | **Yüksek** — 4 varlık + anlık form; `asset_feed_spec` yerleşim kuralları hiç denenmedi |
 
 **Birim testleri hata yollarını ve para birimi çevrimini kilitliyor**
 (`meta-write.spec.ts`, `meta-organic.spec.ts`), ama gerçek API yanıtını

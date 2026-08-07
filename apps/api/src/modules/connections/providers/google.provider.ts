@@ -19,6 +19,7 @@ import {
   type CreateAdResult,
   type DiscoveredOrganicPost,
   type PlatformActionRequest,
+  type PublishDraftResult,
   type PlatformActionResult,
   type PlatformInsights,
   type NormalizedAccountStatus,
@@ -965,6 +966,31 @@ export class GoogleProvider implements IAdPlatformProvider {
       'google',
       'permanent',
       'Google Ads organik gönderi boost etmeyi desteklemiyor — bu bir Meta özelliği.',
+    );
+  }
+
+
+  /**
+   * Modül 4 — Google'da KARŞILIĞI VAR ama yazılmadı.
+   *
+   * Google Ads'te de görsel yükleme (`MediaFileService`) ve kampanya
+   * oluşturma mümkün. Yazılmama sebebi Auto-Boost ile aynı: okuma tarafı bile
+   * canlı API'de doğrulanmadı ve test edilmemiş kodun müşteri hesabında
+   * kampanya açması kabul edilemez.
+   */
+  async uploadAdImage(): Promise<string> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      'Google Ads görsel yükleme henüz uygulanmadı — Basic Access onayı bekleniyor.',
+    );
+  }
+
+  async publishDraft(): Promise<PublishDraftResult> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      'Google Ads reklam oluşturma henüz uygulanmadı — Basic Access onayı bekleniyor.',
     );
   }
 

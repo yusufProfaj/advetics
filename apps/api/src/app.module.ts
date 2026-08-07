@@ -14,6 +14,7 @@ import { HealthController } from './modules/health/health.controller';
 import { AdsModule } from './modules/ads/ads.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { RulesModule } from './modules/rules/rules.module';
+import { AdBuilderModule } from './modules/ad-builder/ad-builder.module';
 import { BoostsModule } from './modules/boosts/boosts.module';
 import { BulkModule } from './modules/bulk/bulk.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
@@ -42,6 +43,7 @@ import { QueueModule } from './queue/queue.module';
     ReportsModule,
     BudgetsModule,
     RulesModule,
+    AdBuilderModule,
     BoostsModule,
     BulkModule,
   ],
