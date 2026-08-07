@@ -379,6 +379,58 @@ export interface PlatformActionResult {
   afterState: Record<string, unknown>;
 }
 
+/**
+ * Organik gönderi — Modül 7 Auto-Boost'un girdisi.
+ *
+ * Metrikler gönderi ÖMRÜ BOYUNCA toplam, günlük değil. Reklam metriklerinden
+ * farklı: orada günlük seri gerekiyor (geri düzeltme, pencere hesapları),
+ * burada tek soru "bu gönderi iyi gitti mi".
+ */
+export interface DiscoveredOrganicPost {
+  externalId: string;
+  mediaType: 'photo' | 'video' | 'carousel' | 'reel' | 'text' | 'link';
+  message?: string;
+  permalink?: string;
+  thumbnailUrl?: string;
+  publishedAt: Date;
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  videoViews: number;
+  raw: unknown;
+}
+
+/**
+ * Boost isteği — mevcut bir organik gönderiden reklam üretmek.
+ *
+ * Meta'da bu ÜÇ VARLIK demek: kampanya + ad set + reklam. Tek bir "boost"
+ * uç noktası yok; Sayfa arayüzündeki "Gönderiyi Öne Çıkar" düğmesi de arka
+ * planda bunları oluşturuyor.
+ */
+export interface BoostRequest {
+  /** `act_` öneki OLMADAN reklam hesabı kimliği. */
+  adAccountExternalId: string;
+  /** Boost edilecek gönderinin platform kimliği. */
+  postExternalId: string;
+  /** Gönderinin sahibi sayfa — reklam bu sayfa adına yayınlanıyor. */
+  pageExternalId: string;
+  dailyBudgetMicros: bigint;
+  durationDays: number;
+  objective: string;
+  currency: string;
+  /** Kampanya adı — panelde ve Ads Manager'da görünür. */
+  name: string;
+}
+
+export interface BoostResult {
+  externalCampaignId: string;
+  externalAdSetId: string;
+  externalAdId: string;
+}
+
 export interface IAdPlatformProvider {
   readonly platform: Platform;
 
@@ -484,6 +536,31 @@ export interface IAdPlatformProvider {
    * açıklamaktan iyi.
    */
   canWrite(grantedScopes: readonly string[]): { ok: boolean; missing: string[] };
+
+  /**
+   * L6 — sosyal profilin organik gönderileri (Modül 7).
+   *
+   * SAYFA TOKEN'I kullanılıyor, kullanıcı token'ı değil: Meta sayfa
+   * içgörülerini yalnızca sayfa token'ıyla veriyor ve o token
+   * `SocialProfile.pageAccessTokenEnc` içinde ayrı şifreli duruyor.
+   *
+   * Google için boş dizi — orada organik gönderi kavramı yok.
+   */
+  fetchOrganicPosts(params: {
+    pageAccessToken: string;
+    profileExternalId: string;
+    profileType: 'facebook_page' | 'instagram_business';
+    /** Bu tarihten sonrasını çek. Verilmezse sağlayıcının varsayılan penceresi. */
+    since?: Date;
+    onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
+  }): Promise<DiscoveredOrganicPost[]>;
+
+  /**
+   * Organik gönderiden reklam üretir (Modül 7).
+   *
+   * `ads_management` gerektiriyor — `canWrite()` önce sorulmalı.
+   */
+  createBoost(ctx: FetchContext, request: BoostRequest): Promise<BoostResult>;
 }
 
 export const AD_PLATFORM_PROVIDERS = 'AD_PLATFORM_PROVIDERS';

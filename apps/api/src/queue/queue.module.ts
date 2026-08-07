@@ -1,7 +1,9 @@
 import { Global, Module } from '@nestjs/common';
 import { ConnectionsModule } from '../modules/connections/connections.module';
 import { RulesModule } from '../modules/rules/rules.module';
+import { BoostsModule } from '../modules/boosts/boosts.module';
 import { InsightsSyncService } from './insights-sync.service';
+import { OrganicSyncService } from './organic-sync.service';
 import { QuotaGuardService } from './quota-guard.service';
 import { StructureSyncService } from './structure-sync.service';
 import { SyncQueueService } from './sync-queue.service';
@@ -20,13 +22,14 @@ import { SyncProcessorService } from './sync-processor.service';
  */
 @Global()
 @Module({
-  imports: [ConnectionsModule, RulesModule],
+  imports: [ConnectionsModule, RulesModule, BoostsModule],
   providers: [
     QuotaGuardService,
     SyncQueueService,
     SyncProcessorService,
     StructureSyncService,
     InsightsSyncService,
+    OrganicSyncService,
   ],
   exports: [
     QuotaGuardService,
@@ -34,6 +37,7 @@ import { SyncProcessorService } from './sync-processor.service';
     SyncProcessorService,
     StructureSyncService,
     InsightsSyncService,
+    OrganicSyncService,
   ],
 })
 export class QueueModule {}

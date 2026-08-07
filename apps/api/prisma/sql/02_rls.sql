@@ -101,7 +101,9 @@ DECLARE
     -- Modül 6
     'report_templates', 'report_shares',
     -- Modül 5
-    'monthly_budgets', 'rules', 'rule_runs', 'rule_action_logs'
+    'monthly_budgets', 'rules', 'rule_runs', 'rule_action_logs',
+    -- Modül 7
+    'organic_posts', 'boost_rules', 'boosts'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -640,6 +642,61 @@ CREATE POLICY adv_rule_actions_insert ON rule_action_logs
       WHERE r.id = rule_action_logs.rule_id AND app.can_access_client(r.client_id)
     )
   );
+
+-- =============================================================================
+-- MODÜL 7 — Auto-Boost
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- organic_posts, boost_rules, boosts
+--
+-- Üçü de standart kiracı deseni: satır müşteriye ait, müşteri temsilcisi
+-- kendi müşterisinin verisini görüyor.
+--
+-- BURADA OLMAYAN ŞEY: `boost.approve` ayrımı. `monthly_budgets` ve `rules` ile
+-- aynı gerekçe — RLS bağlamında rol adı yok ve izin listesini iki yerde tutmak
+-- ikisinin zamanla ayrışması demek. RLS kiracı sınırını koruyor; onay yetkisi
+-- guard katmanında.
+--
+-- organic_posts'a DELETE politikası YOK: gönderiler senkronizasyondan geliyor
+-- ve elle silinmeleri, boost geçmişinin dayandığı kaydı ortadan kaldırırdı.
+-- Sosyal profil silinirse CASCADE ile gidiyorlar.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_organic_posts_select ON organic_posts
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_organic_posts_insert ON organic_posts
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_organic_posts_update ON organic_posts
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_boost_rules_select ON boost_rules
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_boost_rules_insert ON boost_rules
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_boost_rules_update ON boost_rules
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_boost_rules_delete ON boost_rules
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_boosts_select ON boosts
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_boosts_insert ON boosts
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_boosts_update ON boosts
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- boosts'a DELETE politikası YOK: bir boost para taahhüdü ve kaydı denetim
+-- izidir. İptal etmek `status = 'rejected'` demek, satırı silmek değil.
 
 -- -----------------------------------------------------------------------------
 -- Yetkiler (yeni tablolar için ALTER DEFAULT PRIVILEGES zaten çalışıyor;

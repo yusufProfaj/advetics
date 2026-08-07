@@ -15,6 +15,9 @@ import {
   type IAdPlatformProvider,
   type InsightsLevel,
   type InsightsRequest,
+  type BoostRequest,
+  type BoostResult,
+  type DiscoveredOrganicPost,
   type PlatformActionRequest,
   type PlatformActionResult,
   type PlatformInsights,
@@ -23,6 +26,7 @@ import {
   type NormalizedEntityStatus,
   type OAuthTokens,
   type PlatformStructure,
+  type RateLimitSnapshot,
   type TokenVerification,
 } from '../provider.types';
 import { parseMetaRateLimit, platformFetch } from './http';
@@ -1026,6 +1030,198 @@ export class MetaProvider implements IAdPlatformProvider {
     return { afterState };
   }
 
+
+  // ---------------------------------------------------------------------------
+  // MODÜL 7 — Auto-Boost
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Sayfanın / Instagram hesabının organik gönderileri.
+   *
+   * İKİ AYRI UÇ NOKTA, tek metot. Facebook Sayfası `/{page}/posts`, Instagram
+   * `/{ig-user}/media` kullanıyor ve içgörü alan adları da farklı
+   * (`post_impressions` vs `impressions`). Çağırana bu farkı taşıtmak, her
+   * çağrı yerinde aynı `if`i tekrarlatmak olurdu.
+   *
+   * İÇGÖRÜLER GÖNDERİYLE BİRLİKTE, ayrı çağrıyla değil: 25 gönderi için 25 ek
+   * istek atmak kotayı gereksiz yakıyor. Meta iç içe alan sözdizimiyle
+   * (`insights.metric(...)`) tek çağrıda veriyor.
+   */
+  async fetchOrganicPosts(params: {
+    pageAccessToken: string;
+    profileExternalId: string;
+    profileType: 'facebook_page' | 'instagram_business';
+    since?: Date;
+    onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
+  }): Promise<DiscoveredOrganicPost[]> {
+    const ig = params.profileType === 'instagram_business';
+
+    const url = new URL(
+      `${this.graph}/${params.profileExternalId}/${ig ? 'media' : 'posts'}`,
+    );
+    url.searchParams.set(
+      'fields',
+      ig
+        ? [
+            'id',
+            'media_type',
+            'caption',
+            'permalink',
+            'thumbnail_url',
+            'media_url',
+            'timestamp',
+            'like_count',
+            'comments_count',
+            'insights.metric(impressions,reach,saved,video_views)',
+          ].join(',')
+        : [
+            'id',
+            'message',
+            'permalink_url',
+            'full_picture',
+            'created_time',
+            'attachments{media_type}',
+            'shares',
+            'likes.summary(true).limit(0)',
+            'comments.summary(true).limit(0)',
+            'insights.metric(post_impressions,post_impressions_unique,post_video_views)',
+          ].join(','),
+    );
+    url.searchParams.set('limit', '50');
+    if (params.since) {
+      url.searchParams.set('since', String(Math.floor(params.since.getTime() / 1000)));
+    }
+
+    const res = await platformFetch<GraphPage>(
+      'meta',
+      url.toString(),
+      { headers: { Authorization: `Bearer ${params.pageAccessToken}` } },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await params.onRateLimit?.(res.rateLimit);
+
+    const out: DiscoveredOrganicPost[] = [];
+    for (const row of res.data.data ?? []) {
+      const post = mapOrganicPost(row as Record<string, unknown>, ig);
+      if (post) out.push(post);
+    }
+    return out;
+  }
+
+  /**
+   * Gönderiyi boost eder: kampanya + ad set + reklam.
+   *
+   * ÜÇ ÇAĞRI VE HEPSİ BAŞARILI OLMALI. Ortada kalırsa (ad set açıldı, reklam
+   * açılamadı) bütçesi olan ama reklamı olmayan bir ad set kalıyor — para
+   * harcamıyor ama Ads Manager'ı kirletiyor. Bu yüzden hata durumunda
+   * oluşturulan varlıklar GERİ ALINIYOR.
+   *
+   * Kampanya PAUSED açılıyor, ad set ve reklam ACTIVE. Sonra kampanya
+   * ACTIVE'e alınıyor: üçü de ACTIVE açılsaydı, ad set hazır olmadan kampanya
+   * yayına girer ve Meta bunu "eksik yapılandırma" diye reddedebilirdi.
+   */
+  async createBoost(ctx: FetchContext, request: BoostRequest): Promise<BoostResult> {
+    const act = `act_${request.adAccountExternalId}`;
+    const created: Array<{ id: string; label: string }> = [];
+
+    try {
+      const campaign = await this.graphPost<{ id: string }>(ctx, `${act}/campaigns`, {
+        name: request.name,
+        objective: request.objective,
+        status: 'PAUSED',
+        special_ad_categories: '[]',
+      });
+      created.push({ id: campaign.id, label: 'kampanya' });
+
+      // Bitiş zamanı SÜREDEN türetiliyor; Meta ömür boyu bütçe olmadan da
+      // bitiş zamanı kabul ediyor ve boost'un kendiliğinden durmasını
+      // sağlayan tek şey bu. Bitiş vermezsek "3 günlük boost" süresiz
+      // çalışan bir kampanya olur.
+      const endTime = new Date(Date.now() + request.durationDays * 86_400_000);
+
+      const adSet = await this.graphPost<{ id: string }>(ctx, `${act}/adsets`, {
+        name: `${request.name} — ad set`,
+        campaign_id: campaign.id,
+        daily_budget: toMinorUnits(request.dailyBudgetMicros, request.currency).toString(),
+        billing_event: 'IMPRESSIONS',
+        optimization_goal: 'POST_ENGAGEMENT',
+        end_time: endTime.toISOString(),
+        // HEDEFLEME: sayfanın kendi ülkesi/kitlesi yerine geniş bir taban
+        // veriliyor ve daraltma kullanıcıya bırakılıyor. Boost'un amacı
+        // mevcut ilgiyi büyütmek; dar hedefleme onu zaten gören kitleye
+        // tekrar göstermek olurdu.
+        targeting: JSON.stringify({ geo_locations: { countries: ['TR'] } }),
+        status: 'ACTIVE',
+      });
+      created.push({ id: adSet.id, label: 'ad set' });
+
+      const ad = await this.graphPost<{ id: string }>(ctx, `${act}/ads`, {
+        name: `${request.name} — reklam`,
+        adset_id: adSet.id,
+        // MEVCUT GÖNDERİYİ kullanıyor, yeni yaratmıyor: `object_story_id`
+        // gönderinin kendisini reklama çeviriyor ve organik etkileşim
+        // (beğeni, yorum) korunuyor. Yeni bir creative üretmek, gönderinin
+        // biriktirdiği sosyal kanıtı sıfırlardı.
+        creative: JSON.stringify({
+          object_story_id: `${request.pageExternalId}_${stripPagePrefix(request.postExternalId, request.pageExternalId)}`,
+        }),
+        status: 'ACTIVE',
+      });
+      created.push({ id: ad.id, label: 'reklam' });
+
+      await this.graphPost(ctx, campaign.id, { status: 'ACTIVE' });
+
+      return {
+        externalCampaignId: campaign.id,
+        externalAdSetId: adSet.id,
+        externalAdId: ad.id,
+      };
+    } catch (err) {
+      // GERİ ALMA — ters sırada sil.
+      //
+      // En iyi çaba: silme de başarısız olabilir ve o zaman yapılacak bir şey
+      // yok. Ama denememek, her başarısız boost denemesinde Ads Manager'da
+      // yetim bir kampanya bırakmak demek.
+      for (const entity of created.reverse()) {
+        try {
+          await platformFetch('meta', `${this.graph}/${entity.id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${ctx.accessToken}` },
+          });
+        } catch {
+          this.logger.warn(
+            `Boost geri alınamadı: ${entity.label} ${entity.id} platformda kaldı`,
+          );
+        }
+      }
+      throw err;
+    }
+  }
+
+  /** Graph API'ye form-encoded POST — boost akışının üç adımı da bunu kullanıyor. */
+  private async graphPost<T>(
+    ctx: FetchContext,
+    path: string,
+    fields: Record<string, string>,
+  ): Promise<T> {
+    const body = new URLSearchParams(fields);
+    const res = await platformFetch<T>(
+      'meta',
+      `${this.graph}/${path}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ctx.accessToken}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+      },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+    return res.data;
+  }
+
 }
 
 /**
@@ -1234,6 +1430,133 @@ function pickActionValue(value: unknown, types: readonly string[]): string {
     if (v !== undefined && v !== 0) return String(v);
   }
   return '0';
+}
+
+/**
+ * Gönderi kimliğinden sayfa önekini ayıklar.
+ *
+ * Meta gönderi kimliğini iki biçimde veriyor: `<page>_<post>` ve yalnızca
+ * `<post>`. `object_story_id` her zaman birleşik biçimi istiyor; öneki iki kez
+ * eklemek `<page>_<page>_<post>` üretir ve Meta bunu "gönderi bulunamadı" diye
+ * reddeder — mesajı da hangi kimliğin yanlış olduğunu söylemez.
+ */
+export function stripPagePrefix(postId: string, pageId: string): string {
+  return postId.startsWith(`${pageId}_`) ? postId.slice(pageId.length + 1) : postId;
+}
+
+/**
+ * Graph yanıtını organik gönderiye çevirir.
+ *
+ * Facebook ve Instagram AYRI alan adları kullanıyor ve içgörüler iç içe bir
+ * `data` dizisinde `{name, values:[{value}]}` şeklinde geliyor. Şekle bağımlı
+ * okumak yerine ada göre arama yapılıyor: Meta alan sırasını garanti etmiyor.
+ */
+export function mapOrganicPost(
+  row: Record<string, unknown>,
+  ig: boolean,
+): DiscoveredOrganicPost | null {
+  const id = typeof row.id === 'string' ? row.id : null;
+  if (!id) return null;
+
+  const insights = readInsights(row.insights);
+  const timestamp = ig ? row.timestamp : row.created_time;
+  const publishedAt = typeof timestamp === 'string' ? new Date(timestamp) : null;
+  if (!publishedAt || Number.isNaN(publishedAt.getTime())) return null;
+
+  const likes = ig
+    ? num(row.like_count)
+    : num(readNested(row, ['likes', 'summary', 'total_count']));
+  const comments = ig
+    ? num(row.comments_count)
+    : num(readNested(row, ['comments', 'summary', 'total_count']));
+  // Paylaşım YALNIZCA Facebook'ta var; Instagram paylaşımı raporlamıyor.
+  // Sıfır yazmak "hiç paylaşılmadı" demek olurdu — ölçülmemiş olanı sıfır
+  // saymak, tam da bu projede raporlarda kaçınılan hata.
+  const shares = ig ? 0 : num(readNested(row, ['shares', 'count']));
+  const saves = ig ? insights.saved : 0;
+
+  return {
+    externalId: id,
+    mediaType: mapMediaType(row, ig),
+    message: str(ig ? row.caption : row.message),
+    permalink: str(ig ? row.permalink : row.permalink_url),
+    thumbnailUrl: str(ig ? (row.thumbnail_url ?? row.media_url) : row.full_picture),
+    publishedAt,
+    impressions: insights.impressions,
+    reach: insights.reach,
+    likes,
+    comments,
+    shares,
+    saves,
+    videoViews: insights.videoViews,
+    raw: row,
+  };
+}
+
+function mapMediaType(row: Record<string, unknown>, ig: boolean): DiscoveredOrganicPost['mediaType'] {
+  if (ig) {
+    const t = String(row.media_type ?? '').toUpperCase();
+    if (t === 'VIDEO') return 'video';
+    if (t === 'CAROUSEL_ALBUM') return 'carousel';
+    if (t === 'IMAGE') return 'photo';
+    return 'photo';
+  }
+  const att = readNested(row, ['attachments', 'data', '0', 'media_type']);
+  const t = String(att ?? '').toLowerCase();
+  if (t === 'video') return 'video';
+  if (t === 'album') return 'carousel';
+  if (t === 'photo') return 'photo';
+  if (t === 'link') return 'link';
+  return row.message ? 'text' : 'photo';
+}
+
+/**
+ * `insights.data[]` dizisini ada göre okur.
+ *
+ * Facebook ve Instagram farklı metrik adları kullanıyor; ikisini de aynı
+ * sözlüğe indirip burada eşliyoruz.
+ */
+function readInsights(value: unknown): {
+  impressions: number;
+  reach: number;
+  saved: number;
+  videoViews: number;
+} {
+  const out = { impressions: 0, reach: 0, saved: 0, videoViews: 0 };
+  const data = readNested(value as Record<string, unknown>, ['data']);
+  if (!Array.isArray(data)) return out;
+
+  for (const entry of data) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const e = entry as Record<string, unknown>;
+    const name = String(e.name ?? '');
+    const values = e.values;
+    const v = Array.isArray(values) && values.length > 0 ? num((values[0] as Record<string, unknown>)?.value) : 0;
+
+    if (name === 'impressions' || name === 'post_impressions') out.impressions = v;
+    else if (name === 'reach' || name === 'post_impressions_unique') out.reach = v;
+    else if (name === 'saved') out.saved = v;
+    else if (name === 'video_views' || name === 'post_video_views') out.videoViews = v;
+  }
+  return out;
+}
+
+function readNested(obj: unknown, path: string[]): unknown {
+  let cur: unknown = obj;
+  for (const key of path) {
+    if (cur === null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[key];
+  }
+  return cur;
+}
+
+function num(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : 0;
+}
+
+function str(v: unknown): string | undefined {
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
 /**

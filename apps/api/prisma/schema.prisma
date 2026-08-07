@@ -96,6 +96,9 @@ model Organization {
   reportTemplates ReportTemplate[]
   monthlyBudgets  MonthlyBudget[]
   rules           Rule[]
+  organicPosts    OrganicPost[]
+  boostRules      BoostRule[]
+  boosts          Boost[]
 
   @@map("organizations")
 }
@@ -166,6 +169,9 @@ model Client {
   reportShares    ReportShare[]
   monthlyBudgets  MonthlyBudget[]
   rules           Rule[]
+  organicPosts    OrganicPost[]
+  boostRules      BoostRule[]
+  boosts          Boost[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -463,6 +469,7 @@ model AdAccount {
   campaigns  Campaign[]
   budgets    MonthlyBudget[]
   rules      Rule[]
+  boosts     Boost[]
 
   @@unique([platform, externalId, clientId])
   @@index([clientId, syncEnabled])
@@ -500,6 +507,8 @@ model SocialProfile {
   client         Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   connection     PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   linkedAdAccount AdAccount?        @relation("BoostBillingAccount", fields: [linkedAdAccountId], references: [id], onDelete: SetNull)
+  organicPosts   OrganicPost[]
+  boostRules     BoostRule[]
 
   @@unique([connectionId, externalId])
   @@index([clientId, syncEnabled])
@@ -632,6 +641,8 @@ enum SyncJobType {
   /// veriyi okuyup karar veriyor; API çağrısı yalnızca aksiyon uygulanırken
   /// ve kuralın kendi `rule_action` kota katmanından yapılıyor.
   rules_evaluate
+  /// Modül 7 — boost kuralı değerlendirmesi + onaylanmışların oluşturulması.
+  boosts_evaluate
   /// L7 — yeni hesap bağlandığında geçmiş
   initial_backfill
 }
@@ -1160,6 +1171,193 @@ model RuleActionLog {
   @@index([ruleId, entityId, createdAt(sort: Desc)])
   @@index([runId])
   @@map("rule_action_logs")
+}
+
+/// Organik gönderi — Modül 7 Auto-Boost'un girdisi.
+///
+/// NEDEN AYRI TABLO: bu gönderiler REKLAM DEĞİL. `ads` tablosuna koymak,
+/// panelin ve raporun onları reklam sanmasına yol açardı — harcama sıfır,
+/// dönüşüm sıfır, ve her ortalama bozulurdu.
+///
+/// Metrikler `insights_daily`ye de yazılmıyor: o tablo reklam metrikleri için
+/// ve organik erişimle ödenmiş erişimi aynı kovaya koymak, müşteriye
+/// "reklamla 50 bin kişiye ulaştık" derken 30 bininin organik olduğunu
+/// gizlemek olurdu.
+model OrganicPost {
+  id              String @id @default(uuid()) @db.Uuid
+  orgId           String @map("org_id") @db.Uuid
+  clientId        String @map("client_id") @db.Uuid
+  socialProfileId String @map("social_profile_id") @db.Uuid
+
+  externalId String  @map("external_id") @db.VarChar(128)
+  /// photo | video | carousel | reel | text | link
+  mediaType  String  @map("media_type") @db.VarChar(20)
+  message    String? @db.VarChar(3000)
+  permalink  String? @db.VarChar(1024)
+  thumbnailUrl String? @map("thumbnail_url") @db.VarChar(1024)
+
+  publishedAt DateTime @map("published_at") @db.Timestamptz(6)
+
+  impressions Int @default(0)
+  /// Erişim TEKİL kullanıcı — günler arası toplanamaz. Burada zaten gönderi
+  /// ömrü boyunca tek bir sayı olarak geliyor, toplama sorusu doğmuyor.
+  reach       Int @default(0)
+  likes       Int @default(0)
+  comments    Int @default(0)
+  shares      Int @default(0)
+  saves       Int @default(0)
+  videoViews  Int @default(0) @map("video_views")
+  /// Beğeni + yorum + paylaşım + kaydetme. Platformun kendi "engagement"
+  /// alanı tutarsız olduğu için bileşenlerden türetiliyor.
+  engagements Int @default(0)
+
+  /// Bu gönderi daha önce boost edildi mi — kural aynı gönderiyi iki kez
+  /// boost etmesin diye. `boosts` ilişkisi üzerinden de bulunabilirdi ama
+  /// aday sorgusunda her gönderi için alt sorgu çalıştırmak pahalı.
+  boostedAt DateTime? @map("boosted_at") @db.Timestamptz(6)
+
+  raw       Json?    @db.JsonB
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  boosts        Boost[]
+
+  @@unique([socialProfileId, externalId])
+  @@index([clientId, publishedAt(sort: Desc)])
+  @@index([socialProfileId, boostedAt])
+  @@map("organic_posts")
+}
+
+/// Auto-Boost kuralı — Modül 7.
+///
+/// KURAL MOTORUNDAN (Modül 5) FARKI: orada aksiyon çoğunlukla harcamayı
+/// DURDURUYOR, burada harcama BAŞLATIYOR. Asimetri ters yönde ve daha sert:
+/// yanlış duraklatılan kampanya yeniden açılır, harcanan para geri gelmez.
+///
+/// Bu yüzden burada prova modu YETMİYOR — onay akışı var. Aday gönderiler
+/// `boost.approve` yetkisi olan biri onaylayana kadar bekliyor. `autoApprove`
+/// açıkça açılabiliyor ama varsayılan kapalı.
+model BoostRule {
+  id       String  @id @default(uuid()) @db.Uuid
+  orgId    String  @map("org_id") @db.Uuid
+  clientId String  @map("client_id") @db.Uuid
+  /// null = müşterinin tüm sosyal profilleri.
+  socialProfileId String? @map("social_profile_id") @db.Uuid
+
+  name        String  @db.VarChar(160)
+  description String? @db.VarChar(1000)
+
+  /// [{ metric, operator, value }] — organik metrikler üzerinde.
+  conditions Json   @db.JsonB
+  combinator String @default("and") @db.VarChar(3)
+
+  /// Gönderi en fazla bu kadar eski olabilir.
+  ///
+  /// Boost'un işe yaraması için gönderinin hâlâ ilgi görüyor olması gerekiyor;
+  /// üç ay önceki bir gönderiyi boost etmek parayı ölü içeriğe harcamak.
+  maxPostAgeHours Int @default(72) @map("max_post_age_hours")
+  /// Gönderi en az bu kadar yayında kalmış olmalı — ilk saatlerdeki etkileşim
+  /// gönderinin gerçek performansını temsil etmiyor.
+  minPostAgeHours Int @default(6) @map("min_post_age_hours")
+
+  /// Boost başına GÜNLÜK bütçe (micros) ve süre.
+  dailyBudgetMicros BigInt @map("daily_budget_micros")
+  durationDays      Int    @default(3) @map("duration_days")
+
+  /// Meta kampanya hedefi. Boost için pratikte POST_ENGAGEMENT ya da
+  /// OUTCOME_ENGAGEMENT.
+  objective String @default("OUTCOME_ENGAGEMENT") @db.VarChar(60)
+
+  /// AYLIK SERT TAVAN — bu kuralın bir ayda taahhüt edebileceği azami tutar.
+  ///
+  /// `monthly_budgets`ten AYRI ve ona EK. Aylık bütçe tüm harcamanın tavanı;
+  /// bu ise otomatik boost'un o bütçe içindeki payının tavanı. İkisini
+  /// birleştirmek, tek bir yanlış eşiğin aylık bütçenin tamamını boost'a
+  /// yönlendirmesine izin vermek olurdu.
+  monthlyCapMicros BigInt @map("monthly_cap_micros")
+
+  /// Tek turda en fazla kaç aday üretilir.
+  maxBoostsPerRun Int @default(3) @map("max_boosts_per_run")
+
+  /// ONAY GEREKTİRMEDEN oluştursun mu. VARSAYILAN HAYIR.
+  ///
+  /// Para harcayan bir otomasyonun varsayılan olarak onaysız çalışması,
+  /// kullanıcının vermediği bir kararı onun adına vermek olur.
+  autoApprove Boolean @default(false) @map("auto_approve")
+
+  enabled Boolean @default(true)
+
+  lastRunAt DateTime? @map("last_run_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?   @map("created_by") @db.Uuid
+
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile? @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  boosts        Boost[]
+
+  @@index([clientId, enabled])
+  @@map("boost_rules")
+}
+
+/// Tek bir boost — aday, onaylanmış ya da oluşturulmuş.
+///
+/// ADAYLAR DA SAKLANIYOR. Reddedilen bir adayın kaydı, "kural neden bu
+/// gönderiyi seçti" ve "neden reddettik" sorularının cevabı; ayrıca aynı
+/// gönderinin tekrar tekrar aday gösterilmesini engelliyor.
+model Boost {
+  id       String  @id @default(uuid()) @db.Uuid
+  orgId    String  @map("org_id") @db.Uuid
+  clientId String  @map("client_id") @db.Uuid
+  /// null = elle oluşturulmuş boost (kural değil kullanıcı seçti).
+  boostRuleId   String? @map("boost_rule_id") @db.Uuid
+  organicPostId String  @map("organic_post_id") @db.Uuid
+  /// Faturalandırma hesabı — SocialProfile.linkedAdAccountId'den geliyor.
+  adAccountId   String  @map("ad_account_id") @db.Uuid
+
+  /// candidate | approved | rejected | creating | active | failed
+  status String @default("candidate") @db.VarChar(16)
+
+  dailyBudgetMicros BigInt @map("daily_budget_micros")
+  durationDays      Int    @map("duration_days")
+  objective         String @db.VarChar(60)
+
+  /// Kuralın bu gönderiyi neden seçtiği — insan okunur.
+  reason String @db.VarChar(500)
+
+  /// Platformda oluşturulan varlıklar. Boost bir kampanya + ad set + reklam.
+  externalCampaignId String? @map("external_campaign_id") @db.VarChar(128)
+  externalAdSetId    String? @map("external_ad_set_id") @db.VarChar(128)
+  externalAdId       String? @map("external_ad_id") @db.VarChar(128)
+
+  error String? @db.VarChar(1000)
+
+  approvedBy String?   @map("approved_by") @db.Uuid
+  approvedAt DateTime? @map("approved_at") @db.Timestamptz(6)
+  createdOnPlatformAt DateTime? @map("created_on_platform_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  boostRule    BoostRule?   @relation(fields: [boostRuleId], references: [id], onDelete: SetNull)
+  organicPost  OrganicPost  @relation(fields: [organicPostId], references: [id], onDelete: Cascade)
+  adAccount    AdAccount    @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  /// AYNI GÖNDERİ İKİ KEZ BOOST EDİLMESİN.
+  ///
+  /// Kısmi tekil indeks migration'da: yalnızca "canlı" sayılan durumlar
+  /// (aday/onaylı/oluşturuluyor/aktif) çakışıyor. Reddedilmiş ya da başarısız
+  /// bir boost yeniden denenebilmeli.
+  @@index([clientId, status, createdAt(sort: Desc)])
+  @@index([boostRuleId, createdAt(sort: Desc)])
+  @@map("boosts")
 }
 
 model SyncJob {

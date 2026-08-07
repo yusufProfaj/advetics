@@ -197,3 +197,109 @@ ALTER TABLE rule_action_logs ADD CONSTRAINT rule_action_logs_type_chk
 ALTER TABLE rule_action_logs DROP CONSTRAINT IF EXISTS rule_action_logs_error_chk;
 ALTER TABLE rule_action_logs ADD CONSTRAINT rule_action_logs_error_chk
   CHECK (outcome <> 'failed' OR error IS NOT NULL);
+
+-- =============================================================================
+-- MODÜL 7 — Auto-Boost
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- boosts: durum bilinen bir değer olmalı.
+-- -----------------------------------------------------------------------------
+ALTER TABLE boosts DROP CONSTRAINT IF EXISTS boosts_status_chk;
+ALTER TABLE boosts ADD CONSTRAINT boosts_status_chk
+  CHECK (status IN ('candidate', 'approved', 'rejected', 'creating', 'active', 'failed'));
+
+-- -----------------------------------------------------------------------------
+-- boosts: BAŞARISIZ kayıtta sebep zorunlu.
+-- -----------------------------------------------------------------------------
+ALTER TABLE boosts DROP CONSTRAINT IF EXISTS boosts_error_chk;
+ALTER TABLE boosts ADD CONSTRAINT boosts_error_chk
+  CHECK (status <> 'failed' OR error IS NOT NULL);
+
+-- -----------------------------------------------------------------------------
+-- boosts: AKTİF bir boost'un platform kimlikleri OLMALI.
+--
+-- Bunlar olmadan boost'u sonradan bulmak, durdurmak ya da metriklerini
+-- eşleştirmek imkânsız. "Aktif" işaretlenip kimliği olmayan bir kayıt,
+-- panelde çalışıyor görünen ama takip edilemeyen bir harcama demek.
+-- -----------------------------------------------------------------------------
+ALTER TABLE boosts DROP CONSTRAINT IF EXISTS boosts_active_ids_chk;
+ALTER TABLE boosts ADD CONSTRAINT boosts_active_ids_chk
+  CHECK (
+    status <> 'active'
+    OR (external_campaign_id IS NOT NULL AND external_ad_set_id IS NOT NULL
+        AND external_ad_id IS NOT NULL)
+  );
+
+-- -----------------------------------------------------------------------------
+-- boosts: onaylanmış kayıtta onay ZAMANI zorunlu.
+--
+-- ONAYLAYAN KİŞİ ZORUNLU DEĞİL ve bu bilinçli: `approved_by IS NULL`,
+-- "kural otomatik onayladı" demek. Kuralın kimliğini oraya yazmak, insan
+-- onayı ile makine onayını denetim kaydında ayırt edilemez kılardı — oysa
+-- para taahhüdünde bu ayrım tam olarak sorulacak soru.
+--
+-- İlk yazımda kısıt `approved_by IS NOT NULL` istiyordu ve otomatik onaylı
+-- kuralın ürettiği her aday veritabanı tarafından reddediliyordu: kural
+-- sessizce hiçbir boost açamıyordu. Test yakaladı.
+-- -----------------------------------------------------------------------------
+ALTER TABLE boosts DROP CONSTRAINT IF EXISTS boosts_approval_chk;
+ALTER TABLE boosts ADD CONSTRAINT boosts_approval_chk
+  CHECK (status NOT IN ('approved', 'creating', 'active') OR approved_at IS NOT NULL);
+
+-- -----------------------------------------------------------------------------
+-- boosts ve boost_rules: bütçe pozitif, süre makul.
+--
+-- Sıfır bütçeli boost Meta tarafından reddedilir; 365 günlük bir boost ise
+-- "boost" değil kalıcı kampanya ve bu araç onun için değil.
+-- -----------------------------------------------------------------------------
+ALTER TABLE boosts DROP CONSTRAINT IF EXISTS boosts_budget_chk;
+ALTER TABLE boosts ADD CONSTRAINT boosts_budget_chk
+  CHECK (daily_budget_micros > 0 AND duration_days BETWEEN 1 AND 30);
+
+ALTER TABLE boost_rules DROP CONSTRAINT IF EXISTS boost_rules_budget_chk;
+ALTER TABLE boost_rules ADD CONSTRAINT boost_rules_budget_chk
+  CHECK (
+    daily_budget_micros > 0
+    AND duration_days BETWEEN 1 AND 30
+    AND monthly_cap_micros > 0
+    AND max_boosts_per_run BETWEEN 1 AND 50
+  );
+
+-- -----------------------------------------------------------------------------
+-- boost_rules: AYLIK TAVAN tek bir boost'un maliyetini karşılamalı.
+--
+-- `daily_budget × duration` tavanı aşıyorsa kural HİÇBİR ZAMAN boost
+-- oluşturamaz — sessizce çalışmayan bir otomasyon. Kayıt anında reddetmek,
+-- ayda bir "neden hiç boost açılmadı" sorusunu sordurmaktan iyi.
+-- -----------------------------------------------------------------------------
+ALTER TABLE boost_rules DROP CONSTRAINT IF EXISTS boost_rules_cap_chk;
+ALTER TABLE boost_rules ADD CONSTRAINT boost_rules_cap_chk
+  CHECK (monthly_cap_micros >= daily_budget_micros * duration_days);
+
+-- -----------------------------------------------------------------------------
+-- boost_rules: gönderi yaş penceresi tutarlı olmalı.
+--
+-- `min > max` olan bir kural hiçbir gönderiyi eşleştirmez ve yine sessizce
+-- çalışmaz.
+-- -----------------------------------------------------------------------------
+ALTER TABLE boost_rules DROP CONSTRAINT IF EXISTS boost_rules_age_chk;
+ALTER TABLE boost_rules ADD CONSTRAINT boost_rules_age_chk
+  CHECK (min_post_age_hours < max_post_age_hours AND min_post_age_hours >= 0);
+
+ALTER TABLE boost_rules DROP CONSTRAINT IF EXISTS boost_rules_conditions_chk;
+ALTER TABLE boost_rules ADD CONSTRAINT boost_rules_conditions_chk
+  CHECK (jsonb_typeof(conditions) = 'array' AND jsonb_array_length(conditions) BETWEEN 1 AND 5);
+
+CREATE UNIQUE INDEX IF NOT EXISTS boost_rules_client_name_uniq
+  ON boost_rules (client_id, lower(name));
+
+-- -----------------------------------------------------------------------------
+-- organic_posts: etkileşim bileşenlerinden türetiliyor, negatif olamaz.
+-- -----------------------------------------------------------------------------
+ALTER TABLE organic_posts DROP CONSTRAINT IF EXISTS organic_posts_counts_chk;
+ALTER TABLE organic_posts ADD CONSTRAINT organic_posts_counts_chk
+  CHECK (
+    impressions >= 0 AND reach >= 0 AND likes >= 0 AND comments >= 0
+    AND shares >= 0 AND saves >= 0 AND video_views >= 0 AND engagements >= 0
+  );

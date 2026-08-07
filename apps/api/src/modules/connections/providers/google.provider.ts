@@ -15,6 +15,8 @@ import {
   type IAdPlatformProvider,
   type InsightsLevel,
   type InsightsRequest,
+  type BoostResult,
+  type DiscoveredOrganicPost,
   type PlatformActionRequest,
   type PlatformActionResult,
   type PlatformInsights,
@@ -915,6 +917,38 @@ export class GoogleProvider implements IAdPlatformProvider {
       'permanent',
       `Google Ads yazma işlemleri henüz uygulanmadı (${action.type}). ` +
         'Basic Access onayı ve okuma tarafının canlı doğrulaması bekleniyor.',
+    );
+  }
+
+
+  // ---------------------------------------------------------------------------
+  // MODÜL 7 — Auto-Boost: Google'da KARŞILIĞI YOK
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Google Ads'te "organik gönderi" diye bir şey yok.
+   *
+   * Boş dizi dönüyor, hata değil: Auto-Boost bir Meta özelliği ve Google
+   * bağlantısı olan bir müşteride bu senkronizasyonun "başarısız" olması
+   * yanlış olurdu — yapacak bir iş yok, hata yok.
+   */
+  async fetchOrganicPosts(): Promise<DiscoveredOrganicPost[]> {
+    return [];
+  }
+
+  /**
+   * Boost Google'da yok.
+   *
+   * `fetchOrganicPosts` boş dizi dönerken burada HATA fırlatmak tutarsız
+   * görünebilir ama değil: boş liste "boost edilecek gönderi yok" demek ve
+   * doğru; bir boost isteğinin buraya ulaşması ise çağıranın hatası ve
+   * sessizce yutmak, oluşturulduğu sanılan bir boost bırakırdı.
+   */
+  async createBoost(): Promise<BoostResult> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      'Google Ads organik gönderi boost etmeyi desteklemiyor — bu bir Meta özelliği.',
     );
   }
 

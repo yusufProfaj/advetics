@@ -11,6 +11,9 @@ import { layerForJob, type SyncJobPayload } from './queues';
 import type { TenantContext } from '@advetics/shared';
 import { RulesService } from '../modules/rules/rules.service';
 import { RuleExecutorService } from '../modules/rules/rule-executor.service';
+import { OrganicSyncService } from './organic-sync.service';
+import { BoostsService } from '../modules/boosts/boosts.service';
+import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
 
 /**
  * Worker'ın sentetik kiracı bağlamındaki kullanıcı kimliği.
@@ -50,6 +53,9 @@ export class SyncProcessorService {
     private readonly insights: InsightsSyncService,
     private readonly rules: RulesService,
     private readonly executor: RuleExecutorService,
+    private readonly organic: OrganicSyncService,
+    private readonly boosts: BoostsService,
+    private readonly boostExecutor: BoostExecutorService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -60,6 +66,7 @@ export class SyncProcessorService {
     // kotasına bakmak yanlış olurdu. Kota kontrolü aksiyon başına,
     // uygulayıcının içinde.
     if (payload.ruleId) return this.processRuleJob(payload);
+    if (payload.jobType === 'boosts_evaluate') return this.processBoostJob(payload);
     return this.processAccountJob(payload);
   }
 
@@ -72,6 +79,7 @@ export class SyncProcessorService {
    */
   private async fanOut(payload: SyncJobPayload): Promise<{ rows: number; note: string }> {
     if (payload.jobType === 'rules_evaluate') return this.fanOutRules();
+    if (payload.jobType === 'boosts_evaluate') return this.fanOutBoosts();
 
     const accounts = await this.db.adAccount.findMany({
       where: {
@@ -239,6 +247,85 @@ export class SyncProcessorService {
   }
 
   /**
+   * Boost süpürmesi — MÜŞTERİ başına iş açıyor, kural başına değil.
+   *
+   * Kural motorundan farkı: boost akışının ikinci yarısı (onaylanmışları
+   * platformda oluşturmak) müşteri seviyesinde ve kurallardan bağımsız.
+   * Elle onaylanmış bir boost, kuralı silinmiş olsa bile oluşturulmalı.
+   */
+  private async fanOutBoosts(): Promise<{ rows: number; note: string }> {
+    const clients = await this.db.client.findMany({
+      where: {
+        status: 'active',
+        OR: [{ boostRules: { some: { enabled: true } } }, { boosts: { some: { status: 'approved' } } }],
+      },
+      select: { id: true },
+    });
+
+    let enqueued = 0;
+    for (const c of clients) {
+      const res = await this.queue.enqueue({
+        clientId: c.id,
+        platform: 'meta',
+        jobType: 'boosts_evaluate',
+      });
+      if (res.enqueued) enqueued++;
+    }
+    return { rows: enqueued, note: `${clients.length} müşteri · ${enqueued} kuyruğa alındı` };
+  }
+
+  /**
+   * Bir müşterinin boost kurallarını çalıştırır ve onaylanmışları oluşturur.
+   *
+   * İKİ ADIM AYNI İŞTE ama SIRA ÖNEMLİ: önce aday üretmek, sonra onaylıları
+   * oluşturmak. Ters sırada, bu turda otomatik onaylanan bir aday bir sonraki
+   * tura kadar beklerdi — yarım gün gecikme.
+   */
+  private async processBoostJob(payload: SyncJobPayload): Promise<{ rows: number; note: string }> {
+    const syncJobId = BigInt(payload.syncJobId);
+    await this.db.syncJob.update({
+      where: { id: syncJobId },
+      data: { status: 'running', startedAt: new Date(), attempts: { increment: 1 } },
+    });
+
+    const rules = await this.db.boostRule.findMany({
+      where: { clientId: payload.clientId, enabled: true },
+      select: { id: true },
+    });
+
+    let candidates = 0;
+    const notes: string[] = [];
+    for (const r of rules) {
+      const out = await this.boosts.runRule(this.db, r.id, new Date());
+      candidates += out.created;
+      notes.push(...out.notes);
+    }
+
+    const created = await this.boostExecutor.createApproved(this.db, payload.clientId);
+
+    await this.db.syncJob.update({
+      where: { id: syncJobId },
+      data: {
+        status: 'succeeded',
+        finishedAt: new Date(),
+        rowsUpserted: candidates + created.created,
+      },
+    });
+
+    return {
+      rows: candidates + created.created,
+      note: [
+        `${candidates} aday`,
+        `${created.created} boost oluşturuldu`,
+        created.failed > 0 ? `${created.failed} başarısız` : null,
+        ...notes,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    };
+  }
+
+  /**
    * Tek bir kuralı değerlendirir.
    *
    * KİRACI BAĞLAMI SENTETİK. Worker'ın oturumu yok; bağlam kuralın kendi
@@ -374,6 +461,21 @@ export class SyncProcessorService {
           dateTo: payload.dateTo,
         });
         await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        return { rows: result.rows, note: result.note };
+      } catch (err) {
+        await this.recordFailure(syncJobId, err);
+        throw err;
+      }
+    }
+
+    if (payload.jobType === 'organic_posts') {
+      if (!payload.socialProfileId) {
+        await this.markFailed(syncJobId, 'missing_profile', 'organic_posts sosyal profil olmadan geldi');
+        throw new UnrecoverableError('organic_posts sosyal profil olmadan geldi');
+      }
+      try {
+        const result = await this.organic.syncProfile(payload.socialProfileId);
+        await this.markSucceeded(payload.syncJobId, result.rows, 1);
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
