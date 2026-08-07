@@ -15,6 +15,8 @@ import {
   type IAdPlatformProvider,
   type InsightsLevel,
   type InsightsRequest,
+  type PlatformActionRequest,
+  type PlatformActionResult,
   type PlatformInsights,
   type NormalizedAccountStatus,
   type NormalizedBudgetMode,
@@ -872,6 +874,50 @@ export class GoogleProvider implements IAdPlatformProvider {
         return 'unknown';
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // YAZMA — HENÜZ UYGULANMADI
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Google tek scope kullanıyor (`adwords`) ve o scope okuma+yazmayı birlikte
+   * veriyor. Yani izin açısından yazma her zaman "mümkün" görünüyor.
+   *
+   * `applyAction` yine de reddediyor — sebep aşağıda.
+   */
+  canWrite(grantedScopes: readonly string[]): { ok: boolean; missing: string[] } {
+    const missing = this.requiredScopes.filter((s) => !grantedScopes.includes(s));
+    return { ok: missing.length === 0, missing };
+  }
+
+  /**
+   * KASITLI OLARAK UYGULANMADI.
+   *
+   * Google Ads bağlantısı bugüne kadar CANLI API'ye hiç çıkmadı — Basic
+   * Access onayı bekleniyor ve `fetchStructure`/`fetchInsights` bile tek bir
+   * kez gerçek yanıtla doğrulanmadı. Bu koşulda yazma uygulamak, test
+   * edilmemiş kodun müşterinin kampanyalarını değiştirmesi demek olurdu.
+   *
+   * Sessizce başarılı dönmek ya da hiç metot tanımlamamak daha kötü olurdu:
+   * kural motoru Google varlıklarını da eşleştiriyor ve aksiyonun
+   * uygulanmadığını bilmeden "uygulandı" kaydı yazardı. Açık bir `permanent`
+   * hata, kural kaydına sebebiyle birlikte düşüyor ve arayüzde görünüyor.
+   *
+   * Basic Access geldikten ve okuma tarafı canlıda doğrulandıktan sonra
+   * `CampaignService.mutate` / `AdGroupService.mutate` ile yazılacak.
+   */
+  async applyAction(
+    _ctx: FetchContext,
+    action: PlatformActionRequest,
+  ): Promise<PlatformActionResult> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      `Google Ads yazma işlemleri henüz uygulanmadı (${action.type}). ` +
+        'Basic Access onayı ve okuma tarafının canlı doğrulaması bekleniyor.',
+    );
+  }
+
 }
 
 /**

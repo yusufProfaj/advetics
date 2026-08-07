@@ -15,6 +15,8 @@ import {
   type IAdPlatformProvider,
   type InsightsLevel,
   type InsightsRequest,
+  type PlatformActionRequest,
+  type PlatformActionResult,
   type PlatformInsights,
   type NormalizedAccountStatus,
   type NormalizedBudgetMode,
@@ -79,7 +81,16 @@ export class MetaProvider implements IAdPlatformProvider {
    *   ads_management      → bütçe/durum değiştirme (Modül 5 kural aksiyonları)
    *   business_management → müşterinin Business Manager varlıklarına erişim
    */
-  readonly requiredScopes = ['ads_read', 'ads_management', 'business_management'] as const;
+  /**
+   * ÇEKİRDEK izinler — bunlar olmadan bağlantı iş görmez.
+   *
+   * `ads_management` BURADA DEĞİL, isteğe bağlıda. Yazma yetkisi olmadan
+   * panel, Ads Explorer, raporlar ve bütçe takibi eksiksiz çalışıyor; yalnızca
+   * kural motoru platforma dokunamıyor. Zorunlu saymak, App Review'un
+   * `ads_management`i onaylamadığı dönemde çalışan bir bağlantıyı `needs_reauth`
+   * göstermek olurdu — aşamalı başvurunun tam da kaçınmak istediği durum.
+   */
+  readonly requiredScopes = ['ads_read', 'business_management'] as const;
 
   /**
    * ÖZELLİK izinleri — yalnızca Auto-Boost (Modül 7) için.
@@ -91,6 +102,9 @@ export class MetaProvider implements IAdPlatformProvider {
    * yalnızca Auto-Boost kullanılamaz.
    */
   readonly optionalScopes = [
+    // Kural motorunun yazma izni (Modül 5). Onaylanana kadar kurallar prova
+    // modunda çalışmaya devam ediyor ve ne yapacaklarını gösteriyor.
+    'ads_management',
     'pages_show_list',
     'pages_read_engagement',
     'instagram_basic',
@@ -931,6 +945,87 @@ export class MetaProvider implements IAdPlatformProvider {
         return 'unknown';
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // YAZMA — Modül 5 kural motoru
+  // ---------------------------------------------------------------------------
+
+  canWrite(grantedScopes: readonly string[]): { ok: boolean; missing: string[] } {
+    const missing = WRITE_SCOPES.filter((s) => !grantedScopes.includes(s));
+    return { ok: missing.length === 0, missing };
+  }
+
+  /**
+   * Varlığı Graph API üzerinden günceller.
+   *
+   * TEK BİR POST. Meta'da kampanya, ad set ve reklam güncellemesi aynı şekil:
+   * varlık kimliğine POST ve değişecek alanlar gövdede. Seviye başına ayrı
+   * metot yazmak üç kopya aynı kod olurdu.
+   *
+   * DÖNÜŞ DEĞERİ PLATFORMDAN OKUNMUYOR. Meta güncelleme yanıtında yalnızca
+   * `{"success": true}` dönüyor; yeni durumu doğrulamak için ayrı bir GET
+   * gerekirdi ve bu her aksiyonda kotayı ikiye katlardı. Bunun yerine
+   * gönderdiğimiz değeri `afterState` olarak kaydediyoruz — bir sonraki
+   * yapı senkronizasyonu zaten gerçek durumu getirip üzerine yazacak.
+   */
+  async applyAction(
+    ctx: FetchContext,
+    action: PlatformActionRequest,
+  ): Promise<PlatformActionResult> {
+    const body = new URLSearchParams();
+    let afterState: Record<string, unknown>;
+
+    switch (action.type) {
+      case 'pause':
+        body.set('status', 'PAUSED');
+        afterState = { status: 'paused' };
+        break;
+
+      case 'resume':
+        // ACTIVE gönderiyoruz ama varlık ÜST SEVİYE duraklatılmışsa Meta bunu
+        // kabul eder ve yine yayına çıkmaz — `effective_status` farklı kalır.
+        // Bu bir hata değil, hiyerarşi kuralı; senkronizasyon gerçek durumu
+        // getirdiğinde fark görünür olacak.
+        body.set('status', 'ACTIVE');
+        afterState = { status: 'active' };
+        break;
+
+      case 'set_budget': {
+        const minor = toMinorUnits(action.amountMicros, action.currency);
+        // Meta sıfır bütçeyi reddediyor; kırpma kural motorunda yapılıyor ama
+        // buraya yine de sıfır gelirse platform hatası yerine açık bir mesaj
+        // vermek teşhisi kolaylaştırıyor.
+        if (minor <= 0n) {
+          throw new PlatformApiError('meta', 'permanent', 'Bütçe sıfır ya da negatif olamaz');
+        }
+        const field = action.budgetMode === 'daily' ? 'daily_budget' : 'lifetime_budget';
+        body.set(field, minor.toString());
+        afterState = {
+          budgetAmountMicros: action.amountMicros.toString(),
+          budgetMode: action.budgetMode,
+        };
+        break;
+      }
+    }
+
+    const res = await platformFetch<{ success?: boolean }>(
+      'meta',
+      `${this.graph}/${action.externalId}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ctx.accessToken}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+      },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+
+    return { afterState };
+  }
+
 }
 
 /**
@@ -1140,6 +1235,39 @@ function pickActionValue(value: unknown, types: readonly string[]): string {
   }
   return '0';
 }
+
+/**
+ * Yazma için gereken izinler.
+ *
+ * `optionalScopes` içinde de var ama liste orada UI'ın izin ekranı için;
+ * burada AMACA göre ayrı duruyor. İkisini tek listeden türetmek, ileride
+ * yazma için ikinci bir izin gerektiğinde onun izin ekranına eklenmesini de
+ * zorunlu kılardı — istenmeyen bir bağ.
+ */
+const WRITE_SCOPES = ['ads_management'] as const;
+
+/**
+ * Micros → para biriminin EN KÜÇÜK BİRİMİ.
+ *
+ * Meta bütçeyi minor unit istiyor: TRY için kuruş, JPY için yen. Micros'u
+ * doğrudan göndermek bütçeyi bir milyon katına çıkarırdı — kural motorunun
+ * yapabileceği en pahalı hata.
+ *
+ * Küsuratsız ve üç küsuratlı para birimleri ISO 4217'de istisnadır ve
+ * varsayılan 2'yi uygulamak JPY'de bütçeyi 100 katına çıkarır.
+ */
+export function toMinorUnits(micros: bigint, currency: string): bigint {
+  const code = currency.toUpperCase();
+  const digits = ZERO_DECIMAL.has(code) ? 0 : THREE_DECIMAL.has(code) ? 3 : 2;
+  const divisor = 10n ** BigInt(6 - digits);
+  return micros / divisor;
+}
+
+const ZERO_DECIMAL = new Set([
+  'BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA',
+  'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF',
+]);
+const THREE_DECIMAL = new Set(['BHD', 'IQD', 'JOD', 'KWD', 'LYD', 'OMR', 'TND']);
 
 /**
  * Video görüntüleme gibi TEK TÜRLÜ dizilerin toplamı.

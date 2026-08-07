@@ -21,7 +21,15 @@ import { Prisma } from '@prisma/client';
 
 /** Prisma istemcisinin bu testlerde kullanılan yüzeyi. */
 export interface TestDb {
-  $queryRaw(sql: Prisma.Sql): Promise<unknown[]>;
+  /**
+   * `T` SONUCUN TAMAMI, eleman tipi değil — Prisma'nın kendi imzası böyle.
+   *
+   * `Promise<unknown[]>` yazmak koşum ortamını Prisma'dan AYIRIYORDU: testler
+   * çalışıyor ama servisleri `TxLike` bekleyen bir parametreye geçirmek
+   * derlenmiyordu. Koşum ortamının üretimden sapması, tam da onun engellemesi
+   * gereken şey.
+   */
+  $queryRaw<T = unknown>(sql: Prisma.Sql): Promise<T>;
   $executeRaw(sql: Prisma.Sql): Promise<number>;
   [model: string]: unknown;
 }
@@ -188,6 +196,7 @@ export async function createHarness(): Promise<Harness> {
   const reset = async (): Promise<void> => {
     await pg.exec(`
       TRUNCATE TABLE
+        rule_action_logs, rule_runs, rules,
         monthly_budgets,
         insights_daily, api_usage_log, sync_jobs,
         ads, creatives, ad_groups, campaigns,

@@ -45,7 +45,7 @@ async function seedSecondAccount(currency = 'TRY', platform: 'meta' | 'google' =
   // Google hesabı AYRI bir bağlantıya bağlı: platform_connections tek
   // platformu temsil ediyor ve Meta bağlantısına Google hesabı asmak
   // gerçekte olmayan bir durumu test etmek olurdu.
-  let connectionId = IDS.connection;
+  let connectionId: string = IDS.connection;
   if (platform === 'google') {
     connectionId = '33333333-3333-3333-3333-33333333333b';
     await h.q(

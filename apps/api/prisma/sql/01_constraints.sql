@@ -109,3 +109,91 @@ ALTER TABLE monthly_budgets ADD CONSTRAINT monthly_budgets_pause_pct_chk
 ALTER TABLE monthly_budgets DROP CONSTRAINT IF EXISTS monthly_budgets_currency_chk;
 ALTER TABLE monthly_budgets ADD CONSTRAINT monthly_budgets_currency_chk
   CHECK (currency ~ '^[A-Z]{3}$');
+
+-- =============================================================================
+-- MODÜL 5 — Kural motoru
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- rules: hesap seviyesinde kural OLMAZ.
+--
+-- Bir hesabı duraklatmak diye bir şey yok. Şema `EntityLevel` enum'unu
+-- paylaşıyor ve o enum `account` da içeriyor; kısıt olmadan geçerli görünen
+-- ama hiçbir varlık bulamayan bir kural yazılabilirdi — sessizce hiç
+-- çalışmayan bir kural, hata veren bir kuraldan kötü.
+-- -----------------------------------------------------------------------------
+ALTER TABLE rules DROP CONSTRAINT IF EXISTS rules_level_chk;
+ALTER TABLE rules ADD CONSTRAINT rules_level_chk
+  CHECK (level IN ('campaign', 'ad_group', 'ad'));
+
+ALTER TABLE rules DROP CONSTRAINT IF EXISTS rules_combinator_chk;
+ALTER TABLE rules ADD CONSTRAINT rules_combinator_chk
+  CHECK (combinator IN ('and', 'or'));
+
+-- -----------------------------------------------------------------------------
+-- rules: koşul dizisi BOŞ olamaz.
+--
+-- Koşulsuz bir kural TÜM varlıkları eşleştirir. Prova modunda fark edilir ama
+-- canlıda tek turda hesabın tamamını duraklatır. `maxActionsPerRun` bunu 20'de
+-- keser — yani felaket değil ama yine de 20 kampanya.
+-- -----------------------------------------------------------------------------
+ALTER TABLE rules DROP CONSTRAINT IF EXISTS rules_conditions_chk;
+ALTER TABLE rules ADD CONSTRAINT rules_conditions_chk
+  CHECK (jsonb_typeof(conditions) = 'array' AND jsonb_array_length(conditions) BETWEEN 1 AND 5);
+
+ALTER TABLE rules DROP CONSTRAINT IF EXISTS rules_action_chk;
+ALTER TABLE rules ADD CONSTRAINT rules_action_chk
+  CHECK (jsonb_typeof(action) = 'object' AND action ? 'type');
+
+-- -----------------------------------------------------------------------------
+-- rules: emniyet sınırları sıfırlanamaz.
+--
+-- `max_actions_per_run = 0` kuralı işlevsiz kılar (sessiz), çok büyük bir
+-- değer ise emniyeti kaldırır. `max_data_age_hours` sıfır olursa hiçbir veri
+-- yeterince taze sayılmaz ve kural yine sessizce hiç çalışmaz.
+-- -----------------------------------------------------------------------------
+ALTER TABLE rules DROP CONSTRAINT IF EXISTS rules_limits_chk;
+ALTER TABLE rules ADD CONSTRAINT rules_limits_chk
+  CHECK (
+    max_actions_per_run BETWEEN 1 AND 200
+    AND max_data_age_hours BETWEEN 1 AND 168
+    AND cooldown_minutes BETWEEN 0 AND 20160
+  );
+
+-- -----------------------------------------------------------------------------
+-- rules: aynı müşteride aynı isimde iki kural olmasın.
+--
+-- Kural adı denetim kaydında ve uyarı e-postasında görünüyor; iki "EBM
+-- koruması" arasında hangisinin tetiklendiğini ayırt etmek imkânsız olurdu.
+-- -----------------------------------------------------------------------------
+CREATE UNIQUE INDEX IF NOT EXISTS rules_client_name_uniq
+  ON rules (client_id, lower(name));
+
+-- -----------------------------------------------------------------------------
+-- rule_action_logs: outcome bilinen bir değer olmalı.
+--
+-- Enum DEĞİL, CHECK: yeni bir atlama sebebi eklemek enum migration'ı yerine
+-- tek satırlık bir kısıt güncellemesi olsun. Sebep listesinin büyümesi
+-- bekleniyor — her yeni koruma yeni bir sebep demek.
+-- -----------------------------------------------------------------------------
+ALTER TABLE rule_action_logs DROP CONSTRAINT IF EXISTS rule_action_logs_outcome_chk;
+ALTER TABLE rule_action_logs ADD CONSTRAINT rule_action_logs_outcome_chk
+  CHECK (outcome IN (
+    'simulated', 'applied', 'failed',
+    'skipped_cooldown', 'skipped_guard', 'skipped_stale_data',
+    'skipped_no_budget', 'skipped_capped', 'skipped_noop'
+  ));
+
+ALTER TABLE rule_action_logs DROP CONSTRAINT IF EXISTS rule_action_logs_type_chk;
+ALTER TABLE rule_action_logs ADD CONSTRAINT rule_action_logs_type_chk
+  CHECK (action_type IN ('pause', 'resume', 'adjust_budget', 'notify'));
+
+-- -----------------------------------------------------------------------------
+-- rule_action_logs: BAŞARISIZ kayıtta hata mesajı ZORUNLU.
+--
+-- Sebebi yazılmamış bir başarısızlık, ajansa "kural çalışmadı" demekten başka
+-- bir şey söylemiyor. Bu projede sessiz hataların maliyeti zaten görüldü.
+-- -----------------------------------------------------------------------------
+ALTER TABLE rule_action_logs DROP CONSTRAINT IF EXISTS rule_action_logs_error_chk;
+ALTER TABLE rule_action_logs ADD CONSTRAINT rule_action_logs_error_chk
+  CHECK (outcome <> 'failed' OR error IS NOT NULL);

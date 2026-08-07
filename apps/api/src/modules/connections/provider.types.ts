@@ -346,6 +346,39 @@ export interface PlatformInsights {
 // Adapter
 // -----------------------------------------------------------------------------
 
+/**
+ * Platforma yazılacak aksiyon.
+ *
+ * `externalId` platformun kendi kimliği (bizim UUID'miz değil): yazma
+ * çağrısında bizim kimliğimizin hiçbir anlamı yok ve çeviriyi sağlayıcının
+ * içinde yapmak, her sağlayıcıya aynı join'i yazdırmak olurdu.
+ */
+export type PlatformActionRequest =
+  | { type: 'pause'; level: 'campaign' | 'ad_group' | 'ad'; externalId: string }
+  | { type: 'resume'; level: 'campaign' | 'ad_group' | 'ad'; externalId: string }
+  | {
+      type: 'set_budget';
+      level: 'campaign' | 'ad_group';
+      externalId: string;
+      /** Micros. Günlük mü ömür boyu mu, `budgetMode` söylüyor. */
+      amountMicros: bigint;
+      budgetMode: 'daily' | 'lifetime';
+      /**
+       * Hesabın para birimi.
+       *
+       * Meta bütçeyi para biriminin EN KÜÇÜK BİRİMİNDE istiyor (TRY için
+       * kuruş) ve bazı para birimlerinin küsuratı yok (JPY). Çevrimi
+       * sağlayıcı yapıyor; micros'u doğrudan göndermek bütçeyi bir milyon
+       * katına çıkarırdı.
+       */
+      currency: string;
+    };
+
+export interface PlatformActionResult {
+  /** Platformun onayladığı yeni durum — kayda `afterState` olarak yazılıyor. */
+  afterState: Record<string, unknown>;
+}
+
 export interface IAdPlatformProvider {
   readonly platform: Platform;
 
@@ -427,6 +460,30 @@ export interface IAdPlatformProvider {
    * granülerlikte ve tek bir toplam satırı geri düzeltmeyi imkânsız kılardı.
    */
   fetchInsights(ctx: FetchContext, request: InsightsRequest): Promise<PlatformInsights>;
+
+  /**
+   * YAZMA — kural motorunun platforma dokunduğu tek nokta.
+   *
+   * Tek bir metot, aksiyon başına ayrı metot değil: çağıran taraf (kural
+   * uygulayıcı) hangi aksiyonun hangi platformda desteklendiğini bilmek
+   * zorunda kalmasın. Desteklenmeyen bir aksiyon `permanent` hatayla
+   * reddediliyor ve o hata kural kaydına yazılıyor.
+   *
+   * `writeScopes` boş değilse bu yetenek İZİN BEKLİYOR demektir; çağıran
+   * önce `canWrite()` sormalı.
+   */
+  applyAction(ctx: FetchContext, action: PlatformActionRequest): Promise<PlatformActionResult>;
+
+  /**
+   * Bu bağlantı yazma yapabilir mi.
+   *
+   * Meta App Review izinleri TEK TEK onaylıyor ve `ads_management` çoğu
+   * uygulamada `ads_read`ten aylar sonra geliyor. Onay gelmeden yazmayı
+   * denemek, her kural turunda aynı yetki hatasını üretirdi — ajans kuralın
+   * bozuk olduğunu sanırdı. Eksik izni ÖNCEDEN söylemek, hatayı sonradan
+   * açıklamaktan iyi.
+   */
+  canWrite(grantedScopes: readonly string[]): { ok: boolean; missing: string[] };
 }
 
 export const AD_PLATFORM_PROVIDERS = 'AD_PLATFORM_PROVIDERS';

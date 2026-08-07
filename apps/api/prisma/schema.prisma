@@ -95,6 +95,7 @@ model Organization {
   auditLogs   AuditLog[]
   reportTemplates ReportTemplate[]
   monthlyBudgets  MonthlyBudget[]
+  rules           Rule[]
 
   @@map("organizations")
 }
@@ -164,6 +165,7 @@ model Client {
   reportTemplates ReportTemplate[]
   reportShares    ReportShare[]
   monthlyBudgets  MonthlyBudget[]
+  rules           Rule[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -460,6 +462,7 @@ model AdAccount {
   boostTargets SocialProfile[]  @relation("BoostBillingAccount")
   campaigns  Campaign[]
   budgets    MonthlyBudget[]
+  rules      Rule[]
 
   @@unique([platform, externalId, clientId])
   @@index([clientId, syncEnabled])
@@ -1019,6 +1022,140 @@ model MonthlyBudget {
   @@index([clientId, month])
   @@index([adAccountId, month])
   @@map("monthly_budgets")
+}
+
+/// Kural motoru — Modül 5.
+///
+/// PROVA VARSAYILAN. `dryRun` true doğuyor ve canlıya almak `rule.activate`
+/// yetkisi istiyor. Sebep asimetri: yanlış rapor düzeltilebilir, yanlış
+/// durdurulan kampanyanın kaçırdığı satış geri gelmez.
+model Rule {
+  id       String  @id @default(uuid()) @db.Uuid
+  orgId    String  @map("org_id") @db.Uuid
+  clientId String  @map("client_id") @db.Uuid
+  /// null = müşterinin TÜM reklam hesapları.
+  adAccountId String? @map("ad_account_id") @db.Uuid
+
+  name        String  @db.VarChar(160)
+  description String? @db.VarChar(1000)
+
+  /// campaign | ad_group | ad. `account` YOK — hesap duraklatılamaz.
+  level EntityLevel
+
+  /// Koşul dizisi. JSONB çünkü koşul SAYISI ve şekli değişken; kolonlara
+  /// açmak 5 koşul için 20 kolon demek olurdu ve 6. koşul migration
+  /// gerektirirdi. Doğrulama Zod ile sınırda yapılıyor.
+  conditions Json @db.JsonB
+  /// 'and' | 'or'. İç içe gruplama yok — okunamayan kural canlıya alınmamalı.
+  combinator String @default("and") @db.VarChar(3)
+
+  /// { type: 'pause' } | { type: 'adjust_budget', percent: 20, maxBudget: … }
+  action Json @db.JsonB
+  /// Minimum örneklem eşikleri — gürültüyle tetiklenmeyi engelliyor.
+  guard Json @db.JsonB
+
+  /// Aynı varlığa iki aksiyon arasındaki bekleme. Salınımı engelliyor.
+  cooldownMinutes Int @default(1440) @map("cooldown_minutes")
+  /// Tek çalıştırmada dokunulacak azami varlık — kazaya karşı son emniyet.
+  maxActionsPerRun Int @default(20) @map("max_actions_per_run")
+  /// Veri bu kadar saatten eskiyse hiçbir aksiyon alınmıyor.
+  maxDataAgeHours Int @default(36) @map("max_data_age_hours")
+
+  enabled Boolean @default(true)
+  /// Canlıya geçiş AYRI yetki. Varsayılan prova.
+  dryRun  Boolean @default(true) @map("dry_run")
+
+  lastRunAt       DateTime? @map("last_run_at") @db.Timestamptz(6)
+  lastTriggeredAt DateTime? @map("last_triggered_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount    AdAccount?   @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  runs         RuleRun[]
+  actions      RuleActionLog[]
+
+  @@index([clientId, enabled])
+  @@index([enabled, lastRunAt])
+  @@map("rules")
+}
+
+/// Kuralın tek bir değerlendirme turu.
+///
+/// AKSİYON ALINMASA DA kaydediliyor: "kuralım neden hiç çalışmıyor" sorusunun
+/// cevabı çoğu zaman "çalıştı, hiçbir varlık koşulu sağlamadı". Yalnızca
+/// aksiyonlu turları kaydetmek o soruyu cevaplanamaz kılardı.
+model RuleRun {
+  id     String @id @default(uuid()) @db.Uuid
+  orgId  String @map("org_id") @db.Uuid
+  ruleId String @map("rule_id") @db.Uuid
+
+  /// Turun ÇALIŞTIĞI ANDAKİ mod. Kuralın güncel `dryRun` değeri değil:
+  /// kural sonradan canlıya alınırsa geçmiş turlar prova olarak kalmalı.
+  dryRun Boolean @map("dry_run")
+
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  evaluatedCount Int @default(0) @map("evaluated_count")
+  matchedCount   Int @default(0) @map("matched_count")
+  actionCount    Int @default(0) @map("action_count")
+
+  error String? @db.VarChar(2000)
+
+  rule    Rule            @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  actions RuleActionLog[]
+
+  @@index([ruleId, startedAt(sort: Desc)])
+  @@map("rule_runs")
+}
+
+/// Tek bir varlığa dair karar — uygulanan da atlanan da.
+///
+/// ATLANANLAR DA YAZILIYOR. `outcome` neden atlandığını tek tek söylüyor
+/// (bekleme, örneklem, bayat veri, sınır). Tek bir "atlandı" değeri ajansa
+/// hiçbir şey anlatmazdı.
+///
+/// Model adı `RuleActionLog`: `RuleAction` adı paylaşılan pakette AKSİYON
+/// TANIMI için kullanılıyor (kuralın ne yapacağı) ve ikisini aynı adla
+/// anmak, "kuralın aksiyonu" ile "alınan aksiyon" ayrımını bulanıklaştırırdı.
+model RuleActionLog {
+  id     String @id @default(uuid()) @db.Uuid
+  orgId  String @map("org_id") @db.Uuid
+  ruleId String @map("rule_id") @db.Uuid
+  runId  String @map("run_id") @db.Uuid
+
+  entityLevel      EntityLevel @map("entity_level")
+  entityId         String      @map("entity_id") @db.Uuid
+  /// Ad, varlık silinse bile geçmişte okunabilsin diye KOPYALANIYOR.
+  /// Join ile çözmek, silinen bir kampanyanın geçmiş kaydını "—" yapardı.
+  entityName       String      @map("entity_name") @db.VarChar(300)
+  entityExternalId String      @map("entity_external_id") @db.VarChar(128)
+
+  actionType String @map("action_type") @db.VarChar(20)
+  outcome    String @db.VarChar(24)
+  /// İnsan okunur gerekçe: "EBM 312,40 > 250 (son 7 gün)".
+  reason     String @db.VarChar(500)
+
+  /// Aksiyon öncesi/sonrası durum — geri alma (`rule.revert`) ve denetim için.
+  beforeState Json? @map("before_state") @db.JsonB
+  afterState  Json? @map("after_state") @db.JsonB
+
+  error String? @db.VarChar(1000)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  rule Rule    @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  run  RuleRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  /// Bekleme süresi sorgusu bu indeksi kullanıyor: "bu kural bu varlığa en son
+  /// ne zaman DOKUNDU". Atlananlar bekleme başlatmıyor, o filtre sorguda.
+  @@index([ruleId, entityId, createdAt(sort: Desc)])
+  @@index([runId])
+  @@map("rule_action_logs")
 }
 
 model SyncJob {

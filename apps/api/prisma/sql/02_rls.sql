@@ -101,7 +101,7 @@ DECLARE
     -- Modül 6
     'report_templates', 'report_shares',
     -- Modül 5
-    'monthly_budgets'
+    'monthly_budgets', 'rules', 'rule_runs', 'rule_action_logs'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -543,6 +543,102 @@ CREATE POLICY adv_monthly_budget_update ON monthly_budgets
 CREATE POLICY adv_monthly_budget_delete ON monthly_budgets
   FOR DELETE USING (
     org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+-- =============================================================================
+-- MODÜL 5 — Kural motoru
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- rules
+--
+-- Standart kiracı deseni: kural müşteriye ait, müşteri temsilcisi kendi
+-- müşterisinin kuralını görür ve yazar.
+--
+-- BURADA OLMAYAN ŞEY: prova/canlı ayrımı ve rule.activate yetkisi.
+--
+-- `monthly_budgets` ile aynı gerekçe: RLS bağlamında yalnızca dört GUC var
+-- (org, kullanıcı, client listesi, org admin mi) ve rol adı yok. İzin listesini
+-- iki yerde tutmak ikisinin zamanla ayrışması demek. RLS burada kiracı
+-- sınırını koruyor; bir kuralı canlıya almanın yetkisi guard katmanında.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_rules_select ON rules
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_rules_insert ON rules
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- UPDATE'te WITH CHECK de var: USING satırın ESKİ, WITH CHECK YENİ hâlini
+-- denetliyor. Yalnızca USING olsaydı bir kural erişilemeyen bir müşteriye
+-- taşınabilirdi — o müşterinin hesabında çalışan, sahibinin göremediği bir
+-- kural.
+CREATE POLICY adv_rules_update ON rules
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_rules_delete ON rules
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- rule_runs ve rule_action_logs
+--
+-- Kiracı kontrolü KURAL ÜZERİNDEN yapılıyor: satırın kendi org_id'si var ama
+-- tek başına yetmez — org içindeki başka bir müşterinin kuralının turları
+-- görünürdü. `EXISTS` alt sorgusu kuralın client_id'sini denetliyor.
+--
+-- INSERT politikası worker için DEĞİL: worker BYPASSRLS ile bağlanıyor ve
+-- politikalara hiç uğramıyor. Bu politikalar panelden yapılan manuel
+-- çalıştırma içindir.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_rule_runs_select ON rule_runs
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM rules r
+      WHERE r.id = rule_runs.rule_id AND app.can_access_client(r.client_id)
+    )
+  );
+
+CREATE POLICY adv_rule_runs_insert ON rule_runs
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM rules r
+      WHERE r.id = rule_runs.rule_id AND app.can_access_client(r.client_id)
+    )
+  );
+
+CREATE POLICY adv_rule_runs_update ON rule_runs
+  FOR UPDATE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM rules r
+      WHERE r.id = rule_runs.rule_id AND app.can_access_client(r.client_id)
+    )
+  );
+
+-- DELETE politikası YOK: tur kaydı denetim izidir.
+--
+-- `audit_logs` ile aynı gerekçe. Kuralın ne zaman ne yaptığı, kuralı yazan
+-- kişinin silebileceği bir bilgi olmamalı. Kural silinirse turlar CASCADE ile
+-- gider; bu bilinçli — kuralın kendisi yoksa turlarının bağlamı da yok.
+
+CREATE POLICY adv_rule_actions_select ON rule_action_logs
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM rules r
+      WHERE r.id = rule_action_logs.rule_id AND app.can_access_client(r.client_id)
+    )
+  );
+
+CREATE POLICY adv_rule_actions_insert ON rule_action_logs
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM rules r
+      WHERE r.id = rule_action_logs.rule_id AND app.can_access_client(r.client_id)
+    )
   );
 
 -- -----------------------------------------------------------------------------

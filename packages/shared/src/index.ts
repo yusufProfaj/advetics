@@ -6,5 +6,6 @@ export * from './schemas/budget.schema';
 export * from './schemas/connection.schema';
 export * from './schemas/metrics.schema';
 export * from './schemas/report.schema';
+export * from './schemas/rule.schema';
 export * from './schemas/tenant.schema';
 export * from './types/context';
