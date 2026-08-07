@@ -19,10 +19,18 @@ export interface NavEntry {
   icon: keyof typeof ICONS;
   /** Bu öğeyi açan modül numarası. */
   module: number;
+  /**
+   * Modül numarasını EZEN hazır bayrağı.
+   *
+   * Bir modül birden fazla ekran getiriyor ve hepsi aynı anda bitmiyor:
+   * Modül 5'in bütçe tablosu hazır, kural motoru değil. Modül numarasına
+   * bakmak ikisini birlikte açardı ve Kurallar linki 404 verirdi.
+   */
+  ready?: boolean;
 }
 
 // Modül 6 (Raporlar) hazır. Kurallar (5), Auto-Boost (7) ve Toplu Oluşturucu
-// (8) hâlâ pasif.
+// (8) hâlâ pasif — Modül 5'in yalnızca bütçe tarafı açık, `ready` ile.
 const READY_MODULES = new Set([1, 2, 3, 4, 6]);
 
 export function NavSection({ title, items }: { title?: string; items: NavEntry[] }) {
@@ -37,7 +45,7 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
       )}
       <ul className="space-y-0.5">
         {items.map((item) => {
-          const ready = READY_MODULES.has(item.module);
+          const ready = item.ready ?? READY_MODULES.has(item.module);
           const active = ready && (pathname === item.href || pathname.startsWith(`${item.href}/`));
           return (
             <li key={item.href}>
@@ -79,6 +87,7 @@ const ICONS = {
   overview: 'M3 10.5 10 4l7 6.5M5.5 9v7h9V9',
   explorer: 'M4 15V8m4 7V5m4 10v-4m4 4V9',
   rules: 'M4 6h12M4 10h7M4 14h9M15.5 12.5 17 14l-1.5 1.5',
+  budget: 'M3 16V9m4 7V5m4 11v-5m4 5V7M2.5 16h15',
   reports: 'M5.5 3.5h6l3.5 3.5v9.5h-9.5zM11.5 3.5V7H15',
   boost: 'M10 3.5 4.5 12h4L8 16.5 15.5 8h-4z',
   bulk: 'M4 5.5h5v5H4zM11 5.5h5v5h-5zM4 12.5h5v3H4zM11 12.5h5v3h-5z',

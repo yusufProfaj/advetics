@@ -94,6 +94,7 @@ model Organization {
   invitations Invitation[]
   auditLogs   AuditLog[]
   reportTemplates ReportTemplate[]
+  monthlyBudgets  MonthlyBudget[]
 
   @@map("organizations")
 }
@@ -162,6 +163,7 @@ model Client {
 
   reportTemplates ReportTemplate[]
   reportShares    ReportShare[]
+  monthlyBudgets  MonthlyBudget[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -457,6 +459,7 @@ model AdAccount {
   connection PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   boostTargets SocialProfile[]  @relation("BoostBillingAccount")
   campaigns  Campaign[]
+  budgets    MonthlyBudget[]
 
   @@unique([platform, externalId, clientId])
   @@index([clientId, syncEnabled])
@@ -956,6 +959,66 @@ model ReportShare {
 
   @@index([clientId, createdAt(sort: Desc)])
   @@map("report_shares")
+}
+
+/// Aylık bütçe — pacing, hard cap ve otomatik durdurmanın dayanağı.
+///
+/// İKİ SEVİYE:
+///   · `adAccountId = null` → müşteri geneli bütçe (şirketin aylık toplamı)
+///   · `adAccountId` dolu   → proje/hesap bazlı bütçe
+///
+/// Bir müşterinin birden fazla projesi olabiliyor ve ajans hem proje bazında
+/// hem şirket toplamında bütçe tanımlamak istiyor. İkisi birlikte var olabilir:
+/// hesap bütçeleri tek tek izlenir, müşteri bütçesi şemsiye olarak.
+model MonthlyBudget {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+  /// null = müşteri geneli.
+  adAccountId String? @map("ad_account_id") @db.Uuid
+
+  /// Ayın İLK GÜNÜ. Ay bir aralık değil bir nokta olarak saklanıyor: "2026-08"
+  /// yerine "2026-08-01" tutmak tarih aritmetiğini SQL'de doğrudan yapılabilir
+  /// kılıyor ve string ay biçimiyle uğraşmayı ortadan kaldırıyor.
+  month DateTime @db.Date
+
+  /// Micros. Para her yerde micros — kayan noktayla para tutmak kuruş kaydırır.
+  amountMicros BigInt @map("amount_micros")
+  currency     String @db.Char(3)
+
+  /// Günlük sert limit. Aşılırsa kampanyalar durdurulabilir (Modül 5).
+  /// null = günlük limit yok.
+  dailyCapMicros BigInt? @map("daily_cap_micros")
+
+  /// Bu yüzdeye ulaşınca uyarı üretilir. Varsayılan %80.
+  alertThresholdPct Int @default(80) @map("alert_threshold_pct")
+
+  /// Bu yüzdeye ulaşınca kampanyalar OTOMATİK DURDURULUR.
+  ///
+  /// null = kapalı ve VARSAYILAN BU. Otomatik durdurma para harcamayı kesiyor
+  /// ama aynı zamanda satışı da kesiyor; sessizce açık gelmemeli. Modül 5
+  /// yazılana kadar bu alan yalnızca saklanıyor, uygulanmıyor.
+  autoPauseAtPct Int? @map("auto_pause_at_pct")
+
+  note String? @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount    AdAccount?   @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  /// TEKİLLİK KISITI BURADA DEĞİL, migration'da.
+  ///
+  /// `@@unique([clientId, adAccountId, month])` YETMİYOR: Postgres'te NULL
+  /// hiçbir şeye eşit değil, dolayısıyla `adAccountId IS NULL` olan iki satır
+  /// çakışmıyor ve aynı ay için iki müşteri geneli bütçe girilebiliyor.
+  /// Migration'da iki KISMİ tekil indeks var — bkz. 20260807_module5_budgets.
+  @@index([clientId, month])
+  @@index([adAccountId, month])
+  @@map("monthly_budgets")
 }
 
 model SyncJob {

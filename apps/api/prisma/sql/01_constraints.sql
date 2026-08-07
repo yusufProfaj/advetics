@@ -59,3 +59,53 @@ CREATE UNIQUE INDEX IF NOT EXISTS invitations_pending_uniq
 CREATE INDEX IF NOT EXISTS refresh_tokens_active_idx
   ON refresh_tokens (user_id, expires_at)
   WHERE revoked_at IS NULL;
+
+-- =============================================================================
+-- MODÜL 5 — Aylık bütçe
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- monthly_budgets: `month` daima AYIN İLK GÜNÜ olmalı.
+--
+-- Ay bir nokta olarak saklanıyor. "2026-08-15" yazan bir satır sessizce
+-- eşleşmez: pacing sorgusu ayın ilk gününü arıyor, bulamıyor ve bütçe YOK gibi
+-- davranıyor. Uyarı üretilmez, pacing çubuğu görünmez, kimse fark etmez.
+-- -----------------------------------------------------------------------------
+ALTER TABLE monthly_budgets DROP CONSTRAINT IF EXISTS monthly_budgets_month_first_day_chk;
+ALTER TABLE monthly_budgets ADD CONSTRAINT monthly_budgets_month_first_day_chk
+  CHECK (EXTRACT(DAY FROM month) = 1);
+
+-- -----------------------------------------------------------------------------
+-- monthly_budgets: bütçe pozitif olmalı.
+--
+-- Sıfır bütçe "bütçe yok" ile aynı anlama gelmiyor ama pacing'de sıfıra bölme
+-- üretiyor. Bütçe tanımlamamak isteyen satırı SİLER.
+-- -----------------------------------------------------------------------------
+ALTER TABLE monthly_budgets DROP CONSTRAINT IF EXISTS monthly_budgets_amount_chk;
+ALTER TABLE monthly_budgets ADD CONSTRAINT monthly_budgets_amount_chk
+  CHECK (amount_micros > 0);
+
+ALTER TABLE monthly_budgets DROP CONSTRAINT IF EXISTS monthly_budgets_daily_cap_chk;
+ALTER TABLE monthly_budgets ADD CONSTRAINT monthly_budgets_daily_cap_chk
+  CHECK (daily_cap_micros IS NULL OR daily_cap_micros > 0);
+
+-- -----------------------------------------------------------------------------
+-- monthly_budgets: eşik yüzdeleri makul aralıkta.
+--
+-- Üst sınır 100 DEĞİL: bütçenin %120'sinde durdurmak geçerli bir strateji
+-- (ay sonunda tolerans tanımak). %500 ise yazım hatası.
+-- -----------------------------------------------------------------------------
+ALTER TABLE monthly_budgets DROP CONSTRAINT IF EXISTS monthly_budgets_alert_pct_chk;
+ALTER TABLE monthly_budgets ADD CONSTRAINT monthly_budgets_alert_pct_chk
+  CHECK (alert_threshold_pct BETWEEN 1 AND 200);
+
+ALTER TABLE monthly_budgets DROP CONSTRAINT IF EXISTS monthly_budgets_pause_pct_chk;
+ALTER TABLE monthly_budgets ADD CONSTRAINT monthly_budgets_pause_pct_chk
+  CHECK (auto_pause_at_pct IS NULL OR auto_pause_at_pct BETWEEN 1 AND 200);
+
+-- -----------------------------------------------------------------------------
+-- monthly_budgets: ISO 4217.
+-- -----------------------------------------------------------------------------
+ALTER TABLE monthly_budgets DROP CONSTRAINT IF EXISTS monthly_budgets_currency_chk;
+ALTER TABLE monthly_budgets ADD CONSTRAINT monthly_budgets_currency_chk
+  CHECK (currency ~ '^[A-Z]{3}$');

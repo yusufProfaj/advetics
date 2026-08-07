@@ -48,6 +48,14 @@ export const PERMISSIONS = [
   'insights.read',
   'sync.trigger',
 
+  // Modül 4-5 — bütçe
+  //
+  // `budget.write` AYRI bir yetki: bütçeyi görmek ile DEĞİŞTİRMEK farklı
+  // kararlar. Bütçe limiti aynı zamanda otomatik durdurmanın (kill-switch)
+  // eşiği; yanlış girilen bir sayı kampanyaları durdurabilir.
+  'budget.read',
+  'budget.write',
+
   // Modül 5 — kurallar
   'rule.read',
   'rule.write',
@@ -86,6 +94,8 @@ const MANAGER_PERMS: readonly Permission[] = [
   'connection.write',
   'insights.read',
   'sync.trigger',
+  'budget.read',
+  'budget.write',
   'rule.read',
   'rule.write',
   'rule.activate',
@@ -109,6 +119,8 @@ const ANALYST_PERMS: readonly Permission[] = [
   'connection.read',
   'insights.read',
   'sync.trigger',
+  // Analist bütçeyi GÖRÜR (rapor ve pacing için gerekli) ama DEĞİŞTİREMEZ.
+  'budget.read',
   'rule.read',
   'report.read',
   'report.write',
@@ -121,6 +133,9 @@ const ANALYST_PERMS: readonly Permission[] = [
 const CLIENT_VIEWER_PERMS: readonly Permission[] = [
   'client.read',
   'insights.read',
+  // Müşteri kendi bütçesini görebilmeli: raporda ve panelde bütçe tüketimi
+  // gösteriliyor ve o bilgi zaten kendisine ait.
+  'budget.read',
   'rule.read',
   'report.read',
   'boost.read',

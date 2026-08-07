@@ -99,7 +99,9 @@ DECLARE
     'campaigns', 'ad_groups', 'ads', 'creatives', 'insights_daily',
     'fx_rates', 'sync_jobs', 'api_usage_log',
     -- Modül 6
-    'report_templates', 'report_shares'
+    'report_templates', 'report_shares',
+    -- Modül 5
+    'monthly_budgets'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -491,6 +493,54 @@ CREATE POLICY adv_report_share_update ON report_shares
   );
 
 CREATE POLICY adv_report_share_delete ON report_shares
+  FOR DELETE USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+-- =============================================================================
+-- MODÜL 5 — Aylık bütçe
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- monthly_budgets
+--
+-- Bütçe müşteriye ait bir bilgi: müşteri temsilcisi kendi müşterisinin
+-- bütçesini görmeli, başkasınınkini görmemeli. Standart kiracı deseni.
+--
+-- BURADA OLMAYAN ŞEY: `budget.write` ayrımı.
+--
+-- Analist bütçeyi GÖRÜR ama DEĞİŞTİREMEZ (roles.ts). Bu ayrım RLS'te
+-- ZORLANMIYOR, guard katmanında zorlanıyor — çünkü RLS bağlamında yalnızca dört
+-- GUC var (org, kullanıcı, client listesi, org admin mi) ve rol adı yok.
+--
+-- Bilinçli bir sınır: RLS bu projede KİRACI izolasyonunun son savunma hattı,
+-- rol matrisinin ikinci kopyası değil. İzin listesini iki yerde tutmak ikisinin
+-- zamanla ayrışması demek ve ayrışan kopya sessizce yanlış olan taraf olur.
+-- Yanlış müşterinin bütçesini görmek veri sızıntısı; yetkisiz kullanıcının
+-- kendi müşterisinin bütçesini değiştirmesi yetki hatası — ikincisi ciddi ama
+-- kiracı sınırını delmiyor.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_monthly_budget_select ON monthly_budgets
+  FOR SELECT USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_monthly_budget_insert ON monthly_budgets
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+-- UPDATE'te WITH CHECK de var: USING satırın ESKİ hâlini, WITH CHECK YENİ hâlini
+-- denetler. Yalnızca USING olsaydı, erişilebilir bir bütçenin client_id'si
+-- erişilemeyen bir müşteriye taşınabilirdi — satır kendi kiracısından çıkardı.
+CREATE POLICY adv_monthly_budget_update ON monthly_budgets
+  FOR UPDATE USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  ) WITH CHECK (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_monthly_budget_delete ON monthly_budgets
   FOR DELETE USING (
     org_id = app.current_org_id() AND app.can_access_client(client_id)
   );

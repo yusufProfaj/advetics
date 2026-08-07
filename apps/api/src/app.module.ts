@@ -12,6 +12,7 @@ import { ConnectionsModule } from './modules/connections/connections.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { HealthController } from './modules/health/health.controller';
 import { AdsModule } from './modules/ads/ads.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
@@ -36,6 +37,7 @@ import { QueueModule } from './queue/queue.module';
     MetricsModule,
     AdsModule,
     ReportsModule,
+    BudgetsModule,
   ],
   controllers: [HealthController],
   providers: [
