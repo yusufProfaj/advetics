@@ -1,5 +1,18 @@
 # AdTech Automation & Reporting Dashboard — Teknik Mimari
 
+> ⚠️ **BU BELGE PLANI ANLATIYOR, GERÇEĞİ DEĞİL.**
+>
+> 2026-08-03'te, tek satır kod yazılmadan önce yazıldı. Uygulama sırasında
+> bazı kararlar değişti (tablo adları, bazı tabloların hiç yazılmaması,
+> plana sonradan eklenen `monthly_budgets`).
+>
+> **Nerede olduğumuzu öğrenmek için [DURUM.md](DURUM.md) oku.** O belge koddan
+> doğrulanarak yazılıyor ve her sürümde güncelleniyor. İkisi çeliştiğinde
+> DURUM.md geçerli.
+>
+> Bu belge yine de değerli: **neden** öyle yapıldığını anlatan tek kaynak.
+> Kararların gerekçeleri burada duruyor.
+
 > **Durum:** Onaylandı (2026-08-03)
 > **Kapsam:** Sadece **Meta (Facebook/Instagram)** ve **Google Ads**. TikTok, Snapchat, LinkedIn ve diğer platformlar kapsam dışıdır.
 > **Kullanıcı tipleri:** `Admin` (ajans), `Client` (müşteri)
@@ -457,6 +470,10 @@ Meta hesabı TRY, Google hesabı USD ise "kümülatif harcama" ancak bununla do�
 ```
 
 #### `rule_actions`
+
+> ⚠️ **YAZILMADI.** Kuralın tek bir aksiyonu olduğu için ayrı tabloya gerek
+> kalmadı; `rules.action` JSONB kolonunda duruyor.
+
 IF/THEN/ELSE'in THEN ve ELSE dalları.
 
 | Kolon | Tip | Not |
@@ -469,6 +486,9 @@ IF/THEN/ELSE'in THEN ve ELSE dalları.
 | params | jsonb | `{"mode":"percent","value":20,"max_budget_micros":500000000}` |
 
 #### `rule_executions`
+
+> ⚠️ **ADI DEĞİŞTİ → `rule_runs`.** Yapı aynı.
+
 
 | Kolon | Tip |
 |---|---|
@@ -534,6 +554,10 @@ Geri alma (undo) ve müşteriye hesap verme buradan yürür.
 | requires_approval | boolean | true → önce onay kuyruğu |
 
 #### `boost_executions`
+
+> ⚠️ **ADI DEĞİŞTİ → `boosts`.** Ayrıca kapsam genişledi: aday, onay ve
+> oluşturma tek tabloda; `status` alanı üçünü de taşıyor.
+
 `status` (`pending_approval`/`creating`/`active`/`completed`/`failed`/`rejected`),
 `trigger_snapshot jsonb`, `created_campaign_id`/`created_ad_group_id`/`created_ad_id`,
 `budget_micros`, `spend_micros`, `approved_by_user_id`, `approved_at`.
@@ -545,6 +569,11 @@ Geri alma (undo) ve müşteriye hesap verme buradan yürür.
 `default_date_range`, `branding_profile_id`, `include_platforms text[]`.
 
 #### `reports`
+
+> ⚠️ **YAZILMADI.** Rapor anlık üretiliyor ve saklanmıyor. Sebep: saklanan
+> rapor, veriler geriye dönük düzeltildiğinde (atıf penceresi) gerçekle
+> çelişiyor. Paylaşım linki tarih aralığını taşıyor, raporu değil.
+
 
 | Kolon | Tip | Not |
 |---|---|---|
@@ -561,26 +590,45 @@ Geri alma (undo) ve müşteriye hesap verme buradan yürür.
 | data_snapshot | jsonb | **Rapor donmuş veriyle üretilir** — 3 ay sonra aynı link aynı sayıyı gösterir |
 
 #### `report_schedules`
+
+> ⚠️ **YAZILMADI.** Zamanlanmış rapor e-posta altyapısı gerektiriyor ve o
+> altyapı henüz yok. Bkz. DURUM.md § 7.
+
 `cron`, `timezone`, `recipients jsonb`, `delivery` (`email_pdf`/`email_link`/`both`),
 `is_active`, `last_sent_at`, `next_run_at`.
 
 ### I. Toplu Kampanya Oluşturucu  *(Modül 8)*
 
 #### `bulk_jobs`
+
+> ⚠️ **ADI DEĞİŞTİ → `bulk_batches`.**
+
 `spec jsonb` (kampanya/adset iskeleti + varyasyon matrisi),
 `status` (`draft`/`validating`/`ready`/`publishing`/`published`/`partial`/`failed`),
 `publish_as` (`paused_draft` / `active` — **varsayılan `paused_draft`**),
 `total_variants`, `created_count`, `failed_count`.
 
 #### `bulk_assets`
+
+> ⚠️ **YAZILMADI.** Varlık arşivi BASE bölümüne ait ve o bölüm hiç
+> başlanmadı. Şu an görsel kimliği toplu oluşturucuya elle giriliyor.
+
 `asset_type` (`image`/`video`/`headline`/`primary_text`/`description`/`cta`/`url`),
 `storage_url`, `text_value`, `platform_asset_id` (Meta image hash / Google asset id), `meta jsonb`.
 
 #### `bulk_variants`
+
+> ⚠️ **ADI DEĞİŞTİ → `bulk_items`.**
+
 `combination jsonb`, `generated_name`, `status` (`pending`/`created`/`failed`/`skipped`),
 `created_ad_id`, `external_id`, `error_code`, `error_message`.
 
 ### `notifications` + `notification_channels`
+
+> ⚠️ **YAZILMADI.** Bildirim altyapısı yok. Uyarı eşikleri hesaplanıyor ve
+> panelde gösteriliyor ama kimseye bildirim gitmiyor. DURUM.md § 7'de sıradaki
+> adımların ilki.
+
 Kural uyarıları, bağlantı kopması, boost onay talepleri, rapor hazır bildirimleri tek akışta.
 `channel_type`: `email`/`slack_webhook`/`in_app`; `events text[]` aboneliği.
 
@@ -742,23 +790,49 @@ bunu 5–10× katlar — bu yüzden L5 **opt-in**'dir.
 
 ## 4. Geliştirme Sıralaması
 
+> Bu tablo 2026-08-07 itibarıyla güncellendi. Ayrıntı ve doğrulanmamış yollar
+> için [DURUM.md](DURUM.md).
+
 | Modül | Kapsam | Durum |
 |---|---|---|
-| **1** | Auth + multi-tenant iskelet + RLS | 🚧 Devam ediyor |
-| **2** | Platform bağlantıları (OAuth) + Provider adapter | ⏳ |
-| **3** | Sync worker'ları + Unified Dashboard | ⏳ |
-| **4** | Ads Explorer | ⏳ |
-| **5** | Rules Engine | ⏳ |
-| **6** | White-Label Reporting | ⏳ |
-| **7** | Auto-Boost (Meta) | ⏳ |
-| **8** | Bulk Campaign Creator | ⏳ |
+| **1** | Auth + multi-tenant iskelet + RLS | ✅ |
+| **2** | Platform bağlantıları (OAuth) + Provider adapter | ✅ Meta · 🟡 Google onay bekliyor |
+| **3** | Sync worker'ları + Unified Dashboard | ✅ |
+| **4** | Ads Explorer | ✅ |
+| **5** | Rules Engine | ✅ prova · 🟡 canlı yazma doğrulanmadı |
+| **6** | White-Label Reporting | ✅ canlı rapor · ❌ zamanlanmış PDF |
+| **7** | Auto-Boost (Meta) | 🟡 seçim tamam · oluşturma doğrulanmadı |
+| **8** | Bulk Campaign Creator | 🟡 doğrulama tamam · yayın doğrulanmadı |
+
+**Plana sonradan eklenen:** `monthly_budgets` (Modül 5). Bu tablo planda yoktu
+ama bütçe pacing, sert limit, otomatik durdurma ve bütçe koşullu kuralların
+dördü de ona bağlandı.
+
+**Planda olup yazılmayanlar:** `reports` (rapor anlık üretiliyor, saklanmıyor),
+`report_schedules`, `notifications`, `bulk_assets`. Gerekçeleri DURUM.md'de.
 
 ## 5. Değişmez Güvenlik Varsayılanları
 
-1. **Her kural `dry_run` modunda oluşur.** Kullanıcı en az 1 başarılı kuru çalıştırma görmeden
-   `live` moda geçemez. Bütçeye dokunan bir üründe bu güven ilk günden kurulur.
-2. **Bulk Creator varsayılanı `paused_draft`.** Toplu üretim asla doğrudan yayına girmez.
-3. **Auto-Boost'ta günlük ve aylık harcama tavanı zorunludur.**
-4. **RLS her tenant tablosunda açıktır ve `FORCE` edilmiştir.** Uygulama katmanı atlanamaz.
-5. **OAuth token'ları asla düz metin saklanmaz.** AES-256-GCM + `key_version`.
-6. **Bayat veriyle otomatik aksiyon alınmaz.** `skipped_stale_data`.
+> Altı maddenin **beşi uygulandı**; hangisinin nasıl karşılandığı her maddede
+> yazıyor. Uygulanmayan tek madde 1'in ikinci cümlesi.
+
+1. **Her kural `dry_run` modunda oluşur.** ✅ Uygulandı — girdi şemasında
+   `dryRun` alanı bile yok ve canlıya geçiş ayrı bir yetki (`rule.activate`).
+   Koşul ya da aksiyon değişirse kural provaya geri dönüyor.
+   ⚠️ **"En az 1 başarılı kuru çalıştırma görmeden geçemez" kısmı ZORLANMIYOR.**
+   Arayüz provayı öneriyor, ama teknik olarak hiç çalıştırmadan canlıya
+   alınabiliyor. Zorlamak kolay; henüz yapılmadı.
+2. **Bulk Creator varsayılanı `paused_draft`.** ✅ Uygulandı — reklamlar
+   duraklatılmış oluşturuluyor ve `bulk.publish` ayrı bir yetki.
+3. **Auto-Boost'ta günlük ve aylık harcama tavanı zorunludur.** ✅ Uygulandı —
+   `monthly_cap_micros` NOT NULL ve veritabanı kısıtı tavanın tek bir boost'un
+   maliyetini karşılamasını zorluyor. Tavan TAAHHÜT üzerinden hesaplanıyor,
+   harcanan üzerinden değil.
+4. **RLS her tenant tablosunda açıktır ve `FORCE` edilmiştir.** ✅ Uygulandı —
+   ayrıca `src/prisma/rls-coverage.spec.ts` politikasız bir tablo eklenirse
+   TEST ZAMANINDA düşüyor, deploy'daki preflight'a kalmıyor.
+5. **OAuth token'ları asla düz metin saklanmaz.** ✅ Uygulandı — AES-256-GCM,
+   sürüm şifreli verinin ilk baytına gömülü. Sayfa token'ları ayrı kolonda.
+6. **Bayat veriyle otomatik aksiyon alınmaz.** ✅ Uygulandı — `maxDataAgeHours`
+   (varsayılan 36 saat) ve `skipped_stale_data` sonucu. Ayrıca minimum örneklem,
+   bekleme süresi ve tur sınırı korumaları eklendi (planda yoktu).

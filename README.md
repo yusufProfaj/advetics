@@ -5,7 +5,8 @@ Meta (Facebook/Instagram) ve Google Ads için white-label reklam otomasyon ve ra
 > **Kapsam kilidi:** Yalnızca **Meta** ve **Google Ads**. TikTok, Snapchat, LinkedIn ve diğer
 > platformlar ürün kapsamı dışındadır.
 
-- Teknik mimari: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- **Nerede kaldık, sırada ne var:** [`docs/DURUM.md`](docs/DURUM.md) ← buradan başla
+- Teknik mimari ve karar gerekçeleri: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Üretim kurulumu (Hostinger VPS + CloudPanel): [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 
 ---
@@ -107,7 +108,8 @@ advetics/
 ├── packages/
 │   └── shared/                 Zod şemaları, RBAC matrisi, ortak tipler
 ├── infra/postgres/init/        Veritabanı rolleri
-└── docs/ARCHITECTURE.md        Teknik mimari
+├── docs/DURUM.md               Güncel durum ve yol haritası
+└── docs/ARCHITECTURE.md        Teknik mimari (plan + gerekçeler)
 ```
 
 ---
