@@ -801,8 +801,46 @@ async function dumpActions(): Promise<void> {
   console.log('');
 }
 
+/**
+ * Son işler — PLATFORM VE HESAP ADIYLA.
+ *
+ * İlk hâli yalnızca iş türünü ve sonucu gösteriyordu. İki hesap aynı dakikada
+ * çalıştığında (Meta ve Google süpürmesi aynı zamanlayıcıdan tetikleniyor)
+ * çıktı şöyle görünüyordu:
+ *
+ *     11:30  succeeded  insights_realtime  satır: 9
+ *     11:30  failed     insights_realtime  satır: 0
+ *
+ * Hangisinin hangi hesap olduğu okunamıyordu ve "Google düzeldi mi" sorusu
+ * cevaplanamıyordu. Platform ve hesap adı olmadan bu liste yalnızca "bir şey
+ * bozuk" diyor, ne bozuk demiyor.
+ *
+ *   sync -- jobs --failed         yalnızca başarısız olanlar
+ *   sync -- jobs --platform google
+ */
 async function listJobs(): Promise<void> {
+  const platformFilter = arg('platform');
+  const onlyFailed = ARGV.includes('--failed');
+
+  // PLATFORM SYNC_JOBS'TA YOK — hesaptan türetiliyor.
+  //
+  // Tabloda `platform` kolonu bulunmuyor; iş kaydı hesabı işaret ediyor ve
+  // platform bilgisi orada. Filtre de bu yüzden iki adımlı: önce o platformun
+  // hesap kimlikleri, sonra o hesaplara ait işler.
+  const platformAccountIds = platformFilter
+    ? (
+        await prisma.adAccount.findMany({
+          where: { platform: platformFilter as never },
+          select: { id: true },
+        })
+      ).map((a) => a.id)
+    : null;
+
   const jobs = await prisma.syncJob.findMany({
+    where: {
+      ...(platformAccountIds ? { adAccountId: { in: platformAccountIds } } : {}),
+      ...(onlyFailed ? { status: 'failed' } : {}),
+    },
     select: {
       id: true,
       jobType: true,
@@ -814,10 +852,21 @@ async function listJobs(): Promise<void> {
       errorMessage: true,
       createdAt: true,
       finishedAt: true,
+      adAccountId: true,
+      client: { select: { name: true } },
     },
     orderBy: { createdAt: 'desc' },
     take: 20,
   });
+
+  // Hesap adları AYRI SORGUDA: sync_jobs.ad_account_id bir ilişki değil (hesap
+  // silinse bile iş kaydı kalmalı), dolayısıyla join edilemiyor.
+  const accountIds = [...new Set(jobs.map((j) => j.adAccountId).filter(Boolean))] as string[];
+  const accounts = await prisma.adAccount.findMany({
+    where: { id: { in: accountIds } },
+    select: { id: true, name: true, platform: true },
+  });
+  const accountInfo = new Map(accounts.map((a) => [a.id, a]));
 
   if (jobs.length === 0) {
     console.log('\nHiç senkronizasyon işi yok.\n');
@@ -828,10 +877,14 @@ async function listJobs(): Promise<void> {
   for (const j of jobs) {
     const color =
       j.status === 'succeeded' ? '\x1b[32m' : j.status === 'failed' ? '\x1b[31m' : '\x1b[33m';
+    const info = j.adAccountId ? accountInfo.get(j.adAccountId) : undefined;
+    // Hesabı olmayan iş = süpürme işi; platformu yok ve olmaması doğru.
+    const platform = info?.platform ?? '—';
+    const who = info?.name ?? j.client.name;
     console.log(
       `  ${j.createdAt.toISOString().slice(0, 19)}  ${color}${j.status.padEnd(9)}\x1b[0m` +
-        `  ${j.jobType.padEnd(18)}  satır: ${String(j.rowsUpserted).padStart(5)}  çağrı: ${String(j.apiCallsUsed).padStart(3)}` +
-        `  deneme: ${j.attempts}`,
+        `  ${platform.padEnd(6)}  ${j.jobType.padEnd(18)}  satır: ${String(j.rowsUpserted).padStart(5)}  çağrı: ${String(j.apiCallsUsed).padStart(3)}` +
+        `  deneme: ${j.attempts}  ${who.slice(0, 32)}`,
     );
     if (j.errorCode) console.log(`      \x1b[90m${j.errorCode}: ${j.errorMessage ?? ''}\x1b[0m`);
   }
