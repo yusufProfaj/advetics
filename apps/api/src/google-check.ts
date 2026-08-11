@@ -246,6 +246,44 @@ async function main(): Promise<void> {
    */
   const probeFields = arg('field');
   const explicitCustomer = arg('customer');
+  const accountUuid = arg('account');
+
+  /**
+   * `--account <uuid>` → müşteri kimliği VE yönetici kimliği veritabanından.
+   *
+   * NEDEN EKLENDİ: `--customer` + `--login` elle verilirken yanlış MCC yazmak
+   * çok kolay. Bir ajansta 129 hesap dört ayrı MCC altında duruyor ve hangi
+   * hesabın hangisine bağlı olduğunu ezberlemek imkânsız. Yanlış MCC'nin
+   * cevabı `USER_PERMISSION_DENIED` ve o mesaj token sorunu gibi okunuyor —
+   * yani hatayı yanlış yerde aratıyor.
+   *
+   * Hesap zaten veritabanında ve `manager_external_id` orada duruyor.
+   */
+  if (probeFields && accountUuid) {
+    const account = await db.adAccount.findUnique({
+      where: { id: accountUuid },
+      select: { name: true, externalId: true, managerExternalId: true, platform: true },
+    });
+    if (!account || account.platform !== 'google') {
+      console.log(`\n  ✗ Google reklam hesabı bulunamadı: ${accountUuid}\n`);
+      await app.close();
+      process.exit(1);
+    }
+    console.log(
+      `\n  hesap: ${account.name} (${account.externalId})` +
+        `${account.managerExternalId ? ` · MCC ${account.managerExternalId}` : ' · MCC yok'}`,
+    );
+    await runProbe(
+      provider,
+      accessToken,
+      account.externalId,
+      account.managerExternalId ?? undefined,
+      probeFields,
+    );
+    await app.close();
+    process.exit(failed > 0 ? 1 : 0);
+  }
+
   if (probeFields && explicitCustomer) {
     await runProbe(provider, accessToken, explicitCustomer, arg('login'), probeFields);
     await app.close();
