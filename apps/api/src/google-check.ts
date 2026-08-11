@@ -19,7 +19,26 @@
  * GERÇEK SAĞLAYICI KODUNU kullanıyor, elle HTTP atmıyor. Elle atmak, üretimde
  * çalışan koddan FARKLI bir yolu test etmek olurdu ve tanı değersizleşirdi.
  *
- * Kullanım:
+ * NEDEN src/ ALTINDA VE NEDEN DERLENMİŞ ÇALIŞIYOR:
+ *
+ * İlk hâli `prisma/google-check.ts` idi ve `tsx` ile koşuyordu — diğer ops
+ * araçları gibi. Nest açılışta patladı:
+ *
+ *     Nest can't resolve dependencies of the TokenService (?, +, APP_CONFIG)
+ *
+ * Sebep DI yapılandırması DEĞİL: `tsx` esbuild kullanıyor ve esbuild
+ * `emitDecoratorMetadata` DESTEKLEMİYOR. O metadata olmadan Nest constructor
+ * parametrelerinin tiplerini göremiyor ve hepsini `undefined` sanıyor.
+ *
+ * `sync-cli.ts` tsx ile sorunsuz çalışıyor çünkü Nest'i hiç açmıyor, doğrudan
+ * PrismaClient kullanıyor. Worker ise `dist/worker.js`ten koşuyor — derlenmiş.
+ *
+ * Bu araç da aynı yolu izliyor: `src/` altında duruyor, `nest build` ile
+ * derleniyor ve `node dist/google-check.js` ile çalışıyor. Ek fayda: üretimde
+ * koşan İKİLİNİN AYNISINI test ediyoruz, ayrı bir derleyicinin ürettiğini
+ * değil.
+ *
+ * Kullanım (deploy sonrası, derlenmiş çıktı hazırken):
  *   pnpm --filter @advetics/api google-check
  *   pnpm --filter @advetics/api google-check -- --client <uuid>
  */
@@ -30,12 +49,12 @@ import { NestFactory } from '@nestjs/core';
 
 loadEnv({ path: resolve(__dirname, '../.env') });
 
-import { AppModule } from '../src/app.module';
-import { PrismaAdminService } from '../src/prisma/prisma-admin.service';
-import { ProviderRegistry } from '../src/modules/connections/provider.registry';
-import { TokenVaultService } from '../src/modules/connections/token-vault.service';
-import { CONFIG, type AppConfig } from '../src/config/configuration';
-import { PlatformApiError } from '../src/modules/connections/provider.types';
+import { AppModule } from './app.module';
+import { PrismaAdminService } from './prisma/prisma-admin.service';
+import { ProviderRegistry } from './modules/connections/provider.registry';
+import { TokenVaultService } from './modules/connections/token-vault.service';
+import { CONFIG, type AppConfig } from './config/configuration';
+import { PlatformApiError } from './modules/connections/provider.types';
 
 const ARGV = process.argv.slice(2).filter((a) => a !== '--');
 function arg(name: string): string | undefined {
