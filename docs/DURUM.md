@@ -1,6 +1,6 @@
 # Advetics — Durum ve Yol Haritası
 
-> **Son güncelleme:** 2026-08-07
+> **Son güncelleme:** 2026-08-11
 > **Kaynak:** Bu belge koddan doğrulanarak yazıldı, hafızadan değil. Her iddia
 > için dosya yolu verilmiştir; şüphe duyduğun satırı açıp bakabilirsin.
 >
@@ -13,17 +13,23 @@
 
 | | |
 |---|---|
-| Veritabanı tablosu | **33** |
-| Migration | **11** |
-| API testi | **465** |
+| Veritabanı tablosu | **35** |
+| Migration | **12** |
+| API testi | **528** |
 | Web testi | **20** |
-| Panel sayfası | **8** |
-| API controller | **14** |
-| Sunucuya çıkmış | Kod `origin/main`'de — **deploy edilmesi gerekiyor** |
+| Panel sayfası | **9** |
+| API controller | **16** |
 
-**En önemli tek cümle:** Meta'ya **yazan** hiçbir kod yolu bugüne kadar canlı
-API'de çalıştırılmadı. `ads_management` onayı olmadan çalıştırılamazdı. Okuma
-tarafı (senkronizasyon, panel, rapor) canlıda doğrulandı.
+**İki cümlelik özet:**
+
+**Okuma tarafı iki platformda da canlı.** Meta zaten çalışıyordu; Google Basic
+Access 11 Ağustos'ta alındı ve aynı gün baştan sona doğrulandı — 129 hesap
+keşfi, yapı senkronizasyonu, metrikler. Hesap toplamı kampanya toplamına
+kuruşuna kadar eşit çıktı.
+
+**Yazma tarafı hiçbir platformda canlıda çalıştırılmadı.** Kural aksiyonları,
+boost oluşturma, toplu reklam ve Reklam Oluşturucu — dördü de `ads_management`
+onayı olmadan çalıştırılamazdı. Bkz. § 5.
 
 ---
 
@@ -49,7 +55,7 @@ Senin paylaştığın 7 parçalı mimariye göre. ✅ tamam · 🟡 kısmi · �
 |---|---|---|
 | Bilgi bankası (marka sesi, ürün bilgisi) | ❌ | Hiç başlanmadı |
 | Kitle kütüphanesi | ❌ | Meta'da `custom_audiences` çekilmiyor |
-| Anahtar kelime kütüphanesi | ❌ | Google Basic Access'e bağlı |
+| Anahtar kelime kütüphanesi | ❌ | Google artık canlı — engel kalktı, yazılmadı |
 | Görsel/video varlık arşivi | ❌ | Toplu oluşturucu görsel kimliği elle alıyor |
 
 **Bu bölüm tamamen boş.** Modül 8'in (toplu oluşturucu) gerçek verimi buna
@@ -59,7 +65,9 @@ bağlı: şu an her satıra `image_hash` elle giriliyor.
 
 | Yetenek | Durum | Nerede |
 |---|---|---|
-| Birleşik panel (Meta + Google tek ekran) | ✅ | `/dashboard` |
+| Birleşik panel (Meta + Google tek ekran) | ✅ | `/dashboard` — canlı veriyle doğrulandı |
+| Platform sekmeleri (Tümü / Meta / Google) | ✅ | Filtre özet, grafik ve tabloya birlikte gidiyor |
+| İzlenmeyen hesapları gizleme | ✅ | Kapatılan hesap panelden ve rapordan çıkıyor, verisi silinmiyor |
 | Ads Explorer (reklam seviyesi keşif) | ✅ | `/ads-explorer` |
 | Bütçe pacing | ✅ | `/butce` |
 | Trend izleyici | ❌ | — |
@@ -118,7 +126,7 @@ Bugün "frekans > 3 ise duraklat" kuralı yazılabiliyor. Eksik olan, yorgunluğ
 | Paylaşım linki (hash'li token) | ✅ | `share.service.ts` |
 | Yazdırma | 🟡 | Tarayıcı yazdırma; sunucu PDF'i yok |
 | **Zamanlanmış PDF/Excel** | ❌ | **E-posta altyapısı yok** |
-| Anahtar kelime raporu | ❌ | Google Basic Access'e bağlı |
+| Anahtar kelime raporu | ❌ | Google artık canlı — engel kalktı, yazılmadı |
 
 ---
 
@@ -134,6 +142,38 @@ Bugün "frekans > 3 ise duraklat" kuralı yazılabiliyor. Eksik olan, yorgunluğ
 | 6 | Beyaz etiket raporlama | ✅ |
 | 7 | Auto-Boost | 🟡 seçim doğrulandı · oluşturma doğrulanmadı |
 | 8 | Toplu oluşturucu | 🟡 doğrulama tamam · yayın doğrulanmadı |
+
+---
+
+## 3.5. Canlı doğrulama günlüğü — Google (2026-08-11)
+
+Google tarafı o güne kadar **hiç** canlı API görmemişti. Üç turda çözüldü ve
+her tur tek bir net hata verdi. Bu sıra, benzer bir entegrasyonda tekrar
+edilebilir:
+
+| Tur | Hata | Sebep |
+|---|---|---|
+| 1 | `PAGE_SIZE_NOT_SUPPORTED` | İstek gövdesinde `pageSize` — Google artık reddediyor, sabit 10.000 kullanıyor |
+| 2 | `UNRECOGNIZED_FIELD` | `campaign.start_date`, `campaign.end_date`, `metrics.video_views` v25'te yok |
+| 3 | — | Zincir baştan sona çalıştı |
+
+**Doğrulama:** hesap seviyesi toplamı 3.889,31 = kampanya seviyesi toplamı
+3.889,31. Meta'da güven veren aynı iç tutarlılık kontrolü.
+
+**Bu turda ortaya çıkan üç araç:**
+
+- `google-check` — zinciri adım adım yürüten tanı. Tam senkronizasyon içinde
+  hangi adımın kırıldığını görmek imkânsızdı.
+- `google-check -- --field a,b,c` — GAQL alan sondası. Her alan denemesi
+  aksi hâlde "kod → commit → deploy → çalıştır" turu demekti.
+- Google hata zenginleştirme — `sync_jobs.error_message` her Google
+  hatasında birebir aynı satırı yazıyordu; gerçek sebep
+  `details[].errors[].errorCode` altındaydı ve mesaja hiç girmiyordu.
+
+**Kaybedilenler (bilinçli):** kampanya başlangıç/bitiş tarihi ve video
+görüntüleme Google tarafında boş kalıyor. Doğru alan adlarını tahmin etmek her
+denemede bir canlı tur yakacaktı; alan sondası artık var, gerektiğinde
+saniyeler içinde bulunur.
 
 ---
 
@@ -169,6 +209,11 @@ Bunlar **yazıldı, test edildi, ama canlı Meta API'sinde bir kez bile
 | Boost oluşturma | `meta.provider.ts` → `createBoost` | **Yüksek** — 3 varlık, geri alma yolu var ama denenmedi |
 | Toplu reklam oluşturma | `meta.provider.ts` → `createAd` vb. | **Yüksek** — kısmi başarı yönetimi denenmedi |
 | Reklam Oluşturucu yayını | `meta.provider.ts` → `publishDraft` | **Yüksek** — 4 varlık + anlık form; `asset_feed_spec` yerleşim kuralları hiç denenmedi |
+
+Google yazma yolu **hiç yazılmadı** ve bu artık bilinçli bir sıra kararı:
+okuma tarafı yeni doğrulandı, yazma bir sonraki adım. Meta'daki üç turluk
+deneyim gösterdi ki yazma yolları okuma yollarından daha kırılgan ve her biri
+canlı doğrulama istiyor.
 
 **Birim testleri hata yollarını ve para birimi çevrimini kilitliyor**
 (`meta-write.spec.ts`, `meta-organic.spec.ts`), ama gerçek API yanıtını
@@ -222,14 +267,13 @@ gerçek. Ekran kaydı için doğal bir anlatı.
 
 ### Hemen (başvuru öncesi)
 
-1. **Deploy et.** Kod `origin/main`'de ama sunucuda değil.
-   ```bash
-   cd /home/advetics/htdocs/advetics.com && git pull && ./scripts/deploy.sh
-   ```
-2. **Business Verification'ı başlat.** App Review'un ön koşulu ve en uzun süren
+1. **Business Verification'ı başlat.** App Review'un ön koşulu ve en uzun süren
    adım — kod yazmayı beklemesine gerek yok.
-3. **Sızmış kimlik bilgilerini döndür.** Sohbete yapıştırılan SSH parolası, üç
+2. **Sızmış kimlik bilgilerini döndür.** Sohbete yapıştırılan SSH parolası, üç
    veritabanı parolası ve Meta app secret.
+3. **İzlenecek hesapları seç.** Google 129 hesap getirdi ve izlenen her hesap
+   her gün kota tüketiyor. Bağlantı sayfasındaki arama + izlenenler bloğu bu
+   iş için var.
 
 ### Onay beklerken (kod tarafı)
 
@@ -249,8 +293,9 @@ gerçek. Ekran kaydı için doğal bir anlatı.
 8. **Canlı yazma doğrulaması** (yukarıdaki 5 adımlı sıra).
 9. **Günlük sert limit ve otomatik durdurmayı uygula.** Alanlar hazır, yalnızca
    kural motoruna bağlanacak.
-10. **Google Basic Access gelince:** okuma tarafını canlıda doğrula, sonra
-    Google yazma yolunu yaz.
+10. **Google yazma yolu.** Okuma canlıda doğrulandı; kampanya oluşturma,
+    duraklatma ve bütçe değiştirme yazılmadı. Meta'daki deneyim, her yazma
+    yolunun ayrı canlı doğrulama istediğini gösterdi.
 
 ### Sonraya bırakılanlar
 

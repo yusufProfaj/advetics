@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ConnectionSummary } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { AccountPicker } from './account-picker';
 
 const PLATFORM_LABEL: Record<string, string> = {
   meta: 'Meta',
@@ -27,7 +28,6 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
   const [error, setError] = useState<string | null>(null);
 
   const status = STATUS[connection.status];
-  const syncedCount = connection.adAccounts.filter((a) => a.syncEnabled).length;
 
   async function run(key: string, fn: () => Promise<unknown>) {
     setError(null);
@@ -143,63 +143,10 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
         </div>
       )}
 
-      {/* Reklam hesapları */}
-      <div className="mt-4">
-        <div className="flex items-baseline justify-between">
-          <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-            Reklam hesapları ({syncedCount}/{connection.adAccounts.length} izleniyor)
-          </h4>
-        </div>
-
-        {connection.adAccounts.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-muted">
-            Hesap bulunamadı. Google&apos;da bu genelde developer token&apos;ın Basic Access
-            onayı olmadığını gösterir.
-          </p>
-        ) : (
-          <ul className="mt-2 divide-y divide-line">
-            {connection.adAccounts.map((a) => (
-              <li key={a.id} className="flex items-center justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {a.name}
-                    {a.isManager && (
-                      <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] text-ink-muted">
-                        yönetici hesabı
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-ink-muted">
-                    {a.externalId} · {a.currency} · {a.timezone} · {a.status}
-                  </p>
-                </div>
-
-                {/* Yönetici (MCC) hesapları reklam yayınlamaz — izlemek anlamsız. */}
-                <label className="flex shrink-0 items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={a.syncEnabled}
-                    disabled={busy !== null || isPending || a.isManager}
-                    onChange={(e) =>
-                      void run(`sync-${a.id}`, () =>
-                        apiFetch(`/connections/ad-accounts/${a.id}/sync`, {
-                          method: 'PATCH',
-                          body: JSON.stringify({ syncEnabled: e.target.checked }),
-                        }),
-                      )
-                    }
-                    className="h-4 w-4 accent-brand disabled:opacity-40"
-                  />
-                  <span className={a.isManager ? 'text-ink-muted' : ''}>İzle</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-2 text-xs text-ink-muted">
-          Her izlenen hesap API kotası tüketir. Keşfedilen hesaplar bu yüzden kapalı başlar.
-        </p>
-      </div>
+      {/* Reklam hesapları — AYRI BİLEŞENDE.
+          Google Basic Access'ten sonra tek bağlantı 129 hesap getirdi ve düz
+          liste hem aramayı hem "neyi izliyorum" sorusunu imkânsız kıldı. */}
+      <AccountPicker accounts={connection.adAccounts} />
 
       {/* Sosyal profiller — yalnızca Meta */}
       {connection.socialProfiles.length > 0 && (
