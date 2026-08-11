@@ -690,4 +690,68 @@ describe('MetricsService', () => {
       expect(s.accountCount).toBe(0);
     });
   });
+
+  /**
+   * İZLENMEYEN HESAP FİLTRESİ.
+   *
+   * Ajans bir müşteriyle çalışmayı bıraktığında hesabı kapatıyor ve o hesabın
+   * harcamasının genel toplamdan da çıkmasını bekliyor. Kapatılan hesap
+   * toplamda kalmaya devam ederse panel, artık yönetilmeyen bir bütçeyi
+   * raporluyor demektir.
+   */
+  describe('izlenmeyen hesaplar', () => {
+    it('KRİTİK: kapalı hesabın verisi toplama girmiyor', async () => {
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000000',
+        impressions: 1000,
+        clicks: 50,
+        conversions: 5,
+      });
+
+      const before = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      // Özet yalnızca KAMPANYA seviyesini okuyor (TOTALS_LEVEL); dört seviye
+      // toplanmıyor.
+      expect(before.spendMicros).toBe('1000000000');
+
+      await h.q(`UPDATE ad_accounts SET sync_enabled = false WHERE id = $1`, [IDS.adAccount]);
+
+      const after = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      expect(after.spendMicros).toBe('0');
+    });
+
+    it('VERİ SİLİNMİYOR — hesap açılınca geri geliyor', async () => {
+      // Geçici olarak kapatmak geri alınamaz bir kayıp olmamalı; `insights_daily`
+      // satırları duruyor, yalnızca sorgudan eleniyorlar.
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000000',
+        impressions: 1000,
+        clicks: 50,
+        conversions: 5,
+      });
+      await h.q(`UPDATE ad_accounts SET sync_enabled = false WHERE id = $1`, [IDS.adAccount]);
+      await h.q(`UPDATE ad_accounts SET sync_enabled = true WHERE id = $1`, [IDS.adAccount]);
+
+      const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      expect(s.spendMicros).toBe('1000000000');
+    });
+
+    it('GİZLENEN HESAP SAYISI bildiriliyor — sessizce kaybolmuyor', async () => {
+      // Sebebini görmeyen kullanıcı "harcama neden düştü" diye sorar. Bu sayı
+      // arayüzün o soruyu önceden cevaplamasını sağlıyor.
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000000',
+        impressions: 1000,
+        clicks: 50,
+        conversions: 5,
+      });
+      expect((await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' })).hiddenAccounts).toBe(0);
+
+      await h.q(`UPDATE ad_accounts SET sync_enabled = false WHERE id = $1`, [IDS.adAccount]);
+      expect((await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' })).hiddenAccounts).toBe(1);
+    });
+  });
+
 });

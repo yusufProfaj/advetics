@@ -14,6 +14,7 @@ import type {
   TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { TxLike } from '../rules/rules.service';
 
 /**
  * Unified Dashboard sorgu katmanı.
@@ -71,6 +72,8 @@ export class MetricsService {
 
     return this.prisma.withTenant(ctx, async (tx) => {
       const filters = this.filters(query);
+
+      const hiddenAccounts = await this.hiddenAccountCount(tx, query);
 
       const [current] = await tx.$queryRaw<RawTotals[]>(
         Prisma.sql`
@@ -182,6 +185,7 @@ export class MetricsService {
         reachAcrossAccounts: Number(meta?.account_count ?? 0) > 1,
         lastFetchedAt: meta?.last_fetched_at ? meta.last_fetched_at.toISOString() : null,
         accountCount: Number(meta?.account_count ?? 0),
+        hiddenAccounts,
       };
     });
   }
@@ -303,7 +307,48 @@ export class MetricsService {
     if (query.adAccountId) {
       parts.push(Prisma.sql`AND ${Prisma.raw(`${p}ad_account_id`)} = ${query.adAccountId}::uuid`);
     }
-    return parts.length > 0 ? Prisma.join(parts, ' ') : Prisma.empty;
+
+    /**
+     * İZLENMEYEN HESAPLAR PANELE GİRMİYOR.
+     *
+     * `sync_enabled` başlangıçta yalnızca operasyonel bir bayraktı: "bu hesap
+     * için kota harcayalım mı". Ama ajansın kullanımında anlamı farklı —
+     * hesabı kapatmak "bu müşteriyle çalışmayı bıraktık" demek ve o hesabın
+     * harcaması genel toplama karışmaya devam ederse panel yanlış bir tablo
+     * gösteriyor.
+     *
+     * VERİ SİLİNMİYOR. `insights_daily` satırları duruyor; hesap yeniden
+     * açıldığında geçmişiyle birlikte geri geliyor. Silmek geri alınamaz bir
+     * işlem olurdu ve "geçici olarak kapattım" senaryosunu felakete çevirirdi.
+     *
+     * Gizlenen hesap sayısı `hiddenAccounts` olarak yukarı taşınıyor: sessizce
+     * kaybolan veri, bu projede tekrar eden hata deseninin ta kendisi.
+     */
+    parts.push(
+      Prisma.sql`AND ${Prisma.raw(`${p}ad_account_id`)} IN (
+        SELECT id FROM ad_accounts WHERE sync_enabled = true
+      )`,
+    );
+
+    return Prisma.join(parts, ' ');
+  }
+
+  /**
+   * Panelde gizlenen (izlenmeyen) hesap sayısı.
+   *
+   * Ayrı bir sorgu ve ucuz: `ad_accounts` küçük bir tablo. Metrik sorgusuna
+   * gömmek, filtrenin kendisiyle sayımın aynı ifadeye bağlı olması demekti ve
+   * filtre değiştiğinde sayım sessizce yanlışa düşerdi.
+   */
+  private async hiddenAccountCount(tx: TxLike, query: MetricsQuery): Promise<number> {
+    const platformFilter = query.platform
+      ? Prisma.sql`AND platform = ${query.platform}::"Platform"`
+      : Prisma.empty;
+    const [row] = await tx.$queryRaw<Array<{ n: string | number }>>(Prisma.sql`
+      SELECT COUNT(*) AS n FROM ad_accounts
+      WHERE sync_enabled = false ${platformFilter}
+    `);
+    return Number(row?.n ?? 0);
   }
 
   /** Ham toplamları türetilmiş oranlarla birlikte ortak şekle çevirir. */

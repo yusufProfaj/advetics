@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type {
   MetricLevel,
+  Platform,
   MetricsBreakdownRow,
   MetricsSummary,
   MetricsTimeseriesPoint,
@@ -53,8 +54,14 @@ export default async function DashboardPage({
 
   const range = resolveRange(first(params.aralik));
   const level = resolveLevel(first(params.seviye));
+  const platform = resolvePlatform(first(params.platform));
 
   const base = new URLSearchParams({ from: range.from, to: range.to });
+  // PLATFORM FİLTRESİ ÜÇ SORGUYA DA gidiyor: özet, grafik ve dağılım aynı
+  // kapsamı göstermeli. Yalnızca tabloya uygulamak, üstteki kartların
+  // "toplam" gösterirken tablonun tek platformu listelemesi demek olurdu —
+  // aynı ekranda iki farklı gerçek.
+  if (platform) base.set('platform', platform);
   const breakdownQs = new URLSearchParams(base);
   breakdownQs.set('level', level);
   breakdownQs.set('limit', '25');
@@ -82,7 +89,10 @@ export default async function DashboardPage({
             {scopeLabel} · {formatDayLong(range.from)} — {formatDayLong(range.to)}
           </p>
         </div>
-        <RangeTabs current={range.key} level={level} />
+        <div className="flex flex-wrap items-center gap-2">
+          <PlatformTabs current={platform} range={range.key} level={level} />
+          <RangeTabs current={range.key} level={level} platform={platform} />
+        </div>
       </header>
 
       {summary === null ? (
@@ -100,6 +110,18 @@ export default async function DashboardPage({
               <strong>Birden fazla para birimi var</strong> (
               {summary.byCurrency.map((c) => c.currency).join(', ')}). Kur çevrimi henüz yok, bu
               yüzden toplamlar birleştirilmiyor — tutarlar para birimi başına ayrı gösteriliyor.
+            </Notice>
+          )}
+
+          {/* İZLENMEYEN HESAPLAR SESSİZCE DÜŞMÜYOR.
+              Kapatılan bir hesabın harcaması toplamdan çıkıyor ve sebebini
+              görmeyen kullanıcı "harcama neden azaldı" diye sorar. Sayıyı
+              yazmak o soruyu önceden cevaplıyor. */}
+          {summary.hiddenAccounts > 0 && (
+            <Notice tone="warn">
+              <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara dâhil
+              değil. Verileri silinmedi — hesabı Platform Bağlantıları sayfasından yeniden
+              izlemeye alırsan geçmişiyle birlikte geri gelir.
             </Notice>
           )}
 
@@ -246,13 +268,68 @@ function SecondaryStrip({ summary }: { summary: MetricsSummary }) {
   );
 }
 
-function RangeTabs({ current, level }: { current: string; level: MetricLevel }) {
+/**
+ * Platform sekmeleri.
+ *
+ * "Tümü" varsayılan çünkü bu ürünün ana vaadi iki platformu TEK ekranda
+ * toplamak. Sekmeler o vaadi bozmuyor, derinleşme yolu açıyor: bir platformun
+ * kampanyalarına odaklanmak istediğinde diğerinin gürültüsü kalkıyor.
+ *
+ * Seçim URL'de taşınıyor — sayfa sunucu bileşeni ve seçim için JS inmiyor;
+ * ayrıca bağlantı paylaşılabilir oluyor.
+ */
+function PlatformTabs({
+  current,
+  range,
+  level,
+}: {
+  current: Platform | null;
+  range: string;
+  level: MetricLevel;
+}) {
+  const options: Array<{ key: Platform | null; label: string }> = [
+    { key: null, label: 'Tümü' },
+    { key: 'meta', label: 'Meta' },
+    { key: 'google', label: 'Google' },
+  ];
+  return (
+    <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Platform">
+      {options.map((o) => {
+        const qs = new URLSearchParams({ aralik: range, seviye: level });
+        if (o.key) qs.set('platform', o.key);
+        const active = current === o.key;
+        return (
+          <Link
+            key={o.label}
+            href={`/dashboard?${qs}`}
+            aria-current={active ? 'page' : undefined}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+              active ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            {o.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function RangeTabs({
+  current,
+  level,
+  platform,
+}: {
+  current: string;
+  level: MetricLevel;
+  platform: Platform | null;
+}) {
   return (
     <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Tarih aralığı">
       {RANGE_PRESETS.map((p) => (
         <Link
           key={p.key}
-          href={`/dashboard?aralik=${p.key}&seviye=${level}`}
+          href={`/dashboard?aralik=${p.key}&seviye=${level}${platform ? `&platform=${platform}` : ''}`}
           aria-current={current === p.key ? 'page' : undefined}
           className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
             current === p.key ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
@@ -303,6 +380,16 @@ function microsOf(value: number | null): string | null {
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+/**
+ * Platform parametresi.
+ *
+ * Bilinmeyen değer "tümü"ye düşüyor, hata vermiyor: URL elle düzenlenmiş
+ * olabilir ve bir yazım hatası yüzünden panelin açılmaması abartı olurdu.
+ */
+function resolvePlatform(raw: string | undefined): Platform | null {
+  return raw === 'meta' || raw === 'google' ? raw : null;
 }
 
 function resolveLevel(raw: string | undefined): MetricLevel {

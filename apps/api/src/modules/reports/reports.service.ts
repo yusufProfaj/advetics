@@ -60,6 +60,25 @@ interface RawBucketRow {
   purchase: string | number | null;
 }
 
+
+/**
+ * İZLENMEYEN HESAPLAR RAPORA GİRMİYOR — panelle AYNI kural.
+ *
+ * `sync_enabled = false` "bu müşteriyle çalışmayı bıraktık" demek ve o
+ * hesabın harcaması rapora karışmaya devam ederse müşteriye yanlış bir tablo
+ * gönderilmiş olur.
+ *
+ * TEK YERDE TANIMLI ve beş sorguya da aynı parça giriyor. Sorgu başına elle
+ * yazmak, birinde unutmak demek — ve unutulan sorgu sessizce eski davranışı
+ * sürdürürdü. Panelin karşılığı `MetricsService.filters()`.
+ */
+function trackedAccounts(alias = ''): Prisma.Sql {
+  const column = alias ? `${alias}.ad_account_id` : 'ad_account_id';
+  return Prisma.sql`AND ${Prisma.raw(column)} IN (
+    SELECT id FROM ad_accounts WHERE sync_enabled = true
+  )`;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -218,7 +237,7 @@ export class ReportsService {
                  NULL::bigint AS day_count,
                  NULL::uuid AS entity_id
           FROM insights_daily
-          WHERE client_id = ${params.clientId}::uuid
+          WHERE client_id = ${params.clientId}::uuid ${trackedAccounts()}
             AND date BETWEEN ${params.from}::date AND ${params.to}::date
             AND entity_level = ${LEVEL}
           GROUP BY platform
@@ -284,7 +303,7 @@ export class ReportsService {
                  SUM(i.reach) AS reach_sum,
                  COUNT(DISTINCT i.date) AS day_count
           FROM insights_daily i
-          WHERE i.client_id = ${params.clientId}::uuid
+          WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
             AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
             AND i.entity_level = ${LEVEL}
           GROUP BY i.entity_id, i.platform
@@ -340,7 +359,7 @@ export class ReportsService {
         WITH base AS (
           SELECT date, SUM(spend_micros) AS spend_micros
           FROM insights_daily
-          WHERE client_id = ${params.clientId}::uuid
+          WHERE client_id = ${params.clientId}::uuid ${trackedAccounts()}
             AND date BETWEEN ${params.from}::date AND ${params.to}::date
             AND entity_level = ${LEVEL}
           GROUP BY date
@@ -396,7 +415,7 @@ export class ReportsService {
         JOIN ad_groups g ON g.id = a.ad_group_id
         JOIN campaigns c ON c.id = g.campaign_id
         LEFT JOIN creatives cr ON cr.id = a.creative_id
-        WHERE i.client_id = ${params.clientId}::uuid
+        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
           AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
           AND i.entity_level = 'ad'::"EntityLevel"
         GROUP BY a.id, a.name, c.name, cr.headline, cr.asset_urls
@@ -499,7 +518,7 @@ export class ReportsService {
                THEN i2.raw_metrics -> 'actions'
                ELSE '[]'::jsonb END
         ) AS act
-        WHERE i2.client_id = ${params.clientId}::uuid
+        WHERE i2.client_id = ${params.clientId}::uuid ${trackedAccounts('i2')}
           AND i2.date BETWEEN ${params.from}::date AND ${params.to}::date
           AND i2.entity_level = ${LEVEL}
         -- Gren: istenen grup + varlık + gün. Böylece öncelik her ham satırda

@@ -167,6 +167,14 @@ export interface MetricsSummary extends MetricTotals, CurrencyBreakdown {
   lastFetchedAt: string | null;
   /** Veri bulunan reklam hesabı sayısı. */
   accountCount: number;
+  /**
+   * İZLENMESİ KAPALI olduğu için panele girmeyen hesap sayısı.
+   *
+   * Sessizce kaybolan veri bu projede tekrar eden hata deseni. Kapatılan bir
+   * hesabın harcaması genel toplamdan düştüğünde, sebebini görmeyen kullanıcı
+   * "harcama neden düştü" diye sorar. Sayı burada, arayüz bunu yazıyor.
+   */
+  hiddenAccounts: number;
 }
 
 export interface MetricsTimeseriesPoint extends MetricTotals {
