@@ -106,6 +106,17 @@ export function normalizeError(
   // fbtrace_id Meta desteğiyle konuşurken tek kullanışlı referans.
   if (typeof err.fbtrace_id === 'string') parts.push(`fbtrace=${err.fbtrace_id}`);
 
+  // GOOGLE'IN GERÇEK SEBEBİ `details[].errors[]` ALTINDA.
+  //
+  // Üst seviye mesaj HER HATA İÇİN AYNI: "Request contains an invalid
+  // argument." Hangi alanın reddedildiği, kotanın mı dolduğu, sorgunun mu
+  // bozuk olduğu yalnızca `errorCode` ve iç mesajda yazıyor.
+  //
+  // Bu olmadan `sync_jobs.error_message` her Google hatasında birebir aynı
+  // satırı gösteriyordu ve tanı imkânsızdı: hesap saatlerdir 30 dakikada bir
+  // düşerken kayıtta yalnızca "invalid argument" yazıyordu.
+  parts.push(...googleErrorParts(err));
+
   const message = parts.join(' · ');
 
   const detail = {
@@ -156,6 +167,59 @@ export function normalizeError(
   // Sınıflandırılamayan 4xx'ler kalıcı sayılır: tekrar denemek aynı sonucu verir
   // ve kotayı boşa harcar.
   return new PlatformApiError(platform, 'permanent', message, detail);
+}
+
+/**
+ * Google hata gövdesinden teşhis edilebilir parçaları çıkarır.
+ *
+ * Yapı:
+ *   error.details[].errors[].errorCode = { <kategori>: <KOD> }
+ *   error.details[].errors[].message   = insan okunur açıklama
+ *   error.details[].requestId          = Google desteğiyle konuşurken referans
+ *
+ * `errorCode` TEK ANAHTARLI bir nesne ve anahtarın adı kategoriyi veriyor
+ * (`queryError`, `requestError`, `authorizationError`…). Sabit bir anahtar
+ * aramak yerine ilk girdiyi okuyoruz: kategori listesi uzun ve sürümle
+ * değişiyor.
+ *
+ * İLK İKİ HATAYLA SINIRLI. Google tek yanıtta onlarca hata döndürebiliyor ve
+ * hepsini `sync_jobs.error_message` içine yazmak sütunu taşırır; ilk ikisi
+ * hemen her zaman aynı kök sebebi anlatıyor.
+ */
+function googleErrorParts(err: Record<string, unknown>): string[] {
+  const details = err.details;
+  if (!Array.isArray(details)) return [];
+
+  const out: string[] = [];
+  let requestId: string | undefined;
+
+  for (const detail of details) {
+    if (typeof detail !== 'object' || detail === null) continue;
+    const d = detail as Record<string, unknown>;
+    if (typeof d.requestId === 'string') requestId = d.requestId;
+
+    const errors = d.errors;
+    if (!Array.isArray(errors)) continue;
+
+    for (const entry of errors.slice(0, 2)) {
+      if (typeof entry !== 'object' || entry === null) continue;
+      const e = entry as Record<string, unknown>;
+
+      const codeObj = e.errorCode;
+      if (typeof codeObj === 'object' && codeObj !== null) {
+        const [category, value] = Object.entries(codeObj as Record<string, unknown>)[0] ?? [];
+        if (category && value !== undefined) out.push(`${category}=${String(value)}`);
+      }
+      if (typeof e.message === 'string' && e.message.length > 0) {
+        out.push(e.message.slice(0, 300));
+      }
+    }
+  }
+
+  // requestId EN SONA: Google desteğine yazarken gereken tek referans ama
+  // mesajın başında yer kaplaması teşhisi zorlaştırırdı.
+  if (requestId) out.push(`requestId=${requestId}`);
+  return out;
 }
 
 /**

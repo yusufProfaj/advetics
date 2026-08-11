@@ -101,3 +101,116 @@ describe('normalizeError — Google', () => {
     expect(err.retryable).toBe(false);
   });
 });
+
+/**
+ * Google hata zenginleştirme.
+ *
+ * NEDEN BU TESTLER: Google'ın üst seviye mesajı HER HATA İÇİN AYNI —
+ * "Request contains an invalid argument." Gerçek sebep `details[].errors[]`
+ * altında ve mesaja katılmazsa `sync_jobs.error_message` teşhis edilemez
+ * hâle geliyor.
+ *
+ * Bu canlıda yaşandı: bir Google hesabı saatlerce 30 dakikada bir düştü ve
+ * her kayıtta yalnızca "invalid argument" yazıyordu. Hangi alanın reddedildiği
+ * ancak ayrı bir tanı aracıyla görülebildi.
+ */
+describe('normalizeError — Google zenginleştirme', () => {
+  function googleResponse(status = 400): Response {
+    return new Response(null, { status, statusText: 'Bad Request' });
+  }
+
+  const body = {
+    error: {
+      code: 400,
+      message: 'Request contains an invalid argument.',
+      status: 'INVALID_ARGUMENT',
+      details: [
+        {
+          '@type': 'type.googleapis.com/google.ads.googleads.v25.errors.GoogleAdsFailure',
+          errors: [
+            {
+              errorCode: { queryError: 'UNRECOGNIZED_FIELD' },
+              message: "Unrecognized field in the query: 'metrics.video_views'.",
+            },
+          ],
+          requestId: 'cPKNYfx_aVR6rGKJ44Q2hQ',
+        },
+      ],
+    },
+  };
+
+  it('KRİTİK: errorCode mesaja giriyor', () => {
+    // Bu olmadan iki tamamen farklı hata birebir aynı satırı üretiyor.
+    const err = normalizeError('google', googleResponse(), body);
+    expect(err.message).toContain('queryError=UNRECOGNIZED_FIELD');
+  });
+
+  it('iç mesaj — hangi ALANIN reddedildiği', () => {
+    const err = normalizeError('google', googleResponse(), body);
+    expect(err.message).toContain('metrics.video_views');
+  });
+
+  it('requestId taşınıyor — Google desteğinin istediği referans', () => {
+    const err = normalizeError('google', googleResponse(), body);
+    expect(err.message).toContain('requestId=cPKNYfx_aVR6rGKJ44Q2hQ');
+  });
+
+  it('FARKLI hatalar FARKLI mesaj üretiyor', () => {
+    // Asıl amaç bu: iki hata ayırt edilebilmeli.
+    const pageSize = {
+      error: {
+        message: 'Request contains an invalid argument.',
+        status: 'INVALID_ARGUMENT',
+        details: [
+          {
+            errors: [
+              {
+                errorCode: { requestError: 'PAGE_SIZE_NOT_SUPPORTED' },
+                message: 'Setting the page size is not supported.',
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const a = normalizeError('google', googleResponse(), body).message;
+    const b = normalizeError('google', googleResponse(), pageSize).message;
+    expect(a).not.toBe(b);
+    expect(b).toContain('PAGE_SIZE_NOT_SUPPORTED');
+  });
+
+  it('ÇOK hata varsa ilk ikisi alınıyor', () => {
+    // Google tek yanıtta onlarca hata döndürebiliyor; hepsini yazmak
+    // error_message sütununu taşırır.
+    const many = {
+      error: {
+        message: 'x',
+        details: [
+          {
+            errors: Array.from({ length: 10 }, (_, i) => ({
+              errorCode: { queryError: `KOD_${i}` },
+              message: `mesaj ${i}`,
+            })),
+          },
+        ],
+      },
+    };
+    const msg = normalizeError('google', googleResponse(), many).message;
+    expect(msg).toContain('KOD_0');
+    expect(msg).toContain('KOD_1');
+    expect(msg).not.toContain('KOD_2');
+  });
+
+  it('details yoksa çökmüyor', () => {
+    // Google her hatada bu yapıyı vermiyor (401, 500 gibi durumlarda düz gövde).
+    const plain = { error: { message: 'Unauthenticated.', status: 'UNAUTHENTICATED' } };
+    const err = normalizeError('google', googleResponse(401), plain);
+    expect(err.kind).toBe('invalid_token');
+    expect(err.message).toContain('Unauthenticated');
+  });
+
+  it('bozuk details yapısı çökmüyor', () => {
+    const broken = { error: { message: 'x', details: 'metin' } };
+    expect(() => normalizeError('google', googleResponse(), broken)).not.toThrow();
+  });
+});
