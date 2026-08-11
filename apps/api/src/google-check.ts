@@ -42,8 +42,12 @@
  *   pnpm --filter @advetics/api google-check
  *   pnpm --filter @advetics/api google-check -- --client <uuid>
  *
- * Tek bir GAQL alanının bu sürümde geçerli olup olmadığını sınamak için:
- *   pnpm --filter @advetics/api google-check -- --field campaign.start_date
+ * GAQL alanlarını sınamak (virgülle birden fazla, her biri ayrı sorgu):
+ *   google-check -- --field campaign.start_date,campaign.end_date
+ *
+ * Hesap keşfini atlayıp doğrudan sınamak (çok daha hızlı):
+ *   google-check -- --customer 9608136521 --login 4074080956 \
+ *                   --field campaign.start_date,campaign.end_date
  */
 import 'reflect-metadata';
 import { resolve } from 'node:path';
@@ -107,6 +111,64 @@ function indent(text: string): string {
 function head(title: string): void {
   console.log(`\n${title}`);
   console.log('─'.repeat(Math.max(title.length, 40)));
+}
+
+/**
+ * Bir ya da daha çok GAQL alanını AYRI AYRI sınar.
+ *
+ * NEDEN AYRI AYRI: tek sorguda üç alan seçilirse Google hepsini tek bir
+ * "Unrecognized fields" mesajında topluyor ve hangisinin geçerli olduğu
+ * anlaşılmıyor. Alan başına bir sorgu, alan başına net bir cevap.
+ *
+ * Virgülle ayrılmış liste kabul ediyor:
+ *   --field campaign.start_date,campaign.end_date,campaign.serving_status
+ */
+async function runProbe(
+  provider: { platform: string },
+  accessToken: string,
+  customerId: string,
+  loginCustomerId: string | undefined,
+  fields: string,
+): Promise<void> {
+  const list = fields
+    .split(',')
+    .map((f) => f.trim())
+    .filter(Boolean);
+
+  head(`Alan sondası — ${list.length} alan · müşteri ${customerId}`);
+
+  const search = (
+    provider as unknown as {
+      searchGaql: (t: string, c: string, q: string, l?: string) => Promise<unknown[]>;
+    }
+  ).searchGaql.bind(provider);
+
+  for (const field of list) {
+    const resource = field.split('.')[0];
+    try {
+      await search(accessToken, customerId, `SELECT ${field} FROM ${resource} LIMIT 1`, loginCustomerId);
+      ok(`${field} GEÇERLİ`);
+    } catch (err) {
+      // Yalnızca "tanınmayan alan" mesajını göster; tam gövde üç alanda
+      // ekranı doldurur ve asıl cevabı gizler.
+      const short =
+        err instanceof PlatformApiError
+          ? extractGoogleMessage(err) ?? err.message
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      failed++;
+      console.log(`  ✗ ${field} — ${short}`);
+    }
+  }
+}
+
+/** Google hata gövdesinden ilk `errors[].message` alanını çıkarır. */
+function extractGoogleMessage(err: PlatformApiError): string | null {
+  const raw = err.detail?.raw as
+    | { error?: { details?: Array<{ errors?: Array<{ message?: string }> }> } }
+    | undefined;
+  return raw?.error?.details?.[0]?.errors?.[0]?.message ?? null;
 }
 
 async function main(): Promise<void> {
@@ -175,6 +237,21 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  /**
+   * ALAN SONDASI — hızlı yol.
+   *
+   * `--customer` verilmişse hesap keşfi ATLANIYOR. Keşif 129 hesap için ~10
+   * saniye ve 130 API çağrısı; tek bir alan adını sınamak için bunu her
+   * seferinde ödemek anlamsız.
+   */
+  const probeFields = arg('field');
+  const explicitCustomer = arg('customer');
+  if (probeFields && explicitCustomer) {
+    await runProbe(provider, accessToken, explicitCustomer, arg('login'), probeFields);
+    await app.close();
+    process.exit(failed > 0 ? 1 : 0);
+  }
+
   head('3. Erişilebilir hesaplar');
   let accounts: Awaited<ReturnType<typeof provider.listAdAccounts>> = [];
   try {
@@ -227,25 +304,14 @@ async function main(): Promise<void> {
    * Tek bir alanı seçen minimal bir sorgu atıyor. Geçerliyse "var", değilse
    * Google'ın kendi hata mesajını olduğu gibi gösteriyor.
    */
-  const probe = arg('field');
-  if (probe) {
-    head(`Alan sondası — ${probe}`);
-    const resource = probe.split('.')[0];
-    try {
-      await (
-        provider as unknown as {
-          searchGaql: (t: string, c: string, q: string, l?: string) => Promise<unknown[]>;
-        }
-      ).searchGaql(
-        accessToken,
-        target.externalId,
-        `SELECT ${probe} FROM ${resource} LIMIT 1`,
-        target.managerExternalId,
-      );
-      ok(`${probe} GEÇERLİ`);
-    } catch (err) {
-      bad(`${probe} reddedildi`, err);
-    }
+  if (probeFields) {
+    await runProbe(
+      provider,
+      accessToken,
+      target.externalId,
+      target.managerExternalId,
+      probeFields,
+    );
     await app.close();
     process.exit(failed > 0 ? 1 : 0);
   }
