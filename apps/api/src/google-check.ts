@@ -41,6 +41,9 @@
  * Kullanım (deploy sonrası, derlenmiş çıktı hazırken):
  *   pnpm --filter @advetics/api google-check
  *   pnpm --filter @advetics/api google-check -- --client <uuid>
+ *
+ * Tek bir GAQL alanının bu sürümde geçerli olup olmadığını sınamak için:
+ *   pnpm --filter @advetics/api google-check -- --field campaign.start_date
  */
 import 'reflect-metadata';
 import { resolve } from 'node:path';
@@ -212,6 +215,40 @@ async function main(): Promise<void> {
   const target =
     accounts.find((a) => a.status !== 'closed' && a.externalId !== a.managerExternalId) ??
     accounts[0]!;
+
+  /**
+   * ALAN SONDASI — `--field campaign.start_date`
+   *
+   * NEDEN VAR: Google alan adlarını sürümler arasında değiştiriyor ve hangi
+   * adın geçerli olduğunu öğrenmenin tek yolu denemek. Bu sonda olmadan her
+   * deneme "kodu değiştir → commit → deploy → çalıştır" turu demekti; ilk
+   * canlı denemede iki ayrı alan reddedildi ve her biri bir tur yaktı.
+   *
+   * Tek bir alanı seçen minimal bir sorgu atıyor. Geçerliyse "var", değilse
+   * Google'ın kendi hata mesajını olduğu gibi gösteriyor.
+   */
+  const probe = arg('field');
+  if (probe) {
+    head(`Alan sondası — ${probe}`);
+    const resource = probe.split('.')[0];
+    try {
+      await (
+        provider as unknown as {
+          searchGaql: (t: string, c: string, q: string, l?: string) => Promise<unknown[]>;
+        }
+      ).searchGaql(
+        accessToken,
+        target.externalId,
+        `SELECT ${probe} FROM ${resource} LIMIT 1`,
+        target.managerExternalId,
+      );
+      ok(`${probe} GEÇERLİ`);
+    } catch (err) {
+      bad(`${probe} reddedildi`, err);
+    }
+    await app.close();
+    process.exit(failed > 0 ? 1 : 0);
+  }
 
   head(`4. Yapı sorgusu — ${target.name} (${target.externalId})`);
   try {

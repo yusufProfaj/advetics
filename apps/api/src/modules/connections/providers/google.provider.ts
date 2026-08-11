@@ -290,6 +290,13 @@ export class GoogleProvider implements IAdPlatformProvider {
    * Google, hangi yönetici hesabı üzerinden yetkilendiğini bilmek ister.
    * Başlık olmadan alt hesap sorguları PERMISSION_DENIED döner.
    */
+  /**
+   * Tek sayfalı GAQL sorgusu.
+   *
+   * `private` ama tanı aracı (`src/google-check.ts`) alan sondası için buna
+   * erişiyor. Public yapmak, sağlayıcı arayüzüne ait olmayan bir metodu
+   * sözleşmeye sokmak olurdu; tanı aracının tip kaçışı bilinçli ve tek yerde.
+   */
   private async searchGaql<T>(
     accessToken: string,
     customerId: string,
@@ -477,9 +484,21 @@ export class GoogleProvider implements IAdPlatformProvider {
     }>(
       accessToken,
       customerId,
+      // START_DATE / END_DATE SEÇİLMİYOR.
+      //
+      // v25 bunları reddediyor:
+      //   UNRECOGNIZED_FIELD — "Unrecognized fields in the query:
+      //   'campaign.start_date', 'campaign.end_date'."
+      //
+      // Google alan adlarını sürümler arasında değiştiriyor ve doğru karşılığı
+      // tahmin etmek, her denemede canlı bir tur yakmak demek. Bu iki alan
+      // ÇEKİRDEK DEĞİL: yalnızca kampanya kartında başlangıç/bitiş göstermeye
+      // yarıyorlardı ve yokluklarında senkronizasyonun geri kalanı eksiksiz
+      // çalışıyor.
+      //
+      // Doğru adı bulmak için:  google-check -- --field campaign.start_date
       `SELECT campaign.id, campaign.name, campaign.status, campaign.serving_status,
               campaign.advertising_channel_type, campaign.bidding_strategy_type,
-              campaign.start_date, campaign.end_date,
               campaign_budget.amount_micros, campaign_budget.total_amount_micros,
               campaign_budget.period
        FROM campaign`,
@@ -502,6 +521,9 @@ export class GoogleProvider implements IAdPlatformProvider {
         budgetMode: budget.mode,
         budgetAmountMicros: budget.micros,
         bidStrategy: this.str(c.biddingStrategyType),
+        // Yukarıdaki sorgu bu alanları seçmiyor (v25 reddediyor). Değerler
+        // undefined kalıyor ve kampanya kaydında başlangıç/bitiş boş görünüyor
+        // — Meta'da dolu, Google'da boş. Uydurulmuş bir tarih yazmaktan iyi.
         startTime: this.parseGoogleDate(c.startDate),
         stopTime: this.parseGoogleDate(c.endDate),
         // Google `updated_at` vermiyor — delta anahtarı yok.
@@ -627,10 +649,20 @@ export class GoogleProvider implements IAdPlatformProvider {
     const rows = await this.searchGaqlPaged<Record<string, unknown>>(
       accessToken,
       customerId,
+      // METRICS.VIDEO_VIEWS SEÇİLMİYOR — v25 reddediyor:
+      //   UNRECOGNIZED_FIELD — "Unrecognized field in the query:
+      //   'metrics.video_views'."
+      //
+      // Hem hesap hem kampanya seviyesinde reddediliyor, yani seviyeye özgü
+      // bir kısıt değil; alan bu sürümde yok. Video görüntüleme Google
+      // tarafında sıfır kalıyor ve bu, sıfır sanılmaması gereken bir sıfır —
+      // rapor katmanı zaten platforma göre ayrım yapıyor.
+      //
+      // `metrics.impressions` iki kez yazılmıştı; tekrarı da temizlendi.
       `SELECT ${view.idField}, segments.date, customer.currency_code,
               metrics.impressions, metrics.clicks, metrics.cost_micros,
               metrics.conversions, metrics.conversions_value,
-              metrics.video_views, metrics.engagements, metrics.impressions
+              metrics.engagements
        FROM ${view.resource}
        WHERE segments.date BETWEEN '${request.dateFrom}' AND '${request.dateTo}'`,
       loginCustomerId,
@@ -661,6 +693,7 @@ export class GoogleProvider implements IAdPlatformProvider {
         spendMicros: this.micros(metrics?.costMicros) ?? 0n,
         conversions: Number(metrics?.conversions ?? 0) || 0,
         conversionValueMicros: googleValueToMicros(metrics?.conversionsValue),
+        // Sorgu bu alanı seçmiyor (v25'te yok) — daima 0.
         videoViews: Number(metrics?.videoViews ?? 0) || 0,
         engagements: Number(metrics?.engagements ?? 0) || 0,
         // Google `reach` vermiyor — bu metrik Meta'ya özgü. 0 bırakıyoruz;
