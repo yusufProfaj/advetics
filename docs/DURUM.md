@@ -127,7 +127,7 @@ Bugün "frekans > 3 ise duraklat" kuralı yazılabiliyor. Eksik olan, yorgunluğ
 | Modül | Kapsam | Durum |
 |---|---|---|
 | 1 | Auth + çok kiracılı iskelet + RLS | ✅ |
-| 2 | Platform bağlantıları (OAuth) + adapter | ✅ Meta canlı · 🟡 Google onay bekliyor |
+| 2 | Platform bağlantıları (OAuth) + adapter | ✅ Meta canlı · 🟡 Google onay alındı, canlı doğrulama sırada |
 | 3 | Sync worker + birleşik panel | ✅ |
 | 4 | Ads Explorer | ✅ |
 | 5 | Kural motoru | ✅ prova doğrulandı · 🟡 canlı yazma doğrulanmadı |
@@ -201,7 +201,7 @@ kabul edilemez.
 | Meta `pages_read_engagement` + `instagram_manage_insights` | **Başvurulmadı** | Auto-Boost'un organik verisi |
 | Meta Business Verification | **Yapılmadı** | App Review ön koşulu |
 | Meta Tech Provider | **Başvurulmadı** | Müşteri hesaplarını yönetmek |
-| Google Ads Basic Access | **Bekliyor** | Google verisinin canlıya çıkması |
+| Google Ads Basic Access | ✅ **Alındı** (2026-08-11) | Google verisi canlıya çıkabilir — doğrulama bekliyor |
 
 `ads_management` **zorunlu scope listesinden çıkarıldı** ve isteğe bağlıya
 alındı ([meta.provider.ts](apps/api/src/modules/connections/providers/meta.provider.ts)).

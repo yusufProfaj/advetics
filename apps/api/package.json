@@ -18,6 +18,7 @@
     "postinstall": "prisma generate",
     "db:set-password": "tsx prisma/set-password.ts",
     "sync": "tsx prisma/sync-cli.ts",
+    "google-check": "tsx prisma/google-check.ts",
     "worker": "node dist/worker.js",
     "worker:dev": "tsx watch src/worker.ts"
   },
