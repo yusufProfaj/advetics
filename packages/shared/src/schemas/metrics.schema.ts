@@ -183,3 +183,64 @@ export interface MetricsBreakdownRow extends MetricTotals {
   status: string;
   currency: string;
 }
+
+// -----------------------------------------------------------------------------
+// ROAS — TEK KAYNAK
+// -----------------------------------------------------------------------------
+
+/**
+ * Dönüşüm başına bu değerin altı GERÇEK GELİR SAYILMIYOR.
+ *
+ * Google Ads'te dönüşüm eylemine değer atanmadığında varsayılan 1 birim
+ * kullanılıyor. Sonuç: `conversion_value == conversions`. Canlı veriden
+ * (Ege Birlik Yapı, 4-10 Ağustos 2026):
+ *
+ *     38 dönüşüm → 38 TRY      31 dönüşüm → 31 TRY
+ *     19,5 dönüşüm → 19,5 TRY  17 dönüşüm → 16 TRY
+ *
+ * Hiçbir işte bir form ya da telefon dönüşümü 1 TL etmiyor. Bu değer bir
+ * ölçüm değil, Google'ın yer tutucusu.
+ */
+const PLACEHOLDER_VALUE_PER_CONVERSION = 1;
+
+/**
+ * ROAS — yer tutucu gelir tespit edilirse `null`.
+ *
+ * NEDEN TEK FONKSİYON: bu kural hem panelde hem raporda gerekiyor. İki yerde
+ * ayrı yazmak, ikisinin zamanla ayrışması demek — bu projede panelin ve
+ * raporun aynı soruya farklı cevap vermesi bir kez yaşandı ve müşteriye giden
+ * belgeyle ekranın çelişmesine yol açtı.
+ *
+ * ÜÇ DURUM:
+ *   · harcama yok        → null (bölünecek bir şey yok)
+ *   · gelir yok          → null. "0.00×" göstermek "sıfır getiri" anlamını
+ *                          dayatıyor ve gelir hiç takip edilmeyen bir lead
+ *                          kampanyasını battı gösteriyor.
+ *   · gelir YER TUTUCU   → null. Teknik olarak sıfırdan büyük ama ölçüm değil;
+ *                          0,02× göstermek "her liraya 2 kuruş dönüyor" diye
+ *                          okunuyor ve gerçekte öyle bir şey söylenmiyor.
+ *
+ * @param spendUnits   harcama, PARA BİRİMİNDE (micros değil)
+ * @param valueUnits   dönüşüm değeri, para biriminde
+ * @param conversions  dönüşüm sayısı — yer tutucu tespiti için gerekli
+ */
+export function deriveRoas(
+  spendUnits: number,
+  valueUnits: number,
+  conversions: number,
+): number | null {
+  if (spendUnits <= 0 || valueUnits <= 0) return null;
+
+  // YER TUTUCU TESPİTİ. Dönüşüm başına ortalama değer 1 birimi aşmıyorsa
+  // gerçek gelir takibi yok demektir.
+  //
+  // Eşiğin ALTINI da kapsıyor: bazı dönüşüm eylemlerine 1, bazılarına 0
+  // atanmış hesaplarda ortalama 1'in altına düşüyor (canlı veride
+  // 17 dönüşüm → 16 TRY gibi). Ortalama 1'i AŞTIĞI anda gerçek bir değer
+  // tanımlanmış sayılıyor.
+  if (conversions > 0 && valueUnits / conversions <= PLACEHOLDER_VALUE_PER_CONVERSION) {
+    return null;
+  }
+
+  return valueUnits / spendUnits;
+}

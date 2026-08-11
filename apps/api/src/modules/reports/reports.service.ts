@@ -1,3 +1,4 @@
+import { deriveRoas } from '@advetics/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -534,7 +535,11 @@ export class ReportsService {
       cpc: clicks > 0 ? spend / clicks : null,
       cpm: impressions > 0 ? (spend / impressions) * 1000 : null,
       cpa: conversions > 0 ? spend / conversions : null,
-      roas: spend > 0 && value > 0 ? value / spend : null,
+      // Panelle AYNI kural — bkz. deriveRoas. İki yerde ayrı yazmak, panelin
+      // ve müşteriye giden raporun aynı soruya farklı cevap vermesi demek;
+      // bu projede bir kez yaşandı. Yer tutucu gelirden üretilmiş bir ROAS
+      // raporda daha da zararlı olurdu.
+      roas: deriveRoas(spend, value, conversions),
     };
   }
 
@@ -593,7 +598,11 @@ export class ReportsService {
       cpc: clicks > 0 ? spend / clicks : null,
       cpm: impressions > 0 ? (spend / impressions) * 1000 : null,
       cpa: conversions > 0 ? spend / conversions : null,
-      roas: spend > 0 && value > 0 ? value / spend : null,
+      // Panelle AYNI kural — bkz. deriveRoas. İki yerde ayrı yazmak, panelin
+      // ve müşteriye giden raporun aynı soruya farklı cevap vermesi demek;
+      // bu projede bir kez yaşandı. Yer tutucu gelirden üretilmiş bir ROAS
+      // raporda daha da zararlı olurdu.
+      roas: deriveRoas(spend, value, conversions),
     };
   }
 

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { deriveRoas } from '@advetics/shared';
 import type {
   BreakdownQuery,
   MetricLevel,
@@ -329,10 +330,14 @@ export class MetricsService {
       cpc: clicks > 0 ? spend / clicks : null,
       cpm: impressions > 0 ? (spend / impressions) * 1000 : null,
       cpa: conversions > 0 ? spend / conversions : null,
-      // ROAS yalnızca DEĞER varsa anlamlı. Lead formu ve mesajlaşma
-      // kampanyalarında gelir hiç takip edilmiyor; "0.00×" göstermek
-      // "sıfır getiri" anlamını dayatıyor ve kampanyayı battı gösteriyor.
-      roas: spend > 0 && value > 0 ? value / spend : null,
+      // ROAS kuralı PAYLAŞILAN fonksiyonda: rapor da aynısını kullanıyor ve
+      // iki yerde ayrı yazmak ikisinin ayrışması demek.
+      //
+      // Sıfır gelirin yanı sıra YER TUTUCU geliri de eliyor: Google dönüşüm
+      // eylemine değer atanmadığında 1 birim varsayıyor ve sonuç
+      // "değer == dönüşüm sayısı" oluyor. 0,02× göstermek gerçekte
+      // söylenmeyen bir şey söylemek olurdu.
+      roas: deriveRoas(spend, value, conversions),
     };
   }
 
