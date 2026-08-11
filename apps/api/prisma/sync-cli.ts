@@ -58,7 +58,41 @@ function money(micros: bigint | null, currency: string): string {
   return `${value.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ${currency}`;
 }
 
+/**
+ * Hesap listesi — ARAMA VE ÖZETLE.
+ *
+ * Google Basic Access'ten sonra tek bir bağlantı 129 hesap getirdi. Hepsini
+ * beşer satırla basmak 650 satırlık, içinde aradığını bulamayacağın bir
+ * çıktı demek — ve bu listenin tek kullanım amacı bir hesabın kimliğini
+ * bulup senkronizasyona açmak.
+ *
+ *   sync -- list --search ege        adı/müşterisi/kimliği eşleşenler
+ *   sync -- list --platform google   yalnızca bir platform
+ *   sync -- list --enabled           yalnızca AÇIK olanlar
+ *
+ * Sonda her zaman platform bazlı açık/kapalı özeti var: "hangileri şu an
+ * açık" sorusunun cevabı listeyi okumadan görünsün.
+ */
+/**
+ * Platform bazlı açık/kapalı özeti.
+ *
+ * Kota bu projede hesap bazlı ve açık her hesap her gün sorgulanıyor. Kaç
+ * hesabın açık olduğunu bilmeden hesap açmak, kotayı fark etmeden tüketmek
+ * demek.
+ */
+function printSummary(summary: Map<string, { total: number; enabled: number }>): void {
+  console.log('  ── Özet ──');
+  for (const [platform, s] of [...summary].sort()) {
+    console.log(`  ${platform.padEnd(6)}  ${s.enabled} açık / ${s.total} hesap`);
+  }
+  console.log('');
+}
+
 async function listAccounts(): Promise<void> {
+  const search = arg('search')?.toLowerCase();
+  const platformFilter = arg('platform');
+  const onlyEnabled = ARGV.includes('--enabled');
+
   const accounts = await prisma.adAccount.findMany({
     select: {
       id: true,
@@ -83,8 +117,54 @@ async function listAccounts(): Promise<void> {
     return;
   }
 
-  console.log(`\n${accounts.length} reklam hesabı:\n`);
+  // ÖZET FİLTREDEN ÖNCE hesaplanıyor: "kaç hesap açık" sorusunun cevabı
+  // aramadan bağımsız olmalı, yoksa `--search ege` sonrası "1 açık" görüp
+  // diğer açıkları unutmak kolay.
+  const summary = new Map<string, { total: number; enabled: number }>();
   for (const a of accounts) {
+    const s = summary.get(a.platform) ?? { total: 0, enabled: 0 };
+    s.total++;
+    if (a.syncEnabled) s.enabled++;
+    summary.set(a.platform, s);
+  }
+
+  const filtered = accounts.filter((a) => {
+    if (platformFilter && a.platform !== platformFilter) return false;
+    if (onlyEnabled && !a.syncEnabled) return false;
+    if (!search) return true;
+    return (
+      a.name.toLowerCase().includes(search) ||
+      a.client.name.toLowerCase().includes(search) ||
+      a.externalId.toLowerCase().includes(search)
+    );
+  });
+
+  if (filtered.length === 0) {
+    console.log(`\nEşleşen hesap yok (${accounts.length} hesap arasında arandı).\n`);
+    printSummary(summary);
+    return;
+  }
+
+  /**
+   * ÇOK SONUÇTA TEK SATIR. Beş satırlık ayrıntı 10 hesapta okunur, 100'de
+   * değil. Eşik aşılınca kimlik ve durum tek satırda veriliyor — zaten
+   * aranan şey bu.
+   */
+  if (filtered.length > 12) {
+    console.log(`\n${filtered.length} hesap eşleşti (kısa görünüm):\n`);
+    for (const a of filtered) {
+      const flag = a.syncEnabled ? '\x1b[32m●\x1b[0m' : '\x1b[90m○\x1b[0m';
+      console.log(
+        `  ${flag} ${a.platform.padEnd(6)} ${a.id}  ${a.name.slice(0, 46).padEnd(46)} ${a.client.name}`,
+      );
+    }
+    console.log('\n  Ayrıntı için aramayı daralt:  sync -- list --search <metin>\n');
+    printSummary(summary);
+    return;
+  }
+
+  console.log(`\n${filtered.length} reklam hesabı:\n`);
+  for (const a of filtered) {
     const flag = a.syncEnabled ? '\x1b[32m●\x1b[0m açık ' : '\x1b[90m○\x1b[0m kapalı';
     console.log(`  ${flag}  ${a.platform.padEnd(6)}  ${a.name}`);
     console.log(`           id: ${a.id}`);
@@ -103,6 +183,8 @@ async function listAccounts(): Promise<void> {
     );
     console.log('');
   }
+
+  printSummary(summary);
 
   const off = accounts.filter((a) => !a.syncEnabled).length;
   if (off > 0) {
@@ -807,6 +889,9 @@ async function main(): Promise<void> {
 Senkronizasyon ops aracı
 
   sync -- list                        reklam hesaplarını ve sync durumunu listeler
+  sync -- list --search <metin>       ada / müşteriye / kimliğe göre ara
+  sync -- list --platform google      tek platform
+  sync -- list --enabled              yalnızca açık olanlar
   sync -- enable  --account <uuid>    hesabı senkronizasyona açar
   sync -- disable --account <uuid>    hesabı kapatır
   sync -- run      --account <uuid>   yapı senkronizasyonunu ŞİMDİ tetikler (tam tarama)
