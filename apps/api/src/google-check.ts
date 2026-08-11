@@ -231,8 +231,12 @@ async function main(): Promise<void> {
   } catch (err) {
     bad('yapı sorgusu', err);
     console.log(
-      '\n  GAQL alan adları sürüme göre değişiyor. Hata mesajındaki alan adını\n' +
-        '  google.provider.ts içindeki sorguyla karşılaştır.\n',
+      '\n  Ham gövdedeki `errorCode` gerçek sebebi söylüyor; üst seviye mesaj\n' +
+        '  ("Request contains an invalid argument") her şey için aynı.\n' +
+        '  Sık görülenler:\n' +
+        '    · PAGE_SIZE_NOT_SUPPORTED   → istek gövdesinde desteklenmeyen alan\n' +
+        '    · UNRECOGNIZED_FIELD        → GAQL alan adı bu sürümde yok\n' +
+        '    · USER_PERMISSION_DENIED    → login-customer-id eksik ya da yanlış\n',
     );
   }
 

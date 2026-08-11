@@ -711,9 +711,18 @@ export class GoogleProvider implements IAdPlatformProvider {
           headers,
           body: JSON.stringify({
             query: query.trim(),
-            // 10.000 Google'ın izin verdiği üst sınır. Sayfa sayısını
-            // düşürmek hem gecikmeyi hem operasyon maliyetini azaltıyor.
-            pageSize: 10_000,
+            // PAGE_SIZE GÖNDERİLMİYOR — Google artık REDDEDİYOR.
+            //
+            // v25'te `pageSize` alanı hata veriyor:
+            //   PAGE_SIZE_NOT_SUPPORTED — "Setting the page size is not
+            //   supported. Search Responses will have fixed page size of
+            //   '10000' rows."
+            //
+            // Yani istediğimiz değerin aynısı zaten sabit varsayılan; alanı
+            // göndermek tek başına TÜM sorguyu 400 ile düşürüyordu. İlk canlı
+            // çalıştırmada yapı ve metrik sorgularının üçü de bu yüzden
+            // patladı — hesap keşfi çalışıyordu çünkü o sayfasız yolu
+            // kullanıyor.
             ...(pageToken ? { pageToken } : {}),
           }),
         },
