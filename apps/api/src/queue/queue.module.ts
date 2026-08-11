@@ -4,6 +4,7 @@ import { RulesModule } from '../modules/rules/rules.module';
 import { BoostsModule } from '../modules/boosts/boosts.module';
 import { InsightsSyncService } from './insights-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
+import { KeywordSyncService } from './keyword-sync.service';
 import { QuotaGuardService } from './quota-guard.service';
 import { StructureSyncService } from './structure-sync.service';
 import { SyncQueueService } from './sync-queue.service';
@@ -30,6 +31,7 @@ import { SyncProcessorService } from './sync-processor.service';
     StructureSyncService,
     InsightsSyncService,
     OrganicSyncService,
+    KeywordSyncService,
   ],
   exports: [
     QuotaGuardService,
@@ -38,6 +40,7 @@ import { SyncProcessorService } from './sync-processor.service';
     StructureSyncService,
     InsightsSyncService,
     OrganicSyncService,
+    KeywordSyncService,
   ],
 })
 export class QueueModule {}

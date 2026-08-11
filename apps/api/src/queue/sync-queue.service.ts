@@ -208,6 +208,9 @@ export class SyncQueueService implements OnModuleDestroy {
       // veri düştüğü anda çalışabilmeli. Saatlik tarama, bekleme süresiyle
       // birlikte hem duyarlı hem sakin bir davranış veriyor.
       { name: 'sweep:rules', pattern: '13 * * * *', jobType: 'rules_evaluate' },
+      // Anahtar kelime: günde bir, gece. Rapor aylık okunuyor ve gün içinde
+      // tazelemenin karşılığı yok; sabah 4'te dünün verisi hazır oluyor.
+      { name: 'sweep:keywords', pattern: '47 4 * * *', jobType: 'keyword_insights' },
       // Modül 7 — boost: GÜNDE İKİ KEZ, saatte bir değil.
       //
       // Organik metrikler yavaş değişiyor ve boost kararı bir gönderi için

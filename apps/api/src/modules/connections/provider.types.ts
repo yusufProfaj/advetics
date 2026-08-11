@@ -514,6 +514,29 @@ export interface PublishDraftResult {
   leadFormId?: string;
 }
 
+/**
+ * Anahtar kelime performansı satırı — yalnızca Google.
+ *
+ * Meta'da karşılığı yok: orada hedefleme ilgi alanı ve kitle üzerinden
+ * yürüyor, aranan bir kelime yok.
+ */
+export interface DiscoveredKeywordRow {
+  /** Google criterion kimliği — METİN değişse de sabit kalan tekillik anahtarı. */
+  externalCriterionId: string;
+  keyword: string;
+  matchType: 'EXACT' | 'PHRASE' | 'BROAD' | 'UNKNOWN';
+  /** Ad group'un PLATFORM kimliği; çağıran bunu kendi UUID'sine çeviriyor. */
+  adGroupExternalId?: string;
+  /** YYYY-MM-DD */
+  date: string;
+  impressions: number;
+  clicks: number;
+  spendMicros: bigint;
+  conversions: number;
+  conversionValueMicros: bigint;
+  currency: string;
+}
+
 export interface IAdPlatformProvider {
   readonly platform: Platform;
 
@@ -662,6 +685,18 @@ export interface IAdPlatformProvider {
    * temizlemek zorunda kalıyor.
    */
   publishDraft(ctx: FetchContext, request: PublishDraftRequest): Promise<PublishDraftResult>;
+
+  /**
+   * Anahtar kelime performansı — yalnızca Google.
+   *
+   * Meta boş dizi dönüyor, hata değil: bu bir yetenek farkı, arıza değil.
+   * Hata fırlatmak, Meta bağlantısı olan her müşteride senkronizasyonun
+   * başarısız görünmesi demek olurdu.
+   */
+  fetchKeywords(
+    ctx: FetchContext,
+    request: { dateFrom: string; dateTo: string },
+  ): Promise<{ rows: DiscoveredKeywordRow[]; apiCalls: number }>;
 
   /**
    * Tek bir reklam oluşturur (Modül 8).

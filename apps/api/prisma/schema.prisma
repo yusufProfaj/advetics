@@ -176,6 +176,7 @@ model Client {
   boosts          Boost[]
   bulkBatches     BulkBatch[]
   adDrafts        AdDraft[]
+  keywordInsights KeywordInsight[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -475,6 +476,7 @@ model AdAccount {
   rules      Rule[]
   boosts     Boost[]
   adDrafts   AdDraft[]
+  keywordInsights KeywordInsight[]
   bulkBatches BulkBatch[]
 
   @@unique([platform, externalId, clientId])
@@ -642,6 +644,8 @@ enum SyncJobType {
   insights_backfill
   /// L5 — kırılımlar (opt-in)
   insights_breakdown
+  /// Anahtar kelime performansı — yalnızca Google, yalnızca arama kampanyaları
+  keyword_insights
   /// L6 — organik post metrikleri (Auto-Boost)
   organic_posts
   /// Modül 5 — kural değerlendirmesi. Platform verisi ÇEKMİYOR, mevcut
@@ -1562,6 +1566,64 @@ model AdDraftAsset {
   /// değiştirmeli, yanına eklenmemeli — arayüzde de üç kutu var.
   @@unique([draftId, ratio])
   @@map("ad_draft_assets")
+}
+
+/// Anahtar kelime performansı — YALNIZCA GOOGLE.
+///
+/// NEDEN AYRI TABLO, `insights_daily`de bir seviye değil:
+///
+///   · Anahtar kelime reklam hiyerarşisinin bir parçası DEĞİL. Kampanya →
+///     ad group → reklam zinciri varlıkları temsil ediyor; anahtar kelime bir
+///     HEDEFLEME KRİTERİ ve `ads` tablosunda karşılığı yok.
+///
+///   · `entity_level` enum'una 'keyword' eklemek, o enum üzerinde çalışan her
+///     sorguyu etkilerdi. Panel toplamları tek seviyeden okuyor
+///     (TOTALS_LEVEL='campaign'); yeni bir seviye eklemek çift sayım riskini
+///     her sorguya taşırdı.
+///
+///   · Meta'da karşılığı YOK. `insights_daily` iki platformu birleştiriyor;
+///     yalnızca birinde var olan bir seviye o tabloyu asimetrik yapardı.
+model KeywordInsight {
+  clientId    String @map("client_id") @db.Uuid
+  adAccountId String @map("ad_account_id") @db.Uuid
+  /// Bizim ad group kimliğimiz — yapı senkronizasyonu eşleştiriyor.
+  /// Eşleşme bulunamazsa null: anahtar kelime verisini atmak yerine
+  /// bağlamsız saklamak daha iyi.
+  adGroupId   String? @map("ad_group_id") @db.Uuid
+
+  /// Google'ın criterion kimliği. Anahtar kelime METNİ değişebiliyor
+  /// (eşleme türü düzenlemesi); kimlik sabit ve doğru tekillik anahtarı bu.
+  externalCriterionId String @map("external_criterion_id") @db.VarChar(64)
+
+  keyword   String @db.VarChar(500)
+  /// EXACT | PHRASE | BROAD
+  matchType String @map("match_type") @db.VarChar(20)
+
+  date DateTime @db.Date
+
+  impressions Int    @default(0)
+  clicks      Int    @default(0)
+  spendMicros BigInt @default(0) @map("spend_micros")
+  conversions Decimal @default(0) @db.Decimal(14, 4)
+  conversionValueMicros BigInt @default(0) @map("conversion_value_micros")
+
+  currency  String   @db.Char(3)
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  /// PARTITION YOK — `insights_daily`den farklı.
+  ///
+  /// O tablo dört seviyeyi × her gün × her varlık tutuyor ve hızla milyonlara
+  /// çıkıyor. Anahtar kelime yalnızca Google'da, yalnızca arama
+  /// kampanyalarında ve yalnızca gösterim ALAN kelimeler için yazılıyor.
+  /// Hacim bir mertebe küçük; partition karmaşıklığı henüz karşılığını
+  /// vermiyor.
+  @@id([date, adAccountId, externalCriterionId])
+  @@index([clientId, date(sort: Desc)])
+  @@index([adAccountId, date(sort: Desc)])
+  @@map("keyword_insights")
 }
 
 model SyncJob {

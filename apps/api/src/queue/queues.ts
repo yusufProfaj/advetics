@@ -87,6 +87,10 @@ export function layerForJob(payload: SyncJobPayload): keyof typeof JOB_PRIORITY 
       return 'initial_backfill';
     case 'rules_evaluate':
       return 'rule_action';
+    case 'keyword_insights':
+      // Kırılımlarla aynı katman: ikisi de opsiyonel derinleşme ve çekirdek
+      // metriklerin önüne geçmemeli.
+      return 'insights_breakdown';
     // Boost OLUŞTURMAK para taahhüt ediyor; senkronizasyon kotayı doldurmuş
     // olsa bile geçmeli. Modül 5 aksiyonlarıyla aynı öncelikli kova.
     case 'boosts_evaluate':

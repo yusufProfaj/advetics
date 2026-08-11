@@ -232,7 +232,14 @@ function isoDate(offsetDays = 0): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function runJob(jobType: 'structure' | 'insights_realtime' | 'insights_daily' | 'insights_backfill'): Promise<void> {
+async function runJob(
+  jobType:
+    | 'structure'
+    | 'insights_realtime'
+    | 'insights_daily'
+    | 'insights_backfill'
+    | 'keyword_insights',
+): Promise<void> {
   const id = arg('account') ?? die('--account <uuid> zorunlu.');
   if (!REDIS_URL) die('REDIS_URL tanımlı değil — kuyruğa iş konulamaz.');
 
@@ -927,6 +934,9 @@ async function main(): Promise<void> {
       break;
     case 'backfill':
       await runJob('insights_backfill');
+      break;
+    case 'keywords':
+      await runJob('keyword_insights');
       break;
     case 'inspect':
       await inspect();

@@ -12,6 +12,7 @@ import type { TenantContext } from '@advetics/shared';
 import { RulesService } from '../modules/rules/rules.service';
 import { RuleExecutorService } from '../modules/rules/rule-executor.service';
 import { OrganicSyncService } from './organic-sync.service';
+import { KeywordSyncService } from './keyword-sync.service';
 import { BoostsService } from '../modules/boosts/boosts.service';
 import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
 
@@ -56,6 +57,7 @@ export class SyncProcessorService {
     private readonly organic: OrganicSyncService,
     private readonly boosts: BoostsService,
     private readonly boostExecutor: BoostExecutorService,
+    private readonly keywords: KeywordSyncService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -457,6 +459,29 @@ export class SyncProcessorService {
         const result = await this.insights.syncAccount({
           adAccountId: payload.adAccountId,
           jobType: payload.jobType,
+          dateFrom: payload.dateFrom,
+          dateTo: payload.dateTo,
+        });
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        return { rows: result.rows, note: result.note };
+      } catch (err) {
+        await this.recordFailure(syncJobId, err);
+        throw err;
+      }
+    }
+
+    if (payload.jobType === 'keyword_insights') {
+      if (!payload.adAccountId) {
+        await this.markFailed(syncJobId, 'missing_account', 'keyword_insights hesap kimliği olmadan geldi');
+        throw new UnrecoverableError('keyword_insights hesap kimliği olmadan geldi');
+      }
+      if (!payload.dateFrom || !payload.dateTo) {
+        await this.markFailed(syncJobId, 'missing_dates', 'keyword_insights tarih aralığı olmadan geldi');
+        throw new UnrecoverableError('keyword_insights tarih aralığı olmadan geldi');
+      }
+      try {
+        const result = await this.keywords.syncAccount({
+          adAccountId: payload.adAccountId,
           dateFrom: payload.dateFrom,
           dateTo: payload.dateTo,
         });

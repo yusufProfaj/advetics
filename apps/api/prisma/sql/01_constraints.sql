@@ -428,3 +428,28 @@ ALTER TABLE ad_draft_assets ADD CONSTRAINT ad_draft_assets_dims_chk
 ALTER TABLE ad_draft_assets DROP CONSTRAINT IF EXISTS ad_draft_assets_mime_chk;
 ALTER TABLE ad_draft_assets ADD CONSTRAINT ad_draft_assets_mime_chk
   CHECK (mime_type IN ('image/jpeg', 'image/png'));
+
+-- =============================================================================
+-- Anahtar kelime performansı (yalnızca Google)
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- keyword_insights: sayaçlar negatif olamaz.
+-- -----------------------------------------------------------------------------
+ALTER TABLE keyword_insights DROP CONSTRAINT IF EXISTS keyword_insights_counts_chk;
+ALTER TABLE keyword_insights ADD CONSTRAINT keyword_insights_counts_chk
+  CHECK (impressions >= 0 AND clicks >= 0 AND spend_micros >= 0 AND conversions >= 0);
+
+-- -----------------------------------------------------------------------------
+-- keyword_insights: eşleme türü bilinen bir değer.
+--
+-- Google yalnızca üç tür veriyor. Bilinmeyen bir değer, sağlayıcı eşlemesinin
+-- bozulduğunu gösterir ve raporda anlamsız bir etiket olarak görünürdü.
+-- -----------------------------------------------------------------------------
+ALTER TABLE keyword_insights DROP CONSTRAINT IF EXISTS keyword_insights_match_chk;
+ALTER TABLE keyword_insights ADD CONSTRAINT keyword_insights_match_chk
+  CHECK (match_type IN ('EXACT', 'PHRASE', 'BROAD', 'UNKNOWN'));
+
+ALTER TABLE keyword_insights DROP CONSTRAINT IF EXISTS keyword_insights_currency_chk;
+ALTER TABLE keyword_insights ADD CONSTRAINT keyword_insights_currency_chk
+  CHECK (currency ~ '^[A-Z]{3}$');

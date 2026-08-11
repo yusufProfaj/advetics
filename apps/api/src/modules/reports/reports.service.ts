@@ -111,6 +111,8 @@ export class ReportsService {
       const currencies = [...new Set(platformBlocks.map((b) => b.currency).filter(Boolean))];
       const currency = currencies.length === 1 ? currencies[0]! : null;
 
+      const keywords = await this.keywordRows(tx, params);
+
       return {
         client,
         branding,
@@ -127,11 +129,76 @@ export class ReportsService {
         googleCampaigns: campaigns.filter((c) => c.platform === 'google').map((c) => c.row),
         daily,
         topAds,
-        // `null` "veri yok" DEĞİL, "bu yetenek henüz yok": Google anahtar
-        // kelime seviyesi senkronizasyonu yazılmadı ve Basic Access onayı
-        // bekleniyor. Boş dizi "anahtar kelimen yok" demek olurdu.
-        keywords: null,
+        // `null` HÂLÂ "bu yetenek yok" demek — ama artık yalnızca Google
+        // bağlantısı olmayan müşteriler için. Meta-only bir müşteride boş dizi
+        // döndürmek "anahtar kelimen yok" demek olurdu; oysa o platformda
+        // anahtar kelime diye bir şey yok.
+        keywords,
         generatedAt: new Date().toISOString(),
+      };
+    });
+  }
+
+  /**
+   * Anahtar kelime performansı — yalnızca Google.
+   *
+   * `null` DÖNÜŞÜ ANLAMLI: müşterinin hiç Google hesabı yoksa bu bölüm
+   * "yetenek yok" olarak gösteriliyor. Boş dizi ise "Google var ama bu dönemde
+   * gösterim alan kelime yok" demek. İkisi farklı ve rapor ikisini farklı
+   * anlatıyor.
+   *
+   * EN ÇOK HARCAYAN 25 kelime. Bir arama hesabında binlerce kelime olabiliyor
+   * ve müşteriye giden belgede hepsini listelemek raporu okunamaz kılar;
+   * harcamanın büyük kısmı zaten ilk onlarcada toplanıyor.
+   */
+  private async keywordRows(
+    tx: TxLike,
+    params: { clientId: string; from: string; to: string },
+  ): Promise<ReportData['keywords']> {
+    const [hasGoogle] = await tx.$queryRaw<Array<{ n: string | number }>>(Prisma.sql`
+      SELECT COUNT(*) AS n FROM ad_accounts
+      WHERE client_id = ${params.clientId}::uuid AND platform = 'google'::"Platform"
+        AND sync_enabled = true
+    `);
+    if (Number(hasGoogle?.n ?? 0) === 0) return null;
+
+    const rows = await tx.$queryRaw<
+      Array<{
+        keyword: string;
+        spend_micros: string | number | bigint | null;
+        impressions: string | number | null;
+        clicks: string | number | null;
+      }>
+    >(Prisma.sql`
+      SELECT k.keyword,
+             SUM(k.spend_micros) AS spend_micros,
+             SUM(k.impressions) AS impressions,
+             SUM(k.clicks) AS clicks
+      FROM keyword_insights k
+      WHERE k.client_id = ${params.clientId}::uuid
+        AND k.date BETWEEN ${params.from}::date AND ${params.to}::date
+        ${trackedAccounts('k')}
+      -- AYNI METİNLİ kelimeler birleştiriliyor: aynı kelime birden fazla ad
+      -- group'ta tanımlı olabiliyor ve müşteriye üç ayrı satır göstermek
+      -- "aynı kelimeye üç kez mi para verdik" sorusunu doğurur.
+      GROUP BY k.keyword
+      HAVING SUM(k.impressions) > 0
+      ORDER BY SUM(k.spend_micros) DESC
+      LIMIT 25
+    `);
+
+    return rows.map((r) => {
+      const impressions = Number(r.impressions ?? 0);
+      const clicks = Number(r.clicks ?? 0);
+      const spendMicros = BigInt(String(r.spend_micros ?? 0).split('.')[0] || '0');
+      const spend = Number(spendMicros) / 1_000_000;
+      return {
+        keyword: r.keyword,
+        spendMicros: spendMicros.toString(),
+        impressions,
+        clicks,
+        ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
+        cpc: clicks > 0 ? spend / clicks : null,
       };
     });
   }

@@ -18,6 +18,7 @@ import {
   type BoostResult,
   type CreateAdResult,
   type DiscoveredOrganicPost,
+  type DiscoveredKeywordRow,
   type PlatformActionRequest,
   type PublishDraftResult,
   type PlatformActionResult,
@@ -1036,6 +1037,84 @@ export class GoogleProvider implements IAdPlatformProvider {
     );
   }
 
+
+  // ---------------------------------------------------------------------------
+  // Anahtar kelime performansı
+  // ---------------------------------------------------------------------------
+
+  /**
+   * `keyword_view` üzerinden anahtar kelime metrikleri.
+   *
+   * GÖSTERİM ALMAYANLAR ÇEKİLMİYOR. Bir arama kampanyasında binlerce anahtar
+   * kelime tanımlı olabiliyor ve çoğu belirli bir günde hiç gösterim almıyor.
+   * Hepsini çekmek satır sayısını on katına çıkarır ve raporda hiçbir şey
+   * eklemez — sıfırlık satırlar zaten gösterilmiyor.
+   *
+   * ALAN ADLARI SÜRÜME BAĞLI. Bir alan reddedilirse sondayla doğrula:
+   *   google-check -- --customer <id> --field ad_group_criterion.keyword.text
+   */
+  async fetchKeywords(
+    ctx: FetchContext,
+    request: { dateFrom: string; dateTo: string },
+  ): Promise<{ rows: DiscoveredKeywordRow[]; apiCalls: number }> {
+    const customerId = ctx.accountExternalId;
+    const calls = { n: 0 };
+
+    const raw = await this.searchGaqlPaged<Record<string, unknown>>(
+      ctx.accessToken,
+      customerId,
+      `SELECT ad_group_criterion.criterion_id,
+              ad_group_criterion.keyword.text,
+              ad_group_criterion.keyword.match_type,
+              ad_group.id,
+              segments.date,
+              customer.currency_code,
+              metrics.impressions, metrics.clicks, metrics.cost_micros,
+              metrics.conversions, metrics.conversions_value
+       FROM keyword_view
+       WHERE segments.date BETWEEN '${request.dateFrom}' AND '${request.dateTo}'
+         AND metrics.impressions > 0`,
+      ctx.loginCustomerId,
+      calls,
+    );
+
+    const rows: DiscoveredKeywordRow[] = [];
+    for (const row of raw) {
+      const criterion = this.obj(row.adGroupCriterion);
+      const keywordObj = this.obj(criterion?.keyword);
+      const metrics = this.obj(row.metrics);
+      const segments = this.obj(row.segments);
+
+      const criterionId = this.str(criterion?.criterionId);
+      const text = this.str(keywordObj?.text);
+      const date = this.str(segments?.date);
+      // Üçü de zorunlu: kimliksiz ya da tarihsiz bir satır tekil anahtara
+      // yazılamaz ve metinsiz bir satır raporda boş bir hücre olurdu.
+      if (!criterionId || !text || !date) continue;
+
+      rows.push({
+        externalCriterionId: criterionId,
+        keyword: text.slice(0, 500),
+        matchType: normalizeMatchType(this.str(keywordObj?.matchType)),
+        adGroupExternalId: this.str(this.obj(row.adGroup)?.id),
+        date,
+        impressions: Number(metrics?.impressions ?? 0) || 0,
+        clicks: Number(metrics?.clicks ?? 0) || 0,
+        // Zaten micros — Google `cost_micros` veriyor, çevrim yok.
+        spendMicros: this.micros(metrics?.costMicros) ?? 0n,
+        conversions: Number(metrics?.conversions ?? 0) || 0,
+        // `conversions_value` micros DEĞİL, ondalık double. İkisini aynı
+        // sanmak değeri bir milyon kat yanlış gösterir.
+        conversionValueMicros: googleValueToMicros(metrics?.conversionsValue),
+        currency: (this.str(this.obj(row.customer)?.currencyCode) ?? 'TRY')
+          .toUpperCase()
+          .slice(0, 3),
+      });
+    }
+
+    return { rows, apiCalls: calls.n };
+  }
+
 }
 
 /**
@@ -1086,6 +1165,19 @@ function googleValueToMicros(value: unknown): bigint {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0n;
   return BigInt(Math.round(n * 1_000_000));
+}
+
+/**
+ * Eşleme türünü normalleştirir.
+ *
+ * Google beklenmedik bir değer verirse `UNKNOWN`: veritabanı kısıtı bilinen
+ * dört değeri kabul ediyor ve ham değeri geçirmek tüm senkronizasyonu
+ * düşürürdü. Bir anahtar kelimenin eşleme türünü bilmemek, o kelimenin
+ * performansını hiç kaydetmemekten iyi.
+ */
+function normalizeMatchType(raw: string | undefined): DiscoveredKeywordRow['matchType'] {
+  const v = (raw ?? '').toUpperCase();
+  return v === 'EXACT' || v === 'PHRASE' || v === 'BROAD' ? v : 'UNKNOWN';
 }
 
 /** 1234567890 → 123-456-7890 (Google arayüzündeki gösterim). */

@@ -55,7 +55,7 @@ Senin paylaştığın 7 parçalı mimariye göre. ✅ tamam · 🟡 kısmi · �
 |---|---|---|
 | Bilgi bankası (marka sesi, ürün bilgisi) | ❌ | Hiç başlanmadı |
 | Kitle kütüphanesi | ❌ | Meta'da `custom_audiences` çekilmiyor |
-| Anahtar kelime kütüphanesi | ❌ | Google artık canlı — engel kalktı, yazılmadı |
+| Anahtar kelime kütüphanesi | ❌ | Performans verisi geliyor; kütüphane (kayıtlı liste) yok |
 | Görsel/video varlık arşivi | ❌ | Toplu oluşturucu görsel kimliği elle alıyor |
 
 **Bu bölüm tamamen boş.** Modül 8'in (toplu oluşturucu) gerçek verimi buna
@@ -126,7 +126,7 @@ Bugün "frekans > 3 ise duraklat" kuralı yazılabiliyor. Eksik olan, yorgunluğ
 | Paylaşım linki (hash'li token) | ✅ | `share.service.ts` |
 | Yazdırma | 🟡 | Tarayıcı yazdırma; sunucu PDF'i yok |
 | **Zamanlanmış PDF/Excel** | ❌ | **E-posta altyapısı yok** |
-| Anahtar kelime raporu | ❌ | Google artık canlı — engel kalktı, yazılmadı |
+| Anahtar kelime raporu | 🟡 | Veri hattı yazıldı, canlı doğrulanmadı |
 
 ---
 

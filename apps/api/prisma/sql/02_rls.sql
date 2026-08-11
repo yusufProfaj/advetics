@@ -106,6 +106,8 @@ DECLARE
     'organic_posts', 'boost_rules', 'boosts',
     -- Modül 4 — reklam oluşturucu
     'ad_drafts', 'ad_draft_assets',
+    -- Anahtar kelime performansı
+    'keyword_insights',
     -- Modül 8
     'bulk_batches', 'bulk_items'
   ];
@@ -825,6 +827,23 @@ CREATE POLICY adv_ad_draft_assets_delete ON ad_draft_assets
       WHERE d.id = ad_draft_assets.draft_id AND app.can_access_client(d.client_id)
     )
   );
+
+-- =============================================================================
+-- Anahtar kelime performansı
+-- =============================================================================
+
+-- DELETE politikası YOK: veriler senkronizasyondan geliyor ve elle silinmeleri
+-- raporun dayandığı kaydı ortadan kaldırırdı. Hesap silinirse CASCADE ile
+-- gidiyorlar.
+CREATE POLICY adv_keyword_insights_select ON keyword_insights
+  FOR SELECT USING (app.can_access_client(client_id));
+
+CREATE POLICY adv_keyword_insights_insert ON keyword_insights
+  FOR INSERT WITH CHECK (app.can_access_client(client_id));
+
+CREATE POLICY adv_keyword_insights_update ON keyword_insights
+  FOR UPDATE USING (app.can_access_client(client_id))
+             WITH CHECK (app.can_access_client(client_id));
 
 -- -----------------------------------------------------------------------------
 -- Yetkiler (yeni tablolar için ALTER DEFAULT PRIVILEGES zaten çalışıyor;

@@ -19,6 +19,7 @@ import {
   type CreateAdRequest,
   type CreateAdResult,
   type BoostResult,
+  type DiscoveredKeywordRow,
   type DiscoveredOrganicPost,
   type PlatformActionRequest,
   type PublishDraftRequest,
@@ -1478,6 +1479,19 @@ export class MetaProvider implements IAdPlatformProvider {
       },
     );
     return form.id;
+  }
+
+
+  /**
+   * Meta'da anahtar kelime YOK.
+   *
+   * Boş dizi dönüyor, hata değil: bu bir yetenek farkı, arıza değil. Hata
+   * fırlatmak, Meta bağlantısı olan her müşteride anahtar kelime
+   * senkronizasyonunun başarısız görünmesi ve iş listesinin kırmızıya
+   * boyanması demek olurdu.
+   */
+  async fetchKeywords(): Promise<{ rows: DiscoveredKeywordRow[]; apiCalls: number }> {
+    return { rows: [], apiCalls: 0 };
   }
 
 }
