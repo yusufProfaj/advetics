@@ -7,6 +7,7 @@ export * from './schemas/boost.schema';
 export * from './schemas/budget.schema';
 export * from './schemas/bulk.schema';
 export * from './schemas/connection.schema';
+export * from './schemas/form.schema';
 export * from './schemas/metrics.schema';
 export * from './schemas/report.schema';
 export * from './schemas/rule.schema';

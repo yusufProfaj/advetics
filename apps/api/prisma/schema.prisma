@@ -87,12 +87,12 @@ model Organization {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  users       User[]
-  clients     Client[]
-  memberships Membership[]
-  branding    BrandingProfile[]
-  invitations Invitation[]
-  auditLogs   AuditLog[]
+  users           User[]
+  clients         Client[]
+  memberships     Membership[]
+  branding        BrandingProfile[]
+  invitations     Invitation[]
+  auditLogs       AuditLog[]
   reportTemplates ReportTemplate[]
   monthlyBudgets  MonthlyBudget[]
   rules           Rule[]
@@ -101,23 +101,24 @@ model Organization {
   boosts          Boost[]
   bulkBatches     BulkBatch[]
   adDrafts        AdDraft[]
+  leadForms       LeadForm[]
 
   @@map("organizations")
 }
 
 model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  orgId        String     @map("org_id") @db.Uuid
+  id                 String     @id @default(uuid()) @db.Uuid
+  orgId              String     @map("org_id") @db.Uuid
   /// Daima küçük harfe normalize edilerek saklanır (Zod `toLowerCase`).
-  email        String     @db.VarChar(255)
+  email              String     @db.VarChar(255)
   /// argon2id hash. SSO ile gelen kullanıcılarda null.
-  passwordHash String?    @map("password_hash") @db.Text
-  fullName     String     @map("full_name") @db.VarChar(120)
-  avatarUrl    String?    @map("avatar_url") @db.VarChar(1024)
-  locale       String     @default("tr") @db.VarChar(10)
+  passwordHash       String?    @map("password_hash") @db.Text
+  fullName           String     @map("full_name") @db.VarChar(120)
+  avatarUrl          String?    @map("avatar_url") @db.VarChar(1024)
+  locale             String     @default("tr") @db.VarChar(10)
   /// TOTP secret — AES-256-GCM ile şifreli. (MFA Modül 1.5'te aktifleşir.)
-  mfaSecretEnc Bytes?     @map("mfa_secret_enc")
-  mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
+  mfaSecretEnc       Bytes?     @map("mfa_secret_enc")
+  mfaEnabled         Boolean    @default(false) @map("mfa_enabled")
   /// İLK GİRİŞTE PAROLA DEĞİŞTİRME ZORUNLU MU.
   ///
   /// Seed ile ya da yönetici tarafından kurulan parolalar geçici sayılıyor:
@@ -127,17 +128,17 @@ model User {
   /// Kullanıcı DEĞİŞTİRMEDEN paneli kullanabiliyor ama her ekranda uyarı
   /// görüyor. Girişi tamamen bloklamak, kendi parolasını değiştirmek için
   /// giriş yapması gereken bir kullanıcıyı kilitler.
-  mustChangePassword Boolean @default(false) @map("must_change_password")
-  status       UserStatus @default(invited)
-  lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz(6)
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  mustChangePassword Boolean    @default(false) @map("must_change_password")
+  status             UserStatus @default(invited)
+  lastLoginAt        DateTime?  @map("last_login_at") @db.Timestamptz(6)
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization       Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  organization       Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
   memberships        Membership[]
   refreshTokens      RefreshToken[]
   passwordResets     PasswordResetToken[]
-  invitationsCreated Invitation[]        @relation("InvitationCreatedBy")
+  invitationsCreated Invitation[]         @relation("InvitationCreatedBy")
   connectionsCreated PlatformConnection[]
 
   @@unique([orgId, email])
@@ -160,7 +161,7 @@ model Client {
   updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
   archivedAt        DateTime?    @map("archived_at") @db.Timestamptz(6)
 
-  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   memberships  Membership[]
   branding     BrandingProfile?
   invitations  Invitation[]
@@ -187,6 +188,7 @@ model Client {
   bulkBatches     BulkBatch[]
   adDrafts        AdDraft[]
   keywordInsights KeywordInsight[]
+  leadForms       LeadForm[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -195,15 +197,15 @@ model Client {
 
 /// Kullanıcı ↔ erişim yetkisi. RLS'in dayandığı tablodur.
 model Membership {
-  id       String @id @default(uuid()) @db.Uuid
-  userId   String @map("user_id") @db.Uuid
-  orgId    String @map("org_id") @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  userId      String  @map("user_id") @db.Uuid
+  orgId       String  @map("org_id") @db.Uuid
   /// null => org geneli erişim (yalnızca owner/admin).
   /// Bunun tekilliği partial unique index ile korunur — bkz. prisma/sql/01_constraints.sql
-  clientId String? @map("client_id") @db.Uuid
-  role     Role
+  clientId    String? @map("client_id") @db.Uuid
+  role        Role
   /// Yetki override: { "rule.activate": false }. Rolü daima ezer.
-  permissions Json? @db.JsonB
+  permissions Json?   @db.JsonB
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -238,10 +240,10 @@ model BrandingProfile {
   fontFamily   String @default("Inter") @map("font_family") @db.VarChar(120)
 
   /// Rapor paylaşım linklerinin servis edileceği alan adı.
-  customDomain     String?   @unique @map("custom_domain") @db.VarChar(255)
-  domainVerifiedAt DateTime? @map("domain_verified_at") @db.Timestamptz(6)
+  customDomain      String?   @unique @map("custom_domain") @db.VarChar(255)
+  domainVerifiedAt  DateTime? @map("domain_verified_at") @db.Timestamptz(6)
   /// DNS TXT doğrulaması için tek kullanımlık değer.
-  domainVerifyToken String?  @map("domain_verify_token") @db.VarChar(64)
+  domainVerifyToken String?   @map("domain_verify_token") @db.VarChar(64)
 
   emailFromName    String  @default("Advetics") @map("email_from_name") @db.VarChar(120)
   emailFromAddress String? @map("email_from_address") @db.VarChar(255)
@@ -271,10 +273,10 @@ model RefreshToken {
   tokenHash String @unique @map("token_hash") @db.VarChar(64)
   familyId  String @map("family_id") @db.Uuid
 
-  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(6)
-  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(6)
-  revokedReason String?  @map("revoked_reason") @db.VarChar(64)
-  replacedById String?   @map("replaced_by_id") @db.Uuid
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedReason String?   @map("revoked_reason") @db.VarChar(64)
+  replacedById  String?   @map("replaced_by_id") @db.Uuid
 
   ip        String?  @db.Inet
   userAgent String?  @map("user_agent") @db.VarChar(512)
@@ -335,13 +337,13 @@ model PasswordResetToken {
 /// Bu üründe bütçeler değişiyor — bu tablo pazarlık konusu değildir.
 /// Modül 5'te kural motoru buraya actorType='rule' ile yazacak.
 model AuditLog {
-  id       BigInt    @id @default(autoincrement())
-  orgId    String    @map("org_id") @db.Uuid
-  clientId String?   @map("client_id") @db.Uuid
+  id       BigInt  @id @default(autoincrement())
+  orgId    String  @map("org_id") @db.Uuid
+  clientId String? @map("client_id") @db.Uuid
 
-  actorType ActorType @default(user) @map("actor_type")
-  actorId   String?   @map("actor_id") @db.Uuid
-  actorLabel String?  @map("actor_label") @db.VarChar(255)
+  actorType  ActorType @default(user) @map("actor_type")
+  actorId    String?   @map("actor_id") @db.Uuid
+  actorLabel String?   @map("actor_label") @db.VarChar(255)
 
   /// Nokta ile ayrılmış eylem anahtarı: `client.created`, `budget.increased`
   action     String  @db.VarChar(80)
@@ -406,9 +408,9 @@ model PlatformConnection {
 
   /// Platform tarafındaki kullanıcı/işletme kimliği. Aynı hesabın iki kez
   /// bağlanmasını tespit etmek için kullanılır.
-  externalUserId String  @map("external_user_id") @db.VarChar(128)
+  externalUserId String @map("external_user_id") @db.VarChar(128)
   /// UI'da gösterilen ad — "Advetics Business Manager" gibi.
-  accountLabel   String  @map("account_label") @db.VarChar(200)
+  accountLabel   String @map("account_label") @db.VarChar(200)
 
   accessTokenEnc  Bytes     @map("access_token_enc")
   /// Google için zorunlu (access token 1 saatte dolar). Meta long-lived
@@ -419,17 +421,17 @@ model PlatformConnection {
 
   grantedScopes String[] @map("granted_scopes")
 
-  status        ConnectionStatus @default(active)
-  lastErrorCode String?          @map("last_error_code") @db.VarChar(80)
-  lastErrorAt   DateTime?        @map("last_error_at") @db.Timestamptz(6)
+  status         ConnectionStatus @default(active)
+  lastErrorCode  String?          @map("last_error_code") @db.VarChar(80)
+  lastErrorAt    DateTime?        @map("last_error_at") @db.Timestamptz(6)
   /// Token'ın en son doğrulandığı an. Sağlık göstergesi.
-  lastVerifiedAt DateTime?       @map("last_verified_at") @db.Timestamptz(6)
+  lastVerifiedAt DateTime?        @map("last_verified_at") @db.Timestamptz(6)
   /// Ardışık hata sayacı. Circuit breaker eşiği.
-  failureCount  Int              @default(0) @map("failure_count")
+  failureCount   Int              @default(0) @map("failure_count")
 
-  connectedByUserId String   @map("connected_by_user_id") @db.Uuid
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  connectedByUserId String    @map("connected_by_user_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
 
   client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -445,9 +447,9 @@ model PlatformConnection {
 
 /// Reklam hesabı. Meta `act_123456789`, Google `1234567890`.
 model AdAccount {
-  id           String @id @default(uuid()) @db.Uuid
-  clientId     String @map("client_id") @db.Uuid
-  connectionId String @map("connection_id") @db.Uuid
+  id           String   @id @default(uuid()) @db.Uuid
+  clientId     String   @map("client_id") @db.Uuid
+  connectionId String   @map("connection_id") @db.Uuid
   platform     Platform
 
   externalId String @map("external_id") @db.VarChar(128)
@@ -459,9 +461,9 @@ model AdAccount {
   /// Insight tarihleri bu zaman diliminde. "Bugün"ün tanımı buna bağlı.
   timezone String @db.VarChar(64)
 
-  status AdAccountStatus @default(unknown)
+  status            AdAccountStatus @default(unknown)
   /// Google MCC / Meta Business Manager kimliği.
-  managerExternalId String? @map("manager_external_id") @db.VarChar(128)
+  managerExternalId String?         @map("manager_external_id") @db.VarChar(128)
 
   /// Kullanıcı bu hesabı senkronize etmek istiyor mu. Bağlantı kurulduğunda
   /// hesaplar KEŞFEDİLİR ama varsayılan olarak KAPALIDIR — 40 hesaplı bir
@@ -472,22 +474,22 @@ model AdAccount {
   lastInsightsSyncAt  DateTime? @map("last_insights_sync_at") @db.Timestamptz(6)
   /// Son kota okuması (Meta BUC yüzdeleri / Google operasyon sayacı).
   /// Modül 3'teki adaptif hız sınırlayıcı bunu kullanır.
-  rateLimitState Json? @map("rate_limit_state") @db.JsonB
+  rateLimitState      Json?     @map("rate_limit_state") @db.JsonB
 
   raw       Json?    @db.JsonB
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  client     Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  connection PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  boostTargets SocialProfile[]  @relation("BoostBillingAccount")
-  campaigns  Campaign[]
-  budgets    MonthlyBudget[]
-  rules      Rule[]
-  boosts     Boost[]
-  adDrafts   AdDraft[]
+  client          Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  connection      PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  boostTargets    SocialProfile[]    @relation("BoostBillingAccount")
+  campaigns       Campaign[]
+  budgets         MonthlyBudget[]
+  rules           Rule[]
+  boosts          Boost[]
+  adDrafts        AdDraft[]
   keywordInsights KeywordInsight[]
-  bulkBatches BulkBatch[]
+  bulkBatches     BulkBatch[]
 
   @@unique([platform, externalId, clientId])
   @@index([clientId, syncEnabled])
@@ -522,12 +524,13 @@ model SocialProfile {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  client         Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  connection     PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  linkedAdAccount AdAccount?        @relation("BoostBillingAccount", fields: [linkedAdAccountId], references: [id], onDelete: SetNull)
-  organicPosts   OrganicPost[]
-  boostRules     BoostRule[]
-  adDrafts       AdDraft[]
+  client          Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  connection      PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  linkedAdAccount AdAccount?         @relation("BoostBillingAccount", fields: [linkedAdAccountId], references: [id], onDelete: SetNull)
+  organicPosts    OrganicPost[]
+  boostRules      BoostRule[]
+  adDrafts        AdDraft[]
+  leadForms       LeadForm[]
 
   @@unique([connectionId, externalId])
   @@index([clientId, syncEnabled])
@@ -548,7 +551,7 @@ model OAuthState {
   tokenHash String   @unique @map("token_hash") @db.VarChar(64)
 
   /// Yetkilendirme sonrası dönülecek panel yolu.
-  redirectTo String? @map("redirect_to") @db.VarChar(512)
+  redirectTo      String?  @map("redirect_to") @db.VarChar(512)
   /// Talep edilen scope'lar — callback'te platformun verdikleriyle karşılaştırılır.
   requestedScopes String[] @map("requested_scopes")
 
@@ -584,7 +587,7 @@ model DataDeletionRequest {
   platform Platform
 
   /// Platform tarafındaki kullanıcı kimliği (Meta user_id).
-  externalUserId String @map("external_user_id") @db.VarChar(128)
+  externalUserId   String @map("external_user_id") @db.VarChar(128)
   /// Kullanıcının durumu sorgulayacağı kod. URL'de görünür, tahmin edilemez olmalı.
   confirmationCode String @unique @map("confirmation_code") @db.VarChar(64)
 
@@ -679,20 +682,20 @@ enum SyncJobStatus {
 }
 
 model Campaign {
-  id           String @id @default(uuid()) @db.Uuid
-  adAccountId  String @map("ad_account_id") @db.Uuid
+  id          String   @id @default(uuid()) @db.Uuid
+  adAccountId String   @map("ad_account_id") @db.Uuid
   /// Denormalize — RLS ve hızlı filtre için. Join'siz sorgu maliyeti düşer.
-  clientId     String @map("client_id") @db.Uuid
-  platform     Platform
+  clientId    String   @map("client_id") @db.Uuid
+  platform    Platform
 
   externalId String @map("external_id") @db.VarChar(128)
   name       String @db.VarChar(512)
 
   /// Normalize edilmiş amaç. Platformların ham değerleri `raw` içinde.
-  objective       String? @db.VarChar(60)
+  objective       String?      @db.VarChar(60)
   status          EntityStatus @default(unknown)
   /// Platformun ham durumu — "PAUSED" ile "CAMPAIGN_PAUSED" farkını korur.
-  effectiveStatus String? @map("effective_status") @db.VarChar(60)
+  effectiveStatus String?      @map("effective_status") @db.VarChar(60)
 
   budgetMode         BudgetMode @default(none) @map("budget_mode")
   /// Para MICROS cinsinden. Float ile para tutmak toplama sırasına göre
@@ -703,12 +706,12 @@ model Campaign {
   startTime DateTime? @map("start_time") @db.Timestamptz(6)
   stopTime  DateTime? @map("stop_time") @db.Timestamptz(6)
 
-  raw Json? @db.JsonB
+  raw               Json?     @db.JsonB
   /// Delta senkronizasyonun anahtarı: bundan yenisini çekmek yeter.
   platformUpdatedAt DateTime? @map("platform_updated_at") @db.Timestamptz(6)
   syncedAt          DateTime  @default(now()) @map("synced_at") @db.Timestamptz(6)
   /// Soft delete — platformda silinen kampanyanın geçmiş metrikleri korunur.
-  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -725,10 +728,10 @@ model Campaign {
 
 /// Meta'da "Ad Set", Google'da "Ad Group". Aynı tablo.
 model AdGroup {
-  id          String @id @default(uuid()) @db.Uuid
-  campaignId  String @map("campaign_id") @db.Uuid
-  adAccountId String @map("ad_account_id") @db.Uuid
-  clientId    String @map("client_id") @db.Uuid
+  id          String   @id @default(uuid()) @db.Uuid
+  campaignId  String   @map("campaign_id") @db.Uuid
+  adAccountId String   @map("ad_account_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
   platform    Platform
 
   externalId String @map("external_id") @db.VarChar(128)
@@ -742,7 +745,7 @@ model AdGroup {
   bidAmountMicros    BigInt?    @map("bid_amount_micros")
   optimizationGoal   String?    @map("optimization_goal") @db.VarChar(60)
   /// Hedefleme spec'i — Modül 8 toplu oluşturucuda şablon olarak kullanılacak.
-  targeting Json? @db.JsonB
+  targeting          Json?      @db.JsonB
 
   startTime DateTime? @map("start_time") @db.Timestamptz(6)
   stopTime  DateTime? @map("stop_time") @db.Timestamptz(6)
@@ -766,10 +769,10 @@ model AdGroup {
 }
 
 model Ad {
-  id          String @id @default(uuid()) @db.Uuid
-  adGroupId   String @map("ad_group_id") @db.Uuid
-  adAccountId String @map("ad_account_id") @db.Uuid
-  clientId    String @map("client_id") @db.Uuid
+  id          String   @id @default(uuid()) @db.Uuid
+  adGroupId   String   @map("ad_group_id") @db.Uuid
+  adAccountId String   @map("ad_account_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
   platform    Platform
 
   externalId String @map("external_id") @db.VarChar(128)
@@ -778,8 +781,8 @@ model Ad {
   status          EntityStatus @default(unknown)
   effectiveStatus String?      @map("effective_status") @db.VarChar(60)
 
-  creativeId String? @map("creative_id") @db.Uuid
-  previewUrl String? @map("preview_url") @db.VarChar(1024)
+  creativeId         String? @map("creative_id") @db.Uuid
+  previewUrl         String? @map("preview_url") @db.VarChar(1024)
   /// Reklam reddedildiyse sebepleri — Ads Explorer'da (Modül 4) gösterilecek.
   reviewStatus       String? @map("review_status") @db.VarChar(60)
   disapprovalReasons Json?   @map("disapproval_reasons") @db.JsonB
@@ -803,9 +806,9 @@ model Ad {
 }
 
 model Creative {
-  id          String @id @default(uuid()) @db.Uuid
-  adAccountId String @map("ad_account_id") @db.Uuid
-  clientId    String @map("client_id") @db.Uuid
+  id          String   @id @default(uuid()) @db.Uuid
+  adAccountId String   @map("ad_account_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
   platform    Platform
 
   externalId   String  @map("external_id") @db.VarChar(128)
@@ -849,15 +852,15 @@ model Creative {
 /// SUM(spend)/SUM(conv) ≠ AVG(cpa). Saklanan bir CPA, gruplandığında yanlış
 /// sayı üretir ve o yanlış sayıyla kural motoru bütçe kapatır.
 model InsightsDaily {
-  clientId    String @map("client_id") @db.Uuid
-  adAccountId String @map("ad_account_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  adAccountId String   @map("ad_account_id") @db.Uuid
   platform    Platform
 
-  entityLevel EntityLevel @map("entity_level")
+  entityLevel      EntityLevel @map("entity_level")
   /// İlgili tablonun id'si (campaign/ad_group/ad) veya ad_account id'si.
-  entityId String @map("entity_id") @db.Uuid
+  entityId         String      @map("entity_id") @db.Uuid
   /// Join'siz sorgu için — Ads Explorer'da platform kimliğiyle arama yapılıyor.
-  entityExternalId String @map("entity_external_id") @db.VarChar(128)
+  entityExternalId String      @map("entity_external_id") @db.VarChar(128)
 
   /// HESABIN KENDİ zaman diliminde. "Bugün"ün tanımı buna bağlı.
   date DateTime @db.Date
@@ -868,16 +871,16 @@ model InsightsDaily {
   breakdownKey String @default("") @map("breakdown_key") @db.VarChar(255)
   breakdown    Json?  @db.JsonB
 
-  impressions Int    @default(0)
-  clicks      Int    @default(0)
+  impressions          Int     @default(0)
+  clicks               Int     @default(0)
   /// Hesabın para biriminde, micros.
-  spendMicros BigInt @default(0) @map("spend_micros")
+  spendMicros          BigInt  @default(0) @map("spend_micros")
   /// Müşterinin rapor para birimine çevrilmiş — fx_rates ile.
   spendMicrosReporting BigInt? @map("spend_micros_reporting")
 
   /// Google kesirli dönüşüm döndürür (0.75 gibi) — integer olamaz.
-  conversions          Decimal @default(0) @db.Decimal(14, 4)
-  conversionValueMicros BigInt @default(0) @map("conversion_value_micros")
+  conversions           Decimal @default(0) @db.Decimal(14, 4)
+  conversionValueMicros BigInt  @default(0) @map("conversion_value_micros")
 
   videoViews  Int      @default(0) @map("video_views")
   engagements Int      @default(0)
@@ -885,10 +888,10 @@ model InsightsDaily {
   frequency   Decimal? @db.Decimal(10, 4)
 
   /// Platforma özgü tüm alanlar. Yeni metrik desteği migration gerektirmiyor.
-  rawMetrics Json?  @map("raw_metrics") @db.JsonB
-  currency   String @db.Char(3)
+  rawMetrics Json?    @map("raw_metrics") @db.JsonB
+  currency   String   @db.Char(3)
   /// Bayatlık göstergesi — kural motoru bunu okuyup eski veriyle aksiyon almayı reddediyor.
-  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+  fetchedAt  DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
 
   @@id([date, entityLevel, entityId, breakdownKey])
   @@index([clientId, date(sort: Desc), entityLevel])
@@ -927,9 +930,9 @@ model ReportTemplate {
   /// null = organizasyon varsayılanı.
   clientId String? @map("client_id") @db.Uuid
 
-  name String @db.VarChar(160)
+  name        String  @db.VarChar(160)
   /// Kapakta görünen başlık. Boşsa "Dijital Pazarlama Raporu".
-  title String? @db.VarChar(200)
+  title       String? @db.VarChar(200)
   /// Kapanış sayfası metni.
   closingText String? @map("closing_text") @db.Text
 
@@ -1010,9 +1013,9 @@ model ReportShare {
 /// hem şirket toplamında bütçe tanımlamak istiyor. İkisi birlikte var olabilir:
 /// hesap bütçeleri tek tek izlenir, müşteri bütçesi şemsiye olarak.
 model MonthlyBudget {
-  id       String @id @default(uuid()) @db.Uuid
-  orgId    String @map("org_id") @db.Uuid
-  clientId String @map("client_id") @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  orgId       String  @map("org_id") @db.Uuid
+  clientId    String  @map("client_id") @db.Uuid
   /// null = müşteri geneli.
   adAccountId String? @map("ad_account_id") @db.Uuid
 
@@ -1066,9 +1069,9 @@ model MonthlyBudget {
 /// yetkisi istiyor. Sebep asimetri: yanlış rapor düzeltilebilir, yanlış
 /// durdurulan kampanyanın kaçırdığı satış geri gelmez.
 model Rule {
-  id       String  @id @default(uuid()) @db.Uuid
-  orgId    String  @map("org_id") @db.Uuid
-  clientId String  @map("client_id") @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  orgId       String  @map("org_id") @db.Uuid
+  clientId    String  @map("client_id") @db.Uuid
   /// null = müşterinin TÜM reklam hesapları.
   adAccountId String? @map("ad_account_id") @db.Uuid
 
@@ -1081,21 +1084,21 @@ model Rule {
   /// Koşul dizisi. JSONB çünkü koşul SAYISI ve şekli değişken; kolonlara
   /// açmak 5 koşul için 20 kolon demek olurdu ve 6. koşul migration
   /// gerektirirdi. Doğrulama Zod ile sınırda yapılıyor.
-  conditions Json @db.JsonB
+  conditions Json   @db.JsonB
   /// 'and' | 'or'. İç içe gruplama yok — okunamayan kural canlıya alınmamalı.
   combinator String @default("and") @db.VarChar(3)
 
   /// { type: 'pause' } | { type: 'adjust_budget', percent: 20, maxBudget: … }
   action Json @db.JsonB
   /// Minimum örneklem eşikleri — gürültüyle tetiklenmeyi engelliyor.
-  guard Json @db.JsonB
+  guard  Json @db.JsonB
 
   /// Aynı varlığa iki aksiyon arasındaki bekleme. Salınımı engelliyor.
-  cooldownMinutes Int @default(1440) @map("cooldown_minutes")
+  cooldownMinutes  Int @default(1440) @map("cooldown_minutes")
   /// Tek çalıştırmada dokunulacak azami varlık — kazaya karşı son emniyet.
   maxActionsPerRun Int @default(20) @map("max_actions_per_run")
   /// Veri bu kadar saatten eskiyse hiçbir aksiyon alınmıyor.
-  maxDataAgeHours Int @default(36) @map("max_data_age_hours")
+  maxDataAgeHours  Int @default(36) @map("max_data_age_hours")
 
   enabled Boolean @default(true)
   /// Canlıya geçiş AYRI yetki. Varsayılan prova.
@@ -1108,9 +1111,9 @@ model Rule {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  adAccount    AdAccount?   @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount    AdAccount?      @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
   runs         RuleRun[]
   actions      RuleActionLog[]
 
@@ -1210,11 +1213,11 @@ model OrganicPost {
   clientId        String @map("client_id") @db.Uuid
   socialProfileId String @map("social_profile_id") @db.Uuid
 
-  externalId String  @map("external_id") @db.VarChar(128)
+  externalId   String  @map("external_id") @db.VarChar(128)
   /// photo | video | carousel | reel | text | link
-  mediaType  String  @map("media_type") @db.VarChar(20)
-  message    String? @db.VarChar(3000)
-  permalink  String? @db.VarChar(1024)
+  mediaType    String  @map("media_type") @db.VarChar(20)
+  message      String? @db.VarChar(3000)
+  permalink    String? @db.VarChar(1024)
   thumbnailUrl String? @map("thumbnail_url") @db.VarChar(1024)
 
   publishedAt DateTime @map("published_at") @db.Timestamptz(6)
@@ -1263,9 +1266,9 @@ model OrganicPost {
 /// `boost.approve` yetkisi olan biri onaylayana kadar bekliyor. `autoApprove`
 /// açıkça açılabiliyor ama varsayılan kapalı.
 model BoostRule {
-  id       String  @id @default(uuid()) @db.Uuid
-  orgId    String  @map("org_id") @db.Uuid
-  clientId String  @map("client_id") @db.Uuid
+  id              String  @id @default(uuid()) @db.Uuid
+  orgId           String  @map("org_id") @db.Uuid
+  clientId        String  @map("client_id") @db.Uuid
   /// null = müşterinin tüm sosyal profilleri.
   socialProfileId String? @map("social_profile_id") @db.Uuid
 
@@ -1332,9 +1335,9 @@ model BoostRule {
 /// gönderiyi seçti" ve "neden reddettik" sorularının cevabı; ayrıca aynı
 /// gönderinin tekrar tekrar aday gösterilmesini engelliyor.
 model Boost {
-  id       String  @id @default(uuid()) @db.Uuid
-  orgId    String  @map("org_id") @db.Uuid
-  clientId String  @map("client_id") @db.Uuid
+  id            String  @id @default(uuid()) @db.Uuid
+  orgId         String  @map("org_id") @db.Uuid
+  clientId      String  @map("client_id") @db.Uuid
   /// null = elle oluşturulmuş boost (kural değil kullanıcı seçti).
   boostRuleId   String? @map("boost_rule_id") @db.Uuid
   organicPostId String  @map("organic_post_id") @db.Uuid
@@ -1358,8 +1361,8 @@ model Boost {
 
   error String? @db.VarChar(1000)
 
-  approvedBy String?   @map("approved_by") @db.Uuid
-  approvedAt DateTime? @map("approved_at") @db.Timestamptz(6)
+  approvedBy          String?   @map("approved_by") @db.Uuid
+  approvedAt          DateTime? @map("approved_at") @db.Timestamptz(6)
   createdOnPlatformAt DateTime? @map("created_on_platform_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -1388,9 +1391,9 @@ model Boost {
 /// hangilerinin platformda oluştuğunu satır bazında bilmek gerekiyor.
 /// Diziyi güncellemek, kısmi başarıyı takip edilemez kılardı.
 model BulkBatch {
-  id       String @id @default(uuid()) @db.Uuid
-  orgId    String @map("org_id") @db.Uuid
-  clientId String @map("client_id") @db.Uuid
+  id          String @id @default(uuid()) @db.Uuid
+  orgId       String @map("org_id") @db.Uuid
+  clientId    String @map("client_id") @db.Uuid
   adAccountId String @map("ad_account_id") @db.Uuid
 
   name String @db.VarChar(160)
@@ -1434,7 +1437,7 @@ model BulkItem {
   /// Hata mesajlarında "3. satır" demek için gerekli.
   rowNumber Int @map("row_number")
 
-  name        String  @db.VarChar(300)
+  name         String  @db.VarChar(300)
   /// KOLONLAR PLATFORM SINIRINDAN GENİŞ ve bu bilinçli.
   ///
   /// Sınırı aşan metin REDDEDİLMİYOR, SAKLANIYOR — doğrulayıcı onu
@@ -1442,13 +1445,13 @@ model BulkItem {
   /// Kolonu tam sınırda tutmak, geçersiz satırı hiç kaydedememek demekti:
   /// kullanıcı satır bazında bir uyarı yerine tüm parti için anlaşılmaz bir
   /// veritabanı hatası alırdı.
-  primaryText String? @map("primary_text") @db.VarChar(8000)
-  headline    String? @db.VarChar(2000)
-  description String? @db.VarChar(2000)
-  linkUrl     String? @map("link_url") @db.VarChar(2048)
+  primaryText  String? @map("primary_text") @db.VarChar(8000)
+  headline     String? @db.VarChar(2000)
+  description  String? @db.VarChar(2000)
+  linkUrl      String? @map("link_url") @db.VarChar(2048)
   callToAction String? @map("call_to_action") @db.VarChar(60)
   /// Görsel/video kimliği ya da URL'si. Yükleme AYRI bir adım.
-  mediaRef    String? @map("media_ref") @db.VarChar(1024)
+  mediaRef     String? @map("media_ref") @db.VarChar(1024)
 
   /// Bu satıra özel ayarlar — partinin `defaults` değerlerini eziyor.
   overrides Json? @db.JsonB
@@ -1489,9 +1492,9 @@ model BulkItem {
 /// oluşturucu satır satır hata veriyor ve kısmi başarıyı yönetiyor, burada
 /// ise tek bir sonuç var — yayınlandı ya da yayınlanmadı.
 model AdDraft {
-  id       String @id @default(uuid()) @db.Uuid
-  orgId    String @map("org_id") @db.Uuid
-  clientId String @map("client_id") @db.Uuid
+  id              String @id @default(uuid()) @db.Uuid
+  orgId           String @map("org_id") @db.Uuid
+  clientId        String @map("client_id") @db.Uuid
   adAccountId     String @map("ad_account_id") @db.Uuid
   /// Reklamın yayınlanacağı Facebook sayfası.
   socialProfileId String @map("social_profile_id") @db.Uuid
@@ -1505,7 +1508,7 @@ model AdDraft {
   description String? @db.VarChar(255)
 
   /// website tipi için.
-  linkUrl String? @map("link_url") @db.VarChar(2048)
+  linkUrl        String? @map("link_url") @db.VarChar(2048)
   /// whatsapp tipi için. Boşsa sayfaya bağlı numara kullanılıyor.
   whatsappNumber String? @map("whatsapp_number") @db.VarChar(20)
 
@@ -1530,10 +1533,10 @@ model AdDraft {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid
 
-  organization  Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  adAccount     AdAccount     @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
-  socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount     AdAccount      @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile  @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
   assets        AdDraftAsset[]
 
   @@index([clientId, createdAt(sort: Desc)])
@@ -1594,8 +1597,8 @@ model AdDraftAsset {
 ///   · Meta'da karşılığı YOK. `insights_daily` iki platformu birleştiriyor;
 ///     yalnızca birinde var olan bir seviye o tabloyu asimetrik yapardı.
 model KeywordInsight {
-  clientId    String @map("client_id") @db.Uuid
-  adAccountId String @map("ad_account_id") @db.Uuid
+  clientId    String  @map("client_id") @db.Uuid
+  adAccountId String  @map("ad_account_id") @db.Uuid
   /// Bizim ad group kimliğimiz — yapı senkronizasyonu eşleştiriyor.
   /// Eşleşme bulunamazsa null: anahtar kelime verisini atmak yerine
   /// bağlamsız saklamak daha iyi.
@@ -1611,11 +1614,11 @@ model KeywordInsight {
 
   date DateTime @db.Date
 
-  impressions Int    @default(0)
-  clicks      Int    @default(0)
-  spendMicros BigInt @default(0) @map("spend_micros")
-  conversions Decimal @default(0) @db.Decimal(14, 4)
-  conversionValueMicros BigInt @default(0) @map("conversion_value_micros")
+  impressions           Int     @default(0)
+  clicks                Int     @default(0)
+  spendMicros           BigInt  @default(0) @map("spend_micros")
+  conversions           Decimal @default(0) @db.Decimal(14, 4)
+  conversionValueMicros BigInt  @default(0) @map("conversion_value_micros")
 
   currency  String   @db.Char(3)
   fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
@@ -1643,14 +1646,14 @@ model SyncJob {
   adAccountId     String? @map("ad_account_id") @db.Uuid
   socialProfileId String? @map("social_profile_id") @db.Uuid
 
-  jobType     SyncJobType   @map("job_type")
-  entityLevel EntityLevel?  @map("entity_level")
-  dateFrom    DateTime?     @map("date_from") @db.Date
-  dateTo      DateTime?     @map("date_to") @db.Date
+  jobType     SyncJobType  @map("job_type")
+  entityLevel EntityLevel? @map("entity_level")
+  dateFrom    DateTime?    @map("date_from") @db.Date
+  dateTo      DateTime?    @map("date_to") @db.Date
 
-  status SyncJobStatus @default(queued)
+  status   SyncJobStatus @default(queued)
   /// 1 = kullanıcı tetiklemeli (interaktif) … 10 = backfill. Düşük sayı önce.
-  priority Int @default(5)
+  priority Int           @default(5)
 
   attempts    Int @default(0)
   maxAttempts Int @default(5) @map("max_attempts")
@@ -1661,7 +1664,7 @@ model SyncJob {
   /// Meta async insights job kimliği — worker yeniden başlasa bile polling sürer.
   platformJobId String? @map("platform_job_id") @db.VarChar(255)
   /// BullMQ iş kimliği — kuyruktaki işle veritabanı kaydını eşleştirir.
-  queueJobId String? @map("queue_job_id") @db.VarChar(255)
+  queueJobId    String? @map("queue_job_id") @db.VarChar(255)
 
   errorCode    String? @map("error_code") @db.VarChar(80)
   errorMessage String? @map("error_message") @db.VarChar(1000)
@@ -1693,11 +1696,11 @@ model ApiUsageLog {
   endpoint String @db.VarChar(255)
 
   /// Meta BUC yüzdeleri.
-  callCountPct Int? @map("call_count_pct")
-  cpuTimePct   Int? @map("cpu_time_pct")
-  totalTimePct Int? @map("total_time_pct")
+  callCountPct   Int? @map("call_count_pct")
+  cpuTimePct     Int? @map("cpu_time_pct")
+  totalTimePct   Int? @map("total_time_pct")
   /// Üçünün en yükseği — adaptif eşikler bunu okuyor.
-  usagePercent Int? @map("usage_percent")
+  usagePercent   Int? @map("usage_percent")
   /// Google: bu istekte tüketilen operasyon sayısı.
   operationsUsed Int? @map("operations_used")
 
@@ -1710,4 +1713,69 @@ model ApiUsageLog {
   @@index([adAccountId, createdAt(sort: Desc)])
   @@index([platform, createdAt(sort: Desc)])
   @@map("api_usage_log")
+}
+
+/// Meta Anlık Form (Instant Form) — Kütüphane > Formlar.
+///
+/// YAYINLANMIŞ FORM DEĞİŞTİRİLEMİYOR. Meta güncellemeyi kabul etmiyor çünkü
+/// kullanıcılar belirli bir onay metnini kabul ederek veri verdi. "Düzenleme"
+/// bu yüzden YENİ BİR SATIR üretiyor; eski satır topladığı bilgilerle duruyor.
+model LeadForm {
+  id              String @id @default(uuid()) @db.Uuid
+  orgId           String @map("org_id") @db.Uuid
+  clientId        String @map("client_id") @db.Uuid
+  /// Form SAYFAYA ait, reklam hesabına değil. Meta'da `leadgen_forms` uç
+  /// noktası sayfanın altında yaşıyor ve sayfa token'ı gerektiriyor.
+  socialProfileId String @map("social_profile_id") @db.Uuid
+
+  /// Yalnızca panelde görünüyor; Meta'ya gitmiyor, müşteri görmüyor.
+  name     String @db.VarChar(200)
+  /// more_volume | higher_intent | rich_form
+  formType String @default("more_volume") @map("form_type") @db.VarChar(16)
+
+  headline String? @db.VarChar(60)
+  intro    String? @db.VarChar(1000)
+
+  prefillQuestions Json @map("prefill_questions") @db.JsonB
+  customQuestions  Json @default("[]") @map("custom_questions") @db.JsonB
+
+  privacyPolicyUrl      String @map("privacy_policy_url") @db.VarChar(2048)
+  privacyPolicyLinkText String @default("Gizlilik Politikası") @map("privacy_policy_link_text") @db.VarChar(80)
+  /// KVKK açık rıza kutuları. Meta'nın `custom_disclaimer` yapısına çevriliyor.
+  consentBoxes          Json   @default("[]") @map("consent_boxes") @db.JsonB
+
+  thankYouHeadline String  @default("Teşekkürler!") @map("thank_you_headline") @db.VarChar(60)
+  thankYouBody     String  @default("") @map("thank_you_body") @db.VarChar(300)
+  thankYouCtaText  String  @default("") @map("thank_you_cta_text") @db.VarChar(40)
+  thankYouCtaUrl   String? @map("thank_you_cta_url") @db.VarChar(2048)
+
+  /// draft | published | superseded | failed
+  status         String  @default("draft") @db.VarChar(16)
+  externalFormId String? @map("external_form_id") @db.VarChar(128)
+
+  version        Int     @default(1)
+  /// Zincirin ilk halkası. İLK SÜRÜMDE KENDİ KİMLİĞİ — NULL değil.
+  rootId         String  @map("root_id") @db.Uuid
+  /// Bu formu geçersiz kılan yeni sürüm. İleriye bakıyor.
+  supersededById String? @map("superseded_by_id") @db.Uuid
+
+  error       String?   @db.VarChar(2000)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization  Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+
+  root         LeadForm   @relation("LeadFormRoot", fields: [rootId], references: [id], onDelete: Cascade)
+  versions     LeadForm[] @relation("LeadFormRoot")
+  supersededBy LeadForm?  @relation("LeadFormSupersede", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes   LeadForm[] @relation("LeadFormSupersede")
+
+  @@index([clientId, createdAt(sort: Desc)])
+  @@index([rootId, version])
+  @@map("lead_forms")
 }

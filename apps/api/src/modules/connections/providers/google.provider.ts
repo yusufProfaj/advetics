@@ -1053,6 +1053,21 @@ export class GoogleProvider implements IAdPlatformProvider {
    * ALAN ADLARI SÜRÜME BAĞLI. Bir alan reddedilirse sondayla doğrula:
    *   google-check -- --customer <id> --field ad_group_criterion.keyword.text
    */
+  /**
+   * Google'da Meta anlık formunun karşılığı YOK.
+   *
+   * Lead Form uzantısı ayrı bir kavram, ayrı bir uç nokta ve farklı bir veri
+   * modeli. Sessizce boş kimlik dönmek, kullanıcının kütüphanede "yayında"
+   * görünen ama hiçbir yerde var olmayan bir formu olması demek olurdu.
+   */
+  async createLeadForm(): Promise<string> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      "Google Ads'te anlık form yok — bu özellik yalnızca Meta'da çalışıyor.",
+    );
+  }
+
   async fetchKeywords(
     ctx: FetchContext,
     request: { dateFrom: string; dateTo: string },

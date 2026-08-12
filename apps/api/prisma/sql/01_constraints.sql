@@ -453,3 +453,73 @@ ALTER TABLE keyword_insights ADD CONSTRAINT keyword_insights_match_chk
 ALTER TABLE keyword_insights DROP CONSTRAINT IF EXISTS keyword_insights_currency_chk;
 ALTER TABLE keyword_insights ADD CONSTRAINT keyword_insights_currency_chk
   CHECK (currency ~ '^[A-Z]{3}$');
+
+-- =============================================================================
+-- FORMLAR KÜTÜPHANESİ — lead_forms
+-- =============================================================================
+
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_type_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_type_chk
+  CHECK (form_type IN ('more_volume', 'higher_intent', 'rich_form'));
+
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_status_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_status_chk
+  CHECK (status IN ('draft', 'published', 'superseded', 'failed'));
+
+-- SORUSUZ FORM OLMAZ.
+--
+-- Meta soru içermeyen bir formu kabul etmiyor ama hata yayın anında geliyor —
+-- kullanıcı her şeyi doldurmuş ve bekliyorken. Burada durduruyoruz.
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_questions_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_questions_chk
+  CHECK (jsonb_typeof(prefill_questions) = 'array'
+         AND jsonb_array_length(prefill_questions) >= 1);
+
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_custom_questions_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_custom_questions_chk
+  CHECK (jsonb_typeof(custom_questions) = 'array'
+         AND jsonb_array_length(custom_questions) <= 5);
+
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_consent_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_consent_chk
+  CHECK (jsonb_typeof(consent_boxes) = 'array'
+         AND jsonb_array_length(consent_boxes) <= 4);
+
+-- YAYINLANMIŞ FORMUN META KİMLİĞİ OLMAK ZORUNDA.
+--
+-- Kimliksiz "yayında" satırı, arayüzde yayında görünen ama hiçbir reklamda
+-- kullanılamayan bir form demek: `leadgen_forms` çağrısı başarılı olmuş ama
+-- yanıt kaydedilememiş. Sessiz ve bulunması zor bir durum.
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_published_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_published_chk
+  CHECK (status <> 'published' OR (external_form_id IS NOT NULL AND published_at IS NOT NULL));
+
+-- ESKİ SÜRÜM YENİSİNİ İŞARET ETMEK ZORUNDA (ve tersi).
+--
+-- `superseded` durumu ile `superseded_by_id` birlikte anlam taşıyor. Biri
+-- olmadan diğeri, arayüzün "bu formun yenisi var" uyarısını gösterip yeni
+-- sürüme bağlantı verememesi demek.
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_supersede_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_supersede_chk
+  CHECK ((status = 'superseded') = (superseded_by_id IS NOT NULL));
+
+-- Bir form kendi kendisini geçersiz kılamaz.
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_self_supersede_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_self_supersede_chk
+  CHECK (superseded_by_id IS NULL OR superseded_by_id <> id);
+
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_version_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_version_chk
+  CHECK (version >= 1);
+
+-- İLK SÜRÜMÜN KÖKÜ KENDİSİ.
+--
+-- `root_id = id` kuralı olmadan sürüm 1 için kök NULL olurdu ve "bu formun tüm
+-- sürümleri" sorgusu iki dala ayrılırdı (COALESCE(root_id, id)).
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_root_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_root_chk
+  CHECK (version > 1 OR root_id = id);
+
+ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_error_chk;
+ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_error_chk
+  CHECK (status <> 'failed' OR error IS NOT NULL);

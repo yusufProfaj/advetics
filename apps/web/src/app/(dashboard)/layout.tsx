@@ -74,6 +74,7 @@ const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
     // 2 BASE — henüz tamamen boş, ama yol haritası görünür olsun.
     title: 'Kütüphane',
     items: [
+      { href: '/kutuphane/formlar', label: 'Formlar', icon: 'forms', module: 4, ready: true },
       { href: '/kutuphane/gorseller', label: 'Görsel Arşivi', icon: 'assets', module: 2 },
       { href: '/kutuphane/kitleler', label: 'Kitleler', icon: 'audience', module: 2 },
       { href: '/kutuphane/bilgi', label: 'Bilgi Bankası', icon: 'knowledge', module: 2 },

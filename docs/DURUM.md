@@ -13,12 +13,12 @@
 
 | | |
 |---|---|
-| Veritabanı tablosu | **35** |
-| Migration | **12** |
-| API testi | **528** |
+| Veritabanı tablosu | **37** |
+| Migration | **16** |
+| API testi | **563** |
 | Web testi | **20** |
-| Panel sayfası | **9** |
-| API controller | **16** |
+| Panel sayfası | **10** |
+| API controller | **17** |
 
 **İki cümlelik özet:**
 
@@ -57,9 +57,25 @@ Senin paylaştığın 7 parçalı mimariye göre. ✅ tamam · 🟡 kısmi · �
 | Kitle kütüphanesi | ❌ | Meta'da `custom_audiences` çekilmiyor |
 | Anahtar kelime kütüphanesi | ❌ | Performans verisi geliyor; kütüphane (kayıtlı liste) yok |
 | Görsel/video varlık arşivi | ❌ | Toplu oluşturucu görsel kimliği elle alıyor |
+| **Form kütüphanesi (Anlık Form)** | 🟡 | `/kutuphane/formlar` — sürümleme çalışıyor, Meta yayını doğrulanmadı |
 
-**Bu bölüm tamamen boş.** Modül 8'in (toplu oluşturucu) gerçek verimi buna
-bağlı: şu an her satıra `image_hash` elle giriliyor.
+**Bu bölümün ilk parçası doldu.** Formlar kütüphanesi 12 Ağustos'ta yazıldı;
+geri kalanı (bilgi bankası, kitle, varlık arşivi) hâlâ boş. Modül 8'in (toplu
+oluşturucu) gerçek verimi varlık arşivine bağlı: şu an her satıra `image_hash`
+elle giriliyor.
+
+**Formlar kütüphanesindeki tasarım problemi ve çözümü:** Meta'da yayınlanmış
+form DEĞİŞTİRİLEMİYOR — kullanıcı belirli bir onay metnini kabul ederek veri
+verdi ve o metnin sonradan değişmesi onayı geçersiz kılar. "Düzenle" bu yüzden
+yeni bir satır (yeni sürüm) üretiyor; `root_id` zinciri, `superseded_by_id`
+ileri bağlantıyı tutuyor ve kütüphane yalnızca zincirin son halkasını
+listeliyor. Form ADI bunun dışında: yalnızca panelde görünüyor, Meta'ya
+gitmiyor, bu yüzden değişmesi yeni sürüm gerektirmiyor — aksi hâlde yazım
+hatası düzeltmek Meta'da çöp form biriktirirdi.
+
+**Arayüzün açıkça söylediği ve kolay gözden kaçan şey:** yeni sürüm YAYINDAKİ
+REKLAMLARI DEĞİŞTİRMİYOR. Meta çalışan bir reklamın kreatifindeki form
+kimliğini değiştirmiyor; yeni formu kullanmak için yeni bir reklam gerekiyor.
 
 ### 3 — CENTRAL (All-in-One Panel) 🟡
 
@@ -88,6 +104,7 @@ gösteriliyor, ama kimseye **bildirim gitmiyor**.
 | Auto-Boost (organik → reklam) | 🟡 | `/auto-boost` — oluşturma yolu doğrulanmadı |
 | Organik gönderi senkronizasyonu | ✅ | `queue/organic-sync.service.ts` |
 | Görsel/video yükleme | 🟡 | Reklam Oluşturucu'da var; kalıcı arşiv (BASE) hâlâ yok |
+| **Anlık form oluşturucu** | 🟡 | `/kutuphane/formlar` — 5 bölüm + canlı önizleme; yayın doğrulanmadı |
 
 ### 5 — MANAGE (Bütçe, Kill-Switch, Teklif) 🟡
 
@@ -209,6 +226,7 @@ Bunlar **yazıldı, test edildi, ama canlı Meta API'sinde bir kez bile
 | Boost oluşturma | `meta.provider.ts` → `createBoost` | **Yüksek** — 3 varlık, geri alma yolu var ama denenmedi |
 | Toplu reklam oluşturma | `meta.provider.ts` → `createAd` vb. | **Yüksek** — kısmi başarı yönetimi denenmedi |
 | Reklam Oluşturucu yayını | `meta.provider.ts` → `publishDraft` | **Yüksek** — 4 varlık + anlık form; `asset_feed_spec` yerleşim kuralları hiç denenmedi |
+| **Kütüphane formu yayını** | `meta.provider.ts` → `createLeadForm` | **Yüksek** — geri alınamaz; `legal_content`, `context_card`, `thank_you_page` eşlemeleri belgeden çıkarıldı, gerçek yanıt görülmedi. `is_optimized_for_quality` eşlemesi (= "daha nitelikli") de doğrulanmadı |
 
 Google yazma yolu **hiç yazılmadı** ve bu artık bilinçli bir sıra kararı:
 okuma tarafı yeni doğrulandı, yazma bir sonraki adım. Meta'daki üç turluk

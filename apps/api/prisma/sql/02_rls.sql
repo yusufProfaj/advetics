@@ -109,7 +109,9 @@ DECLARE
     -- Anahtar kelime performansı
     'keyword_insights',
     -- Modül 8
-    'bulk_batches', 'bulk_items'
+    'bulk_batches', 'bulk_items',
+    -- Formlar kütüphanesi
+    'lead_forms'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -874,3 +876,32 @@ BEGIN
   END IF;
 END
 $$;
+
+-- =============================================================================
+-- FORMLAR KÜTÜPHANESİ
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- lead_forms
+--
+-- Standart kiracı deseni.
+--
+-- DELETE POLİTİKASI VAR ama servis katmanı yalnızca TASLAK formları siliyor.
+-- Yayınlanmış bir formu veritabanından silmek, Meta'da yaşamaya devam eden ve
+-- hâlâ bilgi toplayan bir formu kayıtlarımızdan düşürmek olurdu — gelen
+-- lead'lerin hangi forma ait olduğu bir daha bulunamazdı. Kuralı RLS'e değil
+-- servise koyduk çünkü RLS'in "durum" bilgisiyle karar vermesi, iş kuralını
+-- iki yere yaymak demek.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_lead_forms_select ON lead_forms
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_lead_forms_insert ON lead_forms
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_lead_forms_update ON lead_forms
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_lead_forms_delete ON lead_forms
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));

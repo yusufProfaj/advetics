@@ -22,6 +22,7 @@ import {
   type DiscoveredKeywordRow,
   type DiscoveredOrganicPost,
   type PlatformActionRequest,
+  type CreateLeadFormRequest,
   type PublishDraftRequest,
   type PublishDraftResult,
   type PlatformActionResult,
@@ -1371,7 +1372,7 @@ export class MetaProvider implements IAdPlatformProvider {
     try {
       let leadFormId: string | undefined;
       if (req.spec.destinationType === 'ON_AD') {
-        leadFormId = await this.createLeadForm(ctx, req);
+        leadFormId = await this.createEmbeddedLeadForm(ctx, req);
         // Form SAYFAYA ait, reklam hesabına değil; geri alma listesine
         // eklenmiyor çünkü silinmesi sayfa token'ı gerektiriyor ve boş bir
         // form zararsız.
@@ -1458,7 +1459,10 @@ export class MetaProvider implements IAdPlatformProvider {
    *
    * Form SAYFAYA ait olduğu için sayfa üzerinden oluşturuluyor.
    */
-  private async createLeadForm(ctx: FetchContext, req: PublishDraftRequest): Promise<string> {
+  private async createEmbeddedLeadForm(
+    ctx: FetchContext,
+    req: PublishDraftRequest,
+  ): Promise<string> {
     const form = await this.graphPost<{ id: string }>(
       ctx,
       `${req.pageExternalId}/leadgen_forms`,
@@ -1481,6 +1485,126 @@ export class MetaProvider implements IAdPlatformProvider {
     return form.id;
   }
 
+
+  // ---------------------------------------------------------------------------
+  // FORMLAR KÜTÜPHANESİ
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Kütüphanedeki formu Meta'da oluşturur.
+   *
+   * `publishDraft` içindeki gömülü form oluşturmadan AYRI TUTULDU. Orada form
+   * reklamın bir parçası, alanları sabit ve ömrü o reklama bağlı; burada form
+   * başlı başına bir varlık, birden çok reklamda kullanılabiliyor ve içeriğini
+   * kullanıcı belirliyor. İkisini tek metotta birleştirmek, basit akıştaki
+   * "hiçbir karar verme" sözünü bozardı.
+   *
+   * GERİ ALINAMAZ. Meta oluşan formu güncellemiyor; içerik değişikliği yeni
+   * form demek. Çağıran bunu kullanıcıya söylemeden yayınlamamalı.
+   */
+  async createLeadForm(ctx: FetchContext, req: CreateLeadFormRequest): Promise<string> {
+    const fields: Record<string, string> = {
+      name: req.name,
+      // Gizlilik politikası ZORUNLU — Meta formu onsuz kabul etmiyor.
+      privacy_policy: JSON.stringify({
+        url: req.privacyPolicyUrl,
+        link_text: req.privacyPolicyLinkText,
+      }),
+      questions: JSON.stringify(
+        req.questions.map((q) =>
+          q.type === 'CUSTOM'
+            ? {
+                type: 'CUSTOM',
+                label: (q as { label: string }).label,
+                ...((q as { options?: string[] }).options?.length
+                  ? {
+                      options: (q as { options: string[] }).options.map((o) => ({
+                        value: o,
+                        key: o,
+                      })),
+                    }
+                  : {}),
+              }
+            : { type: q.type },
+        ),
+      ),
+    };
+
+    /**
+     * `higher_intent` AYRI BİR ALAN DEĞİL.
+     *
+     * Meta'nın arayüzündeki "daha nitelikli" seçeneği API'de
+     * `is_optimized_for_quality` bayrağına karşılık geliyor; form tipi diye
+     * bir alan yok. Kendi enum'umuzu tutup burada çeviriyoruz.
+     */
+    if (req.formType === 'higher_intent') {
+      fields.is_optimized_for_quality = 'true';
+    }
+
+    if (req.headline || req.intro) {
+      fields.context_card = JSON.stringify({
+        title: req.headline ?? req.name,
+        content: req.intro ? [req.intro] : [],
+        style: req.formType === 'rich_form' ? 'PARAGRAPH_STYLE' : 'LIST_STYLE',
+        button_text: 'Devam',
+      });
+    }
+
+    /**
+     * KVKK onay kutuları `custom_disclaimer` altında gidiyor.
+     *
+     * `checkbox: true` olan her satır kullanıcıya ayrı bir onay kutusu
+     * gösteriyor; `is_required` işaretlenmişse form o kutu olmadan
+     * gönderilemiyor. Türkiye'de açık rıza bunu gerektiriyor — gizlilik
+     * politikası linki tek başına yeterli sayılmıyor.
+     */
+    if (req.consentBoxes.length > 0) {
+      fields.legal_content = JSON.stringify({
+        custom_disclaimer: {
+          title: 'Onaylar',
+          body: {
+            text: '',
+            url_entities: [],
+          },
+          checkboxes: req.consentBoxes.map((c, i) => ({
+            key: `onay_${i + 1}`,
+            text: c.text,
+            is_required: c.required,
+          })),
+        },
+      });
+    }
+
+    fields.thank_you_page = JSON.stringify({
+      title: req.thankYouHeadline,
+      body: req.thankYouBody,
+      button_type: req.thankYouCtaUrl ? 'VIEW_WEBSITE' : 'NONE',
+      ...(req.thankYouCtaUrl
+        ? { website_url: req.thankYouCtaUrl, button_text: req.thankYouCtaText }
+        : {}),
+    });
+
+    // Form SAYFA TOKEN'IYLA oluşturuluyor.
+    //
+    // `leadgen_forms` sayfanın altında yaşıyor. Kullanıcı token'ıyla çağrı,
+    // izinler doğru olsa bile "(#200) izin gerekiyor" ile dönüyor ve mesaj
+    // hangi token'ın eksik olduğunu söylemiyor — saatler yiyen bir hata.
+    const res = await platformFetch<{ id: string }>(
+      'meta',
+      `${this.graph}/${req.pageExternalId}/leadgen_forms`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${req.pageAccessToken}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams(fields).toString(),
+      },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+    return res.data.id;
+  }
 
   /**
    * Meta'da anahtar kelime YOK.

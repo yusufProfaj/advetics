@@ -469,6 +469,38 @@ export interface CreateAdResult {
  * İkisini tek tipte birleştirmek, yarısı opsiyonel bir alan kümesi üretirdi
  * ve hangi alanın hangi akışta zorunlu olduğu tipten okunamaz olurdu.
  */
+/**
+ * Kütüphaneden Meta'ya form yayınlama isteği (Formlar kütüphanesi).
+ *
+ * `publishDraft` içindeki gömülü form oluşturmadan AYRI: orada form reklamın
+ * bir parçası ve alanları sabit; burada form başlı başına bir varlık,
+ * yeniden kullanılabiliyor ve alanları kullanıcı belirliyor.
+ */
+export interface CreateLeadFormRequest {
+  pageExternalId: string;
+  /**
+   * SAYFA TOKEN'I — kullanıcı token'ı DEĞİL.
+   *
+   * `leadgen_forms` uç noktası sayfanın altında yaşıyor ve sayfa token'ı
+   * istiyor. Kullanıcı token'ıyla çağrı, izinler doğru olsa bile
+   * "(#200) izin gerekiyor" ile dönüyor ve mesaj hangi token'ın eksik
+   * olduğunu söylemiyor.
+   */
+  pageAccessToken: string;
+  name: string;
+  formType: string;
+  headline?: string;
+  intro?: string;
+  questions: Array<{ type: string } | { type: 'CUSTOM'; label: string; options?: string[] }>;
+  privacyPolicyUrl: string;
+  privacyPolicyLinkText: string;
+  consentBoxes: Array<{ text: string; required: boolean }>;
+  thankYouHeadline: string;
+  thankYouBody: string;
+  thankYouCtaText: string;
+  thankYouCtaUrl?: string;
+}
+
 export interface PublishDraftRequest {
   adAccountExternalId: string;
   pageExternalId: string;
@@ -685,6 +717,15 @@ export interface IAdPlatformProvider {
    * temizlemek zorunda kalıyor.
    */
   publishDraft(ctx: FetchContext, request: PublishDraftRequest): Promise<PublishDraftResult>;
+
+  /**
+   * Kütüphanedeki formu Meta'da oluşturur (Formlar kütüphanesi).
+   *
+   * DÖNÜŞÜ OLMAYAN BİR İŞLEM. Meta'da oluşan form GÜNCELLENEMİYOR; içeriği
+   * değiştirmek yeni bir form oluşturmayı gerektiriyor. Çağıran bunu
+   * kullanıcıya söylemeden yayınlamamalı.
+   */
+  createLeadForm(ctx: FetchContext, request: CreateLeadFormRequest): Promise<string>;
 
   /**
    * Anahtar kelime performansı — yalnızca Google.
