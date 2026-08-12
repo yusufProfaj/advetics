@@ -118,6 +118,16 @@ model User {
   /// TOTP secret — AES-256-GCM ile şifreli. (MFA Modül 1.5'te aktifleşir.)
   mfaSecretEnc Bytes?     @map("mfa_secret_enc")
   mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
+  /// İLK GİRİŞTE PAROLA DEĞİŞTİRME ZORUNLU MU.
+  ///
+  /// Seed ile ya da yönetici tarafından kurulan parolalar geçici sayılıyor:
+  /// o parola en az bir kez kurulum sırasında bir insanın gözünden geçiyor
+  /// (kurulum notu, sohbet, e-posta) ve kalıcı olmamalı.
+  ///
+  /// Kullanıcı DEĞİŞTİRMEDEN paneli kullanabiliyor ama her ekranda uyarı
+  /// görüyor. Girişi tamamen bloklamak, kendi parolasını değiştirmek için
+  /// giriş yapması gereken bir kullanıcıyı kilitler.
+  mustChangePassword Boolean @default(false) @map("must_change_password")
   status       UserStatus @default(invited)
   lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz(6)
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
