@@ -26,6 +26,14 @@ export const JOB_PRIORITY = {
   insights_daily: 5,
   insights_backfill: 7,
   organic_posts: 7,
+  /**
+   * Potansiyel müşteri çekme — SENKRONİZASYONUN ÖNÜNDE.
+   *
+   * Bir kişi az önce bilgilerini bıraktı ve ajans onu ne kadar erken ararsa
+   * dönüşüm o kadar yüksek. Dünün metriklerini beklemek, canlı bir müşteriyi
+   * bekletmek demek.
+   */
+  lead_fetch: 3,
   insights_breakdown: 8,
   initial_backfill: 10,
 } as const;
@@ -55,6 +63,15 @@ export interface SyncJobPayload {
    */
   dateFrom?: string;
   dateTo?: string;
+  /**
+   * Meta'nın bildirdiği potansiyel müşteri kimliği (`lead_fetch`).
+   *
+   * Webhook yalnızca bu kimliği veriyor; alan değerleri ayrı bir çağrıda
+   * sayfa token'ıyla çekiliyor.
+   */
+  externalLeadId?: string;
+  /** Formun Meta kimliği (`leads_reconcile`). */
+  externalFormId?: string;
   /** Kullanıcı tetiklemeli mi — kota katmanı buna göre yükseliyor. */
   interactive?: boolean;
   /**
@@ -95,6 +112,12 @@ export function layerForJob(payload: SyncJobPayload): keyof typeof JOB_PRIORITY 
     // olsa bile geçmeli. Modül 5 aksiyonlarıyla aynı öncelikli kova.
     case 'boosts_evaluate':
       return 'rule_action';
+    case 'lead_fetch':
+      return 'lead_fetch';
+    case 'leads_reconcile':
+      // Tarama bir YEDEK yol: webhook çalışıyorsa hiçbir şey bulmuyor.
+      // Canlı kaydın önüne geçmemeli.
+      return 'organic_posts';
     default:
       return 'insights_daily';
   }
@@ -112,6 +135,8 @@ export function buildJobId(p: {
   adAccountId?: string;
   socialProfileId?: string;
   ruleId?: string;
+  externalLeadId?: string;
+  externalFormId?: string;
   dateFrom?: string;
   dateTo?: string;
   entityLevel?: EntityLevel;
@@ -127,7 +152,12 @@ export function buildJobId(p: {
   // Muafiyete yaslanmak kırılgan: parça sayısı değiştiği anda geri döner.
   return [
     p.jobType,
-    p.adAccountId ?? p.socialProfileId ?? p.ruleId ?? 'na',
+    // LEAD KİMLİĞİ AYIRICI OLARAK EN ÖNCE.
+    //
+    // Aynı sayfadan saniyeler içinde on kayıt gelebiliyor. Ayırıcı sosyal
+    // profil olsaydı hepsi tek iş kimliğine düşer ve BullMQ'nun mükerrer
+    // engeli dokuzunu SESSİZCE atardı — dokuz kayıp müşteri, sıfır hata.
+    p.externalLeadId ?? p.externalFormId ?? p.adAccountId ?? p.socialProfileId ?? p.ruleId ?? 'na',
     p.entityLevel ?? 'all',
     p.dateFrom ?? '',
     p.dateTo ?? '',

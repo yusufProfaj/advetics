@@ -111,7 +111,9 @@ DECLARE
     -- Modül 8
     'bulk_batches', 'bulk_items',
     -- Formlar kütüphanesi
-    'lead_forms'
+    'lead_forms',
+    -- Potansiyel müşteriler
+    'leads', 'lead_sync_cursors'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -905,3 +907,45 @@ CREATE POLICY adv_lead_forms_update ON lead_forms
 
 CREATE POLICY adv_lead_forms_delete ON lead_forms
   FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- =============================================================================
+-- POTANSİYEL MÜŞTERİLER
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- leads
+--
+-- Standart kiracı deseni ama BURADAKİ VERİ KİŞİSEL VERİ. Bir müşterinin
+-- kayıtlarının başka bir müşterinin temsilcisine görünmesi, sıradan bir
+-- yetkilendirme hatası değil KVKK ihlali.
+--
+-- INSERT politikası VAR ama uygulama kayıtları worker rolüyle (BYPASSRLS)
+-- yazıyor: webhook ve tarama bir kullanıcı oturumu olmadan çalışıyor ve
+-- `app.current_org_id()` boş. Politika yine de tanımlı — ileride bir yol
+-- kullanıcı bağlamında yazarsa sınır orada da geçerli olsun.
+--
+-- DELETE politikası VAR: KVKK silme talebi geldiğinde kayıt gerçekten
+-- silinebilmeli.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_leads_select ON leads
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_leads_insert ON leads
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_leads_update ON leads
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_leads_delete ON leads
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- lead_sync_cursors
+--
+-- İmleçler yalnızca OKUNUYOR (panelde "webhook çalışıyor mu" göstergesi).
+-- Yazma tamamen worker'ın işi; kullanıcının imleci elle değiştirmesi,
+-- taramanın geçmişi atlaması ya da her turda baştan okuması demek olurdu.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_lead_sync_cursors_select ON lead_sync_cursors
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));

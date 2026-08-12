@@ -76,6 +76,19 @@ export const PERMISSIONS = [
   'bulk.read',
   'bulk.write',
   'bulk.publish',
+
+  // Potansiyel müşteriler (Lead CRM)
+  'lead.read',
+  'lead.write',
+  /**
+   * DIŞA AKTARMA AYRI YETKİ.
+   *
+   * Okumak kişisel veriyi ekranda göstermek; dışa aktarmak onu sistemden
+   * ÇIKARMAK. Dosya bir kez indirildikten sonra silinemiyor, izlenemiyor ve
+   * KVKK sorumluluğu bizde kalıyor. İkisini aynı yetkiye bağlamak, "listeye
+   * bakabilsin" demenin "listeyi alıp gidebilsin" anlamına gelmesi demek.
+   */
+  'lead.export',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -109,6 +122,9 @@ const MANAGER_PERMS: readonly Permission[] = [
   'bulk.read',
   'bulk.write',
   'bulk.publish',
+  'lead.read',
+  'lead.write',
+  'lead.export',
 ];
 
 const ANALYST_PERMS: readonly Permission[] = [
@@ -128,6 +144,10 @@ const ANALYST_PERMS: readonly Permission[] = [
   'boost.read',
   'bulk.read',
   'bulk.write', // taslak hazırlayabilir, yayınlayamaz
+  'lead.read',
+  // Analist kaydı arayıp durumunu ilerletebilir — asıl işi bu. Ama listeyi
+  // dosya olarak dışarı ÇIKARAMAZ; o ayrı bir sorumluluk.
+  'lead.write',
 ];
 
 const CLIENT_VIEWER_PERMS: readonly Permission[] = [

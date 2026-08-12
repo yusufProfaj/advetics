@@ -102,6 +102,8 @@ model Organization {
   bulkBatches     BulkBatch[]
   adDrafts        AdDraft[]
   leadForms       LeadForm[]
+  leads           Lead[]
+  leadCursors     LeadSyncCursor[]
 
   @@map("organizations")
 }
@@ -189,6 +191,8 @@ model Client {
   adDrafts        AdDraft[]
   keywordInsights KeywordInsight[]
   leadForms       LeadForm[]
+  leads           Lead[]
+  leadCursors     LeadSyncCursor[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -531,6 +535,8 @@ model SocialProfile {
   boostRules      BoostRule[]
   adDrafts        AdDraft[]
   leadForms       LeadForm[]
+  leads           Lead[]
+  leadCursors     LeadSyncCursor[]
 
   @@unique([connectionId, externalId])
   @@index([clientId, syncEnabled])
@@ -667,6 +673,10 @@ enum SyncJobType {
   rules_evaluate
   /// Modül 7 — boost kuralı değerlendirmesi + onaylanmışların oluşturulması.
   boosts_evaluate
+  /// Webhook'un bildirdiği tek bir potansiyel müşteri kaydının alanlarını çeker.
+  lead_fetch
+  /// Bir formun kaçmış kayıtlarını tarar — webhook teslimi garanti değil.
+  leads_reconcile
   /// L7 — yeni hesap bağlandığında geçmiş
   initial_backfill
 }
@@ -1794,8 +1804,90 @@ model LeadForm {
   supersededBy LeadForm?  @relation("LeadFormSupersede", fields: [supersededById], references: [id], onDelete: SetNull)
   supersedes   LeadForm[] @relation("LeadFormSupersede")
   adDrafts     AdDraft[]
+  leads        Lead[]
 
   @@index([clientId, createdAt(sort: Desc)])
   @@index([rootId, version])
   @@map("lead_forms")
+}
+
+/// Potansiyel müşteri — Meta anlık formundan gelen kayıt.
+///
+/// KAÇAN KAYIT SESSİZDİR: reklam yayında, bütçe harcanıyor, form
+/// dolduruluyor ama kayıt ulaşmazsa hiçbir yerde hata görünmüyor. Bu yüzden
+/// iki ayrı yol var (webhook + mutabakat taraması) ve `source` hangisinden
+/// geldiğini kaydediyor.
+model Lead {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+
+  /// Meta'daki kayıt kimliği — mükerrer engelinin dayanağı.
+  externalLeadId String @map("external_lead_id") @db.VarChar(64)
+
+  leadFormId      String? @map("lead_form_id") @db.Uuid
+  socialProfileId String? @map("social_profile_id") @db.Uuid
+
+  externalAdId String? @map("external_ad_id") @db.VarChar(64)
+  /// KOPYALANIYOR, join'le çözülmüyor: reklam silinirse atıf kaybolur ve
+  /// geçmiş rapor değişirdi.
+  campaignName String? @map("campaign_name") @db.VarChar(300)
+  leadFormName String? @map("lead_form_name") @db.VarChar(300)
+
+  /// Aranabilir alanlar ayrı kolonda — JSONB içinde arama indekslenemiyor.
+  fullName String? @map("full_name") @db.VarChar(300)
+  email    String? @db.VarChar(320)
+  phone    String? @db.VarChar(40)
+  fields   Json    @default("[]") @db.JsonB
+
+  status String  @default("new") @db.VarChar(16)
+  note   String? @db.VarChar(2000)
+  /// webhook | reconcile | manual — TEŞHİS İÇİN.
+  source String  @db.VarChar(16)
+
+  /// Meta'da formun doldurulduğu an. `createdAt` bizim aldığımız an.
+  submittedAt DateTime @map("submitted_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  leadForm      LeadForm?      @relation(fields: [leadFormId], references: [id], onDelete: SetNull)
+  socialProfile SocialProfile? @relation(fields: [socialProfileId], references: [id], onDelete: SetNull)
+
+  @@unique([externalLeadId], map: "leads_external_uniq")
+  @@index([clientId, submittedAt(sort: Desc)])
+  @@index([clientId, status])
+  @@index([leadFormId])
+  @@map("leads")
+}
+
+/// Mutabakat imleci — form başına "nereye kadar okuduk".
+///
+/// İMLEÇ `lead_forms` İÇİNDE DEĞİL: o tablo sürüm zinciriyle yönetiliyor ve
+/// her düzenleme yeni satır üretiyor. İmleç Meta'nın form kimliğine bağlı,
+/// bizimkine değil.
+model LeadSyncCursor {
+  id              String @id @default(uuid()) @db.Uuid
+  orgId           String @map("org_id") @db.Uuid
+  clientId        String @map("client_id") @db.Uuid
+  socialProfileId String @map("social_profile_id") @db.Uuid
+  externalFormId  String @map("external_form_id") @db.VarChar(64)
+
+  syncedThrough DateTime? @map("synced_through") @db.Timestamptz(6)
+  lastRunAt     DateTime? @map("last_run_at") @db.Timestamptz(6)
+  lastError     String?   @map("last_error") @db.VarChar(1000)
+  /// Son taramada bulunan YENİ kayıt sayısı. Sürekli sıfırdan büyükse
+  /// webhook o sayfa için çalışmıyor demektir.
+  lastNewCount  Int       @default(0) @map("last_new_count")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([externalFormId], map: "lead_sync_cursors_form_uniq")
+  @@map("lead_sync_cursors")
 }

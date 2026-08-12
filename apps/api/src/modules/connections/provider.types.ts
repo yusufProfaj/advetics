@@ -476,6 +476,20 @@ export interface CreateAdResult {
  * bir parçası ve alanları sabit; burada form başlı başına bir varlık,
  * yeniden kullanılabiliyor ve alanları kullanıcı belirliyor.
  */
+/**
+ * Meta'dan çekilen potansiyel müşteri kaydı.
+ *
+ * `field_data` biçimi: `[{ name, values: [string] }]`. Değerler DİZİ olarak
+ * geliyor — çoktan seçmeli sorularda birden çok değer olabiliyor.
+ */
+export interface DiscoveredLead {
+  externalLeadId: string;
+  externalFormId: string | null;
+  externalAdId: string | null;
+  submittedAt: Date;
+  fields: Array<{ name: string; label: string; value: string }>;
+}
+
 export interface CreateLeadFormRequest {
   pageExternalId: string;
   /**
@@ -745,6 +759,31 @@ export interface IAdPlatformProvider {
    * kullanıcıya söylemeden yayınlamamalı.
    */
   createLeadForm(ctx: FetchContext, request: CreateLeadFormRequest): Promise<string>;
+
+  /**
+   * Tek bir potansiyel müşteri kaydını çeker.
+   *
+   * Webhook yalnızca kimliği veriyor; alanlar bu çağrıda geliyor ve çağrı
+   * SAYFA TOKEN'I + `leads_retrieval` izni istiyor.
+   */
+  fetchLead(params: {
+    pageAccessToken: string;
+    externalLeadId: string;
+    onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
+  }): Promise<DiscoveredLead>;
+
+  /**
+   * Bir formun kayıtlarını tarar — MUTABAKAT İÇİN.
+   *
+   * Webhook teslimi garanti değil. Bu tarama olmadan kaçan bir kayıt hiçbir
+   * yerde iz bırakmıyor: hata yok, uyarı yok, yalnızca gelmeyen bir müşteri.
+   */
+  fetchFormLeads(params: {
+    pageAccessToken: string;
+    externalFormId: string;
+    since: Date;
+    onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
+  }): Promise<DiscoveredLead[]>;
 
   /**
    * Anahtar kelime performansı — yalnızca Google.

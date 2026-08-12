@@ -196,7 +196,7 @@ export async function createHarness(): Promise<Harness> {
   const reset = async (): Promise<void> => {
     await pg.exec(`
       TRUNCATE TABLE
-        lead_forms,
+        leads, lead_sync_cursors, lead_forms,
         bulk_items, bulk_batches,
         boosts, boost_rules, organic_posts,
         rule_action_logs, rule_runs, rules,

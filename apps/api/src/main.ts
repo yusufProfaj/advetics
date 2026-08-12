@@ -23,6 +23,15 @@ import { CONFIG, type AppConfig } from './config/configuration';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
+    /**
+     * HAM GÖVDEYİ SAKLA — leadgen webhook imzası için ZORUNLU.
+     *
+     * Meta `X-Hub-Signature-256` imzasını gönderdiği baytlar üzerinden
+     * üretiyor. Ayrıştırılmış nesneyi yeniden `JSON.stringify` etmek işe
+     * yaramıyor: anahtar sırası, boşluk ve sayı biçimi değişiyor, imza
+     * tutmuyor ve webhook "hiç çalışmıyor" gibi görünüyor.
+     */
+    rawBody: true,
   });
 
   const config = app.get<AppConfig>(CONFIG);

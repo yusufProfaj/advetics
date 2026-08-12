@@ -523,3 +523,29 @@ ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_root_chk
 ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_error_chk;
 ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_error_chk
   CHECK (status <> 'failed' OR error IS NOT NULL);
+
+-- =============================================================================
+-- POTANSİYEL MÜŞTERİLER — leads
+-- =============================================================================
+
+ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_status_chk;
+ALTER TABLE leads ADD CONSTRAINT leads_status_chk
+  CHECK (status IN ('new', 'contacted', 'qualified', 'won', 'lost'));
+
+ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_source_chk;
+ALTER TABLE leads ADD CONSTRAINT leads_source_chk
+  CHECK (source IN ('webhook', 'reconcile', 'manual'));
+
+ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_fields_chk;
+ALTER TABLE leads ADD CONSTRAINT leads_fields_chk
+  CHECK (jsonb_typeof(fields) = 'array');
+
+-- EN AZ BİR İLETİŞİM BİLGİSİ.
+--
+-- Ad, e-posta ve telefonun üçü de boşsa elimizde ulaşılamayan bir kayıt var
+-- demektir. Bu, çekme çağrısının başarısız olduğu ama hatanın yutulduğu
+-- durumun imzası: kayıt oluşuyor, içi boş, kimse fark etmiyor. Kısıt bunu
+-- yazma anında yakalıyor.
+ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_contact_chk;
+ALTER TABLE leads ADD CONSTRAINT leads_contact_chk
+  CHECK (full_name IS NOT NULL OR email IS NOT NULL OR phone IS NOT NULL);

@@ -85,6 +85,14 @@ const envSchema = z.object({
   META_APP_ID: z.string().optional(),
   META_APP_SECRET: z.string().optional(),
   /**
+   * Leadgen webhook el sıkışma anahtarı.
+   *
+   * Meta'nın uygulama panelinde girilen sabitle AYNI olmak zorunda. Bizim
+   * belirlediğimiz rastgele bir dize; kimlik doğrulamıyor, yalnızca uç
+   * noktanın bize ait olduğunu kanıtlıyor. Asıl güvenlik imzada.
+   */
+  META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
+  /**
    * Graph API sürümü. Meta her ~3 ayda yeni sürüm çıkarır ve eskiyi ~2 yılda
    * kapatır. CANLIYA ALMADAN ÖNCE güncel sürümü doğrula:
    * https://developers.facebook.com/docs/graph-api/changelog
@@ -131,7 +139,12 @@ export interface AppConfig {
   /** Modül 2 — platform kimlik bilgileri. Eksikse ilgili provider devre dışı. */
   platforms: {
     oauthRedirectBaseUrl?: string;
-    meta: { appId?: string; appSecret?: string; apiVersion: string };
+    meta: {
+      appId?: string;
+      appSecret?: string;
+      apiVersion: string;
+      webhookVerifyToken?: string;
+    };
     google: {
       clientId?: string;
       clientSecret?: string;
@@ -203,6 +216,7 @@ export function loadConfig(): AppConfig {
         appId: env.META_APP_ID,
         appSecret: env.META_APP_SECRET,
         apiVersion: env.META_API_VERSION,
+        webhookVerifyToken: env.META_WEBHOOK_VERIFY_TOKEN,
       },
       google: {
         clientId: env.GOOGLE_CLIENT_ID,

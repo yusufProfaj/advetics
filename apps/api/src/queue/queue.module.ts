@@ -3,6 +3,7 @@ import { ConnectionsModule } from '../modules/connections/connections.module';
 import { RulesModule } from '../modules/rules/rules.module';
 import { BoostsModule } from '../modules/boosts/boosts.module';
 import { InsightsSyncService } from './insights-sync.service';
+import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
 import { KeywordSyncService } from './keyword-sync.service';
 import { QuotaGuardService } from './quota-guard.service';
@@ -31,6 +32,7 @@ import { SyncProcessorService } from './sync-processor.service';
     StructureSyncService,
     InsightsSyncService,
     OrganicSyncService,
+    LeadSyncService,
     KeywordSyncService,
   ],
   exports: [
@@ -40,6 +42,7 @@ import { SyncProcessorService } from './sync-processor.service';
     StructureSyncService,
     InsightsSyncService,
     OrganicSyncService,
+    LeadSyncService,
     KeywordSyncService,
   ],
 })

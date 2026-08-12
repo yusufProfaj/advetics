@@ -1068,6 +1068,20 @@ export class GoogleProvider implements IAdPlatformProvider {
     );
   }
 
+  /**
+   * Google'da anlık form kaydı YOK — form uzantısı ayrı bir kavram.
+   *
+   * Boş dizi dönmek yerine hata: sessizce boş dönmek, Google bağlantısı olan
+   * bir müşteride "hiç kayıt gelmiyor" durumunu normal göstermek olurdu.
+   */
+  async fetchLead(): Promise<never> {
+    throw new PlatformApiError('google', 'permanent', "Google Ads'te anlık form kaydı yok.");
+  }
+
+  async fetchFormLeads(): Promise<never> {
+    throw new PlatformApiError('google', 'permanent', "Google Ads'te anlık form kaydı yok.");
+  }
+
   async fetchKeywords(
     ctx: FetchContext,
     request: { dateFrom: string; dateTo: string },

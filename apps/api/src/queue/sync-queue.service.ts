@@ -94,6 +94,10 @@ export class SyncQueueService implements OnModuleDestroy {
     socialProfileId?: string;
     /** Modül 5 — kural işi. Bkz. SyncJobPayload.ruleId */
     ruleId?: string;
+    /** Potansiyel müşteri kimliği (`lead_fetch`). */
+    externalLeadId?: string;
+    /** Formun Meta kimliği (`leads_reconcile`). */
+    externalFormId?: string;
     entityLevel?: EntityLevel;
     /** YYYY-MM-DD. Date nesnesi DEĞİL — saat dilimi kayması için bkz. queues.ts */
     dateFrom?: string;
@@ -140,6 +144,8 @@ export class SyncQueueService implements OnModuleDestroy {
       adAccountId: params.adAccountId,
       socialProfileId: params.socialProfileId,
       ruleId: params.ruleId,
+      externalLeadId: params.externalLeadId,
+      externalFormId: params.externalFormId,
       entityLevel: params.entityLevel,
       dateFrom: params.dateFrom,
       dateTo: params.dateTo,

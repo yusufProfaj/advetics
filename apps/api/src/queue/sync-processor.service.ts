@@ -11,6 +11,7 @@ import { layerForJob, type SyncJobPayload } from './queues';
 import type { TenantContext } from '@advetics/shared';
 import { RulesService } from '../modules/rules/rules.service';
 import { RuleExecutorService } from '../modules/rules/rule-executor.service';
+import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
 import { KeywordSyncService } from './keyword-sync.service';
 import { BoostsService } from '../modules/boosts/boosts.service';
@@ -55,6 +56,7 @@ export class SyncProcessorService {
     private readonly rules: RulesService,
     private readonly executor: RuleExecutorService,
     private readonly organic: OrganicSyncService,
+    private readonly leads: LeadSyncService,
     private readonly boosts: BoostsService,
     private readonly boostExecutor: BoostExecutorService,
     private readonly keywords: KeywordSyncService,
@@ -105,7 +107,7 @@ export class SyncProcessorService {
 
     for (const acct of accounts) {
       // Organik post işleri reklam hesabına değil sosyal profile ait.
-      if (payload.jobType === 'organic_posts') continue;
+      if (payload.jobType === 'organic_posts' || payload.jobType === 'leads_reconcile') continue;
 
       const dates = this.datesForJob(payload.jobType, acct.timezone);
 
@@ -122,6 +124,32 @@ export class SyncProcessorService {
     }
 
     // Organik postlar için sosyal profilleri ayrıca dolaş.
+    /**
+     * MUTABAKAT MÜŞTERİ BAŞINA, FORM BAŞINA DEĞİL.
+     *
+     * Form başına iş açmak, 12 müşteride yüzlerce iş demek ve her biri kendi
+     * sayfa token'ını çözerdi. Servis müşterinin formlarını kendi geziyor ve
+     * form başına hata yönetimi orada yapılıyor.
+     */
+    if (payload.jobType === 'leads_reconcile') {
+      const clients = await this.db.client.findMany({
+        where: {
+          status: 'active',
+          leadForms: { some: { externalFormId: { not: null } } },
+        },
+        select: { id: true },
+      });
+      for (const c of clients) {
+        const res = await this.queue.enqueue({
+          clientId: c.id,
+          platform: 'meta',
+          jobType: 'leads_reconcile',
+        });
+        if (res.enqueued) enqueued++;
+        else skipped++;
+      }
+    }
+
     if (payload.jobType === 'organic_posts') {
       const profiles = await this.db.socialProfile.findMany({
         where: {
@@ -486,6 +514,37 @@ export class SyncProcessorService {
           dateTo: payload.dateTo,
         });
         await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        return { rows: result.rows, note: result.note };
+      } catch (err) {
+        await this.recordFailure(syncJobId, err);
+        throw err;
+      }
+    }
+
+    if (payload.jobType === 'lead_fetch') {
+      if (!payload.socialProfileId || !payload.externalLeadId) {
+        await this.markFailed(syncJobId, 'missing_lead', 'lead_fetch eksik parametreyle geldi');
+        throw new UnrecoverableError('lead_fetch sosyal profil ya da kayıt kimliği olmadan geldi');
+      }
+      try {
+        const result = await this.leads.fetchOne({
+          socialProfileId: payload.socialProfileId,
+          externalLeadId: payload.externalLeadId,
+        });
+        await this.markSucceeded(payload.syncJobId, result.rows, 1);
+        return { rows: result.rows, note: result.note };
+      } catch (err) {
+        await this.recordFailure(syncJobId, err);
+        throw err;
+      }
+    }
+
+    if (payload.jobType === 'leads_reconcile') {
+      try {
+        const result = await this.leads.reconcile(payload.clientId);
+        // API çağrı sayısı form sayısına bağlı ve servis onu saymıyor;
+        // 1 yazmak yanıltıcı olurdu ama 0 da öyle. Satır sayısı asıl bilgi.
+        await this.markSucceeded(payload.syncJobId, result.rows, 1);
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);

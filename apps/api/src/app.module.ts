@@ -16,6 +16,7 @@ import { BudgetsModule } from './modules/budgets/budgets.module';
 import { RulesModule } from './modules/rules/rules.module';
 import { AdBuilderModule } from './modules/ad-builder/ad-builder.module';
 import { FormsModule } from './modules/forms/forms.module';
+import { LeadsModule } from './modules/leads/leads.module';
 import { BoostsModule } from './modules/boosts/boosts.module';
 import { BulkModule } from './modules/bulk/bulk.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
@@ -46,6 +47,7 @@ import { QueueModule } from './queue/queue.module';
     RulesModule,
     AdBuilderModule,
     FormsModule,
+    LeadsModule,
     BoostsModule,
     BulkModule,
   ],

@@ -23,6 +23,7 @@ import {
   type DiscoveredOrganicPost,
   type PlatformActionRequest,
   type CreateLeadFormRequest,
+  type DiscoveredLead,
   type PublishDraftRequest,
   type PublishDraftResult,
   type PlatformActionResult,
@@ -35,7 +36,7 @@ import {
   type RateLimitSnapshot,
   type TokenVerification,
 } from '../provider.types';
-import { parseMetaRateLimit, platformFetch } from './http';
+import { parseMetaRateLimit, platformFetch, type PlatformResponse } from './http';
 
 /**
  * Graph API sayfalı yanıtı.
@@ -1638,6 +1639,106 @@ export class MetaProvider implements IAdPlatformProvider {
     return res.data.id;
   }
 
+  // ---------------------------------------------------------------------------
+  // POTANSİYEL MÜŞTERİLER
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Tek kaydı çeker.
+   *
+   * SAYFA TOKEN'I + `leads_retrieval`. Kullanıcı token'ıyla çağrı, izinler
+   * doğru olsa bile boş dönüyor ya da "(#200)" ile reddediliyor.
+   */
+  async fetchLead(params: {
+    pageAccessToken: string;
+    externalLeadId: string;
+    onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
+  }): Promise<DiscoveredLead> {
+    const url = new URL(`${this.graph}/${params.externalLeadId}`);
+    url.searchParams.set(
+      'fields',
+      ['id', 'created_time', 'form_id', 'ad_id', 'field_data'].join(','),
+    );
+
+    const res = await platformFetch<RawLead>(
+      'meta',
+      url.toString(),
+      { headers: { Authorization: `Bearer ${params.pageAccessToken}` } },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await params.onRateLimit?.(res.rateLimit);
+    return mapLead(res.data);
+  }
+
+  /**
+   * Bir formun kayıtlarını tarar.
+   *
+   * `filtering` ile zaman kısıtı: Meta `created_time` üzerinde `GREATER_THAN`
+   * kabul ediyor ve saniye cinsinden epoch bekliyor.
+   *
+   * SAYFALAMA TAKİP EDİLİYOR ama ÜST SINIRLA. Sınırsız takip, ilk taramada
+   * yıllık geçmişi çekip kotayı bitirebilir; sınır ise sessiz olmasın diye
+   * loglanıyor ve bir sonraki tur kaldığı yerden devam ediyor (imleç en eski
+   * okunmamış kayda göre ilerliyor).
+   */
+  async fetchFormLeads(params: {
+    pageAccessToken: string;
+    externalFormId: string;
+    since: Date;
+    onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
+  }): Promise<DiscoveredLead[]> {
+    const out: DiscoveredLead[] = [];
+    let next: string | null = null;
+    let pages = 0;
+
+    const first = new URL(`${this.graph}/${params.externalFormId}/leads`);
+    first.searchParams.set(
+      'fields',
+      ['id', 'created_time', 'form_id', 'ad_id', 'field_data'].join(','),
+    );
+    first.searchParams.set('limit', '100');
+    first.searchParams.set(
+      'filtering',
+      JSON.stringify([
+        {
+          field: 'time_created',
+          operator: 'GREATER_THAN',
+          value: Math.floor(params.since.getTime() / 1000),
+        },
+      ]),
+    );
+
+    let url: string = first.toString();
+    while (pages < MAX_LEAD_PAGES) {
+      const res: PlatformResponse<GraphPage> = await platformFetch<GraphPage>(
+        'meta',
+        url,
+        { headers: { Authorization: `Bearer ${params.pageAccessToken}` } },
+        parseMetaRateLimit,
+      );
+      if (res.rateLimit) await params.onRateLimit?.(res.rateLimit);
+
+      for (const row of res.data.data ?? []) {
+        out.push(mapLead(row as unknown as RawLead));
+      }
+
+      pages++;
+      next = res.data.paging?.next ?? null;
+      if (!next) break;
+      url = next;
+    }
+
+    if (next) {
+      // SESSİZ KESME YOK. Sayfa sınırına takıldıysak bunu söylüyoruz;
+      // bir sonraki tur imleçten devam ediyor.
+      this.logger.warn(
+        `Form ${params.externalFormId}: ${MAX_LEAD_PAGES} sayfa sınırına ulaşıldı, ` +
+          'kalanı bir sonraki turda okunacak',
+      );
+    }
+    return out;
+  }
+
   /**
    * Meta'da anahtar kelime YOK.
    *
@@ -2119,4 +2220,43 @@ function int(value: unknown): number {
   if (value === null || value === undefined || value === '') return 0;
   const n = Number(value);
   return Number.isFinite(n) ? Math.round(n) : 0;
+}
+
+/**
+ * İlk taramanın sayfa sınırı.
+ *
+ * 100'lük sayfalarla 10.000 kayıt. Sınırsız takip, yeni bağlanan bir sayfada
+ * yıllık geçmişi tek turda çekip kotayı bitirebilir.
+ */
+const MAX_LEAD_PAGES = 100;
+
+interface RawLead {
+  id?: string;
+  created_time?: string;
+  form_id?: string;
+  ad_id?: string;
+  field_data?: Array<{ name?: string; values?: string[] }>;
+}
+
+/**
+ * Meta kaydını bizim biçimimize çevirir.
+ *
+ * `values` DİZİ: çoktan seçmeli sorularda birden çok cevap olabiliyor.
+ * İlkini almak, kullanıcının işaretlediği diğer seçenekleri SESSİZCE atmak
+ * olurdu; virgülle birleştiriyoruz.
+ */
+function mapLead(raw: RawLead): DiscoveredLead {
+  return {
+    externalLeadId: String(raw.id ?? ''),
+    externalFormId: raw.form_id ? String(raw.form_id) : null,
+    externalAdId: raw.ad_id ? String(raw.ad_id) : null,
+    // `created_time` yoksa ŞİMDİ kullanılıyor: kaydı atmaktansa yaklaşık bir
+    // zamanla tutmak yeğ. Zaman sıralaması bozulur ama kişi kaybolmaz.
+    submittedAt: raw.created_time ? new Date(raw.created_time) : new Date(),
+    fields: (raw.field_data ?? []).map((f) => ({
+      name: String(f.name ?? ''),
+      label: String(f.name ?? ''),
+      value: (f.values ?? []).join(', '),
+    })),
+  };
 }

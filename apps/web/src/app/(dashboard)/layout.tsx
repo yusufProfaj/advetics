@@ -53,6 +53,13 @@ const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
     // 5 MANAGE
     title: 'Yönet',
     items: [
+      {
+        href: '/potansiyel-musteriler',
+        label: 'Potansiyel Müşteriler',
+        icon: 'leads',
+        module: 4,
+        ready: true,
+      },
       { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true },
       { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true },
     ],

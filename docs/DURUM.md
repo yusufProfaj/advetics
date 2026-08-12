@@ -13,12 +13,12 @@
 
 | | |
 |---|---|
-| Veritabanı tablosu | **37** |
-| Migration | **17** |
-| API testi | **604** |
+| Veritabanı tablosu | **39** |
+| Migration | **19** |
+| API testi | **634** |
 | Web testi | **20** |
-| Panel sayfası | **10** |
-| API controller | **17** |
+| Panel sayfası | **11** |
+| API controller | **18** |
 
 **İki cümlelik özet:**
 
@@ -106,6 +106,31 @@ gösteriliyor, ama kimseye **bildirim gitmiyor**.
 | Organik gönderi senkronizasyonu | ✅ | `queue/organic-sync.service.ts` |
 | Görsel/video yükleme | 🟡 | Reklam Oluşturucu'da var; kalıcı arşiv (BASE) hâlâ yok |
 | **Anlık form oluşturucu** | 🟡 | `/kutuphane/formlar` — 5 bölüm + canlı önizleme; yayın doğrulanmadı |
+| **Potansiyel Müşteriler (Lead CRM)** | 🟡 | `/potansiyel-musteriler` — webhook + mutabakat; canlı doğrulanmadı |
+
+**Potansiyel Müşteriler (Lead CRM) — 12 Ağustos.** `/potansiyel-musteriler`.
+Anlık form kayıtları iki ayrı yoldan geliyor ve bu, yedeklilik değil
+ZORUNLULUK: Meta webhook teslimini garanti etmiyor, sunucu bir dakika yanıt
+vermezse o bildirim kayboluyor ve bir daha gelmiyor. Kaçan kayıt hiçbir yerde
+hata üretmiyor — panel "0 potansiyel müşteri" diyor ve bu ya "kimse
+doldurmadı" ya da "sistem çalışmıyor" demek.
+
+  · **Webhook** — anlık. İmza `X-Hub-Signature-256` ile HAM GÖVDE üzerinden,
+    sabit sürede. Uç nokta Graph API'ye HİÇ çağrı yapmadan 200 dönüyor: Meta
+    birkaç saniyede yanıt bekliyor ve gecikme tekrar denemeye, tekrarlar da
+    aboneliğin kapatılmasına yol açıyor (kapalı abonelik = sessiz durma).
+  · **Mutabakat taraması** — periyodik. Form başına imleçle, kaçanları alıyor.
+
+İkisi `ON CONFLICT DO NOTHING` ile buluşuyor; örtüşme ENGELLENMİYOR çünkü
+birinin sessizce ölmesine karşı tek korumamız o. `source` alanı hangi yoldan
+geldiğini tutuyor ve panel **mutabakat oranını** gösteriyor: kayıtlar taramayla
+geliyorsa webhook o sayfa için ölmüş demektir — başka hiçbir yerde görünmeyecek
+bir arıza.
+
+Dışa aktarma AYRI YETKİ (`lead.export`): okumak kişisel veriyi ekranda
+göstermek, dışa aktarmak onu sistemden ÇIKARMAK. CSV denetim kaydına yazılıyor,
+BOM ile başlıyor (Excel Türkçe karakterleri bozmasın) ve formül enjeksiyonuna
+karşı korunuyor — ad alanı reklamla gelen bir yabancının yazdığı metin.
 
 **"Tek giriş, iki mod" kararı ve gerekçesi (12 Ağustos).** Spec'teki tam
 kontrollü kampanya kurucusu, ürünün kurucu vaadiyle çelişiyordu: *"reklam ile
@@ -252,6 +277,7 @@ Bunlar **yazıldı, test edildi, ama canlı Meta API'sinde bir kez bile
 | Boost oluşturma | `meta.provider.ts` → `createBoost` | **Yüksek** — 3 varlık, geri alma yolu var ama denenmedi |
 | Toplu reklam oluşturma | `meta.provider.ts` → `createAd` vb. | **Yüksek** — kısmi başarı yönetimi denenmedi |
 | Reklam Oluşturucu yayını | `meta.provider.ts` → `publishDraft` | **Yüksek** — 4 varlık + anlık form; `asset_feed_spec` yerleşim kuralları hiç denenmedi |
+| **Leadgen webhook + lead çekme** | `leadgen-webhook.service.ts`, `lead-sync.service.ts` | **Yüksek** — imza doğrulaması, `field_data` biçimi, `filtering` zaman kısıtı ve sayfalama belgeden çıkarıldı; `leads_retrieval` izni yok, gerçek bildirim hiç alınmadı |
 | **Gelişmiş mod yayını** | `meta.provider.ts` → `publishDraft` (teklif/bütçe/takvim alanları) | **Yüksek** — `bid_strategy`, `bid_amount`, `lifetime_budget`, `start_time` alanları hiç gönderilmedi. Uyumluluk matrisi de belgeden çıkarıldı, canlıda sınanmadı |
 | **Kütüphane formu yayını** | `meta.provider.ts` → `createLeadForm` | **Yüksek** — geri alınamaz; `legal_content`, `context_card`, `thank_you_page` eşlemeleri belgeden çıkarıldı, gerçek yanıt görülmedi. `is_optimized_for_quality` eşlemesi (= "daha nitelikli") de doğrulanmadı |
 
