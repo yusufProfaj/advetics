@@ -9,12 +9,15 @@ import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { AdBuilderService } from './ad-builder.service';
 import { AssetStorageService } from './asset-storage.service';
 import {
-  campaignSpec,
   customizationRules,
   defaultTargeting,
   endTimeFor,
   labelFor,
   placementsFor,
+  placementsFrom,
+  resolveSpec,
+  scheduleFrom,
+  targetingFrom,
 } from './goal-mapping';
 
 /**
@@ -99,22 +102,48 @@ export class AdPublisherService {
       //    tekrar denenirse aynı görseller yeniden yüklenmesin.
       const hashes = await this.uploadImages(ctx, draft, fetchCtx);
 
+      /**
+       * İKİ MOD, TEK YAYIN YOLU.
+       *
+       * Gelişmiş modda kararları kullanıcı verdi, hızlı modda biz verdik —
+       * ama buradan sonrası aynı. İki ayrı yayın yolu olsaydı, birinde
+       * düzeltilen bir hata (geri alma, para birimi çevrimi, sıralama)
+       * diğerinde kalırdı ve fark ancak canlıda görülürdü.
+       */
+      const adv = draft.mode === 'advanced' ? draft.advanced : null;
+      const schedule = adv ? scheduleFrom(adv) : null;
+
       const result = await provider.publishDraft(fetchCtx, {
         adAccountExternalId: auth.accountExternalId,
         pageExternalId: auth.pageExternalId,
         name: draft.name,
-        spec: campaignSpec(draft.goal, auth.pageExternalId),
+        spec: resolveSpec(draft, auth.pageExternalId),
         primaryText: draft.primaryText,
         headline: draft.headline ?? undefined,
         description: draft.description ?? undefined,
         linkUrl: draft.linkUrl ?? undefined,
         whatsappNumber: draft.whatsappNumber ?? undefined,
         dailyBudgetMicros: BigInt(draft.dailyBudgetMicros),
-        endTime: endTimeFor(draft.durationDays, new Date()),
+        // Gelişmiş modda takvim kullanıcının; hızlı modda süreden türüyor.
+        endTime: schedule?.endAt ?? endTimeFor(draft.durationDays, new Date()),
+        startTime: schedule?.startAt ?? null,
+        budgetMode: adv?.budgetMode,
+        bidStrategy: adv?.bidStrategy,
+        bidAmountMinor: adv?.bidAmount ? bidToMinor(adv.bidAmount) : undefined,
+        leadFormExternalId: auth.leadFormExternalId,
         currency: auth.currency,
         images: hashes,
-        targeting: defaultTargeting(),
-        placements: placementsFor(hashes.map((h) => h.ratio)),
+        targeting: adv ? targetingFrom(adv.targeting) : defaultTargeting(),
+        /**
+         * OTOMATİK YERLEŞİMDE HİÇBİR ALAN GÖNDERİLMİYOR.
+         *
+         * `placementsFrom` boş nesne dönüyor ve yayılınca hedeflemeye hiçbir
+         * yerleşim alanı eklenmiyor — Meta bunu "hepsi" diye okuyor. Hızlı
+         * modda ise yerleşim yüklenen görsele göre kısıtlanıyor.
+         */
+        placements: adv
+          ? placementsFrom(adv.placement)
+          : placementsFor(hashes.map((h) => h.ratio)),
         customizationRules:
           hashes.length > 1 ? customizationRules(hashes.map((h) => h.ratio)) : null,
       });
@@ -208,6 +237,7 @@ export class AdPublisherService {
     pageExternalId: string;
     currency: string;
     grantedScopes: string[];
+    leadFormExternalId?: string;
   }> {
     const [row] = await this.prisma.withTenant(ctx, (tx) =>
       tx.$queryRaw<
@@ -236,14 +266,40 @@ export class AdPublisherService {
         `Platform bağlantısı etkin değil (${row.status}) — yeniden bağlanmak gerekiyor.`,
       );
     }
+    /**
+     * Kütüphaneden seçilen formun META KİMLİĞİ.
+     *
+     * Yalnızca YAYINLANMIŞ formun kimliği var. Taslak bir form seçilmişse
+     * kimlik yok ve yayın engelleniyor — Meta'da var olmayan bir forma
+     * referans veren kreatif reddedilir ve hata mesajı ("Invalid parameter")
+     * sebebi hiç anlatmaz.
+     */
+    let leadFormExternalId: string | undefined;
+    if (draft.leadFormId) {
+      const [form] = await this.prisma.withTenant(ctx, (tx) =>
+        tx.$queryRaw<Array<{ external_form_id: string | null }>>(Prisma.sql`
+          SELECT external_form_id FROM lead_forms
+          WHERE id = ${draft.leadFormId}::uuid AND org_id = ${ctx.orgId}::uuid
+        `),
+      );
+      if (!form?.external_form_id) {
+        throw new BadRequestException(
+          'Seçilen form henüz Meta’da yayınlanmamış. Kütüphane > Formlar bölümünden yayınla.',
+        );
+      }
+      leadFormExternalId = form.external_form_id;
+    }
+
     return {
       connectionId: row.connection_id,
       accountExternalId: row.account_external_id,
       pageExternalId: row.page_external_id,
       currency: row.currency,
       grantedScopes: row.granted_scopes ?? [],
+      leadFormExternalId,
     };
   }
+
 
   private async setStatus(
     ctx: TenantContext,
@@ -258,4 +314,21 @@ export class AdPublisherService {
       `),
     );
   }
+}
+
+/**
+ * Teklif tutarını hesabın alt birimine çevirir.
+ *
+ * `150,50` → 15050 kuruş. Virgül ondalık ayırıcı olarak kabul ediliyor:
+ * Türkçe klavyede varsayılan bu ve nokta beklemek sessizce NaN üretirdi —
+ * teklif alanı boş gider, Meta varsayılanı uygular ve kullanıcı tavan
+ * koyduğunu sanır.
+ */
+function bidToMinor(amount: string): bigint {
+  const normalized = amount.replace(',', '.');
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new BadRequestException('Teklif tutarı okunamadı.');
+  }
+  return BigInt(Math.round(value * 100));
 }

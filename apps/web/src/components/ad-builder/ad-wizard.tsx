@@ -12,9 +12,14 @@ import {
   type AdDraftRecord,
   type AssetRatio,
   type CampaignGoal,
+  type AdvancedSettings,
+  type CampaignMode,
+  type LeadFormRecord,
   type PublishCheck,
 } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
+import { advancedDefaultsFor } from '@advetics/shared';
+import { AdvancedPanel } from './advanced-panel';
 
 /**
  * Reklam oluşturma sihirbazı.
@@ -33,11 +38,14 @@ export function AdWizard({
   clientId,
   accounts,
   pages,
+  forms,
   existing,
 }: {
   clientId: string;
   accounts: Array<{ id: string; name: string; currency: string }>;
   pages: Array<{ id: string; name: string }>;
+  /** Kütüphanedeki anlık formlar — yalnızca gelişmiş modda kullanılıyor. */
+  forms: LeadFormRecord[];
   existing?: AdDraftRecord;
 }) {
   const router = useRouter();
@@ -55,6 +63,10 @@ export function AdWizard({
     existing ? String(BigInt(existing.dailyBudgetMicros) / 1_000_000n) : '200',
   );
   const [durationDays, setDurationDays] = useState(String(existing?.durationDays ?? 7));
+
+  const [mode, setMode] = useState<CampaignMode>(existing?.mode ?? 'simple');
+  const [advanced, setAdvanced] = useState<AdvancedSettings | null>(existing?.advanced ?? null);
+  const [leadFormId, setLeadFormId] = useState<string | null>(existing?.leadFormId ?? null);
 
   const [draftId, setDraftId] = useState(existing?.id ?? null);
   const [assets, setAssets] = useState<AdAssetRecord[]>(existing?.assets ?? []);
@@ -79,7 +91,25 @@ export function AdWizard({
       whatsappNumber: whatsappNumber.trim() || undefined,
       dailyBudget: dailyBudget.trim(),
       durationDays: Number(durationDays),
+      mode,
+      advanced: advanced ?? undefined,
+      leadFormId: leadFormId ?? undefined,
     };
+  }
+
+  /**
+   * Gelişmiş moda geçiş — HIZLI MODUN KARARLARIYLA DOLU BAŞLIYOR.
+   *
+   * Boş bir ekran, kullanıcıyı sıfırdan kurmaya zorlar ve daha önemlisi:
+   * bizim onun adına ne seçtiğimizi hiç göstermez. Dolu başlamak hem
+   * başlangıç noktası veriyor hem de "biz bunu seçmiştik" diyor.
+   */
+  function switchMode(next: CampaignMode): void {
+    if (next === 'advanced' && !advanced && goal) {
+      setAdvanced(advancedDefaultsFor(goal));
+    }
+    setMode(next);
+    setCheck(null);
   }
 
   /**
@@ -364,8 +394,60 @@ export function AdWizard({
             </div>
           </Step>
 
-          {/* 6. Kontrol ve yayın */}
-          <Step no={6} title="Son kontrol">
+          {/* MOD SEÇİCİ.
+              Bütçeden SONRA, son kontrolden ÖNCE. Sebebi sıralama değil
+              psikoloji: en başta sorulsaydı, reklamcılık bilmeyen kullanıcı
+              "gelişmiş" seçeneğini görüp kendini yetersiz hissederdi. Burada
+              ise her şey zaten hazır ve gelişmiş mod bir EK, bir ön koşul
+              değil. */}
+          <Step no={6} title="Ayarlar">
+            <div className="flex flex-wrap gap-2">
+              {(['simple', 'advanced'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => switchMode(m)}
+                  className={`rounded-lg border px-3 py-2 text-left transition ${
+                    mode === m ? 'border-brand bg-brand-soft' : 'border-line hover:bg-surface-sunken'
+                  }`}
+                >
+                  <span className="block text-sm font-medium text-ink">
+                    {m === 'simple' ? 'Bizim önerdiğimiz ayarlar' : 'Gelişmiş — ayarları ben seçeyim'}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-ink-muted">
+                    {m === 'simple'
+                      ? 'Hedef, optimizasyon, kitle ve yerleşimi biz belirleriz.'
+                      : 'Hedef, teklif, kitle ve yerleşim üzerinde tam kontrol.'}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {mode === 'simple' && (
+              // HIZLI MODDA NE SEÇTİĞİMİZİ SÖYLÜYORUZ. "Biz hallederiz" demek
+              // yeterli değil: kullanıcı neyin kararını devrettiğini bilmeli
+              // ve gerekirse geri alabilmeli.
+              <p className="mt-3 text-xs text-ink-muted">
+                {campaignExplanation(goal)}
+              </p>
+            )}
+
+            {mode === 'advanced' && advanced && (
+              <div className="mt-4">
+                <AdvancedPanel
+                  value={advanced}
+                  onChange={setAdvanced}
+                  currency={currency}
+                  forms={forms}
+                  leadFormId={leadFormId}
+                  onLeadFormChange={setLeadFormId}
+                />
+              </div>
+            )}
+          </Step>
+
+          {/* 7. Kontrol ve yayın */}
+          <Step no={7} title="Son kontrol">
             {check === null ? (
               <button
                 type="button"
@@ -688,3 +770,24 @@ function Field({
 
 const input =
   'w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand';
+
+/**
+ * Hızlı modda bizim verdiğimiz kararların düz Türkçe özeti.
+ *
+ * `GOAL_META[goal].promise` kullanıcının ne ELDE EDECEĞİNİ söylüyor; bu ise
+ * bizim onun adına NE SEÇTİĞİMİZİ. İkisi farklı sorular ve ikincisi gelişmiş
+ * moda geçme kararını verirken gereken bilgi.
+ */
+function campaignExplanation(goal: CampaignGoal): string {
+  const common =
+    'Kitle: Türkiye, 18+, daraltma yok. Yerleşim: yüklediğin görsel oranlarına göre. ' +
+    'Teklif: en düşük maliyet.';
+  switch (goal) {
+    case 'form':
+      return `Hedef: potansiyel müşteri, form dolduranlara göre optimize. ${common}`;
+    case 'whatsapp':
+      return `Hedef: potansiyel müşteri, mesaj yazanlara göre optimize. ${common}`;
+    case 'website':
+      return `Hedef: trafik, sayfayı gerçekten açanlara göre optimize. ${common}`;
+  }
+}

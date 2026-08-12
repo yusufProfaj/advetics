@@ -1503,6 +1503,24 @@ model AdDraft {
   goal String @db.VarChar(16)
   name String @db.VarChar(200)
 
+  /// simple | advanced — "tek giriş, iki mod".
+  ///
+  /// Hızlı modda Meta'nın sorduğu her şeye biz cevap veriyoruz
+  /// (`goal-mapping.ts`). Gelişmiş modda kullanıcının seçimleri `advanced`
+  /// içinde duruyor ve AYNI doğrulamadan, AYNI yayın yolundan geçiyor.
+  mode String @default("simple") @db.VarChar(10)
+
+  /// Gelişmiş ayarlar. JSONB çünkü alanlar Meta'nın alanları ve Meta bunları
+  /// sürümden sürüme değiştiriyor — otuz kolon her değişiklikte migration
+  /// demek olurdu.
+  advanced Json? @db.JsonB
+
+  /// Kütüphaneden seçilen anlık form (yalnızca gelişmiş mod).
+  ///
+  /// Hızlı modda form taslakla birlikte oluşturuluyor ve ömrü ona bağlı;
+  /// burada kütüphaneden seçiliyor ve birden çok reklamda kullanılabiliyor.
+  leadFormId String? @map("lead_form_id") @db.Uuid
+
   primaryText String  @map("primary_text") @db.VarChar(2000)
   headline    String? @db.VarChar(255)
   description String? @db.VarChar(255)
@@ -1537,6 +1555,7 @@ model AdDraft {
   client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   adAccount     AdAccount      @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
   socialProfile SocialProfile  @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  leadForm      LeadForm?      @relation(fields: [leadFormId], references: [id], onDelete: SetNull)
   assets        AdDraftAsset[]
 
   @@index([clientId, createdAt(sort: Desc)])
@@ -1774,6 +1793,7 @@ model LeadForm {
   versions     LeadForm[] @relation("LeadFormRoot")
   supersededBy LeadForm?  @relation("LeadFormSupersede", fields: [supersededById], references: [id], onDelete: SetNull)
   supersedes   LeadForm[] @relation("LeadFormSupersede")
+  adDrafts     AdDraft[]
 
   @@index([clientId, createdAt(sort: Desc)])
   @@index([rootId, version])

@@ -528,7 +528,26 @@ export interface PublishDraftRequest {
   dailyBudgetMicros: bigint;
   /** null = süresiz. */
   endTime: Date | null;
+  /** null = hemen başla. Gelişmiş modda kullanıcı belirleyebiliyor. */
+  startTime?: Date | null;
   currency: string;
+
+  /**
+   * Bütçe tipi (gelişmiş mod).
+   *
+   * `lifetime` seçildiğinde Meta `daily_budget` DEĞİL `lifetime_budget`
+   * bekliyor ve ikisini birden göndermek reddediliyor. Bitiş zamanı da
+   * zorunlu — Meta toplam bütçeyi süreye bölerek dağıtıyor.
+   */
+  budgetMode?: 'daily' | 'lifetime';
+
+  /** Teklif stratejisi (gelişmiş mod). Yoksa Meta varsayılanı. */
+  bidStrategy?: string;
+  /** Teklif/maliyet tavanı — hesabın para biriminin alt biriminde. */
+  bidAmountMinor?: bigint;
+
+  /** Anlık form kimliği — kütüphaneden seçilmişse. */
+  leadFormExternalId?: string;
   /** İlk eleman DAİMA kare — tek görselli yolda o kullanılıyor. */
   images: Array<{ ratio: 'square' | 'vertical' | 'horizontal'; hash: string }>;
   targeting: Record<string, unknown>;

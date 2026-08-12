@@ -1370,8 +1370,16 @@ export class MetaProvider implements IAdPlatformProvider {
     const created: Array<{ id: string; label: string }> = [];
 
     try {
-      let leadFormId: string | undefined;
-      if (req.spec.destinationType === 'ON_AD') {
+      /**
+       * KÜTÜPHANEDEN FORM GELDİYSE YENİSİ OLUŞTURULMUYOR.
+       *
+       * Gelişmiş modda kullanıcı formu kütüphaneden seçiyor ve o form zaten
+       * Meta'da yayında. Burada bir tane daha oluşturmak, aynı formun iki
+       * kopyasını bırakmak ve gelen bilgilerin hangi forma ait olduğunu
+       * karıştırmak demek olurdu.
+       */
+      let leadFormId: string | undefined = req.leadFormExternalId;
+      if (!leadFormId && req.spec.destinationType === 'ON_AD') {
         leadFormId = await this.createEmbeddedLeadForm(ctx, req);
         // Form SAYFAYA ait, reklam hesabına değil; geri alma listesine
         // eklenmiyor çünkü silinmesi sayfa token'ı gerektiriyor ve boş bir
@@ -1389,12 +1397,36 @@ export class MetaProvider implements IAdPlatformProvider {
       const adSetFields: Record<string, string> = {
         name: `${req.name} — ad set`,
         campaign_id: campaign.id,
-        daily_budget: toMinorUnits(req.dailyBudgetMicros, req.currency).toString(),
         billing_event: req.spec.billingEvent,
         optimization_goal: req.spec.optimizationGoal,
         targeting: JSON.stringify({ ...req.targeting, ...req.placements }),
         status: 'ACTIVE',
       };
+
+      /**
+       * GÜNLÜK VE TOPLAM BÜTÇE BİRLİKTE GÖNDERİLEMİYOR.
+       *
+       * Meta ikisini birden alırsa isteği reddediyor. Alan adı da farklı:
+       * `daily_budget` / `lifetime_budget`. Toplam bütçede `end_time` zorunlu
+       * ve doğrulama bunu zaten engelliyor.
+       */
+      const budgetMinor = toMinorUnits(req.dailyBudgetMicros, req.currency).toString();
+      if (req.budgetMode === 'lifetime') {
+        adSetFields.lifetime_budget = budgetMinor;
+      } else {
+        adSetFields.daily_budget = budgetMinor;
+      }
+
+      if (req.bidStrategy && req.bidStrategy !== 'LOWEST_COST_WITHOUT_CAP') {
+        adSetFields.bid_strategy = req.bidStrategy;
+        // Tavanlı stratejide tutar zorunlu; doğrulama bunu engelliyor ama
+        // alan yine de koşullu — sağlayıcı çağıranın doğruluğuna güvenmiyor.
+        if (req.bidAmountMinor !== undefined) {
+          adSetFields.bid_amount = req.bidAmountMinor.toString();
+        }
+      }
+
+      if (req.startTime) adSetFields.start_time = req.startTime.toISOString();
       if (req.spec.destinationType) adSetFields.destination_type = req.spec.destinationType;
       if (req.spec.promotedObject) {
         adSetFields.promoted_object = JSON.stringify(

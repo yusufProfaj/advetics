@@ -3,6 +3,7 @@ import {
   AD_DRAFT_STATUS_LABELS,
   GOAL_META,
   type AdDraftRecord,
+  type LeadFormRecord,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
@@ -40,7 +41,7 @@ export default async function AdBuilderPage({
 
   const canWrite = hasPermission(session, 'bulk.write');
 
-  const [connections, drafts] = await Promise.all([
+  const [connections, drafts, forms] = await Promise.all([
     serverApiFetch<
       Array<{
         adAccounts: Array<{ id: string; name: string; currency: string }>;
@@ -48,6 +49,10 @@ export default async function AdBuilderPage({
       }>
     >(`/connections?clientId=${clientId}`).catch(() => []),
     serverApiFetch<AdDraftRecord[]>(`/ad-drafts?clientId=${clientId}`).catch(() => []),
+    // Formlar YALNIZCA gelişmiş modda kullanılıyor ama sayfa yüklenirken
+    // getiriliyor: mod değiştirildiğinde ek bir istek beklemek, seçim
+    // kutusunun bir an boş görünmesi demek olurdu.
+    serverApiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${clientId}`).catch(() => []),
   ]);
 
   const accounts = connections.flatMap((c) => c.adAccounts ?? []);
@@ -79,6 +84,7 @@ export default async function AdBuilderPage({
           clientId={clientId}
           accounts={accounts}
           pages={pages}
+          forms={forms}
           existing={editing}
         />
       ) : (

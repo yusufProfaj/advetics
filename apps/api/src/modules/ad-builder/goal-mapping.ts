@@ -1,4 +1,11 @@
-import type { AssetRatio, CampaignGoal } from '@advetics/shared';
+import { GOAL_SPEC } from '@advetics/shared';
+import type {
+  AdvancedSettings,
+  AssetRatio,
+  CampaignGoal,
+  PlacementInput,
+  TargetingInput,
+} from '@advetics/shared';
 
 /**
  * Kampanya tipi → Meta ayarları.
@@ -48,12 +55,14 @@ export function campaignSpec(goal: CampaignGoal, pageExternalId: string): MetaCa
      */
     case 'form':
       return {
-        objective: 'OUTCOME_LEADS',
-        optimizationGoal: 'LEAD_GENERATION',
+        // DEĞERLER `GOAL_SPEC`'TEN. Arayüz de gelişmiş moda geçerken aynı
+        // tablodan besleniyor; iki yerde ayrı yazılsalardı zamanla ayrışır
+        // ve kullanıcı hızlı modda kaydedip gelişmişe geçtiğinde bambaşka
+        // bir ayar bulurdu.
+        //
         // IMPRESSIONS faturalama: Meta lead başına faturalamayı küçük
         // hesaplarda desteklemiyor ve gösterim başına faturalama standart.
-        billingEvent: 'IMPRESSIONS',
-        destinationType: 'ON_AD',
+        ...GOAL_SPEC.form,
         promotedObject: { page_id: pageExternalId },
         callToAction: 'SIGN_UP',
         explanation:
@@ -74,10 +83,7 @@ export function campaignSpec(goal: CampaignGoal, pageExternalId: string): MetaCa
      */
     case 'whatsapp':
       return {
-        objective: 'OUTCOME_LEADS',
-        optimizationGoal: 'CONVERSATIONS',
-        billingEvent: 'IMPRESSIONS',
-        destinationType: 'WHATSAPP',
+        ...GOAL_SPEC.whatsapp,
         promotedObject: { page_id: pageExternalId },
         callToAction: 'WHATSAPP_MESSAGE',
         explanation:
@@ -103,9 +109,7 @@ export function campaignSpec(goal: CampaignGoal, pageExternalId: string): MetaCa
      */
     case 'website':
       return {
-        objective: 'OUTCOME_TRAFFIC',
-        optimizationGoal: 'LANDING_PAGE_VIEWS',
-        billingEvent: 'IMPRESSIONS',
+        ...GOAL_SPEC.website,
         callToAction: 'LEARN_MORE',
         explanation:
           'Reklama tıklayan kişi web sitene gider. Sayfayı gerçekten açanlara ' +
@@ -248,4 +252,130 @@ export function totalCommitmentMicros(
   durationDays: number,
 ): bigint | null {
   return durationDays > 0 ? dailyBudgetMicros * BigInt(durationDays) : null;
+}
+
+// -----------------------------------------------------------------------------
+// İKİ MODU BİRLEŞTİREN KATMAN
+// -----------------------------------------------------------------------------
+
+/**
+ * Taslaktan Meta ayarlarını çözer — modu ne olursa olsun.
+ *
+ * BU FONKSİYON "TEK GİRİŞ, İKİ MOD"UN KİLİT TAŞI. Yayın yolu tek ve iki modu
+ * da bu besliyor. İki ayrı yayın yolu olsaydı, birinde düzeltilen bir hata
+ * diğerinde kalırdı ve fark ancak canlıda görülürdü.
+ *
+ * Basit modda kararı `campaignSpec` veriyor; gelişmiş modda kullanıcı veriyor
+ * ama AYNI doğrulamadan (`objective-matrix.ts`) geçiyor. Kullanıcının seçimi
+ * bizim eşlememizden daha ayrıcalıklı değil.
+ */
+export function resolveSpec(
+  draft: { goal: CampaignGoal; mode: string; advanced: AdvancedSettings | null },
+  pageExternalId: string,
+): MetaCampaignSpec {
+  if (draft.mode !== 'advanced' || !draft.advanced) {
+    return campaignSpec(draft.goal, pageExternalId);
+  }
+
+  const a = draft.advanced;
+
+  /**
+   * `promoted_object` GELİŞMİŞ MODDA DA GEREKEBİLİYOR ve bunu kullanıcıya
+   * sormuyoruz — teknik bir zorunluluk, stratejik bir karar değil.
+   *
+   * Piksel seçilmişse piksel + olay gidiyor; değilse sayfa kimliği. İkisini
+   * birden göndermek Meta tarafından reddediliyor.
+   */
+  const promotedObject: Record<string, string> | undefined = a.pixelId
+    ? { pixel_id: a.pixelId, custom_event_type: a.conversionEvent ?? 'LEAD' }
+    : OBJECTIVE_NEEDS_PAGE.has(a.objective)
+      ? { page_id: pageExternalId }
+      : undefined;
+
+  return {
+    objective: a.objective,
+    optimizationGoal: a.optimizationGoal,
+    billingEvent: a.billingEvent,
+    destinationType: a.destinationType,
+    promotedObject,
+    // CTA kullanıcıya sorulmuyor: varış tipinden türüyor ve uyumsuz bir CTA
+    // Meta tarafından sessizce görmezden geliniyor (buton yine görünüyor ama
+    // yanlış yere götürüyor).
+    callToAction: ctaFor(a),
+    explanation: 'Gelişmiş mod — ayarları sen belirledin.',
+  };
+}
+
+/** `promoted_object.page_id` isteyen hedefler. */
+const OBJECTIVE_NEEDS_PAGE = new Set(['OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT']);
+
+function ctaFor(a: AdvancedSettings): string {
+  switch (a.destinationType) {
+    case 'ON_AD':
+      return 'SIGN_UP';
+    case 'WHATSAPP':
+      return 'WHATSAPP_MESSAGE';
+    case 'MESSENGER':
+      return 'MESSAGE_PAGE';
+    default:
+      return a.objective === 'OUTCOME_SALES' ? 'SHOP_NOW' : 'LEARN_MORE';
+  }
+}
+
+/**
+ * Gelişmiş moddan Meta hedefleme nesnesi.
+ *
+ * `age_max = 65` GÖNDERİLMİYOR. Meta'da 65 "65 ve üzeri" demek ve alanı
+ * göndermek ile göndermemek aynı sonucu veriyor; ama göndermek, Ads
+ * Manager'da "18-65" yazması ve kullanıcının 66 yaşındakilerin dışlandığını
+ * sanması demek.
+ */
+export function targetingFrom(t: TargetingInput): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    geo_locations:
+      t.cityKeys.length > 0
+        ? { countries: t.countries, cities: t.cityKeys.map((key) => ({ key })) }
+        : { countries: t.countries },
+    age_min: t.ageMin,
+  };
+  if (t.ageMax < 65) out.age_max = t.ageMax;
+  // Meta: 1 = erkek, 2 = kadın. Alan hiç gönderilmezse ikisi de.
+  if (t.genders === 'male') out.genders = [1];
+  if (t.genders === 'female') out.genders = [2];
+  if (t.locales.length > 0) out.locales = t.locales;
+  return out;
+}
+
+/**
+ * Gelişmiş moddan yerleşim.
+ *
+ * OTOMATİK YERLEŞİMDE HİÇBİR ŞEY GÖNDERİLMİYOR — boş nesne değil, alanların
+ * kendisi yok. Meta'ya boş `publisher_platforms` göndermek "hiçbir platform"
+ * demek ve ad set hiç dağıtım yapmıyor; alanı hiç göndermemek "hepsi" demek.
+ * İkisi arasındaki fark sessiz bir sıfır harcama.
+ */
+export function placementsFrom(p: PlacementInput): Record<string, string[]> {
+  if (p.mode === 'auto') return {};
+
+  const out: Record<string, string[]> = { publisher_platforms: p.platforms };
+  if (p.platforms.includes('facebook') && p.facebookPositions.length > 0) {
+    out.facebook_positions = [...p.facebookPositions];
+  }
+  if (p.platforms.includes('instagram') && p.instagramPositions.length > 0) {
+    out.instagram_positions = [...p.instagramPositions];
+  }
+  return out;
+}
+
+/**
+ * Gelişmiş modda başlangıç/bitiş.
+ *
+ * Boş bırakılan başlangıç = hemen. Bitiş yoksa süresiz — ama toplam bütçe
+ * kullanılıyorsa doğrulama bitişi zaten zorunlu kılıyor.
+ */
+export function scheduleFrom(a: AdvancedSettings): { startAt: Date | null; endAt: Date | null } {
+  return {
+    startAt: a.startAt ? new Date(a.startAt) : null,
+    endAt: a.endAt ? new Date(a.endAt) : null,
+  };
 }

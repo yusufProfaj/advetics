@@ -7,8 +7,12 @@ import {
   endTimeFor,
   labelFor,
   placementsFor,
+  placementsFrom,
+  resolveSpec,
+  targetingFrom,
   totalCommitmentMicros,
 } from './goal-mapping';
+import { defaultsFromSpec } from './objective-matrix';
 
 /**
  * Kampanya tipi → Meta eşlemesi.
@@ -223,5 +227,127 @@ describe('süre ve taahhüt', () => {
 
   it('SÜRESİZDE toplam null — uydurma sayı gösterilmiyor', () => {
     expect(totalCommitmentMicros(200_000_000n, 0)).toBeNull();
+  });
+});
+
+// -----------------------------------------------------------------------------
+// İKİ MOD
+// -----------------------------------------------------------------------------
+
+describe('resolveSpec — tek yayın yolu', () => {
+  it('hızlı modda goal-mapping kararı geçerli', () => {
+    const spec = resolveSpec({ goal: 'whatsapp', mode: 'simple', advanced: null }, 'page-1');
+    expect(spec.optimizationGoal).toBe('CONVERSATIONS');
+    expect(spec.destinationType).toBe('WHATSAPP');
+  });
+
+  it('mod gelişmiş ama ayar boşsa hızlı moda düşüyor', () => {
+    // Veritabanı kısıtı bunu zaten engelliyor. Yine de çökmek yerine güvenli
+    // varsayılana düşmek doğru: yayın anında `undefined.objective` okumak,
+    // sebebi anlaşılmayan bir hataya dönerdi.
+    const spec = resolveSpec({ goal: 'website', mode: 'advanced', advanced: null }, 'page-1');
+    expect(spec.objective).toBe('OUTCOME_TRAFFIC');
+  });
+
+  it('gelişmiş modda kullanıcının seçimi geçiyor', () => {
+    const advanced = defaultsFromSpec({
+      objective: 'OUTCOME_ENGAGEMENT',
+      optimizationGoal: 'POST_ENGAGEMENT',
+      billingEvent: 'IMPRESSIONS',
+    });
+    const spec = resolveSpec({ goal: 'website', mode: 'advanced', advanced }, 'page-1');
+    // `goal` alanı 'website' ama gelişmiş mod onu GÖRMEZDEN GELİYOR: hızlı
+    // modun kararını taşıyor, gelişmiş modun değil.
+    expect(spec.objective).toBe('OUTCOME_ENGAGEMENT');
+  });
+
+  it('piksel varsa promoted_object piksel taşıyor, sayfa DEĞİL', () => {
+    // İkisini birden göndermek Meta tarafından reddediliyor.
+    const advanced = {
+      ...defaultsFromSpec({
+        objective: 'OUTCOME_SALES',
+        optimizationGoal: 'OFFSITE_CONVERSIONS',
+        billingEvent: 'IMPRESSIONS',
+      }),
+      pixelId: '999',
+      conversionEvent: 'PURCHASE',
+    };
+    const spec = resolveSpec({ goal: 'website', mode: 'advanced', advanced }, 'page-1');
+    expect(spec.promotedObject).toEqual({ pixel_id: '999', custom_event_type: 'PURCHASE' });
+  });
+
+  it('lead hedefinde piksel yoksa sayfa kimliği gidiyor', () => {
+    const advanced = defaultsFromSpec({
+      objective: 'OUTCOME_LEADS',
+      optimizationGoal: 'LEAD_GENERATION',
+      billingEvent: 'IMPRESSIONS',
+      destinationType: 'ON_AD',
+    });
+    const spec = resolveSpec({ goal: 'form', mode: 'advanced', advanced }, 'page-1');
+    expect(spec.promotedObject).toEqual({ page_id: 'page-1' });
+  });
+});
+
+describe('gelişmiş hedefleme', () => {
+  const base = defaultsFromSpec({
+    objective: 'OUTCOME_TRAFFIC',
+    optimizationGoal: 'LINK_CLICKS',
+    billingEvent: 'IMPRESSIONS',
+  }).targeting;
+
+  it('65 üst yaşı GÖNDERİLMİYOR', () => {
+    // Meta'da 65 "65 ve üzeri". Alanı göndermek Ads Manager'da "18-65"
+    // yazması ve kullanıcının 66 yaşındakilerin dışlandığını sanması demek.
+    expect(targetingFrom(base).age_max).toBeUndefined();
+  });
+
+  it('65 altı üst yaş gönderiliyor', () => {
+    expect(targetingFrom({ ...base, ageMax: 44 }).age_max).toBe(44);
+  });
+
+  it('cinsiyet Meta kodlarına çevriliyor', () => {
+    expect(targetingFrom({ ...base, genders: 'female' }).genders).toEqual([2]);
+    expect(targetingFrom({ ...base, genders: 'male' }).genders).toEqual([1]);
+    // 'all' hiç alan göndermiyor — boş dizi "hiçbir cinsiyet" demek olurdu.
+    expect(targetingFrom(base).genders).toBeUndefined();
+  });
+
+  it('şehir seçilmemişse yalnızca ülke gidiyor', () => {
+    expect(targetingFrom(base).geo_locations).toEqual({ countries: ['TR'] });
+  });
+
+  it('şehir seçilmişse Meta anahtar biçimine çevriliyor', () => {
+    expect(targetingFrom({ ...base, cityKeys: ['12345'] }).geo_locations).toEqual({
+      countries: ['TR'],
+      cities: [{ key: '12345' }],
+    });
+  });
+});
+
+describe('gelişmiş yerleşim', () => {
+  it('OTOMATİK yerleşimde hiçbir alan gönderilmiyor', () => {
+    // Boş `publisher_platforms` göndermek "hiçbir platform" demek ve ad set
+    // sessizce hiç dağıtım yapmaz. Alanı hiç göndermemek "hepsi" demek.
+    expect(
+      placementsFrom({
+        mode: 'auto',
+        platforms: ['facebook', 'instagram'],
+        facebookPositions: [],
+        instagramPositions: [],
+      }),
+    ).toEqual({});
+  });
+
+  it('elle yerleşimde seçilen konumlar gidiyor', () => {
+    const out = placementsFrom({
+      mode: 'manual',
+      platforms: ['instagram'],
+      facebookPositions: ['feed'],
+      instagramPositions: ['reels'],
+    });
+    expect(out.publisher_platforms).toEqual(['instagram']);
+    expect(out.instagram_positions).toEqual(['reels']);
+    // Facebook seçili DEĞİL: konumları gönderilmiyor, yoksa Meta reddediyor.
+    expect(out.facebook_positions).toBeUndefined();
   });
 });

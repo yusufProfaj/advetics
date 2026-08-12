@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CAMPAIGN_MODES, advancedSettingsSchema, type AdvancedSettings } from './campaign-advanced.schema';
 
 /**
  * Reklam Oluşturucu — Modül 4 (CREATE).
@@ -204,8 +205,33 @@ export const adDraftInputSchema = z
     dailyBudget: money,
     /** Kaç gün yayında kalsın. 0 = süresiz. */
     durationDays: z.coerce.number().int().min(0).max(90).default(7),
+
+    /**
+     * simple | advanced — "tek giriş, iki mod".
+     *
+     * Aynı taslak iki modda da açılabiliyor. Gelişmişe geçen kullanıcı
+     * görsellerini ve metinlerini kaybetmiyor; yalnızca Meta'ya giden
+     * kararların kimin verdiği değişiyor.
+     */
+    mode: z.enum(CAMPAIGN_MODES).default('simple'),
+    advanced: advancedSettingsSchema.optional(),
+    /** Gelişmiş modda kütüphaneden seçilen anlık form. */
+    leadFormId: z.string().uuid().optional(),
   })
   .superRefine((v, ctx) => {
+    // GELİŞMİŞ MOD AYARSIZ OLAMAZ.
+    //
+    // Modu gelişmiş görünüp ayarı olmayan bir taslak, yayın anında "hangi
+    // hedefi kullanayım" sorusunu cevapsız bırakır. Veritabanı kısıtı da
+    // aynı şeyi söylüyor; burada söylemek hatayı formda gösteriyor.
+    if (v.mode === 'advanced' && !v.advanced) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['advanced'],
+        message: 'Gelişmiş modda kampanya ayarları zorunlu',
+      });
+    }
+
     if (v.goal === 'website') {
       const url = v.linkUrl?.trim();
       if (!url) {
@@ -266,6 +292,9 @@ export interface AdDraftRecord {
   whatsappNumber: string | null;
   dailyBudgetMicros: string;
   durationDays: number;
+  mode: (typeof CAMPAIGN_MODES)[number];
+  advanced: AdvancedSettings | null;
+  leadFormId: string | null;
   status: AdDraftStatus;
   assets: AdAssetRecord[];
   externalCampaignId: string | null;

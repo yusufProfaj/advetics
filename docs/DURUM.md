@@ -14,8 +14,8 @@
 | | |
 |---|---|
 | Veritabanı tablosu | **37** |
-| Migration | **16** |
-| API testi | **563** |
+| Migration | **17** |
+| API testi | **604** |
 | Web testi | **20** |
 | Panel sayfası | **10** |
 | API controller | **17** |
@@ -98,6 +98,7 @@ gösteriliyor, ama kimseye **bildirim gitmiyor**.
 | Yetenek | Durum | Nerede |
 |---|---|---|
 | **Reklam Oluşturucu** (form/WhatsApp/site) | 🟡 | `/reklam-olustur` — yayın yolu doğrulanmadı |
+| **Gelişmiş Kampanya Oluşturucu** | 🟡 | Aynı ekranda ikinci mod — hedef, teklif, kitle, yerleşim; yayın doğrulanmadı |
 | Görsel yükleme (3 oran) + boyut doğrulama | ✅ | `image-probe.ts`, `asset-storage.service.ts` |
 | Toplu reklam oluşturucu | 🟡 | `/toplu-olustur` — yayın yolu doğrulanmadı |
 | Yayın öncesi doğrulama | ✅ | Karakter sınırı, URL, CTA, mükerrer ad |
@@ -105,6 +106,31 @@ gösteriliyor, ama kimseye **bildirim gitmiyor**.
 | Organik gönderi senkronizasyonu | ✅ | `queue/organic-sync.service.ts` |
 | Görsel/video yükleme | 🟡 | Reklam Oluşturucu'da var; kalıcı arşiv (BASE) hâlâ yok |
 | **Anlık form oluşturucu** | 🟡 | `/kutuphane/formlar` — 5 bölüm + canlı önizleme; yayın doğrulanmadı |
+
+**"Tek giriş, iki mod" kararı ve gerekçesi (12 Ağustos).** Spec'teki tam
+kontrollü kampanya kurucusu, ürünün kurucu vaadiyle çelişiyordu: *"reklam ile
+ilgili bilgisi olmayan birisinin bile platformu kullanabilmesi"*. Ayrı bir
+"gelişmiş" sayfası açmak iki sorun üretirdi — hızlı modda başlayan taslak
+gelişmişe geçemez (kullanıcı her şeyi baştan yazar) ve iki ayrı yayın yolu
+oluşur (birinde düzeltilen hata diğerinde kalır, fark ancak canlıda görülür).
+
+Bunun yerine aynı ekranda mod: aynı taslak, aynı görseller, aynı yayın yolu.
+`resolveSpec()` iki modu tek yola bağlıyor. Mod seçici bütçeden SONRA duruyor
+— en başta olsaydı, reklamcılık bilmeyen kullanıcı "gelişmiş" seçeneğini görüp
+kendini yetersiz hissederdi; orada ise gelişmiş mod bir ek, ön koşul değil.
+
+**Uyumluluk matrisi (`objective-matrix.ts`) bu modülün asıl işi.** Meta'da
+hedef × optimizasyon × varış tipi × faturalama birbirine bağlı ve geçersiz
+kombinasyonun kötü sonucu Meta'nın REDDETMESİ değil, KABUL ETMESİ: ad set
+"aktif" görünür, harcama sıfır kalır, hata mesajı yoktur. Matris "izin
+verilenler listesi" olarak yazıldı — bilinmeyen kombinasyon geçersiz sayılıyor.
+Arayüzde uyumsuz seçenek hiç görünmüyor; sonradan uyarmak, kullanıcının o
+hatayı yapmasına izin vermek demek.
+
+Hızlı modun üç eşlemesi `GOAL_SPEC` ile tek kaynağa bağlandı: sunucudaki
+`campaignSpec` ve arayüzdeki "gelişmişe geç" varsayılanı aynı tablodan
+besleniyor. Ayrı yazılsalardı kullanıcı hızlı modda kaydedip gelişmişe
+geçtiğinde bambaşka bir ayar bulurdu.
 
 ### 5 — MANAGE (Bütçe, Kill-Switch, Teklif) 🟡
 
@@ -226,6 +252,7 @@ Bunlar **yazıldı, test edildi, ama canlı Meta API'sinde bir kez bile
 | Boost oluşturma | `meta.provider.ts` → `createBoost` | **Yüksek** — 3 varlık, geri alma yolu var ama denenmedi |
 | Toplu reklam oluşturma | `meta.provider.ts` → `createAd` vb. | **Yüksek** — kısmi başarı yönetimi denenmedi |
 | Reklam Oluşturucu yayını | `meta.provider.ts` → `publishDraft` | **Yüksek** — 4 varlık + anlık form; `asset_feed_spec` yerleşim kuralları hiç denenmedi |
+| **Gelişmiş mod yayını** | `meta.provider.ts` → `publishDraft` (teklif/bütçe/takvim alanları) | **Yüksek** — `bid_strategy`, `bid_amount`, `lifetime_budget`, `start_time` alanları hiç gönderilmedi. Uyumluluk matrisi de belgeden çıkarıldı, canlıda sınanmadı |
 | **Kütüphane formu yayını** | `meta.provider.ts` → `createLeadForm` | **Yüksek** — geri alınamaz; `legal_content`, `context_card`, `thank_you_page` eşlemeleri belgeden çıkarıldı, gerçek yanıt görülmedi. `is_optimized_for_quality` eşlemesi (= "daha nitelikli") de doğrulanmadı |
 
 Google yazma yolu **hiç yazılmadı** ve bu artık bilinçli bir sıra kararı:

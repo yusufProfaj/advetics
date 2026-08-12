@@ -151,8 +151,8 @@ describe('taslak düzenleme', () => {
 
     expect(u.id).toBe(f.id);
     expect(u.version).toBe(1);
-    const [{ count }] = await h.q<{ count: string }>(`SELECT count(*) FROM lead_forms`);
-    expect(Number(count)).toBe(1);
+    const rows = await h.q<{ count: string }>(`SELECT count(*) FROM lead_forms`);
+    expect(Number(rows[0]?.count)).toBe(1);
   });
 });
 
@@ -204,8 +204,8 @@ describe('yayınlanmış formu düzenleme', () => {
     expect(u.status).toBe('published');
     // Meta kimliği DEĞİŞMİYOR: Meta'daki form olduğu gibi duruyor.
     expect(u.externalFormId).toBe('fbform-1');
-    const [{ count }] = await h.q<{ count: string }>(`SELECT count(*) FROM lead_forms`);
-    expect(Number(count)).toBe(1);
+    const rows = await h.q<{ count: string }>(`SELECT count(*) FROM lead_forms`);
+    expect(Number(rows[0]?.count)).toBe(1);
   });
 
   it('yayınlanmış formda içerik alanları yerinde DEĞİŞMİYOR', async () => {
@@ -238,8 +238,8 @@ describe('silme', () => {
   it('taslak silinebiliyor', async () => {
     const f = await svc.create(CTX, input());
     await svc.remove(CTX, f.id);
-    const [{ count }] = await h.q<{ count: string }>(`SELECT count(*) FROM lead_forms`);
-    expect(Number(count)).toBe(0);
+    const rows = await h.q<{ count: string }>(`SELECT count(*) FROM lead_forms`);
+    expect(Number(rows[0]?.count)).toBe(0);
   });
 
   it('YAYINLANMIŞ form silinemiyor', async () => {

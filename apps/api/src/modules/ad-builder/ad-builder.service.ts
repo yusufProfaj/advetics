@@ -13,6 +13,8 @@ import {
   type AdDraftInput,
   type AdDraftRecord,
   type AdDraftStatus,
+  type AdvancedSettings,
+  type CampaignMode,
   type AssetRatio,
   type CampaignGoal,
   type PublishCheck,
@@ -22,7 +24,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { TxLike } from '../rules/rules.service';
 import { AssetStorageService } from './asset-storage.service';
 import { probeImage } from './image-probe';
-import { campaignSpec, totalCommitmentMicros } from './goal-mapping';
+import { campaignSpec, resolveSpec, totalCommitmentMicros } from './goal-mapping';
+import { OBJECTIVE_RULES, validateAdvanced } from './objective-matrix';
 
 /**
  * Reklam Oluşturucu — veri katmanı.
@@ -52,6 +55,9 @@ interface DraftRow {
   whatsapp_number: string | null;
   daily_budget_micros: string | number | bigint;
   duration_days: number;
+  mode: CampaignMode;
+  advanced: AdvancedSettings | null;
+  lead_form_id: string | null;
   status: AdDraftStatus;
   external_campaign_id: string | null;
   external_ad_id: string | null;
@@ -115,7 +121,8 @@ export class AdBuilderService {
         INSERT INTO ad_drafts (
           id, org_id, client_id, ad_account_id, social_profile_id, goal, name,
           primary_text, headline, description, link_url, whatsapp_number,
-          daily_budget_micros, duration_days, created_by, updated_at
+          daily_budget_micros, duration_days, mode, advanced, lead_form_id,
+          created_by, updated_at
         ) VALUES (
           gen_random_uuid(), ${ctx.orgId}::uuid, ${input.clientId}::uuid,
           ${input.adAccountId}::uuid, ${input.socialProfileId}::uuid,
@@ -123,6 +130,7 @@ export class AdBuilderService {
           ${input.headline || null}, ${input.description || null},
           ${input.linkUrl || null}, ${input.whatsappNumber || null},
           ${toMicros(input.dailyBudget)}::bigint, ${input.durationDays},
+          ${input.mode}, ${advancedJson(input)}::jsonb, ${input.leadFormId || null}::uuid,
           ${ctx.userId}::uuid, now()
         )
         RETURNING id
@@ -149,6 +157,15 @@ export class AdBuilderService {
           whatsapp_number = ${input.whatsappNumber || null},
           daily_budget_micros = ${toMicros(input.dailyBudget)}::bigint,
           duration_days = ${input.durationDays},
+          mode = ${input.mode},
+          -- AYARLAR MOD DEĞİŞSE DE SAKLANIYOR.
+          --
+          -- Hızlı moda dönen kullanıcı gelişmiş ayarlarını kaybetmemeli;
+          -- geri döndüğünde her şeyi baştan kurmak zorunda kalırdı. Kısıt
+          -- yalnızca "gelişmiş modda ayar VAR" diyor, "hızlı modda YOK"
+          -- demiyor.
+          advanced = COALESCE(${advancedJson(input)}::jsonb, advanced),
+          lead_form_id = ${input.leadFormId || null}::uuid,
           updated_at = now()
         WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
           -- YAYINLANMIŞ TASLAK DEĞİŞTİRİLEMEZ.
@@ -380,6 +397,25 @@ export class AdBuilderService {
       blockers.push('Web sitesi adresi eksik.');
     }
 
+    /**
+     * GELİŞMİŞ MODDA UYUMLULUK MATRİSİ AYNI KONTROL LİSTESİNE KATILIYOR.
+     *
+     * Ayrı bir "gelişmiş doğrulama" ekranı olsaydı, kullanıcı iki ayrı yerde
+     * iki ayrı liste görürdü ve hangisinin yayını engellediği belirsiz
+     * kalırdı. Tek liste, tek karar.
+     */
+    if (draft.mode === 'advanced' && draft.advanced) {
+      const adv = validateAdvanced(draft.advanced, {
+        hasLinkUrl: Boolean(draft.linkUrl),
+        hasLeadForm: Boolean(draft.leadFormId),
+        ratios: draft.assets.map((a) => a.ratio),
+        dailyBudget: Number(BigInt(draft.dailyBudgetMicros) / 1_000_000n),
+        currency: 'TRY',
+      });
+      blockers.push(...adv.blockers.map((b) => b.message));
+      warnings.push(...adv.warnings.map((w) => w.message));
+    }
+
     if (!draft.assets.some((a) => a.ratio === 'vertical')) {
       warnings.push(
         'Dikey görsel yok — reklam Hikâyeler ve Reels’te gösterilmeyecek. ' +
@@ -411,12 +447,21 @@ export class AdBuilderService {
       );
     }
 
-    const spec = campaignSpec(draft.goal, '0');
+    const spec = resolveSpec(draft, '0');
+
+    // ÖZETTE MODA GÖRE FARKLI ETİKET. Gelişmiş modda "Form" yazmak yanıltıcı
+    // olurdu: kullanıcı hedefi değiştirmiş olabilir ve taslağın `goal` alanı
+    // yalnızca hızlı modun kararını taşıyor.
+    const label =
+      draft.mode === 'advanced' && draft.advanced
+        ? OBJECTIVE_RULES[draft.advanced.objective].label
+        : GOAL_META[draft.goal].label;
+
     const summary =
       draft.durationDays > 0
-        ? `${GOAL_META[draft.goal].label} · günde ${money(daily)} · ${draft.durationDays} gün · ` +
+        ? `${label} · günde ${money(daily)} · ${draft.durationDays} gün · ` +
           `toplam ${money(total!)}`
-        : `${GOAL_META[draft.goal].label} · günde ${money(daily)} · süresiz`;
+        : `${label} · günde ${money(daily)} · süresiz`;
 
     return {
       ok: blockers.length === 0,
@@ -503,6 +548,9 @@ export class AdBuilderService {
       whatsappNumber: row.whatsapp_number,
       dailyBudgetMicros: String(row.daily_budget_micros),
       durationDays: row.duration_days,
+      mode: row.mode ?? 'simple',
+      advanced: row.advanced ?? null,
+      leadFormId: row.lead_form_id,
       status: row.status,
       assets: assets
         // SIRA SABİT: kare, dikey, yatay. Veritabanı sırası rastgele ve
@@ -541,4 +589,16 @@ function money(micros: bigint): string {
 
 function mb(bytes: number): string {
   return (bytes / 1024 / 1024).toFixed(1);
+}
+
+/**
+ * Gelişmiş ayarları JSONB'ye çevirir.
+ *
+ * `null` DÖNMESİ ANLAMLI: `COALESCE` ile birleşince "ayar gönderilmediyse
+ * mevcut olanı koru" davranışını veriyor. `'null'::jsonb` dönseydi (JSON
+ * null'ı) COALESCE onu geçerli bir değer sayar ve kayıtlı ayarları silerdi —
+ * SQL NULL ile JSON null arasındaki bu fark sessiz bir veri kaybı olurdu.
+ */
+function advancedJson(input: AdDraftInput): string | null {
+  return input.advanced ? JSON.stringify(input.advanced) : null;
 }
