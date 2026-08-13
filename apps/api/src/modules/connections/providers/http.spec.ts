@@ -214,3 +214,40 @@ describe('normalizeError — Google zenginleştirme', () => {
     expect(() => normalizeError('google', googleResponse(), broken)).not.toThrow();
   });
 });
+
+describe('yapılacak iş ipucu', () => {
+  /**
+   * Meta'nın mesajları BELİRTİYİ anlatıyor, çözümü değil. Uygulamanın
+   * geliştirme modunda olduğunu söylüyor ama o modun nereden değiştirileceğini
+   * söylemiyor — arayan kişi hatayı kodda arıyor ve bulamıyor.
+   */
+  it('geliştirme modu hatasına ne yapılacağı ekleniyor', () => {
+    const err = normalizeError(
+      'meta',
+      { status: 400, headers: new Headers() } as Response,
+      {
+        error: {
+          code: 100,
+          error_subcode: 1885183,
+          message: 'Invalid parameter',
+          error_user_msg: 'Geliştirme modundaki bir uygulama tarafından oluşturuldu',
+        },
+      },
+    );
+    expect(err.message).toContain('subcode=1885183');
+    expect(err.message).toContain('developers.facebook.com');
+    // Meta'nın kendi açıklaması KORUNUYOR — ipucu onun yerini almıyor.
+    expect(err.message).toContain('Geliştirme modundaki');
+  });
+
+  it('bilinmeyen alt koda ipucu UYDURULMUYOR', () => {
+    // Kod değişikliğiyle çözülen hatalara "şunu yap" demek yanlış yönlendirme.
+    const err = normalizeError(
+      'meta',
+      { status: 400, headers: new Headers() } as Response,
+      { error: { code: 100, error_subcode: 999999, message: 'Invalid parameter' } },
+    );
+    expect(err.message).toContain('subcode=999999');
+    expect(err.message).not.toContain('→');
+  });
+});

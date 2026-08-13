@@ -65,6 +65,24 @@ export async function platformFetch<T>(
  * Google gRPC benzeri `error.status` + `details[].errors[].errorCode` yapısı
  * kullanır. İkisini de aynı beş kategoriye indiriyoruz.
  */
+/**
+ * Kullanıcının YAPMASI GEREKEN şeyi söyleyen alt kodlar.
+ *
+ * Meta'nın mesajları BELİRTİYİ anlatıyor, çözümü değil. "Geliştirme
+ * modundaki bir uygulama tarafından oluşturuldu" doğru bir cümle ama o modun
+ * nereden değiştirileceğini söylemiyor ve arayan kişi hatayı kodda arıyor.
+ *
+ * BURAYA YALNIZCA KOD DEĞİŞİKLİĞİYLE ÇÖZÜLEMEYEN durumlar giriyor. Eksik bir
+ * alan ya da yanlış bir biçim buraya ait değil — onların çözümü koddur ve
+ * kullanıcıya "şunu yap" demek yanlış yönlendirme olurdu.
+ */
+const META_ACTION_HINTS: Record<string, string> = {
+  1885183:
+    'Meta uygulaman GELİŞTİRME MODUNDA. Reklam yayınlamak için canlıya ' +
+    'alınması gerekiyor: developers.facebook.com → uygulaman → üstteki ' +
+    'Geliştirme/Canlı anahtarını Canlı yap.',
+};
+
 export function normalizeError(
   platform: Platform,
   res: Response,
@@ -102,7 +120,13 @@ export function normalizeError(
   if (err.error_data !== undefined && err.error_data !== null) {
     parts.push(`error_data=${JSON.stringify(err.error_data).slice(0, 300)}`);
   }
-  if (subcode !== undefined) parts.push(`subcode=${subcode}`);
+  if (subcode !== undefined) {
+    parts.push(`subcode=${subcode}`);
+    // NE YAPILACAĞI, mesajın SONUNDA. Meta'nın kendi açıklaması yukarıda
+    // duruyor; bu satır onun yerini almıyor, eksik kalan adımı ekliyor.
+    const hint = platform === 'meta' ? META_ACTION_HINTS[String(subcode)] : undefined;
+    if (hint) parts.push(`→ ${hint}`);
+  }
   // fbtrace_id Meta desteğiyle konuşurken tek kullanışlı referans.
   if (typeof err.fbtrace_id === 'string') parts.push(`fbtrace=${err.fbtrace_id}`);
 
