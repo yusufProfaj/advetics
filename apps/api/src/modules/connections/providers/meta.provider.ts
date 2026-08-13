@@ -1468,12 +1468,19 @@ export class MetaProvider implements IAdPlatformProvider {
 
       if (req.startTime) adSetFields.start_time = req.startTime.toISOString();
       if (req.spec.destinationType) adSetFields.destination_type = req.spec.destinationType;
+      /**
+       * FORM KİMLİĞİ `promoted_object` İÇİNE GİRMİYOR.
+       *
+       * Meta reddediyor: `(#100) Invalid keys "leadgen_form_id" were found in
+       * param "promoted_object"`. Ad set yalnızca hangi SAYFA adına
+       * yayınlandığını biliyor; form KREATİFE bağlı ve
+       * `call_to_action.value.lead_gen_form_id` ile veriliyor.
+       *
+       * Ayrım mantıklı: aynı ad set altında farklı formlara giden birden çok
+       * kreatif olabiliyor.
+       */
       if (req.spec.promotedObject) {
-        adSetFields.promoted_object = JSON.stringify(
-          leadFormId
-            ? { ...req.spec.promotedObject, leadgen_form_id: leadFormId }
-            : req.spec.promotedObject,
-        );
+        adSetFields.promoted_object = JSON.stringify(req.spec.promotedObject);
       }
       if (req.endTime) adSetFields.end_time = req.endTime.toISOString();
 
@@ -2150,7 +2157,30 @@ function buildCreativeSpec(
     ? (req.whatsappNumber ? `https://wa.me/${req.whatsappNumber}` : `https://wa.me/`)
     : (req.linkUrl ?? `https://facebook.com/${req.pageExternalId}`);
 
-  if (req.images.length <= 1) {
+  /**
+   * FORM KAMPANYASINDA HER ZAMAN TEK GÖRSELLİ KREATİF.
+   *
+   * Çok görselli yol `asset_feed_spec` kullanıyor ve orada form kimliğinin
+   * nereye yazılacağını CANLIDA DOĞRULAYAMIYORUZ. Yanlış alana yazmanın iki
+   * sonucu var ve ikincisi tehlikeli olan:
+   *
+   *   · Meta reddeder — görünür, düzeltilir.
+   *   · Meta KABUL EDER ve alanı görmezden gelir. Reklam yayınlanır, "Kaydol"
+   *     butonu görünür, tıklayan kişiye form AÇILMAZ. Hata yok, harcama var,
+   *     potansiyel müşteri yok.
+   *
+   * Tahmin etmek yerine bildiğimiz yola düşüyoruz: tek görselli kreatifte
+   * `call_to_action.value.lead_gen_form_id` Meta'nın belgelediği standart
+   * biçim. Bedeli oran özelleştirmesinin kaybı ve bunu `publishCheck`
+   * kullanıcıya SÖYLÜYOR — sessizce kırpmıyoruz.
+   *
+   * `ads_management` canlıda tam çalıştığında `asset_feed_spec` içindeki
+   * doğru alan denenip Ads Manager'dan formun gerçekten bağlandığı
+   * doğrulanmalı; ondan sonra bu kısıt kalkabilir.
+   */
+  if (req.images.length <= 1 || leadFormId) {
+    // Kare her zaman ilk sırada (`ad-publisher` sıralıyor), yani çok görsel
+    // yüklenmiş bir form kampanyasında akışa uygun olan seçiliyor.
     const hash = req.images[0]?.hash;
     return {
       object_story_spec: JSON.stringify({

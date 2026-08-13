@@ -531,6 +531,25 @@ export class AdBuilderService {
      * buraya konmasaydı metinsiz bir reklam yayınlanabilirdi ve Meta onu
      * boş birincil metinle gösterirdi.
      */
+    /**
+     * FORM KAMPANYASINDA ORAN ÖZELLEŞTİRMESİ ÇALIŞMIYOR — SESSİZ DEĞİL.
+     *
+     * Anlık form kreatife `lead_gen_form_id` ile bağlanıyor ve bu yalnızca
+     * tek görselli kreatifte doğrulanmış bir biçim. Çok görselli yolda formun
+     * nereye yazılacağı canlıda sınanmadı; yanlış alana yazmak, Meta'nın onu
+     * sessizce görmezden gelmesi ve "Kaydol" butonunun hiçbir yere
+     * gitmemesi demek olabilirdi.
+     *
+     * Kullanıcı üç oran yükleyip yalnızca birinin kullanıldığını fark
+     * etmemeli: kırpma sessiz olmamalı.
+     */
+    if (draft.goal === 'form' && draft.assets.length > 1) {
+      warnings.push(
+        'Form kampanyasında şimdilik yalnızca kare görsel kullanılıyor — ' +
+          'Hikâye ve yatay yerleşimler için ayrı görsel gönderilmiyor.',
+      );
+    }
+
     if (!draft.primaryText.trim()) {
       blockers.push('Ana metin boş — reklamın üstünde görünecek yazı olmadan yayınlanamaz.');
     }

@@ -94,3 +94,34 @@ describe('kampanya oluşturmanın zorunlu alanları', () => {
     expect(SOURCE).toContain("const ADSET_BUDGET_SHARING = 'false';");
   });
 });
+
+describe('anlık form kreatife bağlanıyor, ad set\'e değil', () => {
+  /**
+   * Meta `promoted_object` içinde `leadgen_form_id` kabul etmiyor:
+   * `(#100) Invalid keys "leadgen_form_id" were found in param
+   * "promoted_object"`. Ad set yalnızca hangi SAYFA adına yayınlandığını
+   * biliyor; form kreatife ait.
+   *
+   * Bu canlıda öğrenildi ve tekrar etmemesi için kaynak taranıyor.
+   */
+  it('promoted_object form kimliği TAŞIMIYOR', () => {
+    // Yalnızca hatayı anlatan yorum satırında geçebilir.
+    const codeLines = SOURCE.split('\n').filter(
+      (l) => l.includes('leadgen_form_id') && !l.trim().startsWith('*'),
+    );
+    expect(codeLines).toEqual([]);
+  });
+
+  it('kreatif form kimliğini call_to_action içinde taşıyor', () => {
+    expect(SOURCE).toContain('lead_gen_form_id: leadFormId');
+  });
+
+  it('FORM kampanyası tek görselli kreatife düşüyor', () => {
+    /**
+     * Çok görselli yolda (`asset_feed_spec`) form kimliğinin nereye yazılacağı
+     * doğrulanmadı. Yanlış alana yazmak Meta'nın onu sessizce görmezden
+     * gelmesi ve butonun hiçbir yere gitmemesi demek olabilirdi.
+     */
+    expect(SOURCE).toContain('if (req.images.length <= 1 || leadFormId) {');
+  });
+});
