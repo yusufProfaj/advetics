@@ -15,7 +15,7 @@
 |---|---|
 | Veritabanı tablosu | **39** |
 | Migration | **19** |
-| API testi | **634** |
+| API testi | **660** |
 | Web testi | **20** |
 | Panel sayfası | **11** |
 | API controller | **18** |
@@ -105,8 +105,33 @@ gösteriliyor, ama kimseye **bildirim gitmiyor**.
 | Auto-Boost (organik → reklam) | 🟡 | `/auto-boost` — oluşturma yolu doğrulanmadı |
 | Organik gönderi senkronizasyonu | ✅ | `queue/organic-sync.service.ts` |
 | Görsel/video yükleme | 🟡 | Reklam Oluşturucu'da var; kalıcı arşiv (BASE) hâlâ yok |
+| **Akıllı varlık yönlendirme** | ✅ | Meta + Google PMax yuva kapsaması, kırpma yüzdesi, eksik yuva tespiti |
 | **Anlık form oluşturucu** | 🟡 | `/kutuphane/formlar` — 5 bölüm + canlı önizleme; yayın doğrulanmadı |
 | **Potansiyel Müşteriler (Lead CRM)** | 🟡 | `/potansiyel-musteriler` — webhook + mutabakat; canlı doğrulanmadı |
+
+**Akıllı varlık yönlendirme — 13 Ağustos.** `asset-routing.schema.ts`.
+Tek görsel seti, iki platform, çakışmayan oranlar. Asıl mesele "her oran farkı
+sorundur" değil, farkın NE KADAR olduğunu hesaplamak — kimse hesaplamıyor,
+platformlar sessizce kırpıyor.
+
+  · Meta Hikâye 9:16 ile Google dikey 4:5 ikisi de "dikey" ama hikâye görseli
+    Google yuvasına konursa alanın yalnızca %30'u kalıyor. Kullanılamaz;
+    yönlendirme o görseli o yuvaya HİÇ atamıyor.
+  · Meta yatay 16:9 ile 1.91:1 arasındaki fark ise %7. Tolerans bunu bilerek
+    yutuyor: daraltmak 1920×1080 gibi yaygın bir boyutu sebepsiz reddetmek
+    olurdu. Test bu kararı kilitliyor.
+
+Yönlendirme ÖLÇÜLEN BOYUTA göre yapılıyor, `matchRatio` kovasına göre değil —
+kova %8 tolerans taşıyor ve 1080×1080 ile 1200×628'i aynı sayardı. Korunan
+alan = küçük oran / büyük oran; %80 üstü kabul edilebilir kırpma, %50 altı
+atama yok. Her yuvaya EN İYİ görsel atanıyor (ilk uyan değil), böylece aynı
+set farklı sırada yüklendiğinde aynı sonucu veriyor.
+
+Google PMax bloğu YAYINI ENGELLEMİYOR ve arayüz bunu yazıyor: Google yazma
+yolu henüz yok, onun engellerini Meta yayınının önüne koymak çalışan bir akışı
+yazılmamış bir özellik yüzünden durdurmak olurdu. **Kare logo eksikliği** ayrı
+bir engel olarak sürekli görünüyor — PMax varlık grubu logosuz oluşturulmuyor
+ve logo yükleme akışı henüz yok.
 
 **Potansiyel Müşteriler (Lead CRM) — 12 Ağustos.** `/potansiyel-musteriler`.
 Anlık form kayıtları iki ayrı yoldan geliyor ve bu, yedeklilik değil
@@ -277,6 +302,7 @@ Bunlar **yazıldı, test edildi, ama canlı Meta API'sinde bir kez bile
 | Boost oluşturma | `meta.provider.ts` → `createBoost` | **Yüksek** — 3 varlık, geri alma yolu var ama denenmedi |
 | Toplu reklam oluşturma | `meta.provider.ts` → `createAd` vb. | **Yüksek** — kısmi başarı yönetimi denenmedi |
 | Reklam Oluşturucu yayını | `meta.provider.ts` → `publishDraft` | **Yüksek** — 4 varlık + anlık form; `asset_feed_spec` yerleşim kuralları hiç denenmedi |
+| **Google PMax varlık gereksinimleri** | `asset-routing.schema.ts` | **Orta** — oranlar, en küçük/önerilen boyutlar ve logo zorunluluğu Google belgelerinden çıkarıldı; Google yazma yolu hiç yazılmadı, tek bir varlık grubu oluşturulmadı |
 | **Leadgen webhook + lead çekme** | `leadgen-webhook.service.ts`, `lead-sync.service.ts` | **Yüksek** — imza doğrulaması, `field_data` biçimi, `filtering` zaman kısıtı ve sayfalama belgeden çıkarıldı; `leads_retrieval` izni yok, gerçek bildirim hiç alınmadı |
 | **Gelişmiş mod yayını** | `meta.provider.ts` → `publishDraft` (teklif/bütçe/takvim alanları) | **Yüksek** — `bid_strategy`, `bid_amount`, `lifetime_budget`, `start_time` alanları hiç gönderilmedi. Uyumluluk matrisi de belgeden çıkarıldı, canlıda sınanmadı |
 | **Kütüphane formu yayını** | `meta.provider.ts` → `createLeadForm` | **Yüksek** — geri alınamaz; `legal_content`, `context_card`, `thank_you_page` eşlemeleri belgeden çıkarıldı, gerçek yanıt görülmedi. `is_optimized_for_quality` eşlemesi (= "daha nitelikli") de doğrulanmadı |

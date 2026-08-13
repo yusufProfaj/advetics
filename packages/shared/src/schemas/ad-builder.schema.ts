@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CAMPAIGN_MODES, advancedSettingsSchema, type AdvancedSettings } from './campaign-advanced.schema';
+import type { AssetCoverage } from './asset-routing.schema';
 
 /**
  * Reklam Oluşturucu — Modül 4 (CREATE).
@@ -314,4 +315,16 @@ export interface PublishCheck {
   /** Kullanıcının onaylayacağı özet: "Günde 200 ₺ · 7 gün · toplam 1.400 ₺". */
   summary: string;
   totalBudgetMicros: string;
+  /**
+   * Yuva kapsaması — Meta VE Google.
+   *
+   * Meta kapsamasının engelleri `blockers` içine de giriyor ve yayını
+   * durduruyor. GOOGLE KAPSAMASI BİLGİLENDİRME: Google yazma yolu henüz yok
+   * ve onun engellerini Meta yayınının önüne koymak, çalışan bir akışı
+   * yazılmamış bir özellik yüzünden durdurmak olurdu.
+   *
+   * Yine de gösteriliyor: ajans aynı görsel setiyle Google'a da çıkacaksa
+   * neyin eksik olduğunu görselleri yüklerken bilmeli, aylar sonra değil.
+   */
+  assetCoverage: AssetCoverage[];
 }

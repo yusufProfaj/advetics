@@ -20,6 +20,7 @@ import {
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { advancedDefaultsFor } from '@advetics/shared';
 import { AdvancedPanel } from './advanced-panel';
+import { CoveragePanel } from './coverage-panel';
 
 /**
  * Reklam oluşturma sihirbazı.
@@ -462,6 +463,12 @@ export function AdWizard({
                 <p className="rounded-lg bg-surface-sunken px-3 py-2 text-sm font-medium text-ink">
                   {check.summary}
                 </p>
+
+                {/* KAPSAMA ENGELLERİN ÜSTÜNDE.
+                    Engel metinleri "Yatay yerleşim için uygun görsel yok"
+                    diyor; hangi yuvanın boş olduğunu görmeden bu cümle soyut
+                    kalıyor. Tablo önce, açıklama sonra. */}
+                {check.assetCoverage && <CoveragePanel coverage={check.assetCoverage} />}
 
                 {check.blockers.map((b) => (
                   <p

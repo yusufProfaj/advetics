@@ -15,6 +15,7 @@ import {
   type AdDraftStatus,
   type AdvancedSettings,
   type CampaignMode,
+  coverageFor,
   type AssetRatio,
   type CampaignGoal,
   type PublishCheck,
@@ -386,12 +387,30 @@ export class AdBuilderService {
 
     if (draft.status === 'published') blockers.push('Bu reklam zaten yayınlanmış.');
 
-    const hasSquare = draft.assets.some((a) => a.ratio === 'square');
-    if (!hasSquare) {
-      // Kare tek evrensel yedek: Meta bir yerleşim için görsel bulamazsa
-      // reklamı orada göstermiyor.
-      blockers.push('Kare görsel zorunlu — reklamın akışta görünmesi için gerekiyor.');
-    }
+    /**
+     * VARLIK KAPSAMASI — kova değil, ÖLÇÜLEN BOYUT.
+     *
+     * Eskiden burada yalnızca "kare var mı" sorulurdu. O kontrol `matchRatio`
+     * kovasına bakıyordu ve kova %8 tolerans taşıyor: 1080×1000 bir görsel
+     * "kare" sayılıyor, sonra Meta onu kırpıyor ve kimse ne kadar kırpıldığını
+     * bilmiyordu.
+     *
+     * `coverageFor` her yuvayı gerçek sayılarla değerlendiriyor ve kırpmanın
+     * ne kadarını kaybettireceğini önceden söylüyor.
+     */
+    const assets = draft.assets.map((a) => ({ id: a.id, width: a.width, height: a.height }));
+    const coverage = coverageFor('meta', assets);
+    blockers.push(...coverage.blockers);
+    warnings.push(...coverage.warnings);
+
+    /**
+     * GOOGLE KAPSAMASI HESAPLANIYOR AMA YAYINI ENGELLEMİYOR.
+     *
+     * Google yazma yolu henüz yok; onun engellerini Meta yayınının önüne
+     * koymak, çalışan bir akışı yazılmamış bir özellik yüzünden durdurmak
+     * olurdu. Arayüz bunu ayrı bir blokta, "hazırlık" olarak gösteriyor.
+     */
+    const googleCoverage = coverageFor('google', assets);
 
     if (draft.goal === 'website' && !draft.linkUrl) {
       blockers.push('Web sitesi adresi eksik.');
@@ -414,13 +433,6 @@ export class AdBuilderService {
       });
       blockers.push(...adv.blockers.map((b) => b.message));
       warnings.push(...adv.warnings.map((w) => w.message));
-    }
-
-    if (!draft.assets.some((a) => a.ratio === 'vertical')) {
-      warnings.push(
-        'Dikey görsel yok — reklam Hikâyeler ve Reels’te gösterilmeyecek. ' +
-          'Bu yerleşimler genelde en ucuz erişimi veriyor.',
-      );
     }
 
     for (const [field, limit] of Object.entries(AD_TEXT_FIELDS)) {
@@ -469,6 +481,7 @@ export class AdBuilderService {
       warnings,
       summary,
       totalBudgetMicros: (total ?? 0n).toString(),
+      assetCoverage: [coverage, googleCoverage],
       // `spec` yalnızca açıklamayı taşımak için çağrıldı; arayüz kullanıcıya
       // ne olacağını düz Türkçe anlatıyor.
       ...({ explanation: spec.explanation } as Record<string, string>),
