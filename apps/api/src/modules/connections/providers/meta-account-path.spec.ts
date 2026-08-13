@@ -65,3 +65,32 @@ describe('kaynak taraması', () => {
     expect(uses.length).toBeGreaterThanOrEqual(6);
   });
 });
+
+describe('kampanya oluşturmanın zorunlu alanları', () => {
+  /**
+   * Meta bu alanları eksik bırakılan isteği REDDEDİYOR ve hangi alanın eksik
+   * olduğunu ancak canlı çağrıda öğreniyoruz — birim testi bir HTTP yanıtı
+   * üretmiyor. Bu yüzden koruma kaynak taraması: kampanya kuran her yer aynı
+   * zorunlu alanları taşımalı.
+   *
+   * `is_adset_budget_sharing_enabled` bunlardan biri ve canlıda öğrenildi:
+   * kampanya seviyesinde bütçe kullanılmadığında Meta alanı zorunlu tutuyor
+   * (subcode 4834011).
+   */
+  const campaignCalls = SOURCE.split('`${act}/campaigns`').length - 1;
+
+  it('iki yerde kampanya kuruluyor — boost ve reklam oluşturucu', () => {
+    expect(campaignCalls).toBe(2);
+  });
+
+  it('HER kampanya çağrısı bütçe paylaşımı alanını taşıyor', () => {
+    const withField = SOURCE.split('is_adset_budget_sharing_enabled: ADSET_BUDGET_SHARING').length - 1;
+    expect(withField).toBe(campaignCalls);
+  });
+
+  it('paylaşım KAPALI — tek ad set var ve bütçe takibi kaymamalı', () => {
+    // `true` olsaydı Meta bütçenin %20'sini ad set'ler arasında taşıyabilir
+    // ve panelde yazan dağılımla gerçek ayrışırdı.
+    expect(SOURCE).toContain("const ADSET_BUDGET_SHARING = 'false';");
+  });
+});

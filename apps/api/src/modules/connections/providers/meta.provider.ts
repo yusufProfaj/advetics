@@ -97,6 +97,29 @@ export function actPath(externalId: string): string {
   return externalId.startsWith('act_') ? externalId : `act_${externalId}`;
 }
 
+/**
+ * Ad set'ler arası bütçe paylaşımı — META ARTIK AÇIKÇA SORUYOR.
+ *
+ * Kampanya seviyesinde bütçe kullanmayan (yani bütçeyi ad set'e koyan)
+ * kampanyalarda Meta bu alanı ZORUNLU kılıyor ve eksikse isteği şu hatayla
+ * reddediyor: "is_adset_budget_sharing_enabled alanında True veya False
+ * belirtilmelidir" (subcode 4834011).
+ *
+ * DEĞER `false` VE İKİ SEBEBİ VAR:
+ *
+ *   1. Bu üründe her kampanya TEK AD SET ile oluşuyor. Paylaşacak ikinci bir
+ *      ad set yok; `true` hiçbir şey değiştirmez ama ileride çok ad set'li bir
+ *      kampanya eklendiğinde sessizce devreye girerdi.
+ *   2. `true`, Meta'nın bütçenin %20'sini ad set'ler arasında taşımasına izin
+ *      veriyor. Aylık bütçe takibi (Modül 5) harcamayı ad set bazında
+ *      modelliyor; platformun bütçeyi kendi başına kaydırması, panelde yazan
+ *      dağılımla gerçeğin ayrışması demek olurdu.
+ *
+ * Çok ad set'li kampanya desteği geldiğinde bu karar YENİDEN DÜŞÜNÜLMELİ —
+ * orada paylaşım gerçekten performans kazandırabiliyor.
+ */
+const ADSET_BUDGET_SHARING = 'false';
+
 @Injectable()
 export class MetaProvider implements IAdPlatformProvider {
   readonly platform: Platform = 'meta';
@@ -1151,6 +1174,7 @@ export class MetaProvider implements IAdPlatformProvider {
         objective: request.objective,
         status: 'PAUSED',
         special_ad_categories: '[]',
+        is_adset_budget_sharing_enabled: ADSET_BUDGET_SHARING,
       });
       created.push({ id: campaign.id, label: 'kampanya' });
 
@@ -1406,6 +1430,7 @@ export class MetaProvider implements IAdPlatformProvider {
         objective: req.spec.objective,
         status: 'PAUSED',
         special_ad_categories: '[]',
+        is_adset_budget_sharing_enabled: ADSET_BUDGET_SHARING,
       });
       created.push({ id: campaign.id, label: 'kampanya' });
 
