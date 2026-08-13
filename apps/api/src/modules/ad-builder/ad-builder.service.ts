@@ -406,9 +406,18 @@ export class AdBuilderService {
 
       const ratio = matchRatio(asset.width, asset.height);
       if (!ratio) {
+        /**
+         * ARŞİV HER ORANI KABUL EDİYOR, META REKLAMI ÜÇÜNÜ.
+         *
+         * Kütüphane Google için de kullanılıyor (1.91:1, 4:5) ve logolar 4:1
+         * olabiliyor; oran kısıtını yüklemeye koymak onları reddetmek olurdu.
+         * Ayrım burada, ve mesaj ne yapılacağını söylüyor — "desteklenmiyor"
+         * demek kullanıcıya bir sonraki adımı vermiyor.
+         */
         throw new BadRequestException(
-          `Bu görselin oranı desteklenmiyor (${asset.width}×${asset.height}). ` +
-            'Kare, dikey ya da yatay olmalı.',
+          `Bu görsel ${asset.width}×${asset.height} ve Meta reklamının kabul ettiği ` +
+            'oranlara uymuyor: kare (1:1), dikey (9:16) ya da yatay (16:9). ' +
+            'Görseli bu oranlardan birine kırpıp arşive yeniden yükle.',
         );
       }
 

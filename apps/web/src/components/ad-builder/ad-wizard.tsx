@@ -1,13 +1,14 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AD_TEXT_FIELDS,
   ASSET_RATIOS,
   CAMPAIGN_GOALS,
   GOAL_META,
   RATIO_META,
+  matchRatio,
   type AdAssetRecord,
   type AdDraftRecord,
   type AssetRatio,
@@ -80,6 +81,18 @@ export function AdWizard({
   const [error, setError] = useState<string | null>(null);
   const [published, setPublished] = useState(existing?.status === 'published');
   const [libraryOpen, setLibraryOpen] = useState(false);
+
+  /**
+   * HATA GÖRÜŞ ALANINA KAYDIRILIYOR.
+   *
+   * Bu form uzun: kullanıcı 3. adımda bir şey yaparken hata mesajı 7.
+   * adımın altında beliriyordu ve ekranda hiç görünmüyordu — "tıkladım,
+   * hiçbir şey olmadı" hissi. Sessiz hatanın arayüz karşılığı bu.
+   */
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [error]);
 
   const currency = accounts.find((a) => a.id === adAccountId)?.currency ?? 'TRY';
 
@@ -374,27 +387,66 @@ export function AdWizard({
                 </button>
 
                 {libraryOpen && (
-                  <ul className="mt-2 grid gap-2 sm:grid-cols-6">
-                    {libraryAssets.map((a) => (
-                      <li key={a.id}>
-                        <button
-                          type="button"
-                          disabled={busy !== null}
-                          onClick={() => void attachFromLibrary(a.id)}
-                          title={`${a.name} · ${a.width}×${a.height}`}
-                          className="block w-full overflow-hidden rounded-lg border border-line bg-surface-sunken transition hover:border-brand disabled:opacity-50"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={`${API_URL}${a.previewUrl}`}
-                            alt={a.name}
-                            className="aspect-square w-full object-contain"
-                            loading="lazy"
-                          />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <ul className="mt-2 grid gap-2 sm:grid-cols-6">
+                      {libraryAssets.map((a) => {
+                        /**
+                         * KULLANILAMAYAN GÖRSEL SEÇİLEMİYOR ve SEBEBİ YAZIYOR.
+                         *
+                         * Arşiv her oranı kabul ediyor (Google 1.91:1 ve 4:5
+                         * istiyor, logo 4:1) ama Meta reklamı yalnızca kare,
+                         * 9:16 ve 16:9 kovalarına oturuyor. Telefondan çekilmiş
+                         * 4:3 bir fotoğraf hiçbirine girmiyor.
+                         *
+                         * Tıklatıp sunucudan hata aldırmak, kullanıcıya
+                         * "denedim, olmadı" yaşatmak demekti. Neyin neden
+                         * kullanılamadığı tıklamadan önce görünüyor.
+                         */
+                        const fits = matchRatio(a.width, a.height);
+                        return (
+                          <li key={a.id}>
+                            <button
+                              type="button"
+                              disabled={busy !== null || fits === null}
+                              onClick={() => void attachFromLibrary(a.id)}
+                              title={
+                                fits
+                                  ? `${a.name} · ${a.width}×${a.height} · ${RATIO_META[fits].label}`
+                                  : `${a.name} · ${a.width}×${a.height} — bu oran Meta reklamında kullanılamıyor`
+                              }
+                              className={`block w-full overflow-hidden rounded-lg border bg-surface-sunken transition ${
+                                fits
+                                  ? 'border-line hover:border-brand'
+                                  : 'cursor-not-allowed border-line opacity-35'
+                              } disabled:opacity-35`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={`${API_URL}${a.previewUrl}`}
+                                alt={a.name}
+                                className="aspect-square w-full object-contain"
+                                loading="lazy"
+                              />
+                              <span className="block truncate px-1 pb-1 text-[10px] text-ink-muted">
+                                {fits ? RATIO_META[fits].label : 'oran uymuyor'}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+
+                    {/* SESSİZ ELEME YOK: kaç görselin neden kullanılamadığı
+                        yazıyor, yoksa kullanıcı arşivdekilerin bir kısmının
+                        neden soluk göründüğünü anlamaz. */}
+                    {libraryAssets.some((a) => matchRatio(a.width, a.height) === null) && (
+                      <p className="mt-1.5 text-[11px] text-ink-muted">
+                        Soluk görünenler Meta reklamına uymayan oranlarda (ör. 4:3
+                        fotoğraflar). Kare, dikey (9:16) ya da yatay (16:9) kırpıp
+                        yeniden yükle.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -583,7 +635,10 @@ export function AdWizard({
       )}
 
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-inset ring-rose-200">
+        <p
+          ref={errorRef}
+          className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-inset ring-rose-200"
+        >
           {error}
         </p>
       )}
