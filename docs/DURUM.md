@@ -15,7 +15,7 @@
 |---|---|
 | Veritabanı tablosu | **41** |
 | Migration | **21** |
-| API testi | **684** |
+| API testi | **694** |
 | Web testi | **20** |
 | Panel sayfası | **12** |
 | API controller | **19** |
@@ -347,6 +347,36 @@ Plandan **fazla** çıkanlar: `monthly_budgets` (planda yoktu, dört özelliğin
 temeli oldu), `organic_posts` (planda vardı ama alan seti genişledi).
 
 ---
+
+### İlk canlı yazma denemesinden çıkanlar (13 Ağustos)
+
+Arşiv testi sırasında yayın denendi ve **yazma yolunun ilk gerçek Meta
+çağrısı** yapıldı. Üç hata çıktı, üçü de yalnızca canlıda görülebilecek türden:
+
+1. **3. adım hiç çalışmıyormuş.** Görseller 3. adımda ama taslak şeması
+   `primaryText`'i zorunlu tutuyordu ve metinler 4. adımda soruluyor. Görsel
+   eklemek taslak gerektirdiği için adım tamamen ölüydü — sürükle-bırak dahil.
+   Kanıt elimizdeydi ve okumamışız: `/home/advetics/uploads` dizini hiç
+   oluşmamıştı, bunu "kimse yüklememiş" diye yorumlamıştık; doğrusu "kimse
+   yükleyememiş"ti.
+
+2. **Hata mesajı formun en altındaydı.** Uzun formda 3. adımdaki bir hatanın
+   mesajı 7. adımın altında beliriyor ve ekrana hiç girmiyordu — sessiz
+   hatanın arayüz karşılığı.
+
+3. **`act_` öneki iki kez ekleniyordu.** `ad_accounts.external_id` Meta'dan
+   önekli geliyor; yazma yolları körlemesine bir önek daha ekleyip
+   `act_act_1602474151544739` üretiyordu. Meta bunu *"does not exist, cannot
+   be loaded due to missing permissions"* diye reddediyor — **mesaj yetki
+   sorunu gibi okunuyor** ve bu projede `ads_management` zaten beklendiği için
+   yanlış teşhise son derece müsait. Tuzağa okuma yolunda bir kez düşülmüş ve
+   koruma yalnızca oraya konmuştu; artık tek bir `actPath()` yardımcısı var ve
+   kaynak taraması yeni bir körlemesine öneki test hatası yapıyor.
+
+**Çıkarılan ders:** bu üç hatanın hiçbirini birim testleri yakalayamazdı —
+biri adım sırasıyla şemanın çelişmesi, biri CSS/yerleşim, biri de yalnızca
+gerçek API yanıtında görünen bir dize birleştirme hatası. Yazma yollarının
+"test edildi" sayılabilmesi için canlı bir çağrı şart.
 
 ## 5. Doğrulanmamış olan — en kritik bölüm
 

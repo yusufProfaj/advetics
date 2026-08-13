@@ -43,8 +43,14 @@ export class AssetUploaderService {
     params: {
       assetId: string;
       adAccountId: string;
-      adAccountExternalId: string;
-      /** `asset_feed_spec` etiketiyle eşleşmesi gereken ad. */
+      /**
+       * `asset_feed_spec` etiketiyle eşleşmesi gereken ad.
+       *
+       * Hesabın DIŞ kimliği burada İSTENMİYOR: yükleme `fetchCtx` üzerinden
+       * yapılıyor ve `act_` öneki sağlayıcının içinde tek bir yerde
+       * kuruluyor. İkinci bir kaynak, o önekin iki kez eklenmesine yol açan
+       * hatanın tekrarı olurdu.
+       */
       label: string;
       fetchCtx: FetchContext;
     },

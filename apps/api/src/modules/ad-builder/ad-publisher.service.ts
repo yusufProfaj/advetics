@@ -233,7 +233,6 @@ export class AdPublisherService {
         ? await this.assetUploader.ensureExternalRef(ctx, {
             assetId: row.asset_id,
             adAccountId: draft.adAccountId,
-            adAccountExternalId: '',
             label,
             fetchCtx,
           })

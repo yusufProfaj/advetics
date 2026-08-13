@@ -391,7 +391,6 @@ export class BulkService {
                 ? await this.assetUploader.ensureExternalRef(ctx, {
                     assetId: item.asset_id,
                     adAccountId: batch.ad_account_id,
-                    adAccountExternalId: batch.account_external_id,
                     // Toplu oluşturucuda oran kuralı yok — tek görselli
                     // kreatif, etiket yalnızca Meta tarafında ad olarak
                     // görünüyor.

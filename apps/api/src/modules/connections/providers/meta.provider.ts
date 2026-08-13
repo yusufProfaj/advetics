@@ -79,6 +79,24 @@ const META_LEVEL: Record<InsightsLevel, string> = {
  * Kapsam: reklam hesabı keşfi, sayfa/Instagram profili keşfi, token yaşam
  * döngüsü, L1 yapı okuma. Yazma aksiyonları Modül 5'te eklenecek.
  */
+/**
+ * Reklam hesabı kimliğini Graph yoluna çevirir — ÖNEKİ İKİ KEZ EKLEMEDEN.
+ *
+ * `ad_accounts.external_id` Meta'dan `act_` ÖNEKİYLE geliyor ve öyle
+ * saklanıyor. Önek körlemesine eklendiğinde `act_act_1602474151544739`
+ * çıkıyor ve Meta bunu "Object with ID does not exist, cannot be loaded due
+ * to missing permissions" diye reddediyor — mesaj YETKİ sorunu gibi okunuyor
+ * ve saatlerce yanlış yerde aranıyor.
+ *
+ * Bu tuzağa okuma yolunda bir kez düşülmüş ve koruma ORAYA konmuştu; yazma
+ * yolları korumasız kaldı ve `ads_management` olmadan hiç çalıştırılamadıkları
+ * için görünmedi. Koruma artık TEK YERDE — iki ayrı yerde tutmak, ikisinin
+ * zamanla ayrışması demekti ve nitekim ayrıştı.
+ */
+export function actPath(externalId: string): string {
+  return externalId.startsWith('act_') ? externalId : `act_${externalId}`;
+}
+
 @Injectable()
 export class MetaProvider implements IAdPlatformProvider {
   readonly platform: Platform = 'meta';
@@ -453,9 +471,7 @@ export class MetaProvider implements IAdPlatformProvider {
   async fetchStructure(ctx: FetchContext, since?: Date): Promise<PlatformStructure> {
     // Hesap kimliği `act_` prefix'i ile gelmeli; keşifte öyle kaydediyoruz ama
     // dışarıdan ham kimlik gelme ihtimaline karşı normalize ediyoruz.
-    const act = ctx.accountExternalId.startsWith('act_')
-      ? ctx.accountExternalId
-      : `act_${ctx.accountExternalId}`;
+    const act = actPath(ctx.accountExternalId);
 
     const calls = { n: 0 };
     const campaigns: DiscoveredCampaign[] = [];
@@ -773,9 +789,7 @@ export class MetaProvider implements IAdPlatformProvider {
    * gün başına ayrı çağrı yapmak 30× kota demek olurdu.
    */
   async fetchInsights(ctx: FetchContext, request: InsightsRequest): Promise<PlatformInsights> {
-    const act = ctx.accountExternalId.startsWith('act_')
-      ? ctx.accountExternalId
-      : `act_${ctx.accountExternalId}`;
+    const act = actPath(ctx.accountExternalId);
 
     const url = new URL(`${this.graph}/${act}/insights`);
     url.searchParams.set('level', META_LEVEL[request.level]);
@@ -1128,7 +1142,7 @@ export class MetaProvider implements IAdPlatformProvider {
    * yayına girer ve Meta bunu "eksik yapılandırma" diye reddedebilirdi.
    */
   async createBoost(ctx: FetchContext, request: BoostRequest): Promise<BoostResult> {
-    const act = `act_${request.adAccountExternalId}`;
+    const act = actPath(request.adAccountExternalId);
     const created: Array<{ id: string; label: string }> = [];
 
     try {
@@ -1217,7 +1231,7 @@ export class MetaProvider implements IAdPlatformProvider {
    * birkaç partide çöplüğe dönüyor.
    */
   async createAd(ctx: FetchContext, request: CreateAdRequest): Promise<CreateAdResult> {
-    const act = `act_${request.adAccountExternalId}`;
+    const act = actPath(request.adAccountExternalId);
     const fallbackLink = `https://facebook.com/${request.pageExternalId}`;
     const link = request.linkUrl ?? fallbackLink;
 
@@ -1324,7 +1338,7 @@ export class MetaProvider implements IAdPlatformProvider {
 
     const res = await platformFetch<{ images?: Record<string, { hash?: string }> }>(
       'meta',
-      `${this.graph}/act_${ctx.accountExternalId}/adimages`,
+      `${this.graph}/${actPath(ctx.accountExternalId)}/adimages`,
       {
         method: 'POST',
         headers: {
@@ -1367,7 +1381,7 @@ export class MetaProvider implements IAdPlatformProvider {
     ctx: FetchContext,
     req: PublishDraftRequest,
   ): Promise<PublishDraftResult> {
-    const act = `act_${req.adAccountExternalId}`;
+    const act = actPath(req.adAccountExternalId);
     const created: Array<{ id: string; label: string }> = [];
 
     try {
