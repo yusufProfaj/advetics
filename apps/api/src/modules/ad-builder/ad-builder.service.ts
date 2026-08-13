@@ -523,6 +523,18 @@ export class AdBuilderService {
      */
     const googleCoverage = coverageFor('google', assets);
 
+    /**
+     * ANA METİN YAYINDA ZORUNLU — taslakta değil.
+     *
+     * Şema artık boş metinli taslağa izin veriyor (görseller metinlerden önceki
+     * adımda ve taslak olmadan görsel eklenemiyor). Zorunluluk buraya taşındı;
+     * buraya konmasaydı metinsiz bir reklam yayınlanabilirdi ve Meta onu
+     * boş birincil metinle gösterirdi.
+     */
+    if (!draft.primaryText.trim()) {
+      blockers.push('Ana metin boş — reklamın üstünde görünecek yazı olmadan yayınlanamaz.');
+    }
+
     if (draft.goal === 'website' && !draft.linkUrl) {
       blockers.push('Web sitesi adresi eksik.');
     }

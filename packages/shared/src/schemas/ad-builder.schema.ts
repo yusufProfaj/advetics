@@ -185,7 +185,19 @@ export const adDraftInputSchema = z
     goal: z.enum(CAMPAIGN_GOALS),
     name: z.string().trim().min(1, 'Kampanyaya bir ad ver').max(200),
 
-    primaryText: z.string().trim().min(1, 'Ana metin boş olamaz').max(2000),
+    /**
+     * ANA METİN TASLAKTA BOŞ OLABİLİR.
+     *
+     * Sihirbazda görseller 3. adım, metinler 4. adım. Görsel eklemek taslak
+     * gerektiriyor (dosya bir taslağa bağlanıyor), taslak da metni zorunlu
+     * tutarsa 3. adım HİÇ ÇALIŞMIYOR: kullanıcı görseli bırakıyor, sunucu
+     * "Ana metin boş olamaz" diyor ve hata formun en altında beliriyor.
+     *
+     * Taslak eksik olabilmeli — amacı zaten işi parça parça yapmak. Metnin
+     * zorunluluğu YAYIN kontrolüne ait (`publishCheck`) ve orada engelleyici
+     * olarak duruyor.
+     */
+    primaryText: z.string().trim().max(2000).default(''),
     headline: z.string().trim().max(255).optional(),
     description: z.string().trim().max(255).optional(),
 
