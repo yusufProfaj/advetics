@@ -80,7 +80,26 @@ export const bulkItemInputSchema = z.object({
   description: z.string().trim().max(2000).nullable().optional(),
   linkUrl: z.string().trim().max(2048).nullable().optional(),
   callToAction: z.string().trim().max(60).nullable().optional(),
+  /**
+   * Ham Meta görsel hash'i ya da video kimliği.
+   *
+   * ARŞİVE ALTERNATİF, tamamlayıcısı değil: ikisinden BİRİ dolu olmalı.
+   * İkisini birden kabul etmek, hangisinin kazandığını belirsiz bırakırdı ve
+   * yanlış görselle yayınlanan bir reklam sessizce yanlış olur.
+   */
   mediaRef: z.string().trim().max(1024).nullable().optional(),
+  /**
+   * Arşivdeki görselin ADI.
+   *
+   * Hash yerine ad yazmak, kullanıcıyı Ads Manager'a gidip 32 karakterlik bir
+   * dizeyi kopyalamaktan kurtarıyor — toplu oluşturucunun en çok zaman yiyen
+   * adımı buydu.
+   *
+   * Ad → varlık çözümlemesi DOĞRULAMA anında yapılıyor, yayın anında değil:
+   * "bu ada sahip görsel yok" hatası satır kaydedilirken görünmeli, 60
+   * satırlık bir parti yayına verildikten sonra değil.
+   */
+  assetName: z.string().trim().max(200).nullable().optional(),
   overrides: z.record(z.unknown()).nullable().optional(),
 });
 export type BulkItemInput = z.infer<typeof bulkItemInputSchema>;
@@ -171,6 +190,9 @@ export interface BulkItemRecord {
   linkUrl: string | null;
   callToAction: string | null;
   mediaRef: string | null;
+  assetName: string | null;
+  /** Çözümlenen arşiv varlığı. Ad eşleşmediyse null ve satırda hata var. */
+  assetId: string | null;
   status: BulkItemStatus;
   issues: BulkIssue[];
   externalAdId: string | null;

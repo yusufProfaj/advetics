@@ -23,15 +23,26 @@ const COLUMNS = [
   { key: 'description', label: 'Açıklama' },
   { key: 'linkUrl', label: 'Hedef URL' },
   { key: 'callToAction', label: 'Eylem düğmesi' },
-  { key: 'mediaRef', label: 'Görsel hash / video kimliği' },
+  /**
+   * ARŞİV ADI ÖNCE, ham referans sonra.
+   *
+   * Sıra bir tercih bildiriyor: beklenen kullanım arşivden ad yazmak. Ham
+   * hash o değeri Ads Manager'dan kopyalamayı gerektiriyor ve bu aracın
+   * kurtarmayı vaat ettiği işin bir parçasıydı.
+   */
+  { key: 'assetName', label: 'Arşiv görseli (adı)' },
+  { key: 'mediaRef', label: 'Ham görsel hash / video kimliği' },
 ] as const;
 
 export function BulkComposer({
   clientId,
   accounts,
+  assetNames,
 }: {
   clientId: string;
   accounts: Array<{ id: string; name: string }>;
+  /** Arşivdeki görsel adları — yapıştırma kutusunun üstünde gösteriliyor. */
+  assetNames: string[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -135,13 +146,32 @@ export function BulkComposer({
           Excel veya Sheets&apos;ten kopyalayıp yapıştır. Sütun sırası:{' '}
           {COLUMNS.map((c) => c.label).join(' · ')}
         </p>
+        <p className="mt-0.5 text-[11px] text-ink-muted">
+          Görsel için <strong>arşiv adı</strong> ya da <strong>ham hash</strong> —
+          ikisinden biri. İkisini birden yazarsan hangisinin kullanılacağı belirsiz
+          kalır ve satır reddedilir.
+        </p>
+
+        {/* ARŞİV ADLARI BURADA. Kullanıcı adı hatırlamak zorunda kalmasın:
+            listeyi başka sekmede açıp geri dönmek, bu aracın kurtardığı
+            zamanı geri harcamak olurdu. */}
+        {assetNames.length > 0 && (
+          <details className="mt-1.5">
+            <summary className="cursor-pointer text-[11px] text-brand">
+              Arşivdeki görsel adları ({assetNames.length})
+            </summary>
+            <p className="mt-1 font-mono text-[11px] leading-relaxed text-ink-muted">
+              {assetNames.join(' · ')}
+            </p>
+          </details>
+        )}
         <textarea
           value={paste}
           onChange={(e) => setPaste(e.target.value)}
           rows={8}
           spellCheck={false}
           className="mt-1.5 w-full rounded-lg border border-line bg-surface px-2.5 py-2 font-mono text-xs outline-none focus:border-brand"
-          placeholder={`Varyasyon A\tYaz indirimi başladı\tŞimdi keşfet\t\thttps://site.com\tSHOP_NOW\tabc123…`}
+          placeholder={`Varyasyon A\tYaz indirimi başladı\tŞimdi keşfet\t\thttps://site.com\tSHOP_NOW\tyaz-kampanya-1\t`}
         />
       </div>
 

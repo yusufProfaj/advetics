@@ -100,11 +100,28 @@ export function validateItem(item: BulkItemInput): BulkIssue[] {
     });
   }
 
-  if (!item.mediaRef) {
+  /**
+   * GÖRSEL KAYNAĞI: ARŞİV ADI YA DA HAM HASH — İKİSİNDEN BİRİ.
+   *
+   * İkisini birden kabul etmek hangisinin kazandığını belirsiz bırakırdı ve
+   * yanlış görselle yayınlanan bir reklam sessizce yanlış olur: kimse hata
+   * görmez, yalnızca reklam beklenenden farklıdır.
+   */
+  const hasMedia = Boolean(item.mediaRef);
+  const hasAsset = Boolean(item.assetName);
+
+  if (!hasMedia && !hasAsset) {
     issues.push({
       field: 'mediaRef',
       severity: 'error',
-      message: 'Görsel ya da video referansı zorunlu.',
+      message: 'Arşiv görseli adı ya da ham görsel referansı zorunlu.',
+    });
+  } else if (hasMedia && hasAsset) {
+    issues.push({
+      field: 'assetName',
+      severity: 'error',
+      message:
+        'Hem arşiv adı hem ham referans girilmiş. Hangisinin kullanılacağı belirsiz — birini boş bırak.',
     });
   }
 

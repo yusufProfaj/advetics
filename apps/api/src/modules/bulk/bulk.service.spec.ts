@@ -22,6 +22,7 @@ let h: Harness;
 let svc: BulkService;
 const createAd = vi.fn();
 const canWrite = vi.fn();
+const ensureExternalRef = vi.fn();
 
 const CTX: TenantContext = {
   orgId: IDS.org,
@@ -73,6 +74,10 @@ beforeAll(async () => {
     { get: () => ({ platform: 'meta', createAd, canWrite }) } as never,
     { getAccessToken: async () => 'token' } as never,
     { acquire: async () => ({ allowed: true, usagePercent: 5 }), record: async () => {} } as never,
+    // Arşiv yükleyicisi: hash'i olduğu gibi döndürüyor. Gerçek önbellek
+    // mantığı kendi testlerinde; burada yayın yolunun arşiv varlığını
+    // ÇÖZÜMLEDİĞİNİ doğruluyoruz.
+    { ensureExternalRef: ensureExternalRef } as never,
   );
 });
 
@@ -86,6 +91,8 @@ beforeEach(async () => {
   createAd.mockReset();
   canWrite.mockReset();
   canWrite.mockReturnValue({ ok: true, missing: [] });
+  ensureExternalRef.mockReset();
+  ensureExternalRef.mockResolvedValue('hesap-hash-1');
   let n = 0;
   createAd.mockImplementation(async () => {
     n++;
@@ -278,5 +285,107 @@ describe('silme', () => {
     const b = await svc.create(CTX, batchInput());
     await svc.publish(CTX, b.id);
     await expect(svc.remove(CTX, b.id)).rejects.toThrow(/yayınlanmış/i);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// ARŞİV GÖRSELİ
+// -----------------------------------------------------------------------------
+
+/** Kütüphaneye bir varlık koyar. */
+async function seedAsset(name: string, hash = 'x'): Promise<string> {
+  const rows = await h.q<{ id: string }>(
+    `INSERT INTO assets (id, org_id, client_id, kind, name, file_name, mime_type,
+       byte_size, width, height, storage_key, content_hash, updated_at)
+     VALUES (gen_random_uuid(), $1, $2, 'image', $3, 'f.png', 'image/png',
+       100, 1080, 1080, 'k/' || $4, $4, now())
+     RETURNING id::text AS id`,
+    [IDS.org, IDS.client, name, `${hash}${name}`.padEnd(20, 'z')],
+  );
+  return rows[0]!.id;
+}
+
+describe('arşiv görseli', () => {
+  it('ad ÇÖZÜMLENİYOR ve satır geçerli oluyor', async () => {
+    await seedAsset('yaz-kampanya-1');
+    const b = await svc.create(
+      CTX,
+      batchInput({ items: [row(1, { mediaRef: null, assetName: 'yaz-kampanya-1' })] }),
+    );
+    expect(b.items[0]?.status).toBe('pending');
+    expect(b.items[0]?.assetId).not.toBeNull();
+    expect(b.items[0]?.assetName).toBe('yaz-kampanya-1');
+  });
+
+  it('BÜYÜK/KÜÇÜK harf farkı eşleşmeyi bozmuyor', async () => {
+    // Kullanıcı Excel'den yapıştırıyor; harf farkı yüzünden eşleşmemek
+    // sebebi gözle görülmeyen bir hata olurdu.
+    await seedAsset('Yaz-Kampanya-2');
+    const b = await svc.create(
+      CTX,
+      batchInput({ items: [row(1, { mediaRef: null, assetName: 'yaz-kampanya-2' })] }),
+    );
+    expect(b.items[0]?.status).toBe('pending');
+  });
+
+  it('bulunamayan ad SATIRI GEÇERSİZ yapıyor', async () => {
+    const b = await svc.create(
+      CTX,
+      batchInput({ items: [row(1, { mediaRef: null, assetName: 'olmayan' })] }),
+    );
+    expect(b.items[0]?.status).toBe('invalid');
+    expect(b.items[0]?.issues.map((i) => i.message).join(' ')).toContain('adında görsel yok');
+  });
+
+  it('ÇİFT AD belirsizlik hatası — sessizce biri seçilmiyor', async () => {
+    /**
+     * Arşivde adlar tekil değil. Birini seçmek, yanlış görselle yayınlanan ve
+     * hiçbir yerde hata üretmeyen bir reklam demek olurdu.
+     */
+    await seedAsset('ayni-ad', 'a');
+    await seedAsset('ayni-ad', 'b');
+    const b = await svc.create(
+      CTX,
+      batchInput({ items: [row(1, { mediaRef: null, assetName: 'ayni-ad' })] }),
+    );
+    expect(b.items[0]?.status).toBe('invalid');
+    expect(b.items[0]?.issues.map((i) => i.message).join(' ')).toContain('2 görsel var');
+  });
+
+  it('HEM ham referans HEM arşiv adı reddediliyor', async () => {
+    // Hangisinin kazandığı belirsiz kalırsa yanlış görselle yayınlanan bir
+    // reklam sessizce yanlış olur.
+    const b = await svc.create(
+      CTX,
+      batchInput({ items: [row(1, { mediaRef: 'a'.repeat(32), assetName: 'yaz-1' })] }),
+    );
+    expect(b.items[0]?.status).toBe('invalid');
+    expect(b.items[0]?.issues.map((i) => i.message).join(' ')).toContain('belirsiz');
+  });
+
+  it('yayında HESABA ÖZEL hash çözümleniyor', async () => {
+    /**
+     * Meta hash'i reklam hesabı başına. Arşivde saklanan bir hash'i başka
+     * hesapta kullanmak ya reddediliyor ya da kreatifi GÖRSELSİZ oluşturuyor.
+     */
+    const assetId = await seedAsset('yaz-kampanya-3');
+    const b = await svc.create(
+      CTX,
+      batchInput({ items: [row(1, { mediaRef: null, assetName: 'yaz-kampanya-3' })] }),
+    );
+    await svc.publish(CTX, b.id);
+
+    expect(ensureExternalRef).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ assetId, adAccountId: IDS.adAccount }),
+    );
+    // Sağlayıcıya giden değer önbellekten dönen hesap hash'i.
+    expect(createAd.mock.calls[0]?.[1]).toMatchObject({ mediaRef: 'hesap-hash-1' });
+  });
+
+  it('ham referanslı satır arşive UĞRAMIYOR', async () => {
+    const b = await svc.create(CTX, batchInput());
+    await svc.publish(CTX, b.id);
+    expect(ensureExternalRef).not.toHaveBeenCalled();
   });
 });

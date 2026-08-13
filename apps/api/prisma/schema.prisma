@@ -1465,7 +1465,16 @@ model BulkItem {
   linkUrl      String? @map("link_url") @db.VarChar(2048)
   callToAction String? @map("call_to_action") @db.VarChar(60)
   /// Görsel/video kimliği ya da URL'si. Yükleme AYRI bir adım.
-  mediaRef     String? @map("media_ref") @db.VarChar(1024)
+  /// Arşivdeki görselin ADI — kullanıcının yazdığı hâliyle.
+  ///
+  /// Eşleşmediğinde hata mesajında gösteriliyor; yalnızca `assetId` tutmak
+  /// "hangi ad yanlıştı" sorusunu cevapsız bırakırdı.
+  assetName    String? @map("asset_name") @db.VarChar(200)
+  /// Çözümlenmiş varlık. Doğrulama anında sabitleniyor; sonraki bir yeniden
+  /// adlandırma partiyi bozmuyor.
+  assetId      String? @map("asset_id") @db.Uuid
+
+  mediaRef String? @map("media_ref") @db.VarChar(1024)
 
   /// Bu satıra özel ayarlar — partinin `defaults` değerlerini eziyor.
   overrides Json? @db.JsonB
@@ -1489,6 +1498,7 @@ model BulkItem {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   batch BulkBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  asset Asset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
 
   @@unique([batchId, rowNumber])
   @@index([batchId, status])
@@ -1937,6 +1947,7 @@ model Asset {
   client       Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   platformRefs AssetPlatformRef[]
   draftAssets  AdDraftAsset[]
+  bulkItems    BulkItem[]
 
   @@unique([clientId, contentHash], map: "assets_client_hash_uniq")
   @@index([clientId, kind, createdAt(sort: Desc)])

@@ -15,6 +15,7 @@ import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AssetUploaderService } from '../assets/asset-uploader.service';
 import type { TxLike } from '../rules/rules.service';
 import { isPublishable, validateBatch, validateItem } from './bulk-validator';
 
@@ -58,6 +59,8 @@ interface ItemRow {
   link_url: string | null;
   call_to_action: string | null;
   media_ref: string | null;
+  asset_name: string | null;
+  asset_id: string | null;
   status: BulkItemStatus;
   issues: BulkIssue[] | null;
   external_ad_id: string | null;
@@ -81,6 +84,7 @@ export class BulkService {
     private readonly providers: ProviderRegistry,
     private readonly vault: TokenVaultService,
     private readonly quota: QuotaGuardService,
+    private readonly assetUploader: AssetUploaderService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -123,14 +127,52 @@ export class BulkService {
       // satırın yanında görmeli, ayrı bir "parti uyarıları" kutusunda değil.
       const batchIssues = validateBatch(input.items);
 
+      /**
+       * ARŞİV ADLARI TEK SORGUDA ÇÖZÜMLENİYOR.
+       *
+       * Satır başına sorgu, 60 satırlık bir partide 60 gidiş-dönüş demek.
+       * Adlar küçük harfe indirgenerek eşleştiriliyor: kullanıcı Excel'den
+       * yapıştırıyor ve büyük/küçük harf farkı yüzünden eşleşmemek, sebebi
+       * gözle görülmeyen bir hata olurdu.
+       */
+      const assetsByName = await this.resolveAssetNames(tx, input.clientId, input.items);
+
       const values = input.items.map((item) => {
         const issues = [...validateItem(item), ...(batchIssues.get(item.rowNumber) ?? [])];
+
+        let assetId: string | null = null;
+        if (item.assetName) {
+          const matches = assetsByName.get(item.assetName.trim().toLowerCase()) ?? [];
+          if (matches.length === 0) {
+            issues.push({
+              field: 'assetName',
+              severity: 'error',
+              message: `Arşivde "${item.assetName}" adında görsel yok.`,
+            });
+          } else if (matches.length > 1) {
+            /**
+             * ÇİFT AD BELİRSİZLİK — sessizce biri seçilmiyor.
+             *
+             * Arşivde adlar tekil değil (kullanıcı iki görsele aynı adı
+             * verebiliyor). Birini seçmek, yanlış görselle yayınlanan ve
+             * hiçbir yerde hata üretmeyen bir reklam demek olurdu.
+             */
+            issues.push({
+              field: 'assetName',
+              severity: 'error',
+              message: `Arşivde "${item.assetName}" adında ${matches.length} görsel var — adı benzersiz yap.`,
+            });
+          } else {
+            assetId = matches[0]!;
+          }
+        }
         const status: BulkItemStatus = isPublishable(issues) ? 'pending' : 'invalid';
         return Prisma.sql`(
           gen_random_uuid(), ${ctx.orgId}::uuid, ${batch.id}::uuid, ${item.rowNumber},
           ${item.name}, ${item.primaryText ?? null}, ${item.headline ?? null},
           ${item.description ?? null}, ${item.linkUrl ?? null},
           ${item.callToAction ?? null}, ${item.mediaRef ?? null},
+          ${item.assetName ?? null}, ${assetId}::uuid,
           ${item.overrides ? JSON.stringify(item.overrides) : null}::jsonb,
           ${status},
           ${issues.length > 0 ? JSON.stringify(issues) : null}::jsonb,
@@ -141,8 +183,8 @@ export class BulkService {
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO bulk_items (
           id, org_id, batch_id, row_number, name, primary_text, headline,
-          description, link_url, call_to_action, media_ref, overrides,
-          status, issues, updated_at
+          description, link_url, call_to_action, media_ref, asset_name, asset_id,
+          overrides, status, issues, updated_at
         ) VALUES ${Prisma.join(values, ', ')}
       `);
 
@@ -336,7 +378,30 @@ export class BulkService {
               description: item.description ?? undefined,
               linkUrl: item.link_url ?? undefined,
               callToAction: item.call_to_action ?? undefined,
-              mediaRef: item.media_ref!,
+              /**
+               * ARŞİV VARLIĞI HESABA ÖZEL HASH'E ÇEVRİLİYOR.
+               *
+               * Meta'nın `image_hash` değeri REKLAM HESABI BAŞINA üretiliyor;
+               * arşivde saklanan bir hash'i başka hesapta kullanmak ya
+               * reddediliyor ya da kreatifi GÖRSELSİZ oluşturuyor.
+               * `ensureExternalRef` (varlık, hesap) çifti için önbelleğe
+               * bakıyor ve gerekirse yüklüyor.
+               */
+              mediaRef: item.asset_id
+                ? await this.assetUploader.ensureExternalRef(ctx, {
+                    assetId: item.asset_id,
+                    adAccountId: batch.ad_account_id,
+                    adAccountExternalId: batch.account_external_id,
+                    // Toplu oluşturucuda oran kuralı yok — tek görselli
+                    // kreatif, etiket yalnızca Meta tarafında ad olarak
+                    // görünüyor.
+                    label: `advetics_bulk_${item.row_number}`,
+                    fetchCtx: {
+                      accessToken,
+                      accountExternalId: batch.account_external_id,
+                    },
+                  })
+                : item.media_ref!,
             },
           );
 
@@ -422,6 +487,46 @@ export class BulkService {
     `);
   }
 
+  /**
+   * Arşiv adlarını tek sorguda çözer.
+   *
+   * KÜÇÜK HARFE İNDİRGENEREK eşleştiriliyor: kullanıcı Excel'den yapıştırıyor
+   * ve "Yaz-1" ile "yaz-1" arasındaki farkın eşleşmeyi bozması, sebebi gözle
+   * görülmeyen bir hata olurdu.
+   *
+   * Aynı ada sahip birden çok varlık olabiliyor (arşivde ad tekil değil), bu
+   * yüzden dönüş DİZİ: çağıran belirsizliği hata olarak bildiriyor.
+   */
+  private async resolveAssetNames(
+    tx: TxLike,
+    clientId: string,
+    items: ReadonlyArray<{ assetName?: string | null }>,
+  ): Promise<Map<string, string[]>> {
+    const names = [
+      ...new Set(
+        items
+          .map((i) => i.assetName?.trim().toLowerCase())
+          .filter((n): n is string => Boolean(n)),
+      ),
+    ];
+    const out = new Map<string, string[]>();
+    if (names.length === 0) return out;
+
+    const rows = await tx.$queryRaw<Array<{ id: string; lname: string }>>(Prisma.sql`
+      SELECT id::text AS id, lower(name) AS lname
+      FROM assets
+      WHERE client_id = ${clientId}::uuid
+        AND kind = 'image'
+        AND lower(name) = ANY(${names}::text[])
+    `);
+    for (const r of rows) {
+      const list = out.get(r.lname) ?? [];
+      list.push(r.id);
+      out.set(r.lname, list);
+    }
+    return out;
+  }
+
   private toBatchRecord(row: BatchRow): BulkBatchRecord {
     return {
       id: row.id,
@@ -449,6 +554,8 @@ export class BulkService {
       linkUrl: row.link_url,
       callToAction: row.call_to_action,
       mediaRef: row.media_ref,
+      assetName: row.asset_name,
+      assetId: row.asset_id,
       status: row.status,
       issues: row.issues ?? [],
       externalAdId: row.external_ad_id,

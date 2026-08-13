@@ -6,6 +6,7 @@ import {
   type BulkBatchRecord,
   type BulkBatchStatus,
   type BulkItemStatus,
+  type AssetListResult,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
@@ -46,11 +47,16 @@ export default async function BulkPage({
   const canWrite = hasPermission(session, 'bulk.write');
   const canPublish = hasPermission(session, 'bulk.publish');
 
-  const [batches, connections] = await Promise.all([
+  const [batches, connections, library] = await Promise.all([
     serverApiFetch<BulkBatchRecord[]>(`/bulk?clientId=${clientId}`).catch(() => null),
     serverApiFetch<Array<{ adAccounts: Array<{ id: string; name: string }> }>>(
       `/connections?clientId=${clientId}`,
     ).catch(() => []),
+    // Arşiv adları: yalnızca reklam görselleri. Logolar Meta reklamında
+    // kullanılmıyor ve listede yer kaplamamalı.
+    serverApiFetch<AssetListResult>(
+      `/assets?clientId=${clientId}&kind=image&limit=200&offset=0`,
+    ).catch(() => null),
   ]);
   const accounts = connections.flatMap((c) => c.adAccounts ?? []);
 
@@ -69,7 +75,11 @@ export default async function BulkPage({
           <p className="mt-0.5 text-sm text-ink-muted">{clientName}</p>
         </div>
         {canWrite && accounts.length > 0 && (
-          <BulkComposer clientId={clientId} accounts={accounts} />
+          <BulkComposer
+            clientId={clientId}
+            accounts={accounts}
+            assetNames={(library?.rows ?? []).map((a) => a.name)}
+          />
         )}
       </header>
 

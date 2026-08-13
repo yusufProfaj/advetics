@@ -14,8 +14,8 @@
 | | |
 |---|---|
 | Veritabanı tablosu | **41** |
-| Migration | **20** |
-| API testi | **677** |
+| Migration | **21** |
+| API testi | **684** |
 | Web testi | **20** |
 | Panel sayfası | **12** |
 | API controller | **19** |
@@ -56,7 +56,7 @@ Senin paylaştığın 7 parçalı mimariye göre. ✅ tamam · 🟡 kısmi · �
 | Bilgi bankası (marka sesi, ürün bilgisi) | ❌ | Hiç başlanmadı |
 | Kitle kütüphanesi | ❌ | Meta'da `custom_audiences` çekilmiyor |
 | Anahtar kelime kütüphanesi | ❌ | Performans verisi geliyor; kütüphane (kayıtlı liste) yok |
-| **Görsel/video varlık arşivi** | 🟡 | `/kutuphane/gorseller` — görsel + logo, mükerrer engeli, hesap başına hash önbelleği |
+| **Görsel/video varlık arşivi** | 🟡 | `/kutuphane/gorseller` — görsel + logo, mükerrer engeli, hesap başına hash önbelleği; reklam oluşturucu ve toplu oluşturucuya bağlı |
 | **Form kütüphanesi (Anlık Form)** | 🟡 | `/kutuphane/formlar` — sürümleme çalışıyor, Meta yayını doğrulanmadı |
 
 **Bu bölümün ilk parçası doldu.** Formlar kütüphanesi 12 Ağustos'ta yazıldı;
@@ -138,6 +138,34 @@ reklam oluşturucunun depolamasını, yayıncı da arşivin önbelleğini kullan
 iki modül birbirini içe aktarırdı. `forwardRef` ihtiyacı genelde yanlış
 yerleştirilmiş bir bağımlılığın işareti ve depolama ikisinin de ALTINDA duran
 bir altyapı parçası.
+
+**Toplu oluşturucuda arşiv (13 Ağustos).** `image_hash` elle yazma derdi
+bitti: satırda ham hash yerine **arşiv görselinin adı** yazılıyor. Ad →
+varlık çözümlemesi DOĞRULAMA anında yapılıyor, yayın anında değil — "bu ada
+sahip görsel yok" hatası 60 satırlık parti yayına verildikten sonra değil,
+satır kaydedilirken görünmeli.
+
+Üç karar:
+
+  · **Ham hash ile arşiv adı birlikte olamaz.** Hangisinin kazandığı belirsiz
+    kalırsa yanlış görselle yayınlanan bir reklam sessizce yanlış olur.
+  · **Çift ad belirsizlik hatası.** Arşivde adlar tekil değil; birini sessizce
+    seçmek yine yanlış görsel demek. Satır geçersiz işaretleniyor ve kaç
+    eşleşme olduğu yazılıyor.
+  · **Ad küçük harfe indirgenerek eşleşiyor.** Kullanıcı Excel'den
+    yapıştırıyor; "Yaz-1" ile "yaz-1" farkının eşleşmeyi bozması, sebebi gözle
+    görülmeyen bir hata olurdu.
+
+Yayın anında `asset_id` hesaba özel hash'e çevriliyor (`ensureExternalRef`) —
+arşivde saklanan bir hash'i başka hesapta kullanmak Meta tarafından ya
+reddediliyor ya da kreatifi görselsiz oluşturuyor.
+
+Yazarken çıkan tasarım çelişkisi: veritabanı kısıtını "ikisi birden olamaz"
+diye koymak, geçersiz satırın KAYDEDİLMESİNİ de engelliyordu ve 60 satırlık
+bir partide tek hatalı satır partinin tamamını ham bir veritabanı hatasıyla
+düşürüyordu — kullanıcı hangi satırın sorunlu olduğunu öğrenemezdi. Kısıt
+`status = 'pending'` ile sınırlandı: geçersiz satırlar gerekçeleriyle
+saklanıyor, yayına yalnızca `pending` olanlar gidiyor.
 
 **Akıllı varlık yönlendirme — 13 Ağustos.** `asset-routing.schema.ts`.
 Tek görsel seti, iki platform, çakışmayan oranlar. Asıl mesele "her oran farkı
