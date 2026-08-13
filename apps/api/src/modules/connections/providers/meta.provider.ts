@@ -1190,6 +1190,9 @@ export class MetaProvider implements IAdPlatformProvider {
         daily_budget: toMinorUnits(request.dailyBudgetMicros, request.currency).toString(),
         billing_event: 'IMPRESSIONS',
         optimization_goal: 'POST_ENGAGEMENT',
+        // Reklam oluşturucuyla AYNI GEREKÇE: strateji söylenmezse Meta hesabın
+        // varsayılanına düşüyor ve tavanlı bir varsayılan isteği reddediyor.
+        bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
         end_time: endTime.toISOString(),
         // HEDEFLEME: sayfanın kendi ülkesi/kitlesi yerine geniş bir taban
         // veriliyor ve daraltma kullanıcıya bırakılıyor. Boost'un amacı
@@ -1457,13 +1460,28 @@ export class MetaProvider implements IAdPlatformProvider {
         adSetFields.daily_budget = budgetMinor;
       }
 
-      if (req.bidStrategy && req.bidStrategy !== 'LOWEST_COST_WITHOUT_CAP') {
-        adSetFields.bid_strategy = req.bidStrategy;
+      /**
+       * TEKLİF STRATEJİSİ HER ZAMAN AÇIKÇA GÖNDERİLİYOR.
+       *
+       * Eskiden yalnızca tavanlı stratejilerde yazılıyordu; varsayılan durumda
+       * alan hiç gitmiyordu ve karar Meta'ya bırakılıyordu. Meta da hesabın
+       * varsayılanına düşüyor — o varsayılan tavanlı bir strateji ise istek
+       * şu hatayla reddediliyor: "Teklif Stratejisi İçin Teklif Tutarı veya
+       * Teklif Sınırı Gerekiyor" (subcode 2490487).
+       *
+       * Bu ürünün ilkesi zaten "Meta'nın sorduğu her soruya biz cevap
+       * veriyoruz". Cevabı söylememek, cevabı bilmemekle aynı kapıya çıkıyor:
+       * kampanyanın nasıl teklif verdiği hesap ayarına göre değişiyor ve iki
+       * müşteride aynı taslak farklı davranıyor.
+       */
+      adSetFields.bid_strategy = req.bidStrategy ?? 'LOWEST_COST_WITHOUT_CAP';
+      if (
+        adSetFields.bid_strategy !== 'LOWEST_COST_WITHOUT_CAP' &&
+        req.bidAmountMinor !== undefined
+      ) {
         // Tavanlı stratejide tutar zorunlu; doğrulama bunu engelliyor ama
         // alan yine de koşullu — sağlayıcı çağıranın doğruluğuna güvenmiyor.
-        if (req.bidAmountMinor !== undefined) {
-          adSetFields.bid_amount = req.bidAmountMinor.toString();
-        }
+        adSetFields.bid_amount = req.bidAmountMinor.toString();
       }
 
       if (req.startTime) adSetFields.start_time = req.startTime.toISOString();

@@ -125,3 +125,28 @@ describe('anlık form kreatife bağlanıyor, ad set\'e değil', () => {
     expect(SOURCE).toContain('if (req.images.length <= 1 || leadFormId) {');
   });
 });
+
+describe('teklif stratejisi açıkça gönderiliyor', () => {
+  /**
+   * Strateji söylenmezse Meta hesabın varsayılanına düşüyor. O varsayılan
+   * tavanlı bir strateji ise istek reddediliyor ("Teklif Stratejisi İçin
+   * Teklif Tutarı veya Teklif Sınırı Gerekiyor", subcode 2490487) — ama daha
+   * kötüsü, reddedilmediği durumda kampanyanın NASIL teklif verdiği hesap
+   * ayarına göre değişiyor ve aynı taslak iki müşteride farklı davranıyor.
+   */
+  it('reklam oluşturucu varsayılanı açıkça yazıyor', () => {
+    expect(SOURCE).toContain(
+      "adSetFields.bid_strategy = req.bidStrategy ?? 'LOWEST_COST_WITHOUT_CAP';",
+    );
+  });
+
+  it('boost da açıkça yazıyor', () => {
+    expect(SOURCE).toContain("bid_strategy: 'LOWEST_COST_WITHOUT_CAP',");
+  });
+
+  it('tavan tutarı YALNIZCA tavanlı stratejide gidiyor', () => {
+    // `LOWEST_COST_WITHOUT_CAP` ile `bid_amount` göndermek Meta tarafından
+    // reddediliyor: strateji tavan tanımıyor.
+    expect(SOURCE).toContain("adSetFields.bid_strategy !== 'LOWEST_COST_WITHOUT_CAP' &&");
+  });
+});
