@@ -264,7 +264,7 @@ export class AdBuilderService {
 
     const key = await this.storage.save({
       orgId: ctx.orgId,
-      draftId,
+      scope: draftId,
       bytes: file.buffer,
       mimeType,
     });
@@ -352,6 +352,108 @@ export class AdBuilderService {
     });
     if (!row) throw new NotFoundException('Görsel bulunamadı');
     return { bytes: await this.storage.read(row.storage_key), mimeType: row.mime_type };
+  }
+
+  /**
+   * Kütüphanedeki bir varlığı taslağa ekler.
+   *
+   * DOSYA KOPYALANMIYOR, BAĞLANIYOR. Aynı baytları ikinci kez diske yazmak
+   * arşivin varlık sebebini ortadan kaldırırdı: bir görselin on kampanyada
+   * kullanılması on kopya demek olurdu.
+   *
+   * Oran KÜTÜPHANEDEKİ boyutlardan hesaplanıyor, kullanıcıya sorulmuyor —
+   * yükleme akışındaki davranışın aynısı.
+   */
+  async attachFromLibrary(
+    ctx: TenantContext,
+    draftId: string,
+    assetId: string,
+  ): Promise<AdAssetRecord> {
+    const draft = await this.get(ctx, draftId);
+    if (draft.status !== 'draft' && draft.status !== 'failed') {
+      throw new BadRequestException('Yayınlanmış taslağa görsel eklenemez.');
+    }
+
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const [asset] = await tx.$queryRaw<
+        Array<{
+          id: string;
+          client_id: string;
+          file_name: string;
+          mime_type: string;
+          byte_size: number;
+          width: number;
+          height: number;
+          storage_key: string;
+        }>
+      >(Prisma.sql`
+        SELECT id::text AS id, client_id::text AS client_id, file_name, mime_type,
+               byte_size, width, height, storage_key
+        FROM assets WHERE id = ${assetId}::uuid AND org_id = ${ctx.orgId}::uuid
+      `);
+      if (!asset) throw new NotFoundException('Varlık bulunamadı');
+
+      /**
+       * BAŞKA MÜŞTERİNİN VARLIĞI REDDEDİLİYOR.
+       *
+       * RLS aynı organizasyon içinde bunu yakalamıyor: iki satır da aynı
+       * `org_id`'ye sahip. Bir müşterinin görselini diğerinin reklamında
+       * yayınlamak, sessiz ve ciddi bir hata.
+       */
+      if (asset.client_id !== draft.clientId) {
+        throw new BadRequestException('Bu görsel başka bir müşteriye ait.');
+      }
+
+      const ratio = matchRatio(asset.width, asset.height);
+      if (!ratio) {
+        throw new BadRequestException(
+          `Bu görselin oranı desteklenmiyor (${asset.width}×${asset.height}). ` +
+            'Kare, dikey ya da yatay olmalı.',
+        );
+      }
+
+      const [row] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO ad_draft_assets (
+          id, org_id, draft_id, ratio, file_name, mime_type, byte_size,
+          width, height, storage_key, asset_id
+        ) VALUES (
+          gen_random_uuid(), ${ctx.orgId}::uuid, ${draftId}::uuid, ${ratio},
+          ${asset.file_name}, ${asset.mime_type}, ${asset.byte_size},
+          ${asset.width}, ${asset.height}, ${asset.storage_key}, ${asset.id}::uuid
+        )
+        -- AYNI ORANA İKİNCİ GÖRSEL ÖNCEKİNİ DEĞİŞTİRİYOR.
+        --
+        -- Yükleme akışındaki davranışla aynı: her oranda tek görsel var ve
+        -- kullanıcı "kareyi değiştir" derken ikinci bir kare eklemek istemiyor.
+        --
+        -- ESKİ DOSYA SİLİNMİYOR: kütüphaneye ait ve başka taslaklarda
+        -- kullanılıyor olabilir. Yükleme akışında dosya taslağa özeldi ve
+        -- silinebiliyordu; burada silmek arşivi bozardı.
+        ON CONFLICT (draft_id, ratio) DO UPDATE SET
+          file_name = EXCLUDED.file_name,
+          mime_type = EXCLUDED.mime_type,
+          byte_size = EXCLUDED.byte_size,
+          width = EXCLUDED.width,
+          height = EXCLUDED.height,
+          storage_key = EXCLUDED.storage_key,
+          asset_id = EXCLUDED.asset_id,
+          -- HASH SIFIRLANIYOR: görsel değişti, eski hash başka bir görseli
+          -- işaret ediyor ve yayında yanlış görsel çıkardı.
+          meta_image_hash = NULL
+        RETURNING id::text AS id
+      `);
+      if (!row) throw new BadRequestException('Görsel eklenemedi');
+
+      return {
+        id: row.id,
+        ratio,
+        fileName: asset.file_name,
+        width: asset.width,
+        height: asset.height,
+        byteSize: asset.byte_size,
+        previewUrl: `/ad-drafts/${draftId}/assets/${row.id}/preview`,
+      };
+    });
   }
 
   private async previousKey(

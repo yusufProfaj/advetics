@@ -113,7 +113,9 @@ DECLARE
     -- Formlar kütüphanesi
     'lead_forms',
     -- Potansiyel müşteriler
-    'leads', 'lead_sync_cursors'
+    'leads', 'lead_sync_cursors',
+    -- Varlık arşivi
+    'assets', 'asset_platform_refs'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -949,3 +951,57 @@ CREATE POLICY adv_leads_delete ON leads
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_lead_sync_cursors_select ON lead_sync_cursors
   FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- =============================================================================
+-- VARLIK ARŞİVİ
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- assets
+--
+-- Standart kiracı deseni. DELETE politikası var: kütüphane kullanıcının
+-- yönettiği bir alan ve kullanılmayan bir görseli silebilmeli. Kullanımdaki
+-- varlığın silinmesi SERVİS katmanında engelleniyor — RLS'in "bu varlık kaç
+-- reklamda kullanılıyor" sorusunu sorması, iş kuralını iki yere yaymak olurdu.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_assets_select ON assets
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_assets_insert ON assets
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_assets_update ON assets
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_assets_delete ON assets
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- asset_platform_refs
+--
+-- MÜŞTERİ KİMLİĞİ KOLONU YOK: referans varlığa ait ve varlık müşteriye.
+-- Erişim kontrolü bu yüzden varlık üzerinden kuruluyor; kolonu kopyalamak
+-- iki kaynağın zamanla ayrışması riski demek olurdu.
+--
+-- Yazma yalnızca worker'ın işi (yayın anında hash önbelleğe alınıyor) ama
+-- politika yine de tanımlı: ileride bir yol kullanıcı bağlamında yazarsa
+-- sınır orada da geçerli olsun.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_asset_platform_refs_select ON asset_platform_refs
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM assets a
+      WHERE a.id = asset_platform_refs.asset_id AND app.can_access_client(a.client_id)
+    )
+  );
+
+CREATE POLICY adv_asset_platform_refs_insert ON asset_platform_refs
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM assets a
+      WHERE a.id = asset_platform_refs.asset_id AND app.can_access_client(a.client_id)
+    )
+  );

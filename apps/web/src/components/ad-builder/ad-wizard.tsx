@@ -14,6 +14,7 @@ import {
   type CampaignGoal,
   type AdvancedSettings,
   type CampaignMode,
+  type AssetRecord,
   type LeadFormRecord,
   type PublishCheck,
 } from '@advetics/shared';
@@ -40,6 +41,7 @@ export function AdWizard({
   accounts,
   pages,
   forms,
+  libraryAssets,
   existing,
 }: {
   clientId: string;
@@ -47,6 +49,8 @@ export function AdWizard({
   pages: Array<{ id: string; name: string }>;
   /** Kütüphanedeki anlık formlar — yalnızca gelişmiş modda kullanılıyor. */
   forms: LeadFormRecord[];
+  /** Arşivdeki görseller — yeniden kullanım için. */
+  libraryAssets: AssetRecord[];
   existing?: AdDraftRecord;
 }) {
   const router = useRouter();
@@ -75,6 +79,7 @@ export function AdWizard({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [published, setPublished] = useState(existing?.status === 'published');
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const currency = accounts.find((a) => a.id === adAccountId)?.currency ?? 'TRY';
 
@@ -158,6 +163,31 @@ export function AdWizard({
       setCheck(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Görsel yüklenemedi');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Kütüphaneden görsel ekler.
+   *
+   * DOSYA YENİDEN YÜKLENMİYOR, BAĞLANIYOR. Arşivin varlık sebebi bu: bir
+   * görselin on kampanyada kullanılması on kopya demek olmamalı.
+   */
+  async function attachFromLibrary(assetId: string): Promise<void> {
+    setBusy('upload');
+    setError(null);
+    try {
+      const id = await ensureDraft();
+      const asset = await apiFetch<AdAssetRecord>(
+        `/ad-drafts/${id}/assets/from-library?assetId=${assetId}`,
+        { method: 'POST' },
+      );
+      setAssets((prev) => [...prev.filter((a) => a.ratio !== asset.ratio), asset]);
+      setCheck(null);
+      setLibraryOpen(false);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Görsel eklenemedi');
     } finally {
       setBusy(null);
     }
@@ -326,6 +356,48 @@ export function AdWizard({
                 />
               ))}
             </div>
+
+            {/* ARŞİVDEN SEÇİM — yüklemenin ALTERNATİFİ, yerine geçeni değil.
+                Sürükle-bırak asıl akış; arşiv "bunu daha önce kullanmıştım"
+                diyen için. Arşivi öne koymak, ilk kez reklam veren birine
+                boş bir liste göstermek olurdu. */}
+            {libraryAssets.length > 0 && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setLibraryOpen((v) => !v)}
+                  className="text-xs font-medium text-brand underline"
+                >
+                  {libraryOpen
+                    ? 'Arşivi kapat'
+                    : `Arşivden seç (${libraryAssets.length} görsel)`}
+                </button>
+
+                {libraryOpen && (
+                  <ul className="mt-2 grid gap-2 sm:grid-cols-6">
+                    {libraryAssets.map((a) => (
+                      <li key={a.id}>
+                        <button
+                          type="button"
+                          disabled={busy !== null}
+                          onClick={() => void attachFromLibrary(a.id)}
+                          title={`${a.name} · ${a.width}×${a.height}`}
+                          className="block w-full overflow-hidden rounded-lg border border-line bg-surface-sunken transition hover:border-brand disabled:opacity-50"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`${API_URL}${a.previewUrl}`}
+                            alt={a.name}
+                            className="aspect-square w-full object-contain"
+                            loading="lazy"
+                          />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </Step>
 
           {/* 4. Metinler */}

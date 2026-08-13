@@ -40,12 +40,19 @@ export class AssetStorageService {
    */
   async save(params: {
     orgId: string;
-    draftId: string;
+    /**
+     * Anahtarın ikinci parçası — taslak kimliği ya da `library`.
+     *
+     * Kütüphane varlıkları bir taslağa ait değil ve `<org>/library/...`
+     * altında duruyorlar. Taslak dizinine koymak, taslak silindiğinde
+     * kütüphanedeki dosyanın da temizlenmesi riskini doğururdu.
+     */
+    scope: string;
     bytes: Buffer;
     mimeType: string;
   }): Promise<string> {
     const ext = params.mimeType === 'image/png' ? 'png' : 'jpg';
-    const key = `${params.orgId}/${params.draftId}/${randomUUID()}.${ext}`;
+    const key = `${params.orgId}/${params.scope}/${randomUUID()}.${ext}`;
     const target = this.absolute(key);
 
     await mkdir(dirname(target), { recursive: true });
@@ -91,10 +98,13 @@ export class AssetStorageService {
   }
 
   /**
-   * İçerik özeti — aynı görselin iki kez yüklenmesini tespit için.
+   * İçerik özeti — aynı görselin iki kez yüklenmesini engelliyor.
    *
-   * Şu an yalnızca loglanıyor; kütüphane (BASE) bölümü yazıldığında yeniden
-   * kullanım burada bağlanacak.
+   * Kütüphane (BASE) bunu MÜŞTERİ BAZLI tekil bir kısıtla kullanıyor: aynı
+   * dosyayı ikinci kez yükleyen kullanıcı yeni bir satır açmıyor, mevcut
+   * kaydı alıyor. Müşteri bazlı olmasının sebebi, iki farklı müşterinin aynı
+   * stok fotoğrafı kullanmasının meşru olması — ve Meta'ya zaten ayrı ayrı
+   * yüklenmeleri gerekmesi.
    */
   static digest(bytes: Buffer): string {
     return createHash('sha256').update(bytes).digest('hex').slice(0, 32);

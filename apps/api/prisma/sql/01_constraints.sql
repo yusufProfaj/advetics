@@ -549,3 +549,28 @@ ALTER TABLE leads ADD CONSTRAINT leads_fields_chk
 ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_contact_chk;
 ALTER TABLE leads ADD CONSTRAINT leads_contact_chk
   CHECK (full_name IS NOT NULL OR email IS NOT NULL OR phone IS NOT NULL);
+
+-- =============================================================================
+-- VARLIK ARŞİVİ — assets
+-- =============================================================================
+
+ALTER TABLE assets DROP CONSTRAINT IF EXISTS assets_kind_chk;
+ALTER TABLE assets ADD CONSTRAINT assets_kind_chk
+  CHECK (kind IN ('image', 'logo'));
+
+ALTER TABLE assets DROP CONSTRAINT IF EXISTS assets_dimensions_chk;
+ALTER TABLE assets ADD CONSTRAINT assets_dimensions_chk
+  CHECK (width > 0 AND height > 0 AND byte_size > 0);
+
+-- İÇERİK ÖZETİ BOŞ OLAMAZ.
+--
+-- Boş özet, mükerrer engelinin sessizce devre dışı kalması demek: her yükleme
+-- benzersiz görünür ve aynı görsel arşivde onlarca kez birikir. Kısıt bunu
+-- yazma anında yakalıyor.
+ALTER TABLE assets DROP CONSTRAINT IF EXISTS assets_hash_chk;
+ALTER TABLE assets ADD CONSTRAINT assets_hash_chk
+  CHECK (length(content_hash) >= 16);
+
+ALTER TABLE asset_platform_refs DROP CONSTRAINT IF EXISTS asset_platform_refs_ref_chk;
+ALTER TABLE asset_platform_refs ADD CONSTRAINT asset_platform_refs_ref_chk
+  CHECK (length(external_ref) > 0);

@@ -3,6 +3,7 @@ import {
   AD_DRAFT_STATUS_LABELS,
   GOAL_META,
   type AdDraftRecord,
+  type AssetListResult,
   type LeadFormRecord,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
@@ -41,7 +42,7 @@ export default async function AdBuilderPage({
 
   const canWrite = hasPermission(session, 'bulk.write');
 
-  const [connections, drafts, forms] = await Promise.all([
+  const [connections, drafts, forms, library] = await Promise.all([
     serverApiFetch<
       Array<{
         adAccounts: Array<{ id: string; name: string; currency: string }>;
@@ -53,6 +54,11 @@ export default async function AdBuilderPage({
     // getiriliyor: mod değiştirildiğinde ek bir istek beklemek, seçim
     // kutusunun bir an boş görünmesi demek olurdu.
     serverApiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${clientId}`).catch(() => []),
+    // Arşiv: yalnızca reklam görselleri. Logolar Meta reklamında
+    // kullanılmıyor ve seçim ızgarasında yer kaplamamalı.
+    serverApiFetch<AssetListResult>(
+      `/assets?clientId=${clientId}&kind=image&limit=60&offset=0`,
+    ).catch(() => null),
   ]);
 
   const accounts = connections.flatMap((c) => c.adAccounts ?? []);
@@ -85,6 +91,7 @@ export default async function AdBuilderPage({
           accounts={accounts}
           pages={pages}
           forms={forms}
+          libraryAssets={library?.rows ?? []}
           existing={editing}
         />
       ) : (

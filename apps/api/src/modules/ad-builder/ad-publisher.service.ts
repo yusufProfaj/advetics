@@ -6,6 +6,7 @@ import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
+import { AssetUploaderService } from '../assets/asset-uploader.service';
 import { AdBuilderService } from './ad-builder.service';
 import { AssetStorageService } from './asset-storage.service';
 import {
@@ -48,6 +49,7 @@ export class AdPublisherService {
     private readonly providers: ProviderRegistry,
     private readonly vault: TokenVaultService,
     private readonly quota: QuotaGuardService,
+    private readonly assetUploader: AssetUploaderService,
   ) {}
 
   async publish(ctx: TenantContext, draftId: string): Promise<AdDraftRecord> {
@@ -193,9 +195,15 @@ export class AdPublisherService {
     const provider = this.providers.get('meta');
     const rows = await this.prisma.withTenant(ctx, (tx) =>
       tx.$queryRaw<
-        Array<{ id: string; ratio: AssetRatio; storage_key: string; meta_image_hash: string | null }>
+        Array<{
+          id: string;
+          ratio: AssetRatio;
+          storage_key: string;
+          meta_image_hash: string | null;
+          asset_id: string | null;
+        }>
       >(Prisma.sql`
-        SELECT id, ratio, storage_key, meta_image_hash
+        SELECT id, ratio, storage_key, meta_image_hash, asset_id::text AS asset_id
         FROM ad_draft_assets WHERE draft_id = ${draft.id}::uuid
       `),
     );
@@ -206,14 +214,33 @@ export class AdPublisherService {
         out.push({ ratio: row.ratio, hash: row.meta_image_hash });
         continue;
       }
-      const bytes = await this.storage.read(row.storage_key);
-      const hash = await provider.uploadAdImage(fetchCtx, {
-        // ETİKET ORANLA AYNI: kreatifteki `asset_customization_rules` bu
-        // etiketle görseli eşleştiriyor. Rastgele bir ad kullanmak, kuralın
-        // hiçbir görsele bağlanmaması demek olurdu.
-        name: labelFor(row.ratio),
-        bytes,
-      });
+      /**
+       * KÜTÜPHANE VARLIĞIYSA ARŞİV ÖNBELLEĞİNDEN GEÇ.
+       *
+       * Aynı görsel başka bir kampanyada bu hesaba zaten yüklenmiş olabilir.
+       * `ensureExternalRef` (varlık, hesap) çifti için hash'i saklıyor;
+       * isabet ederse Meta'ya hiç gidilmiyor.
+       *
+       * ÖNBELLEK HESAP BAŞINA: Meta'nın `image_hash` değeri reklam hesabına
+       * özel ve A hesabının hash'i B hesabında ya reddediliyor ya da kreatifi
+       * GÖRSELSİZ oluşturuyor — reklam yayınlanır, para harcar, boş görünür.
+       */
+      // ETİKET ORANLA AYNI: kreatifteki `asset_customization_rules` bu
+      // etiketle görseli eşleştiriyor. Rastgele bir ad kullanmak, kuralın
+      // hiçbir görsele bağlanmaması demek olurdu.
+      const label = labelFor(row.ratio);
+      const hash = row.asset_id
+        ? await this.assetUploader.ensureExternalRef(ctx, {
+            assetId: row.asset_id,
+            adAccountId: draft.adAccountId,
+            adAccountExternalId: '',
+            label,
+            fetchCtx,
+          })
+        : await provider.uploadAdImage(fetchCtx, {
+            name: label,
+            bytes: await this.storage.read(row.storage_key),
+          });
       await this.prisma.withTenant(ctx, (tx) =>
         tx.$executeRaw(Prisma.sql`
           UPDATE ad_draft_assets SET meta_image_hash = ${hash} WHERE id = ${row.id}::uuid

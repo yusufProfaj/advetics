@@ -5,6 +5,7 @@ export * from './schemas/ad-builder.schema';
 export * from './schemas/ads-explorer.schema';
 export * from './schemas/boost.schema';
 export * from './schemas/asset-routing.schema';
+export * from './schemas/asset.schema';
 export * from './schemas/budget.schema';
 export * from './schemas/bulk.schema';
 export * from './schemas/connection.schema';

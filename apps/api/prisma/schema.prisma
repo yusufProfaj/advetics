@@ -104,6 +104,8 @@ model Organization {
   leadForms       LeadForm[]
   leads           Lead[]
   leadCursors     LeadSyncCursor[]
+  assets          Asset[]
+  assetRefs       AssetPlatformRef[]
 
   @@map("organizations")
 }
@@ -193,6 +195,7 @@ model Client {
   leadForms       LeadForm[]
   leads           Lead[]
   leadCursors     LeadSyncCursor[]
+  assets          Asset[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -494,6 +497,7 @@ model AdAccount {
   adDrafts        AdDraft[]
   keywordInsights KeywordInsight[]
   bulkBatches     BulkBatch[]
+  assetRefs       AssetPlatformRef[]
 
   @@unique([platform, externalId, clientId])
   @@index([clientId, syncEnabled])
@@ -1602,7 +1606,12 @@ model AdDraftAsset {
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  /// Kütüphanedeki kaynağı. NULL = kütüphane öncesi yüklenmiş ya da
+  /// doğrudan taslağa bırakılmış.
+  assetId String? @map("asset_id") @db.Uuid
+
   draft AdDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  asset Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
 
   /// Oran başına TEK görsel. İkinci kare görsel yüklemek öncekini
   /// değiştirmeli, yanına eklenmemeli — arayüzde de üç kutu var.
@@ -1890,4 +1899,69 @@ model LeadSyncCursor {
 
   @@unique([externalFormId], map: "lead_sync_cursors_form_uniq")
   @@map("lead_sync_cursors")
+}
+
+/// Varlık arşivi (BASE) — müşteri bazlı görsel kütüphanesi.
+///
+/// Dosya BİR KEZ yükleniyor ve birden çok kampanyada kullanılıyor. Bugüne
+/// kadar her görsel bir taslağa bağlıydı; aynı ürün fotoğrafını ikinci bir
+/// kampanyada kullanmak yeniden yüklemek demekti.
+model Asset {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+
+  /// image | logo
+  ///
+  /// Logo ayrı bir tür: markaya ait, kampanyadan kampanyaya değişmiyor ve
+  /// Google Performance Max onsuz kampanya oluşturmuyor.
+  kind String @default("image") @db.VarChar(12)
+
+  name     String @db.VarChar(200)
+  fileName String @map("file_name") @db.VarChar(300)
+  mimeType String @map("mime_type") @db.VarChar(60)
+  byteSize Int    @map("byte_size")
+  width    Int
+  height   Int
+
+  storageKey String @map("storage_key") @db.VarChar(500)
+
+  /// İçerik özeti — mükerrer yüklemeyi engelliyor. MÜŞTERİ BAZLI tekil.
+  contentHash String @map("content_hash") @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  platformRefs AssetPlatformRef[]
+  draftAssets  AdDraftAsset[]
+
+  @@unique([clientId, contentHash], map: "assets_client_hash_uniq")
+  @@index([clientId, kind, createdAt(sort: Desc)])
+  @@map("assets")
+}
+
+/// Varlığın bir reklam hesabındaki karşılığı.
+///
+/// META HASH'İ HESAP BAŞINA. Aynı görsel iki hesapta kullanılıyorsa iki ayrı
+/// hash var; tek kolonda tutmak A hesabının hash'ini B hesabında kullanmak
+/// demek ve Meta bunu ya reddediyor ya da kreatifi görselsiz oluşturuyor.
+model AssetPlatformRef {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  assetId     String   @map("asset_id") @db.Uuid
+  platform    Platform
+  adAccountId String   @map("ad_account_id") @db.Uuid
+  /// Meta'da `image_hash`, Google'da varlık kaynak adı.
+  externalRef String   @map("external_ref") @db.VarChar(256)
+  uploadedAt  DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  asset        Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  adAccount    AdAccount    @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, adAccountId], map: "asset_platform_refs_uniq")
+  @@map("asset_platform_refs")
 }

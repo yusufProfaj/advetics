@@ -110,6 +110,23 @@ export class AdBuilderController {
   }
 
   /**
+   * Kütüphaneden görsel ekler.
+   *
+   * AYRI UÇ NOKTA, yükleme ucunun bir varyantı değil: burada dosya gövdesi
+   * yok, yalnızca bir kimlik var. Aynı uca iki farklı gövde biçimi kabul
+   * ettirmek (multipart ya da JSON) hangi yolun çalıştığını belirsizleştirirdi.
+   */
+  @Post(':id/assets/from-library')
+  @RequirePermissions('bulk.write')
+  attachFromLibrary(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('assetId', ParseUUIDPipe) assetId: string,
+  ): Promise<AdAssetRecord> {
+    return this.drafts.attachFromLibrary(ctx, id, assetId);
+  }
+
+  /**
    * Görsel önizleme.
    *
    * DOSYA DOĞRUDAN SERVİS EDİLMİYOR — nginx ile statik sunmak, yükleme

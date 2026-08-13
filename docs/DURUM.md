@@ -13,12 +13,12 @@
 
 | | |
 |---|---|
-| Veritabanı tablosu | **39** |
-| Migration | **19** |
-| API testi | **660** |
+| Veritabanı tablosu | **41** |
+| Migration | **20** |
+| API testi | **677** |
 | Web testi | **20** |
-| Panel sayfası | **11** |
-| API controller | **18** |
+| Panel sayfası | **12** |
+| API controller | **19** |
 
 **İki cümlelik özet:**
 
@@ -56,7 +56,7 @@ Senin paylaştığın 7 parçalı mimariye göre. ✅ tamam · 🟡 kısmi · �
 | Bilgi bankası (marka sesi, ürün bilgisi) | ❌ | Hiç başlanmadı |
 | Kitle kütüphanesi | ❌ | Meta'da `custom_audiences` çekilmiyor |
 | Anahtar kelime kütüphanesi | ❌ | Performans verisi geliyor; kütüphane (kayıtlı liste) yok |
-| Görsel/video varlık arşivi | ❌ | Toplu oluşturucu görsel kimliği elle alıyor |
+| **Görsel/video varlık arşivi** | 🟡 | `/kutuphane/gorseller` — görsel + logo, mükerrer engeli, hesap başına hash önbelleği |
 | **Form kütüphanesi (Anlık Form)** | 🟡 | `/kutuphane/formlar` — sürümleme çalışıyor, Meta yayını doğrulanmadı |
 
 **Bu bölümün ilk parçası doldu.** Formlar kütüphanesi 12 Ağustos'ta yazıldı;
@@ -108,6 +108,36 @@ gösteriliyor, ama kimseye **bildirim gitmiyor**.
 | **Akıllı varlık yönlendirme** | ✅ | Meta + Google PMax yuva kapsaması, kırpma yüzdesi, eksik yuva tespiti |
 | **Anlık form oluşturucu** | 🟡 | `/kutuphane/formlar` — 5 bölüm + canlı önizleme; yayın doğrulanmadı |
 | **Potansiyel Müşteriler (Lead CRM)** | 🟡 | `/potansiyel-musteriler` — webhook + mutabakat; canlı doğrulanmadı |
+
+**Varlık arşivi (BASE) — 13 Ağustos.** `/kutuphane/gorseller`. Üç somut
+sorunu çözüyor: aynı görseli her kampanyada yeniden yüklemek, toplu
+oluşturucuda `image_hash` değerini ELLE yazmak (o değeri bulmak için Ads
+Manager'a gitmek gerekiyordu) ve Google PMax logosunun yerinin olmaması.
+
+**Modülün merkezindeki gerçek: Meta'nın `image_hash` değeri REKLAM HESABI
+BAŞINA üretiliyor.** Aynı görsel iki hesapta kullanılıyorsa iki ayrı hash var.
+Tek kolonda tutmak, A hesabının hash'ini B hesabında kullanmak demek — Meta
+bunu ya "Invalid parameter" ile reddediyor ya da kreatifi GÖRSELSİZ
+oluşturuyor. İkincisinde reklam yayınlanıyor, para harcıyor ve boş görünüyor.
+Bu yüzden `asset_platform_refs` tablosu (varlık, hesap) çiftini tekil tutuyor
+ve önbellek isabet ederse Meta'ya hiç gidilmiyor.
+
+Mükerrer yükleme içerik özetiyle engelleniyor ve kontrol DİSKE YAZMADAN ÖNCE
+yapılıyor — sonra yapmak her tekrar yüklemede yetim bir dosya bırakırdı;
+paylaşımlı sunucuda bu, diğer siteleri de etkileyen sessiz bir disk dolması.
+Tekil kısıt MÜŞTERİ BAZLI: iki müşterinin aynı stok fotoğrafı yüklemesi meşru
+ve Meta'ya zaten ayrı ayrı yüklenmeleri gerekiyor.
+
+Kullanımdaki varlık silinemiyor: silmek, Meta'da çalışmaya devam eden bir
+reklamın kaydını koparmak demek. Logo ayrı bir tür ve alt sınırı daha düşük
+(128 piksel) — reklam görselinin sınırını uygulamak Google'ın kabul ettiği bir
+logoyu reddetmek olurdu.
+
+Yapı gereği bir düzeltme: depolama katmanı `StorageModule`'e taşındı. Arşiv
+reklam oluşturucunun depolamasını, yayıncı da arşivin önbelleğini kullanıyor;
+iki modül birbirini içe aktarırdı. `forwardRef` ihtiyacı genelde yanlış
+yerleştirilmiş bir bağımlılığın işareti ve depolama ikisinin de ALTINDA duran
+bir altyapı parçası.
 
 **Akıllı varlık yönlendirme — 13 Ağustos.** `asset-routing.schema.ts`.
 Tek görsel seti, iki platform, çakışmayan oranlar. Asıl mesele "her oran farkı
@@ -302,6 +332,7 @@ Bunlar **yazıldı, test edildi, ama canlı Meta API'sinde bir kez bile
 | Boost oluşturma | `meta.provider.ts` → `createBoost` | **Yüksek** — 3 varlık, geri alma yolu var ama denenmedi |
 | Toplu reklam oluşturma | `meta.provider.ts` → `createAd` vb. | **Yüksek** — kısmi başarı yönetimi denenmedi |
 | Reklam Oluşturucu yayını | `meta.provider.ts` → `publishDraft` | **Yüksek** — 4 varlık + anlık form; `asset_feed_spec` yerleşim kuralları hiç denenmedi |
+| **Arşiv hash önbelleği** | `asset-uploader.service.ts` | **Orta** — hesap başına hash mantığı doğru ama tek bir gerçek yükleme yapılmadı; `uploadAdImage` zaten `ads_management` bekliyor |
 | **Google PMax varlık gereksinimleri** | `asset-routing.schema.ts` | **Orta** — oranlar, en küçük/önerilen boyutlar ve logo zorunluluğu Google belgelerinden çıkarıldı; Google yazma yolu hiç yazılmadı, tek bir varlık grubu oluşturulmadı |
 | **Leadgen webhook + lead çekme** | `leadgen-webhook.service.ts`, `lead-sync.service.ts` | **Yüksek** — imza doğrulaması, `field_data` biçimi, `filtering` zaman kısıtı ve sayfalama belgeden çıkarıldı; `leads_retrieval` izni yok, gerçek bildirim hiç alınmadı |
 | **Gelişmiş mod yayını** | `meta.provider.ts` → `publishDraft` (teklif/bütçe/takvim alanları) | **Yüksek** — `bid_strategy`, `bid_amount`, `lifetime_budget`, `start_time` alanları hiç gönderilmedi. Uyumluluk matrisi de belgeden çıkarıldı, canlıda sınanmadı |

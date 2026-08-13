@@ -16,6 +16,8 @@ import { BudgetsModule } from './modules/budgets/budgets.module';
 import { RulesModule } from './modules/rules/rules.module';
 import { AdBuilderModule } from './modules/ad-builder/ad-builder.module';
 import { FormsModule } from './modules/forms/forms.module';
+import { AssetsModule } from './modules/assets/assets.module';
+import { StorageModule } from './storage/storage.module';
 import { LeadsModule } from './modules/leads/leads.module';
 import { BoostsModule } from './modules/boosts/boosts.module';
 import { BulkModule } from './modules/bulk/bulk.module';
@@ -48,6 +50,8 @@ import { QueueModule } from './queue/queue.module';
     AdBuilderModule,
     FormsModule,
     LeadsModule,
+    StorageModule,
+    AssetsModule,
     BoostsModule,
     BulkModule,
   ],
