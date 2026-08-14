@@ -41,6 +41,11 @@ function arg(name: string): string | undefined {
   return i !== -1 ? ARGV[i + 1] : undefined;
 }
 
+/** Değersiz bayrak — `--apply`, `--backfill` gibi. */
+function has(name: string): boolean {
+  return ARGV.includes(`--${name}`);
+}
+
 const COMMAND = ARGV[0];
 const REDIS_URL = process.env.REDIS_URL;
 const REDIS_DB = Number(process.env.REDIS_DB ?? 3);
@@ -232,6 +237,95 @@ function isoDate(offsetDays = 0): string {
   return d.toISOString().slice(0, 10);
 }
 
+type JobType =
+  | 'structure'
+  | 'insights_realtime'
+  | 'insights_daily'
+  | 'insights_backfill'
+  | 'keyword_insights';
+
+/**
+ * sync_jobs kaydı + kuyruk girişi — TEK YERDE.
+ *
+ * Hem tek hesaplık `runJob` hem toplu `portfolio` buradan geçiyor. İki ayrı
+ * kopya tutmak, birinde düzeltilen bir hatanın diğerinde kalması demekti ve
+ * buradaki ayrıntıların hiçbiri gözle yakalanmıyor: kayıt sırası, iş kimliği
+ * ayırıcısı ve öksüz kalan satırın temizliği.
+ *
+ * KAYIT ÖNCE, KUYRUK SONRA. Worker işi kayıt oluşmadan alırsa `syncJobId`'yi
+ * bulamıyor.
+ *
+ * Hata durumunda `die` ÇAĞIRMIYOR, fırlatıyor: toplu çalıştırmada tek bir
+ * hesabın kuyruğa girememesi diğer 26'sını iptal etmemeli.
+ */
+async function enqueueSyncJob(params: {
+  queue: Queue;
+  account: { id: string; clientId: string; platform: string; name: string };
+  jobType: JobType;
+  dateFrom?: string;
+  dateTo?: string;
+  /** Küçük sayı önce çalışıyor. Yapı işleri metriklerden önde olmalı. */
+  priority?: number;
+}): Promise<{ id: bigint }> {
+  const { queue, account, jobType, dateFrom, dateTo } = params;
+
+  const record = await prisma.syncJob.create({
+    data: {
+      clientId: account.clientId,
+      adAccountId: account.id,
+      jobType,
+      status: 'queued',
+      priority: params.priority ?? 1,
+      queueJobId: null,
+      dateFrom: dateFrom ? new Date(`${dateFrom}T00:00:00Z`) : null,
+      dateTo: dateTo ? new Date(`${dateTo}T00:00:00Z`) : null,
+    },
+    select: { id: true },
+  });
+
+  // Ayırıcı `:` DEĞİL: BullMQ özel iş kimliğinde `:` yasaklıyor (bkz. queues.ts).
+  // İş numarasını kimliğe katıyoruz — tamamlanmış bir işin kimliğini yeniden
+  // kullanmak BullMQ tarafında sessizce yok sayılabiliyor.
+  const jobId = `manual__${jobType}__${account.id}__${record.id}`;
+
+  // Kuyruğa ekleme başarısız olursa tablo kaydını öksüz bırakma: satır
+  // sonsuza kadar `queued` kalır, hiçbir worker almaz ve `sync -- jobs`
+  // çıktısında hiç sonuçlanmayan bir iş olarak durur.
+  try {
+    await queue.add(
+      jobType,
+      {
+        syncJobId: record.id.toString(),
+        clientId: account.clientId,
+        platform: account.platform,
+        jobType,
+        adAccountId: account.id,
+        dateFrom,
+        dateTo,
+        // interactive: yapı işinde worker'a TAM TARAMA yaptırıyor. Elle
+        // tetikleyen biri silinmiş kampanyaların da kaybolmasını bekliyor;
+        // delta bunu yapamaz.
+        interactive: true,
+      },
+      { jobId, priority: params.priority ?? 1 },
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await prisma.syncJob.update({
+      where: { id: record.id },
+      data: {
+        status: 'failed',
+        finishedAt: new Date(),
+        errorCode: 'enqueue_failed',
+        errorMessage: message.slice(0, 1000),
+      },
+    });
+    throw new Error(`${account.name}: iş kuyruğa eklenemedi — ${message}`);
+  }
+
+  return record;
+}
+
 async function runJob(
   jobType:
     | 'structure'
@@ -275,64 +369,16 @@ async function runJob(
     die(`Bağlantı durumu "${account.connection.status}" — yeniden bağlanmak gerekiyor.`);
   }
 
-  // sync_jobs kaydı ÖNCE, kuyruk SONRA — worker işi kayıt oluşmadan alırsa
-  // syncJobId'yi bulamaz.
-  const record = await prisma.syncJob.create({
-    data: {
-      clientId: account.clientId,
-      adAccountId: account.id,
-      jobType,
-      status: 'queued',
-      priority: 1,
-      queueJobId: null,
-      dateFrom: dateFrom ? new Date(`${dateFrom}T00:00:00Z`) : null,
-      dateTo: dateTo ? new Date(`${dateTo}T00:00:00Z`) : null,
-    },
-    select: { id: true },
-  });
-
   const connection = new Redis(REDIS_URL, { db: REDIS_DB, maxRetriesPerRequest: null });
   const queue = new Queue('sync', { connection, prefix: PREFIX });
 
-  // Ayırıcı `:` DEĞİL: BullMQ özel iş kimliğinde `:` yasaklıyor (bkz. queues.ts).
-  // İş numarasını kimliğe katıyoruz — tamamlanmış bir işin kimliğini yeniden
-  // kullanmak BullMQ tarafında sessizce yok sayılabiliyor.
-  const jobId = `manual__${jobType}__${account.id}__${record.id}`;
-  // Kuyruğa ekleme başarısız olursa tablo kaydını öksüz bırakma: satır
-  // sonsuza kadar `queued` kalır, hiçbir worker almaz ve `sync -- jobs`
-  // çıktısında hiç sonuçlanmayan bir iş olarak durur.
+  let record: { id: bigint };
   try {
-    await queue.add(
-      jobType,
-      {
-        syncJobId: record.id.toString(),
-        clientId: account.clientId,
-        platform: account.platform,
-        jobType,
-        adAccountId: account.id,
-        dateFrom,
-        dateTo,
-        // interactive: yapı işinde worker'a TAM TARAMA yaptırıyor. Elle
-        // tetikleyen biri silinmiş kampanyaların da kaybolmasını bekliyor;
-        // delta bunu yapamaz.
-        interactive: true,
-      },
-      { jobId, priority: 1 },
-    );
+    record = await enqueueSyncJob({ queue, account, jobType, dateFrom, dateTo });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await prisma.syncJob.update({
-      where: { id: record.id },
-      data: {
-        status: 'failed',
-        finishedAt: new Date(),
-        errorCode: 'enqueue_failed',
-        errorMessage: message.slice(0, 1000),
-      },
-    });
     await queue.close();
     await connection.quit().catch(() => connection.disconnect());
-    die(`İş kuyruğa eklenemedi: ${message}`);
+    die(err instanceof Error ? err.message : String(err));
   }
 
   console.log(`\n▸ İş kuyruğa eklendi`);
@@ -912,6 +958,191 @@ async function listJobs(): Promise<void> {
   }
 }
 
+/**
+ * Portföyün TAMAMINI açar ve veri çeker — hesap hesap uğraşmadan.
+ *
+ * NEDEN GEREKLİ: `enable` ve `run` tek hesap alıyor. Portföy seed'i 27 hesabı
+ * müşterilere bağladıktan sonra hepsini elle açmak 27, yapı taraması 27,
+ * metrik 27 komut demekti; her biri için önce `list` çıktısından UUID bulmak
+ * gerekiyordu. Bu, insanın yarısında vazgeçeceği bir iş — ve yarısı yapılmış
+ * bir portföyde panel "veri yok" değil, EKSİK veri gösteriyor.
+ *
+ * `sync_enabled` varsayılanı `false` (bkz. schema.prisma): hesaplar keşfediliyor
+ * ama kapalı geliyor, çünkü 129 hesaplı bir bağlantıyı açmak istemeden 129
+ * hesabın kotasını yakmak demek. Seed hesapları müşteriye BAĞLIYOR ama AÇMIYOR;
+ * ikisi ayrı karar.
+ *
+ * VARSAYILAN KURU ÇALIŞMA. Hiçbir şey yapmadan ne yapılacağını yazıyor.
+ * `--apply` olmadan tek bir satır değişmiyor, tek bir API çağrısı gitmiyor.
+ * Onlarca hesabın kotasını harcayan bir komutun yanlışlıkla çalışması,
+ * Google tarafında günlük kotayı bitirip senkronizasyonu ertesi güne
+ * bırakabilir.
+ *
+ * İKİ AŞAMA ve sırası ÖNEMLİ:
+ *
+ *   1) yapı  — kampanya/reklam seti/reklam satırları
+ *   2) metrik — 90 günlük insights
+ *
+ * Metrik satırları, ait oldukları kampanya satırı veritabanında YOKSA
+ * ATLANIYOR (insights-sync.service.ts → `writeRows`, `skipped`). Yani yapı
+ * taraması bitmeden metrik çekmek kotayı harcayıp veriyi çöpe atmak demek.
+ * Bu yüzden aşamalar ayrı komutlar: 1. aşama bitince `sync -- jobs` ile
+ * görülür, sonra 2. aşama çalıştırılır.
+ */
+async function portfolio(): Promise<void> {
+  const apply = has('apply');
+  const backfill = has('backfill');
+  const days = Number(arg('days') ?? 90);
+  const platformFilter = arg('platform');
+
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    die(`--days ${arg('days')} geçersiz. 1..365 arası bir tam sayı bekleniyor.`);
+  }
+  if (platformFilter && platformFilter !== 'meta' && platformFilter !== 'google') {
+    die(`--platform ${platformFilter} geçersiz. "meta" ya da "google".`);
+  }
+
+  const accounts = await prisma.adAccount.findMany({
+    where: {
+      ...(platformFilter ? { platform: platformFilter as 'meta' | 'google' } : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      platform: true,
+      externalId: true,
+      clientId: true,
+      syncEnabled: true,
+      lastStructureSyncAt: true,
+      client: { select: { name: true } },
+      connection: { select: { status: true } },
+    },
+    orderBy: [{ platform: 'asc' }, { name: 'asc' }],
+  });
+
+  // Bağlantısı sağlıksız hesap AÇILMIYOR. Açmak, her turda başarısız olacak
+  // bir işi kuyruğa sokmak ve hata tablosunu gürültüyle doldurmak olurdu.
+  const blocked = accounts.filter((a) => a.connection.status !== 'active');
+  const usable = accounts.filter((a) => a.connection.status === 'active');
+  const toEnable = usable.filter((a) => !a.syncEnabled);
+  const noStructure = usable.filter((a) => a.lastStructureSyncAt === null);
+
+  const dateFrom = isoDate(-days);
+  const dateTo = isoDate(-1);
+
+  console.log(`\nPortföy senkronizasyonu — ${backfill ? `2. AŞAMA: metrik` : '1. AŞAMA: yapı'}`);
+  console.log('─'.repeat(64));
+  console.log(`  toplam hesap        ${accounts.length}`);
+  console.log(`  bağlantısı sağlıklı ${usable.length}`);
+  console.log(`  şu an izlemede açık ${usable.length - toEnable.length}`);
+  console.log(`  açılacak            ${toEnable.length}`);
+  if (backfill) {
+    console.log(`  tarih aralığı       ${dateFrom} .. ${dateTo}  (${days} gün)`);
+    console.log(`  yapı taraması yok   ${noStructure.length}  ← metrik çekilmeyecek`);
+  }
+
+  if (blocked.length > 0) {
+    // Sessizce atlamak, "hepsi açıldı" deyip bir kısmının hiç veri
+    // getirmediğini gizlemek olurdu.
+    console.log(`\n  ! ${blocked.length} hesabın bağlantısı sağlıksız — atlanıyor:`);
+    for (const a of blocked) {
+      console.log(`      ${a.client.name} · ${a.platform} ${a.name} (${a.connection.status})`);
+    }
+    console.log('    Panelden Platform Bağlantıları → yeniden bağlan.');
+  }
+
+  if (backfill && noStructure.length > 0) {
+    console.log(`\n  ! ${noStructure.length} hesapta yapı taraması hiç yapılmamış — metrik ATLANIYOR:`);
+    for (const a of noStructure) {
+      console.log(`      ${a.client.name} · ${a.platform} ${a.name}`);
+    }
+    console.log(
+      '    Metrik satırları kampanya satırı olmadan yazılamıyor, atlanıyor.\n' +
+        '    Önce 1. aşama:  sync -- portfolio --apply',
+    );
+  }
+
+  const targets = backfill ? usable.filter((a) => a.lastStructureSyncAt !== null) : usable;
+
+  if (!apply) {
+    console.log(`\n  KURU ÇALIŞMA — hiçbir şey değişmedi, tek bir API çağrısı gitmedi.`);
+    console.log(`  Uygulamak için sona --apply ekle:`);
+    console.log(
+      `      pnpm --filter @advetics/api sync -- portfolio${backfill ? ` --backfill --days ${days}` : ''} --apply\n`,
+    );
+    console.log(`  Uygulanırsa ${targets.length} iş kuyruğa girecek.`);
+    console.log(
+      `  Bu ${targets.length} hesabın kotasını harcar; Google tarafında günlük\n` +
+        `  kota sınırlı ve bittiğinde senkronizasyon ertesi güne kalır.\n`,
+    );
+    return;
+  }
+
+  if (targets.length === 0) {
+    console.log('\n  Kuyruğa konacak iş yok.\n');
+    return;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Uygula
+  // ---------------------------------------------------------------------------
+  if (!backfill && toEnable.length > 0) {
+    await prisma.adAccount.updateMany({
+      where: { id: { in: toEnable.map((a) => a.id) } },
+      data: { syncEnabled: true },
+    });
+    console.log(`\n  ✓ ${toEnable.length} hesap izlemeye açıldı`);
+  }
+
+  if (!REDIS_URL) die('REDIS_URL tanımlı değil — kuyruğa iş konulamaz.');
+  const connection = new Redis(REDIS_URL, { db: REDIS_DB, maxRetriesPerRequest: null });
+  const queue = new Queue('sync', { connection, prefix: PREFIX });
+
+  const jobType: JobType = backfill ? 'insights_backfill' : 'structure';
+  let queued = 0;
+  const failed: string[] = [];
+
+  console.log(`\n  ${jobType} kuyruğa konuyor…`);
+  for (const account of targets) {
+    try {
+      await enqueueSyncJob({
+        queue,
+        account: {
+          id: account.id,
+          clientId: account.clientId,
+          platform: account.platform,
+          name: account.name,
+        },
+        jobType,
+        dateFrom: backfill ? dateFrom : undefined,
+        dateTo: backfill ? dateTo : undefined,
+        // Yapı işleri metriklerden ÖNCE. Aynı anda kuyruktalarsa metrik
+        // kampanya satırını bulamaz ve atlanır.
+        priority: backfill ? 5 : 1,
+      });
+      queued++;
+    } catch (err) {
+      // Tek hesabın hatası diğerlerini iptal etmiyor; hepsi sonda raporlanıyor.
+      failed.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  await queue.close();
+  await connection.quit().catch(() => connection.disconnect());
+
+  console.log(`\nÖzet`);
+  console.log('─'.repeat(64));
+  console.log(`  ${queued} iş kuyruğa girdi · ${failed.length} başarısız`);
+  for (const f of failed) console.log(`      ✗ ${f}`);
+  console.log(
+    `\n  İlerlemeyi izle:   pnpm --filter @advetics/api sync -- jobs\n` +
+      (backfill
+        ? '\n  Metrikler geldikçe panelde görünür.\n'
+        : `\n  Yapı işleri bittikten SONRA 2. aşama:\n` +
+          `      pnpm --filter @advetics/api sync -- portfolio --backfill --days ${days} --apply\n`),
+  );
+}
+
 async function main(): Promise<void> {
   switch (COMMAND) {
     case 'list':
@@ -947,6 +1178,9 @@ async function main(): Promise<void> {
     case 'jobs':
       await listJobs();
       break;
+    case 'portfolio':
+      await portfolio();
+      break;
     default:
       console.log(`
 Senkronizasyon ops aracı
@@ -964,6 +1198,16 @@ Senkronizasyon ops aracı
   sync -- inspect --account <uuid>    senkronize edilen veriyi ham alanlarla inceler
   sync -- actions --account <uuid>    ham Meta aksiyon türlerini ve değerlerini döker
   sync -- jobs                        son 20 senkronizasyon işini gösterir
+
+TOPLU — portföyün tamamı, hesap hesap uğraşmadan:
+
+  sync -- portfolio                   NE YAPILACAĞINI yazar, hiçbir şey değiştirmez
+  sync -- portfolio --apply           1. aşama: hesapları açar + yapı taraması
+  sync -- portfolio --backfill --days 90 --apply
+                                      2. aşama: 90 günlük metrik
+
+  Sıra önemli: metrik satırları kampanya satırı olmadan ATLANIYOR. Önce
+  1. aşama bitsin (sync -- jobs ile izle), sonra 2. aşama.
 
 Örnek:
   pnpm --filter @advetics/api sync -- list
