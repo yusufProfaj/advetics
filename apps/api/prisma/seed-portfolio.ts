@@ -157,6 +157,40 @@ function normalizeGoogleId(raw: string): string {
   return raw.replace(/\D/g, '');
 }
 
+/**
+ * Meta hesap kimliğinin veritabanında bulunabileceği İKİ biçim.
+ *
+ * `ad_accounts.external_id` Meta'da `act_` ÖNEKİYLE saklanıyor: keşif
+ * `/me/adaccounts` yanıtındaki `id` alanını olduğu gibi yazıyor ve Meta orayı
+ * `act_966706145588095` diye dolduruyor (meta.provider.ts, `listAdAccounts`).
+ *
+ * Bu seed ise kimlikleri ÖNEKSİZ tutuyor — Meta arayüzü ve Business Manager
+ * onları öyle gösteriyor, elle karşılaştırırken hata payı düşük. İkisi
+ * eşleşmiyordu: 13 Meta hesabının 13'ü de "VERİTABANINDA YOK" dönüyordu,
+ * oysa hepsi oradaydı ve panelde çalışıyordu. 14 Google hesabının 14'ü
+ * bulunduğu için sorun "bağlantı kurulmamış" gibi de görünmüyordu.
+ *
+ * İKİ BİÇİMİ DE ARIYORUZ, tek birini "doğru" ilan etmiyoruz. `act_X` ile `X`
+ * aynı hesap, aralarında belirsizlik yok; hangi biçimin yazıldığını tahmin
+ * etmek yerine ikisini de kabul etmek, eski satırlara ve ileride keşif
+ * tarafında yapılacak bir normalleştirmeye karşı da dayanıklı.
+ *
+ * Bu tuzak bu projede DÖRDÜNCÜ kez çıkıyor (bkz. CLAUDE.md "tekrar eden
+ * teknik tuzaklar"). Mevcut kaynak taraması testi yalnızca meta.provider.ts'yi
+ * taradığı için buraya ulaşmıyordu; `seed-portfolio-meta-id.spec.ts` bu
+ * dosyayı da kilitliyor.
+ */
+/*
+ * EXPORT EDİLMİYOR ve bu bilinçli. Bu modülün en altında `main()` doğrudan
+ * çağrılıyor; dosyayı bir testten import etmek SEED'İ ÇALIŞTIRIR — üstelik
+ * gerçek veritabanında. Bu yüzden davranış import ile değil, kaynak
+ * taramasıyla kilitleniyor (`seed-portfolio-meta-id.spec.ts`).
+ */
+function metaIdCandidates(raw: string): string[] {
+  const bare = raw.startsWith('act_') ? raw.slice('act_'.length) : raw;
+  return [bare, `act_${bare}`];
+}
+
 function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -228,18 +262,22 @@ async function main(): Promise<void> {
 
   for (const entry of PORTFOLIO) {
     const targetClientId = clientId.get(entry.name)!;
-    const wanted: Array<{ platform: 'meta' | 'google'; externalId: string; shown: string }> = [
-      ...entry.meta.map((id) => ({ platform: 'meta' as const, externalId: id, shown: id })),
+    const wanted: Array<{ platform: 'meta' | 'google'; externalIds: string[]; shown: string }> = [
+      ...entry.meta.map((id) => ({
+        platform: 'meta' as const,
+        externalIds: metaIdCandidates(id),
+        shown: id,
+      })),
       ...entry.google.map((id) => ({
         platform: 'google' as const,
-        externalId: normalizeGoogleId(id),
+        externalIds: [normalizeGoogleId(id)],
         shown: id,
       })),
     ];
 
     for (const w of wanted) {
       const account = await prisma.adAccount.findFirst({
-        where: { platform: w.platform, externalId: w.externalId },
+        where: { platform: w.platform, externalId: { in: w.externalIds } },
         select: { id: true, name: true, clientId: true },
       });
 
