@@ -71,11 +71,58 @@ LANGUAGE sql STABLE AS $$
   SELECT app.current_org_id() IS NOT NULL AND app.current_user_id() IS NOT NULL;
 $$;
 
-/* Verilen client'a erişim var mı? */
+/*
+ * Panelde SEÇİLİ olan müşteri. Boş string = seçim yok (org geneli görünüm).
+ *
+ * current_client_ids() ile karıştırılmamalı: o ERİŞEBİLECEĞİ müşterilerin
+ * listesi, bu ise ŞU AN BAKTIĞI müşteri. İkisi ayrı sorulara cevap veriyor
+ * ve tek bir değişkende birleştirilemezler — erişim listesini seçime
+ * daraltmak, müşteri seçicisinin kendi listesini de daraltıp kullanıcıyı
+ * seçtiği müşteriye kilitlerdi.
+ */
+CREATE OR REPLACE FUNCTION app.current_active_client_id() RETURNS uuid
+LANGUAGE sql STABLE AS $$
+  SELECT NULLIF(current_setting('app.current_active_client_id', true), '')::uuid;
+$$;
+
+/*
+ * Verilen client'a erişim var mı?
+ *
+ * İKİ KATMAN:
+ *
+ *   1. YETKİ    — org yöneticisi her müşteriyi görebilir, diğerleri yalnızca
+ *                 kendi portföyünü.
+ *   2. SEÇİM    — panelde bir müşteri seçiliyse, veri O müşteriyle sınırlanır.
+ *
+ * İkinci katman sonradan eklendi ve sebebi somut: org yöneticisi Çiftçi Grup'u
+ * seçmesine rağmen panelde Mirnas'ın kampanyalarını görüyordu. Seçim
+ * hesaplanıyor ve oturum bağlamında duruyordu ama HİÇBİR YERDE
+ * KULLANILMIYORDU; metrik sorgusunda da client süzgeci yoktu, ayrım tamamen
+ * bu fonksiyona bırakılmıştı ve bu fonksiyon yöneticiye "hepsini görebilir"
+ * diyordu. Sonuç: müşteri seçicisi görsel olarak değişiyor, sorgu değişmiyor.
+ *
+ * Düzeltme neden BURADA: aynı boşluk Ads Explorer, bütçe, kurallar, raporlar
+ * ve leadlerde de vardı — hepsi müşteri ayrımını bu fonksiyona güveniyor.
+ * Her sorguya tek tek client süzgeci eklemek, bir tanesini unutmanın sessizce
+ * yanlış sayı göstermesi demekti.
+ *
+ * Yetki katmanı OLDUĞU GİBİ duruyor. Seçim yalnızca DARALTIYOR, hiçbir zaman
+ * genişletmiyor: erişemediğin bir müşteriyi seçmek sana o müşteriyi açmıyor.
+ * Seçim doğrulaması ayrıca uygulama tarafında da yapılıyor (bkz.
+ * tenant-context.service.ts — istenen değer erişim listesine karşı sınanıyor).
+ *
+ * `clients` tablosunun kendi politikası bu fonksiyonu KULLANMIYOR, kuralını
+ * inline yazıyor. Bu şart: müşteri listesi daralsaydı, bir müşteri seçen
+ * kullanıcı başka bir müşteriye geçemezdi.
+ */
 CREATE OR REPLACE FUNCTION app.can_access_client(target uuid) RETURNS boolean
 LANGUAGE sql STABLE AS $$
   SELECT app.has_context()
-     AND (app.is_org_admin() OR target = ANY (app.current_client_ids()));
+     AND (app.is_org_admin() OR target = ANY (app.current_client_ids()))
+     AND (
+       app.current_active_client_id() IS NULL
+       OR target = app.current_active_client_id()
+     );
 $$;
 
 -- -----------------------------------------------------------------------------

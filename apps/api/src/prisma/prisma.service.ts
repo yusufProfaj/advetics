@@ -70,12 +70,27 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     }
 
     return this.$transaction(async (tx) => {
+      /**
+       * `app.current_active_client_id` — panelde SEÇİLİ müşteri.
+       *
+       * `current_client_ids` ile ayrı tutuluyor: o erişebileceği müşteriler,
+       * bu şu an baktığı müşteri. Erişim listesini seçime daraltmak, müşteri
+       * seçicisinin kendi listesini de daraltıp kullanıcıyı seçtiği müşteriye
+       * KİLİTLERDİ — geri dönemezdi.
+       *
+       * Seçim yokken BOŞ STRING gönderiliyor, değişken atlanmıyor. Atlamak,
+       * havuzdan gelen bağlantıda önceki isteğin değerinin kalması demekti;
+       * `set_config(..., true)` transaction ömürlü olsa da her isteğin kendi
+       * değerini AÇIKÇA yazması, bir sonraki bakımda bu varsayımın yanlış
+       * çıkma ihtimalini ortadan kaldırıyor.
+       */
       await tx.$queryRaw`
         SELECT
-          set_config('app.current_org_id',     ${ctx.orgId},                 true),
-          set_config('app.current_user_id',    ${ctx.userId},                true),
-          set_config('app.current_client_ids', ${ctx.clientIds.join(',')},   true),
-          set_config('app.is_org_admin',       ${ctx.isOrgAdmin ? 'on' : 'off'}, true)
+          set_config('app.current_org_id',          ${ctx.orgId},                 true),
+          set_config('app.current_user_id',         ${ctx.userId},                true),
+          set_config('app.current_client_ids',      ${ctx.clientIds.join(',')},   true),
+          set_config('app.is_org_admin',            ${ctx.isOrgAdmin ? 'on' : 'off'}, true),
+          set_config('app.current_active_client_id', ${ctx.activeClientId ?? ''}, true)
       `;
       return fn(tx);
     });
