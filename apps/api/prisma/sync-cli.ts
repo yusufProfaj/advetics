@@ -994,6 +994,8 @@ async function portfolio(): Promise<void> {
   const backfill = has('backfill');
   const days = Number(arg('days') ?? 90);
   const platformFilter = arg('platform');
+  const clientFilter = arg('client');
+  const everything = has('all');
 
   if (!Number.isInteger(days) || days < 1 || days > 365) {
     die(`--days ${arg('days')} geçersiz. 1..365 arası bir tam sayı bekleniyor.`);
@@ -1001,8 +1003,11 @@ async function portfolio(): Promise<void> {
   if (platformFilter && platformFilter !== 'meta' && platformFilter !== 'google') {
     die(`--platform ${platformFilter} geçersiz. "meta" ya da "google".`);
   }
+  if (clientFilter && everything) {
+    die('--client ile --all birlikte kullanılamaz. Hangisinin kazandığı belirsiz kalırdı.');
+  }
 
-  const accounts = await prisma.adAccount.findMany({
+  const all = await prisma.adAccount.findMany({
     where: {
       ...(platformFilter ? { platform: platformFilter as 'meta' | 'google' } : {}),
     },
@@ -1014,11 +1019,86 @@ async function portfolio(): Promise<void> {
       clientId: true,
       syncEnabled: true,
       lastStructureSyncAt: true,
-      client: { select: { name: true } },
+      client: { select: { name: true, slug: true } },
       connection: { select: { status: true } },
     },
     orderBy: [{ platform: 'asc' }, { name: 'asc' }],
   });
+
+  /**
+   * KAPSAM AÇIKÇA SEÇİLMEDEN HİÇBİR ŞEY YAPILMIYOR.
+   *
+   * İlk sürüm varsayılan olarak TÜM hesapları kapsıyordu ve bu yanlıştı:
+   * `ad_accounts.client_id` ZORUNLU bir alan, yani keşifte gelen her hesabın
+   * zaten bir müşterisi var. "Müşterisi olan hesaplar" diye süzmek hiçbir şeyi
+   * daraltmıyor — üretimde 27 hesaplık bir portföy için çalıştırılan komut
+   * 288 hesap saydı.
+   *
+   * 288 hesabı izlemeye açmak, portföyle ilgisi olmayan 261 hesabın kotasını
+   * her gün yakmak demekti. Kuru çalışma bunu yakaladı; varsayılanın kendisi
+   * yine de yanlıştı ve bir dahaki sefere yakalanmayabilirdi.
+   *
+   * Artık kapsam ZORUNLU: `--client` ya da `--all`. Kapsamsız çağrı bir envanter
+   * raporu basıyor — müşteri müşteri kaç hesap var, kaçı açık. Bu, komutu
+   * güvenli kılmanın yanında en çok ihtiyaç duyulan bilgiyi de veriyor.
+   */
+  const byClient = new Map<string, { name: string; slug: string; rows: typeof all }>();
+  for (const a of all) {
+    const key = a.clientId;
+    const entry = byClient.get(key) ?? { name: a.client.name, slug: a.client.slug, rows: [] };
+    entry.rows.push(a);
+    byClient.set(key, entry);
+  }
+
+  if (!clientFilter && !everything) {
+    console.log(`\nEnvanter — ${all.length} hesap · ${byClient.size} müşteri`);
+    console.log('─'.repeat(72));
+    const sorted = [...byClient.values()].sort((x, y) => y.rows.length - x.rows.length);
+    for (const c of sorted) {
+      const on = c.rows.filter((r) => r.syncEnabled).length;
+      const meta = c.rows.filter((r) => r.platform === 'meta').length;
+      const google = c.rows.length - meta;
+      console.log(
+        `  ${String(c.rows.length).padStart(4)} hesap  (${String(on).padStart(3)} açık)  ` +
+          `meta ${String(meta).padStart(3)} · google ${String(google).padStart(3)}   ${c.name}` +
+          `  [${c.slug}]`,
+      );
+    }
+    console.log(
+      `\n  KAPSAM SEÇİLMEDİ — hiçbir şey değişmedi.\n\n` +
+        `  Belirli müşteriler (slug'lar virgülle):\n` +
+        `      sync -- portfolio --client sabanci-insaat,mia-yapi\n\n` +
+        `  Tümü (${all.length} hesap — kotayı düşün):\n` +
+        `      sync -- portfolio --all\n`,
+    );
+    return;
+  }
+
+  let accounts = all;
+  if (clientFilter) {
+    const wanted = clientFilter
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+
+    accounts = all.filter(
+      (a) =>
+        wanted.includes(a.client.slug.toLowerCase()) || wanted.includes(a.client.name.toLowerCase()),
+    );
+
+    // Eşleşmeyen slug SESSİZCE yutulmuyor. Yazım hatası yüzünden bir müşterinin
+    // atlanması, "hepsini senkronize ettim" sanmakla sonuçlanırdı.
+    const matched = new Set(
+      accounts.flatMap((a) => [a.client.slug.toLowerCase(), a.client.name.toLowerCase()]),
+    );
+    const unmatched = wanted.filter((w) => !matched.has(w));
+    if (unmatched.length > 0) {
+      die(
+        `Şu müşteriler bulunamadı: ${unmatched.join(', ')}\n` +
+          '  Slug listesi için kapsamsız çalıştır:  sync -- portfolio',
+      );
+    }
+  }
 
   // Bağlantısı sağlıksız hesap AÇILMIYOR. Açmak, her turda başarısız olacak
   // bir işi kuyruğa sokmak ve hata tablosunu gürültüyle doldurmak olurdu.
@@ -1064,11 +1144,15 @@ async function portfolio(): Promise<void> {
 
   const targets = backfill ? usable.filter((a) => a.lastStructureSyncAt !== null) : usable;
 
+  // Önerilen komut KAPSAMI TAŞIMALI. Kapsamsız bir komut satırı önermek,
+  // kullanıcının onu kopyalayıp 288 hesabı açmasına giden en kısa yol olurdu.
+  const scopeArgs = everything ? ' --all' : ` --client ${clientFilter}`;
+
   if (!apply) {
     console.log(`\n  KURU ÇALIŞMA — hiçbir şey değişmedi, tek bir API çağrısı gitmedi.`);
     console.log(`  Uygulamak için sona --apply ekle:`);
     console.log(
-      `      pnpm --filter @advetics/api sync -- portfolio${backfill ? ` --backfill --days ${days}` : ''} --apply\n`,
+      `      pnpm --filter @advetics/api sync -- portfolio${scopeArgs}${backfill ? ` --backfill --days ${days}` : ''} --apply\n`,
     );
     console.log(`  Uygulanırsa ${targets.length} iş kuyruğa girecek.`);
     console.log(
@@ -1139,7 +1223,7 @@ async function portfolio(): Promise<void> {
       (backfill
         ? '\n  Metrikler geldikçe panelde görünür.\n'
         : `\n  Yapı işleri bittikten SONRA 2. aşama:\n` +
-          `      pnpm --filter @advetics/api sync -- portfolio --backfill --days ${days} --apply\n`),
+          `      pnpm --filter @advetics/api sync -- portfolio${scopeArgs} --backfill --days ${days} --apply\n`),
   );
 }
 
@@ -1199,12 +1283,19 @@ Senkronizasyon ops aracı
   sync -- actions --account <uuid>    ham Meta aksiyon türlerini ve değerlerini döker
   sync -- jobs                        son 20 senkronizasyon işini gösterir
 
-TOPLU — portföyün tamamı, hesap hesap uğraşmadan:
+TOPLU — birçok hesabı tek komutla, hesap hesap uğraşmadan:
 
-  sync -- portfolio                   NE YAPILACAĞINI yazar, hiçbir şey değiştirmez
-  sync -- portfolio --apply           1. aşama: hesapları açar + yapı taraması
-  sync -- portfolio --backfill --days 90 --apply
+  sync -- portfolio                   ENVANTER: müşteri müşteri kaç hesap, kaçı açık
+  sync -- portfolio --client a,b      kapsamı seçer, planı yazar (hiçbir şey değişmez)
+  sync -- portfolio --client a,b --apply
+                                      1. aşama: hesapları açar + yapı taraması
+  sync -- portfolio --client a,b --backfill --days 90 --apply
                                       2. aşama: 90 günlük metrik
+  sync -- portfolio --all             tüm müşteriler (kotayı düşün)
+
+  KAPSAM ZORUNLU. Keşifte gelen HER hesabın bir müşterisi var, dolayısıyla
+  "müşterisi olanlar" diye bir daraltma yok: kapsamsız çalıştırmak yüzlerce
+  hesabı açmak olurdu. Kapsamsız çağrı yalnızca envanter basar.
 
   Sıra önemli: metrik satırları kampanya satırı olmadan ATLANIYOR. Önce
   1. aşama bitsin (sync -- jobs ile izle), sonra 2. aşama.
