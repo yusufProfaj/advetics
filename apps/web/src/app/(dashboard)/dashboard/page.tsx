@@ -88,6 +88,17 @@ export default async function DashboardPage({
           <p className="mt-0.5 text-sm text-ink-muted">
             {scopeLabel} · {formatDayLong(range.from)} — {formatDayLong(range.to)}
           </p>
+          {/*
+            TAMAMLANMAMIŞ GÜN AÇIKÇA YAZILIYOR. Sabah 09:00'da görülen düşük
+            harcama "kampanya durmuş" diye okunuyor; oysa gün bitmemiş.
+            Hiçbir hata üretmeyen ama yanlış karar aldıran gösterim tam olarak
+            budur.
+          */}
+          {range.incomplete && (
+            <p className="mt-1 text-xs text-warn">
+              Gün henüz tamamlanmadı — rakamlar gün boyunca artmaya devam edecek.
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <PlatformTabs current={platform} range={range.key} level={level} />
