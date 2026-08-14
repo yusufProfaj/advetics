@@ -10,6 +10,7 @@ import { METRIC_LEVELS } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { RANGE_PRESETS, resolveRange } from '@/lib/date-range';
+import { RefreshButton } from '@/components/refresh-button';
 import {
   changePercent,
   changePercentMicros,
@@ -103,6 +104,7 @@ export default async function DashboardPage({
         <div className="flex flex-wrap items-center gap-2">
           <PlatformTabs current={platform} range={range.key} level={level} />
           <RangeTabs current={range.key} level={level} platform={platform} />
+          <RefreshButton />
         </div>
       </header>
 
@@ -176,7 +178,14 @@ export default async function DashboardPage({
 
           <p className="text-xs text-ink-muted">
             Son güncelleme: {formatRelative(summary.lastFetchedAt)} · {summary.accountCount} reklam
-            hesabı · Bugün dâhil değil — tamamlanmamış bir gün tüm oranları aşağı çeker
+            hesabı ·{' '}
+            {/* Bu cümle KOŞULLU olmak zorunda. "Bugün" penceresi eklenmeden
+                önce koşulsuzdu ve doğruydu; artık Bugün seçiliyken tam tersini
+                söylüyor olurdu — ekranın kendi verisiyle çelişen bir açıklama,
+                yanlış sayıdan daha çok güven kaybettirir. */}
+            {range.incomplete
+              ? 'Bugüne bakıyorsunuz — gün bitmediği için rakamlar artmaya devam edecek'
+              : 'Bugün dâhil değil — tamamlanmamış bir gün tüm oranları aşağı çeker'}
           </p>
         </>
       )}

@@ -26,6 +26,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
+import { SyncModule } from './modules/sync/sync.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { QueueModule } from './queue/queue.module';
     TenancyModule,
     QueueModule,
     ConnectionsModule,
+    SyncModule,
     MetricsModule,
     AdsModule,
     ReportsModule,
