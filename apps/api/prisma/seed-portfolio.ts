@@ -12,8 +12,16 @@
  * yazmak, o parolayı sonsuza kadar sızdırmak demek. Silinse bile git geçmişinde
  * kalır.
  *
- * Kurulan parolalar GEÇİCİ sayılıyor: `mustChangePassword` işaretleniyor ve
- * kullanıcı panelde uyarı görüyor.
+ * Kurulan parolalar GEÇİCİ sayılıyor: `mustChangePassword` işaretleniyor.
+ *
+ * DİKKAT — BU BAYRAK ŞU AN HİÇBİR ŞEY YAPMIYOR. Alan veritabanına yazılıyor
+ * ama `apps/api/src` ve `apps/web/src` altında onu OKUYAN tek bir satır yok:
+ * kullanıcı uyarı görmüyor, giriş engellenmiyor, parola değiştirmeye
+ * zorlanmıyor. Bu yorum önce "kullanıcı panelde uyarı görüyor" diyordu ve
+ * yanlıştı — okuyan kişiye var olmayan bir korumaya güvendiriyordu.
+ *
+ * Yani seed ile kurulan parolalar süresiz geçerli. Zorlama yazılana kadar
+ * ilk giriş sonrası parolayı ELLE değiştirmek gerekiyor.
  *
  * Kullanım:
  *   SEED_ADMIN_PASSWORD=… SEED_YUSUF_PASSWORD=… SEED_ECEM_PASSWORD=… \
@@ -24,7 +32,21 @@ import { config as loadEnv } from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 
-loadEnv({ path: resolve(__dirname, '../.env') });
+/**
+ * ÜÇ SEVİYE YUKARI — depo kökü. `../.env` DEĞİL.
+ *
+ * Monorepo'da tek bir .env var ve kökte duruyor; API, panel ve bütün prisma
+ * script'leri oradan besleniyor. Bu dosya tek başına `apps/api/.env` arıyordu
+ * ve orada dosya olmadığı için Prisma "Environment variable not found:
+ * DATABASE_URL" diyerek düşüyordu — hata mesajı .env'in yanlış yerde
+ * arandığını değil, değişkenin hiç tanımlanmadığını söylüyor ve insanı
+ * doğrudan yanlış yere bakmaya gönderiyor.
+ *
+ * Bu seed bugüne kadar hiç çalıştırılmamıştı; hata da o yüzden ortaya
+ * çıkmamıştı. `seed-env-path.spec.ts` artık bütün prisma script'lerini tarayıp
+ * aynı yolu kullandıklarını doğruluyor.
+ */
+loadEnv({ path: resolve(__dirname, '../../../.env') });
 
 const prisma = new PrismaClient({ datasourceUrl: process.env.DIRECT_DATABASE_URL });
 

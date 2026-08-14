@@ -55,7 +55,12 @@ kalkmayacaktı. Advetics henüz canlı değilken başkasının üretimi riske gi
   edilmemeli.
 - Seed script'leri parolayı **yalnızca ortam değişkeninden** okur
   (`SEED_ADMIN_PASSWORD` vb.), koda gömülmez.
-- `.env` dosyaları git'te yok ve olmamalı. Sunucuda `apps/api/.env` altında.
+- `.env` dosyaları git'te yok ve olmamalı. **Tek bir `.env` var ve DEPO
+  KÖKÜNDE** — API, panel ve bütün `prisma/` script'leri oradan besleniyor
+  (`resolve(__dirname, '../../../.env')`). Burada bir süre "sunucuda
+  `apps/api/.env` altında" yazıyordu; yanlıştı ve `seed-portfolio.ts` tam da
+  o yanlış yolu okuduğu için "Environment variable not found: DATABASE_URL"
+  ile düşüyordu. `seed-env-path.spec.ts` artık yolu kilitliyor.
 
 ## 3. Kod yazarken
 
