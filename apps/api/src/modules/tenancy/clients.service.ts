@@ -42,6 +42,24 @@ export class ClientsService {
           reportingCurrency: true,
           status: true,
           createdAt: true,
+          /**
+           * Reklam hesabı ve ekip sayıları listede GÖRÜNMEK ZORUNDA.
+           *
+           * Müşteriler ekranının tek işi "hangi müşteride ne var" sorusuna
+           * cevap vermek. Sayılar olmadan liste yalnızca isimlerden ibaret
+           * kalıyor ve hesabı olmayan bir müşteri — yani hiç veri gelmeyecek
+           * bir müşteri — hesabı olandan ayırt edilemiyor.
+           *
+           * `syncEnabled` ayrı sayılıyor: bağlı olmak ile İZLENİYOR olmak
+           * farklı. Portföy seed'i 27 hesabı bağladı ama hiçbirini açmamıştı
+           * ve panel "veri yok" gösteriyordu; ekranda ayrı görünseydi sebep
+           * bir bakışta anlaşılırdı.
+           */
+          _count: { select: { adAccounts: true, memberships: true } },
+          adAccounts: {
+            where: { syncEnabled: true },
+            select: { id: true },
+          },
         },
       }),
     );

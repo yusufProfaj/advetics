@@ -31,7 +31,7 @@ const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
     items: [
       { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1 },
       { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4 },
-      { href: '/saglik', label: 'Sağlık Skoru', icon: 'health', module: 3 },
+      { href: '/saglik', label: 'Sağlık Skoru', icon: 'health', module: 3, ready: false },
     ],
   },
   {
@@ -68,8 +68,11 @@ const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
     // 6 OPTIMISE
     title: 'İyileştir',
     items: [
-      { href: '/yorgunluk', label: 'Reklam Yorgunluğu', icon: 'fatigue', module: 6 },
-      { href: '/ab-test', label: 'A/B Test', icon: 'abtest', module: 6 },
+      // Modül 6 hazır sayılıyor (Raporlar bitti) ama bu ikisinin sayfası YOK.
+      // `ready` verilmezse modül numarasına düşülüyor ve ikisi de tıklanabilir
+      // görünüp 404 veriyordu.
+      { href: '/yorgunluk', label: 'Reklam Yorgunluğu', icon: 'fatigue', module: 6, ready: false },
+      { href: '/ab-test', label: 'A/B Test', icon: 'abtest', module: 6, ready: false },
     ],
   },
   {
@@ -89,19 +92,40 @@ const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
         module: 2,
         ready: true,
       },
-      { href: '/kutuphane/kitleler', label: 'Kitleler', icon: 'audience', module: 2 },
-      { href: '/kutuphane/bilgi', label: 'Bilgi Bankası', icon: 'knowledge', module: 2 },
+      { href: '/kutuphane/kitleler', label: 'Kitleler', icon: 'audience', module: 2, ready: false },
+      { href: '/kutuphane/bilgi', label: 'Bilgi Bankası', icon: 'knowledge', module: 2, ready: false },
     ],
   },
   {
     // 1 WORKSPACE — en altta çünkü en seyrek açılıyor.
+    //
+    // SIRA KURULUM SIRASI. Yeni bir müşteriyi devralan kişi yukarıdan aşağı
+    // ilerleyerek işi bitiriyor:
+    //
+    //   1. Müşteri aç            (şirket)
+    //   2. Reklam hesabını bağla (o müşterinin yönetilecek hesapları)
+    //   3. Ekibi yetkilendir     (kim hangi müşteriyi görecek)
+    //
+    // Önceki sıra Platform Bağlantıları'nı en üste koyuyordu ve akışı tersine
+    // çeviriyordu: bağlantı ekranı müşteri seçilmeden iş görmüyor ("Önce bir
+    // müşteri seç" diyor), yani ilk tıklanan yer çıkmaz sokaktı.
+    //
+    // Marka ve Denetim Kaydı `ready` DEĞİL: arka uçları hazır (branding,
+    // audit-logs uç noktaları çalışıyor) ama ekranları yazılmadı. Modül
+    // numaralarına bakılsaydı ikisi de açık görünüp 404 verirdi.
     title: 'Çalışma Alanı',
     items: [
-      { href: '/ayarlar/baglantilar', label: 'Platform Bağlantıları', icon: 'plug', module: 2 },
-      { href: '/ayarlar/musteriler', label: 'Müşteriler', icon: 'clients', module: 1 },
-      { href: '/ayarlar/ekip', label: 'Ekip & Yetkiler', icon: 'team', module: 1 },
-      { href: '/ayarlar/marka', label: 'Marka', icon: 'brand', module: 1 },
-      { href: '/ayarlar/denetim', label: 'Denetim Kaydı', icon: 'audit', module: 1 },
+      { href: '/ayarlar/musteriler', label: 'Müşteriler', icon: 'clients', module: 1, ready: true },
+      {
+        href: '/ayarlar/baglantilar',
+        label: 'Platform Bağlantıları',
+        icon: 'plug',
+        module: 2,
+        ready: true,
+      },
+      { href: '/ayarlar/ekip', label: 'Ekip & Yetkiler', icon: 'team', module: 1, ready: true },
+      { href: '/ayarlar/marka', label: 'Marka', icon: 'brand', module: 1, ready: false },
+      { href: '/ayarlar/denetim', label: 'Denetim Kaydı', icon: 'audit', module: 1, ready: false },
     ],
   },
 ];
