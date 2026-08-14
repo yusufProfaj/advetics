@@ -88,8 +88,46 @@
 @utility border-brand-soft {
   border-color: color-mix(in srgb, var(--brand-primary) 24%, transparent);
 }
+/**
+ * Marka renginin OKUNABİLİR tonu — zemine göre yön değiştiriyor.
+ *
+ * Ham marka rengi metin olarak her zemine yetmiyor. Varsayılan kırmızı
+ * (#e11d2e) koyu yüzeyde 3.80 kontrast veriyor, eşik 4.5 (ölçüldü).
+ *
+ * Yön TEMAYA GÖRE TERS: açık temada siyaha, karanlık temada BEYAZA doğru
+ * karışıyor. Tek yönlü karıştırmak (eski hâli yalnızca siyaha karıştırıyordu)
+ * karanlık temada rengi daha da koyultuyor ve kontrastı 2.95'e düşürüyordu —
+ * yani okunabilirlik için eklenen katman okunabilirliği bozuyordu.
+ *
+ * Karışım oranı marka renginden TÜRETİLİYOR, sabit bir renk yazılmıyor:
+ * beyaz etiket ürününde her müşterinin rengi farklı ve sabit bir "açık
+ * kırmızı" müşterinin mavisinde anlamsız olurdu.
+ */
+:root {
+  --brand-legible: color-mix(in srgb, var(--brand-primary) 88%, black);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand-legible: color-mix(in srgb, var(--brand-primary) 65%, white);
+  }
+}
+
 @utility text-brand-strong {
-  color: color-mix(in srgb, var(--brand-primary) 88%, black);
+  color: var(--brand-legible);
+}
+
+/**
+ * Çıpa bağlantılarında yumuşak kaydırma — tanıtım sayfasının menüsü için.
+ *
+ * `prefers-reduced-motion` ile koşullu: hareket duyarlılığı olan kullanıcıda
+ * sayfanın kendiliğinden kayması baş dönmesi yapabiliyor ve o kullanıcı için
+ * anında atlamak DOĞRU davranış, eksik özellik değil.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {

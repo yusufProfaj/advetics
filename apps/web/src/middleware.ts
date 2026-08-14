@@ -95,7 +95,19 @@ export function middleware(req: NextRequest): NextResponse {
     return NextResponse.redirect(new URL('/r/bulunamadi', origin));
   }
 
-  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  /**
+   * Kök `/` tanıtım sayfası — herkese açık.
+   *
+   * PUBLIC_PATHS LİSTESİNE `'/'` EKLEMEYİN. Liste bugün
+   * `pathname.startsWith(`${p}/`)` ile eşleşiyor ve `'/'` için bu `'//'`
+   * ürettiğinden tesadüfen zararsız kalıyor. Eşleşme bir gün
+   * `startsWith(p)` olarak sadeleştirilirse `'/'` her yolla eşleşir ve
+   * PANELİN TAMAMI OTURUMSUZ AÇILIR — sessiz, gürültüsüz, tek satırlık bir
+   * güvenlik açığı. Kök burada ayrı ve açıkça karşılanıyor.
+   */
+  const isPublic =
+    pathname === '/' ||
+    PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const hasSessionCookie = req.cookies.has(ACCESS_COOKIE);
 
   if (!isPublic && !hasSessionCookie) {
