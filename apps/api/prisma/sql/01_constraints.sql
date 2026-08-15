@@ -46,13 +46,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS branding_profiles_org_default_uniq
   WHERE client_id IS NULL;
 
 -- -----------------------------------------------------------------------------
--- invitations: aynı e-posta + aynı kapsam için birden fazla BEKLEYEN davet olmasın.
--- -----------------------------------------------------------------------------
-CREATE UNIQUE INDEX IF NOT EXISTS invitations_pending_uniq
-  ON invitations (org_id, email, COALESCE(client_id, '00000000-0000-0000-0000-000000000000'::uuid))
-  WHERE status = 'pending';
-
--- -----------------------------------------------------------------------------
 -- refresh_tokens: süresi geçmiş kayıtların temizliği için kısmi index
 -- (Modül 1.5'te bir cron job bunu kullanacak.)
 -- -----------------------------------------------------------------------------

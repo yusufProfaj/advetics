@@ -399,7 +399,7 @@ Hepsi canlıda. Doğrulanmayı bekleyenler işaretli.
 | `904b939` `3d893d3` | `sync -- portfolio` toplu mod (kapsam zorunlu) | ❌ hiç koşulmadı |
 | `159e9a8` | Müşteriler + Ekip ekranları, menüde 9 ölü bağlantı kapatıldı | ✅ |
 | `ff20b72` | **Aktif müşteri süzgeci** — seçili müşteri veriyi daraltmıyordu | 🟡 kısmen |
-| `dc28f79` | Ekip ekranı: davet, rol değiştirme, yetki kaldırma | ❌ |
+| `dc28f79` | Ekip ekranı: davet, rol değiştirme, yetki kaldırma (davet 16 Ağustos'ta kaldırıldı — §3.6) | ❌ |
 | `5b98504` | Bugün ve Son 60 gün pencereleri | ❌ |
 | `37a2264` | "Şimdi güncelle" düğmesi | ❌ |
 | `54e4740` | Müşteriler ekranı diğer müşterilerin hesaplarını "yok" gösteriyordu | ❌ |
@@ -418,6 +418,44 @@ Hepsi canlıda. Doğrulanmayı bekleyenler işaretli.
 **Bilinen açık:** `mustChangePassword` alanı veritabanına yazılıyor ama
 `apps/api/src` ve `apps/web/src` altında onu OKUYAN tek satır yok — zorlama
 yazılana kadar seed parolaları süresiz geçerli.
+
+> Bu açık **2026-08-16'da büyüdü**: davet akışı kaldırıldı ve kullanıcı artık
+> doğrudan ekleniyor, parolayı da ekleyen yönetici belirliyor. Yani her yeni
+> kullanıcının parolası, onu ekleyen kişi tarafından biliniyor ve kullanıcı
+> kendi değiştirmedikçe öyle kalıyor. Bilinçli bir karardı (zorlama ayrı bir
+> iş: login yanıtı + panel yönlendirmesi + parola değiştirme sayfası) ama
+> **açıldığı gün geriye dönük tarama gerekmiyor** — `createMember` alanı zaten
+> `true` yazıyor.
+
+### 3.6. Davet akışı kaldırıldı (2026-08-16)
+
+Davet üretimde ÇALIŞMIYORDU ve bu tasarımdan değil eksiklikten geliyordu:
+token üretiliyor, SHA-256 hash'i saklanıyor ve **düz metni atılıyordu** —
+yalnızca `NODE_ENV !== 'production'` iken log'a düşüyordu. E-posta altyapısı
+da hiç yazılmadığı için kimse daveti kabul edemiyordu; panel bunu ekranda
+itiraf ediyordu bile.
+
+Yerine **doğrudan kullanıcı ekleme** geldi (`POST /members`, org yöneticisi).
+`invitations` tablosu ve `InvitationStatus` enum'u düşürüldü,
+`/auth/invitations/accept` kaldırıldı, `user.invite` yetkisi silindi (ekleme
+artık `user.write` altında).
+
+İki davranış kilitlendi (`members-create.spec.ts`):
+
+- Parola **hash'lenerek** yazılıyor — düz metin yazan bir regresyon hiçbir
+  testte, hiçbir logda görünmezdi.
+- **Mevcut kullanıcının parolasına dokunulmuyor.** Aynı e-posta zaten kayıtlıysa
+  yalnızca yeni yetki ekleniyor ve yanıt `created: false` dönüyor; panel de
+  "yazdığın parola kullanılmadı" diye uyarıyor. Aksi hâlde "ekip ekle"
+  ekranından yapılan masum bir işlem çalışan bir hesabın parolasını sessizce
+  sıfırlardı.
+
+**Kalıntı:** `UserStatus` enum'unda `invited` değeri ve `users.status`
+varsayılanı hâlâ `invited`. Artık bu değeri ÜRETEN kod yok (hem kayıt hem
+ekleme `active` yazıyor), ama varsayılan olarak dururken statüsü açıkça
+verilmeyen bir kullanıcı oluşturulursa o kullanıcı giriş yapamaz
+(`tenant-context.service` `status !== 'active'` ise reddediyor). Temizlemek
+ayrı bir migration ister.
 
 ## 4. Sıradaki geliştirme adayları
 

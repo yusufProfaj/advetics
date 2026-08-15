@@ -12,14 +12,12 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
-  acceptInvitationSchema,
   changePasswordSchema,
   confirmPasswordResetSchema,
   loginSchema,
   registerOrganizationSchema,
   requestPasswordResetSchema,
   switchClientSchema,
-  type AcceptInvitationInput,
   type ChangePasswordInput,
   type ConfirmPasswordResetInput,
   type LoginInput,
@@ -157,23 +155,6 @@ export class AuthController {
     this.auth.assertClientAccess(ctx, dto.clientId);
     setActiveClientCookie(res, this.config, dto.clientId);
     return this.auth.buildSession(ctx.userId, dto.clientId);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Davet
-  // ---------------------------------------------------------------------------
-
-  @Public()
-  @HttpCode(HttpStatus.OK)
-  @Post('invitations/accept')
-  async acceptInvitation(
-    @Body(zodBody(acceptInvitationSchema)) dto: AcceptInvitationInput,
-    @Req() req: AuthedRequest,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const result = await this.auth.acceptInvitation(dto, this.meta(req));
-    setAuthCookies(res, this.config, result.tokens);
-    return result.session;
   }
 
   // ---------------------------------------------------------------------------

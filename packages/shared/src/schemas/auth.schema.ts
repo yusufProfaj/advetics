@@ -37,16 +37,27 @@ export const registerOrganizationSchema = z.object({
 });
 export type RegisterOrganizationInput = z.infer<typeof registerOrganizationSchema>;
 
-export const acceptInvitationSchema = z.object({
-  token: z.string().min(20).max(255),
-  fullName: z.string().trim().min(2).max(120),
-  password: passwordSchema,
-});
-export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
-
-export const createInvitationSchema = z
+/**
+ * Ekibe kullanıcı ekleme — DAVET DEĞİL, DOĞRUDAN OLUŞTURMA.
+ *
+ * Davet akışı kaldırıldı çünkü üretimde çalışmıyordu: token üretiliyor,
+ * hash'lenip saklanıyor ve düz metni ATILIYORDU (yalnızca geliştirme
+ * ortamında loglanıyordu). E-posta altyapısı olmadığı için kimsenin daveti
+ * kabul etmesine imkân yoktu — panel bunu ekranda itiraf ediyordu bile.
+ * Kullanılamayan bir akışı ayakta tutmak, çalışıyor sanılmasına yol açıyor.
+ *
+ * Parolayı ekleyen yönetici belirliyor ve kullanıcıya kendi iletiyor.
+ *
+ * BİLİNEN AÇIK: ilk girişte parola değiştirme ZORLANMIYOR. `mustChangePassword`
+ * alanı şemada var ama okuyan tek satır yok, yani ekleyenin bildiği parola
+ * süresiz geçerli kalıyor. Bilinçli olarak sonraya bırakıldı; zorlama
+ * yazılana kadar bu bir güven varsayımıdır.
+ */
+export const createMemberSchema = z
   .object({
     email: emailSchema,
+    fullName: z.string().trim().min(2).max(120),
+    password: passwordSchema,
     role: z.enum(ROLES),
     /** null => org geneli erişim. Sadece owner/admin rolleri için geçerli. */
     clientId: z.string().uuid().nullable(),
@@ -58,7 +69,7 @@ export const createInvitationSchema = z
       path: ['clientId'],
     },
   );
-export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;
+export type CreateMemberInput = z.infer<typeof createMemberSchema>;
 
 export const requestPasswordResetSchema = z.object({ email: emailSchema });
 export type RequestPasswordResetInput = z.infer<typeof requestPasswordResetSchema>;

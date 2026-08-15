@@ -1,11 +1,7 @@
 import Link from 'next/link';
 import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
-import {
-  TeamManager,
-  type InvitationRow,
-  type MemberRow,
-} from '@/components/tenancy/team-manager';
+import { TeamManager, type MemberRow } from '@/components/tenancy/team-manager';
 
 export const metadata = { title: 'Ekip & Yetkiler — Advetics' };
 
@@ -22,17 +18,19 @@ interface ClientRow {
  * Ekranın merkezinde bu yüzden kullanıcı değil, kullanıcı × müşteri eşleşmesi
  * var.
  *
- * Veri sunucuda çekiliyor, eylemler istemcide. `/invitations` yalnızca org
- * yöneticisine açık (RequireOrgAdmin) — portföy yöneticisi bu isteği alırsa
- * 403 döner ve sayfanın tamamı patlardı; bu yüzden hatası yutuluyor ve davet
- * bölümü boş listeyle çalışmaya devam ediyor.
+ * Veri sunucuda çekiliyor, eylemler istemcide. Kullanıcı EKLEME uç noktası
+ * (`POST /members`) yalnızca org yöneticisine açık; portföy yöneticisi
+ * listeyi görür ama ekleyemez.
+ *
+ * DAVET AKIŞI KALDIRILDI: token üretiliyor, hash'lenip saklanıyor ve düz
+ * metni atılıyordu — e-posta altyapısı olmadığı için üretimde kimse daveti
+ * kabul edemiyordu. Kullanıcı artık doğrudan oluşuyor.
  */
 export default async function TeamPage() {
   const session = await requireSession();
 
-  const [members, invitations, clients] = await Promise.all([
+  const [members, clients] = await Promise.all([
     serverApiFetch<MemberRow[]>('/members').catch(() => []),
-    serverApiFetch<InvitationRow[]>('/invitations').catch(() => []),
     serverApiFetch<ClientRow[]>('/clients').catch(() => []),
   ]);
 
@@ -54,11 +52,6 @@ export default async function TeamPage() {
         <span className="text-ink-muted">
           <strong className="text-ink">{clients.length}</strong> müşteri
         </span>
-        {invitations.length > 0 && (
-          <span className="text-ink-muted">
-            <strong className="text-ink">{invitations.length}</strong> bekleyen davet
-          </span>
-        )}
       </div>
 
       {members.length === 0 ? (
@@ -71,7 +64,6 @@ export default async function TeamPage() {
       ) : (
         <TeamManager
           members={members}
-          invitations={invitations}
           clients={clients}
           currentUserId={session.user.id}
         />

@@ -9,7 +9,6 @@ import { Prisma, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type {
-  AcceptInvitationInput,
   ChangePasswordInput,
   LoginInput,
   RegisterOrganizationInput,
@@ -21,13 +20,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { TenantContextService } from './tenant-context.service';
 import { TokenService, type IssuedTokens } from './token.service';
-
-const ARGON_OPTIONS: argon2.Options = {
-  type: argon2.argon2id,
-  memoryCost: 19456, // 19 MiB — OWASP önerisi
-  timeCost: 2,
-  parallelism: 1,
-};
+import { ARGON_OPTIONS } from '../../common/utils/password-hash';
 
 /**
  * Kullanıcı bulunamadığında da gerçek bir doğrulama maliyeti ödenir ki cevap
@@ -261,100 +254,6 @@ export class AuthService {
     if (!ctx.clientIds.includes(clientId)) {
       throw new BadRequestException('Bu müşteriye erişim yetkiniz yok');
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Davet kabulü
-  // ---------------------------------------------------------------------------
-
-  async acceptInvitation(input: AcceptInvitationInput, meta: RequestMeta): Promise<AuthResult> {
-    const tokenHash = this.hashToken(input.token);
-
-    const invitation = await this.admin.invitation.findUnique({
-      where: { tokenHash },
-      include: { organization: { select: { id: true, status: true } } },
-    });
-
-    if (!invitation || invitation.status !== 'pending') {
-      throw new BadRequestException('Davet geçersiz veya daha önce kullanılmış');
-    }
-    if (invitation.expiresAt.getTime() <= Date.now()) {
-      await this.admin.invitation.update({
-        where: { id: invitation.id },
-        data: { status: 'expired' },
-      });
-      throw new BadRequestException('Davetin süresi dolmuş');
-    }
-    if (invitation.organization.status !== 'active') {
-      throw new BadRequestException('Organizasyon askıya alınmış');
-    }
-
-    const passwordHash = await argon2.hash(input.password, ARGON_OPTIONS);
-
-    const user = await this.admin.$transaction(async (tx) => {
-      const existing = await tx.user.findUnique({
-        where: { orgId_email: { orgId: invitation.orgId, email: invitation.email } },
-      });
-
-      const target = existing
-        ? await tx.user.update({
-            where: { id: existing.id },
-            data: {
-              passwordHash: existing.passwordHash ?? passwordHash,
-              fullName: input.fullName,
-              status: 'active',
-            },
-          })
-        : await tx.user.create({
-            data: {
-              orgId: invitation.orgId,
-              email: invitation.email,
-              passwordHash,
-              fullName: input.fullName,
-              status: 'active',
-            },
-          });
-
-      // Aynı kapsam için membership zaten varsa rolü güncelle, çoğaltma.
-      const existingMembership = await tx.membership.findFirst({
-        where: { userId: target.id, clientId: invitation.clientId },
-      });
-
-      if (existingMembership) {
-        await tx.membership.update({
-          where: { id: existingMembership.id },
-          data: { role: invitation.role },
-        });
-      } else {
-        await tx.membership.create({
-          data: {
-            userId: target.id,
-            orgId: invitation.orgId,
-            clientId: invitation.clientId,
-            role: invitation.role,
-          },
-        });
-      }
-
-      await tx.invitation.update({
-        where: { id: invitation.id },
-        data: { status: 'accepted', acceptedAt: new Date() },
-      });
-
-      return target;
-    });
-
-    await this.audit.recordUnauthenticated(invitation.orgId, {
-      action: 'invitation.accepted',
-      targetType: 'user',
-      targetId: user.id,
-      actorId: user.id,
-      clientId: invitation.clientId,
-      after: { email: invitation.email, role: invitation.role },
-      ...meta,
-    });
-
-    return this.completeLogin(user.id, user.orgId, meta);
   }
 
   // ---------------------------------------------------------------------------

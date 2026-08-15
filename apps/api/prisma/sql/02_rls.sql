@@ -137,7 +137,7 @@ DECLARE
   t text;
   tables text[] := ARRAY[
     'organizations', 'users', 'clients', 'memberships', 'branding_profiles',
-    'refresh_tokens', 'password_reset_tokens', 'invitations', 'audit_logs',
+    'refresh_tokens', 'password_reset_tokens', 'audit_logs',
     -- Modül 2
     'platform_connections', 'ad_accounts', 'social_profiles', 'oauth_states',
     -- Politikası KASITLI olarak yok — aşağıdaki nota bak.
@@ -295,15 +295,6 @@ CREATE POLICY adv_refresh_tokens_own ON refresh_tokens
 CREATE POLICY adv_password_resets_own ON password_reset_tokens
   FOR ALL USING (user_id = app.current_user_id())
           WITH CHECK (user_id = app.current_user_id());
-
--- -----------------------------------------------------------------------------
--- invitations
--- Davet yönetimi yalnızca org yöneticilerine aittir.
--- Daveti KABUL etme akışı kimlik doğrulamasızdır → yönetim bağlantısı kullanır.
--- -----------------------------------------------------------------------------
-CREATE POLICY adv_invitations_admin ON invitations
-  FOR ALL USING (org_id = app.current_org_id() AND app.is_org_admin())
-          WITH CHECK (org_id = app.current_org_id() AND app.is_org_admin());
 
 -- -----------------------------------------------------------------------------
 -- audit_logs

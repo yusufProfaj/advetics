@@ -6,7 +6,7 @@ import { ROLES, type Role } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 
 /**
- * Ekip yönetimi — davet, rol değiştirme, yetki kaldırma.
+ * Ekip yönetimi — kullanıcı ekleme, rol değiştirme, yetki kaldırma.
  *
  * Yetki MÜŞTERİ BAZINDA veriliyor. Bir kişi A müşterisinde kampanya yöneticisi,
  * B'de yalnızca görüntüleyici olabilir; bu yüzden düzenlenen şey kullanıcı
@@ -31,7 +31,7 @@ const ROLE_HINT: Record<Role, string> = {
 
 /**
  * Org geneli erişim (tüm müşteriler) YALNIZCA bu roller için.
- * Sunucudaki `createInvitationSchema` da aynı kuralı uyguluyor; burada
+ * Sunucudaki `createMemberSchema` da aynı kuralı uyguluyor; burada
  * tekrarlanmasının sebebi, kullanıcının geçersiz kombinasyonu SEÇEBİLMESİNİ
  * engellemek. Sonradan hata göstermek, o hatayı yapmasına izin vermektir.
  */
@@ -58,14 +58,6 @@ export interface MemberRow {
   memberships: MembershipRow[];
 }
 
-export interface InvitationRow {
-  id: string;
-  email: string;
-  role: Role;
-  expiresAt: string;
-  client: { name: string } | null;
-}
-
 function formatDate(value: string | null): string {
   if (!value) return 'hiç giriş yapmadı';
   return new Date(value).toLocaleDateString('tr-TR', {
@@ -77,12 +69,10 @@ function formatDate(value: string | null): string {
 
 export function TeamManager({
   members,
-  invitations,
   clients,
   currentUserId,
 }: {
   members: MemberRow[];
-  invitations: InvitationRow[];
   clients: ClientOption[];
   currentUserId: string;
 }) {
@@ -91,8 +81,11 @@ export function TeamManager({
   const [error, setError] = useState<string | null>(null);
 
   const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('manager');
   const [clientId, setClientId] = useState<string>('');
+  const [notice, setNotice] = useState<string | null>(null);
 
   const orgWideAllowed = ORG_WIDE_ROLES.includes(role);
 
@@ -109,11 +102,22 @@ export function TeamManager({
     }
   }
 
-  async function invite(e: React.FormEvent) {
+  async function addMember(e: React.FormEvent) {
     e.preventDefault();
+    setNotice(null);
     const trimmed = email.trim().toLowerCase();
     if (!trimmed.includes('@')) {
       setError('Geçerli bir e-posta adresi girin.');
+      return;
+    }
+    if (fullName.trim().length < 2) {
+      setError('Ad soyad girin.');
+      return;
+    }
+    // Sunucudaki kuralın AYNISI. Formu gönderip 400 almak yerine burada
+    // durmak, kullanıcıya parolayı yeniden yazdırmıyor.
+    if (password.length < 12 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Parola en az 12 karakter olmalı ve harf ile rakam içermeli.');
       return;
     }
     // Org geneli seçimi yalnızca izin veren rollerde gönderilir; diğerlerinde
@@ -124,12 +128,26 @@ export function TeamManager({
       return;
     }
 
-    await run('invite', async () => {
-      await apiFetch('/invitations', {
+    await run('add', async () => {
+      const res = await apiFetch<{ created: boolean }>('/members', {
         method: 'POST',
-        body: JSON.stringify({ email: trimmed, role, clientId: clientId || null }),
+        body: JSON.stringify({
+          email: trimmed,
+          fullName: fullName.trim(),
+          password,
+          role,
+          clientId: clientId || null,
+        }),
       });
       setEmail('');
+      setFullName('');
+      setPassword('');
+      if (!res.created) {
+        setNotice(
+          `${trimmed} zaten kayıtlıydı — yalnızca yeni yetki eklendi. ` +
+            'Yazdığın parola KULLANILMADI, kullanıcı eski parolasıyla giriyor.',
+        );
+      }
     });
   }
 
@@ -142,17 +160,51 @@ export function TeamManager({
       )}
 
       {/* ---------------------------------------------------------------- */}
-      {/* Davet                                                            */}
+      {/* Kullanıcı ekle                                                   */}
       {/* ---------------------------------------------------------------- */}
-      <form onSubmit={invite} className="rounded-xl border border-line bg-surface p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-ink">Kullanıcı davet et</h2>
+      <form onSubmit={addMember} className="rounded-xl border border-line bg-surface p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-ink">Kullanıcı ekle</h2>
+        <p className="mt-1 text-xs text-ink-muted">
+          Kullanıcı ANINDA oluşur — davet gönderilmiyor. Parolayı sen belirliyorsun ve
+          kullanıcıya kendin iletiyorsun.
+        </p>
 
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <input
+            type="text"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Ad Soyad"
+            disabled={busy !== null}
+            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-muted disabled:opacity-60"
+          />
+
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="ornek@sirket.com"
+            disabled={busy !== null}
+            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-muted disabled:opacity-60"
+          />
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          {/*
+            PAROLA GİZLENMİYOR (type="text").
+
+            Bunu yönetici kullanıcıya ELDEN iletecek; göremediği bir şeyi
+            doğru iletemez. Gizlemek "bir daha yaz" alanı ya da göz simgesi
+            gerektirirdi ve ikisi de aynı bilgiyi ekrana getirmenin daha
+            dolambaçlı yolu. Kendi parolası değil, üçüncü birinin geçici
+            parolası.
+          */}
+          <input
+            type="text"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Parola (en az 12 karakter)"
+            autoComplete="off"
             disabled={busy !== null}
             className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-muted disabled:opacity-60"
           />
@@ -203,51 +255,28 @@ export function TeamManager({
             disabled={busy !== null || email.trim().length === 0}
             className="rounded-lg bg-brand px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy === 'invite' ? 'Gönderiliyor…' : 'Davet Gönder'}
+            {busy === 'add' ? 'Ekleniyor…' : 'Kullanıcıyı Ekle'}
           </button>
           <span className="text-xs text-ink-muted">
-            Davet bağlantısı e-postayla GÖNDERİLMİYOR — bildirim altyapısı henüz yok.
-            Bağlantıyı listeden alıp kendiniz iletmeniz gerekiyor.
+            İlk girişte parola değiştirme ZORLANMIYOR — belirlediğin parola sen
+            söylemedikçe geçerli kalır.
           </span>
         </div>
-      </form>
 
-      {/* ---------------------------------------------------------------- */}
-      {/* Bekleyen davetler                                                */}
-      {/* ---------------------------------------------------------------- */}
-      {invitations.length > 0 && (
-        <section className="rounded-xl border border-line bg-surface p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-ink">
-            Bekleyen davetler ({invitations.length})
-          </h2>
-          <ul className="mt-3 space-y-2">
-            {invitations.map((inv) => (
-              <li
-                key={inv.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm"
-              >
-                <span className="text-ink">{inv.email}</span>
-                <span className="text-xs text-ink-muted">
-                  {inv.client?.name ?? 'tüm müşteriler'} · {ROLE_TR[inv.role] ?? inv.role} · son
-                  geçerlilik {formatDate(inv.expiresAt)}
-                </span>
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() =>
-                    run(`inv-${inv.id}`, () =>
-                      apiFetch(`/invitations/${inv.id}`, { method: 'DELETE' }),
-                    )
-                  }
-                  className="text-xs font-medium text-danger hover:underline disabled:opacity-50"
-                >
-                  {busy === `inv-${inv.id}` ? 'İptal ediliyor…' : 'İptal et'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+        {/*
+          MEVCUT KULLANICIYA YETKİ EKLENDİYSE BUNU SÖYLÜYORUZ.
+
+          Aynı e-posta zaten kayıtlıysa sunucu yeni kullanıcı OLUŞTURMUYOR,
+          yalnızca yeni yetkiyi ekliyor ve parolaya dokunmuyor. Söylenmezse
+          yönetici yazdığı parolanın geçerli olduğunu sanır ve kullanıcı giriş
+          yapamayınca ikisi de yanlış yerde arar.
+        */}
+        {notice && (
+          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2 text-xs text-amber-900">
+            {notice}
+          </p>
+        )}
+      </form>
 
       {/* ---------------------------------------------------------------- */}
       {/* Kullanıcılar                                                     */}

@@ -34,7 +34,9 @@ export const PERMISSIONS = [
   'client.write',
   'client.delete',
   'user.read',
-  'user.invite',
+  // `user.invite` KALDIRILDI: davet akışı yok, kullanıcı doğrudan ekleniyor
+  // ve o da `user.write` altında. İki ayrı yetki tutmak, birine izin verip
+  // diğerini unutmanın kapısıydı.
   'user.write',
   'branding.read',
   'branding.write',

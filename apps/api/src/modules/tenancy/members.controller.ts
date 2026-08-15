@@ -10,9 +10,9 @@ import {
   Req,
 } from '@nestjs/common';
 import {
-  createInvitationSchema,
+  createMemberSchema,
   updateMembershipSchema,
-  type CreateInvitationInput,
+  type CreateMemberInput,
   type TenantContext,
   type UpdateMembershipInput,
 } from '@advetics/shared';
@@ -35,33 +35,21 @@ export class MembersController {
     return this.members.listMembers(ctx);
   }
 
-  @Get('invitations')
+  /**
+   * Ekibe kullanıcı ekler.
+   *
+   * Davet uç noktalarının yerine geçti. Org yöneticisi işi: parolayı ekleyen
+   * belirliyor ve kullanıcıya kendi iletiyor.
+   */
+  @Post('members')
   @RequireOrgAdmin()
-  @RequirePermissions('user.invite')
-  listInvitations(@CurrentTenant() ctx: TenantContext) {
-    return this.members.listInvitations(ctx);
-  }
-
-  @Post('invitations')
-  @RequireOrgAdmin()
-  @RequirePermissions('user.invite')
-  invite(
+  @RequirePermissions('user.write')
+  createMember(
     @CurrentTenant() ctx: TenantContext,
-    @Body(zodBody(createInvitationSchema)) dto: CreateInvitationInput,
+    @Body(zodBody(createMemberSchema)) dto: CreateMemberInput,
     @Req() req: AuthedRequest,
   ) {
-    return this.members.invite(ctx, dto, this.meta(req));
-  }
-
-  @Delete('invitations/:id')
-  @RequireOrgAdmin()
-  @RequirePermissions('user.invite')
-  revokeInvitation(
-    @CurrentTenant() ctx: TenantContext,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Req() req: AuthedRequest,
-  ) {
-    return this.members.revokeInvitation(ctx, id, this.meta(req));
+    return this.members.createMember(ctx, dto, this.meta(req));
   }
 
   @Patch('memberships/:id')

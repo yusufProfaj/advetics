@@ -54,13 +54,6 @@ enum Role {
   client_viewer
 }
 
-enum InvitationStatus {
-  pending
-  accepted
-  revoked
-  expired
-}
-
 enum ActorType {
   user
   rule
@@ -95,7 +88,6 @@ model Organization {
   socialProfiles  SocialProfile[]
   memberships     Membership[]
   branding        BrandingProfile[]
-  invitations     Invitation[]
   auditLogs       AuditLog[]
   reportTemplates ReportTemplate[]
   monthlyBudgets  MonthlyBudget[]
@@ -146,7 +138,6 @@ model User {
   memberships        Membership[]
   refreshTokens      RefreshToken[]
   passwordResets     PasswordResetToken[]
-  invitationsCreated Invitation[]         @relation("InvitationCreatedBy")
   connectionsCreated PlatformConnection[]
 
   @@unique([orgId, email])
@@ -172,7 +163,6 @@ model Client {
   organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   memberships  Membership[]
   branding     BrandingProfile?
-  invitations  Invitation[]
 
   // Modül 2
   connections    PlatformConnection[]
@@ -299,30 +289,6 @@ model RefreshToken {
   @@index([familyId])
   @@index([expiresAt])
   @@map("refresh_tokens")
-}
-
-model Invitation {
-  id        String           @id @default(uuid()) @db.Uuid
-  orgId     String           @map("org_id") @db.Uuid
-  clientId  String?          @map("client_id") @db.Uuid
-  email     String           @db.VarChar(255)
-  role      Role
-  tokenHash String           @unique @map("token_hash") @db.VarChar(64)
-  status    InvitationStatus @default(pending)
-
-  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
-  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz(6)
-  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
-  createdById String    @map("created_by_id") @db.Uuid
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy    User         @relation("InvitationCreatedBy", fields: [createdById], references: [id])
-
-  @@index([orgId, status])
-  @@index([email])
-  @@map("invitations")
 }
 
 model PasswordResetToken {

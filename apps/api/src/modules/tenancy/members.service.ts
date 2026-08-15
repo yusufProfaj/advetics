@@ -6,16 +6,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
-import { createHash, randomBytes } from 'node:crypto';
+
 import {
   isOrgScopedRole,
-  type CreateInvitationInput,
+  type CreateMemberInput,
   type Permission,
   type TenantContext,
   type UpdateMembershipInput,
 } from '@advetics/shared';
 import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { hashPassword } from '../../common/utils/password-hash';
 
 interface Meta {
   ip?: string | null;
@@ -23,7 +24,6 @@ interface Meta {
   requestId?: string | null;
 }
 
-const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class MembersService {
@@ -67,116 +67,100 @@ export class MembersService {
     );
   }
 
-  async listInvitations(ctx: TenantContext) {
-    return this.prisma.withTenant(ctx, (tx) =>
-      tx.invitation.findMany({
-        where: { status: 'pending' },
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          clientId: true,
-          expiresAt: true,
-          createdAt: true,
-          client: { select: { id: true, name: true } },
-        },
-      }),
-    );
-  }
-
   /**
-   * Davet oluşturur.
+   * Ekibe kullanıcı ekler — DAVET DEĞİL, doğrudan oluşturma.
    *
-   * Token yalnızca burada, düz metin olarak var olur; veritabanına SHA-256
-   * hash'i yazılır. E-posta gönderimi Modül 1.5'te eklenecek — o zamana kadar
-   * token yanıtta (yalnızca geliştirme ortamında) ve log'da döner.
+   * Davet akışı kaldırıldı: üretimde token üretilip hash'leniyor ve düz metni
+   * ATILIYORDU (yalnızca geliştirme ortamında loglanıyordu), e-posta
+   * altyapısı da olmadığı için kimse daveti kabul edemiyordu. Kullanılamayan
+   * bir akış, çalışıyor sanıldığı sürece gerçek bir arızadan daha pahalı.
+   *
+   * İKİ YOL VAR ve hangisinin işlediği YANITTA DÖNÜYOR:
+   *
+   *   · Kullanıcı yoksa  → oluşturulur, parola yöneticinin verdiği olur.
+   *   · Kullanıcı VARSA  → yalnızca yeni yetki eklenir, PAROLASINA
+   *     DOKUNULMAZ. Aksi hâlde bir yöneticinin "ekip" ekranından yaptığı
+   *     masum bir işlem, mevcut bir kullanıcının parolasını sessizce
+   *     sıfırlardı — üstelik o kullanıcı bunu ancak giriş yapamayınca
+   *     öğrenirdi.
+   *
+   * `created` bayrağı arayüzün doğru cümleyi kurabilmesi için: "kullanıcı
+   * oluşturuldu" ile "mevcut kullanıcıya yetki eklendi" farklı şeyler ve
+   * ikincisinde yöneticinin yazdığı parola KULLANILMADI.
    */
-  async invite(ctx: TenantContext, input: CreateInvitationInput, meta: Meta) {
-    // Şema zaten org geneli erişimi owner/admin ile sınırlıyor; burada
-    // ikinci kez doğruluyoruz çünkü bu kural bir yetki yükseltme kapısıdır.
+  async createMember(ctx: TenantContext, input: CreateMemberInput, meta: Meta) {
+    // Şema zaten kısıtlıyor; burada ikinci kez doğruluyoruz çünkü bu kural
+    // bir yetki yükseltme kapısı — org geneli erişim yalnızca owner/admin.
     if (input.clientId === null && !isOrgScopedRole(input.role)) {
       throw new BadRequestException(
         'Organizasyon geneli erişim yalnızca owner ve admin rollerine verilebilir',
       );
     }
 
-    const rawToken = randomBytes(32).toString('base64url');
+    // Hash'i transaction DIŞINDA hesaplıyoruz: argon2 kasıtlı olarak yavaş
+    // (19 MiB, 2 tur) ve o süre boyunca bir veritabanı transaction'ını açık
+    // tutmak, bağlantı havuzunu yükün en yoğun anında meşgul eder.
+    const passwordHash = await hashPassword(input.password);
 
-    const invitation = await this.prisma.withTenant(ctx, async (tx) => {
+    return this.prisma.withTenant(ctx, async (tx) => {
       if (input.clientId) {
         const client = await tx.client.findUnique({ where: { id: input.clientId } });
         if (!client) throw new NotFoundException('Müşteri bulunamadı');
       }
 
-      const existingMember = await tx.user.findFirst({
+      const existing = await tx.user.findFirst({
         where: { email: input.email },
         select: { id: true, memberships: { select: { clientId: true } } },
       });
-      if (existingMember?.memberships.some((m) => m.clientId === input.clientId)) {
+
+      if (existing?.memberships.some((m) => m.clientId === input.clientId)) {
         throw new ConflictException('Bu kullanıcının zaten bu kapsamda erişimi var');
       }
 
-      const created = await tx.invitation.create({
+      const user =
+        existing ??
+        (await tx.user.create({
+          data: {
+            orgId: ctx.orgId,
+            email: input.email,
+            passwordHash,
+            fullName: input.fullName,
+            status: 'active',
+            // Şemada duruyor ama HENÜZ OKUYAN YOK — ilk girişte parola
+            // değiştirme zorlanmıyor. Yine de yazıyoruz ki zorlama eklendiği
+            // gün geçmiş kullanıcılar da kapsansın.
+            mustChangePassword: true,
+          },
+          select: { id: true, memberships: { select: { clientId: true } } },
+        }));
+
+      await tx.membership.create({
         data: {
+          userId: user.id,
           orgId: ctx.orgId,
           clientId: input.clientId,
-          email: input.email,
           role: input.role as Role,
-          tokenHash: createHash('sha256').update(rawToken).digest('hex'),
-          expiresAt: new Date(Date.now() + INVITATION_TTL_MS),
-          createdById: ctx.userId,
         },
       });
 
       await this.audit.record(tx, ctx, {
-        action: 'invitation.created',
-        targetType: 'invitation',
-        targetId: created.id,
+        action: existing ? 'membership.granted' : 'user.created',
+        targetType: 'user',
+        targetId: user.id,
         clientId: input.clientId,
         after: { email: input.email, role: input.role, clientId: input.clientId },
         ...meta,
       });
 
-      return created;
-    });
-
-    if (process.env.NODE_ENV !== 'production') {
-      this.logger.warn(`[DEV] Davet token'ı (${input.email}): ${rawToken}`);
-    }
-
-    return {
-      id: invitation.id,
-      email: invitation.email,
-      role: invitation.role,
-      clientId: invitation.clientId,
-      expiresAt: invitation.expiresAt,
-      ...(process.env.NODE_ENV !== 'production' ? { devToken: rawToken } : {}),
-    };
-  }
-
-  async revokeInvitation(ctx: TenantContext, id: string, meta: Meta) {
-    return this.prisma.withTenant(ctx, async (tx) => {
-      const invitation = await tx.invitation.findUnique({ where: { id } });
-      if (!invitation || invitation.status !== 'pending') {
-        throw new NotFoundException('Bekleyen davet bulunamadı');
-      }
-
-      const updated = await tx.invitation.update({
-        where: { id },
-        data: { status: 'revoked', revokedAt: new Date() },
-      });
-
-      await this.audit.record(tx, ctx, {
-        action: 'invitation.revoked',
-        targetType: 'invitation',
-        targetId: id,
-        clientId: invitation.clientId,
-        before: { email: invitation.email, status: 'pending' },
-        ...meta,
-      });
-
-      return updated;
+      return {
+        id: user.id,
+        email: input.email,
+        fullName: input.fullName,
+        role: input.role,
+        clientId: input.clientId,
+        /** false => kullanıcı zaten vardı; yazılan parola KULLANILMADI. */
+        created: existing === null,
+      };
     });
   }
 
