@@ -1,6 +1,91 @@
 # Devir belgesi — nerede kaldık
 
-**Son güncelleme:** 2026-08-13 · **Son commit:** `97c1b0e`
+**Son güncelleme:** 2026-08-15 · **Son commit:** `54e4740`
+
+---
+
+## 0. SIRADAKİ İŞ — bağlantı modelini ajans seviyesine çevirmek
+
+Bu, şu an açık olan tek büyük iş. Aşağıdaki bölümler (§1 ve sonrası) 13
+Ağustos'taki Meta durumunu anlatıyor ve hâlâ geçerli; bu bölüm onun önüne
+geçiyor.
+
+### Sorun
+
+Bağlantılar **müşteri bazlı**: `platform_connections.client_id` zorunlu ve
+keşfedilen hesap, bağlantının kurulduğu müşteriye yazılıyor
+(`connections.service.ts` → `discoverAndStore`, `clientId: conn.clientId`).
+
+Ajansın tek bir Meta kimliği **157**, tek bir Google girişi **127** reklam
+hesabına erişiyor. 12 müşteri için bu modelde aynı kimliği 12 kez
+yetkilendirmek gerekiyor ve iki şey birden bozuluyor:
+
+- Her müşteri kendi kopyasında yine 157 hesabı görüyor → 12 × 157 satır.
+- Aynı kimlik tekrar tekrar yetkilendirildiği için platform tarafında önceki
+  token geçersizleşiyor. **Canlıda gözlendi:** bir müşteriye hesap bağlanınca
+  diğerinin bağlantısı kopuyor.
+
+Kod bu kopmanın sebebi DEĞİL. Bağlantı `clientId + platform + externalUserId`
+üçlüsüyle upsert ediliyor, yani başka müşterinin satırına dokunmuyor; bağlantıyı
+iptal eden tek yer elle "Kaldır" akışı. Sorun modelin kendisinde.
+
+### Hedef
+
+Bağlantı **ajansa** ait olur. Meta bir kez bağlanır, 157 hesap havuza düşer,
+her müşteriye hangi hesapların ait olduğu panelden seçilir. Tekrar
+yetkilendirme yok, dolayısıyla kopma da yok. Bu, Socianty'de çalışan model.
+
+### Neden düşünülenden büyük
+
+**Ne `platform_connections` ne `ad_accounts` tablosunda `org_id` var** — ikisi
+de yalnızca `client_id` taşıyor. Yani "ajansa ait bağlantı" ve "henüz
+atanmamış hesap" kavramlarının veritabanında tutunacağı bir yer yok.
+
+| # | Adım | Risk |
+|---|---|---|
+| 1 | İki tabloya `org_id` ekle, müşteriden doldur | Düşük |
+| 2 | `client_id`'yi nullable yap (atanmamış havuz) | Orta |
+| 3 | **RLS politikalarını yeniden yaz** | **Yüksek** |
+| 4 | Tekillik kısıtı `[clientId,…]` → `[orgId,…]` | Orta |
+| 5 | Keşif kodu havuza yazsın | Düşük |
+| 6 | Hesap atama uç noktası + arayüz | Düşük |
+| 7 | Mevcut 284 hesap ve bağlantıları taşı | **Yüksek** |
+
+**3. adım neden en kritik:** `client_id` nullable olduğu anda, politikası
+yazılmamış her satır KİMSEYE AİT OLMAYAN bir satır. Yanlış yazılan tek bir
+politika atanmamış hesapları yanlış kiracıya açar. Beklenen şekil:
+
+```sql
+-- bağlantılar: org bazlı
+USING (org_id = app.current_org_id())
+
+-- hesaplar: atanmamış olan yalnızca org yöneticisine görünür
+USING (
+  org_id = app.current_org_id()
+  AND (
+    CASE WHEN client_id IS NULL
+      THEN app.is_org_admin()
+      ELSE app.can_access_client(client_id)
+    END
+  )
+)
+```
+
+**RLS'i testler yakalamıyor** (CLAUDE.md §3). Koşum ortamı politikaları
+kurduktan sonra zorlamayı kapatıyor. `active-client-scope.spec.ts` fonksiyon
+mantığını doğrudan çağırarak sınayabiliyor — aynı yöntem buraya da
+uygulanmalı — ama tablo politikalarını hiçbir test görmüyor. Politikalar ELLE
+gözden geçirilecek.
+
+**7. adım geri alması zor:** canlı veritabanında 284 satırın sahipliği
+değişiyor. Migration'dan önce yedek alınmalı.
+
+### Sıra
+
+1–4 tek migration'da gitmeli (yarım uygulanmış şema = kırık keşif kodu).
+5–6 ardından, 7 en son ve ayrı.
+
+---
 
 Bu belge yeni bir oturumun (ve yeni bir hesabın) kaldığı yerden devam
 edebilmesi için. Ayrıntılı durum [`DURUM.md`](DURUM.md) içinde; çalışma
@@ -78,6 +163,38 @@ Bunlar koda değil, sunucuya/hesaplara ait. Hiçbiri yapılmadı:
       üç kullanıcı parolası. Hepsi değiştirilmeli.
 - [ ] **Meta Business Verification + App Review** (`ads_management`,
       `leads_retrieval`). Yazma yollarının tamamı buna bağlı.
+
+## 3.5. 14–15 Ağustos'ta yapılanlar
+
+Hepsi canlıda. Doğrulanmayı bekleyenler işaretli.
+
+| Commit | Ne | Canlıda doğrulandı |
+|---|---|---|
+| `9d1e2d3` | Tanıtım sayfası — kök artık `/login`'e değil ürüne açılıyor | ✅ |
+| `1f97b53` | Portföy seed'i `.env`'i yanlış yerden okuyordu | ✅ |
+| `a1b4396` | Meta hesapları `act_` öneki yüzünden hiç bulunamıyordu | ✅ |
+| `904b939` `3d893d3` | `sync -- portfolio` toplu mod (kapsam zorunlu) | ❌ hiç koşulmadı |
+| `159e9a8` | Müşteriler + Ekip ekranları, menüde 9 ölü bağlantı kapatıldı | ✅ |
+| `ff20b72` | **Aktif müşteri süzgeci** — seçili müşteri veriyi daraltmıyordu | 🟡 kısmen |
+| `dc28f79` | Ekip ekranı: davet, rol değiştirme, yetki kaldırma | ❌ |
+| `5b98504` | Bugün ve Son 60 gün pencereleri | ❌ |
+| `37a2264` | "Şimdi güncelle" düğmesi | ❌ |
+| `54e4740` | Müşteriler ekranı diğer müşterilerin hesaplarını "yok" gösteriyordu | ❌ |
+
+**Üç tuzak burada öğrenildi, üçü de teste bağlandı:**
+
+- Menüde "hazır mı" kararı sayfanın varlığına değil MODÜL NUMARASINA
+  bakıyordu; dokuz bağlantı 404 veriyordu (`nav-routes.spec.ts`).
+- `prisma/` script'lerinden biri `.env`'i yanlış yoldan okuyordu ve hata
+  mesajı ("Environment variable not found") insanı yanlış yere gönderiyordu
+  (`seed-env-path.spec.ts`).
+- Aktif müşteri seçimi hesaplanıyor ama HİÇBİR YERDE kullanılmıyordu; org
+  yöneticisi hangi müşteriyi seçerse seçsin bütün müşterilerin verisini
+  görüyordu (`active-client-scope.spec.ts`).
+
+**Bilinen açık:** `mustChangePassword` alanı veritabanına yazılıyor ama
+`apps/api/src` ve `apps/web/src` altında onu OKUYAN tek satır yok — zorlama
+yazılana kadar seed parolaları süresiz geçerli.
 
 ## 4. Sıradaki geliştirme adayları
 
