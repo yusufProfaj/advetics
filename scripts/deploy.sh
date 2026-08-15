@@ -105,8 +105,27 @@ log "Bağımlılıklar"
 # -----------------------------------------------------------------------------
 # --frozen-lockfile: lockfile ile package.json uyuşmazsa BAŞARISIZ olur.
 # Üretimde sessizce farklı bir sürüm kurulmasındansa dağıtımın durması iyidir.
-pnpm install --frozen-lockfile
-ok "kuruldu"
+#
+# --prod=false: devDependencies ZORUNLU, çünkü DERLEME SUNUCUDA YAPILIYOR.
+# prisma CLI, @nestjs/cli, typescript, tailwind — hepsi devDependency.
+#
+# Bayrak olmadan pnpm kararı `NODE_ENV`e bakarak veriyor ve ortamda
+# `NODE_ENV=production` varsa devDependencies'i ATLIYOR. Sonuç, sebebini hiç
+# anlatmayan bir hata:
+#
+#     apps/api postinstall$ prisma generate
+#     sh: 1: prisma: not found
+#
+# Bu üretimde yaşandı ve tetikleyicisi masum bir teşhis komutuydu:
+# `set -a && . ./.env && set +a` — sunucudaki `.env` `NODE_ENV=production`
+# taşıyor (bkz. site-setup.sh) ve o satır kabuğa sızınca bir sonraki deploy
+# düşüyor. Aynı dosyayı bu script de aşağıda okuyor, yani tuzak kendi
+# içimizde duruyordu.
+#
+# Bayrak kararı ortamdan alıp BURAYA taşıyor: ne kurulacağı dağıtımın kendi
+# bilgisi, kabuğun değil.
+pnpm install --frozen-lockfile --prod=false
+ok "kuruldu (devDependencies dâhil — derleme sunucuda yapılıyor)"
 
 # -----------------------------------------------------------------------------
 log "Derleme"
