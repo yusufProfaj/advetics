@@ -32,8 +32,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # `with:` YOK ve olmamalı: pnpm sürümü package.json'daki
+      # `packageManager` alanından okunuyor (pnpm@9.12.0). Sürümü burada
+      # ayrıca pinlemek iki kaynak yaratıyor ve çakıştığında action düşüyor.
+      #
+      # DİKKAT — bu satırın geçmişi var: 2026-08-03'te `version: 9` kaldırıldı
+      # ama `with:` satırı geride bırakıldı. Boş `with:` YAML'da `null` demek
+      # ve GitHub Actions bunu geçersiz iş akışı sayıyor: koşum "Invalid
+      # workflow file" ile anında düşüyor, HİÇBİR job çalışmıyor. Sonuç, tam
+      # olarak hiçbir yerde hata gibi görünmeyen bir arıza — otomatik dağıtım
+      # üç ay boyunca sessizce ölü kaldı ve herkes elle deploy etmeye devam
+      # etti. Anahtar olmayan bir `with:` bırakma.
       - uses: pnpm/action-setup@v4
-        with:
 
       - uses: actions/setup-node@v4
         with:
