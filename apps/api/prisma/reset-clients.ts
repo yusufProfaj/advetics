@@ -76,9 +76,25 @@ async function main(): Promise<void> {
   });
   for (const u of users) console.log(`      ${u.email}`);
 
-  if (before.clients === 0) {
-    console.log('\n  Silinecek müşteri yok.\n');
+  /**
+   * ERKEN ÇIKIŞ YALNIZCA HER ŞEY TEMİZSE.
+   *
+   * İlk sürüm "müşteri yoksa çıkış" diyordu ve üretimde tam olarak yanlış
+   * anda devreye girdi: müşteriler zaten silinmişti ama 11.222 YETİM metrik
+   * satırı duruyordu. Script "silinecek müşteri yok" deyip çıktı ve asıl
+   * temizlenmesi gereken şeye hiç dokunmadı.
+   *
+   * Yetim metrikler müşterisiz kalabiliyor çünkü `insights_daily` bölümlenmiş
+   * bir tablo ve cascade oraya ulaşmıyor. Yani "müşteri sayısı" bu script'in
+   * yapacak işi olup olmadığını söyleyen doğru ölçüt değil.
+   */
+  if (before.clients === 0 && before.insights === 0) {
+    console.log('\n  Zaten temiz — silinecek müşteri ve metrik yok.\n');
     return;
+  }
+
+  if (before.clients === 0) {
+    console.log('\n  Müşteri yok, ama YETİM METRİK var — müşterisi silinmiş satırlar.');
   }
 
   if (!APPLY) {
@@ -92,15 +108,6 @@ async function main(): Promise<void> {
 
   console.log('\n  Siliniyor…');
 
-  /**
-   * TEK SİLME, GERİSİ ZİNCİRLEME.
-   *
-   * `clients` satırını silmek yeterli: şemadaki `onDelete: Cascade`
-   * ilişkileri bağlantıları, hesapları, kampanyaları, metrikleri ve
-   * üyelikleri de düşürüyor. Tabloları elle sırayla silmek, bir tanesini
-   * atlayınca yetim satır bırakırdı — ve yetim satır, bir sonraki kurulumda
-   * "bu hesap zaten var" diye kendini gösterir.
-   */
   /**
    * METRİKLER AYRI SİLİNİYOR — cascade onlara ULAŞMIYOR.
    *
@@ -117,6 +124,13 @@ async function main(): Promise<void> {
   const insightsDeleted = await prisma.insightsDaily.deleteMany({});
   console.log(`  ${insightsDeleted.count} metrik satırı silindi (cascade ulaşmıyor)`);
 
+  /**
+   * MÜŞTERİLER — geri kalan her şey zincirleme gidiyor.
+   *
+   * `clients` satırını silmek bağlantıları, hesapları, kampanyaları ve
+   * müşteriye bağlı üyelikleri de düşürüyor. Metrikler HARİÇ; yukarıda ayrıca
+   * siliniyorlar.
+   */
   const deleted = await prisma.client.deleteMany({});
 
   const after = await counts();
