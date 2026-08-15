@@ -21,7 +21,13 @@ export const toggleAccountSyncSchema = z.object({
 });
 export type ToggleAccountSyncInput = z.infer<typeof toggleAccountSyncSchema>;
 
-export const assignAdAccountSchema = z.object({
+/**
+ * Havuzdaki bir kaydı (reklam hesabı ya da sayfa) müşteriye atama gövdesi.
+ *
+ * İkisi için TEK şema: alan da kural da aynı ve ayrı iki şema, birine eklenen
+ * bir doğrulamanın diğerinde unutulmasına giden en kısa yol olurdu.
+ */
+export const assignToClientSchema = z.object({
   /**
    * null = havuza geri koy (atamayı kaldır).
    *
@@ -31,7 +37,7 @@ export const assignAdAccountSchema = z.object({
    */
   clientId: z.string().uuid().nullable(),
 });
-export type AssignAdAccountInput = z.infer<typeof assignAdAccountSchema>;
+export type AssignToClientInput = z.infer<typeof assignToClientSchema>;
 
 export const linkBoostAccountSchema = z.object({
   /** null = bağlantıyı kaldır. */
@@ -77,6 +83,15 @@ export interface SocialProfileSummary {
   pictureUrl: string | null;
   linkedAdAccountId: string | null;
   syncEnabled: boolean;
+  /**
+   * Atandığı müşteri. null = ajansın HAVUZUNDA.
+   *
+   * Reklam hesaplarıyla aynı model. Atanmamış sayfa senkronize edilmez ve
+   * üzerine form/reklam kurulamaz — organik gönderi, lead ve form satırları
+   * müşteri kimliği taşıyor.
+   */
+  clientId: string | null;
+  clientName: string | null;
 }
 
 export interface ConnectionSummary {

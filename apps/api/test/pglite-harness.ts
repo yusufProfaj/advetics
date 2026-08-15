@@ -176,6 +176,74 @@ export async function createHarness(): Promise<Harness> {
       },
     },
 
+    socialProfile: {
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        const rows = await q<Record<string, unknown>>(
+          'SELECT * FROM social_profiles WHERE id = $1',
+          [where.id],
+        );
+        const p = rows[0];
+        if (!p) return null;
+        return {
+          id: p.id,
+          orgId: p.org_id,
+          clientId: p.client_id,
+          connectionId: p.connection_id,
+          profileType: p.profile_type,
+          externalId: p.external_id,
+          name: p.name,
+          syncEnabled: p.sync_enabled,
+          linkedAdAccountId: p.linked_ad_account_id,
+        };
+      },
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: { clientId?: string | null; syncEnabled?: boolean; lastSyncAt?: Date };
+      }) => {
+        // `clientId` için `in` kontrolü: undefined "dokunma", null "havuza
+        // geri koy" — ikisi ayrı komut.
+        if ('clientId' in data) {
+          await q('UPDATE social_profiles SET client_id = $1 WHERE id = $2', [
+            data.clientId ?? null,
+            where.id,
+          ]);
+        }
+        if (data.syncEnabled !== undefined) {
+          await q('UPDATE social_profiles SET sync_enabled = $1 WHERE id = $2', [
+            data.syncEnabled,
+            where.id,
+          ]);
+        }
+        if (data.lastSyncAt) {
+          await q('UPDATE social_profiles SET last_sync_at = $1 WHERE id = $2', [
+            data.lastSyncAt,
+            where.id,
+          ]);
+        }
+        const rows = await q<Record<string, unknown>>(
+          'SELECT id, client_id, sync_enabled, name FROM social_profiles WHERE id = $1',
+          [where.id],
+        );
+        const p = rows[0];
+        return p
+          ? { id: p.id, clientId: p.client_id, syncEnabled: p.sync_enabled, name: p.name }
+          : {};
+      },
+    },
+
+    leadForm: {
+      count: async ({ where }: { where: { socialProfileId: string; clientId: string } }) => {
+        const rows = await q<{ n: string }>(
+          'SELECT count(*) AS n FROM lead_forms WHERE social_profile_id = $1 AND client_id = $2',
+          [where.socialProfileId, where.clientId],
+        );
+        return Number(rows[0]!.n);
+      },
+    },
+
     /**
      * Denetim kaydı — servislerin `tx`'e yazdığı tek ortak tablo.
      *

@@ -325,16 +325,30 @@ export class FormsService {
    * sayfasında yayınlanır.
    */
   private async assertProfile(tx: TxLike, input: LeadFormInput): Promise<void> {
-    const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT id FROM social_profiles
-      WHERE id = ${input.socialProfileId}::uuid
-        AND client_id = ${input.clientId}::uuid
-        AND profile_type = 'facebook_page'
-    `);
-    if (rows.length === 0) {
+    /**
+     * NEDEN ÜÇ AYRI CEVAP: sayfa artık ATANMAMIŞ da olabiliyor (ajansın
+     * havuzunda duruyor). Üçünü tek "bulunamadı" mesajına toplamak,
+     * kullanıcıyı yanlış yere bakmaya gönderirdi — atanmamış bir sayfa için
+     * yapılacak şey formu düzeltmek değil, sayfayı müşteriye atamak.
+     */
+    const rows = await tx.$queryRaw<Array<{ client_id: string | null; profile_type: string }>>(
+      Prisma.sql`
+        SELECT client_id::text AS client_id, profile_type::text AS profile_type
+        FROM social_profiles WHERE id = ${input.socialProfileId}::uuid
+      `,
+    );
+    const profile = rows[0];
+    if (!profile || profile.profile_type !== 'facebook_page') {
+      throw new BadRequestException('Seçilen Facebook sayfası bulunamadı.');
+    }
+    if (profile.client_id === null) {
       throw new BadRequestException(
-        'Seçilen Facebook sayfası bu müşteriye ait değil ya da bulunamadı.',
+        'Bu Facebook sayfası henüz bir müşteriye atanmamış. Platform Bağlantıları ' +
+          'ekranından sayfayı bu müşteriye ata; atanmamış sayfadan gelen kayıtlar yazılamaz.',
       );
+    }
+    if (profile.client_id !== input.clientId) {
+      throw new BadRequestException('Seçilen Facebook sayfası bu müşteriye ait değil.');
     }
   }
 

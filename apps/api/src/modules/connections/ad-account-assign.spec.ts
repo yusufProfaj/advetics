@@ -29,6 +29,7 @@ let seenContexts: TenantContext[] = [];
 const CLIENT_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 const POOL_ACCOUNT = '99999999-9999-9999-9999-999999999999';
 const MCC_ACCOUNT = '98989898-9898-9898-9898-989898989898';
+const POOL_PROFILE = '97979797-9797-9797-9797-979797979797';
 
 const CTX: TenantContext = {
   orgId: IDS.org,
@@ -189,5 +190,83 @@ describe('atama', () => {
     await expect(svc.setAccountSync(CTX, POOL_ACCOUNT, true, META)).rejects.toThrow(
       /atanmamış/i,
     );
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Sosyal profiller — aynı havuz modeli
+// -----------------------------------------------------------------------------
+
+describe('sayfa ataması', () => {
+  beforeEach(async () => {
+    await h.q(
+      `INSERT INTO social_profiles
+         (id, org_id, client_id, connection_id, profile_type, external_id, name,
+          sync_enabled, updated_at)
+       VALUES ($1, $2, NULL, $3, 'facebook_page', 'page-havuz', 'Havuz sayfası',
+               false, now())`,
+      [POOL_PROFILE, IDS.org, IDS.connection],
+    );
+  });
+
+  async function profileRow(id: string) {
+    const rows = await h.q<{ client_id: string | null; sync_enabled: boolean }>(
+      'SELECT client_id, sync_enabled FROM social_profiles WHERE id = $1',
+      [id],
+    );
+    return rows[0]!;
+  }
+
+  it('havuzdaki sayfa müşteriye atanıyor', async () => {
+    const res = await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+
+    expect(res.changed).toBe(true);
+    expect((await profileRow(POOL_PROFILE)).client_id).toBe(IDS.client);
+    expect(await auditActions()).toEqual(['social_profile.assigned']);
+  });
+
+  it('bağlam AKTİF MÜŞTERİ SEÇİMİ KAPALI kuruluyor', async () => {
+    // Reklam hesabındakiyle aynı Postgres kuralı: UPDATE sonrası yeni satır
+    // SELECT politikasından da geçmek zorunda.
+    seenContexts = [];
+    await svc.assignSocialProfile(CTX, POOL_PROFILE, CLIENT_B, META);
+    for (const ctx of seenContexts) expect(ctx.activeClientId).toBeNull();
+  });
+
+  it('atama kalkınca İZLEME DE kapanıyor', async () => {
+    await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+    await h.q('UPDATE social_profiles SET sync_enabled = true WHERE id = $1', [POOL_PROFILE]);
+
+    await svc.assignSocialProfile(CTX, POOL_PROFILE, null, META);
+
+    const row = await profileRow(POOL_PROFILE);
+    expect(row.client_id).toBeNull();
+    expect(row.sync_enabled).toBe(false);
+  });
+
+  it('KRİTİK: müşterisi değişen sayfanın FORMLARI eski müşteride kalıyor ve sayısı bildiriliyor', async () => {
+    /*
+     * Formlar ve toplanmış kayıtlar TAŞINMIYOR — bir markanın topladığı
+     * potansiyel müşteriler başka bir markanın CRM'ine geçemez. Ama bu
+     * SÖYLENMEZSE kullanıcı formlarını kaybettiğini sanar ve yanlış yerde
+     * arar.
+     */
+    await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+    await h.q(
+      `INSERT INTO lead_forms
+         (id, org_id, client_id, social_profile_id, name, form_type, prefill_questions,
+          privacy_policy_url, root_id, created_by, updated_at)
+       VALUES ($5, $1, $2, $3, 'Form', 'more_volume', '["EMAIL"]'::jsonb,
+               'https://advetics.com/gizlilik', $5, $4, now())`,
+      [IDS.org, IDS.client, POOL_PROFILE, IDS.user, '12121212-1212-1212-1212-121212121212'],
+    );
+
+    const res = await svc.assignSocialProfile(CTX, POOL_PROFILE, CLIENT_B, META);
+
+    expect(res.clientId).toBe(CLIENT_B);
+    expect(res.leftBehindForms).toBe(1);
+    // Form GERÇEKTEN eski müşteride duruyor.
+    const forms = await h.q<{ client_id: string }>('SELECT client_id FROM lead_forms');
+    expect(forms[0]?.client_id).toBe(IDS.client);
   });
 });

@@ -157,6 +157,7 @@ export class ConnectionsService {
           socialProfiles: {
             where: clientId ? { clientId } : undefined,
             orderBy: { name: 'asc' },
+            include: { client: { select: { name: true } } },
           },
         },
       });
@@ -176,7 +177,7 @@ export class ConnectionsService {
     c: Prisma.PlatformConnectionGetPayload<{
       include: {
         adAccounts: { include: { client: { select: { name: true } } } };
-        socialProfiles: true;
+        socialProfiles: { include: { client: { select: { name: true } } } };
       };
     }>,
   ): ConnectionSummary {
@@ -225,6 +226,8 @@ export class ConnectionsService {
           pictureUrl: p.pictureUrl,
           linkedAdAccountId: p.linkedAdAccountId,
           syncEnabled: p.syncEnabled,
+          clientId: p.clientId,
+          clientName: p.client?.name ?? null,
         }),
       ),
     };
@@ -404,7 +407,7 @@ export class ConnectionsService {
       // Hesap keşfi bağlantıyı bozmamalı: token kaydedildi, kullanıcı zaten
       // bağlandı. Keşif başarısız olursa sonradan "Hesapları yenile" ile
       // tekrar denenebilir.
-      let discovered = { adAccounts: 0, socialProfiles: 0, socialProfilesSkipped: 0 };
+      let discovered = { adAccounts: 0, socialProfiles: 0 };
       try {
         discovered = await this.discoverAndStore(connectionId, platform, tokens.accessToken);
       } catch (err) {
@@ -549,7 +552,7 @@ export class ConnectionsService {
     connectionId: string,
     platform: Platform,
     accessToken: string,
-  ): Promise<{ adAccounts: number; socialProfiles: number; socialProfilesSkipped: number }> {
+  ): Promise<{ adAccounts: number; socialProfiles: number }> {
     const provider = this.provider(platform);
     const conn = await this.admin.platformConnection.findUniqueOrThrow({
       where: { id: connectionId },
@@ -605,39 +608,19 @@ export class ConnectionsService {
     if (platform === 'meta') {
       const profiles = await provider.listSocialProfiles(accessToken);
 
-      /**
-       * SOSYAL PROFİLLER HÂLÂ MÜŞTERİ DÜZEYİNDE.
-       *
-       * `social_profiles.client_id` NOT NULL: ajans bağlantısı migration'ı
-       * (plan 1–4. adım) yalnızca bağlantıları ve reklam hesaplarını org
-       * seviyesine taşıdı. Ajans geneli bir bağlantıda sayfaların hangi
-       * müşteriye ait olduğu bilinmiyor, dolayısıyla yazılamıyorlar.
-       *
-       * SESSİZCE ATLANMIYOR: sayı çağırana dönüyor, log'a yazılıyor ve
-       * denetim kaydına giriyor. Bu projedeki hataların neredeyse tamamı
-       * sessizdi — "Auto-Boost neden hiçbir sayfa görmüyor" sorusunun cevabı
-       * hiçbir yerde yazmıyor olsaydı, günler kaybedilirdi.
-       */
-      if (conn.clientId === null) {
-        this.logger.warn(
-          `Bağlantı ${connectionId} ajans geneli (müşteriye atanmamış); ` +
-            `${profiles.length} sosyal profil ATLANDI. social_profiles.client_id ` +
-            `zorunlu — havuz modeli sosyal profillere henüz uygulanmadı.`,
-        );
-        return {
-          adAccounts: accounts.length,
-          socialProfiles: 0,
-          socialProfilesSkipped: profiles.length,
-        };
-      }
-      const profileClientId = conn.clientId;
-
       for (const p of profiles) {
         const pageToken = p.pageAccessToken ? this.vault.encrypt(p.pageAccessToken) : null;
         await this.admin.socialProfile.upsert({
-          where: { connectionId_externalId: { connectionId, externalId: p.externalId } },
+          // ORGANİZASYON BAZLI, bağlantı bazlı DEĞİL. İkinci bir Meta kimliği
+          // bağlandığında aynı Facebook sayfası iki bağlantının da altında
+          // görünüyor; bağlantı bazlı anahtar aynı sayfa için ikinci bir satır
+          // açardı ve Auto-Boost hangisini kullanacağını bilemezdi.
+          where: { orgId_externalId: { orgId: conn.orgId, externalId: p.externalId } },
           create: {
-            clientId: profileClientId,
+            orgId: conn.orgId,
+            // Bağlantı ajans geneliyse sayfa da HAVUZA düşer, müşteriye
+            // ayrıca atanır.
+            clientId: conn.clientId,
             connectionId,
             profileType: p.profileType,
             externalId: p.externalId,
@@ -650,6 +633,12 @@ export class ConnectionsService {
             raw: p.raw as Prisma.InputJsonValue,
           },
           update: {
+            // `clientId` ve `syncEnabled` KASITLI olarak güncellenmiyor:
+            // "Hesapları yenile" düğmesi yapılmış atamaları ve izleme
+            // seçimlerini sessizce sıfırlamamalı. `connectionId` güncelleniyor
+            // çünkü sayfa ikinci bir kimlikle yeniden keşfedilmiş olabilir ve
+            // sayfa token'ı o bağlantıdan geliyor.
+            connectionId,
             name: p.name,
             username: p.username ?? null,
             pictureUrl: p.pictureUrl ?? null,
@@ -663,9 +652,7 @@ export class ConnectionsService {
       }
     }
 
-    // Buraya gelindiyse atlama olmamış demektir: tek atlama yolu yukarıdaki
-    // erken dönüş (ajans geneli bağlantı).
-    return { adAccounts: accounts.length, socialProfiles: socialCount, socialProfilesSkipped: 0 };
+    return { adAccounts: accounts.length, socialProfiles: socialCount };
   }
 
   // ---------------------------------------------------------------------------
@@ -855,6 +842,83 @@ export class ConnectionsService {
         clientId: after.clientId,
         syncEnabled: after.syncEnabled,
         changed: true,
+      };
+    });
+  }
+
+  /**
+   * Sayfayı/Instagram hesabını bir müşteriye atar ya da havuza geri koyar.
+   *
+   * Reklam hesabı atamasıyla AYNI kurallar geçerli ve aynı sebeplerle:
+   * bağlam `activeClientId: null` ile kuruluyor (yoksa Postgres UPDATE'i
+   * reddediyor — sebep `assignAdAccount` notunda) ve atama kalkınca izleme
+   * kapanıyor.
+   *
+   * BİR FARK VAR: sayfanın müşterisi DEĞİŞİRSE, o sayfaya bağlı formlar ve
+   * organik gönderiler ESKİ müşterinin altında kalıyor. Bunlar geçmiş kayıt ve
+   * taşınmaları yanlış olurdu — bir markanın topladığı potansiyel müşteriler
+   * başka bir markanın CRM'ine geçemez. Çağıran bu durumu kullanıcıya
+   * söylemek zorunda; sayı yanıtta dönüyor.
+   */
+  async assignSocialProfile(
+    ctx: TenantContext,
+    socialProfileId: string,
+    clientId: string | null,
+    meta: Meta,
+  ) {
+    if (clientId !== null && !ctx.clientIds.includes(clientId)) {
+      throw new NotFoundException('Müşteri bulunamadı');
+    }
+
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+
+    return this.prisma.withTenant(scoped, async (tx) => {
+      const before = await tx.socialProfile.findUnique({ where: { id: socialProfileId } });
+      if (!before) throw new NotFoundException('Sayfa bulunamadı');
+
+      if (before.clientId === clientId) {
+        return {
+          id: before.id,
+          clientId: before.clientId,
+          syncEnabled: before.syncEnabled,
+          changed: false,
+          leftBehindForms: 0,
+        };
+      }
+
+      // ESKİ MÜŞTERİDE KALACAK FORM SAYISI. Sessiz bırakmak, kullanıcının
+      // sayfayı taşıdıktan sonra "formlarım nerede" diye aramasına yol açardı.
+      const leftBehindForms =
+        before.clientId === null
+          ? 0
+          : await tx.leadForm.count({
+              where: { socialProfileId, clientId: before.clientId },
+            });
+
+      const after = await tx.socialProfile.update({
+        where: { id: socialProfileId },
+        data: {
+          clientId,
+          ...(clientId === null ? { syncEnabled: false } : {}),
+        },
+      });
+
+      await this.audit.record(tx, ctx, {
+        action: clientId === null ? 'social_profile.unassigned' : 'social_profile.assigned',
+        targetType: 'social_profile',
+        targetId: socialProfileId,
+        clientId: clientId ?? before.clientId,
+        before: { clientId: before.clientId, syncEnabled: before.syncEnabled },
+        after: { clientId: after.clientId, syncEnabled: after.syncEnabled, name: after.name },
+        ...meta,
+      });
+
+      return {
+        id: after.id,
+        clientId: after.clientId,
+        syncEnabled: after.syncEnabled,
+        changed: true,
+        leftBehindForms,
       };
     });
   }

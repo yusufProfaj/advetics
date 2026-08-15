@@ -18,10 +18,10 @@ import {
 import type { Response } from 'express';
 import {
   PLATFORMS,
-  assignAdAccountSchema,
+  assignToClientSchema,
   startOAuthSchema,
   toggleAccountSyncSchema,
-  type AssignAdAccountInput,
+  type AssignToClientInput,
   type Platform,
   type StartOAuthInput,
   type TenantContext,
@@ -222,10 +222,26 @@ export class ConnectionsController {
   assignAdAccount(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(zodBody(assignAdAccountSchema)) dto: AssignAdAccountInput,
+    @Body(zodBody(assignToClientSchema)) dto: AssignToClientInput,
     @Req() req: AuthedRequest,
   ) {
     return this.connections.assignAdAccount(ctx, id, dto.clientId, this.meta(req));
+  }
+
+  /**
+   * Facebook sayfasını / Instagram hesabını bir müşteriye ata — havuz modeli
+   * reklam hesaplarındakiyle aynı.
+   */
+  @Patch('social-profiles/:id/client')
+  @RequirePermissions('connection.write')
+  @RequireOrgAdmin()
+  assignSocialProfile(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(assignToClientSchema)) dto: AssignToClientInput,
+    @Req() req: AuthedRequest,
+  ) {
+    return this.connections.assignSocialProfile(ctx, id, dto.clientId, this.meta(req));
   }
 
   /**

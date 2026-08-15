@@ -641,13 +641,26 @@ export class AdBuilderService {
       throw new BadRequestException('Reklam hesabı bu müşteriye bağlı değil');
     }
 
-    const [profile] = await tx.$queryRaw<Array<{ client_id: string; profile_type: string }>>(
+    // `client_id` NULL OLABİLİR (sayfa havuzda). Tip elle yazıldığı için
+    // derleyici bunu kendiliğinden bilmiyor — nullable'ı burada söylemezsek
+    // aşağıdaki kontrol "ölü kod" gibi görünür ve bir sonraki düzenlemede
+    // silinir.
+    const [profile] = await tx.$queryRaw<
+      Array<{ client_id: string | null; profile_type: string }>
+    >(
       Prisma.sql`
         SELECT client_id, profile_type::text AS profile_type
         FROM social_profiles WHERE id = ${input.socialProfileId}::uuid
       `,
     );
     if (!profile) throw new NotFoundException('Sayfa bulunamadı');
+    // Atanmamış sayfa (havuzda) için ayrı mesaj: yapılacak şey taslağı
+    // düzeltmek değil, sayfayı müşteriye atamak.
+    if (profile.client_id === null) {
+      throw new BadRequestException(
+        'Bu sayfa henüz bir müşteriye atanmamış. Platform Bağlantıları ekranından ata.',
+      );
+    }
     if (profile.client_id !== input.clientId) {
       throw new BadRequestException('Sayfa bu müşteriye bağlı değil');
     }

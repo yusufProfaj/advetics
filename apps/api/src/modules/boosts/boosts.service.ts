@@ -229,13 +229,21 @@ export class BoostsService {
 
   private async assertProfile(tx: TxLike, input: BoostRuleInput): Promise<void> {
     if (!input.socialProfileId) return;
-    const [p] = await tx.$queryRaw<Array<{ client_id: string; linked: string | null }>>(
+    // `client_id` NULL OLABİLİR — sayfa ajansın havuzunda, henüz atanmamış.
+    // Tip elle yazıldığı için derleyici bunu söylemiyor.
+    const [p] = await tx.$queryRaw<Array<{ client_id: string | null; linked: string | null }>>(
       Prisma.sql`
         SELECT client_id, linked_ad_account_id::text AS linked
         FROM social_profiles WHERE id = ${input.socialProfileId}::uuid
       `,
     );
     if (!p) throw new NotFoundException('Sosyal profil bulunamadı');
+    if (p.client_id === null) {
+      throw new BadRequestException(
+        'Bu sayfa henüz bir müşteriye atanmamış. Platform Bağlantıları ekranından ata — ' +
+          'atanmamış sayfanın organik gönderileri çekilmiyor, dolayısıyla boost adayı da oluşmaz.',
+      );
+    }
     if (p.client_id !== input.clientId) {
       throw new BadRequestException('Sosyal profil bu müşteriye bağlı değil');
     }

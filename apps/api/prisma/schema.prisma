@@ -89,9 +89,10 @@ model Organization {
 
   users           User[]
   clients         Client[]
-  // Modül 2 — bağlantı ve reklam hesabı ajansa ait, müşteriye değil.
+  // Modül 2 — bağlantı, reklam hesabı ve sayfa ajansa ait, müşteriye değil.
   connections     PlatformConnection[]
   adAccounts      AdAccount[]
+  socialProfiles  SocialProfile[]
   memberships     Membership[]
   branding        BrandingProfile[]
   invitations     Invitation[]
@@ -543,9 +544,14 @@ model AdAccount {
 /// Facebook sayfası veya Instagram Business hesabı — Auto-Boost (Modül 7) için.
 /// SADECE Meta. Google'da karşılığı yoktur.
 model SocialProfile {
-  id           String @id @default(uuid()) @db.Uuid
-  clientId     String @map("client_id") @db.Uuid
-  connectionId String @map("connection_id") @db.Uuid
+  id     String @id @default(uuid()) @db.Uuid
+  orgId  String @map("org_id") @db.Uuid
+  /// null => havuzda, henüz hiçbir müşteriye atanmamış. Atanmamış sayfa
+  /// senkronize EDİLMEZ ve üzerine form/reklam kurulamaz: `organic_posts`,
+  /// `leads` ve `lead_forms` satırları `client_id` taşıyor ve NULL yazılan
+  /// satırı RLS kimseye göstermez.
+  clientId     String? @map("client_id") @db.Uuid
+  connectionId String  @map("connection_id") @db.Uuid
 
   profileType SocialProfileType @map("profile_type")
   externalId  String            @map("external_id") @db.VarChar(128)
@@ -567,7 +573,9 @@ model SocialProfile {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  client          Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization    Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// SetNull, Cascade DEĞİL: müşteri silinince sayfa ajansın havuzuna döner.
+  client          Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
   connection      PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   linkedAdAccount AdAccount?         @relation("BoostBillingAccount", fields: [linkedAdAccountId], references: [id], onDelete: SetNull)
   organicPosts    OrganicPost[]
@@ -577,7 +585,11 @@ model SocialProfile {
   leads           Lead[]
   leadCursors     LeadSyncCursor[]
 
-  @@unique([connectionId, externalId])
+  /// Tekillik ORGANİZASYON bazında: ikinci bir Meta kimliği bağlandığında aynı
+  /// Facebook sayfası iki bağlantının da altında görünüyor ve bağlantı bazlı
+  /// kısıt aynı sayfa için iki satır üretirdi.
+  @@unique([orgId, externalId])
+  @@index([orgId, clientId])
   @@index([clientId, syncEnabled])
   @@map("social_profiles")
 }

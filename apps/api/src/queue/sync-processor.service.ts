@@ -180,8 +180,18 @@ export class SyncProcessorService {
         select: { id: true, clientId: true },
       });
       for (const p of profiles) {
+        // Reklam hesaplarındaki ile aynı kural: atanmamış sayfa süpürmeye
+        // girmez ve kaç tane atlandığı yazılır. Müşteri silinince `client_id`
+        // NULL'a düşüyor ama `sync_enabled` açık kalıyor — kullanıcı sayfanın
+        // hâlâ senkronize olduğunu sanır.
+        const clientId = p.clientId;
+        if (clientId === null) {
+          unassigned++;
+          continue;
+        }
+
         const res = await this.queue.enqueue({
-          clientId: p.clientId,
+          clientId,
           platform: 'meta',
           jobType: 'organic_posts',
           socialProfileId: p.id,
@@ -194,7 +204,7 @@ export class SyncProcessorService {
     const note =
       `${payload.jobType}: ${enqueued} iş açıldı, ${skipped} atlandı (zaten kuyrukta)` +
       (unassigned > 0
-        ? `, ${unassigned} hesap MÜŞTERİYE ATANMAMIŞ olduğu için çekilmedi`
+        ? `, ${unassigned} kayıt MÜŞTERİYE ATANMAMIŞ olduğu için çekilmedi`
         : '');
     this.logger.log(note);
     return { rows: 0, note };

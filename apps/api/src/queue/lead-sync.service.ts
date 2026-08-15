@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { assertAssigned } from '../common/utils/ad-account-assignment';
 import type { DiscoveredLead } from '../modules/connections/provider.types';
 import { PlatformApiError } from '../modules/connections/provider.types';
 import { ProviderRegistry } from '../modules/connections/provider.registry';
@@ -333,11 +334,14 @@ export class LeadSyncService {
   // ---------------------------------------------------------------------------
 
   private async loadProfile(socialProfileId: string): Promise<ProfileRow> {
-    const profile = await this.db.socialProfile.findUniqueOrThrow({
+    const found = await this.db.socialProfile.findUniqueOrThrow({
       where: { id: socialProfileId },
-      // ORG KİMLİĞİ MÜŞTERİ ÜZERİNDEN — `social_profiles` tablosunda org_id yok.
-      include: { client: { select: { orgId: true } } },
     });
+
+    // ATANMAMIŞ SAYFA BURADA DURUR. `leads.client_id` NOT NULL ve atanmamış
+    // bir sayfadan gelen kaydın hangi müşteriye ait olduğu BİLİNMİYOR — tahmin
+    // etmek, kişisel veriyi yanlış markanın CRM'ine yazmak olurdu.
+    const profile = assertAssigned(found);
 
     if (!profile.pageAccessTokenEnc) {
       throw new PlatformApiError(
@@ -350,7 +354,7 @@ export class LeadSyncService {
     return {
       id: profile.id,
       clientId: profile.clientId,
-      orgId: profile.client.orgId,
+      orgId: profile.orgId,
       pageToken: this.crypto.decrypt(Buffer.from(profile.pageAccessTokenEnc)),
     };
   }

@@ -67,9 +67,9 @@ beforeEach(async () => {
   await seedTenant(h);
   await h.q(
     `INSERT INTO social_profiles
-       (id, client_id, connection_id, profile_type, external_id, name, updated_at)
-     VALUES ($1, $2, $3, 'facebook_page', 'page-1', 'Örnek Sayfa', now())`,
-    [PROFILE, IDS.client, IDS.connection],
+       (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
+     VALUES ($1, $2, $3, $4, 'facebook_page', 'page-1', 'Örnek Sayfa', now())`,
+    [PROFILE, IDS.org, IDS.client, IDS.connection],
   );
 });
 
@@ -119,9 +119,9 @@ describe('oluşturma', () => {
     );
     await h.q(
       `INSERT INTO social_profiles
-         (id, client_id, connection_id, profile_type, external_id, name, updated_at)
-       VALUES ($1, $2, $3, 'facebook_page', 'page-2', 'Diğer Sayfa', now())`,
-      [OTHER_PROFILE, OTHER_CLIENT, IDS.connection],
+         (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
+       VALUES ($1, $2, $3, $4, 'facebook_page', 'page-2', 'Diğer Sayfa', now())`,
+      [OTHER_PROFILE, IDS.org, OTHER_CLIENT, IDS.connection],
     );
     await expect(
       svc.create(CTX, input({ socialProfileId: OTHER_PROFILE })),

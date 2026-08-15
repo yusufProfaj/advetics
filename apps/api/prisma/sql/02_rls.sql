@@ -473,22 +473,50 @@ CREATE POLICY adv_ad_accounts_write ON ad_accounts
   );
 
 -- -----------------------------------------------------------------------------
--- social_profiles  (yalnızca Meta — Auto-Boost, Modül 7)
+-- social_profiles  (yalnızca Meta — Auto-Boost, lead formları, reklam yayını)
 --
--- BU TABLO AJANS SEVİYESİNE TAŞINMADI ve `client_id`'si hâlâ NOT NULL.
--- Bilinçli bir kapsam kararı: ajans bağlantısı migration'ı iki tabloyu
--- (bağlantılar + reklam hesapları) kapsıyor. Sonucu somut ve KÖRLEMESİNE
--- BIRAKILMADI: ajans geneli (client_id NULL) bir bağlantıda sayfa/Instagram
--- keşfi ATLANIYOR ve atlandığı hem log'a hem keşif özetine yazılıyor
--- (connections.service.ts → discoverAndStore). Havuz modeli sosyal profillere
--- de gerekince aynı desen buraya uygulanmalı.
+-- REKLAM HESAPLARIYLA AYNI HAVUZ MODELİ. Sahiplik `org_id`'de; `client_id`
+-- NULL ise sayfa havuzda ve yalnızca org yöneticisine görünüyor.
+--
+-- Neden org yöneticisine: havuz, ajansın Meta kimliğinin eriştiği BÜTÜN
+-- sayfaların listesi ve çoğu başka müşterilere ait. Müşteri düzeyindeki bir
+-- kullanıcıya göstermek, ajansın portföyünü tek ekranda sızdırmak olurdu.
+--
+-- ATAMA UÇ NOKTASI DA `activeClientId: null` İLE ÇALIŞMAK ZORUNDA — sebebi
+-- `ad_accounts` politikasının üstündeki notta.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_social_profiles_select ON social_profiles
-  FOR SELECT USING (app.can_access_client(client_id));
+  FOR SELECT USING (
+    app.has_context()
+    AND org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.can_access_client(client_id)
+      END
+    )
+  );
 
 CREATE POLICY adv_social_profiles_write ON social_profiles
-  FOR ALL USING (app.can_access_client(client_id))
-          WITH CHECK (app.can_access_client(client_id));
+  FOR ALL USING (
+    app.has_context()
+    AND org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.can_access_client(client_id)
+      END
+    )
+  ) WITH CHECK (
+    app.has_context()
+    AND org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.can_access_client(client_id)
+      END
+    )
+  );
 
 -- -----------------------------------------------------------------------------
 -- oauth_states

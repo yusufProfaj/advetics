@@ -115,15 +115,15 @@ buna göre veriliyor:
   gevşetmek çözmüyor, engel SELECT politikasında. Çözüm çağıran tarafta:
   bağlamı daraltan değeri (örneğin `activeClientId`) o istek için kapat.
   `ad-account-pool-rls.spec.ts` bunu kilitliyor.
-- **`ad_accounts.client_id` ve `platform_connections.client_id` NULLABLE.**
-  NULL = ajansın havuzunda, müşteriye atanmamış. Sahiplik `org_id`'de. Bu
-  satırlar için senkronizasyon kuyruğa GİRMEMELİ — `client_id`'si NULL bir
-  `sync_jobs` satırını RLS kimseye göstermez ve iş sessizce kaybolur
-  (`assertAssigned()` kullan).
+- **`ad_accounts`, `platform_connections` ve `social_profiles` içinde
+  `client_id` NULLABLE.** NULL = ajansın havuzunda, müşteriye atanmamış.
+  Sahiplik `org_id`'de. Bu satırlar için senkronizasyon kuyruğa GİRMEMELİ —
+  `client_id`'si NULL bir `sync_jobs` satırını RLS kimseye göstermez ve iş
+  sessizce kaybolur (`assertAssigned()` kullan).
 
 ### Test
 
-- `pnpm --filter @advetics/api test` — vitest. Şu an **757 API testi**.
+- `pnpm --filter @advetics/api test` — vitest. Şu an **769 API testi**.
 - Veritabanına dokunan testler **PGlite** kullanıyor (gerçek Postgres, WASM).
   Şema üretim migration'larından kuruluyor — el yazımı test şeması yok.
 - **RLS testlerde varsayılan olarak KAPALI** (worker rolü BYPASSRLS'i taklit
@@ -180,7 +180,7 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 - Bir müşteri = bir **şirket**; şirketin birden çok projesi/reklam hesabı
   olabilir. Panelde ve raporlarda reklam hesabı süzgeci **her zaman** bulunmalı.
 - **Platform bağlantısı AJANSA ait, müşteriye değil.** Meta/Google bir kez
-  yetkilendiriliyor, erişilen bütün reklam hesapları havuza düşüyor ve
-  müşteriye panelden atanıyor. Müşteri başına yeniden yetkilendirme yok —
+  yetkilendiriliyor; erişilen bütün reklam hesapları VE sayfalar havuza düşüyor
+  ve müşteriye panelden atanıyor. Müşteri başına yeniden yetkilendirme yok —
   platform önceki token'ı geçersiz kılıyor ve bağlantıları koparıyordu.
-  Bağlantı kurmak/kaldırmak ve hesap atamak org yöneticisi işi.
+  Bağlantı kurmak/kaldırmak ve atama yapmak org yöneticisi işi.

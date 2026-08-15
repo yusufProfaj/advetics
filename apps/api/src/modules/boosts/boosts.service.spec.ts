@@ -51,10 +51,10 @@ function ruleInput(over: Partial<BoostRuleInput> = {}): BoostRuleInput {
 
 async function seedProfile(linkAccount = true): Promise<void> {
   await h.q(
-    `INSERT INTO social_profiles (id, client_id, connection_id, profile_type, external_id,
+    `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type, external_id,
        name, linked_ad_account_id, sync_enabled, updated_at)
-     VALUES ($1, $2, $3, 'facebook_page', 'page-1', 'Ege Birlik Sayfa', $4, true, now())`,
-    [PROFILE, IDS.client, IDS.connection, linkAccount ? IDS.adAccount : null],
+     VALUES ($1, $2, $3, $4, 'facebook_page', 'page-1', 'Ege Birlik Sayfa', $5, true, now())`,
+    [PROFILE, IDS.org, IDS.client, IDS.connection, linkAccount ? IDS.adAccount : null],
   );
 }
 

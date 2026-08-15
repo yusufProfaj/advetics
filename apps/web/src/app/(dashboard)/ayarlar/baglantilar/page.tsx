@@ -31,6 +31,13 @@ export default async function ConnectionsPage() {
   const pooled = accounts.filter((a) => a.clientId === null).length;
   const assigned = accounts.length - pooled;
 
+  // Sayfalar AYRI sayılıyor: reklam hesabı atamak lead formlarını çalıştırmıyor
+  // ve tersi. Tek bir "atanmamış" sayısı, ikisinden hangisinin eksik olduğunu
+  // gizlerdi.
+  const pooledProfiles = connections
+    .flatMap((c) => c.socialProfiles)
+    .filter((p) => p.clientId === null).length;
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
@@ -74,11 +81,22 @@ export default async function ConnectionsPage() {
           {/* SESSİZ KESME YOK: kaç hesap havuzda bekliyor, sayıyla yazılıyor.
               Havuzdaki hesap senkronize edilmiyor ve bunu bilmeden "veri
               gelmiyor" diye aramak, bu üründeki en pahalı hata türü. */}
-          {pooled > 0 && (
+          {(pooled > 0 || pooledProfiles > 0) && (
             <div className="rounded-xl border border-amber-300 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
-              <strong>{pooled} reklam hesabı havuzda</strong> — hiçbir müşteriye
-              atanmamış. {assigned} hesap atanmış durumda. Atanmamış hesap
-              senkronize edilmez; aşağıdan bir müşteriye ata.
+              {pooled > 0 && (
+                <p>
+                  <strong>{pooled} reklam hesabı havuzda</strong> — hiçbir müşteriye
+                  atanmamış. {assigned} hesap atanmış durumda. Atanmamış hesap
+                  senkronize edilmez.
+                </p>
+              )}
+              {pooledProfiles > 0 && (
+                <p className={pooled > 0 ? 'mt-1.5' : undefined}>
+                  <strong>{pooledProfiles} sayfa/Instagram hesabı havuzda</strong> —
+                  atanmamış sayfadan gelen potansiyel müşteri kaydı yazılamaz.
+                </p>
+              )}
+              <p className="mt-1.5 text-xs">Aşağıdan bir müşteriye ata.</p>
             </div>
           )}
 

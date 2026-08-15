@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { assertAssigned } from '../common/utils/ad-account-assignment';
 import { PlatformApiError } from '../modules/connections/provider.types';
 import { ProviderRegistry } from '../modules/connections/provider.registry';
 import { CryptoService } from '../crypto/crypto.service';
@@ -42,17 +43,18 @@ export class OrganicSyncService {
   ) {}
 
   async syncProfile(socialProfileId: string): Promise<{ rows: number; note: string }> {
-    const profile = await this.db.socialProfile.findUniqueOrThrow({
+    const found = await this.db.socialProfile.findUniqueOrThrow({
       where: { id: socialProfileId },
-      // ORG KİMLİĞİ MÜŞTERİ ÜZERİNDEN GELİYOR.
-      //
-      // `social_profiles` tablosunda org_id kolonu yok — org bağlantısı
-      // client üzerinden kuruluyor (ad_accounts ve insights_daily ile aynı
-      // desen). İlk yazımda buraya `connection.clientId` konmuştu ve org_id
-      // kolonuna MÜŞTERİ kimliği yazılıyordu: RLS'in org kontrolü hiçbir
-      // satırı eşleştirmezdi ve gönderiler panelde hiç görünmezdi.
-      include: { connection: true, client: { select: { orgId: true } } },
+      // `org_id` artık SAYFANIN KENDİ kolonu. Eskiden müşteri üzerinden
+      // JOIN'leniyordu ve o yolda bir kez org_id kolonuna MÜŞTERİ kimliği
+      // yazılmıştı: RLS'in org kontrolü hiçbir satırı eşleştirmedi ve
+      // gönderiler panelde hiç görünmedi.
+      include: { connection: true },
     });
+
+    // ATANMAMIŞ SAYFA BURADA DURUR. `organic_posts.client_id` NOT NULL; NULL
+    // yazılamaz, yazılabilse de RLS o satırları kimseye göstermezdi.
+    const profile = assertAssigned(found);
 
     if (!profile.pageAccessTokenEnc) {
       // SAYFA TOKEN'I YOKSA İŞ YAPILAMAZ ve bu kalıcı bir durum: yeniden
@@ -114,7 +116,7 @@ export class OrganicSyncService {
     // aynı deseni kullanıyor.
     const values = posts.map(
       (p) => Prisma.sql`(
-        gen_random_uuid(), ${profile.client.orgId}::uuid,
+        gen_random_uuid(), ${profile.orgId}::uuid,
         ${profile.clientId}::uuid, ${socialProfileId}::uuid,
         ${p.externalId}, ${p.mediaType}, ${p.message?.slice(0, 3000) ?? null},
         ${p.permalink ?? null}, ${p.thumbnailUrl ?? null}, ${p.publishedAt},

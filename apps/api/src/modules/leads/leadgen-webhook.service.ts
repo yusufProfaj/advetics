@@ -148,6 +148,30 @@ export class LeadgenWebhookService {
           continue;
         }
 
+        /**
+         * ATANMAMIŞ SAYFADAN GELEN KAYIT YAZILAMAZ — VE BU DURUM ÜST SEVİYE
+         * LOGLANIYOR.
+         *
+         * Sayfa ajansın havuzunda ama hiçbir müşteriye atanmamışsa, gelen
+         * kişisel verinin hangi markaya ait olduğu BİLİNMİYOR. Tahmin etmek,
+         * kaydı yanlış müşterinin CRM'ine yazmak demek.
+         *
+         * Meta'ya yine 200 dönüyoruz (aksi hâlde bildirim sonsuza kadar
+         * tekrarlanır ve abonelik kapatılır) ama kayıp SESSİZ DEĞİL: Meta
+         * kaybolan bir bildirimi bir daha göndermiyor, yani buradaki her satır
+         * gerçekten kaybolmuş bir potansiyel müşteri. Sayfa atandıktan sonra
+         * mutabakat taraması geçmişi toplayabilir.
+         */
+        if (profile.clientId === null) {
+          this.logger.error(
+            `Leadgen bildirimi ATANMAMIŞ sayfadan: ${pageId} (${profile.id}) — ` +
+              `kayıt ${v.leadgen_id} yazılamadı. Sayfayı Platform Bağlantıları ` +
+              `ekranından bir müşteriye ata; ardından form mutabakatı geçmişi toplar.`,
+          );
+          skipped++;
+          continue;
+        }
+
         const res = await this.queue.enqueue({
           clientId: profile.clientId,
           platform: 'meta',
@@ -167,7 +191,7 @@ export class LeadgenWebhookService {
 
   private async findProfile(
     pageExternalId: string,
-  ): Promise<{ id: string; clientId: string } | null> {
+  ): Promise<{ id: string; clientId: string | null } | null> {
     return this.db.socialProfile.findFirst({
       where: { externalId: pageExternalId, profileType: 'facebook_page' },
       select: { id: true, clientId: true },

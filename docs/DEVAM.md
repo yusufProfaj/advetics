@@ -233,13 +233,45 @@ Migration: `20260815160000_agency_oauth_state`. **757 API testi geçiyor**
 
 ### Hâlâ açık
 
-- **Sosyal profiller havuz modeline geçmedi** (`social_profiles.client_id` NOT
-  NULL). Ajans geneli bağlantıda sayfa keşfi ATLANIYOR; atlandığı log'a ve
-  keşif özetine yazılıyor. Auto-Boost ve formlar bu profillere bağlı, yani
-  Meta yazma yolları açıldığında karara bağlanmalı.
 - **Panelde hesap ataması yalnızca bağlantı kartından yapılıyor.** Müşteri
   ekranında "bu müşterinin hesapları" görünümü yok; 157 hesaplı bir havuzda
   müşteri müşteri gitmek isteyen biri için ayrı bir ekran gerekebilir.
+
+---
+
+## 0.3. Sosyal profiller de havuz modelinde
+
+Migration: `20260815180000_agency_social_profiles`. **769 API testi geçiyor.**
+
+5–6. adımlarda `social_profiles` kapsam dışı bırakılmıştı ve sonucu somuttu:
+ajans geneli bir bağlantıda sayfa keşfi HİÇ YAPILAMIYORDU (kolon zorunluydu,
+hangi müşteriye yazılacağı bilinmiyordu). Yani Auto-Boost, lead formları ve
+reklam yayını sayfa göremiyordu. Artık reklam hesaplarıyla birebir aynı model.
+
+**Bir yamayı da kaldırdı:** `organic-sync` ve `lead-sync`, org kimliğini müşteri
+üzerinden JOIN'leyerek buluyordu ve o yolda bir kez `org_id` kolonuna MÜŞTERİ
+kimliği yazılmıştı — RLS hiçbir satırı eşleştirmemiş, gönderiler panelde hiç
+görünmemişti. Kolon artık sayfanın kendisinde.
+
+**Tekillik bağlantı bazından org bazına geçti.** Eski kısıt
+`(connection_id, external_id)` idi; ikinci bir Meta kimliği bağlandığında aynı
+Facebook sayfası iki satır olurdu — reklam hesaplarında tam olarak bu, üretimde
+1.134 mükerrer satır üretmişti.
+
+**Atanmamış sayfada ne olur, nerede yazar:**
+
+| Yol | Davranış |
+|---|---|
+| Organik gönderi senkronizasyonu | Süpürmede atlanır, sayısı log'a yazılır |
+| Lead webhook'u | Kayıt YAZILMAZ, `error` seviyesinde loglanır (Meta'ya 200 döner, yoksa abonelik kapanır) |
+| Lead formu oluşturma | "Bu sayfa henüz bir müşteriye atanmamış" |
+| Reklam taslağı | Aynı mesaj |
+| Boost kuralı | Aynı mesaj + organik gönderi çekilmediği uyarısı |
+
+**Sayfanın müşterisi DEĞİŞİRSE geçmiş taşınmıyor** — formlar ve toplanmış
+kayıtlar eski müşteride kalıyor. Bir markanın topladığı potansiyel müşteriler
+başka bir markanın CRM'ine geçemez. Kaç form kaldığı yanıtta dönüyor ve panelde
+uyarı olarak gösteriliyor; söylenmezse kullanıcı formlarını kaybettiğini sanar.
 
 ---
 

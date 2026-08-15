@@ -31,6 +31,8 @@ const CONN_OTHER = '3e3e3e3e-3e3e-3e3e-3e3e-3e3e3e3e3e3e';
 const ACC_POOL = '44444444-4444-4444-4444-444444444444';
 const ACC_ASSIGNED = '55555555-5555-5555-5555-555555555555';
 const ACC_OTHER_ORG = '5e5e5e5e-5e5e-5e5e-5e5e-5e5e5e5e5e5e';
+const PROFILE_POOL = '66666666-6666-6666-6666-666666666666';
+const PROFILE_ASSIGNED = '77777777-7777-7777-7777-777777777777';
 
 /** Politika uygulanan rol. Tabloların sahibi DEĞİL — RLS ancak öyle işliyor. */
 const APP_ROLE = 'advetics_rls_test';
@@ -44,7 +46,7 @@ beforeAll(async () => {
 
   // Koşum ortamı RLS'i kapatmıştı; bu paketin konusu olan iki tabloda geri
   // açıyoruz. Politikalar zaten `02_rls.sql` ile kuruldu ve silinmedi.
-  for (const t of ['ad_accounts', 'platform_connections']) {
+  for (const t of ['ad_accounts', 'platform_connections', 'social_profiles']) {
     await h.q(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`);
   }
 });
@@ -86,6 +88,13 @@ beforeEach(async () => {
             ($2, $4, $8,    $6, 'meta', 'act_assigned', 'A hesabı', 'TRY', 'Europe/Istanbul', now()),
             ($3, $5, NULL,  $7, 'meta', 'act_other',    'Yabancı',  'TRY', 'Europe/Istanbul', now())`,
     [ACC_POOL, ACC_ASSIGNED, ACC_OTHER_ORG, ORG, ORG_OTHER, CONN, CONN_OTHER, CLIENT_A],
+  );
+  await h.q(
+    `INSERT INTO social_profiles
+       (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
+     VALUES ($1, $3, NULL, $5, 'facebook_page', 'page_pool',     'Havuz sayfası', now()),
+            ($2, $3, $4,   $5, 'facebook_page', 'page_assigned', 'A sayfası',     now())`,
+    [PROFILE_POOL, PROFILE_ASSIGNED, ORG, CLIENT_A, CONN],
   );
 });
 
@@ -223,6 +232,58 @@ describe('ad_accounts — atama yazma yolu', () => {
     // satır erişilemeyen bir müşteriye TAŞINABİLİRDİ.
     await expect(
       asUser(`UPDATE ad_accounts SET client_id = '${CLIENT_B}' WHERE id = '${ACC_ASSIGNED}'`, CLIENT_USER),
+    ).rejects.toThrow(/row-level security/i);
+  });
+});
+
+describe('social_profiles — havuz', () => {
+  async function visibleProfiles(ctx: Ctx): Promise<string[]> {
+    const rows = await asUser<{ name: string }>(
+      'SELECT name FROM social_profiles ORDER BY name',
+      ctx,
+    );
+    return rows.map((r) => r.name);
+  }
+
+  it('ORG YÖNETİCİSİ havuzdaki sayfayı da görüyor', async () => {
+    expect(await visibleProfiles(ORG_ADMIN)).toEqual(['A sayfası', 'Havuz sayfası']);
+  });
+
+  it('KRİTİK: müşteri düzeyi kullanıcı HAVUZDAKİ SAYFAYI GÖRMÜYOR', async () => {
+    // Havuz, ajansın Meta kimliğinin eriştiği bütün sayfaların listesi —
+    // çoğu başka müşterilere ait. Bir müşteri temsilcisine göstermek, ajansın
+    // portföyünü tek ekranda sızdırmak olurdu.
+    expect(await visibleProfiles(CLIENT_USER)).toEqual(['A sayfası']);
+  });
+
+  it('müşteri düzeyi kullanıcı havuzdaki sayfaya DOKUNAMIYOR', async () => {
+    await asUser(
+      `UPDATE social_profiles SET client_id = '${CLIENT_A}' WHERE id = '${PROFILE_POOL}'`,
+      CLIENT_USER,
+    );
+    const rows = await h.q<{ client_id: string | null }>(
+      `SELECT client_id FROM social_profiles WHERE id = '${PROFILE_POOL}'`,
+    );
+    expect(rows[0]?.client_id).toBeNull();
+  });
+
+  it('ORG YÖNETİCİSİ seçim kapalıyken sayfayı atayabiliyor', async () => {
+    await asUser(
+      `UPDATE social_profiles SET client_id = '${CLIENT_B}' WHERE id = '${PROFILE_POOL}'`,
+      { ...ORG_ADMIN, activeClientId: null },
+    );
+    const rows = await h.q<{ client_id: string | null }>(
+      `SELECT client_id FROM social_profiles WHERE id = '${PROFILE_POOL}'`,
+    );
+    expect(rows[0]?.client_id).toBe(CLIENT_B);
+  });
+
+  it('KRİTİK: sayfayı ERİŞEMEDİĞİ müşteriye taşıyamıyor', async () => {
+    await expect(
+      asUser(
+        `UPDATE social_profiles SET client_id = '${CLIENT_B}' WHERE id = '${PROFILE_ASSIGNED}'`,
+        CLIENT_USER,
+      ),
     ).rejects.toThrow(/row-level security/i);
   });
 });

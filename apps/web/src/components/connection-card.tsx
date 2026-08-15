@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { ConnectionSummary } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { AccountPicker, type PickerClient } from './account-picker';
+import { SocialProfileList } from './social-profile-list';
 
 const PLATFORM_LABEL: Record<string, string> = {
   meta: 'Meta',
@@ -177,30 +178,14 @@ export function ConnectionCard({
         canManage={canManage}
       />
 
-      {/* Sosyal profiller — yalnızca Meta */}
+      {/* Sosyal profiller — yalnızca Meta. Reklam hesaplarıyla AYNI havuz
+          modeli: sayfa da ajansa ait ve müşteriye atanıyor. */}
       {connection.socialProfiles.length > 0 && (
-        <div className="mt-4">
-          <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-            Sayfalar & Instagram ({connection.socialProfiles.length})
-          </h4>
-          <ul className="mt-2 flex flex-wrap gap-2">
-            {connection.socialProfiles.map((p) => (
-              <li
-                key={p.id}
-                className="flex items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-xs"
-              >
-                <span className="text-ink-muted">
-                  {p.profileType === 'instagram_business' ? 'IG' : 'FB'}
-                </span>
-                <span className="font-medium">{p.name}</span>
-                {p.username && <span className="text-ink-muted">@{p.username}</span>}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-xs text-ink-muted">
-            Auto-Boost (Modül 7) bu profilleri kullanacak.
-          </p>
-        </div>
+        <SocialProfileList
+          profiles={connection.socialProfiles}
+          clients={clients}
+          canManage={canManage}
+        />
       )}
     </section>
   );

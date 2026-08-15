@@ -155,6 +155,48 @@ describe('müşteri silinmesi', () => {
   });
 });
 
+describe('sosyal profiller — aynı havuz kuralları', () => {
+  const PROFILE = '66666666-6666-6666-6666-666666666666';
+
+  async function insertProfile(id: string, externalId = 'page-1', clientId: string | null = null) {
+    await h.q(
+      `INSERT INTO social_profiles
+         (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
+       VALUES ($1, $2, $3, $4, 'facebook_page', $5, 'Sayfa', now())`,
+      [id, ORG, clientId, CONN, externalId],
+    );
+  }
+
+  it('AYNI sayfa organizasyonda iki kez eklenemiyor', async () => {
+    // Tekillik eskiden BAĞLANTI bazındaydı: ikinci bir Meta kimliği
+    // bağlandığında aynı sayfa iki satır olurdu ve Auto-Boost hangisini
+    // kullanacağını bilemezdi.
+    await insertProfile(PROFILE);
+    await expect(insertProfile('67676767-6767-6767-6767-676767676767')).rejects.toThrow(
+      /duplicate key|unique/i,
+    );
+  });
+
+  it('müşteri silinince sayfa HAVUZA dönüyor, silinmiyor', async () => {
+    await insertProfile(PROFILE, 'page-1', CLIENT);
+    await h.q(`DELETE FROM clients WHERE id = $1`, [CLIENT]);
+
+    const rows = await h.q<{ client_id: string | null; org_id: string }>(
+      `SELECT client_id, org_id FROM social_profiles`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.client_id).toBeNull();
+    expect(rows[0]!.org_id).toBe(ORG);
+  });
+
+  it('sayfa BAŞKA organizasyonun müşterisine atanamıyor', async () => {
+    await insertProfile(PROFILE);
+    await expect(
+      h.q(`UPDATE social_profiles SET client_id = $1`, [CLIENT_OTHER]),
+    ).rejects.toThrow(/foreign key|violates/i);
+  });
+});
+
 describe('organizasyon tutarlılığı', () => {
   it('KRİTİK: hesap BAŞKA organizasyonun müşterisine atanamıyor', async () => {
     /*

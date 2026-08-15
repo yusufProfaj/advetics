@@ -230,9 +230,9 @@ describe('silme koruması', () => {
     const { asset } = await upload(png(1080, 1080));
     const draft = '99999999-9999-9999-9999-999999999999';
     await h.q(
-      `INSERT INTO social_profiles (id, client_id, connection_id, profile_type, external_id, name, updated_at)
-       VALUES ('88888888-8888-8888-8888-888888888888', $1, $2, 'facebook_page', 'p1', 'Sayfa', now())`,
-      [IDS.client, IDS.connection],
+      `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
+       VALUES ('88888888-8888-8888-8888-888888888888', $1, $2, $3, 'facebook_page', 'p1', 'Sayfa', now())`,
+      [IDS.org, IDS.client, IDS.connection],
     );
     await h.q(
       // `link_url` ZORUNLU: `ad_drafts_website_link_chk` web sitesi hedefinde
