@@ -15,6 +15,7 @@
     "db:rls": "tsx prisma/apply-sql.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-portfolio": "tsx prisma/seed-portfolio.ts",
+    "db:reset-clients": "tsx prisma/reset-clients.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "db:set-password": "tsx prisma/set-password.ts",
