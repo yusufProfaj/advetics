@@ -101,9 +101,39 @@ async function main(): Promise<void> {
    * atlayınca yetim satır bırakırdı — ve yetim satır, bir sonraki kurulumda
    * "bu hesap zaten var" diye kendini gösterir.
    */
+  /**
+   * METRİKLER AYRI SİLİNİYOR — cascade onlara ULAŞMIYOR.
+   *
+   * `insights_daily` BÖLÜMLENMİŞ (partitioned) bir tablo ve şemadaki
+   * `onDelete: Cascade` veritabanı seviyesinde uygulanmamış. Üretimde
+   * doğrulandı: 14 müşteri silindikten sonra 11.222 metrik satırı olduğu gibi
+   * kaldı ve artık var olmayan müşterilere işaret ediyordu.
+   *
+   * ÖNCE metrikler, SONRA müşteriler. Ters sırada da çalışırdı ama müşteriler
+   * gittikten sonra "hangi satırlar yetim" sorusu ancak `NOT EXISTS` ile
+   * cevaplanabilirdi; burada zaten hepsi silineceği için sıra sadece niyeti
+   * okunur kılıyor.
+   */
+  const insightsDeleted = await prisma.insightsDaily.deleteMany({});
+  console.log(`  ${insightsDeleted.count} metrik satırı silindi (cascade ulaşmıyor)`);
+
   const deleted = await prisma.client.deleteMany({});
 
   const after = await counts();
+
+  /**
+   * ORGANİZASYON GENELİ ÜYELİK KALIR ve bu DOĞRU.
+   *
+   * `client_id = null` olan üyelik (org yöneticisi) hiçbir müşteriye bağlı
+   * değil, dolayısıyla zincirleme silinmiyor. Silinseydi hello@profaj.com
+   * hiçbir yetkisi olmadan kalırdı: panele girer ama müşteri bile
+   * oluşturamazdı — yani sıfırlamadan sonra sistemi kimse toparlayamazdı.
+   *
+   * İlk sürümde kontrol bunu hesaba katmıyordu ve üretimde YANLIŞ ALARM
+   * verdi. Beklenen bir kalıntıyı hata saymak, gerçek hatanın yanında
+   * durduğunda ikisini de güvenilmez yapıyor.
+   */
+  const orgWide = await prisma.membership.count({ where: { clientId: null } });
 
   console.log(`\nÖzet`);
   console.log('─'.repeat(60));
@@ -114,6 +144,8 @@ async function main(): Promise<void> {
   console.log(`  bağlantı        ${before.connections} → ${after.connections}`);
   console.log(`  üyelik          ${before.memberships} → ${after.memberships}`);
   console.log(`  kullanıcı       ${before.users} → ${after.users}  (değişmemeli)`);
+  console.log(`\n  ${orgWide} organizasyon geneli üyelik KASITLI olarak duruyor —`);
+  console.log(`  onsuz hiç kimse müşteri oluşturamazdı.`);
 
   // Zincirleme silmenin gerçekten çalıştığını DOĞRULUYORUZ. Bir tablo geride
   // kalırsa sessizce kalırdı ve ancak yeni kurulumda tuhaf bir hata olarak
@@ -123,7 +155,8 @@ async function main(): Promise<void> {
     ['kampanya', after.campaigns],
     ['metrik satırı', after.insights],
     ['bağlantı', after.connections],
-    ['üyelik', after.memberships],
+    // Yalnızca MÜŞTERİYE BAĞLI üyelikler sıfırlanmalı.
+    ['müşteriye bağlı üyelik', after.memberships - orgWide],
   ].filter(([, n]) => (n as number) > 0);
 
   if (leftovers.length > 0) {
