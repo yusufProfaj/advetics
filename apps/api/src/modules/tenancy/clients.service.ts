@@ -29,8 +29,26 @@ export class ClientsService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * Müşteri listesi — AKTİF MÜŞTERİ SEÇİMİ UYGULANMADAN.
+   *
+   * `activeClientId: null` ile çağrılıyor ve bu şart. Aktif müşteri seçimi
+   * RLS'te `can_access_client` üzerinden veriyi seçili müşteriye daraltıyor;
+   * aşağıdaki `_count.adAccounts` da reklam hesaplarını saydığı için o
+   * daraltmaya takılıyordu. Sonuç: Çiftçi Grup seçiliyken diğer 11 müşteri
+   * "0 hesap" görünüyor ve ekran "bağlı reklam hesabı yok — bu müşteride hiç
+   * veri görünmeyecek" diye UYARIYORDU. Hesaplar yerli yerindeydi.
+   *
+   * Bu ekranın tanımı gereği kapsamı TÜM müşteriler: "hangi müşteride ne var"
+   * sorusuna cevap veriyor. Seçili müşteriye daraltmak, sorunun kendisini
+   * ortadan kaldırırdı.
+   *
+   * YETKİ KATMANI DOKUNULMAMIŞ durumda: `clientIds` ve `isOrgAdmin` aynen
+   * geçiyor, yani portföy yöneticisi yine yalnızca kendi müşterilerini
+   * görüyor. Kaldırılan tek şey SEÇİM daraltması.
+   */
   async list(ctx: TenantContext) {
-    return this.prisma.withTenant(ctx, (tx) =>
+    return this.prisma.withTenant({ ...ctx, activeClientId: null }, (tx) =>
       tx.client.findMany({
         where: { status: { not: 'archived' } },
         orderBy: { name: 'asc' },

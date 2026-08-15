@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { ClientCreateForm } from '@/components/tenancy/client-create-form';
+import { ClientActions } from '@/components/tenancy/client-actions';
 
 export const metadata = { title: 'Müşteriler — Advetics' };
 
@@ -146,20 +146,11 @@ export default async function ClientsPage() {
                   </p>
                 )}
 
-                <div className="mt-4 flex gap-4 border-t border-line pt-3 text-xs">
-                  <Link
-                    href="/ayarlar/baglantilar"
-                    className="font-medium text-brand-strong hover:underline"
-                  >
-                    Hesapları yönet
-                  </Link>
-                  <Link
-                    href="/ayarlar/ekip"
-                    className="font-medium text-brand-strong hover:underline"
-                  >
-                    Ekibi yönet
-                  </Link>
-                </div>
+                <ClientActions
+                  clientId={client.id}
+                  clientName={client.name}
+                  accountCount={total}
+                />
               </li>
             );
           })}
