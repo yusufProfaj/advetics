@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { UnrecoverableError } from 'bullmq';
+import { assertAssigned } from '../common/utils/ad-account-assignment';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
 import {
   PlatformApiError,
@@ -82,7 +83,7 @@ export class InsightsSyncService {
       throw new UnrecoverableError(`${params.jobType} için metrik seviyesi tanımlı değil`);
     }
 
-    const account = await this.db.adAccount.findUniqueOrThrow({
+    const found = await this.db.adAccount.findUniqueOrThrow({
       where: { id: params.adAccountId },
       select: {
         id: true,
@@ -94,6 +95,11 @@ export class InsightsSyncService {
         timezone: true,
       },
     });
+
+    // ATANMAMIŞ HESAP BURADA DURUR. `insights_daily.client_id` NULL yazılırsa
+    // satırlar hiçbir raporda görünmez ama kota harcanmış olur — en pahalı
+    // sessiz hata türü.
+    const account = assertAssigned(found);
 
     const provider = this.providers.get(account.platform);
     const accessToken = await this.vault.getAccessToken(account.connectionId, provider);

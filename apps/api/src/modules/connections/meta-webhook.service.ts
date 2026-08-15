@@ -96,7 +96,10 @@ export class MetaWebhookService {
   ): Promise<{ revoked: number }> {
     const connections = await this.db.platformConnection.findMany({
       where: { platform: 'meta', externalUserId, status: { not: 'revoked' } },
-      select: { id: true, clientId: true, client: { select: { orgId: true } } },
+      // `orgId` artık bağlantının KENDİ kolonu; müşteri üzerinden dolaşmıyoruz.
+      // Ajans geneli bağlantıda müşteri zaten yok (client_id NULL) ve join
+      // null dönerdi.
+      select: { id: true, orgId: true, clientId: true },
     });
 
     if (connections.length === 0) {
@@ -121,7 +124,7 @@ export class MetaWebhookService {
         },
       });
 
-      await this.audit.recordUnauthenticated(conn.client.orgId, {
+      await this.audit.recordUnauthenticated(conn.orgId, {
         action: 'connection.deauthorized_by_platform',
         targetType: 'platform_connection',
         targetId: conn.id,
@@ -166,11 +169,15 @@ export class MetaWebhookService {
     try {
       const connections = await this.db.platformConnection.findMany({
         where: { platform: 'meta', externalUserId },
-        select: { id: true, clientId: true, client: { select: { orgId: true } } },
+        select: { id: true, orgId: true, clientId: true },
       });
 
-      const clientIds = [...new Set(connections.map((c) => c.clientId))];
-      const orgIds = [...new Set(connections.map((c) => c.client.orgId))];
+      // Ajans geneli bağlantının müşterisi YOK; NULL'ları listeye koymak
+      // `affectedClientIds` alanına anlamsız bir boşluk yazardı.
+      const clientIds = [
+        ...new Set(connections.map((c) => c.clientId).filter((id): id is string => id !== null)),
+      ];
+      const orgIds = [...new Set(connections.map((c) => c.orgId))];
 
       // Cascade: ad_accounts ve social_profiles bağlantıyla birlikte gider.
       await this.db.platformConnection.deleteMany({

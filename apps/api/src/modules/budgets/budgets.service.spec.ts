@@ -50,18 +50,26 @@ async function seedSecondAccount(currency = 'TRY', platform: 'meta' | 'google' =
     connectionId = '33333333-3333-3333-3333-33333333333b';
     await h.q(
       `INSERT INTO platform_connections
-         (id, client_id, platform, status, external_user_id, account_label,
+         (id, org_id, client_id, platform, status, external_user_id, account_label,
           access_token_enc, granted_scopes, connected_by_user_id, updated_at)
-       VALUES ($1, $2, 'google', 'active', 'g1', 'Google', '\\x00', '{}', $3, now())`,
-      [connectionId, IDS.client, IDS.user],
+       VALUES ($1, $2, $3, 'google', 'active', 'g1', 'Google', '\\x00', '{}', $4, now())`,
+      [connectionId, IDS.org, IDS.client, IDS.user],
     );
   }
   await h.q(
     `INSERT INTO ad_accounts
-       (id, client_id, connection_id, platform, external_id, name, currency,
+       (id, org_id, client_id, connection_id, platform, external_id, name, currency,
         timezone, sync_enabled, updated_at)
-     VALUES ($1, $2, $3, $4, 'ext-b', $5, $6, 'Europe/Istanbul', true, now())`,
-    [ACCOUNT_B, IDS.client, connectionId, platform, platform === 'google' ? 'Google Ads' : 'Proje B', currency],
+     VALUES ($1, $2, $3, $4, $5, 'ext-b', $6, $7, 'Europe/Istanbul', true, now())`,
+    [
+      ACCOUNT_B,
+      IDS.org,
+      IDS.client,
+      connectionId,
+      platform,
+      platform === 'google' ? 'Google Ads' : 'Proje B',
+      currency,
+    ],
   );
 }
 

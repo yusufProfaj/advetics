@@ -109,10 +109,20 @@ export class SyncController {
   }
 
   /** Aktif müşterinin izlenen hesapları. RLS zaten müşteriye daraltıyor. */
+  /**
+   * İzlemeye alınmış hesaplar.
+   *
+   * `clientId: { not: null }` ŞART. Bağlantılar ajans seviyesine taşındıktan
+   * sonra havuzda müşteriye atanmamış hesaplar duruyor ve org yöneticisi
+   * bunları RLS altında GÖREBİLİYOR (havuzu yönetebilmesi için). Süzgeç
+   * olmasaydı "Şimdi güncelle" atanmamış bir hesap için iş açar, iş
+   * `client_id`'si NULL bir `sync_jobs` satırı üretir ve o satır hiçbir
+   * panelde görünmezdi.
+   */
   private async enabledAccounts(ctx: TenantContext) {
-    return this.prisma.withTenant(ctx, (tx) =>
+    const rows = await this.prisma.withTenant(ctx, (tx) =>
       tx.adAccount.findMany({
-        where: { syncEnabled: true, connection: { status: 'active' } },
+        where: { syncEnabled: true, clientId: { not: null }, connection: { status: 'active' } },
         select: {
           id: true,
           clientId: true,
@@ -122,6 +132,11 @@ export class SyncController {
         },
       }),
     );
+
+    // Süzgeç veritabanında; buradaki daraltma yalnızca TİP için. Prisma
+    // `{ not: null }` koşulunu tipe yansıtmıyor ve `clientId` `string | null`
+    // kalıyor.
+    return rows.filter((a): a is typeof a & { clientId: string } => a.clientId !== null);
   }
 }
 

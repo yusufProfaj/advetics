@@ -340,6 +340,7 @@ export class ConnectionsService {
 
       const missing = provider.requiredScopes.filter((s) => !tokens.grantedScopes.includes(s));
       const connectionId = await this.persistConnection(
+        state.orgId,
         state.clientId,
         state.createdByUserId,
         platform,
@@ -349,7 +350,7 @@ export class ConnectionsService {
       // Hesap keşfi bağlantıyı bozmamalı: token kaydedildi, kullanıcı zaten
       // bağlandı. Keşif başarısız olursa sonradan "Hesapları yenile" ile
       // tekrar denenebilir.
-      let discovered = { adAccounts: 0, socialProfiles: 0 };
+      let discovered = { adAccounts: 0, socialProfiles: 0, socialProfilesSkipped: 0 };
       try {
         discovered = await this.discoverAndStore(connectionId, platform, tokens.accessToken);
       } catch (err) {
@@ -413,9 +414,17 @@ export class ConnectionsService {
    * Bağlantıyı kaydeder. Aynı platform hesabı yeniden bağlanırsa GÜNCELLENİR —
    * yeni satır açmak, aynı reklam hesabının iki bağlantı altında görünmesine ve
    * çift senkronizasyona yol açardı.
+   *
+   * TEKİLLİK ARTIK ORGANİZASYON BAZINDA. Eskiden `[clientId, platform,
+   * externalUserId]` idi ve ajansın TEK Meta kimliği her müşteri için ayrı bir
+   * satır açıyordu; Meta ise her yeni yetkilendirmede öncekinin token'ını
+   * geçersiz kılıyordu, yani bir müşteriye bağlanmak diğerinin bağlantısını
+   * KOPARIYORDU. Aynı kimlik artık organizasyonda tek satır: ikinci
+   * yetkilendirme aynı satırı tazeliyor.
    */
   private async persistConnection(
-    clientId: string,
+    orgId: string,
+    clientId: string | null,
     userId: string,
     platform: Platform,
     tokens: {
@@ -432,13 +441,14 @@ export class ConnectionsService {
 
     const saved = await this.admin.platformConnection.upsert({
       where: {
-        clientId_platform_externalUserId: {
-          clientId,
+        orgId_platform_externalUserId: {
+          orgId,
           platform: platform as PrismaPlatform,
           externalUserId: tokens.externalUserId,
         },
       },
       create: {
+        orgId,
         clientId,
         platform: platform as PrismaPlatform,
         externalUserId: tokens.externalUserId,
@@ -485,24 +495,30 @@ export class ConnectionsService {
     connectionId: string,
     platform: Platform,
     accessToken: string,
-  ): Promise<{ adAccounts: number; socialProfiles: number }> {
+  ): Promise<{ adAccounts: number; socialProfiles: number; socialProfilesSkipped: number }> {
     const provider = this.provider(platform);
     const conn = await this.admin.platformConnection.findUniqueOrThrow({
       where: { id: connectionId },
-      select: { clientId: true },
+      select: { orgId: true, clientId: true },
     });
 
     const accounts = await provider.listAdAccounts(accessToken);
     for (const a of accounts) {
       await this.admin.adAccount.upsert({
         where: {
-          platform_externalId_clientId: {
+          // ORGANİZASYON BAZLI. Müşteri bazlıyken ajansın 157 hesabı her
+          // müşteriye ayrı ayrı yazılıyordu ve üretimde 1.134 mükerrer satır
+          // birikti — bir müşterinin hesabı diğerinin altında listeleniyordu.
+          platform_externalId_orgId: {
             platform: platform as PrismaPlatform,
             externalId: a.externalId,
-            clientId: conn.clientId,
+            orgId: conn.orgId,
           },
         },
         create: {
+          orgId: conn.orgId,
+          // Bağlantı ajans geneliyse hesap HAVUZA düşer (client_id NULL) ve
+          // müşteriye ayrıca atanır.
           clientId: conn.clientId,
           connectionId,
           platform: platform as PrismaPlatform,
@@ -516,8 +532,10 @@ export class ConnectionsService {
           raw: a.raw as Prisma.InputJsonValue,
         },
         update: {
-          // syncEnabled KASITLI olarak güncellenmiyor — kullanıcının seçimi
-          // her yenilemede sıfırlanmamalı.
+          // syncEnabled ve clientId KASITLI olarak güncellenmiyor —
+          // kullanıcının seçimi ve yaptığı müşteri ATAMASI her hesap
+          // yenilemesinde sıfırlanmamalı. Sıfırlansaydı "Hesapları yenile"
+          // düğmesi bütün atamaları sessizce havuza geri döndürürdü.
           connectionId,
           name: a.name,
           currency: a.currency,
@@ -532,12 +550,40 @@ export class ConnectionsService {
     let socialCount = 0;
     if (platform === 'meta') {
       const profiles = await provider.listSocialProfiles(accessToken);
+
+      /**
+       * SOSYAL PROFİLLER HÂLÂ MÜŞTERİ DÜZEYİNDE.
+       *
+       * `social_profiles.client_id` NOT NULL: ajans bağlantısı migration'ı
+       * (plan 1–4. adım) yalnızca bağlantıları ve reklam hesaplarını org
+       * seviyesine taşıdı. Ajans geneli bir bağlantıda sayfaların hangi
+       * müşteriye ait olduğu bilinmiyor, dolayısıyla yazılamıyorlar.
+       *
+       * SESSİZCE ATLANMIYOR: sayı çağırana dönüyor, log'a yazılıyor ve
+       * denetim kaydına giriyor. Bu projedeki hataların neredeyse tamamı
+       * sessizdi — "Auto-Boost neden hiçbir sayfa görmüyor" sorusunun cevabı
+       * hiçbir yerde yazmıyor olsaydı, günler kaybedilirdi.
+       */
+      if (conn.clientId === null) {
+        this.logger.warn(
+          `Bağlantı ${connectionId} ajans geneli (müşteriye atanmamış); ` +
+            `${profiles.length} sosyal profil ATLANDI. social_profiles.client_id ` +
+            `zorunlu — havuz modeli sosyal profillere henüz uygulanmadı.`,
+        );
+        return {
+          adAccounts: accounts.length,
+          socialProfiles: 0,
+          socialProfilesSkipped: profiles.length,
+        };
+      }
+      const profileClientId = conn.clientId;
+
       for (const p of profiles) {
         const pageToken = p.pageAccessToken ? this.vault.encrypt(p.pageAccessToken) : null;
         await this.admin.socialProfile.upsert({
           where: { connectionId_externalId: { connectionId, externalId: p.externalId } },
           create: {
-            clientId: conn.clientId,
+            clientId: profileClientId,
             connectionId,
             profileType: p.profileType,
             externalId: p.externalId,
@@ -563,7 +609,9 @@ export class ConnectionsService {
       }
     }
 
-    return { adAccounts: accounts.length, socialProfiles: socialCount };
+    // Buraya gelindiyse atlama olmamış demektir: tek atlama yolu yukarıdaki
+    // erken dönüş (ajans geneli bağlantı).
+    return { adAccounts: accounts.length, socialProfiles: socialCount, socialProfilesSkipped: 0 };
   }
 
   // ---------------------------------------------------------------------------
@@ -638,6 +686,22 @@ export class ConnectionsService {
     return this.prisma.withTenant(ctx, async (tx) => {
       const before = await tx.adAccount.findUnique({ where: { id: adAccountId } });
       if (!before) throw new NotFoundException('Reklam hesabı bulunamadı');
+
+      /**
+       * ATANMAMIŞ HESAP İZLEMEYE ALINAMAZ — DOĞRULAMA BURADA, KULLANIM ANINDA
+       * DEĞİL.
+       *
+       * İzin verseydik: süpürme işi bu hesabı `client_id` süzgecinde eler,
+       * kullanıcı ise ekranda "izleniyor" görür. Hiçbir hata çıkmaz, hiçbir
+       * veri gelmez. Kullanıcı yanlış yeri arar — token'ı, kotayı, platform
+       * ayarlarını.
+       */
+      if (before.clientId === null && syncEnabled) {
+        throw new BadRequestException(
+          `"${before.name}" henüz bir müşteriye atanmamış. Önce hesabı bir ` +
+            `müşteriye atayın; atanmamış hesap senkronize edilmez.`,
+        );
+      }
 
       const after = await tx.adAccount.update({
         where: { id: adAccountId },

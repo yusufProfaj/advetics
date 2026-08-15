@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { assertAssigned } from '../common/utils/ad-account-assignment';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
 import { PlatformApiError, type PlatformStructure } from '../modules/connections/provider.types';
 import { ProviderRegistry } from '../modules/connections/provider.registry';
@@ -59,7 +60,7 @@ export class StructureSyncService {
     adAccountId: string;
     full?: boolean;
   }): Promise<StructureSyncResult> {
-    const account = await this.db.adAccount.findUniqueOrThrow({
+    const found = await this.db.adAccount.findUniqueOrThrow({
       where: { id: params.adAccountId },
       select: {
         id: true,
@@ -71,6 +72,12 @@ export class StructureSyncService {
         lastStructureSyncAt: true,
       },
     });
+
+    // ATANMAMIŞ HESAP BURADA DURUR. Yazılacak her satır (`campaigns`,
+    // `ad_groups`, `ads`, `creatives`) `client_id` taşıyor ve NULL yazmak o
+    // satırları RLS altında görünmez kılardı — iş "başarılı" biter, panelde
+    // hiçbir şey çıkmaz.
+    const account = assertAssigned(found);
 
     const provider = this.providers.get(account.platform);
     const accessToken = await this.vault.getAccessToken(account.connectionId, provider);

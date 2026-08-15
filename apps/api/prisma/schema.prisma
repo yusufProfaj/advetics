@@ -89,6 +89,9 @@ model Organization {
 
   users           User[]
   clients         Client[]
+  // Modül 2 — bağlantı ve reklam hesabı ajansa ait, müşteriye değil.
+  connections     PlatformConnection[]
+  adAccounts      AdAccount[]
   memberships     Membership[]
   branding        BrandingProfile[]
   invitations     Invitation[]
@@ -408,9 +411,22 @@ enum SocialProfileType {
 /// Token'lar ASLA düz metin saklanmaz: CryptoService (AES-256-GCM) ile
 /// şifrelenir ve her değerin başına anahtar sürümü yazılır, böylece anahtar
 /// rotasyonu eski kayıtları okunamaz hale getirmez.
+///
+/// BAĞLANTI AJANSA AİT, MÜŞTERİYE DEĞİL. Sahiplik `org_id`'de; `client_id`
+/// yalnızca bağlantı gerçekten tek bir müşteriye özelse (müşteri kendi Meta
+/// hesabını devrettiyse) dolu olur.
+///
+/// Model müşteri bazlıyken ajansın tek Meta kimliğini 12 müşteri için 12 kez
+/// yetkilendirmek gerekiyordu ve Meta her yeni yetkilendirmede öncekinin
+/// token'ını geçersiz kılıyordu: bir müşteriye hesap bağlayınca diğerinin
+/// bağlantısı KOPUYORDU. Canlıda gözlendi. Tekillik artık `org_id` üzerinde,
+/// yani aynı kimlik bir kez yetkilendiriliyor.
 model PlatformConnection {
   id       String   @id @default(uuid()) @db.Uuid
-  clientId String   @map("client_id") @db.Uuid
+  orgId    String   @map("org_id") @db.Uuid
+  /// null => ajans geneli bağlantı. Hesaplar havuza düşer, müşteriye ayrıca
+  /// atanır.
+  clientId String?  @map("client_id") @db.Uuid
   platform Platform
 
   /// Platform tarafındaki kullanıcı/işletme kimliği. Aynı hesabın iki kez
@@ -441,21 +457,35 @@ model PlatformConnection {
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
 
-  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// SetNull, Cascade DEĞİL: müşteri silinince ajansın bağlantısı ölmemeli,
+  /// yalnızca müşteriyle olan bağı kopmalı.
+  client         Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
   connectedBy    User            @relation(fields: [connectedByUserId], references: [id])
   adAccounts     AdAccount[]
   socialProfiles SocialProfile[]
 
-  @@unique([clientId, platform, externalUserId])
+  @@unique([orgId, platform, externalUserId])
+  @@index([orgId, status])
   @@index([clientId, status])
   @@index([status, tokenExpiresAt])
   @@map("platform_connections")
 }
 
 /// Reklam hesabı. Meta `act_123456789`, Google `1234567890`.
+///
+/// HESAP AJANSIN HAVUZUNDA DURUR, müşteriye ATANIR. Ajansın tek Meta kimliği
+/// 157, tek Google girişi 127 hesaba erişiyor; bunların hepsini bağlantıyı
+/// kuran müşteriye yazmak 12 müşteride 12 × 157 mükerrer satır üretiyordu.
+/// Tekillik `[platform, externalId, orgId]` — aynı reklam hesabı bir
+/// organizasyonda TEK satır.
 model AdAccount {
   id           String   @id @default(uuid()) @db.Uuid
-  clientId     String   @map("client_id") @db.Uuid
+  orgId        String   @map("org_id") @db.Uuid
+  /// null => havuzda, henüz hiçbir müşteriye atanmamış. Atanmamış hesap
+  /// senkronize EDİLMEZ: `client_id`'si NULL bir `sync_jobs` satırı RLS
+  /// altında kimseye görünmez ve iş sessizce kaybolurdu.
+  clientId     String?  @map("client_id") @db.Uuid
   connectionId String   @map("connection_id") @db.Uuid
   platform     Platform
 
@@ -487,7 +517,11 @@ model AdAccount {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  client          Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization    Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// SetNull, Cascade DEĞİL: müşteri silinince hesap ajansın havuzuna GERİ
+  /// DÖNER. Cascade olsaydı müşteri silmek ajansın kendi reklam hesabı
+  /// kaydını da silerdi.
+  client          Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
   connection      PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   boostTargets    SocialProfile[]    @relation("BoostBillingAccount")
   campaigns       Campaign[]
@@ -499,7 +533,8 @@ model AdAccount {
   bulkBatches     BulkBatch[]
   assetRefs       AssetPlatformRef[]
 
-  @@unique([platform, externalId, clientId])
+  @@unique([platform, externalId, orgId])
+  @@index([orgId, clientId])
   @@index([clientId, syncEnabled])
   @@index([connectionId])
   @@map("ad_accounts")

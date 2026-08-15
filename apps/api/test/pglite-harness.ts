@@ -268,20 +268,29 @@ export async function seedTenant(
      VALUES ($1, $2, 'test@advetics.com', 'x', 'Test Kullanıcı', now())`,
     [IDS.user, IDS.org],
   );
+  /**
+   * BAĞLANTI VE HESAP `org_id` TAŞIYOR.
+   *
+   * Sahiplik ajansta; `client_id` yalnızca ATAMA. Bu yardımcı ATANMIŞ bir
+   * hesap kuruyor — testlerin çoğu müşteri bazlı davranışı sınıyor. Havuz
+   * (`client_id IS NULL`) davranışını sınayan paketler kendi kurulumlarını
+   * yapıyor: `ad-account-pool-rls.spec.ts`, `agency-connection-schema.spec.ts`.
+   */
   await h.q(
     `INSERT INTO platform_connections
-       (id, client_id, platform, status, external_user_id, account_label,
+       (id, org_id, client_id, platform, status, external_user_id, account_label,
         access_token_enc, granted_scopes, connected_by_user_id, updated_at)
-     VALUES ($1, $2, $3, 'active', 'u1', 'Test', '\\x00', '{}', $4, now())`,
-    [IDS.connection, IDS.client, platform, IDS.user],
+     VALUES ($1, $2, $3, $4, 'active', 'u1', 'Test', '\\x00', '{}', $5, now())`,
+    [IDS.connection, IDS.org, IDS.client, platform, IDS.user],
   );
   await h.q(
     `INSERT INTO ad_accounts
-       (id, client_id, connection_id, platform, external_id, name, currency,
+       (id, org_id, client_id, connection_id, platform, external_id, name, currency,
         timezone, sync_enabled, updated_at)
-     VALUES ($1, $2, $3, $4, $5, 'Hesap', 'TRY', $6, true, now())`,
+     VALUES ($1, $2, $3, $4, $5, $6, 'Hesap', 'TRY', $7, true, now())`,
     [
       IDS.adAccount,
+      IDS.org,
       IDS.client,
       IDS.connection,
       platform,

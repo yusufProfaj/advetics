@@ -109,14 +109,28 @@ buna göre veriliyor:
   çalışmaz; `asset_platform_refs` bunu tutuyor.
 - **`ad_accounts.external_id` Meta'da `act_` önekiyle geliyor.** Önek elle
   eklenmez, `actPath()` kullanılır.
+- **UPDATE sonrası YENİ satır, tablonun SELECT politikasından da geçmek
+  zorunda.** Bir satırı, kendi görüş alanının DIŞINA taşıyan bir UPDATE
+  reddediliyor: `new row violates row-level security policy`. WITH CHECK'i
+  gevşetmek çözmüyor, engel SELECT politikasında. Çözüm çağıran tarafta:
+  bağlamı daraltan değeri (örneğin `activeClientId`) o istek için kapat.
+  `ad-account-pool-rls.spec.ts` bunu kilitliyor.
+- **`ad_accounts.client_id` ve `platform_connections.client_id` NULLABLE.**
+  NULL = ajansın havuzunda, müşteriye atanmamış. Sahiplik `org_id`'de. Bu
+  satırlar için senkronizasyon kuyruğa GİRMEMELİ — `client_id`'si NULL bir
+  `sync_jobs` satırını RLS kimseye göstermez ve iş sessizce kaybolur
+  (`assertAssigned()` kullan).
 
 ### Test
 
-- `pnpm --filter @advetics/api test` — vitest. Şu an **705 API testi**.
+- `pnpm --filter @advetics/api test` — vitest. Şu an **745 API testi**.
 - Veritabanına dokunan testler **PGlite** kullanıyor (gerçek Postgres, WASM).
   Şema üretim migration'larından kuruluyor — el yazımı test şeması yok.
-- **RLS testlerde KAPALI** (worker rolü BYPASSRLS'i taklit ediyor). Yani bir
-  RLS boşluğunu testler yakalamaz; politikaları elle gözden geçir.
+- **RLS testlerde varsayılan olarak KAPALI** (worker rolü BYPASSRLS'i taklit
+  ediyor). Ama kapatılabilir bir varsayılan: `SET ROLE` ile sahibi olmayan bir
+  role geçen bir test politikaları GERÇEKTEN sınayabiliyor — örnek
+  `ad-account-pool-rls.spec.ts`. Kritik bir politika yazıyorsan elle gözden
+  geçirmekle yetinme, o deseni kullan.
 - Bazı testler **kaynak taraması** yapıyor (`meta-account-path.spec.ts`,
   `google-request.spec.ts`). Canlıda öğrenilen ve birim testiyle
   yakalanamayacak kuralları böyle kilitliyoruz.

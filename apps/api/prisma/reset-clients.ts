@@ -125,15 +125,21 @@ async function main(): Promise<void> {
   console.log(`  ${insightsDeleted.count} metrik satırı silindi (cascade ulaşmıyor)`);
 
   /**
-   * MÜŞTERİLER — geri kalan her şey zincirleme gidiyor.
+   * MÜŞTERİLER — kampanyalar ve müşteriye bağlı üyelikler zincirleme gidiyor.
    *
-   * `clients` satırını silmek bağlantıları, hesapları, kampanyaları ve
-   * müşteriye bağlı üyelikleri de düşürüyor. Metrikler HARİÇ; yukarıda ayrıca
-   * siliniyorlar.
+   * BAĞLANTILAR VE REKLAM HESAPLARI ARTIK GİTMİYOR ve bu DOĞRU. Bağlantı
+   * modeli ajans seviyesine taşındıktan sonra ikisi de organizasyona ait;
+   * müşteri silindiğinde `client_id` NULL'a düşüyor (`ON DELETE SET NULL`) ve
+   * hesap ajansın HAVUZUNA geri dönüyor. Cascade bıraksaydık bir müşteriyi
+   * silmek, ajansın kendi Meta bağlantısını ve 157 hesabın kaydını da
+   * götürürdü.
+   *
+   * Metrikler yine HARİÇ; yukarıda ayrıca siliniyorlar.
    */
   const deleted = await prisma.client.deleteMany({});
 
   const after = await counts();
+  const pooled = await prisma.adAccount.count({ where: { clientId: null } });
 
   /**
    * ORGANİZASYON GENELİ ÜYELİK KALIR ve bu DOĞRU.
@@ -152,25 +158,35 @@ async function main(): Promise<void> {
   console.log(`\nÖzet`);
   console.log('─'.repeat(60));
   console.log(`  ${deleted.count} müşteri silindi`);
-  console.log(`  reklam hesabı   ${before.adAccounts} → ${after.adAccounts}`);
+  console.log(`  reklam hesabı   ${before.adAccounts} → ${after.adAccounts}  (havuza döndü: ${pooled})`);
   console.log(`  kampanya        ${before.campaigns} → ${after.campaigns}`);
   console.log(`  metrik satırı   ${before.insights} → ${after.insights}`);
-  console.log(`  bağlantı        ${before.connections} → ${after.connections}`);
+  console.log(`  bağlantı        ${before.connections} → ${after.connections}  (ajansa ait, silinmiyor)`);
   console.log(`  üyelik          ${before.memberships} → ${after.memberships}`);
   console.log(`  kullanıcı       ${before.users} → ${after.users}  (değişmemeli)`);
   console.log(`\n  ${orgWide} organizasyon geneli üyelik KASITLI olarak duruyor —`);
   console.log(`  onsuz hiç kimse müşteri oluşturamazdı.`);
 
-  // Zincirleme silmenin gerçekten çalıştığını DOĞRULUYORUZ. Bir tablo geride
-  // kalırsa sessizce kalırdı ve ancak yeni kurulumda tuhaf bir hata olarak
-  // ortaya çıkardı.
+  /**
+   * KALINTI KONTROLÜ — beklenen kalıntı hata sayılmıyor.
+   *
+   * Bağlantılar ve reklam hesapları AJANSA ait; müşteri silinince kalmaları
+   * doğru davranış. Onları da listeye koymak, her sıfırlamada kırmızı bir
+   * "ZİNCİRLEME SİLME EKSİK KALDI" uyarısı üretirdi. Bu betik zaten bir kez,
+   * organizasyon geneli üyelik yüzünden aynı yanlış alarmı verdi: beklenen bir
+   * kalıntıyı hata saymak, gerçek hatanın yanında durduğunda ikisini de
+   * güvenilmez yapıyor.
+   *
+   * BEKLENMEYEN kalıntı hâlâ hata: müşterisi silinmiş bir kampanya ya da
+   * metrik satırı gerçekten eksik bir cascade demek.
+   */
   const leftovers = [
-    ['reklam hesabı', after.adAccounts],
     ['kampanya', after.campaigns],
     ['metrik satırı', after.insights],
-    ['bağlantı', after.connections],
     // Yalnızca MÜŞTERİYE BAĞLI üyelikler sıfırlanmalı.
     ['müşteriye bağlı üyelik', after.memberships - orgWide],
+    // Havuza dönmeyen, yani hâlâ silinmiş bir müşteriye işaret eden hesap.
+    ['müşterisi kalmış reklam hesabı', after.adAccounts - pooled],
   ].filter(([, n]) => (n as number) > 0);
 
   if (leftovers.length > 0) {
@@ -183,7 +199,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`\n  Temiz. Sıradaki adım: panelden müşteri oluştur, sonra`);
-  console.log(`  Platform Bağlantıları'ndan hesapları bağla.\n`);
+  console.log(`  havuzdaki ${pooled} hesabı müşterilere ata.\n`);
 }
 
 main()

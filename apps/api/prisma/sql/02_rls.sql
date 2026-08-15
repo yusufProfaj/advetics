@@ -325,10 +325,21 @@ CREATE POLICY adv_audit_insert ON audit_logs
 -- MODÜL 2 — Platform Bağlantıları
 -- =============================================================================
 --
--- Üçü de müşteri düzeyinde veri: bir müşterinin Meta/Google bağlantısı, reklam
--- hesapları ve sosyal profilleri. Erişim `app.can_access_client()` ile
--- belirlenir — org yöneticisi hepsini, müşteri düzeyi kullanıcı yalnızca
--- yetkili olduklarını görür.
+-- BAĞLANTI VE REKLAM HESABI AJANSA AİT (`org_id`), MÜŞTERİYE DEĞİL.
+-- `client_id` artık SAHİPLİK değil ATAMA alanı ve NULL olabilir:
+--
+--   · platform_connections.client_id IS NULL => ajans geneli bağlantı.
+--   · ad_accounts.client_id IS NULL          => havuzda, atanmamış hesap.
+--
+-- BURASI BU MİGRATION'IN EN KRİTİK YERİ. `client_id` nullable olduğu andan
+-- itibaren, politikası yazılmamış her satır KİMSEYE AİT OLMAYAN bir satır ve
+-- eski politika (`app.can_access_client(client_id)`) NULL girdiyle NULL
+-- döndürüp satırı gizlerdi — atama ekranı hiçbir zaman hesap göremezdi.
+-- Ters yönde ise yanlış yazılmış tek bir koşul, atanmamış 157 hesabı yanlış
+-- kiracıya açar.
+--
+-- `sosyal profiller` HÂLÂ müşteri düzeyinde (client_id NOT NULL) — bkz.
+-- aşağıdaki not.
 --
 -- Şifreli token kolonları (access_token_enc vb.) bu politikalarla korunur ama
 -- ASIL koruma uygulama katmanındadır: bu kolonlar hiçbir API yanıtında
@@ -336,30 +347,141 @@ CREATE POLICY adv_audit_insert ON audit_logs
 
 -- -----------------------------------------------------------------------------
 -- platform_connections
+--
+-- OKUMA org düzeyinde. Ajansın Meta/Google kimliği tek ve ortak: hangi
+-- bağlantının hangi hesapları beslediğini yalnızca org yöneticisine göstermek,
+-- manager ve analyst için Platform Bağlantıları ekranını BOŞ bırakırdı — ve
+-- boş liste, yetki hatasından ayırt edilemeyen sessiz bir arıza olurdu.
+--
+-- Bilinçli olarak korunmayan: aynı organizasyondaki her oturum, ajansın
+-- bağlantı ETİKETİNİ (accountLabel, platform, durum) okuyabilir. Token'lar
+-- değil — onlar hiçbir yanıtta dönmüyor. `client_viewer` rolünde
+-- `connection.read` yetkisi zaten yok, yani uç nokta guard seviyesinde kapalı;
+-- buradaki politika ikinci savunma hattı olarak kiracı sınırını koruyor,
+-- rol sınırını değil.
+--
+-- YAZMA dar: ajans geneli bir bağlantıyı KALDIRMAK bütün müşterilerin
+-- senkronizasyonunu birden durdurur. Bu org yöneticisinin kararı olmalı.
+-- Müşteriye özel bağlantı (müşteri kendi hesabını devretmişse) eski kuralla
+-- devam ediyor.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_connections_select ON platform_connections
-  FOR SELECT USING (app.can_access_client(client_id));
+  FOR SELECT USING (
+    app.has_context()
+    AND org_id = app.current_org_id()
+  );
 
 CREATE POLICY adv_connections_write ON platform_connections
-  FOR ALL USING (app.can_access_client(client_id))
-          WITH CHECK (app.can_access_client(client_id));
+  FOR ALL USING (
+    app.has_context()
+    AND org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.can_access_client(client_id)
+      END
+    )
+  ) WITH CHECK (
+    app.has_context()
+    AND org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.can_access_client(client_id)
+      END
+    )
+  );
 
 -- -----------------------------------------------------------------------------
 -- ad_accounts
 --
--- Yazma yetkisi de müşteri erişimine bağlı: `sync_enabled` bayrağını
--- değiştirmek kota tüketimini etkiler, o yüzden müşterisine erişimi olan
--- kullanıcı bunu yapabilir. Hangi ROLÜN yapabileceğini PermissionsGuard belirler.
+-- İKİ HÂL, İKİ KURAL:
+--
+--   · ATANMIŞ hesap (client_id dolu) — eskisi gibi: müşterisine erişimi olan
+--     görür. `sync_enabled` bayrağını değiştirmek kota tüketimini etkilediği
+--     için yazma da aynı erişime bağlı. Hangi ROLÜN yapabileceğini
+--     PermissionsGuard belirler.
+--
+--   · HAVUZDAKİ hesap (client_id NULL) — yalnızca org yöneticisi. Havuz,
+--     ajansın hangi reklam hesaplarına erişebildiğinin tam listesi (Meta'da
+--     157, Google'da 127) ve bunların çoğu BAŞKA müşterilere ait. Müşteri
+--     düzeyindeki bir kullanıcıya göstermek, ajansın tüm müşteri portföyünü
+--     tek ekranda sızdırmak olurdu.
+--
+-- `org_id` koşulu ayrıca yazılıyor, `can_access_client()`e güvenilmiyor: o
+-- fonksiyon client listesine bakıyor ve hesabın org'unu hiç görmüyor. İkisinin
+-- birbiriyle tutarlı olduğunu veritabanı seviyesinde
+-- `ad_accounts_client_org_fkey` kompozit yabancı anahtarı garantiliyor.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_ad_accounts_select ON ad_accounts
-  FOR SELECT USING (app.can_access_client(client_id));
+  FOR SELECT USING (
+    app.has_context()
+    AND org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.can_access_client(client_id)
+      END
+    )
+  );
 
+/*
+ * ATAMA YAPAN UÇ NOKTA AKTİF MÜŞTERİ SEÇİMİNİ KAPATMAK ZORUNDA.
+ *
+ * Bu, POLİTİKAYLA ÇÖZÜLEMEYEN bir kısıt ve yazılırken deneyle bulundu.
+ * Postgres'te bir UPDATE'ten sonra YENİ satır, tablonun SELECT politikasından
+ * da geçmek zorunda. `can_access_client()` ise panelde seçili müşteriye
+ * daraltıyor. Sonuç: org yöneticisi panelde A müşterisi seçiliyken havuzdaki
+ * bir hesabı B'ye atamaya çalışırsa, yeni satır kendi görüş alanının dışına
+ * çıktığı için Postgres UPDATE'i reddediyor:
+ *
+ *     new row violates row-level security policy for table "ad_accounts"
+ *
+ * WITH CHECK'i gevşetmek BU SORUNU ÇÖZMÜYOR — engel SELECT politikasında.
+ * Denendi ve ölçüldü; `ad-account-pool-rls.spec.ts` davranışı kilitliyor.
+ *
+ * ÇÖZÜM POLİTİKADA DEĞİL, ÇAĞIRAN TARAFTA: atama uç noktası bağlamı
+ * `activeClientId: null` ile kurmalı (`prisma.withTenant({ ...ctx,
+ * activeClientId: null }, …)`). Seçim bir GÖRÜNÜM süzgeci; atama ise bir
+ * YÖNETİM işlemi ve org yöneticisi zaten organizasyondaki tüm müşterilere
+ * erişebiliyor. SEÇİMİ POLİTİKADAN KALDIRMAK YANLIŞ OLURDU: tam olarak o
+ * daraltma, yöneticinin Çiftçi Grup seçiliyken Mirnas'ın verisini görmesi
+ * hatasının düzeltmesiydi (bkz. `app.can_access_client` notu).
+ *
+ * Bu, planın 6. adımını (atama uç noktası + arayüz) yazacak olan için
+ * bağlayıcı bir not.
+ */
 CREATE POLICY adv_ad_accounts_write ON ad_accounts
-  FOR ALL USING (app.can_access_client(client_id))
-          WITH CHECK (app.can_access_client(client_id));
+  FOR ALL USING (
+    app.has_context()
+    AND org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.can_access_client(client_id)
+      END
+    )
+  ) WITH CHECK (
+    app.has_context()
+    AND org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.can_access_client(client_id)
+      END
+    )
+  );
 
 -- -----------------------------------------------------------------------------
 -- social_profiles  (yalnızca Meta — Auto-Boost, Modül 7)
+--
+-- BU TABLO AJANS SEVİYESİNE TAŞINMADI ve `client_id`'si hâlâ NOT NULL.
+-- Bilinçli bir kapsam kararı: ajans bağlantısı migration'ı iki tabloyu
+-- (bağlantılar + reklam hesapları) kapsıyor. Sonucu somut ve KÖRLEMESİNE
+-- BIRAKILMADI: ajans geneli (client_id NULL) bir bağlantıda sayfa/Instagram
+-- keşfi ATLANIYOR ve atlandığı hem log'a hem keşif özetine yazılıyor
+-- (connections.service.ts → discoverAndStore). Havuz modeli sosyal profillere
+-- de gerekince aynı desen buraya uygulanmalı.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_social_profiles_select ON social_profiles
   FOR SELECT USING (app.can_access_client(client_id));

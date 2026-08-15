@@ -41,15 +41,15 @@ yetkilendirme yok, dolayısıyla kopma da yok. Bu, Socianty'de çalışan model.
 de yalnızca `client_id` taşıyor. Yani "ajansa ait bağlantı" ve "henüz
 atanmamış hesap" kavramlarının veritabanında tutunacağı bir yer yok.
 
-| # | Adım | Risk |
-|---|---|---|
-| 1 | İki tabloya `org_id` ekle | Düşük |
-| 2 | `client_id`'yi nullable yap (atanmamış havuz) | **Yüksek — 125 kod noktası** |
-| 3 | **RLS politikalarını yeniden yaz** | **Yüksek — 126 politika satırı** |
-| 4 | Tekillik kısıtı `[clientId,…]` → `[orgId,…]` | Orta |
-| 5 | Keşif kodu havuza yazsın | Düşük |
-| 6 | Hesap atama uç noktası + arayüz | Düşük |
-| ~~7~~ | ~~Mevcut hesapları taşı~~ | **GEREKSİZ — aşağıya bak** |
+| # | Adım | Risk | Durum |
+|---|---|---|---|
+| 1 | İki tabloya `org_id` ekle | Düşük | ✅ bitti |
+| 2 | `client_id`'yi nullable yap (atanmamış havuz) | **Yüksek — 125 kod noktası** | ✅ bitti |
+| 3 | **RLS politikalarını yeniden yaz** | **Yüksek — 126 politika satırı** | ✅ bitti |
+| 4 | Tekillik kısıtı `[clientId,…]` → `[orgId,…]` | Orta | ✅ bitti |
+| 5 | Keşif kodu havuza yazsın | Düşük | ⬜ sırada |
+| 6 | Hesap atama uç noktası + arayüz | Düşük | ⬜ sırada |
+| ~~7~~ | ~~Mevcut hesapları taşı~~ | **GEREKSİZ — aşağıya bak** | — |
 
 ### 2026-08-15: veritabanı sıfırlandı, 7. adım ortadan kalktı
 
@@ -113,6 +113,9 @@ mantığını doğrudan çağırarak sınayabiliyor — aynı yöntem buraya da
 uygulanmalı — ama tablo politikalarını hiçbir test görmüyor. Politikalar ELLE
 gözden geçirilecek.
 
+> **Bu artık geçerli değil** — §0.1'e bak. `SET ROLE` ile politikalar test
+> ortamında da uygulanabiliyor ve tablo politikaları test edildi.
+
 **7. adım geri alması zor:** canlı veritabanında 284 satırın sahipliği
 değişiyor. Migration'dan önce yedek alınmalı.
 
@@ -120,6 +123,84 @@ değişiyor. Migration'dan önce yedek alınmalı.
 
 1–4 tek migration'da gitmeli (yarım uygulanmış şema = kırık keşif kodu).
 5–6 ardından, 7 en son ve ayrı.
+
+---
+
+## 0.1. 1–4. adımlar YAPILDI — ne değişti, sırada ne var
+
+Migration: `20260815120000_agency_connections`. Şema, RLS, kısıtlar ve derleyen
+kod tek commit'te. **745 API testi geçiyor** (öncesi 726; 19'u bu işin yeni
+testleri). `pnpm typecheck` API ve panelde temiz.
+
+### Ölçülen yayılma tahminden küçük çıktı
+
+125 `.clientId` noktasından **yalnızca 25'i** derleyiciyi düşürdü ve bunlar 8
+dosyaya toplanmıştı. Sebebi tipin çoğu yerde `AdAccount`'tan değil, kendi
+`client_id`'si NOT NULL olan alt tablolardan (kampanya, metrik, kural) gelmesi.
+Planın "listeyi baştan çıkarma, derleyiciyi takip et" tavsiyesi doğru çıktı.
+
+### Kararlar
+
+- **Atanmamış hesap = erken hata.** `assertAssigned()`
+  ([ad-account-assignment.ts](../apps/api/src/common/utils/ad-account-assignment.ts))
+  yapı ve metrik senkronizasyonunun girişinde duruyor. `setAccountSync` de
+  atanmamış hesabın izlemeye alınmasını reddediyor — doğrulama kullanım anında
+  değil, GİRİŞ anında.
+- **Toplu yollarda atlamak, ama sayarak.** Süpürme işi atanmamış hesabı geçiyor
+  ve kaç tane geçtiğini log'a yazıyor. `sync -- portfolio` havuzdaki hesap
+  sayısını başta basıyor.
+- **`ON DELETE SET NULL`.** Müşteri silinince hesap ve bağlantı ölmüyor,
+  havuza dönüyor. `db:reset-clients` buna göre güncellendi: bağlantı ve
+  hesabın kalması artık "eksik cascade" alarmı üretmiyor.
+- **Kompozit yabancı anahtar** `(client_id, org_id) → clients(id, org_id)`:
+  hesap başka organizasyonun müşterisine atanamıyor. RLS'in iki koşulunun
+  birbirini doğrulamasını veritabanı garantiliyor.
+- **Sosyal profiller kapsam dışı** (`social_profiles.client_id` hâlâ NOT NULL).
+  Ajans geneli bağlantıda sayfa keşfi ATLANIYOR; atlandığı log'a ve keşif
+  özetine yazılıyor. 5. adımda karara bağlanmalı.
+
+### RLS artık TEST EDİLİYOR
+
+Plan "politikaları testler yakalamıyor, elle gözden geçir" diyordu. Artık
+gerek yok: `SET ROLE` ile sahibi olmayan bir role geçince PGlite politikaları
+gerçekten uyguluyor. `ad-account-pool-rls.spec.ts` bunu yapıyor — deponun ilk
+gerçek tablo politikası testi. Aynı yöntem başka tablolara da uygulanabilir.
+
+### 6. ADIM İÇİN BAĞLAYICI NOT — deneyle bulundu
+
+Atama uç noktası bağlamı **`activeClientId: null`** ile kurmak zorunda:
+
+```ts
+this.prisma.withTenant({ ...ctx, activeClientId: null }, (tx) => …)
+```
+
+Sebebi Postgres kuralı: bir UPDATE'ten sonra **yeni satır, tablonun SELECT
+politikasından da geçmek zorunda**. `can_access_client()` panelde seçili
+müşteriye daraltıyor; org yöneticisi A müşterisi seçiliyken havuzdaki bir
+hesabı B'ye atamaya çalışırsa satır kendi görüş alanının dışına çıkıyor ve
+Postgres reddediyor:
+
+```
+new row violates row-level security policy for table "ad_accounts"
+```
+
+**WITH CHECK'i gevşetmek çözmüyor** — denendi, engel SELECT politikasında.
+SELECT politikasındaki daraltmayı kaldırmak ise ASLA doğru değil: tam olarak o
+daraltma, yöneticinin Çiftçi Grup seçiliyken Mirnas'ın verisini görmesi
+hatasının düzeltmesiydi. Davranış `ad-account-pool-rls.spec.ts` içinde
+kilitli.
+
+### 5–6. adımda değişecek yerler
+
+- `startOAuth` hâlâ aktif müşteri İSTİYOR ve `oauth_states.client_id` NOT NULL.
+  Ajans geneli bağlantı için ikisi de gevşemeli.
+- `connections.service.ts → list()` hâlâ müşteri bazlı süzüyor; org geneli
+  listeye dönmeli.
+- **Ara durumun bilinen etkisi:** tekillik artık org bazlı olduğu için aynı
+  Meta kimliğini ikinci bir müşteriye bağlamak yeni satır AÇMIYOR, mevcut
+  satırı tazeliyor. Yani 5–6 bitmeden çok müşterili kullanım yapılmamalı:
+  hesaplar ilk bağlantıyı kuran müşterinin altında kalır. Kopma sorunu ise
+  şimdiden çözüldü — tekrar yetkilendirme gerekmiyor.
 
 ---
 

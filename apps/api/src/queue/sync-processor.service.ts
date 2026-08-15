@@ -94,6 +94,7 @@ export class SyncProcessorService {
       },
       select: {
         id: true,
+        name: true,
         clientId: true,
         platform: true,
         timezone: true,
@@ -104,15 +105,34 @@ export class SyncProcessorService {
 
     let enqueued = 0;
     let skipped = 0;
+    let unassigned = 0;
 
     for (const acct of accounts) {
       // Organik post işleri reklam hesabına değil sosyal profile ait.
       if (payload.jobType === 'organic_posts' || payload.jobType === 'leads_reconcile') continue;
 
+      /**
+       * ATANMAMIŞ HESAP SÜPÜRMEYE GİRMEZ — VE KAÇ TANE OLDUĞU YAZILIR.
+       *
+       * Yukarıdaki `client: { status: 'active' }` süzgeci bunları zaten
+       * eliyor (nullable ilişkide bu koşul "client var VE aktif" demek), ama
+       * SESSİZCE eliyor. Senaryo gerçek: müşteri silinince `client_id` NULL'a
+       * düşüyor (`ON DELETE SET NULL`) ve `sync_enabled` açık kalıyor —
+       * kullanıcı hesabın hâlâ senkronize olduğunu sanıyor.
+       *
+       * Buradaki sayaç, "8 hesap izleniyordu, artık 6'sı çekiliyor" sorusunun
+       * cevabını log'a yazıyor. Sayı olmadan bu fark hiçbir yerde görünmezdi.
+       */
+      const clientId = acct.clientId;
+      if (clientId === null) {
+        unassigned++;
+        continue;
+      }
+
       const dates = this.datesForJob(payload.jobType, acct.timezone);
 
       const res = await this.queue.enqueue({
-        clientId: acct.clientId,
+        clientId,
         platform: acct.platform as Platform,
         jobType: payload.jobType,
         adAccountId: acct.id,
@@ -171,7 +191,11 @@ export class SyncProcessorService {
       }
     }
 
-    const note = `${payload.jobType}: ${enqueued} iş açıldı, ${skipped} atlandı (zaten kuyrukta)`;
+    const note =
+      `${payload.jobType}: ${enqueued} iş açıldı, ${skipped} atlandı (zaten kuyrukta)` +
+      (unassigned > 0
+        ? `, ${unassigned} hesap MÜŞTERİYE ATANMAMIŞ olduğu için çekilmedi`
+        : '');
     this.logger.log(note);
     return { rows: 0, note };
   }

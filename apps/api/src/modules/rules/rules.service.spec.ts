@@ -316,10 +316,10 @@ describe('değerlendirme', () => {
     await seedInsight({ entityId: CAMPAIGN, date: '2026-08-05', spendMicros: '3000000000' });
     const other = '44444444-4444-4444-4444-44444444444b';
     await h.q(
-      `INSERT INTO ad_accounts (id, client_id, connection_id, platform, external_id, name,
+      `INSERT INTO ad_accounts (id, org_id, client_id, connection_id, platform, external_id, name,
          currency, timezone, sync_enabled, updated_at)
-       VALUES ($1, $2, $3, 'meta', 'ext-x', 'Hesap B', 'TRY', 'Europe/Istanbul', true, now())`,
-      [other, IDS.client, IDS.connection],
+       VALUES ($1, $2, $3, $4, 'meta', 'ext-x', 'Hesap B', 'TRY', 'Europe/Istanbul', true, now())`,
+      [other, IDS.org, IDS.client, IDS.connection],
     );
     const rule = await svc.create(CTX, ruleInput({ adAccountId: other }));
     expect((await svc.evaluateRule(CTX, rule.id, NOW)).evaluatedCount).toBe(0);

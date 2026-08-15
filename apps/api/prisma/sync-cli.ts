@@ -85,6 +85,18 @@ function money(micros: bigint | null, currency: string): string {
  * hesabın açık olduğunu bilmeden hesap açmak, kotayı fark etmeden tüketmek
  * demek.
  */
+/**
+ * Hesabın müşteri etiketi.
+ *
+ * `client` NULL olabiliyor: bağlantılar ajans seviyesine taşındıktan sonra
+ * hesaplar önce HAVUZA düşüyor, müşteriye sonra atanıyor. Boş string basmak
+ * hizayı bozar ve "müşterisi silinmiş mi, atanmamış mı" sorusunu cevapsız
+ * bırakırdı.
+ */
+function clientLabel(a: { client: { name: string } | null }): string {
+  return a.client?.name ?? '— havuzda (atanmamış) —';
+}
+
 function printSummary(summary: Map<string, { total: number; enabled: number }>): void {
   console.log('  ── Özet ──');
   for (const [platform, s] of [...summary].sort()) {
@@ -139,7 +151,7 @@ async function listAccounts(): Promise<void> {
     if (!search) return true;
     return (
       a.name.toLowerCase().includes(search) ||
-      a.client.name.toLowerCase().includes(search) ||
+      (a.client?.name.toLowerCase().includes(search) ?? false) ||
       a.externalId.toLowerCase().includes(search)
     );
   });
@@ -160,7 +172,7 @@ async function listAccounts(): Promise<void> {
     for (const a of filtered) {
       const flag = a.syncEnabled ? '\x1b[32m●\x1b[0m' : '\x1b[90m○\x1b[0m';
       console.log(
-        `  ${flag} ${a.platform.padEnd(6)} ${a.id}  ${a.name.slice(0, 46).padEnd(46)} ${a.client.name}`,
+        `  ${flag} ${a.platform.padEnd(6)} ${a.id}  ${a.name.slice(0, 46).padEnd(46)} ${clientLabel(a)}`,
       );
     }
     console.log('\n  Ayrıntı için aramayı daralt:  sync -- list --search <metin>\n');
@@ -179,7 +191,7 @@ async function listAccounts(): Promise<void> {
       }`,
     );
     console.log(
-      `           müşteri: ${a.client.name}  ·  ${a.currency}  ·  ${a.timezone}  ·  durum: ${a.status}`,
+      `           müşteri: ${clientLabel(a)}  ·  ${a.currency}  ·  ${a.timezone}  ·  durum: ${a.status}`,
     );
     console.log(
       `           bağlantı: ${a.connection.status}  ·  kampanya: ${a._count.campaigns}  ·  son yapı sync: ${
@@ -365,6 +377,20 @@ async function runJob(
   if (!account.syncEnabled) {
     die(`Hesap KAPALI. Önce aç:\n    pnpm --filter @advetics/api sync -- enable --account ${id}`);
   }
+  /**
+   * ATANMAMIŞ HESAP KUYRUĞA GİRMEZ.
+   *
+   * `sync_jobs.client_id` NOT NULL değil ama NULL yazılan bir iş satırını RLS
+   * kimseye göstermez: iş çalışır, kota harcar ve panelde HİÇ GÖRÜNMEZ.
+   * Burada erken durup ne yapılması gerektiğini söylüyoruz.
+   */
+  const accountClientId = account.clientId;
+  if (accountClientId === null) {
+    die(
+      `Hesap "${account.name}" havuzda — hiçbir müşteriye atanmamış.\n` +
+        '  Panelden Platform Bağlantıları → hesabı bir müşteriye ata, sonra tekrar dene.',
+    );
+  }
   if (account.connection.status !== 'active') {
     die(`Bağlantı durumu "${account.connection.status}" — yeniden bağlanmak gerekiyor.`);
   }
@@ -374,7 +400,13 @@ async function runJob(
 
   let record: { id: bigint };
   try {
-    record = await enqueueSyncJob({ queue, account, jobType, dateFrom, dateTo });
+    record = await enqueueSyncJob({
+      queue,
+      account: { ...account, clientId: accountClientId },
+      jobType,
+      dateFrom,
+      dateTo,
+    });
   } catch (err) {
     await queue.close();
     await connection.quit().catch(() => connection.disconnect());
@@ -1007,7 +1039,7 @@ async function portfolio(): Promise<void> {
     die('--client ile --all birlikte kullanılamaz. Hangisinin kazandığı belirsiz kalırdı.');
   }
 
-  const all = await prisma.adAccount.findMany({
+  const rows = await prisma.adAccount.findMany({
     where: {
       ...(platformFilter ? { platform: platformFilter as 'meta' | 'google' } : {}),
     },
@@ -1026,13 +1058,37 @@ async function portfolio(): Promise<void> {
   });
 
   /**
+   * HAVUZDAKİ HESAPLAR PORTFÖY KOMUTUNUN DIŞINDA — VE SAYISI YAZILIYOR.
+   *
+   * Bu komut müşteri bazlı çalışıyor (`--client <slug>`), atanmamış hesabın
+   * ise slug'ı yok. Sessizce elemek, ajansın 157 hesabından kaçının hâlâ
+   * havuzda beklediğini gizlerdi — oysa migration sonrası ilk sorulacak soru
+   * tam olarak bu.
+   */
+  const all = rows.filter(
+    (a): a is typeof a & { clientId: string; client: { name: string; slug: string } } =>
+      a.clientId !== null && a.client !== null,
+  );
+  const pooled = rows.length - all.length;
+  if (pooled > 0) {
+    console.log(
+      `\n  ${pooled} hesap HAVUZDA (hiçbir müşteriye atanmamış) — bu komutun dışında.\n` +
+        '  Panelden Platform Bağlantıları → hesapları müşterilere ata.',
+    );
+  }
+
+  /**
    * KAPSAM AÇIKÇA SEÇİLMEDEN HİÇBİR ŞEY YAPILMIYOR.
    *
    * İlk sürüm varsayılan olarak TÜM hesapları kapsıyordu ve bu yanlıştı:
-   * `ad_accounts.client_id` ZORUNLU bir alan, yani keşifte gelen her hesabın
-   * zaten bir müşterisi var. "Müşterisi olan hesaplar" diye süzmek hiçbir şeyi
-   * daraltmıyor — üretimde 27 hesaplık bir portföy için çalıştırılan komut
-   * 288 hesap saydı.
+   * o modelde `ad_accounts.client_id` ZORUNLUYDU, yani keşifte gelen her
+   * hesabın zaten bir müşterisi vardı. "Müşterisi olan hesaplar" diye süzmek
+   * hiçbir şeyi daraltmıyordu — üretimde 27 hesaplık bir portföy için
+   * çalıştırılan komut 288 hesap saydı.
+   *
+   * Kolon artık nullable (havuz modeli) ve atanmamış hesaplar yukarıda
+   * elendi; ama kapsam zorunluluğu YİNE DE geçerli: atanmış hesaplar da tek
+   * komutla açıldığında kotayı aynı şekilde yakıyor.
    *
    * 288 hesabı izlemeye açmak, portföyle ilgisi olmayan 261 hesabın kotasını
    * her gün yakmak demekti. Kuru çalışma bunu yakaladı; varsayılanın kendisi
