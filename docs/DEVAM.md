@@ -19,7 +19,16 @@ Bu bölüm işin NEDEN yapıldığını ve nasıl karara bağlandığını anlat
 ve kalan açıklar §0.1–0.3'te. Aşağıdaki bölümler (§1 ve sonrası) 13 Ağustos'taki
 Meta durumunu anlatıyor ve hâlâ geçerli.
 
-> **Deploy sırasında iki tuzak çıktı, ikisi de düzeltildi ve depoda duruyor:**
+> **DAĞITIM ARTIK OTOMATİK.** `main`'e her push GitHub Actions üzerinden
+> sunucuya deploy ediyor. Bu üç ay boyunca ÖLÜYDÜ: 2026-08-03'te iş akışı
+> dosyasında boş bir `with:` kaldı, Actions dosyayı geçersiz sayıp hiçbir job
+> çalıştırmadı ve kimse fark etmedi — çünkü ortada başarısız bir dağıtım değil,
+> hiç başlamamış bir dağıtım vardı. Sunucu `37a2264`'te takılı kaldı ve
+> deploy'lar elle yapılmaya devam etti. Düzeltildi (`13fa58e`) ve doğrulandı.
+> Elle dağıtım yolu hâlâ geçerli (`git pull` + `./scripts/deploy.sh`), ama
+> artık istisna.
+>
+> **Deploy sırasında iki tuzak daha çıktı, ikisi de düzeltildi ve depoda duruyor:**
 > `preflight.sh` veritabanını "kapalı" gösteriyordu (`?schema=public`
 > parametresini libpq reddediyor) — paylaşımlı sunucuda PostgreSQL'i kurcalamaya
 > gönderebilecek bir yanlış teşhis. `deploy.sh` ise ortamda `NODE_ENV=production`
