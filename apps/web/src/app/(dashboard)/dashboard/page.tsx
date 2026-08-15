@@ -11,6 +11,7 @@ import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { RANGE_PRESETS, resolveRange } from '@/lib/date-range';
 import { RefreshButton } from '@/components/refresh-button';
+import { BackfillButton } from '@/components/backfill-button';
 import {
   changePercent,
   changePercentMicros,
@@ -105,6 +106,7 @@ export default async function DashboardPage({
           <PlatformTabs current={platform} range={range.key} level={level} />
           <RangeTabs current={range.key} level={level} platform={platform} />
           <RefreshButton />
+          <BackfillButton />
         </div>
       </header>
 

@@ -1,6 +1,15 @@
-import { BadRequestException, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import type { TenantContext } from '@advetics/shared';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from '@nestjs/common';
+import { backfillSchema, type BackfillInput, type TenantContext } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
+import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 
@@ -108,6 +117,90 @@ export class SyncController {
     return { accountCount: accounts.length, queued, skipped };
   }
 
+  /**
+   * GEÇMİŞ METRİKLERİ ÇEK — "Şimdi güncelle"den ayrı, çünkü maliyeti ayrı.
+   *
+   * `insights_realtime` yalnızca bugünü kapsıyor. Yeni bağlanan bir müşterinin
+   * geçmişi ise 90 gün × hesap sayısı kadar çağrı demek; bunu aynı düğmeye
+   * bağlamak, her tıkta kotayı geri alınamaz biçimde harcamak olurdu.
+   *
+   * `apply: false` (varsayılan) HİÇBİR ŞEY YAPMIYOR, yalnızca ne olacağını
+   * söylüyor. Sunucudaki `sync-cli`ın deseni bu ve sebebi somut: kapsamsız
+   * çalıştırılan ilk sürüm 27 hesaplık bir portföy için 288 hesap saymıştı.
+   *
+   * YAPI TARAMASI OLMAYAN HESAP ATLANIYOR ve sayısı DÖNÜYOR. Metrik satırı,
+   * ait olduğu kampanya satırı veritabanında yoksa yazılamıyor — sessizce
+   * atlansa kullanıcı "90 gün çektim ama veri yok" derdi ve sebebi hiçbir
+   * ekranda yazmazdı.
+   */
+  @Post('backfill')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('sync.trigger')
+  async backfill(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(backfillSchema)) dto: BackfillInput,
+  ) {
+    if (!ctx.activeClientId) {
+      throw new BadRequestException(
+        'Önce bir müşteri seçin — geçmiş veri seçili müşterinin hesapları için çekilir.',
+      );
+    }
+
+    const accounts = await this.enabledAccounts(ctx);
+    if (accounts.length === 0) {
+      throw new BadRequestException(
+        'Bu müşteride izlemeye alınmış hesap yok. Platform Bağlantıları ekranından hesap seçin.',
+      );
+    }
+
+    const ready = accounts.filter((a) => a.lastStructureSyncAt !== null);
+    const noStructure = accounts.length - ready.length;
+
+    // Aralık DÜNDE bitiyor. Bugünü de kapsasaydı "Şimdi güncelle" ile aynı
+    // günü iki kez çekerdik; kuyruk mükerrer işi eliyor ama tarih aralıkları
+    // farklı olduğu için elemezdi.
+    const dateFrom = isoDaysAgo(dto.days);
+    const dateTo = isoDaysAgo(1);
+
+    if (!dto.apply) {
+      return {
+        applied: false,
+        accountCount: ready.length,
+        noStructure,
+        dateFrom,
+        dateTo,
+        queued: 0,
+        skipped: 0,
+      };
+    }
+
+    let queued = 0;
+    let skipped = 0;
+
+    for (const account of ready) {
+      const res = await this.queue.enqueue({
+        clientId: account.clientId,
+        platform: account.platform,
+        jobType: 'insights_backfill',
+        adAccountId: account.id,
+        dateFrom,
+        dateTo,
+      });
+      if (res.enqueued) queued++;
+      else skipped++;
+    }
+
+    return {
+      applied: true,
+      accountCount: ready.length,
+      noStructure,
+      dateFrom,
+      dateTo,
+      queued,
+      skipped,
+    };
+  }
+
   /** Aktif müşterinin izlenen hesapları. RLS zaten müşteriye daraltıyor. */
   /**
    * İzlemeye alınmış hesaplar.
@@ -129,6 +222,7 @@ export class SyncController {
           platform: true,
           name: true,
           lastInsightsSyncAt: true,
+          lastStructureSyncAt: true,
         },
       }),
     );
@@ -143,4 +237,11 @@ export class SyncController {
 /** Bugün, UTC. Metrikler `YYYY-MM-DD` string bekliyor — Date kayma üretiyor. */
 function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** N gün öncesi, UTC, `YYYY-MM-DD`. */
+function isoDaysAgo(n: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
 }

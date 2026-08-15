@@ -1,4 +1,26 @@
 import { z } from 'zod';
+
+/**
+ * Geçmiş metrik çekme (backfill) isteği.
+ *
+ * "Şimdi güncelle" bilerek yalnızca BUGÜNÜ çekiyor. Geriye dönük çekim ayrı,
+ * çünkü maliyeti bambaşka: 90 gün × hesap sayısı kadar API çağrısı ve Google
+ * tarafında günlük kota bittiğinde senkronizasyon ertesi güne kalıyor.
+ *
+ * `apply` VARSAYILAN OLARAK FALSE. Sunucudaki `sync-cli` ile aynı desen: önce
+ * ne olacağını söyle, sonra uygula. Panelde tek tık ile 90 günü başlatmak,
+ * kotayı geri alınamaz biçimde harcamanın en kolay yolu olurdu.
+ */
+export const backfillSchema = z.object({
+  /**
+   * Kaç gün geriye. Üst sınır 365: Meta 37 aya kadar veri veriyor ama tek
+   * seferde bir yıldan fazlasını istemek, iş başına dönen satır sayısını
+   * hesabın işleyemeyeceği boyuta çıkarıyor.
+   */
+  days: z.number().int().min(1).max(365),
+  apply: z.boolean().default(false),
+});
+export type BackfillInput = z.infer<typeof backfillSchema>;
 import { PLATFORMS } from '../constants/platforms';
 
 /**
