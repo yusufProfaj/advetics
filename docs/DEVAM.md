@@ -1,6 +1,74 @@
 # Devir belgesi — nerede kaldık
 
-**Son güncelleme:** 2026-08-15 · **Son commit:** `54e4740`
+**Son güncelleme:** 2026-08-16 · **Son commit:** `5fa82a2` · **Canlı:** evet,
+`main`'e her push otomatik deploy ediyor
+
+---
+
+## SIRADAKİ İŞ — "Reklam Oluştur" bölümünün yeniden tasarımı
+
+**Bu, yeni oturumun devralacağı iş.** Aşağıdaki §0 ve sonrası tamamlanmış
+işler; buradan başla.
+
+### Ne isteniyor
+
+Kullanıcının verbatim ifadesi: *"oluştur kısmını baştan tasarlayacağız, burayı
+nasıl geliştirebiliriz diye düşünmemiz lazım"*. Yani bir hata düzeltme değil,
+**tasarım tartışması** — önce ne yapılacağına karar verilecek, sonra yazılacak.
+İlk turda kod yazmaya başlama; mevcut akışın neyi iyi yaptığını ve nerede
+tıkandığını konuş.
+
+### Bugün ne var — yüzey
+
+| Katman | Dosya | Satır |
+|---|---|---|
+| Sihirbaz (panel) | `apps/web/src/components/ad-builder/ad-wizard.tsx` | 927 |
+| Gelişmiş mod | `apps/web/src/components/ad-builder/advanced-panel.tsx` | 552 |
+| Kapsama paneli | `apps/web/src/components/ad-builder/coverage-panel.tsx` | 122 |
+| Sayfa | `apps/web/src/app/(dashboard)/reklam-olustur/page.tsx` | 179 |
+| Taslak servisi | `apps/api/src/modules/ad-builder/ad-builder.service.ts` | 772 |
+| Yayınlayıcı | `apps/api/src/modules/ad-builder/ad-publisher.service.ts` | 360 |
+| **Hedef eşlemesi** | `apps/api/src/modules/ad-builder/goal-mapping.ts` | 381 |
+| Amaç matrisi | `apps/api/src/modules/ad-builder/objective-matrix.ts` | 383 |
+
+`goal-mapping.ts` **ürünün çekirdeği** ve dokunmadan önce okunmalı:
+"reklamcılık bilmeyen biri kullanabilsin" vaadi pratikte "Meta'nın sorduğu her
+soruya biz cevap veriyoruz" demek ve o cevapların tamamı orada. Hedefleme
+(yaş, cinsiyet, ilgi alanı) KASITLI olarak sorulmuyor — gerekçesi dosyanın
+içinde yazılı.
+
+### Mevcut tasarımın iki kilit kararı
+
+Yeniden tasarımda bunları değiştirmek serbest ama **bilerek** değiştirilmeli:
+
+- **Adımlar ayrı ekran değil, tek sayfada sıralı bloklar.** Gerekçe: sihirbaz
+  adımları arasında gidip gelmek kullanıcının ne yazdığını unutturuyor.
+- **Uzman modu ayrı sayfa değil**, aynı taslağın üzerinde "Gelişmiş" paneli.
+  Aynı görseller, aynı yayın yolu.
+
+### Canlıda öğrenilmiş altı hata — §2'yi MUTLAKA oku
+
+13 Ağustos'taki ilk gerçek Meta yazma çağrısında altı hata çıktı ve **üçü
+sessizdi** (hata yok, log yok, sadece hiçbir yere gitmeyen bir reklam).
+Hepsi teste bağlandı. Yeniden tasarım bu tuzakları geri getirmemeli; liste
+§2'de.
+
+### Blokaj durumu
+
+- **Meta uygulaması artık CANLI modda** (2026-08-16'da alındı). `subcode=1885183`
+  engeli kalktı.
+- **Advanced Access hâlâ yok.** Kendi ajans hesaplarında yayın çalışabilir;
+  müşteri hesapları App Review'a bağlı. Yeniden tasarım sırasında canlı yazma
+  testi yapılacaksa bu sınır hatırlanmalı.
+- Reklam oluşturmak için müşteride **hem atanmış reklam hesabı hem atanmış
+  Facebook sayfası** gerekiyor (§0.3).
+
+### Elde ne var — gerçek veri
+
+2026-08-16 itibarıyla üretimde: 1 organizasyon, Meta bağlı, **157 hesap
+havuzda**, müşteriler oluşturulmuş, hesaplar atanmış ve izlemede, metrikler
+akıyor (`insights_daily` dolu, 2026-07-23'ten itibaren). Yani tasarımı gerçek
+veriyle deneyebilirsin.
 
 ---
 
@@ -36,8 +104,38 @@ Meta durumunu anlatıyor ve hâlâ geçerli.
 > `--prod=false` ile kuruyor. **`.env`'i kabuğa `set -a` ile almak** bu ikincisini
 > tetikleyen şeydi — teşhis için yaparsan sonra yeni bir kabuk aç.
 
-> **Sıradaki iş** artık §3 (bekleyen operasyonel işler — Meta canlı modu, webhook
-> token'ı, parola rotasyonu) ve §4 (geliştirme adayları).
+### 2026-08-16: kurulum canlıda tamamlandı
+
+Panelden yapılan ve DOĞRULANAN adımlar:
+
+- Meta bağlandı, **157 hesap havuza düştü** — tek yetkilendirme, kopma yok.
+  Modelin canlıdaki ilk sınavı ve geçti.
+- Müşteriler oluşturuldu, hesaplar atandı ve izlemeye alındı.
+- Metrikler akıyor. `insights_daily` 2026-07-23 → bugün, 1.222 satır.
+
+**Geçmiş veri konusunda çıkan soru ve cevabı:** 90 gün çekildi ama yalnızca ~24
+günlük veri geldi. 180 gün denendi, **tek satır bile değişmedi**. `sync_jobs`
+kayıtları işlerin doğru aralıkla (2026-05-17 ve 2026-02-16) gittiğini,
+`succeeded` bittiğini ve kısmi gelmediğini gösteriyor. Yani Meta'da o reklam
+hesapları için 2026-07-23'ten eski veri YOK. Kod tarafında sorun değil.
+
+> **Ama panel bunu söylemedi ve bu bir eksik.** Kullanıcı "90 istedim 30 geldi"
+> diye sormak zorunda kaldı; cevap veritabanında hazırdı. İki küçük iş açık:
+> **(1)** Dashboard "elimizdeki en eski veri: 23 Tem 2026" yazsın ve seçilen
+> pencere veriden geriye gidiyorsa uyarsın. **(2)** Metrik işinin ürettiği
+> `"N satır · M atlandı"` notu TABLOYA yazılsın — şu an yalnızca worker
+> log'una düşüyor, kalıcı olmadığı için sorgulanamıyor. Atlanan satır
+> (metrik geldi ama kampanyası bulunamadı) tam da sessiz kalması en kolay şey.
+
+### 2026-08-16'da yapılan diğer işler
+
+- **Davet akışı kaldırıldı**, kullanıcı doğrudan ekleniyor (§3.6).
+- **Kullanıcı kartında "+ Yetki ekle"** — mevcut kullanıcıya parola sormadan
+  müşteri yetkisi (`POST /memberships`).
+- **Panelde "Geçmiş veriyi çek"** — 7/30/90/180 gün, kuru çalışma + onay
+  (`POST /sync/backfill`). Sunucudaki `sync-cli` hâlâ duruyor ve çok müşterili
+  toplu iş için daha pratik.
+- **CI düzeltildi** — otomatik dağıtım 3 Ağustos'tan beri ölüydü.
 
 ### Sorun
 
@@ -327,6 +425,9 @@ subcode=1885183 — Reklam kreatif gönderisi, geliştirme modundaki bir uygulam
 tarafından oluşturuldu.
 ```
 
+> **2026-08-16: YAPILDI.** Uygulama Canlı moda alındı ve `subcode=1885183`
+> engeli kalktı. Aşağıdaki talimat tarihsel kayıt olarak duruyor.
+
 **Kullanıcının yapması gereken:** Meta uygulamasını developers.facebook.com
 üzerinden **Geliştirme → Canlı** moduna almak. Anahtar panelin üstünde, uygulama
 adının yanında (ya da sol menüde "Uygulama İncelemesi" sayfasının başında).
@@ -369,23 +470,25 @@ eklenmiyor — yanlış yönlendirme olurdu.
 
 ## 3. Bekleyen operasyonel işler
 
-Bunlar koda değil, sunucuya/hesaplara ait. Hiçbiri yapılmadı:
+Bunlar koda değil, sunucuya/hesaplara ait.
 
 - [ ] **`META_WEBHOOK_VERIFY_TOKEN`** sunucuda **depo kökündeki** `.env` içine
       eklenmeli (CLAUDE.md §2 — `apps/api/.env` YOK, o yol bir kez zaten
       yanlış teşhise yol açtı) ve
       Meta uygulama panelinde webhook URL'i `https://advetics.com/api/leads/webhook`
       olarak kaydedilmeli. **Bu yapılmadan hiçbir lead bildirimi gelmez.**
-- [ ] **Google hesap listesi bayat** — DB'de 29 hesap, keşifte 129 bulunmuştu.
-      Platform Bağlantıları → "Hesapları yenile".
-- [ ] **`db:seed-portfolio` çalıştırılmadı.** 12 müşteri + 3 kullanıcı seed'i
-      hazır; parolalar ortam değişkeninden okunuyor
-      (`SEED_ADMIN_PASSWORD`, `SEED_YUSUF_PASSWORD`, `SEED_ECEM_PASSWORD`).
+- [x] ~~**Google hesap listesi bayat**~~ — veritabanı sıfırlandı, konu kalmadı.
+      Google henüz YENİDEN BAĞLANMADI; bağlanınca hesaplar havuza düşecek.
+- [x] ~~**`db:seed-portfolio`**~~ — GEREKSİZ. Müşteriler 16 Ağustos'ta panelden
+      elle oluşturuldu ve davet akışı kaldırıldığı için seed'in kullanıcı
+      kısmı da geçersiz. Script duruyor ama çalıştırılmamalı.
 - [ ] **Parola rotasyonu.** Geliştirme sırasında sohbete yapıştırılan sırlar
       var: site kullanıcısı SSH parolası, üç DB parolası, Meta app secret ve
       üç kullanıcı parolası. Hepsi değiştirilmeli.
 - [ ] **Meta Business Verification + App Review** (`ads_management`,
-      `leads_retrieval`). Yazma yollarının tamamı buna bağlı.
+      `leads_retrieval`). Canlı mod alındı ama Advanced Access YOK: kendi
+      ajans hesaplarında yayın çalışabilir, MÜŞTERİ hesapları onaya bağlı.
+- [ ] **Google'ı bağla.** Meta bağlandı, Google henüz bağlanmadı.
 
 ## 3.5. 14–15 Ağustos'ta yapılanlar
 
