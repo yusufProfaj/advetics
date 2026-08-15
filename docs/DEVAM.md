@@ -4,12 +4,28 @@
 
 ---
 
-## 0. TAMAMLANDI — bağlantı modeli ajans seviyesine çevrildi
+## 0. TAMAMLANDI VE CANLIDA — bağlantı modeli ajans seviyesine çevrildi
 
-**1–6. adımların tamamı bitti** (§0.1 ve §0.2). Bu bölüm işin NEDEN yapıldığını
-ve nasıl karara bağlandığını anlatıyor; sonuç ve kalan açıklar §0.1–0.2'de.
-Aşağıdaki bölümler (§1 ve sonrası) 13 Ağustos'taki Meta durumunu anlatıyor ve
-hâlâ geçerli.
+**1–6. adımların tamamı bitti** (§0.1–0.3) ve **2026-08-15'te üretime çıktı**
+(`ade9f33`). Üç migration uygulandı, `db:rls` geçti, üç süreç de ayakta.
+Veritabanı deploy anında boştu (0 müşteri / 0 hesap / 0 sayfa), yani yeni
+tekillik kısıtları hiçbir mükerrer satıra takılmadı.
+
+**Sıradaki iş kodda değil panelde:** müşterileri oluştur → Meta ve Google'ı
+BİRER KEZ bağla → havuza düşen hesapları ve sayfaları müşterilere ata. Atama
+iki ekrandan da yapılabiliyor (Platform Bağlantıları / Müşteriler).
+
+Bu bölüm işin NEDEN yapıldığını ve nasıl karara bağlandığını anlatıyor; sonuç
+ve kalan açıklar §0.1–0.3'te. Aşağıdaki bölümler (§1 ve sonrası) 13 Ağustos'taki
+Meta durumunu anlatıyor ve hâlâ geçerli.
+
+> **Deploy sırasında iki tuzak çıktı, ikisi de düzeltildi ve depoda duruyor:**
+> `preflight.sh` veritabanını "kapalı" gösteriyordu (`?schema=public`
+> parametresini libpq reddediyor) — paylaşımlı sunucuda PostgreSQL'i kurcalamaya
+> gönderebilecek bir yanlış teşhis. `deploy.sh` ise ortamda `NODE_ENV=production`
+> varsa devDependencies'i atlayıp `prisma: not found` ile düşüyordu; artık
+> `--prod=false` ile kuruyor. **`.env`'i kabuğa `set -a` ile almak** bu ikincisini
+> tetikleyen şeydi — teşhis için yaparsan sonra yeni bir kabuk aç.
 
 > **Sıradaki iş** artık §3 (bekleyen operasyonel işler — Meta canlı modu, webhook
 > token'ı, parola rotasyonu) ve §4 (geliştirme adayları).
