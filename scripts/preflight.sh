@@ -80,7 +80,22 @@ WEB_PORT=3598
 # -----------------------------------------------------------------------------
 hdr "Veritabanı"
 # -----------------------------------------------------------------------------
-DIRECT_URL="$(envval DIRECT_DATABASE_URL)"
+# SORGU DİZESİ ATILIYOR — `?schema=public` PRISMA'NIN, libpq'nün DEĞİL.
+#
+# Prisma bağlantı adresinde `?schema=public` istiyor; libpq ise tanımadığı
+# sorgu parametresini reddediyor:
+#
+#     psql: error: invalid URI query parameter: "schema"
+#
+# Bu, üretimde TAM OLARAK yanlış teşhise yol açtı: preflight
+# "✗ veritabanına bağlanılamadı" yazıp "systemctl status postgresql" önerdi,
+# oysa veritabanı ayaktaydı ve uygulama sorunsuz bağlanıyordu (/api/health 200
+# dönüyordu). PAYLAŞIMLI BİR SUNUCUDA bu öneri, çalışan bir PostgreSQL'i
+# yeniden başlatmaya — yani 11 sitenin veritabanını kesmeye — giden en kısa yol.
+#
+# Kontrolün kendisi değerli (migrator rolü gerçekten bağlanabiliyor mu), o
+# yüzden kaldırmak yerine adresi psql'in anladığı biçime indiriyoruz.
+DIRECT_URL="$(envval DIRECT_DATABASE_URL | sed 's/?.*$//')"
 if command -v psql >/dev/null && [[ -n "$DIRECT_URL" ]]; then
   if psql "$DIRECT_URL" -tAc 'SELECT 1' >/dev/null 2>&1; then
     ok "bağlantı kuruldu (migrator)"
