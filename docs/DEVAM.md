@@ -4,11 +4,15 @@
 
 ---
 
-## 0. SIRADAKİ İŞ — bağlantı modelini ajans seviyesine çevirmek
+## 0. TAMAMLANDI — bağlantı modeli ajans seviyesine çevrildi
 
-Bu, şu an açık olan tek büyük iş. Aşağıdaki bölümler (§1 ve sonrası) 13
-Ağustos'taki Meta durumunu anlatıyor ve hâlâ geçerli; bu bölüm onun önüne
-geçiyor.
+**1–6. adımların tamamı bitti** (§0.1 ve §0.2). Bu bölüm işin NEDEN yapıldığını
+ve nasıl karara bağlandığını anlatıyor; sonuç ve kalan açıklar §0.1–0.2'de.
+Aşağıdaki bölümler (§1 ve sonrası) 13 Ağustos'taki Meta durumunu anlatıyor ve
+hâlâ geçerli.
+
+> **Sıradaki iş** artık §3 (bekleyen operasyonel işler — Meta canlı modu, webhook
+> token'ı, parola rotasyonu) ve §4 (geliştirme adayları).
 
 ### Sorun
 
@@ -47,8 +51,8 @@ atanmamış hesap" kavramlarının veritabanında tutunacağı bir yer yok.
 | 2 | `client_id`'yi nullable yap (atanmamış havuz) | **Yüksek — 125 kod noktası** | ✅ bitti |
 | 3 | **RLS politikalarını yeniden yaz** | **Yüksek — 126 politika satırı** | ✅ bitti |
 | 4 | Tekillik kısıtı `[clientId,…]` → `[orgId,…]` | Orta | ✅ bitti |
-| 5 | Keşif kodu havuza yazsın | Düşük | ⬜ sırada |
-| 6 | Hesap atama uç noktası + arayüz | Düşük | ⬜ sırada |
+| 5 | Keşif kodu havuza yazsın | Düşük | ✅ bitti |
+| 6 | Hesap atama uç noktası + arayüz | Düşük | ✅ bitti |
 | ~~7~~ | ~~Mevcut hesapları taşı~~ | **GEREKSİZ — aşağıya bak** | — |
 
 ### 2026-08-15: veritabanı sıfırlandı, 7. adım ortadan kalktı
@@ -190,17 +194,52 @@ daraltma, yöneticinin Çiftçi Grup seçiliyken Mirnas'ın verisini görmesi
 hatasının düzeltmesiydi. Davranış `ad-account-pool-rls.spec.ts` içinde
 kilitli.
 
-### 5–6. adımda değişecek yerler
+---
 
-- `startOAuth` hâlâ aktif müşteri İSTİYOR ve `oauth_states.client_id` NOT NULL.
-  Ajans geneli bağlantı için ikisi de gevşemeli.
-- `connections.service.ts → list()` hâlâ müşteri bazlı süzüyor; org geneli
-  listeye dönmeli.
-- **Ara durumun bilinen etkisi:** tekillik artık org bazlı olduğu için aynı
-  Meta kimliğini ikinci bir müşteriye bağlamak yeni satır AÇMIYOR, mevcut
-  satırı tazeliyor. Yani 5–6 bitmeden çok müşterili kullanım yapılmamalı:
-  hesaplar ilk bağlantıyı kuran müşterinin altında kalır. Kopma sorunu ise
-  şimdiden çözüldü — tekrar yetkilendirme gerekmiyor.
+## 0.2. 5–6. adımlar YAPILDI — model tamamlandı
+
+Migration: `20260815160000_agency_oauth_state`. **757 API testi geçiyor**
+(1–4'ten sonra 745'ti). Her iki uygulama da derleniyor.
+
+### Akış artık şöyle
+
+1. **Bağlan** — Platform Bağlantıları ekranı müşteri seçimi İSTEMİYOR.
+   `oauth_states.client_id` nullable oldu; ajans geneli akışta NULL yazılıyor.
+2. **Keşfet** — erişilen bütün reklam hesapları HAVUZA düşüyor
+   (`client_id IS NULL`), varsayılan olarak izleme kapalı.
+3. **Ata** — `PATCH /connections/ad-accounts/:id/client`, gövde
+   `{ clientId: string | null }`. `null` = havuza geri koy.
+4. **İzle** — yalnızca atanmış hesap izlemeye alınabiliyor.
+
+### Kararlar
+
+- **Atama ve bağlantı yönetimi ORG YÖNETİCİSİ işi** (`@RequireOrgAdmin`):
+  `authorize`, `reauthorize`, `disconnect`, `ad-accounts/:id/client`. RLS zaten
+  aynı şeyi söylüyordu ama decorator olmadan hata "kayıt bulunamadı" ya da ham
+  bir politika ihlali olarak çıkıyordu — yetki sorunu olduğu anlaşılmıyordu.
+  Panelde de bu düğmeler yalnızca yöneticiye gösteriliyor.
+- **Atama kalkınca izleme kapanıyor.** Açık kalsaydı hesap ekranda "izleniyor"
+  görünür, süpürme işi onu eler, hiç veri gelmez ve hiçbir hata çıkmazdı.
+- **`GET /connections` kapsamı isteğin kendisinden kuruluyor**, oturumdaki
+  seçimden değil. Parametresizse daraltma kapalı (havuz görünür); `?clientId=X`
+  varsa X'e daraltılıyor — kurallar ekranı adres çubuğundaki müşteriyle
+  çalışıyor ve oturumdaki seçim başka biri olabiliyor. Eskiden bu durumda ekran
+  sessizce boş bir hesap listesi gösterirdi.
+- **Sosyal profiller de `?clientId` ile süzülüyor.** Bağlantı müşteriye aitken
+  bu daraltma örtüktü; org geneline çıkınca kayboldu ve formlar ekranı başka
+  müşterilerin Facebook sayfalarını listeleyecekti.
+- **Yönetici (MCC) hesabı atanamıyor** — reklam yayınlamıyor, atamak boş bir
+  senkronizasyon turu ve boşa kota demek.
+
+### Hâlâ açık
+
+- **Sosyal profiller havuz modeline geçmedi** (`social_profiles.client_id` NOT
+  NULL). Ajans geneli bağlantıda sayfa keşfi ATLANIYOR; atlandığı log'a ve
+  keşif özetine yazılıyor. Auto-Boost ve formlar bu profillere bağlı, yani
+  Meta yazma yolları açıldığında karara bağlanmalı.
+- **Panelde hesap ataması yalnızca bağlantı kartından yapılıyor.** Müşteri
+  ekranında "bu müşterinin hesapları" görünümü yok; 157 hesaplı bir havuzda
+  müşteri müşteri gitmek isteyen biri için ayrı bir ekran gerekebilir.
 
 ---
 
@@ -267,7 +306,9 @@ eklenmiyor — yanlış yönlendirme olurdu.
 
 Bunlar koda değil, sunucuya/hesaplara ait. Hiçbiri yapılmadı:
 
-- [ ] **`META_WEBHOOK_VERIFY_TOKEN`** sunucuda `apps/api/.env` içine eklenmeli ve
+- [ ] **`META_WEBHOOK_VERIFY_TOKEN`** sunucuda **depo kökündeki** `.env` içine
+      eklenmeli (CLAUDE.md §2 — `apps/api/.env` YOK, o yol bir kez zaten
+      yanlış teşhise yol açtı) ve
       Meta uygulama panelinde webhook URL'i `https://advetics.com/api/leads/webhook`
       olarak kaydedilmeli. **Bu yapılmadan hiçbir lead bildirimi gelmez.**
 - [ ] **Google hesap listesi bayat** — DB'de 29 hesap, keşifte 129 bulunmuştu.
@@ -338,7 +379,7 @@ Repo bunları taşıyamaz; `hello@profaj.com` tarafında ayrıca sağlanmalı:
 |---|---|
 | GitHub deposu | `yusufProfaj/advetics` — yeni hesaba erişim verilmeli |
 | Sunucu SSH | `advetics` site kullanıcısı, gerekiyorsa root — adres parola yöneticisinde |
-| `apps/api/.env` | Sunucuda duruyor, git'te yok. Yerel geliştirme için kopyası gerekir |
+| Depo kökündeki `.env` | Sunucuda duruyor, git'te yok. **`apps/api/.env` diye bir dosya yok** — API, panel ve `prisma/` script'leri kökten besleniyor |
 | Meta uygulaması | developers.facebook.com — yönetici yetkisi |
 | Google Ads | MCC erişimi + developer token |
 | Sunucu paneli | CloudPanel — adres parola yöneticisinde |

@@ -1,0 +1,193 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { TenantContext } from '@advetics/shared';
+import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { PrismaAdminService } from '../../prisma/prisma-admin.service';
+import { AuditService } from '../audit/audit.service';
+import { ConnectionsService } from './connections.service';
+
+/**
+ * REKLAM HESABI ATAMA — planın 6. adımı.
+ *
+ * Ajansın tek Meta kimliği 157 hesaba erişiyor; hangisinin hangi müşteriye ait
+ * olduğu bu yolla belirleniyor. Test edilen dört karar da sessiz hata
+ * üretebilecek yerlerde:
+ *
+ *   1. Bağlam `activeClientId: null` ile kuruluyor mu — kurulmazsa Postgres
+ *      atamayı reddediyor (yeni satır SELECT politikasının dışına çıkıyor) ve
+ *      hata "satır politikayı ihlal ediyor" olarak çıkıyor.
+ *   2. Atama kalkınca izleme kapanıyor mu — kapanmazsa hesap "izleniyor"
+ *      görünür ama süpürme işi onu eler ve hiç veri gelmez.
+ *   3. Değişiklik yokken denetim kaydı yazılmıyor mu.
+ *   4. Yönetici (MCC) hesabı atanamıyor mu.
+ */
+let h: Harness;
+let svc: ConnectionsService;
+/** `withTenant`e geçirilen bağlam — 1. maddeyi doğrulamak için yakalanıyor. */
+let seenContexts: TenantContext[] = [];
+
+const CLIENT_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+const POOL_ACCOUNT = '99999999-9999-9999-9999-999999999999';
+const MCC_ACCOUNT = '98989898-9898-9898-9898-989898989898';
+
+const CTX: TenantContext = {
+  orgId: IDS.org,
+  userId: IDS.user,
+  clientIds: [IDS.client, CLIENT_B],
+  activeClientId: IDS.client,
+  isOrgAdmin: true,
+} as TenantContext;
+
+const META = { ip: null, userAgent: null, requestId: 'test' };
+
+beforeAll(async () => {
+  h = await createHarness();
+
+  const prisma = {
+    withTenant: async <T>(ctx: TenantContext, fn: (tx: unknown) => Promise<T>) => {
+      seenContexts.push(ctx);
+      return fn(h.db);
+    },
+  } as unknown as PrismaService;
+
+  // AuditService yalnızca verilen `tx`e yazıyor; yönetim bağlantısına
+  // dokunmuyor (o yalnızca `recordUnauthenticated` yolunda kullanılıyor).
+  const audit = new AuditService(null as unknown as PrismaAdminService);
+
+  svc = new ConnectionsService(
+    prisma,
+    null as never,
+    null as never,
+    audit,
+    null as never,
+    null as never,
+  );
+});
+
+afterAll(async () => {
+  await h.close();
+});
+
+beforeEach(async () => {
+  seenContexts = [];
+  await h.reset();
+  await seedTenant(h);
+  await h.q(
+    `INSERT INTO clients (id, org_id, name, slug, updated_at)
+     VALUES ($1, $2, 'İkinci Müşteri', 'ikinci', now())`,
+    [CLIENT_B, IDS.org],
+  );
+  // Havuzda bekleyen hesap: keşiften geldi, henüz kimseye atanmadı.
+  await h.q(
+    `INSERT INTO ad_accounts
+       (id, org_id, client_id, connection_id, platform, external_id, name, currency,
+        timezone, sync_enabled, updated_at)
+     VALUES ($1, $2, NULL, $3, 'meta', 'act_pool', 'Havuz hesabı', 'TRY',
+             'Europe/Istanbul', false, now())`,
+    [POOL_ACCOUNT, IDS.org, IDS.connection],
+  );
+});
+
+async function accountRow(id: string) {
+  const rows = await h.q<{ client_id: string | null; sync_enabled: boolean }>(
+    'SELECT client_id, sync_enabled FROM ad_accounts WHERE id = $1',
+    [id],
+  );
+  return rows[0]!;
+}
+
+async function auditActions(): Promise<string[]> {
+  const rows = await h.q<{ action: string }>('SELECT action FROM audit_logs ORDER BY id');
+  return rows.map((r) => r.action);
+}
+
+describe('atama', () => {
+  it('havuzdaki hesap müşteriye atanıyor', async () => {
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+
+    expect(res.changed).toBe(true);
+    expect(res.clientId).toBe(IDS.client);
+    expect((await accountRow(POOL_ACCOUNT)).client_id).toBe(IDS.client);
+    expect(await auditActions()).toEqual(['ad_account.assigned']);
+  });
+
+  it('KRİTİK: bağlam AKTİF MÜŞTERİ SEÇİMİ KAPALI kuruluyor', async () => {
+    /*
+     * Postgres'te UPDATE sonrası yeni satır, tablonun SELECT politikasından da
+     * geçmek zorunda. `can_access_client()` seçili müşteriye daraltıyor; A
+     * seçiliyken hesabı B'ye atamak satırı görüş alanının dışına çıkarıyor ve
+     * UPDATE reddediliyor.
+     *
+     * Bu test o gerekliliği KODDA kilitliyor: `assignAdAccount` bağlamı
+     * `activeClientId: null` ile kurmazsa burada düşer. (Politikanın kendisi
+     * `ad-account-pool-rls.spec.ts` içinde sınanıyor — orada RLS gerçekten
+     * açık.)
+     */
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+
+    expect(seenContexts.length).toBeGreaterThan(0);
+    for (const ctx of seenContexts) {
+      expect(ctx.activeClientId).toBeNull();
+    }
+    // Çağıranın bağlamı DEĞİŞMİYOR — yalnızca bu işlem için daraltma kapalı.
+    expect(CTX.activeClientId).toBe(IDS.client);
+  });
+
+  it('KRİTİK: atama kalkınca İZLEME DE kapanıyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await svc.setAccountSync(CTX, POOL_ACCOUNT, true, META);
+    expect((await accountRow(POOL_ACCOUNT)).sync_enabled).toBe(true);
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, null, META);
+
+    expect(res.clientId).toBeNull();
+    const row = await accountRow(POOL_ACCOUNT);
+    expect(row.client_id).toBeNull();
+    // Açık kalsaydı: hesap ekranda "izleniyor" görünür, süpürme işi onu eler,
+    // hiç veri gelmez ve hiçbir hata çıkmaz.
+    expect(row.sync_enabled).toBe(false);
+  });
+
+  it('DEĞİŞİKLİK YOKSA denetim kaydı yazılmıyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+
+    expect(res.changed).toBe(false);
+    // Denetim kaydı "ne değişti" sorusunu cevaplıyor; değişmeyen bir işlemi
+    // yazmak, gerçek değişikliklerin arasına gürültü koymak olurdu.
+    expect(await auditActions()).toEqual(['ad_account.assigned']);
+  });
+
+  it('YÖNETİCİ (MCC) hesabı atanamıyor', async () => {
+    // Yönetici hesabı reklam yayınlamıyor; atamak boş bir senkronizasyon turu
+    // ve boşa kota demek.
+    await h.q(
+      `INSERT INTO ad_accounts
+         (id, org_id, client_id, connection_id, platform, external_id, name, currency,
+          timezone, manager_external_id, sync_enabled, updated_at)
+       VALUES ($1, $2, NULL, $3, 'google', 'mcc-1', 'MCC', 'TRY', 'Europe/Istanbul',
+               'mcc-1', false, now())`,
+      [MCC_ACCOUNT, IDS.org, IDS.connection],
+    );
+
+    await expect(svc.assignAdAccount(CTX, MCC_ACCOUNT, IDS.client, META)).rejects.toThrow(
+      /yönetici/i,
+    );
+  });
+
+  it('ERİŞİLEMEYEN müşteriye atanamıyor', async () => {
+    const foreign = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+    await expect(svc.assignAdAccount(CTX, POOL_ACCOUNT, foreign, META)).rejects.toThrow(
+      /Müşteri bulunamadı/,
+    );
+  });
+
+  it('ATANMAMIŞ hesap izlemeye alınamıyor', async () => {
+    // Doğrulama KULLANIM anında değil GİRİŞ anında: kullanıcı hesabın
+    // senkronize edilmeyeceğini, veri gelmediğini fark ettiğinde değil,
+    // düğmeye bastığında öğrenmeli.
+    await expect(svc.setAccountSync(CTX, POOL_ACCOUNT, true, META)).rejects.toThrow(
+      /atanmamış/i,
+    );
+  });
+});

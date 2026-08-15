@@ -128,38 +128,22 @@ export async function createHarness(): Promise<Harness> {
 
     adAccount: {
       findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
-        const rows = await q<Record<string, unknown>>(
-          'SELECT * FROM ad_accounts WHERE id = $1',
-          [where.id],
-        );
-        const a = rows[0];
+        const a = await loadAdAccount(q, where.id);
         if (!a) throw new Error(`ad_account bulunamadı: ${where.id}`);
-        return {
-          id: a.id,
-          clientId: a.client_id,
-          connectionId: a.connection_id,
-          platform: a.platform,
-          externalId: a.external_id,
-          managerExternalId: a.manager_external_id,
-          timezone: a.timezone,
-          currency: a.currency,
-          lastStructureSyncAt: a.last_structure_sync_at,
-          lastInsightsSyncAt: a.last_insights_sync_at,
-        };
+        return a;
       },
-      findUnique: async ({ where }: { where: { id: string } }) => {
-        const rows = await q<{ connection_id: string }>(
-          'SELECT connection_id FROM ad_accounts WHERE id = $1',
-          [where.id],
-        );
-        return rows[0] ? { connectionId: rows[0].connection_id } : null;
-      },
+      findUnique: async ({ where }: { where: { id: string } }) => loadAdAccount(q, where.id),
       update: async ({
         where,
         data,
       }: {
         where: { id: string };
-        data: { lastStructureSyncAt?: Date; lastInsightsSyncAt?: Date };
+        data: {
+          lastStructureSyncAt?: Date;
+          lastInsightsSyncAt?: Date;
+          clientId?: string | null;
+          syncEnabled?: boolean;
+        };
       }) => {
         if (data.lastStructureSyncAt) {
           await q('UPDATE ad_accounts SET last_structure_sync_at = $1 WHERE id = $2', [
@@ -173,6 +157,53 @@ export async function createHarness(): Promise<Harness> {
             where.id,
           ]);
         }
+        // `clientId` UNDEFINED ile NULL AYRI ŞEYLER: undefined "dokunma",
+        // null "havuza geri koy". `if (data.clientId)` yazmak, atamayı
+        // kaldırma yolunu sessizce çalışmaz hâle getirirdi.
+        if ('clientId' in data) {
+          await q('UPDATE ad_accounts SET client_id = $1 WHERE id = $2', [
+            data.clientId ?? null,
+            where.id,
+          ]);
+        }
+        if (data.syncEnabled !== undefined) {
+          await q('UPDATE ad_accounts SET sync_enabled = $1 WHERE id = $2', [
+            data.syncEnabled,
+            where.id,
+          ]);
+        }
+        return (await loadAdAccount(q, where.id)) ?? {};
+      },
+    },
+
+    /**
+     * Denetim kaydı — servislerin `tx`'e yazdığı tek ortak tablo.
+     *
+     * `id` VERİLMİYOR: kolon BIGSERIAL, UUID değil. Elle id yazmak dizinin
+     * kaymasına ve sonraki insert'lerin çakışmasına yol açıyor.
+     */
+    auditLog: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        await q(
+          `INSERT INTO audit_logs
+             (org_id, client_id, actor_type, actor_id, action, target_type, target_id,
+              before, after, ip, user_agent, request_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          [
+            data.orgId,
+            data.clientId ?? null,
+            data.actorType ?? 'user',
+            data.actorId ?? null,
+            data.action,
+            data.targetType ?? null,
+            data.targetId ?? null,
+            data.before === undefined ? null : JSON.stringify(data.before),
+            data.after === undefined ? null : JSON.stringify(data.after),
+            data.ip ?? null,
+            data.userAgent ?? null,
+            data.requestId ?? null,
+          ],
+        );
         return {};
       },
     },
@@ -211,6 +242,39 @@ export async function createHarness(): Promise<Harness> {
   };
 
   return { pg, db, q, reset, close: () => pg.close() };
+}
+
+/**
+ * Reklam hesabı satırını Prisma'nın döndürdüğü camelCase şekle çevirir.
+ *
+ * TEK YERDEN: `findUnique` eskiden yalnızca `connectionId` döndürüyordu ve
+ * atama yolu (`client_id`, `sync_enabled`) eklendiğinde iki metot birbirinden
+ * ayrı düşerdi — test koşum ortamının üretimden sapması, tam da onun
+ * engellemesi gereken şey.
+ */
+async function loadAdAccount(
+  q: <T>(sql: string, params?: unknown[]) => Promise<T[]>,
+  id: string,
+): Promise<Record<string, unknown> | null> {
+  const rows = await q<Record<string, unknown>>('SELECT * FROM ad_accounts WHERE id = $1', [id]);
+  const a = rows[0];
+  if (!a) return null;
+  return {
+    id: a.id,
+    orgId: a.org_id,
+    clientId: a.client_id,
+    connectionId: a.connection_id,
+    platform: a.platform,
+    externalId: a.external_id,
+    name: a.name,
+    managerExternalId: a.manager_external_id,
+    timezone: a.timezone,
+    currency: a.currency,
+    status: a.status,
+    syncEnabled: a.sync_enabled,
+    lastStructureSyncAt: a.last_structure_sync_at,
+    lastInsightsSyncAt: a.last_insights_sync_at,
+  };
 }
 
 /** `findMany({ where: { platform, externalId: { in } } })` taklidi. */

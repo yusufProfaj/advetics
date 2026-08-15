@@ -21,6 +21,18 @@ export const toggleAccountSyncSchema = z.object({
 });
 export type ToggleAccountSyncInput = z.infer<typeof toggleAccountSyncSchema>;
 
+export const assignAdAccountSchema = z.object({
+  /**
+   * null = havuza geri koy (atamayı kaldır).
+   *
+   * Ayrı bir "kaldır" uç noktası açmadık: atama ve kaldırma aynı alanın iki
+   * değeri ve ikisini iki uç noktaya bölmek, arayüzde bir seçicinin iki farklı
+   * çağrı yapması demekti.
+   */
+  clientId: z.string().uuid().nullable(),
+});
+export type AssignAdAccountInput = z.infer<typeof assignAdAccountSchema>;
+
 export const linkBoostAccountSchema = z.object({
   /** null = bağlantıyı kaldır. */
   adAccountId: z.string().uuid().nullable(),
@@ -46,6 +58,14 @@ export interface AdAccountSummary {
   syncEnabled: boolean;
   isManager: boolean;
   lastInsightsSyncAt: string | null;
+  /**
+   * Atandığı müşteri. null = ajansın HAVUZUNDA, henüz atanmamış.
+   *
+   * Ajansın tek Meta kimliği 157 reklam hesabına erişiyor ve bunların çoğu
+   * hiçbir zaman atanmayacak. Atanmamış hesap senkronize EDİLMEZ.
+   */
+  clientId: string | null;
+  clientName: string | null;
 }
 
 export interface SocialProfileSummary {

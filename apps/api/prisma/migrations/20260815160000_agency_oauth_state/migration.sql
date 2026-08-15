@@ -1,0 +1,17 @@
+-- OAUTH AKIŞI DA AJANS SEVİYESİNE GEÇİYOR (plan 5. adım)
+--
+-- `oauth_states.client_id` zorunluydu çünkü bağlantı bir müşteriye kuruluyordu:
+-- panelde müşteri seçilmeden "Meta'ya bağlan" düğmesi çalışmıyordu. Bağlantı
+-- artık ajansa ait ve keşfedilen hesaplar HAVUZA düşüyor; akışın başında hangi
+-- müşteri olduğunu sormak hem gereksiz hem yanıltıcı — kullanıcı seçtiği
+-- müşterinin hesaplarını bağladığını sanırdı, oysa gelen 157 hesabın çoğu
+-- başka müşterilere ait.
+--
+-- NULL = ajans geneli yetkilendirme. Kolon SİLİNMİYOR: müşteri kendi Meta
+-- hesabını devrettiğinde akışı o müşteriye bağlamak hâlâ anlamlı ve
+-- `platform_connections.client_id` de aynı ikiliği taşıyor.
+-- Kolonun yabancı anahtarı YOK ve olmamalı (şemada da ilişki tanımlı değil):
+-- state 10 dakikalık, tek kullanımlık bir CSRF kaydı. Müşteri akışın ortasında
+-- silinirse callback'in "geçersiz state" ile düşmesi, yetkilendirmeyi
+-- gereksiz yere kaybettirirdi.
+ALTER TABLE "oauth_states" ALTER COLUMN "client_id" DROP NOT NULL;

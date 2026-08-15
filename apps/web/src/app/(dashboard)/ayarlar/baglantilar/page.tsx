@@ -10,57 +10,88 @@ export const metadata = { title: 'Platform Bağlantıları — Advetics' };
 export default async function ConnectionsPage() {
   const session = await requireSession();
 
+  /**
+   * MÜŞTERİ SEÇİMİ ARTIK ÖN KOŞUL DEĞİL.
+   *
+   * Bağlantı ajansa ait: Meta bir kez bağlanıyor, eriştiği bütün reklam
+   * hesapları havuza düşüyor ve hangisinin hangi müşteriye ait olduğu bu
+   * ekranda seçiliyor. Eskiden bu sayfa "önce bir müşteri seç" diyordu ve o
+   * model aynı kimliği müşteri başına yeniden yetkilendirmeyi gerektirdiği
+   * için bağlantıları koparıyordu.
+   *
+   * `/connections` müşteri parametresi OLMADAN çağrılıyor: hesapların tamamı,
+   * atanmışı ve havuzdakiyle birlikte gelmeli.
+   */
   const [availability, connections] = await Promise.all([
     serverApiFetch<ProviderAvailability[]>('/connections/availability').catch(() => []),
-    session.activeClientId
-      ? serverApiFetch<ConnectionSummary[]>('/connections').catch(() => [])
-      : Promise.resolve([]),
+    serverApiFetch<ConnectionSummary[]>('/connections').catch(() => []),
   ]);
 
-  const activeClient = session.memberships.find((m) => m.clientId === session.activeClientId);
+  const accounts = connections.flatMap((c) => c.adAccounts);
+  const pooled = accounts.filter((a) => a.clientId === null).length;
+  const assigned = accounts.length - pooled;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Platform Bağlantıları</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Meta ve Google Ads hesaplarını bağla, hangi reklam hesaplarının izleneceğini seç.
+          Meta ve Google Ads hesaplarını <strong>bir kez</strong> bağla; gelen reklam
+          hesaplarını müşterilere ata ve hangilerinin izleneceğini seç.
         </p>
       </div>
 
       <CallbackBanner />
 
-      {/* Bağlantılar müşteri bazlıdır — seçim yapılmadan işlem yapılamaz. */}
-      {!session.activeClientId ? (
-        <div className="rounded-xl border border-amber-300 bg-amber-50/60 p-5">
-          <h2 className="text-sm font-semibold">Önce bir müşteri seç</h2>
-          <p className="mt-1.5 text-sm text-amber-900">
-            Bağlantılar müşteri bazında kurulur — her müşterinin kendi Meta ve Google
-            hesapları vardır. Üstteki seçiciden bir müşteri seç.
+      {/* Bağlantı kurmak bütün müşterileri etkiliyor — API de bunu org
+          yöneticisiyle sınırlıyor. Düğmeyi yetkisi olmayana göstermek,
+          tıklayınca 403 almak demekti. */}
+      {session.isOrgAdmin ? (
+        <section className="rounded-xl border border-line bg-surface p-5">
+          <h2 className="text-sm font-semibold">Yeni bağlantı</h2>
+          <p className="mt-1 text-xs text-ink-muted">
+            Bağlantı ajansa kurulur, müşteriye değil. Aynı hesabı ikinci kez
+            yetkilendirmek gerekmez.
           </p>
+          <ConnectButtons availability={availability} />
+        </section>
+      ) : (
+        <div className="rounded-xl border border-line bg-surface-muted p-5">
+          <h2 className="text-sm font-semibold">Bağlantı kurma yetkisi yok</h2>
+          <p className="mt-1.5 text-sm text-ink-muted">
+            Platform bağlantısı kurmak, kaldırmak ve hesapları müşterilere atamak
+            organizasyon yöneticisinin işi. Aşağıdaki listeyi görebilirsin.
+          </p>
+        </div>
+      )}
+
+      {connections.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-line p-8 text-center">
+          <p className="text-sm text-ink-muted">Henüz bağlantı yok.</p>
         </div>
       ) : (
         <>
-          <section className="rounded-xl border border-line bg-surface p-5">
-            <h2 className="text-sm font-semibold">
-              Yeni bağlantı{activeClient?.clientName ? ` — ${activeClient.clientName}` : ''}
-            </h2>
-            <ConnectButtons availability={availability} />
-          </section>
-
-          {connections.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-line p-8 text-center">
-              <p className="text-sm text-ink-muted">
-                Bu müşteri için henüz bağlantı yok. Yukarıdan başla.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {connections.map((c) => (
-                <ConnectionCard key={c.id} connection={c} />
-              ))}
+          {/* SESSİZ KESME YOK: kaç hesap havuzda bekliyor, sayıyla yazılıyor.
+              Havuzdaki hesap senkronize edilmiyor ve bunu bilmeden "veri
+              gelmiyor" diye aramak, bu üründeki en pahalı hata türü. */}
+          {pooled > 0 && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
+              <strong>{pooled} reklam hesabı havuzda</strong> — hiçbir müşteriye
+              atanmamış. {assigned} hesap atanmış durumda. Atanmamış hesap
+              senkronize edilmez; aşağıdan bir müşteriye ata.
             </div>
           )}
+
+          <div className="space-y-4">
+            {connections.map((c) => (
+              <ConnectionCard
+                key={c.id}
+                connection={c}
+                clients={session.availableClients}
+                canManage={session.isOrgAdmin}
+              />
+            ))}
+          </div>
         </>
       )}
 

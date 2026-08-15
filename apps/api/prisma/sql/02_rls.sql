@@ -508,11 +508,21 @@ CREATE POLICY adv_oauth_states_select ON oauth_states
     AND created_by_user_id = app.current_user_id()
   );
 
+-- `client_id` NULL olabilir: ajans geneli yetkilendirme. O hâlde erişim
+-- kontrolü müşteriye değil ORG YÖNETİCİLİĞİNE bağlı — ajansın platform
+-- kimliğini bağlamak bütün müşterileri etkileyen bir işlem.
+-- `can_access_client(NULL)` NULL döner ve politika sessizce false'a düşerdi;
+-- akış "geçersiz state" ile ölür, sebebi hiçbir yerde yazmazdı.
 CREATE POLICY adv_oauth_states_insert ON oauth_states
   FOR INSERT WITH CHECK (
     org_id = app.current_org_id()
     AND created_by_user_id = app.current_user_id()
-    AND app.can_access_client(client_id)
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.can_access_client(client_id)
+      END
+    )
   );
 
 -- =============================================================================

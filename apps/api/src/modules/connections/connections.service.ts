@@ -100,24 +100,64 @@ export class ConnectionsService {
   // Listeleme
   // ---------------------------------------------------------------------------
 
+  /**
+   * Bağlantılar — ORGANİZASYON GENELİ.
+   *
+   * Bağlantı ajansa ait; müşteri seçimi artık ön koşul DEĞİL. Eskiden seçim
+   * zorunluydu ve "önce bir müşteri seçin" hatası veriyordu; o model aynı Meta
+   * kimliğini müşteri başına yeniden yetkilendirmeyi gerektiriyor ve
+   * bağlantıları koparıyordu.
+   *
+   * `clientId` verilirse REKLAM HESAPLARI VE SOSYAL PROFİLLER o müşteriye
+   * daraltılır — bağlantılar değil. Kurallar, formlar ve toplu oluşturucu
+   * ekranları bu uç noktayı tam olarak bunun için çağırıyor: "bu müşterinin
+   * hesapları". Bağlantıyı da süzseydik, ajans bağlantısı altındaki atanmış
+   * hesaplar o ekranlarda kaybolurdu.
+   *
+   * SOSYAL PROFİL SÜZGECİ ŞART. Eskiden bağlantının kendisi müşteriye aitti,
+   * dolayısıyla altındaki sayfalar da örtük olarak o müşteriye aitti. Bağlantı
+   * org geneline çıkınca bu örtük daraltma kayboldu: `kutuphane/formlar`
+   * ekranı, süzgeç olmadan başka müşterilerin Facebook sayfalarını listelerdi.
+   */
   async list(ctx: TenantContext, clientId: string | null): Promise<ConnectionSummary[]> {
-    const targetClientId = clientId ?? ctx.activeClientId;
-    if (!targetClientId) {
-      throw new BadRequestException(
-        'Bağlantılar müşteri bazlıdır. Önce bir müşteri seçin.',
-      );
-    }
-    if (!ctx.clientIds.includes(targetClientId)) {
+    if (clientId && !ctx.clientIds.includes(clientId)) {
       throw new NotFoundException('Müşteri bulunamadı');
     }
 
-    return this.prisma.withTenant(ctx, async (tx) => {
+    /**
+     * KAPSAM İSTEĞE GÖRE KURULUYOR, OTURUMDAKİ SEÇİME GÖRE DEĞİL.
+     *
+     * `app.can_access_client()` panelde seçili müşteriye daraltıyor ve bu
+     * daraltma iki yerde birden yanlış sonuç üretiyordu:
+     *
+     *   · Parametresiz çağrı (Platform Bağlantıları ekranı) — bir müşteri
+     *     seçiliyken HAVUZ dışındaki her şey düşerdi, yani atama ekranı
+     *     hesapların bir kısmını hiç göstermezdi.
+     *   · Açık `?clientId=X` çağrısı, oturumda BAŞKA bir müşteri seçiliyken —
+     *     RLS X'in satırlarını gizler ve ekran boş bir hesap listesi gösterir.
+     *     Kurallar ekranı adres çubuğundan gelen müşteriyle çalışıyor ve bu
+     *     ikisi rahatlıkla farklı olabiliyor.
+     *
+     * İkisinin de cevabı aynı: kapsamı İSTEĞİN kendisi belirlesin. Erişim
+     * yetkisi zaten yukarıda `ctx.clientIds` ile doğrulandı; buradaki değer
+     * yalnızca görünümü daraltıyor, genişletmiyor.
+     */
+    const scoped: TenantContext = { ...ctx, activeClientId: clientId };
+
+    return this.prisma.withTenant(scoped, async (tx) => {
       const rows = await tx.platformConnection.findMany({
-        where: { clientId: targetClientId, status: { not: 'revoked' } },
+        where: { status: { not: 'revoked' } },
         orderBy: { createdAt: 'asc' },
         include: {
-          adAccounts: { orderBy: { name: 'asc' } },
-          socialProfiles: { orderBy: { name: 'asc' } },
+          adAccounts: {
+            where: clientId ? { clientId } : undefined,
+            orderBy: { name: 'asc' },
+            include: { client: { select: { name: true } } },
+          },
+          socialProfiles: {
+            where: clientId ? { clientId } : undefined,
+            orderBy: { name: 'asc' },
+          },
         },
       });
 
@@ -134,7 +174,10 @@ export class ConnectionsService {
    */
   private toSummary(
     c: Prisma.PlatformConnectionGetPayload<{
-      include: { adAccounts: true; socialProfiles: true };
+      include: {
+        adAccounts: { include: { client: { select: { name: true } } } };
+        socialProfiles: true;
+      };
     }>,
   ): ConnectionSummary {
     const prov = this.provider(c.platform as Platform);
@@ -166,6 +209,10 @@ export class ConnectionsService {
           syncEnabled: a.syncEnabled,
           isManager: a.managerExternalId === a.externalId,
           lastInsightsSyncAt: a.lastInsightsSyncAt?.toISOString() ?? null,
+          // ATAMA BİLGİSİ YANITTA. Havuzda 157 hesap varken "bu hesap kimin"
+          // sorusunun cevabı ekranda görünmezse atama ekranı kullanılamaz.
+          clientId: a.clientId,
+          clientName: a.client?.name ?? null,
         }),
       ),
       socialProfiles: c.socialProfiles.map(
@@ -187,19 +234,24 @@ export class ConnectionsService {
   // OAuth başlatma
   // ---------------------------------------------------------------------------
 
+  /**
+   * BAĞLANTI AJANSA KURULUR — müşteri seçimi İSTENMEZ.
+   *
+   * Eskiden aktif müşteri zorunluydu ("Bağlantı bir müşteriye kurulur"). O
+   * model iki şeyi birden yanlış yapıyordu: kullanıcı seçtiği müşterinin
+   * hesaplarını bağladığını sanıyordu (oysa gelen 157 hesabın çoğu başka
+   * müşterilere ait) ve aynı Meta kimliği müşteri başına yeniden
+   * yetkilendirildiği için platform önceki token'ı geçersiz kılıyordu.
+   *
+   * Keşfedilen hesaplar HAVUZA düşüyor, müşteriye `assignAdAccount` ile
+   * atanıyor.
+   */
   async startOAuth(
     ctx: TenantContext,
     platform: Platform,
     opts: { redirectTo?: string; forceReconsent?: boolean },
     meta: Meta,
   ): Promise<{ authorizeUrl: string }> {
-    const clientId = ctx.activeClientId;
-    if (!clientId) {
-      throw new BadRequestException(
-        'Bağlantı bir müşteriye kurulur. Önce üstteki seçiciden müşteri seçin.',
-      );
-    }
-
     const provider = this.provider(platform);
     if (!provider.isConfigured()) {
       const missing = this.availability().find((a) => a.platform === platform)?.missingConfig ?? [];
@@ -217,7 +269,9 @@ export class ConnectionsService {
       tx.oAuthState.create({
         data: {
           orgId: ctx.orgId,
-          clientId,
+          // Ajans geneli yetkilendirme. Bağlantı ve hesaplar organizasyona
+          // yazılıyor; müşteri ataması ayrı bir adım.
+          clientId: null,
           platform: platform as PrismaPlatform,
           tokenHash: this.hash(rawState),
           redirectTo: opts.redirectTo ?? null,
@@ -719,6 +773,89 @@ export class ConnectionsService {
       });
 
       return { id: after.id, syncEnabled: after.syncEnabled };
+    });
+  }
+
+  /**
+   * Reklam hesabını bir müşteriye atar ya da havuza geri koyar.
+   *
+   * BAĞLAM `activeClientId: null` İLE KURULUYOR VE BU ŞART.
+   *
+   * Postgres'te bir UPDATE'ten sonra YENİ satır, tablonun SELECT
+   * politikasından da geçmek zorunda. `app.can_access_client()` panelde seçili
+   * müşteriye daraltıyor; org yöneticisi A müşterisi seçiliyken havuzdaki bir
+   * hesabı B'ye atarsa satır kendi görüş alanının dışına çıkıyor ve Postgres
+   * reddediyor: "new row violates row-level security policy". Politikayı
+   * gevşetmek çözüm DEĞİL — o daraltma, yöneticinin bir müşteri seçiliyken
+   * başka müşterinin verisini görmesi hatasının düzeltmesi. Seçim bir GÖRÜNÜM
+   * süzgeci; atama ise yönetim işlemi. Davranış
+   * `ad-account-pool-rls.spec.ts` içinde kilitli.
+   *
+   * ATAMA KALKINCA İZLEME DE KAPANIYOR. Atanmamış hesap süpürme işinde
+   * eleniyor; `sync_enabled` açık kalsaydı kullanıcı hesabın hâlâ senkronize
+   * olduğunu sanır, hiçbir hata görmez ve veri gelmezdi.
+   */
+  async assignAdAccount(
+    ctx: TenantContext,
+    adAccountId: string,
+    clientId: string | null,
+    meta: Meta,
+  ) {
+    if (clientId !== null && !ctx.clientIds.includes(clientId)) {
+      throw new NotFoundException('Müşteri bulunamadı');
+    }
+
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+
+    return this.prisma.withTenant(scoped, async (tx) => {
+      const before = await tx.adAccount.findUnique({ where: { id: adAccountId } });
+      if (!before) throw new NotFoundException('Reklam hesabı bulunamadı');
+
+      if (before.clientId === clientId) {
+        return {
+          id: before.id,
+          clientId: before.clientId,
+          syncEnabled: before.syncEnabled,
+          changed: false,
+        };
+      }
+
+      // YÖNETİCİ (MCC) HESABI ATANAMAZ. Reklam yayınlamıyor; atamak boş bir
+      // senkronizasyon turu ve boşa kota demek. Arayüzde de kapalı ama karar
+      // burada, çünkü uç nokta arayüz olmadan da çağrılabiliyor.
+      if (clientId !== null && before.managerExternalId === before.externalId) {
+        throw new BadRequestException(
+          `"${before.name}" bir yönetici (MCC) hesabı — reklam yayınlamıyor, müşteriye atanamaz.`,
+        );
+      }
+
+      const after = await tx.adAccount.update({
+        where: { id: adAccountId },
+        data: {
+          clientId,
+          ...(clientId === null ? { syncEnabled: false } : {}),
+        },
+      });
+
+      await this.audit.record(tx, ctx, {
+        action: clientId === null ? 'ad_account.unassigned' : 'ad_account.assigned',
+        targetType: 'ad_account',
+        targetId: adAccountId,
+        // Denetim kaydı ATAMANIN YAPILDIĞI müşteriye yazılıyor; kaldırmada
+        // hesabın AYRILDIĞI müşteriye. İkisi de "bu müşterinin hesap listesi
+        // ne zaman değişti" sorusunu cevaplıyor.
+        clientId: clientId ?? before.clientId,
+        before: { clientId: before.clientId, syncEnabled: before.syncEnabled },
+        after: { clientId: after.clientId, syncEnabled: after.syncEnabled, name: after.name },
+        ...meta,
+      });
+
+      return {
+        id: after.id,
+        clientId: after.clientId,
+        syncEnabled: after.syncEnabled,
+        changed: true,
+      };
     });
   }
 

@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ConnectionSummary } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { AccountPicker } from './account-picker';
+import { AccountPicker, type PickerClient } from './account-picker';
 
 const PLATFORM_LABEL: Record<string, string> = {
   meta: 'Meta',
@@ -21,7 +21,16 @@ const STATUS: Record<
   revoked: { label: 'Kaldırıldı', cls: 'text-ink-muted', dot: 'bg-slate-400' },
 };
 
-export function ConnectionCard({ connection }: { connection: ConnectionSummary }) {
+export function ConnectionCard({
+  connection,
+  clients,
+  canManage,
+}: {
+  connection: ConnectionSummary;
+  clients: PickerClient[];
+  /** Org yöneticisi mi — bağlantıyı ve hesap atamalarını değiştirebilir. */
+  canManage: boolean;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
@@ -87,9 +96,13 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
           >
             {busy === 'refresh' ? '…' : 'Hesapları yenile'}
           </button>
-          {(connection.status === 'needs_reauth' ||
-            connection.missingScopes.length > 0 ||
-            connection.missingOptionalScopes.length > 0) && (
+          {/* Yeniden yetkilendirme ve kaldırma ORG YÖNETİCİSİ işi: ajans
+              geneli bir bağlantı bütün müşterileri besliyor. API de öyle
+              diyor — düğmeyi herkese göstermek, tıklayınca 403 almak demekti. */}
+          {canManage &&
+            (connection.status === 'needs_reauth' ||
+              connection.missingScopes.length > 0 ||
+              connection.missingOptionalScopes.length > 0) && (
             <button
               type="button"
               onClick={() => void run('reauth', reauthorize)}
@@ -99,17 +112,29 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
               {busy === 'reauth' ? '…' : 'Yeniden yetkilendir'}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              if (!confirm('Bağlantı kaldırılacak ve tüm senkronizasyon duracak. Geçmiş veriler korunur. Devam?')) return;
-              void run('disconnect', () => apiFetch(`/connections/${connection.id}/disconnect`, { method: 'POST' }));
-            }}
-            disabled={busy !== null || isPending}
-            className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-700 transition hover:bg-red-50 disabled:opacity-50"
-          >
-            {busy === 'disconnect' ? '…' : 'Kaldır'}
-          </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => {
+                // UYARI METNİ ARTIK BÜTÜN MÜŞTERİLERİ SÖYLÜYOR. Bağlantı
+                // ajansa ait; kaldırmak tek bir müşterinin değil, o bağlantıya
+                // bağlı HER hesabın senkronizasyonunu durduruyor.
+                if (
+                  !confirm(
+                    'Bu bağlantı ajansa ait ve altındaki TÜM müşterilerin hesaplarını besliyor. ' +
+                      'Kaldırılırsa hepsinin senkronizasyonu durur. Geçmiş veriler korunur. Devam?',
+                  )
+                ) {
+                  return;
+                }
+                void run('disconnect', () => apiFetch(`/connections/${connection.id}/disconnect`, { method: 'POST' }));
+              }}
+              disabled={busy !== null || isPending}
+              className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+            >
+              {busy === 'disconnect' ? '…' : 'Kaldır'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -146,7 +171,11 @@ export function ConnectionCard({ connection }: { connection: ConnectionSummary }
       {/* Reklam hesapları — AYRI BİLEŞENDE.
           Google Basic Access'ten sonra tek bağlantı 129 hesap getirdi ve düz
           liste hem aramayı hem "neyi izliyorum" sorusunu imkânsız kıldı. */}
-      <AccountPicker accounts={connection.adAccounts} />
+      <AccountPicker
+        accounts={connection.adAccounts}
+        clients={clients}
+        canManage={canManage}
+      />
 
       {/* Sosyal profiller — yalnızca Meta */}
       {connection.socialProfiles.length > 0 && (

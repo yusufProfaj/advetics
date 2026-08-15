@@ -18,8 +18,10 @@ import {
 import type { Response } from 'express';
 import {
   PLATFORMS,
+  assignAdAccountSchema,
   startOAuthSchema,
   toggleAccountSyncSchema,
+  type AssignAdAccountInput,
   type Platform,
   type StartOAuthInput,
   type TenantContext,
@@ -28,6 +30,7 @@ import {
 import {
   CurrentTenant,
   Public,
+  RequireOrgAdmin,
   RequirePermissions,
 } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
@@ -80,9 +83,19 @@ export class ConnectionsController {
    * tarayıcı yönlendirmeyi kendisi yapmalı — XHR üzerinden gelen bir 302
    * platformun izin ekranını görünmez kılar.
    */
+  /**
+   * ORG YÖNETİCİSİ İŞİ — bağlantı artık ajansa kuruluyor.
+   *
+   * Tek bir Meta kimliği bütün müşterileri besliyor; onu bağlamak ya da
+   * değiştirmek portföyün tamamını etkiliyor. RLS de aynı şeyi söylüyor
+   * (`adv_oauth_states_insert`, ajans geneli state için `is_org_admin`), ama
+   * decorator olmadan hata ham bir politika ihlali olarak çıkar ve sebebi
+   * anlaşılmazdı.
+   */
   @Post('authorize')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('connection.write')
+  @RequireOrgAdmin()
   startOAuth(
     @CurrentTenant() ctx: TenantContext,
     @Body(zodBody(startOAuthSchema)) dto: StartOAuthInput,
@@ -142,6 +155,7 @@ export class ConnectionsController {
   @Post(':id/reauthorize')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('connection.write')
+  @RequireOrgAdmin()
   async reauthorize(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -193,9 +207,35 @@ export class ConnectionsController {
     return this.connections.setAccountSync(ctx, id, dto.syncEnabled, this.meta(req));
   }
 
+  /**
+   * Reklam hesabını bir müşteriye ata / havuza geri koy.
+   *
+   * ORG YÖNETİCİSİ İŞİ. Havuz, ajansın erişebildiği TÜM reklam hesaplarının
+   * listesi (Meta'da 157) ve çoğu başka müşterilere ait; RLS de havuz
+   * satırlarını yalnızca org yöneticisine gösteriyor. Decorator olmasaydı
+   * müşteri düzeyindeki bir kullanıcı için sorgu 0 satır etkiler ve hata
+   * "kayıt bulunamadı" olurdu — yetki sorunu olduğu hiç anlaşılmazdı.
+   */
+  @Patch('ad-accounts/:id/client')
+  @RequirePermissions('connection.write')
+  @RequireOrgAdmin()
+  assignAdAccount(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(assignAdAccountSchema)) dto: AssignAdAccountInput,
+    @Req() req: AuthedRequest,
+  ) {
+    return this.connections.assignAdAccount(ctx, id, dto.clientId, this.meta(req));
+  }
+
+  /**
+   * ORG YÖNETİCİSİ İŞİ: ajans geneli bir bağlantıyı kaldırmak BÜTÜN
+   * müşterilerin senkronizasyonunu birden durdurur.
+   */
   @Post(':id/disconnect')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('connection.write')
+  @RequireOrgAdmin()
   disconnect(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,

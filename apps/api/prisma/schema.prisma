@@ -589,10 +589,13 @@ model SocialProfile {
 /// satırı `consumedAt` ile bir kez tüketilir. Token'ın kendisi değil SHA-256
 /// hash'i saklanır.
 model OAuthState {
-  id        String   @id @default(uuid()) @db.Uuid
-  orgId     String   @map("org_id") @db.Uuid
-  clientId  String   @map("client_id") @db.Uuid
-  platform  Platform
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  /// null => ajans geneli yetkilendirme. Dolu olması yalnızca akışın belirli
+  /// bir müşteri için başlatıldığı hâli anlatır (müşteri kendi hesabını
+  /// devretmişse).
+  clientId String? @map("client_id") @db.Uuid
+  platform Platform
   tokenHash String   @unique @map("token_hash") @db.VarChar(64)
 
   /// Yetkilendirme sonrası dönülecek panel yolu.

@@ -123,7 +123,7 @@ buna göre veriliyor:
 
 ### Test
 
-- `pnpm --filter @advetics/api test` — vitest. Şu an **745 API testi**.
+- `pnpm --filter @advetics/api test` — vitest. Şu an **757 API testi**.
 - Veritabanına dokunan testler **PGlite** kullanıyor (gerçek Postgres, WASM).
   Şema üretim migration'larından kuruluyor — el yazımı test şeması yok.
 - **RLS testlerde varsayılan olarak KAPALI** (worker rolü BYPASSRLS'i taklit
@@ -179,3 +179,8 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   panelde geçmiyor.
 - Bir müşteri = bir **şirket**; şirketin birden çok projesi/reklam hesabı
   olabilir. Panelde ve raporlarda reklam hesabı süzgeci **her zaman** bulunmalı.
+- **Platform bağlantısı AJANSA ait, müşteriye değil.** Meta/Google bir kez
+  yetkilendiriliyor, erişilen bütün reklam hesapları havuza düşüyor ve
+  müşteriye panelden atanıyor. Müşteri başına yeniden yetkilendirme yok —
+  platform önceki token'ı geçersiz kılıyor ve bağlantıları koparıyordu.
+  Bağlantı kurmak/kaldırmak ve hesap atamak org yöneticisi işi.
