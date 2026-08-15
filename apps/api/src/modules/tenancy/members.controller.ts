@@ -11,8 +11,10 @@ import {
 } from '@nestjs/common';
 import {
   createMemberSchema,
+  createMembershipSchema,
   updateMembershipSchema,
   type CreateMemberInput,
+  type CreateMembershipInput,
   type TenantContext,
   type UpdateMembershipInput,
 } from '@advetics/shared';
@@ -50,6 +52,23 @@ export class MembersController {
     @Req() req: AuthedRequest,
   ) {
     return this.members.createMember(ctx, dto, this.meta(req));
+  }
+
+  /**
+   * Mevcut kullanıcıya yeni müşteri yetkisi verir — parola SORULMUYOR.
+   *
+   * `POST /members` yeni kullanıcı oluşturmak için; var olan birine yetki
+   * eklerken oradaki parola alanı boşa uydurulmuş bir değer olurdu.
+   */
+  @Post('memberships')
+  @RequireOrgAdmin()
+  @RequirePermissions('user.write')
+  addMembership(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(createMembershipSchema)) dto: CreateMembershipInput,
+    @Req() req: AuthedRequest,
+  ) {
+    return this.members.addMembership(ctx, dto, this.meta(req));
   }
 
   @Patch('memberships/:id')

@@ -71,6 +71,34 @@ export const createMemberSchema = z
   );
 export type CreateMemberInput = z.infer<typeof createMemberSchema>;
 
+/**
+ * MEVCUT bir kullanıcıya yeni bir müşteri yetkisi verir.
+ *
+ * `createMemberSchema`den AYRI olmasının sebebi PAROLA. O şema parolayı
+ * zorunlu istiyor — yeni kullanıcı oluşturuyor çünkü. Var olan birine yetki
+ * eklerken parola hiçbir işe yaramıyor (sunucu zaten dokunmuyor) ama form
+ * istediği için yönetici boşa bir parola uydurmak zorunda kalıyordu. Uydurulan
+ * ve hiçbir yere yazılmayan bir alan, arayüzün en hızlı güven kaybetme yolu.
+ *
+ * Bir kişi birden çok müşteride farklı rollerde olabilir; bu yüzden eklenen
+ * şey kullanıcı değil, kullanıcı × müşteri eşleşmesi.
+ */
+export const createMembershipSchema = z
+  .object({
+    userId: z.string().uuid(),
+    role: z.enum(ROLES),
+    /** null => org geneli erişim. Sadece owner/admin rolleri için geçerli. */
+    clientId: z.string().uuid().nullable(),
+  })
+  .refine(
+    (v) => v.clientId !== null || v.role === 'owner' || v.role === 'admin',
+    {
+      message: 'Org geneli erişim yalnızca owner ve admin rollerine verilebilir',
+      path: ['clientId'],
+    },
+  );
+export type CreateMembershipInput = z.infer<typeof createMembershipSchema>;
+
 export const requestPasswordResetSchema = z.object({ email: emailSchema });
 export type RequestPasswordResetInput = z.infer<typeof requestPasswordResetSchema>;
 

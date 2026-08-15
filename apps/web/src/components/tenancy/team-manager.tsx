@@ -362,11 +362,172 @@ export function TeamManager({
                     göremez.
                   </p>
                 )}
+
+                {/*
+                  YETKİ EKLEME KARTIN İÇİNDE ve PAROLA SORMUYOR.
+
+                  Önceden var olan birine yetki vermenin tek yolu üstteki
+                  "Kullanıcı ekle" formuna onun e-postasını yazmaktı — ve o form
+                  parolayı zorunlu istediği için yönetici hiçbir yere yazılmayan
+                  bir parola uydurmak zorunda kalıyordu. Uydurulup yok sayılan
+                  bir alan, arayüzün en hızlı güven kaybetme yolu.
+
+                  Zaten yetkisi olan müşteriler listeden ÇIKARILIYOR: sunucu
+                  mükerrer kaydı reddediyor ve reddedileceği belli olan bir
+                  seçeneği göstermek, kullanıcıyı hata almaya davet etmek olurdu.
+                */}
+                <GrantAccess
+                  userId={member.id}
+                  clients={clients.filter(
+                    (c) => !member.memberships.some((m) => m.clientId === c.id),
+                  )}
+                  hasOrgWide={member.memberships.some((m) => m.clientId === null)}
+                  disabled={busy !== null}
+                  onDone={() => router.refresh()}
+                  onError={setError}
+                />
               </div>
             </li>
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Tek bir kullanıcıya müşteri yetkisi verir — parola SORMADAN.
+ *
+ * Ayrı bileşen çünkü kendi küçük durumu var (açık mı, hangi müşteri, hangi
+ * rol) ve bu durumu üst bileşende her kullanıcı için ayrı ayrı tutmak,
+ * listedeki 3 kullanıcı için 3 kat state demek olurdu.
+ *
+ * Kapalı başlıyor: ekip ekranının asıl işi "kimde ne var" sorusunu
+ * cevaplamak; her kartta açık duran bir form o cevabı gürültüye boğardı.
+ */
+function GrantAccess({
+  userId,
+  clients,
+  hasOrgWide,
+  disabled,
+  onDone,
+  onError,
+}: {
+  userId: string;
+  /** Zaten yetkisi OLMAYAN müşteriler — mükerrer seçenek gösterilmiyor. */
+  clients: ClientOption[];
+  /** Org geneli yetkisi zaten varsa "Tüm müşteriler" ikinci kez verilemez. */
+  hasOrgWide: boolean;
+  disabled: boolean;
+  onDone: () => void;
+  onError: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [clientId, setClientId] = useState('');
+  const [role, setRole] = useState<Role>('manager');
+
+  const orgWideAllowed = ORG_WIDE_ROLES.includes(role);
+  const nothingLeft = clients.length === 0 && (hasOrgWide || !orgWideAllowed);
+
+  async function submit() {
+    if (!clientId && !orgWideAllowed) {
+      onError('Bu rol için bir müşteri seçin.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiFetch('/memberships', {
+        method: 'POST',
+        body: JSON.stringify({ userId, role, clientId: clientId || null }),
+      });
+      setOpen(false);
+      setClientId('');
+      onDone();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Yetki eklenemedi.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={disabled || nothingLeft}
+        title={nothingLeft ? 'Bu kullanıcının tüm müşterilerde yetkisi var' : undefined}
+        className="text-xs font-medium text-brand transition hover:underline disabled:opacity-40 disabled:no-underline"
+      >
+        + Yetki ekle
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-surface-muted p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={role}
+          onChange={(e) => {
+            const next = e.target.value as Role;
+            setRole(next);
+            if (!ORG_WIDE_ROLES.includes(next) && clientId === '') setClientId('');
+          }}
+          disabled={saving}
+          className="rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink disabled:opacity-60"
+        >
+          {ROLES.map((r) => (
+            <option key={r} value={r}>
+              {ROLE_TR[r]}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          disabled={saving}
+          className="flex-1 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink disabled:opacity-60"
+        >
+          {orgWideAllowed && !hasOrgWide && <option value="">Tüm müşteriler</option>}
+          {(!orgWideAllowed || hasOrgWide) && <option value="">Müşteri seçin…</option>}
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={saving}
+          className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white transition disabled:opacity-50"
+        >
+          {saving ? '…' : 'Ekle'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          disabled={saving}
+          className="text-xs text-ink-muted hover:underline disabled:opacity-50"
+        >
+          Vazgeç
+        </button>
+      </div>
+
+      <p className="mt-2 text-[11px] text-ink-muted">{ROLE_HINT[role]}</p>
+
+      {/* MÜŞTERİ YOKSA SEBEBİ YAZILI. Boş bir seçici, "yetki veremiyorum"
+          sorusunun cevabını hiçbir yerde bırakmazdı. */}
+      {clients.length === 0 && (
+        <p className="mt-1.5 text-[11px] text-amber-700">
+          Atanabilecek müşteri yok — ya hepsinde yetkisi var ya da henüz müşteri
+          oluşturulmamış.
+        </p>
+      )}
     </div>
   );
 }

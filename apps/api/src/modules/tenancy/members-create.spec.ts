@@ -66,6 +66,8 @@ beforeEach(() => {
     client: { findUnique: async () => ({ id: CLIENT, name: 'Müşteri' }) },
     user: {
       findFirst: async () => existingUser,
+      findUnique: async () =>
+        existingUser ? { ...existingUser, email: 'mevcut@advetics.com' } : null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
         calls.userCreate.push(data);
         return { id: 'yeni-user', memberships: [] };
@@ -163,5 +165,59 @@ describe('createMember', () => {
     const res = await svc.createMember(CTX, input({ clientId: null, role: 'admin' }), META);
     expect(res.created).toBe(true);
     expect(calls.membershipCreate[0]).toMatchObject({ clientId: null, role: 'admin' });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Mevcut kullanıcıya yetki ekleme — parola sormayan yol
+// -----------------------------------------------------------------------------
+
+describe('addMembership', () => {
+  const USER = '33333333-3333-3333-3333-333333333333';
+
+  it('mevcut kullanıcıya yetki ekliyor ve PAROLAYA hiç dokunmuyor', async () => {
+    // Bu uç noktanın var olma sebebi bu: `createMember` parolayı zorunlu
+    // istiyor ve var olan birine yetki verirken o alan boşa uydurulmuş bir
+    // değer oluyordu.
+    existingUser = { id: USER, memberships: [] };
+
+    await svc.addMembership(CTX, { userId: USER, role: 'manager', clientId: CLIENT }, META);
+
+    expect(calls.membershipCreate[0]).toMatchObject({
+      userId: USER,
+      clientId: CLIENT,
+      role: 'manager',
+    });
+    expect(calls.userCreate).toEqual([]);
+    expect(calls.userUpdate).toEqual([]);
+    expect(calls.audit).toEqual(['membership.granted']);
+  });
+
+  it('AYNI kapsam ikinci kez verilemiyor', async () => {
+    existingUser = { id: USER, memberships: [{ clientId: CLIENT }] };
+
+    await expect(
+      svc.addMembership(CTX, { userId: USER, role: 'analyst', clientId: CLIENT }, META),
+    ).rejects.toThrow(/zaten bu kapsamda/);
+    expect(calls.membershipCreate).toEqual([]);
+  });
+
+  it('BULUNAMAYAN kullanıcıya yetki verilemiyor', async () => {
+    // RLS başka organizasyonun kullanıcısını da göstermiyor; "bulunamadı" ile
+    // "senin org'unda değil" aynı cevabı veriyor ve bu kasıtlı.
+    existingUser = null;
+
+    await expect(
+      svc.addMembership(CTX, { userId: USER, role: 'manager', clientId: CLIENT }, META),
+    ).rejects.toThrow(/Kullanıcı bulunamadı/);
+  });
+
+  it('ORG GENELİ erişim yalnızca owner/admin rollerine verilebiliyor', async () => {
+    existingUser = { id: USER, memberships: [] };
+
+    await expect(
+      svc.addMembership(CTX, { userId: USER, role: 'analyst', clientId: null }, META),
+    ).rejects.toThrow(/Organizasyon geneli/);
+    expect(calls.membershipCreate).toEqual([]);
   });
 });

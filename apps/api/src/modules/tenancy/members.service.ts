@@ -10,6 +10,7 @@ import { Role } from '@prisma/client';
 import {
   isOrgScopedRole,
   type CreateMemberInput,
+  type CreateMembershipInput,
   type Permission,
   type TenantContext,
   type UpdateMembershipInput,
@@ -161,6 +162,65 @@ export class MembersService {
         /** false => kullanıcı zaten vardı; yazılan parola KULLANILMADI. */
         created: existing === null,
       };
+    });
+  }
+
+  /**
+   * MEVCUT kullanıcıya yeni bir müşteri yetkisi verir.
+   *
+   * `createMember`den farkı parola: orada yeni kullanıcı doğuyor ve parola
+   * zorunlu, burada kullanıcı zaten var ve parolasına DOKUNULMUYOR. İkisini
+   * tek uç noktada toplamak, arayüzü var olan birine yetki verirken boşa
+   * parola uydurmaya zorluyordu.
+   *
+   * Kullanıcının varlığını RLS üzerinden doğruluyoruz: `users` politikası org
+   * yöneticisine kendi organizasyonundaki herkesi gösteriyor, başka
+   * organizasyondakini göstermiyor. Yani buradaki "bulunamadı", "başka org'un
+   * kullanıcısı" ile aynı cevabı veriyor ve bu kasıtlı — 403 dönmek o
+   * kullanıcının var olduğunu sızdırırdı.
+   */
+  async addMembership(ctx: TenantContext, input: CreateMembershipInput, meta: Meta) {
+    if (input.clientId === null && !isOrgScopedRole(input.role)) {
+      throw new BadRequestException(
+        'Organizasyon geneli erişim yalnızca owner ve admin rollerine verilebilir',
+      );
+    }
+
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true, email: true, memberships: { select: { clientId: true } } },
+      });
+      if (!user) throw new NotFoundException('Kullanıcı bulunamadı');
+
+      if (input.clientId) {
+        const client = await tx.client.findUnique({ where: { id: input.clientId } });
+        if (!client) throw new NotFoundException('Müşteri bulunamadı');
+      }
+
+      if (user.memberships.some((m) => m.clientId === input.clientId)) {
+        throw new ConflictException('Bu kullanıcının zaten bu kapsamda erişimi var');
+      }
+
+      const membership = await tx.membership.create({
+        data: {
+          userId: user.id,
+          orgId: ctx.orgId,
+          clientId: input.clientId,
+          role: input.role as Role,
+        },
+      });
+
+      await this.audit.record(tx, ctx, {
+        action: 'membership.granted',
+        targetType: 'user',
+        targetId: user.id,
+        clientId: input.clientId,
+        after: { email: user.email, role: input.role, clientId: input.clientId },
+        ...meta,
+      });
+
+      return membership;
     });
   }
 
