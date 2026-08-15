@@ -43,13 +43,49 @@ atanmamış hesap" kavramlarının veritabanında tutunacağı bir yer yok.
 
 | # | Adım | Risk |
 |---|---|---|
-| 1 | İki tabloya `org_id` ekle, müşteriden doldur | Düşük |
-| 2 | `client_id`'yi nullable yap (atanmamış havuz) | Orta |
-| 3 | **RLS politikalarını yeniden yaz** | **Yüksek** |
+| 1 | İki tabloya `org_id` ekle | Düşük |
+| 2 | `client_id`'yi nullable yap (atanmamış havuz) | **Yüksek — 125 kod noktası** |
+| 3 | **RLS politikalarını yeniden yaz** | **Yüksek — 126 politika satırı** |
 | 4 | Tekillik kısıtı `[clientId,…]` → `[orgId,…]` | Orta |
 | 5 | Keşif kodu havuza yazsın | Düşük |
 | 6 | Hesap atama uç noktası + arayüz | Düşük |
-| 7 | Mevcut 284 hesap ve bağlantıları taşı | **Yüksek** |
+| ~~7~~ | ~~Mevcut hesapları taşı~~ | **GEREKSİZ — aşağıya bak** |
+
+### 2026-08-15: veritabanı sıfırlandı, 7. adım ortadan kalktı
+
+`db:reset-clients` çalıştırıldı. Silinen: 14 müşteri, 8 bağlantı, **1.134
+reklam hesabı**, 712 kampanya, 11.222 metrik satırı, müşteriye bağlı 12
+üyelik. Kalan: 3 kullanıcı, organizasyon, marka profili, org geneli üyelik.
+
+Migration'ı önemli ölçüde kolaylaştırıyor:
+
+- **7. adım tamamen gereksiz.** Taşınacak veri yok; en riskli ve geri alması
+  en zor adım buydu.
+- **2. ve 4. adımın VERİ riski sıfır.** Boş tabloda `DROP NOT NULL` ve kısıt
+  değişikliği anında ve güvenli.
+- Geriye kalan risk tamamen **kod tarafında**.
+
+### Ölçülmüş yayılma alanı (tahmin değil, sayıldı)
+
+```
+apps/api/src içinde .clientId erişimi     125 nokta
+02_rls.sql içinde client_id geçen satır   126
+platform_connections clientId kullanımı     9
+```
+
+125 noktanın hepsi kırılmayacak, ama `enqueueSyncJob({ clientId:
+account.clientId })` gibi `string` bekleyen yerler `string | null` alınca
+derlenmeyecek. Her biri bilinçli bir karar istiyor: bu yol atanmamış hesapla
+çalışabilir mi, yoksa erken hata mı vermeli?
+
+**Doğru varsayılan: erken hata.** Atanmamış bir hesap için senkronizasyon
+kuyruğa GİRMEMELİ — girerse `client_id`'si NULL bir `sync_jobs` satırı oluşur,
+RLS onu kimseye göstermez ve iş sessizce kaybolur. Bu projenin klasik hata
+deseninin ta kendisi.
+
+`pnpm typecheck` bu adımda yol gösterici: derleyici nullable'ın dokunduğu her
+yeri tek tek söyleyecek. Listeyi baştan çıkarmaya çalışma, derleyiciyi takip
+et.
 
 **3. adım neden en kritik:** `client_id` nullable olduğu anda, politikası
 yazılmamış her satır KİMSEYE AİT OLMAYAN bir satır. Yanlış yazılan tek bir
