@@ -119,13 +119,15 @@ kayıtları işlerin doğru aralıkla (2026-05-17 ve 2026-02-16) gittiğini,
 `succeeded` bittiğini ve kısmi gelmediğini gösteriyor. Yani Meta'da o reklam
 hesapları için 2026-07-23'ten eski veri YOK. Kod tarafında sorun değil.
 
-> **Ama panel bunu söylemedi ve bu bir eksik.** Kullanıcı "90 istedim 30 geldi"
-> diye sormak zorunda kaldı; cevap veritabanında hazırdı. İki küçük iş açık:
-> **(1)** Dashboard "elimizdeki en eski veri: 23 Tem 2026" yazsın ve seçilen
-> pencere veriden geriye gidiyorsa uyarsın. **(2)** Metrik işinin ürettiği
-> `"N satır · M atlandı"` notu TABLOYA yazılsın — şu an yalnızca worker
-> log'una düşüyor, kalıcı olmadığı için sorgulanamıyor. Atlanan satır
-> (metrik geldi ama kampanyası bulunamadı) tam da sessiz kalması en kolay şey.
+> **KONU KAPALI — yapılacak bir şey yok.** Kullanıcının kararı: veri
+> gerçekten yok, kod tarafında da panelde de bir iş açılmayacak. Bu satır
+> tekrar araştırılmasın diye duruyor: aynı soru yeniden gelirse cevabı
+> yukarıdaki `sync_jobs` kanıtı.
+>
+> Yalnızca şu not kalsın: metrik işinin ürettiği `"N satır · M atlandı"`
+> özeti tabloya YAZILMIYOR, yalnızca worker log'una düşüyor. Bugün bunu
+> sorgulayamadık. Başka bir sebeple metrik eksikliği araştırılırsa ilk
+> bakılacak yer burası olmayacak — akılda tutulmalı.
 
 ### 2026-08-16'da yapılan diğer işler
 
