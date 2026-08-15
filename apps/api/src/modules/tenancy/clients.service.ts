@@ -68,15 +68,37 @@ export class ClientsService {
            * kalıyor ve hesabı olmayan bir müşteri — yani hiç veri gelmeyecek
            * bir müşteri — hesabı olandan ayırt edilemiyor.
            *
-           * `syncEnabled` ayrı sayılıyor: bağlı olmak ile İZLENİYOR olmak
-           * farklı. Portföy seed'i 27 hesabı bağladı ama hiçbirini açmamıştı
-           * ve panel "veri yok" gösteriyordu; ekranda ayrı görünseydi sebep
-           * bir bakışta anlaşılırdı.
+           * `syncEnabled` hesap başına dönüyor: ATANMIŞ olmak ile İZLENİYOR
+           * olmak farklı. Portföy seed'i 27 hesabı bağladı ama hiçbirini
+           * açmamıştı ve panel "veri yok" gösteriyordu; ekranda ayrı
+           * görünseydi sebep bir bakışta anlaşılırdı.
            */
           _count: { select: { adAccounts: true, memberships: true } },
+          /**
+           * HESAPLARIN KENDİSİ DE DÖNÜYOR, yalnızca sayısı değil.
+           *
+           * Sayı "bu müşteride bir şey var mı" sorusuna cevap veriyor ama
+           * "HANGİSİ var" sorusuna vermiyor — ve havuz modelinde asıl sorulan
+           * bu. Ajansın 157 hesabı tek havuzda duruyor; bir müşterinin hangi
+           * hesapları aldığını görmek için tek yol Platform Bağlantıları
+           * ekranında 157 satır arasında aramaktı.
+           *
+           * Satır sayısı sorun değil: atanmış hesaplar müşteri başına birkaç
+           * tane (portföyde en fazla dört). Havuzun tamamı BURADAN dönmüyor.
+           */
           adAccounts: {
-            where: { syncEnabled: true },
-            select: { id: true },
+            orderBy: { name: 'asc' },
+            select: {
+              id: true,
+              name: true,
+              platform: true,
+              externalId: true,
+              syncEnabled: true,
+            },
+          },
+          socialProfiles: {
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true, profileType: true },
           },
         },
       }),

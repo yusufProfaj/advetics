@@ -1,7 +1,14 @@
+import type { ConnectionSummary } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { ClientCreateForm } from '@/components/tenancy/client-create-form';
 import { ClientActions } from '@/components/tenancy/client-actions';
+import {
+  ClientAssets,
+  type ClientAdAccount,
+  type ClientProfile,
+  type PoolItem,
+} from '@/components/tenancy/client-assets';
 
 export const metadata = { title: 'Müşteriler — Advetics' };
 
@@ -28,8 +35,9 @@ interface ClientRow {
   status: string;
   createdAt: string;
   _count: { adAccounts: number; memberships: number };
-  /** Yalnızca izlemede olanlar — API `syncEnabled: true` ile süzüyor. */
-  adAccounts: Array<{ id: string }>;
+  /** Bu müşteriye ATANMIŞ hesaplar — izlemede olup olmadıkları alan içinde. */
+  adAccounts: ClientAdAccount[];
+  socialProfiles: ClientProfile[];
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -39,12 +47,50 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function ClientsPage() {
-  await requireSession();
+  const session = await requireSession();
 
-  const clients = await serverApiFetch<ClientRow[]>('/clients').catch(() => []);
+  /**
+   * HAVUZ DA ÇEKİLİYOR — atama buradan yapılabilsin diye.
+   *
+   * `/connections` parametresiz çağrıldığında atanmamış hesap ve sayfaları da
+   * döndürüyor, ama yalnızca org yöneticisine: RLS havuz satırlarını başkasına
+   * göstermiyor. Yani müşteri düzeyindeki bir kullanıcı için bu liste zaten
+   * boş dönüyor ve arayüz de atama kontrollerini göstermiyor.
+   */
+  const [clients, connections] = await Promise.all([
+    serverApiFetch<ClientRow[]>('/clients').catch(() => []),
+    session.isOrgAdmin
+      ? serverApiFetch<ConnectionSummary[]>('/connections').catch(() => [])
+      : Promise.resolve([]),
+  ]);
+
+  const pool: PoolItem[] = [
+    ...connections
+      .flatMap((c) => c.adAccounts)
+      .filter((a) => a.clientId === null)
+      .map((a) => ({
+        id: a.id,
+        name: a.name,
+        externalId: a.externalId,
+        kind: 'ad_account' as const,
+        isManager: a.isManager,
+      })),
+    ...connections
+      .flatMap((c) => c.socialProfiles)
+      .filter((p) => p.clientId === null)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        externalId: p.externalId,
+        kind: 'social_profile' as const,
+      })),
+  ];
 
   const totalAccounts = clients.reduce((sum, c) => sum + c._count.adAccounts, 0);
-  const totalWatched = clients.reduce((sum, c) => sum + c.adAccounts.length, 0);
+  const totalWatched = clients.reduce(
+    (sum, c) => sum + c.adAccounts.filter((a) => a.syncEnabled).length,
+    0,
+  );
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -86,7 +132,7 @@ export default async function ClientsPage() {
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2">
           {clients.map((client) => {
-            const watched = client.adAccounts.length;
+            const watched = client.adAccounts.filter((a) => a.syncEnabled).length;
             const total = client._count.adAccounts;
 
             return (
@@ -137,14 +183,23 @@ export default async function ClientsPage() {
                 */}
                 {total === 0 && (
                   <p className="mt-4 rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-muted">
-                    Bağlı reklam hesabı yok — bu müşteride hiç veri görünmeyecek.
+                    Atanmış reklam hesabı yok — bu müşteride hiç veri görünmeyecek.
                   </p>
                 )}
                 {total > 0 && watched === 0 && (
                   <p className="mt-4 rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-muted">
-                    {total} hesap bağlı ama hiçbiri izlemede değil — veri çekilmiyor.
+                    {total} hesap atanmış ama hiçbiri izlemede değil — veri çekilmiyor.
                   </p>
                 )}
+
+                <ClientAssets
+                  clientId={client.id}
+                  clientName={client.name}
+                  adAccounts={client.adAccounts}
+                  profiles={client.socialProfiles}
+                  pool={pool}
+                  canManage={session.isOrgAdmin}
+                />
 
                 <ClientActions
                   clientId={client.id}

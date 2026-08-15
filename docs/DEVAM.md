@@ -231,11 +231,19 @@ Migration: `20260815160000_agency_oauth_state`. **757 API testi geçiyor**
 - **Yönetici (MCC) hesabı atanamıyor** — reklam yayınlamıyor, atamak boş bir
   senkronizasyon turu ve boşa kota demek.
 
-### Hâlâ açık
+### Atama iki ekrandan da yapılabiliyor
 
-- **Panelde hesap ataması yalnızca bağlantı kartından yapılıyor.** Müşteri
-  ekranında "bu müşterinin hesapları" görünümü yok; 157 hesaplı bir havuzda
-  müşteri müşteri gitmek isteyen biri için ayrı bir ekran gerekebilir.
+- **Platform Bağlantıları** — bağlantı bağlantı: "bu Meta kimliği neye
+  erişiyor, hangisi kimin".
+- **Müşteriler** — müşteri müşteri: her kart kendi reklam hesaplarını ve
+  sayfalarını listeliyor, havuzdan arayıp atayabiliyor, "çıkar" ile havuza geri
+  koyabiliyor. Ajans müşteri müşteri çalışıyor; havuzda 157 satır varken tek
+  bir hesabın kime ait olduğunu bulmanın başka yolu yoktu.
+
+Havuz listesi Müşteriler ekranında **listelenmiyor, aranıyor** — 12 kartın her
+birine 157 satır basmak ekranı kullanılamaz hâle getirirdi. Havuz zaten
+yalnızca org yöneticisine dönüyor (RLS), yani müşteri düzeyindeki kullanıcı
+kendi varlıklarını görüyor ama atama kontrollerini görmüyor.
 
 ---
 
