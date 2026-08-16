@@ -12,6 +12,27 @@ const PLATFORM_LABEL: Record<string, string> = {
   google: 'Google Ads',
 };
 
+/**
+ * Kart başlığı.
+ *
+ * PLATFORM ADI İKİ KEZ YAZILMIYOR. Google'ın etiketi "Google Ads" ile
+ * başlıyor ve başlık "Google Ads · Google Ads" oluyordu; Meta'da etiket
+ * işletme adı olduğu için orada birleştirme doğru.
+ *
+ * BAŞLIKTA HESAP SAYISI YOK. Etiket (`accountLabel`) yalnızca yetkilendirme
+ * anında yazılıyor, yani donmuş bir anlık görüntü — sayıyı oraya koymak,
+ * "Hesapları yenile" sonrası gerçekle ayrışan bir rakam bırakmak demek.
+ * Kaç hesap olduğunu hemen aşağıdaki seçici canlı veriden söylüyor.
+ */
+function headline(c: ConnectionSummary): string {
+  const platform = PLATFORM_LABEL[c.platform] ?? c.platform;
+  const label = c.accountLabel?.trim();
+  if (!label) return platform;
+  return label === platform || label.startsWith(`${platform} `)
+    ? label
+    : `${platform} · ${label}`;
+}
+
 const STATUS: Record<
   ConnectionSummary['status'],
   { label: string; cls: string; dot: string }
@@ -66,10 +87,7 @@ export function ConnectionCard({
         <div>
           <div className="flex items-center gap-2">
             <span className={`inline-block h-2 w-2 rounded-full ${status.dot}`} />
-            <h3 className="text-sm font-semibold">
-              {PLATFORM_LABEL[connection.platform] ?? connection.platform} ·{' '}
-              {connection.accountLabel}
-            </h3>
+            <h3 className="text-sm font-semibold">{headline(connection)}</h3>
           </div>
           <p className={`mt-1 text-xs ${status.cls}`}>
             {status.label}

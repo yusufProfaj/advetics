@@ -52,3 +52,44 @@ describe('Google arama isteği', () => {
     expect(SOURCE).toContain("'login-customer-id'");
   });
 });
+
+describe('Google hata mesajları', () => {
+  it('KRİTİK: yazma hataları "Basic Access" demiyor', () => {
+    /**
+     * ERİŞİM 2026-08-16'DA ALINDI. O tarihe kadar yazma metotlarının hata
+     * metni "Basic Access onayı bekleniyor" diyordu ve doğruydu; artık
+     * kullanıcıyı ÇÖZÜLMÜŞ bir sorunu çözmeye gönderiyor.
+     *
+     * Bu, `preflight.sh`'ın veritabanını "kapalı" göstermesiyle aynı sınıf
+     * hata: kod çalışmıyor değil, TEŞHİS yanlış. Ve bu tür bayat metinler
+     * hiçbir testte, hiçbir logda görünmüyor — yalnızca onları okuyan
+     * kullanıcı yanlış yere gidiyor.
+     *
+     * Yazma yolu yazıldığında bu metinler zaten kalkacak. Test o güne kadar
+     * eski gerekçenin geri sızmasını engelliyor.
+     */
+    const offenders = codeLines().filter((l) => /Basic Access/.test(l));
+    expect(
+      offenders,
+      `Hata metninde bayat erişim gerekçesi kalmış:\n${offenders.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('hesap etiketine kök müşteri SAYISI yazılmıyor', () => {
+    /**
+     * `listAccessibleCustomers` KÖK kimlikleri döndürüyor — çoğu yönetici
+     * (MCC) hesabı ve `listAdAccounts` onları bilerek eliyor. Etiket bir
+     * dönem "(28 hesap)" yazıyordu; aynı kartta hesap seçici "2 / 127" ve
+     * "havuzdaki 125 hesap" diyordu. Üç sayı, hiçbiri diğerini açıklamıyor.
+     *
+     * Üstelik etiket yalnızca yetkilendirme anında yazılıyor: `refreshAccounts`
+     * ona dokunmadığı için "Hesapları yenile" sonrası iki sayı sessizce
+     * ayrışıyordu.
+     */
+    const offenders = codeLines().filter((l) => /customers\.length\}\s*hesap/.test(l));
+    expect(
+      offenders,
+      `Etikete yine kök müşteri sayısı yazılmış:\n${offenders.join('\n')}`,
+    ).toEqual([]);
+  });
+});

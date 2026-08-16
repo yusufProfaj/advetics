@@ -186,10 +186,25 @@ export class GoogleProvider implements IAdPlatformProvider {
       const customers = await this.listAccessibleCustomerIds(accessToken);
       if (customers.length > 0) {
         externalUserId = externalUserId || customers[0]!;
+        /**
+         * ETİKETE SAYI YAZILMIYOR ve bu bilinçli.
+         *
+         * `listAccessibleCustomers` KÖK kimlikleri döndürüyor — çoğu yönetici
+         * (MCC) hesabı ve `listAdAccounts` onları bilerek eliyor, çünkü
+         * reklam yayınlamıyorlar. Etiket "28 hesap" yazdığında kart,
+         * kullanıcıya reklam veremeyeceği şeyleri hesap diye sayıyordu:
+         * başlıkta 28, hemen altındaki blokta "2 / 127", onun altında
+         * "havuzdaki 125 hesap". Üç sayı, hiçbiri diğerini açıklamıyor.
+         *
+         * İkinci ve daha sinsi sorun: bu etiket YALNIZCA yetkilendirme
+         * anında yazılıyor. `refreshAccounts` ona hiç dokunmuyor, yani
+         * "Hesapları yenile" gerçek sayıyı günceller, etiketteki sayıyı
+         * güncellemez ve ikisi zamanla sessizce ayrışır.
+         *
+         * Gerçek sayıyı zaten hesap seçici canlı veriden basıyor.
+         */
         accountLabel =
-          customers.length === 1
-            ? `Google Ads ${customerLabel(customers[0]!)}`
-            : `Google Ads (${customers.length} hesap)`;
+          customers.length === 1 ? `Google Ads ${customerLabel(customers[0]!)}` : 'Google Ads';
       }
     } catch (err) {
       this.logger.warn(
@@ -201,7 +216,12 @@ export class GoogleProvider implements IAdPlatformProvider {
       throw new PlatformApiError(
         'google',
         'permanent',
-        'Google hesabı belirlenemedi. Developer token Basic Access onayı olmadan yalnızca test hesapları görünür.',
+        // SEBEP TEK DEĞİL ve tek sebep yazmak yanlış teşhis üretiyor: bu
+        // mesaj "Basic Access yok" diyordu, oysa erişim 2026-08-16'da alındı.
+        // Aynı hata artık yanlış hesapla giriş yapıldığında da çıkabiliyor.
+        'Google hesabı belirlenemedi. Bu Google kullanıcısının erişebildiği bir Ads hesabı ' +
+          'olmayabilir, ya da developer token yalnızca test hesaplarını görüyor olabilir. ' +
+          'Tanı için: pnpm --filter @advetics/api google-check',
       );
     }
 
@@ -938,20 +958,23 @@ export class GoogleProvider implements IAdPlatformProvider {
   }
 
   /**
-   * KASITLI OLARAK UYGULANMADI.
+   * HENÜZ YAZILMADI — engel erişim değil, kod.
    *
-   * Google Ads bağlantısı bugüne kadar CANLI API'ye hiç çıkmadı — Basic
-   * Access onayı bekleniyor ve `fetchStructure`/`fetchInsights` bile tek bir
-   * kez gerçek yanıtla doğrulanmadı. Bu koşulda yazma uygulamak, test
-   * edilmemiş kodun müşterinin kampanyalarını değiştirmesi demek olurdu.
+   * 2026-08-16'da Google erişimi alındı, hesaplar bağlandı ve okuma tarafı
+   * canlıda doğrulandı (127 reklam hesabı keşfedildi, metrikler akıyor).
+   * Yani eski gerekçe —"Basic Access bekleniyor"— artık geçerli değil;
+   * geriye yalnızca yazma kodunun yazılmamış olması kaldı.
+   *
+   * MESAJDA ERİŞİMDEN BAHSETMİYORUZ ve bu bilinçli: kullanıcıyı çözülmüş bir
+   * sorunu çözmeye göndermek, `preflight.sh`'ın veritabanını "kapalı"
+   * göstermesiyle aynı sınıf yanlış teşhis. Mesaj ne eksikse onu söylemeli.
    *
    * Sessizce başarılı dönmek ya da hiç metot tanımlamamak daha kötü olurdu:
    * kural motoru Google varlıklarını da eşleştiriyor ve aksiyonun
    * uygulanmadığını bilmeden "uygulandı" kaydı yazardı. Açık bir `permanent`
    * hata, kural kaydına sebebiyle birlikte düşüyor ve arayüzde görünüyor.
    *
-   * Basic Access geldikten ve okuma tarafı canlıda doğrulandıktan sonra
-   * `CampaignService.mutate` / `AdGroupService.mutate` ile yazılacak.
+   * Yazılınca `CampaignService.mutate` / `AdGroupService.mutate` kullanılacak.
    */
   async applyAction(
     _ctx: FetchContext,
@@ -960,8 +983,8 @@ export class GoogleProvider implements IAdPlatformProvider {
     throw new PlatformApiError(
       'google',
       'permanent',
-      `Google Ads yazma işlemleri henüz uygulanmadı (${action.type}). ` +
-        'Basic Access onayı ve okuma tarafının canlı doğrulaması bekleniyor.',
+      `Google Ads yazma işlemleri henüz yazılmadı (${action.type}). ` +
+        'Bağlantı ve okuma tarafı çalışıyor; eksik olan yazma kodu.',
     );
   }
 
@@ -990,17 +1013,16 @@ export class GoogleProvider implements IAdPlatformProvider {
    * sessizce yutmak, oluşturulduğu sanılan bir boost bırakırdı.
    */
   /**
-   * Toplu reklam oluşturma — Google'da HENÜZ UYGULANMADI.
+   * Toplu reklam oluşturma — Google'da HENÜZ YAZILMADI.
    *
-   * applyAction ile aynı gerekçe: Google bağlantısı canlı API'ye hiç çıkmadı
-   * ve test edilmemiş kodun müşterinin hesabında 60 reklam oluşturması kabul
-   * edilemez.
+   * `applyAction` ile aynı durum: erişim var, kod yok. Burada risk daha da
+   * büyük — test edilmemiş bir yol tek çağrıda 60 reklam oluşturur.
    */
   async createAd(): Promise<CreateAdResult> {
     throw new PlatformApiError(
       'google',
       'permanent',
-      'Google Ads toplu oluşturma henüz uygulanmadı — Basic Access ve canlı doğrulama bekleniyor.',
+      'Google Ads toplu oluşturma henüz yazılmadı.',
     );
   }
 
@@ -1017,15 +1039,17 @@ export class GoogleProvider implements IAdPlatformProvider {
    * Modül 4 — Google'da KARŞILIĞI VAR ama yazılmadı.
    *
    * Google Ads'te de görsel yükleme (`MediaFileService`) ve kampanya
-   * oluşturma mümkün. Yazılmama sebebi Auto-Boost ile aynı: okuma tarafı bile
-   * canlı API'de doğrulanmadı ve test edilmemiş kodun müşteri hesabında
-   * kampanya açması kabul edilemez.
+   * oluşturma mümkün; erişim de artık var. Eksik olan tek şey kod.
+   *
+   * YAZILDIĞI GÜN İLK ÇAĞRI AJANSIN KENDİ HESABINDA YAPILMALI. Meta'da ilk
+   * gerçek yazma çağrısında altı hata çıktı ve üçü sessizdi; Google'ınki de
+   * canlıda öğrenilecek ve o ders müşterinin bütçesiyle alınmamalı.
    */
   async uploadAdImage(): Promise<string> {
     throw new PlatformApiError(
       'google',
       'permanent',
-      'Google Ads görsel yükleme henüz uygulanmadı — Basic Access onayı bekleniyor.',
+      'Google Ads görsel yükleme henüz yazılmadı.',
     );
   }
 
@@ -1033,7 +1057,7 @@ export class GoogleProvider implements IAdPlatformProvider {
     throw new PlatformApiError(
       'google',
       'permanent',
-      'Google Ads reklam oluşturma henüz uygulanmadı — Basic Access onayı bekleniyor.',
+      'Google Ads reklam oluşturma henüz yazılmadı. Meta üzerinden yayınlayabilirsin.',
     );
   }
 
