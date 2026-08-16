@@ -85,9 +85,11 @@ export class SyncController {
     }
 
     const accounts = await this.enabledAccounts(ctx);
-    if (accounts.length === 0) {
+    const profiles = await this.enabledProfiles(ctx);
+    if (accounts.length === 0 && profiles.length === 0) {
       throw new BadRequestException(
-        'Bu müşteride izlemeye alınmış hesap yok. Platform Bağlantıları ekranından hesap seçin.',
+        'Bu müşteride izlemeye alınmış hesap ya da sayfa yok. Platform Bağlantıları ' +
+          've Müşteriler ekranından izlemeye al.',
       );
     }
 
@@ -114,7 +116,41 @@ export class SyncController {
       }
     }
 
-    return { accountCount: accounts.length, queued, skipped };
+    /**
+     * ORGANİK GÖNDERİLER DE BU DÜĞMEDE — sonradan eklendi.
+     *
+     * Düğme "Şimdi güncelle" diyordu ama YALNIZCA reklam hesaplarını
+     * kapsıyordu; organik gönderi süpürmesi ayrı bir zamanlanmış işti
+     * (`sweep:organic`, saatte bir). Sonucu canlıda görüldü: kullanıcı sayfayı
+     * izlemeye aldı, "Şimdi güncelle"ye bastı ve hiçbir gönderi gelmedi —
+     * çünkü o düğme organiğe hiç dokunmuyordu. Adı ile yaptığı iş
+     * ayrışıyordu.
+     *
+     * MALİYETİ KÜÇÜK: sayfa başına tek bir Graph çağrısı ve yalnızca İZLEMEYE
+     * ALINMIŞ sayfalar için. Geçmiş metriklerin aksine (`backfill`) burada
+     * geri alınamaz bir kota harcaması yok.
+     */
+    for (const profile of profiles) {
+      const res = await this.queue.enqueue({
+        clientId: profile.clientId,
+        platform: 'meta',
+        jobType: 'organic_posts',
+        socialProfileId: profile.id,
+        interactive: true,
+      });
+      if (res.enqueued) queued++;
+      else skipped++;
+    }
+
+    return {
+      accountCount: accounts.length,
+      // SAYFA SAYISI AYRI DÖNÜYOR: "3 hesap güncelleniyor" derken iki sayfanın
+      // da kuyruğa girdiğini söylememek, bu düğmenin baştaki hatasını
+      // tekrarlamak olurdu.
+      profileCount: profiles.length,
+      queued,
+      skipped,
+    };
   }
 
   /**
@@ -212,6 +248,22 @@ export class SyncController {
    * `client_id`'si NULL bir `sync_jobs` satırı üretir ve o satır hiçbir
    * panelde görünmezdi.
    */
+  /**
+   * İzlemeye alınmış SAYFALAR — organik gönderi süpürmesinin girdisi.
+   *
+   * Süpürme işinin kendi süzgeciyle aynı koşullar (`sync-processor`):
+   * izleme açık, müşteriye atanmış, bağlantı etkin.
+   */
+  private async enabledProfiles(ctx: TenantContext) {
+    const rows = await this.prisma.withTenant(ctx, (tx) =>
+      tx.socialProfile.findMany({
+        where: { syncEnabled: true, clientId: { not: null }, connection: { status: 'active' } },
+        select: { id: true, clientId: true, name: true },
+      }),
+    );
+    return rows.filter((p): p is typeof p & { clientId: string } => p.clientId !== null);
+  }
+
   private async enabledAccounts(ctx: TenantContext) {
     const rows = await this.prisma.withTenant(ctx, (tx) =>
       tx.adAccount.findMany({

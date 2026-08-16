@@ -6,6 +6,8 @@ import { apiFetch } from '@/lib/api';
 
 interface RefreshResult {
   accountCount: number;
+  /** İzlemeye alınmış sayfa sayısı — organik gönderiler bunlardan çekiliyor. */
+  profileCount: number;
   queued: number;
   skipped: number;
 }
@@ -38,7 +40,13 @@ export function RefreshButton() {
       // Atlanan iş SESSİZ KALMAMALI. Düğmeye ikinci kez basan biri "bir şey
       // olmadı" diye düşünüyor; oysa iş zaten kuyrukta ve tekrar eklemek
       // kotayı ikinci kez harcamak olurdu.
-      const parts = [`${res.accountCount} hesap`, `${res.queued} iş kuyruğa alındı`];
+      // SAYFA SAYISI DA YAZILIYOR. Düğme bir süre yalnızca reklam hesaplarını
+      // kapsıyordu ve organik gönderilere hiç dokunmuyordu; kullanıcı sayfayı
+      // izlemeye alıp bu düğmeye basıyor, hiçbir gönderi gelmiyordu. Sayfa
+      // sayısını yazmak, kapsamın ne olduğunu düğmenin kendisine söyletiyor.
+      const parts = [`${res.accountCount} hesap`];
+      if (res.profileCount > 0) parts.push(`${res.profileCount} sayfa`);
+      parts.push(`${res.queued} iş kuyruğa alındı`);
       if (res.skipped > 0) parts.push(`${res.skipped} iş zaten kuyruktaydı`);
       setMessage(parts.join(' · '));
 
