@@ -82,10 +82,13 @@ akış ve engeller §7.2'de. Özeti:
    çalışıyor ve aylık tavanı ona göre hesaplanıyor; `BoostRequest` iki kipli
    olacak ve günlük kip varsayılan kalacak.
 
-**Önerilen sıra:**
+**Sıra:**
 
-1. IG gönderisinde erken hata — karar gerektirmiyor, bugünkü sessiz riski
-   kapatıyor, tek commit.
+1. ✅ **BİTTİ** — IG gönderisinde erken hata. Üç katman: kural kaydı
+   (`assertProfile`), aday üretimi (sayarak atlıyor) ve yürütücü (kota
+   alınmadan önce). Karşılaştırma ve metin tek yerde:
+   `instagram-boost-guard.ts` — K17 dalı yazılınca **bu dosya silinecek** ve
+   derleyici üç çağrı yerini gösterecek. **999 API testi** (öncesi 987).
 2. IG profilinin ana sayfası saklansın (4. tuzak).
 3. `BoostRequest`'e `targeting` + bütçe kipi; kural yolunun davranışı
    varsayılan.

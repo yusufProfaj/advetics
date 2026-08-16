@@ -19,6 +19,7 @@ import {
   selectPost,
   type PostSnapshot,
 } from './boost-selector';
+import { INSTAGRAM_BOOST_UNSUPPORTED, isInstagramProfile } from './instagram-boost-guard';
 
 /**
  * Modül 7 — Auto-Boost veri katmanı.
@@ -73,6 +74,8 @@ interface PostRow {
   social_profile_name: string;
   linked_ad_account_id: string | null;
   external_id: string;
+  /** `facebook_page` | `instagram_business` — Instagram bugün boost edilemiyor. */
+  profile_type: string;
   media_type: MediaType;
   message: string | null;
   permalink: string | null;
@@ -231,13 +234,25 @@ export class BoostsService {
     if (!input.socialProfileId) return;
     // `client_id` NULL OLABİLİR — sayfa ajansın havuzunda, henüz atanmamış.
     // Tip elle yazıldığı için derleyici bunu söylemiyor.
-    const [p] = await tx.$queryRaw<Array<{ client_id: string | null; linked: string | null }>>(
+    const [p] = await tx.$queryRaw<
+      Array<{ client_id: string | null; linked: string | null; profile_type: string }>
+    >(
       Prisma.sql`
-        SELECT client_id, linked_ad_account_id::text AS linked
+        SELECT client_id, linked_ad_account_id::text AS linked,
+               profile_type::text AS profile_type
         FROM social_profiles WHERE id = ${input.socialProfileId}::uuid
       `,
     );
     if (!p) throw new NotFoundException('Sosyal profil bulunamadı');
+    // DOĞRULAMA KULLANIM ANINDA DEĞİL GİRİŞ ANINDA. Instagram profiline kural
+    // kurulabilseydi kullanıcı bunu ancak aylar sonra, hiç boost açılmadığını
+    // fark ettiğinde öğrenirdi — ya da daha kötüsü, açılan boost'un yanlış
+    // olduğunu hiç öğrenemezdi.
+    if (isInstagramProfile(p.profile_type)) {
+      throw new BadRequestException(
+        `${INSTAGRAM_BOOST_UNSUPPORTED} Kuralı bir Facebook sayfasına kur.`,
+      );
+    }
     if (p.client_id === null) {
       throw new BadRequestException(
         'Bu sayfa henüz bir müşteriye atanmamış. Platform Bağlantıları ekranından ata — ' +
@@ -279,7 +294,8 @@ export class BoostsService {
 
     const posts = await tx.$queryRaw<PostRow[]>(Prisma.sql`
       SELECT p.*, sp.name AS social_profile_name,
-             sp.linked_ad_account_id::text AS linked_ad_account_id
+             sp.linked_ad_account_id::text AS linked_ad_account_id,
+             sp.profile_type::text AS profile_type
       FROM organic_posts p
       JOIN social_profiles sp ON sp.id = p.social_profile_id
       WHERE p.client_id = ${rule.client_id}::uuid ${profileFilter}
@@ -292,6 +308,7 @@ export class BoostsService {
 
     let created = 0;
     let cappedOut = 0;
+    let instagramSkipped = 0;
     let committed = toBigInt(rule.committed_micros);
     const dailyBudget = toBigInt(rule.daily_budget_micros);
     const monthlyCap = toBigInt(rule.monthly_cap_micros);
@@ -322,6 +339,23 @@ export class BoostsService {
         now,
       });
       if (!result.selected) continue;
+
+      /**
+       * INSTAGRAM GÖNDERİSİ ATLANIYOR — ama SAYILARAK.
+       *
+       * Kuralın `social_profile_id`'si boşsa müşterinin bütün profilleri
+       * taranıyor, Instagram dahil. `assertProfile` yalnızca profili AÇIKÇA
+       * seçen kuralı engelliyor; buradaki yol onun kapsamadığı hâl.
+       *
+       * ÖLÇÜTLERDEN SONRA SAYILIYOR, önce değil: kuralın eşiğini zaten
+       * geçemeyecek 14 Instagram gönderisini "atlandı" diye bildirmek,
+       * kullanıcıya kaybettiği bir şey varmış hissi verirdi. Buradaki sayı
+       * gerçekten boost edilecekken engellenmiş gönderilerin sayısı.
+       */
+      if (isInstagramProfile(p.profile_type)) {
+        instagramSkipped++;
+        continue;
+      }
 
       // FATURALANDIRMA HESABI YOKSA aday üretilmiyor — açılamayacak bir
       // boost'u onay kuyruğuna koymak, kullanıcıyı boşuna meşgul eder.
@@ -393,6 +427,14 @@ export class BoostsService {
 
     if (cappedOut > 0) {
       notes.push(`${cappedOut} aday aylık tavana takıldı`);
+    }
+    // SESSİZ KESME YOK. Ölçütleri geçmiş ama açılamamış gönderi varsa sayısı
+    // ve SEBEBİ yazılıyor; yoksa kullanıcı kuralın çalışmadığını sanar.
+    if (instagramSkipped > 0) {
+      notes.push(
+        `${instagramSkipped} gönderi ölçütleri geçti ama Instagram'da. ` +
+          INSTAGRAM_BOOST_UNSUPPORTED,
+      );
     }
     return { evaluated: posts.length, created, cappedOut, notes };
   }

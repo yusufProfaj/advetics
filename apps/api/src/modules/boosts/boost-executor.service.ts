@@ -5,6 +5,7 @@ import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import type { TxLike } from '../rules/rules.service';
+import { INSTAGRAM_BOOST_UNSUPPORTED, isInstagramProfile } from './instagram-boost-guard';
 
 /**
  * Onaylanmış boost'ları platformda oluşturur.
@@ -33,6 +34,14 @@ interface PendingRow {
   objective: string;
   post_external_id: string;
   profile_external_id: string;
+  /**
+   * `facebook_page` | `instagram_business`.
+   *
+   * `profile_external_id`'nin NE OLDUĞUNU bu alan belirliyor: Facebook'ta
+   * sayfa kimliği, Instagram'da IG kullanıcı kimliği. İkisi aynı yere
+   * gönderilemez.
+   */
+  profile_type: string;
   rule_name: string | null;
   account_external_id: string;
   connection_id: string;
@@ -74,6 +83,7 @@ export class BoostExecutorService {
              b.daily_budget_micros, b.duration_days, b.objective,
              p.external_id AS post_external_id,
              sp.external_id AS profile_external_id,
+             sp.profile_type::text AS profile_type,
              r.name AS rule_name,
              a.external_id AS account_external_id,
              a.connection_id::text AS connection_id,
@@ -108,6 +118,22 @@ export class BoostExecutorService {
 
   private async createOne(tx: TxLike, row: PendingRow): Promise<boolean> {
     const provider = this.providers.get('meta');
+
+    /**
+     * INSTAGRAM ENGELİ — SON SAVUNMA HATTI ve en başta duruyor.
+     *
+     * Aday üretimi Instagram gönderisini artık atlıyor, ama bu satır o
+     * kontrolün tekrarı değil: veritabanında bu düzeltmeden ÖNCE oluşmuş
+     * `approved` kayıtlar olabilir ve onlar bu döngüden geçer.
+     *
+     * KOTA ALINMADAN ÖNCE: hiçbir zaman yapılamayacak bir iş için kota
+     * yakmanın anlamı yok. Bağlantı durumundan da önce, çünkü bağlantı
+     * geçici bir sorun, bu ise K17'ye kadar kalıcı.
+     */
+    if (isInstagramProfile(row.profile_type)) {
+      await this.fail(tx, row.id, INSTAGRAM_BOOST_UNSUPPORTED);
+      return false;
+    }
 
     if (row.connection_status !== 'active') {
       await this.fail(tx, row.id, `Platform bağlantısı etkin değil (${row.connection_status}).`);
