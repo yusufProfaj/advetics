@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { AssetsModule } from '../assets/assets.module';
+import { ConnectionsModule } from '../connections/connections.module';
+import { DraftPublishService } from './draft-publish.service';
 import { DraftTreeController } from './draft-tree.controller';
 import { DraftTreeService } from './draft-tree.service';
 
@@ -11,8 +14,9 @@ import { DraftTreeService } from './draft-tree.service';
  * değiştirmek olurdu.
  */
 @Module({
+  imports: [ConnectionsModule, AssetsModule],
   controllers: [DraftTreeController],
-  providers: [DraftTreeService],
+  providers: [DraftTreeService, DraftPublishService],
   exports: [DraftTreeService],
 })
 export class DraftTreeModule {}

@@ -3,11 +3,13 @@ import {
   simpleDraftInputSchema,
   type DraftCampaignRecord,
   type DraftGroupRecord,
+  type PublishCheck,
   type SimpleDraftInput,
   type TenantContext,
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
+import { DraftPublishService } from './draft-publish.service';
 import { DraftTreeService } from './draft-tree.service';
 
 /**
@@ -24,7 +26,10 @@ import { DraftTreeService } from './draft-tree.service';
  */
 @Controller('draft-campaigns')
 export class DraftTreeController {
-  constructor(private readonly tree: DraftTreeService) {}
+  constructor(
+    private readonly tree: DraftTreeService,
+    private readonly publisher: DraftPublishService,
+  ) {}
 
   /**
    * Müşterinin taslakları — GRUPLANMIŞ.
@@ -74,6 +79,43 @@ export class DraftTreeController {
     @Body(zodBody(simpleDraftInputSchema)) input: SimpleDraftInput,
   ): Promise<DraftGroupRecord> {
     return this.tree.createFromSimple(ctx, input);
+  }
+
+  /** Yayın öncesi kontrol — engelleyenler, uyarılar ve yuva kapsaması. */
+  @Get(':id/check')
+  @RequirePermissions('bulk.read')
+  check(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<PublishCheck> {
+    return this.publisher.check(ctx, id);
+  }
+
+  /** Tek platform kampanyasını yayınlar. */
+  @Post(':id/publish')
+  @RequirePermissions('bulk.write')
+  publish(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DraftCampaignRecord> {
+    return this.publisher.publish(ctx, id);
+  }
+
+  /**
+   * Niyetin bütün platformlarını yayınlar — her biri BAĞIMSIZ.
+   *
+   * HATA FIRLATMIYOR: Meta çıkıp Google düştüğünde tek bir hata döndürmek,
+   * yayına girmiş ve o anda para harcamaya başlamış Meta kampanyasını
+   * kullanıcıdan gizlemek olurdu. Yanıt her platformun kendi durumunu
+   * taşıyor.
+   */
+  @Post(':id/publish-group')
+  @RequirePermissions('bulk.write')
+  publishGroup(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DraftGroupRecord> {
+    return this.publisher.publishGroup(ctx, id);
   }
 
   @Delete(':id')
