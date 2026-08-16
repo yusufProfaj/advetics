@@ -104,6 +104,9 @@ model Organization {
   assetRefs       AssetPlatformRef[]
   adCreatives     AdCreative[]
   adCreativeLinks AdCreativeAsset[]
+  draftCampaigns  DraftCampaign[]
+  draftAdGroups   DraftAdGroup[]
+  draftAds        DraftAd[]
 
   @@map("organizations")
 }
@@ -193,6 +196,7 @@ model Client {
   leadCursors     LeadSyncCursor[]
   assets          Asset[]
   adCreatives     AdCreative[]
+  draftCampaigns  DraftCampaign[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -499,6 +503,7 @@ model AdAccount {
   rules           Rule[]
   boosts          Boost[]
   adDrafts        AdDraft[]
+  draftCampaigns  DraftCampaign[]
   keywordInsights KeywordInsight[]
   bulkBatches     BulkBatch[]
   assetRefs       AssetPlatformRef[]
@@ -550,6 +555,7 @@ model SocialProfile {
   organicPosts    OrganicPost[]
   boostRules      BoostRule[]
   adDrafts        AdDraft[]
+  draftAdGroups   DraftAdGroup[]
   leadForms       LeadForm[]
   leads           Lead[]
   leadCursors     LeadSyncCursor[]
@@ -1842,6 +1848,7 @@ model LeadForm {
   supersededBy LeadForm?  @relation("LeadFormSupersede", fields: [supersededById], references: [id], onDelete: SetNull)
   supersedes   LeadForm[] @relation("LeadFormSupersede")
   adDrafts     AdDraft[]
+  draftAdGroups DraftAdGroup[]
   leads        Lead[]
 
   @@index([clientId, createdAt(sort: Desc)])
@@ -2039,6 +2046,7 @@ model AdCreative {
   organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   client       Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   assets       AdCreativeAsset[]
+  draftAds     DraftAd[]
 
   @@index([clientId, createdAt(sort: Desc)])
   @@map("ad_creatives")
@@ -2079,4 +2087,192 @@ model AdCreativeAsset {
   @@unique([creativeId, assetId], map: "ad_creative_assets_uniq")
   @@index([assetId])
   @@map("ad_creative_assets")
+}
+
+// -----------------------------------------------------------------------------
+// Kampanya taslağı ağacı
+//
+// ADLANDIRMA SENKRONİZE OKUMA TARAFINI AYNALIYOR:
+//   campaigns  → ad_groups  → ads          (platformdan gelen, okunan)
+//   draft_campaigns → draft_ad_groups → draft_ads   (bizim kurduğumuz, yazılacak)
+//
+// "ad set" değil `ad_group` çünkü okuma tarafı da öyle: aynı tablo hem Meta ad
+// set'ini hem Google ad group'unu tutuyor ve iki ayrı kelime kullanmak, aynı
+// şeyin iki adı olması demek olurdu. Panelde kullanıcı yine "reklam grubu"
+// görecek; buradaki isim veritabanının işi.
+//
+// Ayna kasıtlı: taslak yayınlandığında bu ağaç senkronize satırlara bağlanıyor
+// ve "yayınladığım şey şu anda ne durumda" sorusu tek eşlemeyle cevaplanıyor.
+// -----------------------------------------------------------------------------
+
+/// Kampanya taslağı — BİR TASLAK = BİR PLATFORM.
+///
+/// Aynı niyetin iki platformdaki karşılığı `groupId` ile bağlanıyor, tek satırda
+/// birleştirilmiyor. Sebebi kısmi başarı: Meta çıkar, Google düşer ve bu
+/// istisna değil normal sonuçtur — iki API, iki onay süreci, iki politika
+/// motoru. Tek `status` alanı iki gerçeği taşıyamıyor; "başarısız" demek
+/// yayındaki Meta reklamını gizler, "yayında" demek hiç oluşmamış Google
+/// kampanyasını var gösterir. İkisi de bu projenin klasik sessiz hatası.
+///
+/// İkinci gerekçe bütçe: "günde 200 ₺" iki platforma nasıl bölünecek sorusunun
+/// cevabı kullanıcının kararı. Ayrı satır = ayrı bütçe, açıkça.
+///
+/// `ad_drafts` TABLOSU YERİNDE DURUYOR ve çalışmaya devam ediyor. Bu ağaç onun
+/// yerini alacak ama göç ayrı bir iş (tasarım belgesi K11) — şimdilik ikisi yan
+/// yana ve hiçbir mevcut satır taşınmadı.
+model DraftCampaign {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+
+  /// Aynı niyetin diğer platformdaki eşi. NULL = tek platformluk taslak.
+  ///
+  /// KENDİ TABLOSU YOK ve bu bilinçli: grubun kampanya adından başka özniteliği
+  /// olmayacak, tablo açmak boş bir satır tutmak demek olurdu. Raporlamada
+  /// "bu kampanyanın toplam sonucu" bu kimlik üzerinden kuruluyor — ama
+  /// TOPLANAMAYAN METRİK TOPLANMIYOR: erişim tekil kişi sayısı ve aynı insan
+  /// iki platformda da görüldüyse iki kez sayılır.
+  groupId String? @map("group_id") @db.Uuid
+
+  platform    Platform
+  adAccountId String   @map("ad_account_id") @db.Uuid
+
+  name String @db.VarChar(200)
+
+  /// Hangi yüzeyden kuruldu: simple | expert.
+  ///
+  /// Bugünkü `ad_drafts.mode` (simple/advanced) bir ANAHTARDI — aynı taslağın
+  /// üzerinde iki görünüm. Burada iki AYRI YÜZEY var: basit yüzey ağacı bir
+  /// üreticiyle kuruyor, uzman yüzeyi ağacı doğrudan düzenliyor. Kolonun işi
+  /// "bu taslağı hangi ekran açsın" sorusunu cevaplamak.
+  surface String @default("simple") @db.VarChar(10)
+
+  /// form | whatsapp | website — basit yüzeyin verdiği tek stratejik karar.
+  ///
+  /// UZMAN YÜZEYİNDE NULL. Uzman hedefi değil, doğrudan platformun amacını
+  /// (`settings.objective`) seçiyor; ona bir `goal` uydurmak, taslağın neye
+  /// göre kurulduğu sorusuna yanlış cevap vermek olurdu.
+  goal String? @db.VarChar(16)
+
+  /// Platforma özgü kampanya ayarları — amaç, özel reklam kategorisi, teklif.
+  ///
+  /// JSONB, `ad_drafts.advanced` ile aynı gerekçe: alanlar platformun ve
+  /// platform bunları sürümden sürüme değiştiriyor.
+  settings Json? @db.JsonB
+
+  /// daily | lifetime | none.
+  ///
+  /// BÜTÇE İKİ SEVİYEDE OLABİLİR ve hangisinin dolu olduğu anlamlı:
+  /// Meta'da kampanya bütçesi (CBO) ile reklam grubu bütçesi (ABO) farklı
+  /// dağıtım davranışı demek; Google'da bütçe her zaman kampanya seviyesinde
+  /// (`CampaignBudget` ayrı bir kaynak). İkisini birden doldurmak ya da
+  /// ikisini birden boş bırakmak geçersiz — kontrol `01_constraints.sql`'de
+  /// ve serviste.
+  budgetMode         String  @default("none") @map("budget_mode") @db.VarChar(10)
+  budgetAmountMicros BigInt? @map("budget_amount_micros")
+
+  startAt DateTime? @map("start_at") @db.Timestamptz(6)
+  endAt   DateTime? @map("end_at") @db.Timestamptz(6)
+
+  /// draft | publishing | published | failed — PLATFORM BAŞINA.
+  status String @default("draft") @db.VarChar(16)
+
+  externalCampaignId String?   @map("external_campaign_id") @db.VarChar(128)
+  error              String?   @db.VarChar(2000)
+  publishedAt        DateTime? @map("published_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount    AdAccount       @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  adGroups     DraftAdGroup[]
+
+  @@index([clientId, createdAt(sort: Desc)])
+  @@index([groupId])
+  @@map("draft_campaigns")
+}
+
+/// Reklam grubu taslağı (Meta'da ad set, Google'da ad group).
+///
+/// ÇOKLU: şema baştan birden fazla grubu taşıyor ama arayüz ilk turda tek grup
+/// gösteriyor (tasarım belgesi K4). Şemayı sonradan çoğaltmak migration demek;
+/// arayüzü açmak bir ekran işi.
+model DraftAdGroup {
+  id         String @id @default(uuid()) @db.Uuid
+  orgId      String @map("org_id") @db.Uuid
+  campaignId String @map("campaign_id") @db.Uuid
+
+  name String @db.VarChar(200)
+
+  /// Sıra kullanıcının kararı; veritabanı sırası rastgele.
+  position Int @default(0)
+
+  /// Reklamın yayınlanacağı Facebook sayfası. Google'da NULL.
+  ///
+  /// AD SET SEVİYESİNDE çünkü Meta sayfayı burada değil kreatifte istiyor ama
+  /// `promoted_object.page_id` ad set'e gidiyor — ikisi ayrı yerler ve bu
+  /// ayrımı bir kez canlıda öğrendik (13 Ağustos, 5 numaralı hata: form
+  /// kimliği ad set'e konmuştu).
+  socialProfileId String? @map("social_profile_id") @db.Uuid
+  leadFormId      String? @map("lead_form_id") @db.Uuid
+
+  /// Hedefleme, yerleşim, optimizasyon, teklif — platforma özgü.
+  settings Json? @db.JsonB
+
+  budgetMode         String  @default("none") @map("budget_mode") @db.VarChar(10)
+  budgetAmountMicros BigInt? @map("budget_amount_micros")
+
+  externalAdSetId String? @map("external_ad_set_id") @db.VarChar(128)
+  error           String? @db.VarChar(2000)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  campaign      DraftCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile? @relation(fields: [socialProfileId], references: [id], onDelete: SetNull)
+  leadForm      LeadForm?      @relation(fields: [leadFormId], references: [id], onDelete: SetNull)
+  ads           DraftAd[]
+
+  @@index([campaignId, position])
+  @@map("draft_ad_groups")
+}
+
+/// Reklam taslağı — bir reklam grubunun içindeki tek bir reklam.
+///
+/// BU TABLONUN VARLIK SEBEBİ A/B TESTİ. Bugün bir taslak tek bir reklam
+/// demek ve aynı reklam grubuna ikinci bir metin/görsel denemesi eklemenin
+/// yolu yok. Ajans pratiğinde reklam grubu başına 3-5 kreatif standart.
+model DraftAd {
+  id         String @id @default(uuid()) @db.Uuid
+  orgId      String @map("org_id") @db.Uuid
+  adGroupId  String @map("ad_group_id") @db.Uuid
+  creativeId String @map("creative_id") @db.Uuid
+
+  name String @db.VarChar(200)
+
+  position Int @default(0)
+
+  externalAdId       String? @map("external_ad_id") @db.VarChar(128)
+  externalCreativeId String? @map("external_creative_id") @db.VarChar(128)
+  error              String? @db.VarChar(2000)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  adGroup      DraftAdGroup @relation(fields: [adGroupId], references: [id], onDelete: Cascade)
+  /// KULLANIMDA OLAN KREATİF SİLİNEMİYOR (Restrict).
+  ///
+  /// Cascade olsaydı kütüphaneden bir kreatifi silmek, ona bağlı taslak
+  /// reklamları sessizce yok ederdi — kullanıcı kütüphaneyi topluyor sanır,
+  /// kampanyası eksilir.
+  creative     AdCreative   @relation(fields: [creativeId], references: [id], onDelete: Restrict)
+
+  @@index([adGroupId, position])
+  @@index([creativeId])
+  @@map("draft_ads")
 }

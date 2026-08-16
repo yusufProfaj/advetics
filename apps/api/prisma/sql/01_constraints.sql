@@ -567,3 +567,64 @@ ALTER TABLE assets ADD CONSTRAINT assets_hash_chk
 ALTER TABLE asset_platform_refs DROP CONSTRAINT IF EXISTS asset_platform_refs_ref_chk;
 ALTER TABLE asset_platform_refs ADD CONSTRAINT asset_platform_refs_ref_chk
   CHECK (length(external_ref) > 0);
+
+-- -----------------------------------------------------------------------------
+-- Kampanya taslağı ağacı
+--
+-- `ad_drafts` kısıtlarının aynısı, ağaca uyarlanmış hâli. Aynı gerekçeler:
+-- sebepsiz bir başarısızlık "çalışmadı"dan fazlasını söylemiyor, kimliksiz bir
+-- "yayında" kaydı ise panelde çalışıyor görünen ama bulunamayan bir harcama.
+-- -----------------------------------------------------------------------------
+ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_status_chk;
+ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_status_chk
+  CHECK (status IN ('draft', 'publishing', 'published', 'failed'));
+
+ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_surface_chk;
+ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_surface_chk
+  CHECK (surface IN ('simple', 'expert'));
+
+-- HEDEF YALNIZCA BASİT YÜZEYDE. Uzman yüzeyi platformun amacını doğrudan
+-- seçiyor; ona bir `goal` uydurmak, taslağın neye göre kurulduğu sorusuna
+-- yanlış cevap vermek olurdu.
+ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_goal_chk;
+ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_goal_chk
+  CHECK (goal IS NULL OR goal IN ('form', 'whatsapp', 'website'));
+
+-- BÜTÇE MODU İLE TUTAR BİRLİKTE GİDER.
+--
+-- Modu 'daily' olup tutarı NULL olan bir satır, yayın anında bütçesiz
+-- kampanya demek — Meta bunu reddediyor ama hata mesajı hangi alanın eksik
+-- olduğunu söylemiyor. Tersi de sessiz: modu 'none' iken duran bir tutar,
+-- kullanıcının girdiği ama hiçbir yere gitmeyen bir sayı.
+ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_budget_chk;
+ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_budget_chk
+  CHECK (
+    budget_mode IN ('none', 'daily', 'lifetime')
+    AND (budget_mode = 'none') = (budget_amount_micros IS NULL)
+    AND (budget_amount_micros IS NULL OR budget_amount_micros > 0)
+  );
+
+-- TOPLAM BÜTÇEDE BİTİŞ ZORUNLU. Meta bütçeyi süreye bölüyor; süre yoksa
+-- bölecek bir şey de yok ve ad set hiç dağıtım yapmıyor.
+ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_lifetime_end_chk;
+ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_lifetime_end_chk
+  CHECK (budget_mode <> 'lifetime' OR end_at IS NOT NULL);
+
+ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_error_chk;
+ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_error_chk
+  CHECK (status <> 'failed' OR error IS NOT NULL);
+
+ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_published_chk;
+ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_published_chk
+  CHECK (
+    status <> 'published'
+    OR (external_campaign_id IS NOT NULL AND published_at IS NOT NULL)
+  );
+
+ALTER TABLE draft_ad_groups DROP CONSTRAINT IF EXISTS draft_ad_groups_budget_chk;
+ALTER TABLE draft_ad_groups ADD CONSTRAINT draft_ad_groups_budget_chk
+  CHECK (
+    budget_mode IN ('none', 'daily', 'lifetime')
+    AND (budget_mode = 'none') = (budget_amount_micros IS NULL)
+    AND (budget_amount_micros IS NULL OR budget_amount_micros > 0)
+  );

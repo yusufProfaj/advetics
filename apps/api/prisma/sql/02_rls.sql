@@ -164,7 +164,9 @@ DECLARE
     -- Varlık arşivi
     'assets', 'asset_platform_refs',
     -- Kreatif (metin havuzu + görsel havuzu)
-    'ad_creatives', 'ad_creative_assets'
+    'ad_creatives', 'ad_creative_assets',
+    -- Kampanya taslağı ağacı
+    'draft_campaigns', 'draft_ad_groups', 'draft_ads'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -1287,5 +1289,141 @@ CREATE POLICY adv_ad_creative_assets_delete ON ad_creative_assets
     AND EXISTS (
       SELECT 1 FROM ad_creatives c
       WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+-- =============================================================================
+-- Kampanya taslağı ağacı
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- draft_campaigns
+--
+-- `ad_drafts` ile aynı desen: org + müşteri. Ağacın kökü bu, dolayısıyla
+-- çocukların erişim kontrolü de buradan türüyor.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_draft_campaigns_select ON draft_campaigns
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_draft_campaigns_insert ON draft_campaigns
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_draft_campaigns_update ON draft_campaigns
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_draft_campaigns_delete ON draft_campaigns
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- draft_ad_groups
+--
+-- Kiracı kontrolü KAMPANYA ÜZERİNDEN. Satırın kendi `org_id`'si var ama tek
+-- başına yetmez: org içindeki başka bir müşterinin kampanyasına ait grup
+-- görünürdü.
+--
+-- `client_id` KOLONU YOK ve bilerek: kopyalamak iki kaynağın zamanla ayrışması
+-- demek olurdu. Bir grubun müşterisi, kampanyasının müşterisidir — başka türlü
+-- olamaz ve olmamalı.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_draft_ad_groups_select ON draft_ad_groups
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM draft_campaigns c
+      WHERE c.id = draft_ad_groups.campaign_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+CREATE POLICY adv_draft_ad_groups_insert ON draft_ad_groups
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM draft_campaigns c
+      WHERE c.id = draft_ad_groups.campaign_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+CREATE POLICY adv_draft_ad_groups_update ON draft_ad_groups
+  FOR UPDATE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM draft_campaigns c
+      WHERE c.id = draft_ad_groups.campaign_id AND app.can_access_client(c.client_id)
+    )
+  )
+  WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM draft_campaigns c
+      WHERE c.id = draft_ad_groups.campaign_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+CREATE POLICY adv_draft_ad_groups_delete ON draft_ad_groups
+  FOR DELETE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM draft_campaigns c
+      WHERE c.id = draft_ad_groups.campaign_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+-- -----------------------------------------------------------------------------
+-- draft_ads
+--
+-- İKİ SEVİYE YUKARI JOIN ediliyor: reklam → grup → kampanya. Zincirin
+-- kısaltılması (yalnızca `org_id`) org içindeki bütün taslak reklamları
+-- birbirine açardı.
+--
+-- KREATİFİN MÜŞTERİSİ AYRICA KONTROL EDİLMİYOR — politikayla yakalanamıyor,
+-- iki satır da aynı org'da. "A müşterisinin kreatifini B'nin reklamına bağlama"
+-- kontrolü servis katmanında açık bir kontrol olmak zorunda.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_draft_ads_select ON draft_ads
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM draft_ad_groups g
+      JOIN draft_campaigns c ON c.id = g.campaign_id
+      WHERE g.id = draft_ads.ad_group_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+CREATE POLICY adv_draft_ads_insert ON draft_ads
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM draft_ad_groups g
+      JOIN draft_campaigns c ON c.id = g.campaign_id
+      WHERE g.id = draft_ads.ad_group_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+CREATE POLICY adv_draft_ads_update ON draft_ads
+  FOR UPDATE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM draft_ad_groups g
+      JOIN draft_campaigns c ON c.id = g.campaign_id
+      WHERE g.id = draft_ads.ad_group_id AND app.can_access_client(c.client_id)
+    )
+  )
+  WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM draft_ad_groups g
+      JOIN draft_campaigns c ON c.id = g.campaign_id
+      WHERE g.id = draft_ads.ad_group_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+CREATE POLICY adv_draft_ads_delete ON draft_ads
+  FOR DELETE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM draft_ad_groups g
+      JOIN draft_campaigns c ON c.id = g.campaign_id
+      WHERE g.id = draft_ads.ad_group_id AND app.can_access_client(c.client_id)
     )
   );
