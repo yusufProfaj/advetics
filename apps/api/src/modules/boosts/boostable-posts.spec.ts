@@ -331,6 +331,10 @@ describe('boş listenin sebebi', () => {
     await seedProfile(FB, 'facebook_page');
     const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
     expect(out.emptyReason).toMatch(/henüz gönderi çekilmemiş/i);
+    // SIKLIK DOĞRU: organik süpürme saatte bir koşuyor. "Günde iki kez" boost
+    // kuralının sıklığı ve o cümle kullanıcıyı boşuna yarım gün bekletirdi.
+    expect(out.emptyReason).toMatch(/saatte bir/i);
+    expect(out.emptyReason).not.toMatch(/günde iki kez/i);
   });
 
   it('liste doluyken sebep YAZILMIYOR', async () => {

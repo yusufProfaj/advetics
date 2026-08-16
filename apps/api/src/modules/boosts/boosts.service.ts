@@ -444,9 +444,14 @@ export class BoostsService {
         'aç; izleme kapalıyken organik gönderiler çekilmiyor.'
       );
     }
+    // SIKLIK DOĞRU YAZILMALI. İlk yazımda "günde iki kez" diyordu — o, boost
+    // KURALININ değerlendirme sıklığı (`sweep:boosts`). Organik gönderi
+    // süpürmesi SAATTE BİR koşuyor (`sweep:organic`, dakika 41). Yanlış
+    // sıklık, kullanıcıyı boşuna yarım gün bekletir.
     return (
-      `${say.izlenen} sayfa izlemede ama henüz gönderi çekilmemiş. Senkronizasyon ` +
-      'günde iki kez koşuyor; "Şimdi güncelle" ile öne alabilirsin.'
+      `${say.izlenen} sayfa izlemede ama henüz gönderi çekilmemiş. Gönderiler ` +
+      'saatte bir çekiliyor; Genel Bakış ekranındaki "Şimdi güncelle" ile hemen ' +
+      'başlatabilirsin.'
     );
   }
 
