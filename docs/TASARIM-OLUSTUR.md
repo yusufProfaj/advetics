@@ -395,6 +395,97 @@ Böylece yeni platform eklemek ad-builder'a dokunmadan mümkün olur ve §9.1'de
 üçlü ayrım tip seviyesinde zorunlu hâle gelir — bir provider "bu hedefi
 destekliyor muyum" sorusuna cevap vermeden derlenemez.
 
+### 9.5. Somut birleşme noktası: KREATİF
+
+Tek cümle: **kreatif birleşir, kampanya birleşmez.**
+
+Kreatif = **metin havuzu + görsel havuzu**. Paketleme platformun işi:
+
+| | Meta (tek görselli) | Google RSA (Arama) | Google PMax |
+|---|---|---|---|
+| Başlık | 1 | **15'e kadar**, 30 karakter | birkaç kısa + birkaç uzun |
+| Açıklama | 1 | **4'e kadar**, 90 karakter | birkaç |
+| Ana metin | 1 (birincil metin) | yok | yok |
+| Görsel | kare (zorunlu) · 9:16 · 16:9 | yok | 1.91:1 · 1:1 · 4:5 + **logo** |
+
+Bugün bu iki dünya iki ayrı yerde yaşıyor: metin `ad_drafts` sütunlarında
+(`primary_text`, `headline`, `description`), görsel `ad_draft_assets`'te ve
+ikisi de tek bir taslağa çivili. Google eklenince bu model çöküyor — 15
+başlığı üç sütuna sığdıramazsın.
+
+**Öneri:** kreatif kendi varlığı olsun (K5), içinde **etiketli** metin
+parçaları (`kısa_başlık` / `uzun_başlık` / `açıklama` / `ana_metin`) ve
+görseller dursun. Her platform kendi paketini bu havuzdan kursun. Kazancı
+somut: kullanıcı bir kez yazar, Meta bir başlık alır, Google on beş
+başlığın en iyisini kendi seçer.
+
+Görsel tarafında birleşme zaten **yarı yarıya hazır**: `coverageFor` iki
+platformun yuvalarını da biliyor ve K7'deki kırpma aracı tek görselden hem
+Meta'nın hem Google'ın oranlarını üretebilir. Eksik olan tek şey **logo** —
+PMax onsuz varlık grubu oluşturmuyor ve bugün yükleme akışında hiç yok
+([asset-routing.schema.ts:166](../packages/shared/src/schemas/asset-routing.schema.ts:166)).
+
+### 9.6. Basit yüzeyde kullanıcı ne görüyor
+
+Platform bir soru olarak hiç geçmiyor; hedef kartının **altında sonuç
+olarak** yazıyor:
+
+```
+┌────────────────────────────┐  ┌────────────────────────────┐
+│ WhatsApp'tan mesaj gelsin  │  │ Siteme ziyaretçi gelsin    │
+│ Facebook · Instagram       │  │ Facebook · Instagram·Google│
+└────────────────────────────┘  └────────────────────────────┘
+```
+
+**Ek soru YALNIZCA iki platformun da anlamlı olduğu hedefte çıkıyor** ve
+platform seçimi olarak değil, **bütçe sorusu** olarak:
+
+> Bütçeni nasıl kullanalım?
+> · Önce Meta'da deneyelim · İkisini de deneyelim · Yalnızca Google
+
+Kaydırıcı YOK. "Yüzde kaçı Google'a" sorusu, cevabını bilmeyen bir kullanıcıya
+sorulmuş bir uzman sorusudur; üç hazır seçenek aynı kararı verdiriyor.
+
+### 9.7. EN KRİTİK DETAY: kısmi başarı
+
+Meta çıktı, Google düştü. Bu **normal** bir sonuç, istisna değil — iki ayrı
+API, iki ayrı onay süreci, iki ayrı politika motoru.
+
+Bugünkü model bunu ifade **edemiyor**: `ad_drafts.status` tek alan ve tek
+`error` sütunu var. Tek satırla iki gerçeği taşımaya çalışmak, ya "başarısız"
+deyip yayında olan Meta reklamını gizlemek ya da "yayında" deyip hiç
+oluşmamış Google kampanyasını var göstermek demek. İkisi de bu projenin
+klasik sessiz hatası.
+
+K13'ün (bir taslak = bir platform) asıl gerekçesi bu. Ekranda karşılığı:
+
+```
+Yaz Kampanyası
+  ├ Meta    · yayında            · günde 120 ₺
+  └ Google  · başarısız          · [Yeniden dene]   ← tek başına
+```
+
+Düşen taraf **tek başına** tekrar denenebilmeli. Bütün grubu yeniden
+yayınlamak, çalışan Meta kampanyasının ikinci bir kopyasını açmak olurdu.
+
+### 9.8. Raporda birleşme — iki tuzak
+
+Grup kimliği "bu kampanyanın toplam sonucu"nu mümkün kılıyor ama **her metrik
+toplanamıyor** ve bunu bilmeden toplamak sessiz bir yanlış sayı üretir:
+
+| Metrik | Toplanır mı | Neden |
+|---|---|---|
+| Harcama | ✅ | Para paradır |
+| Gösterim | ✅ | Olay sayısı |
+| Tıklama | ✅ | Olay sayısı |
+| **Erişim** | ❌ | Tekil KİŞİ sayısı. Aynı insan iki platformda da görüldüyse iki kez sayılır; toplam gerçek erişimden büyük çıkar |
+| **Dönüşüm** | ⚠️ | İki platform da kendi atıf penceresiyle sahipleniyor. Meta reklamını görüp Google'dan dönen kişiyi ikisi birden yazabiliyor |
+| CPA / ROAS | ⚠️ | Payda dönüşüme bağlı; dönüşüm çift sayılıyorsa bunlar da yanlış |
+
+Kural: **toplanamayan metrik toplanmaz, platform kırılımıyla yan yana
+gösterilir.** Erişim için tek doğru cümle "Meta 40.000 · Google 25.000",
+"65.000" değil.
+
 ---
 
 ## 10. AÇIK KARARLAR
@@ -722,6 +813,10 @@ Belgede varsayım olarak duran, canlıda ya da veriyle sınanacak maddeler:
   token'ı yalnızca test hesaplarını görüyor
   ([google.provider.ts:204](../apps/api/src/modules/connections/providers/google.provider.ts:204)).
   Standard olup olmadığı hâlâ bilinmiyor.
+- **Google RSA ve PMax'in tam metin kotaları** (§9.5). RSA'nın 15 başlık / 4
+  açıklama sınırı belgelenmiş; PMax'in kısa–uzun başlık dağılımı sürüme göre
+  değişiyor ve canlıda doğrulanmalı. Metin havuzunun etiket şeması buna göre
+  kesinleşecek.
 - ~~**Google'da kaç hesap havuza düştü**~~ — **CEVAPLANDI (2026-08-16,
   panelden):** 127 hesap keşfedildi, **2'si atanmış ve izleniyor** (Ege Birlik
   Yapı · 1695129827, Fenbay İnşaat Mühendislik · 2020193566 — ikisi de TRY /
