@@ -21,9 +21,12 @@ import type { TxLike } from '../rules/rules.service';
 
 interface PendingRow {
   id: string;
+  org_id: string;
   client_id: string;
   ad_account_id: string;
   organic_post_id: string;
+  social_profile_id: string;
+  boost_rule_id: string | null;
   daily_budget_micros: bigint;
   duration_days: number;
   objective: string;
@@ -60,8 +63,11 @@ export class BoostExecutorService {
     limit = 10,
   ): Promise<{ created: number; failed: number }> {
     const pending = await tx.$queryRaw<PendingRow[]>(Prisma.sql`
-      SELECT b.id, b.client_id, b.ad_account_id::text AS ad_account_id,
+      SELECT b.id, b.org_id::text AS org_id, b.client_id,
+             b.ad_account_id::text AS ad_account_id,
              b.organic_post_id::text AS organic_post_id,
+             b.boost_rule_id::text AS boost_rule_id,
+             p.social_profile_id::text AS social_profile_id,
              b.daily_budget_micros, b.duration_days, b.objective,
              p.external_id AS post_external_id,
              sp.external_id AS profile_external_id,
@@ -171,6 +177,8 @@ export class BoostExecutorService {
         WHERE id = ${row.id}::uuid
       `);
 
+      await this.writeTree(tx, row, result);
+
       // GÖNDERİ İŞARETLENİYOR — aynı gönderi ikinci kez aday olmasın.
       //
       // Kısmi tekil indeks zaten canlı bir boost varken ikinciyi engelliyor,
@@ -193,6 +201,92 @@ export class BoostExecutorService {
             : String(err);
       await this.fail(tx, row.id, message);
       return false;
+    }
+  }
+
+  /**
+   * Boost'u KAMPANYA AĞACINA yazar.
+   *
+   * NEDEN BURADA VE NEDEN AYNI TRANSACTION'DA: bu servis zaten `tx` üzerinden
+   * kiracı tablolarına yazıyor (`boosts`, `organic_posts`). Ağaç satırlarını
+   * aynı transaction'dan yazmak YENİ BİR GÜVENLİK KARARI DEĞİL — mevcut
+   * kararın ta kendisi. Ayrı bir yola çıkarmak, boost oluşup ağaç satırının
+   * yazılamadığı bir aralık bırakırdı ve o boost panelde hiç görünmezdi.
+   *
+   * NE KAZANDIRIYOR: kuraldan doğan bir boost artık elle kurulan
+   * kampanyalarla AYNI listede, aynı durum modeliyle ve "nereden geldi"
+   * bilgisiyle duruyor. Beklenmedik bir harcamanın kaynağını bulmanın tek
+   * yolu bu bağ — `boost_rule_id` hangi kuralın açtığını söylüyor.
+   *
+   * `boosts` TABLOSU KALIYOR ve işi değişmiyor: onay kuyruğu ve aylık tavan
+   * muhasebesi. Ağaç "hangi kampanyalar var" sorusunun, `boosts` "hangi
+   * boost'lar onaylandı ve ne kadar taahhüt edildi" sorusunun cevabı.
+   *
+   * SESSİZ KALMIYOR: ağaç yazılamazsa boost YİNE oluşmuş durumda ve
+   * platformda para harcıyor. Hata fırlatmak, oluşan boost'u "başarısız"
+   * göstermek olurdu; log'a yazıp devam ediyoruz.
+   */
+  private async writeTree(
+    tx: TxLike,
+    row: PendingRow,
+    result: { externalCampaignId: string; externalAdSetId: string; externalAdId: string },
+  ): Promise<void> {
+    try {
+      /**
+       * KAYNAK KURALA BAĞLI. `draft_campaigns_boost_rule_chk` kuraldan doğan
+       * bir kampanyanın kuralını taşımasını zorunlu kılıyor; elle onaylanan
+       * bir boost'ta kural yok ve o satır 'manual' oluyor.
+       */
+      const source = row.boost_rule_id ? 'boost_rule' : 'manual';
+      const name = `Boost — ${row.rule_name ?? 'elle'} — ${row.post_external_id.slice(-8)}`;
+      const endAt = new Date(Date.now() + row.duration_days * 86_400_000);
+
+      const [campaign] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO draft_campaigns (
+          id, org_id, client_id, platform, ad_account_id, name, surface, goal,
+          settings, budget_mode, budget_amount_micros, end_at, status,
+          external_campaign_id, published_at, source, boost_rule_id, updated_at
+        ) VALUES (
+          gen_random_uuid(), ${row.org_id}::uuid, ${row.client_id}::uuid, 'meta',
+          ${row.ad_account_id}::uuid, ${name}, 'simple', NULL,
+          ${JSON.stringify({ objective: row.objective })}::jsonb,
+          'daily', ${row.daily_budget_micros}::bigint, ${endAt}::timestamptz,
+          'published', ${result.externalCampaignId}, now(),
+          ${source}, ${row.boost_rule_id}::uuid, now()
+        )
+        RETURNING id::text AS id
+      `);
+      if (!campaign) throw new Error('Kampanya satırı yazılamadı');
+
+      const [group] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO draft_ad_groups (
+          id, org_id, campaign_id, name, position, social_profile_id,
+          external_ad_set_id, updated_at
+        ) VALUES (
+          gen_random_uuid(), ${row.org_id}::uuid, ${campaign.id}::uuid, ${name}, 0,
+          ${row.social_profile_id}::uuid, ${result.externalAdSetId}, now()
+        )
+        RETURNING id::text AS id
+      `);
+      if (!group) throw new Error('Reklam grubu satırı yazılamadı');
+
+      // KREATİF YOK, GÖNDERİ VAR. `draft_ads_source_chk` ikisinden tam
+      // birinin dolu olmasını zorunlu kılıyor.
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO draft_ads (
+          id, org_id, ad_group_id, creative_id, organic_post_id, name, position,
+          external_ad_id, updated_at
+        ) VALUES (
+          gen_random_uuid(), ${row.org_id}::uuid, ${group.id}::uuid, NULL,
+          ${row.organic_post_id}::uuid, ${name}, 0, ${result.externalAdId}, now()
+        )
+      `);
+    } catch (err) {
+      this.logger.error(
+        `Boost ağaca yazılamadı (${row.id}): ` +
+          `${err instanceof Error ? err.message : String(err)}. ` +
+          'Boost platformda OLUŞTU ve harcıyor; panelde kampanya listesinde görünmeyecek.',
+      );
     }
   }
 

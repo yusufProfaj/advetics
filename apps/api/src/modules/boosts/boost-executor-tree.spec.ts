@@ -1,0 +1,232 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
+import { PlatformApiError } from '../connections/provider.types';
+import { BoostExecutorService } from './boost-executor.service';
+
+/**
+ * Boost kural motoru — KAMPANYA AĞACINA BAĞLANDI.
+ *
+ * Kuraldan doğan bir boost artık elle kurulan kampanyalarla aynı listede,
+ * aynı durum modeliyle ve "nereden geldi" bilgisiyle duruyor. Beklenmedik bir
+ * harcamanın kaynağını bulmanın tek yolu bu bağ.
+ *
+ * `boosts` TABLOSU KALIYOR ve işi değişmiyor: onay kuyruğu ve aylık tavan
+ * muhasebesi. Ağaç "hangi kampanyalar var", `boosts` "hangi boost onaylandı
+ * ve ne kadar taahhüt edildi" sorusunun cevabı.
+ */
+
+let h: Harness;
+let svc: BoostExecutorService;
+
+const createBoost = vi.fn();
+const canWrite = vi.fn();
+
+const POST = '66666666-6666-6666-6666-666666666666';
+const PAGE = '77777777-7777-7777-7777-777777777777';
+const RULE = '88888888-8888-8888-8888-888888888888';
+const BOOST = '99999999-9999-9999-9999-999999999999';
+
+beforeAll(async () => {
+  h = await createHarness();
+  svc = new BoostExecutorService(
+    { get: () => ({ platform: 'meta', createBoost, canWrite }) } as never,
+    { getAccessToken: async () => 'token' } as never,
+    { acquire: async () => ({ allowed: true, usagePercent: 5 }), record: async () => {} } as never,
+  );
+});
+
+afterAll(async () => {
+  await h.close();
+});
+
+beforeEach(async () => {
+  await h.reset();
+  await seedTenant(h);
+
+  await h.q(
+    `INSERT INTO social_profiles
+       (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
+     VALUES ($1, $2, $3, $4, 'facebook_page', 'page-1', 'Sayfa', now())`,
+    [PAGE, IDS.org, IDS.client, IDS.connection],
+  );
+  await h.q(
+    `INSERT INTO organic_posts
+       (id, org_id, client_id, social_profile_id, external_id, media_type,
+        published_at, updated_at)
+     VALUES ($1, $2, $3, $4, 'post-abcdefgh', 'photo', now() - interval '2 days', now())`,
+    [POST, IDS.org, IDS.client, PAGE],
+  );
+  await h.q(
+    `INSERT INTO boost_rules
+       (id, org_id, client_id, social_profile_id, name,
+        conditions, combinator, daily_budget_micros, duration_days,
+        monthly_cap_micros, objective, updated_at)
+     VALUES ($1, $2, $3, $4, 'Etkileşim kuralı',
+             '[{"metric":"engagements","operator":"gte","value":100}]'::jsonb,
+             'and', 100000000, 3, 3000000000, 'OUTCOME_ENGAGEMENT', now())`,
+    [RULE, IDS.org, IDS.client, PAGE],
+  );
+
+  createBoost.mockReset();
+  canWrite.mockReset();
+  canWrite.mockReturnValue({ ok: true, missing: [] });
+  createBoost.mockResolvedValue({
+    externalCampaignId: 'c-1',
+    externalAdSetId: 'as-1',
+    externalAdId: 'ad-1',
+  });
+});
+
+/** Onaylanmış bir boost ekler. */
+async function onaylanmisBoost(ruleId: string | null = RULE): Promise<void> {
+  await h.q(
+    `INSERT INTO boosts
+       (id, org_id, client_id, boost_rule_id, organic_post_id, ad_account_id,
+        status, daily_budget_micros, duration_days,
+        objective, reason, approved_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'approved', 100000000, 3,
+             'OUTCOME_ENGAGEMENT', 'Etkileşim 120 ≥ 100', now(), now())`,
+    [BOOST, IDS.org, IDS.client, ruleId, POST, IDS.adAccount],
+  );
+}
+
+describe('boost ağaca yazılıyor', () => {
+  it('kuraldan doğan boost KAMPANYA olarak görünüyor', async () => {
+    await onaylanmisBoost();
+    const sonuc = await svc.createApproved(h.db, IDS.client);
+    expect(sonuc).toEqual({ created: 1, failed: 0 });
+
+    const [kampanya] = await h.q<{
+      name: string;
+      status: string;
+      source: string;
+      boost_rule_id: string;
+      external_campaign_id: string;
+      goal: string | null;
+    }>(`SELECT name, status, source, boost_rule_id::text AS boost_rule_id,
+               external_campaign_id, goal
+        FROM draft_campaigns`);
+
+    expect(kampanya!.status).toBe('published');
+    expect(kampanya!.external_campaign_id).toBe('c-1');
+    // KÖKEN: hangi kural açtı.
+    expect(kampanya!.source).toBe('boost_rule');
+    expect(kampanya!.boost_rule_id).toBe(RULE);
+    // Boost'un hedefi yok: hedef basit yüzeyin üç seçeneğinden biri ve
+    // "gönderiyi öne çıkar" onlardan biri değil.
+    expect(kampanya!.goal).toBeNull();
+  });
+
+  it('reklam KREATİFSİZ, gönderiye bağlı', async () => {
+    /**
+     * Boost edilen gönderinin metni ve görseli ZATEN META'DA. Kreatif
+     * kütüphanemizde karşılığı yok ve `draft_ads_source_chk` ikisinden tam
+     * birinin dolu olmasını zorunlu kılıyor.
+     */
+    await onaylanmisBoost();
+    await svc.createApproved(h.db, IDS.client);
+
+    const [reklam] = await h.q<{
+      creative_id: string | null;
+      organic_post_id: string;
+      external_ad_id: string;
+    }>(`SELECT creative_id::text AS creative_id, organic_post_id::text AS organic_post_id,
+               external_ad_id FROM draft_ads`);
+
+    expect(reklam!.creative_id).toBeNull();
+    expect(reklam!.organic_post_id).toBe(POST);
+    expect(reklam!.external_ad_id).toBe('ad-1');
+  });
+
+  it('dış kimlikler ağacın KENDİ SEVİYELERİNE yazılıyor', async () => {
+    await onaylanmisBoost();
+    await svc.createApproved(h.db, IDS.client);
+
+    const [grup] = await h.q<{ external_ad_set_id: string; social_profile_id: string }>(
+      `SELECT external_ad_set_id, social_profile_id::text AS social_profile_id
+       FROM draft_ad_groups`,
+    );
+    expect(grup!.external_ad_set_id).toBe('as-1');
+    expect(grup!.social_profile_id).toBe(PAGE);
+  });
+
+  it('KURALSIZ (elle onaylanan) boost "manual" kökenli', async () => {
+    /**
+     * `draft_campaigns_boost_rule_chk` kuraldan doğan kampanyanın kuralını
+     * taşımasını zorunlu kılıyor; kuralsız bir boost'ta o alan boş ve satır
+     * 'manual' olmalı — yoksa kısıt düşerdi.
+     */
+    await onaylanmisBoost(null);
+    const sonuc = await svc.createApproved(h.db, IDS.client);
+    expect(sonuc.created).toBe(1);
+
+    const [kampanya] = await h.q<{ source: string; boost_rule_id: string | null }>(
+      `SELECT source, boost_rule_id::text AS boost_rule_id FROM draft_campaigns`,
+    );
+    expect(kampanya!.source).toBe('manual');
+    expect(kampanya!.boost_rule_id).toBeNull();
+  });
+
+  it('boosts TABLOSU İŞİNİ SÜRDÜRÜYOR — tavan muhasebesi orada', async () => {
+    // Ağaç "hangi kampanyalar var", `boosts` "ne kadar taahhüt edildi"
+    // sorusunun cevabı. İkisi birbirinin yerini almıyor.
+    await onaylanmisBoost();
+    await svc.createApproved(h.db, IDS.client);
+
+    const [boost] = await h.q<{ status: string; daily_budget_micros: string }>(
+      `SELECT status, daily_budget_micros::text AS daily_budget_micros FROM boosts`,
+    );
+    expect(boost!.status).toBe('active');
+    // Taahhüt hesabı günlük bütçe × süre üzerinden yapılıyor; `boosts`
+    // ikisini de tutuyor ve ağaç onların yerini almıyor.
+    expect(boost!.daily_budget_micros).toBe('100000000');
+  });
+});
+
+describe('başarısızlık', () => {
+  it('platform hatasında ağaca HİÇBİR SATIR yazılmıyor', async () => {
+    // Oluşmamış bir kampanyayı listede göstermek, olmayan bir harcamayı var
+    // saymak olurdu.
+    createBoost.mockRejectedValue(
+      new PlatformApiError('meta', 'permanent', 'Gönderi boost edilemiyor'),
+    );
+    await onaylanmisBoost();
+    const sonuc = await svc.createApproved(h.db, IDS.client);
+
+    expect(sonuc).toEqual({ created: 0, failed: 1 });
+    expect(await h.q(`SELECT id FROM draft_campaigns`)).toHaveLength(0);
+
+    const [boost] = await h.q<{ status: string; error: string }>(
+      `SELECT status, error FROM boosts`,
+    );
+    expect(boost!.status).toBe('failed');
+    expect(boost!.error).toContain('boost edilemiyor');
+  });
+
+  it('KRİTİK: ağaç yazılamazsa boost YİNE oluşmuş sayılıyor', async () => {
+    /**
+     * Ağaç satırı yazılamazsa boost platformda ÇOKTAN oluştu ve para
+     * harcıyor. Hata fırlatmak, oluşan boost'u "başarısız" göstermek olurdu —
+     * ve bir sonraki tur onu ikinci kez oluşturmayı denerdi.
+     *
+     * Ağacı bozmanın en temiz yolu: reklam hesabını sil, yabancı anahtar
+     * düşsün. `boosts` satırı yine `active` kalmalı.
+     */
+    await onaylanmisBoost();
+    // Kampanya satırı `ad_account_id` yabancı anahtarına bağlı; hesabı
+    // silmek ağaç yazımını düşürüyor ama boost akışını değil.
+    await h.q(`ALTER TABLE draft_campaigns DROP CONSTRAINT draft_campaigns_ad_account_id_fkey`);
+    await h.q(
+      `ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_ad_account_id_fkey
+       FOREIGN KEY (ad_account_id) REFERENCES ad_accounts(id) ON DELETE CASCADE
+       DEFERRABLE INITIALLY IMMEDIATE`,
+    );
+    await h.q(`UPDATE boosts SET ad_account_id = ad_account_id`);
+
+    const sonuc = await svc.createApproved(h.db, IDS.client);
+    expect(sonuc.created).toBe(1);
+
+    const [boost] = await h.q<{ status: string }>(`SELECT status FROM boosts`);
+    expect(boost!.status).toBe('active');
+  });
+});

@@ -279,10 +279,33 @@ Kuralın işi **"hangi gönderi" ve "ne kadar"** demek; oradan sonrası aynı ya
 Eklenecek: **elle boost.** Gönderi listesinden "öne çıkar" → basit yüzeyin üç
 soruluk hâli. Kural motoru kalıyor, tek yol olmaktan çıkıyor.
 
-Not: kural bir gönderiyi seçtiğinde bugün doğrudan aday üretiyor. Yeni modelde
-aday = **onay bekleyen bir kampanya taslağı ağacı**. Bu, onay ekranında "ne
-yayınlanacak" sorusunun tam cevabını göstermeyi mümkün kılıyor — bugün özet
-gösteriliyor.
+### 7.1. Nasıl bağlandı (2026-08-16)
+
+**`boosts` tablosu kaldı ve işi değişmedi:** onay kuyruğu ve aylık tavan
+muhasebesi. Ağaç "hangi kampanyalar var", `boosts` "hangi boost onaylandı ve
+ne kadar taahhüt edildi" sorusunun cevabı. İkisi birbirinin yerini almıyor.
+
+**Yazma noktası:** `boost-executor` boost'u oluşturduğu transaction'da ağaç
+satırlarını da yazıyor. Bu YENİ BİR GÜVENLİK KARARI DEĞİL — o servis zaten
+`tx` üzerinden kiracı tablolarına yazıyor (`boosts`, `organic_posts`). Ayrı
+bir yola çıkarmak, boost oluşup ağaç satırının yazılamadığı bir aralık
+bırakırdı ve o boost panelde hiç görünmezdi.
+
+**Şema tarafında iki ekleme gerekti:** `draft_ads.creative_id` nullable oldu
+ve yanına `organic_post_id` geldi (ikisinden tam biri dolu), çünkü boost
+edilen gönderinin metni ve görseli zaten Meta'da. Ayrıca `draft_campaigns`
+artık kökenini taşıyor (`source`, `boost_rule_id`) — beklenmedik bir
+harcamanın hangi kuraldan doğduğunu bulmanın tek yolu bu.
+
+**Ağaç yazılamazsa boost yine oluşmuş sayılıyor.** Hata fırlatmak, platformda
+çoktan oluşmuş ve para harcayan bir boost'u "başarısız" göstermek olurdu — ve
+bir sonraki tur onu ikinci kez oluşturmayı denerdi. Log'a yazılıp devam
+ediliyor.
+
+**Kalan iş:** aday üretimi hâlâ yalnızca `boosts` tablosuna yazıyor; ağaç
+satırı boost PLATFORMDA oluştuktan sonra doğuyor. Onay ekranında "ne
+yayınlanacak" sorusunun tam cevabını göstermek için adayın da ağaç olması
+gerekiyor — ayrı bir iş.
 
 ---
 
