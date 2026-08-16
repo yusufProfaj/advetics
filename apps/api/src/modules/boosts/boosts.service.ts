@@ -444,6 +444,38 @@ export class BoostsService {
         'aç; izleme kapalıyken organik gönderiler çekilmiyor.'
       );
     }
+    /**
+     * SON SENKRONİZASYON DÜŞTÜYSE SEBEBİ YAZILIYOR — "henüz çekilmemiş"
+     * DEMİYOR.
+     *
+     * Bu ayrım canlıda öğrenildi. İzleme açıktı, iş kuyruğa girdi, Meta
+     * reddetti ve ekran hâlâ "henüz gönderi çekilmemiş, bekle" diyordu.
+     * Kullanıcı beklemeye devam etti; oysa beklemek hiçbir şeyi
+     * değiştirmeyecekti — hata KALICIYDI (eksik izin, geçersiz metrik).
+     *
+     * Platformun kendi mesajı olduğu gibi gösteriliyor. Kendi cümlemize
+     * çevirmek, canlıda tek bilgi kaynağı olan metni kaybetmek olurdu:
+     * "(#10) ... requires the 'pages_read_engagement' permission" cümlesi
+     * yapılacak işi doğrudan söylüyor.
+     */
+    const [sonHata] = await tx.$queryRaw<
+      Array<{ error_message: string | null; created_at: Date }>
+    >(Prisma.sql`
+      SELECT error_message, created_at
+      FROM sync_jobs
+      WHERE client_id = ${clientId}::uuid
+        AND job_type = 'organic_posts'
+        AND status = 'failed'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    if (sonHata?.error_message) {
+      return (
+        'Gönderiler çekilemedi — son deneme hata verdi: ' +
+        `${sonHata.error_message.slice(0, 400)}`
+      );
+    }
+
     // SIKLIK DOĞRU YAZILMALI. İlk yazımda "günde iki kez" diyordu — o, boost
     // KURALININ değerlendirme sıklığı (`sweep:boosts`). Organik gönderi
     // süpürmesi SAATTE BİR koşuyor (`sweep:organic`, dakika 41). Yanlış

@@ -1099,7 +1099,25 @@ export class MetaProvider implements IAdPlatformProvider {
             'timestamp',
             'like_count',
             'comments_count',
-            'insights.metric(impressions,reach,saved,video_views)',
+            /**
+             * `views`, `video_views`'ın YERİNE — CANLIDA ÖĞRENİLDİ.
+             *
+             * Meta isteği reddetti ve geçerli değerleri tek tek saydı:
+             * "(#100) metric[3] must be one of the following values:
+             * impressions, reach, replies, saved, likes, comments, shares,
+             * total_interactions, follows, profile_visits, ..., views, ..."
+             * Listede `video_views` YOK; Instagram medya içgörülerinde o ad
+             * artık kabul edilmiyor.
+             *
+             * TEK BİR GEÇERSİZ METRİK BÜTÜN ÇAĞRIYI DÜŞÜRÜYOR — içgörüler iç
+             * içe alan olarak isteniyor, yani gönderiler de gelmiyor. Bu
+             * yüzden hata "video izlenmesi eksik" değil "hiç gönderi yok"
+             * olarak görünüyordu.
+             *
+             * `views` daha geniş: yalnızca video değil tüm görüntülenmeler.
+             * Meta iki metriği birleştirdi ve ayrı bir video sayacı bırakmadı.
+             */
+            'insights.metric(impressions,reach,saved,views)',
           ].join(',')
         : [
             'id',
@@ -2391,7 +2409,12 @@ function readInsights(value: unknown): {
     if (name === 'impressions' || name === 'post_impressions') out.impressions = v;
     else if (name === 'reach' || name === 'post_impressions_unique') out.reach = v;
     else if (name === 'saved') out.saved = v;
-    else if (name === 'video_views' || name === 'post_video_views') out.videoViews = v;
+    // `views` Instagram'da `video_views`ın halefi; Facebook hâlâ
+    // `post_video_views` döndürüyor. Eski ad da okunmaya devam ediyor:
+    // veritabanındaki `raw` kayıtları ve olası sürüm farkları için zararsız.
+    else if (name === 'views' || name === 'video_views' || name === 'post_video_views') {
+      out.videoViews = v;
+    }
   }
   return out;
 }

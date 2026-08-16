@@ -337,6 +337,41 @@ describe('boş listenin sebebi', () => {
     expect(out.emptyReason).not.toMatch(/günde iki kez/i);
   });
 
+  it('KRİTİK: son senkronizasyon DÜŞTÜYSE sebebi platformun kendi metniyle yazılıyor', async () => {
+    /*
+     * Canlıda yaşandı: izleme açıktı, iş kuyruğa girdi, Meta reddetti ve ekran
+     * hâlâ "henüz çekilmemiş, bekle" diyordu. Beklemek hiçbir şeyi
+     * değiştirmeyecekti — hata KALICIYDI (eksik izin). Platformun mesajı
+     * yapılacak işi doğrudan söylüyor, o yüzden olduğu gibi gösteriliyor.
+     */
+    await seedProfile(FB, 'facebook_page');
+    await h.q(
+      `INSERT INTO sync_jobs (client_id, job_type, status, error_code, error_message, created_at)
+       VALUES ($1, 'organic_posts', 'failed', 'permission_denied',
+               '(#10) This endpoint requires the pages_read_engagement permission', now())`,
+      [IDS.client],
+    );
+
+    const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
+    expect(out.emptyReason).toMatch(/pages_read_engagement/);
+    // "Bekle" DEMİYOR: beklemek bu hatayı çözmüyor.
+    expect(out.emptyReason).not.toMatch(/saatte bir/i);
+  });
+
+  it('BAŞARILI son senkronizasyonda hata metni gösterilmiyor', async () => {
+    // Eski bir hata sonsuza kadar ekranda kalmamalı; sorgu yalnızca `failed`
+    // satırlara bakıyor ve başarılı tur sonrası liste zaten dolu oluyor.
+    await seedProfile(FB, 'facebook_page');
+    await h.q(
+      `INSERT INTO sync_jobs (client_id, job_type, status, created_at)
+       VALUES ($1, 'organic_posts', 'succeeded', now())`,
+      [IDS.client],
+    );
+
+    const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
+    expect(out.emptyReason).toMatch(/saatte bir/i);
+  });
+
   it('liste doluyken sebep YAZILMIYOR', async () => {
     // Dolu listede sebep hesaplamak, her açılışta bir sorguyu boşuna
     // koşturmak olurdu.
