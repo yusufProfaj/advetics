@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import {
   advancedDefaultsFor,
   buildExpertTree,
+  expertDraftInputSchema,
   type AdvancedSettings,
   type ExpertDraftInput,
   type TenantContext,
@@ -64,6 +65,7 @@ function input(patch: Partial<ExpertDraftInput> = {}): ExpertDraftInput {
     budget: '500',
     creativeIds: [CREATIVE_A],
     advanced: advanced(),
+    keywords: [],
     ...patch,
   };
 }
@@ -327,5 +329,115 @@ describe('yayın', () => {
     const c = await tree.createFromExpert(CTX, input({ creativeIds: [CREATIVE_A, CREATIVE_B] }));
     const check = await svc.check(CTX, c.id);
     expect(check.blockers.join(' ')).toContain('2. reklam:');
+  });
+});
+
+describe('Google arama — uzman yüzeyi', () => {
+  const GOOGLE_ACC = '77777777-7777-7777-7777-777777777777';
+
+  beforeEach(async () => {
+    await h.q(
+      `INSERT INTO ad_accounts
+         (id, org_id, client_id, connection_id, platform, external_id, name, currency,
+          timezone, manager_external_id, updated_at)
+       VALUES ($1, $2, $3, $4, 'google', '1695129827', 'Google hesabı', 'TRY',
+               'Europe/Istanbul', '4074080956', now())`,
+      [GOOGLE_ACC, IDS.org, IDS.client, IDS.connection],
+    );
+  });
+
+  function googleInput(patch: Partial<ExpertDraftInput> = {}): ExpertDraftInput {
+    return input({
+      platform: 'google',
+      adAccountId: GOOGLE_ACC,
+      socialProfileId: undefined,
+      advanced: undefined,
+      keywords: ['halı yıkama', 'koltuk yıkama'],
+      linkUrl: 'https://site.com',
+      ...patch,
+    });
+  }
+
+  it('META AYARLARI İSTENMİYOR', () => {
+    /**
+     * Amaç, optimizasyon, yerleşim ve hedefleme Meta'nın kavramları. Google
+     * arama kampanyasında zorunlu tutmak, uzmandan hiçbir yere gitmeyecek
+     * alanlar doldurmasını istemek olurdu.
+     */
+    const plan = buildExpertTree(googleInput(), NOW);
+    expect(plan.blockers).toEqual([]);
+    expect(plan.campaigns[0]!.settings).toEqual({ channel: 'SEARCH' });
+  });
+
+  it('anahtar kelimeler REKLAM GRUBUNDA duruyor', () => {
+    const c = buildExpertTree(googleInput(), NOW).campaigns[0]!;
+    expect(c.adGroups[0]!.settings.keywords).toEqual(['halı yıkama', 'koltuk yıkama']);
+    expect(c.adGroups[0]!.settings.linkUrl).toBe('https://site.com');
+  });
+
+  it('SAYFA İSTENMİYOR — Google\'da sayfa kavramı yok', () => {
+    const c = buildExpertTree(googleInput(), NOW).campaigns[0]!;
+    expect(c.adGroups[0]!.socialProfileId).toBeUndefined();
+  });
+
+  it('KRİTİK: kelimesiz kampanya kurulamıyor', () => {
+    // Kelimesiz arama kampanyası hiç gösterim almıyor ve hata da vermiyor.
+    const plan = buildExpertTree(googleInput({ keywords: [] }), NOW);
+    expect(plan.campaigns).toHaveLength(0);
+    expect(plan.blockers.join(' ')).toContain('en az bir anahtar kelime');
+  });
+
+  it('hedef URL\'siz kampanya kurulamıyor', () => {
+    const plan = buildExpertTree(googleInput({ linkUrl: undefined }), NOW);
+    expect(plan.blockers.join(' ')).toContain('hedef URL');
+  });
+
+  it('şema platforma göre farklı zorunluluk uyguluyor', () => {
+    // Meta girdisi advanced ister, Google girdisi keywords + linkUrl.
+    expect(expertDraftInputSchema.safeParse(googleInput()).success).toBe(true);
+    expect(
+      expertDraftInputSchema.safeParse(googleInput({ keywords: [] })).success,
+    ).toBe(false);
+    expect(
+      expertDraftInputSchema.safeParse(input({ advanced: undefined })).success,
+    ).toBe(false);
+  });
+
+  it('servis Google taslağını kuruyor ve okuyor', async () => {
+    const c = await tree.createFromExpert(CTX, googleInput());
+    expect(c.platform).toBe('google');
+    expect(c.surface).toBe('expert');
+    expect(c.adGroups[0]!.settings!.keywords).toEqual(['halı yıkama', 'koltuk yıkama']);
+  });
+
+  it('KRİTİK: yayın kontrolü GOOGLE ayarlarını Meta matrisiyle denetlemiyor', async () => {
+    /**
+     * `advancedFrom` Google taslağında `null` dönüyor — amaç ve optimizasyon
+     * yok, olmamalı da. Bunu hata saymak, doğru kurulmuş bir kampanyayı
+     * "ayarları okunamadı" diye reddetmek olurdu.
+     */
+    const c = await tree.createFromExpert(CTX, googleInput());
+    const check = await svc.check(CTX, c.id);
+    expect(check.blockers.join(' ')).not.toContain('ayarları okunamadı');
+  });
+
+  it('kontrol CANLIDA İLK KEZ uyarısını veriyor', async () => {
+    // Meta'da ilk gerçek yazma çağrısında altı hata çıktı ve üçü sessizdi;
+    // kullanıcı Google'ı bilerek denemeli.
+    const c = await tree.createFromExpert(CTX, googleInput());
+    const check = await svc.check(CTX, c.id);
+    expect(check.warnings.join(' ')).toContain('canlıda ilk kez');
+    expect(check.warnings.join(' ')).toContain('DURAKLATILMIŞ');
+  });
+
+  it('görsel kapsaması arama kampanyasını ENGELLEMİYOR', async () => {
+    /**
+     * Arama reklamı metinsel. Kare görsel yok diye bir arama kampanyasını
+     * durdurmak, ilgisiz bir kuralı dayatmak olurdu.
+     */
+    await h.q(`DELETE FROM ad_creative_assets WHERE creative_id = $1`, [CREATIVE_A]);
+    const c = await tree.createFromExpert(CTX, googleInput());
+    const check = await svc.check(CTX, c.id);
+    expect(check.blockers.join(' ')).not.toContain('Akış');
   });
 });

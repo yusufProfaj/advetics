@@ -38,7 +38,7 @@ export function ExpertAdBuilder({
   forms,
 }: {
   clientId: string;
-  accounts: Array<{ id: string; name: string; currency: string }>;
+  accounts: Array<{ id: string; name: string; currency: string; platform: string }>;
   pages: Array<{ id: string; name: string }>;
   creatives: CreativeRecord[];
   forms: LeadFormRecord[];
@@ -46,7 +46,20 @@ export function ExpertAdBuilder({
   const router = useRouter();
 
   const [name, setName] = useState('');
-  const [adAccountId, setAdAccountId] = useState(accounts[0]?.id ?? '');
+  /**
+   * PLATFORM İLK SORU ve varsayılan Meta.
+   *
+   * Basit yüzeyde platform bir SONUÇ (hedeften türüyor); burada bir GİRDİ,
+   * çünkü uzman ne yaptığını biliyor ve iki platformun kampanya yapısı
+   * bambaşka. Aynı ekranda ikisini birden kurmak, Meta'nın alanlarını
+   * Google'a uydurmak olurdu.
+   */
+  const [platform, setPlatform] = useState<'meta' | 'google'>('meta');
+  const [adAccountId, setAdAccountId] = useState(
+    accounts.find((a) => a.platform === 'meta')?.id ?? accounts[0]?.id ?? '',
+  );
+  /** Google arama — virgülle ayrılmış anahtar kelimeler. */
+  const [keywordText, setKeywordText] = useState('');
   const [pageId, setPageId] = useState(pages[0]?.id ?? '');
   const [budget, setBudget] = useState('500');
   const [creativeIds, setCreativeIds] = useState<string[]>([]);
@@ -70,18 +83,49 @@ export function ExpertAdBuilder({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const google = platform === 'google';
+  const platformAccounts = accounts.filter((a) => a.platform === platform);
   const currency = accounts.find((a) => a.id === adAccountId)?.currency ?? 'TRY';
+
+  /**
+   * Anahtar kelimeler VİRGÜLLE ayrılıyor.
+   *
+   * Satır başı da kabul ediliyor: kullanıcı listeyi bir tablodan
+   * yapıştırdığında satır satır geliyor ve virgül beklemek, yapıştırılan
+   * listenin tek bir dev kelime sayılması demek olurdu.
+   */
+  const keywords = useMemo(
+    () =>
+      keywordText
+        .split(/[,\n]/)
+        .map((k) => k.trim())
+        .filter(Boolean),
+    [keywordText],
+  );
 
   const eksikler = useMemo(() => {
     const list: string[] = [];
     if (!name.trim()) list.push('Kampanyaya bir ad ver.');
     if (creativeIds.length === 0) list.push('En az bir kreatif seç.');
-    if (!pageId) list.push('Facebook sayfası seç.');
-    if (advanced.budgetMode === 'lifetime' && !advanced.endAt) {
-      list.push('Toplam bütçede bitiş tarihi zorunlu.');
+    if (platformAccounts.length === 0) {
+      list.push(
+        google
+          ? 'Bu müşteriye atanmış Google reklam hesabı yok.'
+          : 'Bu müşteriye atanmış Meta reklam hesabı yok.',
+      );
+    }
+    if (google) {
+      // Kelimesiz arama kampanyası hiç gösterim almıyor ve hata da vermiyor.
+      if (keywords.length === 0) list.push('En az bir anahtar kelime yaz.');
+      if (!linkUrl.trim()) list.push('Hedef URL yaz.');
+    } else {
+      if (!pageId) list.push('Facebook sayfası seç.');
+      if (advanced.budgetMode === 'lifetime' && !advanced.endAt) {
+        list.push('Toplam bütçede bitiş tarihi zorunlu.');
+      }
     }
     return list;
-  }, [name, creativeIds, pageId, advanced]);
+  }, [name, creativeIds, pageId, advanced, google, keywords, linkUrl, platformAccounts]);
 
   async function olustur(): Promise<void> {
     setBusy('create');
@@ -92,15 +136,19 @@ export function ExpertAdBuilder({
         body: JSON.stringify({
           clientId,
           name: name.trim(),
-          platform: 'meta',
+          platform,
           adAccountId,
-          socialProfileId: pageId,
-          leadFormId: leadFormId ?? undefined,
+          // GOOGLE'DA SAYFA VE META AYARLARI GÖNDERİLMİYOR: ikisi de o
+          // platformda hiçbir yere gitmiyor ve göndermek, sunucunun
+          // kullanmadığı veriyi saklaması olurdu.
+          socialProfileId: google ? undefined : pageId,
+          leadFormId: google ? undefined : (leadFormId ?? undefined),
           budget,
           creativeIds,
-          advanced,
+          advanced: google ? undefined : advanced,
+          keywords: google ? keywords : [],
           linkUrl: linkUrl.trim() || undefined,
-          whatsappNumber: whatsappNumber.trim() || undefined,
+          whatsappNumber: google ? undefined : whatsappNumber.trim() || undefined,
         }),
       });
       setCampaign(created);
@@ -136,9 +184,13 @@ export function ExpertAdBuilder({
     return (
       <div className="space-y-3">
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-          <h3 className="text-sm font-semibold text-emerald-900">Kampanya yayında</h3>
+          <h3 className="text-sm font-semibold text-emerald-900">
+            {campaign.platform === 'google' ? 'Kampanya oluşturuldu — DURAKLATILMIŞ' : 'Kampanya yayında'}
+          </h3>
           <p className="mt-1 text-xs text-emerald-800">
-            Meta kimliği: <code>{campaign.externalCampaignId}</code> · ad set:{' '}
+            {campaign.platform === 'google' ? 'Google' : 'Meta'} kimliği:{' '}
+            <code>{campaign.externalCampaignId}</code> ·{' '}
+            {campaign.platform === 'google' ? 'reklam grubu' : 'ad set'}:{' '}
             <code>{campaign.adGroups[0]?.externalAdSetId}</code>
           </p>
         </div>
@@ -168,6 +220,54 @@ export function ExpertAdBuilder({
 
   return (
     <div className="space-y-4">
+      {/* PLATFORM İLK SORU — basit yüzeydekinin tersi.
+          Orada platform hedeften türüyor; burada uzman seçiyor, çünkü iki
+          platformun kampanya yapısı bambaşka ve aynı ekranda ikisini birden
+          kurmak Meta'nın alanlarını Google'a uydurmak olurdu. */}
+      <section className="rounded-xl border border-line bg-surface p-4">
+        <h2 className="text-sm font-semibold text-ink">Platform</h2>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {(['meta', 'google'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => {
+                setPlatform(p);
+                // Hesap da platformla birlikte değişiyor: Meta hesabına
+                // Google kampanyası yazmak yayın anında düşerdi ve hata
+                // "hesap bulunamadı" gibi okunurdu.
+                setAdAccountId(accounts.find((a) => a.platform === p)?.id ?? '');
+              }}
+              className={`rounded-xl border p-3 text-left transition ${
+                platform === p ? 'border-brand bg-brand-soft' : 'border-line hover:bg-surface-sunken'
+              }`}
+            >
+              <span className="block text-sm font-semibold text-ink">
+                {p === 'meta' ? 'Meta' : 'Google Ads'}
+              </span>
+              <span className="mt-0.5 block text-[11px] text-ink-muted">
+                {p === 'meta'
+                  ? 'Facebook ve Instagram. Amaç, optimizasyon, kitle ve yerleşim.'
+                  : 'Arama kampanyası. Anahtar kelime ve metin — görsel kullanmıyor.'}
+              </span>
+              <span className="mt-1 block text-[11px] text-ink-muted">
+                {accounts.filter((a) => a.platform === p).length} hesap atanmış
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* GOOGLE YOLU CANLIDA HİÇ ÇALIŞTIRILMADI ve bunu seçim anında
+            söylüyoruz, yayın anında değil. */}
+        {google && (
+          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-inset ring-amber-200">
+            Google yayın yolu <strong>canlıda ilk kez çalışacak</strong>. Kampanya
+            DURAKLATILMIŞ açılır — Google Ads&apos;te gözden geçirip kendin başlatman
+            gerekiyor. İlk denemeyi ajansın kendi hesabında ve küçük bütçeyle yap.
+          </p>
+        )}
+      </section>
+
       <section className="rounded-xl border border-line bg-surface p-4">
         <h2 className="text-sm font-semibold text-ink">Kampanya</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -188,23 +288,37 @@ export function ExpertAdBuilder({
               onChange={(e) => setAdAccountId(e.target.value)}
               className={input}
             >
-              {accounts.map((a) => (
+              {/* LİSTE SEÇİLİ PLATFORMLA SINIRLI. Karışık liste, Google
+                  kampanyasına Meta hesabı seçmeyi mümkün kılardı. */}
+              {platformAccounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
               ))}
             </select>
           </Alan>
-          <Alan label="Sayfa">
-            <select value={pageId} onChange={(e) => setPageId(e.target.value)} className={input}>
-              {pages.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </Alan>
-          <Alan label="Hedef URL" ipucu="Trafik ve dönüşüm hedeflerinde zorunlu.">
+          {/* SAYFA YALNIZCA META'DA. Google'da sayfa kavramı yok ve alanı
+              göstermek, kullanıcıya hiçbir yere gitmeyecek bir seçim
+              yaptırmak olurdu. */}
+          {!google && (
+            <Alan label="Sayfa">
+              <select value={pageId} onChange={(e) => setPageId(e.target.value)} className={input}>
+                {pages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </Alan>
+          )}
+          <Alan
+            label="Hedef URL"
+            ipucu={
+              google
+                ? 'Google arama reklamında ZORUNLU.'
+                : 'Trafik ve dönüşüm hedeflerinde zorunlu.'
+            }
+          >
             <input
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
@@ -212,16 +326,58 @@ export function ExpertAdBuilder({
               className={input}
             />
           </Alan>
-          <Alan label="WhatsApp numarası" ipucu="Boşsa sayfaya bağlı numara kullanılır.">
-            <input
-              value={whatsappNumber}
-              onChange={(e) => setWhatsappNumber(e.target.value)}
-              placeholder="905551112233"
-              className={input}
-            />
-          </Alan>
+          {!google && (
+            <Alan label="WhatsApp numarası" ipucu="Boşsa sayfaya bağlı numara kullanılır.">
+              <input
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                placeholder="905551112233"
+                className={input}
+              />
+            </Alan>
+          )}
         </div>
       </section>
+
+      {/* ANAHTAR KELİMELER — yalnızca Google arama */}
+      {google && (
+        <section className="rounded-xl border border-line bg-surface p-4">
+          <h2 className="text-sm font-semibold text-ink">
+            Anahtar kelimeler
+            <span className="ml-1.5 font-normal text-ink-muted">{keywords.length} kelime</span>
+          </h2>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            Virgül ya da satır başıyla ayır. Öbek eşleme kullanılıyor: kelimenin geçtiği
+            aramalarda çıkar, alakasız aramalarda çıkmaz.
+          </p>
+          <textarea
+            value={keywordText}
+            onChange={(e) => setKeywordText(e.target.value)}
+            rows={4}
+            placeholder={'halı yıkama\nkoltuk yıkama\nevde halı yıkama'}
+            className="mt-2 w-full rounded-lg border border-line bg-surface px-2.5 py-2 text-sm outline-none focus:border-brand"
+          />
+          {/* KELİMESİZ KAMPANYA HİÇ GÖSTERİM ALMIYOR ve hiçbir hata da
+              vermiyor — sessiz sıfır. Bunu boş alanın altında söylüyoruz. */}
+          {keywords.length === 0 ? (
+            <p className="mt-1.5 text-[11px] text-rose-700">
+              Anahtar kelimesiz bir arama kampanyası hiç gösterim almaz ve Google bunu hata
+              olarak da bildirmez.
+            </p>
+          ) : (
+            <ul className="mt-2 flex flex-wrap gap-1.5">
+              {keywords.map((k) => (
+                <li
+                  key={k}
+                  className="rounded-lg bg-surface-sunken px-2 py-0.5 text-[11px] text-ink"
+                >
+                  {k}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       {/* Kreatifler — ÇOKLU, bu yüzeyin varlık sebeplerinden biri */}
       <section className="rounded-xl border border-line bg-surface p-4">
@@ -286,15 +442,34 @@ export function ExpertAdBuilder({
         )}
       </section>
 
-      {/* Meta ayarları — MEVCUT PANEL */}
-      <AdvancedPanel
-        value={advanced}
-        onChange={setAdvanced}
-        currency={currency}
-        forms={forms}
-        leadFormId={leadFormId}
-        onLeadFormChange={setLeadFormId}
-      />
+      {/* META AYARLARI — GOOGLE'DA GÖSTERİLMİYOR.
+          Amaç, optimizasyon, yerleşim ve hedefleme Meta'nın kavramları;
+          Google arama kampanyasında karşılıkları ya yok ya bambaşka.
+          Göstermek, doldurulan ama hiçbir yere gitmeyen alanlar demek. */}
+      {!google ? (
+        <AdvancedPanel
+          value={advanced}
+          onChange={setAdvanced}
+          currency={currency}
+          forms={forms}
+          leadFormId={leadFormId}
+          onLeadFormChange={setLeadFormId}
+        />
+      ) : (
+        <section className="rounded-xl border border-line bg-surface p-4">
+          <h3 className="text-sm font-semibold text-ink">Google ayarları</h3>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            Kanal: <strong>Arama</strong>. Teklif: elle TBM, tavan günlük bütçenin yirmide
+            biri. Arama ağı ortakları ve Görüntülü Reklam Ağı <strong>kapalı</strong> —
+            arama kampanyası kurduğunu sanıp bütçenin başka envantere gitmesini
+            engelliyoruz.
+          </p>
+          <p className="mt-1.5 text-[11px] text-ink-muted">
+            Performance Max henüz yok: dönüşüm takibi olmadan öğrenmiyor ve bu üründe
+            piksel/etiket hikâyesi yazılmadı.
+          </p>
+        </section>
+      )}
 
       {!campaign ? (
         <div className="rounded-xl border border-line bg-surface p-4">

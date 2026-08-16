@@ -48,18 +48,24 @@ export default async function ExpertAdPage({
     serverApiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${clientId}`).catch(() => []),
   ]);
 
+  /**
+   * İKİ PLATFORMUN HESAPLARI DA GELİYOR.
+   *
+   * Uzman platformu kendisi seçiyor; listeyi Meta'ya süzmek, Google hesabı
+   * atanmış bir müşteride o seçeneği hiç göstermemek olurdu.
+   */
   const accounts = connections
     .flatMap((c) => c.adAccounts ?? [])
-    .filter((a) => a.platform === 'meta');
+    .filter((a) => a.platform === 'meta' || a.platform === 'google');
   const pages = connections
     .flatMap((c) => c.socialProfiles ?? [])
     .filter((p) => p.profileType === 'facebook_page');
 
-  if (accounts.length === 0 || pages.length === 0) {
+  if (accounts.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
         <h1 className="text-sm font-semibold text-ink">
-          Bu müşteride Meta reklam hesabı ya da sayfa atanmamış
+          Bu müşteriye henüz reklam hesabı atanmamış
         </h1>
         <Link
           href="/ayarlar/baglantilar"

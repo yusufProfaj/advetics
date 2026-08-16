@@ -119,7 +119,7 @@ export class DraftPublishService {
      * yapıyor.
      */
     const advanced = advancedFrom(campaign, group);
-    if (campaign.surface === 'expert' && advanced) {
+    if (!google && campaign.surface === 'expert' && advanced) {
       const adv = validateAdvanced(advanced, {
         hasLinkUrl: Boolean(group?.settings?.linkUrl),
         hasLeadForm: Boolean(group?.leadFormId),
@@ -131,7 +131,15 @@ export class DraftPublishService {
       warnings.push(...adv.warnings.map((w) => w.message));
     }
 
-    if (campaign.surface === 'expert' && !advanced) {
+    /**
+     * AYAR EKSİKLİĞİ YALNIZCA META'DA HATA.
+     *
+     * `advancedFrom` Meta ayarlarını topluyor ve Google arama kampanyasında
+     * öyle bir küme YOK — amaç, optimizasyon ve yerleşim Meta'nın kavramları.
+     * Google taslağında `null` dönmesi normal; onu hata saymak, doğru kurulmuş
+     * bir kampanyayı "ayarları okunamadı" diye reddetmek olurdu.
+     */
+    if (!google && campaign.surface === 'expert' && !advanced) {
       blockers.push('Uzman taslağının ayarları okunamadı — taslağı yeniden oluştur.');
     }
 

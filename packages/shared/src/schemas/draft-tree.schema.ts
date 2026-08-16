@@ -348,32 +348,94 @@ export function moneyToMicros(amount: string): string {
  * doğrudan `OUTCOME_LEADS` + `LEAD_GENERATION` seçiyor. Ona bir hedef
  * uydurmak, taslağın neye göre kurulduğu sorusuna yanlış cevap vermek olurdu.
  */
-export const expertDraftInputSchema = z.object({
-  clientId: z.string().uuid(),
-  name: z.string().trim().min(1, 'Kampanyaya bir ad ver').max(200),
+export const expertDraftInputSchema = z
+  .object({
+    clientId: z.string().uuid(),
+    name: z.string().trim().min(1, 'Kampanyaya bir ad ver').max(200),
 
-  platform: z.enum(DRAFT_PLATFORMS),
-  adAccountId: z.string().uuid(),
-  socialProfileId: z.string().uuid().optional(),
-  leadFormId: z.string().uuid().optional(),
+    platform: z.enum(DRAFT_PLATFORMS),
+    adAccountId: z.string().uuid(),
+    socialProfileId: z.string().uuid().optional(),
+    leadFormId: z.string().uuid().optional(),
 
-  /** Bütçe — uzman tutarı ve tipini kendisi veriyor. */
-  budget: money,
+    /** Bütçe — uzman tutarı ve tipini kendisi veriyor. */
+    budget: money,
 
+    /**
+     * ÇOKLU KREATİF — bu yüzeyin varlık sebeplerinden biri.
+     *
+     * Aynı reklam grubuna 3-5 kreatif koymak ajans pratiğinde standart ve
+     * basit yüzeyde mümkün değil. Sıra anlamlı: platformda ilk sırada
+     * oluşturulan reklam listede de ilk görünüyor.
+     */
+    creativeIds: z.array(z.string().uuid()).min(1, 'En az bir kreatif seç').max(10),
+
+    /**
+     * META AYARLARI — Google'da KULLANILMIYOR.
+     *
+     * `AdvancedSettings` amaç, optimizasyon, yerleşim ve hedeflemeyi taşıyor
+     * ve hepsi Meta'nın kavramları. Google arama kampanyasında karşılıkları
+     * ya yok ya bambaşka; zorunlu tutmak, Google kampanyası kuran uzmandan
+     * hiçbir yere gitmeyecek alanlar doldurmasını istemek olurdu.
+     */
+    advanced: advancedSettingsSchema.optional(),
+
+    /**
+     * ANAHTAR KELİMELER — yalnızca Google arama.
+     *
+     * KELİMESİZ ARAMA KAMPANYASI HİÇ GÖSTERİM ALMIYOR ve hiçbir hata da
+     * vermiyor. Bu, platformun sessizce hiçbir şey yapmadığı en net örnek ve
+     * bu yüzden şema seviyesinde zorunlu.
+     */
+    keywords: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
+
+    linkUrl: z.string().trim().max(2048).optional(),
+    whatsappNumber: z.string().trim().max(20).optional(),
+  })
   /**
-   * ÇOKLU KREATİF — bu yüzeyin varlık sebeplerinden biri.
+   * PLATFORMA GÖRE ZORUNLULUK — tek şema, iki kural kümesi.
    *
-   * Aynı reklam grubuna 3-5 kreatif koymak ajans pratiğinde standart ve
-   * basit yüzeyde mümkün değil. Sıra anlamlı: platformda ilk sırada
-   * oluşturulan reklam listede de ilk görünüyor.
+   * Ayrı iki şema yazmak, ortak alanların (ad, bütçe, kreatifler) iki yerde
+   * durması demek olurdu. `superRefine` farkı tek yerde tutuyor ve hata
+   * mesajı hangi alanın neden gerektiğini SÖYLÜYOR.
    */
-  creativeIds: z.array(z.string().uuid()).min(1, 'En az bir kreatif seç').max(10),
+  .superRefine((v, ctx) => {
+    if (v.platform === 'meta') {
+      if (!v.advanced) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['advanced'],
+          message: 'Meta kampanyasında amaç ve optimizasyon ayarları zorunlu.',
+        });
+      }
+      if (!v.socialProfileId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['socialProfileId'],
+          message: 'Meta reklamı bir Facebook sayfası adına yayınlanır.',
+        });
+      }
+      return;
+    }
 
-  advanced: advancedSettingsSchema,
-
-  linkUrl: z.string().trim().max(2048).optional(),
-  whatsappNumber: z.string().trim().max(20).optional(),
-});
+    // Google arama
+    if (v.keywords.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['keywords'],
+        message:
+          'Google arama kampanyası en az bir anahtar kelime gerektiriyor — ' +
+          'kelimesiz kampanya hiç gösterim almaz.',
+      });
+    }
+    if (!v.linkUrl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['linkUrl'],
+        message: 'Google arama reklamı hedef URL olmadan oluşturulamaz.',
+      });
+    }
+  });
 
 export type ExpertDraftInput = z.infer<typeof expertDraftInputSchema>;
 
@@ -387,9 +449,77 @@ export type ExpertDraftInput = z.infer<typeof expertDraftInputSchema>;
  */
 export function buildExpertTree(input: ExpertDraftInput, now: Date): DraftTreePlan {
   const blockers: string[] = [];
-  const a = input.advanced;
 
-  if (input.platform === 'meta' && !input.socialProfileId) {
+  if (input.platform === 'google') {
+    /**
+     * GOOGLE ARAMA — Meta ayarları YOK.
+     *
+     * Amaç, optimizasyon, yerleşim ve hedefleme Meta'nın kavramları. Google
+     * arama kampanyasında karşılıkları ya yok ya bambaşka; uydurulmuş bir
+     * eşleme, kullanıcının seçmediği bir yapıyla yayınlamak olurdu.
+     *
+     * Kanal SEARCH sabit (tasarım belgesi K14): PMax dönüşüm takibi olmadan
+     * öğrenmiyor ve bu üründe piksel hikâyesi hiç yok.
+     */
+    if (input.keywords.length === 0) {
+      blockers.push(
+        'Google arama kampanyası en az bir anahtar kelime gerektiriyor — ' +
+          'kelimesiz kampanya hiç gösterim almaz.',
+      );
+    }
+    if (!input.linkUrl) {
+      blockers.push('Google arama reklamı hedef URL olmadan oluşturulamaz.');
+    }
+    if (blockers.length > 0) {
+      return { campaigns: [], skipped: [], groupRequired: false, blockers };
+    }
+
+    return {
+      campaigns: [
+        {
+          platform: 'google',
+          adAccountId: input.adAccountId,
+          name: input.name,
+          surface: 'expert',
+          goal: null,
+          settings: { channel: 'SEARCH' },
+          budgetMode: 'daily',
+          budgetAmountMicros: moneyToMicros(input.budget),
+          endAt: null,
+          adGroups: [
+            {
+              name: input.name,
+              position: 0,
+              settings: {
+                keywords: input.keywords,
+                linkUrl: input.linkUrl,
+              },
+              ads: input.creativeIds.map((creativeId, position) => ({
+                name: `${input.name} — ${position + 1}`,
+                creativeId,
+                position,
+              })),
+            },
+          ],
+        },
+      ],
+      skipped: [],
+      groupRequired: false,
+      blockers: [],
+    };
+  }
+
+  const a = input.advanced;
+  if (!a) {
+    return {
+      campaigns: [],
+      skipped: [],
+      groupRequired: false,
+      blockers: ['Meta kampanyasında amaç ve optimizasyon ayarları zorunlu.'],
+    };
+  }
+
+  if (!input.socialProfileId) {
     blockers.push('Meta reklamı bir Facebook sayfası adına yayınlanır — sayfa seçilmedi.');
   }
 
@@ -411,7 +541,7 @@ export function buildExpertTree(input: ExpertDraftInput, now: Date): DraftTreePl
   return {
     campaigns: [
       {
-        platform: input.platform,
+        platform: 'meta',
         adAccountId: input.adAccountId,
         name: input.name,
         surface: 'expert',
