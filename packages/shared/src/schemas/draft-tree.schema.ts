@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { CAMPAIGN_GOALS, type CampaignGoal } from './ad-builder.schema';
-import { GOAL_SPEC } from './campaign-advanced.schema';
+import { GOAL_SPEC, advancedSettingsSchema } from './campaign-advanced.schema';
 
 /**
  * Kampanya taslağı ağacı — kampanya → reklam grubu → reklam.
@@ -167,7 +167,15 @@ export interface PlannedCampaign {
   adAccountId: string;
   name: string;
   surface: DraftSurface;
-  goal: CampaignGoal;
+  /**
+   * BASİT YÜZEYDE DOLU, UZMAN YÜZEYİNDE NULL.
+   *
+   * Uzman hedefi değil, doğrudan platformun amacını seçiyor. Ona bir hedef
+   * uydurmak, taslağın neye göre kurulduğu sorusuna yanlış cevap vermek
+   * olurdu — ve o cevap yayın anında `campaignSpec`'i yanlış çağırmaya yol
+   * açardı.
+   */
+  goal: CampaignGoal | null;
   settings: Record<string, unknown>;
   budgetMode: DraftBudgetMode;
   /** Micros — string olarak taşınıyor, BigInt JSON'a girmiyor. */
@@ -320,6 +328,143 @@ export function moneyToMicros(amount: string): string {
   const whole = parts[0] || '0';
   const padded = ((parts[1] ?? '') + '000000').slice(0, 6);
   return (BigInt(whole) * 1_000_000n + BigInt(padded)).toString();
+}
+
+// -----------------------------------------------------------------------------
+// Uzman yüzeyi
+// -----------------------------------------------------------------------------
+
+/**
+ * Uzman girdisi — kararları KULLANICI veriyor.
+ *
+ * `AdvancedSettings` OLDUĞU GİBİ KULLANILIYOR, yeni bir tip yazılmadı. O şema
+ * amaç, optimizasyon, faturalama, teklif, hedefleme ve yerleşimi zaten
+ * taşıyor ve `objective-matrix.ts` onu doğruluyor — ikinci bir tip yazmak,
+ * uyumsuz kombinasyonların yalnızca bir yolda yakalanması demek olurdu.
+ * Meta bazı uyumsuz kombinasyonları KABUL EDİP hiç dağıtım yapmıyor; bu
+ * yüzden doğrulamanın tek olması kritik.
+ *
+ * HEDEF (`goal`) YOK ve olmayacak. Uzman "form mu WhatsApp mı" demiyor,
+ * doğrudan `OUTCOME_LEADS` + `LEAD_GENERATION` seçiyor. Ona bir hedef
+ * uydurmak, taslağın neye göre kurulduğu sorusuna yanlış cevap vermek olurdu.
+ */
+export const expertDraftInputSchema = z.object({
+  clientId: z.string().uuid(),
+  name: z.string().trim().min(1, 'Kampanyaya bir ad ver').max(200),
+
+  platform: z.enum(DRAFT_PLATFORMS),
+  adAccountId: z.string().uuid(),
+  socialProfileId: z.string().uuid().optional(),
+  leadFormId: z.string().uuid().optional(),
+
+  /** Bütçe — uzman tutarı ve tipini kendisi veriyor. */
+  budget: money,
+
+  /**
+   * ÇOKLU KREATİF — bu yüzeyin varlık sebeplerinden biri.
+   *
+   * Aynı reklam grubuna 3-5 kreatif koymak ajans pratiğinde standart ve
+   * basit yüzeyde mümkün değil. Sıra anlamlı: platformda ilk sırada
+   * oluşturulan reklam listede de ilk görünüyor.
+   */
+  creativeIds: z.array(z.string().uuid()).min(1, 'En az bir kreatif seç').max(10),
+
+  advanced: advancedSettingsSchema,
+
+  linkUrl: z.string().trim().max(2048).optional(),
+  whatsappNumber: z.string().trim().max(20).optional(),
+});
+
+export type ExpertDraftInput = z.infer<typeof expertDraftInputSchema>;
+
+/**
+ * Uzman girdisinden ağaç planı — SAF FONKSİYON.
+ *
+ * Basit yüzeyin üreticisinden farkı, karar vermemesi: `buildDraftTree` hedefi
+ * Meta ayarlarına ÇEVİRİYOR, bu ise kullanıcının verdiği ayarları olduğu gibi
+ * taşıyor. Doğrulama ayrı ve sunucuda (`validateAdvanced`) — kullanıcının
+ * seçimi bizim eşlememizden daha ayrıcalıklı değil.
+ */
+export function buildExpertTree(input: ExpertDraftInput, now: Date): DraftTreePlan {
+  const blockers: string[] = [];
+  const a = input.advanced;
+
+  if (input.platform === 'meta' && !input.socialProfileId) {
+    blockers.push('Meta reklamı bir Facebook sayfası adına yayınlanır — sayfa seçilmedi.');
+  }
+
+  /**
+   * TOPLAM BÜTÇEDE BİTİŞ ZORUNLU — veritabanı kısıtıyla AYNI kural.
+   *
+   * Meta bütçeyi süreye bölüyor; süre yoksa bölecek bir şey de yok ve ad set
+   * hiç dağıtım yapmıyor. Kısıt burada da duruyor ki kullanıcı hatayı ham bir
+   * veritabanı ihlali olarak değil, cümle olarak görsün.
+   */
+  if (a.budgetMode === 'lifetime' && !a.endAt) {
+    blockers.push('Toplam bütçe seçtiğinde bitiş tarihi zorunlu — Meta bütçeyi süreye böler.');
+  }
+
+  if (blockers.length > 0) {
+    return { campaigns: [], skipped: [], groupRequired: false, blockers };
+  }
+
+  return {
+    campaigns: [
+      {
+        platform: input.platform,
+        adAccountId: input.adAccountId,
+        name: input.name,
+        surface: 'expert',
+        goal: null,
+        settings: {
+          objective: a.objective,
+          bidStrategy: a.bidStrategy,
+          ...(a.bidAmount ? { bidAmount: a.bidAmount } : {}),
+        },
+        budgetMode: a.budgetMode,
+        budgetAmountMicros: moneyToMicros(input.budget),
+        endAt: a.endAt ? new Date(a.endAt).toISOString() : null,
+        adGroups: [
+          {
+            name: input.name,
+            position: 0,
+            socialProfileId: input.socialProfileId,
+            /**
+             * AYARLARIN TAMAMI REKLAM GRUBUNDA.
+             *
+             * Meta'da da öyle duruyorlar: optimizasyon, faturalama, hedefleme
+             * ve yerleşim ad set'in alanları. Kampanyaya taşımak, ikinci bir
+             * grup eklendiğinde ayarların paylaşılması demek olurdu ve o
+             * davranış Meta'da yok.
+             */
+            settings: {
+              optimizationGoal: a.optimizationGoal,
+              billingEvent: a.billingEvent,
+              ...(a.destinationType ? { destinationType: a.destinationType } : {}),
+              targeting: a.targeting,
+              placement: a.placement,
+              ...(a.pixelId ? { pixelId: a.pixelId } : {}),
+              ...(a.conversionEvent ? { conversionEvent: a.conversionEvent } : {}),
+              ...(a.startAt ? { startAt: a.startAt } : {}),
+              ...(input.linkUrl ? { linkUrl: input.linkUrl } : {}),
+              ...(input.whatsappNumber ? { whatsappNumber: input.whatsappNumber } : {}),
+            },
+            ads: input.creativeIds.map((creativeId, position) => ({
+              // AD SIRAYLA: Ads Manager'da hangi varyantın hangisi olduğu
+              // ancak addan anlaşılıyor ve hepsine aynı adı vermek, uzmanı
+              // sonuçları eşleştiremez hâle getirirdi.
+              name: `${input.name} — ${position + 1}`,
+              creativeId,
+              position,
+            })),
+          },
+        ],
+      },
+    ],
+    skipped: [],
+    groupRequired: false,
+    blockers: [],
+  };
 }
 
 // -----------------------------------------------------------------------------

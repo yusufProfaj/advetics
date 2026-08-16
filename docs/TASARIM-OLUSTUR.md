@@ -2,6 +2,8 @@
 
 **Durum:** İNŞAAT SÜRÜYOR · **Tarih:** 2026-08-16 · **5 karar kapandı, 10 açık**
 
+İki yüzey de yazıldı: `/reklam-olustur/basit` ve `/reklam-olustur/uzman`.
+
 Bu belge bir plan değil, bir **karar zemini**. §1–§9 bugünkü durumu ve önerilen
 omurgayı anlatıyor, §10 kararları taşıyor.
 
@@ -567,50 +569,26 @@ beklemek ajansı yavaşlatır, bu yüzden kapatılabilir olmalı.
 - **(b)** Çoklu ad set + çoklu kreatif (tam ağaç).
 - **(c)** (b) + kayıtlı kitle kütüphanesi.
 
-**Öneri: (a) ilk turda, model (b)'yi taşıyacak şekilde.** Yani veritabanı
-ağacı baştan çoklu ad set'i kaldırsın, arayüz ilk turda tek ad set göstersin.
-Şemayı sonradan çoğaltmak migration demek; arayüzü açmak bir ekran işi.
-Kayıtlı kitle (c) ayrı bir modül ve BASE'e ait — bu işi ona bağlamak
-tıkanma üretir.
+**Karar: (a) — TEK REKLAM GRUBU, ÇOKLU KREATİF.** 2026-08-16'da kapandı ve
+yazıldı. Şema çoklu grubu taşıyor, arayüz tek grup gösteriyor; şemayı
+sonradan çoğaltmak migration demek, arayüzü açmak bir ekran işi.
 
-**Karar: (a) — arayüz tek ad set, ŞEMA çoklu ad set taşıyor.** 2026-08-16'da
-kapandı. Şemayı sonradan çoğaltmak migration demek; arayüzü açmak bir ekran
-işi. Kayıtlı kitle (c) kapsam dışı — BASE'e ait.
+**Uygulamada çıkan iki şey:**
 
----
+1. **Çoklu kreatif yeni bir eşleme gerektirmedi.** İlk reklam `publishDraft`
+   ile kampanyayı ve ad set'i kuruyor, kalanlar `createAd` ile aynı ad set'e
+   ekleniyor — ikisi de mevcut kod ve `createAd`'i toplu oluşturucu zaten
+   kullanıyor.
+2. **Bir varyantın düşmesi kampanyayı düşürmüyor.** Kampanya ve ad set çoktan
+   açıldı ve para harcamaya başladı; hepsini geri almak, çalışan bir yapıyı
+   bir varyant yüzünden yıkmak olurdu. Düşen varyantın sebebi kendi satırına
+   yazılıyor.
 
-### K5 — Kreatif ayrı bir varlık mı olsun?
+**Kalan kısıt çoklu AD SET.** `publishDraft` tek ad set yazıyor ve ikincisini
+açmanın yolu canlıda hiç denenmedi; ağaç taşıyor ama yayınlamıyor ve bu
+kullanıcıya açıkça söyleniyor.
 
-Bugün görseller taslağa bağlı (`ad_draft_assets.draft_id`).
-
-- **(a)** Kreatif kendi tablosu olur; bir kreatif birden çok reklamda
-  kullanılır.
-- **(b)** Bugünkü gibi kalır; ad set başına N reklam olunca her reklam kendi
-  görsel kümesini taşır.
-
-**Öneri: (a).** (b) ile "aynı görselle iki metin dene" senaryosu görseli iki
-kez yüklemek demek ve arşivin varlık sebebini yeniden deler — arşiv tam da
-bunun için yazılmıştı.
-
-**Karar: (a) — KREATİF AYRI VARLIK.** 2026-08-16'da kapandı ve inşaatın ilk
-adımı bu. §9.5'teki metin havuzu bunu zorunlu kılıyor: Google RSA'nın on beş
-başlığı `ad_drafts`'ın üç metin sütununa sığmıyor.
-
----
-
-### K6 — Menü ve bilgi mimarisi
-
-- **(a)** Tek "Reklamlar" girişi, altında dört başlangıç: hızlı reklam /
-  kampanya kur / gönderiyi öne çıkar / toplu.
-- **(b)** Bugünkü üç ayrı sayfa kalır, içleri değişir.
-- **(c)** İki sayfa: "Reklam Oluştur" (basit) ve "Kampanya Yönetimi" (uzman +
-  toplu), Auto-Boost ayrı kalır.
-
-**Öneri: (a).** Kullanıcı "reklam vereceğim" diye geliyor; giriş kapısı tek
-olmalı. Auto-Boost'un **kural yönetimi** yine ayrı bir sayfada kalabilir —
-orası reklam oluşturma değil, otomasyon ayarı.
-
-**Karar:** _(açık)_
+Kayıtlı kitle (c) hâlâ kapsam dışı — BASE'e ait.
 
 ---
 

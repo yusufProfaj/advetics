@@ -69,7 +69,8 @@ export default async function SimpleAdPage({
 
   return (
     <div className="space-y-5">
-      <header>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
         <h1 className="text-xl font-semibold text-ink">Hızlı Reklam</h1>
         {/* HANGİ MÜŞTERİ İÇİN ÇALIŞILDIĞI YAZIYOR.
             Eski sihirbazda yazmıyordu ve reklam hesabı sessizce listenin ilk
@@ -79,6 +80,16 @@ export default async function SimpleAdPage({
           <strong className="text-ink">{client?.name ?? 'Müşteri'}</strong> için reklam
           oluşturuyorsun. Ne istediğini söyle, gerisini biz hallederiz.
         </p>
+        </div>
+        {/* UZMAN YÜZEYİNE GEÇİŞ. İki yüzey aynı ağaca yazıyor; geçiş
+            kullanıcının bir şey kaybetmesine yol açmıyor, yalnızca aynı işi
+            başka bir soru setiyle yapıyor. */}
+        <Link
+          href={`/reklam-olustur/uzman?musteri=${clientId}`}
+          className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-sunken"
+        >
+          Kampanya Kur (uzman)
+        </Link>
       </header>
 
       {canWrite ? (

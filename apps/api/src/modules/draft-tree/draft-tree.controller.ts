@@ -1,11 +1,13 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import {
   creativeInputSchema,
+  expertDraftInputSchema,
   simpleDraftInputSchema,
   type DraftCampaignRecord,
   type CreativeInput,
   type CreativeRecord,
   type DraftGroupRecord,
+  type ExpertDraftInput,
   type PublishCheck,
   type SimpleDraftInput,
   type TenantContext,
@@ -83,6 +85,22 @@ export class DraftTreeController {
     @Body(zodBody(simpleDraftInputSchema)) input: SimpleDraftInput,
   ): Promise<DraftGroupRecord> {
     return this.tree.createFromSimple(ctx, input);
+  }
+
+  /**
+   * Uzman yüzeyinden kampanya kurar.
+   *
+   * TEK KAMPANYA DÖNÜYOR, grup değil: uzman platformu kendisi seçiyor ve
+   * "aynı niyeti iki platforma çıkar" kararı basit yüzeyin işi. İki platform
+   * isteyen uzman iki kampanya kuruyor — ve o zaman ne yaptığını biliyor.
+   */
+  @Post('expert')
+  @RequirePermissions('bulk.write')
+  createExpert(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(expertDraftInputSchema)) input: ExpertDraftInput,
+  ): Promise<DraftCampaignRecord> {
+    return this.tree.createFromExpert(ctx, input);
   }
 
   /** Yayın öncesi kontrol — engelleyenler, uyarılar ve yuva kapsaması. */

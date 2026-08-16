@@ -4,9 +4,11 @@ import {
   coverageFor,
   matchRatio,
   packTextsFor,
+  type AdvancedSettings,
   type AssetCoverage,
   type AssetRatio,
   type CreativeTexts,
+  type DraftAdGroupRecord,
   type DraftCampaignRecord,
   type DraftGroupRecord,
   type PublishCheck,
@@ -23,7 +25,11 @@ import {
   defaultTargeting,
   labelFor,
   placementsFor,
+  placementsFrom,
+  resolveSpec,
+  targetingFrom,
 } from '../ad-builder/goal-mapping';
+import { validateAdvanced } from '../ad-builder/objective-matrix';
 import { DraftTreeService } from './draft-tree.service';
 
 /**
@@ -35,11 +41,17 @@ import { DraftTreeService } from './draft-tree.service';
  * altı hatanın düzeltmesinin yalnızca bir yola gitmesi hikâyesini tekrarlamak
  * olurdu.
  *
- * BUNUN BEDELİ BİR KISIT: `publishDraft` tek kampanya + tek ad set + tek
- * reklam yazıyor. Ağaç daha fazlasını TAŞIYABİLİYOR ama yayınlayamıyor ve bu
- * durum kullanıcıya AÇIKÇA söyleniyor. Çok varlıklı yazma yolunu canlıda
- * doğrulamadan yazmak, bu projenin en açık kuralına aykırı: tahmin etmektense
- * kısıtla, kısıtı kullanıcıya söyle.
+ * İKİ YÜZEY, TEK YAYIN YOLU. Basit yüzeyde spec'i `campaignSpec` üretiyor,
+ * uzman yüzeyinde `resolveSpec` kullanıcının ayarlarını alıyor — ikisi de aynı
+ * dosyada ve zaten mevcut reklam oluşturucuyu besliyorlar.
+ *
+ * ÇOKLU KREATİF: ilk reklam `publishDraft` ile kampanyayı ve ad set'i kuruyor,
+ * kalanlar `createAd` ile AYNI ad set'e ekleniyor. İkisi de mevcut kod.
+ *
+ * KALAN KISIT — ÇOKLU AD SET. `publishDraft` tek ad set yazıyor ve ikinci bir
+ * ad set açmanın yolu canlıda hiç denenmedi. Ağaç taşıyor ama yayınlamıyor ve
+ * bu kullanıcıya AÇIKÇA söyleniyor: tahmin etmektense kısıtla, kısıtı
+ * kullanıcıya söyle.
  */
 @Injectable()
 export class DraftPublishService {
@@ -87,22 +99,16 @@ export class DraftPublishService {
     }
 
     /**
-     * UZMAN YÜZEYİ YAYINI HENÜZ YOK.
+     * TEK GRUP KISITI — sessiz değil.
      *
-     * `goal` NULL demek, kararları kullanıcının verdiği ve `campaignSpec`'in
-     * üretemeyeceği bir taslak demek. O yolu yazmadan yayınlamaya çalışmak,
-     * ayarların sessizce yok sayılması olurdu.
-     */
-    if (!campaign.goal) {
-      blockers.push('Uzman yüzeyinden kurulan taslakların yayını henüz yazılmadı.');
-    }
-
-    /**
-     * TEK GRUP, TEK REKLAM KISITI — sessiz değil.
+     * Ağaç çoklu grup taşıyor (K4) ama `publishDraft` tek kampanya + tek ad
+     * set yazıyor ve ikinci bir ad set açmanın yolu canlıda hiç denenmedi.
+     * Fazlasını sessizce atlamak, kullanıcının iki grup kurup birinin
+     * yayınlandığını fark etmemesi demek olurdu.
      *
-     * Ağaç çoklu taşıyor (K4) ama `publishDraft` tek yazıyor. Fazlasını
-     * sessizce atlamak, kullanıcının üç varyant kurup birinin yayınlandığını
-     * fark etmemesi demek olurdu.
+     * ÇOKLU REKLAM ARTIK ENGELLİ DEĞİL: ilk reklam `publishDraft` ile
+     * kampanyayı ve ad set'i kuruyor, kalanlar `createAd` ile AYNI ad set'e
+     * ekleniyor. İkisi de mevcut kod; yeni bir eşleme yazılmadı.
      */
     if (campaign.adGroups.length !== 1) {
       blockers.push(
@@ -112,10 +118,33 @@ export class DraftPublishService {
     }
     const group = campaign.adGroups[0];
     const ads = group?.ads ?? [];
-    if (group && ads.length !== 1) {
-      blockers.push(
-        `Bu grupta ${ads.length} reklam var; şimdilik tek reklamlı gruplar yayınlanabiliyor.`,
-      );
+    if (group && ads.length === 0) {
+      blockers.push('Reklam grubunda hiç reklam yok.');
+    }
+
+    /**
+     * UZMAN AYARLARI AYNI KONTROL LİSTESİNE KATILIYOR.
+     *
+     * Ayrı bir "gelişmiş doğrulama" ekranı olsaydı kullanıcı iki ayrı yerde
+     * iki ayrı liste görürdü ve hangisinin yayını engellediği belirsiz
+     * kalırdı. Tek liste, tek karar — mevcut `publishCheck` de aynı şeyi
+     * yapıyor.
+     */
+    const advanced = advancedFrom(campaign, group);
+    if (campaign.surface === 'expert' && advanced) {
+      const adv = validateAdvanced(advanced, {
+        hasLinkUrl: Boolean(group?.settings?.linkUrl),
+        hasLeadForm: Boolean(group?.leadFormId),
+        ratios: [],
+        dailyBudget: Number(BigInt(campaign.budgetAmountMicros ?? '0') / 1_000_000n),
+        currency: 'TRY',
+      });
+      blockers.push(...adv.blockers.map((b) => b.message));
+      warnings.push(...adv.warnings.map((w) => w.message));
+    }
+
+    if (campaign.surface === 'expert' && !advanced) {
+      blockers.push('Uzman taslağının ayarları okunamadı — taslağı yeniden oluştur.');
     }
 
     if (campaign.platform === 'meta' && !group?.socialProfileId) {
@@ -133,9 +162,20 @@ export class DraftPublishService {
 
     let coverage: AssetCoverage[] = [];
 
-    const ad = ads[0];
-    if (ad) {
+    /**
+     * HER REKLAM AYRI AYRI DENETLENİYOR, yalnızca ilki değil.
+     *
+     * Uzman yüzeyi aynı gruba 3-5 kreatif koyabiliyor. Yalnızca ilkini
+     * denetlemek, üçüncü varyantın metinsiz ya da kare görselsiz olduğunu
+     * yayına çıktıktan sonra öğrenmek demek olurdu — ve o varyant sessizce
+     * kötü performans gösterirdi.
+     *
+     * MESAJDA VARYANT NUMARASI VAR: "ana metin boş" tek başına, beş kreatifli
+     * bir kampanyada hangisini düzelteceğini söylemiyor.
+     */
+    for (const [i, ad] of ads.entries()) {
       const creative = await this.loadCreative(ctx, ad.creativeId);
+      const etiket = ads.length > 1 ? `${i + 1}. reklam: ` : '';
 
       /**
        * METİN HAVUZUNDAN META PAKETİ.
@@ -146,14 +186,18 @@ export class DraftPublishService {
        * sorusunu sormak zorunda kalmıyor.
        */
       const packed = packTextsFor('meta_single_image', creative.texts);
-      blockers.push(...packed.blockers);
-      warnings.push(...packed.warnings);
+      blockers.push(...packed.blockers.map((b) => etiket + b));
+      warnings.push(...packed.warnings.map((w) => etiket + w));
 
       if (!packed.primaryText) {
-        blockers.push('Ana metin boş — reklamın üstünde görünecek yazı olmadan yayınlanamaz.');
+        blockers.push(
+          `${etiket}Ana metin boş — reklamın üstünde görünecek yazı olmadan yayınlanamaz.`,
+        );
       }
       if (packed.headlines.length === 0) {
-        warnings.push('Başlık boş — reklamın altında kalın yazıyla görünen kısım olmayacak.');
+        warnings.push(
+          `${etiket}Başlık boş — reklamın altında kalın yazıyla görünen kısım olmayacak.`,
+        );
       }
 
       /**
@@ -166,11 +210,12 @@ export class DraftPublishService {
        */
       const metaCoverage = coverageFor('meta', creative.assets);
       const googleCoverage = coverageFor('google', creative.assets);
-      blockers.push(...metaCoverage.blockers);
-      warnings.push(...metaCoverage.warnings);
-      coverage = [metaCoverage, googleCoverage];
-    } else {
-      blockers.push('Kampanyada reklam yok.');
+      blockers.push(...metaCoverage.blockers.map((b) => etiket + b));
+      warnings.push(...metaCoverage.warnings.map((w) => etiket + w));
+
+      // KAPSAMA PANELİ İLK REKLAMINKİNİ GÖSTERİYOR: üç kreatif için üç tablo
+      // basmak ekranı okunamaz kılardı, engeller ise hepsi listede duruyor.
+      if (i === 0) coverage = [metaCoverage, googleCoverage];
     }
 
     const budget = BigInt(campaign.budgetAmountMicros ?? '0');
@@ -256,6 +301,7 @@ export class DraftPublishService {
     const group = campaign.adGroups[0]!;
     const ad = group.ads[0]!;
     const creative = await this.loadCreative(ctx, ad.creativeId);
+    const advanced = advancedFrom(campaign, group);
     const auth = await this.resolveAuth(ctx, campaign, group.socialProfileId!, group.leadFormId);
 
     const provider = this.providers.get('meta');
@@ -311,7 +357,22 @@ export class DraftPublishService {
          * `LINK_CLICKS` sınıfı hataların bir yolda düzeltilip diğerinde
          * kalması demek olurdu.
          */
-        spec: campaignSpec(campaign.goal!, auth.pageExternalId),
+        /**
+         * SPEC `goal-mapping.ts`'TEN — dosyaya dokunulmadı.
+         *
+         * Basit yüzeyde `campaignSpec` hedefi çeviriyor; uzman yüzeyinde
+         * `resolveSpec` kullanıcının ayarlarını alıyor. İKİSİ DE O DOSYADA
+         * ve zaten mevcut reklam oluşturucuyu besliyorlar. Burada ikinci bir
+         * eşleme yazmak, `LEAD_GENERATION` yerine `LINK_CLICKS` sınıfı
+         * hataların bir yolda düzeltilip diğerinde kalması demek olurdu.
+         */
+        spec: advanced
+          ? // `goal` BURADA OKUNMUYOR: `resolveSpec` mod 'advanced' olduğunda
+            // doğrudan kullanıcının ayarlarına bakıyor ve hedefe hiç
+            // dokunmuyor. Alan tipin zorunlu kıldığı bir doldurma; uzman
+            // taslağında hedef zaten NULL.
+            resolveSpec({ goal: 'website', mode: 'advanced', advanced }, auth.pageExternalId)
+          : campaignSpec(campaign.goal!, auth.pageExternalId),
         primaryText: packed.primaryText ?? '',
         headline: packed.headlines[0],
         description: packed.descriptions[0],
@@ -331,12 +392,70 @@ export class DraftPublishService {
          * Hikâyeler açılmıyor, çünkü otomatik yerleşim kare görseli oraya
          * kırpıyor ve metin kesiliyor.
          */
-        targeting: defaultTargeting(),
-        placements: placementsFor(images.map((i) => i.ratio)),
+        /**
+         * HEDEFLEME VE YERLEŞİM: basit yüzeyde BİZİM kararımız, uzman
+         * yüzeyinde KULLANICININ.
+         *
+         * Basit modda yerleşim yüklenen görsele göre kısıtlanıyor (dikey
+         * görsel yoksa Hikâyeler açılmıyor); uzman modda kullanıcı ne
+         * seçtiyse o gidiyor. Otomatik yerleşimde `placementsFrom` BOŞ nesne
+         * dönüyor ve hiçbir alan gönderilmiyor — boş `publisher_platforms`
+         * göndermek "hiçbir platform" demek ve ad set hiç dağıtım yapmıyor.
+         */
+        targeting: advanced ? targetingFrom(advanced.targeting) : defaultTargeting(),
+        placements: advanced
+          ? placementsFrom(advanced.placement)
+          : placementsFor(images.map((i) => i.ratio)),
+        bidStrategy: advanced?.bidStrategy,
+        bidAmountMinor: advanced?.bidAmount ? bidToMinor(advanced.bidAmount) : undefined,
         customizationRules: null,
       });
 
       await this.markPublished(ctx, campaignId, group.id, ad.id, result);
+
+      /**
+       * KALAN REKLAMLAR AYNI AD SET'E EKLENİYOR.
+       *
+       * `publishDraft` kampanya + ad set + ilk reklamı kuruyor; `createAd`
+       * mevcut bir ad set'e reklam ekliyor ve toplu oluşturucu onu zaten
+       * kullanıyor. İkisini birleştirmek yeni bir eşleme yazmadan çoklu
+       * kreatifi mümkün kılıyor.
+       *
+       * BİR VARYANTIN DÜŞMESİ KAMPANYAYI DÜŞÜRMÜYOR. Kampanya ve ad set
+       * yayında; hepsini geri almak, çalışan bir yapıyı bir varyant yüzünden
+       * yıkmak olurdu. Düşen varyantın sebebi KENDİ satırına yazılıyor.
+       */
+      for (const digeri of group.ads.slice(1)) {
+        try {
+          const varyant = await this.loadCreative(ctx, digeri.creativeId);
+          const varyantImages = await this.uploadImages(
+            ctx,
+            campaign.adAccountId,
+            varyant,
+            fetchCtx,
+          );
+          const ilkGorsel = varyantImages[0];
+          if (!ilkGorsel) throw new Error('Varyantın kullanılabilir görseli yok.');
+
+          const varyantMetin = packTextsFor('meta_single_image', varyant.texts);
+          const eklendi = await provider.createAd(fetchCtx, {
+            adAccountExternalId: auth.accountExternalId,
+            adSetExternalId: result.adSetId,
+            pageExternalId: auth.pageExternalId,
+            name: digeri.name,
+            primaryText: varyantMetin.primaryText,
+            headline: varyantMetin.headlines[0],
+            description: varyantMetin.descriptions[0],
+            linkUrl: (group.settings?.linkUrl as string | undefined) ?? undefined,
+            mediaRef: ilkGorsel.hash,
+          });
+          await this.setAdRefs(ctx, digeri.id, eklendi.externalAdId, eklendi.externalCreativeId);
+        } catch (err) {
+          const mesaj = err instanceof Error ? err.message : String(err);
+          await this.setAdError(ctx, digeri.id, mesaj.slice(0, 2000));
+          this.logger.warn(`Varyant eklenemedi (${digeri.id}): ${mesaj}`);
+        }
+      }
     } catch (err) {
       const message =
         err instanceof PlatformApiError
@@ -538,6 +657,33 @@ export class DraftPublishService {
     });
   }
 
+  private async setAdRefs(
+    ctx: TenantContext,
+    adId: string,
+    externalAdId: string,
+    externalCreativeId: string,
+  ): Promise<void> {
+    await this.prisma.withTenant(ctx, (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE draft_ads SET
+          external_ad_id = ${externalAdId},
+          external_creative_id = ${externalCreativeId},
+          error = NULL,
+          updated_at = now()
+        WHERE id = ${adId}::uuid AND org_id = ${ctx.orgId}::uuid
+      `),
+    );
+  }
+
+  private async setAdError(ctx: TenantContext, adId: string, error: string): Promise<void> {
+    await this.prisma.withTenant(ctx, (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE draft_ads SET error = ${error}, updated_at = now()
+        WHERE id = ${adId}::uuid AND org_id = ${ctx.orgId}::uuid
+      `),
+    );
+  }
+
   private async fail(ctx: TenantContext, campaignId: string, error: string): Promise<void> {
     await this.setStatus(ctx, campaignId, 'failed', error);
   }
@@ -576,6 +722,61 @@ function normalizeTexts(raw: Partial<CreativeTexts> | null): CreativeTexts {
     longHeadlines: raw?.longHeadlines ?? [],
     descriptions: raw?.descriptions ?? [],
   };
+}
+
+/**
+ * Ağaçtaki ayarlardan `AdvancedSettings` toplar.
+ *
+ * KAMPANYA VE GRUP AYRI YERLERDE TUTUYOR — Meta'da da öyle: amaç ve teklik
+ * kampanyanın, optimizasyon ve hedefleme ad set'in alanları. `AdvancedSettings`
+ * ikisini tek nesnede birleştiriyor çünkü `resolveSpec` ve `validateAdvanced`
+ * onu bekliyor; birleştirme burada, tek yerde.
+ *
+ * BASİT YÜZEYDE `null` DÖNÜYOR ve dönmeli: orada kararları biz verdik ve
+ * `campaignSpec` çalışmalı. Eksik bir ayarı varsayılanla doldurup uzman gibi
+ * davranmak, kullanıcının seçmediği bir hedefle yayınlamak olurdu.
+ */
+function advancedFrom(
+  campaign: DraftCampaignRecord,
+  group: DraftAdGroupRecord | undefined,
+): AdvancedSettings | null {
+  if (campaign.surface !== 'expert' || !group) return null;
+  const c = campaign.settings ?? {};
+  const g = group.settings ?? {};
+  if (!c.objective || !g.optimizationGoal || !g.targeting || !g.placement) return null;
+
+  return {
+    objective: c.objective,
+    optimizationGoal: g.optimizationGoal,
+    billingEvent: g.billingEvent ?? 'IMPRESSIONS',
+    destinationType: g.destinationType,
+    bidStrategy: c.bidStrategy ?? 'LOWEST_COST_WITHOUT_CAP',
+    bidAmount: c.bidAmount,
+    budgetMode: campaign.budgetMode === 'lifetime' ? 'lifetime' : 'daily',
+    startAt: g.startAt,
+    endAt: campaign.endAt ?? undefined,
+    targeting: g.targeting,
+    placement: g.placement,
+    pixelId: g.pixelId,
+    conversionEvent: g.conversionEvent,
+  } as AdvancedSettings;
+}
+
+/**
+ * Teklif tutarını hesabın alt birimine çevirir.
+ *
+ * `150,50` → 15050 kuruş. Virgül ondalık ayırıcı olarak kabul ediliyor:
+ * Türkçe klavyede varsayılan bu ve nokta beklemek sessizce NaN üretirdi —
+ * teklif alanı boş gider, Meta varsayılanı uygular ve kullanıcı tavan
+ * koyduğunu sanır.
+ */
+function bidToMinor(amount: string): bigint {
+  const normalized = amount.replace(',', '.');
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new BadRequestException('Teklif tutarı okunamadı.');
+  }
+  return BigInt(Math.round(value * 100));
 }
 
 function platformLabel(platform: string): string {

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import {
   buildDraftTree,
+  buildExpertTree,
   type CampaignGoal,
   type DraftAdGroupRecord,
   type DraftAdRecord,
@@ -12,6 +13,7 @@ import {
   type DraftStatus,
   type DraftSurface,
   type DraftTreePlan,
+  type ExpertDraftInput,
   type SimpleDraftInput,
   type TenantContext,
 } from '@advetics/shared';
@@ -105,8 +107,16 @@ export class DraftTreeService {
     }
 
     const ids = await this.prisma.withTenant(ctx, async (tx) => {
-      await this.assertScope(tx, input, plan);
-      return this.writePlan(tx, ctx, input, plan);
+      await this.assertScope(
+        tx,
+        {
+          clientId: input.clientId,
+          socialProfileId: input.socialProfileId,
+          creativeIds: [input.creativeId],
+        },
+        plan,
+      );
+      return this.writePlan(tx, ctx, { clientId: input.clientId }, plan);
     });
 
     const campaigns = await Promise.all(ids.map((id) => this.get(ctx, id)));
@@ -128,7 +138,14 @@ export class DraftTreeService {
   private async writePlan(
     tx: TxLike,
     ctx: TenantContext,
-    input: SimpleDraftInput,
+    /**
+     * İKİ YÜZEYİN ORTAK ALANLARI — tam girdi tipi DEĞİL.
+     *
+     * `SimpleDraftInput` beklemek, uzman yüzeyinin kullanmadığı alanları
+     * (hedef, süre) uydurmasını gerektirirdi. Yazıcının ihtiyacı yalnızca
+     * bunlar; dar tip, ileride üçüncü bir yüzey eklendiğinde de yeter.
+     */
+    input: { clientId: string; leadFormId?: string },
     plan: DraftTreePlan,
   ): Promise<string[]> {
     /**
@@ -169,10 +186,12 @@ export class DraftTreeService {
       for (const g of c.adGroups) {
         const [group] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           INSERT INTO draft_ad_groups (
-            id, org_id, campaign_id, name, position, social_profile_id, settings, updated_at
+            id, org_id, campaign_id, name, position, social_profile_id, lead_form_id,
+            settings, updated_at
           ) VALUES (
             gen_random_uuid(), ${ctx.orgId}::uuid, ${campaign.id}::uuid, ${g.name},
             ${g.position}, ${g.socialProfileId ?? null}::uuid,
+            ${input.leadFormId ?? null}::uuid,
             ${JSON.stringify(g.settings)}::jsonb, now()
           )
           RETURNING id::text AS id
@@ -193,6 +212,44 @@ export class DraftTreeService {
     }
 
     return ids;
+  }
+
+  /**
+   * Uzman yüzeyinden ağaç kurar.
+   *
+   * BASİT YÜZEYLE AYNI YAZMA YOLU (`writePlan`) ve bu bilinçli: iki ayrı
+   * yazıcı, birinde düzeltilen bir hatanın diğerinde kalması demek olurdu.
+   * Fark yalnızca planı ÜRETEN fonksiyonda — biri hedefi ayarlara çeviriyor,
+   * diğeri kullanıcının ayarlarını olduğu gibi taşıyor.
+   */
+  async createFromExpert(
+    ctx: TenantContext,
+    input: ExpertDraftInput,
+  ): Promise<DraftCampaignRecord> {
+    const plan = buildExpertTree(input, new Date());
+    if (plan.blockers.length > 0) {
+      throw new BadRequestException(plan.blockers.join(' '));
+    }
+
+    const ids = await this.prisma.withTenant(ctx, async (tx) => {
+      await this.assertScope(
+        tx,
+        {
+          clientId: input.clientId,
+          socialProfileId: input.socialProfileId,
+          creativeIds: input.creativeIds,
+        },
+        plan,
+      );
+      return this.writePlan(
+        tx,
+        ctx,
+        { clientId: input.clientId, leadFormId: input.leadFormId },
+        plan,
+      );
+    });
+
+    return this.get(ctx, ids[0]!);
   }
 
   // ---------------------------------------------------------------------------
@@ -291,7 +348,7 @@ export class DraftTreeService {
    */
   private async assertScope(
     tx: TxLike,
-    input: SimpleDraftInput,
+    input: { clientId: string; socialProfileId?: string; creativeIds: string[] },
     plan: DraftTreePlan,
   ): Promise<void> {
     for (const c of plan.campaigns) {
@@ -349,13 +406,27 @@ export class DraftTreeService {
       }
     }
 
-    const [creative] = await tx.$queryRaw<Array<{ client_id: string }>>(Prisma.sql`
-      SELECT client_id::text AS client_id
-      FROM ad_creatives WHERE id = ${input.creativeId}::uuid
+    /**
+     * KREATİFLERİN HEPSİ KONTROL EDİLİYOR, yalnızca ilki değil.
+     *
+     * Uzman yüzeyi aynı gruba birden çok kreatif koyabiliyor; birini
+     * denetleyip diğerlerini geçmek, listenin sonuna başka müşterinin
+     * kreatifini koymanın yeterli olması demek olurdu.
+     */
+    const creatives = await tx.$queryRaw<Array<{ id: string; client_id: string }>>(Prisma.sql`
+      SELECT id::text AS id, client_id::text AS client_id
+      FROM ad_creatives WHERE id = ANY(${input.creativeIds}::uuid[])
     `);
-    if (!creative) throw new NotFoundException('Kreatif bulunamadı');
-    if (creative.client_id !== input.clientId) {
-      throw new BadRequestException('Bu kreatif başka bir müşteriye ait.');
+    if (creatives.length !== new Set(input.creativeIds).size) {
+      throw new NotFoundException('Kreatif bulunamadı');
+    }
+    const yabanci = creatives.filter((c) => c.client_id !== input.clientId);
+    if (yabanci.length > 0) {
+      throw new BadRequestException(
+        yabanci.length === 1
+          ? 'Bu kreatif başka bir müşteriye ait.'
+          : `${yabanci.length} kreatif başka bir müşteriye ait.`,
+      );
     }
   }
 
