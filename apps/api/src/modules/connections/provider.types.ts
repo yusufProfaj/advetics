@@ -555,6 +555,30 @@ export interface PublishDraftRequest {
    */
   budgetMode?: 'daily' | 'lifetime';
 
+  /**
+   * ANAHTAR KELİMELER — YALNIZCA GOOGLE ARAMA.
+   *
+   * Meta'da karşılığı yok ve orada bu alan hiç okunmuyor. Google'da ise
+   * anahtar kelimesiz bir arama kampanyası HİÇ HARCAMIYOR ve hiçbir hata da
+   * vermiyor — sessiz sıfırın ta kendisi; yayın kontrolü en az bir kelime
+   * istiyor.
+   */
+  keywords?: string[];
+
+  /**
+   * GOOGLE RSA METİNLERİ — Meta'nın tek başlığından AYRI.
+   *
+   * Meta bir başlık ve bir açıklama alıyor (`headline`, `description`);
+   * Google RSA on beşe kadar başlık ve dörde kadar açıklama istiyor. Aynı
+   * alanları paylaştırmak, Meta'nın tek başlığını Google'a tek başlıkla
+   * göndermek demek olurdu — Google bunu REDDEDİYOR (en az üç başlık).
+   *
+   * İkisi de `packTextsFor` ile aynı metin havuzundan üretiliyor; ayrı
+   * alanlar yalnızca paketin farklı olduğunu söylüyor.
+   */
+  googleHeadlines?: string[];
+  googleDescriptions?: string[];
+
   /** Teklif stratejisi (gelişmiş mod). Yoksa Meta varsayılanı. */
   bidStrategy?: string;
   /** Teklif/maliyet tavanı — hesabın para biriminin alt biriminde. */

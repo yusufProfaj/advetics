@@ -297,12 +297,27 @@ describe('KISMİ BAŞARI — K13 kararının sınavı', () => {
     expect(byPlatform.meta!.status).toBe('published');
     expect(byPlatform.meta!.externalCampaignId).toBe('c-1');
     expect(byPlatform.google!.status).toBe('failed');
-    // TEK ENGEL: platformun yazma kodu. Ağaç eksiksiz olduğu için başka bir
-    // sebep karışmıyor — hata mesajı kullanıcıya doğru şeyi söylüyor.
-    expect(byPlatform.google!.error).toBe(
-      'Google Ads reklam oluşturma henüz yazılmadı. Bağlantı ve okuma tarafı çalışıyor; ' +
-        'eksik olan yazma kodu.',
-    );
+
+    /**
+     * DÜŞME SEBEBİ ARTIK GERÇEK BİR EKSİK — ve üçü de anlamlı.
+     *
+     * Bu test bir dönem "Google yazma kodu yok" diyordu; yazıldıktan sonra
+     * aynı ağaç ÜÇ farklı sebeple düşüyor ve üçü de tasarımın söylediği
+     * şeyler:
+     *
+     *   1. Anahtar kelime yok — kelimesiz arama kampanyası hiç gösterim
+     *      almaz, yani sessiz sıfır.
+     *   2. RSA en az 3 başlık istiyor, havuzda 2 var.
+     *   3. RSA en az 2 açıklama istiyor, havuzda 1 var.
+     *
+     * (2) ve (3) §9.5'in tam olarak öngördüğü asimetri: META İÇİN YETERLİ
+     * OLAN HAVUZ GOOGLE İÇİN YETMİYOR. Aynı kreatif Meta'da yayınlandı,
+     * Google'da yetmedi — ve kullanıcı hangi metnin eksik olduğunu tek tek
+     * görüyor.
+     */
+    expect(byPlatform.google!.error).toContain('en az bir anahtar kelime');
+    expect(byPlatform.google!.error).toContain('en az 3 başlık');
+    expect(byPlatform.google!.error).toContain('en az 2 açıklama');
   });
 
   it('grup yayını HATA FIRLATMIYOR', async () => {

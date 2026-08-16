@@ -84,19 +84,7 @@ export class DraftPublishService {
 
     if (campaign.status === 'published') blockers.push('Bu kampanya zaten yayınlanmış.');
 
-    /**
-     * GOOGLE HENÜZ YAZILMADI — erişim değil, kod eksik.
-     *
-     * Erişim 2026-08-16'da alındı ve okuma tarafı canlıda doğrulandı. Mesajın
-     * bunu söylemesi önemli: "onay bekleniyor" demek kullanıcıyı çözülmüş bir
-     * sorunu çözmeye gönderirdi.
-     */
-    if (campaign.platform !== 'meta') {
-      blockers.push(
-        'Google Ads reklam oluşturma henüz yazılmadı. Bağlantı ve okuma tarafı çalışıyor; ' +
-          'eksik olan yazma kodu.',
-      );
-    }
+    const google = campaign.platform === 'google';
 
     /**
      * TEK GRUP KISITI — sessiz değil.
@@ -147,8 +135,41 @@ export class DraftPublishService {
       blockers.push('Uzman taslağının ayarları okunamadı — taslağı yeniden oluştur.');
     }
 
-    if (campaign.platform === 'meta' && !group?.socialProfileId) {
+    if (!google && !group?.socialProfileId) {
       blockers.push('Reklam bir Facebook sayfası adına yayınlanır — sayfa seçilmemiş.');
+    }
+
+    /**
+     * GOOGLE ARAMA KAMPANYASININ İKİ ZORUNLUSU.
+     *
+     * ANAHTAR KELİMESİZ kampanya hiç gösterim almıyor ve hiçbir hata da
+     * vermiyor — sessiz sıfırın ta kendisi. HEDEF URL'siz reklam ise Google
+     * tarafından reddediliyor ama mesaj hangi alanın eksik olduğunu
+     * söylemiyor.
+     */
+    if (google) {
+      const keywords = (group?.settings?.keywords as string[] | undefined) ?? [];
+      if (keywords.length === 0) {
+        blockers.push(
+          'Google arama kampanyası en az bir anahtar kelime gerektiriyor — ' +
+            'kelimesiz kampanya hiç gösterim almaz.',
+        );
+      }
+      if (!group?.settings?.linkUrl) {
+        blockers.push('Google arama reklamı hedef URL olmadan oluşturulamaz.');
+      }
+
+      /**
+       * BU YOL CANLIDA HİÇ ÇALIŞTIRILMADI — uyarı olarak söyleniyor.
+       *
+       * Meta'da ilk gerçek yazma çağrısında altı hata çıktı ve üçü sessizdi.
+       * Kullanıcı bunu bilerek denemeli; kampanya zaten DURAKLATILMIŞ
+       * açılıyor ve kendisi Google Ads'ten başlatıyor.
+       */
+      warnings.push(
+        'Google yayın yolu canlıda ilk kez çalışacak. Kampanya DURAKLATILMIŞ açılır — ' +
+          'Google Ads’te gözden geçirip kendin başlatman gerekiyor.',
+      );
     }
 
     if (campaign.budgetMode === 'none' || !campaign.budgetAmountMicros) {
@@ -185,16 +206,24 @@ export class DraftPublishService {
        * sebebi buraya uyarı olarak düşüyor — kullanıcı "yazdığım başlık nerede"
        * sorusunu sormak zorunda kalmıyor.
        */
-      const packed = packTextsFor('meta_single_image', creative.texts);
+      const packed = packTextsFor(google ? 'google_rsa' : 'meta_single_image', creative.texts);
       blockers.push(...packed.blockers.map((b) => etiket + b));
       warnings.push(...packed.warnings.map((w) => etiket + w));
 
-      if (!packed.primaryText) {
+      /**
+       * ANA METİN YALNIZCA META'DA ZORUNLU.
+       *
+       * Google RSA'da "birincil metin" diye bir alan yok; `packTextsFor` onu
+       * zaten düşürüyor ve düşürdüğünü uyarı olarak söylüyor. Burada da
+       * zorunlu tutmak, Google kullanıcısına hiçbir yerde görünmeyecek bir
+       * metin yazdırmak olurdu.
+       */
+      if (!google && !packed.primaryText) {
         blockers.push(
           `${etiket}Ana metin boş — reklamın üstünde görünecek yazı olmadan yayınlanamaz.`,
         );
       }
-      if (packed.headlines.length === 0) {
+      if (!google && packed.headlines.length === 0) {
         warnings.push(
           `${etiket}Başlık boş — reklamın altında kalın yazıyla görünen kısım olmayacak.`,
         );
@@ -210,8 +239,16 @@ export class DraftPublishService {
        */
       const metaCoverage = coverageFor('meta', creative.assets);
       const googleCoverage = coverageFor('google', creative.assets);
-      blockers.push(...metaCoverage.blockers.map((b) => etiket + b));
-      warnings.push(...metaCoverage.warnings.map((w) => etiket + w));
+      /**
+       * GÖRSEL KAPSAMASI ARAMA KAMPANYASINDA ENGEL DEĞİL.
+       *
+       * Arama reklamı METİNSEL — görsel kullanmıyor. Kare görsel yok diye
+       * bir arama kampanyasını durdurmak, ilgisiz bir kuralı dayatmak olurdu.
+       */
+      if (!google) {
+        blockers.push(...metaCoverage.blockers.map((b) => etiket + b));
+        warnings.push(...metaCoverage.warnings.map((w) => etiket + w));
+      }
 
       // KAPSAMA PANELİ İLK REKLAMINKİNİ GÖSTERİYOR: üç kreatif için üç tablo
       // basmak ekranı okunamaz kılardı, engeller ise hepsi listede duruyor.
@@ -302,9 +339,16 @@ export class DraftPublishService {
     const ad = group.ads[0]!;
     const creative = await this.loadCreative(ctx, ad.creativeId);
     const advanced = advancedFrom(campaign, group);
-    const auth = await this.resolveAuth(ctx, campaign, group.socialProfileId!, group.leadFormId);
+    const auth = await this.resolveAuth(ctx, campaign, group.socialProfileId, group.leadFormId);
 
-    const provider = this.providers.get('meta');
+    /**
+     * SAĞLAYICI KAMPANYANIN PLATFORMUNDAN GELİYOR, sabit 'meta' değil.
+     *
+     * Sabit bırakmak, Google kampanyasını Meta'ya yazmayı denemek demek
+     * olurdu — ve hata "hesap bulunamadı" gibi okunurdu.
+     */
+    const google = campaign.platform === 'google';
+    const provider = this.providers.get(campaign.platform);
     const can = provider.canWrite(auth.grantedScopes);
     if (!can.ok) {
       const message =
@@ -315,7 +359,7 @@ export class DraftPublishService {
     }
 
     const gate = await this.quota.acquire({
-      platform: 'meta',
+      platform: campaign.platform,
       adAccountId: campaign.adAccountId,
       // Kullanıcı ekranda bekliyor: öncelikli kova.
       layer: 'interactive',
@@ -332,9 +376,10 @@ export class DraftPublishService {
     const fetchCtx = {
       accessToken,
       accountExternalId: auth.accountExternalId,
+      loginCustomerId: auth.managerExternalId,
       onRateLimit: (snapshot: Parameters<NonNullable<typeof this.quota.record>>[0]['snapshot']) =>
         this.quota.record({
-          platform: 'meta',
+          platform: campaign.platform,
           adAccountId: campaign.adAccountId,
           endpoint: 'draft-tree:publish',
           snapshot,
@@ -342,8 +387,20 @@ export class DraftPublishService {
     };
 
     try {
-      const images = await this.uploadImages(ctx, campaign.adAccountId, creative, fetchCtx);
-      const packed = packTextsFor('meta_single_image', creative.texts);
+      /**
+       * ARAMA REKLAMI METİNSEL — görsel yüklenmiyor.
+       *
+       * Google'a görsel göndermeyi denemek `uploadAdImage`'a düşerdi ve o
+       * hâlâ uygulanmamış (PMax geldiğinde gerekecek). Arama kampanyasının
+       * görsele ihtiyacı yok.
+       */
+      const images = google
+        ? []
+        : await this.uploadImages(ctx, campaign.adAccountId, creative, fetchCtx);
+      const packed = packTextsFor(
+        google ? 'google_rsa' : 'meta_single_image',
+        creative.texts,
+      );
 
       const result = await provider.publishDraft(fetchCtx, {
         adAccountExternalId: auth.accountExternalId,
@@ -385,6 +442,14 @@ export class DraftPublishService {
         leadFormExternalId: auth.leadFormExternalId,
         currency: auth.currency,
         images,
+        // GOOGLE RSA METİNLERİ AYRI ALANDA: Meta bir başlık alıyor, Google
+        // en az üç istiyor ve aynı alanı paylaştırmak Google'ın reddettiği
+        // bir paket üretirdi.
+        googleHeadlines: google ? packed.headlines : undefined,
+        googleDescriptions: google ? packed.descriptions : undefined,
+        keywords: google
+          ? ((group.settings?.keywords as string[] | undefined) ?? [])
+          : undefined,
         /**
          * HEDEFLEME VE YERLEŞİM `goal-mapping.ts`'TEN.
          *
@@ -551,22 +616,38 @@ export class DraftPublishService {
   private async resolveAuth(
     ctx: TenantContext,
     campaign: DraftCampaignRecord,
-    socialProfileId: string,
+    socialProfileId: string | null,
     leadFormId: string | null,
   ): Promise<{
     connectionId: string;
     accountExternalId: string;
     pageExternalId: string;
+    /**
+     * Google MCC kimliği — `login-customer-id` başlığı için.
+     *
+     * MCC altındaki bir hesapta YAZMA yaparken de zorunlu, okuma tarafındaki
+     * kadar: eksikse Google `USER_PERMISSION_DENIED` dönüyor ve mesaj token
+     * sorunu gibi okunuyor.
+     */
+    managerExternalId?: string;
     currency: string;
     grantedScopes: string[];
     leadFormExternalId?: string;
   }> {
+    /**
+     * SAYFA LEFT JOIN — Google'da sayfa YOK.
+     *
+     * Eski hâli `JOIN social_profiles` idi ve Google kampanyasında hiçbir
+     * satır dönmüyordu; hata "Reklam hesabı bağlantısı bulunamadı" olurdu ve
+     * kullanıcı bağlantısında sorun sanırdı.
+     */
     const [row] = await this.prisma.withTenant(ctx, (tx) =>
       tx.$queryRaw<
         Array<{
           connection_id: string;
           account_external_id: string;
-          page_external_id: string;
+          page_external_id: string | null;
+          manager_external_id: string | null;
           currency: string;
           granted_scopes: string[];
           status: string;
@@ -575,10 +656,11 @@ export class DraftPublishService {
         SELECT a.connection_id::text AS connection_id,
                a.external_id AS account_external_id,
                sp.external_id AS page_external_id,
+               a.manager_external_id,
                a.currency, c.granted_scopes, c.status::text AS status
         FROM ad_accounts a
         JOIN platform_connections c ON c.id = a.connection_id
-        JOIN social_profiles sp ON sp.id = ${socialProfileId}::uuid
+        LEFT JOIN social_profiles sp ON sp.id = ${socialProfileId}::uuid
         WHERE a.id = ${campaign.adAccountId}::uuid
       `),
     );
@@ -610,7 +692,9 @@ export class DraftPublishService {
     return {
       connectionId: row.connection_id,
       accountExternalId: row.account_external_id,
-      pageExternalId: row.page_external_id,
+      // Google'da sayfa yok; boş dize gidiyor ve sağlayıcı onu okumuyor.
+      pageExternalId: row.page_external_id ?? '',
+      managerExternalId: row.manager_external_id ?? undefined,
       currency: row.currency,
       grantedScopes: row.granted_scopes ?? [],
       leadFormExternalId,

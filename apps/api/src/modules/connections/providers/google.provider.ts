@@ -20,6 +20,7 @@ import {
   type DiscoveredOrganicPost,
   type DiscoveredKeywordRow,
   type PlatformActionRequest,
+  type PublishDraftRequest,
   type PublishDraftResult,
   type PlatformActionResult,
   type PlatformInsights,
@@ -31,6 +32,18 @@ import {
   type TokenVerification,
 } from '../provider.types';
 import { platformFetch } from './http';
+import {
+  adGroupBody,
+  campaignBody,
+  campaignBudgetBody,
+  googleDate,
+  keywordsBody,
+  nameStamp,
+  removeBody,
+  responsiveSearchAdBody,
+  resourceCollection,
+  type GoogleMutateBody,
+} from './google-write';
 
 /**
  * Google Ads adapter'ı.
@@ -1053,12 +1066,173 @@ export class GoogleProvider implements IAdPlatformProvider {
     );
   }
 
-  async publishDraft(): Promise<PublishDraftResult> {
-    throw new PlatformApiError(
+  /**
+   * Arama kampanyası: bütçe → kampanya → reklam grubu → anahtar kelimeler →
+   * reklam.
+   *
+   * DÖRT DEĞİL BEŞ ÇAĞRI ve Meta'dan yapısal fark burada: bütçe AYRI BİR
+   * KAYNAK (`CampaignBudget`) ve kampanya ona referans veriyor. Meta'da bütçe
+   * ad set'in bir alanı.
+   *
+   * ORTADA KALIRSA GERİ ALINIYOR — `createBoost` deseninin aynısı. Bütçe
+   * oluşup kampanya oluşmazsa hesapta yetim bir bütçe kalıyor: para
+   * harcamıyor ama bir sonraki denemede aynı adla ikinci bir bütçe
+   * açılamıyor (DUPLICATE_NAME) ve kullanıcı sebebini anlamıyor.
+   *
+   * KAMPANYA PAUSED AÇILIYOR VE PAUSED KALIYOR — Meta yolundan bilerek
+   * FARKLI. Orada kampanya en sonda ACTIVE'e alınıyor çünkü o yol canlıda bir
+   * kez çalıştı; burası HİÇ çalışmadı. İlk gerçek çağrının sonucunu bir insan
+   * görmeden para harcanmamalı.
+   */
+  async publishDraft(
+    ctx: FetchContext,
+    req: PublishDraftRequest,
+  ): Promise<PublishDraftResult> {
+    if (!req.linkUrl) {
+      throw new PlatformApiError(
+        'google',
+        'permanent',
+        'Google arama reklamı hedef URL olmadan oluşturulamaz.',
+      );
+    }
+    const keywords = (req.keywords ?? []).map((k) => k.trim()).filter(Boolean);
+    if (keywords.length === 0) {
+      // Anahtar kelimesiz arama kampanyası HİÇ HARCAMIYOR ve hata da
+      // vermiyor. Burada durdurmak, sessiz sıfırı engelliyor.
+      throw new PlatformApiError(
+        'google',
+        'permanent',
+        'Google arama kampanyası en az bir anahtar kelime gerektiriyor — ' +
+          'kelimesiz kampanya hiç gösterim almaz.',
+      );
+    }
+
+    const stamp = nameStamp(new Date());
+    const created: Array<{ resource: string; label: string }> = [];
+
+    try {
+      const budget = await this.mutate(
+        ctx,
+        'campaignBudgets',
+        campaignBudgetBody({
+          name: req.name,
+          amountMicros: req.dailyBudgetMicros.toString(),
+          stamp,
+        }),
+      );
+      created.push({ resource: budget, label: 'bütçe' });
+
+      const campaign = await this.mutate(
+        ctx,
+        'campaigns',
+        campaignBody({
+          name: req.name,
+          budgetResource: budget,
+          stamp,
+          startDate: req.startTime ? googleDate(req.startTime) : undefined,
+          endDate: req.endTime ? googleDate(req.endTime) : undefined,
+        }),
+      );
+      created.push({ resource: campaign, label: 'kampanya' });
+
+      /**
+       * REKLAM GRUBU TEKLİFİ GÜNLÜK BÜTÇENİN YİRMİDE BİRİ.
+       *
+       * Elle CPC'de tavan zorunlu ve hesabın varsayılanına bırakmak, aynı
+       * kodun iki müşteride farklı davranması demek. Yirmide bir, günde en az
+       * yirmi tıklama hedefleyen kaba ama ÖNGÖRÜLEBİLİR bir başlangıç;
+       * uzman Google Ads'ten değiştirebiliyor ve kampanya zaten duraklatılmış
+       * açılıyor.
+       */
+      const cpcBidMicros = (req.dailyBudgetMicros / 20n).toString();
+      const adGroup = await this.mutate(
+        ctx,
+        'adGroups',
+        adGroupBody({ name: req.name, campaignResource: campaign, cpcBidMicros }),
+      );
+      created.push({ resource: adGroup, label: 'reklam grubu' });
+
+      await this.mutate(ctx, 'adGroupCriteria', keywordsBody({ adGroupResource: adGroup, keywords }));
+
+      const ad = await this.mutate(
+        ctx,
+        'adGroupAds',
+        responsiveSearchAdBody({
+          adGroupResource: adGroup,
+          finalUrl: req.linkUrl,
+          // METİNLER `packTextsFor('google_rsa')` ÜZERİNDEN GELİYOR ve burada
+          // tekrar kırpılmıyor: sınır tek yerde uygulanmalı, yoksa iki kural
+          // zamanla ayrışır.
+          headlines: req.googleHeadlines ?? [],
+          descriptions: req.googleDescriptions ?? [],
+        }),
+      );
+
+      return {
+        campaignId: campaign,
+        adSetId: adGroup,
+        creativeId: ad,
+        adId: ad,
+      };
+    } catch (err) {
+      // TERS SIRADA GERİ AL. Silme başarısız olsa bile ASIL hatayı fırlatıyoruz:
+      // kullanıcının görmesi gereken, kampanyanın neden kurulamadığı.
+      for (const varlik of [...created].reverse()) {
+        try {
+          await this.mutate(ctx, resourceCollection(varlik.resource), removeBody(varlik.resource));
+        } catch (temizlikHatasi) {
+          this.logger.error(
+            `Google ${varlik.label} geri alınamadı (${varlik.resource}): ` +
+              `${temizlikHatasi instanceof Error ? temizlikHatasi.message : String(temizlikHatasi)}`,
+          );
+        }
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * `:mutate` çağrısı — tek işlem, tek kaynak adı döner.
+   *
+   * `login-customer-id` başlığı okuma tarafındaki kadar KRİTİK: MCC altındaki
+   * bir hesapta yazma yaparken de zorunlu ve eksikse Google
+   * `USER_PERMISSION_DENIED` dönüyor — mesaj token sorunu gibi okunuyor.
+   */
+  private async mutate(
+    ctx: FetchContext,
+    collection: string,
+    payload: GoogleMutateBody,
+  ): Promise<string> {
+    const { developerToken } = this.assertConfigured();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${ctx.accessToken}`,
+      'developer-token': developerToken,
+      'Content-Type': 'application/json',
+    };
+    if (ctx.loginCustomerId) headers['login-customer-id'] = ctx.loginCustomerId;
+
+    const { data } = await platformFetch<{ results?: Array<{ resourceName?: string }> }>(
       'google',
-      'permanent',
-      'Google Ads reklam oluşturma henüz yazılmadı. Meta üzerinden yayınlayabilirsin.',
+      `${this.adsBase}/customers/${ctx.accountExternalId}/${collection}:mutate`,
+      { method: 'POST', headers, body: JSON.stringify(payload) },
     );
+
+    const resource = data.results?.[0]?.resourceName;
+    if (!resource) {
+      /**
+       * KAYNAK ADI YOKSA BAŞARILI SAYMIYORUZ.
+       *
+       * Google 200 dönüp boş sonuç verebiliyor ve bunu başarı saymak,
+       * "oluşturuldu" denen ama var olmayan bir kampanya demek olurdu —
+       * üstelik geri alınacak bir kimlik de kalmazdı.
+       */
+      throw new PlatformApiError(
+        'google',
+        'permanent',
+        `Google ${collection} oluşturma yanıtında kaynak adı yok.`,
+      );
+    }
+    return resource;
   }
 
 

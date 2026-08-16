@@ -1,6 +1,6 @@
 # "Oluştur" bölümünün yeniden tasarımı — tasarım belgesi
 
-**Durum:** İNŞAAT SÜRÜYOR · **Tarih:** 2026-08-16 · **5 karar kapandı, 10 açık**
+**Durum:** İNŞAAT SÜRÜYOR · **Tarih:** 2026-08-16 · **6 karar kapandı, 9 açık**
 
 İki yüzey de yazıldı: `/reklam-olustur/basit` ve `/reklam-olustur/uzman`.
 
@@ -738,23 +738,36 @@ Google düştü" durumunu ifade edemiyor.
   kanal ve "aramada bulunmak" hedefinin tek karşılığı.
 - **(c)** İkisi de, hedefe göre.
 
-**Öneri: (b) önce, (a) sonra.** Sıra ters görünüyor ama gerekçesi
-`goal-mapping.ts`'in kendi mantığı: PMax dönüşüm takibi olmadan öğrenmiyor ve
-bu üründe **piksel/etiket hikâyesi hiç yok** — Meta tarafında `OUTCOME_SALES`
-tam bu yüzden kullanılmıyor. Takip olmadan açılan bir PMax, öğrenmeyen ve
-sessizce para harcayan bir kampanya olur; bu ürünün en korktuğu şey.
-Arama kampanyası ise dönüşüm takibi olmadan da anlamlı trafik getiriyor.
+**Karar: (b) — ARAMA. PMax sonraya.** 2026-08-16'da kapandı ve yazıldı.
+Sıra ters görünüyor ama gerekçesi `goal-mapping.ts`'in kendi mantığı: PMax
+dönüşüm takibi olmadan öğrenmiyor ve bu üründe piksel/etiket hikâyesi hiç yok
+— Meta tarafında `OUTCOME_SALES` tam bu yüzden kullanılmıyor.
 
-Erişim açıldığına göre bu karar artık **canlıda sınanabilir**: ajansın kendi
-hesabında küçük bütçeli bir arama kampanyası, `google-check` ile alan
-doğrulaması yaparak. Kararı masa başında vermek zorunda değiliz.
+**Aramanın beklenmedik faydası:** arama reklamı METİNSEL. Görsel yükleme,
+kırpma ve kapsama makinesinin hiçbiri gerekmiyor; `uploadAdImage`
+uygulanmamış kalabildi. Yüzey alanı ve dolayısıyla risk belirgin küçüldü.
 
-**Bağlı soru — dönüşüm takibi.** PMax'i gerçekten istiyorsak Google etiketi
-ve dönüşüm tanımı bu ürüne girmek zorunda. Bu, reklam oluşturucunun değil
-ayrı bir işin kapsamı ve bugün hiç yok; K14 (a) seçilirse o iş de sıraya
-girmiş olur.
+**Uygulamada verilen dört karar:**
 
-**Karar:** _(açık)_
+1. **Kampanya PAUSED açılıyor ve PAUSED KALIYOR** — Meta yolundan bilerek
+   farklı. Orada kampanya en sonda ACTIVE'e alınıyor çünkü o yol canlıda bir
+   kez çalıştı; burası hiç çalışmadı ve ilk gerçek çağrının sonucunu bir
+   insan görmeden para harcanmamalı.
+2. **Arama ağı ortakları ve Görüntülü Reklam Ağı açıkça KAPALI.** Google'ın
+   varsayılanı ikisini de açık getiriyor; alanı göndermemek, arama kampanyası
+   kurduğunu sanan kullanıcının bütçesinin bir kısmının bambaşka bir
+   envantere gitmesi olurdu.
+3. **`partialFailure: false`.** Açık olsaydı Google geçersiz işlemleri atlayıp
+   kalanları uygular ve yanıt "başarılı" görünürdü — üç anahtar kelimeden
+   ikisi eklenmiş bir kampanya, hiçbir hata olmadan.
+4. **Teklif `manualCpc`.** `MaximizeConversions` dönüşüm takibi istiyor.
+
+**BU YOL CANLIDA HİÇ ÇALIŞTIRILMADI.** Yayın kontrolü bunu kullanıcıya uyarı
+olarak söylüyor. İlk çağrı ajansın kendi hesabında, en küçük bütçeyle
+yapılmalı — kampanya zaten duraklatılmış açılıyor.
+
+**Bağlı soru hâlâ açık — dönüşüm takibi.** PMax'i istiyorsak Google etiketi ve
+dönüşüm tanımı bu ürüne girmek zorunda; o iş yazılmadı.
 
 ---
 
