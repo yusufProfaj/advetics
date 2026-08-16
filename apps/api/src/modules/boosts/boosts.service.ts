@@ -153,7 +153,7 @@ export class BoostsService {
   // ---------------------------------------------------------------------------
 
   async listRules(ctx: TenantContext, clientId: string): Promise<BoostRuleRecord[]> {
-    return this.prisma.withTenant(ctx, async (tx) => {
+    return this.prisma.withTenant(this.scoped(ctx, clientId), async (tx) => {
       const rows = await this.selectRules(
         tx,
         Prisma.sql`r.org_id = ${ctx.orgId}::uuid AND r.client_id = ${clientId}::uuid`,
@@ -320,6 +320,26 @@ export class BoostsService {
     }
   }
 
+
+  /**
+   * KAPSAM İSTEĞİN KENDİSİNDEN KURULUYOR, OTURUMDAKİ SEÇİMDEN DEĞİL.
+   *
+   * `app.can_access_client()` panelde seçili müşteriye daraltıyor
+   * (`02_rls.sql`). Akıllı Boost sayfası ise müşteriyi adres çubuğundaki
+   * `?musteri=` parametresiyle alıyor ve sekmeyle değiştiriliyor — oturumdaki
+   * seçim başka bir müşteri olabilir. O durumda RLS istenen müşterinin
+   * satırlarını gizliyor ve ekran SESSİZCE BOŞ liste gösteriyor: ne hata, ne
+   * uyarı, yalnızca "gönderi yok".
+   *
+   * Aynı hata `GET /connections` için bir kez yaşandı ve orada da böyle
+   * çözüldü (§0.2). Erişim yetkisi ayrıca kontrol ediliyor: `clientIds`
+   * içermiyorsa RLS zaten hiçbir satır döndürmez — buradaki değer görünümü
+   * DARALTIYOR, genişletmiyor.
+   */
+  private scoped(ctx: TenantContext, clientId: string): TenantContext {
+    return { ...ctx, activeClientId: clientId };
+  }
+
   // ---------------------------------------------------------------------------
   // Elle boost — gönderi seçim listesi
   // ---------------------------------------------------------------------------
@@ -347,7 +367,7 @@ export class BoostsService {
     ctx: TenantContext,
     query: BoostablePostQuery,
   ): Promise<BoostablePostList> {
-    return this.prisma.withTenant(ctx, async (tx) => {
+    return this.prisma.withTenant(this.scoped(ctx, query.clientId), async (tx) => {
       const profileFilter = query.socialProfileId
         ? Prisma.sql`AND p.social_profile_id = ${query.socialProfileId}::uuid`
         : Prisma.empty;
@@ -443,7 +463,7 @@ export class BoostsService {
    * var" deyip ay sonunda bütçenin katlarını taahhüt etmek demek.
    */
   async spendSummary(ctx: TenantContext, clientId: string): Promise<BoostSpendSummary> {
-    return this.prisma.withTenant(ctx, async (tx) => {
+    return this.prisma.withTenant(this.scoped(ctx, clientId), async (tx) => {
       const [row] = await tx.$queryRaw<
         Array<{ committed: string | number | bigint | null }>
       >(Prisma.sql`
@@ -501,7 +521,8 @@ export class BoostsService {
    * burada var ve o kişi düğmeye basan kullanıcı.
    */
   async createManualBoost(ctx: TenantContext, input: ManualBoostInput): Promise<BoostRecord> {
-    const boostId = await this.prisma.withTenant(ctx, async (tx) => {
+    const scoped = this.scoped(ctx, input.clientId);
+    const boostId = await this.prisma.withTenant(scoped, async (tx) => {
       const [post] = await tx.$queryRaw<BoostablePostRow[]>(Prisma.sql`
         SELECT p.id::text AS id, p.social_profile_id::text AS social_profile_id,
                sp.name AS social_profile_name, sp.profile_type::text AS profile_type,
@@ -603,7 +624,7 @@ export class BoostsService {
      * `approved` yazıldı: çağrı düşerse boost kaydı duruyor ve hatası
      * `boosts.error`'da.
      */
-    const sonuc = await this.prisma.withTenant(ctx, (tx) =>
+    const sonuc = await this.prisma.withTenant(scoped, (tx) =>
       this.executor.createOneApproved(tx, boostId),
     );
     if (!sonuc.ok) throw new BadRequestException(sonuc.error);
@@ -1011,7 +1032,7 @@ export class BoostsService {
   // ---------------------------------------------------------------------------
 
   async listBoosts(ctx: TenantContext, query: BoostQuery): Promise<BoostRecord[]> {
-    return this.prisma.withTenant(ctx, async (tx) => {
+    return this.prisma.withTenant(this.scoped(ctx, query.clientId), async (tx) => {
       const statusFilter = query.status
         ? Prisma.sql`AND b.status = ${query.status}`
         : Prisma.empty;

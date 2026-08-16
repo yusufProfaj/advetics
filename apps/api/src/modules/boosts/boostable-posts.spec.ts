@@ -22,6 +22,8 @@ import { BoostsService } from './boosts.service';
 
 let h: Harness;
 let svc: BoostsService;
+/** `withTenant`e geçirilen bağlamlar — kapsam kararını doğrulamak için. */
+let seenContexts: TenantContext[] = [];
 
 const CTX: TenantContext = {
   orgId: IDS.org,
@@ -93,7 +95,13 @@ beforeAll(async () => {
   h = await createHarness();
   svc = new BoostsService(
     {
-      withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
+      withTenant: async <T>(c: TenantContext, fn: (tx: unknown) => Promise<T>) => {
+        // BAĞLAM YAKALANIYOR: PGlite koşumunda RLS zorlanmıyor, dolayısıyla
+        // "satır geldi mi" testi kapsamı SINAMIYOR — düzeltme kaldırılsa bile
+        // geçerdi. Sınanan şey kararın kendisi: hangi bağlam kuruldu.
+        seenContexts.push(c);
+        return fn(h.db);
+      },
     } as unknown as PrismaService,
     // ELLE BOOST YOLU BU TESTLERDE KULLANILMIYOR; yürütücü yalnızca
     // bağımlılığı karşılamak için veriliyor.
@@ -108,6 +116,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await h.reset();
   await seedTenant(h);
+  seenContexts = [];
 });
 
 describe('listeleme ve sıra', () => {
@@ -331,5 +340,42 @@ describe('boş listenin sebebi', () => {
     await seedPost(postId(1), FB, '2026-08-10T12:00:00Z');
     const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
     expect(out.emptyReason).toBeNull();
+  });
+});
+
+/**
+ * KAPSAM — oturumdaki seçim değil, İSTEĞİN kendisi.
+ *
+ * `app.can_access_client()` panelde seçili müşteriye daraltıyor. Akıllı Boost
+ * sayfası müşteriyi adres çubuğundaki `?musteri=` ile alıyor ve sekmeyle
+ * değiştiriliyor; ikisi rahatlıkla farklı olabiliyor. Kapsam oturumdan
+ * kurulsaydı ekran, yetkisi olan bir kullanıcıya SESSİZCE boş liste
+ * gösterirdi — ne hata, ne uyarı.
+ *
+ * Aynı hata `GET /connections` için bir kez yaşandı (§0.2).
+ */
+describe('kapsam istekten kuruluyor', () => {
+  const BASKA = '99999999-9999-9999-9999-999999999999';
+
+  it('KRİTİK: bağlam İSTENEN müşteriye kuruluyor, oturumdakine değil', async () => {
+    // PGlite'ta RLS zorlanmadığı için "satır geldi mi" diye bakmak bu kararı
+    // SINAMIYOR. Sınanan şey doğrudan kararın kendisi.
+    const baskaSecili = { ...CTX, activeClientId: BASKA } as TenantContext;
+    await svc.listBoostablePosts(baskaSecili, { clientId: IDS.client, limit: 30 });
+
+    expect(seenContexts).not.toHaveLength(0);
+    for (const c of seenContexts) expect(c.activeClientId).toBe(IDS.client);
+  });
+
+  it('harcama özeti de aynı kapsamda', async () => {
+    const baskaSecili = { ...CTX, activeClientId: BASKA } as TenantContext;
+    await svc.spendSummary(baskaSecili, IDS.client);
+    for (const c of seenContexts) expect(c.activeClientId).toBe(IDS.client);
+  });
+
+  it('boost listesi de aynı kapsamda', async () => {
+    const baskaSecili = { ...CTX, activeClientId: BASKA } as TenantContext;
+    await svc.listBoosts(baskaSecili, { clientId: IDS.client });
+    for (const c of seenContexts) expect(c.activeClientId).toBe(IDS.client);
   });
 });
