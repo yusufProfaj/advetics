@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AssetsModule } from '../assets/assets.module';
 import { ConnectionsModule } from '../connections/connections.module';
+import { CreativeService } from './creative.service';
 import { DraftPublishService } from './draft-publish.service';
-import { DraftTreeController } from './draft-tree.controller';
+import { CreativeController, DraftTreeController } from './draft-tree.controller';
 import { DraftTreeService } from './draft-tree.service';
 
 /**
@@ -15,8 +16,8 @@ import { DraftTreeService } from './draft-tree.service';
  */
 @Module({
   imports: [ConnectionsModule, AssetsModule],
-  controllers: [DraftTreeController],
-  providers: [DraftTreeService, DraftPublishService],
-  exports: [DraftTreeService],
+  controllers: [DraftTreeController, CreativeController],
+  providers: [DraftTreeService, DraftPublishService, CreativeService],
+  exports: [DraftTreeService, CreativeService],
 })
 export class DraftTreeModule {}

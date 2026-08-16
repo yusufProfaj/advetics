@@ -1,7 +1,10 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import {
+  creativeInputSchema,
   simpleDraftInputSchema,
   type DraftCampaignRecord,
+  type CreativeInput,
+  type CreativeRecord,
   type DraftGroupRecord,
   type PublishCheck,
   type SimpleDraftInput,
@@ -9,6 +12,7 @@ import {
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
+import { CreativeService } from './creative.service';
 import { DraftPublishService } from './draft-publish.service';
 import { DraftTreeService } from './draft-tree.service';
 
@@ -125,5 +129,53 @@ export class DraftTreeController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.tree.remove(ctx, id);
+  }
+}
+
+/**
+ * Kreatif kütüphanesi uç noktaları.
+ *
+ * AYRI KONTROLCÜ çünkü yolu ayrı: kreatif bir kampanyaya ait değil, müşteriye
+ * ait. `/draft-campaigns/:id/creatives` gibi bir yol, kreatifin ömrünü
+ * kampanyaya bağlıymış gibi gösterirdi — oysa varlık sebebi tam tersi.
+ */
+@Controller('creatives')
+export class CreativeController {
+  constructor(private readonly creatives: CreativeService) {}
+
+  @Get()
+  @RequirePermissions('bulk.read')
+  list(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<CreativeRecord[]> {
+    return this.creatives.list(ctx, clientId);
+  }
+
+  @Get(':id')
+  @RequirePermissions('bulk.read')
+  get(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<CreativeRecord> {
+    return this.creatives.get(ctx, id);
+  }
+
+  @Post()
+  @RequirePermissions('bulk.write')
+  create(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(creativeInputSchema)) input: CreativeInput,
+  ): Promise<CreativeRecord> {
+    return this.creatives.create(ctx, input);
+  }
+
+  @Delete(':id')
+  @RequirePermissions('bulk.write')
+  remove(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.creatives.remove(ctx, id);
   }
 }

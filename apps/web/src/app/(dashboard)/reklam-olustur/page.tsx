@@ -84,6 +84,31 @@ export default async function AdBuilderPage({
         </p>
       </header>
 
+      {/* YENİ YÜZEYE GEÇİŞ — menüye HENÜZ KONMADI.
+          Menünün nasıl yeniden kurulacağı açık bir karar (tasarım belgesi K6)
+          ve tek başına değiştirmek, kararı fiilen vermek olurdu. Ama
+          erişilemeyen bir sayfa da işe yaramaz; geçiş şimdilik buradan.
+
+          İKİ AKIŞ YAN YANA ÇALIŞIYOR: bu ekran ve yeni ekran ayrı tablolara
+          yazıyor (`ad_drafts` ve `draft_campaigns`). Aynı anda ikisini de
+          kullanmak veri karıştırmıyor ama kullanıcı taslaklarını iki ayrı
+          listede görür — bu yüzden geçiş kalıcı değil, göç (K11) kapanınca
+          bu ekran emekliye ayrılacak. */}
+      <div className="rounded-xl border border-brand/30 bg-brand-soft px-4 py-3">
+        <p className="text-sm font-medium text-ink">Yeni: Hızlı Reklam</p>
+        <p className="mt-0.5 text-xs text-ink-muted">
+          Daha kısa akış, hangi platformda çalışacağını gösteren hedef kartları ve arşivden
+          çoklu görsel seçimi. Bu ekran şimdilik yerinde duruyor; taslakların ayrı listelerde
+          görünür.
+        </p>
+        <Link
+          href={`/reklam-olustur/basit?musteri=${clientId}`}
+          className="mt-2 inline-block rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white"
+        >
+          Hızlı Reklam&apos;ı dene
+        </Link>
+      </div>
+
       {canWrite ? (
         <AdWizard
           key={editing?.id ?? 'new'}
