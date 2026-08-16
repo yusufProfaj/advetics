@@ -16,42 +16,82 @@
 
 Yani Akıllı Boost bugün **yalnızca kuralla** çalışıyor: kural koş → aday üret →
 onayla → yayınla. Kural kurmadan, gönderiyi elle seçip hemen yayınlamanın yolu
-yok. Tasarım ayrıntısı ve açık kararlar
-[`TASARIM-OLUSTUR.md` §7.2](TASARIM-OLUSTUR.md) ve **K16–K18**'de.
+yok.
+
+**KARARLAR KAPANDI — 2026-08-16.** K16–K18 tartışıldı, tartışma sırasında
+kodda çıkan iki açık için K19 ve K20 eklendi. Beşi de
+[`TASARIM-OLUSTUR.md` §10](TASARIM-OLUSTUR.md) içinde gerekçeleriyle yazılı;
+akış ve engeller §7.2'de. Özeti:
+
+| | Karar |
+|---|---|
+| **K16** hedefleme | Şehir + yaş + cinsiyet + **kayıtlı kitleler**. İki yeni uç: coğrafi arama ve kayıtlı kitle listesi. Kitle tabloya yazılmıyor, ekran açılırken çekiliyor. Liste boşsa boş açılır liste değil, "kayıtlı kitle bulunamadı" |
+| **K17** Instagram | Profil türüne göre dallan. Deneme sırası: **doğrudan IG** (FB turu atlanıyor). Hata gelirse ayırt etmenin yolu aynı hesapta tek bir FB çağrısı |
+| **K18** bütçe | Toplam göster, **toplam gönder** (`lifetime_budget`). `BoostRequest` iki kipli olacak; **kural yolu günlük kalıyor** |
+| **K19** emniyet | Sert tavan yok. Yayın düğmesinin üstünde toplam tutar + aylık bütçe uyarısı. Ara ekran değil, aynı ekranın son satırı |
+| **K20** tekrar boost | Elle yolda **uyarı, blok değil**. Kısmi tekil indeks canlı ikinci boost'u engellemeye devam ediyor |
 
 **Bugün kodda ne var, ne yok** (yeni oturum buradan başlamalı):
 
 | | Durum |
 |---|---|
-| `organic_posts` tablosu ve senkronizasyonu | VAR — Instagram dahil (`organic-sync.service.ts:97`) |
+| `organic_posts` tablosu ve senkronizasyonu | VAR — Instagram dahil (`queue/organic-sync.service.ts:97`) |
 | Gönderi listeleme UCU | **YOK** — tabloyu okuyan hiçbir controller yok |
-| Boost yayın yolu | VAR — `createBoost` + ağaç kaydı (§7.1) |
+| Boost yayın yolu | VAR — `createBoost` + ağaç kaydı (§7.1). **Canlıda hiç çalıştırılmadı** |
 | Hedefleme seçimi | **YOK** — `BoostRequest`'te `targeting` alanı bile yok |
+| Şehir arama ucu | **YOK** — `cityKeys` şemada var, dolduran hiçbir şey yok |
+| Kayıtlı kitle ucu | **YOK** |
+| IG profilinin ana sayfası | **SAKLANMIYOR** — aşağıda 4. tuzak |
 | Elle boost ekranı | **YOK** |
 
-**ÜÇ TUZAK — kod yazmadan önce oku:**
+**BEŞ TUZAK — kod yazmadan önce oku:**
 
-1. **HEDEFLEME ŞU AN SABİT.** `meta.provider.ts` içindeki `createBoost` her
-   boost'a `{"geo_locations":{"countries":["TR"]}}` gönderiyor; bu sabit kod,
-   ayar değil. Kullanıcıya lokasyon seçtirip bu satıra dokunmamak, panelde
+1. **HEDEFLEME ŞU AN SABİT.** `meta.provider.ts:1212` içindeki `createBoost`
+   her boost'a `{"geo_locations":{"countries":["TR"]}}` gönderiyor; bu sabit
+   kod, ayar değil. Kullanıcıya lokasyon seçtirip bu satıra dokunmamak, panelde
    İzmir yazıp Meta'ya Türkiye göndermek olur — **tam olarak bu projenin baş
    belası olan sessiz hata**. `BoostRequest`'e `targeting` eklenmeli ve kural
    yolunun bugünkü davranışı (ülke geneli) varsayılan olarak korunmalı.
 
-2. **INSTAGRAM GÖNDERİSİ FACEBOOK GİBİ BOOST EDİLEMEZ.** Bugünkü kod reklamı
-   `object_story_id: "{sayfa}_{gönderi}"` ile kuruyor — bu **Facebook sayfa
-   gönderisi** biçimi. Instagram gönderisi için Meta ayrı bir yol istiyor
-   (`instagram_actor_id` + IG medya kimliği). Senkronizasyon Instagram
-   gönderilerini zaten çekiyor ama boost yolunda profil türü hiç kontrol
-   edilmiyor: `boost-executor.service.ts:167` sayfa kimliğini koşulsuz
-   `pageExternalId` diye geçiyor. Kullanıcının istediği şey tam da Instagram
-   gönderisi olduğu için **ilk iş bu.** Canlıda hiç denenmedi; hata veriyor mu
-   yoksa sessizce yanlış reklam mı üretiyor bilinmiyor.
+2. **INSTAGRAM GÖNDERİSİ FACEBOOK GİBİ BOOST EDİLEMEZ — VE BU AÇIK BUGÜN DE
+   VAR.** Bugünkü kod reklamı `object_story_id: "{sayfa}_{gönderi}"` ile
+   kuruyor; bu Facebook sayfa gönderisi biçimi. `boost-executor.service.ts:167`
+   profil türüne hiç bakmadan `sp.external_id`'yi `pageExternalId` diye
+   geçiyor — IG profilinde bu değer **IG kullanıcı kimliği**.
+
+   Bunun elle boost'u beklemesi gerekmiyor: aday seçicide de profil türü
+   süzgeci yok (`boosts.service.ts:276`), yani `social_profile_id` boş
+   bırakılan bir kural IG gönderisini bugün aday yapabilir. **İlk commit bu
+   olmalı ve hiçbir karara bağlı değil:** IG profili görüldüğünde erken hata.
 
 3. **ÖZEL KATEGORİ HEDEFLEMEYİ KISITLIYOR.** Müşteri konut/istihdam/kredi
    beyan etmişse yaş ve cinsiyet daraltması gönderilemiyor
-   (`restrictTargetingFor`). Elle boost ekranı bu alanları gösterip sessizce
-   düşürmemeli — ya kapatmalı ya da düşeceğini söylemeli.
+   (`restrictTargetingFor`). K16 gereği **kayıtlı kitle de kapatılmalı** —
+   kitlenin kendisi yaş/cinsiyet daraltması taşıyabilir. Ekran bu alanları
+   gösterip sessizce düşürmemeli; kapatmalı ve sebebini yazmalı.
+
+4. **IG PROFİLİNİN ANA FACEBOOK SAYFASI SAKLANMIYOR.** `listSocialProfiles`
+   (`meta.provider.ts:455`) IG satırının `raw`'ına yalnızca IG nesnesini
+   koyuyor; sayfanın kimliği kayboluyor, yalnızca sayfa token'ı kalıyor.
+   Meta'da her reklam bir Facebook sayfasına bağlı, yani K17 hangi alan
+   setinde karar kılarsa kılsın bu kimlik gerekecek. Değer keşif döngüsünde
+   zaten elin altında; saklamak migration + mevcut satırların yeniden keşfi
+   demek.
+
+5. **`lifetime_budget` KURAL YOLUNU BOZMAMALI** (K18). Kural günlük bütçeyle
+   çalışıyor ve aylık tavanı ona göre hesaplanıyor; `BoostRequest` iki kipli
+   olacak ve günlük kip varsayılan kalacak.
+
+**Önerilen sıra:**
+
+1. IG gönderisinde erken hata — karar gerektirmiyor, bugünkü sessiz riski
+   kapatıyor, tek commit.
+2. IG profilinin ana sayfası saklansın (4. tuzak).
+3. `BoostRequest`'e `targeting` + bütçe kipi; kural yolunun davranışı
+   varsayılan.
+4. Gönderi listeleme ucu + coğrafi arama ucu + kayıtlı kitle ucu.
+5. Ekran.
+6. Ajansın kendi hesabında en küçük bütçeyle gerçek çağrı (K17: doğrudan IG).
 
 ---
 
@@ -83,9 +123,10 @@ anda doğrulanmış olur.
 ## A. TAMAMLANDI — "Oluştur" bölümü yeniden kuruldu
 
 20 commit, `afc173e..64fe10c`. Tasarım kararları ve gerekçeleri
-[`TASARIM-OLUSTUR.md`](TASARIM-OLUSTUR.md) içinde; **on sekiz karardan dokuzu
-kapalı, dokuzu açık** (K2, K3, K8, K10, K12, K15 + elle boost'un K16, K17,
-K18'i). Kapanmış kararların gerekçesi belgede yazılı ve geri alınabilir.
+[`TASARIM-OLUSTUR.md`](TASARIM-OLUSTUR.md) içinde; **yirmi karardan on dördü
+kapalı, altısı açık** (K2, K3, K8, K10, K12, K15). Elle boost'un K16–K18'i
+16 Ağustos'ta kapandı ve yanlarına K19 ile K20 eklendi. Kapanmış kararların
+gerekçesi belgede yazılı ve geri alınabilir.
 
 ### Ne değişti
 

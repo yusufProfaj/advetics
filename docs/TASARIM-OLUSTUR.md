@@ -355,13 +355,38 @@ profil türüne hiç bakmıyor, sayfa kimliğini koşulsuz geçiyor. İstenen ş
 olarak Instagram olduğu için ilk iş bu — ve canlıda hiç denenmediği için
 "hata mı veriyor, yoksa sessizce yanlış reklam mı üretiyor" bilinmiyor.
 
+> **BU BUGÜN DE AÇIK — elle boost'u beklemiyor (2026-08-16 tespiti).** Aday
+> seçicide profil türü süzgeci YOK
+> ([boosts.service.ts](../apps/api/src/modules/boosts/boosts.service.ts)):
+> `social_profile_id` boş bırakılan bir kural müşterinin bütün profillerini
+> tarıyor, Instagram dahil. Organik senkronizasyon IG gönderilerini zaten
+> çekiyor, yani bugün kurulabilecek bir kural IG gönderisini aday yapabilir ve
+> yürütücü Meta'ya `object_story_id: "<ig_user_id>_<media_id>"` yollar — iki
+> parçası da yanlış uzaydan gelen bir kimlik.
+>
+> **Karar beklemeyen tek iş bu:** IG profili görüldüğünde erken hata. K16–K20'
+> nin hiçbirine bağlı değil ve tek başına gönderilebilir.
+
 **(3) Özel kategori hedeflemeyi kısıtlıyor.** Konut/istihdam/kredi beyanı olan
 müşteride yaş ve cinsiyet daraltması gönderilemiyor (`restrictTargetingFor`).
 Ekran bu alanları gösterip sessizce düşürmemeli — "doğrulama kullanım anında
 değil giriş anında" kuralı.
 
-Açık kararlar: **K16** (hedefleme ne kadar açılsın), **K17** (Instagram yolu),
-**K18** (bütçe ve süre varsayılanı).
+**(4) IG profilinin ana Facebook sayfası SAKLANMIYOR.** `listSocialProfiles`
+IG satırını yazarken `raw` alanına yalnızca IG nesnesini koyuyor
+([meta.provider.ts](../apps/api/src/modules/connections/providers/meta.provider.ts));
+sayfanın kimliği kayboluyor, geriye yalnızca sayfanın token'ı kalıyor. Meta'da
+her reklam bir Facebook sayfasına bağlı, yani K17 hangi alan setinde karar
+kılarsa kılsın **ana sayfa kimliği gerekecek.** Keşif döngüsünde değer zaten
+elin altında (sayfanın kendi `id`'si), ama saklanması migration + mevcut
+satırların yeniden keşfi demek. Elle boost'tan önce çözülmeli.
+
+**(5) Şehir seçiminin veri kaynağı yok.** Ayrıntı K16'da: `cityKeys` şemada ve
+`targetingFrom`'da var, onu dolduran hiçbir şey yok.
+
+Kararlar: **K16** (hedefleme kapsamı), **K17** (Instagram yolu ve deneme
+sırası), **K18** (bütçe kipi), **K19** (harcama emniyeti), **K20** (aynı
+gönderinin tekrar boost'u) — **beşi de 2026-08-16'da kapandı.**
 
 ---
 
@@ -601,6 +626,16 @@ gösterilir.** Erişim için tek doğru cümle "Meta 40.000 · Google 25.000",
 > ağaç) bilerek sonraya bırakıldı.
 
 Her biri tartışılacak. `Karar:` satırları oturumda doldurulacak.
+
+> **2026-08-16, ikinci tur — ELLE BOOST'UN BEŞ KARARI KAPANDI.** K16, K17, K18
+> tartışıldı ve kapatıldı; tartışma sırasında kodda çıkan iki açık için **K19**
+> (harcama emniyeti) ve **K20** (aynı gönderinin tekrar boost'u) eklendi.
+> Toplam **yirmi karardan on dördü kapalı, altısı açık** (K2, K3, K8, K10,
+> K12, K15) — açık kalanların hiçbiri elle boost'u engellemiyor.
+>
+> **İkisi önerilen seçenekten farklı kapandı** ve gerekçeleri kendi
+> bölümlerinde yazılı: K16 (c) seçildi — "hedef kitle" istemi kayıtlı
+> kitlelerle karşılanıyor; K17'de deneme sırası doğrudan Instagram.
 
 ---
 
@@ -968,7 +1003,38 @@ bilmediği bir dil ve yanlış kullanıldığında sessizce erişimi öldürüyo
 "hedefleme sorulmuyor" ilkesinin (§3) sınırı burada. Kayıtlı kitleler ayrı bir
 senkronizasyon işi.
 
-**Karar:** _(açık)_
+**Karar: (c) — ŞEHİR + YAŞ + CİNSİYET + KAYITLI KİTLELER.** 2026-08-16'da
+kapandı, önerinin bir adım ötesinde. Gerekçe kullanıcının kendi cümlesinde:
+*"hangi lokasyona gösterileceğini **ya da hedef kitleye** gösterileceğini"* —
+"hedef kitle"nin panelde bir karşılığı olacaksa, ilgi alanı listesi değil
+**ajansın Ads Manager'da zaten kurduğu kitle** olmalı. İlgi/davranış seçtirmeme
+gerekçesi (§3) aynen geçerli; kayıtlı kitlede seçimi yapan zaten ajans ve
+seçim panelde değil Meta'da kurulmuş oluyor.
+
+Bu kararın bedeli iki yeni uç nokta ve ikisi de bu işin asıl maliyeti:
+
+- **Coğrafi arama** (`/search?type=adgeolocation`). `cityKeys` şemada VAR
+  ([campaign-advanced.schema.ts](../packages/shared/src/schemas/campaign-advanced.schema.ts))
+  ve `targetingFrom` onu Meta'ya çeviriyor, ama **onu dolduran hiçbir şey
+  yok** — ne arayüz, ne uç nokta. Uzman panelinde bile şehir alanı yok. Şehir
+  olmadan "lokasyon seç" bugünkü sabit `TR`'nin adının değişmesinden ibaret
+  kalırdı.
+- **Kayıtlı kitleler.** Ekran açılırken çekiliyor, **tabloya yazılmıyor**: yeni
+  tablo `02_rls.sql` politika listesi ve `pglite-harness.ts` TRUNCATE listesi
+  demek (CLAUDE.md §3), oysa bu veri hiçbir yerde saklanmak zorunda değil.
+
+**Kitle listesi boşsa boş bir açılır liste GÖSTERİLMEZ** — "Ads Manager'da
+kayıtlı kitle bulunamadı" yazılır. K16'nın (c) maddesindeki itiraz buydu ve
+karşılığı "sessiz kesme yok" kuralının kendisi: boş liste, kullanıcıya kendi
+kurulumunda bir şey eksik olduğunu düşündürür.
+
+**Özel kategoride kayıtlı kitle de kapalı.** `restrictTargetingFor` bugün yaş
+ve cinsiyeti düşürüyor; kategori kısıtı kayıtlı kitleleri de kapsıyor olmalı,
+çünkü kitlenin kendisi yaş/cinsiyet daraltması taşıyabilir. Ekran üçünü birden
+kapatmalı ve sebebini yazmalı. **Bu canlıda doğrulanmadı:** Meta reddedebilir
+de, kabul edip sessizce yok sayabilir de — ikincisi olursa kullanıcı
+uygulanmayan bir kitleye reklam verdiğini sanır. İlk gerçek çağrıda bakılacak
+ve sonuç buraya yazılacak.
 
 ---
 
@@ -988,7 +1054,30 @@ doğrulanmadan yazılamaz:** alan adları belgeden okunup yazılırsa Meta'nın
 yanlış gönderiyi gösterir. Ajansın kendi hesabında tek bir gerçek çağrı, bu
 kararın önkoşulu.
 
-**Karar:** _(açık)_
+**Karar: (a) — PROFİL TÜRÜNE GÖRE DALLAN. Denemede sıra: DOĞRUDAN IG.**
+2026-08-16'da kapandı.
+
+(a) tartışmalı değildi. Kapatılan asıl soru **denemenin sırası**: önce
+bugünkü Facebook yolunu canlıda doğrulayıp sonra IG'ye geçmek önerilmişti,
+kullanıcının kararı doğrudan IG'yi denemek. Gerekçesi de yerinde — istenen şey
+IG ve Facebook turu bir ara adım.
+
+**Bunun bedeli açıkça yazılsın:** boost yolu (FB dahil) canlıda HİÇ
+çalıştırılmadı. Yani ilk IG çağrısı hata verirse iki ihtimal birden açık kalır:
+IG alanları mı yanlış, yoksa boost yolunun kendisi mi. Ayırt etmenin yolu
+peşinen bellidir ve hata gelirse ilk yapılacak şey budur: **aynı hesapta bir
+Facebook sayfa gönderisiyle tek bir çağrı.** Yeşilse sorun IG dalında, o da
+düşerse sorun ortak yolda.
+
+**Deneme kuralları:** ajansın kendi hesabı, en küçük bütçe, Meta'nın dönen
+hata gövdesi TAM METNİYLE kaydedilir (`code`/`subcode` dahil — §2'de altı
+hatanın beşi bu metinden çözüldü).
+
+**Doğrulanacak somut belirsizlik:** `/{ig-user}/media` uçunun döndürdüğü `id`
+ile reklam API'sinin kabul ettiği IG medya kimliği aynı olmayabilir; Meta'nın
+iki ayrı kimlik uzayı var. Alan adları belgeden yazılıp geçilmeyecek — çağrı
+başarılı dönse bile **oluşan reklam Ads Manager'da açılıp doğru gönderiyi
+gösterdiği gözle görülecek.** "200 döndü" bu projede doğrulama sayılmıyor.
 
 ---
 
@@ -1004,7 +1093,63 @@ merak edilen şey toplam. Ekranda ikisi birden yazılmalı ki sürpriz olmasın.
 Tamsayıya bölünmeyen tutarlarda **yukarı değil aşağı** yuvarlanmalı — beklenen
 tutarı aşan bir harcama, eksik harcamadan çok daha kötü karşılanır.
 
-**Karar:** _(açık)_
+**Karar: TOPLAM GÖSTER, TOPLAM GÖNDER.** 2026-08-16'da kapandı; önerinin
+(a göster / b gönder) yerine üçüncü bir yol seçildi. Ekranda "300 TL, 5 gün",
+Meta'ya ad set seviyesinde `lifetime_budget`.
+
+Gerekçe: (a)/(b) ikilisi çeviriyi ekranın arkasına saklıyor ve **çeviri tam
+oturmuyor**. Günlük bütçe Meta'da sert bir tavan değil — günü aşabiliyor ve
+dengelemeyi hafta içine yayıyor. Yani "300 TL harcayacaksın" yazan bir ekranın
+altından 5 × 60 TL göndermek, panelde yazan sayı ile hesaptan çıkan sayının
+ayrışması demek. Bu üründe kabul edilmeyen hata sınıfı tam olarak bu. Toplam
+gönderildiğinde yuvarlama sorunu da ortadan kalkıyor: kullanıcının yazdığı sayı
+Meta'nın gördüğü sayının kendisi oluyor.
+
+`lifetime_budget` bitiş zamanı zorunlu kılıyor — `createBoost` zaten süreden
+bir `end_time` türetiyor, yani yeni bir alan gerekmiyor.
+
+**KURAL YOLU GÜNLÜK KALIYOR.** `boost_rules.daily_budget_micros` günlük
+düşünüyor ve doğrusu da bu: kural süresiz çalışıyor, tavanı ayrıca
+`monthly_cap_micros` tutuyor. Yani `BoostRequest` **iki kipli** olacak (günlük
+| toplam) ve kuralın bugünkü davranışı varsayılan kalacak — §3'ün "çalışan
+davranış bozulmuyor" kuralı.
+
+---
+
+### K19 — Elle boost'un harcama emniyeti ne olsun?
+
+Kuralın aylık sert tavanı (`boost_rules.monthly_cap_micros`) **kuralın
+üzerinde**. Elle boost'ta `boost_rule_id` NULL, yani ne tavan var, ne onay
+kuyruğu, ne kural. İstenen "direkt yayınla" bu — ama boost özelliğinin tek
+emniyeti de buydu.
+
+- **(a) Onay satırı + aylık bütçe uyarısı.** Sert tavan yok; yayın düğmesinin
+  üstünde toplam tutar ve "bu ay boost'a ne gitti / müşterinin aylık bütçesinin
+  ne kadarı" yazıyor.
+- **(b) Hiçbir şey.** En az sürtünme; yanlış yazılan bir sıfır anında gidiyor.
+- **(c) Elle boost için ayrı aylık tavan.** Müşteri kartında yeni bir ayar.
+
+**Karar: (a).** 2026-08-16'da kapandı. (c) kurulması gereken yeni bir ayar ve
+kullanıcı kurmadıkça ya sıfır ya sınırsız davranmak gerekiyor — ikisi de kötü
+varsayılan. (b) ise kararı kullanıcının verdiği doğru ama **tutarı görmeden**
+verdiği bir karara dönüşüyor.
+
+**Ara ekran DEĞİL, aynı ekranın son satırı** (§7.2: "ara onay yok"). Uyarı
+yayını engellemiyor, yalnızca sayıyı gösteriyor.
+
+---
+
+### K20 — Elle boost aynı gönderiyi ikinci kez öne çıkarabilsin mi?
+
+`organic_posts.boosted_at` kalıcı ve kısmi tekil indeks canlı ikinci boost'u
+engelliyor. Kural yolu için doğru: kural aynı gönderiye ikinci kez para
+harcamamalı.
+
+**Karar: elle yolda UYARI, blok değil.** 2026-08-16'da kapandı. Gönderiyi
+seçen kullanıcının kendisi; "bu gönderi 4 gün önce öne çıkarıldı" demek
+bilgilendirme, reddetmek ise kullanıcının verdiği kararı geri çevirmek olur.
+Kısmi tekil indeks **canlı** boost'u engellemeye devam ediyor — aynı gönderi
+için aynı anda iki boost, para harcayan bir mükerrerlik.
 
 ---
 
