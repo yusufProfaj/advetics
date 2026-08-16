@@ -197,6 +197,19 @@ describe('atama', () => {
 // Sosyal profiller — aynı havuz modeli
 // -----------------------------------------------------------------------------
 
+describe('reklam hesabı izlemesi — kapsam', () => {
+  it('BAŞKA müşteri seçiliyken de izleme açılabiliyor', async () => {
+    // Sayfanınkiyle aynı gerekçe ve aynı ekran.
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+
+    seenContexts = [];
+    const baskaSecili: TenantContext = { ...CTX, activeClientId: CLIENT_B } as TenantContext;
+    await svc.setAccountSync(baskaSecili, POOL_ACCOUNT, true, META);
+
+    for (const ctx of seenContexts) expect(ctx.activeClientId).toBeNull();
+  });
+});
+
 describe('sayfa ataması', () => {
   beforeEach(async () => {
     await h.q(
@@ -264,6 +277,26 @@ describe('sayfa ataması', () => {
       /henüz bir müşteriye atanmamış/i,
     );
     expect((await profileRow(POOL_PROFILE)).sync_enabled).toBe(false);
+  });
+
+  it('KRİTİK: BAŞKA müşteri seçiliyken de izleme açılabiliyor', async () => {
+    /*
+     * Müşteriler ekranı BÜTÜN müşterilerin kartlarını yan yana gösteriyor.
+     * `app.can_access_client()` ise oturumdaki seçili müşteriye daraltıyor:
+     * yönetici A seçiliyken B'nin sayfasını izlemeye almaya çalıştığında RLS
+     * satırı gizliyor ve hata "Sayfa bulunamadı" oluyordu — sayfa oradaydı,
+     * eksik olan yetki değil KAPSAMDI. Atama ucu bunu baştan beri
+     * `activeClientId: null` ile çözüyordu; izleme anahtarı yazılırken
+     * atlanmıştı ve üretimde tam olarak bu yaşandı.
+     */
+    await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+
+    seenContexts = [];
+    const baskaSecili: TenantContext = { ...CTX, activeClientId: CLIENT_B } as TenantContext;
+    await svc.setProfileSync(baskaSecili, POOL_PROFILE, true, META);
+
+    for (const ctx of seenContexts) expect(ctx.activeClientId).toBeNull();
+    expect((await profileRow(POOL_PROFILE)).sync_enabled).toBe(true);
   });
 
   it('izleme değişikliği DENETİM KAYDINA yazılıyor', async () => {

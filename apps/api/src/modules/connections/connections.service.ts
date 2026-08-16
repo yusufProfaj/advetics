@@ -828,7 +828,11 @@ export class ConnectionsService {
     syncEnabled: boolean,
     meta: Meta,
   ) {
-    return this.prisma.withTenant(ctx, async (tx) => {
+    // SAYFANINKİYLE AYNI GEREKÇE: Müşteriler ekranı bütün müşterilerin
+    // kartlarını gösteriyor ve seçili olmayan bir müşterinin hesabını
+    // izlemeye almak, oturumdaki daraltma yüzünden "bulunamadı" ile düşüyordu.
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+    return this.prisma.withTenant(scoped, async (tx) => {
       const before = await tx.adAccount.findUnique({ where: { id: adAccountId } });
       if (!before) throw new NotFoundException('Reklam hesabı bulunamadı');
 
@@ -890,7 +894,22 @@ export class ConnectionsService {
     syncEnabled: boolean,
     meta: Meta,
   ) {
-    return this.prisma.withTenant(ctx, async (tx) => {
+    /**
+     * BAĞLAM `activeClientId: null` İLE KURULUYOR — atama ucundaki kuralın
+     * aynısı ve ilk yazımda ATLANMIŞTI.
+     *
+     * `app.can_access_client()` panelde seçili müşteriye daraltıyor. Müşteriler
+     * ekranı ise BÜTÜN müşterilerin kartlarını yan yana gösteriyor: yönetici
+     * Fenbay seçiliyken Ege Birlik'in sayfasını izlemeye almaya çalıştığında
+     * RLS satırı gizliyor ve hata "Sayfa bulunamadı" oluyordu — sayfa oradaydı,
+     * görünmeyen şey yetki değil KAPSAMDI.
+     *
+     * Yetki bu satırla gevşemiyor: `can_access_client` hâlâ org yöneticisi ya
+     * da `clientIds` üyeliği arıyor. Kalkan tek şey oturumdaki GÖRÜNÜM
+     * daraltması.
+     */
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+    return this.prisma.withTenant(scoped, async (tx) => {
       const before = await tx.socialProfile.findUnique({ where: { id: socialProfileId } });
       if (!before) throw new NotFoundException('Sayfa bulunamadı');
 
