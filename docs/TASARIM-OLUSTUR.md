@@ -1,10 +1,15 @@
 # "Oluştur" bölümünün yeniden tasarımı — tasarım belgesi
 
-**Durum:** TARTIŞMAYA AÇIK · **Tarih:** 2026-08-16 · **Kod yazılmadı**
+**Durum:** İNŞAAT BAŞLADI · **Tarih:** 2026-08-16 · **4 karar kapandı, 11 açık**
 
-Bu belge bir plan değil, bir **karar zemini**. §1–§8 bugünkü durumu ve önerilen
-omurgayı anlatıyor; §10'daki 15 kararın hepsi açık ve `Karar:` satırları boş.
-Kod, §10 kapanmadan yazılmayacak.
+Bu belge bir plan değil, bir **karar zemini**. §1–§9 bugünkü durumu ve önerilen
+omurgayı anlatıyor, §10 kararları taşıyor.
+
+İnşaat için zorunlu olan dört karar (K1, K4, K5, K13) kapatıldı ve kod
+yazılmaya başlandı. **Kalan on bir karar için varsayım yapılmayacak** — o
+alanlara gelindiğinde karar sorulacak. Kapanmış kararlar da kesin değil:
+sıra, en riskli adımı sona bırakacak şekilde kuruldu ki fikir değişirse
+atılan şey veri değil kod olsun.
 
 Kullanıcının talebi, kendi ifadesiyle: *"bu reklam oluştur mantığını tekrardan
 kurmamız gerekiyor böyle çok karışık, müşteri için ve reklamı bilen dijital
@@ -488,7 +493,19 @@ gösterilir.** Erişim için tek doğru cümle "Meta 40.000 · Google 25.000",
 
 ---
 
-## 10. AÇIK KARARLAR
+## 10. KARARLAR
+
+> **2026-08-16 — DÖRT KARAR KAPANDI, ON BİRİ AÇIK.** Kullanıcının ifadesi:
+> *"başlayalım daha sonra mantığıma uymazsa düzeltiriz"*. Buna göre inşaata
+> başlamak için **zorunlu olan** dört karar (K1, K4, K5, K13) önerilen
+> seçenekle kapatıldı; diğerleri açık kaldı ve kod yazılırken varsayım
+> yapılmayacak.
+>
+> **Bu dördü geri alınabilir kalsın diye sıra böyle kuruldu:** ilk iş kreatif
+> tablosu — hiçbir mevcut tabloyu değiştirmiyor, yalnızca ekliyor. Yani
+> "bu mantık bana uymadı" cevabı gelirse atılacak şey yeni bir tablo olur,
+> göç etmiş veri değil. En riskli adım (mevcut `ad_drafts`'ın yerini alacak
+> ağaç) bilerek sonraya bırakıldı.
 
 Her biri tartışılacak. `Karar:` satırları oturumda doldurulacak.
 
@@ -505,7 +522,9 @@ deseni tam olarak bu — bugün üç yol var ve altı hatanın düzeltmesi ikisi
 gitmedi. (b)'nin tek avantajı ilk turda daha az iş; bedeli her Meta kuralını
 iki yerde öğrenmek.
 
-**Karar:** _(açık)_
+**Karar: (a) — TEK AĞAÇ.** 2026-08-16'da kapandı. Gerekçe belgede: iki
+model = iki yayın yolu ve bu projede altı hatanın düzeltmesi zaten üç yoldan
+yalnızca birine gitmişti.
 
 ---
 
@@ -553,7 +572,9 @@ ağacı baştan çoklu ad set'i kaldırsın, arayüz ilk turda tek ad set göste
 Kayıtlı kitle (c) ayrı bir modül ve BASE'e ait — bu işi ona bağlamak
 tıkanma üretir.
 
-**Karar:** _(açık)_
+**Karar: (a) — arayüz tek ad set, ŞEMA çoklu ad set taşıyor.** 2026-08-16'da
+kapandı. Şemayı sonradan çoğaltmak migration demek; arayüzü açmak bir ekran
+işi. Kayıtlı kitle (c) kapsam dışı — BASE'e ait.
 
 ---
 
@@ -570,7 +591,9 @@ Bugün görseller taslağa bağlı (`ad_draft_assets.draft_id`).
 kez yüklemek demek ve arşivin varlık sebebini yeniden deler — arşiv tam da
 bunun için yazılmıştı.
 
-**Karar:** _(açık)_
+**Karar: (a) — KREATİF AYRI VARLIK.** 2026-08-16'da kapandı ve inşaatın ilk
+adımı bu. §9.5'teki metin havuzu bunu zorunlu kılıyor: Google RSA'nın on beş
+başlığı `ad_drafts`'ın üç metin sütununa sığmıyor.
 
 ---
 
@@ -711,7 +734,9 @@ kullanıcı yazdığını kaybetmeye devam eder.
 Grup kimliği (b)'nin tek gerçek faydasını — birleşik raporlama — zaten
 veriyor.
 
-**Karar:** _(açık)_
+**Karar: (a) — BİR TASLAK = BİR PLATFORM, ortak grup kimliği.** 2026-08-16'da
+kapandı. Belirleyici olan §9.7: bugünkü tek `status`/`error` alanı "Meta çıktı,
+Google düştü" durumunu ifade edemiyor.
 
 ---
 

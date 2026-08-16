@@ -102,6 +102,8 @@ model Organization {
   leadCursors     LeadSyncCursor[]
   assets          Asset[]
   assetRefs       AssetPlatformRef[]
+  adCreatives     AdCreative[]
+  adCreativeLinks AdCreativeAsset[]
 
   @@map("organizations")
 }
@@ -190,6 +192,7 @@ model Client {
   leads           Lead[]
   leadCursors     LeadSyncCursor[]
   assets          Asset[]
+  adCreatives     AdCreative[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -1961,9 +1964,10 @@ model Asset {
 
   organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   client       Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  platformRefs AssetPlatformRef[]
-  draftAssets  AdDraftAsset[]
-  bulkItems    BulkItem[]
+  platformRefs  AssetPlatformRef[]
+  draftAssets   AdDraftAsset[]
+  bulkItems     BulkItem[]
+  creativeLinks AdCreativeAsset[]
 
   @@unique([clientId, contentHash], map: "assets_client_hash_uniq")
   @@index([clientId, kind, createdAt(sort: Desc)])
@@ -1991,4 +1995,88 @@ model AssetPlatformRef {
 
   @@unique([assetId, adAccountId], map: "asset_platform_refs_uniq")
   @@map("asset_platform_refs")
+}
+
+/// Kreatif — metin havuzu + görsel havuzu.
+///
+/// META İLE GOOGLE'IN BİRLEŞTİĞİ YER. Kampanya, ad set ve yayın çağrısı
+/// platforma özgü kalıyor; birleşen tek şey kreatif. Sebebi iki platformun
+/// metin isteğinin aynı şey olmaması: Meta bir başlık alıyor, Google RSA
+/// on beşe kadar.
+///
+/// NEDEN `ad_drafts` SÜTUNLARI YETMİYOR: metinler bugün o tablonun üç
+/// sütununda duruyor (`primary_text`, `headline`, `description`) ve on beş
+/// başlık üç sütuna sığmıyor. Her platform için ayrı sütun açmak ise aynı
+/// cümlenin iki yerde durması demek — biri düzeltilir, diğeri unutulur ve
+/// fark yalnızca yayına çıkan reklamda görülür.
+///
+/// TASLAĞA BAĞLI DEĞİL, MÜŞTERİYE AİT. `ad_draft_assets` bir taslağa çiviliydi
+/// ve aynı kreatifi ikinci bir kampanyada kullanmanın yolu yoktu. Kreatif
+/// kendi başına durunca "geçen ayki reklamı tekrarla" mümkün oluyor.
+model AdCreative {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+
+  name String @db.VarChar(200)
+
+  /// Metin havuzu — `creativeTextsSchema` (packages/shared).
+  ///
+  /// JSONB ÇÜNKÜ SAYILAR PLATFORMUN. Google RSA bugün 15 başlık istiyor,
+  /// yarın 12 isteyebilir; PMax'in kısa/uzun başlık dağılımı sürümle
+  /// değişiyor. Her parçaya bir sütun açmak, platformun her kararında
+  /// migration demek olurdu. Aynı gerekçe `ad_drafts.advanced` için de
+  /// geçerliydi.
+  ///
+  /// Havuz PLATFORMDAN BAĞIMSIZ: hangi metnin nereye gideceğine
+  /// `packTextsFor` karar veriyor ve sığmayanı sebebiyle eliyor.
+  texts Json @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assets       AdCreativeAsset[]
+
+  @@index([clientId, createdAt(sort: Desc)])
+  @@map("ad_creatives")
+}
+
+/// Kreatif ↔ arşiv görseli.
+///
+/// GÖRSEL KOPYALANMIYOR, BAĞLANIYOR. Arşivin varlık sebebi bu: bir görselin
+/// on kreatifte kullanılması on kopya demek olmamalı.
+///
+/// ORAN BURADA TUTULMUYOR ve bu bilinçli. `ad_draft_assets` her satırda bir
+/// `ratio` taşıyordu (square/vertical/horizontal) çünkü o kovalar Meta'nın
+/// kovalarıydı. Google başka oranlar istiyor (1.91:1, 4:5) ve aynı görsel iki
+/// platformda iki farklı yuvaya düşebiliyor — oranı satıra yazmak, kreatifi
+/// bir platforma bağlamak olurdu. Hangi görselin hangi yerleşime gittiğini
+/// `coverageFor` ölçülen boyutlardan hesaplıyor ve iki platformu da biliyor.
+model AdCreativeAsset {
+  id         String @id @default(uuid()) @db.Uuid
+  orgId      String @map("org_id") @db.Uuid
+  creativeId String @map("creative_id") @db.Uuid
+  assetId    String @map("asset_id") @db.Uuid
+
+  /// Sıra SABİT tutuluyor: veritabanı sırası rastgele ve görsellerin arayüzde
+  /// yer değiştirmesi kafa karıştırırdı. `ad_drafts` bunu kod tarafında
+  /// sıralayarak çözüyordu; burada veriye yazılıyor çünkü sıra artık
+  /// kullanıcının kararı.
+  position Int @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creative     AdCreative   @relation(fields: [creativeId], references: [id], onDelete: Cascade)
+  asset        Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  /// AYNI GÖRSEL BİR KREATİFE İKİ KEZ EKLENEMEZ. Meta aynı görseli iki kez
+  /// içeren bir kreatifi kabul ediyor ve ikinci kopyayı sessizce yok sayıyor;
+  /// kullanıcı ise iki farklı görsel yüklediğini sanıyor.
+  @@unique([creativeId, assetId], map: "ad_creative_assets_uniq")
+  @@index([assetId])
+  @@map("ad_creative_assets")
 }

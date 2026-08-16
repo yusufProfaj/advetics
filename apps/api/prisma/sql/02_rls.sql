@@ -162,7 +162,9 @@ DECLARE
     -- Potansiyel müşteriler
     'leads', 'lead_sync_cursors',
     -- Varlık arşivi
-    'assets', 'asset_platform_refs'
+    'assets', 'asset_platform_refs',
+    -- Kreatif (metin havuzu + görsel havuzu)
+    'ad_creatives', 'ad_creative_assets'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -1201,5 +1203,89 @@ CREATE POLICY adv_asset_platform_refs_insert ON asset_platform_refs
     AND EXISTS (
       SELECT 1 FROM assets a
       WHERE a.id = asset_platform_refs.asset_id AND app.can_access_client(a.client_id)
+    )
+  );
+
+-- =============================================================================
+-- Kreatif — metin havuzu + görsel havuzu
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- ad_creatives
+--
+-- `ad_drafts` ile aynı desen: org + müşteri. Kreatif müşteriye ait ve org
+-- içindeki başka bir müşterinin kreatifi görünmemeli.
+--
+-- BURADA SIZINTI DİĞERLERİNDEN FARKLI BİR ŞEY DEMEK: kreatif, müşterinin
+-- HENÜZ YAYINLAMADIĞI reklam metinleri ve görselleri. Rakip iki markanın
+-- aynı ajansta olması olağan; birinin diğerinin kampanya metnini görmesi
+-- veri sızıntısından öte ticari bir sorun.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_ad_creatives_select ON ad_creatives
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_ad_creatives_insert ON ad_creatives
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_ad_creatives_update ON ad_creatives
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_ad_creatives_delete ON ad_creatives
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
+-- ad_creative_assets
+--
+-- Kiracı kontrolü KREATİF ÜZERİNDEN — `ad_draft_assets` deseninin aynısı.
+-- Satırın kendi `org_id`'si var ama tek başına yetmez: org içindeki başka bir
+-- müşterinin kreatifine ait bağlantı görünürdü.
+--
+-- GÖRSELİN KENDİ MÜŞTERİSİ AYRICA KONTROL EDİLMİYOR ve bunun sebebi var:
+-- RLS iki tabloyu birden zorlamıyor, `assets` satırı kendi politikasından
+-- geçiyor. Ama "A müşterisinin görselini B'nin kreatifine bağlama" hatası
+-- politikayla YAKALANMIYOR — iki satır da aynı org'da. O kontrol servis
+-- katmanında, `attachFromLibrary`'deki gibi açık bir kontrol olmak zorunda.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_ad_creative_assets_select ON ad_creative_assets
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM ad_creatives c
+      WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+CREATE POLICY adv_ad_creative_assets_insert ON ad_creative_assets
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM ad_creatives c
+      WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+CREATE POLICY adv_ad_creative_assets_update ON ad_creative_assets
+  FOR UPDATE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM ad_creatives c
+      WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
+    )
+  )
+  WITH CHECK (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM ad_creatives c
+      WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
+    )
+  );
+
+CREATE POLICY adv_ad_creative_assets_delete ON ad_creative_assets
+  FOR DELETE USING (
+    org_id = app.current_org_id()
+    AND EXISTS (
+      SELECT 1 FROM ad_creatives c
+      WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
     )
   );
