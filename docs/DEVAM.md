@@ -95,8 +95,31 @@ Bu bölüm işin NEDEN yapıldığını ve nasıl karara bağlandığını anlat
 ve kalan açıklar §0.1–0.3'te. Aşağıdaki bölümler (§1 ve sonrası) 13 Ağustos'taki
 Meta durumunu anlatıyor ve hâlâ geçerli.
 
-> **DAĞITIM ARTIK OTOMATİK.** `main`'e her push GitHub Actions üzerinden
-> sunucuya deploy ediyor. Bu üç ay boyunca ÖLÜYDÜ: 2026-08-03'te iş akışı
+> **DİKKAT — OTOMATİK DAĞITIM HÂLÂ ÇALIŞMIYOR (2026-08-16 tespiti).**
+>
+> Aşağıdaki "artık otomatik" iddiası YANLIŞ ve bu satır düzeltilmeden
+> bırakılmamalı: GitHub Actions'ta **30 koşunun 30'u başarısız, hiç başarılı
+> koşu yok** — `13fa58e`'nin "düzeltildi ve doğrulandı" dediği koşu dahil.
+>
+> `13fa58e` gerçekten bir şeyi düzeltti: iş akışı dosyası artık GEÇERLİ ve
+> job'lar başlıyor. **Doğrulama işi tamamen yeşil** (typecheck, testler,
+> derleme, RLS kapsaması). Düşen adım bir sonraki: **"SSH ile dağıt"**.
+>
+> Yani tablo şu: eskiden dağıtım HİÇ BAŞLAMIYORDU, şimdi başlıyor, kodu
+> doğruluyor ve son adımda sunucuya bağlanamadan düşüyor. İkisi de aynı sonucu
+> veriyor — sunucuda eski kod — ama ikincisi daha sinsi, çünkü ekranda çalışan
+> bir iş akışı görünüyor.
+>
+> **Bakılacak yer:** adım beş sırra bağlı — `VPS_HOST`, `VPS_USER`,
+> `VPS_SSH_KEY`, `VPS_SSH_PORT`, `VPS_APP_PATH`. Öncesindeki her şey yeşilken
+> orada düşmesi, sırların eksik/yanlış olduğuna ya da anahtarın sunucuda
+> yetkili olmadığına işaret ediyor. Log'u okumak depo yönetici yetkisi
+> istiyor.
+>
+> **O düzelene kadar dağıtım ELLE yapılmalı** (aşağıdaki yol geçerli).
+
+> ~~**DAĞITIM ARTIK OTOMATİK.**~~ `main`'e her push GitHub Actions üzerinden
+> sunucuya deploy ediyor — **etmesi gerekiyordu.** Bu üç ay boyunca ÖLÜYDÜ: 2026-08-03'te iş akışı
 > dosyasında boş bir `with:` kaldı, Actions dosyayı geçersiz sayıp hiçbir job
 > çalıştırmadı ve kimse fark etmedi — çünkü ortada başarısız bir dağıtım değil,
 > hiç başlamamış bir dağıtım vardı. Sunucu `37a2264`'te takılı kaldı ve
