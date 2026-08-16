@@ -203,7 +203,16 @@ export class DraftPublishService {
      * bir kampanyada hangisini düzelteceğini söylemiyor.
      */
     for (const [i, ad] of ads.entries()) {
-      const creative = await this.loadCreative(ctx, ad.creativeId);
+      /**
+       * BOOST REKLAMININ METNİ VE GÖRSELİ BİZDE DEĞİL.
+       *
+       * Gönderi zaten Meta'da yayında; metin havuzu ve kapsama kontrolleri
+       * onun için anlamsız. Uygulamak, yayında olan bir gönderiyi "ana metin
+       * boş" diye reddetmek olurdu.
+       */
+      if (ad.organicPostId) continue;
+
+      const creative = await this.loadCreative(ctx, ad.creativeId!);
       const etiket = ads.length > 1 ? `${i + 1}. reklam: ` : '';
 
       /**
@@ -345,8 +354,24 @@ export class DraftPublishService {
 
     const group = campaign.adGroups[0]!;
     const ad = group.ads[0]!;
-    const creative = await this.loadCreative(ctx, ad.creativeId);
     const advanced = advancedFrom(campaign, group);
+
+    /**
+     * BOOST AYRI BİR YAYIN ÇAĞRISI — `createBoost`, `publishDraft` değil.
+     *
+     * Boost edilen gönderinin metni ve görseli ZATEN META'DA duruyor; bizim
+     * kreatif kütüphanemizde karşılığı yok ve `publishDraft` bir kreatif
+     * kurmaya çalışırdı. Meta'nın kendi uç noktası gönderiyi olduğu gibi öne
+     * çıkarıyor.
+     *
+     * Ağacın kazancı burada: boost artık aynı listede, aynı durum modeliyle ve
+     * aynı "nereden geldi" bilgisiyle duruyor.
+     */
+    if (ad.organicPostId) {
+      return this.publishBoost(ctx, campaign, group, ad);
+    }
+
+    const creative = await this.loadCreative(ctx, ad.creativeId!);
     const auth = await this.resolveAuth(ctx, campaign, group.socialProfileId, group.leadFormId);
 
     /**
@@ -500,6 +525,15 @@ export class DraftPublishService {
        */
       for (const digeri of group.ads.slice(1)) {
         try {
+          /**
+           * BOOST VARYANTI OLMAZ. Bir gönderi bir kez öne çıkarılıyor; ikinci
+           * bir "varyant" aynı gönderiye ikinci kez para harcamak demek ve
+           * `boost-selector` bunu zaten engelliyor ("aynı gönderi ikinci kez
+           * boost edilmez"). Buraya düşmesi çağıranın hatası.
+           */
+          if (!digeri.creativeId) {
+            throw new Error('Boost reklamının varyantı olamaz.');
+          }
           const varyant = await this.loadCreative(ctx, digeri.creativeId);
           const varyantImages = await this.uploadImages(
             ctx,
@@ -542,6 +576,84 @@ export class DraftPublishService {
     }
 
     return this.tree.get(ctx, campaignId);
+  }
+
+  /**
+   * Gönderi boost'unu yayınlar.
+   *
+   * `createBoost` kampanya + ad set + reklamı tek çağrıda kuruyor ve ortada
+   * kalırsa kendi içinde geri alıyor — o kod zaten var ve Auto-Boost onu
+   * kullanıyor. Burada yeniden yazmak, aynı hatanın iki yerde düzeltilmesi
+   * demek olurdu.
+   */
+  private async publishBoost(
+    ctx: TenantContext,
+    campaign: DraftCampaignRecord,
+    group: DraftAdGroupRecord,
+    ad: { id: string; organicPostId: string | null },
+  ): Promise<DraftCampaignRecord> {
+    const [post] = await this.prisma.withTenant(ctx, (tx) =>
+      tx.$queryRaw<Array<{ post_external_id: string; page_external_id: string }>>(Prisma.sql`
+        SELECT p.external_id AS post_external_id, sp.external_id AS page_external_id
+        FROM organic_posts p
+        JOIN social_profiles sp ON sp.id = p.social_profile_id
+        WHERE p.id = ${ad.organicPostId}::uuid AND p.org_id = ${ctx.orgId}::uuid
+      `),
+    );
+    if (!post) throw new BadRequestException('Öne çıkarılacak gönderi bulunamadı.');
+
+    const auth = await this.resolveAuth(ctx, campaign, group.socialProfileId, null);
+    const provider = this.providers.get('meta');
+    const can = provider.canWrite(auth.grantedScopes);
+    if (!can.ok) {
+      const message = `Yazma izni yok: ${can.missing.join(', ')}.`;
+      await this.fail(ctx, campaign.id, message);
+      throw new BadRequestException(message);
+    }
+
+    await this.setStatus(ctx, campaign.id, 'publishing', null);
+
+    const accessToken = await this.vault.getAccessToken(auth.connectionId, provider);
+    try {
+      const result = await provider.createBoost(
+        { accessToken, accountExternalId: auth.accountExternalId },
+        {
+          adAccountExternalId: auth.accountExternalId,
+          postExternalId: post.post_external_id,
+          pageExternalId: post.page_external_id,
+          dailyBudgetMicros: BigInt(campaign.budgetAmountMicros!),
+          /**
+           * SÜRE BİTİŞ TARİHİNDEN TÜRÜYOR.
+           *
+           * `createBoost` gün sayısı istiyor, ağaç ise bitiş tarihi tutuyor.
+           * Süresiz bir boost olmamalı: taahhüt bazlı tavan hesabı gün
+           * sayısına dayanıyor ve süresiz bir kayıt o hesabı anlamsız kılardı.
+           */
+          durationDays: durationFrom(campaign.endAt),
+          objective: (campaign.settings?.objective as string) ?? 'OUTCOME_ENGAGEMENT',
+          currency: auth.currency,
+          name: campaign.name,
+        },
+      );
+
+      await this.markPublished(ctx, campaign.id, group.id, ad.id, {
+        campaignId: result.externalCampaignId,
+        adSetId: result.externalAdSetId,
+        creativeId: result.externalAdId,
+        adId: result.externalAdId,
+      });
+    } catch (err) {
+      const message =
+        err instanceof PlatformApiError
+          ? `${err.kind}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      await this.fail(ctx, campaign.id, message.slice(0, 2000));
+      throw new BadRequestException(message);
+    }
+
+    return this.tree.get(ctx, campaign.id);
   }
 
   // ---------------------------------------------------------------------------
@@ -873,6 +985,19 @@ function bidToMinor(amount: string): bigint {
 
 function platformLabel(platform: string): string {
   return platform === 'google' ? 'Google Ads' : 'Meta';
+}
+
+/**
+ * Bitiş tarihinden gün sayısı.
+ *
+ * SÜRESİZ BOOST YOK: taahhüt bazlı tavan hesabı gün sayısına dayanıyor
+ * (`fitsInCap`) ve süresiz bir kayıt o hesabı anlamsız kılardı — ay sonunda
+ * tavanın ne kadar aşıldığı hiç bilinmezdi. Bitiş yoksa yedi gün.
+ */
+function durationFrom(endAt: string | null): number {
+  if (!endAt) return 7;
+  const gun = Math.round((new Date(endAt).getTime() - Date.now()) / 86_400_000);
+  return Math.max(1, Math.min(gun, 90));
 }
 
 function money(micros: bigint): string {

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import {
   buildDraftTree,
   buildExpertTree,
+  moneyToMicros,
   type CampaignGoal,
   type DraftAdGroupRecord,
   type DraftAdRecord,
@@ -13,6 +14,8 @@ import {
   type DraftStatus,
   type DraftSurface,
   type DraftTreePlan,
+  type DuplicateCampaignInput,
+  type DuplicateResult,
   type ExpertDraftInput,
   type SimpleDraftInput,
   type TenantContext,
@@ -35,6 +38,8 @@ interface CampaignRow {
   id: string;
   client_id: string;
   group_id: string | null;
+  source: string;
+  source_campaign_id: string | null;
   platform: DraftPlatform;
   ad_account_id: string;
   ad_account_name: string;
@@ -73,8 +78,9 @@ interface AdRow {
   ad_group_id: string;
   name: string;
   position: number;
-  creative_id: string;
-  creative_name: string;
+  creative_id: string | null;
+  creative_name: string | null;
+  organic_post_id: string | null;
   external_ad_id: string | null;
   error: string | null;
 }
@@ -252,6 +258,121 @@ export class DraftTreeService {
     return this.get(ctx, ids[0]!);
   }
 
+  /**
+   * Kampanyayı N varyasyona çoğaltır — eski toplu oluşturucunun yerini alıyor.
+   *
+   * KAYNAK ZATEN DOĞRULANMIŞ BİR AĞAÇ. Hesap, sayfa, kreatif ve platform uyumu
+   * kaynağı kurarken kontrol edildi; kopyalar o kontrolleri yeniden geçmek
+   * zorunda değil. Kullanıcının yazdığı ALANLAR yeniden doğrulanıyor
+   * (değiştirilen kreatifler gibi), gerisi olduğu gibi taşınıyor.
+   *
+   * HER VARYASYON AYRI DENENİYOR. Yirmi kopyanın üçü kurulamayabilir ve kalan
+   * on yedisi geçerlidir; tek bir hata fırlatmak, kurulmuş on yedi kampanyayı
+   * gizlemek olurdu. Kısmi başarı bu üründe istisna değil normal sonuç.
+   */
+  async duplicate(ctx: TenantContext, input: DuplicateCampaignInput): Promise<DuplicateResult> {
+    const kaynak = await this.get(ctx, input.sourceCampaignId);
+    const kaynakGrup = kaynak.adGroups[0];
+    if (!kaynakGrup) {
+      throw new BadRequestException('Kaynak kampanyanın reklam grubu yok — çoğaltılamaz.');
+    }
+
+    const created: DraftCampaignRecord[] = [];
+    const failed: Array<{ name: string; reason: string }> = [];
+
+    for (const varyasyon of input.variants) {
+      try {
+        const id = await this.prisma.withTenant(ctx, async (tx) => {
+          const kreatifler =
+            varyasyon.creativeIds ??
+            kaynakGrup.ads.map((a) => a.creativeId).filter((c): c is string => c !== null);
+
+          if (kreatifler.length === 0) {
+            /**
+             * BOOST KAMPANYASI ÇOĞALTILAMIYOR.
+             *
+             * Kaynak bir gönderi boost'uysa reklamın kreatifi yok ve aynı
+             * gönderiyi ikinci kez öne çıkarmak, aynı kitleye aynı içeriği
+             * tekrar göstermek demek — `boost-selector` bunu zaten
+             * engelliyor.
+             */
+            throw new BadRequestException(
+              'Gönderi boost’u çoğaltılamaz — aynı gönderi ikinci kez öne çıkarılmaz.',
+            );
+          }
+
+          // DEĞİŞTİRİLEN KREATİFLER YENİDEN DENETLENİYOR: kaynağınkiler
+          // doğrulanmıştı, kullanıcının yazdıkları değil.
+          if (varyasyon.creativeIds) {
+            await this.assertCreativesOwned(tx, kaynak.clientId, varyasyon.creativeIds);
+          }
+
+          const ayarlar = { ...(kaynakGrup.settings ?? {}) };
+          if (varyasyon.keywords) ayarlar.keywords = varyasyon.keywords;
+
+          const [kampanya] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            INSERT INTO draft_campaigns (
+              id, org_id, client_id, platform, ad_account_id, name, surface, goal,
+              settings, budget_mode, budget_amount_micros, start_at, end_at,
+              source, source_campaign_id, created_by, updated_at
+            )
+            SELECT gen_random_uuid(), org_id, client_id, platform, ad_account_id,
+                   ${varyasyon.name}, surface, goal, settings, budget_mode,
+                   -- BÜTÇE VERİLMEDİYSE KAYNAĞINKİ. Sıfıra düşürmek ya da
+                   -- varsayılan uydurmak, kullanıcının fark etmediği bir
+                   -- harcama değişikliği olurdu.
+                   --
+                   -- DEĞER BURADA ÇÖZÜLÜYOR, sonradan güncellenmiyor:
+                   -- bütçe kısıtı modu ile tutarın BİRLİKTE gitmesini
+                   -- istiyor ve NULL yazıp arkasından doldurmak insert
+                   -- anında kısıta takılıyordu.
+                   ${varyasyon.budget ? moneyToMicros(varyasyon.budget) : kaynak.budgetAmountMicros}::bigint,
+                   start_at, end_at, 'duplicate', id, ${ctx.userId}::uuid, now()
+            FROM draft_campaigns
+            WHERE id = ${kaynak.id}::uuid AND org_id = ${ctx.orgId}::uuid
+            RETURNING id::text AS id
+          `);
+          if (!kampanya) throw new BadRequestException('Kopya oluşturulamadı');
+
+          const [grup] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            INSERT INTO draft_ad_groups (
+              id, org_id, campaign_id, name, position, social_profile_id, lead_form_id,
+              settings, budget_mode, budget_amount_micros, updated_at
+            )
+            SELECT gen_random_uuid(), org_id, ${kampanya.id}::uuid, ${varyasyon.name},
+                   position, social_profile_id, lead_form_id,
+                   ${JSON.stringify(ayarlar)}::jsonb, budget_mode, budget_amount_micros, now()
+            FROM draft_ad_groups WHERE id = ${kaynakGrup.id}::uuid
+            RETURNING id::text AS id
+          `);
+          if (!grup) throw new BadRequestException('Reklam grubu kopyalanamadı');
+
+          for (const [position, creativeId] of kreatifler.entries()) {
+            await tx.$executeRaw(Prisma.sql`
+              INSERT INTO draft_ads (
+                id, org_id, ad_group_id, creative_id, name, position, updated_at
+              ) VALUES (
+                gen_random_uuid(), ${ctx.orgId}::uuid, ${grup.id}::uuid,
+                ${creativeId}::uuid, ${`${varyasyon.name} — ${position + 1}`}, ${position}, now()
+              )
+            `);
+          }
+
+          return kampanya.id;
+        });
+
+        created.push(await this.get(ctx, id));
+      } catch (err) {
+        failed.push({
+          name: varyasyon.name,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return { created, failed };
+  }
+
   // ---------------------------------------------------------------------------
   // Okuma
   // ---------------------------------------------------------------------------
@@ -406,21 +527,30 @@ export class DraftTreeService {
       }
     }
 
-    /**
-     * KREATİFLERİN HEPSİ KONTROL EDİLİYOR, yalnızca ilki değil.
-     *
-     * Uzman yüzeyi aynı gruba birden çok kreatif koyabiliyor; birini
-     * denetleyip diğerlerini geçmek, listenin sonuna başka müşterinin
-     * kreatifini koymanın yeterli olması demek olurdu.
-     */
+    await this.assertCreativesOwned(tx, input.clientId, input.creativeIds);
+  }
+
+  /**
+   * Kreatiflerin HEPSİ aynı müşteriye mi ait.
+   *
+   * Birini denetleyip diğerlerini geçmek, listenin sonuna başka müşterinin
+   * kreatifini koymanın yeterli olması demek olurdu. RLS bunu yakalamıyor —
+   * iki satır da aynı org'da.
+   */
+  private async assertCreativesOwned(
+    tx: TxLike,
+    clientId: string,
+    creativeIds: string[],
+  ): Promise<void> {
+    if (creativeIds.length === 0) return;
     const creatives = await tx.$queryRaw<Array<{ id: string; client_id: string }>>(Prisma.sql`
       SELECT id::text AS id, client_id::text AS client_id
-      FROM ad_creatives WHERE id = ANY(${input.creativeIds}::uuid[])
+      FROM ad_creatives WHERE id = ANY(${creativeIds}::uuid[])
     `);
-    if (creatives.length !== new Set(input.creativeIds).size) {
+    if (creatives.length !== new Set(creativeIds).size) {
       throw new NotFoundException('Kreatif bulunamadı');
     }
-    const yabanci = creatives.filter((c) => c.client_id !== input.clientId);
+    const yabanci = creatives.filter((c) => c.client_id !== clientId);
     if (yabanci.length > 0) {
       throw new BadRequestException(
         yabanci.length === 1
@@ -445,6 +575,7 @@ export class DraftTreeService {
   ): Promise<DraftCampaignRecord[]> {
     const campaigns = await tx.$queryRaw<CampaignRow[]>(Prisma.sql`
       SELECT c.id::text AS id, c.client_id::text AS client_id, c.group_id::text AS group_id,
+             c.source, c.source_campaign_id::text AS source_campaign_id,
              c.platform::text AS platform, c.ad_account_id::text AS ad_account_id,
              a.name AS ad_account_name, c.name, c.surface, c.goal, c.settings,
              c.budget_mode, c.budget_amount_micros, c.start_at, c.end_at, c.status,
@@ -476,9 +607,12 @@ export class DraftTreeService {
         : await tx.$queryRaw<AdRow[]>(Prisma.sql`
             SELECT d.id::text AS id, d.ad_group_id::text AS ad_group_id, d.name, d.position,
                    d.creative_id::text AS creative_id, cr.name AS creative_name,
+                   d.organic_post_id::text AS organic_post_id,
                    d.external_ad_id, d.error
             FROM draft_ads d
-            JOIN ad_creatives cr ON cr.id = d.creative_id
+            -- LEFT JOIN: boost reklamının kreatifi YOK ve iç birleştirme onu
+            -- listeden sessizce düşürürdü — kampanya reklamsız görünürdü.
+            LEFT JOIN ad_creatives cr ON cr.id = d.creative_id
             WHERE d.ad_group_id = ANY(${groupIds}::uuid[]) AND d.org_id = ${ctx.orgId}::uuid
             ORDER BY d.position
           `);
@@ -492,6 +626,7 @@ export class DraftTreeService {
         position: a.position,
         creativeId: a.creative_id,
         creativeName: a.creative_name,
+        organicPostId: a.organic_post_id,
         externalAdId: a.external_ad_id,
         error: a.error,
       });
@@ -522,6 +657,8 @@ export class DraftTreeService {
       id: c.id,
       clientId: c.client_id,
       groupId: c.group_id,
+      source: c.source,
+      sourceCampaignId: c.source_campaign_id,
       platform: c.platform,
       adAccountId: c.ad_account_id,
       adAccountName: c.ad_account_name,

@@ -628,3 +628,27 @@ ALTER TABLE draft_ad_groups ADD CONSTRAINT draft_ad_groups_budget_chk
     AND (budget_mode = 'none') = (budget_amount_micros IS NULL)
     AND (budget_amount_micros IS NULL OR budget_amount_micros > 0)
   );
+
+-- -----------------------------------------------------------------------------
+-- draft_ads: REKLAM YA KREATİFTEN YA GÖNDERİDEN doğar — tam biri.
+--
+-- "İkisi de boş" görselsiz metinsiz bir reklam demek. "İkisi de dolu" ise
+-- hangisinin yayınlanacağı belirsiz ve Meta o belirsizliği kendi kararıyla
+-- çözerdi — sessizce, ve kullanıcı beklediğinden başka bir reklam görürdü.
+-- -----------------------------------------------------------------------------
+ALTER TABLE draft_ads DROP CONSTRAINT IF EXISTS draft_ads_source_chk;
+ALTER TABLE draft_ads ADD CONSTRAINT draft_ads_source_chk
+  CHECK ((creative_id IS NULL) <> (organic_post_id IS NULL));
+
+ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_source_chk;
+ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_source_chk
+  CHECK (source IN ('manual', 'boost_rule', 'duplicate'));
+
+-- KURALDAN DOĞAN KAMPANYA KURALINI TAŞIMAK ZORUNDA.
+--
+-- Kuralsız bir 'boost_rule' satırı, otomatik açılmış ama hangi kuralın
+-- açtığı bilinmeyen bir harcama demek — beklenmedik bir faturanın kaynağını
+-- bulmanın tek yolu bu bağ.
+ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_boost_rule_chk;
+ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_boost_rule_chk
+  CHECK (source <> 'boost_rule' OR boost_rule_id IS NOT NULL);

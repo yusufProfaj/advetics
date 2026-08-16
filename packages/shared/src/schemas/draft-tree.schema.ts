@@ -598,6 +598,71 @@ export function buildExpertTree(input: ExpertDraftInput, now: Date): DraftTreePl
 }
 
 // -----------------------------------------------------------------------------
+// Çoğaltma — eski "toplu oluşturma"nın yerini alıyor
+// -----------------------------------------------------------------------------
+
+/**
+ * Kampanya çoğaltma girdisi.
+ *
+ * ESKİ TOPLU OLUŞTURUCU BİR TABLOYDU: kullanıcı Excel'de sekiz sütun
+ * hazırlıyor, panele yapıştırıyor ve ÜSTELİK Meta ad set kimliğiyle sayfa
+ * kimliğini ELLE yazıyordu — ikisi de zaten veritabanımızda duruyorken.
+ * Sütun kayması en yaygın hataydı ve yapıştırmadan önce görünmüyordu.
+ *
+ * YENİ MODEL: çalışan bir kampanyayı seç, ondan N varyasyon üret. Ajansın
+ * gerçekte yaptığı iş bu — sıfırdan altmış farklı reklam değil, aynı yapının
+ * farklı bütçe/metin/kelime denemeleri.
+ *
+ * Kazancı yalnızca kullanışlılık değil: kaynak kampanya zaten DOĞRULANMIŞ bir
+ * ağaç. Hesap, sayfa, kreatif ve platform uyumu bir kez kontrol edildi;
+ * kopyaların hiçbiri o kontrolleri yeniden geçmek zorunda değil.
+ */
+export const duplicateCampaignInputSchema = z.object({
+  /** Kaynak kampanya taslağı. */
+  sourceCampaignId: z.string().uuid(),
+
+  /**
+   * Her satır bir kopya. FARK YAZILAN ALANLARDA, gerisi kaynaktan geliyor.
+   *
+   * Boş bırakılan alan "kaynaktakiyle aynı" demek ve bu, tablodan en büyük
+   * farkı: kullanıcı yalnızca DEĞİŞENİ yazıyor.
+   */
+  variants: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1, 'Varyasyona bir ad ver').max(200),
+        /** Boşsa kaynağın bütçesi. */
+        budget: money.optional(),
+        /** Boşsa kaynağın kreatifleri. */
+        creativeIds: z.array(z.string().uuid()).max(10).optional(),
+        /** Yalnızca Google — boşsa kaynağın kelimeleri. */
+        keywords: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
+      }),
+    )
+    .min(1, 'En az bir varyasyon ekle')
+    /**
+     * ÜST SINIR VAR ve sebebi para: her varyasyon ayrı bir kampanya, ayrı bir
+     * günlük bütçe. Yirmi kopya, günlük harcamanın yirmi katı demek ve
+     * kullanıcı bunu tek bir düğmeye basarak yapıyor.
+     */
+    .max(20, 'Tek seferde en fazla 20 varyasyon'),
+});
+
+export type DuplicateCampaignInput = z.infer<typeof duplicateCampaignInputSchema>;
+
+/**
+ * Çoğaltma sonucu — her satır kendi durumunu taşıyor.
+ *
+ * Kısmi başarı makinesi (K13) burada da geçerli: yirmi kopyanın üçü
+ * kurulamayabilir ve kalan on yedisi geçerlidir. Tek bir "başarısız" demek,
+ * kurulmuş on yedi kampanyayı gizlemek olurdu.
+ */
+export interface DuplicateResult {
+  created: DraftCampaignRecord[];
+  failed: Array<{ name: string; reason: string }>;
+}
+
+// -----------------------------------------------------------------------------
 // Kayıt tipleri
 // -----------------------------------------------------------------------------
 
@@ -605,8 +670,11 @@ export interface DraftAdRecord {
   id: string;
   name: string;
   position: number;
-  creativeId: string;
-  creativeName: string;
+  /** Kütüphaneden gelen kreatif. Boost'ta NULL. */
+  creativeId: string | null;
+  creativeName: string | null;
+  /** Öne çıkarılan organik gönderi. Elle kurulan reklamda NULL. */
+  organicPostId: string | null;
   externalAdId: string | null;
   error: string | null;
 }
@@ -630,6 +698,9 @@ export interface DraftCampaignRecord {
   id: string;
   clientId: string;
   groupId: string | null;
+  /** manual | boost_rule | duplicate — kampanya nereden geldi. */
+  source: string;
+  sourceCampaignId: string | null;
   platform: DraftPlatform;
   adAccountId: string;
   adAccountName: string;

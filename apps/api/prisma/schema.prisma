@@ -1288,6 +1288,7 @@ model OrganicPost {
   client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
   boosts        Boost[]
+  draftAds     DraftAd[]
 
   @@unique([socialProfileId, externalId])
   @@index([clientId, publishedAt(sort: Desc)])
@@ -1363,6 +1364,7 @@ model BoostRule {
   client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   socialProfile SocialProfile? @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
   boosts        Boost[]
+  draftCampaigns DraftCampaign[]
 
   @@index([clientId, enabled])
   @@map("boost_rules")
@@ -2177,6 +2179,20 @@ model DraftCampaign {
   /// draft | publishing | published | failed — PLATFORM BAŞINA.
   status String @default("draft") @db.VarChar(16)
 
+  /// manual | boost_rule | duplicate — KAMPANYA NEREDEN GELDİ.
+  ///
+  /// Listede aynı görünen üç satırın hangisinin otomatik açıldığını bilmeden,
+  /// beklenmedik bir harcamanın kaynağı bulunamıyor.
+  source String @default("manual") @db.VarChar(16)
+
+  /// Kopyanın kaynağı. Kaynak silinince kopya ölmüyor (SET NULL): kopya kendi
+  /// başına bir kampanya ve bir taslağı silmek yayındaki beş kampanyayı
+  /// düşürmemeli.
+  sourceCampaignId String? @map("source_campaign_id") @db.Uuid
+
+  /// Kuraldan doğduysa hangi kural. `source = 'boost_rule'` iken ZORUNLU.
+  boostRuleId String? @map("boost_rule_id") @db.Uuid
+
   externalCampaignId String?   @map("external_campaign_id") @db.VarChar(128)
   error              String?   @db.VarChar(2000)
   publishedAt        DateTime? @map("published_at") @db.Timestamptz(6)
@@ -2187,8 +2203,11 @@ model DraftCampaign {
 
   organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   client       Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  adAccount    AdAccount       @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
-  adGroups     DraftAdGroup[]
+  adAccount      AdAccount       @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  sourceCampaign DraftCampaign?  @relation("DraftCampaignCopy", fields: [sourceCampaignId], references: [id], onDelete: SetNull)
+  copies         DraftCampaign[] @relation("DraftCampaignCopy")
+  boostRule      BoostRule?      @relation(fields: [boostRuleId], references: [id], onDelete: SetNull)
+  adGroups       DraftAdGroup[]
 
   @@index([clientId, createdAt(sort: Desc)])
   @@index([groupId])
@@ -2247,10 +2266,20 @@ model DraftAdGroup {
 /// demek ve aynı reklam grubuna ikinci bir metin/görsel denemesi eklemenin
 /// yolu yok. Ajans pratiğinde reklam grubu başına 3-5 kreatif standart.
 model DraftAd {
-  id         String @id @default(uuid()) @db.Uuid
-  orgId      String @map("org_id") @db.Uuid
-  adGroupId  String @map("ad_group_id") @db.Uuid
-  creativeId String @map("creative_id") @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
+  orgId     String @map("org_id") @db.Uuid
+  adGroupId String @map("ad_group_id") @db.Uuid
+
+  /// Kütüphaneden gelen kreatif. Boost'ta NULL.
+  creativeId String? @map("creative_id") @db.Uuid
+
+  /// Öne çıkarılan organik gönderi. Elle kurulan reklamda NULL.
+  ///
+  /// BİR BOOST'UN KREATİFİ YOK: metni ve görseli zaten Meta'da duruyor.
+  /// İkisinden TAM BİRİ dolu olmak zorunda (`draft_ads_source_chk`) — ikisi
+  /// de dolu olsaydı hangisinin yayınlanacağını Meta kendi kararıyla
+  /// çözerdi, sessizce.
+  organicPostId String? @map("organic_post_id") @db.Uuid
 
   name String @db.VarChar(200)
 
@@ -2270,9 +2299,11 @@ model DraftAd {
   /// Cascade olsaydı kütüphaneden bir kreatifi silmek, ona bağlı taslak
   /// reklamları sessizce yok ederdi — kullanıcı kütüphaneyi topluyor sanır,
   /// kampanyası eksilir.
-  creative     AdCreative   @relation(fields: [creativeId], references: [id], onDelete: Restrict)
+  creative     AdCreative?  @relation(fields: [creativeId], references: [id], onDelete: Restrict)
+  organicPost  OrganicPost? @relation(fields: [organicPostId], references: [id], onDelete: Cascade)
 
   @@index([adGroupId, position])
   @@index([creativeId])
+  @@index([organicPostId])
   @@map("draft_ads")
 }

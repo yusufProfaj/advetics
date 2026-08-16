@@ -11,12 +11,15 @@ import {
 } from '@nestjs/common';
 import {
   creativeInputSchema,
+  duplicateCampaignInputSchema,
   expertDraftInputSchema,
   simpleDraftInputSchema,
   type DraftCampaignRecord,
   type CreativeInput,
   type CreativeRecord,
   type DraftGroupRecord,
+  type DuplicateCampaignInput,
+  type DuplicateResult,
   type ExpertDraftInput,
   type PublishCheck,
   type SimpleDraftInput,
@@ -111,6 +114,22 @@ export class DraftTreeController {
     @Body(zodBody(expertDraftInputSchema)) input: ExpertDraftInput,
   ): Promise<DraftCampaignRecord> {
     return this.tree.createFromExpert(ctx, input);
+  }
+
+  /**
+   * Kampanyayı N varyasyona çoğaltır — eski toplu oluşturucunun yerini alıyor.
+   *
+   * HATA FIRLATMIYOR (kaynak bulunamaması dışında): yirmi kopyanın üçü
+   * kurulamayabilir ve kalan on yedisi geçerlidir. Tek bir hata döndürmek,
+   * kurulmuş on yedi kampanyayı gizlemek olurdu.
+   */
+  @Post('duplicate')
+  @RequirePermissions('bulk.write')
+  duplicate(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(duplicateCampaignInputSchema)) input: DuplicateCampaignInput,
+  ): Promise<DuplicateResult> {
+    return this.tree.duplicate(ctx, input);
   }
 
   /** Yayın öncesi kontrol — engelleyenler, uyarılar ve yuva kapsaması. */

@@ -297,9 +297,20 @@ Toplu oluşturma ayrı bir modül değil, **uzman yüzeyinin tablo girişi**.
 | Yalnızca mevcut ad set'e reklam eklenebiliyor | Ad set de üretilebiliyor (aynı ağaç) |
 | `bulk-validator` ayrı doğrulama | Aynı doğrulayıcı, tablo girişine bağlı |
 
-TSV yapıştırma **korunmalı**: ajans metinleri Sheets'te hazırlıyor ve 60
-satırı forma girmek bu aracın kurtarmayı vaat ettiği işin ta kendisi. Değişen
-şey ham kimlikler.
+> **BU ÖNERİ 2026-08-16'DA DEĞİŞTİ — kullanıcının kararı.** Verbatim: *"toplu
+> oluşturma sistemni düzeltmemiz gerekiyor excel dosyası tablo falan olmaz
+> daha optimize kullanışlı olması gerekiyor."*
+>
+> Belgede "TSV korunmalı" yazıyordu; gerekçesi "ajans metinleri Sheets'te
+> hazırlıyor" idi. Kullanıcı bunu reddetti ve haklı: tablonun kurtardığı iş,
+> aynı yapının farklı denemelerini kurmak — ve o iş bir tabloyu doldurmayı
+> gerektirmiyor.
+>
+> **Yerine gelen model: KAMPANYA ÇOĞALTMA.** Çalışan bir kampanyayı seç, N
+> varyasyon üret; yazmadığın her alan kaynaktan gelir. Kazancı yalnızca
+> kullanışlılık değil: kaynak zaten DOĞRULANMIŞ bir ağaç, yani
+> hesap-sayfa-platform uyumu bir kez kontrol edildi ve kopyalar o kontrolleri
+> yeniden geçmiyor. Ham Meta kimlikleri de tamamen kalktı.
 
 ---
 
