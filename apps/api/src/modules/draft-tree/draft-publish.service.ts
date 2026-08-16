@@ -4,6 +4,9 @@ import {
   coverageFor,
   matchRatio,
   packTextsFor,
+  restrictTargetingFor,
+  SPECIAL_AD_CATEGORY_META,
+  type SpecialAdCategory,
   type AdvancedSettings,
   type AssetCoverage,
   type AssetRatio,
@@ -272,6 +275,38 @@ export class DraftPublishService {
       if (i === 0) coverage = [metaCoverage, googleCoverage];
     }
 
+    /**
+     * ÖZEL KATEGORİ VE HEDEFLEME KISITI — kontrolde SÖYLENİYOR.
+     *
+     * Kullanıcı 25-44 yaş kadın hedefleyen bir taslak kurmuş olabilir ve
+     * konut kategorisi yüzünden o daraltma uygulanmayacak. Yayından sonra
+     * fark etmesi, yanlış kitleye harcanan bütçe demek.
+     */
+    const [musteri] = await this.prisma.withTenant(ctx, (tx) =>
+      tx.$queryRaw<Array<{ special_ad_categories: string[] }>>(Prisma.sql`
+        SELECT special_ad_categories FROM clients WHERE id = ${campaign.clientId}::uuid
+      `),
+    );
+    const kategoriler = (musteri?.special_ad_categories ?? []) as SpecialAdCategory[];
+    if (kategoriler.length > 0 && !google) {
+      const etiketler = kategoriler
+        .map((k) => SPECIAL_AD_CATEGORY_META[k]?.label ?? k)
+        .join(', ');
+      const dusen = restrictTargetingFor(
+        kategoriler,
+        advanced ? targetingFrom(advanced.targeting) : defaultTargeting(),
+      ).removed;
+
+      warnings.push(
+        `Bu müşteri özel reklam kategorisinde beyan edilmiş (${etiketler}) — ` +
+          'kampanya Meta’ya bu beyanla gidiyor.' +
+          (dusen.length > 0
+            ? ` Meta bu kategoride ${dusen.join(', ')} daraltmasına izin vermiyor; ` +
+              'o alanlar gönderilmeyecek.'
+            : ''),
+      );
+    }
+
     const budget = BigInt(campaign.budgetAmountMicros ?? '0');
     const days = campaign.endAt
       ? Math.max(
@@ -483,6 +518,7 @@ export class DraftPublishService {
         keywords: google
           ? ((group.settings?.keywords as string[] | undefined) ?? [])
           : undefined,
+        specialAdCategories: auth.specialAdCategories,
         /**
          * HEDEFLEME VE YERLEŞİM `goal-mapping.ts`'TEN.
          *
@@ -500,7 +536,19 @@ export class DraftPublishService {
          * dönüyor ve hiçbir alan gönderilmiyor — boş `publisher_platforms`
          * göndermek "hiçbir platform" demek ve ad set hiç dağıtım yapmıyor.
          */
-        targeting: advanced ? targetingFrom(advanced.targeting) : defaultTargeting(),
+        /**
+         * ÖZEL KATEGORİDE HEDEFLEME KISITLANIYOR.
+         *
+         * Meta konut/istihdam/kredi kampanyalarında yaş, cinsiyet ve
+         * ayrıntılı hedeflemeyi kapatıyor. Alanları yine göndermek isteğin
+         * REDDEDİLMESİ demek — ya da daha kötüsü, Meta kabul edip sessizce
+         * yok sayıyor ve kullanıcı 25-44 yaşa reklam verdiğini sanıyor.
+         * Kısıtlamayı biz uyguluyoruz ve kontrol ekranı ne düştüğünü yazıyor.
+         */
+        targeting: restrictTargetingFor(
+          auth.specialAdCategories,
+          advanced ? targetingFrom(advanced.targeting) : defaultTargeting(),
+        ).targeting,
         placements: advanced
           ? placementsFrom(advanced.placement)
           : placementsFor(images.map((i) => i.ratio)),
@@ -633,6 +681,7 @@ export class DraftPublishService {
           objective: (campaign.settings?.objective as string) ?? 'OUTCOME_ENGAGEMENT',
           currency: auth.currency,
           name: campaign.name,
+          specialAdCategories: auth.specialAdCategories,
         },
       );
 
@@ -753,6 +802,8 @@ export class DraftPublishService {
     currency: string;
     grantedScopes: string[];
     leadFormExternalId?: string;
+    /** Müşterinin beyan ettiği özel reklam kategorileri. */
+    specialAdCategories: SpecialAdCategory[];
   }> {
     /**
      * SAYFA LEFT JOIN — Google'da sayfa YOK.
@@ -771,15 +822,20 @@ export class DraftPublishService {
           currency: string;
           granted_scopes: string[];
           status: string;
+          special_ad_categories: string[];
         }>
       >(Prisma.sql`
         SELECT a.connection_id::text AS connection_id,
                a.external_id AS account_external_id,
                sp.external_id AS page_external_id,
                a.manager_external_id,
-               a.currency, c.granted_scopes, c.status::text AS status
+               a.currency, c.granted_scopes, c.status::text AS status,
+               cl.special_ad_categories
         FROM ad_accounts a
         JOIN platform_connections c ON c.id = a.connection_id
+        -- KATEGORİLER MÜŞTERİDEN, kampanyadan değil: bir emlak firması her
+        -- kampanyasında emlakçı.
+        JOIN clients cl ON cl.id = ${campaign.clientId}::uuid
         LEFT JOIN social_profiles sp ON sp.id = ${socialProfileId}::uuid
         WHERE a.id = ${campaign.adAccountId}::uuid
       `),
@@ -818,6 +874,7 @@ export class DraftPublishService {
       currency: row.currency,
       grantedScopes: row.granted_scopes ?? [],
       leadFormExternalId,
+      specialAdCategories: (row.special_ad_categories ?? []) as SpecialAdCategory[],
     };
   }
 

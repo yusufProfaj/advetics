@@ -61,6 +61,14 @@ export class ClientsService {
           status: true,
           createdAt: true,
           /**
+           * ÖZEL REKLAM KATEGORİLERİ LİSTEDE DÖNÜYOR.
+           *
+           * Beyanın müşteri kartında görünmesi gerekiyor: kampanya kurarken
+           * değil, müşteri tanımlanırken verilen bir karar ve unutulduğunda
+           * ceza hesap seviyesinde.
+           */
+          specialAdCategories: true,
+          /**
            * Reklam hesabı ve ekip sayıları listede GÖRÜNMEK ZORUNDA.
            *
            * Müşteriler ekranının tek işi "hangi müşteride ne var" sorusuna
@@ -138,6 +146,7 @@ export class ClientsService {
           slug,
           timezone: input.timezone,
           reportingCurrency: input.reportingCurrency,
+          specialAdCategories: input.specialAdCategories,
         },
       });
 
@@ -175,6 +184,15 @@ export class ClientsService {
             : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
           ...(input.status === 'archived' ? { archivedAt: new Date() } : {}),
+          /**
+           * ÖZEL KATEGORİ DEĞİŞİKLİĞİ DENETİM KAYDINA DA GİRİYOR (aşağıda,
+           * `client.updated`). Bir müşterinin konut beyanının ne zaman ve kim
+           * tarafından kaldırıldığı, politika ihlali soruşturmasında
+           * sorulacak ilk şey.
+           */
+          ...(input.specialAdCategories !== undefined
+            ? { specialAdCategories: input.specialAdCategories }
+            : {}),
         },
       });
 

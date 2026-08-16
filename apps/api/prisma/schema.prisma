@@ -161,6 +161,16 @@ model Client {
   /// Çok para birimli toplamada hedef kur (fx_rates ile çevrilir).
   reportingCurrency String       @default("TRY") @map("reporting_currency") @db.Char(3)
   status            ClientStatus @default(active)
+
+  /// Meta özel reklam kategorileri — HOUSING | EMPLOYMENT | CREDIT | ...
+  ///
+  /// MÜŞTERİNİN ÖZELLİĞİ, KAMPANYANIN DEĞİL: bir emlak firması her
+  /// kampanyasında emlakçı ve her kampanyada tek tek sormak bir gün
+  /// unutulacağı anlamına gelir. Beyan edilmeden yayınlanan reklam politika
+  /// ihlali ve cezası HESAP seviyesinde — yani ajansın o hesaptaki bütün
+  /// kampanyalarını riske atıyor.
+  specialAdCategories String[] @default([]) @map("special_ad_categories")
+
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
   archivedAt        DateTime?    @map("archived_at") @db.Timestamptz(6)

@@ -1,6 +1,6 @@
 # "Oluştur" bölümünün yeniden tasarımı — tasarım belgesi
 
-**Durum:** İNŞAAT SÜRÜYOR · **Tarih:** 2026-08-16 · **6 karar kapandı, 9 açık**
+**Durum:** İNŞAAT SÜRÜYOR · **Tarih:** 2026-08-16 · **7 karar kapandı, 8 açık**
 
 İki yüzey de yazıldı: `/reklam-olustur/basit` ve `/reklam-olustur/uzman`.
 
@@ -691,12 +691,25 @@ Bugün üç yazma yolunda da sabit `[]`.
 - **(b)** Kampanya kurarken sorulur.
 - **(c)** Şimdilik dokunulmaz.
 
-**Öneri: (a).** Kategori müşterinin özelliği, kampanyanın değil; her
-kampanyada sormak unutulacağı anlamına gelir ve unutulduğunda ceza hesap
-seviyesinde. (c) kabul edilebilir tek koşulla: ajansın bu kategorilerde
-müşterisi olmadığı **doğrulanırsa**.
+**Karar: (a) — MÜŞTERİ KARTINDA.** 2026-08-16'da kapandı ve yazıldı.
+Kategori müşterinin özelliği, kampanyanın değil; her kampanyada sormak bir gün
+unutulacağı anlamına gelir ve o gün pahalı.
 
-**Karar:** _(açık)_
+**Bugünkü cevap (c)'yi de destekliyordu ve yine de yazıldı:** kullanıcı
+izlenen iki inşaat müşterisinin konut reklamı VERMEDİĞİNİ doğruladı. Ama bu
+"bugün" bilgisi — ajans yeni müşteri ekleyecek ve alan yoksa beyan
+edilemeyecek. Varsayılan boş ve çoğu müşteride doğru cevap bu.
+
+**Uygulamada ortaya çıkan asıl mesele HEDEFLEME KISITI.** Meta özel
+kategorilerde yaş, cinsiyet ve ayrıntılı hedeflemeyi kapatıyor. Alanları yine
+göndermek isteğin reddedilmesi demek — ya da daha kötüsü, Meta kabul edip
+sessizce yok sayıyor ve kullanıcı 25-44 yaş kadın hedeflediğini sanıyor.
+Kısıtı `restrictTargetingFor` uyguluyor, ne düştüğünü sayıyor ve yayın
+kontrolü bunu yayından ÖNCE söylüyor.
+
+**Google kapsam dışı:** orada da benzer kategoriler var ama beyan kampanya
+API'sinde değil, hesap seviyesinde ve panel üzerinden. Uydurma bir eşleme,
+beyan edildiği sanılan ama hiçbir yere gitmeyen bir alan olurdu.
 
 ---
 

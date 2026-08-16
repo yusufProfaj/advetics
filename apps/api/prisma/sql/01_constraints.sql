@@ -652,3 +652,17 @@ ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_source_chk
 ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_boost_rule_chk;
 ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_boost_rule_chk
   CHECK (source <> 'boost_rule' OR boost_rule_id IS NOT NULL);
+
+-- -----------------------------------------------------------------------------
+-- clients: özel reklam kategorileri TANINAN DEĞERLER olmalı.
+--
+-- Tanınmayan bir değer Meta tarafından reddediliyor ve hata mesajı
+-- ("Invalid parameter") hangi alanın sorunlu olduğunu söylemiyor. Yazma
+-- anında yakalamak, yayın anında anlaşılmaz bir hata almaktan iyi.
+-- -----------------------------------------------------------------------------
+ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_special_categories_chk;
+ALTER TABLE clients ADD CONSTRAINT clients_special_categories_chk
+  CHECK (special_ad_categories <@ ARRAY[
+    'HOUSING', 'EMPLOYMENT', 'CREDIT',
+    'ISSUES_ELECTIONS_POLITICS', 'ONLINE_GAMBLING_AND_GAMING'
+  ]::text[]);

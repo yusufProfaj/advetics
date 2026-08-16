@@ -1173,7 +1173,18 @@ export class MetaProvider implements IAdPlatformProvider {
         name: request.name,
         objective: request.objective,
         status: 'PAUSED',
-        special_ad_categories: '[]',
+        /**
+         * ÖZEL REKLAM KATEGORİLERİ — SABİT '[]' DEĞİL.
+         *
+         * Konut, istihdam ve kredi reklamları düzenlemeye tabi ve kategori
+         * beyan edilmeden yayınlanan reklam politika ihlali. Cezası kampanya
+         * seviyesinde değil HESAP seviyesinde: bir müşteri için unutulan
+         * beyan, ajansın o hesaptaki bütün kampanyalarını riske atıyor.
+         *
+         * Boş dizi hâlâ geçerli ve çoğu müşteride doğru cevap — ama artık
+         * SABİT değil, müşterinin beyanından geliyor.
+         */
+        special_ad_categories: JSON.stringify(request.specialAdCategories ?? []),
         is_adset_budget_sharing_enabled: ADSET_BUDGET_SHARING,
       });
       created.push({ id: campaign.id, label: 'kampanya' });
@@ -1432,7 +1443,8 @@ export class MetaProvider implements IAdPlatformProvider {
         name: req.name,
         objective: req.spec.objective,
         status: 'PAUSED',
-        special_ad_categories: '[]',
+        // Kategoriler müşterinin beyanından geliyor (bkz. createBoost).
+        special_ad_categories: JSON.stringify(req.specialAdCategories ?? []),
         is_adset_budget_sharing_enabled: ADSET_BUDGET_SHARING,
       });
       created.push({ id: campaign.id, label: 'kampanya' });

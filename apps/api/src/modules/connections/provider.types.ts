@@ -423,6 +423,8 @@ export interface BoostRequest {
   currency: string;
   /** Kampanya adı — panelde ve Ads Manager'da görünür. */
   name: string;
+  /** Müşterinin beyan ettiği özel reklam kategorileri. */
+  specialAdCategories?: string[];
 }
 
 export interface BoostResult {
@@ -564,6 +566,16 @@ export interface PublishDraftRequest {
    * istiyor.
    */
   keywords?: string[];
+
+  /**
+   * ÖZEL REKLAM KATEGORİLERİ — müşterinin beyanı.
+   *
+   * Beyan edilmeden yayınlanan konut/istihdam/kredi reklamı politika ihlali
+   * ve cezası HESAP seviyesinde. Alan opsiyonel ama boş geçmek ile hiç
+   * göndermemek aynı şey değil: sağlayıcı boşu da açıkça `[]` olarak
+   * gönderiyor, çünkü Meta alanı hiç görmezse kendi varsayımını uyguluyor.
+   */
+  specialAdCategories?: string[];
 
   /**
    * GOOGLE RSA METİNLERİ — Meta'nın tek başlığından AYRI.

@@ -37,6 +37,7 @@ interface PendingRow {
   account_external_id: string;
   connection_id: string;
   currency: string;
+  special_ad_categories: string[];
   granted_scopes: string[];
   connection_status: string;
 }
@@ -77,12 +78,17 @@ export class BoostExecutorService {
              a.external_id AS account_external_id,
              a.connection_id::text AS connection_id,
              a.currency,
+             -- ÖZEL REKLAM KATEGORİLERİ MÜŞTERİDEN. Beyan edilmeden
+             -- yayınlanan konut/istihdam/kredi reklamı politika ihlali ve
+             -- cezası HESAP seviyesinde.
+             cl.special_ad_categories,
              c.granted_scopes, c.status::text AS connection_status
       FROM boosts b
       JOIN organic_posts p ON p.id = b.organic_post_id
       JOIN social_profiles sp ON sp.id = p.social_profile_id
       JOIN ad_accounts a ON a.id = b.ad_account_id
       JOIN platform_connections c ON c.id = a.connection_id
+      JOIN clients cl ON cl.id = b.client_id
       LEFT JOIN boost_rules r ON r.id = b.boost_rule_id
       WHERE b.client_id = ${clientId}::uuid AND b.status = 'approved'
       ORDER BY b.approved_at
@@ -164,6 +170,7 @@ export class BoostExecutorService {
           objective: row.objective,
           currency: row.currency,
           name: `Boost — ${row.rule_name ?? 'elle'} — ${row.post_external_id.slice(-8)}`,
+          specialAdCategories: row.special_ad_categories ?? [],
         },
       );
 

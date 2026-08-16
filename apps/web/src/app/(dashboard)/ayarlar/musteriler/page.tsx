@@ -1,8 +1,9 @@
-import type { ConnectionSummary } from '@advetics/shared';
+import type { ConnectionSummary, SpecialAdCategory } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { ClientCreateForm } from '@/components/tenancy/client-create-form';
 import { ClientActions } from '@/components/tenancy/client-actions';
+import { SpecialCategoryPicker } from '@/components/tenancy/special-category-picker';
 import {
   ClientAssets,
   type ClientAdAccount,
@@ -34,6 +35,8 @@ interface ClientRow {
   reportingCurrency: string;
   status: string;
   createdAt: string;
+  /** Meta özel reklam kategorileri — beyan edilmezse politika ihlali. */
+  specialAdCategories?: SpecialAdCategory[];
   _count: { adAccounts: number; memberships: number };
   /** Bu müşteriye ATANMIŞ hesaplar — izlemede olup olmadıkları alan içinde. */
   adAccounts: ClientAdAccount[];
@@ -198,6 +201,15 @@ export default async function ClientsPage() {
                   adAccounts={client.adAccounts}
                   profiles={client.socialProfiles}
                   pool={pool}
+                  canManage={session.isOrgAdmin}
+                />
+
+                {/* ÖZEL KATEGORİ BEYANI MÜŞTERİ KARTINDA: bir emlak firması
+                    her kampanyasında emlakçı ve kampanya başına sormak bir gün
+                    unutulacağı anlamına gelir. */}
+                <SpecialCategoryPicker
+                  clientId={client.id}
+                  value={client.specialAdCategories ?? []}
                   canManage={session.isOrgAdmin}
                 />
 

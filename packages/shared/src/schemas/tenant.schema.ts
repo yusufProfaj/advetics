@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { specialAdCategoriesSchema } from './special-category.schema';
 import { ROLES } from '../auth/roles';
 
 const slugSchema = z
@@ -35,6 +36,17 @@ export const createClientSchema = z.object({
   slug: slugSchema.optional(),
   timezone: timezoneSchema.default('Europe/Istanbul'),
   reportingCurrency: z.string().length(3).toUpperCase().default('TRY'),
+
+  /**
+   * Meta özel reklam kategorileri — MÜŞTERİNİN ÖZELLİĞİ.
+   *
+   * Konut, istihdam ve kredi reklamları düzenlemeye tabi; kategori beyan
+   * edilmeden yayınlanan reklam politika ihlali ve cezası HESAP seviyesinde.
+   * Kampanya başına sormak, bir gün unutulacağı anlamına gelir.
+   *
+   * VARSAYILAN BOŞ ve çoğu müşteride doğru cevap bu.
+   */
+  specialAdCategories: specialAdCategoriesSchema,
 });
 export type CreateClientInput = z.infer<typeof createClientSchema>;
 

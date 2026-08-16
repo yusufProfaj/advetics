@@ -18,5 +18,6 @@ export * from './schemas/lead.schema';
 export * from './schemas/metrics.schema';
 export * from './schemas/report.schema';
 export * from './schemas/rule.schema';
+export * from './schemas/special-category.schema';
 export * from './schemas/tenant.schema';
 export * from './types/context';
