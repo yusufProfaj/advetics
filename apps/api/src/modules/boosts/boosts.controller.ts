@@ -14,12 +14,15 @@ import {
   boostDecisionSchema,
   boostQuerySchema,
   boostRuleInputSchema,
+  manualBoostInputSchema,
   type BoostablePostList,
   type BoostablePostQuery,
   type BoostQuery,
   type BoostRecord,
   type BoostRuleInput,
   type BoostRuleRecord,
+  type BoostSpendSummary,
+  type ManualBoostInput,
   type TenantContext,
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
@@ -70,6 +73,33 @@ export class BoostsController {
     @Query(zodQuery(boostablePostQuerySchema)) query: BoostablePostQuery,
   ): Promise<BoostablePostList> {
     return this.boosts.listBoostablePosts(ctx, query);
+  }
+
+  /** K19 — bu ay boost'a ne gitti, müşterinin bütçesi ne. */
+  @Get('spend')
+  @RequirePermissions('boost.read')
+  spend(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<BoostSpendSummary> {
+    return this.boosts.spendSummary(ctx, clientId);
+  }
+
+  /**
+   * ELLE BOOST — gönderiyi seç, yayınla.
+   *
+   * `boost.approve` İSTİYOR, `boost.write` DEĞİL. Bu uç nokta ara onay
+   * adımı olmadan PARA TAAHHÜT EDİYOR; kural yazma yetkisiyle aynı kefeye
+   * koymak, aday üretmekle harcamayı başlatmayı aynı şey saymak olurdu.
+   * Modül 7'nin baştan beri taşıdığı ayrım bu.
+   */
+  @Post('manual')
+  @RequirePermissions('boost.approve')
+  createManual(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(manualBoostInputSchema)) input: ManualBoostInput,
+  ): Promise<BoostRecord> {
+    return this.boosts.createManualBoost(ctx, input);
   }
 
   @Get('rules')

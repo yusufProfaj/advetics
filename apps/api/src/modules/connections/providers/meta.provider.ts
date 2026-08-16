@@ -1193,6 +1193,36 @@ export class MetaProvider implements IAdPlatformProvider {
   }
 
   /**
+   * Kayıtlı kitlenin hedefleme nesnesi.
+   *
+   * CANLIDA DOĞRULANMADI. `targeting` alanının kitle nesnesinde döndüğü
+   * belgeden okundu; ilk gerçek çağrıda gövde gözle kontrol edilecek. Alan
+   * boş dönerse `null` veriliyor ve çağıran yayını DURDURUYOR — boş bir
+   * hedeflemeyle devam etmek, kullanıcının seçtiği kitle yerine herkese
+   * reklam vermek demek olurdu.
+   */
+  async getSavedAudienceTargeting(
+    ctx: FetchContext,
+    savedAudienceId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const url = new URL(`${this.graph}/${savedAudienceId}`);
+    url.searchParams.set('fields', 'id,targeting');
+
+    const res = await platformFetch<{ targeting?: unknown }>(
+      'meta',
+      url.toString(),
+      { headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+
+    const t = res.data.targeting;
+    if (!t || typeof t !== 'object' || Array.isArray(t)) return null;
+    const spec = t as Record<string, unknown>;
+    return Object.keys(spec).length > 0 ? spec : null;
+  }
+
+  /**
    * Gönderiyi boost eder: kampanya + ad set + reklam.
    *
    * ÜÇ ÇAĞRI VE HEPSİ BAŞARILI OLMALI. Ortada kalırsa (ad set açıldı, reklam

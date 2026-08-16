@@ -37,6 +37,17 @@ const PAGE = '77777777-7777-7777-7777-777777777777';
 const RULE = '88888888-8888-8888-8888-888888888888';
 const BOOST = '99999999-9999-9999-9999-999999999999';
 
+/**
+ * Elle boost yolu bu dosyada sınanmıyor (kendi testi var); yürütücü yalnızca
+ * yapıcı bağımlılığını karşılıyor. Gerçek bir yürütücü vermek, bu testleri
+ * ilgisiz bir bileşenin davranışına bağlardı.
+ */
+function executorStub(): BoostExecutorService {
+  return {
+    createOneApproved: async () => ({ ok: true as const }),
+  } as unknown as BoostExecutorService;
+}
+
 beforeAll(async () => {
   h = await createHarness();
   svc = new BoostExecutorService(
@@ -44,9 +55,14 @@ beforeAll(async () => {
     { getAccessToken: async () => 'token' } as never,
     { acquire: async () => ({ allowed: true, usagePercent: 5 }), record: async () => {} } as never,
   );
-  boosts = new BoostsService({
-    withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
-  } as unknown as PrismaService);
+  boosts = new BoostsService(
+    {
+      withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
+    } as unknown as PrismaService,
+    // ELLE BOOST YOLU BU TESTLERDE KULLANILMIYOR; yürütücü yalnızca
+    // bağımlılığı karşılamak için veriliyor.
+    executorStub(),
+  );
 });
 
 afterAll(async () => {

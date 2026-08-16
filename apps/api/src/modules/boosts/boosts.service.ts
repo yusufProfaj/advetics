@@ -9,7 +9,10 @@ import type {
   BoostRecord,
   BoostRuleInput,
   BoostRuleRecord,
+  BoostSpendSummary,
   BoostStatus,
+  ManualBoostInput,
+  ManualBoostTargeting,
   MediaType,
   OrganicPostRecord,
   TenantContext,
@@ -22,6 +25,7 @@ import {
   selectPost,
   type PostSnapshot,
 } from './boost-selector';
+import { BoostExecutorService } from './boost-executor.service';
 import { INSTAGRAM_BOOST_UNSUPPORTED, isInstagramProfile } from './instagram-boost-guard';
 
 /**
@@ -134,7 +138,15 @@ export interface SelectionOutcome {
 export class BoostsService {
   private readonly logger = new Logger(BoostsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  /**
+   * YÜRÜTÜCÜ ENJEKTE EDİLİYOR — elle boost kural yolunun yayın kodundan
+   * geçiyor. Ters yönde bağımlılık yok: `BoostExecutorService` bu servisi
+   * tanımıyor, dolayısıyla döngü oluşmuyor.
+   */
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly executor: BoostExecutorService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Kural CRUD
@@ -244,7 +256,13 @@ export class BoostsService {
     return tx.$queryRaw<RuleRow[]>(Prisma.sql`
       SELECT r.*, sp.name AS social_profile_name,
              COALESCE((
-               SELECT SUM(b.daily_budget_micros * b.duration_days)
+               -- KİPE GÖRE: toplam bütçeli bir boost'ta çarpım yok. Kural
+               -- yolu bugün yalnızca günlük yazıyor ama bu sorgu kipi
+               -- varsaymamalı — varsayarsa gelecekteki bir kip değişikliği
+               -- tavanı sessizce yanlış hesaplar.
+               SELECT SUM(COALESCE(
+                 b.total_budget_micros, b.daily_budget_micros * b.duration_days
+               ))
                FROM boosts b
                WHERE b.boost_rule_id = r.id
                  -- REDDEDİLEN VE BAŞARISIZ boost'lar taahhüt SAYILMIYOR:
@@ -368,6 +386,260 @@ export class BoostsService {
         limit: query.limit,
       };
     });
+  }
+
+  /**
+   * K19 — bu ay boost'a ne gitti, müşterinin bütçesi ne.
+   *
+   * Elle boost'ta SERT TAVAN YOK: kararı kullanıcı veriyor. Ama tutarı
+   * GÖRMEDEN vermesin diye yayın satırının üstünde bu iki sayı duruyor.
+   * Kuralın aylık tavanı burada işe yaramıyor — o tavan kurala ait ve elle
+   * boost'un kuralı yok (`boost_rule_id` NULL).
+   *
+   * TAAHHÜT ÜZERİNDEN, harcanan üzerinden değil — kuralın tavan hesabıyla aynı
+   * gerekçe: yalnızca gerçekleşen harcamayı saymak, ay boyunca "hâlâ yerimiz
+   * var" deyip ay sonunda bütçenin katlarını taahhüt etmek demek.
+   */
+  async spendSummary(ctx: TenantContext, clientId: string): Promise<BoostSpendSummary> {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const [row] = await tx.$queryRaw<
+        Array<{ committed: string | number | bigint | null }>
+      >(Prisma.sql`
+        SELECT COALESCE(SUM(
+          -- KİPE GÖRE: toplam bütçeli boost'ta çarpım YOK, sayı zaten toplam.
+          COALESCE(b.total_budget_micros, b.daily_budget_micros * b.duration_days)
+        ), 0) AS committed
+        FROM boosts b
+        WHERE b.client_id = ${clientId}::uuid
+          AND b.status IN ('candidate', 'approved', 'creating', 'active')
+          AND b.created_at >= date_trunc('month', now())
+      `);
+
+      const [budget] = await tx.$queryRaw<
+        Array<{ amount_micros: string | number | bigint; currency: string }>
+      >(Prisma.sql`
+        SELECT amount_micros, currency
+        FROM monthly_budgets
+        WHERE client_id = ${clientId}::uuid
+          AND ad_account_id IS NULL
+          AND month = date_trunc('month', now())::date
+        LIMIT 1
+      `);
+
+      return {
+        committedThisMonthMicros: toBigInt(row?.committed).toString(),
+        // BÜTÇE TANIMLI DEĞİLSE NULL, SIFIR DEĞİL. Sıfır yazmak ekranda
+        // "bütçenin %∞'i" gibi bir oran ya da "bütçe aşıldı" uyarısı üretirdi;
+        // oysa söylenecek şey "bu müşteride aylık bütçe tanımlı değil".
+        monthlyBudgetMicros: budget ? toBigInt(budget.amount_micros).toString() : null,
+        currency: budget?.currency ?? 'TRY',
+      };
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Elle boost — üçüncü üretici
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Gönderiyi ELLE öne çıkarır: taslağı yazar ve AYNI İSTEKTE yayınlar.
+   *
+   * AYRI BİR YOL DEĞİL, ÜÇÜNCÜ ÜRETİCİ. Ağacın kuralı bu (§4): üç üretici
+   * (elle / kural / çoğaltma), tek yayın yolu. Elle boost da `boosts` satırı
+   * ve `draft_campaigns` satırı yazıyor, sonra kural yolunun kullandığı
+   * `BoostExecutorService`'ten geçiyor. Doğrudan `createBoost` çağırmak
+   * dördüncü bir yazma yolu açardı ve bu belgenin bütün teşhisi tam olarak
+   * buydu.
+   *
+   * "DİREKT YAYINLA" İLE "AĞACA YAZ" ÇELİŞMİYOR: kullanıcı ara ekran
+   * görmüyor, boost yine Reklamlar listesinde diğerleriyle birlikte duruyor.
+   *
+   * ONAY ADIMI YOK ve `approved_by` KULLANICININ KENDİSİ. Kural yolunda
+   * otomatik onayda bu alan boş bırakılıyor çünkü onaylayan bir insan yok;
+   * burada var ve o kişi düğmeye basan kullanıcı.
+   */
+  async createManualBoost(ctx: TenantContext, input: ManualBoostInput): Promise<BoostRecord> {
+    const boostId = await this.prisma.withTenant(ctx, async (tx) => {
+      const [post] = await tx.$queryRaw<BoostablePostRow[]>(Prisma.sql`
+        SELECT p.id::text AS id, p.social_profile_id::text AS social_profile_id,
+               sp.name AS social_profile_name, sp.profile_type::text AS profile_type,
+               sp.linked_ad_account_id::text AS linked_ad_account_id,
+               p.external_id, p.media_type, p.message, p.permalink, p.thumbnail_url,
+               p.published_at, p.impressions, p.reach, p.likes, p.comments,
+               p.shares, p.saves, p.video_views, p.engagements, p.boosted_at,
+               EXISTS (
+                 SELECT 1 FROM boosts b
+                 WHERE b.organic_post_id = p.id
+                   AND b.status IN ('candidate', 'approved', 'creating', 'active')
+               ) AS has_live_boost,
+               1 AS total
+        FROM organic_posts p
+        JOIN social_profiles sp ON sp.id = p.social_profile_id
+        WHERE p.id = ${input.organicPostId}::uuid
+          AND p.client_id = ${input.clientId}::uuid
+      `);
+      if (!post) throw new NotFoundException('Gönderi bulunamadı');
+
+      /**
+       * ENGELLER SUNUCUDA DA KONTROL EDİLİYOR — listedeki `blockedReason`
+       * yeterli değil.
+       *
+       * Liste ekranı düğmeyi kapatıyor ama API doğrudan çağrılabilir ve
+       * arada geçen sürede gönderi engelli hâle gelmiş olabilir: başka bir
+       * sekmede boost açılmış, sayfanın hesap ataması kaldırılmış olabilir.
+       * AYNI FONKSİYON kullanılıyor, ikinci bir kopya değil — iki yerde farklı
+       * yazılan kontrol, bir gün birbirinden ayrılır.
+       */
+      const blocked = this.toBoostablePost(post).blockedReason;
+      if (blocked) throw new BadRequestException(blocked);
+
+      const adAccountId = post.linked_ad_account_id!;
+      const totalMicros = toMicros(input.totalBudget);
+
+      /**
+       * KAYITLI KİTLE VARSA HEDEFLEME NESNESİ YAZILMIYOR — ikisi birden değil.
+       *
+       * Kitle Meta'da kendi lokasyonunu, yaşını ve cinsiyetini taşıyor;
+       * ikisini birleştirmek "kesişim mi birleşim mi" sorusunu bizim
+       * cevaplamamız demek ve yanlış cevap sessizce yanlış kitleye harcar.
+       * Kitlenin gerçek tanımı YAYIN ANINDA platformdan okunuyor.
+       */
+      const savedAudienceId = input.targeting.savedAudienceId ?? null;
+      const targeting = savedAudienceId ? null : metaTargetingFrom(input.targeting);
+
+      const [boost] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO boosts (
+          id, org_id, client_id, boost_rule_id, organic_post_id, ad_account_id,
+          status, budget_mode, total_budget_micros, duration_days, objective,
+          targeting, saved_audience_id, reason, approved_by, approved_at, updated_at
+        ) VALUES (
+          gen_random_uuid(), ${ctx.orgId}::uuid, ${input.clientId}::uuid,
+          -- KURAL YOK: bu boost'u bir kural değil kullanıcı açtı ve
+          -- boost_rule_id NULL tam olarak bunu söylüyor. (SQL yorumunda
+          -- backtick YASAK — şablonu ortasından kapatıyor, CLAUDE.md §3.)
+          NULL, ${input.organicPostId}::uuid, ${adAccountId}::uuid,
+          'approved', 'lifetime', ${totalMicros}::bigint, ${input.durationDays},
+          'OUTCOME_ENGAGEMENT',
+          ${targeting ? JSON.stringify(targeting) : null}::jsonb,
+          ${savedAudienceId},
+          ${manualReason(input)},
+          ${ctx.userId}::uuid, now(), now()
+        )
+        -- CANLI BOOST VARSA ÇAKIŞIR. Yukarıdaki kontrol arada geçen sürede
+        -- eskimiş olabilir; son söz veritabanının.
+        ON CONFLICT DO NOTHING
+        RETURNING id::text AS id
+      `);
+      if (!boost) {
+        throw new BadRequestException(
+          'Bu gönderi için az önce bir boost açılmış. Sayfayı yenile.',
+        );
+      }
+
+      await this.writeManualTree(tx, {
+        boostId: boost.id,
+        orgId: ctx.orgId,
+        clientId: input.clientId,
+        adAccountId,
+        socialProfileId: post.social_profile_id,
+        organicPostId: post.id,
+        totalBudgetMicros: totalMicros,
+        durationDays: input.durationDays,
+        postExternalId: post.external_id,
+        now: new Date(),
+      });
+
+      return boost.id;
+    });
+
+    /**
+     * YAYIN AYRI BİR TRANSACTION'DA ve bu bilinçli.
+     *
+     * Platform çağrısı saniyeler sürebiliyor (üç Graph isteği). Kiracı
+     * transaction'ını o süre boyunca açık tutmak, bir kullanıcının yavaş bir
+     * Meta yanıtıyla veritabanı bağlantısını işgal etmesi demek. Kayıt zaten
+     * `approved` yazıldı: çağrı düşerse boost kaydı duruyor ve hatası
+     * `boosts.error`'da.
+     */
+    const sonuc = await this.prisma.withTenant(ctx, (tx) =>
+      this.executor.createOneApproved(tx, boostId),
+    );
+    if (!sonuc.ok) throw new BadRequestException(sonuc.error);
+
+    const [record] = await this.listBoosts(ctx, { clientId: input.clientId, boostId });
+    if (!record) throw new NotFoundException('Boost oluşturuldu ama okunamadı');
+    return record;
+  }
+
+  /**
+   * Elle boost'un ağaç satırları.
+   *
+   * `writeCandidateTree`'nin eşi ama üç farkla: köken `manual_boost`, kural
+   * yok ve bütçe kipi `lifetime`.
+   *
+   * HATA YUTULMUYOR — kural yolundakinin aksine. Orada aday zaten geçerli ve
+   * ağaç yalnızca görünürlük içindi; burada taslak yayının GİRDİSİ:
+   * `publishBoost` bütçe kipini ve tutarını ağaçtan okuyor. Yazılamamış bir
+   * ağaç, yayınlanacak bir şey olmaması demek.
+   */
+  private async writeManualTree(
+    tx: TxLike,
+    p: {
+      boostId: string;
+      orgId: string;
+      clientId: string;
+      adAccountId: string;
+      socialProfileId: string;
+      organicPostId: string;
+      totalBudgetMicros: bigint;
+      durationDays: number;
+      postExternalId: string;
+      now: Date;
+    },
+  ): Promise<void> {
+    const name = `Öne çıkarılan gönderi — ${p.postExternalId.slice(-8)}`;
+    const endAt = new Date(p.now.getTime() + p.durationDays * 86_400_000);
+
+    const [campaign] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      INSERT INTO draft_campaigns (
+        id, org_id, client_id, platform, ad_account_id, name, surface, goal,
+        settings, budget_mode, budget_amount_micros, end_at, status,
+        source, boost_rule_id, updated_at
+      ) VALUES (
+        gen_random_uuid(), ${p.orgId}::uuid, ${p.clientId}::uuid, 'meta',
+        ${p.adAccountId}::uuid, ${name}, 'simple', NULL,
+        ${JSON.stringify({ objective: 'OUTCOME_ENGAGEMENT' })}::jsonb,
+        'lifetime', ${p.totalBudgetMicros}::bigint, ${endAt}::timestamptz,
+        'draft', 'manual_boost', NULL, now()
+      )
+      RETURNING id::text AS id
+    `);
+    if (!campaign) throw new Error('Kampanya taslağı yazılamadı');
+
+    const [group] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      INSERT INTO draft_ad_groups (
+        id, org_id, campaign_id, name, position, social_profile_id, updated_at
+      ) VALUES (
+        gen_random_uuid(), ${p.orgId}::uuid, ${campaign.id}::uuid, ${name}, 0,
+        ${p.socialProfileId}::uuid, now()
+      )
+      RETURNING id::text AS id
+    `);
+    if (!group) throw new Error('Reklam grubu yazılamadı');
+
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO draft_ads (
+        id, org_id, ad_group_id, creative_id, organic_post_id, name, position, updated_at
+      ) VALUES (
+        gen_random_uuid(), ${p.orgId}::uuid, ${group.id}::uuid, NULL,
+        ${p.organicPostId}::uuid, ${name}, 0, now()
+      )
+    `);
+
+    await tx.$executeRaw(Prisma.sql`
+      UPDATE boosts SET draft_campaign_id = ${campaign.id}::uuid, updated_at = now()
+      WHERE id = ${p.boostId}::uuid
+    `);
   }
 
   private toBoostablePost(r: BoostablePostRow): BoostablePostRecord {
@@ -701,6 +973,12 @@ export class BoostsService {
       const statusFilter = query.status
         ? Prisma.sql`AND b.status = ${query.status}`
         : Prisma.empty;
+      // TEK KAYIT SÜZGECİ: elle boost yayınlandıktan sonra oluşan kaydı geri
+      // döndürmek için. Ayrı bir `getBoost` yazmak, aynı SELECT'i ve aynı
+      // eşlemeyi ikinci kez yazmak olurdu.
+      const idFilter = query.boostId
+        ? Prisma.sql`AND b.id = ${query.boostId}::uuid`
+        : Prisma.empty;
       const rows = await tx.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
         SELECT b.*, r.name AS rule_name, a.name AS ad_account_name,
                p.external_id AS post_external_id, p.media_type, p.message,
@@ -714,7 +992,7 @@ export class BoostsService {
         JOIN ad_accounts a ON a.id = b.ad_account_id
         LEFT JOIN boost_rules r ON r.id = b.boost_rule_id
         WHERE b.org_id = ${ctx.orgId}::uuid AND b.client_id = ${query.clientId}::uuid
-          ${statusFilter}
+          ${statusFilter} ${idFilter}
         ORDER BY
           -- ONAY BEKLEYENLER EN ÜSTTE. Bu ekranın tek eylemi onay vermek;
           -- kronolojik sıralama, yapılacak işi geçmişin içine gömerdi.
@@ -830,8 +1108,20 @@ export class BoostsService {
       boostedAt: (r.boosted_at as Date | null)?.toISOString() ?? null,
     };
 
-    const daily = toBigInt(r.daily_budget_micros as string);
+    /**
+     * TOPLAM KİPE GÖRE HESAPLANIYOR.
+     *
+     * `lifetime` kipte toplam kullanıcının yazdığı sayının kendisi; çarpmak
+     * onu gün sayısı katına çıkarırdı. `daily` kipte ise toplam diye saklanan
+     * bir sayı yok ve çarpım tek doğru cevap.
+     */
+    const mode = r.budget_mode === 'lifetime' ? 'lifetime' : 'daily';
+    const daily = r.daily_budget_micros == null ? null : toBigInt(r.daily_budget_micros as string);
     const days = Number(r.duration_days ?? 1);
+    const total =
+      mode === 'lifetime'
+        ? toBigInt(r.total_budget_micros as string)
+        : (daily ?? 0n) * BigInt(days);
 
     return {
       id: String(r.id),
@@ -842,9 +1132,10 @@ export class BoostsService {
       adAccountId: String(r.ad_account_id),
       adAccountName: String(r.ad_account_name),
       status: r.status as BoostStatus,
-      dailyBudgetMicros: daily.toString(),
+      budgetMode: mode,
+      dailyBudgetMicros: daily?.toString() ?? null,
       durationDays: days,
-      totalBudgetMicros: (daily * BigInt(days)).toString(),
+      totalBudgetMicros: total.toString(),
       objective: String(r.objective),
       reason: String(r.reason),
       externalCampaignId: (r.external_campaign_id as string) ?? null,
@@ -863,6 +1154,57 @@ export function toMicros(amount: string): bigint {
   const whole = parts[0] || '0';
   const padded = ((parts[1] ?? '') + '000000').slice(0, 6);
   return BigInt(whole) * 1_000_000n + BigInt(padded);
+}
+
+/**
+ * Elle boost hedeflemesini META NESNESİNE çevirir.
+ *
+ * `goal-mapping.ts` içindeki `targetingFrom`'un boost karşılığı ve aynı iki
+ * kuralı taşıyor:
+ *
+ *   · `age_max = 65` GÖNDERİLMİYOR. Meta'da 65 "65 ve üzeri" demek; alanı
+ *     göndermek Ads Manager'da "18-65" yazdırıyor ve kullanıcı 66
+ *     yaşındakilerin dışlandığını sanıyor.
+ *   · Cinsiyet "hepsi" ise alan HİÇ gönderilmiyor. Boş dizi göndermek
+ *     Meta'da "hiç kimse" demek.
+ *
+ * ÖZEL KATEGORİ KISITI BURADA UYGULANMIYOR — sağlayıcıda uygulanıyor
+ * (`buildBoostAdSetParams`). İki yerde uygulamak, birinin bir gün
+ * güncellenmemesi demek.
+ */
+function metaTargetingFrom(t: ManualBoostTargeting): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    geo_locations:
+      t.cityKeys.length > 0
+        ? { countries: t.countries, cities: t.cityKeys.map((key) => ({ key })) }
+        : { countries: t.countries },
+    age_min: t.ageMin,
+  };
+  if (t.ageMax < 65) out.age_max = t.ageMax;
+  // Meta: 1 = erkek, 2 = kadın.
+  if (t.genders === 'male') out.genders = [1];
+  if (t.genders === 'female') out.genders = [2];
+  return out;
+}
+
+/**
+ * `boosts.reason` — kural yolunda kuralın gerekçesi, elle yolda KULLANICININ
+ * SEÇİMİ.
+ *
+ * Kolon boş bırakılabilirdi ama listede "neden bu boost açıldı" sütunu var ve
+ * elle boost'ta orada boşluk görmek, kaydın eksik olduğunu düşündürürdü.
+ */
+function manualReason(input: ManualBoostInput): string {
+  const t = input.targeting;
+  const parcalar: string[] = [`${input.totalBudget} ₺ · ${input.durationDays} gün`];
+  if (t.savedAudienceId) {
+    parcalar.push('kayıtlı kitle');
+  } else {
+    parcalar.push(t.cityKeys.length > 0 ? `${t.cityKeys.length} lokasyon` : 'ülke geneli');
+    if (t.ageMin !== 18 || t.ageMax !== 65) parcalar.push(`${t.ageMin}-${t.ageMax} yaş`);
+    if (t.genders !== 'all') parcalar.push(t.genders === 'male' ? 'erkek' : 'kadın');
+  }
+  return `Elle öne çıkarıldı — ${parcalar.join(' · ')}`.slice(0, 500);
 }
 
 function toBigInt(value: string | number | bigint | null | undefined): bigint {

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PlatformApiError } from '../connections/provider.types';
+import { PlatformApiError, type BoostBudget } from '../connections/provider.types';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
@@ -38,9 +38,16 @@ interface PendingRow {
    * other types" ile patlıyor ve bu yalnızca gerçek bir sorgu koştuğunda
    * görülüyor. `BoostsService.RuleRow` aynı tuzağı zaten belgeliyordu.
    */
-  daily_budget_micros: string | number | bigint;
+  daily_budget_micros: string | number | bigint | null;
+  /** `daily` | `lifetime` — hangi bütçe kolonunun dolu olduğunu bu belirliyor. */
+  budget_mode: string;
+  total_budget_micros: string | number | bigint | null;
   duration_days: number;
   objective: string;
+  /** Meta hedefleme nesnesi. NULL = sağlayıcının varsayılanı (ülke geneli). */
+  targeting: unknown;
+  /** Kayıtlı kitle. Doluysa `targeting` NULL — kısıt veritabanında. */
+  saved_audience_id: string | null;
   post_external_id: string;
   profile_external_id: string;
   /**
@@ -82,14 +89,68 @@ export class BoostExecutorService {
     clientId: string,
     limit = 10,
   ): Promise<{ created: number; failed: number }> {
-    const pending = await tx.$queryRaw<PendingRow[]>(Prisma.sql`
+    const pending = await this.pending(
+      tx,
+      // Durum süzgeci `pending()` içinde — iki çağıranın da onaylı olmayan
+      // bir satırı yayınlaması imkânsız olsun diye orada.
+      Prisma.sql`b.client_id = ${clientId}::uuid`,
+      limit,
+    );
+
+    let created = 0;
+    let failed = 0;
+
+    for (const row of pending) {
+      const ok = await this.createOne(tx, row);
+      if (ok) created++;
+      else failed++;
+    }
+    return { created, failed };
+  }
+
+  /**
+   * TEK bir onaylı boost'u oluşturur — elle boost bu yoldan geçiyor.
+   *
+   * NEDEN AYRI BİR METOT VE NEDEN AYRI BİR YAYIN YOLU DEĞİL: elle boost da
+   * `boosts` satırı yazıp aynı `createOne`'dan geçiyor. Kota bekçisi, yazma
+   * izni kontrolü, geri alma, ağaç kaydı ve `boosted_at` işareti orada ve
+   * ikinci bir kopyası olmamalı — bu belgenin bütün teşhisi (§2) üç ayrı
+   * yazma yolu olmasıydı.
+   *
+   * HATA METNİ GERİ DÖNÜYOR, yalnızca kolona yazılmıyor. Kural yolunda hata
+   * `boosts.error`'a düşüyor ve kullanıcı onu listede sonra görüyor; elle
+   * boost'ta kullanıcı düğmeye BASMIŞ ve ekranda bekliyor. "Bir şey oldu"
+   * demek, bu projede tekrar tekrar çıkan sessiz hatanın arayüz karşılığı.
+   */
+  async createOneApproved(
+    tx: TxLike,
+    boostId: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    const [row] = await this.pending(tx, Prisma.sql`b.id = ${boostId}::uuid`, 1);
+    if (!row) return { ok: false, error: 'Boost kaydı bulunamadı ya da onaylı değil.' };
+
+    const ok = await this.createOne(tx, row);
+    if (ok) return { ok: true };
+
+    // `createOne` sebebi `boosts.error`'a yazdı; buradan okuyup çağırana
+    // veriyoruz. İkinci kez üretmek, iki farklı metin üretme riski demek.
+    const [after] = await tx.$queryRaw<Array<{ error: string | null }>>(Prisma.sql`
+      SELECT error FROM boosts WHERE id = ${boostId}::uuid
+    `);
+    return { ok: false, error: after?.error ?? 'Boost oluşturulamadı.' };
+  }
+
+  /** Yayına hazır satırlar — iki çağıran da aynı sorguyu kullanıyor. */
+  private async pending(tx: TxLike, where: Prisma.Sql, limit: number): Promise<PendingRow[]> {
+    return tx.$queryRaw<PendingRow[]>(Prisma.sql`
       SELECT b.id, b.org_id::text AS org_id, b.client_id,
              b.ad_account_id::text AS ad_account_id,
              b.organic_post_id::text AS organic_post_id,
              b.boost_rule_id::text AS boost_rule_id,
              b.draft_campaign_id::text AS draft_campaign_id,
              p.social_profile_id::text AS social_profile_id,
-             b.daily_budget_micros, b.duration_days, b.objective,
+             b.budget_mode, b.daily_budget_micros, b.total_budget_micros,
+             b.duration_days, b.objective, b.targeting, b.saved_audience_id,
              p.external_id AS post_external_id,
              sp.external_id AS profile_external_id,
              sp.profile_type::text AS profile_type,
@@ -109,20 +170,10 @@ export class BoostExecutorService {
       JOIN platform_connections c ON c.id = a.connection_id
       JOIN clients cl ON cl.id = b.client_id
       LEFT JOIN boost_rules r ON r.id = b.boost_rule_id
-      WHERE b.client_id = ${clientId}::uuid AND b.status = 'approved'
+      WHERE ${where} AND b.status = 'approved'
       ORDER BY b.approved_at
       LIMIT ${limit}
     `);
-
-    let created = 0;
-    let failed = 0;
-
-    for (const row of pending) {
-      const ok = await this.createOne(tx, row);
-      if (ok) created++;
-      else failed++;
-    }
-    return { created, failed };
   }
 
   private async createOne(tx: TxLike, row: PendingRow): Promise<boolean> {
@@ -183,10 +234,44 @@ export class BoostExecutorService {
 
     try {
       const accessToken = await this.vault.getAccessToken(row.connection_id, provider);
+      const fetchCtx = {
+        accessToken,
+        accountExternalId: row.account_external_id,
+      };
+
+      /**
+       * KAYITLI KİTLE YAYIN ANINDA ÇÖZÜLÜYOR.
+       *
+       * Kitlenin kimliğini bir ad set'e doğrudan yazmanın yolu yok; uygulanan
+       * şey kitlenin taşıdığı hedefleme tanımı. Tanımı seçim anında çekip
+       * saklamak yerine burada okumak, kullanıcının Ads Manager'da bu arada
+       * değiştirdiği bir kitlenin ESKİ hâlini göndermeyi engelliyor.
+       *
+       * BULUNAMAZSA YAYIN DURUYOR. Geniş hedeflemeye düşmek, seçtiği kitleye
+       * reklam verdiğini sanan kullanıcının parasını başka yere harcamak olur
+       * — ve hiçbir yerde görünmez.
+       */
+      let targeting = (row.targeting as Record<string, unknown> | null) ?? undefined;
+      if (row.saved_audience_id) {
+        const kitle = await provider.getSavedAudienceTargeting(
+          fetchCtx,
+          row.saved_audience_id,
+        );
+        if (!kitle) {
+          await this.fail(
+            tx,
+            row.id,
+            'Seçilen kayıtlı kitle Meta’da bulunamadı ya da hedefleme tanımı boş. ' +
+              'Kitle silinmiş olabilir; Ads Manager’dan kontrol et.',
+          );
+          return false;
+        }
+        targeting = kitle;
+      }
+
       const result = await provider.createBoost(
         {
-          accessToken,
-          accountExternalId: row.account_external_id,
+          ...fetchCtx,
           onRateLimit: (snapshot) =>
             this.quota.record({
               platform: 'meta',
@@ -201,22 +286,23 @@ export class BoostExecutorService {
           postExternalId: row.post_external_id,
           pageExternalId: row.profile_external_id,
           /**
-           * KURAL YOLU GÜNLÜK KALIYOR — elle boost toplam bütçeye geçse de.
+           * BÜTÇE KİPİ SATIRDAN OKUNUYOR, VARSAYILMIYOR.
            *
-           * Kural süresiz çalışıyor ve aylık tavanı günlük bütçe × süre
-           * üzerinden hesaplanıyor (`boost_rules.monthly_cap_micros`). Toplam
-           * bütçeye çevirmek o hesabı sessizce kaydırırdı: aynı kural aynı
-           * tavanla farklı sayıda boost açmaya başlardı.
+           * Kural yolu GÜNLÜK yazıyor ve öyle kalıyor: kural süresiz çalışıyor
+           * ve aylık tavanı günlük bütçe × süre üzerinden hesaplanıyor
+           * (`boost_rules.monthly_cap_micros`). Elle boost TOPLAM yazıyor
+           * (K18). Kipi burada varsaymak, elle boost'un 300 TL'sini günlük
+           * 300 TL olarak beş gün harcamak demek olurdu.
            */
-          budget: { mode: 'daily', dailyMicros: toBigInt(row.daily_budget_micros) },
+          budget: budgetOf(row),
           durationDays: row.duration_days,
           /**
-           * HEDEFLEME VERİLMİYOR = ülke geneli, yani bugünkü davranış.
-           *
-           * Kural ekranında hedefleme sorulmuyor ve sorulmadığı sürece burada
-           * bir değer üretmek, kullanıcının vermediği bir kararı onun adına
-           * vermek olur.
+           * HEDEFLEME SATIRDAN. Kural satırlarında NULL ve o zaman sağlayıcı
+           * kendi varsayılanını (ülke geneli) uyguluyor — kural ekranında
+           * hedefleme sorulmuyor ve sorulmadığı sürece burada bir değer
+           * üretmek, kullanıcının vermediği bir kararı onun adına vermek olur.
            */
+          targeting,
           objective: row.objective,
           currency: row.currency,
           name: `Boost — ${row.rule_name ?? 'elle'} — ${row.post_external_id.slice(-8)}`,
@@ -415,6 +501,30 @@ export class BoostExecutorService {
  * cazip ama iki modül arasında bu tek satır için bağımlılık kurmak, ikisini
  * de kendi başına okunur olmaktan çıkarır.
  */
+/**
+ * Satırdan bütçe kipini kurar.
+ *
+ * TANINMAYAN KİP HATA VERİYOR, günlüğe düşmüyor. Sessizce günlük saymak,
+ * toplam bütçeli bir boost'un beş katını harcaması demek olurdu — ve kip
+ * kolonundaki bir yazım hatası tam olarak böyle görünmez kalırdı. Veritabanı
+ * kısıtı (`boosts_budget_chk`) bunu zaten engelliyor; burası ikinci kilit.
+ */
+function budgetOf(row: PendingRow): BoostBudget {
+  if (row.budget_mode === 'lifetime') {
+    if (row.total_budget_micros === null) {
+      throw new Error('Toplam bütçeli boost kaydında tutar yok.');
+    }
+    return { mode: 'lifetime', totalMicros: toBigInt(row.total_budget_micros) };
+  }
+  if (row.budget_mode === 'daily') {
+    if (row.daily_budget_micros === null) {
+      throw new Error('Günlük bütçeli boost kaydında tutar yok.');
+    }
+    return { mode: 'daily', dailyMicros: toBigInt(row.daily_budget_micros) };
+  }
+  throw new Error(`Tanınmayan bütçe kipi: ${row.budget_mode}`);
+}
+
 function toBigInt(value: string | number | bigint): bigint {
   if (typeof value === 'bigint') return value;
   return BigInt(String(value).split('.')[0] || '0');

@@ -1071,6 +1071,14 @@ export class GoogleProvider implements IAdPlatformProvider {
     );
   }
 
+  async getSavedAudienceTargeting(): Promise<Record<string, unknown> | null> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      'Google Ads kayıtlı kitle listesi henüz yazılmadı.',
+    );
+  }
+
 
   /**
    * Modül 4 — Google'da KARŞILIĞI VAR ama yazılmadı.

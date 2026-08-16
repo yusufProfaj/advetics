@@ -156,6 +156,8 @@ export const boostQuerySchema = z.object({
   status: z
     .enum(['candidate', 'approved', 'rejected', 'creating', 'active', 'failed'])
     .optional(),
+  /** Tek kayıt — elle boost yayınlandıktan sonra sonucu okumak için. */
+  boostId: z.string().uuid().optional(),
 });
 export type BoostQuery = z.infer<typeof boostQuerySchema>;
 
@@ -268,6 +270,81 @@ export const boostablePostQuerySchema = z.object({
 });
 export type BoostablePostQuery = z.infer<typeof boostablePostQuerySchema>;
 
+// -----------------------------------------------------------------------------
+// Elle boost — yayın isteği
+// -----------------------------------------------------------------------------
+
+/**
+ * Elle boost hedeflemesi.
+ *
+ * KAYITLI KİTLE DİĞERLERİYLE BİRLİKTE KULLANILMIYOR — birini seçmek diğerini
+ * kapatıyor. Sebebi tahmin etmeme kuralı: kayıtlı kitle Meta'da KENDİ
+ * lokasyonunu, yaşını ve cinsiyetini taşıyor. İkisini birleştirmek "kesişim mi
+ * birleşim mi" sorusunu bizim cevaplamamız demek ve yanlış cevap sessizce
+ * yanlış kitleye harcama yapar. Doğrulama şemada, ekranda da alanlar
+ * kapatılıyor.
+ */
+export const manualBoostTargetingSchema = z
+  .object({
+    /** Boş bırakılamıyor: ülkesiz hedefleme Meta'da "dünya geneli" demek. */
+    countries: z.array(z.string().length(2)).min(1).max(25).default(['TR']),
+    /** Meta şehir/il anahtarları — `targeting/locations` ucundan geliyor. */
+    cityKeys: z.array(z.string().max(40)).max(25).default([]),
+    ageMin: z.number().int().min(18).max(65).default(18),
+    ageMax: z.number().int().min(18).max(65).default(65),
+    genders: z.enum(['all', 'male', 'female']).default('all'),
+    /** Seçilirse diğer alanların hepsi YOK SAYILIR. */
+    savedAudienceId: z.string().max(64).optional(),
+  })
+  .refine((t) => t.ageMax >= t.ageMin, {
+    message: 'Yaş aralığı ters',
+    path: ['ageMax'],
+  });
+export type ManualBoostTargeting = z.infer<typeof manualBoostTargetingSchema>;
+
+/**
+ * Elle boost isteği — "gönderi seç → bütçe ve süre → nereye → yayınla".
+ *
+ * TOPLAM BÜTÇE İSTENİYOR, günlük değil (K18). Ekranda günlük karşılığı da
+ * gösteriliyor ki sürpriz olmasın, ama Meta'ya giden sayı kullanıcının
+ * yazdığının kendisi.
+ */
+export const manualBoostInputSchema = z.object({
+  clientId: z.string().uuid(),
+  organicPostId: z.string().uuid(),
+  /**
+   * Toplam bütçe, ANA PARA BİRİMİ cinsinden ("300" = 300 ₺).
+   *
+   * Alt sınır boş bir sayı değil: Meta çok küçük bütçeli bir ad set'i kabul
+   * ediyor ama hiç dağıtmıyor — para harcanmıyor, sonuç da gelmiyor ve
+   * kullanıcı boost'un çalışmadığını sanıyor.
+   */
+  totalBudget: z
+    .string()
+    .regex(/^\d+([.,]\d{1,2})?$/, 'Geçerli bir tutar gir')
+    .refine((v) => Number(v.replace(',', '.')) >= 20, {
+      message: 'En az 20 ₺ — daha küçük bütçeli boost dağıtım almıyor',
+    }),
+  durationDays: z.number().int().min(1).max(30),
+  targeting: manualBoostTargetingSchema,
+});
+export type ManualBoostInput = z.infer<typeof manualBoostInputSchema>;
+
+/**
+ * K19 — elle boost'un harcama emniyeti.
+ *
+ * SERT TAVAN YOK; kararı kullanıcı veriyor. Ama tutarı GÖRMEDEN vermesin diye
+ * yayın satırının üstünde bu üç sayı duruyor. Kuralın aylık tavanı
+ * (`boost_rules.monthly_cap_micros`) elle boost'ta yok — `boost_rule_id` NULL.
+ */
+export interface BoostSpendSummary {
+  /** Bu ay boost'a taahhüt edilen toplam (kural + elle). */
+  committedThisMonthMicros: string;
+  /** Müşterinin bu ayki bütçesi. Tanımlı değilse null — sıfır DEĞİL. */
+  monthlyBudgetMicros: string | null;
+  currency: string;
+}
+
 export interface BoostRecord {
   id: string;
   clientId: string;
@@ -277,9 +354,19 @@ export interface BoostRecord {
   adAccountId: string;
   adAccountName: string;
   status: BoostStatus;
-  dailyBudgetMicros: string;
+  budgetMode: 'daily' | 'lifetime';
+  /**
+   * Günlük bütçe — YALNIZCA `daily` kipte dolu.
+   *
+   * Toplam bütçeli boost'ta günlük bütçe diye bir sayı YOK: Meta parayı eşit
+   * bölmüyor ve türetilmiş bir sayı göstermek uydurma bir kesinlik olurdu.
+   */
+  dailyBudgetMicros: string | null;
   durationDays: number;
-  /** `dailyBudget × duration` — taahhüt edilen toplam. */
+  /**
+   * Taahhüt edilen toplam. `daily` kipte `dailyBudget × duration`, `lifetime`
+   * kipte kullanıcının yazdığı sayının kendisi.
+   */
   totalBudgetMicros: string;
   objective: string;
   reason: string;

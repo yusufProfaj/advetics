@@ -825,6 +825,23 @@ export interface IAdPlatformProvider {
   listSavedAudiences(ctx: FetchContext): Promise<SavedAudienceOption[]>;
 
   /**
+   * Kayıtlı kitlenin GERÇEK hedefleme nesnesi — yayın anında okunuyor.
+   *
+   * Kitlenin kimliğini bir ad set'e doğrudan yazmanın yolu yok; uygulanan şey
+   * kitlenin taşıdığı hedefleme tanımı. Tanımı ekran açılışında çekip
+   * saklamak yerine yayın anında okumak, kullanıcının Ads Manager'da bu
+   * arada değiştirdiği bir kitlenin ESKİ hâlini göndermeyi engelliyor.
+   *
+   * Bulunamazsa `null` — çağıran bunu HATA saymalı. Geniş hedeflemeye düşmek,
+   * seçilen kitleye reklam verdiğini sanan kullanıcının parasını başka yere
+   * harcamak olur.
+   */
+  getSavedAudienceTargeting(
+    ctx: FetchContext,
+    savedAudienceId: string,
+  ): Promise<Record<string, unknown> | null>;
+
+  /**
    * Görseli reklam hesabına yükler ve hash döner (Modül 4).
    *
    * Meta kreatifte görseli hash ile istiyor, URL ile değil: görselin

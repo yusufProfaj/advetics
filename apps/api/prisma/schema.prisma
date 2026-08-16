@@ -1420,11 +1420,40 @@ model Boost {
   /// candidate | approved | rejected | creating | active | failed
   status String @default("candidate") @db.VarChar(16)
 
-  dailyBudgetMicros BigInt @map("daily_budget_micros")
-  durationDays      Int    @map("duration_days")
-  objective         String @db.VarChar(60)
+  /// BÜTÇE KİPE GÖRE AYRI KOLONDA — tek kolona iki anlam yüklenmiyor.
+  ///
+  /// Kural yolu GÜNLÜK düşünüyor: süresiz çalışıyor ve aylık tavanı günlük
+  /// bütçe × süre üzerinden hesaplanıyor. Elle boost TOPLAM düşünüyor:
+  /// kullanıcı "300 TL, 5 gün" diyor ve merak ettiği şey toplam (K18).
+  ///
+  /// `boosts_budget_chk` kipe göre TAM BİRİNİ zorunlu kılıyor. Aynı kolona
+  /// duruma göre günlük ya da toplam yazmak, kolonu okuyan her sorgunun kipi
+  /// de okumasını gerektirirdi — ve unutulduğu gün ortaya çıkan şey beş kat
+  /// harcama.
+  budgetMode        String  @default("daily") @map("budget_mode") @db.VarChar(10)
+  dailyBudgetMicros BigInt? @map("daily_budget_micros")
+  totalBudgetMicros BigInt? @map("total_budget_micros")
+  durationDays      Int     @map("duration_days")
+  objective         String  @db.VarChar(60)
+
+  /// Meta hedefleme nesnesi. NULL = sağlayıcının varsayılanı (ülke geneli),
+  /// yani kural yolunun bugünkü davranışı.
+  ///
+  /// SAKLANIYOR, yalnızca gönderilip unutulmuyor: "bu boost kime gösterildi"
+  /// sorusunun cevabı aksi hâlde yalnızca Ads Manager'da olurdu ve beklenmedik
+  /// bir sonucun sebebi aranırken ilk bakılacak yer burası.
+  targeting Json? @db.JsonB
+
+  /// Ads Manager'da kurulu kayıtlı kitle (K16). `targeting` ile BİRLİKTE
+  /// OLAMAZ — kısıt veritabanında.
+  ///
+  /// NEDEN AYRI KOLON: `targeting` olduğu gibi Meta'ya gidiyor ve bizim
+  /// uydurduğumuz bir anahtar oraya sızarsa Meta onu SESSİZCE YOK SAYAR.
+  /// Kitlenin gerçek hedefleme nesnesi yayın anında platformdan okunuyor.
+  savedAudienceId String? @map("saved_audience_id") @db.VarChar(64)
 
   /// Kuralın bu gönderiyi neden seçtiği — insan okunur.
+  /// Elle boost'ta kullanıcının kendi seçimi yazılıyor.
   reason String @db.VarChar(500)
 
   /// Platformda oluşturulan varlıklar. Boost bir kampanya + ad set + reklam.

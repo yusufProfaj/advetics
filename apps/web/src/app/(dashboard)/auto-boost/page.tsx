@@ -15,6 +15,7 @@ import {
   CreateApprovedButton,
   RunBoostRuleButton,
 } from '@/components/boost/boost-controls';
+import { ManualBoost } from '@/components/boost/manual-boost';
 
 export const metadata = { title: 'Auto-Boost — Advetics' };
 export const dynamic = 'force-dynamic';
@@ -73,7 +74,15 @@ export default async function AutoBoostPage({
             {clientName} · günde iki kez değerlendiriliyor
           </p>
         </div>
-        {canApprove && <CreateApprovedButton clientId={clientId} />}
+        <div className="flex flex-wrap items-center gap-2">
+          {/*
+            ELLE BOOST BURADA, ayrı bir sayfada değil.
+            Kural yolu ve elle yol aynı işin iki üreticisi; ayrı sayfaya
+            koymak, "hangi ekrandan hangisi açılıyordu" sorusunu üretirdi.
+          */}
+          <ManualBoost clientId={clientId} canPublish={canApprove} />
+          {canApprove && <CreateApprovedButton clientId={clientId} />}
+        </div>
       </header>
 
       {session.availableClients.length > 1 && (
@@ -215,11 +224,30 @@ function BoostCard({
           {boost.boostRuleName && ` (${boost.boostRuleName})`}
         </p>
 
+        {/*
+          BÜTÇE KİPE GÖRE YAZILIYOR.
+
+          Toplam bütçeli boost'ta (elle boost — K18) günlük bütçe diye bir sayı
+          YOK: Meta parayı eşit bölmüyor ve "—/gün × 5 gün" yazmak kullanıcıya
+          hesaplanabilir bir şey varmış izlenimi verirdi.
+        */}
         <p className="mt-1 text-[11px] text-ink-muted">
-          {formatMoney(boost.dailyBudgetMicros, currency)}/gün × {boost.durationDays} gün ={' '}
-          <strong className="text-ink">
-            {formatMoney(boost.totalBudgetMicros, currency)}
-          </strong>{' '}
+          {boost.budgetMode === 'lifetime' ? (
+            <>
+              <strong className="text-ink">
+                {formatMoney(boost.totalBudgetMicros, currency)}
+              </strong>{' '}
+              toplam · {boost.durationDays} gün
+            </>
+          ) : (
+            <>
+              {formatMoney(boost.dailyBudgetMicros, currency)}/gün × {boost.durationDays} gün
+              ={' '}
+              <strong className="text-ink">
+                {formatMoney(boost.totalBudgetMicros, currency)}
+              </strong>
+            </>
+          )}{' '}
           · {boost.adAccountName}
         </p>
 

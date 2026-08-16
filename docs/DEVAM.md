@@ -42,7 +42,8 @@ akış ve engeller §7.2'de. Özeti:
 | Şehir arama ucu | VAR — `GET /connections/targeting/locations`. **Canlıda denenmedi** |
 | Kayıtlı kitle ucu | VAR — `GET /connections/targeting/saved-audiences`. **Canlıda denenmedi** |
 | IG profilinin ana sayfası | VAR — `social_profiles.parent_page_external_id`. **Mevcut satırlarda NULL**, bir kez "Hesapları yenile" gerekiyor |
-| Elle boost ekranı | **YOK** |
+| Elle boost ekranı | VAR — Akıllı Boost sayfasında "Gönderi öne çıkar". **Canlıda denenmedi** |
+| Elle boost yayın ucu | VAR — `POST /boosts/manual` (`boost.approve`) |
 
 **BEŞ TUZAK — kod yazmadan önce oku:**
 
@@ -79,10 +80,17 @@ akış ve engeller §7.2'de. Özeti:
    Kural yolu günlük kipte kalıyor ve iki test bunu kilitliyor
    (`boost-executor-tree.spec.ts` → "yeni alanlar sızmıyor").
 
-   > **CANLIDA DOĞRULANMAMIŞ İKİ ŞEY var ve ilk gerçek çağrıda bakılacak:**
-   > `lifetime_budget` + `start_time` ikilisinin Meta tarafından kabul
-   > edilip edilmediği, ve özel kategori müşterisinde kayıtlı kitlenin
-   > reddedilip mi yoksa sessizce yok mu sayıldığı.
+   > **CANLIDA DOĞRULANMAMIŞ DÖRT ŞEY — ilk gerçek çağrıda sırayla bakılacak:**
+   >
+   > 1. `lifetime_budget` + `start_time` ikilisi Meta tarafından kabul
+   >    ediliyor mu.
+   > 2. Kayıtlı kitlenin `targeting` alanı gerçekten dönüyor mu ve gönderilen
+   >    hâliyle kabul ediliyor mu.
+   > 3. Coğrafi arama sonucundaki `key` biçimi ad set hedeflemesinde çalışıyor
+   >    mu (panelde "İzmir" seçip Ads Manager'da İzmir göründüğü GÖZLE
+   >    doğrulanacak — "200 döndü" bu projede doğrulama sayılmıyor).
+   > 4. Özel kategori müşterisinde Meta alanları reddediyor mu, yoksa kabul
+   >    edip sessizce yok mu sayıyor.
 
 **Sıra:**
 
@@ -121,8 +129,25 @@ akış ve engeller §7.2'de. Özeti:
    yetkisi istemiyor. Kitle ve lokasyon listeleri **tabloya yazılmıyor**,
    ekran açılırken çekiliyor.
 
-5. Ekran.
+5. ✅ **BİTTİ** — ekran ve yayın ucu. **1074 API testi** (öncesi 1053), 59 panel
+   testi, iki derleme de temiz.
+
+   `POST /boosts/manual` taslağı yazıp **aynı istekte** yayınlıyor ve kural
+   yolunun `BoostExecutorService`'inden geçiyor — dördüncü bir yazma yolu
+   açılmadı. Ekran Akıllı Boost sayfasında, ayrı sayfa değil: dört adım
+   (gönderi → bütçe/süre → kime → yayınla), ara onay yok.
+
+   Şema tarafında `boosts` üç kolon kazandı: `budget_mode`,
+   `total_budget_micros`, `targeting` + `saved_audience_id`.
+   `daily_budget_micros` NULLABLE oldu — toplam bütçeli boost'ta günlük
+   bütçe diye bir sayı yok ve türetilmiş bir değer yazmak uydurma kesinlik
+   olurdu. Migration `20260817090000_manual_boost`; kipe göre tam bir bütçe
+   kolonunu zorunlu kılan CHECK `01_constraints.sql`'de.
+
 6. Ajansın kendi hesabında en küçük bütçeyle gerçek çağrı (K17: doğrudan IG).
+
+   > **BU ARTIK TEK KALAN ADIM.** Kod tarafında elle boost bitti; canlıda
+   > hiç çalıştırılmadı.
 
 ---
 

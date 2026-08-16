@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { BoostRuleInput, TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { BoostExecutorService } from './boost-executor.service';
 import { BoostsService } from './boosts.service';
 
 /**
@@ -85,11 +86,27 @@ async function seedPost(params: {
   );
 }
 
+/**
+ * Elle boost yolu bu dosyada sınanmıyor (kendi testi var); yürütücü yalnızca
+ * yapıcı bağımlılığını karşılıyor. Gerçek bir yürütücü vermek, bu testleri
+ * ilgisiz bir bileşenin davranışına bağlardı.
+ */
+function executorStub(): BoostExecutorService {
+  return {
+    createOneApproved: async () => ({ ok: true as const }),
+  } as unknown as BoostExecutorService;
+}
+
 beforeAll(async () => {
   h = await createHarness();
-  svc = new BoostsService({
-    withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
-  } as unknown as PrismaService);
+  svc = new BoostsService(
+    {
+      withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
+    } as unknown as PrismaService,
+    // ELLE BOOST YOLU BU TESTLERDE KULLANILMIYOR; yürütücü yalnızca
+    // bağımlılığı karşılamak için veriliyor.
+    executorStub(),
+  );
 });
 
 afterAll(async () => {

@@ -105,11 +105,27 @@ async function seedPost(id: string, profileId: string): Promise<void> {
   );
 }
 
+/**
+ * Elle boost yolu bu dosyada sınanmıyor (kendi testi var); yürütücü yalnızca
+ * yapıcı bağımlılığını karşılıyor. Gerçek bir yürütücü vermek, bu testleri
+ * ilgisiz bir bileşenin davranışına bağlardı.
+ */
+function executorStub(): BoostExecutorService {
+  return {
+    createOneApproved: async () => ({ ok: true as const }),
+  } as unknown as BoostExecutorService;
+}
+
 beforeAll(async () => {
   h = await createHarness();
-  boosts = new BoostsService({
-    withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
-  } as unknown as PrismaService);
+  boosts = new BoostsService(
+    {
+      withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
+    } as unknown as PrismaService,
+    // ELLE BOOST YOLU BU TESTLERDE KULLANILMIYOR; yürütücü yalnızca
+    // bağımlılığı karşılamak için veriliyor.
+    executorStub(),
+  );
   executor = new BoostExecutorService(
     { get: () => ({ platform: 'meta', createBoost, canWrite }) } as never,
     { getAccessToken: async () => 'token' } as never,

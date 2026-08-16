@@ -236,6 +236,15 @@ ALTER TABLE boosts ADD CONSTRAINT boosts_active_ids_chk
 -- kuralın ürettiği her aday veritabanı tarafından reddediliyordu: kural
 -- sessizce hiçbir boost açamıyordu. Test yakaladı.
 -- -----------------------------------------------------------------------------
+-- boosts: kayıtlı kitle ile elle hedefleme BİRLİKTE OLMAZ (K16).
+--
+-- Kayıtlı kitle Meta'da kendi lokasyonunu, yaşını ve cinsiyetini taşıyor.
+-- İkisini birden saklamak, yayın anında hangisinin kazanacağını kodun sırasına
+-- bırakmak demek — ve yanlış olan taraf sessizce yanlış kitleye harcar.
+ALTER TABLE boosts DROP CONSTRAINT IF EXISTS boosts_targeting_chk;
+ALTER TABLE boosts ADD CONSTRAINT boosts_targeting_chk
+  CHECK (saved_audience_id IS NULL OR targeting IS NULL);
+
 ALTER TABLE boosts DROP CONSTRAINT IF EXISTS boosts_approval_chk;
 ALTER TABLE boosts ADD CONSTRAINT boosts_approval_chk
   CHECK (status NOT IN ('approved', 'creating', 'active') OR approved_at IS NOT NULL);
@@ -246,9 +255,23 @@ ALTER TABLE boosts ADD CONSTRAINT boosts_approval_chk
 -- Sıfır bütçeli boost Meta tarafından reddedilir; 365 günlük bir boost ise
 -- "boost" değil kalıcı kampanya ve bu araç onun için değil.
 -- -----------------------------------------------------------------------------
+--
+-- BÜTÇE KİPE GÖRE: kural yolunda günlük, elle boost'ta toplam (K18). Kolonlar
+-- ayrı ve TAM BİRİ dolu olmak zorunda. İkisi birden dolu olsaydı hangisinin
+-- Meta'ya gideceği kodun sırasına kalırdı; ikisi de boş olsaydı bütçesiz bir
+-- boost kaydı oluşurdu ve hata ancak yayın anında çıkardı.
 ALTER TABLE boosts DROP CONSTRAINT IF EXISTS boosts_budget_chk;
 ALTER TABLE boosts ADD CONSTRAINT boosts_budget_chk
-  CHECK (daily_budget_micros > 0 AND duration_days BETWEEN 1 AND 30);
+  CHECK (
+    duration_days BETWEEN 1 AND 30
+    AND CASE budget_mode
+      WHEN 'daily' THEN daily_budget_micros > 0 AND total_budget_micros IS NULL
+      WHEN 'lifetime' THEN total_budget_micros > 0 AND daily_budget_micros IS NULL
+      -- TANINMAYAN KİP REDDEDİLİYOR. `ELSE true` yazmak, yazım hatası taşıyan
+      -- bir kipin bütün bütçe kontrolünü sessizce atlaması demek olurdu.
+      ELSE false
+    END
+  );
 
 ALTER TABLE boost_rules DROP CONSTRAINT IF EXISTS boost_rules_budget_chk;
 ALTER TABLE boost_rules ADD CONSTRAINT boost_rules_budget_chk
@@ -640,9 +663,15 @@ ALTER TABLE draft_ads DROP CONSTRAINT IF EXISTS draft_ads_source_chk;
 ALTER TABLE draft_ads ADD CONSTRAINT draft_ads_source_chk
   CHECK ((creative_id IS NULL) <> (organic_post_id IS NULL));
 
+-- 'manual_boost' AYRI BİR KÖKEN, 'manual' DEĞİL.
+--
+-- İkisi de kullanıcının kurduğu kampanya ama soruları farklı: "bu harcama
+-- nereden çıktı" sorusunda elle boost, elle kurulmuş bir kampanyadan bambaşka
+-- bir iş. Aynı değere sıkıştırmak, boost harcamasını kampanya harcamasından
+-- ayırt etmeyi imkânsız kılardı.
 ALTER TABLE draft_campaigns DROP CONSTRAINT IF EXISTS draft_campaigns_source_chk;
 ALTER TABLE draft_campaigns ADD CONSTRAINT draft_campaigns_source_chk
-  CHECK (source IN ('manual', 'boost_rule', 'duplicate'));
+  CHECK (source IN ('manual', 'manual_boost', 'boost_rule', 'duplicate'));
 
 -- KURALDAN DOĞAN KAMPANYA KURALINI TAŞIMAK ZORUNDA.
 --
