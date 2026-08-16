@@ -96,4 +96,21 @@ describe('clients.list — kapsam', () => {
     expect(await svc.list(CTX)).toEqual([]);
     expect(seenArgs!.select.adAccounts?.select).toMatchObject({ syncEnabled: true });
   });
+
+  it('KRİTİK: SAYFA satırında da syncEnabled dönüyor', async () => {
+    /*
+     * Bu alan bir kez unutuldu ve ekran sessizce yalan söyledi: sayfa
+     * satırındaki `syncEnabled` gelmeyince tarayıcıda `undefined` oluyor,
+     * rozet hep "gönderiler çekilmiyor" kalıyor, düğme hep "izlemeye al"
+     * yazıyor ve tıklamadan sonra ekran birebir aynı görünüyor. Kullanıcı
+     * için bu "düğme çalışmıyor" demekti — oysa istek gidiyor ve veritabanı
+     * güncelleniyordu.
+     *
+     * Derleyici yakalayamıyor: panel yanıtı `serverApiFetch<ClientRow[]>` ile
+     * DENETLENMEDEN dönüştürülüyor, yani tip alanın var olduğunu söylüyor ama
+     * kimse doğrulamıyor. Kilit bu yüzden burada.
+     */
+    await svc.list(CTX);
+    expect(seenArgs!.select.socialProfiles?.select).toMatchObject({ syncEnabled: true });
+  });
 });

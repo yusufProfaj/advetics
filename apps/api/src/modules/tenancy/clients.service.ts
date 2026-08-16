@@ -106,7 +106,22 @@ export class ClientsService {
           },
           socialProfiles: {
             orderBy: { name: 'asc' },
-            select: { id: true, name: true, profileType: true },
+            /**
+             * `syncEnabled` ŞART — unutulduğu için ekran sessizce yalan
+             * söylüyordu.
+             *
+             * Alan gönderilmeyince tarayıcıda `undefined` oluyor: rozet hep
+             * "gönderiler çekilmiyor" kalıyor, düğme hep "izlemeye al" yazıyor
+             * ve tıklamadan sonra ekran birebir aynı görünüyor. Kullanıcı için
+             * bu "düğme çalışmıyor" demek — oysa istek gidiyor, veritabanı
+             * güncelleniyor, yalnızca ekran haberi almıyor.
+             *
+             * Panel tarafındaki tip bu alanı ZORUNLU sayıyor ama derleyici
+             * yakalayamıyor: yanıt `serverApiFetch<ClientRow[]>` ile
+             * denetlenmeden dönüştürülüyor. Bu yüzden aşağıdaki test alanın
+             * varlığını kilitliyor.
+             */
+            select: { id: true, name: true, profileType: true, syncEnabled: true },
           },
         },
       }),
