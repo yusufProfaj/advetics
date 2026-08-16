@@ -36,11 +36,11 @@ akış ve engeller §7.2'de. Özeti:
 | | Durum |
 |---|---|
 | `organic_posts` tablosu ve senkronizasyonu | VAR — Instagram dahil (`queue/organic-sync.service.ts:97`) |
-| Gönderi listeleme UCU | **YOK** — tabloyu okuyan hiçbir controller yok |
+| Gönderi listeleme UCU | VAR — `GET /boosts/posts` |
 | Boost yayın yolu | VAR — `createBoost` + ağaç kaydı (§7.1). **Canlıda hiç çalıştırılmadı** |
 | Hedefleme alanı | VAR — `BoostRequest.targeting`, verilmezse ülke geneli TR. **Ekran hâlâ yok** |
-| Şehir arama ucu | **YOK** — `cityKeys` şemada var, dolduran hiçbir şey yok |
-| Kayıtlı kitle ucu | **YOK** |
+| Şehir arama ucu | VAR — `GET /connections/targeting/locations`. **Canlıda denenmedi** |
+| Kayıtlı kitle ucu | VAR — `GET /connections/targeting/saved-audiences`. **Canlıda denenmedi** |
 | IG profilinin ana sayfası | VAR — `social_profiles.parent_page_external_id`. **Mevcut satırlarda NULL**, bir kez "Hesapları yenile" gerekiyor |
 | Elle boost ekranı | **YOK** |
 
@@ -109,7 +109,18 @@ akış ve engeller §7.2'de. Özeti:
    kategori kısıtı SAĞLAYICIDA uygulanıyor, çağıranda değil. `publishBoost`
    artık `budget_mode`'u ağaçtan okuyor — bugüne kadar koşulsuz günlük
    sayıyordu. **1030 API testi** (öncesi 1009).
-4. Gönderi listeleme ucu + coğrafi arama ucu + kayıtlı kitle ucu.
+4. ✅ **BİTTİ** — üç uç nokta yazıldı. **1053 API testi** (öncesi 1030).
+
+   | Uç | Ne döner |
+   |---|---|
+   | `GET /boosts/posts` | Öne çıkarılabilir gönderiler. Engelli olanlar **gizlenmiyor**, `blockedReason` ile dönüyor; `warning` engel değil (K20). Liste `total` + `limit` taşıyor |
+   | `GET /connections/targeting/locations` | Şehir/il/ülke yazarken-arama. `key` hedeflemeye giden değer |
+   | `GET /connections/targeting/saved-audiences` | Ads Manager'daki kayıtlı kitleler. **Boş liste geçerli cevap** — ekran "bulunamadı" yazmalı |
+
+   Üçü de `connection.read` / `boost.read` ile okunuyor; hiçbiri yazma
+   yetkisi istemiyor. Kitle ve lokasyon listeleri **tabloya yazılmıyor**,
+   ekran açılırken çekiliyor.
+
 5. Ekran.
 6. Ajansın kendi hesabında en küçük bütçeyle gerçek çağrı (K17: doğrudan IG).
 

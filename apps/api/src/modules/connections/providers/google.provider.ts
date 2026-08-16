@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Platform } from '@advetics/shared';
+import type { GeoLocationOption, Platform, SavedAudienceOption } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
@@ -1044,6 +1044,30 @@ export class GoogleProvider implements IAdPlatformProvider {
       'google',
       'permanent',
       'Google Ads organik gönderi boost etmeyi desteklemiyor — bu bir Meta özelliği.',
+    );
+  }
+
+  /**
+   * Google'da KARŞILIĞI VAR ama yazılmadı.
+   *
+   * `GeoTargetConstantService` aynı işi yapıyor ve anahtar biçimi de farklı
+   * (kaynak adı, sayısal anahtar değil). BOŞ DİZİ DÖNMÜYOR: boş liste
+   * "aradığın yer bulunamadı" diye okunur ve kullanıcı Türkiye'yi arayıp
+   * sonuç alamayınca hatayı kendi yazımında arar.
+   */
+  async searchGeoLocations(): Promise<GeoLocationOption[]> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      'Google Ads lokasyon araması henüz yazılmadı.',
+    );
+  }
+
+  async listSavedAudiences(): Promise<SavedAudienceOption[]> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      'Google Ads kayıtlı kitle listesi henüz yazılmadı.',
     );
   }
 

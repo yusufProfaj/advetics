@@ -1,4 +1,4 @@
-import type { Platform } from '@advetics/shared';
+import type { GeoLocationOption, Platform, SavedAudienceOption } from '@advetics/shared';
 
 /**
  * Platform adapter sözleşmesi.
@@ -812,6 +812,17 @@ export interface IAdPlatformProvider {
    * `ads_management` gerektiriyor — `canWrite()` önce sorulmalı.
    */
   createBoost(ctx: FetchContext, request: BoostRequest): Promise<BoostResult>;
+
+  /**
+   * Coğrafi hedefleme araması — şehir/bölge/ülke.
+   *
+   * Sonuçtaki `key` doğrudan hedeflemeye giden değer. Uydurulamaz: Meta şehri
+   * ada göre değil bu anahtara göre tanıyor.
+   */
+  searchGeoLocations(ctx: FetchContext, query: string): Promise<GeoLocationOption[]>;
+
+  /** Reklam hesabında kurulu kayıtlı kitleler. */
+  listSavedAudiences(ctx: FetchContext): Promise<SavedAudienceOption[]>;
 
   /**
    * Görseli reklam hesabına yükler ve hash döner (Modül 4).

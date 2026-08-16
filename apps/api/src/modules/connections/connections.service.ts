@@ -10,8 +10,10 @@ import { createHash, randomBytes } from 'node:crypto';
 import type {
   AdAccountSummary,
   ConnectionSummary,
+  GeoLocationOption,
   Platform,
   ProviderAvailability,
+  SavedAudienceList,
   SocialProfileSummary,
   TenantContext,
 } from '@advetics/shared';
@@ -20,7 +22,11 @@ import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from './provider.registry';
-import { PlatformApiError, type IAdPlatformProvider } from './provider.types';
+import {
+  PlatformApiError,
+  type FetchContext,
+  type IAdPlatformProvider,
+} from './provider.types';
 import { TokenVaultService } from './token-vault.service';
 
 interface Meta {
@@ -705,6 +711,92 @@ export class ConnectionsService {
       await this.vault.recordFailure(conn.id, err);
       throw err;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hedefleme aramaları — platformdan okunuyor, saklanmıyor
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Coğrafi hedefleme araması — şehir/il/ülke.
+   *
+   * REKLAM HESABI ÜZERİNDEN SORULUYOR, org geneli bir token üzerinden değil.
+   * Sebebi yetkilendirme: hesap kullanıcının erişebildiği bir hesap olmak
+   * zorunda ve bunu RLS zaten söylüyor. Org'un herhangi bir Meta token'ını
+   * kullanmak, müşteri düzeyindeki bir kullanıcıya ajansın bütün
+   * bağlantılarını dolaylı olarak açardı.
+   */
+  async searchGeoLocations(
+    ctx: TenantContext,
+    adAccountId: string,
+    query: string,
+  ): Promise<GeoLocationOption[]> {
+    const { provider, fetchCtx } = await this.lookupContext(ctx, adAccountId);
+    return provider.searchGeoLocations(fetchCtx, query);
+  }
+
+  /**
+   * Reklam hesabında kurulu kayıtlı kitleler.
+   *
+   * BOŞ LİSTE GEÇERLİ BİR CEVAP ve hata değil: ajans Ads Manager'da hiç kitle
+   * kurmamış olabilir. Ekranın bunu "kayıtlı kitle bulunamadı" diye yazması
+   * gerekiyor — boş bir açılır liste, kullanıcıya kendi kurulumunda bir şey
+   * eksik olduğunu düşündürür (K16).
+   */
+  async listSavedAudiences(
+    ctx: TenantContext,
+    adAccountId: string,
+  ): Promise<SavedAudienceList> {
+    const { provider, fetchCtx } = await this.lookupContext(ctx, adAccountId);
+    const items = await provider.listSavedAudiences(fetchCtx);
+    return { items, total: items.length };
+  }
+
+  /**
+   * Reklam hesabından sağlayıcı + token bağlamı kurar.
+   *
+   * ATANMAMIŞ HESAP REDDEDİLİYOR. Havuzdaki bir hesap üzerinden hedefleme
+   * araması yapmak teknik olarak çalışırdı, ama o hesabın hangi müşterinin
+   * kampanyasında kullanılacağı belli değil — ve elle boost ekranı zaten
+   * atanmış bir hesapla çalışıyor. Erken hata, `assertAssigned()` ile aynı
+   * gerekçe.
+   */
+  private async lookupContext(
+    ctx: TenantContext,
+    adAccountId: string,
+  ): Promise<{ provider: IAdPlatformProvider; fetchCtx: FetchContext }> {
+    const account = await this.prisma.withTenant(ctx, (tx) =>
+      tx.adAccount.findUnique({
+        where: { id: adAccountId },
+        select: {
+          id: true,
+          clientId: true,
+          platform: true,
+          externalId: true,
+          connectionId: true,
+          managerExternalId: true,
+        },
+      }),
+    );
+    if (!account) throw new NotFoundException('Reklam hesabı bulunamadı');
+    if (account.clientId === null) {
+      throw new BadRequestException(
+        'Bu reklam hesabı henüz bir müşteriye atanmamış. Platform Bağlantıları ' +
+          'ekranından ata.',
+      );
+    }
+
+    const provider = this.provider(account.platform as Platform);
+    const accessToken = await this.vault.getAccessToken(account.connectionId, provider);
+
+    return {
+      provider,
+      fetchCtx: {
+        accessToken,
+        accountExternalId: account.externalId,
+        loginCustomerId: account.managerExternalId ?? undefined,
+      },
+    };
   }
 
   /** Token'ı platforma karşı doğrular. Sağlık göstergesini tazeler. */

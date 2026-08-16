@@ -19,10 +19,16 @@ import type { Response } from 'express';
 import {
   PLATFORMS,
   assignToClientSchema,
+  geoSearchQuerySchema,
+  savedAudienceQuerySchema,
   startOAuthSchema,
   toggleAccountSyncSchema,
   type AssignToClientInput,
+  type GeoLocationOption,
+  type GeoSearchQuery,
   type Platform,
+  type SavedAudienceList,
+  type SavedAudienceQuery,
   type StartOAuthInput,
   type TenantContext,
   type ToggleAccountSyncInput,
@@ -33,7 +39,7 @@ import {
   RequireOrgAdmin,
   RequirePermissions,
 } from '../../common/decorators';
-import { zodBody } from '../../common/pipes/zod-validation.pipe';
+import { zodBody, zodQuery } from '../../common/pipes/zod-validation.pipe';
 import type { AuthedRequest } from '../../common/types/request';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { ConnectionsService } from './connections.service';
@@ -74,6 +80,33 @@ export class ConnectionsController {
   @RequirePermissions('connection.read')
   list(@CurrentTenant() ctx: TenantContext, @Query('clientId') clientId?: string) {
     return this.connections.list(ctx, clientId ?? null);
+  }
+
+  /**
+   * Coğrafi hedefleme araması — şehir/il/ülke yazarken-arama.
+   *
+   * `connection.read` YETİYOR ve `connection.write` İSTENMİYOR: bu uç hiçbir
+   * şey değiştirmiyor, platformdan okuyor. Yazma yetkisi istemek, kampanya
+   * kuran ama bağlantı yönetmeyen bir kullanıcının lokasyon seçememesi
+   * demek olurdu.
+   */
+  @Get('targeting/locations')
+  @RequirePermissions('connection.read')
+  searchLocations(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(geoSearchQuerySchema)) query: GeoSearchQuery,
+  ): Promise<GeoLocationOption[]> {
+    return this.connections.searchGeoLocations(ctx, query.adAccountId, query.q);
+  }
+
+  /** Ads Manager'da kurulu kayıtlı kitleler. Boş liste geçerli bir cevap. */
+  @Get('targeting/saved-audiences')
+  @RequirePermissions('connection.read')
+  savedAudiences(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(savedAudienceQuerySchema)) query: SavedAudienceQuery,
+  ): Promise<SavedAudienceList> {
+    return this.connections.listSavedAudiences(ctx, query.adAccountId);
   }
 
   /**

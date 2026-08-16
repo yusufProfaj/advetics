@@ -2,7 +2,9 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   CONVERSION_BUCKETS,
   restrictTargetingFor,
+  type GeoLocationOption,
   type Platform,
+  type SavedAudienceOption,
   type SpecialAdCategory,
 } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
@@ -1134,6 +1136,63 @@ export class MetaProvider implements IAdPlatformProvider {
   }
 
   /**
+   * Coğrafi hedefleme araması.
+   *
+   * `location_types` AÇIKÇA VERİLİYOR. Verilmezse Meta bölge tipini de,
+   * posta kodunu da, "designated market area"yı da karıştırıyor ve listede
+   * kullanıcının tanımadığı satırlar çıkıyor. Üç tip yeterli: ülke, il, şehir.
+   *
+   * CANLIDA DOĞRULANMADI — ilk gerçek çağrıda alan adları ve `key` biçimi
+   * gözle kontrol edilecek.
+   */
+  async searchGeoLocations(ctx: FetchContext, query: string): Promise<GeoLocationOption[]> {
+    const url = new URL(`${this.graph}/search`);
+    url.searchParams.set('type', 'adgeolocation');
+    url.searchParams.set('location_types', JSON.stringify(['country', 'region', 'city']));
+    url.searchParams.set('q', query);
+    url.searchParams.set('limit', '25');
+
+    const res = await platformFetch<GraphPage>(
+      'meta',
+      url.toString(),
+      { headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+
+    return (res.data.data ?? [])
+      .map((row) => mapGeoLocation(row as Record<string, unknown>))
+      .filter((o): o is GeoLocationOption => o !== null);
+  }
+
+  /**
+   * Reklam hesabında kurulu kayıtlı kitleler.
+   *
+   * HEDEFLEME NESNESİ ÇEKİLMİYOR, yalnızca kimlik ve ad. Kitlenin içeriği
+   * bizi ilgilendirmiyor; hedeflemeye giden şey kimliği ve o kimliği Meta
+   * kendi çözüyor. İçeriği çekmek, panelde gösterilmeyecek bir veriyi her
+   * ekran açılışında taşımak olurdu.
+   */
+  async listSavedAudiences(ctx: FetchContext): Promise<SavedAudienceOption[]> {
+    const act = actPath(ctx.accountExternalId ?? '');
+    const url = new URL(`${this.graph}/${act}/saved_audiences`);
+    url.searchParams.set('fields', 'id,name,approximate_count');
+    url.searchParams.set('limit', '100');
+
+    const res = await platformFetch<GraphPage>(
+      'meta',
+      url.toString(),
+      { headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+
+    return (res.data.data ?? [])
+      .map((row) => mapSavedAudience(row as Record<string, unknown>))
+      .filter((o): o is SavedAudienceOption => o !== null);
+  }
+
+  /**
    * Gönderiyi boost eder: kampanya + ad set + reklam.
    *
    * ÜÇ ÇAĞRI VE HEPSİ BAŞARILI OLMALI. Ortada kalırsa (ad set açıldı, reklam
@@ -2010,6 +2069,59 @@ function pickActionValue(value: unknown, types: readonly string[]): string {
  */
 export function stripPagePrefix(postId: string, pageId: string): string {
   return postId.startsWith(`${pageId}_`) ? postId.slice(pageId.length + 1) : postId;
+}
+
+/**
+ * Coğrafi arama satırını hedefleme seçeneğine çevirir.
+ *
+ * ETİKET ÜÇ PARÇADAN KURULUYOR: "İzmir, İzmir, Türkiye". Yalnızca `name`
+ * göstermek yetmiyor — Meta'da aynı adı taşıyan onlarca yer var (Türkiye'de
+ * bile birden fazla "Merkez" ilçesi) ve yanlış seçim ancak fatura geldiğinde
+ * fark ediliyor.
+ */
+export function mapGeoLocation(row: Record<string, unknown>): GeoLocationOption | null {
+  const key = row.key;
+  const name = row.name;
+  // ANAHTARSIZ SATIR ATILIYOR: `key` hedeflemeye giden değerin ta kendisi ve
+  // olmadan bu satır seçilse bile Meta'ya gönderilemez. Listeye koymak,
+  // tıklanınca hiçbir şey olmayan bir seçenek göstermek olurdu.
+  if (typeof key !== 'string' || typeof name !== 'string') return null;
+
+  const parcalar = [name];
+  if (typeof row.region === 'string' && row.region && row.region !== name) {
+    parcalar.push(row.region);
+  }
+  if (typeof row.country_name === 'string' && row.country_name) {
+    parcalar.push(row.country_name);
+  }
+
+  return {
+    key,
+    type: typeof row.type === 'string' ? row.type : 'unknown',
+    name,
+    label: parcalar.join(', '),
+    countryCode: typeof row.country_code === 'string' ? row.country_code : null,
+  };
+}
+
+/**
+ * Kayıtlı kitle satırı.
+ *
+ * `approximate_count` YOKSA NULL, sıfır DEĞİL. Meta bu alanı küçük kitlelerde
+ * ve yeni kurulmuş kitlelerde vermiyor; sıfır yazmak "bu kitlede kimse yok"
+ * demek olurdu ve kullanıcı çalışan bir kitleyi kullanmaktan vazgeçerdi.
+ * Ölçülmemiş olanı sıfır saymak bu projede raporlarda da kaçınılan hata.
+ */
+export function mapSavedAudience(row: Record<string, unknown>): SavedAudienceOption | null {
+  const id = row.id;
+  if (typeof id !== 'string') return null;
+  const count = row.approximate_count;
+
+  return {
+    id,
+    name: typeof row.name === 'string' && row.name ? row.name : id,
+    approximateCount: typeof count === 'number' ? count : null,
+  };
 }
 
 /**

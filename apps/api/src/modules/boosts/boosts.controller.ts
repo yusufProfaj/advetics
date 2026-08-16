@@ -10,9 +10,12 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  boostablePostQuerySchema,
   boostDecisionSchema,
   boostQuerySchema,
   boostRuleInputSchema,
+  type BoostablePostList,
+  type BoostablePostQuery,
   type BoostQuery,
   type BoostRecord,
   type BoostRuleInput,
@@ -52,6 +55,21 @@ export class BoostsController {
     @Query(zodQuery(boostQuerySchema)) query: BoostQuery,
   ): Promise<BoostRecord[]> {
     return this.boosts.listBoosts(ctx, query);
+  }
+
+  /**
+   * Öne çıkarılabilecek gönderiler — elle boost ekranının ilk adımı.
+   *
+   * `boost.read` yetiyor: bu uç yalnızca okuyor, hiçbir şey taahhüt etmiyor.
+   * Para taahhüdü `boost.approve` altında ve orada kalıyor.
+   */
+  @Get('posts')
+  @RequirePermissions('boost.read')
+  listPosts(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(boostablePostQuerySchema)) query: BoostablePostQuery,
+  ): Promise<BoostablePostList> {
+    return this.boosts.listBoostablePosts(ctx, query);
   }
 
   @Get('rules')

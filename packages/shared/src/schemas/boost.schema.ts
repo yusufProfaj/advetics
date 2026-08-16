@@ -210,6 +210,64 @@ export interface OrganicPostRecord {
   boostedAt: string | null;
 }
 
+// -----------------------------------------------------------------------------
+// Elle boost — gönderi seçim listesi
+// -----------------------------------------------------------------------------
+
+/**
+ * Elle boost ekranının gönderi satırı.
+ *
+ * `OrganicPostRecord`'a ÜÇ ALAN EKLİYOR ve üçü de aynı soruya cevap veriyor:
+ * "bu gönderi öne çıkarılabilir mi, çıkarılamazsa neden".
+ *
+ * ÖNE ÇIKARILAMAYAN GÖNDERİ LİSTEDEN GİZLENMİYOR. Gizlemek en kolay yol ama
+ * en kötüsü: kullanıcı Instagram gönderisini seçmeye geliyor, listede
+ * bulamıyor ve senkronizasyonun bozuk olduğunu sanıyor. Sebebi yazmak,
+ * sessizce elemekten her zaman iyi.
+ */
+export interface BoostablePostRecord extends OrganicPostRecord {
+  profileType: 'facebook_page' | 'instagram_business';
+  /** Faturalandırma hesabı — sayfaya bağlı hesap yoksa null. */
+  adAccountId: string | null;
+  /**
+   * Boşsa öne çıkarılabilir. Doluysa SEBEP yazıyor ve ekran seçimi kapatıyor.
+   *
+   * Engel, uyarıdan farklı: buradaki bir değer "bu gönderi bugün
+   * yayınlanamaz" demek ve ekranın düğmeyi kapatması gerekiyor.
+   */
+  blockedReason: string | null;
+  /**
+   * Engel DEĞİL, bilgi. Kullanıcı yine de öne çıkarabilir.
+   *
+   * Bugünkü tek kullanımı K20: daha önce öne çıkarılmış bir gönderiyi ikinci
+   * kez öne çıkarmak reddedilmiyor — gönderiyi seçen kullanıcının kendisi ve
+   * kararı geri çevirmek değil, bilgilendirmek doğru.
+   */
+  warning: string | null;
+}
+
+/**
+ * Gönderi listesi — SAYIYLA BİRLİKTE.
+ *
+ * `items` tek başına dönseydi otuz satır gören kullanıcı bunun tamamı mı yoksa
+ * kesilmiş bir liste mi olduğunu bilemezdi. "Sessiz kesme yok" kuralı: kaç
+ * gösterildiği ve toplamın kaç olduğu her listede yazılı.
+ */
+export interface BoostablePostList {
+  items: BoostablePostRecord[];
+  /** Süzgece uyan TOPLAM — `items.length` sınırla kesilmiş olabilir. */
+  total: number;
+  limit: number;
+}
+
+export const boostablePostQuerySchema = z.object({
+  clientId: z.string().uuid(),
+  /** Boşsa müşterinin bütün sayfaları. */
+  socialProfileId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+});
+export type BoostablePostQuery = z.infer<typeof boostablePostQuerySchema>;
+
 export interface BoostRecord {
   id: string;
   clientId: string;

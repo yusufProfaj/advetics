@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type {
+  BoostablePostList,
+  BoostablePostQuery,
+  BoostablePostRecord,
   BoostCondition,
   BoostQuery,
   BoostRecord,
@@ -90,6 +93,33 @@ interface PostRow {
   video_views: number;
   engagements: number;
   boosted_at: Date | null;
+}
+
+/** `listBoostablePosts` ham satırı. */
+interface BoostablePostRow {
+  id: string;
+  social_profile_id: string;
+  social_profile_name: string;
+  profile_type: string;
+  linked_ad_account_id: string | null;
+  external_id: string;
+  media_type: MediaType;
+  message: string | null;
+  permalink: string | null;
+  thumbnail_url: string | null;
+  published_at: Date;
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  video_views: number;
+  engagements: number;
+  boosted_at: Date | null;
+  has_live_boost: boolean;
+  /** `COUNT(*) OVER ()` — sürücüye göre string ya da number. */
+  total: string | number;
 }
 
 export interface SelectionOutcome {
@@ -270,6 +300,139 @@ export class BoostsService {
           'Platform bağlantıları sayfasından hesabı eşleştirin.',
       );
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Elle boost — gönderi seçim listesi
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Öne çıkarılabilecek gönderiler.
+   *
+   * ELLE BOOST'UN İLK EKRANI. `organic_posts` tablosu ve senkronizasyonu
+   * baştan beri vardı ama tabloyu okuyan HİÇBİR uç nokta yoktu: gönderiler
+   * yalnızca kural motorunun aday sorgusundan görünüyordu ve kullanıcı
+   * "hangi gönderilerim var" sorusunu hiçbir yerde soramıyordu.
+   *
+   * ÖNE ÇIKARILAMAYAN GÖNDERİ GİZLENMİYOR, SEBEBİYLE GÖSTERİLİYOR. Süzmek
+   * daha temiz bir liste verirdi ve tam da bu yüzden yanlış: Instagram
+   * gönderisini aramaya gelen kullanıcı listede hiç bulamayınca
+   * senkronizasyonun bozuk olduğunu düşünür. Üç engel sebebi var ve üçü de
+   * satırın kendisinde yazılı.
+   *
+   * SIRA ETKİLEŞİME GÖRE DEĞİL TARİHE GÖRE. Kural motoru en çok etkileşim
+   * alanı seçiyor çünkü kararı o veriyor; burada kararı kullanıcı veriyor ve
+   * aradığı gönderi neredeyse her zaman "az önce paylaştığım" oluyor.
+   * Kuralın asla seçemeyeceği yeni gönderiler (§7.2) tam olarak bunlar.
+   */
+  async listBoostablePosts(
+    ctx: TenantContext,
+    query: BoostablePostQuery,
+  ): Promise<BoostablePostList> {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const profileFilter = query.socialProfileId
+        ? Prisma.sql`AND p.social_profile_id = ${query.socialProfileId}::uuid`
+        : Prisma.empty;
+
+      const rows = await tx.$queryRaw<BoostablePostRow[]>(Prisma.sql`
+        SELECT p.id::text AS id, p.social_profile_id::text AS social_profile_id,
+               sp.name AS social_profile_name, sp.profile_type::text AS profile_type,
+               sp.linked_ad_account_id::text AS linked_ad_account_id,
+               p.external_id, p.media_type, p.message, p.permalink, p.thumbnail_url,
+               p.published_at, p.impressions, p.reach, p.likes, p.comments,
+               p.shares, p.saves, p.video_views, p.engagements, p.boosted_at,
+               -- CANLI BOOST VARLIĞI, boost SAYISI değil.
+               --
+               -- Kısmi tekil indeks aynı gönderi için ikinci canlı boost'u
+               -- zaten reddediyor; ekranın bunu YAYINDAN ÖNCE bilmesi
+               -- gerekiyor, yoksa kullanıcı formu doldurup ham bir kısıt
+               -- ihlaliyle karşılaşır.
+               EXISTS (
+                 SELECT 1 FROM boosts b
+                 WHERE b.organic_post_id = p.id
+                   AND b.status IN ('candidate', 'approved', 'creating', 'active')
+               ) AS has_live_boost,
+               COUNT(*) OVER () AS total
+        FROM organic_posts p
+        JOIN social_profiles sp ON sp.id = p.social_profile_id
+        WHERE p.client_id = ${query.clientId}::uuid ${profileFilter}
+        ORDER BY p.published_at DESC
+        LIMIT ${query.limit}
+      `);
+
+      return {
+        items: rows.map((r) => this.toBoostablePost(r)),
+        // TOPLAM PENCERE FONKSİYONUNDAN, ikinci bir COUNT sorgusundan değil:
+        // iki sorgu, liste ile sayının farklı anlara ait olması demek olurdu.
+        total: rows.length > 0 ? Number(rows[0]!.total) : 0,
+        limit: query.limit,
+      };
+    });
+  }
+
+  private toBoostablePost(r: BoostablePostRow): BoostablePostRecord {
+    const reach = Number(r.reach ?? 0);
+    const engagements = Number(r.engagements ?? 0);
+
+    /**
+     * ENGEL SIRASI ÖNEMLİ — kullanıcı TEK bir sebep görüyor.
+     *
+     * Instagram önce geliyor çünkü en temeli: bağlı hesap atansa da,
+     * canlı boost olmasa da o gönderi bugün yayınlanamıyor. "Bağlı reklam
+     * hesabı yok" demek, kullanıcıyı çözülse bile işe yaramayacak bir işe
+     * göndermek olurdu.
+     */
+    let blockedReason: string | null = null;
+    if (isInstagramProfile(r.profile_type)) {
+      blockedReason = INSTAGRAM_BOOST_UNSUPPORTED;
+    } else if (!r.linked_ad_account_id) {
+      blockedReason =
+        'Bu sayfaya bağlı bir reklam hesabı yok — boost faturalandırılamaz. ' +
+        'Platform Bağlantıları ekranından hesabı eşleştir.';
+    } else if (r.has_live_boost) {
+      blockedReason =
+        'Bu gönderi için zaten yayında ya da onay bekleyen bir boost var. ' +
+        'Aynı gönderiye ikinci bir boost açmak bütçeyi iki katına çıkarırdı.';
+    }
+
+    /**
+     * UYARI, ENGEL DEĞİL (K20).
+     *
+     * Daha önce öne çıkarılmış bir gönderiyi ikinci kez öne çıkarmak kural
+     * yolunda yasak — kural aynı gönderiye ikinci kez para harcamamalı. Elle
+     * yolda gönderiyi seçen kullanıcının kendisi ve kararı geri çevirmek
+     * değil, bilgilendirmek doğru.
+     */
+    const warning =
+      r.boosted_at && !r.has_live_boost
+        ? `Bu gönderi daha önce (${r.boosted_at.toLocaleDateString('tr-TR')}) öne çıkarıldı.`
+        : null;
+
+    return {
+      id: r.id,
+      socialProfileId: r.social_profile_id,
+      socialProfileName: r.social_profile_name,
+      profileType: r.profile_type as BoostablePostRecord['profileType'],
+      adAccountId: r.linked_ad_account_id,
+      externalId: r.external_id,
+      mediaType: r.media_type,
+      message: r.message,
+      permalink: r.permalink,
+      thumbnailUrl: r.thumbnail_url,
+      publishedAt: r.published_at.toISOString(),
+      impressions: Number(r.impressions ?? 0),
+      reach,
+      likes: Number(r.likes ?? 0),
+      comments: Number(r.comments ?? 0),
+      shares: Number(r.shares ?? 0),
+      saves: Number(r.saves ?? 0),
+      videoViews: Number(r.video_views ?? 0),
+      engagements,
+      engagementRate: reach > 0 ? (engagements / reach) * 100 : null,
+      boostedAt: r.boosted_at?.toISOString() ?? null,
+      blockedReason,
+      warning,
+    };
   }
 
   // ---------------------------------------------------------------------------
