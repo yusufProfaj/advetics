@@ -419,6 +419,24 @@ export interface DiscoveredOrganicPost {
  * uç noktası yok; Sayfa arayüzündeki "Gönderiyi Öne Çıkar" düğmesi de arka
  * planda bunları oluşturuyor.
  */
+/**
+ * Boost bütçesi — İKİ KİP VE AYRIK BİR BİRLEŞİM.
+ *
+ * NEDEN İKİ KİP: kural yolu GÜNLÜK düşünüyor (süresiz çalışıyor, tavanı
+ * `boost_rules.monthly_cap_micros` tutuyor). Elle boost ise TOPLAM düşünüyor:
+ * kullanıcı "300 TL, 5 gün" diyor ve merak ettiği şey toplam (K18).
+ *
+ * NEDEN AYRIK BİRLEŞİM, NEDEN `mode` + tek sayı DEĞİL: iki alanı yan yana
+ * koymak (`dailyMicros?`, `totalMicros?`) ikisinin birden dolu ya da ikisinin
+ * birden boş olabileceği bir tip demek. Bu projede bütçe alanındaki bir
+ * karışıklığın bedeli somut: yanlış kutuya yazılan 300, günlük 300 TL olarak
+ * beş gün harcanır. Derleyici bunu imkânsız kılabiliyorken çalışma anına
+ * bırakmanın gerekçesi yok.
+ */
+export type BoostBudget =
+  | { mode: 'daily'; dailyMicros: bigint }
+  | { mode: 'lifetime'; totalMicros: bigint };
+
 export interface BoostRequest {
   /** `act_` öneki OLMADAN reklam hesabı kimliği. */
   adAccountExternalId: string;
@@ -426,7 +444,12 @@ export interface BoostRequest {
   postExternalId: string;
   /** Gönderinin sahibi sayfa — reklam bu sayfa adına yayınlanıyor. */
   pageExternalId: string;
-  dailyBudgetMicros: bigint;
+  budget: BoostBudget;
+  /**
+   * Süre. HER İKİ KİPTE DE ZORUNLU ve sebepleri farklı: günlük bütçede
+   * boost'un kendiliğinden durmasını sağlayan tek şey bu, toplam bütçede ise
+   * Meta parayı bölmek için süreye ihtiyaç duyuyor.
+   */
   durationDays: number;
   objective: string;
   currency: string;
@@ -434,6 +457,18 @@ export interface BoostRequest {
   name: string;
   /** Müşterinin beyan ettiği özel reklam kategorileri. */
   specialAdCategories?: string[];
+  /**
+   * Hedefleme. VERİLMEZSE ülke geneli (TR) — kural yolunun bugünkü davranışı.
+   *
+   * Alan eklenene kadar bu değer sağlayıcıda SABİT KODLUYDU. Ekrandan
+   * lokasyon seçtirip o satırı bırakmak, panelde "İzmir" gösterip Meta'ya
+   * "Türkiye" göndermek olurdu: kullanıcı yanlış kitleye harcadığını hiçbir
+   * yerde göremez.
+   *
+   * Özel reklam kategorisi kısıtı ÇAĞIRANDA DEĞİL, sağlayıcıda uygulanıyor —
+   * bkz. `createBoost`.
+   */
+  targeting?: Record<string, unknown>;
 }
 
 export interface BoostResult {

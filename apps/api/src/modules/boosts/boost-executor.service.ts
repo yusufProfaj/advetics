@@ -29,7 +29,16 @@ interface PendingRow {
   social_profile_id: string;
   boost_rule_id: string | null;
   draft_campaign_id: string | null;
-  daily_budget_micros: bigint;
+  /**
+   * BIGINT KOLONLARI SÜRÜCÜYE GÖRE FARKLI TİPTE GELİYOR.
+   *
+   * Prisma+Postgres `bigint` veriyor, PGlite `number`/`string`. Burada
+   * yalnızca `bigint` yazmak derleyiciyi susturuyordu ama tip GERÇEĞE
+   * UYMUYORDU: değer bir BigInt işlemine girdiği anda "Cannot mix BigInt and
+   * other types" ile patlıyor ve bu yalnızca gerçek bir sorgu koştuğunda
+   * görülüyor. `BoostsService.RuleRow` aynı tuzağı zaten belgeliyordu.
+   */
+  daily_budget_micros: string | number | bigint;
   duration_days: number;
   objective: string;
   post_external_id: string;
@@ -191,8 +200,23 @@ export class BoostExecutorService {
           adAccountExternalId: row.account_external_id,
           postExternalId: row.post_external_id,
           pageExternalId: row.profile_external_id,
-          dailyBudgetMicros: row.daily_budget_micros,
+          /**
+           * KURAL YOLU GÜNLÜK KALIYOR — elle boost toplam bütçeye geçse de.
+           *
+           * Kural süresiz çalışıyor ve aylık tavanı günlük bütçe × süre
+           * üzerinden hesaplanıyor (`boost_rules.monthly_cap_micros`). Toplam
+           * bütçeye çevirmek o hesabı sessizce kaydırırdı: aynı kural aynı
+           * tavanla farklı sayıda boost açmaya başlardı.
+           */
+          budget: { mode: 'daily', dailyMicros: toBigInt(row.daily_budget_micros) },
           durationDays: row.duration_days,
+          /**
+           * HEDEFLEME VERİLMİYOR = ülke geneli, yani bugünkü davranış.
+           *
+           * Kural ekranında hedefleme sorulmuyor ve sorulmadığı sürece burada
+           * bir değer üretmek, kullanıcının vermediği bir kararı onun adına
+           * vermek olur.
+           */
           objective: row.objective,
           currency: row.currency,
           name: `Boost — ${row.rule_name ?? 'elle'} — ${row.post_external_id.slice(-8)}`,
@@ -382,4 +406,16 @@ export class BoostExecutorService {
       WHERE id = ${boostId}::uuid
     `);
   }
+}
+
+/**
+ * BIGINT kolonunu güvenle `bigint`e çevirir — sürücü ne dönerse dönsün.
+ *
+ * `BoostsService` içindeki eşinin aynısı. Ortak bir yardımcıya çıkarmak
+ * cazip ama iki modül arasında bu tek satır için bağımlılık kurmak, ikisini
+ * de kendi başına okunur olmaktan çıkarır.
+ */
+function toBigInt(value: string | number | bigint): bigint {
+  if (typeof value === 'bigint') return value;
+  return BigInt(String(value).split('.')[0] || '0');
 }

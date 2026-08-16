@@ -341,3 +341,37 @@ describe('ADAY AŞAMASINDA ağaç doğuyor', () => {
     expect(await h.q(`SELECT id FROM draft_campaigns`)).toHaveLength(1);
   });
 });
+
+/**
+ * KURAL YOLUNUN DAVRANIŞI DEĞİŞMEDİ.
+ *
+ * `BoostRequest` elle boost için iki kipli bütçe ve hedefleme alanı kazandı
+ * (K16, K18). Kural yolu ikisini de KULLANMIYOR ve kullanmamalı: kuralın aylık
+ * tavanı günlük bütçe × süre üzerinden hesaplanıyor, hedefleme ise kural
+ * ekranında hiç sorulmuyor.
+ *
+ * Bu iki testin tek işi o kararı kilitlemek. Yeni alanların "madem var,
+ * buradan da geçirelim" diye kural yoluna sızması, aynı kuralın aynı tavanla
+ * farklı sayıda boost açmaya başlaması demek olurdu — ve bu hiçbir yerde hata
+ * üretmezdi.
+ */
+describe('kural yolu — yeni alanlar sızmıyor', () => {
+  it('KRİTİK: bütçe GÜNLÜK kipte gönderiliyor', async () => {
+    await onaylanmisBoost();
+    await svc.createApproved(h.db, IDS.client);
+
+    expect(createBoost.mock.calls[0]![1].budget).toEqual({
+      mode: 'daily',
+      dailyMicros: 100_000_000n,
+    });
+  });
+
+  it('KRİTİK: hedefleme GÖNDERİLMİYOR — sağlayıcının varsayılanı geçerli', async () => {
+    // Kural ekranında hedefleme sorulmuyor; burada bir değer üretmek
+    // kullanıcının vermediği bir kararı onun adına vermek olurdu.
+    await onaylanmisBoost();
+    await svc.createApproved(h.db, IDS.client);
+
+    expect(createBoost.mock.calls[0]![1].targeting).toBeUndefined();
+  });
+});

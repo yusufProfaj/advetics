@@ -38,7 +38,7 @@ akış ve engeller §7.2'de. Özeti:
 | `organic_posts` tablosu ve senkronizasyonu | VAR — Instagram dahil (`queue/organic-sync.service.ts:97`) |
 | Gönderi listeleme UCU | **YOK** — tabloyu okuyan hiçbir controller yok |
 | Boost yayın yolu | VAR — `createBoost` + ağaç kaydı (§7.1). **Canlıda hiç çalıştırılmadı** |
-| Hedefleme seçimi | **YOK** — `BoostRequest`'te `targeting` alanı bile yok |
+| Hedefleme alanı | VAR — `BoostRequest.targeting`, verilmezse ülke geneli TR. **Ekran hâlâ yok** |
 | Şehir arama ucu | **YOK** — `cityKeys` şemada var, dolduran hiçbir şey yok |
 | Kayıtlı kitle ucu | **YOK** |
 | IG profilinin ana sayfası | VAR — `social_profiles.parent_page_external_id`. **Mevcut satırlarda NULL**, bir kez "Hesapları yenile" gerekiyor |
@@ -46,12 +46,10 @@ akış ve engeller §7.2'de. Özeti:
 
 **BEŞ TUZAK — kod yazmadan önce oku:**
 
-1. **HEDEFLEME ŞU AN SABİT.** `meta.provider.ts:1212` içindeki `createBoost`
-   her boost'a `{"geo_locations":{"countries":["TR"]}}` gönderiyor; bu sabit
-   kod, ayar değil. Kullanıcıya lokasyon seçtirip bu satıra dokunmamak, panelde
-   İzmir yazıp Meta'ya Türkiye göndermek olur — **tam olarak bu projenin baş
-   belası olan sessiz hata**. `BoostRequest`'e `targeting` eklenmeli ve kural
-   yolunun bugünkü davranışı (ülke geneli) varsayılan olarak korunmalı.
+1. ~~**HEDEFLEME ŞU AN SABİT.**~~ **ÇÖZÜLDÜ** (3. adım). `BoostRequest.targeting`
+   eklendi; verilmezse `DEFAULT_BOOST_TARGETING` (ülke geneli TR) uygulanıyor
+   ve kural yolu tam da bunu kullanıyor. Kalan iş ekranda: seçilen değeri bu
+   alana yazmak.
 
 2. **INSTAGRAM GÖNDERİSİ FACEBOOK GİBİ BOOST EDİLEMEZ — VE BU AÇIK BUGÜN DE
    VAR.** Bugünkü kod reklamı `object_story_id: "{sayfa}_{gönderi}"` ile
@@ -64,11 +62,12 @@ akış ve engeller §7.2'de. Özeti:
    bırakılan bir kural IG gönderisini bugün aday yapabilir. **İlk commit bu
    olmalı ve hiçbir karara bağlı değil:** IG profili görüldüğünde erken hata.
 
-3. **ÖZEL KATEGORİ HEDEFLEMEYİ KISITLIYOR.** Müşteri konut/istihdam/kredi
-   beyan etmişse yaş ve cinsiyet daraltması gönderilemiyor
-   (`restrictTargetingFor`). K16 gereği **kayıtlı kitle de kapatılmalı** —
-   kitlenin kendisi yaş/cinsiyet daraltması taşıyabilir. Ekran bu alanları
-   gösterip sessizce düşürmemeli; kapatmalı ve sebebini yazmalı.
+3. **ÖZEL KATEGORİ HEDEFLEMEYİ KISITLIYOR.** Kısıtın kendisi 3. adımda
+   sağlayıcıya kondu — `buildBoostAdSetParams` yaş ve cinsiyeti düşürüyor,
+   yani çağıran unutsa bile Meta'ya yanlış alan gitmiyor. **Ekran tarafı hâlâ
+   yapılmadı:** alanları gösterip sessizce düşürmek yerine kapatmalı ve
+   sebebini yazmalı. K16 gereği **kayıtlı kitle de kapatılmalı** — kitlenin
+   kendisi yaş/cinsiyet daraltması taşıyabilir.
 
 4. ~~**IG PROFİLİNİN ANA FACEBOOK SAYFASI SAKLANMIYOR.**~~ **ÇÖZÜLDÜ** (2.
    adım). Kolon eklendi ve keşif dolduruyor. Kalan tek iş operasyonel:
@@ -76,9 +75,14 @@ akış ve engeller §7.2'de. Özeti:
    **K17'nin dalı yazıldığında NULL bir değerle boost DENENMEMELİ** — erken
    hata verilmeli, yoksa yine yanlış kimlik gönderilir.
 
-5. **`lifetime_budget` KURAL YOLUNU BOZMAMALI** (K18). Kural günlük bütçeyle
-   çalışıyor ve aylık tavanı ona göre hesaplanıyor; `BoostRequest` iki kipli
-   olacak ve günlük kip varsayılan kalacak.
+5. ~~**`lifetime_budget` KURAL YOLUNU BOZMAMALI**~~ **ÇÖZÜLDÜ** (3. adım).
+   Kural yolu günlük kipte kalıyor ve iki test bunu kilitliyor
+   (`boost-executor-tree.spec.ts` → "yeni alanlar sızmıyor").
+
+   > **CANLIDA DOĞRULANMAMIŞ İKİ ŞEY var ve ilk gerçek çağrıda bakılacak:**
+   > `lifetime_budget` + `start_time` ikilisinin Meta tarafından kabul
+   > edilip edilmediği, ve özel kategori müşterisinde kayıtlı kitlenin
+   > reddedilip mi yoksa sessizce yok mu sayıldığı.
 
 **Sıra:**
 
@@ -99,8 +103,12 @@ akış ve engeller §7.2'de. Özeti:
    > doldurulamıyor. Keşif kolonu her turda güncelliyor, yani tek bir yenileme
    > yetiyor. Yapılmazsa K17'nin Instagram dalı yazıldığında hiçbir Instagram
    > hesabı boost edilemez.
-3. `BoostRequest`'e `targeting` + bütçe kipi; kural yolunun davranışı
-   varsayılan.
+3. ✅ **BİTTİ** — `BoostRequest`'e `targeting` + iki kipli bütçe.
+   `BoostBudget` ayrık birleşim (`daily` | `lifetime`), ad set gövdesi
+   sınanabilir bir saf fonksiyona çıkarıldı (`buildBoostAdSetParams`). Özel
+   kategori kısıtı SAĞLAYICIDA uygulanıyor, çağıranda değil. `publishBoost`
+   artık `budget_mode`'u ağaçtan okuyor — bugüne kadar koşulsuz günlük
+   sayıyordu. **1030 API testi** (öncesi 1009).
 4. Gönderi listeleme ucu + coğrafi arama ucu + kayıtlı kitle ucu.
 5. Ekran.
 6. Ajansın kendi hesabında en küçük bütçeyle gerçek çağrı (K17: doğrudan IG).

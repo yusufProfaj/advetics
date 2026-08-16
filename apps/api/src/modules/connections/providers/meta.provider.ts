@@ -1,5 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { CONVERSION_BUCKETS, type Platform } from '@advetics/shared';
+import {
+  CONVERSION_BUCKETS,
+  restrictTargetingFor,
+  type Platform,
+  type SpecialAdCategory,
+} from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
@@ -1165,29 +1170,11 @@ export class MetaProvider implements IAdPlatformProvider {
       });
       created.push({ id: campaign.id, label: 'kampanya' });
 
-      // Bitiş zamanı SÜREDEN türetiliyor; Meta ömür boyu bütçe olmadan da
-      // bitiş zamanı kabul ediyor ve boost'un kendiliğinden durmasını
-      // sağlayan tek şey bu. Bitiş vermezsek "3 günlük boost" süresiz
-      // çalışan bir kampanya olur.
-      const endTime = new Date(Date.now() + request.durationDays * 86_400_000);
-
-      const adSet = await this.graphPost<{ id: string }>(ctx, `${act}/adsets`, {
-        name: `${request.name} — ad set`,
-        campaign_id: campaign.id,
-        daily_budget: toMinorUnits(request.dailyBudgetMicros, request.currency).toString(),
-        billing_event: 'IMPRESSIONS',
-        optimization_goal: 'POST_ENGAGEMENT',
-        // Reklam oluşturucuyla AYNI GEREKÇE: strateji söylenmezse Meta hesabın
-        // varsayılanına düşüyor ve tavanlı bir varsayılan isteği reddediyor.
-        bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-        end_time: endTime.toISOString(),
-        // HEDEFLEME: sayfanın kendi ülkesi/kitlesi yerine geniş bir taban
-        // veriliyor ve daraltma kullanıcıya bırakılıyor. Boost'un amacı
-        // mevcut ilgiyi büyütmek; dar hedefleme onu zaten gören kitleye
-        // tekrar göstermek olurdu.
-        targeting: JSON.stringify({ geo_locations: { countries: ['TR'] } }),
-        status: 'ACTIVE',
-      });
+      const adSet = await this.graphPost<{ id: string }>(
+        ctx,
+        `${act}/adsets`,
+        buildBoostAdSetParams(request, campaign.id, new Date()),
+      );
       created.push({ id: adSet.id, label: 'ad set' });
 
       const ad = await this.graphPost<{ id: string }>(ctx, `${act}/ads`, {
@@ -2023,6 +2010,104 @@ function pickActionValue(value: unknown, types: readonly string[]): string {
  */
 export function stripPagePrefix(postId: string, pageId: string): string {
   return postId.startsWith(`${pageId}_`) ? postId.slice(pageId.length + 1) : postId;
+}
+
+/**
+ * BOOST HEDEFLEMESİNİN VARSAYILANI — ülke geneli Türkiye.
+ *
+ * Boost'un amacı mevcut ilgiyi büyütmek; dar hedefleme onu zaten gören
+ * kitleye tekrar göstermek olurdu. Kural yolunun bugünkü davranışı bu ve
+ * hedefleme alanı eklenirken KORUNDU (§3 — çalışan davranış bozulmuyor).
+ */
+export const DEFAULT_BOOST_TARGETING: Record<string, unknown> = {
+  geo_locations: { countries: ['TR'] },
+};
+
+/**
+ * Boost ad set'inin Graph gövdesi.
+ *
+ * DÖNGÜDEN ÇIKARILDI Kİ SINANABİLSİN: burada üretilen üç değer de yanlış
+ * olduğunda SESSİZ. Yanlış bütçe alanı beklenenin katlarını harcar, yanlış
+ * hedefleme reklamı başka şehre gösterir, eksik `end_time` boost'u süresiz
+ * çalıştırır — üçü de Meta tarafından kabul edilir ve hiçbir hata üretmez.
+ *
+ * `now` DIŞARIDAN GELİYOR: `Date.now()` içeride olsaydı bitiş zamanı teste
+ * bağlanamazdı.
+ */
+export function buildBoostAdSetParams(
+  request: BoostRequest,
+  campaignId: string,
+  now: Date,
+): Record<string, string> {
+  /**
+   * Bitiş zamanı SÜREDEN türetiliyor ve HER İKİ KİPTE DE gönderiliyor.
+   *
+   * Günlük bütçede boost'un kendiliğinden durmasını sağlayan tek şey bu:
+   * bitiş vermezsek "3 günlük boost" süresiz çalışan bir kampanya olur.
+   * Toplam bütçede ise Meta parayı süreye bölüyor ve süre olmadan bölecek
+   * bir şeyi yok.
+   */
+  const endTime = new Date(now.getTime() + request.durationDays * 86_400_000);
+
+  /**
+   * ÖZEL KATEGORİ KISITI ÇAĞIRANDA DEĞİL, BURADA.
+   *
+   * Konut/istihdam/kredi beyanı olan müşteride Meta yaş ve cinsiyet
+   * daraltmasını kabul etmiyor — ya reddediyor ya da KABUL EDİP sessizce yok
+   * sayıyor. İkincisinde kullanıcı uygulanmamış bir hedeflemeye reklam
+   * verdiğini sanır.
+   *
+   * Kısıtın telde son duraktan önce uygulanması bilinçli: boost'un iki
+   * çağıranı var (kural yürütücüsü ve ağaç yayıncısı) ve üçüncüsü elle boost
+   * olacak. Çağırana bırakmak, bir gün birinin unutması demek — ve unutulduğu
+   * hiçbir yerde görünmez. Çağıran katman kullanıcıya UYARIYI gösteriyor;
+   * garantiyi burası veriyor.
+   */
+  const { targeting } = restrictTargetingFor(
+    (request.specialAdCategories ?? []) as SpecialAdCategory[],
+    request.targeting ?? DEFAULT_BOOST_TARGETING,
+  );
+
+  const params: Record<string, string> = {
+    name: `${request.name} — ad set`,
+    campaign_id: campaignId,
+    billing_event: 'IMPRESSIONS',
+    optimization_goal: 'POST_ENGAGEMENT',
+    // Reklam oluşturucuyla AYNI GEREKÇE: strateji söylenmezse Meta hesabın
+    // varsayılanına düşüyor ve tavanlı bir varsayılan isteği reddediyor.
+    bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+    end_time: endTime.toISOString(),
+    targeting: JSON.stringify(targeting),
+    status: 'ACTIVE',
+  };
+
+  if (request.budget.mode === 'lifetime') {
+    /**
+     * TOPLAM BÜTÇE — kullanıcının yazdığı sayının kendisi.
+     *
+     * Günlük bütçe Meta'da SERT TAVAN DEĞİL: günü aşabiliyor ve dengelemeyi
+     * hafta içine yayıyor. Ekranda "300 TL" yazarken altından 5 × 60 TL
+     * göndermek, panelde yazan sayı ile hesaptan çıkan sayının ayrışması
+     * demek (K18).
+     *
+     * `start_time` toplam bütçeyle birlikte AÇIKÇA gönderiliyor: Meta parayı
+     * bir aralığa bölüyor ve aralığın başlangıcını söylememek, kararı
+     * platformun varsayılanına bırakmak olur. CANLIDA DOĞRULANMADI —
+     * ilk gerçek çağrıda bakılacak.
+     */
+    params.lifetime_budget = toMinorUnits(
+      request.budget.totalMicros,
+      request.currency,
+    ).toString();
+    params.start_time = now.toISOString();
+  } else {
+    params.daily_budget = toMinorUnits(
+      request.budget.dailyMicros,
+      request.currency,
+    ).toString();
+  }
+
+  return params;
 }
 
 /**

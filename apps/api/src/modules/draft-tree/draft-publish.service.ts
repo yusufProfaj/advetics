@@ -669,7 +669,20 @@ export class DraftPublishService {
           adAccountExternalId: auth.accountExternalId,
           postExternalId: post.post_external_id,
           pageExternalId: post.page_external_id,
-          dailyBudgetMicros: BigInt(campaign.budgetAmountMicros!),
+          /**
+           * BÜTÇE KİPİ AĞAÇTAN OKUNUYOR, VARSAYILMIYOR.
+           *
+           * `draft_campaigns.budget_mode` bu kolonu baştan beri taşıyordu ama
+           * burası tutarı koşulsuz GÜNLÜK sayıyordu. Bugüne kadar doğru
+           * sonuç veriyordu, çünkü boost ağacına yazan tek yol kural
+           * yürütücüsüydü ve o hep 'daily' yazıyor. Elle boost toplam bütçe
+           * yazacak (K18) ve o gün bu satır sessizce yanlış olurdu: 300 TL'lik
+           * toplam, günlük 300 TL olarak beş gün harcanırdı.
+           */
+          budget:
+            campaign.budgetMode === 'lifetime'
+              ? { mode: 'lifetime', totalMicros: BigInt(campaign.budgetAmountMicros!) }
+              : { mode: 'daily', dailyMicros: BigInt(campaign.budgetAmountMicros!) },
           /**
            * SÜRE BİTİŞ TARİHİNDEN TÜRÜYOR.
            *
