@@ -1,82 +1,127 @@
 # Devir belgesi — nerede kaldık
 
-**Son güncelleme:** 2026-08-16 · **Son commit:** `5fa82a2` · **Canlı:** evet,
-`main`'e her push otomatik deploy ediyor
+**Son güncelleme:** 2026-08-16 · **Son commit:** `64fe10c` · **Canlı:** HAYIR
+— kod `main`'de ama sunucuya ÇIKMADI (aşağıya bak)
 
 ---
 
-## SIRADAKİ İŞ — "Reklam Oluştur" bölümünün yeniden tasarımı
+## SIRADAKİ İŞ — iki tane, ikisi de kod yazmak DEĞİL
 
-**Bu, yeni oturumun devralacağı iş.** Aşağıdaki §0 ve sonrası tamamlanmış
-işler; buradan başla.
+Önceki oturum "Oluştur" bölümünün yeniden tasarımını bitirdi (§A). Sıradaki iki
+iş de doğrulama işi ve ikisi de sunucuda yapılacak.
 
-> **KAPSAM BÜYÜDÜ (2026-08-16).** İş tek ekran değil: `/reklam-olustur` +
-> `/auto-boost` + `/toplu-olustur` birlikte yeniden kuruluyor ve müşteri ile
-> uzman için **iki ayrı yüzey** olacak. Tasarım tartışması ayrı bir belgede:
-> [`TASARIM-OLUSTUR.md`](TASARIM-OLUSTUR.md). Google Ads'in bu modele nasıl
-> katılacağı da orada (§9). Belgede 15 açık karar var ve
-> **kod, o kararlar kapanmadan yazılmayacak.** Aşağıdaki bölüm bugünkü
-> yüzeyi anlatıyor ve hâlâ doğru.
+### 1. ELLE DAĞIT — otomatik dağıtım çalışmıyor
 
-### Ne isteniyor
+`main` üzerindeki kod CI'da tamamen yeşil ama **sunucuda değil**. GitHub
+Actions'ta 30 koşunun 30'u başarısız; düşen adım "SSH ile dağıt" ve öncesindeki
+her şey (typecheck, testler, derleme, RLS kapsaması) geçiyor. Ayrıntı ve
+bakılacak sırlar §0'daki uyarıda.
 
-Kullanıcının verbatim ifadesi: *"oluştur kısmını baştan tasarlayacağız, burayı
-nasıl geliştirebiliriz diye düşünmemiz lazım"*. Yani bir hata düzeltme değil,
-**tasarım tartışması** — önce ne yapılacağına karar verilecek, sonra yazılacak.
-İlk turda kod yazmaya başlama; mevcut akışın neyi iyi yaptığını ve nerede
-tıkandığını konuş.
+```
+su - advetics
+cd ~/htdocs/advetics.com && git pull && ./scripts/deploy.sh
+```
 
-### Bugün ne var — yüzey
+Deploy **5 migration** uygulayacak (hepsi ekleme; tek `ALTER COLUMN ... DROP
+NOT NULL` ve o genişletme), ardından `db:rls` politikaları ve kısıtları
+yenileyecek.
 
-| Katman | Dosya | Satır |
-|---|---|---|
-| Sihirbaz (panel) | `apps/web/src/components/ad-builder/ad-wizard.tsx` | 927 |
-| Gelişmiş mod | `apps/web/src/components/ad-builder/advanced-panel.tsx` | 552 |
-| Kapsama paneli | `apps/web/src/components/ad-builder/coverage-panel.tsx` | 122 |
-| Sayfa | `apps/web/src/app/(dashboard)/reklam-olustur/page.tsx` | 179 |
-| Taslak servisi | `apps/api/src/modules/ad-builder/ad-builder.service.ts` | 772 |
-| Yayınlayıcı | `apps/api/src/modules/ad-builder/ad-publisher.service.ts` | 360 |
-| **Hedef eşlemesi** | `apps/api/src/modules/ad-builder/goal-mapping.ts` | 381 |
-| Amaç matrisi | `apps/api/src/modules/ad-builder/objective-matrix.ts` | 383 |
+**Çıktığını doğrulama:** bu uç şu an `404` dönüyor, yeni kodla `401` dönmeli
+(rota var, kimlik istiyor):
 
-`goal-mapping.ts` **ürünün çekirdeği** ve dokunmadan önce okunmalı:
-"reklamcılık bilmeyen biri kullanabilsin" vaadi pratikte "Meta'nın sorduğu her
-soruya biz cevap veriyoruz" demek ve o cevapların tamamı orada. Hedefleme
-(yaş, cinsiyet, ilgi alanı) KASITLI olarak sorulmuyor — gerekçesi dosyanın
-içinde yazılı.
+```
+curl -s -o /dev/null -w '%{http_code}\n' https://advetics.com/api/draft-campaigns
+```
 
-### Mevcut tasarımın iki kilit kararı
+**Deploy öncesi bakılmalı:** eski oluşturucunun yazma uçları artık `410`
+dönüyor. Üretimde YAYINLANMAMIŞ taslak varsa artık yayınlanamaz (kayıtlar
+silinmiyor, salt okunur görünüyor). Sayı hiç öğrenilmedi:
 
-Yeniden tasarımda bunları değiştirmek serbest ama **bilerek** değiştirilmeli:
+```
+SELECT status, count(*) FROM ad_drafts GROUP BY status;
+```
 
-- **Adımlar ayrı ekran değil, tek sayfada sıralı bloklar.** Gerekçe: sihirbaz
-  adımları arasında gidip gelmek kullanıcının ne yazdığını unutturuyor.
-- **Uzman modu ayrı sayfa değil**, aynı taslağın üzerinde "Gelişmiş" paneli.
-  Aynı görseller, aynı yayın yolu.
+### 2. İLK GERÇEK YAZMA ÇAĞRISI — hiç yapılmadı
 
-### Canlıda öğrenilmiş altı hata — §2'yi MUTLAKA oku
+**Bu oturumda yazılan hiçbir yayın yolu canlıda denenmedi.** Ne yeni Meta yolu,
+ne Google. 13 Ağustos'taki ilk gerçek Meta çağrısında altı hata çıkmıştı ve
+üçü sessizdi (§2); Google'ın kendi altısı olacak ve o kod tamamen
+doğrulanmamış — istek gövdeleri bilgiden yazıldı, tek bir canlı çağrı gitmedi.
 
-13 Ağustos'taki ilk gerçek Meta yazma çağrısında altı hata çıktı ve **üçü
-sessizdi** (hata yok, log yok, sadece hiçbir yere gitmeyen bir reklam).
-Hepsi teste bağlandı. Yeniden tasarım bu tuzakları geri getirmemeli; liste
-§2'de.
+**Nasıl yapılmalı:** ajansın KENDİ hesabında, en küçük bütçeyle.
 
-### Blokaj durumu
+- **Meta:** Advanced Access hâlâ yok; müşteri hesapları App Review'a bağlı,
+  ajansın kendi hesabında çalışabilir.
+- **Google:** kampanya zaten DURAKLATILMIŞ açılıyor ve öyle kalıyor — para
+  harcamadan Google Ads'te gövdenin doğru oturup oturmadığı görülebilir.
+  Alan doğrulaması için `pnpm --filter @advetics/api google-check`.
+- Google denemesi için kreatifin **en az 3 başlık ve 2 açıklama** taşıması
+  gerekiyor (RSA sınırı). Kütüphane → Kreatifler ekranından düzenlenebiliyor.
 
-- **Meta uygulaması artık CANLI modda** (2026-08-16'da alındı). `subcode=1885183`
-  engeli kalktı.
-- **Advanced Access hâlâ yok.** Kendi ajans hesaplarında yayın çalışabilir;
-  müşteri hesapları App Review'a bağlı. Yeniden tasarım sırasında canlı yazma
-  testi yapılacaksa bu sınır hatırlanmalı.
-- Reklam oluşturmak için müşteride **hem atanmış reklam hesabı hem atanmış
-  Facebook sayfası** gerekiyor (§0.3).
+Hata mesajı geldiğinde tam metniyle getir; kod tarafı ona göre düzeltilecek.
 
-### Elde ne var — gerçek veri
+---
 
-2026-08-16 itibarıyla üretimde: 1 organizasyon, Meta bağlı, **157 hesap
-havuzda**, müşteriler oluşturulmuş, hesaplar atanmış ve izlemede, metrikler
-akıyor (`insights_daily` dolu, 2026-07-23'ten itibaren). Yani tasarımı gerçek
-veriyle deneyebilirsin.
+## A. TAMAMLANDI — "Oluştur" bölümü yeniden kuruldu
+
+20 commit, `afc173e..64fe10c`. Tasarım kararları ve gerekçeleri
+[`TASARIM-OLUSTUR.md`](TASARIM-OLUSTUR.md) içinde; **on beş karardan dokuzu
+kapalı, altısı açık** (K2, K3, K8, K10, K12, K15). Kapanmış kararların
+gerekçesi belgede yazılı ve geri alınabilir.
+
+### Ne değişti
+
+| Önce | Sonra |
+|---|---|
+| Meta'ya yazan ÜÇ ayrı yol, ortak kodu yok | Tek ağaç: `draft_campaigns` → `draft_ad_groups` → `draft_ads`, tek yayın yolu |
+| Tek sihirbaz, "basit/gelişmiş" anahtarı | İKİ AYRI YÜZEY: `/reklam-olustur/basit` ve `/reklam-olustur/uzman` |
+| Metinler `ad_drafts`'ın üç sütununda | Kreatif kütüphanesi: metin havuzu + görsel havuzu (`/kutuphane/kreatifler`) |
+| Üç oran kutusu, "kırp ve yeniden yükle" | Tarayıcıda kırpma: tek görselden üç oran, odak noktalı |
+| Toplu = Excel/TSV yapıştırma + ham Meta kimlikleri | Kampanya çoğaltma: kaynağı seç, yalnızca DEĞİŞENİ yaz |
+| Boost ayrı ada | Boost ağaçta: aday da, yayınlanan da aynı listede |
+| Google yazma yolu YOK | Google arama kampanyası yazıldı (PAUSED açılıyor) |
+| `special_ad_categories` sabit `[]` | Müşteri kartında beyan + hedefleme kısıtı |
+| Menüde üç madde | Tek giriş: "Reklamlar" + "Akıllı Boost" |
+
+**987 API testi, 59 panel testi.** Öncesi 789 API testiydi.
+
+### Bilinen ve KABUL EDİLMİŞ sınırlar
+
+Bunlar eksik değil, bilinçli kısıt — her biri "tahmin etmektense kısıtla"
+kuralının sonucu ve kullanıcıya açıkça söyleniyor:
+
+- **Çoklu ad set yayınlanmıyor.** Ağaç taşıyor ama `publishDraft` tek ad set
+  yazıyor ve ikincisini açmanın yolu canlıda hiç denenmedi.
+- **Google'da yalnızca Arama.** PMax dönüşüm takibi istiyor ve bu üründe
+  piksel/etiket hikâyesi hiç yok (K14).
+- **Bütçe tahmini yok.** `delivery_estimate` hiç çağrılmadı; tutmayan bir
+  tahmin hiç göstermemekten kötü (K8, açık).
+- **Boost varyantı yok** — aynı gönderi ikinci kez öne çıkarılmıyor.
+- **`ad_drafts` emekli ama SİLİNMEDİ.** Veri yerinde; tablonun düşürülmesi
+  ayrı bir iş ve satır sayısı öğrenilmeden yapılmamalı (K11).
+
+### Bu oturumda çıkan ve düzeltilen üç sessiz hata
+
+Hiçbiri aranan şey değildi; başka bir işi yaparken ortaya çıktılar:
+
+1. **Kural özeti olmayan adayları sayıyordu.** `INSERT ... ON CONFLICT DO
+   NOTHING` `$executeRaw` ile çağrılıyordu ve çakışan (hiç yazılmayan) tur da
+   `created++` sayıyordu.
+2. **Kreatifte yanlış teşhis.** Aynı görsel iki kez seçilince SQL tekrarları
+   tekilleştirdiği için "1 görsel arşivde bulunamadı" diyordu; görsel arşivde
+   duruyordu, sorun tekrarın kendisiydi.
+3. **Google hata metinleri bayattı.** "Basic Access onayı bekleniyor" diyordu;
+   erişim 16 Ağustos'ta alınmıştı ve mesaj kullanıcıyı çözülmüş bir sorunu
+   çözmeye gönderiyordu.
+
+### Tekrar edilmemesi gereken iki tuzak (bu oturumda ikisine de düşüldü)
+
+- **`Prisma.sql` şablonu içindeki SQL yorumunda BACKTICK KULLANMA.** Şablonu
+  ortasından kapatıyor; hata `',' expected` ya da `Expected ")"` diyor ve
+  sebebi hiç belli olmuyor. Bu oturumda İKİ KEZ oldu.
+- **Belgeyi script'le düzenlerken "sonraki açık satıra kadar" deseni
+  kullanma.** Aradaki kapalı bölümleri yutuyor; TASARIM-OLUSTUR.md'de K5 ve
+  K6 böyle silindi ve tesadüfen fark edildi.
 
 ---
 
@@ -612,10 +657,13 @@ arşivi de yapıldı. Açık kalanlar:
    hiç başlanmadı.
 2. **Bildirim altyapısı** — CENTRAL uyarılarının ve zamanlanmış raporların ön
    koşulu. Şu an hiçbir şey bildirim göndermiyor.
-3. **Google yazma yolu** — hiç yazılmadı. Bu bilinçli bir sıra kararıydı:
-   okuma tarafı yeni doğrulandı ve Meta'daki deneyim yazma yollarının canlı
-   doğrulama olmadan güvenilmez olduğunu gösterdi.
-4. **Sunucu tarafı PDF raporu**, sağlık skoru, A/B test motoru — daha sonraya.
+3. ~~**Google yazma yolu**~~ — **YAZILDI** (2026-08-16, arama kampanyası).
+   Ama CANLIDA HİÇ ÇALIŞTIRILMADI; ilk gerçek çağrı sıradaki işlerden biri.
+   PMax hâlâ yok ve dönüşüm takibine bağlı.
+4. **Dönüşüm takibi (piksel/etiket)** — Google PMax'in ve Meta'da
+   `OUTCOME_SALES`'in ön koşulu. Bu üründe hiç yok ve iki platformda da
+   tavanı o belirliyor.
+5. **Sunucu tarafı PDF raporu**, sağlık skoru, A/B test motoru — daha sonraya.
 
 Ayrıntılı liste ve gerekçeler: [`DURUM.md`](DURUM.md) § 7.
 
