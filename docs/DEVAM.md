@@ -10,6 +10,14 @@
 **Bu, yeni oturumun devralacağı iş.** Aşağıdaki §0 ve sonrası tamamlanmış
 işler; buradan başla.
 
+> **KAPSAM BÜYÜDÜ (2026-08-16).** İş tek ekran değil: `/reklam-olustur` +
+> `/auto-boost` + `/toplu-olustur` birlikte yeniden kuruluyor ve müşteri ile
+> uzman için **iki ayrı yüzey** olacak. Tasarım tartışması ayrı bir belgede:
+> [`TASARIM-OLUSTUR.md`](TASARIM-OLUSTUR.md). Google Ads'in bu modele nasıl
+> katılacağı da orada (§9). Belgede 15 açık karar var ve
+> **kod, o kararlar kapanmadan yazılmayacak.** Aşağıdaki bölüm bugünkü
+> yüzeyi anlatıyor ve hâlâ doğru.
+
 ### Ne isteniyor
 
 Kullanıcının verbatim ifadesi: *"oluştur kısmını baştan tasarlayacağız, burayı
@@ -480,7 +488,6 @@ Bunlar koda değil, sunucuya/hesaplara ait.
       Meta uygulama panelinde webhook URL'i `https://advetics.com/api/leads/webhook`
       olarak kaydedilmeli. **Bu yapılmadan hiçbir lead bildirimi gelmez.**
 - [x] ~~**Google hesap listesi bayat**~~ — veritabanı sıfırlandı, konu kalmadı.
-      Google henüz YENİDEN BAĞLANMADI; bağlanınca hesaplar havuza düşecek.
 - [x] ~~**`db:seed-portfolio`**~~ — GEREKSİZ. Müşteriler 16 Ağustos'ta panelden
       elle oluşturuldu ve davet akışı kaldırıldığı için seed'in kullanıcı
       kısmı da geçersiz. Script duruyor ama çalıştırılmamalı.
@@ -490,7 +497,17 @@ Bunlar koda değil, sunucuya/hesaplara ait.
 - [ ] **Meta Business Verification + App Review** (`ads_management`,
       `leads_retrieval`). Canlı mod alındı ama Advanced Access YOK: kendi
       ajans hesaplarında yayın çalışabilir, MÜŞTERİ hesapları onaya bağlı.
-- [ ] **Google'ı bağla.** Meta bağlandı, Google henüz bağlanmadı.
+- [x] ~~**Google'ı bağla.**~~ **2026-08-16: YAPILDI.** Erişim alındı, hesaplar
+      bağlandı, veri akıyor. Yani okuma tarafı artık canlıda doğrulanmış
+      durumda ve developer token engeli kalktı.
+- [ ] **Google yazma yolu — erişim var, KOD YOK.** `google.provider.ts`'te
+      `publishDraft`, `createAd`, `uploadAdImage` ve `applyAction` hâlâ kalıcı
+      hata fırlatıyor. Bu doğru davranış, ama **hata metinleri artık yanlış**:
+      dört kullanıcıya görünen mesaj "Basic Access onayı bekleniyor" diyor ve
+      kullanıcıyı çözülmüş bir sorunu çözmeye gönderiyor. `preflight.sh`'ın
+      veritabanını "kapalı" göstermesiyle aynı sınıf yanlış teşhis. Metinler
+      "henüz yazılmadı"ya çevrilmeli — yeniden tasarımı beklemeden.
+      Ayrıntı: [`TASARIM-OLUSTUR.md`](TASARIM-OLUSTUR.md) §9.1.
 
 ## 3.5. 14–15 Ağustos'ta yapılanlar
 

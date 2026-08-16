@@ -1,0 +1,766 @@
+# "Oluştur" bölümünün yeniden tasarımı — tasarım belgesi
+
+**Durum:** TARTIŞMAYA AÇIK · **Tarih:** 2026-08-16 · **Kod yazılmadı**
+
+Bu belge bir plan değil, bir **karar zemini**. §1–§8 bugünkü durumu ve önerilen
+omurgayı anlatıyor; §10'daki 15 kararın hepsi açık ve `Karar:` satırları boş.
+Kod, §10 kapanmadan yazılmayacak.
+
+Kullanıcının talebi, kendi ifadesiyle: *"bu reklam oluştur mantığını tekrardan
+kurmamız gerekiyor böyle çok karışık, müşteri için ve reklamı bilen dijital
+pazarlama uzmanı için 2 ayrı mantık olması gerekiyor ve (google akıllı kampanya
+gibi basit) … auto boost ve toplu oluştur mantığını da değiştireceğiz"*.
+
+Yani kapsam tek ekran değil: **`/reklam-olustur` + `/auto-boost` +
+`/toplu-olustur` birlikte.**
+
+---
+
+## 1. Bugün ne var — ölçülmüş, tahmin değil
+
+### Meta'ya reklam yazan üç ayrı yol
+
+| Yol | Model | Doğrulama | Ne oluşturuyor | Provider metodu |
+|---|---|---|---|---|
+| `/reklam-olustur` | `ad_drafts` + orana bağlı görsel | `publishCheck` + `objective-matrix` | Yeni kampanya + ad set + **1 reklam** | `publishDraft` ([meta.provider.ts:1407](../apps/api/src/modules/connections/providers/meta.provider.ts:1407)) |
+| `/auto-boost` | Kural → aday → onay | `boost-selector` | Organik gönderiden yeni kampanya | `createBoost` ([:1167](../apps/api/src/modules/connections/providers/meta.provider.ts:1167)) |
+| `/toplu-olustur` | TSV yapıştırma | `bulk-validator` | **Mevcut** ad set'e N reklam (PAUSED) | `createAd` ([:1260](../apps/api/src/modules/connections/providers/meta.provider.ts:1260)) |
+
+**Üç yolun ortak kodu yok.** Provider'da üç ayrı yazma metodu, üç ayrı
+doğrulama, üç ayrı hata yolu.
+
+Bunun bedeli somut: 13 Ağustos'ta canlıda öğrenilen altı hata
+([DEVAM.md §2](DEVAM.md)) yalnızca `publishDraft` yolunda düzeltildi. Örneğin
+`is_adset_budget_sharing_enabled` `createBoost`'a da eklenmiş ama form kimliği,
+teklif stratejisi ve çok görselli yol yalnızca bir yolda öğrenildi.
+`createAd` ve `createBoost` **hiç canlı yazma testi görmedi.**
+
+### Satır sayıları
+
+| Katman | Dosya | Satır |
+|---|---|---|
+| Sihirbaz | `apps/web/src/components/ad-builder/ad-wizard.tsx` | 927 |
+| Gelişmiş panel | `apps/web/src/components/ad-builder/advanced-panel.tsx` | 552 |
+| Taslak servisi | `apps/api/src/modules/ad-builder/ad-builder.service.ts` | 772 |
+| Yayınlayıcı | `apps/api/src/modules/ad-builder/ad-publisher.service.ts` | 360 |
+| Hedef eşlemesi | `apps/api/src/modules/ad-builder/goal-mapping.ts` | 381 |
+| Amaç matrisi | `apps/api/src/modules/ad-builder/objective-matrix.ts` | 383 |
+| Boost servisi + seçici + yürütücü | `apps/api/src/modules/boosts/` | 942 |
+| Toplu servis + doğrulayıcı | `apps/api/src/modules/bulk/` | 809 |
+| Toplu besteci | `apps/web/src/components/bulk/bulk-composer.tsx` | 385 |
+
+### ZATEN VAR AMA KULLANILMIYOR: senkronize edilmiş ağaç
+
+Şemada okuma tarafı için **tam hiyerarşi** duruyor:
+
+```
+Campaign → AdGroup → Ad → Creative        (prisma/schema.prisma:714, 760, 801, 838)
+```
+
+`AdGroup` üzerinde `targeting Json?` alanı var ve şemadaki yorumu şunu diyor:
+
+> `/// Hedefleme spec'i — Modül 8 toplu oluşturucuda şablon olarak kullanılacak.`
+
+Yani "mevcut yapıdan şablon üret" fikri bir kez düşünülmüş, sonra
+kullanılmamış. Toplu oluşturucu bugün kullanıcıdan **elle Meta ad set kimliği
+ve sayfa kimliği yapıştırmasını** istiyor
+([bulk-composer.tsx:117-138](../apps/web/src/components/bulk/bulk-composer.tsx:117))
+— oysa o ad set zaten veritabanımızda, adıyla birlikte.
+
+### Yazma tarafında ağaç YOK
+
+`ad_drafts` düz bir tablo: bir taslak = bir kampanya + bir ad set + bir reklam.
+Görseller taslağa bağlı (`ad_draft_assets.draft_id`), yani bir kreatif kendi
+başına var olamıyor.
+
+---
+
+## 2. Teşhis — karışıklık nereden geliyor
+
+### 2.1. "Basit/Gelişmiş" bir anahtar, iki mantık değil
+
+Aynı taslağın üzerinde duruyor, dolayısıyla ikisi de aynı kalıba sıkışmış:
+tek kampanya, tek ad set, tek reklam. Sonuç iki tarafı da tatmin etmiyor.
+
+**Acemi için hâlâ karmaşık:** 7 blok, kampanya adı, reklam hesabı seçimi, üç
+ayrı oran kutusu, mod seçici ve sonda bir "Kontrol et" kapısı.
+
+**Uzman için yetersiz:** ikinci bir kreatif eklenemiyor, iki kitle
+karşılaştırılamıyor, kayıtlı kitle yok, yayınlanan reklam kopyalanamıyor,
+mevcut kampanyaya ad set eklenemiyor. "Gelişmiş" panel yalnızca **aynı tek ad
+set'in** alanlarını açıyor.
+
+### 2.2. Modüller kullanıcıya göre değil, tekniğe göre bölünmüş
+
+Kullanıcı "reklam vereceğim" diye geliyor; biz "elle mi, kuraldan mı, tablodan
+mı" diye soruyoruz. Menüde üç ayrı yer, üç ayrı zihinsel model.
+
+### 2.3. Elle "şu gönderiyi öne çıkar" yolu hiç yok
+
+Boost adayları yalnızca kuraldan doğuyor: `boosts.controller.ts` içinde aday
+üreten tek uç `POST rules/:id/run`. Oysa reklamcılık bilmeyen birinin anladığı
+en net eylem budur — "reklam oluştur"dan çok daha net.
+
+### 2.4. Yayın tek yönlü kapı
+
+Yayınlanan taslak açılamıyor bile
+([page.tsx:120](<../apps/web/src/app/(dashboard)/reklam-olustur/page.tsx>:120)),
+kopyalanamıyor, durdurulamıyor. `ad_drafts.external_campaign_id` ile
+senkronize `campaigns.external_id` arasında panelde hiçbir bağ yok. "Geçen
+ayki kampanyayı yeniden ver" bir ajansın en sık yapacağı iş ve yolu yok.
+
+### 2.5. Arayüze geri sızmış sessiz hatalar
+
+Yeniden tasarımdan bağımsız, her hâlükârda düzeltilecek dört madde:
+
+| # | Sorun | Yer |
+|---|---|---|
+| 1 | Yazılan metin kaydedilmiyor — taslak yalnızca görsel yükleme / kontrol / yayın anında yazılıyor | [ad-wizard.tsx:140](../apps/web/src/components/ad-builder/ad-wizard.tsx:140) |
+| 2 | "Kontrol et" ad veya metin boşken pasif, sebebini söylemiyor | [:580](../apps/web/src/components/ad-builder/ad-wizard.tsx:580) |
+| 3 | Reklam hesabı sessizce `accounts[0]`; hangi müşteri için çalışıldığı ekranda yazmıyor | [:61](../apps/web/src/components/ad-builder/ad-wizard.tsx:61) |
+| 4 | Gelişmiş modda `budgetMode: 'lifetime'` seçilince 5. adımın "Günde ne kadar" etiketi yalan söylüyor | [ad-publisher.service.ts:128](../apps/api/src/modules/ad-builder/ad-publisher.service.ts:128) |
+
+1 numara veri kaybı, 2 ve 3 bu projenin klasik sessiz hata deseni.
+
+---
+
+## 3. DEĞİŞMEYECEKLER
+
+Bunlar tartışmaya açık değil — her biri bir kazanın karşılığı ve yeniden
+kurarken taşınmak zorunda.
+
+| Ne | Neden |
+|---|---|
+| `goal-mapping.ts`'in tamamı | Ürünün çekirdeği. `LEAD_GENERATION` yerine `LINK_CLICKS`, `LANDING_PAGE_VIEW` kararı, otomatik yerleşimde alanın **hiç** gönderilmemesi — üçü de sessiz para yakan hataların düzeltmesi |
+| Tek yayın yolu (`resolveSpec`) | İki mod, tek boru hattı. Yeni tasarımda **üç modüle** genişliyor |
+| Kapsama paneli (%kırpma) | "Kırpılabilir" bilgi değil, "%36'sı kırpılacak" karar verdiriyor |
+| Engelleyen / uyaran ayrımı | Birleştirmek, "başlığın kısaltılacak" notunu yayını durduran hataya çevirir |
+| Giriş anında doğrulama | Kullanıcı görselin kullanılamayacağını tıkladığında değil bıraktığında öğrenmeli |
+| Boost'un taahhüt bazlı tavanı + "kısmi boost yok" | Harcanan üzerinden saymak ay sonunda tavanın iki katına izin verirdi |
+| `bulk-validator.ts` | 60 satırlık partide 41. satırın hatasını platforma gitmeden yakalıyor |
+| Toplu yayında PAUSED açma + onay metni | 60 reklam ACTIVE açılsa hepsi anında harcamaya başlar |
+| Kampanya PAUSED açılıp en sonda ACTIVE'e alınması | Ad set hazır olmadan kampanya yayına girerse Meta eksik yapılandırma diye reddedebiliyor |
+| `special_ad_categories` kararının bilinçli olması | Bugün her üç yolda da sabit `[]` — bkz. §10 K9, bu bir açık |
+
+---
+
+## 4. Önerilen omurga
+
+**Tek cümle: veri modeli tek olsun (kampanya → ad set(ler) → reklam(lar)),
+yüzeyler ikiye ayrılsın, girişler üç kalsın.**
+
+```
+   GİRİŞLER                    TEK MODEL                  TEK YAYIN
+   ────────                    ─────────                  ─────────
+
+   Basit yüzey ─┐
+   (müşteri)    │
+                ├──►  Kampanya taslağı ağacı  ──►  Yayın çekirdeği  ──►  Meta
+   Uzman yüzey ─┤      campaign                     · goal-mapping
+   (ajans)      │       └ ad set(ler)               · objective-matrix
+                │           └ reklam(lar)           · kapsama
+   Kural ───────┤               └ kreatif           · PAUSED→ACTIVE sırası
+   (auto-boost) │                                   · geri alma
+                │
+   Tablo ───────┘
+   (toplu)
+```
+
+### Neden tek model
+
+- **Tek yayın yolu, projenin kendi dersi.** `resolveSpec` iki modu tek boruya
+  soktu ve bunun gerekçesi kodda yazılı: iki ayrı yayın yolu olsaydı birinde
+  düzeltilen hata diğerinde kalırdı ve fark ancak canlıda görülürdü. Bugün
+  **üç** ayrı yol var ve bu tam olarak yaşandı — altı hatanın düzeltmesi
+  diğer iki yola gitmedi.
+- **Devir mümkün olur.** Müşteri basit yüzeyde kurar, ajans uzman yüzeyde
+  devralır. Bugün imkânsız: basit modda kurulan şey yalnızca tek bir reklam.
+- **Yayın sonrası bağ kurulur.** Ağaç yayınlandıktan sonra senkronize
+  `Campaign/AdGroup/Ad` satırlarına bağlanır; "durumu ne, durdur, kopyala"
+  aynı ekrandan çalışır.
+
+### Neden iki yüzey (bir anahtar değil)
+
+İkisi farklı **iş** yapıyor, aynı işin iki zorluk seviyesi değil:
+
+| | Basit yüzey | Uzman yüzey |
+|---|---|---|
+| Kullanıcı | Reklamcılık bilmiyor | Ads Manager kullanıyor |
+| Soru sayısı | 4–5 | Sınırsız |
+| Meta terminolojisi | **Hiç geçmez** | **Aynen geçer** (`LEAD_GENERATION`, `OUTCOME_LEADS`) |
+| Ağaç | Görünmez, üretici kurar | Doğrudan düzenlenir |
+| Kararlar | Bizde (`goal-mapping`) | Kullanıcıda (`objective-matrix` yine doğrular) |
+| Hata toleransı | Yanlış seçim imkânsız olmalı | Yanlış seçim uyarılır, engellenmez |
+
+Terminoloji kuralı simetrik: uzman "Neyi optimize edelim → Form dolduranlar"
+görmek istemiyor, `LEAD_GENERATION` görmek istiyor — çünkü Ads Manager'la
+eşleştirmek zorunda. Bugünkü gelişmiş panel Meta'nın dilini gizliyor ve bu
+uzmana zarar veriyor.
+
+---
+
+## 5. Basit yüzey — "Google akıllı kampanya" karşılığı
+
+Google'ın akıllı kampanyasını çalıştıran şey ekranın kısalığı değil, **her
+sorunun sonucunun anında görünmesi.** Karşılığı:
+
+| # | Soru | Not |
+|---|---|---|
+| 1 | **Ne olsun?** | Form / WhatsApp / Site + **"Gönderiyi öne çıkar"** (yeni) |
+| 2 | **Nereye?** | Müşteriye tek hesap ve tek sayfa atanmışsa **hiç sorulmaz**. Bugün sessizce `accounts[0]` seçiliyor — daha kötüsü |
+| 3 | **Görsel** | **Tek görsel yeter.** Kırpılıp üç orana çoğaltılır (bkz. K7) |
+| 4 | **Metin** | Sabit canlı önizleme yanında |
+| 5 | **Bütçe** | **Üç hazır kart + tahmini sonuç aralığı** (bkz. K8) |
+| 6 | **Yayınla** | "Kontrol et" kapısı yok; engeller yazarken canlı güncellenir |
+
+Üç nokta ayrıca vurgulanmalı:
+
+**Bugünkü en sert duvar görselde.** Kare yuva zorunlu
+([asset-routing.schema.ts:83](../packages/shared/src/schemas/asset-routing.schema.ts:83))
+ve kırpma aracı yok. Telefonundan 4:3 fotoğrafla gelen kullanıcı — yani tipik
+kullanıcı — bunu **son adımda** öğreniyor ve verdiğimiz talimat "kırp ve
+yeniden yükle". Kırpacak yerin biz olmamamız, ürünün vaadindeki en büyük
+delik.
+
+**Bütçe rakamı bugün anlamsız.** "Günde 200 ₺" hiçbir şey ifade etmiyor;
+"günde 200 ₺ ≈ ayda 40–70 form" karar verdiriyor. Basit yüzeyin tek en büyük
+kazancı bu olabilir.
+
+**Yayın sonrası ekran gerekiyor.** Bugün "Reklamın yayında" deyip kapanıyoruz.
+`Ad.effectiveStatus` senkronize ediliyor; Meta incelemesinin sonucu aynı
+ekranda gösterilebilir.
+
+---
+
+## 6. Uzman yüzeyi
+
+Başlangıç noktası dört tane olmalı — bugün yalnızca birincisi var:
+
+1. Yeni kampanya kur
+2. **Mevcut kampanyaya ad set ekle** (kampanyalar senkronize, listeden seçilir)
+3. **Mevcut ad set'e reklam ekle** (bugün bu, toplu oluşturucunun ham kimlik
+   isteyen hâli)
+4. **Var olanı kopyala** (yayınlanmış taslaktan yeni taslak)
+
+Ağaç düzenleyici:
+
+```
+Kampanya   objective · bütçe modu (CBO/ABO) · special_ad_categories · takvim
+  └ Ad set  hedefleme · yerleşim · optimizasyon · teklif · bütçe
+      └ Reklam  kreatif (görsel + metin + CTA) · form
+```
+
+Uzman yüzeyinin ihtiyaç duyduğu ama **bugün olmayan** iki şey:
+
+- **Kayıtlı kitle.** BASE bölümünün "kitle kütüphanesi" parçası hiç
+  yazılmadı ([DEVAM.md §4](DEVAM.md)). Uzman aynı kitleyi her kampanyada elle
+  kurmak istemez. Bağımlılık burada adlandırılıyor; kapsama alınıp
+  alınmayacağı K4.
+- **`special_ad_categories`.** Üç yazma yolunda da sabit `[]` gidiyor. Emlak,
+  istihdam ve kredi müşterileri için bu bir politika ihlali ve Meta bunu
+  hesap seviyesinde cezalandırıyor. Bugün panelde sorulmuyor bile — K9.
+
+---
+
+## 7. Auto-Boost bu modelde
+
+Kuralın işi **"hangi gönderi" ve "ne kadar"** demek; oradan sonrası aynı yayın
+çekirdeği. Yani `boost-selector.ts` ve tavan muhasebesi olduğu gibi kalıyor,
+`createBoost` ise yayın çekirdeğine katılıyor.
+
+Eklenecek: **elle boost.** Gönderi listesinden "öne çıkar" → basit yüzeyin üç
+soruluk hâli. Kural motoru kalıyor, tek yol olmaktan çıkıyor.
+
+Not: kural bir gönderiyi seçtiğinde bugün doğrudan aday üretiyor. Yeni modelde
+aday = **onay bekleyen bir kampanya taslağı ağacı**. Bu, onay ekranında "ne
+yayınlanacak" sorusunun tam cevabını göstermeyi mümkün kılıyor — bugün özet
+gösteriliyor.
+
+---
+
+## 8. Toplu oluştur bu modelde
+
+Toplu oluşturma ayrı bir modül değil, **uzman yüzeyinin tablo girişi**.
+
+| Bugün | Öneri |
+|---|---|
+| Elle Meta ad set kimliği yapıştırılıyor | Senkronize ad set listesinden seçiliyor |
+| Elle Facebook sayfa kimliği yapıştırılıyor | Müşteriye atanmış sayfalardan seçiliyor |
+| Yalnızca mevcut ad set'e reklam eklenebiliyor | Ad set de üretilebiliyor (aynı ağaç) |
+| `bulk-validator` ayrı doğrulama | Aynı doğrulayıcı, tablo girişine bağlı |
+
+TSV yapıştırma **korunmalı**: ajans metinleri Sheets'te hazırlıyor ve 60
+satırı forma girmek bu aracın kurtarmayı vaat ettiği işin ta kendisi. Değişen
+şey ham kimlikler.
+
+---
+
+## 9. Google Ads bu modelde nereye oturuyor
+
+### 9.1. Bugünkü gerçek — 2026-08-16'da DEĞİŞTİ
+
+**Google erişimi alındı, hesaplar bağlandı ve veri akıyor.** Yani bu belgenin
+ilk hâlindeki iki engel de kalktı: developer token onayı ve "okuma tarafı
+canlıda hiç doğrulanmadı".
+
+**Ama yazma yolu hâlâ sıfır satır.** Erişim açıldı, kod yazılmadı. Bu ayrım
+korunmalı; karıştırmak "yayınlayabiliyoruz" sanıp boş bir düğme koymak demek.
+
+`google.provider.ts` her yazma metodunda kalıcı hata fırlatıyor ve — belgenin
+en önemli tespiti bu — **üç ayrı gerekçe ayırt ediyor:**
+
+| Gerekçe | Metotlar | Anlamı |
+|---|---|---|
+| **"Henüz uygulanmadı"** | `publishDraft`, `createAd`, `uploadAdImage`, `applyAction` | Karşılığı var, **yazılmayı bekliyor** (erişim engeli kalktı) |
+| **"Karşılığı YOK — bu bir Meta özelliği"** | `createBoost`, `createLeadForm`, `fetchLead` | Asla olmayacak |
+| **Hata değil, boş dönüyor** | `fetchOrganicPosts` | Yapacak iş yok; "başarısız" saymak yanlış olurdu |
+
+Bu üçlü ayrım, "iki platformu nasıl birleştiririz" sorusunun cevabının
+yarısını zaten veriyor. **Yeni arayüz bu üç durumu üç ayrı cümleyle
+göstermeli.** "Henüz yok" ile "hiç olmayacak"ı aynı göstermek, kullanıcının
+asla gelmeyecek bir şeyi beklemesi demek.
+
+> **BAYAT HATA MESAJLARI — küçük ama acil.** Kodda en az beş yerde
+> *"Basic Access onayı bekleniyor"* yazıyor ve bunların dördü **kullanıcıya
+> görünen hata metni**
+> ([google.provider.ts:964, 1003, 1028, 1036](../apps/api/src/modules/connections/providers/google.provider.ts:964)),
+> biri de yorum ([:953](../apps/api/src/modules/connections/providers/google.provider.ts:953)).
+> Artık yanlış: kullanıcıyı çözülmüş bir sorunu çözmeye gönderiyorlar.
+> `preflight.sh`'ın veritabanını "kapalı" göstermesiyle aynı sınıf — yanlış
+> teşhis. Doğru metin: *"Google Ads reklam oluşturma henüz yazılmadı."*
+> Bu, yeniden tasarımı beklemeden düzeltilmeli.
+
+### 9.1.1. Erişim açılınca ortaya çıkan YENİ risk
+
+Google engelliyken, yazılmamış yazma yolu zararsızdı. Artık değil: **kod
+yazıldığı anda gerçek bir müşteri hesabında gerçek para harcayabilir.**
+
+Meta'nın dersi burada birebir geçerli — ilk gerçek yazma çağrısında **altı
+hata** çıktı ve üçü sessizdi ([DEVAM.md §2](DEVAM.md)). Google'ın kendi altısı
+olacak ve API biçimi Meta'dan daha farklı: her şey `mutate` işlemleriyle,
+kaynak adlarıyla ve — Meta'dan yapısal olarak ayrılan nokta — **bütçe ayrı bir
+kaynak** (`CampaignBudget`), kampanya ona referans veriyor. Meta'da bütçe ad
+set'te (ya da CBO'da kampanyada) duruyor. Ortak ağaç bu farkı taşımak zorunda.
+
+Bu yüzden Google'ın ilk canlı yazma çağrısı da Meta'daki gibi olmalı:
+**ajansın kendi hesabında, en küçük bütçeyle, hemen duraklatılarak.**
+
+### 9.2. Hangi katman birleşir, hangisi birleşmez
+
+| Katman | Birleşir mi | Not |
+|---|---|---|
+| Müşteri, hesap havuzu, yetki, RLS | **Zaten birleşik** | Havuz modeli platformdan bağımsız |
+| Para (micros), tarih, metrikler, rapor | **Zaten birleşik** | `insights_daily`, FX, türetilmiş metrikler |
+| Varlık arşivi + kapsama | **Zaten birleşik** | `coverageFor('google' \| 'meta')` yazılmış ve çalışıyor — PMax yuvaları ve logo zorunluluğu dahil |
+| Niyet (kullanıcının hedefi) | **Birleşir** | Tek soru; çeviri platform başına ayrı |
+| Metin alanları | **Kısmen** | Meta 1 birincil + 1 başlık + 1 açıklama; Google RSA 15 başlık + 4 açıklama. Ortak **metin havuzu**, ayrı **paketleme** |
+| Kampanya ağacı | **Birleşmez** | Meta ad set ≠ Google ad group ≠ PMax varlık grubu |
+| Teklif, yerleşim, optimizasyon | **Birleşmez** | Uzman zaten platformun dilini istiyor; birleştirmek zarar |
+| Yayın çağrısı | **Birleşmez, SIRALANIR** | Bkz. K13 |
+
+### 9.3. Ana fikir: basit yüzeyde platform bir GİRDİ değil, ÇIKTI
+
+Reklamcılık bilmeyen kullanıcı Meta'nın ne, Google'ın ne yaptığını da bilmez.
+Ona "hangi platform" diye sormak, cevabını bilmediği bir soruyu sormaktır —
+tam da bu ürünün kaçındığı şey.
+
+Doğrusu: **hedefi sorarız, platformu biz söyleriz.**
+
+| Hedef | Meta | Google | Not |
+|---|---|---|---|
+| WhatsApp'tan mesaj | ✅ tek | ❌ karşılığı yok | Google'da böyle bir reklam tipi yok |
+| Anlık form | ✅ | ⚠️ farklı kavram | Google'ın lead form uzantısı ayrı bir model — provider zaten bunu söylüyor |
+| Siteye trafik / satış | ✅ | ✅ | **"Her ikisi" seçeneğinin anlamlı olduğu tek yer burası** |
+| Aramada bulunmak | ❌ karşılığı yok | ✅ tek | Meta'da arama talebi yok |
+| Gönderiyi öne çıkar | ✅ tek | ❌ | Google'da organik gönderi kavramı yok |
+
+Bu tablo bir şeyi açığa çıkarıyor: **bugünkü üç hedefin üçü de Meta biçiminde.**
+Google'ı gerçekten eklemek, en az bir Google biçimli hedef eklemek demek
+("insanlar seni Google'da arıyor"). Aksi hâlde Google'ı bağlar, hiçbir hedefte
+kullanamayız.
+
+### 9.4. Mimari kural: çeviri provider'a taşınır
+
+`goal-mapping.ts` bugün ad-builder modülünde duruyor ama içeriği tamamen
+Meta'ya özgü (`OUTCOME_LEADS`, `destination_type`, `promoted_object`).
+Google eklendiğinde bu dosyanın yanına ikinci bir dosya değil, **provider
+arayüzüne bir metot** gelmeli:
+
+```
+provider.specFor(goal, context)   →  platforma özgü kampanya spec'i
+provider.supports(goal)           →  'yes' | 'not_yet' | 'never'
+```
+
+Böylece yeni platform eklemek ad-builder'a dokunmadan mümkün olur ve §9.1'deki
+üçlü ayrım tip seviyesinde zorunlu hâle gelir — bir provider "bu hedefi
+destekliyor muyum" sorusuna cevap vermeden derlenemez.
+
+---
+
+## 10. AÇIK KARARLAR
+
+Her biri tartışılacak. `Karar:` satırları oturumda doldurulacak.
+
+---
+
+### K1 — Tek veri modeli mi, iki ayrı model mi?
+
+- **(a)** Tek ağaç, iki yüzey. Basit yüzey ağacı bir üreticiyle kurar.
+- **(b)** İki ayrı model: basit yüzey bugünkü düz `ad_drafts`'ta kalır, uzman
+  yüzeyi yeni bir ağaç tablosuna yazılır.
+
+**Öneri: (a).** (b) ikinci bir yayın yolu demek ve bu projenin en pahalı hata
+deseni tam olarak bu — bugün üç yol var ve altı hatanın düzeltmesi ikisine hiç
+gitmedi. (b)'nin tek avantajı ilk turda daha az iş; bedeli her Meta kuralını
+iki yerde öğrenmek.
+
+**Karar:** _(açık)_
+
+---
+
+### K2 — Kim hangi yüzeyi görüyor?
+
+- **(a)** Rolden türer: müşteri seviyesindeki kullanıcı yalnızca basit yüzeyi
+  görür, ajans ikisini de.
+- **(b)** Herkes seçebilir, varsayılan rolden gelir.
+- **(c)** Müşteri bazında ayar: bu müşteri uzman yüzeyini görebilir/göremez.
+
+**Öneri: (a).** Beyaz etiketli üründe müşteriye teklif stratejisi göstermek
+hem korkutucu hem riskli. (b) bugünkü mod anahtarının aynısı ve aynı sorunu
+üretir: acemi "gelişmiş"i görüp kendini yetersiz hisseder.
+
+**Karar:** _(açık)_
+
+---
+
+### K3 — Müşterinin yayını doğrudan mı çıksın, onaya mı düşsün?
+
+- **(a)** Doğrudan yayın, müşteri başına **günlük bütçe tavanı** ile
+  sınırlanır.
+- **(b)** Ajans onayına düşer. Auto-Boost'ta onay kuyruğu **zaten var ve
+  çalışıyor** (`candidate → decision → create-approved`); müşteri modundaki
+  reklamlar da aynı kuyruğa girebilir.
+- **(c)** Müşteri bazında ayar: bu müşteri onaysız yayınlayabilir.
+
+**Öneri: (c), varsayılan (b).** Ajansın müşterisi ajansın reklam hesabında
+para harcıyor; ilk kurulumda onay doğru varsayılan. Ama her müşteri için onay
+beklemek ajansı yavaşlatır, bu yüzden kapatılabilir olmalı.
+
+**Karar:** _(açık)_
+
+---
+
+### K4 — Uzman yüzeyinin ilk tur kapsamı
+
+- **(a)** Tek ad set + çoklu kreatif (A/B).
+- **(b)** Çoklu ad set + çoklu kreatif (tam ağaç).
+- **(c)** (b) + kayıtlı kitle kütüphanesi.
+
+**Öneri: (a) ilk turda, model (b)'yi taşıyacak şekilde.** Yani veritabanı
+ağacı baştan çoklu ad set'i kaldırsın, arayüz ilk turda tek ad set göstersin.
+Şemayı sonradan çoğaltmak migration demek; arayüzü açmak bir ekran işi.
+Kayıtlı kitle (c) ayrı bir modül ve BASE'e ait — bu işi ona bağlamak
+tıkanma üretir.
+
+**Karar:** _(açık)_
+
+---
+
+### K5 — Kreatif ayrı bir varlık mı olsun?
+
+Bugün görseller taslağa bağlı (`ad_draft_assets.draft_id`).
+
+- **(a)** Kreatif kendi tablosu olur; bir kreatif birden çok reklamda
+  kullanılır.
+- **(b)** Bugünkü gibi kalır; ad set başına N reklam olunca her reklam kendi
+  görsel kümesini taşır.
+
+**Öneri: (a).** (b) ile "aynı görselle iki metin dene" senaryosu görseli iki
+kez yüklemek demek ve arşivin varlık sebebini yeniden deler — arşiv tam da
+bunun için yazılmıştı.
+
+**Karar:** _(açık)_
+
+---
+
+### K6 — Menü ve bilgi mimarisi
+
+- **(a)** Tek "Reklamlar" girişi, altında dört başlangıç: hızlı reklam /
+  kampanya kur / gönderiyi öne çıkar / toplu.
+- **(b)** Bugünkü üç ayrı sayfa kalır, içleri değişir.
+- **(c)** İki sayfa: "Reklam Oluştur" (basit) ve "Kampanya Yönetimi" (uzman +
+  toplu), Auto-Boost ayrı kalır.
+
+**Öneri: (a).** Kullanıcı "reklam vereceğim" diye geliyor; giriş kapısı tek
+olmalı. Auto-Boost'un **kural yönetimi** yine ayrı bir sayfada kalabilir —
+orası reklam oluşturma değil, otomasyon ayarı.
+
+**Karar:** _(açık)_
+
+---
+
+### K7 — Görsel kırpma nerede yapılacak?
+
+- **(a)** Tarayıcıda: kullanıcı odak noktasını sürükler, üç oran canvas'ta
+  üretilip yüklenir.
+- **(b)** Sunucuda: tek görsel yüklenir, merkez kırpma ile üç oran üretilir,
+  kullanıcı sonucu görür ve isterse odak noktasını değiştirir.
+- **(c)** Yalnızca öneri: kırpmayı yapmayız, hangi oranın eksik olduğunu daha
+  erken söyleriz.
+
+**Öneri: (a).** Sunucuda kırpma yeni bir görüntü işleme bağımlılığı demek
+(bugün yalnızca `image-probe.ts` var, başlık okuyor — yeniden örnekleme yok).
+Tarayıcıda canvas bunu bağımlılıksız yapıyor ve kullanıcı sonucu anında
+görüyor. **Dikkat:** kırpılmış görsel arşive de yazılmalı, yoksa aynı iş her
+kampanyada tekrar edilir.
+
+**Karar:** _(açık)_
+
+---
+
+### K8 — Bütçe tahmini ilk turda mı?
+
+Meta'nın `delivery_estimate` ucu var ama **bu projede hiç çağrılmadı**; dönen
+aralığın Türkiye'deki küçük hesaplarda ne kadar anlamlı olduğu
+doğrulanmadı.
+
+- **(a)** İlk turda gelsin — basit yüzeyin en büyük kazancı bu.
+- **(b)** Sonraya. Üç bütçe kartı yine olur ama altında tahmin yerine düz
+  açıklama yazar ("küçük başla, sonuçları gör").
+- **(c)** Kendi verimizden tahmin: `insights_daily` dolu, aynı müşterinin
+  geçmiş CPA'sından aralık üretilir.
+
+**Öneri: önce (b), aynı turda (a) denenir.** Tahmin gösterip tutmaması,
+hiç göstermemekten kötü — bu ürünün müşterisi o sayıya inanır.
+(c) cazip ama 2026-07-23'ten eski veri yok
+([DEVAM.md](DEVAM.md)), yani çoğu müşteride hesaplanacak geçmiş yok.
+
+**Karar:** _(açık)_
+
+---
+
+### K9 — `special_ad_categories`
+
+Bugün üç yazma yolunda da sabit `[]`.
+
+- **(a)** Müşteri kartına bir alan: bu müşteri özel kategori mi (emlak /
+  istihdam / kredi / sosyal-siyasi). Kampanyaya oradan geçer.
+- **(b)** Kampanya kurarken sorulur.
+- **(c)** Şimdilik dokunulmaz.
+
+**Öneri: (a).** Kategori müşterinin özelliği, kampanyanın değil; her
+kampanyada sormak unutulacağı anlamına gelir ve unutulduğunda ceza hesap
+seviyesinde. (c) kabul edilebilir tek koşulla: ajansın bu kategorilerde
+müşterisi olmadığı **doğrulanırsa**.
+
+**Karar:** _(açık)_
+
+---
+
+### K10 — Yayın sonrası
+
+- **(a)** Yayınlanan ağaç senkronize `Campaign/AdGroup/Ad` satırlarına
+  bağlanır; oluştur ekranı durum, harcama, durdur ve kopyala gösterir.
+- **(b)** Bugünkü gibi: yayınlanınca Genel Bakış'a yönlendirilir.
+
+**Öneri: (a) ama kademeli** — ilk turda yalnızca **durum + kopyala**. Durdurma
+zaten Kurallar modülünde var ve iki yerden durdurmak çakışma üretebilir.
+
+**Karar:** _(açık)_
+
+---
+
+### K11 — Mevcut `ad_drafts` verisi ne olacak?
+
+Üretimdeki taslak sayısı **bilinmiyor** — panelden ya da veritabanından
+sayılmalı. Veritabanı 15 Ağustos'ta sıfırlandığı için sayının küçük olması
+bekleniyor.
+
+- **(a)** Taşınır (düz satır → tek düğümlü ağaç).
+- **(b)** Yayınlanmışlar okunur kalır, yayınlanmamışlar silinir.
+- **(c)** Sayı sıfır ya da ihmal edilebilirse tablo bırakılır, yenisi kurulur.
+
+**Öneri: önce SAY, sonra karar ver.** Sayı 0 ise (c) en temizi.
+
+**Karar:** _(açık)_
+
+---
+
+### K12 — §2.5'teki dört sessiz hata ne zaman düzeltilecek?
+
+- **(a)** Hemen, yeniden tasarımdan önce, ayrı bir commit'te.
+- **(b)** Yeni yüzeylerle birlikte — yeni kodda zaten olmayacaklar.
+
+**Öneri: (a) yalnızca 1 numara için** (metin kaybı — veri kaybı ve bugün
+canlıda), gerisi (b). Yeniden tasarım haftalar sürebilir ve o süre boyunca
+kullanıcı yazdığını kaybetmeye devam eder.
+
+**Karar:** _(açık)_
+
+---
+
+### K13 — Bir taslak kaç platform taşısın?
+
+- **(a)** Bir taslak = **bir platform**. "Her ikisinde yayınla" ikinci bir
+  taslak üretir; ikisi ortak bir **grup kimliğiyle** bağlanır ve raporlama o
+  kimlik üzerinden birleşir.
+- **(b)** Bir taslak = N platform. Yayınlayıcı ikiye dağıtır.
+
+**Öneri: (a).** Üç gerekçe, üçü de bu projenin bilinen hata desenleri:
+
+1. **Yarım durum.** Meta başarılı, Google düştü — tek satır iki gerçeği
+   taşıyamaz. `createBoost` yarım kalan varlıkları geri alıyor
+   ([meta.provider.ts:1155](../apps/api/src/modules/connections/providers/meta.provider.ts:1155))
+   ama iki **platform** arasında atomik geri alma diye bir şey yok.
+2. **Bütçe.** "Günde 200 ₺" ikiye nasıl bölünecek? Bu kullanıcının kararı;
+   bizim uydurmamız, hesabın ayarına güvenmekle aynı hata sınıfı.
+3. **Sonradan evrim.** İki platform bağımsız değişiyor; tek satır ikisini
+   birden temsil edemez ve zamanla hangisinin doğru olduğu bilinmez.
+
+Grup kimliği (b)'nin tek gerçek faydasını — birleşik raporlama — zaten
+veriyor.
+
+**Karar:** _(açık)_
+
+---
+
+### K14 — Google için hangi kampanya tipi?
+
+- **(a)** **Performance Max.** Varlık ver, gerisini Google karara bağlasın.
+  Ürünün felsefesine en yakın olan bu ve kapsama sistemi zaten PMax
+  yuvalarına göre yazılmış.
+- **(b)** **Arama (Search).** Anahtar kelime gerekiyor ama niyet en net olan
+  kanal ve "aramada bulunmak" hedefinin tek karşılığı.
+- **(c)** İkisi de, hedefe göre.
+
+**Öneri: (b) önce, (a) sonra.** Sıra ters görünüyor ama gerekçesi
+`goal-mapping.ts`'in kendi mantığı: PMax dönüşüm takibi olmadan öğrenmiyor ve
+bu üründe **piksel/etiket hikâyesi hiç yok** — Meta tarafında `OUTCOME_SALES`
+tam bu yüzden kullanılmıyor. Takip olmadan açılan bir PMax, öğrenmeyen ve
+sessizce para harcayan bir kampanya olur; bu ürünün en korktuğu şey.
+Arama kampanyası ise dönüşüm takibi olmadan da anlamlı trafik getiriyor.
+
+Erişim açıldığına göre bu karar artık **canlıda sınanabilir**: ajansın kendi
+hesabında küçük bütçeli bir arama kampanyası, `google-check` ile alan
+doğrulaması yaparak. Kararı masa başında vermek zorunda değiliz.
+
+**Bağlı soru — dönüşüm takibi.** PMax'i gerçekten istiyorsak Google etiketi
+ve dönüşüm tanımı bu ürüne girmek zorunda. Bu, reklam oluşturucunun değil
+ayrı bir işin kapsamı ve bugün hiç yok; K14 (a) seçilirse o iş de sıraya
+girmiş olur.
+
+**Karar:** _(açık)_
+
+---
+
+### K15 — Desteklenmeyen hedef arayüzde ne olsun?
+
+- **(a)** Seçenek gösterilir, **sebebiyle** pasif: "henüz yok" ile "hiç
+  olmayacak" farklı cümleler.
+- **(b)** Gizlenir.
+
+**Öneri: (a).** Provider zaten üç ayrı gerekçe üretiyor (§9.1) ve bu bilgi
+bugün hiçbir yere ulaşmıyor. Gizlemek, kullanıcının Google bağlayıp neden
+hiçbir şey yapamadığını anlamaması demek — sessiz hata deseninin arayüz
+karşılığı.
+
+**Karar:** _(açık)_
+
+---
+
+## 11. Sıra ve riskler
+
+Kararlar kapandıktan sonra önerilen sıra:
+
+| # | Adım | Neden bu sırada |
+|---|---|---|
+| 1 | Yayın çekirdeği: ağaç şeması + tek publisher | Çekirdek önce gitmezse üç yolu ayrı ayrı yazmış oluruz — bugünkü durumu daha büyük ölçekte tekrarlarız |
+| 2 | Basit yüzey | Vaadin sahibi bu; en çok kullanıcıya dokunuyor |
+| 3 | Uzman yüzey (tek ad set) | Ajansın günlük işi |
+| 4 | Toplu = uzmanın tablo girişi | Ham kimlikler kalkar |
+| 5 | Auto-Boost = ağaç üreticisi + elle boost | En az riskli, en son |
+
+**Google yazma yolu bu sıranın neresinde?** Erişim açıldığına göre artık
+"sonra" demenin teknik gerekçesi kalmadı; karar ürünsel. Önerim: **1. adımda
+yalnızca arayüz sözleşmesi** (`specFor` / `supports`, §9.4) — Google'ın
+gerçek yazma kodu 3. adımdan sonra, ayrı bir iş olarak. Gerekçe: Google'ın
+kendi "altı hatası" Meta'nınkiyle aynı anda çıkarsa hangisinin ne olduğu
+ayırt edilemez. Ama sözleşme 1. adımda girmezse sonradan geriye dönük
+takılır — asıl maliyet orada.
+
+### Riskler
+
+- **Meta'da Advanced Access hâlâ yok.** Yeni çekirdeği Meta tarafında yalnızca
+  ajansın kendi hesaplarında canlı sınayabiliriz. §2'nin dersi: canlı çağrı
+  olmadan bir yazma yolu "test edildi" sayılmıyor. Yani 1. adım bitince
+  **hemen** bir gerçek yayın denenmeli, beş adımın sonunda değil.
+- **Google'da engel kalktı, tehlike başladı.** Yazma kodu artık gerçek bir
+  müşteri hesabında gerçek para harcayabilir (§9.1.1). İlk canlı çağrı ajansın
+  kendi hesabında, en küçük bütçeyle ve hemen duraklatılarak yapılmalı.
+- **Birleştirmenin kendisi riskli.** Altı hatayı kilitleyen testler
+  `publishDraft` yolunu hedefliyor; birleşme sonrası hepsi yeşil kalmalı. O
+  testler bu işin şartnamesi.
+- **CLAUDE.md tuzakları geçerli:** yeni tablo → `02_rls.sql` politika listesi
+  + `test/pglite-harness.ts` TRUNCATE listesi; enum'a değer eklemek ayrı
+  migration; `Prisma.sql` yorumlarında backtick yok.
+- **RLS elle değil testle doğrulanacak.** `ad-account-pool-rls.spec.ts`
+  deseni (`SET ROLE`) yeni tablolara uygulanmalı.
+
+## 12. Doğrulanması gerekenler
+
+Belgede varsayım olarak duran, canlıda ya da veriyle sınanacak maddeler:
+
+- `delivery_estimate` Türkiye'deki küçük hesaplarda anlamlı aralık dönüyor mu
+  (K8).
+- Üretimde kaç `ad_drafts` satırı var (K11).
+- Ajansın emlak / istihdam / kredi kategorisinde müşterisi var mı (K9).
+- Tarayıcıda kırpılmış görselin Meta'nın minimum kenar kuralını
+  (`MIN_IMAGE_EDGE`) her oranda geçtiği — kırpma çözünürlük düşürüyor.
+- **Google erişim seviyesi Basic mi Standard mı** (K14). Basic'te günlük işlem
+  sınırı var ve toplu oluşturmada ilk çarpılacak yer orası. **Kısmen
+  cevaplandı:** 127 gerçek hesap geldiğine göre token en azından Basic — test
+  token'ı yalnızca test hesaplarını görüyor
+  ([google.provider.ts:204](../apps/api/src/modules/connections/providers/google.provider.ts:204)).
+  Standard olup olmadığı hâlâ bilinmiyor.
+- ~~**Google'da kaç hesap havuza düştü**~~ — **CEVAPLANDI (2026-08-16,
+  panelden):** 127 hesap keşfedildi, **2'si atanmış ve izleniyor** (Ege Birlik
+  Yapı · 1695129827, Fenbay İnşaat Mühendislik · 2020193566 — ikisi de TRY /
+  Europe/Istanbul), **125'i havuzda**. Meta'da 157 hesap vardı.
+  İki sonuç: (1) Google verisi akıyor ama **yalnızca iki müşteri için** —
+  "veri geliyor" ifadesi dar; (2) K14'ün canlı sınaması bu iki hesapta
+  yapılabilir.
+
+### 12.1. Panelden çıkan yeni bulgu — "28 hesap" etiketi
+
+Bağlantı kartının başlığı **"Google Ads · Google Ads (28 hesap)"** diyor;
+hemen altındaki blok **"2 / 127"**, onun da altı **"Havuzdaki 125 hesap"**.
+Aynı kartta üç sayı ve hiçbiri diğerini açıklamıyor.
+
+Sayılar yanlış değil, **etiket yanıltıcı**:
+
+| Sayı | Kaynak | Ne sayıyor |
+|---|---|---|
+| 28 | `listAccessibleCustomerIds` ([:269](../apps/api/src/modules/connections/providers/google.provider.ts:269)) | Doğrudan erişilen **kök** müşteri kimliği — çoğu MCC, reklam hesabı değil |
+| 127 | `listAdAccounts` ([:336](../apps/api/src/modules/connections/providers/google.provider.ts:336)) | O köklerin altındaki, yönetici olmayan, `ENABLED` **reklam** hesapları |
+| 125 | `accounts.filter(clientId === null)` ([account-picker.tsx:91](../apps/web/src/components/account-picker.tsx:91)) | Havuzda bekleyen (atanmamış) |
+
+İki sorun:
+
+1. **"hesap" kelimesi iki farklı şeyi anlatıyor.** 28'in çoğu yönetici hesabı
+   ve `listAdAccounts` onları bilerek eliyor — "yönetici hesapları listeye
+   alınmaz, reklam yayınlamazlar". Yani kart, kullanıcıya reklam
+   veremeyeceği şeyleri "hesap" diye sayıyor.
+2. **Etiket DONMUŞ.** `accountLabel` yalnızca yetkilendirme anında yazılıyor
+   ([connections.service.ts:429, 512, 523](../apps/api/src/modules/connections/connections.service.ts:429));
+   `refreshAccounts` ([:663](../apps/api/src/modules/connections/connections.service.ts:663))
+   ona hiç dokunmuyor. "Hesapları yenile" 127'yi günceller, 28'i güncellemez —
+   zamanla iki sayı birbirinden uzaklaşır ve kimse fark etmez.
+
+Doğrusu: başlık ya reklam hesabı sayısını göstermeli ya da ne saydığını
+yazmalı ("28 yönetici hesabı üzerinden 127 reklam hesabı"). Bu, yeniden
+tasarımı beklemeden düzeltilebilir.
+
+---
+
+Çalışma kuralları [`CLAUDE.md`](../CLAUDE.md), durum
+[`DURUM.md`](DURUM.md), devir [`DEVAM.md`](DEVAM.md).
