@@ -1,47 +1,16 @@
 # Devir belgesi — nerede kaldık
 
-**Son güncelleme:** 2026-08-16 · **Son commit:** `64fe10c` · **Canlı:** HAYIR
-— kod `main`'de ama sunucuya ÇIKMADI (aşağıya bak)
+**Son güncelleme:** 2026-08-16 · **Son commit:** `c22a528` · **Canlı:** EVET —
+`64fe10c` elle dağıtıldı ve doğrulandı. Sonraki iki commit yalnızca belge.
 
 ---
 
-## SIRADAKİ İŞ — iki tane, ikisi de kod yazmak DEĞİL
+## SIRADAKİ İŞ — tek tane, ve kod yazmak DEĞİL
 
-Önceki oturum "Oluştur" bölümünün yeniden tasarımını bitirdi (§A). Sıradaki iki
-iş de doğrulama işi ve ikisi de sunucuda yapılacak.
+Önceki oturum "Oluştur" bölümünün yeniden tasarımını bitirdi (§A) ve kod
+2026-08-16'da üretime çıktı (§B). Geriye tek doğrulama işi kaldı.
 
-### 1. ELLE DAĞIT — otomatik dağıtım çalışmıyor
-
-`main` üzerindeki kod CI'da tamamen yeşil ama **sunucuda değil**. GitHub
-Actions'ta 30 koşunun 30'u başarısız; düşen adım "SSH ile dağıt" ve öncesindeki
-her şey (typecheck, testler, derleme, RLS kapsaması) geçiyor. Ayrıntı ve
-bakılacak sırlar §0'daki uyarıda.
-
-```
-su - advetics
-cd ~/htdocs/advetics.com && git pull && ./scripts/deploy.sh
-```
-
-Deploy **5 migration** uygulayacak (hepsi ekleme; tek `ALTER COLUMN ... DROP
-NOT NULL` ve o genişletme), ardından `db:rls` politikaları ve kısıtları
-yenileyecek.
-
-**Çıktığını doğrulama:** bu uç şu an `404` dönüyor, yeni kodla `401` dönmeli
-(rota var, kimlik istiyor):
-
-```
-curl -s -o /dev/null -w '%{http_code}\n' https://advetics.com/api/draft-campaigns
-```
-
-**Deploy öncesi bakılmalı:** eski oluşturucunun yazma uçları artık `410`
-dönüyor. Üretimde YAYINLANMAMIŞ taslak varsa artık yayınlanamaz (kayıtlar
-silinmiyor, salt okunur görünüyor). Sayı hiç öğrenilmedi:
-
-```
-SELECT status, count(*) FROM ad_drafts GROUP BY status;
-```
-
-### 2. İLK GERÇEK YAZMA ÇAĞRISI — hiç yapılmadı
+### İLK GERÇEK YAZMA ÇAĞRISI — hiç yapılmadı
 
 **Bu oturumda yazılan hiçbir yayın yolu canlıda denenmedi.** Ne yeni Meta yolu,
 ne Google. 13 Ağustos'taki ilk gerçek Meta çağrısında altı hata çıkmıştı ve
@@ -97,8 +66,9 @@ kuralının sonucu ve kullanıcıya açıkça söyleniyor:
 - **Bütçe tahmini yok.** `delivery_estimate` hiç çağrılmadı; tutmayan bir
   tahmin hiç göstermemekten kötü (K8, açık).
 - **Boost varyantı yok** — aynı gönderi ikinci kez öne çıkarılmıyor.
-- **`ad_drafts` emekli ama SİLİNMEDİ.** Veri yerinde; tablonun düşürülmesi
-  ayrı bir iş ve satır sayısı öğrenilmeden yapılmamalı (K11).
+- **`ad_drafts` emekli ama SİLİNMEDİ.** Üretimde 0 satır olduğu 16 Ağustos'ta
+  ölçüldü (§B), yani tablonun düşürülmesi artık güvenli — ama ayrı bir iş ve
+  bu oturumda yapılmadı (K11).
 
 ### Bu oturumda çıkan ve düzeltilen üç sessiz hata
 
@@ -122,6 +92,40 @@ Hiçbiri aranan şey değildi; başka bir işi yaparken ortaya çıktılar:
 - **Belgeyi script'le düzenlerken "sonraki açık satıra kadar" deseni
   kullanma.** Aradaki kapalı bölümleri yutuyor; TASARIM-OLUSTUR.md'de K5 ve
   K6 böyle silindi ve tesadüfen fark edildi.
+
+---
+
+## B. DAĞITILDI — 2026-08-16, ELLE
+
+`64fe10c` sunucuya elle çıktı. Otomatik dağıtım **hâlâ çalışmıyor** (§0'daki
+uyarı geçerli); bu deploy `su - advetics` → `git pull` → `./scripts/deploy.sh`
+ile yapıldı. Beş migration, ardından `01_constraints` / `02_rls` /
+`03_partitions` sorunsuz uygulandı; üç süreç de `advetics` kullanıcısı altında
+`online` döndü.
+
+Doğrulandı: `/api/draft-campaigns` ve `/api/creatives` artık **401** (deploy
+öncesi 404'tü — rota var, kimlik istiyor), `/api/health` 200 ve veritabanı
+gecikmesi 2 ms.
+
+**`ad_drafts` ÜRETİMDE BOŞ — 0 satır.** Eski oluşturucunun emekliye ayrılması
+hiçbir şeyi kilitlemedi, taşınacak veri yok ve panelde "eski taslaklar" bölümü
+hiç görünmüyor. Bu, K11'in bekleyen tek koşuluydu: **tablo artık güvenle
+düşürülebilir.** Düşürülürken `ad_draft_assets`, `02_rls.sql`'deki politikalar
+ve `pglite-harness.ts`'nin `TRUNCATE` listesi birlikte temizlenmeli.
+
+Kullanılan sorgu — `psql -d advetics` ÇALIŞMIYOR (rol adı işletim sistemi
+kullanıcısından alınıyor, oysa roller `advetics_*`) ve bağlantı dizesindeki
+`?schema=public` libpq tarafından reddediliyor, o yüzden kesiliyor:
+
+```
+cd ~/htdocs/advetics.com
+export DB_URL="$(grep -m1 '^DIRECT_DATABASE_URL=' .env | sed -e 's/^[^=]*=//' -e 's/^["'"'"']//' -e 's/["'"'"']$//' -e 's/?.*$//')"
+psql "$DB_URL" -c "SELECT status, count(*) FROM ad_drafts GROUP BY status;"
+```
+
+`.env` **`set -a` ile alınmamalı** — `NODE_ENV=production`'ı kabuğa sokuyor ve
+`deploy.sh`'ı `prisma: not found` ile düşürüyor. Yukarıdaki tek değişkeni
+okuyor.
 
 ---
 

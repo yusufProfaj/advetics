@@ -771,9 +771,8 @@ zaten Kurallar modülünde var ve iki yerden durdurmak çakışma üretebilir.
 
 ### K11 — Mevcut `ad_drafts` verisi ne olacak?
 
-Üretimdeki taslak sayısı **bilinmiyor** — panelden ya da veritabanından
-sayılmalı. Veritabanı 15 Ağustos'ta sıfırlandığı için sayının küçük olması
-bekleniyor.
+Üretimdeki taslak sayısı karar anında **bilinmiyordu** — 16 Ağustos'ta deploy
+sonrası ölçüldü: **0 satır**. Veritabanı 15 Ağustos'ta sıfırlanmıştı.
 
 - **(a)** Taşınır (düz satır → tek düğümlü ağaç).
 - **(b)** Yayınlanmışlar okunur kalır, yayınlanmamışlar silinir.
@@ -781,8 +780,8 @@ bekleniyor.
 
 **Karar: EMEKLİ AMA SİLİNMEDİ.** 2026-08-16'da kapandı.
 
-Sayı hâlâ bilinmiyor ve tam da bu yüzden veri taşınmadı ya da düşürülmedi.
-Yapılan: eski akışın yazma yolları kapatıldı (uçlar 410 dönüyor), yeni bir
+Karar verilirken sayı bilinmiyordu ve tam da bu yüzden veri taşınmadı ya da
+düşürülmedi. Yapılan: eski akışın yazma yolları kapatıldı (uçlar 410 dönüyor), yeni bir
 taslak oluşturmanın yolu kalmadı; mevcut kayıtlar Reklamlar ekranında SALT
 OKUNUR bir bölümde duruyor ve bölüm boşsa hiç görünmüyor.
 
@@ -796,7 +795,10 @@ bir gün başka bir ekrandan ya da bir betikten sessizce yeniden kullanılır ve
 taslak yeni akışın hiçbir kontrolünden geçmez — özel reklam kategorisi beyanı
 dahil. `retired.spec.ts` kilitliyor.
 
-**Tablonun düşürülmesi ayrı bir iş** ve sayı öğrenilmeden yapılmamalı.
+**Tablonun düşürülmesi ayrı bir iş.** Sayı artık biliniyor (0) ve düşürme
+güvenli; yapılırken `ad_draft_assets`, `02_rls.sql` politikaları ve
+`pglite-harness.ts`'nin `TRUNCATE` listesi birlikte temizlenmeli. Salt okunur
+uçlar ve `retired.spec.ts` de o zaman kaldırılır.
 
 ---
 
@@ -941,7 +943,8 @@ Belgede varsayım olarak duran, canlıda ya da veriyle sınanacak maddeler:
 
 - `delivery_estimate` Türkiye'deki küçük hesaplarda anlamlı aralık dönüyor mu
   (K8).
-- Üretimde kaç `ad_drafts` satırı var (K11).
+- ~~Üretimde kaç `ad_drafts` satırı var (K11).~~ **CEVAPLANDI 2026-08-16: 0
+  satır.** Emekliye ayırma hiçbir taslağı kilitlemedi.
 - Ajansın emlak / istihdam / kredi kategorisinde müşterisi var mı (K9).
 - Tarayıcıda kırpılmış görselin Meta'nın minimum kenar kuralını
   (`MIN_IMAGE_EDGE`) her oranda geçtiği — kırpma çözünürlük düşürüyor.
