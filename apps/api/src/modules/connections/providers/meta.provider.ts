@@ -435,6 +435,23 @@ export class MetaProvider implements IAdPlatformProvider {
       'username',
       'access_token',
       'picture{url}',
+      /**
+       * `tasks` — kullanıcının SAYFA ÜZERİNDEKİ görevleri.
+       *
+       * NEDEN İSTENİYOR: sayfa token'ının hangi izinleri taşıyacağını bu
+       * belirliyor. Canlıda şu durum çıktı ve teşhis edilemedi — aynı sayfa
+       * token'ı Instagram medyası için çalışıyor, sayfa gönderileri için
+       * "(#10) requires pages_read_engagement" ile reddediliyor. Kullanıcı
+       * token'ında izin VAR; eksik olan şey sayfa seviyesinde.
+       *
+       * İki ihtimal vardı — sayfada yetersiz rol mü, uygulamada Advanced
+       * Access eksikliği mi — ve ikisi de tahminle ayırt edilemiyordu. Meta
+       * cevabı zaten veriyor; biz sormuyorduk.
+       *
+       * `raw` içinde saklanıyor: ayrı bir kolon açmak, tek bir teşhis için
+       * şema büyütmek olurdu.
+       */
+      'tasks',
       'instagram_business_account{id,username,name,profile_picture_url}',
     ].join(',');
 
