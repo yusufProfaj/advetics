@@ -1,12 +1,13 @@
 # "Oluştur" bölümünün yeniden tasarımı — tasarım belgesi
 
-**Durum:** İNŞAAT BAŞLADI · **Tarih:** 2026-08-16 · **4 karar kapandı, 11 açık**
+**Durum:** İNŞAAT SÜRÜYOR · **Tarih:** 2026-08-16 · **5 karar kapandı, 10 açık**
 
 Bu belge bir plan değil, bir **karar zemini**. §1–§9 bugünkü durumu ve önerilen
 omurgayı anlatıyor, §10 kararları taşıyor.
 
-İnşaat için zorunlu olan dört karar (K1, K4, K5, K13) kapatıldı ve kod
-yazılmaya başlandı. **Kalan on bir karar için varsayım yapılmayacak** — o
+İnşaat için zorunlu olan dört karar (K1, K4, K5, K13) kapatıldı, ardından
+K7 (kırpma) da yazıldığı gün kapandı. **Kalan on karar için varsayım
+yapılmayacak** — o
 alanlara gelindiğinde karar sorulacak. Kapanmış kararlar da kesin değil:
 sıra, en riskli adımı sona bırakacak şekilde kuruldu ki fikir değişirse
 atılan şey veri değil kod olsun.
@@ -622,13 +623,23 @@ orası reklam oluşturma değil, otomasyon ayarı.
 - **(c)** Yalnızca öneri: kırpmayı yapmayız, hangi oranın eksik olduğunu daha
   erken söyleriz.
 
-**Öneri: (a).** Sunucuda kırpma yeni bir görüntü işleme bağımlılığı demek
-(bugün yalnızca `image-probe.ts` var, başlık okuyor — yeniden örnekleme yok).
-Tarayıcıda canvas bunu bağımlılıksız yapıyor ve kullanıcı sonucu anında
-görüyor. **Dikkat:** kırpılmış görsel arşive de yazılmalı, yoksa aynı iş her
-kampanyada tekrar edilir.
+**Karar: (a) — TARAYICIDA, ODAK NOKTALI.** 2026-08-16'da kapandı ve yazıldı.
+Sunucuda kırpma yeni bir görüntü işleme bağımlılığı demekti (bugün yalnızca
+`image-probe.ts` var ve o sadece başlık okuyor); canvas bunu bağımlılıksız
+yapıyor ve kullanıcı sonucu anında görüyor.
 
-**Karar:** _(açık)_
+**Uygulamada çıkan üç şey:**
+
+1. **Kırpılan görsel arşive yazılıyor** ve mükerrer kontrolü işi kendiliğinden
+   çözüyor: aynı kaynak + aynı odak = aynı baytlar = mevcut kayıt dönüyor.
+   Arşiv şişmiyor, ama kullanıcıya "zaten vardı" diye söyleniyor.
+2. **Çözünürlük sınırı gerçek bir kısıt.** 800×600'den 9:16 kırpmak 338×600
+   üretiyor ve `MIN_IMAGE_EDGE`'in altına düşüyor. Üretilemeyen oran sessizce
+   atlanmıyor; kaçının neden üretilemediği yazıyor.
+3. **Canvas kirlenmesi tuzağı.** Görseli `<img src>` ile çizmek tuvali
+   kirletiyor ve `toBlob` SecurityError fırlatıyor — üstelik SESSİZ bir tuzak:
+   önizleme çalışır, kullanıcı odağı ayarlar, "üret" der ve ancak o an patlar.
+   Baytlar `fetch` + `createImageBitmap` ile alınıyor.
 
 ---
 

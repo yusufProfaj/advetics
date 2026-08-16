@@ -14,6 +14,7 @@ import {
   type PublishCheck,
 } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
+import { CropStudio } from './crop-studio';
 
 /**
  * Basit yüzey — tek ekran, sıralı bloklar.
@@ -71,6 +72,10 @@ export function SimpleAdBuilder({
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [assetIds, setAssetIds] = useState<string[]>([]);
   const [dailyBudget, setDailyBudget] = useState<string>(BUDGET_PRESETS[1].value);
+  /** Kırpma stüdyosuna girilen kaynak görsel. */
+  const [cropSource, setCropSource] = useState<AssetRecord | null>(null);
+  /** Stüdyodan dönen görseller — sayfa yenilenene kadar arşiv listesine eklenir. */
+  const [uretilenler, setUretilenler] = useState<AssetRecord[]>([]);
   const [durationDays, setDurationDays] = useState('7');
 
   const [step, setStep] = useState<Step>('form');
@@ -105,7 +110,19 @@ export function SimpleAdBuilder({
    * Meta reklamı kare, 9:16 ve 16:9 kovalarına oturuyor. Telefondan çekilmiş
    * 4:3 bir fotoğraf hiçbirine girmiyor ve bunu tıklamadan önce görmeli.
    */
-  const uymayanSayisi = libraryAssets.filter(
+  /**
+   * Gösterilecek görseller — ARŞİV + BU OTURUMDA ÜRETİLENLER.
+   *
+   * Kırpma sonrası `router.refresh()` beklemek, kullanıcının az önce
+   * ürettiği görselleri birkaç saniye görememesi demek. Üretilenler listeye
+   * ÖNDEN ekleniyor; mükerrer olanlar (arşivde zaten vardı) elenmiş hâlde.
+   */
+  const gosterilen = useMemo(() => {
+    const arsivKimlikleri = new Set(libraryAssets.map((a) => a.id));
+    return [...uretilenler.filter((a) => !arsivKimlikleri.has(a.id)), ...libraryAssets];
+  }, [libraryAssets, uretilenler]);
+
+  const uymayanSayisi = gosterilen.filter(
     (a) => matchRatio(a.width, a.height) === null,
   ).length;
 
@@ -320,7 +337,7 @@ export function SimpleAdBuilder({
             baslik="Görselleri seç"
             altBaslik="Birden fazla seçebilirsin; hangisinin nereye gideceğine biz karar veririz."
           >
-            {libraryAssets.length === 0 ? (
+            {gosterilen.length === 0 ? (
               <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
                 Arşivde henüz görsel yok. <strong>Kütüphane → Görsel Arşivi</strong> bölümünden
                 yükleyebilirsin.
@@ -328,7 +345,7 @@ export function SimpleAdBuilder({
             ) : (
               <>
                 <ul className="grid gap-2 sm:grid-cols-6">
-                  {libraryAssets.map((a) => {
+                  {gosterilen.map((a) => {
                     const oran = matchRatio(a.width, a.height);
                     const secili = assetIds.includes(a.id);
                     return (
@@ -367,20 +384,63 @@ export function SimpleAdBuilder({
                             {secili ? `✓ ${assetIds.indexOf(a.id) + 1}.` : oran ? a.name : 'oran uymuyor'}
                           </span>
                         </button>
+
+                        {/* KIRPMA HER GÖRSELDE VAR, yalnızca uymayanlarda değil.
+                            Kare bir fotoğraftan dikey üretmek de anlamlı: dikey
+                            görsel yoksa Hikâyeler yerleşimi hiç açılmıyor. */}
+                        <button
+                          type="button"
+                          onClick={() => setCropSource(a)}
+                          className="mt-0.5 w-full text-[10px] text-brand underline"
+                        >
+                          {oran ? 'kırp' : 'kırpıp kullan'}
+                        </button>
                       </li>
                     );
                   })}
                 </ul>
 
                 {/* SESSİZ ELEME YOK: kaç görsel gösteriliyor, kaçı neden
-                    kullanılamıyor ve toplam kaç tane var — üçü de yazıyor. */}
+                    kullanılamıyor ve toplam kaç tane var — üçü de yazıyor.
+                    ARTIK ÇÖZÜMÜ DE SÖYLÜYOR: uymayan görsel çöp değil,
+                    kırpılabilir. */}
                 <p className="mt-2 text-[11px] text-ink-muted">
-                  {libraryAssets.length} görsel gösteriliyor
+                  {gosterilen.length} görsel gösteriliyor
                   {libraryTotal > libraryAssets.length && ` (arşivde toplam ${libraryTotal})`}.
                   {uymayanSayisi > 0 &&
-                    ` Soluk görünen ${uymayanSayisi} tanesi Meta reklamına uymayan oranlarda ` +
-                      '(ör. 4:3 fotoğraflar).'}
+                    ` Soluk görünen ${uymayanSayisi} tanesi Meta reklamına uymayan oranlarda — ` +
+                      'altlarındaki "kırpıp kullan" ile üç orana çevirebilirsin.'}
                 </p>
+
+                {cropSource && (
+                  <div className="mt-3">
+                    <CropStudio
+                      clientId={clientId}
+                      source={cropSource}
+                      onCancel={() => setCropSource(null)}
+                      onDone={(uretilen) => {
+                        /**
+                         * ÜRETİLEN GÖRSELLER KENDİLİĞİNDEN SEÇİLİYOR.
+                         *
+                         * Kullanıcı zaten "bunu kullanacağım" diyerek kırptı;
+                         * bir de listeden tek tek seçmesini istemek, aracın
+                         * kurtardığı işi geri vermek olurdu.
+                         */
+                        setUretilenler((prev) => [
+                          ...uretilen.filter((u) => !prev.some((p) => p.id === u.id)),
+                          ...prev,
+                        ]);
+                        setAssetIds((prev) => [
+                          ...new Set([...prev, ...uretilen.map((u) => u.id)]),
+                        ]);
+                        setCropSource(null);
+                        // Arşiv listesi de tazelensin: sayfa yenilenince
+                        // görseller sunucudan gelir ve yerel liste erir.
+                        router.refresh();
+                      }}
+                    />
+                  </div>
+                )}
               </>
             )}
           </Blok>
@@ -419,7 +479,7 @@ export function SimpleAdBuilder({
                 headline={headline}
                 description={description}
                 goal={goal}
-                asset={libraryAssets.find((a) => a.id === assetIds[0])}
+                asset={gosterilen.find((a) => a.id === assetIds[0])}
               />
             </div>
           </Blok>

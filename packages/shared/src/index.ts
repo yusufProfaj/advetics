@@ -11,6 +11,7 @@ export * from './schemas/bulk.schema';
 export * from './schemas/connection.schema';
 export * from './schemas/campaign-advanced.schema';
 export * from './schemas/creative.schema';
+export * from './schemas/crop.schema';
 export * from './schemas/draft-tree.schema';
 export * from './schemas/form.schema';
 export * from './schemas/lead.schema';
