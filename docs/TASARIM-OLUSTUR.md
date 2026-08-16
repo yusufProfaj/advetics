@@ -302,10 +302,16 @@ harcamanın hangi kuraldan doğduğunu bulmanın tek yolu bu.
 bir sonraki tur onu ikinci kez oluşturmayı denerdi. Log'a yazılıp devam
 ediliyor.
 
-**Kalan iş:** aday üretimi hâlâ yalnızca `boosts` tablosuna yazıyor; ağaç
-satırı boost PLATFORMDA oluştuktan sonra doğuyor. Onay ekranında "ne
-yayınlanacak" sorusunun tam cevabını göstermek için adayın da ağaç olması
-gerekiyor — ayrı bir iş.
+**Aday üretimi de taşındı (2026-08-16).** Bir aday oluşurken kampanya taslağı
+da yazılıyor (`status = 'draft'`) ve `boosts.draft_campaign_id` ikisini
+bağlıyor. Onaylanan boost platformda oluşunca AYNI satır `published` oluyor —
+ikinci bir kampanya doğmuyor. Reddedilen adayın taslağı siliniyor: bırakmak,
+listede asla yayınlanmayacak bir taslak bırakmak olurdu.
+
+Bunu yaparken `runRule` içinde bir sayım hatası da düzeldi: `INSERT ... ON
+CONFLICT DO NOTHING` `$executeRaw` ile çağrılıyordu ve çakışan (yani hiç
+yazılmayan) tur da `created++` sayıyordu. `RETURNING` ile çakışma artık ayırt
+ediliyor.
 
 ---
 

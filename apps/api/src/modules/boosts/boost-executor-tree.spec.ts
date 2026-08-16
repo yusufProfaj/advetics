@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
+import type { TenantContext } from '@advetics/shared';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { PlatformApiError } from '../connections/provider.types';
 import { BoostExecutorService } from './boost-executor.service';
+import { BoostsService } from './boosts.service';
 
 /**
  * Boost kural motoru — KAMPANYA AĞACINA BAĞLANDI.
@@ -17,6 +20,14 @@ import { BoostExecutorService } from './boost-executor.service';
 
 let h: Harness;
 let svc: BoostExecutorService;
+let boosts: BoostsService;
+
+const CTX: TenantContext = {
+  orgId: IDS.org,
+  userId: IDS.user,
+  clientIds: [IDS.client],
+  isOrgAdmin: true,
+} as TenantContext;
 
 const createBoost = vi.fn();
 const canWrite = vi.fn();
@@ -33,6 +44,9 @@ beforeAll(async () => {
     { getAccessToken: async () => 'token' } as never,
     { acquire: async () => ({ allowed: true, usagePercent: 5 }), record: async () => {} } as never,
   );
+  boosts = new BoostsService({
+    withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
+  } as unknown as PrismaService);
 });
 
 afterAll(async () => {
@@ -44,10 +58,14 @@ beforeEach(async () => {
   await seedTenant(h);
 
   await h.q(
+    // FATURALANDIRMA HESABI ŞART: `runRule` bağlı reklam hesabı olmayan
+    // sayfayı atlıyor — açılamayacak bir boost'u onay kuyruğuna koymak
+    // kullanıcıyı boşuna meşgul ederdi.
     `INSERT INTO social_profiles
-       (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
-     VALUES ($1, $2, $3, $4, 'facebook_page', 'page-1', 'Sayfa', now())`,
-    [PAGE, IDS.org, IDS.client, IDS.connection],
+       (id, org_id, client_id, connection_id, profile_type, external_id, name,
+        linked_ad_account_id, updated_at)
+     VALUES ($1, $2, $3, $4, 'facebook_page', 'page-1', 'Sayfa', $5, now())`,
+    [PAGE, IDS.org, IDS.client, IDS.connection, IDS.adAccount],
   );
   await h.q(
     `INSERT INTO organic_posts
@@ -228,5 +246,98 @@ describe('başarısızlık', () => {
 
     const [boost] = await h.q<{ status: string }>(`SELECT status FROM boosts`);
     expect(boost!.status).toBe('active');
+  });
+});
+
+describe('ADAY AŞAMASINDA ağaç doğuyor', () => {
+  beforeEach(async () => {
+    // Kuralın koşulunu sağlayan bir gönderi: iki günlük ve 120 etkileşimli.
+    await h.q(
+      `UPDATE organic_posts SET engagements = 120, reach = 1000, impressions = 2000
+       WHERE id = $1`,
+      [POST],
+    );
+  });
+
+  it('KRİTİK: aday üretilirken TASLAK kampanya da yazılıyor', async () => {
+    /**
+     * Bugüne kadar bir boost adayı yalnızca `boosts` tablosunda vardı ve
+     * kampanya listesinde hiç görünmüyordu. Onay ekranı "ne yayınlanacak"
+     * sorusuna tek cümlelik bir özetle cevap veriyordu; oysa onaylanan şey
+     * PARA TAAHHÜDÜ.
+     */
+    const sonuc = await boosts.runRule(h.db, RULE, new Date());
+    expect(sonuc.created).toBe(1);
+
+    const [kampanya] = await h.q<{ status: string; source: string; boost_rule_id: string }>(
+      `SELECT status, source, boost_rule_id::text AS boost_rule_id FROM draft_campaigns`,
+    );
+    // TASLAK olarak doğuyor, yayınlanmış olarak değil.
+    expect(kampanya!.status).toBe('draft');
+    expect(kampanya!.source).toBe('boost_rule');
+    expect(kampanya!.boost_rule_id).toBe(RULE);
+  });
+
+  it('boost ile taslak BİRBİRİNE BAĞLI', async () => {
+    await boosts.runRule(h.db, RULE, new Date());
+    const [boost] = await h.q<{ draft_campaign_id: string | null }>(
+      `SELECT draft_campaign_id::text AS draft_campaign_id FROM boosts`,
+    );
+    const [kampanya] = await h.q<{ id: string }>(`SELECT id::text AS id FROM draft_campaigns`);
+    expect(boost!.draft_campaign_id).toBe(kampanya!.id);
+  });
+
+  it('KRİTİK: onaylanan aday İKİNCİ bir kampanya doğurmuyor', async () => {
+    /**
+     * Aday aşamasında taslak yazıldı; yayın onu güncellemeli. İkinci bir
+     * kampanya açmak, kullanıcının listede aynı boost'u iki kez görmesi ve
+     * hangisinin gerçek olduğunu bilememesi demek olurdu.
+     */
+    await boosts.runRule(h.db, RULE, new Date());
+    await h.q(`UPDATE boosts SET status = 'approved', approved_at = now()`);
+
+    const sonuc = await svc.createApproved(h.db, IDS.client);
+    expect(sonuc.created).toBe(1);
+
+    const kampanyalar = await h.q<{ status: string; external_campaign_id: string }>(
+      `SELECT status, external_campaign_id FROM draft_campaigns`,
+    );
+    expect(kampanyalar).toHaveLength(1);
+    expect(kampanyalar[0]!.status).toBe('published');
+    expect(kampanyalar[0]!.external_campaign_id).toBe('c-1');
+
+    // Dış kimlikler ağacın kendi seviyelerine yazılıyor.
+    const [grup] = await h.q<{ external_ad_set_id: string }>(
+      `SELECT external_ad_set_id FROM draft_ad_groups`,
+    );
+    expect(grup!.external_ad_set_id).toBe('as-1');
+    const [reklam] = await h.q<{ external_ad_id: string }>(
+      `SELECT external_ad_id FROM draft_ads`,
+    );
+    expect(reklam!.external_ad_id).toBe('ad-1');
+  });
+
+  it('KRİTİK: REDDEDİLEN adayın taslağı siliniyor', async () => {
+    /**
+     * Bırakmak, kampanya listesinde asla yayınlanmayacak bir taslak bırakmak
+     * olurdu — kullanıcı onu görüp "bunu ben mi unuttum" diye düşünürdü. Onay
+     * reddi, o kampanyanın hiç var olmaması demek.
+     */
+    await boosts.runRule(h.db, RULE, new Date());
+    const [boost] = await h.q<{ id: string }>(`SELECT id::text AS id FROM boosts`);
+
+    await boosts.decide(CTX, boost!.id, false);
+
+    expect(await h.q(`SELECT id FROM draft_campaigns`)).toHaveLength(0);
+    // Boost kaydı KALIYOR: denetim izi ve tavan muhasebesi orada.
+    const [kalan] = await h.q<{ status: string }>(`SELECT status FROM boosts`);
+    expect(kalan!.status).toBe('rejected');
+  });
+
+  it('onaylanan adayın taslağı DURUYOR', async () => {
+    await boosts.runRule(h.db, RULE, new Date());
+    const [boost] = await h.q<{ id: string }>(`SELECT id::text AS id FROM boosts`);
+    await boosts.decide(CTX, boost!.id, true);
+    expect(await h.q(`SELECT id FROM draft_campaigns`)).toHaveLength(1);
   });
 });

@@ -27,6 +27,7 @@ interface PendingRow {
   organic_post_id: string;
   social_profile_id: string;
   boost_rule_id: string | null;
+  draft_campaign_id: string | null;
   daily_budget_micros: bigint;
   duration_days: number;
   objective: string;
@@ -67,6 +68,7 @@ export class BoostExecutorService {
              b.ad_account_id::text AS ad_account_id,
              b.organic_post_id::text AS organic_post_id,
              b.boost_rule_id::text AS boost_rule_id,
+             b.draft_campaign_id::text AS draft_campaign_id,
              p.social_profile_id::text AS social_profile_id,
              b.daily_budget_micros, b.duration_days, b.objective,
              p.external_id AS post_external_id,
@@ -233,6 +235,23 @@ export class BoostExecutorService {
   ): Promise<void> {
     try {
       /**
+       * TASLAK ZATEN VARSA GÜNCELLENİYOR, YENİSİ AÇILMIYOR.
+       *
+       * Aday üretilirken bir kampanya taslağı da yazıldı (`BoostsService`).
+       * Burada ikinci bir kampanya oluşturmak, kullanıcının listede aynı
+       * boost'u iki kez görmesi ve hangisinin gerçek olduğunu bilememesi
+       * demek olurdu.
+       *
+       * Eski adaylarda (bu bağ eklenmeden önce oluşmuş) `draft_campaign_id`
+       * boş; onlar için aşağıdaki yol yeni bir ağaç kuruyor. Geriye dönük
+       * tarama gerekmiyor — eski adaylar zaten tükenecek.
+       */
+      if (row.draft_campaign_id) {
+        await this.markTreePublished(tx, row, result);
+        return;
+      }
+
+      /**
        * KAYNAK KURALA BAĞLI. `draft_campaigns_boost_rule_chk` kuraldan doğan
        * bir kampanyanın kuralını taşımasını zorunlu kılıyor; elle onaylanan
        * bir boost'ta kural yok ve o satır 'manual' oluyor.
@@ -288,6 +307,40 @@ export class BoostExecutorService {
           'Boost platformda OLUŞTU ve harcıyor; panelde kampanya listesinde görünmeyecek.',
       );
     }
+  }
+
+  /**
+   * Adayla birlikte doğmuş taslağı YAYINLANMIŞ yapar.
+   *
+   * Dış kimlikler ağacın kendi seviyelerine yazılıyor: kampanya, reklam grubu
+   * ve reklam ayrı ayrı. Hepsini kampanyaya yığmak, "bu reklam grubu
+   * platformda hangisi" sorusunun cevabını yok ederdi.
+   */
+  private async markTreePublished(
+    tx: TxLike,
+    row: PendingRow,
+    result: { externalCampaignId: string; externalAdSetId: string; externalAdId: string },
+  ): Promise<void> {
+    await tx.$executeRaw(Prisma.sql`
+      UPDATE draft_campaigns SET
+        status = 'published',
+        external_campaign_id = ${result.externalCampaignId},
+        published_at = now(),
+        error = NULL,
+        updated_at = now()
+      WHERE id = ${row.draft_campaign_id}::uuid
+    `);
+    await tx.$executeRaw(Prisma.sql`
+      UPDATE draft_ad_groups SET
+        external_ad_set_id = ${result.externalAdSetId}, updated_at = now()
+      WHERE campaign_id = ${row.draft_campaign_id}::uuid
+    `);
+    await tx.$executeRaw(Prisma.sql`
+      UPDATE draft_ads SET external_ad_id = ${result.externalAdId}, updated_at = now()
+      WHERE ad_group_id IN (
+        SELECT id FROM draft_ad_groups WHERE campaign_id = ${row.draft_campaign_id}::uuid
+      )
+    `);
   }
 
   private async fail(tx: TxLike, boostId: string, error: string): Promise<void> {

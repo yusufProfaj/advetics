@@ -339,7 +339,7 @@ export class BoostsService {
       }
 
       const approved = rule.auto_approve;
-      await tx.$executeRaw(Prisma.sql`
+      const [boost] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         INSERT INTO boosts (
           id, org_id, client_id, boost_rule_id, organic_post_id, ad_account_id,
           status, daily_budget_micros, duration_days, objective, reason,
@@ -359,7 +359,30 @@ export class BoostsService {
         -- Kısmi tekil indeks bunu garanti ediyor; buradaki DO NOTHING,
         -- iki worker aynı anda çalıştığında turun patlamasını engelliyor.
         ON CONFLICT DO NOTHING
+        -- RETURNING İLE ÇAKIŞMA AYIRT EDİLİYOR: DO NOTHING satır döndürmüyor
+        -- ve boş sonuç "bu gönderi zaten alınmış" demek. Eskiden executeRaw
+        -- kullanılıyordu ve çakışan tur da oluşturulmuş sayılıyordu — sayı bir
+        -- fazla çıkıyordu ve kimse fark etmiyordu.
+        RETURNING id::text AS id
       `);
+      if (!boost) continue;
+
+      await this.writeCandidateTree(tx, {
+        boostId: boost.id,
+        orgId: rule.org_id,
+        clientId: rule.client_id,
+        ruleId: rule.id,
+        ruleName: rule.name,
+        adAccountId: p.linked_ad_account_id,
+        socialProfileId: p.social_profile_id,
+        organicPostId: p.id,
+        dailyBudgetMicros: dailyBudget,
+        durationDays: rule.duration_days,
+        objective: rule.objective,
+        postExternalId: p.external_id,
+        now,
+      });
+
       created++;
       committed += perBoost;
     }
@@ -372,6 +395,96 @@ export class BoostsService {
       notes.push(`${cappedOut} aday aylık tavana takıldı`);
     }
     return { evaluated: posts.length, created, cappedOut, notes };
+  }
+
+  /**
+   * Adayla birlikte KAMPANYA TASLAĞI yazar.
+   *
+   * NEDEN ADAY AŞAMASINDA: bugüne kadar bir boost adayı yalnızca `boosts`
+   * tablosunda vardı ve kampanya listesinde hiç görünmüyordu. Onay ekranı
+   * "ne yayınlanacak" sorusuna tek cümlelik bir özetle cevap veriyordu; oysa
+   * onaylanan şey PARA TAAHHÜDÜ ve kullanıcının tam olarak neyi onayladığını
+   * görmesi gerekiyor.
+   *
+   * TASLAK OLARAK doğuyor (`status = 'draft'`), yayınlanmış olarak değil.
+   * Onaylanan boost platformda oluşunca AYNI satır `published` oluyor —
+   * ikinci bir kampanya doğmuyor.
+   *
+   * SESSİZ KALMIYOR ama ADAYI DA DÜŞÜRMÜYOR: taslak yazılamazsa aday yine
+   * geçerli ve onaylanabilir; yalnızca listede görünmez. Hata fırlatmak,
+   * kuralın bütün turunu bir görüntüleme sorunu yüzünden durdurmak olurdu.
+   */
+  private async writeCandidateTree(
+    tx: TxLike,
+    p: {
+      boostId: string;
+      orgId: string;
+      clientId: string;
+      ruleId: string;
+      ruleName: string;
+      adAccountId: string;
+      socialProfileId: string;
+      organicPostId: string;
+      dailyBudgetMicros: bigint;
+      durationDays: number;
+      objective: string;
+      postExternalId: string;
+      now: Date;
+    },
+  ): Promise<void> {
+    try {
+      const name = `Boost — ${p.ruleName} — ${p.postExternalId.slice(-8)}`;
+      const endAt = new Date(p.now.getTime() + p.durationDays * 86_400_000);
+
+      const [campaign] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO draft_campaigns (
+          id, org_id, client_id, platform, ad_account_id, name, surface, goal,
+          settings, budget_mode, budget_amount_micros, end_at, status,
+          source, boost_rule_id, updated_at
+        ) VALUES (
+          gen_random_uuid(), ${p.orgId}::uuid, ${p.clientId}::uuid, 'meta',
+          ${p.adAccountId}::uuid, ${name}, 'simple', NULL,
+          ${JSON.stringify({ objective: p.objective })}::jsonb,
+          'daily', ${p.dailyBudgetMicros}::bigint, ${endAt}::timestamptz,
+          'draft', 'boost_rule', ${p.ruleId}::uuid, now()
+        )
+        RETURNING id::text AS id
+      `);
+      if (!campaign) throw new Error('Kampanya taslağı yazılamadı');
+
+      const [group] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO draft_ad_groups (
+          id, org_id, campaign_id, name, position, social_profile_id, updated_at
+        ) VALUES (
+          gen_random_uuid(), ${p.orgId}::uuid, ${campaign.id}::uuid, ${name}, 0,
+          ${p.socialProfileId}::uuid, now()
+        )
+        RETURNING id::text AS id
+      `);
+      if (!group) throw new Error('Reklam grubu yazılamadı');
+
+      // KREATİF YOK, GÖNDERİ VAR: boost edilen gönderinin metni ve görseli
+      // zaten Meta'da.
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO draft_ads (
+          id, org_id, ad_group_id, creative_id, organic_post_id, name, position, updated_at
+        ) VALUES (
+          gen_random_uuid(), ${p.orgId}::uuid, ${group.id}::uuid, NULL,
+          ${p.organicPostId}::uuid, ${name}, 0, now()
+        )
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE boosts SET draft_campaign_id = ${campaign.id}::uuid, updated_at = now()
+        WHERE id = ${p.boostId}::uuid
+      `);
+    } catch (err) {
+      this.logger.error(
+        `Boost adayı ağaca yazılamadı (${p.boostId}): ` +
+          `${err instanceof Error ? err.message : String(err)}. ` +
+          'Aday geçerli ve onaylanabilir; yalnızca kampanya listesinde görünmeyecek.',
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -433,6 +546,26 @@ export class BoostsService {
         throw new NotFoundException(
           'Boost bulunamadı ya da artık onay bekleyen bir durumda değil.',
         );
+      }
+
+      /**
+       * REDDEDİLEN ADAYIN TASLAĞI SİLİNİYOR.
+       *
+       * Bırakmak, kampanya listesinde asla yayınlanmayacak bir taslak
+       * bırakmak olurdu — ve kullanıcı onu görüp "bunu ben mi unuttum" diye
+       * düşünürdü. Onay reddi, o kampanyanın hiç var olmaması demek.
+       *
+       * Yayınlanmış bir taslak zaten silinmiyor (`status <> 'published'`);
+       * reddedilen aday hiç yayınlanmamış olduğu için koşul her zaman
+       * tutuyor, ama koşul yine de duruyor: bir gün "reddet" yayındaki bir
+       * boost için de çağrılabilir hâle gelirse, o kampanyayı silmemeli.
+       */
+      if (!approve) {
+        await tx.$executeRaw(Prisma.sql`
+          DELETE FROM draft_campaigns
+          WHERE id = (SELECT draft_campaign_id FROM boosts WHERE id = ${boostId}::uuid)
+            AND status <> 'published'
+        `);
       }
       const rows = await this.listBoosts(ctx, { clientId: ctx.clientIds[0]! });
       const found = rows.find((b) => b.id === boostId);

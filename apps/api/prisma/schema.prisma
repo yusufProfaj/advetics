@@ -1400,6 +1400,13 @@ model Boost {
   externalAdSetId    String? @map("external_ad_set_id") @db.VarChar(128)
   externalAdId       String? @map("external_ad_id") @db.VarChar(128)
 
+  /// Adayla birlikte doğan kampanya taslağı.
+  ///
+  /// Onaylanan boost platformda oluşunca AYNI satır `published` oluyor —
+  /// ikinci bir kampanya doğmuyor. Taslak silinirse bu kolon NULL olur ama
+  /// boost kaydı yaşar: `boosts` onay ve tavan muhasebesinin defteri.
+  draftCampaignId String? @map("draft_campaign_id") @db.Uuid
+
   error String? @db.VarChar(1000)
 
   approvedBy          String?   @map("approved_by") @db.Uuid
