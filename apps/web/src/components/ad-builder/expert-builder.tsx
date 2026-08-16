@@ -12,6 +12,7 @@ import {
 } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { AdvancedPanel } from './advanced-panel';
+import { CoveragePanel } from './coverage-panel';
 
 /**
  * Uzman yüzeyi — kararlar KULLANICININ.
@@ -500,6 +501,14 @@ export function ExpertAdBuilder({
               <p className="rounded-lg bg-surface-sunken px-3 py-2 text-sm font-medium text-ink">
                 {check.summary}
               </p>
+              {/* Yuva kapsaması — kırpma yüzdesiyle. Arama kampanyasında
+                  görsel kullanılmadığı için liste boş geliyor ve blok hiç
+                  görünmüyor. */}
+              {check.assetCoverage.length > 0 && (
+                <div className="mt-3">
+                  <CoveragePanel coverage={check.assetCoverage} />
+                </div>
+              )}
               {check.blockers.map((b) => (
                 <p
                   key={b}

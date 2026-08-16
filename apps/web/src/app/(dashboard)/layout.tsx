@@ -38,15 +38,22 @@ const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
     // 4 CREATE
     title: 'Oluştur',
     items: [
-      {
-        href: '/reklam-olustur',
-        label: 'Reklam Oluştur',
-        icon: 'create',
-        module: 4,
-        ready: true,
-      },
+      /**
+       * TEK GİRİŞ — üç ayrı menü maddesi yerine (tasarım belgesi K6).
+       *
+       * Kullanıcı "reklam vereceğim" diye geliyor; biz ona "elle mi, kuraldan
+       * mı, tablodan mı" diye soruyorduk ve bu üç ayrı zihinsel model demekti.
+       * `/reklam-olustur` artık bir giriş kapısı: dört başlangıç noktası ve
+       * kampanya listesi. Toplu oluşturma oradan açılıyor, menüde ayrı
+       * madde değil.
+       */
+      { href: '/reklam-olustur', label: 'Reklamlar', icon: 'create', module: 4, ready: true },
+      /**
+       * AKILLI BOOST MENÜDE KALIYOR çünkü orada yapılan iş reklam oluşturmak
+       * değil OTOMASYON AYARI: kural kurmak ve onay kuyruğunu yönetmek.
+       * Kuralın ürettiği kampanyalar zaten "Reklamlar" listesinde görünüyor.
+       */
       { href: '/auto-boost', label: 'Akıllı Boost', icon: 'boost', module: 7, ready: true },
-      { href: '/toplu-olustur', label: 'Toplu Oluşturucu', icon: 'bulk', module: 8, ready: true },
     ],
   },
   {

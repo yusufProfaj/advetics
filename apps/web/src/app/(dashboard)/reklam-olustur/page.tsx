@@ -3,25 +3,30 @@ import {
   AD_DRAFT_STATUS_LABELS,
   GOAL_META,
   type AdDraftRecord,
-  type AssetListResult,
-  type LeadFormRecord,
+  type DraftGroupRecord,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
-import { AdWizard } from '@/components/ad-builder/ad-wizard';
+import { DraftGroupList } from '@/components/ad-builder/draft-group-list';
 
-export const metadata = { title: 'Reklam Oluştur — Advetics' };
+export const metadata = { title: 'Reklamlar — Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
- * Reklam Oluşturucu — Modül 4 (CREATE).
+ * Reklamlar — GİRİŞ KAPISI.
  *
- * Bu sayfanın hedef kullanıcısı REKLAMCILIK BİLMİYOR. Ekranda hedef,
- * optimizasyon, yerleşim ya da teklif stratejisi geçmiyor; hepsi sunucuda
- * karara bağlanıyor.
+ * Bu sayfa eskiden sihirbazın kendisiydi. Artık dört başlangıç noktası ve
+ * kampanya listesi: kullanıcı "reklam vereceğim" diye geliyor, biz de ona
+ * "elle mi, kuraldan mı, tablodan mı" diye sormak yerine ne yapmak istediğini
+ * soruyoruz (tasarım belgesi §2.2).
+ *
+ * ESKİ SİHİRBAZ EMEKLİ. `ad_drafts` tablosu ve verisi YERİNDE — silinmedi,
+ * taşınmadı. Sebebi: üretimdeki satır sayısı bilinmiyor ve bilinmeden veri
+ * taşımak ya da düşürmek sorumsuzluk olurdu. Eski taslaklar aşağıda salt
+ * okunur bir bölümde duruyor; yeni bir tane oluşturmanın yolu yok.
  */
-export default async function AdBuilderPage({
+export default async function AdsHomePage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -41,161 +46,124 @@ export default async function AdBuilderPage({
   }
 
   const canWrite = hasPermission(session, 'bulk.write');
+  const client = session.availableClients.find((c) => c.id === clientId);
 
-  const [connections, drafts, forms, library] = await Promise.all([
-    serverApiFetch<
-      Array<{
-        adAccounts: Array<{ id: string; name: string; currency: string }>;
-        socialProfiles: Array<{ id: string; name: string; profileType: string }>;
-      }>
-    >(`/connections?clientId=${clientId}`).catch(() => []),
+  const [groups, legacy] = await Promise.all([
+    serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`).catch(() => []),
     serverApiFetch<AdDraftRecord[]>(`/ad-drafts?clientId=${clientId}`).catch(() => []),
-    // Formlar YALNIZCA gelişmiş modda kullanılıyor ama sayfa yüklenirken
-    // getiriliyor: mod değiştirildiğinde ek bir istek beklemek, seçim
-    // kutusunun bir an boş görünmesi demek olurdu.
-    serverApiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${clientId}`).catch(() => []),
-    // Arşiv: yalnızca reklam görselleri. Logolar Meta reklamında
-    // kullanılmıyor ve seçim ızgarasında yer kaplamamalı.
-    serverApiFetch<AssetListResult>(
-      `/assets?clientId=${clientId}&kind=image&limit=60&offset=0`,
-    ).catch(() => null),
   ]);
-
-  const accounts = connections.flatMap((c) => c.adAccounts ?? []);
-  // REKLAM SAYFA ADINA YAYINLANIYOR ve Instagram hesabı tek başına bunu
-  // yapamıyor — Meta reklamı her zaman bir Facebook sayfasına bağlıyor.
-  const pages = connections
-    .flatMap((c) => c.socialProfiles ?? [])
-    .filter((p) => p.profileType === 'facebook_page');
-
-  const editId = first(params.taslak);
-  const editing = editId ? drafts.find((d) => d.id === editId) : undefined;
-
-  if (accounts.length === 0 || pages.length === 0) {
-    return <Missing hasAccounts={accounts.length > 0} hasPages={pages.length > 0} />;
-  }
 
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-xl font-semibold text-ink">Reklam Oluştur</h1>
+        <h1 className="text-xl font-semibold text-ink">Reklamlar</h1>
         <p className="mt-0.5 text-sm text-ink-muted">
-          Görselleri seç, ne yazacağını söyle, gerisini biz hallederiz.
+          <strong className="text-ink">{client?.name ?? 'Müşteri'}</strong> · ne yapmak
+          istediğini seç.
         </p>
       </header>
 
-      {/* YENİ YÜZEYE GEÇİŞ — menüye HENÜZ KONMADI.
-          Menünün nasıl yeniden kurulacağı açık bir karar (tasarım belgesi K6)
-          ve tek başına değiştirmek, kararı fiilen vermek olurdu. Ama
-          erişilemeyen bir sayfa da işe yaramaz; geçiş şimdilik buradan.
+      {canWrite && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Giris
+            href={`/reklam-olustur/basit?musteri=${clientId}`}
+            baslik="Hızlı Reklam"
+            aciklama="Ne istediğini söyle, gerisini biz hallederiz. Hedef, kitle ve yerleşim sorulmuyor."
+            vurgu
+          />
+          <Giris
+            href={`/reklam-olustur/uzman?musteri=${clientId}`}
+            baslik="Kampanya Kur"
+            aciklama="Amaç, optimizasyon, kitle ve yerleşim üzerinde tam kontrol. Meta ve Google."
+          />
+          <Giris
+            href={`/toplu-olustur?musteri=${clientId}`}
+            baslik="Toplu Oluştur"
+            aciklama="Çalışan bir kampanyadan varyasyonlar üret. Yazmadığın alan kaynaktan gelir."
+          />
+          <Giris
+            href={`/auto-boost?musteri=${clientId}`}
+            baslik="Gönderiyi Öne Çıkar"
+            aciklama="Kural kur, iyi giden gönderiler onayına düşsün."
+          />
+        </div>
+      )}
 
-          İKİ AKIŞ YAN YANA ÇALIŞIYOR: bu ekran ve yeni ekran ayrı tablolara
-          yazıyor (`ad_drafts` ve `draft_campaigns`). Aynı anda ikisini de
-          kullanmak veri karıştırmıyor ama kullanıcı taslaklarını iki ayrı
-          listede görür — bu yüzden geçiş kalıcı değil, göç (K11) kapanınca
-          bu ekran emekliye ayrılacak. */}
-      <div className="rounded-xl border border-brand/30 bg-brand-soft px-4 py-3">
-        <p className="text-sm font-medium text-ink">Yeni: Hızlı Reklam</p>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          Daha kısa akış, hangi platformda çalışacağını gösteren hedef kartları ve arşivden
-          çoklu görsel seçimi. Bu ekran şimdilik yerinde duruyor; taslakların ayrı listelerde
-          görünür.
-        </p>
-        <Link
-          href={`/reklam-olustur/basit?musteri=${clientId}`}
-          className="mt-2 inline-block rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white"
-        >
-          Hızlı Reklam&apos;ı dene
-        </Link>
-      </div>
-
-      {canWrite ? (
-        <AdWizard
-          key={editing?.id ?? 'new'}
-          clientId={clientId}
-          accounts={accounts}
-          pages={pages}
-          forms={forms}
-          libraryAssets={library?.rows ?? []}
-          existing={editing}
-        />
+      {groups.length > 0 ? (
+        <DraftGroupList groups={groups} />
       ) : (
-        <Notice>Reklam oluşturmak için yetkin yok.</Notice>
+        <p className="rounded-xl border border-dashed border-line bg-surface px-4 py-8 text-center text-sm text-ink-muted">
+          Bu müşteride henüz kampanya yok.
+        </p>
       )}
 
-      {drafts.length > 0 && (
-        <section className="rounded-xl border border-line bg-surface">
-          <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
-            Önceki reklamların
-          </h2>
-          <ul>
-            {drafts.map((d) => (
-              <li
-                key={d.id}
-                className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 px-4 py-2.5 last:border-0"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{d.name}</p>
-                  <p className="text-[11px] text-ink-muted">
-                    {GOAL_META[d.goal].label} · {AD_DRAFT_STATUS_LABELS[d.status]} ·{' '}
-                    {formatRelative(d.createdAt)}
-                    {d.error && <span className="text-rose-700"> · {d.error}</span>}
-                  </p>
-                </div>
-                {d.status !== 'published' && canWrite && (
-                  <Link
-                    href={`/reklam-olustur?taslak=${d.id}`}
-                    className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-sunken"
-                  >
-                    Devam et
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {legacy.length > 0 && <EskiTaslaklar drafts={legacy} />}
     </div>
+  );
+}
+
+function Giris({
+  href,
+  baslik,
+  aciklama,
+  vurgu,
+}: {
+  href: string;
+  baslik: string;
+  aciklama: string;
+  vurgu?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`block rounded-xl border p-4 transition ${
+        vurgu ? 'border-brand bg-brand-soft' : 'border-line bg-surface hover:bg-surface-sunken'
+      }`}
+    >
+      <span className="block text-sm font-semibold text-ink">{baslik}</span>
+      <span className="mt-1 block text-xs text-ink-muted">{aciklama}</span>
+    </Link>
   );
 }
 
 /**
- * Eksik ön koşul ekranı.
+ * Eski oluşturucuyla yapılmış reklamlar — SALT OKUNUR.
  *
- * NE EKSİK olduğunu tek tek söylüyor. "Bağlantı kurmalısın" demek yetmez:
- * kullanıcının hangisini kurduğunu ve hangisinin kaldığını görmesi gerekiyor.
+ * VERİ SİLİNMEDİ VE TAŞINMADI. Taşımak cazip görünüyor ama temiz değil: eski
+ * taslakların görselleri taslağa özel dosyalar (`ad_draft_assets`) ve bir
+ * kısmının arşivde karşılığı yok — yani kreatif kütüphanesine dönüştürülemez.
+ * Üstelik üretimdeki satır sayısı bilinmiyor.
+ *
+ * Bu yüzden geçmiş burada duruyor: yeni bir tane oluşturulamıyor, var olanlar
+ * kayıp değil. Bölüm boşsa hiç görünmüyor — yani yeni kurulumlarda bu ekran
+ * eski akıştan hiç söz etmiyor.
  */
-function Missing({ hasAccounts, hasPages }: { hasAccounts: boolean; hasPages: boolean }) {
+function EskiTaslaklar({ drafts }: { drafts: AdDraftRecord[] }) {
   return (
-    <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-      <h1 className="text-sm font-semibold text-ink">Reklam vermek için iki şey gerekiyor</h1>
-      <ul className="mx-auto mt-3 max-w-sm space-y-1.5 text-left text-sm">
-        <li className={hasAccounts ? 'text-ink-muted line-through' : 'text-ink'}>
-          {hasAccounts ? '✓' : '○'} Bir reklam hesabı
-        </li>
-        <li className={hasPages ? 'text-ink-muted line-through' : 'text-ink'}>
-          {hasPages ? '✓' : '○'} Bir Facebook sayfası
-        </li>
+    <section className="rounded-xl border border-line bg-surface">
+      <div className="border-b border-line px-4 py-3">
+        <h2 className="text-sm font-semibold text-ink">
+          Eski oluşturucuyla yapılmış reklamlar
+          <span className="ml-1.5 font-normal text-ink-muted">({drafts.length})</span>
+        </h2>
+        <p className="mt-0.5 text-xs text-ink-muted">
+          Salt okunur. Eski akış emekliye ayrıldı; bu kayıtlar silinmedi ve platformdaki
+          reklamları etkilenmedi. Yeni reklamlar yukarıdaki adımlardan oluşturuluyor.
+        </p>
+      </div>
+      <ul>
+        {drafts.map((d) => (
+          <li key={d.id} className="border-b border-line/60 px-4 py-2.5 last:border-0">
+            <p className="truncate text-sm font-medium text-ink">{d.name}</p>
+            <p className="text-[11px] text-ink-muted">
+              {GOAL_META[d.goal].label} · {AD_DRAFT_STATUS_LABELS[d.status]} ·{' '}
+              {formatRelative(d.createdAt)}
+              {d.error && <span className="text-rose-700"> · {d.error}</span>}
+            </p>
+          </li>
+        ))}
       </ul>
-      <p className="mx-auto mt-3 max-w-md text-xs text-ink-muted">
-        Reklam her zaman bir Facebook sayfası adına yayınlanır. Instagram hesabı tek başına
-        yeterli değil.
-      </p>
-      <Link
-        href="/ayarlar/baglantilar"
-        className="mt-4 inline-block rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white"
-      >
-        Platform bağlantılarına git
-      </Link>
-    </div>
-  );
-}
-
-function Notice({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
-      {children}
-    </div>
+    </section>
   );
 }
 

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  GoneException,
   Delete,
   Get,
   Param,
@@ -29,6 +30,22 @@ import { AdBuilderService } from './ad-builder.service';
 import { AdPublisherService } from './ad-publisher.service';
 
 /**
+ * EMEKLİ AKIŞ — YALNIZCA OKUMA.
+ *
+ * Bu oluşturucu 2026-08-16'da emekliye ayrıldı; yerini kampanya taslağı ağacı
+ * aldı (`/draft-campaigns`). Yazma uçları açık bir hatayla reddediyor.
+ *
+ * NEDEN SİLİNMEDİ: `ad_drafts` tablosunda üretim verisi var ve satır sayısı
+ * bilinmiyor. Okuma yolları duruyor ki geçmiş kaybolmasın — panel eski
+ * taslakları salt okunur bir bölümde gösteriyor.
+ *
+ * NEDEN YAZMA KAPATILDI: arayüzden erişilemiyor olması yetmez. Açık bir uç,
+ * bir gün başka bir ekrandan ya da bir betikten sessizce yeniden kullanılır ve
+ * o taslak yeni akışın hiçbir kontrolünden geçmez — özel reklam kategorisi
+ * beyanı dahil.
+ */
+
+/**
  * Reklam Oluşturucu uç noktaları.
  *
  * YETKİLER TOPLU OLUŞTURUCUYLA PAYLAŞILIYOR (`bulk.*`). İkisi de aynı işi
@@ -36,6 +53,17 @@ import { AdPublisherService } from './ad-publisher.service';
  * "toplu oluşturmayı kapattım ama tek tek oluşturabiliyor" gibi bir boşlukla
  * karşılaşması demek olurdu.
  */
+/**
+ * Emekli akışın yazma uçlarında dönen mesaj.
+ *
+ * 410 GONE, 404 DEĞİL: kaynak vardı ve bilerek kaldırıldı. 404 "yanlış adres"
+ * dedirtirdi ve çağıran tarafı yolu düzeltmeye çalıştırırdı.
+ */
+const EMEKLI_MESAJ =
+  'Bu reklam oluşturucu emekliye ayrıldı. Yeni akış: Reklamlar ekranından ' +
+  'Hızlı Reklam ya da Kampanya Kur. Eski taslaklar silinmedi, salt okunur ' +
+  'olarak duruyor.';
+
 @Controller('ad-drafts')
 export class AdBuilderController {
   constructor(
@@ -76,7 +104,9 @@ export class AdBuilderController {
     @CurrentTenant() ctx: TenantContext,
     @Body(zodBody(adDraftInputSchema)) input: AdDraftInput,
   ): Promise<AdDraftRecord> {
-    return this.drafts.create(ctx, input);
+    void ctx;
+    void input;
+    throw new GoneException(EMEKLI_MESAJ);
   }
 
   @Put(':id')
@@ -86,7 +116,10 @@ export class AdBuilderController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(zodBody(adDraftInputSchema)) input: AdDraftInput,
   ): Promise<AdDraftRecord> {
-    return this.drafts.update(ctx, id, input);
+    void ctx;
+    void id;
+    void input;
+    throw new GoneException(EMEKLI_MESAJ);
   }
 
   /**
@@ -106,7 +139,10 @@ export class AdBuilderController {
     @UploadedFile()
     file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
   ): Promise<AdAssetRecord> {
-    return this.drafts.addAsset(ctx, id, file);
+    void ctx;
+    void id;
+    void file;
+    throw new GoneException(EMEKLI_MESAJ);
   }
 
   /**
@@ -123,7 +159,10 @@ export class AdBuilderController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('assetId', ParseUUIDPipe) assetId: string,
   ): Promise<AdAssetRecord> {
-    return this.drafts.attachFromLibrary(ctx, id, assetId);
+    void ctx;
+    void id;
+    void assetId;
+    throw new GoneException(EMEKLI_MESAJ);
   }
 
   /**
@@ -172,7 +211,9 @@ export class AdBuilderController {
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<AdDraftRecord> {
-    return this.publisher.publish(ctx, id);
+    void ctx;
+    void id;
+    throw new GoneException(EMEKLI_MESAJ);
   }
 
   @Delete(':id')
