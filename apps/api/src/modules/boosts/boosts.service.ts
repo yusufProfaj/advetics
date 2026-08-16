@@ -384,8 +384,50 @@ export class BoostsService {
         // iki sorgu, liste ile sayının farklı anlara ait olması demek olurdu.
         total: rows.length > 0 ? Number(rows[0]!.total) : 0,
         limit: query.limit,
+        // EK SORGU YALNIZCA LİSTE BOŞKEN. Dolu listede sebebi hesaplamak,
+        // her açılışta bir sorguyu boşuna koşturmak olurdu.
+        emptyReason: rows.length > 0 ? null : await this.emptyReason(tx, query.clientId),
       };
     });
+  }
+
+  /**
+   * Liste neden boş.
+   *
+   * ÜÇ DURUM AYNI GÖRÜNÜYORDU ve yapılacak işleri bambaşka. Üretimde yaşanan
+   * şey buydu: 199 sosyal profilin hepsi müşteriye atanmamıştı, ekran boş bir
+   * liste gösterdi ve kullanıcı senkronizasyonun bozuk olduğunu düşündü.
+   *
+   * SIRA EN TEMELDEN: atanmamış bir sayfada "izlemeyi aç" demek, izin
+   * verilmeyen bir işe göndermek olurdu (`setProfileSync` atanmamış sayfayı
+   * reddediyor).
+   */
+  private async emptyReason(tx: TxLike, clientId: string): Promise<string> {
+    const [say] = await tx.$queryRaw<Array<{ atanmis: number; izlenen: number }>>(Prisma.sql`
+      SELECT COUNT(*)::int AS atanmis,
+             COUNT(*) FILTER (WHERE sync_enabled)::int AS izlenen
+      FROM social_profiles
+      WHERE client_id = ${clientId}::uuid
+    `);
+
+    if (!say || say.atanmis === 0) {
+      return (
+        'Bu müşteriye atanmış bir sayfa yok. Müşteriler ekranından havuzdaki ' +
+        'Facebook sayfasını ya da Instagram hesabını bu müşteriye ata — ' +
+        'atanmamış sayfanın gönderileri hiç çekilmiyor.'
+      );
+    }
+    if (say.izlenen === 0) {
+      return (
+        `Bu müşterinin ${say.atanmis} sayfası var ama hiçbirinde gönderi izleme ` +
+        'açık değil. Müşteriler ekranında sayfanın yanındaki "izlemeye al" ile ' +
+        'aç; izleme kapalıyken organik gönderiler çekilmiyor.'
+      );
+    }
+    return (
+      `${say.izlenen} sayfa izlemede ama henüz gönderi çekilmemiş. Senkronizasyon ` +
+      'günde iki kez koşuyor; "Şimdi güncelle" ile öne alabilirsin.'
+    );
   }
 
   /**

@@ -92,7 +92,14 @@ function ManualBoostForm({
   useEffect(() => {
     void apiFetch<BoostablePostList>(`/boosts/posts?clientId=${clientId}`)
       .then(setPosts)
-      .catch(() => setPosts({ items: [], total: 0, limit: 0 }));
+      .catch(() =>
+        setPosts({
+          items: [],
+          total: 0,
+          limit: 0,
+          emptyReason: 'Gönderiler yüklenemedi. Sayfayı yenilemeyi dene.',
+        }),
+      );
     void apiFetch<BoostSpendSummary>(`/boosts/spend?clientId=${clientId}`)
       .then(setSpend)
       .catch(() => setSpend(null));
@@ -202,10 +209,15 @@ function ManualBoostForm({
           1 · Gönderi
         </h3>
         {posts === null && <p className="text-xs text-ink-muted">Gönderiler yükleniyor…</p>}
+        {/*
+          BOŞ LİSTE SEBEBİYLE BİRLİKTE. "Gönderi yok" üç bambaşka durumu aynı
+          şekilde gösteriyordu — sayfa atanmamış, izleme kapalı, süpürme
+          koşmamış — ve üçünün de yapılacak işi farklı. Üretimde tam olarak bu
+          yaşandı: 199 sayfanın hepsi atanmamıştı ve ekran sessizdi.
+        */}
         {posts && posts.items.length === 0 && (
-          <p className="text-xs text-ink-muted">
-            Bu müşteride henüz çekilmiş gönderi yok. Sayfa bir müşteriye atanmış ve
-            senkronizasyonu açık olmalı.
+          <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
+            {posts.emptyReason ?? 'Bu müşteride henüz çekilmiş gönderi yok.'}
           </p>
         )}
         <div className="space-y-1.5">

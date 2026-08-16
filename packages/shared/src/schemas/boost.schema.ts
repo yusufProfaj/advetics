@@ -260,6 +260,20 @@ export interface BoostablePostList {
   /** Süzgece uyan TOPLAM — `items.length` sınırla kesilmiş olabilir. */
   total: number;
   limit: number;
+  /**
+   * LİSTE BOŞSA NEDEN BOŞ — dolu listede null.
+   *
+   * NEDEN VAR: boş bir liste üç bambaşka durumu aynı şekilde gösteriyordu ve
+   * üçünün de yapılacak işi farklı:
+   *
+   *   · Müşteriye hiç sayfa atanmamış → Müşteriler ekranından ata.
+   *   · Sayfa atanmış ama izleme kapalı → izlemeyi aç.
+   *   · İzleme açık ama süpürme henüz koşmamış → bekle.
+   *
+   * Üretimde tam olarak bu yaşandı: 199 sayfanın hepsi atanmamıştı, ekran boş
+   * bir liste gösterdi ve sebebi hiçbir yerde yazmıyordu.
+   */
+  emptyReason: string | null;
 }
 
 export const boostablePostQuerySchema = z.object({

@@ -30,6 +30,8 @@ export interface ClientProfile {
   id: string;
   name: string;
   profileType: string;
+  /** Organik gönderi senkronizasyonu. Kapalıyken Akıllı Boost gönderi görmüyor. */
+  syncEnabled: boolean;
 }
 
 export interface PoolItem {
@@ -84,6 +86,29 @@ export function ClientAssets({
         body: JSON.stringify({ clientId: target }),
       });
       setSearch('');
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'İşlem başarısız.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * SAYFANIN GÖNDERİ İZLEMESİ.
+   *
+   * Bu düğme olmadan `sync_enabled` alanını değiştirmenin hiçbir yolu yoktu:
+   * üretimde 199 sayfanın hepsi kapalıydı, atanan sayfalar bile gönderi
+   * çekmiyordu ve sebebi hiçbir ekranda yazmıyordu.
+   */
+  async function toggleProfileSync(p: ClientProfile): Promise<void> {
+    setBusy(p.id);
+    setError(null);
+    try {
+      await apiFetch(`/connections/social-profiles/${p.id}/sync`, {
+        method: 'PATCH',
+        body: JSON.stringify({ syncEnabled: !p.syncEnabled }),
+      });
       startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'İşlem başarısız.');
@@ -149,22 +174,44 @@ export function ClientAssets({
                   {p.profileType === 'instagram_business' ? 'IG' : 'FB'} ·{' '}
                 </span>
                 <span className="font-medium text-ink">{p.name}</span>
+                {/* İZLENMİYOR OLMAK SESSİZ KALMAMALI — reklam hesaplarındaki
+                    ile aynı gerekçe. Atanmış ama izlemesi kapalı bir sayfa,
+                    Akıllı Boost'ta hiç atanmamış bir sayfayla birebir aynı
+                    görünüyor: gönderi yok. */}
+                {!p.syncEnabled && (
+                  <span className="text-amber-700"> · gönderiler çekilmiyor</span>
+                )}
               </span>
               {canManage && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void assign(
-                      { id: p.id, name: p.name, externalId: '', kind: 'social_profile' },
-                      null,
-                    )
-                  }
-                  disabled={busy !== null || isPending}
-                  title="Havuza geri koy — bu müşteriden çıkar"
-                  className="shrink-0 text-[11px] text-ink-muted underline decoration-dotted transition hover:text-ink disabled:opacity-40"
-                >
-                  {busy === p.id ? '…' : 'çıkar'}
-                </button>
+                <span className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void toggleProfileSync(p)}
+                    disabled={busy !== null || isPending}
+                    title={
+                      p.syncEnabled
+                        ? 'Gönderi çekmeyi durdur'
+                        : 'Organik gönderileri çek — Akıllı Boost bunları kullanıyor'
+                    }
+                    className="text-[11px] text-brand underline decoration-dotted transition hover:no-underline disabled:opacity-40"
+                  >
+                    {busy === p.id ? '…' : p.syncEnabled ? 'izlemeyi durdur' : 'izlemeye al'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void assign(
+                        { id: p.id, name: p.name, externalId: '', kind: 'social_profile' },
+                        null,
+                      )
+                    }
+                    disabled={busy !== null || isPending}
+                    title="Havuza geri koy — bu müşteriden çıkar"
+                    className="text-[11px] text-ink-muted underline decoration-dotted transition hover:text-ink disabled:opacity-40"
+                  >
+                    çıkar
+                  </button>
+                </span>
               )}
             </li>
           ))}

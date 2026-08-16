@@ -144,10 +144,38 @@ akış ve engeller §7.2'de. Özeti:
    olurdu. Migration `20260817090000_manual_boost`; kipe göre tam bir bütçe
    kolonunu zorunlu kılan CHECK `01_constraints.sql`'de.
 
+5b. ✅ **BİTTİ** — sayfa izleme anahtarı (canlıda çıkan engel).
+
+   **NASIL BULUNDU:** panelde elle boost denenmek istendi, gönderi listesi
+   boştu. Üretim sorgusu sebebi gösterdi: **199 sosyal profilin hepsi
+   `client_id = NULL` ve `sync_enabled = false`.** Ajans geneli havuz
+   modeline geçilirken (§0.2–0.3) reklam hesaplarına yazılan izleme anahtarı
+   **sayfalara yazılmamıştı** — `sync_enabled` alanını değiştirebilecek tek
+   bir uç nokta ya da düğme yoktu. Yani sayfa atansa bile organik gönderi
+   asla çekilmiyordu ve bunun hiçbir yerde karşılığı görünmüyordu.
+
+   Eklenenler: `PATCH /connections/social-profiles/:id/sync` + Müşteriler
+   ekranında sayfa satırında "izlemeye al / izlemeyi durdur", atanmamış
+   sayfada erken hata, denetim kaydı. Atanmış ama izlemesi kapalı sayfa
+   satırda **"gönderiler çekilmiyor"** diye işaretleniyor.
+
+   Ayrıca gönderi listesi artık **boş dönerken sebebini söylüyor**
+   (`emptyReason`): sayfa atanmamış / izleme kapalı / süpürme koşmamış —
+   üçü de yapılacak işi farklı, oysa üçü de boş liste olarak görünüyordu.
+
+   **1082 API testi** (öncesi 1074).
+
 6. Ajansın kendi hesabında en küçük bütçeyle gerçek çağrı (K17: doğrudan IG).
 
    > **BU ARTIK TEK KALAN ADIM.** Kod tarafında elle boost bitti; canlıda
    > hiç çalıştırılmadı.
+   >
+   > **Dağıtımdan sonra panelde sırasıyla:** (1) "Hesapları yenile" — IG
+   > satırlarının ana sayfa kimliğini doldurur (2. adım), (2) Müşteriler
+   > ekranından ilgili sayfayı müşteriye **ata**, (3) aynı satırda
+   > **"izlemeye al"**, (4) "Şimdi güncelle" ile süpürmeyi öne al. Bu dördü
+   > yapılmadan gönderi listesi boş kalır — ve artık boş kalırsa hangisinin
+   > eksik olduğunu ekran yazıyor.
 
 ---
 

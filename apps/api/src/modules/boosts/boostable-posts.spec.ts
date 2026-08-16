@@ -140,7 +140,11 @@ describe('listeleme ve sıra', () => {
 
   it('boş listede toplam sıfır', async () => {
     const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
-    expect(out).toEqual({ items: [], total: 0, limit: 30 });
+    expect(out.items).toEqual([]);
+    expect(out.total).toBe(0);
+    expect(out.limit).toBe(30);
+    // Boşluğun SEBEBİ de dönüyor; ayrı bir describe onu sınıyor.
+    expect(out.emptyReason).not.toBeNull();
   });
 
   it('sayfa süzgeci uygulanıyor', async () => {
@@ -286,5 +290,46 @@ describe('uyarı — engel değil (K20)', () => {
     const [p] = (await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 })).items;
     expect(p!.blockedReason).not.toBeNull();
     expect(p!.warning).toBeNull();
+  });
+});
+
+/**
+ * BOŞ LİSTENİN SEBEBİ — üç durum, üç farklı yapılacak iş.
+ *
+ * ÜRETİMDE YAŞANDI: 199 sosyal profilin hepsi müşteriye atanmamıştı, ekran
+ * boş bir liste gösterdi ve kullanıcı senkronizasyonun bozuk olduğunu
+ * düşündü. Boş liste tek başına bir cevap değil.
+ */
+describe('boş listenin sebebi', () => {
+  it('KRİTİK: hiç sayfa atanmamışsa ATAMA söyleniyor', async () => {
+    const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
+    expect(out.items).toHaveLength(0);
+    expect(out.emptyReason).toMatch(/atanmış bir sayfa yok/i);
+    expect(out.emptyReason).toMatch(/Müşteriler ekranı/i);
+  });
+
+  it('KRİTİK: sayfa atanmış ama izleme kapalıysa İZLEME söyleniyor', async () => {
+    // Bu iki durum bugüne kadar birebir aynı görünüyordu: boş liste.
+    await seedProfile(FB, 'facebook_page');
+    await h.q(`UPDATE social_profiles SET sync_enabled = false WHERE id = $1`, [FB]);
+
+    const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
+    expect(out.emptyReason).toMatch(/izleme/i);
+    expect(out.emptyReason).toMatch(/1 sayfası/);
+  });
+
+  it('izleme açık ama gönderi yoksa SENKRONİZASYON söyleniyor', async () => {
+    await seedProfile(FB, 'facebook_page');
+    const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
+    expect(out.emptyReason).toMatch(/henüz gönderi çekilmemiş/i);
+  });
+
+  it('liste doluyken sebep YAZILMIYOR', async () => {
+    // Dolu listede sebep hesaplamak, her açılışta bir sorguyu boşuna
+    // koşturmak olurdu.
+    await seedProfile(FB, 'facebook_page');
+    await seedPost(postId(1), FB, '2026-08-10T12:00:00Z');
+    const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
+    expect(out.emptyReason).toBeNull();
   });
 });

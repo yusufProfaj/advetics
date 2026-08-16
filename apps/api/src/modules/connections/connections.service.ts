@@ -868,6 +868,66 @@ export class ConnectionsService {
   }
 
   /**
+   * SAYFANIN organik gönderi senkronizasyonunu aç/kapat.
+   *
+   * NEDEN SONRADAN EKLENDİ VE NEDEN ÖNEMLİ: ajans geneli havuz modeline
+   * geçilirken (§0.2–0.3) reklam hesaplarına yazılan izleme anahtarı
+   * sayfalara YAZILMAMIŞTI. Sonucu ölçüldü: üretimde 199 sosyal profilin
+   * hepsi `sync_enabled = false` ve o alanı değiştirebilecek tek bir uç nokta
+   * yoktu. Yani kullanıcı sayfayı müşteriye atıyor, hiçbir hata almıyor,
+   * hiçbir gönderi gelmiyor ve sebebi hiçbir ekranda yazmıyor — bu projenin
+   * baş belası olan sessiz hatanın ta kendisi. Auto-Boost'un girdisi olan
+   * `organic_posts` bu yüzden BOŞTU.
+   *
+   * ATAMA BUNU OTOMATİK AÇMIYOR ve bu bilinçli — reklam hesaplarındaki
+   * kararın aynısı. Bir sayfa reklam yayınlamak ya da lead formu için de
+   * atanıyor; organik senkronizasyon ise her süpürmede sayfa başına bir
+   * Graph çağrısı demek ve o çağrı yalnızca Auto-Boost'a yarıyor.
+   */
+  async setProfileSync(
+    ctx: TenantContext,
+    socialProfileId: string,
+    syncEnabled: boolean,
+    meta: Meta,
+  ) {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const before = await tx.socialProfile.findUnique({ where: { id: socialProfileId } });
+      if (!before) throw new NotFoundException('Sayfa bulunamadı');
+
+      /**
+       * ATANMAMIŞ SAYFA İZLEMEYE ALINAMAZ — `setAccountSync` ile aynı gerekçe.
+       *
+       * İzin verseydik süpürme işi bu sayfayı `client_id` süzgecinde eler,
+       * kullanıcı ekranda "izlemede" görür ve hiçbir gönderi gelmez.
+       * `organic_posts.client_id` zaten NOT NULL: satır yazılamazdı.
+       */
+      if (before.clientId === null && syncEnabled) {
+        throw new BadRequestException(
+          `"${before.name}" henüz bir müşteriye atanmamış. Önce sayfayı bir ` +
+            `müşteriye atayın; atanmamış sayfanın gönderileri çekilmez.`,
+        );
+      }
+
+      const after = await tx.socialProfile.update({
+        where: { id: socialProfileId },
+        data: { syncEnabled },
+      });
+
+      await this.audit.record(tx, ctx, {
+        action: syncEnabled ? 'social_profile.sync_enabled' : 'social_profile.sync_disabled',
+        targetType: 'social_profile',
+        targetId: socialProfileId,
+        clientId: before.clientId,
+        before: { syncEnabled: before.syncEnabled },
+        after: { syncEnabled: after.syncEnabled, name: after.name },
+        ...meta,
+      });
+
+      return { id: after.id, syncEnabled: after.syncEnabled };
+    });
+  }
+
+  /**
    * Reklam hesabını bir müşteriye atar ya da havuza geri koyar.
    *
    * BAĞLAM `activeClientId: null` İLE KURULUYOR VE BU ŞART.

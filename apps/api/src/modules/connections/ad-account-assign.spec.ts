@@ -233,6 +233,50 @@ describe('sayfa ataması', () => {
     for (const ctx of seenContexts) expect(ctx.activeClientId).toBeNull();
   });
 
+  /**
+   * SAYFANIN GÖNDERİ İZLEMESİ — bu anahtar SONRADAN eklendi.
+   *
+   * Ajans geneli havuz modeline geçilirken reklam hesaplarına yazılan izleme
+   * anahtarı sayfalara yazılmamıştı ve sonucu üretimde ölçüldü: 199 sosyal
+   * profilin hepsi `sync_enabled = false` ve o alanı değiştirebilecek tek bir
+   * uç nokta yoktu. Kullanıcı sayfayı atıyor, hata almıyor, gönderi gelmiyor
+   * ve sebebi hiçbir ekranda yazmıyordu. Auto-Boost'un girdisi bu yüzden
+   * boştu.
+   */
+  it('KRİTİK: atanmış sayfanın gönderi izlemesi AÇILABİLİYOR', async () => {
+    await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+    await svc.setProfileSync(CTX, POOL_PROFILE, true, META);
+    expect((await profileRow(POOL_PROFILE)).sync_enabled).toBe(true);
+  });
+
+  it('izleme kapatılabiliyor', async () => {
+    await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+    await svc.setProfileSync(CTX, POOL_PROFILE, true, META);
+    await svc.setProfileSync(CTX, POOL_PROFILE, false, META);
+    expect((await profileRow(POOL_PROFILE)).sync_enabled).toBe(false);
+  });
+
+  it('KRİTİK: ATANMAMIŞ sayfa izlemeye alınamıyor', async () => {
+    // İzin verilseydi süpürme işi sayfayı client_id süzgecinde eler, kullanıcı
+    // ekranda "izlemede" görür ve hiçbir gönderi gelmezdi — reklam
+    // hesaplarındakiyle birebir aynı gerekçe.
+    await expect(svc.setProfileSync(CTX, POOL_PROFILE, true, META)).rejects.toThrow(
+      /henüz bir müşteriye atanmamış/i,
+    );
+    expect((await profileRow(POOL_PROFILE)).sync_enabled).toBe(false);
+  });
+
+  it('izleme değişikliği DENETİM KAYDINA yazılıyor', async () => {
+    // Gönderi çekmeyi açmak kota tüketen bir karar; kimin ne zaman açtığı
+    // sorulabilmeli.
+    await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+    await svc.setProfileSync(CTX, POOL_PROFILE, true, META);
+    expect(await auditActions()).toEqual([
+      'social_profile.assigned',
+      'social_profile.sync_enabled',
+    ]);
+  });
+
   it('atama kalkınca İZLEME DE kapanıyor', async () => {
     await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
     await h.q('UPDATE social_profiles SET sync_enabled = true WHERE id = $1', [POOL_PROFILE]);

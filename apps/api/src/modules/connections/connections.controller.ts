@@ -265,6 +265,25 @@ export class ConnectionsController {
    * Facebook sayfasını / Instagram hesabını bir müşteriye ata — havuz modeli
    * reklam hesaplarındakiyle aynı.
    */
+  /**
+   * Sayfanın organik gönderi senkronizasyonunu aç/kapat.
+   *
+   * `connection.write` — reklam hesabının izleme anahtarıyla aynı yetki.
+   * ORG YÖNETİCİSİ ŞARTI YOK ve bu bilinçli: atama org yöneticisi işi (havuz
+   * bütün müşterileri kapsıyor), ama kendi müşterisinin sayfasının izlemesini
+   * açmak o müşteriyle çalışan kişinin işi.
+   */
+  @Patch('social-profiles/:id/sync')
+  @RequirePermissions('connection.write')
+  setProfileSync(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(toggleAccountSyncSchema)) dto: ToggleAccountSyncInput,
+    @Req() req: AuthedRequest,
+  ) {
+    return this.connections.setProfileSync(ctx, id, dto.syncEnabled, this.meta(req));
+  }
+
   @Patch('social-profiles/:id/client')
   @RequirePermissions('connection.write')
   @RequireOrgAdmin()
