@@ -195,6 +195,59 @@ describe('sosyal profiller — aynı havuz kuralları', () => {
       h.q(`UPDATE social_profiles SET client_id = $1`, [CLIENT_OTHER]),
     ).rejects.toThrow(/foreign key|violates/i);
   });
+
+  /**
+   * ANA FACEBOOK SAYFASI — yalnızca Instagram satırlarında.
+   *
+   * Meta'da her reklam bir Facebook sayfasına bağlı, Instagram'a yayınlanan
+   * da. Ama Instagram satırında `external_id` IG kullanıcı kimliği; sayfanın
+   * kimliği ayrı bir kolonda taşınıyor. Kolonun Facebook satırında da dolu
+   * olabilmesi, ona ikinci bir anlam yüklemek olurdu ve o anlamı okuyan kod
+   * yanlış sayfaya reklam yayınlardı.
+   */
+  describe('ana Facebook sayfası kolonu', () => {
+    const IG = '68686868-6868-6868-6868-686868686868';
+
+    async function insertIg(parentPage: string | null) {
+      await h.q(
+        `INSERT INTO social_profiles
+           (id, org_id, client_id, connection_id, profile_type, external_id, name,
+            parent_page_external_id, updated_at)
+         VALUES ($1, $2, NULL, $3, 'instagram_business', 'ig-user-1', 'IG', $4, now())`,
+        [IG, ORG, CONN, parentPage],
+      );
+    }
+
+    it('Instagram satırında ana sayfa kimliği tutuluyor', async () => {
+      await insertIg('111111111');
+      const [row] = await h.q<{ parent_page_external_id: string }>(
+        `SELECT parent_page_external_id FROM social_profiles WHERE id = $1`,
+        [IG],
+      );
+      expect(row!.parent_page_external_id).toBe('111111111');
+    });
+
+    it('KRİTİK: Facebook satırında ana sayfa DOLU OLAMIYOR', async () => {
+      await expect(
+        h.q(
+          `INSERT INTO social_profiles
+             (id, org_id, client_id, connection_id, profile_type, external_id, name,
+              parent_page_external_id, updated_at)
+           VALUES ($1, $2, NULL, $3, 'facebook_page', 'page-9', 'Sayfa', '111111111', now())`,
+          [PROFILE, ORG, CONN],
+        ),
+      ).rejects.toThrow(/parent_page_chk|check constraint|violates/i);
+    });
+
+    it('Instagram satırı ana sayfa OLMADAN da yazılabiliyor', async () => {
+      // Kolon eklenmeden önce keşfedilmiş satırlarda NULL ve bu geçerli bir
+      // durum: "henüz yeniden keşfedilmedi". Zorunlu yapmak, mevcut 157
+      // satırlık kurulumda migration'ı düşürürdü.
+      await insertIg(null);
+      const rows = await h.q(`SELECT id FROM social_profiles WHERE id = $1`, [IG]);
+      expect(rows).toHaveLength(1);
+    });
+  });
 });
 
 describe('organizasyon tutarlılığı', () => {

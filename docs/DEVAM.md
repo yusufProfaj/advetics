@@ -41,7 +41,7 @@ akış ve engeller §7.2'de. Özeti:
 | Hedefleme seçimi | **YOK** — `BoostRequest`'te `targeting` alanı bile yok |
 | Şehir arama ucu | **YOK** — `cityKeys` şemada var, dolduran hiçbir şey yok |
 | Kayıtlı kitle ucu | **YOK** |
-| IG profilinin ana sayfası | **SAKLANMIYOR** — aşağıda 4. tuzak |
+| IG profilinin ana sayfası | VAR — `social_profiles.parent_page_external_id`. **Mevcut satırlarda NULL**, bir kez "Hesapları yenile" gerekiyor |
 | Elle boost ekranı | **YOK** |
 
 **BEŞ TUZAK — kod yazmadan önce oku:**
@@ -70,13 +70,11 @@ akış ve engeller §7.2'de. Özeti:
    kitlenin kendisi yaş/cinsiyet daraltması taşıyabilir. Ekran bu alanları
    gösterip sessizce düşürmemeli; kapatmalı ve sebebini yazmalı.
 
-4. **IG PROFİLİNİN ANA FACEBOOK SAYFASI SAKLANMIYOR.** `listSocialProfiles`
-   (`meta.provider.ts:455`) IG satırının `raw`'ına yalnızca IG nesnesini
-   koyuyor; sayfanın kimliği kayboluyor, yalnızca sayfa token'ı kalıyor.
-   Meta'da her reklam bir Facebook sayfasına bağlı, yani K17 hangi alan
-   setinde karar kılarsa kılsın bu kimlik gerekecek. Değer keşif döngüsünde
-   zaten elin altında; saklamak migration + mevcut satırların yeniden keşfi
-   demek.
+4. ~~**IG PROFİLİNİN ANA FACEBOOK SAYFASI SAKLANMIYOR.**~~ **ÇÖZÜLDÜ** (2.
+   adım). Kolon eklendi ve keşif dolduruyor. Kalan tek iş operasyonel:
+   üretimdeki satırlarda NULL, bir kez "Hesapları yenile" gerekiyor.
+   **K17'nin dalı yazıldığında NULL bir değerle boost DENENMEMELİ** — erken
+   hata verilmeli, yoksa yine yanlış kimlik gönderilir.
 
 5. **`lifetime_budget` KURAL YOLUNU BOZMAMALI** (K18). Kural günlük bütçeyle
    çalışıyor ve aylık tavanı ona göre hesaplanıyor; `BoostRequest` iki kipli
@@ -89,7 +87,18 @@ akış ve engeller §7.2'de. Özeti:
    alınmadan önce). Karşılaştırma ve metin tek yerde:
    `instagram-boost-guard.ts` — K17 dalı yazılınca **bu dosya silinecek** ve
    derleyici üç çağrı yerini gösterecek. **999 API testi** (öncesi 987).
-2. IG profilinin ana sayfası saklansın (4. tuzak).
+2. ✅ **BİTTİ** — IG profilinin ana Facebook sayfası saklanıyor.
+   `social_profiles.parent_page_external_id`, migration
+   `20260816230000_social_profile_parent_page`. Eşleme döngüden çıkarıldı
+   (`mapPageProfiles`) ki sınanabilsin. CHECK kısıtı `01_constraints.sql`'de:
+   Facebook satırında dolu olamıyor. **1009 API testi** (öncesi 999).
+
+   > **DAĞITIMDAN SONRA PANELDEN "HESAPLARI YENİLE" ÇALIŞTIRILMALI.** Kolon
+   > mevcut satırlar keşfedildikten sonra eklendi; üretimdeki bütün Instagram
+   > satırlarında NULL ve değer Meta'da, veritabanında değil — geriye dönük
+   > doldurulamıyor. Keşif kolonu her turda güncelliyor, yani tek bir yenileme
+   > yetiyor. Yapılmazsa K17'nin Instagram dalı yazıldığında hiçbir Instagram
+   > hesabı boost edilemez.
 3. `BoostRequest`'e `targeting` + bütçe kipi; kural yolunun davranışı
    varsayılan.
 4. Gönderi listeleme ucu + coğrafi arama ucu + kayıtlı kitle ucu.

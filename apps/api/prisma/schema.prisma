@@ -543,6 +543,28 @@ model SocialProfile {
   name        String            @db.VarChar(200)
   pictureUrl  String?           @map("picture_url") @db.VarChar(1024)
 
+  /// INSTAGRAM SATIRLARININ ANA FACEBOOK SAYFASI. Facebook satırlarında NULL.
+  ///
+  /// NEDEN GEREKLİ: Meta'da her reklam bir Facebook sayfasına bağlı —
+  /// Instagram'a yayınlanan reklam da. Instagram satırında `external_id`
+  /// SAYFA KİMLİĞİ DEĞİL, IG kullanıcı kimliği; ikisi farklı kimlik uzayı ve
+  /// birini diğerinin yerine göndermek boost yolunun bugünkü hatasıydı
+  /// (bkz. `instagram-boost-guard.ts`).
+  ///
+  /// NEDEN KİMLİK, NEDEN KENDİNE YABANCI ANAHTAR DEĞİL: değer Meta'ya
+  /// gönderilecek olanın ta kendisi ve keşif sırasında satır sırasına
+  /// bağımlılık yaratmıyor. Ayrıca sayfa satırı silinse bile Instagram
+  /// hesabının boost'u çalışmaya devam ediyor — sayfa token'ı zaten bu
+  /// satırda. Yabancı anahtar olsaydı `SET NULL` ile silinir ve çalışan bir
+  /// yol sessizce kapanırdı.
+  ///
+  /// NULL BİR INSTAGRAM SATIRI = HENÜZ YENİDEN KEŞFEDİLMEMİŞ. Bu kolon
+  /// eklenmeden önce keşfedilen satırlarda boş; "Hesapları yenile" bir kez
+  /// çalıştırılınca doluyor. K17'nin Instagram dalı yazıldığında NULL bir
+  /// değerle boost DENENMEMELİ — erken hata verilmeli, yoksa yine yanlış
+  /// kimlik gönderilir.
+  parentPageExternalId String? @map("parent_page_external_id") @db.VarChar(128)
+
   /// Boost'un faturalanacağı reklam hesabı. Kullanıcı seçer.
   linkedAdAccountId String? @map("linked_ad_account_id") @db.Uuid
 

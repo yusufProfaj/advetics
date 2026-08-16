@@ -627,6 +627,7 @@ export class ConnectionsService {
             name: p.name,
             username: p.username ?? null,
             pictureUrl: p.pictureUrl ?? null,
+            parentPageExternalId: p.parentPageExternalId ?? null,
             pageAccessTokenEnc: pageToken?.data ?? null,
             keyVersion: pageToken?.keyVersion ?? 1,
             syncEnabled: false,
@@ -642,6 +643,17 @@ export class ConnectionsService {
             name: p.name,
             username: p.username ?? null,
             pictureUrl: p.pictureUrl ?? null,
+            /**
+             * ANA SAYFA GÜNCELLENİYOR — atama ve izleme gibi korunmuyor.
+             *
+             * Bu bir kullanıcı tercihi değil, platformdan okunan gerçek.
+             * Üstelik korunması AKTİF ZARAR verirdi: kolon bu satırlar
+             * keşfedildikten sonra eklendi, yani üretimdeki Instagram
+             * satırlarının hepsinde NULL. Güncellenmeseydi "Hesapları yenile"
+             * onları hiç doldurmazdı ve tek doldurma yolu satırları silmek
+             * olurdu — atamalarla birlikte.
+             */
+            parentPageExternalId: p.parentPageExternalId ?? null,
             ...(pageToken
               ? { pageAccessTokenEnc: pageToken.data, keyVersion: pageToken.keyVersion }
               : {}),

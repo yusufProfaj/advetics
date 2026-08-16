@@ -1,0 +1,30 @@
+-- Instagram satırlarının ANA FACEBOOK SAYFASI
+--
+-- Meta'da her reklam bir Facebook sayfasına bağlı — Instagram'a yayınlanan
+-- reklam da. Ama Instagram satırında `external_id` SAYFA KİMLİĞİ DEĞİL, IG
+-- kullanıcı kimliği: keşif `/me/accounts` üzerinden dönen her sayfa için bir
+-- satır, o sayfanın bağlı IG hesabı varsa bir satır daha yazıyor ve ikinci
+-- satıra IG'nin kendi kimliği giriyor.
+--
+-- SAYFANIN KİMLİĞİ ŞİMDİYE KADAR ATILIYORDU. Keşif döngüsünde değer elin
+-- altındaydı (sayfanın kendi `id`'si) ama Instagram satırının `raw` alanına
+-- yalnızca IG nesnesi yazılıyordu; geriye yalnızca sayfanın TOKEN'ı kalıyordu,
+-- kimliği değil. Yani "bu Instagram hesabı hangi sayfaya ait" sorusunun
+-- veritabanında cevabı yoktu.
+--
+-- NEDEN KİMLİK, NEDEN KENDİNE YABANCI ANAHTAR DEĞİL: değer doğrudan Meta'ya
+-- gönderilecek olanın kendisi ve keşifte satır sırasına bağımlılık
+-- yaratmıyor. Ayrıca sayfa satırı silinse bile Instagram hesabının boost'u
+-- çalışmaya devam ediyor — sayfa token'ı zaten aynı satırda. Yabancı anahtar
+-- olsaydı `ON DELETE SET NULL` ile temizlenir ve çalışan bir yol sessizce
+-- kapanırdı.
+--
+-- MEVCUT SATIRLARDA NULL KALIYOR ve geriye dönük doldurulamıyor: değer
+-- Meta'da, veritabanında değil. Panelden "Hesapları yenile" bir kez
+-- çalıştırılınca doluyor — keşif bu kolonu her turda güncelliyor.
+-- Kolonun Facebook satırlarında dolu olmasını engelleyen CHECK kısıtı
+-- `prisma/sql/01_constraints.sql` içinde: bu depoda Prisma ile ifade
+-- edilemeyen kısıtlar orada toplanıyor ve `db:rls` ile idempotent
+-- uygulanıyor.
+ALTER TABLE "social_profiles"
+    ADD COLUMN "parent_page_external_id" VARCHAR(128);

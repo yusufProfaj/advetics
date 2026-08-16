@@ -148,6 +148,15 @@ export interface DiscoveredSocialProfile {
   pictureUrl?: string;
   /** Sayfa token'ı kullanıcı token'ından ayrıdır ve ayrı şifrelenir. */
   pageAccessToken?: string;
+  /**
+   * YALNIZCA INSTAGRAM satırlarında dolu — hesabın bağlı olduğu Facebook
+   * sayfasının kimliği.
+   *
+   * Instagram satırında `externalId` IG kullanıcı kimliği, sayfa kimliği
+   * DEĞİL. Meta'da her reklam bir sayfaya bağlı olduğu için ikisi de gerekiyor
+   * ve karıştırılırsa reklam yanlış kimlikle kuruluyor.
+   */
+  parentPageExternalId?: string;
   raw: unknown;
 }
 

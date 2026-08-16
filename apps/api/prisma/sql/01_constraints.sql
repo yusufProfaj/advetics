@@ -666,3 +666,23 @@ ALTER TABLE clients ADD CONSTRAINT clients_special_categories_chk
     'HOUSING', 'EMPLOYMENT', 'CREDIT',
     'ISSUES_ELECTIONS_POLITICS', 'ONLINE_GAMBLING_AND_GAMING'
   ]::text[]);
+
+-- -----------------------------------------------------------------------------
+-- social_profiles: ana Facebook sayfası YALNIZCA Instagram satırlarında.
+--
+-- Kolonun tek anlamı "bu Instagram hesabı şu Facebook sayfasına ait" —
+-- Instagram satırında `external_id` IG kullanıcı kimliği ve Meta'da her
+-- reklam bir sayfaya bağlı olduğu için sayfanın kimliği ayrıca taşınıyor.
+--
+-- Facebook satırında dolu olması kolona İKİNCİ BİR ANLAM yüklemek olurdu ve
+-- o anlamı okuyan kod yanlış sayfaya reklam yayınlardı. Kısıt veritabanında,
+-- çünkü bu tür bir karışıklık kod incelemesinde gözden kaçıyor ve sonucu
+-- ancak canlı bir yayın çağrısında görülüyor.
+--
+-- NULL HER İKİSİNDE DE GEÇERLİ: kolon mevcut satırlar keşfedildikten sonra
+-- eklendi, yani üretimdeki Instagram satırlarında boş. "Hesapları yenile"
+-- bir kez çalıştırılınca doluyor. Zorunlu yapmak migration'ı düşürürdü.
+-- -----------------------------------------------------------------------------
+ALTER TABLE social_profiles DROP CONSTRAINT IF EXISTS social_profiles_parent_page_chk;
+ALTER TABLE social_profiles ADD CONSTRAINT social_profiles_parent_page_chk
+  CHECK (profile_type = 'instagram_business' OR parent_page_external_id IS NULL);

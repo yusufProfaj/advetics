@@ -440,31 +440,7 @@ export class MetaProvider implements IAdPlatformProvider {
       const body: GraphPage = res.data;
 
       for (const raw of body.data ?? []) {
-        const picture = raw.picture as { data?: { url?: string } } | undefined;
-
-        profiles.push({
-          profileType: 'facebook_page',
-          externalId: String(raw.id),
-          name: String(raw.name ?? raw.id),
-          username: raw.username ? String(raw.username) : undefined,
-          pictureUrl: picture?.data?.url,
-          pageAccessToken: raw.access_token ? String(raw.access_token) : undefined,
-          raw,
-        });
-
-        const ig = raw.instagram_business_account as Record<string, unknown> | undefined;
-        if (ig?.id) {
-          profiles.push({
-            profileType: 'instagram_business',
-            externalId: String(ig.id),
-            name: String(ig.name ?? ig.username ?? ig.id),
-            username: ig.username ? String(ig.username) : undefined,
-            pictureUrl: ig.profile_picture_url ? String(ig.profile_picture_url) : undefined,
-            // IG Business hesabına erişim, bağlı olduğu SAYFANIN token'ı ile olur.
-            pageAccessToken: raw.access_token ? String(raw.access_token) : undefined,
-            raw: ig,
-          });
-        }
+        profiles.push(...mapPageProfiles(raw));
       }
 
       next = body.paging?.next;
@@ -2047,6 +2023,53 @@ function pickActionValue(value: unknown, types: readonly string[]): string {
  */
 export function stripPagePrefix(postId: string, pageId: string): string {
   return postId.startsWith(`${pageId}_`) ? postId.slice(pageId.length + 1) : postId;
+}
+
+/**
+ * `/me/accounts` satırını sosyal profillere çevirir: sayfa, varsa artı IG.
+ *
+ * BİR SATIR İKİ PROFİL ÜRETEBİLİYOR ve ikisinin kimlikleri FARKLI UZAYDAN:
+ * sayfanınki Facebook sayfa kimliği, Instagram'ınki IG kullanıcı kimliği.
+ * Meta'da reklam her zaman bir Facebook sayfasına bağlı olduğu için Instagram
+ * satırı sayfanın kimliğini de taşımak zorunda — taşımadığı sürece "bu
+ * Instagram hesabı hangi sayfaya ait" sorusunun veritabanında cevabı yoktu ve
+ * boost yolu IG kullanıcı kimliğini sayfa kimliği sanıyordu.
+ *
+ * DÖNGÜDEN ÇIKARILDI ki sınanabilsin: bu eşlemenin hatası sessiz — profil
+ * kaydedilir, adı doğru görünür, yalnızca yayın anında yanlış kimlik gider.
+ */
+export function mapPageProfiles(raw: Record<string, unknown>): DiscoveredSocialProfile[] {
+  const picture = raw.picture as { data?: { url?: string } } | undefined;
+  const pageToken = raw.access_token ? String(raw.access_token) : undefined;
+
+  const out: DiscoveredSocialProfile[] = [
+    {
+      profileType: 'facebook_page',
+      externalId: String(raw.id),
+      name: String(raw.name ?? raw.id),
+      username: raw.username ? String(raw.username) : undefined,
+      pictureUrl: picture?.data?.url,
+      pageAccessToken: pageToken,
+      raw,
+    },
+  ];
+
+  const ig = raw.instagram_business_account as Record<string, unknown> | undefined;
+  if (ig?.id) {
+    out.push({
+      profileType: 'instagram_business',
+      externalId: String(ig.id),
+      name: String(ig.name ?? ig.username ?? ig.id),
+      username: ig.username ? String(ig.username) : undefined,
+      pictureUrl: ig.profile_picture_url ? String(ig.profile_picture_url) : undefined,
+      // IG Business hesabına erişim, bağlı olduğu SAYFANIN token'ı ile olur.
+      pageAccessToken: pageToken,
+      parentPageExternalId: String(raw.id),
+      raw: ig,
+    });
+  }
+
+  return out;
 }
 
 /**
