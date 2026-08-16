@@ -1,6 +1,6 @@
 # "Oluştur" bölümünün yeniden tasarımı — tasarım belgesi
 
-**Durum:** İNŞAAT SÜRÜYOR · **Tarih:** 2026-08-16 · **7 karar kapandı, 8 açık**
+**Durum:** İNŞAAT SÜRÜYOR · **Tarih:** 2026-08-16 · **9 karar kapandı, 6 açık**
 
 İki yüzey de yazıldı: `/reklam-olustur/basit` ve `/reklam-olustur/uzman`.
 
@@ -632,6 +632,49 @@ Kayıtlı kitle (c) hâlâ kapsam dışı — BASE'e ait.
 
 ---
 
+### K5 — Kreatif ayrı bir varlık mı olsun?
+
+Bugün görseller taslağa bağlı (`ad_draft_assets.draft_id`).
+
+- **(a)** Kreatif kendi tablosu olur; bir kreatif birden çok reklamda
+  kullanılır.
+- **(b)** Bugünkü gibi kalır; ad set başına N reklam olunca her reklam kendi
+  görsel kümesini taşır.
+
+**Öneri: (a).** (b) ile "aynı görselle iki metin dene" senaryosu görseli iki
+kez yüklemek demek ve arşivin varlık sebebini yeniden deler — arşiv tam da
+bunun için yazılmıştı.
+
+**Karar: (a) — KREATİF AYRI VARLIK.** 2026-08-16'da kapandı ve inşaatın ilk
+adımı bu. §9.5'teki metin havuzu bunu zorunlu kılıyor: Google RSA'nın on beş
+başlığı `ad_drafts`'ın üç metin sütununa sığmıyor.
+
+---
+
+### K6 — Menü ve bilgi mimarisi
+
+- **(a)** Tek "Reklamlar" girişi, altında dört başlangıç: hızlı reklam /
+  kampanya kur / gönderiyi öne çıkar / toplu.
+- **(b)** Bugünkü üç ayrı sayfa kalır, içleri değişir.
+- **(c)** İki sayfa: "Reklam Oluştur" (basit) ve "Kampanya Yönetimi" (uzman +
+  toplu), Auto-Boost ayrı kalır.
+
+**Öneri: (a).** Kullanıcı "reklam vereceğim" diye geliyor; giriş kapısı tek
+olmalı. Auto-Boost'un **kural yönetimi** yine ayrı bir sayfada kalabilir —
+orası reklam oluşturma değil, otomasyon ayarı.
+
+**Karar: (a) — TEK GİRİŞ.** 2026-08-16'da kapandı. `/reklam-olustur` artık bir
+giriş kapısı: dört başlangıç noktası (Hızlı Reklam, Kampanya Kur, Toplu
+Oluştur, Gönderiyi Öne Çıkar) ve kampanya listesi.
+
+Menüde üç madde yerine iki: **Reklamlar** ve **Akıllı Boost**. Boost menüde
+kaldı çünkü orada yapılan iş reklam oluşturmak değil OTOMASYON AYARI — kural
+kurmak ve onay kuyruğunu yönetmek. Kuralın ürettiği kampanyalar zaten
+Reklamlar listesinde görünüyor. Toplu oluşturma menüden çıktı; giriş
+kapısından açılıyor.
+
+---
+
 ### K7 — Görsel kırpma nerede yapılacak?
 
 - **(a)** Tarayıcıda: kullanıcı odak noktasını sürükler, üç oran canvas'ta
@@ -736,9 +779,24 @@ bekleniyor.
 - **(b)** Yayınlanmışlar okunur kalır, yayınlanmamışlar silinir.
 - **(c)** Sayı sıfır ya da ihmal edilebilirse tablo bırakılır, yenisi kurulur.
 
-**Öneri: önce SAY, sonra karar ver.** Sayı 0 ise (c) en temizi.
+**Karar: EMEKLİ AMA SİLİNMEDİ.** 2026-08-16'da kapandı.
 
-**Karar:** _(açık)_
+Sayı hâlâ bilinmiyor ve tam da bu yüzden veri taşınmadı ya da düşürülmedi.
+Yapılan: eski akışın yazma yolları kapatıldı (uçlar 410 dönüyor), yeni bir
+taslak oluşturmanın yolu kalmadı; mevcut kayıtlar Reklamlar ekranında SALT
+OKUNUR bir bölümde duruyor ve bölüm boşsa hiç görünmüyor.
+
+**Taşıma sayıdan bağımsız olarak da doğru değildi:** eski taslakların
+görselleri taslağa özel dosyalar (`ad_draft_assets`) ve bir kısmının arşivde
+karşılığı yok — kreatif kütüphanesine dönüştürülemiyorlar. Taşıma "yarısı
+çalışan" bir sonuç üretirdi.
+
+**Yazma neden kapatıldı:** arayüzden erişilemiyor olması yetmez. Açık bir uç
+bir gün başka bir ekrandan ya da bir betikten sessizce yeniden kullanılır ve o
+taslak yeni akışın hiçbir kontrolünden geçmez — özel reklam kategorisi beyanı
+dahil. `retired.spec.ts` kilitliyor.
+
+**Tablonun düşürülmesi ayrı bir iş** ve sayı öğrenilmeden yapılmamalı.
 
 ---
 
