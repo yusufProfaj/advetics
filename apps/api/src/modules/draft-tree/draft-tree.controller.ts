@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import {
   creativeInputSchema,
   expertDraftInputSchema,
@@ -186,6 +196,26 @@ export class CreativeController {
     @Body(zodBody(creativeInputSchema)) input: CreativeInput,
   ): Promise<CreativeRecord> {
     return this.creatives.create(ctx, input);
+  }
+
+  @Put(':id')
+  @RequirePermissions('bulk.write')
+  update(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(creativeInputSchema)) input: CreativeInput,
+  ): Promise<CreativeRecord> {
+    return this.creatives.update(ctx, id, input);
+  }
+
+  /** Yayınlanmış kreatifi düzenlemenin yolu — kopyala, kopyayı düzenle. */
+  @Post(':id/duplicate')
+  @RequirePermissions('bulk.write')
+  duplicate(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<CreativeRecord> {
+    return this.creatives.duplicate(ctx, id);
   }
 
   @Delete(':id')

@@ -92,6 +92,15 @@ const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
         module: 2,
         ready: true,
       },
+      /**
+       * Kreatif kütüphaneye ait, "Oluştur" altına değil: bir kampanyaya değil
+       * MÜŞTERİYE ait ve aynı metin/görsel on kampanyada kullanılabiliyor.
+       *
+       * Bu, "Oluştur" bölümünün menüde nasıl yeniden kurulacağı kararını
+       * (tasarım belgesi K6) vermiyor — Formlar ve Görsel Arşivi'nin yanına
+       * üçüncü bir kütüphane girişi eklemek o karardan bağımsız.
+       */
+      { href: '/kutuphane/kreatifler', label: 'Kreatifler', icon: 'assets', module: 4, ready: true },
       { href: '/kutuphane/kitleler', label: 'Kitleler', icon: 'audience', module: 2, ready: false },
       { href: '/kutuphane/bilgi', label: 'Bilgi Bankası', icon: 'knowledge', module: 2, ready: false },
     ],

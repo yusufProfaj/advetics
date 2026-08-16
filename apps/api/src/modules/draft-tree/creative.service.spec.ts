@@ -198,3 +198,137 @@ describe('silme', () => {
     await expect(svc.remove(CTX, c.id)).rejects.toThrow(/1 reklamda kullanılıyor/);
   });
 });
+
+describe('güncelleme', () => {
+  it('metin havuzu ve görseller güncelleniyor', async () => {
+    const c = await svc.create(CTX, input({ assetIds: [ASSET_A] }));
+    const guncel = await svc.update(CTX, c.id, {
+      ...input(),
+      name: 'Yeni ad',
+      texts: {
+        primaryText: 'Yeni metin',
+        headlines: ['Bir', 'İki', 'Üç'],
+        longHeadlines: [],
+        descriptions: ['Açıklama bir', 'Açıklama iki'],
+      },
+      assetIds: [ASSET_B, ASSET_A],
+    });
+
+    expect(guncel.name).toBe('Yeni ad');
+    expect(guncel.texts.headlines).toEqual(['Bir', 'İki', 'Üç']);
+    // SIRA DA GÜNCELLENİYOR: kullanıcı görselleri yeniden sıralamış olabilir
+    // ve fark hesabı bunu göremezdi.
+    expect(guncel.assets.map((a) => a.name)).toEqual(['Dikey', 'Kare']);
+  });
+
+  it('KRİTİK: yayınlanmış reklamda kullanılan kreatif DEĞİŞTİRİLEMİYOR', async () => {
+    /**
+     * Değişiklik platformda hiçbir şeyi değiştirmiyor (Meta ve Google kendi
+     * kopyalarını aldı) ama panelde yayındaki reklamdan FARKLI bir şey
+     * gösteriyor. "Reklamda ne yazıyor" sorusunun cevabı yanlış olur — ve o
+     * soru kampanya kötü gittiğinde sorulur.
+     */
+    const c = await svc.create(CTX, input());
+    await yayinlanmisReklamEkle(c.id);
+
+    await expect(svc.update(CTX, c.id, input({ name: 'Değişti' }))).rejects.toThrow(
+      /yayınlanmış reklamda kullanılıyor/i,
+    );
+  });
+
+  it('mesaj KOPYALAMAYI söylüyor — sadece engellemiyor', async () => {
+    // Engellemek tek başına kullanıcıya yapacak bir şey bırakmıyor.
+    const c = await svc.create(CTX, input());
+    await yayinlanmisReklamEkle(c.id);
+    await expect(svc.update(CTX, c.id, input())).rejects.toThrow(/Kopyasını oluştur/);
+  });
+
+  it('YAYINLANMAMIŞ taslakta kullanılan kreatif değiştirilebiliyor', async () => {
+    // Taslak henüz platforma gitmedi; ayrışacak bir gerçek yok.
+    const c = await svc.create(CTX, input());
+    await taslakReklamEkle(c.id, 'draft');
+    const guncel = await svc.update(CTX, c.id, input({ name: 'Değişti' }));
+    expect(guncel.name).toBe('Değişti');
+  });
+
+  it('başka müşterinin görseli güncellemede de reddediliyor', async () => {
+    const c = await svc.create(CTX, input());
+    await expect(
+      svc.update(CTX, c.id, input({ assetIds: [ASSET_OTHER] })),
+    ).rejects.toThrow(/başka bir müşteriye ait/i);
+  });
+});
+
+describe('kopyalama', () => {
+  it('metin, görsel ve sıra kopyalanıyor', async () => {
+    const c = await svc.create(CTX, input({ assetIds: [ASSET_B, ASSET_A] }));
+    const kopya = await svc.duplicate(CTX, c.id);
+
+    expect(kopya.id).not.toBe(c.id);
+    expect(kopya.texts).toEqual(c.texts);
+    expect(kopya.assets.map((a) => a.name)).toEqual(['Dikey', 'Kare']);
+  });
+
+  it('ADA "kopya" ekleniyor', async () => {
+    // İki özdeş ad, listede hangisinin hangisi olduğunu bulmayı imkânsız
+    // kılardı.
+    const c = await svc.create(CTX, input({ name: 'Yaz kreatifi' }));
+    const kopya = await svc.duplicate(CTX, c.id);
+    expect(kopya.name).toBe('Yaz kreatifi (kopya)');
+  });
+
+  it('YAYINLANMIŞ kreatif kopyalanabiliyor — düzenlemenin yolu bu', async () => {
+    const c = await svc.create(CTX, input());
+    await yayinlanmisReklamEkle(c.id);
+
+    const kopya = await svc.duplicate(CTX, c.id);
+    // Kopya hiçbir reklamda kullanılmıyor, dolayısıyla düzenlenebiliyor.
+    const guncel = await svc.update(CTX, kopya.id, input({ name: 'Düzenlendi' }));
+    expect(guncel.name).toBe('Düzenlendi');
+  });
+});
+
+/** Kreatifi yayınlanmış bir reklama bağlar. */
+async function yayinlanmisReklamEkle(creativeId: string): Promise<void> {
+  await taslakReklamEkle(creativeId, 'published');
+}
+
+async function taslakReklamEkle(creativeId: string, status: string): Promise<void> {
+  const campaignId = crypto.randomUUID();
+  const groupId = crypto.randomUUID();
+  /**
+   * `published` durumu kısıtlar yüzünden dış kimlik VE tarih istiyor
+   * (`draft_campaigns_published_chk`): kimliksiz bir "yayında" kaydı,
+   * panelde çalışıyor görünen ama platformda bulunamayan bir harcama olurdu.
+   * Değerler burada JS'te hesaplanıyor — aynı parametreyi hem karşılaştırma
+   * hem değer olarak kullanmak Postgres'in tipi çıkaramamasına yol açıyordu.
+   */
+  const yayinda = status === 'published';
+  await h.q(
+    `INSERT INTO draft_campaigns
+       (id, org_id, client_id, platform, ad_account_id, name, goal,
+        budget_mode, budget_amount_micros, status, external_campaign_id,
+        published_at, updated_at)
+     VALUES ($1, $2, $3, 'meta', $4, 'Kampanya', 'whatsapp', 'daily', 200000000,
+             $5, $6, $7::timestamptz, now())`,
+    [
+      campaignId,
+      IDS.org,
+      IDS.client,
+      IDS.adAccount,
+      status,
+      yayinda ? 'c-1' : null,
+      yayinda ? new Date().toISOString() : null,
+    ],
+  );
+  await h.q(
+    `INSERT INTO draft_ad_groups (id, org_id, campaign_id, name, updated_at)
+     VALUES ($1, $2, $3, 'Grup', now())`,
+    [groupId, IDS.org, campaignId],
+  );
+  await h.q(
+    `INSERT INTO draft_ads (id, org_id, ad_group_id, creative_id, name, updated_at)
+     VALUES (gen_random_uuid(), $1, $2, $3, 'Reklam', now())`,
+    [IDS.org, groupId, creativeId],
+  );
+}

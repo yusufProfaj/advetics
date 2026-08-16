@@ -93,6 +93,89 @@ export class CreativeService {
     return this.get(ctx, id);
   }
 
+  /**
+   * Kreatifi günceller.
+   *
+   * YAYINLANMIŞ REKLAMDA KULLANILIYORSA DEĞİŞTİRİLEMİYOR.
+   *
+   * Sebebi `ad_drafts` güncellemesindekiyle aynı: değişiklik platformda
+   * hiçbir şeyi değiştirmiyor (Meta ve Google kendi kopyalarını aldı) ama
+   * panelde yayındaki reklamdan FARKLI bir şey gösteriyor. "Reklamda ne
+   * yazıyor" sorusunun cevabı yanlış olur — ve o soru kampanya kötü
+   * gittiğinde sorulur.
+   *
+   * Çözüm engellemek değil YÖNLENDİRMEK: mesaj kopyalamayı söylüyor ve
+   * `duplicate` o işi tek çağrıda yapıyor.
+   */
+  async update(ctx: TenantContext, id: string, input: CreativeInput): Promise<CreativeRecord> {
+    await this.prisma.withTenant(ctx, async (tx) => {
+      const [yayinda] = await tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`
+        SELECT count(*)::bigint AS n
+        FROM draft_ads d
+        JOIN draft_ad_groups g ON g.id = d.ad_group_id
+        JOIN draft_campaigns c ON c.id = g.campaign_id
+        WHERE d.creative_id = ${id}::uuid AND c.status = 'published'
+      `);
+      if (yayinda && Number(yayinda.n) > 0) {
+        throw new BadRequestException(
+          `Bu kreatif ${Number(yayinda.n)} yayınlanmış reklamda kullanılıyor ve ` +
+            'değiştirilemez — panelde yazan ile yayındaki reklam ayrışırdı. ' +
+            'Kopyasını oluşturup onu düzenle.',
+        );
+      }
+
+      await this.assertAssetsOwned(tx, input);
+
+      const n = await tx.$executeRaw(Prisma.sql`
+        UPDATE ad_creatives
+        SET name = ${input.name}, texts = ${JSON.stringify(input.texts)}::jsonb,
+            updated_at = now()
+        WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
+          AND client_id = ${input.clientId}::uuid
+      `);
+      if (n === 0) throw new NotFoundException('Kreatif bulunamadı');
+
+      /**
+       * GÖRSELLER SİLİNİP YENİDEN YAZILIYOR.
+       *
+       * Fark hesaplamak (hangisi eklendi, hangisi çıktı) daha zarif görünüyor
+       * ama SIRA da veriyi taşıyor: kullanıcı görselleri yeniden sıralamış
+       * olabilir ve fark hesabı bunu göremez. Silip yazmak sırayı da
+       * doğruluyor.
+       */
+      await tx.$executeRaw(Prisma.sql`
+        DELETE FROM ad_creative_assets WHERE creative_id = ${id}::uuid
+      `);
+      for (const [position, assetId] of input.assetIds.entries()) {
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO ad_creative_assets (id, org_id, creative_id, asset_id, position)
+          VALUES (gen_random_uuid(), ${ctx.orgId}::uuid, ${id}::uuid, ${assetId}::uuid, ${position})
+        `);
+      }
+    });
+
+    return this.get(ctx, id);
+  }
+
+  /**
+   * Kreatifi kopyalar.
+   *
+   * YAYINLANMIŞ KREATİFİ DÜZENLEMENİN YOLU BU. Ajansın en sık yapacağı iş
+   * "geçen ayki reklamı metnini değiştirip tekrar ver" ve bugün o iş her şeyi
+   * baştan yazmayı gerektiriyor.
+   */
+  async duplicate(ctx: TenantContext, id: string): Promise<CreativeRecord> {
+    const kaynak = await this.get(ctx, id);
+    return this.create(ctx, {
+      clientId: kaynak.clientId,
+      // ADA "kopya" EKLENİYOR: iki özdeş ad, listede hangisinin hangisi
+      // olduğunu bulmayı imkânsız kılardı.
+      name: `${kaynak.name} (kopya)`.slice(0, 200),
+      texts: kaynak.texts,
+      assetIds: kaynak.assets.map((a) => a.assetId),
+    });
+  }
+
   async remove(ctx: TenantContext, id: string): Promise<void> {
     await this.prisma.withTenant(ctx, async (tx) => {
       /**
