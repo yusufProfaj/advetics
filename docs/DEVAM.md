@@ -1,16 +1,61 @@
 # Devir belgesi — nerede kaldık
 
-**Son güncelleme:** 2026-08-16 · **Son commit:** `c22a528` · **Canlı:** EVET —
-`64fe10c` elle dağıtıldı ve doğrulandı. Sonraki iki commit yalnızca belge.
+**Son güncelleme:** 2026-08-16 · **Son commit:** `7a68840` · **Canlı:** EVET —
+`64fe10c` elle dağıtıldı ve doğrulandı. Sonraki commit'ler yalnızca belge.
 
 ---
 
-## SIRADAKİ İŞ — tek tane, ve kod yazmak DEĞİL
+## SIRADAKİ İŞ — 1. ELLE BOOST (yeni istek, kod yazılacak)
 
 Önceki oturum "Oluştur" bölümünün yeniden tasarımını bitirdi (§A) ve kod
-2026-08-16'da üretime çıktı (§B). Geriye tek doğrulama işi kaldı.
+2026-08-16'da üretime çıktı (§B). Kullanıcının yeni isteği:
 
-### İLK GERÇEK YAZMA ÇAĞRISI — hiç yapılmadı
+> "auto boost kısmında manuel boost olması da gerekiyor yani girdiğimde
+> instagram gönderisini seçip hangi lokasyona gösterileceğini ya da hedef
+> kitleye gösterileceğini seçip direkt boost'u yayınlayabilmem lazım"
+
+Yani Akıllı Boost bugün **yalnızca kuralla** çalışıyor: kural koş → aday üret →
+onayla → yayınla. Kural kurmadan, gönderiyi elle seçip hemen yayınlamanın yolu
+yok. Tasarım ayrıntısı ve açık kararlar
+[`TASARIM-OLUSTUR.md` §7.2](TASARIM-OLUSTUR.md) ve **K16–K18**'de.
+
+**Bugün kodda ne var, ne yok** (yeni oturum buradan başlamalı):
+
+| | Durum |
+|---|---|
+| `organic_posts` tablosu ve senkronizasyonu | VAR — Instagram dahil (`organic-sync.service.ts:97`) |
+| Gönderi listeleme UCU | **YOK** — tabloyu okuyan hiçbir controller yok |
+| Boost yayın yolu | VAR — `createBoost` + ağaç kaydı (§7.1) |
+| Hedefleme seçimi | **YOK** — `BoostRequest`'te `targeting` alanı bile yok |
+| Elle boost ekranı | **YOK** |
+
+**ÜÇ TUZAK — kod yazmadan önce oku:**
+
+1. **HEDEFLEME ŞU AN SABİT.** `meta.provider.ts` içindeki `createBoost` her
+   boost'a `{"geo_locations":{"countries":["TR"]}}` gönderiyor; bu sabit kod,
+   ayar değil. Kullanıcıya lokasyon seçtirip bu satıra dokunmamak, panelde
+   İzmir yazıp Meta'ya Türkiye göndermek olur — **tam olarak bu projenin baş
+   belası olan sessiz hata**. `BoostRequest`'e `targeting` eklenmeli ve kural
+   yolunun bugünkü davranışı (ülke geneli) varsayılan olarak korunmalı.
+
+2. **INSTAGRAM GÖNDERİSİ FACEBOOK GİBİ BOOST EDİLEMEZ.** Bugünkü kod reklamı
+   `object_story_id: "{sayfa}_{gönderi}"` ile kuruyor — bu **Facebook sayfa
+   gönderisi** biçimi. Instagram gönderisi için Meta ayrı bir yol istiyor
+   (`instagram_actor_id` + IG medya kimliği). Senkronizasyon Instagram
+   gönderilerini zaten çekiyor ama boost yolunda profil türü hiç kontrol
+   edilmiyor: `boost-executor.service.ts:167` sayfa kimliğini koşulsuz
+   `pageExternalId` diye geçiyor. Kullanıcının istediği şey tam da Instagram
+   gönderisi olduğu için **ilk iş bu.** Canlıda hiç denenmedi; hata veriyor mu
+   yoksa sessizce yanlış reklam mı üretiyor bilinmiyor.
+
+3. **ÖZEL KATEGORİ HEDEFLEMEYİ KISITLIYOR.** Müşteri konut/istihdam/kredi
+   beyan etmişse yaş ve cinsiyet daraltması gönderilemiyor
+   (`restrictTargetingFor`). Elle boost ekranı bu alanları gösterip sessizce
+   düşürmemeli — ya kapatmalı ya da düşeceğini söylemeli.
+
+---
+
+## SIRADAKİ İŞ — 2. İLK GERÇEK YAZMA ÇAĞRISI (hiç yapılmadı)
 
 **Bu oturumda yazılan hiçbir yayın yolu canlıda denenmedi.** Ne yeni Meta yolu,
 ne Google. 13 Ağustos'taki ilk gerçek Meta çağrısında altı hata çıkmıştı ve
@@ -29,14 +74,18 @@ doğrulanmamış — istek gövdeleri bilgiden yazıldı, tek bir canlı çağr�
 
 Hata mesajı geldiğinde tam metniyle getir; kod tarafı ona göre düzeltilecek.
 
+**Bu iki iş birleştirilebilir:** elle boost, ajansın kendi Instagram hesabında
+en küçük bütçeyle denenirse hem yeni ekran hem de ilk gerçek yazma çağrısı aynı
+anda doğrulanmış olur.
+
 ---
 
 ## A. TAMAMLANDI — "Oluştur" bölümü yeniden kuruldu
 
 20 commit, `afc173e..64fe10c`. Tasarım kararları ve gerekçeleri
-[`TASARIM-OLUSTUR.md`](TASARIM-OLUSTUR.md) içinde; **on beş karardan dokuzu
-kapalı, altısı açık** (K2, K3, K8, K10, K12, K15). Kapanmış kararların
-gerekçesi belgede yazılı ve geri alınabilir.
+[`TASARIM-OLUSTUR.md`](TASARIM-OLUSTUR.md) içinde; **on sekiz karardan dokuzu
+kapalı, dokuzu açık** (K2, K3, K8, K10, K12, K15 + elle boost'un K16, K17,
+K18'i). Kapanmış kararların gerekçesi belgede yazılı ve geri alınabilir.
 
 ### Ne değişti
 

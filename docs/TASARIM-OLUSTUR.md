@@ -313,6 +313,56 @@ CONFLICT DO NOTHING` `$executeRaw` ile çağrılıyordu ve çakışan (yani hiç
 yazılmayan) tur da `created++` sayıyordu. `RETURNING` ile çakışma artık ayırt
 ediliyor.
 
+### 7.2. ELLE BOOST — istendi, HENÜZ YAZILMADI (2026-08-16)
+
+Kullanıcının ifadesi: *"girdiğimde instagram gönderisini seçip hangi lokasyona
+gösterileceğini ya da hedef kitleye gösterileceğini seçip direkt boost'u
+yayınlayabilmem lazım"*.
+
+Bugün Akıllı Boost **yalnızca kuralla** çalışıyor. Kural, ölçüt ve aylık tavan
+kurmayı gerektiriyor; "şu gönderi iyi gidiyor, bunu öne çıkar" demek isteyen
+kullanıcı için bu üç adım fazla. Üstelik kuralın doğası gereği **geçmişe
+bakıyor** — daha yeni yayımlanmış bir gönderi hiçbir eşiği geçemediği için
+kuralla asla boost edilemiyor.
+
+**Akış:** gönderi seç → bütçe ve süre → nereye/kime → yayınla. Dört adım, tek
+ekran, ara onay yok. Kural yolundaki "aday → onay" adımı burada yok, çünkü
+kararı zaten kullanıcı veriyor.
+
+**Ayrı bir yol DEĞİL, üçüncü üretici.** Ağacın kuralı bu (§4): üç üretici
+(elle / kural / çoğaltma), tek yayın yolu. Elle boost da `draft_campaigns`
+satırı yazıyor — `source = 'manual_boost'` — ve aynı `publishBoost()`
+üzerinden gidiyor. Doğrudan `createBoost` çağırmak dördüncü bir yazma yolu
+açardı ve bu belgenin bütün teşhisi (§2) tam olarak buydu.
+
+"Direkt yayınla" ile "ağaca yaz" çelişmiyor: taslak yazılıyor ve **aynı istek
+içinde** yayınlanıyor. Kullanıcı ara ekran görmüyor, boost yine Reklamlar
+listesinde diğerleriyle birlikte duruyor.
+
+**Üç engel — hiçbiri bugün çözülmüş değil:**
+
+**(1) Hedefleme sabit kodlanmış.** `meta.provider.ts` içinde `createBoost` her
+boost'a `{"geo_locations":{"countries":["TR"]}}` yolluyor ve `BoostRequest`'te
+`targeting` alanı yok. Ekrandan lokasyon seçtirip bu satırı bırakmak, panelde
+"İzmir" gösterip Meta'ya "Türkiye" göndermek demek: kullanıcı yanlış kitleye
+harcadığını hiçbir yerde göremez. Alan eklenmeli; kural yolunun bugünkü
+davranışı varsayılan kalmalı (§3 — çalışan davranış bozulmuyor).
+
+**(2) Instagram gönderisi Facebook gibi boost edilemez.** Bugünkü kod
+`object_story_id: "{sayfa}_{gönderi}"` kuruyor; bu Facebook sayfa gönderisi
+biçimi. Instagram için Meta ayrı alanlar istiyor. `boost-executor.service.ts`
+profil türüne hiç bakmıyor, sayfa kimliğini koşulsuz geçiyor. İstenen şey tam
+olarak Instagram olduğu için ilk iş bu — ve canlıda hiç denenmediği için
+"hata mı veriyor, yoksa sessizce yanlış reklam mı üretiyor" bilinmiyor.
+
+**(3) Özel kategori hedeflemeyi kısıtlıyor.** Konut/istihdam/kredi beyanı olan
+müşteride yaş ve cinsiyet daraltması gönderilemiyor (`restrictTargetingFor`).
+Ekran bu alanları gösterip sessizce düşürmemeli — "doğrulama kullanım anında
+değil giriş anında" kuralı.
+
+Açık kararlar: **K16** (hedefleme ne kadar açılsın), **K17** (Instagram yolu),
+**K18** (bütçe ve süre varsayılanı).
+
 ---
 
 ## 8. Toplu oluştur bu modelde
@@ -899,6 +949,65 @@ karşılığı.
 
 ---
 
+### K16 — Elle boost'ta hedefleme ne kadar açılsın?
+
+Kullanıcı "lokasyon **ya da** hedef kitle" dedi — ikisi de olabilir demek, ama
+"hedef kitle" panelde henüz hiçbir şeye karşılık gelmiyor.
+
+- **(a) Yalnızca lokasyon.** Ülke/şehir seç, gerisi geniş kalsın. Boost'un
+  amacı zaten mevcut ilgiyi büyütmek; dar hedefleme onu zaten gören kitleye
+  tekrar göstermek olur (bugünkü sabit kodun gerekçesi de bu).
+- **(b) Lokasyon + yaş + cinsiyet.** Meta'nın en anlaşılır üç alanı; hedef
+  kullanıcı reklamcılık bilmese de bu üçünü kurabiliyor.
+- **(c) (b) + Meta'daki kayıtlı kitleler.** Ajans Ads Manager'da kitle
+  kurmuşsa panelden seçilebilir. Kurulu kitle yoksa liste boş görünür ve
+  kullanıcı eksik bir şey olduğunu sanar.
+
+**Öneri: (b), (c) sonraya.** İlgi/davranış hedeflemesi hedef kullanıcının
+bilmediği bir dil ve yanlış kullanıldığında sessizce erişimi öldürüyor —
+"hedefleme sorulmuyor" ilkesinin (§3) sınırı burada. Kayıtlı kitleler ayrı bir
+senkronizasyon işi.
+
+**Karar:** _(açık)_
+
+---
+
+### K17 — Instagram gönderisi nasıl boost edilecek?
+
+Bugünkü `object_story_id` yolu Facebook sayfa gönderisine göre yazılmış (§7.2).
+
+- **(a)** Profil türüne göre dallan: Facebook'ta bugünkü yol, Instagram'da
+  IG'ye özel alanlar.
+- **(b)** Instagram gönderisini de Facebook sayfası üzerinden yayınla.
+- **(c)** Önce yalnızca Facebook desteklensin, Instagram sonra.
+
+**Öneri: (a).** (b) çalışmıyor — IG medyasının sayfa gönderisi karşılığı yok.
+(c) istenen şeyin ta kendisini dışarıda bırakıyor. **Ama bu kod canlıda
+doğrulanmadan yazılamaz:** alan adları belgeden okunup yazılırsa Meta'nın
+*kabul edip görmezden gelme* ihtimali var ve o zaman boost oluşur, para harcar,
+yanlış gönderiyi gösterir. Ajansın kendi hesabında tek bir gerçek çağrı, bu
+kararın önkoşulu.
+
+**Karar:** _(açık)_
+
+---
+
+### K18 — Elle boost'ta bütçe ve süre nasıl sorulacak?
+
+- **(a) Toplam tutar + süre.** "300 TL, 5 gün." Kullanıcı ne harcayacağını
+  bilir; günlük bütçe arkada hesaplanır.
+- **(b) Günlük bütçe + süre.** Meta'nın ve bugünkü `createBoost`'un dili.
+
+**Öneri: (a) gösterilsin, (b) gönderilsin.** "Günlük 60 TL" diyen bir ekranda
+kullanıcı 5 günde 300 TL harcayacağını çıkarmak zorunda kalıyor; boost'ta
+merak edilen şey toplam. Ekranda ikisi birden yazılmalı ki sürpriz olmasın.
+Tamsayıya bölünmeyen tutarlarda **yukarı değil aşağı** yuvarlanmalı — beklenen
+tutarı aşan bir harcama, eksik harcamadan çok daha kötü karşılanır.
+
+**Karar:** _(açık)_
+
+---
+
 ## 11. Sıra ve riskler
 
 Kararlar kapandıktan sonra önerilen sıra:
@@ -946,6 +1055,10 @@ Belgede varsayım olarak duran, canlıda ya da veriyle sınanacak maddeler:
 - ~~Üretimde kaç `ad_drafts` satırı var (K11).~~ **CEVAPLANDI 2026-08-16: 0
   satır.** Emekliye ayırma hiçbir taslağı kilitlemedi.
 - Ajansın emlak / istihdam / kredi kategorisinde müşterisi var mı (K9).
+- **Instagram gönderisi bugünkü boost yoluyla ne yapıyor** (K17): Meta hata mı
+  veriyor, yoksa isteği kabul edip yanlış/boş bir reklam mı üretiyor? Kod
+  profil türüne hiç bakmıyor ve bu yol canlıda hiç denenmedi.
+- Ajansın Meta hesabında kayıtlı kitle var mı (K16 (c) buna bağlı).
 - Tarayıcıda kırpılmış görselin Meta'nın minimum kenar kuralını
   (`MIN_IMAGE_EDGE`) her oranda geçtiği — kırpma çözünürlük düşürüyor.
 - **Google erişim seviyesi Basic mi Standard mı** (K14). Basic'te günlük işlem
