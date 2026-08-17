@@ -23,6 +23,7 @@ import {
   type InsightsLevel,
   type InsightsRequest,
   type BoostRequest,
+  type BoostSource,
   type CreateAdRequest,
   type CreateAdResult,
   type BoostResult,
@@ -1316,16 +1317,52 @@ export class MetaProvider implements IAdPlatformProvider {
       );
       created.push({ id: adSet.id, label: 'ad set' });
 
+      /**
+       * KREATİF İKİ AYRI YOL — ve fark alan adlarında değil, ÇAĞRI SAYISINDA.
+       *
+       * FACEBOOK: `object_story_id` reklamın içine gömülüyor, ayrı bir
+       * kreatif çağrısı YOK. Mevcut gönderiyi olduğu gibi reklama çeviriyor ve
+       * organik etkileşimi (beğeni, yorum) koruyor.
+       *
+       * INSTAGRAM: `object_story_id` GEÇERSİZ — o biçim Facebook sayfa
+       * gönderisine ait. Instagram için AYRI bir `adcreatives` çağrısı
+       * gerekiyor ve orada üç KÖK alan var: `object_id` (Facebook sayfası),
+       * `instagram_user_id`, `source_instagram_media_id`. `object_story_spec`
+       * HİÇ gönderilmiyor: o, sıfırdan yayınlanmamış gönderi yaratma yolu ve
+       * `source_instagram_media_id` onun alan listesinde yok.
+       */
+      let creativeRef: string;
+      if (request.source.surface === 'instagram') {
+        const creative = await this.graphPost<{ id: string }>(
+          ctx,
+          `${act}/adcreatives`,
+          instagramCreativeBody(request.source, request.name),
+        );
+        created.push({ id: creative.id, label: 'kreatif' });
+
+        /**
+         * KREATİF OLUŞTU DİYE DOĞRU GÖNDERİYE BAĞLANDIĞI ANLAMINA GELMİYOR.
+         *
+         * K17'nin bütün çekincesi buydu: Meta bir alanı kabul edip sessizce
+         * yok sayabiliyor ve o zaman boost oluşuyor, para harcıyor, YANLIŞ
+         * gönderiyi gösteriyor. `effective_instagram_media_id` reklamda
+         * fiilen kullanılan medyayı söylüyor — salt okunur ve tam bu iş için
+         * var. Eşleşmiyorsa reklam hiç açılmıyor.
+         *
+         * "200 döndü" bu projede doğrulama sayılmıyor; doğrulama budur.
+         */
+        await this.assertInstagramCreative(ctx, creative.id, request.source);
+        creativeRef = JSON.stringify({ creative_id: creative.id });
+      } else {
+        creativeRef = JSON.stringify({
+          object_story_id: `${request.source.pageExternalId}_${stripPagePrefix(request.source.postExternalId, request.source.pageExternalId)}`,
+        });
+      }
+
       const ad = await this.graphPost<{ id: string }>(ctx, `${act}/ads`, {
         name: `${request.name} — reklam`,
         adset_id: adSet.id,
-        // MEVCUT GÖNDERİYİ kullanıyor, yeni yaratmıyor: `object_story_id`
-        // gönderinin kendisini reklama çeviriyor ve organik etkileşim
-        // (beğeni, yorum) korunuyor. Yeni bir creative üretmek, gönderinin
-        // biriktirdiği sosyal kanıtı sıfırlardı.
-        creative: JSON.stringify({
-          object_story_id: `${request.pageExternalId}_${stripPagePrefix(request.postExternalId, request.pageExternalId)}`,
-        }),
+        creative: creativeRef,
         status: 'ACTIVE',
       });
       created.push({ id: ad.id, label: 'reklam' });
@@ -1356,6 +1393,62 @@ export class MetaProvider implements IAdPlatformProvider {
         }
       }
       throw err;
+    }
+  }
+
+  /**
+   * Oluşan Instagram kreatifinin GERÇEKTEN istenen gönderiye bağlandığını
+   * doğrular.
+   *
+   * `effective_instagram_media_id` salt okunur ve reklamda FİİLEN kullanılan
+   * medyayı söylüyor. Gönderdiğimiz `source_instagram_media_id` ile
+   * eşleşmiyorsa Meta alanı kabul edip başka bir şey kullanmış demektir —
+   * boost oluşur, para harcar, yanlış gönderiyi gösterir ve hiçbir yerde
+   * görünmez.
+   *
+   * ALAN HİÇ DÖNMEZSE HATA VERİLMİYOR. `fields` ile açıkça istenmediğinde
+   * dönmüyor ve bazı hesaplarda gecikmeli doluyor; yokluğunu "yanlış" saymak,
+   * çalışan bir yolu sebepsiz kapatmak olurdu. Log'a yazılıyor ve devam
+   * ediliyor — kısıt burada bilinçli olarak "eşleşmiyorsa dur", "eşleşme
+   * bilgisi yoksa dur" değil.
+   */
+  private async assertInstagramCreative(
+    ctx: FetchContext,
+    creativeId: string,
+    source: Extract<BoostSource, { surface: 'instagram' }>,
+  ): Promise<void> {
+    const url = new URL(`${this.graph}/${creativeId}`);
+    url.searchParams.set(
+      'fields',
+      'object_id,instagram_user_id,source_instagram_media_id,effective_instagram_media_id',
+    );
+
+    const res = await platformFetch<{
+      effective_instagram_media_id?: string;
+      source_instagram_media_id?: string;
+    }>(
+      'meta',
+      url.toString(),
+      { headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+      parseMetaRateLimit,
+    );
+
+    const fiili =
+      res.data.effective_instagram_media_id ?? res.data.source_instagram_media_id;
+    if (!fiili) {
+      this.logger.warn(
+        `Instagram kreatifi ${creativeId}: Meta kullanılan medya kimliğini ` +
+          'döndürmedi, doğrulama yapılamadı. Reklam yine açılıyor.',
+      );
+      return;
+    }
+    if (fiili !== source.mediaExternalId) {
+      throw new PlatformApiError(
+        'meta',
+        'permanent',
+        `Instagram kreatifi YANLIŞ gönderiye bağlandı: istenen ` +
+          `${source.mediaExternalId}, Meta'nın kullandığı ${fiili}. Boost geri alındı.`,
+      );
     }
   }
 
@@ -2205,6 +2298,72 @@ export function mapSavedAudience(row: Record<string, unknown>): SavedAudienceOpt
 }
 
 /**
+ * Instagram kreatif gövdesi — `POST /act_<id>/adcreatives`.
+ *
+ * ÜÇ ALAN VE ÜÇÜ DE KÖK SEVİYEDE. `object_story_spec` İÇİNE YAZILMIYOR:
+ * `source_instagram_media_id` o nesnenin alan listesinde hiç yok, yani içine
+ * yazmak imkânsız — ve `object_story_spec` zaten başka bir yolun aracı
+ * (sıfırdan yayınlanmamış gönderi yaratmak). Var olan organik gönderiyi
+ * boost etmek bu üç alanla oluyor.
+ *
+ * `object_id` SAYFA KİMLİĞİ, gönderi kimliği DEĞİL. Alanın genel tanımı
+ * "tanıtılan Facebook nesnesi" ama Instagram boost yolunda buraya sayfa
+ * yazılıyor. Meta'nın kendi örneği birebir böyle.
+ *
+ * GÖNDERİLMEYEN ALANLAR VE SEBEPLERİ — hepsi bilinçli:
+ *
+ *   · `call_to_action`: boost yolunda hangi `type` değerlerinin geçerli
+ *     olduğu belgelenmemiş ve linksiz organik gönderide ne olacağı belirsiz.
+ *     Kararı Meta'ya bırakmak yerine ALANI HİÇ göndermiyoruz; gönderinin
+ *     kendi düğmesi neyse o kalıyor.
+ *   · `degrees_of_freedom_spec…enroll_status`: Meta bazı hesaplarda bunu
+ *     zorunlu tutuyor ("Creative Must Provide enroll_status"). Ama `OPT_IN`
+ *     organik gönderinin GÖRÜNÜMÜNÜ otomatik iyileştirmelerle değiştiriyor ve
+ *     boost'un amacı gönderiyi olduğu gibi öne çıkarmak. Hata gelirse
+ *     `OPT_OUT` ile eklenecek.
+ *   · `instagram_permalink_url`: referansta yazılabilir görünüyor ama Meta'nın
+ *     boost rehberinde hiç geçmiyor. Bilinen yola düşülüyor.
+ *
+ * KULLANILMAYAN ESKİ ADLAR: `instagram_actor_id` (v22.0'da kaldırıldı),
+ * `instagram_story_id` (yerine `source_instagram_media_id`),
+ * `legacy_instagram_media_id` (v21 ve öncesi kimlik uzayı).
+ */
+export function instagramCreativeBody(
+  source: Extract<BoostSource, { surface: 'instagram' }>,
+  name: string,
+): Record<string, string> {
+  return {
+    name: `${name} — kreatif`,
+    object_id: source.pageExternalId,
+    instagram_user_id: source.instagramUserId,
+    source_instagram_media_id: source.mediaExternalId,
+  };
+}
+
+/**
+ * Instagram yerleşimi — medya türüne göre.
+ *
+ * BOŞ BIRAKILMIYOR ve sebebi "platformun varsayılanına güvenme" kuralı:
+ * `instagram_positions` verilmezse Meta reklamı BÜTÜN Instagram yerleşimlerine
+ * dağıtıyor ve bir akış fotoğrafı Reels'te gösterildiğinde kırpılıp kötü
+ * görünüyor. `publisher_platforms` ise Facebook'a sızmayı engelliyor: Instagram
+ * medyasından üretilen kreatifin Facebook akışında karşılığı yok.
+ *
+ * KASITLI OLARAK DAR: her medya türü için tek yerleşim. Genişletmek bir sonraki
+ * turun işi ve canlı veriye bakarak yapılmalı; şimdi geniş bırakmak, sonucun
+ * neden kötü olduğunu bilemediğimiz bir dağıtım demek.
+ */
+export function instagramPlacements(mediaType: string): {
+  publisher_platforms: string[];
+  instagram_positions: string[];
+} {
+  return {
+    publisher_platforms: ['instagram'],
+    instagram_positions: mediaType === 'reel' ? ['reels'] : ['stream'],
+  };
+}
+
+/**
  * BOOST HEDEFLEMESİNİN VARSAYILANI — ülke geneli Türkiye.
  *
  * Boost'un amacı mevcut ilgiyi büyütmek; dar hedefleme onu zaten gören
@@ -2260,6 +2419,18 @@ export function buildBoostAdSetParams(
     request.targeting ?? DEFAULT_BOOST_TARGETING,
   );
 
+  /**
+   * INSTAGRAM'DA YERLEŞİM AÇIKÇA YAZILIYOR.
+   *
+   * Facebook boost'unda yerleşim verilmiyor ve o davranış korunuyor (§3);
+   * Instagram'da ise verilmemesi, IG medyasından üretilen kreatifin Facebook
+   * yerleşimlerine de dağıtılmaya çalışılması demek.
+   */
+  const yerlesim =
+    request.source.surface === 'instagram'
+      ? instagramPlacements(request.source.mediaType)
+      : {};
+
   const params: Record<string, string> = {
     name: `${request.name} — ad set`,
     campaign_id: campaignId,
@@ -2269,7 +2440,7 @@ export function buildBoostAdSetParams(
     // varsayılanına düşüyor ve tavanlı bir varsayılan isteği reddediyor.
     bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
     end_time: endTime.toISOString(),
-    targeting: JSON.stringify(targeting),
+    targeting: JSON.stringify({ ...targeting, ...yerlesim }),
     status: 'ACTIVE',
   };
 

@@ -437,13 +437,60 @@ export type BoostBudget =
   | { mode: 'daily'; dailyMicros: bigint }
   | { mode: 'lifetime'; totalMicros: bigint };
 
+/**
+ * BOOST EDİLEN GÖNDERİNİN KAYNAĞI — ayrık birleşim, iki ayrı Meta yolu.
+ *
+ * FACEBOOK ve INSTAGRAM AYNI ŞEY DEĞİL ve fark alan adlarında değil, çağrı
+ * sayısında: Facebook sayfa gönderisi reklama `object_story_id` ile gömülü
+ * geçiyor (tek çağrı), Instagram medyası ise AYRI bir `adcreatives` çağrısı
+ * gerektiriyor ve orada üç kök alan var (`object_id`, `instagram_user_id`,
+ * `source_instagram_media_id`).
+ *
+ * NEDEN AYRIK BİRLEŞİM: bu tip yazılmadan önce `pageExternalId` alanı her iki
+ * durumda da `social_profiles.external_id`den besleniyordu ve Instagram
+ * satırında o değer SAYFA KİMLİĞİ DEĞİL, IG kullanıcı kimliğiydi. Meta'ya iki
+ * parçası da yanlış uzaydan gelen bir kimlik gidiyordu. Ayrık birleşim bunu
+ * derleyici seviyesinde imkânsız kılıyor: Instagram dalı sayfa kimliğini
+ * AYRICA istiyor ve o kimlik `social_profiles.parent_page_external_id`den
+ * geliyor.
+ *
+ * ÜÇ KİMLİK UZAYI VAR ve karıştırılırsa hata sessiz: (1) IG medya kimliği
+ * `GET /{ig-user}/media` → `id`, (2) `ig_id` eski Instagram API sayısı,
+ * (3) `legacy_instagram_media_id` v21 ve öncesi Marketing API kimliği. Kod
+ * yalnızca birinciye kilitli.
+ */
+export type BoostSource =
+  | {
+      surface: 'facebook_page';
+      /** Gönderinin sahibi sayfa — reklam bu sayfa adına yayınlanıyor. */
+      pageExternalId: string;
+      /** Sayfa gönderisinin kimliği. Birleşik biçimde de gelebiliyor. */
+      postExternalId: string;
+    }
+  | {
+      surface: 'instagram';
+      /**
+       * ANA FACEBOOK SAYFASI. Meta'da her reklam bir sayfaya bağlı; Instagram
+       * reklamı da. `social_profiles.parent_page_external_id`den geliyor ve
+       * NULL olamaz — kaynağı NULL olan bir Instagram satırı için boost
+       * denenmemeli.
+       */
+      pageExternalId: string;
+      /** Instagram Business Account kimliği (IGUser). */
+      instagramUserId: string;
+      /** `GET /{ig-user}/media` → `id`. Başka hiçbir kimlik uzayı değil. */
+      mediaExternalId: string;
+      /**
+       * Yerleşimi belirliyor: reel → `reels`, diğerleri → `stream`.
+       * Boş bırakmak Meta'ya "bütün Instagram yerleşimleri" demek.
+       */
+      mediaType: string;
+    };
+
 export interface BoostRequest {
   /** `act_` öneki OLMADAN reklam hesabı kimliği. */
   adAccountExternalId: string;
-  /** Boost edilecek gönderinin platform kimliği. */
-  postExternalId: string;
-  /** Gönderinin sahibi sayfa — reklam bu sayfa adına yayınlanıyor. */
-  pageExternalId: string;
+  source: BoostSource;
   budget: BoostBudget;
   /**
    * Süre. HER İKİ KİPTE DE ZORUNLU ve sebepleri farklı: günlük bütçede

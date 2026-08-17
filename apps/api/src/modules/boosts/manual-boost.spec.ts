@@ -63,11 +63,13 @@ async function seedProfile(
   id: string,
   type: 'facebook_page' | 'instagram_business',
   linked = true,
+  anaSayfa: string | null = '345736801957026',
 ): Promise<void> {
   await h.q(
     `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type,
-       external_id, name, linked_ad_account_id, sync_enabled, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, now())`,
+       external_id, name, linked_ad_account_id, parent_page_external_id,
+       sync_enabled, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, now())`,
     [
       id,
       IDS.org,
@@ -77,6 +79,7 @@ async function seedProfile(
       `ext-${id.slice(0, 6)}`,
       'Profil',
       linked ? IDS.adAccount : null,
+      type === 'instagram_business' ? anaSayfa : null,
     ],
   );
 }
@@ -300,14 +303,29 @@ describe('kayıtlı kitle (K16)', () => {
 });
 
 describe('engeller — sunucuda da kontrol ediliyor', () => {
-  it('KRİTİK: Instagram gönderisi reddediliyor', async () => {
-    // Liste ekranı düğmeyi kapatıyor ama API doğrudan çağrılabilir.
+  it('KRİTİK: Instagram gönderisi ARTIK YAYINLANIYOR', async () => {
+    // K17 kapandı. Bu test bir zamanlar reddedilmesini sınıyordu; artık
+    // yayınlanması ve doğru kaynakla gitmesi sınanıyor.
     await seedProfile(IG, 'instagram_business');
+    await seedPost(IG_POST, IG);
+
+    const kayit = await svc.createManualBoost(CTX, input({ organicPostId: IG_POST }));
+    expect(kayit.status).toBe('active');
+    expect(istek().source).toMatchObject({
+      surface: 'instagram',
+      pageExternalId: '345736801957026',
+    });
+  });
+
+  it('KRİTİK: ANA SAYFASI OLMAYAN Instagram gönderisi reddediliyor', async () => {
+    // Liste ekranı düğmeyi kapatıyor ama API doğrudan çağrılabilir; üstelik
+    // arada geçen sürede sayfa yenilenmemiş olabilir.
+    await seedProfile(IG, 'instagram_business', true, null);
     await seedPost(IG_POST, IG);
 
     await expect(
       svc.createManualBoost(CTX, input({ organicPostId: IG_POST })),
-    ).rejects.toThrow(/Instagram gönderileri henüz/i);
+    ).rejects.toThrow(/Hesapları yenile/i);
     expect(createBoost).not.toHaveBeenCalled();
   });
 

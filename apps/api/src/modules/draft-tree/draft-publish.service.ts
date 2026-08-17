@@ -20,7 +20,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
-import { PlatformApiError } from '../connections/provider.types';
+import { PlatformApiError, type BoostSource } from '../connections/provider.types';
+import { INSTAGRAM_PARENT_PAGE_MISSING } from '../boosts/instagram-boost-guard';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { AssetUploaderService } from '../assets/asset-uploader.service';
 import {
@@ -641,8 +642,12 @@ export class DraftPublishService {
     ad: { id: string; organicPostId: string | null },
   ): Promise<DraftCampaignRecord> {
     const [post] = await this.prisma.withTenant(ctx, (tx) =>
-      tx.$queryRaw<Array<{ post_external_id: string; page_external_id: string }>>(Prisma.sql`
-        SELECT p.external_id AS post_external_id, sp.external_id AS page_external_id
+      tx.$queryRaw<Array<BoostPostRow>>(Prisma.sql`
+        SELECT p.external_id AS post_external_id, sp.external_id AS page_external_id,
+               sp.profile_type::text AS profile_type,
+               -- INSTAGRAM İÇİN ŞART: reklam bir Facebook sayfasına bağlanıyor
+               -- ve Instagram satırındaki external_id sayfa kimliği değil.
+               sp.parent_page_external_id, p.media_type
         FROM organic_posts p
         JOIN social_profiles sp ON sp.id = p.social_profile_id
         WHERE p.id = ${ad.organicPostId}::uuid AND p.org_id = ${ctx.orgId}::uuid
@@ -667,8 +672,7 @@ export class DraftPublishService {
         { accessToken, accountExternalId: auth.accountExternalId },
         {
           adAccountExternalId: auth.accountExternalId,
-          postExternalId: post.post_external_id,
-          pageExternalId: post.page_external_id,
+          source: boostSourceFrom(post),
           /**
            * BÜTÇE KİPİ AĞAÇTAN OKUNUYOR, VARSAYILMIYOR.
            *
@@ -1064,6 +1068,46 @@ function platformLabel(platform: string): string {
  * (`fitsInCap`) ve süresiz bir kayıt o hesabı anlamsız kılardı — ay sonunda
  * tavanın ne kadar aşıldığı hiç bilinmezdi. Bitiş yoksa yedi gün.
  */
+interface BoostPostRow {
+  post_external_id: string;
+  page_external_id: string;
+  profile_type: string;
+  parent_page_external_id: string | null;
+  media_type: string;
+}
+
+/**
+ * Ağaç satırından boost kaynağı.
+ *
+ * `boost-executor` ile AYNI kararı veriyor ve ikisinin ayrışmaması gerekiyor:
+ * Instagram satırında `external_id` IG kullanıcı kimliği, sayfa kimliği ise
+ * `parent_page_external_id`. Karıştırmak Meta'ya iki parçası da yanlış
+ * uzaydan gelen bir kimlik göndermek demek.
+ *
+ * ANA SAYFA YOKSA HATA — sessizce Facebook yoluna DÜŞMÜYOR. Düşseydi IG
+ * kullanıcı kimliği sayfa kimliği sanılır ve reklam ya reddedilir ya da yanlış
+ * kurulur; ikincisi sessiz.
+ */
+function boostSourceFrom(post: BoostPostRow): BoostSource {
+  if (post.profile_type !== 'instagram_business') {
+    return {
+      surface: 'facebook_page',
+      pageExternalId: post.page_external_id,
+      postExternalId: post.post_external_id,
+    };
+  }
+  if (!post.parent_page_external_id) {
+    throw new BadRequestException(INSTAGRAM_PARENT_PAGE_MISSING);
+  }
+  return {
+    surface: 'instagram',
+    pageExternalId: post.parent_page_external_id,
+    instagramUserId: post.page_external_id,
+    mediaExternalId: post.post_external_id,
+    mediaType: post.media_type,
+  };
+}
+
 function durationFrom(endAt: string | null): number {
   if (!endAt) return 7;
   const gun = Math.round((new Date(endAt).getTime() - Date.now()) / 86_400_000);

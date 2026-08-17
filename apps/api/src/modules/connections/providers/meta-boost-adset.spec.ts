@@ -21,8 +21,7 @@ const NOW = new Date('2026-08-16T12:00:00.000Z');
 function req(over: Partial<BoostRequest> = {}): BoostRequest {
   return {
     adAccountExternalId: '123',
-    postExternalId: 'post-1',
-    pageExternalId: 'page-1',
+    source: { surface: 'facebook_page', pageExternalId: 'page-1', postExternalId: 'post-1' },
     budget: { mode: 'daily', dailyMicros: 100_000_000n },
     durationDays: 3,
     objective: 'OUTCOME_ENGAGEMENT',

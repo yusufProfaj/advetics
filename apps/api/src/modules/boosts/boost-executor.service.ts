@@ -1,11 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PlatformApiError, type BoostBudget } from '../connections/provider.types';
+import {
+  PlatformApiError,
+  type BoostBudget,
+  type BoostSource,
+} from '../connections/provider.types';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import type { TxLike } from '../rules/rules.service';
-import { INSTAGRAM_BOOST_UNSUPPORTED, isInstagramProfile } from './instagram-boost-guard';
+import { INSTAGRAM_PARENT_PAGE_MISSING, isInstagramProfile } from './instagram-boost-guard';
 
 /**
  * Onaylanmış boost'ları platformda oluşturur.
@@ -58,6 +62,9 @@ interface PendingRow {
    * gönderilemez.
    */
   profile_type: string;
+  /** Instagram satırlarında ana Facebook sayfası; NULL ise boost denenmiyor. */
+  parent_page_external_id: string | null;
+  media_type: string;
   rule_name: string | null;
   account_external_id: string;
   connection_id: string;
@@ -151,9 +158,12 @@ export class BoostExecutorService {
              p.social_profile_id::text AS social_profile_id,
              b.budget_mode, b.daily_budget_micros, b.total_budget_micros,
              b.duration_days, b.objective, b.targeting, b.saved_audience_id,
-             p.external_id AS post_external_id,
+             p.external_id AS post_external_id, p.media_type,
              sp.external_id AS profile_external_id,
              sp.profile_type::text AS profile_type,
+             -- ANA FACEBOOK SAYFASI: Instagram satırında external_id IG
+             -- kullanıcı kimliği; reklam ise bir sayfaya bağlanmak zorunda.
+             sp.parent_page_external_id,
              r.name AS rule_name,
              a.external_id AS account_external_id,
              a.connection_id::text AS connection_id,
@@ -180,19 +190,37 @@ export class BoostExecutorService {
     const provider = this.providers.get('meta');
 
     /**
-     * INSTAGRAM ENGELİ — SON SAVUNMA HATTI ve en başta duruyor.
+     * KAYNAK EN BAŞTA KURULUYOR — kota alınmadan, durum `creating` olmadan.
      *
-     * Aday üretimi Instagram gönderisini artık atlıyor, ama bu satır o
-     * kontrolün tekrarı değil: veritabanında bu düzeltmeden ÖNCE oluşmuş
-     * `approved` kayıtlar olabilir ve onlar bu döngüden geçer.
+     * Instagram'da ANA SAYFA ŞART: `parent_page_external_id` NULL olan bir
+     * satır için boost denenmiyor. Sayfa kimliği olmadan kurulacak kreatif ya
+     * reddedilir ya da yanlış bir kimlikle oluşur — ikincisi sessiz. Kolon bu
+     * satırlar keşfedildikten SONRA eklendi, yani üretimdeki eski satırlarda
+     * boş ve çözüm kodda değil: bir kez "Hesapları yenile".
      *
-     * KOTA ALINMADAN ÖNCE: hiçbir zaman yapılamayacak bir iş için kota
-     * yakmanın anlamı yok. Bağlantı durumundan da önce, çünkü bağlantı
-     * geçici bir sorun, bu ise K17'ye kadar kalıcı.
+     * NEDEN EN BAŞTA: hiçbir zaman yapılamayacak bir iş için kota yakmak, aynı
+     * turdaki gerçek boost'ları sıraya atmak demek. Aynı gerekçe eski Instagram
+     * engelinde de yazılıydı ve dal yazılırken kaybolmuştu.
      */
+    let kaynak: BoostSource;
     if (isInstagramProfile(row.profile_type)) {
-      await this.fail(tx, row.id, INSTAGRAM_BOOST_UNSUPPORTED);
-      return false;
+      if (!row.parent_page_external_id) {
+        await this.fail(tx, row.id, INSTAGRAM_PARENT_PAGE_MISSING);
+        return false;
+      }
+      kaynak = {
+        surface: 'instagram',
+        pageExternalId: row.parent_page_external_id,
+        instagramUserId: row.profile_external_id,
+        mediaExternalId: row.post_external_id,
+        mediaType: row.media_type,
+      };
+    } else {
+      kaynak = {
+        surface: 'facebook_page',
+        pageExternalId: row.profile_external_id,
+        postExternalId: row.post_external_id,
+      };
     }
 
     if (row.connection_status !== 'active') {
@@ -283,8 +311,7 @@ export class BoostExecutorService {
         },
         {
           adAccountExternalId: row.account_external_id,
-          postExternalId: row.post_external_id,
-          pageExternalId: row.profile_external_id,
+          source: kaynak,
           /**
            * BÜTÇE KİPİ SATIRDAN OKUNUYOR, VARSAYILMIYOR.
            *

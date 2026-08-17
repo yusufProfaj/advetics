@@ -26,7 +26,11 @@ import {
   type PostSnapshot,
 } from './boost-selector';
 import { BoostExecutorService } from './boost-executor.service';
-import { INSTAGRAM_BOOST_UNSUPPORTED, isInstagramProfile } from './instagram-boost-guard';
+import {
+  INSTAGRAM_PARENT_PAGE_MISSING,
+  INSTAGRAM_RULE_UNSUPPORTED,
+  isInstagramProfile,
+} from './instagram-boost-guard';
 
 /**
  * Modül 7 — Auto-Boost veri katmanı.
@@ -106,6 +110,8 @@ interface BoostablePostRow {
   social_profile_name: string;
   profile_type: string;
   linked_ad_account_id: string | null;
+  /** Instagram satırlarında ana Facebook sayfası. NULL = yenileme gerekiyor. */
+  parent_page_external_id: string | null;
   external_id: string;
   media_type: MediaType;
   message: string | null;
@@ -297,9 +303,7 @@ export class BoostsService {
     // fark ettiğinde öğrenirdi — ya da daha kötüsü, açılan boost'un yanlış
     // olduğunu hiç öğrenemezdi.
     if (isInstagramProfile(p.profile_type)) {
-      throw new BadRequestException(
-        `${INSTAGRAM_BOOST_UNSUPPORTED} Kuralı bir Facebook sayfasına kur.`,
-      );
+      throw new BadRequestException(INSTAGRAM_RULE_UNSUPPORTED);
     }
     if (p.client_id === null) {
       throw new BadRequestException(
@@ -376,6 +380,9 @@ export class BoostsService {
         SELECT p.id::text AS id, p.social_profile_id::text AS social_profile_id,
                sp.name AS social_profile_name, sp.profile_type::text AS profile_type,
                sp.linked_ad_account_id::text AS linked_ad_account_id,
+               -- ANA FACEBOOK SAYFASI: Instagram gönderisinin boost
+               -- edilebilmesi buna bağlı ve NULL olabiliyor.
+               sp.parent_page_external_id,
                p.external_id, p.media_type, p.message, p.permalink, p.thumbnail_url,
                p.published_at, p.impressions, p.reach, p.likes, p.comments,
                p.shares, p.saves, p.video_views, p.engagements, p.boosted_at,
@@ -564,6 +571,7 @@ export class BoostsService {
         SELECT p.id::text AS id, p.social_profile_id::text AS social_profile_id,
                sp.name AS social_profile_name, sp.profile_type::text AS profile_type,
                sp.linked_ad_account_id::text AS linked_ad_account_id,
+               sp.parent_page_external_id,
                p.external_id, p.media_type, p.message, p.permalink, p.thumbnail_url,
                p.published_at, p.impressions, p.reach, p.likes, p.comments,
                p.shares, p.saves, p.video_views, p.engagements, p.boosted_at,
@@ -755,8 +763,11 @@ export class BoostsService {
      * göndermek olurdu.
      */
     let blockedReason: string | null = null;
-    if (isInstagramProfile(r.profile_type)) {
-      blockedReason = INSTAGRAM_BOOST_UNSUPPORTED;
+    if (isInstagramProfile(r.profile_type) && !r.parent_page_external_id) {
+      // INSTAGRAM ARTIK ENGELLİ DEĞİL — engelli olan yalnızca ANA SAYFASI
+      // BİLİNMEYEN Instagram hesabı. Meta'da her reklam bir Facebook sayfasına
+      // bağlı ve o kimlik yalnızca "Hesapları yenile" ile geliyor.
+      blockedReason = INSTAGRAM_PARENT_PAGE_MISSING;
     } else if (!r.linked_ad_account_id) {
       blockedReason =
         'Bu sayfaya bağlı bir reklam hesabı yok — boost faturalandırılamaz. ' +
@@ -966,10 +977,8 @@ export class BoostsService {
     // SESSİZ KESME YOK. Ölçütleri geçmiş ama açılamamış gönderi varsa sayısı
     // ve SEBEBİ yazılıyor; yoksa kullanıcı kuralın çalışmadığını sanar.
     if (instagramSkipped > 0) {
-      notes.push(
-        `${instagramSkipped} gönderi ölçütleri geçti ama Instagram'da. ` +
-          INSTAGRAM_BOOST_UNSUPPORTED,
-      );
+      notes.push(`${instagramSkipped} gönderi ölçütleri geçti ama Instagram'da. ` +
+        INSTAGRAM_RULE_UNSUPPORTED);
     }
     return { evaluated: posts.length, created, cappedOut, notes };
   }

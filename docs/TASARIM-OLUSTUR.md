@@ -1079,6 +1079,59 @@ iki ayrı kimlik uzayı var. Alan adları belgeden yazılıp geçilmeyecek — �
 başarılı dönse bile **oluşan reklam Ads Manager'da açılıp doğru gönderiyi
 gösterdiği gözle görülecek.** "200 döndü" bu projede doğrulama sayılmıyor.
 
+#### Alan seti — 2026-08-17'de iki bağımsız kaynaktan doğrulandı
+
+Instagram gönderisi `object_story_id` ile reklama çevrilemiyor; **ayrı bir
+`adcreatives` çağrısı** gerekiyor ve üç alan da **kök seviyede**:
+
+| Alan | Değer | Kaynak |
+|---|---|---|
+| `object_id` | **Facebook sayfa** kimliği | `social_profiles.parent_page_external_id` |
+| `instagram_user_id` | IG Business Account | Instagram satırının `external_id`'si |
+| `source_instagram_media_id` | Organik medya | `/{ig-user}/media` → `id` |
+
+`object_story_spec` **hiç gönderilmiyor**: o, sıfırdan yayınlanmamış gönderi
+yaratma yolunun aracı ve `source_instagram_media_id` onun alan listesinde yok.
+
+**Bilerek dışarıda bırakılanlar:** `call_to_action` (boost yolunda geçerli
+`type` değerleri belgelenmemiş), `degrees_of_freedom_spec…enroll_status`
+(yalnızca tek kaynak; `OPT_IN` organik gönderinin görünümünü değiştiriyor ve
+boost'un amacı gönderiyi olduğu gibi öne çıkarmak — Meta hata verirse
+`OPT_OUT` eklenecek), `instagram_permalink_url` (referansta var, rehberde yok).
+
+**Kullanılmayan eski adlar:** `instagram_actor_id`, `instagram_story_id`,
+`legacy_instagram_media_id`. Üçü de bugün hiçbir sürümde çalışmıyor.
+
+**Üç kimlik uzayı var** ve karıştırılması bu işin başlangıç hatasıydı:
+`/{ig-user}/media` → `id` (doğru), `ig_id` (eski Instagram API), ve
+`legacy_instagram_media_id` (v21 ve öncesi Marketing API). Kod yalnızca
+birinciye kilitli.
+
+**Yerleşim ad set'te açıkça yazılıyor:** `publisher_platforms: ["instagram"]`
+ve medya türüne göre `instagram_positions` (reel → `reels`, diğerleri →
+`stream`). Boş bırakmak Meta'ya "bütün Instagram yerleşimleri" demek; bir akış
+fotoğrafı Reels'te kırpılıp kötü görünüyor. Facebook yolunda yerleşim
+verilmemeye devam ediyor (§3 — çalışan davranış bozulmuyor).
+
+#### Kodla doğrulama — "kabul edip yok sayma" riskine karşı
+
+K17'nin bütün çekincesi Meta'nın bir alanı kabul edip sessizce yok saymasıydı.
+`effective_instagram_media_id` salt okunur ve reklamda **fiilen kullanılan**
+medyayı söylüyor: kreatif oluşturulduktan sonra okunuyor ve gönderdiğimiz
+kimlikle eşleşmiyorsa reklam **hiç açılmıyor**, boost geri alınıyor.
+
+Alan hiç dönmezse hata verilmiyor, log'a yazılıp devam ediliyor: `fields` ile
+istenmediğinde dönmüyor ve bazı hesaplarda gecikmeli doluyor. Kısıt bilinçli
+olarak "eşleşmiyorsa dur", "bilgi yoksa dur" değil.
+
+#### Kural yolu HENÜZ açılmadı — bilinçli
+
+Instagram elle boost'ta açık, **kuralda kapalı**. Kural motoru otomatik ve
+tekrar tekrar harcıyor; doğrulanmamış bir yazma yolunu ilk kez otomasyona
+vermek §2'nin bütün dersine aykırı. Elle boost tek bir bilinçli tıklama. İlk
+gerçek çağrı Ads Manager'da gözle doğrulandıktan sonra `assertProfile` ile
+aday seçicideki süzgeç kalkacak (`instagram-boost-guard.ts`).
+
 ---
 
 ### K18 — Elle boost'ta bütçe ve süre nasıl sorulacak?

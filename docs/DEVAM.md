@@ -165,10 +165,38 @@ akış ve engeller §7.2'de. Özeti:
 
    **1082 API testi** (öncesi 1074).
 
-6. Ajansın kendi hesabında en küçük bütçeyle gerçek çağrı (K17: doğrudan IG).
+6. ✅ **KOD BİTTİ** — K17'nin Instagram dalı yazıldı. **1112 API testi.**
 
-   > **BU ARTIK TEK KALAN ADIM.** Kod tarafında elle boost bitti; canlıda
-   > hiç çalıştırılmadı.
+   Alan seti iki bağımsız kaynaktan çapraz doğrulandı (ayrıntı
+   [`TASARIM-OLUSTUR.md` K17](TASARIM-OLUSTUR.md)): Instagram gönderisi
+   `object_story_id` ile değil, **ayrı bir `adcreatives` çağrısıyla** ve kök
+   seviyede üç alanla reklama çevriliyor — `object_id` (Facebook sayfası),
+   `instagram_user_id`, `source_instagram_media_id`.
+
+   `BoostRequest.source` artık ayrık birleşim: Instagram dalı sayfa kimliğini
+   AYRICA istiyor, yani IG kullanıcı kimliğini sayfa kimliği sanmak derleyici
+   seviyesinde imkânsız. Kreatif oluştuktan sonra
+   `effective_instagram_media_id` okunuyor ve eşleşmezse reklam hiç açılmıyor
+   — "Meta kabul edip yanlış gönderiyi gösterir" riskinin kod karşılığı.
+
+   **Kural yolu bilerek kapalı kaldı:** Instagram elle boost'ta açık, kuralda
+   değil. Kural otomatik ve tekrar tekrar harcıyor; doğrulanmamış bir yol ilk
+   kez otomasyona verilmiyor. İlk gerçek çağrı gözle doğrulanınca
+   `instagram-boost-guard.ts` silinecek.
+
+7. **CANLI ÇAĞRI — tek kalan adım ve kodla değil elle yapılıyor.**
+
+   > Ajansın kendi hesabında, **en küçük bütçeyle**, tek bir Instagram
+   > gönderisiyle. Sonra Ads Manager'da reklam açılıp **doğru gönderiyi
+   > gösterdiği gözle görülecek** — "200 döndü" bu projede doğrulama değil.
+   >
+   > Hata gelirse `boosts.error` kolonunda tam metniyle duruyor. İki bilinen
+   > olasılık: `enroll_status` istenirse `OPT_OUT` eklenecek; medya kimliği
+   > reddedilirse kimlik uzayı sorunu demektir ve `/{ig-user}/media` → `id`
+   > dışında bir yol denenmeyecek, önce hata gövdesi okunacak.
+   >
+   > Facebook tarafı ayrı ve **App Review'a bağlı** — `pages_read_engagement`
+   > için Advanced Access. Instagram bunu beklemiyor.
    >
    > **Dağıtımdan sonra panelde sırasıyla:** (1) "Hesapları yenile" — IG
    > satırlarının ana sayfa kimliğini doldurur (2. adım), (2) Müşteriler

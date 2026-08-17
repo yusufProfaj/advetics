@@ -40,11 +40,17 @@ async function seedProfile(
   id: string,
   type: 'facebook_page' | 'instagram_business',
   linked = true,
+  /**
+   * Instagram satırının ana Facebook sayfası. NULL = "Hesapları yenile"
+   * çalıştırılmamış; o durumda gönderi listede ENGELLİ görünüyor.
+   */
+  anaSayfa: string | null = '345736801957026',
 ): Promise<void> {
   await h.q(
     `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type,
-       external_id, name, linked_ad_account_id, sync_enabled, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, now())`,
+       external_id, name, linked_ad_account_id, parent_page_external_id,
+       sync_enabled, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, now())`,
     [
       id,
       IDS.org,
@@ -54,6 +60,8 @@ async function seedProfile(
       `ext-${id.slice(0, 8)}`,
       `Profil ${id.slice(0, 4)}`,
       linked ? IDS.adAccount : null,
+      // CHECK kısıtı: ana sayfa yalnızca Instagram satırlarında dolu olabilir.
+      type === 'instagram_business' ? anaSayfa : null,
     ],
   );
 }
@@ -197,16 +205,27 @@ describe('engeller — gizlenmiyor, sebebiyle dönüyor', () => {
     expect(p!.adAccountId).toBe(IDS.adAccount);
   });
 
-  it('KRİTİK: Instagram gönderisi LİSTEDE ama engelli', async () => {
-    // Gizlemek en kolay yol ve en kötüsü: kullanıcı Instagram gönderisini
-    // aramaya geliyor, bulamıyor ve senkronizasyonun bozuk olduğunu sanıyor.
+  it('KRİTİK: Instagram gönderisi ARTIK SEÇİLEBİLİR', async () => {
+    // K17 kapandı ve Instagram dalı yazıldı. Bu test bir zamanlar tersini
+    // sınıyordu; engel Instagram'a değil, ana sayfası bilinmeyen Instagram'a.
     await seedProfile(IG, 'instagram_business');
     await seedPost(postId(1), IG, '2026-08-10T12:00:00Z');
 
     const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
     expect(out.items).toHaveLength(1);
     expect(out.items[0]!.profileType).toBe('instagram_business');
-    expect(out.items[0]!.blockedReason).toMatch(/Instagram gönderileri henüz/i);
+    expect(out.items[0]!.blockedReason).toBeNull();
+  });
+
+  it('KRİTİK: ANA SAYFASI OLMAYAN Instagram gönderisi engelli', async () => {
+    // Meta'da her reklam bir Facebook sayfasına bağlı; Instagram satırındaki
+    // external_id sayfa kimliği değil. Sayfa kimliği yoksa reklam ya reddedilir
+    // ya da YANLIŞ kimlikle oluşur.
+    await seedProfile(IG, 'instagram_business', true, null);
+    await seedPost(postId(1), IG, '2026-08-10T12:00:00Z');
+
+    const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
+    expect(out.items[0]!.blockedReason).toMatch(/Hesapları yenile/i);
   });
 
   it('bağlı reklam hesabı olmayan sayfa engelli ve NE YAPILACAĞINI söylüyor', async () => {
@@ -254,15 +273,15 @@ describe('engeller — gizlenmiyor, sebebiyle dönüyor', () => {
     expect(p!.blockedReason).toBeNull();
   });
 
-  it('ENGEL SIRASI: Instagram, bağlı hesap eksikliğinden önce geliyor', async () => {
-    // Kullanıcı TEK bir sebep görüyor ve o sebep en temeli olmalı. "Bağlı
-    // reklam hesabı yok" demek, çözülse bile işe yaramayacak bir işe
-    // göndermek olurdu.
-    await seedProfile(IG, 'instagram_business', false);
+  it('ENGEL SIRASI: ana sayfa eksikliği, bağlı hesap eksikliğinden önce', async () => {
+    // Kullanıcı TEK bir sebep görüyor ve o sebep en temeli olmalı. İkisi de
+    // eksikse "reklam hesabı ata" demek, çözülse bile işe yaramayacak bir işe
+    // göndermek olurdu — ana sayfa olmadan boost hiç kurulamıyor.
+    await seedProfile(IG, 'instagram_business', false, null);
     await seedPost(postId(1), IG, '2026-08-10T12:00:00Z');
 
     const [p] = (await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 })).items;
-    expect(p!.blockedReason).toMatch(/Instagram/i);
+    expect(p!.blockedReason).toMatch(/Hesapları yenile/i);
     expect(p!.blockedReason).not.toMatch(/reklam hesabı yok/i);
   });
 });

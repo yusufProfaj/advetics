@@ -382,6 +382,20 @@ describe('kural yolu — yeni alanlar sızmıyor', () => {
     });
   });
 
+  it('KRİTİK: Facebook sayfası SAYFA GÖNDERİSİ yolundan gidiyor', async () => {
+    // Instagram dalı yazıldıktan sonra bu ayrımın kilitli kalması gerekiyor:
+    // sayfa gönderisi `object_story_id` ile gömülü geçiyor, Instagram ise ayrı
+    // bir kreatif çağrısı istiyor. Kaynak tipi bunu belirliyor.
+    await onaylanmisBoost();
+    await svc.createApproved(h.db, IDS.client);
+
+    expect(createBoost.mock.calls[0]![1].source).toEqual({
+      surface: 'facebook_page',
+      pageExternalId: 'page-1',
+      postExternalId: 'post-abcdefgh',
+    });
+  });
+
   it('KRİTİK: hedefleme GÖNDERİLMİYOR — sağlayıcının varsayılanı geçerli', async () => {
     // Kural ekranında hedefleme sorulmuyor; burada bir değer üretmek
     // kullanıcının vermediği bir kararı onun adına vermek olurdu.
