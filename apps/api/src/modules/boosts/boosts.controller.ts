@@ -17,6 +17,7 @@ import {
   manualBoostInputSchema,
   type BoostablePostList,
   type BoostablePostQuery,
+  type BoostCampaignList,
   type BoostQuery,
   type BoostRecord,
   type BoostRuleInput,
@@ -73,6 +74,21 @@ export class BoostsController {
     @Query(zodQuery(boostablePostQuerySchema)) query: BoostablePostQuery,
   ): Promise<BoostablePostList> {
     return this.boosts.listBoostablePosts(ctx, query);
+  }
+
+  /**
+   * Altına gönderi eklenebilecek boost kampanyaları (K21).
+   *
+   * `boost.read` yetiyor: bu uç yalnızca okuyor. Seçimin para taahhüt ettiği
+   * yer `POST /boosts/manual` ve orada `boost.approve` isteniyor.
+   */
+  @Get('campaigns')
+  @RequirePermissions('boost.read')
+  listCampaigns(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<BoostCampaignList> {
+    return this.boosts.listBoostCampaigns(ctx, clientId);
   }
 
   /** K19 — bu ay boost'a ne gitti, müşterinin bütçesi ne. */

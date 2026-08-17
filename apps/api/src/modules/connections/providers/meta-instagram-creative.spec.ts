@@ -387,11 +387,17 @@ describe('createBoost — adım etiketlemesi kaynakta bağlı', () => {
      * Bu testin kendisi zorunlu. Daha önce bir kaynak taramasında dilim
      * metodu imzasından hemen sonra kesiyordu ve tarama HER ŞEYİ geçiriyordu.
      * Boş bir dilimde "yasak dizge yok" iddiası her zaman doğrudur.
+     *
+     * `/campaigns` ARTIK BURADA DEĞİL: kampanya oluşturma `createBoostCampaign`
+     * metoduna taşındı (K21) çünkü var olan kampanya yolunda hiç çağrılmıyor.
+     * Dayanaklar yeni yapıya göre — ve bu testin K21 değişikliğinde düşmesi
+     * taramanın çalıştığının kanıtı.
      */
     expect(GOVDE.length).toBeGreaterThan(1200);
-    expect(GOVDE).toContain('/campaigns');
     expect(GOVDE).toContain('/adsets');
     expect(GOVDE).toContain('/ads');
+    expect(GOVDE).toContain('createBoostCampaign');
+    expect(GOVDE).toContain('assertReusableCampaign');
     expect(GOVDE).toContain('catch');
   });
 
@@ -404,18 +410,27 @@ describe('createBoost — adım etiketlemesi kaynakta bağlı', () => {
     expect(GOVDE).not.toMatch(/throw err\s*;/);
   });
 
-  it('KRİTİK: her platform çağrısının ÖNÜNDE bir adım ataması var', () => {
+  it('KRİTİK: her platform çağrısına karşılık AYRI bir adım adı var', () => {
     /*
      * Sayı karşılaştırması bilinçli: çağrı eklenip etiket eklenmediğinde
-     * düşmesi gereken tek koruma bu. Beş çağrı var (kampanya, ad set,
-     * kreatif, reklam, kampanyayı yayına alma) ve Instagram dalında bir de
-     * doğrulama; ilk atama `try`'dan önce yapıldığı için `adim = ` sayısı
-     * çağrı sayısına eşit ya da fazla olmak zorunda.
+     * düşmesi gereken tek koruma bu. Yedi başarısız olabilir çağrı var —
+     * kampanyanın iki dalı (yeni aç / var olanı denetle), ad set, kreatif,
+     * kreatif doğrulaması, reklam, kampanyayı yayına alma — ve her birinin
+     * KENDİ adı olmak zorunda. Aynı adı iki adımda kullanmak, hatayı yanlış
+     * adıma bağlamak olurdu ve yanlış teşhis hiç teşhisten kötü.
+     *
+     * Etiketler `-ken` ekiyle bitiyor ("oluşturulurken", "denetlenirken") ve
+     * tarama bunu arıyor. Konvansiyona bağlı olması kabul edilmiş bir maliyet:
+     * yeni bir adım eklerken uyumlu bir ad seçmeye zorluyor, uymayan ad testi
+     * düşürüyor ve sebebi bu yorumda yazıyor.
      */
-    const cagri = (GOVDE.match(/await this\.graphPost|await this\.assertInstagramCreative/g) ?? [])
-      .length;
-    const etiket = (GOVDE.match(/adim = '/g) ?? []).length;
-    expect(cagri).toBeGreaterThanOrEqual(5);
+    const cagri = (
+      GOVDE.match(
+        /await this\.(graphPost|assertInstagramCreative|createBoostCampaign|assertReusableCampaign)/g,
+      ) ?? []
+    ).length;
+    const etiket = new Set(GOVDE.match(/'[^']*ken'/g) ?? []).size;
+    expect(cagri).toBeGreaterThanOrEqual(7);
     expect(etiket).toBeGreaterThanOrEqual(cagri);
   });
 });

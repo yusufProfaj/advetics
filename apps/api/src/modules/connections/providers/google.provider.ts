@@ -1048,6 +1048,19 @@ export class GoogleProvider implements IAdPlatformProvider {
   }
 
   /**
+   * BOŞ KAYIT DÖNÜYOR, hata DEĞİL.
+   *
+   * `createBoost` hata fırlatıyor çünkü orada kullanıcı bir şey yapmaya
+   * çalışıyor ve sessiz kalmak yanlış olur. Burası ise yalnızca bir liste
+   * zenginleştirme adımı: Google'da boost kampanyası yok, dolayısıyla durumu
+   * okunacak kampanya da yok. Hata fırlatmak, Meta kampanyalarını listeleyen
+   * ekranı Google bağlantısı yüzünden çökertirdi.
+   */
+  async getCampaignSummaries(): Promise<Record<string, never>> {
+    return {};
+  }
+
+  /**
    * Google'da KARŞILIĞI VAR ama yazılmadı.
    *
    * `GeoTargetConstantService` aynı işi yapıyor ve anahtar biçimi de farklı

@@ -1242,6 +1242,120 @@ için aynı anda iki boost, para harcayan bir mükerrerlik.
 
 ---
 
+### K21 — Gönderi VAR OLAN bir boost kampanyasının altına eklenebilir mi?
+
+Kullanıcının istediği kurgu (2026-08-17, ilk boost yayına çıktıktan sonra):
+
+> boost kampanyası oluştur — altına seçtiğim gönderinin reklam setini ve
+> reklamını oluştur; bir sonraki gönderi Instagram'a yüklendiğinde boost
+> kampanyasını seçeyim ve altına gönderi reklam setini ve reklamını
+> ekleyebileyim
+
+Talebin kendisiyle birlikte gelen soru şuydu: kurguyu tamamen değiştirecekse ya
+da farklı sorunlar çıkaracaksa uğraşılmasın.
+
+**Karar: yapılabilir ve yapıldı — ama yalnızca ELLE boost'ta.** Kurgu
+değişmiyor; §4'ün "üç üretici, tek yayın yolu" modeli aynı kalıyor ve boost
+yine `boosts` satırı + ağaç kaydı üretiyor. Değişen tek şey kampanyanın
+oluşturulup oluşturulmadığı.
+
+#### Kararı mümkün kılan tek gerçek: bütçe ad set'te
+
+`is_adset_budget_sharing_enabled` **`false`** ve bu değer ürünün başından beri
+bilinçli. Yani var olan bir kampanyanın altına ikinci bir ad set eklemek,
+çalışan boost'ların bütçesine **dokunmuyor**.
+
+Bu alan `true` olsaydı cevap "uğraşmayalım" olurdu: Meta bütçenin %20'sini ad
+set'ler arasında kaydırıyor ve yeni bir gönderi eklemek, yayında olan
+gönderinin harcamasını **sessizce** kısardı. Sağlayıcıdaki yorum bu ihtimali
+zaten not düşmüştü: *"Çok ad set'li kampanya desteği geldiğinde bu karar
+yeniden düşünülmeli."* Düşünüldü ve `false` kalıyor — Modül 5'in aylık bütçe
+takibi harcamayı ad set bazında modelliyor, platformun parayı kendi başına
+kaydırması panelde yazan dağılımla gerçeğin ayrışması demek.
+
+#### Kampanya seviyesindeki dört alan ve dördünün de sessiz hata riski
+
+Kampanya ayarları **sonradan değiştirilemiyor**, dolayısıyla yeniden kullanılan
+bir kampanya altına eklenen her gönderiye kendi ayarlarını dayatıyor. Karar
+`decideCampaignReuse` içinde ve saf — dördü de sessizce atlanabilir türden:
+
+| Alan | Yanlışsa ne olur | Sıra |
+|---|---|---|
+| `special_ad_categories` | Müşterinin beyanı sonradan "konut" olduysa, eski kampanyaya eklenen reklam **beyansız** yayınlanır. Cezası kampanya değil **HESAP** seviyesinde | **1.** en pahalı hata |
+| `objective` | `POST_ENGAGEMENT` + `ON_POST` yalnızca OUTCOME_ENGAGEMENT altında geçerli; başka amaçta Meta kabul edip başka bir şey yapabilir | 2. |
+| `account_id` | Kampanya hesaplar arasında taşınamıyor; sayfanın faturalandırma hesabı değiştiyse para **başka müşterinin** hesabından çıkar | 3. |
+| `effective_status` | Duraklatılmış kampanyanın altındaki yeni ad set **hiç harcamıyor**, panelde boost "yayında" görünür ve hiçbir hata yazılmaz | 4. |
+
+**Sıra kasıtlı.** Hem beyanı uyuşmayan hem duraklatılmış bir kampanyada
+kullanıcıya söylenecek şey politika riski, "yayına al" değil: "yayına al"
+mesajını görüp kampanyayı açan kullanıcı beyansız reklama bir adım daha
+yaklaşırdı.
+
+**Durum Meta'dan okunuyor, kendi kaydımızdan değil.** Kullanıcı kampanyayı Ads
+Manager'dan duraklatmış olabilir ve bizim satırımız hâlâ `active` der. Denetim
+**hiçbir şey oluşturulmadan önce** çalışıyor: ad set açıldıktan sonra reddetmek,
+geri alınacak bir varlık ve geri almanın da başarısız olabileceği bir pencere
+bırakırdı.
+
+**Kampanya kendiliğinden yayına ALINMIYOR.** Duraklatmayı kullanıcı bilerek
+yapmış olabilir; paylaşılan bir nesnenin durumunu bizim değiştirmemiz onun
+kararını sessizce geri almak olurdu. Reddedip **söylüyoruz**.
+
+#### Tek geri dönülemez risk: geri alma
+
+`createBoost` hata durumunda oluşturduğu her varlığı siliyor. Paylaşılan bir
+kampanya o listeye girerse, **başarısız bir ikinci boost, birinci boost'un
+yayındaki reklamını siler** — harcanmış para geri gelmez.
+
+Bu yüzden `BoostRequest.campaign` **ayrık birleşim**
+(`{mode:'new'} | {mode:'existing', externalCampaignId}`), isteğe bağlı bir
+`externalCampaignId?: string` değil: ikincisi "dolu mu?" kontrolünü geri alma
+kodunun hatırlamasına bağlamak olurdu. Kampanya oluşturma ayrı bir metoda
+(`createBoostCampaign`) taşındı ve geri alma listesine ekleme **o metodun
+içinde**; var olan kampanya yolunda o metot hiç çağrılmıyor. İki kaynak
+taraması bunu kilitliyor ve ikisi de mutasyonla doğrulandı — `created.push`'un
+daldan dışarı taşınması ve denetim metoduna `created` verilmesi, iki gerçekçi
+refactor hatası, ikisi de yakalanıyor.
+
+#### Varsayılan neden "yeni kampanya"
+
+`destination_type`'ta platformun varsayılanına güvenmemek doğruydu çünkü orada
+platformun varsayılanı **yanlıştı**. Burada varsayılan bizim ve en korunaklı
+olan: alanı doldurmayı unutan bir yol kendi kampanyasını açıyor. Fazladan
+kampanya düzen sorunudur, geri dönülebilir; tersi varsayılan (var olana ekle)
+unutulduğunda paylaşılan bir nesneye dokunmak demekti.
+
+#### Seçilebilir kampanyalar nereden geliyor
+
+**Kendi boost geçmişimizden**, Meta'nın kampanya listesinden değil. Hesapta
+boost'la ilgisi olmayan yüzlerce kampanya olabiliyor ve bizim açmadığımız bir
+kampanyanın amacı ile beyanı bilinmiyor: listeye koymak, kullanıcıyı yayın
+anında reddedilecek bir seçime davet etmek olurdu. Yalnızca `active` /
+`completed` satırların kampanyaları listeleniyor — `failed` bir satırın
+kampanyası geri alma sırasında silinmiş olabilir.
+
+Kampanyanın **adı** Meta'dan, durumun okunduğu **aynı çağrıda** alınıyor
+(`?ids=…&fields=id,name,effective_status`). Adı bizde saklı değil ve kendi
+ürettiğimiz bir etiket ("Boost kampanyası · 17.08.2026") üç kampanya arasından
+seçim yapmaya yetmiyor — kullanıcı bu ekranı Ads Manager'la yan yana kullanıyor.
+Ad dönüp durum dönmezse kampanya **"okunamadı"** sayılıyor: yarım bilgi geçiş
+sebebi değil.
+
+#### Beklenti düzeltmesi ekranda yazıyor
+
+Bunun faydası **düzen**, performans değil. Meta'nın öğrenme evresi ad set
+başına işliyor; aynı kampanyanın altında olmak gönderilerin performansını
+birleştirmiyor. Kullanıcı "aynı kampanya = birleşik performans" bekleyebilir ve
+beklentiyi düzeltmemek, sonradan açıklanamayan bir sonuç bırakırdı.
+
+#### Kural yolu kapalı — K17 ile aynı gerekçe
+
+Kural motoru otomatik ve tekrar tekrar harcıyor. Var olan kampanyaya ekleme
+tek bir bilinçli tıklama olarak açıldı; otomasyona verilmesi, kuralın bir
+gönderiyi yanlış kampanyaya eklemesinin hiçbir yerde görünmemesi demek olurdu.
+
+---
+
 ## 11. Sıra ve riskler
 
 Kararlar kapandıktan sonra önerilen sıra:

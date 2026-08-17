@@ -4,6 +4,7 @@ import type {
   BoostablePostList,
   BoostablePostQuery,
   BoostablePostRecord,
+  BoostCampaignList,
   BoostCondition,
   BoostQuery,
   BoostRecord,
@@ -543,6 +544,132 @@ export class BoostsService {
     });
   }
 
+  /**
+   * Altına gönderi eklenebilecek boost kampanyaları (K21).
+   *
+   * KAYNAK KENDİ BOOST GEÇMİŞİMİZ, Meta'nın kampanya listesi DEĞİL. Hesapta
+   * boost'la ilgisi olmayan yüzlerce kampanya olabiliyor ve bizim açmadığımız
+   * bir kampanyanın amacı ile kategori beyanı bilinmiyor: listeye koymak,
+   * kullanıcıyı yayın anında reddedilecek bir seçime davet etmek olurdu.
+   *
+   * DURUM META'DAN OKUNUYOR ve okuma TRANSACTION'IN DIŞINDA. Kendi satırımız
+   * kampanyayı 'active' derken kullanıcı onu Ads Manager'dan duraklatmış
+   * olabilir; duraklatılmış kampanyanın altındaki yeni reklam hiç harcamıyor
+   * ve hiçbir hata vermiyor. "Doğrulama kullanım anında değil giriş anında"
+   * kuralı gereği kullanıcı bunu SEÇEMEDEN görüyor.
+   */
+  async listBoostCampaigns(
+    ctx: TenantContext,
+    clientId: string,
+  ): Promise<BoostCampaignList> {
+    const scoped = this.scoped(ctx, clientId);
+
+    const rows = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$queryRaw<
+        Array<{
+          external_id: string;
+          post_count: string | number | bigint;
+          last_used_at: Date;
+          connection_id: string;
+          account_external_id: string;
+          total: string | number | bigint;
+        }>
+      >(Prisma.sql`
+        WITH kampanyalar AS (
+          SELECT b.external_campaign_id AS external_id,
+                 COUNT(*) AS post_count,
+                 MAX(b.created_on_platform_at) AS last_used_at,
+                 -- HESAP VE BAĞLANTI: durumu okumak için ikisi de gerekiyor.
+                 -- Aynı kampanyanın bütün satırları aynı hesapta olmak
+                 -- zorunda (kampanya hesaplar arasında taşınamıyor), o yüzden
+                 -- herhangi biri yeterli.
+                 MIN(a.external_id) AS account_external_id,
+                 MIN(a.connection_id::text) AS connection_id
+          FROM boosts b
+          JOIN ad_accounts a ON a.id = b.ad_account_id
+          WHERE b.client_id = ${clientId}::uuid
+            AND b.external_campaign_id IS NOT NULL
+            -- YALNIZCA GERÇEKTEN OLUŞMUŞ OLANLAR. 'failed' bir satırın
+            -- kampanyası geri alma sırasında silinmiş olabilir ve silinmiş
+            -- kampanyayı listelemek, seçildiğinde açıklanamayan bir hata
+            -- vermek demek.
+            AND b.status IN ('active', 'completed')
+          GROUP BY b.external_campaign_id
+        )
+        -- AD BURADA ÜRETİLMİYOR: kampanyanın Ads Manager'daki gerçek adı
+        -- bizde saklı değil ve Meta'dan durumla AYNI çağrıda okunuyor.
+        -- Kendi ürettiğimiz bir etiket ("Boost kampanyası · 17.08.2026") üç
+        -- kampanya arasından seçim yapmaya yetmiyor.
+        SELECT k.*, COUNT(*) OVER () AS total
+        FROM kampanyalar k
+        ORDER BY k.last_used_at DESC
+        -- SESSİZ KESME YOK: kaç tane gösterildiği ve toplamın kaç olduğu
+        -- yanıtta duruyor (total).
+        LIMIT 25
+      `),
+    );
+
+    if (rows.length === 0) {
+      return {
+        campaigns: [],
+        emptyReason:
+          'Bu müşteride henüz yayına çıkmış bir boost kampanyası yok. İlk gönderiyi ' +
+          'öne çıkardığında kampanya oluşacak ve sonraki gönderileri onun altına ' +
+          'ekleyebileceksin.',
+      };
+    }
+
+    /*
+     * TEK BAĞLANTI ÜZERİNDEN OKUNUYOR. Bir müşterinin boost kampanyaları
+     * pratikte tek reklam hesabında ve tek bağlantıda; kampanya başına
+     * bağlantı çözmek gereksiz çağrı üretirdi. Farklı bağlantılar varsa
+     * diğerlerinin durumu okunamıyor ve bu, "bilinmiyor" olarak görünüyor —
+     * yanlış bir "yayında" iddiasından iyisi.
+     */
+    const ilk = rows[0]!;
+    const ozetler = await this.executor.campaignSummaries(
+      ilk.connection_id,
+      ilk.account_external_id,
+      rows.map((r) => r.external_id),
+    );
+
+    const campaigns = rows.map((r) => {
+      const ozet = ozetler[r.external_id];
+      const status = ozet?.status ?? null;
+      return {
+        externalId: r.external_id,
+        /*
+         * AD OKUNAMADIYSA SON KULLANIM TARİHİ. Boş dizge göstermek satırı
+         * ayırt edilemez yapardı; tarih en azından hangi kampanya olduğunu
+         * daraltıyor ve satırın altında gönderi sayısı da yazıyor.
+         */
+        name:
+          ozet?.name ??
+          `Boost kampanyası · ${r.last_used_at.toLocaleDateString('tr-TR')}`,
+        postCount: Number(r.post_count),
+        lastUsedAt: r.last_used_at.toISOString(),
+        status,
+        /*
+         * SEÇİLEBİLİRLİK YALNIZCA 'ACTIVE'. `null` (okunamadı) seçilebilir
+         * SAYILMIYOR: okunamayan bir durumu yayında varsaymak, harcamayan bir
+         * boost'u yayında göstermek olurdu — bu projenin baş belası.
+         */
+        selectable: status === 'ACTIVE',
+      };
+    });
+
+    const secilebilir = campaigns.filter((c) => c.selectable).length;
+    return {
+      campaigns,
+      emptyReason:
+        secilebilir === 0
+          ? `${campaigns.length} kampanya bulundu ama hiçbiri yayında değil. ` +
+            'Duraklatılmış bir kampanyanın altına eklenen reklam hiç harcamıyor; ' +
+            'kampanyayı Ads Manager’da yayına al ya da yeni kampanya oluştur.'
+          : null,
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Elle boost — üçüncü üretici
   // ---------------------------------------------------------------------------
@@ -619,7 +746,8 @@ export class BoostsService {
         INSERT INTO boosts (
           id, org_id, client_id, boost_rule_id, organic_post_id, ad_account_id,
           status, budget_mode, total_budget_micros, duration_days, objective,
-          targeting, saved_audience_id, reason, approved_by, approved_at, updated_at
+          targeting, saved_audience_id, target_campaign_external_id,
+          reason, approved_by, approved_at, updated_at
         ) VALUES (
           gen_random_uuid(), ${ctx.orgId}::uuid, ${input.clientId}::uuid,
           -- KURAL YOK: bu boost'u bir kural değil kullanıcı açtı ve
@@ -630,6 +758,12 @@ export class BoostsService {
           'OUTCOME_ENGAGEMENT',
           ${targeting ? JSON.stringify(targeting) : null}::jsonb,
           ${savedAudienceId},
+          -- VAR OLAN KAMPANYA SEÇİLDİYSE KİMLİĞİ (K21), yoksa NULL = yeni
+          -- kampanya. Burada DOĞRULANMIYOR: kampanyanın amacı, beyanı, hesabı
+          -- ve durumu ancak Meta'dan okunarak denetlenebilir ve o denetim
+          -- yayın anında, hiçbir şey oluşturulmadan önce yapılıyor. Burada
+          -- doğrulamaya çalışmak, kendi kaydımızı Meta'nın gerçeği sanmak olur.
+          ${input.targetCampaignExternalId ?? null},
           ${manualReason(input)},
           ${ctx.userId}::uuid, now(), now()
         )

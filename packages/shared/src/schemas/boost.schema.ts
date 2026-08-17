@@ -366,8 +366,63 @@ export const manualBoostInputSchema = z.object({
     }),
   durationDays: z.number().int().min(1).max(30),
   targeting: manualBoostTargetingSchema,
+  /**
+   * VAR OLAN kampanyanın altına ekle (K21). Verilmezse yeni kampanya.
+   *
+   * SEÇENEK KİMLİĞİ DEĞİL, KAMPANYANIN META KİMLİĞİ. Kendi tablomuzdan bir
+   * kimlik almak, o satırın hâlâ Meta'daki durumu temsil ettiğini varsaymak
+   * olurdu; kampanya Ads Manager'dan duraklatılmış ya da silinmiş olabilir.
+   * Meta kimliği, yayın anında platformdan doğrulanabilen tek şey.
+   *
+   * BOŞ DİZGE KABUL EDİLMİYOR: form alanı temizlendiğinde `""` göndermek
+   * kolay ve `""` bir kampanya kimliği değil — "yeni kampanya" demek istiyorsa
+   * alan HİÇ gönderilmemeli. Aksi hâlde Meta'ya boş kimlikle gidilir ve hata
+   * "kampanya bulunamadı" olarak döner; sebebi hiç anlaşılmaz.
+   */
+  targetCampaignExternalId: z.string().min(1).max(128).optional(),
 });
 export type ManualBoostInput = z.infer<typeof manualBoostInputSchema>;
+
+/**
+ * Elle boost ekranında seçilebilecek kampanya (K21).
+ *
+ * KAYNAK KENDİ BOOST GEÇMİŞİMİZ, Meta'nın kampanya listesi DEĞİL. İki sebep:
+ * hesapta boost'la ilgisi olmayan yüzlerce kampanya olabiliyor ve bizim
+ * açmadığımız bir kampanyanın amacı/beyanı bilinmiyor — listeye koymak,
+ * kullanıcıyı yayın anında reddedilecek bir seçime davet etmek olurdu.
+ *
+ * `status` META'DAN geliyor, kendi kaydımızdan değil: kullanıcı kampanyayı Ads
+ * Manager'dan duraklatmış olabilir ve duraklatılmış kampanyanın altındaki yeni
+ * reklam hiç harcamıyor. Doğrulama giriş anında olmalı — kullanıcı seçemeden
+ * görmeli.
+ */
+export interface BoostCampaignOption {
+  /** Meta kampanya kimliği — seçim bununla gönderiliyor. */
+  externalId: string;
+  name: string;
+  /** Bu kampanyanın altında bugüne kadar öne çıkarılan gönderi sayısı. */
+  postCount: number;
+  /** En son ne zaman kullanıldı. */
+  lastUsedAt: string;
+  /**
+   * Meta'daki güncel durum. `null` = okunamadı (kota, ağ ya da silinmiş
+   * kampanya) — o zaman "bilinmiyor" gösteriliyor ve seçilemiyor. Okunamayan
+   * bir durumu "yayında" saymak, harcamayan bir boost'u yayında göstermek
+   * olurdu.
+   */
+  status: string | null;
+  /** Seçilebilir mi — yalnızca Meta'da ACTIVE olanlar. */
+  selectable: boolean;
+}
+
+export interface BoostCampaignList {
+  campaigns: BoostCampaignOption[];
+  /**
+   * Liste boşsa NEDEN boş. Bu ekranın her listesinde olduğu gibi: "hiç
+   * kampanya yok" ile "kampanyaların durumu okunamadı" farklı işler.
+   */
+  emptyReason: string | null;
+}
 
 /**
  * K19 — elle boost'un harcama emniyeti.

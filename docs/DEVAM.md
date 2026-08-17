@@ -319,6 +319,63 @@ akış ve engeller §7.2'de. Özeti:
 
    **1142 API testi.**
 
+6f. ✅ **BİTTİ** — gönderi VAR OLAN bir boost kampanyasının altına
+   eklenebiliyor (K21). **İlk boost yayına çıktıktan sonra istendi.**
+
+   İstenen: ilk gönderi kendi kampanyasını açsın, sonraki gönderiler o
+   kampanyayı seçip altına **kendi reklam seti ve reklamıyla** eklenebilsin.
+
+   **KURGU DEĞİŞMEDİ.** §4'ün "üç üretici, tek yayın yolu" modeli aynı; boost
+   yine `boosts` satırı + ağaç kaydı üretiyor. Değişen tek şey kampanyanın
+   oluşturulup oluşturulmadığı.
+
+   **Kararı mümkün kılan tek gerçek:** `is_adset_budget_sharing_enabled` =
+   `false`, yani bütçe ad set'te ve paylaşım kapalı. Yeni bir ad set eklemek
+   çalışan boost'ların bütçesine dokunmuyor. `true` olsaydı cevap "yapılmasın"
+   olurdu: Meta bütçenin %20'sini ad set'ler arasında kaydırıyor ve yeni
+   gönderi eklemek, yayındaki gönderinin harcamasını **sessizce** kısardı.
+
+   **TEK GERİ DÖNÜLEMEZ RİSK GERİ ALMADA** ve yapısal olarak kapatıldı.
+   `createBoost` hata durumunda oluşturduğu her şeyi siliyor; paylaşılan bir
+   kampanya o listeye girerse **başarısız bir ikinci boost, birincinin
+   yayındaki reklamını siler.** `BoostRequest.campaign` bu yüzden ayrık
+   birleşim, isteğe bağlı bir kimlik alanı değil — ikincisi "dolu mu?"
+   kontrolünü geri alma kodunun hatırlamasına bağlamak olurdu. Kampanya
+   oluşturma ayrı metoda taşındı ve listeye ekleme o metodun içinde.
+
+   **Kampanya seviyesindeki dört alan denetleniyor** ve hiçbiri
+   değiştirilemiyor: `special_ad_categories` (beyansız reklamın cezası HESAP
+   seviyesinde — listedeki en pahalı hata), `objective`, `account_id`,
+   `effective_status`. Durum **Meta'dan** okunuyor: kullanıcı kampanyayı Ads
+   Manager'dan duraklatmış olabilir ve duraklatılmış kampanyanın altındaki
+   yeni ad set hiç harcamıyor, panelde "yayında" görünür.
+
+   Denetim **hiçbir şey oluşturulmadan önce**. Kampanyanın durumu
+   kendiliğinden ACTIVE'e ALINMIYOR — kullanıcı bilerek duraklatmış olabilir.
+
+   **Ekranda beş adım var artık** (Gönderi → **Kampanya** → Bütçe → Kime →
+   Yayınla). Varsayılan "yeni kampanya": unutulduğunda fazladan bir kampanya
+   doğar (geri dönülebilir), paylaşılan bir kampanyaya dokunulmaz (geri
+   dönülemez). Seçilemeyen kampanya listeden gizlenmiyor, **sebebi satırda**
+   yazıyor.
+
+   Kampanyanın adı Meta'dan, durumun okunduğu **aynı çağrıda** alınıyor —
+   kendi ürettiğimiz bir etiket üç kampanya arasından seçim yapmaya yetmiyor.
+
+   **BEKLENTİ DÜZELTMESİ EKRANDA:** faydası düzen, performans değil. Meta'nın
+   öğrenme evresi ad set başına işliyor; aynı kampanyada olmak sonuçları
+   birleştirmiyor.
+
+   **Kural yolu kapalı** — K17 ile aynı gerekçe: kural otomatik ve tekrar
+   tekrar harcıyor.
+
+   **Bu oturumda iki kez uydurma isim yazdım ve ikisi de yakalandı:** Tailwind
+   `accent` renk tokenı yok (depoda `brand` var) — uydurma sınıf sessizce
+   hiçbir renk basıyordu; ve `seedPost`'a var olmayan üçüncü argüman
+   verilmişti. İkincisi vitest'te değil `pnpm typecheck` ile çıkıyor.
+
+   **1169 API testi.** Yeni migration: `20260817160000_boost_reuse_campaign`.
+
 7. **CANLI ÇAĞRI — tek kalan adım ve kodla değil elle yapılıyor.**
 
    > Ajansın kendi hesabında, **en küçük bütçeyle**, tek bir Instagram

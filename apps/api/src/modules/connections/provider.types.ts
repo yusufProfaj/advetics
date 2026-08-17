@@ -487,10 +487,36 @@ export type BoostSource =
       mediaType: string;
     };
 
+/**
+ * Boost'un kampanyası: YENİ mi, VAR OLAN mı? (K21)
+ *
+ * Ayrık birleşim, çünkü ikisi arasındaki fark tek bir alanın dolu olması
+ * değil — GERİ ALMA DAVRANIŞI değişiyor. Yeni kampanya hata durumunda
+ * siliniyor; var olan kampanya SİLİNEMEZ, altında başka gönderilerin
+ * yayındaki reklamları var. Bunu `externalCampaignId?: string` gibi isteğe
+ * bağlı bir alanla modellemek, "dolu mu?" kontrolünü geri alma kodunun
+ * hatırlamasına bağlamak olurdu — ve unutulduğunda bedeli, başarısız bir
+ * boost'un BAŞKA bir boost'un yayındaki reklamını silmesi.
+ */
+export type BoostCampaignTarget =
+  | { mode: 'new' }
+  | { mode: 'existing'; externalCampaignId: string };
+
 export interface BoostRequest {
   /** `act_` öneki OLMADAN reklam hesabı kimliği. */
   adAccountExternalId: string;
   source: BoostSource;
+  /**
+   * VERİLMEZSE YENİ KAMPANYA — ve bu varsayılan bilinçli olarak güvenli olan.
+   *
+   * Alanı unutan bir çağıran kendi kampanyasını açıyor: fazladan bir kampanya
+   * düzen sorunudur, geri dönülebilir. Tersi varsayılan (var olana ekle)
+   * unutulduğunda paylaşılan bir nesneye dokunmak demekti ve o geri
+   * dönülemez. `destination_type`'ta varsayılana güvenmemek doğruydu çünkü
+   * orada platformun varsayılanı YANLIŞTI; burada bizim varsayılanımız en
+   * korunaklı olan.
+   */
+  campaign?: BoostCampaignTarget;
   budget: BoostBudget;
   /**
    * Süre. HER İKİ KİPTE DE ZORUNLU ve sebepleri farklı: günlük bütçede
@@ -516,6 +542,20 @@ export interface BoostRequest {
    * bkz. `createBoost`.
    */
   targeting?: Record<string, unknown>;
+}
+
+/**
+ * Kampanyanın platformdaki özeti — seçim ekranı için (K21).
+ *
+ * AD DA OKUNUYOR, yalnızca durum değil. Kampanyanın Ads Manager'daki gerçek
+ * adı bizde SAKLI DEĞİL ve kendi ürettiğimiz bir etiket ("Boost kampanyası ·
+ * 17.08.2026") üç kampanya arasından seçim yaparken hiçbir işe yaramıyor.
+ * Alan, durumun okunduğu çağrıya eklendi — fazladan istek yok.
+ */
+export interface CampaignSummary {
+  name?: string;
+  /** `effective_status`. Yokluğu "okunamadı" demek, "yayında değil" DEĞİL. */
+  status?: string;
 }
 
 export interface BoostResult {
@@ -859,6 +899,23 @@ export interface IAdPlatformProvider {
    * `ads_management` gerektiriyor — `canWrite()` önce sorulmalı.
    */
   createBoost(ctx: FetchContext, request: BoostRequest): Promise<BoostResult>;
+
+  /**
+   * Verilen kampanyaların PLATFORMDAKİ güncel adı ve durumu (K21).
+   *
+   * KENDİ KAYDIMIZ YETMİYOR: kullanıcı kampanyayı Ads Manager'dan
+   * duraklatabiliyor ya da silebiliyor ve bizim satırımız hâlâ 'active' der.
+   * Duraklatılmış kampanyanın altına eklenen reklam HİÇ HARCAMIYOR ve hiçbir
+   * hata da vermiyor — seçim ekranında görünmesi gereken tam bu.
+   *
+   * DÖNEN KAYITTA OLMAYAN KİMLİK "durumu okunamadı" demek, "yayında değil"
+   * DEĞİL. İkisini birbirine karıştırmak, kota hatası yüzünden bütün
+   * kampanyaları seçilemez göstermek olurdu. Çağıran ayrımı koruyor.
+   */
+  getCampaignSummaries(
+    ctx: FetchContext,
+    campaignExternalIds: string[],
+  ): Promise<Record<string, CampaignSummary>>;
 
   /**
    * Coğrafi hedefleme araması — şehir/bölge/ülke.

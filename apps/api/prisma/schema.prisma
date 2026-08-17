@@ -1465,6 +1465,19 @@ model Boost {
   /// Elle boost'ta kullanıcının kendi seçimi yazılıyor.
   reason String @db.VarChar(500)
 
+  /// KULLANICININ SEÇTİĞİ kampanya — var olanın altına eklenecekse (K21).
+  ///
+  /// `externalCampaignId` İLE BİRLEŞTİRİLEMEZ ve sebebi anlam farkı: burası
+  /// NEREYE eklemek İSTEDİĞİMİZ (yayın öncesi, seçim), aşağısı Meta'da NE
+  /// OLUŞTUĞU (yayın sonrası, olgu). Aşağıdaki kolonun dolu olması bütün kod
+  /// tabanında "bu boost platformda var" demek; oraya önceden yazmak
+  /// oluşmamış bir boost'u oluşmuş göstermek olurdu.
+  ///
+  /// NULL = yeni kampanya aç. En korunaklı varsayılan: unutulduğunda fazladan
+  /// bir kampanya doğar (geri dönülebilir), paylaşılan bir kampanyaya
+  /// dokunulmaz (geri dönülemez).
+  targetCampaignExternalId String? @map("target_campaign_external_id") @db.VarChar(128)
+
   /// Platformda oluşturulan varlıklar. Boost bir kampanya + ad set + reklam.
   externalCampaignId String? @map("external_campaign_id") @db.VarChar(128)
   externalAdSetId    String? @map("external_ad_set_id") @db.VarChar(128)

@@ -10,6 +10,7 @@ import {
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
+  type CampaignSummary,
   type AuthorizeUrlParams,
   type DiscoveredAd,
   type DiscoveredAdAccount,
@@ -1298,34 +1299,36 @@ export class MetaProvider implements IAdPlatformProvider {
      * çağrısı seçin" diyordu, oysa eksik olan ad set alanıydı. Meta'nın
      * tarifi kendi arayüzüne göre yazılmış ve API'de yanıltıyor.
      */
-    let adim = 'Kampanya oluşturulurken';
+    const hedefKampanya = request.campaign ?? { mode: 'new' };
+    let adim =
+      hedefKampanya.mode === 'new'
+        ? 'Kampanya oluşturulurken'
+        : 'Seçilen kampanya denetlenirken';
 
     try {
-      const campaign = await this.graphPost<{ id: string }>(ctx, `${act}/campaigns`, {
-        name: request.name,
-        objective: request.objective,
-        status: 'PAUSED',
-        /**
-         * ÖZEL REKLAM KATEGORİLERİ — SABİT '[]' DEĞİL.
-         *
-         * Konut, istihdam ve kredi reklamları düzenlemeye tabi ve kategori
-         * beyan edilmeden yayınlanan reklam politika ihlali. Cezası kampanya
-         * seviyesinde değil HESAP seviyesinde: bir müşteri için unutulan
-         * beyan, ajansın o hesaptaki bütün kampanyalarını riske atıyor.
-         *
-         * Boş dizi hâlâ geçerli ve çoğu müşteride doğru cevap — ama artık
-         * SABİT değil, müşterinin beyanından geliyor.
-         */
-        special_ad_categories: JSON.stringify(request.specialAdCategories ?? []),
-        is_adset_budget_sharing_enabled: ADSET_BUDGET_SHARING,
-      });
-      created.push({ id: campaign.id, label: 'kampanya' });
+      /**
+       * VAR OLAN KAMPANYA `created` LİSTESİNE GİRMİYOR (K21).
+       *
+       * Geri alma listesi "biz ne oluşturduysak onu sil" demek. Paylaşılan bir
+       * kampanya buraya girerse, BAŞARISIZ bir ikinci boost BİRİNCİ boost'un
+       * yayındaki reklamını silerdi — bu özelliğin tek geri dönülemez hatası.
+       * Ayrım tek yerde ve burada: aşağıdaki bütün blok `campaignId`'yi
+       * yalnızca OKUYOR, kimin oluşturduğunu bilmiyor ve bilmesi de gerekmiyor.
+       */
+      const campaignId =
+        hedefKampanya.mode === 'existing'
+          ? await this.assertReusableCampaign(
+              ctx,
+              request,
+              hedefKampanya.externalCampaignId,
+            )
+          : await this.createBoostCampaign(ctx, act, request, created);
 
       adim = 'Ad set (bütçe ve hedefleme) oluşturulurken';
       const adSet = await this.graphPost<{ id: string }>(
         ctx,
         `${act}/adsets`,
-        buildBoostAdSetParams(request, campaign.id, new Date()),
+        buildBoostAdSetParams(request, campaignId, new Date()),
       );
       created.push({ id: adSet.id, label: 'ad set' });
 
@@ -1382,11 +1385,25 @@ export class MetaProvider implements IAdPlatformProvider {
       });
       created.push({ id: ad.id, label: 'reklam' });
 
-      adim = 'Kampanya yayına alınırken';
-      await this.graphPost(ctx, campaign.id, { status: 'ACTIVE' });
+      /**
+       * VAR OLAN KAMPANYANIN DURUMUNA DOKUNULMUYOR (K21).
+       *
+       * Yeni kampanya PAUSED açılıp burada yayına alınıyor — sırası bilinçli,
+       * ad set hazır olmadan yayına giren kampanya "eksik yapılandırma" diye
+       * reddedilebiliyor. Var olan kampanya ise ZATEN yayında: durumu
+       * `assertReusableCampaign` doğruladı. Yine de ACTIVE göndermek çoğu
+       * zaman etkisiz bir çağrı olurdu ama şu riski taşıyor: kullanıcı
+       * kampanyayı Ads Manager'da bilerek duraklattıysa ve doğrulama ile bu
+       * çağrı arasında duraklattıysa, biz onun kararını sessizce geri alırdık.
+       * Paylaşılan bir nesneyi ancak sahibi yayına alır.
+       */
+      if (hedefKampanya.mode === 'new') {
+        adim = 'Kampanya yayına alınırken';
+        await this.graphPost(ctx, campaignId, { status: 'ACTIVE' });
+      }
 
       return {
-        externalCampaignId: campaign.id,
+        externalCampaignId: campaignId,
         externalAdSetId: adSet.id,
         externalAdId: ad.id,
       };
@@ -1410,6 +1427,157 @@ export class MetaProvider implements IAdPlatformProvider {
       }
       throw labelBoostError(adim, err);
     }
+  }
+
+  /**
+   * Kampanyaların PLATFORMDAKİ güncel adı ve durumu — TEK ÇAĞRIDA (K21).
+   *
+   * Meta'nın kök `?ids=` biçimi kullanılıyor: kampanya başına bir istek
+   * atmak, seçim ekranını her açılışta kampanya sayısı kadar yavaşlatır ve
+   * kotayı boşa harcar.
+   *
+   * PARÇALARA BÖLÜNÜYOR. Meta `ids` listesine sınır koyuyor ve sınırı aşan
+   * istek TAMAMEN reddediliyor — yani tek bir uzun liste, bütün kampanyaların
+   * durumunu "okunamadı" yapar. 50'lik partiler güvenli tarafta.
+   *
+   * BİR PARTİ DÜŞERSE DİĞERLERİ DEVAM EDİYOR ve düşen partinin kimlikleri
+   * kayıttan EKSİK kalıyor. Çağıran eksikliği "durumu bilinmiyor" olarak
+   * gösteriyor; burada boş dizge ya da 'PAUSED' gibi bir değer uydurmak,
+   * okunamayan durumu okunmuş göstermek olurdu.
+   */
+  async getCampaignSummaries(
+    ctx: FetchContext,
+    campaignExternalIds: string[],
+  ): Promise<Record<string, CampaignSummary>> {
+    const sonuc: Record<string, CampaignSummary> = {};
+    if (campaignExternalIds.length === 0) return sonuc;
+
+    for (let i = 0; i < campaignExternalIds.length; i += 50) {
+      const parti = campaignExternalIds.slice(i, i + 50);
+      const url = new URL(this.graph);
+      url.searchParams.set('ids', parti.join(','));
+      // AD DA İSTENİYOR: kampanyanın Ads Manager'daki gerçek adı bizde saklı
+      // değil ve kendi ürettiğimiz bir etiket seçim yapmaya yetmiyor.
+      url.searchParams.set('fields', 'id,name,effective_status');
+
+      try {
+        const res = await platformFetch<
+          Record<string, { id?: string; name?: string; effective_status?: string }>
+        >(
+          'meta',
+          url.toString(),
+          { headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+          parseMetaRateLimit,
+        );
+        for (const [id, kampanya] of Object.entries(res.data ?? {})) {
+          /*
+           * SATIR YALNIZCA DURUM VARSA YAZILIYOR. Ad dönüp durum dönmezse
+           * kampanya "okunabildi" görünür ve seçilebilirlik kararı eksik bilgiye
+           * dayanırdı; kaydın yokluğu "okunamadı" demek ve bu ayrım korunmalı.
+           */
+          if (kampanya?.effective_status) {
+            sonuc[id] = {
+              name: kampanya.name,
+              status: kampanya.effective_status,
+            };
+          }
+        }
+      } catch (err) {
+        // SESSİZ DEĞİL ama ÖLDÜRÜCÜ DE DEĞİL: durumu okunamayan kampanya
+        // seçilemez olarak gösteriliyor ve kullanıcı sebebini ekranda görüyor.
+        this.logger.warn(
+          `Kampanya özetleri okunamadı (${parti.length} kampanya): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+    return sonuc;
+  }
+
+  /**
+   * Boost için YENİ kampanya açar ve geri alma listesine ekler.
+   *
+   * `created`'a eklemek bu metodun İŞİNİN PARÇASI, çağıranın hatırlaması
+   * gereken bir adım değil: oluşturup listeye eklemeyi ayırmak, bir gün
+   * birinin ikincisini atlaması ve başarısız boost'un Ads Manager'da yetim
+   * kampanya bırakması demekti.
+   */
+  private async createBoostCampaign(
+    ctx: FetchContext,
+    act: string,
+    request: BoostRequest,
+    created: Array<{ id: string; label: string }>,
+  ): Promise<string> {
+    const campaign = await this.graphPost<{ id: string }>(ctx, `${act}/campaigns`, {
+      name: request.name,
+      objective: request.objective,
+      status: 'PAUSED',
+      /**
+       * ÖZEL REKLAM KATEGORİLERİ — SABİT '[]' DEĞİL.
+       *
+       * Konut, istihdam ve kredi reklamları düzenlemeye tabi ve kategori
+       * beyan edilmeden yayınlanan reklam politika ihlali. Cezası kampanya
+       * seviyesinde değil HESAP seviyesinde: bir müşteri için unutulan
+       * beyan, ajansın o hesaptaki bütün kampanyalarını riske atıyor.
+       *
+       * Boş dizi hâlâ geçerli ve çoğu müşteride doğru cevap — ama artık
+       * SABİT değil, müşterinin beyanından geliyor.
+       */
+      special_ad_categories: JSON.stringify(request.specialAdCategories ?? []),
+      is_adset_budget_sharing_enabled: ADSET_BUDGET_SHARING,
+    });
+    created.push({ id: campaign.id, label: 'kampanya' });
+    return campaign.id;
+  }
+
+  /**
+   * VAR OLAN kampanyanın altına gönderi eklenebilir mi? (K21)
+   *
+   * HİÇBİR ŞEY OLUŞTURULMADAN ÖNCE çalışıyor. Sıra önemli: ad set açıldıktan
+   * sonra reddetmek, geri alınacak bir varlık bırakmak ve geri almanın da
+   * başarısız olabileceği bir pencere açmak olurdu. Uygunsuz kampanya
+   * seçildiğinde Meta'da hiçbir iz kalmıyor.
+   *
+   * Kararın kendisi `decideCampaignReuse` içinde ve saf — dört kontrolün her
+   * biri sessizce atlanabilir türden ve teste bağlanmadan güvenilmez.
+   */
+  private async assertReusableCampaign(
+    ctx: FetchContext,
+    request: BoostRequest,
+    campaignId: string,
+  ): Promise<string> {
+    const url = new URL(`${this.graph}/${campaignId}`);
+    url.searchParams.set(
+      'fields',
+      'id,objective,status,effective_status,special_ad_categories,account_id',
+    );
+
+    const res = await platformFetch<{
+      id: string;
+      objective?: string;
+      status?: string;
+      effective_status?: string;
+      special_ad_categories?: string[];
+      account_id?: string;
+    }>(
+      'meta',
+      url.toString(),
+      { headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+      parseMetaRateLimit,
+    );
+
+    const karar = decideCampaignReuse({
+      objectiveWanted: request.objective,
+      categoriesWanted: request.specialAdCategories ?? [],
+      adAccountWanted: request.adAccountExternalId,
+      campaign: res.data,
+    });
+
+    if (!karar.ok) {
+      throw new PlatformApiError('meta', 'permanent', karar.message);
+    }
+    return campaignId;
   }
 
   /**
@@ -2347,6 +2515,115 @@ export function mapSavedAudience(row: Record<string, unknown>): SavedAudienceOpt
  * PlatformApiError DIŞINDAKİ hata OLDUĞU GİBİ geçiyor: onu sarmak, üstteki
  * `instanceof` kontrollerini (örneğin transaction hatası ayrımı) bozardı.
  */
+/**
+ * VAR OLAN bir kampanyanın altına gönderi eklenebilir mi? (K21)
+ *
+ * Kampanya seviyesindeki alanlar SONRADAN DEĞİŞTİRİLEMİYOR ve bu yüzden
+ * yeniden kullanılan bir kampanya, altına eklenen her gönderiye kendi
+ * ayarlarını dayatıyor. Dördü de sessiz hataya açık:
+ *
+ *   1. AMAÇ — `POST_ENGAGEMENT` optimizasyonu ve `ON_POST` hedefi yalnızca
+ *      OUTCOME_ENGAGEMENT altında geçerli. Başka amaçlı bir kampanyaya
+ *      eklemek, ya hata ya da Meta'nın kabul edip başka bir şey yapması.
+ *
+ *   2. ÖZEL REKLAM KATEGORİSİ — kampanyada beyan edilmiş kategoriler
+ *      değiştirilemiyor. Müşterinin beyanı sonradan "konut" olduysa, eski
+ *      kampanyaya eklenen reklam BEYANSIZ yayınlanır. Cezası kampanya
+ *      seviyesinde değil HESAP seviyesinde: bir müşteri için unutulan beyan,
+ *      ajansın o hesaptaki bütün kampanyalarını riske atıyor. Bu, listedeki
+ *      en pahalı hata.
+ *
+ *   3. REKLAM HESABI — kampanya tek bir hesapta yaşıyor. Sayfanın
+ *      faturalandırma hesabı sonradan değiştiyse, eski kampanya artık yanlış
+ *      hesapta ve para başka müşterinin hesabından çıkar.
+ *
+ *   4. DURUM — duraklatılmış bir kampanyanın altındaki yeni ad set HİÇ
+ *      HARCAMIYOR. Panelde boost "yayında" görünür, Ads Manager'da hiçbir
+ *      şey olmaz ve hiçbir hata da yazmaz. Bu projenin baş belası tam olarak
+ *      bu tür.
+ *
+ * DURUM META'DAN OKUNUYOR, kendi kaydımızdan değil: kullanıcı kampanyayı Ads
+ * Manager'dan duraklatmış olabilir ve bizim satırımız hâlâ 'active' der.
+ *
+ * KAMPANYA KENDİLİĞİNDEN YAYINA ALINMIYOR. Duraklatmayı kullanıcı bilerek
+ * yapmış olabilir; paylaşılan bir nesnenin durumunu bizim değiştirmemiz,
+ * onun kararını sessizce geri almak olurdu. Reddedip SÖYLÜYORUZ.
+ */
+export function decideCampaignReuse(params: {
+  objectiveWanted: string;
+  categoriesWanted: string[];
+  adAccountWanted: string;
+  campaign: {
+    id: string;
+    objective?: string;
+    effective_status?: string;
+    status?: string;
+    special_ad_categories?: string[];
+    account_id?: string;
+  };
+}): { ok: true } | { ok: false; message: string } {
+  const { objectiveWanted, categoriesWanted, adAccountWanted, campaign } = params;
+
+  if (campaign.objective && campaign.objective !== objectiveWanted) {
+    return {
+      ok: false,
+      message:
+        `Seçilen kampanyanın amacı "${campaign.objective}", oysa gönderi öne çıkarma ` +
+        `"${objectiveWanted}" istiyor. Kampanyanın amacı sonradan değiştirilemiyor — ` +
+        `bu gönderi için yeni bir kampanya oluştur.`,
+    };
+  }
+
+  /*
+   * KÜME KARŞILAŞTIRMASI, dizi karşılaştırması değil: Meta sırayı korumuyor
+   * ve sıraya duyarlı bir kontrol, aynı beyanı "farklı" sayıp çalışan bir
+   * yolu kapatırdı.
+   */
+  const kampanyaKat = [...(campaign.special_ad_categories ?? [])].sort();
+  const istenenKat = [...categoriesWanted].sort();
+  if (kampanyaKat.join('|') !== istenenKat.join('|')) {
+    return {
+      ok: false,
+      message:
+        `Seçilen kampanyanın özel reklam kategorisi beyanı (${kampanyaKat.join(', ') || 'yok'}) ` +
+        `müşterinin bugünkü beyanıyla (${istenenKat.join(', ') || 'yok'}) uyuşmuyor. ` +
+        `Beyan kampanya oluşturulduktan sonra değiştirilemiyor ve eksik beyan hesap ` +
+        `seviyesinde yaptırıma açık — bu gönderi için yeni bir kampanya oluştur.`,
+    };
+  }
+
+  /*
+   * HESAP KİMLİĞİNDE ÖNEK NORMALLEŞTİRİLİYOR. Meta `account_id`'yi öneksiz
+   * döndürüyor ama bizim kaydımızda `act_` önekiyle duruyor; çıplak
+   * karşılaştırma her seferinde uyuşmazlık verir ve özellik hiç çalışmaz.
+   */
+  if (
+    campaign.account_id &&
+    actPath(campaign.account_id) !== actPath(adAccountWanted)
+  ) {
+    return {
+      ok: false,
+      message:
+        `Seçilen kampanya başka bir reklam hesabında (${campaign.account_id}); bu boost ` +
+        `${adAccountWanted} hesabından faturalandırılıyor. Kampanya hesaplar arasında ` +
+        `taşınamıyor — yeni bir kampanya oluştur.`,
+    };
+  }
+
+  const durum = campaign.effective_status ?? campaign.status;
+  if (durum !== 'ACTIVE') {
+    return {
+      ok: false,
+      message:
+        `Seçilen kampanya yayında değil (durumu: ${durum ?? 'bilinmiyor'}). Duraklatılmış ` +
+        `bir kampanyanın altına eklenen reklam hiç harcamıyor ve hiçbir hata da vermiyor. ` +
+        `Kampanyayı Ads Manager'da yayına al ya da yeni bir kampanya oluştur.`,
+    };
+  }
+
+  return { ok: true };
+}
+
 export function labelBoostError(step: string, err: unknown): unknown {
   if (err instanceof PlatformApiError) {
     return new PlatformApiError(

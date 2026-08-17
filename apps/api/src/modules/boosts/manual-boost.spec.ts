@@ -41,6 +41,7 @@ const IG_POST = 'eeeeeeee-5555-5555-5555-eeeeeeeeeeee';
 const createBoost = vi.fn();
 const canWrite = vi.fn();
 const getSavedAudienceTargeting = vi.fn();
+const getCampaignSummaries = vi.fn();
 
 function input(over: Partial<ManualBoostInput> = {}): ManualBoostInput {
   return {
@@ -102,7 +103,13 @@ beforeAll(async () => {
 
   executor = new BoostExecutorService(
     {
-      get: () => ({ platform: 'meta', createBoost, canWrite, getSavedAudienceTargeting }),
+      get: () => ({
+        platform: 'meta',
+        createBoost,
+        canWrite,
+        getSavedAudienceTargeting,
+        getCampaignSummaries,
+      }),
     } as never,
     { getAccessToken: async () => 'token' } as never,
     { acquire: async () => ({ allowed: true, usagePercent: 5 }), record: async () => {} } as never,
@@ -123,6 +130,8 @@ beforeEach(async () => {
   createBoost.mockReset();
   canWrite.mockReset();
   getSavedAudienceTargeting.mockReset();
+  getCampaignSummaries.mockReset();
+  getCampaignSummaries.mockResolvedValue({});
   canWrite.mockReturnValue({ ok: true, missing: [] });
   createBoost.mockResolvedValue({
     externalCampaignId: 'c-1',
@@ -473,5 +482,173 @@ describe('harcama özeti (K19)', () => {
     const ozet = await svc.spendSummary(CTX, IDS.client);
     expect(ozet.monthlyBudgetMicros).toBe('5000000000');
     expect(ozet.currency).toBe('TRY');
+  });
+});
+
+/**
+ * VAR OLAN KAMPANYANIN ALTINA EKLEME — K21'in BAĞLANTISI.
+ *
+ * `decideCampaignReuse` ayrı test edildi ama o testler kararın DOĞRU olduğunu
+ * söylüyor, kullanıldığını söylemiyor. Bu bloğun tamamı tek soruya bakıyor:
+ * kullanıcının ekranda seçtiği kampanya, veritabanından geçip Meta isteğinde
+ * gerçekten görünüyor mu? Aynı boşluk `labelBoostError`'da mutasyonla
+ * bulunmuştu — fonksiyon doğruydu, çağrılmıyordu.
+ */
+describe('var olan kampanyanın altına ekleme (K21)', () => {
+  const KAMPANYA = '120210000000000001';
+
+  it('KRİTİK: seçilen kampanya Meta isteğine `existing` olarak gidiyor', async () => {
+    await svc.createManualBoost(
+      CTX,
+      input({ targetCampaignExternalId: KAMPANYA }),
+    );
+    expect(istek().campaign).toEqual({
+      mode: 'existing',
+      externalCampaignId: KAMPANYA,
+    });
+  });
+
+  it('KRİTİK: seçim YOKSA `new` gidiyor — ara hâl üretilmiyor', async () => {
+    /*
+     * `{ mode: 'existing', externalCampaignId: null }` gibi bir ara hâl,
+     * ayrık birleşimin bütün amacını boşa çıkarırdı: geri alma kodu "var olan
+     * kampanya" dalında ilerler ve silinmemesi gereken bir şeyi silmeye
+     * kalkabilirdi.
+     */
+    await svc.createManualBoost(CTX, input());
+    expect(istek().campaign).toEqual({ mode: 'new' });
+  });
+
+  it('seçim veritabanına AYRI kolona yazılıyor', async () => {
+    /*
+     * `external_campaign_id`'ye ÖNCEDEN yazılmıyor: o kolonun dolu olması
+     * bütün kod tabanında "bu boost platformda var" demek ve oraya seçim
+     * yazmak, oluşmamış bir boost'u oluşmuş göstermek olurdu.
+     */
+    await svc.createManualBoost(
+      CTX,
+      input({ targetCampaignExternalId: KAMPANYA }),
+    );
+    const [row] = await h.q<{
+      target_campaign_external_id: string | null;
+      external_campaign_id: string | null;
+    }>(
+      `SELECT target_campaign_external_id, external_campaign_id FROM boosts`,
+    );
+    expect(row!.target_campaign_external_id).toBe(KAMPANYA);
+    // Yayın sonrası olgu: sağlayıcının döndürdüğü kimlik.
+    expect(row!.external_campaign_id).toBe('c-1');
+  });
+
+  it('seçim yoksa kolon NULL — yeni kampanya', async () => {
+    await svc.createManualBoost(CTX, input());
+    const [row] = await h.q<{ target_campaign_external_id: string | null }>(
+      `SELECT target_campaign_external_id FROM boosts`,
+    );
+    expect(row!.target_campaign_external_id).toBeNull();
+  });
+});
+
+describe('seçilebilir kampanya listesi (K21)', () => {
+  it('YAYINA ÇIKMIŞ boost yoksa liste boş ve SEBEBİ yazıyor', async () => {
+    // Boş liste sebebini söylemezse kullanıcı ne yapacağını bilmiyor — bu
+    // ekranın her listesinde aynı kural.
+    const liste = await svc.listBoostCampaigns(CTX, IDS.client);
+    expect(liste.campaigns).toEqual([]);
+    expect(liste.emptyReason).toMatch(/henüz yayına çıkmış bir boost kampanyası yok/);
+  });
+
+  it('KRİTİK: durum META’DAN geliyor, kendi kaydımızdan DEĞİL', async () => {
+    /*
+     * Kendi satırımız boost'u 'active' der ama kampanya Ads Manager'dan
+     * duraklatılmış olabilir. Duraklatılmış kampanyanın altındaki yeni reklam
+     * HİÇ HARCAMIYOR ve hiçbir hata vermiyor.
+     */
+    await svc.createManualBoost(CTX, input());
+    getCampaignSummaries.mockResolvedValue({ 'c-1': { name: 'Yaz kampanyası', status: 'PAUSED' } });
+
+    const liste = await svc.listBoostCampaigns(CTX, IDS.client);
+    expect(liste.campaigns).toHaveLength(1);
+    expect(liste.campaigns[0]!.status).toBe('PAUSED');
+    expect(liste.campaigns[0]!.selectable).toBe(false);
+    expect(liste.emptyReason).toMatch(/hiçbiri yayında değil/);
+  });
+
+  it('yayındaki kampanya seçilebilir', async () => {
+    await svc.createManualBoost(CTX, input());
+    getCampaignSummaries.mockResolvedValue({ 'c-1': { name: 'Yaz kampanyası', status: 'ACTIVE' } });
+
+    const liste = await svc.listBoostCampaigns(CTX, IDS.client);
+    expect(liste.campaigns[0]!.selectable).toBe(true);
+    expect(liste.campaigns[0]!.postCount).toBe(1);
+    expect(liste.emptyReason).toBeNull();
+  });
+
+  it('KRİTİK: durum OKUNAMADIYSA seçilemez — "yayında" varsayılmıyor', async () => {
+    /*
+     * Kota hatası, ağ hatası ya da silinmiş kampanya. Okunamayan durumu
+     * yayında saymak, harcamayan bir boost'u yayında göstermek olurdu.
+     */
+    await svc.createManualBoost(CTX, input());
+    getCampaignSummaries.mockResolvedValue({});
+
+    const liste = await svc.listBoostCampaigns(CTX, IDS.client);
+    expect(liste.campaigns[0]!.status).toBeNull();
+    expect(liste.campaigns[0]!.selectable).toBe(false);
+  });
+
+  it('AYNI kampanyanın altındaki iki gönderi TEK satır ve sayaç 2', async () => {
+    // Kampanya listesi kampanya başına bir satır göstermeli; gönderi başına
+    // göstermek, aynı kampanyayı beş kez listelemek olurdu.
+    await svc.createManualBoost(CTX, input());
+    await seedPost(IG_POST, FB);
+    await svc.createManualBoost(CTX, input({ organicPostId: IG_POST }));
+    getCampaignSummaries.mockResolvedValue({ 'c-1': { name: 'Yaz kampanyası', status: 'ACTIVE' } });
+
+    const liste = await svc.listBoostCampaigns(CTX, IDS.client);
+    expect(liste.campaigns).toHaveLength(1);
+    expect(liste.campaigns[0]!.postCount).toBe(2);
+  });
+});
+
+describe('kampanya adı (K21)', () => {
+  it('KRİTİK: ad META’DAN geliyor — kendi ürettiğimiz etiket değil', async () => {
+    /*
+     * Kampanyanın Ads Manager'daki gerçek adı bizde saklı değil. Kendi
+     * ürettiğimiz bir etiket ("Boost kampanyası · 17.08.2026") üç kampanya
+     * arasından seçim yapmaya yetmiyor ve kullanıcı ekranla Ads Manager'ı
+     * yan yana kullanıyor. Alan, durumun okunduğu ÇAĞRIYA eklendi — fazladan
+     * istek yok.
+     */
+    await svc.createManualBoost(CTX, input());
+    getCampaignSummaries.mockResolvedValue({
+      'c-1': { name: 'Öne çıkarılan gönderi — 89207', status: 'ACTIVE' },
+    });
+
+    const liste = await svc.listBoostCampaigns(CTX, IDS.client);
+    expect(liste.campaigns[0]!.name).toBe('Öne çıkarılan gönderi — 89207');
+  });
+
+  it('ad okunamadıysa tarihe düşüyor — boş dizge DEĞİL', async () => {
+    // Boş ad satırı ayırt edilemez yapardı; tarih hangi kampanya olduğunu
+    // daraltıyor ve altında gönderi sayısı da yazıyor.
+    await svc.createManualBoost(CTX, input());
+    getCampaignSummaries.mockResolvedValue({ 'c-1': { status: 'ACTIVE' } });
+
+    const liste = await svc.listBoostCampaigns(CTX, IDS.client);
+    expect(liste.campaigns[0]!.name).toMatch(/^Boost kampanyası · \d/);
+  });
+
+  it('KRİTİK: ad var ama DURUM yoksa kampanya "okunamadı" sayılıyor', async () => {
+    /*
+     * Yarım bilgi geçiş sebebi değil: durumu bilinmeyen kampanyayı seçilebilir
+     * yapmak, harcamayan bir boost'u yayında göstermek olurdu.
+     */
+    await svc.createManualBoost(CTX, input());
+    getCampaignSummaries.mockResolvedValue({ 'c-1': { name: 'Yaz kampanyası' } });
+
+    const liste = await svc.listBoostCampaigns(CTX, IDS.client);
+    expect(liste.campaigns[0]!.status).toBeNull();
+    expect(liste.campaigns[0]!.selectable).toBe(false);
   });
 });

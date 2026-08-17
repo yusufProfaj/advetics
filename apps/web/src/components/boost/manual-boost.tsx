@@ -6,6 +6,7 @@ import {
   MEDIA_TYPE_LABELS,
   type BoostablePostList,
   type BoostablePostRecord,
+  type BoostCampaignList,
   type BoostSpendSummary,
   type GeoLocationOption,
   type SavedAudienceList,
@@ -14,9 +15,11 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatMoney, formatNumber } from '@/lib/format';
 
 /**
- * ELLE BOOST — "gönderi seç → bütçe ve süre → nereye/kime → yayınla".
+ * ELLE BOOST — "gönderi seç → kampanya → bütçe ve süre → nereye/kime → yayınla".
  *
- * DÖRT ADIM, TEK EKRAN, ARA ONAY YOK (§7.2). Kural yolundaki "aday → onay"
+ * BEŞ ADIM, TEK EKRAN, ARA ONAY YOK (§7.2). Kampanya adımı sonradan eklendi
+ * (K21): ilk gönderi kendi kampanyasını açıyor, sonraki gönderiler o
+ * kampanyanın altına kendi reklam seti ve reklamıyla eklenebiliyor. Kural yolundaki "aday → onay"
  * adımı burada yok çünkü kararı zaten kullanıcı veriyor; ikinci kez sormak
  * istenen akışı bozmak olurdu.
  *
@@ -121,6 +124,16 @@ function ManualBoostForm({
   const [kitleler, setKitleler] = useState<SavedAudienceList | null>(null);
   const [kitle, setKitle] = useState<string>('');
 
+  /**
+   * SEÇİLEN KAMPANYA (K21). BOŞ DİZGE = yeni kampanya oluştur.
+   *
+   * Varsayılan bilinçli olarak boş: kullanıcı hiçbir şey seçmediğinde kendi
+   * kampanyası açılıyor. Tersi varsayılan (en son kampanyayı seçili getirmek)
+   * fark edilmeden PAYLAŞILAN bir kampanyaya eklemek olurdu.
+   */
+  const [kampanya, setKampanya] = useState('');
+  const [kampanyalar, setKampanyalar] = useState<BoostCampaignList | null>(null);
+
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -138,6 +151,21 @@ function ManualBoostForm({
     void apiFetch<BoostSpendSummary>(`/boosts/spend?clientId=${clientId}`)
       .then(setSpend)
       .catch(() => setSpend(null));
+    /*
+     * KAMPANYALAR EN BAŞTA ÇEKİLİYOR, gönderi seçimini beklemiyor: liste
+     * müşteriye ait ve gönderiden bağımsız. Durumları Meta'dan okunduğu için
+     * çağrı yavaş olabiliyor ve gönderi seçildikten sonra beklemek, kullanıcıyı
+     * boş bir kutuya baktırmak olurdu.
+     */
+    void apiFetch<BoostCampaignList>(`/boosts/campaigns?clientId=${clientId}`)
+      .then(setKampanyalar)
+      .catch(() =>
+        setKampanyalar({
+          campaigns: [],
+          emptyReason:
+            'Kampanya listesi yüklenemedi. Yeni kampanya oluşturarak devam edebilirsin.',
+        }),
+      );
   }, [clientId]);
 
   /**
@@ -202,6 +230,13 @@ function ManualBoostForm({
           organicPostId: secili.id,
           totalBudget: butce.replace(',', '.'),
           durationDays: gun,
+          /*
+           * BOŞ DİZGE GÖNDERİLMİYOR, alan HİÇ gönderilmiyor. Şema `""`
+           * kabul etmiyor ve etmemesi doğru: boş dizge bir kampanya kimliği
+           * değil. Gönderilse Meta'ya boş kimlikle gidilir ve hata
+           * "kampanya bulunamadı" olarak döner — sebebi hiç anlaşılmaz.
+           */
+          ...(kampanya ? { targetCampaignExternalId: kampanya } : {}),
           targeting: kitleSecili
             ? {
                 locations: [],
@@ -304,6 +339,79 @@ function ManualBoostForm({
         <>
           <Blok
             no={2}
+            baslik="Kampanya"
+            alt="Yeni kampanya açabilir ya da var olanın altına ekleyebilirsin."
+          >
+            <div className="space-y-1.5">
+              <KampanyaSecim
+                secili={kampanya === ''}
+                onSec={() => setKampanya('')}
+                baslik="Yeni kampanya oluştur"
+                alt="Bu gönderi için ayrı bir kampanya açılır."
+              />
+
+              {kampanyalar?.campaigns.map((k) => (
+                <KampanyaSecim
+                  key={k.externalId}
+                  secili={kampanya === k.externalId}
+                  onSec={() => setKampanya(k.externalId)}
+                  baslik={k.name}
+                  alt={
+                    `${k.postCount} gönderi · son kullanım ` +
+                    new Date(k.lastUsedAt).toLocaleDateString('tr-TR')
+                  }
+                  /*
+                   * SEÇİLEMEZ SEBEBİ SATIRDA. Düğmeyi kapatıp sebebini
+                   * söylememek, kullanıcıya "çalışmıyor" göstermek olurdu —
+                   * bu ekranda daha önce tam olarak bu hataya düşüldü.
+                   */
+                  kapali={!k.selectable}
+                  kapaliSebep={
+                    k.status === null
+                      ? 'Durumu okunamadı — Ads Manager’dan kontrol et'
+                      : `Yayında değil (${k.status}) — altına eklenen reklam harcamaz`
+                  }
+                />
+              ))}
+
+              {kampanyalar === null && (
+                <p className="text-[11px] text-ink-muted">Kampanyalar yükleniyor…</p>
+              )}
+
+              {/*
+                SAYAÇ VE SEBEP KOŞULSUZ. Liste boşken de, doluyken de kaç
+                kampanya bulunduğu ve neden seçilemediği yazılı.
+              */}
+              {kampanyalar && (
+                <p className="pt-1 text-[11px] text-ink-muted">
+                  {kampanyalar.campaigns.length > 0 &&
+                    `${kampanyalar.campaigns.length} kampanya bulundu · ` +
+                      `${kampanyalar.campaigns.filter((k) => k.selectable).length} tanesi seçilebilir`}
+                  {kampanyalar.emptyReason && (
+                    <span className="block pt-1">{kampanyalar.emptyReason}</span>
+                  )}
+                </p>
+              )}
+
+              {/*
+                AYNI KAMPANYAYA EKLEMENİN NE OLMADIĞI da söyleniyor. Kullanıcı
+                "aynı kampanya = birleşik performans" bekleyebilir; Meta'nın
+                öğrenme evresi ad set başına işliyor ve beklentiyi düzeltmemek,
+                sonradan açıklanamayan bir sonuç bırakırdı.
+              */}
+              {kampanya !== '' && (
+                <p className="rounded-lg border border-line bg-surface-sunken px-2.5 py-2 text-[11px] text-ink-muted">
+                  Bu gönderi seçilen kampanyanın altına <strong>kendi reklam seti ve
+                  reklamıyla</strong> eklenecek. Bütçesi ayrı — kampanyadaki diğer
+                  gönderilerin harcamasına dokunmuyor. Performans da ayrı hesaplanır;
+                  aynı kampanyada olmak sonuçları birleştirmiyor.
+                </p>
+              )}
+            </div>
+          </Blok>
+
+          <Blok
+            no={3}
             baslik="Bütçe ve süre"
             alt="Yazdığın toplam tutar Meta'ya olduğu gibi gidiyor."
           >
@@ -364,7 +472,7 @@ function ManualBoostForm({
             </div>
           </Blok>
 
-          <Blok no={3} baslik="Kime gösterilsin" alt="Boş bırakırsan Türkiye geneli.">
+          <Blok no={4} baslik="Kime gösterilsin" alt="Boş bırakırsan Türkiye geneli.">
             {kitleler && kitleler.items.length > 0 && (
               <label className="block max-w-sm">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
@@ -420,7 +528,7 @@ function ManualBoostForm({
             )}
           </Blok>
 
-          <Blok no={4} baslik="Yayınla" alt="Ara onay yok — bu düğme parayı harcıyor.">
+          <Blok no={5} baslik="Yayınla" alt="Ara onay yok — bu düğme parayı harcıyor.">
             {secili.warning && (
               <p className="rounded-lg border border-line bg-surface-muted p-3 text-xs text-warn">
                 {secili.warning}
@@ -592,6 +700,64 @@ function PostRow({
 }
 
 /** Depo standardı rozet. */
+/**
+ * Kampanya seçim satırı (K21).
+ *
+ * BÜTÜN SATIR TIKLANABİLİR, küçük bir radyo düğmesi değil — `PostRow` ile aynı
+ * gerekçe: 16 pikselkare bir hedefe nişan almak dokunmatik ekranda ve fareyle
+ * gereksiz zor.
+ *
+ * KAPALI SATIR GİZLENMİYOR, SEBEBİ YAZILIYOR. Seçilemeyen kampanyayı listeden
+ * çıkarmak "kampanyam nerede?" sorusunu doğururdu; bırakıp sebebini söylemek
+ * yapılacak işi de söylüyor (Ads Manager'da yayına al).
+ */
+function KampanyaSecim({
+  secili,
+  onSec,
+  baslik,
+  alt,
+  kapali = false,
+  kapaliSebep,
+}: {
+  secili: boolean;
+  onSec: () => void;
+  baslik: string;
+  alt: string;
+  kapali?: boolean;
+  kapaliSebep?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSec}
+      disabled={kapali}
+      className={`flex w-full min-w-0 items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition ${
+        kapali
+          ? 'cursor-not-allowed border-line bg-surface-sunken opacity-60'
+          : secili
+            ? 'border-brand bg-brand-soft'
+            : 'border-line hover:bg-surface-sunken'
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border ${
+          secili ? 'border-brand' : 'border-line'
+        }`}
+      >
+        {secili && <span className="size-2 rounded-full bg-brand" />}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-xs font-medium text-ink">{baslik}</span>
+        <span className="block text-[11px] text-ink-muted">{alt}</span>
+        {kapali && kapaliSebep && (
+          <span className="block pt-0.5 text-[11px] text-danger">{kapaliSebep}</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
 function Chip({ cls, children }: { cls: string; children: React.ReactNode }) {
   return (
     <span

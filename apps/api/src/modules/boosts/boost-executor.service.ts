@@ -4,6 +4,7 @@ import {
   PlatformApiError,
   type BoostBudget,
   type BoostSource,
+  type CampaignSummary,
 } from '../connections/provider.types';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
@@ -107,6 +108,14 @@ interface PendingRow {
   targeting: unknown;
   /** Kayıtlı kitle. Doluysa `targeting` NULL — kısıt veritabanında. */
   saved_audience_id: string | null;
+  /**
+   * Kullanıcının seçtiği VAR OLAN kampanya (K21). NULL = yeni kampanya aç.
+   *
+   * Burada DOĞRULANMIYOR — kampanyanın amacı, beyanı, hesabı ve durumu
+   * yalnızca Meta'dan okunarak denetlenebiliyor ve o denetim sağlayıcıda,
+   * hiçbir şey oluşturulmadan önce yapılıyor.
+   */
+  target_campaign_external_id: string | null;
   post_external_id: string;
   profile_external_id: string;
   /**
@@ -138,6 +147,46 @@ export class BoostExecutorService {
     private readonly vault: TokenVaultService,
     private readonly quota: QuotaGuardService,
   ) {}
+
+  /**
+   * Kampanyaların platformdaki güncel adını ve durumunu okur (K21).
+   *
+   * BU METOT YÜRÜTÜCÜDE, ÇÜNKÜ SAĞLAYICI VE TOKEN BURADA. `BoostsService`
+   * kasayı (`TokenVaultService`) tanımıyor ve tanıması da gerekmiyor —
+   * listeleme bir okuma işi, yayın yolunun bağımlılıklarını oraya taşımak
+   * servisi platform ayrıntısına bağlardı.
+   *
+   * ÇAĞRI TRANSACTION'IN DIŞINDA YAPILMALI. Bu metot `tx` almıyor ve almaması
+   * bilinçli: `withTenant` etkileşimli bir transaction açıyor ve Prisma'nın
+   * 5 saniyelik sınırı Meta çağrılarının süresinden kısa — 6c'de tam bu
+   * yüzden bir boost transaction ölümüyle kayboldu.
+   *
+   * HATA FIRLATMIYOR. Bağlantı bozuksa ya da kota doluysa boş kayıt dönüyor
+   * ve çağıran bunu "durumu bilinmiyor" olarak gösteriyor: kampanya seçimi
+   * ekranının tamamını, bir durum okuma hatası yüzünden çökertmek yanlış olur.
+   */
+  async campaignSummaries(
+    connectionId: string,
+    accountExternalId: string,
+    campaignExternalIds: string[],
+  ): Promise<Record<string, CampaignSummary>> {
+    if (campaignExternalIds.length === 0) return {};
+    try {
+      const provider = this.providers.get('meta');
+      const accessToken = await this.vault.getAccessToken(connectionId, provider);
+      return await provider.getCampaignSummaries(
+        { accessToken, accountExternalId },
+        campaignExternalIds,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Kampanya özetleri alınamadı (bağlantı ${connectionId}): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return {};
+    }
+  }
 
   /**
    * Onaylanmış boost'ları oluşturur.
@@ -219,6 +268,7 @@ export class BoostExecutorService {
              p.social_profile_id::text AS social_profile_id,
              b.budget_mode, b.daily_budget_micros, b.total_budget_micros,
              b.duration_days, b.objective, b.targeting, b.saved_audience_id,
+             b.target_campaign_external_id,
              p.external_id AS post_external_id, p.media_type,
              sp.external_id AS profile_external_id,
              sp.profile_type::text AS profile_type,
@@ -401,6 +451,21 @@ export class BoostExecutorService {
            * üretmek, kullanıcının vermediği bir kararı onun adına vermek olur.
            */
           targeting,
+          /**
+           * KAMPANYA HEDEFİ SATIRDAN (K21). NULL ise alan HİÇ gönderilmiyor
+           * ve sağlayıcı yeni kampanya açıyor.
+           *
+           * `{ mode: 'existing', externalCampaignId: null }` gibi bir ara hâl
+           * ÜRETİLMİYOR: ayrık birleşimin bütün amacı "var olan" durumunda
+           * kimliğin KESİN dolu olması ve geri alma kodunun onu silmeye
+           * kalkmaması.
+           */
+          campaign: row.target_campaign_external_id
+            ? {
+                mode: 'existing' as const,
+                externalCampaignId: row.target_campaign_external_id,
+              }
+            : { mode: 'new' as const },
           objective: row.objective,
           currency: row.currency,
           name: `Boost — ${row.rule_name ?? 'elle'} — ${row.post_external_id.slice(-8)}`,
