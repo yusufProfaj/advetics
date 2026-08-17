@@ -448,6 +448,10 @@ akış ve engeller §7.2'de. Özeti:
 
    **1209 API testi.**
 
+   ✅ **CANLIDA DOĞRULANDI (2026-08-17):** dağıtıldı ve isimler beklenen
+   biçimde geldi. K22'nin tek açık kalan sınırı aynı gönderi + aynı gün =
+   aynı ad; bu bilinçli.
+
 7. **CANLI ÇAĞRI — tek kalan adım ve kodla değil elle yapılıyor.**
 
    > Ajansın kendi hesabında, **en küçük bütçeyle**, tek bir Instagram
