@@ -1288,8 +1288,17 @@ model OrganicPost {
   /// photo | video | carousel | reel | text | link
   mediaType    String  @map("media_type") @db.VarChar(20)
   message      String? @db.VarChar(3000)
-  permalink    String? @db.VarChar(1024)
-  thumbnailUrl String? @map("thumbnail_url") @db.VarChar(1024)
+  /// ADRESLER TEXT, VARCHAR(1024) DEĞİL.
+  ///
+  /// Meta'nın imzalı medya adresleri uzun ve uzunlukları garanti edilmiyor.
+  /// 1024'ü geçen TEK BİR adres, o sayfanın BÜTÜN gönderilerini düşürüyordu:
+  /// senkronizasyon tek toplu INSERT kullanıyor ve tek satırın kısıt ihlali
+  /// bütün deyimi geri alıyor. Sonuç yine "hiç gönderi yok" olarak görünürdü.
+  ///
+  /// Kırpmak çözüm değil: kırpılmış bir imzalı adres sessizce kırık görsel
+  /// demek. `message` kırpılabiliyor çünkü kırpılmış metin hâlâ metin.
+  permalink    String? @db.Text
+  thumbnailUrl String? @map("thumbnail_url") @db.Text
 
   publishedAt DateTime @map("published_at") @db.Timestamptz(6)
 

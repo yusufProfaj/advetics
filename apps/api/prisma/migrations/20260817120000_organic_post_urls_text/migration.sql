@@ -1,0 +1,21 @@
+-- Gönderi adresleri VARCHAR(1024) DEĞİL, TEXT
+--
+-- Meta'nın imzalı medya adresleri uzun ve uzunlukları garanti edilmiyor:
+-- Instagram `media_url` değerleri imza, süre ve dönüşüm parametreleri taşıyor.
+-- 1024 karakteri geçen TEK BİR adres, o sayfanın BÜTÜN gönderilerini
+-- düşürüyordu: `organic-sync.service.ts` gönderileri TEK toplu INSERT ile
+-- yazıyor ve tek satırın kısıt ihlali bütün deyimi geri alıyor.
+--
+-- Sonuç yine "hiç gönderi yok" olarak görünürdü — bugün üç kez yaşanan hata
+-- sınıfının aynısı (bkz. e5c8547: geçersiz tek bir içgörü metriği bütün
+-- çağrıyı düşürüyordu; 05b680e: eksik tek bir alan düğmeyi bozuk gösteriyordu).
+--
+-- KIRPMAK ÇÖZÜM DEĞİL. `message` kırpılabiliyor çünkü kırpılmış metin hâlâ
+-- okunabilir bir metin; kırpılmış bir imzalı adres ise SESSİZCE kırık görsel
+-- demek — panelde boş kutu görünür ve sebebi hiçbir yerde yazmaz. Kolonu
+-- büyütmek tek doğru yol.
+--
+-- Postgres'te VARCHAR(n) → TEXT dönüşümü tabloyu yeniden yazmıyor ve mevcut
+-- veriye dokunmuyor.
+ALTER TABLE "organic_posts" ALTER COLUMN "permalink" TYPE TEXT;
+ALTER TABLE "organic_posts" ALTER COLUMN "thumbnail_url" TYPE TEXT;

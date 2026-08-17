@@ -74,16 +74,11 @@ export default async function AutoBoostPage({
             {clientName} · günde iki kez değerlendiriliyor
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/*
-            ELLE BOOST BURADA, ayrı bir sayfada değil.
-            Kural yolu ve elle yol aynı işin iki üreticisi; ayrı sayfaya
-            koymak, "hangi ekrandan hangisi açılıyordu" sorusunu üretirdi.
-          */}
-          <ManualBoost clientId={clientId} canPublish={canApprove} />
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {canApprove && <CreateApprovedButton clientId={clientId} />}
         </div>
       </header>
+
 
       {session.availableClients.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
@@ -102,6 +97,22 @@ export default async function AutoBoostPage({
           ))}
         </div>
       )}
+
+      {/*
+        ELLE BOOST BU SAYFADA, ayrı bir sayfada değil — kural yolu ve elle yol
+        aynı işin iki üreticisi ve ayırmak "hangi ekrandan hangisi açılıyordu"
+        sorusunu üretirdi.
+
+        AMA BAŞLIK SATIRININ İÇİNDE DEĞİL, ALTINDA. İlk yazımda başlığın düğme
+        satırındaydı ve dört adımlı form iki düğmenin yanına flex öğesi olarak
+        giriyordu: satırdaki gönderi metni nowrap olduğu için formun min-content
+        genişliği 1142px'e çıkıyor, flex öğesi de `min-width:auto` yüzünden o
+        genişliğin altına küçülemiyordu. Ölçülen sonuç 1280px ekranda 153px
+        yatay BELGE taşmasıydı ve kenar çubuğu sticky yalnızca dikey
+        sabitlediği için sağa kaydırınca sol kenar ekrandan çıkıyordu —
+        kullanıcıya "metinler soldan kesilmiş" görünüyordu.
+      */}
+      <ManualBoost clientId={clientId} canPublish={canApprove} />
 
       {boosts === null ? (
         <Notice tone="error">Boost verisi alınamadı.</Notice>
@@ -171,7 +182,11 @@ function BoostCard({
         <img
           src={p.thumbnailUrl}
           alt=""
-          className="h-24 w-24 shrink-0 rounded-lg object-cover"
+          loading="lazy"
+          /* Beyaz etiket alan adını Meta'ya sızdırmamak için — kreatif
+             kartında baştan beri var, burada eksikti. */
+          referrerPolicy="no-referrer"
+          className="h-24 w-24 shrink-0 rounded-lg bg-surface-sunken object-cover"
         />
       ) : (
         <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-[11px] text-ink-muted">

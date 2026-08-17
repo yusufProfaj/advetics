@@ -23,6 +23,17 @@ import { formatMoney, formatNumber } from '@/lib/format';
  * EKRANIN TAŞIDIĞI TEK MESAJ: bu düğme para harcıyor ve ne kadar harcadığı
  * düğmenin ÜSTÜNDE yazıyor (K19). Sert bir tavan yok — karar kullanıcının —
  * ama tutarı görmeden verilen bir karar olmasın.
+ *
+ * PANEL BAŞLIK SATIRINDA DEĞİL, ONUN ALTINDA — ve bu bir yerleşim zorunluluğu.
+ * Form ilk yazımda sayfa başlığının düğme satırının içindeydi; dört adımlı bir
+ * form iki düğmenin yanına flex öğesi olarak giriyordu. Satırdaki gönderi
+ * metni `truncate` (nowrap) olduğu için formun min-content genişliği 1142px'e
+ * çıkıyor ve flex öğesi `min-width:auto` yüzünden o genişliğin altına
+ * küçülemiyor: canlıda 1280px ekranda 153px yatay BELGE taşması ölçüldü.
+ * Kenar çubuğu `sticky` yalnızca dikey sabitlediği için kullanıcı sağa
+ * kaydırınca sol kenar ekrandan çıkıyor ve metinler "soldan kesilmiş"
+ * görünüyordu. Panel blok seviyesine alındığında genişlik veriye göre de
+ * oynamıyor: liste boşken 715px, dolduğunda 984px zıplıyordu.
  */
 export function ManualBoost({
   clientId,
@@ -36,29 +47,40 @@ export function ManualBoost({
 
   if (!canPublish) return null;
 
-  if (!acik) {
-    return (
-      <button
-        type="button"
-        onClick={() => setAcik(true)}
-        className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white"
-      >
-        Gönderi öne çıkar
-      </button>
-    );
-  }
-
   return (
-    <ManualBoostForm
-      clientId={clientId}
-      onClose={() => setAcik(false)}
-      onDone={() => {
-        setAcik(false);
-        router.refresh();
-      }}
-    />
+    <div className="min-w-0">
+      {!acik ? (
+        <button
+          type="button"
+          onClick={() => setAcik(true)}
+          className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white"
+        >
+          Gönderi öne çıkar
+        </button>
+      ) : (
+        <ManualBoostForm
+          clientId={clientId}
+          onClose={() => setAcik(false)}
+          onDone={() => {
+            setAcik(false);
+            router.refresh();
+          }}
+        />
+      )}
+    </div>
   );
 }
+
+/** Depo standardı form girdisi — `focus:border-brand` dahil. */
+const input =
+  'w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand';
+
+/** Hazır bütçe/süre ön ayarları — ham sayı kutusundan önce gelir. */
+const PRESETS = [
+  { toplam: '300', gun: 5 },
+  { toplam: '500', gun: 7 },
+  { toplam: '1000', gun: 14 },
+] as const;
 
 function ManualBoostForm({
   clientId,
@@ -153,6 +175,7 @@ function ManualBoostForm({
   const gunlukMicros = gun > 0 ? toplamMicros / BigInt(gun) : 0n;
 
   const kitleSecili = kitle !== '';
+  const engelliSayi = posts?.items.filter((p) => p.blockedReason !== null).length ?? 0;
 
   async function yayinla(): Promise<void> {
     if (!secili) return;
@@ -167,7 +190,14 @@ function ManualBoostForm({
           totalBudget: butce.replace(',', '.'),
           durationDays: gun,
           targeting: kitleSecili
-            ? { countries: ['TR'], cityKeys: [], ageMin: 18, ageMax: 65, genders: 'all', savedAudienceId: kitle }
+            ? {
+                countries: ['TR'],
+                cityKeys: [],
+                ageMin: 18,
+                ageMax: 65,
+                genders: 'all',
+                savedAudienceId: kitle,
+              }
             : {
                 countries: ['TR'],
                 cityKeys: sehirler.map((s) => s.key),
@@ -186,9 +216,9 @@ function ManualBoostForm({
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-line bg-surface p-4">
-      <header className="flex items-start justify-between gap-3">
-        <div>
+    <section className="w-full min-w-0 space-y-4 rounded-xl border border-line bg-surface p-4">
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold text-ink">Gönderi öne çıkar</h2>
           <p className="mt-0.5 text-xs text-ink-muted">
             Kural kurmadan, seçtiğin gönderiyi hemen yayına alır.
@@ -197,94 +227,132 @@ function ManualBoostForm({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg border border-line px-2.5 py-1 text-xs text-ink"
+          className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-sunken"
         >
           Kapat
         </button>
       </header>
 
-      {/* 1. adım — gönderi */}
-      <div className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-          1 · Gönderi
-        </h3>
+      <Blok no={1} baslik="Gönderi" alt="Öne çıkarmak istediğin gönderiyi seç.">
         {posts === null && <p className="text-xs text-ink-muted">Gönderiler yükleniyor…</p>}
+
         {/*
-          BOŞ LİSTE SEBEBİYLE BİRLİKTE. "Gönderi yok" üç bambaşka durumu aynı
-          şekilde gösteriyordu — sayfa atanmamış, izleme kapalı, süpürme
-          koşmamış — ve üçünün de yapılacak işi farklı. Üretimde tam olarak bu
-          yaşandı: 199 sayfanın hepsi atanmamıştı ve ekran sessizdi.
+          BOŞ DURUM KESİKLİ ÇERÇEVEYLE. Depoda kesikli çerçeve "burada içerik
+          yok, sen ekleyeceksin" demek ve `emptyReason` tam olarak yapılacak
+          işi söylüyor: sayfa atanmamış / izleme kapalı / süpürme koşmamış /
+          son senkronizasyon hata verdi. Dördü de tek satırlık bir gri kutuya
+          sığmıyordu.
         */}
         {posts && posts.items.length === 0 && (
-          <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
-            {posts.emptyReason ?? 'Bu müşteride henüz çekilmiş gönderi yok.'}
-          </p>
+          <div className="rounded-xl border border-dashed border-line bg-surface p-6 text-center">
+            <p className="text-sm font-semibold text-ink">Öne çıkarılacak gönderi yok</p>
+            <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">
+              {posts.emptyReason ?? 'Bu müşteride henüz çekilmiş gönderi yok.'}
+            </p>
+          </div>
         )}
-        <div className="space-y-1.5">
-          {posts?.items.map((p) => (
-            <PostRow
-              key={p.id}
-              post={p}
-              secili={secili?.id === p.id}
-              onSec={() => setSecili(p)}
-            />
-          ))}
-        </div>
-        {/* SESSİZ KESME YOK: kaç gösterildiği ve toplamın kaç olduğu yazılı. */}
-        {posts && posts.total > posts.items.length && (
-          <p className="text-xs text-ink-muted">
-            {posts.items.length} / {posts.total} gönderi gösteriliyor — en yeniler.
-          </p>
+
+        {posts && posts.items.length > 0 && (
+          <>
+            <ul className="overflow-hidden rounded-xl border border-line">
+              {posts.items.map((p) => (
+                <li key={p.id} className="border-b border-line last:border-b-0">
+                  <PostRow
+                    post={p}
+                    secili={secili?.id === p.id}
+                    onSec={() => setSecili(p)}
+                  />
+                </li>
+              ))}
+            </ul>
+            {/*
+              SAYAÇ KOŞULSUZ. "Sessiz kesme yok": kaç gönderi gösterildiği ve
+              kaçının kullanılamadığı her zaman yazılı — koşullu yazmak,
+              kullanıcının listeyi tam sanmasına izin vermek olurdu.
+            */}
+            <p className="text-[11px] text-ink-muted">
+              {posts.items.length} gönderi gösteriliyor
+              {posts.total > posts.items.length && ` · toplam ${posts.total}, en yeniler`}
+              {engelliSayi > 0 && ` · ${engelliSayi} tanesi öne çıkarılamıyor (sebebi satırda)`}
+            </p>
+          </>
         )}
-      </div>
+      </Blok>
 
       {secili && (
         <>
-          {/* 2. adım — bütçe ve süre */}
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              2 · Bütçe ve süre
-            </h3>
+          <Blok
+            no={2}
+            baslik="Bütçe ve süre"
+            alt="Yazdığın toplam tutar Meta'ya olduğu gibi gidiyor."
+          >
+            <div className="grid gap-2 sm:grid-cols-3">
+              {PRESETS.map((p) => {
+                const aktif = butce === p.toplam && gun === p.gun;
+                return (
+                  <button
+                    key={p.toplam}
+                    type="button"
+                    aria-pressed={aktif}
+                    onClick={() => {
+                      setButce(p.toplam);
+                      setGun(p.gun);
+                    }}
+                    className={`rounded-xl border p-3 text-left transition ${
+                      aktif ? 'border-brand bg-brand-soft' : 'border-line hover:bg-surface-sunken'
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold text-ink">{p.toplam} ₺</span>
+                    <span className="block text-[11px] text-ink-muted">{p.gun} gün</span>
+                  </button>
+                );
+              })}
+            </div>
+
             <div className="flex flex-wrap items-end gap-3">
-              <label className="text-xs text-ink-muted">
-                Toplam bütçe (₺)
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                  Toplam bütçe (₺)
+                </span>
                 <input
                   value={butce}
                   onChange={(e) => setButce(e.target.value)}
                   inputMode="decimal"
-                  className="mt-1 block w-32 rounded-lg border border-line bg-surface px-2 py-1.5 text-sm text-ink"
+                  className={`${input} w-32`}
                 />
               </label>
-              <label className="text-xs text-ink-muted">
-                Süre (gün)
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                  Süre (gün)
+                </span>
                 <input
                   value={gun}
                   onChange={(e) => setGun(Number(e.target.value) || 1)}
                   type="number"
                   min={1}
                   max={30}
-                  className="mt-1 block w-24 rounded-lg border border-line bg-surface px-2 py-1.5 text-sm text-ink"
+                  className={`${input} w-24`}
                 />
               </label>
-              <p className="pb-1.5 text-xs text-ink-muted">
-                Günde yaklaşık {formatMoney(gunlukMicros.toString(), 'TRY')} harcanır.
+              <p className="pb-1.5 text-[11px] text-ink-muted">
+                Günde yaklaşık {formatMoney(gunlukMicros.toString(), 'TRY')}.
+                <span className="block">
+                  Meta'ya toplam tutar gidiyor; günlük sayı yalnızca bilgi.
+                </span>
               </p>
             </div>
-          </div>
+          </Blok>
 
-          {/* 3. adım — kime */}
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              3 · Kime gösterilsin
-            </h3>
-
+          <Blok no={3} baslik="Kime gösterilsin" alt="Boş bırakırsan Türkiye geneli.">
             {kitleler && kitleler.items.length > 0 && (
-              <label className="block text-xs text-ink-muted">
-                Kayıtlı kitle
+              <label className="block max-w-sm">
+                <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                  Kayıtlı kitle
+                </span>
                 <select
                   value={kitle}
                   onChange={(e) => setKitle(e.target.value)}
-                  className="mt-1 block w-full max-w-sm rounded-lg border border-line bg-surface px-2 py-1.5 text-sm text-ink"
+                  className={input}
                 >
                   <option value="">Kullanma — aşağıdan kendim seçeyim</option>
                   {kitleler.items.map((k) => (
@@ -301,17 +369,18 @@ function ManualBoostForm({
             {/* BOŞ AÇILIR LİSTE GÖSTERİLMİYOR — kullanıcı kendi kurulumunda bir
                 şey eksik olduğunu sanmasın (K16). */}
             {kitleler && kitleler.items.length === 0 && (
-              <p className="text-xs text-ink-muted">
+              <p className="text-[11px] text-ink-muted">
                 Ads Manager’da kayıtlı kitle bulunamadı — aşağıdan lokasyon ve yaş
                 seçebilirsin.
               </p>
             )}
 
             {kitleSecili ? (
-              <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
-                Kayıtlı kitle seçildi. Lokasyon, yaş ve cinsiyet <b>kitlenin kendi
-                tanımından</b> geliyor — burada ayrıca seçilmiyor, çünkü ikisini
-                birleştirmek kitlenin tanımını sessizce değiştirirdi.
+              <p className="rounded-lg border border-line bg-surface-muted p-3 text-xs text-ink-muted">
+                Kayıtlı kitle seçildi. Lokasyon, yaş ve cinsiyet{' '}
+                <b className="text-ink">kitlenin kendi tanımından</b> geliyor — burada
+                ayrıca seçilmiyor, çünkü ikisini birleştirmek kitlenin tanımını sessizce
+                değiştirirdi.
               </p>
             ) : (
               <ManualTargeting
@@ -328,35 +397,83 @@ function ManualBoostForm({
                 setCinsiyet={setCinsiyet}
               />
             )}
-          </div>
+          </Blok>
 
-          {/* 4. adım — yayınla */}
-          <div className="space-y-2 border-t border-line pt-3">
+          <Blok no={4} baslik="Yayınla" alt="Ara onay yok — bu düğme parayı harcıyor.">
             {secili.warning && (
-              <p className="text-xs text-amber-700">{secili.warning}</p>
+              <p className="rounded-lg border border-line bg-surface-muted p-3 text-xs text-warn">
+                {secili.warning}
+              </p>
             )}
-            {/* K19 — TUTAR GÖRÜLMEDEN KARAR VERİLMESİN. Ara ekran değil, aynı
-                ekranın son satırı. */}
+            {/*
+              K19 — TUTAR GÖRÜLMEDEN KARAR VERİLMESİN. Ara ekran değil, aynı
+              ekranın son satırı; ama çıplak gri metin değil, kendi yüzeyinde:
+              para taahhüdü olan tek satır kart zemininden ayrılıyor.
+            */}
             {spend && <SpendLine spend={spend} eklenecek={toplamMicros} />}
-            {hata && <p className="text-xs text-rose-700">{hata}</p>}
+            {hata && (
+              <p className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
+                {hata}
+              </p>
+            )}
             <button
               type="button"
               onClick={yayinla}
               disabled={busy || toplamMicros === 0n}
-              className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40"
             >
               {busy
                 ? 'Yayınlanıyor…'
                 : `${formatMoney(toplamMicros.toString(), 'TRY')} harca ve yayınla`}
             </button>
-          </div>
+          </Blok>
         </>
       )}
     </section>
   );
 }
 
-/** Bir gönderi satırı — engelliyse SEBEBİYLE gösteriliyor, gizlenmiyor. */
+/**
+ * Numaralı adım — hızlı reklam sihirbazındaki `Blok` deseninin aynısı.
+ *
+ * Dört adımlı bir akışın adımları numara rozetiyle gösteriliyor; boost ekranı
+ * da aynı akış olduğu için aynı görünmeli.
+ */
+function Blok({
+  no,
+  baslik,
+  alt,
+  children,
+}: {
+  no: number;
+  baslik: string;
+  alt?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0 border-t border-line pt-3">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-bold text-white">
+          {no}
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-ink">{baslik}</h3>
+          {alt && <p className="text-xs text-ink-muted">{alt}</p>}
+        </div>
+      </div>
+      <div className="mt-2 min-w-0 space-y-2 sm:pl-7">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Bir gönderi satırı — GÖRSELİYLE, engelliyse SEBEBİYLE.
+ *
+ * SATIRIN TAMAMI TIKLANABİLİR: ayrı bir "Seç" düğmesi, tıklama alanını
+ * gereksiz daraltıyordu. Engelli satır `disabled` — tıklanamıyor ama
+ * listeden GİZLENMİYOR: Instagram gönderisini aramaya gelen kullanıcı
+ * bulamayınca senkronizasyonun bozuk olduğunu sanıyor.
+ */
 function PostRow({
   post,
   secili,
@@ -367,37 +484,100 @@ function PostRow({
   onSec: () => void;
 }) {
   const engelli = post.blockedReason !== null;
+  const [gorselDustu, setGorselDustu] = useState(false);
+  const gorselVar = post.thumbnailUrl !== null && !gorselDustu;
 
   return (
-    <div
-      className={`rounded-lg border p-2.5 ${
-        secili ? 'border-brand bg-surface-sunken' : 'border-line'
-      } ${engelli ? 'opacity-60' : ''}`}
+    <button
+      type="button"
+      onClick={onSec}
+      disabled={engelli}
+      aria-pressed={secili}
+      className={`flex w-full min-w-0 items-start gap-3 px-3 py-2.5 text-left transition ${
+        secili ? 'bg-brand-soft' : 'hover:bg-surface-sunken'
+      } ${engelli ? 'cursor-not-allowed opacity-60 hover:bg-transparent' : ''}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm text-ink">
-            {post.message ?? `${MEDIA_TYPE_LABELS[post.mediaType]} gönderisi`}
-          </p>
-          <p className="mt-0.5 text-xs text-ink-muted">
-            {post.socialProfileName} · {formatNumber(post.reach)} erişim ·{' '}
-            {formatNumber(post.engagements)} etkileşim
-            {post.engagementRate !== null && ` · %${post.engagementRate.toFixed(1)}`}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onSec}
-          disabled={engelli}
-          className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink disabled:opacity-50"
-        >
-          {secili ? 'Seçildi' : 'Seç'}
-        </button>
-      </div>
-      {post.blockedReason && (
-        <p className="mt-1.5 text-xs text-ink-muted">{post.blockedReason}</p>
+      {/*
+        GÖRSEL DÜZ <img> İLE — `next/image` DEĞİL ve bu depo genelindeki karar.
+        Meta'nın CDN adresleri imzalı ve süresi doluyor; `next/image` onları
+        kendi proxy'sinde önbelleğe alır, imza dolunca optimizer hata döndürür.
+        Üstelik `remotePatterns`'a fbcdn yazmak joker alt alan adı gerektiriyor
+        ve panelin kendi origin'i üzerinden herhangi bir fbcdn nesnesini
+        servis eden bir görsel proxy'si açardı.
+
+        `referrerPolicy="no-referrer"`: beyaz etiket alan adını Meta'ya
+        sızdırmamak için. `onError`: imzası dolmuş adres boş kutu bırakmasın,
+        medya tipi etiketine düşsün.
+      */}
+      {gorselVar ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={post.thumbnailUrl!}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setGorselDustu(true)}
+          className="h-16 w-16 shrink-0 rounded-lg bg-surface-sunken object-cover"
+        />
+      ) : (
+        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-[10px] text-ink-muted">
+          {MEDIA_TYPE_LABELS[post.mediaType]}
+        </span>
       )}
-    </div>
+
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <Chip
+            cls={
+              post.profileType === 'instagram_business'
+                ? 'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200'
+                : 'bg-sky-50 text-sky-700 ring-sky-200'
+            }
+          >
+            {post.profileType === 'instagram_business' ? 'Instagram' : 'Facebook'}
+          </Chip>
+          <span className="truncate text-[11px] text-ink-muted">
+            {post.socialProfileName}
+          </span>
+        </span>
+
+        {/*
+          METİN İKİ SATIRDA KIRPILIYOR, tek satırda DEĞİL. Tek satır `truncate`
+          (nowrap) formun min-content genişliğini metnin tamamına çıkarıyordu ve
+          yatay taşmanın ölçülmüş sebebi buydu. `line-clamp` sarmayı koruyor.
+        */}
+        <span className="mt-0.5 line-clamp-2 block text-sm text-ink">
+          {post.message ?? `${MEDIA_TYPE_LABELS[post.mediaType]} gönderisi`}
+        </span>
+
+        <span className="mt-0.5 block text-[11px] text-ink-muted">
+          {formatNumber(post.reach)} erişim · {formatNumber(post.engagements)} etkileşim
+          {post.engagementRate !== null && ` · %${post.engagementRate.toFixed(1)}`}
+        </span>
+
+        {post.blockedReason && (
+          <span className="mt-1 block text-[11px] text-ink-muted">{post.blockedReason}</span>
+        )}
+        {post.warning && !post.blockedReason && (
+          <span className="mt-1 block text-[11px] text-warn">{post.warning}</span>
+        )}
+      </span>
+
+      {secili && (
+        <Chip cls="bg-emerald-50 text-emerald-700 ring-emerald-200">Seçildi</Chip>
+      )}
+    </button>
+  );
+}
+
+/** Depo standardı rozet. */
+function Chip({ cls, children }: { cls: string; children: React.ReactNode }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${cls}`}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -415,19 +595,22 @@ function ManualTargeting(p: {
   setCinsiyet: (v: 'all' | 'male' | 'female') => void;
 }) {
   return (
-    <div className="space-y-2">
-      <div>
-        <label className="text-xs text-ink-muted">
-          Lokasyon ara (boş bırakırsan Türkiye geneli)
+    <div className="min-w-0 space-y-2">
+      <div className="min-w-0">
+        <label className="block max-w-sm">
+          <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+            Lokasyon ara
+          </span>
           <input
             value={p.arama}
             onChange={(e) => p.setArama(e.target.value)}
             placeholder="İzmir, Ankara…"
-            className="mt-1 block w-full max-w-sm rounded-lg border border-line bg-surface px-2 py-1.5 text-sm text-ink"
+            className={input}
           />
         </label>
+
         {p.sonuclar.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1.5">
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
             {p.sonuclar.slice(0, 8).map((s) => (
               <button
                 key={s.key}
@@ -438,13 +621,14 @@ function ManualTargeting(p: {
                   }
                   p.setArama('');
                 }}
-                className="rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface-sunken"
+                className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-surface-sunken"
               >
                 + {s.label}
               </button>
             ))}
           </div>
         )}
+
         {p.sehirler.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {p.sehirler.map((s) => (
@@ -452,7 +636,8 @@ function ManualTargeting(p: {
                 key={s.key}
                 type="button"
                 onClick={() => p.setSehirler(p.sehirler.filter((x) => x.key !== s.key))}
-                className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-ink"
+                title="Kaldır"
+                className="rounded-lg border border-brand bg-brand-soft px-2.5 py-1 text-xs font-medium text-ink"
               >
                 {s.label} ✕
               </button>
@@ -462,16 +647,18 @@ function ManualTargeting(p: {
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <label className="text-xs text-ink-muted">
-          Yaş
-          <div className="mt-1 flex items-center gap-1">
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+            Yaş
+          </span>
+          <span className="flex items-center gap-1">
             <input
               value={p.yasMin}
               onChange={(e) => p.setYasMin(Number(e.target.value) || 18)}
               type="number"
               min={18}
               max={65}
-              className="w-16 rounded-lg border border-line bg-surface px-2 py-1.5 text-sm text-ink"
+              className={`${input} w-20`}
             />
             <span className="text-ink-muted">–</span>
             <input
@@ -480,16 +667,18 @@ function ManualTargeting(p: {
               type="number"
               min={18}
               max={65}
-              className="w-16 rounded-lg border border-line bg-surface px-2 py-1.5 text-sm text-ink"
+              className={`${input} w-20`}
             />
-          </div>
+          </span>
         </label>
-        <label className="text-xs text-ink-muted">
-          Cinsiyet
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+            Cinsiyet
+          </span>
           <select
             value={p.cinsiyet}
             onChange={(e) => p.setCinsiyet(e.target.value as 'all' | 'male' | 'female')}
-            className="mt-1 block rounded-lg border border-line bg-surface px-2 py-1.5 text-sm text-ink"
+            className={input}
           >
             <option value="all">Hepsi</option>
             <option value="male">Erkek</option>
@@ -519,17 +708,22 @@ function SpendLine({
   const butce = spend.monthlyBudgetMicros ? BigInt(spend.monthlyBudgetMicros) : null;
 
   return (
-    <p className="text-xs text-ink-muted">
-      Bu ay boost’a {formatMoney(spend.committedThisMonthMicros, spend.currency)} gitti;
-      bununla birlikte {formatMoney(sonra.toString(), spend.currency)} olacak.{' '}
-      {butce !== null ? (
-        <>
-          Aylık bütçe {formatMoney(butce.toString(), spend.currency)} — bunun{' '}
-          %{Number((sonra * 100n) / (butce > 0n ? butce : 1n))}’i.
-        </>
-      ) : (
-        <>Bu müşteride aylık bütçe tanımlı değil.</>
-      )}
-    </p>
+    <div className="rounded-lg border border-line bg-surface-muted p-3">
+      <p className="text-xs text-ink">
+        Bu boost’la birlikte bu ay boost’a giden toplam{' '}
+        <strong>{formatMoney(sonra.toString(), spend.currency)}</strong> olacak.
+      </p>
+      <p className="mt-0.5 text-[11px] text-ink-muted">
+        Şu ana kadar {formatMoney(spend.committedThisMonthMicros, spend.currency)}.{' '}
+        {butce !== null ? (
+          <>
+            Aylık bütçe {formatMoney(butce.toString(), spend.currency)} — bunun %
+            {Number((sonra * 100n) / (butce > 0n ? butce : 1n))}’i.
+          </>
+        ) : (
+          <>Bu müşteride aylık bütçe tanımlı değil.</>
+        )}
+      </p>
+    </div>
   );
 }
