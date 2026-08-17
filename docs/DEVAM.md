@@ -175,9 +175,10 @@ akış ve engeller §7.2'de. Özeti:
 
    `BoostRequest.source` artık ayrık birleşim: Instagram dalı sayfa kimliğini
    AYRICA istiyor, yani IG kullanıcı kimliğini sayfa kimliği sanmak derleyici
-   seviyesinde imkânsız. Kreatif oluştuktan sonra
-   `effective_instagram_media_id` okunuyor ve eşleşmezse reklam hiç açılmıyor
-   — "Meta kabul edip yanlış gönderiyi gösterir" riskinin kod karşılığı.
+   seviyesinde imkânsız. Kreatif oluştuktan sonra geri okunup gönderdiğimiz
+   kimlikle karşılaştırılıyor; eşleşmezse reklam hiç açılmıyor — "Meta kabul
+   edip yanlış gönderiyi gösterir" riskinin kod karşılığı. (Bu kontrolün ilk
+   hâli yanlış alanı karşılaştırıyordu; 6d'ye bak.)
 
    **Kural yolu bilerek kapalı kaldı:** Instagram elle boost'ta açık, kuralda
    değil. Kural otomatik ve tekrar tekrar harcıyor; doğrulanmamış bir yol ilk
@@ -237,6 +238,44 @@ akış ve engeller §7.2'de. Özeti:
 
    **1125 API testi.**
 
+6d. ✅ **BİTTİ** — kreatif doğrulaması **kendi kontrolüm** yüzünden boost'u
+   reddetti; karşılaştırma yanlış alanları eşleştiriyordu.
+
+   **NASIL BULUNDU:** ilk canlı Instagram boost'u şu mesajla düştü —
+   *"Instagram kreatifi YANLIŞ gönderiye bağlandı: gönderilen
+   18090331100389207, Meta'nın kullandığı 18117166231898791."* Kontrolün amacı
+   doğruydu ve **para harcanmadı**, ama karşılaştırması yanlıştı: bizim
+   yazdığımız `source_instagram_media_id` ile Meta'nın türettiği
+   `effective_instagram_media_id` **aynı kimlik uzayında olmak zorunda değil**
+   — K17 üç ayrı uzay olduğunu tam bu yüzden sayıyor. Kontrol "Meta yanlış
+   gönderiyi kullandı" ile "Meta aynı gönderiyi başka kimlikle raporluyor"
+   arasını ayırt edemiyordu ve ikinci durumda **çalışan bir yolu kapatıyordu**.
+
+   Artık benzeri benzerle: yazdığımız alanı geri okumak aynı uzayda kalmak
+   demek, farklıysa gerçekten yanlış medya kaydedilmiş → **reddet**.
+   `effective` farkı **uyarı** (engel değil), yankı hiç dönmezse de uyarı.
+
+   **Karar saf bir fonksiyona çıkarıldı** (`decideInstagramCreativeCheck`):
+   metodun içindeyken test edilemez durumdaydı ve bütün özelliğin en kritik
+   kararı bu. Beş test mutasyonla doğrulandı — canlıda beni yanıltan hatayı
+   (yankı yerine `effective` ile karşılaştırmak) geri koymak üçünü düşürüyor.
+
+   **Sonraki oturum için açık kalan tek soru:** `18117166231898791` gerçekten
+   başka bir gönderi mi, yoksa aynı gönderinin başka kimliği mi? Kesin cevap
+   Ads Manager'da **gözle** bakmak (7. adımın önkoşulu zaten bu). Veritabanı
+   tarafı da bir ipucu veriyor:
+
+   ```
+   SELECT external_id, left(message,60), published_at FROM organic_posts
+   WHERE external_id IN ('18090331100389207','18117166231898791');
+   ```
+
+   İki satır dönerse Meta gerçekten başka bir gönderi kullanmış demektir ve
+   **gönderdiğimiz kimliğin kaynağı** (`/{ig-user}/media` → `id`) sorgulanır.
+   Tek satır dönerse kimlik uzayı farkı — bugünkü uyarı yolu doğru.
+
+   **1130 API testi.**
+
 7. **CANLI ÇAĞRI — tek kalan adım ve kodla değil elle yapılıyor.**
 
    > Ajansın kendi hesabında, **en küçük bütçeyle**, tek bir Instagram
@@ -250,6 +289,15 @@ akış ve engeller §7.2'de. Özeti:
    >
    > Facebook tarafı ayrı ve **App Review'a bağlı** — `pages_read_engagement`
    > için Advanced Access. Instagram bunu beklemiyor.
+   >
+   > **ÖNCE TEMİZLİK — 6c'nin transaction hatasından kalan iki artık var:**
+   > (a) Ads Manager'da **"Öne çıkarılan gönderi — …"** adlı bir kampanya
+   > kalmış olabilir (1000 ₺ / 14 gün denemesi): transaction 12,5 saniyede
+   > ölünce kayıt yazılamadı ama kampanya Meta'da oluşmuş olabilir. Varsa elle
+   > silinmeli — duraklatılmış değil, **silinmeli**; aksi halde harcamaya
+   > başlar. (b) `boosts` tablosunda `approved`'da takılı kalan satır
+   > (`a3e20f76-9e77-47c2-b9a0-832f9aa1c83a`) temizlenmeli, yoksa "onaylananları
+   > oluştur" onu yeniden denemeye çalışır.
    >
    > **Dağıtımdan sonra panelde sırasıyla:** (1) "Hesapları yenile" — IG
    > satırlarının ana sayfa kimliğini doldurur (2. adım), (2) Müşteriler

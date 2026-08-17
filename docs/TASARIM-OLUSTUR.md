@@ -1116,13 +1116,32 @@ verilmemeye devam ediyor (§3 — çalışan davranış bozulmuyor).
 #### Kodla doğrulama — "kabul edip yok sayma" riskine karşı
 
 K17'nin bütün çekincesi Meta'nın bir alanı kabul edip sessizce yok saymasıydı.
-`effective_instagram_media_id` salt okunur ve reklamda **fiilen kullanılan**
-medyayı söylüyor: kreatif oluşturulduktan sonra okunuyor ve gönderdiğimiz
-kimlikle eşleşmiyorsa reklam **hiç açılmıyor**, boost geri alınıyor.
+Kreatif oluşturulduktan sonra geri okunuyor ve gönderdiğimiz kimlikle
+eşleşmiyorsa reklam **hiç açılmıyor**, boost geri alınıyor.
 
-Alan hiç dönmezse hata verilmiyor, log'a yazılıp devam ediliyor: `fields` ile
-istenmediğinde dönmüyor ve bazı hesaplarda gecikmeli doluyor. Kısıt bilinçli
-olarak "eşleşmiyorsa dur", "bilgi yoksa dur" değil.
+**Karşılaştırma BENZERİ BENZERLE yapılıyor** — bu, ilk canlı denemede
+öğrenildi ve kontrolün ilk hâli yanlıştı. İlk sürüm yazdığımız
+`source_instagram_media_id` ile Meta'nın türettiği
+`effective_instagram_media_id` alanını karşılaştırıyordu; 2026-08-17'de ilk
+gerçek boost tam bu yüzden reddedildi (gönderilen `18090331100389207`,
+`effective` olarak dönen `18117166231898791`). İki alanın **aynı kimlik
+uzayında olduğu belgelenmiş değil** — yukarıdaki üç uzay tam da bu yüzden
+sayılıyor. Yani kontrol, "Meta yanlış gönderiyi kullandı" ile "Meta aynı
+gönderiyi başka bir kimlikle raporluyor" arasını ayırt edemiyordu ve ikinci
+durumda çalışan bir yolu kapatıyordu.
+
+Bugünkü karar üç durumlu (`decideInstagramCreativeCheck`, saf fonksiyon,
+beş test mutasyonla doğrulanmış):
+
+| Geri okunan | Karar | Neden |
+|---|---|---|
+| `source_instagram_media_id` **farklı** | **REDDET** | Yazdığımız alanı geri okumak aynı uzayda kalmak demek. Farklıysa gerçekten yanlış medya kaydedilmiş. |
+| `effective_instagram_media_id` farklı, yankı doğru | **UYAR** | Sebebi büyük olasılıkla kimlik uzayı. Engel yapmak, doğrulanmamış bir varsayım yüzünden çalışan yolu kapatmak olurdu. |
+| Yankı hiç dönmedi | **UYAR** | `fields` ile istenmediğinde dönmüyor ve bazı hesaplarda gecikmeli doluyor. Yokluğu "yanlış" değil. |
+
+Uyarı **sessiz kalmıyor**: log'a neye bakılacağını yazıyor. `effective`
+farkının gerçekten kimlik uzayı olup olmadığının tek kesin cevabı Ads
+Manager'da gözle bakmak — K17'nin kural yolunu açma önkoşulu da bu.
 
 #### Kural yolu HENÜZ açılmadı — bilinçli
 
