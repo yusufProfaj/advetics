@@ -39,6 +39,20 @@ export const assignToClientSchema = z.object({
 });
 export type AssignToClientInput = z.infer<typeof assignToClientSchema>;
 
+/**
+ * Sayfanın BOOST FATURALANDIRMA hesabı.
+ *
+ * BU ŞEMA VARDI AMA UÇ NOKTASI YOKTU. `social_profiles.linked_ad_account_id`
+ * kolonu sekiz yerde OKUNUYOR (aday üretimi, elle boost, gönderi listesi,
+ * kural doğrulaması) ama hiçbir yerde yazılmıyordu — ne uç nokta ne düğme.
+ * Sonucu: boost'un zorunlu ön koşulu ayarlanamıyor ve ekran her gönderide
+ * "bu sayfaya bağlı bir reklam hesabı yok" diyor. `sync_enabled` ile birebir
+ * aynı boşluk ve ikisi de aynı gün bulundu.
+ *
+ * Yanlış hesap, başka bir müşterinin bütçesinden harcamak demek ve geri
+ * alınamıyor: Meta'da oluşmuş kampanya silinse bile harcanan para dönmüyor.
+ * Bu yüzden müşteri ve platform eşleşmesi SUNUCUDA doğrulanıyor.
+ */
 export const linkBoostAccountSchema = z.object({
   /** null = bağlantıyı kaldır. */
   adAccountId: z.string().uuid().nullable(),

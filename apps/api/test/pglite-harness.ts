@@ -196,13 +196,41 @@ export async function createHarness(): Promise<Harness> {
           linkedAdAccountId: p.linked_ad_account_id,
         };
       },
+      /**
+       * TANIMADIĞI ALANDA HATA FIRLATIYOR — sessizce yok saymıyor.
+       *
+       * Bu taklit bir süre yalnızca üç alanı biliyordu ve bilmediğini sessizce
+       * atlıyordu. Sonucu somut: `linkedAdAccountId` eklendiğinde gerçek kod
+       * doğru çalışırken test "güncellenmedi" diyordu ve hatanın taklitten
+       * geldiği hiçbir yerde yazmıyordu. Tersi daha kötü olurdu — taklit
+       * atlarken testin GEÇMESİ, yani var olmayan bir davranışın doğrulanmış
+       * sayılması.
+       *
+       * Yeni bir kolon güncellenmeye başladığında bu liste de büyümek zorunda
+       * ve hata mesajı bunu söylüyor.
+       */
       update: async ({
         where,
         data,
       }: {
         where: { id: string };
-        data: { clientId?: string | null; syncEnabled?: boolean; lastSyncAt?: Date };
+        data: {
+          clientId?: string | null;
+          syncEnabled?: boolean;
+          lastSyncAt?: Date;
+          linkedAdAccountId?: string | null;
+        };
       }) => {
+        const bilinen = ['clientId', 'syncEnabled', 'lastSyncAt', 'linkedAdAccountId'];
+        const tanimsiz = Object.keys(data).filter((k) => !bilinen.includes(k));
+        if (tanimsiz.length > 0) {
+          throw new Error(
+            `pglite-harness: socialProfile.update bu alanları tanımıyor: ` +
+              `${tanimsiz.join(', ')}. Taklide ekle — yoksa test sessizce ` +
+              'güncellenmemiş bir satırı doğrulamış olur.',
+          );
+        }
+
         // `clientId` için `in` kontrolü: undefined "dokunma", null "havuza
         // geri koy" — ikisi ayrı komut.
         if ('clientId' in data) {
@@ -223,13 +251,28 @@ export async function createHarness(): Promise<Harness> {
             where.id,
           ]);
         }
+        // `in` kontrolü yine ŞART: null "eşleşmeyi kaldır" demek ve
+        // `!== undefined` ile ayırt edilemezdi.
+        if ('linkedAdAccountId' in data) {
+          await q('UPDATE social_profiles SET linked_ad_account_id = $1 WHERE id = $2', [
+            data.linkedAdAccountId ?? null,
+            where.id,
+          ]);
+        }
         const rows = await q<Record<string, unknown>>(
-          'SELECT id, client_id, sync_enabled, name FROM social_profiles WHERE id = $1',
+          `SELECT id, client_id, sync_enabled, name, linked_ad_account_id
+           FROM social_profiles WHERE id = $1`,
           [where.id],
         );
         const p = rows[0];
         return p
-          ? { id: p.id, clientId: p.client_id, syncEnabled: p.sync_enabled, name: p.name }
+          ? {
+              id: p.id,
+              clientId: p.client_id,
+              syncEnabled: p.sync_enabled,
+              name: p.name,
+              linkedAdAccountId: p.linked_ad_account_id,
+            }
           : {};
       },
     },

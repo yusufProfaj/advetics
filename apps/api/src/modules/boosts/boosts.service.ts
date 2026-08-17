@@ -771,7 +771,8 @@ export class BoostsService {
     } else if (!r.linked_ad_account_id) {
       blockedReason =
         'Bu sayfaya bağlı bir reklam hesabı yok — boost faturalandırılamaz. ' +
-        'Platform Bağlantıları ekranından hesabı eşleştir.';
+        'Müşteriler ekranında sayfanın altındaki "Boost hesabı" seçicisinden ' +
+        'bir Meta reklam hesabı seç.';
     } else if (r.has_live_boost) {
       blockedReason =
         'Bu gönderi için zaten yayında ya da onay bekleyen bir boost var. ' +

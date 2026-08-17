@@ -32,6 +32,13 @@ export interface ClientProfile {
   profileType: string;
   /** Organik gönderi senkronizasyonu. Kapalıyken Akıllı Boost gönderi görmüyor. */
   syncEnabled: boolean;
+  /**
+   * Boost'un faturalanacağı reklam hesabı. NULL ise gönderi öne çıkarılamıyor.
+   *
+   * Bu alan uçtan gönderilmezse ekran hangi hesabın eşleştiğini gösteremez ve
+   * kullanıcı aynı hesabı tekrar tekrar seçer — `syncEnabled` ile aynı hata.
+   */
+  linkedAdAccountId: string | null;
 }
 
 export interface PoolItem {
@@ -117,6 +124,40 @@ export function ClientAssets({
     }
   }
 
+  /**
+   * BOOST FATURALANDIRMA HESABI.
+   *
+   * Bu seçici olmadan `linked_ad_account_id` alanını değiştirmenin hiçbir yolu
+   * yoktu: kolon sekiz yerde okunuyor ama hiçbir yerde yazılmıyordu ve elle
+   * boost ekranı her gönderide "bu sayfaya bağlı bir reklam hesabı yok"
+   * diyordu.
+   */
+  async function linkAccount(p: ClientProfile, adAccountId: string | null): Promise<void> {
+    setBusy(p.id);
+    setError(null);
+    try {
+      await apiFetch(`/connections/social-profiles/${p.id}/ad-account`, {
+        method: 'PATCH',
+        body: JSON.stringify({ adAccountId }),
+      });
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'İşlem başarısız.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Boost yalnızca Meta'da var; Google hesabı seçeneklere hiç girmiyor.
+   * Sunucu da reddediyor ama seçilebilir göstermek, reddedilecek bir işi
+   * teklif etmek olurdu.
+   */
+  const metaAccounts = useMemo(
+    () => adAccounts.filter((a) => a.platform === 'meta'),
+    [adAccounts],
+  );
+
   const watched = adAccounts.filter((a) => a.syncEnabled).length;
 
   return (
@@ -168,7 +209,8 @@ export function ClientAssets({
             </li>
           ))}
           {profiles.map((p) => (
-            <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
+            <li key={p.id} className="text-xs">
+              <div className="flex items-center justify-between gap-2">
               <span className="min-w-0 truncate">
                 <span className="text-ink-muted">
                   {p.profileType === 'instagram_business' ? 'IG' : 'FB'} ·{' '}
@@ -212,6 +254,40 @@ export function ClientAssets({
                     çıkar
                   </button>
                 </span>
+              )}
+              </div>
+
+              {/*
+                BOOST FATURALANDIRMA HESABI — gönderi öne çıkarmanın ön koşulu.
+                Eşleşme yoksa Akıllı Boost her gönderide "bağlı reklam hesabı
+                yok" diyor ve sebebi burada çözülüyor.
+              */}
+              {canManage && (
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="shrink-0 text-[11px] text-ink-muted">Boost hesabı:</span>
+                  {metaAccounts.length === 0 ? (
+                    // BOŞ AÇILIR LİSTE GÖSTERİLMİYOR: kullanıcı kendi
+                    // kurulumunda bir şey eksik sanmasın, eksik olan şey
+                    // ATANMIŞ META HESABI.
+                    <span className="text-[11px] text-amber-700">
+                      bu müşteriye atanmış Meta hesabı yok
+                    </span>
+                  ) : (
+                    <select
+                      value={p.linkedAdAccountId ?? ''}
+                      onChange={(e) => void linkAccount(p, e.target.value || null)}
+                      disabled={busy !== null || isPending}
+                      className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 py-1 text-[11px] text-ink outline-none focus:border-brand disabled:opacity-40"
+                    >
+                      <option value="">Seçilmedi — öne çıkarılamaz</option>
+                      {metaAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               )}
             </li>
           ))}

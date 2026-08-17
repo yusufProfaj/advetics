@@ -20,12 +20,14 @@ import {
   PLATFORMS,
   assignToClientSchema,
   geoSearchQuerySchema,
+  linkBoostAccountSchema,
   savedAudienceQuerySchema,
   startOAuthSchema,
   toggleAccountSyncSchema,
   type AssignToClientInput,
   type GeoLocationOption,
   type GeoSearchQuery,
+  type LinkBoostAccountInput,
   type Platform,
   type SavedAudienceList,
   type SavedAudienceQuery,
@@ -282,6 +284,23 @@ export class ConnectionsController {
     @Req() req: AuthedRequest,
   ) {
     return this.connections.setProfileSync(ctx, id, dto.syncEnabled, this.meta(req));
+  }
+
+  /**
+   * Sayfanın boost faturalandırma hesabını eşleştir.
+   *
+   * `connection.write` — izleme anahtarıyla aynı yetki ve aynı gerekçe: bu
+   * müşteriyle çalışan kişinin işi, org yöneticisi şartı yok.
+   */
+  @Patch('social-profiles/:id/ad-account')
+  @RequirePermissions('connection.write')
+  linkBoostAccount(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(linkBoostAccountSchema)) dto: LinkBoostAccountInput,
+    @Req() req: AuthedRequest,
+  ) {
+    return this.connections.setProfileAdAccount(ctx, id, dto.adAccountId, this.meta(req));
   }
 
   @Patch('social-profiles/:id/client')

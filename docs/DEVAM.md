@@ -184,6 +184,28 @@ akış ve engeller §7.2'de. Özeti:
    kez otomasyona verilmiyor. İlk gerçek çağrı gözle doğrulanınca
    `instagram-boost-guard.ts` silinecek.
 
+6b. ✅ **BİTTİ** — boost faturalandırma hesabı eşleştirilebiliyor.
+
+   **NASIL BULUNDU:** ekran düzeldi, gönderiler görselleriyle listelendi ve her
+   satırda tek bir engel kaldı: "bu sayfaya bağlı bir reklam hesabı yok".
+   `social_profiles.linked_ad_account_id` **sekiz yerde okunuyor, hiçbir yerde
+   yazılmıyordu** — ne uç nokta ne düğme. `sync_enabled` ile birebir aynı
+   boşluk ve ikisi de aynı gün bulundu. Zod şeması bile vardı
+   (`linkBoostAccountSchema`), yalnızca ucu yazılmamış.
+
+   `PATCH /connections/social-profiles/:id/ad-account` + Müşteriler ekranında
+   sayfa satırının altında "Boost hesabı" seçicisi. Müşteri ve platform
+   eşleşmesi **sunucuda** doğrulanıyor: başka müşterinin hesabından
+   faturalandırmak, harcanan parayı geri getirmeyen bir karışıklık. Google
+   hesabı seçeneklere hiç girmiyor.
+
+   **Test harness'inde de bir tuzak çıktı:** `socialProfile.update` taklidi
+   yalnızca üç alanı tanıyor ve **bilmediğini sessizce yok sayıyordu** — gerçek
+   kod doğru çalışırken test "güncellenmedi" diyordu. Artık tanımadığı alanda
+   hata fırlatıyor; tersi (taklit atlarken testin geçmesi) daha kötü olurdu.
+
+   **1118 API testi.**
+
 7. **CANLI ÇAĞRI — tek kalan adım ve kodla değil elle yapılıyor.**
 
    > Ajansın kendi hesabında, **en küçük bütçeyle**, tek bir Instagram

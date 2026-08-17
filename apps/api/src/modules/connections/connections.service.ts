@@ -947,6 +947,82 @@ export class ConnectionsService {
   }
 
   /**
+   * Sayfanın BOOST FATURALANDIRMA hesabını eşleştirir.
+   *
+   * NEDEN SONRADAN EKLENDİ: `social_profiles.linked_ad_account_id` kolonu
+   * baştan beri vardı ve SEKİZ yerde OKUNUYORDU (aday üretimi, elle boost,
+   * gönderi listesi, kural doğrulaması...) ama HİÇBİR YERDE YAZILMIYORDU — ne
+   * uç nokta ne düğme. Yani boost'un zorunlu ön koşulu ayarlanamıyordu ve
+   * ekran her gönderide "bu sayfaya bağlı bir reklam hesabı yok" diyordu.
+   * `sync_enabled` ile birebir aynı boşluk.
+   *
+   * MÜŞTERİ VE PLATFORM SUNUCUDA DOĞRULANIYOR. Yanlış hesap, başka bir
+   * müşterinin bütçesinden harcamak demek ve bunu geri almanın yolu yok:
+   * Meta'da oluşmuş bir kampanya silinse bile harcanan para geri gelmiyor.
+   * Google hesabı da reddediliyor — boost yalnızca Meta'da var.
+   */
+  async setProfileAdAccount(
+    ctx: TenantContext,
+    socialProfileId: string,
+    adAccountId: string | null,
+    meta: Meta,
+  ) {
+    // BAĞLAM `activeClientId: null` — Müşteriler ekranı bütün müşterilerin
+    // kartlarını gösteriyor ve seçili olmayan bir müşterinin sayfasına
+    // dokunmak oturumdaki daraltma yüzünden "bulunamadı" ile düşüyordu.
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+    return this.prisma.withTenant(scoped, async (tx) => {
+      const before = await tx.socialProfile.findUnique({ where: { id: socialProfileId } });
+      if (!before) throw new NotFoundException('Sayfa bulunamadı');
+
+      if (adAccountId !== null) {
+        const account = await tx.adAccount.findUnique({ where: { id: adAccountId } });
+        if (!account) throw new NotFoundException('Reklam hesabı bulunamadı');
+
+        if (account.platform !== 'meta') {
+          throw new BadRequestException(
+            'Boost yalnızca Meta’da çalışıyor — faturalandırma hesabı bir Meta ' +
+              'reklam hesabı olmalı.',
+          );
+        }
+        /**
+         * HESAP VE SAYFA AYNI MÜŞTERİDE OLMAK ZORUNDA.
+         *
+         * Havuz modelinde hesap ve sayfa ayrı ayrı atanıyor, yani ikisinin
+         * farklı müşterilere ait olması mümkün. Eşleştirmeye izin vermek, bir
+         * müşterinin gönderisini başka müşterinin hesabından faturalandırmak
+         * demek — panelde hiçbir yerde görünmeyecek bir karışıklık.
+         */
+        if (account.clientId === null || account.clientId !== before.clientId) {
+          throw new BadRequestException(
+            'Reklam hesabı bu sayfanın müşterisine atanmamış. Aynı müşteride ' +
+              'olmayan bir hesaptan boost faturalandırılamaz.',
+          );
+        }
+      }
+
+      const after = await tx.socialProfile.update({
+        where: { id: socialProfileId },
+        data: { linkedAdAccountId: adAccountId },
+      });
+
+      await this.audit.record(tx, ctx, {
+        action: adAccountId
+          ? 'social_profile.boost_account_linked'
+          : 'social_profile.boost_account_unlinked',
+        targetType: 'social_profile',
+        targetId: socialProfileId,
+        clientId: before.clientId,
+        before: { linkedAdAccountId: before.linkedAdAccountId },
+        after: { linkedAdAccountId: after.linkedAdAccountId, name: after.name },
+        ...meta,
+      });
+
+      return { id: after.id, linkedAdAccountId: after.linkedAdAccountId };
+    });
+  }
+
+  /**
    * Reklam hesabını bir müşteriye atar ya da havuza geri koyar.
    *
    * BAĞLAM `activeClientId: null` İLE KURULUYOR VE BU ŞART.

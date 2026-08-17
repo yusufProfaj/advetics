@@ -234,7 +234,11 @@ describe('engeller — gizlenmiyor, sebebiyle dönüyor', () => {
 
     const [p] = (await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 })).items;
     expect(p!.blockedReason).toMatch(/reklam hesabı yok/i);
-    expect(p!.blockedReason).toMatch(/Platform Bağlantıları/i);
+    // Mesaj DOĞRU EKRANI söylüyor: seçici Müşteriler ekranında, Platform
+    // Bağlantıları'nda değil. Yanlış ekrana yönlendiren bir teşhis, teşhis
+    // olmaktan çıkıyor.
+    expect(p!.blockedReason).toMatch(/Müşteriler ekranı/i);
+    expect(p!.blockedReason).toMatch(/Boost hesabı/i);
     expect(p!.adAccountId).toBeNull();
   });
 

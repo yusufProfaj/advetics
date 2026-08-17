@@ -310,6 +310,74 @@ describe('sayfa ataması', () => {
     ]);
   });
 
+  /**
+   * BOOST FATURALANDIRMA HESABI — bu uç nokta hiç yoktu.
+   *
+   * `linked_ad_account_id` sekiz yerde OKUNUYOR ama hiçbir yerde
+   * yazılmıyordu; boost'un zorunlu ön koşulu ayarlanamıyor ve elle boost
+   * ekranı her gönderide "bağlı reklam hesabı yok" diyordu. `sync_enabled`
+   * ile aynı boşluk.
+   */
+  describe('boost faturalandırma hesabı', () => {
+    async function linked(): Promise<string | null> {
+      const rows = await h.q<{ linked_ad_account_id: string | null }>(
+        'SELECT linked_ad_account_id::text AS linked_ad_account_id FROM social_profiles WHERE id = $1',
+        [POOL_PROFILE],
+      );
+      return rows[0]!.linked_ad_account_id;
+    }
+
+    it('KRİTİK: hesap eşleştirilebiliyor', async () => {
+      await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+      await svc.setProfileAdAccount(CTX, POOL_PROFILE, IDS.adAccount, META);
+      expect(await linked()).toBe(IDS.adAccount);
+    });
+
+    it('eşleşme kaldırılabiliyor', async () => {
+      await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+      await svc.setProfileAdAccount(CTX, POOL_PROFILE, IDS.adAccount, META);
+      await svc.setProfileAdAccount(CTX, POOL_PROFILE, null, META);
+      expect(await linked()).toBeNull();
+    });
+
+    it('KRİTİK: BAŞKA MÜŞTERİNİN hesabı eşleştirilemiyor', async () => {
+      /*
+       * Havuz modelinde hesap ve sayfa ayrı ayrı atanıyor, yani farklı
+       * müşterilere ait olmaları mümkün. İzin vermek, bir müşterinin
+       * gönderisini başka müşterinin hesabından faturalandırmak demek — ve
+       * harcanan para geri gelmiyor.
+       */
+      await svc.assignSocialProfile(CTX, POOL_PROFILE, CLIENT_B, META);
+      await expect(
+        svc.setProfileAdAccount(CTX, POOL_PROFILE, IDS.adAccount, META),
+      ).rejects.toThrow(/aynı müşteride/i);
+      expect(await linked()).toBeNull();
+    });
+
+    it('KRİTİK: BAŞKA müşteri seçiliyken de eşleştirilebiliyor', async () => {
+      // Müşteriler ekranı bütün müşterilerin kartlarını gösteriyor; oturumdaki
+      // daraltma yüzünden "bulunamadı" ile düşmemeli.
+      await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+      seenContexts = [];
+      const baskaSecili: TenantContext = { ...CTX, activeClientId: CLIENT_B } as TenantContext;
+      await svc.setProfileAdAccount(baskaSecili, POOL_PROFILE, IDS.adAccount, META);
+
+      for (const ctx of seenContexts) expect(ctx.activeClientId).toBeNull();
+      expect(await linked()).toBe(IDS.adAccount);
+    });
+
+    it('eşleştirme DENETİM KAYDINA yazılıyor', async () => {
+      // Faturalandırma hesabını değiştirmek para kararı; kimin ne zaman
+      // değiştirdiği sorulabilmeli.
+      await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+      await svc.setProfileAdAccount(CTX, POOL_PROFILE, IDS.adAccount, META);
+      expect(await auditActions()).toEqual([
+        'social_profile.assigned',
+        'social_profile.boost_account_linked',
+      ]);
+    });
+  });
+
   it('atama kalkınca İZLEME DE kapanıyor', async () => {
     await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
     await h.q('UPDATE social_profiles SET sync_enabled = true WHERE id = $1', [POOL_PROFILE]);

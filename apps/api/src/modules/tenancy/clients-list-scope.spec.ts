@@ -113,4 +113,17 @@ describe('clients.list — kapsam', () => {
     await svc.list(CTX);
     expect(seenArgs!.select.socialProfiles?.select).toMatchObject({ syncEnabled: true });
   });
+
+  it('KRİTİK: sayfa satırında linkedAdAccountId de dönüyor', async () => {
+    /*
+     * `syncEnabled` ile BİREBİR AYNI hikâye ve ikisi de aynı gün bulundu:
+     * kolon sekiz yerde okunuyor, ekran hangi hesabın eşleştiğini gösteremezse
+     * kullanıcı aynı hesabı tekrar tekrar seçiyor ve seçiminin kaydedildiğini
+     * hiç göremiyor.
+     */
+    await svc.list(CTX);
+    expect(seenArgs!.select.socialProfiles?.select).toMatchObject({
+      linkedAdAccountId: true,
+    });
+  });
 });

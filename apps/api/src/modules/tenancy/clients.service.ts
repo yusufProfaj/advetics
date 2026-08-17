@@ -121,7 +121,20 @@ export class ClientsService {
              * denetlenmeden dönüştürülüyor. Bu yüzden aşağıdaki test alanın
              * varlığını kilitliyor.
              */
-            select: { id: true, name: true, profileType: true, syncEnabled: true },
+            select: {
+              id: true,
+              name: true,
+              profileType: true,
+              syncEnabled: true,
+              /**
+               * `linkedAdAccountId` DE ŞART — `syncEnabled` ile aynı hikâye.
+               *
+               * Boost bu hesaptan faturalanıyor ve alan gönderilmezse ekran
+               * hangi sayfanın eşleştirilmiş olduğunu gösteremiyor: kullanıcı
+               * eşleştirdiği hesabı göremediği için tekrar tekrar seçiyor.
+               */
+              linkedAdAccountId: true,
+            },
           },
         },
       }),
