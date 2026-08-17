@@ -49,8 +49,7 @@ function input(over: Partial<ManualBoostInput> = {}): ManualBoostInput {
     totalBudget: '300',
     durationDays: 5,
     targeting: {
-      countries: ['TR'],
-      cityKeys: [],
+      locations: [],
       ageMin: 18,
       ageMax: 65,
       genders: 'all',
@@ -210,16 +209,21 @@ describe('hedefleme', () => {
       CTX,
       input({
         targeting: {
-          countries: ['TR'],
-          cityKeys: ['2420351'],
+          locations: [{ key: '2420351', type: 'city' }],
           ageMin: 25,
           ageMax: 44,
           genders: 'female',
         },
       }),
     );
+    /*
+     * ÜLKE GENELİ YOK ve bu testin asıl iddiası bu. Meta kovaları BİRLEŞİM
+     * olarak uyguluyor: `countries:["TR"]` ile `cities:[İzmir]` birlikte
+     * gönderilirse sonuç Türkiye geneli olur — panelde "İzmir" yazarken
+     * reklamın ülke geneline gitmesi, hata vermeyen türden bir hata.
+     */
     expect(istek().targeting).toEqual({
-      geo_locations: { countries: ['TR'], cities: [{ key: '2420351' }] },
+      geo_locations: { cities: [{ key: '2420351' }] },
       age_min: 25,
       age_max: 44,
       genders: [2],
@@ -237,6 +241,66 @@ describe('hedefleme', () => {
     // Boş dizi göndermek Meta'da "hiç kimse" demek.
     await svc.createManualBoost(CTX, input());
     expect((istek().targeting as Record<string, unknown>).genders).toBeUndefined();
+  });
+
+  it('KRİTİK: ÜLKE seçimi `countries` kovasına gidiyor, şehir kovasına DEĞİL', async () => {
+    /*
+     * Canlıda öğrenildi. Tür yokken seçilen her şey şehir sanılıyordu ve
+     * "Türkiye" seçildiğinde Meta reddetti: "integer türü bekleniyor, ancak TR
+     * değeriyle bir string türü alındı". Şehir anahtarları sayısal, ülke kodu
+     * iki harf.
+     */
+    await svc.createManualBoost(
+      CTX,
+      input({ targeting: { ...input().targeting, locations: [{ key: 'TR', type: 'country' }] } }),
+    );
+    expect((istek().targeting as Record<string, unknown>).geo_locations).toEqual({
+      countries: ['TR'],
+    });
+  });
+
+  it('KRİTİK: İL seçimi `regions` kovasına gidiyor', async () => {
+    // İl şehir kovasına yazıldığında Meta "Şehir Hedeflemesi Desteklenmiyor"
+    // diyordu — anahtar geçerliydi, kova yanlıştı.
+    await svc.createManualBoost(
+      CTX,
+      input({
+        targeting: { ...input().targeting, locations: [{ key: '3468', type: 'region' }] },
+      }),
+    );
+    expect((istek().targeting as Record<string, unknown>).geo_locations).toEqual({
+      regions: [{ key: '3468' }],
+    });
+  });
+
+  it('karışık seçim üç kovaya AYRI AYRI dağılıyor', async () => {
+    await svc.createManualBoost(
+      CTX,
+      input({
+        targeting: {
+          ...input().targeting,
+          locations: [
+            { key: 'TR', type: 'country' },
+            { key: '3468', type: 'region' },
+            { key: '2420351', type: 'city' },
+          ],
+        },
+      }),
+    );
+    expect((istek().targeting as Record<string, unknown>).geo_locations).toEqual({
+      countries: ['TR'],
+      regions: [{ key: '3468' }],
+      cities: [{ key: '2420351' }],
+    });
+  });
+
+  it('LOKASYON SEÇİLMEZSE ülke geneli TR', async () => {
+    // Boş `geo_locations` göndermek Meta'da "dünya geneli" demek ve bir Türkiye
+    // ajansı için en pahalı sessiz hata olurdu.
+    await svc.createManualBoost(CTX, input());
+    expect((istek().targeting as Record<string, unknown>).geo_locations).toEqual({
+      countries: ['TR'],
+    });
   });
 
   it('hedefleme KAYDEDİLİYOR — sonradan "kime gösterildi" sorulabilsin', async () => {
@@ -290,7 +354,13 @@ describe('kayıtlı kitle (K16)', () => {
     await svc.createManualBoost(
       CTX,
       input({
-        targeting: { countries: ['TR'], cityKeys: ['1'], ageMin: 25, ageMax: 44, genders: 'male', savedAudienceId: 'sa-1' },
+        targeting: {
+          locations: [{ key: '1', type: 'city' }],
+          ageMin: 25,
+          ageMax: 44,
+          genders: 'male',
+          savedAudienceId: 'sa-1',
+        },
       }),
     );
 

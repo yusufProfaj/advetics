@@ -71,6 +71,19 @@ export function ManualBoost({
   );
 }
 
+/**
+ * Lokasyon türü etiketleri.
+ *
+ * TÜR EKRANDA GÖRÜNÜYOR çünkü seçim sonucu değiştiriyor: "Türkiye" seçmek ülke
+ * geneli, "İzmir" seçmek şehir demek ve ikisi Meta'da farklı kovalara gidiyor.
+ * Aynı adı taşıyan bir il ile bir şehir de olabiliyor.
+ */
+const LOKASYON_TURU: Record<string, string> = {
+  country: 'Ülke',
+  region: 'İl',
+  city: 'Şehir',
+};
+
 /** Depo standardı form girdisi — `focus:border-brand` dahil. */
 const input =
   'w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand';
@@ -191,16 +204,24 @@ function ManualBoostForm({
           durationDays: gun,
           targeting: kitleSecili
             ? {
-                countries: ['TR'],
-                cityKeys: [],
+                locations: [],
                 ageMin: 18,
                 ageMax: 65,
                 genders: 'all',
                 savedAudienceId: kitle,
               }
             : {
-                countries: ['TR'],
-                cityKeys: sehirler.map((s) => s.key),
+                /**
+                 * TÜR DE GÖNDERİLİYOR. İlk sürümde yalnızca anahtar
+                 * gönderiliyordu ve sunucu hepsini şehir sanıyordu: "Türkiye"
+                 * seçildiğinde Meta "integer bekleniyor, TR geldi" ile
+                 * reddediyordu, il seçildiğinde "şehir hedeflemesi
+                 * desteklenmiyor" diyordu.
+                 */
+                locations: sehirler.map((s) => ({
+                  key: s.key,
+                  type: s.type === 'country' || s.type === 'region' ? s.type : 'city',
+                })),
                 ageMin: yasMin,
                 ageMax: yasMax,
                 genders: cinsiyet,
@@ -623,26 +644,39 @@ function ManualTargeting(p: {
                 }}
                 className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-surface-sunken"
               >
-                + {s.label}
+                + {LOKASYON_TURU[s.type] ?? s.type} · {s.label}
               </button>
             ))}
           </div>
         )}
 
         {p.sehirler.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {p.sehirler.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => p.setSehirler(p.sehirler.filter((x) => x.key !== s.key))}
-                title="Kaldır"
-                className="rounded-lg border border-brand bg-brand-soft px-2.5 py-1 text-xs font-medium text-ink"
-              >
-                {s.label} ✕
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {p.sehirler.map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => p.setSehirler(p.sehirler.filter((x) => x.key !== s.key))}
+                  title="Kaldır"
+                  className="rounded-lg border border-brand bg-brand-soft px-2.5 py-1 text-xs font-medium text-ink"
+                >
+                  {LOKASYON_TURU[s.type] ?? s.type} · {s.label} ✕
+                </button>
+              ))}
+            </div>
+            {/*
+              ÜLKE GENELİNİN KAPANDIĞI YAZILIYOR. Meta lokasyon kovalarını
+              BİRLEŞİM olarak uyguluyor: "Türkiye + İzmir" demek Türkiye geneli
+              demek. Bu yüzden lokasyon seçilince ülke geneli gönderilmiyor —
+              ve kullanıcı bunu ekranda görmeli, yoksa "hem Türkiye hem İzmir"
+              sandığı bir daraltma yapıyor.
+            */}
+            <p className="mt-1 text-[11px] text-ink-muted">
+              Yalnızca bu {p.sehirler.length} lokasyona gösterilecek — ülke geneli
+              kapanıyor.
+            </p>
+          </>
         )}
       </div>
 

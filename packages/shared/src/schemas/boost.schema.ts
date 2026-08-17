@@ -298,12 +298,37 @@ export type BoostablePostQuery = z.infer<typeof boostablePostQuerySchema>;
  * yanlış kitleye harcama yapar. Doğrulama şemada, ekranda da alanlar
  * kapatılıyor.
  */
+/**
+ * Seçilen bir lokasyon — TÜRÜYLE BİRLİKTE.
+ *
+ * TÜR ŞART VE CANLIDA ÖĞRENİLDİ. İlk yazımda yalnızca `cityKeys` vardı ve
+ * arama sonucundan seçilen HER ŞEY şehir sanılıyordu. Kullanıcı "Türkiye"yi
+ * seçtiğinde Meta'ya `cities: [{key:"TR"}]` gidiyordu ve Meta şunu döndü:
+ * *"Invalid parameter · Tür Uyumsuzluğu · integer türü bekleniyor, ancak TR
+ * değeriyle bir string türü alındı"* — şehir anahtarları sayısal, ülke kodu
+ * ise iki harf. Bir il seçildiğinde de *"Şehir Hedeflemesi Desteklenmiyor"*
+ * hatası geliyordu.
+ *
+ * Meta üç ayrı kova tutuyor (`countries`, `regions`, `cities`) ve hangisine
+ * yazılacağını yalnızca tür belirliyor.
+ */
+export const boostLocationSchema = z.object({
+  /** Meta anahtarı: ülkede iki harf ("TR"), il ve şehirde sayısal dizge. */
+  key: z.string().min(1).max(64),
+  type: z.enum(['country', 'region', 'city']),
+});
+export type BoostLocation = z.infer<typeof boostLocationSchema>;
+
 export const manualBoostTargetingSchema = z
   .object({
-    /** Boş bırakılamıyor: ülkesiz hedefleme Meta'da "dünya geneli" demek. */
-    countries: z.array(z.string().length(2)).min(1).max(25).default(['TR']),
-    /** Meta şehir/il anahtarları — `targeting/locations` ucundan geliyor. */
-    cityKeys: z.array(z.string().max(40)).max(25).default([]),
+    /**
+     * Seçilen lokasyonlar. BOŞSA ülke geneli Türkiye.
+     *
+     * Bir ya da daha fazla lokasyon seçilirse ülke geneli GÖNDERİLMİYOR —
+     * `metaTargetingFrom`'daki gerekçe: Meta bu kovaları BİRLEŞİM olarak
+     * uyguluyor, yani "Türkiye + İzmir" demek "Türkiye geneli" demek.
+     */
+    locations: z.array(boostLocationSchema).max(25).default([]),
     ageMin: z.number().int().min(18).max(65).default(18),
     ageMax: z.number().int().min(18).max(65).default(65),
     genders: z.enum(['all', 'male', 'female']).default('all'),

@@ -1283,11 +1283,36 @@ export function toMicros(amount: string): bigint {
  * güncellenmemesi demek.
  */
 function metaTargetingFrom(t: ManualBoostTargeting): Record<string, unknown> {
+  /**
+   * LOKASYONLAR TÜRÜNE GÖRE AYRI KOVALARA. Canlıda iki hata birden verdi.
+   *
+   * Önce tür yoktu ve seçilen her şey şehir sanılıyordu. Kullanıcı "Türkiye"yi
+   * seçtiğinde Meta `cities: [{key:"TR"}]` alıp reddetti: *"integer türü
+   * bekleniyor, ancak TR değeriyle bir string türü alındı"* — şehir anahtarları
+   * sayısal, ülke kodu iki harf. Bir il seçildiğinde de *"Şehir Hedeflemesi
+   * Desteklenmiyor"* çıktı.
+   *
+   * ÜLKE GENELİ, LOKASYON SEÇİLDİYSE GÖNDERİLMİYOR — VE BU DAHA SİNSİ OLANI.
+   * Meta bu kovaları BİRLEŞİM olarak uyguluyor: `countries:["TR"]` ile
+   * `cities:[İzmir]` birlikte gönderilirse sonuç "Türkiye geneli VE İzmir",
+   * yani Türkiye geneli. Panelde "İzmir" yazarken reklamın ülke geneline
+   * gitmesi — hata vermeyen, yalnızca parayı yanlış yere harcayan tür.
+   */
+  const geo: Record<string, unknown> = {};
+  const ulkeler = t.locations.filter((l) => l.type === 'country').map((l) => l.key);
+  const iller = t.locations.filter((l) => l.type === 'region').map((l) => ({ key: l.key }));
+  const sehirler = t.locations.filter((l) => l.type === 'city').map((l) => ({ key: l.key }));
+
+  if (ulkeler.length > 0) geo.countries = ulkeler;
+  if (iller.length > 0) geo.regions = iller;
+  if (sehirler.length > 0) geo.cities = sehirler;
+  // HİÇ LOKASYON SEÇİLMEDİYSE ülke geneli TR. Boş `geo_locations` göndermek
+  // Meta'da "dünya geneli" demek ve bir Türkiye ajansı için en pahalı sessiz
+  // hata olurdu.
+  if (Object.keys(geo).length === 0) geo.countries = ['TR'];
+
   const out: Record<string, unknown> = {
-    geo_locations:
-      t.cityKeys.length > 0
-        ? { countries: t.countries, cities: t.cityKeys.map((key) => ({ key })) }
-        : { countries: t.countries },
+    geo_locations: geo,
     age_min: t.ageMin,
   };
   if (t.ageMax < 65) out.age_max = t.ageMax;
@@ -1310,7 +1335,9 @@ function manualReason(input: ManualBoostInput): string {
   if (t.savedAudienceId) {
     parcalar.push('kayıtlı kitle');
   } else {
-    parcalar.push(t.cityKeys.length > 0 ? `${t.cityKeys.length} lokasyon` : 'ülke geneli');
+    parcalar.push(
+      t.locations.length > 0 ? `${t.locations.length} lokasyon` : 'ülke geneli',
+    );
     if (t.ageMin !== 18 || t.ageMax !== 65) parcalar.push(`${t.ageMin}-${t.ageMax} yaş`);
     if (t.genders !== 'all') parcalar.push(t.genders === 'male' ? 'erkek' : 'kadın');
   }
