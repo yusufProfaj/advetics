@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Response } from 'express';
+import { PlatformApiError } from '../../modules/connections/provider.types';
 import type { AuthedRequest } from '../types/request';
 
 interface ErrorBody {
@@ -70,6 +71,47 @@ export class AllExceptionsFilter implements ExceptionFilter {
         statusCode: status,
         code: this.defaultCode(status),
         message: String(response),
+        requestId,
+      };
+    }
+
+    /**
+     * PLATFORM HATASI — bu dal olmadan Meta'nın söylediği HİÇBİR ŞEY panele
+     * ulaşmıyordu.
+     *
+     * `PlatformApiError` bir `HttpException` DEĞİL, dolayısıyla yukarıdaki
+     * dallara takılmıyor ve son dala düşüyordu: 500 "Beklenmeyen bir hata
+     * oluştu". Yani "izin yok", "kota doldu", "hesap bulunamadı" ve "geçersiz
+     * alan" panelde AYNI cümleye dönüşüyordu.
+     *
+     * Bunun bedeli ölçüldü: elle boost ekranında lokasyon araması boş döndü ve
+     * sebebi koddan bulunamadı çünkü kullanıcıya giden mesajda hiçbir bilgi
+     * yoktu. Aynı cümle boost yayınında da görülmüştü (2026-08-17).
+     *
+     * MESAJ OLDUĞU GİBİ GEÇİYOR ama `detail.raw` GEÇMİYOR: ham gövde
+     * platformun döndürdüğü her şeyi taşıyor ve istemciye ne olduğunu
+     * söylemek gerekiyor, platformun tüm yanıtını değil — Prisma dalıyla aynı
+     * gerekçe. Alt kod (subcode) EKLENİYOR: Meta'nın hata kataloğunda arama
+     * ancak onunla yapılabiliyor ve bu iş boyunca en çok işe yarayan ipucu o
+     * oldu.
+     */
+    if (exception instanceof PlatformApiError) {
+      const subcode = exception.detail?.platformSubcode;
+      const platform = exception.platform === 'meta' ? 'Meta' : 'Google';
+      return {
+        // KOTA 429, DİĞERLERİ 502. 429 istemcinin geri çekilmesi gereken tek
+        // durum; kalanlar yukarı akış hatası ve 502 tam olarak bunu söylüyor.
+        // 403 KULLANILMIYOR: bu uygulamada 403 "kullanıcının yetkisi yok"
+        // demek ve platform izni eksikliğini oraya koymak, panel yetkilerinde
+        // sorun varmış gibi okunurdu.
+        statusCode:
+          exception.kind === 'rate_limited'
+            ? HttpStatus.TOO_MANY_REQUESTS
+            : HttpStatus.BAD_GATEWAY,
+        code: `PLATFORM_${exception.kind.toUpperCase()}`,
+        message: `${platform}: ${exception.message}${
+          subcode ? ` (alt kod ${subcode})` : ''
+        }`,
         requestId,
       };
     }

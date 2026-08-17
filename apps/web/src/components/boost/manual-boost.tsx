@@ -117,6 +117,19 @@ function ManualBoostForm({
   const [sehirler, setSehirler] = useState<GeoLocationOption[]>([]);
   const [arama, setArama] = useState('');
   const [sonuclar, setSonuclar] = useState<GeoLocationOption[]>([]);
+  /**
+   * ARAMANIN DURUMU AYRI TUTULUYOR — dört hâl var ve dördü farklı iş.
+   *
+   * Önceden yalnızca `sonuclar` vardı ve hata `.catch(() => setSonuclar([]))`
+   * ile yutuluyordu: "henüz aramadım", "arıyorum", "eşleşme yok" ve "çağrı
+   * düştü" ekranda AYNI görünüyordu — boş bir alan. Konum seçenekleri
+   * gelmediğinde sebebin ne olduğu 2026-08-17'de tam bu yüzden teşhis
+   * edilemedi; kodda hiçbir iz yoktu çünkü hata hiç yazılmamıştı.
+   */
+  const [aramaDurum, setAramaDurum] = useState<'bos' | 'kisa' | 'araniyor' | 'bitti'>(
+    'bos',
+  );
+  const [aramaHata, setAramaHata] = useState<string | null>(null);
   const [yasMin, setYasMin] = useState(18);
   const [yasMax, setYasMax] = useState(65);
   const [cinsiyet, setCinsiyet] = useState<'all' | 'male' | 'female'>('all');
@@ -188,16 +201,44 @@ function ManualBoostForm({
   // Şehir araması: en az iki harf ve yazma durunca. Her tuşa istek atmak
   // Meta kotasını boşuna yakar.
   useEffect(() => {
-    if (arama.trim().length < 2 || !secili?.adAccountId) {
+    setAramaHata(null);
+    if (!secili?.adAccountId) {
+      // Hesap yoksa arama HİÇ atılmıyor ve kullanıcı yazdıkça hiçbir şey
+      // olmuyor. Gönderi seçiliyse engel listesinde yakalanmış olurdu, ama
+      // kalan tek ihtimal de sessiz kalmasın.
       setSonuclar([]);
+      setAramaDurum('bos');
       return;
     }
+    if (arama.trim().length < 2) {
+      setSonuclar([]);
+      setAramaDurum(arama.trim().length === 0 ? 'bos' : 'kisa');
+      return;
+    }
+    setAramaDurum('araniyor');
     const t = setTimeout(() => {
       void apiFetch<GeoLocationOption[]>(
         `/connections/targeting/locations?adAccountId=${secili.adAccountId}&q=${encodeURIComponent(arama.trim())}`,
       )
-        .then(setSonuclar)
-        .catch(() => setSonuclar([]));
+        .then((r) => {
+          setSonuclar(r);
+          setAramaDurum('bitti');
+        })
+        .catch((err: unknown) => {
+          /*
+           * HATA METNİ OLDUĞU GİBİ GÖSTERİLİYOR. Meta'nın mesajı burada
+           * kullanıcıya da bize de tek ipucu: "izin yok", "kota doldu" ve
+           * "hesap bulunamadı" üç ayrı iş ve üçü de boş liste olarak
+           * görünüyordu.
+           */
+          setSonuclar([]);
+          setAramaDurum('bitti');
+          setAramaHata(
+            err instanceof ApiRequestError
+              ? err.message
+              : 'Lokasyon araması başarısız oldu (ağ hatası).',
+          );
+        });
     }, 350);
     return () => clearTimeout(t);
   }, [arama, secili?.adAccountId]);
@@ -518,6 +559,8 @@ function ManualBoostForm({
                 arama={arama}
                 setArama={setArama}
                 sonuclar={sonuclar}
+                aramaDurum={aramaDurum}
+                aramaHata={aramaHata}
                 yasMin={yasMin}
                 setYasMin={setYasMin}
                 yasMax={yasMax}
@@ -774,6 +817,8 @@ function ManualTargeting(p: {
   arama: string;
   setArama: (v: string) => void;
   sonuclar: GeoLocationOption[];
+  aramaDurum: 'bos' | 'kisa' | 'araniyor' | 'bitti';
+  aramaHata: string | null;
   yasMin: number;
   setYasMin: (v: number) => void;
   yasMax: number;
@@ -795,6 +840,31 @@ function ManualTargeting(p: {
             className={input}
           />
         </label>
+
+        {/*
+          DÖRT HÂL AYRI YAZILIYOR. Boş bir alan bırakmak kullanıcıya
+          "çalışmıyor" göstermek ve sebebini saklamak demek — bu ekranda daha
+          önce tam olarak bu oldu.
+        */}
+        {p.aramaDurum === 'kisa' && (
+          <p className="mt-1.5 text-[11px] text-ink-muted">
+            Aramak için en az iki harf yaz.
+          </p>
+        )}
+        {p.aramaDurum === 'araniyor' && (
+          <p className="mt-1.5 text-[11px] text-ink-muted">Lokasyon aranıyor…</p>
+        )}
+        {p.aramaHata && (
+          <p className="mt-1.5 text-[11px] text-danger">
+            {p.aramaHata} Lokasyon seçmeden devam edersen boost{' '}
+            <strong>Türkiye geneline</strong> gider.
+          </p>
+        )}
+        {p.aramaDurum === 'bitti' && !p.aramaHata && p.sonuclar.length === 0 && (
+          <p className="mt-1.5 text-[11px] text-ink-muted">
+            “{p.arama.trim()}” için Meta’da eşleşme bulunamadı.
+          </p>
+        )}
 
         {p.sonuclar.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">

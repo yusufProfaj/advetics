@@ -376,6 +376,47 @@ akış ve engeller §7.2'de. Özeti:
 
    **1169 API testi.** Yeni migration: `20260817160000_boost_reuse_campaign`.
 
+6g. ✅ **BİTTİ** — Meta'nın hata mesajı panele HİÇ ulaşmıyordu; teşhis
+   zorluklarının kökü buymuş.
+
+   **NASIL BULUNDU:** K21 dağıtıldıktan sonra lokasyon araması boş dönmeye
+   başladı ("İzmir yazıyorum altında seçenek çıkmıyor"). Diff'te konum yolunu
+   bozacak bir şey YOK — kod, uç nokta, eşleyici ve web bağlantısı el
+   değmemiş; devre kesici de yok. Sebebi bulunamamasının nedeni koddaydı:
+
+   **`PlatformApiError` bir `HttpException` DEĞİL** ve `AllExceptionsFilter`'da
+   kendi dalı yoktu, dolayısıyla son dala düşüyordu: **500 "Beklenmeyen bir
+   hata oluştu"**. Yani "izin yok", "kota doldu", "hesap bulunamadı" ve
+   "geçersiz alan" panelde AYNI cümleye dönüşüyordu. Boost yayınındaki
+   "Beklenmeyen bir hata oluştu" da (6c) tam olarak bu.
+
+   Artık platform hatası kendi dalında: Meta'nın mesajı **olduğu gibi** ve
+   **alt kodla birlikte** geçiyor (alt kod olmadan Meta'nın hata kataloğunda
+   arama yapılamıyor — bu iş boyunca en çok işe yarayan ipucu o oldu). Kota
+   429, kalanlar 502. **403 kullanılmıyor:** bu uygulamada 403 "kullanıcının
+   panel yetkisi yok" demek ve platform iznini oraya koymak teşhisi panel
+   rollerine götürürdü. Ham gövde (`detail.raw`) istemciye GİTMİYOR — Prisma
+   dalıyla aynı gerekçe.
+
+   **Ekran tarafında da aynı hata vardı:** lokasyon araması
+   `.catch(() => setSonuclar([]))` ile hatayı yutuyordu. "Henüz aramadım",
+   "arıyorum", "eşleşme yok" ve "çağrı düştü" — dördü de boş bir alan olarak
+   görünüyordu. Artık dördü ayrı yazılı ve hata durumunda Meta'nın mesajı
+   ekranda, altında da şu uyarı: lokasyon seçmeden devam edersen boost Türkiye
+   geneline gider.
+
+   **BU MADDE SEBEBİ DEĞİL, SEBEBİN GÖRÜNMESİNİ SAĞLIYOR.** Lokasyon
+   aramasının neden boş döndüğü hâlâ bilinmiyor; dağıtımdan sonra ekran
+   söyleyecek. Mesaj `permission_denied` derse Facebook App Review, `rate
+   limit` derse kota, "hesap bulunamadı" derse sayfanın boost hesabı ataması.
+
+   Mutasyon: platform dalını kaldırmak 7 testi, alt kodu kaldırmak 1, ham
+   gövdeyi göndermek 1, kotayı 502 yapmak 1 testi düşürüyor. Sıra mutasyonu
+   yakalanMADI ve sebebi test eksikliği değil — iki tür ayrık, sıra gerçekten
+   sonucu değiştirmiyor; test yorumundaki yanlış iddia düzeltildi.
+
+   **1179 API testi.**
+
 7. **CANLI ÇAĞRI — tek kalan adım ve kodla değil elle yapılıyor.**
 
    > Ajansın kendi hesabında, **en küçük bütçeyle**, tek bir Instagram
