@@ -166,6 +166,21 @@ export class MetaProvider implements IAdPlatformProvider {
     'ads_management',
     'pages_show_list',
     'pages_read_engagement',
+    /**
+     * `read_insights` — FACEBOOK GÖNDERİ İÇGÖRÜLERİ. Listede yoktu.
+     *
+     * `fetchOrganicPosts` Facebook tarafında `insights.metric(post_impressions,
+     * post_impressions_unique,post_video_views)` istiyor ve Meta sayfa/gönderi
+     * içgörüleri için bu izni ayrıca arıyor. Instagram tarafı
+     * `instagram_manage_insights` ile karşılanıyordu; Facebook karşılığı
+     * atlanmış.
+     *
+     * NEDEN SESSİZ KALDI: içgörüler İÇ İÇE ALAN olarak isteniyor, yani izin
+     * eksikliği "metrikler boş geldi" değil "gönderi listesi hiç gelmedi"
+     * olarak görünüyor — e5c8547'deki geçersiz metrik hatasının birebir aynı
+     * mekanizması.
+     */
+    'read_insights',
     'instagram_basic',
     'instagram_manage_insights',
   ] as const;
