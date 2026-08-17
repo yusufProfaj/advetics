@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BoostRequest, BoostSource } from '../provider.types';
 import {
   buildBoostAdSetParams,
+  decideInstagramCreativeCheck,
   instagramCreativeBody,
   instagramPlacements,
 } from './meta.provider';
@@ -165,5 +166,66 @@ describe('ad set — Instagram yerleşimi hedeflemeye giriyor', () => {
   it('reel boost’u REELS yerleşimiyle gidiyor', () => {
     const p = buildBoostAdSetParams(req({ ...IG, mediaType: 'reel' }), 'c-1', NOW);
     expect(JSON.parse(p.targeting!).instagram_positions).toEqual(['reels']);
+  });
+});
+
+/**
+ * KREATİF DOĞRULAMASININ KARARI — K17'nin çekincesinin kod karşılığı.
+ *
+ * Canlıda tam olarak beklenen belirsizlik çıktı: gönderilen 18090331100389207,
+ * Meta'nın `effective` olarak döndürdüğü 18117166231898791. İki ihtimal vardı
+ * ve ayırt edilmeden karar verilemezdi — Meta başka bir gönderi mi kullandı,
+ * yoksa `effective` alanı başka bir kimlik uzayında mı raporlanıyor.
+ *
+ * Karar bu yüzden BENZERİ BENZERLE karşılaştırıyor: `source_instagram_media_id`
+ * yankısı aynı uzayda ve sorulan soruyu tam olarak cevaplıyor.
+ */
+describe('decideInstagramCreativeCheck', () => {
+  const SENT = '18090331100389207';
+
+  it('yankı BİREBİR eşleşiyorsa geçiyor', () => {
+    expect(decideInstagramCreativeCheck({ sent: SENT, echo: SENT })).toEqual({
+      verdict: 'ok',
+    });
+  });
+
+  it('KRİTİK: yankı FARKLIYSA reddediyor — para harcanmıyor', () => {
+    // Aynı alanı geri okumak aynı uzayda karşılaştırmak demek; farklıysa Meta
+    // gerçekten başka bir medya kaydetmiş.
+    const k = decideInstagramCreativeCheck({ sent: SENT, echo: '99999999999999999' });
+    expect(k.verdict).toBe('reject');
+    expect(k.verdict === 'reject' && k.message).toMatch(/YANLIŞ gönderiye bağlandı/);
+  });
+
+  it('KRİTİK: `effective` farkı ENGEL DEĞİL, uyarı', () => {
+    /*
+     * Canlıda görülen tam durum. Engel yapmak, çalışan bir yolu doğrulanmamış
+     * bir varsayım (iki alanın aynı kimlik uzayında olduğu) yüzünden kapatmak
+     * olurdu. Ama sessiz de kalmıyor: uyarı, gözle doğrulamanın neye bakacağını
+     * söylüyor.
+     */
+    const k = decideInstagramCreativeCheck({
+      sent: SENT,
+      echo: SENT,
+      effective: '18117166231898791',
+    });
+    expect(k.verdict).toBe('warn');
+    expect(k.verdict === 'warn' && k.message).toMatch(/kimlik uzayı farkı/);
+    expect(k.verdict === 'warn' && k.message).toMatch(/gözle doğrulanmalı/);
+  });
+
+  it('yankı HİÇ dönmezse uyarı — engel değil', () => {
+    // `fields` ile istenmediğinde dönmüyor ve gecikmeli dolabiliyor; yokluğunu
+    // "yanlış" saymak sebepsiz engel olurdu.
+    const k = decideInstagramCreativeCheck({ sent: SENT });
+    expect(k.verdict).toBe('warn');
+    expect(k.verdict === 'warn' && k.message).toMatch(/doğrulama yapılamadı/);
+  });
+
+  it('KRİTİK: yankı yanlışsa `effective` doğru olsa bile REDDEDİYOR', () => {
+    // Sıra önemli: yanlış kayıt, doğru görünen bir ikinci alanla aklanmıyor.
+    expect(
+      decideInstagramCreativeCheck({ sent: SENT, echo: 'baska', effective: SENT }).verdict,
+    ).toBe('reject');
   });
 });

@@ -1433,22 +1433,17 @@ export class MetaProvider implements IAdPlatformProvider {
       parseMetaRateLimit,
     );
 
-    const fiili =
-      res.data.effective_instagram_media_id ?? res.data.source_instagram_media_id;
-    if (!fiili) {
-      this.logger.warn(
-        `Instagram kreatifi ${creativeId}: Meta kullanılan medya kimliğini ` +
-          'döndürmedi, doğrulama yapılamadı. Reklam yine açılıyor.',
-      );
-      return;
+    const karar = decideInstagramCreativeCheck({
+      sent: source.mediaExternalId,
+      echo: res.data.source_instagram_media_id,
+      effective: res.data.effective_instagram_media_id,
+    });
+
+    if (karar.verdict === 'reject') {
+      throw new PlatformApiError('meta', 'permanent', karar.message);
     }
-    if (fiili !== source.mediaExternalId) {
-      throw new PlatformApiError(
-        'meta',
-        'permanent',
-        `Instagram kreatifi YANLIŞ gönderiye bağlandı: istenen ` +
-          `${source.mediaExternalId}, Meta'nın kullandığı ${fiili}. Boost geri alındı.`,
-      );
+    if (karar.verdict === 'warn') {
+      this.logger.warn(`Instagram kreatifi ${creativeId}: ${karar.message}`);
     }
   }
 
@@ -2295,6 +2290,66 @@ export function mapSavedAudience(row: Record<string, unknown>): SavedAudienceOpt
     name: typeof row.name === 'string' && row.name ? row.name : id,
     approximateCount: typeof count === 'number' ? count : null,
   };
+}
+
+/**
+ * Instagram kreatif doğrulamasının KARARI — saf, sınanabilir.
+ *
+ * K17'nin bütün çekincesi Meta'nın bir alanı kabul edip sessizce yok saymasıydı
+ * ve canlıda tam olarak bu belirsizlik çıktı: gönderilen 18090331100389207,
+ * Meta'nın `effective` olarak döndürdüğü 18117166231898791.
+ *
+ * KARAR ÜÇ DURUMLU ve hangi alana bakıldığı belirleyici:
+ *
+ *   · `reject` — `source_instagram_media_id` YANKISI farklı. Aynı alanı geri
+ *     okumak aynı uzayda karşılaştırmak demek; farklıysa Meta gerçekten başka
+ *     bir medya kaydetmiş. Reklam açılmıyor.
+ *   · `warn` — yankı doğru ama `effective_instagram_media_id` farklı. Büyük
+ *     olasılıkla kimlik uzayı farkı (Instagram medyasında üç uzay var). Engel
+ *     yapmak, çalışan bir yolu doğrulanmamış bir varsayım yüzünden kapatmak
+ *     olurdu; ama sessiz de kalmıyor.
+ *   · `warn` — yankı hiç dönmedi. `fields` ile istenmediğinde dönmüyor ve
+ *     gecikmeli dolabiliyor; yokluğunu "yanlış" saymak yine sebepsiz engel.
+ *
+ * Hiçbir durumda "her şey yolunda" varsayımı yok: `ok` yalnızca yankı BİREBİR
+ * eşleştiğinde dönüyor.
+ */
+export function decideInstagramCreativeCheck(params: {
+  sent: string;
+  echo?: string;
+  effective?: string;
+}): { verdict: 'ok' } | { verdict: 'reject' | 'warn'; message: string } {
+  const { sent, echo, effective } = params;
+
+  if (echo && echo !== sent) {
+    return {
+      verdict: 'reject',
+      message:
+        `Instagram kreatifi YANLIŞ gönderiye bağlandı: gönderilen ${sent}, ` +
+        `Meta'nın kaydettiği ${echo}. Boost geri alındı.`,
+    };
+  }
+
+  if (!echo) {
+    return {
+      verdict: 'warn',
+      message:
+        'Meta gönderilen medya kimliğini geri döndürmedi, doğrulama yapılamadı. ' +
+        'Reklam açılıyor — Ads Manager’dan gözle kontrol et.',
+    };
+  }
+
+  if (effective && effective !== sent) {
+    return {
+      verdict: 'warn',
+      message:
+        `Gönderilen medya kimliği ${sent} kaydedildi ama Meta "effective" olarak ` +
+        `${effective} raporluyor. Muhtemelen kimlik uzayı farkı; reklamın DOĞRU ` +
+        'gönderiyi gösterdiği Ads Manager’dan gözle doğrulanmalı.',
+    };
+  }
+
+  return { verdict: 'ok' };
 }
 
 /**
