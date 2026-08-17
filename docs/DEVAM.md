@@ -417,6 +417,37 @@ akış ve engeller §7.2'de. Özeti:
 
    **1179 API testi.**
 
+6h. ✅ **BİTTİ** — boost adları tek fonksiyondan üretiliyor (K22).
+
+   Biçim: `Müşteri - ilk üç kelime - YYYY-MM-DD - Boost - Seviye`. Seviye
+   `Kampanya` / `Reklam Seti` / `Reklam` / `Kreatif`.
+
+   Ad **beş ayrı yerde** üretiliyordu ve her biri kendi biçimini uyduruyordu:
+   Meta'ya giden ad (`Boost — elle — 89207`), panel ağacının adı üç ayrı yolda,
+   sağlayıcıdaki üç ek. Aynı boost panelde bir, Ads Manager'da başka türlü
+   görünüyordu.
+
+   **Taban ile ek ayrı:** çağıran seviye eki olmayan tabanı veriyor, sağlayıcı
+   ekini ekliyor. Tam ad gönderilse ad çift seviyeli çıkardı.
+
+   Tarih `YYYY-MM-DD` (isme göre sıralama kronolojik olsun) ve **yerel
+   bileşenlerden** okunuyor — `toISOString()` akşam 21:00'den sonraki boost'a
+   ertesi günün tarihini yazardı. Emoji ve bağlantı kelime sayılmıyor,
+   altyazısız gönderide medya türü yazılıyor, kırpma parça bazında (sondan
+   kırpmak seviye ekini yer).
+
+   **Mutasyon üç boşluk gösterdi ve üçü de kapatıldı:** kırpma testi kırpmanın
+   OLDUĞUNU doğrulamıyordu; kampanya ve ad set adlarının HİÇBİR testi yoktu —
+   ad set ekini yanlış seviyeye çevirmek 92 testin hiçbirini düşürmüyordu.
+   Kampanya ve reklam adları `createBoost` içinde ve gerçek HTTP gerektirdiği
+   için kaynak taramasıyla kilitlendi.
+
+   **CLAUDE.md §3 tuzağına yine düşüldü:** `Prisma.sql` şablonundaki SQL
+   yorumuna ters tırnak yazıldı, şablon ortasından kapandı, hata `TS1005`
+   olarak çıktı. `sql-template.spec.ts` yakaladı — tarama tam bunun için var.
+
+   **1209 API testi.**
+
 7. **CANLI ÇAĞRI — tek kalan adım ve kodla değil elle yapılıyor.**
 
    > Ajansın kendi hesabında, **en küçük bütçeyle**, tek bir Instagram

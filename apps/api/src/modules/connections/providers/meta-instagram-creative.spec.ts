@@ -99,10 +99,18 @@ describe('instagramCreativeBody', () => {
   });
 
   it('kreatif ADLANDIRILIYOR — Ads Manager’da bulunabilsin', () => {
-    // Ad verilmezse Meta otomatik üretiyor ve aynı gönderiden çıkan beş
-    // kreatif birbirinden ayırt edilemiyor.
-    expect(instagramCreativeBody(IG, 'Boost — gönderi')).toMatchObject({
-      name: 'Boost — gönderi — kreatif',
+    /*
+     * Ad verilmezse Meta otomatik üretiyor ve aynı gönderiden çıkan beş
+     * kreatif birbirinden ayırt edilemiyor.
+     *
+     * BİÇİM K22'DE DEĞİŞTİ: gelen değer artık SEVİYE EKİ OLMAYAN taban ad ve
+     * eki bu fonksiyon ekliyor. Eski biçim (`… — kreatif`) her üretim yerinde
+     * ayrı uyduruluyordu.
+     */
+    expect(
+      instagramCreativeBody(IG, 'Ege Birlik Yapı - Bu yaz - 2026-08-17 - Boost'),
+    ).toMatchObject({
+      name: 'Ege Birlik Yapı - Bu yaz - 2026-08-17 - Boost - Kreatif',
     });
   });
 });
@@ -432,5 +440,101 @@ describe('createBoost — adım etiketlemesi kaynakta bağlı', () => {
     const etiket = new Set(GOVDE.match(/'[^']*ken'/g) ?? []).size;
     expect(cagri).toBeGreaterThanOrEqual(7);
     expect(etiket).toBeGreaterThanOrEqual(cagri);
+  });
+});
+
+/**
+ * BOOST VARLIKLARININ ADI — sağlayıcı tarafı (K22).
+ *
+ * Kullanıcının istediği şey tam olarak bu: kampanya, reklam seti ve reklam
+ * adlarının sabit bir biçimden gelmesi. Mutasyon gösterdi ki bu adların
+ * HİÇBİRİNİN testi yoktu — ad set eki yanlış seviyeye çevrildiğinde 92 testin
+ * hepsi geçiyordu.
+ */
+describe('boost adları — sağlayıcı ekleri (K22)', () => {
+  const TABAN = 'Ege Birlik Yapı - Bu yaz hayalinizdeki - 2026-08-17 - Boost';
+  const NOW = new Date('2026-08-17T12:00:00.000Z');
+
+  function req(): BoostRequest {
+    return {
+      adAccountExternalId: '123',
+      source: IG,
+      budget: { mode: 'lifetime', totalMicros: 300_000_000n },
+      durationDays: 5,
+      objective: 'OUTCOME_ENGAGEMENT',
+      currency: 'TRY',
+      name: TABAN,
+    };
+  }
+
+  it('KRİTİK: ad set adı "… - Reklam Seti"', () => {
+    expect(buildBoostAdSetParams(req(), 'c-1', NOW).name).toBe(`${TABAN} - Reklam Seti`);
+  });
+
+  it('KRİTİK: ad set "Reklam" ya da "Kampanya" DEĞİL', () => {
+    // Yanlış seviye eki, listede hangi nesneye baktığını yanlış söylüyor —
+    // hiç ek olmamasından kötü.
+    const ad = buildBoostAdSetParams(req(), 'c-1', NOW).name!;
+    expect(ad).not.toBe(`${TABAN} - Reklam`);
+    expect(ad).not.toBe(`${TABAN} - Kampanya`);
+  });
+
+  it('KRİTİK: taban ad ÇİFT SEVİYE almıyor', () => {
+    // Çağıran taban gönderiyor; buraya tam bir ad gelse `… - Kampanya -
+    // Reklam Seti` gibi iki seviyeli çıkardı.
+    const ad = buildBoostAdSetParams(req(), 'c-1', NOW).name!;
+    expect(ad.match(/ - (Kampanya|Reklam Seti|Reklam|Kreatif)/g)).toHaveLength(1);
+  });
+});
+
+/**
+ * KAYNAK TARAMASI — kampanya ve reklam adları (K22).
+ *
+ * İkisi de `createBoost` içinde ve gerçek HTTP çağrısı gerektirdikleri için
+ * birim testiyle okunamıyor. Mutasyon gösterdi ki korumasızdılar: kampanyaya
+ * ek eklemeyi bırakmak hiçbir testi düşürmüyordu.
+ */
+describe('boost adları — createBoost kaynakta bağlı (K22)', () => {
+  const SOURCE = readFileSync(join(__dirname, 'meta.provider.ts'), 'utf8');
+
+  const GOVDE = (() => {
+    const imza = 'async createBoost(ctx: FetchContext, request: BoostRequest)';
+    const bas = SOURCE.indexOf(imza);
+    if (bas < 0) throw new Error('createBoost bulunamadı — tarama boşa düşer');
+    const i = SOURCE.indexOf('{', bas);
+    let d = 0;
+    for (let j = i; j < SOURCE.length; j++) {
+      if (SOURCE[j] === '{') d++;
+      else if (SOURCE[j] === '}') {
+        d--;
+        if (d === 0) return SOURCE.slice(i, j + 1);
+      }
+    }
+    throw new Error('createBoost gövdesi kapanmadı');
+  })();
+
+  /** Kampanya oluşturma `createBoostCampaign`'e taşındı; o da taranıyor. */
+  const KAMPANYA_METODU = (() => {
+    const bas = SOURCE.indexOf('private async createBoostCampaign(');
+    if (bas < 0) throw new Error('createBoostCampaign bulunamadı — tarama boşa düşer');
+    return SOURCE.slice(bas, SOURCE.indexOf('\n  }', bas));
+  })();
+
+  it('tarama BOŞA DÜŞMÜYOR', () => {
+    expect(GOVDE.length).toBeGreaterThan(1200);
+    expect(KAMPANYA_METODU).toContain('/campaigns');
+    expect(KAMPANYA_METODU.length).toBeGreaterThan(300);
+  });
+
+  it('KRİTİK: kampanya adı "Kampanya" ekiyle gidiyor', () => {
+    expect(KAMPANYA_METODU).toContain("boostNameWithLabel(request.name, 'campaign')");
+    // ÇIPLAK `request.name` kalmadı: ek atlanırsa kampanya seviyesi yazısız
+    // kalır ve üç nesne Ads Manager'da aynı adı taşır.
+    expect(KAMPANYA_METODU).not.toMatch(/name: request\.name,/);
+  });
+
+  it('KRİTİK: reklam adı "Reklam" ekiyle gidiyor', () => {
+    expect(GOVDE).toContain("boostNameWithLabel(request.name, 'ad')");
+    expect(GOVDE).not.toMatch(/name: `\$\{request\.name\} — reklam`/);
   });
 });

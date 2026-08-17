@@ -652,3 +652,84 @@ describe('kampanya adı (K21)', () => {
     expect(liste.campaigns[0]!.selectable).toBe(false);
   });
 });
+
+/**
+ * ADLANDIRMANIN BAĞLANTISI — K22.
+ *
+ * `boostAssetName` ayrı test edildi ama o testler biçimin doğru olduğunu
+ * söylüyor, KULLANILDIĞINI söylemiyor. Bu blok tek soruya bakıyor: müşteri adı
+ * ve gönderi metni veritabanından geçip Meta isteğinde gerçekten görünüyor mu?
+ * Aynı boşluk `labelBoostError`'da mutasyonla bulunmuştu — fonksiyon doğruydu,
+ * çağrılmıyordu.
+ */
+describe('boost adları (K22)', () => {
+  /**
+   * MÜŞTERİ ADI BİLEREK DEĞİŞTİRİLİYOR.
+   *
+   * Fikstürdeki müşterinin adı "Müşteri" ve fonksiyonun boş ad YEDEĞİ de
+   * "Müşteri" — ikisi aynı olduğu için join bozulsa testler yine geçerdi.
+   * Ayırt edilebilir bir ad, bu testleri boşa düşmekten kurtaran tek şey.
+   */
+  const MUSTERI = 'Ege Birlik Yapı';
+
+  beforeEach(async () => {
+    await h.q(`UPDATE clients SET name = $1 WHERE id = $2`, [MUSTERI, IDS.client]);
+  });
+
+  it('KRİTİK: Meta’ya giden ad SEVİYE EKİ OLMADAN, taban biçimde', async () => {
+    /*
+     * Sağlayıcı her seviyeye kendi ekini ekliyor. Buradan tam bir ad
+     * göndermek, adın `… - Boost - Kampanya - Reklam Seti` gibi çift seviyeli
+     * çıkması demekti.
+     */
+    await svc.createManualBoost(CTX, input());
+    const ad = istek().name as string;
+    expect(ad).toMatch(/^Ege Birlik Yapı - test - \d{4}-\d{2}-\d{2} - Boost$/);
+    expect(ad).not.toContain('Kampanya');
+    expect(ad).not.toContain('Reklam');
+  });
+
+  it('KRİTİK: MÜŞTERİ ADI adın başında', async () => {
+    // Eski ad `Boost — elle — 89207` idi ve Ads Manager'da hangi müşterinin
+    // hangi gönderisi olduğu okunamıyordu.
+    await svc.createManualBoost(CTX, input());
+    expect((istek().name as string).startsWith(`${MUSTERI} - `)).toBe(true);
+  });
+
+  it('KRİTİK: GÖNDERİ METNİ adın içinde — gönderi kimliği DEĞİL', async () => {
+    await svc.createManualBoost(CTX, input());
+    const ad = istek().name as string;
+    expect(ad).toContain('test');
+    // Gönderi kimliğinin son sekiz hanesi artık adda geçmiyor.
+    expect(ad).not.toContain('post-');
+  });
+
+  it('KRİTİK: panel ağacının adı Meta’ya giden adla AYNI TABANI taşıyor', async () => {
+    /*
+     * İkisi ayrışırsa aynı boost panelde bir, Ads Manager'da başka türlü
+     * görünür ve eşleştirmek gönderi kimliğinin son hanelerini karşılaştırmayı
+     * gerektirir — tam olarak bundan kaçınmak için değişti.
+     */
+    await svc.createManualBoost(CTX, input());
+    const taban = istek().name as string;
+    const [kampanya] = await h.q<{ name: string }>(`SELECT name FROM draft_campaigns`);
+    expect(kampanya!.name).toBe(`${taban} - Kampanya`);
+  });
+
+  it('KRİTİK: altyazısız gönderide MEDYA TÜRÜ yazıyor, boş parça değil', async () => {
+    // Altyazısız fotoğraf Meta'da sıradan; biçim `Müşteri -  - tarih` olurdu.
+    await h.q(`UPDATE organic_posts SET message = NULL WHERE id = $1`, [POST]);
+    await svc.createManualBoost(CTX, input());
+    const ad = istek().name as string;
+    expect(ad).toBe(`${MUSTERI} - Fotoğraf - ${bugun()} - Boost`);
+    expect(ad).not.toContain(' -  - ');
+  });
+});
+
+/** Testin beklediği tarih — fonksiyonla aynı yerel biçim. */
+function bugun(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`;
+}

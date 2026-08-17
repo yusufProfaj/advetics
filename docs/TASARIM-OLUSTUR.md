@@ -1354,6 +1354,69 @@ Kural motoru otomatik ve tekrar tekrar harcıyor. Var olan kampanyaya ekleme
 tek bir bilinçli tıklama olarak açıldı; otomasyona verilmesi, kuralın bir
 gönderiyi yanlış kampanyaya eklemesinin hiçbir yerde görünmemesi demek olurdu.
 
+### K22 — Boost varlıklarının adı ne olsun?
+
+Kullanıcının istediği biçim (2026-08-17):
+
+> "Müşteri adı" - "Gönderinin ilk 3 kelimesi" - "tarih" - "Boost" yazısı
+> şeklinde sonunda da Kampanya - Reklam Seti - Reklam şeklinde kurgularsın
+
+**Karar: tek fonksiyon, beş üretim yeri de ona bağlı.**
+
+```
+Ege Birlik Yapı - Bu yaz hayalinizdeki - 2026-08-17 - Boost - Kampanya
+Ege Birlik Yapı - Bu yaz hayalinizdeki - 2026-08-17 - Boost - Reklam Seti
+Ege Birlik Yapı - Bu yaz hayalinizdeki - 2026-08-17 - Boost - Reklam
+Ege Birlik Yapı - Bu yaz hayalinizdeki - 2026-08-17 - Boost - Kreatif
+```
+
+**Ad BEŞ ayrı yerde üretiliyordu** ve her biri kendi biçimini uyduruyordu:
+Meta'ya giden ad (`Boost — elle — 89207`), panel ağacının adı üç ayrı yolda
+(`Öne çıkarılan gönderi — 89207`, `Boost — {kural} — 89207`) ve sağlayıcıdaki
+üç ek (`— ad set`, `— reklam`, `— kreatif`). Aynı boost panelde bir, Ads
+Manager'da başka türlü görünüyordu ve ikisini eşleştirmek gönderi kimliğinin
+son sekiz hanesini karşılaştırmayı gerektiriyordu.
+
+**Kreatif de adlandırılıyor** — kullanıcının saydığı üç seviyede yok ama
+Meta'da ayrı bir nesne ve Ads Manager'da adıyla görünüyor.
+
+**Taban ile ek AYRI.** Çağıran seviye eki olmayan tabanı veriyor
+(`… - 2026-08-17 - Boost`), sağlayıcı her nesneye kendi ekini ekliyor. Tam ad
+gönderilse `… - Boost - Kampanya - Reklam Seti` gibi çift seviyeli çıkardı.
+
+#### Kararlar ve gerekçeleri
+
+**Tarih `YYYY-MM-DD`.** `17.08.2026` alfabetik sıralamada yanlış diziliyor:
+bütün 17'ler bir araya geliyor, aylar karışıyor. Ads Manager'da isme göre
+sıralama sık kullanılıyor ve bu biçim kronolojik diziliyor. Depo zaten tarihleri
+bu biçimde string tutuyor.
+
+**Tarih YEREL bileşenlerden okunuyor.** `toISOString()` UTC'ye çeviriyor ve
+Türkiye'de akşam 21:00'den sonra oluşturulan boost'a **ertesi günün** tarihini
+yazardı — depo genelinde tarih kayması tam olarak böyle üretiliyor.
+
+**Emoji ve bağlantı kelime sayılmıyor.** Gerçek gönderi "…tam zamanı! 🌞🌊
+İster…" diye devam ediyor ve ham ilk üç kelimeyi almak `🌞🌊` gibi bir parça
+üretebiliyordu. Hashtag korunuyor: harf içeriyor ve anlam taşıyor.
+
+**Altyazısız gönderide medya türü yazılıyor** ("Fotoğraf", "Reel"). Boş parça
+`Müşteri -  - 2026-08-17` üretirdi; hiç bilgi vermeyen bir ad ile bozuk görünen
+bir ad arasında ikincisi daha kötü.
+
+**Kırpma PARÇA bazında, adın sonundan değil.** Sondan kırpmak "Kampanya",
+"Reklam Seti", "Reklam" eklerini yiyip adı işe yaramaz hâle getirirdi — oysa o
+ek, listede hangi seviyeye baktığını söyleyen tek şey.
+
+**Kural adı adın içinde GEÇMİYOR.** Kullanıcı Ads Manager'da müşteriyi ve
+gönderiyi arıyor; kuralın adı panelde zaten satırın yanında yazıyor.
+
+#### Kabul edilmiş sınır
+
+**Aynı gönderi aynı gün ikinci kez öne çıkarılırsa ad aynı oluyor.** Biçime
+kimsenin istemediği bir sayaç eklenmedi. K20 bunu engellemiyor, uyarıyor — ve
+kampanya seçim ekranı adın altında gönderi sayısı ile son kullanım tarihini de
+yazdığı için iki satır orada hâlâ ayırt edilebiliyor.
+
 ---
 
 ## 11. Sıra ve riskler

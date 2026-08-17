@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { boostAssetName, MEDIA_TYPE_LABELS } from '@advetics/shared';
 import type {
   BoostablePostList,
   BoostablePostQuery,
@@ -55,6 +56,8 @@ interface RuleRow {
   client_id: string;
   social_profile_id: string | null;
   social_profile_name: string | null;
+  /** Boost adının ilk parçası (K22) — kuralın müşterisinin adı. */
+  client_name: string;
   name: string;
   description: string | null;
   conditions: BoostCondition[];
@@ -106,6 +109,8 @@ interface PostRow {
 
 /** `listBoostablePosts` ham satırı. */
 interface BoostablePostRow {
+  /** Boost adının ilk parçası (K22). */
+  client_name: string;
   id: string;
   social_profile_id: string;
   social_profile_name: string;
@@ -262,6 +267,9 @@ export class BoostsService {
   private async selectRules(tx: TxLike, where: Prisma.Sql): Promise<RuleRow[]> {
     return tx.$queryRaw<RuleRow[]>(Prisma.sql`
       SELECT r.*, sp.name AS social_profile_name,
+             -- BOOST ADININ İLK PARÇASI (K22). Müşteri kuralın kendisine bağlı,
+             -- gönderiye değil; her aday satırında tekrarlamak gereksiz olurdu.
+             cl.name AS client_name,
              COALESCE((
                -- KİPE GÖRE: toplam bütçeli bir boost'ta çarpım yok. Kural
                -- yolu bugün yalnızca günlük yazıyor ama bu sorgu kipi
@@ -279,6 +287,7 @@ export class BoostsService {
                  AND b.created_at >= date_trunc('month', now())
              ), 0) AS committed_micros
       FROM boost_rules r
+      JOIN clients cl ON cl.id = r.client_id
       LEFT JOIN social_profiles sp ON sp.id = r.social_profile_id
       WHERE ${where}
       ORDER BY r.enabled DESC, r.name
@@ -398,9 +407,20 @@ export class BoostsService {
                  WHERE b.organic_post_id = p.id
                    AND b.status IN ('candidate', 'approved', 'creating', 'active')
                ) AS has_live_boost,
+               -- MÜŞTERİ ADI BU SORGUDA KULLANILMIYOR ama SEÇİLİYOR ve
+               -- sebebi tipin dürüstlüğü: satır tipi alanı zorunlu ilan ediyor
+               -- ve queryRaw DENETİMSİZ bir dönüşüm — eksik bıraksak TypeScript
+               -- hiçbir şey söylemez, alan undefined gelir ve onu bir gün
+               -- kullanan kod adı "undefined - ..." diye üretirdi. Aynı boşluğa
+               -- müşteri servisinde düşülmüştü.
+               --
+               -- (SQL yorumunda ters tırnak YASAK — CLAUDE.md §3. Şablonu
+               -- ortasından kapatıyor ve hata TS1005 olarak çıkıyor.)
+               cl.name AS client_name,
                COUNT(*) OVER () AS total
         FROM organic_posts p
         JOIN social_profiles sp ON sp.id = p.social_profile_id
+        JOIN clients cl ON cl.id = p.client_id
         WHERE p.client_id = ${query.clientId}::uuid ${profileFilter}
         ORDER BY p.published_at DESC
         LIMIT ${query.limit}
@@ -707,9 +727,12 @@ export class BoostsService {
                  WHERE b.organic_post_id = p.id
                    AND b.status IN ('candidate', 'approved', 'creating', 'active')
                ) AS has_live_boost,
+               -- BOOST ADININ İLK PARÇASI (K22).
+               cl.name AS client_name,
                1 AS total
         FROM organic_posts p
         JOIN social_profiles sp ON sp.id = p.social_profile_id
+        JOIN clients cl ON cl.id = p.client_id
         WHERE p.id = ${input.organicPostId}::uuid
           AND p.client_id = ${input.clientId}::uuid
       `);
@@ -788,6 +811,9 @@ export class BoostsService {
         totalBudgetMicros: totalMicros,
         durationDays: input.durationDays,
         postExternalId: post.external_id,
+        clientName: post.client_name,
+        postMessage: post.message,
+        mediaLabel: MEDIA_TYPE_LABELS[post.media_type as MediaType],
         now: new Date(),
       });
 
@@ -846,10 +872,27 @@ export class BoostsService {
       totalBudgetMicros: bigint;
       durationDays: number;
       postExternalId: string;
+      /** Boost adının parçaları (K22) — ad tek fonksiyondan üretiliyor. */
+      clientName: string;
+      postMessage: string | null;
+      mediaLabel: string;
       now: Date;
     },
   ): Promise<void> {
-    const name = `Öne çıkarılan gönderi — ${p.postExternalId.slice(-8)}`;
+    /*
+     * AD TEK FONKSİYONDAN (K22). Önceki ad `Öne çıkarılan gönderi — 89207`
+     * idi: hangi müşteri, hangi gönderi ve hangi tarih olduğu okunamıyordu ve
+     * Meta'ya giden addan da farklıydı — aynı boost'u panelde ve Ads
+     * Manager'da eşleştirmek gönderi kimliğinin son hanelerini
+     * karşılaştırmayı gerektiriyordu.
+     */
+    const name = boostAssetName({
+      kind: 'campaign',
+      clientName: p.clientName,
+      postMessage: p.postMessage,
+      mediaLabel: p.mediaLabel,
+      date: p.now,
+    });
     const endAt = new Date(p.now.getTime() + p.durationDays * 86_400_000);
 
     const [campaign] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -1105,6 +1148,9 @@ export class BoostsService {
         durationDays: rule.duration_days,
         objective: rule.objective,
         postExternalId: p.external_id,
+        clientName: rule.client_name,
+        postMessage: p.message,
+        mediaLabel: MEDIA_TYPE_LABELS[p.media_type as MediaType],
         now,
       });
 
@@ -1160,11 +1206,24 @@ export class BoostsService {
       durationDays: number;
       objective: string;
       postExternalId: string;
+      /** Boost adının parçaları (K22). */
+      clientName: string;
+      postMessage: string | null;
+      mediaLabel: string;
       now: Date;
     },
   ): Promise<void> {
     try {
-      const name = `Boost — ${p.ruleName} — ${p.postExternalId.slice(-8)}`;
+      // Kural yolu da AYNI biçimi kullanıyor (K22). Kural adı adın içinde
+      // GEÇMİYOR: kullanıcı Ads Manager'da müşteriyi ve gönderiyi arıyor,
+      // kuralın adı panelde zaten satırın yanında yazıyor.
+      const name = boostAssetName({
+        kind: 'campaign',
+        clientName: p.clientName,
+        postMessage: p.postMessage,
+        mediaLabel: p.mediaLabel,
+        date: p.now,
+      });
       const endAt = new Date(p.now.getTime() + p.durationDays * 86_400_000);
 
       const [campaign] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`

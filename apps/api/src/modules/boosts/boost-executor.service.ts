@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  boostAssetName,
+  boostNameBase,
+  MEDIA_TYPE_LABELS,
+  type MediaType,
+} from '@advetics/shared';
+import {
   PlatformApiError,
   type BoostBudget,
   type BoostSource,
@@ -129,6 +135,16 @@ interface PendingRow {
   /** Instagram satırlarında ana Facebook sayfası; NULL ise boost denenmiyor. */
   parent_page_external_id: string | null;
   media_type: string;
+  /**
+   * Boost adının parçaları (K22): müşteri adı ve gönderinin ilk kelimeleri.
+   *
+   * Ad artık `Müşteri - ilk üç kelime - tarih - Boost - Seviye` biçiminde ve
+   * bu iki alan olmadan üretilemiyor. Önceden ad kural adı ile gönderi
+   * kimliğinin son sekiz hanesinden kuruluyordu ve Ads Manager'da hangi
+   * müşterinin hangi gönderisi olduğu okunamıyordu.
+   */
+  client_name: string;
+  post_message: string | null;
   rule_name: string | null;
   account_external_id: string;
   connection_id: string;
@@ -270,6 +286,9 @@ export class BoostExecutorService {
              b.duration_days, b.objective, b.targeting, b.saved_audience_id,
              b.target_campaign_external_id,
              p.external_id AS post_external_id, p.media_type,
+             -- BOOST ADININ PARÇALARI (K22). Metin gönderiden, ad müşteriden.
+             p.message AS post_message,
+             cl.name AS client_name,
              sp.external_id AS profile_external_id,
              sp.profile_type::text AS profile_type,
              -- ANA FACEBOOK SAYFASI: Instagram satırında external_id IG
@@ -468,7 +487,19 @@ export class BoostExecutorService {
             : { mode: 'new' as const },
           objective: row.objective,
           currency: row.currency,
-          name: `Boost — ${row.rule_name ?? 'elle'} — ${row.post_external_id.slice(-8)}`,
+          /**
+           * AD TEK FONKSİYONDAN (K22) ve SEVİYE EKİ OLMADAN.
+           *
+           * Sağlayıcı her seviyeye kendi ekini ekliyor (`Kampanya`,
+           * `Reklam Seti`, `Reklam`, `Kreatif`). Buradan tam bir ad göndermek,
+           * adın çift seviyeli çıkması demekti.
+           */
+          name: boostNameBase({
+            clientName: row.client_name,
+            postMessage: row.post_message,
+            mediaLabel: MEDIA_TYPE_LABELS[row.media_type as MediaType],
+            date: new Date(),
+          }),
           specialAdCategories: row.special_ad_categories ?? [],
         },
       );
@@ -622,7 +653,19 @@ export class BoostExecutorService {
        * bir boost'ta kural yok ve o satır 'manual' oluyor.
        */
       const source = row.boost_rule_id ? 'boost_rule' : 'manual';
-      const name = `Boost — ${row.rule_name ?? 'elle'} — ${row.post_external_id.slice(-8)}`;
+      /*
+       * PANEL AĞACININ ADI DA AYNI FONKSİYONDAN (K22) — ama burada TAM ad
+       * kullanılıyor, taban değil: bu satır Meta'ya gitmiyor, panelde
+       * kampanya olarak görünüyor ve orada seviyesinin yazılı olması gerekiyor.
+       * İkisinin ayrışması, panelde bir Ads Manager'da başka ad demekti.
+       */
+      const name = boostAssetName({
+        kind: 'campaign',
+        clientName: row.client_name,
+        postMessage: row.post_message,
+        mediaLabel: MEDIA_TYPE_LABELS[row.media_type as MediaType],
+        date: new Date(),
+      });
       const endAt = new Date(Date.now() + row.duration_days * 86_400_000);
 
       const [campaign] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`

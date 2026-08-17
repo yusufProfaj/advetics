@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  boostNameWithLabel,
   CONVERSION_BUCKETS,
   restrictTargetingFor,
   type GeoLocationOption,
@@ -1378,7 +1379,7 @@ export class MetaProvider implements IAdPlatformProvider {
 
       adim = 'Reklam oluşturulurken';
       const ad = await this.graphPost<{ id: string }>(ctx, `${act}/ads`, {
-        name: `${request.name} — reklam`,
+        name: boostNameWithLabel(request.name, 'ad'),
         adset_id: adSet.id,
         creative: creativeRef,
         status: 'ACTIVE',
@@ -1510,7 +1511,10 @@ export class MetaProvider implements IAdPlatformProvider {
     created: Array<{ id: string; label: string }>,
   ): Promise<string> {
     const campaign = await this.graphPost<{ id: string }>(ctx, `${act}/campaigns`, {
-      name: request.name,
+      // TABAN AD + SEVİYE EKİ (K22). `request.name` seviye eki TAŞIMIYOR;
+      // taşısaydı ad `… - Boost - Kampanya - Reklam Seti` gibi çift seviyeli
+      // çıkardı. Ek tek yerden geliyor: `boostNameWithLabel`.
+      name: boostNameWithLabel(request.name, 'campaign'),
       objective: request.objective,
       status: 'PAUSED',
       /**
@@ -2710,7 +2714,7 @@ export function instagramCreativeBody(
   name: string,
 ): Record<string, string> {
   return {
-    name: `${name} — kreatif`,
+    name: boostNameWithLabel(name, 'creative'),
     object_id: source.pageExternalId,
     instagram_user_id: source.instagramUserId,
     source_instagram_media_id: source.mediaExternalId,
@@ -2809,7 +2813,7 @@ export function buildBoostAdSetParams(
       : {};
 
   const params: Record<string, string> = {
-    name: `${request.name} — ad set`,
+    name: boostNameWithLabel(request.name, 'adSet'),
     campaign_id: campaignId,
     billing_event: 'IMPRESSIONS',
     optimization_goal: 'POST_ENGAGEMENT',
