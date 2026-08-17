@@ -669,8 +669,18 @@ export class BoostsService {
      * `approved` yazıldı: çağrı düşerse boost kaydı duruyor ve hatası
      * `boosts.error`'da.
      */
-    const sonuc = await this.prisma.withTenant(scoped, (tx) =>
-      this.executor.createOneApproved(tx, boostId),
+    /**
+     * ÇALIŞTIRICI VERİLİYOR — tek bir uzun transaction DEĞİL.
+     *
+     * Bu satır bir kez `withTenant(...)` sarmalıydı ve üretimde şu oldu:
+     * Meta çağrıları 12,5 saniye sürdü, Prisma'nın 5 saniyelik transaction
+     * sınırı doldu, kayıt `approved`'da kaldı ve hata `boosts.error`'a bile
+     * yazılamadı. Daha kötüsü: kampanya Meta'da oluşmuş olabilir ve bizde izi
+     * yok. Artık her DB adımı kendi kısa transaction'ında.
+     */
+    const sonuc = await this.executor.createOneApproved(
+      (fn) => this.prisma.withTenant(scoped, fn),
+      boostId,
     );
     if (!sonuc.ok) throw new BadRequestException(sonuc.error);
 

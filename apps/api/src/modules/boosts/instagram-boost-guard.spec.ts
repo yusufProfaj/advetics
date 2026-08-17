@@ -26,6 +26,13 @@ import { BoostsService } from './boosts.service';
  */
 
 let h: Harness;
+/**
+ * Test çalıştırıcısı — yürütücü artık hazır bir `tx` değil, "şu işi bir
+ * transaction'da koştur" diyen bir fonksiyon alıyor. Sebebi üretimde
+ * öğrenildi: platform çağrısı transaction içinde kalınca Prisma'nın 5 saniyelik
+ * sınırı doluyor ve hata bile kaydedilemiyor.
+ */
+const runner = <T>(fn: (tx: never) => Promise<T>): Promise<T> => fn(h.db as never);
 let boosts: BoostsService;
 let executor: BoostExecutorService;
 
@@ -172,7 +179,7 @@ describe('Instagram artık yayınlanabiliyor', () => {
     await seedPost(IG_POST, IG_PROFILE);
     await onayliBoost(IG_POST);
 
-    const out = await executor.createApproved(h.db, IDS.client);
+    const out = await executor.createApproved(runner, IDS.client);
     expect(out).toEqual({ created: 1, failed: 0 });
 
     expect(createBoost.mock.calls[0]![1].source).toEqual({
@@ -189,7 +196,7 @@ describe('Instagram artık yayınlanabiliyor', () => {
     await seedPost(FB_POST, FB_PROFILE);
     await onayliBoost(FB_POST);
 
-    await executor.createApproved(h.db, IDS.client);
+    await executor.createApproved(runner, IDS.client);
     expect(createBoost.mock.calls[0]![1].source).toEqual({
       surface: 'facebook_page',
       pageExternalId: 'page-1',
@@ -206,7 +213,7 @@ describe('KISIT 1 — ana sayfası olmayan Instagram satırı', () => {
     await seedPost(IG_POST, IG_PROFILE);
     await onayliBoost(IG_POST);
 
-    const out = await executor.createApproved(h.db, IDS.client);
+    const out = await executor.createApproved(runner, IDS.client);
     expect(out).toEqual({ created: 0, failed: 1 });
     expect(createBoost).not.toHaveBeenCalled();
   });
@@ -215,7 +222,7 @@ describe('KISIT 1 — ana sayfası olmayan Instagram satırı', () => {
     await seedProfile(IG_PROFILE, 'instagram_business', null);
     await seedPost(IG_POST, IG_PROFILE);
     await onayliBoost(IG_POST);
-    await executor.createApproved(h.db, IDS.client);
+    await executor.createApproved(runner, IDS.client);
 
     const [row] = await h.q<{ status: string; error: string }>(
       `SELECT status, error FROM boosts`,
@@ -238,7 +245,7 @@ describe('KISIT 1 — ana sayfası olmayan Instagram satırı', () => {
     await seedPost(IG_POST, IG_PROFILE);
     await onayliBoost(IG_POST);
 
-    await kotali.createApproved(h.db, IDS.client);
+    await kotali.createApproved(runner, IDS.client);
     expect(acquire).not.toHaveBeenCalled();
   });
 

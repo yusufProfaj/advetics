@@ -183,6 +183,17 @@ export class BoostsController {
     @CurrentTenant() ctx: TenantContext,
     @Query('clientId') clientId: string,
   ): Promise<{ created: number; failed: number }> {
-    return this.prisma.withTenant(ctx, (tx) => this.executor.createApproved(tx, clientId));
+    /**
+     * ÇALIŞTIRICI VERİLİYOR, HAZIR BİR `tx` DEĞİL.
+     *
+     * Platform çağrısı transaction'ın DIŞINDA kalmak zorunda: `withTenant`
+     * etkileşimli bir transaction açıyor ve Prisma'nın 5 saniyelik sınırı,
+     * Meta'ya yapılan üç çağrının süresinden kısa. Üretimde transaction ölüp
+     * hata bile kaydedilemedi.
+     */
+    return this.executor.createApproved(
+      (fn) => this.prisma.withTenant(ctx, fn),
+      clientId,
+    );
   }
 }

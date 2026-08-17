@@ -206,6 +206,37 @@ akış ve engeller §7.2'de. Özeti:
 
    **1118 API testi.**
 
+6c. ✅ **BİTTİ** — ilk canlı çağrılar üç hata çıkardı, üçü de düzeltildi.
+
+   **(1) Lokasyon türü taşınmıyordu.** Meta: *"integer türü bekleniyor, ancak
+   TR değeriyle bir string alındı"* (subcode 1885097) ve *"Şehir Hedeflemesi
+   Desteklenmiyor"* (1487479). Seçilen her şey şehir sanılıyordu; ülke kodu iki
+   harf, şehir anahtarı sayısal. Artık `locations: [{key, type}]` ve üç kova
+   (`countries` / `regions` / `cities`).
+
+   **Aynı düzeltmede hata VERMEYEN bir hata da kapandı:** lokasyon seçilse bile
+   ülke geneli gönderilmeye devam ediyordu ve Meta bu kovaları BİRLEŞİM olarak
+   uyguluyor — "Türkiye + İzmir" = Türkiye geneli. Yani İzmir seçilen bir boost
+   bütün Türkiye'ye gidiyordu, sessizce.
+
+   **(2) MİMARİ: platform çağrısı transaction'ın içindeydi.** `withTenant` RLS
+   bağlamı için etkileşimli transaction açıyor ve Prisma'nın sınırı **5 saniye**;
+   Meta'ya üç-dört çağrı üretimde **12,5 saniye** sürdü. Sonuç çift sessiz hata:
+   transaction ölünce `fail()` bile yazamadı (Meta'nın mesajı kayboldu, kullanıcı
+   "beklenmeyen bir hata" gördü) ve kayıt `approved`'da kaldı — oysa kampanya
+   Meta'da oluşmuş olabilir.
+
+   Yürütücü artık hazır bir `tx` değil bir **çalıştırıcı** (`TxRunner`) alıyor;
+   her DB adımı kendi kısa transaction'ında, platform çağrısı ikisinin arasında.
+   Kayıt düşerse boost `failed` DEĞİL `creating` kalıyor ve dış kimlikler log'a
+   yazılıyor: `failed` yazmak satırı yeniden denenebilir yapar ve İKİNCİ bir
+   kampanya açardı.
+
+   Üç test bu kuralı doğrudan kodluyor (çağrı anında açık transaction yok; DB işi
+   en az üç turda; kayıt düşerse `creating` kalıyor) ve mutasyonla doğrulandı.
+
+   **1125 API testi.**
+
 7. **CANLI ÇAĞRI — tek kalan adım ve kodla değil elle yapılıyor.**
 
    > Ajansın kendi hesabında, **en küçük bütçeyle**, tek bir Instagram

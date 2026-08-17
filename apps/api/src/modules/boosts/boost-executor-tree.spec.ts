@@ -19,6 +19,13 @@ import { BoostsService } from './boosts.service';
  */
 
 let h: Harness;
+/**
+ * Test çalıştırıcısı — yürütücü artık hazır bir `tx` değil, "şu işi bir
+ * transaction'da koştur" diyen bir fonksiyon alıyor. Sebebi üretimde
+ * öğrenildi: platform çağrısı transaction içinde kalınca Prisma'nın 5 saniyelik
+ * sınırı doluyor ve hata bile kaydedilemiyor.
+ */
+const runner = <T>(fn: (tx: never) => Promise<T>): Promise<T> => fn(h.db as never);
 let svc: BoostExecutorService;
 let boosts: BoostsService;
 
@@ -127,7 +134,7 @@ async function onaylanmisBoost(ruleId: string | null = RULE): Promise<void> {
 describe('boost ağaca yazılıyor', () => {
   it('kuraldan doğan boost KAMPANYA olarak görünüyor', async () => {
     await onaylanmisBoost();
-    const sonuc = await svc.createApproved(h.db, IDS.client);
+    const sonuc = await svc.createApproved(runner, IDS.client);
     expect(sonuc).toEqual({ created: 1, failed: 0 });
 
     const [kampanya] = await h.q<{
@@ -158,7 +165,7 @@ describe('boost ağaca yazılıyor', () => {
      * birinin dolu olmasını zorunlu kılıyor.
      */
     await onaylanmisBoost();
-    await svc.createApproved(h.db, IDS.client);
+    await svc.createApproved(runner, IDS.client);
 
     const [reklam] = await h.q<{
       creative_id: string | null;
@@ -174,7 +181,7 @@ describe('boost ağaca yazılıyor', () => {
 
   it('dış kimlikler ağacın KENDİ SEVİYELERİNE yazılıyor', async () => {
     await onaylanmisBoost();
-    await svc.createApproved(h.db, IDS.client);
+    await svc.createApproved(runner, IDS.client);
 
     const [grup] = await h.q<{ external_ad_set_id: string; social_profile_id: string }>(
       `SELECT external_ad_set_id, social_profile_id::text AS social_profile_id
@@ -191,7 +198,7 @@ describe('boost ağaca yazılıyor', () => {
      * 'manual' olmalı — yoksa kısıt düşerdi.
      */
     await onaylanmisBoost(null);
-    const sonuc = await svc.createApproved(h.db, IDS.client);
+    const sonuc = await svc.createApproved(runner, IDS.client);
     expect(sonuc.created).toBe(1);
 
     const [kampanya] = await h.q<{ source: string; boost_rule_id: string | null }>(
@@ -205,7 +212,7 @@ describe('boost ağaca yazılıyor', () => {
     // Ağaç "hangi kampanyalar var", `boosts` "ne kadar taahhüt edildi"
     // sorusunun cevabı. İkisi birbirinin yerini almıyor.
     await onaylanmisBoost();
-    await svc.createApproved(h.db, IDS.client);
+    await svc.createApproved(runner, IDS.client);
 
     const [boost] = await h.q<{ status: string; daily_budget_micros: string }>(
       `SELECT status, daily_budget_micros::text AS daily_budget_micros FROM boosts`,
@@ -225,7 +232,7 @@ describe('başarısızlık', () => {
       new PlatformApiError('meta', 'permanent', 'Gönderi boost edilemiyor'),
     );
     await onaylanmisBoost();
-    const sonuc = await svc.createApproved(h.db, IDS.client);
+    const sonuc = await svc.createApproved(runner, IDS.client);
 
     expect(sonuc).toEqual({ created: 0, failed: 1 });
     expect(await h.q(`SELECT id FROM draft_campaigns`)).toHaveLength(0);
@@ -257,7 +264,7 @@ describe('başarısızlık', () => {
     );
     await h.q(`UPDATE boosts SET ad_account_id = ad_account_id`);
 
-    const sonuc = await svc.createApproved(h.db, IDS.client);
+    const sonuc = await svc.createApproved(runner, IDS.client);
     expect(sonuc.created).toBe(1);
 
     const [boost] = await h.q<{ status: string }>(`SELECT status FROM boosts`);
@@ -312,7 +319,7 @@ describe('ADAY AŞAMASINDA ağaç doğuyor', () => {
     await boosts.runRule(h.db, RULE, new Date());
     await h.q(`UPDATE boosts SET status = 'approved', approved_at = now()`);
 
-    const sonuc = await svc.createApproved(h.db, IDS.client);
+    const sonuc = await svc.createApproved(runner, IDS.client);
     expect(sonuc.created).toBe(1);
 
     const kampanyalar = await h.q<{ status: string; external_campaign_id: string }>(
@@ -371,10 +378,97 @@ describe('ADAY AŞAMASINDA ağaç doğuyor', () => {
  * farklı sayıda boost açmaya başlaması demek olurdu — ve bu hiçbir yerde hata
  * üretmezdi.
  */
+/**
+ * PLATFORM ÇAĞRISI TRANSACTION'IN DIŞINDA — mimari kural, üretimde öğrenildi.
+ *
+ * `withTenant` RLS bağlamı için ETKİLEŞİMLİ bir transaction açıyor
+ * (`set_config(..., is_local => true)` transaction ömrüne bağlı) ve Prisma'nın
+ * varsayılan sınırı 5 saniye. Boost ise Meta'ya üç-dört HTTP çağrısı yapıyor;
+ * üretimde 12,5 saniye sürdü ve şu oldu:
+ *
+ *   · Transaction öldü, ardından `fail()` bile yazamadı — Meta'nın hata metni
+ *     KAYBOLDU ve kullanıcı yalnızca "beklenmeyen bir hata" gördü.
+ *   · Kayıt `approved`'da kaldı. Ama çağrı BAŞARILI olmuş olabilir: o zaman
+ *     platformda para harcayan bir kampanya var ve bizde hiçbir izi yok.
+ *
+ * Bu testler kuralı doğrudan kodluyor: çağrı anında AÇIK bir transaction
+ * olmamalı. Süre ölçen bir test yazmak yerine bunu ölçüyorlar, çünkü sorun
+ * yavaşlık değil YERLEŞİM.
+ */
+describe('platform çağrısı transaction dışında', () => {
+  it('KRİTİK: createBoost çağrılırken açık transaction YOK', async () => {
+    let icinde = false;
+    let cagriAnindaIcindeydi: boolean | null = null;
+
+    const izleyen = async <T>(fn: (tx: never) => Promise<T>): Promise<T> => {
+      icinde = true;
+      try {
+        return await fn(h.db as never);
+      } finally {
+        icinde = false;
+      }
+    };
+
+    createBoost.mockImplementation(async () => {
+      cagriAnindaIcindeydi = icinde;
+      return { externalCampaignId: 'c-1', externalAdSetId: 'as-1', externalAdId: 'ad-1' };
+    });
+
+    await onaylanmisBoost();
+    await svc.createApproved(izleyen, IDS.client);
+
+    expect(cagriAnindaIcindeydi).toBe(false);
+  });
+
+  it('DB işi BİRDEN FAZLA kısa transaction’da koşuyor', async () => {
+    // Tek bir uzun transaction olsaydı sayaç 1 olurdu. En az üç adım var:
+    // bekleyenleri oku, `creating` işaretle, sonucu yaz.
+    let tur = 0;
+    const sayan = async <T>(fn: (tx: never) => Promise<T>): Promise<T> => {
+      tur++;
+      return fn(h.db as never);
+    };
+
+    await onaylanmisBoost();
+    await svc.createApproved(sayan, IDS.client);
+
+    expect(tur).toBeGreaterThanOrEqual(3);
+  });
+
+  it('KRİTİK: sonuç yazımı düşerse dış kimlikler LOG’A yazılıp hata fırlatılıyor', async () => {
+    /*
+     * Boost platformda oluştu ve para harcamaya başladı; kaydedilemedi. Sessiz
+     * kalmak, kayıtsız bir kampanyayı Ads Manager'da aramak zorunda bırakmak
+     * demek. `false` dönmek de yanlış olurdu: ikinci deneme İKİNCİ bir kampanya
+     * açardı.
+     */
+    let ilk = true;
+    const sonAdimdaDusen = async <T>(fn: (tx: never) => Promise<T>): Promise<T> => {
+      // İlk iki tur (oku + creating) geçiyor; sonucu yazan tur düşüyor.
+      if (!ilk && createBoost.mock.calls.length > 0) {
+        throw new Error('Transaction already closed');
+      }
+      ilk = false;
+      return fn(h.db as never);
+    };
+
+    await onaylanmisBoost();
+    await expect(svc.createApproved(sonAdimdaDusen, IDS.client)).rejects.toThrow(
+      /Meta'da OLUŞTU ama kaydedilemedi/,
+    );
+
+    // KAYIT `creating` KALIYOR, `failed` DEĞİL. `failed` yazmak satırı yeniden
+    // denenebilir yapardı ve ikinci bir kampanya açılırdı; `pending()` yalnızca
+    // `approved` satırları alıyor, yani `creating` tekrar denenmiyor.
+    const [row] = await h.q<{ status: string }>(`SELECT status FROM boosts`);
+    expect(row!.status).toBe('creating');
+  });
+});
+
 describe('kural yolu — yeni alanlar sızmıyor', () => {
   it('KRİTİK: bütçe GÜNLÜK kipte gönderiliyor', async () => {
     await onaylanmisBoost();
-    await svc.createApproved(h.db, IDS.client);
+    await svc.createApproved(runner, IDS.client);
 
     expect(createBoost.mock.calls[0]![1].budget).toEqual({
       mode: 'daily',
@@ -387,7 +481,7 @@ describe('kural yolu — yeni alanlar sızmıyor', () => {
     // sayfa gönderisi `object_story_id` ile gömülü geçiyor, Instagram ise ayrı
     // bir kreatif çağrısı istiyor. Kaynak tipi bunu belirliyor.
     await onaylanmisBoost();
-    await svc.createApproved(h.db, IDS.client);
+    await svc.createApproved(runner, IDS.client);
 
     expect(createBoost.mock.calls[0]![1].source).toEqual({
       surface: 'facebook_page',
@@ -400,7 +494,7 @@ describe('kural yolu — yeni alanlar sızmıyor', () => {
     // Kural ekranında hedefleme sorulmuyor; burada bir değer üretmek
     // kullanıcının vermediği bir kararı onun adına vermek olurdu.
     await onaylanmisBoost();
-    await svc.createApproved(h.db, IDS.client);
+    await svc.createApproved(runner, IDS.client);
 
     expect(createBoost.mock.calls[0]![1].targeting).toBeUndefined();
   });

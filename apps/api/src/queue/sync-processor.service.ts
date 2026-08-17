@@ -365,7 +365,13 @@ export class SyncProcessorService {
       notes.push(...out.notes);
     }
 
-    const created = await this.boostExecutor.createApproved(this.db, payload.clientId);
+    // WORKER YÖNETİM İSTEMCİSİYLE ÇALIŞIYOR (BYPASSRLS) ve transaction
+    // gerekmiyor; çalıştırıcı işi doğrudan koşturuyor. Platform çağrısının
+    // transaction dışında kalması yine şart: Meta çağrıları saniyeler sürüyor.
+    const created = await this.boostExecutor.createApproved(
+      (fn) => fn(this.db),
+      payload.clientId,
+    );
 
     await this.db.syncJob.update({
       where: { id: syncJobId },

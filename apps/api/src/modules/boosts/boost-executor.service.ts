@@ -12,6 +12,61 @@ import type { TxLike } from '../rules/rules.service';
 import { INSTAGRAM_PARENT_PAGE_MISSING, isInstagramProfile } from './instagram-boost-guard';
 
 /**
+ * DB işini KISA transaction'larda koşturan çalıştırıcı.
+ *
+ * NEDEN VAR — CANLIDA ÖĞRENİLDİ. Bu servis eskiden çağırandan hazır bir `tx`
+ * alıyordu ve o `tx`, RLS bağlamı için açılmış ETKİLEŞİMLİ bir Prisma
+ * transaction'ıydı (`withTenant`, `set_config(..., is_local => true)` yüzünden
+ * transaction zorunlu). Prisma'nın varsayılan sınırı 5 saniye; boost ise
+ * Meta'ya ÜÇ ilâ DÖRT HTTP çağrısı yapıyor ve üretimde 7–12,5 saniye sürdü.
+ *
+ * Sonuç yalnızca "yavaş" değildi, ÇİFT SESSİZ HATAYDI:
+ *
+ *   1. Transaction ölüyor, ardından `fail()` bile yazamıyor — hata
+ *      `boosts.error` kolonuna DÜŞEMİYOR ve kullanıcı 500 görüyor.
+ *   2. Kayıt `approved`'da kalıyor. Ama Meta çağrısı BAŞARILI OLMUŞ olabilir:
+ *      o zaman platformda para harcayan bir kampanya var ve bizde hiçbir izi
+ *      yok. Boost'un bütün geri alma mantığı da bu yüzden çalışmıyor.
+ *
+ * Çözüm platform çağrısını transaction'ın DIŞINA çıkarmak. Çağıran artık
+ * "şu işi kısa bir transaction'da koştur" diyen bir fonksiyon veriyor:
+ *
+ *   · kiracı yolu  → `(fn) => prisma.withTenant(ctx, fn)`
+ *   · worker yolu  → `(fn) => fn(adminClient)`  (BYPASSRLS, transaction yok)
+ *
+ * Uzun transaction'ın bedeli yalnızca zaman aşımı da değil: bağlantı havuzunda
+ * bir bağlantıyı HTTP süresince kilitliyor.
+ */
+export type TxRunner = <T>(fn: (tx: TxLike) => Promise<T>) => Promise<T>;
+
+/**
+ * BOOST PLATFORMDA OLUŞTU AMA KAYDEDİLEMEDİ.
+ *
+ * Ayrı bir sınıf, çünkü bu hâl "başarısız" DEĞİL ve öyle işaretlenmemeli:
+ * kampanya Meta'da duruyor ve para harcıyor. `failed` yazmak iki yanlış
+ * üretiyor — kullanıcı olmadığını sanıyor, ve satır yeniden denenebilir hâle
+ * geldiği için İKİNCİ bir kampanya açılabiliyor.
+ *
+ * Kayıt `creating` kalıyor: bu durum baştan beri "süreç ortasında kaldı, elle
+ * incelenmeli" anlamına geliyor ve `pending()` yalnızca `approved` satırları
+ * aldığı için tekrar denenmiyor.
+ */
+class BoostCreatedButUnrecorded extends Error {
+  constructor(
+    readonly boostId: string,
+    readonly result: { externalCampaignId: string; externalAdSetId: string; externalAdId: string },
+    cause: unknown,
+  ) {
+    super(
+      `Boost Meta'da OLUŞTU ama kaydedilemedi. Kampanya ${result.externalCampaignId} ` +
+        `platformda duruyor ve para harcıyor — Ads Manager'dan elle durdurulmalı. ` +
+        `Sebep: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+    this.name = 'BoostCreatedButUnrecorded';
+  }
+}
+
+/**
  * Onaylanmış boost'ları platformda oluşturur.
  *
  * ADAY ÜRETİMİNDEN AYRI BİR ADIM ve bu ayrım bu modülün en önemli tasarım
@@ -92,23 +147,25 @@ export class BoostExecutorService {
    * olurdu; kalanlar bir sonraki turda alınıyor.
    */
   async createApproved(
-    tx: TxLike,
+    run: TxRunner,
     clientId: string,
     limit = 10,
   ): Promise<{ created: number; failed: number }> {
-    const pending = await this.pending(
-      tx,
+    const pending = await run((tx) =>
+      this.pending(
+        tx,
       // Durum süzgeci `pending()` içinde — iki çağıranın da onaylı olmayan
       // bir satırı yayınlaması imkânsız olsun diye orada.
-      Prisma.sql`b.client_id = ${clientId}::uuid`,
-      limit,
+        Prisma.sql`b.client_id = ${clientId}::uuid`,
+        limit,
+      ),
     );
 
     let created = 0;
     let failed = 0;
 
     for (const row of pending) {
-      const ok = await this.createOne(tx, row);
+      const ok = await this.createOne(run, row);
       if (ok) created++;
       else failed++;
     }
@@ -130,20 +187,24 @@ export class BoostExecutorService {
    * demek, bu projede tekrar tekrar çıkan sessiz hatanın arayüz karşılığı.
    */
   async createOneApproved(
-    tx: TxLike,
+    run: TxRunner,
     boostId: string,
   ): Promise<{ ok: true } | { ok: false; error: string }> {
-    const [row] = await this.pending(tx, Prisma.sql`b.id = ${boostId}::uuid`, 1);
+    const [row] = await run((tx) =>
+      this.pending(tx, Prisma.sql`b.id = ${boostId}::uuid`, 1),
+    );
     if (!row) return { ok: false, error: 'Boost kaydı bulunamadı ya da onaylı değil.' };
 
-    const ok = await this.createOne(tx, row);
+    const ok = await this.createOne(run, row);
     if (ok) return { ok: true };
 
     // `createOne` sebebi `boosts.error`'a yazdı; buradan okuyup çağırana
     // veriyoruz. İkinci kez üretmek, iki farklı metin üretme riski demek.
-    const [after] = await tx.$queryRaw<Array<{ error: string | null }>>(Prisma.sql`
-      SELECT error FROM boosts WHERE id = ${boostId}::uuid
-    `);
+    const [after] = await run((tx) =>
+      tx.$queryRaw<Array<{ error: string | null }>>(Prisma.sql`
+        SELECT error FROM boosts WHERE id = ${boostId}::uuid
+      `),
+    );
     return { ok: false, error: after?.error ?? 'Boost oluşturulamadı.' };
   }
 
@@ -186,7 +247,7 @@ export class BoostExecutorService {
     `);
   }
 
-  private async createOne(tx: TxLike, row: PendingRow): Promise<boolean> {
+  private async createOne(run: TxRunner, row: PendingRow): Promise<boolean> {
     const provider = this.providers.get('meta');
 
     /**
@@ -205,7 +266,7 @@ export class BoostExecutorService {
     let kaynak: BoostSource;
     if (isInstagramProfile(row.profile_type)) {
       if (!row.parent_page_external_id) {
-        await this.fail(tx, row.id, INSTAGRAM_PARENT_PAGE_MISSING);
+        await run((tx) => this.fail(tx, row.id, INSTAGRAM_PARENT_PAGE_MISSING));
         return false;
       }
       kaynak = {
@@ -224,7 +285,9 @@ export class BoostExecutorService {
     }
 
     if (row.connection_status !== 'active') {
-      await this.fail(tx, row.id, `Platform bağlantısı etkin değil (${row.connection_status}).`);
+      await run((tx) =>
+        this.fail(tx, row.id, `Platform bağlantısı etkin değil (${row.connection_status}).`),
+      );
       return false;
     }
 
@@ -233,10 +296,12 @@ export class BoostExecutorService {
       // App Review onayı gelene kadar en sık karşılaşılacak durum. Boost
       // `failed` düşüyor ama `approved` durumuna geri alınabilir — onay
       // kararı hâlâ geçerli, eksik olan platform izni.
-      await this.fail(
-        tx,
-        row.id,
-        `Yazma izni yok: ${can.missing.join(', ')}. Platform onayı geldikten sonra yeniden denenebilir.`,
+      await run((tx) =>
+        this.fail(
+          tx,
+          row.id,
+          `Yazma izni yok: ${can.missing.join(', ')}. Platform onayı geldikten sonra yeniden denenebilir.`,
+        ),
       );
       return false;
     }
@@ -247,7 +312,9 @@ export class BoostExecutorService {
       layer: 'rule_action',
     });
     if (!gate.allowed) {
-      await this.fail(tx, row.id, `Kota engeli: ${gate.reason}. Sonraki turda denenecek.`);
+      await run((tx) =>
+        this.fail(tx, row.id, `Kota engeli: ${gate.reason}. Sonraki turda denenecek.`),
+      );
       return false;
     }
 
@@ -256,9 +323,11 @@ export class BoostExecutorService {
     // Süreç ortasında worker düşerse kayıt `creating` kalıyor ve bu bilgi
     // değerli: `approved` bırakmak, bir sonraki turun aynı boost'u ikinci kez
     // oluşturmasına yol açardı. `creating` kayıtlar elle incelenmeli.
-    await tx.$executeRaw(Prisma.sql`
-      UPDATE boosts SET status = 'creating', updated_at = now() WHERE id = ${row.id}::uuid
-    `);
+    await run((tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE boosts SET status = 'creating', updated_at = now() WHERE id = ${row.id}::uuid
+      `),
+    );
 
     try {
       const accessToken = await this.vault.getAccessToken(row.connection_id, provider);
@@ -286,11 +355,13 @@ export class BoostExecutorService {
           row.saved_audience_id,
         );
         if (!kitle) {
-          await this.fail(
-            tx,
-            row.id,
+          await run((tx) =>
+            this.fail(
+              tx,
+              row.id,
             'Seçilen kayıtlı kitle Meta’da bulunamadı ya da hedefleme tanımı boş. ' +
               'Kitle silinmiş olabilir; Ads Manager’dan kontrol et.',
+            ),
           );
           return false;
         }
@@ -337,41 +408,100 @@ export class BoostExecutorService {
         },
       );
 
-      await tx.$executeRaw(Prisma.sql`
-        UPDATE boosts SET
-          status = 'active',
-          external_campaign_id = ${result.externalCampaignId},
-          external_ad_set_id = ${result.externalAdSetId},
-          external_ad_id = ${result.externalAdId},
-          created_on_platform_at = now(),
-          error = NULL,
-          updated_at = now()
-        WHERE id = ${row.id}::uuid
-      `);
+      /**
+       * PLATFORM ÇAĞRISI BİTTİ — kayıt İŞİ TEK KISA TRANSACTION'DA.
+       *
+       * Üçü birlikte yazılıyor (boost satırı, ağaç, gönderi işareti) çünkü
+       * ikisi yazılıp üçüncüsü yazılmayan bir hâl, panelde açıklanamaz bir
+       * kayıt bırakır. Ama bu transaction artık yalnızca DB işi içeriyor:
+       * saniyeler süren HTTP çağrısı dışında kaldı.
+       */
+      try {
+        await run(async (tx) => {
+          await tx.$executeRaw(Prisma.sql`
+            UPDATE boosts SET
+              status = 'active',
+              external_campaign_id = ${result.externalCampaignId},
+              external_ad_set_id = ${result.externalAdSetId},
+              external_ad_id = ${result.externalAdId},
+              created_on_platform_at = now(),
+              error = NULL,
+              updated_at = now()
+            WHERE id = ${row.id}::uuid
+          `);
 
-      await this.writeTree(tx, row, result);
+          await this.writeTree(tx, row, result);
 
-      // GÖNDERİ İŞARETLENİYOR — aynı gönderi ikinci kez aday olmasın.
-      //
-      // Kısmi tekil indeks zaten canlı bir boost varken ikinciyi engelliyor,
-      // ama boost sonradan iptal edilirse indeks serbest kalıyor. `boosted_at`
-      // kalıcı: bir kez boost edilmiş gönderi, boost bittikten sonra da
-      // yeniden aday olmamalı.
-      await tx.$executeRaw(Prisma.sql`
-        UPDATE organic_posts SET boosted_at = now(), updated_at = now()
-        WHERE id = ${row.organic_post_id}::uuid
-      `);
+          // GÖNDERİ İŞARETLENİYOR — aynı gönderi ikinci kez aday olmasın.
+          //
+          // Kısmi tekil indeks zaten canlı bir boost varken ikinciyi
+          // engelliyor, ama boost sonradan iptal edilirse indeks serbest
+          // kalıyor. `boosted_at` kalıcı: bir kez boost edilmiş gönderi, boost
+          // bittikten sonra da yeniden aday olmamalı.
+          await tx.$executeRaw(Prisma.sql`
+            UPDATE organic_posts SET boosted_at = now(), updated_at = now()
+            WHERE id = ${row.organic_post_id}::uuid
+          `);
+        });
+      } catch (err) {
+        /**
+         * BOOST PLATFORMDA VAR AMA KAYDEDİLEMEDİ — EN PAHALI HÂL.
+         *
+         * Kampanya oluştu ve para harcamaya başladı; bizde izi yok. Bu yüzden
+         * hata YUTULMUYOR ve dış kimlikler log'a TAM olarak yazılıyor: Ads
+         * Manager'da bulunup elle durdurulabilsin. Üretimde tam olarak bu
+         * yaşandı — transaction zaman aşımına düştü ve kampanya kayıtsız kaldı.
+         *
+         * Fırlatmak yerine `false` dönmek, çağırana "olmadı" demek olurdu ve
+         * ikinci deneme İKİNCİ bir kampanya açardı.
+         */
+        this.logger.error(
+          `BOOST PLATFORMDA OLUŞTU AMA KAYDEDİLEMEDİ — elle müdahale gerekiyor. ` +
+            `boost=${row.id} kampanya=${result.externalCampaignId} ` +
+            `adset=${result.externalAdSetId} reklam=${result.externalAdId} · ` +
+            `sebep: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        throw new BoostCreatedButUnrecorded(row.id, result, err);
+      }
 
       this.logger.log(`Boost oluşturuldu: ${result.externalAdId}`);
       return true;
     } catch (err) {
+      /**
+       * KAMPANYA OLUŞTUYSA `failed` YAZILMIYOR — yukarı veriliyor.
+       *
+       * Kayıt `creating` kalıyor ve o durum "elle incelenmeli" demek.
+       * `failed` yazmak iki yanlış üretirdi: kullanıcı boost'un olmadığını
+       * sanardı ve satır yeniden denenebilir hâle geldiği için İKİNCİ bir
+       * kampanya açılabilirdi. Para harcayan bir mükerrerlik, kayıt eksikliğinden
+       * daha pahalı.
+       */
+      if (err instanceof BoostCreatedButUnrecorded) throw err;
+
       const message =
         err instanceof PlatformApiError
           ? `${err.kind}: ${err.message}`
           : err instanceof Error
             ? err.message
             : String(err);
-      await this.fail(tx, row.id, message);
+      /**
+       * HATA YAZIMI DA KISA TRANSACTION'DA ve KENDİ hatasını yutuyor.
+       *
+       * Üretimde şu yaşandı: dış transaction zaman aşımına düşmüş, ardından
+       * `fail()` de yazamamış ve ASIL hata (Meta'nın mesajı) kaybolmuştu —
+       * kullanıcı yalnızca "beklenmeyen bir hata" gördü. Sebebi kaydedememek,
+       * sebebi bilmemekten farksız.
+       */
+      try {
+        await run((tx) => this.fail(tx, row.id, message));
+      } catch (yazmaHatasi) {
+        this.logger.error(
+          `Boost hatası KAYDEDİLEMEDİ (${row.id}). Asıl sebep: ${message} · ` +
+            `yazma hatası: ${
+              yazmaHatasi instanceof Error ? yazmaHatasi.message : String(yazmaHatasi)
+            }`,
+        );
+      }
       return false;
     }
   }
