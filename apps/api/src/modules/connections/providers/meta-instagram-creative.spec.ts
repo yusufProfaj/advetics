@@ -1,9 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PlatformApiError } from '../provider.types';
 import type { BoostRequest, BoostSource } from '../provider.types';
 import {
   buildBoostAdSetParams,
   decideInstagramCreativeCheck,
   instagramCreativeBody,
+  labelBoostError,
   instagramPlacements,
 } from './meta.provider';
 
@@ -227,5 +231,191 @@ describe('decideInstagramCreativeCheck', () => {
     expect(
       decideInstagramCreativeCheck({ sent: SENT, echo: 'baska', effective: SENT }).verdict,
     ).toBe('reject');
+  });
+});
+
+/**
+ * HEDEF TÜRÜ — boost'u öldüren eksik alan.
+ *
+ * İlk canlı deneme *"Eylem Çağrısı Gerekiyor · Kampanya amacınız için harici
+ * bir internet sitesi URL'si gerekiyor"* (subcode 2446383) ile reddedildi.
+ * Sebebi gönderdiğimiz yanlış bir değer DEĞİL, hiç göndermediğimiz bir alandı:
+ * `destination_type` verilmediğinde Meta hedefi kendi çözüyor ve harici bir
+ * siteye düşüyor. Boost'ta harici URL yok — kullanıcı var olan gönderiyi öne
+ * çıkarıyor.
+ *
+ * Bu, CLAUDE.md'deki "platformun varsayılanına güvenme" kuralının birebir
+ * karşılığı: alanı göndermemek, kararı hesabın ayarına bırakmak demek.
+ */
+describe('ad set — hedef türü', () => {
+  const NOW = new Date('2026-08-17T12:00:00.000Z');
+
+  function req(source: BoostSource): BoostRequest {
+    return {
+      adAccountExternalId: '123',
+      source,
+      budget: { mode: 'lifetime', totalMicros: 300_000_000n },
+      durationDays: 5,
+      objective: 'OUTCOME_ENGAGEMENT',
+      currency: 'TRY',
+      name: 'Boost',
+    };
+  }
+
+  const FB: BoostSource = {
+    surface: 'facebook_page',
+    pageExternalId: 'page-1',
+    postExternalId: 'post-1',
+  };
+
+  it('KRİTİK: Instagram boost’unda `destination_type: ON_POST` gidiyor', () => {
+    expect(buildBoostAdSetParams(req(IG), 'c-1', NOW).destination_type).toBe('ON_POST');
+  });
+
+  it('KRİTİK: Facebook boost’unda DA gidiyor', () => {
+    /*
+     * Yerleşim kararının TERSİ ve bilinçli. Yerleşimde korunacak çalışan bir
+     * davranış vardı; burada yok — Facebook boost'u aynı amacı ve aynı
+     * optimizasyonu kullanıyor, yani App Review açıldığı gün aynı hataya
+     * düşerdi ve hata ikinci kez baştan bulunurdu.
+     */
+    expect(buildBoostAdSetParams(req(FB), 'c-1', NOW).destination_type).toBe('ON_POST');
+  });
+
+  it('hedef, POST_ENGAGEMENT optimizasyonuyla birlikte gidiyor', () => {
+    // İkisi bir arada anlamlı: "gönderinin üzerinde kal" + "etkileşime göre
+    // optimize et". Biri değişirse diğeri de değişmek zorunda.
+    const p = buildBoostAdSetParams(req(IG), 'c-1', NOW);
+    expect(p.optimization_goal).toBe('POST_ENGAGEMENT');
+    expect(p.destination_type).toBe('ON_POST');
+  });
+
+  it('KRİTİK: harici bir link ALANI HİÇ gönderilmiyor', () => {
+    // Meta'nın mesajı "bir internet sitesi URL'si girin" diyor ama doğru çözüm
+    // uydurma bir URL göndermek DEĞİL: o, kullanıcının gönderisini tanıtmak
+    // yerine bir siteye trafik göndermek olurdu ve tıklayan kişi gönderiyi
+    // hiç görmezdi.
+    const p = buildBoostAdSetParams(req(IG), 'c-1', NOW);
+    expect(p.link).toBeUndefined();
+    expect(p.link_url).toBeUndefined();
+  });
+});
+
+/**
+ * HATA HANGİ ADIMDA ÇIKTI — teşhisi tahminden çıkarıyor.
+ *
+ * `destination_type` hatası tam bu yüzden ilk turda yanlış yere bağlandı:
+ * Meta'nın metni "reklam kreatifi kısmında bir eylem çağrısı seçin" diyordu,
+ * oysa eksik olan ad set alanıydı.
+ */
+describe('labelBoostError', () => {
+  it('adım adı hata metninin ÖNÜNE geliyor', () => {
+    const e = labelBoostError(
+      'Ad set oluşturulurken',
+      new PlatformApiError('meta', 'permanent', 'Invalid parameter'),
+    );
+    expect((e as Error).message).toBe('Ad set oluşturulurken: Invalid parameter');
+  });
+
+  it('KRİTİK: `kind` KORUNUYOR — kalıcı hata yeniden denenmiyor', () => {
+    // `retryable` doğrudan `kind`'a bakıyor. Sarma sırasında `permanent`
+    // kaybolsa boost sonsuza kadar yeniden denenirdi.
+    const e = labelBoostError(
+      'Reklam oluşturulurken',
+      new PlatformApiError('meta', 'permanent', 'x'),
+    ) as PlatformApiError;
+    expect(e.kind).toBe('permanent');
+    expect(e.retryable).toBe(false);
+
+    const t = labelBoostError(
+      'Reklam oluşturulurken',
+      new PlatformApiError('meta', 'transient', 'y'),
+    ) as PlatformApiError;
+    expect(t.retryable).toBe(true);
+  });
+
+  it('KRİTİK: `detail` KORUNUYOR — subcode olmadan hata aranamıyor', () => {
+    const e = labelBoostError(
+      'Ad set oluşturulurken',
+      new PlatformApiError('meta', 'permanent', 'x', { platformSubcode: 2446383 }),
+    ) as PlatformApiError;
+    expect(e.detail?.platformSubcode).toBe(2446383);
+  });
+
+  it('KRİTİK: platform hatası OLMAYAN hata OLDUĞU GİBİ geçiyor', () => {
+    // Sarmak, üstteki `instanceof` ayrımlarını (örneğin transaction hatası)
+    // bozardı — 6c'de tam o ayrım yüzünden kayıt `creating` bırakılıyor.
+    const raw = new Error('Transaction already closed');
+    expect(labelBoostError('Reklam oluşturulurken', raw)).toBe(raw);
+  });
+});
+
+/**
+ * KAYNAK TARAMASI — etiketin BAĞLANDIĞINI kilitliyor.
+ *
+ * `labelBoostError`'ın kendisi test edilmiş olması bir şey ifade etmiyor:
+ * `createBoost` onu çağırmayı bırakırsa bütün birim testleri geçmeye devam
+ * eder ve hata yine hangi adımda çıktığını söylemez. Bu boşluk mutasyonla
+ * bulundu — etiketleme kaldırıldığında 27 testin hepsi geçiyordu.
+ *
+ * Tarama ayrıca ALTINCI ÇAĞRIYI da yakalıyor: biri boost'a yeni bir Meta
+ * çağrısı ekleyip `adim`'i güncellemezse, o çağrının hatası önceki adımın
+ * adıyla raporlanır — yanlış teşhis, hiç teşhis olmamasından kötü.
+ */
+describe('createBoost — adım etiketlemesi kaynakta bağlı', () => {
+  const SOURCE = readFileSync(join(__dirname, 'meta.provider.ts'), 'utf8');
+
+  /** `createBoost` gövdesini SÜSLÜ PARANTEZ EŞLEŞTİREREK çıkarıyor. */
+  const GOVDE = (() => {
+    const imza = 'async createBoost(ctx: FetchContext, request: BoostRequest)';
+    const bas = SOURCE.indexOf(imza);
+    if (bas < 0) throw new Error('createBoost bulunamadı — tarama boşa düşer');
+    let i = SOURCE.indexOf('{', bas);
+    let derinlik = 0;
+    for (let j = i; j < SOURCE.length; j++) {
+      if (SOURCE[j] === '{') derinlik++;
+      else if (SOURCE[j] === '}') {
+        derinlik--;
+        if (derinlik === 0) return SOURCE.slice(i, j + 1);
+      }
+    }
+    throw new Error('createBoost gövdesi kapanmadı');
+  })();
+
+  it('tarama BOŞA DÜŞMÜYOR — gövde gerçekten yakalandı', () => {
+    /*
+     * Bu testin kendisi zorunlu. Daha önce bir kaynak taramasında dilim
+     * metodu imzasından hemen sonra kesiyordu ve tarama HER ŞEYİ geçiriyordu.
+     * Boş bir dilimde "yasak dizge yok" iddiası her zaman doğrudur.
+     */
+    expect(GOVDE.length).toBeGreaterThan(1200);
+    expect(GOVDE).toContain('/campaigns');
+    expect(GOVDE).toContain('/adsets');
+    expect(GOVDE).toContain('/ads');
+    expect(GOVDE).toContain('catch');
+  });
+
+  it('KRİTİK: hata `labelBoostError` ile fırlatılıyor', () => {
+    expect(GOVDE).toContain('throw labelBoostError(adim, err)');
+  });
+
+  it('KRİTİK: ÇIPLAK `throw err` kalmadı', () => {
+    // Geri alma bloğundan sonra çıplak fırlatmak, etiketi sessizce atlamak.
+    expect(GOVDE).not.toMatch(/throw err\s*;/);
+  });
+
+  it('KRİTİK: her platform çağrısının ÖNÜNDE bir adım ataması var', () => {
+    /*
+     * Sayı karşılaştırması bilinçli: çağrı eklenip etiket eklenmediğinde
+     * düşmesi gereken tek koruma bu. Beş çağrı var (kampanya, ad set,
+     * kreatif, reklam, kampanyayı yayına alma) ve Instagram dalında bir de
+     * doğrulama; ilk atama `try`'dan önce yapıldığı için `adim = ` sayısı
+     * çağrı sayısına eşit ya da fazla olmak zorunda.
+     */
+    const cagri = (GOVDE.match(/await this\.graphPost|await this\.assertInstagramCreative/g) ?? [])
+      .length;
+    const etiket = (GOVDE.match(/adim = '/g) ?? []).length;
+    expect(cagri).toBeGreaterThanOrEqual(5);
+    expect(etiket).toBeGreaterThanOrEqual(cagri);
   });
 });

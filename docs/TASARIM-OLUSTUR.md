@@ -1107,6 +1107,23 @@ boost'un amacı gönderiyi olduğu gibi öne çıkarmak — Meta hata verirse
 `legacy_instagram_media_id` (v21 ve öncesi Marketing API). Kod yalnızca
 birinciye kilitli.
 
+**Hedef ad set'te açıkça yazılıyor: `destination_type: "ON_POST"`.** Alan
+verilmediğinde Meta hedefi kendi çözüyor ve harici bir web sitesine düşüyor —
+ilk canlı deneme *"Eylem Çağrısı Gerekiyor · Kampanya amacınız için harici bir
+internet sitesi URL'si gerekiyor"* (subcode 2446383) ile reddedildi. Boost'ta
+harici URL **yok**: kullanıcı var olan gönderiyi öne çıkarıyor. `ON_POST`,
+OUTCOME_ENGAGEMENT altında tam bu durumun değeri ve `POST_ENGAGEMENT`
+optimizasyonuyla eşleşen tek tutarlı hedef; iki bağımsız referanstan
+doğrulandı. **Meta'nın mesajı yanlış yeri gösteriyor** ("reklam kreatifi
+kısmında bir eylem çağrısı seçin") — tarif kendi arayüzüne göre yazılmış ve
+API'de kreatife bakmaya sevk ediyor. Yanlış çözüm, uydurma bir URL göndermek
+olurdu: o zaman tıklayan kişi gönderiyi hiç görmezdi.
+
+Bu alan **Facebook yoluna da** gidiyor — aşağıdaki yerleşim kararının tersi.
+Fark: yerleşimde korunacak çalışan bir davranış vardı, burada yok. Facebook
+boost'u aynı amacı ve aynı optimizasyonu kullanıyor, yani App Review açıldığı
+gün aynı hataya düşerdi.
+
 **Yerleşim ad set'te açıkça yazılıyor:** `publisher_platforms: ["instagram"]`
 ve medya türüne göre `instagram_positions` (reel → `reels`, diğerleri →
 `stream`). Boş bırakmak Meta'ya "bütün Instagram yerleşimleri" demek; bir akış

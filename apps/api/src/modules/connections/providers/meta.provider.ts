@@ -1289,6 +1289,17 @@ export class MetaProvider implements IAdPlatformProvider {
     const act = actPath(request.adAccountExternalId);
     const created: Array<{ id: string; label: string }> = [];
 
+    /**
+     * HANGİ ADIMDA DÜŞTÜĞÜ KAYDEDİLİYOR.
+     *
+     * Beş ayrı Meta çağrısı var ve hatanın metni hangisinden geldiğini
+     * söylemiyor. `destination_type` hatası tam bu yüzden ilk turda ad set'e
+     * değil kreatife bağlandı: mesaj "reklam kreatifi kısmında bir eylem
+     * çağrısı seçin" diyordu, oysa eksik olan ad set alanıydı. Meta'nın
+     * tarifi kendi arayüzüne göre yazılmış ve API'de yanıltıyor.
+     */
+    let adim = 'Kampanya oluşturulurken';
+
     try {
       const campaign = await this.graphPost<{ id: string }>(ctx, `${act}/campaigns`, {
         name: request.name,
@@ -1310,6 +1321,7 @@ export class MetaProvider implements IAdPlatformProvider {
       });
       created.push({ id: campaign.id, label: 'kampanya' });
 
+      adim = 'Ad set (bütçe ve hedefleme) oluşturulurken';
       const adSet = await this.graphPost<{ id: string }>(
         ctx,
         `${act}/adsets`,
@@ -1333,6 +1345,7 @@ export class MetaProvider implements IAdPlatformProvider {
        */
       let creativeRef: string;
       if (request.source.surface === 'instagram') {
+        adim = 'Instagram kreatifi oluşturulurken';
         const creative = await this.graphPost<{ id: string }>(
           ctx,
           `${act}/adcreatives`,
@@ -1351,6 +1364,7 @@ export class MetaProvider implements IAdPlatformProvider {
          *
          * "200 döndü" bu projede doğrulama sayılmıyor; doğrulama budur.
          */
+        adim = 'Instagram kreatifi doğrulanırken';
         await this.assertInstagramCreative(ctx, creative.id, request.source);
         creativeRef = JSON.stringify({ creative_id: creative.id });
       } else {
@@ -1359,6 +1373,7 @@ export class MetaProvider implements IAdPlatformProvider {
         });
       }
 
+      adim = 'Reklam oluşturulurken';
       const ad = await this.graphPost<{ id: string }>(ctx, `${act}/ads`, {
         name: `${request.name} — reklam`,
         adset_id: adSet.id,
@@ -1367,6 +1382,7 @@ export class MetaProvider implements IAdPlatformProvider {
       });
       created.push({ id: ad.id, label: 'reklam' });
 
+      adim = 'Kampanya yayına alınırken';
       await this.graphPost(ctx, campaign.id, { status: 'ACTIVE' });
 
       return {
@@ -1392,7 +1408,7 @@ export class MetaProvider implements IAdPlatformProvider {
           );
         }
       }
-      throw err;
+      throw labelBoostError(adim, err);
     }
   }
 
@@ -2314,6 +2330,35 @@ export function mapSavedAudience(row: Record<string, unknown>): SavedAudienceOpt
  * Hiçbir durumda "her şey yolunda" varsayımı yok: `ok` yalnızca yankı BİREBİR
  * eşleştiğinde dönüyor.
  */
+/**
+ * Boost hatasına HANGİ ADIMDA çıktığını ekler.
+ *
+ * NEDEN GEREKLİ: boost beş Meta çağrısından oluşuyor ve Meta'nın hata metni
+ * hangisinden geldiğini söylemiyor. Bu, ilk canlı denemede doğrudan yanlış
+ * teşhise yol açtı: eksik alan ad set'in `destination_type`'ıydı ama mesaj
+ * *"reklam kreatifi kısmında bir eylem çağrısı seçin"* diyordu — Meta'nın
+ * tarifi kendi arayüzüne göre yazılmış ve API'de yanlış yeri gösteriyor.
+ *
+ * HATA SINIFI KORUNUYOR. `kind` yeniden üretiliyor çünkü `retryable` ona
+ * bakıyor: `permanent` bir hatayı sarıp `transient` yapmak, boost'u sonsuza
+ * kadar yeniden denemek demek olurdu. `detail` de taşınıyor — subcode olmadan
+ * Meta'nın hata kataloğunda arama yapılamıyor.
+ *
+ * PlatformApiError DIŞINDAKİ hata OLDUĞU GİBİ geçiyor: onu sarmak, üstteki
+ * `instanceof` kontrollerini (örneğin transaction hatası ayrımı) bozardı.
+ */
+export function labelBoostError(step: string, err: unknown): unknown {
+  if (err instanceof PlatformApiError) {
+    return new PlatformApiError(
+      err.platform,
+      err.kind,
+      `${step}: ${err.message}`,
+      err.detail,
+    );
+  }
+  return err;
+}
+
 export function decideInstagramCreativeCheck(params: {
   sent: string;
   echo?: string;
@@ -2491,6 +2536,25 @@ export function buildBoostAdSetParams(
     campaign_id: campaignId,
     billing_event: 'IMPRESSIONS',
     optimization_goal: 'POST_ENGAGEMENT',
+    /**
+     * HEDEF AÇIKÇA "GÖNDERİNİN ÜZERİNDE" — verilmemesi boost'u öldürüyordu.
+     *
+     * Alan gönderilmediğinde Meta hedefi kendi çözüyor ve harici bir web
+     * sitesine düşüyor: ilk canlı denemede istek *"Eylem Çağrısı Gerekiyor ·
+     * Kampanya amacınız için harici bir internet sitesi URL'si gerekiyor"*
+     * (subcode 2446383) ile reddedildi. Boost'un tanımı gereği harici bir URL
+     * YOK — kullanıcı var olan gönderiyi öne çıkarıyor, bir siteye trafik
+     * göndermiyor. `ON_POST`, OUTCOME_ENGAGEMENT altında tam bu durumun
+     * değeri ve `POST_ENGAGEMENT` optimizasyonuyla eşleşen tek tutarlı hedef.
+     *
+     * FACEBOOK YOLUNA DA GÖNDERİLİYOR ve bu, yerleşim kararının tersi
+     * (yerleşim yalnızca Instagram'da yazılıyor). Fark şurada: yerleşimde
+     * korunacak çalışan bir davranış vardı, burada YOK — Facebook boost'u da
+     * aynı amacı ve aynı optimizasyonu kullanıyor, yani App Review açıldığı
+     * gün aynı hataya düşerdi. İki yolu ayırmak, aynı hatayı ikinci kez
+     * bulmayı beklemek olurdu.
+     */
+    destination_type: 'ON_POST',
     // Reklam oluşturucuyla AYNI GEREKÇE: strateji söylenmezse Meta hesabın
     // varsayılanına düşüyor ve tavanlı bir varsayılan isteği reddediyor.
     bid_strategy: 'LOWEST_COST_WITHOUT_CAP',

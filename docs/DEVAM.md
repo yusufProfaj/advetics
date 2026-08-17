@@ -276,6 +276,49 @@ akış ve engeller §7.2'de. Özeti:
 
    **1130 API testi.**
 
+6e. ✅ **BİTTİ** — ad set'te `destination_type` HİÇ gönderilmiyordu; Meta
+   hedefi kendi çözüp harici bir web sitesine düşüyordu.
+
+   Hata: *"Eylem Çağrısı Gerekiyor · Kampanya amacınız için harici bir
+   internet sitesi URL'si gerekiyor. Reklam kreatifi kısmında bir eylem
+   çağrısı seçin ve bir internet sitesi URL'si girin"* (subcode 2446383).
+
+   **Sebep gönderdiğimiz yanlış bir değer değil, hiç göndermediğimiz bir
+   alandı.** `destination_type` verilmediğinde Meta hedefi kendi belirliyor;
+   boost'ta harici URL YOK — kullanıcı var olan gönderiyi öne çıkarıyor, bir
+   siteye trafik göndermiyor. Doğru değer `ON_POST`: OUTCOME_ENGAGEMENT
+   altında "harici site olmadan mevcut gönderiyi öne çıkar" durumunun karşılığı
+   ve `POST_ENGAGEMENT` optimizasyonuyla eşleşen tek tutarlı hedef. İki
+   bağımsız Meta referansından doğrulandı.
+
+   CLAUDE.md'deki **"platformun varsayılanına güvenme"** kuralının birebir
+   karşılığı: alanı göndermemek, kararı platformun ayarına bırakmak.
+
+   **Facebook yoluna da gönderiliyor** ve bu, yerleşim kararının tersi
+   (yerleşim yalnızca Instagram'da yazılıyor). Fark: yerleşimde korunacak
+   çalışan bir davranış vardı, burada yok — Facebook boost'u aynı amacı ve
+   aynı optimizasyonu kullanıyor, yani App Review açıldığı gün aynı hataya
+   düşer ve hata ikinci kez baştan bulunurdu.
+
+   **Meta'nın mesajı yanlış yeri gösterdi** ve teşhis ilk turda kreatife
+   bağlandı — oysa eksik olan ad set alanıydı. Tarif Meta'nın kendi
+   arayüzüne göre yazılmış. Boost beş ayrı Meta çağrısından oluşuyor ve hangisi
+   düştüğü hiçbir yerde yazmıyordu; artık hata metni **adımla başlıyor**
+   ("Ad set (bütçe ve hedefleme) oluşturulurken: …"). `labelBoostError`
+   hata sınıfını koruyor: `kind` yeniden üretiliyor (kalıcı hatayı `transient`
+   yapmak sonsuz yeniden deneme olurdu) ve `detail` taşınıyor (subcode olmadan
+   Meta'nın kataloğunda arama yapılamıyor).
+
+   **Mutasyonda bir boşluk çıktı ve kapatıldı:** `labelBoostError`'ın kendisi
+   test edilmişti ama `createBoost`'un onu ÇAĞIRDIĞI test edilmemişti —
+   etiketleme kaldırıldığında 27 testin hepsi geçiyordu. Kaynak taraması
+   eklendi; tarama boşa düşerse (metot adı değişirse) hata fırlatıyor, sessizce
+   geçmiyor. Tarama ayrıca **altıncı çağrıyı** da yakalıyor: etiketlenmemiş yeni
+   bir Meta çağrısı, hatasını önceki adımın adıyla raporlar — yanlış teşhis,
+   hiç teşhis olmamasından kötü.
+
+   **1142 API testi.**
+
 7. **CANLI ÇAĞRI — tek kalan adım ve kodla değil elle yapılıyor.**
 
    > Ajansın kendi hesabında, **en küçük bütçeyle**, tek bir Instagram
