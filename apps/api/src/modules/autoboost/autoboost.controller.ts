@@ -1,9 +1,11 @@
-import { Body, Controller, Get, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import type { TenantContext } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import type { AutoBoostQueueList } from '@advetics/shared';
+import { autoBoostDecisionSchema } from '@advetics/shared';
+import { AutoBoostLaunchService } from './autoboost-launch.service';
 import { AutoBoostReadService } from './autoboost-read.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
 
@@ -31,7 +33,26 @@ export class AutoBoostController {
   constructor(
     private readonly subscribe: YouTubeSubscribeService,
     private readonly read: AutoBoostReadService,
+    private readonly launch: AutoBoostLaunchService,
   ) {}
+
+  /**
+   * "ONAYLA VE BOOSTLA" — kartı yayına alır ya da reddeder.
+   *
+   * `boost.approve` İSTİYOR, `boost.read` DEĞİL. Bu uç ara onay adımı olmadan
+   * PARA TAAHHÜT EDİYOR; okuma yetkisiyle aynı kefeye koymak, kartları
+   * görebilen herkesin harcama başlatabilmesi demekti. Modül 7'nin baştan
+   * beri taşıdığı ayrım.
+   */
+  @Post('queue/:id/decision')
+  @RequirePermissions('boost.approve')
+  decide(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(autoBoostDecisionSchema)) body: { approve: boolean },
+  ): Promise<{ status: string; message: string }> {
+    return this.launch.decide(ctx, id, body.approve);
+  }
 
   /**
    * BİLDİRİM HAVUZU — onay bekleyen kartlar.

@@ -173,3 +173,72 @@ düşürülmedi — 2.0'ın verisi yerinde ve `arsiv/advetics-2.0` dağıtılabi
 **En kritik kısıt:** kuyrukta `(social_profile_id, external_id)` tekil.
 Mükerrer bildirim aynı karta düşer, ikinci kart açmaz — yoksa aynı içerik için
 **iki reklam** yayınlanır.
+
+
+---
+
+## 5. Yayın yolu — Meta AÇIK, Google BLOKE
+
+### Meta (Instagram): mevcut ve doğrulanmış yoldan
+
+Kart onaylandığında yeni bir yayın yolu çalışmıyor: `boosts` satırı açılıyor ve
+yayın `BoostExecutorService` üzerinden gidiyor — canlıda çalışan, şu dersleri
+zaten taşıyan yol:
+
+- `destination_type: ON_POST` (verilmezse Meta reddediyor)
+- Instagram için ayrı `adcreatives` çağrısı ve üç kök alan
+- Kreatifin geri okunup **benzeri benzerle** karşılaştırılması
+- Platform çağrısının transaction dışında kalması (5 sn sınırı)
+
+İkinci bir yol yazmak bu derslerin ikinci kez öğrenilmesi demekti. Yan fayda:
+harcama muhasebesi (K19) ve ağaç kaydı kendiliğinden çalışıyor, ikisi de
+`boosts` satırına bağlı.
+
+**İki kez onaylama engelli.** Durum güncellemesi `WHERE status = 'pending'`
+koşuluyla yapılıyor; iki kullanıcı aynı anda onaylarsa ikincisi sıfır satır
+günceller ve orada durur. "Önce oku sonra yaz" yarışı kaybederdi ve sonuç
+İKİ REKLAM olurdu.
+
+**Başarısız kart `pending`e GERİ ALINMIYOR**, `failed` oluyor. Geri almak,
+kullanıcının aynı düğmeye tekrar basıp platformda ikinci bir kampanya açmasına
+izin verirdi.
+
+### Google (YouTube): logo zorunluluğu yolu kapatıyor
+
+**Araştırmanın en pahalı bulgusu.** API'den oluşturulabilen tek YouTube video
+reklamı `DemandGenVideoResponsiveAdInfo` ve **v24'ten beri şu üç alan
+ZORUNLU**:
+
+| Alan | Tip | Not |
+|---|---|---|
+| `business_name` | `AdTextAsset` | Marka adı — ön ayarda yok |
+| `videos[]` | `AdVideoAsset` | Ayrı Asset kaydı gerekiyor (`type: YOUTUBE_VIDEO`) |
+| `logo_images[]` | `AdImageAsset` | **Ayrı Asset kaydı** — en az 128×128, 1:1 |
+
+`logo_images` v23'te opsiyoneldi, v24'te zorunlu oldu. Logo ayrı bir Asset
+kaydı gerektiriyor (`type: IMAGE`, base64 veri) ve **Google tarafında görsel
+yükleme yolu henüz yazılmadı** (`uploadAdImage` Google'da hata fırlatıyor).
+
+Sonuç: "kullanıcı yalnızca videoyu seçip yayınlar" akışı Google'da **mümkün
+değil**. Ön ayara en az marka adı ve logo eklenmeli.
+
+Bu yüzden onay ucu Google kartlarını REDDEDİYOR ve sebebini söylüyor. Eksik
+alanla istek atmak Google'ın reddiyle sonuçlanır ve kullanıcı anlamayacağı bir
+hata görürdü.
+
+#### Google yolunu açmak için gerekenler
+
+1. Ön ayara `businessName`, `longHeadlines` ve **logo** alanları
+2. Google görsel yükleme (`AssetOperation`, `type: IMAGE`, base64)
+3. Video Asset oluşturma (`type: YOUTUBE_VIDEO`, `youtube_video_id`)
+4. **Kanal kontrolleri** — bu atlanmamalı: varsayılan `ALL_CHANNELS`, yani
+   ayarlanmazsa reklam yalnızca YouTube'da değil **Gmail, Discover, Maps ve
+   Display'de de** yayınlanır. `ad_group.demand_gen_ad_group_settings.channel_controls`
+   açıkça verilmeli — "platformun varsayılanına güvenme" kuralının Google
+   karşılığı.
+5. `Ad.final_urls` ad seviyesinde (ad info'nun içinde DEĞİL)
+
+> **Doğrulanmadı:** başlık/açıklama adet ve karakter sınırları Google'ın kendi
+> dokümanları arasında çelişiyor (3+ zorunlu / 40 karakter ile 1–5 / 30
+> karakter). Resmî API örnekleri her alandan tek tane gönderiyor. İlk gerçek
+> çağrıda netleşecek.

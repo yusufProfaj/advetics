@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { BoostsModule } from '../boosts/boosts.module';
 import { AutoBoostQueueService } from './autoboost-queue.service';
+import { AutoBoostLaunchService } from './autoboost-launch.service';
 import { AutoBoostReadService } from './autoboost-read.service';
 import { YouTubeApiService } from './youtube-api.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
@@ -15,9 +17,14 @@ import { YouTubeWebSubService } from './youtube-websub.service';
  * oradan besleniyor.
  */
 @Module({
+  // BoostsModule: yayın mevcut ve DOĞRULANMIŞ yürütücüden geçiyor.
+  // İkinci bir yayın yolu yazmak, canlıda öğrenilmiş her dersi ikinci kez
+  // öğrenmek demekti.
+  imports: [BoostsModule],
   controllers: [AutoBoostController, YouTubeWebSubController],
   providers: [
     AutoBoostQueueService,
+    AutoBoostLaunchService,
     AutoBoostReadService,
     YouTubeApiService,
     YouTubeSubscribeService,

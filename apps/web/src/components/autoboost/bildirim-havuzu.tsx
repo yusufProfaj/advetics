@@ -204,37 +204,85 @@ const DURUM_ETIKETI: Record<string, string> = {
 /**
  * "Onayla ve Boostla".
  *
- * ŞU AN DEVRE DIŞI ve sebebi ekranda yazıyor: yayın yolu (Meta boost'u ve
- * Google Demand Gen kampanyası) henüz bağlanmadı. Düğmeyi çalışıyormuş gibi
- * göstermek, tıklandığında hiçbir şey olmayan bir düğme demekti — bu projenin
- * kaçındığı sessiz hata biçimi.
+ * ═══ BU DÜĞME PARA HARCIYOR ═══
+ *
+ * Ara onay adımı YOK — kararı kullanıcı zaten bu ekranda veriyor ve ikinci
+ * kez sormak istenen akışı bozardı. Ama harcanacak tutar düğmenin ÜSTÜNDE
+ * yazıyor (kartın ön ayar satırı) ve engel varsa düğme açılmıyor.
+ *
+ * INSTAGRAM AÇIK, YOUTUBE KAPALI ve sebebi ekranda: Google Demand Gen reklamı
+ * marka adı ve logo görseli ZORUNLU kılıyor (v24'ten beri), ikisi de ön ayarda
+ * henüz yok. Kapalı bırakıp sebebini söylemek, tıklandığında anlaşılmaz bir
+ * Google hatası veren bir düğmeden iyi.
  */
 function OnayDugmesi({
   kayit,
   etkin,
-  onDegisti: _onDegisti,
+  onDegisti,
 }: {
   kayit: AutoBoostQueueItemRecord;
   etkin: boolean;
   onDegisti: () => void;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+
   if (kayit.status !== 'pending') return null;
 
+  const youtube = kayit.platform === 'google';
+  const acik = etkin && !youtube && !busy;
+
+  async function karar(approve: boolean): Promise<void> {
+    setBusy(true);
+    setHata(null);
+    try {
+      const r = await apiFetch<{ status: string; message: string }>(
+        `/autoboost/queue/${kayit.id}/decision`,
+        { method: 'POST', body: JSON.stringify({ approve }) },
+      );
+      /*
+       * BAŞARISIZ YAYIN DA BİR SONUÇ. Sunucu `failed` dönebiliyor ve mesajı
+       * platformun kendi cümlesini taşıyor; onu göstermeden yenilemek,
+       * kullanıcıya "bir şey oldu ama ne bilmiyorum" bırakırdı.
+       */
+      if (r.status === 'failed') setHata(r.message);
+      onDegisti();
+    } catch (err) {
+      setHata(err instanceof ApiRequestError ? err.message : 'İşlem tamamlanamadı.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="text-right">
+    <div className="max-w-[12rem] text-right">
       <button
         type="button"
-        disabled
-        title="Yayın yolu henüz bağlanmadı"
-        className="cursor-not-allowed rounded-lg bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-ink-muted"
+        onClick={() => void karar(true)}
+        disabled={!acik}
+        className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-ink-muted"
       >
-        Onayla ve Boostla
+        {busy ? 'Yayınlanıyor…' : 'Onayla ve Boostla'}
       </button>
-      <p className="mt-1 max-w-[11rem] text-[10px] text-ink-muted">
-        {etkin
-          ? 'Yayın yolu henüz bağlanmadı — kart hazır, düğme sonraki adımda açılacak.'
-          : 'Önce yukarıdaki engel giderilmeli.'}
-      </p>
+
+      {acik && (
+        <button
+          type="button"
+          onClick={() => void karar(false)}
+          className="mt-1 block w-full rounded-lg border border-line px-3 py-1 text-[11px] font-medium text-ink-muted hover:bg-surface-sunken"
+        >
+          Reddet
+        </button>
+      )}
+
+      {youtube && (
+        <p className="mt-1 text-[10px] text-ink-muted">
+          YouTube yayını henüz açık değil: Google marka adı ve logo zorunlu
+          kılıyor, ikisi de ön ayarda yok.
+        </p>
+      )}
+
+      {hata && <p className="mt-1 text-[10px] text-danger">{hata}</p>}
     </div>
   );
 }
