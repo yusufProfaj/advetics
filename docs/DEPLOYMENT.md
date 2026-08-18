@@ -239,6 +239,74 @@ dağıtımla birlikte geliyor ve ilk açılışında Redis'i bulamazsa ölür.
 
 ---
 
+## 5c. YouTube Data API anahtarı (Advetics 1.0 — otomatik boost)
+
+**Bu adım YALNIZCA YouTube otomatik boost kullanılacaksa gerekiyor.** Anahtar
+yoksa uygulama normal açılıyor; yalnızca YouTube kartları oluşmuyor ve panel
+bunu söylüyor.
+
+### Ne işe yarıyor — ve neden OAuth değil
+
+YouTube bildirimi geldiğinde gövdedeki video kimliği **doğrulanmadan** kart
+açılamıyor. Sebebi bir güvenlik incelemesinde ölçüldü: bildirim gövdesindeki
+`videoId` doğrulanmazsa, bildirim adresini ele geçiren biri müşterinin
+bütçesiyle **başkasının videosunu** tanıtabiliyor — uygunsuz içerik seçilirse
+politika ihlali ajansın reklam hesabına işliyor.
+
+Bu yüzden gövde yalnızca **tetikleyici**; başlık, küçük resim ve kanal bilgisi
+YouTube Data API'den okunuyor.
+
+**API ANAHTARI YETİYOR, OAUTH GEREKMİYOR.** `videos.list` herkese açık veri
+okuyor ve kullanıcı adına işlem yapmıyor. Bu önemli: yeni bir OAuth kapsamı
+eklemek canlı Google Ads bağlantısının **yeniden yetkilendirilmesini**
+gerektirirdi ve bu projede yeniden yetkilendirme daha önce bağlantıları
+koparmıştı.
+
+### Adımlar
+
+1. **Google Cloud Console** → mevcut projeyi seç. Google Ads OAuth istemcisinin
+   bulunduğu projeyi kullanmak en temizi; zorunlu değil ama faturalandırma ve
+   kota tek yerde durur.
+
+2. **API'yi etkinleştir**: "APIs & Services" → "Enable APIs and services" →
+   **YouTube Data API v3** → *Enable*.
+   Etkinleştirmeden anahtar üretilse bile çağrılar `403` ile döner.
+
+3. **Anahtarı üret**: "APIs & Services" → "Credentials" → "Create credentials"
+   → **API key**. Üretilen değeri kopyala; sonra tekrar gösterilmiyor.
+
+4. **ANAHTARI KISITLA — bu adım atlanmamalı.** Kısıtlanmamış bir anahtar,
+   eline geçen herkesin senin kotanı harcamasına izin verir.
+   - *Application restrictions* → **IP addresses** → sunucunun çıkış IP'sini
+     ekle. Çağrı sunucudan gidiyor, tarayıcıdan değil; bu kısıt anahtarı
+     sızsa bile büyük ölçüde işe yaramaz kılıyor.
+   - *API restrictions* → **Restrict key** → yalnızca **YouTube Data API v3**.
+
+5. **Depo kökündeki `.env` dosyasına ekle** (API, panel ve script'ler hepsi
+   oradan besleniyor):
+
+   ```
+   YOUTUBE_API_KEY=AIza...
+   ```
+
+6. **Dağıt.** `su - advetics` → `cd ~/htdocs/advetics.com` → `git pull` →
+   `./scripts/deploy.sh`
+
+### Kota
+
+Varsayılan günlük kota **10.000 birim**; `videos.list` çağrısı **1 birim**.
+Bildirim başına bir çağrı yapılıyor, yani günde 10.000 yeni video yüklenmedikçe
+kota engel değil. Kota dolarsa kart oluşmaz ve sebebi kaydedilir — sessizce
+atlanmaz.
+
+### Anahtar `.env` dışına ÇIKMAMALI
+
+Depoya yazılmaz, sohbete yapıştırılmaz, log'a düşmez. Sızdığından
+şüphelenilirse Google Cloud Console'dan silinip yenisi üretilir; eski anahtar
+anında geçersiz olur.
+
+---
+
 ## 6. SSL
 
 **Sites → advetics.com → SSL/TLS → New Let's Encrypt Certificate**

@@ -109,6 +109,20 @@ const envSchema = z.object({
    * https://developers.google.com/google-ads/api/docs/release-notes
    */
   GOOGLE_ADS_API_VERSION: z.string().default('v25'),
+  /**
+   * YouTube Data API v3 anahtarı — Advetics 1.0 bildirim doğrulaması.
+   *
+   * OAUTH DEĞİL, API ANAHTARI. `videos.list` herkese açık veri okuyor ve
+   * kullanıcı adına bir işlem yapmıyor; yeni bir OAuth kapsamı eklemek canlı
+   * Google Ads bağlantısının yeniden yetkilendirilmesini gerektirirdi ve
+   * CLAUDE.md'ye göre yeniden yetkilendirme daha önce bağlantıları kopardı.
+   *
+   * İSTEĞE BAĞLI ve bu bilinçli: anahtar yoksa uygulama açılmaya devam
+   * ediyor, yalnızca YouTube otomatik boost'u çalışmıyor — ve çalışmadığını
+   * SÖYLÜYOR. Zorunlu kılmak, bu özelliği kullanmayan bir kurulumun hiç
+   * açılmaması demekti.
+   */
+  YOUTUBE_API_KEY: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -150,6 +164,14 @@ export interface AppConfig {
       clientSecret?: string;
       developerToken?: string;
       apiVersion: string;
+    };
+    /**
+     * YouTube — yalnızca OKUMA. Reklam yayını Google Ads bağlantısından
+     * gidiyor; bu anahtar bildirimdeki videonun gerçekten o kanala ait
+     * olduğunu doğrulamak için.
+     */
+    youtube: {
+      apiKey?: string;
     };
   };
 }
@@ -223,6 +245,9 @@ export function loadConfig(): AppConfig {
         clientSecret: env.GOOGLE_CLIENT_SECRET,
         developerToken: env.GOOGLE_ADS_DEVELOPER_TOKEN,
         apiVersion: env.GOOGLE_ADS_API_VERSION,
+      },
+      youtube: {
+        apiKey: env.YOUTUBE_API_KEY,
       },
     },
   };

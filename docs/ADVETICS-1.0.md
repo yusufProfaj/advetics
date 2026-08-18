@@ -107,6 +107,21 @@ etmiyor — WebSub keşfi imkânsız.
 
 ---
 
+## 2.5. Kurulum: `YOUTUBE_API_KEY`
+
+Video doğrulaması (§3) YouTube Data API'ye bir çağrı yapıyor ve bunun için
+API anahtarı gerekiyor. **OAuth DEĞİL** — `videos.list` herkese açık veri
+okuyor, dolayısıyla yeni bir kapsam ve canlı bağlantının yeniden
+yetkilendirilmesi gerekmiyor.
+
+Adımlar: [`DEPLOYMENT.md` §5c](DEPLOYMENT.md).
+
+Anahtar **isteğe bağlı**: yoksa uygulama normal açılıyor, yalnızca YouTube
+kartları oluşmuyor ve panel bunu söylüyor. Zorunlu kılmak, bu özelliği
+kullanmayan bir kurulumun hiç açılmaması demekti.
+
+---
+
 ## 3. İki ucun GÜVENLİĞİ — aynı fonksiyon KULLANILAMAZ
 
 Uçlar kimlik doğrulamasız ve internete açık; tetikledikleri şey **para
