@@ -4,6 +4,7 @@ import { BoostsModule } from '../boosts/boosts.module';
 import { ConnectionsModule } from '../connections/connections.module';
 import { AutoBoostQueueService } from './autoboost-queue.service';
 import { AutoBoostLaunchService } from './autoboost-launch.service';
+import { AutoBoostPresetService } from './autoboost-preset.service';
 import { AutoBoostReadService } from './autoboost-read.service';
 import { YouTubeApiService } from './youtube-api.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
@@ -27,6 +28,7 @@ import { YouTubeWebSubService } from './youtube-websub.service';
   providers: [
     AutoBoostQueueService,
     AutoBoostLaunchService,
+    AutoBoostPresetService,
     AutoBoostReadService,
     YouTubeApiService,
     YouTubeSubscribeService,

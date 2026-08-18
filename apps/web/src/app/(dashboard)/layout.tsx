@@ -93,6 +93,13 @@ const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
     items: [
       { href: '/kutuphane/formlar', label: 'Formlar', icon: 'forms', module: 4, ready: true },
       {
+        href: '/kutuphane/bilgi-bankasi',
+        label: 'Bilgi Bankası',
+        icon: 'assets',
+        module: 7,
+        ready: true,
+      },
+      {
         href: '/kutuphane/gorseller',
         label: 'Görsel Arşivi',
         icon: 'assets',

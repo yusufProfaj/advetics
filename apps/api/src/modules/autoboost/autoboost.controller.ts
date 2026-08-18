@@ -1,10 +1,25 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { z } from 'zod';
 import type { TenantContext } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import type { AutoBoostQueueList } from '@advetics/shared';
-import { autoBoostDecisionSchema } from '@advetics/shared';
+import {
+  autoBoostDecisionSchema,
+  autoBoostPresetInputSchema,
+  type AutoBoostPresetInput,
+  type AutoBoostPresetRecord,
+} from '@advetics/shared';
+import { AutoBoostPresetService } from './autoboost-preset.service';
 import { AutoBoostLaunchService } from './autoboost-launch.service';
 import { AutoBoostReadService } from './autoboost-read.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
@@ -34,7 +49,34 @@ export class AutoBoostController {
     private readonly subscribe: YouTubeSubscribeService,
     private readonly read: AutoBoostReadService,
     private readonly launch: AutoBoostLaunchService,
+    private readonly presets: AutoBoostPresetService,
   ) {}
+
+  /** Bilgi Bankası — bu müşterinin ön ayarları. */
+  @Get('presets')
+  @RequirePermissions('boost.read')
+  listPresets(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<AutoBoostPresetRecord[]> {
+    return this.presets.list(ctx, clientId);
+  }
+
+  /**
+   * Ön ayarı kaydeder.
+   *
+   * `boost.write` İSTİYOR, `boost.approve` DEĞİL. Ön ayar yazmak para
+   * harcamıyor — harcamayı başlatan şey kartın onaylanması ve o ayrı bir
+   * yetkide. Modül 7'nin baştan beri taşıdığı ayrım.
+   */
+  @Put('presets')
+  @RequirePermissions('boost.write')
+  savePreset(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(autoBoostPresetInputSchema)) input: AutoBoostPresetInput,
+  ): Promise<AutoBoostPresetRecord> {
+    return this.presets.upsert(ctx, input);
+  }
 
   /**
    * "ONAYLA VE BOOSTLA" — kartı yayına alır ya da reddeder.
