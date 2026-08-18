@@ -1,4 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  demandGenAdGroupBody,
+  demandGenCampaignBody,
+  demandGenVideoAdBody,
+  googleImageAssetBody,
+  googleVideoAssetBody,
+} from './google-demandgen';
 import type { GeoLocationOption, Platform, SavedAudienceOption } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
@@ -1103,12 +1110,144 @@ export class GoogleProvider implements IAdPlatformProvider {
    * gerçek yazma çağrısında altı hata çıktı ve üçü sessizdi; Google'ınki de
    * canlıda öğrenilecek ve o ders müşterinin bütçesiyle alınmamalı.
    */
-  async uploadAdImage(): Promise<string> {
-    throw new PlatformApiError(
-      'google',
-      'permanent',
-      'Google Ads görsel yükleme henüz yazılmadı.',
-    );
+  /**
+   * Görseli Google Ads'e Asset olarak yükler ve KAYNAK ADINI döndürür.
+   *
+   * META'DAN FARK: Meta bir `image_hash` döndürüyor, Google tam bir kaynak
+   * adı (`customers/123/assets/456`). İkisi de hesap başına ve
+   * `asset_platform_refs` ikisini de aynı kolonda tutuyor — çağıran hangi
+   * platformda olduğunu zaten biliyor.
+   *
+   * MULTIPART YOK: Google base64'ü JSON gövdesinin içinde bekliyor.
+   */
+  async uploadAdImage(
+    ctx: FetchContext,
+    params: { name: string; bytes: Buffer },
+  ): Promise<string> {
+    return this.mutate(ctx, 'assets', googleImageAssetBody(params));
+  }
+
+  /**
+   * YouTube videosunu Asset olarak kaydeder.
+   *
+   * VİDEO INLINE VERİLEMİYOR: `DemandGenVideoResponsiveAdInfo.videos[]` yalnızca
+   * Asset kaynak adı taşıyor. Yani reklam kurulmadan önce bu çağrı zorunlu.
+   */
+  async createYouTubeVideoAsset(
+    ctx: FetchContext,
+    params: { videoId: string; title: string },
+  ): Promise<string> {
+    return this.mutate(ctx, 'assets', googleVideoAssetBody(params));
+  }
+
+  /**
+   * YOUTUBE VİDEO REKLAMI — Demand Gen zinciri.
+   *
+   * BEŞ ÇAĞRI: bütçe → kampanya → reklam grubu → video varlığı → reklam.
+   * (Logo varlığı çağıran tarafından önbellekten geliyor; her yayında yeniden
+   * yüklemek gereksiz.)
+   *
+   * ORTADA KALIRSA GERİ ALINIYOR — `publishDraft` ve Meta `createBoost`
+   * desenlerinin aynısı. Yetim bir bütçe para harcamıyor ama hesabı kirletiyor
+   * ve aynı adla ikinci bütçe açılamıyor (DUPLICATE_NAME).
+   *
+   * KAMPANYA PAUSED KALIYOR ve bu Meta yolundan bilinçli farkı: Google yazma
+   * yolu canlıda hiç çalışmadı; ilk gerçek çağrının sonucunu insan görmeden
+   * para harcamamalı. Ajans Google Ads'te gözden geçirip kendisi açıyor.
+   */
+  async createVideoBoost(
+    ctx: FetchContext,
+    request: {
+      name: string;
+      dailyBudgetMicros: bigint;
+      durationDays: number;
+      videoId: string;
+      videoTitle: string;
+      logoAssetResource: string;
+      businessName: string;
+      finalUrl: string;
+      headlines: string[];
+      longHeadlines: string[];
+      descriptions: string[];
+    },
+  ): Promise<{ campaignId: string; adGroupId: string; adId: string }> {
+    const stamp = nameStamp(new Date());
+    const created: Array<{ resource: string; label: string }> = [];
+
+    try {
+      const budget = await this.mutate(
+        ctx,
+        'campaignBudgets',
+        campaignBudgetBody({
+          name: request.name,
+          amountMicros: request.dailyBudgetMicros.toString(),
+          stamp,
+        }),
+      );
+      created.push({ resource: budget, label: 'bütçe' });
+
+      const bitis = new Date(Date.now() + request.durationDays * 86_400_000);
+      const campaign = await this.mutate(
+        ctx,
+        'campaigns',
+        demandGenCampaignBody({
+          name: request.name,
+          budgetResource: budget,
+          stamp,
+          endDate: googleDate(bitis),
+        }),
+      );
+      created.push({ resource: campaign, label: 'kampanya' });
+
+      const adGroup = await this.mutate(
+        ctx,
+        'adGroups',
+        demandGenAdGroupBody({ name: request.name, campaignResource: campaign }),
+      );
+      created.push({ resource: adGroup, label: 'reklam grubu' });
+
+      /*
+       * VİDEO VARLIĞI GERİ ALMA LİSTESİNE GİRMİYOR. Varlıklar hesap
+       * seviyesinde ve yeniden kullanılabiliyor; silmek, aynı videoyu ikinci
+       * kez tanıtmak istendiğinde yeniden yüklemek demek olurdu. Yetim varlık
+       * para harcamıyor ve Ads Manager'da kampanya listesini de kirletmiyor.
+       */
+      const videoAsset = await this.createYouTubeVideoAsset(ctx, {
+        videoId: request.videoId,
+        title: request.videoTitle,
+      });
+
+      const ad = await this.mutate(
+        ctx,
+        'adGroupAds',
+        demandGenVideoAdBody({
+          adGroupResource: adGroup,
+          finalUrl: request.finalUrl,
+          businessName: request.businessName,
+          videoAssetResource: videoAsset,
+          logoAssetResource: request.logoAssetResource,
+          headlines: request.headlines,
+          longHeadlines: request.longHeadlines,
+          descriptions: request.descriptions,
+        }),
+      );
+
+      return { campaignId: campaign, adGroupId: adGroup, adId: ad };
+    } catch (err) {
+      // TERS SIRADA GERİ AL ve ASIL hatayı fırlat: kullanıcının görmesi
+      // gereken, kampanyanın neden kurulamadığı.
+      for (const varlik of [...created].reverse()) {
+        try {
+          await this.mutate(ctx, resourceCollection(varlik.resource), removeBody(varlik.resource));
+        } catch (temizlikHatasi) {
+          this.logger.error(
+            `Google ${varlik.label} geri alınamadı (${varlik.resource}): ` +
+              `${temizlikHatasi instanceof Error ? temizlikHatasi.message : String(temizlikHatasi)}`,
+          );
+        }
+      }
+      throw err;
+    }
   }
 
   /**

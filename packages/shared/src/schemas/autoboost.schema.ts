@@ -126,11 +126,45 @@ export const googlePresetSettingsSchema = z.object({
    */
   finalUrl: z.string().url().max(2048),
   /**
+   * MARKA ADI — v24'ten beri ZORUNLU.
+   *
+   * `DemandGenVideoResponsiveAdInfo.business_name` proto'da "Required" ve
+   * onsuz reklam oluşturulamıyor. Bu, "kullanıcı yalnızca videoyu seçip
+   * yayınlar" akışının Google'da neden mümkün olmadığının bir parçası.
+   */
+  businessName: z.string().min(1).max(25),
+
+  /**
+   * LOGO — v24'ten beri ZORUNLU ve ayrı bir Asset kaydı gerektiriyor.
+   *
+   * Görsel Arşivi'ndeki bir varlığın kimliği. Yayın anında Google'a
+   * yükleniyor ve kaynak adı `asset_platform_refs` tablosuna önbellekleniyor
+   * — Meta'nın `image_hash`'i için zaten kullanılan tablo, aynı gerekçeyle:
+   * hesap başına bir kez yüklemek yeterli.
+   *
+   * MÜŞTERİ BAŞINA BİR KEZ seçiliyor ve bütün videolarda kullanılıyor; akış
+   * yine tek tıkla kalıyor, yalnızca kurulum bir adım uzuyor.
+   */
+  logoAssetId: z.string().uuid(),
+
+  /**
    * Başlıklar ve açıklamalar. Reklam metni ön ayardan geliyor çünkü 1.0'ın
    * vaadi "form doldurmadan yayınla" — video geldiğinde sorulacak bir şey
    * kalmamalı.
+   *
+   * ═══ SINIRLAR DAHA SIKI OLANDAN ALINDI ═══
+   *
+   * Google'ın KENDİ dokümanları çelişiyor: bir yardım sayfası başlık için 40
+   * karakter ve "en az 3 tane" derken diğeri 30 karakter ve "1-5" diyor. API
+   * proto'su ise HİÇBİR sınır belgelemiyor ve resmî örnekler her alandan tek
+   * tane gönderiyor.
+   *
+   * Çelişkide sıkı olanı seçmek, reddedilen bir isteği ekranda önlemek demek;
+   * gevşek olanı seçmek "kabul edildi sandım, Google reddetti" demek olurdu.
+   * Gerçek sınır ilk canlı çağrıda netleşecek.
    */
-  headlines: z.array(z.string().min(1).max(40)).min(1).max(5),
+  headlines: z.array(z.string().min(1).max(30)).min(1).max(5),
+  longHeadlines: z.array(z.string().min(1).max(90)).min(1).max(5),
   descriptions: z.array(z.string().min(1).max(90)).min(1).max(5),
   /** Ülke/bölge anahtarları — Google'ın `geoTargetConstants` kaynak adları. */
   locations: z.array(z.string().min(1).max(64)).max(25).default([]),
