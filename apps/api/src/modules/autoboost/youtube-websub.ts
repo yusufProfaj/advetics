@@ -466,3 +466,76 @@ export function decideVideoBelongsToChannel(params: {
 
   return { ok: true };
 }
+
+// -----------------------------------------------------------------------------
+// AKIŞ SINIRI — incelemenin dördüncü bulgusu
+// -----------------------------------------------------------------------------
+
+/**
+ * Bir profil ne kadar bildirim üretebilir?
+ *
+ * ═══ NEDEN GEREKLİ ═══
+ *
+ * Kuyruktaki tekillik kısıtı yalnızca AYNI video kimliğini engelliyor.
+ * Saldırgan her istekte FARKLI bir kimlik gönderirse kısıt hiç devreye
+ * girmiyor: kuyruk şişiyor, panelde "Bildirim Havuzu" yüzlerce sahte kartla
+ * doluyor ve müşterinin GERÇEK yeni videosu o yığının içinde kayboluyor.
+ *
+ * Asıl zarar bu: özellik sessizce işlevsiz kalıyor. Üstüne, tek tıkla onaya
+ * alışmış bir kullanıcı gelişigüzel onaylarsa zarar tek kartın bütçesiyle
+ * sınırlı kalmıyor.
+ *
+ * SINIRLAR GERÇEK YÜKÜN ÇOK ÜSTÜNDE. Bir kanal saatte 10 video yüklemiyor;
+ * bekleyen 50 kart da hiçbir müşterinin normal iş temposunda oluşmuyor.
+ * Amaç meşru kullanımı hiç etkilememek, kötüye kullanımı durdurmak.
+ */
+export const SAATLIK_BILDIRIM_SINIRI = 10;
+export const BEKLEYEN_KART_TAVANI = 50;
+
+export type AkisKarari =
+  | { allow: true }
+  | { allow: false; reason: string; sizintiSinyali: boolean };
+
+export function decideRateLimit(params: {
+  /** Son bir saatte bu profil için oluşturulan kart sayısı. */
+  sonSaattekiKart: number;
+  /** Şu an onay bekleyen kart sayısı. */
+  bekleyenKart: number;
+}): AkisKarari {
+  if (params.sonSaattekiKart >= SAATLIK_BILDIRIM_SINIRI) {
+    /*
+     * SESSİZCE DÜŞÜRÜLMÜYOR — bu bir SIZINTI GÖSTERGESİ.
+     *
+     * Meşru bir kanal saatte 10 video yüklemiyor. Bu eşiğin aşılması,
+     * bildirim adresinin başkasının eline geçtiğine dair en erken işaret ve
+     * sessizce atmak o işareti yok etmek olurdu.
+     */
+    return {
+      allow: false,
+      reason:
+        `Bu kanal için son bir saatte ${params.sonSaattekiKart} bildirim geldi ` +
+        `(sınır ${SAATLIK_BILDIRIM_SINIRI}). Normal bir kanal bu hızda video ` +
+        'yüklemiyor — bildirim adresi başkasının eline geçmiş olabilir.',
+      sizintiSinyali: true,
+    };
+  }
+
+  if (params.bekleyenKart >= BEKLEYEN_KART_TAVANI) {
+    /*
+     * TAVAN AŞILDIĞINDA SIZINTI SİNYALİ VERİLMİYOR ve fark önemli: bu
+     * genellikle kullanıcının kartları onaylamayı bıraktığı anlamına geliyor,
+     * saldırı değil. İkisini aynı uyarıya bağlamak, gerçek sinyali gürültüde
+     * boğardı.
+     */
+    return {
+      allow: false,
+      reason:
+        `Onay bekleyen ${params.bekleyenKart} kart var (tavan ` +
+        `${BEKLEYEN_KART_TAVANI}). Yeni bildirimler için önce mevcut kartları ` +
+        'onayla ya da reddet.',
+      sizintiSinyali: false,
+    };
+  }
+
+  return { allow: true };
+}

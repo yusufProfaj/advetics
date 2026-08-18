@@ -4,6 +4,9 @@ import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   abonelikSagligi,
+  BEKLEYEN_KART_TAVANI,
+  decideRateLimit,
+  SAATLIK_BILDIRIM_SINIRI,
   decideNotificationAccept,
   decideVideoBelongsToChannel,
   AZAMI_KIRALAMA_SN,
@@ -549,5 +552,63 @@ describe('decideVideoBelongsToChannel', () => {
     });
     expect(k.ok).toBe(false);
     expect(!k.ok && k.saldiriSinyali).toBe(false);
+  });
+});
+
+/**
+ * AKIŞ SINIRI — incelemenin dördüncü bulgusu.
+ *
+ * Kuyruktaki tekillik kısıtı yalnızca AYNI video kimliğini engelliyor.
+ * Saldırgan her istekte farklı kimlik gönderirse kısıt hiç devreye girmiyor ve
+ * müşterinin gerçek videosu sahte kartların içinde kayboluyor — özellik
+ * sessizce işlevsiz kalıyor.
+ */
+describe('decideRateLimit', () => {
+  it('normal akış geçiyor', () => {
+    expect(decideRateLimit({ sonSaattekiKart: 2, bekleyenKart: 3 })).toEqual({ allow: true });
+  });
+
+  it('KRİTİK: saatlik sınır aşılınca REDDEDİLİYOR', () => {
+    const k = decideRateLimit({
+      sonSaattekiKart: SAATLIK_BILDIRIM_SINIRI,
+      bekleyenKart: 0,
+    });
+    expect(k.allow).toBe(false);
+  });
+
+  it('KRİTİK: saatlik sınır aşımı SIZINTI SİNYALİ', () => {
+    /*
+     * Meşru bir kanal saatte 10 video yüklemiyor. Bu eşiğin aşılması,
+     * bildirim adresinin başkasının eline geçtiğine dair en erken işaret;
+     * sessizce atmak o işareti yok etmek olurdu.
+     */
+    const k = decideRateLimit({ sonSaattekiKart: 25, bekleyenKart: 0 });
+    expect(!k.allow && k.sizintiSinyali).toBe(true);
+    expect(!k.allow && k.reason).toMatch(/başkasının eline geçmiş/);
+  });
+
+  it('KRİTİK: bekleyen kart tavanı SIZINTI SİNYALİ DEĞİL', () => {
+    /*
+     * Bu genellikle kullanıcının kartları onaylamayı bıraktığı anlamına
+     * geliyor, saldırı değil. İkisini aynı uyarıya bağlamak gerçek sinyali
+     * gürültüde boğardı.
+     */
+    const k = decideRateLimit({ sonSaattekiKart: 0, bekleyenKart: BEKLEYEN_KART_TAVANI });
+    expect(k.allow).toBe(false);
+    expect(!k.allow && k.sizintiSinyali).toBe(false);
+    expect(!k.allow && k.reason).toMatch(/onayla ya da reddet/);
+  });
+
+  it('saatlik sınır tavandan ÖNCE kontrol ediliyor', () => {
+    // İkisi birden aşıldığında söylenmesi gereken şey sızıntı ihtimali;
+    // "kartları onayla" mesajı asıl uyarıyı gizlerdi.
+    const k = decideRateLimit({ sonSaattekiKart: 99, bekleyenKart: 99 });
+    expect(!k.allow && k.sizintiSinyali).toBe(true);
+  });
+
+  it('sınırlar GERÇEK YÜKÜN çok üstünde — meşru kullanım etkilenmiyor', () => {
+    // Bir kanal saatte 10 video yüklemiyor, bir müşteri 50 kart biriktirmiyor.
+    expect(SAATLIK_BILDIRIM_SINIRI).toBeGreaterThanOrEqual(10);
+    expect(BEKLEYEN_KART_TAVANI).toBeGreaterThanOrEqual(50);
   });
 });

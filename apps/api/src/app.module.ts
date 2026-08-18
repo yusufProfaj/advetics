@@ -20,6 +20,7 @@ import { AssetsModule } from './modules/assets/assets.module';
 import { DraftTreeModule } from './modules/draft-tree/draft-tree.module';
 import { StorageModule } from './storage/storage.module';
 import { LeadsModule } from './modules/leads/leads.module';
+import { AutoBoostModule } from './modules/autoboost/autoboost.module';
 import { BoostsModule } from './modules/boosts/boosts.module';
 import { BulkModule } from './modules/bulk/bulk.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
@@ -57,6 +58,7 @@ import { SyncModule } from './modules/sync/sync.module';
     AssetsModule,
     DraftTreeModule,
     BoostsModule,
+    AutoBoostModule,
     BulkModule,
   ],
   controllers: [HealthController],

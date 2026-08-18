@@ -1,4 +1,18 @@
 import 'reflect-metadata';
+/*
+ * `express` DOĞRUDAN BAĞIMLILIK olarak eklendi ve bu zorunluydu.
+ *
+ * Paket zaten ağaçta vardı — `@nestjs/platform-express` onu çekiyor — ama
+ * pnpm sıkı kurulumda GEÇİŞLİ bağımlılıklar içe aktarılamıyor. TypeScript
+ * hiçbir şey demiyordu (`@types/express` mevcut) ve derleme de geçiyordu;
+ * uygulama yalnızca AÇILIRKEN "Cannot find module 'express'" ile ölüyordu.
+ *
+ * Kendi ham gövde ara katmanımızı yazmak da mümkündü ama akış tüketmenin
+ * kenar durumları (boyut sınırı, yarıda kesilen istek, iki kez okunan akış)
+ * yeni bir hata yüzeyi açardı; zaten kurulu olan paketi açıkça beyan etmek
+ * daha az riskli.
+ */
+import express from 'express';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -38,6 +52,37 @@ async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
 
   app.setGlobalPrefix(config.globalPrefix);
+
+  /**
+   * YOUTUBE BİLDİRİM UCU İÇİN HAM GÖVDE — Nest'in `rawBody` seçeneği BURADA
+   * ÇALIŞMIYOR.
+   *
+   * Yukarıdaki `rawBody: true` kancası yalnızca `json` ve `urlencoded`
+   * parser'lara takılıyor. YouTube WebSub bildirimi `application/atom+xml`
+   * gönderiyor; o içerik türü hiçbir parser'a uğramadığı için `req.rawBody`
+   * TANIMSIZ kalıyor.
+   *
+   * İmza ham baytlar üzerinden hesaplanıyor ve ayrıştırılmış bir gövdeden
+   * geri üretilemiyor — yani bu satır olmadan imza HER ZAMAN geçersiz çıkar
+   * ve sebebi hiçbir yerde görünmez. Tuzak kod yazılmadan önce araştırmada
+   * tespit edildi.
+   *
+   * İÇERİK TÜRÜ JOKERLE eşleniyor (yıldız bölü yıldız) — bilinçli: hub'ın
+   * hangi türü göndereceğine güvenmiyoruz. Yalnızca BU YOL için geçerli;
+   * diğer uçların gövde ayrıştırması değişmiyor.
+   *
+   * (Jokerin kendisi bu yorumda YAZILAMIYOR: dizge blok yorumunu ortasından
+   * kapatıyor ve hata `TS1109: Expression expected` olarak çıkıyor —
+   * `Prisma.sql` yorumlarındaki ters tırnak tuzağının aynısı.)
+   *
+   * SINIR 1 MB: uç kimlik doğrulamasız ve internete açık; sınırsız gövde
+   * kabul etmek belleği tüketmenin en ucuz yolu olurdu. Gerçek bildirimler
+   * birkaç kilobayt.
+   */
+  app.use(
+    `/${config.globalPrefix}/webhooks/youtube`,
+    express.raw({ type: '*/*', limit: '1mb' }),
+  );
 
   // Sıra önemli: requestId önce gelmeli ki hata filtresi bile onu kullanabilsin.
   app.use(requestIdMiddleware);
