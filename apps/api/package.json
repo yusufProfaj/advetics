@@ -22,7 +22,8 @@
     "sync": "tsx prisma/sync-cli.ts",
     "google-check": "node dist/google-check.js",
     "worker": "node dist/worker.js",
-    "worker:dev": "tsx watch src/worker.ts"
+    "worker:dev": "tsx watch src/worker.ts",
+    "youtube-check": "tsx prisma/youtube-check.ts"
   },
   "dependencies": {
     "@advetics/shared": "workspace:*",
