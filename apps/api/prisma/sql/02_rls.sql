@@ -153,6 +153,7 @@ DECLARE
     'organic_posts', 'boost_rules', 'boosts',
     -- Advetics 1.0 — otomatik boost ön ayarları ve onay kuyruğu
     'auto_boost_presets', 'auto_boost_queue_items',
+    'auto_boost_subscriptions',
     -- Modül 4 — reklam oluşturucu
     'ad_drafts', 'ad_draft_assets',
     -- Anahtar kelime performansı
@@ -913,6 +914,19 @@ CREATE POLICY adv_boost_rules_delete ON boost_rules
 -- lead webhook'unda da geçerli. Buradaki politikalar PANELDEN gelen okuma ve
 -- onaylama içindir; webhook'un bu politikalardan geçmesi beklenmiyor ve
 -- beklenseydi kayıt sessizce kaybolurdu (`client_id` bağlamı yok).
+CREATE POLICY adv_auto_boost_subscriptions_select ON auto_boost_subscriptions
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_auto_boost_subscriptions_insert ON auto_boost_subscriptions
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_auto_boost_subscriptions_update ON auto_boost_subscriptions
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_auto_boost_subscriptions_delete ON auto_boost_subscriptions
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
 CREATE POLICY adv_auto_boost_presets_select ON auto_boost_presets
   FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
 

@@ -110,6 +110,7 @@ model Organization {
 
   autoBoostPresets    AutoBoostPreset[]
   autoBoostQueueItems AutoBoostQueueItem[]
+  autoBoostSubscriptions AutoBoostSubscription[]
   @@map("organizations")
 }
 
@@ -212,6 +213,7 @@ model Client {
 
   autoBoostPresets    AutoBoostPreset[]
   autoBoostQueueItems AutoBoostQueueItem[]
+  autoBoostSubscriptions AutoBoostSubscription[]
   @@unique([orgId, slug])
   @@index([orgId, status])
   @@map("clients")
@@ -604,6 +606,7 @@ model SocialProfile {
   /// kısıt aynı sayfa için iki satır üretirdi.
   autoBoostPresets    AutoBoostPreset[]
   autoBoostQueueItems AutoBoostQueueItem[]
+  autoBoostSubscription  AutoBoostSubscription?
   @@unique([orgId, externalId])
   @@index([orgId, clientId])
   @@index([clientId, syncEnabled])
@@ -2516,6 +2519,19 @@ model AutoBoostQueueItem {
 
   error String? @db.VarChar(1000)
 
+  /// Bildirimin KÖKENİ — sahte ile gerçeği ayırt etmek için.
+  ///
+  /// `imzasiz` gelen kart panelde İŞARETLİ görünüyor: koruma o kart için
+  /// yalnızca adresin gizli kalmasına dayanıyor demektir ve kullanıcı bunu
+  /// bilmeli. Alan olmadan sızan bir belirtecin haftalarca fark edilmeden
+  /// kullanılması mümkündü.
+  signatureState String? @map("signature_state") @db.VarChar(16)
+
+  /// Kaynak IP — BEYAZ LİSTE İÇİN DEĞİL. App Engine çıkış IP'leri bütün
+  /// Google Cloud kiracılarıyla ortak; beyaz liste kimseyi dışarıda
+  /// bırakmadan savunma görüntüsü verirdi. Yalnızca olay sonrası inceleme.
+  sourceIp String? @map("source_ip") @db.VarChar(64)
+
   approvedBy String?   @map("approved_by") @db.Uuid
   approvedAt DateTime? @map("approved_at") @db.Timestamptz(6)
   launchedAt DateTime? @map("launched_at") @db.Timestamptz(6)
@@ -2531,4 +2547,61 @@ model AutoBoostQueueItem {
   @@unique([socialProfileId, externalId])
   @@index([clientId, status, createdAt(sort: Desc)])
   @@map("auto_boost_queue_items")
+}
+
+/// YouTube bildirim aboneliği (WebSub) — Advetics 1.0.
+///
+/// GÜVENLİK İNCELEMESİNDEN SONRA ŞEKİLLENDİ. İlk tasarım üç kritik noktadan
+/// düştü ve üçünün karşılığı burada: imza kilidi, belirtecin düz metin
+/// saklanmaması ve iptal edilebilir olması.
+model AutoBoostSubscription {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+
+  /// Bir kanal = bir abonelik.
+  socialProfileId String @unique @map("social_profile_id") @db.Uuid
+
+  /// `hub.topic` — doğrulama el sıkışmasında gelen konu bununla
+  /// karşılaştırılıyor. Eşleşme aranmasa başkası bizim geri çağrı adresimizi
+  /// kullanarak KENDİ kanalını abone ettirebilirdi.
+  topicUrl String @map("topic_url")
+
+  /// BELİRTECİN KENDİSİ SAKLANMIYOR — ana anahtardan ve bu nonce'tan
+  /// türetiliyor. Burada yalnızca SHA-256 özeti var ve tek işi gelen
+  /// istekteki belirteçten profili BULMAK. Düz metin saklansaydı her
+  /// veritabanı dökümü canlı bir kimlik bilgisi taşırdı.
+  ///
+  /// NONCE DÖNDÜRÜLEBİLİR: sızıntı şüphesinde yenileniyor, eski adres anında
+  /// ölüyor. İlk tasarımda iptal yolu hiç yoktu.
+  tokenNonce        String @map("token_nonce") @db.VarChar(64)
+  callbackTokenHash String @unique @map("callback_token_hash") @db.Char(64)
+
+  verifiedAt   DateTime? @map("verified_at") @db.Timestamptz(6)
+  leaseSeconds Int?      @map("lease_seconds")
+  renewAt      DateTime? @map("renew_at") @db.Timestamptz(6)
+
+  /// ÖĞREN-VE-KİLİTLE. İlk geçerli imza görüldüğü an doluyor; doluysa imzasız
+  /// istek ARTIK reddediliyor.
+  ///
+  /// Baştan zorunlu değil çünkü Google hub'ının `hub.secret`'ı dikkate alıp
+  /// almadığı ölçülmedi — zorunlu kılmak, imzalamıyorsa özelliğin hiç
+  /// çalışmaması demekti. Bu alan ikisini de çözüyor.
+  signatureSeenAt DateTime? @map("signature_seen_at") @db.Timestamptz(6)
+
+  /// Ölü adam düğmesi buna bakıyor.
+  lastNotificationAt DateTime? @map("last_notification_at") @db.Timestamptz(6)
+
+  /// `hub.mode=denied` sebebi. Doluysa abonelik ÖLÜ ve panel göstermeli.
+  deniedReason String? @map("denied_reason") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+
+  @@index([renewAt])
+  @@map("auto_boost_subscriptions")
 }

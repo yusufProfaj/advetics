@@ -314,3 +314,155 @@ export function youtubeThumbnailUrl(videoId: string): string {
 export function youtubeWatchUrl(videoId: string): string {
   return `https://www.youtube.com/watch?v=${videoId}`;
 }
+
+// -----------------------------------------------------------------------------
+// BİLDİRİM KABUL KARARI — güvenlik incelemesinin ardından yeniden yazıldı
+// -----------------------------------------------------------------------------
+
+/**
+ * Bir bildirim kabul edilmeli mi? (ÖĞREN-VE-KİLİTLE)
+ *
+ * ═══ İLK TASARIM BURADAN DÜŞTÜ ═══
+ *
+ * İlk hâlde imzasız bildirim koşulsuz kabul ediliyordu ve gerekçe şuydu:
+ * "Google hub'ı `hub.secret`'ı dikkate almayabilir, sıkı reddetmek özelliğin
+ * hiç çalışmaması riskini taşır."
+ *
+ * Bağımsız inceleme bunun imza katmanını DEĞERSİZ kıldığını gösterdi:
+ * saldırganın imzayı atlatmak için yapması gereken tek şey BAŞLIĞI HİÇ
+ * GÖNDERMEMEK. Google gerçekten imzalıyor olsa bile katman sıfır değerde
+ * kalıyordu — yalnızca YANLIŞ imza gönderen beceriksizi durduruyordu.
+ * CLAUDE.md'nin "var gibi görünüp çalışmayan savunma" tarifi tam olarak bu.
+ *
+ * ÇÖZÜM ÖĞREN-VE-KİLİTLE: bir abonelikte İLK geçerli imza görüldüğü an, o
+ * abonelik için imzasız istek ARTIK reddediliyor.
+ *
+ *   · Hub hiç imzalamıyorsa kilit hiç kurulmuyor → özellik çalışıyor.
+ *   · Hub imzalıyorsa kilit ilk bildirimde kuruluyor → downgrade kapanıyor.
+ *
+ * Ölçülmemiş bir varsayıma kalıcı bir politika bağlamak yerine, gerçeği
+ * gözleyip ona göre sıkılaşıyor.
+ *
+ * KİLİT KURULDUKTAN SONRA GELEN İMZASIZ İSTEK BİR SALDIRI SİNYALİDİR ve
+ * `saldiriSinyali` ile işaretleniyor — sessizce reddetmek, sızmış bir
+ * belirtecin haftalarca kullanılmasına izin verirdi.
+ */
+export type BildirimKarari =
+  | { accept: true; imzaDurumu: 'gecerli' | 'imzasiz'; kilitle: boolean; uyari: string | null }
+  | { accept: false; reason: string; saldiriSinyali: boolean };
+
+export function decideNotificationAccept(params: {
+  imza: ImzaSonucu;
+  /** Bu abonelikte daha önce geçerli bir imza görüldü mü? */
+  imzaDahaOnceGoruldu: boolean;
+}): BildirimKarari {
+  if (params.imza === 'gecersiz') {
+    /*
+     * YANLIŞ İMZA HER ZAMAN RED ve her zaman saldırı sinyali. Meşru bir hub
+     * yanlış imza üretmiyor; üretiyorsa da sırrımız onunkiyle uyuşmuyor
+     * demektir ve o da düzeltilmesi gereken bir durum.
+     */
+    return { accept: false, reason: 'imza geçersiz', saldiriSinyali: true };
+  }
+
+  if (params.imza === 'gecerli') {
+    return {
+      accept: true,
+      imzaDurumu: 'gecerli',
+      // Kilit ilk geçerli imzada kuruluyor; sonrasında tekrar yazmak gereksiz
+      // ama zararsız — çağıran zaten doluysa dokunmuyor.
+      kilitle: true,
+      uyari: null,
+    };
+  }
+
+  // Buradan sonrası 'imzasiz'.
+  if (params.imzaDahaOnceGoruldu) {
+    return {
+      accept: false,
+      reason:
+        'Bu abonelikte daha önce geçerli imza görüldü; imzasız bildirim artık ' +
+        'kabul edilmiyor. Bu bir düşürme (downgrade) denemesi olabilir.',
+      saldiriSinyali: true,
+    };
+  }
+
+  return {
+    accept: true,
+    imzaDurumu: 'imzasiz',
+    kilitle: false,
+    /*
+     * KULLANICIYA SÖYLENİYOR. Bu kartın koruması yalnızca adresin gizli
+     * kalmasına dayanıyor ve kullanıcı bunu bilmeli — "sessiz hata yok"
+     * kuralının güvenlik tarafındaki karşılığı.
+     */
+    uyari:
+      'Bu bildirim imzasız geldi. Koruma yalnızca bildirim adresinin gizli ' +
+      'kalmasına dayanıyor.',
+  };
+}
+
+/**
+ * Atom gövdesindeki video, gerçekten BU KANALIN videosu mu?
+ *
+ * ═══ İNCELEMENİN İKİNCİ KRİTİK BULGUSU ═══
+ *
+ * İlk tasarım gövdedeki `yt:channelId`'yi profilin kanalıyla karşılaştırıp
+ * yetiyor sayıyordu. Ama `channelId` BİR SIR DEĞİL: kanal sayfasında, feed
+ * adresinde, panelde yazıyor. Belirteci bilen onu da bilir.
+ *
+ * Asıl açık şuydu: `videoId` HİÇ DOĞRULANMIYORDU. Başlık, küçük resim ve
+ * bağlantı saldırganın verdiği kimlikten türetiliyordu. Yani belirteci bilen
+ * biri, müşterinin bütçesiyle BAŞKASININ videosunu tanıtabilirdi — uygunsuz
+ * içerik seçilirse politika ihlali ajansın reklam hesabına işler ve zarar tek
+ * müşteriyle sınırlı kalmaz.
+ *
+ * BU YÜZDEN ATOM GÖVDESİ TETİKLEYİCİ, VERİ KAYNAĞI DEĞİL. Karar burada
+ * veriliyor; veriyi çağıran YouTube Data API'den alıyor ve gövdeye
+ * güvenmiyor.
+ */
+export type VideoDogrulama =
+  | { ok: true }
+  | { ok: false; reason: string; saldiriSinyali: boolean };
+
+export function decideVideoBelongsToChannel(params: {
+  /** Data API'nin `snippet.channelId` değeri — gövdeden DEĞİL. */
+  apiChannelId: string | null;
+  /** Aboneliğin bağlı olduğu kanal. */
+  expectedChannelId: string;
+  /** Data API videoyu hiç bulamadıysa. */
+  bulunamadi: boolean;
+}): VideoDogrulama {
+  if (params.bulunamadi) {
+    /*
+     * VİDEO BULUNAMADI = KABUL EDİLMEZ. "Belki henüz yayılmamıştır" diye
+     * geçirmek, uydurulmuş her kimliği kabul etmek demek olurdu. Gerçekten
+     * gecikme varsa hub bildirimi tekrarlıyor ve ikinci turda bulunuyor.
+     */
+    return {
+      ok: false,
+      reason: 'Video YouTube API’de bulunamadı — uydurulmuş bir kimlik olabilir.',
+      saldiriSinyali: true,
+    };
+  }
+
+  if (!params.apiChannelId) {
+    return {
+      ok: false,
+      reason: 'Videonun kanalı okunamadı; doğrulanmadan kart açılmıyor.',
+      saldiriSinyali: false,
+    };
+  }
+
+  if (params.apiChannelId !== params.expectedChannelId) {
+    return {
+      ok: false,
+      reason:
+        `Video BAŞKA bir kanala ait (${params.apiChannelId}); bu abonelik ` +
+        `${params.expectedChannelId} kanalına bağlı.`,
+      saldiriSinyali: true,
+    };
+  }
+
+  return { ok: true };
+}

@@ -4,6 +4,8 @@ import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   abonelikSagligi,
+  decideNotificationAccept,
+  decideVideoBelongsToChannel,
   AZAMI_KIRALAMA_SN,
   decideWebSubVerification,
   parseYouTubeFeed,
@@ -426,5 +428,126 @@ describe('imza karşılaştırması SABİT SÜREDE — kaynakta kilitli', () => 
       if (satir.includes('.length')) continue;
       expect(satir).not.toMatch(/[!=]==/);
     }
+  });
+});
+
+/**
+ * ÖĞREN-VE-KİLİTLE — güvenlik incelemesinin birinci bulgusunun karşılığı.
+ *
+ * İlk tasarımda imzasız bildirim koşulsuz kabul ediliyordu. İnceleme bunun
+ * imza katmanını DEĞERSİZ kıldığını gösterdi: saldırganın imzayı atlatmak
+ * için yapması gereken tek şey başlığı hiç göndermemek.
+ */
+describe('decideNotificationAccept', () => {
+  it('geçerli imza kabul ediliyor ve KİLİT kuruluyor', () => {
+    const k = decideNotificationAccept({ imza: 'gecerli', imzaDahaOnceGoruldu: false });
+    expect(k).toEqual({ accept: true, imzaDurumu: 'gecerli', kilitle: true, uyari: null });
+  });
+
+  it('KRİTİK: YANLIŞ imza her zaman RED ve saldırı sinyali', () => {
+    // Meşru bir hub yanlış imza üretmiyor.
+    const k = decideNotificationAccept({ imza: 'gecersiz', imzaDahaOnceGoruldu: false });
+    expect(k.accept).toBe(false);
+    expect(!k.accept && k.saldiriSinyali).toBe(true);
+  });
+
+  it('İLK imzasız bildirim kabul ediliyor — özellik ilk günden kapanmıyor', () => {
+    /*
+     * Google hub'ının `hub.secret`'ı dikkate alıp almadığı ÖLÇÜLMEDİ. Baştan
+     * zorunlu kılmak, imzalamıyorsa özelliğin hiç çalışmaması demekti.
+     */
+    const k = decideNotificationAccept({ imza: 'imzasiz', imzaDahaOnceGoruldu: false });
+    expect(k.accept).toBe(true);
+    expect(k.accept && k.kilitle).toBe(false);
+  });
+
+  it('KRİTİK: imzasız kabul KULLANICIYA SÖYLENİYOR', () => {
+    // Bu kartın koruması yalnızca adresin gizli kalmasına dayanıyor ve
+    // kullanıcı bunu bilmeli — "sessiz hata yok" kuralının güvenlik karşılığı.
+    const k = decideNotificationAccept({ imza: 'imzasiz', imzaDahaOnceGoruldu: false });
+    expect(k.accept && k.uyari).toMatch(/imzasız/i);
+    expect(k.accept && k.uyari).toMatch(/gizli kalmasına/);
+  });
+
+  it('KRİTİK: KİLİT KURULDUKTAN SONRA imzasız bildirim REDDEDİLİYOR', () => {
+    /*
+     * BU TESTİN KORUDUĞU ŞEY DÜŞÜRME SALDIRISI. Hub imzalıyorsa, imzasız
+     * gelen bir istek hub'dan gelmiş olamaz.
+     */
+    const k = decideNotificationAccept({ imza: 'imzasiz', imzaDahaOnceGoruldu: true });
+    expect(k.accept).toBe(false);
+    expect(!k.accept && k.reason).toMatch(/düşürme|downgrade/i);
+  });
+
+  it('KRİTİK: kilit sonrası imzasız istek SALDIRI SİNYALİ', () => {
+    // Sessizce reddetmek, sızmış bir belirtecin haftalarca kullanılmasına
+    // izin verirdi.
+    const k = decideNotificationAccept({ imza: 'imzasiz', imzaDahaOnceGoruldu: true });
+    expect(!k.accept && k.saldiriSinyali).toBe(true);
+  });
+});
+
+/**
+ * GÖVDE TETİKLEYİCİ, VERİ KAYNAĞI DEĞİL — incelemenin ikinci bulgusu.
+ *
+ * `channelId` bir sır değil (feed adresinde yazıyor), dolayısıyla gövdedeki
+ * kanal kimliğini kontrol etmek savunma sayılmaz. Asıl açık `videoId`'nin hiç
+ * doğrulanmamasıydı: belirteci bilen biri müşterinin bütçesiyle BAŞKASININ
+ * videosunu tanıtabilirdi.
+ */
+describe('decideVideoBelongsToChannel', () => {
+  const KANALIM = 'UCBR8-60-B28hp2BmDPdntcQ';
+
+  it('kanal eşleşiyorsa geçiyor', () => {
+    expect(
+      decideVideoBelongsToChannel({
+        apiChannelId: KANALIM,
+        expectedChannelId: KANALIM,
+        bulunamadi: false,
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  it('KRİTİK: BAŞKA kanalın videosu REDDEDİLİYOR', () => {
+    /*
+     * Saldırı senaryosu: doğru channelId (herkese açık) + rakibin ya da
+     * uygunsuz bir videonun kimliği. Panelde tanıdık görünen kart belirir,
+     * kullanıcı onaylar, müşterinin bütçesiyle başkasının videosu tanıtılır.
+     * Uygunsuz içerikte politika ihlali AJANSIN reklam hesabına işler.
+     */
+    const k = decideVideoBelongsToChannel({
+      apiChannelId: 'UCbaskasi',
+      expectedChannelId: KANALIM,
+      bulunamadi: false,
+    });
+    expect(k.ok).toBe(false);
+    expect(!k.ok && k.saldiriSinyali).toBe(true);
+  });
+
+  it('KRİTİK: BULUNAMAYAN video REDDEDİLİYOR — "belki gecikmiştir" denmiyor', () => {
+    /*
+     * Geçirmek, uydurulmuş her kimliği kabul etmek demek. Gerçekten gecikme
+     * varsa hub bildirimi tekrarlıyor ve ikinci turda bulunuyor.
+     */
+    const k = decideVideoBelongsToChannel({
+      apiChannelId: null,
+      expectedChannelId: KANALIM,
+      bulunamadi: true,
+    });
+    expect(k.ok).toBe(false);
+    expect(!k.ok && k.saldiriSinyali).toBe(true);
+  });
+
+  it('kanal OKUNAMADIYSA reddediliyor ama saldırı sinyali DEĞİL', () => {
+    // API kısmi cevap döndürmüş olabilir; bu bir arıza, saldırı değil.
+    // İkisini ayırmak, gerçek saldırı sinyalinin gürültüde kaybolmamasını
+    // sağlıyor.
+    const k = decideVideoBelongsToChannel({
+      apiChannelId: null,
+      expectedChannelId: KANALIM,
+      bulunamadi: false,
+    });
+    expect(k.ok).toBe(false);
+    expect(!k.ok && k.saldiriSinyali).toBe(false);
   });
 });
