@@ -92,6 +92,16 @@ buna göre veriliyor:
   demektir; bilinen yola düş ve kısıtı kullanıcıya **söyle**.
 - **Doğrulama kullanım anında değil, giriş anında.** Kullanıcı yüklediği
   görselin kullanılamayacağını tıkladığında değil bıraktığında öğrenmeli.
+- **`.catch(() => setX([]))` YASAK.** Arayüzde hatayı yutmak, "henüz
+  aramadım", "arıyorum", "sonuç yok" ve "çağrı düştü" hâllerini AYNI boş alana
+  çeviriyor. Dördü farklı iş ve dördü ayrı yazılmalı; hata durumunda platformun
+  kendi mesajı ekranda görünmeli. Lokasyon aramasının neden boş döndüğü tam
+  bu yüzden teşhis edilemedi.
+- **Boş liste NEDENİNİ söylesin.** "Sayfa atanmamış", "izleme kapalı",
+  "süpürme koşmadı" üçü de boş liste olarak görünüyordu ama üçünün yapılacak
+  işi farklı (`emptyReason` deseni).
+- **"200 döndü" doğrulama değil.** Yazma yolları platformda GÖZLE
+  doğrulanmadan bitmiş sayılmıyor.
 
 ### Tekrar eden teknik tuzaklar
 
@@ -115,11 +125,70 @@ buna göre veriliyor:
   gevşetmek çözmüyor, engel SELECT politikasında. Çözüm çağıran tarafta:
   bağlamı daraltan değeri (örneğin `activeClientId`) o istek için kapat.
   `ad-account-pool-rls.spec.ts` bunu kilitliyor.
+- **`$queryRaw<T>` DENETİMSİZ bir dönüşüm — tip yalan söyleyebilir.** Satır
+  tipine alan eklerken SELECT'e de eklemeyi unutma; TypeScript hiçbir şey
+  demiyor, alan `undefined` geliyor ve onu kullanan kod sessizce yanlış üretiyor.
+  Aynı boşluk `serverApiFetch<T>` için de geçerli.
+- **Platform çağrısı transaction'ın İÇİNDE olamaz.** `withTenant` etkileşimli
+  bir transaction açıyor ve Prisma'nın sınırı 5 saniye; Meta'ya üç-dört çağrı
+  üretimde 12,5 saniye sürdü. Transaction ölünce hata bile kaydedilemedi.
+  Yürütücüye hazır bir `tx` değil bir ÇALIŞTIRICI ver, platform çağrısı iki
+  kısa transaction'ın arasında kalsın.
+- **Kayıt yazılamazsa satır `failed` DEĞİL `creating` kalmalı.** `failed`
+  yazmak satırı yeniden denenebilir yapar ve platformda İKİNCİ bir kampanya
+  açar — para harcayan mükerrerlik.
+- **`PlatformApiError` bir `HttpException` DEĞİL.** `AllExceptionsFilter`'da
+  kendi dalı olmazsa son dala düşüyor ve "izin yok", "kota doldu", "hesap
+  bulunamadı", "geçersiz alan" hepsi panelde **"Beklenmeyen bir hata oluştu"**
+  oluyor. Bu cümle bu projede bir turu tamamen kaybettirdi.
 - **`ad_accounts`, `platform_connections` ve `social_profiles` içinde
   `client_id` NULLABLE.** NULL = ajansın havuzunda, müşteriye atanmamış.
   Sahiplik `org_id`'de. Bu satırlar için senkronizasyon kuyruğa GİRMEMELİ —
   `client_id`'si NULL bir `sync_jobs` satırını RLS kimseye göstermez ve iş
   sessizce kaybolur (`assertAssigned()` kullan).
+
+### Canlıda öğrenilen platform gerçekleri
+
+Hepsi gerçek para harcanarak ya da bir tur kaybedilerek bulundu. Belgeden
+okunup varsayılmadı — canlıda doğrulandı.
+
+**Meta**
+
+- **Ad set'te `destination_type` verilmezse boost REDDEDİLİYOR.** Meta hedefi
+  kendi çözüp harici web sitesine düşüyor ve *"Eylem Çağrısı Gerekiyor ·
+  Kampanya amacınız için harici bir internet sitesi URL'si gerekiyor"*
+  (subcode 2446383) diyor. Gönderi öne çıkarmada doğru değer `ON_POST`.
+  Mesajın "reklam kreatifi kısmında" demesi YANILTICI — eksik olan ad set alanı.
+- **`geo_locations` kovaları BİRLEŞİM, kesişim değil.** "Türkiye + İzmir"
+  göndermek Türkiye geneli demek ve **hiçbir hata vermiyor**. Lokasyon
+  seçildiğinde ülke geneli gönderilmemeli.
+- **Instagram medyasının ÜÇ kimlik uzayı var:** `/{ig-user}/media` → `id`
+  (doğru), `ig_id`, `legacy_instagram_media_id`. Karıştırmak sessiz hata.
+- **Instagram gönderisi `object_story_id` ile reklama çevrilemez.** Ayrı bir
+  `adcreatives` çağrısı ve kök seviyede üç alan gerekiyor: `object_id`
+  (Facebook sayfası), `instagram_user_id`, `source_instagram_media_id`.
+- **Kreatif oluştu diye doğru gönderiye bağlandığı anlamına gelmiyor.** Geri
+  okuyup karşılaştır — ama BENZERİ BENZERLE: yazdığın alanın yankısıyla.
+  `effective_instagram_media_id` başka bir kimlik uzayında olabiliyor ve onu
+  engel saymak çalışan bir yolu kapatıyor.
+
+**Google Ads** (2026-08 araştırması, resmi dokümandan)
+
+- **`advertising_channel_type = VIDEO` kampanya API'DEN OLUŞTURULAMIYOR.**
+  Google Ads API video kampanyalarında yalnızca okuma ve raporlama yapıyor.
+  Enum'da `VIDEO_ACTION` gibi değerlerin durması oluşturulabilir olduğunu
+  GÖSTERMİYOR — şema doğrulamasından geçer, iş mantığı reddeder. YouTube
+  video reklamı API'den yönetilecekse yol **Demand Gen** (`DEMAND_GEN`,
+  alt tip verilmez).
+- **Bütçe AYRI BİR KAYNAK** (`CampaignBudget`) ve kampanya ona referans
+  veriyor — Meta'daki gibi ad set'in alanı değil. Bütçe kampanya altındaki
+  bütün reklam gruplarınca PAYLAŞILIYOR.
+- **Kampanya ve bütçe adları hesapta TEKİL olmalı** (`DUPLICATE_NAME`);
+  bu yüzden bütçe adına zaman damgası ekleniyor.
+- **`partialFailure: false` şart.** `true` olsaydı Google geçersiz işlemleri
+  atlayıp kalanları uygular ve yanıt "başarılı" görünürdü.
+- **Google yazma yolu canlıda HİÇ denenmedi.** İstek gövdeleri bilgiden
+  yazıldı. İlk gerçek çağrı en küçük bütçeyle yapılmalı.
 
 ### Test
 
@@ -131,9 +200,18 @@ buna göre veriliyor:
   role geçen bir test politikaları GERÇEKTEN sınayabiliyor — örnek
   `ad-account-pool-rls.spec.ts`. Kritik bir politika yazıyorsan elle gözden
   geçirmekle yetinme, o deseni kullan.
+- **MUTASYON DİSİPLİNİ: kritik bir test, kodu bozarak doğrulanmadan yazılmış
+  sayılmaz.** Bu oturumda üç test mutasyonla BOŞ çıktı — hepsi geçiyordu ama
+  hiçbir şey tutmuyordu: (1) bir fonksiyon test edilmişti ama ÇAĞRILDIĞI test
+  edilmemişti, (2) kırpma testi kırpmanın OLDUĞUNU değil yalnızca sonucun
+  şeklini kontrol ediyordu, (3) ad set adının hiç testi yoktu. Testi yazdıktan
+  sonra ilgili satırı boz, düştüğünü gör, geri al.
 - Bazı testler **kaynak taraması** yapıyor (`meta-account-path.spec.ts`,
   `google-request.spec.ts`). Canlıda öğrenilen ve birim testiyle
-  yakalanamayacak kuralları böyle kilitliyoruz.
+  yakalanamayacak kuralları böyle kilitliyoruz. **Tarama BOŞA DÜŞEBİLİR:**
+  metot adı değişince dilim boşalıyor ve "yasak dizge yok" iddiası her zaman
+  doğru oluyor. Her taramaya "gövde gerçekten yakalandı" testi ekle ve dilim
+  bulunamazsa HATA FIRLAT.
 
 ### Commit
 
