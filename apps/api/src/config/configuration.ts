@@ -122,7 +122,16 @@ const envSchema = z.object({
    * SÖYLÜYOR. Zorunlu kılmak, bu özelliği kullanmayan bir kurulumun hiç
    * açılmaması demekti.
    */
-  YOUTUBE_API_KEY: z.string().min(1).optional(),
+  /*
+   * `.min(1)` YOK ve bu kasıtlı — `META_APP_ID` ile aynı desen.
+   *
+   * `.env.example` bu değişkeni BOŞ dizgeyle gönderiyor ve taze bir kopyanın
+   * açılması gerekiyor. `.min(1)` eklendiğinde boş dizge şemayı düşürüyor ve
+   * uygulama "Ortam değişkenleri geçersiz" ile hiç açılmıyor — yani bu
+   * özelliği kullanmayan bir kurulum, kullanmadığı bir anahtar yüzünden
+   * çöküyor. Boş dizge zaten falsy; okuyan kod onu "yok" sayıyor.
+   */
+  YOUTUBE_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
