@@ -233,13 +233,21 @@ export class AutoBoostLaunchService {
      * Meta'ya yapılan çağrıların süresinden kısa — üretimde 12,5 saniye
      * ölçüldü ve transaction ölünce hata bile kaydedilemedi.
      */
-    const sonuc = await this.executor.createApproved(
+    /*
+     * `createOneApproved` — TOPLU OLAN DEĞİL. `createApproved(client, 1)`
+     * müşterinin onaylı boost'larını EN ESKİDEN alıyor: kural motorundan
+     * kalmış daha eski bir onaylı satır varsa o yayınlanır, bizimki
+     * `approved` kalır ve dönüş yine `created: 1` olur. O hâlde kart
+     * `launched` yazılır ama kampanya kimlikleri NULL gelir — kullanıcı
+     * "yayınlandı" görür, ortada bizim gönderimizin reklamı yoktur ve
+     * bizim boost'u sonra zamanlanmış tarama kartla ilgisiz yayınlar.
+     */
+    const sonuc = await this.executor.createOneApproved(
       (fn) => this.prisma.withTenant(scoped, fn),
-      kayit.client_id,
-      1,
+      boostId,
     );
 
-    if (sonuc.created > 0) {
+    if (sonuc.ok) {
       await this.prisma.withTenant(scoped, (tx) =>
         tx.$executeRaw(Prisma.sql`
           UPDATE auto_boost_queue_items q
@@ -255,19 +263,12 @@ export class AutoBoostLaunchService {
     }
 
     /*
-     * BAŞARISIZ: HATA `boosts` SATIRINDA ve oradan karta taşınıyor. Kendi
-     * cümlemizi yazmak, Meta'nın söylediğini kaybetmek olurdu — bu projede
-     * en pahalı hata tipi tam olarak o.
+     * BAŞARISIZ: HATA METNİ `createOneApproved`'DAN GELİYOR. O da `boosts`
+     * satırından okuyor — kendi cümlemizi yazmak, Meta'nın söylediğini
+     * kaybetmek olurdu ve bu projede en pahalı hata tipi tam olarak o.
      */
-    const satirlar = await this.prisma.withTenant(scoped, (tx) =>
-      tx.$queryRaw<Array<{ error: string | null; status: string }>>(Prisma.sql`
-        SELECT error, status FROM boosts WHERE id = ${boostId}::uuid
-      `),
-    );
-    const b = satirlar[0];
-    const mesaj = b?.error ?? 'Yayın başarısız oldu; sebep kaydedilemedi.';
-    await this.geriAl(scoped, kayit.id, mesaj);
-    return { status: 'failed', message: mesaj };
+    await this.geriAl(scoped, kayit.id, sonuc.error);
+    return { status: 'failed', message: sonuc.error };
   }
 
   /**
