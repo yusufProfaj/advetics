@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
 import { Prisma } from '@prisma/client';
 import type { TenantContext } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
+import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   deriveCallbackToken,
@@ -40,6 +41,13 @@ export class YouTubeSubscribeService {
   constructor(
     @Inject(CONFIG) private readonly config: AppConfig,
     private readonly prisma: PrismaService,
+    /**
+     * YENİLEME İŞİ İÇİN — zamanlayıcıdan geliyor ve oturumu yok.
+     *
+     * RLS politikaları oturumsuz bağlamda eşleşemiyor; `PrismaService` ile
+     * tarama SIFIR satır bulur ve iş sessizce hiçbir şey yapmazdı.
+     */
+    private readonly db: PrismaAdminService,
     private readonly youtube: YouTubeApiService,
   ) {}
 
@@ -171,6 +179,113 @@ export class YouTubeSubscribeService {
       this.logger.log(`YouTube kanalı eklendi: ${kanal.title} (${kanal.channelId})`);
       return { socialProfileId: profil.id, channelId: kanal.channelId, title: kanal.title };
     });
+  }
+
+  /**
+   * SÜRESİ YAKLAŞAN ABONELİKLERİ YENİLER — sessiz ölümün panzehiri.
+   *
+   * ═══ NEDEN BU İŞ VAR ═══
+   *
+   * WebSub kiralaması azami ~10 gün ve dolduğunda hub HABER VERMİYOR: ne
+   * hata, ne log, ne bildirim. Yenilenmezse video bildirimleri sessizce
+   * duruyor ve panelde yalnızca "hiç kart gelmiyor" görünüyor — sebebi
+   * YouTube'da, kanalda, izinlerde aranıyor.
+   *
+   * İKİ KÜME YENİLENİYOR, BİRİ BİLEREK DIŞARIDA:
+   *
+   *   1. `renew_at` GEÇMİŞ — normal yenileme (sürenin %80'inde).
+   *   2. HİÇ DOĞRULANMAMIŞ — kanal eklendi ama hub el sıkışması hiç
+   *      tamamlanmadı. Hub o an ulaşılamaz olmuş olabilir.
+   *   3. REDDEDİLMİŞ (`denied_reason` dolu) — DENENMİYOR. Hub bir sebeple
+   *      reddetti ve aynı isteği tekrarlamak o sebebi değiştirmiyor; insan
+   *      müdahalesi gerekiyor ve panel bunu gösteriyor. Sonsuza kadar yeniden
+   *      denemek, hub'ı gereksiz meşgul etmenin yanında gerçek sorunu da
+   *      gizlerdi.
+   *
+   * HATA TEK ABONELİĞİ DÜŞÜRÜYOR, TURU DEĞİL. Bir kanalın hub'ı reddetmesi
+   * diğerlerinin yenilenmesini engellememeli.
+   *
+   * WORKER BAĞLAMINDA (`PrismaAdminService`, BYPASSRLS): bu iş zamanlayıcıdan
+   * geliyor ve oturumu yok; RLS politikaları eşleşemez ve tarama SIFIR satır
+   * bulurdu — yani sessizce hiçbir şey yapmazdı.
+   */
+  async renewDueSubscriptions(): Promise<{ rows: number; note: string }> {
+    const bekleyenler = await this.db.$queryRaw<
+      Array<{
+        social_profile_id: string;
+        token_nonce: string;
+        channel_external_id: string;
+        verified_at: Date | null;
+      }>
+    >(Prisma.sql`
+      SELECT s.social_profile_id::text AS social_profile_id, s.token_nonce,
+             sp.external_id AS channel_external_id, s.verified_at
+      FROM auto_boost_subscriptions s
+      JOIN social_profiles sp ON sp.id = s.social_profile_id
+      WHERE s.denied_reason IS NULL
+        AND (
+          (s.renew_at IS NOT NULL AND s.renew_at <= now())
+          OR
+          -- HİÇ DOĞRULANMAMIŞ ama YENİ DEĞİL: kanal eklendikten sonra hub'ın
+          -- el sıkışması birkaç saniye sürüyor, o pencerede yeniden istek
+          -- göndermek gereksiz. Beş dakika sonra hâlâ doğrulanmamışsa bir şey
+          -- ters gitmiş demektir.
+          (s.verified_at IS NULL AND s.created_at < now() - interval '5 minutes')
+        )
+      ORDER BY s.renew_at NULLS FIRST
+      LIMIT 100
+    `);
+
+    if (bekleyenler.length === 0) {
+      return { rows: 0, note: 'yenilenecek abonelik yok' };
+    }
+
+    let basarili = 0;
+    for (const a of bekleyenler) {
+      try {
+        const token = deriveCallbackToken({
+          masterKey: this.masterKey(),
+          socialProfileId: a.social_profile_id,
+          nonce: a.token_nonce,
+        });
+        await this.sendSubscribe({
+          socialProfileId: a.social_profile_id,
+          token,
+          nonce: a.token_nonce,
+          channelId: a.channel_external_id,
+          mode: 'subscribe',
+        });
+
+        /*
+         * `renew_at` İLERİ ALINIYOR ama `verified_at` DEĞİL.
+         *
+         * Abonelik ancak hub'ın doğrulama çağrısıyla gerçekten yenileniyor;
+         * burada yalnızca isteği gönderdik. `verified_at`i şimdi yazmak,
+         * doğrulama hiç gelmese bile aboneliği sağlıklı göstermek olurdu —
+         * ölü adam düğmesini kendi elimizle devre dışı bırakmak.
+         *
+         * İleri alınmasının sebebi ayrı: aksi hâlde her tur aynı abonelik
+         * için yeniden istek gönderilir ve hub gereksiz yere dövülürdü.
+         */
+        await this.db.$executeRaw(Prisma.sql`
+          UPDATE auto_boost_subscriptions
+          SET renew_at = now() + interval '1 hour', updated_at = now()
+          WHERE social_profile_id = ${a.social_profile_id}::uuid
+        `);
+        basarili++;
+      } catch (err) {
+        // TUR DEVAM EDİYOR: bir kanalın sorunu diğerlerini engellememeli.
+        this.logger.error(
+          `YouTube aboneliği yenilenemedi (profil ${a.social_profile_id}): ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    return {
+      rows: basarili,
+      note: `${bekleyenler.length} abonelik · ${basarili} istek gönderildi`,
+    };
   }
 
   /**

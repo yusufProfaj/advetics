@@ -18,6 +18,7 @@ import {
   autoBoostPresetInputSchema,
   type AutoBoostPresetInput,
   type AutoBoostPresetRecord,
+  type AutoBoostSubscriptionHealth,
 } from '@advetics/shared';
 import { AutoBoostPresetService } from './autoboost-preset.service';
 import { AutoBoostLaunchService } from './autoboost-launch.service';
@@ -51,6 +52,20 @@ export class AutoBoostController {
     private readonly launch: AutoBoostLaunchService,
     private readonly presets: AutoBoostPresetService,
   ) {}
+
+  /**
+   * YouTube aboneliklerinin sağlığı — ölü adam düğmesi.
+   *
+   * `boost.read` yetiyor: yalnızca okuyor.
+   */
+  @Get('subscriptions/health')
+  @RequirePermissions('boost.read')
+  health(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<AutoBoostSubscriptionHealth[]> {
+    return this.read.subscriptionHealth(ctx, clientId);
+  }
 
   /** Bilgi Bankası — bu müşterinin ön ayarları. */
   @Get('presets')

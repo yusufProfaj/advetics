@@ -350,3 +350,37 @@ export type AutoBoostQueueQuery = z.infer<typeof autoBoostQueueQuerySchema>;
 export const autoBoostDecisionSchema = z.object({
   approve: z.boolean(),
 });
+
+// -----------------------------------------------------------------------------
+// Abonelik sağlığı — ÖLÜ ADAM DÜĞMESİ
+// -----------------------------------------------------------------------------
+
+/**
+ * YouTube bildirim aboneliğinin durumu.
+ *
+ * NEDEN PANELDE GÖRÜNÜYOR: WebSub kiralaması ~10 günde doluyor ve hub HABER
+ * VERMİYOR. Yenileme işi de tek noktalı arıza — Redis temizlenip tekrarlı iş
+ * kaybolursa bildirim sessizce duruyor. Üç arıza da panelde yalnızca "hiç
+ * kart gelmiyor" olarak görünür ve sebebi YouTube'da, kanalda, izinlerde
+ * aranır.
+ *
+ * Bu kayıt o aramayı gereksiz kılıyor.
+ */
+export interface AutoBoostSubscriptionHealth {
+  socialProfileId: string;
+  channelName: string;
+  ok: boolean;
+  /** Sorun varsa NE YAPILACAĞINI söyleyen cümle. */
+  message: string | null;
+  verifiedAt: string | null;
+  lastNotificationAt: string | null;
+  /** Hub reddettiyse sebebi — insan müdahalesi gerekiyor. */
+  deniedReason: string | null;
+  /**
+   * İmza kilidi kuruldu mu.
+   *
+   * Kurulmadıysa koruma yalnızca bildirim adresinin gizli kalmasına
+   * dayanıyor ve kullanıcı bunu bilmeli.
+   */
+  signatureLocked: boolean;
+}

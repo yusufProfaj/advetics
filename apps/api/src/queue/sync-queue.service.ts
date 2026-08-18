@@ -224,6 +224,14 @@ export class SyncQueueService implements OnModuleDestroy {
       // hesaplardı; günde iki kez hem sabah hem akşam paylaşımlarını
       // yakalıyor.
       { name: 'sweep:boosts', pattern: '29 8,20 * * *', jobType: 'boosts_evaluate' },
+      // Advetics 1.0 — YouTube bildirim aboneliği yenileme: SAATTE BİR.
+      //
+      // Kiralama ~10 gün ve yenileme %80'inde (yaklaşık 8. gün) yapılıyor,
+      // yani günde bir tarama da yeterdi. Saatlik olmasının sebebi ayrı:
+      // HİÇ DOĞRULANMAMIŞ abonelikler de bu turda yeniden deneniyor ve orada
+      // gecikme doğrudan kullanıcıya yansıyor — kanalı ekleyip bildirimin
+      // gelmesini bekleyen biri bir gün beklememeli.
+      { name: 'sweep:websub', pattern: '53 * * * *', jobType: 'websub_renew' },
     ];
 
     for (const s of schedules) {

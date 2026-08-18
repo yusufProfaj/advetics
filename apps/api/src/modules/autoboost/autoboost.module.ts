@@ -34,6 +34,6 @@ import { YouTubeWebSubService } from './youtube-websub.service';
     YouTubeSubscribeService,
     YouTubeWebSubService,
   ],
-  exports: [AutoBoostQueueService, YouTubeApiService],
+  exports: [AutoBoostQueueService, YouTubeApiService, YouTubeSubscribeService],
 })
 export class AutoBoostModule {}

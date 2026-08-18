@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  abonelikSagligi,
+} from './youtube-websub';
+import {
   autoBoostPresetSettingsSchema,
   type AutoBoostQueueItemRecord,
   type AutoBoostQueueList,
+  type AutoBoostSubscriptionHealth,
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -21,6 +25,73 @@ import { PrismaService } from '../../prisma/prisma.service';
 @Injectable()
 export class AutoBoostReadService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * YouTube aboneliklerinin sağlığı — ölü adam düğmesi.
+   *
+   * Kiralamanın sessizce dolması, hub'ın aboneliği reddetmesi ve yenileme
+   * işinin kaybolması; üçü de panelde "hiç kart gelmiyor" olarak görünüyor ve
+   * üçünün yapılacak işi farklı. Bu uç o ayrımı yapıyor.
+   */
+  async subscriptionHealth(
+    ctx: TenantContext,
+    clientId: string,
+  ): Promise<AutoBoostSubscriptionHealth[]> {
+    const scoped = { ...ctx, activeClientId: clientId };
+    const rows = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$queryRaw<
+        Array<{
+          social_profile_id: string;
+          channel_name: string;
+          verified_at: Date | null;
+          lease_seconds: number | null;
+          last_notification_at: Date | null;
+          denied_reason: string | null;
+          signature_seen_at: Date | null;
+        }>
+      >(Prisma.sql`
+        SELECT s.social_profile_id::text AS social_profile_id, sp.name AS channel_name,
+               s.verified_at, s.lease_seconds, s.last_notification_at,
+               s.denied_reason, s.signature_seen_at
+        FROM auto_boost_subscriptions s
+        JOIN social_profiles sp ON sp.id = s.social_profile_id
+        WHERE s.client_id = ${clientId}::uuid
+        ORDER BY sp.name
+      `),
+    );
+
+    const now = new Date();
+    return rows.map((r) => {
+      /*
+       * REDDEDİLME EN ÖNCELİKLİ. Kiralama hesabı da sorunlu diyecektir ama
+       * söylenmesi gereken şey hub'ın sebebi — "yeniden izlemeye al" mesajı
+       * reddedilmiş bir abonelikte işe yaramaz.
+       */
+      const saglik = r.denied_reason
+        ? {
+            ok: false,
+            message:
+              `YouTube bildirim aboneliği reddedildi: ${r.denied_reason}. ` +
+              'Kanalı yeniden eklemeyi dene.',
+          }
+        : abonelikSagligi({
+            now,
+            verifiedAt: r.verified_at,
+            leaseSeconds: r.lease_seconds,
+          });
+
+      return {
+        socialProfileId: r.social_profile_id,
+        channelName: r.channel_name,
+        ok: saglik.ok,
+        message: saglik.message,
+        verifiedAt: r.verified_at?.toISOString() ?? null,
+        lastNotificationAt: r.last_notification_at?.toISOString() ?? null,
+        deniedReason: r.denied_reason,
+        signatureLocked: r.signature_seen_at !== null,
+      };
+    });
+  }
 
   async listQueue(ctx: TenantContext, clientId: string): Promise<AutoBoostQueueList> {
     const scoped = { ...ctx, activeClientId: clientId };

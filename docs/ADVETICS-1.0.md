@@ -93,9 +93,40 @@ PubSubHubbub (WebSub) gerçek bir webhook ve kullanılacak. Ama üç ayrı sessi
    biter.
 3. **Yenileme işinin kendisi tek noktalı arıza.** BullMQ tekrarlı işi sessizce
    ölürse (Redis temizlenir, tekrarlı iş kaybolur) bildirim durur ve panelde
-   "hiç video gelmiyor" diye görünür. **Ölü adam düğmesi gerekiyor:** en son
-   ne zaman bildirim/yenileme olduğu kaydedilecek ve eşiği aşınca panelde
-   uyarı çıkacak.
+   "hiç video gelmiyor" diye görünür.
+
+### Yenileme işi — `sweep:websub`, saatte bir
+
+Kiralama ~10 gün ve yenileme %80'inde yapılıyor; günde bir tarama da yeterdi.
+**Saatlik olmasının sebebi ayrı:** hiç doğrulanmamış abonelikler de bu turda
+yeniden deneniyor ve orada gecikme doğrudan kullanıcıya yansıyor — kanalı
+ekleyip bildirim bekleyen biri bir gün beklememeli.
+
+İki küme yenileniyor, biri bilerek dışarıda:
+
+| Durum | Davranış |
+|---|---|
+| `renew_at` geçmiş | Yenileniyor |
+| Hiç doğrulanmamış (5 dk'dan eski) | Yeniden deneniyor — hub o an ulaşılamaz olmuş olabilir |
+| **Reddedilmiş** (`denied_reason` dolu) | **Denenmiyor** — aynı isteği tekrarlamak sebebi değiştirmiyor; insan müdahalesi gerekiyor |
+
+`renew_at` ileri alınıyor ama **`verified_at` alınmıyor**: abonelik ancak
+hub'ın doğrulama çağrısıyla gerçekten yenileniyor. Şimdi yazmak, doğrulama hiç
+gelmese bile aboneliği sağlıklı göstermek — ölü adam düğmesini kendi elimizle
+kapatmak olurdu.
+
+Hata **tek aboneliği** düşürüyor, turu değil.
+
+### Ölü adam düğmesi panelde
+
+Üç arıza da yalnızca "hiç kart gelmiyor" olarak görünürdü ve üçünün yapılacak
+işi farklı. Bildirim Havuzu'nun **üstünde** — boş bir liste görüldüğünde
+okunması gereken ilk şey bu:
+
+- Kiralama dolmuş / hiç doğrulanmamış → "yeniden izlemeye al"
+- Hub reddetmiş → hub'ın kendi sebebi gösteriliyor
+- **İmza kilidi kurulmamış** → hata değil, bilgi: koruma yalnızca bildirim
+  adresinin gizli kalmasına dayanıyor ve kullanıcı bunu bilmeli
 
 **Hub URL'si SABİT YAZILACAK.** YouTube feed'i `Link:` başlığında hub'ı ilan
 etmiyor — WebSub keşfi imkânsız.

@@ -752,6 +752,11 @@ enum SyncJobType {
   leads_reconcile
   /// L7 — yeni hesap bağlandığında geçmiş
   initial_backfill
+  /// Advetics 1.0 — YouTube WebSub aboneliklerini yeniler.
+  ///
+  /// Kiralama ~10 günde doluyor ve hub haber vermiyor; yenilenmezse bildirim
+  /// SESSİZCE duruyor. Bu iş küresel bir tarama, müşteri başına dağılmıyor.
+  websub_renew
 }
 
 enum SyncJobStatus {

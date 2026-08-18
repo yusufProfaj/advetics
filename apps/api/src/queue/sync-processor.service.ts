@@ -15,6 +15,7 @@ import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
 import { KeywordSyncService } from './keyword-sync.service';
 import { BoostsService } from '../modules/boosts/boosts.service';
+import { YouTubeSubscribeService } from '../modules/autoboost/youtube-subscribe.service';
 import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
 
 /**
@@ -58,6 +59,7 @@ export class SyncProcessorService {
     private readonly organic: OrganicSyncService,
     private readonly leads: LeadSyncService,
     private readonly boosts: BoostsService,
+    private readonly subscribe: YouTubeSubscribeService,
     private readonly boostExecutor: BoostExecutorService,
     private readonly keywords: KeywordSyncService,
   ) {}
@@ -84,6 +86,15 @@ export class SyncProcessorService {
   private async fanOut(payload: SyncJobPayload): Promise<{ rows: number; note: string }> {
     if (payload.jobType === 'rules_evaluate') return this.fanOutRules();
     if (payload.jobType === 'boosts_evaluate') return this.fanOutBoosts();
+    /*
+     * WEBSUB YENİLEMESİ MÜŞTERİ BAŞINA DAĞILMIYOR.
+     *
+     * Diğer taramalar hesap/müşteri başına iş kuyruğa atıyor; bu tarama
+     * küresel: süresi yaklaşan bütün abonelikleri tek geçişte işliyor.
+     * Müşteriye bölmek, çoğu müşteride hiç YouTube kanalı olmadığı için
+     * boş iş üretirdi.
+     */
+    if (payload.jobType === 'websub_renew') return this.subscribe.renewDueSubscriptions();
 
     const accounts = await this.db.adAccount.findMany({
       where: {

@@ -2,7 +2,11 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import type { AutoBoostQueueItemRecord, AutoBoostQueueList } from '@advetics/shared';
+import type {
+  AutoBoostQueueItemRecord,
+  AutoBoostQueueList,
+  AutoBoostSubscriptionHealth,
+} from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatMoney, formatRelative } from '@/lib/format';
 
@@ -21,6 +25,7 @@ import { formatMoney, formatRelative } from '@/lib/format';
 export function BildirimHavuzu({ clientId }: { clientId: string }) {
   const router = useRouter();
   const [liste, setListe] = useState<AutoBoostQueueList | null>(null);
+  const [saglik, setSaglik] = useState<AutoBoostSubscriptionHealth[]>([]);
   const [hata, setHata] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,6 +46,18 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
             : 'Bildirim havuzu yüklenemedi. Sayfayı yenilemeyi dene.',
         ),
       );
+
+    /*
+     * ABONELİK SAĞLIĞI AYRI ÇEKİLİYOR ve hatası kartları GİZLEMİYOR.
+     *
+     * Sağlık okunamazsa kuyruk yine gösterilmeli: ikisi ayrı iş ve birinin
+     * arızası diğerini görünmez yapmamalı.
+     */
+    void apiFetch<AutoBoostSubscriptionHealth[]>(
+      `/autoboost/subscriptions/health?clientId=${clientId}`,
+    )
+      .then(setSaglik)
+      .catch(() => setSaglik([]));
   }, [clientId]);
 
   if (hata) {
@@ -78,6 +95,45 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
           {liste.total > liste.items.length && ` · toplam ${liste.total}, en yeniler`}
         </p>
       </header>
+
+      {/*
+        ÖLÜ ADAM DÜĞMESİ — kartlardan ÖNCE.
+        
+        WebSub kiralaması ~10 günde sessizce doluyor, hub aboneliği
+        reddedebiliyor ve yenileme işinin kendisi kaybolabiliyor. Üçü de
+        panelde yalnızca "hiç kart gelmiyor" olarak görünür ve sebebi
+        YouTube'da, kanalda, izinlerde aranırdı. Uyarı listenin ÜSTÜNDE çünkü
+        boş bir liste gördüğünde okunması gereken ilk şey bu.
+      */}
+      {saglik
+        .filter((h) => !h.ok)
+        .map((h) => (
+          <div
+            key={h.socialProfileId}
+            className="rounded-xl border border-danger/40 bg-surface p-3"
+          >
+            <p className="text-xs font-semibold text-danger">
+              {h.channelName}: bildirim aboneliği çalışmıyor
+            </p>
+            <p className="mt-1 text-[11px] text-ink-muted">{h.message}</p>
+          </div>
+        ))}
+
+      {/*
+        İMZASIZ ABONELİK UYARISI — hata değil, bilgi.
+        
+        Kilit kurulmadıysa koruma yalnızca bildirim adresinin gizli kalmasına
+        dayanıyor. Sessiz bırakmak, kullanıcının bilmediği bir riski taşıması
+        demek olurdu.
+      */}
+      {saglik
+        .filter((h) => h.ok && !h.signatureLocked && h.lastNotificationAt)
+        .map((h) => (
+          <p key={h.socialProfileId} className="text-[11px] text-ink-muted">
+            {h.channelName}: bildirimler imzasız geliyor — koruma yalnızca
+            bildirim adresinin gizli kalmasına dayanıyor.
+          </p>
+        ))}
 
       {liste.items.length === 0 && (
         <div className="rounded-xl border border-dashed border-line bg-surface p-6 text-center">
