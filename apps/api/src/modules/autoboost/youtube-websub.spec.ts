@@ -4,6 +4,8 @@ import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   abonelikSagligi,
+  buildCallbackUrl,
+  buildSubscribeBody,
   BEKLEYEN_KART_TAVANI,
   decideRateLimit,
   SAATLIK_BILDIRIM_SINIRI,
@@ -610,5 +612,66 @@ describe('decideRateLimit', () => {
     // Bir kanal saatte 10 video yüklemiyor, bir müşteri 50 kart biriktirmiyor.
     expect(SAATLIK_BILDIRIM_SINIRI).toBeGreaterThanOrEqual(10);
     expect(BEKLEYEN_KART_TAVANI).toBeGreaterThanOrEqual(50);
+  });
+});
+
+describe('abonelik isteği', () => {
+  const ORTAK = {
+    callbackUrl: 'https://advetics.com/api/webhooks/youtube/tok3n',
+    topicUrl: youtubeTopicUrl(KANAL),
+    secret: 'gizli',
+  };
+
+  it('KRİTİK: `hub.secret` GÖNDERİLİYOR — kilit mekanizmasının ön şartı', () => {
+    /*
+     * Göndermezsek hub hiç imzalamaz, öğren-ve-kilitle hiç kurulmaz ve koruma
+     * KALICI olarak yalnızca adresin gizliliğine dayanır.
+     */
+    const b = buildSubscribeBody({ ...ORTAK, mode: 'subscribe' });
+    expect(b.get('hub.secret')).toBe('gizli');
+  });
+
+  it('zorunlu alanların hepsi var', () => {
+    const b = buildSubscribeBody({ ...ORTAK, mode: 'subscribe' });
+    expect(b.get('hub.callback')).toBe(ORTAK.callbackUrl);
+    expect(b.get('hub.topic')).toBe(ORTAK.topicUrl);
+    expect(b.get('hub.mode')).toBe('subscribe');
+    expect(b.get('hub.verify')).toBe('async');
+  });
+
+  it('KRİTİK: iptal isteğinde secret GÖNDERİLMİYOR', () => {
+    // Gereksiz ve bazı hub'lar fazladan alanı reddediyor.
+    const b = buildSubscribeBody({ ...ORTAK, mode: 'unsubscribe' });
+    expect(b.get('hub.secret')).toBeNull();
+    expect(b.get('hub.mode')).toBe('unsubscribe');
+  });
+
+  it('istenen kiralama süresi gönderiliyor', () => {
+    const b = buildSubscribeBody({ ...ORTAK, mode: 'subscribe', leaseSeconds: 432_000 });
+    expect(b.get('hub.lease_seconds')).toBe('432000');
+  });
+});
+
+describe('buildCallbackUrl', () => {
+  it('mutlak adres üretiyor', () => {
+    expect(
+      buildCallbackUrl({
+        publicBaseUrl: 'https://advetics.com',
+        globalPrefix: 'api',
+        token: 'tok3n',
+      }),
+    ).toBe('https://advetics.com/api/webhooks/youtube/tok3n');
+  });
+
+  it('KRİTİK: sondaki eğik çizgi ÇİFT ÇİZGİ üretmiyor', () => {
+    // `https://advetics.com//api/...` hub tarafından farklı bir adres sayılır
+    // ve doğrulama el sıkışması bize hiç ulaşmaz.
+    expect(
+      buildCallbackUrl({
+        publicBaseUrl: 'https://advetics.com/',
+        globalPrefix: 'api',
+        token: 'tok3n',
+      }),
+    ).toBe('https://advetics.com/api/webhooks/youtube/tok3n');
   });
 });

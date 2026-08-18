@@ -539,3 +539,70 @@ export function decideRateLimit(params: {
 
   return { allow: true };
 }
+
+// -----------------------------------------------------------------------------
+// ABONELİK İSTEĞİ
+// -----------------------------------------------------------------------------
+
+/**
+ * Hub'a gönderilecek abonelik gövdesi.
+ *
+ * `application/x-www-form-urlencoded` ile POST ediliyor; hub JSON kabul
+ * etmiyor.
+ *
+ * `hub.secret` GÖNDERİLİYOR ve bu, öğren-ve-kilitle mekanizmasının ön şartı:
+ * göndermezsek hub hiç imzalamaz, kilit hiç kurulmaz ve koruma kalıcı olarak
+ * yalnızca adresin gizliliğine dayanır.
+ *
+ * WebSub 0.4'e göre hub yalnızca geri çağrı adresi HTTPS ise imzalıyor —
+ * üretimde öyle; yerelde HTTP ile denenirse imza hiç gelmez ve bu bir hata
+ * değil, beklenen davranıştır.
+ */
+export function buildSubscribeBody(params: {
+  callbackUrl: string;
+  topicUrl: string;
+  secret: string;
+  /** `subscribe` ya da `unsubscribe`. */
+  mode: 'subscribe' | 'unsubscribe';
+  leaseSeconds?: number;
+}): URLSearchParams {
+  const body = new URLSearchParams({
+    'hub.callback': params.callbackUrl,
+    'hub.topic': params.topicUrl,
+    'hub.verify': 'async',
+    'hub.mode': params.mode,
+  });
+
+  /*
+   * SECRET YALNIZCA ABONE OLURKEN. `unsubscribe` isteğinde göndermek
+   * gereksiz ve bazı hub'lar fazladan alanı reddediyor.
+   */
+  if (params.mode === 'subscribe') {
+    body.set('hub.secret', params.secret);
+    // İstenen süre; hub daha kısasını verebilir ve verdiği bağlayıcı.
+    body.set('hub.lease_seconds', String(params.leaseSeconds ?? AZAMI_KIRALAMA_SN));
+  }
+
+  return body;
+}
+
+/**
+ * Geri çağrı adresi.
+ *
+ * MUTLAK ADRES ZORUNLU: hub'ın bize ulaşabilmesi için tam URL gerekiyor ve
+ * göreli bir yol sessizce çalışmaz — hub aboneliği kurmaz, hata da vermez.
+ *
+ * HTTPS ZORUNLU DEĞİL ama imza için gerekli (yukarıya bak); bu yüzden
+ * yapılandırmadaki genel adres kullanılıyor, isteğin `Host` başlığı değil.
+ * `Host` başlığına güvenmek, proxy'nin ilettiği değere güvenmek demek ve o
+ * değer saldırgan tarafından belirlenebiliyor.
+ */
+export function buildCallbackUrl(params: {
+  /** Örn. `https://advetics.com` — sonunda eğik çizgi olmadan. */
+  publicBaseUrl: string;
+  globalPrefix: string;
+  token: string;
+}): string {
+  const base = params.publicBaseUrl.replace(/\/+$/, '');
+  return `${base}/${params.globalPrefix}/webhooks/youtube/${params.token}`;
+}
