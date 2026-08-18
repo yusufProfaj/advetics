@@ -9,6 +9,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type { Response } from 'express';
 import { PlatformApiError } from '../../modules/connections/provider.types';
+import { maskPath } from '../mask-path';
 import type { AuthedRequest } from '../types/request';
 
 interface ErrorBody {
@@ -37,14 +38,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const body = this.toErrorBody(exception, requestId);
 
+    /*
+     * YOL MASKELENEREK YAZILIYOR. Adresinde sır taşıyan uçlar var (YouTube
+     * bildirim geri çağrısı) ve ham `originalUrl` o sırrı pm2 log dosyasına
+     * döküyordu — sunucu 11+ üretim sitesiyle paylaşımlı ve DEPLOYMENT.md
+     * operatöre `pm2 logs` çalıştırmasını söylüyor.
+     */
+
     if (body.statusCode >= 500) {
       this.logger.error(
-        `${req.method} ${req.originalUrl} → ${body.statusCode} [${requestId}]`,
+        `${req.method} ${maskPath(req.originalUrl)} → ${body.statusCode} [${requestId}]`,
         exception instanceof Error ? exception.stack : String(exception),
       );
     } else {
       this.logger.warn(
-        `${req.method} ${req.originalUrl} → ${body.statusCode} ${body.code} [${requestId}]`,
+        `${req.method} ${maskPath(req.originalUrl)} → ${body.statusCode} ${body.code} [${requestId}]`,
       );
     }
 
