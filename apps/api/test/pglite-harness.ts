@@ -343,6 +343,7 @@ export async function createHarness(): Promise<Harness> {
         asset_platform_refs, assets,
         leads, lead_sync_cursors, lead_forms,
         bulk_items, bulk_batches,
+        auto_boost_queue_items, auto_boost_presets,
         boosts, boost_rules, organic_posts,
         rule_action_logs, rule_runs, rules,
         monthly_budgets,

@@ -65,7 +65,22 @@ export type LinkBoostAccountInput = z.infer<typeof linkBoostAccountSchema>;
 
 export type ConnectionStatusValue = 'active' | 'needs_reauth' | 'revoked' | 'error';
 export type AdAccountStatusValue = 'active' | 'paused' | 'disabled' | 'closed' | 'unknown';
-export type SocialProfileTypeValue = 'facebook_page' | 'instagram_business';
+/**
+ * Sosyal profil türleri.
+ *
+ * `youtube_channel` Advetics 1.0 ile eklendi: bağlı YouTube kanalı,
+ * Instagram hesabı ve Facebook sayfasıyla aynı yerde duruyor — üçü de
+ * müşteriye atanan, içerik üreten hesaplar ve üçü de aynı havuz/atama
+ * mantığından geçiyor.
+ *
+ * BU TİPE DEĞER EKLEMEK, profil türüne göre dallanan HER YERİ derleyicide
+ * açığa çıkarır. Eklendiğinde çıkan hatalar gürültü değil, yapılacak işin
+ * listesi.
+ */
+export type SocialProfileTypeValue =
+  | 'facebook_page'
+  | 'instagram_business'
+  | 'youtube_channel';
 
 export interface AdAccountSummary {
   id: string;

@@ -4,6 +4,7 @@ export * from './constants/boost-naming';
 export * from './schemas/auth.schema';
 export * from './schemas/ad-builder.schema';
 export * from './schemas/ads-explorer.schema';
+export * from './schemas/autoboost.schema';
 export * from './schemas/boost.schema';
 export * from './schemas/asset-routing.schema';
 export * from './schemas/asset.schema';

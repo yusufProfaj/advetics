@@ -151,6 +151,8 @@ DECLARE
     'monthly_budgets', 'rules', 'rule_runs', 'rule_action_logs',
     -- Modül 7
     'organic_posts', 'boost_rules', 'boosts',
+    -- Advetics 1.0 — otomatik boost ön ayarları ve onay kuyruğu
+    'auto_boost_presets', 'auto_boost_queue_items',
     -- Modül 4 — reklam oluşturucu
     'ad_drafts', 'ad_draft_assets',
     -- Anahtar kelime performansı
@@ -897,6 +899,44 @@ CREATE POLICY adv_boost_rules_update ON boost_rules
              WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
 
 CREATE POLICY adv_boost_rules_delete ON boost_rules
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- ---------------------------------------------------------------------------
+-- auto_boost_presets, auto_boost_queue_items  (Advetics 1.0)
+-- ---------------------------------------------------------------------------
+--
+-- Standart kiracı deseni. İkisi de müşteriye ait ve müşteri temsilcisi
+-- yalnızca kendi müşterisinin kayıtlarını görüyor.
+--
+-- KUYRUK KAYITLARINI WEBHOOK YAZIYOR ve webhook'un oturumu YOK. Bu yüzden
+-- yazma yolu `PrismaAdminService` (BYPASSRLS) üzerinden gidiyor — aynı şey
+-- lead webhook'unda da geçerli. Buradaki politikalar PANELDEN gelen okuma ve
+-- onaylama içindir; webhook'un bu politikalardan geçmesi beklenmiyor ve
+-- beklenseydi kayıt sessizce kaybolurdu (`client_id` bağlamı yok).
+CREATE POLICY adv_auto_boost_presets_select ON auto_boost_presets
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_auto_boost_presets_insert ON auto_boost_presets
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_auto_boost_presets_update ON auto_boost_presets
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_auto_boost_presets_delete ON auto_boost_presets
+  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_auto_boost_queue_items_select ON auto_boost_queue_items
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_auto_boost_queue_items_insert ON auto_boost_queue_items
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_auto_boost_queue_items_update ON auto_boost_queue_items
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_auto_boost_queue_items_delete ON auto_boost_queue_items
   FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
 
 CREATE POLICY adv_boosts_select ON boosts

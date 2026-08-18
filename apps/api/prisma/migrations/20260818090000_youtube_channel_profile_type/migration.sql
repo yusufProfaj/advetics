@@ -1,0 +1,14 @@
+-- YOUTUBE KANALI BİR SOSYAL PROFİL TÜRÜ (Advetics 1.0)
+--
+-- Bağlı YouTube kanalı, Instagram hesabı ve Facebook sayfasıyla aynı yerde
+-- durmalı: ikisi de "müşteriye atanmış, içerik üreten bir hesap" ve ikisi de
+-- havuzdan atanıyor. Ayrı bir tablo açmak atama, RLS ve senkronizasyon
+-- mantığını ikiye bölerdi.
+--
+-- BU MIGRATION TEK BAŞINA VE İÇİNDE BAŞKA HİÇBİR ŞEY YOK.
+--
+-- Gerekçe CLAUDE.md §3'te yazılı: `ALTER TYPE ... ADD VALUE` ile eklenen bir
+-- enum değeri AYNI TRANSACTION İÇİNDE KULLANILAMIYOR. Tabloları da bu dosyaya
+-- koysaydık, o tablolarda yeni değeri kullanan her satır
+-- "unsafe use of new value" ile düşerdi.
+ALTER TYPE "SocialProfileType" ADD VALUE IF NOT EXISTS 'youtube_channel';

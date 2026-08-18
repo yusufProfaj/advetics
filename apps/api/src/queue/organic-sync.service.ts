@@ -87,6 +87,28 @@ export class OrganicSyncService {
     // bulmak için var. `decrypt`e ayrıca vermek gereksiz ve iki kaynağın
     // ayrışması riski.
     // Prisma `Bytes` alanını Uint8Array olarak veriyor; crypto katmanı Buffer bekliyor.
+    /**
+     * YOUTUBE KANALI BU YOLA GİREMEZ.
+     *
+     * Bu süpürme Meta'nın organik gönderi uçlarını çağırıyor ve profil türünü
+     * aşağıda `'facebook_page' | 'instagram_business'` olarak DARALTIYOR.
+     * Advetics 1.0 ile `youtube_channel` eklendi ve o daraltma artık bir
+     * DENETİMSİZ DÖNÜŞÜM: bir YouTube kanalı buraya düşerse tip sistemi
+     * susar, Meta'ya kanal kimliğiyle sayfa gönderisi sorulur ve sonuç boş
+     * bir liste olur — yani "bu kanalda hiç video yok" gibi görünür.
+     *
+     * YouTube içeriği kendi yolundan (WebSub bildirimi) geliyor; buraya
+     * düşmesi çağıranın hatası ve sessizce yutulmamalı.
+     */
+    if (profile.profileType === 'youtube_channel') {
+      throw new PlatformApiError(
+        'meta',
+        'permanent',
+        'YouTube kanalı Meta organik gönderi süpürmesine giremez — ' +
+          'YouTube içeriği kendi bildirim yolundan geliyor.',
+      );
+    }
+
     const pageToken = this.crypto.decrypt(Buffer.from(profile.pageAccessTokenEnc));
     const provider = this.providers.get('meta');
 

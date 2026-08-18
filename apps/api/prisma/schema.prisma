@@ -108,6 +108,8 @@ model Organization {
   draftAdGroups   DraftAdGroup[]
   draftAds        DraftAd[]
 
+  autoBoostPresets    AutoBoostPreset[]
+  autoBoostQueueItems AutoBoostQueueItem[]
   @@map("organizations")
 }
 
@@ -208,6 +210,8 @@ model Client {
   adCreatives     AdCreative[]
   draftCampaigns  DraftCampaign[]
 
+  autoBoostPresets    AutoBoostPreset[]
+  autoBoostQueueItems AutoBoostQueueItem[]
   @@unique([orgId, slug])
   @@index([orgId, status])
   @@map("clients")
@@ -388,6 +392,9 @@ enum AdAccountStatus {
 enum SocialProfileType {
   facebook_page
   instagram_business
+  /// Advetics 1.0 — bağlı YouTube kanalı. Instagram hesabıyla aynı yerde
+  /// duruyor: ikisi de müşteriye atanan, içerik üreten bir hesap.
+  youtube_channel
 }
 
 /// Bir OAuth yetkilendirmesi = bir Meta Business veya Google Ads kullanıcı izni.
@@ -595,6 +602,8 @@ model SocialProfile {
   /// Tekillik ORGANİZASYON bazında: ikinci bir Meta kimliği bağlandığında aynı
   /// Facebook sayfası iki bağlantının da altında görünüyor ve bağlantı bazlı
   /// kısıt aynı sayfa için iki satır üretirdi.
+  autoBoostPresets    AutoBoostPreset[]
+  autoBoostQueueItems AutoBoostQueueItem[]
   @@unique([orgId, externalId])
   @@index([orgId, clientId])
   @@index([clientId, syncEnabled])
@@ -1510,6 +1519,7 @@ model Boost {
   /// Kısmi tekil indeks migration'da: yalnızca "canlı" sayılan durumlar
   /// (aday/onaylı/oluşturuluyor/aktif) çakışıyor. Reddedilmiş ya da başarısız
   /// bir boost yeniden denenebilmeli.
+  autoBoostQueueItems AutoBoostQueueItem[]
   @@index([clientId, status, createdAt(sort: Desc)])
   @@index([boostRuleId, createdAt(sort: Desc)])
   @@map("boosts")
@@ -2396,4 +2406,129 @@ model DraftAd {
   @@index([creativeId])
   @@index([organicPostId])
   @@map("draft_ads")
+}
+
+// -----------------------------------------------------------------------------
+// Advetics 1.0 — Otomatik Boost (Instagram + YouTube)
+// -----------------------------------------------------------------------------
+
+/// Onaylanınca hangi ayarlarla yayınlanacağı (Advetics 1.0).
+///
+/// `BoostRule` İLE KARIŞTIRILMAMALI ve o model değiştirilmedi. Fark kavramsal:
+/// `BoostRule` bir KURAL MOTORU — koşullar, eşikler, aylık tavan, tur başına
+/// aday sayısı — ve gönderileri KENDİSİ SEÇİYOR. Ön ayar hiçbir şey seçmiyor;
+/// seçimi kullanıcı tek tıkla yapıyor ve bu model yalnızca "hangi ayarlarla"
+/// sorusunu cevaplıyor. 1.0'ın sadeliği tam olarak burada: koşul, eşik, tavan
+/// yok.
+model AutoBoostPreset {
+  id       String   @id @default(uuid()) @db.Uuid
+  orgId    String   @map("org_id") @db.Uuid
+  clientId String   @map("client_id") @db.Uuid
+  /// `meta` → Instagram, `google` → YouTube. Yeni enum açılmadı: YouTube bir
+  /// platform değil, Google'ın bir yüzeyi.
+  platform Platform
+
+  /// null = müşterinin o platformdaki BÜTÜN profilleri.
+  socialProfileId String? @map("social_profile_id") @db.Uuid
+
+  enabled Boolean @default(true)
+
+  /// BÜTÇE KİPE GÖRE AYRI KOLONDA — tek kolona iki anlam yüklenmiyor (K18).
+  /// `auto_boost_presets_budget_chk` kipe göre TAM BİRİNİ zorunlu kılıyor.
+  ///
+  /// GOOGLE'DA `lifetime` YASAK (`auto_boost_presets_google_daily_chk`):
+  /// orada bütçe ayrı bir kaynak ve günlük; toplamı günlüğe bölmek panelde
+  /// yazan tutar ile hesaptan çıkanı ayrıştırır.
+  budgetMode        String  @default("daily") @map("budget_mode") @db.VarChar(10)
+  dailyBudgetMicros BigInt? @map("daily_budget_micros")
+  totalBudgetMicros BigInt? @map("total_budget_micros")
+  durationDays      Int     @default(3) @map("duration_days")
+
+  /// Platforma özgü ayarlar — Zod ayrık birleşimiyle doğrulanıyor.
+  ///
+  /// JSONB, çünkü iki platformun alanları ortak değil ve hepsini kolona açmak
+  /// yarısı her zaman NULL olan bir tablo demekti. GÜVENLİ, çünkü bu JSON
+  /// platforma OLDUĞU GİBİ GİTMİYOR: okunurken doğrulanıp alan alan
+  /// eşleniyor. (Ham JSON'u platforma geçirmek, uydurulmuş bir anahtarın
+  /// sessizce yok sayılması demek olurdu.)
+  settings Json @db.JsonB
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?   @map("created_by") @db.Uuid
+
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile? @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  queueItems    AutoBoostQueueItem[]
+
+  @@index([clientId, platform])
+  @@map("auto_boost_presets")
+}
+
+/// Onay bekleyen gönderi/video — "Bildirim Havuzu" (Advetics 1.0).
+///
+/// Instagram gönderisi ve YouTube videosu AYNI tabloda: panelde tek bir havuz
+/// gösteriliyor ve iki ayrı kaynaktan sıralama/sayfalama doğru kurulamazdı.
+model AutoBoostQueueItem {
+  id       String   @id @default(uuid()) @db.Uuid
+  orgId    String   @map("org_id") @db.Uuid
+  clientId String   @map("client_id") @db.Uuid
+  platform Platform
+
+  /// Hangi hesaptan geldi. NULL OLAMAZ — reklam bir sayfa/kanal adına
+  /// yayınlanıyor ve hangisi olduğu bilinmeden yayın kurulamaz.
+  socialProfileId String @map("social_profile_id") @db.Uuid
+
+  /// İDEMPOTENCY ANAHTARI — bu modelin en kritik alanı.
+  ///
+  /// Instagram medya kimliği ya da YouTube video kimliği. Webhook teslimi
+  /// GARANTİ DEĞİL ve MÜKERRER olabiliyor. Tekillik kısıtı olmasa aynı
+  /// gönderi için iki kart düşer, ikisi de onaylanırsa AYNI İÇERİK İÇİN İKİ
+  /// REKLAM açılır. Kısıt veritabanında çünkü iki webhook aynı anda gelebiliyor
+  /// ve "önce bak sonra yaz" yarışı kaybediyor.
+  externalId String @map("external_id") @db.VarChar(128)
+
+  title        String?   @db.VarChar(2000)
+  thumbnailUrl String?   @map("thumbnail_url")
+  permalink    String?
+  mediaType    String?   @map("media_type") @db.VarChar(32)
+  publishedAt  DateTime? @map("published_at") @db.Timestamptz(6)
+
+  /// pending | approved | rejected | launching | launched | failed
+  ///
+  /// `launching` AYRI BİR DURUM: onay ile platformda oluşma arasında saniyeler
+  /// var ve süreç orada düşerse kayıt `pending` kalmamalı — kalırsa ikinci kez
+  /// onaylanır ve İKİNCİ reklam açılır.
+  status String @default("pending") @db.VarChar(16)
+
+  /// Onay anındaki ön ayar ve onun KOPYASI. Ön ayar sonradan değişse bile bu
+  /// kaydın hangi ayarlarla yayınlandığı okunabilmeli.
+  appliedPresetId String? @map("applied_preset_id") @db.Uuid
+  appliedSettings Json?   @map("applied_settings") @db.JsonB
+
+  /// Meta yolunda `boosts` satırı da yazılıyor (harcama muhasebesi ve ağaç
+  /// oradan işliyor); Google yolunda karşılığı yok, kimlikler doğrudan burada.
+  boostId            String? @map("boost_id") @db.Uuid
+  externalCampaignId String? @map("external_campaign_id") @db.VarChar(128)
+  externalAdGroupId  String? @map("external_ad_group_id") @db.VarChar(128)
+  externalAdId       String? @map("external_ad_id") @db.VarChar(128)
+
+  error String? @db.VarChar(1000)
+
+  approvedBy String?   @map("approved_by") @db.Uuid
+  approvedAt DateTime? @map("approved_at") @db.Timestamptz(6)
+  launchedAt DateTime? @map("launched_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile    @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  appliedPreset AutoBoostPreset? @relation(fields: [appliedPresetId], references: [id], onDelete: SetNull)
+  boost         Boost?           @relation(fields: [boostId], references: [id], onDelete: SetNull)
+
+  @@unique([socialProfileId, externalId])
+  @@index([clientId, status, createdAt(sort: Desc)])
+  @@map("auto_boost_queue_items")
 }

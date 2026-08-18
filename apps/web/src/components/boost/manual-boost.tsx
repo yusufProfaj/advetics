@@ -75,6 +75,20 @@ export function ManualBoost({
 }
 
 /**
+ * Profil türü etiketleri.
+ *
+ * ÖNCEDEN İKİLİYDİ (`instagram_business ? 'Instagram' : 'Facebook'`) ve
+ * Advetics 1.0 ile `youtube_channel` eklenince bir YouTube kanalı sessizce
+ * "Facebook" diye görünürdü. Kayıt tablosu, yeni tür eklendiğinde en kötü
+ * ihtimalle ham değeri gösteriyor — yanlış bir etiket göstermiyor.
+ */
+const PROFIL_ETIKETI: Record<string, string> = {
+  facebook_page: 'Facebook',
+  instagram_business: 'Instagram',
+  youtube_channel: 'YouTube',
+};
+
+/**
  * Lokasyon türü etiketleri.
  *
  * TÜR EKRANDA GÖRÜNÜYOR çünkü seçim sonucu değiştiriyor: "Türkiye" seçmek ülke
@@ -706,7 +720,7 @@ function PostRow({
                 : 'bg-sky-50 text-sky-700 ring-sky-200'
             }
           >
-            {post.profileType === 'instagram_business' ? 'Instagram' : 'Facebook'}
+            {PROFIL_ETIKETI[post.profileType] ?? post.profileType}
           </Chip>
           <span className="truncate text-[11px] text-ink-muted">
             {post.socialProfileName}
