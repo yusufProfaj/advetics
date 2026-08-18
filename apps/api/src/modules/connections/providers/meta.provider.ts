@@ -1127,6 +1127,19 @@ export class MetaProvider implements IAdPlatformProvider {
         ? [
             'id',
             'media_type',
+            /**
+             * REKLAM KREATİFLERİNİ AYIRAN ALAN — istenmezse gelmiyor.
+             *
+             * `/{ig-user}/media` yalnızca organik gönderileri döndürmüyor:
+             * `AD` türü medya da listeye giriyor. Bu alan olmadan sistemin
+             * KENDİ ÜRETTİĞİ reklam kreatifi "yeni gönderi" sanılıyor ve
+             * otomatik boost'ta GERİ BESLEME DÖNGÜSÜ oluşuyor — reklam yeni
+             * reklam doğuruyor.
+             *
+             * Değerler: AD | FEED | STORY | REELS. Yalnızca Facebook Login
+             * yolunda mevcut ve bu ürün onu kullanıyor.
+             */
+            'media_product_type',
             'caption',
             'permalink',
             'thumbnail_url',
@@ -1182,7 +1195,21 @@ export class MetaProvider implements IAdPlatformProvider {
 
     const out: DiscoveredOrganicPost[] = [];
     for (const row of res.data.data ?? []) {
-      const post = mapOrganicPost(row as Record<string, unknown>, ig);
+      const ham = row as Record<string, unknown>;
+      /**
+       * REKLAM KREATİFİ ORGANİK GÖNDERİ DEĞİL — burada eleniyor.
+       *
+       * İki şeyi birden bozuyordu: (1) elle boost ekranında reklam
+       * kreatifleri "öne çıkarılabilir gönderi" olarak listeleniyordu,
+       * (2) otomatik boost'ta kendi reklamımız "yeni gönderi" sanılıp yeni
+       * bir reklam doğuruyordu — geri besleme döngüsü.
+       *
+       * ELEME BURADA, ÇAĞIRANDA DEĞİL: `fetchOrganicPosts` "organik gönderi"
+       * vaat ediyor ve reklamı döndürmesi sözleşmenin ihlali. Çağırana
+       * bırakmak, üç ayrı yerde hatırlanması gereken bir kural demekti.
+       */
+      if (ham.media_product_type === 'AD') continue;
+      const post = mapOrganicPost(ham, ig);
       if (post) out.push(post);
     }
     return out;
