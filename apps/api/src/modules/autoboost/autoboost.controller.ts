@@ -1,8 +1,10 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import type { TenantContext } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
+import type { AutoBoostQueueList } from '@advetics/shared';
+import { AutoBoostReadService } from './autoboost-read.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
 
 /**
@@ -26,7 +28,25 @@ const kanalEkleSchema = z.object({
 
 @Controller('autoboost')
 export class AutoBoostController {
-  constructor(private readonly subscribe: YouTubeSubscribeService) {}
+  constructor(
+    private readonly subscribe: YouTubeSubscribeService,
+    private readonly read: AutoBoostReadService,
+  ) {}
+
+  /**
+   * BİLDİRİM HAVUZU — onay bekleyen kartlar.
+   *
+   * `boost.read` yetiyor: yalnızca okuyor. Onaylamak ayrı bir yetki ve ayrı
+   * bir uç nokta — Modül 7'nin baştan beri taşıdığı ayrım.
+   */
+  @Get('queue')
+  @RequirePermissions('boost.read')
+  queue(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<AutoBoostQueueList> {
+    return this.read.listQueue(ctx, clientId);
+  }
 
   /**
    * YouTube kanalı ekler ve bildirim aboneliğini başlatır.

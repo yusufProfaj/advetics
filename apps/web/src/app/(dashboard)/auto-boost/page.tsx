@@ -16,6 +16,8 @@ import {
   RunBoostRuleButton,
 } from '@/components/boost/boost-controls';
 import { ManualBoost } from '@/components/boost/manual-boost';
+import { BildirimHavuzu } from '@/components/autoboost/bildirim-havuzu';
+import { YouTubeKanalEkle } from '@/components/autoboost/youtube-kanal-ekle';
 
 export const metadata = { title: 'Auto-Boost — Advetics' };
 export const dynamic = 'force-dynamic';
@@ -51,6 +53,12 @@ export default async function AutoBoostPage({
 
   const canApprove = hasPermission(session, 'boost.approve');
   const canWrite = hasPermission(session, 'boost.write');
+  /*
+   * KANAL EKLEME AYRI YETKİ. Bağlantı kurmak/kaldırmak CLAUDE.md'ye göre org
+   * yöneticisi işi; kart onaylayabilen herkesin yeni kanal bağlayabilmesi,
+   * boost yetkisiyle bağlantı yetkisini aynı kefeye koymak olurdu.
+   */
+  const canManageConnections = hasPermission(session, 'connection.write');
 
   const [boosts, rules] = await Promise.all([
     serverApiFetch<BoostRecord[]>(`/boosts?clientId=${clientId}`).catch(() => null),
@@ -113,6 +121,32 @@ export default async function AutoBoostPage({
         kullanıcıya "metinler soldan kesilmiş" görünüyordu.
       */}
       <ManualBoost clientId={clientId} canPublish={canApprove} />
+
+      {/*
+        ADVETICS 1.0 — BİLDİRİM HAVUZU VE KANAL EKLEME.
+        
+        Havuz ELLE BOOST'UN ÜSTÜNDE DEĞİL ALTINDA ve bu sıralama bilinçli:
+        elle boost bugün çalışan ve para harcayan yol, havuz ise yeni ve
+        yayın düğmesi henüz bağlanmamış. Çalışmayan bir düğmeyi çalışanın
+        üstüne koymak, kullanıcıyı önce ona yönlendirirdi.
+        
+        Kanal ekleme `connection.write` istiyor — bağlantı kurulumu işi ve
+        org yöneticisine ait; kart onaylayabilen herkesin yeni kanal
+        bağlayabilmesi doğru olmazdı.
+      */}
+      <div className="min-w-0 space-y-4 rounded-xl border border-line bg-surface p-4">
+        <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-ink">Otomatik boost</h2>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              Yeni gönderi ve videolar burada onayına düşer.
+            </p>
+          </div>
+          {canManageConnections && <YouTubeKanalEkle clientId={clientId} />}
+        </header>
+
+        <BildirimHavuzu clientId={clientId} />
+      </div>
 
       {boosts === null ? (
         <Notice tone="error">Boost verisi alınamadı.</Notice>

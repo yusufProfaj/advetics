@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AutoBoostQueueService } from './autoboost-queue.service';
+import { AutoBoostReadService } from './autoboost-read.service';
 import { YouTubeApiService } from './youtube-api.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
 import { AutoBoostController } from './autoboost.controller';
@@ -17,6 +18,7 @@ import { YouTubeWebSubService } from './youtube-websub.service';
   controllers: [AutoBoostController, YouTubeWebSubController],
   providers: [
     AutoBoostQueueService,
+    AutoBoostReadService,
     YouTubeApiService,
     YouTubeSubscribeService,
     YouTubeWebSubService,
