@@ -210,10 +210,10 @@ const DURUM_ETIKETI: Record<string, string> = {
  * kez sormak istenen akışı bozardı. Ama harcanacak tutar düğmenin ÜSTÜNDE
  * yazıyor (kartın ön ayar satırı) ve engel varsa düğme açılmıyor.
  *
- * INSTAGRAM AÇIK, YOUTUBE KAPALI ve sebebi ekranda: Google Demand Gen reklamı
- * marka adı ve logo görseli ZORUNLU kılıyor (v24'ten beri), ikisi de ön ayarda
- * henüz yok. Kapalı bırakıp sebebini söylemek, tıklandığında anlaşılmaz bir
- * Google hatası veren bir düğmeden iyi.
+ * İKİ PLATFORM DA AÇIK ama davranışları FARKLI ve fark yazılı: Instagram
+ * doğrudan yayına giriyor, YouTube kampanyası DURAKLATILMIŞ açılıyor. Google
+ * yazma yolu canlıda hiç çalışmadı ve ilk gerçek çağrının sonucunu insan
+ * görmeden para harcamamalı.
  */
 function OnayDugmesi({
   kayit,
@@ -229,8 +229,7 @@ function OnayDugmesi({
 
   if (kayit.status !== 'pending') return null;
 
-  const youtube = kayit.platform === 'google';
-  const acik = etkin && !youtube && !busy;
+  const acik = etkin && !busy;
 
   async function karar(approve: boolean): Promise<void> {
     setBusy(true);
@@ -275,10 +274,17 @@ function OnayDugmesi({
         </button>
       )}
 
-      {youtube && (
+      {/*
+        YOUTUBE KAMPANYASI DURAKLATILMIŞ AÇILIYOR ve bu kullanıcıya SÖYLENİYOR.
+        Meta yolundan farkı bilinçli: Google yazma yolu canlıda hiç çalışmadı
+        ve ilk gerçek çağrının sonucunu insan görmeden para harcamamalı.
+        Söylemezsek kullanıcı "yayınladım" sanıp Ads Manager'da duraklatılmış
+        bir kampanya bulur ve sebebini arar.
+      */}
+      {kayit.platform === 'google' && (
         <p className="mt-1 text-[10px] text-ink-muted">
-          YouTube yayını henüz açık değil: Google marka adı ve logo zorunlu
-          kılıyor, ikisi de ön ayarda yok.
+          Kampanya <strong>duraklatılmış</strong> açılır; Google Ads’te gözden
+          geçirip yayına alman gerekiyor.
         </p>
       )}
 

@@ -203,7 +203,7 @@ günceller ve orada durur. "Önce oku sonra yaz" yarışı kaybederdi ve sonuç
 kullanıcının aynı düğmeye tekrar basıp platformda ikinci bir kampanya açmasına
 izin verirdi.
 
-### Google (YouTube): logo zorunluluğu yolu kapatıyor
+### Google (YouTube): AÇIK — kampanya duraklatılmış oluşuyor
 
 **Araştırmanın en pahalı bulgusu.** API'den oluşturulabilen tek YouTube video
 reklamı `DemandGenVideoResponsiveAdInfo` ve **v24'ten beri şu üç alan
@@ -219,24 +219,42 @@ ZORUNLU**:
 kaydı gerektiriyor (`type: IMAGE`, base64 veri) ve **Google tarafında görsel
 yükleme yolu henüz yazılmadı** (`uploadAdImage` Google'da hata fırlatıyor).
 
-Sonuç: "kullanıcı yalnızca videoyu seçip yayınlar" akışı Google'da **mümkün
-değil**. Ön ayara en az marka adı ve logo eklenmeli.
+Sonuç: "kullanıcı yalnızca videoyu seçip yayınlar" akışı Google'da mümkün
+değil. **Ön ayara marka adı ve logo eklendi** — logo Görsel Arşivi'nden ve
+müşteri başına bir kez seçiliyor, böylece akış yine tek tıkla kalıyor ve
+yalnızca kurulum bir adım uzuyor.
 
-Bu yüzden onay ucu Google kartlarını REDDEDİYOR ve sebebini söylüyor. Eksik
-alanla istek atmak Google'ın reddiyle sonuçlanır ve kullanıcı anlamayacağı bir
-hata görürdü.
+#### Zincir: beş çağrı
 
-#### Google yolunu açmak için gerekenler
+bütçe → kampanya → reklam grubu → video varlığı → reklam. Ortada kalırsa geri
+alınıyor; **video varlığı geri alma listesine girmiyor** çünkü varlıklar hesap
+seviyesinde ve yeniden kullanılabiliyor.
 
-1. Ön ayara `businessName`, `longHeadlines` ve **logo** alanları
-2. Google görsel yükleme (`AssetOperation`, `type: IMAGE`, base64)
-3. Video Asset oluşturma (`type: YOUTUBE_VIDEO`, `youtube_video_id`)
-4. **Kanal kontrolleri** — bu atlanmamalı: varsayılan `ALL_CHANNELS`, yani
-   ayarlanmazsa reklam yalnızca YouTube'da değil **Gmail, Discover, Maps ve
-   Display'de de** yayınlanır. `ad_group.demand_gen_ad_group_settings.channel_controls`
-   açıkça verilmeli — "platformun varsayılanına güvenme" kuralının Google
-   karşılığı.
-5. `Ad.final_urls` ad seviyesinde (ad info'nun içinde DEĞİL)
+Logo `asset_platform_refs`'e önbellekleniyor — Meta'nın `image_hash`'i için
+zaten kullanılan tablo. İlk yayında yükleniyor, sonrakiler okuyor.
+
+#### Atlanması kolay ve pahalı olan: kanal kontrolleri
+
+Varsayılan `ALL_CHANNELS`. Ayarlanmazsa reklam yalnızca YouTube'da değil
+**Gmail, Discover, Maps ve Display'de de** yayınlanıyor — kullanıcı "YouTube
+videomu tanıttım" sanarken bütçesinin bir kısmı bambaşka envantere gidiyor ve
+hiçbir hata çıkmıyor. YouTube dışı kanallar **açıkça `false`** yazılıyor:
+alanı göndermemek varsayılana bırakmak ve varsayılan açık.
+
+#### Meta yolundan üç yapısal fark
+
+1. **`boosts` satırı açılmıyor.** O tablo `organic_post_id` zorunlu kılıyor ve
+   YouTube videosunun organik gönderi karşılığı yok. Kimlikler kuyruk
+   kaydında; Google harcaması `insights_daily` üzerinden zaten senkronize.
+2. **Bütçe günlük.** Google'da toplam bütçe yok; kısıt veritabanında da var.
+3. **Kampanya `PAUSED` kalıyor** ve bu ekranda yazıyor. Google yazma yolu
+   canlıda hiç çalışmadı; ilk gerçek çağrının sonucunu insan görmeden para
+   harcamamalı. Söylemezsek kullanıcı "yayınladım" sanıp Ads Manager'da
+   duraklatılmış bir kampanya bulur ve sebebini arar.
+
+**Reklam hesabının Google olduğu doğrulanıyor.** `linked_ad_account_id` bir
+Meta hesabını gösteriyorsa istek Google'a Meta hesap kimliğiyle gider ve
+"hesap bulunamadı" ile döner — sebebi anlaşılmayan bir hata.
 
 > **Doğrulanmadı:** başlık/açıklama adet ve karakter sınırları Google'ın kendi
 > dokümanları arasında çelişiyor (3+ zorunlu / 40 karakter ile 1–5 / 30

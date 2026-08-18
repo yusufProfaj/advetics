@@ -1458,6 +1458,22 @@ export class MetaProvider implements IAdPlatformProvider {
   }
 
   /**
+   * YouTube video reklamı Meta'da YOK.
+   *
+   * `getCampaignSummaries` boş kayıt dönerken burada HATA fırlatmak tutarsız
+   * görünebilir ama değil: orası bir liste zenginleştirme adımı, burada ise
+   * kullanıcı bir şey YAYINLAMAYA çalışıyor ve sessizce yutmak, oluşturulduğu
+   * sanılan bir kampanya bırakırdı.
+   */
+  async createVideoBoost(): Promise<never> {
+    throw new PlatformApiError(
+      'meta',
+      'permanent',
+      'YouTube video reklamı Meta’da yok — bu bir Google Ads özelliği.',
+    );
+  }
+
+  /**
    * Kampanyaların PLATFORMDAKİ güncel adı ve durumu — TEK ÇAĞRIDA (K21).
    *
    * Meta'nın kök `?ids=` biçimi kullanılıyor: kampanya başına bir istek

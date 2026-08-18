@@ -53,6 +53,16 @@ export class AssetUploaderService {
        */
       label: string;
       fetchCtx: FetchContext;
+      /**
+       * VARSAYILAN `meta` — mevcut çağıranlar değişmesin diye.
+       *
+       * Google Demand Gen reklamı v24'ten beri logo görselini ZORUNLU
+       * kılıyor ve o da bir Asset olarak yükleniyor. İki platform aynı
+       * önbelleği paylaşabiliyor çünkü tekillik `(varlık, REKLAM HESABI)`
+       * çiftinde ve hesaplar zaten platforma özgü — aynı görsel bir Meta
+       * hesabında hash, bir Google hesabında kaynak adı olarak duruyor.
+       */
+      platform?: 'meta' | 'google';
     },
   ): Promise<string> {
     const cached = await this.prisma.withTenant(ctx, (tx) =>
@@ -64,6 +74,8 @@ export class AssetUploaderService {
     );
     if (cached[0]) return cached[0].external_ref;
 
+    const platform = params.platform ?? 'meta';
+
     const [asset] = await this.prisma.withTenant(ctx, (tx) =>
       tx.$queryRaw<Array<{ storage_key: string }>>(Prisma.sql`
         SELECT storage_key FROM assets
@@ -73,7 +85,7 @@ export class AssetUploaderService {
     if (!asset) throw new Error(`Varlık bulunamadı: ${params.assetId}`);
 
     const bytes = await this.storage.read(asset.storage_key);
-    const provider = this.providers.get('meta');
+    const provider = this.providers.get(platform);
     const hash = await provider.uploadAdImage(params.fetchCtx, {
       name: params.label,
       bytes,
@@ -85,13 +97,14 @@ export class AssetUploaderService {
           id, org_id, asset_id, platform, ad_account_id, external_ref
         ) VALUES (
           gen_random_uuid(), ${ctx.orgId}::uuid, ${params.assetId}::uuid,
-          'meta'::"Platform", ${params.adAccountId}::uuid, ${hash}
+          ${platform}::"Platform", ${params.adAccountId}::uuid, ${hash}
         )
         -- YARIŞ DURUMU: iki yayın aynı anda aynı görseli yükleyebiliyor.
         --
         -- Meta ikisini de kabul ediyor ve aynı hash'i dönüyor (içerik aynı),
         -- yani çakışma zararsız. Hata fırlatmak, ikinci yayını sebepsiz
-        -- düşürmek olurdu.
+        -- düşürmek olurdu. Google'da iki ayrı kaynak adı oluşabiliyor ve
+        -- ikisi de geçerli; ilk yazılan kalıyor.
         ON CONFLICT (asset_id, ad_account_id) DO NOTHING
       `),
     );

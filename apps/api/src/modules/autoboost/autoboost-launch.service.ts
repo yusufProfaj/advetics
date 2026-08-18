@@ -8,7 +8,10 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AssetUploaderService } from '../assets/asset-uploader.service';
 import { BoostExecutorService } from '../boosts/boost-executor.service';
+import { ProviderRegistry } from '../connections/provider.registry';
+import { TokenVaultService } from '../connections/token-vault.service';
 
 /**
  * "ONAYLA VE BOOSTLA" — kartın yayına dönüştüğü yer.
@@ -31,6 +34,9 @@ export class AutoBoostLaunchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly executor: BoostExecutorService,
+    private readonly providers: ProviderRegistry,
+    private readonly vault: TokenVaultService,
+    private readonly uploader: AssetUploaderService,
   ) {}
 
   async decide(
@@ -104,24 +110,7 @@ export class AutoBoostLaunchService {
       return { status: 'rejected', message: 'Kart reddedildi.' };
     }
 
-    if (kayit.platform === 'google') {
-      /*
-       * GOOGLE YOLU HENÜZ AÇIK DEĞİL ve sebebi araştırmada çıktı:
-       * `DemandGenVideoResponsiveAdInfo` v24'ten beri `logo_images` ve
-       * `business_name` alanlarını ZORUNLU kılıyor. Logo ayrı bir Asset
-       * kaydı gerektiriyor (type IMAGE, base64) ve o yükleme yolu Google
-       * tarafında henüz yazılmadı.
-       *
-       * BURADA DURDURMAK, YARIM YOLDAN GİTMEKTEN İYİ: eksik alanla istek
-       * atmak Google'ın reddiyle sonuçlanır ve kullanıcı sebebini
-       * anlamayacağı bir hata görür.
-       */
-      throw new BadRequestException(
-        'YouTube yayını henüz açık değil: Google Demand Gen reklamı marka adı ' +
-          've logo görseli zorunlu kılıyor, ikisi de ön ayarda henüz yok. ' +
-          'Instagram kartları onaylanabiliyor.',
-      );
-    }
+    if (kayit.platform === 'google') return this.launchGoogle(ctx, scoped, kayit);
 
     return this.launchMeta(ctx, scoped, kayit);
   }
@@ -279,6 +268,164 @@ export class AutoBoostLaunchService {
     const mesaj = b?.error ?? 'Yayın başarısız oldu; sebep kaydedilemedi.';
     await this.geriAl(scoped, kayit.id, mesaj);
     return { status: 'failed', message: mesaj };
+  }
+
+  /**
+   * YouTube kartını yayına alır — Demand Gen.
+   *
+   * META YOLUNDAN ÜÇ YAPISAL FARK ve üçü de platformun gerçeği:
+   *
+   *   1. `boosts` SATIRI AÇILMIYOR. O tablo `organic_post_id` zorunlu kılıyor
+   *      ve YouTube videosunun organik gönderi karşılığı yok. Kimlikler
+   *      doğrudan kuyruk kaydında duruyor; Google harcaması `insights_daily`
+   *      üzerinden zaten senkronize ediliyor.
+   *   2. BÜTÇE GÜNLÜK. Google'da toplam bütçe yok — kısıt veritabanında da
+   *      var (`auto_boost_presets_google_daily_chk`).
+   *   3. KAMPANYA PAUSED KALIYOR. Google yazma yolu canlıda hiç çalışmadı;
+   *      ilk gerçek çağrının sonucunu insan görmeden para harcamamalı.
+   */
+  private async launchGoogle(
+    ctx: TenantContext,
+    scoped: TenantContext,
+    kayit: KuyrukSatiri,
+  ): Promise<{ status: string; message: string }> {
+    if (!kayit.preset_id || !kayit.preset_enabled) {
+      throw new BadRequestException(
+        'Bu müşteri için YouTube otomatik boost ön ayarı yok ya da kapalı.',
+      );
+    }
+    if (!kayit.linked_ad_account_id) {
+      throw new BadRequestException(
+        'Bu kanala bağlı bir Google reklam hesabı yok. Müşteriler ekranından ' +
+          'reklam hesabı seç — reklam o hesaptan faturalandırılıyor.',
+      );
+    }
+
+    const ayar = autoBoostPresetSettingsSchema.safeParse(kayit.settings);
+    if (!ayar.success || ayar.data.platform !== 'google') {
+      throw new BadRequestException(
+        'Ön ayar kaydı okunamadı; Bilgi Bankası’ndan yeniden kaydet.',
+      );
+    }
+    const g = ayar.data;
+
+    if (kayit.budget_mode !== 'daily' || !kayit.daily_budget_micros) {
+      /*
+       * GOOGLE'DA TOPLAM BÜTÇE YOK. Kısıt veritabanında da var ama burada
+       * tekrar kontrol ediliyor: kayıt kısıt eklenmeden önce yazılmış
+       * olabilir ve toplam bütçeyi günlüğe bölmek panelde yazan tutarla
+       * hesaptan çıkanı ayrıştırırdı.
+       */
+      throw new BadRequestException(
+        'YouTube kampanyası günlük bütçe gerektiriyor; ön ayarda toplam bütçe seçili.',
+      );
+    }
+
+    /*
+     * REKLAM HESABI GOOGLE OLMAK ZORUNDA.
+     *
+     * `linked_ad_account_id` bir Meta hesabını gösteriyorsa istek Google'a
+     * Meta hesap kimliğiyle gider ve "hesap bulunamadı" ile döner — sebebi
+     * anlaşılmayan bir hata. Burada kontrol etmek, o hatayı okunabilir bir
+     * cümleye çeviriyor.
+     */
+    const [hesap] = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$queryRaw<Array<{ platform: string; external_id: string; connection_id: string }>>(
+        Prisma.sql`
+          SELECT platform::text AS platform, external_id, connection_id::text AS connection_id
+          FROM ad_accounts WHERE id = ${kayit.linked_ad_account_id}::uuid
+        `,
+      ),
+    );
+    if (!hesap) throw new BadRequestException('Reklam hesabı bulunamadı.');
+    if (hesap.platform !== 'google') {
+      throw new BadRequestException(
+        'Bu kanala bağlı hesap bir Google Ads hesabı değil. YouTube reklamı ' +
+          'Google Ads hesabından yayınlanıyor; Müşteriler ekranından doğru ' +
+          'hesabı seç.',
+      );
+    }
+
+    // --- Kartı KİLİTLE (Meta yoluyla aynı yarış koruması)
+    const kilit = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE auto_boost_queue_items
+        SET status = 'launching', approved_by = ${ctx.userId}::uuid,
+            approved_at = now(), updated_at = now()
+        WHERE id = ${kayit.id}::uuid AND status = 'pending'
+      `),
+    );
+    if (kilit === 0) {
+      throw new BadRequestException('Bu kart az önce işlendi. Sayfayı yenile.');
+    }
+
+    try {
+      const provider = this.providers.get('google');
+      const accessToken = await this.vault.getAccessToken(hesap.connection_id, provider);
+      const fetchCtx = { accessToken, accountExternalId: hesap.external_id };
+
+      /*
+       * LOGO ÖNBELLEKTEN. İlk yayında yükleniyor, sonrakiler kaynak adını
+       * `asset_platform_refs`ten okuyor — aynı görseli her videoda yeniden
+       * yüklemek kota harcar ve hesapta mükerrer varlık üretir.
+       */
+      const logoResource = await this.uploader.ensureExternalRef(scoped, {
+        assetId: g.logoAssetId,
+        adAccountId: kayit.linked_ad_account_id,
+        label: `${kayit.client_name} logo`,
+        fetchCtx,
+        platform: 'google',
+      });
+
+      const sonuc = await provider.createVideoBoost(fetchCtx, {
+        name: boostNameBase({
+          clientName: kayit.client_name,
+          postMessage: kayit.title,
+          mediaLabel: 'Video',
+          date: new Date(),
+        }),
+        dailyBudgetMicros: BigInt(kayit.daily_budget_micros),
+        durationDays: kayit.duration_days ?? 7,
+        videoId: kayit.external_id,
+        videoTitle: kayit.title ?? kayit.external_id,
+        logoAssetResource: logoResource,
+        businessName: g.businessName,
+        finalUrl: g.finalUrl,
+        headlines: g.headlines,
+        longHeadlines: g.longHeadlines,
+        descriptions: g.descriptions,
+      });
+
+      await this.prisma.withTenant(scoped, (tx) =>
+        tx.$executeRaw(Prisma.sql`
+          UPDATE auto_boost_queue_items
+          SET status = 'launched', launched_at = now(), error = NULL,
+              external_campaign_id = ${sonuc.campaignId},
+              external_ad_group_id = ${sonuc.adGroupId},
+              external_ad_id = ${sonuc.adId},
+              updated_at = now()
+          WHERE id = ${kayit.id}::uuid
+        `),
+      );
+
+      return {
+        status: 'launched',
+        message:
+          'YouTube kampanyası oluşturuldu ve DURAKLATILMIŞ açıldı. Google ' +
+          'Ads’te gözden geçirip yayına al — bu yol canlıda ilk kez ' +
+          'çalışıyor ve sonucu insan görmeden para harcamamalı.',
+      };
+    } catch (err) {
+      /*
+       * PLATFORMUN KENDİ MESAJI TAŞINIYOR. Kendi cümlemizi yazmak, Google'ın
+       * söylediğini kaybetmek olurdu — bu projede en pahalı hata tipi tam
+       * olarak o.
+       */
+      const mesaj = err instanceof Error ? err.message : String(err);
+      this.logger.error(`YouTube yayını başarısız (kart ${kayit.id}): ${mesaj}`);
+      await this.geriAl(scoped, kayit.id, mesaj);
+      return { status: 'failed', message: mesaj };
+    }
   }
 
   /**

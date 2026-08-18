@@ -150,11 +150,18 @@ export class AutoBoostReadService {
     }
     if (!presetVar) return 'Ön ayar okunamadı.';
 
-    if (r.platform === 'meta' && !r.linked_ad_account_id) {
-      return (
-        'Bu sayfaya bağlı bir reklam hesabı yok. Müşteriler ekranından ' +
-        '“Boost hesabı” seç — reklam o hesaptan faturalandırılıyor.'
-      );
+    /*
+     * REKLAM HESABI HER İKİ PLATFORMDA DA ZORUNLU ve mesaj platforma göre
+     * değişiyor: Meta'da "sayfaya bağlı boost hesabı", Google'da "kanala bağlı
+     * Google Ads hesabı". Tek bir genel cümle, kullanıcıyı yanlış ekrana
+     * yönlendirirdi.
+     */
+    if (!r.linked_ad_account_id) {
+      return r.platform === 'meta'
+        ? 'Bu sayfaya bağlı bir reklam hesabı yok. Müşteriler ekranından ' +
+            '“Boost hesabı” seç — reklam o hesaptan faturalandırılıyor.'
+        : 'Bu kanala bağlı bir Google Ads hesabı yok. Müşteriler ekranından ' +
+            'reklam hesabı seç — YouTube reklamı oradan yayınlanıyor.';
     }
 
     return null;

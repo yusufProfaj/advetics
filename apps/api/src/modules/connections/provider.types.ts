@@ -901,6 +901,35 @@ export interface IAdPlatformProvider {
   createBoost(ctx: FetchContext, request: BoostRequest): Promise<BoostResult>;
 
   /**
+   * YOUTUBE VİDEO REKLAMI — Demand Gen (Advetics 1.0).
+   *
+   * `createBoost`TAN AYRI BİR METOT ve bu bilinçli. `BoostRequest` Meta'nın
+   * modeline göre şekillendi: bütçe ad set'te, hedefleme nesnesi, özel reklam
+   * kategorileri, `BoostSource` ayrık birleşimi. Google'da bunların hiçbiri
+   * aynı değil — bütçe ayrı bir kaynak, toplam bütçe yok, kreatif ayrı Asset
+   * kayıtları gerektiriyor. İki modeli tek imzaya sıkıştırmak, yarısı her
+   * çağrıda anlamsız olan bir parametre listesi üretirdi.
+   */
+  createVideoBoost(
+    ctx: FetchContext,
+    request: {
+      name: string;
+      dailyBudgetMicros: bigint;
+      durationDays: number;
+      /** YouTube video kimliği — adres çubuğundaki 11 karakterlik değer. */
+      videoId: string;
+      videoTitle: string;
+      /** Yüklenmiş logo varlığının kaynak adı. */
+      logoAssetResource: string;
+      businessName: string;
+      finalUrl: string;
+      headlines: string[];
+      longHeadlines: string[];
+      descriptions: string[];
+    },
+  ): Promise<{ campaignId: string; adGroupId: string; adId: string }>;
+
+  /**
    * Verilen kampanyaların PLATFORMDAKİ güncel adı ve durumu (K21).
    *
    * KENDİ KAYDIMIZ YETMİYOR: kullanıcı kampanyayı Ads Manager'dan
