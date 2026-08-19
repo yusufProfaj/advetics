@@ -133,9 +133,26 @@ model User {
   /// o parola en az bir kez kurulum sırasında bir insanın gözünden geçiyor
   /// (kurulum notu, sohbet, e-posta) ve kalıcı olmamalı.
   ///
-  /// Kullanıcı DEĞİŞTİRMEDEN paneli kullanabiliyor ama her ekranda uyarı
-  /// görüyor. Girişi tamamen bloklamak, kendi parolasını değiştirmek için
-  /// giriş yapması gereken bir kullanıcıyı kilitler.
+  /// ⚠ BU ALAN BUGÜN HİÇBİR ŞEY YAPMIYOR — YAZILIYOR, HİÇ OKUNMUYOR.
+  ///
+  /// Burada bir süre "kullanıcı her ekranda uyarı görüyor" yazıyordu ve bu
+  /// DOĞRU DEĞİLDİ: alan `createMember` ve `seed-portfolio` tarafından
+  /// yazılıyor ama giriş, oturum kurulumu, `SessionResponse` tipi ve panelin
+  /// hiçbir yeri onu okumuyor. Yani yöneticinin belirlediği geçici parola,
+  /// kullanıcı isterse kalıcı. Yanlış yorum, güvenliğin var olduğu izlenimi
+  /// veriyordu — olmayan bir korumadan daha kötüsü, olduğu sanılan bir koruma.
+  ///
+  /// ZORLAMAYI YAZAN KİŞİYE İKİ NOT:
+  ///   1. Alan hiçbir yerde TEMİZLENMİYOR de. `changePassword` ve
+  ///      `confirmPasswordReset` yalnızca `password_hash` güncelliyor;
+  ///      sıfırlamayı iki yola da eklemezsen zorlama KİLİT DÖNGÜSÜ olur.
+  ///   2. Panelde parola değiştirme ekranı YOK. `POST /auth/password/change`
+  ///      ucu var ama `apps/web` içinde onu çağıran tek satır bile yok —
+  ///      yani zorlamadan önce o ekran yazılmalı, yoksa kullanıcı zorlanır
+  ///      ve yapabileceği bir şey olmaz.
+  ///
+  /// Girişi tamamen bloklamak da çözüm değil: kendi parolasını değiştirmek
+  /// için giriş yapması gereken bir kullanıcıyı kilitler.
   mustChangePassword Boolean    @default(false) @map("must_change_password")
   status             UserStatus @default(invited)
   lastLoginAt        DateTime?  @map("last_login_at") @db.Timestamptz(6)

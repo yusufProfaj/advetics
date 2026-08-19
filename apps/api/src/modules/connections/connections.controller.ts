@@ -139,7 +139,7 @@ export class ConnectionsController {
     return this.connections.startOAuth(
       ctx,
       dto.platform,
-      { redirectTo: dto.redirectTo, forceReconsent: dto.forceReconsent },
+      { redirectTo: dto.redirectTo, forceReconsent: dto.forceReconsent, clientId: dto.clientId },
       this.meta(req),
     );
   }

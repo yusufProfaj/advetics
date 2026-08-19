@@ -60,7 +60,13 @@ export default async function ConnectionsPage() {
             Bağlantı ajansa kurulur, müşteriye değil. Aynı hesabı ikinci kez
             yetkilendirmek gerekmez.
           </p>
-          <ConnectButtons availability={availability} />
+          <ConnectButtons
+            availability={availability}
+            activeClientId={session.activeClientId}
+            activeClientName={
+              session.availableClients.find((c) => c.id === session.activeClientId)?.name ?? null
+            }
+          />
         </section>
       ) : (
         <div className="rounded-xl border border-line bg-surface-muted p-5">

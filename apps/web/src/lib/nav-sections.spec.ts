@@ -27,13 +27,32 @@ const etiketler = (rol: keyof typeof ROLE_PERMISSIONS): string[] =>
   visibleSections(izinler(rol)).flatMap((s) => s.items.map((i) => i.label));
 
 describe('menü verisi gerçekten okunuyor', () => {
+  it('EKRANI OLMAYAN öğe menüde YOK', () => {
+    /*
+     * Menünün üçte biri `ready: false` idi: soluk, tıklanamaz satırlar.
+     * Kullanıcı hangisinin çalıştığını denemeden bilemiyordu. Sayfası
+     * yazılmamış bir öğeyi menüde tutmanın faydası yok.
+     */
+    const olu = SECTIONS.flatMap((s) => s.items).filter((i) => i.ready === false);
+    expect(olu.map((i) => i.href)).toEqual([]);
+  });
+
+  it('aynı etiket İKİ KEZ geçmiyor', () => {
+    // "Bilgi Bankası" iki satırdı: biri çalışan ekran, diğeri ekranı
+    // olmayan bir kalıntı. İkisi menüde yan yana duruyordu.
+    const etiket = SECTIONS.flatMap((s) => s.items).map((i) => i.label);
+    expect(new Set(etiket).size).toBe(etiket.length);
+  });
+
   it('tarama boşa düşmüyor — bölümler ve yetkili öğeler var', () => {
     // Bu dosyanın bütün iddiaları SECTIONS'a dayanıyor; dizi boşalırsa ya da
     // yetki anahtarları silinirse aşağıdaki "görünmüyor" testleri her zaman
     // doğru olurdu.
-    expect(SECTIONS.length).toBeGreaterThan(3);
-    expect(SECTIONS.some((s) => s.title === 'Çalışma Alanı')).toBe(true);
-    expect(SECTIONS.flatMap((s) => s.items).filter((i) => i.perm).length).toBeGreaterThan(2);
+    // İKİ BÖLÜM: workspace içi işler + ajans yönetimi. Bu sayı bir kez
+    // yediydi ve sadeleştirmede ikiye indi; testin onu bilmesi kasıtlı —
+    // üçüncü bir bölüm eklenirse burası düşer ve karar gözden geçirilir.
+    expect(SECTIONS.map((s) => s.title)).toEqual(['Workspace', 'Çalışma Alanı']);
+    expect(SECTIONS.flatMap((s) => s.items).filter((i) => i.perm).length).toBe(3);
   });
 });
 

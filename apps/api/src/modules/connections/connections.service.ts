@@ -22,6 +22,7 @@ import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from './provider.registry';
+import { decideConnectionOwnership } from './connection-ownership';
 import {
   PlatformApiError,
   type FetchContext,
@@ -244,21 +245,27 @@ export class ConnectionsService {
   // ---------------------------------------------------------------------------
 
   /**
-   * BAĞLANTI AJANSA KURULUR — müşteri seçimi İSTENMEZ.
+   * İKİ MODEL: workspace bazlı bağlantı ya da ajans havuzu.
    *
-   * Eskiden aktif müşteri zorunluydu ("Bağlantı bir müşteriye kurulur"). O
-   * model iki şeyi birden yanlış yapıyordu: kullanıcı seçtiği müşterinin
-   * hesaplarını bağladığını sanıyordu (oysa gelen 157 hesabın çoğu başka
-   * müşterilere ait) ve aynı Meta kimliği müşteri başına yeniden
-   * yetkilendirildiği için platform önceki token'ı geçersiz kılıyordu.
+   * `clientId` VERİLİRSE bağlantı o workspace'e kurulur ve keşfedilen bütün
+   * reklam hesapları/sayfalar doğrudan ona yazılır — havuz adımı yok.
+   * VERİLMEZSE eski davranış: bağlantı ajansa kurulur, hesaplar havuza düşer
+   * ve `assignAdAccount` ile müşteriye atanır.
    *
-   * Keşfedilen hesaplar HAVUZA düşüyor, müşteriye `assignAdAccount` ile
-   * atanıyor.
+   * NEDEN İKİSİ BİRDEN: ajansın bugün havuzda duran bağlantısı ve ona bağlı
+   * 157 hesabı çalışmaya devam etmek zorunda. Havuz yolunu kaldırmak,
+   * üretimde yayında olan boost'ların hesaplarını kopartırdı.
+   *
+   * WORKSPACE BAZLI MODELİN KOŞULU: her workspace KENDİ platform hesabıyla
+   * bağlanmalı. Aynı Meta kimliği bir organizasyonda tek satır
+   * (`orgId_platform_externalUserId`) ve platform her yeni yetkilendirmede
+   * öncekinin token'ını geçersiz kılıyor — aynı hesabı ikinci bir
+   * workspace'e bağlamak `persistConnection` içinde REDDEDİLİYOR.
    */
   async startOAuth(
     ctx: TenantContext,
     platform: Platform,
-    opts: { redirectTo?: string; forceReconsent?: boolean },
+    opts: { redirectTo?: string; forceReconsent?: boolean; clientId?: string },
     meta: Meta,
   ): Promise<{ authorizeUrl: string }> {
     const provider = this.provider(platform);
@@ -267,6 +274,17 @@ export class ConnectionsService {
       throw new BadRequestException(
         `${platform} yapılandırılmamış. Eksik: ${missing.join(', ')}`,
       );
+    }
+
+    /*
+     * HEDEF WORKSPACE ERİŞİM LİSTESİNE KARŞI DOĞRULANIYOR.
+     *
+     * RLS zaten reddederdi (`adv_oauth_states_insert` → `can_access_client`)
+     * ama oradan gelen hata ham bir politika ihlali olur ve sebebi
+     * anlaşılmaz. Burada durdurmak, kullanıcıya ne olduğunu söylüyor.
+     */
+    if (opts.clientId && !ctx.clientIds.includes(opts.clientId)) {
+      throw new BadRequestException('Bu workspace için yetkin yok.');
     }
 
     // State: rastgele token, veritabanında yalnızca SHA-256 hash'i saklanır.
@@ -278,9 +296,10 @@ export class ConnectionsService {
       tx.oAuthState.create({
         data: {
           orgId: ctx.orgId,
-          // Ajans geneli yetkilendirme. Bağlantı ve hesaplar organizasyona
-          // yazılıyor; müşteri ataması ayrı bir adım.
-          clientId: null,
+          // NULL = ajans havuzu, dolu = o workspace'e kurulan bağlantı.
+          // Geri dönüşte bu değer bağlantıya, oradan keşfedilen bütün
+          // hesap ve sayfalara akıyor.
+          clientId: opts.clientId ?? null,
           platform: platform as PrismaPlatform,
           tokenHash: this.hash(rawState),
           redirectTo: opts.redirectTo ?? null,
@@ -499,6 +518,50 @@ export class ConnectionsService {
       accountLabel: string;
     },
   ): Promise<string> {
+    /*
+     * ═══ SAHİPLİK DEĞİŞTİRİLEMEZ — SESSİZ YANLIŞ WORKSPACE'İN ÖNÜ ═══
+     *
+     * Aşağıdaki `upsert`'ün `update` dalı `clientId`'ye DOKUNMUYOR (ve
+     * dokunmamalı: token tazelemesi sahipliği değiştirmemeli). Ama bu, kontrol
+     * edilmezse şu sessiz hatayı üretiyordu:
+     *
+     *   1. Meta hesabı X, "Ege Birlik Yapı" workspace'ine bağlanır.
+     *   2. Kullanıcı "Fenbay"ı seçip AYNI Meta hesabıyla yetkilendirir.
+     *   3. Tekillik `orgId_platform_externalUserId` üzerinde: aynı satır
+     *      bulunur, `update` koşar, token tazelenir — ama `client_id` HÂLÂ
+     *      Ege'dir.
+     *   4. `discoverAndStore` bağlantının `clientId`'sini okuyor: Fenbay için
+     *      keşfedilen bütün hesaplar EGE'YE yazılır.
+     *
+     * Ekran "bağlandı" der, kullanıcı Fenbay'a bağladığını sanır, hesaplar
+     * başka workspace'te görünür. Hata yok, log yok.
+     *
+     * NULL → workspace geçişi de reddediliyor: bugün havuzda duran bağlantının
+     * altında 157 hesap var ve çoğu BAŞKA müşterilere ait. Onu tek bir
+     * workspace'e işaretlemek, sonraki keşiflerin hepsini o workspace'e
+     * yazdırırdı.
+     */
+    const mevcut = await this.admin.platformConnection.findUnique({
+      where: {
+        orgId_platform_externalUserId: {
+          orgId,
+          platform: platform as PrismaPlatform,
+          externalUserId: tokens.externalUserId,
+        },
+      },
+      select: { clientId: true, client: { select: { name: true } } },
+    });
+
+    const sahiplik = decideConnectionOwnership({
+      platform,
+      // `undefined` = satır YOK (ilk bağlantı), `null` = var ve havuzda.
+      // İkisini ayırmak şart: ilki serbest, ikincisi reddediliyor.
+      existingClientId: mevcut ? mevcut.clientId : undefined,
+      existingClientName: mevcut?.client?.name ?? null,
+      requestedClientId: clientId,
+    });
+    if (!sahiplik.ok) throw new BadRequestException(sahiplik.message);
+
     const access = this.vault.encrypt(tokens.accessToken);
     const refresh = tokens.refreshToken ? this.vault.encrypt(tokens.refreshToken) : null;
 

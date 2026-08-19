@@ -20,7 +20,7 @@ import { MembersService } from './members.service';
 const CTX: TenantContext = {
   orgId: '11111111-1111-1111-1111-111111111111',
   userId: '22222222-2222-2222-2222-222222222222',
-  clientIds: [],
+  clientIds: [] as string[],
   activeClientId: null,
   isOrgAdmin: true,
 } as TenantContext;

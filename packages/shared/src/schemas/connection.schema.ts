@@ -13,6 +13,19 @@ export const startOAuthSchema = z.object({
     .optional(),
   /** needs_reauth durumunda onay ekranını zorla. */
   forceReconsent: z.boolean().optional(),
+  /**
+   * BAĞLANTININ KURULACAĞI WORKSPACE. Verilmezse ajans havuzuna kurulur.
+   *
+   * İki model de destekleniyor ve fark platformun kendi davranışından
+   * doğuyor: aynı Meta/Google kimliği bir organizasyonda TEK satır
+   * (`orgId_platform_externalUserId`) ve platform her yeni yetkilendirmede
+   * öncekinin token'ını geçersiz kılıyor. Yani workspace başına bağlantı
+   * ancak HER WORKSPACE KENDİ platform hesabıyla bağlandığında çalışıyor.
+   * Aynı hesabı ikinci bir workspace'e bağlamak reddediliyor — sessizce
+   * ilkinde bırakmak, kullanıcının başka bir workspace'e bağladığını
+   * sanması demekti.
+   */
+  clientId: z.string().uuid().optional(),
 });
 export type StartOAuthInput = z.infer<typeof startOAuthSchema>;
 
