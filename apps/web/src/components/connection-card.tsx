@@ -47,11 +47,24 @@ export function ConnectionCard({
   connection,
   clients,
   canManage,
+  compact = false,
 }: {
   connection: ConnectionSummary;
   clients: PickerClient[];
   /** Org yöneticisi mi — bağlantıyı ve hesap atamalarını değiştirebilir. */
   canManage: boolean;
+  /**
+   * HESAP LİSTESİNİ GİZLER — kart yalnızca BAĞLANTININ DURUMUNU gösterir.
+   *
+   * Bağlantı ekranında hesaplar artık havuz kartlarından ve arama kutulu
+   * pop-up'tan atanıyor; aynı listeyi burada ikinci kez basmak ekranı
+   * metrelerce uzatıyordu (284 hesap). Kartın burada kalmasının sebebi başka:
+   * token süresi, eksik izinler ve "yeniden yetkilendir" düğmesi yalnızca
+   * burada var.
+   *
+   * VARSAYILAN KAPALI: bayrağı almayan bir çağıran eski davranışı görüyor.
+   */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -190,20 +203,32 @@ export function ConnectionCard({
       {/* Reklam hesapları — AYRI BİLEŞENDE.
           Google Basic Access'ten sonra tek bağlantı 129 hesap getirdi ve düz
           liste hem aramayı hem "neyi izliyorum" sorusunu imkânsız kıldı. */}
-      <AccountPicker
-        accounts={connection.adAccounts}
-        clients={clients}
-        canManage={canManage}
-      />
+      {!compact && (
+        <AccountPicker
+          accounts={connection.adAccounts}
+          clients={clients}
+          canManage={canManage}
+        />
+      )}
 
       {/* Sosyal profiller — yalnızca Meta. Reklam hesaplarıyla AYNI havuz
           modeli: sayfa da ajansa ait ve müşteriye atanıyor. */}
-      {connection.socialProfiles.length > 0 && (
+      {!compact && connection.socialProfiles.length > 0 && (
         <SocialProfileList
           profiles={connection.socialProfiles}
           clients={clients}
           canManage={canManage}
         />
+      )}
+
+      {/* SAYILAR YİNE YAZILI: liste gizlense de "bu bağlantı ne getirdi"
+          sorusu cevapsız kalmamalı. */}
+      {compact && (
+        <p className="mt-3 text-[11px] text-ink-muted">
+          {connection.adAccounts.length} reklam hesabı ·{' '}
+          {connection.socialProfiles.length} sayfa/kanal keşfedildi. Atama havuz
+          kartlarından yapılıyor.
+        </p>
       )}
     </section>
   );

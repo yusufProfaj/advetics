@@ -3,6 +3,8 @@ import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { ConnectButtons } from '@/components/connect-buttons';
 import { ConnectionCard } from '@/components/connection-card';
+import { HavuzKartlari } from '@/components/connections/havuz-kartlari';
+import { IzlenenHesaplar } from '@/components/connections/izlenen-hesaplar';
 import { CallbackBanner } from '@/components/callback-banner';
 
 export const metadata = { title: 'Platform Bağlantıları — Advetics' };
@@ -39,17 +41,6 @@ export default async function ConnectionsPage() {
     serverApiFetch<ProviderAvailability[]>('/connections/availability').catch(() => []),
     serverApiFetch<ConnectionSummary[]>('/connections').catch(() => []),
   ]);
-
-  const accounts = connections.flatMap((c) => c.adAccounts);
-  const pooled = accounts.filter((a) => a.clientId === null).length;
-  const assigned = accounts.length - pooled;
-
-  // Sayfalar AYRI sayılıyor: reklam hesabı atamak lead formlarını çalıştırmıyor
-  // ve tersi. Tek bir "atanmamış" sayısı, ikisinden hangisinin eksik olduğunu
-  // gizlerdi.
-  const pooledProfiles = connections
-    .flatMap((c) => c.socialProfiles)
-    .filter((p) => p.clientId === null).length;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -93,35 +84,34 @@ export default async function ConnectionsPage() {
         </div>
       ) : (
         <>
-          {/* SESSİZ KESME YOK: kaç hesap havuzda bekliyor, sayıyla yazılıyor.
-              Havuzdaki hesap senkronize edilmiyor ve bunu bilmeden "veri
-              gelmiyor" diye aramak, bu üründeki en pahalı hata türü. */}
-          {(pooled > 0 || pooledProfiles > 0) && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
-              {pooled > 0 && (
-                <p>
-                  <strong>{pooled} reklam hesabı havuzda</strong> — hiçbir müşteriye
-                  atanmamış. {assigned} hesap atanmış durumda. Atanmamış hesap
-                  senkronize edilmez.
-                </p>
-              )}
-              {pooledProfiles > 0 && (
-                <p className={pooled > 0 ? 'mt-1.5' : undefined}>
-                  <strong>{pooledProfiles} sayfa/Instagram hesabı havuzda</strong> —
-                  atanmamış sayfadan gelen potansiyel müşteri kaydı yazılamaz.
-                </p>
-              )}
-              <p className="mt-1.5 text-xs">Aşağıdan bir müşteriye ata.</p>
-            </div>
-          )}
+          {/*
+            HAVUZ KARTLARI — eski satır satır liste yerine.
+            Her bağlantının altında bütün hesaplar listeleniyordu; 284 hesapta
+            ekran metrelerce uzuyor ve "hangi hesap boşta" sorusu ancak
+            kaydırarak cevaplanabiliyordu. Şimdi kanal başına tek kart ve
+            liste POP-UP'ta, arama kutusuyla.
+          */}
+          <HavuzKartlari
+            connections={connections}
+            clients={session.availableClients}
+            canManage={session.isOrgAdmin}
+          />
 
-          <div className="space-y-4">
+          <IzlenenHesaplar connections={connections} clients={session.availableClients} />
+
+          {/*
+            BAĞLANTI DURUMU KARTLARI DURUYOR ama artık hesap listesi taşımıyor:
+            token süresi, eksik izinler ve "yeniden yetkilendir" düğmesi burada
+            ve başka hiçbir yerde yok.
+          */}
+          <div className="space-y-3">
             {connections.map((c) => (
               <ConnectionCard
                 key={c.id}
                 connection={c}
                 clients={session.availableClients}
                 canManage={session.isOrgAdmin}
+                compact
               />
             ))}
           </div>
