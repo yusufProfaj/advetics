@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { Permission } from '@advetics/shared';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 /**
  * Kenar çubuğu gezinmesi.
@@ -48,16 +49,87 @@ export interface NavEntry {
 // (8) hâlâ pasif — Modül 5'in yalnızca bütçe tarafı açık, `ready` ile.
 const READY_MODULES = new Set([1, 2, 3, 4, 6]);
 
+/**
+ * Açılır-kapanır menü bölümü.
+ *
+ * AÇIK/KAPALI DURUM TARAYICIDA SAKLANIYOR ama ilk render SUNUCUYLA AYNI
+ * olmak zorunda: `localStorage` doğrudan `useState` başlangıcında okunursa
+ * sunucu "açık", istemci "kapalı" render eder ve React hydration uyarısı
+ * verip ağacı atar. Bu yüzden depo `useEffect` içinde okunuyor.
+ *
+ * AKTİF SAYFANIN BÖLÜMÜ HER ZAMAN AÇIK — saklanan durum ne olursa olsun.
+ * Kapalı bir bölümün içindeki sayfada duruyor olmak, kullanıcının menüde
+ * nerede olduğunu göremediği bir hâl demek: "buraya nereden geldim" sorusunun
+ * cevabı ekranda olmalı.
+ */
+function bolumAnahtari(title: string): string {
+  return `advetics.nav.${title}`;
+}
+
 export function NavSection({ title, items }: { title?: string; items: NavEntry[] }) {
   const pathname = usePathname();
+
+  const icinde = items.some(
+    (i) => pathname === i.href || pathname.startsWith(`${i.href}/`),
+  );
+
+  const [acik, setAcik] = useState(true);
+  useEffect(() => {
+    if (!title) return;
+    const kayit = window.localStorage.getItem(bolumAnahtari(title));
+    if (kayit !== null) setAcik(kayit === '1');
+  }, [title]);
+
+  function degistir(): void {
+    if (!title) return;
+    const yeni = !acik;
+    setAcik(yeni);
+    window.localStorage.setItem(bolumAnahtari(title), yeni ? '1' : '0');
+  }
+
+  // Başlıksız bölüm katlanmıyor: katlama denetimi başlığın kendisi.
+  const gorunur = !title || acik || icinde;
 
   return (
     <div>
       {title && (
-        <p className="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
-          {title}
-        </p>
+        <button
+          type="button"
+          onClick={degistir}
+          aria-expanded={gorunur}
+          className="flex w-full items-center gap-1.5 rounded-lg px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-muted transition hover:text-ink"
+        >
+          <svg
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+            className={`h-3 w-3 shrink-0 transition-transform duration-200 ${
+              gorunur ? 'rotate-90' : ''
+            }`}
+          >
+            <path
+              d="M7.5 5l5 5-5 5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span className="truncate">{title}</span>
+        </button>
       )}
+      {/*
+        AÇILMA `grid-template-rows` İLE, `max-height` İLE DEĞİL. max-height
+        yaklaşımı içeriğin yüksekliğini önceden bilmeyi gerektiriyor: tahmini
+        değer küçük kalırsa liste kırpılıyor, büyük kalırsa animasyon
+        kapanışta duraksıyor. 0fr → 1fr geçişi gerçek yüksekliği kullanıyor.
+      */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+          gorunur ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
       <ul className="space-y-0.5">
         {items.map((item) => {
           const ready = item.ready ?? READY_MODULES.has(item.module);
@@ -93,6 +165,8 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
           );
         })}
       </ul>
+        </div>
+      </div>
     </div>
   );
 }

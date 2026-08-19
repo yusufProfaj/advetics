@@ -58,12 +58,23 @@ export class MembersService {
    * çalışanının kendi test hesabı bunun tipik örneği). O kişi ajans
    * personelidir ve listede KALMALI. `every` yazmak onu gizlerdi.
    */
-  async listMembers(ctx: TenantContext) {
+  async listMembers(ctx: TenantContext, clientId?: string | null) {
+    /*
+     * İKİ LİSTE, İKİ AYRI SORU.
+     *
+     * `clientId` YOKSA soru "ajansın ekibi kim" — müşteri hesapları dışarıda.
+     * `clientId` VARSA soru "bu workspace'e kim erişiyor" ve cevap müşterinin
+     * KENDİ giriş hesaplarını da içermek zorunda: o ekranın bütün amacı zaten
+     * onları yönetmek. Ajans listesinden dışlanmaları, ajans ekibi sayılmamak
+     * içindi; kendi workspace'lerinde gizlenmeleri onları yönetilemez yapardı.
+     */
+    const where = clientId
+      ? { memberships: { some: { clientId } } }
+      : { memberships: { some: { role: { not: 'client_viewer' as const } } } };
+
     return this.prisma.withTenant(ctx, (tx) =>
       tx.user.findMany({
-        where: {
-          memberships: { some: { role: { not: 'client_viewer' } } },
-        },
+        where,
         orderBy: { fullName: 'asc' },
         select: {
           id: true,

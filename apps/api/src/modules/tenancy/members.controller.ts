@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import {
@@ -31,10 +32,18 @@ export class MembersController {
     return { ip: req.ip ?? null, userAgent: req.get('user-agent') ?? null, requestId: req.requestId };
   }
 
+  /**
+   * `?clientId=` VERİLİRSE o workspace'in erişim listesi, verilmezse ajans
+   * ekibi. İkisi farklı soru ve müşteri hesapları yalnızca birincisinde var.
+   *
+   * YETKİ AYNI (`user.read`) ÇÜNKÜ SINIR RLS'TE: erişemediği bir müşterinin
+   * kimliğini yazan biri boş liste alıyor, hata değil. İkinci bir yetki
+   * kontrolü eklemek, aynı kuralı iki yerde tutmak olurdu.
+   */
   @Get('members')
   @RequirePermissions('user.read')
-  list(@CurrentTenant() ctx: TenantContext) {
-    return this.members.listMembers(ctx);
+  list(@CurrentTenant() ctx: TenantContext, @Query('clientId') clientId?: string) {
+    return this.members.listMembers(ctx, clientId ?? null);
   }
 
   /**

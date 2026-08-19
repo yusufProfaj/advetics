@@ -20,7 +20,7 @@ const izinler = (rol: keyof typeof ROLE_PERMISSIONS): Permission[] => [
   ...ROLE_PERMISSIONS[rol],
 ];
 
-const basliklar = (rol: keyof typeof ROLE_PERMISSIONS): string[] =>
+const basliklar = (rol: keyof typeof ROLE_PERMISSIONS): Array<string | undefined> =>
   visibleSections(izinler(rol)).map((s) => s.title);
 
 const etiketler = (rol: keyof typeof ROLE_PERMISSIONS): string[] =>
@@ -51,14 +51,23 @@ describe('menü verisi gerçekten okunuyor', () => {
     // İKİ BÖLÜM: workspace içi işler + ajans yönetimi. Bu sayı bir kez
     // yediydi ve sadeleştirmede ikiye indi; testin onu bilmesi kasıtlı —
     // üçüncü bir bölüm eklenirse burası düşer ve karar gözden geçirilir.
-    expect(SECTIONS.map((s) => s.title)).toEqual(['Workspace', 'Çalışma Alanı']);
+    // BEŞ BÖLÜM: başlıksız hızlı erişim + üç iş bölümü + Ayarlar. Sayı
+    // testte yazılı çünkü yapı iki kez değişti ve her değişim bir karardı;
+    // altıncı bir bölüm eklenirse burası düşer ve karar gözden geçirilir.
+    expect(SECTIONS.map((s) => s.title)).toEqual([
+      undefined,
+      'Reklamlar',
+      'Raporlar',
+      'Kütüphane',
+      'Ayarlar',
+    ]);
     expect(SECTIONS.flatMap((s) => s.items).filter((i) => i.perm).length).toBe(3);
   });
 });
 
 describe('MÜŞTERİ HESABI (client_viewer)', () => {
   it('KRİTİK: "Çalışma Alanı" kategorisini GÖRMÜYOR', () => {
-    expect(basliklar('client_viewer')).not.toContain('Çalışma Alanı');
+    expect(basliklar('client_viewer')).not.toContain('Ayarlar');
   });
 
   it('KRİTİK: Müşteriler, Platform Bağlantıları ve Ekip & Yetkiler görünmüyor', () => {
@@ -81,7 +90,7 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
 
 describe('AJANS ROLLERİ', () => {
   it('owner "Çalışma Alanı" kategorisini ve üç ekranını görüyor', () => {
-    expect(basliklar('owner')).toContain('Çalışma Alanı');
+    expect(basliklar('owner')).toContain('Ayarlar');
     const gorunen = etiketler('owner');
     expect(gorunen).toContain('Müşteriler');
     expect(gorunen).toContain('Platform Bağlantıları');
@@ -89,7 +98,7 @@ describe('AJANS ROLLERİ', () => {
   });
 
   it('admin de görüyor', () => {
-    expect(basliklar('admin')).toContain('Çalışma Alanı');
+    expect(basliklar('admin')).toContain('Ayarlar');
   });
 
   it('analist ajans içi olduğu için kategoriyi görüyor ama yönetim ekranları yetkisine bağlı', () => {

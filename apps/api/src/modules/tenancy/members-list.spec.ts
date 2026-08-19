@@ -67,6 +67,29 @@ describe('ekip listesi süzgeci', () => {
     });
   });
 
+  it('KRİTİK: clientId verilince O WORKSPACE’in listesi — müşteri hesapları DAHİL', async () => {
+    /*
+     * İKİ LİSTE, İKİ AYRI SORU. Ajans listesi client_viewer'ı dışlıyor
+     * (ajansın kaç çalışanı olduğu okunabilmeli). Workspace listesi onları
+     * İÇERMEK zorunda: o ekranın bütün amacı müşterinin kendi giriş
+     * hesaplarını yönetmek ve başka hiçbir ekranda görünmüyorlar.
+     */
+    const { svc, args } = servis();
+    await svc.listMembers(CTX, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    expect(args().where).toEqual({
+      memberships: { some: { clientId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' } },
+    });
+    // ROL SÜZGECİ OLMAMALI — olsaydı müşterinin hesapları kendi
+    // workspace'inde de görünmez, yani yönetilemez olurdu.
+    expect(JSON.stringify(args().where)).not.toContain('client_viewer');
+  });
+
+  it('clientId verilmezse ajans listesi — eski davranış korunuyor', async () => {
+    const { svc, args } = servis();
+    await svc.listMembers(CTX);
+    expect(JSON.stringify(args().where)).toContain('client_viewer');
+  });
+
   it('KRİTİK: `some` kullanılıyor, `every` DEĞİL', async () => {
     /*
      * FARK ÖNEMLİ. Bir kişi bir müşteride client_viewer, başka bir yerde

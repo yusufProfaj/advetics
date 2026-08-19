@@ -4,6 +4,7 @@ import { requireSession } from '@/lib/session';
 import { ConnectButtons } from '@/components/connect-buttons';
 import { ConnectionCard } from '@/components/connection-card';
 import { CallbackBanner } from '@/components/callback-banner';
+import { WorkspaceSecici } from '@/components/workspace-secici';
 
 export const metadata = { title: 'Platform Bağlantıları — Advetics' };
 
@@ -11,20 +12,50 @@ export default async function ConnectionsPage() {
   const session = await requireSession();
 
   /**
-   * MÜŞTERİ SEÇİMİ ARTIK ÖN KOŞUL DEĞİL.
+   * ═══ WORKSPACE SEÇİMİ ÖN KOŞUL ═══
    *
-   * Bağlantı ajansa ait: Meta bir kez bağlanıyor, eriştiği bütün reklam
-   * hesapları havuza düşüyor ve hangisinin hangi müşteriye ait olduğu bu
-   * ekranda seçiliyor. Eskiden bu sayfa "önce bir müşteri seç" diyordu ve o
-   * model aynı kimliği müşteri başına yeniden yetkilendirmeyi gerektirdiği
-   * için bağlantıları koparıyordu.
+   * Bu sayfa iki kez model değiştirdi ve ikisinin de sebebi yazılı:
    *
-   * `/connections` müşteri parametresi OLMADAN çağrılıyor: hesapların tamamı,
-   * atanmışı ve havuzdakiyle birlikte gelmeli.
+   *   1. En başta "önce bir müşteri seç" diyordu. O model aynı Meta kimliğini
+   *      müşteri başına yeniden yetkilendirmeyi gerektiriyordu ve platform her
+   *      yetkilendirmede öncekinin token'ını geçersiz kıldığı için
+   *      bağlantıları KOPARIYORDU.
+   *   2. Sonra bağlantı ajansa kuruldu, hesaplar havuza düştü ve bu ekran
+   *      hepsini birden gösteriyordu. Ama havuz görünümü şunu üretiyordu:
+   *      ekranda ONLARCA müşterinin hesabı yan yana duruyor ve hangisinin
+   *      kime ait olduğu ancak satır satır okunarak anlaşılıyordu.
+   *
+   * Bugünkü model: bağlantı WORKSPACE'e kuruluyor ve her workspace KENDİ
+   * platform hesabıyla bağlanıyor — yani 1'deki token çakışması oluşmuyor.
+   * Sayfa da buna göre daraltıldı: seçili workspace'in bağlantıları.
+   *
+   * SEÇİM YOKSA LİSTE HİÇ ÇEKİLMİYOR. Boş bir liste gösterip "bir müşteri
+   * seç" demek, kullanıcıya bağlantı olmadığını düşündürürdü; iki hâl aynı
+   * ekrana çıkardı.
    */
+  const clientId = session.activeClientId;
+  const clientName =
+    session.availableClients.find((c) => c.id === clientId)?.name ?? null;
+
+  if (!clientId) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold">Platform Bağlantıları</h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            Bağlantılar workspace bazında kuruluyor.
+          </p>
+        </div>
+        <WorkspaceSecKapisi clients={session.availableClients} />
+      </div>
+    );
+  }
+
   const [availability, connections] = await Promise.all([
     serverApiFetch<ProviderAvailability[]>('/connections/availability').catch(() => []),
-    serverApiFetch<ConnectionSummary[]>('/connections').catch(() => []),
+    serverApiFetch<ConnectionSummary[]>(
+      `/connections?clientId=${encodeURIComponent(clientId)}`,
+    ).catch(() => []),
   ]);
 
   const accounts = connections.flatMap((c) => c.adAccounts);
@@ -43,8 +74,8 @@ export default async function ConnectionsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Platform Bağlantıları</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Meta ve Google Ads hesaplarını <strong>bir kez</strong> bağla; gelen reklam
-          hesaplarını müşterilere ata ve hangilerinin izleneceğini seç.
+          <strong className="text-ink">{clientName}</strong> workspace’i için aktif
+          bağlantılar. Başka bir workspace için üst bardan müşteriyi değiştir.
         </p>
       </div>
 
@@ -57,8 +88,10 @@ export default async function ConnectionsPage() {
         <section className="rounded-xl border border-line bg-surface p-5">
           <h2 className="text-sm font-semibold">Yeni bağlantı</h2>
           <p className="mt-1 text-xs text-ink-muted">
-            Bağlantı ajansa kurulur, müşteriye değil. Aynı hesabı ikinci kez
-            yetkilendirmek gerekmez.
+            Bağlantı bu workspace’e kurulur. Her workspace KENDİ Meta/Google
+            hesabıyla bağlanmalı — aynı hesabı ikinci bir workspace’e bağlamak
+            platformda ilk bağlantının token’ını geçersiz kılardı ve sistem
+            bunu reddediyor.
           </p>
           <ConnectButtons
             availability={availability}
@@ -80,7 +113,16 @@ export default async function ConnectionsPage() {
 
       {connections.length === 0 ? (
         <div className="rounded-xl border border-dashed border-line p-8 text-center">
-          <p className="text-sm text-ink-muted">Henüz bağlantı yok.</p>
+          {/* BOŞ LİSTENİN SEBEBİ YAZILI: "bağlantı yok" ile "yanlış workspace'e
+              bakıyorsun" farklı iki iş ve ikisi de boş liste olarak görünür. */}
+          <p className="text-sm font-medium text-ink">
+            {clientName} için henüz bağlantı yok
+          </p>
+          <p className="mx-auto mt-1.5 max-w-md text-xs text-ink-muted">
+            Yukarıdan Meta ya da Google Ads hesabını bağla. Bağlantı kurulduğunda
+            o hesabın reklam hesapları ve sayfaları doğrudan bu workspace’e
+            yazılır.
+          </p>
         </div>
       ) : (
         <>
@@ -144,6 +186,49 @@ export default async function ConnectionsPage() {
           </li>
         </ul>
       </section>
+    </div>
+  );
+}
+
+/**
+ * WORKSPACE SEÇME KAPISI.
+ *
+ * Üst bardaki değiştirici zaten var ama buraya bir liste daha konuyor ve
+ * sebebi şu: kullanıcı menüden "Platform Bağlantıları"na tıklayıp boş bir
+ * ekranla karşılaşıyor ve yapması gerekenin ÜST BARA gitmek olduğunu
+ * bilmiyor. Yapılacak işi ekranın ortasında göstermek, kullanıcıyı bir
+ * denetim aramaya göndermekten iyi.
+ *
+ * BUNLAR BAĞLANTI DEĞİL, ÜST BARDAKİ DEĞİŞTİRİCİYİ ÇAĞIRAN DÜĞMELER — aksi
+ * hâlde adrese `?musteri=` yazan ikinci bir denetim doğardı ve o çakışma bu
+ * projede zaten bir kez yaşandı (üst bar bir müşteri yazarken gövde
+ * başkasının verisini gösteriyordu).
+ */
+function WorkspaceSecKapisi({
+  clients,
+}: {
+  clients: Array<{ id: string; name: string }>;
+}) {
+  if (clients.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-line p-8 text-center">
+        <p className="text-sm font-medium text-ink">Henüz müşteri yok</p>
+        <p className="mt-1.5 text-xs text-ink-muted">
+          Bağlantı bir workspace’e kuruluyor. Önce Ayarlar → Müşteriler’den bir
+          müşteri ekle.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-line bg-surface p-6">
+      <h2 className="text-sm font-semibold text-ink">Önce bir workspace seç</h2>
+      <p className="mt-1 text-sm text-ink-muted">
+        Platform bağlantıları workspace bazında tutuluyor: bağladığın hesabın
+        reklam hesapları ve sayfaları doğrudan seçtiğin müşteriye yazılıyor.
+      </p>
+      <WorkspaceSecici clients={clients} />
     </div>
   );
 }

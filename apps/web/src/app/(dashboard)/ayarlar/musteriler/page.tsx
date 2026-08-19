@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { ConnectionSummary, SpecialAdCategory } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
@@ -172,8 +173,19 @@ export default async function ClientsPage() {
                   <div>
                     <dt className="text-xs text-ink-muted">Ekip</dt>
                     <dd className="mt-0.5 font-semibold text-ink">
-                      {client._count.memberships}
-                      <span className="font-normal text-ink-muted"> kişi</span>
+                      {/*
+                        SAYI BAĞLANTI: her müşteri ayrı bir workspace ve
+                        kendi erişim listesi var. Ajans ekibi ekranı müşteri
+                        hesaplarını bilerek dışarıda bırakıyor, dolayısıyla
+                        onların yönetileceği tek yer burası.
+                      */}
+                      <Link
+                        href={`/ayarlar/musteriler/${client.id}/ekip`}
+                        className="text-brand-strong hover:underline"
+                      >
+                        {client._count.memberships}
+                        <span className="font-normal text-ink-muted"> kişi</span>
+                      </Link>
                     </dd>
                   </div>
                 </dl>

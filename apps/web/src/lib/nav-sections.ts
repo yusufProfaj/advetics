@@ -2,34 +2,56 @@ import type { Permission } from '@advetics/shared';
 import type { NavEntry } from '@/components/nav';
 
 /**
- * Kenar çubuğu — İKİ BÖLÜM.
+ * Kenar çubuğu — KATLANABİLİR bölümler.
  *
- * Önce yedi bölüm (Merkez / Oluştur / Yönet / İyileştir / Raporla / Kütüphane /
- * Çalışma Alanı) ve 23 öğe vardı. Sadeleştirmede iki şey yapıldı:
+ * Bu yapı iki kez değişti ve ikisinin de sebebi ölçüldü:
  *
- *   1. EKRANI OLMAYAN 7 ÖĞE ÇIKARILDI. `ready: false` olanlar soluk ve
- *      tıklanamaz basılıyordu — yani menünün üçte biri ölü satırdı ve
- *      kullanıcı hangisinin çalıştığını denemeden bilemiyordu. Sayfaları
- *      yazıldığında geri eklenecekler; menüde durmalarının hiçbir faydası
- *      yoktu. ("Bilgi Bankası" İKİ KEZ geçiyordu: biri çalışan
- *      `/kutuphane/bilgi-bankasi`, diğeri ekranı olmayan `/kutuphane/bilgi`.)
+ *   1. Önce yedi bölüm ve 23 öğe vardı; 7'sinin EKRANI YOKTU (soluk,
+ *      tıklanamaz) ve "Bilgi Bankası" iki kez geçiyordu. Ölü satırlar
+ *      çıkarıldı ve iki düz gruba indirildi.
+ *   2. İki düz grup fazla uzundu: 12 satır tek blokta, hiçbir gruplama
+ *      olmadan. Bölümler geri geldi ama artık KATLANABİLİR — kullanıcı
+ *      kullanmadığı bölümü kapatıyor ve kapalı kalıyor.
  *
- *   2. YEDİ BAŞLIK İKİYE İNDİ. Ayrım artık iş akışına göre değil YETKİYE
- *      göre: bir workspace'in içinde yapılan işler, ve ajansın workspace'leri
- *      yönettiği yer. Müşteri hesabı ikinciyi hiç görmüyor.
+ * İLK BÖLÜM BAŞLIKSIZ ve bu kasıtlı: en sık açılan iki ekran katlanamaz
+ * olmalı. Bir başlık altına koymak, onları kapatılabilir yapardı.
  *
- * SIRA: istenen altı ekran önce. Kalan altısı da ÇALIŞAN ekranlar ve bu
- * yüzden menüde tutuldu — çalışan bir özelliği menüden düşürmek onu sessizce
- * yok etmek olurdu. İstenmiyorlarsa tek tek çıkarılabilir.
+ * AYARLAR bölümü yalnızca yönetim yetkisi olanlara görünüyor; süzgeç
+ * `visibleSections` içinde ve bölüm boşalırsa başlığı da basılmıyor.
  */
-export const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
+export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
   {
-    title: 'Workspace',
+    // BAŞLIKSIZ — katlanamaz. Günlük iş bu iki ekranda başlıyor.
     items: [
       { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1 },
-      { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4 },
       { href: '/auto-boost', label: 'Akıllı Boost', icon: 'boost', module: 7, ready: true },
+    ],
+  },
+  {
+    title: 'Reklamlar',
+    items: [
+      { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4 },
+      { href: '/reklam-olustur', label: 'Reklam Oluştur', icon: 'create', module: 4, ready: true },
+      { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true },
+      { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true },
+    ],
+  },
+  {
+    title: 'Raporlar',
+    items: [
       { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6 },
+      {
+        href: '/potansiyel-musteriler',
+        label: 'Potansiyel Müşteriler',
+        icon: 'leads',
+        module: 4,
+        ready: true,
+      },
+    ],
+  },
+  {
+    title: 'Kütüphane',
+    items: [
       {
         href: '/kutuphane/bilgi-bankasi',
         label: 'Bilgi Bankası',
@@ -44,30 +66,16 @@ export const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
         module: 2,
         ready: true,
       },
-
-      // ——— İstenen altılının dışında kalanlar. Hepsi ÇALIŞIYOR.
-      { href: '/reklam-olustur', label: 'Reklamlar', icon: 'create', module: 4, ready: true },
-      {
-        href: '/potansiyel-musteriler',
-        label: 'Potansiyel Müşteriler',
-        icon: 'leads',
-        module: 4,
-        ready: true,
-      },
-      { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true },
-      { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true },
-      { href: '/kutuphane/formlar', label: 'Formlar', icon: 'forms', module: 4, ready: true },
       { href: '/kutuphane/kreatifler', label: 'Kreatifler', icon: 'assets', module: 4, ready: true },
+      { href: '/kutuphane/formlar', label: 'Formlar', icon: 'forms', module: 4, ready: true },
     ],
   },
   {
     /*
-     * AJANS İŞİ. Bu bölümü yalnızca yönetim yetkisi olanlar görüyor ve
-     * süzgeç `visibleSections` içinde — bölüm boşalırsa başlığı da
-     * basılmıyor. `client.read` KULLANILMIYOR: client_viewer'da var (kendi
+     * AJANS İŞİ. `client.read` KULLANILMIYOR: client_viewer'da var (kendi
      * müşterisini okuyabilmeli), ayırt eden şey yönetim yetkisi.
      */
-    title: 'Çalışma Alanı',
+    title: 'Ayarlar',
     items: [
       {
         href: '/ayarlar/musteriler',
@@ -109,7 +117,7 @@ export const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
  */
 export function visibleSections(
   permissions: readonly Permission[],
-): Array<{ title: string; items: NavEntry[] }> {
+): Array<{ title?: string; items: NavEntry[] }> {
   const izinli = new Set(permissions);
   return SECTIONS.map((s) => ({
     title: s.title,
