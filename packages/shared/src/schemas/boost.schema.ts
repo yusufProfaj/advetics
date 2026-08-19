@@ -176,6 +176,16 @@ export const BOOST_STATUSES = [
   'rejected',
   'creating',
   'active',
+  /**
+   * SÜRESİ DOLMUŞ boost — kampanya Meta'da durdu.
+   *
+   * Bu değer olmadan bir gönderi bir kez boostlandıktan sonra ÖMÜR BOYU
+   * kilitli kalıyordu: `boosts_active_post_uniq` 'active' durumunu kapsıyor
+   * ve hiçbir kod yolu o durumdan çıkmıyordu. Kayıt silinmiyor — harcama
+   * muhasebesi (K19) ve "daha önce öne çıkarıldı" uyarısı (K20) buradan
+   * okunuyor.
+   */
+  'completed',
   'failed',
 ] as const;
 export type BoostStatus = (typeof BOOST_STATUSES)[number];
@@ -186,6 +196,7 @@ export const BOOST_STATUS_LABELS: Record<BoostStatus, string> = {
   rejected: 'Reddedildi',
   creating: 'Oluşturuluyor',
   active: 'Yayında',
+  completed: 'Süresi doldu',
   failed: 'Başarısız',
 };
 
@@ -246,6 +257,17 @@ export interface BoostablePostRecord extends OrganicPostRecord {
    * kararı geri çevirmek değil, bilgilendirmek doğru.
    */
   warning: string | null;
+  /**
+   * "Yayınla" düğmesi bu gönderi için ÇALIŞIR MI — Bilgi Bankası ön ayarı
+   * var mı ve açık mı.
+   *
+   * DOĞRULAMA GİRİŞ ANINDA, KULLANIM ANINDA DEĞİL. Bu alan olmasaydı düğme
+   * her satırda etkin görünür, kullanıcı tıklar ve "ön ayar yok" hatasını
+   * ancak o zaman görürdü. Ön ayar SAYFA BAZINDA da tanımlanabildiği için
+   * müşteri seviyesinde tek bir uyarı da yetmiyor: aynı müşterinin bir
+   * sayfası hazırken diğeri olmayabilir.
+   */
+  presetReady: boolean;
 }
 
 /**

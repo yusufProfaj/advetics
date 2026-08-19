@@ -26,6 +26,15 @@ import { AutoBoostReadService } from './autoboost-read.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
 
 /**
+ * Tek tıkla yayın gövdesi — SADECE müşteri kimliği.
+ *
+ * `strict()` KASITLI: gövdeye bütçe ya da hedefleme sızarsa istek REDDEDİLİR.
+ * Sessizce yok saymak, "ön ayar uygulandı" sanılan ama aslında istemcinin
+ * gönderdiği bir alanın uygulandığı bir gelecek bırakırdı.
+ */
+const presetLaunchSchema = z.object({ clientId: z.string().uuid() }).strict();
+
+/**
  * Advetics 1.0 — otomatik boost yönetimi.
  *
  * WEBHOOK UCU AYRI BİR CONTROLLER'DA (`YouTubeWebSubController`) ve bu
@@ -109,6 +118,29 @@ export class AutoBoostController {
     @Body(zodBody(autoBoostDecisionSchema)) body: { approve: boolean },
   ): Promise<{ status: string; message: string }> {
     return this.launch.decide(ctx, id, body.approve);
+  }
+
+  /**
+   * TEK TIKLA YAYIN — gönderi listesindeki "Yayınla" düğmesi.
+   *
+   * GÖVDE YALNIZCA MÜŞTERİ KİMLİĞİ TAŞIYOR: bütçe, süre, hedefleme ve ad
+   * Bilgi Bankası ön ayarından geliyor. İstemcinin gönderebileceği bir bütçe
+   * alanı OLMAMASI kasıtlı — olsaydı "kullanıcı hiçbir şey girmiyor" iddiası
+   * yalnızca arayüzde doğru olurdu ve API'yi doğrudan çağıran biri ön ayarı
+   * atlayabilirdi.
+   *
+   * `boost.approve` İSTİYOR: bu uç ara onay adımı olmadan PARA TAAHHÜT
+   * EDİYOR. `boost.read` ile aynı kefeye koymak, gönderileri görebilen
+   * herkesin harcama başlatabilmesi demekti.
+   */
+  @Post('posts/:postId/launch')
+  @RequirePermissions('boost.approve')
+  launchPost(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Body(zodBody(presetLaunchSchema)) body: { clientId: string },
+  ): Promise<{ status: string; message: string }> {
+    return this.launch.gonderiyiYayinla(ctx, body.clientId, postId);
   }
 
   /**

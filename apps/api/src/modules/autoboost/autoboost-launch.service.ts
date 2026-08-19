@@ -5,11 +5,14 @@ import {
   boostNameBase,
   MEDIA_TYPE_LABELS,
   type MediaType,
+  type MetaPresetSettings,
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AssetUploaderService } from '../assets/asset-uploader.service';
 import { BoostExecutorService } from '../boosts/boost-executor.service';
+import { BoostsService } from '../boosts/boosts.service';
+import { metaTargetingFrom } from '../boosts/meta-targeting';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 
@@ -34,6 +37,7 @@ export class AutoBoostLaunchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly executor: BoostExecutorService,
+    private readonly boosts: BoostsService,
     private readonly providers: ProviderRegistry,
     private readonly vault: TokenVaultService,
     private readonly uploader: AssetUploaderService,
@@ -60,6 +64,7 @@ export class AutoBoostLaunchService {
         SELECT q.id::text AS id, q.org_id::text AS org_id, q.client_id::text AS client_id,
                q.platform::text AS platform, q.status, q.external_id,
                q.social_profile_id::text AS social_profile_id, q.title,
+               q.media_type,
                p.id::text AS post_id,
                sp.linked_ad_account_id::text AS linked_ad_account_id,
                cl.name AS client_name,
@@ -178,38 +183,24 @@ export class AutoBoostLaunchService {
       throw new BadRequestException('Bu kart az önce işlendi. Sayfayı yenile.');
     }
 
-    const now = new Date();
-    const adTabani = boostNameBase({
+    const boostId = await this.onAyardanBoostAc(scoped, {
+      orgId: kayit.org_id,
+      clientId: kayit.client_id,
       clientName: kayit.client_name,
+      postId: kayit.post_id,
+      adAccountId: kayit.linked_ad_account_id,
       postMessage: kayit.title,
-      mediaLabel: MEDIA_TYPE_LABELS['photo' as MediaType],
-      date: now,
-    });
-
-    // --- `boosts` satırını aç (onaylanmış olarak)
-    const boostId = await this.prisma.withTenant(scoped, async (tx) => {
-      const [b] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        INSERT INTO boosts (
-          id, org_id, client_id, boost_rule_id, organic_post_id, ad_account_id,
-          status, budget_mode, total_budget_micros, daily_budget_micros,
-          duration_days, objective, targeting, saved_audience_id,
-          reason, approved_by, approved_at, updated_at
-        ) VALUES (
-          gen_random_uuid(), ${kayit.org_id}::uuid, ${kayit.client_id}::uuid,
-          -- KURAL YOK: bu boost'u kural değil kullanıcı onayladı.
-          NULL, ${kayit.post_id}::uuid, ${kayit.linked_ad_account_id}::uuid,
-          'approved', ${kayit.budget_mode}, ${kayit.total_budget_micros},
-          ${kayit.daily_budget_micros}, ${kayit.duration_days},
-          'OUTCOME_ENGAGEMENT',
-          ${meta.savedAudienceId ? null : JSON.stringify(metaTargeting(meta))}::jsonb,
-          ${meta.savedAudienceId},
-          ${`Bildirim havuzundan onaylandı — ${adTabani}`.slice(0, 500)},
-          ${ctx.userId}::uuid, now(), now()
-        )
-        ON CONFLICT DO NOTHING
-        RETURNING id::text AS id
-      `);
-      return b?.id ?? null;
+      // MEDYA TİPİ KARTTAN. Ada yalnızca gönderi METİNSİZSE giriyor
+      // (`boostAssetName` yedeği) ama o durumda "Fotoğraf" yazan bir video
+      // reklamı üretiyordu.
+      mediaType: (kayit.media_type as MediaType | null) ?? ('photo' as MediaType),
+      budgetMode: kayit.budget_mode,
+      dailyBudgetMicros: kayit.daily_budget_micros,
+      totalBudgetMicros: kayit.total_budget_micros,
+      durationDays: kayit.duration_days,
+      meta,
+      kaynak: 'Bildirim havuzundan onaylandı',
+      userId: ctx.userId,
     });
 
     if (!boostId) {
@@ -436,6 +427,200 @@ export class AutoBoostLaunchService {
    * basıp platformda İKİNCİ bir kampanya açmasına izin verirdi. Hata
    * giderildikten sonra kart elle yeniden açılmalı — bilinçli bir sürtünme.
    */
+  /**
+   * GÖNDERİ LİSTESİNDEN TEK TIKLA YAYIN — "Yayınla" / "Tekrar boostla".
+   *
+   * KULLANICI HİÇBİR ŞEY GİRMİYOR. Bütçe, süre, hedefleme, kayıtlı kitle ve
+   * ad Bilgi Bankası ön ayarından geliyor; ekranda yalnızca gönderi ve bir
+   * düğme var. İstenen buydu: "ben hiçbir şey girmeyeceğim, elle bilgi
+   * bankasını doldurmak dışında".
+   *
+   * KUYRUK KARTI AÇILMIYOR ve bu bilinçli. `auto_boost_queue_items` üzerinde
+   * (social_profile_id, external_id) TAM tekil indeks var — kısmi değil.
+   * Yani bir gönderi için ÖMÜR BOYU tek kart. Buradan kart açmak, aynı
+   * gönderiyi ikinci kez yayınlamayı (kullanıcının istediği "tekrar boostla")
+   * kalıcı olarak imkânsız kılardı; süpürme o gönderi için kart açmışsa da
+   * çakışırdı. Kart "sistem yeni bir gönderi FARK ETTİ" demek; burada farkı
+   * kullanıcı ediyor.
+   *
+   * TEKRAR BOOSTLAMAYI ENGELLEYEN TEK ŞEY `boosts_active_post_uniq`: aynı
+   * gönderi için ikinci CANLI boost açılamıyor. Önceki bittikten sonra
+   * yenisi serbest ve K20 gereği bu bir uyarı, engel değil.
+   */
+  async gonderiyiYayinla(
+    ctx: TenantContext,
+    clientId: string,
+    organicPostId: string,
+  ): Promise<{ status: string; message: string }> {
+    // AKTİF MÜŞTERİ BU İSTEK İÇİN GÖNDERİNİN MÜŞTERİSİ. Kart yolundaki gibi
+    // `null` YAPILMIYOR: orada kart başka bir müşteriye ait olabiliyordu,
+    // burada müşteriyi çağıran söylüyor ve daraltmayı açık bırakmak RLS'in
+    // yanlış müşterinin gönderisini yayınlamasını engelliyor.
+    const scoped: TenantContext = { ...ctx, activeClientId: clientId };
+
+    /*
+     * ENGEL KONTROLÜ ORTAK FONKSİYONDAN. Elle boost formunun kullandığı
+     * fonksiyonun aynısı: canlı boost var mı, sayfaya reklam hesabı bağlı mı,
+     * Instagram'ın ana Facebook sayfası biliniyor mu. İkinci bir kopya
+     * yazmak, bir gün ayrışacak iki kural demekti.
+     */
+    const post = await this.prisma.withTenant(scoped, (tx) =>
+      this.boosts.gonderiyiOkuVeDogrula(tx, organicPostId, clientId),
+    );
+
+    const onAyar = await this.prisma.withTenant(scoped, async (tx) => {
+      const [row] = await tx.$queryRaw<OnAyarSatiri[]>(Prisma.sql`
+        SELECT ap.id::text AS preset_id, ap.enabled AS preset_enabled,
+               ap.budget_mode, ap.daily_budget_micros, ap.total_budget_micros,
+               ap.duration_days, ap.settings
+        FROM auto_boost_presets ap
+        WHERE ap.client_id = ${clientId}::uuid AND ap.platform = 'meta'
+          AND (ap.social_profile_id = ${post.social_profile_id}::uuid
+               OR ap.social_profile_id IS NULL)
+        -- SAYFAYA ÖZEL ÖN AYAR MÜŞTERİ VARSAYILANINI EZİYOR. Sıralama
+        -- bildirim havuzu yolundakiyle BİREBİR aynı olmak zorunda: iki yol
+        -- aynı gönderi için farklı ön ayar seçerse, hangisinin uygulandığı
+        -- düğmeye hangi ekrandan basıldığına bağlı olurdu.
+        ORDER BY ap.social_profile_id NULLS LAST
+        LIMIT 1
+      `);
+      return row ?? null;
+    });
+
+    if (!onAyar) {
+      throw new BadRequestException(
+        'Bu müşteri için Meta ön ayarı yok. Kütüphane → Bilgi Bankası’ndan ' +
+          'bütçeyi, süreyi ve hedeflemeyi bir kez tanımla — yayın o ayarlarla ' +
+          'yapılıyor.',
+      );
+    }
+    if (!onAyar.preset_enabled) {
+      throw new BadRequestException(
+        'Bu müşterinin Meta ön ayarı kapalı. Bilgi Bankası’ndan aç.',
+      );
+    }
+
+    const ayar = autoBoostPresetSettingsSchema.safeParse(onAyar.settings);
+    if (!ayar.success || ayar.data.platform !== 'meta') {
+      throw new BadRequestException(
+        'Ön ayar kaydı okunamadı; Bilgi Bankası’ndan yeniden kaydet.',
+      );
+    }
+
+    const boostId = await this.onAyardanBoostAc(scoped, {
+      orgId: ctx.orgId,
+      clientId,
+      clientName: post.client_name,
+      postId: post.id,
+      // `gonderiyiOkuVeDogrula` reklam hesabı yoksa zaten hata fırlattı.
+      adAccountId: post.linked_ad_account_id!,
+      postMessage: post.message,
+      mediaType: post.media_type,
+      budgetMode: onAyar.budget_mode,
+      dailyBudgetMicros: onAyar.daily_budget_micros,
+      totalBudgetMicros: onAyar.total_budget_micros,
+      durationDays: onAyar.duration_days,
+      meta: ayar.data,
+      kaynak: 'Gönderi listesinden yayınlandı',
+      userId: ctx.userId,
+    });
+
+    if (!boostId) {
+      // Kısmi tekil indeks reddetti: arada başka bir sekmede ya da süpürme
+      // yoluyla boost açılmış.
+      throw new BadRequestException(
+        'Bu gönderi için az önce bir boost açılmış. Sayfayı yenile.',
+      );
+    }
+
+    /*
+     * PLATFORM ÇAĞRISI TRANSACTION'IN DIŞINDA. `withTenant` etkileşimli bir
+     * transaction açıyor ve Prisma'nın sınırı 5 saniye; Meta'ya yapılan üç
+     * çağrı üretimde 12,5 saniye sürdü ve transaction ölünce hata bile
+     * kaydedilemedi.
+     */
+    const sonuc = await this.executor.createOneApproved(
+      (fn) => this.prisma.withTenant(scoped, fn),
+      boostId,
+    );
+
+    if (!sonuc.ok) {
+      /*
+       * PLATFORMUN KENDİ CÜMLESİ GÖSTERİLİYOR. Kendi metnimizi yazmak, bu
+       * projede tek teşhis kaynağı olan mesajı kaybetmek olurdu.
+       */
+      throw new BadRequestException(sonuc.error);
+    }
+
+    return { status: 'launched', message: 'Gönderi yayına alındı.' };
+  }
+
+  /**
+   * ÖN AYARDAN `boosts` SATIRI AÇAR — ön ayarla yayınlayan İKİ YOL DA buradan.
+   *
+   * Bildirim havuzu kartı ile gönderi listesindeki "Yayınla" düğmesi aynı
+   * kaydı üretmek zorunda. İki ayrı INSERT yazmak, ön ayarın bir alanının
+   * (hedefleme, kayıtlı kitle, bütçe kipi) bir yolda uygulanıp diğerinde
+   * uygulanmaması demekti — ve fark eden olmazdı, çünkü ikisi de "çalışıyor".
+   *
+   * `null` DÖNÜYORSA satır AÇILAMADI: kısmi tekil indeks (`boosts_active_post_uniq`)
+   * aynı gönderi için ikinci canlı boost'u reddetti. Çağıran bunu kendi
+   * bağlamına göre anlatıyor.
+   */
+  private async onAyardanBoostAc(
+    scoped: TenantContext,
+    g: OnAyarBoostGirdisi,
+  ): Promise<string | null> {
+    /*
+     * BÜTÇE ALANLARI BURADA DOĞRULANIYOR. Ön ayar satırı bunları zorunlu
+     * kılıyor ama sorgudan `null` gelebiliyor (LEFT JOIN eşleşmezse) ve
+     * `null` bütçeyle açılan bir boost `boosts_budget_chk`'e takılıp ham bir
+     * kısıt hatası üretirdi — kullanıcıya hiçbir şey anlatmayan cinsten.
+     */
+    if (!g.budgetMode || !g.durationDays) {
+      throw new BadRequestException(
+        'Ön ayarın bütçesi eksik. Bilgi Bankası’ndan bütçe ve süreyi kaydet.',
+      );
+    }
+
+    const adTabani = boostNameBase({
+      clientName: g.clientName,
+      postMessage: g.postMessage,
+      mediaLabel: MEDIA_TYPE_LABELS[g.mediaType],
+      date: new Date(),
+    });
+
+    return this.prisma.withTenant(scoped, async (tx) => {
+      const [b] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO boosts (
+          id, org_id, client_id, boost_rule_id, organic_post_id, ad_account_id,
+          status, budget_mode, total_budget_micros, daily_budget_micros,
+          duration_days, objective, targeting, saved_audience_id,
+          reason, approved_by, approved_at, updated_at
+        ) VALUES (
+          gen_random_uuid(), ${g.orgId}::uuid, ${g.clientId}::uuid,
+          -- KURAL YOK: bu boost'u kural değil kullanıcı onayladı.
+          NULL, ${g.postId}::uuid, ${g.adAccountId}::uuid,
+          'approved', ${g.budgetMode}, ${g.totalBudgetMicros},
+          ${g.dailyBudgetMicros}, ${g.durationDays},
+          'OUTCOME_ENGAGEMENT',
+          -- KAYITLI KİTLE VARSA HEDEFLEME NESNESİ YAZILMIYOR: kitle Meta'da
+          -- kendi lokasyonunu ve demografisini taşıyor, ikisini birleştirmek
+          -- "kesişim mi birleşim mi" sorusunu bizim cevaplamamız demek.
+          ${g.meta.savedAudienceId ? null : JSON.stringify(metaTargetingFrom(g.meta))}::jsonb,
+          ${g.meta.savedAudienceId},
+          ${`${g.kaynak} — ${adTabani}`.slice(0, 500)},
+          ${g.userId}::uuid, now(), now()
+        )
+        -- CANLI BOOST VARSA ÇAKIŞIR. Çağırandaki kontrol arada geçen sürede
+        -- eskimiş olabilir; son söz veritabanının.
+        ON CONFLICT DO NOTHING
+        RETURNING id::text AS id
+      `);
+      return b?.id ?? null;
+    });
+  }
+
   private async geriAl(ctx: TenantContext, id: string, mesaj: string): Promise<void> {
     await this.prisma.withTenant(ctx, (tx) =>
       tx.$executeRaw(Prisma.sql`
@@ -447,33 +632,37 @@ export class AutoBoostLaunchService {
   }
 }
 
-/**
- * Ön ayardaki hedeflemeyi Meta nesnesine çevirir.
- *
- * LOKASYON KOVALARI AYRI ve ülke geneli lokasyon seçiliyken GÖNDERİLMİYOR:
- * Meta bu kovaları BİRLEŞİM olarak uyguluyor, yani "Türkiye + İzmir" Türkiye
- * geneli demek ve hiçbir hata vermiyor.
- */
-function metaTargeting(m: {
-  locations: Array<{ key: string; type: 'country' | 'region' | 'city' }>;
-  ageMin: number;
-  ageMax: number;
-  genders: 'all' | 'male' | 'female';
-}): Record<string, unknown> {
-  const geo: Record<string, string[]> = {};
-  for (const l of m.locations) {
-    const kova = l.type === 'country' ? 'countries' : l.type === 'region' ? 'regions' : 'cities';
-    (geo[kova] ??= []).push(l.key);
-  }
-  if (m.locations.length === 0) geo.countries = ['TR'];
 
-  const t: Record<string, unknown> = {
-    geo_locations: geo,
-    age_min: m.ageMin,
-    age_max: m.ageMax,
-  };
-  if (m.genders !== 'all') t.genders = [m.genders === 'male' ? 1 : 2];
-  return t;
+/** Gönderi yolunda okunan ön ayar satırı. */
+interface OnAyarSatiri {
+  preset_id: string;
+  preset_enabled: boolean;
+  budget_mode: string | null;
+  daily_budget_micros: bigint | null;
+  total_budget_micros: bigint | null;
+  duration_days: number | null;
+  settings: unknown;
+}
+
+/** `onAyardanBoostAc` girdisi — iki yayın yolunun ortak sözleşmesi. */
+interface OnAyarBoostGirdisi {
+  orgId: string;
+  clientId: string;
+  clientName: string;
+  postId: string;
+  adAccountId: string;
+  /** Ada giren metin: kartta `title`, gönderi listesinde `message`. */
+  postMessage: string | null;
+  /** Yalnızca METİNSİZ gönderide ada düşüyor (`boostAssetName` yedeği). */
+  mediaType: MediaType;
+  budgetMode: string | null;
+  dailyBudgetMicros: bigint | null;
+  totalBudgetMicros: bigint | null;
+  durationDays: number | null;
+  meta: MetaPresetSettings;
+  /** Sebep alanının ilk parçası — boost'un hangi ekrandan doğduğu. */
+  kaynak: string;
+  userId: string;
 }
 
 interface KuyrukSatiri {
@@ -486,6 +675,7 @@ interface KuyrukSatiri {
   external_id: string;
   social_profile_id: string;
   title: string | null;
+  media_type: string | null;
   post_id: string | null;
   linked_ad_account_id: string | null;
   preset_id: string | null;

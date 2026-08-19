@@ -113,6 +113,10 @@ beforeAll(async () => {
     } as never,
     { getAccessToken: async () => 'token' } as never,
     { acquire: async () => ({ allowed: true, usagePercent: 5 }), record: async () => {} } as never,
+      // ADMIN PRISMA — yalnızca `completeEndedBoosts` kullanıyor ve bu
+    // testlerde çağrılmıyor. Çağrılırsa SESSİZCE geçmesin diye fırlatan bir
+    // yerine koyma veriliyor.
+    { $executeRaw: () => { throw new Error('admin prisma bu testte beklenmiyor'); } } as never,
   );
   svc = new BoostsService(prisma, executor);
 });

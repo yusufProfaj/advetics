@@ -61,6 +61,10 @@ beforeAll(async () => {
     { get: () => ({ platform: 'meta', createBoost, canWrite }) } as never,
     { getAccessToken: async () => 'token' } as never,
     { acquire: async () => ({ allowed: true, usagePercent: 5 }), record: async () => {} } as never,
+      // ADMIN PRISMA — yalnızca `completeEndedBoosts` kullanıyor ve bu
+    // testlerde çağrılmıyor. Çağrılırsa SESSİZCE geçmesin diye fırlatan bir
+    // yerine koyma veriliyor.
+    { $executeRaw: () => { throw new Error('admin prisma bu testte beklenmiyor'); } } as never,
   );
   boosts = new BoostsService(
     {
@@ -497,5 +501,65 @@ describe('kural yolu — yeni alanlar sızmıyor', () => {
     await svc.createApproved(runner, IDS.client);
 
     expect(createBoost.mock.calls[0]![1].targeting).toBeUndefined();
+  });
+});
+
+describe('TOPLAM BÜTÇELİ boost (Bilgi Bankası ön ayarı)', () => {
+  /**
+   * Ağaç bir süre bütçe kipini SABİT 'daily' yazıyordu ve tutar olarak
+   * daily_budget_micros alıyordu. Kural yolunda doğruydu — kurallar günlük
+   * bütçe kullanıyor. Ama Bilgi Bankası ön ayarı Meta'da TOPLAM BÜTÇE
+   * seçilmesine izin veriyor ve o durumda daily_budget_micros NULL.
+   *
+   * draft_campaigns.budget_amount_micros kolonu NULL kabul ettiği için
+   * insert PATLAMIYORDU: kampanya panelde "günlük bütçe" kipiyle ve TUTARSIZ
+   * görünüyordu. Hata yok, log yok, yanlış sayı — bu projenin baş belası.
+   */
+  async function toplamButceliBoost(): Promise<void> {
+    await h.q(
+      `INSERT INTO boosts
+         (id, org_id, client_id, boost_rule_id, organic_post_id, ad_account_id,
+          status, budget_mode, total_budget_micros, daily_budget_micros,
+          duration_days, objective, reason, approved_at, updated_at)
+       VALUES ($1, $2, $3, NULL, $4, $5, 'approved', 'lifetime', 450000000, NULL,
+               3, 'OUTCOME_ENGAGEMENT', 'Bildirim havuzundan onaylandı', now(), now())`,
+      [BOOST, IDS.org, IDS.client, POST, IDS.adAccount],
+    );
+  }
+
+  it('KRİTİK: ağaçtaki bütçe kipi "lifetime" yazılıyor', async () => {
+    await toplamButceliBoost();
+    const sonuc = await svc.createApproved(runner, IDS.client);
+    expect(sonuc.created).toBe(1);
+
+    const [kampanya] = await h.q<{ budget_mode: string }>(
+      `SELECT budget_mode FROM draft_campaigns`,
+    );
+    expect(kampanya!.budget_mode).toBe('lifetime');
+  });
+
+  it('KRİTİK: ağaçtaki tutar TOPLAM bütçe, NULL değil', async () => {
+    await toplamButceliBoost();
+    await svc.createApproved(runner, IDS.client);
+
+    const [kampanya] = await h.q<{ budget_amount_micros: string | null }>(
+      `SELECT budget_amount_micros::text AS budget_amount_micros FROM draft_campaigns`,
+    );
+    // NULL AYRICA SINANIYOR: hatanın canlıdaki hâli tam olarak buydu ve
+    // "eşit değil" iddiası NULL'da da geçerdi.
+    expect(kampanya!.budget_amount_micros).not.toBeNull();
+    expect(kampanya!.budget_amount_micros).toBe('450000000');
+  });
+
+  it('günlük bütçeli boost hâlâ "daily" yazıyor — düzeltme kural yolunu bozmadı', async () => {
+    await onaylanmisBoost();
+    await svc.createApproved(runner, IDS.client);
+
+    const [kampanya] = await h.q<{ budget_mode: string; budget_amount_micros: string }>(
+      `SELECT budget_mode, budget_amount_micros::text AS budget_amount_micros
+         FROM draft_campaigns`,
+    );
+    expect(kampanya!.budget_mode).toBe('daily');
+    expect(kampanya!.budget_amount_micros).toBe('100000000');
   });
 });

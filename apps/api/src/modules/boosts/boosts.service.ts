@@ -28,6 +28,7 @@ import {
   type PostSnapshot,
 } from './boost-selector';
 import { BoostExecutorService } from './boost-executor.service';
+import { metaTargetingFrom } from './meta-targeting';
 import {
   INSTAGRAM_PARENT_PAGE_MISSING,
   INSTAGRAM_RULE_UNSUPPORTED,
@@ -108,7 +109,7 @@ interface PostRow {
 }
 
 /** `listBoostablePosts` ham satırı. */
-interface BoostablePostRow {
+export interface BoostablePostRow {
   /** Boost adının ilk parçası (K22). */
   client_name: string;
   id: string;
@@ -134,6 +135,8 @@ interface BoostablePostRow {
   engagements: number;
   boosted_at: Date | null;
   has_live_boost: boolean;
+  /** Bilgi Bankası ön ayarı var VE açık mı. */
+  preset_ready: boolean;
   /** `COUNT(*) OVER ()` — sürücüye göre string ya da number. */
   total: string | number;
 }
@@ -354,6 +357,60 @@ export class BoostsService {
     return { ...ctx, activeClientId: clientId };
   }
 
+  /**
+   * Gönderiyi okur ve ENGEL KONTROLÜNDEN geçirir — yayınlayan her yol buradan.
+   *
+   * ENGELLER SUNUCUDA DA KONTROL EDİLİYOR; listedeki `blockedReason` yeterli
+   * değil. Liste ekranı düğmeyi kapatıyor ama API doğrudan çağrılabilir ve
+   * arada geçen sürede gönderi engelli hâle gelmiş olabilir: başka bir sekmede
+   * boost açılmış, sayfanın hesap ataması kaldırılmış olabilir.
+   *
+   * AYNI FONKSİYON, İKİNCİ BİR KOPYA DEĞİL. Kontrolü çağıran tarafa
+   * kopyalamak, iki yerde farklı yazılmış bir kuralın bir gün ayrışması
+   * demek — ve ayrıştığında fark eden olmaz, çünkü ikisi de "çalışıyor".
+   * Bilgi Bankası ön ayarından tek tıkla yayın yolu (AutoBoostLaunchService)
+   * bu yüzden kendi kontrolünü yazmıyor, bunu çağırıyor.
+   */
+  async gonderiyiOkuVeDogrula(
+    tx: TxLike,
+    organicPostId: string,
+    clientId: string,
+  ): Promise<BoostablePostRow> {
+    const [post] = await tx.$queryRaw<BoostablePostRow[]>(Prisma.sql`
+      SELECT p.id::text AS id, p.social_profile_id::text AS social_profile_id,
+             sp.name AS social_profile_name, sp.profile_type::text AS profile_type,
+             sp.linked_ad_account_id::text AS linked_ad_account_id,
+             sp.parent_page_external_id,
+             p.external_id, p.media_type, p.message, p.permalink, p.thumbnail_url,
+             p.published_at, p.impressions, p.reach, p.likes, p.comments,
+             p.shares, p.saves, p.video_views, p.engagements, p.boosted_at,
+             EXISTS (
+               SELECT 1 FROM boosts b
+               WHERE b.organic_post_id = p.id
+                 AND b.status IN ('candidate', 'approved', 'creating', 'active')
+             ) AS has_live_boost,
+             -- BU SORGUDA ÖN AYAR OKUNMUYOR: yayın yolu ön ayarı kendi
+             -- okuyor ve eksikse kendi cümlesini söylüyor. Burada false
+             -- vermek engel üretirdi; elle boost FORMU ön ayarsız da
+             -- çalışıyor ve çalışmaya devam etmeli.
+             false AS preset_ready,
+             -- BOOST ADININ İLK PARÇASI (K22).
+             cl.name AS client_name,
+             1 AS total
+      FROM organic_posts p
+      JOIN social_profiles sp ON sp.id = p.social_profile_id
+      JOIN clients cl ON cl.id = p.client_id
+      WHERE p.id = ${organicPostId}::uuid
+        AND p.client_id = ${clientId}::uuid
+    `);
+    if (!post) throw new NotFoundException('Gönderi bulunamadı');
+
+    const blocked = this.toBoostablePost(post).blockedReason;
+    if (blocked) throw new BadRequestException(blocked);
+
+    return post;
+  }
+
   // ---------------------------------------------------------------------------
   // Elle boost — gönderi seçim listesi
   // ---------------------------------------------------------------------------
@@ -407,6 +464,13 @@ export class BoostsService {
                  WHERE b.organic_post_id = p.id
                    AND b.status IN ('candidate', 'approved', 'creating', 'active')
                ) AS has_live_boost,
+               -- "YAYINLA" DÜĞMESİ ÇALIŞIR MI — ön ayar var ve açık mı.
+               --
+               -- ÖNCELİK YAYIN YOLUNDAKİYLE BİREBİR AYNI OLMAK ZORUNDA:
+               -- sayfaya özel ön ayar müşteri varsayılanını eziyor. Liste
+               -- başka bir ön ayara bakarsa düğme "hazır" der, yayın "yok"
+               -- der ve ikisi de kendi içinde tutarlı görünür.
+               (pr.id IS NOT NULL AND pr.enabled) AS preset_ready,
                -- MÜŞTERİ ADI BU SORGUDA KULLANILMIYOR ama SEÇİLİYOR ve
                -- sebebi tipin dürüstlüğü: satır tipi alanı zorunlu ilan ediyor
                -- ve queryRaw DENETİMSİZ bir dönüşüm — eksik bıraksak TypeScript
@@ -421,6 +485,13 @@ export class BoostsService {
         FROM organic_posts p
         JOIN social_profiles sp ON sp.id = p.social_profile_id
         JOIN clients cl ON cl.id = p.client_id
+        LEFT JOIN LATERAL (
+          SELECT ap.id, ap.enabled FROM auto_boost_presets ap
+          WHERE ap.client_id = p.client_id AND ap.platform = 'meta'
+            AND (ap.social_profile_id = p.social_profile_id OR ap.social_profile_id IS NULL)
+          ORDER BY ap.social_profile_id NULLS LAST
+          LIMIT 1
+        ) pr ON true
         WHERE p.client_id = ${query.clientId}::uuid ${profileFilter}
         ORDER BY p.published_at DESC
         LIMIT ${query.limit}
@@ -714,43 +785,7 @@ export class BoostsService {
   async createManualBoost(ctx: TenantContext, input: ManualBoostInput): Promise<BoostRecord> {
     const scoped = this.scoped(ctx, input.clientId);
     const boostId = await this.prisma.withTenant(scoped, async (tx) => {
-      const [post] = await tx.$queryRaw<BoostablePostRow[]>(Prisma.sql`
-        SELECT p.id::text AS id, p.social_profile_id::text AS social_profile_id,
-               sp.name AS social_profile_name, sp.profile_type::text AS profile_type,
-               sp.linked_ad_account_id::text AS linked_ad_account_id,
-               sp.parent_page_external_id,
-               p.external_id, p.media_type, p.message, p.permalink, p.thumbnail_url,
-               p.published_at, p.impressions, p.reach, p.likes, p.comments,
-               p.shares, p.saves, p.video_views, p.engagements, p.boosted_at,
-               EXISTS (
-                 SELECT 1 FROM boosts b
-                 WHERE b.organic_post_id = p.id
-                   AND b.status IN ('candidate', 'approved', 'creating', 'active')
-               ) AS has_live_boost,
-               -- BOOST ADININ İLK PARÇASI (K22).
-               cl.name AS client_name,
-               1 AS total
-        FROM organic_posts p
-        JOIN social_profiles sp ON sp.id = p.social_profile_id
-        JOIN clients cl ON cl.id = p.client_id
-        WHERE p.id = ${input.organicPostId}::uuid
-          AND p.client_id = ${input.clientId}::uuid
-      `);
-      if (!post) throw new NotFoundException('Gönderi bulunamadı');
-
-      /**
-       * ENGELLER SUNUCUDA DA KONTROL EDİLİYOR — listedeki `blockedReason`
-       * yeterli değil.
-       *
-       * Liste ekranı düğmeyi kapatıyor ama API doğrudan çağrılabilir ve
-       * arada geçen sürede gönderi engelli hâle gelmiş olabilir: başka bir
-       * sekmede boost açılmış, sayfanın hesap ataması kaldırılmış olabilir.
-       * AYNI FONKSİYON kullanılıyor, ikinci bir kopya değil — iki yerde farklı
-       * yazılan kontrol, bir gün birbirinden ayrılır.
-       */
-      const blocked = this.toBoostablePost(post).blockedReason;
-      if (blocked) throw new BadRequestException(blocked);
-
+      const post = await this.gonderiyiOkuVeDogrula(tx, input.organicPostId, input.clientId);
       const adAccountId = post.linked_ad_account_id!;
       const totalMicros = toMicros(input.totalBudget);
 
@@ -1003,6 +1038,7 @@ export class BoostsService {
       boostedAt: r.boosted_at?.toISOString() ?? null,
       blockedReason,
       warning,
+      presetReady: r.preset_ready === true,
     };
   }
 
@@ -1469,61 +1505,6 @@ export function toMicros(amount: string): bigint {
   return BigInt(whole) * 1_000_000n + BigInt(padded);
 }
 
-/**
- * Elle boost hedeflemesini META NESNESİNE çevirir.
- *
- * `goal-mapping.ts` içindeki `targetingFrom`'un boost karşılığı ve aynı iki
- * kuralı taşıyor:
- *
- *   · `age_max = 65` GÖNDERİLMİYOR. Meta'da 65 "65 ve üzeri" demek; alanı
- *     göndermek Ads Manager'da "18-65" yazdırıyor ve kullanıcı 66
- *     yaşındakilerin dışlandığını sanıyor.
- *   · Cinsiyet "hepsi" ise alan HİÇ gönderilmiyor. Boş dizi göndermek
- *     Meta'da "hiç kimse" demek.
- *
- * ÖZEL KATEGORİ KISITI BURADA UYGULANMIYOR — sağlayıcıda uygulanıyor
- * (`buildBoostAdSetParams`). İki yerde uygulamak, birinin bir gün
- * güncellenmemesi demek.
- */
-function metaTargetingFrom(t: ManualBoostTargeting): Record<string, unknown> {
-  /**
-   * LOKASYONLAR TÜRÜNE GÖRE AYRI KOVALARA. Canlıda iki hata birden verdi.
-   *
-   * Önce tür yoktu ve seçilen her şey şehir sanılıyordu. Kullanıcı "Türkiye"yi
-   * seçtiğinde Meta `cities: [{key:"TR"}]` alıp reddetti: *"integer türü
-   * bekleniyor, ancak TR değeriyle bir string türü alındı"* — şehir anahtarları
-   * sayısal, ülke kodu iki harf. Bir il seçildiğinde de *"Şehir Hedeflemesi
-   * Desteklenmiyor"* çıktı.
-   *
-   * ÜLKE GENELİ, LOKASYON SEÇİLDİYSE GÖNDERİLMİYOR — VE BU DAHA SİNSİ OLANI.
-   * Meta bu kovaları BİRLEŞİM olarak uyguluyor: `countries:["TR"]` ile
-   * `cities:[İzmir]` birlikte gönderilirse sonuç "Türkiye geneli VE İzmir",
-   * yani Türkiye geneli. Panelde "İzmir" yazarken reklamın ülke geneline
-   * gitmesi — hata vermeyen, yalnızca parayı yanlış yere harcayan tür.
-   */
-  const geo: Record<string, unknown> = {};
-  const ulkeler = t.locations.filter((l) => l.type === 'country').map((l) => l.key);
-  const iller = t.locations.filter((l) => l.type === 'region').map((l) => ({ key: l.key }));
-  const sehirler = t.locations.filter((l) => l.type === 'city').map((l) => ({ key: l.key }));
-
-  if (ulkeler.length > 0) geo.countries = ulkeler;
-  if (iller.length > 0) geo.regions = iller;
-  if (sehirler.length > 0) geo.cities = sehirler;
-  // HİÇ LOKASYON SEÇİLMEDİYSE ülke geneli TR. Boş `geo_locations` göndermek
-  // Meta'da "dünya geneli" demek ve bir Türkiye ajansı için en pahalı sessiz
-  // hata olurdu.
-  if (Object.keys(geo).length === 0) geo.countries = ['TR'];
-
-  const out: Record<string, unknown> = {
-    geo_locations: geo,
-    age_min: t.ageMin,
-  };
-  if (t.ageMax < 65) out.age_max = t.ageMax;
-  // Meta: 1 = erkek, 2 = kadın.
-  if (t.genders === 'male') out.genders = [1];
-  if (t.genders === 'female') out.genders = [2];
-  return out;
-}
 
 /**
  * `boosts.reason` — kural yolunda kuralın gerekçesi, elle yolda KULLANICININ

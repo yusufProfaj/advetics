@@ -402,6 +402,10 @@ const STATUS_TONE: Record<BoostStatus, string> = {
   rejected: 'bg-slate-100 text-slate-600 ring-slate-200',
   creating: 'bg-sky-50 text-sky-700 ring-sky-200',
   active: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  // SÜRESİ DOLMUŞ boost NÖTR renkte — yeşil değil. Yeşil "şu an harcıyor"
+  // demek ve biten bir kampanyayı öyle göstermek, aylık harcamayı gözle
+  // toplayan birine yanlış sayı verdirirdi.
+  completed: 'bg-slate-100 text-slate-600 ring-slate-200',
   failed: 'bg-rose-50 text-rose-700 ring-rose-200',
 };
 

@@ -200,7 +200,10 @@ ALTER TABLE rule_action_logs ADD CONSTRAINT rule_action_logs_error_chk
 -- -----------------------------------------------------------------------------
 ALTER TABLE boosts DROP CONSTRAINT IF EXISTS boosts_status_chk;
 ALTER TABLE boosts ADD CONSTRAINT boosts_status_chk
-  CHECK (status IN ('candidate', 'approved', 'rejected', 'creating', 'active', 'failed'));
+  -- 'completed' = süresi dolmuş boost. Bu değer olmadan bir gönderi bir kez
+  -- boostlandıktan sonra ÖMÜR BOYU kilitli kalıyordu: `boosts_active_post_uniq`
+  -- 'active' durumunu kapsıyor ve hiçbir kod yolu o durumdan çıkmıyordu.
+  CHECK (status IN ('candidate', 'approved', 'rejected', 'creating', 'active', 'completed', 'failed'));
 
 -- -----------------------------------------------------------------------------
 -- boosts: BAŞARISIZ kayıtta sebep zorunlu.

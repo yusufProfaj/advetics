@@ -757,6 +757,13 @@ enum SyncJobType {
   /// Kiralama ~10 günde doluyor ve hub haber vermiyor; yenilenmezse bildirim
   /// SESSİZCE duruyor. Bu iş küresel bir tarama, müşteri başına dağılmıyor.
   websub_renew
+  /// Advetics 1.0 — süresi dolmuş boost'ları 'completed' yapar.
+  ///
+  /// Bu tarama olmadan bir gönderi bir kez boostlandıktan sonra BİR DAHA
+  /// boostlanamıyor: `boosts_active_post_uniq` kısmi tekil indeksi 'active'
+  /// durumunu kapsıyor ve hiçbir kod yolu o durumdan çıkmıyordu. Küresel
+  /// tarama, müşteri başına dağılmıyor.
+  boost_complete
 }
 
 enum SyncJobStatus {

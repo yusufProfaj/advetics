@@ -50,8 +50,14 @@ describe('bildirim havuzu yayını — yürütücü çağrısı', () => {
   it('dilim gerçekten yakalanıyor', () => {
     const dilim = metaDali();
     expect(dilim.length).toBeGreaterThan(500);
-    // Gövde gerçekten Meta yayını mı: boost satırını o yazıyor.
-    expect(dilim).toContain('INSERT INTO boosts');
+    /*
+     * Gövde gerçekten Meta yayın dalı mı. Bu çapa bir kez INSERT'ti ve
+     * refaktör onu ortak çekirdeğe (`onAyardanBoostAc`) taşıyınca test
+     * DÜŞTÜ — istenen tam olarak buydu: dilim anlamını yitirdiğinde tarama
+     * sessizce "yasak dizge yok" demeyi sürdürmemeli.
+     */
+    expect(dilim).toContain('onAyardanBoostAc(');
+    expect(dilim).toContain('auto_boost_queue_items');
   });
 
   it('yorum soyucu gerçekten soyuyor', () => {

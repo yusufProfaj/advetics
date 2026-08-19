@@ -232,6 +232,14 @@ export class SyncQueueService implements OnModuleDestroy {
       // gecikme doğrudan kullanıcıya yansıyor — kanalı ekleyip bildirimin
       // gelmesini bekleyen biri bir gün beklememeli.
       { name: 'sweep:websub', pattern: '53 * * * *', jobType: 'websub_renew' },
+      // Advetics 1.0 — süresi dolmuş boost'ları bitirme: SAATTE BİR.
+      //
+      // Bu tarama koşmazsa bir gönderi bir kez boostlandıktan sonra BİR DAHA
+      // boostlanamıyor: `boosts_active_post_uniq` 'active' durumunu kapsıyor.
+      // Gecikme doğrudan kullanıcıya yansıyor — kampanyası dün biten bir
+      // gönderiyi tekrar öne çıkarmak isteyen biri ertesi günü beklememeli.
+      // Saatlik olması, en kötü ihtimalle bir saatlik gecikme demek.
+      { name: 'sweep:boost-complete', pattern: '37 * * * *', jobType: 'boost_complete' },
     ];
 
     for (const s of schedules) {

@@ -95,6 +95,11 @@ export class SyncProcessorService {
      * boş iş üretirdi.
      */
     if (payload.jobType === 'websub_renew') return this.subscribe.renewDueSubscriptions();
+    /*
+     * BOOST BİTİRME DE KÜRESEL. Süresi dolmuş boost'lar bütün müşterilerde
+     * aynı sorguyla bulunuyor; müşteriye bölmek boş iş üretirdi.
+     */
+    if (payload.jobType === 'boost_complete') return this.boostExecutor.completeEndedBoosts();
 
     const accounts = await this.db.adAccount.findMany({
       where: {

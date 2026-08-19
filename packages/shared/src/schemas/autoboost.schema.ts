@@ -197,6 +197,9 @@ export const autoBoostPresetSettingsSchema = z.discriminatedUnion('platform', [
 ]);
 export type AutoBoostPresetSettings = z.infer<typeof autoBoostPresetSettingsSchema>;
 
+/** Ayrık birleşimin Meta dalı — yayın yolu bunu tek başına taşıyor. */
+export type MetaPresetSettings = Extract<AutoBoostPresetSettings, { platform: 'meta' }>;
+
 // -----------------------------------------------------------------------------
 // Ön ayarın kendisi
 // -----------------------------------------------------------------------------

@@ -134,6 +134,10 @@ beforeAll(async () => {
     { get: () => ({ platform: 'meta', createBoost, canWrite }) } as never,
     { getAccessToken: async () => 'token' } as never,
     { acquire: async () => ({ allowed: true, usagePercent: 5 }), record: async () => {} } as never,
+      // ADMIN PRISMA — yalnızca `completeEndedBoosts` kullanıyor ve bu
+    // testlerde çağrılmıyor. Çağrılırsa SESSİZCE geçmesin diye fırlatan bir
+    // yerine koyma veriliyor.
+    { $executeRaw: () => { throw new Error('admin prisma bu testte beklenmiyor'); } } as never,
   );
 });
 
@@ -240,7 +244,11 @@ describe('KISIT 1 — ana sayfası olmayan Instagram satırı', () => {
       { get: () => ({ platform: 'meta', createBoost, canWrite }) } as never,
       { getAccessToken: async () => 'token' } as never,
       { acquire, record: async () => {} } as never,
-    );
+        // ADMIN PRISMA — yalnızca `completeEndedBoosts` kullanıyor ve bu
+    // testlerde çağrılmıyor. Çağrılırsa SESSİZCE geçmesin diye fırlatan bir
+    // yerine koyma veriliyor.
+    { $executeRaw: () => { throw new Error('admin prisma bu testte beklenmiyor'); } } as never,
+  );
     await seedProfile(IG_PROFILE, 'instagram_business', null);
     await seedPost(IG_POST, IG_PROFILE);
     await onayliBoost(IG_POST);

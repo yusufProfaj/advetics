@@ -15,6 +15,7 @@ import {
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
+import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import type { TxLike } from '../rules/rules.service';
 import { INSTAGRAM_PARENT_PAGE_MISSING, isInstagramProfile } from './instagram-boost-guard';
 
@@ -162,6 +163,7 @@ export class BoostExecutorService {
     private readonly providers: ProviderRegistry,
     private readonly vault: TokenVaultService,
     private readonly quota: QuotaGuardService,
+    private readonly admin: PrismaAdminService,
   ) {}
 
   /**
@@ -202,6 +204,43 @@ export class BoostExecutorService {
       );
       return {};
     }
+  }
+
+  /**
+   * SÜRESİ DOLMUŞ BOOST'LARI BİTİRİR — gönderi yeniden boostlanabilsin diye.
+   *
+   * NEDEN VAR: `boosts_active_post_uniq` kısmi tekil indeksi 'active'
+   * durumunu kapsıyor ve aynı gönderi için ikinci satırı reddediyor. Bu
+   * tarama yazılana kadar hiçbir kod yolu bir boost'u 'active' durumundan
+   * ÇIKARMIYORDU — yani bir gönderi bir kez boostlandıktan sonra BİR DAHA
+   * ASLA boostlanamıyordu. Gönderi listesindeki engel hiç kalkmıyor, "Tekrar
+   * boostla" düğmesi sonsuza kadar kapalı kalıyordu.
+   *
+   * BİTİŞ `created_on_platform_at` ÜZERİNDEN, `created_at` ÜZERİNDEN DEĞİL.
+   * Ad set'in Meta'daki `end_time`'ı sağlayıcının içinde, platform çağrısının
+   * yapıldığı anın üzerine kuruluyor; `created_on_platform_at` ise o çağrı
+   * DÖNDÜKTEN sonra yazılıyor — yani bizim hesabımız Meta'nınkinden birazcık
+   * SONRA doluyor. Yön kasıtlı: erken bitirmek, Meta'da hâlâ harcayan bir
+   * kampanya dururken ikinci kampanyanın açılmasına izin vermek olurdu.
+   *
+   * BYPASSRLS: küresel bir bakım işi, tek bir müşteriye ait değil — WebSub
+   * yenilemesiyle aynı gerekçe.
+   */
+  async completeEndedBoosts(): Promise<{ rows: number; note: string }> {
+    const rows = await this.admin.$executeRaw(Prisma.sql`
+      UPDATE boosts SET status = 'completed', updated_at = now()
+      WHERE status = 'active'
+        -- PLATFORMDA OLUŞMAMIŞ SATIR BİTİRİLMİYOR. NULL bir tarih
+        -- aritmetiğe girseydi koşul NULL dönerdi ve satır zaten seçilmezdi;
+        -- açıkça yazılması o satırların neden atlandığını okunur kılıyor.
+        AND created_on_platform_at IS NOT NULL
+        AND created_on_platform_at + make_interval(days => duration_days) <= now()
+    `);
+
+    // KAÇ SATIRIN BİTİRİLDİĞİ YAZILIYOR. "Sessiz kesme yok": bu tarama hiç
+    // koşmazsa belirtisi "gönderiyi tekrar boostlayamıyorum" olur ve sebebi
+    // taramada aranmaz.
+    return { rows, note: `${rows} boost süresi dolduğu için bitirildi` };
   }
 
   /**
@@ -668,6 +707,25 @@ export class BoostExecutorService {
       });
       const endAt = new Date(Date.now() + row.duration_days * 86_400_000);
 
+      /*
+       * BÜTÇE KİPİ BOOST SATIRINDAN — SABİT 'daily' DEĞİL.
+       *
+       * Burada bir süre 'daily' sabit yazılıydı ve tutar olarak
+       * daily_budget_micros alınıyordu. Kural yolunda doğruydu (kurallar
+       * günlük bütçe kullanıyor) ama Bilgi Bankası ön ayarı Meta'da
+       * TOPLAM BÜTÇE seçilmesine izin veriyor. O durumda
+       * daily_budget_micros NULL ve budget_amount_micros kolonu NULL kabul
+       * ettiği için insert PATLAMIYORDU: panelde kampanya "günlük bütçe"
+       * kipiyle ve TUTARSIZ görünüyordu. Yanlış sayı, hata yok — bu
+       * projedeki en pahalı hata tipi.
+       *
+       * boosts_budget_chk kipe göre doğru kolonu zaten zorunlu kılıyor,
+       * dolayısıyla seçilen tutar NULL olamaz.
+       */
+      const kip = row.budget_mode === 'lifetime' ? 'lifetime' : 'daily';
+      const tutar =
+        kip === 'lifetime' ? row.total_budget_micros : row.daily_budget_micros;
+
       const [campaign] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         INSERT INTO draft_campaigns (
           id, org_id, client_id, platform, ad_account_id, name, surface, goal,
@@ -677,7 +735,7 @@ export class BoostExecutorService {
           gen_random_uuid(), ${row.org_id}::uuid, ${row.client_id}::uuid, 'meta',
           ${row.ad_account_id}::uuid, ${name}, 'simple', NULL,
           ${JSON.stringify({ objective: row.objective })}::jsonb,
-          'daily', ${row.daily_budget_micros}::bigint, ${endAt}::timestamptz,
+          ${kip}, ${tutar}::bigint, ${endAt}::timestamptz,
           'published', ${result.externalCampaignId}, now(),
           ${source}, ${row.boost_rule_id}::uuid, now()
         )

@@ -441,3 +441,91 @@ describe('kapsam istekten kuruluyor', () => {
     for (const c of seenContexts) expect(c.activeClientId).toBe(IDS.client);
   });
 });
+
+/**
+ * TEK TIKLA YAYIN — düğmenin TIKLANMADAN ÖNCE durumunu bilmesi.
+ *
+ * "Doğrulama kullanım anında değil, giriş anında": bu alan olmasaydı düğme
+ * her satırda etkin görünür, kullanıcı tıklar ve "ön ayar yok" hatasını ancak
+ * o zaman görürdü.
+ */
+describe('ön ayar hazır mı (presetReady)', () => {
+  /** Bilgi Bankası ön ayarı. `profil` NULL ise müşteri varsayılanı. */
+  async function seedPreset(
+    id: string,
+    profil: string | null,
+    enabled = true,
+  ): Promise<void> {
+    await h.q(
+      `INSERT INTO auto_boost_presets
+         (id, org_id, client_id, platform, social_profile_id, enabled,
+          budget_mode, daily_budget_micros, duration_days, settings, updated_at)
+       VALUES ($1, $2, $3, 'meta', $4, $5, 'daily', 100000000, 3,
+               '{"platform":"meta","goal":"engagement","locations":[],"ageMin":18,"ageMax":65,"genders":"all","savedAudienceId":null}'::jsonb,
+               now())`,
+      [id, IDS.org, IDS.client, profil, enabled],
+    );
+  }
+
+  const P1 = 'eeeeeeee-0000-0000-0000-000000000001';
+  const P2 = 'eeeeeeee-0000-0000-0000-000000000002';
+
+  it('ön ayar YOKSA hazır değil', async () => {
+    await seedProfile(FB, 'facebook_page');
+    await seedPost(postId(1), FB, '2026-08-10T12:00:00Z');
+
+    const [p] = (await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 })).items;
+    expect(p!.presetReady).toBe(false);
+  });
+
+  it('müşteri varsayılanı VARSA hazır', async () => {
+    await seedProfile(FB, 'facebook_page');
+    await seedPost(postId(1), FB, '2026-08-10T12:00:00Z');
+    await seedPreset(P1, null);
+
+    const [p] = (await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 })).items;
+    expect(p!.presetReady).toBe(true);
+  });
+
+  it('KRİTİK: KAPALI ön ayar hazır SAYILMIYOR', async () => {
+    await seedProfile(FB, 'facebook_page');
+    await seedPost(postId(1), FB, '2026-08-10T12:00:00Z');
+    await seedPreset(P1, null, false);
+
+    const [p] = (await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 })).items;
+    expect(p!.presetReady).toBe(false);
+  });
+
+  it('KRİTİK: SAYFAYA ÖZEL kapalı ön ayar, müşteri varsayılanını EZİYOR', async () => {
+    /*
+     * Yayın yolu (`gonderiyiYayinla`) ön ayarı `ORDER BY social_profile_id
+     * NULLS LAST LIMIT 1` ile seçiyor ve `enabled`'ı SÜZMÜYOR — yani sayfaya
+     * özel kapalı bir ön ayar varsa yayın "kapalı" diyerek duruyor. Liste
+     * `enabled`'ı LATERAL içinde süzseydi müşteri varsayılanına düşer,
+     * "hazır" derdi ve düğme tıklanınca hata verirdi.
+     */
+    await seedProfile(FB, 'facebook_page');
+    await seedPost(postId(1), FB, '2026-08-10T12:00:00Z');
+    await seedPreset(P1, null, true); // müşteri varsayılanı AÇIK
+    await seedPreset(P2, FB, false); // sayfaya özel KAPALI
+
+    const [p] = (await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 })).items;
+    expect(p!.presetReady).toBe(false);
+  });
+
+  it('KRİTİK: iki ön ayar varken satır ÇOĞALMIYOR ve toplam yalan söylemiyor', async () => {
+    /*
+     * LATERAL içindeki LIMIT 1 düşerse aynı gönderi iki satır olarak döner:
+     * liste iki kez görünür ve `COUNT(*) OVER ()` toplamı da iki yazar.
+     * Hiçbir mevcut test bunu yakalamıyordu.
+     */
+    await seedProfile(FB, 'facebook_page');
+    await seedPost(postId(1), FB, '2026-08-10T12:00:00Z');
+    await seedPreset(P1, null);
+    await seedPreset(P2, FB);
+
+    const liste = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
+    expect(liste.items).toHaveLength(1);
+    expect(liste.total).toBe(1);
+  });
+});

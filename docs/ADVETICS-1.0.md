@@ -291,3 +291,66 @@ Meta hesabını gösteriyorsa istek Google'a Meta hesap kimliğiyle gider ve
 > dokümanları arasında çelişiyor (3+ zorunlu / 40 karakter ile 1–5 / 30
 > karakter). Resmî API örnekleri her alandan tek tane gönderiyor. İlk gerçek
 > çağrıda netleşecek.
+
+---
+
+## 6. Tek tıkla yayın — elle boost da Bilgi Bankası'na bağlandı
+
+**İstenen:** *"gönderinin yanında yayınla (önceden yayınlandıysa tekrar
+boostla) butonu olması gerekiyor, ben hiçbir şey girmeyeceğim elle bilgi
+bankasını doldurmak dışında."*
+
+`/reklam-olustur` ekranındaki gönderi listesinde her satırın yanında bir
+düğme var. Bütçe, süre, hedefleme, kayıtlı kitle ve ad **ön ayardan** geliyor;
+istek gövdesi yalnızca müşteri kimliği taşıyor (`presetLaunchSchema.strict()`).
+Gövdeye bütçe koyulabilseydi "ön ayar uygulanıyor" iddiası yalnızca arayüzde
+doğru olurdu.
+
+Ayrıntılı form **duruyor**: ön ayarı olmayan müşteride ve ayar değiştirmek
+isteyen kullanıcıda hâlâ çalışıyor. Düğme hızlı yol, formun yerine geçen bir
+şey değil.
+
+### Kuyruk kartı AÇILMIYOR — bilinçli
+
+`auto_boost_queue_items` üzerinde `(social_profile_id, external_id)` **tam**
+tekil indeks var, kısmi değil: bir gönderi için ömür boyu tek kart. Buradan
+kart açmak, aynı gönderiyi ikinci kez yayınlamayı kalıcı olarak imkânsız
+kılardı. Kart "sistem yeni bir gönderi FARK ETTİ" demek; burada farkı
+kullanıcı ediyor.
+
+### Bulunan hata: gönderi ilk boost'tan sonra ÖMÜR BOYU kilitliydi
+
+`boosts_active_post_uniq` kısmi tekil indeksi `'active'` durumunu kapsıyor.
+Ama hiçbir kod yolu bir boost'u o durumdan çıkarmıyordu — durum listesinde
+(`candidate, approved, rejected, creating, active, failed`) bitmiş bir
+boost'un karşılığı yoktu.
+
+Yani **"tekrar boostla" hiç çalışmayacaktı.** Kampanya Meta'da çoktan durmuş
+oluyor (ad set `end_time` ile oluşturuluyor), eksik olan yalnızca bizim
+kaydımızdı.
+
+Çözüm: `'completed'` durumu + `sweep:boost-complete` (saatte bir). Bitiş
+`created_on_platform_at + duration_days` üzerinden hesaplanıyor — `created_at`
+üzerinden DEĞİL: Meta'daki `end_time` sağlayıcının içinde, platform çağrısı
+anında kuruluyor ve `created_on_platform_at` o çağrı döndükten sonra
+yazılıyor, yani bizim hesabımız Meta'nınkinden birazcık **sonra** doluyor.
+Yön kasıtlı — erken bitirmek, hâlâ harcayan bir kampanya dururken ikinci
+kampanyanın açılmasına izin vermek olurdu.
+
+### Bulunan hata: iki ayrı hedefleme üreticisi
+
+Meta hedefleme nesnesini üreten iki fonksiyon vardı ve çıktıları farklıydı:
+biri `regions`/`cities` kovalarına `{ key }` nesnesi koyuyordu (canlıda
+öğrenilmiş doğru biçim), diğeri düz string; biri `age_max = 65`'i
+göndermiyordu, diğeri her zaman gönderiyordu. Ön ayarında il seçen bir
+müşterinin reklamı ya reddedilecek ya da sessizce ülke geneline çıkacaktı.
+Bugün tek dosyada: `meta-targeting.ts`.
+
+### Düğmenin durumu TIKLANMADAN ÖNCE biliniyor
+
+`listBoostablePosts` artık `presetReady` döndürüyor (ön ayar var ve açık mı).
+Ön ayar sayfa bazında da tanımlanabildiği için müşteri seviyesinde tek bir
+uyarı yetmiyor: aynı müşterinin bir sayfası hazırken diğeri olmayabilir.
+Liste ön ayarı seçerken `enabled`'ı **süzmüyor** — süzseydi sayfaya özel
+kapalı bir ön ayar müşteri varsayılanına düşer, liste "hazır" der, yayın
+"kapalı" derdi.

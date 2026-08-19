@@ -141,6 +141,23 @@ buna göre veriliyor:
   kendi dalı olmazsa son dala düşüyor ve "izin yok", "kota doldu", "hesap
   bulunamadı", "geçersiz alan" hepsi panelde **"Beklenmeyen bir hata oluştu"**
   oluyor. Bu cümle bu projede bir turu tamamen kaybettirdi.
+- **KISMİ TEKİL İNDEKS + SON DURUMU OLMAYAN DURUM MAKİNESİ = KALICI KİLİT.**
+  `boosts_active_post_uniq` `'active'` durumunu kapsıyordu ama hiçbir kod yolu
+  bir boost'u o durumdan ÇIKARMIYORDU — durum listesinde "bitti" karşılığı
+  yoktu. Sonuç: bir gönderi bir kez boostlandıktan sonra BİR DAHA ASLA
+  boostlanamıyordu ve belirtisi kodda değil arayüzde görünüyordu ("düğme hep
+  kapalı"). Kampanya Meta'da çoktan durmuştu; eksik olan yalnızca bizim
+  kaydımızdı. Kısmi indeksin yüklemine bir durum yazarken **o durumdan çıkışı
+  kimin yazdığını** göster. `boost-completion.spec.ts` bunu kilitliyor.
+- **AYNI ŞEYİ ÜRETEN İKİNCİ FONKSİYON, DOĞDUĞU ANDA AYRIŞIR.** Meta hedefleme
+  nesnesini üreten iki fonksiyon vardı; ikisi de derleniyor, ikisi de
+  "çalışıyordu". Farklar: biri `regions`/`cities` kovalarına `{ key }` nesnesi
+  koyuyordu (canlıda öğrenilmiş doğru biçim), diğeri DÜZ STRING; biri
+  `age_max = 65`'i göndermiyordu (Meta'da 65 = "65 ve üzeri"), diğeri her
+  zaman gönderiyordu. Yani ön ayarında il seçen müşterinin reklamı ya
+  reddedilecek ya da sessizce ülke geneline çıkacaktı. Bugün tek dosyada:
+  `meta-targeting.ts`, ve `meta-targeting.spec.ts` yayın yollarının kendi
+  `geo_locations` nesnesini kurmasını yasaklıyor.
 - **`ad_accounts`, `platform_connections` ve `social_profiles` içinde
   `client_id` NULLABLE.** NULL = ajansın havuzunda, müşteriye atanmamış.
   Sahiplik `org_id`'de. Bu satırlar için senkronizasyon kuyruğa GİRMEMELİ —

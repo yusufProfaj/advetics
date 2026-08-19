@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   MEDIA_TYPE_LABELS,
   type BoostablePostList,
@@ -164,7 +165,14 @@ function ManualBoostForm({
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
-  useEffect(() => {
+  /*
+   * GÖNDERİ YÜKLEMESİ AYRI BİR FONKSİYON: tek tıkla yayından sonra liste
+   * YENİDEN çekilmek zorunda. Yenilenmezse yayınlanan gönderinin düğmesi
+   * etkin kalır ve ikinci tık, veritabanı kısıtına takılan bir hata mesajı
+   * üretir — kullanıcıya "çalışmadı" gibi görünen ama aslında çalışmış olan
+   * bir işlem.
+   */
+  const gonderileriYukle = useCallback(() => {
     void apiFetch<BoostablePostList>(`/boosts/posts?clientId=${clientId}`)
       .then(setPosts)
       .catch(() =>
@@ -175,6 +183,10 @@ function ManualBoostForm({
           emptyReason: 'Gönderiler yüklenemedi. Sayfayı yenilemeyi dene.',
         }),
       );
+  }, [clientId]);
+
+  useEffect(() => {
+    gonderileriYukle();
     void apiFetch<BoostSpendSummary>(`/boosts/spend?clientId=${clientId}`)
       .then(setSpend)
       .catch(() => setSpend(null));
@@ -193,7 +205,7 @@ function ManualBoostForm({
             'Kampanya listesi yüklenemedi. Yeni kampanya oluşturarak devam edebilirsin.',
         }),
       );
-  }, [clientId]);
+  }, [clientId, gonderileriYukle]);
 
   /**
    * KİTLELER GÖNDERİ SEÇİLİNCE ÇEKİLİYOR — hangi reklam hesabı olduğu ancak
@@ -363,16 +375,61 @@ function ManualBoostForm({
           </div>
         )}
 
+        {posts && posts.items.length > 0 && posts.items.every((p) => !p.presetReady) && (
+          /*
+             ÖN AYAR YOKSA TEK BANT — her satıra ayrı uyarı yazmak yerine.
+             Ön ayar sayfa bazında da tanımlanabildiği için "hiçbiri hazır
+             değil" ile "bazıları hazır" farklı iki durum; bant yalnızca
+             HİÇBİRİ hazır değilken çıkıyor, karışık durumda satırın kendi
+             notu görünüyor.
+          */
+          <div className="mb-3 rounded-xl border border-warn/40 bg-warn/5 px-3 py-2.5">
+            <p className="text-xs font-semibold text-ink">
+              Tek tıkla yayın için Bilgi Bankası boş
+            </p>
+            <p className="mt-0.5 text-[11px] text-ink-muted">
+              Bu müşteri için Meta ön ayarı tanımlı değil ya da kapalı. Bütçeyi,
+              süreyi ve hedeflemeyi bir kez{' '}
+              <Link
+                href="/kutuphane/bilgi-bankasi"
+                className="font-semibold text-brand underline"
+              >
+                Kütüphane → Bilgi Bankası
+              </Link>{' '}
+              üzerinden tanımladıktan sonra gönderilerin yanındaki “Yayınla”
+              düğmesi çalışır. Aşağıdaki form ön ayarsız da kullanılabilir.
+            </p>
+          </div>
+        )}
+
         {posts && posts.items.length > 0 && (
           <>
             <ul className="overflow-hidden rounded-xl border border-line">
               {posts.items.map((p) => (
-                <li key={p.id} className="border-b border-line last:border-b-0">
-                  <PostRow
-                    post={p}
-                    secili={secili?.id === p.id}
-                    onSec={() => setSecili(p)}
-                  />
+                <li
+                  key={p.id}
+                  className="flex items-stretch gap-1 border-b border-line pr-2 last:border-b-0"
+                >
+                  {/*
+                    SATIR VE DÜĞME KARDEŞ, İÇ İÇE DEĞİL. `PostRow` bir
+                    <button> ve içine ikinci bir <button> koymak geçersiz
+                    HTML — tarayıcı iç düğmeyi dışarı taşıyor ve tıklama
+                    hedefleri karışıyor.
+                  */}
+                  <div className="min-w-0 flex-1">
+                    <PostRow
+                      post={p}
+                      secili={secili?.id === p.id}
+                      onSec={() => setSecili(p)}
+                    />
+                  </div>
+                  <div className="flex shrink-0 items-center">
+                    <YayinlaDugmesi
+                      post={p}
+                      clientId={clientId}
+                      onYayinlandi={gonderileriYukle}
+                    />
+                  </div>
                 </li>
               ))}
             </ul>
@@ -753,6 +810,92 @@ function PostRow({
         <Chip cls="bg-emerald-50 text-emerald-700 ring-emerald-200">Seçildi</Chip>
       )}
     </button>
+  );
+}
+
+/**
+ * "YAYINLA" / "TEKRAR BOOSTLA" — tek tıkla yayın.
+ *
+ * KULLANICI HİÇBİR ŞEY GİRMİYOR. Bütçe, süre, hedefleme ve ad Bilgi
+ * Bankası ön ayarından geliyor; bu düğme yalnızca gönderiyi ve müşteriyi
+ * söylüyor. İstek gövdesine bütçe koyulabilseydi "ön ayar uygulanıyor"
+ * iddiası yalnızca ekranda doğru olurdu.
+ *
+ * ÜÇ AYRI ETKİSİZLİK SEBEBİ VE ÜÇÜ DE YAZILI. Düğmeyi sebepsiz kapatmak,
+ * kullanıcıya "çalışmıyor" göstermek olurdu:
+ *   · gönderi engelli (canlı boost, hesap yok, Instagram ana sayfası yok)
+ *   · ön ayar yok ya da kapalı
+ *   · yayın sürüyor
+ *
+ * HATA YUTULMUYOR. Sunucudan gelen mesaj platformun kendi cümlesini
+ * taşıyor ve bu projede tek teşhis kaynağı o.
+ */
+function YayinlaDugmesi({
+  post,
+  clientId,
+  onYayinlandi,
+}: {
+  post: BoostablePostRecord;
+  clientId: string;
+  onYayinlandi: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+
+  const engelli = post.blockedReason !== null;
+  const onAyarYok = !post.presetReady;
+  const kapali = engelli || onAyarYok || busy;
+
+  // DAHA ÖNCE ÖNE ÇIKARILMIŞSA ETİKET DEĞİŞİYOR (K20). Aynı gönderiyi
+  // yeniden boostlamak yasak değil; kullanıcı bunu bilerek yapıyor.
+  const etiket = busy
+    ? 'Yayınlanıyor…'
+    : post.boostedAt !== null
+      ? 'Tekrar boostla'
+      : 'Yayınla';
+
+  async function yayinla(): Promise<void> {
+    setBusy(true);
+    setHata(null);
+    try {
+      await apiFetch<{ status: string; message: string }>(
+        `/autoboost/posts/${post.id}/launch`,
+        { method: 'POST', body: JSON.stringify({ clientId }) },
+      );
+      // LİSTE YENİLENİYOR: yayınlanan gönderinin düğmesi kapanmalı, yoksa
+      // ikinci tık kısıt hatası üretir ve kullanıcı işlemin başarısız
+      // olduğunu sanır.
+      onYayinlandi();
+    } catch (e) {
+      setHata(
+        e instanceof ApiRequestError ? e.message : 'Yayın başarısız oldu.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex max-w-[9.5rem] flex-col items-end gap-1 py-2">
+      <button
+        type="button"
+        onClick={() => void yayinla()}
+        disabled={kapali}
+        className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white transition disabled:opacity-40"
+      >
+        {etiket}
+      </button>
+      {/* SEBEP YAZILI — yalnızca ön ayar eksikse. Gönderi engelliyse sebep
+          zaten satırın kendisinde duruyor ve iki kez yazmak gürültü. */}
+      {onAyarYok && !engelli && (
+        <span className="text-right text-[10px] leading-tight text-ink-muted">
+          Ön ayar yok
+        </span>
+      )}
+      {hata && (
+        <span className="text-right text-[10px] leading-tight text-danger">{hata}</span>
+      )}
+    </div>
   );
 }
 
