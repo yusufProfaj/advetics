@@ -19,12 +19,14 @@ import { describe, expect, it } from 'vitest';
  * verirdi") — ama yalnızca Kurallar için `ready` konmuştu. Yorumla korunan
  * kural, korunmayan kuraldır.
  *
- * Test iki dosyayı birden okuyor: menü tanımı layout.tsx'te, hazır olma kuralı
+ * Test iki dosyayı birden okuyor: menü tanımı lib/nav-sections.ts'te (bir
+ * zamanlar layout.tsx'teydi; yetki süzgeci sınanabilsin diye taşındı ve bu
+ * taramanın boşa-düşme koruması taşımayı yakaladı), hazır olma kuralı
  * nav.tsx'te. İkisi ayrı dosyada olduğu için biri değişince diğerinin
  * bozulduğu gözle görünmüyor.
  */
 const APP_DIR = __dirname;
-const LAYOUT = readFileSync(join(APP_DIR, '(dashboard)/layout.tsx'), 'utf8');
+const LAYOUT = readFileSync(join(APP_DIR, '../lib/nav-sections.ts'), 'utf8');
 const NAV = readFileSync(join(APP_DIR, '../components/nav.tsx'), 'utf8');
 
 /** nav.tsx'teki READY_MODULES kümesini kaynaktan okur — elle kopyalamıyoruz. */
@@ -45,7 +47,7 @@ interface NavEntry {
   ready?: boolean;
 }
 
-/** layout.tsx'teki menü girdilerini ayıklar. */
+/** nav-sections.ts'teki menü girdilerini ayıklar. */
 function navEntries(): NavEntry[] {
   const entries: NavEntry[] = [];
   // Girdiler tek satırda da çok satırda da yazılabiliyor; href'ten başlayıp

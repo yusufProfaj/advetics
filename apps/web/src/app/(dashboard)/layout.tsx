@@ -2,7 +2,8 @@ import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { ClientSwitcher } from '@/components/client-switcher';
 import { LogoutButton } from '@/components/logout-button';
-import { NavSection, type NavEntry } from '@/components/nav';
+import { NavSection } from '@/components/nav';
+import { visibleSections } from '@/lib/nav-sections';
 
 interface Branding {
   logoUrl: string | null;
@@ -13,145 +14,6 @@ interface Branding {
   footerText: string | null;
 }
 
-/**
- * Kenar çubuğu — mimari dokümandaki 7 bölüm.
- *
- * BÖLÜM ADLARI TÜRKÇE ve İŞ DİLİNDE. "CENTRAL" ya da "OPTIMISE" bir yazılım
- * mimarisi terimi; panelde oturan kişi reklam uzmanı bile olsa bunlar ona bir
- * şey söylemiyor. Bölüm adı "orada ne yapacağımı" anlatmalı.
- *
- * SIRA DA BİR ANLAM TAŞIYOR: yukarıdan aşağı bir iş akışı — önce bakarsın
- * (Merkez), sonra yaparsın (Oluştur), sonra kontrol edersin (Yönet),
- * iyileştirirsin, en son raporlarsın.
- */
-const SECTIONS: Array<{ title: string; items: NavEntry[] }> = [
-  {
-    // 3 CENTRAL — en sık açılan ekran en üstte.
-    title: 'Merkez',
-    items: [
-      { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1 },
-      { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4 },
-      { href: '/saglik', label: 'Sağlık Skoru', icon: 'health', module: 3, ready: false },
-    ],
-  },
-  {
-    // 4 CREATE
-    title: 'Oluştur',
-    items: [
-      /**
-       * TEK GİRİŞ — üç ayrı menü maddesi yerine (tasarım belgesi K6).
-       *
-       * Kullanıcı "reklam vereceğim" diye geliyor; biz ona "elle mi, kuraldan
-       * mı, tablodan mı" diye soruyorduk ve bu üç ayrı zihinsel model demekti.
-       * `/reklam-olustur` artık bir giriş kapısı: dört başlangıç noktası ve
-       * kampanya listesi. Toplu oluşturma oradan açılıyor, menüde ayrı
-       * madde değil.
-       */
-      { href: '/reklam-olustur', label: 'Reklamlar', icon: 'create', module: 4, ready: true },
-      /**
-       * AKILLI BOOST MENÜDE KALIYOR çünkü orada yapılan iş reklam oluşturmak
-       * değil OTOMASYON AYARI: kural kurmak ve onay kuyruğunu yönetmek.
-       * Kuralın ürettiği kampanyalar zaten "Reklamlar" listesinde görünüyor.
-       */
-      { href: '/auto-boost', label: 'Akıllı Boost', icon: 'boost', module: 7, ready: true },
-    ],
-  },
-  {
-    // 5 MANAGE
-    title: 'Yönet',
-    items: [
-      {
-        href: '/potansiyel-musteriler',
-        label: 'Potansiyel Müşteriler',
-        icon: 'leads',
-        module: 4,
-        ready: true,
-      },
-      { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true },
-      { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true },
-    ],
-  },
-  {
-    // 6 OPTIMISE
-    title: 'İyileştir',
-    items: [
-      // Modül 6 hazır sayılıyor (Raporlar bitti) ama bu ikisinin sayfası YOK.
-      // `ready` verilmezse modül numarasına düşülüyor ve ikisi de tıklanabilir
-      // görünüp 404 veriyordu.
-      { href: '/yorgunluk', label: 'Reklam Yorgunluğu', icon: 'fatigue', module: 6, ready: false },
-      { href: '/ab-test', label: 'A/B Test', icon: 'abtest', module: 6, ready: false },
-    ],
-  },
-  {
-    // 7 REPORT
-    title: 'Raporla',
-    items: [{ href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6 }],
-  },
-  {
-    // 2 BASE — henüz tamamen boş, ama yol haritası görünür olsun.
-    title: 'Kütüphane',
-    items: [
-      { href: '/kutuphane/formlar', label: 'Formlar', icon: 'forms', module: 4, ready: true },
-      {
-        href: '/kutuphane/bilgi-bankasi',
-        label: 'Bilgi Bankası',
-        icon: 'assets',
-        module: 7,
-        ready: true,
-      },
-      {
-        href: '/kutuphane/gorseller',
-        label: 'Görsel Arşivi',
-        icon: 'assets',
-        module: 2,
-        ready: true,
-      },
-      /**
-       * Kreatif kütüphaneye ait, "Oluştur" altına değil: bir kampanyaya değil
-       * MÜŞTERİYE ait ve aynı metin/görsel on kampanyada kullanılabiliyor.
-       *
-       * Bu, "Oluştur" bölümünün menüde nasıl yeniden kurulacağı kararını
-       * (tasarım belgesi K6) vermiyor — Formlar ve Görsel Arşivi'nin yanına
-       * üçüncü bir kütüphane girişi eklemek o karardan bağımsız.
-       */
-      { href: '/kutuphane/kreatifler', label: 'Kreatifler', icon: 'assets', module: 4, ready: true },
-      { href: '/kutuphane/kitleler', label: 'Kitleler', icon: 'audience', module: 2, ready: false },
-      { href: '/kutuphane/bilgi', label: 'Bilgi Bankası', icon: 'knowledge', module: 2, ready: false },
-    ],
-  },
-  {
-    // 1 WORKSPACE — en altta çünkü en seyrek açılıyor.
-    //
-    // SIRA KURULUM SIRASI. Yeni bir müşteriyi devralan kişi yukarıdan aşağı
-    // ilerleyerek işi bitiriyor:
-    //
-    //   1. Müşteri aç            (şirket)
-    //   2. Reklam hesabını bağla (o müşterinin yönetilecek hesapları)
-    //   3. Ekibi yetkilendir     (kim hangi müşteriyi görecek)
-    //
-    // Önceki sıra Platform Bağlantıları'nı en üste koyuyordu ve akışı tersine
-    // çeviriyordu: bağlantı ekranı müşteri seçilmeden iş görmüyor ("Önce bir
-    // müşteri seç" diyor), yani ilk tıklanan yer çıkmaz sokaktı.
-    //
-    // Marka ve Denetim Kaydı `ready` DEĞİL: arka uçları hazır (branding,
-    // audit-logs uç noktaları çalışıyor) ama ekranları yazılmadı. Modül
-    // numaralarına bakılsaydı ikisi de açık görünüp 404 verirdi.
-    title: 'Çalışma Alanı',
-    items: [
-      { href: '/ayarlar/musteriler', label: 'Müşteriler', icon: 'clients', module: 1, ready: true },
-      {
-        href: '/ayarlar/baglantilar',
-        label: 'Platform Bağlantıları',
-        icon: 'plug',
-        module: 2,
-        ready: true,
-      },
-      { href: '/ayarlar/ekip', label: 'Ekip & Yetkiler', icon: 'team', module: 1, ready: true },
-      { href: '/ayarlar/marka', label: 'Marka', icon: 'brand', module: 1, ready: false },
-      { href: '/ayarlar/denetim', label: 'Denetim Kaydı', icon: 'audit', module: 1, ready: false },
-    ],
-  },
-];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
@@ -192,7 +54,24 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 pb-4">
-          {SECTIONS.map((section) => (
+          {/*
+            MENÜ YETKİYE GÖRE SÜZÜLÜYOR — bölüm boş kalırsa BAŞLIĞI DA
+            basılmıyor.
+
+            Buradaki liste bir süre filtresiz basılıyordu: "Çalışma Alanı"
+            kategorisi (Müşteriler, Platform Bağlantıları, Ekip & Yetkiler)
+            client_viewer rolüne de görünüyordu. Arka uç zaten reddediyordu
+            (`@RequirePermissions`), yani veri sızmıyordu — ama kullanıcıya
+            tıklayabildiği ve 403 alacağı bağlantılar gösteriliyordu ve
+            ajansın iç ekranlarının VARLIĞI müşteriye sızıyordu.
+
+            CLAUDE.md'nin ve roles.ts'in baştan beri söylediği kural bu:
+            backend guard'ları ile arayüz gizleme AYNI matristen beslenir.
+            Yetki anahtarı yazılmamış öğe eskisi gibi herkese görünüyor —
+            süzme opt-in, böylece bir anahtarı atlamak ajans çalışanından
+            çalışan bir ekranı sessizce gizlemiyor.
+          */}
+          {visibleSections(session.permissions).map((section) => (
             <NavSection key={section.title} title={section.title} items={section.items} />
           ))}
         </nav>

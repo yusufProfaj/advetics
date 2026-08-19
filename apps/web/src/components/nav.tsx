@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { Permission } from '@advetics/shared';
 import { usePathname } from 'next/navigation';
 
 /**
@@ -27,6 +28,20 @@ export interface NavEntry {
    * bakmak ikisini birlikte açardı ve Kurallar linki 404 verirdi.
    */
   ready?: boolean;
+  /**
+   * Bu öğeyi görmek için gereken yetki. Verilmezse öğe HERKESE görünür.
+   *
+   * OPT-IN, opt-out DEĞİL: yetki anahtarı yazılmamış bir öğe eskisi gibi
+   * görünmeye devam ediyor. Tersi — "yetki yoksa gizle" — menüdeki her
+   * satırın doğru anahtarla eşleşmesini gerektirirdi ve bir tanesini
+   * atlamak, ajans çalışanından çalışan bir ekranı SESSİZCE gizlerdi.
+   *
+   * Anahtar `packages/shared/src/auth/roles.ts` matrisinden geliyor —
+   * backend guard'larıyla AYNI kaynak. CLAUDE.md'nin kuralı bu: ikisinin
+   * ayrışması, kullanıcıya tıklayabildiği ama 403 alacağı bir bağlantı
+   * göstermek demek.
+   */
+  perm?: Permission;
 }
 
 // Modül 6 (Raporlar) hazır. Kurallar (5), Auto-Boost (7) ve Toplu Oluşturucu
