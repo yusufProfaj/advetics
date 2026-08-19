@@ -316,6 +316,20 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   panelde geçmiyor.
 - Bir müşteri = bir **şirket**; şirketin birden çok projesi/reklam hesabı
   olabilir. Panelde ve raporlarda reklam hesabı süzgeci **her zaman** bulunmalı.
+- **WORKSPACE BAŞINA PLATFORM BAĞLANTISI MÜMKÜN DEĞİL — denendi, çürüdü.**
+  Müşterilerin kendi Facebook hesabı yok; ajans onların Business Manager'ına
+  partner olarak ekleniyor. Yani her yetkilendirme AYNI Facebook kullanıcısı
+  oluyor ve `orgId + platform + externalUserId` tekil anahtarında tek satıra
+  çakışıyor. "Her workspace kendi hesabıyla bağlansın" modeli bu yüzden
+  fiziksel olarak kurulamıyor. Müşteri ayrımı bağlantıda değil hesap
+  ATAMASINDA yapılıyor.
+- **ATAMA İZLEMEYİ DE AÇIYOR VE GEÇMİŞİ KUYRUĞA ALIYOR.** "Ata → izlemeyi aç
+  → bekle" üçlüsü kullanıcının angarya dediği şeydi ve ikinci adımı atlamak
+  "atadım ama veri gelmiyor" hâlini üretiyordu. Bir workspace'in verisi
+  bağlanınca değil, HESAP ONA ATANINCA başlıyor: `syncEnabled` açılıyor,
+  `structure` ve 90 günlük `initial_backfill` kuyruğa giriyor. Sıra önemli —
+  metrikler kampanya satırlarına bağlanıyor. `ad-account-assign.spec.ts`
+  gerçek veritabanıyla kilitliyor.
 - **Platform bağlantısı AJANSA ait, müşteriye değil.** Meta/Google bir kez
   yetkilendiriliyor; erişilen bütün reklam hesapları VE sayfalar havuza düşüyor
   ve müşteriye panelden atanıyor. Müşteri başına yeniden yetkilendirme yok —

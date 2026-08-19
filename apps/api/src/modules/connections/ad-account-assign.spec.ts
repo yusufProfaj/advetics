@@ -41,6 +41,9 @@ const CTX: TenantContext = {
 
 const META = { ip: null, userAgent: null, requestId: 'test' };
 
+/** Atama sonrası kuyruğa giden işler. */
+let kuyruk: Array<Record<string, unknown>> = [];
+
 beforeAll(async () => {
   h = await createHarness();
 
@@ -62,9 +65,13 @@ beforeAll(async () => {
     audit,
     null as never,
     null as never,
-      // KUYRUK — yalnızca `ilkVeriCekimi` kullanıyor ve bu testlerde o yol
-    // koşmuyor. Çağrılırsa SESSİZCE geçmesin diye fırlatan bir yerine koyma.
-    { enqueue: () => { throw new Error('kuyruk bu testte beklenmiyor'); } } as never,
+    // KUYRUK KAYDEDİCİ — atama artık geçmiş veriyi kuyruğa alıyor ve
+    // sınanacak şey tam olarak o. Fırlatan bir yerine koyma, `catch` içinde
+    // yutulur ve testler "kuyruğa girdi" iddiasını hiç doğrulamazdı.
+    { enqueue: (payload: Record<string, unknown>) => {
+        kuyruk.push(payload);
+        return Promise.resolve({ enqueued: true });
+      } } as never,
   );
 });
 
@@ -74,6 +81,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   seenContexts = [];
+  kuyruk = [];
   await h.reset();
   await seedTenant(h);
   await h.q(
@@ -416,5 +424,59 @@ describe('sayfa ataması', () => {
     // Form GERÇEKTEN eski müşteride duruyor.
     const forms = await h.q<{ client_id: string }>('SELECT client_id FROM lead_forms');
     expect(forms[0]?.client_id).toBe(IDS.client);
+  });
+});
+
+describe('ATAMA TEK ADIM — izleme açılıyor ve geçmiş kuyruğa giriyor', () => {
+  /**
+   * NEDEN: müşterilerin kendi Facebook hesabı yok, ajans onların Business
+   * Manager'ına partner olarak ekleniyor. Yani bağlantı ajans seviyesinde
+   * kalmak zorunda ve bir workspace'in verisi HESAP ONA ATANINCA başlıyor.
+   *
+   * "Ata → izlemeyi aç → bekle" üçlüsü kullanıcının angarya dediği şeydi ve
+   * ikinci adımı atlamak "atadım ama veri gelmiyor" hâlini üretiyordu.
+   */
+  it('KRİTİK: atama İZLEMEYİ AÇIYOR — ayrı bir adım yok', async () => {
+    const sonuc = await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    expect(sonuc.syncEnabled).toBe(true);
+
+    const [satir] = await h.q<{ sync_enabled: boolean }>(
+      `SELECT sync_enabled FROM ad_accounts WHERE id = $1`,
+      [POOL_ACCOUNT],
+    );
+    expect(satir!.sync_enabled).toBe(true);
+  });
+
+  it('KRİTİK: geçmiş veri kuyruğa giriyor — önce structure, sonra initial_backfill', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    expect(kuyruk.map((i) => i.jobType)).toEqual(['structure', 'initial_backfill']);
+    expect(kuyruk.every((i) => i.adAccountId === POOL_ACCOUNT)).toBe(true);
+    expect(kuyruk.every((i) => i.clientId === IDS.client)).toBe(true);
+  });
+
+  it('KRİTİK: geçmiş 90 gün ve KAMPANYA seviyesinde', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    const b = kuyruk.find((i) => i.jobType === 'initial_backfill')!;
+    expect(b.entityLevel).toBe('campaign');
+    const gun =
+      (new Date(`${b.dateTo as string}T00:00:00Z`).getTime() -
+        new Date(`${b.dateFrom as string}T00:00:00Z`).getTime()) /
+      86_400_000;
+    expect(Math.round(gun)).toBe(90);
+  });
+
+  it('KRİTİK: ATAMA KALKARKEN kuyruğa iş GİRMİYOR', async () => {
+    // Havuza geri konan hesap senkronize edilmiyor; geçmiş çekmek boşa kota.
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    kuyruk = [];
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, null, META);
+    expect(kuyruk).toHaveLength(0);
+  });
+
+  it('DEĞİŞİKLİK YOKSA kuyruğa iş girmiyor — aynı atama iki kez', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    kuyruk = [];
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    expect(kuyruk).toHaveLength(0);
   });
 });

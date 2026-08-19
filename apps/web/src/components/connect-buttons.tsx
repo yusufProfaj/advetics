@@ -10,28 +10,19 @@ const LABELS: Record<Platform, string> = {
 };
 
 /**
- * HEDEF WORKSPACE ÜST BARDAN GELİYOR — burada ikinci bir seçici YOK.
+ * BAĞLANTI AJANSA KURULUYOR — hedef workspace SORULMUYOR.
  *
- * Aktif workspace zaten üst bardaki değiştiricide seçili ve panelin her
- * yerinde geçerli olan bağlam o. Buraya ikinci bir müşteri seçici koymak, bu
- * turda kaldırılan hatanın aynısını üretirdi: iki denetim, iki cevap.
+ * Bir süre burada workspace zorunluydu ("her workspace kendi Meta hesabıyla
+ * bağlansın"). O model ÇÜRÜDÜ: müşterilerin kendi Facebook hesabı yok, ajans
+ * onların Business Manager'ına partner olarak ekleniyor. Yani her
+ * yetkilendirme AYNI Facebook kullanıcısı oluyor ve
+ * `orgId + platform + externalUserId` tekil anahtarında tek satıra çakışıyor —
+ * ikinci workspace'i bağlama denemesi sahiplik korumasına takılıyordu.
  *
- * WORKSPACE SEÇİLİ DEĞİLKEN BAĞLANILAMIYOR. Eskiden bağlantı ajans havuzuna
- * kuruluyordu ve keşfedilen hesaplar tek tek müşterilere atanıyordu; artık
- * bağlantı doğrudan bir workspace'e kuruluyor ve hesaplar oraya yazılıyor.
- * Hedefi belirsiz bırakıp havuza düşürmek, kullanıcının hangi müşteriye
- * bağladığını bilmemesi demekti — bu ekranın geçmişteki tam olarak bu hatası
- * 157 hesabın yanlış yere düşmesiyle sonuçlanmıştı.
+ * Müşteri ayrımı bağlantıda değil, aşağıdaki hesap ATAMASINDA yapılıyor ve
+ * atama artık izlemeyi de açıp geçmiş veriyi kuyruğa alıyor.
  */
-export function ConnectButtons({
-  availability,
-  activeClientId,
-  activeClientName,
-}: {
-  availability: ProviderAvailability[];
-  activeClientId: string | null;
-  activeClientName: string | null;
-}) {
+export function ConnectButtons({ availability }: { availability: ProviderAvailability[] }) {
   const [pending, setPending] = useState<Platform | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,11 +34,7 @@ export function ConnectButtons({
         '/connections/authorize',
         {
           method: 'POST',
-          body: JSON.stringify({
-            platform,
-            redirectTo: '/ayarlar/baglantilar',
-            clientId: activeClientId,
-          }),
+          body: JSON.stringify({ platform, redirectTo: '/ayarlar/baglantilar' }),
         },
       );
       // Yönlendirmeyi tarayıcı yapmalı: fetch üzerinden gelen bir 302,
@@ -59,28 +46,8 @@ export function ConnectButtons({
     }
   }
 
-  const workspaceYok = activeClientId === null;
-
   return (
     <div className="mt-4 space-y-3">
-      {/* HEDEF YAZILI. "Bağlan" düğmesinin hangi workspace'e bağlayacağı
-          ekranda görünmeden tıklanmamalı — geri alması pahalı bir işlem. */}
-      {workspaceYok ? (
-        <div className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2.5">
-          <p className="text-sm font-semibold text-ink">Önce bir workspace seç</p>
-          <p className="mt-0.5 text-xs text-ink-muted">
-            Bağlantı ve keşfedilen bütün reklam hesapları seçtiğin workspace’e
-            yazılıyor. Üst bardaki değiştiriciden müşteriyi seç, sonra bağlan.
-          </p>
-        </div>
-      ) : (
-        <p className="text-xs text-ink-muted">
-          Bağlantı <span className="font-semibold text-ink">{activeClientName}</span>{' '}
-          workspace’ine kurulacak; keşfedilen reklam hesapları ve sayfalar
-          doğrudan ona yazılacak.
-        </p>
-      )}
-
       {error && (
         <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -96,7 +63,7 @@ export function ConnectButtons({
               <button
                 type="button"
                 onClick={() => void connect(a.platform)}
-                disabled={pending !== null || workspaceYok}
+                disabled={pending !== null}
                 className="mt-3 w-full rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {pending === a.platform ? 'Yönlendiriliyor…' : 'Bağlan'}

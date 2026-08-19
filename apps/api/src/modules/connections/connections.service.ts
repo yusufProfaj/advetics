@@ -708,6 +708,59 @@ export class ConnectionsService {
   }
 
   /**
+   * TEK BİR REKLAM HESABI İÇİN geçmiş veriyi kuyruğa alır.
+   *
+   * `ilkVeriCekimi`nin tek hesaplık eşi: orada bağlantı kurulurken bütün
+   * hesaplar, burada ATAMA anında yalnızca atanan hesap.
+   *
+   * NEDEN ATAMADA: müşterilerin kendi Facebook hesabı yok, dolayısıyla
+   * bağlantı ajans seviyesinde kalmak zorunda (aynı Meta kimliği tek satır).
+   * Bir workspace'in verisi bağlanınca değil, HESAP ONA ATANINCA başlıyor.
+   * Ata → izlemeyi aç → bekle üçlüsü, kullanıcının "angarya" dediği şeydi ve
+   * ikinci adımı atlamak "atadım ama veri gelmiyor" hâlini üretiyordu.
+   *
+   * TRANSACTION'IN DIŞINDA ÇAĞRILIYOR: kuyruk Redis'e gidiyor ve Prisma'nın
+   * etkileşimli transaction sınırı 5 saniye.
+   */
+  private async hesabaGecmisiKuyrukla(
+    clientId: string,
+    platform: Platform,
+    adAccountId: string,
+  ): Promise<void> {
+    try {
+      const bugun = new Date();
+      const baslangic = new Date(bugun.getTime() - 90 * 86_400_000);
+      const gun = (d: Date): string => d.toISOString().slice(0, 10);
+
+      // ÖNCE AĞAÇ, SONRA METRİK: metrikler kampanya satırlarına bağlanıyor.
+      await this.queue.enqueue({ clientId, platform, jobType: 'structure', adAccountId });
+      await this.queue.enqueue({
+        clientId,
+        platform,
+        jobType: 'initial_backfill',
+        adAccountId,
+        entityLevel: 'campaign',
+        dateFrom: gun(baslangic),
+        dateTo: gun(bugun),
+      });
+      this.logger.log(
+        `Reklam hesabı ${adAccountId} müşteriye atandı: izleme açıldı, 90 günlük geçmiş kuyruğa eklendi`,
+      );
+    } catch (err) {
+      /*
+       * ATAMAYI GERİ ALMIYORUZ ama sessiz de kalmıyoruz. Atama yazıldı ve
+       * doğru; eksik olan yalnızca geçmiş verinin tetiklenmesi ve o
+       * "Şimdi güncelle" ile tekrar denenebilir. Belirtisi "atadım, eski veri
+       * gelmedi" olur ve sebebi burada yazılı.
+       */
+      this.logger.error(
+        `Atama sonrası geçmiş veri kuyruğa alınamadı (hesap ${adAccountId}): ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
    * Bağlantı kurulur kurulmaz izlemeyi açar ve GEÇMİŞ VERİYİ kuyruğa alır.
    *
    * ÜÇ İŞ, BU SIRAYLA VE SIRA ÖNEMLİ:
@@ -1345,7 +1398,7 @@ export class ConnectionsService {
 
     const scoped: TenantContext = { ...ctx, activeClientId: null };
 
-    return this.prisma.withTenant(scoped, async (tx) => {
+    const sonuc = await this.prisma.withTenant(scoped, async (tx) => {
       const before = await tx.adAccount.findUnique({ where: { id: adAccountId } });
       if (!before) throw new NotFoundException('Reklam hesabı bulunamadı');
 
@@ -1355,6 +1408,7 @@ export class ConnectionsService {
           clientId: before.clientId,
           syncEnabled: before.syncEnabled,
           changed: false,
+          platform: before.platform as Platform,
         };
       }
 
@@ -1367,12 +1421,22 @@ export class ConnectionsService {
         );
       }
 
+      /*
+       * ATAMA İZLEMEYİ AÇIYOR — ayrı bir adım DEĞİL.
+       *
+       * Keşif hesapları `syncEnabled: false` yazıyor ve gerekçesi havuz
+       * modeliydi: bağlanan Meta kimliği onlarca müşterinin hesabını
+       * görüyordu, hepsini açmak istenmeyen hesapların kotasını yakardı.
+       * Ama ATAMA zaten bir seçim: kullanıcı bu hesabın bu müşteriye ait
+       * olduğunu söylüyor. İzlemeyi ayrıca istemek, "atadım ama veri
+       * gelmiyor" hâlinin doğrudan sebebiydi.
+       *
+       * Atama KALKINCA izleme kapanıyor (eski davranış): atanmamış hesabı
+       * senkronize etmek boşa kota.
+       */
       const after = await tx.adAccount.update({
         where: { id: adAccountId },
-        data: {
-          clientId,
-          ...(clientId === null ? { syncEnabled: false } : {}),
-        },
+        data: { clientId, syncEnabled: clientId !== null },
       });
 
       await this.audit.record(tx, ctx, {
@@ -1393,8 +1457,20 @@ export class ConnectionsService {
         clientId: after.clientId,
         syncEnabled: after.syncEnabled,
         changed: true,
+        platform: after.platform as Platform,
       };
     });
+
+    /*
+     * KUYRUK TRANSACTION'IN DIŞINDA. `withTenant` etkileşimli bir transaction
+     * açıyor ve Prisma'nın sınırı 5 saniye; Redis yavaşladığında transaction
+     * ölür ve atama bile kaydedilemezdi.
+     */
+    if (sonuc.changed && sonuc.clientId) {
+      await this.hesabaGecmisiKuyrukla(sonuc.clientId, sonuc.platform, adAccountId);
+    }
+
+    return sonuc;
   }
 
   /**
@@ -1446,12 +1522,18 @@ export class ConnectionsService {
               where: { socialProfileId, clientId: before.clientId },
             });
 
+      /*
+       * ATAMA İZLEMEYİ AÇIYOR — reklam hesabı atamasıyla aynı gerekçe.
+       *
+       * Sayfada bu ayrıca kritik: organik gönderi süpürmesi `syncEnabled`
+       * bakıyor ve Akıllı Boost'un bildirim havuzu ondan besleniyor. Kapalı
+       * kalan bir sayfa "hiç yeni gönderi gelmiyor" olarak görünüyor ve sebebi
+       * Instagram'da, izinlerde, webhook'ta aranıyor — oysa tek eksik bir
+       * anahtardı.
+       */
       const after = await tx.socialProfile.update({
         where: { id: socialProfileId },
-        data: {
-          clientId,
-          ...(clientId === null ? { syncEnabled: false } : {}),
-        },
+        data: { clientId, syncEnabled: clientId !== null },
       });
 
       await this.audit.record(tx, ctx, {
