@@ -36,15 +36,34 @@ export class MembersService {
   ) {}
 
   /**
-   * Ekip listesi.
+   * Ekip listesi — YALNIZCA AJANS İÇİ.
    *
    * RLS `users` tablosunda org yöneticisi olmayanlara yalnızca kendi satırını
    * gösterir — bu endpoint bir client_viewer tarafından çağrılırsa tek satır
    * döner, hata değil. Bu davranış kasıtlıdır.
+   *
+   * MÜŞTERİ HESAPLARI BU LİSTEDE YOK. Ekran adı "Ekip & Yetkiler" ve işi
+   * ajans personelini yönetmek; müşteri markası için açılan giriş hesapları
+   * oraya ait değil. Bir süre ikisi AYNI DÜZ LİSTEDE duruyordu: rol dışında
+   * hiçbir ayrım yoktu ve üstteki sayaç ikisini tek bir "N kullanıcı" olarak
+   * topluyordu — yani ajansın kaç çalışanı olduğu ekrandan okunamıyordu.
+   *
+   * SÜZGEÇ SORGUDA, ARAYÜZDE DEĞİL. Arayüzde süzmek, uç noktayı doğrudan
+   * çağıran birine listeyi açık bırakırdı; bu ekranın verisi kimin hangi
+   * müşteride hangi yetkiye sahip olduğu ve tam olarak saklanması gereken
+   * şey o.
+   *
+   * `some` KULLANILIYOR, `every` DEĞİL VE FARK ÖNEMLİ: bir kişi bir
+   * müşteride client_viewer, başka bir yerde manager olabilir (ajans
+   * çalışanının kendi test hesabı bunun tipik örneği). O kişi ajans
+   * personelidir ve listede KALMALI. `every` yazmak onu gizlerdi.
    */
   async listMembers(ctx: TenantContext) {
     return this.prisma.withTenant(ctx, (tx) =>
       tx.user.findMany({
+        where: {
+          memberships: { some: { role: { not: 'client_viewer' } } },
+        },
         orderBy: { fullName: 'asc' },
         select: {
           id: true,
