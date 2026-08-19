@@ -33,7 +33,16 @@ export default async function ClientChannelsPage({
   if (!data) notFound();
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    /*
+     * TAM GENİŞLİK — ortalanmış 896px'lik kolon DEĞİL.
+     *
+     * Kartlar `max-w-4xl` içinde ortalanıyordu ve geniş ekranda sağda büyük
+     * bir ölü alan kalıyordu: kart tam genişlikteydi ama içindeki hesap satırı
+     * yarıda bitiyor, "Kaldır" ekranın ortasında duruyordu. Bu ekran bir
+     * belge değil bir yönetim tablosu; hesaplar arttıkça yatay alan işe
+     * yarıyor.
+     */
+    <div className="w-full space-y-6">
       <div>
         <Link
           href="/ayarlar/musteriler"

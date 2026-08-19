@@ -78,7 +78,14 @@ function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }
       )}
 
       {grup.connected.length > 0 && (
-        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+        /*
+          BAĞLI HESAPLAR IZGARAYI DOLDURUYOR. İki kolonda kalınca tek hesaplı
+          bir kanalda satır ekranın yarısında bitiyor ve sağda ölü alan
+          kalıyordu — ekran görüntüsünde en göze batan şey buydu. Dört kolona
+          kadar açılıyor; hesap sayısı arttıkça yatay alan gerçekten işe
+          yarıyor ve kart dikey olarak uzamıyor.
+        */
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {grup.connected.map((i) => (
             <BagliKart key={i.id} clientId={clientId} kind={grup.kind} item={i} />
           ))}
@@ -89,7 +96,9 @@ function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }
         <div className="mt-3 rounded-lg border border-line bg-surface-sunken p-3">
           <p className="text-[11px] font-medium text-ink">Havuzdan seç</p>
           <p className="mt-0.5 text-[11px] text-ink-muted">{CHANNEL_HINTS[grup.kind]}</p>
-          <ul className="mt-2 space-y-1.5">
+          {/* SEÇİCİ LİSTESİ DE YAYILIYOR — havuzda onlarca hesap olabiliyor
+              ve tek kolonda okumak kaydırmayı zorunlu kılıyordu. */}
+          <ul className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
             {grup.available.map((i) => (
               <SecilebilirSatir key={i.id} clientId={clientId} kind={grup.kind} item={i} />
             ))}

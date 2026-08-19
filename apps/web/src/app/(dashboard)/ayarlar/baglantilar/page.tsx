@@ -43,7 +43,15 @@ export default async function ConnectionsPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    /*
+     * 4xl'DEN 7xl'E — TAM GENİŞLİĞE DEĞİL.
+     *
+     * Beş havuz kartı 896px'te iki kolona sıkışıyordu. Ama bu ekran kartların
+     * yanında uzun açıklama metinleri de taşıyor (platform onayları, izin
+     * listeleri) ve onlar tam genişlikte satır başına 200 karakteri geçip
+     * okunmaz hâle geliyor. 7xl ikisini birden tutuyor.
+     */
+    <div className="mx-auto max-w-7xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Platform Bağlantıları</h1>
         <p className="mt-1 text-sm text-ink-muted">
