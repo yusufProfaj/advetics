@@ -175,6 +175,17 @@ export class ClientsService {
           timezone: input.timezone,
           reportingCurrency: input.reportingCurrency,
           specialAdCategories: input.specialAdCategories,
+          // İLETİŞİM VE FATURA BİLGİSİ — hepsi opsiyonel, boş dizge şemada
+          // `null`'a çevriliyor ("girilmedi" ile "boş girildi" ayrımı).
+          contactName: input.contactName,
+          contactEmail: input.contactEmail,
+          contactPhone: input.contactPhone,
+          website: input.website,
+          address: input.address,
+          taxOffice: input.taxOffice,
+          taxNumber: input.taxNumber,
+          iban: input.iban,
+          notes: input.notes,
         },
       });
 

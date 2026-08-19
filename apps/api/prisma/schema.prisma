@@ -191,6 +191,26 @@ model Client {
   /// kampanyalarını riske atıyor.
   specialAdCategories String[] @default([]) @map("special_ad_categories")
 
+  /// İLETİŞİM VE FATURA BİLGİSİ — hepsi opsiyonel.
+  ///
+  /// `contact_email` rapor gönderiminin okuyacağı alan. Bilgi bir kez burada
+  /// duruyor; ön ayarda (`auto_boost_presets`) TUTULMUYOR çünkü bir müşterinin
+  /// iki ön ayarı olabiliyor ve adresin iki kopyası, birinin güncellenmemesi
+  /// demekti.
+  ///
+  /// Zorunlu DEĞİL: müşteri açmanın ilk amacı hesapları bağlamak. Zorunlu alan
+  /// eklemek, elinde fatura bilgisi olmayan birinin müşteriyi hiç açamaması
+  /// demekti.
+  contactName  String? @map("contact_name") @db.VarChar(120)
+  contactEmail String? @map("contact_email") @db.VarChar(255)
+  contactPhone String? @map("contact_phone") @db.VarChar(40)
+  website      String? @db.VarChar(255)
+  address      String? @db.VarChar(500)
+  taxOffice    String? @map("tax_office") @db.VarChar(120)
+  taxNumber    String? @map("tax_number") @db.VarChar(40)
+  iban         String? @db.VarChar(34)
+  notes        String? @db.VarChar(2000)
+
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
   archivedAt        DateTime?    @map("archived_at") @db.Timestamptz(6)

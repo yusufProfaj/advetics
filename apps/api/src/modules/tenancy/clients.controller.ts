@@ -5,15 +5,22 @@ import {
   type CreateClientInput,
   type TenantContext,
   type UpdateClientInput,
+  clientSetupSchema,
+  type ClientSetupInput,
+  type ClientSetupResult,
 } from '@advetics/shared';
 import { CurrentTenant, RequireOrgAdmin, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import type { AuthedRequest } from '../../common/types/request';
 import { ClientsService } from './clients.service';
+import { ClientSetupService } from './client-setup.service';
 
 @Controller('clients')
 export class ClientsController {
-  constructor(private readonly clients: ClientsService) {}
+  constructor(
+    private readonly clients: ClientsService,
+    private readonly setupService: ClientSetupService,
+  ) {}
 
   private meta(req: AuthedRequest) {
     return { ip: req.ip ?? null, userAgent: req.get('user-agent') ?? null, requestId: req.requestId };
@@ -40,6 +47,28 @@ export class ClientsController {
     @Req() req: AuthedRequest,
   ) {
     return this.clients.create(ctx, dto, this.meta(req));
+  }
+
+  /**
+   * KURULUM SİHİRBAZI — müşteri, hesap atamaları ve giriş hesabı tek çağrıda.
+   *
+   * `POST /clients` DURUYOR ve kaldırılmadı: yalnızca müşteri açmak isteyen
+   * (ya da API'yi kendi akışında kullanan) biri için hâlâ doğru uç. Sihirbaz
+   * onun üzerine bir ADIM, yerine geçen bir şey değil.
+   *
+   * Aynı yetkiler: `client.write` + org yöneticisi. Sihirbaz hesap ataması ve
+   * kullanıcı oluşturma da yapıyor, yani en geniş yetkiyi gerektiren adımın
+   * altında kalmamalı.
+   */
+  @Post('setup')
+  @RequireOrgAdmin()
+  @RequirePermissions('client.write')
+  setup(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(clientSetupSchema)) dto: ClientSetupInput,
+    @Req() req: AuthedRequest,
+  ): Promise<ClientSetupResult> {
+    return this.setupService.setup(ctx, dto, this.meta(req));
   }
 
   @Patch(':id')
