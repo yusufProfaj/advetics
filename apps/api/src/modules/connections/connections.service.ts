@@ -911,6 +911,57 @@ export class ConnectionsService {
       }
     }
 
+    /*
+     * WORKSPACE BAĞLANTISI SAHİPSİZ SATIRLARI SAHİPLENİYOR.
+     *
+     * Yukarıdaki upsert'ler `clientId`'yi BİLEREK güncellemiyor ve bu havuz
+     * modelinde doğruydu: "Hesapları yenile" yapılmış müşteri atamalarını
+     * sessizce havuza geri döndürmemeli.
+     *
+     * Ama tekil anahtar BAĞLANTIYA DEĞİL ORGANİZASYONA bağlı
+     * (`platform + externalId + orgId`), yani havuz döneminde keşfedilmiş bir
+     * hesap, müşterinin kendi Meta hesabıyla yeniden bağlanınca İKİNCİ SATIR
+     * AÇMIYOR — var olan satır güncelleniyor ve `connectionId` yeni bağlantıya
+     * geçiyor. `clientId` ise NULL kalıyordu.
+     *
+     * Sonucu sessizdi: satırın bağlantısı yeni workspace'i gösteriyor,
+     * ataması ise hâlâ boş. `ilkVeriCekimi` hesapları
+     * `{ connectionId, clientId }` ile arıyor, eşleşme olmuyor, izleme
+     * açılmıyor ve geçmiş veri kuyruğa girmiyor. Kullanıcı "bağlandı" görüyor
+     * ve hiçbir veri gelmiyor — bu üründeki en pahalı hata tipi.
+     *
+     * YALNIZCA SAHİPSİZ (`clientId IS NULL`) SATIRLAR SAHİPLENİLİYOR. Başka
+     * bir müşteriye ATANMIŞ bir hesabı buradan taşımak, iki müşterinin Meta
+     * hesabının aynı reklam hesabını görmesi gibi gerçek bir belirsizliği
+     * sessizce çözmek olurdu; o durum insan kararı ister ve aşağıda log'a
+     * yazılıyor.
+     */
+    if (conn.clientId) {
+      const [hesap, profil] = await Promise.all([
+        this.admin.adAccount.updateMany({
+          where: { connectionId, clientId: null },
+          data: { clientId: conn.clientId },
+        }),
+        this.admin.socialProfile.updateMany({
+          where: { connectionId, clientId: null },
+          data: { clientId: conn.clientId },
+        }),
+      ]);
+
+      const cakisan = await this.admin.adAccount.count({
+        where: { connectionId, clientId: { not: conn.clientId } },
+      });
+
+      this.logger.log(
+        `Bağlantı ${connectionId}: ${hesap.count} reklam hesabı ve ${profil.count} sayfa ` +
+          `bu workspace'e sahiplendirildi` +
+          (cakisan > 0
+            ? `. DİKKAT: ${cakisan} hesap BAŞKA bir müşteriye atanmış ve taşınmadı — ` +
+              'aynı reklam hesabı iki müşterinin Meta hesabında görünüyor, elle karar verilmeli'
+            : ''),
+      );
+    }
+
     return { adAccounts: accounts.length, socialProfiles: socialCount };
   }
 

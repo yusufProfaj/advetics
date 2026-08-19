@@ -141,6 +141,19 @@ buna göre veriliyor:
   kendi dalı olmazsa son dala düşüyor ve "izin yok", "kota doldu", "hesap
   bulunamadı", "geçersiz alan" hepsi panelde **"Beklenmeyen bir hata oluştu"**
   oluyor. Bu cümle bu projede bir turu tamamen kaybettirdi.
+- **TEKİL ANAHTARIN KAPSAMI, SAHİPLİĞİ GÜNCELLEYEN KODUN KAPSAMIYLA AYNI
+  OLMAK ZORUNDA.** `ad_accounts` tekil anahtarı `(platform, external_id,
+  org_id)` — BAĞLANTIYA bağlı değil. Yani aynı reklam hesabı ikinci bir
+  bağlantıyla keşfedilince İKİNCİ SATIR AÇMIYOR, var olan satır güncelleniyor
+  ve `connection_id` yeni bağlantıya geçiyor. Ama upsert `client_id`'yi
+  bilerek güncellemiyordu (havuz modelinde doğruydu: "Hesapları yenile"
+  atamaları sıfırlamamalı). Sonuç yarım bir satırdı: BAĞLANTISI yeni
+  workspace'i, ATAMASI hâlâ boşu gösteriyor. Bu satır `{ connectionId,
+  clientId }` ile arayan hiçbir sorguya düşmüyor — izleme açılmıyor, geçmiş
+  veri gelmiyor, ekran "bağlandı" diyor. Sahiplenme YALNIZCA `client_id IS
+  NULL` satırlarda yapılıyor; başka müşteriye atanmış bir hesabı taşımak,
+  gerçek bir belirsizliği sessizce çözmek olurdu. `hesap-sahiplenme.spec.ts`
+  bunu kilitliyor.
 - **KISMİ TEKİL İNDEKS + SON DURUMU OLMAYAN DURUM MAKİNESİ = KALICI KİLİT.**
   `boosts_active_post_uniq` `'active'` durumunu kapsıyordu ama hiçbir kod yolu
   bir boost'u o durumdan ÇIKARMIYORDU — durum listesinde "bitti" karşılığı
