@@ -170,6 +170,15 @@ async function main(): Promise<void> {
    * ÜRETİMDE YAŞANDI ve script YARIDA kaldı: metrikler silinmiş, müşteriler
    * duruyordu. Taslak ağacını önce silmek engeli kaldırıyor; `draft_campaigns`
    * silinince `draft_ad_groups` ve `draft_ads` zincirleme gidiyor.
+   *
+   * BU ADIM KOŞULSUZ VE ÖYLE KALMALI — "Postgres sırayı zaten hallediyor"
+   * diye kaldırılabilir görünüyor, halletmiyor. Cascade tetikleyicileri
+   * kısıtın oluşturma sırasına göre değil TETİKLEYİCİ ADINA göre alfabetik
+   * koşuyor (`RI_ConstraintTrigger_c_<oid>`), yani bir STRING karşılaştırması:
+   * basamak sayısı sınırında ters dönüyor (`..._99999` > `..._100001`).
+   * Üstelik `pg_restore` ya da `migrate reset` ile kurulan bir veritabanında
+   * kısıtlar bambaşka sırada yaratılabiliyor. Sıra bizim kontrolümüzde değil
+   * ve İKİ YÖNE DE güvenilemez; engeli elle kaldırmak tek güvenilir yol.
    */
   const draftsDeleted = await prisma.draftCampaign.deleteMany({});
   console.log(`  ${draftsDeleted.count} taslak kampanya silindi (RESTRICT engeli kaldırıldı)`);
