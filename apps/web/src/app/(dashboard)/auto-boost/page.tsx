@@ -88,23 +88,23 @@ export default async function AutoBoostPage({
       </header>
 
 
-      {session.availableClients.length > 1 && (
-        <div className="flex flex-wrap gap-1.5">
-          {session.availableClients.map((c) => (
-            <Link
-              key={c.id}
-              href={`/auto-boost?musteri=${c.id}`}
-              className={`rounded-lg px-2.5 py-1 text-xs transition ${
-                c.id === clientId
-                  ? 'bg-surface-sunken font-medium text-ink'
-                  : 'text-ink-muted hover:bg-surface-sunken'
-              }`}
-            >
-              {c.name}
-            </Link>
-          ))}
-        </div>
-      )}
+      {/*
+        SAYFA İÇİ MÜŞTERİ ŞERİDİ KALDIRILDI — aktif workspace TEK BİR yerden
+        seçiliyor: üst bardaki değiştirici.
+
+        Burada bütün müşterileri listeleyen ikinci bir şerit vardı ve üst
+        bardaki değiştiriciyle ÇAKIŞIYORDU. Şeritten bir müşteriye geçmek
+        adrese `?musteri=` yazıyor, sayfalar ise aktif müşteriyi
+        `params.musteri ?? session.activeClientId` sırasıyla çözüyor — yani
+        URL cookie'yi eziyordu. Sonuç: üst bar "Ege Birlik Yapı" yazarken
+        gövde Fenbay'ın verisini gösteriyordu.
+
+        Veri sızıntısı DEĞİLDİ (RLS her iki müşteriye de erişimi olan ajans
+        yöneticisi için doğru davranıyor, `workspace-isolation-rls.spec.ts`
+        bunu kanıtlıyor) ama ekranda yazan workspace ile gövdedeki veri
+        birbirini tutmuyordu — sızıntıdan ayırt edilemeyecek kadar kötü bir
+        hâl. Tek denetim, tek cevap.
+      */}
 
       {/*
         ELLE BOOST BU SAYFADA, ayrı bir sayfada değil — kural yolu ve elle yol

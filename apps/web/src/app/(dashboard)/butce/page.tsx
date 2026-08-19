@@ -94,23 +94,6 @@ export default async function BudgetPage({
         </div>
       </header>
 
-      {session.availableClients.length > 1 && (
-        <div className="flex flex-wrap gap-1.5">
-          {session.availableClients.map((c) => (
-            <Link
-              key={c.id}
-              href={linkWith({ musteri: c.id })}
-              className={`rounded-lg px-2.5 py-1 text-xs transition ${
-                c.id === clientId
-                  ? 'bg-surface-sunken font-medium text-ink'
-                  : 'text-ink-muted hover:bg-surface-sunken'
-              }`}
-            >
-              {c.name}
-            </Link>
-          ))}
-        </div>
-      )}
 
       {data === null ? (
         <Notice tone="error">

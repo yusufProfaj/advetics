@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 
 interface AvailableClient {
@@ -33,6 +33,8 @@ export function ClientSwitcher({
   isOrgAdmin: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -55,6 +57,32 @@ export function ClientSwitcher({
         method: 'POST',
         body: JSON.stringify({ clientId }),
       });
+
+      /*
+       * URL'DEKİ `?musteri=` TEMİZLENİYOR — ve bu düzeltmenin ta kendisi.
+       *
+       * Sayfalar aktif müşteriyi `params.musteri ?? session.activeClientId`
+       * sırasıyla çözüyor, yani URL parametresi COOKIE'Yİ EZİYOR. Bu şerit
+       * temizlenmediğinde şu oluyordu: kullanıcı sayfa içi bir bağlantıyla
+       * `?musteri=Fenbay` adresine gidiyor, sonra üst bardan "Ege Birlik
+       * Yapı"yı seçiyor; cookie değişiyor, ÜST BAR "Ege Birlik Yapı" yazıyor
+       * ama SAYFA GÖVDESİ hâlâ Fenbay'ın verisini gösteriyor.
+       *
+       * Bu bir veri sızıntısı DEĞİL: gösterilen veri gerçekten URL'deki
+       * müşteriye ait ve RLS onu doğruluyor. Ama ekranda yazan aktif
+       * workspace ile gövdedeki veri BİRBİRİNİ TUTMUYOR — ve bu, sızıntıdan
+       * ayırt edilemeyecek kadar kötü bir hâl. Panelde "hangi müşterinin
+       * verisine bakıyorum" sorusunun tek bir cevabı olmak zorunda.
+       *
+       * `replace`, `push` DEĞİL: geri düğmesi kullanıcıyı az önce
+       * terk ettiği müşteriye geri atmamalı.
+       */
+      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      if (params.has('musteri')) {
+        params.delete('musteri');
+        const qs = params.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname);
+      }
       router.refresh();
     } finally {
       setPending(false);
