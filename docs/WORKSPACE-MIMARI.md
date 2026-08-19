@@ -121,12 +121,19 @@ doğrulandı: süzgeci kaldırınca ve her şeyi gizleyince).
 | Bilgi Bankası | `/kutuphane/bilgi-bankasi` — aynı ad |
 | Görsel Arşiv | `/kutuphane/gorseller` — "Görsel Arşivi" |
 
-Yani bu maddede yapılacak iş **yeniden gruplama**: bugünkü 7 bölüm
-(Merkez / Oluştur / Yönet / İyileştir / Raporla / Kütüphane / Çalışma Alanı)
-istenen 2 bölüme (Kullanıcı / Çalışma Alanı) indirilecek. Bu bir karar, hata
-değil — ve bugünkü bölümleme "yukarıdan aşağı iş akışı" gerekçesiyle
-tasarlanmış. **Sadeleştirme istiyorsan bunu ayrıca söylemen gerekiyor**, çünkü
-mevcut gruplama bilinçli.
+### Sadeleştirme — **uygulandı**
+
+Yedi bölüm ve 23 öğe → **iki bölüm ve 15 öğe**.
+
+- **Ekranı olmayan 7 öğe çıkarıldı.** Soluk ve tıklanamaz basılıyorlardı;
+  menünün üçte biri ölü satırdı. "Bilgi Bankası" iki kez geçiyordu — biri
+  çalışan ekran, diğeri ekranı olmayan bir kalıntı.
+- Ayrım artık iş akışına göre değil **yetkiye** göre: `Workspace` (bir
+  müşterinin içinde yapılan işler) ve `Çalışma Alanı` (ajans yönetimi).
+- İstenen altı ekran başta. **Kalan altısı da çalışan ekranlar** (Reklamlar,
+  Potansiyel Müşteriler, Aylık Bütçe, Kurallar, Formlar, Kreatifler) ve bu
+  yüzden menüde tutuldu — çalışan bir özelliği menüden düşürmek onu sessizce
+  yok etmek olurdu. İstenmiyorlarsa tek tek çıkarılabilir.
 
 ---
 
@@ -183,15 +190,24 @@ bunu varsaymış olabilir:
 hesabıyla yetkilendirilecek. Ajans tek bir Facebook hesabıyla bütün
 müşterileri bağlıyorsa istenen akış ikinci bağlantıda birincisini koparır.
 
-**Bu bir ürün kararı ve senin vermen gerekiyor.** Hangi model geçerli?
+### Karar: her workspace kendi Meta hesabıyla — **uygulandı**
 
-### Yapılacaklar (bu kararın ardından)
+Alt yapı zaten hazırmış: `state.clientId` bağlantıya, oradan keşfedilen bütün
+hesap ve sayfalara akıyordu. Eksik olan tek şey `startOAuth`'un her zaman
+`null` yazmasıydı.
 
-1. OAuth `state` parametresine `clientId` taşınması (bugün taşınmıyor).
-2. Bağlantı ekranının aktif workspace'e bağlanması: "Meta Bağla" o workspace
-   için bağlar, keşfedilen hesaplar `client_id` **dolu** yazılır.
-3. Bağlantı kurulunca `initial_backfill` işinin tetiklenmesi — iş tipi zaten
-   var, tetikleyicisi bu akışa bağlanacak.
+- Hedef workspace **üst bardaki değiştiriciden** geliyor; bağlantı ekranında
+  ikinci bir seçici yok (bu turda kaldırılan hatanın aynısını üretirdi).
+- Workspace seçili değilken bağlanılamıyor ve sebebi ekranda yazılı.
+- **Sahiplik değişimi reddediliyor.** Aynı Meta hesabını ikinci bir
+  workspace'e bağlamak, upsert'ün `update` dalı `client_id`'ye dokunmadığı
+  için sessizce ilk workspace'te bırakırdı ve keşfedilen hesaplar oraya
+  düşerdi. Artık hata mesajı hesabın nerede olduğunu ve ne yapılacağını
+  söylüyor. `connection-ownership.spec.ts` kilitliyor.
+- Havuz yolu API'de duruyor — kaldırmak üretimdeki 157 hesabı kopartırdı.
+
+**Kalan:** bağlantı kurulunca `initial_backfill` işinin tetiklenmesi. İş tipi
+var, tetikleyicisi bu akışa bağlanmadı.
 
 ---
 
@@ -264,9 +280,45 @@ Sıra:
 | 1 | İzolasyonun kanıtı (10 RLS testi) | **yapıldı** |
 | 1 | Müşteri değiştirici çakışması | **yapıldı** |
 | 2 | Menü RBAC süzgeci + testler | **yapıldı** |
-| 2 | Menünün 2 bölüme sadeleştirilmesi | karar bekliyor |
-| 3 | Ekip listesinden müşteri hesaplarının çıkarılması | kaldı — küçük |
+| 2 | Menünün 2 bölüme sadeleştirilmesi | **yapıldı** |
+| 3 | Ekip listesinden müşteri hesaplarının çıkarılması | **yapıldı** |
 | 3 | `mustChangePassword` uygulanmıyor | **açık, istek dışı** |
-| 4 | Workspace bazlı bağlantı | karar bekliyor (aynı mı farklı mı platform kimliği) |
+| 4 | Workspace bazlı bağlantı | **yapıldı** |
+| 4 | `initial_backfill` tetikleyicisi | kaldı — küçük |
 | 5 | 14 gün / bu ay / geçen ay / özel aralık | kaldı — küçük |
 | 6 | İletişim e-postası alanı, PDF, e-posta | kaldı — büyük, iki karar + bir sır gerekiyor |
+
+---
+
+## 7. Haritanın bulduğu, istek listesinde OLMAYAN iki açık
+
+Bunlara dokunulmadı; bilinmeleri gerekiyor.
+
+### Mobilde panelde GEZİNME YOK
+
+Kenar çubuğu `hidden ... lg:flex` — 1024px altında tamamen kayboluyor ve
+yerine hiçbir şey konmamış: hamburger, çekmece ya da alt gezinme yok. Depo
+genelinde `lg:hidden` / `max-lg:` sınıfı **hiç geçmiyor**, yani "yalnızca
+mobilde görünen" tek bir öğe bile yazılmamış.
+
+Daha kötüsü: `LogoutButton` ve kullanıcı bloğu da kenar çubuğunun içinde. Yani
+mobilde kullanıcı sayfa değiştiremediği gibi **çıkış da yapamıyor**.
+
+### `mustChangePassword` bir koruma DEĞİL
+
+Alan iki yerde yazılıyor (`createMember`, `seed-portfolio`) ve **hiçbir yerde
+okunmuyor** — giriş, oturum kurulumu, `SessionResponse` tipi ve panelin hiçbir
+yeri. Yöneticinin belirlediği geçici parola, kullanıcı isterse kalıcı.
+
+Zorlamayı yazacak kişi için iki tuzak:
+
+1. Alan hiçbir yerde **temizlenmiyor** de. `changePassword` ve
+   `confirmPasswordReset` yalnızca `password_hash` güncelliyor — sıfırlamayı
+   iki yola da eklemezsen zorlama bir **kilit döngüsü** olur.
+2. Panelde **parola değiştirme ekranı yok.** `POST /auth/password/change` ucu
+   var ama `apps/web` içinde onu çağıran tek satır bile yok. Zorlamadan önce
+   o ekran yazılmalı, yoksa kullanıcı zorlanır ve yapabileceği bir şey olmaz.
+
+`schema.prisma`'daki yorum "kullanıcı her ekranda uyarı görüyor" diyordu;
+yanlıştı ve düzeltildi — olmayan bir korumanın var sanılması, hiç olmamasından
+kötü.
