@@ -44,7 +44,16 @@ export default async function WorkspaceTeamPage({
   if (!client) notFound();
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    /*
+     * 5xl'DEN 7xl'E. Üye kartları dikey yığındaydı ve geniş ekranda her kart
+     * satırın tamamını kaplayıp sağda ölü alan bırakıyordu — kanallar
+     * ekranındaki şikâyetin aynısı. Kartlar artık ızgarada; genişlik onlara
+     * yarıyor.
+     *
+     * TAM GENİŞLİK DEĞİL: bu ekranda yetki açıklamaları ve rol metinleri var
+     * ve tam genişlikte satır başına çok fazla karakter düşüyor.
+     */
+    <div className="mx-auto max-w-7xl space-y-6">
       <div>
         <Link
           href="/ayarlar/musteriler"

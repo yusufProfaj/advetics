@@ -281,7 +281,14 @@ export function TeamManager({
       {/* ---------------------------------------------------------------- */}
       {/* Kullanıcılar                                                     */}
       {/* ---------------------------------------------------------------- */}
-      <ul className="space-y-3">
+      {/*
+        ÜYE KARTLARI IZGARADA. Dikey yığında her kart satırın tamamını
+        kaplıyordu ve içindeki bilgi (ad, e-posta, son giriş) satırın
+        solunda bitip sağda ölü alan bırakıyordu. İki kolonda kart genişliği
+        içeriğe yaklaşıyor; xl'de üç kolon, çünkü altındaki yetki listesi
+        daha dar bir kartta kırılıyor.
+      */}
+      <ul className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3 items-start">
         {members.map((member) => {
           const isSelf = member.id === currentUserId;
 
