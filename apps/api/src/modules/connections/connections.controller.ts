@@ -198,12 +198,9 @@ export class ConnectionsController {
     @Req() req: AuthedRequest,
   ) {
     const platform = this.assertPlatform(platformParam);
-    return this.connections.startOAuth(
-      ctx,
-      platform,
-      { forceReconsent: true, redirectTo: '/ayarlar/baglantilar' },
-      this.meta(req),
-    );
+    // `id` SERVİSE GEÇİYOR: bağlantının hangi workspace'e ait olduğu orada
+    // yazılı ve yeniden yetkilendirme sahipliği KORUMAK zorunda.
+    return this.connections.reauthorize(ctx, id, platform, this.meta(req));
   }
 
   @Post(':id/verify')

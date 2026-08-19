@@ -320,6 +320,58 @@ export class ConnectionsService {
     };
   }
 
+  /**
+   * YENİDEN YETKİLENDİRME — sahipliği KORUYARAK.
+   *
+   * BU METOT OLMADAN WORKSPACE BAZLI BAĞLANTI TEK KULLANIMLIKTI. Uç nokta
+   * `startOAuth`'u `clientId` vermeden çağırıyordu, yani state satırına `null`
+   * yazılıyordu; geri dönüşte `persistConnection` "havuza bağlanıyor" diye
+   * okuyor ve sahiplik koruması bunu REDDEDİYORDU. Sonuç: bir workspace'e
+   * bağlanan hesap, token'ı süresi dolup `needs_reauth` olduğu anda KALICI
+   * OLARAK yenilenemez hâle geliyordu — ve kullanıcıya gösterilen mesaj
+   * "önce mevcut bağlantıyı kaldır" diyordu, yani tek çıkış yolu bağlantıyı
+   * silmekti.
+   *
+   * Meta token'larının süresi rutin olarak doluyor; bu bir ihtimal değil,
+   * takvimli bir kesintiydi.
+   *
+   * `id` PARAMETRESİ ARTIK KULLANILIYOR. Eskiden imzada duruyor ama gövdede
+   * hiç okunmuyordu — bağlantının hangi workspace'e ait olduğu tam da orada
+   * yazılı olduğu için o parametre bu metodun var oluş sebebi.
+   */
+  async reauthorize(
+    ctx: TenantContext,
+    connectionId: string,
+    platform: Platform,
+    meta: Meta,
+  ): Promise<{ authorizeUrl: string }> {
+    const conn = await this.prisma.withTenant({ ...ctx, activeClientId: null }, (tx) =>
+      tx.platformConnection.findFirst({
+        where: { id: connectionId },
+        select: { clientId: true, platform: true },
+      }),
+    );
+    if (!conn) throw new NotFoundException('Bağlantı bulunamadı');
+
+    /*
+     * PLATFORM KAYITTAN DOĞRULANIYOR. Adres çubuğundan gelen `?platform=`
+     * ile kaydın platformu ayrışırsa, Meta bağlantısı için Google izin
+     * ekranına gidilir ve dönüşte BAŞKA bir bağlantı tazelenirdi.
+     */
+    if (conn.platform !== platform) {
+      throw new BadRequestException('Bağlantının platformu eşleşmiyor.');
+    }
+
+    return this.startOAuth(
+      ctx,
+      platform,
+      // SAHİPLİK OLDUĞU GİBİ TAŞINIYOR: havuz bağlantısı havuz kalıyor,
+      // workspace bağlantısı kendi workspace'inde kalıyor.
+      { forceReconsent: true, redirectTo: '/ayarlar/baglantilar', clientId: conn.clientId ?? undefined },
+      meta,
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // OAuth callback
   // ---------------------------------------------------------------------------
