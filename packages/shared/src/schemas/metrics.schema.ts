@@ -21,6 +21,28 @@ export const backfillSchema = z.object({
   apply: z.boolean().default(false),
 });
 export type BackfillInput = z.infer<typeof backfillSchema>;
+
+/**
+ * "Şimdi güncelle" gövdesi — EKRANDA SEÇİLİ ARALIK.
+ *
+ * Düğme bir süre yalnızca BUGÜNÜN verisini tazeliyordu. Kullanıcı "Son 30
+ * gün" seçip düğmeye basıyor, hiçbir şey değişmiyordu — çünkü tazelenen gün
+ * seçili aralığın içinde bile olsa geri kalan 29 gün hiç dokunulmuyordu.
+ * Adı ile yaptığı iş ayrışıyordu.
+ *
+ * Alanlar OPSİYONEL: gövdesiz çağrı eski davranışı (bugün) koruyor.
+ */
+export const refreshRangeSchema = z.object({
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD bekleniyor')
+    .optional(),
+  dateTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD bekleniyor')
+    .optional(),
+});
+export type RefreshRangeInput = z.infer<typeof refreshRangeSchema>;
 import { PLATFORMS } from '../constants/platforms';
 
 /**

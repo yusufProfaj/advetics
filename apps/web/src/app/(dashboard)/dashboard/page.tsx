@@ -11,7 +11,6 @@ import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { RANGE_PRESETS, resolveRange } from '@/lib/date-range';
 import { RefreshButton } from '@/components/refresh-button';
-import { BackfillButton } from '@/components/backfill-button';
 import {
   changePercent,
   changePercentMicros,
@@ -105,8 +104,16 @@ export default async function DashboardPage({
         <div className="flex flex-wrap items-center gap-2">
           <PlatformTabs current={platform} range={range.key} level={level} />
           <RangeTabs current={range.key} level={level} platform={platform} />
-          <RefreshButton />
-          <BackfillButton />
+          {/*
+            "GEÇMİŞ VERİYİ ÇEK" DÜĞMESİ KALDIRILDI — işi iki yere dağıldı ve
+            ikisi de kendiliğinden çalışıyor:
+              · Hesap bir müşteriye ATANDIĞINDA 90 günlük geçmiş kendiliğinden
+                kuyruğa giriyor.
+              · "Şimdi güncelle" artık EKRANDA SEÇİLİ ARALIĞI yeniliyor,
+                yalnızca bugünü değil.
+            Üçüncü bir düğme, kullanıcıya hangisine basacağını sorduruyordu.
+          */}
+          <RefreshButton dateFrom={range.from} dateTo={range.to} rangeLabel={range.label} />
         </div>
       </header>
 

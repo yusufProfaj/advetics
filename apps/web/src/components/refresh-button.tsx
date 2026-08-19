@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 
@@ -24,8 +24,17 @@ interface RefreshResult {
  * "Güncellendi" deyip eski veriyi göstermek, kullanıcının taze sandığı bayat
  * veriye bakması demek.
  */
-export function RefreshButton() {
+export function RefreshButton({
+  dateFrom,
+  dateTo,
+  rangeLabel,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  rangeLabel: string;
+}) {
   const router = useRouter();
+  useSearchParams();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +44,15 @@ export function RefreshButton() {
     setError(null);
     setMessage(null);
     try {
-      const res = await apiFetch<RefreshResult>('/sync/refresh', { method: 'POST' });
+      /*
+       * EKRANDA SEÇİLİ ARALIK GÖNDERİLİYOR. Düğme bir süre gövdesiz
+       * çağırıyordu ve sunucu yalnızca BUGÜNÜ tazeliyordu: kullanıcı
+       * "Son 30 gün" seçip basıyor, hiçbir şey değişmiyordu.
+       */
+      const res = await apiFetch<RefreshResult>('/sync/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ dateFrom, dateTo }),
+      });
 
       // Atlanan iş SESSİZ KALMAMALI. Düğmeye ikinci kez basan biri "bir şey
       // olmadı" diye düşünüyor; oysa iş zaten kuyrukta ve tekrar eklemek
@@ -44,7 +61,9 @@ export function RefreshButton() {
       // kapsıyordu ve organik gönderilere hiç dokunmuyordu; kullanıcı sayfayı
       // izlemeye alıp bu düğmeye basıyor, hiçbir gönderi gelmiyordu. Sayfa
       // sayısını yazmak, kapsamın ne olduğunu düğmenin kendisine söyletiyor.
-      const parts = [`${res.accountCount} hesap`];
+      // HANGİ ARALIĞIN yenilendiği yazılı: kullanıcı düğmeye bastığında
+      // neyin tazeleneceğini bilmeli, sonradan tahmin etmemeli.
+      const parts = [rangeLabel, `${res.accountCount} hesap`];
       if (res.profileCount > 0) parts.push(`${res.profileCount} sayfa`);
       parts.push(`${res.queued} iş kuyruğa alındı`);
       if (res.skipped > 0) parts.push(`${res.skipped} iş zaten kuyruktaydı`);

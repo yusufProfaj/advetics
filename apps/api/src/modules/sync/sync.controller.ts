@@ -7,7 +7,13 @@ import {
   HttpStatus,
   Post,
 } from '@nestjs/common';
-import { backfillSchema, type BackfillInput, type TenantContext } from '@advetics/shared';
+import {
+  backfillSchema,
+  refreshRangeSchema,
+  type BackfillInput,
+  type RefreshRangeInput,
+  type TenantContext,
+} from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -75,7 +81,10 @@ export class SyncController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('sync.trigger')
-  async refresh(@CurrentTenant() ctx: TenantContext) {
+  async refresh(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(refreshRangeSchema)) dto: RefreshRangeInput,
+  ) {
     if (!ctx.activeClientId) {
       // Müşteri seçilmeden tetiklemek, TÜM portföyün kotasını tek tıkla
       // harcamak demekti. Seçim zorunlu.
@@ -99,17 +108,49 @@ export class SyncController {
     // Yapı ÖNCE ekleniyor. `enqueue` öncelik parametresi almıyor; sıra
     // kuyruğa ekleme sırasıyla belirleniyor ve metrik işinin yapıdan sonra
     // gelmesi bu yüzden burada garanti ediliyor.
+    /*
+     * EKRANDA SEÇİLİ ARALIK YENİLENİYOR — yalnızca bugün DEĞİL.
+     *
+     * Düğme bir süre sabit `isoToday()` gönderiyordu. Kullanıcı "Son 30 gün"
+     * seçip düğmeye basıyor, hiçbir şey değişmiyordu: tazelenen tek gün
+     * aralığın içinde olsa bile geri kalan 29 güne hiç dokunulmuyordu.
+     *
+     * İKİ FARKLI İŞ, ÇÜNKÜ MALİYETLERİ FARKLI:
+     *   · BUGÜN → `insights_realtime`, yalnızca hesap ve kampanya seviyesi.
+     *     Gün içi ad seviyesi kotayı 20-50× artırıyor ve gün içinde ad bazlı
+     *     karar istatistiksel olarak anlamsız.
+     *   · GEÇMİŞ GÜNLER → `insights_backfill`, kampanya/reklam seti/reklam.
+     *     Gün kapandı, veri oturdu; atıf penceresi de burada düzeliyor.
+     *
+     * Aralık verilmezse eski davranış: yalnızca bugün.
+     */
+    const bugun = isoToday();
+    const dateFrom = dto.dateFrom ?? bugun;
+    const dateTo = dto.dateTo ?? bugun;
+    // Geçmiş kısmı bugünden ÖNCE biten parça. Aralık yalnızca bugünü
+    // kapsıyorsa geçmiş işi hiç açılmıyor — boşuna kota.
+    const gecmisSonu = dateTo < bugun ? dateTo : oncekiGun(bugun);
+    const gecmisVar = dateFrom < bugun;
+    const bugunVar = dateTo >= bugun;
+
     for (const account of accounts) {
-      for (const jobType of ['structure', 'insights_realtime'] as const) {
+      const isler: Array<{ jobType: 'structure' | 'insights_realtime' | 'insights_backfill'; dateFrom?: string; dateTo?: string }> =
+        [{ jobType: 'structure' }];
+      if (gecmisVar) {
+        isler.push({ jobType: 'insights_backfill', dateFrom, dateTo: gecmisSonu });
+      }
+      if (bugunVar) {
+        isler.push({ jobType: 'insights_realtime', dateFrom: bugun, dateTo: bugun });
+      }
+
+      for (const is of isler) {
         const res = await this.queue.enqueue({
           clientId: account.clientId,
           platform: account.platform,
-          jobType,
+          jobType: is.jobType,
           adAccountId: account.id,
           interactive: true,
-          ...(jobType === 'insights_realtime'
-            ? { dateFrom: isoToday(), dateTo: isoToday() }
-            : {}),
+          ...(is.dateFrom ? { dateFrom: is.dateFrom, dateTo: is.dateTo } : {}),
         });
         if (res.enqueued) queued++;
         else skipped++;
@@ -292,6 +333,18 @@ function isoToday(): string {
 }
 
 /** N gün öncesi, UTC, `YYYY-MM-DD`. */
+/**
+ * Bir gün öncesi — YYYY-MM-DD dizgesi üzerinden.
+ *
+ * `Date`'e çevirip geri yazmak saat dilimi kayması üretiyor (CLAUDE.md);
+ * UTC gün başına sabitleyip çıkarmak kaymayı kapatıyor.
+ */
+function oncekiGun(gun: string): string {
+  const d = new Date(`${gun}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function isoDaysAgo(n: number): string {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - n);
