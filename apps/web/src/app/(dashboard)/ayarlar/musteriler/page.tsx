@@ -191,6 +191,21 @@ export default async function ClientsPage() {
                 </dl>
 
                 {/*
+                  KANALLAR BAĞLANTISI — bu müşterinin kurulumunun yapıldığı yer.
+                  Platform Bağlantıları ajansın işi (bir kez bağlan); bu ekran
+                  müşterinin işi (hangi hesap kime ait). İkisini ayırmak,
+                  bağlantı ekranının onlarca müşterinin hesabını yan yana
+                  göstermesini bitiriyor.
+                */}
+                <Link
+                  href={`/ayarlar/musteriler/${client.id}/kanallar`}
+                  className="mt-3 flex items-center justify-between rounded-lg border border-line px-3 py-2 text-sm transition hover:bg-surface-sunken"
+                >
+                  <span className="font-medium text-ink">Bağlı kanallar</span>
+                  <span className="text-xs text-ink-muted">Meta · Google · IG · YouTube →</span>
+                </Link>
+
+                {/*
                   İki uyarı da SESSİZ KALMASI en kolay durumları anlatıyor:
                   hesabı olmayan müşteri hiç veri getirmez, hesabı bağlı ama
                   izlemeye açılmamış müşteri de getirmez — ikisi panelde

@@ -205,3 +205,89 @@ export interface ClientSetupResult {
    */
   failures: Array<{ kind: 'adAccount' | 'socialProfile' | 'user'; id: string; reason: string }>;
 }
+
+// -----------------------------------------------------------------------------
+// Bağlı kanallar — workspace görünümü
+// -----------------------------------------------------------------------------
+
+/**
+ * BEŞ KANAL, İKİ TABLO.
+ *
+ * Kullanıcı "Meta Ads / Google Ads / Facebook / Instagram / YouTube" diye
+ * düşünüyor; veritabanı `ad_accounts` (platform ayrımıyla) ve
+ * `social_profiles` (profil tipi ayrımıyla) diye tutuyor. Bu eşleme TEK
+ * YERDE duruyor — iki tarafın kendi eşlemesini yazması, bir kanalın bir
+ * ekranda görünüp diğerinde görünmemesi demekti.
+ */
+export const CHANNEL_KINDS = [
+  'meta_ads',
+  'google_ads',
+  'facebook',
+  'instagram',
+  'youtube',
+] as const;
+export type ChannelKind = (typeof CHANNEL_KINDS)[number];
+
+export const CHANNEL_LABELS: Record<ChannelKind, string> = {
+  meta_ads: 'Meta Ads',
+  google_ads: 'Google Ads',
+  facebook: 'Facebook Sayfası',
+  instagram: 'Instagram',
+  youtube: 'YouTube Kanalı',
+};
+
+/**
+ * Kanalın ne işe yaradığı — boş kartta yazılıyor.
+ *
+ * "Henüz bağlı kanal yok" tek başına ne yapılacağını söylemiyor; hangi
+ * kanalın neyi çalıştırdığını bilmeyen biri hangisini ekleyeceğini de
+ * bilmiyor.
+ */
+export const CHANNEL_HINTS: Record<ChannelKind, string> = {
+  meta_ads: 'Facebook ve Instagram reklamları buradan yayınlanıyor ve harcama buradan okunuyor.',
+  google_ads: 'Google ve YouTube reklamları buradan yayınlanıyor.',
+  facebook: 'Sayfanın organik gönderileri çekiliyor; Akıllı Boost bunları öne çıkarıyor.',
+  instagram: 'Hesabın gönderileri çekiliyor; Akıllı Boost bunları öne çıkarıyor.',
+  youtube: 'Yeni video yayınlandığında Akıllı Boost bildirim düşürüyor.',
+};
+
+/** Kanal listesindeki tek bir hesap/sayfa. */
+export interface ChannelItem {
+  id: string;
+  name: string;
+  /** Platformdaki kimlik — kullanıcı Ads Manager ile eşleştirebilmeli. */
+  externalId: string;
+  /** İzleme açık mı. Atanmış bir kanalda kapalıysa veri GELMEZ. */
+  syncEnabled: boolean;
+  /**
+   * Yönetici (MCC) hesabı mı — atanamaz.
+   *
+   * Reklam yayınlamıyor; atamak boş bir senkronizasyon turu ve boşa kota
+   * demek. Listede GİZLENMİYOR, sebebiyle kapalı görünüyor: aradığı hesabı
+   * bulamayan kullanıcı senkronizasyonun bozuk olduğunu sanıyor.
+   */
+  isManager: boolean;
+}
+
+/** Bir kanal tipi için workspace görünümü. */
+export interface ChannelGroup {
+  kind: ChannelKind;
+  /** Bu workspace'e atanmış olanlar. */
+  connected: ChannelItem[];
+  /** Havuzda duran, atanabilecek olanlar. */
+  available: ChannelItem[];
+}
+
+export interface ClientChannels {
+  clientId: string;
+  clientName: string;
+  groups: ChannelGroup[];
+  /**
+   * Hiç platform bağlantısı yoksa doldurulur.
+   *
+   * "Havuz boş" ile "ajans henüz Meta'ya bağlanmamış" farklı iki iş ve ikisi
+   * de boş liste olarak görünüyor. Boş listenin sebebi yazılmazsa kullanıcı
+   * atayacak hesap arar, bulamaz ve sistemin bozuk olduğunu sanır.
+   */
+  emptyReason: string | null;
+}

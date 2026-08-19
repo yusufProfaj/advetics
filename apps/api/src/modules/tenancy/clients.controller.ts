@@ -8,18 +8,21 @@ import {
   clientSetupSchema,
   type ClientSetupInput,
   type ClientSetupResult,
+  type ClientChannels,
 } from '@advetics/shared';
 import { CurrentTenant, RequireOrgAdmin, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import type { AuthedRequest } from '../../common/types/request';
 import { ClientsService } from './clients.service';
 import { ClientSetupService } from './client-setup.service';
+import { ClientChannelsService } from './client-channels.service';
 
 @Controller('clients')
 export class ClientsController {
   constructor(
     private readonly clients: ClientsService,
     private readonly setupService: ClientSetupService,
+    private readonly channels: ClientChannelsService,
   ) {}
 
   private meta(req: AuthedRequest) {
@@ -69,6 +72,23 @@ export class ClientsController {
     @Req() req: AuthedRequest,
   ): Promise<ClientSetupResult> {
     return this.setupService.setup(ctx, dto, this.meta(req));
+  }
+
+  /**
+   * BAĞLI KANALLAR — bu workspace'in Meta Ads / Google Ads / Facebook /
+   * Instagram / YouTube görünümü.
+   *
+   * `client.read` YETİYOR: yalnızca okuyor. Atama ayrı uçlarda ve
+   * `connection.write` istiyor — müşteri hesabı kendi kanallarını görebilmeli
+   * ama değiştirememeli.
+   */
+  @Get(':id/channels')
+  @RequirePermissions('client.read')
+  listChannels(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ClientChannels> {
+    return this.channels.list(ctx, id);
   }
 
   @Patch(':id')

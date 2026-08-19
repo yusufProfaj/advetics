@@ -5,6 +5,7 @@ import { BrandingService } from './branding.service';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { ClientSetupService } from './client-setup.service';
+import { ClientChannelsService } from './client-channels.service';
 import { MembersController } from './members.controller';
 import { MembersService } from './members.service';
 import { OrganizationsController } from './organizations.controller';
@@ -20,7 +21,7 @@ import { OrganizationsController } from './organizations.controller';
     MembersController,
     BrandingController,
   ],
-  providers: [ClientsService, MembersService, BrandingService, ClientSetupService],
+  providers: [ClientsService, MembersService, BrandingService, ClientSetupService, ClientChannelsService],
   exports: [ClientsService, BrandingService],
 })
 export class TenancyModule {}
