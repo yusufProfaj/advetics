@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ConnectionSummary } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { PlatformLogo, adAccountKanali } from '@/components/platform-logo';
 import { AccountPicker, type PickerClient } from './account-picker';
 import { SocialProfileList } from './social-profile-list';
 
@@ -100,7 +101,16 @@ export function ConnectionCard({
         <div>
           <div className="flex items-center gap-2">
             <span className={`inline-block h-2 w-2 rounded-full ${status.dot}`} />
-            <h3 className="text-sm font-semibold">{headline(connection)}</h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold">
+              {/* BAĞLANTININ PLATFORMU ROZETTE: kart artık hesap listesi
+                  taşımıyor (havuz kartlarına taşındı) ve başlık metni tek
+                  başına hangi platform olduğunu ayırt etmenin tek yoluydu. */}
+              <PlatformLogo
+                kind={adAccountKanali(connection.platform)}
+                className="h-4 w-4 shrink-0"
+              />
+              {headline(connection)}
+            </h3>
           </div>
           <p className={`mt-1 text-xs ${status.cls}`}>
             {status.label}

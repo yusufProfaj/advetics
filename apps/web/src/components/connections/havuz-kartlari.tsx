@@ -10,6 +10,7 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { havuzlariCikar, havuzSuz, KANALLAR, type HavuzOgesi } from '@/lib/havuz';
+import { PlatformLogo } from '@/components/platform-logo';
 
 interface Musteri {
   id: string;
@@ -79,8 +80,15 @@ function HavuzKarti({
 }) {
   return (
     <section className="rounded-xl border border-line bg-surface p-4">
-      <h3 className="text-sm font-semibold text-ink">{CHANNEL_LABELS[kind]} havuzu</h3>
-      <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">{CHANNEL_HINTS[kind]}</p>
+      <div className="flex items-start gap-2.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface">
+          <PlatformLogo kind={kind} className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-ink">{CHANNEL_LABELS[kind]} havuzu</h3>
+          <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">{CHANNEL_HINTS[kind]}</p>
+        </div>
+      </div>
 
       <p className="mt-3 text-2xl font-semibold text-ink">
         {adet}
@@ -178,7 +186,10 @@ function HavuzModal({
       >
         <div className="border-b border-line px-4 py-3">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-ink">{CHANNEL_LABELS[kind]} havuzu</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <PlatformLogo kind={kind} className="h-4 w-4" />
+              {CHANNEL_LABELS[kind]} havuzu
+            </h2>
             <button
               type="button"
               onClick={onKapat}

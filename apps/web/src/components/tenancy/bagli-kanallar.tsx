@@ -11,6 +11,7 @@ import {
   type ClientChannels,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { PlatformLogo } from '@/components/platform-logo';
 
 /**
  * BAĞLI KANALLAR — bir workspace'in kanalları, kart düzeninde.
@@ -47,7 +48,11 @@ function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }
     <section className="rounded-xl border border-line bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <KanalRozeti kind={grup.kind} />
+          {/* LOGO BEYAZ ZEMİNDE: markaların kendi renkleri var ve renkli
+              bir rozetin üstünde ikisi çakışıyordu. */}
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface">
+            <PlatformLogo kind={grup.kind} className="h-5 w-5" />
+          </span>
           <div>
             <h3 className="text-sm font-semibold text-ink">{CHANNEL_LABELS[grup.kind]}</h3>
             <p className="text-[11px] text-ink-muted">
@@ -219,31 +224,5 @@ function SecilebilirSatir({
       </div>
       {hata && <p className="mt-1 px-3 text-[11px] text-danger">{hata}</p>}
     </li>
-  );
-}
-
-/** Kanal rozeti — dış ikon kütüphanesi eklemeden tutarlı bir set. */
-function KanalRozeti({ kind }: { kind: ChannelKind }) {
-  const renk: Record<ChannelKind, string> = {
-    meta_ads: 'bg-sky-50 text-sky-700 ring-sky-200',
-    google_ads: 'bg-amber-50 text-amber-700 ring-amber-200',
-    facebook: 'bg-blue-50 text-blue-700 ring-blue-200',
-    instagram: 'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200',
-    youtube: 'bg-rose-50 text-rose-700 ring-rose-200',
-  };
-  const harf: Record<ChannelKind, string> = {
-    meta_ads: 'M',
-    google_ads: 'G',
-    facebook: 'f',
-    instagram: 'ig',
-    youtube: '▶',
-  };
-  return (
-    <span
-      aria-hidden="true"
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold ring-1 ${renk[kind]}`}
-    >
-      {harf[kind]}
-    </span>
   );
 }

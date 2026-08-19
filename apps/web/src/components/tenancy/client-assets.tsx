@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { PlatformLogo, adAccountKanali, profilKanali } from '@/components/platform-logo';
 
 /**
  * Müşteri kartındaki VARLIK GÖRÜNÜMÜ — hangi reklam hesapları ve hangi
@@ -50,7 +51,6 @@ export interface PoolItem {
   isManager?: boolean;
 }
 
-const PLATFORM_LABEL: Record<string, string> = { meta: 'Meta', google: 'Google' };
 
 export function ClientAssets({
   clientId,
@@ -190,9 +190,13 @@ export function ClientAssets({
         <ul className="mt-2 divide-y divide-line/60">
           {adAccounts.map((a) => (
             <li key={a.id} className="flex items-center gap-2 py-1.5 text-xs">
-              <span className="w-12 shrink-0 text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                {PLATFORM_LABEL[a.platform] ?? a.platform}
-              </span>
+              {/* LOGO METİN ETİKETİN YERİNE: dar kolonda "Meta"/"Google"
+                  sözcükleri satırın üçte birini yiyordu ve ad kırpılıyordu.
+                  `title` ile metin karşılığı korunuyor. */}
+              <PlatformLogo
+                kind={adAccountKanali(a.platform)}
+                className="h-4 w-4 shrink-0"
+              />
               <span className="min-w-0 flex-1 truncate font-medium text-ink">{a.name}</span>
               {/* İZLENMİYOR OLMAK SESSİZ KALMAMALI: atanmış ama kapalı bir
                   hesap, hiç atanmamış bir hesapla panelde birebir aynı
@@ -221,13 +225,7 @@ export function ClientAssets({
 
           {profiles.map((p) => (
             <li key={p.id} className="flex items-center gap-2 py-1.5 text-xs">
-              <span className="w-12 shrink-0 text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                {p.profileType === 'instagram_business'
-                  ? 'IG'
-                  : p.profileType === 'youtube_channel'
-                    ? 'YT'
-                    : 'FB'}
-              </span>
+              <PlatformLogo kind={profilKanali(p.profileType)} className="h-4 w-4 shrink-0" />
               <span className="min-w-0 flex-1 truncate font-medium text-ink">{p.name}</span>
 
               {/*

@@ -11,6 +11,7 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { havuzlariCikar, havuzSuz, KANALLAR } from '@/lib/havuz';
+import { PlatformLogo } from '@/components/platform-logo';
 
 /**
  * MÜŞTERİ KURULUM SİHİRBAZI — tek ekranda, pop-up.
@@ -395,10 +396,13 @@ function KanalSecimi({
                 disabled={ogeler.length === 0}
                 className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition hover:bg-surface-sunken disabled:opacity-50"
               >
-                <span className="min-w-0">
+                <span className="flex min-w-0 items-center gap-2">
+                  <PlatformLogo kind={k} className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0">
                   <span className="block text-sm text-ink">{CHANNEL_LABELS[k]}</span>
                   <span className="block text-[11px] text-ink-muted">
                     {ogeler.length === 0 ? 'havuzda hesap yok' : `${ogeler.length} hesap boşta`}
+                  </span>
                   </span>
                 </span>
                 <span className="shrink-0 text-[11px] font-medium text-brand-strong">
