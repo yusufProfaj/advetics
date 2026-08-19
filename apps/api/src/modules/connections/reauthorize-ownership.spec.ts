@@ -55,6 +55,9 @@ function servis(kayit: { clientId: string | null; platform: string } | null): {
     {} as never,
     {} as never,
     {} as never,
+      // KUYRUK — yalnızca `ilkVeriCekimi` kullanıyor ve bu testlerde o yol
+    // koşmuyor. Çağrılırsa SESSİZCE geçmesin diye fırlatan bir yerine koyma.
+    { enqueue: () => { throw new Error('kuyruk bu testte beklenmiyor'); } } as never,
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

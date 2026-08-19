@@ -22,6 +22,7 @@ import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from './provider.registry';
+import { SyncQueueService } from '../../queue/sync-queue.service';
 import { decideConnectionOwnership } from './connection-ownership';
 import {
   PlatformApiError,
@@ -50,6 +51,7 @@ export class ConnectionsService {
     private readonly audit: AuditService,
     private readonly registry: ProviderRegistry,
     @Inject(CONFIG) private readonly config: AppConfig,
+    private readonly queue: SyncQueueService,
   ) {}
 
   private provider(platform: Platform): IAdPlatformProvider {
@@ -153,7 +155,29 @@ export class ConnectionsService {
 
     return this.prisma.withTenant(scoped, async (tx) => {
       const rows = await tx.platformConnection.findMany({
-        where: { status: { not: 'revoked' } },
+        /*
+         * WORKSPACE SEÇİLİYSE BAĞLANTILAR DA SÜZÜLÜYOR — eskiden yalnızca
+         * hesaplar süzülüyordu ve sonuç şuydu: ajansın havuz bağlantısı HER
+         * workspace'in ekranında SIFIR hesapla görünüyordu. Kullanıcı
+         * "bağlantı var ama hesap yok" sanıyordu; oysa o bağlantı bu
+         * workspace'e ait bile değildi.
+         *
+         * İKİ DAL, VE İKİNCİSİ GEÇİŞ İÇİN ŞART: bağlantı ya bu workspace'e
+         * AİT, ya da havuz döneminden kalma ve altındaki hesaplardan/
+         * sayfalardan en az biri bu workspace'e ATANMIŞ. İkinci dal olmadan
+         * bugün üretimde çalışan müşteriler bağlantılarını göremezdi —
+         * hesapları havuz bağlantısının altında duruyor.
+         */
+        where: clientId
+          ? {
+              status: { not: 'revoked' },
+              OR: [
+                { clientId },
+                { adAccounts: { some: { clientId } } },
+                { socialProfiles: { some: { clientId } } },
+              ],
+            }
+          : { status: { not: 'revoked' } },
         orderBy: { createdAt: 'asc' },
         include: {
           adAccounts: {
@@ -495,6 +519,27 @@ export class ConnectionsService {
         );
       }
 
+      /*
+       * WORKSPACE BAĞLANTISINDA VERİ HEMEN ÇEKİLİYOR.
+       *
+       * Havuz modelinde bu doğru olmazdı: bağlanan Meta kimliği ONLARCA
+       * müşterinin hesabını görüyordu ve hepsini açmak, kullanıcının hiç
+       * istemediği hesapların kotasını yakardı. Bu yüzden keşif
+       * `syncEnabled: false` yazıyor ve hangi hesabın izleneceğini kullanıcı
+       * seçiyordu.
+       *
+       * Workspace modelinde bağlanan hesap MÜŞTERİNİN KENDİ hesabı: altından
+       * çıkan reklam hesapları zaten o müşteriye ait ve hepsi isteniyor.
+       * Ayrıca kullanıcının bağlandıktan sonra ikinci bir ekranda tek tek
+       * anahtar açması, "bağladım ama veri gelmiyor" hâlinin en sık sebebiydi.
+       *
+       * HAVUZ BAĞLANTISI DIŞARIDA: `state.clientId` yoksa eski davranış
+       * aynen sürüyor.
+       */
+      if (state.clientId) {
+        await this.ilkVeriCekimi(connectionId, state.clientId, platform);
+      }
+
       await this.audit.recordUnauthenticated(state.orgId, {
         action: 'connection.created',
         targetType: 'platform_connection',
@@ -660,6 +705,87 @@ export class ConnectionsService {
     });
 
     return saved.id;
+  }
+
+  /**
+   * Bağlantı kurulur kurulmaz izlemeyi açar ve GEÇMİŞ VERİYİ kuyruğa alır.
+   *
+   * ÜÇ İŞ, BU SIRAYLA VE SIRA ÖNEMLİ:
+   *   1. `syncEnabled` açılıyor — kapalı hesap hiçbir taramaya girmiyor.
+   *   2. `structure` — kampanya/reklam seti/reklam ağacı. Metrikler bu
+   *      satırlara bağlanıyor; önce metrik çekmek, bağlanacak satırı olmayan
+   *      veri demek.
+   *   3. `initial_backfill` — 90 günlük geçmiş, KAMPANYA seviyesinde. Reklam
+   *      seviyesinde 90 gün çekmek yeni bir hesabın kotasını saatlerce
+   *      bloklar (`insights-sync.service.ts` bu kararı taşıyor).
+   *
+   * HATA YUTULMUYOR AMA BAĞLANTIYI DA DÜŞÜRMÜYOR: bu noktada token
+   * kaydedildi ve kullanıcı bağlandı. Kuyruk erişilemezse bağlantıyı geri
+   * almak, çalışan bir yetkilendirmeyi çöpe atmak olurdu — ama sessiz
+   * kalmak da olmaz, çünkü belirtisi "bağladım, veri gelmiyor" oluyor ve
+   * sebebi kodda aranıyor.
+   */
+  private async ilkVeriCekimi(
+    connectionId: string,
+    clientId: string,
+    platform: Platform,
+  ): Promise<void> {
+    try {
+      // İZLEMEYİ AÇ. Yalnızca BU bağlantının ve BU müşterinin hesapları —
+      // aynı workspace'e ait başka bir bağlantının hesaplarına dokunmuyoruz.
+      await this.admin.adAccount.updateMany({
+        where: { connectionId, clientId },
+        data: { syncEnabled: true },
+      });
+
+      const accounts = await this.admin.adAccount.findMany({
+        where: { connectionId, clientId },
+        select: { id: true, name: true },
+      });
+
+      // Sosyal profillerde de izleme açılıyor: organik gönderi süpürmesi
+      // (Akıllı Boost'un beslendiği yer) buna bakıyor.
+      await this.admin.socialProfile.updateMany({
+        where: { connectionId, clientId },
+        data: { syncEnabled: true },
+      });
+
+      const bugun = new Date();
+      const baslangic = new Date(bugun.getTime() - 90 * 86_400_000);
+      const gun = (d: Date): string => d.toISOString().slice(0, 10);
+
+      for (const a of accounts) {
+        await this.queue.enqueue({
+          clientId,
+          platform,
+          jobType: 'structure',
+          adAccountId: a.id,
+        });
+        await this.queue.enqueue({
+          clientId,
+          platform,
+          jobType: 'initial_backfill',
+          adAccountId: a.id,
+          entityLevel: 'campaign',
+          dateFrom: gun(baslangic),
+          dateTo: gun(bugun),
+        });
+      }
+
+      // KAÇ HESAP AÇILDIĞI YAZILIYOR. Sessiz kesme yok: sıfır hesapla dönen
+      // bir bağlantı ("izin verilen hesap yok") ile onlarca hesaplı bir
+      // bağlantı panelde aynı görünüyor.
+      this.logger.log(
+        `Bağlantı ${connectionId}: ${accounts.length} reklam hesabı izlemeye alındı, ` +
+          `90 günlük geçmiş kuyruğa eklendi`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `İlk veri çekimi kurulamadı (bağlantı ${connectionId}): ` +
+          `${err instanceof Error ? err.message : String(err)}. ` +
+          'Bağlantı KURULDU ama geçmiş veri gelmeyecek; "Hesapları yenile" ile tekrar denenebilir.',
+      );
+    }
   }
 
   /**

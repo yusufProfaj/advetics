@@ -72,6 +72,9 @@ beforeEach(() => {
     null as never,
     null as never,
     null as never,
+      // KUYRUK — yalnızca `ilkVeriCekimi` kullanıyor ve bu testlerde o yol
+    // koşmuyor. Çağrılırsa SESSİZCE geçmesin diye fırlatan bir yerine koyma.
+    { enqueue: () => { throw new Error('kuyruk bu testte beklenmiyor'); } } as never,
   );
 });
 
