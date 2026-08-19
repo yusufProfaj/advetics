@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { ConnectionSummary, SpecialAdCategory } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
-import { ClientCreateForm } from '@/components/tenancy/client-create-form';
+import { ClientSetupWizard } from '@/components/tenancy/client-setup-wizard';
 import { ClientActions } from '@/components/tenancy/client-actions';
 import { SpecialCategoryPicker } from '@/components/tenancy/special-category-picker';
 import {
@@ -123,7 +123,18 @@ export default async function ClientsPage() {
         </span>
       </div>
 
-      <ClientCreateForm />
+      {/*
+        KURULUM SİHİRBAZI, TEK SATIRLIK "ad gir" FORMUNUN YERİNE.
+        Eski form yalnızca müşteriyi açıyordu; hesap atama, izleme açma ve
+        sayfa ekleme ayrı ekranlara dağılmıştı ve kullanıcının tarifi "hepsi
+        angarya" oldu. Sihirbaz hepsini tek çağrıda yapıyor.
+
+        HAVUZ SİHİRBAZA VERİLİYOR: sayfa `connections`'ı zaten çekiyor
+        (yukarıdaki sayaçlar için), ikinci bir istek gereksiz.
+      */}
+      <div className="flex justify-end">
+        <ClientSetupWizard connections={connections} />
+      </div>
 
       {clients.length === 0 ? (
         <div className="rounded-xl border border-line bg-surface p-8 text-center">

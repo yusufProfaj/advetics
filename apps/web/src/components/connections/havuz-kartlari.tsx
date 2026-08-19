@@ -9,22 +9,12 @@ import {
   type ConnectionSummary,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-
-interface HavuzOgesi {
-  id: string;
-  name: string;
-  externalId: string;
-  isManager: boolean;
-  /** Reklam hesabı mı, sosyal profil mi — atama ucu buna göre seçiliyor. */
-  reklamHesabi: boolean;
-}
+import { havuzlariCikar, havuzSuz, KANALLAR, type HavuzOgesi } from '@/lib/havuz';
 
 interface Musteri {
   id: string;
   name: string;
 }
-
-const KANALLAR: ChannelKind[] = ['meta_ads', 'google_ads', 'facebook', 'instagram', 'youtube'];
 
 /**
  * HAVUZ KARTLARI — bağlantı ekranının atama yüzü.
@@ -48,47 +38,7 @@ export function HavuzKartlari({
 }) {
   const [acikKanal, setAcikKanal] = useState<ChannelKind | null>(null);
 
-  const havuzlar = useMemo(() => {
-    const map: Record<ChannelKind, HavuzOgesi[]> = {
-      meta_ads: [],
-      google_ads: [],
-      facebook: [],
-      instagram: [],
-      youtube: [],
-    };
-
-    for (const a of connections.flatMap((c) => c.adAccounts)) {
-      if (a.clientId !== null) continue;
-      map[a.platform === 'meta' ? 'meta_ads' : 'google_ads'].push({
-        id: a.id,
-        name: a.name,
-        externalId: a.externalId,
-        isManager: a.isManager,
-        reklamHesabi: true,
-      });
-    }
-
-    for (const p of connections.flatMap((c) => c.socialProfiles)) {
-      if (p.clientId !== null) continue;
-      const k: ChannelKind | null =
-        p.profileType === 'facebook_page'
-          ? 'facebook'
-          : p.profileType === 'instagram_business'
-            ? 'instagram'
-            : p.profileType === 'youtube_channel'
-              ? 'youtube'
-              : null;
-      if (!k) continue;
-      map[k].push({
-        id: p.id,
-        name: p.name,
-        externalId: p.externalId,
-        isManager: false,
-        reklamHesabi: false,
-      });
-    }
-    return map;
-  }, [connections]);
+  const havuzlar = useMemo(() => havuzlariCikar(connections), [connections]);
 
   return (
     <>
@@ -189,15 +139,7 @@ function HavuzModal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onKapat]);
 
-  const suzulmus = useMemo(() => {
-    const q = arama.trim().toLocaleLowerCase('tr');
-    if (!q) return ogeler;
-    return ogeler.filter(
-      (o) =>
-        o.name.toLocaleLowerCase('tr').includes(q) ||
-        o.externalId.toLocaleLowerCase('tr').includes(q),
-    );
-  }, [ogeler, arama]);
+  const suzulmus = useMemo(() => havuzSuz(ogeler, arama), [ogeler, arama]);
 
   async function ata(oge: HavuzOgesi): Promise<void> {
     if (!hedef) {
