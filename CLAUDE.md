@@ -141,6 +141,17 @@ buna göre veriliyor:
   kendi dalı olmazsa son dala düşüyor ve "izin yok", "kota doldu", "hesap
   bulunamadı", "geçersiz alan" hepsi panelde **"Beklenmeyen bir hata oluştu"**
   oluyor. Bu cümle bu projede bir turu tamamen kaybettirdi.
+- **ÇOK ADIMLI SİLMEDE RİSKLİ ADIM ÖNCE, PAHALI ADIM SONRA.** `reset-clients`
+  önce 4.340 metrik satırını siliyor, sonra müşterileri siliyordu. Müşteri
+  silme `draft_ads_creative_id_fkey` (`onDelete: Restrict`) engeline takıldı ve
+  script düştü: **metrik verisi gitti, müşteriler durdu** — en pahalı yarısı
+  yapıldı, işe yarayan yarısı yapılmadı. Metrik Meta'da 37 aylık sınıra
+  takılıyor ve Google'da yeniden çekmek kota harcıyor; müşteri satırı ucuz.
+  Sıra tersine çevrildi. Ayrıca `Restrict` taşıyan bağın işaret ettiği satırlar
+  cascade'den ÖNCE elle silinmeli: müşteri silinince iki cascade dalı birden
+  işliyor (`ad_creatives` ve `draft_campaigns`) ve Postgres kreatifi silmeye
+  kalkınca taslak reklam engeli tetikliyor. `reset-clients-guards.spec.ts`
+  sırayı kilitliyor.
 - **TEKİL ANAHTARIN KAPSAMI, SAHİPLİĞİ GÜNCELLEYEN KODUN KAPSAMIYLA AYNI
   OLMAK ZORUNDA.** `ad_accounts` tekil anahtarı `(platform, external_id,
   org_id)` — BAĞLANTIYA bağlı değil. Yani aynı reklam hesabı ikinci bir

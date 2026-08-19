@@ -158,20 +158,21 @@ async function main(): Promise<void> {
   console.log('\n  Siliniyor…');
 
   /**
-   * METRİKLER AYRI SİLİNİYOR — cascade onlara ULAŞMIYOR.
+   * ═══ TASLAK AĞACI EN BAŞTA — TEK `RESTRICT` ENGELİ BURADA ═══
    *
-   * `insights_daily` BÖLÜMLENMİŞ (partitioned) bir tablo ve şemadaki
-   * `onDelete: Cascade` veritabanı seviyesinde uygulanmamış. Üretimde
-   * doğrulandı: 14 müşteri silindikten sonra 11.222 metrik satırı olduğu gibi
-   * kaldı ve artık var olmayan müşterilere işaret ediyordu.
+   * `draft_ads.creative_id` → `ad_creatives` bağı `onDelete: Restrict`.
+   * Müşteri silinince iki cascade dalı birden işliyor — biri
+   * `ad_creatives`'e, diğeri `draft_campaigns`'e — ve Postgres kreatifi
+   * silmeye kalkınca ona işaret eden taslak reklam engeli tetikliyor:
    *
-   * ÖNCE metrikler, SONRA müşteriler. Ters sırada da çalışırdı ama müşteriler
-   * gittikten sonra "hangi satırlar yetim" sorusu ancak `NOT EXISTS` ile
-   * cevaplanabilirdi; burada zaten hepsi silineceği için sıra sadece niyeti
-   * okunur kılıyor.
+   *     Foreign key constraint violated: draft_ads_creative_id_fkey
+   *
+   * ÜRETİMDE YAŞANDI ve script YARIDA kaldı: metrikler silinmiş, müşteriler
+   * duruyordu. Taslak ağacını önce silmek engeli kaldırıyor; `draft_campaigns`
+   * silinince `draft_ad_groups` ve `draft_ads` zincirleme gidiyor.
    */
-  const insightsDeleted = await prisma.insightsDaily.deleteMany({});
-  console.log(`  ${insightsDeleted.count} metrik satırı silindi (cascade ulaşmıyor)`);
+  const draftsDeleted = await prisma.draftCampaign.deleteMany({});
+  console.log(`  ${draftsDeleted.count} taslak kampanya silindi (RESTRICT engeli kaldırıldı)`);
 
   /**
    * MÜŞTERİLER — kampanyalar ve müşteriye bağlı üyelikler zincirleme gidiyor.
@@ -186,6 +187,28 @@ async function main(): Promise<void> {
    * Metrikler yine HARİÇ; yukarıda ayrıca siliniyorlar.
    */
   const deleted = await prisma.client.deleteMany({});
+  console.log(`  ${deleted.count} müşteri silindi`);
+
+  /**
+   * METRİKLER MÜŞTERİLERDEN SONRA — SIRA BİLİNÇLİ OLARAK DEĞİŞTİ.
+   *
+   * `insights_daily` BÖLÜMLENMİŞ bir tablo ve şemadaki `onDelete: Cascade`
+   * veritabanı seviyesinde uygulanmamış: müşteri silinince satırlar olduğu
+   * gibi kalıyor (üretimde doğrulandı — 14 müşteri sonrası 11.222 yetim
+   * satır). Bu yüzden ayrıca siliniyor.
+   *
+   * ÖNCE METRİK SİLMEK YANLIŞTI. Öyleydi ve üretimde şu oldu: 4.340 metrik
+   * satırı silindi, ardından müşteri silme RESTRICT engeline takıldı ve
+   * script düştü. Sonuç: metrik verisi gitti, müşteriler durdu — yani en
+   * pahalı yarısı yapıldı, işe yarayan yarısı yapılmadı. Metrik verisi
+   * Meta'da 37 aylık sınıra takılıyor ve Google'da yeniden çekmek kota
+   * harcıyor; müşteri satırı ise ucuz.
+   *
+   * RİSKLİ ADIM ÖNCE, PAHALI ADIM SONRA: müşteri silme düşerse metrikler
+   * hâlâ yerinde ve tekrar denenebilir.
+   */
+  const insightsDeleted = await prisma.insightsDaily.deleteMany({});
+  console.log(`  ${insightsDeleted.count} metrik satırı silindi (cascade ulaşmıyor)`);
 
   /**
    * ═══ KULLANICI SİLME — ÖNCE `RESTRICT` ENGELLERİ ÇÖZÜLÜYOR ═══
@@ -247,7 +270,6 @@ async function main(): Promise<void> {
 
   console.log(`\nÖzet`);
   console.log('─'.repeat(60));
-  console.log(`  ${deleted.count} müşteri silindi`);
   console.log(`  reklam hesabı   ${before.adAccounts} → ${after.adAccounts}  (havuza döndü: ${pooled})`);
   console.log(`  kampanya        ${before.campaigns} → ${after.campaigns}`);
   console.log(`  metrik satırı   ${before.insights} → ${after.insights}`);

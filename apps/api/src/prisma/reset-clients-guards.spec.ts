@@ -37,6 +37,38 @@ describe('KURU ÇALIŞMA VARSAYILAN', () => {
   });
 });
 
+describe('SİLME SIRASI — üretimde yarım silmeye yol açan iki karar', () => {
+  it('KRİTİK: taslak ağacı müşterilerden ÖNCE siliniyor', () => {
+    /*
+     * `draft_ads.creative_id` → `ad_creatives` bağı `onDelete: Restrict`.
+     * Müşteri silinince iki cascade dalı birden işliyor ve Postgres kreatifi
+     * silmeye kalkınca engel tetikliyor:
+     *   Foreign key constraint violated: draft_ads_creative_id_fkey
+     * Üretimde yaşandı; script yarıda kaldı.
+     */
+    const kod = yorumsuz(KAYNAK);
+    const taslak = kod.indexOf('draftCampaign.deleteMany');
+    const musteri = kod.indexOf('client.deleteMany');
+    expect(taslak).toBeGreaterThan(-1);
+    expect(musteri).toBeGreaterThan(-1);
+    expect(taslak).toBeLessThan(musteri);
+  });
+
+  it('KRİTİK: metrikler müşterilerden SONRA siliniyor', () => {
+    /*
+     * Ters sıra üretimde en pahalı yarıyı yaptırdı: 4.340 metrik satırı
+     * silindi, sonra müşteri silme düştü. Metrik verisi Meta'da 37 aylık
+     * sınıra takılıyor ve Google'da yeniden çekmek kota harcıyor; müşteri
+     * satırı ucuz. Riskli adım önce, pahalı adım sonra.
+     */
+    const kod = yorumsuz(KAYNAK);
+    const musteri = kod.indexOf('client.deleteMany');
+    const metrik = kod.indexOf('insightsDaily.deleteMany');
+    expect(metrik).toBeGreaterThan(-1);
+    expect(musteri).toBeLessThan(metrik);
+  });
+});
+
 describe('KULLANICI SİLME KİLİTLERİ', () => {
   it('KRİTİK: kullanıcı silme AYRI bir bayrakta', () => {
     // Müşterileri sıfırlamak ile ekibi silmek iki ayrı karar; tek bayrağa
