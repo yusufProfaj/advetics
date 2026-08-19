@@ -24,9 +24,15 @@
  * dönüşü olmayan bir işlemin yanlışlıkla çalışması, bu projede kabul
  * edilebilecek en pahalı hata.
  *
+ * KULLANICILAR AYRI BİR BAYRAKLA SİLİNİYOR (`--purge-users`) ve varsayılan
+ * DEĞİL. Müşterileri sıfırlamak ile ajans personelini silmek iki ayrı karar;
+ * ikisini tek bayrağa bağlamak, "müşterileri temizleyeyim" diyen birinin
+ * ekibini de silmesi demekti.
+ *
  * Kullanım:
- *   pnpm --filter @advetics/api db:reset-clients            (ne silineceğini yazar)
- *   pnpm --filter @advetics/api db:reset-clients -- --apply (siler)
+ *   pnpm --filter @advetics/api db:reset-clients                          (kuru)
+ *   pnpm --filter @advetics/api db:reset-clients -- --apply               (müşteriler)
+ *   pnpm --filter @advetics/api db:reset-clients -- --apply --purge-users (+ kullanıcılar)
  */
 import { resolve } from 'node:path';
 import { config as loadEnv } from 'dotenv';
@@ -39,6 +45,20 @@ const prisma = new PrismaClient({ datasourceUrl: process.env.DIRECT_DATABASE_URL
 // pnpm 9 `--`'yı gerçek argüman olarak geçiriyor (bkz. sync-cli.ts).
 const ARGV = process.argv.slice(2).filter((a) => a !== '--');
 const APPLY = ARGV.includes('--apply');
+const PURGE_USERS = ARGV.includes('--purge-users');
+
+/**
+ * SİLİNMEYECEK KULLANICILAR — ajans yöneticileri.
+ *
+ * Liste KODDA, argümanda değil: komut satırında yazılan bir e-posta yanlış
+ * yazılırsa o kullanıcı da silinir ve panele girecek kimse kalmaz. Burada
+ * durunca değişmesi bir commit gerektiriyor.
+ */
+const KORUNAN_EPOSTALAR = [
+  'hello@profaj.com',
+  'yusuf@profaj.com',
+  'ecem@profaj.com',
+] as const;
 
 async function counts() {
   const [clients, connections, adAccounts, campaigns, insights, memberships, users] =
@@ -71,10 +91,39 @@ async function main(): Promise<void> {
   // yerine KİMLERİN kalacağını görmek, yanlış veritabanına bağlanıldığını da
   // ortaya çıkarır.
   const users = await prisma.user.findMany({
-    select: { email: true },
+    select: { id: true, email: true },
     orderBy: { email: 'asc' },
   });
-  for (const u of users) console.log(`      ${u.email}`);
+
+  const korunacak = users.filter((u) => KORUNAN_EPOSTALAR.includes(u.email as never));
+  const silinecekKullanicilar = PURGE_USERS
+    ? users.filter((u) => !KORUNAN_EPOSTALAR.includes(u.email as never))
+    : [];
+
+  if (!PURGE_USERS) {
+    for (const u of users) console.log(`      ${u.email}`);
+  } else {
+    console.log(`\n  KALACAK (${korunacak.length}):`);
+    for (const u of korunacak) console.log(`      ${u.email}`);
+    console.log(`\n  SİLİNECEK kullanıcı (${silinecekKullanicilar.length}):`);
+    for (const u of silinecekKullanicilar) console.log(`      ${u.email}`);
+  }
+
+  /**
+   * KORUNAN E-POSTALARIN HİÇBİRİ YOKSA DUR.
+   *
+   * Bu kontrol yanlış veritabanına bağlanmayı ve e-posta yazım hatasını aynı
+   * anda yakalıyor. Olmasaydı: liste hiçbir kullanıcıyla eşleşir, "hepsi
+   * silinecek" olur ve uygulandığında panele girebilecek TEK BİR hesap bile
+   * kalmazdı — geri dönüşü veritabanına elle SQL yazmak olan bir hâl.
+   */
+  if (PURGE_USERS && korunacak.length === 0) {
+    console.log(`\n  ! DURDURULDU: korunacak e-postaların hiçbiri bu veritabanında yok.`);
+    console.log(`    Aranan: ${KORUNAN_EPOSTALAR.join(', ')}`);
+    console.log(`    Yanlış veritabanına bağlanmış olabilirsin. Hiçbir şey silinmedi.\n`);
+    process.exitCode = 1;
+    return;
+  }
 
   /**
    * ERKEN ÇIKIŞ YALNIZCA HER ŞEY TEMİZSE.
@@ -88,8 +137,8 @@ async function main(): Promise<void> {
    * bir tablo ve cascade oraya ulaşmıyor. Yani "müşteri sayısı" bu script'in
    * yapacak işi olup olmadığını söyleyen doğru ölçüt değil.
    */
-  if (before.clients === 0 && before.insights === 0) {
-    console.log('\n  Zaten temiz — silinecek müşteri ve metrik yok.\n');
+  if (before.clients === 0 && before.insights === 0 && silinecekKullanicilar.length === 0) {
+    console.log('\n  Zaten temiz — silinecek müşteri, metrik ve kullanıcı yok.\n');
     return;
   }
 
@@ -138,6 +187,47 @@ async function main(): Promise<void> {
    */
   const deleted = await prisma.client.deleteMany({});
 
+  /**
+   * ═══ KULLANICI SİLME — ÖNCE `RESTRICT` ENGELLERİ ÇÖZÜLÜYOR ═══
+   *
+   * TEK yabancı anahtar `ON DELETE RESTRICT`:
+   * `platform_connections.connected_by_user_id`.
+   *
+   * (`invitations.created_by_id` de RESTRICT'ti ama tablo
+   * `20260816090000_drop_invitations` ile düşürüldü — davet akışı
+   * kaldırılmıştı.)
+   *
+   * Yani bağlantıyı kuran kullanıcıyı silmek Postgres tarafından REDDEDİLİR
+   * ve script yarıda patlar — müşteriler silinmiş, kullanıcılar durur, ortada
+   * yarım bir sıfırlama kalır.
+   *
+   * SATIRLAR SİLİNMİYOR, DEVREDİLİYOR. Bağlantı ajansa ait ve CANLI: onu
+   * silmek 157 hesabın kaydını ve yayındaki boost'ların hesap bağını
+   * götürürdü. "Kim bağladı" alanı bir denetim bilgisi ve devredilmesi
+   * bilgiyi bulanıklaştırıyor — ama bağlantıyı kaybetmekten iyi. Devir
+   * ekranda YAZILIYOR, sessizce yapılmıyor.
+   */
+  if (silinecekKullanicilar.length > 0) {
+    const kalanAdmin = korunacak[0]!;
+    const silinecekIdler = silinecekKullanicilar.map((u) => u.id);
+
+    const devredilenBaglanti = await prisma.platformConnection.updateMany({
+      where: { connectedByUserId: { in: silinecekIdler } },
+      data: { connectedByUserId: kalanAdmin.id },
+    });
+    if (devredilenBaglanti.count > 0) {
+      console.log(
+        `  ${devredilenBaglanti.count} platform bağlantısının "kuran kullanıcı" alanı ` +
+          `${kalanAdmin.email} üzerine alındı (silinemezdi: ON DELETE RESTRICT)`,
+      );
+    }
+
+    const silinenKullanici = await prisma.user.deleteMany({
+      where: { id: { in: silinecekIdler } },
+    });
+    console.log(`  ${silinenKullanici.count} kullanıcı silindi`);
+  }
+
   const after = await counts();
   const pooled = await prisma.adAccount.count({ where: { clientId: null } });
 
@@ -163,7 +253,10 @@ async function main(): Promise<void> {
   console.log(`  metrik satırı   ${before.insights} → ${after.insights}`);
   console.log(`  bağlantı        ${before.connections} → ${after.connections}  (ajansa ait, silinmiyor)`);
   console.log(`  üyelik          ${before.memberships} → ${after.memberships}`);
-  console.log(`  kullanıcı       ${before.users} → ${after.users}  (değişmemeli)`);
+  console.log(
+    `  kullanıcı       ${before.users} → ${after.users}` +
+      (PURGE_USERS ? `  (yalnızca yöneticiler kaldı)` : `  (değişmemeli)`),
+  );
   console.log(`\n  ${orgWide} organizasyon geneli üyelik KASITLI olarak duruyor —`);
   console.log(`  onsuz hiç kimse müşteri oluşturamazdı.`);
 
