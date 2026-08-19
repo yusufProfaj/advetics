@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
-import { TeamManager, type MemberRow } from '@/components/tenancy/team-manager';
+import type { MemberRow } from '@/components/tenancy/team-manager';
+import { TeamScreen } from '@/components/tenancy/team-screen';
 
 export const metadata = { title: 'Ekip & Yetkiler — Advetics' };
 
@@ -53,30 +54,19 @@ export default async function TeamPage() {
         </p>
       </div>
 
-      {/* Sessiz kesme yok — kaç kişi listelendiği yazılı. */}
-      <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-line bg-surface px-5 py-3.5 text-sm">
-        <span>
-          <strong>{members.length}</strong> kullanıcı
-        </span>
-        <span className="text-ink-muted">
-          <strong className="text-ink">{clients.length}</strong> müşteri
-        </span>
-      </div>
-
-      {members.length === 0 ? (
-        <div className="rounded-xl border border-line bg-surface p-8 text-center">
-          <p className="text-sm font-medium text-ink">Kullanıcı bulunamadı</p>
-          <p className="mt-1.5 text-sm text-ink-muted">
-            Listenin boş görünmesi yetkinin yetersiz olmasından da kaynaklanabilir.
-          </p>
-        </div>
-      ) : (
-        <TeamManager
-          members={members}
-          clients={clients}
-          currentUserId={session.user.id}
-        />
-      )}
+      {/*
+        SAYAÇ BANDI, EKLEME DÜĞMESİ VE LİSTELER TEK BİLEŞENDE.
+        Ekleme formu sayfanın üstünde sabit duruyordu ve her açılışta yer
+        kaplıyordu; oysa kullanıcı eklemek seyrek bir iş. Asıl soru
+        ("bu workspace'e kim erişiyor") ise hiç cevaplanmıyordu — kullanıcılar
+        tek tek kart olarak basılıyordu.
+      */}
+      <TeamScreen
+        members={members}
+        clients={clients}
+        currentUserId={session.user.id}
+        canManage={session.isOrgAdmin}
+      />
 
       <p className="text-xs text-ink-muted">
         Yeni müşteri açmak için{' '}

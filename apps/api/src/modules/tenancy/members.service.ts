@@ -14,6 +14,7 @@ import {
   type Permission,
   type TenantContext,
   type UpdateMembershipInput,
+  type UpdateMemberInfoInput,
 } from '@advetics/shared';
 import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -192,6 +193,89 @@ export class MembersService {
         /** false => kullanıcı zaten vardı; yazılan parola KULLANILMADI. */
         created: existing === null,
       };
+    });
+  }
+
+  /**
+   * KULLANICI BİLGİSİNİ GÜNCELLER — ad, e-posta, parola.
+   *
+   * NEDEN VAR: kullanıcı oluşturulduktan sonra bilgisi hiçbir yerden
+   * düzenlenemiyordu. Yalnızca rol değiştirilebiliyordu (`updateMembership`);
+   * yanlış yazılmış bir e-posta ya da unutulmuş bir parola için tek çare
+   * kullanıcıyı silip yeniden açmaktı — ve bu, o kullanıcının bütün müşteri
+   * yetkilerini de götürüyordu.
+   *
+   * ROL BURADA DEĞİŞTİRİLMİYOR ve bu bilinçli: bir kişi BİR müşteride
+   * yönetici, başkasında görüntüleyici olabiliyor. Rolü kullanıcıya bağlamak
+   * o kuralı sessizce bozardı; yetki `memberships` üzerinde kalıyor.
+   *
+   * RLS SINIRI YETERLİ: `users` politikası org yöneticisi olmayana yalnızca
+   * kendi satırını gösteriyor, dolayısıyla başka bir organizasyonun
+   * kullanıcısı bu sorguya hiç düşmüyor.
+   */
+  async updateMemberInfo(
+    ctx: TenantContext,
+    userId: string,
+    input: UpdateMemberInfoInput,
+    meta: Meta,
+  ) {
+    return this.prisma.withTenant({ ...ctx, activeClientId: null }, async (tx) => {
+      const before = await tx.user.findFirst({
+        where: { id: userId },
+        select: { id: true, email: true, fullName: true },
+      });
+      if (!before) throw new NotFoundException('Kullanıcı bulunamadı');
+
+      /*
+       * E-POSTA TEKİLLİĞİ ÖNCEDEN KONTROL EDİLİYOR. Veritabanı kısıtı zaten
+       * engelliyor ama oradan dönen hata ham bir `P2002` ve panelde
+       * "Bu kayıt zaten mevcut" oluyor — hangi alanın çakıştığını söylemiyor.
+       */
+      if (input.email && input.email !== before.email) {
+        const cakisan = await tx.user.findFirst({
+          where: { email: input.email, id: { not: userId } },
+          select: { id: true },
+        });
+        if (cakisan) {
+          throw new ConflictException('Bu e-posta başka bir kullanıcıda kayıtlı');
+        }
+      }
+
+      const veri: Record<string, unknown> = {};
+      if (input.fullName !== undefined) veri.fullName = input.fullName;
+      if (input.email !== undefined) veri.email = input.email;
+      if (input.password !== undefined) {
+        veri.passwordHash = await hashPassword(input.password);
+        /*
+         * PAROLA DEĞİŞİNCE OTURUMLAR DÜŞMÜYOR — ve bu bir eksik.
+         * `refresh_tokens` satırları geçerli kalıyor, yani parolası
+         * değiştirilen biri açık oturumunda çalışmaya devam ediyor. Doğrusu
+         * o kullanıcının refresh token'larını iptal etmek; bugün öyle bir yol
+         * yok ve uydurmak yerine yazılı bırakılıyor.
+         */
+      }
+
+      const after = await tx.user.update({
+        where: { id: userId },
+        data: veri,
+        select: { id: true, email: true, fullName: true },
+      });
+
+      await this.audit.record(tx, ctx, {
+        action: 'user.updated',
+        targetType: 'user',
+        targetId: userId,
+        // PAROLA DENETİM KAYDINA YAZILMIYOR, yalnızca DEĞİŞTİĞİ yazılıyor.
+        before: { email: before.email, fullName: before.fullName },
+        after: {
+          email: after.email,
+          fullName: after.fullName,
+          passwordChanged: input.password !== undefined,
+        },
+        ...meta,
+      });
+
+      return after;
     });
   }
 

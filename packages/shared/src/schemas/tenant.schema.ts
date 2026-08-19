@@ -291,3 +291,30 @@ export interface ClientChannels {
    */
   emptyReason: string | null;
 }
+
+/**
+ * KULLANICI BİLGİSİ GÜNCELLEME — rol DEĞİL.
+ *
+ * Rol ve yetkiler `PATCH /memberships/:id` üzerinden yönetiliyor ve öyle
+ * kalmalı: bir kullanıcının BİR müşteride yönetici, başkasında görüntüleyici
+ * olabilmesi bu ürünün temel kuralı ve rolü kullanıcıya bağlamak o kuralı
+ * sessizce bozardı.
+ *
+ * HER ALAN OPSİYONEL ama en az biri gerekli — boş bir gövde denetim kaydına
+ * "güncellendi" yazdırıp hiçbir şey değiştirmezdi.
+ */
+export const updateMemberInfoSchema = z
+  .object({
+    fullName: z.string().trim().min(2).max(120).optional(),
+    email: z.string().trim().email().max(255).optional(),
+    /**
+     * Verilirse parola DEĞİŞTİRİLİR. Boş dizge gönderilirse yok sayılıyor
+     * (formda dokunulmamış alan) — `undefined` ile ayrımı şemada yapılıyor
+     * ki "parolayı temizle" gibi bir şey kazara olmasın.
+     */
+    password: z.string().min(10).max(200).optional(),
+  })
+  .refine((v) => v.fullName !== undefined || v.email !== undefined || v.password !== undefined, {
+    message: 'Değiştirilecek en az bir alan gerekli',
+  });
+export type UpdateMemberInfoInput = z.infer<typeof updateMemberInfoSchema>;

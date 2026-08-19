@@ -1,0 +1,109 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+/**
+ * EKİP EKRANININ KARARLARI.
+ *
+ * Ekran tarayıcı olayları etrafında kurulu (modal, katlanır kart) ve bu
+ * depoda DOM test altyapısı yok. Sınanan şey, ekranın eski hâline dönmesini
+ * ve sessiz bir yetki hatasını engelleyen kararlar.
+ */
+const KAYNAK = readFileSync(join(__dirname, 'team-screen.tsx'), 'utf8');
+const SAYFA = readFileSync(
+  join(__dirname, '..', '..', 'app', '(dashboard)', 'ayarlar', 'ekip', 'page.tsx'),
+  'utf8',
+);
+
+const yorumsuz = (m: string): string =>
+  m
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '');
+
+describe('tarama boşa düşmüyor', () => {
+  it('dosyalar okunuyor ve beklenen gövdeyi taşıyor', () => {
+    expect(KAYNAK.length).toBeGreaterThan(4000);
+    expect(yorumsuz(KAYNAK)).toContain('TeamScreen');
+    expect(yorumsuz(SAYFA)).toContain('TeamScreen');
+  });
+});
+
+describe('ajans ekibi / workspace ayrımı', () => {
+  it('KRİTİK: ayrım ÜYELİK KAPSAMINA göre — e-posta ya da role göre DEĞİL', () => {
+    /*
+     * Ajans personeline bir müşteride rol verilebiliyor ve müşteri
+     * tarafından biri asla org geneli üyelik almıyor. Alan adına ("@profaj")
+     * ya da role bakan bir ayrım, ilk istisnada yanlış kümeye koyardı.
+     */
+    const kod = yorumsuz(KAYNAK);
+    expect(kod).toContain('x.clientId === null');
+    expect(kod).not.toContain('@profaj');
+    expect(kod).not.toMatch(/endsWith\(['"]@/);
+  });
+
+  it('workspace üyeleri o müşterinin kimliğiyle eşleşiyor', () => {
+    expect(yorumsuz(KAYNAK)).toContain('x.clientId === c.id');
+  });
+});
+
+describe('eski düzen geri gelmesin', () => {
+  it('KRİTİK: sayfa artık kullanıcıları tek tek kart olarak basmıyor', () => {
+    // Eski ekran her KULLANICIYI kart yapıyordu ve "bu workspace'e kim
+    // erişiyor" sorusu cevapsız kalıyordu.
+    expect(yorumsuz(SAYFA)).not.toContain('<TeamManager');
+  });
+
+  it('KRİTİK: kullanıcı ekleme POP-UP’ta, sayfada sabit form değil', () => {
+    const kod = yorumsuz(KAYNAK);
+    expect(kod).toContain('KullaniciEkleModal');
+    expect(kod).toContain('role="dialog"');
+  });
+});
+
+describe('yetki kararları', () => {
+  it('KRİTİK: rol düzenleme modalında YOK — üyelikte kalıyor', () => {
+    /*
+     * Bir kişi bir müşteride yönetici, başkasında görüntüleyici olabiliyor.
+     * Rolü kullanıcı bilgisiyle birlikte göndermek o kuralı sessizce bozardı.
+     */
+    const kod = yorumsuz(KAYNAK);
+    const i = kod.indexOf('function UyeDuzenleModal');
+    expect(i).toBeGreaterThan(-1);
+    const govde = kod.slice(i, i + 2500);
+    expect(govde).toContain('/members/');
+    expect(govde).not.toContain('role:');
+  });
+
+  it('KRİTİK: yalnızca DEĞİŞEN alanlar gönderiliyor', () => {
+    // Hepsini göndermek, parola alanını boş bırakanın parolasını
+    // sıfırlamaya çalışmak demekti.
+    const kod = yorumsuz(KAYNAK);
+    expect(kod).toContain('adDegisti ?');
+    expect(kod).toContain('epostaDegisti ?');
+    expect(kod).toContain("parola !== '' ?");
+  });
+
+  it('KRİTİK: kendi yetkini değiştirmek kapalı', () => {
+    // Tek yöneticinin kendini düşürmesi, panelden geri alınamayan bir
+    // kilitlenme üretir.
+    expect(yorumsuz(KAYNAK)).toContain('kendisi');
+  });
+
+  it('org geneli kapsam yalnızca owner/admin için seçilebilir', () => {
+    const kod = yorumsuz(KAYNAK);
+    expect(kod).toContain("rol === 'owner' || rol === 'admin'");
+  });
+});
+
+describe('sessiz kalmayan yerler', () => {
+  it('davet gönderilmediği yazılı', () => {
+    expect(yorumsuz(KAYNAK)).toContain('davet gönderilmiyor');
+  });
+
+  it('KRİTİK: parola değişince oturumun düşmediği yazılı', () => {
+    // Bilinen eksik; gizlemek, erişimi kestiğini sanan birine yanlış
+    // güven verirdi.
+    expect(yorumsuz(KAYNAK)).toContain('açık oturumu düşmüyor');
+  });
+});
