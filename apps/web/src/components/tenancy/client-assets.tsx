@@ -177,19 +177,29 @@ export function ClientAssets({
           görünmeyecek.
         </p>
       ) : (
-        <ul className="mt-2 space-y-1">
+        /*
+          SATIRLAR TEK BİÇİMLİ. Önceki düzende reklam hesabı TEK satır,
+          sosyal profil ise İKİ blok basıyordu: ad satırı, altında tam
+          genişlikte bir "Boost hesabı:" açılır kutusu. Kart içinde bazı
+          satırlar 20px, bazıları 60px yükseliyordu ve liste kırık görünüyordu.
+
+          Artık her varlık AYNI ızgarada: sabit genişlikte platform etiketi,
+          esneyen ad, sağda eylemler. Boost seçici ADIN YANINDA ve dar —
+          sağdaki eylem sütununun soluna yerleşiyor, altına değil.
+        */
+        <ul className="mt-2 divide-y divide-line/60">
           {adAccounts.map((a) => (
-            <li key={a.id} className="flex items-center justify-between gap-2 text-xs">
-              <span className="min-w-0 truncate">
-                <span className="text-ink-muted">
-                  {PLATFORM_LABEL[a.platform] ?? a.platform} ·{' '}
-                </span>
-                <span className="font-medium text-ink">{a.name}</span>
-                {/* İZLENMİYOR OLMAK SESSİZ KALMAMALI: atanmış ama kapalı bir
-                    hesap, hiç atanmamış bir hesapla panelde birebir aynı
-                    görünür — ikisi de "veri yok". */}
-                {!a.syncEnabled && <span className="text-amber-700"> · izlenmiyor</span>}
+            <li key={a.id} className="flex items-center gap-2 py-1.5 text-xs">
+              <span className="w-12 shrink-0 text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                {PLATFORM_LABEL[a.platform] ?? a.platform}
               </span>
+              <span className="min-w-0 flex-1 truncate font-medium text-ink">{a.name}</span>
+              {/* İZLENMİYOR OLMAK SESSİZ KALMAMALI: atanmış ama kapalı bir
+                  hesap, hiç atanmamış bir hesapla panelde birebir aynı
+                  görünür — ikisi de "veri yok". */}
+              {!a.syncEnabled && (
+                <span className="shrink-0 text-[10px] text-amber-700">izlenmiyor</span>
+              )}
               {canManage && (
                 <button
                   type="button"
@@ -201,31 +211,67 @@ export function ClientAssets({
                   }
                   disabled={busy !== null || isPending}
                   title="Havuza geri koy — bu müşteriden çıkar"
-                  className="shrink-0 text-[11px] text-ink-muted underline decoration-dotted transition hover:text-ink disabled:opacity-40"
+                  className="shrink-0 text-[11px] text-ink-muted transition hover:text-danger disabled:opacity-40"
                 >
                   {busy === a.id ? '…' : 'çıkar'}
                 </button>
               )}
             </li>
           ))}
+
           {profiles.map((p) => (
-            <li key={p.id} className="text-xs">
-              <div className="flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate">
-                <span className="text-ink-muted">
-                  {p.profileType === 'instagram_business' ? 'IG' : 'FB'} ·{' '}
-                </span>
-                <span className="font-medium text-ink">{p.name}</span>
-                {/* İZLENMİYOR OLMAK SESSİZ KALMAMALI — reklam hesaplarındaki
-                    ile aynı gerekçe. Atanmış ama izlemesi kapalı bir sayfa,
-                    Akıllı Boost'ta hiç atanmamış bir sayfayla birebir aynı
-                    görünüyor: gönderi yok. */}
-                {!p.syncEnabled && (
-                  <span className="text-amber-700"> · gönderiler çekilmiyor</span>
-                )}
+            <li key={p.id} className="flex items-center gap-2 py-1.5 text-xs">
+              <span className="w-12 shrink-0 text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                {p.profileType === 'instagram_business'
+                  ? 'IG'
+                  : p.profileType === 'youtube_channel'
+                    ? 'YT'
+                    : 'FB'}
               </span>
+              <span className="min-w-0 flex-1 truncate font-medium text-ink">{p.name}</span>
+
+              {/*
+                BOOST FATURALANDIRMA HESABI — gönderi öne çıkarmanın ön koşulu.
+                Eşleşme yoksa Akıllı Boost her gönderide "bağlı reklam hesabı
+                yok" diyor ve sebebi burada çözülüyor.
+
+                DAR VE SATIR İÇİNDE: tam genişlikte ve satırın altında
+                dururken listeyi kırıyordu.
+              */}
+              {canManage &&
+                p.profileType !== 'youtube_channel' &&
+                (metaAccounts.length === 0 ? (
+                  <span
+                    title="Bu müşteriye atanmış Meta reklam hesabı yok"
+                    className="shrink-0 text-[10px] text-amber-700"
+                  >
+                    boost hesabı yok
+                  </span>
+                ) : (
+                  <select
+                    value={p.linkedAdAccountId ?? ''}
+                    onChange={(e) => void linkAccount(p, e.target.value || null)}
+                    disabled={busy !== null || isPending}
+                    title="Boost faturalandırma hesabı"
+                    className={`w-24 shrink-0 rounded border border-line bg-surface px-1 py-0.5 text-[10px] outline-none focus:border-brand disabled:opacity-40 ${
+                      p.linkedAdAccountId ? 'text-ink' : 'text-amber-700'
+                    }`}
+                  >
+                    <option value="">boost yok</option>
+                    {metaAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                ))}
+
+              {!p.syncEnabled && (
+                <span className="shrink-0 text-[10px] text-amber-700">çekilmiyor</span>
+              )}
+
               {canManage && (
-                <span className="flex shrink-0 items-center gap-2">
+                <span className="flex shrink-0 items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => void toggleProfileSync(p)}
@@ -235,9 +281,9 @@ export function ClientAssets({
                         ? 'Gönderi çekmeyi durdur'
                         : 'Organik gönderileri çek — Akıllı Boost bunları kullanıyor'
                     }
-                    className="text-[11px] text-brand underline decoration-dotted transition hover:no-underline disabled:opacity-40"
+                    className="text-[11px] text-ink-muted transition hover:text-ink disabled:opacity-40"
                   >
-                    {busy === p.id ? '…' : p.syncEnabled ? 'izlemeyi durdur' : 'izlemeye al'}
+                    {busy === p.id ? '…' : p.syncEnabled ? 'durdur' : 'izle'}
                   </button>
                   <button
                     type="button"
@@ -249,45 +295,11 @@ export function ClientAssets({
                     }
                     disabled={busy !== null || isPending}
                     title="Havuza geri koy — bu müşteriden çıkar"
-                    className="text-[11px] text-ink-muted underline decoration-dotted transition hover:text-ink disabled:opacity-40"
+                    className="text-[11px] text-ink-muted transition hover:text-danger disabled:opacity-40"
                   >
                     çıkar
                   </button>
                 </span>
-              )}
-              </div>
-
-              {/*
-                BOOST FATURALANDIRMA HESABI — gönderi öne çıkarmanın ön koşulu.
-                Eşleşme yoksa Akıllı Boost her gönderide "bağlı reklam hesabı
-                yok" diyor ve sebebi burada çözülüyor.
-              */}
-              {canManage && (
-                <div className="mt-1 flex items-center gap-1.5">
-                  <span className="shrink-0 text-[11px] text-ink-muted">Boost hesabı:</span>
-                  {metaAccounts.length === 0 ? (
-                    // BOŞ AÇILIR LİSTE GÖSTERİLMİYOR: kullanıcı kendi
-                    // kurulumunda bir şey eksik sanmasın, eksik olan şey
-                    // ATANMIŞ META HESABI.
-                    <span className="text-[11px] text-amber-700">
-                      bu müşteriye atanmış Meta hesabı yok
-                    </span>
-                  ) : (
-                    <select
-                      value={p.linkedAdAccountId ?? ''}
-                      onChange={(e) => void linkAccount(p, e.target.value || null)}
-                      disabled={busy !== null || isPending}
-                      className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 py-1 text-[11px] text-ink outline-none focus:border-brand disabled:opacity-40"
-                    >
-                      <option value="">Seçilmedi — öne çıkarılamaz</option>
-                      {metaAccounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
               )}
             </li>
           ))}

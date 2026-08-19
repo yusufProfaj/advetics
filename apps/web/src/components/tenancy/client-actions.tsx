@@ -61,6 +61,12 @@ export function ClientActions({
   }
 
   return (
+    /*
+      İKİ SARMAL: dıştaki `mt-auto` satırı kartın altına itiyor, içteki
+      `mt-4` ise içerik kartı doldurduğunda ayırıcı çizginin metne
+      yapışmasını engelliyor — `mt-auto` boş alan kalmayınca 0'a düşüyor.
+    */
+    <div className="mt-auto">
     <div className="mt-4 border-t border-line pt-3">
       <div className="flex flex-wrap items-center gap-4 text-xs">
         <button
@@ -125,6 +131,7 @@ export function ClientActions({
           {error}
         </p>
       )}
+    </div>
     </div>
   );
 }

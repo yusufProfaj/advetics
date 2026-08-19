@@ -56,10 +56,49 @@ export function SpecialCategoryPicker({
     }
   }
 
+  /*
+   * KATLANIYOR — açıklama metni her kartta AÇIK duruyordu.
+   *
+   * Beyan bir müşteride ömür boyu bir ya da iki kez değişiyor; buna karşılık
+   * dört satırlık uyarı metni ve beş etiket, her müşteri kartının yarısını
+   * kaplıyordu. Kapalıyken TEK SATIR ve o satır asıl bilgiyi taşıyor:
+   * beyan var mı, varsa hangisi.
+   *
+   * SEÇİLİ KATEGORİ VARSA VARSAYILAN AÇIK. Kapatmak, düzenlemeye tabi bir
+   * beyanı göz önünden kaldırmak olurdu — kartın yarısını yiyen şey açıklama
+   * metniydi, beyanın kendisi değil.
+   */
+  const [acik, setAcik] = useState(secili.length > 0);
+
+  const ozet =
+    secili.length === 0
+      ? 'beyan yok'
+      : secili.map((k) => SPECIAL_AD_CATEGORY_META[k].label).join(', ');
+
   return (
-    <div className="rounded-lg border border-line p-3">
-      <p className="text-xs font-semibold text-ink">Özel reklam kategorisi</p>
-      <p className="mt-0.5 text-[11px] text-ink-muted">
+    <div className="rounded-lg border border-line">
+      <button
+        type="button"
+        onClick={() => setAcik((v) => !v)}
+        aria-expanded={acik}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-surface-sunken"
+      >
+        <span className="min-w-0">
+          <span className="block text-xs font-semibold text-ink">Özel reklam kategorisi</span>
+          <span
+            className={`block truncate text-[11px] ${
+              secili.length > 0 ? 'text-amber-700' : 'text-ink-muted'
+            }`}
+          >
+            {ozet}
+          </span>
+        </span>
+        <span className="shrink-0 text-[11px] text-ink-muted">{acik ? 'kapat' : 'düzenle'}</span>
+      </button>
+
+      {!acik ? null : (
+      <div className="border-t border-line p-3">
+      <p className="text-[11px] text-ink-muted">
         Konut, istihdam ve kredi reklamları düzenlemeye tabi. Beyan edilmeden yayınlanan
         reklam politika ihlali ve ceza <strong>hesap seviyesinde</strong> — o hesaptaki
         bütün kampanyaları etkiliyor.
@@ -118,6 +157,8 @@ export function SpecialCategoryPicker({
       )}
       {kaydedildi && !degisti && (
         <p className="mt-2 text-[11px] text-emerald-700">Beyan kaydedildi.</p>
+      )}
+      </div>
       )}
     </div>
   );

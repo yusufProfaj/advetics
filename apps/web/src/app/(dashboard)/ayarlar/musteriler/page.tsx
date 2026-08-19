@@ -96,8 +96,17 @@ export default async function ClientsPage() {
     0,
   );
 
+  /*
+   * GENİŞLİK 5xl'DEN 7xl'E. Kartlar iki kolonda 1024px'lik bir şeride
+   * sıkışıyordu ve geniş ekranda içerik sayfanın ortasında dar bir sütun
+   * olarak duruyordu. Kart içeriği (varlık listesi + açılır kutular) o
+   * genişlikte satır satır kırılıyordu.
+   *
+   * ÜÇÜNCÜ KOLON YALNIZCA xl'DE (aşağıdaki ızgara): 1280px altında üç kart
+   * yan yana konunca varlık satırlarındaki ad ve boost seçici yine kırılıyor.
+   */
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Müşteriler</h1>
         <p className="mt-1 text-sm text-ink-muted">
@@ -145,7 +154,7 @@ export default async function ClientsPage() {
           </p>
         </div>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2">
+        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {clients.map((client) => {
             const watched = client.adAccounts.filter((a) => a.syncEnabled).length;
             const total = client._count.adAccounts;
@@ -153,7 +162,14 @@ export default async function ClientsPage() {
             return (
               <li
                 key={client.id}
-                className="rounded-xl border border-line bg-surface p-5 shadow-sm"
+                /*
+                  DİKEY FLEX: ızgara kartları zaten eşit yüksekliğe uzatıyor
+                  ama alt eylem satırı (Hesapları yönet / Ekibi yönet /
+                  Arşivle) içeriğin bittiği yerde kalıyordu — yan yana iki
+                  kartta iki farklı hizada duruyor ve liste kırık görünüyordu.
+                  `mt-auto` ile satır kartın altına yapışıyor.
+                */
+                className="flex flex-col rounded-xl border border-line bg-surface p-5 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
