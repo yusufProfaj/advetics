@@ -27,14 +27,30 @@ import { PlatformLogo } from '@/components/platform-logo';
  */
 export function BagliKanallar({ data }: { data: ClientChannels }) {
   return (
-    <div className="space-y-4">
+    <div>
       {data.emptyReason ? (
         <div className="rounded-xl border border-dashed border-line p-8 text-center">
           <p className="text-sm font-medium text-ink">Bağlanabilecek kanal yok</p>
           <p className="mx-auto mt-1.5 max-w-lg text-sm text-ink-muted">{data.emptyReason}</p>
         </div>
       ) : (
-        data.groups.map((g) => <KanalGrubu key={g.kind} clientId={data.clientId} grup={g} />)
+        /*
+          KANALLAR YAN YANA DİKEY KARTLARDA — alt alta geniş şeritlerde DEĞİL.
+          Şerit düzeninde her kart ekranın tamamını kaplıyor ama içindeki
+          hesap satırı üçte birinde bitiyordu: sağda kalıcı bir ölü alan ve
+          beş kanalı görmek için sürekli kaydırma. Kart daralınca içerik
+          genişliğine oturuyor ve beş kanal tek ekranda görünüyor.
+
+          `items-start`: kanalların hesap sayısı farklı ve ızgaranın hepsini
+          en uzun karta uzatması, boş kart alanı üretirdi.
+        */
+        <ul className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
+          {data.groups.map((g) => (
+            <li key={g.kind}>
+              <KanalGrubu clientId={data.clientId} grup={g} />
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -46,7 +62,10 @@ function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }
 
   return (
     <section className="rounded-xl border border-line bg-surface p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* BAŞLIK SARMIYOR: dar kartta "+ Kanal Ekle" alt satıra düşüp
+          başlığın altında yalnız kalıyordu. Düğme küçüldü ve kırpılmayan
+          tek satırda kalıyor. */}
+      <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
           {/* LOGO BEYAZ ZEMİNDE: markaların kendi renkleri var ve renkli
               bir rozetin üstünde ikisi çakışıyordu. */}
@@ -70,7 +89,7 @@ function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }
           type="button"
           onClick={() => setAcik((v) => !v)}
           disabled={!eklenebilir}
-          className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-40"
+          className="shrink-0 whitespace-nowrap rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-40"
         >
           {acik ? 'Kapat' : '+ Kanal Ekle'}
         </button>
@@ -82,15 +101,10 @@ function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }
         </p>
       )}
 
+      {/* KART DARALDI, HESAPLAR ALT ALTA. Kanal kartları yan yana dizildiği
+          için kart içinde ikinci bir kolon açmak adları kırpardı. */}
       {grup.connected.length > 0 && (
-        /*
-          BAĞLI HESAPLAR IZGARAYI DOLDURUYOR. İki kolonda kalınca tek hesaplı
-          bir kanalda satır ekranın yarısında bitiyor ve sağda ölü alan
-          kalıyordu — ekran görüntüsünde en göze batan şey buydu. Dört kolona
-          kadar açılıyor; hesap sayısı arttıkça yatay alan gerçekten işe
-          yarıyor ve kart dikey olarak uzamıyor.
-        */
-        <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <ul className="mt-3 space-y-2">
           {grup.connected.map((i) => (
             <BagliKart key={i.id} clientId={clientId} kind={grup.kind} item={i} />
           ))}
@@ -101,9 +115,10 @@ function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }
         <div className="mt-3 rounded-lg border border-line bg-surface-sunken p-3">
           <p className="text-[11px] font-medium text-ink">Havuzdan seç</p>
           <p className="mt-0.5 text-[11px] text-ink-muted">{CHANNEL_HINTS[grup.kind]}</p>
-          {/* SEÇİCİ LİSTESİ DE YAYILIYOR — havuzda onlarca hesap olabiliyor
-              ve tek kolonda okumak kaydırmayı zorunlu kılıyordu. */}
-          <ul className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+          {/* SEÇİCİ DE ALT ALTA ve YÜKSEKLİĞİ SINIRLI: havuzda onlarca hesap
+              olabiliyor ve sınırsız liste, kartı sayfa boyunca uzatıp
+              yanındaki kanalları ekrandan atıyordu. */}
+          <ul className="mt-2 max-h-64 space-y-1.5 overflow-y-auto">
             {grup.available.map((i) => (
               <SecilebilirSatir key={i.id} clientId={clientId} kind={grup.kind} item={i} />
             ))}
