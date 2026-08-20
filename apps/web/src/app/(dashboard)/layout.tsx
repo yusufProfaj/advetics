@@ -2,6 +2,7 @@ import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { ClientSwitcher } from '@/components/client-switcher';
 import { LogoutButton } from '@/components/logout-button';
+import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
 import { NavSection } from '@/components/nav';
 import { visibleSections } from '@/lib/nav-sections';
 
@@ -110,6 +111,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
         </header>
 
+        {/* OTURUMU AYAKTA TUTAR. Access token 15 dakikada ölüyor ve panelde
+            onu yenileyen hiçbir çağrı yoktu: kullanıcı tam 15 dakika sonra
+            atılıyordu. Ayrıntılı gerekçe bileşenin kendisinde. */}
+        <OturumTazeleyici />
         <main className="flex-1 px-5 py-6">{children}</main>
 
         {!branding?.hidePoweredBy && (
