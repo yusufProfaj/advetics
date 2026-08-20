@@ -41,11 +41,41 @@ export function TeamScreen({
 }) {
   const [ekleAcik, setEkleAcik] = useState(false);
   const [duzenlenen, setDuzenlenen] = useState<MemberRow | null>(null);
+  const [atanan, setAtanan] = useState<MemberRow | null>(null);
 
+  /*
+   * AJANS EKİBİ = ORG GENELİ ÜYELİĞİ OLANLAR + HİÇ ÜYELİĞİ OLMAYANLAR.
+   *
+   * İkinci kısım bir hatayı kapatıyor: ilk sürüm yalnızca org geneli üyeliği
+   * olanları alıyordu ve HİÇBİR ÜYELİĞİ OLMAYAN kullanıcı iki listede de
+   * çıkmıyordu. Üstteki sayaç "4 kullanıcı" derken ekranda bir kişi
+   * görünüyordu — kullanıcı var, hiçbir yerde yok.
+   *
+   * Bu hâl istisna da değil: ajans personeli önce açılıyor, yetkisi sonra
+   * veriliyor. Yetkisiz kalan kişi tam da "Danışman ata" ile bir workspace'e
+   * bağlanacak olan.
+   */
   const ajansEkibi = useMemo(
-    () => members.filter((m) => m.memberships.some((x) => x.clientId === null)),
+    () =>
+      members.filter(
+        (m) => m.memberships.length === 0 || m.memberships.some((x) => x.clientId === null),
+      ),
     [members],
   );
+
+  /*
+   * HİÇBİR LİSTEYE DÜŞMEYEN KALDI MI — sessiz kaybolmaya karşı.
+   * Yalnızca müşteriye bağlı üyeliği olan biri workspace kartında görünüyor;
+   * burada sayılan, ikisine de girmeyenler.
+   */
+  const kayipSayisi =
+    members.length -
+    new Set([
+      ...ajansEkibi.map((m) => m.id),
+      ...clients.flatMap((c) =>
+        members.filter((m) => m.memberships.some((x) => x.clientId === c.id)).map((m) => m.id),
+      ),
+    ]).size;
 
   const workspaceler = useMemo(
     () =>
@@ -78,6 +108,15 @@ export function TeamScreen({
         )}
       </div>
 
+      {/* SESSİZ KAYBOLMA UYARISI. Bu sayı sıfırdan büyükse listelerden biri
+          eksik demektir ve sayaçla ekran birbirini tutmuyor. */}
+      {kayipSayisi > 0 && (
+        <p className="rounded-lg bg-warn/10 px-4 py-2.5 text-xs text-warn">
+          {kayipSayisi} kullanıcı hiçbir listede görünmüyor. Bu bir arıza —
+          ekrandaki sayı ile listeler birbirini tutmuyor.
+        </p>
+      )}
+
       <section>
         <h2 className="text-sm font-semibold text-ink">Ajans ekibi</h2>
         <p className="mt-0.5 text-xs text-ink-muted">
@@ -101,19 +140,35 @@ export function TeamScreen({
                   <span className="block truncate text-xs text-ink-muted">{m.email}</span>
                 </span>
                 <span className="shrink-0 text-xs text-ink-muted">
-                  {m.memberships
-                    .filter((x) => x.clientId === null)
-                    .map((x) => ROLE_TR[x.role])
-                    .join(', ')}
+                  {m.memberships.length === 0 ? (
+                    /* YETKİSİZ HESAP SESSİZ KALMIYOR: giriş yapabiliyor ama
+                       panelde hiçbir veri göremiyor ve sebebi yalnızca
+                       burada yazılı. */
+                    <span className="text-warn">yetkisi yok</span>
+                  ) : (
+                    m.memberships
+                      .filter((x) => x.clientId === null)
+                      .map((x) => ROLE_TR[x.role])
+                      .join(', ')
+                  )}
                 </span>
                 {canManage && (
-                  <button
-                    type="button"
-                    onClick={() => setDuzenlenen(m)}
-                    className="shrink-0 text-xs font-medium text-brand-strong hover:underline"
-                  >
-                    Düzenle
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setAtanan(m)}
+                      className="shrink-0 text-xs font-medium text-brand-strong hover:underline"
+                    >
+                      Danışman ata
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDuzenlenen(m)}
+                      className="shrink-0 text-xs text-ink-muted transition hover:text-ink"
+                    >
+                      Düzenle
+                    </button>
+                  </>
                 )}
               </li>
             ))}
@@ -151,6 +206,13 @@ export function TeamScreen({
       )}
       {duzenlenen && (
         <UyeDuzenleModal member={duzenlenen} onKapat={() => setDuzenlenen(null)} />
+      )}
+      {atanan && (
+        <DanismanAtaModal
+          member={atanan}
+          clients={clients}
+          onKapat={() => setAtanan(null)}
+        />
       )}
     </div>
   );
@@ -480,6 +542,118 @@ function KullaniciEkleModal({
         >
           {busy ? 'Ekleniyor…' : 'Kullanıcıyı ekle'}
         </button>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * DANIŞMAN ATA — ajans personelini bir workspace'e bağlar.
+ *
+ * NEDEN KISAYOL: ajans çalışanı önce açılıyor, yetkisi sonra veriliyor. O
+ * arada kişi hiçbir müşteriyi göremiyor ve yetkiyi vermenin yolu workspace
+ * kartını açıp "yetki ekle" aramaktı. Kısayol kişiden başlıyor: "bu kişiyi
+ * hangi müşteriye, hangi rolle".
+ *
+ * ORG GENELİ ERİŞİM BURADAN VERİLMİYOR. Bu ekran "bir müşteriye ata" işi;
+ * bütün müşterilere erişim ayrı bir karar ve `owner`/`admin` rolü gerektiriyor
+ * — sunucu da öyle uyguluyor (`createMembershipSchema`). Buradan seçilebilse
+ * bir danışman atama işlemi sessizce org yöneticisi üretebilirdi.
+ */
+function DanismanAtaModal({
+  member,
+  clients,
+  onKapat,
+}: {
+  member: MemberRow;
+  clients: ClientOption[];
+  onKapat: () => void;
+}) {
+  const router = useRouter();
+  const [clientId, setClientId] = useState('');
+  const [rol, setRol] = useState<Role>('manager');
+  const [busy, setBusy] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+
+  /*
+   * ZATEN YETKİSİ OLAN MÜŞTERİLER LİSTEDE YOK. Sunucu ikinci bir üyeliği
+   * "zaten bu kapsamda erişimi var" diye reddediyor; seçilebilir bırakmak,
+   * kullanıcıyı tıklayıp hata almaya göndermek olurdu.
+   */
+  const secilebilir = clients.filter(
+    (c) => !member.memberships.some((m) => m.clientId === c.id),
+  );
+
+  async function ata(): Promise<void> {
+    setBusy(true);
+    setHata(null);
+    try {
+      await apiFetch('/memberships', {
+        method: 'POST',
+        body: JSON.stringify({ userId: member.id, clientId, role: rol }),
+      });
+      router.refresh();
+      onKapat();
+    } catch (e) {
+      setHata(e instanceof ApiRequestError ? e.message : 'Atama başarısız oldu.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal baslik={`${member.fullName ?? member.email} — danışman ata`} onKapat={onKapat}>
+      <div className="space-y-3">
+        {secilebilir.length === 0 ? (
+          <p className="rounded-lg bg-surface-sunken px-3 py-2 text-sm text-ink-muted">
+            Bu kişinin zaten bütün müşterilerde yetkisi var.
+          </p>
+        ) : (
+          <>
+            <label className="block">
+              <span className="text-[11px] text-ink-muted">Workspace</span>
+              <select
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
+              >
+                <option value="">Seçin…</option>
+                {secilebilir.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] text-ink-muted">Rol</span>
+              <select
+                value={rol}
+                onChange={(e) => setRol(e.target.value as Role)}
+                className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
+              >
+                {/* ORG GENELİ ROLLER YOK: bu ekran bir müşteriye atama işi. */}
+                {ROLES.filter((r) => r !== 'owner' && r !== 'admin').map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_TR[r as Role]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {hata && <p className="text-xs text-danger">{hata}</p>}
+
+            <button
+              type="button"
+              onClick={() => void ata()}
+              disabled={busy || clientId === ''}
+              className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
+            >
+              {busy ? 'Atanıyor…' : 'Ata'}
+            </button>
+          </>
+        )}
       </div>
     </Modal>
   );

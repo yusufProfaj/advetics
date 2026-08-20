@@ -120,28 +120,24 @@ export default async function ClientsPage() {
         izlendiği görünmezse, hesabı bağlı ama izlemeye açılmamış bir müşteri
         "veri gelmiyor" diye okunur ve sebebi hiçbir ekranda yazmaz.
       */}
-      <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-line bg-surface px-5 py-3.5 text-sm">
-        <span>
-          <strong>{clients.length}</strong> müşteri
-        </span>
-        <span className="text-ink-muted">
-          <strong className="text-ink">{totalAccounts}</strong> reklam hesabı
-        </span>
-        <span className="text-ink-muted">
-          <strong className="text-ink">{totalWatched}</strong> tanesi izlemede
-        </span>
-      </div>
-
       {/*
-        KURULUM SİHİRBAZI, TEK SATIRLIK "ad gir" FORMUNUN YERİNE.
-        Eski form yalnızca müşteriyi açıyordu; hesap atama, izleme açma ve
-        sayfa ekleme ayrı ekranlara dağılmıştı ve kullanıcının tarifi "hepsi
-        angarya" oldu. Sihirbaz hepsini tek çağrıda yapıyor.
-
-        HAVUZ SİHİRBAZA VERİLİYOR: sayfa `connections`'ı zaten çekiyor
-        (yukarıdaki sayaçlar için), ikinci bir istek gereksiz.
+        "YENİ MÜŞTERİ" SAYAÇ BANDININ İÇİNDE — altında ayrı bir satırda değil.
+        Ayrı satırda dururken sağa yaslanmış tek bir düğme kendi başına bir
+        şerit kaplıyordu ve bandın sağındaki boşluk boş duruyordu. Ekip
+        ekranındaki "+ Kullanıcı ekle" ile aynı yer ve aynı desen.
       */}
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-5 py-3.5 text-sm">
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
+          <span>
+            <strong>{clients.length}</strong> müşteri
+          </span>
+          <span className="text-ink-muted">
+            <strong className="text-ink">{totalAccounts}</strong> reklam hesabı
+          </span>
+          <span className="text-ink-muted">
+            <strong className="text-ink">{totalWatched}</strong> tanesi izlemede
+          </span>
+        </div>
         <ClientSetupWizard connections={connections} />
       </div>
 

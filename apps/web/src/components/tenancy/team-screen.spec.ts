@@ -47,6 +47,70 @@ describe('ajans ekibi / workspace ayrımı', () => {
   });
 });
 
+describe('KİMSE KAYBOLMUYOR', () => {
+  it('KRİTİK: üyeliği OLMAYAN kullanıcı da ajans ekibinde', () => {
+    /*
+     * İlk sürüm yalnızca org geneli üyeliği olanları alıyordu ve hiçbir
+     * üyeliği olmayan kullanıcı iki listede de çıkmıyordu: sayaç "4
+     * kullanıcı" derken ekranda bir kişi görünüyordu. Ajans personeli önce
+     * açılıp yetkisi sonra verildiği için bu hâl istisna değil, normal.
+     */
+    /*
+     * ÇAPA `ajansEkibi` TANIMININ GÖVDESİ, dosyanın tamamı DEĞİL. İlk sürüm
+     * dizgeyi her yerde arıyordu ve mutasyon testi BOŞ çıktı: koşulu
+     * listeden sildim, aynı dizge satır içindeki "yetkisi yok" kontrolünde
+     * geçtiği için test GEÇTİ.
+     */
+    const kod = yorumsuz(KAYNAK);
+    const m = /const ajansEkibi = useMemo\(([\s\S]*?)\[members\]/.exec(kod);
+    if (!m) throw new Error('ajansEkibi tanımı bulunamadı — tarama boşa düştü.');
+    expect(m[1]).toContain('m.memberships.length === 0');
+  });
+
+  it('KRİTİK: hiçbir listeye düşmeyen varsa EKRANDA uyarı çıkıyor', () => {
+    // Sayı ile liste birbirini tutmuyorsa bu bir arıza ve sessiz kalmamalı.
+    /*
+     * ÇAPA KOŞULLU RENDER, değişkenin varlığı DEĞİL. `kayipSayisi` tanımlı
+     * kalıp render kapatılabiliyordu ve test yine geçiyordu.
+     */
+    const kod = yorumsuz(KAYNAK);
+    expect(kod).toContain('{kayipSayisi > 0 && (');
+    expect(kod).toContain('hiçbir listede görünmüyor');
+  });
+
+  it('yetkisiz hesabın durumu satırda yazılı', () => {
+    // Giriş yapabiliyor ama panelde hiçbir veri göremiyor.
+    expect(yorumsuz(KAYNAK)).toContain('yetkisi yok');
+  });
+});
+
+describe('DANIŞMAN ATA', () => {
+  it('KRİTİK: org geneli rol buradan VERİLEMİYOR', () => {
+    /*
+     * Bu ekran "bir müşteriye ata" işi. Buradan owner/admin seçilebilse bir
+     * danışman atama işlemi sessizce org yöneticisi üretirdi.
+     */
+    const kod = yorumsuz(KAYNAK);
+    const i = kod.indexOf('function DanismanAtaModal');
+    expect(i).toBeGreaterThan(-1);
+    const govde = kod.slice(i, i + 3500);
+    expect(govde).toContain("r !== 'owner' && r !== 'admin'");
+  });
+
+  it('zaten yetkisi olan müşteri listede YOK', () => {
+    // Sunucu ikinci üyeliği reddediyor; seçilebilir bırakmak kullanıcıyı
+    // tıklayıp hata almaya göndermek olurdu.
+    expect(yorumsuz(KAYNAK)).toContain('!member.memberships.some((m) => m.clientId === c.id)');
+  });
+
+  it('üyelik ucuna gidiyor, kullanıcı ucuna değil', () => {
+    const kod = yorumsuz(KAYNAK);
+    const i = kod.indexOf('function DanismanAtaModal');
+    const govde = kod.slice(i, i + 3500);
+    expect(govde).toContain("'/memberships'");
+  });
+});
+
 describe('eski düzen geri gelmesin', () => {
   it('KRİTİK: sayfa artık kullanıcıları tek tek kart olarak basmıyor', () => {
     // Eski ekran her KULLANICIYI kart yapıyordu ve "bu workspace'e kim
