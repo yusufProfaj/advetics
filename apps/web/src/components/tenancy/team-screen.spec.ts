@@ -100,7 +100,32 @@ describe('DANIŞMAN ATA', () => {
   it('zaten yetkisi olan müşteri listede YOK', () => {
     // Sunucu ikinci üyeliği reddediyor; seçilebilir bırakmak kullanıcıyı
     // tıklayıp hata almaya göndermek olurdu.
-    expect(yorumsuz(KAYNAK)).toContain('!member.memberships.some((m) => m.clientId === c.id)');
+    expect(yorumsuz(KAYNAK)).toContain('!secilen.memberships.some((m) => m.clientId === c.id)');
+  });
+
+  it('KRİTİK: akış DANIŞMAN SEÇİMİYLE başlıyor', () => {
+    /*
+     * İstenen sıra: önce kim, sonra hangi workspace, sonra hangi rol.
+     * Kişi başına satır içi bir bağlantı, aynı işi satır sayısı kadar
+     * tekrarlıyor ve "önce danışmanı seç" akışını kuramıyordu.
+     */
+    const kod = yorumsuz(KAYNAK);
+    const i = kod.indexOf('function DanismanAtaModal');
+    const govde = kod.slice(i, i + 5000);
+    expect(govde).toContain('1 · Danışman');
+    expect(govde).toContain('2 · Workspace');
+    expect(govde).toContain('3 · Rol');
+    // Danışman listesi bileşene DIŞARIDAN geliyor — tek kişiye sabitlenmiş
+    // bir modal bu akışı kuramaz.
+    expect(govde).toContain('danismanlar');
+  });
+
+  it('KRİTİK: danışman seçilmeden workspace seçilemiyor', () => {
+    // Uygun müşteriler KİME atadığına bağlı; önce hepsini gösterip sonra
+    // kısaltmak, seçimi kullanıcının gözü önünde geri almak olurdu.
+    const kod = yorumsuz(KAYNAK);
+    expect(kod).toContain('disabled={!secilen}');
+    expect(kod).toContain('Önce danışman seç');
   });
 
   it('üyelik ucuna gidiyor, kullanıcı ucuna değil', () => {
@@ -108,6 +133,15 @@ describe('DANIŞMAN ATA', () => {
     const i = kod.indexOf('function DanismanAtaModal');
     const govde = kod.slice(i, i + 3500);
     expect(govde).toContain("'/memberships'");
+  });
+});
+
+describe('üst bant', () => {
+  it('KRİTİK: "Danışman ata" ÜST BANTTA, satır içinde değil', () => {
+    const kod = yorumsuz(KAYNAK);
+    expect(kod).toContain('setAtamaAcik(true)');
+    // Satır içi kişi-bazlı tetikleyici kalmamalı.
+    expect(kod).not.toContain('setAtanan(');
   });
 });
 

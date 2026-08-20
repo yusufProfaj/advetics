@@ -27,7 +27,7 @@ const CTX: TenantContext = {
   clientIds: [],
   activeClientId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
   isOrgAdmin: true,
-} as TenantContext;
+} as unknown as TenantContext;
 
 const META = { ip: null, userAgent: null, requestId: 'test' };
 

@@ -63,8 +63,24 @@ describe('ekip listesi süzgeci', () => {
     // SÜZGEÇ SORGUDA, arayüzde değil: arayüzde süzmek uç noktayı doğrudan
     // çağıran birine listeyi açık bırakırdı.
     expect(args().where).toEqual({
-      memberships: { some: { role: { not: 'client_viewer' } } },
+      OR: [
+        { memberships: { none: {} } },
+        { memberships: { some: { role: { not: 'client_viewer' } } } },
+      ],
     });
+  });
+
+  it('KRİTİK: HİÇ ÜYELİĞİ OLMAYAN kullanıcı listeden DÜŞMÜYOR', async () => {
+    /*
+     * `some` en az bir üyelik istiyor; üyeliği olmayan kullanıcı o koşula
+     * hiç uymuyor ve listeden tamamen düşüyordu. Üretimde yusuf@ ve ecem@
+     * hesapları panelde HİÇ görünmedi ve arayüzde düzeltmeye çalışmak işe
+     * yaramadı — satır API'den zaten gelmiyordu.
+     */
+    const { svc, args } = servis();
+    await svc.listMembers(CTX);
+    const w = args().where as { OR: Array<Record<string, unknown>> };
+    expect(w.OR.some((k) => JSON.stringify(k).includes('"none"'))).toBe(true);
   });
 
   it('KRİTİK: clientId verilince O WORKSPACE’in listesi — müşteri hesapları DAHİL', async () => {

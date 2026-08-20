@@ -41,7 +41,7 @@ export function TeamScreen({
 }) {
   const [ekleAcik, setEkleAcik] = useState(false);
   const [duzenlenen, setDuzenlenen] = useState<MemberRow | null>(null);
-  const [atanan, setAtanan] = useState<MemberRow | null>(null);
+  const [atamaAcik, setAtamaAcik] = useState(false);
 
   /*
    * AJANS EKİBİ = ORG GENELİ ÜYELİĞİ OLANLAR + HİÇ ÜYELİĞİ OLMAYANLAR.
@@ -98,13 +98,24 @@ export function TeamScreen({
           </span>
         </div>
         {canManage && (
-          <button
-            type="button"
-            onClick={() => setEkleAcik(true)}
-            className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white transition"
-          >
-            + Kullanıcı ekle
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* ATAMA EKLEMEDEN ÖNCE GELİYOR: var olan bir danışmanı bir
+                workspace'e bağlamak, yeni kullanıcı açmaktan daha sık bir iş. */}
+            <button
+              type="button"
+              onClick={() => setAtamaAcik(true)}
+              className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken"
+            >
+              Danışman ata
+            </button>
+            <button
+              type="button"
+              onClick={() => setEkleAcik(true)}
+              className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white transition"
+            >
+              + Kullanıcı ekle
+            </button>
+          </div>
         )}
       </div>
 
@@ -152,23 +163,17 @@ export function TeamScreen({
                       .join(', ')
                   )}
                 </span>
+                {/* SATIRDA YALNIZCA "Düzenle". Atama üst banda taşındı:
+                    kişi başına bir bağlantı, aynı işi satır sayısı kadar
+                    tekrarlıyordu ve asıl akış "önce danışmanı seç". */}
                 {canManage && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setAtanan(m)}
-                      className="shrink-0 text-xs font-medium text-brand-strong hover:underline"
-                    >
-                      Danışman ata
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDuzenlenen(m)}
-                      className="shrink-0 text-xs text-ink-muted transition hover:text-ink"
-                    >
-                      Düzenle
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    onClick={() => setDuzenlenen(m)}
+                    className="shrink-0 text-xs font-medium text-brand-strong hover:underline"
+                  >
+                    Düzenle
+                  </button>
                 )}
               </li>
             ))}
@@ -207,11 +212,11 @@ export function TeamScreen({
       {duzenlenen && (
         <UyeDuzenleModal member={duzenlenen} onKapat={() => setDuzenlenen(null)} />
       )}
-      {atanan && (
+      {atamaAcik && (
         <DanismanAtaModal
-          member={atanan}
+          danismanlar={ajansEkibi}
           clients={clients}
-          onKapat={() => setAtanan(null)}
+          onKapat={() => setAtamaAcik(false)}
         />
       )}
     </div>
@@ -548,41 +553,49 @@ function KullaniciEkleModal({
 }
 
 /**
- * DANIŞMAN ATA — ajans personelini bir workspace'e bağlar.
+ * DANIŞMAN ATA — üç adım tek ekranda: kim, hangi workspace, hangi rol.
  *
- * NEDEN KISAYOL: ajans çalışanı önce açılıyor, yetkisi sonra veriliyor. O
- * arada kişi hiçbir müşteriyi göremiyor ve yetkiyi vermenin yolu workspace
- * kartını açıp "yetki ekle" aramaktı. Kısayol kişiden başlıyor: "bu kişiyi
- * hangi müşteriye, hangi rolle".
+ * NEDEN KİŞİDEN BAŞLIYOR: ajans çalışanı önce açılıyor, yetkisi sonra
+ * veriliyor. O arada kişi hiçbir müşteriyi göremiyor ve yetkiyi vermenin yolu
+ * workspace kartını açıp içeride yetki eklemekti — yani "kimi
+ * yetkilendireceğim" sorusuyla başlayan akış, "hangi workspace'e bakayım"
+ * sorusuyla başlamak zorunda kalıyordu.
  *
  * ORG GENELİ ERİŞİM BURADAN VERİLMİYOR. Bu ekran "bir müşteriye ata" işi;
  * bütün müşterilere erişim ayrı bir karar ve `owner`/`admin` rolü gerektiriyor
  * — sunucu da öyle uyguluyor (`createMembershipSchema`). Buradan seçilebilse
- * bir danışman atama işlemi sessizce org yöneticisi üretebilirdi.
+ * bir danışman atama işlemi sessizce org yöneticisi üretirdi.
  */
 function DanismanAtaModal({
-  member,
+  danismanlar,
   clients,
   onKapat,
 }: {
-  member: MemberRow;
+  danismanlar: MemberRow[];
   clients: ClientOption[];
   onKapat: () => void;
 }) {
   const router = useRouter();
+  const [userId, setUserId] = useState('');
   const [clientId, setClientId] = useState('');
   const [rol, setRol] = useState<Role>('manager');
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
+  const secilen = danismanlar.find((d) => d.id === userId) ?? null;
+
   /*
    * ZATEN YETKİSİ OLAN MÜŞTERİLER LİSTEDE YOK. Sunucu ikinci bir üyeliği
    * "zaten bu kapsamda erişimi var" diye reddediyor; seçilebilir bırakmak,
    * kullanıcıyı tıklayıp hata almaya göndermek olurdu.
+   *
+   * DANIŞMAN SEÇİLMEDEN LİSTE BOŞ: hangi müşterilerin uygun olduğu KİME
+   * atadığına bağlı ve önce hepsini gösterip sonra kısaltmak, seçimi
+   * kullanıcının gözü önünde geri almak olurdu.
    */
-  const secilebilir = clients.filter(
-    (c) => !member.memberships.some((m) => m.clientId === c.id),
-  );
+  const secilebilirMusteriler = secilen
+    ? clients.filter((c) => !secilen.memberships.some((m) => m.clientId === c.id))
+    : [];
 
   async function ata(): Promise<void> {
     setBusy(true);
@@ -590,7 +603,7 @@ function DanismanAtaModal({
     try {
       await apiFetch('/memberships', {
         method: 'POST',
-        body: JSON.stringify({ userId: member.id, clientId, role: rol }),
+        body: JSON.stringify({ userId, clientId, role: rol }),
       });
       router.refresh();
       onKapat();
@@ -602,58 +615,85 @@ function DanismanAtaModal({
   }
 
   return (
-    <Modal baslik={`${member.fullName ?? member.email} — danışman ata`} onKapat={onKapat}>
+    <Modal baslik="Danışman ata" onKapat={onKapat}>
       <div className="space-y-3">
-        {secilebilir.length === 0 ? (
-          <p className="rounded-lg bg-surface-sunken px-3 py-2 text-sm text-ink-muted">
-            Bu kişinin zaten bütün müşterilerde yetkisi var.
-          </p>
-        ) : (
-          <>
-            <label className="block">
-              <span className="text-[11px] text-ink-muted">Workspace</span>
-              <select
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
-              >
-                <option value="">Seçin…</option>
-                {secilebilir.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
+          Ajans ekibinden birini bir workspace’e bağlar. Bütün müşterilere erişim
+          ayrı bir karar — o yetki yalnızca Sahip ve Yönetici rollerine veriliyor.
+        </p>
 
-            <label className="block">
-              <span className="text-[11px] text-ink-muted">Rol</span>
-              <select
-                value={rol}
-                onChange={(e) => setRol(e.target.value as Role)}
-                className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
-              >
-                {/* ORG GENELİ ROLLER YOK: bu ekran bir müşteriye atama işi. */}
-                {ROLES.filter((r) => r !== 'owner' && r !== 'admin').map((r) => (
-                  <option key={r} value={r}>
-                    {ROLE_TR[r as Role]}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <label className="block">
+          <span className="text-[11px] text-ink-muted">1 · Danışman</span>
+          <select
+            value={userId}
+            onChange={(e) => {
+              setUserId(e.target.value);
+              // Danışman değişince müşteri seçimi sıfırlanıyor: uygun
+              // müşteriler kişiye bağlı ve eski seçim geçersiz kalabilir.
+              setClientId('');
+            }}
+            className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
+          >
+            <option value="">Seçin…</option>
+            {danismanlar.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.fullName ?? d.email} · {d.email}
+              </option>
+            ))}
+          </select>
+        </label>
 
-            {hata && <p className="text-xs text-danger">{hata}</p>}
+        <label className="block">
+          <span className="text-[11px] text-ink-muted">2 · Workspace</span>
+          <select
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            disabled={!secilen}
+            className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm disabled:opacity-50"
+          >
+            <option value="">{secilen ? 'Seçin…' : 'Önce danışman seç'}</option>
+            {secilebilirMusteriler.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {/* SEBEBİ YAZILI: boş liste "müşteri yok" ile "bu kişinin zaten
+              hepsinde yetkisi var" arasında ayrım yapmıyordu. */}
+          {secilen && secilebilirMusteriler.length === 0 && (
+            <span className="mt-1 block text-[11px] text-warn">
+              Bu kişinin zaten bütün workspace’lerde yetkisi var.
+            </span>
+          )}
+        </label>
 
-            <button
-              type="button"
-              onClick={() => void ata()}
-              disabled={busy || clientId === ''}
-              className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
-            >
-              {busy ? 'Atanıyor…' : 'Ata'}
-            </button>
-          </>
-        )}
+        <label className="block">
+          <span className="text-[11px] text-ink-muted">3 · Rol</span>
+          <select
+            value={rol}
+            onChange={(e) => setRol(e.target.value as Role)}
+            disabled={!secilen}
+            className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm disabled:opacity-50"
+          >
+            {/* ORG GENELİ ROLLER YOK: bu ekran bir müşteriye atama işi. */}
+            {ROLES.filter((r) => r !== 'owner' && r !== 'admin').map((r) => (
+              <option key={r} value={r}>
+                {ROLE_TR[r as Role]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {hata && <p className="text-xs text-danger">{hata}</p>}
+
+        <button
+          type="button"
+          onClick={() => void ata()}
+          disabled={busy || userId === '' || clientId === ''}
+          className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
+        >
+          {busy ? 'Atanıyor…' : 'Yetkilendir'}
+        </button>
       </div>
     </Modal>
   );

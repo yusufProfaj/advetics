@@ -69,9 +69,28 @@ export class MembersService {
      * onları yönetmek. Ajans listesinden dışlanmaları, ajans ekibi sayılmamak
      * içindi; kendi workspace'lerinde gizlenmeleri onları yönetilemez yapardı.
      */
+    /*
+     * PARAMETRESİZ DAL `some` DEĞİL `OR` KULLANIYOR — ve sebebi üretimde
+     * görüldü.
+     *
+     * Önceki hâl `{ memberships: { some: { role: { not: 'client_viewer' } } } }`
+     * idi. `some` EN AZ BİR üyelik istiyor; hiç üyeliği olmayan kullanıcı o
+     * koşula hiç uymuyor ve listeden TAMAMEN düşüyordu. Ajans personeli önce
+     * açılıp yetkisi sonra verildiği için bu hâl istisna değil normal:
+     * yusuf@ ve ecem@ hesapları panelde HİÇ görünmüyordu ve arayüzde
+     * düzeltmeye çalışmak işe yaramadı, çünkü satır API'den zaten gelmiyordu.
+     *
+     * Doğru kural: bir kullanıcı ancak ÜYELİĞİ VARSA ve ÜYELİKLERİNİN HEPSİ
+     * `client_viewer` ise ajans listesinden düşer. Üyeliği olmayan düşmez.
+     */
     const where = clientId
       ? { memberships: { some: { clientId } } }
-      : { memberships: { some: { role: { not: 'client_viewer' as const } } } };
+      : {
+          OR: [
+            { memberships: { none: {} } },
+            { memberships: { some: { role: { not: 'client_viewer' as const } } } },
+          ],
+        };
 
     return this.prisma.withTenant(ctx, (tx) =>
       tx.user.findMany({
