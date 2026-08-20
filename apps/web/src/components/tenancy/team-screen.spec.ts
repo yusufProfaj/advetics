@@ -30,16 +30,30 @@ describe('tarama boşa düşmüyor', () => {
 });
 
 describe('ajans ekibi / workspace ayrımı', () => {
-  it('KRİTİK: ayrım ÜYELİK KAPSAMINA göre — e-posta ya da role göre DEĞİL', () => {
+  it('KRİTİK: ayrım ROLE göre — üyelik KAPSAMINA göre DEĞİL', () => {
     /*
-     * Ajans personeline bir müşteride rol verilebiliyor ve müşteri
-     * tarafından biri asla org geneli üyelik almıyor. Alan adına ("@profaj")
-     * ya da role bakan bir ayrım, ilk istisnada yanlış kümeye koyardı.
+     * İki sürüm boyunca kapsama bakıldı ("org geneli üyeliği var mı") ve ikisi
+     * de yanlıştı: bir workspace'e ATANMIŞ DANIŞMAN ile o workspace'in
+     * MÜŞTERİ HESABI kapsam açısından birebir aynı görünüyor. Üç workspace'e
+     * atanmış yusuf@ hesabı "müşteri hesabı" sanılıp ajans ekibinden düştü.
+     *
+     * Ayırt eden şey ROL: müşteriye teslim edilen hesap `client_viewer`.
      */
     const kod = yorumsuz(KAYNAK);
-    expect(kod).toContain('x.clientId === null');
+    const m = /const ajansEkibi = useMemo\(([\s\S]*?)\[members\]/.exec(kod);
+    if (!m) throw new Error('ajansEkibi tanımı bulunamadı — tarama boşa düştü.');
+    expect(m[1]).toContain("x.role !== 'client_viewer'");
+    expect(m[1]).not.toContain('x.clientId === null');
+    // Alan adına bakan bir ayrım ilk istisnada yanlış kümeye koyardı.
     expect(kod).not.toContain('@profaj');
-    expect(kod).not.toMatch(/endsWith\(['"]@/);
+  });
+
+  it('KRİTİK: kural sunucudaki süzgeçle aynı biçimde', () => {
+    // İkisinin ayrışması, kullanıcının API listesinde olup ekranda
+    // görünmemesi demek — bu ekranda tam olarak o yaşandı.
+    const kod = yorumsuz(KAYNAK);
+    const m = /const ajansEkibi = useMemo\(([\s\S]*?)\[members\]/.exec(kod)!;
+    expect(m[1]).toContain('m.memberships.length === 0');
   });
 
   it('workspace üyeleri o müşterinin kimliğiyle eşleşiyor', () => {
@@ -136,12 +150,52 @@ describe('DANIŞMAN ATA', () => {
   });
 });
 
+describe('DANIŞMAN EKLE', () => {
+  it('KRİTİK: rol listesinde client_viewer YOK', () => {
+    /*
+     * `client_viewer` müşteri hesabının rolü. Bir danışmanı onunla açmak,
+     * kişiyi ajans ekibi listesinden düşürüp müşteri hesabı gibi göstermeye
+     * yetiyor.
+     */
+    const kod = yorumsuz(KAYNAK);
+    const i = kod.indexOf('function DanismanEkleModal');
+    expect(i).toBeGreaterThan(-1);
+    const govde = kod.slice(i, i + 5000);
+    expect(govde).toContain("r !== 'client_viewer'");
+  });
+
+  it('KRİTİK: org geneli kapsamda rol ZORLA admin', () => {
+    // Sunucu org geneli erişimi yalnızca owner/admin'e veriyor; manager
+    // seçili kalırsa istek reddedilir ve sebebi ekranda anlaşılmaz.
+    const kod = yorumsuz(KAYNAK);
+    const i = kod.indexOf('function DanismanEkleModal');
+    const govde = kod.slice(i, i + 5000);
+    expect(govde).toContain("orgGeneli ? 'admin' : rol");
+  });
+
+  it('kapsam zorunlu — erişimsiz hesap açılamıyor', () => {
+    const kod = yorumsuz(KAYNAK);
+    const i = kod.indexOf('function DanismanEkleModal');
+    const govde = kod.slice(i, i + 5000);
+    expect(govde).toContain("kapsam === ''");
+  });
+});
+
 describe('üst bant', () => {
   it('KRİTİK: "Danışman ata" ÜST BANTTA, satır içinde değil', () => {
     const kod = yorumsuz(KAYNAK);
     expect(kod).toContain('setAtamaAcik(true)');
     // Satır içi kişi-bazlı tetikleyici kalmamalı.
     expect(kod).not.toContain('setAtanan(');
+  });
+
+  it('KRİTİK: üç ayrı düğme — ekle, ata, kullanıcı', () => {
+    // Tek bir "ekle" düğmesi her seferinde "rolü ne olsun, kapsamı ne olsun"
+    // sorusunu sordurtuyordu.
+    const kod = yorumsuz(KAYNAK);
+    expect(kod).toContain('setDanismanEkleAcik(true)');
+    expect(kod).toContain('setAtamaAcik(true)');
+    expect(kod).toContain('setEkleAcik(true)');
   });
 });
 

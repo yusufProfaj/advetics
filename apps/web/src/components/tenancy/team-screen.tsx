@@ -42,23 +42,36 @@ export function TeamScreen({
   const [ekleAcik, setEkleAcik] = useState(false);
   const [duzenlenen, setDuzenlenen] = useState<MemberRow | null>(null);
   const [atamaAcik, setAtamaAcik] = useState(false);
+  const [danismanEkleAcik, setDanismanEkleAcik] = useState(false);
 
   /*
-   * AJANS EKİBİ = ORG GENELİ ÜYELİĞİ OLANLAR + HİÇ ÜYELİĞİ OLMAYANLAR.
+   * AJANS EKİBİ AYRIMI ROLE GÖRE — ÜYELİK KAPSAMINA GÖRE DEĞİL.
    *
-   * İkinci kısım bir hatayı kapatıyor: ilk sürüm yalnızca org geneli üyeliği
-   * olanları alıyordu ve HİÇBİR ÜYELİĞİ OLMAYAN kullanıcı iki listede de
-   * çıkmıyordu. Üstteki sayaç "4 kullanıcı" derken ekranda bir kişi
-   * görünüyordu — kullanıcı var, hiçbir yerde yok.
+   * İki sürüm boyunca kapsama bakıldı ("org geneli üyeliği var mı") ve ikisi
+   * de yanlıştı: bir workspace'e ATANMIŞ DANIŞMAN ile o workspace'in MÜŞTERİ
+   * HESABI kapsam açısından birebir aynı görünüyor. Sonuç: üç workspace'e
+   * danışman olarak atanmış yusuf@ hesabı "müşteri hesabı" sanıldı ve ajans
+   * ekibinden düştü.
    *
-   * Bu hâl istisna da değil: ajans personeli önce açılıyor, yetkisi sonra
-   * veriliyor. Yetkisiz kalan kişi tam da "Danışman ata" ile bir workspace'e
-   * bağlanacak olan.
+   * AYIRT EDEN ŞEY ROL. Müşteriye teslim edilen hesap `client_viewer` olarak
+   * açılıyor (kurulum sihirbazı bunu sabit yazıyor ve istemciden almıyor);
+   * danışman hangi workspace'e atanırsa atansın başka bir rol taşıyor.
+   *
+   * Kural sunucudaki `listMembers` süzgeciyle BİREBİR aynı: üyeliği yok ya
+   * da en az bir üyeliği `client_viewer` DEĞİL. İkisinin ayrışması, bir
+   * kullanıcının listede olup ekranda görünmemesi demekti — bu ekranda tam
+   * olarak o yaşandı.
+   *
+   * Bir danışman hem burada hem atandığı workspace kartlarında görünüyor ve
+   * bu doğru: ikisi farklı soru — "kim ajans personeli" ve "bu müşteriye kim
+   * erişiyor".
    */
   const ajansEkibi = useMemo(
     () =>
       members.filter(
-        (m) => m.memberships.length === 0 || m.memberships.some((x) => x.clientId === null),
+        (m) =>
+          m.memberships.length === 0 ||
+          m.memberships.some((x) => x.role !== 'client_viewer'),
       ),
     [members],
   );
@@ -99,8 +112,22 @@ export function TeamScreen({
         </div>
         {canManage && (
           <div className="flex flex-wrap items-center gap-2">
-            {/* ATAMA EKLEMEDEN ÖNCE GELİYOR: var olan bir danışmanı bir
-                workspace'e bağlamak, yeni kullanıcı açmaktan daha sık bir iş. */}
+            {/*
+              ÜÇ DÜĞME, ÜÇ AYRI İŞ ve karışmamaları için ayrı duruyorlar:
+                · Danışman ekle — ajans personeli AÇAR (rolü client_viewer
+                  OLAMAZ; onu açan şey zaten danışman olmasıdır)
+                · Danışman ata  — VAR OLAN danışmanı bir workspace'e bağlar
+                · Kullanıcı ekle — genel yol; müşteri hesabı da buradan açılır
+              Tek bir "ekle" düğmesi, her seferinde "rolü ne olsun, kapsamı ne
+              olsun" sorusunu sordurtuyordu.
+            */}
+            <button
+              type="button"
+              onClick={() => setDanismanEkleAcik(true)}
+              className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken"
+            >
+              + Danışman ekle
+            </button>
             <button
               type="button"
               onClick={() => setAtamaAcik(true)}
@@ -156,11 +183,16 @@ export function TeamScreen({
                        panelde hiçbir veri göremiyor ve sebebi yalnızca
                        burada yazılı. */
                     <span className="text-warn">yetkisi yok</span>
-                  ) : (
+                  ) : m.memberships.some((x) => x.clientId === null) ? (
                     m.memberships
                       .filter((x) => x.clientId === null)
                       .map((x) => ROLE_TR[x.role])
                       .join(', ')
+                  ) : (
+                    /* ORG GENELİ YETKİSİ YOKSA KAÇ WORKSPACE'E ATANDIĞI
+                       YAZILIYOR: rolü tek başına yazmak, üç müşteride üç
+                       farklı rolü olan bir danışmanda yanlış olurdu. */
+                    `${m.memberships.length} workspace`
                   )}
                 </span>
                 {/* SATIRDA YALNIZCA "Düzenle". Atama üst banda taşındı:
@@ -208,6 +240,9 @@ export function TeamScreen({
 
       {ekleAcik && (
         <KullaniciEkleModal clients={clients} onKapat={() => setEkleAcik(false)} />
+      )}
+      {danismanEkleAcik && (
+        <DanismanEkleModal clients={clients} onKapat={() => setDanismanEkleAcik(false)} />
       )}
       {duzenlenen && (
         <UyeDuzenleModal member={duzenlenen} onKapat={() => setDuzenlenen(null)} />
@@ -546,6 +581,146 @@ function KullaniciEkleModal({
           className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
         >
           {busy ? 'Ekleniyor…' : 'Kullanıcıyı ekle'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * DANIŞMAN EKLE — ajans personeli açar.
+ *
+ * "Kullanıcı ekle"den farkı ROL KÜMESİ: burada `client_viewer` YOK. Müşteriye
+ * teslim edilen hesap o rolle açılıyor ve bir danışmanı yanlışlıkla o rolle
+ * açmak, kişiyi ajans ekibi listesinden düşürüp müşteri hesabı gibi
+ * göstermeye yetiyor — bu ekranda tam olarak o yaşandı.
+ *
+ * KAPSAMSIZ DANIŞMAN AÇILAMIYOR ve bu sunucunun kuralı: bir kullanıcı ya bir
+ * workspace'e bağlanır ya da org geneli (yalnızca Yönetici) olur. Erişimi
+ * olmayan bir hesap giriş yapıp hiçbir şey göremezdi. Sonradan başka
+ * workspace'lere "Danışman ata" ile bağlanıyor.
+ */
+function DanismanEkleModal({
+  clients,
+  onKapat,
+}: {
+  clients: ClientOption[];
+  onKapat: () => void;
+}) {
+  const router = useRouter();
+  const [ad, setAd] = useState('');
+  const [eposta, setEposta] = useState('');
+  const [parola, setParola] = useState('');
+  /** `org` => bütün müşteriler (Yönetici); değilse müşteri kimliği. */
+  const [kapsam, setKapsam] = useState('');
+  const [rol, setRol] = useState<Role>('manager');
+  const [busy, setBusy] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+
+  const orgGeneli = kapsam === 'org';
+
+  async function ekle(): Promise<void> {
+    setBusy(true);
+    setHata(null);
+    try {
+      await apiFetch('/members', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: eposta.trim(),
+          fullName: ad.trim(),
+          password: parola,
+          // ORG GENELİ KAPSAMDA ROL ZORLA `admin`: sunucu org geneli erişimi
+          // yalnızca owner/admin'e veriyor ve manager seçili kalırsa istek
+          // reddedilir — sebebi ekranda anlaşılmazdı.
+          role: orgGeneli ? 'admin' : rol,
+          clientId: orgGeneli ? null : kapsam,
+        }),
+      });
+      router.refresh();
+      onKapat();
+    } catch (e) {
+      setHata(e instanceof ApiRequestError ? e.message : 'Danışman eklenemedi.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal baslik="Danışman ekle" onKapat={onKapat}>
+      <div className="space-y-3">
+        <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
+          Ajans personeli açar — müşteri hesabı değil. Davet gönderilmiyor;
+          parolayı sen belirleyip kendin iletiyorsun. Başka workspace’lere
+          sonradan “Danışman ata” ile bağlayabilirsin.
+        </p>
+
+        <Alan etiket="Ad soyad" value={ad} onChange={setAd} />
+        <Alan etiket="E-posta" type="email" value={eposta} onChange={setEposta} />
+        <Alan
+          etiket="Parola (en az 12 karakter)"
+          type="password"
+          value={parola}
+          onChange={setParola}
+        />
+
+        <label className="block">
+          <span className="text-[11px] text-ink-muted">İlk kapsam</span>
+          <select
+            value={kapsam}
+            onChange={(e) => setKapsam(e.target.value)}
+            className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
+          >
+            <option value="">Seçin…</option>
+            <option value="org">Bütün müşteriler (Yönetici)</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {/* KAPSAMSIZ AÇILAMADIĞI YAZILI: sunucu reddediyor ve sebebi
+              formda görünmezse "neden ekleyemiyorum" olarak geri gelir. */}
+          <span className="mt-1 block text-[11px] text-ink-muted">
+            Erişimi olmayan hesap açılamıyor — en az bir kapsam gerekiyor.
+          </span>
+        </label>
+
+        {!orgGeneli && (
+          <label className="block">
+            <span className="text-[11px] text-ink-muted">Rol</span>
+            <select
+              value={rol}
+              onChange={(e) => setRol(e.target.value as Role)}
+              className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
+            >
+              {/* `client_viewer` YOK: bu rol müşteri hesabının rolü ve bir
+                  danışmanı onunla açmak, kişiyi ajans ekibinden düşürürdü. */}
+              {ROLES.filter(
+                (r) => r !== 'owner' && r !== 'admin' && r !== 'client_viewer',
+              ).map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_TR[r as Role]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {hata && <p className="text-xs text-danger">{hata}</p>}
+
+        <button
+          type="button"
+          onClick={() => void ekle()}
+          disabled={
+            busy ||
+            ad.trim().length < 2 ||
+            eposta.trim() === '' ||
+            parola.length < 12 ||
+            kapsam === ''
+          }
+          className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
+        >
+          {busy ? 'Ekleniyor…' : 'Danışmanı ekle'}
         </button>
       </div>
     </Modal>
