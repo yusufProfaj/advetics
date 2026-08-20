@@ -17,12 +17,25 @@ interface Branding {
 
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireSession();
-
-  // Marka bilgisi sunucuda çözülüp CSS değişkenlerine basılır — böylece sayfa
-  // ilk boyamada doğru renkte gelir. Müşteriye ajansın varsayılan rengini bir
-  // kare bile göstermek istemiyoruz.
-  const branding = await serverApiFetch<Branding>('/branding').catch(() => null);
+  /*
+   * İKİ ÇAĞRI PARALEL — ardışık DEĞİL.
+   *
+   * Önceden `await requireSession()` bitmeden `/branding` başlamıyordu ve
+   * ikisi birbirine bağlı değil: her gezinmede iki tam gidiş-dönüş SERİ
+   * olarak toplanıyordu. Panelin her sayfası bu layout'tan geçtiği için
+   * maliyet her tıklamada ödeniyordu.
+   *
+   * `requireSession()` başarısızlıkta `redirect()` fırlatıyor; `Promise.all`
+   * içinde de aynen çalışıyor — `/branding` sonucu o durumda kullanılmıyor.
+   *
+   * Marka bilgisi sunucuda çözülüp CSS değişkenlerine basılıyor; böylece sayfa
+   * ilk boyamada doğru renkte geliyor. Müşteriye ajansın varsayılan rengini
+   * bir kare bile göstermek istemiyoruz.
+   */
+  const [session, branding] = await Promise.all([
+    requireSession(),
+    serverApiFetch<Branding>('/branding').catch(() => null),
+  ]);
 
   const themeStyle = branding
     ? ({
