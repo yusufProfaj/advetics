@@ -250,6 +250,21 @@ export class SyncProcessorService {
         // L4 — son 7 gün. Atıf pencereleri yüzünden dünün verisi 3 gün sonra
         // hâlâ değişiyor; bir kez çekip bırakmak ROAS'ı sistematik eksik gösterir.
         return { from: this.shiftDays(todayInTz, -7), to: this.shiftDays(todayInTz, -1) };
+      /*
+       * ANAHTAR KELİMELER — BU DAL EKSİKTİ VE İŞ HER GÜN DÜŞÜYORDU.
+       *
+       * `sweep:keywords` her gece 04:47'de `keyword_insights` işi kuyruğa
+       * atıyor, ama burada karşılığı olmadığı için `undefined` dönüyor ve iş
+       * `[missing_dates] keyword_insights tarih aralığı olmadan geldi` ile
+       * düşüyordu. Sonuç: Google anahtar kelime verisi HİÇ toplanmadı ve
+       * bunun tek izi `sync_jobs` tablosundaydı — okuyan da yoktu.
+       *
+       * Metrik geri düzeltmesiyle AYNI pencere (son 7 gün): anahtar kelime
+       * satırları da aynı atıf gecikmesine tabi ve tek gün çekmek kapanmamış
+       * dönüşümleri eksik gösterirdi.
+       */
+      case 'keyword_insights':
+        return { from: this.shiftDays(todayInTz, -7), to: this.shiftDays(todayInTz, -1) };
       default:
         return undefined;
     }

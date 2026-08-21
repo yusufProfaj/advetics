@@ -104,6 +104,39 @@ export class InsightsSyncService {
     // sessiz hata türü.
     const account = assertAssigned(found);
 
+    /*
+     * ═══ YAPI KOŞMADIYSA PLATFORMA HİÇ GİTMİYORUZ ═══
+     *
+     * Bu kontrol ÖNCE aşağıdaydı — satırlar çekildikten SONRA. Canlıda ne
+     * ürettiği görüldü ve bir KİLİTLENMEYDİ:
+     *
+     *   1. Yapı taraması hiç koşmamış bir Meta hesabında metrik işi 3.151
+     *      satır çekiyor (kampanya + reklam seti + reklam, 90 gün, onlarca
+     *      sayfa) ve hiçbirini yazamıyor.
+     *   2. İş tekrar denenebilir sayılıyor ve BEŞ KEZ daha aynı şeyi yapıyor.
+     *   3. Bu turlar hesabın kota yüzdesini %90'ın üstüne çıkarıyor.
+     *   4. Kota bekçisi bundan sonra HER işi reddediyor — YAPI TARAMASI DA
+     *      DAHİL (`structure` katmanının üst sınırı da %90).
+     *   5. Yapı hiç koşamadığı için metrikler hiç eşlenemiyor. Başa dön.
+     *
+     * Yani metrik işi, bağlı olduğu yapı işinin kotasını yiyordu. Panelde
+     * görünen tablo: "Yapı: hiç", metrik işi "5. deneme · failed", son iş
+     * "throttled" — ve hiçbir zaman ilerlemiyor.
+     *
+     * Kontrol artık ÇAĞRIDAN ÖNCE ve maliyeti SIFIR API çağrısı. İş yine
+     * tekrar denenebilir düşüyor ama kota harcamadan düşüyor, böylece yapı
+     * taraması nefes alacak yer buluyor.
+     */
+    if (account.lastStructureSyncAt === null) {
+      throw new PlatformApiError(
+        account.platform,
+        'transient',
+        'Bu hesapta yapı taraması hiç koşmadı — kampanya satırları olmadan metrik ' +
+          'yazılamıyor. Metrik çekimi kotayı boşa harcamamak için hiç başlatılmadı; ' +
+          'yapı taraması tamamlanınca tekrar denenecek.',
+      );
+    }
+
     const provider = this.providers.get(account.platform);
     const accessToken = await this.vault.getAccessToken(account.connectionId, provider);
 
@@ -202,15 +235,6 @@ export class InsightsSyncService {
      *     `sync_jobs`'a yazılıyor ve panelde "başarılı · 0 satır" olarak
      *     GÖRÜNÜYOR.
      */
-    if (totalRows === 0 && totalSkipped > 0 && account.lastStructureSyncAt === null) {
-      throw new PlatformApiError(
-        account.platform,
-        'transient',
-        `Metrikler yazılamadı: ${totalSkipped} satırın hiçbiri eşlenemedi ve bu hesapta yapı ` +
-          'taraması hiç koşmadı. Kampanya satırları yazıldıktan sonra tekrar denenecek.',
-      );
-    }
-
     /*
      * DAMGA EN SONDA — BAŞARISIZ BİR TUR "SENKRONİZE EDİLDİ" DEMEZ.
      *

@@ -65,8 +65,18 @@ function row(over: Partial<DiscoveredInsightRow> = {}): DiscoveredInsightRow {
   };
 }
 
-/** Hiyerarşiyi ekler — metrikler ancak varlıklar varsa yazılabiliyor. */
+/**
+ * Hiyerarşiyi ekler — metrikler ancak varlıklar varsa yazılabiliyor.
+ *
+ * `last_structure_sync_at` DE YAZILIYOR ve bu bir detay değil: kampanya
+ * satırlarının var olması "yapı taraması koştu" demek. Alan NULL kalırsa
+ * metrik çekimi platforma hiç gitmeden tekrar denenebilir hatayla düşüyor —
+ * kilitlenmeye karşı konan koruma tam olarak bunu yapıyor.
+ */
 async function seedHierarchy(): Promise<void> {
+  await h.q('UPDATE ad_accounts SET last_structure_sync_at = now() WHERE id = $1', [
+    IDS.adAccount,
+  ]);
   await h.q(
     `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, updated_at)
      VALUES ('66666666-6666-6666-6666-666666666666', $1, $2, 'meta', $3, 'Kampanya', 'active', 'daily', now())`,
@@ -502,9 +512,36 @@ describe('hiçbir satır yazılamayan iş', () => {
       }),
     ).rejects.toMatchObject({ kind: 'transient' });
 
-    // Kota harcandı ama tek satır yazılmadı — tam olarak tekrar denenmesi
-    // gereken durum.
     expect(await rowCount()).toBe(0);
+  });
+
+  it('KRİTİK: yapı koşmadıysa PLATFORMA HİÇ ÇAĞRI GİTMİYOR — kilitlenmenin sebebi buydu', async () => {
+    /*
+     * Canlıda görülen kilitlenme: metrik işi 3.151 satır çekip hiçbirini
+     * yazamıyor, beş kez tekrar deneniyor, bu turlar hesabın kota yüzdesini
+     * %90'ın üstüne çıkarıyor ve kota bekçisi bundan sonra YAPI TARAMASINI DA
+     * reddediyor (`structure` katmanının sınırı da %90). Yapı koşamadığı için
+     * metrikler hiç eşlenemiyor — başa dön.
+     *
+     * Metrik işi, bağlı olduğu yapı işinin kotasını yiyordu.
+     */
+    await h.q('UPDATE ad_accounts SET last_structure_sync_at = NULL WHERE id = $1', [
+      IDS.adAccount,
+    ]);
+    provider.rowsByLevel = { campaign: [row({ entityExternalId: BILINMEYEN })] };
+    provider.requests = [];
+
+    await expect(
+      svc.syncAccount({
+        adAccountId: IDS.adAccount,
+        jobType: 'initial_backfill',
+        dateFrom: '2026-05-23',
+        dateTo: '2026-08-20',
+      }),
+    ).rejects.toMatchObject({ kind: 'transient' });
+
+    // TEK BİR platform çağrısı bile yapılmamalı.
+    expect(provider.requests).toHaveLength(0);
   });
 
   it('YAPI KOŞTUYSA: başarı sayılıyor — arşivlenmiş kampanya asla eşlenmeyecek', async () => {
@@ -530,7 +567,7 @@ describe('hiçbir satır yazılamayan iş', () => {
   });
 
   it('BİR SATIR BİLE YAZILDIYSA hata yok — kısmi eşleşme tekrar denemeyi hak etmiyor', async () => {
-    await h.q('UPDATE ad_accounts SET last_structure_sync_at = NULL WHERE id = $1', [
+    await h.q('UPDATE ad_accounts SET last_structure_sync_at = now() WHERE id = $1', [
       IDS.adAccount,
     ]);
     provider.rowsByLevel = {
@@ -549,7 +586,7 @@ describe('hiçbir satır yazılamayan iş', () => {
   });
 
   it('ATLANAN SATIR YOKSA boş sonuç hata değil — hesapta o gün veri olmayabilir', async () => {
-    await h.q('UPDATE ad_accounts SET last_structure_sync_at = NULL WHERE id = $1', [
+    await h.q('UPDATE ad_accounts SET last_structure_sync_at = now() WHERE id = $1', [
       IDS.adAccount,
     ]);
     provider.rowsByLevel = { campaign: [] };

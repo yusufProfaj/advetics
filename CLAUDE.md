@@ -138,6 +138,20 @@ buna göre veriliyor:
   ayrılmak zorunda: yapı taraması HİÇ koşmadıysa geçici (tekrar denenmeli),
   koştuysa varlık gerçekten yok (arşivlenmiş kampanya — tekrar denemek beş kez
   kota harcar). Atılan satır sayısı ve not artık `sync_jobs`'a yazılıyor.
+- **BAĞIMLI İŞ, BAĞLI OLDUĞU İŞİN KOTASINI YİYEBİLİR — ÖNCE KONTROL, SONRA
+  ÇAĞRI.** Yapı taraması hiç koşmamış bir hesapta metrik işi 3.151 satır
+  çekip hiçbirini yazamıyor, tekrar denenebilir sayılıp beş kez daha aynı
+  şeyi yapıyor, hesabın kota yüzdesini %90'ın üstüne çıkarıyor ve kota
+  bekçisi bundan sonra YAPI TARAMASINI DA reddediyor (`structure` katmanının
+  sınırı da %90). Yapı koşamadığı için metrikler hiç eşlenemiyor — kalıcı
+  kilit. Ön koşul kontrolü platform çağrısından ÖNCE yapılmalı: maliyeti
+  sıfır çağrı olan bir ret, bağımlılığına nefes alacak yer bırakıyor.
+- **ZAMANLANMIŞ İŞ, İHTİYACI OLAN PARAMETREYİ ÜRETEN DALLA BİRLİKTE
+  EKLENİR.** `sweep:keywords` her gece `keyword_insights` kuyruğa atıyordu
+  ama `datesForJob` o tür için dal taşımıyordu; iş her gün
+  `[missing_dates]` ile düşüyor ve Google anahtar kelime verisi HİÇ
+  toplanmıyordu. Tek iz `sync_jobs`'taydı, okuyan yoktu.
+  `sweep-dates.spec.ts` zamanlayıcı listesiyle türeticiyi karşılaştırıyor.
 - **PLATFORMA GİDEN İSTEKTE ATIF/RAPORLAMA AYARLARI AÇIKÇA YAZILIR.** Meta
   insights çağrısı `use_unified_attribution_setting` ve `action_report_time`
   göndermiyordu; karar hesabın varsayılanına kalıyordu ve iki müşteride farklı
