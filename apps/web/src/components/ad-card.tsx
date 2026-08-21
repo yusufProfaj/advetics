@@ -1,5 +1,7 @@
 import type { AdExplorerRow } from '@advetics/shared';
 import { formatMoney, formatNumber, formatPercent, formatRoas } from '@/lib/format';
+import { KreatifGorsel } from '@/components/kreatif-gorsel';
+import { PlatformLogo } from '@/components/platform-logo';
 
 const STATUS_STYLE: Record<string, string> = {
   active: 'bg-emerald-500/10 text-emerald-500 ring-emerald-500/25',
@@ -37,6 +39,24 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
   const image = ad.creative?.assetUrls[0];
   const hasIssues = ad.issues.length > 0;
 
+  /*
+   * ═══ "GÖRSEL YOK" ÜÇ FARKLI ŞEY DEMEKTİ ═══
+   *
+   * Aynı boş kutu şunların hepsini temsil ediyordu ve üçünün yapılacak işi
+   * farklı:
+   *
+   *   · Google ARAMA reklamı — görsel ZATEN YOK, bu normal ve doğru. Kutu
+   *     göstermek raporda ve ekranda görüntü kirliliği üretiyor.
+   *   · Google Display — kaynak adı URL sanılıp kırık görsel çıkıyordu
+   *     (API tarafında elendi, artık "alınamadı" dalına düşüyor).
+   *   · Meta kreatifi — adres ölmüş ya da hiç senkronize edilmemiş.
+   *
+   * `platform` ve `creativeType` ikisi de API'den ZATEN geliyordu; kart
+   * hiçbirini karara sokmuyordu.
+   */
+  const aramaReklami =
+    ad.platform === 'google' && /SEARCH/i.test(ad.creative?.creativeType ?? '');
+
   /**
    * Reklamın platformdaki önizlemesi.
    *
@@ -64,19 +84,26 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
             kırpıyor — creative inceleme aracında reklamın okunamaması, aracın
             hiç olmaması kadar kötü. `contain` kenarlarda boşluk bırakıyor ama
             reklamın TAMAMI görünüyor. */}
-        <PreviewLink href={preview} className="relative aspect-[4/5] w-full shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:w-36">
+        <PreviewLink
+          href={preview}
+          className={
+            aramaReklami
+              ? // ARAMA REKLAMINDA GÖRSEL KUTUSU YOK. Boş bir 4:5 kutu
+                // göstermek "eksik bir şey var" izlenimi veriyor; oysa
+                // metin reklamında görsel diye bir şey yok.
+                'hidden'
+              : 'relative aspect-[4/5] w-full shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:w-36'
+          }
+        >
           {image ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
+            <KreatifGorsel
               src={image}
               alt={ad.creative?.headline ?? ad.name}
-              referrerPolicy="no-referrer"
-              loading="lazy"
-              className="h-full w-full object-contain"
+              bosMetin="görsel alınamadı"
             />
           ) : (
             <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-ink-muted">
-              görsel yok
+              görsel alınamadı
             </div>
           )}
           {/* Birden fazla görsel varsa (karusel / dinamik creative) sayısı
@@ -107,6 +134,21 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
             >
               {STATUS_LABEL[ad.deleted ? 'deleted' : ad.status] ?? ad.status}
             </span>
+            {/* PLATFORM ROZETİ. Meta ve Google reklamları aynı listede yan
+                yana duruyor ve hangisinin hangi platforma ait olduğu ancak
+                kampanya adından tahmin edilebiliyordu. */}
+            <span className="inline-flex items-center gap-1 rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] text-ink-muted">
+              <PlatformLogo
+                kind={ad.platform === 'google' ? 'google_ads' : 'meta_ads'}
+                className="h-3 w-3"
+              />
+              {ad.platform === 'google' ? 'Google Ads' : 'Meta Ads'}
+            </span>
+            {aramaReklami && (
+              <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] text-ink-muted">
+                Arama reklamı — görsel yoktur
+              </span>
+            )}
             {ad.creative?.creativeType && (
               <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] text-ink-muted">
                 {ad.creative.creativeType}

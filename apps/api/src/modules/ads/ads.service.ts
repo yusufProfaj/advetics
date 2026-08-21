@@ -354,6 +354,22 @@ export class AdsService {
   ): Promise<AdsExploreResult['facets']> {
     // Facet'ler TARİH ARALIĞINDAN bağımsız: süzgeç panelinde bir kampanyanın
     // kaybolması ("dün harcama yoktu" diye) kullanıcıyı şaşırtıyor.
+    /*
+     * FACET'LER SEÇİLİ HESABA DA DARALIYOR.
+     *
+     * Tarih aralığından bağımsız olmaları KASITLI: süzgeç panelinde bir
+     * kampanyanın "dün harcama yoktu" diye kaybolması kullanıcıyı şaşırtıyor.
+     *
+     * Ama HESAP süzgecinden bağımsız olmaları bir hataydı ve ekranda
+     * görünüyordu: bir hesap seçilince başlıkta "12 reklam" yazarken durum
+     * çipleri hâlâ org genelindeki "Aktif (412)" ve "Sorunlu (37)" sayılarını
+     * gösteriyordu. "Sorunlu (37)"ye tıklayınca 2 satır çıkıyordu. Kampanya
+     * facet'i için zaten tersi karar verilmişti — ikisi ayrışmıştı.
+     */
+    const hesapKapsami = query.adAccountId
+      ? Prisma.sql`AND a.ad_account_id = ${query.adAccountId}::uuid`
+      : Prisma.empty;
+
     const base = Prisma.sql`
       FROM ads a
       JOIN ad_groups g ON g.id = a.ad_group_id
@@ -361,6 +377,7 @@ export class AdsService {
       WHERE ${
         query.platform ? Prisma.sql`a.platform = ${query.platform}::"Platform"` : Prisma.sql`TRUE`
       }
+      ${hesapKapsami}
     `;
 
     const adAccounts = await tx.$queryRaw<
@@ -379,20 +396,12 @@ export class AdsService {
       `,
     );
 
-    // Kampanya listesi SEÇİLİ HESABA göre daralıyor.
-    //
-    // Ajans görünümünde onlarca kampanya var; hepsini listelemek süzgeç
-    // panelini kullanılamaz hâle getiriyor. Hesap seçiliyse yalnızca o hesabın
-    // kampanyaları gösteriliyor.
-    const campaignScope = query.adAccountId
-      ? Prisma.sql`AND a.ad_account_id = ${query.adAccountId}::uuid`
-      : Prisma.empty;
-
+    // Kampanya listesi de aynı `base` üzerinden daralıyor — hesap kapsamı
+    // artık orada, ayrıca eklenmiyor.
     const campaigns = await tx.$queryRaw<Array<{ id: string; name: string; ad_count: string }>>(
       Prisma.sql`
         SELECT c.id, c.name, COUNT(a.id) AS ad_count
         ${base}
-        ${campaignScope}
         GROUP BY c.id, c.name
         ORDER BY COUNT(a.id) DESC, c.name
         LIMIT 50
@@ -470,8 +479,25 @@ export class AdsService {
       ctaType: r.cta_type,
       destinationUrl: r.destination_url,
       displayUrl: r.display_url,
+      /*
+       * YALNIZCA GERÇEK ADRESLER. Google `responsive_display_ad
+       * .marketing_images[].asset` alanında bir URL değil KAYNAK ADI
+       * döndürüyor: `customers/1234567890/assets/98765`. Bu dize
+       * `creatives.asset_urls`'e yazılıyordu ve panel onu `<img src>`e
+       * basınca tarayıcı kendi origin'ine göreli yol sanıp 404 alıyordu.
+       * Sonuç: Google Display reklamları "görsel yok" bile demiyor, KIRIK
+       * GÖRSEL gösteriyordu.
+       *
+       * Süzgeç burada, çünkü veri tabanındaki satırları temizlemek geçmişe
+       * dönük bir migration ister ve sağlayıcı yeniden yazana kadar aynı
+       * değer tekrar gelir. Kaynak adını URL'ye çevirmek ayrı bir GAQL
+       * sorgusu (`FROM asset`) gerektiriyor ve hesap başına ek çağrı demek —
+       * ayrı bir iş.
+       */
       assetUrls: Array.isArray(r.asset_urls)
-        ? r.asset_urls.filter((u): u is string => typeof u === 'string')
+        ? r.asset_urls.filter(
+            (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
+          )
         : [],
     };
   }

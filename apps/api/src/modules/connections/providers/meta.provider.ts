@@ -729,8 +729,23 @@ export class MetaProvider implements IAdPlatformProvider {
     // panelde gösterilen tek görsel o oluyordu — okunamayacak kadar bulanık.
     // Bu parametreler yalnızca reklam edge'inde geçerli.
     if (edge === 'ads') {
-      url.searchParams.set('thumbnail_width', '600');
-      url.searchParams.set('thumbnail_height', '600');
+      /*
+       * 600 → 1080. Gönderi ve video boost'larında Meta `image_url`
+       * DÖNDÜRMÜYOR; elimizdeki tek görsel `thumbnail_url` ve varsayılanı
+       * ~64px. Panelde ve raporda "bazı görseller piksel piksel, bazıları
+       * net" tablosunun kalıcı yarısı buydu.
+       *
+       * Ek kota maliyeti YOK: aynı istekte bir parametre. Meta istenen
+       * boyutu garanti etmiyor (kaynak daha küçükse onu döndürüyor), ama
+       * tavanı yükseltmek bedava.
+       *
+       * DİKKAT: bu parametre yalnızca YENİ yazılan kreatiflere işliyor.
+       * Zamanlanmış yapı taraması delta çalışıyor ve değişmemiş bir reklamı
+       * yeniden yazmıyor — eski satırlar panelde "Şimdi güncelle"ye basılana
+       * kadar (tam tarama) eski boyutta kalıyor.
+       */
+      url.searchParams.set('thumbnail_width', '1080');
+      url.searchParams.set('thumbnail_height', '1080');
     }
 
     // `effective_status` FİLTRESİ KULLANMIYORUZ — kasıtlı.
