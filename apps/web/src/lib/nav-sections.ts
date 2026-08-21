@@ -94,6 +94,20 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         perm: 'connection.read',
       },
       {
+        /*
+         * TEŞHİS EKRANI AYARLAR ALTINDA ve `connection.read` ile kapalı.
+         * `insights.read` ile açmak client_viewer'a da gösterirdi: bu ekran
+         * platformun ham hata mesajlarını (subcode, fbtrace) basıyor ve o
+         * müşteri tarafına ait bir bilgi değil.
+         */
+        href: '/ayarlar/senkronizasyon',
+        label: 'Senkronizasyon Durumu',
+        icon: 'sync',
+        module: 3,
+        ready: true,
+        perm: 'connection.read',
+      },
+      {
         href: '/ayarlar/ekip',
         label: 'Ekip & Yetkiler',
         icon: 'team',

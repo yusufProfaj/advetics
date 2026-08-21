@@ -17,6 +17,7 @@ import { KeywordSyncService } from './keyword-sync.service';
 import { BoostsService } from '../modules/boosts/boosts.service';
 import { YouTubeSubscribeService } from '../modules/autoboost/youtube-subscribe.service';
 import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
+import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
 
 /**
  * Worker'ın sentetik kiracı bağlamındaki kullanıcı kimliği.
@@ -102,12 +103,10 @@ export class SyncProcessorService {
     if (payload.jobType === 'boost_complete') return this.boostExecutor.completeEndedBoosts();
 
     const accounts = await this.db.adAccount.findMany({
-      where: {
-        syncEnabled: true,
-        status: { in: ['active', 'paused'] },
-        connection: { status: 'active' },
-        client: { status: 'active' },
-      },
+      // Süzgeç TEK YERDE: teşhis ekranı da aynı sabiti okuyor. Ayrı
+      // yazıldığında "elle basınca geliyor, kendiliğinden gelmiyor" hâli
+      // doğuyor ve hiçbir ekranda görünmüyor (supurme-kapsami.ts).
+      where: SUPURME_HESAP_KOSULU,
       select: {
         id: true,
         name: true,

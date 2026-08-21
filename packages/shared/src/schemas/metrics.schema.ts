@@ -43,7 +43,7 @@ export const refreshRangeSchema = z.object({
     .optional(),
 });
 export type RefreshRangeInput = z.infer<typeof refreshRangeSchema>;
-import { PLATFORMS } from '../constants/platforms';
+import { PLATFORMS, type Platform } from '../constants/platforms';
 
 /**
  * Metrik sorgu ve yanıt sözleşmeleri.
@@ -295,4 +295,110 @@ export function deriveRoas(
   }
 
   return valueUnits / spendUnits;
+}
+
+// -----------------------------------------------------------------------------
+// Senkronizasyon teşhisi
+// -----------------------------------------------------------------------------
+
+/**
+ * "VERİ NEDEN YOK" SORUSUNUN TEK CEVAP YERİ.
+ *
+ * Bu sözleşme, panelde altı farklı arızanın AYNI boş ekrana düşmesini
+ * bitirmek için var. Bugüne kadar şunların hepsi "grafik boş" olarak
+ * görünüyordu ve ayırt etmenin tek yolu sunucuya SSH ile girip
+ * `sync-cli -- jobs` çalıştırmaktı:
+ *
+ *   · hesap müşteriye atanmamış
+ *   · atanmış ama izleme kapalı
+ *   · izleme açık ama bağlantı yeniden yetki istiyor
+ *   · hesabın platform durumu zamanlanmış süpürmenin süzgecine takılıyor
+ *   · yapı taraması hiç koşmadı → metrikler kampanya satırına bağlanamıyor
+ *   · iş koştu, başarılı bitti ama SIFIR satır yazdı
+ *
+ * Altısının yapılacak işi farklı. `blockedReason` her hesap için bunlardan
+ * hangisinin geçerli olduğunu YAZIYOR; boşsa hesapta bilinen bir engel yok.
+ */
+export interface SyncAccountStatus {
+  id: string;
+  name: string;
+  platform: Platform;
+  /** `ad_accounts.status` — platformdan geldiği hâliyle. */
+  status: string;
+  syncEnabled: boolean;
+  connectionStatus: string;
+  lastStructureSyncAt: string | null;
+  lastInsightsSyncAt: string | null;
+  /**
+   * Zamanlanmış süpürme bu hesabı ALIYOR mu?
+   *
+   * "Şimdi güncelle" düğmesinin süzgeci ile zamanlanmış süpürmenin süzgeci
+   * aynı değil: süpürme hesabın platform durumuna da bakıyor, düğme bakmıyor.
+   * Bu ayrım "elle basınca geliyor, kendiliğinden gelmiyor" hâlini üretiyor
+   * ve başka hiçbir yerde görünmüyor.
+   */
+  inScheduledSweep: boolean;
+  /** Metrik yazılabilmesi için yapı taraması koşmuş olmak ZORUNDA. */
+  structureReady: boolean;
+  /** Doluysa KULLANICIYA OLDUĞU GİBİ gösterilecek cümle. */
+  blockedReason: string | null;
+}
+
+/** Bir senkronizasyon işinin panelde gösterilen hâli. */
+export interface SyncJobStatusRow {
+  /** `sync_jobs.id` BIGSERIAL — JSON'da string taşınıyor. */
+  id: string;
+  jobType: string;
+  entityLevel: string | null;
+  status: string;
+  attempts: number;
+  rowsUpserted: number;
+  apiCallsUsed: number;
+  errorCode: string | null;
+  /**
+   * Platformun KENDİ mesajı (Meta'da subcode ve fbtrace dahil).
+   *
+   * Bu alan tabloya bugüne kadar da yazılıyordu ama okuyan hiçbir uç nokta
+   * yoktu: "izin yok", "kota doldu", "hesap bulunamadı" panelde hiç
+   * görünmüyordu.
+   */
+  errorMessage: string | null;
+  adAccountId: string | null;
+  adAccountName: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+/**
+ * Süzgeçlerin ELEDİĞİ hesapların sayımı — kategorisiyle birlikte.
+ *
+ * ATANMAMIŞ HESAP BURADA SAYILMIYOR ve bu bilinçli. Genel Bakış'taki
+ * `hiddenAccounts` sayacı tam bu hatayı yapıyor: ajansın havuzundaki
+ * yüzlerce atanmamış hesabı da sayıyor ve kullanıcı hangi müşteriyi seçerse
+ * seçsin devasa, alakasız bir rakam görüyor. Uyarı böyle olunca gerçek bir
+ * gizlenmeyi işaret ettiğinde de kimse ciddiye almıyor. Bu uç yalnızca
+ * MÜŞTERİYE ATANMIŞ hesaplara bakıyor; hiç atanmamışsa cevap zaten boş
+ * `accounts` dizisi.
+ *
+ * SESSİZ KESME YOK: bir hesabın listede olmaması bir bilgi. Kaç tanesinin
+ * hangi sebeple elendiği yazılmazsa "hiç hesap yok" ile "üç hesap var ama
+ * üçü de elendi" aynı ekrana düşer.
+ */
+export interface SyncExcludedCounts {
+  syncDisabled: number;
+  clientInactive: number;
+  connectionInactive: number;
+  accountStatus: number;
+}
+
+export interface SyncStatusResponse {
+  accountCount: number;
+  neverSyncedCount: number;
+  oldestSyncAt: string | null;
+  accounts: SyncAccountStatus[];
+  excluded: SyncExcludedCounts;
+  recentJobs: SyncJobStatusRow[];
+  /** Gösterilen iş sayısı toplamı tutmuyorsa kullanıcı bunu GÖRMELİ. */
+  recentJobsTotal: number;
 }
