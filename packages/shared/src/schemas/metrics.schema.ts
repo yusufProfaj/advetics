@@ -342,6 +342,24 @@ export interface SyncAccountStatus {
   structureReady: boolean;
   /** Doluysa KULLANICIYA OLDUĞU GİBİ gösterilecek cümle. */
   blockedReason: string | null;
+  /**
+   * BU HESABIN EN SON İŞİ — cevap sorunun YANINDA olmak zorunda.
+   *
+   * İlk sürümde yalnızca ortak bir "son 25 iş" tablosu vardı ve teşhis
+   * pratikte çalışmıyordu: organik gönderi işleri listeyi dolduruyor,
+   * aranan hesabın yapı taraması sayfanın altında kalıyordu. 356 işlik bir
+   * tabloda doğru satırı gözle aramak, teşhis aracının kendisini kullanılmaz
+   * yapıyor.
+   */
+  lastJob: SyncJobStatusRow | null;
+  /**
+   * Bu hesabın en son DÜŞEN işi.
+   *
+   * `lastJob` başarılı olsa bile arıza burada olabilir: organik gönderi işi
+   * başarılı biterken yapı taraması izin hatasıyla düşmüş olabiliyor ve
+   * yalnızca sonuncuya bakmak o hatayı gizler.
+   */
+  lastFailedJob: SyncJobStatusRow | null;
 }
 
 /** Bir senkronizasyon işinin panelde gösterilen hâli. */
@@ -410,4 +428,19 @@ export interface SyncStatusResponse {
   recentJobs: SyncJobStatusRow[];
   /** Gösterilen iş sayısı toplamı tutmuyorsa kullanıcı bunu GÖRMELİ. */
   recentJobsTotal: number;
+  /**
+   * SAYAÇLAR BÜTÜN İŞLER ÜZERİNDEN — gösterilen 25 üzerinden DEĞİL.
+   *
+   * İlk sürümde bu sayılar `recentJobs` dizisinden hesaplanıyordu ve tam
+   * olarak kaçınmaya çalıştığım hatayı yapıyordu: "5 düşen iş" aslında
+   * "gösterilen 25 işin 5'i" demekti, 356 işin 5'i değil. Kesilmiş bir
+   * listeden sayı türetmek, sessiz kesmenin bir başka biçimi.
+   */
+  jobCounts: {
+    failed: number;
+    /** `succeeded` ama tek satır yazmamış METRİK işleri. Diğer iş türlerinde
+     * sıfır satır normal (o gün yeni gönderi yok gibi) ve sayılmıyor. */
+    emptySuccess: number;
+    running: number;
+  };
 }

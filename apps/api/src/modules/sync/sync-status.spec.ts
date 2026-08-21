@@ -81,9 +81,61 @@ const IS: IsSatiri = {
 let hesapArgs: { where?: Record<string, unknown> } | null = null;
 let isArgs: { take?: number } | null = null;
 
-function kur(hesaplar: HesapSatiri[], isler: IsSatiri[] = [], isToplam = isler.length) {
+/** Hesap başına son iş sorgusunun (DISTINCT ON) döndürdüğü ham satır. */
+interface HamIs {
+  id: bigint;
+  job_type: string;
+  entity_level: string | null;
+  status: string;
+  attempts: number;
+  rows_upserted: number;
+  rows_skipped: number | null;
+  api_calls_used: number;
+  error_code: string | null;
+  error_message: string | null;
+  note: string | null;
+  ad_account_id: string;
+  created_at: Date;
+  started_at: Date | null;
+  finished_at: Date | null;
+}
+
+function hamIs(over: Partial<HamIs> = {}): HamIs {
+  return {
+    id: 99n,
+    job_type: 'structure',
+    entity_level: null,
+    status: 'failed',
+    attempts: 5,
+    rows_upserted: 0,
+    rows_skipped: null,
+    api_calls_used: 3,
+    error_code: 'permission_denied',
+    error_message: "(#10) requires 'ads_read' · fbtrace_id: Zz9",
+    note: null,
+    ad_account_id: 'acc-1',
+    created_at: new Date('2026-08-21T07:47:00Z'),
+    started_at: new Date('2026-08-21T07:47:01Z'),
+    finished_at: new Date('2026-08-21T07:47:09Z'),
+    ...over,
+  };
+}
+
+interface Sayaclar {
+  failed?: number;
+  emptySuccess?: number;
+  running?: number;
+}
+
+function kur(
+  hesaplar: HesapSatiri[],
+  isler: IsSatiri[] = [],
+  isToplam = isler.length,
+  ekstra: { sayaclar?: Sayaclar; sonIs?: HamIs[]; sonDusen?: HamIs[] } = {},
+) {
   hesapArgs = null;
   isArgs = null;
+  const sayaclar = ekstra.sayaclar ?? {};
 
   const tx = {
     adAccount: {
@@ -97,7 +149,23 @@ function kur(hesaplar: HesapSatiri[], isler: IsSatiri[] = [], isToplam = isler.l
         isArgs = args;
         return isler;
       },
-      count: async () => isToplam,
+      /*
+       * SAYAÇLAR AYRI SORGU. Parametresiz çağrı toplamı, `where` taşıyan
+       * çağrılar düşen/boş/koşan sayısını veriyor — hepsi VERİTABANINDAN,
+       * gösterilen 25 satırdan değil.
+       */
+      count: async (args?: { where?: { status?: unknown; rowsUpserted?: number } }) => {
+        if (!args?.where) return isToplam;
+        const w = args.where;
+        if (w.status === 'failed') return sayaclar.failed ?? 0;
+        if (w.rowsUpserted === 0) return sayaclar.emptySuccess ?? 0;
+        return sayaclar.running ?? 0;
+      },
+    },
+    // Ham SQL: ilk çağrı hesap başına SON iş, ikincisi son DÜŞEN iş.
+    $queryRaw: async (q: { strings?: string[]; values?: unknown[]; sql?: string }) => {
+      const metin = JSON.stringify(q);
+      return metin.includes('failed') ? (ekstra.sonDusen ?? []) : (ekstra.sonIs ?? []);
     },
   };
 
@@ -220,6 +288,48 @@ describe('GET /sync/status — teşhis', () => {
       { ...SAGLAM_HESAP, id: 'b', lastInsightsSyncAt: new Date('2026-08-14T06:00:00Z') },
     ]).status(CTX);
     expect(res.oldestSyncAt).toBe('2026-08-14T06:00:00.000Z');
+  });
+
+  it('SAYAÇLAR gösterilen listeden DEĞİL veritabanından geliyor', async () => {
+    // İlk sürüm bunları `recentJobs` dizisinden türetiyordu: 356 işlik bir
+    // tabloda "5 düşen iş" aslında "gösterilen 25 işin 5'i" demekti. Kesilmiş
+    // bir listeden sayı üretmek, sessiz kesmenin başka bir biçimi.
+    const res = await kur([SAGLAM_HESAP], [IS], 356, {
+      sayaclar: { failed: 5, emptySuccess: 2, running: 1 },
+    }).status(CTX);
+
+    expect(res.jobCounts).toEqual({ failed: 5, emptySuccess: 2, running: 1 });
+    // Gösterilen listede tek iş var ve o da başarılı — sayaçlar ondan
+    // türeseydi üçü de 0 olurdu.
+    expect(res.recentJobs).toHaveLength(1);
+  });
+
+  it('HESABIN SON İŞİ satırın yanında — 356 işlik tabloda gözle aramak teşhis değil', async () => {
+    const res = await kur([SAGLAM_HESAP], [], 0, {
+      sonIs: [hamIs({ status: 'succeeded', error_code: null, error_message: null })],
+    }).status(CTX);
+    expect(res.accounts[0]!.lastJob?.status).toBe('succeeded');
+    expect(res.accounts[0]!.lastJob?.adAccountName).toBe('Mirnas — Meta');
+  });
+
+  it('SON DÜŞEN İŞ ayrı — son iş başarılıysa arıza gizlenmemeli', async () => {
+    // Canlıda görülen tam tablo: organik gönderi işi başarılı biterken yapı
+    // taraması izin hatasıyla düşmüştü. Yalnızca sonuncuya bakmak o hatayı
+    // gizliyordu.
+    const res = await kur([SAGLAM_HESAP], [], 0, {
+      sonIs: [hamIs({ job_type: 'organic_posts', status: 'succeeded', error_message: null })],
+      sonDusen: [hamIs()],
+    }).status(CTX);
+
+    expect(res.accounts[0]!.lastJob?.status).toBe('succeeded');
+    expect(res.accounts[0]!.lastFailedJob?.status).toBe('failed');
+    expect(res.accounts[0]!.lastFailedJob?.errorMessage).toContain('fbtrace_id');
+  });
+
+  it('hesabın hiç işi yoksa iki alan da null — uydurma satır YOK', async () => {
+    const res = await kur([SAGLAM_HESAP]).status(CTX);
+    expect(res.accounts[0]!.lastJob).toBeNull();
+    expect(res.accounts[0]!.lastFailedJob).toBeNull();
   });
 
   it('işin hangi hesaba ait olduğu ADIYLA dönüyor — kimlikle teşhis edilemez', async () => {

@@ -105,10 +105,14 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
 
 function OzetSeridi({ data }: { data: SyncStatusResponse }) {
   const engelli = data.accounts.filter((a) => a.blockedReason !== null).length;
-  const bosBiten = data.recentJobs.filter(
-    (j) => j.status === 'succeeded' && j.rowsUpserted === 0,
-  ).length;
-  const dusen = data.recentJobs.filter((j) => j.status === 'failed').length;
+  /*
+   * SAYAÇLAR API'DEN GELİYOR, GÖSTERİLEN 25 SATIRDAN DEĞİL.
+   *
+   * İlk sürümde bunlar `data.recentJobs` üzerinden hesaplanıyordu: 356 işlik
+   * bir tabloda "5 düşen iş" aslında "gösterilen 25 işin 5'i" demekti.
+   * Kesilmiş bir listeden sayı türetmek, sessiz kesmenin başka bir biçimi.
+   */
+  const { failed: dusen, emptySuccess: bosBiten, running: koşan } = data.jobCounts;
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -118,7 +122,12 @@ function OzetSeridi({ data }: { data: SyncStatusResponse }) {
         deger={String(engelli)}
         vurgu={engelli > 0 ? 'warn' : undefined}
       />
-      <Kutu baslik="Düşen iş" deger={String(dusen)} vurgu={dusen > 0 ? 'danger' : undefined} />
+      <Kutu
+        baslik="Düşen iş"
+        deger={String(dusen)}
+        vurgu={dusen > 0 ? 'danger' : undefined}
+        ipucu={koşan > 0 ? `${koşan} iş hâlâ kuyrukta ya da koşuyor.` : undefined}
+      />
       {/*
         "BAŞARILI AMA SIFIR SATIR" AYRI BİR KUTU. Bu, "atadım veri gelmiyor"
         hâlinin en sinsi biçimi: iş `succeeded` bitiyor, hiçbir yerde hata
@@ -189,7 +198,54 @@ function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
           Zamanlanmış güncellemeye girmiyor.
         </p>
       )}
+
+      {/*
+        HESABIN KENDİ İŞİ SATIRIN YANINDA.
+        Ortak "son 25 iş" tablosu tek başına yetmiyordu: organik gönderi
+        işleri listeyi dolduruyor, aranan hesabın yapı taraması sayfanın
+        altında kalıyordu. 356 işlik bir tabloda doğru satırı gözle aramak,
+        teşhis aracının kendisini kullanılmaz yapıyor.
+      */}
+      {hesap.lastFailedJob !== null && (
+        <IsOzeti baslik="Bu hesabın son DÜŞEN işi" is={hesap.lastFailedJob} hata />
+      )}
+      {hesap.lastJob !== null && hesap.lastJob.id !== hesap.lastFailedJob?.id && (
+        <IsOzeti baslik="Bu hesabın son işi" is={hesap.lastJob} />
+      )}
     </li>
+  );
+}
+
+/** Hesap satırının altında tek bir işin özeti. */
+function IsOzeti({
+  baslik,
+  is,
+  hata,
+}: {
+  baslik: string;
+  is: SyncJobStatusRow;
+  hata?: boolean;
+}) {
+  return (
+    <div
+      className={`mt-2 rounded border px-3 py-2 text-xs ${
+        hata ? 'border-danger/40 bg-danger/5' : 'border-line bg-surface-muted'
+      }`}
+    >
+      <p className="text-ink-muted">
+        {baslik}: <span className="text-ink">{IS_ADLARI[is.jobType] ?? is.jobType}</span> ·{' '}
+        {is.status} · {is.rowsUpserted} satır
+        {is.rowsSkipped !== null && is.rowsSkipped > 0 && <> · {is.rowsSkipped} atıldı</>}
+        {is.attempts > 1 && <> · {is.attempts}. deneme</>} · {zaman(is.finishedAt ?? is.createdAt)}
+      </p>
+      {is.errorMessage && (
+        <p className="mt-1 leading-snug text-danger">
+          {is.errorCode && <span className="font-mono">[{is.errorCode}] </span>}
+          {is.errorMessage}
+        </p>
+      )}
+      {is.note && <p className="mt-1 text-ink-muted">{is.note}</p>}
+    </div>
   );
 }
 
