@@ -531,6 +531,8 @@ export class SyncProcessorService {
         await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls, {
           note: result.note,
         });
+        // Yapı bitti — geçmişi bekleyen bir hesap varsa şimdi kuyruğa girsin.
+        await this.yapiSonrasiGecmisiKuyrukla(payload.adAccountId);
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
@@ -736,6 +738,68 @@ export class SyncProcessorService {
    * rotasyonuyla kayboluyordu. Oysa bu iki alan, "atadım ama veri gelmiyor"
    * teşhisinin tek kanıtı.
    */
+  /**
+   * YAPI BİTTİ — GEÇMİŞİ BEKLEYEN İŞ VARSA ŞİMDİ KUYRUĞA GİRSİN.
+   *
+   * Bu, canlıda görülen bir ÖLÜ NOKTAYI kapatıyor. Sıra şuydu:
+   *
+   *   1. Hesap atanıyor; `structure` ve `initial_backfill` kuyruğa giriyor.
+   *   2. Yapı taraması büyük hesapta birkaç kez düşüyor (sayfa boyutu) ve
+   *      dakikalarca sürüyor.
+   *   3. `initial_backfill` bu sırada beş denemesini de harcıyor — her
+   *      seferinde "yapı taraması hiç koşmadı" diyerek, doğru biçimde.
+   *   4. Yapı taraması SONUNDA başarıyor.
+   *   5. Ama geçmiş çekimi çoktan kalıcı `failed`. Kendiliğinden bir daha
+   *      denenmiyor: gecelik süpürme yalnızca son 7 günü çekiyor.
+   *
+   * Sonuç: yapı 300 kampanya yazmış, panelde "Metrik: hiç" yazıyor ve
+   * kullanıcının bunu bilip elle "Son 90 gün" ile tetiklemesi gerekiyor.
+   *
+   * KOŞUL DAR TUTULDU: yalnızca o hesapta HİÇ metrik yoksa. Aksi hâlde her
+   * yapı taraması (6 saatte bir) 90 günlük bir çekim tetikler ve kotayı
+   * boşa harcardı. Kuyruğun mükerrer engeli de ikinci bir güvence.
+   */
+  private async yapiSonrasiGecmisiKuyrukla(adAccountId: string): Promise<void> {
+    try {
+      const account = await this.db.adAccount.findUnique({
+        where: { id: adAccountId },
+        select: { clientId: true, platform: true, lastInsightsSyncAt: true, syncEnabled: true },
+      });
+      if (!account || account.clientId === null || !account.syncEnabled) return;
+      if (account.lastInsightsSyncAt !== null) return;
+
+      const bugun = new Date();
+      const baslangic = new Date(bugun.getTime() - 90 * 86_400_000);
+      const gun = (d: Date): string => d.toISOString().slice(0, 10);
+
+      const res = await this.queue.enqueue({
+        clientId: account.clientId,
+        platform: account.platform,
+        jobType: 'initial_backfill',
+        adAccountId,
+        entityLevel: 'campaign',
+        dateFrom: gun(baslangic),
+        dateTo: gun(bugun),
+      });
+      if (res.enqueued) {
+        this.logger.log(
+          `Yapı taraması bitti, ${adAccountId} için 90 günlük geçmiş yeniden kuyruğa alındı.`,
+        );
+      }
+    } catch (err) {
+      /*
+       * YUTULUYOR AMA SESSİZ DEĞİL. Yapı taraması BAŞARILI bitti; bu ek adım
+       * düşerse onu başarısız saymak, yazılmış 3.382 satırı çöpe atıp aynı
+       * taramayı tekrar koşturmak olurdu. Kullanıcının kaybı yalnızca
+       * geçmiş verinin gecikmesi ve o "Şimdi güncelle" ile alınabiliyor.
+       */
+      this.logger.error(
+        `Yapı sonrası geçmiş kuyruğa alınamadı (hesap ${adAccountId}): ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   async markSucceeded(
     syncJobId: string,
     rows: number,

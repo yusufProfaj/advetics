@@ -146,6 +146,14 @@ buna göre veriliyor:
   sınırı da %90). Yapı koşamadığı için metrikler hiç eşlenemiyor — kalıcı
   kilit. Ön koşul kontrolü platform çağrısından ÖNCE yapılmalı: maliyeti
   sıfır çağrı olan bir ret, bağımlılığına nefes alacak yer bırakıyor.
+- **YAVAŞ BİR ÖN KOŞUL, BAĞIMLI İŞİN DENEMELERİNİ TÜKETİYOR.** Büyük bir
+  hesapta yapı taraması dakikalarca sürüp birkaç kez düşerken, geçmiş çekimi
+  beş denemesini de "yapı hiç koşmadı" diyerek harcıyor — her seferinde
+  doğru davranarak. Yapı sonunda başarıyor ama geçmiş çekimi kalıcı `failed`
+  ve kendiliğinden bir daha denenmiyor (gecelik süpürme yalnızca son 7 gün).
+  Panelde "Yapı: 13:06 · Metrik: hiç". Ön koşul BİTTİĞİNDE bağımlı işi
+  yeniden kuyruğa al; koşulu dar tut (yalnızca hiç metrik yoksa), yoksa 6
+  saatte bir 90 günlük çekim tetiklenir. `yapi-sonrasi-gecmis.spec.ts`.
 - **META SAYFA BOYUTU SABİT OLAMAZ: "reduce the amount of data".** Büyük bir
   reklam hesabında `limit=500` ile yapı taraması HTTP 500 ve *"Please reduce
   the amount of data you're asking for"* ile düşüyor. Kabul edilen boyutun
