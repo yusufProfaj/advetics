@@ -200,8 +200,8 @@ export default async function DashboardPage({
             </Notice>
           )}
 
-          <Cards summary={summary} />
-          <SecondaryStrip summary={summary} />
+          <Cards summary={summary} karsilastir={range.karsilastirma !== 'yok'} />
+          <SecondaryStrip summary={summary} karsilastir={range.karsilastirma !== 'yok'} />
 
           {/* TEK GÜNLÜK ARALIKTA GRAFİK YOK.
               Bir gün için zaman serisi tek bir bar demek: kocaman boş bir
@@ -248,8 +248,22 @@ export default async function DashboardPage({
   );
 }
 
-function Cards({ summary }: { summary: MetricsSummary }) {
-  const prev = summary.previous;
+function Cards({
+  summary,
+  karsilastir,
+}: {
+  summary: MetricsSummary;
+  karsilastir: boolean;
+}) {
+  /*
+   * KARŞILAŞTIRMA KAPALIYSA DELTA DA YOK.
+   *
+   * Sunucu geriye dönük uyum için önceki dönemi yine döndürüyor (rapor bu
+   * ucu parametresiz çağırıyor). Onu ekranda göstermek, seçicide "Karşılaştır
+   * kapalı" yazarken kartlarda yüzde değişim basmak demek olurdu — düğme
+   * yaptığını söylemeyen bir düğme olurdu.
+   */
+  const prev = karsilastir ? summary.previous : null;
   const currency = summary.currency;
 
   // Karışık para biriminde tek bir harcama toplamı göstermek yanlış olurdu;
@@ -309,8 +323,14 @@ function Cards({ summary }: { summary: MetricsSummary }) {
 }
 
 /** İkincil metrikler — bağlam veriyor, karar verdirmiyor. */
-function SecondaryStrip({ summary }: { summary: MetricsSummary }) {
-  const prev = summary.previous;
+function SecondaryStrip({
+  summary,
+  karsilastir,
+}: {
+  summary: MetricsSummary;
+  karsilastir: boolean;
+}) {
+  const prev = karsilastir ? summary.previous : null;
   const currency = summary.currency;
 
   return (

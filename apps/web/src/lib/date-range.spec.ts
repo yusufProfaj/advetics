@@ -173,10 +173,24 @@ describe('özel aralık', () => {
 });
 
 describe('karşılaştırma penceresi', () => {
-  it('varsayılan KAPALI — her sorguda ikinci bir tarama bedava değil', () => {
+  it('varsayılan AÇIK (önceki dönem) — panel hep böyle çalışıyordu', () => {
+    // Varsayılan kapalı yapmak, bir gün panele bakan herkesin alıştığı
+    // yüzdelerin sebepsizce kaybolması demek olurdu.
     const r = resolveRange({ aralik: '30g' });
+    expect(r.karsilastirma).toBe('onceki_donem');
+    expect(r.compareFrom).not.toBeNull();
+  });
+
+  it('KRİTİK: açıkça kapatılabiliyor — düğme yaptığını söylemeli', () => {
+    const r = resolveRange({ aralik: '30g', karsilastir: 'yok' });
     expect(r.karsilastirma).toBe('yok');
     expect(r.compareFrom).toBeNull();
+  });
+
+  it('KAPALI durumu da bağlantıda TAŞINIYOR', () => {
+    // Taşınmazsa kullanıcının kapattığı karşılaştırma bir sonraki tıklamada
+    // geri gelirdi.
+    expect(rangeParams(resolveRange({ aralik: '30g', karsilastir: 'yok' })).karsilastir).toBe('yok');
   });
 
   it('ÖNCEKİ DÖNEM aynı uzunlukta ve hemen öncesi', () => {
@@ -201,18 +215,18 @@ describe('karşılaştırma penceresi', () => {
     expect(k.from).toBe('2025-08-07');
   });
 
-  it('bilinmeyen karşılaştırma değeri KAPALI sayılıyor', () => {
-    expect(resolveRange({ aralik: '30g', karsilastir: 'zart' }).karsilastirma).toBe('yok');
+  it('bilinmeyen karşılaştırma değeri VARSAYILANA düşüyor — URL elle düzenlenebiliyor', () => {
+    expect(resolveRange({ aralik: '30g', karsilastir: 'zart' }).karsilastirma).toBe('onceki_donem');
   });
 });
 
 describe('rangeParams', () => {
-  it('ön ayarda yalnızca anahtar taşınıyor', () => {
+  it('ön ayarda tarih alanları taşınmıyor, karşılaştırma taşınıyor', () => {
     expect(rangeParams(resolveRange({ aralik: '7g' }))).toEqual({
       aralik: '7g',
       baslangic: undefined,
       bitis: undefined,
-      karsilastir: undefined,
+      karsilastir: 'onceki_donem',
     });
   });
 
@@ -224,7 +238,7 @@ describe('rangeParams', () => {
         aralik: 'ozel',
         baslangic: '2026-07-01',
         bitis: '2026-07-31',
-        karsilastir: undefined,
+        karsilastir: 'onceki_donem',
       });
   });
 

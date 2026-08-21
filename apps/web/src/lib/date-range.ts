@@ -269,8 +269,23 @@ export function resolveRange(params: RangeParams | string | undefined): Resolved
     kirpildi = true;
   }
 
+  /*
+   * VARSAYILAN AÇIK — VE BU BİR UYUM KARARI.
+   *
+   * Panel başından beri "önceki döneme göre %X" gösteriyordu; sunucu önceki
+   * dönemi koşulsuz hesaplıyordu. Karşılaştırmayı varsayılan KAPALI yapmak,
+   * bir gün panele bakan herkesin alıştığı yüzdelerin sebepsizce kaybolması
+   * demek olurdu.
+   *
+   * Kapatmak AÇIK bir seçim: `?karsilastir=yok`. Bilinmeyen bir değer de
+   * varsayılana düşüyor — URL elle düzenlenebiliyor.
+   */
   const karsilastirma: KarsilastirmaKipi =
-    p.karsilastir === 'onceki_donem' || p.karsilastir === 'onceki_yil' ? p.karsilastir : 'yok';
+    p.karsilastir === 'yok'
+      ? 'yok'
+      : p.karsilastir === 'onceki_yil'
+        ? 'onceki_yil'
+        : 'onceki_donem';
 
   const kars = karsilastirmaPenceresi(from, to, karsilastirma);
 
@@ -325,6 +340,11 @@ export function rangeParams(r: ResolvedRange): Record<string, string | undefined
     aralik: r.key,
     baslangic: r.key === 'ozel' ? r.from : undefined,
     bitis: r.key === 'ozel' ? r.to : undefined,
-    karsilastir: r.karsilastirma === 'yok' ? undefined : r.karsilastirma,
+    /*
+     * "KAPALI" DA TAŞINIYOR. Varsayılan açık olduğu için `undefined`
+     * bırakmak, kullanıcının kapattığı karşılaştırmanın bir sonraki
+     * tıklamada geri gelmesi demek olurdu.
+     */
+    karsilastir: r.karsilastirma,
   };
 }
