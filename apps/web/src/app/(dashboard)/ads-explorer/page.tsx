@@ -3,7 +3,8 @@ import type { AdsExploreQuery, AdsExploreResult } from '@advetics/shared';
 import { AD_SORT_FIELDS, AD_STATUSES, PLATFORMS } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
-import { RANGE_PRESETS, resolveRange } from '@/lib/date-range';
+import { rangeParams, resolveRange } from '@/lib/date-range';
+import { TarihSecici } from '@/components/tarih-secici';
 import { formatDayLong, formatMoney, formatNumber, formatPercent } from '@/lib/format';
 import { AdCard } from '@/components/ad-card';
 
@@ -53,7 +54,12 @@ export default async function AdsExplorerPage({
   await requireSession();
   const params = await searchParams;
 
-  const range = resolveRange(first(params.aralik));
+  const range = resolveRange({
+    aralik: first(params.aralik),
+    baslangic: first(params.baslangic),
+    bitis: first(params.bitis),
+    karsilastir: first(params.karsilastir),
+  });
   const sort = pick(first(params.sirala), AD_SORT_FIELDS, 'spend');
   const dir = first(params.yon) === 'asc' ? 'asc' : 'desc';
   const status = pick(first(params.durum), AD_STATUSES, undefined);
@@ -110,7 +116,10 @@ export default async function AdsExplorerPage({
   const linkWith = (over: Record<string, string | undefined>): string => {
     const next = new URLSearchParams();
     const current: Record<string, string | undefined> = {
-      aralik: range.key,
+      // TARİH ANAHTARLARININ HEPSİ. Yalnızca `aralik` taşınsaydı özel bir
+      // aralık seçip herhangi bir süzgece basmak onu sessizce 30 güne
+      // döndürürdü — "aralık bazen kayboluyor" belirtisi.
+      ...rangeParams(range),
       sirala: sort,
       yon: dir,
       durum: status,
@@ -161,26 +170,17 @@ export default async function AdsExplorerPage({
               </Link>
             ))}
           </nav>
-        <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Tarih aralığı">
-          {RANGE_PRESETS.map((p) => (
-            <Link
-              key={p.key}
-              href={linkWith({ aralik: p.key, sayfa: undefined })}
-              aria-current={range.key === p.key ? 'page' : undefined}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                range.key === p.key ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
-              }`}
-            >
-              {p.label}
-            </Link>
-          ))}
-          </nav>
+        <TarihSecici aralik={range} enEskiGun={null} />
         </div>
       </header>
 
       {/* Arama — düz GET formu, istemci JS'i yok. */}
       <form action="/ads-explorer" method="get" className="flex flex-wrap gap-2">
-        <input type="hidden" name="aralik" value={range.key} />
+        {/* TARİH ANAHTARLARI GİZLİ ALAN OLARAK. Form GET ile URL'i baştan
+            kurduğu için burada olmayan her parametre ARAMA YAPINCA düşüyor. */}
+        {Object.entries(rangeParams(range)).map(([k, v]) =>
+          v === undefined ? null : <input key={k} type="hidden" name={k} value={v} />,
+        )}
         <input type="hidden" name="sirala" value={sort} />
         <input type="hidden" name="yon" value={dir} />
         {status && <input type="hidden" name="durum" value={status} />}

@@ -112,7 +112,26 @@ const ORDER_MSG = {
 // için yeterli.
 const SPAN_MSG = { message: 'Tarih aralığı en fazla 400 gün olabilir', path: ['to'] };
 
-export const metricsQuerySchema = metricsQueryBase
+/**
+ * KARŞILAŞTIRMA PENCERESİ AÇIKÇA GELİYOR — sunucuda türetilmiyor.
+ *
+ * Önceki dönem bir süre `summary()` içinde koşulsuz hesaplanıyordu: her
+ * çağrıda ikinci bir tam tarama yapılıyor, kullanıcı ne kapatabiliyor ne de
+ * "önceki yıl" gibi başka bir pencere seçebiliyordu.
+ *
+ * Pencereyi İSTEMCİNİN göndermesi tercih edildi çünkü seçim zaten orada
+ * yapılıyor ve ekranda hangi dönemle karşılaştırıldığı YAZILIYOR. Sunucu ayrı
+ * bir hesap yaparsa iki taraf ayrışır ve "%12 arttı" diyen ekran ile
+ * gerçekte karşılaştırılan dönem farklı olur — üstelik hiçbir hata vermeden.
+ *
+ * İkisi de verilmezse karşılaştırma KAPALI.
+ */
+const compareAlanlari = {
+  compareFrom: isoDate.optional(),
+  compareTo: isoDate.optional(),
+};
+
+export const metricsQuerySchema = metricsQueryBase.extend(compareAlanlari)
   .refine(orderOk, ORDER_MSG)
   .refine(spanOk, SPAN_MSG);
 

@@ -9,7 +9,9 @@ import type {
 import { METRIC_LEVELS } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
-import { RANGE_PRESETS, resolveRange } from '@/lib/date-range';
+import { rangeParams, resolveRange } from '@/lib/date-range';
+import { baglanti } from '@/lib/baglanti';
+import { TarihSecici } from '@/components/tarih-secici';
 import { RefreshButton } from '@/components/refresh-button';
 import {
   changePercent,
@@ -53,11 +55,55 @@ export default async function DashboardPage({
   const session = await requireSession();
   const params = await searchParams;
 
-  const range = resolveRange(first(params.aralik));
+  /*
+   * KAPSAM ÖNCE OKUNUYOR: "Tüm zamanlar" ön ayarı elimizdeki en eski veri
+   * gününe dayanıyor. Sabit bir alt sınır hem yüzlerce boş günü tarar hem de
+   * 400 günlük sunucu sınırına takılıp hata sayfası üretirdi.
+   *
+   * Hata YUTULMUYOR ama aralığı da düşürmüyor: kapsam alınamazsa "Tüm
+   * zamanlar" 90 güne düşüyor ve bu `date-range.ts` içinde yazılı.
+   */
+  const kapsam = await serverApiFetch<{ earliestDate: string | null }>(
+    `/metrics/coverage?from=${first(params.baslangic) ?? '2026-01-01'}&to=${first(params.bitis) ?? '2026-01-01'}`,
+  ).catch(() => null);
+
+  const range = resolveRange({
+    aralik: first(params.aralik),
+    baslangic: first(params.baslangic),
+    bitis: first(params.bitis),
+    karsilastir: first(params.karsilastir),
+    enEskiGun: kapsam?.earliestDate ?? null,
+  });
   const level = resolveLevel(first(params.seviye));
   const platform = resolvePlatform(first(params.platform));
 
+  /*
+   * BAĞLANTILARDA TAŞINAN SÜZGEÇLER — TEK YERDE.
+   *
+   * Platform sekmesi ve kırılım sekmesi bağlantılarını elle birleştiriyordu
+   * ve kırılım sekmesi `platform`ı DÜŞÜRÜYORDU: kullanıcı "Meta" seçip
+   * "Reklam seti"ne basınca süzgeç sessizce sıfırlanıyordu. Özel tarih
+   * aralığı gelince taşınacak anahtar sayısı üçten beşe çıktı ve elle
+   * birleştirme sürdürülemez hâle geldi.
+   */
+  const tasinan = {
+    ...rangeParams(range),
+    platform: platform ?? undefined,
+    seviye: level,
+  };
+
   const base = new URLSearchParams({ from: range.from, to: range.to });
+  /*
+   * KARŞILAŞTIRMA PENCERESİ AÇIKÇA GİDİYOR. Sunucu eskiden bunu koşulsuz
+   * kendisi hesaplıyordu; kullanıcı ne kapatabiliyor ne "önceki yıl"
+   * seçebiliyordu. Pencereyi panel hesaplayıp EKRANDA YAZDIĞI için (seçicide
+   * "1–31 Tem ile karşılaştırılacak") sorguya da o gitmeli — iki taraf ayrı
+   * hesaplarsa yazan dönem ile karşılaştırılan dönem ayrışır.
+   */
+  if (range.compareFrom && range.compareTo) {
+    base.set('compareFrom', range.compareFrom);
+    base.set('compareTo', range.compareTo);
+  }
   // PLATFORM FİLTRESİ ÜÇ SORGUYA DA gidiyor: özet, grafik ve dağılım aynı
   // kapsamı göstermeli. Yalnızca tabloya uygulamak, üstteki kartların
   // "toplam" gösterirken tablonun tek platformu listelemesi demek olurdu —
@@ -102,8 +148,8 @@ export default async function DashboardPage({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <PlatformTabs current={platform} range={range.key} level={level} />
-          <RangeTabs current={range.key} level={level} platform={platform} />
+          <PlatformTabs current={platform} tasinan={tasinan} />
+          <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
           {/*
             "GEÇMİŞ VERİYİ ÇEK" DÜĞMESİ KALDIRILDI — işi iki yere dağıldı ve
             ikisi de kendiliğinden çalışıyor:
@@ -180,7 +226,7 @@ export default async function DashboardPage({
             <BreakdownTable
               rows={breakdown}
               level={level}
-              rangeKey={range.key}
+              tasinan={tasinan}
               currency={summary.currency}
             />
           )}
@@ -309,12 +355,10 @@ function SecondaryStrip({ summary }: { summary: MetricsSummary }) {
  */
 function PlatformTabs({
   current,
-  range,
-  level,
+  tasinan,
 }: {
   current: Platform | null;
-  range: string;
-  level: MetricLevel;
+  tasinan: Record<string, string | undefined>;
 }) {
   const options: Array<{ key: Platform | null; label: string }> = [
     { key: null, label: 'Tümü' },
@@ -324,13 +368,11 @@ function PlatformTabs({
   return (
     <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Platform">
       {options.map((o) => {
-        const qs = new URLSearchParams({ aralik: range, seviye: level });
-        if (o.key) qs.set('platform', o.key);
         const active = current === o.key;
         return (
           <Link
             key={o.label}
-            href={`/dashboard?${qs}`}
+            href={baglanti('/dashboard', tasinan, { platform: o.key ?? undefined })}
             aria-current={active ? 'page' : undefined}
             className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
               active ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
@@ -340,33 +382,6 @@ function PlatformTabs({
           </Link>
         );
       })}
-    </nav>
-  );
-}
-
-function RangeTabs({
-  current,
-  level,
-  platform,
-}: {
-  current: string;
-  level: MetricLevel;
-  platform: Platform | null;
-}) {
-  return (
-    <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Tarih aralığı">
-      {RANGE_PRESETS.map((p) => (
-        <Link
-          key={p.key}
-          href={`/dashboard?aralik=${p.key}&seviye=${level}${platform ? `&platform=${platform}` : ''}`}
-          aria-current={current === p.key ? 'page' : undefined}
-          className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-            current === p.key ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
-          }`}
-        >
-          {p.label}
-        </Link>
-      ))}
     </nav>
   );
 }

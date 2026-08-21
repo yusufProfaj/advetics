@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { baglanti } from '@/lib/baglanti';
 import type { MetricsBreakdownRow, MetricLevel } from '@advetics/shared';
 import {
   formatDecimal,
@@ -46,12 +47,12 @@ const STATUS_LABEL: Record<string, string> = {
 export function BreakdownTable({
   rows,
   level,
-  rangeKey,
+  tasinan,
   currency,
 }: {
   rows: MetricsBreakdownRow[];
   level: MetricLevel;
-  rangeKey: string;
+  tasinan: Record<string, string | undefined>;
   currency: string | null;
 }) {
   // ÖLÜ KOLONU GÖSTERMİYORUZ.
@@ -71,7 +72,10 @@ export function BreakdownTable({
           {LEVEL_TABS.map((tab) => (
             <Link
               key={tab.key}
-              href={`/dashboard?aralik=${rangeKey}&seviye=${tab.key}`}
+              // TAŞINAN SÜZGEÇLERLE. Eskiden yalnızca `aralik` yazılıyordu ve
+              // `platform` DÜŞÜYORDU: "Meta" seçip seviye değiştiren kullanıcı
+              // sessizce bütün platformlara dönüyordu.
+              href={baglanti('/dashboard', tasinan, { seviye: tab.key })}
               aria-current={level === tab.key ? 'page' : undefined}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
                 level === tab.key

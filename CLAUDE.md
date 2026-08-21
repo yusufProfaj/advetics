@@ -189,6 +189,13 @@ buna göre veriliyor:
   pencere = karşılaştırılamayan CPA/ROAS, sıfır hata mesajı. Varsayılanı bile
   olsa açıkça yaz: varsayılan değiştiğinde rakam haber vermeden kayar.
   `meta-attribution.spec.ts` bunu tarıyor.
+- **BAĞLANTIYI ELLE BİRLEŞTİRME — SÜZGEÇ DÜŞÜYOR.** Panel süzgeçleri URL'de
+  taşıyor ve her sekme kendi bağlantısını elle kuruyordu; kırılım sekmesi
+  `platform`ı düşürüyordu, yani "Meta" seçip seviye değiştiren kullanıcı
+  sessizce bütün platformlara dönüyordu. Özel tarih aralığı gelince taşınacak
+  anahtar sayısı üçten beşe çıktı. Tek üretici (`lib/baglanti.ts`) ve taşınan
+  parametreleri tek yerde kur. Belirti "aralık/süzgeç bazen kayboluyor" ve
+  hiçbir ekranda görünmüyor.
 - **AYNI SÜZGECİ İKİ YERDE YAZMA.** Zamanlanmış süpürme hesabın platform
   durumuna bakıyordu, elle tetikleyen uç bakmıyordu; belirtisi "elle basınca
   geliyor, kendiliğinden gelmiyor" ve hiçbir ekranda görünmüyordu. Süzgeç tek

@@ -36,6 +36,22 @@ export class MetricsController {
     return this.metrics.summary(ctx, query);
   }
 
+  /**
+   * Veri kapsamı — "Tüm zamanlar" ön ayarının dayanağı.
+   *
+   * Tarih parametreleri şemadan geliyor ama SORGUDA KULLANILMIYOR: uç, aralık
+   * değil hesap/platform süzgeci için bağlam istiyor. Ayrı bir şema yazmak,
+   * aynı süzgeci ikinci kez tanımlamak olurdu.
+   */
+  @Get('coverage')
+  @RequirePermissions('insights.read')
+  coverage(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(metricsQuerySchema)) query: MetricsQuery,
+  ): Promise<{ earliestDate: string | null; latestDate: string | null }> {
+    return this.metrics.coverage(ctx, query);
+  }
+
   @Get('timeseries')
   @RequirePermissions('insights.read')
   timeseries(

@@ -263,6 +263,50 @@ describe('MetricsService', () => {
       expect(s.previous?.spendMicros).toBe('5000000');
     });
 
+    it('KRİTİK: pencere İSTEKTEN gelirse o kullanılıyor — "önceki yıl" bunu gerektiriyor', async () => {
+      /*
+       * Pencere bir süre koşulsuz sunucuda türetiliyordu ("aynı uzunlukta,
+       * hemen öncesi") ve kullanıcı başka bir karşılaştırma seçemiyordu.
+       * Panel pencereyi hesaplayıp EKRANDA YAZIYOR; sunucu ayrı bir hesap
+       * yapsaydı yazan dönem ile karşılaştırılan dönem ayrışırdı.
+       */
+      await seedMetrics({
+        date: '2025-08-05',
+        spendMicros: '7000000',
+        impressions: 700,
+        clicks: 7,
+        conversions: 0,
+      });
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000',
+        impressions: 100,
+        clicks: 1,
+        conversions: 0,
+      });
+
+      const s = await svc.summary(CTX, {
+        from: '2026-08-05',
+        to: '2026-08-05',
+        compareFrom: '2025-08-05',
+        compareTo: '2025-08-05',
+      });
+      expect(s.spendMicros).toBe('1000000');
+      expect(s.previous?.spendMicros).toBe('7000000');
+    });
+
+    it('pencere gelmezse ESKİ davranış korunuyor — rapor bu ucu parametresiz çağırıyor', async () => {
+      await seedMetrics({
+        date: '2026-08-04',
+        spendMicros: '5000000',
+        impressions: 500,
+        clicks: 5,
+        conversions: 0,
+      });
+      const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      expect(s.previous?.spendMicros).toBe('5000000');
+    });
+
     it('önceki dönemde veri yoksa null', async () => {
       await seedMetrics({
         date: '2026-08-05',
@@ -274,6 +318,31 @@ describe('MetricsService', () => {
       const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
       // Sıfırlı bir nesne döndürmek "%100 düşüş" gibi görünürdü.
       expect(s.previous).toBeNull();
+    });
+  });
+
+  describe('coverage — "Tüm zamanlar"ın dayanağı', () => {
+    it('en eski ve en yeni veri gününü döndürüyor', async () => {
+      // Sabit bir alt sınır (örn. 2020) hem yüzlerce boş günü tarar hem de
+      // 400 günlük aralık sınırına takılıp panelde hata sayfası üretirdi.
+      for (const date of ['2026-05-23', '2026-07-01', '2026-08-20']) {
+        await seedMetrics({
+          date,
+          spendMicros: '1000000',
+          impressions: 100,
+          clicks: 1,
+          conversions: 0,
+        });
+      }
+      const c = await svc.coverage(CTX, { from: '2026-08-01', to: '2026-08-05' });
+      expect(c.earliestDate).toBe('2026-05-23');
+      expect(c.latestDate).toBe('2026-08-20');
+    });
+
+    it('hiç veri yoksa null — uydurma bir başlangıç YOK', async () => {
+      const c = await svc.coverage(CTX, { from: '2026-08-01', to: '2026-08-05' });
+      expect(c.earliestDate).toBeNull();
+      expect(c.latestDate).toBeNull();
     });
   });
 

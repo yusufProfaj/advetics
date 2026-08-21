@@ -61,14 +61,59 @@ interface RawTotals {
 export class MetricsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * ELİMİZDEKİ EN ESKİ VE EN YENİ VERİ GÜNÜ.
+   *
+   * "Tüm zamanlar" ön ayarı buna dayanıyor. Sabit bir alt sınır (örn. 2020)
+   * hem yüzlerce boş günü tarar hem de 400 günlük aralık sınırına takılıp
+   * panelde hata sayfası üretirdi. Ayrıca kullanıcıya HANGİ TARİHTEN İTİBAREN
+   * veri olduğunu söylemek gerekiyor: boş bir başlangıç "o dönemde kampanya
+   * yoktu" gibi okunuyor, oysa veri hiç çekilmemiş olabilir.
+   *
+   * Tek satır, iki agregat — `@@index([clientId, date DESC, entityLevel])`
+   * üzerinde ucuz.
+   */
+  async coverage(
+    ctx: TenantContext,
+    query: MetricsQuery,
+  ): Promise<{ earliestDate: string | null; latestDate: string | null }> {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const filters = this.filters(query);
+      const [row] = await tx.$queryRaw<Array<{ en_eski: Date | null; en_yeni: Date | null }>>(
+        Prisma.sql`
+          SELECT MIN(date) AS en_eski, MAX(date) AS en_yeni
+          FROM insights_daily
+          WHERE entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            ${filters}
+        `,
+      );
+      return {
+        earliestDate: row?.en_eski ? this.dateText(row.en_eski) : null,
+        latestDate: row?.en_yeni ? this.dateText(row.en_yeni) : null,
+      };
+    });
+  }
+
   async summary(ctx: TenantContext, query: MetricsQuery): Promise<MetricsSummary> {
-    // Önceki dönem AYNI UZUNLUKTA ve hemen öncesinde.
-    //
-    // "Geçen ay" gibi takvimsel bir pencere değil: 7 günlük bir bakışı 30
-    // günlük bir dönemle karşılaştırmak yüzde değişimi anlamsız kılar.
+    /*
+     * KARŞILAŞTIRMA PENCERESİ İSTEKTEN GELİYOR — burada türetilmiyor.
+     *
+     * Eskiden koşulsuz hesaplanıyordu ("aynı uzunlukta, hemen öncesi") ve iki
+     * sonucu vardı: her `/metrics/summary` çağrısı ikinci bir tam tarama
+     * yapıyordu, ve kullanıcı ne kapatabiliyor ne de "önceki yıl" gibi başka
+     * bir pencere seçebiliyordu.
+     *
+     * Panel pencereyi zaten hesaplıyor ve EKRANDA YAZIYOR ("1–31 Tem ile
+     * karşılaştırılacak"). Sunucu ayrı bir hesap yapsaydı iki taraf ayrışır
+     * ve yazan dönem ile karşılaştırılan dönem farklı olurdu — hiçbir hata
+     * vermeden.
+     *
+     * GERİYE DÖNÜK UYUM: pencere gelmezse eski davranış korunuyor. Rapor ve
+     * eski bağlantılar `compareFrom` göndermiyor.
+     */
     const days = this.dayCount(query.from, query.to);
-    const prevTo = this.shift(query.from, -1);
-    const prevFrom = this.shift(prevTo, -(days - 1));
+    const prevTo = query.compareTo ?? this.shift(query.from, -1);
+    const prevFrom = query.compareFrom ?? this.shift(prevTo, -(days - 1));
 
     return this.prisma.withTenant(ctx, async (tx) => {
       const filters = this.filters(query);
