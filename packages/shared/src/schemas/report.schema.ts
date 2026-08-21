@@ -168,15 +168,104 @@ export type ReportQuery = z.infer<typeof reportQuerySchema>;
 
 export const REPORT_SECTION_ENUM = z.enum(REPORT_SECTIONS);
 
+/**
+ * SEÇİLEBİLİR METRİKLER — `METRIC_LABELS` TEK KAYNAK.
+ *
+ * Ekrandaki seçim listesi, sunucudaki doğrulama ve belgedeki sütunlar aynı
+ * listeden besleniyor. Üçünü ayrı yazmak, birinin güncellenmemesi hâlinde
+ * ekranda seçilebilen ama rapora hiç çıkmayan bir metrik demek — ve
+ * TypeScript bunu söylemiyor.
+ */
+export const METRIC_KEYS = Object.keys(METRIC_LABELS) as Array<keyof typeof METRIC_LABELS>;
+export type MetricKey = (typeof METRIC_KEYS)[number];
+const METRIC_KEY_ENUM = z.enum(METRIC_KEYS as [MetricKey, ...MetricKey[]]);
+
+/**
+ * DÖNÜŞÜM KOVALARI YALNIZCA META'DA VAR.
+ *
+ * Google `actions` dizisi döndürmüyor; form/mesaj dökümü orada YOK ve 0
+ * yazmak "hiç form gelmedi" gibi okunur. Seçim ekranı bunu gizlemek yerine
+ * sebebiyle söylemek zorunda.
+ */
+export const BUCKET_KEYS = ['form', 'message', 'purchase'] as const;
+export type BucketKey = (typeof BUCKET_KEYS)[number];
+
+/**
+ * BÖLÜM AYARLARI — `report_templates.options` JSONB'sinin şeması.
+ *
+ * Kolon migration'da ve Prisma'da baştan beri vardı, yorumu tam bu işi tarif
+ * ediyordu ve TEK SATIR KOD onu okumuyordu. Artık okuyor.
+ *
+ * AYRIK BİRLEŞİM DEĞİL, BÖLÜM ANAHTARLI HARİTA: bölümlerin çoğu aynı iki
+ * ayarı taşıyor (hangi metrikler, kaç satır) ve her biri için ayrı bir dal
+ * yazmak, yeni bölüm eklendiğinde unutulacak bir yer daha demek.
+ *
+ * GÜVENLİ, ÇÜNKÜ OKURKEN ALAN ALAN EŞLENİYOR: JSONB olduğu gibi belgeye
+ * geçmiyor. `auto_boost_presets.settings` deseni — bilinmeyen bir anahtarı
+ * sessizce taşımak, ekranda "hazır" görünen bozuk bir kayıt üretir.
+ */
+export const sectionOptionsSchema = z.object({
+  /**
+   * Bu bölümde gösterilecek metrikler. Boş dizi = varsayılana dön.
+   *
+   * `undefined` ile boş dizi AYNI ŞEY DEĞİL: kullanıcı hepsini kaldırdıysa
+   * bunu bir seçim olarak saklamak, bir dahaki açılışta boş bir tablo
+   * göstermek olurdu. Boş kalan bölüm varsayılan sütunlarına dönüyor ve bu
+   * ekranda yazılı.
+   */
+  metrics: z.array(METRIC_KEY_ENUM).max(METRIC_KEYS.length).optional(),
+  /** Kaç satır gösterilecek (kampanya/kelime/reklam tabloları). */
+  limit: z.number().int().min(1).max(100).optional(),
+  /** Meta dönüşüm kovaları (form/mesaj/satış) sütun olarak gösterilsin mi. */
+  buckets: z.array(z.enum(BUCKET_KEYS)).optional(),
+});
+export type SectionOptions = z.infer<typeof sectionOptionsSchema>;
+
+export const reportOptionsSchema = z.record(REPORT_SECTION_ENUM, sectionOptionsSchema);
+export type ReportOptions = z.infer<typeof reportOptionsSchema>;
+
 export const reportTemplateInputSchema = z.object({
   name: z.string().trim().min(1).max(160),
   title: z.string().trim().max(200).optional(),
   closingText: z.string().trim().max(2000).optional(),
   /** null = organizasyon varsayılanı. */
   clientId: z.string().uuid().nullable().optional(),
-  sections: z.array(REPORT_SECTION_ENUM).min(1).max(REPORT_SECTIONS.length),
+  /*
+   * SIRA BURADA VE TEKRAR YASAK.
+   *
+   * Aynı bölüm iki kez yazılırsa React aynı `key` ile iki düğüm basıyor ve
+   * belgede bölüm iki kez çıkıyor. Şema bunu reddediyor: `parseSections`
+   * geçersizleri eliyor ama tekrarı elemiyordu.
+   */
+  sections: z
+    .array(REPORT_SECTION_ENUM)
+    .min(1)
+    .max(REPORT_SECTIONS.length)
+    .refine((a) => new Set(a).size === a.length, 'Aynı bölüm iki kez eklenemez'),
+  options: reportOptionsSchema.optional(),
 });
 export type ReportTemplateInput = z.infer<typeof reportTemplateInputSchema>;
+
+/** Şablon listesi satırı — düzenleme ekranı bunu okuyor. */
+export interface ReportTemplateSummary {
+  id: string;
+  name: string;
+  clientId: string | null;
+  clientName: string | null;
+  sections: ReportSection[];
+  options: ReportOptions;
+  title: string | null;
+  closingText: string | null;
+  updatedAt: string;
+  /**
+   * Bu şablondan üretilmiş AKTİF paylaşım linki sayısı.
+   *
+   * Silme uçtan `ON DELETE CASCADE` ile bu linkleri de siliyor. Sayıyı
+   * göstermeden silme sormak, müşteriye gönderilmiş bir raporu haber
+   * vermeden 404'e çevirmek olurdu.
+   */
+  shareCount: number;
+}
 
 export const shareInputSchema = z
   .object({

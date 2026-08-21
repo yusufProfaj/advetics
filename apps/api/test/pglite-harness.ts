@@ -347,6 +347,11 @@ export async function createHarness(): Promise<Harness> {
         boosts, boost_rules, organic_posts,
         rule_action_logs, rule_runs, rules,
         monthly_budgets,
+        -- RAPOR TABLOLARI ACIKCA YAZILI. Bugune kadar clients/organizations
+        -- CASCADE'i sayesinde dolayli temizleniyorlardi; bu TESADUFI ve
+        -- org_id/client_id iliskisi bir gun nullable olursa sessizce sizarlar.
+        -- (Backtick YOK: sablon dizesini ortasindan kapatiyor — CLAUDE.md.)
+        report_shares, report_templates,
         insights_daily, api_usage_log, sync_jobs,
         ads, creatives, ad_groups, campaigns,
         ad_accounts, social_profiles, platform_connections,
