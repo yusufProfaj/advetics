@@ -840,6 +840,32 @@ export class MetaProvider implements IAdPlatformProvider {
       JSON.stringify({ since: request.dateFrom, until: request.dateTo }),
     );
     url.searchParams.set('limit', '500');
+
+    /*
+     * ═══ ATIF AYARI AÇIKÇA GÖNDERİLİYOR — VARSAYILANA BIRAKILMIYOR ═══
+     *
+     * Bu üç parametre bir süre HİÇ gönderilmiyordu ve kararı Meta veriyordu.
+     * CLAUDE.md'nin "platformun varsayılanına güvenme — aynı kod iki
+     * müşteride farklı davranır" kuralının tam ihlaliydi: iki reklam
+     * hesabının atıf penceresi farklıysa CPA ve ROAS karşılaştırılamaz hâle
+     * geliyor ve fark HİÇBİR YERDE görünmüyor.
+     *
+     * `use_unified_attribution_setting=true` — dönüşümler ad set'in KENDİ
+     * atıf ayarıyla raporlanıyor. Bu, Ads Manager'ın varsayılan olarak
+     * gösterdiği sayının aynısı. Sabit bir pencere seçmek (örn. 7d_click)
+     * "daha tutarlı" görünürdü ama panelin rakamı müşterinin Ads Manager'da
+     * gördüğüyle tutmazdı ve o tartışmayı her ay yeniden yaşardık.
+     *
+     * `action_report_time=impression` — dönüşüm, GÖSTERİMİN olduğu güne
+     * yazılıyor. Bu Meta'nın varsayılanı; buraya AÇIKÇA yazılmasının sebebi
+     * varsayılanın değişmesine karşı korunmak. Alternatif (`conversion`)
+     * dönüşümü gerçekleştiği güne yazar ve aylık rapor sınırlarında daha
+     * doğru görünür — ama Ads Manager ile aramızda fark açar. Değiştirilecekse
+     * bilerek ve müşteriye söylenerek değiştirilmeli.
+     */
+    url.searchParams.set('use_unified_attribution_setting', 'true');
+    url.searchParams.set('action_report_time', 'impression');
+
     url.searchParams.set('access_token', ctx.accessToken);
     url.searchParams.set(
       'fields',

@@ -513,7 +513,9 @@ export class SyncProcessorService {
           // silinmiş kampanyanın kaybolmasını bekliyor.
           full: payload.interactive === true,
         });
-        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls, {
+          note: result.note,
+        });
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
@@ -545,7 +547,13 @@ export class SyncProcessorService {
           dateFrom: payload.dateFrom,
           dateTo: payload.dateTo,
         });
-        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        // ATILAN SATIR SAYISI YALNIZCA METRİK İŞİNDE VAR ve teşhisin
+        // belkemiği: `rows=0` + `skipped>0`, "yapı taraması eksik ya da
+        // kampanya arşivlenmiş" demek.
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls, {
+          note: result.note,
+          rowsSkipped: result.skipped,
+        });
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
@@ -568,7 +576,9 @@ export class SyncProcessorService {
           dateFrom: payload.dateFrom,
           dateTo: payload.dateTo,
         });
-        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls, {
+          note: result.note,
+        });
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
@@ -703,7 +713,20 @@ export class SyncProcessorService {
     }
   }
 
-  async markSucceeded(syncJobId: string, rows: number, apiCalls: number): Promise<void> {
+  /**
+   * İşi başarıyla kapatır — VE NEDEN'İNİ YAZAR.
+   *
+   * `note` ile `rowsSkipped` sonradan eklendi ve sebebi somut: "0 satır
+   * yazıldı, 12 atlandı" bilgisi yalnızca worker log'unda kalıyordu ve log
+   * rotasyonuyla kayboluyordu. Oysa bu iki alan, "atadım ama veri gelmiyor"
+   * teşhisinin tek kanıtı.
+   */
+  async markSucceeded(
+    syncJobId: string,
+    rows: number,
+    apiCalls: number,
+    extra?: { note?: string; rowsSkipped?: number },
+  ): Promise<void> {
     await this.db.syncJob.update({
       where: { id: BigInt(syncJobId) },
       data: {
@@ -711,6 +734,10 @@ export class SyncProcessorService {
         finishedAt: new Date(),
         rowsUpserted: rows,
         apiCallsUsed: apiCalls,
+        // `?? null` DEĞİL `?? undefined`: not üretmeyen iş türlerinde
+        // (boost, kural) var olan bir notu silmek istemiyoruz.
+        note: extra?.note?.slice(0, 500),
+        rowsSkipped: extra?.rowsSkipped,
         errorCode: null,
         errorMessage: null,
       },

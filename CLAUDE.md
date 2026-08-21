@@ -125,6 +125,29 @@ buna göre veriliyor:
   gevşetmek çözmüyor, engel SELECT politikasında. Çözüm çağıran tarafta:
   bağlamı daraltan değeri (örneğin `activeClientId`) o istek için kapat.
   `ad-account-pool-rls.spec.ts` bunu kilitliyor.
+- **KUYRUK ÖNCELİĞİ BİR BARİYER DEĞİL.** `structure` (öncelik 4) ile
+  `initial_backfill` (10) art arda, gecikmesiz kuyruğa giriyordu ve sıranın
+  "garanti" olduğu sanılıyordu. Worker `concurrency: 4` ile çalışıyor: yapı
+  işi hâlâ koşarken metrik işi ikinci bir slotta başlayabiliyor. Kampanya
+  satırı henüz yokken gelen metrikler eşlenemeyip atlanıyor. Bağımlılık
+  isteniyorsa ya işin SONUNDA zincirle ya da başarısızlığı tekrar denenebilir
+  yap; öncelik yalnızca sıralama ipucu.
+- **`succeeded` + `rows = 0` BU PROJEDE BİR HATA TÜRÜ.** Metrik işi hiçbir
+  satır yazamadığında başarılı sayılıyordu ve BİR DAHA denenmiyordu; belirtisi
+  "atadım, veri gelmiyor" ve teşhisi yalnızca worker log'unda. İki durum
+  ayrılmak zorunda: yapı taraması HİÇ koşmadıysa geçici (tekrar denenmeli),
+  koştuysa varlık gerçekten yok (arşivlenmiş kampanya — tekrar denemek beş kez
+  kota harcar). Atılan satır sayısı ve not artık `sync_jobs`'a yazılıyor.
+- **PLATFORMA GİDEN İSTEKTE ATIF/RAPORLAMA AYARLARI AÇIKÇA YAZILIR.** Meta
+  insights çağrısı `use_unified_attribution_setting` ve `action_report_time`
+  göndermiyordu; karar hesabın varsayılanına kalıyordu ve iki müşteride farklı
+  pencere = karşılaştırılamayan CPA/ROAS, sıfır hata mesajı. Varsayılanı bile
+  olsa açıkça yaz: varsayılan değiştiğinde rakam haber vermeden kayar.
+  `meta-attribution.spec.ts` bunu tarıyor.
+- **AYNI SÜZGECİ İKİ YERDE YAZMA.** Zamanlanmış süpürme hesabın platform
+  durumuna bakıyordu, elle tetikleyen uç bakmıyordu; belirtisi "elle basınca
+  geliyor, kendiliğinden gelmiyor" ve hiçbir ekranda görünmüyordu. Süzgeç tek
+  sabitte (`SUPURME_HESAP_KOSULU`) ve teşhis ekranı da onu okuyor.
 - **PRISMA `include` İLİŞKİNİN BÜTÜN KOLONLARINI ÇEKİYOR — `select` KULLAN.**
   `/connections` listesi `include` ile kuruluydu ve havuzda 481 reklam hesabı
   varken her satırın `raw` (tam platform yanıtı, JSONB), `rate_limit_state` ve

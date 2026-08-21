@@ -1888,6 +1888,14 @@ model SyncJob {
   apiCallsUsed Int @default(0) @map("api_calls_used")
   rowsUpserted Int @default(0) @map("rows_upserted")
 
+  /// Yazılamayıp ATILAN satır sayısı. NULL = bilinmiyor (kolon öncesi kayıt);
+  /// 0 ile aynı şey DEĞİL. `rows_upserted = 0` ve `rows_skipped > 0` olan bir
+  /// iş "başarılı" görünür ama hiçbir veri yazmamıştır.
+  rowsSkipped  Int? @map("rows_skipped")
+  /// İnsan okuması için özet: hangi aralık, hangi seviye, kaç satır, kaç
+  /// atlandı. Bugüne kadar yalnızca worker log'una yazılıyordu.
+  note         String? @db.VarChar(500)
+
   /// Meta async insights job kimliği — worker yeniden başlasa bile polling sürer.
   platformJobId String? @map("platform_job_id") @db.VarChar(255)
   /// BullMQ iş kimliği — kuyruktaki işle veritabanı kaydını eşleştirir.

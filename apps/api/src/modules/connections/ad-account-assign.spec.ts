@@ -454,6 +454,17 @@ describe('ATAMA TEK ADIM — izleme açılıyor ve geçmiş kuyruğa giriyor', (
     expect(kuyruk.every((i) => i.clientId === IDS.client)).toBe(true);
   });
 
+  it('KRİTİK: metrik işi GECİKMELİ, yapı işi değil — öncelik bariyer değil', async () => {
+    // Worker dört işi paralel çalıştırıyor; öncelik (structure 4, backfill 10)
+    // yalnızca SIRA veriyor. Gecikme olmadan metrik işi yapı işi hâlâ
+    // koşarken başlayabiliyor ve bütün satırlar eşlenemeyip atlanıyor.
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    const y = kuyruk.find((i) => i.jobType === 'structure')!;
+    const b = kuyruk.find((i) => i.jobType === 'initial_backfill')!;
+    expect(y.delayMs).toBeUndefined();
+    expect(b.delayMs).toBeGreaterThan(0);
+  });
+
   it('KRİTİK: geçmiş 90 gün ve KAMPANYA seviyesinde', async () => {
     await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
     const b = kuyruk.find((i) => i.jobType === 'initial_backfill')!;

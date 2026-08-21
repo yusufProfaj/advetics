@@ -125,7 +125,7 @@ describe('GET /sync/status — teşhis', () => {
 
   it('sync_jobs.id JSON’a girebiliyor — BigInt string’e çevriliyor', async () => {
     const res = await kur([SAGLAM_HESAP], [IS]).status(CTX);
-    expect(res.recentJobs[0].id).toBe('4211');
+    expect(res.recentJobs[0]!.id).toBe('4211');
     // BigInt olduğu gibi dönseydi uç nokta burada 500 verirdi.
     expect(() => JSON.stringify(res)).not.toThrow();
   });
@@ -142,7 +142,7 @@ describe('GET /sync/status — teşhis', () => {
       [SAGLAM_HESAP],
       [{ ...IS, status: 'failed', errorCode: 'permission', errorMessage: '(#200) …fbtrace_id: Ab1' }],
     ).status(CTX);
-    expect(res.recentJobs[0].errorMessage).toContain('fbtrace_id');
+    expect(res.recentJobs[0]!.errorMessage).toContain('fbtrace_id');
   });
 
   it('kesme SESSİZ DEĞİL — toplam iş sayısı ayrıca dönüyor', async () => {
@@ -153,27 +153,27 @@ describe('GET /sync/status — teşhis', () => {
 
   it('sağlam hesapta engel YOK', async () => {
     const res = await kur([SAGLAM_HESAP]).status(CTX);
-    expect(res.accounts[0].blockedReason).toBeNull();
-    expect(res.accounts[0].inScheduledSweep).toBe(true);
+    expect(res.accounts[0]!.blockedReason).toBeNull();
+    expect(res.accounts[0]!.inScheduledSweep).toBe(true);
   });
 
   it('yapı taraması hiç koşmadıysa engel BUNU söylüyor', async () => {
     const res = await kur([{ ...SAGLAM_HESAP, lastStructureSyncAt: null }]).status(CTX);
-    expect(res.accounts[0].structureReady).toBe(false);
-    expect(res.accounts[0].blockedReason).toContain('Yapı taraması');
+    expect(res.accounts[0]!.structureReady).toBe(false);
+    expect(res.accounts[0]!.blockedReason).toContain('Yapı taraması');
   });
 
   it('yapı koştu ama metrik hiç gelmediyse AYRI bir cümle — ikisi farklı iş', async () => {
     const res = await kur([{ ...SAGLAM_HESAP, lastInsightsSyncAt: null }]).status(CTX);
-    expect(res.accounts[0].blockedReason).toContain('metrik hiç çekilmedi');
-    expect(res.accounts[0].blockedReason).not.toContain('Yapı taraması');
+    expect(res.accounts[0]!.blockedReason).toContain('metrik hiç çekilmedi');
+    expect(res.accounts[0]!.blockedReason).not.toContain('Yapı taraması');
   });
 
   it('süpürme engeli yapı engelinin ÖNÜNDE — hesap hiç çekilmiyorsa yapı ikincil', async () => {
     const res = await kur([
       { ...SAGLAM_HESAP, syncEnabled: false, lastStructureSyncAt: null },
     ]).status(CTX);
-    expect(res.accounts[0].blockedReason).toContain('İzleme kapalı');
+    expect(res.accounts[0]!.blockedReason).toContain('İzleme kapalı');
   });
 
   it('elenen hesaplar sebep sebep sayılıyor ve BİR KEZ sayılıyor', async () => {
@@ -224,6 +224,6 @@ describe('GET /sync/status — teşhis', () => {
 
   it('işin hangi hesaba ait olduğu ADIYLA dönüyor — kimlikle teşhis edilemez', async () => {
     const res = await kur([SAGLAM_HESAP], [IS]).status(CTX);
-    expect(res.recentJobs[0].adAccountName).toBe('Mirnas — Meta');
+    expect(res.recentJobs[0]!.adAccountName).toBe('Mirnas — Meta');
   });
 });

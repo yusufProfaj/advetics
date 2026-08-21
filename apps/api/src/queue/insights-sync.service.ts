@@ -93,6 +93,9 @@ export class InsightsSyncService {
         externalId: true,
         managerExternalId: true,
         timezone: true,
+        // Metrik yazımının ÖN ŞARTI. Aşağıda "hiçbir satır yazılamadı"
+        // durumunun tekrar denenebilir olup olmadığına bu alan karar veriyor.
+        lastStructureSyncAt: true,
       },
     });
 
@@ -179,6 +182,39 @@ export class InsightsSyncService {
     ]
       .filter(Boolean)
       .join(' · ');
+
+    /*
+     * ═══ HİÇBİR SATIR YAZILAMADI: BAŞARI DEĞİL ═══
+     *
+     * Bu dal "atadım ama veri gelmiyor" belirtisinin kaynağı. Metrik satırı,
+     * ait olduğu kampanya/reklam satırı veritabanında yoksa YAZILAMIYOR ve
+     * atlanıyor. İş bugüne kadar `succeeded` + `rows=0` kapanıyordu, BİR DAHA
+     * denenmiyordu ve kullanıcı boş bir grafik görüyordu.
+     *
+     * İKİ AYRI DURUM VE YALNIZCA BİRİ TEKRAR DENENEBİLİR:
+     *
+     *   · YAPI TARAMASI HİÇ KOŞMADI → gerçekten geçici. `structure` ile
+     *     `initial_backfill` art arda, gecikmesiz kuyruğa giriyor; öncelik
+     *     farkı SIRA veriyor, BARİYER vermiyor ve worker dördü paralel
+     *     çalıştırıyor. Yapı hâlâ koşarken metrik işi başlayabiliyor.
+     *     Tekrar denemek doğru: backoff yapının bitmesine zaman tanıyor.
+     *
+     *   · YAPI KOŞTU AMA VARLIK YİNE DE YOK → ARŞİVLENMİŞ kampanya. Meta
+     *     `effective_status` filtresi olmadan arşivlenmiş varlıkları
+     *     döndürmüyor (meta.provider.ts), yani o kampanyalar bizde hiç yok ve
+     *     HİÇBİR ZAMAN olmayacak. Tekrar denemek beş kez kota harcayıp aynı
+     *     yere varmak olurdu. Bu yüzden başarı sayılıyor — ama notu artık
+     *     `sync_jobs`'a yazılıyor ve panelde "başarılı · 0 satır" olarak
+     *     GÖRÜNÜYOR.
+     */
+    if (totalRows === 0 && totalSkipped > 0 && account.lastStructureSyncAt === null) {
+      throw new PlatformApiError(
+        account.platform,
+        'transient',
+        `Metrikler yazılamadı: ${totalSkipped} satırın hiçbiri eşlenemedi ve bu hesapta yapı ` +
+          'taraması hiç koşmadı. Kampanya satırları yazıldıktan sonra tekrar denenecek.',
+      );
+    }
 
     return { rows: totalRows, apiCalls: totalCalls, skipped: totalSkipped, note };
   }

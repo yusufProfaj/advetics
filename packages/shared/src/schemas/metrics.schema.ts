@@ -363,6 +363,15 @@ export interface SyncJobStatusRow {
    * görünmüyordu.
    */
   errorMessage: string | null;
+  /**
+   * ATILAN satır sayısı. `null` = bilinmiyor (kolon öncesi kayıt) ve bu 0 ile
+   * AYNI ŞEY DEĞİL. `rowsUpserted = 0` + `rowsSkipped > 0` olan bir iş
+   * "başarılı" görünür ama hiçbir veri yazmamıştır — "atadım, veri gelmiyor"
+   * hâlinin imzası budur.
+   */
+  rowsSkipped: number | null;
+  /** İnsan okuması için özet: hangi aralık, hangi seviye, ne oldu. */
+  note: string | null;
   adAccountId: string | null;
   adAccountName: string | null;
   createdAt: string;

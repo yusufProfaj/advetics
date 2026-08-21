@@ -217,8 +217,22 @@ function IsSatiri({ is }: { is: SyncJobStatusRow }) {
           </p>
         )}
       </td>
-      <td className="px-4 py-2 text-right tabular-nums">{is.rowsUpserted}</td>
-      <td className="px-4 py-2 text-xs text-ink-muted">{zaman(is.finishedAt ?? is.createdAt)}</td>
+      <td className="px-4 py-2 text-right tabular-nums">
+        {is.rowsUpserted}
+        {/*
+          ATILAN SATIR YAZILI SATIRIN YANINDA. "0 yazıldı" tek başına bir
+          hata gibi görünmüyor; "0 yazıldı, 12 atıldı" ise doğrudan yapı
+          taramasını işaret ediyor. Bilgi bugüne kadar yalnızca worker
+          log'undaydı ve log rotasyonuyla kayboluyordu.
+        */}
+        {is.rowsSkipped !== null && is.rowsSkipped > 0 && (
+          <span className="block text-xs text-warn">{is.rowsSkipped} atıldı</span>
+        )}
+      </td>
+      <td className="px-4 py-2 text-xs text-ink-muted">
+        {zaman(is.finishedAt ?? is.createdAt)}
+        {is.note && <span className="block text-[11px] opacity-80">{is.note}</span>}
+      </td>
     </tr>
   );
 }

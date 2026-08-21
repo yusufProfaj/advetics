@@ -37,6 +37,16 @@ interface Meta {
   requestId?: string | null;
 }
 
+/**
+ * Atama sonrası geçmiş metrik işinin BEKLETİLDİĞİ süre.
+ *
+ * 90 saniye ölçülmüş bir üst sınır değil, yapı taramasının tipik süresine
+ * göre seçilmiş bir pay. Garanti değil ve olmak zorunda da değil: yapı hâlâ
+ * bitmemişse metrik işi artık sessizce başarılı sayılmıyor, tekrar denenebilir
+ * hata veriyor (`insights-sync.service.ts`).
+ */
+const YAPI_ICIN_TANINAN_SURE_MS = 90_000;
+
 /** OAuth state ömrü. Kısa tutuluyor: bu pencere bir CSRF fırsat penceresidir. */
 const STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -810,7 +820,31 @@ export class ConnectionsService {
       const baslangic = new Date(bugun.getTime() - 90 * 86_400_000);
       const gun = (d: Date): string => d.toISOString().slice(0, 10);
 
-      // ÖNCE AĞAÇ, SONRA METRİK: metrikler kampanya satırlarına bağlanıyor.
+      /*
+       * ═══ ÖNCE AĞAÇ, SONRA METRİK — VE ÖNCELİK BUNU GARANTİ ETMİYOR ═══
+       *
+       * Metrik satırı, ait olduğu kampanya satırı veritabanında yoksa
+       * YAZILAMIYOR. Bu iki iş bir süre art arda, gecikmesiz kuyruğa
+       * giriyordu ve "sıra" yalnızca ÖNCELİKLE (structure 4, backfill 10)
+       * sağlanıyordu. Öncelik bir BAĞIMLILIK DEĞİL: worker dört işi paralel
+       * çalıştırıyor, yani yapı işi hâlâ koşarken metrik işi ikinci bir
+       * slotta başlayabiliyor. Sonuç canlıda görüldü — bütün metrikler
+       * eşlenemeyip atlanıyor, iş `succeeded` + `rows=0` kapanıyor ve BİR
+       * DAHA denenmiyordu. Belirtisi tam olarak "atadım, veri gelmiyor".
+       *
+       * İKİ KATMANLI ÇÖZÜM, ÇÜNKÜ TEK BAŞINA HİÇBİRİ YETMİYOR:
+       *
+       *   1. GECİKME (burada) — yarışın çoğunu ortadan kaldırıyor. Ama bir
+       *      GARANTİ DEĞİL: yapı taraması yavaş bir hesapta 90 saniyeyi de
+       *      aşabilir.
+       *   2. GERÇEK GÜVENCE `insights-sync.service.ts` içinde: hiçbir satır
+       *      yazılamadıysa ve o hesapta yapı taraması hiç koşmadıysa iş
+       *      BAŞARILI SAYILMIYOR, tekrar denenebilir hata veriyor ve BullMQ
+       *      artan bekleme ile yeniden deniyor.
+       *
+       * Gecikme olmasaydı 2. katman işi kurtarırdı ama her seferinde bir
+       * başarısız deneme ve boşa giden bir API turu pahasına.
+       */
       await this.queue.enqueue({ clientId, platform, jobType: 'structure', adAccountId });
       await this.queue.enqueue({
         clientId,
@@ -820,6 +854,7 @@ export class ConnectionsService {
         entityLevel: 'campaign',
         dateFrom: gun(baslangic),
         dateTo: gun(bugun),
+        delayMs: YAPI_ICIN_TANINAN_SURE_MS,
       });
       this.logger.log(
         `Reklam hesabı ${adAccountId} müşteriye atandı: izleme açıldı, 90 günlük geçmiş kuyruğa eklendi`,

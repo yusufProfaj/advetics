@@ -472,3 +472,96 @@ describe('InsightsSyncService', () => {
     });
   });
 });
+
+/**
+ * ═══ "ATADIM AMA VERİ GELMİYOR" — HİÇBİR SATIR YAZILAMAYAN İŞ ═══
+ *
+ * Bu blok canlıda görülen bir belirtinin kaynağını kilitliyor: hesap
+ * atanıyor, `structure` ve `initial_backfill` art arda kuyruğa giriyor, worker
+ * dördünü paralel çalıştırıyor ve metrik işi yapı işinden ÖNCE bitebiliyor.
+ * Kampanya satırı henüz yokken gelen bütün metrikler eşlenemeyip atlanıyordu;
+ * iş `succeeded` + `rows=0` kapanıyor ve BİR DAHA denenmiyordu.
+ *
+ * İki durumu ayırmak şart, çünkü yalnızca biri tekrar denenebilir.
+ */
+describe('hiçbir satır yazılamayan iş', () => {
+  const BILINMEYEN = 'platformda-var-bizde-yok';
+
+  it('YAPI HİÇ KOŞMADIYSA: tekrar denenebilir hata — başarı SAYILMIYOR', async () => {
+    await h.q('UPDATE ad_accounts SET last_structure_sync_at = NULL WHERE id = $1', [
+      IDS.adAccount,
+    ]);
+    provider.rowsByLevel = { campaign: [row({ entityExternalId: BILINMEYEN })] };
+
+    await expect(
+      svc.syncAccount({
+        adAccountId: IDS.adAccount,
+        jobType: 'insights_backfill',
+        dateFrom: '2026-08-05',
+        dateTo: '2026-08-05',
+      }),
+    ).rejects.toMatchObject({ kind: 'transient' });
+
+    // Kota harcandı ama tek satır yazılmadı — tam olarak tekrar denenmesi
+    // gereken durum.
+    expect(await rowCount()).toBe(0);
+  });
+
+  it('YAPI KOŞTUYSA: başarı sayılıyor — arşivlenmiş kampanya asla eşlenmeyecek', async () => {
+    // Meta arşivlenmiş varlıkları hiç döndürmüyor; bu satırlar bizde HİÇBİR
+    // ZAMAN olmayacak. Beş kez tekrar denemek beş kez kota harcamak olurdu.
+    await h.q('UPDATE ad_accounts SET last_structure_sync_at = now() WHERE id = $1', [
+      IDS.adAccount,
+    ]);
+    provider.rowsByLevel = { campaign: [row({ entityExternalId: BILINMEYEN })] };
+
+    const res = await svc.syncAccount({
+      adAccountId: IDS.adAccount,
+      jobType: 'insights_backfill',
+      dateFrom: '2026-08-05',
+      dateTo: '2026-08-05',
+    });
+
+    expect(res.rows).toBe(0);
+    expect(res.skipped).toBeGreaterThan(0);
+    // NOT KALICI OLMAK ZORUNDA: bu cümle olmadan "başarılı · 0 satır" hiçbir
+    // şey anlatmıyor ve teşhis yine worker log'una kalıyor.
+    expect(res.note).toContain('atlandı');
+  });
+
+  it('BİR SATIR BİLE YAZILDIYSA hata yok — kısmi eşleşme tekrar denemeyi hak etmiyor', async () => {
+    await h.q('UPDATE ad_accounts SET last_structure_sync_at = NULL WHERE id = $1', [
+      IDS.adAccount,
+    ]);
+    provider.rowsByLevel = {
+      campaign: [row(), row({ entityExternalId: BILINMEYEN, date: '2026-08-06' })],
+    };
+
+    const res = await svc.syncAccount({
+      adAccountId: IDS.adAccount,
+      jobType: 'insights_backfill',
+      dateFrom: '2026-08-05',
+      dateTo: '2026-08-06',
+    });
+
+    expect(res.rows).toBe(1);
+    expect(res.skipped).toBe(1);
+  });
+
+  it('ATLANAN SATIR YOKSA boş sonuç hata değil — hesapta o gün veri olmayabilir', async () => {
+    await h.q('UPDATE ad_accounts SET last_structure_sync_at = NULL WHERE id = $1', [
+      IDS.adAccount,
+    ]);
+    provider.rowsByLevel = { campaign: [] };
+
+    const res = await svc.syncAccount({
+      adAccountId: IDS.adAccount,
+      jobType: 'insights_backfill',
+      dateFrom: '2026-08-05',
+      dateTo: '2026-08-05',
+    });
+
+    expect(res.rows).toBe(0);
+    expect(res.skipped).toBe(0);
+  });
+});
