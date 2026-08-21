@@ -41,6 +41,19 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     items: [
       { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6 },
       {
+        /*
+         * ŞABLONLAR RAPORLARIN ALTINDA ve `report.write` ile kapalı:
+         * müşteri hesabı (client_viewer) raporu OKUYOR, biçimini
+         * değiştirmiyor.
+         */
+        href: '/raporlar/sablonlar',
+        label: 'Rapor Şablonları',
+        icon: 'reports',
+        module: 6,
+        ready: true,
+        perm: 'report.write',
+      },
+      {
         href: '/potansiyel-musteriler',
         label: 'Potansiyel Müşteriler',
         icon: 'leads',

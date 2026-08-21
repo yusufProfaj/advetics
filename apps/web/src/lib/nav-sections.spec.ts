@@ -65,7 +65,7 @@ describe('menü verisi gerçekten okunuyor', () => {
     // çünkü yetkisiz bir öğe eklemek sessiz bir sızıntı olurdu: Senkronizasyon
     // Durumu ekranı platformun ham hata mesajlarını basıyor ve `perm` düşerse
     // müşteri hesabı da görürdü.
-    expect(SECTIONS.flatMap((s) => s.items).filter((i) => i.perm).length).toBe(4);
+    expect(SECTIONS.flatMap((s) => s.items).filter((i) => i.perm).length).toBe(5);
   });
 });
 

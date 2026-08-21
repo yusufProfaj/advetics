@@ -4,6 +4,8 @@ import { Prisma } from '@prisma/client';
 import {
   CONVERSION_BUCKETS,
   REPORT_SECTIONS,
+  reportOptionsSchema,
+  type ReportOptions,
   type ConversionBucket,
   type ConversionCounts,
   type MetricTotals,
@@ -121,6 +123,7 @@ export class ReportsService {
         from: params.from,
         to: params.to,
         sections: template.sections,
+        options: template.options,
         rangeDays: this.dayCount(params.from, params.to),
         currency,
         platforms: platformBlocks,
@@ -247,19 +250,37 @@ export class ReportsService {
     tx: TxLike,
     clientId: string,
     templateId?: string,
-  ): Promise<{ title: string | null; closingText: string | null; sections: ReportSection[] }> {
+  ): Promise<{
+    title: string | null;
+    closingText: string | null;
+    sections: ReportSection[];
+    options: ReportOptions;
+  }> {
     const rows = await tx.$queryRaw<
-      Array<{ title: string | null; closing_text: string | null; sections: unknown }>
+      Array<{
+        title: string | null;
+        closing_text: string | null;
+        sections: unknown;
+        options: unknown;
+      }>
     >(
       templateId
         ? Prisma.sql`
-            SELECT title, closing_text, sections FROM report_templates
+            SELECT title, closing_text, sections, options FROM report_templates
             WHERE id = ${templateId}::uuid
+              -- SAHİPLİK KONTROLÜ: şablon kimliği adres çubuğundan geliyor.
+              -- Org yöneticisi RLS'i geçtiği için bu satır olmadan başka bir
+              -- müşterinin şablonuyla rapor üretilebiliyordu.
+              AND (client_id = ${clientId}::uuid OR client_id IS NULL)
           `
         : Prisma.sql`
-            SELECT title, closing_text, sections FROM report_templates
+            SELECT title, closing_text, sections, options FROM report_templates
             WHERE client_id = ${clientId}::uuid OR client_id IS NULL
-            ORDER BY client_id NULLS LAST
+            -- MÜŞTERİYE ÖZEL ŞABLON ÖNCE, sonra org varsayılanı. Aynı
+            -- müşteride birden fazla şablon varsa EN SON GÜNCELLENEN
+            -- geliyor: eskiden sıra belirsizdi ve hangi şablonun
+            -- kullanıldığı çağrıdan çağrıya değişebilirdi.
+            ORDER BY client_id NULLS LAST, updated_at DESC
             LIMIT 1
           `,
     );
@@ -272,7 +293,20 @@ export class ReportsService {
       // üretmek, kullanıcıyı hiçbir şey göstermeyen bir ekranla baş başa
       // bırakmak olurdu.
       sections: this.parseSections(row?.sections),
+      options: this.parseOptions(row?.options),
     };
+  }
+
+  /**
+   * `options` JSONB'sini ALAN ALAN doğrular.
+   *
+   * Ham JSON'u belgeye geçirmek, uydurulmuş bir anahtarın sessizce yok
+   * sayılması demek olurdu. Bozuk kayıt boş nesneye düşüyor ve rapor
+   * varsayılan sütunlarına dönüyor.
+   */
+  private parseOptions(value: unknown): ReportOptions {
+    const r = reportOptionsSchema.safeParse(value);
+    return r.success ? r.data : {};
   }
 
   private parseSections(value: unknown): ReportSection[] {

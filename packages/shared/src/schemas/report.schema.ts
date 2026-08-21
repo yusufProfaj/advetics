@@ -343,6 +343,15 @@ export interface ReportData {
   from: string;
   to: string;
   sections: ReportSection[];
+  /**
+   * BÖLÜM AYARLARI — hangi metrik sütunları, kaç satır.
+   *
+   * Şablonda saklanıyordu ama belgeye HİÇ ULAŞMIYORDU: `build()` yalnızca
+   * `sections` döndürüyordu ve seçilen metrikler sessizce yok sayılıyordu.
+   * Bir ayarı kaydedip hiçbir yerde göremeyen kullanıcı, özelliğin bozuk
+   * olduğunu değil kendi yaptığını yanlış yaptığını düşünüyor.
+   */
+  options: ReportOptions;
   /** Aralıktaki gün sayısı — kampanya kapsamasıyla karşılaştırmak için. */
   rangeDays: number;
   currency: string | null;

@@ -332,3 +332,98 @@ describe('ReportsService — yapı', () => {
     ).rejects.toThrow(/bulunamadı/);
   });
 });
+
+/**
+ * ═══ ŞABLONUN RAPORA ULAŞMASI ═══
+ *
+ * Şablon kaydediliyordu ama belgeye YALNIZCA `sections` ulaşıyordu:
+ * `options` kolonu okunmuyordu bile. Bir ayarı kaydedip hiçbir yerde
+ * göremeyen kullanıcı, özelliğin bozuk olduğunu değil kendi yaptığını
+ * yanlış yaptığını düşünür.
+ */
+describe('ReportsService — şablon', () => {
+  async function sablonEkle(over: {
+    clientId?: string | null;
+    sections?: string[];
+    options?: unknown;
+    title?: string;
+    updatedAt?: string;
+  } = {}): Promise<string> {
+    const rows = await h.q<{ id: string }>(
+      `INSERT INTO report_templates (id, org_id, client_id, name, title, sections, options, status, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, 'Şablon', $3, $4::jsonb, $5::jsonb, 'published', $6::timestamptz)
+       RETURNING id`,
+      [
+        IDS.org,
+        over.clientId === undefined ? IDS.client : over.clientId,
+        over.title ?? 'Başlık',
+        JSON.stringify(over.sections ?? ['cover', 'summary', 'closing']),
+        JSON.stringify(over.options ?? {}),
+        over.updatedAt ?? '2026-08-01T00:00:00Z',
+      ],
+    );
+    return rows[0]!.id;
+  }
+
+  it('KRİTİK: bölüm AYARLARI belgeye ulaşıyor', async () => {
+    await sablonEkle({ options: { meta_campaigns: { metrics: ['spend', 'clicks'], limit: 5 } } });
+    const data = await svc.build(CTX, RANGE);
+    expect(data.options.meta_campaigns).toEqual({ metrics: ['spend', 'clicks'], limit: 5 });
+  });
+
+  it('bölüm sırası şablondan geliyor', async () => {
+    await sablonEkle({ sections: ['closing', 'cover'] });
+    expect((await svc.build(CTX, RANGE)).sections).toEqual(['closing', 'cover']);
+  });
+
+  it('KRİTİK: bozuk options belgeye HAM geçmiyor', async () => {
+    await sablonEkle({ options: { meta_campaigns: { metrics: ['uydurma'] } } });
+    expect((await svc.build(CTX, RANGE)).options).toEqual({});
+  });
+
+  it('şablon yoksa TÜM bölümler — boş rapor üretilmiyor', async () => {
+    const data = await svc.build(CTX, RANGE);
+    expect(data.sections.length).toBeGreaterThan(3);
+    expect(data.options).toEqual({});
+  });
+
+  it('KRİTİK: aynı müşteride iki şablon varsa EN SON GÜNCELLENEN geliyor', async () => {
+    /*
+     * Sıralama eskiden yalnızca `client_id NULLS LAST` idi: aynı müşteriye
+     * ikinci bir şablon kaydedilince hangisinin geleceği BELİRSİZDİ ve
+     * çağrıdan çağrıya değişebilirdi — sessizce yanlış rapor.
+     */
+    await sablonEkle({ sections: ['cover'], updatedAt: '2026-08-01T00:00:00Z' });
+    await sablonEkle({ sections: ['closing'], updatedAt: '2026-08-10T00:00:00Z' });
+    expect((await svc.build(CTX, RANGE)).sections).toEqual(['closing']);
+  });
+
+  it('müşteriye özel şablon ORG VARSAYILANININ önünde', async () => {
+    await sablonEkle({ clientId: null, sections: ['cover'] });
+    await sablonEkle({ clientId: IDS.client, sections: ['summary'] });
+    expect((await svc.build(CTX, RANGE)).sections).toEqual(['summary']);
+  });
+
+  it('KRİTİK: BAŞKA müşterinin şablonu kimliğiyle kullanılamıyor', async () => {
+    /*
+     * `templateId` adres çubuğundan geliyor. Org yöneticisi RLS'i geçtiği
+     * için sahiplik kontrolü olmadan başka bir müşterinin şablonuyla rapor
+     * üretilebiliyordu — o müşterinin başlığı ve kapanış metniyle.
+     */
+    await h.q(
+      `INSERT INTO clients (id, org_id, slug, name, timezone, reporting_currency, status, created_at, updated_at)
+       VALUES ($1, $2, 'diger-musteri', 'Diğer Müşteri', 'Europe/Istanbul', 'TRY', 'active', now(), now())`,
+      ['dddddddd-dddd-dddd-dddd-dddddddddddd', IDS.org],
+    );
+    const yabanci = await sablonEkle({
+      clientId: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+      sections: ['closing'],
+      title: 'Yabancı başlık',
+    });
+
+    const data = await svc.build(CTX, { ...RANGE, templateId: yabanci });
+    // Yabancı şablon YOK SAYILIYOR: varsayılan bölümlere düşülüyor.
+    expect(data.sections.length).toBeGreaterThan(3);
+    expect(data.title).not.toBe('Yabancı başlık');
+  });
+});
