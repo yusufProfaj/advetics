@@ -35,10 +35,28 @@ import {
 export function TarihSecici({
   aralik,
   enEskiGun,
+  karsilastirmaVar = true,
+  enGecGun,
 }: {
   aralik: ResolvedRange;
   /** `/metrics/coverage`ten gelen en eski veri günü. "Tüm zamanlar" buna dayanıyor. */
   enEskiGun: IsoDay | null;
+  /**
+   * Karşılaştırma bölümü gösterilsin mi.
+   *
+   * Rapor ekranında KAPALI: rapor belgesi yüzde değişim göstermiyor ve
+   * çalışmayan bir düğme koymak, kullanıcıya olmayan bir özellik vaat etmek
+   * olurdu.
+   */
+  karsilastirmaVar?: boolean;
+  /**
+   * Seçilebilecek EN GEÇ gün. Varsayılan bugün.
+   *
+   * Rapor ekranı bunu düne çekiyor: rapor bir BELGE ve müşteriye gidiyor;
+   * tamamlanmamış bir günü içine almak, gün içinde değişecek rakamları
+   * müşteriye göndermek demek.
+   */
+  enGecGun?: IsoDay;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -217,6 +235,7 @@ export function TarihSecici({
               ay={takvimAy}
               from={taslakFrom}
               to={taslakTo}
+              enGec={enGecGun}
               onAyDegis={setTakvimAy}
               onGunSec={gunSec}
             />
@@ -234,6 +253,7 @@ export function TarihSecici({
               </p>
             )}
 
+            {karsilastirmaVar && (
             <div className="mt-3 border-t border-line pt-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">Karşılaştır</span>
@@ -277,6 +297,7 @@ export function TarihSecici({
                 </p>
               )}
             </div>
+            )}
 
             <div className="mt-3 flex justify-end gap-2">
               <button
@@ -338,17 +359,19 @@ function Takvim({
   ay,
   from,
   to,
+  enGec,
   onAyDegis,
   onGunSec,
 }: {
   ay: string;
   from: IsoDay;
   to: IsoDay;
+  enGec?: IsoDay;
   onAyDegis: (ay: string) => void;
   onGunSec: (gun: IsoDay) => void;
 }) {
   const gunler = useMemo(() => ayIzgarasi(ay), [ay]);
-  const bugun = today();
+  const sonGun = enGec ?? today();
 
   return (
     <div className="mt-3">
@@ -388,7 +411,7 @@ function Takvim({
               onClick={() => onGunSec(g)}
               // GELECEK GÜNLER KAPALI: veri yok, seçilmesi yalnızca boş bir
               // grafik üretir.
-              disabled={g > bugun}
+              disabled={g > sonGun}
               className={`rounded py-1 transition disabled:opacity-30 ${
                 g === from || g === to
                   ? 'bg-brand font-medium text-white'
