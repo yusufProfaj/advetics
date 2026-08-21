@@ -125,6 +125,17 @@ buna göre veriliyor:
   gevşetmek çözmüyor, engel SELECT politikasında. Çözüm çağıran tarafta:
   bağlamı daraltan değeri (örneğin `activeClientId`) o istek için kapat.
   `ad-account-pool-rls.spec.ts` bunu kilitliyor.
+- **PRISMA `include` İLİŞKİNİN BÜTÜN KOLONLARINI ÇEKİYOR — `select` KULLAN.**
+  `/connections` listesi `include` ile kuruluydu ve havuzda 481 reklam hesabı
+  varken her satırın `raw` (tam platform yanıtı, JSONB), `rate_limit_state` ve
+  `page_access_token_enc` (ŞİFRELİ SAYFA TOKEN'I) kolonlarını da okuyordu;
+  hepsi `toSummary` içinde atılıyordu. Yük YANITTA GÖRÜNMÜYOR — yanıt zaten
+  doğru, pahalı olan ona giden yol. Panelde "yavaş" olarak bildirilen şeyin
+  ölçülebilir kısmı buydu ve şifreli token'ın belleğe alınması ayrı bir
+  sorundu. Alan listesini `satisfies Prisma.XSelect` ile sabit tut ve satır
+  tipini `GetPayload<{ select: typeof SABIT }>` ile ONDAN TÜRET: ayrı
+  yazılırsa biri güncellenmediğinde TypeScript susar.
+  `connections-select.spec.ts` bunu kilitliyor.
 - **`$queryRaw<T>` DENETİMSİZ bir dönüşüm — tip yalan söyleyebilir.** Satır
   tipine alan eklerken SELECT'e de eklemeyi unutma; TypeScript hiçbir şey
   demiyor, alan `undefined` geliyor ve onu kullanan kod sessizce yanlış üretiyor.

@@ -40,6 +40,60 @@ interface Meta {
 /** OAuth state ömrü. Kısa tutuluyor: bu pencere bir CSRF fırsat penceresidir. */
 const STATE_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * `/connections` LİSTESİNİN ÇEKTİĞİ ALANLAR — TEK YERDE.
+ *
+ * Sorgu ile `toSummary`'nin tipi buradan türetiliyor. Ayrı yazılsalardı
+ * biri güncellenmediğinde TypeScript susardı ve alan `undefined` gelirdi;
+ * `$queryRaw<T>` için CLAUDE.md'de yazılı olan tuzağın Prisma karşılığı bu.
+ */
+const HESAP_ALANLARI = {
+  id: true,
+  platform: true,
+  externalId: true,
+  name: true,
+  currency: true,
+  timezone: true,
+  status: true,
+  syncEnabled: true,
+  managerExternalId: true,
+  lastInsightsSyncAt: true,
+  clientId: true,
+  client: { select: { name: true } },
+} satisfies Prisma.AdAccountSelect;
+
+const PROFIL_ALANLARI = {
+  id: true,
+  profileType: true,
+  externalId: true,
+  name: true,
+  username: true,
+  pictureUrl: true,
+  linkedAdAccountId: true,
+  syncEnabled: true,
+  clientId: true,
+  client: { select: { name: true } },
+} satisfies Prisma.SocialProfileSelect;
+
+const BAGLANTI_ALANLARI = {
+  id: true,
+  platform: true,
+  accountLabel: true,
+  status: true,
+  grantedScopes: true,
+  tokenExpiresAt: true,
+  lastVerifiedAt: true,
+  lastErrorCode: true,
+  createdAt: true,
+  adAccounts: { select: HESAP_ALANLARI },
+  socialProfiles: { select: PROFIL_ALANLARI },
+} satisfies Prisma.PlatformConnectionSelect;
+
+/** `toSummary` girdisi — sorgunun alan listesinden TÜRETİLİYOR. */
+type BaglantiSatiri = Prisma.PlatformConnectionGetPayload<{
+  select: typeof BAGLANTI_ALANLARI;
+}>;
+
 @Injectable()
 export class ConnectionsService {
   private readonly logger = new Logger(ConnectionsService.name);
@@ -179,16 +233,45 @@ export class ConnectionsService {
             }
           : { status: { not: 'revoked' } },
         orderBy: { createdAt: 'asc' },
-        include: {
+        /*
+         * ═══ `select`, `include` DEĞİL — VE FARK ÜRETİMDE ÖLÇÜLDÜ ═══
+         *
+         * `include` ilişkinin BÜTÜN skaler kolonlarını çekiyor. Bu sorgu
+         * havuzda 481 reklam hesabı ve 199 sayfa varken şunları da
+         * okuyordu ve `toSummary` hepsini ATIYORDU:
+         *
+         *   · `ad_accounts.raw` — her hesabın TAM platform yanıtı (JSONB)
+         *   · `ad_accounts.rate_limit_state` (JSONB)
+         *   · `social_profiles.raw` (JSONB)
+         *   · `social_profiles.page_access_token_enc` — ŞİFRELİ SAYFA TOKEN'I
+         *   · `platform_connections.access_token_enc` / `refresh_token_enc`
+         *
+         * Yani megabaytlarca veri Postgres'ten okunup Node'a taşınıyor ve
+         * yanıta hiç girmeden çöpe gidiyordu. Panelde "yavaş" olarak
+         * görünen şeyin ölçülebilir kısmı buydu: yük yanıtta GÖRÜNMÜYOR,
+         * çünkü yanıt zaten doğru — pahalı olan ona giden yol.
+         *
+         * GÜVENLİK TARAFI DA VAR: aşağıdaki `toSummary` yorumu "şifreli
+         * token kolonları bu fonksiyondan geçmez" diyor ve yanıt için
+         * doğruydu; ama SORGU onları yine de belleğe alıyordu. Artık
+         * alınmıyor.
+         *
+         * YENİ ALAN EKLERKEN buraya da eklemek gerekiyor — `select`
+         * unutulan alanı `undefined` yapar ve TypeScript bunu yakalar
+         * (`include`'un aksine sessiz kalmaz).
+         */
+        select: {
+          ...BAGLANTI_ALANLARI,
+          // Süzgeç ve sıralama dinamik; ALAN LİSTESİ sabitten geliyor.
           adAccounts: {
             where: clientId ? { clientId } : undefined,
             orderBy: { name: 'asc' },
-            include: { client: { select: { name: true } } },
+            select: HESAP_ALANLARI,
           },
           socialProfiles: {
             where: clientId ? { clientId } : undefined,
             orderBy: { name: 'asc' },
-            include: { client: { select: { name: true } } },
+            select: PROFIL_ALANLARI,
           },
         },
       });
@@ -205,12 +288,7 @@ export class ConnectionsService {
    * kuralın korunduğunu kontrol et.
    */
   private toSummary(
-    c: Prisma.PlatformConnectionGetPayload<{
-      include: {
-        adAccounts: { include: { client: { select: { name: true } } } };
-        socialProfiles: { include: { client: { select: { name: true } } } };
-      };
-    }>,
+    c: BaglantiSatiri,
   ): ConnectionSummary {
     const prov = this.provider(c.platform as Platform);
     const missingScopes = prov.requiredScopes.filter((s) => !c.grantedScopes.includes(s));
