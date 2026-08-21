@@ -146,6 +146,16 @@ buna göre veriliyor:
   sınırı da %90). Yapı koşamadığı için metrikler hiç eşlenemiyor — kalıcı
   kilit. Ön koşul kontrolü platform çağrısından ÖNCE yapılmalı: maliyeti
   sıfır çağrı olan bir ret, bağımlılığına nefes alacak yer bırakıyor.
+- **META SAYFA BOYUTU SABİT OLAMAZ: "reduce the amount of data".** Büyük bir
+  reklam hesabında `limit=500` ile yapı taraması HTTP 500 ve *"Please reduce
+  the amount of data you're asking for"* ile düşüyor. Kabul edilen boyutun
+  sabit eşiği yok — hesabın büyüklüğüne, alan setine ve o anki yüke göre
+  değişiyor, yani aynı istek bir hesapta çalışıp diğerinde düşüyor. Sabit
+  küçük limit koymak bütün hesaplarda 10× çağrı demek; doğrusu hatayı görünce
+  limiti YARILAYIP AYNI SAYFAYI tekrar istemek. Küçültülen limit sonraki
+  sayfalarda da korunmalı (Meta'nın `paging.next` bağlantısı kendi limitini
+  taşıyor). Hata kod/subcode ile ayırt edilemiyor (çoğu zaman kod 1 =
+  "unknown"); ayıran tek şey mesaj. `meta-sayfa-boyutu.spec.ts`.
 - **MÜKERRER ENGELİ KALICI KİLİT ÜRETEBİLİYOR — VE İZ BIRAKMIYOR.** Tarih
   taşımayan işlerde (`structure`) kuyruk kimliği sabit; `enqueue` aynı
   kimlikli bir iş görünce `enqueued: false` dönüyordu ve bu, `sync_jobs`

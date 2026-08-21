@@ -103,6 +103,26 @@ const META_LEVEL: Record<InsightsLevel, string> = {
  * için görünmedi. Koruma artık TEK YERDE — iki ayrı yerde tutmak, ikisinin
  * zamanla ayrışması demekti ve nitekim ayrıştı.
  */
+/** Yapı taramasında sayfa başına istenen kayıt sayısı. */
+const ILK_SAYFA_BOYUTU = 500;
+/** Bunun altına inmek çağrı sayısını hesabın işleyemeyeceği kadar artırır. */
+const EN_KUCUK_SAYFA = 25;
+/** 500 → 250 → 125 → 62 → 31 → 25. Beş küçültme yeterli; sonrası döngü olur. */
+const MAX_KUCULTME = 5;
+
+/**
+ * Meta "istediğin veri fazla" mı diyor?
+ *
+ * Bu hata HTTP 500 ile geliyor ve mesajı sabit. Kod/subcode'a bakmak
+ * güvenilir değil: Meta bu durumda çoğu zaman kod 1 ("An unknown error
+ * occurred") döndürüyor ve o kod başka onlarca durumda da çıkıyor. Ayırt
+ * eden tek şey mesajın kendisi.
+ */
+export function veriFazlaHatasi(err: unknown): boolean {
+  const mesaj = err instanceof Error ? err.message : String(err);
+  return /reduce the amount of data/i.test(mesaj);
+}
+
 export function actPath(externalId: string): string {
   return externalId.startsWith('act_') ? externalId : `act_${externalId}`;
 }
@@ -700,7 +720,7 @@ export class MetaProvider implements IAdPlatformProvider {
   ): Promise<{ rows: Array<Record<string, unknown>>; complete: boolean }> {
     const url = new URL(`${this.graph}/${act}/${edge}`);
     url.searchParams.set('fields', fields.join(','));
-    url.searchParams.set('limit', '500');
+    url.searchParams.set('limit', String(ILK_SAYFA_BOYUTU));
     url.searchParams.set('access_token', ctx.accessToken);
     // THUMBNAIL BOYUTU.
     //
@@ -748,14 +768,70 @@ export class MetaProvider implements IAdPlatformProvider {
     let pages = 0;
     const MAX_PAGES = 40;
 
+    /*
+     * ═══ SAYFA BOYUTU KENDİLİĞİNDEN KÜÇÜLÜYOR ═══
+     *
+     * Meta büyük hesaplarda şu hatayı veriyor ve HTTP durumu 500 oluyor:
+     *
+     *   "Please reduce the amount of data you're asking for, then retry
+     *    your request"
+     *
+     * Sabit bir eşik yok: kabul edilen sayfa boyutu hesabın büyüklüğüne,
+     * istenen alan setine ve o anki yüke göre değişiyor. Aynı istek bir
+     * hesapta çalışıp diğerinde düşüyor.
+     *
+     * Canlıda ürettiği tablo: bir reklam hesabında yapı taraması HİÇ
+     * tamamlanamadı. Her denemede aynı yerde aynı hatayla düşüyor, beş
+     * denemeden sonra kalıcı `failed` oluyor ve kampanya satırları hiç
+     * yazılmadığı için o hesabın METRİKLERİ de hiç yazılamıyordu. Panelde
+     * görünen tek şey "Yapı: hiç" idi.
+     *
+     * Sabit ve küçük bir limit koymak (örn. 50) bu hatayı önlerdi ama bütün
+     * hesaplarda 10 kat daha fazla çağrı demek olurdu — kota bu projede
+     * gerçek bir kısıt. Bunun yerine 500'den başlayıp hatayı GÖRÜNCE
+     * yarılıyoruz; küçük hesaplar tek çağrıda bitmeye devam ediyor.
+     */
+    let limit = ILK_SAYFA_BOYUTU;
+    let kucultme = 0;
+
     while (next && pages < MAX_PAGES) {
-      const res = await platformFetch<GraphPage>('meta', next, {}, parseMetaRateLimit);
+      let res;
+      try {
+        res = await platformFetch<GraphPage>('meta', next, {}, parseMetaRateLimit);
+      } catch (err) {
+        if (!veriFazlaHatasi(err) || limit <= EN_KUCUK_SAYFA || kucultme >= MAX_KUCULTME) throw err;
+        limit = Math.max(EN_KUCUK_SAYFA, Math.floor(limit / 2));
+        kucultme++;
+        this.logger.warn(
+          `Meta ${edge} (${act}): sayfa boyutu ${limit}'e düşürülüp aynı sayfa tekrar isteniyor ` +
+            `(${kucultme}. küçültme).`,
+        );
+        // AYNI SAYFA yeniden isteniyor: `next` imleci koruyor, yalnızca
+        // `limit` değişiyor. `pages` ARTMIYOR — küçültme bir ilerleme değil.
+        // Tip AÇIKÇA yazılı: `next` özyinelemeli `GraphPage`'ten besleniyor ve
+        // çıkarım TS7022 veriyor (dosya başındaki nota bakın).
+        const u: URL = new URL(next as string);
+        u.searchParams.set('limit', String(limit));
+        next = u.toString();
+        continue;
+      }
       calls.n++;
       if (res.rateLimit && ctx.onRateLimit) await ctx.onRateLimit(res.rateLimit);
 
       const body: GraphPage = res.data;
       rows.push(...(body.data ?? []));
-      next = body.paging?.next;
+      // Meta'nın verdiği `next` kendi limitini taşıyor; küçülttüysek onu
+      // korumak zorundayız, yoksa bir sonraki sayfa yine 500'lük olur.
+      // Tip AÇIKÇA yazılı: `GraphPage` özyinelemeli ve çıkarım TS7022 veriyor
+      // (dosyanın başındaki nota bakın).
+      const sonraki: string | undefined = body.paging?.next;
+      if (sonraki !== undefined && limit !== ILK_SAYFA_BOYUTU) {
+        const u = new URL(sonraki);
+        u.searchParams.set('limit', String(limit));
+        next = u.toString();
+      } else {
+        next = sonraki;
+      }
       pages++;
     }
 
