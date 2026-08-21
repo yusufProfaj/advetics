@@ -200,32 +200,23 @@ function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
       )}
 
       {/*
-        HESABIN KENDİ İŞİ SATIRIN YANINDA.
-        Ortak "son 25 iş" tablosu tek başına yetmiyordu: organik gönderi
-        işleri listeyi dolduruyor, aranan hesabın yapı taraması sayfanın
-        altında kalıyordu. 356 işlik bir tabloda doğru satırı gözle aramak,
-        teşhis aracının kendisini kullanılmaz yapıyor.
+        HESABIN İŞLERİ SATIRIN YANINDA, İŞ TÜRÜ BAŞINA.
+        Ortak "son 25 iş" tablosu yetmiyordu: organik gönderi işleri listeyi
+        dolduruyor, aranan hesabın yapı taraması altta kalıyordu. Tek bir
+        "son iş" alanı da yetmedi — daha yeni bir metrik işi, kotaya takılmış
+        yapı taramasını gizliyordu. Sorulan soru tür bazlı: "yapı ne oldu",
+        "metrik ne oldu". Bir tür hiç görünmüyorsa o iş HİÇ KUYRUĞA GİRMEMİŞ
+        demek ve bu da bir cevap.
       */}
-      {hesap.lastFailedJob !== null && (
-        <IsOzeti baslik="Bu hesabın son DÜŞEN işi" is={hesap.lastFailedJob} hata />
-      )}
-      {hesap.lastJob !== null && hesap.lastJob.id !== hesap.lastFailedJob?.id && (
-        <IsOzeti baslik="Bu hesabın son işi" is={hesap.lastJob} />
-      )}
+      {hesap.lastJobs.map((j) => (
+        <IsOzeti key={j.id} is={j} hata={j.status === 'failed' || j.status === 'throttled'} />
+      ))}
     </li>
   );
 }
 
 /** Hesap satırının altında tek bir işin özeti. */
-function IsOzeti({
-  baslik,
-  is,
-  hata,
-}: {
-  baslik: string;
-  is: SyncJobStatusRow;
-  hata?: boolean;
-}) {
+function IsOzeti({ is, hata }: { is: SyncJobStatusRow; hata?: boolean }) {
   return (
     <div
       className={`mt-2 rounded border px-3 py-2 text-xs ${
@@ -233,8 +224,8 @@ function IsOzeti({
       }`}
     >
       <p className="text-ink-muted">
-        {baslik}: <span className="text-ink">{IS_ADLARI[is.jobType] ?? is.jobType}</span> ·{' '}
-        {is.status} · {is.rowsUpserted} satır
+        <span className="text-ink">{IS_ADLARI[is.jobType] ?? is.jobType}</span> · {is.status} ·{' '}
+        {is.rowsUpserted} satır
         {is.rowsSkipped !== null && is.rowsSkipped > 0 && <> · {is.rowsSkipped} atıldı</>}
         {is.attempts > 1 && <> · {is.attempts}. deneme</>} · {zaman(is.finishedAt ?? is.createdAt)}
       </p>

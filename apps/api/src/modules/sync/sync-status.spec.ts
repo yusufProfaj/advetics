@@ -131,7 +131,7 @@ function kur(
   hesaplar: HesapSatiri[],
   isler: IsSatiri[] = [],
   isToplam = isler.length,
-  ekstra: { sayaclar?: Sayaclar; sonIs?: HamIs[]; sonDusen?: HamIs[] } = {},
+  ekstra: { sayaclar?: Sayaclar; sonIs?: HamIs[] } = {},
 ) {
   hesapArgs = null;
   isArgs = null;
@@ -162,11 +162,8 @@ function kur(
         return sayaclar.running ?? 0;
       },
     },
-    // Ham SQL: ilk çağrı hesap başına SON iş, ikincisi son DÜŞEN iş.
-    $queryRaw: async (q: { strings?: string[]; values?: unknown[]; sql?: string }) => {
-      const metin = JSON.stringify(q);
-      return metin.includes('failed') ? (ekstra.sonDusen ?? []) : (ekstra.sonIs ?? []);
-    },
+    // Ham SQL: hesap + iş türü başına en son iş (DISTINCT ON).
+    $queryRaw: async () => ekstra.sonIs ?? [],
   };
 
   const prisma = {
@@ -304,32 +301,49 @@ describe('GET /sync/status — teşhis', () => {
     expect(res.recentJobs).toHaveLength(1);
   });
 
-  it('HESABIN SON İŞİ satırın yanında — 356 işlik tabloda gözle aramak teşhis değil', async () => {
+  it('HESABIN İŞLERİ satırın yanında — 356 işlik tabloda gözle aramak teşhis değil', async () => {
     const res = await kur([SAGLAM_HESAP], [], 0, {
       sonIs: [hamIs({ status: 'succeeded', error_code: null, error_message: null })],
     }).status(CTX);
-    expect(res.accounts[0]!.lastJob?.status).toBe('succeeded');
-    expect(res.accounts[0]!.lastJob?.adAccountName).toBe('Mirnas — Meta');
+    expect(res.accounts[0]!.lastJobs[0]!.status).toBe('succeeded');
+    expect(res.accounts[0]!.lastJobs[0]!.adAccountName).toBe('Mirnas — Meta');
   });
 
-  it('SON DÜŞEN İŞ ayrı — son iş başarılıysa arıza gizlenmemeli', async () => {
-    // Canlıda görülen tam tablo: organik gönderi işi başarılı biterken yapı
-    // taraması izin hatasıyla düşmüştü. Yalnızca sonuncuya bakmak o hatayı
-    // gizliyordu.
+  it('KRİTİK: İŞ TÜRÜ BAŞINA satır — daha yeni bir iş, takılmış yapı işini GİZLEMEMELİ', async () => {
+    /*
+     * Canlıda tam olarak bu oldu: bir Meta hesabında yapı taraması kotaya
+     * takılıp `throttled` kalmıştı, ama daha yeni bir metrik işi olduğu için
+     * "son iş" alanında o satır hiç görünmüyordu. Panel "Yapı: hiç" diyordu
+     * ve sebebini söyleyemiyordu.
+     */
     const res = await kur([SAGLAM_HESAP], [], 0, {
-      sonIs: [hamIs({ job_type: 'organic_posts', status: 'succeeded', error_message: null })],
-      sonDusen: [hamIs()],
+      sonIs: [
+        hamIs({ id: 1n, job_type: 'insights_backfill', status: 'succeeded', error_message: null }),
+        hamIs({ id: 2n, job_type: 'structure', status: 'throttled', error_code: 'quota_denied' }),
+      ],
     }).status(CTX);
 
-    expect(res.accounts[0]!.lastJob?.status).toBe('succeeded');
-    expect(res.accounts[0]!.lastFailedJob?.status).toBe('failed');
-    expect(res.accounts[0]!.lastFailedJob?.errorMessage).toContain('fbtrace_id');
+    const turler = res.accounts[0]!.lastJobs.map((j) => j.jobType);
+    expect(turler).toContain('structure');
+    expect(turler).toContain('insights_backfill');
+    expect(res.accounts[0]!.lastJobs.find((j) => j.jobType === 'structure')!.status).toBe(
+      'throttled',
+    );
   });
 
-  it('hesabın hiç işi yoksa iki alan da null — uydurma satır YOK', async () => {
+  it('DÜŞEN iş listenin BAŞINDA — kullanıcının aradığı satır arıza satırı', async () => {
+    const res = await kur([SAGLAM_HESAP], [], 0, {
+      sonIs: [
+        hamIs({ id: 1n, job_type: 'organic_posts', status: 'succeeded', error_message: null }),
+        hamIs({ id: 2n, job_type: 'structure', status: 'failed' }),
+      ],
+    }).status(CTX);
+    expect(res.accounts[0]!.lastJobs[0]!.status).toBe('failed');
+  });
+
+  it('hesabın hiç işi yoksa liste BOŞ — uydurma satır YOK', async () => {
     const res = await kur([SAGLAM_HESAP]).status(CTX);
-    expect(res.accounts[0]!.lastJob).toBeNull();
-    expect(res.accounts[0]!.lastFailedJob).toBeNull();
+    expect(res.accounts[0]!.lastJobs).toEqual([]);
   });
 
   it('işin hangi hesaba ait olduğu ADIYLA dönüyor — kimlikle teşhis edilemez', async () => {

@@ -46,6 +46,14 @@ import { supurmeDisiSebep } from '../../queue/supurme-kapsami';
  * (`recentJobsTotal`) ki ekran "son 25 / toplam 340" yazabilsin. Kesilen bir
  * listeyi tam liste sanmak, bu projede tekrar eden hata türü.
  */
+/**
+ * "Şimdi güncelle"de metrik işine tanınan bekleme.
+ *
+ * Yapı taramasının bitmesine pay bırakıyor. Garanti değil — gerçek güvence
+ * metrik işinin yapı koşmamışsa hiç başlamaması (`insights-sync.service.ts`).
+ */
+const YAPI_ICIN_TANINAN_SURE_MS = 90_000;
+
 const RECENT_JOB_LIMIT = 25;
 
 /**
@@ -89,32 +97,42 @@ interface HamIs {
  * ayrı sorgu açmak olurdu. Ham SQL `withTenant` içinde koşuyor, yani RLS
  * aynen uygulanıyor.
  *
- * `durum` verilirse yalnızca o durumdaki işlerin en yenisi dönüyor: son iş
- * başarılı olsa bile arıza daha eski bir düşen işte olabilir ve yalnızca
- * sonuncuya bakmak onu gizler.
+ * İŞ TÜRÜ BAŞINA ayrı satır: "son iş" tek başına bir kilidi gizliyordu.
+ * Bir Meta hesabında yapı taraması kotaya takılıp `throttled` kalmıştı ama
+ * daha yeni bir metrik işi olduğu için o satır hiçbir yerde görünmüyordu.
  */
 async function sonIsSorgusu(
   tx: { $queryRaw: <T>(q: Prisma.Sql) => Promise<T> },
-  durum: 'failed' | null,
-): Promise<Map<string, HamIs>> {
-  const filtre = durum ? Prisma.sql`AND status = ${durum}::"SyncJobStatus"` : Prisma.empty;
+): Promise<Map<string, HamIs[]>> {
   const rows = await tx.$queryRaw<HamIs[]>(Prisma.sql`
-    SELECT DISTINCT ON (ad_account_id)
+    SELECT DISTINCT ON (ad_account_id, job_type)
            id, job_type, entity_level, status, attempts,
            rows_upserted, rows_skipped, api_calls_used,
            error_code, error_message, note,
            ad_account_id, created_at, started_at, finished_at
       FROM sync_jobs
      WHERE ad_account_id IS NOT NULL
-       ${filtre}
-     ORDER BY ad_account_id, created_at DESC
+     ORDER BY ad_account_id, job_type, created_at DESC
   `);
-  return new Map(rows.map((r) => [r.ad_account_id, r]));
+  const out = new Map<string, HamIs[]>();
+  for (const r of rows) {
+    const liste = out.get(r.ad_account_id);
+    if (liste) liste.push(r);
+    else out.set(r.ad_account_id, [r]);
+  }
+  // Düşen işler ÖNCE: kullanıcının aradığı satır arıza satırı.
+  for (const liste of out.values()) {
+    liste.sort((a, b) => {
+      const ay = a.status === 'failed' ? 0 : 1;
+      const by = b.status === 'failed' ? 0 : 1;
+      return ay !== by ? ay - by : b.created_at.getTime() - a.created_at.getTime();
+    });
+  }
+  return out;
 }
 
 /** Ham satırı sözleşmedeki şekle çevirir. */
-function isSatiri(r: HamIs | undefined, adiyle: Map<string, string>): SyncJobStatusRow | null {
-  if (!r) return null;
+function isSatiri(r: HamIs, adiyle: Map<string, string>): SyncJobStatusRow {
   return {
     // BIGSERIAL: olduğu gibi döndürmek JSON.stringify içinde patlıyor.
     id: r.id.toString(),
@@ -171,7 +189,7 @@ export class SyncController {
   @Get('status')
   @RequirePermissions('insights.read')
   async status(@CurrentTenant() ctx: TenantContext): Promise<SyncStatusResponse> {
-    const { rows, jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler, sonDusenler } =
+    const { rows, jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler } =
       await this.prisma.withTenant(ctx, async (tx) => {
       /*
        * YALNIZCA ATANMIŞ HESAPLAR. `clientId: { not: null }` şart:
@@ -200,7 +218,7 @@ export class SyncController {
        * İŞLER AYNI TRANSACTION İÇİNDE. Ayrı `withTenant` çağrısı ikinci bir
        * etkileşimli transaction açardı; iki kısa sorgu için bedeli yersiz.
        */
-      const [jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler, sonDusenler] =
+      const [jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler] =
         await Promise.all([
         tx.syncJob.findMany({
           orderBy: { createdAt: 'desc' },
@@ -240,11 +258,10 @@ export class SyncController {
          * HESAP BAŞINA SON İŞ. `DISTINCT ON` Prisma'da yok; ham SQL
          * `withTenant` içinde koşuyor, yani RLS aynen uygulanıyor.
          */
-        sonIsSorgusu(tx, null),
-        sonIsSorgusu(tx, 'failed'),
+        sonIsSorgusu(tx),
       ]);
 
-      return { rows, jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler, sonDusenler };
+      return { rows, jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler };
     });
 
     const adiyle = new Map(rows.map((a) => [a.id, a.name]));
@@ -296,8 +313,7 @@ export class SyncController {
         inScheduledSweep: sweepReason === null,
         structureReady,
         blockedReason,
-        lastJob: isSatiri(sonIsler.get(a.id), adiyle),
-        lastFailedJob: isSatiri(sonDusenler.get(a.id), adiyle),
+        lastJobs: (sonIsler.get(a.id) ?? []).map((r) => isSatiri(r, adiyle)),
       };
     });
 
@@ -427,6 +443,20 @@ export class SyncController {
           jobType: is.jobType,
           adAccountId: account.id,
           interactive: true,
+          /*
+           * METRİK İŞLERİ GECİKMELİ, YAPI İŞİ DEĞİL.
+           *
+           * Atama yolunda bu gecikme vardı, "Şimdi güncelle" yolunda yoktu ve
+           * fark canlıda ölçüldü: bir Meta hesabında yapı taraması 11:33'te
+           * koşarken aynı dakikada başlayan metrik işi 422 satır çekip
+           * hiçbirini yazamadı ("0 satır · 422 atlandı"), bir dakika sonraki
+           * iş ise 86 satır yazdı. Aradaki tek fark yapı taramasının
+           * bitmesiydi.
+           *
+           * Öncelik farkı (yapı 4, metrik 10) bir BARİYER DEĞİL: worker dört
+           * işi paralel çalıştırıyor.
+           */
+          ...(is.jobType === 'structure' ? {} : { delayMs: YAPI_ICIN_TANINAN_SURE_MS }),
           ...(is.dateFrom ? { dateFrom: is.dateFrom, dateTo: is.dateTo } : {}),
         });
         if (res.enqueued) queued++;

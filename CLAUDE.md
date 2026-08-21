@@ -146,6 +146,19 @@ buna göre veriliyor:
   sınırı da %90). Yapı koşamadığı için metrikler hiç eşlenemiyor — kalıcı
   kilit. Ön koşul kontrolü platform çağrısından ÖNCE yapılmalı: maliyeti
   sıfır çağrı olan bir ret, bağımlılığına nefes alacak yer bırakıyor.
+- **MÜKERRER ENGELİ KALICI KİLİT ÜRETEBİLİYOR — VE İZ BIRAKMIYOR.** Tarih
+  taşımayan işlerde (`structure`) kuyruk kimliği sabit; `enqueue` aynı
+  kimlikli bir iş görünce `enqueued: false` dönüyordu ve bu, `sync_jobs`
+  satırı YAZILMADAN ÖNCE oluyordu. Kotaya takılıp `delayed`e düşmüş bir yapı
+  taraması, kullanıcının bastığı her "Şimdi güncelle"yi sessizce yutuyor,
+  panelde "Yapı: hiç" yazıyor ve o hesaba ait tek bir yapı satırı bile
+  görünmüyordu. Artık `active`/`delayed` iş yaşlıysa (30 dk) ya da kullanıcı
+  ekranda bekliyorsa (interactive) takılmış sayılıp kaldırılıyor; işler
+  upsert olduğu için tekrar koşmak güvenli. `takilmis-is.spec.ts`.
+- **TEŞHİS EKRANI "SON İŞ" GÖSTERİYORSA ARIZAYI GİZLER.** Daha yeni bir
+  metrik işi, kotaya takılmış yapı taramasını görünmez yapıyordu. İş TÜRÜ
+  başına satır göster: bir tür hiç görünmüyorsa o iş hiç kuyruğa girmemiş
+  demek ve bu da bir cevap.
 - **ZAMANLANMIŞ İŞ, İHTİYACI OLAN PARAMETREYİ ÜRETEN DALLA BİRLİKTE
   EKLENİR.** `sweep:keywords` her gece `keyword_insights` kuyruğa atıyordu
   ama `datesForJob` o tür için dal taşımıyordu; iş her gün

@@ -343,23 +343,19 @@ export interface SyncAccountStatus {
   /** Doluysa KULLANICIYA OLDUĞU GİBİ gösterilecek cümle. */
   blockedReason: string | null;
   /**
-   * BU HESABIN EN SON İŞİ — cevap sorunun YANINDA olmak zorunda.
+   * BU HESABIN İŞ TÜRÜ BAŞINA EN SON İŞİ.
    *
-   * İlk sürümde yalnızca ortak bir "son 25 iş" tablosu vardı ve teşhis
-   * pratikte çalışmıyordu: organik gönderi işleri listeyi dolduruyor,
-   * aranan hesabın yapı taraması sayfanın altında kalıyordu. 356 işlik bir
-   * tabloda doğru satırı gözle aramak, teşhis aracının kendisini kullanılmaz
-   * yapıyor.
-   */
-  lastJob: SyncJobStatusRow | null;
-  /**
-   * Bu hesabın en son DÜŞEN işi.
+   * Önce yalnızca "son iş" ve "son düşen iş" vardı ve bir kilidi
+   * gizliyordu: bir Meta hesabında yapı taraması kotaya takılıp
+   * `throttled` kalmıştı, ama daha yeni bir metrik işi olduğu için o satır
+   * hiçbir yerde görünmüyordu. Panelde "Yapı: hiç" yazıyor, sebebi
+   * yazmıyordu.
    *
-   * `lastJob` başarılı olsa bile arıza burada olabilir: organik gönderi işi
-   * başarılı biterken yapı taraması izin hatasıyla düşmüş olabiliyor ve
-   * yalnızca sonuncuya bakmak o hatayı gizler.
+   * İŞ TÜRÜ BAŞINA TEK SATIR, çünkü sorulan soru tür bazlı: "yapı taraması
+   * ne oldu", "metrik ne oldu", "anahtar kelimeler ne oldu". Bir tür hiç
+   * görünmüyorsa o iş HİÇ KUYRUĞA GİRMEMİŞ demek — bu da bir cevap.
    */
-  lastFailedJob: SyncJobStatusRow | null;
+  lastJobs: SyncJobStatusRow[];
 }
 
 /** Bir senkronizasyon işinin panelde gösterilen hâli. */

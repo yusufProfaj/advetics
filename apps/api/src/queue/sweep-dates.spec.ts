@@ -31,11 +31,8 @@ const TARIH_ISTEYENLER = [
 // Servis yalnızca saf yardımcısı için kuruluyor; hiçbir bağımlılığa
 // dokunulmuyor. `datesForJob` private — `hesap-sahiplenme.spec.ts` ile aynı
 // desen.
-const proc = new SyncProcessorService(
-  null as never, null as never, null as never, null as never, null as never,
-  null as never, null as never, null as never, null as never, null as never,
-  null as never, null as never, null as never, null as never, null as never,
-) as unknown as {
+const N = null as never;
+const proc = new SyncProcessorService(N, N, N, N, N, N, N, N, N, N, N, N, N) as unknown as {
   datesForJob: (t: string, tz: string) => { from: string; to: string } | undefined;
 };
 
