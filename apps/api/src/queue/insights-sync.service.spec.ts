@@ -565,3 +565,71 @@ describe('hiçbir satır yazılamayan iş', () => {
     expect(res.skipped).toBe(0);
   });
 });
+
+describe('lastInsightsSyncAt damgası', () => {
+  const damga = async (): Promise<string | null> =>
+    (
+      await h.q<{ t: string | null }>(
+        'SELECT last_insights_sync_at::text AS t FROM ad_accounts WHERE id = $1',
+        [IDS.adAccount],
+      )
+    )[0]!.t;
+
+  it('BAŞARISIZ tur damga BIRAKMIYOR — "senkronize edildi" yalanı olmamalı', async () => {
+    // Damga bir süre yazmadan ÖNCE atılıyordu: hiçbir satır yazamayan ve
+    // tekrar denenmek üzere düşen bir iş bile hesaba taze bir zaman
+    // bırakıyordu. Teşhis ekranında "Yapı: hiç · Metrik: 10:46" yan yana
+    // duruyor ve "metrik geldi" gibi okunuyordu.
+    await h.q(
+      'UPDATE ad_accounts SET last_structure_sync_at = NULL, last_insights_sync_at = NULL WHERE id = $1',
+      [IDS.adAccount],
+    );
+    provider.rowsByLevel = { campaign: [row({ entityExternalId: 'bizde-yok' })] };
+
+    await expect(
+      svc.syncAccount({
+        adAccountId: IDS.adAccount,
+        jobType: 'insights_backfill',
+        dateFrom: '2026-08-05',
+        dateTo: '2026-08-05',
+      }),
+    ).rejects.toThrow();
+
+    expect(await damga()).toBeNull();
+  });
+
+  it('KISMİ sonuçta da damga yok — eksik gün "çekildi" sayılmamalı', async () => {
+    await h.q('UPDATE ad_accounts SET last_insights_sync_at = NULL WHERE id = $1', [
+      IDS.adAccount,
+    ]);
+    provider.rowsByLevel = { campaign: [row()] };
+    provider.complete = false;
+
+    await expect(
+      svc.syncAccount({
+        adAccountId: IDS.adAccount,
+        jobType: 'insights_backfill',
+        dateFrom: '2026-08-05',
+        dateTo: '2026-08-05',
+      }),
+    ).rejects.toThrow();
+
+    expect(await damga()).toBeNull();
+  });
+
+  it('BAŞARILI tur damga bırakıyor', async () => {
+    await h.q('UPDATE ad_accounts SET last_insights_sync_at = NULL WHERE id = $1', [
+      IDS.adAccount,
+    ]);
+    provider.rowsByLevel = { campaign: [row()] };
+
+    await svc.syncAccount({
+      adAccountId: IDS.adAccount,
+      jobType: 'insights_backfill',
+      dateFrom: '2026-08-05',
+      dateTo: '2026-08-05',
+    });
+
+    expect(await damga()).not.toBeNull();
+  });
+});

@@ -159,11 +159,6 @@ export class InsightsSyncService {
       totalSkipped += written.skipped;
     }
 
-    await this.db.adAccount.update({
-      where: { id: account.id },
-      data: { lastInsightsSyncAt: new Date() },
-    });
-
     // Kısmi sonuçta işi başarılı SAYMIYORUZ: eksik bir gün "senkronize edildi"
     // görünürse kimse geri dönüp tamamlamıyor ve rapor sessizce eksik kalıyor.
     if (incomplete) {
@@ -215,6 +210,23 @@ export class InsightsSyncService {
           'taraması hiç koşmadı. Kampanya satırları yazıldıktan sonra tekrar denenecek.',
       );
     }
+
+    /*
+     * DAMGA EN SONDA — BAŞARISIZ BİR TUR "SENKRONİZE EDİLDİ" DEMEZ.
+     *
+     * `lastInsightsSyncAt` bir süre çekim biter bitmez, YAZMADAN ÖNCE
+     * atılıyordu. Sonucu canlıda görüldü: hiçbir satır yazamayan ve tekrar
+     * denenmek üzere düşen bir iş bile hesaba taze bir damga bırakıyordu.
+     * Teşhis ekranında "Yapı: hiç · Metrik: 10:46" yan yana duruyor ve
+     * "metrik geldi ama yapı yok" gibi okunuyordu — oysa metrik de gelmemişti.
+     *
+     * Damga artık YALNIZCA tur gerçekten tamamlandığında atılıyor. Başarısız
+     * turda eski değer kalıyor ve bayatlık uyarısı doğru çalışıyor.
+     */
+    await this.db.adAccount.update({
+      where: { id: account.id },
+      data: { lastInsightsSyncAt: new Date() },
+    });
 
     return { rows: totalRows, apiCalls: totalCalls, skipped: totalSkipped, note };
   }
