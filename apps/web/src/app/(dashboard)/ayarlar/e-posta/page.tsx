@@ -21,7 +21,12 @@ export default async function EpostaAyarlariSayfasi() {
   let hesap: EmailAccountSummary | null = null;
   let hata: string | null = null;
   try {
-    hesap = await serverApiFetch<EmailAccountSummary | null>('/me/email-account');
+    /*
+     * `?? null`: uç henüz ayar yoksa BOŞ GÖVDE ile 200 dönüyor ve istemci
+     * onu `undefined` olarak veriyor. İkisini `null`a indirgemek, "ayar yok"
+     * hâlinin tek bir biçimde ele alınmasını sağlıyor.
+     */
+    hesap = (await serverApiFetch<EmailAccountSummary | null>('/me/email-account')) ?? null;
   } catch (err) {
     hata =
       err instanceof ApiRequestError

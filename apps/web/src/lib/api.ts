@@ -48,7 +48,23 @@ export class ApiRequestError extends Error {
 async function handle<T>(res: Response): Promise<T> {
   if (res.ok) {
     if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+
+    /*
+     * BOŞ GÖVDE JSON DEĞİL — VE 204 TEK YOLU DEĞİL.
+     *
+     * NestJS bir uç `null` döndürdüğünde gövdeyi BOŞ bırakıyor ve durum
+     * kodu 200 kalıyor. `res.json()` o gövdede "Unexpected end of JSON
+     * input" fırlatıyor ve hata, uç noktanın düştüğü sanılacak biçimde
+     * ekrana çıkıyor — canlıda tam olarak bu oldu: "E-posta ayarları
+     * alınamadı: Unexpected end of JSON input", oysa yanıt BAŞARILIYDI ve
+     * anlamı "henüz ayar yok" idi.
+     *
+     * `null` dönebilen her uç bu tuzağa açıktı. Gövde önce metin olarak
+     * okunuyor; boşsa `undefined` dönüyor.
+     */
+    const metin = await res.text();
+    if (metin.length === 0) return undefined as T;
+    return JSON.parse(metin) as T;
   }
 
   let body: ApiError | null = null;
