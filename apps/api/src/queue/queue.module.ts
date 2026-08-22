@@ -7,6 +7,7 @@ import { InsightsSyncService } from './insights-sync.service';
 import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
 import { KeywordSyncService } from './keyword-sync.service';
+import { SearchTermSyncService } from './search-term-sync.service';
 import { QuotaGuardService } from './quota-guard.service';
 import { StructureSyncService } from './structure-sync.service';
 import { SyncQueueService } from './sync-queue.service';
@@ -35,6 +36,7 @@ import { SyncProcessorService } from './sync-processor.service';
     OrganicSyncService,
     LeadSyncService,
     KeywordSyncService,
+    SearchTermSyncService,
   ],
   exports: [
     QuotaGuardService,
@@ -45,6 +47,7 @@ import { SyncProcessorService } from './sync-processor.service';
     OrganicSyncService,
     LeadSyncService,
     KeywordSyncService,
+    SearchTermSyncService,
   ],
 })
 export class QueueModule {}

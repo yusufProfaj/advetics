@@ -14,6 +14,7 @@ import { RuleExecutorService } from '../modules/rules/rule-executor.service';
 import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
 import { KeywordSyncService } from './keyword-sync.service';
+import { SearchTermSyncService } from './search-term-sync.service';
 import { BoostsService } from '../modules/boosts/boosts.service';
 import { YouTubeSubscribeService } from '../modules/autoboost/youtube-subscribe.service';
 import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
@@ -63,6 +64,7 @@ export class SyncProcessorService {
     private readonly subscribe: YouTubeSubscribeService,
     private readonly boostExecutor: BoostExecutorService,
     private readonly keywords: KeywordSyncService,
+    private readonly searchTerms: SearchTermSyncService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -264,6 +266,14 @@ export class SyncProcessorService {
        * dönüşümleri eksik gösterirdi.
        */
       case 'keyword_insights':
+      /*
+       * ARAMA TERİMİ DE AYNI PENCERE. Bu dalı unutmak, işin her gece
+       * `[missing_dates]` ile düşmesi ve verinin HİÇ toplanmaması demek —
+       * anahtar kelimelerde tam olarak bu oldu ve tek iz `sync_jobs`taydı.
+       * `sweep-dates.spec.ts` zamanlayıcı listesiyle bu switch'i
+       * karşılaştırıyor.
+       */
+      case 'search_terms':
         return { from: this.shiftDays(todayInTz, -7), to: this.shiftDays(todayInTz, -1) };
       default:
         return undefined;
@@ -570,6 +580,31 @@ export class SyncProcessorService {
         await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls, {
           note: result.note,
           rowsSkipped: result.skipped,
+        });
+        return { rows: result.rows, note: result.note };
+      } catch (err) {
+        await this.recordFailure(syncJobId, err);
+        throw err;
+      }
+    }
+
+    if (payload.jobType === 'search_terms') {
+      if (!payload.adAccountId) {
+        await this.markFailed(syncJobId, 'missing_account', 'search_terms hesap kimliği olmadan geldi');
+        throw new UnrecoverableError('search_terms hesap kimliği olmadan geldi');
+      }
+      if (!payload.dateFrom || !payload.dateTo) {
+        await this.markFailed(syncJobId, 'missing_dates', 'search_terms tarih aralığı olmadan geldi');
+        throw new UnrecoverableError('search_terms tarih aralığı olmadan geldi');
+      }
+      try {
+        const result = await this.searchTerms.syncAccount({
+          adAccountId: payload.adAccountId,
+          dateFrom: payload.dateFrom,
+          dateTo: payload.dateTo,
+        });
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls, {
+          note: result.note,
         });
         return { rows: result.rows, note: result.note };
       } catch (err) {

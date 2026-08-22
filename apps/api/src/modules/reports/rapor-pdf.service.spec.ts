@@ -84,6 +84,18 @@ const VERI: ReportData = {
   keywords: [
     { keyword: 'urla satılık villa', spendMicros: '3037000000', impressions: 6250, clicks: 302, ctr: 4.83, cpc: 10.05 },
   ],
+  searchTerms: [
+    {
+      term: 'urla satılık villa',
+      keyword: 'urla villa',
+      status: 'NONE',
+      spendMicros: '3037000000',
+      impressions: 6250,
+      clicks: 302,
+      conversions: 15,
+      ctr: 4.83,
+    },
+  ],
   generatedAt: '2026-08-22T00:00:00.000Z',
 };
 

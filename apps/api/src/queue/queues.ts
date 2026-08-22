@@ -104,6 +104,9 @@ export function layerForJob(payload: SyncJobPayload): keyof typeof JOB_PRIORITY 
       return 'initial_backfill';
     case 'rules_evaluate':
       return 'rule_action';
+    case 'search_terms':
+      // Anahtar kelimeyle AYNI katman: ikisi de opsiyonel derinleşme.
+      return 'insights_breakdown';
     case 'keyword_insights':
       // Kırılımlarla aynı katman: ikisi de opsiyonel derinleşme ve çekirdek
       // metriklerin önüne geçmemeli.

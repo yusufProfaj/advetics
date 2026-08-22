@@ -2364,6 +2364,20 @@ export class MetaProvider implements IAdPlatformProvider {
   async fetchKeywords(): Promise<{ rows: DiscoveredKeywordRow[]; apiCalls: number }> {
     return { rows: [], apiCalls: 0 };
   }
+  /**
+   * Meta'da ARAMA TERİMİ diye bir kavram YOK.
+   *
+   * Boş dizi döndürmek "bu dönemde terim yok" gibi okunurdu; oysa doğrusu
+   * "bu platformda böyle bir şey yok". `fetchLead` ile aynı karar.
+   */
+  async fetchSearchTerms(): Promise<never> {
+    throw new PlatformApiError(
+      'meta',
+      'permanent',
+      "Meta'da arama terimi raporu yok — bu yalnızca Google Ads'te var.",
+    );
+  }
+
 
 }
 

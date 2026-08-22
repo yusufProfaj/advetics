@@ -100,6 +100,8 @@ export function ReportDocument({ data }: { data: ReportData }) {
               );
             case 'google_keywords':
               return <Keywords key={section} data={data} />;
+            case 'google_search_terms':
+              return <SearchTerms key={section} data={data} />;
             case 'top_ads':
               return <TopAds key={section} data={data} />;
             case 'closing':
@@ -504,6 +506,86 @@ function Keywords({ data }: { data: ReportData }) {
             </tbody>
           </table>
         </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * ARAMA TERİMLERİ — kullanıcının gerçekten YAZDIĞI sorgular.
+ *
+ * Anahtar kelime bizim hedeflediğimiz şey; bu, kullanıcının yazdığı şey.
+ * Fark paranın nereye gittiğini gösteriyor: geniş eşlemeli bir kelime hiç
+ * istemediğimiz sorgulara da gösterim alabiliyor.
+ */
+function SearchTerms({ data }: { data: ReportData }) {
+  return (
+    <section className="rpt-page pt-10">
+      <PageHead title="Arama Terimleri" subtitle="Google Ads" />
+      {data.searchTerms === null ? (
+        // "Veri yok" DEĞİL "bu yetenek yok": Google bağlantısı olmayan bir
+        // müşteride arama terimi diye bir şey yok.
+        <Empty>Bu müşteride Google Ads bağlantısı bulunmuyor.</Empty>
+      ) : data.searchTerms.length === 0 ? (
+        <Empty>Bu dönemde arama terimi verisi yok.</Empty>
+      ) : (
+        <>
+          <p className="mt-4 text-xs text-slate-500">
+            Kullanıcıların arama kutusuna yazdığı sorgular.{' '}
+            <span className="font-semibold text-amber-600">†</span> işaretli olanlar
+            henüz anahtar kelime ya da negatif olarak tanımlı değil.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b-2 border-slate-300 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                  <th className="py-2 pr-3">Arama Terimi</th>
+                  <th className="px-2 py-2">Eşleşen Kelime</th>
+                  <th className="px-2 py-2 text-right">Harcama</th>
+                  <th className="px-2 py-2 text-right">Tıklama</th>
+                  <th className="px-2 py-2 text-right">{METRIC_LABELS.ctr.label}</th>
+                  <th className="py-2 pl-2 text-right">Dönüşüm</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.searchTerms.map((t) => (
+                  <tr key={t.term} className="border-b border-slate-100">
+                    <td className="max-w-[220px] py-2.5 pr-3 font-medium">
+                      <span className="block truncate" title={t.term}>
+                        {/*
+                          TANIMSIZ TERİM İŞARETLENİYOR. `NONE` olan bir terim
+                          para harcıyor ama ne anahtar kelime ne negatif
+                          olarak tanımlı — raporun en eyleme dönük satırı bu.
+                        */}
+                        {t.status === 'NONE' && (
+                          <span
+                            className="mr-1 align-middle text-[10px] font-semibold text-amber-600"
+                            title="Anahtar kelime ya da negatif olarak tanımlı değil"
+                          >
+                            †
+                          </span>
+                        )}
+                        {t.term}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2.5 text-slate-500">{t.keyword ?? '—'}</td>
+                    <td className="px-2 py-2.5 text-right font-semibold tabular-nums">
+                      {formatMoney(t.spendMicros, data.currency, { decimals: 2 })}
+                    </td>
+                    <td className="px-2 py-2.5 text-right tabular-nums">
+                      {formatNumber(t.clicks)}
+                    </td>
+                    <td className="px-2 py-2.5 text-right tabular-nums">{formatPercent(t.ctr)}</td>
+                    <td className="py-2.5 pl-2 text-right tabular-nums">
+                      {formatNumber(t.conversions)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Footnotes keys={['ctr']} />
+        </>
       )}
     </section>
   );

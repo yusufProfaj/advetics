@@ -46,12 +46,26 @@ export function raporMailTaslagi(data: ReportData, danismanAdi: string): MailTas
     )
     .join('');
 
+  /*
+   * ARAMA TERİMLERİ ANAHTAR KELİMELERİN YERİNE GEÇMİYOR, YANINA GELİYOR.
+   * Biri hedeflediğimiz, diğeri kullanıcının yazdığı şey; ikisini tek listede
+   * karıştırmak müşteriye "bu kelimeyi biz mi seçtik" sorusunu sordururdu.
+   */
   const kelimeler = (data.keywords ?? [])
     .slice(0, 3)
     .map(
       (k) =>
-        `<li><strong>${kacis(k.keyword)}:</strong> ${formatMoney(k.spendMicros, p)} harcama, ` +
+        `<li><strong>${kacis(k.keyword)}</strong> (anahtar kelime): ${formatMoney(k.spendMicros, p)} harcama, ` +
         `${formatNumber(k.clicks)} tıklama (${formatPercent(k.ctr)} TO).</li>`,
+    )
+    .join('');
+
+  const terimler = (data.searchTerms ?? [])
+    .slice(0, 3)
+    .map(
+      (t) =>
+        `<li><strong>${kacis(t.term)}</strong> (arama terimi): ${formatMoney(t.spendMicros, p)} harcama, ` +
+        `${formatNumber(t.clicks)} tıklama ile ${formatNumber(t.conversions)} dönüşüm.</li>`,
     )
     .join('');
 
@@ -73,8 +87,8 @@ Ayrıntılı rapor ekte yer almaktadır.</p>
 ${bloklar}
 
 ${
-  oneCikan || kelimeler
-    ? `<h3>Öne Çıkan Kampanya ve Arama Terimleri Performansı</h3><ul>${oneCikan}${kelimeler}</ul>`
+  oneCikan || kelimeler || terimler
+    ? `<h3>Öne Çıkan Kampanya ve Arama Terimleri Performansı</h3><ul>${oneCikan}${kelimeler}${terimler}</ul>`
     : ''
 }
 

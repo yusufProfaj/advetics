@@ -73,6 +73,9 @@ export class RaporPdfService {
         case 'google_keywords':
           this.anahtarKelimeler(ctx);
           break;
+        case 'google_search_terms':
+          this.aramaTerimleri(ctx);
+          break;
         case 'closing':
           this.kapanis(ctx);
           break;
@@ -268,6 +271,50 @@ export class RaporPdfService {
         size: 9,
         font: ctx.normal,
         color: SIYAH,
+      });
+      y -= 15;
+    }
+  }
+
+  private aramaTerimleri(ctx: Ctx): void {
+    const s = ctx.doc.addPage([EN, BOY]);
+    let y = this.baslik(ctx, s, SECTION_LABELS.google_search_terms);
+
+    if (ctx.data.searchTerms === null) {
+      s.drawText('Bu müşteride Google Ads bağlantısı yok.', {
+        x: KENAR, y, size: 10, font: ctx.normal, color: GRI,
+      });
+      return;
+    }
+    if (ctx.data.searchTerms.length === 0) {
+      s.drawText('Bu dönemde arama terimi verisi yok.', {
+        x: KENAR, y, size: 10, font: ctx.normal, color: GRI,
+      });
+      return;
+    }
+
+    s.drawText(
+      'Kullanıcıların arama kutusuna yazdığı sorgular. † işaretli olanlar henüz ' +
+        'anahtar kelime ya da negatif olarak tanımlı değil.',
+      { x: KENAR, y, size: 8, font: ctx.normal, color: GRI },
+    );
+    y -= 20;
+
+    for (const t of ctx.data.searchTerms) {
+      if (y < KENAR + 40) break;
+      /*
+       * TANIMSIZ TERİM İŞARETLENİYOR. `NONE` olan bir terim para harcıyor ama
+       * ne anahtar kelime ne negatif olarak tanımlı — raporun en eyleme
+       * dönük satırı bu ve işaretlenmezse diğerlerinin arasında kaybolur.
+       */
+      const isaret = t.status === 'NONE' ? '† ' : '';
+      s.drawText(kirp(`${isaret}${t.term}`, ctx.normal, 9, 250), {
+        x: KENAR, y, size: 9, font: ctx.normal, color: SIYAH,
+      });
+      const sag = `${formatMoney(t.spendMicros, ctx.data.currency)}   ${formatNumber(t.clicks)} tık   ${formatNumber(t.conversions)} dönüşüm`;
+      s.drawText(sag, {
+        x: EN - KENAR - ctx.normal.widthOfTextAtSize(sag, 9),
+        y, size: 9, font: ctx.normal, color: SIYAH,
       });
       y -= 15;
     }

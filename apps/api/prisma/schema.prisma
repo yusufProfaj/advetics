@@ -254,6 +254,7 @@ model Client {
   autoBoostPresets       AutoBoostPreset[]
   autoBoostQueueItems    AutoBoostQueueItem[]
   autoBoostSubscriptions AutoBoostSubscription[]
+  searchTermInsights     SearchTermInsight[]
 
   @@unique([orgId, slug])
   @@index([orgId, status])
@@ -551,22 +552,23 @@ model AdAccount {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization    Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  organization       Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   /// SetNull, Cascade DEĞİL: müşteri silinince hesap ajansın havuzuna GERİ
   /// DÖNER. Cascade olsaydı müşteri silmek ajansın kendi reklam hesabı
   /// kaydını da silerdi.
-  client          Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  connection      PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  boostTargets    SocialProfile[]    @relation("BoostBillingAccount")
-  campaigns       Campaign[]
-  budgets         MonthlyBudget[]
-  rules           Rule[]
-  boosts          Boost[]
-  adDrafts        AdDraft[]
-  draftCampaigns  DraftCampaign[]
-  keywordInsights KeywordInsight[]
-  bulkBatches     BulkBatch[]
-  assetRefs       AssetPlatformRef[]
+  client             Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  connection         PlatformConnection  @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  boostTargets       SocialProfile[]     @relation("BoostBillingAccount")
+  campaigns          Campaign[]
+  budgets            MonthlyBudget[]
+  rules              Rule[]
+  boosts             Boost[]
+  adDrafts           AdDraft[]
+  draftCampaigns     DraftCampaign[]
+  keywordInsights    KeywordInsight[]
+  bulkBatches        BulkBatch[]
+  assetRefs          AssetPlatformRef[]
+  searchTermInsights SearchTermInsight[]
 
   @@unique([platform, externalId, orgId])
   @@index([orgId, clientId])
@@ -806,6 +808,8 @@ enum SyncJobType {
   /// durumunu kapsıyor ve hiçbir kod yolu o durumdan çıkmıyordu. Küresel
   /// tarama, müşteri başına dağılmıyor.
   boost_complete
+  /// Google arama terimleri — kullanıcının yazdığı sorgular.
+  search_terms
 }
 
 enum SyncJobStatus {
@@ -1875,6 +1879,52 @@ model AdDraftAsset {
 ///
 ///   · Meta'da karşılığı YOK. `insights_daily` iki platformu birleştiriyor;
 ///     yalnızca birinde var olan bir seviye o tabloyu asimetrik yapardı.
+/// Arama terimleri — kullanıcının gerçekten YAZDIĞI sorgular.
+///
+/// Anahtar kelime bizim hedeflediğimiz şey; arama terimi kullanıcının
+/// yazdığı şey. Fark tam olarak paranın nereye gittiğini gösteriyor: geniş
+/// eşlemeli bir kelime hiç istemediğimiz sorgulara da gösterim alabiliyor.
+model SearchTermInsight {
+  clientId    String  @map("client_id") @db.Uuid
+  adAccountId String  @map("ad_account_id") @db.Uuid
+  adGroupId   String? @map("ad_group_id") @db.Uuid
+
+  /// Terimin SHA-256'sı. Arama teriminin sabit bir kimliği yok ve metnin
+  /// kendisini birincil anahtara koymak btree anahtar sınırına (~2704 bayt)
+  /// yaklaşıyor; yazma anındaki bir indeks hatası gece koşan bir işin
+  /// sessizce düşmesi demek olurdu.
+  termHash    String  @map("term_hash") @db.Char(64)
+  searchTerm  String  @map("search_term") @db.VarChar(500)
+  /// Terimi getiren anahtar kelime — "hangi kelime bu sorguyu çekti".
+  keywordText String? @map("keyword_text") @db.VarChar(500)
+  matchType   String? @map("match_type") @db.VarChar(20)
+
+  /// ADDED | EXCLUDED | ADDED_EXCLUDED | NONE
+  ///
+  /// ÜRÜN AÇISINDAN EN DEĞERLİ ALAN: `NONE` olan bir terim para harcıyor ama
+  /// ne anahtar kelime ne de negatif olarak tanımlı.
+  status String @default("NONE") @db.VarChar(20)
+
+  date DateTime @db.Date
+
+  impressions           Int     @default(0)
+  clicks                Int     @default(0)
+  spendMicros           BigInt  @default(0) @map("spend_micros")
+  conversions           Decimal @default(0) @db.Decimal(14, 4)
+  conversionValueMicros BigInt  @default(0) @map("conversion_value_micros")
+
+  currency  String   @db.Char(3)
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  @@id([date, adAccountId, termHash])
+  @@index([clientId, date(sort: Desc)])
+  @@index([adAccountId, date(sort: Desc)])
+  @@map("search_term_insights")
+}
+
 model KeywordInsight {
   clientId    String  @map("client_id") @db.Uuid
   adAccountId String  @map("ad_account_id") @db.Uuid

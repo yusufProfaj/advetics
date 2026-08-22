@@ -53,6 +53,7 @@ export const REPORT_SECTIONS = [
   'meta_campaigns',
   'google_campaigns',
   'google_keywords',
+  'google_search_terms',
   'top_ads',
   'closing',
 ] as const;
@@ -64,6 +65,7 @@ export const SECTION_LABELS: Record<ReportSection, string> = {
   meta_campaigns: 'Kampanyalar — Meta Ads',
   google_campaigns: 'Kampanyalar — Google Ads',
   google_keywords: 'Anahtar Kelime Performansı',
+  google_search_terms: 'Arama Terimleri',
   top_ads: 'Öne Çıkan Reklamlar',
   closing: 'Kapanış',
 };
@@ -429,6 +431,33 @@ export interface ReportData {
     clicks: number;
     ctr: number | null;
     cpc: number | null;
+  }>;
+  /**
+   * ARAMA TERİMLERİ — kullanıcının gerçekten YAZDIĞI sorgular.
+   *
+   * `keywords` bizim hedeflediğimiz şey; bu, kullanıcının yazdığı şey. Fark
+   * paranın nereye gittiğini gösteriyor: geniş eşlemeli bir kelime hiç
+   * istemediğimiz sorgulara da gösterim alabiliyor.
+   *
+   * `null` = bu müşteride Google bağlantısı yok (anahtar kelimeyle aynı
+   * kural). Boş dizi = bağlantı var, o dönemde terim yok.
+   */
+  searchTerms: null | Array<{
+    term: string;
+    /** Terimi getiren anahtar kelime. */
+    keyword: string | null;
+    /**
+     * ADDED | EXCLUDED | ADDED_EXCLUDED | NONE
+     *
+     * `NONE` = para harcıyor ama ne anahtar kelime ne negatif olarak
+     * tanımlı. Raporda işaretleniyor: yapılacak iş tam da o satırlarda.
+     */
+    status: string;
+    spendMicros: string;
+    impressions: number;
+    clicks: number;
+    conversions: number;
+    ctr: number | null;
   }>;
   generatedAt: string;
 }

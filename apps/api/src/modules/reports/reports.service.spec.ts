@@ -427,3 +427,109 @@ describe('ReportsService — şablon', () => {
     expect(data.title).not.toBe('Yabancı başlık');
   });
 });
+
+/**
+ * ARAMA TERİMLERİ — kullanıcının gerçekten YAZDIĞI sorgular.
+ *
+ * `keywords` ile aynı `null` kuralı: Google bağlantısı yoksa "bu yetenek
+ * yok" demek için `null`. Boş dizi göstermek "hiç arama yok" demek olurdu.
+ */
+describe('ReportsService — arama terimleri', () => {
+  async function googleHesap(): Promise<void> {
+    await h.q("UPDATE ad_accounts SET platform = 'google', sync_enabled = true WHERE id = $1", [
+      IDS.adAccount,
+    ]);
+  }
+
+  async function terim(over: Record<string, unknown> = {}): Promise<void> {
+    await h.q(
+      `INSERT INTO search_term_insights
+         (client_id, ad_account_id, term_hash, search_term, keyword_text, status,
+          date, impressions, clicks, spend_micros, conversions, conversion_value_micros, currency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8, $9, $10, $11, 0, 'TRY')`,
+      [
+        IDS.client,
+        IDS.adAccount,
+        (over.hash as string) ?? 'h1',
+        (over.term as string) ?? 'urla satılık villa',
+        (over.keyword as string) ?? 'urla villa',
+        (over.status as string) ?? 'NONE',
+        (over.date as string) ?? '2026-08-01',
+        (over.impressions as number) ?? 100,
+        (over.clicks as number) ?? 10,
+        (over.spend as string) ?? '5000000',
+        (over.conversions as number) ?? 1,
+      ],
+    );
+  }
+
+  it('KRİTİK: Google bağlantısı yoksa null — "yetenek yok" ile "veri yok" farklı', async () => {
+    const data = await svc.build(CTX, RANGE);
+    expect(data.searchTerms).toBeNull();
+  });
+
+  it('Google varsa ama terim yoksa BOŞ DİZİ', async () => {
+    await googleHesap();
+    expect((await svc.build(CTX, RANGE)).searchTerms).toEqual([]);
+  });
+
+  it('terimler harcamaya göre sıralı geliyor', async () => {
+    await googleHesap();
+    await terim({ hash: 'h1', term: 'az harcayan', spend: '1000000' });
+    await terim({ hash: 'h2', term: 'çok harcayan', spend: '9000000' });
+    const t = (await svc.build(CTX, RANGE)).searchTerms!;
+    expect(t.map((x) => x.term)).toEqual(['çok harcayan', 'az harcayan']);
+  });
+
+  it('AYNI terim farklı günlerde BİRLEŞİYOR', async () => {
+    // Müşteriye aynı sorguyu iki satır göstermek "aynı şeye iki kez mi para
+    // verdik" sorusunu doğurur.
+    await googleHesap();
+    await terim({ hash: 'h1', date: '2026-08-01', clicks: 10, spend: '5000000' });
+    await terim({ hash: 'h1', date: '2026-08-02', clicks: 4, spend: '2000000' });
+    const t = (await svc.build(CTX, RANGE)).searchTerms!;
+    expect(t).toHaveLength(1);
+    expect(t[0]!.clicks).toBe(14);
+    expect(t[0]!.spendMicros).toBe('7000000');
+  });
+
+  it('KRİTİK: durumda TANIMLI olan kazanıyor — bitmiş iş listede kalmamalı', async () => {
+    /*
+     * Terim bir gün eklenmiş, başka bir gün tanımsız görünmüş olabilir.
+     * "NONE" göstermek kullanıcıyı zaten yaptığı işi tekrar yapmaya iterdi.
+     */
+    await googleHesap();
+    await terim({ hash: 'h1', date: '2026-08-01', status: 'NONE' });
+    await terim({ hash: 'h1', date: '2026-08-02', status: 'ADDED' });
+    expect((await svc.build(CTX, RANGE)).searchTerms![0]!.status).toBe('ADDED');
+  });
+
+  it("KRİTİK: kural ALFABETİK sıraya bağlı DEĞİL", async () => {
+    /*
+     * Bugünkü durum adlarının hepsi ('ADDED', 'EXCLUDED', 'ADDED_EXCLUDED')
+     * alfabetik olarak 'NONE'dan ÖNCE geliyor; yani basit bir `MIN()` de
+     * tesadüfen doğru sonucu veriyor ve ilk yazdığım test bunu ayırt
+     * edemiyordu — mutasyon denemesinde görüldü.
+     *
+     * Google yarın 'UNKNOWN' gibi 'NONE'dan SONRA gelen bir durum eklerse o
+     * tesadüf bozulur ve tanımlı bir terim "tanımsız" görünür. Kural bu
+     * yüzden açıkça "NONE olmayan kazanır" diye yazılı.
+     */
+    await googleHesap();
+    await terim({ hash: 'h1', date: '2026-08-01', status: 'NONE' });
+    await terim({ hash: 'h1', date: '2026-08-02', status: 'UNKNOWN' });
+    expect((await svc.build(CTX, RANGE)).searchTerms![0]!.status).toBe('UNKNOWN');
+  });
+
+  it('gösterim almamış terim listeye GİRMİYOR', async () => {
+    await googleHesap();
+    await terim({ hash: 'h1', impressions: 0, clicks: 0 });
+    expect((await svc.build(CTX, RANGE)).searchTerms).toEqual([]);
+  });
+
+  it('aralık DIŞINDAKİ gün sayılmıyor', async () => {
+    await googleHesap();
+    await terim({ hash: 'h1', date: '2026-09-01' });
+    expect((await svc.build(CTX, RANGE)).searchTerms).toEqual([]);
+  });
+});

@@ -26,13 +26,19 @@ const TARIH_ISTEYENLER = [
   'insights_daily',
   'insights_backfill',
   'keyword_insights',
+  /*
+   * ARAMA TERİMLERİ. Bu satırı eklemeden dal yazılsaydı tarama onu HİÇ
+   * kontrol etmezdi — anahtar kelimelerde tam olarak bu oldu ve veri aylarca
+   * hiç toplanmadı.
+   */
+  'search_terms',
 ] as const;
 
 // Servis yalnızca saf yardımcısı için kuruluyor; hiçbir bağımlılığa
 // dokunulmuyor. `datesForJob` private — `hesap-sahiplenme.spec.ts` ile aynı
 // desen.
 const N = null as never;
-const proc = new SyncProcessorService(N, N, N, N, N, N, N, N, N, N, N, N, N) as unknown as {
+const proc = new SyncProcessorService(N, N, N, N, N, N, N, N, N, N, N, N, N, N) as unknown as {
   datesForJob: (t: string, tz: string) => { from: string; to: string } | undefined;
 };
 
@@ -46,6 +52,12 @@ describe('süpürme tarih aralıkları', () => {
       expect(r!.from <= r!.to).toBe(true);
     });
   }
+
+  it('arama terimleri anahtar kelimelerle AYNI pencereyi kullanıyor', () => {
+    expect(proc.datesForJob('search_terms', 'Europe/Istanbul')).toEqual(
+      proc.datesForJob('keyword_insights', 'Europe/Istanbul'),
+    );
+  });
 
   it('anahtar kelimeler metrik geri düzeltmesiyle AYNI pencereyi kullanıyor', () => {
     // Aynı atıf gecikmesine tabiler; tek gün çekmek kapanmamış dönüşümleri

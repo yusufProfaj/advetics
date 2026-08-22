@@ -268,6 +268,11 @@ export class SyncQueueService implements OnModuleDestroy {
       // Anahtar kelime: günde bir, gece. Rapor aylık okunuyor ve gün içinde
       // tazelemenin karşılığı yok; sabah 4'te dünün verisi hazır oluyor.
       { name: 'sweep:keywords', pattern: '47 4 * * *', jobType: 'keyword_insights' },
+      /*
+       * Anahtar kelimelerden 20 dakika sonra: ikisi de aynı kota katmanında
+       * ve aynı anda koşmaları büyük hesaplarda birbirinin önünü kesiyor.
+       */
+      { name: 'sweep:searchterms', pattern: '7 5 * * *', jobType: 'search_terms' },
       // Modül 7 — boost: GÜNDE İKİ KEZ, saatte bir değil.
       //
       // Organik metrikler yavaş değişiyor ve boost kararı bir gönderi için

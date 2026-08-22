@@ -160,7 +160,7 @@ DECLARE
     -- Modül 4 — reklam oluşturucu
     'ad_drafts', 'ad_draft_assets',
     -- Anahtar kelime performansı
-    'keyword_insights',
+    'keyword_insights', 'search_term_insights',
     -- Modül 8
     'bulk_batches', 'bulk_items',
     -- Formlar kütüphanesi
@@ -1107,6 +1107,20 @@ CREATE POLICY adv_keyword_insights_insert ON keyword_insights
   FOR INSERT WITH CHECK (app.can_access_client(client_id));
 
 CREATE POLICY adv_keyword_insights_update ON keyword_insights
+  FOR UPDATE USING (app.can_access_client(client_id))
+             WITH CHECK (app.can_access_client(client_id));
+
+-- search_term_insights — anahtar kelimeyle AYNI kural.
+--
+-- Arama terimi de senkronizasyondan geliyor; DELETE politikası yok, hesap
+-- silinirse CASCADE ile gidiyor.
+CREATE POLICY adv_search_terms_select ON search_term_insights
+  FOR SELECT USING (app.can_access_client(client_id));
+
+CREATE POLICY adv_search_terms_insert ON search_term_insights
+  FOR INSERT WITH CHECK (app.can_access_client(client_id));
+
+CREATE POLICY adv_search_terms_update ON search_term_insights
   FOR UPDATE USING (app.can_access_client(client_id))
              WITH CHECK (app.can_access_client(client_id));
 
