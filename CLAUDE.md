@@ -189,6 +189,19 @@ buna göre veriliyor:
   pencere = karşılaştırılamayan CPA/ROAS, sıfır hata mesajı. Varsayılanı bile
   olsa açıkça yaz: varsayılan değiştiğinde rakam haber vermeden kayar.
   `meta-attribution.spec.ts` bunu tarıyor.
+- **PDF'TE TÜRKÇE GÖMÜLÜ YAZI TİPİ İSTİYOR.** PDF'in standart yazı tipleri
+  WinAnsi kullanıyor: `ğ ş ı` orada YOK, `₺` (U+20BA) hiç yok. Gömmeden
+  üretilen belgede karakterler sessizce düşüyor ya da kutu oluyor ve bunu ilk
+  gören müşteri oluyor. `apps/api/assets/fonts` altında DejaVu Sans
+  (normal + bold, ~1,4 MB) DEPODA duruyor — npm paketi 22 font taşıyor ve
+  paylaşımlı sunucuda gereksiz yük. Font bulunamazsa AÇIKÇA patlıyor; sessizce
+  standart yazı tipine düşmek en kötü davranış. `pdf-yazi-tipi.spec.ts` hem
+  cmap kapsamını hem "standart yazı tipi bunu ÇİZEMİYOR" kanıtını tutuyor.
+- **`__dirname`'e göre çözülen varlık yolu, `src` ve `dist` DERİNLİĞİNE
+  BAĞLI.** Dosya bir alt dizine taşınırsa geliştirmede hiçbir şey olmuyor
+  (testler `src` altından koşuyor), üretimde varlık bulunamıyor. Derinliği
+  testte sabitle. `process.cwd()` de kullanılamaz: pm2 altında çalışma dizini
+  garanti değil.
 - **TABLO BAŞLIĞI, GÖVDESİ, TOPLAMI VE DİPNOTU TEK LİSTEDEN TÜRETİLİR.**
   Rapor kampanya tablosunda dördü ayrı ayrı elle eşleniyordu ve tek bir
   bayrakla (`showBuckets`) iki sabit sete dallanıyordu. Bir sütun eklenip
