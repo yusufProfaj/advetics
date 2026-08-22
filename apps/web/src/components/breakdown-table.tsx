@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { baglanti } from '@/lib/baglanti';
+import { DeltaRozeti } from '@/components/delta-rozeti';
 import type { MetricsBreakdownRow, MetricLevel } from '@advetics/shared';
 import {
   formatDecimal,
@@ -7,6 +8,7 @@ import {
   formatNumber,
   formatPercent,
   formatRoas,
+  changePercent,
 } from '@/lib/format';
 
 const LEVEL_TABS: Array<{ key: MetricLevel; label: string }> = [
@@ -129,22 +131,33 @@ export function BreakdownTable({
                       </p>
                     )}
                   </td>
+                  {/*
+                    DELTA HÜCRENİN ALTINDA, YENİ SÜTUN DEĞİL.
+                    Tablo zaten sabit genişlikte (min-w-[820px]); altı metrik
+                    için altı ek sütun onu mobilde tamamen yatay kaydırmaya
+                    mahkûm ederdi.
+                  */}
                   <td className="px-3 py-2.5 text-right font-medium tabular-nums text-ink">
                     {/* Satır kendi para birimini taşıyor: karışık para
                         biriminde tek bir sembol göstermek yanlış olurdu. */}
                     {formatMoney(r.spendMicros, currency ?? r.currency)}
+                    <Delta simdi={mikroSayi(r.spendMicros)} once={mikroSayi(r.previous?.spendMicros)} />
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-ink-muted">
                     {formatNumber(r.impressions)}
+                    <Delta simdi={r.impressions} once={r.previous?.impressions} />
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-ink-muted">
                     {formatNumber(r.clicks)}
+                    <Delta simdi={r.clicks} once={r.previous?.clicks} />
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-ink-muted">
                     {formatPercent(r.ctr)}
+                    <Delta simdi={r.ctr} once={r.previous?.ctr} />
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-ink">
                     {formatDecimal(r.conversions, 0)}
+                    <Delta simdi={r.conversions} once={r.previous?.conversions} />
                   </td>
                   <td
                     className={`px-3 py-2.5 text-right tabular-nums text-ink-muted ${
@@ -155,6 +168,8 @@ export function BreakdownTable({
                       r.cpa === null ? null : String(Math.round(r.cpa * 1_000_000)),
                       currency ?? r.currency,
                     )}
+                    {/* CPA'da ARTIŞ KÖTÜ — `inverse`. */}
+                    <Delta simdi={r.cpa} once={r.previous?.cpa} inverse />
                   </td>
                   {showRoas && (
                     <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
@@ -181,4 +196,46 @@ function StatusPill({ status }: { status: string }) {
       {STATUS_LABEL[status] ?? status}
     </span>
   );
+}
+
+/**
+ * Hücrenin altındaki değişim rozeti.
+ *
+ * `changePercent` `null` döndüğünde hiçbir şey basılmıyor: önceki dönem yok
+ * ya da sıfırsa karşılaştırma TANIMSIZ. "%0" ya da "%100" göstermek ikisi de
+ * yanlış olurdu ve yeni açılmış her varlık "-%100" görünürdü.
+ */
+function Delta({
+  simdi,
+  once,
+  inverse,
+}: {
+  simdi: number | null | undefined;
+  once: number | null | undefined;
+  inverse?: boolean;
+}) {
+  if (once === undefined || once === null) return null;
+  /*
+   * `simdi` null olabiliyor (CTR gösterim yoksa, CPA dönüşüm yoksa) ve o
+   * durumda karşılaştırma TANIMSIZ: "önceki dönemde CPA vardı, şimdi
+   * hesaplanamıyor" bir düşüş değil. Sıfır saymak "-%100" gösterirdi.
+   */
+  if (simdi === null || simdi === undefined) return null;
+  const d = changePercent(simdi, once);
+  if (d === null) return null;
+  return (
+    <span className="mt-0.5 block">
+      <DeltaRozeti change={d} inverse={inverse} size="xs" />
+    </span>
+  );
+}
+
+/** Micros string'i sayıya — oran hesabı için; gösterimde kullanılmıyor. */
+function mikroSayi(micros: string | null | undefined): number | null {
+  if (micros === null || micros === undefined) return null;
+  try {
+    return Number(BigInt(micros)) / 1_000_000;
+  } catch {
+    return null;
+  }
 }

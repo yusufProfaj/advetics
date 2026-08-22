@@ -107,7 +107,11 @@ buna göre veriliyor:
 
 - **`Prisma.sql` şablonu içindeki SQL yorumlarında backtick KULLANMA.** Şablonu
   ortasından kapatıyor; hata `TS1005: ';' expected` ve sebebi hiç belli olmuyor.
-  `sql-template.spec.ts` bunu tarıyor.
+  `sql-template.spec.ts` bunu tarıyor. **Kural `--` satırlarıyla sınırlı DEĞİL:
+  `/* */` blok yorumu ve sorgunun üstündeki JSDoc de aynı şablonun içinde.**
+  Bu oturumda üç kez aynı yere düşüldü ve tarama yalnızca `--` baktığı için
+  hiçbirini yakalamadı; TypeScript'in gösterdiği satır her seferinde kusursuz
+  görünen SQL'di.
 - **Yeni tablo ekleyince `test/pglite-harness.ts` içindeki `TRUNCATE` listesine
   ekle.** Yoksa testler arası veri sızar — en yanıltıcı test hatası türü.
 - **Yeni tablo ekleyince `prisma/sql/02_rls.sql` içindeki tablo listesine ve
@@ -380,7 +384,7 @@ okunup varsayılmadı — canlıda doğrulandı.
 
 ### Test
 
-- `pnpm --filter @advetics/api test` — vitest. Şu an **789 API testi**.
+- `pnpm --filter @advetics/api test` — vitest. Şu an **1.715 API testi**.
 - Veritabanına dokunan testler **PGlite** kullanıyor (gerçek Postgres, WASM).
   Şema üretim migration'larından kuruluyor — el yazımı test şeması yok.
 - **RLS testlerde varsayılan olarak KAPALI** (worker rolü BYPASSRLS'i taklit
@@ -394,6 +398,13 @@ okunup varsayılmadı — canlıda doğrulandı.
   edilmemişti, (2) kırpma testi kırpmanın OLDUĞUNU değil yalnızca sonucun
   şeklini kontrol ediyordu, (3) ad set adının hiç testi yoktu. Testi yazdıktan
   sonra ilgili satırı boz, düştüğünü gör, geri al.
+- **KAYNAK TARAMASINDA İDDİA YORUMA DEĞİL KODA ÇAPALANIR.** Bir kuralı test
+  ederken o kuralı ANLATAN yorum da aynı dosyada duruyor ve `toContain` ikisini
+  ayırt etmiyor: `inverse` propunu silmek testi düşürmüyordu, çünkü iki satır
+  yukarıdaki *"CPA'da ARTIŞ KÖTÜ — `inverse`"* yorumu eşleşiyordu. Bu oturumda
+  dört ayrı testte oldu (`showBuckets`, `process.cwd()`, `ad.platform ===
+  'google'`, `inverse`). Dilimi tanımın/elemanın kendisinden başlat
+  (`lastIndexOf('<Delta', i)`) ya da eşleşmeyi tek bir satıra sabitle.
 - Bazı testler **kaynak taraması** yapıyor (`meta-account-path.spec.ts`,
   `google-request.spec.ts`). Canlıda öğrenilen ve birim testiyle
   yakalanamayacak kuralları böyle kilitliyoruz. **Tarama BOŞA DÜŞEBİLİR:**

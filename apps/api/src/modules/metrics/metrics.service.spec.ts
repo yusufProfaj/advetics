@@ -824,3 +824,109 @@ describe('MetricsService', () => {
   });
 
 });
+
+/**
+ * ═══ KIRILIM TABLOSUNDA KARŞILAŞTIRMA ═══
+ *
+ * Özet uçta önceki dönem baştan beri vardı; kırılım tek pencere okuyordu ve
+ * "hangi kampanya arttı, hangisi düştü" sorusu tabloda cevapsızdı.
+ *
+ * Üç kural sessizce bozulabiliyor ve üçü de burada kilitli:
+ *   1. Sıralama CARİ döneme bağlı kalmalı.
+ *   2. Önceki dönemde verisi olmayan varlıkta `previous` NULL olmalı.
+ *   3. Karşılaştırma istenmediğinde ikinci pencere HİÇ okunmamalı.
+ */
+describe('MetricsService — kırılım karşılaştırması', () => {
+  async function kampanya(id: string, ad: string): Promise<void> {
+    await h.q(
+      `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, updated_at)
+       VALUES ($1, $2, $3, 'meta', $4, $5, 'active', 'daily', now())`,
+      [id, IDS.adAccount, IDS.client, `ext-${id.slice(0, 6)}`, ad],
+    );
+  }
+
+  async function metrik(entityId: string, date: string, spend: string, clicks = 10): Promise<void> {
+    await h.q(
+      `INSERT INTO insights_daily
+         (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+          date, breakdown_key, impressions, clicks, spend_micros, conversions,
+          conversion_value_micros, currency, reach)
+       VALUES ($1, $2, 'meta', 'campaign', $3, $4, $5::date, '', 1000, $6, $7, 2, 0, 'TRY', 0)`,
+      [IDS.client, IDS.adAccount, entityId, `ext-${entityId.slice(0, 6)}`, date, clicks, spend],
+    );
+  }
+
+  const SORGU = {
+    from: '2026-08-08',
+    to: '2026-08-14',
+    level: 'campaign' as const,
+    limit: 50,
+    compareFrom: '2026-08-01',
+    compareTo: '2026-08-07',
+  };
+
+  it('KRİTİK: önceki dönem satır bazında dönüyor', async () => {
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000', 20);
+    await metrik(CAMPAIGN_ID, '2026-08-03', '1000000', 10);
+
+    const rows = await svc.breakdown(CTX, SORGU);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.spendMicros).toBe('2000000');
+    expect(rows[0]!.previous?.spendMicros).toBe('1000000');
+    expect(rows[0]!.previous?.clicks).toBe(10);
+  });
+
+  it('KRİTİK: önceki dönemde verisi OLMAYAN varlıkta previous NULL', async () => {
+    // Sıfırlı bir nesne döndürmek YENİ açılmış her kampanyayı "-%100"
+    // gösterirdi.
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000');
+    const rows = await svc.breakdown(CTX, SORGU);
+    expect(rows[0]!.previous).toBeNull();
+  });
+
+  it('KRİTİK: SIRALAMA cari döneme bağlı — yalnızca geçmişte harcayan listeyi kaydırmıyor', async () => {
+    /*
+     * Sıralama toplam pencereye bağlı olsaydı, ÖNCEKİ dönemde çok harcamış
+     * ama şimdi hiç harcamayan bir kampanya listenin başına geçerdi ve
+     * "bu kampanya neden burada, hiç harcaması yok" sorusunu doğururdu.
+     */
+    const ESKI = '77777777-0000-0000-0000-000000000001';
+    await kampanya(ESKI, 'Yalnızca geçmişte');
+    await metrik(ESKI, '2026-08-03', '90000000');
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000');
+
+    const rows = await svc.breakdown(CTX, SORGU);
+    expect(rows[0]!.name).toBe('Kampanya A');
+  });
+
+  it('KRİTİK: karşılaştırma İSTENMEZSE previous NULL ve geçmiş okunmuyor', async () => {
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000');
+    await metrik(CAMPAIGN_ID, '2026-08-03', '1000000');
+
+    const rows = await svc.breakdown(CTX, {
+      from: '2026-08-08',
+      to: '2026-08-14',
+      level: 'campaign',
+      limit: 50,
+    });
+    expect(rows[0]!.previous).toBeNull();
+    // Cari dönem geçmişten ETKİLENMEMELİ: pencere genişleseydi 3.000.000
+    // çıkardı.
+    expect(rows[0]!.spendMicros).toBe('2000000');
+  });
+
+  it('cari dönem toplamı ÖNCEKİ dönemi İÇERMİYOR', async () => {
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000');
+    await metrik(CAMPAIGN_ID, '2026-08-03', '1000000');
+    const rows = await svc.breakdown(CTX, SORGU);
+    expect(rows[0]!.spendMicros).toBe('2000000');
+  });
+
+  it('türetilmiş oranlar önceki dönem için de hesaplanıyor', async () => {
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000', 20);
+    await metrik(CAMPAIGN_ID, '2026-08-03', '1000000', 10);
+    const rows = await svc.breakdown(CTX, SORGU);
+    expect(rows[0]!.previous?.ctr).not.toBeNull();
+    expect(rows[0]!.previous?.cpa).not.toBeNull();
+  });
+});

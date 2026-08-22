@@ -131,13 +131,20 @@ const compareAlanlari = {
   compareTo: isoDate.optional(),
 };
 
-export const metricsQuerySchema = metricsQueryBase.extend(compareAlanlari)
+export const metricsQuerySchema = metricsQueryBase
+  .extend(compareAlanlari)
   .refine(orderOk, ORDER_MSG)
   .refine(spanOk, SPAN_MSG);
 
 export type MetricsQuery = z.infer<typeof metricsQuerySchema>;
 
 export const breakdownQuerySchema = metricsQueryBase
+  /*
+   * KIRILIM DA KARŞILAŞTIRMA ALIYOR. Alanlar tabanda değil burada tekrar
+   * ediliyor gibi görünüyor ama tek tanımdan (`compareAlanlari`) geliyor —
+   * ayrı yazılsalardı panelin iki ucu farklı pencerelerle karşılaştırırdı.
+   */
+  .extend(compareAlanlari)
   .extend({
     level: z.enum(METRIC_LEVELS).default('campaign'),
     limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -253,6 +260,16 @@ export interface MetricsBreakdownRow extends MetricTotals {
   platform: (typeof PLATFORMS)[number];
   status: string;
   currency: string;
+  /**
+   * Önceki dönem — yüzde değişim için.
+   *
+   * `null` = o varlığın önceki dönemde HİÇ verisi yok. Sıfırlı bir nesne
+   * döndürmek her yeni kampanyayı "-%100" gösterirdi; özet uçta aynı kural
+   * zaten var (`hasData`).
+   *
+   * Karşılaştırma istenmediğinde de `null`.
+   */
+  previous: MetricTotals | null;
 }
 
 // -----------------------------------------------------------------------------
