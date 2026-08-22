@@ -14,84 +14,15 @@
  *      kaybediyor; büyük hesaplarda yıllık harcama bu sınıra yaklaşıyor.
  */
 
+export {
+  formatMoney,
+  formatNumber,
+  formatDecimal,
+  formatPercent,
+  formatRoas,
+} from '@advetics/shared';
+
 const TR = 'tr-TR';
-
-/** Para birimi kodu → sembol. Bilinmeyen kod olduğu gibi gösterilir. */
-const SYMBOL: Record<string, string> = {
-  TRY: '₺',
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-};
-
-/**
- * Micros string'i okunabilir paraya çevirir — BIGINT ARİTMETİĞİYLE.
- *
- * `Number` üzerinden geçmek büyük tutarlarda kuruş kaybettiriyor. Tam ve
- * kesirli kısmı BigInt ile ayırıp yalnızca gösterim için birleştiriyoruz.
- */
-export function formatMoney(
-  micros: string | null | undefined,
-  currency: string | null,
-  opts: { compact?: boolean; decimals?: number } = {},
-): string {
-  if (micros === null || micros === undefined) return '—';
-
-  let value: bigint;
-  try {
-    value = BigInt(micros);
-  } catch {
-    return '—';
-  }
-
-  const negative = value < 0n;
-  if (negative) value = -value;
-
-  const whole = value / 1_000_000n;
-  const frac = value % 1_000_000n;
-
-  const symbol = currency ? (SYMBOL[currency] ?? currency) : '';
-  const sign = negative ? '-' : '';
-
-  if (opts.compact) {
-    // Kısa gösterim yalnızca KART BAŞLIKLARI için: 7,6B gibi. Tabloda
-    // kullanılmıyor — orada kuruş farkı önemli.
-    const n = Number(whole);
-    const compact =
-      n >= 1_000_000
-        ? `${(n / 1_000_000).toLocaleString(TR, { maximumFractionDigits: 1 })}M`
-        : n >= 1_000
-          ? `${(n / 1_000).toLocaleString(TR, { maximumFractionDigits: 1 })}B`
-          : n.toLocaleString(TR);
-    return `${sign}${compact}${symbol ? ` ${symbol}` : ''}`;
-  }
-
-  const decimals = opts.decimals ?? 2;
-  const fracText = frac.toString().padStart(6, '0').slice(0, decimals);
-  const wholeText = whole.toLocaleString(TR);
-  const body = decimals > 0 ? `${wholeText},${fracText}` : wholeText;
-  return `${sign}${body}${symbol ? ` ${symbol}` : ''}`;
-}
-
-export function formatNumber(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—';
-  return value.toLocaleString(TR, { maximumFractionDigits: 0 });
-}
-
-export function formatDecimal(value: number | null | undefined, digits = 2): string {
-  if (value === null || value === undefined) return '—';
-  return value.toLocaleString(TR, { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
-export function formatPercent(value: number | null | undefined, digits = 2): string {
-  if (value === null || value === undefined) return '—';
-  return `%${value.toLocaleString(TR, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
-}
-
-export function formatRoas(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—';
-  return `${value.toLocaleString(TR, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×`;
-}
 
 /**
  * Yüzde değişim.

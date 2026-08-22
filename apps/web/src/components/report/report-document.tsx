@@ -5,7 +5,14 @@ import type {
   ReportData,
   ReportPlatformBlock,
 } from '@advetics/shared';
-import { COLUMN_LABELS, CONVERSION_BUCKETS, METRIC_LABELS, type ColumnKey } from '@advetics/shared';
+import {
+  COLUMN_LABELS,
+  CONVERSION_BUCKETS,
+  DEFAULT_COLUMNS,
+  METRIC_LABELS,
+  resolveColumns,
+  type ColumnKey,
+} from '@advetics/shared';
 import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent } from '@/lib/format';
 import { ConversionChart } from './conversion-chart';
@@ -75,7 +82,7 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   from={data.from}
                   to={data.to}
                   secim={data.options.meta_campaigns?.metrics}
-                  varsayilan={VARSAYILAN_SUTUNLAR.meta}
+                  varsayilan={DEFAULT_COLUMNS.meta_campaigns}
                 />
               );
             case 'google_campaigns':
@@ -88,7 +95,7 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   currency={data.currency}
                   rangeDays={data.rangeDays}
                   secim={data.options.google_campaigns?.metrics}
-                  varsayilan={VARSAYILAN_SUTUNLAR.google}
+                  varsayilan={DEFAULT_COLUMNS.google_campaigns}
                 />
               );
             case 'google_keywords':
@@ -297,30 +304,6 @@ const SUTUNLAR: Record<ColumnKey, Sutun> = {
   },
 };
 
-/**
- * VARSAYILAN SÜTUNLAR — şablon seçim taşımadığında.
- *
- * Meta'da form/mesaj var, Google'da YOK: Google `actions` dizisi
- * döndürmüyor ve o sütunlar orada her zaman 0 çıkardı — "hiç form gelmedi"
- * gibi okunurdu.
- */
-const VARSAYILAN_SUTUNLAR = {
-  meta: ['spend', 'impressions', 'reach', 'clicks', 'form', 'message'],
-  google: ['spend', 'impressions', 'reach', 'clicks', 'ctr', 'conversions'],
-} satisfies Record<string, ColumnKey[]>;
-
-/**
- * Şablondan gelen seçimi sütun listesine çevirir.
- *
- * Boş ya da tanınmayan seçim VARSAYILANA dönüyor: kullanıcıya boş bir tablo
- * göstermek, bir ayarı yanlış girdiğini anlamasının en zor yolu.
- */
-function sutunlariCoz(secim: ColumnKey[] | undefined, varsayilan: ColumnKey[]): ColumnKey[] {
-  if (!secim || secim.length === 0) return varsayilan;
-  const gecerli = secim.filter((k) => k in SUTUNLAR);
-  return gecerli.length > 0 ? gecerli : varsayilan;
-}
-
 function CampaignPage({
   title,
   platform,
@@ -343,7 +326,7 @@ function CampaignPage({
   to?: string;
   /** Şablondan gelen sütun seçimi; yoksa `varsayilan` kullanılıyor. */
   secim?: ColumnKey[];
-  varsayilan: ColumnKey[];
+  varsayilan: readonly ColumnKey[];
 }) {
   if (rows.length === 0) {
     return (
@@ -354,7 +337,7 @@ function CampaignPage({
     );
   }
 
-  const sutunlar = sutunlariCoz(secim, varsayilan);
+  const sutunlar = resolveColumns(secim, varsayilan);
   const totals = sumRows(rows);
   // Karışık para biriminde `currency` null geliyor ve `formatMoney` sembol
   // basmıyor — tek bir sembol göstermek yanlış olurdu.

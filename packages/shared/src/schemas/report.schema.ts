@@ -226,6 +226,24 @@ export const COLUMN_LABELS: Record<ColumnKey, string> = {
 
 const COLUMN_KEY_ENUM = z.enum(COLUMN_KEYS as unknown as [ColumnKey, ...ColumnKey[]]);
 
+/**
+ * VARSAYILAN SÜTUNLAR — ŞABLON SEÇİM TAŞIMADIĞINDA.
+ *
+ * PAYLAŞILAN PAKETTE, çünkü iki ayrı yerde render ediliyor: panelin HTML
+ * belgesi ve sunucunun PDF'i. İkisi ayrı listeye baksaydı aynı rapor iki
+ * farklı sütun setiyle çıkardı ve farkı müşteriye giden belgede gören
+ * olurdu — CLAUDE.md: "aynı şeyi üreten ikinci fonksiyon doğduğu anda
+ * ayrışır."
+ *
+ * META'DA FORM/MESAJ VAR, GOOGLE'DA YOK: Google `actions` dizisi
+ * döndürmüyor ve o sütunlar orada her zaman 0 çıkardı — "hiç form gelmedi"
+ * gibi okunurdu.
+ */
+export const DEFAULT_COLUMNS = {
+  meta_campaigns: ['spend', 'impressions', 'reach', 'clicks', 'form', 'message'],
+  google_campaigns: ['spend', 'impressions', 'reach', 'clicks', 'ctr', 'conversions'],
+} as const satisfies Record<string, readonly string[]>;
+
 export const sectionOptionsSchema = z.object({
   /**
    * Bu bölümde gösterilecek sütunlar, SIRASIYLA. Boş dizi = varsayılana dön.
@@ -413,4 +431,22 @@ export interface ReportData {
     cpc: number | null;
   }>;
   generatedAt: string;
+}
+
+/**
+ * Şablondan gelen seçimi sütun listesine çevirir.
+ *
+ * Boş ya da tanınmayan seçim VARSAYILANA dönüyor: kullanıcıya boş bir tablo
+ * göstermek, bir ayarı yanlış girdiğini anlamasının en zor yolu.
+ *
+ * PAYLAŞILAN, çünkü panel ve PDF aynı kararı vermek zorunda.
+ */
+export function resolveColumns(
+  secim: readonly string[] | undefined,
+  varsayilan: readonly string[],
+): ColumnKey[] {
+  const gecerli = (secim ?? []).filter((k): k is ColumnKey =>
+    (COLUMN_KEYS as readonly string[]).includes(k),
+  );
+  return gecerli.length > 0 ? gecerli : [...(varsayilan as readonly ColumnKey[])];
 }

@@ -57,44 +57,18 @@ describe('kampanya tablosu sütunları', () => {
     expect(reach).toContain('toplam: null');
   });
 
-  it('boş/tanınmayan seçim VARSAYILANA dönüyor — boş tablo gösterilmiyor', () => {
-    const bas = KAYNAK.indexOf('function sutunlariCoz(');
-    if (bas === -1) {
-      throw new Error('sutunlariCoz bulunamadı — tarama boşa düştü.');
-    }
-    const f = KAYNAK.slice(bas, KAYNAK.indexOf('\nfunction CampaignPage'));
-    expect(f).toContain('secim.length === 0');
-    expect(f).toContain('k in SUTUNLAR');
-  });
-
-  /**
-   * Varsayılan sütun dizisi — TEK SATIR olarak alınıyor.
-   *
-   * İlk yazımda `indexOf('};')` ile kesiyordum; nesne `} satisfies …` ile
-   * bittiği için o dizge çok ilerideki bir yerde bulunuyor ve dilim
-   * dosyanın yarısını yutuyordu — iddia da kodla ilgisiz biçimde düşüyordu.
-   */
-  function varsayilanSatiri(ad: 'meta' | 'google'): string {
-    const satir = KAYNAK.split('\n').find((l) => l.trim().startsWith(`${ad}: [`));
-    if (!satir) {
-      throw new Error(`${ad} varsayılanı bulunamadı — tarama boşa düştü.`);
-    }
-    return satir;
-  }
-
-  it('KRİTİK: Google varsayılanında form/mesaj YOK', () => {
+  it('belge PAYLAŞILAN çözümleyiciyi ve varsayılanları kullanıyor', () => {
     /*
-     * Google `actions` dizisi döndürmüyor; o sütunlar orada her zaman 0
-     * çıkardı ve "hiç form gelmedi" diye okunurdu.
+     * Sütun kararı `packages/shared` içinde: aynı rapor hem panelde HTML
+     * hem sunucuda PDF olarak render ediliyor ve ikisi AYNI listeye bakmak
+     * zorunda. Belgenin kendi kopyasını tutması, iki farklı sütun setiyle
+     * çıkan bir rapor demek olurdu.
      */
-    const google = varsayilanSatiri('google');
-    expect(google).not.toContain("'form'");
-    expect(google).not.toContain("'message'");
-  });
-
-  it('Meta varsayılanında form ve mesaj VAR', () => {
-    const meta = varsayilanSatiri('meta');
-    expect(meta).toContain("'form'");
-    expect(meta).toContain("'message'");
+    const g = kampanyaGovdesi();
+    expect(g).toContain('resolveColumns(secim, varsayilan)');
+    expect(KAYNAK).toContain('DEFAULT_COLUMNS.meta_campaigns');
+    expect(KAYNAK).toContain('DEFAULT_COLUMNS.google_campaigns');
+    // Yerel bir kopya GERİ GELMEMELİ.
+    expect(KAYNAK).not.toContain('const VARSAYILAN_SUTUNLAR');
   });
 });
