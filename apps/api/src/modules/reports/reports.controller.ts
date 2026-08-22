@@ -3,17 +3,22 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { Res } from '@nestjs/common';
 import {
   reportQuerySchema,
+  reportSendSchema,
+  type ReportMailDraft,
+  type ReportSendInput,
   reportTemplateInputSchema,
   shareInputSchema,
   type ReportTemplateInput,
@@ -29,6 +34,7 @@ import { ReportsService } from './reports.service';
 import { ShareService } from './share.service';
 import { ReportTemplatesService } from './report-templates.service';
 import { RaporPdfService } from './rapor-pdf.service';
+import { RaporGonderService } from './rapor-gonder.service';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -41,6 +47,7 @@ export class ReportsController {
     private readonly pdfService: RaporPdfService,
     private readonly audit: AuditService,
     private readonly prisma: PrismaService,
+    private readonly gonderService: RaporGonderService,
   ) {}
 
   /** Panelden önizleme — oturumlu, RLS'li. */
@@ -112,6 +119,35 @@ export class ReportsController {
     res.setHeader('Content-Disposition', `attachment; filename="${dosyaAdi(data)}"`);
     res.setHeader('Content-Length', String(bayt.byteLength));
     res.send(bayt);
+  }
+
+  /**
+   * MAİL TASLAĞI — sayılar rapordan, anlatı şablondan.
+   *
+   * Sunucu üretip DOĞRUDAN GÖNDERMİYOR: "Urla bölgesindeki konut
+   * aramalarında..." gibi cümleler veriden çıkarılamıyor ve uydurmak
+   * müşteriye yanlış bir strateji anlatmak olurdu. Taslak ekranda
+   * düzenleniyor.
+   */
+  @Get('mail-draft')
+  @RequirePermissions('report.share')
+  mailDraft(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(reportQuerySchema)) query: ReportQuery,
+  ): Promise<ReportMailDraft> {
+    return this.gonderService.taslak(ctx, query);
+  }
+
+  /** Raporu müşteriye gönderir. Doğrulanmamış e-posta kimliğiyle reddediyor. */
+  @Post('send')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('report.share')
+  send(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(reportSendSchema)) dto: ReportSendInput,
+    @Req() req: RequestMeta,
+  ): Promise<{ sent: true; to: string }> {
+    return this.gonderService.gonder(ctx, dto, meta(req));
   }
 
   @Get('templates')

@@ -6,6 +6,7 @@ import { gunEkle, resolveRange, today } from '@/lib/date-range';
 import { TarihSecici } from '@/components/tarih-secici';
 import { ReportDocument } from '@/components/report/report-document';
 import { ShareControls } from '@/components/report/share-controls';
+import { RaporGonder } from '@/components/report/rapor-gonder';
 
 export const metadata = { title: 'Raporlar — Advetics' };
 export const dynamic = 'force-dynamic';
@@ -98,6 +99,18 @@ export default async function ReportsPage({
         </div>
       ) : (
         <>
+          {/*
+            İKİ BLOK, ÜÇ YOL: indir / maille gönder üstte (en sık kullanılan),
+            oturumsuz paylaşım linki altta. Tek bir menüye sıkıştırmak,
+            "hangisi neydi" sorusunu her seferinde sordururdu.
+          */}
+          <RaporGonder
+            clientId={clientId}
+            from={from}
+            to={to}
+            hasData={report.platforms.length > 0}
+          />
+
           <ShareControls
             clientId={clientId}
             from={from}

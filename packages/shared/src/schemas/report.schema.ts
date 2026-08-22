@@ -450,3 +450,38 @@ export function resolveColumns(
   );
   return gecerli.length > 0 ? gecerli : [...(varsayilan as readonly ColumnKey[])];
 }
+
+/**
+ * RAPOR MAİLİ GÖNDERİMİ.
+ *
+ * Gövde İSTEMCİDEN geliyor ve bu bilinçli: taslak sunucuda üretiliyor
+ * (sayılar rapordan), ama anlatı kısmı veriden çıkarılamıyor ve gönderen
+ * kişi göndermeden önce düzenliyor. Sunucu üretip doğrudan göndermek,
+ * kimsenin okumadığı bir mail göndermek olurdu.
+ *
+ * GÖVDE TEMİZLENİYOR: kullanıcının düzenlediği HTML alıcının istemcisinde
+ * açılıyor — imza ile aynı yüzey.
+ */
+export const reportSendSchema = z.object({
+  clientId: z.string().uuid(),
+  from: isoDate,
+  to: isoDate,
+  templateId: z.string().uuid().optional(),
+  /** Alıcı. Boşsa müşterinin `contact_email` alanı kullanılıyor. */
+  to_email: z.string().trim().email().optional(),
+  subject: z.string().trim().min(1).max(300),
+  html: z.string().min(1).max(200_000),
+  /** PDF eki gitsin mi. Kapatmak, yalnızca özet göndermek isteyen için. */
+  attachPdf: z.boolean().default(true),
+});
+export type ReportSendInput = z.infer<typeof reportSendSchema>;
+
+export interface ReportMailDraft {
+  subject: string;
+  html: string;
+  /** Müşterinin kayıtlı iletişim adresi. Yoksa `null` — ekran bunu söylemeli. */
+  defaultTo: string | null;
+  /** Gönderenin e-posta kimliği doğrulanmış mı. Değilse gönderim kapalı. */
+  senderReady: boolean;
+  senderEmail: string | null;
+}
