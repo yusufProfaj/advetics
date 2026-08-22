@@ -134,6 +134,64 @@ function icerik(pdf: Buffer): string {
   return parcalar.join('\n').toLowerCase();
 }
 
+/**
+ * Belgede ÇİZİLMİŞ metinler — her ToUnicode haritasıyla çözülmüş ADAYLAR.
+ *
+ * `iceriyorMu` yalnızca "şu karakter belgede geçiyor mu" diyebiliyor ve bu,
+ * iddiaları karakter numarasına mahkûm ediyordu: bir cümlenin çizildiğini
+ * sınamak için o cümleye özgü bir Türkçe harf aramak gerekiyordu. Burada
+ * glif kimlikleri gerçek metne çevriliyor, yani `toContain('TOPLAM')`
+ * diyebiliyoruz.
+ *
+ * NEDEN HER HARİTAYLA: alt küme gömmede aynı glif kimliği normal ve kalın
+ * fontta FARKLI harfe karşılık geliyor, ve pdf-lib kaynak adını
+ * `DejaVuSans-9742682568` gibi üretiyor — ada bakarak hangi haritanın hangi
+ * fonta ait olduğu güvenilir biçimde çıkarılamıyor. Doğru haritayı seçmeye
+ * çalışmak yerine HEPSİYLE çözüp adayların tamamı döndürülüyor: aranan
+ * dizgenin yanlış bir haritadan tesadüfen çıkması pratikte imkânsız,
+ * yanlış haritayı seçip metni kaçırmak ise kolay (bu dosyayı yazarken oldu).
+ */
+function metinler(pdf: Buffer): string[] {
+  const ham = pdf.toString('latin1');
+  const akislar: string[] = [];
+  const re = /stream\r?\n/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(ham)) !== null) {
+    const bas = m.index + m[0].length;
+    const son = ham.indexOf('endstream', bas);
+    if (son === -1) continue;
+    try {
+      akislar.push(inflateSync(Buffer.from(ham.slice(bas, son), 'latin1')).toString('latin1'));
+    } catch {
+      akislar.push(ham.slice(bas, son));
+    }
+  }
+
+  const haritalar: Array<Map<string, string>> = [];
+  for (const a of akislar) {
+    if (!a.includes('begincmap')) continue;
+    const h = new Map<string, string>();
+    for (const mm of a.matchAll(/<([0-9a-fA-F]{4})>\s*<([0-9a-fA-F]{4,})>/g)) {
+      h.set(mm[1]!.toLowerCase(), String.fromCodePoint(parseInt(mm[2]!.slice(0, 4), 16)));
+    }
+    haritalar.push(h);
+  }
+
+  const out: string[] = [];
+  for (const a of akislar) {
+    if (!a.includes('Tj')) continue;
+    for (const mm of a.matchAll(/<([0-9a-fA-F]+)>\s*Tj/g)) {
+      const hex = mm[1]!;
+      for (const h of haritalar) {
+        let t = '';
+        for (let i = 0; i + 4 <= hex.length; i += 4) t += h.get(hex.slice(i, i + 4).toLowerCase()) ?? '';
+        if (t) out.push(t);
+      }
+    }
+  }
+  return out;
+}
+
 /** Karakterin ToUnicode haritasında geçip geçmediği. */
 function iceriyorMu(pdf: Buffer, karakter: string): boolean {
   const kod = karakter.codePointAt(0)!.toString(16).padStart(4, '0').toLowerCase();
@@ -446,5 +504,144 @@ describe('öne çıkan reklamlar', () => {
     const bos = await svc.uret(veri({ topAds: [] }), { getir: veren });
     // "Bu dönemde harcama yapan reklam yok." — Türkçe metin çizildi.
     expect(iceriyorMu(bos, 'ö')).toBe(true);
+  });
+});
+
+/**
+ * ═══ PDF GÖRSELLİĞİ ═══
+ *
+ * Kullanıcının bildirdiği hâliyle: "pdf çok kötü, grafikleri yok, boş text
+ * gibi geldi". Ölçülünce doğrulandı — `branding` ve `daily` alanları veride
+ * duruyordu ve PDF servisinde SIFIR referansları vardı: marka rengi hiç
+ * kullanılmıyor, günlük seri hiç çizilmiyordu.
+ *
+ * Bu testler o üç kararı kilitliyor: renk kullanılıyor, grafik çiziliyor,
+ * tabloda toplam satırı var.
+ */
+describe('PDF görselliği', () => {
+  const KAYNAK = readFileSync(join(__dirname, 'rapor-pdf.service.ts'), 'utf8');
+
+  function gunluk(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+      date: `2026-07-${String(i + 1).padStart(2, '0')}`,
+      spendMicros: String((i + 1) * 1_000_000),
+      conversionCounts: { form: i % 3, message: 1, purchase: 0 },
+    }));
+  }
+
+  it('KRİTİK: MARKA RENGİ belgeye giriyor', async () => {
+    /*
+     * Beyaz etiketli bir üründe markanın rengi müşteriye giden belgede
+     * görünmüyorsa, ürünün ana vaadi belgede yok demektir. `branding`
+     * alanı veride duruyor ama PDF servisinde HİÇ okunmuyordu.
+     *
+     * Ölçüm renk operatöründen: pdf-lib dolguyu içerik akışına `r g b rg`
+     * olarak yazıyor. #E4572E → 0.894 0.341 0.18.
+     */
+    const pdf = await svc.uret({
+      ...VERI,
+      sections: ['cover'],
+      branding: { ...VERI.branding, primaryColor: '#E4572E', accentColor: '#E4572E' },
+    });
+    expect(icerik(pdf)).toMatch(/0\.89\d+ 0\.34\d+ 0\.18\d* rg/);
+  });
+
+  it('KRİTİK: BOZUK marka rengi PDF üretimini düşürmüyor', async () => {
+    // Renk panelden serbest metin giriliyor; tek bir hatalı karakter
+    // yüzünden müşteriye giden belgenin üretilmemesi kabul edilemez.
+    await expect(
+      svc.uret({
+        ...VERI,
+        sections: ['cover'],
+        branding: { ...VERI.branding, primaryColor: 'mavi', accentColor: '' },
+      }),
+    ).resolves.toBeInstanceOf(Buffer);
+  });
+
+  it('KRİTİK: GÜNLÜK GRAFİK çiziliyor — veri elde dururken atlanmıyor', async () => {
+    /*
+     * `data.daily` panelde grafik olarak gösteriliyordu; PDF onu hiç
+     * kullanmıyordu ve belge yalnızca sayı listesiydi.
+     *
+     * Grafik VEKTÖREL: barlar `re f` (dikdörtgen + dolgu), dönüşüm çizgisi
+     * `S` ile çiziliyor. Grafiksiz özet sayfasında bu operatörler bu
+     * yoğunlukta bulunmuyor.
+     */
+    const ile = await svc.uret({ ...VERI, sections: ['summary'], daily: gunluk(20) });
+    const olmadan = await svc.uret({ ...VERI, sections: ['summary'], daily: [] });
+
+    /*
+     * ÖLÇÜM ÇİZİM OPERATÖRÜNDEN, BOYUTTAN DEĞİL.
+     *
+     * İlk denemem ` re` (dikdörtgen) arıyordu ve BOŞA DÜŞTÜ: pdf-lib
+     * dikdörtgeni `re` ile değil `m`/`l` yol komutlarıyla çiziyor, yani
+     * iddia hiçbir zaman tutmayacaktı. Renk operatörü (`rg`) her dolgu ve
+     * her çizgi için bir kez yazılıyor; yirmi barlık bir grafik onu
+     * belirgin biçimde artırıyor.
+     */
+    const say = (b: Buffer): number => icerik(b).split('rg').length - 1;
+    expect(say(ile) - say(olmadan)).toBeGreaterThan(15);
+    expect(ile.byteLength).toBeGreaterThan(olmadan.byteLength + 300);
+  });
+
+  it('tek günlük seride grafik çizilmiyor', async () => {
+    // Bir gün için grafik tek bir bar demek; kartlar aynı bilgiyi daha
+    // okunur veriyor. Paneldeki kararla aynı.
+    /*
+     * KIYAS BOŞ SERİYLE, ÇOK NOKTALIYLA DEĞİL.
+     *
+     * İlk yazımda 1 nokta ile 20 noktayı karşılaştırıyordum ve koşulu
+     * `> 1`den `> 0`a çeviren mutasyon YAKALANMIYORDU: tek barlı bir grafik
+     * de yirmi barlıdan küçüktür. Doğru kıyas "hiç çizilmemiş" hâl.
+     */
+    const bir = await svc.uret({ ...VERI, sections: ['summary'], daily: gunluk(1) });
+    const bos = await svc.uret({ ...VERI, sections: ['summary'], daily: [] });
+    expect(bir.byteLength).toBe(bos.byteLength);
+  });
+
+  it('KRİTİK: kampanya tablosunda TOPLAM satırı var', async () => {
+    /*
+     * PDF'te toplam HİÇ YOKTU: aynı rapor ekranda toplamlı, müşteriye
+     * giden belgede toplamsız çıkıyordu. "Bu ay ne kadar harcadık"
+     * sorusunun cevabı belgede olmalı.
+     */
+    expect(KAYNAK).toContain('COLUMN_TOTALS[k]');
+    const pdf = await svc.uret({ ...VERI, sections: ['meta_campaigns'] });
+    // İDDİA ÇİZİLEN METNE ÇAPALI: kaynak taraması, blok `if (false)` içine
+    // alındığında da geçiyordu.
+    expect(metinler(pdf)).toContain('TOPLAM');
+  });
+
+  it('KRİTİK: TOPLANAMAYAN sütun toplam satırında BOŞ kalıyor', async () => {
+    /*
+     * Erişimde toplam "iki kat kitle" demek: aynı kişi iki kampanyayı da
+     * görmüş olabilir. Sıfır ya da bir sayı basmak, müşteriye giden belgede
+     * uydurulmuş bir rakam olurdu.
+     *
+     * ÖLÇÜM ÇİZİLEN DİZGE SAYISINDAN: tek sütunlu iki tablo, yalnızca o
+     * sütunun toplanabilir olup olmamasıyla ayrılıyor.
+     */
+    const harcama = await svc.uret({
+      ...VERI,
+      sections: ['meta_campaigns'],
+      options: { meta_campaigns: { metrics: ['spend'] } },
+    });
+    const erisim = await svc.uret({
+      ...VERI,
+      sections: ['meta_campaigns'],
+      options: { meta_campaigns: { metrics: ['reach'] } },
+    });
+    expect(metinler(harcama)).toContain('TOPLAM');
+    expect(metinler(erisim)).toContain('TOPLAM');
+    expect(metinler(harcama).length).toBeGreaterThan(metinler(erisim).length);
+  });
+
+  it('KRİTİK: toplam PANELLE aynı kaynaktan — ikinci defter yok', () => {
+    /*
+     * Toplamı burada ikinci kez yazmak, bir sütun eklenip toplamının
+     * unutulması demekti ve TypeScript hiçbir şey demezdi.
+     */
+    expect(KAYNAK).not.toMatch(/const\s+TOPLAMLAR\s*[:=]/);
+    expect(KAYNAK).toContain("from '@advetics/shared'");
   });
 });

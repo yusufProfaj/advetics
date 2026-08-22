@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { COLUMN_KEYS, COLUMN_TOTALS } from '@advetics/shared';
 
 /**
  * RAPOR TABLOSU SÜTUNLARI — TEK KAYIT DEFTERİ.
@@ -47,14 +48,35 @@ describe('kampanya tablosu sütunları', () => {
     expect(kampanyaGovdesi()).toContain('keys={sutunlar.filter(');
   });
 
-  it('ERİŞİM toplanmıyor — tekil kişi sayısı günler arasında toplanamaz', () => {
-    const bas = KAYNAK.indexOf('const SUTUNLAR:');
-    if (bas === -1) {
-      throw new Error('SUTUNLAR defteri bulunamadı — tarama boşa düştü.');
+  it('KRİTİK: ERİŞİM toplanmıyor — tekil kişi sayısı günler arasında toplanamaz', () => {
+    /*
+     * Aynı kişi iki kampanyayı da görmüş olabilir; toplamak müşteriye iki
+     * kat kitle söylemek olur. Karar artık PAYLAŞILAN pakette ve iddia da
+     * oraya bakıyor — davranışa, kaynak metnine değil.
+     */
+    expect(COLUMN_TOTALS.reach).toBeNull();
+    expect(COLUMN_TOTALS.spend).not.toBeNull();
+  });
+
+  it('KRİTİK: her sütunun toplam kararı VAR — sessiz boşluk yok', () => {
+    /*
+     * Bir sütun eklenip toplamı eklenmediğinde tablo sessizce kayıyor.
+     * `Record<ColumnKey, …>` bunu derlemede yakalıyor; bu test aynı şeyi
+     * koşum anında da kilitliyor (biri tipi gevşetirse).
+     */
+    for (const k of COLUMN_KEYS) {
+      expect(Object.hasOwn(COLUMN_TOTALS, k), `${k} için toplam kararı yok`).toBe(true);
     }
-    const defter = KAYNAK.slice(bas, KAYNAK.indexOf('\nconst VARSAYILAN_SUTUNLAR'));
-    const reach = defter.slice(defter.indexOf('  reach: {'), defter.indexOf('  ctr: {'));
-    expect(reach).toContain('toplam: null');
+  });
+
+  it('KRİTİK: panel toplamın İKİNCİ bir kopyasını tutmuyor', () => {
+    /*
+     * PDF ile panel aynı toplamı göstermek zorunda. Panelde yerel bir
+     * `toplam` defteri varken PDF'te hiç toplam yoktu ve ikisini bağlayan
+     * hiçbir şey yoktu; kopya geri gelirse aynı ayrışma da geri gelir.
+     */
+    expect(KAYNAK).not.toContain('toplam:');
+    expect(KAYNAK).toContain('COLUMN_TOTALS[k]');
   });
 
   it('belge PAYLAŞILAN çözümleyiciyi ve varsayılanları kullanıyor', () => {

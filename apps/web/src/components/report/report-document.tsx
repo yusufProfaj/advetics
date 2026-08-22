@@ -11,6 +11,8 @@ import {
   DEFAULT_COLUMNS,
   METRIC_LABELS,
   resolveColumns,
+  sumRows,
+  COLUMN_TOTALS,
   type ColumnKey,
 } from '@advetics/shared';
 import type { ReactNode } from 'react';
@@ -257,19 +259,16 @@ interface Sutun {
    * Erişim tekil kişi sayısı ve günler arasında toplanamıyor; oraya bir sayı
    * yazmak uydurma olurdu. "—" basılıyor.
    */
-  toplam: ((t: ReturnType<typeof sumRows>, money: string | null) => ReactNode) | null;
 }
 
 const SUTUNLAR: Record<ColumnKey, Sutun> = {
   spend: {
     hucre: (r, m) => formatMoney(r.spendMicros, m, { decimals: 2 }),
-    toplam: (t, m) => formatMoney(t.spendMicros, m, { decimals: 2 }),
   },
   impressions: {
     hucre: (r) => formatNumber(r.impressions),
-    toplam: (t) => formatNumber(t.impressions),
   },
-  clicks: { hucre: (r) => formatNumber(r.clicks), toplam: (t) => formatNumber(t.clicks) },
+  clicks: { hucre: (r) => formatNumber(r.clicks) },
   reach: {
     hucre: (r) => (
       <>
@@ -277,32 +276,25 @@ const SUTUNLAR: Record<ColumnKey, Sutun> = {
         {r.reachIsDailyAverage && <span className="text-slate-400">*</span>}
       </>
     ),
-    toplam: null,
   },
-  ctr: { hucre: (r) => formatPercent(r.ctr), toplam: (t) => formatPercent(t.ctr) },
+  ctr: { hucre: (r) => formatPercent(r.ctr) },
   cpc: {
     hucre: (r, m) => formatMoney(microsOf(r.cpc), m),
-    toplam: (t, m) => formatMoney(microsOf(t.cpc), m),
   },
   cpa: {
     hucre: (r, m) => formatMoney(microsOf(r.cpa), m),
-    toplam: (t, m) => formatMoney(microsOf(t.cpa), m),
   },
   conversions: {
     hucre: (r) => formatNumber(r.conversions),
-    toplam: (t) => formatNumber(t.conversions),
   },
   form: {
     hucre: (r) => formatNumber(r.conversionCounts.form),
-    toplam: (t) => formatNumber(t.counts.form),
   },
   message: {
     hucre: (r) => formatNumber(r.conversionCounts.message),
-    toplam: (t) => formatNumber(t.counts.message),
   },
   purchase: {
     hucre: (r) => formatNumber(r.conversionCounts.purchase),
-    toplam: (t) => formatNumber(t.counts.purchase),
   },
 };
 
@@ -412,7 +404,7 @@ function CampaignPage({
                 sayısı günler arasında toplanamaz.
               */}
               {sutunlar.map((k) => {
-                const t = SUTUNLAR[k].toplam;
+                const t = COLUMN_TOTALS[k];
                 return (
                   <td
                     key={k}
@@ -836,42 +828,13 @@ function platformNames(data: ReportData): string {
 }
 
 /** Kampanya satırlarının toplamı — erişim HARİÇ (toplanamaz). */
-function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: ConversionCounts } {
-  let impressions = 0;
-  let clicks = 0;
-  let spend = 0n;
-  let conversions = 0;
-  let value = 0n;
-  const counts: ConversionCounts = { form: 0, message: 0, purchase: 0 };
-
-  for (const r of rows) {
-    impressions += r.impressions;
-    clicks += r.clicks;
-    spend += BigInt(r.spendMicros);
-    conversions += r.conversions;
-    value += BigInt(r.conversionValueMicros);
-    counts.form += r.conversionCounts.form;
-    counts.message += r.conversionCounts.message;
-    counts.purchase += r.conversionCounts.purchase;
-  }
-
-  const spendUnits = Number(spend) / 1_000_000;
-  const valueUnits = Number(value) / 1_000_000;
-
-  return {
-    impressions,
-    clicks,
-    spendMicros: spend.toString(),
-    conversions,
-    conversionValueMicros: value.toString(),
-    ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
-    cpc: clicks > 0 ? spendUnits / clicks : null,
-    cpm: impressions > 0 ? (spendUnits / impressions) * 1000 : null,
-    cpa: conversions > 0 ? spendUnits / conversions : null,
-    roas: spendUnits > 0 && valueUnits > 0 ? valueUnits / spendUnits : null,
-    counts,
-  };
-}
+/*
+ * `sumRows` VE TOPLAM BİÇİMLERİ ARTIK PAYLAŞILAN PAKETTE.
+ *
+ * Burada yerel bir kopya vardı ve PDF tarafında HİÇ toplam yoktu: aynı
+ * rapor ekranda toplamlı, müşteriye giden belgede toplamsız çıkıyordu.
+ * Tek kaynak, iki gösterimin ayrışmasını imkânsız kılıyor.
+ */
 
 function microsOf(value: number | null): string | null {
   if (value === null) return null;

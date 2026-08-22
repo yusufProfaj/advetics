@@ -364,6 +364,25 @@ buna göre veriliyor:
   `kreatif-gorseli.spec.ts` — mutasyon testi burada iki kez boşa düştü:
   `127.0.0.1` zaten sonek listesinde olmadığı için "reddedildi" iddiası IP
   kontrolü SİLİNDİĞİNDE de geçiyordu; iddia SEBEBE çapalanmak zorunda.
+- **VERİDE DURAN ALAN, KULLANILMIYORSA YOKTUR.** Rapor PDF'i `branding` ve
+  `daily` alanlarını HİÇ okumuyordu (servis içinde sıfır referans): marka
+  rengi kullanılmıyor, panelde grafik olarak görünen günlük seri belgeye hiç
+  çizilmiyordu. Kullanıcının bildirdiği hâli *"pdf çok kötü, grafikleri yok,
+  boş text gibi geldi"*. Beyaz etiketli bir üründe markanın rengi müşteriye
+  giden belgede görünmüyorsa ürünün ana vaadi orada yok demektir. Grafik
+  VEKTÖREL çiziliyor (`pdf-cizim.ts`) — sunucuda görsel üretmek paylaşımlı
+  VPS'te yeni bir ikili bağımlılık demek ve `pdf-lib` tam olarak ondan
+  kaçınmak için seçildi.
+- **PDF TESTİNDE METİN DÜZ ARANAMAZ — ama karakter numarasına da mahkûm
+  değilsin.** Yazı tipi ALT KÜME gömülüyor, çizilen metin belgede glif
+  kimliği olarak duruyor. `rapor-pdf.service.spec.ts` içindeki `metinler()`
+  ToUnicode haritalarını okuyup gerçek dizgeyi çıkarıyor, böylece
+  `toContain('TOPLAM')` denebiliyor. HER haritayla çözüp adayların tamamını
+  döndürüyor: pdf-lib kaynak adını `DejaVuSans-9742682568` gibi ürettiği
+  için hangi haritanın hangi fonta ait olduğu addan çıkarılamıyor ve yanlış
+  haritayı seçmek metni sessizce kaçırıyor. Ayrıca `pdf-lib` dikdörtgeni
+  `re` ile DEĞİL `m`/`l` yol komutlarıyla çiziyor — ` re` arayan bir iddia
+  hiçbir zaman tutmaz.
 - **`pdf-lib` YALNIZCA JPEG ve PNG gömüyor.** Meta thumbnail'ları sık sık
   WebP dönüyor ve `embedJpg` anlaşılmaz bir hata fırlatıp PDF üretiminin
   TAMAMINI düşürüyor. Biçim GÖVDEDEN anlaşılıyor (sihirli baytlar), uzantıdan

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { MetricTotals } from './metrics.schema';
+import { formatMoney, formatNumber, formatPercent } from '../format';
 
 /**
  * Modül 6 — White-label raporlama sözleşmeleri.
@@ -513,4 +514,81 @@ export interface ReportMailDraft {
   /** Gönderenin e-posta kimliği doğrulanmış mı. Değilse gönderim kapalı. */
   senderReady: boolean;
   senderEmail: string | null;
+}
+
+// -----------------------------------------------------------------------------
+// Kampanya tablosu — TOPLAM SATIRI
+//
+// TOPLAMLAR PANELDE VE PDF'TE AYNI YERDEN GELMEK ZORUNDA. Panelin kendi
+// toplam fonksiyonları vardı, PDF'in ise HİÇ toplam satırı yoktu: aynı rapor
+// ekranda toplamlı, müşteriye giden belgede toplamsız çıkıyordu ve iki
+// gösterim arasında bağ kuran hiçbir şey yoktu.
+//
+// Sütun eklenip toplamı eklenmediğinde tablo sessizce kayıyor ve TypeScript
+// hiçbir şey demiyor — `Record<ColumnKey, …>` bunu derleme hatasına çeviriyor.
+// -----------------------------------------------------------------------------
+
+export function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: ConversionCounts } {
+  let impressions = 0;
+  let clicks = 0;
+  let spend = 0n;
+  let conversions = 0;
+  let value = 0n;
+  const counts: ConversionCounts = { form: 0, message: 0, purchase: 0 };
+
+  for (const r of rows) {
+    impressions += r.impressions;
+    clicks += r.clicks;
+    spend += BigInt(r.spendMicros);
+    conversions += r.conversions;
+    value += BigInt(r.conversionValueMicros);
+    counts.form += r.conversionCounts.form;
+    counts.message += r.conversionCounts.message;
+    counts.purchase += r.conversionCounts.purchase;
+  }
+
+  const spendUnits = Number(spend) / 1_000_000;
+  const valueUnits = Number(value) / 1_000_000;
+
+  return {
+    impressions,
+    clicks,
+    spendMicros: spend.toString(),
+    conversions,
+    conversionValueMicros: value.toString(),
+    ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
+    cpc: clicks > 0 ? spendUnits / clicks : null,
+    cpm: impressions > 0 ? (spendUnits / impressions) * 1000 : null,
+    cpa: conversions > 0 ? spendUnits / conversions : null,
+    roas: spendUnits > 0 && valueUnits > 0 ? valueUnits / spendUnits : null,
+    counts,
+  };
+}
+
+/**
+ * Sütun başına TOPLAM biçimi. `null` = toplanamaz.
+ *
+ * `reach` toplanamıyor: aynı kişi iki kampanyayı da görmüş olabilir ve
+ * toplamak müşteriye iki kat kitle söylemek olur.
+ */
+export const COLUMN_TOTALS: Record<
+  ColumnKey,
+  ((t: ReturnType<typeof sumRows>, currency: string | null) => string) | null
+> = {
+  spend: (t, m) => formatMoney(t.spendMicros, m, { decimals: 2 }),
+  impressions: (t) => formatNumber(t.impressions),
+  clicks: (t) => formatNumber(t.clicks),
+  reach: null,
+  ctr: (t) => formatPercent(t.ctr),
+  cpc: (t, m) => formatMoney(microsOf(t.cpc), m),
+  cpa: (t, m) => formatMoney(microsOf(t.cpa), m),
+  conversions: (t) => formatNumber(t.conversions),
+  form: (t) => formatNumber(t.counts.form),
+  message: (t) => formatNumber(t.counts.message),
+  purchase: (t) => formatNumber(t.counts.purchase),
+};
+
+/** Ondalık birimden micros dizgesine — `formatMoney` micros bekliyor. */
+function microsOf(v: number | null): string | null {
+  return v === null ? null : String(Math.round(v * 1_000_000));
 }

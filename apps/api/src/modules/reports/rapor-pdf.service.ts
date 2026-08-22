@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
+import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import {
   COLUMN_LABELS,
+  COLUMN_TOTALS,
   DEFAULT_COLUMNS,
   formatMoney,
   formatNumber,
   formatPercent,
   resolveColumns,
+  sumRows,
   SECTION_LABELS,
   type ColumnKey,
   type ReportCampaignRow,
@@ -15,6 +17,7 @@ import {
 } from '@advetics/shared';
 import { yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
+import { grafik, okunakliYazi, renk } from './pdf-cizim';
 
 /** A4, punto cinsinden. */
 const EN = 595.28;
@@ -74,7 +77,21 @@ export class RaporPdfService {
       ? await this.gorselleriHazirla(doc, data, opts.getir)
       : new Map<string, { img: PDFImage } | { hata: string }>();
 
-    const ctx: Ctx = { doc, normal, kalin, data, gorseller };
+    /*
+     * MARKA RENGİ ARTIK KULLANILIYOR. `branding` alanı veride duruyordu ama
+     * PDF'e hiç geçmiyordu: panelde markasını ayarlayan ajans, müşteriye
+     * giden belgede onu göremiyordu. Beyaz etiketli bir üründe bu, ürünün
+     * ana vaadinin belgede görünmemesi demek.
+     */
+    const ctx: Ctx = {
+      doc,
+      normal,
+      kalin,
+      data,
+      gorseller,
+      ana: renk(data.branding.primaryColor),
+      vurgu: renk(data.branding.accentColor, renk(data.branding.primaryColor)),
+    };
 
     for (const bolum of data.sections) {
       switch (bolum) {
@@ -122,25 +139,61 @@ export class RaporPdfService {
 
   private kapak(ctx: Ctx): void {
     const s = ctx.doc.addPage([EN, BOY]);
-    let y = BOY - 200;
 
+    /*
+     * ÜST BANT — kapağın tek görsel öğesi ve marka rengini taşıyor.
+     *
+     * Öncesinde kapak, beyaz bir sayfada üç satır metindi. "Boş bir Word
+     * belgesi" izlenimi tam olarak oradan başlıyordu: müşteriye gönderilen
+     * dosyanın İLK gördüğü sayfa hiçbir şey söylemiyordu.
+     */
+    s.drawRectangle({ x: 0, y: BOY - 170, width: EN, height: 170, color: ctx.ana });
+    s.drawRectangle({ x: 0, y: BOY - 176, width: EN, height: 6, color: ctx.vurgu });
+
+    const bantYazi = okunakliYazi(ctx.ana);
     s.drawText(ctx.data.client.name, {
       x: KENAR,
-      y,
-      size: 28,
+      y: BOY - 100,
+      size: 26,
       font: ctx.kalin,
-      color: rgb(0.1, 0.1, 0.12),
+      color: bantYazi,
     });
-    y -= 34;
-    s.drawText(ctx.data.title, { x: KENAR, y, size: 16, font: ctx.normal, color: GRI });
-    y -= 26;
+    s.drawText(ctx.data.title, {
+      x: KENAR,
+      y: BOY - 128,
+      size: 13,
+      font: ctx.normal,
+      color: bantYazi,
+      opacity: 0.85,
+    });
+
+    let y = BOY - 230;
     s.drawText(`${gun(ctx.data.from)} — ${gun(ctx.data.to)}`, {
       x: KENAR,
       y,
-      size: 12,
+      size: 14,
+      font: ctx.kalin,
+      color: SIYAH,
+    });
+    y -= 20;
+    s.drawText(`${ctx.data.rangeDays} günlük dönem`, {
+      x: KENAR,
+      y,
+      size: 10,
       font: ctx.normal,
       color: GRI,
     });
+
+    // Alt bilgi ajansın kendi metni — beyaz etiketin bir parçası.
+    if (ctx.data.branding.footerText) {
+      s.drawText(kirp(ctx.data.branding.footerText, ctx.normal, 9, EN - 2 * KENAR), {
+        x: KENAR,
+        y: KENAR + 10,
+        size: 9,
+        font: ctx.normal,
+        color: GRI,
+      });
+    }
   }
 
   private ozet(ctx: Ctx): void {
@@ -158,13 +211,36 @@ export class RaporPdfService {
         ['Dönüşüm', formatNumber(blok.conversions)],
         ['Ort. TBM', formatMoney(mikro(blok.cpc), ctx.data.currency)],
       ];
-      let x = KENAR;
-      for (const [ad, deger] of satirlar) {
-        s.drawText(ad, { x, y, size: 8, font: ctx.normal, color: GRI });
-        s.drawText(deger, { x, y: y - 13, size: 11, font: ctx.kalin, color: SIYAH });
-        x += 104;
-      }
-      y -= 40;
+      /*
+       * KARTLAR — çerçeveli kutular, çıplak metin değil.
+       *
+       * Beş sayı yan yana yazılınca hangisinin hangi etikete ait olduğu
+       * ancak dikkatle okunuyordu; müşteriye giden belgede bu, "özensiz"
+       * izleniminin yarısı. Kutu, gözü sayıya bağlıyor.
+       */
+      const KART_G = (EN - 2 * KENAR - 4 * 8) / 5;
+      const KART_Y = 42;
+      satirlar.forEach(([ad, deger], i) => {
+        const x = KENAR + i * (KART_G + 8);
+        s.drawRectangle({
+          x,
+          y: y - KART_Y + 12,
+          width: KART_G,
+          height: KART_Y,
+          color: rgb(0.97, 0.97, 0.98),
+          borderColor: rgb(0.89, 0.89, 0.91),
+          borderWidth: 0.5,
+        });
+        s.drawText(ad, { x: x + 7, y: y + 1, size: 7.5, font: ctx.normal, color: GRI });
+        s.drawText(kirp(deger, ctx.kalin, 11, KART_G - 14), {
+          x: x + 7,
+          y: y - 15,
+          size: 11,
+          font: ctx.kalin,
+          color: SIYAH,
+        });
+      });
+      y -= KART_Y + 14;
 
       // DÖNÜŞÜM KOVALARI YALNIZCA VARSA. Google'da `actions` dizisi yok ve
       // "0 form" yazmak "hiç form gelmedi" gibi okunur.
@@ -178,6 +254,48 @@ export class RaporPdfService {
         y -= 20;
       }
       y -= 10;
+    }
+
+    /*
+     * GÜNLÜK GRAFİK — VERİ ELDE DURUYORDU AMA HİÇ ÇİZİLMİYORDU.
+     *
+     * `data.daily` panelde grafik olarak gösteriliyor; PDF onu hiç
+     * kullanmıyordu ve müşteriye giden belge yalnızca sayı listesiydi.
+     * Kullanıcının bildirdiği "grafikleri yok, boş text gibi" tam olarak bu.
+     *
+     * Tek günlük aralıkta çizilmiyor: bir gün için grafik tek bir bar
+     * demek ve kartlar aynı bilgiyi zaten daha okunur veriyor.
+     */
+    if (ctx.data.daily.length > 1 && y > KENAR + 140) {
+      y -= 8;
+      s.drawText('Günlük harcama ve dönüşüm', {
+        x: KENAR,
+        y,
+        size: 10,
+        font: ctx.kalin,
+        color: SIYAH,
+      });
+      y -= 22;
+      y = grafik(s, {
+        noktalar: ctx.data.daily,
+        from: ctx.data.from,
+        to: ctx.data.to,
+        x: KENAR,
+        y,
+        genislik: EN - 2 * KENAR,
+        yukseklik: Math.min(150, y - KENAR - 30),
+        barRengi: ctx.ana,
+        cizgiRengi: ctx.vurgu,
+        font: ctx.normal,
+        gri: GRI,
+      });
+      s.drawText('Barlar harcama · çizgi dönüşüm', {
+        x: KENAR,
+        y: y - 2,
+        size: 7.5,
+        font: ctx.normal,
+        color: GRI,
+      });
     }
   }
 
@@ -208,34 +326,66 @@ export class RaporPdfService {
      */
     const sutunlar = resolveColumns(ctx.data.options[bolum]?.metrics, DEFAULT_COLUMNS[bolum]);
 
-    const adGenislik = 170;
+    /*
+     * AD SÜTUNU GENİŞLETİLDİ (170 → 200). Meta kampanya adları uzun ve
+     * anlamlı ("Kampanya B · Web Sitesi Ziyareti (Trafik)"); 170 puntoda
+     * tam da ayırt edici kısım kırpılıyordu ve tabloda iki satır aynı
+     * görünüyordu.
+     */
+    const adGenislik = 200;
     const kalanGenislik = EN - KENAR * 2 - adGenislik;
     const sutunGenislik = kalanGenislik / sutunlar.length;
 
-    // Başlık
-    s.drawText('Kampanya', { x: KENAR, y, size: 7.5, font: ctx.kalin, color: GRI });
+    /*
+     * BAŞLIK BANDI — marka renginde dolgu, üstünde okunaklı yazı.
+     *
+     * Öncesinde başlık gri metindi ve altında ince bir çizgi vardı; tablo
+     * ile üstündeki paragraf birbirine karışıyordu. Bant, tablonun nerede
+     * başladığını tek bakışta söylüyor ve belgeye markanın rengini taşıyan
+     * ikinci öğe.
+     */
+    const BANT = 16;
+    s.drawRectangle({
+      x: KENAR,
+      y: y - 5,
+      width: EN - 2 * KENAR,
+      height: BANT,
+      color: ctx.ana,
+    });
+    const bantYazi = okunakliYazi(ctx.ana);
+    s.drawText('Kampanya', { x: KENAR + 6, y, size: 7.5, font: ctx.kalin, color: bantYazi });
     sutunlar.forEach((k, i) => {
       const metin = COLUMN_LABELS[k];
-      const x = KENAR + adGenislik + (i + 1) * sutunGenislik - ctx.kalin.widthOfTextAtSize(metin, 7.5);
-      s.drawText(metin, { x, y, size: 7.5, font: ctx.kalin, color: GRI });
+      const x =
+        KENAR + adGenislik + (i + 1) * sutunGenislik - ctx.kalin.widthOfTextAtSize(metin, 7.5) - 6;
+      s.drawText(metin, { x, y, size: 7.5, font: ctx.kalin, color: bantYazi });
     });
-    y -= 6;
-    s.drawLine({
-      start: { x: KENAR, y },
-      end: { x: EN - KENAR, y },
-      thickness: 1,
-      color: rgb(0.8, 0.8, 0.82),
-    });
-    y -= 14;
+    y -= BANT + 8;
 
-    for (const r of satirlar) {
+    for (const [sira, r] of satirlar.entries()) {
       // SAYFA TAŞMASI: alt kenara gelince yeni sayfa. Kontrol olmadan
       // satırlar sayfanın dışına çizilir ve PDF hata VERMEZ — sadece
       // görünmezler.
       if (y < KENAR + 40) break;
 
+      /*
+       * ZEBRA — gözün on beş sütunlu bir satırda kaymaması için.
+       * Kampanya adı solda, sayılar sağda; ayırıcı olmadan okuyucu yanlış
+       * satırın rakamını okuyor ve bu, müşteriye giden belgede sessiz bir
+       * yanlış bilgi.
+       */
+      if (sira % 2 === 1) {
+        s.drawRectangle({
+          x: KENAR,
+          y: y - 4,
+          width: EN - 2 * KENAR,
+          height: 14,
+          color: rgb(0.973, 0.973, 0.98),
+        });
+      }
+
       s.drawText(kirp(r.name, ctx.normal, 8.5, adGenislik - 6), {
-        x: KENAR,
+        x: KENAR + 6,
         y,
         size: 8.5,
         font: ctx.normal,
@@ -245,10 +395,53 @@ export class RaporPdfService {
       sutunlar.forEach((k, i) => {
         const metin = hucre(k, r, ctx.data.currency);
         const x =
-          KENAR + adGenislik + (i + 1) * sutunGenislik - ctx.normal.widthOfTextAtSize(metin, 8.5);
+          // SAĞ İÇ BOŞLUK BAŞLIKLA AYNI (6): ayrışırsa sayı sütunu
+          // başlığından bir tık kayıyor ve tablo eğri görünüyor.
+          KENAR + adGenislik + (i + 1) * sutunGenislik - ctx.normal.widthOfTextAtSize(metin, 8.5) - 6;
         s.drawText(metin, { x, y, size: 8.5, font: ctx.normal, color: SIYAH });
       });
       y -= 15;
+    }
+    /*
+     * TOPLAM SATIRI — PANELLE AYNI KAYNAKTAN.
+     *
+     * PDF'te toplam HİÇ YOKTU: aynı rapor ekranda toplamlı, müşteriye giden
+     * belgede toplamsız çıkıyordu. Danışman "bu ay ne kadar harcadık"
+     * sorusunu belgede cevaplayamıyordu.
+     *
+     * `sumRows` ve `COLUMN_TOTALS` artık paylaşılan pakette. Toplamı burada
+     * ikinci kez yazmak, bir sütun eklenip toplamının unutulması demekti ve
+     * TypeScript hiçbir şey demezdi — tablo sessizce kayardı.
+     */
+    if (satirlar.length > 0 && y > KENAR + 24) {
+      const t = sumRows(satirlar);
+      y -= 4;
+      s.drawLine({
+        start: { x: KENAR, y: y + 10 },
+        end: { x: EN - KENAR, y: y + 10 },
+        thickness: 0.8,
+        color: rgb(0.75, 0.75, 0.78),
+      });
+      s.drawText('TOPLAM', { x: KENAR + 6, y, size: 8.5, font: ctx.kalin, color: SIYAH });
+      sutunlar.forEach((k, i) => {
+        // TOPLANAMAYAN SÜTUN BOŞ KALIYOR, sıfır yazılmıyor: erişimde toplam
+        // "iki kat kitle" demek olurdu.
+        const bicim = COLUMN_TOTALS[k];
+        if (!bicim) return;
+        const metin = bicim(t, ctx.data.currency);
+        s.drawText(metin, {
+          x:
+            KENAR +
+            adGenislik +
+            (i + 1) * sutunGenislik -
+            ctx.kalin.widthOfTextAtSize(metin, 8.5) -
+            6,
+          y,
+          size: 8.5,
+          font: ctx.kalin,
+          color: SIYAH,
+        });
+      });
     }
   }
 
@@ -354,6 +547,7 @@ export class RaporPdfService {
       s.drawText(satir, { x: KENAR, y, size: 10, font: ctx.normal, color: SIYAH });
       y -= 15;
     }
+
   }
 
   /**
@@ -620,6 +814,9 @@ interface Ctx {
    * ve hata yalnızca üretilen belgede, boş bir kutu olarak görünüyor.
    */
   gorseller: Map<string, { img: PDFImage } | { hata: string }>;
+  /** Marka renkleri — panelde girilen değerlerden, bozuksa nötre düşüyor. */
+  ana: RGB;
+  vurgu: RGB;
 }
 
 const SIYAH = rgb(0.1, 0.1, 0.12);
