@@ -57,22 +57,33 @@ describe('şablon yönetimi', () => {
     expect(g).toContain('err instanceof ApiRequestError ? err.message');
   });
 
-  it('METRİK SEÇİMİ EKRANDA YOK — belge henüz sütunlarını options’tan kurmuyor', () => {
+  it('SÜTUN SEÇİMİ yalnızca TABLOSU OLAN bölümlerde', () => {
     /*
-     * `options` sunucuda saklanıyor ve rapora ulaşıyor, ama
-     * `report-document.tsx` sütunlarını hâlâ sabit setlerden kuruyor.
-     * Çalışmayan bir seçim kutusu koymak, olmayan bir özellik vaat etmek
-     * olurdu — bu oturumda tam da bu hatayı iki kez düzelttim.
-     *
-     * Belge desteklendiğinde bu test DÜŞECEK ve o zaman kaldırılacak.
+     * Kapak, özet ve kapanışta gösterilecek bir sütun listesi yok; oraya
+     * seçici koymak boş bir vaat olurdu. (Bu test bir süre "metrik seçimi
+     * ekranda YOK" diyordu ve doğruydu: belge sütunlarını sabit setlerden
+     * kuruyordu. Belge artık options'tan kuruyor, iddia da değişti.)
      */
-    expect(KAYNAK).not.toContain('METRIC_LABELS');
-    expect(KAYNAK).not.toContain('METRIC_KEYS');
+    const g = modalGovdesi();
+    expect(g).toContain("s === 'meta_campaigns' || s === 'google_campaigns'");
+    expect(g).toContain('<SutunSecici');
   });
 
-  it('mevcut options düzenlemede KORUNUYOR — ekranda görünmese de kaybolmamalı', () => {
-    // Ekran metrikleri göstermiyor; gövdeye koymasaydık PATCH onları
-    // sessizce boşaltırdı.
-    expect(modalGovdesi()).toContain('options: sablon?.options ?? {}');
+  it('mevcut ayarlar düzenlemede KORUNUYOR — kaydetmek onları boşaltmamalı', () => {
+    const g = modalGovdesi();
+    expect(g).toContain('useState<ReportOptions>(sablon?.options ?? {})');
+    expect(g).toContain('options: ayarlar');
+  });
+
+  it('BOŞ sütun seçimi SAKLANMIYOR — varsayılana dönmeli', () => {
+    // Boş diziyi bir seçim olarak yazmak, bir dahaki açılışta boş tablo
+    // göstermek olurdu.
+    expect(modalGovdesi()).toContain('sutunlar.length === 0 ? {}');
+  });
+
+  it("Google'da form/mesaj seçilirse UYARI çıkıyor", () => {
+    // Google `actions` dizisi döndürmüyor; o sütunlar raporda her zaman 0
+    // görünür ve "hiç form gelmedi" diye okunur.
+    expect(KAYNAK).toContain('Google Ads form ve mesaj dökümü');
   });
 });

@@ -189,6 +189,13 @@ buna göre veriliyor:
   pencere = karşılaştırılamayan CPA/ROAS, sıfır hata mesajı. Varsayılanı bile
   olsa açıkça yaz: varsayılan değiştiğinde rakam haber vermeden kayar.
   `meta-attribution.spec.ts` bunu tarıyor.
+- **TABLO BAŞLIĞI, GÖVDESİ, TOPLAMI VE DİPNOTU TEK LİSTEDEN TÜRETİLİR.**
+  Rapor kampanya tablosunda dördü ayrı ayrı elle eşleniyordu ve tek bir
+  bayrakla (`showBuckets`) iki sabit sete dallanıyordu. Bir sütun eklenip
+  toplamı eklenmediğinde tablo sessizce kayıyor ve TypeScript hiçbir şey
+  demiyor — hepsi ayrı JSX blokları. Her sütun BİR KEZ tanımlanmalı: nasıl
+  okunacağı, nasıl toplanacağı (toplanamıyorsa `null`), dipnot gerektirip
+  gerektirmediği. `rapor-sutunlari.spec.ts`.
 - **BAĞLANTIYI ELLE BİRLEŞTİRME — SÜZGEÇ DÜŞÜYOR.** Panel süzgeçleri URL'de
   taşıyor ve her sekme kendi bağlantısını elle kuruyordu; kırılım sekmesi
   `platform`ı düşürüyordu, yani "Meta" seçip seviye değiştiren kullanıcı

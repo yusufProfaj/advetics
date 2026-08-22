@@ -5,7 +5,8 @@ import type {
   ReportData,
   ReportPlatformBlock,
 } from '@advetics/shared';
-import { CONVERSION_BUCKETS, METRIC_LABELS } from '@advetics/shared';
+import { COLUMN_LABELS, CONVERSION_BUCKETS, METRIC_LABELS, type ColumnKey } from '@advetics/shared';
+import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent } from '@/lib/format';
 import { ConversionChart } from './conversion-chart';
 
@@ -73,7 +74,8 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   daily={data.daily}
                   from={data.from}
                   to={data.to}
-                  showBuckets
+                  secim={data.options.meta_campaigns?.metrics}
+                  varsayilan={VARSAYILAN_SUTUNLAR.meta}
                 />
               );
             case 'google_campaigns':
@@ -85,6 +87,8 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   rows={data.googleCampaigns}
                   currency={data.currency}
                   rangeDays={data.rangeDays}
+                  secim={data.options.google_campaigns?.metrics}
+                  varsayilan={VARSAYILAN_SUTUNLAR.google}
                 />
               );
             case 'google_keywords':
@@ -222,6 +226,101 @@ function SummaryBlock({
   );
 }
 
+/**
+ * ═══ KAMPANYA TABLOSU SÜTUNLARI — TEK KAYIT DEFTERİ ═══
+ *
+ * Başlık satırı, gövde hücreleri, TOPLAM satırı ve dipnotlar bir süre AYRI
+ * AYRI elle eşleniyordu ve tek bir bayrakla (`showBuckets`) iki sabit sete
+ * dallanıyordu. Üç yerde elle eşlenen bir liste, birinin güncellenmemesi
+ * hâlinde tablo başlığı ile toplam satırının sessizce ayrışması demek — ve
+ * TypeScript bunu söylemiyor, çünkü hepsi ayrı JSX blokları.
+ *
+ * Artık her sütun BİR KEZ tanımlı: nasıl okunacağı, nasıl toplanacağı ve
+ * dipnot gerektirip gerektirmediği. Şablondan gelen seçim bu defterden
+ * sütunları seçiyor.
+ */
+interface Sutun {
+  /** Sağa hizalı sayı sütunu mu (ad sütunu hariç hepsi öyle). */
+  hucre: (r: ReportCampaignRow, money: string | null) => ReactNode;
+  /**
+   * TOPLAM satırındaki değer. `null` = TOPLANAMAZ.
+   *
+   * Erişim tekil kişi sayısı ve günler arasında toplanamıyor; oraya bir sayı
+   * yazmak uydurma olurdu. "—" basılıyor.
+   */
+  toplam: ((t: ReturnType<typeof sumRows>, money: string | null) => ReactNode) | null;
+}
+
+const SUTUNLAR: Record<ColumnKey, Sutun> = {
+  spend: {
+    hucre: (r, m) => formatMoney(r.spendMicros, m, { decimals: 2 }),
+    toplam: (t, m) => formatMoney(t.spendMicros, m, { decimals: 2 }),
+  },
+  impressions: {
+    hucre: (r) => formatNumber(r.impressions),
+    toplam: (t) => formatNumber(t.impressions),
+  },
+  clicks: { hucre: (r) => formatNumber(r.clicks), toplam: (t) => formatNumber(t.clicks) },
+  reach: {
+    hucre: (r) => (
+      <>
+        {formatNumber(r.reach)}
+        {r.reachIsDailyAverage && <span className="text-slate-400">*</span>}
+      </>
+    ),
+    toplam: null,
+  },
+  ctr: { hucre: (r) => formatPercent(r.ctr), toplam: (t) => formatPercent(t.ctr) },
+  cpc: {
+    hucre: (r, m) => formatMoney(microsOf(r.cpc), m),
+    toplam: (t, m) => formatMoney(microsOf(t.cpc), m),
+  },
+  cpa: {
+    hucre: (r, m) => formatMoney(microsOf(r.cpa), m),
+    toplam: (t, m) => formatMoney(microsOf(t.cpa), m),
+  },
+  conversions: {
+    hucre: (r) => formatNumber(r.conversions),
+    toplam: (t) => formatNumber(t.conversions),
+  },
+  form: {
+    hucre: (r) => formatNumber(r.conversionCounts.form),
+    toplam: (t) => formatNumber(t.counts.form),
+  },
+  message: {
+    hucre: (r) => formatNumber(r.conversionCounts.message),
+    toplam: (t) => formatNumber(t.counts.message),
+  },
+  purchase: {
+    hucre: (r) => formatNumber(r.conversionCounts.purchase),
+    toplam: (t) => formatNumber(t.counts.purchase),
+  },
+};
+
+/**
+ * VARSAYILAN SÜTUNLAR — şablon seçim taşımadığında.
+ *
+ * Meta'da form/mesaj var, Google'da YOK: Google `actions` dizisi
+ * döndürmüyor ve o sütunlar orada her zaman 0 çıkardı — "hiç form gelmedi"
+ * gibi okunurdu.
+ */
+const VARSAYILAN_SUTUNLAR = {
+  meta: ['spend', 'impressions', 'reach', 'clicks', 'form', 'message'],
+  google: ['spend', 'impressions', 'reach', 'clicks', 'ctr', 'conversions'],
+} satisfies Record<string, ColumnKey[]>;
+
+/**
+ * Şablondan gelen seçimi sütun listesine çevirir.
+ *
+ * Boş ya da tanınmayan seçim VARSAYILANA dönüyor: kullanıcıya boş bir tablo
+ * göstermek, bir ayarı yanlış girdiğini anlamasının en zor yolu.
+ */
+function sutunlariCoz(secim: ColumnKey[] | undefined, varsayilan: ColumnKey[]): ColumnKey[] {
+  if (!secim || secim.length === 0) return varsayilan;
+  const gecerli = secim.filter((k) => k in SUTUNLAR);
+  return gecerli.length > 0 ? gecerli : varsayilan;
+}
+
 function CampaignPage({
   title,
   platform,
@@ -231,7 +330,8 @@ function CampaignPage({
   daily,
   from,
   to,
-  showBuckets = false,
+  secim,
+  varsayilan,
 }: {
   title: string;
   platform: string;
@@ -241,7 +341,9 @@ function CampaignPage({
   daily?: ReportData['daily'];
   from?: string;
   to?: string;
-  showBuckets?: boolean;
+  /** Şablondan gelen sütun seçimi; yoksa `varsayilan` kullanılıyor. */
+  secim?: ColumnKey[];
+  varsayilan: ColumnKey[];
 }) {
   if (rows.length === 0) {
     return (
@@ -252,6 +354,7 @@ function CampaignPage({
     );
   }
 
+  const sutunlar = sutunlariCoz(secim, varsayilan);
   const totals = sumRows(rows);
   // Karışık para biriminde `currency` null geliyor ve `formatMoney` sembol
   // basmıyor — tek bir sembol göstermek yanlış olurdu.
@@ -276,21 +379,11 @@ function CampaignPage({
           <thead>
             <tr className="border-b-2 border-slate-300 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
               <th className="py-2 pr-3">Kampanya Adı</th>
-              <th className="px-2 py-2 text-right">Harcama</th>
-              <th className="px-2 py-2 text-right">Gösterim</th>
-              <th className="px-2 py-2 text-right">Erişim</th>
-              <th className="px-2 py-2 text-right">Tıklama</th>
-              {showBuckets ? (
-                <>
-                  <th className="px-2 py-2 text-right">Form</th>
-                  <th className="py-2 pl-2 text-right">Mesaj</th>
-                </>
-              ) : (
-                <>
-                  <th className="px-2 py-2 text-right">{METRIC_LABELS.ctr.label}</th>
-                  <th className="py-2 pl-2 text-right">Dönüşüm</th>
-                </>
-              )}
+              {sutunlar.map((k) => (
+                <th key={k} className="px-2 py-2 text-right">
+                  {COLUMN_LABELS[k]}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -309,36 +402,16 @@ function CampaignPage({
                     )}
                   </span>
                 </td>
-                <td className="px-2 py-2.5 text-right font-semibold tabular-nums">
-                  {formatMoney(r.spendMicros, money, { decimals: 2 })}
-                </td>
-                <td className="px-2 py-2.5 text-right tabular-nums">
-                  {formatNumber(r.impressions)}
-                </td>
-                <td className="px-2 py-2.5 text-right tabular-nums">
-                  {formatNumber(r.reach)}
-                  {r.reachIsDailyAverage && <span className="text-slate-400">*</span>}
-                </td>
-                <td className="px-2 py-2.5 text-right tabular-nums">{formatNumber(r.clicks)}</td>
-                {showBuckets ? (
-                  <>
-                    <td className="px-2 py-2.5 text-right tabular-nums">
-                      {formatNumber(r.conversionCounts.form)}
-                    </td>
-                    <td className="py-2.5 pl-2 text-right tabular-nums">
-                      {formatNumber(r.conversionCounts.message)}
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-2 py-2.5 text-right tabular-nums">
-                      {formatPercent(r.ctr)}
-                    </td>
-                    <td className="py-2.5 pl-2 text-right tabular-nums">
-                      {formatNumber(r.conversions)}
-                    </td>
-                  </>
-                )}
+                {sutunlar.map((k) => (
+                  <td
+                    key={k}
+                    className={`px-2 py-2.5 text-right tabular-nums ${
+                      k === 'spend' ? 'font-semibold' : ''
+                    }`}
+                  >
+                    {SUTUNLAR[k].hucre(r, money)}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -347,34 +420,25 @@ function CampaignPage({
               <td className="py-2.5 pr-3 text-[11px] uppercase tracking-wide text-slate-500">
                 Genel toplam
               </td>
-              <td className="px-2 py-2.5 text-right tabular-nums">
-                {formatMoney(totals.spendMicros, money, { decimals: 2 })}
-              </td>
-              <td className="px-2 py-2.5 text-right tabular-nums">
-                {formatNumber(totals.impressions)}
-              </td>
-              {/* Erişim TOPLANMIYOR: tekil kullanıcı sayısı toplanamaz. */}
-              <td className="px-2 py-2.5 text-right text-slate-400">—</td>
-              <td className="px-2 py-2.5 text-right tabular-nums">{formatNumber(totals.clicks)}</td>
-              {showBuckets ? (
-                <>
-                  <td className="px-2 py-2.5 text-right tabular-nums">
-                    {formatNumber(totals.counts.form)}
+              {/*
+                TOPLAM SATIRI BAŞLIKLARLA AYNI LİSTEDEN. Ayrı yazıldığında
+                sütun eklenip toplamı eklenmeyince tablo sessizce kayıyordu.
+                `toplam === null` olan sütun (erişim) "—" basıyor: tekil kişi
+                sayısı günler arasında toplanamaz.
+              */}
+              {sutunlar.map((k) => {
+                const t = SUTUNLAR[k].toplam;
+                return (
+                  <td
+                    key={k}
+                    className={`px-2 py-2.5 text-right ${
+                      t === null ? 'text-slate-400' : 'tabular-nums'
+                    }`}
+                  >
+                    {t === null ? '—' : t(totals, money)}
                   </td>
-                  <td className="py-2.5 pl-2 text-right tabular-nums">
-                    {formatNumber(totals.counts.message)}
-                  </td>
-                </>
-              ) : (
-                <>
-                  <td className="px-2 py-2.5 text-right tabular-nums">
-                    {formatPercent(totals.ctr)}
-                  </td>
-                  <td className="py-2.5 pl-2 text-right tabular-nums">
-                    {formatNumber(totals.conversions)}
-                  </td>
-                </>
-              )}
+                );
+              })}
             </tr>
           </tfoot>
         </table>
@@ -386,8 +450,14 @@ function CampaignPage({
         </div>
       )}
 
+      {/*
+        DİPNOTLAR DA AYNI LİSTEDEN. Eskiden her çağrı yerinde elle yazılıydı:
+        tabloda olmayan bir metriğin dipnotu basılıyor, olan birininki
+        eksik kalıyordu.
+      */}
       <Footnotes
-        keys={showBuckets ? ['ctr', 'cpc'] : ['ctr', 'cpc', 'cpa']}
+        keys={sutunlar.filter((k): k is keyof typeof METRIC_LABELS => k in METRIC_LABELS)}
+        buckets={sutunlar.some((k) => k === 'form' || k === 'message')}
         extra={[
           anyAverage
             ? '* Erişim tekil kişi sayısıdır ve günler arasında toplanamaz; bu sütun günlük ortalamayı gösterir.'
@@ -400,7 +470,6 @@ function CampaignPage({
         ]
           .filter((v): v is string => v !== null)
           .join('\n')}
-        buckets={showBuckets}
       />
     </section>
   );

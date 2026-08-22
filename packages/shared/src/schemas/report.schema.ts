@@ -204,20 +204,44 @@ export type BucketKey = (typeof BUCKET_KEYS)[number];
  * geçmiyor. `auto_boost_presets.settings` deseni — bilinmeyen bir anahtarı
  * sessizce taşımak, ekranda "hazır" görünen bozuk bir kayıt üretir.
  */
+/**
+ * SÜTUN ANAHTARLARI — metrikler VE dönüşüm kovaları TEK LİSTEDE.
+ *
+ * İkisini ayrı alanlarda tutmak (`metrics` + `buckets`) kullanıcıya sütun
+ * SIRASINI seçtirmiyordu: "Form"u "Tıklama"nın önüne almak imkânsız olurdu.
+ * Tek sıralı liste hem seçimi hem sırayı taşıyor.
+ */
+export const COLUMN_KEYS = [...METRIC_KEYS, ...BUCKET_KEYS] as const;
+export type ColumnKey = (typeof COLUMN_KEYS)[number];
+
+/** Sütun başlıkları — `METRIC_LABELS` ve kova etiketleri tek haritada. */
+export const COLUMN_LABELS: Record<ColumnKey, string> = {
+  ...(Object.fromEntries(
+    METRIC_KEYS.map((k) => [k, METRIC_LABELS[k].label]),
+  ) as Record<MetricKey, string>),
+  ...(Object.fromEntries(
+    BUCKET_KEYS.map((k) => [k, CONVERSION_BUCKETS[k].label]),
+  ) as Record<BucketKey, string>),
+};
+
+const COLUMN_KEY_ENUM = z.enum(COLUMN_KEYS as unknown as [ColumnKey, ...ColumnKey[]]);
+
 export const sectionOptionsSchema = z.object({
   /**
-   * Bu bölümde gösterilecek metrikler. Boş dizi = varsayılana dön.
+   * Bu bölümde gösterilecek sütunlar, SIRASIYLA. Boş dizi = varsayılana dön.
    *
    * `undefined` ile boş dizi AYNI ŞEY DEĞİL: kullanıcı hepsini kaldırdıysa
    * bunu bir seçim olarak saklamak, bir dahaki açılışta boş bir tablo
    * göstermek olurdu. Boş kalan bölüm varsayılan sütunlarına dönüyor ve bu
    * ekranda yazılı.
    */
-  metrics: z.array(METRIC_KEY_ENUM).max(METRIC_KEYS.length).optional(),
+  metrics: z
+    .array(COLUMN_KEY_ENUM)
+    .max(COLUMN_KEYS.length)
+    .refine((a) => new Set(a).size === a.length, 'Aynı sütun iki kez eklenemez')
+    .optional(),
   /** Kaç satır gösterilecek (kampanya/kelime/reklam tabloları). */
   limit: z.number().int().min(1).max(100).optional(),
-  /** Meta dönüşüm kovaları (form/mesaj/satış) sütun olarak gösterilsin mi. */
-  buckets: z.array(z.enum(BUCKET_KEYS)).optional(),
 });
 export type SectionOptions = z.infer<typeof sectionOptionsSchema>;
 
