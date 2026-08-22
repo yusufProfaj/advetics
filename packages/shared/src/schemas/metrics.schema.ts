@@ -251,6 +251,24 @@ export interface MetricsTimeseriesPoint extends MetricTotals {
   date: string;
 }
 
+/**
+ * Zaman serisi — cari dönem ve (istenmişse) karşılaştırma dönemi.
+ *
+ * DÜZ DİZİ DEĞİL, İKİ DİZİ. Karşılaştırma penceresinin TARİHLERİ farklı;
+ * hepsini tek diziye koymak, grafiği çizen tarafı "bu nokta hangi döneme
+ * ait" sorusunu tarih aralığından tekrar türetmeye zorlardı — ve o türetme
+ * iki yerde birden yazılınca ayrışır.
+ *
+ * `previous` NULL: karşılaştırma kapalı. Boş dizi DEĞİL — "karşılaştırma
+ * istenmedi" ile "istendi ama o dönemde hiç veri yok" farklı iki şey ve
+ * grafiğin ikincisinde efsanede önceki dönemi GÖSTERMESİ, birincisinde
+ * göstermemesi gerekiyor.
+ */
+export interface MetricsTimeseries {
+  points: MetricsTimeseriesPoint[];
+  previous: MetricsTimeseriesPoint[] | null;
+}
+
 export interface MetricsBreakdownRow extends MetricTotals {
   entityId: string;
   entityExternalId: string;

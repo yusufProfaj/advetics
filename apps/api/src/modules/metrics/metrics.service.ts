@@ -8,7 +8,7 @@ import type {
   MetricsBreakdownRow,
   MetricsQuery,
   MetricsSummary,
-  MetricsTimeseriesPoint,
+  MetricsTimeseries,
   Platform,
   ReachKind,
   TenantContext,
@@ -235,7 +235,24 @@ export class MetricsService {
     });
   }
 
-  async timeseries(ctx: TenantContext, query: MetricsQuery): Promise<MetricsTimeseriesPoint[]> {
+  /**
+   * Günlük seri — cari dönem ve (istenmişse) karşılaştırma dönemi.
+   *
+   * TEK TARAMA, İKİ PENCERE. Karşılaştırma dönemi cari döneme BİTİŞİK
+   * (`compareTo = from - 1 gün`), yani tek bir `BETWEEN` ikisini birden
+   * kapsıyor. İkinci bir sorgu açmak aynı partition'ları ikinci kez taramak
+   * olurdu; `insights_daily` tarihe göre bölümlenmiş ve pencere zaten
+   * bitişik olduğu için ek maliyeti yok.
+   *
+   * AYRIM SUNUCUDA YAPILIYOR. İki pencereyi tek dizide döndürüp "hangisi
+   * hangi dönem" sorusunu grafiğe bırakmak, aynı sınırı iki yerde birden
+   * hesaplamak demekti — ve bir gün kayan bir sınır hiçbir hata vermeden
+   * yanlış bir "%18 arttı" üretirdi.
+   */
+  async timeseries(ctx: TenantContext, query: MetricsQuery): Promise<MetricsTimeseries> {
+    const karsilastir = query.compareFrom !== undefined && query.compareTo !== undefined;
+    const pencereBasi = karsilastir ? query.compareFrom! : query.from;
+
     return this.prisma.withTenant(ctx, async (tx) => {
       const rows = await tx.$queryRaw<Array<RawTotals & { date: Date }>>(
         Prisma.sql`
@@ -246,7 +263,7 @@ export class MetricsService {
                  SUM(conversions) AS conversions,
                  SUM(conversion_value_micros) AS conversion_value_micros
           FROM insights_daily
-          WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
+          WHERE date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND entity_level = ${TOTALS_LEVEL}::"EntityLevel"
             ${this.filters(query)}
           GROUP BY date
@@ -254,12 +271,25 @@ export class MetricsService {
         `,
       );
 
-      return rows.map((r) => ({
+      const noktalar = rows.map((r) => ({
         // `toISOString().slice(0,10)` DEĞİL: Postgres DATE'i sürücü yerel
         // gece yarısı olarak veriyor ve UTC'ye çevirmek günü kaydırıyor.
         date: this.dateText(r.date),
         ...this.totals(r),
       }));
+
+      if (!karsilastir) return { points: noktalar, previous: null };
+
+      /*
+       * SINIR TARİH DİZGESİYLE KIYASLANIYOR, Date ile değil. Tarihler bu
+       * projede `YYYY-MM-DD` string ve o biçimde sözlük sırası = kronolojik
+       * sıra. `Date`e çevirmek saat dilimi kayması üretiyor — aynı hata bu
+       * kod tabanında birkaç kez yaşandı.
+       */
+      return {
+        points: noktalar.filter((p) => p.date >= query.from),
+        previous: noktalar.filter((p) => p.date < query.from),
+      };
     });
   }
 

@@ -4,7 +4,7 @@ import type {
   Platform,
   MetricsBreakdownRow,
   MetricsSummary,
-  MetricsTimeseriesPoint,
+  MetricsTimeseries,
 } from '@advetics/shared';
 import { METRIC_LEVELS } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
@@ -119,8 +119,8 @@ export default async function DashboardPage({
     serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch(() => null),
     // Tek günlük aralıkta grafik çizilmiyor; sorguyu da atlıyoruz.
     range.days > 1
-      ? serverApiFetch<MetricsTimeseriesPoint[]>(`/metrics/timeseries?${base}`).catch(() => null)
-      : Promise.resolve<MetricsTimeseriesPoint[]>([]),
+      ? serverApiFetch<MetricsTimeseries>(`/metrics/timeseries?${base}`).catch(() => null)
+      : Promise.resolve<MetricsTimeseries>({ points: [], previous: null }),
     serverApiFetch<MetricsBreakdownRow[]>(`/metrics/breakdown?${breakdownQs}`).catch(() => null),
   ]);
 
@@ -213,9 +213,12 @@ export default async function DashboardPage({
               <Notice tone="error">Grafik verisi alınamadı.</Notice>
             ) : (
               <MetricsChart
-                points={series}
+                points={series.points}
+                previous={series.previous}
                 from={range.from}
                 to={range.to}
+                compareFrom={range.compareFrom}
+                compareTo={range.compareTo}
                 currency={summary.currency}
               />
             ))}

@@ -503,7 +503,7 @@ describe('MetricsService', () => {
         clicks: 1,
         conversions: 0,
       });
-      const points = await svc.timeseries(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      const { points } = await svc.timeseries(CTX, { from: '2026-08-05', to: '2026-08-05' });
       expect(points).toHaveLength(1);
       expect(points[0]!.date).toBe('2026-08-05');
     });
@@ -522,7 +522,7 @@ describe('MetricsService', () => {
           conversions: 0,
         });
       }
-      const points = await svc.timeseries(CTX, { from: '2026-08-03', to: '2026-08-05' });
+      const { points } = await svc.timeseries(CTX, { from: '2026-08-03', to: '2026-08-05' });
       expect(points.map((p) => p.date)).toEqual(['2026-08-03', '2026-08-04', '2026-08-05']);
       expect(points.map((p) => p.spendMicros)).toEqual(['3000000', '4000000', '5000000']);
     });
@@ -538,8 +538,134 @@ describe('MetricsService', () => {
         clicks: 0,
         conversions: 0,
       });
-      const points = await svc.timeseries(CTX, { from: '2026-08-01', to: '2026-08-05' });
+      const { points } = await svc.timeseries(CTX, { from: '2026-08-01', to: '2026-08-05' });
       expect(points).toHaveLength(1);
+    });
+
+    it('KRİTİK: karşılaştırma kapalıyken `previous` NULL — boş dizi DEĞİL', async () => {
+      /*
+       * İKİSİ FARKLI İKİ ŞEY. `null` "karşılaştırma istenmedi"; boş dizi
+       * "istendi ama o dönemde hiç veri yok". Grafik ikincisinde efsanede
+       * önceki dönemi GÖSTERMEK, birincisinde göstermemek zorunda — aynı
+       * boş hâle çevirmek bu projenin tekrar eden hatası.
+       */
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000',
+        impressions: 1,
+        clicks: 0,
+        conversions: 0,
+      });
+      const res = await svc.timeseries(CTX, { from: '2026-08-01', to: '2026-08-05' });
+      expect(res.previous).toBeNull();
+    });
+
+    it('KRİTİK: karşılaştırma açıkken iki pencere AYRI dönüyor', async () => {
+      for (const [date, spend] of [
+        ['2026-07-30', '7000000'],
+        ['2026-07-31', '8000000'],
+        ['2026-08-01', '1000000'],
+        ['2026-08-02', '2000000'],
+      ] as const) {
+        await seedMetrics({
+          date,
+          spendMicros: spend,
+          impressions: 10,
+          clicks: 1,
+          conversions: 0,
+        });
+      }
+
+      const res = await svc.timeseries(CTX, {
+        from: '2026-08-01',
+        to: '2026-08-02',
+        compareFrom: '2026-07-30',
+        compareTo: '2026-07-31',
+      });
+
+      expect(res.points.map((p) => p.date)).toEqual(['2026-08-01', '2026-08-02']);
+      expect(res.previous?.map((p) => p.date)).toEqual(['2026-07-30', '2026-07-31']);
+    });
+
+    it('KRİTİK: karşılaştırma penceresi CARİ noktalara SIZMIYOR', async () => {
+      /*
+       * TEK TARAMA İKİ PENCEREYİ BİRDEN OKUYOR. Ayrım yanlış yapılırsa
+       * önceki dönemin harcaması cari döneme karışıyor ve grafikteki her
+       * sayı — kartlardaki toplamla da çelişerek — büyüyor. Hiçbir hata
+       * vermiyor, yalnızca yanlış.
+       */
+      await seedMetrics({
+        date: '2026-07-31',
+        spendMicros: '9000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+      });
+      const res = await svc.timeseries(CTX, {
+        from: '2026-08-01',
+        to: '2026-08-02',
+        compareFrom: '2026-07-30',
+        compareTo: '2026-07-31',
+      });
+      expect(res.points).toEqual([]);
+      expect(res.previous).toHaveLength(1);
+    });
+
+    it('önceki dönemde veri yoksa `previous` BOŞ DİZİ — null değil', async () => {
+      await seedMetrics({
+        date: '2026-08-01',
+        spendMicros: '1000000',
+        impressions: 1,
+        clicks: 0,
+        conversions: 0,
+      });
+      const res = await svc.timeseries(CTX, {
+        from: '2026-08-01',
+        to: '2026-08-02',
+        compareFrom: '2026-07-30',
+        compareTo: '2026-07-31',
+      });
+      expect(res.previous).toEqual([]);
+    });
+
+    it('KRİTİK: karşılaştırma KAPALIYKEN geniş pencere taranmıyor', async () => {
+      // Karşılaştırma istenmediğinde önceki günleri okumak, boşuna partition
+      // taramak ve `points` içine ait olmayan gün koymak demek.
+      await seedMetrics({
+        date: '2026-07-25',
+        spendMicros: '5000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+      });
+      const res = await svc.timeseries(CTX, { from: '2026-08-01', to: '2026-08-02' });
+      expect(res.points).toEqual([]);
+    });
+
+    it('KRİTİK: YARIM karşılaştırma penceresi karşılaştırma SAYILMIYOR', async () => {
+      /*
+       * `compareFrom` var, `compareTo` yok. Şema ikisini bağımsız opsiyonel
+       * tutuyor, yani bu istek gerçekten gelebiliyor.
+       *
+       * Yarım pencereyi kabul etmek sessizce yanlış: tarama `compareFrom`'dan
+       * başlar, önceki dönemin günleri CARİ noktalara karışır ve grafikteki
+       * her sayı kartlardaki toplamla çelişir. Kural "ikisi de yoksa kapalı"
+       * değil, "ikisi de VARSA açık".
+       */
+      await seedMetrics({
+        date: '2026-07-25',
+        spendMicros: '5000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+      });
+      const res = await svc.timeseries(CTX, {
+        from: '2026-08-01',
+        to: '2026-08-02',
+        compareFrom: '2026-07-20',
+      });
+      expect(res.points).toEqual([]);
+      expect(res.previous).toBeNull();
     });
   });
 

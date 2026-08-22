@@ -6,7 +6,7 @@ import {
   type MetricsBreakdownRow,
   type MetricsQuery,
   type MetricsSummary,
-  type MetricsTimeseriesPoint,
+  type MetricsTimeseries,
   type TenantContext,
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
@@ -57,7 +57,7 @@ export class MetricsController {
   timeseries(
     @CurrentTenant() ctx: TenantContext,
     @Query(zodQuery(metricsQuerySchema)) query: MetricsQuery,
-  ): Promise<MetricsTimeseriesPoint[]> {
+  ): Promise<MetricsTimeseries> {
     return this.metrics.timeseries(ctx, query);
   }
 
