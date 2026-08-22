@@ -8,7 +8,7 @@ import type {
   MetricsBreakdownRow,
   MetricsQuery,
   MetricsSummary,
-  MetricsTimeseriesPoint,
+  MetricsTimeseries,
   Platform,
   ReachKind,
   TenantContext,
@@ -61,14 +61,59 @@ interface RawTotals {
 export class MetricsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * ELİMİZDEKİ EN ESKİ VE EN YENİ VERİ GÜNÜ.
+   *
+   * "Tüm zamanlar" ön ayarı buna dayanıyor. Sabit bir alt sınır (örn. 2020)
+   * hem yüzlerce boş günü tarar hem de 400 günlük aralık sınırına takılıp
+   * panelde hata sayfası üretirdi. Ayrıca kullanıcıya HANGİ TARİHTEN İTİBAREN
+   * veri olduğunu söylemek gerekiyor: boş bir başlangıç "o dönemde kampanya
+   * yoktu" gibi okunuyor, oysa veri hiç çekilmemiş olabilir.
+   *
+   * Tek satır, iki agregat — `@@index([clientId, date DESC, entityLevel])`
+   * üzerinde ucuz.
+   */
+  async coverage(
+    ctx: TenantContext,
+    query: MetricsQuery,
+  ): Promise<{ earliestDate: string | null; latestDate: string | null }> {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const filters = this.filters(query);
+      const [row] = await tx.$queryRaw<Array<{ en_eski: Date | null; en_yeni: Date | null }>>(
+        Prisma.sql`
+          SELECT MIN(date) AS en_eski, MAX(date) AS en_yeni
+          FROM insights_daily
+          WHERE entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            ${filters}
+        `,
+      );
+      return {
+        earliestDate: row?.en_eski ? this.dateText(row.en_eski) : null,
+        latestDate: row?.en_yeni ? this.dateText(row.en_yeni) : null,
+      };
+    });
+  }
+
   async summary(ctx: TenantContext, query: MetricsQuery): Promise<MetricsSummary> {
-    // Önceki dönem AYNI UZUNLUKTA ve hemen öncesinde.
-    //
-    // "Geçen ay" gibi takvimsel bir pencere değil: 7 günlük bir bakışı 30
-    // günlük bir dönemle karşılaştırmak yüzde değişimi anlamsız kılar.
+    /*
+     * KARŞILAŞTIRMA PENCERESİ İSTEKTEN GELİYOR — burada türetilmiyor.
+     *
+     * Eskiden koşulsuz hesaplanıyordu ("aynı uzunlukta, hemen öncesi") ve iki
+     * sonucu vardı: her `/metrics/summary` çağrısı ikinci bir tam tarama
+     * yapıyordu, ve kullanıcı ne kapatabiliyor ne de "önceki yıl" gibi başka
+     * bir pencere seçebiliyordu.
+     *
+     * Panel pencereyi zaten hesaplıyor ve EKRANDA YAZIYOR ("1–31 Tem ile
+     * karşılaştırılacak"). Sunucu ayrı bir hesap yapsaydı iki taraf ayrışır
+     * ve yazan dönem ile karşılaştırılan dönem farklı olurdu — hiçbir hata
+     * vermeden.
+     *
+     * GERİYE DÖNÜK UYUM: pencere gelmezse eski davranış korunuyor. Rapor ve
+     * eski bağlantılar `compareFrom` göndermiyor.
+     */
     const days = this.dayCount(query.from, query.to);
-    const prevTo = this.shift(query.from, -1);
-    const prevFrom = this.shift(prevTo, -(days - 1));
+    const prevTo = query.compareTo ?? this.shift(query.from, -1);
+    const prevFrom = query.compareFrom ?? this.shift(prevTo, -(days - 1));
 
     return this.prisma.withTenant(ctx, async (tx) => {
       const filters = this.filters(query);
@@ -190,7 +235,24 @@ export class MetricsService {
     });
   }
 
-  async timeseries(ctx: TenantContext, query: MetricsQuery): Promise<MetricsTimeseriesPoint[]> {
+  /**
+   * Günlük seri — cari dönem ve (istenmişse) karşılaştırma dönemi.
+   *
+   * TEK TARAMA, İKİ PENCERE. Karşılaştırma dönemi cari döneme BİTİŞİK
+   * (`compareTo = from - 1 gün`), yani tek bir `BETWEEN` ikisini birden
+   * kapsıyor. İkinci bir sorgu açmak aynı partition'ları ikinci kez taramak
+   * olurdu; `insights_daily` tarihe göre bölümlenmiş ve pencere zaten
+   * bitişik olduğu için ek maliyeti yok.
+   *
+   * AYRIM SUNUCUDA YAPILIYOR. İki pencereyi tek dizide döndürüp "hangisi
+   * hangi dönem" sorusunu grafiğe bırakmak, aynı sınırı iki yerde birden
+   * hesaplamak demekti — ve bir gün kayan bir sınır hiçbir hata vermeden
+   * yanlış bir "%18 arttı" üretirdi.
+   */
+  async timeseries(ctx: TenantContext, query: MetricsQuery): Promise<MetricsTimeseries> {
+    const karsilastir = query.compareFrom !== undefined && query.compareTo !== undefined;
+    const pencereBasi = karsilastir ? query.compareFrom! : query.from;
+
     return this.prisma.withTenant(ctx, async (tx) => {
       const rows = await tx.$queryRaw<Array<RawTotals & { date: Date }>>(
         Prisma.sql`
@@ -201,7 +263,7 @@ export class MetricsService {
                  SUM(conversions) AS conversions,
                  SUM(conversion_value_micros) AS conversion_value_micros
           FROM insights_daily
-          WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
+          WHERE date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND entity_level = ${TOTALS_LEVEL}::"EntityLevel"
             ${this.filters(query)}
           GROUP BY date
@@ -209,16 +271,38 @@ export class MetricsService {
         `,
       );
 
-      return rows.map((r) => ({
+      const noktalar = rows.map((r) => ({
         // `toISOString().slice(0,10)` DEĞİL: Postgres DATE'i sürücü yerel
         // gece yarısı olarak veriyor ve UTC'ye çevirmek günü kaydırıyor.
         date: this.dateText(r.date),
         ...this.totals(r),
       }));
+
+      if (!karsilastir) return { points: noktalar, previous: null };
+
+      /*
+       * SINIR TARİH DİZGESİYLE KIYASLANIYOR, Date ile değil. Tarihler bu
+       * projede `YYYY-MM-DD` string ve o biçimde sözlük sırası = kronolojik
+       * sıra. `Date`e çevirmek saat dilimi kayması üretiyor — aynı hata bu
+       * kod tabanında birkaç kez yaşandı.
+       */
+      return {
+        points: noktalar.filter((p) => p.date >= query.from),
+        previous: noktalar.filter((p) => p.date < query.from),
+      };
     });
   }
 
   async breakdown(ctx: TenantContext, query: BreakdownQuery): Promise<MetricsBreakdownRow[]> {
+    /*
+     * KARŞILAŞTIRMA PENCERESİ İSTEKTEN GELİYOR — özet uçla aynı kural.
+     * Panel pencereyi hesaplayıp EKRANDA YAZIYOR; sunucu ayrı bir hesap
+     * yapsaydı yazan dönem ile karşılaştırılan dönem ayrışırdı.
+     */
+    const karsilastir = query.compareFrom !== undefined && query.compareTo !== undefined;
+    const prevTo = karsilastir ? query.compareTo! : query.from;
+    const pencereBasi = karsilastir ? query.compareFrom! : query.from;
+
     return this.prisma.withTenant(ctx, async (tx) => {
       // Varlık adı ve üst varlık adı seviyeye göre farklı tablodan geliyor.
       // Üç ayrı sorgu yerine LEFT JOIN'lerle tek sorgu: seviye filtresi
@@ -226,6 +310,11 @@ export class MetricsService {
       const rows = await tx.$queryRaw<
         Array<
           RawTotals & {
+            prev_impressions: string | number | null;
+            prev_clicks: string | number | null;
+            prev_spend_micros: string | number | bigint | null;
+            prev_conversions: string | number | null;
+            prev_conversion_value_micros: string | number | bigint | null;
             entity_id: string;
             entity_external_id: string;
             platform: Platform;
@@ -238,11 +327,31 @@ export class MetricsService {
       >(
         Prisma.sql`
           SELECT i.entity_id, i.entity_external_id, i.platform, i.currency,
-                 SUM(i.impressions) AS impressions,
-                 SUM(i.clicks) AS clicks,
-                 SUM(i.spend_micros) AS spend_micros,
-                 SUM(i.conversions) AS conversions,
-                 SUM(i.conversion_value_micros) AS conversion_value_micros,
+                 -- TEK TARAMA, IKI PENCERE.
+                 --
+                 -- Onceki donem bitisik (prevTo = from - 1), yani tek bir
+                 -- tarih araligi ikisini de kapsiyor. Ikinci bir sorgu kosup
+                 -- JS'te birlestirmek hem fazladan gidis-donus hem de
+                 -- entity_id uzerinden elle join demekti.
+                 --
+                 -- Karsilastirma kapaliyken pencere basi = from oluyor ve
+                 -- taranan aralik degismiyor: kapali bir ozellik icin iki kat
+                 -- satir taramiyoruz.
+                 --
+                 -- (SQL yorumunda BACKTICK YOK: sablonu ortasindan kapatiyor
+                 --  ve hata TS1005 olarak cikip sebebini hic soylemiyor.)
+                 SUM(i.impressions) FILTER (WHERE i.date >= ${query.from}::date) AS impressions,
+                 SUM(i.clicks) FILTER (WHERE i.date >= ${query.from}::date) AS clicks,
+                 SUM(i.spend_micros) FILTER (WHERE i.date >= ${query.from}::date) AS spend_micros,
+                 SUM(i.conversions) FILTER (WHERE i.date >= ${query.from}::date) AS conversions,
+                 SUM(i.conversion_value_micros) FILTER (WHERE i.date >= ${query.from}::date)
+                   AS conversion_value_micros,
+                 SUM(i.impressions) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_impressions,
+                 SUM(i.clicks) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_clicks,
+                 SUM(i.spend_micros) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_spend_micros,
+                 SUM(i.conversions) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_conversions,
+                 SUM(i.conversion_value_micros) FILTER (WHERE i.date <= ${prevTo}::date)
+                   AS prev_conversion_value_micros,
                  COALESCE(c.name, g.name, a.name, acc.name) AS name,
                  COALESCE(gc.name, ag.name) AS parent_name,
                  COALESCE(c.status::text, g.status::text, a.status::text, acc.status::text) AS status
@@ -254,13 +363,17 @@ export class MetricsService {
           -- Üst varlık: ad set'in kampanyası, reklamın ad set'i.
           LEFT JOIN campaigns   gc  ON i.entity_level = 'ad_group' AND gc.id = g.campaign_id
           LEFT JOIN ad_groups   ag  ON i.entity_level = 'ad'       AND ag.id = a.ad_group_id
-          WHERE i.date BETWEEN ${query.from}::date AND ${query.to}::date
+          WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND i.entity_level = ${query.level}::"EntityLevel"
             ${this.filters(query, 'i')}
           GROUP BY i.entity_id, i.entity_external_id, i.platform, i.currency,
                    c.name, g.name, a.name, acc.name, gc.name, ag.name,
                    c.status, g.status, a.status, acc.status
-          ORDER BY SUM(i.spend_micros) DESC
+          -- SIRALAMA CARİ DÖNEME BAĞLI ve bu ŞART: aksi hâlde yalnızca
+          -- ÖNCEKİ dönemde harcama yapmış varlıklar LIMIT'in içine girip
+          -- listeyi kaydırır ve "bu kampanya neden burada, hiç harcaması
+          -- yok" sorusunu doğurur.
+          ORDER BY SUM(i.spend_micros) FILTER (WHERE i.date >= ${query.from}::date) DESC NULLS LAST
           LIMIT ${query.limit}
         `,
       );
@@ -284,6 +397,12 @@ export class MetricsService {
         status: r.status ?? 'unknown',
         currency: r.currency,
         ...this.totals(r),
+        /*
+         * `null` = önceki dönemde HİÇ veri yok. Sıfırlı bir nesne döndürmek
+         * her YENİ kampanyayı "-%100" gösterirdi; özet uçtaki `hasData`
+         * kuralının satır karşılığı.
+         */
+        previous: karsilastir && this.hasData(oncekiSatir(r)) ? this.totals(oncekiSatir(r)) : null,
       }));
     });
   }
@@ -344,9 +463,36 @@ export class MetricsService {
     const platformFilter = query.platform
       ? Prisma.sql`AND platform = ${query.platform}::"Platform"`
       : Prisma.empty;
+    /*
+     * HESAP SÜZGECİ SAYIMA DA UYGULANIYOR.
+     *
+     * Kullanıcı tek bir hesabı seçtiğinde ekrandaki rakamlar o hesabın;
+     * uyarının BAŞKA hesaplardan bahsetmesi, seçtiği hesapta bir sorun
+     * varmış gibi okunuyordu.
+     */
+    const accountFilter = query.adAccountId
+      ? Prisma.sql`AND id = ${query.adAccountId}::uuid`
+      : Prisma.empty;
     const [row] = await tx.$queryRaw<Array<{ n: string | number }>>(Prisma.sql`
       SELECT COUNT(*) AS n FROM ad_accounts
-      WHERE sync_enabled = false ${platformFilter}
+      WHERE sync_enabled = false
+        /*
+         * HAVUZ SAYILMIYOR — client_id IS NULL bu workspace'in hesabı DEĞİL.
+         *
+         * Keşif her hesabı sync_enabled = false ile yazıyor ve ajansın tek
+         * Meta kimliği yüzlerce hesap görüyor. Bu koşul olmadan sayım havuzun
+         * tamamını topluyordu: her müşterinin Genel Bakış'ında "481 hesap
+         * izlenmiyor" yazıyor, uyarı hiçbir zaman sıfıra inmiyor ve tam da bu
+         * yüzden okunmaz hâle geliyordu — GERÇEK bir kapalı hesap da aynı
+         * cümlenin içinde kayboluyordu.
+         *
+         * RLS'in adv_ad_accounts_select politikası havuzu org yöneticisine
+         * AÇIYOR (atama ekranının çalışması buna bağlı), yani politikaya
+         * güvenmek yetmiyor; ayrım burada yapılmak zorunda.
+         */
+        AND client_id IS NOT NULL
+        ${platformFilter}
+        ${accountFilter}
     `);
     return Number(row?.n ?? 0);
   }
@@ -427,4 +573,21 @@ export class MetricsService {
     d.setUTCDate(d.getUTCDate() + days);
     return d.toISOString().slice(0, 10);
   }
+}
+
+/** Ham satırın ÖNCEKİ dönem sütunlarını `RawTotals` şekline çevirir. */
+function oncekiSatir(r: {
+  prev_impressions: string | number | null;
+  prev_clicks: string | number | null;
+  prev_spend_micros: string | number | bigint | null;
+  prev_conversions: string | number | null;
+  prev_conversion_value_micros: string | number | bigint | null;
+}): RawTotals {
+  return {
+    impressions: r.prev_impressions,
+    clicks: r.prev_clicks,
+    spend_micros: r.prev_spend_micros,
+    conversions: r.prev_conversions,
+    conversion_value_micros: r.prev_conversion_value_micros,
+  } as RawTotals;
 }

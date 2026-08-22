@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { MetricTotals } from './metrics.schema';
+import { formatMoney, formatNumber, formatPercent } from '../format';
 
 /**
  * Modül 6 — White-label raporlama sözleşmeleri.
@@ -53,6 +54,7 @@ export const REPORT_SECTIONS = [
   'meta_campaigns',
   'google_campaigns',
   'google_keywords',
+  'google_search_terms',
   'top_ads',
   'closing',
 ] as const;
@@ -64,6 +66,7 @@ export const SECTION_LABELS: Record<ReportSection, string> = {
   meta_campaigns: 'Kampanyalar — Meta Ads',
   google_campaigns: 'Kampanyalar — Google Ads',
   google_keywords: 'Anahtar Kelime Performansı',
+  google_search_terms: 'Arama Terimleri',
   top_ads: 'Öne Çıkan Reklamlar',
   closing: 'Kapanış',
 };
@@ -168,15 +171,146 @@ export type ReportQuery = z.infer<typeof reportQuerySchema>;
 
 export const REPORT_SECTION_ENUM = z.enum(REPORT_SECTIONS);
 
+/**
+ * SEÇİLEBİLİR METRİKLER — `METRIC_LABELS` TEK KAYNAK.
+ *
+ * Ekrandaki seçim listesi, sunucudaki doğrulama ve belgedeki sütunlar aynı
+ * listeden besleniyor. Üçünü ayrı yazmak, birinin güncellenmemesi hâlinde
+ * ekranda seçilebilen ama rapora hiç çıkmayan bir metrik demek — ve
+ * TypeScript bunu söylemiyor.
+ */
+export const METRIC_KEYS = Object.keys(METRIC_LABELS) as Array<keyof typeof METRIC_LABELS>;
+export type MetricKey = (typeof METRIC_KEYS)[number];
+const METRIC_KEY_ENUM = z.enum(METRIC_KEYS as [MetricKey, ...MetricKey[]]);
+
+/**
+ * DÖNÜŞÜM KOVALARI YALNIZCA META'DA VAR.
+ *
+ * Google `actions` dizisi döndürmüyor; form/mesaj dökümü orada YOK ve 0
+ * yazmak "hiç form gelmedi" gibi okunur. Seçim ekranı bunu gizlemek yerine
+ * sebebiyle söylemek zorunda.
+ */
+export const BUCKET_KEYS = ['form', 'message', 'purchase'] as const;
+export type BucketKey = (typeof BUCKET_KEYS)[number];
+
+/**
+ * BÖLÜM AYARLARI — `report_templates.options` JSONB'sinin şeması.
+ *
+ * Kolon migration'da ve Prisma'da baştan beri vardı, yorumu tam bu işi tarif
+ * ediyordu ve TEK SATIR KOD onu okumuyordu. Artık okuyor.
+ *
+ * AYRIK BİRLEŞİM DEĞİL, BÖLÜM ANAHTARLI HARİTA: bölümlerin çoğu aynı iki
+ * ayarı taşıyor (hangi metrikler, kaç satır) ve her biri için ayrı bir dal
+ * yazmak, yeni bölüm eklendiğinde unutulacak bir yer daha demek.
+ *
+ * GÜVENLİ, ÇÜNKÜ OKURKEN ALAN ALAN EŞLENİYOR: JSONB olduğu gibi belgeye
+ * geçmiyor. `auto_boost_presets.settings` deseni — bilinmeyen bir anahtarı
+ * sessizce taşımak, ekranda "hazır" görünen bozuk bir kayıt üretir.
+ */
+/**
+ * SÜTUN ANAHTARLARI — metrikler VE dönüşüm kovaları TEK LİSTEDE.
+ *
+ * İkisini ayrı alanlarda tutmak (`metrics` + `buckets`) kullanıcıya sütun
+ * SIRASINI seçtirmiyordu: "Form"u "Tıklama"nın önüne almak imkânsız olurdu.
+ * Tek sıralı liste hem seçimi hem sırayı taşıyor.
+ */
+export const COLUMN_KEYS = [...METRIC_KEYS, ...BUCKET_KEYS] as const;
+export type ColumnKey = (typeof COLUMN_KEYS)[number];
+
+/** Sütun başlıkları — `METRIC_LABELS` ve kova etiketleri tek haritada. */
+export const COLUMN_LABELS: Record<ColumnKey, string> = {
+  ...(Object.fromEntries(
+    METRIC_KEYS.map((k) => [k, METRIC_LABELS[k].label]),
+  ) as Record<MetricKey, string>),
+  ...(Object.fromEntries(
+    BUCKET_KEYS.map((k) => [k, CONVERSION_BUCKETS[k].label]),
+  ) as Record<BucketKey, string>),
+};
+
+const COLUMN_KEY_ENUM = z.enum(COLUMN_KEYS as unknown as [ColumnKey, ...ColumnKey[]]);
+
+/**
+ * VARSAYILAN SÜTUNLAR — ŞABLON SEÇİM TAŞIMADIĞINDA.
+ *
+ * PAYLAŞILAN PAKETTE, çünkü iki ayrı yerde render ediliyor: panelin HTML
+ * belgesi ve sunucunun PDF'i. İkisi ayrı listeye baksaydı aynı rapor iki
+ * farklı sütun setiyle çıkardı ve farkı müşteriye giden belgede gören
+ * olurdu — CLAUDE.md: "aynı şeyi üreten ikinci fonksiyon doğduğu anda
+ * ayrışır."
+ *
+ * META'DA FORM/MESAJ VAR, GOOGLE'DA YOK: Google `actions` dizisi
+ * döndürmüyor ve o sütunlar orada her zaman 0 çıkardı — "hiç form gelmedi"
+ * gibi okunurdu.
+ */
+export const DEFAULT_COLUMNS = {
+  meta_campaigns: ['spend', 'impressions', 'reach', 'clicks', 'form', 'message'],
+  google_campaigns: ['spend', 'impressions', 'reach', 'clicks', 'ctr', 'conversions'],
+} as const satisfies Record<string, readonly string[]>;
+
+export const sectionOptionsSchema = z.object({
+  /**
+   * Bu bölümde gösterilecek sütunlar, SIRASIYLA. Boş dizi = varsayılana dön.
+   *
+   * `undefined` ile boş dizi AYNI ŞEY DEĞİL: kullanıcı hepsini kaldırdıysa
+   * bunu bir seçim olarak saklamak, bir dahaki açılışta boş bir tablo
+   * göstermek olurdu. Boş kalan bölüm varsayılan sütunlarına dönüyor ve bu
+   * ekranda yazılı.
+   */
+  metrics: z
+    .array(COLUMN_KEY_ENUM)
+    .max(COLUMN_KEYS.length)
+    .refine((a) => new Set(a).size === a.length, 'Aynı sütun iki kez eklenemez')
+    .optional(),
+  /** Kaç satır gösterilecek (kampanya/kelime/reklam tabloları). */
+  limit: z.number().int().min(1).max(100).optional(),
+});
+export type SectionOptions = z.infer<typeof sectionOptionsSchema>;
+
+export const reportOptionsSchema = z.record(REPORT_SECTION_ENUM, sectionOptionsSchema);
+export type ReportOptions = z.infer<typeof reportOptionsSchema>;
+
 export const reportTemplateInputSchema = z.object({
   name: z.string().trim().min(1).max(160),
   title: z.string().trim().max(200).optional(),
   closingText: z.string().trim().max(2000).optional(),
   /** null = organizasyon varsayılanı. */
   clientId: z.string().uuid().nullable().optional(),
-  sections: z.array(REPORT_SECTION_ENUM).min(1).max(REPORT_SECTIONS.length),
+  /*
+   * SIRA BURADA VE TEKRAR YASAK.
+   *
+   * Aynı bölüm iki kez yazılırsa React aynı `key` ile iki düğüm basıyor ve
+   * belgede bölüm iki kez çıkıyor. Şema bunu reddediyor: `parseSections`
+   * geçersizleri eliyor ama tekrarı elemiyordu.
+   */
+  sections: z
+    .array(REPORT_SECTION_ENUM)
+    .min(1)
+    .max(REPORT_SECTIONS.length)
+    .refine((a) => new Set(a).size === a.length, 'Aynı bölüm iki kez eklenemez'),
+  options: reportOptionsSchema.optional(),
 });
 export type ReportTemplateInput = z.infer<typeof reportTemplateInputSchema>;
+
+/** Şablon listesi satırı — düzenleme ekranı bunu okuyor. */
+export interface ReportTemplateSummary {
+  id: string;
+  name: string;
+  clientId: string | null;
+  clientName: string | null;
+  sections: ReportSection[];
+  options: ReportOptions;
+  title: string | null;
+  closingText: string | null;
+  updatedAt: string;
+  /**
+   * Bu şablondan üretilmiş AKTİF paylaşım linki sayısı.
+   *
+   * Silme uçtan `ON DELETE CASCADE` ile bu linkleri de siliyor. Sayıyı
+   * göstermeden silme sormak, müşteriye gönderilmiş bir raporu haber
+   * vermeden 404'e çevirmek olurdu.
+   */
+  shareCount: number;
+}
 
 export const shareInputSchema = z
   .object({
@@ -254,6 +388,15 @@ export interface ReportData {
   from: string;
   to: string;
   sections: ReportSection[];
+  /**
+   * BÖLÜM AYARLARI — hangi metrik sütunları, kaç satır.
+   *
+   * Şablonda saklanıyordu ama belgeye HİÇ ULAŞMIYORDU: `build()` yalnızca
+   * `sections` döndürüyordu ve seçilen metrikler sessizce yok sayılıyordu.
+   * Bir ayarı kaydedip hiçbir yerde göremeyen kullanıcı, özelliğin bozuk
+   * olduğunu değil kendi yaptığını yanlış yaptığını düşünüyor.
+   */
+  options: ReportOptions;
   /** Aralıktaki gün sayısı — kampanya kapsamasıyla karşılaştırmak için. */
   rangeDays: number;
   currency: string | null;
@@ -290,5 +433,162 @@ export interface ReportData {
     ctr: number | null;
     cpc: number | null;
   }>;
+  /**
+   * ARAMA TERİMLERİ — kullanıcının gerçekten YAZDIĞI sorgular.
+   *
+   * `keywords` bizim hedeflediğimiz şey; bu, kullanıcının yazdığı şey. Fark
+   * paranın nereye gittiğini gösteriyor: geniş eşlemeli bir kelime hiç
+   * istemediğimiz sorgulara da gösterim alabiliyor.
+   *
+   * `null` = bu müşteride Google bağlantısı yok (anahtar kelimeyle aynı
+   * kural). Boş dizi = bağlantı var, o dönemde terim yok.
+   */
+  searchTerms: null | Array<{
+    term: string;
+    /** Terimi getiren anahtar kelime. */
+    keyword: string | null;
+    /**
+     * ADDED | EXCLUDED | ADDED_EXCLUDED | NONE
+     *
+     * `NONE` = para harcıyor ama ne anahtar kelime ne negatif olarak
+     * tanımlı. Raporda işaretleniyor: yapılacak iş tam da o satırlarda.
+     */
+    status: string;
+    spendMicros: string;
+    impressions: number;
+    clicks: number;
+    conversions: number;
+    ctr: number | null;
+  }>;
   generatedAt: string;
+}
+
+/**
+ * Şablondan gelen seçimi sütun listesine çevirir.
+ *
+ * Boş ya da tanınmayan seçim VARSAYILANA dönüyor: kullanıcıya boş bir tablo
+ * göstermek, bir ayarı yanlış girdiğini anlamasının en zor yolu.
+ *
+ * PAYLAŞILAN, çünkü panel ve PDF aynı kararı vermek zorunda.
+ */
+export function resolveColumns(
+  secim: readonly string[] | undefined,
+  varsayilan: readonly string[],
+): ColumnKey[] {
+  const gecerli = (secim ?? []).filter((k): k is ColumnKey =>
+    (COLUMN_KEYS as readonly string[]).includes(k),
+  );
+  return gecerli.length > 0 ? gecerli : [...(varsayilan as readonly ColumnKey[])];
+}
+
+/**
+ * RAPOR MAİLİ GÖNDERİMİ.
+ *
+ * Gövde İSTEMCİDEN geliyor ve bu bilinçli: taslak sunucuda üretiliyor
+ * (sayılar rapordan), ama anlatı kısmı veriden çıkarılamıyor ve gönderen
+ * kişi göndermeden önce düzenliyor. Sunucu üretip doğrudan göndermek,
+ * kimsenin okumadığı bir mail göndermek olurdu.
+ *
+ * GÖVDE TEMİZLENİYOR: kullanıcının düzenlediği HTML alıcının istemcisinde
+ * açılıyor — imza ile aynı yüzey.
+ */
+export const reportSendSchema = z.object({
+  clientId: z.string().uuid(),
+  from: isoDate,
+  to: isoDate,
+  templateId: z.string().uuid().optional(),
+  /** Alıcı. Boşsa müşterinin `contact_email` alanı kullanılıyor. */
+  to_email: z.string().trim().email().optional(),
+  subject: z.string().trim().min(1).max(300),
+  html: z.string().min(1).max(200_000),
+  /** PDF eki gitsin mi. Kapatmak, yalnızca özet göndermek isteyen için. */
+  attachPdf: z.boolean().default(true),
+});
+export type ReportSendInput = z.infer<typeof reportSendSchema>;
+
+export interface ReportMailDraft {
+  subject: string;
+  html: string;
+  /** Müşterinin kayıtlı iletişim adresi. Yoksa `null` — ekran bunu söylemeli. */
+  defaultTo: string | null;
+  /** Gönderenin e-posta kimliği doğrulanmış mı. Değilse gönderim kapalı. */
+  senderReady: boolean;
+  senderEmail: string | null;
+}
+
+// -----------------------------------------------------------------------------
+// Kampanya tablosu — TOPLAM SATIRI
+//
+// TOPLAMLAR PANELDE VE PDF'TE AYNI YERDEN GELMEK ZORUNDA. Panelin kendi
+// toplam fonksiyonları vardı, PDF'in ise HİÇ toplam satırı yoktu: aynı rapor
+// ekranda toplamlı, müşteriye giden belgede toplamsız çıkıyordu ve iki
+// gösterim arasında bağ kuran hiçbir şey yoktu.
+//
+// Sütun eklenip toplamı eklenmediğinde tablo sessizce kayıyor ve TypeScript
+// hiçbir şey demiyor — `Record<ColumnKey, …>` bunu derleme hatasına çeviriyor.
+// -----------------------------------------------------------------------------
+
+export function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: ConversionCounts } {
+  let impressions = 0;
+  let clicks = 0;
+  let spend = 0n;
+  let conversions = 0;
+  let value = 0n;
+  const counts: ConversionCounts = { form: 0, message: 0, purchase: 0 };
+
+  for (const r of rows) {
+    impressions += r.impressions;
+    clicks += r.clicks;
+    spend += BigInt(r.spendMicros);
+    conversions += r.conversions;
+    value += BigInt(r.conversionValueMicros);
+    counts.form += r.conversionCounts.form;
+    counts.message += r.conversionCounts.message;
+    counts.purchase += r.conversionCounts.purchase;
+  }
+
+  const spendUnits = Number(spend) / 1_000_000;
+  const valueUnits = Number(value) / 1_000_000;
+
+  return {
+    impressions,
+    clicks,
+    spendMicros: spend.toString(),
+    conversions,
+    conversionValueMicros: value.toString(),
+    ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
+    cpc: clicks > 0 ? spendUnits / clicks : null,
+    cpm: impressions > 0 ? (spendUnits / impressions) * 1000 : null,
+    cpa: conversions > 0 ? spendUnits / conversions : null,
+    roas: spendUnits > 0 && valueUnits > 0 ? valueUnits / spendUnits : null,
+    counts,
+  };
+}
+
+/**
+ * Sütun başına TOPLAM biçimi. `null` = toplanamaz.
+ *
+ * `reach` toplanamıyor: aynı kişi iki kampanyayı da görmüş olabilir ve
+ * toplamak müşteriye iki kat kitle söylemek olur.
+ */
+export const COLUMN_TOTALS: Record<
+  ColumnKey,
+  ((t: ReturnType<typeof sumRows>, currency: string | null) => string) | null
+> = {
+  spend: (t, m) => formatMoney(t.spendMicros, m, { decimals: 2 }),
+  impressions: (t) => formatNumber(t.impressions),
+  clicks: (t) => formatNumber(t.clicks),
+  reach: null,
+  ctr: (t) => formatPercent(t.ctr),
+  cpc: (t, m) => formatMoney(microsOf(t.cpc), m),
+  cpa: (t, m) => formatMoney(microsOf(t.cpa), m),
+  conversions: (t) => formatNumber(t.conversions),
+  form: (t) => formatNumber(t.counts.form),
+  message: (t) => formatNumber(t.counts.message),
+  purchase: (t) => formatNumber(t.counts.purchase),
+};
+
+/** Ondalık birimden micros dizgesine — `formatMoney` micros bekliyor. */
+function microsOf(v: number | null): string | null {
+  return v === null ? null : String(Math.round(v * 1_000_000));
 }

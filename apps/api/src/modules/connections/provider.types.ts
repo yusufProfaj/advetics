@@ -769,6 +769,36 @@ export interface DiscoveredKeywordRow {
   currency: string;
 }
 
+/**
+ * ARAMA TERİMİ — kullanıcının gerçekten YAZDIĞI sorgu.
+ *
+ * `DiscoveredKeywordRow`dan farkı, sabit bir kimliğinin OLMAMASI: anahtar
+ * kelimenin `criterion_id`si var, terimin yok. Tekillik metnin kendisinden
+ * türüyor.
+ */
+export interface DiscoveredSearchTermRow {
+  searchTerm: string;
+  /** Terimi getiren anahtar kelime — "hangi kelime bu sorguyu çekti". */
+  keywordText?: string;
+  matchType?: 'EXACT' | 'PHRASE' | 'BROAD' | 'UNKNOWN';
+  /**
+   * ADDED | EXCLUDED | ADDED_EXCLUDED | NONE
+   *
+   * `NONE` olan terim para harcıyor ama ne anahtar kelime ne negatif olarak
+   * tanımlı — yapılacak iş tam da o listede.
+   */
+  status: string;
+  adGroupExternalId?: string;
+  /** YYYY-MM-DD */
+  date: string;
+  impressions: number;
+  clicks: number;
+  spendMicros: bigint;
+  conversions: number;
+  conversionValueMicros: bigint;
+  currency: string;
+}
+
 export interface IAdPlatformProvider {
   readonly platform: Platform;
 
@@ -1037,6 +1067,18 @@ export interface IAdPlatformProvider {
     ctx: FetchContext,
     request: { dateFrom: string; dateTo: string },
   ): Promise<{ rows: DiscoveredKeywordRow[]; apiCalls: number }>;
+
+  /**
+   * Arama terimleri. YALNIZCA GOOGLE'DA VAR.
+   *
+   * Meta'da "arama terimi" diye bir kavram yok; sağlayıcı bunu açık bir
+   * hatayla söylüyor. Boş dizi döndürmek "bu dönemde terim yok" gibi
+   * okunurdu.
+   */
+  fetchSearchTerms(
+    ctx: FetchContext,
+    request: { dateFrom: string; dateTo: string },
+  ): Promise<{ rows: DiscoveredSearchTermRow[]; apiCalls: number }>;
 
   /**
    * Tek bir reklam oluşturur (Modül 8).

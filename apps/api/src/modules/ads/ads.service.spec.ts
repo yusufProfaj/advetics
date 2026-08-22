@@ -29,6 +29,11 @@ const CTX: TenantContext = {
 const CAMPAIGN = '66666666-6666-6666-6666-666666666666';
 const GROUP = '77777777-7777-7777-7777-777777777777';
 
+/** Aşağıdaki yeni bloklarda kullanılan sabit kimlikler. */
+const AD_A = 'a1111111-1111-1111-1111-111111111111';
+const AD_B = 'a2222222-2222-2222-2222-222222222222';
+const CREATIVE = 'c3333333-3333-3333-3333-333333333333';
+
 const RANGE = { from: '2026-08-04', to: '2026-08-05' };
 const QUERY_BASE = {
   ...RANGE,
@@ -571,5 +576,128 @@ describe('AdsService.detail', () => {
     expect(d.daily).toEqual([]);
     expect(d.spendMicros).toBe('0');
     expect(d.reach).toBeNull();
+  });
+});
+
+/**
+ * ═══ REKLAM KEŞFİ: KIRIK GÖRSEL VE DARALMAYAN SAYAÇ ═══
+ *
+ * İkisi de ekranda "bozuk panel" olarak görünen ama sebebi veride olan
+ * hatalar.
+ */
+describe('kırık görsel adresleri', () => {
+  beforeEach(async () => {
+    await h.reset();
+    await seedTenant(h);
+    await seedHierarchy();
+  });
+
+  it('KRİTİK: URL OLMAYAN değerler eleniyor — Google kaynak adı gönderiyor', async () => {
+    /*
+     * Google `responsive_display_ad.marketing_images[].asset` alanında URL
+     * değil KAYNAK ADI döndürüyor: `customers/1234567890/assets/98765`.
+     * Bu dize `<img src>`e girince tarayıcı kendi origin'ine göreli yol
+     * sanıp 404 alıyor — panel "görsel yok" bile demiyor, KIRIK GÖRSEL
+     * gösteriyor.
+     */
+    await seedCreative(CREATIVE, 'cr-google', {
+      assetUrls: ['customers/1234567890/assets/98765', 'https://cdn/gercek.jpg'],
+    });
+    await seedAd({ id: AD_A, externalId: 'a1', name: 'Display', creativeId: CREATIVE });
+
+    const res = await svc.explore(CTX, QUERY_BASE);
+    expect(res.rows[0]!.creative!.assetUrls).toEqual(['https://cdn/gercek.jpg']);
+  });
+
+  it('hiçbiri geçerli değilse liste BOŞ — kırık adres yerine "görsel yok"', async () => {
+    await seedCreative(CREATIVE, 'cr-bos', {
+      assetUrls: ['customers/1/assets/2', '', 'not-a-url'],
+    });
+    await seedAd({ id: AD_A, externalId: 'a1', name: 'Display', creativeId: CREATIVE });
+
+    const res = await svc.explore(CTX, QUERY_BASE);
+    expect(res.rows[0]!.creative!.assetUrls).toEqual([]);
+  });
+
+  it('http ve https ikisi de geçerli', async () => {
+    await seedCreative(CREATIVE, 'cr-http', {
+      assetUrls: ['http://cdn/a.jpg', 'https://cdn/b.jpg'],
+    });
+    await seedAd({ id: AD_A, externalId: 'a1', name: 'Reklam', creativeId: CREATIVE });
+
+    const res = await svc.explore(CTX, QUERY_BASE);
+    expect(res.rows[0]!.creative!.assetUrls).toHaveLength(2);
+  });
+});
+
+describe('facet sayıları seçili hesaba daralıyor', () => {
+  const HESAP_B = 'a9999999-9999-9999-9999-999999999999';
+  const KAMPANYA_B = '66666666-0000-0000-0000-000000000066';
+  const GRUP_B = '77777777-0000-0000-0000-000000000077';
+
+  beforeEach(async () => {
+    await h.reset();
+    await seedTenant(h);
+    await seedHierarchy();
+
+    // İKİNCİ HESAP — ajans görünümünde onlarca var.
+    await h.q(
+      `INSERT INTO ad_accounts (id, org_id, client_id, connection_id, platform, external_id, name,
+                                currency, timezone, status, sync_enabled, updated_at)
+       VALUES ($1, $2, $3, $4, 'meta', 'act_ikinci_hesap_999', 'İkinci Hesap', 'TRY', 'Europe/Istanbul',
+               'active', true, now())`,
+      [HESAP_B, IDS.org, IDS.client, IDS.connection],
+    );
+    await h.q(
+      `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, updated_at)
+       VALUES ($1, $2, $3, 'meta', 'c9', 'Kampanya B', 'active', 'daily', now())`,
+      [KAMPANYA_B, HESAP_B, IDS.client],
+    );
+    await h.q(
+      `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, updated_at)
+       VALUES ($1, $2, $3, $4, 'meta', 'g9', 'Set B', 'active', 'none', now())`,
+      [GRUP_B, KAMPANYA_B, HESAP_B, IDS.client],
+    );
+    // A hesabında 1 sorunlu reklam, B hesabında 1 temiz reklam.
+    await seedAd({
+      id: AD_A,
+      externalId: 'a1',
+      name: 'Sorunlu A',
+      reviewStatus: 'DISAPPROVED',
+      disapproval: [{ topic: 'Politika' }],
+    });
+    await h.q(
+      `INSERT INTO ads (id, ad_group_id, ad_account_id, client_id, platform, external_id, name,
+                        status, raw, updated_at)
+       VALUES ($1, $2, $3, $4, 'meta', 'b1', 'Temiz B', 'active', '{}'::jsonb, now())`,
+      [AD_B, GRUP_B, HESAP_B, IDS.client],
+    );
+  });
+
+  it('KRİTİK: hesap seçiliyken SORUNLU sayısı o hesabın — tıklayınca boş çıkmamalı', async () => {
+    /*
+     * Eskiden başlıkta "1 reklam" yazarken çip hâlâ org genelindeki sayıyı
+     * gösteriyordu: "Sorunlu (37)"ye tıklayınca 2 satır çıkıyordu. Sayım ile
+     * listenin uyuşmaması, CLAUDE.md'nin "her listede kaç kayıt gösterildiği
+     * ve toplamın kaç olduğu yazılıyor" kuralının ihlal edildiği yer.
+     */
+    const hepsi = await svc.explore(CTX, QUERY_BASE);
+    expect(hepsi.facets.issueCount).toBe(1);
+
+    const sadeceB = await svc.explore(CTX, { ...QUERY_BASE, adAccountId: HESAP_B });
+    expect(sadeceB.facets.issueCount).toBe(0);
+  });
+
+  it('durum sayıları da daralıyor', async () => {
+    const sadeceB = await svc.explore(CTX, { ...QUERY_BASE, adAccountId: HESAP_B });
+    const toplam = sadeceB.facets.statuses.reduce((n, s) => n + s.count, 0);
+    expect(toplam).toBe(1);
+  });
+
+  it('HESAP LİSTESİ daralmıyor — kendi süzgecine daralsa diğer hesaplar kaybolurdu', async () => {
+    // Hesap çipleri hesap süzgecinden bağımsız kalmalı, yoksa bir hesap
+    // seçildikten sonra başka bir hesaba geçmek imkânsız olur.
+    const sadeceB = await svc.explore(CTX, { ...QUERY_BASE, adAccountId: HESAP_B });
+    expect(sadeceB.facets.adAccounts.length).toBeGreaterThan(1);
   });
 });

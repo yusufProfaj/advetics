@@ -41,6 +41,19 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     items: [
       { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6 },
       {
+        /*
+         * ŞABLONLAR RAPORLARIN ALTINDA ve `report.write` ile kapalı:
+         * müşteri hesabı (client_viewer) raporu OKUYOR, biçimini
+         * değiştirmiyor.
+         */
+        href: '/raporlar/sablonlar',
+        label: 'Rapor Şablonları',
+        icon: 'reports',
+        module: 6,
+        ready: true,
+        perm: 'report.write',
+      },
+      {
         href: '/potansiyel-musteriler',
         label: 'Potansiyel Müşteriler',
         icon: 'leads',
@@ -92,6 +105,44 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         module: 2,
         ready: true,
         perm: 'connection.read',
+      },
+      {
+        /*
+         * TEŞHİS EKRANI AYARLAR ALTINDA ve `connection.read` ile kapalı.
+         * `insights.read` ile açmak client_viewer'a da gösterirdi: bu ekran
+         * platformun ham hata mesajlarını (subcode, fbtrace) basıyor ve o
+         * müşteri tarafına ait bir bilgi değil.
+         */
+        href: '/ayarlar/senkronizasyon',
+        label: 'Senkronizasyon Durumu',
+        icon: 'sync',
+        module: 3,
+        ready: true,
+        perm: 'connection.read',
+      },
+      {
+        /*
+         * `report.share` İLE KAPALI — yönetim izniyle DEĞİL.
+         *
+         * Bu ekran "başkasının ayarı" kavramı taşımıyor: herkes yalnızca
+         * kendi satırını görüyor (RLS). O yüzden yönetici iznine bağlamak
+         * yanlış olurdu — danışmanın kendi imzasını düzenlemesi yöneticiye
+         * bağlanırdı.
+         *
+         * Ama izinsiz de bırakılamıyor: `client_viewer` (müşteri hesabı)
+         * rapor GÖNDERMİYOR, yalnızca okuyor. İzinsiz bırakmak ona hem bu
+         * ekranı hem de tamamı ajans işi olan "Ayarlar" başlığını
+         * gösteriyordu — `nav-sections.spec.ts` bunu yakaladı.
+         *
+         * `report.share` tam olarak "rapor gönderebilir" demek ve e-posta
+         * kimliği de onun için gerekiyor.
+         */
+        href: '/ayarlar/e-posta',
+        label: 'E-posta Ayarları',
+        icon: 'mail',
+        module: 6,
+        ready: true,
+        perm: 'report.share',
       },
       {
         href: '/ayarlar/ekip',

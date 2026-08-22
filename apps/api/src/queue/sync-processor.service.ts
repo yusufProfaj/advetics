@@ -14,9 +14,11 @@ import { RuleExecutorService } from '../modules/rules/rule-executor.service';
 import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
 import { KeywordSyncService } from './keyword-sync.service';
+import { SearchTermSyncService } from './search-term-sync.service';
 import { BoostsService } from '../modules/boosts/boosts.service';
 import { YouTubeSubscribeService } from '../modules/autoboost/youtube-subscribe.service';
 import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
+import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
 
 /**
  * Worker'ın sentetik kiracı bağlamındaki kullanıcı kimliği.
@@ -62,6 +64,7 @@ export class SyncProcessorService {
     private readonly subscribe: YouTubeSubscribeService,
     private readonly boostExecutor: BoostExecutorService,
     private readonly keywords: KeywordSyncService,
+    private readonly searchTerms: SearchTermSyncService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -102,12 +105,10 @@ export class SyncProcessorService {
     if (payload.jobType === 'boost_complete') return this.boostExecutor.completeEndedBoosts();
 
     const accounts = await this.db.adAccount.findMany({
-      where: {
-        syncEnabled: true,
-        status: { in: ['active', 'paused'] },
-        connection: { status: 'active' },
-        client: { status: 'active' },
-      },
+      // Süzgeç TEK YERDE: teşhis ekranı da aynı sabiti okuyor. Ayrı
+      // yazıldığında "elle basınca geliyor, kendiliğinden gelmiyor" hâli
+      // doğuyor ve hiçbir ekranda görünmüyor (supurme-kapsami.ts).
+      where: SUPURME_HESAP_KOSULU,
       select: {
         id: true,
         name: true,
@@ -250,6 +251,29 @@ export class SyncProcessorService {
       case 'insights_backfill':
         // L4 — son 7 gün. Atıf pencereleri yüzünden dünün verisi 3 gün sonra
         // hâlâ değişiyor; bir kez çekip bırakmak ROAS'ı sistematik eksik gösterir.
+        return { from: this.shiftDays(todayInTz, -7), to: this.shiftDays(todayInTz, -1) };
+      /*
+       * ANAHTAR KELİMELER — BU DAL EKSİKTİ VE İŞ HER GÜN DÜŞÜYORDU.
+       *
+       * `sweep:keywords` her gece 04:47'de `keyword_insights` işi kuyruğa
+       * atıyor, ama burada karşılığı olmadığı için `undefined` dönüyor ve iş
+       * `[missing_dates] keyword_insights tarih aralığı olmadan geldi` ile
+       * düşüyordu. Sonuç: Google anahtar kelime verisi HİÇ toplanmadı ve
+       * bunun tek izi `sync_jobs` tablosundaydı — okuyan da yoktu.
+       *
+       * Metrik geri düzeltmesiyle AYNI pencere (son 7 gün): anahtar kelime
+       * satırları da aynı atıf gecikmesine tabi ve tek gün çekmek kapanmamış
+       * dönüşümleri eksik gösterirdi.
+       */
+      case 'keyword_insights':
+      /*
+       * ARAMA TERİMİ DE AYNI PENCERE. Bu dalı unutmak, işin her gece
+       * `[missing_dates]` ile düşmesi ve verinin HİÇ toplanmaması demek —
+       * anahtar kelimelerde tam olarak bu oldu ve tek iz `sync_jobs`taydı.
+       * `sweep-dates.spec.ts` zamanlayıcı listesiyle bu switch'i
+       * karşılaştırıyor.
+       */
+      case 'search_terms':
         return { from: this.shiftDays(todayInTz, -7), to: this.shiftDays(todayInTz, -1) };
       default:
         return undefined;
@@ -514,7 +538,11 @@ export class SyncProcessorService {
           // silinmiş kampanyanın kaybolmasını bekliyor.
           full: payload.interactive === true,
         });
-        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls, {
+          note: result.note,
+        });
+        // Yapı bitti — geçmişi bekleyen bir hesap varsa şimdi kuyruğa girsin.
+        await this.yapiSonrasiGecmisiKuyrukla(payload.adAccountId);
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
@@ -546,7 +574,38 @@ export class SyncProcessorService {
           dateFrom: payload.dateFrom,
           dateTo: payload.dateTo,
         });
-        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        // ATILAN SATIR SAYISI YALNIZCA METRİK İŞİNDE VAR ve teşhisin
+        // belkemiği: `rows=0` + `skipped>0`, "yapı taraması eksik ya da
+        // kampanya arşivlenmiş" demek.
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls, {
+          note: result.note,
+          rowsSkipped: result.skipped,
+        });
+        return { rows: result.rows, note: result.note };
+      } catch (err) {
+        await this.recordFailure(syncJobId, err);
+        throw err;
+      }
+    }
+
+    if (payload.jobType === 'search_terms') {
+      if (!payload.adAccountId) {
+        await this.markFailed(syncJobId, 'missing_account', 'search_terms hesap kimliği olmadan geldi');
+        throw new UnrecoverableError('search_terms hesap kimliği olmadan geldi');
+      }
+      if (!payload.dateFrom || !payload.dateTo) {
+        await this.markFailed(syncJobId, 'missing_dates', 'search_terms tarih aralığı olmadan geldi');
+        throw new UnrecoverableError('search_terms tarih aralığı olmadan geldi');
+      }
+      try {
+        const result = await this.searchTerms.syncAccount({
+          adAccountId: payload.adAccountId,
+          dateFrom: payload.dateFrom,
+          dateTo: payload.dateTo,
+        });
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls, {
+          note: result.note,
+        });
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
@@ -569,7 +628,9 @@ export class SyncProcessorService {
           dateFrom: payload.dateFrom,
           dateTo: payload.dateTo,
         });
-        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls);
+        await this.markSucceeded(payload.syncJobId, result.rows, result.apiCalls, {
+          note: result.note,
+        });
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
@@ -704,7 +765,82 @@ export class SyncProcessorService {
     }
   }
 
-  async markSucceeded(syncJobId: string, rows: number, apiCalls: number): Promise<void> {
+  /**
+   * İşi başarıyla kapatır — VE NEDEN'İNİ YAZAR.
+   *
+   * `note` ile `rowsSkipped` sonradan eklendi ve sebebi somut: "0 satır
+   * yazıldı, 12 atlandı" bilgisi yalnızca worker log'unda kalıyordu ve log
+   * rotasyonuyla kayboluyordu. Oysa bu iki alan, "atadım ama veri gelmiyor"
+   * teşhisinin tek kanıtı.
+   */
+  /**
+   * YAPI BİTTİ — GEÇMİŞİ BEKLEYEN İŞ VARSA ŞİMDİ KUYRUĞA GİRSİN.
+   *
+   * Bu, canlıda görülen bir ÖLÜ NOKTAYI kapatıyor. Sıra şuydu:
+   *
+   *   1. Hesap atanıyor; `structure` ve `initial_backfill` kuyruğa giriyor.
+   *   2. Yapı taraması büyük hesapta birkaç kez düşüyor (sayfa boyutu) ve
+   *      dakikalarca sürüyor.
+   *   3. `initial_backfill` bu sırada beş denemesini de harcıyor — her
+   *      seferinde "yapı taraması hiç koşmadı" diyerek, doğru biçimde.
+   *   4. Yapı taraması SONUNDA başarıyor.
+   *   5. Ama geçmiş çekimi çoktan kalıcı `failed`. Kendiliğinden bir daha
+   *      denenmiyor: gecelik süpürme yalnızca son 7 günü çekiyor.
+   *
+   * Sonuç: yapı 300 kampanya yazmış, panelde "Metrik: hiç" yazıyor ve
+   * kullanıcının bunu bilip elle "Son 90 gün" ile tetiklemesi gerekiyor.
+   *
+   * KOŞUL DAR TUTULDU: yalnızca o hesapta HİÇ metrik yoksa. Aksi hâlde her
+   * yapı taraması (6 saatte bir) 90 günlük bir çekim tetikler ve kotayı
+   * boşa harcardı. Kuyruğun mükerrer engeli de ikinci bir güvence.
+   */
+  private async yapiSonrasiGecmisiKuyrukla(adAccountId: string): Promise<void> {
+    try {
+      const account = await this.db.adAccount.findUnique({
+        where: { id: adAccountId },
+        select: { clientId: true, platform: true, lastInsightsSyncAt: true, syncEnabled: true },
+      });
+      if (!account || account.clientId === null || !account.syncEnabled) return;
+      if (account.lastInsightsSyncAt !== null) return;
+
+      const bugun = new Date();
+      const baslangic = new Date(bugun.getTime() - 90 * 86_400_000);
+      const gun = (d: Date): string => d.toISOString().slice(0, 10);
+
+      const res = await this.queue.enqueue({
+        clientId: account.clientId,
+        platform: account.platform,
+        jobType: 'initial_backfill',
+        adAccountId,
+        entityLevel: 'campaign',
+        dateFrom: gun(baslangic),
+        dateTo: gun(bugun),
+      });
+      if (res.enqueued) {
+        this.logger.log(
+          `Yapı taraması bitti, ${adAccountId} için 90 günlük geçmiş yeniden kuyruğa alındı.`,
+        );
+      }
+    } catch (err) {
+      /*
+       * YUTULUYOR AMA SESSİZ DEĞİL. Yapı taraması BAŞARILI bitti; bu ek adım
+       * düşerse onu başarısız saymak, yazılmış 3.382 satırı çöpe atıp aynı
+       * taramayı tekrar koşturmak olurdu. Kullanıcının kaybı yalnızca
+       * geçmiş verinin gecikmesi ve o "Şimdi güncelle" ile alınabiliyor.
+       */
+      this.logger.error(
+        `Yapı sonrası geçmiş kuyruğa alınamadı (hesap ${adAccountId}): ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  async markSucceeded(
+    syncJobId: string,
+    rows: number,
+    apiCalls: number,
+    extra?: { note?: string; rowsSkipped?: number },
+  ): Promise<void> {
     await this.db.syncJob.update({
       where: { id: BigInt(syncJobId) },
       data: {
@@ -712,6 +848,10 @@ export class SyncProcessorService {
         finishedAt: new Date(),
         rowsUpserted: rows,
         apiCallsUsed: apiCalls,
+        // `?? null` DEĞİL `?? undefined`: not üretmeyen iş türlerinde
+        // (boost, kural) var olan bir notu silmek istemiyoruz.
+        note: extra?.note?.slice(0, 500),
+        rowsSkipped: extra?.rowsSkipped,
         errorCode: null,
         errorMessage: null,
       },

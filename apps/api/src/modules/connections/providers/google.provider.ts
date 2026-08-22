@@ -26,6 +26,7 @@ import {
   type CreateAdResult,
   type DiscoveredOrganicPost,
   type DiscoveredKeywordRow,
+  type DiscoveredSearchTermRow,
   type PlatformActionRequest,
   type PublishDraftRequest,
   type PublishDraftResult,
@@ -1462,6 +1463,82 @@ export class GoogleProvider implements IAdPlatformProvider {
 
   async fetchFormLeads(): Promise<never> {
     throw new PlatformApiError('google', 'permanent', "Google Ads'te anlık form kaydı yok.");
+  }
+
+  /**
+   * ARAMA TERİMLERİ — `search_term_view`.
+   *
+   * Anahtar kelime bizim hedeflediğimiz şey, arama terimi kullanıcının
+   * YAZDIĞI şey. Geniş eşlemeli bir kelime hiç istemediğimiz sorgulara da
+   * gösterim alabiliyor ve fark ancak burada görünüyor.
+   *
+   * `search_term_view.status` ÜRÜN AÇISINDAN EN DEĞERLİ ALAN: `NONE` olan
+   * bir terim para harcıyor ama ne anahtar kelime ne de negatif olarak
+   * tanımlı.
+   *
+   * `metrics.impressions > 0` SÜZGECİ ŞART: gösterim almamış terim yok
+   * demektir ve Google onları da döndürebiliyor; süzgeçsiz sorgu hem kotayı
+   * hem tabloyu boş satırlarla şişirir.
+   */
+  async fetchSearchTerms(
+    ctx: FetchContext,
+    request: { dateFrom: string; dateTo: string },
+  ): Promise<{ rows: DiscoveredSearchTermRow[]; apiCalls: number }> {
+    const calls = { n: 0 };
+
+    const raw = await this.searchGaqlPaged<Record<string, unknown>>(
+      ctx.accessToken,
+      ctx.accountExternalId,
+      `SELECT search_term_view.search_term,
+              search_term_view.status,
+              segments.keyword.info.text,
+              segments.keyword.info.match_type,
+              ad_group.id,
+              segments.date,
+              customer.currency_code,
+              metrics.impressions, metrics.clicks, metrics.cost_micros,
+              metrics.conversions, metrics.conversions_value
+       FROM search_term_view
+       WHERE segments.date BETWEEN '${request.dateFrom}' AND '${request.dateTo}'
+         AND metrics.impressions > 0`,
+      ctx.loginCustomerId,
+      calls,
+    );
+
+    const rows: DiscoveredSearchTermRow[] = [];
+    for (const row of raw) {
+      const stv = this.obj(row.searchTermView);
+      const segments = this.obj(row.segments);
+      const kw = this.obj(this.obj(segments?.keyword)?.info);
+      const metrics = this.obj(row.metrics);
+
+      const term = this.str(stv?.searchTerm);
+      const date = this.str(segments?.date);
+      // İkisi de zorunlu: terimsiz satır raporda boş bir hücre, tarihsiz
+      // satır tekil anahtara yazılamaz.
+      if (!term || !date) continue;
+
+      rows.push({
+        searchTerm: term.slice(0, 500),
+        keywordText: this.str(kw?.text)?.slice(0, 500),
+        matchType: normalizeMatchType(this.str(kw?.matchType)),
+        status: (this.str(stv?.status) ?? 'NONE').toUpperCase().slice(0, 20),
+        adGroupExternalId: this.str(this.obj(row.adGroup)?.id),
+        date,
+        impressions: Number(metrics?.impressions ?? 0) || 0,
+        clicks: Number(metrics?.clicks ?? 0) || 0,
+        // Zaten micros — Google `cost_micros` veriyor, çevrim yok.
+        spendMicros: this.micros(metrics?.costMicros) ?? 0n,
+        conversions: Number(metrics?.conversions ?? 0) || 0,
+        // `conversions_value` micros DEĞİL, ondalık double.
+        conversionValueMicros: googleValueToMicros(metrics?.conversionsValue),
+        currency: (this.str(this.obj(row.customer)?.currencyCode) ?? 'TRY')
+          .toUpperCase()
+          .slice(0, 3),
+      });
+    }
+
+    return { rows, apiCalls: calls.n };
   }
 
   async fetchKeywords(

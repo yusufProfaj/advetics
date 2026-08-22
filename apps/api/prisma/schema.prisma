@@ -108,9 +108,11 @@ model Organization {
   draftAdGroups   DraftAdGroup[]
   draftAds        DraftAd[]
 
-  autoBoostPresets    AutoBoostPreset[]
-  autoBoostQueueItems AutoBoostQueueItem[]
+  autoBoostPresets       AutoBoostPreset[]
+  autoBoostQueueItems    AutoBoostQueueItem[]
   autoBoostSubscriptions AutoBoostSubscription[]
+  userEmailAccounts      UserEmailAccount[]
+
   @@map("organizations")
 }
 
@@ -164,6 +166,7 @@ model User {
   refreshTokens      RefreshToken[]
   passwordResets     PasswordResetToken[]
   connectionsCreated PlatformConnection[]
+  emailAccount       UserEmailAccount?
 
   @@unique([orgId, email])
   @@index([orgId, status])
@@ -211,9 +214,9 @@ model Client {
   iban         String? @db.VarChar(34)
   notes        String? @db.VarChar(2000)
 
-  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  archivedAt        DateTime?    @map("archived_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
 
   organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   memberships  Membership[]
@@ -248,9 +251,11 @@ model Client {
   adCreatives     AdCreative[]
   draftCampaigns  DraftCampaign[]
 
-  autoBoostPresets    AutoBoostPreset[]
-  autoBoostQueueItems AutoBoostQueueItem[]
+  autoBoostPresets       AutoBoostPreset[]
+  autoBoostQueueItems    AutoBoostQueueItem[]
   autoBoostSubscriptions AutoBoostSubscription[]
+  searchTermInsights     SearchTermInsight[]
+
   @@unique([orgId, slug])
   @@index([orgId, status])
   @@map("clients")
@@ -547,22 +552,23 @@ model AdAccount {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization    Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  organization       Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   /// SetNull, Cascade DEĞİL: müşteri silinince hesap ajansın havuzuna GERİ
   /// DÖNER. Cascade olsaydı müşteri silmek ajansın kendi reklam hesabı
   /// kaydını da silerdi.
-  client          Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  connection      PlatformConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  boostTargets    SocialProfile[]    @relation("BoostBillingAccount")
-  campaigns       Campaign[]
-  budgets         MonthlyBudget[]
-  rules           Rule[]
-  boosts          Boost[]
-  adDrafts        AdDraft[]
-  draftCampaigns  DraftCampaign[]
-  keywordInsights KeywordInsight[]
-  bulkBatches     BulkBatch[]
-  assetRefs       AssetPlatformRef[]
+  client             Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  connection         PlatformConnection  @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  boostTargets       SocialProfile[]     @relation("BoostBillingAccount")
+  campaigns          Campaign[]
+  budgets            MonthlyBudget[]
+  rules              Rule[]
+  boosts             Boost[]
+  adDrafts           AdDraft[]
+  draftCampaigns     DraftCampaign[]
+  keywordInsights    KeywordInsight[]
+  bulkBatches        BulkBatch[]
+  assetRefs          AssetPlatformRef[]
+  searchTermInsights SearchTermInsight[]
 
   @@unique([platform, externalId, orgId])
   @@index([orgId, clientId])
@@ -574,8 +580,8 @@ model AdAccount {
 /// Facebook sayfası veya Instagram Business hesabı — Auto-Boost (Modül 7) için.
 /// SADECE Meta. Google'da karşılığı yoktur.
 model SocialProfile {
-  id     String @id @default(uuid()) @db.Uuid
-  orgId  String @map("org_id") @db.Uuid
+  id           String  @id @default(uuid()) @db.Uuid
+  orgId        String  @map("org_id") @db.Uuid
   /// null => havuzda, henüz hiçbir müşteriye atanmamış. Atanmamış sayfa
   /// senkronize EDİLMEZ ve üzerine form/reklam kurulamaz: `organic_posts`,
   /// `leads` ve `lead_forms` satırları `client_id` taşıyor ve NULL yazılan
@@ -641,9 +647,10 @@ model SocialProfile {
   /// Tekillik ORGANİZASYON bazında: ikinci bir Meta kimliği bağlandığında aynı
   /// Facebook sayfası iki bağlantının da altında görünüyor ve bağlantı bazlı
   /// kısıt aynı sayfa için iki satır üretirdi.
-  autoBoostPresets    AutoBoostPreset[]
-  autoBoostQueueItems AutoBoostQueueItem[]
-  autoBoostSubscription  AutoBoostSubscription?
+  autoBoostPresets      AutoBoostPreset[]
+  autoBoostQueueItems   AutoBoostQueueItem[]
+  autoBoostSubscription AutoBoostSubscription?
+
   @@unique([orgId, externalId])
   @@index([orgId, clientId])
   @@index([clientId, syncEnabled])
@@ -657,13 +664,13 @@ model SocialProfile {
 /// satırı `consumedAt` ile bir kez tüketilir. Token'ın kendisi değil SHA-256
 /// hash'i saklanır.
 model OAuthState {
-  id       String @id @default(uuid()) @db.Uuid
-  orgId    String @map("org_id") @db.Uuid
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
   /// null => ajans geneli yetkilendirme. Dolu olması yalnızca akışın belirli
   /// bir müşteri için başlatıldığı hâli anlatır (müşteri kendi hesabını
   /// devretmişse).
-  clientId String? @map("client_id") @db.Uuid
-  platform Platform
+  clientId  String?  @map("client_id") @db.Uuid
+  platform  Platform
   tokenHash String   @unique @map("token_hash") @db.VarChar(64)
 
   /// Yetkilendirme sonrası dönülecek panel yolu.
@@ -801,6 +808,8 @@ enum SyncJobType {
   /// durumunu kapsıyor ve hiçbir kod yolu o durumdan çıkmıyordu. Küresel
   /// tarama, müşteri başına dağılmıyor.
   boost_complete
+  /// Google arama terimleri — kullanıcının yazdığı sorgular.
+  search_terms
 }
 
 enum SyncJobStatus {
@@ -1056,6 +1065,52 @@ model FxRate {
 /// müşteriye farklı şeyler gösteriyor: birinde WhatsApp mesajları önemli,
 /// diğerinde anahtar kelimeler. Organizasyon geneli varsayılan şablon
 /// `clientId = null` ile tutuluyor.
+/// Danışman başına e-posta kimliği — rapor müşteriye ONUN adresinden gidiyor.
+///
+/// PAROLA ŞİFRELİ ve hiçbir okuma yolundan geri dönmüyor. Bir kullanıcının
+/// uygulama parolasını saklamak, o hesabın adına mail gönderebilmek demek;
+/// satır yalnızca SAHİBİNE görünüyor (RLS), org yöneticisi bile parolayı
+/// okuyamıyor.
+model UserEmailAccount {
+  id     String @id @default(uuid()) @db.Uuid
+  orgId  String @map("org_id") @db.Uuid
+  /// Tekil: bir kullanıcının tek e-posta kimliği var.
+  userId String @unique @map("user_id") @db.Uuid
+
+  fromName  String @map("from_name") @db.VarChar(160)
+  fromEmail String @map("from_email") @db.VarChar(255)
+
+  smtpHost    String  @map("smtp_host") @db.VarChar(255)
+  smtpPort    Int     @map("smtp_port")
+  smtpSecure  Boolean @default(true) @map("smtp_secure")
+  smtpUser    String  @map("smtp_user") @db.VarChar(255)
+  smtpPassEnc Bytes   @map("smtp_pass_enc")
+  keyVersion  Int     @default(1) @map("key_version")
+
+  /// İmza HTML'i — TEMİZLENMİŞ hâliyle saklanıyor.
+  ///
+  /// Gmail'in imzası SMTP ile giden maile otomatik eklenmiyor; onu Gmail'in
+  /// arayüzü ekliyor. Girişte `script`/`style`/olay öznitelikleri atılıyor ve
+  /// atılanlar kullanıcıya söyleniyor — sonradan sürpriz olmasın.
+  signatureHtml String? @map("signature_html")
+
+  /// "Kaydedildi" doğrulama DEĞİL: SMTP kimliği yanlışsa hata ilk gerçek
+  /// gönderimde çıkar ve o gönderim müşteriye gidecek olandır. Kendine test
+  /// maili gönderilmeden NULL kalıyor.
+  verifiedAt  DateTime? @map("verified_at") @db.Timestamptz(6)
+  lastError   String?   @map("last_error") @db.VarChar(500)
+  lastErrorAt DateTime? @map("last_error_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("user_email_accounts")
+}
+
 model ReportTemplate {
   id       String  @id @default(uuid()) @db.Uuid
   orgId    String  @map("org_id") @db.Uuid
@@ -1390,7 +1445,7 @@ model OrganicPost {
   client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
   boosts        Boost[]
-  draftAds     DraftAd[]
+  draftAds      DraftAd[]
 
   @@unique([socialProfileId, externalId])
   @@index([clientId, publishedAt(sort: Desc)])
@@ -1462,10 +1517,10 @@ model BoostRule {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?   @map("created_by") @db.Uuid
 
-  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  socialProfile SocialProfile? @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
-  boosts        Boost[]
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile  SocialProfile?  @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  boosts         Boost[]
   draftCampaigns DraftCampaign[]
 
   @@index([clientId, enabled])
@@ -1572,6 +1627,7 @@ model Boost {
   /// (aday/onaylı/oluşturuluyor/aktif) çakışıyor. Reddedilmiş ya da başarısız
   /// bir boost yeniden denenebilmeli.
   autoBoostQueueItems AutoBoostQueueItem[]
+
   @@index([clientId, status, createdAt(sort: Desc)])
   @@index([boostRuleId, createdAt(sort: Desc)])
   @@map("boosts")
@@ -1823,6 +1879,52 @@ model AdDraftAsset {
 ///
 ///   · Meta'da karşılığı YOK. `insights_daily` iki platformu birleştiriyor;
 ///     yalnızca birinde var olan bir seviye o tabloyu asimetrik yapardı.
+/// Arama terimleri — kullanıcının gerçekten YAZDIĞI sorgular.
+///
+/// Anahtar kelime bizim hedeflediğimiz şey; arama terimi kullanıcının
+/// yazdığı şey. Fark tam olarak paranın nereye gittiğini gösteriyor: geniş
+/// eşlemeli bir kelime hiç istemediğimiz sorgulara da gösterim alabiliyor.
+model SearchTermInsight {
+  clientId    String  @map("client_id") @db.Uuid
+  adAccountId String  @map("ad_account_id") @db.Uuid
+  adGroupId   String? @map("ad_group_id") @db.Uuid
+
+  /// Terimin SHA-256'sı. Arama teriminin sabit bir kimliği yok ve metnin
+  /// kendisini birincil anahtara koymak btree anahtar sınırına (~2704 bayt)
+  /// yaklaşıyor; yazma anındaki bir indeks hatası gece koşan bir işin
+  /// sessizce düşmesi demek olurdu.
+  termHash    String  @map("term_hash") @db.Char(64)
+  searchTerm  String  @map("search_term") @db.VarChar(500)
+  /// Terimi getiren anahtar kelime — "hangi kelime bu sorguyu çekti".
+  keywordText String? @map("keyword_text") @db.VarChar(500)
+  matchType   String? @map("match_type") @db.VarChar(20)
+
+  /// ADDED | EXCLUDED | ADDED_EXCLUDED | NONE
+  ///
+  /// ÜRÜN AÇISINDAN EN DEĞERLİ ALAN: `NONE` olan bir terim para harcıyor ama
+  /// ne anahtar kelime ne de negatif olarak tanımlı.
+  status String @default("NONE") @db.VarChar(20)
+
+  date DateTime @db.Date
+
+  impressions           Int     @default(0)
+  clicks                Int     @default(0)
+  spendMicros           BigInt  @default(0) @map("spend_micros")
+  conversions           Decimal @default(0) @db.Decimal(14, 4)
+  conversionValueMicros BigInt  @default(0) @map("conversion_value_micros")
+
+  currency  String   @db.Char(3)
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  @@id([date, adAccountId, termHash])
+  @@index([clientId, date(sort: Desc)])
+  @@index([adAccountId, date(sort: Desc)])
+  @@map("search_term_insights")
+}
+
 model KeywordInsight {
   clientId    String  @map("client_id") @db.Uuid
   adAccountId String  @map("ad_account_id") @db.Uuid
@@ -1887,6 +1989,14 @@ model SyncJob {
 
   apiCallsUsed Int @default(0) @map("api_calls_used")
   rowsUpserted Int @default(0) @map("rows_upserted")
+
+  /// Yazılamayıp ATILAN satır sayısı. NULL = bilinmiyor (kolon öncesi kayıt);
+  /// 0 ile aynı şey DEĞİL. `rows_upserted = 0` ve `rows_skipped > 0` olan bir
+  /// iş "başarılı" görünür ama hiçbir veri yazmamıştır.
+  rowsSkipped Int?    @map("rows_skipped")
+  /// İnsan okuması için özet: hangi aralık, hangi seviye, kaç satır, kaç
+  /// atlandı. Bugüne kadar yalnızca worker log'una yazılıyordu.
+  note        String? @db.VarChar(500)
 
   /// Meta async insights job kimliği — worker yeniden başlasa bile polling sürer.
   platformJobId String? @map("platform_job_id") @db.VarChar(255)
@@ -1997,13 +2107,13 @@ model LeadForm {
   client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
 
-  root         LeadForm   @relation("LeadFormRoot", fields: [rootId], references: [id], onDelete: Cascade)
-  versions     LeadForm[] @relation("LeadFormRoot")
-  supersededBy LeadForm?  @relation("LeadFormSupersede", fields: [supersededById], references: [id], onDelete: SetNull)
-  supersedes   LeadForm[] @relation("LeadFormSupersede")
-  adDrafts     AdDraft[]
+  root          LeadForm       @relation("LeadFormRoot", fields: [rootId], references: [id], onDelete: Cascade)
+  versions      LeadForm[]     @relation("LeadFormRoot")
+  supersededBy  LeadForm?      @relation("LeadFormSupersede", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes    LeadForm[]     @relation("LeadFormSupersede")
+  adDrafts      AdDraft[]
   draftAdGroups DraftAdGroup[]
-  leads        Lead[]
+  leads         Lead[]
 
   @@index([clientId, createdAt(sort: Desc)])
   @@index([rootId, version])
@@ -2123,8 +2233,8 @@ model Asset {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid
 
-  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client       Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization  Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   platformRefs  AssetPlatformRef[]
   draftAssets   AdDraftAsset[]
   bulkItems     BulkItem[]
@@ -2197,8 +2307,8 @@ model AdCreative {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid
 
-  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client       Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
   assets       AdCreativeAsset[]
   draftAds     DraftAd[]
 
@@ -2353,8 +2463,8 @@ model DraftCampaign {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid
 
-  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client       Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   adAccount      AdAccount       @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
   sourceCampaign DraftCampaign?  @relation("DraftCampaignCopy", fields: [sourceCampaignId], references: [id], onDelete: SetNull)
   copies         DraftCampaign[] @relation("DraftCampaignCopy")
@@ -2505,13 +2615,13 @@ model AutoBoostPreset {
   /// sessizce yok sayılması demek olurdu.)
   settings Json @db.JsonB
 
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
 
-  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  socialProfile SocialProfile? @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  organization  Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile?       @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
   queueItems    AutoBoostQueueItem[]
 
   @@index([clientId, platform])

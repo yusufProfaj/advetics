@@ -9,6 +9,7 @@ import {
   type ConnectionSummary,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { atamaBildirimi, type AtamaYaniti } from '@/lib/atama-bildirimi';
 import { havuzlariCikar, havuzSuz, KANALLAR, type HavuzOgesi } from '@/lib/havuz';
 import { PlatformLogo } from '@/components/platform-logo';
 
@@ -137,6 +138,7 @@ function HavuzModal({
   const [hedef, setHedef] = useState<string>(clients[0]?.id ?? '');
   const [bekleyen, setBekleyen] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
+  const [bildirim, setBildirim] = useState<string | null>(null);
   const kutuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -156,11 +158,22 @@ function HavuzModal({
     }
     setBekleyen(oge.id);
     setHata(null);
+    setBildirim(null);
     try {
       const yol = oge.reklamHesabi
         ? `/connections/ad-accounts/${oge.id}/client`
         : `/connections/social-profiles/${oge.id}/client`;
-      await apiFetch(yol, { method: 'PATCH', body: JSON.stringify({ clientId: hedef }) });
+      const res = await apiFetch<AtamaYaniti>(yol, {
+        method: 'PATCH',
+        body: JSON.stringify({ clientId: hedef }),
+      });
+      /*
+       * HAVUZDAKİ HESAP DA VERİ TAŞIYABİLİR. "Havuz" hesabın kimseye atanmamış
+       * olması demek; DAHA ÖNCE bir müşteride bulunmuş ve oradan kaldırılmış
+       * olabilir. O hâlde eski müşterinin kampanya ve metrik satırları hâlâ
+       * duruyor ve bu atama onları taşıyor — sayı burada da yazılmalı.
+       */
+      setBildirim(atamaBildirimi(res ?? {}, true));
       // ATAMA İZLEMEYİ AÇIP 90 GÜNLÜK GEÇMİŞİ KUYRUĞA ALIYOR.
       router.refresh();
     } catch (e) {
@@ -236,6 +249,7 @@ function HavuzModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {hata && <p className="mb-2 text-xs text-danger">{hata}</p>}
+          {bildirim && <p className="mb-2 text-xs text-ink-muted">{bildirim}</p>}
 
           {suzulmus.length === 0 ? (
             <p className="py-6 text-center text-sm text-ink-muted">Aramaya uyan hesap yok.</p>

@@ -107,7 +107,14 @@ buna göre veriliyor:
 
 - **`Prisma.sql` şablonu içindeki SQL yorumlarında backtick KULLANMA.** Şablonu
   ortasından kapatıyor; hata `TS1005: ';' expected` ve sebebi hiç belli olmuyor.
-  `sql-template.spec.ts` bunu tarıyor.
+  `sql-template.spec.ts` bunu tarıyor. **Kural `--` satırlarıyla sınırlı DEĞİL:
+  `/* */` blok yorumu ve sorgunun üstündeki JSDoc de aynı şablonun içinde.**
+  Bu oturumda dört kez aynı yere düşüldü ve tarama yalnızca `--` baktığı için
+  hiçbirini yakalamadı; TypeScript'in gösterdiği satır her seferinde kusursuz
+  görünen SQL'di. `sql-template.spec.ts` artık yorum biçimine HİÇ bakmayan
+  ikinci bir dedektör taşıyor (`erkenKapananSablonlar`): bir `Prisma.sql`
+  şablonu kapandıktan sonra gelen ilk anlamlı karakter SQL gibi görünüyorsa
+  şablon ortasından kapanmış demektir.
 - **Yeni tablo ekleyince `test/pglite-harness.ts` içindeki `TRUNCATE` listesine
   ekle.** Yoksa testler arası veri sızar — en yanıltıcı test hatası türü.
 - **Yeni tablo ekleyince `prisma/sql/02_rls.sql` içindeki tablo listesine ve
@@ -125,6 +132,124 @@ buna göre veriliyor:
   gevşetmek çözmüyor, engel SELECT politikasında. Çözüm çağıran tarafta:
   bağlamı daraltan değeri (örneğin `activeClientId`) o istek için kapat.
   `ad-account-pool-rls.spec.ts` bunu kilitliyor.
+- **KUYRUK ÖNCELİĞİ BİR BARİYER DEĞİL.** `structure` (öncelik 4) ile
+  `initial_backfill` (10) art arda, gecikmesiz kuyruğa giriyordu ve sıranın
+  "garanti" olduğu sanılıyordu. Worker `concurrency: 4` ile çalışıyor: yapı
+  işi hâlâ koşarken metrik işi ikinci bir slotta başlayabiliyor. Kampanya
+  satırı henüz yokken gelen metrikler eşlenemeyip atlanıyor. Bağımlılık
+  isteniyorsa ya işin SONUNDA zincirle ya da başarısızlığı tekrar denenebilir
+  yap; öncelik yalnızca sıralama ipucu.
+- **`succeeded` + `rows = 0` BU PROJEDE BİR HATA TÜRÜ.** Metrik işi hiçbir
+  satır yazamadığında başarılı sayılıyordu ve BİR DAHA denenmiyordu; belirtisi
+  "atadım, veri gelmiyor" ve teşhisi yalnızca worker log'unda. İki durum
+  ayrılmak zorunda: yapı taraması HİÇ koşmadıysa geçici (tekrar denenmeli),
+  koştuysa varlık gerçekten yok (arşivlenmiş kampanya — tekrar denemek beş kez
+  kota harcar). Atılan satır sayısı ve not artık `sync_jobs`'a yazılıyor.
+- **BAĞIMLI İŞ, BAĞLI OLDUĞU İŞİN KOTASINI YİYEBİLİR — ÖNCE KONTROL, SONRA
+  ÇAĞRI.** Yapı taraması hiç koşmamış bir hesapta metrik işi 3.151 satır
+  çekip hiçbirini yazamıyor, tekrar denenebilir sayılıp beş kez daha aynı
+  şeyi yapıyor, hesabın kota yüzdesini %90'ın üstüne çıkarıyor ve kota
+  bekçisi bundan sonra YAPI TARAMASINI DA reddediyor (`structure` katmanının
+  sınırı da %90). Yapı koşamadığı için metrikler hiç eşlenemiyor — kalıcı
+  kilit. Ön koşul kontrolü platform çağrısından ÖNCE yapılmalı: maliyeti
+  sıfır çağrı olan bir ret, bağımlılığına nefes alacak yer bırakıyor.
+- **YAVAŞ BİR ÖN KOŞUL, BAĞIMLI İŞİN DENEMELERİNİ TÜKETİYOR.** Büyük bir
+  hesapta yapı taraması dakikalarca sürüp birkaç kez düşerken, geçmiş çekimi
+  beş denemesini de "yapı hiç koşmadı" diyerek harcıyor — her seferinde
+  doğru davranarak. Yapı sonunda başarıyor ama geçmiş çekimi kalıcı `failed`
+  ve kendiliğinden bir daha denenmiyor (gecelik süpürme yalnızca son 7 gün).
+  Panelde "Yapı: 13:06 · Metrik: hiç". Ön koşul BİTTİĞİNDE bağımlı işi
+  yeniden kuyruğa al; koşulu dar tut (yalnızca hiç metrik yoksa), yoksa 6
+  saatte bir 90 günlük çekim tetiklenir. `yapi-sonrasi-gecmis.spec.ts`.
+- **META SAYFA BOYUTU SABİT OLAMAZ: "reduce the amount of data".** Büyük bir
+  reklam hesabında `limit=500` ile yapı taraması HTTP 500 ve *"Please reduce
+  the amount of data you're asking for"* ile düşüyor. Kabul edilen boyutun
+  sabit eşiği yok — hesabın büyüklüğüne, alan setine ve o anki yüke göre
+  değişiyor, yani aynı istek bir hesapta çalışıp diğerinde düşüyor. Sabit
+  küçük limit koymak bütün hesaplarda 10× çağrı demek; doğrusu hatayı görünce
+  limiti YARILAYIP AYNI SAYFAYI tekrar istemek. Küçültülen limit sonraki
+  sayfalarda da korunmalı (Meta'nın `paging.next` bağlantısı kendi limitini
+  taşıyor). Hata kod/subcode ile ayırt edilemiyor (çoğu zaman kod 1 =
+  "unknown"); ayıran tek şey mesaj. `meta-sayfa-boyutu.spec.ts`.
+- **MÜKERRER ENGELİ KALICI KİLİT ÜRETEBİLİYOR — VE İZ BIRAKMIYOR.** Tarih
+  taşımayan işlerde (`structure`) kuyruk kimliği sabit; `enqueue` aynı
+  kimlikli bir iş görünce `enqueued: false` dönüyordu ve bu, `sync_jobs`
+  satırı YAZILMADAN ÖNCE oluyordu. Kotaya takılıp `delayed`e düşmüş bir yapı
+  taraması, kullanıcının bastığı her "Şimdi güncelle"yi sessizce yutuyor,
+  panelde "Yapı: hiç" yazıyor ve o hesaba ait tek bir yapı satırı bile
+  görünmüyordu. Artık `active`/`delayed` iş yaşlıysa (30 dk) ya da kullanıcı
+  ekranda bekliyorsa (interactive) takılmış sayılıp kaldırılıyor; işler
+  upsert olduğu için tekrar koşmak güvenli. `takilmis-is.spec.ts`.
+- **TEŞHİS EKRANI "SON İŞ" GÖSTERİYORSA ARIZAYI GİZLER.** Daha yeni bir
+  metrik işi, kotaya takılmış yapı taramasını görünmez yapıyordu. İş TÜRÜ
+  başına satır göster: bir tür hiç görünmüyorsa o iş hiç kuyruğa girmemiş
+  demek ve bu da bir cevap.
+- **ZAMANLANMIŞ İŞ, İHTİYACI OLAN PARAMETREYİ ÜRETEN DALLA BİRLİKTE
+  EKLENİR.** `sweep:keywords` her gece `keyword_insights` kuyruğa atıyordu
+  ama `datesForJob` o tür için dal taşımıyordu; iş her gün
+  `[missing_dates]` ile düşüyor ve Google anahtar kelime verisi HİÇ
+  toplanmıyordu. Tek iz `sync_jobs`'taydı, okuyan yoktu.
+  `sweep-dates.spec.ts` zamanlayıcı listesiyle türeticiyi karşılaştırıyor.
+- **PLATFORMA GİDEN İSTEKTE ATIF/RAPORLAMA AYARLARI AÇIKÇA YAZILIR.** Meta
+  insights çağrısı `use_unified_attribution_setting` ve `action_report_time`
+  göndermiyordu; karar hesabın varsayılanına kalıyordu ve iki müşteride farklı
+  pencere = karşılaştırılamayan CPA/ROAS, sıfır hata mesajı. Varsayılanı bile
+  olsa açıkça yaz: varsayılan değiştiğinde rakam haber vermeden kayar.
+  `meta-attribution.spec.ts` bunu tarıyor.
+- **KULLANICI HTML'İ ÜÇ YERDE BİRDEN GÖRÜNÜYOR: SAKLA, ÖNİZLE, GÖNDER.**
+  Danışman imzası panelde önizleniyor ve müşteriye giden maile gömülüyor;
+  ikisi de saldırı yüzeyi. Temizlik GİRİŞTE yapılıyor ve TEMİZLENMİŞ hâl
+  saklanıyor — çıkışta temizlemek, kayıtlı hâl ile gönderilen hâli ayrıştırır
+  ve önizleme yalan söyler. Beyaz liste kullanılıyor; kara liste her yeni
+  etikette güncellenmek zorunda. `script`/`style` GÖVDESİYLE atılıyor.
+  Atılanlar kullanıcıya raporlanıyor. `imza-temizle.spec.ts`.
+- **GMAIL İMZASI SMTP İLE GİDEN MAİLE OTOMATİK EKLENMİYOR** — onu Gmail'in
+  arayüzü ekliyor. Ayrıca Gmail'den kopyalanan HTML görselleri kendi
+  önbelleğine yönlendiriyor (`ci3.googleusercontent.com/...#gerçek/adres`);
+  o adres Gmail dışında çalışmıyor ve mailde görsel KIRIK çıkıyor. `#`
+  sonrası gerçek kaynak, otomatik çevriliyor.
+- **PDF'TE TÜRKÇE GÖMÜLÜ YAZI TİPİ İSTİYOR.** PDF'in standart yazı tipleri
+  WinAnsi kullanıyor: `ğ ş ı` orada YOK, `₺` (U+20BA) hiç yok. Gömmeden
+  üretilen belgede karakterler sessizce düşüyor ya da kutu oluyor ve bunu ilk
+  gören müşteri oluyor. `apps/api/assets/fonts` altında DejaVu Sans
+  (normal + bold, ~1,4 MB) DEPODA duruyor — npm paketi 22 font taşıyor ve
+  paylaşımlı sunucuda gereksiz yük. Font bulunamazsa AÇIKÇA patlıyor; sessizce
+  standart yazı tipine düşmek en kötü davranış. `pdf-yazi-tipi.spec.ts` hem
+  cmap kapsamını hem "standart yazı tipi bunu ÇİZEMİYOR" kanıtını tutuyor.
+- **`__dirname`'e göre çözülen varlık yolu, `src` ve `dist` DERİNLİĞİNE
+  BAĞLI.** Dosya bir alt dizine taşınırsa geliştirmede hiçbir şey olmuyor
+  (testler `src` altından koşuyor), üretimde varlık bulunamıyor. Derinliği
+  testte sabitle. `process.cwd()` de kullanılamaz: pm2 altında çalışma dizini
+  garanti değil.
+- **TABLO BAŞLIĞI, GÖVDESİ, TOPLAMI VE DİPNOTU TEK LİSTEDEN TÜRETİLİR.**
+  Rapor kampanya tablosunda dördü ayrı ayrı elle eşleniyordu ve tek bir
+  bayrakla (`showBuckets`) iki sabit sete dallanıyordu. Bir sütun eklenip
+  toplamı eklenmediğinde tablo sessizce kayıyor ve TypeScript hiçbir şey
+  demiyor — hepsi ayrı JSX blokları. Her sütun BİR KEZ tanımlanmalı: nasıl
+  okunacağı, nasıl toplanacağı (toplanamıyorsa `null`), dipnot gerektirip
+  gerektirmediği. `rapor-sutunlari.spec.ts`.
+- **BAĞLANTIYI ELLE BİRLEŞTİRME — SÜZGEÇ DÜŞÜYOR.** Panel süzgeçleri URL'de
+  taşıyor ve her sekme kendi bağlantısını elle kuruyordu; kırılım sekmesi
+  `platform`ı düşürüyordu, yani "Meta" seçip seviye değiştiren kullanıcı
+  sessizce bütün platformlara dönüyordu. Özel tarih aralığı gelince taşınacak
+  anahtar sayısı üçten beşe çıktı. Tek üretici (`lib/baglanti.ts`) ve taşınan
+  parametreleri tek yerde kur. Belirti "aralık/süzgeç bazen kayboluyor" ve
+  hiçbir ekranda görünmüyor.
+- **AYNI SÜZGECİ İKİ YERDE YAZMA.** Zamanlanmış süpürme hesabın platform
+  durumuna bakıyordu, elle tetikleyen uç bakmıyordu; belirtisi "elle basınca
+  geliyor, kendiliğinden gelmiyor" ve hiçbir ekranda görünmüyordu. Süzgeç tek
+  sabitte (`SUPURME_HESAP_KOSULU`) ve teşhis ekranı da onu okuyor.
+- **PRISMA `include` İLİŞKİNİN BÜTÜN KOLONLARINI ÇEKİYOR — `select` KULLAN.**
+  `/connections` listesi `include` ile kuruluydu ve havuzda 481 reklam hesabı
+  varken her satırın `raw` (tam platform yanıtı, JSONB), `rate_limit_state` ve
+  `page_access_token_enc` (ŞİFRELİ SAYFA TOKEN'I) kolonlarını da okuyordu;
+  hepsi `toSummary` içinde atılıyordu. Yük YANITTA GÖRÜNMÜYOR — yanıt zaten
+  doğru, pahalı olan ona giden yol. Panelde "yavaş" olarak bildirilen şeyin
+  ölçülebilir kısmı buydu ve şifreli token'ın belleğe alınması ayrı bir
+  sorundu. Alan listesini `satisfies Prisma.XSelect` ile sabit tut ve satır
+  tipini `GetPayload<{ select: typeof SABIT }>` ile ONDAN TÜRET: ayrı
+  yazılırsa biri güncellenmediğinde TypeScript susar.
+  `connections-select.spec.ts` bunu kilitliyor.
 - **`$queryRaw<T>` DENETİMSİZ bir dönüşüm — tip yalan söyleyebilir.** Satır
   tipine alan eklerken SELECT'e de eklemeyi unutma; TypeScript hiçbir şey
   demiyor, alan `undefined` geliyor ve onu kullanan kod sessizce yanlış üretiyor.
@@ -182,6 +307,104 @@ buna göre veriliyor:
   reddedilecek ya da sessizce ülke geneline çıkacaktı. Bugün tek dosyada:
   `meta-targeting.ts`, ve `meta-targeting.spec.ts` yayın yollarının kendi
   `geo_locations` nesnesini kurmasını yasaklıyor.
+- **DENORMALİZE EDİLMİŞ SAHİPLİK KOLONU, SAHİP DEĞİŞİNCE KENDİLİĞİNDEN
+  TAŞINMIYOR.** `client_id` on beş tabloda BİLEREK denormalize (RLS
+  politikaları join'siz yazılabilsin diye). `assignAdAccount` yalnızca
+  `ad_accounts.client_id`'yi güncelliyordu: hesap A'dan B'ye geçince A'nın
+  raporunda ARTIK ONA AİT OLMAYAN harcama görünmeye devam ediyor, B hiçbir
+  geçmiş göremiyor ve bir sonraki senkronizasyon yeni satırları B'ye yazıp
+  eskileri A'da bırakarak geçmişi İKİYE BÖLÜYOR. Üçü de sessiz. Ayrım tek
+  yerde: `hesap-verisi-tasima.ts`. Platformun aynası ve ölçülmüş metrik
+  TAŞINIYOR (kampanya, grup, reklam, kreatif, metrikler, `sync_jobs`);
+  birinin KARARI olan kayıt kalıyor (bütçe, kural, boost, taslak, toplu
+  işlem) ve sayısı kullanıcıya söyleniyor. Süzgeç `ad_account_id` — panelde
+  atama iki adımlı yapılıyor (önce "Kaldır", sonra "Ata") ve ikinci adımda
+  önceki müşteri artık bilinmiyor.
+- **UPSERT, DENORMALİZE SAHİPLİK KOLONUNU DA GÜNCELLEMEK ZORUNDA.** Yedi
+  `ON CONFLICT DO UPDATE` bloğunun hiçbiri `client_id` yazmıyordu; `creatives`
+  upsert'i `ad_account_id = EXCLUDED.ad_account_id` yazıp `client_id`'yi
+  atlıyordu. Sonuç: satır yarım — hesabı doğru, müşterisi eski — ve "yeniden
+  senkronize et" tavsiyesi de işe yaramıyor. `upsert-client-id.spec.ts`.
+- **POLİTİKASI OLMAYAN UPDATE HATA VERMEZ, SESSİZCE SIFIR SATIR ETKİLER.**
+  `sync_jobs`'ta yalnızca SELECT ve INSERT politikası vardı; taşıma sekiz
+  tablodan yedisini taşıyıp sekizincisini sessizce atlıyordu ve belirtisi
+  yeni müşteride "Yapı: hiç · Metrik: hiç" oluyordu — düzeltilen hatanın ta
+  kendisi. **Bir RLS testi "patlamadı" ile yetinemez: `RETURNING` ile ETKİLENEN
+  SATIRI say.** İlk yazdığım test sekiz tabloyu saydığını sanıyordu ama
+  yalnızca ikisine satır yazıyordu; sıfır satırlık UPDATE politikadan bağımsız
+  olarak başarılı dönüyor ve test yeşildi. `hesap-tasima-rls.spec.ts`.
+  RLS politikaları Prisma migration'ının parçası DEĞİL: `02_rls.sql`
+  `deploy.sh` içindeki `db:rls` ile uygulanıyor.
+- **AYNI SORGUDAKİ HER DAL AYNI SÜZGECİ TAŞIMALI.** Kural motorunun bütçe
+  bekçisinde `spend`, `umbrella` ve `ad_accounts` `client_id` ile süzülüyordu,
+  yalnızca `monthly_budgets` join'i atlanmıştı. Hesap el değiştirdiğinde
+  bütçe eski müşteride kalıyor (kasıtlı) ve o satır B'nin harcamasına
+  bölünüyor — `budget_spent_ratio` koşulu B'nin kampanyalarını DURDURUYOR.
+  İki müşterinin de satırı varsa join iki satır üretiyor ve hangisinin
+  kazandığı belirsiz.
+- **HAVUZ SATIRLARI MÜŞTERİ-KAPSAMLI SAYIMA GİRMEZ — VE RLS SENİ KORUMUYOR.**
+  Genel Bakış'taki "N hesap izlenmiyor" sayacı `ad_accounts WHERE sync_enabled
+  = false` diyordu. Keşif her hesabı `false` ile yazıyor ve ajansın tek Meta
+  kimliği yüzlerce hesap görüyor; `adv_ad_accounts_select` politikası da
+  havuzu (`client_id IS NULL`) org yöneticisine BİLEREK açıyor (atama
+  ekranının çalışması buna bağlı). Sonuç: her müşterinin panelinde "481 hesap
+  izlenmiyor" yazıyordu — uyarı hiçbir zaman sıfıra inmiyor, okunmaz hâle
+  geliyor ve GERÇEK bir kapalı hesap aynı cümlenin içinde kayboluyor. Sayım
+  `client_id IS NOT NULL` demek zorunda; ekrandaki süzgeç (hesap, platform)
+  sayıma da uygulanmalı.
+- **SUNUCUDAN DIŞARI GİDEN HER İSTEK BEYAZ LİSTEYLE KAPATILIR.** Rapor
+  PDF'i kreatif görselini platform CDN'inden indiriyor ve adres
+  VERİTABANINDAN geliyor. "Platformdan geldi" güvenli demek değil: o alan bir
+  gün başka bir şey taşırsa sunucu onu ÇEKER ve paylaşımlı VPS'te bu, iç ağa
+  ya da bulut metadata ucuna (`169.254.169.254`) yapılmış bir istek olur.
+  Kontrol: yalnızca `https`, yalnızca bilinen CDN SONEKLERİ (`endsWith` —
+  `includes` kullanmak `x.fbcdn.net.evil.com`'u geçiriyor), IP literali ret,
+  `redirect: 'manual'` (izlenirse beyaz liste anlamsızlaşıyor), boyut sınırı
+  GÖVDE OKUNURKEN (`content-length` yalan söyleyebiliyor) ve zaman aşımı.
+  `kreatif-gorseli.spec.ts` — mutasyon testi burada iki kez boşa düştü:
+  `127.0.0.1` zaten sonek listesinde olmadığı için "reddedildi" iddiası IP
+  kontrolü SİLİNDİĞİNDE de geçiyordu; iddia SEBEBE çapalanmak zorunda.
+- **SERBEST URL İNDİRİLECEKSE KORUMA ADRESTE DEĞİL ÇÖZÜLEN IP'DE.** Kreatif
+  görseli platform CDN'inden geliyor ve orada beyaz liste işe yarıyor; LOGO
+  ise ajansın kendi alan adında ve liste tutmak her yeni müşteride kod
+  değişikliği demek. `logoIndir` DNS'i çözüp iç ağ aralıklarını
+  (`127/8`, `10/8`, `172.16/12`, `192.168/16`, `169.254/16` = bulut metadata,
+  `100.64/10`, `::1`, `fc00::/7`, `fe80::/10`) reddediyor — `evil.com` pekâlâ
+  `169.254.169.254`e çözülebilir ve adres DİZGESİNE bakan hiçbir kontrol bunu
+  göremez. Kalan risk DNS rebinding; `redirect: 'manual'` ve kısa zaman
+  aşımıyla kabul edilen kalıntı.
+- **VERİDE DURAN ALAN, KULLANILMIYORSA YOKTUR.** Rapor PDF'i `branding` ve
+  `daily` alanlarını HİÇ okumuyordu (servis içinde sıfır referans): marka
+  rengi kullanılmıyor, panelde grafik olarak görünen günlük seri belgeye hiç
+  çizilmiyordu. Kullanıcının bildirdiği hâli *"pdf çok kötü, grafikleri yok,
+  boş text gibi geldi"*. Beyaz etiketli bir üründe markanın rengi müşteriye
+  giden belgede görünmüyorsa ürünün ana vaadi orada yok demektir. Grafik
+  VEKTÖREL çiziliyor (`pdf-cizim.ts`) — sunucuda görsel üretmek paylaşımlı
+  VPS'te yeni bir ikili bağımlılık demek ve `pdf-lib` tam olarak ondan
+  kaçınmak için seçildi.
+- **PDF TESTİNDE METİN DÜZ ARANAMAZ — ama karakter numarasına da mahkûm
+  değilsin.** Yazı tipi ALT KÜME gömülüyor, çizilen metin belgede glif
+  kimliği olarak duruyor. `rapor-pdf.service.spec.ts` içindeki `metinler()`
+  ToUnicode haritalarını okuyup gerçek dizgeyi çıkarıyor, böylece
+  `toContain('TOPLAM')` denebiliyor. HER haritayla çözüp adayların tamamını
+  döndürüyor: pdf-lib kaynak adını `DejaVuSans-9742682568` gibi ürettiği
+  için hangi haritanın hangi fonta ait olduğu addan çıkarılamıyor ve yanlış
+  haritayı seçmek metni sessizce kaçırıyor. Ayrıca `pdf-lib` dikdörtgeni
+  `re` ile DEĞİL `m`/`l` yol komutlarıyla çiziyor — ` re` arayan bir iddia
+  hiçbir zaman tutmaz.
+- **`pdf-lib` YALNIZCA JPEG ve PNG gömüyor.** Meta thumbnail'ları sık sık
+  WebP dönüyor ve `embedJpg` anlaşılmaz bir hata fırlatıp PDF üretiminin
+  TAMAMINI düşürüyor. Biçim GÖVDEDEN anlaşılıyor (sihirli baytlar), uzantıdan
+  ya da `content-type`tan değil. `embedJpg`/`embedPng` ASYNC: çizim döngüsü
+  senkron olduğu için gömme önden yapılmalı — bir `as` cast'i çözülmemiş
+  Promise'i `drawImage`e sokuyor ve hata yalnızca belgede, boş kutu olarak
+  görünüyor.
+- **HESABA BAĞLI OLMAYAN KAYIT, HESABA GÖRE SAYAN RAPORA GİRMİYOR.** Şemsiye
+  bütçe `ad_account_id IS NULL` ile duruyor; "kalanları say" sorgusu
+  `WHERE ad_account_id = $1` dediği için o satır HİÇ görünmüyordu. Oysa
+  taşımadan en çok o etkileniyor: ay ortasında hesap gidince eski müşterinin
+  harcaması düşüyor, bütçe bekçisi olmayan bir boşluk görüyor ve kuralların
+  bütçe ARTIRMASINA izin veriyor. Ayrı sorulup ayrı söyleniyor.
 - **`ad_accounts`, `platform_connections` ve `social_profiles` içinde
   `client_id` NULLABLE.** NULL = ajansın havuzunda, müşteriye atanmamış.
   Sahiplik `org_id`'de. Bu satırlar için senkronizasyon kuyruğa GİRMEMELİ —
@@ -262,13 +485,15 @@ okunup varsayılmadı — canlıda doğrulandı.
 
 ### Test
 
-- `pnpm --filter @advetics/api test` — vitest. Şu an **789 API testi**.
+- `pnpm --filter @advetics/api test` — vitest. Şu an **1.715 API testi**.
 - Veritabanına dokunan testler **PGlite** kullanıyor (gerçek Postgres, WASM).
   Şema üretim migration'larından kuruluyor — el yazımı test şeması yok.
 - **RLS testlerde varsayılan olarak KAPALI** (worker rolü BYPASSRLS'i taklit
   ediyor). Ama kapatılabilir bir varsayılan: `SET ROLE` ile sahibi olmayan bir
   role geçen bir test politikaları GERÇEKTEN sınayabiliyor — örnek
-  `ad-account-pool-rls.spec.ts`. Kritik bir politika yazıyorsan elle gözden
+  `ad-account-pool-rls.spec.ts` ve `hesap-tasima-rls.spec.ts` (ikincisi
+  taşımanın sekiz tabloda da politikalardan geçtiğini ve `activeClientId`
+  kapatılmazsa REDDEDİLDİĞİNİ kilitliyor). Kritik bir politika yazıyorsan elle gözden
   geçirmekle yetinme, o deseni kullan.
 - **MUTASYON DİSİPLİNİ: kritik bir test, kodu bozarak doğrulanmadan yazılmış
   sayılmaz.** Bu oturumda üç test mutasyonla BOŞ çıktı — hepsi geçiyordu ama
@@ -276,6 +501,13 @@ okunup varsayılmadı — canlıda doğrulandı.
   edilmemişti, (2) kırpma testi kırpmanın OLDUĞUNU değil yalnızca sonucun
   şeklini kontrol ediyordu, (3) ad set adının hiç testi yoktu. Testi yazdıktan
   sonra ilgili satırı boz, düştüğünü gör, geri al.
+- **KAYNAK TARAMASINDA İDDİA YORUMA DEĞİL KODA ÇAPALANIR.** Bir kuralı test
+  ederken o kuralı ANLATAN yorum da aynı dosyada duruyor ve `toContain` ikisini
+  ayırt etmiyor: `inverse` propunu silmek testi düşürmüyordu, çünkü iki satır
+  yukarıdaki *"CPA'da ARTIŞ KÖTÜ — `inverse`"* yorumu eşleşiyordu. Bu oturumda
+  dört ayrı testte oldu (`showBuckets`, `process.cwd()`, `ad.platform ===
+  'google'`, `inverse`). Dilimi tanımın/elemanın kendisinden başlat
+  (`lastIndexOf('<Delta', i)`) ya da eşleşmeyi tek bir satıra sabitle.
 - Bazı testler **kaynak taraması** yapıyor (`meta-account-path.spec.ts`,
   `google-request.spec.ts`). Canlıda öğrenilen ve birim testiyle
   yakalanamayacak kuralları böyle kilitliyoruz. **Tarama BOŞA DÜŞEBİLİR:**

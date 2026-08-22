@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { formatNumber } from '@/lib/format';
+import { atamaBildirimi } from '@/lib/atama-bildirimi';
 import { useRouter } from 'next/navigation';
 import {
   CHANNEL_HINTS,
@@ -328,6 +330,50 @@ function SonucOzeti({ sonuc }: { sonuc: ClientSetupResult }) {
         <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
           İzleme açıldı ve son 90 günün verisi kuyruğa alındı. Veri birkaç
           dakika içinde Genel Bakış’ta görünmeye başlar.
+        </p>
+      )}
+
+      {/*
+        HAVUZDAN GELEN HESABIN GEÇMİŞİ SESSİZ TAŞINMIYOR.
+
+        Havuzdaki bir hesap "hiç kullanılmamış" demek değil: başka bir
+        müşteriden kaldırılmış olabilir ve kampanyaları, kreatifleri, geçmiş
+        metrikleri hâlâ orada duruyor. Kurulum onları buraya taşıyor — yani
+        BAŞKA bir müşterinin raporundaki rakam bu ekranda değişiyor. Sessiz
+        kalması, iki ekran arasındaki bağı tamamen koparırdı.
+      */}
+      {(sonuc.movedRows > 0 || Object.keys(sonuc.leftBehind).length > 0) && (
+        <div className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2">
+          {sonuc.movedRows > 0 && (
+            <p className="text-[11px] text-ink">
+              {formatNumber(sonuc.movedRows)} kayıt eski müşteriden bu müşteriye
+              taşındı — kampanyalar, kreatifler ve geçmiş metrikler dahil. Eski
+              müşterinin raporundaki rakamlar buna göre değişti.
+            </p>
+          )}
+          {Object.keys(sonuc.leftBehind).length > 0 && (
+            <p className="mt-1 text-[11px] text-ink-muted">
+              Eski müşteride kalanlar:{' '}
+              {Object.entries(sonuc.leftBehind)
+                .map(([etiket, n]) => `${formatNumber(n)} ${etiket}`)
+                .join(', ')}
+              . Bunlar birinin kararı (bütçe, kural, taslak) ve taşınmıyor.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/*
+        HAVUZDAN GELEN HESABIN GEÇMİŞİ DE TAŞINDI — ve bu yazılmak zorunda.
+        Havuzdaki bir hesap "hiç kullanılmamış" demek değil: başka bir
+        müşteriden kaldırılmış olabilir ve kampanyaları, kreatifleri, geçmiş
+        metrikleri onun altında duruyordu. Atama onları buraya taşıdı, yani
+        BAŞKA bir müşterinin raporundaki rakam da değişti. Söylenmezse iki
+        ekran arasında hiçbir bağ kalmıyor.
+      */}
+      {atamaBildirimi(sonuc, true) && (
+        <p className="rounded-lg border border-line bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
+          {atamaBildirimi(sonuc, true)}
         </p>
       )}
 

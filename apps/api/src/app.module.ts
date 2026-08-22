@@ -25,6 +25,7 @@ import { BoostsModule } from './modules/boosts/boosts.module';
 import { BulkModule } from './modules/bulk/bulk.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { EmailModule } from './modules/email/email.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
@@ -49,6 +50,7 @@ import { SyncModule } from './modules/sync/sync.module';
     MetricsModule,
     AdsModule,
     ReportsModule,
+    EmailModule,
     BudgetsModule,
     RulesModule,
     AdBuilderModule,

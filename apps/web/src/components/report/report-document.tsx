@@ -5,7 +5,17 @@ import type {
   ReportData,
   ReportPlatformBlock,
 } from '@advetics/shared';
-import { CONVERSION_BUCKETS, METRIC_LABELS } from '@advetics/shared';
+import {
+  COLUMN_LABELS,
+  CONVERSION_BUCKETS,
+  DEFAULT_COLUMNS,
+  METRIC_LABELS,
+  resolveColumns,
+  sumRows,
+  COLUMN_TOTALS,
+  type ColumnKey,
+} from '@advetics/shared';
+import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent } from '@/lib/format';
 import { ConversionChart } from './conversion-chart';
 
@@ -73,7 +83,8 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   daily={data.daily}
                   from={data.from}
                   to={data.to}
-                  showBuckets
+                  secim={data.options.meta_campaigns?.metrics}
+                  varsayilan={DEFAULT_COLUMNS.meta_campaigns}
                 />
               );
             case 'google_campaigns':
@@ -85,10 +96,14 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   rows={data.googleCampaigns}
                   currency={data.currency}
                   rangeDays={data.rangeDays}
+                  secim={data.options.google_campaigns?.metrics}
+                  varsayilan={DEFAULT_COLUMNS.google_campaigns}
                 />
               );
             case 'google_keywords':
               return <Keywords key={section} data={data} />;
+            case 'google_search_terms':
+              return <SearchTerms key={section} data={data} />;
             case 'top_ads':
               return <TopAds key={section} data={data} />;
             case 'closing':
@@ -222,6 +237,67 @@ function SummaryBlock({
   );
 }
 
+/**
+ * ═══ KAMPANYA TABLOSU SÜTUNLARI — TEK KAYIT DEFTERİ ═══
+ *
+ * Başlık satırı, gövde hücreleri, TOPLAM satırı ve dipnotlar bir süre AYRI
+ * AYRI elle eşleniyordu ve tek bir bayrakla (`showBuckets`) iki sabit sete
+ * dallanıyordu. Üç yerde elle eşlenen bir liste, birinin güncellenmemesi
+ * hâlinde tablo başlığı ile toplam satırının sessizce ayrışması demek — ve
+ * TypeScript bunu söylemiyor, çünkü hepsi ayrı JSX blokları.
+ *
+ * Artık her sütun BİR KEZ tanımlı: nasıl okunacağı, nasıl toplanacağı ve
+ * dipnot gerektirip gerektirmediği. Şablondan gelen seçim bu defterden
+ * sütunları seçiyor.
+ */
+interface Sutun {
+  /** Sağa hizalı sayı sütunu mu (ad sütunu hariç hepsi öyle). */
+  hucre: (r: ReportCampaignRow, money: string | null) => ReactNode;
+  /**
+   * TOPLAM satırındaki değer. `null` = TOPLANAMAZ.
+   *
+   * Erişim tekil kişi sayısı ve günler arasında toplanamıyor; oraya bir sayı
+   * yazmak uydurma olurdu. "—" basılıyor.
+   */
+}
+
+const SUTUNLAR: Record<ColumnKey, Sutun> = {
+  spend: {
+    hucre: (r, m) => formatMoney(r.spendMicros, m, { decimals: 2 }),
+  },
+  impressions: {
+    hucre: (r) => formatNumber(r.impressions),
+  },
+  clicks: { hucre: (r) => formatNumber(r.clicks) },
+  reach: {
+    hucre: (r) => (
+      <>
+        {formatNumber(r.reach)}
+        {r.reachIsDailyAverage && <span className="text-slate-400">*</span>}
+      </>
+    ),
+  },
+  ctr: { hucre: (r) => formatPercent(r.ctr) },
+  cpc: {
+    hucre: (r, m) => formatMoney(microsOf(r.cpc), m),
+  },
+  cpa: {
+    hucre: (r, m) => formatMoney(microsOf(r.cpa), m),
+  },
+  conversions: {
+    hucre: (r) => formatNumber(r.conversions),
+  },
+  form: {
+    hucre: (r) => formatNumber(r.conversionCounts.form),
+  },
+  message: {
+    hucre: (r) => formatNumber(r.conversionCounts.message),
+  },
+  purchase: {
+    hucre: (r) => formatNumber(r.conversionCounts.purchase),
+  },
+};
+
 function CampaignPage({
   title,
   platform,
@@ -231,7 +307,8 @@ function CampaignPage({
   daily,
   from,
   to,
-  showBuckets = false,
+  secim,
+  varsayilan,
 }: {
   title: string;
   platform: string;
@@ -241,7 +318,9 @@ function CampaignPage({
   daily?: ReportData['daily'];
   from?: string;
   to?: string;
-  showBuckets?: boolean;
+  /** Şablondan gelen sütun seçimi; yoksa `varsayilan` kullanılıyor. */
+  secim?: ColumnKey[];
+  varsayilan: readonly ColumnKey[];
 }) {
   if (rows.length === 0) {
     return (
@@ -252,6 +331,7 @@ function CampaignPage({
     );
   }
 
+  const sutunlar = resolveColumns(secim, varsayilan);
   const totals = sumRows(rows);
   // Karışık para biriminde `currency` null geliyor ve `formatMoney` sembol
   // basmıyor — tek bir sembol göstermek yanlış olurdu.
@@ -276,21 +356,11 @@ function CampaignPage({
           <thead>
             <tr className="border-b-2 border-slate-300 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
               <th className="py-2 pr-3">Kampanya Adı</th>
-              <th className="px-2 py-2 text-right">Harcama</th>
-              <th className="px-2 py-2 text-right">Gösterim</th>
-              <th className="px-2 py-2 text-right">Erişim</th>
-              <th className="px-2 py-2 text-right">Tıklama</th>
-              {showBuckets ? (
-                <>
-                  <th className="px-2 py-2 text-right">Form</th>
-                  <th className="py-2 pl-2 text-right">Mesaj</th>
-                </>
-              ) : (
-                <>
-                  <th className="px-2 py-2 text-right">{METRIC_LABELS.ctr.label}</th>
-                  <th className="py-2 pl-2 text-right">Dönüşüm</th>
-                </>
-              )}
+              {sutunlar.map((k) => (
+                <th key={k} className="px-2 py-2 text-right">
+                  {COLUMN_LABELS[k]}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -309,36 +379,16 @@ function CampaignPage({
                     )}
                   </span>
                 </td>
-                <td className="px-2 py-2.5 text-right font-semibold tabular-nums">
-                  {formatMoney(r.spendMicros, money, { decimals: 2 })}
-                </td>
-                <td className="px-2 py-2.5 text-right tabular-nums">
-                  {formatNumber(r.impressions)}
-                </td>
-                <td className="px-2 py-2.5 text-right tabular-nums">
-                  {formatNumber(r.reach)}
-                  {r.reachIsDailyAverage && <span className="text-slate-400">*</span>}
-                </td>
-                <td className="px-2 py-2.5 text-right tabular-nums">{formatNumber(r.clicks)}</td>
-                {showBuckets ? (
-                  <>
-                    <td className="px-2 py-2.5 text-right tabular-nums">
-                      {formatNumber(r.conversionCounts.form)}
-                    </td>
-                    <td className="py-2.5 pl-2 text-right tabular-nums">
-                      {formatNumber(r.conversionCounts.message)}
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-2 py-2.5 text-right tabular-nums">
-                      {formatPercent(r.ctr)}
-                    </td>
-                    <td className="py-2.5 pl-2 text-right tabular-nums">
-                      {formatNumber(r.conversions)}
-                    </td>
-                  </>
-                )}
+                {sutunlar.map((k) => (
+                  <td
+                    key={k}
+                    className={`px-2 py-2.5 text-right tabular-nums ${
+                      k === 'spend' ? 'font-semibold' : ''
+                    }`}
+                  >
+                    {SUTUNLAR[k].hucre(r, money)}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -347,34 +397,25 @@ function CampaignPage({
               <td className="py-2.5 pr-3 text-[11px] uppercase tracking-wide text-slate-500">
                 Genel toplam
               </td>
-              <td className="px-2 py-2.5 text-right tabular-nums">
-                {formatMoney(totals.spendMicros, money, { decimals: 2 })}
-              </td>
-              <td className="px-2 py-2.5 text-right tabular-nums">
-                {formatNumber(totals.impressions)}
-              </td>
-              {/* Erişim TOPLANMIYOR: tekil kullanıcı sayısı toplanamaz. */}
-              <td className="px-2 py-2.5 text-right text-slate-400">—</td>
-              <td className="px-2 py-2.5 text-right tabular-nums">{formatNumber(totals.clicks)}</td>
-              {showBuckets ? (
-                <>
-                  <td className="px-2 py-2.5 text-right tabular-nums">
-                    {formatNumber(totals.counts.form)}
+              {/*
+                TOPLAM SATIRI BAŞLIKLARLA AYNI LİSTEDEN. Ayrı yazıldığında
+                sütun eklenip toplamı eklenmeyince tablo sessizce kayıyordu.
+                `toplam === null` olan sütun (erişim) "—" basıyor: tekil kişi
+                sayısı günler arasında toplanamaz.
+              */}
+              {sutunlar.map((k) => {
+                const t = COLUMN_TOTALS[k];
+                return (
+                  <td
+                    key={k}
+                    className={`px-2 py-2.5 text-right ${
+                      t === null ? 'text-slate-400' : 'tabular-nums'
+                    }`}
+                  >
+                    {t === null ? '—' : t(totals, money)}
                   </td>
-                  <td className="py-2.5 pl-2 text-right tabular-nums">
-                    {formatNumber(totals.counts.message)}
-                  </td>
-                </>
-              ) : (
-                <>
-                  <td className="px-2 py-2.5 text-right tabular-nums">
-                    {formatPercent(totals.ctr)}
-                  </td>
-                  <td className="py-2.5 pl-2 text-right tabular-nums">
-                    {formatNumber(totals.conversions)}
-                  </td>
-                </>
-              )}
+                );
+              })}
             </tr>
           </tfoot>
         </table>
@@ -386,8 +427,14 @@ function CampaignPage({
         </div>
       )}
 
+      {/*
+        DİPNOTLAR DA AYNI LİSTEDEN. Eskiden her çağrı yerinde elle yazılıydı:
+        tabloda olmayan bir metriğin dipnotu basılıyor, olan birininki
+        eksik kalıyordu.
+      */}
       <Footnotes
-        keys={showBuckets ? ['ctr', 'cpc'] : ['ctr', 'cpc', 'cpa']}
+        keys={sutunlar.filter((k): k is keyof typeof METRIC_LABELS => k in METRIC_LABELS)}
+        buckets={sutunlar.some((k) => k === 'form' || k === 'message')}
         extra={[
           anyAverage
             ? '* Erişim tekil kişi sayısıdır ve günler arasında toplanamaz; bu sütun günlük ortalamayı gösterir.'
@@ -400,7 +447,6 @@ function CampaignPage({
         ]
           .filter((v): v is string => v !== null)
           .join('\n')}
-        buckets={showBuckets}
       />
     </section>
   );
@@ -452,6 +498,86 @@ function Keywords({ data }: { data: ReportData }) {
             </tbody>
           </table>
         </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * ARAMA TERİMLERİ — kullanıcının gerçekten YAZDIĞI sorgular.
+ *
+ * Anahtar kelime bizim hedeflediğimiz şey; bu, kullanıcının yazdığı şey.
+ * Fark paranın nereye gittiğini gösteriyor: geniş eşlemeli bir kelime hiç
+ * istemediğimiz sorgulara da gösterim alabiliyor.
+ */
+function SearchTerms({ data }: { data: ReportData }) {
+  return (
+    <section className="rpt-page pt-10">
+      <PageHead title="Arama Terimleri" subtitle="Google Ads" />
+      {data.searchTerms === null ? (
+        // "Veri yok" DEĞİL "bu yetenek yok": Google bağlantısı olmayan bir
+        // müşteride arama terimi diye bir şey yok.
+        <Empty>Bu müşteride Google Ads bağlantısı bulunmuyor.</Empty>
+      ) : data.searchTerms.length === 0 ? (
+        <Empty>Bu dönemde arama terimi verisi yok.</Empty>
+      ) : (
+        <>
+          <p className="mt-4 text-xs text-slate-500">
+            Kullanıcıların arama kutusuna yazdığı sorgular.{' '}
+            <span className="font-semibold text-amber-600">†</span> işaretli olanlar
+            henüz anahtar kelime ya da negatif olarak tanımlı değil.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b-2 border-slate-300 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                  <th className="py-2 pr-3">Arama Terimi</th>
+                  <th className="px-2 py-2">Eşleşen Kelime</th>
+                  <th className="px-2 py-2 text-right">Harcama</th>
+                  <th className="px-2 py-2 text-right">Tıklama</th>
+                  <th className="px-2 py-2 text-right">{METRIC_LABELS.ctr.label}</th>
+                  <th className="py-2 pl-2 text-right">Dönüşüm</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.searchTerms.map((t) => (
+                  <tr key={t.term} className="border-b border-slate-100">
+                    <td className="max-w-[220px] py-2.5 pr-3 font-medium">
+                      <span className="block truncate" title={t.term}>
+                        {/*
+                          TANIMSIZ TERİM İŞARETLENİYOR. `NONE` olan bir terim
+                          para harcıyor ama ne anahtar kelime ne negatif
+                          olarak tanımlı — raporun en eyleme dönük satırı bu.
+                        */}
+                        {t.status === 'NONE' && (
+                          <span
+                            className="mr-1 align-middle text-[10px] font-semibold text-amber-600"
+                            title="Anahtar kelime ya da negatif olarak tanımlı değil"
+                          >
+                            †
+                          </span>
+                        )}
+                        {t.term}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2.5 text-slate-500">{t.keyword ?? '—'}</td>
+                    <td className="px-2 py-2.5 text-right font-semibold tabular-nums">
+                      {formatMoney(t.spendMicros, data.currency, { decimals: 2 })}
+                    </td>
+                    <td className="px-2 py-2.5 text-right tabular-nums">
+                      {formatNumber(t.clicks)}
+                    </td>
+                    <td className="px-2 py-2.5 text-right tabular-nums">{formatPercent(t.ctr)}</td>
+                    <td className="py-2.5 pl-2 text-right tabular-nums">
+                      {formatNumber(t.conversions)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Footnotes keys={['ctr']} />
+        </>
       )}
     </section>
   );
@@ -702,42 +828,13 @@ function platformNames(data: ReportData): string {
 }
 
 /** Kampanya satırlarının toplamı — erişim HARİÇ (toplanamaz). */
-function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: ConversionCounts } {
-  let impressions = 0;
-  let clicks = 0;
-  let spend = 0n;
-  let conversions = 0;
-  let value = 0n;
-  const counts: ConversionCounts = { form: 0, message: 0, purchase: 0 };
-
-  for (const r of rows) {
-    impressions += r.impressions;
-    clicks += r.clicks;
-    spend += BigInt(r.spendMicros);
-    conversions += r.conversions;
-    value += BigInt(r.conversionValueMicros);
-    counts.form += r.conversionCounts.form;
-    counts.message += r.conversionCounts.message;
-    counts.purchase += r.conversionCounts.purchase;
-  }
-
-  const spendUnits = Number(spend) / 1_000_000;
-  const valueUnits = Number(value) / 1_000_000;
-
-  return {
-    impressions,
-    clicks,
-    spendMicros: spend.toString(),
-    conversions,
-    conversionValueMicros: value.toString(),
-    ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
-    cpc: clicks > 0 ? spendUnits / clicks : null,
-    cpm: impressions > 0 ? (spendUnits / impressions) * 1000 : null,
-    cpa: conversions > 0 ? spendUnits / conversions : null,
-    roas: spendUnits > 0 && valueUnits > 0 ? valueUnits / spendUnits : null,
-    counts,
-  };
-}
+/*
+ * `sumRows` VE TOPLAM BİÇİMLERİ ARTIK PAYLAŞILAN PAKETTE.
+ *
+ * Burada yerel bir kopya vardı ve PDF tarafında HİÇ toplam yoktu: aynı
+ * rapor ekranda toplamlı, müşteriye giden belgede toplamsız çıkıyordu.
+ * Tek kaynak, iki gösterimin ayrışmasını imkânsız kılıyor.
+ */
 
 function microsOf(value: number | null): string | null {
   if (value === null) return null;

@@ -43,7 +43,7 @@ export const refreshRangeSchema = z.object({
     .optional(),
 });
 export type RefreshRangeInput = z.infer<typeof refreshRangeSchema>;
-import { PLATFORMS } from '../constants/platforms';
+import { PLATFORMS, type Platform } from '../constants/platforms';
 
 /**
  * Metrik sorgu ve yanıt sözleşmeleri.
@@ -112,13 +112,39 @@ const ORDER_MSG = {
 // için yeterli.
 const SPAN_MSG = { message: 'Tarih aralığı en fazla 400 gün olabilir', path: ['to'] };
 
+/**
+ * KARŞILAŞTIRMA PENCERESİ AÇIKÇA GELİYOR — sunucuda türetilmiyor.
+ *
+ * Önceki dönem bir süre `summary()` içinde koşulsuz hesaplanıyordu: her
+ * çağrıda ikinci bir tam tarama yapılıyor, kullanıcı ne kapatabiliyor ne de
+ * "önceki yıl" gibi başka bir pencere seçebiliyordu.
+ *
+ * Pencereyi İSTEMCİNİN göndermesi tercih edildi çünkü seçim zaten orada
+ * yapılıyor ve ekranda hangi dönemle karşılaştırıldığı YAZILIYOR. Sunucu ayrı
+ * bir hesap yaparsa iki taraf ayrışır ve "%12 arttı" diyen ekran ile
+ * gerçekte karşılaştırılan dönem farklı olur — üstelik hiçbir hata vermeden.
+ *
+ * İkisi de verilmezse karşılaştırma KAPALI.
+ */
+const compareAlanlari = {
+  compareFrom: isoDate.optional(),
+  compareTo: isoDate.optional(),
+};
+
 export const metricsQuerySchema = metricsQueryBase
+  .extend(compareAlanlari)
   .refine(orderOk, ORDER_MSG)
   .refine(spanOk, SPAN_MSG);
 
 export type MetricsQuery = z.infer<typeof metricsQuerySchema>;
 
 export const breakdownQuerySchema = metricsQueryBase
+  /*
+   * KIRILIM DA KARŞILAŞTIRMA ALIYOR. Alanlar tabanda değil burada tekrar
+   * ediliyor gibi görünüyor ama tek tanımdan (`compareAlanlari`) geliyor —
+   * ayrı yazılsalardı panelin iki ucu farklı pencerelerle karşılaştırırdı.
+   */
+  .extend(compareAlanlari)
   .extend({
     level: z.enum(METRIC_LEVELS).default('campaign'),
     limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -225,6 +251,24 @@ export interface MetricsTimeseriesPoint extends MetricTotals {
   date: string;
 }
 
+/**
+ * Zaman serisi — cari dönem ve (istenmişse) karşılaştırma dönemi.
+ *
+ * DÜZ DİZİ DEĞİL, İKİ DİZİ. Karşılaştırma penceresinin TARİHLERİ farklı;
+ * hepsini tek diziye koymak, grafiği çizen tarafı "bu nokta hangi döneme
+ * ait" sorusunu tarih aralığından tekrar türetmeye zorlardı — ve o türetme
+ * iki yerde birden yazılınca ayrışır.
+ *
+ * `previous` NULL: karşılaştırma kapalı. Boş dizi DEĞİL — "karşılaştırma
+ * istenmedi" ile "istendi ama o dönemde hiç veri yok" farklı iki şey ve
+ * grafiğin ikincisinde efsanede önceki dönemi GÖSTERMESİ, birincisinde
+ * göstermemesi gerekiyor.
+ */
+export interface MetricsTimeseries {
+  points: MetricsTimeseriesPoint[];
+  previous: MetricsTimeseriesPoint[] | null;
+}
+
 export interface MetricsBreakdownRow extends MetricTotals {
   entityId: string;
   entityExternalId: string;
@@ -234,6 +278,16 @@ export interface MetricsBreakdownRow extends MetricTotals {
   platform: (typeof PLATFORMS)[number];
   status: string;
   currency: string;
+  /**
+   * Önceki dönem — yüzde değişim için.
+   *
+   * `null` = o varlığın önceki dönemde HİÇ verisi yok. Sıfırlı bir nesne
+   * döndürmek her yeni kampanyayı "-%100" gösterirdi; özet uçta aynı kural
+   * zaten var (`hasData`).
+   *
+   * Karşılaştırma istenmediğinde de `null`.
+   */
+  previous: MetricTotals | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -295,4 +349,148 @@ export function deriveRoas(
   }
 
   return valueUnits / spendUnits;
+}
+
+// -----------------------------------------------------------------------------
+// Senkronizasyon teşhisi
+// -----------------------------------------------------------------------------
+
+/**
+ * "VERİ NEDEN YOK" SORUSUNUN TEK CEVAP YERİ.
+ *
+ * Bu sözleşme, panelde altı farklı arızanın AYNI boş ekrana düşmesini
+ * bitirmek için var. Bugüne kadar şunların hepsi "grafik boş" olarak
+ * görünüyordu ve ayırt etmenin tek yolu sunucuya SSH ile girip
+ * `sync-cli -- jobs` çalıştırmaktı:
+ *
+ *   · hesap müşteriye atanmamış
+ *   · atanmış ama izleme kapalı
+ *   · izleme açık ama bağlantı yeniden yetki istiyor
+ *   · hesabın platform durumu zamanlanmış süpürmenin süzgecine takılıyor
+ *   · yapı taraması hiç koşmadı → metrikler kampanya satırına bağlanamıyor
+ *   · iş koştu, başarılı bitti ama SIFIR satır yazdı
+ *
+ * Altısının yapılacak işi farklı. `blockedReason` her hesap için bunlardan
+ * hangisinin geçerli olduğunu YAZIYOR; boşsa hesapta bilinen bir engel yok.
+ */
+export interface SyncAccountStatus {
+  id: string;
+  name: string;
+  platform: Platform;
+  /** `ad_accounts.status` — platformdan geldiği hâliyle. */
+  status: string;
+  syncEnabled: boolean;
+  connectionStatus: string;
+  lastStructureSyncAt: string | null;
+  lastInsightsSyncAt: string | null;
+  /**
+   * Zamanlanmış süpürme bu hesabı ALIYOR mu?
+   *
+   * "Şimdi güncelle" düğmesinin süzgeci ile zamanlanmış süpürmenin süzgeci
+   * aynı değil: süpürme hesabın platform durumuna da bakıyor, düğme bakmıyor.
+   * Bu ayrım "elle basınca geliyor, kendiliğinden gelmiyor" hâlini üretiyor
+   * ve başka hiçbir yerde görünmüyor.
+   */
+  inScheduledSweep: boolean;
+  /** Metrik yazılabilmesi için yapı taraması koşmuş olmak ZORUNDA. */
+  structureReady: boolean;
+  /** Doluysa KULLANICIYA OLDUĞU GİBİ gösterilecek cümle. */
+  blockedReason: string | null;
+  /**
+   * BU HESABIN İŞ TÜRÜ BAŞINA EN SON İŞİ.
+   *
+   * Önce yalnızca "son iş" ve "son düşen iş" vardı ve bir kilidi
+   * gizliyordu: bir Meta hesabında yapı taraması kotaya takılıp
+   * `throttled` kalmıştı, ama daha yeni bir metrik işi olduğu için o satır
+   * hiçbir yerde görünmüyordu. Panelde "Yapı: hiç" yazıyor, sebebi
+   * yazmıyordu.
+   *
+   * İŞ TÜRÜ BAŞINA TEK SATIR, çünkü sorulan soru tür bazlı: "yapı taraması
+   * ne oldu", "metrik ne oldu", "anahtar kelimeler ne oldu". Bir tür hiç
+   * görünmüyorsa o iş HİÇ KUYRUĞA GİRMEMİŞ demek — bu da bir cevap.
+   */
+  lastJobs: SyncJobStatusRow[];
+}
+
+/** Bir senkronizasyon işinin panelde gösterilen hâli. */
+export interface SyncJobStatusRow {
+  /** `sync_jobs.id` BIGSERIAL — JSON'da string taşınıyor. */
+  id: string;
+  jobType: string;
+  entityLevel: string | null;
+  status: string;
+  attempts: number;
+  rowsUpserted: number;
+  apiCallsUsed: number;
+  errorCode: string | null;
+  /**
+   * Platformun KENDİ mesajı (Meta'da subcode ve fbtrace dahil).
+   *
+   * Bu alan tabloya bugüne kadar da yazılıyordu ama okuyan hiçbir uç nokta
+   * yoktu: "izin yok", "kota doldu", "hesap bulunamadı" panelde hiç
+   * görünmüyordu.
+   */
+  errorMessage: string | null;
+  /**
+   * ATILAN satır sayısı. `null` = bilinmiyor (kolon öncesi kayıt) ve bu 0 ile
+   * AYNI ŞEY DEĞİL. `rowsUpserted = 0` + `rowsSkipped > 0` olan bir iş
+   * "başarılı" görünür ama hiçbir veri yazmamıştır — "atadım, veri gelmiyor"
+   * hâlinin imzası budur.
+   */
+  rowsSkipped: number | null;
+  /** İnsan okuması için özet: hangi aralık, hangi seviye, ne oldu. */
+  note: string | null;
+  adAccountId: string | null;
+  adAccountName: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+/**
+ * Süzgeçlerin ELEDİĞİ hesapların sayımı — kategorisiyle birlikte.
+ *
+ * ATANMAMIŞ HESAP BURADA SAYILMIYOR ve bu bilinçli. Genel Bakış'taki
+ * `hiddenAccounts` sayacı tam bu hatayı yapıyor: ajansın havuzundaki
+ * yüzlerce atanmamış hesabı da sayıyor ve kullanıcı hangi müşteriyi seçerse
+ * seçsin devasa, alakasız bir rakam görüyor. Uyarı böyle olunca gerçek bir
+ * gizlenmeyi işaret ettiğinde de kimse ciddiye almıyor. Bu uç yalnızca
+ * MÜŞTERİYE ATANMIŞ hesaplara bakıyor; hiç atanmamışsa cevap zaten boş
+ * `accounts` dizisi.
+ *
+ * SESSİZ KESME YOK: bir hesabın listede olmaması bir bilgi. Kaç tanesinin
+ * hangi sebeple elendiği yazılmazsa "hiç hesap yok" ile "üç hesap var ama
+ * üçü de elendi" aynı ekrana düşer.
+ */
+export interface SyncExcludedCounts {
+  syncDisabled: number;
+  clientInactive: number;
+  connectionInactive: number;
+  accountStatus: number;
+}
+
+export interface SyncStatusResponse {
+  accountCount: number;
+  neverSyncedCount: number;
+  oldestSyncAt: string | null;
+  accounts: SyncAccountStatus[];
+  excluded: SyncExcludedCounts;
+  recentJobs: SyncJobStatusRow[];
+  /** Gösterilen iş sayısı toplamı tutmuyorsa kullanıcı bunu GÖRMELİ. */
+  recentJobsTotal: number;
+  /**
+   * SAYAÇLAR BÜTÜN İŞLER ÜZERİNDEN — gösterilen 25 üzerinden DEĞİL.
+   *
+   * İlk sürümde bu sayılar `recentJobs` dizisinden hesaplanıyordu ve tam
+   * olarak kaçınmaya çalıştığım hatayı yapıyordu: "5 düşen iş" aslında
+   * "gösterilen 25 işin 5'i" demekti, 356 işin 5'i değil. Kesilmiş bir
+   * listeden sayı türetmek, sessiz kesmenin bir başka biçimi.
+   */
+  jobCounts: {
+    failed: number;
+    /** `succeeded` ama tek satır yazmamış METRİK işleri. Diğer iş türlerinde
+     * sıfır satır normal (o gün yeni gönderi yok gibi) ve sayılmıyor. */
+    emptySuccess: number;
+    running: number;
+  };
 }

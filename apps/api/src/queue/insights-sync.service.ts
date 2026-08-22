@@ -93,6 +93,9 @@ export class InsightsSyncService {
         externalId: true,
         managerExternalId: true,
         timezone: true,
+        // Metrik yazımının ÖN ŞARTI. Aşağıda "hiçbir satır yazılamadı"
+        // durumunun tekrar denenebilir olup olmadığına bu alan karar veriyor.
+        lastStructureSyncAt: true,
       },
     });
 
@@ -100,6 +103,39 @@ export class InsightsSyncService {
     // satırlar hiçbir raporda görünmez ama kota harcanmış olur — en pahalı
     // sessiz hata türü.
     const account = assertAssigned(found);
+
+    /*
+     * ═══ YAPI KOŞMADIYSA PLATFORMA HİÇ GİTMİYORUZ ═══
+     *
+     * Bu kontrol ÖNCE aşağıdaydı — satırlar çekildikten SONRA. Canlıda ne
+     * ürettiği görüldü ve bir KİLİTLENMEYDİ:
+     *
+     *   1. Yapı taraması hiç koşmamış bir Meta hesabında metrik işi 3.151
+     *      satır çekiyor (kampanya + reklam seti + reklam, 90 gün, onlarca
+     *      sayfa) ve hiçbirini yazamıyor.
+     *   2. İş tekrar denenebilir sayılıyor ve BEŞ KEZ daha aynı şeyi yapıyor.
+     *   3. Bu turlar hesabın kota yüzdesini %90'ın üstüne çıkarıyor.
+     *   4. Kota bekçisi bundan sonra HER işi reddediyor — YAPI TARAMASI DA
+     *      DAHİL (`structure` katmanının üst sınırı da %90).
+     *   5. Yapı hiç koşamadığı için metrikler hiç eşlenemiyor. Başa dön.
+     *
+     * Yani metrik işi, bağlı olduğu yapı işinin kotasını yiyordu. Panelde
+     * görünen tablo: "Yapı: hiç", metrik işi "5. deneme · failed", son iş
+     * "throttled" — ve hiçbir zaman ilerlemiyor.
+     *
+     * Kontrol artık ÇAĞRIDAN ÖNCE ve maliyeti SIFIR API çağrısı. İş yine
+     * tekrar denenebilir düşüyor ama kota harcamadan düşüyor, böylece yapı
+     * taraması nefes alacak yer buluyor.
+     */
+    if (account.lastStructureSyncAt === null) {
+      throw new PlatformApiError(
+        account.platform,
+        'transient',
+        'Bu hesapta yapı taraması hiç koşmadı — kampanya satırları olmadan metrik ' +
+          'yazılamıyor. Metrik çekimi kotayı boşa harcamamak için hiç başlatılmadı; ' +
+          'yapı taraması tamamlanınca tekrar denenecek.',
+      );
+    }
 
     const provider = this.providers.get(account.platform);
     const accessToken = await this.vault.getAccessToken(account.connectionId, provider);
@@ -156,11 +192,6 @@ export class InsightsSyncService {
       totalSkipped += written.skipped;
     }
 
-    await this.db.adAccount.update({
-      where: { id: account.id },
-      data: { lastInsightsSyncAt: new Date() },
-    });
-
     // Kısmi sonuçta işi başarılı SAYMIYORUZ: eksik bir gün "senkronize edildi"
     // görünürse kimse geri dönüp tamamlamıyor ve rapor sessizce eksik kalıyor.
     if (incomplete) {
@@ -179,6 +210,47 @@ export class InsightsSyncService {
     ]
       .filter(Boolean)
       .join(' · ');
+
+    /*
+     * ═══ HİÇBİR SATIR YAZILAMADI: BAŞARI DEĞİL ═══
+     *
+     * Bu dal "atadım ama veri gelmiyor" belirtisinin kaynağı. Metrik satırı,
+     * ait olduğu kampanya/reklam satırı veritabanında yoksa YAZILAMIYOR ve
+     * atlanıyor. İş bugüne kadar `succeeded` + `rows=0` kapanıyordu, BİR DAHA
+     * denenmiyordu ve kullanıcı boş bir grafik görüyordu.
+     *
+     * İKİ AYRI DURUM VE YALNIZCA BİRİ TEKRAR DENENEBİLİR:
+     *
+     *   · YAPI TARAMASI HİÇ KOŞMADI → gerçekten geçici. `structure` ile
+     *     `initial_backfill` art arda, gecikmesiz kuyruğa giriyor; öncelik
+     *     farkı SIRA veriyor, BARİYER vermiyor ve worker dördü paralel
+     *     çalıştırıyor. Yapı hâlâ koşarken metrik işi başlayabiliyor.
+     *     Tekrar denemek doğru: backoff yapının bitmesine zaman tanıyor.
+     *
+     *   · YAPI KOŞTU AMA VARLIK YİNE DE YOK → ARŞİVLENMİŞ kampanya. Meta
+     *     `effective_status` filtresi olmadan arşivlenmiş varlıkları
+     *     döndürmüyor (meta.provider.ts), yani o kampanyalar bizde hiç yok ve
+     *     HİÇBİR ZAMAN olmayacak. Tekrar denemek beş kez kota harcayıp aynı
+     *     yere varmak olurdu. Bu yüzden başarı sayılıyor — ama notu artık
+     *     `sync_jobs`'a yazılıyor ve panelde "başarılı · 0 satır" olarak
+     *     GÖRÜNÜYOR.
+     */
+    /*
+     * DAMGA EN SONDA — BAŞARISIZ BİR TUR "SENKRONİZE EDİLDİ" DEMEZ.
+     *
+     * `lastInsightsSyncAt` bir süre çekim biter bitmez, YAZMADAN ÖNCE
+     * atılıyordu. Sonucu canlıda görüldü: hiçbir satır yazamayan ve tekrar
+     * denenmek üzere düşen bir iş bile hesaba taze bir damga bırakıyordu.
+     * Teşhis ekranında "Yapı: hiç · Metrik: 10:46" yan yana duruyor ve
+     * "metrik geldi ama yapı yok" gibi okunuyordu — oysa metrik de gelmemişti.
+     *
+     * Damga artık YALNIZCA tur gerçekten tamamlandığında atılıyor. Başarısız
+     * turda eski değer kalıyor ve bayatlık uyarısı doğru çalışıyor.
+     */
+    await this.db.adAccount.update({
+      where: { id: account.id },
+      data: { lastInsightsSyncAt: new Date() },
+    });
 
     return { rows: totalRows, apiCalls: totalCalls, skipped: totalSkipped, note };
   }
@@ -244,6 +316,11 @@ export class InsightsSyncService {
         -- birincil anahtarda hiçbir zaman eşleşmiyor ve her senkronizasyonda
         -- satır MÜKERRER olurdu.
         ON CONFLICT (date, entity_level, entity_id, breakdown_key) DO UPDATE SET
+          -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
+          -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
+          -- icin "yeniden senkronize et" tavsiyesi de ise yaramiyordu.
+          -- Kaynak HER ZAMAN hesabin o anki musterisi.
+          client_id = EXCLUDED.client_id,
           impressions = EXCLUDED.impressions,
           clicks = EXCLUDED.clicks,
           spend_micros = EXCLUDED.spend_micros,

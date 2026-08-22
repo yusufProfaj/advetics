@@ -4,6 +4,8 @@ import { Prisma } from '@prisma/client';
 import {
   CONVERSION_BUCKETS,
   REPORT_SECTIONS,
+  reportOptionsSchema,
+  type ReportOptions,
   type ConversionBucket,
   type ConversionCounts,
   type MetricTotals,
@@ -112,6 +114,7 @@ export class ReportsService {
       const currency = currencies.length === 1 ? currencies[0]! : null;
 
       const keywords = await this.keywordRows(tx, params);
+      const searchTerms = await this.searchTermRows(tx, params);
 
       return {
         client,
@@ -121,6 +124,7 @@ export class ReportsService {
         from: params.from,
         to: params.to,
         sections: template.sections,
+        options: template.options,
         rangeDays: this.dayCount(params.from, params.to),
         currency,
         platforms: platformBlocks,
@@ -134,6 +138,7 @@ export class ReportsService {
         // döndürmek "anahtar kelimen yok" demek olurdu; oysa o platformda
         // anahtar kelime diye bir şey yok.
         keywords,
+        searchTerms,
         generatedAt: new Date().toISOString(),
       };
     });
@@ -151,6 +156,81 @@ export class ReportsService {
    * ve müşteriye giden belgede hepsini listelemek raporu okunamaz kılar;
    * harcamanın büyük kısmı zaten ilk onlarcada toplanıyor.
    */
+  /**
+   * ARAMA TERİMLERİ — kullanıcının gerçekten YAZDIĞI sorgular.
+   *
+   * `keywordRows` ile aynı `null` kuralı: Google bağlantısı yoksa "bu yetenek
+   * yok" demek için `null`, bağlantı varsa boş dizi.
+   *
+   * SIRALAMA HARCAMAYA GÖRE ve LİMİT VAR: yüzlerce terim bir raporda
+   * okunamaz. Kesme sessiz kalmıyor — arayüz kaç terimin gösterildiğini ve
+   * kaçının harcama yaptığını yazıyor.
+   */
+  private async searchTermRows(
+    tx: TxLike,
+    params: { clientId: string; from: string; to: string },
+  ): Promise<ReportData['searchTerms']> {
+    const [hasGoogle] = await tx.$queryRaw<Array<{ n: string | number }>>(Prisma.sql`
+      SELECT COUNT(*) AS n FROM ad_accounts
+      WHERE client_id = ${params.clientId}::uuid AND platform = 'google'::"Platform"
+        AND sync_enabled = true
+    `);
+    if (Number(hasGoogle?.n ?? 0) === 0) return null;
+
+    const rows = await tx.$queryRaw<
+      Array<{
+        search_term: string;
+        keyword_text: string | null;
+        status: string;
+        spend_micros: string | number | bigint | null;
+        impressions: string | number | null;
+        clicks: string | number | null;
+        conversions: string | number | null;
+      }>
+    >(Prisma.sql`
+      SELECT t.search_term,
+             -- EN ÇOK HARCAYAN eşleşmenin kelimesi: aynı terim birden fazla
+             -- kelimeyle eşleşebiliyor ve rastgele birini göstermek
+             -- "bu kelime bunu mu çekti" sorusuna yanlış cevap verirdi.
+             (ARRAY_AGG(t.keyword_text ORDER BY t.spend_micros DESC))[1] AS keyword_text,
+             -- DURUMDA "TANIMLI" OLAN KAZANIYOR. Terim bir gün eklenmiş,
+             -- başka bir gün tanımsız görünmüş olabilir; "NONE" göstermek
+             -- kullanıcıyı zaten yaptığı işi tekrar yapmaya iterdi.
+             COALESCE(
+               (ARRAY_AGG(t.status ORDER BY (t.status <> 'NONE') DESC, t.date DESC))[1],
+               'NONE'
+             ) AS status,
+             SUM(t.spend_micros) AS spend_micros,
+             SUM(t.impressions) AS impressions,
+             SUM(t.clicks) AS clicks,
+             SUM(t.conversions) AS conversions
+      FROM search_term_insights t
+      WHERE t.client_id = ${params.clientId}::uuid
+        AND t.date BETWEEN ${params.from}::date AND ${params.to}::date
+        ${trackedAccounts('t')}
+      GROUP BY t.search_term
+      HAVING SUM(t.impressions) > 0
+      ORDER BY SUM(t.spend_micros) DESC
+      LIMIT 25
+    `);
+
+    return rows.map((r) => {
+      const impressions = Number(r.impressions ?? 0);
+      const clicks = Number(r.clicks ?? 0);
+      const spendMicros = BigInt(String(r.spend_micros ?? 0).split('.')[0] || '0');
+      return {
+        term: r.search_term,
+        keyword: r.keyword_text,
+        status: r.status,
+        spendMicros: spendMicros.toString(),
+        impressions,
+        clicks,
+        conversions: Number(r.conversions ?? 0),
+        ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
+      };
+    });
+  }
+
   private async keywordRows(
     tx: TxLike,
     params: { clientId: string; from: string; to: string },
@@ -247,19 +327,37 @@ export class ReportsService {
     tx: TxLike,
     clientId: string,
     templateId?: string,
-  ): Promise<{ title: string | null; closingText: string | null; sections: ReportSection[] }> {
+  ): Promise<{
+    title: string | null;
+    closingText: string | null;
+    sections: ReportSection[];
+    options: ReportOptions;
+  }> {
     const rows = await tx.$queryRaw<
-      Array<{ title: string | null; closing_text: string | null; sections: unknown }>
+      Array<{
+        title: string | null;
+        closing_text: string | null;
+        sections: unknown;
+        options: unknown;
+      }>
     >(
       templateId
         ? Prisma.sql`
-            SELECT title, closing_text, sections FROM report_templates
+            SELECT title, closing_text, sections, options FROM report_templates
             WHERE id = ${templateId}::uuid
+              -- SAHİPLİK KONTROLÜ: şablon kimliği adres çubuğundan geliyor.
+              -- Org yöneticisi RLS'i geçtiği için bu satır olmadan başka bir
+              -- müşterinin şablonuyla rapor üretilebiliyordu.
+              AND (client_id = ${clientId}::uuid OR client_id IS NULL)
           `
         : Prisma.sql`
-            SELECT title, closing_text, sections FROM report_templates
+            SELECT title, closing_text, sections, options FROM report_templates
             WHERE client_id = ${clientId}::uuid OR client_id IS NULL
-            ORDER BY client_id NULLS LAST
+            -- MÜŞTERİYE ÖZEL ŞABLON ÖNCE, sonra org varsayılanı. Aynı
+            -- müşteride birden fazla şablon varsa EN SON GÜNCELLENEN
+            -- geliyor: eskiden sıra belirsizdi ve hangi şablonun
+            -- kullanıldığı çağrıdan çağrıya değişebilirdi.
+            ORDER BY client_id NULLS LAST, updated_at DESC
             LIMIT 1
           `,
     );
@@ -272,7 +370,20 @@ export class ReportsService {
       // üretmek, kullanıcıyı hiçbir şey göstermeyen bir ekranla baş başa
       // bırakmak olurdu.
       sections: this.parseSections(row?.sections),
+      options: this.parseOptions(row?.options),
     };
+  }
+
+  /**
+   * `options` JSONB'sini ALAN ALAN doğrular.
+   *
+   * Ham JSON'u belgeye geçirmek, uydurulmuş bir anahtarın sessizce yok
+   * sayılması demek olurdu. Bozuk kayıt boş nesneye düşüyor ve rapor
+   * varsayılan sütunlarına dönüyor.
+   */
+  private parseOptions(value: unknown): ReportOptions {
+    const r = reportOptionsSchema.safeParse(value);
+    return r.success ? r.data : {};
   }
 
   private parseSections(value: unknown): ReportSection[] {

@@ -12,12 +12,18 @@ import {
   refreshRangeSchema,
   type BackfillInput,
   type RefreshRangeInput,
+  type SyncAccountStatus,
+  type SyncExcludedCounts,
+  type SyncJobStatusRow,
+  type SyncStatusResponse,
   type TenantContext,
 } from '@advetics/shared';
+import { Prisma, type SyncJobType } from '@prisma/client';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SyncQueueService } from '../../queue/sync-queue.service';
+import { supurmeDisiSebep } from '../../queue/supurme-kapsami';
 
 /**
  * Panelden senkronizasyon tetikleme — "Şimdi güncelle".
@@ -33,6 +39,121 @@ import { SyncQueueService } from '../../queue/sync-queue.service';
  * içinde senkronizasyon koşturmak bu korumaları atlamak ve HTTP isteğini
  * dakikalarca açık tutmak olurdu.
  */
+/**
+ * Teşhis ekranında gösterilen iş sayısı.
+ *
+ * Sınırın kendisi zararsız ama SESSİZ OLMASI zararlı: toplam da dönüyor
+ * (`recentJobsTotal`) ki ekran "son 25 / toplam 340" yazabilsin. Kesilen bir
+ * listeyi tam liste sanmak, bu projede tekrar eden hata türü.
+ */
+/**
+ * "Şimdi güncelle"de metrik işine tanınan bekleme.
+ *
+ * Yapı taramasının bitmesine pay bırakıyor. Garanti değil — gerçek güvence
+ * metrik işinin yapı koşmamışsa hiç başlamaması (`insights-sync.service.ts`).
+ */
+const YAPI_ICIN_TANINAN_SURE_MS = 90_000;
+
+const RECENT_JOB_LIMIT = 25;
+
+/**
+ * "Sıfır satır yazdı" hangi iş türlerinde bir ARIZA işareti.
+ *
+ * Organik gönderi ya da potansiyel müşteri işi sıfır satırla bitebilir ve bu
+ * normaldir — o gün yeni gönderi yoktur. Metrik işinde sıfır satır ise ya
+ * yapı taraması eksik ya varlık arşivlenmiş demek.
+ */
+const METRIK_ISLERI = [
+  'insights_realtime',
+  'insights_daily',
+  'insights_backfill',
+  'initial_backfill',
+  // `as const` DEĞİL: Prisma `in` süzgeci mutable dizi bekliyor.
+] satisfies SyncJobType[];
+
+/** `sonIsSorgusu` dönüşü — ham SQL snake_case veriyor. */
+interface HamIs {
+  id: bigint;
+  job_type: string;
+  entity_level: string | null;
+  status: string;
+  attempts: number;
+  rows_upserted: number;
+  rows_skipped: number | null;
+  api_calls_used: number;
+  error_code: string | null;
+  error_message: string | null;
+  note: string | null;
+  ad_account_id: string;
+  created_at: Date;
+  started_at: Date | null;
+  finished_at: Date | null;
+}
+
+/**
+ * HESAP BAŞINA TEK SATIR — `DISTINCT ON` ile.
+ *
+ * Prisma'da "her gruptan en yenisi" doğrudan yok; alternatif hesap başına
+ * ayrı sorgu açmak olurdu. Ham SQL `withTenant` içinde koşuyor, yani RLS
+ * aynen uygulanıyor.
+ *
+ * İŞ TÜRÜ BAŞINA ayrı satır: "son iş" tek başına bir kilidi gizliyordu.
+ * Bir Meta hesabında yapı taraması kotaya takılıp `throttled` kalmıştı ama
+ * daha yeni bir metrik işi olduğu için o satır hiçbir yerde görünmüyordu.
+ */
+async function sonIsSorgusu(
+  tx: { $queryRaw: <T>(q: Prisma.Sql) => Promise<T> },
+): Promise<Map<string, HamIs[]>> {
+  const rows = await tx.$queryRaw<HamIs[]>(Prisma.sql`
+    SELECT DISTINCT ON (ad_account_id, job_type)
+           id, job_type, entity_level, status, attempts,
+           rows_upserted, rows_skipped, api_calls_used,
+           error_code, error_message, note,
+           ad_account_id, created_at, started_at, finished_at
+      FROM sync_jobs
+     WHERE ad_account_id IS NOT NULL
+     ORDER BY ad_account_id, job_type, created_at DESC
+  `);
+  const out = new Map<string, HamIs[]>();
+  for (const r of rows) {
+    const liste = out.get(r.ad_account_id);
+    if (liste) liste.push(r);
+    else out.set(r.ad_account_id, [r]);
+  }
+  // Düşen işler ÖNCE: kullanıcının aradığı satır arıza satırı.
+  for (const liste of out.values()) {
+    liste.sort((a, b) => {
+      const ay = a.status === 'failed' ? 0 : 1;
+      const by = b.status === 'failed' ? 0 : 1;
+      return ay !== by ? ay - by : b.created_at.getTime() - a.created_at.getTime();
+    });
+  }
+  return out;
+}
+
+/** Ham satırı sözleşmedeki şekle çevirir. */
+function isSatiri(r: HamIs, adiyle: Map<string, string>): SyncJobStatusRow {
+  return {
+    // BIGSERIAL: olduğu gibi döndürmek JSON.stringify içinde patlıyor.
+    id: r.id.toString(),
+    jobType: r.job_type,
+    entityLevel: r.entity_level,
+    status: r.status,
+    attempts: r.attempts,
+    rowsUpserted: r.rows_upserted,
+    apiCallsUsed: r.api_calls_used,
+    errorCode: r.error_code,
+    errorMessage: r.error_message,
+    rowsSkipped: r.rows_skipped,
+    note: r.note,
+    adAccountId: r.ad_account_id,
+    adAccountName: adiyle.get(r.ad_account_id) ?? null,
+    createdAt: r.created_at.toISOString(),
+    startedAt: r.started_at?.toISOString() ?? null,
+    finishedAt: r.finished_at?.toISOString() ?? null,
+  };
+}
+
 @Controller('sync')
 export class SyncController {
   constructor(
@@ -41,28 +162,200 @@ export class SyncController {
   ) {}
 
   /**
-   * Aktif müşterinin İZLENEN hesaplarının durumu.
+   * "BU MÜŞTERİDE VERİ NEDEN YOK" SORUSUNUN CEVAP YERİ.
    *
-   * Panelin "en son ne zaman güncellendi" sorusuna cevap veriyor. Bu bilgi
-   * olmadan kullanıcı yenile düğmesine basıp basmamayı tahmin ediyor — ve
-   * bayat veriyi taze sanmak, bu projede en pahalı hata türü.
+   * Bu uç önce yalnızca "en son ne zaman güncellendi" diyordu. Yetmediği
+   * canlıda görüldü: bir workspace'te Meta verisi hiç gelmiyordu, bağlantı
+   * doğruydu ve panelde bakılacak TEK BİR ALAN yoktu. Ayırt edilmesi gereken
+   * altı hâlin hepsi aynı boş grafiğe düşüyordu ve tek teşhis yolu sunucuya
+   * SSH ile girip `sync-cli -- jobs` çalıştırmaktı.
+   *
+   * Üç şey birden dönüyor, çünkü teşhis üçünün KESİŞİMİNDE:
+   *
+   *   1. `accounts` — hesap hesap: yapı taraması koştu mu, metrik geldi mi,
+   *      zamanlanmış süpürme bu hesabı alıyor mu, almıyorsa NEDEN.
+   *   2. `excluded` — süzgeçlerin eledikleri, sebep sebep sayılmış. Elenen
+   *      hesabın listede olmaması da bir bilgi ve sessiz kalmamalı.
+   *   3. `recentJobs` — işlerin kendi sonucu. `error_message` bugüne kadar da
+   *      yazılıyordu (Meta'nın subcode ve fbtrace'i dahil) ama okuyan hiçbir
+   *      uç nokta yoktu.
+   *
+   * EN SİNSİ HÂL `recentJobs` OLMADAN GÖRÜNMÜYOR: iş `succeeded` biter,
+   * `rowsUpserted` 0'dır. Yapı taraması henüz kampanya satırlarını yazmadan
+   * metrik işi koştuysa bütün satırlar eşlenemeyip atlanıyor, iş başarılı
+   * sayılıyor ve BİR DAHA denenmiyor. Belirtisi tam olarak "atadım, veri
+   * gelmiyor".
    */
   @Get('status')
   @RequirePermissions('insights.read')
-  async status(@CurrentTenant() ctx: TenantContext) {
-    const accounts = await this.enabledAccounts(ctx);
+  async status(@CurrentTenant() ctx: TenantContext): Promise<SyncStatusResponse> {
+    const { rows, jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler } =
+      await this.prisma.withTenant(ctx, async (tx) => {
+      /*
+       * YALNIZCA ATANMIŞ HESAPLAR. `clientId: { not: null }` şart:
+       * `ad_accounts` RLS politikasının NULL dalı org yöneticisine havuzun
+       * TAMAMINI açıyor (aktif müşteri seçiliyken bile). Süzgeç olmadan bu
+       * ekran ajansın yüzlerce atanmamış hesabını bu müşterinin sorunuymuş
+       * gibi listelerdi.
+       */
+      const rows = await tx.adAccount.findMany({
+        where: { clientId: { not: null } },
+        orderBy: [{ platform: 'asc' }, { name: 'asc' }],
+        select: {
+          id: true,
+          name: true,
+          platform: true,
+          status: true,
+          syncEnabled: true,
+          lastStructureSyncAt: true,
+          lastInsightsSyncAt: true,
+          connection: { select: { status: true } },
+          client: { select: { status: true } },
+        },
+      });
 
-    // En ESKİ senkronizasyon belirleyici: bir hesap bayatsa panelin tamamı
-    // bayat sayılır. En yenisini göstermek, güncellenmemiş hesabı gizlerdi.
-    const stamps = accounts
+      /*
+       * İŞLER AYNI TRANSACTION İÇİNDE. Ayrı `withTenant` çağrısı ikinci bir
+       * etkileşimli transaction açardı; iki kısa sorgu için bedeli yersiz.
+       */
+      const [jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler] =
+        await Promise.all([
+        tx.syncJob.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: RECENT_JOB_LIMIT,
+          select: {
+            id: true,
+            jobType: true,
+            entityLevel: true,
+            status: true,
+            attempts: true,
+            rowsUpserted: true,
+            apiCallsUsed: true,
+            errorCode: true,
+            errorMessage: true,
+            rowsSkipped: true,
+            note: true,
+            adAccountId: true,
+            createdAt: true,
+            startedAt: true,
+            finishedAt: true,
+          },
+        }),
+        tx.syncJob.count(),
+        /*
+         * SAYAÇLAR VERİTABANINDAN — gösterilen 25 satırdan DEĞİL.
+         *
+         * İlk sürüm bunları `recentJobs` dizisinden türetiyordu ve "5 düşen
+         * iş" aslında "gösterilen 25 işin 5'i" anlamına geliyordu. Kesilmiş
+         * bir listeden sayı üretmek, sessiz kesmenin başka bir biçimi.
+         */
+        tx.syncJob.count({ where: { status: 'failed' } }),
+        tx.syncJob.count({
+          where: { status: 'succeeded', rowsUpserted: 0, jobType: { in: METRIK_ISLERI } },
+        }),
+        tx.syncJob.count({ where: { status: { in: ['running', 'queued', 'throttled'] } } }),
+        /*
+         * HESAP BAŞINA SON İŞ. `DISTINCT ON` Prisma'da yok; ham SQL
+         * `withTenant` içinde koşuyor, yani RLS aynen uygulanıyor.
+         */
+        sonIsSorgusu(tx),
+      ]);
+
+      return { rows, jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler };
+    });
+
+    const adiyle = new Map(rows.map((a) => [a.id, a.name]));
+
+    const excluded: SyncExcludedCounts = {
+      syncDisabled: 0,
+      clientInactive: 0,
+      connectionInactive: 0,
+      accountStatus: 0,
+    };
+
+    const accounts: SyncAccountStatus[] = rows.map((a) => {
+      const sweepReason = supurmeDisiSebep(a);
+
+      // Sayaçlar sebeple AYNI SIRAYI izliyor: bir hesap birden fazla koşula
+      // takılabilir ve iki kez sayılırsa toplam hesap sayısını aşar.
+      if (sweepReason !== null) {
+        if (!a.syncEnabled) excluded.syncDisabled++;
+        else if (a.client === null || a.client.status !== 'active') excluded.clientInactive++;
+        else if (a.connection.status !== 'active') excluded.connectionInactive++;
+        else excluded.accountStatus++;
+      }
+
+      /*
+       * YAPI ENGELİ SÜPÜRME ENGELİNDEN SONRA GELİYOR ama ondan bağımsız:
+       * süpürmeye giren bir hesapta bile yapı taraması hiç koşmadıysa metrik
+       * satırları yazılamıyor. Metrik yazımının ön şartı kampanya satırının
+       * veritabanında olması — eşlenemeyen satır atlanıyor ve iş "başarılı"
+       * kapanıyor.
+       */
+      const structureReady = a.lastStructureSyncAt !== null;
+      const blockedReason =
+        sweepReason ??
+        (!structureReady
+          ? 'Yapı taraması bu hesapta hiç koşmadı — kampanya satırları olmadan metrikler yazılamıyor. "Şimdi güncelle" önce yapıyı çeker.'
+          : a.lastInsightsSyncAt === null
+            ? 'Hesap izleniyor ve yapı taraması koştu ama metrik hiç çekilmedi. Aşağıdaki iş listesinde bu hesabın son işine bakın.'
+            : null);
+
+      return {
+        id: a.id,
+        name: a.name,
+        platform: a.platform,
+        status: a.status,
+        syncEnabled: a.syncEnabled,
+        connectionStatus: a.connection.status,
+        lastStructureSyncAt: a.lastStructureSyncAt?.toISOString() ?? null,
+        lastInsightsSyncAt: a.lastInsightsSyncAt?.toISOString() ?? null,
+        inScheduledSweep: sweepReason === null,
+        structureReady,
+        blockedReason,
+        lastJobs: (sonIsler.get(a.id) ?? []).map((r) => isSatiri(r, adiyle)),
+      };
+    });
+
+    const recentJobs: SyncJobStatusRow[] = jobs.map((j) => ({
+      // `sync_jobs.id` BIGSERIAL. BigInt'i olduğu gibi döndürmek
+      // `JSON.stringify` içinde patlıyor ve uç nokta 500 veriyor.
+      id: j.id.toString(),
+      jobType: j.jobType,
+      entityLevel: j.entityLevel,
+      status: j.status,
+      attempts: j.attempts,
+      rowsUpserted: j.rowsUpserted,
+      apiCallsUsed: j.apiCallsUsed,
+      errorCode: j.errorCode,
+      errorMessage: j.errorMessage,
+      rowsSkipped: j.rowsSkipped,
+      note: j.note,
+      adAccountId: j.adAccountId,
+      adAccountName: j.adAccountId ? (adiyle.get(j.adAccountId) ?? null) : null,
+      createdAt: j.createdAt.toISOString(),
+      startedAt: j.startedAt?.toISOString() ?? null,
+      finishedAt: j.finishedAt?.toISOString() ?? null,
+    }));
+
+    // İZLENEN hesaplar üzerinden — eski sözleşme korunuyor. En ESKİ
+    // senkronizasyon belirleyici: bir hesap bayatsa panelin tamamı bayat
+    // sayılır. En yenisini göstermek, güncellenmemiş hesabı gizlerdi.
+    const izlenen = accounts.filter((a) => a.syncEnabled);
+    const stamps = izlenen
       .map((a) => a.lastInsightsSyncAt)
-      .filter((d): d is Date => d !== null)
-      .map((d) => d.getTime());
+      .filter((d): d is string => d !== null)
+      .map((d) => new Date(d).getTime());
 
     return {
-      accountCount: accounts.length,
-      neverSyncedCount: accounts.filter((a) => a.lastInsightsSyncAt === null).length,
+      accountCount: izlenen.length,
+      neverSyncedCount: izlenen.filter((a) => a.lastInsightsSyncAt === null).length,
       oldestSyncAt: stamps.length > 0 ? new Date(Math.min(...stamps)).toISOString() : null,
+      accounts,
+      excluded,
+      recentJobs,
+      recentJobsTotal: jobsTotal,
+      jobCounts: { failed: failedCount, emptySuccess: emptyCount, running: runningCount },
     };
   }
 
@@ -150,6 +443,20 @@ export class SyncController {
           jobType: is.jobType,
           adAccountId: account.id,
           interactive: true,
+          /*
+           * METRİK İŞLERİ GECİKMELİ, YAPI İŞİ DEĞİL.
+           *
+           * Atama yolunda bu gecikme vardı, "Şimdi güncelle" yolunda yoktu ve
+           * fark canlıda ölçüldü: bir Meta hesabında yapı taraması 11:33'te
+           * koşarken aynı dakikada başlayan metrik işi 422 satır çekip
+           * hiçbirini yazamadı ("0 satır · 422 atlandı"), bir dakika sonraki
+           * iş ise 86 satır yazdı. Aradaki tek fark yapı taramasının
+           * bitmesiydi.
+           *
+           * Öncelik farkı (yapı 4, metrik 10) bir BARİYER DEĞİL: worker dört
+           * işi paralel çalıştırıyor.
+           */
+          ...(is.jobType === 'structure' ? {} : { delayMs: YAPI_ICIN_TANINAN_SURE_MS }),
           ...(is.dateFrom ? { dateFrom: is.dateFrom, dateTo: is.dateTo } : {}),
         });
         if (res.enqueued) queued++;

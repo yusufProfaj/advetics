@@ -61,7 +61,11 @@ describe('menü verisi gerçekten okunuyor', () => {
       'Kütüphane',
       'Ayarlar',
     ]);
-    expect(SECTIONS.flatMap((s) => s.items).filter((i) => i.perm).length).toBe(3);
+    // AYARLAR'IN DÖRT ÖĞESİNİN DÖRDÜ DE YETKİYLE KAPALI. Sayı testte yazılı
+    // çünkü yetkisiz bir öğe eklemek sessiz bir sızıntı olurdu: Senkronizasyon
+    // Durumu ekranı platformun ham hata mesajlarını basıyor ve `perm` düşerse
+    // müşteri hesabı da görürdü.
+    expect(SECTIONS.flatMap((s) => s.items).filter((i) => i.perm).length).toBe(6);
   });
 });
 

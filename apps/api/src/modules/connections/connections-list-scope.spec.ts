@@ -8,7 +8,7 @@ import { ConnectionsService } from './connections.service';
  *
  * Bu paket veritabanına gitmiyor ve gitmemeli: sınanan şey KARARIN kendisi —
  * hangi `activeClientId` ile bağlam kuruluyor ve sorguya hangi süzgeç
- * konuyor. Prisma'nın `include` semantiğini taklit etmek, taklidi test etmek
+ * konuyor. Prisma'nın `select` semantiğini taklit etmek, taklidi test etmek
  * olurdu.
  *
  * Karar üç yerde birden sessiz hata üretebiliyor:
@@ -35,7 +35,7 @@ const CTX: TenantContext = {
 } as TenantContext;
 
 interface FindManyArgs {
-  include: {
+  select: {
     adAccounts: { where?: { clientId?: string } };
     socialProfiles: { where?: { clientId?: string } };
   };
@@ -85,8 +85,8 @@ describe('list — kapsam', () => {
     await svc.list(CTX, null);
 
     expect(seenContext!.activeClientId).toBeNull();
-    expect(seenArgs!.include.adAccounts.where).toBeUndefined();
-    expect(seenArgs!.include.socialProfiles.where).toBeUndefined();
+    expect(seenArgs!.select.adAccounts.where).toBeUndefined();
+    expect(seenArgs!.select.socialProfiles.where).toBeUndefined();
   });
 
   it('AÇIK clientId, oturumdaki seçimi EZİYOR', async () => {
@@ -96,7 +96,7 @@ describe('list — kapsam', () => {
     await svc.list(CTX, CLIENT_B);
 
     expect(seenContext!.activeClientId).toBe(CLIENT_B);
-    expect(seenArgs!.include.adAccounts.where).toEqual({ clientId: CLIENT_B });
+    expect(seenArgs!.select.adAccounts.where).toEqual({ clientId: CLIENT_B });
   });
 
   it('SOSYAL PROFİLLER de süzülüyor', async () => {
@@ -104,7 +104,7 @@ describe('list — kapsam', () => {
     // kayboldu; süzgeç olmadan formlar ekranı başka müşterilerin sayfalarını
     // listeler.
     await svc.list(CTX, CLIENT_B);
-    expect(seenArgs!.include.socialProfiles.where).toEqual({ clientId: CLIENT_B });
+    expect(seenArgs!.select.socialProfiles.where).toEqual({ clientId: CLIENT_B });
   });
 
   it('ERİŞİLEMEYEN müşteri için sorgu HİÇ çalışmıyor', async () => {

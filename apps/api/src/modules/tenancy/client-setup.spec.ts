@@ -66,10 +66,13 @@ let c: Cagrilar;
 let svc: ClientSetupService;
 /** Hangi hesap kimliklerinde atama patlayacak. */
 let patlayan: Set<string>;
+/** Hesap kimliği → o hesabın atamasında dönen taşıma sayıları. */
+let tasima: Map<string, { movedRows: number; leftBehind: Record<string, number> }>;
 let uyePatlar: boolean;
 
 beforeEach(() => {
   c = { hesapAtama: [], profilAtama: [], uye: [] };
+  tasima = new Map();
   patlayan = new Set();
   uyePatlar = false;
 
@@ -85,7 +88,12 @@ beforeEach(() => {
     ) => {
       if (patlayan.has(id)) throw new Error(`"${id}" bir yönetici (MCC) hesabı`);
       c.hesapAtama.push({ ctx, id, clientId });
-      return {};
+      /*
+       * TAKLİT GERÇEK SÖZLEŞMEYİ TAŞIYOR. Boş nesne döndürmek, çağıranın
+       * taşınan satır sayılarını okuduğunu hiç sınamamak demekti — havuzdan
+       * alınan bir hesap başka müşteriden geliyorsa o sayı sıfır değil.
+       */
+      return tasima.get(id) ?? { movedRows: 0, leftBehind: {} };
     },
     assignSocialProfile: async (
       _ctx: TenantContext,
@@ -219,5 +227,35 @@ describe('MÜŞTERİ HESABI', () => {
     const r = await svc.setup(CTX, girdi(), META);
     expect(r.userCreated).toBe(false);
     expect(c.uye).toHaveLength(0);
+  });
+});
+
+describe('havuzdan gelen hesabın geçmişi', () => {
+  it('KRİTİK: taşınan satır sayıları TOPLANIP döndürülüyor', async () => {
+    /*
+     * HAVUZDAKİ HESAP "HİÇ KULLANILMAMIŞ" DEMEK DEĞİL. Daha önce başka bir
+     * müşteride bulunup oradan kaldırılmış olabilir; kampanyaları ve geçmiş
+     * metrikleri hâlâ o müşterinin altında duruyor ve atama onları taşıyor.
+     *
+     * `assignAdAccount` bu sayıyı zaten dönüyordu, ama sihirbaz sonucu
+     * OKUMUYORDU. Sonuç: kurulum "3 hesap atandı" diyor, bir başka
+     * müşterinin raporundaki rakam sessizce değişiyor ve iki ekran arasında
+     * hiçbir bağ yok.
+     */
+    tasima.set(ACC1, { movedRows: 1200, leftBehind: { kural: 1 } });
+    tasima.set(ACC2, { movedRows: 300, leftBehind: { kural: 2, 'aylık bütçe': 1 } });
+
+    const res = await svc.setup(CTX, girdi({ adAccountIds: [ACC1, ACC2] }), META);
+
+    expect(res.movedRows).toBe(1500);
+    // ETİKET BAŞINA TOPLANIYOR: iki hesap da kural bırakmışsa "1 kural, 2
+    // kural" değil "3 kural" yazılmalı.
+    expect(res.leftBehind).toEqual({ kural: 3, 'aylık bütçe': 1 });
+  });
+
+  it('taşıma yoksa sayılar sıfır — alan HER ZAMAN var', async () => {
+    const res = await svc.setup(CTX, girdi({ adAccountIds: [ACC1] }), META);
+    expect(res.movedRows).toBe(0);
+    expect(res.leftBehind).toEqual({});
   });
 });

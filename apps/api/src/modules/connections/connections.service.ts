@@ -30,6 +30,7 @@ import {
   type IAdPlatformProvider,
 } from './provider.types';
 import { TokenVaultService } from './token-vault.service';
+import { hesapVerisiniTasi, type TasimaSonucu } from './hesap-verisi-tasima';
 
 interface Meta {
   ip?: string | null;
@@ -37,8 +38,72 @@ interface Meta {
   requestId?: string | null;
 }
 
+/**
+ * Atama sonrası geçmiş metrik işinin BEKLETİLDİĞİ süre.
+ *
+ * 90 saniye ölçülmüş bir üst sınır değil, yapı taramasının tipik süresine
+ * göre seçilmiş bir pay. Garanti değil ve olmak zorunda da değil: yapı hâlâ
+ * bitmemişse metrik işi artık sessizce başarılı sayılmıyor, tekrar denenebilir
+ * hata veriyor (`insights-sync.service.ts`).
+ */
+const YAPI_ICIN_TANINAN_SURE_MS = 90_000;
+
 /** OAuth state ömrü. Kısa tutuluyor: bu pencere bir CSRF fırsat penceresidir. */
 const STATE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * `/connections` LİSTESİNİN ÇEKTİĞİ ALANLAR — TEK YERDE.
+ *
+ * Sorgu ile `toSummary`'nin tipi buradan türetiliyor. Ayrı yazılsalardı
+ * biri güncellenmediğinde TypeScript susardı ve alan `undefined` gelirdi;
+ * `$queryRaw<T>` için CLAUDE.md'de yazılı olan tuzağın Prisma karşılığı bu.
+ */
+const HESAP_ALANLARI = {
+  id: true,
+  platform: true,
+  externalId: true,
+  name: true,
+  currency: true,
+  timezone: true,
+  status: true,
+  syncEnabled: true,
+  managerExternalId: true,
+  lastInsightsSyncAt: true,
+  clientId: true,
+  client: { select: { name: true } },
+} satisfies Prisma.AdAccountSelect;
+
+const PROFIL_ALANLARI = {
+  id: true,
+  profileType: true,
+  externalId: true,
+  name: true,
+  username: true,
+  pictureUrl: true,
+  linkedAdAccountId: true,
+  syncEnabled: true,
+  clientId: true,
+  client: { select: { name: true } },
+} satisfies Prisma.SocialProfileSelect;
+
+const BAGLANTI_ALANLARI = {
+  id: true,
+  platform: true,
+  accountLabel: true,
+  status: true,
+  grantedScopes: true,
+  tokenExpiresAt: true,
+  lastVerifiedAt: true,
+  lastErrorCode: true,
+  createdAt: true,
+  adAccounts: { select: HESAP_ALANLARI },
+  socialProfiles: { select: PROFIL_ALANLARI },
+} satisfies Prisma.PlatformConnectionSelect;
+
+/** `toSummary` girdisi — sorgunun alan listesinden TÜRETİLİYOR. */
+type BaglantiSatiri = Prisma.PlatformConnectionGetPayload<{
+  select: typeof BAGLANTI_ALANLARI;
+}>;
 
 @Injectable()
 export class ConnectionsService {
@@ -179,16 +244,45 @@ export class ConnectionsService {
             }
           : { status: { not: 'revoked' } },
         orderBy: { createdAt: 'asc' },
-        include: {
+        /*
+         * ═══ `select`, `include` DEĞİL — VE FARK ÜRETİMDE ÖLÇÜLDÜ ═══
+         *
+         * `include` ilişkinin BÜTÜN skaler kolonlarını çekiyor. Bu sorgu
+         * havuzda 481 reklam hesabı ve 199 sayfa varken şunları da
+         * okuyordu ve `toSummary` hepsini ATIYORDU:
+         *
+         *   · `ad_accounts.raw` — her hesabın TAM platform yanıtı (JSONB)
+         *   · `ad_accounts.rate_limit_state` (JSONB)
+         *   · `social_profiles.raw` (JSONB)
+         *   · `social_profiles.page_access_token_enc` — ŞİFRELİ SAYFA TOKEN'I
+         *   · `platform_connections.access_token_enc` / `refresh_token_enc`
+         *
+         * Yani megabaytlarca veri Postgres'ten okunup Node'a taşınıyor ve
+         * yanıta hiç girmeden çöpe gidiyordu. Panelde "yavaş" olarak
+         * görünen şeyin ölçülebilir kısmı buydu: yük yanıtta GÖRÜNMÜYOR,
+         * çünkü yanıt zaten doğru — pahalı olan ona giden yol.
+         *
+         * GÜVENLİK TARAFI DA VAR: aşağıdaki `toSummary` yorumu "şifreli
+         * token kolonları bu fonksiyondan geçmez" diyor ve yanıt için
+         * doğruydu; ama SORGU onları yine de belleğe alıyordu. Artık
+         * alınmıyor.
+         *
+         * YENİ ALAN EKLERKEN buraya da eklemek gerekiyor — `select`
+         * unutulan alanı `undefined` yapar ve TypeScript bunu yakalar
+         * (`include`'un aksine sessiz kalmaz).
+         */
+        select: {
+          ...BAGLANTI_ALANLARI,
+          // Süzgeç ve sıralama dinamik; ALAN LİSTESİ sabitten geliyor.
           adAccounts: {
             where: clientId ? { clientId } : undefined,
             orderBy: { name: 'asc' },
-            include: { client: { select: { name: true } } },
+            select: HESAP_ALANLARI,
           },
           socialProfiles: {
             where: clientId ? { clientId } : undefined,
             orderBy: { name: 'asc' },
-            include: { client: { select: { name: true } } },
+            select: PROFIL_ALANLARI,
           },
         },
       });
@@ -205,12 +299,7 @@ export class ConnectionsService {
    * kuralın korunduğunu kontrol et.
    */
   private toSummary(
-    c: Prisma.PlatformConnectionGetPayload<{
-      include: {
-        adAccounts: { include: { client: { select: { name: true } } } };
-        socialProfiles: { include: { client: { select: { name: true } } } };
-      };
-    }>,
+    c: BaglantiSatiri,
   ): ConnectionSummary {
     const prov = this.provider(c.platform as Platform);
     const missingScopes = prov.requiredScopes.filter((s) => !c.grantedScopes.includes(s));
@@ -732,7 +821,31 @@ export class ConnectionsService {
       const baslangic = new Date(bugun.getTime() - 90 * 86_400_000);
       const gun = (d: Date): string => d.toISOString().slice(0, 10);
 
-      // ÖNCE AĞAÇ, SONRA METRİK: metrikler kampanya satırlarına bağlanıyor.
+      /*
+       * ═══ ÖNCE AĞAÇ, SONRA METRİK — VE ÖNCELİK BUNU GARANTİ ETMİYOR ═══
+       *
+       * Metrik satırı, ait olduğu kampanya satırı veritabanında yoksa
+       * YAZILAMIYOR. Bu iki iş bir süre art arda, gecikmesiz kuyruğa
+       * giriyordu ve "sıra" yalnızca ÖNCELİKLE (structure 4, backfill 10)
+       * sağlanıyordu. Öncelik bir BAĞIMLILIK DEĞİL: worker dört işi paralel
+       * çalıştırıyor, yani yapı işi hâlâ koşarken metrik işi ikinci bir
+       * slotta başlayabiliyor. Sonuç canlıda görüldü — bütün metrikler
+       * eşlenemeyip atlanıyor, iş `succeeded` + `rows=0` kapanıyor ve BİR
+       * DAHA denenmiyordu. Belirtisi tam olarak "atadım, veri gelmiyor".
+       *
+       * İKİ KATMANLI ÇÖZÜM, ÇÜNKÜ TEK BAŞINA HİÇBİRİ YETMİYOR:
+       *
+       *   1. GECİKME (burada) — yarışın çoğunu ortadan kaldırıyor. Ama bir
+       *      GARANTİ DEĞİL: yapı taraması yavaş bir hesapta 90 saniyeyi de
+       *      aşabilir.
+       *   2. GERÇEK GÜVENCE `insights-sync.service.ts` içinde: hiçbir satır
+       *      yazılamadıysa ve o hesapta yapı taraması hiç koşmadıysa iş
+       *      BAŞARILI SAYILMIYOR, tekrar denenebilir hata veriyor ve BullMQ
+       *      artan bekleme ile yeniden deniyor.
+       *
+       * Gecikme olmasaydı 2. katman işi kurtarırdı ama her seferinde bir
+       * başarısız deneme ve boşa giden bir API turu pahasına.
+       */
       await this.queue.enqueue({ clientId, platform, jobType: 'structure', adAccountId });
       await this.queue.enqueue({
         clientId,
@@ -742,6 +855,7 @@ export class ConnectionsService {
         entityLevel: 'campaign',
         dateFrom: gun(baslangic),
         dateTo: gun(bugun),
+        delayMs: YAPI_ICIN_TANINAN_SURE_MS,
       });
       this.logger.log(
         `Reklam hesabı ${adAccountId} müşteriye atandı: izleme açıldı, 90 günlük geçmiş kuyruğa eklendi`,
@@ -1409,6 +1523,15 @@ export class ConnectionsService {
           syncEnabled: before.syncEnabled,
           changed: false,
           platform: before.platform as Platform,
+          // YANIT ŞEKLİ HER DALDA AYNI. Alanı yalnızca değişiklik olan dalda
+          // döndürmek, panelde `undefined` okuyup "0 kayıt taşındı" yazmak
+          // demekti — ki hiçbir şey yapılmadığında bu doğru bir cümle değil.
+          movedRows: 0,
+          movedByTable: {} as TasimaSonucu['tasinan'],
+          leftBehind: {} as TasimaSonucu['kalan'],
+          stayingRows: 0,
+          clientWide: {} as TasimaSonucu['musteriGeneli'],
+          unlinkedBoostPages: 0,
         };
       }
 
@@ -1439,6 +1562,19 @@ export class ConnectionsService {
         data: { clientId, syncEnabled: clientId !== null },
       });
 
+      /*
+       * VERİ DE TAŞINIYOR — AYNI TRANSACTION'DA.
+       *
+       * Ayrı bir transaction'a almak, "hesap taşındı ama verisi taşınmadı"
+       * durumunu MÜMKÜN kılardı ve o durumun hiçbir belirtisi yok: iki
+       * müşterinin raporu da sessizce yanlış olurdu. İkisi ya birlikte olur
+       * ya hiç olmaz.
+       *
+       * Kuyruğa alma bilerek DIŞARIDA (aşağıda): Redis yavaşladığında
+       * transaction ölür ve atama bile kaydedilemezdi.
+       */
+      const tasima = await hesapVerisiniTasi(tx, adAccountId, clientId);
+
       await this.audit.record(tx, ctx, {
         action: clientId === null ? 'ad_account.unassigned' : 'ad_account.assigned',
         targetType: 'ad_account',
@@ -1448,9 +1584,45 @@ export class ConnectionsService {
         // ne zaman değişti" sorusunu cevaplıyor.
         clientId: clientId ?? before.clientId,
         before: { clientId: before.clientId, syncEnabled: before.syncEnabled },
-        after: { clientId: after.clientId, syncEnabled: after.syncEnabled, name: after.name },
+        after: {
+          clientId: after.clientId,
+          syncEnabled: after.syncEnabled,
+          name: after.name,
+          // TAŞINAN SATIR SAYILARI DENETİM KAYDINDA. Bir müşterinin
+          // raporundaki rakam bir gün "geçen ay başkaydı" diye
+          // sorgulandığında, cevabın nerede olduğu belli olsun.
+          tasinanSatirlar: tasima.tasinan,
+          eskiMusteridekiKayitlar: tasima.kalan,
+        },
         ...meta,
       });
+
+      /*
+       * ESKİ MÜŞTERİ DE KENDİ DENETİM SATIRINI ALIYOR.
+       *
+       * Denetim kaydı `clientId ?? before.clientId` ile YENİ müşteriye
+       * yazılıyor; doğrudan A→B atamasında A hiçbir satır almıyordu. Oysa
+       * kaybeden taraf A: kampanyaları, kreatifleri ve geçmiş metrikleri
+       * onun altından ÇIKTI ve raporundaki rakam değişti. "Geçen ay bu sayı
+       * başkaydı" sorusunun cevabı A'nın kendi denetim kaydında olmalı —
+       * B'nin kaydını A göremiyor (RLS).
+       */
+      if (before.clientId !== null && clientId !== null) {
+        await this.audit.record(tx, ctx, {
+          action: 'ad_account.unassigned',
+          targetType: 'ad_account',
+          targetId: adAccountId,
+          clientId: before.clientId,
+          before: { clientId: before.clientId, syncEnabled: before.syncEnabled },
+          after: {
+            clientId: after.clientId,
+            name: after.name,
+            tasinanSatirlar: tasima.tasinan,
+            eskiMusteridekiKayitlar: tasima.kalan,
+          },
+          ...meta,
+        });
+      }
 
       return {
         id: after.id,
@@ -1458,8 +1630,24 @@ export class ConnectionsService {
         syncEnabled: after.syncEnabled,
         changed: true,
         platform: after.platform as Platform,
+        movedRows: tasima.toplam,
+        movedByTable: tasima.tasinan,
+        leftBehind: tasima.kalan,
+        stayingRows: tasima.kalanVeri,
+        clientWide: tasima.musteriGeneli,
+        unlinkedBoostPages: tasima.koparilanFaturaBagi,
       };
-    });
+    },
+    /*
+     * SÜRE UZATILDI — TEK SEBEP `insights_daily`.
+     *
+     * Bir reklam hesabının 90 günlük geçmişi dört varlık seviyesinde yüz
+     * binlerce satır olabiliyor ve hepsinin `client_id`'si tek `UPDATE` ile
+     * değişiyor. Varsayılan 5 saniyede transaction ölseydi hesap taşınmış,
+     * verisi taşınmamış olarak kalırdı. Bu bir istek yolu değil, seyrek bir
+     * yönetim işlemi — bağlantıyı 30 saniye tutması kabul edilebilir.
+     */
+    { timeoutMs: 30_000 });
 
     /*
      * KUYRUK TRANSACTION'IN DIŞINDA. `withTenant` etkileşimli bir transaction

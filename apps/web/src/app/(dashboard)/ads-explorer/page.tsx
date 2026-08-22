@@ -1,13 +1,20 @@
 import Link from 'next/link';
 import type { AdsExploreQuery, AdsExploreResult } from '@advetics/shared';
-import { AD_SORT_FIELDS, AD_STATUSES } from '@advetics/shared';
+import { AD_SORT_FIELDS, AD_STATUSES, PLATFORMS } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
-import { serverApiFetch } from '@/lib/api';
-import { RANGE_PRESETS, resolveRange } from '@/lib/date-range';
+import { ApiRequestError, serverApiFetch } from '@/lib/api';
+import { rangeParams, resolveRange } from '@/lib/date-range';
+import { TarihSecici } from '@/components/tarih-secici';
 import { formatDayLong, formatMoney, formatNumber, formatPercent } from '@/lib/format';
 import { AdCard } from '@/components/ad-card';
 
-export const metadata = { title: 'Ads Explorer — Advetics' };
+/*
+ * BAŞLIK TÜRKÇE. Menüde "Reklam Keşfi" yazıp ekranda "Ads Explorer" görmek,
+ * kullanıcının doğru sayfada olduğundan şüphe etmesine yol açıyordu.
+ * CLAUDE.md: "Arayüz Türkçe ve iş dilinde." URL değişmiyor — bağlantılar
+ * paylaşılmış olabilir.
+ */
+export const metadata = { title: 'Reklam Keşfi — Advetics' };
 export const dynamic = 'force-dynamic';
 
 const SORT_LABEL: Record<string, string> = {
@@ -47,7 +54,12 @@ export default async function AdsExplorerPage({
   await requireSession();
   const params = await searchParams;
 
-  const range = resolveRange(first(params.aralik));
+  const range = resolveRange({
+    aralik: first(params.aralik),
+    baslangic: first(params.baslangic),
+    bitis: first(params.bitis),
+    karsilastir: first(params.karsilastir),
+  });
   const sort = pick(first(params.sirala), AD_SORT_FIELDS, 'spend');
   const dir = first(params.yon) === 'asc' ? 'asc' : 'desc';
   const status = pick(first(params.durum), AD_STATUSES, undefined);
@@ -55,6 +67,14 @@ export default async function AdsExplorerPage({
   const campaignId = first(params.kampanya);
   const q = first(params.ara)?.trim() || undefined;
   const onlyIssues = first(params.sorunlu) === '1';
+  /*
+   * PLATFORM SÜZGECİ. Şemada (`adsExploreQuerySchema`) ve serviste zaten
+   * vardı; panel onu HİÇ göndermiyordu. Meta ve Google reklamları tek listede
+   * karışık duruyor ve hangisinin hangi platforma ait olduğu ancak kampanya
+   * adından tahmin edilebiliyordu — oysa `ads.platform` kolonu baştan beri
+   * orada.
+   */
+  const platform = pick(first(params.platform), PLATFORMS, undefined);
   const page = Math.max(1, Number(first(params.sayfa) ?? 1) || 1);
 
   const qs = new URLSearchParams({
@@ -70,14 +90,36 @@ export default async function AdsExplorerPage({
   if (campaignId) qs.set('campaignId', campaignId);
   if (q) qs.set('q', q);
   if (onlyIssues) qs.set('onlyIssues', 'true');
+  if (platform) qs.set('platform', platform);
 
-  const result = await serverApiFetch<AdsExploreResult>(`/ads?${qs}`).catch(() => null);
+  /*
+   * HATA YUTULMUYOR. `.catch(() => null)` 401 (oturum), 403 (izin), 500
+   * (sorgu hatası) ve "API kapalı" hâllerini AYNI cümleye çeviriyordu:
+   * "Reklamlar alınamadı. API çalışıyor mu?" — sunucu log'una bakmadan
+   * hangisi olduğunu anlamak imkânsızdı. CLAUDE.md'deki
+   * `.catch(() => setX([]))` yasağının aynısı.
+   */
+  let result: AdsExploreResult | null = null;
+  let hata: string | null = null;
+  try {
+    result = await serverApiFetch<AdsExploreResult>(`/ads?${qs}`);
+  } catch (err) {
+    hata =
+      err instanceof ApiRequestError
+        ? `${err.message} (${err.code}, HTTP ${err.status})`
+        : err instanceof Error
+          ? err.message
+          : 'Bilinmeyen hata';
+  }
 
   /** Mevcut süzgeçleri koruyarak yeni bir bağlantı üretir. */
   const linkWith = (over: Record<string, string | undefined>): string => {
     const next = new URLSearchParams();
     const current: Record<string, string | undefined> = {
-      aralik: range.key,
+      // TARİH ANAHTARLARININ HEPSİ. Yalnızca `aralik` taşınsaydı özel bir
+      // aralık seçip herhangi bir süzgece basmak onu sessizce 30 güne
+      // döndürürdü — "aralık bazen kayboluyor" belirtisi.
+      ...rangeParams(range),
       sirala: sort,
       yon: dir,
       durum: status,
@@ -85,6 +127,7 @@ export default async function AdsExplorerPage({
       kampanya: campaignId,
       ara: q,
       sorunlu: onlyIssues ? '1' : undefined,
+      platform,
       ...over,
     };
     for (const [k, v] of Object.entries(current)) if (v) next.set(k, v);
@@ -95,37 +138,56 @@ export default async function AdsExplorerPage({
     <div className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Ads Explorer</h1>
+          <h1 className="text-xl font-semibold text-ink">Reklam Keşfi</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
             {formatDayLong(range.from)} — {formatDayLong(range.to)}
             {result && ` · ${formatNumber(result.total)} reklam`}
           </p>
         </div>
-        <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Tarih aralığı">
-          {RANGE_PRESETS.map((p) => (
-            <Link
-              key={p.key}
-              href={linkWith({ aralik: p.key, sayfa: undefined })}
-              aria-current={range.key === p.key ? 'page' : undefined}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                range.key === p.key ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
-              }`}
-            >
-              {p.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* PLATFORM ŞERİDİ. Google Ads'te arama reklamlarının görseli yok,
+              Meta'da her reklamın var: ikisini tek listede karıştırmak hem
+              tarama hem de rapora alma işini zorlaştırıyor. */}
+          <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Platform">
+            {(
+              [
+                { key: undefined, label: 'Tümü' },
+                { key: 'meta' as const, label: 'Meta Ads' },
+                { key: 'google' as const, label: 'Google Ads' },
+              ] as const
+            ).map((p) => (
+              <Link
+                key={p.label}
+                href={linkWith({ platform: p.key, kampanya: undefined, sayfa: undefined })}
+                aria-current={platform === p.key ? 'page' : undefined}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                  platform === p.key
+                    ? 'bg-surface text-ink shadow-sm'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                {p.label}
+              </Link>
+            ))}
+          </nav>
+        <TarihSecici aralik={range} enEskiGun={null} />
+        </div>
       </header>
 
       {/* Arama — düz GET formu, istemci JS'i yok. */}
       <form action="/ads-explorer" method="get" className="flex flex-wrap gap-2">
-        <input type="hidden" name="aralik" value={range.key} />
+        {/* TARİH ANAHTARLARI GİZLİ ALAN OLARAK. Form GET ile URL'i baştan
+            kurduğu için burada olmayan her parametre ARAMA YAPINCA düşüyor. */}
+        {Object.entries(rangeParams(range)).map(([k, v]) =>
+          v === undefined ? null : <input key={k} type="hidden" name={k} value={v} />,
+        )}
         <input type="hidden" name="sirala" value={sort} />
         <input type="hidden" name="yon" value={dir} />
         {status && <input type="hidden" name="durum" value={status} />}
         {adAccountId && <input type="hidden" name="hesap" value={adAccountId} />}
         {campaignId && <input type="hidden" name="kampanya" value={campaignId} />}
         {onlyIssues && <input type="hidden" name="sorunlu" value="1" />}
+        {platform && <input type="hidden" name="platform" value={platform} />}
         <input
           type="search"
           name="ara"
@@ -150,7 +212,7 @@ export default async function AdsExplorerPage({
       </form>
 
       {result === null ? (
-        <Notice>Reklamlar alınamadı. API çalışıyor mu?</Notice>
+        <Notice>Reklamlar alınamadı — {hata ?? 'sebep bilinmiyor'}</Notice>
       ) : (
         <>
           {/* REKLAM HESABI SÜZGECİ — kampanyalardan önce ve AYRI satırda.

@@ -332,3 +332,204 @@ describe('ReportsService — yapı', () => {
     ).rejects.toThrow(/bulunamadı/);
   });
 });
+
+/**
+ * ═══ ŞABLONUN RAPORA ULAŞMASI ═══
+ *
+ * Şablon kaydediliyordu ama belgeye YALNIZCA `sections` ulaşıyordu:
+ * `options` kolonu okunmuyordu bile. Bir ayarı kaydedip hiçbir yerde
+ * göremeyen kullanıcı, özelliğin bozuk olduğunu değil kendi yaptığını
+ * yanlış yaptığını düşünür.
+ */
+describe('ReportsService — şablon', () => {
+  async function sablonEkle(over: {
+    clientId?: string | null;
+    sections?: string[];
+    options?: unknown;
+    title?: string;
+    updatedAt?: string;
+  } = {}): Promise<string> {
+    const rows = await h.q<{ id: string }>(
+      `INSERT INTO report_templates (id, org_id, client_id, name, title, sections, options, status, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, 'Şablon', $3, $4::jsonb, $5::jsonb, 'published', $6::timestamptz)
+       RETURNING id`,
+      [
+        IDS.org,
+        over.clientId === undefined ? IDS.client : over.clientId,
+        over.title ?? 'Başlık',
+        JSON.stringify(over.sections ?? ['cover', 'summary', 'closing']),
+        JSON.stringify(over.options ?? {}),
+        over.updatedAt ?? '2026-08-01T00:00:00Z',
+      ],
+    );
+    return rows[0]!.id;
+  }
+
+  it('KRİTİK: bölüm AYARLARI belgeye ulaşıyor', async () => {
+    await sablonEkle({ options: { meta_campaigns: { metrics: ['spend', 'clicks'], limit: 5 } } });
+    const data = await svc.build(CTX, RANGE);
+    expect(data.options.meta_campaigns).toEqual({ metrics: ['spend', 'clicks'], limit: 5 });
+  });
+
+  it('bölüm sırası şablondan geliyor', async () => {
+    await sablonEkle({ sections: ['closing', 'cover'] });
+    expect((await svc.build(CTX, RANGE)).sections).toEqual(['closing', 'cover']);
+  });
+
+  it('KRİTİK: bozuk options belgeye HAM geçmiyor', async () => {
+    await sablonEkle({ options: { meta_campaigns: { metrics: ['uydurma'] } } });
+    expect((await svc.build(CTX, RANGE)).options).toEqual({});
+  });
+
+  it('şablon yoksa TÜM bölümler — boş rapor üretilmiyor', async () => {
+    const data = await svc.build(CTX, RANGE);
+    expect(data.sections.length).toBeGreaterThan(3);
+    expect(data.options).toEqual({});
+  });
+
+  it('KRİTİK: aynı müşteride iki şablon varsa EN SON GÜNCELLENEN geliyor', async () => {
+    /*
+     * Sıralama eskiden yalnızca `client_id NULLS LAST` idi: aynı müşteriye
+     * ikinci bir şablon kaydedilince hangisinin geleceği BELİRSİZDİ ve
+     * çağrıdan çağrıya değişebilirdi — sessizce yanlış rapor.
+     */
+    await sablonEkle({ sections: ['cover'], updatedAt: '2026-08-01T00:00:00Z' });
+    await sablonEkle({ sections: ['closing'], updatedAt: '2026-08-10T00:00:00Z' });
+    expect((await svc.build(CTX, RANGE)).sections).toEqual(['closing']);
+  });
+
+  it('müşteriye özel şablon ORG VARSAYILANININ önünde', async () => {
+    await sablonEkle({ clientId: null, sections: ['cover'] });
+    await sablonEkle({ clientId: IDS.client, sections: ['summary'] });
+    expect((await svc.build(CTX, RANGE)).sections).toEqual(['summary']);
+  });
+
+  it('KRİTİK: BAŞKA müşterinin şablonu kimliğiyle kullanılamıyor', async () => {
+    /*
+     * `templateId` adres çubuğundan geliyor. Org yöneticisi RLS'i geçtiği
+     * için sahiplik kontrolü olmadan başka bir müşterinin şablonuyla rapor
+     * üretilebiliyordu — o müşterinin başlığı ve kapanış metniyle.
+     */
+    await h.q(
+      `INSERT INTO clients (id, org_id, slug, name, timezone, reporting_currency, status, created_at, updated_at)
+       VALUES ($1, $2, 'diger-musteri', 'Diğer Müşteri', 'Europe/Istanbul', 'TRY', 'active', now(), now())`,
+      ['dddddddd-dddd-dddd-dddd-dddddddddddd', IDS.org],
+    );
+    const yabanci = await sablonEkle({
+      clientId: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+      sections: ['closing'],
+      title: 'Yabancı başlık',
+    });
+
+    const data = await svc.build(CTX, { ...RANGE, templateId: yabanci });
+    // Yabancı şablon YOK SAYILIYOR: varsayılan bölümlere düşülüyor.
+    expect(data.sections.length).toBeGreaterThan(3);
+    expect(data.title).not.toBe('Yabancı başlık');
+  });
+});
+
+/**
+ * ARAMA TERİMLERİ — kullanıcının gerçekten YAZDIĞI sorgular.
+ *
+ * `keywords` ile aynı `null` kuralı: Google bağlantısı yoksa "bu yetenek
+ * yok" demek için `null`. Boş dizi göstermek "hiç arama yok" demek olurdu.
+ */
+describe('ReportsService — arama terimleri', () => {
+  async function googleHesap(): Promise<void> {
+    await h.q("UPDATE ad_accounts SET platform = 'google', sync_enabled = true WHERE id = $1", [
+      IDS.adAccount,
+    ]);
+  }
+
+  async function terim(over: Record<string, unknown> = {}): Promise<void> {
+    await h.q(
+      `INSERT INTO search_term_insights
+         (client_id, ad_account_id, term_hash, search_term, keyword_text, status,
+          date, impressions, clicks, spend_micros, conversions, conversion_value_micros, currency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8, $9, $10, $11, 0, 'TRY')`,
+      [
+        IDS.client,
+        IDS.adAccount,
+        (over.hash as string) ?? 'h1',
+        (over.term as string) ?? 'urla satılık villa',
+        (over.keyword as string) ?? 'urla villa',
+        (over.status as string) ?? 'NONE',
+        (over.date as string) ?? '2026-08-01',
+        (over.impressions as number) ?? 100,
+        (over.clicks as number) ?? 10,
+        (over.spend as string) ?? '5000000',
+        (over.conversions as number) ?? 1,
+      ],
+    );
+  }
+
+  it('KRİTİK: Google bağlantısı yoksa null — "yetenek yok" ile "veri yok" farklı', async () => {
+    const data = await svc.build(CTX, RANGE);
+    expect(data.searchTerms).toBeNull();
+  });
+
+  it('Google varsa ama terim yoksa BOŞ DİZİ', async () => {
+    await googleHesap();
+    expect((await svc.build(CTX, RANGE)).searchTerms).toEqual([]);
+  });
+
+  it('terimler harcamaya göre sıralı geliyor', async () => {
+    await googleHesap();
+    await terim({ hash: 'h1', term: 'az harcayan', spend: '1000000' });
+    await terim({ hash: 'h2', term: 'çok harcayan', spend: '9000000' });
+    const t = (await svc.build(CTX, RANGE)).searchTerms!;
+    expect(t.map((x) => x.term)).toEqual(['çok harcayan', 'az harcayan']);
+  });
+
+  it('AYNI terim farklı günlerde BİRLEŞİYOR', async () => {
+    // Müşteriye aynı sorguyu iki satır göstermek "aynı şeye iki kez mi para
+    // verdik" sorusunu doğurur.
+    await googleHesap();
+    await terim({ hash: 'h1', date: '2026-08-01', clicks: 10, spend: '5000000' });
+    await terim({ hash: 'h1', date: '2026-08-02', clicks: 4, spend: '2000000' });
+    const t = (await svc.build(CTX, RANGE)).searchTerms!;
+    expect(t).toHaveLength(1);
+    expect(t[0]!.clicks).toBe(14);
+    expect(t[0]!.spendMicros).toBe('7000000');
+  });
+
+  it('KRİTİK: durumda TANIMLI olan kazanıyor — bitmiş iş listede kalmamalı', async () => {
+    /*
+     * Terim bir gün eklenmiş, başka bir gün tanımsız görünmüş olabilir.
+     * "NONE" göstermek kullanıcıyı zaten yaptığı işi tekrar yapmaya iterdi.
+     */
+    await googleHesap();
+    await terim({ hash: 'h1', date: '2026-08-01', status: 'NONE' });
+    await terim({ hash: 'h1', date: '2026-08-02', status: 'ADDED' });
+    expect((await svc.build(CTX, RANGE)).searchTerms![0]!.status).toBe('ADDED');
+  });
+
+  it("KRİTİK: kural ALFABETİK sıraya bağlı DEĞİL", async () => {
+    /*
+     * Bugünkü durum adlarının hepsi ('ADDED', 'EXCLUDED', 'ADDED_EXCLUDED')
+     * alfabetik olarak 'NONE'dan ÖNCE geliyor; yani basit bir `MIN()` de
+     * tesadüfen doğru sonucu veriyor ve ilk yazdığım test bunu ayırt
+     * edemiyordu — mutasyon denemesinde görüldü.
+     *
+     * Google yarın 'UNKNOWN' gibi 'NONE'dan SONRA gelen bir durum eklerse o
+     * tesadüf bozulur ve tanımlı bir terim "tanımsız" görünür. Kural bu
+     * yüzden açıkça "NONE olmayan kazanır" diye yazılı.
+     */
+    await googleHesap();
+    await terim({ hash: 'h1', date: '2026-08-01', status: 'NONE' });
+    await terim({ hash: 'h1', date: '2026-08-02', status: 'UNKNOWN' });
+    expect((await svc.build(CTX, RANGE)).searchTerms![0]!.status).toBe('UNKNOWN');
+  });
+
+  it('gösterim almamış terim listeye GİRMİYOR', async () => {
+    await googleHesap();
+    await terim({ hash: 'h1', impressions: 0, clicks: 0 });
+    expect((await svc.build(CTX, RANGE)).searchTerms).toEqual([]);
+  });
+
+  it('aralık DIŞINDAKİ gün sayılmıyor', async () => {
+    await googleHesap();
+    await terim({ hash: 'h1', date: '2026-09-01' });
+    expect((await svc.build(CTX, RANGE)).searchTerms).toEqual([]);
+  });
+});

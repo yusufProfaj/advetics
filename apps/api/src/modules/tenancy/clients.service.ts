@@ -232,6 +232,31 @@ export class ClientsService {
           ...(input.specialAdCategories !== undefined
             ? { specialAdCategories: input.specialAdCategories }
             : {}),
+          /*
+           * ═══ İLETİŞİM ALANLARI SESSİZCE DÜŞÜYORDU ═══
+           *
+           * Şema (`updateClientSchema`) bunları KABUL EDİYOR, `GET
+           * /clients/:id` DÖNDÜRÜYOR — ama `update()` hiçbirini yazmıyordu.
+           * Yani panelden gönderilen iletişim bilgisi 200 dönüp kayboluyor,
+           * kullanıcı kaydettiğini sanıyordu. Alanların tek giriş noktası
+           * "Yeni müşteri" sihirbazıydı; müşteri açıldıktan sonra iletişim
+           * bilgisi HİÇ düzenlenemiyordu.
+           *
+           * `contact_email` rapor gönderiminin okuyacağı alan — bu boşluk
+           * kapanmadan mail gönderimi kurulamıyordu.
+           *
+           * `null` GEÇERLİ BİR DEĞER: alanı temizlemek de bir düzenleme.
+           * Bu yüzden `!== undefined` kontrolü, `??` değil.
+           */
+          ...(input.contactName !== undefined ? { contactName: input.contactName } : {}),
+          ...(input.contactEmail !== undefined ? { contactEmail: input.contactEmail } : {}),
+          ...(input.contactPhone !== undefined ? { contactPhone: input.contactPhone } : {}),
+          ...(input.website !== undefined ? { website: input.website } : {}),
+          ...(input.address !== undefined ? { address: input.address } : {}),
+          ...(input.taxOffice !== undefined ? { taxOffice: input.taxOffice } : {}),
+          ...(input.taxNumber !== undefined ? { taxNumber: input.taxNumber } : {}),
+          ...(input.iban !== undefined ? { iban: input.iban } : {}),
+          ...(input.notes !== undefined ? { notes: input.notes } : {}),
         },
       });
 

@@ -485,6 +485,47 @@ describe('bütçe tüketimi koşulu', () => {
     expect((await svc.evaluateRule(CTX, rule.id, NOW)).matchedCount).toBe(1);
   });
 
+  it('KRİTİK: BAŞKA MÜŞTERİNİN bütçesi bu hesabın oranını belirlemiyor', async () => {
+    /*
+     * REKLAM HESABI EL DEĞİŞTİRDİĞİNDE OLUŞAN DURUM.
+     *
+     * Hesap B müşterisine atanıyor ama bütçe satırı BİLEREK A'da kalıyor —
+     * bütçe birinin onayladığı ticari bir taahhüt, platformun aynası değil
+     * (`hesap-verisi-tasima.ts`). Bu doğru karar, ancak bütçeyi okuyan
+     * sorgu müşteriyi de süzerse güvenli.
+     *
+     * Süzmediğinde olan şuydu: sorgudaki diğer her dal (`spend`, `umbrella`,
+     * `ad_accounts`) `client_id` ile süzüyordu, yalnızca `monthly_budgets`
+     * join'i atlamıştı. Sonuç, B'nin harcamasının A'NIN BÜTÇESİNE bölünmesi
+     * ve `budget_spent_ratio` koşulunun B'nin kampanyalarını DURDURMASI.
+     * Hiçbir ekranda görünmüyor; belirti yalnızca "kampanyalar kendiliğinden
+     * duruyor".
+     */
+    const DIGER_MUSTERI = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+    await h.q(
+      `INSERT INTO clients (id, org_id, name, slug, updated_at)
+       VALUES ($1, $2, 'Eski Müşteri', 'eski', now())`,
+      [DIGER_MUSTERI, IDS.org],
+    );
+    await seedCampaign(CAMPAIGN, 'Kampanya A');
+    await seedInsight({ entityId: CAMPAIGN, date: '2026-08-05', spendMicros: '9500000000' });
+    // Hesap artık IDS.client'ın; bütçe satırı eski müşteride kaldı.
+    await h.q(
+      `INSERT INTO monthly_budgets (id, org_id, client_id, ad_account_id, month, amount_micros,
+         currency, alert_threshold_pct, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, '2026-08-01', 10000000000, 'TRY', 80, now())`,
+      [IDS.org, DIGER_MUSTERI, IDS.adAccount],
+    );
+
+    const rule = await svc.create(CTX, budgetRule());
+    const out = await svc.evaluateRule(CTX, rule.id, NOW);
+
+    // 9.500/10.000 = %95 EŞLEŞİRDİ. Bütçe bu müşterinin olmadığı için
+    // "bütçe yok" doğru cevap.
+    expect(out.matchedCount).toBe(0);
+    expect(out.actions[0]?.outcome).toBe('skipped_no_budget');
+  });
+
   it('BÜTÇE HİÇ YOKSA sessizce atlanmıyor, bildiriliyor', async () => {
     // "Bütçenin %90'ı bittiyse durdur" kuralı bütçe olmadığı için hiç
     // çalışmıyorsa ajans bunu bilmeli.

@@ -18,6 +18,15 @@ import { JOB_PRIORITY, SYNC_QUEUE, buildJobId, layerForJob, type SyncJobPayload 
  * Sıra önemli: önce tablo, sonra kuyruk. Tersi olursa worker işi tablo kaydı
  * oluşmadan alabilir ve `syncJobId`'yi bulamaz.
  */
+/**
+ * Bir işin "takılmış" sayılması için geçmesi gereken süre.
+ *
+ * 30 dakika: en uzun yapı taraması bile bunun altında bitiyor ve kota
+ * geciktirmesi tipik olarak 5 dakika. Bu süreyi aşan bir `active`/`delayed`
+ * iş, koşan bir iş değil kilitlenmiş bir kimliktir.
+ */
+const TAKILMIS_IS_MS = 30 * 60_000;
+
 @Injectable()
 export class SyncQueueService implements OnModuleDestroy {
   private readonly logger = new Logger(SyncQueueService.name);
@@ -107,14 +116,56 @@ export class SyncQueueService implements OnModuleDestroy {
   }): Promise<{ enqueued: boolean; syncJobId?: string; reason?: string }> {
     const jobId = buildJobId(params);
 
-    // Kuyrukta zaten var mı — tabloya gereksiz kayıt açmadan önce bakıyoruz.
+    /*
+     * ═══ MÜKERRER ENGELİ KALICI BİR KİLİDE DÖNÜŞEBİLİYOR ═══
+     *
+     * İş kimliği tarih taşımayan türlerde SABİT (`structure` gibi). Kuyrukta
+     * aynı kimlikle bir iş varsa buradan `enqueued: false` ile dönülüyor ve
+     * DİKKAT: bu, `sync_jobs` satırı yazılmadan ÖNCE oluyor. Yani engellenen
+     * çağrı hiçbir iz bırakmıyor.
+     *
+     * Canlıda ürettiği tablo şuydu: bir Meta hesabında yapı taraması kotaya
+     * takılıp `delayed`e düşüyor, orada uzun süre bekliyor, ve o sırada
+     * kullanıcının bastığı her "Şimdi güncelle" sessizce reddediliyor.
+     * Panelde "Yapı: hiç" yazıyor, iş listesinde o hesaba ait TEK BİR yapı
+     * satırı bile yok, ve durum kendiliğinden hiç düzelmiyor.
+     *
+     * ÜÇ DURUM, ÜÇ FARKLI KARAR:
+     *
+     *   · `waiting` — sırasını bekliyor, yakında koşacak. Dokunma.
+     *   · `delayed` — geciktirilmiş. Kullanıcı EKRANDA BEKLİYORSA (interactive)
+     *     ya da gecikme makul bir süreyi aştıysa bu bir kilit; işi kaldır ve
+     *     yenisini koy.
+     *   · `active` — işleniyor. Worker gerçekten çalışıyorsa dokunmamalı; ama
+     *     worker öldüyse iş sonsuza kadar `active` kalıyor. İşleme başlama
+     *     zamanı eskiyse takılmış say.
+     *
+     * İŞLERİ TEKRAR KOYMAK GÜVENLİ: yapı ve metrik yazımları upsert
+     * (`ON CONFLICT`), aynı işin iki kez koşması mükerrer satır üretmiyor.
+     */
     const existing = await this.queue.getJob(jobId);
     if (existing) {
       const state = await existing.getState();
-      if (state === 'waiting' || state === 'active' || state === 'delayed') {
-        return { enqueued: false, reason: `zaten kuyrukta (${state})` };
+      const yas = Date.now() - (existing.processedOn ?? existing.timestamp ?? Date.now());
+
+      const takilmis =
+        (state === 'delayed' && (params.interactive === true || yas > TAKILMIS_IS_MS)) ||
+        (state === 'active' && yas > TAKILMIS_IS_MS);
+
+      if (!takilmis && (state === 'waiting' || state === 'active' || state === 'delayed')) {
+        return {
+          enqueued: false,
+          reason: `zaten kuyrukta (${state}, ${Math.round(yas / 60_000)} dk)`,
+        };
       }
-      // Tamamlanmış/başarısız işin kimliği yeniden kullanılabilsin.
+
+      if (takilmis) {
+        this.logger.warn(
+          `Takılmış iş kaldırılıyor: ${jobId} (${state}, ${Math.round(yas / 60_000)} dk) — ` +
+            'yerine yenisi kuyruğa alınıyor.',
+        );
+      }
+      // Tamamlanmış/başarısız/takılmış işin kimliği yeniden kullanılabilsin.
       await existing.remove().catch(() => undefined);
     }
 
@@ -217,6 +268,11 @@ export class SyncQueueService implements OnModuleDestroy {
       // Anahtar kelime: günde bir, gece. Rapor aylık okunuyor ve gün içinde
       // tazelemenin karşılığı yok; sabah 4'te dünün verisi hazır oluyor.
       { name: 'sweep:keywords', pattern: '47 4 * * *', jobType: 'keyword_insights' },
+      /*
+       * Anahtar kelimelerden 20 dakika sonra: ikisi de aynı kota katmanında
+       * ve aynı anda koşmaları büyük hesaplarda birbirinin önünü kesiyor.
+       */
+      { name: 'sweep:searchterms', pattern: '7 5 * * *', jobType: 'search_terms' },
       // Modül 7 — boost: GÜNDE İKİ KEZ, saatte bir değil.
       //
       // Organik metrikler yavaş değişiyor ve boost kararı bir gönderi için

@@ -103,6 +103,26 @@ const META_LEVEL: Record<InsightsLevel, string> = {
  * için görünmedi. Koruma artık TEK YERDE — iki ayrı yerde tutmak, ikisinin
  * zamanla ayrışması demekti ve nitekim ayrıştı.
  */
+/** Yapı taramasında sayfa başına istenen kayıt sayısı. */
+const ILK_SAYFA_BOYUTU = 500;
+/** Bunun altına inmek çağrı sayısını hesabın işleyemeyeceği kadar artırır. */
+const EN_KUCUK_SAYFA = 25;
+/** 500 → 250 → 125 → 62 → 31 → 25. Beş küçültme yeterli; sonrası döngü olur. */
+const MAX_KUCULTME = 5;
+
+/**
+ * Meta "istediğin veri fazla" mı diyor?
+ *
+ * Bu hata HTTP 500 ile geliyor ve mesajı sabit. Kod/subcode'a bakmak
+ * güvenilir değil: Meta bu durumda çoğu zaman kod 1 ("An unknown error
+ * occurred") döndürüyor ve o kod başka onlarca durumda da çıkıyor. Ayırt
+ * eden tek şey mesajın kendisi.
+ */
+export function veriFazlaHatasi(err: unknown): boolean {
+  const mesaj = err instanceof Error ? err.message : String(err);
+  return /reduce the amount of data/i.test(mesaj);
+}
+
 export function actPath(externalId: string): string {
   return externalId.startsWith('act_') ? externalId : `act_${externalId}`;
 }
@@ -700,7 +720,7 @@ export class MetaProvider implements IAdPlatformProvider {
   ): Promise<{ rows: Array<Record<string, unknown>>; complete: boolean }> {
     const url = new URL(`${this.graph}/${act}/${edge}`);
     url.searchParams.set('fields', fields.join(','));
-    url.searchParams.set('limit', '500');
+    url.searchParams.set('limit', String(ILK_SAYFA_BOYUTU));
     url.searchParams.set('access_token', ctx.accessToken);
     // THUMBNAIL BOYUTU.
     //
@@ -709,8 +729,23 @@ export class MetaProvider implements IAdPlatformProvider {
     // panelde gösterilen tek görsel o oluyordu — okunamayacak kadar bulanık.
     // Bu parametreler yalnızca reklam edge'inde geçerli.
     if (edge === 'ads') {
-      url.searchParams.set('thumbnail_width', '600');
-      url.searchParams.set('thumbnail_height', '600');
+      /*
+       * 600 → 1080. Gönderi ve video boost'larında Meta `image_url`
+       * DÖNDÜRMÜYOR; elimizdeki tek görsel `thumbnail_url` ve varsayılanı
+       * ~64px. Panelde ve raporda "bazı görseller piksel piksel, bazıları
+       * net" tablosunun kalıcı yarısı buydu.
+       *
+       * Ek kota maliyeti YOK: aynı istekte bir parametre. Meta istenen
+       * boyutu garanti etmiyor (kaynak daha küçükse onu döndürüyor), ama
+       * tavanı yükseltmek bedava.
+       *
+       * DİKKAT: bu parametre yalnızca YENİ yazılan kreatiflere işliyor.
+       * Zamanlanmış yapı taraması delta çalışıyor ve değişmemiş bir reklamı
+       * yeniden yazmıyor — eski satırlar panelde "Şimdi güncelle"ye basılana
+       * kadar (tam tarama) eski boyutta kalıyor.
+       */
+      url.searchParams.set('thumbnail_width', '1080');
+      url.searchParams.set('thumbnail_height', '1080');
     }
 
     // `effective_status` FİLTRESİ KULLANMIYORUZ — kasıtlı.
@@ -748,14 +783,70 @@ export class MetaProvider implements IAdPlatformProvider {
     let pages = 0;
     const MAX_PAGES = 40;
 
+    /*
+     * ═══ SAYFA BOYUTU KENDİLİĞİNDEN KÜÇÜLÜYOR ═══
+     *
+     * Meta büyük hesaplarda şu hatayı veriyor ve HTTP durumu 500 oluyor:
+     *
+     *   "Please reduce the amount of data you're asking for, then retry
+     *    your request"
+     *
+     * Sabit bir eşik yok: kabul edilen sayfa boyutu hesabın büyüklüğüne,
+     * istenen alan setine ve o anki yüke göre değişiyor. Aynı istek bir
+     * hesapta çalışıp diğerinde düşüyor.
+     *
+     * Canlıda ürettiği tablo: bir reklam hesabında yapı taraması HİÇ
+     * tamamlanamadı. Her denemede aynı yerde aynı hatayla düşüyor, beş
+     * denemeden sonra kalıcı `failed` oluyor ve kampanya satırları hiç
+     * yazılmadığı için o hesabın METRİKLERİ de hiç yazılamıyordu. Panelde
+     * görünen tek şey "Yapı: hiç" idi.
+     *
+     * Sabit ve küçük bir limit koymak (örn. 50) bu hatayı önlerdi ama bütün
+     * hesaplarda 10 kat daha fazla çağrı demek olurdu — kota bu projede
+     * gerçek bir kısıt. Bunun yerine 500'den başlayıp hatayı GÖRÜNCE
+     * yarılıyoruz; küçük hesaplar tek çağrıda bitmeye devam ediyor.
+     */
+    let limit = ILK_SAYFA_BOYUTU;
+    let kucultme = 0;
+
     while (next && pages < MAX_PAGES) {
-      const res = await platformFetch<GraphPage>('meta', next, {}, parseMetaRateLimit);
+      let res;
+      try {
+        res = await platformFetch<GraphPage>('meta', next, {}, parseMetaRateLimit);
+      } catch (err) {
+        if (!veriFazlaHatasi(err) || limit <= EN_KUCUK_SAYFA || kucultme >= MAX_KUCULTME) throw err;
+        limit = Math.max(EN_KUCUK_SAYFA, Math.floor(limit / 2));
+        kucultme++;
+        this.logger.warn(
+          `Meta ${edge} (${act}): sayfa boyutu ${limit}'e düşürülüp aynı sayfa tekrar isteniyor ` +
+            `(${kucultme}. küçültme).`,
+        );
+        // AYNI SAYFA yeniden isteniyor: `next` imleci koruyor, yalnızca
+        // `limit` değişiyor. `pages` ARTMIYOR — küçültme bir ilerleme değil.
+        // Tip AÇIKÇA yazılı: `next` özyinelemeli `GraphPage`'ten besleniyor ve
+        // çıkarım TS7022 veriyor (dosya başındaki nota bakın).
+        const u: URL = new URL(next as string);
+        u.searchParams.set('limit', String(limit));
+        next = u.toString();
+        continue;
+      }
       calls.n++;
       if (res.rateLimit && ctx.onRateLimit) await ctx.onRateLimit(res.rateLimit);
 
       const body: GraphPage = res.data;
       rows.push(...(body.data ?? []));
-      next = body.paging?.next;
+      // Meta'nın verdiği `next` kendi limitini taşıyor; küçülttüysek onu
+      // korumak zorundayız, yoksa bir sonraki sayfa yine 500'lük olur.
+      // Tip AÇIKÇA yazılı: `GraphPage` özyinelemeli ve çıkarım TS7022 veriyor
+      // (dosyanın başındaki nota bakın).
+      const sonraki: string | undefined = body.paging?.next;
+      if (sonraki !== undefined && limit !== ILK_SAYFA_BOYUTU) {
+        const u = new URL(sonraki);
+        u.searchParams.set('limit', String(limit));
+        next = u.toString();
+      } else {
+        next = sonraki;
+      }
       pages++;
     }
 
@@ -840,6 +931,32 @@ export class MetaProvider implements IAdPlatformProvider {
       JSON.stringify({ since: request.dateFrom, until: request.dateTo }),
     );
     url.searchParams.set('limit', '500');
+
+    /*
+     * ═══ ATIF AYARI AÇIKÇA GÖNDERİLİYOR — VARSAYILANA BIRAKILMIYOR ═══
+     *
+     * Bu üç parametre bir süre HİÇ gönderilmiyordu ve kararı Meta veriyordu.
+     * CLAUDE.md'nin "platformun varsayılanına güvenme — aynı kod iki
+     * müşteride farklı davranır" kuralının tam ihlaliydi: iki reklam
+     * hesabının atıf penceresi farklıysa CPA ve ROAS karşılaştırılamaz hâle
+     * geliyor ve fark HİÇBİR YERDE görünmüyor.
+     *
+     * `use_unified_attribution_setting=true` — dönüşümler ad set'in KENDİ
+     * atıf ayarıyla raporlanıyor. Bu, Ads Manager'ın varsayılan olarak
+     * gösterdiği sayının aynısı. Sabit bir pencere seçmek (örn. 7d_click)
+     * "daha tutarlı" görünürdü ama panelin rakamı müşterinin Ads Manager'da
+     * gördüğüyle tutmazdı ve o tartışmayı her ay yeniden yaşardık.
+     *
+     * `action_report_time=impression` — dönüşüm, GÖSTERİMİN olduğu güne
+     * yazılıyor. Bu Meta'nın varsayılanı; buraya AÇIKÇA yazılmasının sebebi
+     * varsayılanın değişmesine karşı korunmak. Alternatif (`conversion`)
+     * dönüşümü gerçekleştiği güne yazar ve aylık rapor sınırlarında daha
+     * doğru görünür — ama Ads Manager ile aramızda fark açar. Değiştirilecekse
+     * bilerek ve müşteriye söylenerek değiştirilmeli.
+     */
+    url.searchParams.set('use_unified_attribution_setting', 'true');
+    url.searchParams.set('action_report_time', 'impression');
+
     url.searchParams.set('access_token', ctx.accessToken);
     url.searchParams.set(
       'fields',
@@ -2247,6 +2364,20 @@ export class MetaProvider implements IAdPlatformProvider {
   async fetchKeywords(): Promise<{ rows: DiscoveredKeywordRow[]; apiCalls: number }> {
     return { rows: [], apiCalls: 0 };
   }
+  /**
+   * Meta'da ARAMA TERİMİ diye bir kavram YOK.
+   *
+   * Boş dizi döndürmek "bu dönemde terim yok" gibi okunurdu; oysa doğrusu
+   * "bu platformda böyle bir şey yok". `fetchLead` ile aynı karar.
+   */
+  async fetchSearchTerms(): Promise<never> {
+    throw new PlatformApiError(
+      'meta',
+      'permanent',
+      "Meta'da arama terimi raporu yok — bu yalnızca Google Ads'te var.",
+    );
+  }
+
 
 }
 

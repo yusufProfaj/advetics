@@ -454,6 +454,17 @@ describe('ATAMA TEK ADIM — izleme açılıyor ve geçmiş kuyruğa giriyor', (
     expect(kuyruk.every((i) => i.clientId === IDS.client)).toBe(true);
   });
 
+  it('KRİTİK: metrik işi GECİKMELİ, yapı işi değil — öncelik bariyer değil', async () => {
+    // Worker dört işi paralel çalıştırıyor; öncelik (structure 4, backfill 10)
+    // yalnızca SIRA veriyor. Gecikme olmadan metrik işi yapı işi hâlâ
+    // koşarken başlayabiliyor ve bütün satırlar eşlenemeyip atlanıyor.
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    const y = kuyruk.find((i) => i.jobType === 'structure')!;
+    const b = kuyruk.find((i) => i.jobType === 'initial_backfill')!;
+    expect(y.delayMs).toBeUndefined();
+    expect(b.delayMs).toBeGreaterThan(0);
+  });
+
   it('KRİTİK: geçmiş 90 gün ve KAMPANYA seviyesinde', async () => {
     await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
     const b = kuyruk.find((i) => i.jobType === 'initial_backfill')!;
@@ -478,5 +489,481 @@ describe('ATAMA TEK ADIM — izleme açılıyor ve geçmiş kuyruğa giriyor', (
     kuyruk = [];
     await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
     expect(kuyruk).toHaveLength(0);
+  });
+});
+
+/**
+ * HESAP EL DEĞİŞTİRİNCE VERİSİ DE TAŞINIYOR.
+ *
+ * Bu bloğun var oluş sebebi tek bir üretim belirtisi: bir reklam hesabı A
+ * müşterisinden B'ye alındıktan sonra A'nın raporunda ARTIK ONA AİT OLMAYAN
+ * harcama görünmeye devam ediyordu, B ise hiçbir geçmiş göremiyordu. Hata yok,
+ * log yok — yalnızca yanlış bir sayı ve yanlış müşteriye gitmiş bir PDF.
+ *
+ * Testler GERÇEK veritabanıyla koşuyor (PGlite): `client_id` denormalize bir
+ * kolon ve iddiaların tamamı SQL'in ne yaptığıyla ilgili — sahte bir Prisma
+ * bunu doğrulayamazdı.
+ */
+describe('hesap el değiştirince verisi de taşınıyor', () => {
+  const KAMPANYA = '11111111-2222-3333-4444-555555555555';
+  const GRUP = '11111111-2222-3333-4444-555555555556';
+  const REKLAM = '11111111-2222-3333-4444-555555555557';
+  const KREATIF = '11111111-2222-3333-4444-555555555558';
+
+  /** Hesabın A müşterisindeyken biriken verisi. */
+  async function eskiVeriYaz(clientId: string) {
+    await h.q(
+      `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, updated_at)
+       VALUES ($1, $2, $3, 'meta', 'c-1', 'Kampanya', now())`,
+      [KAMPANYA, POOL_ACCOUNT, clientId],
+    );
+    await h.q(
+      `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, updated_at)
+       VALUES ($1, $2, $3, $4, 'meta', 'g-1', 'Grup', now())`,
+      [GRUP, KAMPANYA, POOL_ACCOUNT, clientId],
+    );
+    await h.q(
+      `INSERT INTO ads (id, ad_group_id, ad_account_id, client_id, platform, external_id, name, updated_at)
+       VALUES ($1, $2, $3, $4, 'meta', 'a-1', 'Reklam', now())`,
+      [REKLAM, GRUP, POOL_ACCOUNT, clientId],
+    );
+    await h.q(
+      `INSERT INTO creatives (id, ad_account_id, client_id, platform, external_id, updated_at)
+       VALUES ($1, $2, $3, 'meta', 'k-1', now())`,
+      [KREATIF, POOL_ACCOUNT, clientId],
+    );
+    await h.q(
+      `INSERT INTO insights_daily
+         (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+          date, breakdown_key, impressions, clicks, spend_micros, conversions,
+          conversion_value_micros, currency)
+       VALUES ($1, $2, 'meta', 'campaign', $3, 'c-1', '2026-08-01'::date, '',
+               1000, 50, 250000000, 3, 0, 'TRY')`,
+      [clientId, POOL_ACCOUNT, KAMPANYA],
+    );
+    await h.q(
+      `INSERT INTO keyword_insights
+         (client_id, ad_account_id, external_criterion_id, keyword, match_type, date, currency)
+       VALUES ($1, $2, 'kw-1', 'ankara nakliyat', 'EXACT', '2026-08-01'::date, 'TRY')`,
+      [clientId, POOL_ACCOUNT],
+    );
+    await h.q(
+      `INSERT INTO search_term_insights
+         (client_id, ad_account_id, term_hash, search_term, date, currency)
+       VALUES ($1, $2, repeat('a', 64), 'ankara evden eve', '2026-08-01'::date, 'TRY')`,
+      [clientId, POOL_ACCOUNT],
+    );
+    await h.q(
+      `INSERT INTO sync_jobs (client_id, ad_account_id, job_type, status)
+       VALUES ($1, $2, 'structure', 'succeeded')`,
+      [clientId, POOL_ACCOUNT],
+    );
+  }
+
+  async function musteriler(tablo: string): Promise<string[]> {
+    const rows = await h.q<{ client_id: string }>(
+      `SELECT DISTINCT client_id FROM ${tablo} WHERE ad_account_id = $1`,
+      [POOL_ACCOUNT],
+    );
+    return rows.map((r) => r.client_id);
+  }
+
+  it('KRİTİK: hesabın bütün verisi yeni müşteriye geçiyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+
+    for (const t of [
+      'campaigns',
+      'ad_groups',
+      'ads',
+      'creatives',
+      'insights_daily',
+      'keyword_insights',
+      'search_term_insights',
+      'sync_jobs',
+    ]) {
+      expect(await musteriler(t), `${t} taşınmadı`).toEqual([CLIENT_B]);
+    }
+    // SEKİZ TABLO, SEKİZ SATIR. Sayı yanıtta dönüyor çünkü panelde yazılıyor:
+    // "taşındı" demek yetmiyor, KAÇ kayıt taşındığı görünmeli.
+    expect(res.movedRows).toBe(8);
+  });
+
+  it('KRİTİK: eski müşteride TEK BİR satır bile kalmıyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+
+    /*
+     * BÖLÜNMÜŞ GEÇMİŞ ARANIYOR. Yarısı taşınan bir hesap, hiç taşınmayandan
+     * DAHA KÖTÜ: iki müşterinin de rakamı yanlış oluyor ve ikisi de kendi
+     * içinde tutarlı göründüğü için kimse fark etmiyor.
+     */
+    const kalan = await h.q<{ n: string }>(
+      `SELECT count(*) AS n FROM (
+         SELECT client_id FROM campaigns            WHERE ad_account_id = $1
+         UNION ALL SELECT client_id FROM ad_groups  WHERE ad_account_id = $1
+         UNION ALL SELECT client_id FROM ads        WHERE ad_account_id = $1
+         UNION ALL SELECT client_id FROM creatives  WHERE ad_account_id = $1
+         UNION ALL SELECT client_id FROM insights_daily       WHERE ad_account_id = $1
+         UNION ALL SELECT client_id FROM keyword_insights     WHERE ad_account_id = $1
+         UNION ALL SELECT client_id FROM search_term_insights WHERE ad_account_id = $1
+         UNION ALL SELECT client_id FROM sync_jobs            WHERE ad_account_id = $1
+       ) t WHERE client_id = $2`,
+      [POOL_ACCOUNT, IDS.client],
+    );
+    expect(Number(kalan[0]!.n)).toBe(0);
+  });
+
+  it('KRİTİK: havuzdan geçen hesapta da taşıma tam — süzgeç ad_account_id', async () => {
+    /*
+     * A → havuz → B yolu. İkinci adımda `before.clientId` NULL olduğu için
+     * "eski müşterinin satırları" diye bir şey kalmıyor; satırlar hâlâ A'da.
+     * Taşıma `client_id`'ye göre süzseydi bu yol SESSİZCE hiçbir şey taşımaz
+     * ve hata tam olarak eski hâline dönerdi — üstelik yalnızca bu sırada.
+     */
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, null, META);
+
+    expect(await musteriler('campaigns')).toEqual([IDS.client]);
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+    expect(await musteriler('campaigns')).toEqual([CLIENT_B]);
+    expect(await musteriler('insights_daily')).toEqual([CLIENT_B]);
+    expect(res.movedRows).toBe(8);
+  });
+
+  it('havuza geri konunca veri taşınmıyor — eski müşterinin geçmişi', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, null, META);
+
+    // Çocuk tabloların `client_id`'si NOT NULL — boşaltılamıyor. Doğru
+    // davranış da bu: veri o müşteriye aitken toplandı.
+    expect(await musteriler('insights_daily')).toEqual([IDS.client]);
+    expect(res.movedRows).toBe(0);
+
+    /*
+     * KALDIRMADA TEK DENETİM SATIRI. Yeniden atamada eski müşteriye AYRI bir
+     * satır yazılıyor; aynı dal kaldırmada da koşarsa aynı müşteri için İKİ
+     * `unassigned` satırı çıkıyor ve denetim izi mükerrer bir olay anlatıyor.
+     */
+    expect(await auditActions()).toEqual(['ad_account.assigned', 'ad_account.unassigned']);
+
+    // KAÇ KAYDIN KALDIĞI SAYIYLA DÖNÜYOR. "Kaldır"a basan kullanıcı verinin
+    // silinmediğini ve nerede durduğunu görmeli; sessiz kalması "hesabı
+    // kaldırdım, geçmişim gitti mi" sorusunu üretiyordu.
+    expect(res.stayingRows).toBe(8);
+  });
+
+  it('KRİTİK: İKİ ADIMLI atamada da kalanlar raporlanıyor', async () => {
+    /*
+     * PANELDEKİ GERÇEK YOL BU. Arayüzde "A'dan B'ye taşı" diye tek bir işlem
+     * yok: kullanıcı önce "Kaldır"a basıyor (hesap havuza düşüyor), sonra
+     * B'ye atıyor. İkinci adımda `before.clientId` NULL.
+     *
+     * "Kalan" sayısı eski müşteriye göre süzülseydi tam olarak bu yolda —
+     * yani kullanıcının kullandığı tek yolda — hiçbir şey raporlanmazdı ve
+     * A'nın bütçesi sessizce geride kalırdı.
+     */
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await h.q(
+      `INSERT INTO monthly_budgets (id, org_id, client_id, ad_account_id, month, amount_micros, currency, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, '2026-08-01'::date, 5000000000, 'TRY', now())`,
+      [IDS.org, IDS.client, POOL_ACCOUNT],
+    );
+
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, null, META);
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+
+    expect(res.leftBehind).toEqual({ 'aylık bütçe': 1 });
+  });
+
+  it('KRİTİK: müşterinin KENDİ kayıtları taşınmıyor ve sayıyla bildiriliyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await h.q(
+      `INSERT INTO monthly_budgets (id, org_id, client_id, ad_account_id, month, amount_micros, currency, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, '2026-08-01'::date, 5000000000, 'TRY', now())`,
+      [IDS.org, IDS.client, POOL_ACCOUNT],
+    );
+    await h.q(
+      `INSERT INTO rules (id, org_id, client_id, ad_account_id, name, level, conditions, action, guard, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'CPA kuralı', 'campaign', '[{"metric":"cpa","op":"gt","value":100}]'::jsonb, '{"type":"pause"}'::jsonb, '{}'::jsonb, now())`,
+      [IDS.org, IDS.client, POOL_ACCOUNT],
+    );
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+
+    /*
+     * BÜTÇE VE KURAL BİRİNİN KARARI, platformun aynası değil. B'nin hesabına
+     * A'nın hiç görmediği bir kural koymak, o kuralın B'nin kampanyalarını
+     * durdurması demek olurdu. Ayrıca `monthly_budgets_account_uniq` kısmi
+     * tekil indeksi taşımayı ORTASINDA patlatabilirdi.
+     */
+    const butce = await h.q<{ client_id: string }>(
+      'SELECT client_id FROM monthly_budgets WHERE ad_account_id = $1',
+      [POOL_ACCOUNT],
+    );
+    expect(butce[0]!.client_id).toBe(IDS.client);
+
+    // SESSİZ BIRAKILMIYOR — `assignSocialProfile`'daki `leftBehindForms`
+    // deseninin aynısı.
+    expect(res.leftBehind).toEqual({ 'aylık bütçe': 1, kural: 1 });
+  });
+
+  it('aynı müşteriye tekrar atamak hiçbir satıra dokunmuyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+
+    expect(res.changed).toBe(false);
+    // Alan HER DALDA var: `undefined` okuyup "0 kayıt" yazan bir panel,
+    // hiçbir şey yapılmadığında yanlış cümle kurardı.
+    expect(res.movedRows).toBe(0);
+    expect(res.leftBehind).toEqual({});
+  });
+
+  it('KRİTİK: "kalan" sayısı YALNIZCA eski müşterinin kayıtlarını sayıyor', async () => {
+    /*
+     * HESAP GERİ DÖNÜYOR: B → A → B. Her müşteri kendi döneminde bir kural
+     * yazmış oluyor ve ikisi de aynı hesabı işaret ediyor.
+     *
+     * Sayım eski müşteriye göre süzülmezse, B'ye geri dönüşte B'NİN KENDİ
+     * kuralı da "eski müşteride kaldı" diye raporlanıyor. Panelde çıkan cümle
+     * "2 kural eski müşteride kaldı" oluyor ve kullanıcı olmayan bir kaybı
+     * aramaya başlıyor — sessiz hatanın tersi: gürültülü yalan.
+     */
+    const kural = async (clientId: string, ad: string) =>
+      h.q(
+        `INSERT INTO rules (id, org_id, client_id, ad_account_id, name, level, conditions, action, guard, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, 'campaign',
+                 '[{"metric":"cpa","op":"gt","value":100}]'::jsonb, '{"type":"pause"}'::jsonb, '{}'::jsonb, now())`,
+        [IDS.org, clientId, POOL_ACCOUNT, ad],
+      );
+
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+    await kural(CLIENT_B, 'B kuralı');
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await kural(IDS.client, 'A kuralı');
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+
+    // Hesapta iki kural var ama eski müşteride kalan YALNIZCA biri.
+    const toplam = await h.q<{ n: string }>(
+      'SELECT count(*) AS n FROM rules WHERE ad_account_id = $1',
+      [POOL_ACCOUNT],
+    );
+    expect(Number(toplam[0]!.n)).toBe(2);
+    expect(res.leftBehind).toEqual({ kural: 1 });
+  });
+
+  it('KRİTİK: eski müşterinin ŞEMSİYE bütçesi bildiriliyor', async () => {
+    /*
+     * ŞEMSİYE BÜTÇE `ad_account_id IS NULL` İLE DURUYOR — yani hesapla
+     * ilişkisi yok ve hesaba göre sayan hiçbir sorguya düşmüyor. Bu yüzden
+     * "kalan" listesinde hiç görünmüyordu.
+     *
+     * Oysa taşımadan en çok o etkileniyor: ay ortasında hesap gidince eski
+     * müşterinin ay içi harcaması bir anda düşüyor, kural motorunun bütçe
+     * bekçisi olmayan bir boşluk görüyor ve kuralların bütçe ARTIRMASINA
+     * izin veriyor. Yeni müşteride ise harcama var, bütçe yok. İkisi de
+     * para harcatan ve hiçbir ekranda görünmeyen kaymalar.
+     */
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+    await h.q(
+      `INSERT INTO monthly_budgets (id, org_id, client_id, ad_account_id, month, amount_micros, currency, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, NULL, date_trunc('month', now())::date, 5000000000, 'TRY', now())`,
+      [IDS.org, IDS.client],
+    );
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+    expect(res.clientWide).toEqual({ 'ay geneli (şemsiye) bütçe': 1 });
+  });
+
+  it('KRİTİK: "TÜM HESAPLAR" kuralı da bildiriliyor', async () => {
+    /*
+     * KURALLARIN EN YAYGIN ŞEKLİ BU. `rules.ad_account_id` NULL = müşterinin
+     * TÜM reklam hesapları (şemanın kendi yorumu). Hesaba çivilenmiş kural
+     * azınlıkta; sayım yalnızca `= hesap` deseydi, taşınan hesabı GERÇEKTEN
+     * yöneten kural hiç raporlanmazdı ve panelde "kural: 0" yazardı.
+     *
+     * Şemsiye bütçedeki boşluğun aynısı — biri fark edilip diğeri
+     * atlanmıştı.
+     */
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+    await h.q(
+      `INSERT INTO rules (id, org_id, client_id, ad_account_id, name, level, conditions, action, guard, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, NULL, 'Tüm hesaplar · CPA', 'campaign',
+               '[{"metric":"cpa","op":"gt","value":250}]'::jsonb, '{"type":"pause"}'::jsonb, '{}'::jsonb, now())`,
+      [IDS.org, IDS.client],
+    );
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+    expect(res.clientWide).toEqual({ 'tüm hesapları kapsayan kural': 1 });
+    // Hesaba çivilenmiş kural YOK — o listede görünmemeli.
+    expect(res.leftBehind).toEqual({});
+  });
+
+  it('KRİTİK: hesap İKİ müşteriden geçmişse sayım yine çalışıyor', async () => {
+    /*
+     * ÖNCEKİ SAHİP BİRDEN FAZLA OLABİLİR. Hesap A→B→C gezdiyse ve upsert'ler
+     * araya girmişse, satırlar iki farklı müşteride birden duruyor.
+     *
+     * Bu testin var oluş sebebi: sorgu `client_id IN (${sahipler}::uuid)`
+     * biçimindeydi ve cast LİSTE SONUNA düşüyordu — `IN ($1,$2)::uuid`.
+     * Tek sahiple çalışıyor, İKİ sahiple Postgres sözdizimi hatası veriyor.
+     * Yani hata yalnızca hesabın gezdiği, tam da bu özelliğin var olma
+     * sebebi olan durumda ortaya çıkıyordu.
+     */
+    const UCUNCU = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+    await h.q(
+      `INSERT INTO clients (id, org_id, name, slug, updated_at)
+       VALUES ($1, $2, 'Üçüncü', 'ucuncu', now())`,
+      [UCUNCU, IDS.org],
+    );
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+    // Satırların bir kısmı ikinci müşteride: hesap oradan da geçmiş.
+    await h.q('UPDATE campaigns SET client_id = $1 WHERE ad_account_id = $2', [
+      UCUNCU,
+      POOL_ACCOUNT,
+    ]);
+    await h.q(
+      `INSERT INTO monthly_budgets (id, org_id, client_id, ad_account_id, month, amount_micros, currency, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, NULL, date_trunc('month', now())::date, 1000000, 'TRY', now())`,
+      [IDS.org, UCUNCU],
+    );
+
+    const res = await svc.assignAdAccount(
+      { ...CTX, clientIds: [IDS.client, CLIENT_B, UCUNCU] },
+      POOL_ACCOUNT,
+      CLIENT_B,
+      META,
+    );
+
+    expect(res.movedRows).toBe(8);
+    expect(res.clientWide).toEqual({ 'ay geneli (şemsiye) bütçe': 1 });
+  });
+
+  it('KAPANMIŞ ayın şemsiye bütçesi bildirilmiyor', async () => {
+    // Geçmiş ayın bütçesi artık bir eşik değil, kayıt. Onu da bildirmek
+    // her taşımada anlamsız bir uyarı üretirdi ve uyarı körlüğü yaratırdı.
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+    await h.q(
+      `INSERT INTO monthly_budgets (id, org_id, client_id, ad_account_id, month, amount_micros, currency, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, NULL,
+               (date_trunc('month', now()) - interval '1 month')::date, 5000000000, 'TRY', now())`,
+      [IDS.org, IDS.client],
+    );
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+    expect(res.clientWide).toEqual({});
+  });
+
+  it('KRİTİK: ESKİ müşteri de kendi denetim satırını alıyor', async () => {
+    /*
+     * KAYBEDEN TARAFIN KAYDI. Denetim satırı yalnızca YENİ müşteriye
+     * yazılıyordu; doğrudan A→B atamasında A hiçbir iz almıyordu. Oysa
+     * raporundaki rakam değişen taraf A ve B'nin kaydını RLS ona
+     * göstermiyor — "geçen ay bu sayı başkaydı" sorusunun cevabı hiçbir
+     * yerde olmazdı.
+     */
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+
+    const rows = await h.q<{ client_id: string; action: string }>(
+      `SELECT client_id, action FROM audit_logs
+        WHERE target_id = $1 AND action LIKE 'ad_account.%' ORDER BY id`,
+      [POOL_ACCOUNT],
+    );
+
+    /*
+     * İDDİA SAYIYA ÇAPALI, "son iki satır"a DEĞİL.
+     *
+     * İlk yazımda son iki satırın müşterilerine bakıyordum ve eski müşteri
+     * satırını silmek testi DÜŞÜRMÜYORDU: geriye kalan iki satır (havuzdan
+     * A'ya atama + A'dan B'ye atama) zaten tam olarak o iki müşteriyi
+     * taşıyordu. Test geçiyordu ama hiçbir şey tutmuyordu.
+     */
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => `${r.action}:${r.client_id === IDS.client ? 'A' : 'B'}`)).toEqual([
+      'ad_account.assigned:A',
+      'ad_account.assigned:B',
+      'ad_account.unassigned:A',
+    ]);
+  });
+
+  it('KRİTİK: hesap el değiştirince BOOST FATURA BAĞI koparılıyor', async () => {
+    /*
+     * `linkAdAccountForBoost` "hesap ve sayfa AYNI müşteride olmak zorunda"
+     * kuralını EŞLEŞTİRME anında zorluyor. Ama hesap sonradan el değiştirince
+     * kimse bağı koparmıyordu: A'nın sayfasındaki gönderi B'nin reklam
+     * hesabından faturalanmaya devam ediyordu — kuralın var oluş sebebinin
+     * tam kendisi, üstelik para harcayan tarafta ve hiçbir ekranda görünmeden.
+     */
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await h.q(
+      `INSERT INTO social_profiles
+         (id, org_id, client_id, connection_id, profile_type, external_id, name,
+          linked_ad_account_id, updated_at)
+       VALUES ($1, $2, $3, $4, 'facebook_page', 'page_1', 'A sayfası', $5, now())`,
+      [POOL_PROFILE, IDS.org, IDS.client, IDS.connection, POOL_ACCOUNT],
+    );
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+
+    expect(res.unlinkedBoostPages).toBe(1);
+    const rows = await h.q<{ linked_ad_account_id: string | null }>(
+      'SELECT linked_ad_account_id FROM social_profiles WHERE id = $1',
+      [POOL_PROFILE],
+    );
+    expect(rows[0]!.linked_ad_account_id).toBeNull();
+  });
+
+  it('sayfa da AYNI müşterideyse bağ korunuyor', async () => {
+    /*
+     * Bağı toptan koparmak, hesabı ve sayfası aynı müşteride kalan bir
+     * kurulumda çalışan Akıllı Boost'u sessizce durdururdu — düzeltilen
+     * hatanın aynısı, ters yönde.
+     */
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await h.q(
+      `INSERT INTO social_profiles
+         (id, org_id, client_id, connection_id, profile_type, external_id, name,
+          linked_ad_account_id, updated_at)
+       VALUES ($1, $2, $3, $4, 'facebook_page', 'page_1', 'B sayfası', $5, now())`,
+      [POOL_PROFILE, IDS.org, CLIENT_B, IDS.connection, POOL_ACCOUNT],
+    );
+
+    const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+
+    expect(res.unlinkedBoostPages).toBe(0);
+    const rows = await h.q<{ linked_ad_account_id: string | null }>(
+      'SELECT linked_ad_account_id FROM social_profiles WHERE id = $1',
+      [POOL_PROFILE],
+    );
+    expect(rows[0]!.linked_ad_account_id).toBe(POOL_ACCOUNT);
+  });
+
+  it('denetim kaydı taşınan satır sayılarını da tutuyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await eskiVeriYaz(IDS.client);
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+
+    const rows = await h.q<{ after: Record<string, unknown> }>(
+      `SELECT after FROM audit_logs WHERE action = 'ad_account.assigned' ORDER BY id DESC LIMIT 1`,
+    );
+    const after = rows[0]!.after as { tasinanSatirlar?: Record<string, number> };
+    expect(after.tasinanSatirlar?.insights_daily).toBe(1);
+    expect(after.tasinanSatirlar?.campaigns).toBe(1);
   });
 });

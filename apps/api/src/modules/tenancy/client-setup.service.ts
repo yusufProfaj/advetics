@@ -69,6 +69,16 @@ export class ClientSetupService {
     const failures: ClientSetupResult['failures'] = [];
     let assignedAccounts = 0;
     let assignedProfiles = 0;
+    /*
+     * TAŞINAN SATIRLAR BURADA DA TOPLANIYOR.
+     *
+     * Havuzdaki bir hesap "hiç kullanılmamış" demek değil: başka bir
+     * müşteriden kaldırılmış olabilir ve geçmişi hâlâ orada duruyor. Atama
+     * onu taşıyor — ama dönen sayıyı okumayan bu çağıran, bir müşterinin
+     * raporundaki rakamın değiştiğini SESSİZ hâle getiriyordu.
+     */
+    let movedRows = 0;
+    const leftBehind: Record<string, number> = {};
 
     /*
      * ATAMALAR SIRAYLA, PARALEL DEĞİL. Her atama bir transaction açıp iki iş
@@ -78,8 +88,12 @@ export class ClientSetupService {
      */
     for (const id of input.adAccountIds) {
       try {
-        await this.connections.assignAdAccount(scoped, id, client.id, meta);
+        const sonuc = await this.connections.assignAdAccount(scoped, id, client.id, meta);
         assignedAccounts++;
+        movedRows += sonuc.movedRows;
+        for (const [etiket, n] of Object.entries(sonuc.leftBehind)) {
+          leftBehind[etiket] = (leftBehind[etiket] ?? 0) + n;
+        }
       } catch (err) {
         failures.push({
           kind: 'adAccount',
@@ -144,6 +158,8 @@ export class ClientSetupService {
       assignedProfiles,
       userCreated,
       failures,
+      movedRows,
+      leftBehind,
     };
   }
 }

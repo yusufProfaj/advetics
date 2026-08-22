@@ -263,6 +263,50 @@ describe('MetricsService', () => {
       expect(s.previous?.spendMicros).toBe('5000000');
     });
 
+    it('KRİTİK: pencere İSTEKTEN gelirse o kullanılıyor — "önceki yıl" bunu gerektiriyor', async () => {
+      /*
+       * Pencere bir süre koşulsuz sunucuda türetiliyordu ("aynı uzunlukta,
+       * hemen öncesi") ve kullanıcı başka bir karşılaştırma seçemiyordu.
+       * Panel pencereyi hesaplayıp EKRANDA YAZIYOR; sunucu ayrı bir hesap
+       * yapsaydı yazan dönem ile karşılaştırılan dönem ayrışırdı.
+       */
+      await seedMetrics({
+        date: '2025-08-05',
+        spendMicros: '7000000',
+        impressions: 700,
+        clicks: 7,
+        conversions: 0,
+      });
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000',
+        impressions: 100,
+        clicks: 1,
+        conversions: 0,
+      });
+
+      const s = await svc.summary(CTX, {
+        from: '2026-08-05',
+        to: '2026-08-05',
+        compareFrom: '2025-08-05',
+        compareTo: '2025-08-05',
+      });
+      expect(s.spendMicros).toBe('1000000');
+      expect(s.previous?.spendMicros).toBe('7000000');
+    });
+
+    it('pencere gelmezse ESKİ davranış korunuyor — rapor bu ucu parametresiz çağırıyor', async () => {
+      await seedMetrics({
+        date: '2026-08-04',
+        spendMicros: '5000000',
+        impressions: 500,
+        clicks: 5,
+        conversions: 0,
+      });
+      const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      expect(s.previous?.spendMicros).toBe('5000000');
+    });
+
     it('önceki dönemde veri yoksa null', async () => {
       await seedMetrics({
         date: '2026-08-05',
@@ -274,6 +318,31 @@ describe('MetricsService', () => {
       const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
       // Sıfırlı bir nesne döndürmek "%100 düşüş" gibi görünürdü.
       expect(s.previous).toBeNull();
+    });
+  });
+
+  describe('coverage — "Tüm zamanlar"ın dayanağı', () => {
+    it('en eski ve en yeni veri gününü döndürüyor', async () => {
+      // Sabit bir alt sınır (örn. 2020) hem yüzlerce boş günü tarar hem de
+      // 400 günlük aralık sınırına takılıp panelde hata sayfası üretirdi.
+      for (const date of ['2026-05-23', '2026-07-01', '2026-08-20']) {
+        await seedMetrics({
+          date,
+          spendMicros: '1000000',
+          impressions: 100,
+          clicks: 1,
+          conversions: 0,
+        });
+      }
+      const c = await svc.coverage(CTX, { from: '2026-08-01', to: '2026-08-05' });
+      expect(c.earliestDate).toBe('2026-05-23');
+      expect(c.latestDate).toBe('2026-08-20');
+    });
+
+    it('hiç veri yoksa null — uydurma bir başlangıç YOK', async () => {
+      const c = await svc.coverage(CTX, { from: '2026-08-01', to: '2026-08-05' });
+      expect(c.earliestDate).toBeNull();
+      expect(c.latestDate).toBeNull();
     });
   });
 
@@ -434,7 +503,7 @@ describe('MetricsService', () => {
         clicks: 1,
         conversions: 0,
       });
-      const points = await svc.timeseries(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      const { points } = await svc.timeseries(CTX, { from: '2026-08-05', to: '2026-08-05' });
       expect(points).toHaveLength(1);
       expect(points[0]!.date).toBe('2026-08-05');
     });
@@ -453,7 +522,7 @@ describe('MetricsService', () => {
           conversions: 0,
         });
       }
-      const points = await svc.timeseries(CTX, { from: '2026-08-03', to: '2026-08-05' });
+      const { points } = await svc.timeseries(CTX, { from: '2026-08-03', to: '2026-08-05' });
       expect(points.map((p) => p.date)).toEqual(['2026-08-03', '2026-08-04', '2026-08-05']);
       expect(points.map((p) => p.spendMicros)).toEqual(['3000000', '4000000', '5000000']);
     });
@@ -469,8 +538,134 @@ describe('MetricsService', () => {
         clicks: 0,
         conversions: 0,
       });
-      const points = await svc.timeseries(CTX, { from: '2026-08-01', to: '2026-08-05' });
+      const { points } = await svc.timeseries(CTX, { from: '2026-08-01', to: '2026-08-05' });
       expect(points).toHaveLength(1);
+    });
+
+    it('KRİTİK: karşılaştırma kapalıyken `previous` NULL — boş dizi DEĞİL', async () => {
+      /*
+       * İKİSİ FARKLI İKİ ŞEY. `null` "karşılaştırma istenmedi"; boş dizi
+       * "istendi ama o dönemde hiç veri yok". Grafik ikincisinde efsanede
+       * önceki dönemi GÖSTERMEK, birincisinde göstermemek zorunda — aynı
+       * boş hâle çevirmek bu projenin tekrar eden hatası.
+       */
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000',
+        impressions: 1,
+        clicks: 0,
+        conversions: 0,
+      });
+      const res = await svc.timeseries(CTX, { from: '2026-08-01', to: '2026-08-05' });
+      expect(res.previous).toBeNull();
+    });
+
+    it('KRİTİK: karşılaştırma açıkken iki pencere AYRI dönüyor', async () => {
+      for (const [date, spend] of [
+        ['2026-07-30', '7000000'],
+        ['2026-07-31', '8000000'],
+        ['2026-08-01', '1000000'],
+        ['2026-08-02', '2000000'],
+      ] as const) {
+        await seedMetrics({
+          date,
+          spendMicros: spend,
+          impressions: 10,
+          clicks: 1,
+          conversions: 0,
+        });
+      }
+
+      const res = await svc.timeseries(CTX, {
+        from: '2026-08-01',
+        to: '2026-08-02',
+        compareFrom: '2026-07-30',
+        compareTo: '2026-07-31',
+      });
+
+      expect(res.points.map((p) => p.date)).toEqual(['2026-08-01', '2026-08-02']);
+      expect(res.previous?.map((p) => p.date)).toEqual(['2026-07-30', '2026-07-31']);
+    });
+
+    it('KRİTİK: karşılaştırma penceresi CARİ noktalara SIZMIYOR', async () => {
+      /*
+       * TEK TARAMA İKİ PENCEREYİ BİRDEN OKUYOR. Ayrım yanlış yapılırsa
+       * önceki dönemin harcaması cari döneme karışıyor ve grafikteki her
+       * sayı — kartlardaki toplamla da çelişerek — büyüyor. Hiçbir hata
+       * vermiyor, yalnızca yanlış.
+       */
+      await seedMetrics({
+        date: '2026-07-31',
+        spendMicros: '9000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+      });
+      const res = await svc.timeseries(CTX, {
+        from: '2026-08-01',
+        to: '2026-08-02',
+        compareFrom: '2026-07-30',
+        compareTo: '2026-07-31',
+      });
+      expect(res.points).toEqual([]);
+      expect(res.previous).toHaveLength(1);
+    });
+
+    it('önceki dönemde veri yoksa `previous` BOŞ DİZİ — null değil', async () => {
+      await seedMetrics({
+        date: '2026-08-01',
+        spendMicros: '1000000',
+        impressions: 1,
+        clicks: 0,
+        conversions: 0,
+      });
+      const res = await svc.timeseries(CTX, {
+        from: '2026-08-01',
+        to: '2026-08-02',
+        compareFrom: '2026-07-30',
+        compareTo: '2026-07-31',
+      });
+      expect(res.previous).toEqual([]);
+    });
+
+    it('KRİTİK: karşılaştırma KAPALIYKEN geniş pencere taranmıyor', async () => {
+      // Karşılaştırma istenmediğinde önceki günleri okumak, boşuna partition
+      // taramak ve `points` içine ait olmayan gün koymak demek.
+      await seedMetrics({
+        date: '2026-07-25',
+        spendMicros: '5000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+      });
+      const res = await svc.timeseries(CTX, { from: '2026-08-01', to: '2026-08-02' });
+      expect(res.points).toEqual([]);
+    });
+
+    it('KRİTİK: YARIM karşılaştırma penceresi karşılaştırma SAYILMIYOR', async () => {
+      /*
+       * `compareFrom` var, `compareTo` yok. Şema ikisini bağımsız opsiyonel
+       * tutuyor, yani bu istek gerçekten gelebiliyor.
+       *
+       * Yarım pencereyi kabul etmek sessizce yanlış: tarama `compareFrom`'dan
+       * başlar, önceki dönemin günleri CARİ noktalara karışır ve grafikteki
+       * her sayı kartlardaki toplamla çelişir. Kural "ikisi de yoksa kapalı"
+       * değil, "ikisi de VARSA açık".
+       */
+      await seedMetrics({
+        date: '2026-07-25',
+        spendMicros: '5000000',
+        impressions: 10,
+        clicks: 1,
+        conversions: 0,
+      });
+      const res = await svc.timeseries(CTX, {
+        from: '2026-08-01',
+        to: '2026-08-02',
+        compareFrom: '2026-07-20',
+      });
+      expect(res.points).toEqual([]);
+      expect(res.previous).toBeNull();
     });
   });
 
@@ -752,6 +947,170 @@ describe('MetricsService', () => {
       await h.q(`UPDATE ad_accounts SET sync_enabled = false WHERE id = $1`, [IDS.adAccount]);
       expect((await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' })).hiddenAccounts).toBe(1);
     });
+
+    it('KRİTİK: HAVUZDAKİ hesaplar bu sayıya girmiyor', async () => {
+      /*
+       * HAVUZ BU WORKSPACE'İN HESABI DEĞİL.
+       *
+       * Keşif her hesabı `sync_enabled = false` ile yazıyor ve ajansın tek
+       * Meta kimliği yüzlerce hesap görüyor. Sayım havuzu da toplayınca her
+       * müşterinin Genel Bakış'ında "481 hesap izlenmiyor" yazıyordu: uyarı
+       * hiçbir zaman sıfıra inmiyor, okunmaz hâle geliyor ve GERÇEK bir
+       * kapalı hesap aynı cümlenin içinde kayboluyor.
+       */
+      await h.q(
+        `INSERT INTO ad_accounts
+           (id, org_id, client_id, connection_id, platform, external_id, name, currency,
+            timezone, sync_enabled, updated_at)
+         VALUES (gen_random_uuid(), $1, NULL, $2, 'meta', 'act_havuz_1', 'Havuz 1', 'TRY',
+                 'Europe/Istanbul', false, now()),
+                (gen_random_uuid(), $1, NULL, $2, 'meta', 'act_havuz_2', 'Havuz 2', 'TRY',
+                 'Europe/Istanbul', false, now())`,
+        [IDS.org, IDS.connection],
+      );
+
+      const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      expect(s.hiddenAccounts).toBe(0);
+    });
+
+    it('KRİTİK: hesap SÜZGECİ varken sayım da o hesaba daralıyor', async () => {
+      /*
+       * Kullanıcı tek bir hesabı seçtiğinde ekrandaki rakamlar o hesabın.
+       * Uyarının BAŞKA bir hesaptan bahsetmesi, seçtiği hesapta sorun varmış
+       * gibi okunuyordu — hiçbir hata vermeyen, yanlış karar aldıran gösterim.
+       */
+      const IKINCI = '7a7a7a7a-7a7a-7a7a-7a7a-7a7a7a7a7a7a';
+      await h.q(
+        `INSERT INTO ad_accounts
+           (id, org_id, client_id, connection_id, platform, external_id, name, currency,
+            timezone, sync_enabled, updated_at)
+         VALUES ($1, $2, $3, $4, 'meta', 'act_ikinci', 'İkinci', 'TRY',
+                 'Europe/Istanbul', false, now())`,
+        [IKINCI, IDS.org, IDS.client, IDS.connection],
+      );
+
+      // Süzgeç yokken ikinci hesap sayılıyor.
+      expect(
+        (await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' })).hiddenAccounts,
+      ).toBe(1);
+
+      // İzlenen hesap seçiliyken sayı sıfır: uyarı o hesap hakkında değil.
+      expect(
+        (
+          await svc.summary(CTX, {
+            from: '2026-08-05',
+            to: '2026-08-05',
+            adAccountId: IDS.adAccount,
+          })
+        ).hiddenAccounts,
+      ).toBe(0);
+    });
   });
 
+});
+
+/**
+ * ═══ KIRILIM TABLOSUNDA KARŞILAŞTIRMA ═══
+ *
+ * Özet uçta önceki dönem baştan beri vardı; kırılım tek pencere okuyordu ve
+ * "hangi kampanya arttı, hangisi düştü" sorusu tabloda cevapsızdı.
+ *
+ * Üç kural sessizce bozulabiliyor ve üçü de burada kilitli:
+ *   1. Sıralama CARİ döneme bağlı kalmalı.
+ *   2. Önceki dönemde verisi olmayan varlıkta `previous` NULL olmalı.
+ *   3. Karşılaştırma istenmediğinde ikinci pencere HİÇ okunmamalı.
+ */
+describe('MetricsService — kırılım karşılaştırması', () => {
+  async function kampanya(id: string, ad: string): Promise<void> {
+    await h.q(
+      `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, updated_at)
+       VALUES ($1, $2, $3, 'meta', $4, $5, 'active', 'daily', now())`,
+      [id, IDS.adAccount, IDS.client, `ext-${id.slice(0, 6)}`, ad],
+    );
+  }
+
+  async function metrik(entityId: string, date: string, spend: string, clicks = 10): Promise<void> {
+    await h.q(
+      `INSERT INTO insights_daily
+         (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+          date, breakdown_key, impressions, clicks, spend_micros, conversions,
+          conversion_value_micros, currency, reach)
+       VALUES ($1, $2, 'meta', 'campaign', $3, $4, $5::date, '', 1000, $6, $7, 2, 0, 'TRY', 0)`,
+      [IDS.client, IDS.adAccount, entityId, `ext-${entityId.slice(0, 6)}`, date, clicks, spend],
+    );
+  }
+
+  const SORGU = {
+    from: '2026-08-08',
+    to: '2026-08-14',
+    level: 'campaign' as const,
+    limit: 50,
+    compareFrom: '2026-08-01',
+    compareTo: '2026-08-07',
+  };
+
+  it('KRİTİK: önceki dönem satır bazında dönüyor', async () => {
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000', 20);
+    await metrik(CAMPAIGN_ID, '2026-08-03', '1000000', 10);
+
+    const rows = await svc.breakdown(CTX, SORGU);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.spendMicros).toBe('2000000');
+    expect(rows[0]!.previous?.spendMicros).toBe('1000000');
+    expect(rows[0]!.previous?.clicks).toBe(10);
+  });
+
+  it('KRİTİK: önceki dönemde verisi OLMAYAN varlıkta previous NULL', async () => {
+    // Sıfırlı bir nesne döndürmek YENİ açılmış her kampanyayı "-%100"
+    // gösterirdi.
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000');
+    const rows = await svc.breakdown(CTX, SORGU);
+    expect(rows[0]!.previous).toBeNull();
+  });
+
+  it('KRİTİK: SIRALAMA cari döneme bağlı — yalnızca geçmişte harcayan listeyi kaydırmıyor', async () => {
+    /*
+     * Sıralama toplam pencereye bağlı olsaydı, ÖNCEKİ dönemde çok harcamış
+     * ama şimdi hiç harcamayan bir kampanya listenin başına geçerdi ve
+     * "bu kampanya neden burada, hiç harcaması yok" sorusunu doğururdu.
+     */
+    const ESKI = '77777777-0000-0000-0000-000000000001';
+    await kampanya(ESKI, 'Yalnızca geçmişte');
+    await metrik(ESKI, '2026-08-03', '90000000');
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000');
+
+    const rows = await svc.breakdown(CTX, SORGU);
+    expect(rows[0]!.name).toBe('Kampanya A');
+  });
+
+  it('KRİTİK: karşılaştırma İSTENMEZSE previous NULL ve geçmiş okunmuyor', async () => {
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000');
+    await metrik(CAMPAIGN_ID, '2026-08-03', '1000000');
+
+    const rows = await svc.breakdown(CTX, {
+      from: '2026-08-08',
+      to: '2026-08-14',
+      level: 'campaign',
+      limit: 50,
+    });
+    expect(rows[0]!.previous).toBeNull();
+    // Cari dönem geçmişten ETKİLENMEMELİ: pencere genişleseydi 3.000.000
+    // çıkardı.
+    expect(rows[0]!.spendMicros).toBe('2000000');
+  });
+
+  it('cari dönem toplamı ÖNCEKİ dönemi İÇERMİYOR', async () => {
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000');
+    await metrik(CAMPAIGN_ID, '2026-08-03', '1000000');
+    const rows = await svc.breakdown(CTX, SORGU);
+    expect(rows[0]!.spendMicros).toBe('2000000');
+  });
+
+  it('türetilmiş oranlar önceki dönem için de hesaplanıyor', async () => {
+    await metrik(CAMPAIGN_ID, '2026-08-10', '2000000', 20);
+    await metrik(CAMPAIGN_ID, '2026-08-03', '1000000', 10);
+    const rows = await svc.breakdown(CTX, SORGU);
+    expect(rows[0]!.previous?.ctr).not.toBeNull();
+    expect(rows[0]!.previous?.cpa).not.toBeNull();
+  });
 });
