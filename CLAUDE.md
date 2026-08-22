@@ -189,6 +189,18 @@ buna göre veriliyor:
   pencere = karşılaştırılamayan CPA/ROAS, sıfır hata mesajı. Varsayılanı bile
   olsa açıkça yaz: varsayılan değiştiğinde rakam haber vermeden kayar.
   `meta-attribution.spec.ts` bunu tarıyor.
+- **KULLANICI HTML'İ ÜÇ YERDE BİRDEN GÖRÜNÜYOR: SAKLA, ÖNİZLE, GÖNDER.**
+  Danışman imzası panelde önizleniyor ve müşteriye giden maile gömülüyor;
+  ikisi de saldırı yüzeyi. Temizlik GİRİŞTE yapılıyor ve TEMİZLENMİŞ hâl
+  saklanıyor — çıkışta temizlemek, kayıtlı hâl ile gönderilen hâli ayrıştırır
+  ve önizleme yalan söyler. Beyaz liste kullanılıyor; kara liste her yeni
+  etikette güncellenmek zorunda. `script`/`style` GÖVDESİYLE atılıyor.
+  Atılanlar kullanıcıya raporlanıyor. `imza-temizle.spec.ts`.
+- **GMAIL İMZASI SMTP İLE GİDEN MAİLE OTOMATİK EKLENMİYOR** — onu Gmail'in
+  arayüzü ekliyor. Ayrıca Gmail'den kopyalanan HTML görselleri kendi
+  önbelleğine yönlendiriyor (`ci3.googleusercontent.com/...#gerçek/adres`);
+  o adres Gmail dışında çalışmıyor ve mailde görsel KIRIK çıkıyor. `#`
+  sonrası gerçek kaynak, otomatik çevriliyor.
 - **PDF'TE TÜRKÇE GÖMÜLÜ YAZI TİPİ İSTİYOR.** PDF'in standart yazı tipleri
   WinAnsi kullanıyor: `ğ ş ı` orada YOK, `₺` (U+20BA) hiç yok. Gömmeden
   üretilen belgede karakterler sessizce düşüyor ya da kutu oluyor ve bunu ilk

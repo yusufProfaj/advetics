@@ -195,6 +195,7 @@ const ICONS = {
   brand: 'M10 3.5 12 8l4.5.5-3.3 3.1.8 4.4L10 14l-4 2 .8-4.4L3.5 8.5 8 8z',
   audit: 'M10 4.5v11M4.5 10h11M6.5 6.5l7 7M13.5 6.5l-7 7',
   sync: 'M4 8a6 6 0 0 1 10.5-4M16 12a6 6 0 0 1-10.5 4M14.5 3.5V7h-3.5M5.5 16.5V13H9',
+  mail: 'M3 6h14v9H3zM3 6.5l7 5 7-5',
 } as const;
 
 function Icon({ name, active }: { name: keyof typeof ICONS; active?: boolean }) {

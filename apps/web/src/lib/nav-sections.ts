@@ -121,6 +121,30 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         perm: 'connection.read',
       },
       {
+        /*
+         * `report.share` İLE KAPALI — yönetim izniyle DEĞİL.
+         *
+         * Bu ekran "başkasının ayarı" kavramı taşımıyor: herkes yalnızca
+         * kendi satırını görüyor (RLS). O yüzden yönetici iznine bağlamak
+         * yanlış olurdu — danışmanın kendi imzasını düzenlemesi yöneticiye
+         * bağlanırdı.
+         *
+         * Ama izinsiz de bırakılamıyor: `client_viewer` (müşteri hesabı)
+         * rapor GÖNDERMİYOR, yalnızca okuyor. İzinsiz bırakmak ona hem bu
+         * ekranı hem de tamamı ajans işi olan "Ayarlar" başlığını
+         * gösteriyordu — `nav-sections.spec.ts` bunu yakaladı.
+         *
+         * `report.share` tam olarak "rapor gönderebilir" demek ve e-posta
+         * kimliği de onun için gerekiyor.
+         */
+        href: '/ayarlar/e-posta',
+        label: 'E-posta Ayarları',
+        icon: 'mail',
+        module: 6,
+        ready: true,
+        perm: 'report.share',
+      },
+      {
         href: '/ayarlar/ekip',
         label: 'Ekip & Yetkiler',
         icon: 'team',
