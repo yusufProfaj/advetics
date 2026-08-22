@@ -10,7 +10,8 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
+import { Res } from '@nestjs/common';
 import {
   reportQuerySchema,
   reportTemplateInputSchema,
@@ -27,6 +28,9 @@ import { zodBody, zodQuery } from '../../common/pipes/zod-validation.pipe';
 import { ReportsService } from './reports.service';
 import { ShareService } from './share.service';
 import { ReportTemplatesService } from './report-templates.service';
+import { RaporPdfService } from './rapor-pdf.service';
+import { AuditService } from '../audit/audit.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Controller('reports')
 export class ReportsController {
@@ -34,6 +38,9 @@ export class ReportsController {
     private readonly reports: ReportsService,
     private readonly shares: ShareService,
     private readonly templates: ReportTemplatesService,
+    private readonly pdfService: RaporPdfService,
+    private readonly audit: AuditService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /** Panelden önizleme — oturumlu, RLS'li. */
@@ -60,6 +67,53 @@ export class ReportsController {
    * HİÇBİR uca bağlı değildi — şablon yalnızca paylaşım linki üretilirken
    * sessizce oluşturuluyor, kullanıcı onu bir daha hiç göremiyordu.
    */
+  /**
+   * RAPOR PDF'İ — İNDİRME.
+   *
+   * Tarayıcı yazdırması yerine sunucuda üretiliyor: aynı belge e-posta EKİ
+   * olarak da gidecek ve worker'da `window` yok. İki ayrı üretim yolu
+   * olsaydı indirilen PDF ile müşteriye giden PDF ayrışırdı.
+   *
+   * DENETİM KAYDI: rapor organizasyonun dışına çıkıyor. Potansiyel müşteri
+   * CSV'si bu emsali kurdu — "kim, ne zaman, hangi müşterinin raporunu
+   * indirdi" sorusunun cevabı olmalı.
+   */
+  @Get('pdf')
+  @RequirePermissions('report.read')
+  async pdf(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(reportQuerySchema)) query: ReportQuery,
+    @Req() req: RequestMeta,
+    @Res() res: Response,
+  ): Promise<void> {
+    const data = await this.reports.build(ctx, query);
+    const bayt = await this.pdfService.uret(data);
+
+    /*
+     * DENETİM ÜRETİMDEN SONRA, AYRI BİR TRANSACTION'DA.
+     *
+     * PDF üretimi saniyeler sürebiliyor ve `withTenant` etkileşimli bir
+     * transaction açıyor — Prisma'nın sınırı 5 saniye. Üretimi transaction
+     * içine almak, büyük bir raporda transaction'ın ölmesi ve denetim
+     * kaydının da yazılamaması demek olurdu.
+     */
+    await this.prisma.withTenant(ctx, (tx) =>
+      this.audit.record(tx, ctx, {
+        action: 'report.pdf_download',
+        targetType: 'client',
+        targetId: query.clientId,
+        clientId: query.clientId,
+        after: { from: query.from, to: query.to, bytes: bayt.byteLength },
+        ...meta(req),
+      }),
+    );
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${dosyaAdi(data)}"`);
+    res.setHeader('Content-Length', String(bayt.byteLength));
+    res.send(bayt);
+  }
+
   @Get('templates')
   @RequirePermissions('report.read')
   listTemplates(@CurrentTenant() ctx: TenantContext): Promise<ReportTemplateSummary[]> {
@@ -149,4 +203,25 @@ function meta(req: RequestMeta): { ip: string | null; userAgent: string | null; 
     userAgent: req.get?.('user-agent') ?? null,
     requestId: req.requestId ?? null,
   };
+}
+
+/**
+ * PDF DOSYA ADI — müşteri ve dönem.
+ *
+ * Müşteri adı dosya adına giriyor ama TEMİZLENEREK: Türkçe karakterler ve
+ * boşluklar bazı istemcilerde `Content-Disposition` ayrıştırmasını bozuyor ve
+ * indirilen dosya "download" adıyla kaydediliyor.
+ */
+function dosyaAdi(data: ReportData): string {
+  const ad = data.client.name
+    .replace(/[ğĞ]/g, 'g')
+    .replace(/[üÜ]/g, 'u')
+    .replace(/[şŞ]/g, 's')
+    .replace(/[ıİ]/g, 'i')
+    .replace(/[öÖ]/g, 'o')
+    .replace(/[çÇ]/g, 'c')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+  return `${ad || 'rapor'}-${data.from}_${data.to}.pdf`;
 }
