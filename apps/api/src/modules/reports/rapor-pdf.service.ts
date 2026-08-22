@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import {
   COLUMN_LABELS,
@@ -14,6 +14,7 @@ import {
   type ReportData,
 } from '@advetics/shared';
 import { yaziTipiOku } from './pdf-yazi-tipi';
+import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
 
 /** A4, punto cinsinden. */
 const EN = 595.28;
@@ -38,7 +39,14 @@ const KENAR = 40;
  */
 @Injectable()
 export class RaporPdfService {
-  async uret(data: ReportData): Promise<Buffer> {
+  /**
+   * `opts.getir` YALNIZCA TEST İÇİN VAR ve imzada durması bilinçli.
+   *
+   * Kreatif görselleri gerçek CDN'den geliyor; testte oraya çıkmak hem yavaş
+   * hem de CDN'in o günkü hâline bağımlı olurdu. Modül seviyesinde `fetch`i
+   * yamamak ise aynı süreçteki başka testleri de etkiliyor.
+   */
+  async uret(data: ReportData, opts: { getir?: typeof fetch } = {}): Promise<Buffer> {
     const doc = await PDFDocument.create();
     doc.registerFontkit(fontkit);
 
@@ -54,7 +62,19 @@ export class RaporPdfService {
     doc.setCreator('Advetics');
     doc.setProducer('Advetics');
 
-    const ctx: Ctx = { doc, normal, kalin, data };
+    /*
+     * GÖRSELLER YALNIZCA BÖLÜM SEÇİLİYSE İNDİRİLİYOR.
+     *
+     * Koşulsuz indirmek, `top_ads` içermeyen her raporu altı ağ isteği kadar
+     * yavaşlatırdı — ve o isteklerin hiçbiri belgede görünmeyecekti.
+     * İndirme ÖNDEN yapılıyor: çizim döngüsünün ortasında ağ beklemek,
+     * yarısı çizilmiş bir sayfayı zaman aşımına açık bırakırdı.
+     */
+    const gorseller = data.sections.includes('top_ads')
+      ? await this.gorselleriHazirla(doc, data, opts.getir)
+      : new Map<string, { img: PDFImage } | { hata: string }>();
+
+    const ctx: Ctx = { doc, normal, kalin, data, gorseller };
 
     for (const bolum of data.sections) {
       switch (bolum) {
@@ -76,16 +96,20 @@ export class RaporPdfService {
         case 'google_search_terms':
           this.aramaTerimleri(ctx);
           break;
+        case 'top_ads':
+          this.enIyiReklamlar(ctx);
+          break;
         case 'closing':
           this.kapanis(ctx);
           break;
         default:
           /*
            * BİLİNMEYEN BÖLÜM SESSİZCE ATLANIYOR — ve bu bilinçli.
-           * `top_ads` PDF'te henüz yok (kreatif görsellerini indirmek ayrı
-           * bir iş: platform CDN adresleri ölebiliyor ve indirme sırasında
-           * bekleyen bir PDF üretimi worker'ı bloklar). Şablonda seçili
-           * olması PDF üretimini DÜŞÜRMEMELİ.
+           *
+           * Şablonlar veritabanında duruyor ve eski bir şablon, bu sürümde
+           * artık var olmayan bir bölüm adı taşıyabiliyor. Onun yüzünden PDF
+           * üretiminin tamamının düşmesi, müşteriye giden belgeyi bir isim
+           * değişikliğine bağlamak olurdu.
            */
           break;
       }
@@ -332,6 +356,243 @@ export class RaporPdfService {
     }
   }
 
+  /**
+   * Görselleri indirir ve BELGEYE GÖMER.
+   *
+   * Gömme ayrı bir adım olarak burada: baytlar doğru imzayı taşıyıp yine de
+   * bozuk olabiliyor (kesik indirme) ve `embedJpg` o durumda fırlatıyor. Tek
+   * bir reklamın görseli yüzünden müşteriye giden belgenin tamamını
+   * kaybetmek kabul edilemez; hata yakalanıp SEBEP olarak saklanıyor.
+   */
+  private async gorselleriHazirla(
+    doc: PDFDocument,
+    data: ReportData,
+    getir?: typeof fetch,
+  ): Promise<Map<string, { img: PDFImage } | { hata: string }>> {
+    const indirilen: Map<string, GorselSonucu> = await gorselleriIndir(
+      data.topAds.map((a) => a.imageUrl),
+      { getir },
+    );
+    const out = new Map<string, { img: PDFImage } | { hata: string }>();
+
+    for (const [adres, sonuc] of indirilen) {
+      if (!sonuc.ok) {
+        out.set(adres, { hata: sonuc.sebep });
+        continue;
+      }
+      try {
+        const img =
+          sonuc.tur === 'jpg' ? await doc.embedJpg(sonuc.bytes) : await doc.embedPng(sonuc.bytes);
+        out.set(adres, { img });
+      } catch (err) {
+        out.set(adres, { hata: err instanceof Error ? err.message : 'gömülemedi' });
+      }
+    }
+
+    return out;
+  }
+
+  /**
+   * En çok harcayan reklamlar — küçük görsel + metin.
+   *
+   * SATIR DÜZENİ, KART IZGARASI DEĞİL. Google arama reklamlarının görseli
+   * YOK (kullanıcının bildirdiği sorun tam buydu: kart ızgarasında o
+   * reklamlar kocaman boş kutulara dönüşüyordu). Satırda görsel yeri 56
+   * punto: varsa görsel, yoksa sebebi yazan gri bir kutu — düzen ikisinde de
+   * bozulmuyor.
+   *
+   * ÜÇ AYRI DURUM, ÜÇ AYRI CÜMLE. "Metin reklamı" (görsel adresi hiç yok),
+   * "görsel alınamadı" (adres vardı, indirme düştü) ve gerçek görsel farklı
+   * şeyler. İlk ikisini aynı boş kutuya çevirmek, danışmanın müşteriye
+   * "görseller neden yok" sorusunu cevaplayamaması demekti.
+   */
+  private enIyiReklamlar(ctx: Ctx): void {
+    const s = ctx.doc.addPage([EN, BOY]);
+    let y = this.baslik(ctx, s, SECTION_LABELS.top_ads);
+
+    if (ctx.data.topAds.length === 0) {
+      s.drawText('Bu dönemde harcama yapan reklam yok.', {
+        x: KENAR,
+        y,
+        size: 10,
+        font: ctx.normal,
+        color: GRI,
+      });
+      return;
+    }
+
+    const KUTU = 56;
+    const METIN_X = KENAR + KUTU + 12;
+    const SAG = EN - KENAR;
+    let alinamayan = 0;
+    /*
+     * SEBEPLER TOPLANIYOR ÇÜNKÜ YAPILACAK İŞ FARKLI.
+     *
+     * "zaman aşımı" geçici — raporu yeniden üretmek çözüyor. "desteklenmeyen
+     * biçim" kalıcı: Meta thumbnail'ı WebP dönmüş ve pdf-lib onu gömemiyor,
+     * yeniden üretmek hiçbir şeyi değiştirmiyor. İkisini aynı cümleye
+     * çevirmek, danışmanı sonuçsuz bir denemeye göndermek olurdu.
+     */
+    const sebepler = new Set<string>();
+    /*
+     * ÇİZİLEN SATIR SAYILIYOR — SESSİZ KESME YOK.
+     *
+     * Sayfa dolduğunda döngü kırılıyor ve kalan reklamlar hiç görünmüyor.
+     * Bugün sorgu altı satırla sınırlı ve sayfaya sığıyor; ama o sınır bir
+     * gün büyütülürse belge sessizce eksik basılır ve farkı ilk gören
+     * müşteri olur. Kaç tanesinin sığdığı yazılıyor.
+     */
+    let cizilen = 0;
+
+    for (const reklam of ctx.data.topAds) {
+      // SAYFA TAŞMASI: kalan yer bir satıra yetmiyorsa kes. Taşan çizim
+      // pdf-lib'de hata vermiyor, sayfanın dışına düşüyor ve GÖRÜNMÜYOR.
+      if (y < KENAR + KUTU + 10) break;
+
+      const ust = y;
+      const sonuc = reklam.imageUrl ? ctx.gorseller.get(reklam.imageUrl) : undefined;
+
+      if (sonuc && 'img' in sonuc) {
+        /*
+         * EN-BOY ORANI KORUNUYOR. Sabit 56×56 çizmek, 1200×628 bir banner'ı
+         * kareye EZİYOR ve bunu ilk gören müşteri oluyor — belgenin tamamı
+         * "özensiz" görünüyor. Görsel kutuya SIĞDIRILIP ortalanıyor.
+         */
+        const o = Math.min(KUTU / sonuc.img.width, KUTU / sonuc.img.height);
+        const g = sonuc.img.width * o;
+        const yk = sonuc.img.height * o;
+        s.drawImage(sonuc.img, {
+          x: KENAR + (KUTU - g) / 2,
+          y: ust - KUTU + (KUTU - yk) / 2,
+          width: g,
+          height: yk,
+        });
+      } else {
+        // ADRES VARDI AMA GELMEDİ ile ADRES HİÇ YOKTU ayrı sayılıyor:
+        // ilki bir arıza, ikincisi Google arama reklamının normal hâli.
+        if (reklam.imageUrl) {
+          alinamayan++;
+          sebepler.add(sonuc && 'hata' in sonuc ? sonuc.hata : 'indirilemedi');
+        }
+        this.gorselYeri(ctx, s, ust, KUTU, reklam.imageUrl ? 'alinamadi' : 'metin');
+      }
+
+      s.drawText(kirp(reklam.name, ctx.kalin, 10, 300), {
+        x: METIN_X,
+        y: ust - 12,
+        size: 10,
+        font: ctx.kalin,
+        color: SIYAH,
+      });
+      s.drawText(kirp(reklam.campaignName, ctx.normal, 8.5, 300), {
+        x: METIN_X,
+        y: ust - 26,
+        size: 8.5,
+        font: ctx.normal,
+        color: GRI,
+      });
+      if (reklam.headline) {
+        s.drawText(kirp(reklam.headline, ctx.normal, 8.5, 300), {
+          x: METIN_X,
+          y: ust - 40,
+          size: 8.5,
+          font: ctx.normal,
+          color: GRI,
+        });
+      }
+
+      // Sayılar SAĞA yaslı — göz tek bir dikey çizgide tarıyor.
+      const satirlar = [
+        formatMoney(reklam.spendMicros, ctx.data.currency),
+        `${formatNumber(reklam.conversions)} dönüşüm · EBM ${
+          reklam.cpa === null ? '—' : formatMoney(mikro(reklam.cpa), ctx.data.currency)
+        }`,
+        `TO ${formatPercent(reklam.ctr)}`,
+      ];
+      satirlar.forEach((metin, i) => {
+        const punto = i === 0 ? 10 : 8.5;
+        const font = i === 0 ? ctx.kalin : ctx.normal;
+        s.drawText(metin, {
+          x: SAG - font.widthOfTextAtSize(metin, punto),
+          y: ust - 12 - i * 14,
+          size: punto,
+          font,
+          color: i === 0 ? SIYAH : GRI,
+        });
+      });
+
+      cizilen++;
+      y = ust - KUTU - 14;
+    }
+
+    /*
+     * ALINAMAYAN GÖRSEL SAYISI YAZILIYOR.
+     *
+     * Platform CDN adresleri süreli: aynı rapor iki hafta sonra üretilince
+     * görseller sessizce kaybolabiliyor. Sayı yazılmazsa danışman belgeyi
+     * müşteriye gönderdikten sonra öğreniyor.
+     */
+    if (cizilen < ctx.data.topAds.length) {
+      s.drawText(
+        `${ctx.data.topAds.length} reklamdan ${cizilen} tanesi sayfaya sığdı.`,
+        { x: KENAR, y: KENAR + 10, size: 8, font: ctx.normal, color: GRI },
+      );
+    }
+
+    if (alinamayan > 0 && y > KENAR + 20) {
+      /*
+       * CÜMLENİN SONU SABİT ve bu bir üslup tercihi değil: sebep dizgesi
+       * duruma göre değişiyor (bazıları tamamen ASCII, "sunucu 404" gibi),
+       * dolayısıyla uyarının çizildiğini sınayan test değişken bir metne
+       * dayanamıyor. Sabit son aynı zamanda okuyucuya en gerekli bilgiyi
+       * veriyor: belge görselsiz basıldı ve her sebep yeniden denemeyle
+       * çözülmüyor.
+       */
+      const metin =
+        `${alinamayan} reklamın görseli alınamadı (${[...sebepler].join(', ')}) — ` +
+        'görselsiz basıldı, kalıcı biçim hatalarında yeniden üretmek çözmez.';
+      s.drawText(kirp(metin, ctx.normal, 8, EN - 2 * KENAR), {
+        x: KENAR,
+        y: y - 4,
+        size: 8,
+        font: ctx.normal,
+        color: GRI,
+      });
+    }
+  }
+
+  /** Görsel yerine geçen gri kutu — SEBEBİ yazıyor. */
+  private gorselYeri(
+    ctx: Ctx,
+    s: PDFPage,
+    ust: number,
+    kutu: number,
+    sebep: 'metin' | 'alinamadi',
+  ): void {
+    s.drawRectangle({
+      x: KENAR,
+      y: ust - kutu,
+      width: kutu,
+      height: kutu,
+      color: rgb(0.94, 0.94, 0.95),
+    });
+    /*
+     * ETİKET İKİ SATIR ve kısa: kutu 56 punto ve yazı 7 punto. "metin
+     * reklamı" tek satıra sığmıyor, kırpılmış bir "metin rek…" ise hiçbir
+     * şey anlatmıyor.
+     */
+    const etiket = sebep === 'metin' ? 'metin\nreklamı' : 'görsel\nyok';
+    etiket.split('\n').forEach((satir, i) => {
+      s.drawText(satir, {
+        x: KENAR + (kutu - ctx.normal.widthOfTextAtSize(satir, 7)) / 2,
+        y: ust - kutu / 2 - 3 - i * 9,
+        size: 7,
+        font: ctx.normal,
+        color: GRI,
+      });
+    });
+  }
+
   private baslik(ctx: Ctx, s: PDFPage, metin: string): number {
     s.drawText(metin, { x: KENAR, y: BOY - 60, size: 16, font: ctx.kalin, color: SIYAH });
     s.drawText(`${ctx.data.client.name} · ${gun(ctx.data.from)} — ${gun(ctx.data.to)}`, {
@@ -350,6 +611,15 @@ interface Ctx {
   normal: PDFFont;
   kalin: PDFFont;
   data: ReportData;
+  /**
+   * Adres → BELGEYE GÖMÜLMÜŞ görsel ya da başarısızlık sebebi.
+   *
+   * Gömme indirmeyle birlikte ÖNDEN yapılıyor. `embedJpg`/`embedPng` async
+   * ve çizim döngüsü senkron; ikisini karıştırmak, `drawImage`e çözülmemiş
+   * bir Promise vermek demekti — TypeScript bir `as` ile buna izin veriyor
+   * ve hata yalnızca üretilen belgede, boş bir kutu olarak görünüyor.
+   */
+  gorseller: Map<string, { img: PDFImage } | { hata: string }>;
 }
 
 const SIYAH = rgb(0.1, 0.1, 0.12);

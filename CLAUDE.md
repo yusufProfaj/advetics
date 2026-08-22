@@ -342,6 +342,35 @@ buna göre veriliyor:
   bölünüyor — `budget_spent_ratio` koşulu B'nin kampanyalarını DURDURUYOR.
   İki müşterinin de satırı varsa join iki satır üretiyor ve hangisinin
   kazandığı belirsiz.
+- **HAVUZ SATIRLARI MÜŞTERİ-KAPSAMLI SAYIMA GİRMEZ — VE RLS SENİ KORUMUYOR.**
+  Genel Bakış'taki "N hesap izlenmiyor" sayacı `ad_accounts WHERE sync_enabled
+  = false` diyordu. Keşif her hesabı `false` ile yazıyor ve ajansın tek Meta
+  kimliği yüzlerce hesap görüyor; `adv_ad_accounts_select` politikası da
+  havuzu (`client_id IS NULL`) org yöneticisine BİLEREK açıyor (atama
+  ekranının çalışması buna bağlı). Sonuç: her müşterinin panelinde "481 hesap
+  izlenmiyor" yazıyordu — uyarı hiçbir zaman sıfıra inmiyor, okunmaz hâle
+  geliyor ve GERÇEK bir kapalı hesap aynı cümlenin içinde kayboluyor. Sayım
+  `client_id IS NOT NULL` demek zorunda; ekrandaki süzgeç (hesap, platform)
+  sayıma da uygulanmalı.
+- **SUNUCUDAN DIŞARI GİDEN HER İSTEK BEYAZ LİSTEYLE KAPATILIR.** Rapor
+  PDF'i kreatif görselini platform CDN'inden indiriyor ve adres
+  VERİTABANINDAN geliyor. "Platformdan geldi" güvenli demek değil: o alan bir
+  gün başka bir şey taşırsa sunucu onu ÇEKER ve paylaşımlı VPS'te bu, iç ağa
+  ya da bulut metadata ucuna (`169.254.169.254`) yapılmış bir istek olur.
+  Kontrol: yalnızca `https`, yalnızca bilinen CDN SONEKLERİ (`endsWith` —
+  `includes` kullanmak `x.fbcdn.net.evil.com`'u geçiriyor), IP literali ret,
+  `redirect: 'manual'` (izlenirse beyaz liste anlamsızlaşıyor), boyut sınırı
+  GÖVDE OKUNURKEN (`content-length` yalan söyleyebiliyor) ve zaman aşımı.
+  `kreatif-gorseli.spec.ts` — mutasyon testi burada iki kez boşa düştü:
+  `127.0.0.1` zaten sonek listesinde olmadığı için "reddedildi" iddiası IP
+  kontrolü SİLİNDİĞİNDE de geçiyordu; iddia SEBEBE çapalanmak zorunda.
+- **`pdf-lib` YALNIZCA JPEG ve PNG gömüyor.** Meta thumbnail'ları sık sık
+  WebP dönüyor ve `embedJpg` anlaşılmaz bir hata fırlatıp PDF üretiminin
+  TAMAMINI düşürüyor. Biçim GÖVDEDEN anlaşılıyor (sihirli baytlar), uzantıdan
+  ya da `content-type`tan değil. `embedJpg`/`embedPng` ASYNC: çizim döngüsü
+  senkron olduğu için gömme önden yapılmalı — bir `as` cast'i çözülmemiş
+  Promise'i `drawImage`e sokuyor ve hata yalnızca belgede, boş kutu olarak
+  görünüyor.
 - **HESABA BAĞLI OLMAYAN KAYIT, HESABA GÖRE SAYAN RAPORA GİRMİYOR.** Şemsiye
   bütçe `ad_account_id IS NULL` ile duruyor; "kalanları say" sorgusu
   `WHERE ad_account_id = $1` dediği için o satır HİÇ görünmüyordu. Oysa

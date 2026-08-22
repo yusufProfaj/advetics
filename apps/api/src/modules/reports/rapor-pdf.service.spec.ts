@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import type { ReportData } from '@advetics/shared';
@@ -221,5 +223,228 @@ describe('RaporPdfService', () => {
     const pdf = await svc.uret(VERI);
     // Başlık üstveride düz metin (UTF-16BE) olarak duruyor.
     expect(icerik(pdf)).toContain('/title');
+  });
+});
+
+/**
+ * ═══ ÖNE ÇIKAN REKLAMLAR BÖLÜMÜ ═══
+ *
+ * Bu bölüm PDF'te uzun süre YOKTU: kreatif görselini indirmek sunucudan
+ * dışarı bir HTTP isteği demek ve o istek üç ayrı şekilde zarar verebiliyor
+ * (SSRF, askıda kalan bağlantı, sınırsız gövde). Kontroller
+ * `kreatif-gorseli.spec.ts` içinde; burada sınanan şey ÇİZİM: görsel gelsin
+ * ya da gelmesin sayfanın bozulmaması ve eksiğin SEBEBİNİN yazılması.
+ *
+ * METİN DÜZ ARANAMIYOR. Yazı tipi ALT KÜME gömülüyor, yani çizilen metin
+ * belgede glif kimlikleri olarak duruyor. Bu yüzden iddialar `iceriyorMu`
+ * ile ToUnicode haritasına bakıyor ve fixture'ın geri kalanı BİLEREK ASCII:
+ * belgede bir Türkçe karakter görünüyorsa kaynağı yalnızca uyarı cümlesi
+ * olabilir. (Aynı tuzağa bu dosyanın ilk hâlinde de düşülmüştü.)
+ */
+describe('öne çıkan reklamlar', () => {
+  const JPEG_1x1 = Buffer.from(
+    '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a' +
+      'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA' +
+      'AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==',
+    'base64',
+  );
+
+  /**
+   * KÜÇÜK `ç` UYARI CÜMLESİNE ÖZGÜ — ve bu seçim ölçülerek yapıldı.
+   *
+   * İlk denemem `ı` idi ve YANLIŞTI: bölüm başlığı "Öne Çıkan Reklamlar"
+   * zaten `ı` taşıyor, yani harf uyarı hiç çizilmese de belgede vardı ve
+   * iddia her zaman doğru çıkıyordu.
+   *
+   * Küçük `ç` yalnızca uyarının son kelimesinde ("çözebilir") geçiyor:
+   * başlıktaki `Ç` BÜYÜK (ayrı kod noktası), satırlardaki "dönüşüm" ve
+   * yer tutucudaki "görsel yok" `ç` taşımıyor, fixture metinleri ASCII.
+   *
+   * Bu ikisi birbirini doğruluyor: NEGATİF test (görseli olmayan reklam)
+   * belgede başka hiçbir `ç` kaynağı olmadığını, POZİTİF test uyarının onu
+   * eklediğini gösteriyor.
+   */
+  const UYARI_HARFI = 'ç';
+
+  function veri(over: Partial<ReportData> = {}): ReportData {
+    return {
+      ...VERI,
+      // Fixture ASCII: aşağıdaki iddia buna dayanıyor.
+      client: { id: 'c1', name: 'Sabanci Insaat' },
+      title: 'Rapor',
+      closingText: null,
+      sections: ['top_ads'],
+      topAds: [
+        {
+          id: 'a1',
+          name: 'Ikon Live gorselli reklam',
+          campaignName: 'Bagcilar kampanyasi',
+          imageUrl: 'https://scontent.xx.fbcdn.net/v/gorsel.jpg',
+          headline: 'Simdi kesfet',
+          spendMicros: '821770000',
+          conversions: 5,
+          cpa: 164.35,
+          ctr: 1.58,
+        },
+        {
+          id: 'a2',
+          name: 'Urla villa arama reklami',
+          campaignName: 'Google Search',
+          // GÖRSEL ADRESİ HİÇ YOK: Google arama reklamının normal hâli.
+          imageUrl: null,
+          headline: 'Urlada satilik villa',
+          spendMicros: '303700000',
+          conversions: 15,
+          cpa: 20.24,
+          ctr: 4.83,
+        },
+      ],
+      ...over,
+    };
+  }
+
+  /** Ağ ÇAĞRILMIYOR: gerçek CDN'e çıkmak testi hem yavaş hem kırılgan yapardı. */
+  const dusen = (async () => new Response(null, { status: 404 })) as unknown as typeof fetch;
+  const veren = (async () => new Response(JPEG_1x1)) as unknown as typeof fetch;
+
+  it('KRİTİK: fixture ASCII — test kendi öncülünü sınıyor', () => {
+    /*
+     * Bu iddia olmadan aşağıdaki testler SESSİZCE değersizleşir: fixture'a
+     * bir gün Türkçe karakter girerse `iceriyorMu` her zaman true döner ve
+     * "uyarı çizildi" iddiası hep doğru olur.
+     */
+    const d = veri();
+    const metin = [
+      d.title,
+      d.client.name,
+      ...d.topAds.flatMap((a) => [a.name, a.campaignName, a.headline ?? '']),
+    ].join(' ');
+    expect(metin).not.toContain(UYARI_HARFI);
+  });
+
+  it('KRİTİK: bölüm GERÇEKTEN çiziliyor — sessizce atlanmıyor', async () => {
+    /*
+     * ESKİ DAVRANIŞ: `top_ads` şablonda seçiliyse PDF onu SESSİZCE atlıyordu.
+     * Danışman bölümü seçiyor, belgede hiç görmüyor ve sebebini hiçbir yerde
+     * bulamıyordu.
+     */
+    const ile = await svc.uret(veri(), { getir: veren });
+    const olmadan = await svc.uret(veri({ sections: [] }), { getir: veren });
+    expect(ile.byteLength).toBeGreaterThan(olmadan.byteLength + 500);
+  });
+
+  it('KRİTİK: alınamayan görsel SAYIYLA bildiriliyor', async () => {
+    // Platform CDN adresleri süreli. Sayı yazılmazsa danışman belgeyi
+    // müşteriye gönderdikten SONRA öğreniyor.
+    const pdf = await svc.uret(veri(), { getir: dusen });
+    expect(iceriyorMu(pdf, UYARI_HARFI), 'uyarı cümlesi çizilmemiş').toBe(true);
+  });
+
+  it('KRİTİK: görseli OLMAYAN reklam "alınamadı" SAYILMIYOR', async () => {
+    /*
+     * İKİ DURUM AYRI. Google arama reklamının görseli hiç yok — bu bir arıza
+     * değil. İkisini aynı cümleye çevirmek, olmayan bir sorunu her raporda
+     * bildirmek olurdu ve uyarı okunmaz hâle gelirdi.
+     */
+    const yalnizMetin = veri().topAds[1]!;
+    const pdf = await svc.uret(veri({ topAds: [yalnizMetin] }), { getir: dusen });
+    expect(iceriyorMu(pdf, UYARI_HARFI), 'olmayan bir arıza bildirilmiş').toBe(false);
+  });
+
+  it('gerçek JPEG belgeye GÖMÜLÜYOR', async () => {
+    const pdf = await svc.uret(veri(), { getir: veren });
+    // Gömülü JPEG PDF'te DCTDecode filtresiyle duruyor.
+    expect(icerik(pdf)).toContain('/dctdecode');
+    // Ve görsel geldiği için uyarı YOK.
+    expect(iceriyorMu(pdf, UYARI_HARFI)).toBe(false);
+  });
+
+  it('KRİTİK: geniş görsel KAREYE EZİLMİYOR', async () => {
+    /*
+     * Reklam görselleri çoğunlukla 1200×628. Sabit 56×56 çizmek onu kareye
+     * sıkıştırıyor ve müşteriye giden belgenin tamamını özensiz gösteriyor.
+     *
+     * Ölçüm çizim komutundan: pdf-lib görselin genişlik/yükseklik matrisini
+     * içerik akışına yazıyor. Kare çizimde ikisi EŞİT olurdu.
+     */
+    const kaynak = readFileSync(join(__dirname, 'rapor-pdf.service.ts'), 'utf8');
+    const i = kaynak.indexOf("if (sonuc && 'img' in sonuc)");
+    expect(i, 'çizim dalı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const dilim = kaynak.slice(i, kaynak.indexOf('} else {', i));
+    expect(dilim).toContain('Math.min(KUTU / sonuc.img.width, KUTU / sonuc.img.height)');
+    expect(dilim).not.toContain('width: KUTU, height: KUTU');
+  });
+
+  it('KRİTİK: bozuk baytlar PDF üretimini DÜŞÜRMÜYOR', async () => {
+    /*
+     * Baytlar doğru JPEG imzasını taşıyıp yine de bozuk olabiliyor (kesik
+     * indirme). `embedJpg` o durumda fırlatıyor ve tek bir reklamın görseli
+     * yüzünden müşteriye giden belgenin tamamı kaybolurdu.
+     */
+    const bozuk = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x01, 0x02]);
+    const getir = (async () => new Response(bozuk)) as unknown as typeof fetch;
+    const pdf = await svc.uret(veri(), { getir });
+    expect(pdf.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    expect(iceriyorMu(pdf, UYARI_HARFI), 'bozuk görsel sessizce yutulmuş').toBe(true);
+  });
+
+  it('KRİTİK: KALICI hata GEÇİCİ hatadan ayrı yazılıyor', async () => {
+    /*
+     * YAPILACAK İŞ FARKLI. "zaman aşımı" geçici — raporu yeniden üretmek
+     * çözüyor. "desteklenmeyen biçim" kalıcı: Meta thumbnail'ı WebP dönmüş
+     * ve pdf-lib onu gömemiyor; yeniden üretmek hiçbir şeyi değiştirmiyor.
+     * Tek bir "alınamadı" cümlesi danışmanı sonuçsuz bir denemeye gönderirdi.
+     */
+    const webp = Buffer.from([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
+    const getir = (async () => new Response(webp)) as unknown as typeof fetch;
+    const webpPdf = await svc.uret(veri(), { getir });
+    const dusenPdf = await svc.uret(veri(), { getir: dusen });
+
+    /*
+     * `J` SEBEP DİZGESİNE ÖZGÜ: "desteklenmeyen biçim (yalnızca JPEG/PNG)".
+     * Belgenin geri kalanında — başlık, tarih, ASCII fixture, sayılar — hiç
+     * `J` yok. 404 belgesinde de yok; ikisinin karşılaştırılması sebebin
+     * GERÇEKTEN yazıldığını, sabit bir cümle olmadığını gösteriyor.
+     */
+    expect(iceriyorMu(webpPdf, 'J'), 'kalıcı sebep yazılmamış').toBe(true);
+    expect(iceriyorMu(dusenPdf, 'J'), 'sebep sabit yazılıyor olmalı değil').toBe(false);
+    expect(iceriyorMu(webpPdf, UYARI_HARFI)).toBe(true);
+  });
+
+  it('KRİTİK: bölüm seçili DEĞİLSE hiç indirme yapılmıyor', async () => {
+    // Koşulsuz indirmek, `top_ads` içermeyen her raporu altı ağ isteği kadar
+    // yavaşlatırdı — ve o istekler belgede hiç görünmezdi.
+    let cagri = 0;
+    const sayan = (async () => {
+      cagri++;
+      return new Response(JPEG_1x1);
+    }) as unknown as typeof fetch;
+    await svc.uret(veri({ sections: ['summary'] }), { getir: sayan });
+    expect(cagri).toBe(0);
+  });
+
+  it('KRİTİK: sayfaya sığmayan reklamlar SESSİZCE düşmüyor', async () => {
+    /*
+     * Sayfa dolduğunda döngü kırılıyor. Bugün sorgu altı satırla sınırlı ve
+     * hepsi sığıyor; o sınır büyütülürse belge sessizce eksik basılır ve
+     * farkı ilk gören müşteri olur — bu projenin tekrar eden hata deseni.
+     *
+     * `Z` SAYIM CÜMLESİNE ÖZGÜ DEĞİL, o yüzden ölçüm karşılaştırmayla:
+     * on iki reklamlı belge, altı reklamlı belgeden BÜYÜK olmalı ama
+     * satırların hepsini çizemez; uyarı cümlesi farkı `ğ` ile gösteriyor
+     * ("sığdı").
+     */
+    const tek = veri().topAds[1]!;
+    const cok = Array.from({ length: 14 }, (_, i) => ({ ...tek, id: `a${i}`, name: `Reklam ${i}` }));
+    const pdf = await svc.uret(veri({ topAds: cok }), { getir: veren });
+
+    expect(pdf.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    expect(iceriyorMu(pdf, 'ğ'), 'kesme bildirilmemiş').toBe(true);
+  });
+
+  it('reklam yoksa SEBEBİ yazılıyor — boş sayfa değil', async () => {
+    const bos = await svc.uret(veri({ topAds: [] }), { getir: veren });
+    // "Bu dönemde harcama yapan reklam yok." — Türkçe metin çizildi.
+    expect(iceriyorMu(bos, 'ö')).toBe(true);
   });
 });
