@@ -351,7 +351,7 @@ export async function createHarness(): Promise<Harness> {
         -- CASCADE'i sayesinde dolayli temizleniyorlardi; bu TESADUFI ve
         -- org_id/client_id iliskisi bir gun nullable olursa sessizce sizarlar.
         -- (Backtick YOK: sablon dizesini ortasindan kapatiyor — CLAUDE.md.)
-        report_shares, report_templates,
+        report_shares, report_templates, user_email_accounts,
         insights_daily, api_usage_log, sync_jobs,
         ads, creatives, ad_groups, campaigns,
         ad_accounts, social_profiles, platform_connections,

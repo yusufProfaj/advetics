@@ -17,6 +17,7 @@ export * from './schemas/crop.schema';
 export * from './schemas/draft-tree.schema';
 export * from './schemas/form.schema';
 export * from './schemas/lead.schema';
+export * from './schemas/email-account.schema';
 export * from './schemas/metrics.schema';
 export * from './schemas/report.schema';
 export * from './schemas/rule.schema';

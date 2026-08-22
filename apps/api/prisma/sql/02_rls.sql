@@ -147,6 +147,9 @@ DECLARE
     'fx_rates', 'sync_jobs', 'api_usage_log',
     -- Modül 6
     'report_templates', 'report_shares',
+    -- Danışman başına e-posta kimliği. Politikası DİĞERLERİNDEN FARKLI:
+    -- satır yalnızca SAHİBİNE görünüyor, org yöneticisine bile değil.
+    'user_email_accounts',
     -- Modül 5
     'monthly_budgets', 'rules', 'rule_runs', 'rule_action_logs',
     -- Modül 7
@@ -1480,4 +1483,41 @@ CREATE POLICY adv_draft_ads_delete ON draft_ads
       JOIN draft_campaigns c ON c.id = g.campaign_id
       WHERE g.id = draft_ads.ad_group_id AND app.can_access_client(c.client_id)
     )
+  );
+
+-- ============================================================================
+-- user_email_accounts — DANIŞMANIN KENDİ E-POSTA KİMLİĞİ
+-- ============================================================================
+--
+-- SATIR YALNIZCA SAHİBİNE GÖRÜNÜYOR. Org yöneticisi bile göremiyor ve bu
+-- bilinçli: satır o kullanicinin uygulama parolasini (sifreli) tasiyor ve
+-- onu okuyabilmek, o hesabin adina mail gonderebilmek demek. Yonetici
+-- birinin e-posta kimligini kurmak zorunda degil; herkes kendi ayarini
+-- kendisi giriyor.
+--
+-- Bu, depodaki diger tablolardan FARKLI bir kural: cogunda org yoneticisi
+-- her seyi goruyor. Fark burada yaziyor ki bir gun "tutarlilik" adina
+-- gevsetilmesin.
+-- ENABLE/FORCE yukarıdaki tablo listesi döngüsünde yapılıyor.
+
+CREATE POLICY adv_user_email_select ON user_email_accounts
+  FOR SELECT USING (
+    org_id = app.current_org_id() AND user_id = app.current_user_id()
+  );
+
+CREATE POLICY adv_user_email_insert ON user_email_accounts
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id() AND user_id = app.current_user_id()
+  );
+
+CREATE POLICY adv_user_email_update ON user_email_accounts
+  FOR UPDATE USING (
+    org_id = app.current_org_id() AND user_id = app.current_user_id()
+  ) WITH CHECK (
+    org_id = app.current_org_id() AND user_id = app.current_user_id()
+  );
+
+CREATE POLICY adv_user_email_delete ON user_email_accounts
+  FOR DELETE USING (
+    org_id = app.current_org_id() AND user_id = app.current_user_id()
   );

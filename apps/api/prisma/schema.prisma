@@ -108,9 +108,11 @@ model Organization {
   draftAdGroups   DraftAdGroup[]
   draftAds        DraftAd[]
 
-  autoBoostPresets    AutoBoostPreset[]
-  autoBoostQueueItems AutoBoostQueueItem[]
+  autoBoostPresets       AutoBoostPreset[]
+  autoBoostQueueItems    AutoBoostQueueItem[]
   autoBoostSubscriptions AutoBoostSubscription[]
+  userEmailAccounts      UserEmailAccount[]
+
   @@map("organizations")
 }
 
@@ -164,6 +166,7 @@ model User {
   refreshTokens      RefreshToken[]
   passwordResets     PasswordResetToken[]
   connectionsCreated PlatformConnection[]
+  emailAccount       UserEmailAccount?
 
   @@unique([orgId, email])
   @@index([orgId, status])
@@ -211,9 +214,9 @@ model Client {
   iban         String? @db.VarChar(34)
   notes        String? @db.VarChar(2000)
 
-  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  archivedAt        DateTime?    @map("archived_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
 
   organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   memberships  Membership[]
@@ -248,9 +251,10 @@ model Client {
   adCreatives     AdCreative[]
   draftCampaigns  DraftCampaign[]
 
-  autoBoostPresets    AutoBoostPreset[]
-  autoBoostQueueItems AutoBoostQueueItem[]
+  autoBoostPresets       AutoBoostPreset[]
+  autoBoostQueueItems    AutoBoostQueueItem[]
   autoBoostSubscriptions AutoBoostSubscription[]
+
   @@unique([orgId, slug])
   @@index([orgId, status])
   @@map("clients")
@@ -574,8 +578,8 @@ model AdAccount {
 /// Facebook sayfası veya Instagram Business hesabı — Auto-Boost (Modül 7) için.
 /// SADECE Meta. Google'da karşılığı yoktur.
 model SocialProfile {
-  id     String @id @default(uuid()) @db.Uuid
-  orgId  String @map("org_id") @db.Uuid
+  id           String  @id @default(uuid()) @db.Uuid
+  orgId        String  @map("org_id") @db.Uuid
   /// null => havuzda, henüz hiçbir müşteriye atanmamış. Atanmamış sayfa
   /// senkronize EDİLMEZ ve üzerine form/reklam kurulamaz: `organic_posts`,
   /// `leads` ve `lead_forms` satırları `client_id` taşıyor ve NULL yazılan
@@ -641,9 +645,10 @@ model SocialProfile {
   /// Tekillik ORGANİZASYON bazında: ikinci bir Meta kimliği bağlandığında aynı
   /// Facebook sayfası iki bağlantının da altında görünüyor ve bağlantı bazlı
   /// kısıt aynı sayfa için iki satır üretirdi.
-  autoBoostPresets    AutoBoostPreset[]
-  autoBoostQueueItems AutoBoostQueueItem[]
-  autoBoostSubscription  AutoBoostSubscription?
+  autoBoostPresets      AutoBoostPreset[]
+  autoBoostQueueItems   AutoBoostQueueItem[]
+  autoBoostSubscription AutoBoostSubscription?
+
   @@unique([orgId, externalId])
   @@index([orgId, clientId])
   @@index([clientId, syncEnabled])
@@ -657,13 +662,13 @@ model SocialProfile {
 /// satırı `consumedAt` ile bir kez tüketilir. Token'ın kendisi değil SHA-256
 /// hash'i saklanır.
 model OAuthState {
-  id       String @id @default(uuid()) @db.Uuid
-  orgId    String @map("org_id") @db.Uuid
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
   /// null => ajans geneli yetkilendirme. Dolu olması yalnızca akışın belirli
   /// bir müşteri için başlatıldığı hâli anlatır (müşteri kendi hesabını
   /// devretmişse).
-  clientId String? @map("client_id") @db.Uuid
-  platform Platform
+  clientId  String?  @map("client_id") @db.Uuid
+  platform  Platform
   tokenHash String   @unique @map("token_hash") @db.VarChar(64)
 
   /// Yetkilendirme sonrası dönülecek panel yolu.
@@ -1056,6 +1061,52 @@ model FxRate {
 /// müşteriye farklı şeyler gösteriyor: birinde WhatsApp mesajları önemli,
 /// diğerinde anahtar kelimeler. Organizasyon geneli varsayılan şablon
 /// `clientId = null` ile tutuluyor.
+/// Danışman başına e-posta kimliği — rapor müşteriye ONUN adresinden gidiyor.
+///
+/// PAROLA ŞİFRELİ ve hiçbir okuma yolundan geri dönmüyor. Bir kullanıcının
+/// uygulama parolasını saklamak, o hesabın adına mail gönderebilmek demek;
+/// satır yalnızca SAHİBİNE görünüyor (RLS), org yöneticisi bile parolayı
+/// okuyamıyor.
+model UserEmailAccount {
+  id     String @id @default(uuid()) @db.Uuid
+  orgId  String @map("org_id") @db.Uuid
+  /// Tekil: bir kullanıcının tek e-posta kimliği var.
+  userId String @unique @map("user_id") @db.Uuid
+
+  fromName  String @map("from_name") @db.VarChar(160)
+  fromEmail String @map("from_email") @db.VarChar(255)
+
+  smtpHost    String  @map("smtp_host") @db.VarChar(255)
+  smtpPort    Int     @map("smtp_port")
+  smtpSecure  Boolean @default(true) @map("smtp_secure")
+  smtpUser    String  @map("smtp_user") @db.VarChar(255)
+  smtpPassEnc Bytes   @map("smtp_pass_enc")
+  keyVersion  Int     @default(1) @map("key_version")
+
+  /// İmza HTML'i — TEMİZLENMİŞ hâliyle saklanıyor.
+  ///
+  /// Gmail'in imzası SMTP ile giden maile otomatik eklenmiyor; onu Gmail'in
+  /// arayüzü ekliyor. Girişte `script`/`style`/olay öznitelikleri atılıyor ve
+  /// atılanlar kullanıcıya söyleniyor — sonradan sürpriz olmasın.
+  signatureHtml String? @map("signature_html")
+
+  /// "Kaydedildi" doğrulama DEĞİL: SMTP kimliği yanlışsa hata ilk gerçek
+  /// gönderimde çıkar ve o gönderim müşteriye gidecek olandır. Kendine test
+  /// maili gönderilmeden NULL kalıyor.
+  verifiedAt  DateTime? @map("verified_at") @db.Timestamptz(6)
+  lastError   String?   @map("last_error") @db.VarChar(500)
+  lastErrorAt DateTime? @map("last_error_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("user_email_accounts")
+}
+
 model ReportTemplate {
   id       String  @id @default(uuid()) @db.Uuid
   orgId    String  @map("org_id") @db.Uuid
@@ -1390,7 +1441,7 @@ model OrganicPost {
   client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
   boosts        Boost[]
-  draftAds     DraftAd[]
+  draftAds      DraftAd[]
 
   @@unique([socialProfileId, externalId])
   @@index([clientId, publishedAt(sort: Desc)])
@@ -1462,10 +1513,10 @@ model BoostRule {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?   @map("created_by") @db.Uuid
 
-  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  socialProfile SocialProfile? @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
-  boosts        Boost[]
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile  SocialProfile?  @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  boosts         Boost[]
   draftCampaigns DraftCampaign[]
 
   @@index([clientId, enabled])
@@ -1572,6 +1623,7 @@ model Boost {
   /// (aday/onaylı/oluşturuluyor/aktif) çakışıyor. Reddedilmiş ya da başarısız
   /// bir boost yeniden denenebilmeli.
   autoBoostQueueItems AutoBoostQueueItem[]
+
   @@index([clientId, status, createdAt(sort: Desc)])
   @@index([boostRuleId, createdAt(sort: Desc)])
   @@map("boosts")
@@ -1891,10 +1943,10 @@ model SyncJob {
   /// Yazılamayıp ATILAN satır sayısı. NULL = bilinmiyor (kolon öncesi kayıt);
   /// 0 ile aynı şey DEĞİL. `rows_upserted = 0` ve `rows_skipped > 0` olan bir
   /// iş "başarılı" görünür ama hiçbir veri yazmamıştır.
-  rowsSkipped  Int? @map("rows_skipped")
+  rowsSkipped Int?    @map("rows_skipped")
   /// İnsan okuması için özet: hangi aralık, hangi seviye, kaç satır, kaç
   /// atlandı. Bugüne kadar yalnızca worker log'una yazılıyordu.
-  note         String? @db.VarChar(500)
+  note        String? @db.VarChar(500)
 
   /// Meta async insights job kimliği — worker yeniden başlasa bile polling sürer.
   platformJobId String? @map("platform_job_id") @db.VarChar(255)
@@ -2005,13 +2057,13 @@ model LeadForm {
   client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   socialProfile SocialProfile @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
 
-  root         LeadForm   @relation("LeadFormRoot", fields: [rootId], references: [id], onDelete: Cascade)
-  versions     LeadForm[] @relation("LeadFormRoot")
-  supersededBy LeadForm?  @relation("LeadFormSupersede", fields: [supersededById], references: [id], onDelete: SetNull)
-  supersedes   LeadForm[] @relation("LeadFormSupersede")
-  adDrafts     AdDraft[]
+  root          LeadForm       @relation("LeadFormRoot", fields: [rootId], references: [id], onDelete: Cascade)
+  versions      LeadForm[]     @relation("LeadFormRoot")
+  supersededBy  LeadForm?      @relation("LeadFormSupersede", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes    LeadForm[]     @relation("LeadFormSupersede")
+  adDrafts      AdDraft[]
   draftAdGroups DraftAdGroup[]
-  leads        Lead[]
+  leads         Lead[]
 
   @@index([clientId, createdAt(sort: Desc)])
   @@index([rootId, version])
@@ -2131,8 +2183,8 @@ model Asset {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid
 
-  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client       Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization  Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   platformRefs  AssetPlatformRef[]
   draftAssets   AdDraftAsset[]
   bulkItems     BulkItem[]
@@ -2205,8 +2257,8 @@ model AdCreative {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid
 
-  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client       Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
   assets       AdCreativeAsset[]
   draftAds     DraftAd[]
 
@@ -2361,8 +2413,8 @@ model DraftCampaign {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid
 
-  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client       Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   adAccount      AdAccount       @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
   sourceCampaign DraftCampaign?  @relation("DraftCampaignCopy", fields: [sourceCampaignId], references: [id], onDelete: SetNull)
   copies         DraftCampaign[] @relation("DraftCampaignCopy")
@@ -2513,13 +2565,13 @@ model AutoBoostPreset {
   /// sessizce yok sayılması demek olurdu.)
   settings Json @db.JsonB
 
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
 
-  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  socialProfile SocialProfile? @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  organization  Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client        Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  socialProfile SocialProfile?       @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
   queueItems    AutoBoostQueueItem[]
 
   @@index([clientId, platform])
