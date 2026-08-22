@@ -175,6 +175,11 @@ export class SearchTermSyncService {
         spend_micros, conversions, conversion_value_micros, currency, fetched_at
       ) VALUES ${Prisma.join(values, ', ')}
       ON CONFLICT (date, ad_account_id, term_hash) DO UPDATE SET
+        -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
+        -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
+        -- icin "yeniden senkronize et" tavsiyesi de ise yaramiyordu.
+        -- Kaynak HER ZAMAN hesabin o anki musterisi.
+        client_id = EXCLUDED.client_id,
         ad_group_id = EXCLUDED.ad_group_id,
         keyword_text = EXCLUDED.keyword_text,
         match_type = EXCLUDED.match_type,

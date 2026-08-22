@@ -11,6 +11,7 @@ import {
   type ClientChannels,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { atamaBildirimi, type AtamaYaniti } from '@/lib/atama-bildirimi';
 import { PlatformLogo } from '@/components/platform-logo';
 
 /**
@@ -134,6 +135,7 @@ function useAtama(kind: ChannelKind, itemId: string) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  const [bildirim, setBildirim] = useState<string | null>(null);
 
   const reklamHesabi = kind === 'meta_ads' || kind === 'google_ads';
   const yol = reklamHesabi
@@ -143,8 +145,24 @@ function useAtama(kind: ChannelKind, itemId: string) {
   async function ata(clientId: string | null): Promise<void> {
     setBusy(true);
     setHata(null);
+    setBildirim(null);
     try {
-      await apiFetch(yol, { method: 'PATCH', body: JSON.stringify({ clientId }) });
+      const res = await apiFetch<AtamaYaniti>(yol, {
+        method: 'PATCH',
+        body: JSON.stringify({ clientId }),
+      });
+      /*
+       * TAŞINAN VE KALAN SAYILARI EKRANA YAZILIYOR.
+       *
+       * Hesap el değiştirince kampanyaları, kreatifleri ve geçmiş metrikleri
+       * de yeni müşteriye geçiyor; bütçe, kural ve taslak ise BİLEREK eskide
+       * kalıyor. İkisi de bir müşterinin raporundaki rakamı değiştiriyor ve
+       * sessiz kalması "veri mi kayboldu" sorusunu üretiyor.
+       *
+       * `router.refresh()` bildirimi silmiyor: bileşen aynı kalıyor, yalnızca
+       * sunucu verisi tazeleniyor.
+       */
+      setBildirim(atamaBildirimi(res ?? {}, clientId !== null));
       // ATAMA İZLEMEYİ AÇIP GEÇMİŞİ KUYRUĞA ALIYOR; sayfa yenilenince
       // "izleme açık" rozeti görünmeli.
       router.refresh();
@@ -155,7 +173,7 @@ function useAtama(kind: ChannelKind, itemId: string) {
     }
   }
 
-  return { ata, busy, hata };
+  return { ata, busy, hata, bildirim };
 }
 
 function BagliKart({
@@ -167,7 +185,7 @@ function BagliKart({
   kind: ChannelKind;
   item: ChannelItem;
 }) {
-  const { ata, busy, hata } = useAtama(kind, item.id);
+  const { ata, busy, hata, bildirim } = useAtama(kind, item.id);
   void clientId;
 
   return (
@@ -199,6 +217,7 @@ function BagliKart({
         </p>
       )}
       {hata && <p className="mt-1.5 text-[11px] text-danger">{hata}</p>}
+      {bildirim && <p className="mt-1.5 text-[11px] text-ink-muted">{bildirim}</p>}
     </li>
   );
 }
@@ -212,7 +231,7 @@ function SecilebilirSatir({
   kind: ChannelKind;
   item: ChannelItem;
 }) {
-  const { ata, busy, hata } = useAtama(kind, item.id);
+  const { ata, busy, hata, bildirim } = useAtama(kind, item.id);
 
   return (
     <li>
@@ -238,6 +257,7 @@ function SecilebilirSatir({
         )}
       </div>
       {hata && <p className="mt-1 px-3 text-[11px] text-danger">{hata}</p>}
+      {bildirim && <p className="mt-1 px-3 text-[11px] text-ink-muted">{bildirim}</p>}
     </li>
   );
 }

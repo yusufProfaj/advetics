@@ -613,6 +613,16 @@ export class RulesService {
       LEFT JOIN spend s ON s.ad_account_id = a.id
       LEFT JOIN monthly_budgets b
              ON b.ad_account_id = a.id AND b.month = ${monthStart}::date
+             -- MUSTERI YUKLEMI ZORUNLU. Bu sorgudaki diger her dal
+             -- client_id ile suzuyor (spend, umbrella, ad_accounts) —
+             -- yalnizca bu join atlamisti. Bir reklam hesabi baska bir
+             -- musteriye atandiginda BUTCE ESKI MUSTERIDE KALIYOR (kasitli:
+             -- birinin onayladigi ticari taahhut). O satir burada
+             -- suzulmezse kural motoru B'nin harcamasini A'NIN BUTCESINE
+             -- boluyor ve budget_spent_ratio kosulu kampanya DURDURUYOR.
+             -- Iki musterinin de ayni ay icin satiri varsa join iki satir
+             -- uretiyor ve hangisinin kazandigi belirsiz.
+             AND b.client_id = ${clientId}::uuid
       LEFT JOIN umbrella u ON true
       CROSS JOIN client_total ct
       WHERE a.client_id = ${clientId}::uuid

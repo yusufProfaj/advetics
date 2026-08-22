@@ -62,7 +62,27 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
    * @example
    * const clients = await prisma.withTenant(ctx, (tx) => tx.client.findMany());
    */
-  async withTenant<T>(ctx: TenantContext, fn: (tx: TenantClient) => Promise<T>): Promise<T> {
+  async withTenant<T>(
+    ctx: TenantContext,
+    fn: (tx: TenantClient) => Promise<T>,
+    /**
+     * VARSAYILAN SÜREYİ YALNIZCA TOPLU VERİTABANI İŞİ UZATIR.
+     *
+     * Prisma'nın etkileşimli transaction sınırı 5 saniye ve bu bilerek kısa:
+     * istek yolunda daha uzun süren bir transaction, bağlantı havuzunu tutup
+     * bütün paneli yavaşlatıyor. Reklam hesabı yeniden atanırken ise tek bir
+     * `UPDATE` yüz binlerce `insights_daily` satırına dokunabiliyor (90 günlük
+     * geçmiş × dört varlık seviyesi) ve bu 5 saniyeyi aşarsa transaction
+     * ÖLÜYOR: hesap taşınmış, verisi taşınmamış olarak kalırdı — düzeltmeye
+     * çalıştığımız hatanın tam kendisi.
+     *
+     * KURAL DEĞİŞMEDİ: burada uzatılan yalnızca VERİTABANI işi. Platform
+     * çağrısı hâlâ transaction'ın dışında kalmak zorunda — Meta'ya yapılan
+     * üç-dört çağrı üretimde 12,5 saniye sürdü ve transaction öldüğünde hata
+     * bile kaydedilemedi.
+     */
+    opts?: { timeoutMs?: number },
+  ): Promise<T> {
     if (!ctx?.orgId || !ctx?.userId) {
       // Bağlamsız çağrı bir programlama hatasıdır. Sessizce boş sonuç
       // döndürmek yerine gürültülü şekilde patlamayı tercih ediyoruz.
@@ -93,7 +113,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           set_config('app.current_active_client_id', ${ctx.activeClientId ?? ''}, true)
       `;
       return fn(tx);
-    });
+    }, opts?.timeoutMs ? { timeout: opts.timeoutMs, maxWait: opts.timeoutMs } : undefined);
   }
 
   /**

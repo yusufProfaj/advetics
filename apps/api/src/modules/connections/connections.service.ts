@@ -30,6 +30,7 @@ import {
   type IAdPlatformProvider,
 } from './provider.types';
 import { TokenVaultService } from './token-vault.service';
+import { hesapVerisiniTasi, type TasimaSonucu } from './hesap-verisi-tasima';
 
 interface Meta {
   ip?: string | null;
@@ -1522,6 +1523,15 @@ export class ConnectionsService {
           syncEnabled: before.syncEnabled,
           changed: false,
           platform: before.platform as Platform,
+          // YANIT ŞEKLİ HER DALDA AYNI. Alanı yalnızca değişiklik olan dalda
+          // döndürmek, panelde `undefined` okuyup "0 kayıt taşındı" yazmak
+          // demekti — ki hiçbir şey yapılmadığında bu doğru bir cümle değil.
+          movedRows: 0,
+          movedByTable: {} as TasimaSonucu['tasinan'],
+          leftBehind: {} as TasimaSonucu['kalan'],
+          stayingRows: 0,
+          clientWide: {} as TasimaSonucu['musteriGeneli'],
+          unlinkedBoostPages: 0,
         };
       }
 
@@ -1552,6 +1562,19 @@ export class ConnectionsService {
         data: { clientId, syncEnabled: clientId !== null },
       });
 
+      /*
+       * VERİ DE TAŞINIYOR — AYNI TRANSACTION'DA.
+       *
+       * Ayrı bir transaction'a almak, "hesap taşındı ama verisi taşınmadı"
+       * durumunu MÜMKÜN kılardı ve o durumun hiçbir belirtisi yok: iki
+       * müşterinin raporu da sessizce yanlış olurdu. İkisi ya birlikte olur
+       * ya hiç olmaz.
+       *
+       * Kuyruğa alma bilerek DIŞARIDA (aşağıda): Redis yavaşladığında
+       * transaction ölür ve atama bile kaydedilemezdi.
+       */
+      const tasima = await hesapVerisiniTasi(tx, adAccountId, clientId);
+
       await this.audit.record(tx, ctx, {
         action: clientId === null ? 'ad_account.unassigned' : 'ad_account.assigned',
         targetType: 'ad_account',
@@ -1561,9 +1584,45 @@ export class ConnectionsService {
         // ne zaman değişti" sorusunu cevaplıyor.
         clientId: clientId ?? before.clientId,
         before: { clientId: before.clientId, syncEnabled: before.syncEnabled },
-        after: { clientId: after.clientId, syncEnabled: after.syncEnabled, name: after.name },
+        after: {
+          clientId: after.clientId,
+          syncEnabled: after.syncEnabled,
+          name: after.name,
+          // TAŞINAN SATIR SAYILARI DENETİM KAYDINDA. Bir müşterinin
+          // raporundaki rakam bir gün "geçen ay başkaydı" diye
+          // sorgulandığında, cevabın nerede olduğu belli olsun.
+          tasinanSatirlar: tasima.tasinan,
+          eskiMusteridekiKayitlar: tasima.kalan,
+        },
         ...meta,
       });
+
+      /*
+       * ESKİ MÜŞTERİ DE KENDİ DENETİM SATIRINI ALIYOR.
+       *
+       * Denetim kaydı `clientId ?? before.clientId` ile YENİ müşteriye
+       * yazılıyor; doğrudan A→B atamasında A hiçbir satır almıyordu. Oysa
+       * kaybeden taraf A: kampanyaları, kreatifleri ve geçmiş metrikleri
+       * onun altından ÇIKTI ve raporundaki rakam değişti. "Geçen ay bu sayı
+       * başkaydı" sorusunun cevabı A'nın kendi denetim kaydında olmalı —
+       * B'nin kaydını A göremiyor (RLS).
+       */
+      if (before.clientId !== null && clientId !== null) {
+        await this.audit.record(tx, ctx, {
+          action: 'ad_account.unassigned',
+          targetType: 'ad_account',
+          targetId: adAccountId,
+          clientId: before.clientId,
+          before: { clientId: before.clientId, syncEnabled: before.syncEnabled },
+          after: {
+            clientId: after.clientId,
+            name: after.name,
+            tasinanSatirlar: tasima.tasinan,
+            eskiMusteridekiKayitlar: tasima.kalan,
+          },
+          ...meta,
+        });
+      }
 
       return {
         id: after.id,
@@ -1571,8 +1630,24 @@ export class ConnectionsService {
         syncEnabled: after.syncEnabled,
         changed: true,
         platform: after.platform as Platform,
+        movedRows: tasima.toplam,
+        movedByTable: tasima.tasinan,
+        leftBehind: tasima.kalan,
+        stayingRows: tasima.kalanVeri,
+        clientWide: tasima.musteriGeneli,
+        unlinkedBoostPages: tasima.koparilanFaturaBagi,
       };
-    });
+    },
+    /*
+     * SÜRE UZATILDI — TEK SEBEP `insights_daily`.
+     *
+     * Bir reklam hesabının 90 günlük geçmişi dört varlık seviyesinde yüz
+     * binlerce satır olabiliyor ve hepsinin `client_id`'si tek `UPDATE` ile
+     * değişiyor. Varsayılan 5 saniyede transaction ölseydi hesap taşınmış,
+     * verisi taşınmamış olarak kalırdı. Bu bir istek yolu değil, seyrek bir
+     * yönetim işlemi — bağlantıyı 30 saniye tutması kabul edilebilir.
+     */
+    { timeoutMs: 30_000 });
 
     /*
      * KUYRUK TRANSACTION'IN DIŞINDA. `withTenant` etkileşimli bir transaction

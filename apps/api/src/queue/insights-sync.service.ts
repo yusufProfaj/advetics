@@ -316,6 +316,11 @@ export class InsightsSyncService {
         -- birincil anahtarda hiçbir zaman eşleşmiyor ve her senkronizasyonda
         -- satır MÜKERRER olurdu.
         ON CONFLICT (date, entity_level, entity_id, breakdown_key) DO UPDATE SET
+          -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
+          -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
+          -- icin "yeniden senkronize et" tavsiyesi de ise yaramiyordu.
+          -- Kaynak HER ZAMAN hesabin o anki musterisi.
+          client_id = EXCLUDED.client_id,
           impressions = EXCLUDED.impressions,
           clicks = EXCLUDED.clicks,
           spend_micros = EXCLUDED.spend_micros,

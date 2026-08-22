@@ -109,9 +109,12 @@ buna göre veriliyor:
   ortasından kapatıyor; hata `TS1005: ';' expected` ve sebebi hiç belli olmuyor.
   `sql-template.spec.ts` bunu tarıyor. **Kural `--` satırlarıyla sınırlı DEĞİL:
   `/* */` blok yorumu ve sorgunun üstündeki JSDoc de aynı şablonun içinde.**
-  Bu oturumda üç kez aynı yere düşüldü ve tarama yalnızca `--` baktığı için
+  Bu oturumda dört kez aynı yere düşüldü ve tarama yalnızca `--` baktığı için
   hiçbirini yakalamadı; TypeScript'in gösterdiği satır her seferinde kusursuz
-  görünen SQL'di.
+  görünen SQL'di. `sql-template.spec.ts` artık yorum biçimine HİÇ bakmayan
+  ikinci bir dedektör taşıyor (`erkenKapananSablonlar`): bir `Prisma.sql`
+  şablonu kapandıktan sonra gelen ilk anlamlı karakter SQL gibi görünüyorsa
+  şablon ortasından kapanmış demektir.
 - **Yeni tablo ekleyince `test/pglite-harness.ts` içindeki `TRUNCATE` listesine
   ekle.** Yoksa testler arası veri sızar — en yanıltıcı test hatası türü.
 - **Yeni tablo ekleyince `prisma/sql/02_rls.sql` içindeki tablo listesine ve
@@ -304,6 +307,47 @@ buna göre veriliyor:
   reddedilecek ya da sessizce ülke geneline çıkacaktı. Bugün tek dosyada:
   `meta-targeting.ts`, ve `meta-targeting.spec.ts` yayın yollarının kendi
   `geo_locations` nesnesini kurmasını yasaklıyor.
+- **DENORMALİZE EDİLMİŞ SAHİPLİK KOLONU, SAHİP DEĞİŞİNCE KENDİLİĞİNDEN
+  TAŞINMIYOR.** `client_id` on beş tabloda BİLEREK denormalize (RLS
+  politikaları join'siz yazılabilsin diye). `assignAdAccount` yalnızca
+  `ad_accounts.client_id`'yi güncelliyordu: hesap A'dan B'ye geçince A'nın
+  raporunda ARTIK ONA AİT OLMAYAN harcama görünmeye devam ediyor, B hiçbir
+  geçmiş göremiyor ve bir sonraki senkronizasyon yeni satırları B'ye yazıp
+  eskileri A'da bırakarak geçmişi İKİYE BÖLÜYOR. Üçü de sessiz. Ayrım tek
+  yerde: `hesap-verisi-tasima.ts`. Platformun aynası ve ölçülmüş metrik
+  TAŞINIYOR (kampanya, grup, reklam, kreatif, metrikler, `sync_jobs`);
+  birinin KARARI olan kayıt kalıyor (bütçe, kural, boost, taslak, toplu
+  işlem) ve sayısı kullanıcıya söyleniyor. Süzgeç `ad_account_id` — panelde
+  atama iki adımlı yapılıyor (önce "Kaldır", sonra "Ata") ve ikinci adımda
+  önceki müşteri artık bilinmiyor.
+- **UPSERT, DENORMALİZE SAHİPLİK KOLONUNU DA GÜNCELLEMEK ZORUNDA.** Yedi
+  `ON CONFLICT DO UPDATE` bloğunun hiçbiri `client_id` yazmıyordu; `creatives`
+  upsert'i `ad_account_id = EXCLUDED.ad_account_id` yazıp `client_id`'yi
+  atlıyordu. Sonuç: satır yarım — hesabı doğru, müşterisi eski — ve "yeniden
+  senkronize et" tavsiyesi de işe yaramıyor. `upsert-client-id.spec.ts`.
+- **POLİTİKASI OLMAYAN UPDATE HATA VERMEZ, SESSİZCE SIFIR SATIR ETKİLER.**
+  `sync_jobs`'ta yalnızca SELECT ve INSERT politikası vardı; taşıma sekiz
+  tablodan yedisini taşıyıp sekizincisini sessizce atlıyordu ve belirtisi
+  yeni müşteride "Yapı: hiç · Metrik: hiç" oluyordu — düzeltilen hatanın ta
+  kendisi. **Bir RLS testi "patlamadı" ile yetinemez: `RETURNING` ile ETKİLENEN
+  SATIRI say.** İlk yazdığım test sekiz tabloyu saydığını sanıyordu ama
+  yalnızca ikisine satır yazıyordu; sıfır satırlık UPDATE politikadan bağımsız
+  olarak başarılı dönüyor ve test yeşildi. `hesap-tasima-rls.spec.ts`.
+  RLS politikaları Prisma migration'ının parçası DEĞİL: `02_rls.sql`
+  `deploy.sh` içindeki `db:rls` ile uygulanıyor.
+- **AYNI SORGUDAKİ HER DAL AYNI SÜZGECİ TAŞIMALI.** Kural motorunun bütçe
+  bekçisinde `spend`, `umbrella` ve `ad_accounts` `client_id` ile süzülüyordu,
+  yalnızca `monthly_budgets` join'i atlanmıştı. Hesap el değiştirdiğinde
+  bütçe eski müşteride kalıyor (kasıtlı) ve o satır B'nin harcamasına
+  bölünüyor — `budget_spent_ratio` koşulu B'nin kampanyalarını DURDURUYOR.
+  İki müşterinin de satırı varsa join iki satır üretiyor ve hangisinin
+  kazandığı belirsiz.
+- **HESABA BAĞLI OLMAYAN KAYIT, HESABA GÖRE SAYAN RAPORA GİRMİYOR.** Şemsiye
+  bütçe `ad_account_id IS NULL` ile duruyor; "kalanları say" sorgusu
+  `WHERE ad_account_id = $1` dediği için o satır HİÇ görünmüyordu. Oysa
+  taşımadan en çok o etkileniyor: ay ortasında hesap gidince eski müşterinin
+  harcaması düşüyor, bütçe bekçisi olmayan bir boşluk görüyor ve kuralların
+  bütçe ARTIRMASINA izin veriyor. Ayrı sorulup ayrı söyleniyor.
 - **`ad_accounts`, `platform_connections` ve `social_profiles` içinde
   `client_id` NULLABLE.** NULL = ajansın havuzunda, müşteriye atanmamış.
   Sahiplik `org_id`'de. Bu satırlar için senkronizasyon kuyruğa GİRMEMELİ —
@@ -390,7 +434,9 @@ okunup varsayılmadı — canlıda doğrulandı.
 - **RLS testlerde varsayılan olarak KAPALI** (worker rolü BYPASSRLS'i taklit
   ediyor). Ama kapatılabilir bir varsayılan: `SET ROLE` ile sahibi olmayan bir
   role geçen bir test politikaları GERÇEKTEN sınayabiliyor — örnek
-  `ad-account-pool-rls.spec.ts`. Kritik bir politika yazıyorsan elle gözden
+  `ad-account-pool-rls.spec.ts` ve `hesap-tasima-rls.spec.ts` (ikincisi
+  taşımanın sekiz tabloda da politikalardan geçtiğini ve `activeClientId`
+  kapatılmazsa REDDEDİLDİĞİNİ kilitliyor). Kritik bir politika yazıyorsan elle gözden
   geçirmekle yetinme, o deseni kullan.
 - **MUTASYON DİSİPLİNİ: kritik bir test, kodu bozarak doğrulanmadan yazılmış
   sayılmaz.** Bu oturumda üç test mutasyonla BOŞ çıktı — hepsi geçiyordu ama

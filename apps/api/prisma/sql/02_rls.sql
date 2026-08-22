@@ -619,6 +619,28 @@ CREATE POLICY adv_sync_jobs_insert ON sync_jobs
   FOR INSERT WITH CHECK (app.can_access_client(client_id));
 
 -- -----------------------------------------------------------------------------
+-- UPDATE POLİTİKASI — reklam hesabı el değiştirince iş kayıtları da taşınıyor.
+--
+-- BU POLİTİKA OLMADAN TAŞIMA SESSİZCE SIFIR SATIR ETKİLİYORDU. Tabloda
+-- yalnızca SELECT ve INSERT politikası vardı; Postgres politikası olmayan bir
+-- UPDATE'te HATA VERMİYOR, satırı görmüyor. Yani `advetics_app` rolüyle koşan
+-- atama, sekiz tablodan yedisini taşıyıp sekizincisini sessizce atlıyordu ve
+-- belirtisi tanıdıktı: yeni müşterinin senkronizasyon ekranında
+-- "Yapı: hiç · Metrik: hiç".
+--
+-- İlk RLS testi bunu göremedi çünkü sync_jobs tablosuna hiç satır yazmıyordu;
+-- sıfır satırlık bir UPDATE politikadan bağımsız olarak başarılı dönüyor.
+-- `hesap-tasima-rls.spec.ts` artık `RETURNING` ile ETKİLENEN SATIRI sayıyor.
+--
+-- Kapsam, okumanın kapsamıyla AYNI: kullanıcı zaten göreceği satırı
+-- güncelleyebiliyor. Worker durum güncellemelerini BYPASSRLS ile yazmaya
+-- devam ediyor; bu politika onun için değil.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_sync_jobs_update ON sync_jobs
+  FOR UPDATE USING (app.can_access_client(client_id))
+          WITH CHECK (app.can_access_client(client_id));
+
+-- -----------------------------------------------------------------------------
 -- api_usage_log — kota telemetrisi.
 --
 -- client_id NULL olabilir (henüz hesaba bağlanmamış çağrılar). Org yöneticisi

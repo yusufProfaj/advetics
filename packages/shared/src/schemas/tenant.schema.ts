@@ -204,6 +204,23 @@ export interface ClientSetupResult {
    * gelmediğinde sebebin aranacağı yeri gizlerdi.
    */
   failures: Array<{ kind: 'adAccount' | 'socialProfile' | 'user'; id: string; reason: string }>;
+  /**
+   * Havuzdan alınan hesaplarla birlikte YENİ müşteriye taşınan satır sayısı.
+   *
+   * Havuzdaki bir hesap "hiç kullanılmamış" demek DEĞİL: daha önce başka bir
+   * müşteride bulunup oradan kaldırılmış olabilir ve kampanyaları, kreatifleri,
+   * geçmiş metrikleri hâlâ o müşterinin altında duruyor. Kurulum sihirbazı
+   * atamayı `assignAdAccount` üzerinden yapıyor, yani taşıma gerçekleşiyor —
+   * ama sonucu okumayan bir çağıran onu SESSİZ hâle getiriyordu.
+   */
+  movedRows: number;
+  /**
+   * Eski müşteri(ler)de kalan kullanıcı kayıtları: etiket → adet.
+   *
+   * Bütçe, kural, taslak ve toplu işlem taşınmıyor (birinin kararı). Kaç tane
+   * kaldığı burada; kurulum ekranı bunu yazmak zorunda.
+   */
+  leftBehind: Record<string, number>;
 }
 
 // -----------------------------------------------------------------------------

@@ -188,6 +188,11 @@ export class StructureSyncService {
           display_url, asset_urls, raw, synced_at, updated_at
         ) VALUES ${Prisma.join(values)}
         ON CONFLICT (platform, external_id) DO UPDATE SET
+          -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
+          -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
+          -- icin "yeniden senkronize et" tavsiyesi de ise yaramiyordu.
+          -- Kaynak HER ZAMAN hesabin o anki musterisi.
+          client_id = EXCLUDED.client_id,
           ad_account_id = EXCLUDED.ad_account_id,
           creative_type = EXCLUDED.creative_type,
           headline = EXCLUDED.headline,
@@ -232,6 +237,11 @@ export class StructureSyncService {
           updated_at
         ) VALUES ${Prisma.join(values)}
         ON CONFLICT (platform, external_id) DO UPDATE SET
+          -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
+          -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
+          -- icin "yeniden senkronize et" tavsiyesi de ise yaramiyordu.
+          -- Kaynak HER ZAMAN hesabin o anki musterisi.
+          client_id = EXCLUDED.client_id,
           name = EXCLUDED.name,
           objective = EXCLUDED.objective,
           status = EXCLUDED.status,
@@ -308,6 +318,11 @@ export class StructureSyncService {
           raw, platform_updated_at, synced_at, updated_at
         ) VALUES ${Prisma.join(values)}
         ON CONFLICT (platform, external_id) DO UPDATE SET
+          -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
+          -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
+          -- icin "yeniden senkronize et" tavsiyesi de ise yaramiyordu.
+          -- Kaynak HER ZAMAN hesabin o anki musterisi.
+          client_id = EXCLUDED.client_id,
           campaign_id = EXCLUDED.campaign_id,
           name = EXCLUDED.name,
           status = EXCLUDED.status,
@@ -394,6 +409,11 @@ export class StructureSyncService {
           disapproval_reasons, raw, platform_updated_at, synced_at, updated_at
         ) VALUES ${Prisma.join(values)}
         ON CONFLICT (platform, external_id) DO UPDATE SET
+          -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
+          -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
+          -- icin "yeniden senkronize et" tavsiyesi de ise yaramiyordu.
+          -- Kaynak HER ZAMAN hesabin o anki musterisi.
+          client_id = EXCLUDED.client_id,
           ad_group_id = EXCLUDED.ad_group_id,
           name = EXCLUDED.name,
           status = EXCLUDED.status,
