@@ -947,6 +947,64 @@ describe('MetricsService', () => {
       await h.q(`UPDATE ad_accounts SET sync_enabled = false WHERE id = $1`, [IDS.adAccount]);
       expect((await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' })).hiddenAccounts).toBe(1);
     });
+
+    it('KRİTİK: HAVUZDAKİ hesaplar bu sayıya girmiyor', async () => {
+      /*
+       * HAVUZ BU WORKSPACE'İN HESABI DEĞİL.
+       *
+       * Keşif her hesabı `sync_enabled = false` ile yazıyor ve ajansın tek
+       * Meta kimliği yüzlerce hesap görüyor. Sayım havuzu da toplayınca her
+       * müşterinin Genel Bakış'ında "481 hesap izlenmiyor" yazıyordu: uyarı
+       * hiçbir zaman sıfıra inmiyor, okunmaz hâle geliyor ve GERÇEK bir
+       * kapalı hesap aynı cümlenin içinde kayboluyor.
+       */
+      await h.q(
+        `INSERT INTO ad_accounts
+           (id, org_id, client_id, connection_id, platform, external_id, name, currency,
+            timezone, sync_enabled, updated_at)
+         VALUES (gen_random_uuid(), $1, NULL, $2, 'meta', 'act_havuz_1', 'Havuz 1', 'TRY',
+                 'Europe/Istanbul', false, now()),
+                (gen_random_uuid(), $1, NULL, $2, 'meta', 'act_havuz_2', 'Havuz 2', 'TRY',
+                 'Europe/Istanbul', false, now())`,
+        [IDS.org, IDS.connection],
+      );
+
+      const s = await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' });
+      expect(s.hiddenAccounts).toBe(0);
+    });
+
+    it('KRİTİK: hesap SÜZGECİ varken sayım da o hesaba daralıyor', async () => {
+      /*
+       * Kullanıcı tek bir hesabı seçtiğinde ekrandaki rakamlar o hesabın.
+       * Uyarının BAŞKA bir hesaptan bahsetmesi, seçtiği hesapta sorun varmış
+       * gibi okunuyordu — hiçbir hata vermeyen, yanlış karar aldıran gösterim.
+       */
+      const IKINCI = '7a7a7a7a-7a7a-7a7a-7a7a-7a7a7a7a7a7a';
+      await h.q(
+        `INSERT INTO ad_accounts
+           (id, org_id, client_id, connection_id, platform, external_id, name, currency,
+            timezone, sync_enabled, updated_at)
+         VALUES ($1, $2, $3, $4, 'meta', 'act_ikinci', 'İkinci', 'TRY',
+                 'Europe/Istanbul', false, now())`,
+        [IKINCI, IDS.org, IDS.client, IDS.connection],
+      );
+
+      // Süzgeç yokken ikinci hesap sayılıyor.
+      expect(
+        (await svc.summary(CTX, { from: '2026-08-05', to: '2026-08-05' })).hiddenAccounts,
+      ).toBe(1);
+
+      // İzlenen hesap seçiliyken sayı sıfır: uyarı o hesap hakkında değil.
+      expect(
+        (
+          await svc.summary(CTX, {
+            from: '2026-08-05',
+            to: '2026-08-05',
+            adAccountId: IDS.adAccount,
+          })
+        ).hiddenAccounts,
+      ).toBe(0);
+    });
   });
 
 });

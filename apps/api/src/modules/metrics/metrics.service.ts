@@ -463,9 +463,36 @@ export class MetricsService {
     const platformFilter = query.platform
       ? Prisma.sql`AND platform = ${query.platform}::"Platform"`
       : Prisma.empty;
+    /*
+     * HESAP SÜZGECİ SAYIMA DA UYGULANIYOR.
+     *
+     * Kullanıcı tek bir hesabı seçtiğinde ekrandaki rakamlar o hesabın;
+     * uyarının BAŞKA hesaplardan bahsetmesi, seçtiği hesapta bir sorun
+     * varmış gibi okunuyordu.
+     */
+    const accountFilter = query.adAccountId
+      ? Prisma.sql`AND id = ${query.adAccountId}::uuid`
+      : Prisma.empty;
     const [row] = await tx.$queryRaw<Array<{ n: string | number }>>(Prisma.sql`
       SELECT COUNT(*) AS n FROM ad_accounts
-      WHERE sync_enabled = false ${platformFilter}
+      WHERE sync_enabled = false
+        /*
+         * HAVUZ SAYILMIYOR — client_id IS NULL bu workspace'in hesabı DEĞİL.
+         *
+         * Keşif her hesabı sync_enabled = false ile yazıyor ve ajansın tek
+         * Meta kimliği yüzlerce hesap görüyor. Bu koşul olmadan sayım havuzun
+         * tamamını topluyordu: her müşterinin Genel Bakış'ında "481 hesap
+         * izlenmiyor" yazıyor, uyarı hiçbir zaman sıfıra inmiyor ve tam da bu
+         * yüzden okunmaz hâle geliyordu — GERÇEK bir kapalı hesap da aynı
+         * cümlenin içinde kayboluyordu.
+         *
+         * RLS'in adv_ad_accounts_select politikası havuzu org yöneticisine
+         * AÇIYOR (atama ekranının çalışması buna bağlı), yani politikaya
+         * güvenmek yetmiyor; ayrım burada yapılmak zorunda.
+         */
+        AND client_id IS NOT NULL
+        ${platformFilter}
+        ${accountFilter}
     `);
     return Number(row?.n ?? 0);
   }
