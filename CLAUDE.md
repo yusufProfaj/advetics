@@ -364,6 +364,15 @@ buna göre veriliyor:
   `kreatif-gorseli.spec.ts` — mutasyon testi burada iki kez boşa düştü:
   `127.0.0.1` zaten sonek listesinde olmadığı için "reddedildi" iddiası IP
   kontrolü SİLİNDİĞİNDE de geçiyordu; iddia SEBEBE çapalanmak zorunda.
+- **SERBEST URL İNDİRİLECEKSE KORUMA ADRESTE DEĞİL ÇÖZÜLEN IP'DE.** Kreatif
+  görseli platform CDN'inden geliyor ve orada beyaz liste işe yarıyor; LOGO
+  ise ajansın kendi alan adında ve liste tutmak her yeni müşteride kod
+  değişikliği demek. `logoIndir` DNS'i çözüp iç ağ aralıklarını
+  (`127/8`, `10/8`, `172.16/12`, `192.168/16`, `169.254/16` = bulut metadata,
+  `100.64/10`, `::1`, `fc00::/7`, `fe80::/10`) reddediyor — `evil.com` pekâlâ
+  `169.254.169.254`e çözülebilir ve adres DİZGESİNE bakan hiçbir kontrol bunu
+  göremez. Kalan risk DNS rebinding; `redirect: 'manual'` ve kısa zaman
+  aşımıyla kabul edilen kalıntı.
 - **VERİDE DURAN ALAN, KULLANILMIYORSA YOKTUR.** Rapor PDF'i `branding` ve
   `daily` alanlarını HİÇ okumuyordu (servis içinde sıfır referans): marka
   rengi kullanılmıyor, panelde grafik olarak görünen günlük seri belgeye hiç

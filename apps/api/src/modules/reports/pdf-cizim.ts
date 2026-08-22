@@ -147,3 +147,96 @@ export function grafik(
 
   return y - yukseklik - 12;
 }
+
+/** Rengin açık bir tonu — kart zeminleri ve veri çubukları için. */
+export function acikTon(c: RGB, oran = 0.12): RGB {
+  return rgb(1 - (1 - c.red) * oran, 1 - (1 - c.green) * oran, 1 - (1 - c.blue) * oran);
+}
+
+/**
+ * PLATFORM PAY ÇUBUĞU — tek bakışta "para nereye gitti".
+ *
+ * Rapordaki en çok sorulan soru bu ve iki sayıyı yan yana koymak onu
+ * cevaplamıyor: 43.173 ile 16.579'un oranını okuyucu kafasında hesaplıyor.
+ * Yığılmış tek bir çubuk aynı bilgiyi bakışta veriyor.
+ *
+ * PAYI SIFIR OLAN PLATFORM ÇİZİLMİYOR ama etiketi de basılmıyor: sıfır
+ * genişlikte bir dilim ve yanında "%0" yazısı, olmayan bir şeyi varmış gibi
+ * gösteriyor.
+ */
+export function payCubugu(
+  s: PDFPage,
+  opts: {
+    dilimler: Array<{ etiket: string; deger: number; renk: RGB }>;
+    x: number;
+    y: number;
+    genislik: number;
+    yukseklik: number;
+    font: PDFFont;
+    gri: RGB;
+  },
+): number {
+  const toplam = opts.dilimler.reduce((a, d) => a + d.deger, 0);
+  if (toplam <= 0) return opts.y;
+
+  let x = opts.x;
+  for (const d of opts.dilimler) {
+    if (d.deger <= 0) continue;
+    const g = (d.deger / toplam) * opts.genislik;
+    s.drawRectangle({ x, y: opts.y - opts.yukseklik, width: g, height: opts.yukseklik, color: d.renk });
+    x += g;
+  }
+
+  // Etiketler çubuğun ALTINDA: içine yazmak dar dilimlerde taşıyor ve
+  // taşan metin komşu dilimin üstüne biniyor.
+  let ex = opts.x;
+  for (const d of opts.dilimler) {
+    if (d.deger <= 0) continue;
+    const yuzde = Math.round((d.deger / toplam) * 100);
+    const metin = `${d.etiket} %${yuzde}`;
+    s.drawRectangle({
+      x: ex,
+      y: opts.y - opts.yukseklik - 13,
+      width: 6,
+      height: 6,
+      color: d.renk,
+    });
+    s.drawText(metin, {
+      x: ex + 10,
+      y: opts.y - opts.yukseklik - 13,
+      size: 8,
+      font: opts.font,
+      color: opts.gri,
+    });
+    ex += opts.font.widthOfTextAtSize(metin, 8) + 26;
+  }
+
+  return opts.y - opts.yukseklik - 26;
+}
+
+/**
+ * SAYFA ALTBİLGİSİ — her içerik sayfasında.
+ *
+ * Yazıcıdan çıkan ya da e-postayla dolaşan bir belgede sayfalar
+ * ayrılabiliyor; hangi müşteriye ve hangi döneme ait olduğu HER sayfada
+ * yazmalı. Sayfa numarası olmadan da "3. sayfadaki tablo" denemiyor.
+ */
+export function altbilgi(
+  s: PDFPage,
+  opts: { sol: string; sag: string; x: number; genislik: number; alt: number; font: PDFFont; gri: RGB },
+): void {
+  s.drawLine({
+    start: { x: opts.x, y: opts.alt + 16 },
+    end: { x: opts.x + opts.genislik, y: opts.alt + 16 },
+    thickness: 0.5,
+    color: rgb(0.88, 0.88, 0.9),
+  });
+  s.drawText(opts.sol, { x: opts.x, y: opts.alt + 5, size: 7.5, font: opts.font, color: opts.gri });
+  s.drawText(opts.sag, {
+    x: opts.x + opts.genislik - opts.font.widthOfTextAtSize(opts.sag, 7.5),
+    y: opts.alt + 5,
+    size: 7.5,
+    font: opts.font,
+    color: opts.gri,
+  });
+}

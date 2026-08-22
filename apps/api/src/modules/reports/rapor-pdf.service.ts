@@ -16,8 +16,8 @@ import {
   type ReportData,
 } from '@advetics/shared';
 import { yaziTipiOku } from './pdf-yazi-tipi';
-import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
-import { grafik, okunakliYazi, renk } from './pdf-cizim';
+import { gorselleriIndir, logoIndir, type GorselSonucu } from './kreatif-gorseli';
+import { acikTon, altbilgi, grafik, okunakliYazi, payCubugu, renk } from './pdf-cizim';
 
 /** A4, punto cinsinden. */
 const EN = 595.28;
@@ -83,12 +83,22 @@ export class RaporPdfService {
      * giden belgede onu göremiyordu. Beyaz etiketli bir üründe bu, ürünün
      * ana vaadinin belgede görünmemesi demek.
      */
+    /*
+     * LOGO — ajansın kendi alan adından, beyaz liste UYGULANAMAZ.
+     *
+     * Koruma çözülen IP üzerinden (`logoIndir`): iç ağa düşen bir adrese
+     * istek hiç yapılmıyor. Gelmezse kapak logosuz basılıyor; bir logo
+     * yüzünden müşteriye giden belgenin üretilmemesi kabul edilemez.
+     */
+    const logo = await this.logoyuHazirla(doc, data.branding.logoUrl, opts.getir);
+
     const ctx: Ctx = {
       doc,
       normal,
       kalin,
       data,
       gorseller,
+      logo,
       ana: renk(data.branding.primaryColor),
       vurgu: renk(data.branding.accentColor, renk(data.branding.primaryColor)),
     };
@@ -147,42 +157,98 @@ export class RaporPdfService {
      * belgesi" izlenimi tam olarak oradan başlıyordu: müşteriye gönderilen
      * dosyanın İLK gördüğü sayfa hiçbir şey söylemiyordu.
      */
-    s.drawRectangle({ x: 0, y: BOY - 170, width: EN, height: 170, color: ctx.ana });
-    s.drawRectangle({ x: 0, y: BOY - 176, width: EN, height: 6, color: ctx.vurgu });
+    const BANT_Y = 300;
+    s.drawRectangle({ x: 0, y: BOY - BANT_Y, width: EN, height: BANT_Y, color: ctx.ana });
+    s.drawRectangle({ x: 0, y: BOY - BANT_Y - 7, width: EN, height: 7, color: ctx.vurgu });
 
     const bantYazi = okunakliYazi(ctx.ana);
+
+    /*
+     * LOGO VARSA ÜSTTE. Yoksa kompozisyon kaymıyor: metin bloğu sabit
+     * yerinde duruyor ve logosuz kapak da dengeli görünüyor. Logoyu
+     * zorunlu kılmak, henüz marka yüklememiş ajansta boş bir kutu bırakırdı.
+     */
+    if (ctx.logo) {
+      const enBoy = 44 / ctx.logo.height;
+      s.drawImage(ctx.logo, {
+        x: KENAR,
+        y: BOY - 108,
+        width: Math.min(180, ctx.logo.width * enBoy),
+        height: 44,
+      });
+    }
+
     s.drawText(ctx.data.client.name, {
       x: KENAR,
-      y: BOY - 100,
-      size: 26,
+      y: BOY - 196,
+      size: 30,
       font: ctx.kalin,
       color: bantYazi,
     });
     s.drawText(ctx.data.title, {
       x: KENAR,
-      y: BOY - 128,
+      y: BOY - 224,
       size: 13,
       font: ctx.normal,
       color: bantYazi,
       opacity: 0.85,
     });
 
-    let y = BOY - 230;
-    s.drawText(`${gun(ctx.data.from)} — ${gun(ctx.data.to)}`, {
+    // Dönem, bandın içinde bir "rozet": kapağın ikinci en önemli bilgisi.
+    const donem = `${gun(ctx.data.from)} — ${gun(ctx.data.to)}`;
+    const rozetG = ctx.kalin.widthOfTextAtSize(donem, 10) + 20;
+    s.drawRectangle({
       x: KENAR,
-      y,
-      size: 14,
-      font: ctx.kalin,
-      color: SIYAH,
+      y: BOY - 262,
+      width: rozetG,
+      height: 22,
+      color: ctx.vurgu,
     });
-    y -= 20;
-    s.drawText(`${ctx.data.rangeDays} günlük dönem`, {
-      x: KENAR,
-      y,
+    s.drawText(donem, {
+      x: KENAR + 10,
+      y: BOY - 255,
       size: 10,
+      font: ctx.kalin,
+      color: okunakliYazi(ctx.vurgu),
+    });
+
+    s.drawText(`${ctx.data.rangeDays} günlük dönem · ${ctx.data.platforms.length} platform`, {
+      x: KENAR,
+      y: BOY - BANT_Y - 40,
+      size: 11,
       font: ctx.normal,
       color: GRI,
     });
+
+    /*
+     * KAPAK BİLGİ DE TAŞIYOR — yalnızca marka değil.
+     *
+     * Bandın altı boş bir alandı ve müşterinin ilk gördüğü sayfa hiçbir şey
+     * söylemiyordu. Üç başlık sayısı burada: raporun tamamını açmadan "ne
+     * oldu" sorusunun cevabı. Sayılar özet sayfasıyla AYNI bloktan geliyor;
+     * ikinci bir hesap yapmak ikisinin ayrışması demekti.
+     */
+    const ozet = ctx.data.total ?? ctx.data.platforms[0];
+    if (ozet) {
+      const one: Array<[string, string]> = [
+        ['Toplam harcama', formatMoney(ozet.spendMicros, ctx.data.currency)],
+        ['Dönüşüm', formatNumber(ozet.conversions)],
+        ['Ort. EBM', formatMoney(mikro(ozet.cpa), ctx.data.currency)],
+      ];
+      const g = (EN - 2 * KENAR) / 3;
+      one.forEach(([ad, deger], i) => {
+        const x = KENAR + i * g;
+        s.drawRectangle({ x, y: BOY - BANT_Y - 130, width: 3, height: 40, color: ctx.vurgu });
+        s.drawText(ad, { x: x + 10, y: BOY - BANT_Y - 104, size: 9, font: ctx.normal, color: GRI });
+        s.drawText(kirp(deger, ctx.kalin, 18, g - 20), {
+          x: x + 10,
+          y: BOY - BANT_Y - 128,
+          size: 18,
+          font: ctx.kalin,
+          color: SIYAH,
+        });
+      });
+    }
 
     // Alt bilgi ajansın kendi metni — beyaz etiketin bir parçası.
     if (ctx.data.branding.footerText) {
@@ -200,8 +266,40 @@ export class RaporPdfService {
     const s = ctx.doc.addPage([EN, BOY]);
     let y = this.baslik(ctx, s, SECTION_LABELS.summary);
 
-    for (const blok of [...ctx.data.platforms, ...(ctx.data.total ? [ctx.data.total] : [])]) {
-      s.drawText(blok.label, { x: KENAR, y, size: 12, font: ctx.kalin, color: SIYAH });
+    const bloklar = [...ctx.data.platforms, ...(ctx.data.total ? [ctx.data.total] : [])];
+
+    /*
+     * PAY ÇUBUĞU EN ÜSTTE — raporun en çok sorulan sorusu "para nereye
+     * gitti". İki sayıyı yan yana koymak bunu cevaplamıyor: 43.173 ile
+     * 16.579'un oranını okuyucu kafasında hesaplıyor.
+     *
+     * Yalnızca birden çok platform varsa: tek platformda çubuk %100 dolu
+     * çıkıyor ve hiçbir şey söylemiyor.
+     */
+    if (ctx.data.platforms.length > 1) {
+      y = payCubugu(s, {
+        dilimler: ctx.data.platforms.map((b, i) => ({
+          etiket: b.label,
+          deger: Number(BigInt(b.spendMicros) / 1_000_000n),
+          renk: i === 0 ? ctx.ana : ctx.vurgu,
+        })),
+        x: KENAR,
+        y,
+        genislik: EN - 2 * KENAR,
+        yukseklik: 14,
+        font: ctx.normal,
+        gri: GRI,
+      });
+      y -= 6;
+    }
+
+    for (const [bi, blok] of bloklar.entries()) {
+      // RENKLİ RAY: platform adının solunda kısa bir dikey şerit. Toplam
+      // satırı ana renkte, platformlar sırayla ana/vurgu — hangi kartın
+      // hangi platforma ait olduğu pay çubuğuyla eşleşiyor.
+      const rayRengi = bi === 0 ? ctx.ana : bi === 1 ? ctx.vurgu : SIYAH;
+      s.drawRectangle({ x: KENAR, y: y - 2, width: 3, height: 14, color: rayRengi });
+      s.drawText(blok.label, { x: KENAR + 9, y, size: 12, font: ctx.kalin, color: SIYAH });
       y -= 18;
 
       const satirlar: Array<[string, string]> = [
@@ -227,8 +325,9 @@ export class RaporPdfService {
           y: y - KART_Y + 12,
           width: KART_G,
           height: KART_Y,
-          color: rgb(0.97, 0.97, 0.98),
-          borderColor: rgb(0.89, 0.89, 0.91),
+          // İlk kart (harcama) marka tonunda: gözün ilk gitmesi gereken sayı o.
+          color: i === 0 ? acikTon(ctx.ana, 0.1) : rgb(0.97, 0.97, 0.98),
+          borderColor: i === 0 ? acikTon(ctx.ana, 0.35) : rgb(0.89, 0.89, 0.91),
           borderWidth: 0.5,
         });
         s.drawText(ad, { x: x + 7, y: y + 1, size: 7.5, font: ctx.normal, color: GRI });
@@ -362,6 +461,15 @@ export class RaporPdfService {
     });
     y -= BANT + 8;
 
+    /*
+     * VERİ ÇUBUĞU ÖLÇEĞİ: en yüksek harcama. Satır satır hesaplamak her
+     * satırı %100 yapar ve çubuk hiçbir şey anlatmazdı.
+     */
+    const enYuksekHarcama = Math.max(
+      ...satirlar.map((r) => Number(BigInt(r.spendMicros) / 1000n) / 1000),
+      0,
+    );
+
     for (const [sira, r] of satirlar.entries()) {
       // SAYFA TAŞMASI: alt kenara gelince yeni sayfa. Kontrol olmadan
       // satırlar sayfanın dışına çizilir ve PDF hata VERMEZ — sadece
@@ -381,6 +489,28 @@ export class RaporPdfService {
           width: EN - 2 * KENAR,
           height: 14,
           color: rgb(0.973, 0.973, 0.98),
+        });
+      }
+
+      /*
+       * VERİ ÇUBUĞU — harcamanın satırlar arasındaki PAYI, adın ARKASINDA.
+       *
+       * Rakamlar sağa yaslı ve okunuyor ama "hangi kampanya baskın" sorusu
+       * yine kafada hesaplanıyordu.
+       *
+       * İlk denemede çubuk adın ALTINA ince bir çizgi olarak çiziliyordu ve
+       * ALTÇİZGİ gibi okunuyordu — bir bağlantı ya da vurgu sanılıyor,
+       * büyüklük anlatmıyordu. Arka plan dolgusu (Excel'in "veri çubuğu"
+       * deseni) aynı bilgiyi yanlış okunmadan veriyor.
+       */
+      if (enYuksekHarcama > 0) {
+        const oran = Number(BigInt(r.spendMicros) / 1000n) / 1000 / enYuksekHarcama;
+        s.drawRectangle({
+          x: KENAR + 4,
+          y: y - 3.5,
+          width: Math.max(2, (adGenislik - 10) * oran),
+          height: 13,
+          color: acikTon(ctx.ana, 0.16),
         });
       }
 
@@ -548,6 +678,22 @@ export class RaporPdfService {
       y -= 15;
     }
 
+  }
+
+  /** Logoyu indirip belgeye gömer; her başarısızlıkta `null`. */
+  private async logoyuHazirla(
+    doc: PDFDocument,
+    adres: string | null,
+    getir?: typeof fetch,
+  ): Promise<PDFImage | null> {
+    if (!adres) return null;
+    const sonuc = await logoIndir(adres, { getir });
+    if (!sonuc.ok) return null;
+    try {
+      return sonuc.tur === 'jpg' ? await doc.embedJpg(sonuc.bytes) : await doc.embedPng(sonuc.bytes);
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -788,15 +934,38 @@ export class RaporPdfService {
   }
 
   private baslik(ctx: Ctx, s: PDFPage, metin: string): number {
-    s.drawText(metin, { x: KENAR, y: BOY - 60, size: 16, font: ctx.kalin, color: SIYAH });
+    // BÖLÜM ADININ ÜSTÜNDE MARKA RENGİNDE KISA BİR KURAL. Sayfanın nerede
+    // başladığını söylüyor ve belgeye kimliğini taşıyan üçüncü öğe.
+    s.drawRectangle({ x: KENAR, y: BOY - 48, width: 34, height: 4, color: ctx.vurgu });
+    s.drawText(metin, { x: KENAR, y: BOY - 72, size: 17, font: ctx.kalin, color: SIYAH });
     s.drawText(`${ctx.data.client.name} · ${gun(ctx.data.from)} — ${gun(ctx.data.to)}`, {
       x: KENAR,
-      y: BOY - 78,
+      y: BOY - 89,
       size: 8.5,
       font: ctx.normal,
       color: GRI,
     });
-    return BOY - 110;
+
+    /*
+     * ALTBİLGİ HER İÇERİK SAYFASINDA. Yazıcıdan çıkan ya da e-postayla
+     * dolaşan bir belgede sayfalar ayrılabiliyor; hangi müşteriye ve hangi
+     * döneme ait olduğu her sayfada yazmalı.
+     *
+     * Sayfa numarası `getPageCount()`ten: bölümler şablona göre değiştiği
+     * için sabit bir numara tutmak, bir bölüm çıkarıldığında sessizce
+     * yanlış numaralar üretirdi.
+     */
+    altbilgi(s, {
+      sol: ctx.data.branding.footerText ?? ctx.data.client.name,
+      sag: `Sayfa ${ctx.doc.getPageCount()}`,
+      x: KENAR,
+      genislik: EN - 2 * KENAR,
+      alt: KENAR - 18,
+      font: ctx.normal,
+      gri: GRI,
+    });
+
+    return BOY - 122;
   }
 }
 
@@ -817,6 +986,8 @@ interface Ctx {
   /** Marka renkleri — panelde girilen değerlerden, bozuksa nötre düşüyor. */
   ana: RGB;
   vurgu: RGB;
+  /** Gömülmüş logo — yoksa (adres yok ya da indirilemedi) `null`. */
+  logo: PDFImage | null;
 }
 
 const SIYAH = rgb(0.1, 0.1, 0.12);

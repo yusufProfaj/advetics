@@ -645,3 +645,90 @@ describe('PDF görselliği', () => {
     expect(KAYNAK).toContain("from '@advetics/shared'");
   });
 });
+
+describe('PDF sayfa düzeni', () => {
+  it('KRİTİK: her içerik sayfasında ALTBİLGİ ve sayfa numarası var', async () => {
+    /*
+     * Yazıcıdan çıkan ya da e-postayla dolaşan belgede sayfalar
+     * ayrılabiliyor; hangi müşteriye ve döneme ait olduğu HER sayfada
+     * yazmalı. Numarasız belgede "3. sayfadaki tablo" denemiyor.
+     */
+    const pdf = await svc.uret({
+      ...VERI,
+      sections: ['summary', 'meta_campaigns', 'google_campaigns'],
+    });
+    const t = metinler(pdf);
+    expect(t).toContain('Sayfa 1');
+    expect(t).toContain('Sayfa 2');
+    expect(t).toContain('Sayfa 3');
+  });
+
+  it('KRİTİK: PAY ÇUBUĞU tek platformda çizilmiyor', async () => {
+    /*
+     * Tek platformda çubuk %100 dolu çıkıyor ve hiçbir şey söylemiyor;
+     * üstelik "%100" etiketi okuyucuya bir karşılaştırma varmış gibi
+     * geliyor.
+     */
+    // FIXTURE'DA TEK PLATFORM VAR; ikincisini burada kuruyoruz. İlk yazımda
+    // bunu atlamıştım ve "iki platformda çubuk var" iddiası tek platformlu
+    // bir belgeye bakıyordu — test kendi öncülünü sınamıyordu.
+    const ikinci = { ...VERI.platforms[0]!, label: 'Google Ads', spendMicros: '10000000000' };
+    const iki = await svc.uret({
+      ...VERI,
+      sections: ['summary'],
+      platforms: [VERI.platforms[0]!, ikinci],
+    });
+    const tek = await svc.uret({
+      ...VERI,
+      sections: ['summary'],
+      platforms: [VERI.platforms[0]!],
+    });
+    expect(metinler(iki).some((x) => /^Meta Ads %\d+$/.test(x))).toBe(true);
+    expect(metinler(tek).some((x) => /^Meta Ads %\d+$/.test(x))).toBe(false);
+  });
+
+  it('KRİTİK: KAPAK raporun başlık sayılarını taşıyor', async () => {
+    /*
+     * Bandın altı boş bir alandı ve müşterinin İLK gördüğü sayfa hiçbir şey
+     * söylemiyordu. Sayılar özet bloğuyla AYNI kaynaktan; ikinci bir hesap
+     * ikisinin ayrışması demekti.
+     */
+    const pdf = await svc.uret({ ...VERI, sections: ['cover'] });
+    const t = metinler(pdf);
+    expect(t).toContain('Toplam harcama');
+    expect(t).toContain('Ort. EBM');
+  });
+
+  it('KRİTİK: VERİ ÇUBUĞU en yüksek harcamaya göre ölçekleniyor', () => {
+    /*
+     * Satır satır ölçeklemek her satırı %100 yapar ve çubuk hiçbir şey
+     * anlatmaz. İddia kaynağa çapalı çünkü ölçek çizilen metinde değil
+     * genişlikte; genişlik ise PDF akışında sayı olarak duruyor ve tek tek
+     * ayıklamak testi kırılgan yapardı.
+     */
+    const kaynak = readFileSync(join(__dirname, 'rapor-pdf.service.ts'), 'utf8');
+    const i = kaynak.indexOf('const enYuksekHarcama');
+    expect(i, 'ölçek hesabı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    expect(kaynak.slice(i, kaynak.indexOf(';', i))).toContain('Math.max');
+  });
+
+  it('logo YOKSA kapak yine basılıyor', async () => {
+    // Bir logo yüzünden müşteriye giden belgenin üretilmemesi kabul edilemez.
+    await expect(
+      svc.uret({ ...VERI, sections: ['cover'], branding: { ...VERI.branding, logoUrl: null } }),
+    ).resolves.toBeInstanceOf(Buffer);
+  });
+
+  it('KRİTİK: logo İNDİRİLEMEZSE kapak logosuz basılıyor', async () => {
+    const getir = (async () => new Response(null, { status: 500 })) as unknown as typeof fetch;
+    const pdf = await svc.uret(
+      {
+        ...VERI,
+        sections: ['cover'],
+        branding: { ...VERI.branding, logoUrl: 'https://profaj.com/logo.png' },
+      },
+      { getir },
+    );
+    expect(metinler(pdf)).toContain('Toplam harcama');
+  });
+});
