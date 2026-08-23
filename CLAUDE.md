@@ -373,6 +373,19 @@ buna göre veriliyor:
   `169.254.169.254`e çözülebilir ve adres DİZGESİNE bakan hiçbir kontrol bunu
   göremez. Kalan risk DNS rebinding; `redirect: 'manual'` ve kısa zaman
   aşımıyla kabul edilen kalıntı.
+- **REKLAM SEVİYESİ GEÇMİŞ HİÇ ÇEKİLMİYOR — ve rapor bunu SÖYLEMEK zorunda.**
+  `initial_backfill` 90 günü BİLEREK yalnızca kampanya seviyesinde çekiyor
+  (ad seviyesinde 90 gün hesabın kotasını saatlerce bloklar); reklam kırılımı
+  yalnızca gecelik `insights_daily` (dün) ve 7 günlük `insights_backfill`ten
+  geliyor. Sonuç: bir hesap o dönemde gecelik senkronize etmiyorsa o dönemin
+  reklam verisi HİÇ gelmiyor ve bir daha kendiliğinden de gelmiyor. Üretimde
+  görülen hâli: temmuz raporunun "Öne Çıkan Reklamlar" sayfasında dört Google
+  arama reklamı, tek Meta reklamı yok. Bölüm harcamaya göre sıralayıp platform
+  ayırmadığı için okuyan "Meta'nın öne çıkan reklamı yokmuş" diye anlıyordu.
+  `topAdsMissingPlatforms` artık harcaması olan ama `entity_level = 'ad'`
+  satırı bulunmayan platformları döndürüyor ve hem PDF hem panel bunu
+  LİSTENİN ÜSTÜNDE yazıyor. Hiç harcamamış platform bildirilmiyor: her
+  raporda duran bir uyarı okunmaz hâle gelir.
 - **AYNI RAPORUN İKİ GÖSTERİMİ VARSA REFERANS BİRİ OLMALI — ve o panel.**
   PDF'i "daha görsel" yapmaya çalışırken kendi dilimi kurdum: tam sayfa marka
   bandı, dolgulu tablo başlığı, zebra satır, veri çubuğu, pay çubuğu, sayfa

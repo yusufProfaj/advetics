@@ -100,11 +100,12 @@ export class ReportsService {
       const branding = await this.branding(tx, params.clientId);
       const template = await this.template(tx, params.clientId, params.templateId);
 
-      const [platformBlocks, campaigns, daily, topAds] = await Promise.all([
+      const [platformBlocks, campaigns, daily, topAds, topAdsMissingPlatforms] = await Promise.all([
         this.platformBlocks(tx, params),
         this.campaignRows(tx, params),
         this.dailySeries(tx, params),
         this.topAds(tx, params),
+        this.topAdsMissingPlatforms(tx, params),
       ]);
 
       // Para birimi: tek ise toplam anlamlı, birden fazlaysa null.
@@ -133,6 +134,7 @@ export class ReportsService {
         googleCampaigns: campaigns.filter((c) => c.platform === 'google').map((c) => c.row),
         daily,
         topAds,
+        topAdsMissingPlatforms,
         // `null` HÂLÂ "bu yetenek yok" demek — ama artık yalnızca Google
         // bağlantısı olmayan müşteriler için. Meta-only bir müşteride boş dizi
         // döndürmek "anahtar kelimen yok" demek olurdu; oysa o platformda
@@ -564,6 +566,41 @@ export class ReportsService {
     }));
   }
 
+  /**
+   * Bu dönemde HARCAMASI OLAN ama REKLAM SEVİYESİ satırı bulunmayan platformlar.
+   *
+   * NEDEN GEREKLİ: "Öne Çıkan Reklamlar" harcamaya göre sıralıyor ve platform
+   * ayırmıyor. Bir platformun ad seviyesi satırı hiç yoksa bölüm sessizce
+   * yalnızca diğerini gösteriyor ve okuyan "Meta'nın öne çıkan reklamı
+   * yokmuş" diye anlıyor.
+   *
+   * Sebep yapısal: 90 günlük ilk çekim (`initial_backfill`) bilerek YALNIZCA
+   * kampanya seviyesinde koşuyor — ad seviyesinde 90 gün çekmek hesabın
+   * kotasını saatlerce bloklar. Reklam seviyesi yalnızca gecelik iş (dün) ve
+   * 7 günlük geri düzeltmeden geliyor; hesap o dönemde gecelik senkronize
+   * etmiyorsa o dönemin reklam verisi hiçbir zaman gelmiyor.
+   *
+   * TEK SORGU, İKİ KÜME: harcaması olan platformlar EKSİ reklam satırı olan
+   * platformlar. İki ayrı tur atmak aynı satırları ikinci kez taramak olurdu.
+   */
+  private async topAdsMissingPlatforms(
+    tx: TxLike,
+    params: { clientId: string; from: string; to: string },
+  ): Promise<Array<'meta' | 'google'>> {
+    const rows = await tx.$queryRaw<Array<{ platform: 'meta' | 'google' }>>(
+      Prisma.sql`
+        SELECT platform
+        FROM insights_daily i
+        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
+          AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
+          AND i.spend_micros > 0
+        GROUP BY platform
+        HAVING COUNT(*) FILTER (WHERE i.entity_level = 'ad'::"EntityLevel") = 0
+      `,
+    );
+    return rows.map((r) => r.platform);
+  }
+
   /** En çok harcayan reklamlar — creative ile. */
   private async topAds(
     tx: TxLike,
@@ -573,6 +610,7 @@ export class ReportsService {
       Array<{
         id: string;
         name: string | null;
+        platform: 'meta' | 'google';
         campaign_name: string | null;
         headline: string | null;
         asset_urls: unknown;
@@ -583,7 +621,7 @@ export class ReportsService {
       }>
     >(
       Prisma.sql`
-        SELECT a.id, a.name, c.name AS campaign_name, cr.headline, cr.asset_urls,
+        SELECT a.id, a.name, a.platform, c.name AS campaign_name, cr.headline, cr.asset_urls,
                SUM(i.impressions) AS impressions,
                SUM(i.clicks) AS clicks,
                SUM(i.spend_micros) AS spend_micros,
@@ -596,7 +634,7 @@ export class ReportsService {
         WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
           AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
           AND i.entity_level = 'ad'::"EntityLevel"
-        GROUP BY a.id, a.name, c.name, cr.headline, cr.asset_urls
+        GROUP BY a.id, a.name, a.platform, c.name, cr.headline, cr.asset_urls
         ORDER BY SUM(i.spend_micros) DESC
         LIMIT 6
       `,
@@ -617,6 +655,7 @@ export class ReportsService {
         id: r.id,
         name: r.name ?? '—',
         campaignName: r.campaign_name ?? '—',
+        platform: r.platform,
         imageUrl: urls[0] ?? null,
         headline: r.headline,
         spendMicros: t.spendMicros,
