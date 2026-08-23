@@ -10,6 +10,7 @@ import {
 } from '../modules/connections/provider.types';
 import { ProviderRegistry } from '../modules/connections/provider.registry';
 import { TokenVaultService } from '../modules/connections/token-vault.service';
+import { shiftDate } from '../modules/budgets/budget-pacing';
 import { QuotaGuardService } from './quota-guard.service';
 
 /**
@@ -44,6 +45,58 @@ export interface InsightsSyncResult {
 }
 
 /** Hangi iş türü hangi seviyeleri çekiyor. */
+/**
+ * DERİN SEVİYELERDE TARİH PENCERESİ PARÇALANIYOR.
+ *
+ * Meta insights çağrısı `time_increment=1` ile gidiyor, yani yanıt
+ * GÜN × VARLIK satırı taşıyor. 90 gün × reklam seviyesi tek istekte,
+ * büyük bir hesapta *"Please reduce the amount of data you're asking for"*
+ * ile düşüyor — sayfa boyutunu yarılayan uyarlama o hatayı karşılıyor ama
+ * istek gövdesinin kendisi zaten çok büyük olduğunda yarılamak da yetmiyor.
+ *
+ * 15 gün, kampanya seviyesinde bugün sorunsuz çalışan 90 günün altıda biri.
+ * Sayı büyütülürse aynı hata geri gelir; küçültülürse çağrı sayısı ve
+ * dolayısıyla kota tüketimi artar.
+ *
+ * `account`/`campaign` seviyeleri PARÇALANMIYOR: bugün tek istekte çalışıyor
+ * ve gereksiz yere çağrı sayısını üçe katlamanın anlamı yok.
+ */
+const DERIN_SEVIYE_PENCERESI = 15;
+const DERIN_SEVIYELER: ReadonlySet<InsightsLevel> = new Set(['ad_group', 'ad']);
+
+/**
+ * Bir seviye için istek pencereleri.
+ *
+ * SINIF DIŞINDA VE SAF: parçalama matematiği bu değişikliğin taşıyıcı
+ * parçası — 90 günü kaç isteğe böldüğü, aralarında boşluk ya da örtüşme
+ * olup olmadığı. Özel bir metot olarak kalsaydı ancak kaynak taramasıyla
+ * sınanabilirdi ve tarama "bölme var" der ama "doğru bölüyor" DEMEZ.
+ *
+ * Sığ seviyeler (hesap, kampanya) tek pencere: bugün 90 günü sorunsuz
+ * çekiyorlar ve bölmek çağrı sayısını, dolayısıyla kota tüketimini gereksiz
+ * yere katlıyor.
+ *
+ * Tarihler `YYYY-MM-DD` STRING olarak taşınıyor ve karşılaştırma da öyle
+ * yapılıyor: `Date`e çevirmek bu kod tabanında saat dilimi kayması üretiyor
+ * ve bir günü sessizce atlatıyor.
+ */
+export function istekPencereleri(
+  level: InsightsLevel,
+  from: string,
+  to: string,
+): Array<{ from: string; to: string }> {
+  if (!DERIN_SEVIYELER.has(level)) return [{ from, to }];
+
+  const out: Array<{ from: string; to: string }> = [];
+  let bas = from;
+  while (bas <= to) {
+    const son = shiftDate(bas, DERIN_SEVIYE_PENCERESI - 1);
+    out.push({ from: bas, to: son > to ? to : son });
+    bas = shiftDate(son, 1);
+  }
+  return out;
+}
+
 const LEVELS_FOR_JOB: Record<string, InsightsLevel[]> = {
   // L2 gün içi: YALNIZCA hesap ve kampanya.
   //
@@ -55,9 +108,21 @@ const LEVELS_FOR_JOB: Record<string, InsightsLevel[]> = {
   insights_daily: ['account', 'campaign', 'ad_group', 'ad'],
   // L4 geri düzeltme: atıf penceresi kampanya ve altında değişiyor.
   insights_backfill: ['campaign', 'ad_group', 'ad'],
-  // L7 ilk backfill: geçmişi kampanya seviyesinde alıyoruz. Ad seviyesinde
-  // 90 gün çekmek yeni bir hesabın kotasını saatlerce bloklar.
-  initial_backfill: ['campaign'],
+  /*
+   * L7 ilk backfill: 90 GÜN, TÜM SEVİYELER — reklam dahil.
+   *
+   * Uzun süre yalnızca `campaign` çekiliyordu ve gerekçesi kotaydı. Bedeli
+   * üretimde görüldü: "Öne Çıkan Reklamlar" bölümü yalnızca o dönemde
+   * gecelik senkronize etmiş platformun reklamlarını gösteriyordu, çünkü
+   * reklam kırılımı SADECE gecelik iş ve 7 günlük geri düzeltmeden
+   * geliyordu. Geçmiş bir ayın reklam verisi hiçbir zaman oluşmuyor ve
+   * kendiliğinden de oluşmuyordu.
+   *
+   * Kota maliyeti gerçek ve kabul edilmiş bir karar. Riski taşınabilir
+   * kılan şey `DERIN_SEVIYE_PENCERESI`: derin seviyeler 90 günü tek istekte
+   * değil, parça parça istiyor.
+   */
+  initial_backfill: ['campaign', 'ad_group', 'ad'],
 };
 
 @Injectable()
@@ -150,46 +215,55 @@ export class InsightsSyncService {
     let incomplete = false;
 
     for (const level of levels) {
-      let result: PlatformInsights;
-      try {
-        result = await provider.fetchInsights(
-          {
-            accessToken,
-            accountExternalId: account.externalId,
-            loginCustomerId: account.managerExternalId ?? undefined,
-            onRateLimit: (snapshot) =>
-              this.quota.record({
-                platform: account.platform,
-                clientId: account.clientId,
-                adAccountId: account.id,
-                endpoint: `insights:${level}`,
-                snapshot,
-              }),
-          },
-          {
-            level,
-            dateFrom: params.dateFrom,
-            dateTo: params.dateTo,
-            timezone: account.timezone,
-          },
-        );
-      } catch (err) {
-        if (err instanceof PlatformApiError && err.kind === 'rate_limited') {
-          await this.quota.tripBreaker(
-            account.platform,
-            account.id,
-            err.detail?.retryAfterSeconds ?? 900,
+      for (const pencere of istekPencereleri(level, params.dateFrom, params.dateTo)) {
+        let result: PlatformInsights;
+        try {
+          result = await provider.fetchInsights(
+            {
+              accessToken,
+              accountExternalId: account.externalId,
+              loginCustomerId: account.managerExternalId ?? undefined,
+              onRateLimit: (snapshot) =>
+                this.quota.record({
+                  platform: account.platform,
+                  clientId: account.clientId,
+                  adAccountId: account.id,
+                  endpoint: `insights:${level}`,
+                  snapshot,
+                }),
+            },
+            {
+              level,
+              dateFrom: pencere.from,
+              dateTo: pencere.to,
+              timezone: account.timezone,
+            },
           );
+        } catch (err) {
+          if (err instanceof PlatformApiError && err.kind === 'rate_limited') {
+            await this.quota.tripBreaker(
+              account.platform,
+              account.id,
+              err.detail?.retryAfterSeconds ?? 900,
+            );
+          }
+          throw err;
         }
-        throw err;
+
+        totalCalls += result.apiCalls;
+        if (!result.complete) incomplete = true;
+
+        /*
+         * HER PARÇA HEMEN YAZILIYOR, sonda toplu değil. İş ortasında
+         * düşerse (kota, ağ) o ana kadarki günler veritabanında kalıyor ve
+         * tekrar denemede upsert onları aynen üzerine yazıyor — kayıp yok,
+         * mükerrer yok. Sonda yazmak, doksan günlük bir çekimin son
+         * adımdaki bir hatayla tamamen boşa gitmesi demekti.
+         */
+        const written = await this.writeRows(account, level, result);
+        totalRows += written.rows;
+        totalSkipped += written.skipped;
       }
-
-      totalCalls += result.apiCalls;
-      if (!result.complete) incomplete = true;
-
-      const written = await this.writeRows(account, level, result);
-      totalRows += written.rows;
-      totalSkipped += written.skipped;
     }
 
     // Kısmi sonuçta işi başarılı SAYMIYORUZ: eksik bir gün "senkronize edildi"
@@ -409,6 +483,7 @@ export class InsightsSyncService {
    * geriye dönük bir backfill'de eksik partition, tüm işi düşürür — ve hata
    * mesajı ("no partition of relation found for row") sebebi hiç anlatmaz.
    */
+
   private async ensurePartitions(dateFrom: string, dateTo: string): Promise<void> {
     // Ay başlarını dolaşıyoruz: aralık kaç ay sürerse sürsün her ay için bir
     // çağrı yeterli.

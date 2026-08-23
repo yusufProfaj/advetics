@@ -373,18 +373,30 @@ buna göre veriliyor:
   `169.254.169.254`e çözülebilir ve adres DİZGESİNE bakan hiçbir kontrol bunu
   göremez. Kalan risk DNS rebinding; `redirect: 'manual'` ve kısa zaman
   aşımıyla kabul edilen kalıntı.
-- **REKLAM SEVİYESİ GEÇMİŞ HİÇ ÇEKİLMİYOR — ve rapor bunu SÖYLEMEK zorunda.**
-  `initial_backfill` 90 günü BİLEREK yalnızca kampanya seviyesinde çekiyor
-  (ad seviyesinde 90 gün hesabın kotasını saatlerce bloklar); reklam kırılımı
-  yalnızca gecelik `insights_daily` (dün) ve 7 günlük `insights_backfill`ten
-  geliyor. Sonuç: bir hesap o dönemde gecelik senkronize etmiyorsa o dönemin
-  reklam verisi HİÇ gelmiyor ve bir daha kendiliğinden de gelmiyor. Üretimde
-  görülen hâli: temmuz raporunun "Öne Çıkan Reklamlar" sayfasında dört Google
-  arama reklamı, tek Meta reklamı yok. Bölüm harcamaya göre sıralayıp platform
-  ayırmadığı için okuyan "Meta'nın öne çıkan reklamı yokmuş" diye anlıyordu.
-  `topAdsMissingPlatforms` artık harcaması olan ama `entity_level = 'ad'`
-  satırı bulunmayan platformları döndürüyor ve hem PDF hem panel bunu
-  LİSTENİN ÜSTÜNDE yazıyor. Hiç harcamamış platform bildirilmiyor: her
+- **REKLAM SEVİYESİ GEÇMİŞ ARTIK ÇEKİLİYOR — ama pencere PARÇALANARAK.**
+  `initial_backfill` uzun süre 90 günü yalnızca kampanya seviyesinde
+  çekiyordu; gerekçe kotaydı, bedeli üretimde görüldü: temmuz raporunun
+  "Öne Çıkan Reklamlar" sayfasında dört Google arama reklamı vardı, tek Meta
+  reklamı yoktu — reklam kırılımı yalnızca gecelik `insights_daily` (dün) ve
+  7 günlük `insights_backfill`ten geliyordu, yani o dönemde gecelik
+  senkronize etmeyen hesabın reklam verisi HİÇ oluşmuyordu. Kullanıcı kota
+  maliyetini bilerek reklam seviyesini istedi; liste artık
+  `['campaign', 'ad_group', 'ad']`.
+  **Meta insights `time_increment=1` ile gidiyor, yani yanıt GÜN × VARLIK
+  satırı taşıyor: 90 gün × reklam seviyesi tek istekte "reduce the amount of
+  data" ile düşüyor ve sayfa yarılama bunu KURTARMIYOR** (gövde zaten çok
+  büyük). Derin seviyeler (`ad_group`, `ad`) 15 günlük parçalar hâlinde
+  isteniyor, sığ seviyeler tek istekte. Her parça HEMEN yazılıyor: sonda
+  toplu yazmak, doksan günlük çekimin son adımdaki bir hatayla tamamen boşa
+  gitmesi demekti. Parçalama matematiği saf bir fonksiyonda
+  (`istekPencereleri`) ve ÇALIŞTIRILARAK sınanıyor — bir günlük boşluk
+  sessizce eksik veri, bir günlük örtüşme boşa çağrı ve ikisi de kaynak
+  taramasıyla görünmüyor.
+  Değişiklik İLERİYE DÖNÜK: `initial_backfill` yalnızca hesap ilk atandığında
+  kuyruğa giriyor, geçmiş dönemler kendiliğinden dolmuyor.
+  `topAdsMissingPlatforms` yine de duruyor ve gerekli: harcaması olan ama
+  `entity_level = 'ad'` satırı bulunmayan platformları hem PDF hem panel
+  LİSTENİN ÜSTÜNDE yazıyor. Hiç harcamamış platform bildirilmiyor — her
   raporda duran bir uyarı okunmaz hâle gelir.
 - **AYNI RAPORUN İKİ GÖSTERİMİ VARSA REFERANS BİRİ OLMALI — ve o panel.**
   PDF'i "daha görsel" yapmaya çalışırken kendi dilimi kurdum: tam sayfa marka
