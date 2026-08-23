@@ -508,15 +508,16 @@ describe('öne çıkan reklamlar', () => {
 });
 
 /**
- * ═══ PDF GÖRSELLİĞİ ═══
+ * ═══ PDF GÖRSELLİĞİ — REFERANS PANELDEKİ BELGE ═══
  *
- * Kullanıcının bildirdiği hâliyle: "pdf çok kötü, grafikleri yok, boş text
- * gibi geldi". Ölçülünce doğrulandı — `branding` ve `daily` alanları veride
- * duruyordu ve PDF servisinde SIFIR referansları vardı: marka rengi hiç
- * kullanılmıyor, günlük seri hiç çizilmiyordu.
+ * Bu testlerin ilk hâli BENİM tasarım tercihlerimi kilitliyordu: tam sayfa
+ * marka bandı, dolgulu tablo başlığı, zebra satırlar, veri çubukları, sayfa
+ * altbilgisi. Kullanıcının cevabı "çok pastel boya çizimi gibi olmuş" oldu ve
+ * haklıydı — aynı raporun iki gösterimi iki farklı görsel dil konuşuyordu.
  *
- * Bu testler o üç kararı kilitliyor: renk kullanılıyor, grafik çiziliyor,
- * tabloda toplam satırı var.
+ * Referans `apps/web/src/components/report/report-document.tsx`. Aşağıdaki
+ * iddialar oradan ölçülen kararları tutuyor; birini gevşetmek iki belgeyi
+ * yeniden ayrıştırır.
  */
 describe('PDF görselliği', () => {
   const KAYNAK = readFileSync(join(__dirname, 'rapor-pdf.service.ts'), 'utf8');
@@ -525,30 +526,29 @@ describe('PDF görselliği', () => {
     return Array.from({ length: n }, (_, i) => ({
       date: `2026-07-${String(i + 1).padStart(2, '0')}`,
       spendMicros: String((i + 1) * 1_000_000),
-      conversionCounts: { form: i % 3, message: 1, purchase: 0 },
+      conversionCounts: { form: (i % 3) + 1, message: 1, purchase: 0 },
     }));
   }
 
   it('KRİTİK: MARKA RENGİ belgeye giriyor', async () => {
     /*
      * Beyaz etiketli bir üründe markanın rengi müşteriye giden belgede
-     * görünmüyorsa, ürünün ana vaadi belgede yok demektir. `branding`
-     * alanı veride duruyor ama PDF servisinde HİÇ okunmuyordu.
+     * görünmüyorsa ürünün ana vaadi orada yok demektir. Renk ÜÇ yerde:
+     * bölüm alt başlığı, TOPLAM kartının dolgusu, kapaktaki kısa çizgi.
      *
-     * Ölçüm renk operatöründen: pdf-lib dolguyu içerik akışına `r g b rg`
-     * olarak yazıyor. #E4572E → 0.894 0.341 0.18.
+     * Ölçüm renk operatöründen: #E4572E → 0.894 0.341 0.18 rg.
      */
     const pdf = await svc.uret({
       ...VERI,
-      sections: ['cover'],
+      sections: ['summary'],
       branding: { ...VERI.branding, primaryColor: '#E4572E', accentColor: '#E4572E' },
     });
     expect(icerik(pdf)).toMatch(/0\.89\d+ 0\.34\d+ 0\.18\d* rg/);
   });
 
   it('KRİTİK: BOZUK marka rengi PDF üretimini düşürmüyor', async () => {
-    // Renk panelden serbest metin giriliyor; tek bir hatalı karakter
-    // yüzünden müşteriye giden belgenin üretilmemesi kabul edilemez.
+    // Renk panelden serbest metin giriliyor; tek hatalı karakter yüzünden
+    // müşteriye giden belgenin üretilmemesi kabul edilemez.
     await expect(
       svc.uret({
         ...VERI,
@@ -558,168 +558,88 @@ describe('PDF görselliği', () => {
     ).resolves.toBeInstanceOf(Buffer);
   });
 
-  it('KRİTİK: GÜNLÜK GRAFİK çiziliyor — veri elde dururken atlanmıyor', async () => {
+  it('KRİTİK: ÖZET ETİKETLERİ panelle aynı', async () => {
     /*
-     * `data.daily` panelde grafik olarak gösteriliyordu; PDF onu hiç
-     * kullanmıyordu ve belge yalnızca sayı listesiydi.
-     *
-     * Grafik VEKTÖREL: barlar `re f` (dikdörtgen + dolgu), dönüşüm çizgisi
-     * `S` ile çiziliyor. Grafiksiz özet sayfasında bu operatörler bu
-     * yoğunlukta bulunmuyor.
+     * PDF "Harcama" ve "Ort. TBM" yazıyordu, panel ise "Maliyet" ve "EBM".
+     * Aynı rapor iki gösterimde farklı metrikleri farklı adlarla
+     * gösteriyordu ve bunu fark eden müşteri olurdu.
      */
-    const ile = await svc.uret({ ...VERI, sections: ['summary'], daily: gunluk(20) });
-    const olmadan = await svc.uret({ ...VERI, sections: ['summary'], daily: [] });
+    const t = metinler(await svc.uret({ ...VERI, sections: ['summary'] }));
+    expect(t).toContain('MALİYET');
+    expect(t).toContain('EBM');
+    expect(t).not.toContain('ORT. TBM');
+  });
 
+  it('KRİTİK: GÜNLÜK DÖNÜŞÜM GRAFİĞİ kampanya sayfasında çiziliyor', async () => {
     /*
-     * ÖLÇÜM ÇİZİM OPERATÖRÜNDEN, BOYUTTAN DEĞİL.
-     *
-     * İlk denemem ` re` (dikdörtgen) arıyordu ve BOŞA DÜŞTÜ: pdf-lib
-     * dikdörtgeni `re` ile değil `m`/`l` yol komutlarıyla çiziyor, yani
-     * iddia hiçbir zaman tutmayacaktı. Renk operatörü (`rg`) her dolgu ve
-     * her çizgi için bir kez yazılıyor; yirmi barlık bir grafik onu
-     * belirgin biçimde artırıyor.
+     * Grafik bir süre ÖZET sayfasındaydı ve harcama barı + dönüşüm çizgisi
+     * çiziyordu. Referansta grafik KAMPANYA sayfasında ve FORM ile MESAJ'ın
+     * GRUPLU barları — yığmak ya da tek seriye indirmek "toplam dönüşüm"
+     * izlenimi verir, oysa soru "hangisi artıyor".
      */
-    const say = (b: Buffer): number => icerik(b).split('rg').length - 1;
-    expect(say(ile) - say(olmadan)).toBeGreaterThan(15);
-    expect(ile.byteLength).toBeGreaterThan(olmadan.byteLength + 300);
+    const ile = await svc.uret({ ...VERI, sections: ['meta_campaigns'], daily: gunluk(20) });
+    const olmadan = await svc.uret({ ...VERI, sections: ['meta_campaigns'], daily: [] });
+    expect(metinler(ile)).toContain('Günlük dönüşüm seyri');
+    expect(metinler(olmadan)).not.toContain('Günlük dönüşüm seyri');
   });
 
   it('tek günlük seride grafik çizilmiyor', async () => {
-    // Bir gün için grafik tek bir bar demek; kartlar aynı bilgiyi daha
-    // okunur veriyor. Paneldeki kararla aynı.
-    /*
-     * KIYAS BOŞ SERİYLE, ÇOK NOKTALIYLA DEĞİL.
-     *
-     * İlk yazımda 1 nokta ile 20 noktayı karşılaştırıyordum ve koşulu
-     * `> 1`den `> 0`a çeviren mutasyon YAKALANMIYORDU: tek barlı bir grafik
-     * de yirmi barlıdan küçüktür. Doğru kıyas "hiç çizilmemiş" hâl.
-     */
-    const bir = await svc.uret({ ...VERI, sections: ['summary'], daily: gunluk(1) });
-    const bos = await svc.uret({ ...VERI, sections: ['summary'], daily: [] });
+    // KIYAS BOŞ SERİYLE: bir noktayı yirmi noktayla kıyaslamak, koşulu
+    // `> 1`den `> 0`a çeviren mutasyonu kaçırıyordu.
+    const bir = await svc.uret({ ...VERI, sections: ['meta_campaigns'], daily: gunluk(1) });
+    const bos = await svc.uret({ ...VERI, sections: ['meta_campaigns'], daily: [] });
     expect(bir.byteLength).toBe(bos.byteLength);
   });
 
-  it('KRİTİK: kampanya tablosunda TOPLAM satırı var', async () => {
-    /*
-     * PDF'te toplam HİÇ YOKTU: aynı rapor ekranda toplamlı, müşteriye
-     * giden belgede toplamsız çıkıyordu. "Bu ay ne kadar harcadık"
-     * sorusunun cevabı belgede olmalı.
-     */
-    expect(KAYNAK).toContain('COLUMN_TOTALS[k]');
+  it('KRİTİK: kampanya tablosunda GENEL TOPLAM satırı var', async () => {
     const pdf = await svc.uret({ ...VERI, sections: ['meta_campaigns'] });
-    // İDDİA ÇİZİLEN METNE ÇAPALI: kaynak taraması, blok `if (false)` içine
-    // alındığında da geçiyordu.
-    expect(metinler(pdf)).toContain('TOPLAM');
+    expect(metinler(pdf)).toContain('GENEL TOPLAM');
   });
 
-  it('KRİTİK: TOPLANAMAYAN sütun toplam satırında BOŞ kalıyor', async () => {
+  it('KRİTİK: TOPLANAMAYAN sütun toplam satırında "—" basıyor', async () => {
     /*
      * Erişimde toplam "iki kat kitle" demek: aynı kişi iki kampanyayı da
-     * görmüş olabilir. Sıfır ya da bir sayı basmak, müşteriye giden belgede
-     * uydurulmuş bir rakam olurdu.
-     *
-     * ÖLÇÜM ÇİZİLEN DİZGE SAYISINDAN: tek sütunlu iki tablo, yalnızca o
-     * sütunun toplanabilir olup olmamasıyla ayrılıyor.
+     * görmüş olabilir. Boş bırakmak "hesaplanmadı" gibi okunuyordu; panelde
+     * de "—" basılıyor.
      */
-    const harcama = await svc.uret({
-      ...VERI,
-      sections: ['meta_campaigns'],
-      options: { meta_campaigns: { metrics: ['spend'] } },
-    });
     const erisim = await svc.uret({
       ...VERI,
       sections: ['meta_campaigns'],
       options: { meta_campaigns: { metrics: ['reach'] } },
     });
-    expect(metinler(harcama)).toContain('TOPLAM');
-    expect(metinler(erisim)).toContain('TOPLAM');
-    expect(metinler(harcama).length).toBeGreaterThan(metinler(erisim).length);
+    expect(metinler(erisim)).toContain('—');
   });
 
   it('KRİTİK: toplam PANELLE aynı kaynaktan — ikinci defter yok', () => {
-    /*
-     * Toplamı burada ikinci kez yazmak, bir sütun eklenip toplamının
-     * unutulması demekti ve TypeScript hiçbir şey demezdi.
-     */
+    expect(KAYNAK).toContain('COLUMN_TOTALS[k]');
     expect(KAYNAK).not.toMatch(/const\s+TOPLAMLAR\s*[:=]/);
-    expect(KAYNAK).toContain("from '@advetics/shared'");
   });
-});
 
-describe('PDF sayfa düzeni', () => {
-  it('KRİTİK: her içerik sayfasında ALTBİLGİ ve sayfa numarası var', async () => {
+  it('KRİTİK: panelde OLMAYAN süslemeler geri gelmiyor', () => {
     /*
-     * Yazıcıdan çıkan ya da e-postayla dolaşan belgede sayfalar
-     * ayrılabiliyor; hangi müşteriye ve döneme ait olduğu HER sayfada
-     * yazmalı. Numarasız belgede "3. sayfadaki tablo" denemiyor.
+     * REGRESYON BEKÇİSİ. Dolgulu tablo başlığı, zebra satır, veri çubuğu,
+     * sayfa altbilgisi ve platform pay çubuğu benim eklemelerimdi ve
+     * referansta yok. Biri geri eklenirse belge yeniden panelden ayrışır.
      */
-    const pdf = await svc.uret({
-      ...VERI,
-      sections: ['summary', 'meta_campaigns', 'google_campaigns'],
-    });
-    const t = metinler(pdf);
-    expect(t).toContain('Sayfa 1');
-    expect(t).toContain('Sayfa 2');
-    expect(t).toContain('Sayfa 3');
+    for (const yasak of ['payCubugu', 'altbilgi(', 'acikTon(', 'const BANT']) {
+      expect(KAYNAK, `${yasak} geri gelmiş`).not.toContain(yasak);
+    }
   });
 
-  it('KRİTİK: PAY ÇUBUĞU tek platformda çizilmiyor', async () => {
+  it('KRİTİK: KAPAK panelin düzeninde — başlık kelime kelime', () => {
     /*
-     * Tek platformda çubuk %100 dolu çıkıyor ve hiçbir şey söylemiyor;
-     * üstelik "%100" etiketi okuyucuya bir karşılaştırma varmış gibi
-     * geliyor.
+     * Referans başlığı `title.split(' ')` ile kelime kelime satıra
+     * bölüyor. Tek satıra sığdırmak aynı belgenin iki farklı kapakla
+     * çıkması demekti.
      */
-    // FIXTURE'DA TEK PLATFORM VAR; ikincisini burada kuruyoruz. İlk yazımda
-    // bunu atlamıştım ve "iki platformda çubuk var" iddiası tek platformlu
-    // bir belgeye bakıyordu — test kendi öncülünü sınamıyordu.
-    const ikinci = { ...VERI.platforms[0]!, label: 'Google Ads', spendMicros: '10000000000' };
-    const iki = await svc.uret({
-      ...VERI,
-      sections: ['summary'],
-      platforms: [VERI.platforms[0]!, ikinci],
-    });
-    const tek = await svc.uret({
-      ...VERI,
-      sections: ['summary'],
-      platforms: [VERI.platforms[0]!],
-    });
-    expect(metinler(iki).some((x) => /^Meta Ads %\d+$/.test(x))).toBe(true);
-    expect(metinler(tek).some((x) => /^Meta Ads %\d+$/.test(x))).toBe(false);
+    const i = KAYNAK.indexOf('private kapak');
+    expect(i, 'kapak bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const dilim = KAYNAK.slice(i, KAYNAK.indexOf('private ozet', i));
+    expect(dilim).toContain(".split(/\\s+/)");
+    expect(dilim).not.toContain('BANT_Y');
   });
 
-  it('KRİTİK: KAPAK raporun başlık sayılarını taşıyor', async () => {
-    /*
-     * Bandın altı boş bir alandı ve müşterinin İLK gördüğü sayfa hiçbir şey
-     * söylemiyordu. Sayılar özet bloğuyla AYNI kaynaktan; ikinci bir hesap
-     * ikisinin ayrışması demekti.
-     */
-    const pdf = await svc.uret({ ...VERI, sections: ['cover'] });
-    const t = metinler(pdf);
-    expect(t).toContain('Toplam harcama');
-    expect(t).toContain('Ort. EBM');
-  });
-
-  it('KRİTİK: VERİ ÇUBUĞU en yüksek harcamaya göre ölçekleniyor', () => {
-    /*
-     * Satır satır ölçeklemek her satırı %100 yapar ve çubuk hiçbir şey
-     * anlatmaz. İddia kaynağa çapalı çünkü ölçek çizilen metinde değil
-     * genişlikte; genişlik ise PDF akışında sayı olarak duruyor ve tek tek
-     * ayıklamak testi kırılgan yapardı.
-     */
-    const kaynak = readFileSync(join(__dirname, 'rapor-pdf.service.ts'), 'utf8');
-    const i = kaynak.indexOf('const enYuksekHarcama');
-    expect(i, 'ölçek hesabı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
-    expect(kaynak.slice(i, kaynak.indexOf(';', i))).toContain('Math.max');
-  });
-
-  it('logo YOKSA kapak yine basılıyor', async () => {
-    // Bir logo yüzünden müşteriye giden belgenin üretilmemesi kabul edilemez.
-    await expect(
-      svc.uret({ ...VERI, sections: ['cover'], branding: { ...VERI.branding, logoUrl: null } }),
-    ).resolves.toBeInstanceOf(Buffer);
-  });
-
-  it('KRİTİK: logo İNDİRİLEMEZSE kapak logosuz basılıyor', async () => {
+  it('logo YOKSA / İNDİRİLEMEZSE kapak yine basılıyor', async () => {
     const getir = (async () => new Response(null, { status: 500 })) as unknown as typeof fetch;
     const pdf = await svc.uret(
       {
@@ -729,6 +649,6 @@ describe('PDF sayfa düzeni', () => {
       },
       { getir },
     );
-    expect(metinler(pdf)).toContain('Toplam harcama');
+    expect(metinler(pdf)).toContain(VERI.client.name);
   });
 });

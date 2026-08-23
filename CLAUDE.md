@@ -373,6 +373,17 @@ buna göre veriliyor:
   `169.254.169.254`e çözülebilir ve adres DİZGESİNE bakan hiçbir kontrol bunu
   göremez. Kalan risk DNS rebinding; `redirect: 'manual'` ve kısa zaman
   aşımıyla kabul edilen kalıntı.
+- **AYNI RAPORUN İKİ GÖSTERİMİ VARSA REFERANS BİRİ OLMALI — ve o panel.**
+  PDF'i "daha görsel" yapmaya çalışırken kendi dilimi kurdum: tam sayfa marka
+  bandı, dolgulu tablo başlığı, zebra satır, veri çubuğu, pay çubuğu, sayfa
+  altbilgisi. Kullanıcının tarifi *"çok pastel boya çizimi gibi olmuş"*.
+  Referans `apps/web/src/components/report/report-document.tsx`: beyaz zemin,
+  ince slate kuralları, çerçeveli kartlar ve marka rengi YALNIZCA üç yerde
+  (bölüm alt başlığı, TOPLAM kartı dolgusu, kapaktaki kısa çizgi). Aynı
+  ayrışma metinde de vardı: PDF "Harcama"/"Ort. TBM", panel "Maliyet"/"EBM"
+  yazıyordu. `rapor-pdf.service.spec.ts` artık bir REGRESYON BEKÇİSİ taşıyor
+  — `payCubugu`, `altbilgi(`, `acikTon(`, `const BANT` kaynakta geçerse
+  düşüyor.
 - **VERİDE DURAN ALAN, KULLANILMIYORSA YOKTUR.** Rapor PDF'i `branding` ve
   `daily` alanlarını HİÇ okumuyordu (servis içinde sıfır referans): marka
   rengi kullanılmıyor, panelde grafik olarak görünen günlük seri belgeye hiç
