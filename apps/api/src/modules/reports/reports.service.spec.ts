@@ -302,6 +302,89 @@ describe('ReportsService — yapı', () => {
     expect(data.total!.label).toBe('TOPLAM');
   });
 
+  it('KRİTİK: REKLAM SEVİYESİ verisi olmayan platform bildiriliyor', async () => {
+    /*
+     * "Öne Çıkan Reklamlar" harcamaya göre sıralıyor ve platform ayırmıyor.
+     * Meta'nın reklam seviyesi satırı hiç yoksa bölüm sessizce yalnızca
+     * Google'ı gösteriyor ve okuyan "Meta'nın öne çıkan reklamı yokmuş" diye
+     * anlıyor.
+     *
+     * Sebep yapısal: 90 günlük ilk çekim BİLEREK yalnızca kampanya
+     * seviyesinde koşuyor — reklam kırılımı yalnızca gecelik iş ve 7 günlük
+     * geri düzeltmeden geliyor. Üretimde tam olarak bu görüldü: temmuz
+     * raporunda dört Google arama reklamı, tek Meta reklamı yok.
+     */
+    // Meta: yalnızca KAMPANYA seviyesi (ilk çekimin bıraktığı hâl).
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01', spendMicros: '1000000' });
+    // Google: kampanya + REKLAM seviyesi.
+    for (const [seviye, id] of [
+      ['campaign', CAMP_B],
+      ['ad', CAMP_B],
+    ] as const) {
+      await h.q(
+        `INSERT INTO insights_daily
+           (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+            date, breakdown_key, impressions, clicks, spend_micros, conversions,
+            conversion_value_micros, currency, reach, raw_metrics)
+         VALUES ($1, $2, 'google', $4::"EntityLevel", $3, 'ext-g', '2026-08-01'::date, '',
+                 50, 5, 2000000, 0, 0, 'TRY', 0, '{}'::jsonb)`,
+        [IDS.client, IDS.adAccount, id, seviye],
+      );
+    }
+
+    const data = await svc.build(CTX, RANGE);
+    expect(data.topAdsMissingPlatforms).toEqual(['meta']);
+  });
+
+  it('KRİTİK: HİÇ HARCAMAYAN platform "eksik" diye bildirilmiyor', async () => {
+    /*
+     * Uyarının anlamı "harcama var ama reklam kırılımı yok". Harcamamış bir
+     * platform için de yazmak, olmayan bir eksikliği her raporda bildirmek
+     * olurdu — ve her raporda duran bir uyarı okunmaz hâle gelir, gerçek
+     * eksiklik onun içinde kaybolur.
+     */
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01', spendMicros: '1000000' });
+    // Google: satır VAR ama harcama SIFIR ve reklam seviyesi yok.
+    await h.q(
+      `INSERT INTO insights_daily
+         (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+          date, breakdown_key, impressions, clicks, spend_micros, conversions,
+          conversion_value_micros, currency, reach, raw_metrics)
+       VALUES ($1, $2, 'google', 'campaign', $3, 'ext-g0', '2026-08-01'::date, '',
+               10, 0, 0, 0, 0, 'TRY', 0, '{}'::jsonb)`,
+      [IDS.client, IDS.adAccount, CAMP_B],
+    );
+
+    const data = await svc.build(CTX, RANGE);
+    // Meta harcadı ve reklam kırılımı yok → bildiriliyor.
+    // Google harcamadı → bildirilmiyor.
+    expect(data.topAdsMissingPlatforms).toEqual(['meta']);
+  });
+
+  it('her iki platformda reklam verisi varsa eksik bildirilmiyor', async () => {
+    // Her raporda duran bir uyarı okunmaz hâle gelir ve gerçek bir eksiklik
+    // onun içinde kaybolur.
+    for (const [platform, id] of [
+      ['meta', CAMP_A],
+      ['google', CAMP_B],
+    ] as const) {
+      for (const seviye of ['campaign', 'ad'] as const) {
+        await h.q(
+          `INSERT INTO insights_daily
+             (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+              date, breakdown_key, impressions, clicks, spend_micros, conversions,
+              conversion_value_micros, currency, reach, raw_metrics)
+           VALUES ($1, $2, $5::"Platform", $4::"EntityLevel", $3, 'e-' || $5 || $4,
+                   '2026-08-01'::date, '', 50, 5, 2000000, 0, 0, 'TRY', 0, '{}'::jsonb)`,
+          [IDS.client, IDS.adAccount, id, seviye, platform],
+        );
+      }
+    }
+
+    const data = await svc.build(CTX, RANGE);
+    expect(data.topAdsMissingPlatforms).toEqual([]);
+  });
+
   it('şablon yoksa TÜM bölümler geliyor', async () => {
     await seedRow({ entityId: CAMP_A, date: '2026-08-01' });
     const data = await svc.build(CTX, RANGE);

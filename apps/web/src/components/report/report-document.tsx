@@ -583,12 +583,35 @@ function SearchTerms({ data }: { data: ReportData }) {
   );
 }
 
+const PLATFORM_ADI: Record<string, string> = { meta: 'Meta Ads', google: 'Google Ads' };
+
 function TopAds({ data }: { data: ReportData }) {
-  if (data.topAds.length === 0) return null;
+  const eksik = data.topAdsMissingPlatforms;
+  // Hem liste boş hem eksik bildirimi yoksa bölümün gösterecek bir şeyi yok.
+  if (data.topAds.length === 0 && eksik.length === 0) return null;
 
   return (
     <section className="rpt-page pt-10">
       <PageHead title="Öne Çıkan Reklamlar" subtitle="En yüksek harcamaya göre" />
+
+      {/*
+        EKSİK PLATFORM LİSTENİN ÜSTÜNDE.
+
+        Bölüm harcamaya göre sıralıyor ve platform ayırmıyor; bir platformun
+        reklam seviyesi satırı hiç yoksa liste sessizce yalnızca diğerini
+        gösteriyor ve okuyan "Meta'nın öne çıkan reklamı yokmuş" diye anlıyor.
+        Doğrusu "o dönemde Meta için reklam seviyesi veri toplanmadı" ve bu,
+        listeyi okumadan ÖNCE bilinmesi gereken bir kısıt.
+      */}
+      {eksik.length > 0 && (
+        <Note>
+          <strong>{eksik.map((p) => PLATFORM_ADI[p] ?? p).join(' ve ')}</strong> için bu dönemde
+          reklam seviyesi veri yok — geçmiş çekimi kampanya seviyesinde yapılıyor, reklam
+          kırılımı yalnızca son günler için toplanıyor. Aşağıdaki liste bu yüzden diğer
+          platformu gösteriyor.
+        </Note>
+      )}
+
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {data.topAds.map((ad) => (
           <div key={ad.id} className="rpt-card flex gap-4 rounded-xl border border-slate-200 p-4">

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { MetricTotals } from './metrics.schema';
+import { PLATFORMS } from '../constants/platforms';
 import { formatMoney, formatNumber, formatPercent } from '../format';
 
 /**
@@ -417,7 +418,26 @@ export interface ReportData {
     conversions: number;
     cpa: number | null;
     ctr: number | null;
+    platform: (typeof PLATFORMS)[number];
   }>;
+  /**
+   * Bu dönemde HARCAMASI OLAN ama REKLAM SEVİYESİ verisi bulunmayan platformlar.
+   *
+   * NEDEN AYRI BİR ALAN: "Öne Çıkan Reklamlar" bölümü harcamaya göre
+   * sıralıyor ve platform ayırmıyor. Bir platformun reklam satırı hiç yoksa
+   * bölüm sessizce yalnızca diğerini gösteriyor — okuyan "Meta'nın öne çıkan
+   * reklamı yokmuş" diye anlıyor, oysa doğrusu "Meta için o dönemde reklam
+   * seviyesi veri HİÇ TOPLANMADI".
+   *
+   * Sebebi yapısal: 90 günlük ilk çekim (`initial_backfill`) bilerek YALNIZCA
+   * kampanya seviyesinde koşuyor — ad seviyesinde 90 gün çekmek hesabın
+   * kotasını saatlerce bloklar. Reklam seviyesi yalnızca gecelik iş (dün) ve
+   * 7 günlük geri düzeltmeden geliyor. Yani hesap o dönemde gecelik
+   * senkronize etmiyorsa, o dönemin reklam verisi hiçbir zaman gelmiyor.
+   *
+   * Boş dizi = eksik yok. Bölüm bu listeyi YAZMAK zorunda.
+   */
+  topAdsMissingPlatforms: Array<(typeof PLATFORMS)[number]>;
   /**
    * Anahtar kelime performansı.
    *

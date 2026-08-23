@@ -83,6 +83,7 @@ const VERI: ReportData = {
   googleCampaigns: [],
   daily: [],
   topAds: [],
+  topAdsMissingPlatforms: [],
   keywords: [
     { keyword: 'urla satılık villa', spendMicros: '3037000000', impressions: 6250, clicks: 302, ctr: 4.83, cpc: 10.05 },
   ],
@@ -337,6 +338,7 @@ describe('öne çıkan reklamlar', () => {
           id: 'a1',
           name: 'Ikon Live gorselli reklam',
           campaignName: 'Bagcilar kampanyasi',
+          platform: 'meta' as const,
           imageUrl: 'https://scontent.xx.fbcdn.net/v/gorsel.jpg',
           headline: 'Simdi kesfet',
           spendMicros: '821770000',
@@ -348,6 +350,7 @@ describe('öne çıkan reklamlar', () => {
           id: 'a2',
           name: 'Urla villa arama reklami',
           campaignName: 'Google Search',
+          platform: 'google' as const,
           // GÖRSEL ADRESİ HİÇ YOK: Google arama reklamının normal hâli.
           imageUrl: null,
           headline: 'Urlada satilik villa',
@@ -479,6 +482,46 @@ describe('öne çıkan reklamlar', () => {
     }) as unknown as typeof fetch;
     await svc.uret(veri({ sections: ['summary'] }), { getir: sayan });
     expect(cagri).toBe(0);
+  });
+
+  it('KRİTİK: REKLAM SEVİYESİ VERİSİ OLMAYAN platform bildiriliyor', async () => {
+    /*
+     * BÖLÜMÜN EN YANILTICI HÂLİ BUYDU. Liste harcamaya göre sıralıyor ve
+     * platform ayırmıyor; Meta'nın reklam seviyesi satırı hiç yoksa sayfa
+     * yalnızca Google reklamlarını gösteriyor ve okuyan "Meta'nın öne çıkan
+     * reklamı yokmuş" diye anlıyor.
+     *
+     * Doğrusu yapısal: 90 günlük ilk çekim BİLEREK yalnızca kampanya
+     * seviyesinde koşuyor (ad seviyesinde 90 gün çekmek kotayı saatlerce
+     * bloklar), reklam kırılımı yalnızca gecelik iş ve 7 günlük geri
+     * düzeltmeden geliyor. Hesap o dönemde gecelik senkronize etmiyorsa o
+     * dönemin reklam verisi HİÇ gelmiyor.
+     */
+    const pdf = await svc.uret(veri({ topAdsMissingPlatforms: ['meta'] }), { getir: veren });
+    const t = metinler(pdf).join(' ');
+    expect(t).toContain('Meta Ads');
+    expect(t).toContain('reklam seviyesi veri yok');
+  });
+
+  it('eksik platform yoksa uyarı da YOK', async () => {
+    // Her raporda duran bir uyarı okunmaz hâle gelir ve gerçek bir eksiklik
+    // onun içinde kaybolur.
+    const pdf = await svc.uret(veri({ topAdsMissingPlatforms: [] }), { getir: veren });
+    expect(metinler(pdf).join(' ')).not.toContain('reklam seviyesi veri yok');
+  });
+
+  it('KRİTİK: liste BOŞ olsa bile eksik platform bildiriliyor', async () => {
+    /*
+     * İki platformun da reklam seviyesi verisi yoksa liste boş kalıyor.
+     * Bölümü tamamen atlamak, "bu dönemde öne çıkan reklam yok" demekle
+     * aynı sessiz yanlışa düşerdi.
+     */
+    const pdf = await svc.uret(
+      veri({ topAds: [], topAdsMissingPlatforms: ['meta', 'google'] }),
+      { getir: veren },
+    );
+    const t = metinler(pdf).join(' ');
+    expect(t).toContain('Meta Ads ve Google Ads');
   });
 
   it('KRİTİK: sayfaya sığmayan reklamlar SESSİZCE düşmüyor', async () => {

@@ -710,6 +710,39 @@ export class RaporPdfService {
     const s = ctx.doc.addPage([EN, BOY]);
     let y = this.baslik(ctx, s, SECTION_LABELS.top_ads);
 
+    /*
+     * EKSİK PLATFORM ÖNCE YAZILIYOR — listenin ALTINDA değil.
+     *
+     * Bölüm harcamaya göre sıralıyor ve platform ayırmıyor; bir platformun
+     * reklam seviyesi satırı hiç yoksa liste sessizce yalnızca diğerini
+     * gösteriyor. Okuyan "Meta'nın öne çıkan reklamı yokmuş" diye anlıyor,
+     * oysa doğrusu "o dönemde Meta için reklam seviyesi veri toplanmadı".
+     *
+     * Üstte, çünkü listeyi okumadan ÖNCE bilinmesi gereken bir kısıt.
+     */
+    if (ctx.data.topAdsMissingPlatforms.length > 0) {
+      const adlar = ctx.data.topAdsMissingPlatforms.map((p) => PLATFORM_ADI[p]).join(' ve ');
+      for (const [i, satir] of sar(
+        `${adlar} için bu dönemde reklam seviyesi veri yok — geçmiş çekimi kampanya ` +
+          'seviyesinde yapılıyor, reklam kırılımı yalnızca son günler için toplanıyor. ' +
+          'Aşağıdaki liste bu yüzden diğer platformu gösteriyor.',
+        ctx.normal,
+        8,
+        EN - 2 * KENAR - 16,
+      ).entries()) {
+        s.drawText(satir, {
+          x: KENAR + 10,
+          y: y - 4 - i * 11,
+          size: 8,
+          font: ctx.normal,
+          color: SLATE.s600,
+        });
+      }
+      // Panelin `Note` bileşeni: solda 3 punto vurgu şeridi, açık zemin.
+      s.drawRectangle({ x: KENAR, y: y - 30, width: 2.5, height: 34, color: ctx.vurgu });
+      y -= 46;
+    }
+
     if (ctx.data.topAds.length === 0) {
       s.drawText('Bu dönemde harcama yapan reklam yok.', {
         x: KENAR,
@@ -969,6 +1002,9 @@ interface Ctx {
  * okuyor. Burada elle "Form"/"Mesaj" yazmak, kova adı değiştiğinde iki
  * belgenin ayrışması demekti.
  */
+/** Platform kimliğinin insan adı — panelde de aynı iki etiket kullanılıyor. */
+const PLATFORM_ADI: Record<string, string> = { meta: 'Meta Ads', google: 'Google Ads' };
+
 const KOVA_ADI: Record<string, string> = Object.fromEntries(
   Object.entries(CONVERSION_BUCKETS).map(([k, v]) => [k, v.label]),
 );
