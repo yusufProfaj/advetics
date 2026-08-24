@@ -91,7 +91,32 @@ describe('paylaş menüsü', () => {
     expect(MENU.indexOf('Bağlantı süresi')).toBeGreaterThan(i);
   });
 
-  it('PDF indir AYRI kalıyor — müşteriye bir şey ulaştırmıyor', () => {
+  it('KRİTİK: PDF indir PAYLAŞ ile YAN YANA ama menünün İÇİNDE DEĞİL', () => {
+    /*
+     * Yan yana, çünkü raporla ilgili bir şey yapmak için kullanıcı tek yere
+     * baksın. Menünün içinde değil, çünkü indirmek belgeyi KENDİNE almak;
+     * "Bağlantıyı kopyala" ve "Mail yoluyla ilet" ise müşteriye ULAŞTIRMAK.
+     * İkisini aynı başlık altında toplamak farklı iki işi karıştırırdı.
+     */
     expect(GONDER).toContain('PDF indir');
+    expect(MENU).toContain('<RaporGonder clientId={clientId}');
+
+    const menuBasi = MENU.indexOf('role="menu"');
+    expect(menuBasi, 'menü bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    // İndir düğmesi menü bloğundan ÖNCE: kardeş, çocuk değil.
+    expect(MENU.indexOf('<RaporGonder')).toBeLessThan(menuBasi);
+  });
+
+  it('KRİTİK: sayfa PDF düğmesini AYRICA render etmiyor', () => {
+    /*
+     * Panelin içine taşındı; sayfada da kalsaydı ekranda İKİ indirme düğmesi
+     * olurdu — kaldırılan "iki giriş noktası" sorununun aynısı, bu kez
+     * indirme tarafında.
+     */
+    const sayfa = readFileSync(
+      join(__dirname, '..', '..', 'app', '(dashboard)', 'raporlar', 'page.tsx'),
+      'utf8',
+    );
+    expect(kod(sayfa)).not.toContain('<RaporGonder');
   });
 });

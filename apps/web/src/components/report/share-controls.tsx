@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { MailGonderModal } from './rapor-gonder';
+import { MailGonderModal, RaporGonder } from './rapor-gonder';
 
 /**
  * ═══ PAYLAŞ — TEK GİRİŞ, İKİ YOL ═══
@@ -125,6 +125,16 @@ export function ShareControls({
             sonradan açtığında aynı sayıları görür.
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          {/*
+            İNDİR VE PAYLAŞ YAN YANA. Öncesinde "PDF indir" sayfanın üstünde
+            ayrı duruyordu; kullanıcı raporla ilgili bir şey yapmak için iki
+            ayrı yere bakıyordu. İkisi aynı yerde ama AYNI DÜĞME DEĞİL:
+            indirmek belgeyi kendine almak, paylaşmak müşteriye ulaştırmak.
+            Aynı menüye koymak iki farklı işi tek başlık altında toplardı.
+          */}
+          <RaporGonder clientId={clientId} from={from} to={to} hasData={hasData} />
+
         <div className="relative" ref={menuRef}>
           <button
             type="button"
@@ -202,6 +212,7 @@ export function ShareControls({
               </button>
             </div>
           )}
+        </div>
         </div>
       </div>
 
