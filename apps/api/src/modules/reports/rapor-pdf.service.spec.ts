@@ -484,6 +484,57 @@ describe('öne çıkan reklamlar', () => {
     expect(cagri).toBe(0);
   });
 
+  it('KRİTİK: her platform AYRI SAYFADA', async () => {
+    /*
+     * Tek sayfada karışık listelendiğinde harcaması büyük olan platform
+     * listeyi tamamen dolduruyordu: Google'ın en iyi reklamı Meta'nın
+     * altında hiç görünmüyordu.
+     */
+    const [meta, google] = veri().topAds;
+    const pdf = await svc.uret(veri({ topAds: [meta!, google!] }), { getir: veren });
+
+    const t = metinler(pdf);
+    // Başlık her sayfada, alt başlıkta platform adı.
+    expect(t.filter((x) => x === 'ÖNE ÇIKAN REKLAMLAR')).toHaveLength(2);
+    expect(t).toContain('META ADS');
+    expect(t).toContain('GOOGLE ADS');
+  });
+
+  it('KRİTİK: reklamı OLMAYAN platform için sayfa açılmıyor', async () => {
+    // Boş bir sayfa, müşteriye giden belgede "burada bir şey olacaktı"
+    // izlenimi bırakır.
+    const meta = veri().topAds[0]!;
+    const pdf = await svc.uret(veri({ topAds: [meta] }), { getir: veren });
+    expect(metinler(pdf).filter((x) => x === 'ÖNE ÇIKAN REKLAMLAR')).toHaveLength(1);
+  });
+
+  it('eksik platform uyarısı YALNIZCA ilk sayfada', async () => {
+    // Her sayfada tekrarlayan bir uyarı okunmaz hâle gelir.
+    const [meta, google] = veri().topAds;
+    const say = async (reklamlar: typeof veri extends never ? never : Parameters<typeof veri>[0]) =>
+      metinler(await svc.uret(veri(reklamlar), { getir: veren })).filter((x) =>
+        x.includes('reklam seviyesi veri yok'),
+      ).length;
+
+    /*
+     * İDDİA İKİ BELGENİN KIYASI, MUTLAK SAYI DEĞİL.
+     *
+     * `metinler` her dizgeyi iki ToUnicode haritasıyla çözüyor ve uyarı
+     * satırlara sarılıyor; mutlak bir sayı beklemek kırılgan ve gevşek
+     * oluyordu — "her sayfada yaz" mutasyonu üst sınırın altında kalıp
+     * yakalanmadı. İki sayfalı belge, tek sayfalıyla AYNI sayıda uyarı
+     * taşımalı.
+     */
+    const ikiSayfa = await say({
+      topAds: [meta!, google!],
+      topAdsMissingPlatforms: ['meta'],
+    });
+    const tekSayfa = await say({ topAds: [meta!], topAdsMissingPlatforms: ['meta'] });
+
+    expect(tekSayfa).toBeGreaterThan(0);
+    expect(ikiSayfa).toBe(tekSayfa);
+  });
+
   it('KRİTİK: REKLAM SEVİYESİ VERİSİ OLMAYAN platform bildiriliyor', async () => {
     /*
      * BÖLÜMÜN EN YANILTICI HÂLİ BUYDU. Liste harcamaya göre sıralıyor ve

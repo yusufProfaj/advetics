@@ -336,6 +336,53 @@ describe('ReportsService — yapı', () => {
     expect(data.topAdsMissingPlatforms).toEqual(['meta']);
   });
 
+  it('KRİTİK: öne çıkan reklamlar PLATFORM BAŞINA on ikiyle sınırlı', async () => {
+    /*
+     * Tek listede 6 iken harcaması büyük olan platform listeyi tamamen
+     * dolduruyordu: Google'ın en iyi reklamı Meta'nın altında hiç
+     * görünmüyordu. Sınır artık platform BAŞINA uygulanıyor.
+     *
+     * On beş reklam yazılıyor: sınırın gerçekten kestiğini görmek için
+     * sınırdan fazlası gerekiyor.
+     */
+    for (const [platform, kampanya] of [
+      ['meta', CAMP_A],
+      ['google', CAMP_B],
+    ] as const) {
+      for (let i = 0; i < 15; i++) {
+        const adId = `${platform === 'meta' ? 'a' : 'b'}${String(i).padStart(7, '0')}-0000-0000-0000-000000000000`;
+        await h.q(
+          `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, updated_at)
+           VALUES ($1, $2, $3, $4, $5::"Platform", $6, 'G', now())
+           ON CONFLICT DO NOTHING`,
+          [adId, kampanya, IDS.adAccount, IDS.client, platform, `g-${platform}-${i}`],
+        );
+        await h.q(
+          `INSERT INTO ads (id, ad_group_id, ad_account_id, client_id, platform, external_id, name, updated_at)
+           VALUES ($1, $1, $2, $3, $4::"Platform", $5, $6, now())`,
+          [adId, IDS.adAccount, IDS.client, platform, `ad-${platform}-${i}`, `${platform} ${i}`],
+        );
+        await h.q(
+          `INSERT INTO insights_daily
+             (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+              date, breakdown_key, impressions, clicks, spend_micros, conversions,
+              conversion_value_micros, currency, reach, raw_metrics)
+           VALUES ($1, $2, $3::"Platform", 'ad', $4, $5, '2026-08-01'::date, '',
+                   10, 1, $6, 0, 0, 'TRY', 0, '{}'::jsonb)`,
+          [IDS.client, IDS.adAccount, platform, adId, `ad-${platform}-${i}`, String((i + 1) * 1_000_000)],
+        );
+      }
+    }
+
+    const data = await svc.build(CTX, RANGE);
+    const meta = data.topAds.filter((a) => a.platform === 'meta');
+    const google = data.topAds.filter((a) => a.platform === 'google');
+    expect(meta).toHaveLength(12);
+    expect(google).toHaveLength(12);
+    // En çok harcayan başta: sınır rastgele değil, sıralamanın tepesinden.
+    expect(meta[0]!.spendMicros).toBe('15000000');
+  });
+
   it('KRİTİK: HİÇ HARCAMAYAN platform "eksik" diye bildirilmiyor', async () => {
     /*
      * Uyarının anlamı "harcama var ama reklam kırılımı yok". Harcamamış bir
