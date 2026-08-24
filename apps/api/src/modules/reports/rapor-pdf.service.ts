@@ -16,8 +16,8 @@ import {
   type ReportCampaignRow,
   type ReportData,
 } from '@advetics/shared';
-import { yaziTipiOku } from './pdf-yazi-tipi';
-import { gorselleriIndir, logoIndir, type GorselSonucu } from './kreatif-gorseli';
+import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
+import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
 import { donusumGrafigi, okunakliYazi, renk, rozet, SLATE } from './pdf-cizim';
 
 /** A4, punto cinsinden. */
@@ -85,13 +85,17 @@ export class RaporPdfService {
      * ana vaadinin belgede görünmemesi demek.
      */
     /*
-     * LOGO — ajansın kendi alan adından, beyaz liste UYGULANAMAZ.
+     * LOGO DEPODAN OKUNUYOR — ağdan değil.
      *
-     * Koruma çözülen IP üzerinden (`logoIndir`): iç ağa düşen bir adrese
-     * istek hiç yapılmıyor. Gelmezse kapak logosuz basılıyor; bir logo
-     * yüzünden müşteriye giden belgenin üretilmemesi kabul edilemez.
+     * Kapakta her zaman Advetics logosu basılıyor; ajansın `branding.logoUrl`
+     * değeri burada KULLANILMIYOR (panel arayüzünde kullanılmaya devam
+     * ediyor). Beyaz etiket vaadinden bilinçli bir sapma.
+     *
+     * Uzaktan indirmek, müşteriye giden bir belgenin üretimini ağa bağımlı
+     * yapardı: adres cevap vermediğinde rapor logosuz çıkar ve bunu ilk gören
+     * müşteri olur.
      */
-    const logo = await this.logoyuHazirla(doc, data.branding.logoUrl, opts.getir);
+    const logo = await this.logoyuHazirla(doc);
 
     const ctx: Ctx = {
       doc,
@@ -640,17 +644,19 @@ export class RaporPdfService {
 
   }
 
-  /** Logoyu indirip belgeye gömer; her başarısızlıkta `null`. */
-  private async logoyuHazirla(
-    doc: PDFDocument,
-    adres: string | null,
-    getir?: typeof fetch,
-  ): Promise<PDFImage | null> {
-    if (!adres) return null;
-    const sonuc = await logoIndir(adres, { getir });
-    if (!sonuc.ok) return null;
+  /**
+   * Logoyu belgeye gömer; okunamazsa `null` ve kapak logosuz basılır.
+   *
+   * `embedPng` ASYNC: gömme çizimden ÖNCE yapılmak zorunda. Kreatif
+   * görsellerinde tam bu noktada bir `as` cast'i çözülmemiş Promise'i
+   * `drawImage`e sokmuştu ve hata yalnızca belgede, boş kutu olarak
+   * görünmüştü.
+   */
+  private async logoyuHazirla(doc: PDFDocument): Promise<PDFImage | null> {
+    const bayt = logoOku();
+    if (!bayt) return null;
     try {
-      return sonuc.tur === 'jpg' ? await doc.embedJpg(sonuc.bytes) : await doc.embedPng(sonuc.bytes);
+      return await doc.embedPng(bayt);
     } catch {
       return null;
     }
