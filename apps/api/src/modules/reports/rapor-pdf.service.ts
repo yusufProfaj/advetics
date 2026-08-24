@@ -706,9 +706,45 @@ export class RaporPdfService {
    * şeyler. İlk ikisini aynı boş kutuya çevirmek, danışmanın müşteriye
    * "görseller neden yok" sorusunu cevaplayamaması demekti.
    */
+  /**
+   * ÖNE ÇIKAN REKLAMLAR — PLATFORM BAŞINA AYRI SAYFA.
+   *
+   * Tek sayfada karışık listelendiğinde harcaması büyük olan platform
+   * listeyi tamamen dolduruyordu: Google'ın en iyi reklamı Meta'nın altında
+   * hiç görünmüyordu. Rapor iki platformu her yerde ayrı ayrı anlatıyor,
+   * bu bölüm de öyle.
+   *
+   * REKLAMI OLMAYAN PLATFORM İÇİN SAYFA AÇILMIYOR — boş bir sayfa müşteriye
+   * giden belgede "burada bir şey olacaktı" izlenimi bırakır. Ama eksikliğin
+   * SEBEBİ yazılıyor: veri hiç toplanmadıysa bu ilk sayfanın üstünde
+   * bildiriliyor.
+   */
   private enIyiReklamlar(ctx: Ctx): void {
+    const platformlar = PLATFORM_SIRASI.filter((pf) =>
+      ctx.data.topAds.some((a) => a.platform === pf),
+    );
+
+    // Hiç reklam yoksa TEK sayfa: eksikliğin sebebini yazacak bir yer lazım.
+    if (platformlar.length === 0) {
+      this.reklamSayfasi(ctx, null);
+      return;
+    }
+    for (const [i, pf] of platformlar.entries()) {
+      this.reklamSayfasi(ctx, pf, i === 0);
+    }
+  }
+
+  private reklamSayfasi(ctx: Ctx, platform: (typeof PLATFORM_SIRASI)[number] | null, ilk = true): void {
     const s = ctx.doc.addPage([EN, BOY]);
-    let y = this.baslik(ctx, s, SECTION_LABELS.top_ads);
+    let y = this.baslik(
+      ctx,
+      s,
+      SECTION_LABELS.top_ads,
+      platform ? PLATFORM_ADI[platform] : undefined,
+    );
+    const reklamlar = platform
+      ? ctx.data.topAds.filter((a) => a.platform === platform)
+      : ctx.data.topAds;
 
     /*
      * EKSİK PLATFORM ÖNCE YAZILIYOR — listenin ALTINDA değil.
@@ -720,7 +756,7 @@ export class RaporPdfService {
      *
      * Üstte, çünkü listeyi okumadan ÖNCE bilinmesi gereken bir kısıt.
      */
-    if (ctx.data.topAdsMissingPlatforms.length > 0) {
+    if (ilk && ctx.data.topAdsMissingPlatforms.length > 0) {
       const adlar = ctx.data.topAdsMissingPlatforms.map((p) => PLATFORM_ADI[p]).join(' ve ');
       for (const [i, satir] of sar(
         `${adlar} için bu dönemde reklam seviyesi veri yok — geçmiş çekimi kampanya ` +
@@ -743,7 +779,7 @@ export class RaporPdfService {
       y -= 46;
     }
 
-    if (ctx.data.topAds.length === 0) {
+    if (reklamlar.length === 0) {
       s.drawText('Bu dönemde harcama yapan reklam yok.', {
         x: KENAR,
         y,
@@ -777,7 +813,7 @@ export class RaporPdfService {
      */
     let cizilen = 0;
 
-    for (const reklam of ctx.data.topAds) {
+    for (const reklam of reklamlar) {
       // SAYFA TAŞMASI: kalan yer bir satıra yetmiyorsa kes. Taşan çizim
       // pdf-lib'de hata vermiyor, sayfanın dışına düşüyor ve GÖRÜNMÜYOR.
       if (y < KENAR + KUTU + 10) break;
@@ -865,9 +901,9 @@ export class RaporPdfService {
      * görseller sessizce kaybolabiliyor. Sayı yazılmazsa danışman belgeyi
      * müşteriye gönderdikten sonra öğreniyor.
      */
-    if (cizilen < ctx.data.topAds.length) {
+    if (cizilen < reklamlar.length) {
       s.drawText(
-        `${ctx.data.topAds.length} reklamdan ${cizilen} tanesi sayfaya sığdı.`,
+        `${reklamlar.length} reklamdan ${cizilen} tanesi sayfaya sığdı.`,
         { x: KENAR, y: KENAR + 10, size: 8, font: ctx.normal, color: GRI },
       );
     }
@@ -1004,6 +1040,15 @@ interface Ctx {
  */
 /** Platform kimliğinin insan adı — panelde de aynı iki etiket kullanılıyor. */
 const PLATFORM_ADI: Record<string, string> = { meta: 'Meta Ads', google: 'Google Ads' };
+
+/**
+ * Sayfa sırası — raporun geri kalanıyla AYNI.
+ *
+ * Özet blokları ve kampanya tabloları Meta'yı önce anlatıyor; öne çıkan
+ * reklamların sırası ondan ayrılırsa okuyan aynı belgede iki farklı düzenle
+ * karşılaşır.
+ */
+const PLATFORM_SIRASI = ['meta', 'google'] as const;
 
 const KOVA_ADI: Record<string, string> = Object.fromEntries(
   Object.entries(CONVERSION_BUCKETS).map(([k, v]) => [k, v.label]),

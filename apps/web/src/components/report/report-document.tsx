@@ -585,14 +585,62 @@ function SearchTerms({ data }: { data: ReportData }) {
 
 const PLATFORM_ADI: Record<string, string> = { meta: 'Meta Ads', google: 'Google Ads' };
 
+/**
+ * Sayfa sırası — raporun geri kalanıyla AYNI (özet blokları, kampanya
+ * tabloları). Ayrılırsa okuyan aynı belgede iki farklı düzenle karşılaşır.
+ */
+const PLATFORM_SIRASI = ['meta', 'google'] as const;
+
+/**
+ * ÖNE ÇIKAN REKLAMLAR — PLATFORM BAŞINA AYRI SAYFA.
+ *
+ * Tek listede karışık gösterildiğinde harcaması büyük olan platform listeyi
+ * tamamen dolduruyordu: Google'ın en iyi reklamı Meta'nın altında hiç
+ * görünmüyordu. Rapor iki platformu her yerde ayrı anlatıyor, bu bölüm de öyle.
+ *
+ * Reklamı olmayan platform için sayfa AÇILMIYOR — boş bir sayfa "burada bir
+ * şey olacaktı" izlenimi bırakır. Eksikliğin sebebi ilk sayfanın üstünde.
+ */
 function TopAds({ data }: { data: ReportData }) {
   const eksik = data.topAdsMissingPlatforms;
-  // Hem liste boş hem eksik bildirimi yoksa bölümün gösterecek bir şeyi yok.
-  if (data.topAds.length === 0 && eksik.length === 0) return null;
+  const platformlar = PLATFORM_SIRASI.filter((pf) =>
+    data.topAds.some((a) => a.platform === pf),
+  );
+
+  if (platformlar.length === 0) {
+    // Hiç reklam yoksa TEK sayfa: eksikliğin sebebini yazacak bir yer lazım.
+    return eksik.length === 0 ? null : <TopAdsSayfasi data={data} platform={null} ilk />;
+  }
+
+  return (
+    <>
+      {platformlar.map((pf, i) => (
+        <TopAdsSayfasi key={pf} data={data} platform={pf} ilk={i === 0} />
+      ))}
+    </>
+  );
+}
+
+function TopAdsSayfasi({
+  data,
+  platform,
+  ilk,
+}: {
+  data: ReportData;
+  platform: (typeof PLATFORM_SIRASI)[number] | null;
+  ilk: boolean;
+}) {
+  const eksik = ilk ? data.topAdsMissingPlatforms : [];
+  const reklamlar = platform
+    ? data.topAds.filter((a) => a.platform === platform)
+    : data.topAds;
 
   return (
     <section className="rpt-page pt-10">
-      <PageHead title="Öne Çıkan Reklamlar" subtitle="En yüksek harcamaya göre" />
+      <PageHead
+        title="Öne Çıkan Reklamlar"
+        subtitle={platform ? PLATFORM_ADI[platform]! : 'En yüksek harcamaya göre'}
+      />
 
       {/*
         EKSİK PLATFORM LİSTENİN ÜSTÜNDE.
@@ -613,7 +661,7 @@ function TopAds({ data }: { data: ReportData }) {
       )}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
-        {data.topAds.map((ad) => (
+        {reklamlar.map((ad) => (
           <div key={ad.id} className="rpt-card flex gap-4 rounded-xl border border-slate-200 p-4">
             <div className="aspect-[4/5] w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100">
               {ad.imageUrl && (

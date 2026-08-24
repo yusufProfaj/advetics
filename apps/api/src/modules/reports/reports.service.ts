@@ -81,6 +81,15 @@ function trackedAccounts(alias = ''): Prisma.Sql {
   )`;
 }
 
+/**
+ * Bölüm başına gösterilecek reklam sayısı — PLATFORM BAŞINA.
+ *
+ * Tek listede 6 iken harcaması büyük olan platform listeyi tamamen
+ * dolduruyordu: Meta'nın harcaması Google'ınkinden büyükse Google'ın en iyi
+ * reklamı hiç görünmüyordu.
+ */
+const TOP_ADS_LIMIT = 12;
+
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -601,7 +610,7 @@ export class ReportsService {
     return rows.map((r) => r.platform);
   }
 
-  /** En çok harcayan reklamlar — creative ile. */
+    /** En çok harcayan reklamlar — platform başına, creative ile. */
   private async topAds(
     tx: TxLike,
     params: { clientId: string; from: string; to: string },
@@ -621,22 +630,45 @@ export class ReportsService {
       }>
     >(
       Prisma.sql`
-        SELECT a.id, a.name, a.platform, c.name AS campaign_name, cr.headline, cr.asset_urls,
-               SUM(i.impressions) AS impressions,
-               SUM(i.clicks) AS clicks,
-               SUM(i.spend_micros) AS spend_micros,
-               SUM(i.conversions) AS conversions
-        FROM insights_daily i
-        JOIN ads a ON a.id = i.entity_id
-        JOIN ad_groups g ON g.id = a.ad_group_id
-        JOIN campaigns c ON c.id = g.campaign_id
-        LEFT JOIN creatives cr ON cr.id = a.creative_id
-        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
-          AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
-          AND i.entity_level = 'ad'::"EntityLevel"
-        GROUP BY a.id, a.name, a.platform, c.name, cr.headline, cr.asset_urls
-        ORDER BY SUM(i.spend_micros) DESC
-        LIMIT 6
+        /*
+         * PLATFORM BAŞINA EN ÇOK HARCAYAN REKLAMLAR (sayı: TOP_ADS_LIMIT).
+         *
+         * SAYI YORUMA DEĞER OLARAK YAZILMIYOR. Etiketli şablonda yorumun
+         * içindeki bir interpolasyon da metin değil BAĞLI PARAMETRE olur ve
+         * sorgunun ortasına yerleşip onu bozar. Backtick tuzağının kardeşi
+         * (bkz. CLAUDE.md); sabitin adı yazılıyor, değeri değil.
+         *
+         * Öncesinde tek bir "en çok harcayan 6" listesi vardı ve platform
+         * ayrımı yoktu: Meta'nın harcaması Google'ınkinden büyükse liste
+         * tamamen Meta oluyordu ve Google'ın en iyi reklamı hiç görünmüyordu.
+         * Rapor iki platformu ayrı ayrı anlatıyor; bu bölüm de öyle olmalı.
+         *
+         * ROW_NUMBER pencere fonksiyonu, platform başına AYRI bir LIMIT'in
+         * tek sorgudaki karşılığı. İki ayrı sorgu atmak aynı satırları ikinci
+         * kez taramak olurdu.
+         */
+        WITH toplamlar AS (
+          SELECT a.id, a.name, a.platform, c.name AS campaign_name, cr.headline, cr.asset_urls,
+                 SUM(i.impressions) AS impressions,
+                 SUM(i.clicks) AS clicks,
+                 SUM(i.spend_micros) AS spend_micros,
+                 SUM(i.conversions) AS conversions
+          FROM insights_daily i
+          JOIN ads a ON a.id = i.entity_id
+          JOIN ad_groups g ON g.id = a.ad_group_id
+          JOIN campaigns c ON c.id = g.campaign_id
+          LEFT JOIN creatives cr ON cr.id = a.creative_id
+          WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
+            AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
+            AND i.entity_level = 'ad'::"EntityLevel"
+          GROUP BY a.id, a.name, a.platform, c.name, cr.headline, cr.asset_urls
+        )
+        SELECT * FROM (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY platform ORDER BY spend_micros DESC) AS sira
+          FROM toplamlar
+        ) t
+        WHERE sira <= ${TOP_ADS_LIMIT}
+        ORDER BY platform, spend_micros DESC
       `,
     );
 

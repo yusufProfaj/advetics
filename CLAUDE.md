@@ -105,6 +105,11 @@ buna göre veriliyor:
 
 ### Tekrar eden teknik tuzaklar
 
+- **`Prisma.sql` YORUMUNUN İÇİNDE İNTERPOLASYON DA KULLANMA.** Backtick
+  tuzağının kardeşi: etiketli şablonda yorumun içindeki `${...}` metin değil
+  BAĞLI PARAMETRE oluyor ve sorgunun ortasına yerleşip onu bozuyor. Bir
+  sabitin DEĞERİNİ yoruma yazma, ADINI yaz. (Bu tuzağı *anlatan* yorumun
+  kendisi de aynı sebeple patladı — açıklama kelimeyle yapılmalı.)
 - **`Prisma.sql` şablonu içindeki SQL yorumlarında backtick KULLANMA.** Şablonu
   ortasından kapatıyor; hata `TS1005: ';' expected` ve sebebi hiç belli olmuyor.
   `sql-template.spec.ts` bunu tarıyor. **Kural `--` satırlarıyla sınırlı DEĞİL:
