@@ -100,9 +100,11 @@ export default async function ReportsPage({
       ) : (
         <>
           {/*
-            İKİ BLOK, ÜÇ YOL: indir / maille gönder üstte (en sık kullanılan),
-            oturumsuz paylaşım linki altta. Tek bir menüye sıkıştırmak,
-            "hangisi neydi" sorusunu her seferinde sordururdu.
+            İKİ DÜĞME, ÜÇ YOL: "PDF indir" ayrı durur çünkü müşteriye bir şey
+            ULAŞTIRMIYOR — belgeyi kendine alıyorsun. Müşteriye ulaştıran iki
+            yol ("Bağlantıyı kopyala", "Mail yoluyla ilet") tek "Paylaş"
+            menüsünde toplandı; öncesinde biri üstte biri altta ayrı ayrı
+            duruyordu ve aynı iş için iki giriş noktası vardı.
           */}
           <RaporGonder
             clientId={clientId}

@@ -1,22 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReportMailDraft } from '@advetics/shared';
 import { ApiRequestError, apiFetch, API_URL } from '@/lib/api';
 
 /**
- * ═══ PAYLAŞ VE GÖNDER ═══
+ * ═══ PDF İNDİR ═══
  *
- * Üç yol, biri diğerinin yerine geçmiyor:
+ * Belgeyi kendin göndermek ya da arşivlemek için.
  *
- *   · PDF İNDİR — belgeyi kendin göndermek ya da arşivlemek için.
- *   · LİNK KOPYALA — oturum gerektirmeyen, tarih aralığı SABİT bir sayfa.
- *   · MAİLLE GÖNDER — PDF eki + özet, danışmanın kendi adresinden.
- *
- * MAİL TASLAĞI DÜZENLENEBİLİR ve bu kasıtlı. Sayılar rapordan geliyor ama
- * anlatı ("Urla bölgesindeki konut aramalarında...") veriden çıkarılamıyor;
- * uydurmak müşteriye yanlış bir strateji anlatmak olurdu. Gönderen kişi
- * göndermeden önce okuyor ve düzenliyor.
+ * MÜŞTERİYE ULAŞTIRMANIN İKİ YOLU BURADAN ÇIKTI. Öncesinde "Müşteriye
+ * gönder" burada ayrı bir düğmeydi ve altta da ayrı bir paylaşım paneli
+ * vardı: aynı iş için ekranda İKİ giriş noktası. İkisi tek bir "Paylaş"
+ * menüsünde toplandı (`share-controls.tsx`); mail akışı buradaki
+ * `MailGonderModal`da duruyor ve açılışını o menü belirliyor.
  */
 export function RaporGonder({
   clientId,
@@ -29,7 +26,49 @@ export function RaporGonder({
   to: string;
   hasData: boolean;
 }) {
-  const [acik, setAcik] = useState(false);
+  const qs = new URLSearchParams({ clientId, from, to });
+
+  return (
+    /*
+      PDF DÜZ BİR BAĞLANTI. `fetch` ile indirmek gövdeyi belleğe alıp blob
+      üretmek demek; tarayıcının kendi indirme akışı hem daha ucuz hem de
+      büyük dosyada ilerleme gösteriyor.
+    */
+    <a
+      href={`${API_URL}/reports/pdf?${qs}`}
+      className={`inline-block rounded-lg border border-line px-3.5 py-2 text-sm transition hover:bg-surface-muted ${
+        hasData ? '' : 'pointer-events-none opacity-50'
+      }`}
+      title={hasData ? undefined : 'Bu dönemde veri yok'}
+    >
+      PDF indir
+    </a>
+  );
+}
+
+/**
+ * ═══ MAİLLE GÖNDER — KONTROLLÜ MODAL ═══
+ *
+ * Kendi düğmesi YOK: açılışını "Paylaş" menüsü belirliyor.
+ *
+ * MAİL TASLAĞI DÜZENLENEBİLİR ve bu kasıtlı. Sayılar rapordan geliyor ama
+ * anlatı ("Urla bölgesindeki konut aramalarında...") veriden çıkarılamıyor;
+ * uydurmak müşteriye yanlış bir strateji anlatmak olurdu. Gönderen kişi
+ * göndermeden önce okuyor ve düzenliyor.
+ */
+export function MailGonderModal({
+  clientId,
+  from,
+  to,
+  acik,
+  onKapat,
+}: {
+  clientId: string;
+  from: string;
+  to: string;
+  acik: boolean;
+  onKapat: () => void;
+}) {
   const [taslak, setTaslak] = useState<ReportMailDraft | null>(null);
   const [alici, setAlici] = useState('');
   const [konu, setKonu] = useState('');
@@ -41,8 +80,18 @@ export function RaporGonder({
 
   const qs = new URLSearchParams({ clientId, from, to });
 
-  async function taslakAc() {
-    setAcik(true);
+  /*
+   * TASLAK AÇILIŞTA BİR KEZ ÇEKİLİYOR. Her render'da çekmek sunucuya
+   * gereksiz tur attırır ve kullanıcının o sırada yazdığı metnin üzerine
+   * yazardı.
+   */
+  useEffect(() => {
+    if (!acik || taslak !== null) return;
+    void taslakGetir();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acik]);
+
+  async function taslakGetir() {
     setBekleyen('taslak');
     setHata(null);
     setSonuc(null);
@@ -76,7 +125,7 @@ export function RaporGonder({
         }),
       });
       setSonuc(`Rapor ${r.to} adresine gönderildi.`);
-      setAcik(false);
+      onKapat();
     } catch (err) {
       // Sunucunun KENDİ mesajı: "kimlik doğrulanamadı" ile "alıcı reddedildi"
       // farklı işler ve ikisini tek cümleye çevirmek kullanıcıyı tahmine
@@ -88,32 +137,12 @@ export function RaporGonder({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {/*
-          PDF DÜZ BİR BAĞLANTI. `fetch` ile indirmek gövdeyi belleğe alıp
-          blob üretmek demek; tarayıcının kendi indirme akışı hem daha ucuz
-          hem de büyük dosyada ilerleme gösteriyor.
-        */}
-        <a
-          href={`${API_URL}/reports/pdf?${qs}`}
-          className={`rounded-lg border border-line px-3.5 py-2 text-sm transition hover:bg-surface-muted ${
-            hasData ? '' : 'pointer-events-none opacity-50'
-          }`}
-          title={hasData ? undefined : 'Bu dönemde veri yok'}
-        >
-          PDF indir
-        </a>
-        <button
-          type="button"
-          onClick={taslakAc}
-          disabled={!hasData || bekleyen !== null}
-          className="rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-        >
-          {bekleyen === 'taslak' ? 'Hazırlanıyor…' : 'Müşteriye gönder'}
-        </button>
-      </div>
-
+    <>
+      {/*
+        SONUÇ MODAL KAPANDIKTAN SONRA DA DURUYOR. Gönderim başarılıysa modal
+        kapanıyor; onaylama cümlesi kapanan bir kutuda kalsaydı kullanıcı
+        gönderip göndermediğini bilemezdi.
+      */}
       {sonuc && (
         <p className="rounded border border-ok/40 bg-ok/5 px-3 py-2 text-sm">{sonuc}</p>
       )}
@@ -127,7 +156,7 @@ export function RaporGonder({
         <div
           className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setAcik(false);
+            if (e.target === e.currentTarget) onKapat();
           }}
         >
           <div className="w-full max-w-2xl rounded-xl border border-line bg-surface p-5 shadow-xl">
@@ -214,7 +243,7 @@ export function RaporGonder({
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setAcik(false)}
+                onClick={onKapat}
                 className="rounded-lg px-3 py-2 text-sm text-ink-muted transition hover:text-ink"
               >
                 Vazgeç
@@ -236,6 +265,6 @@ export function RaporGonder({
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
