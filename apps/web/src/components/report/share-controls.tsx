@@ -1,14 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { MailGonderModal } from './rapor-gonder';
 
 /**
- * Paylaşım linki üretme.
+ * ═══ PAYLAŞ — TEK GİRİŞ, İKİ YOL ═══
  *
- * Ham token yalnızca ÜRETİM ANINDA bir kez dönüyor (sunucuda hash'i saklanıyor),
- * bu yüzden ekranda gösterilip kopyalanması gerekiyor. Sayfa yenilenince
- * kaybolduğu açıkça yazıyor — kullanıcı "sonra bakarım" diye kapatmasın.
+ * Öncesinde müşteriye ulaştırmanın iki yolu ekranın İKİ AYRI yerindeydi:
+ * üstte "Müşteriye gönder" düğmesi, altta bu panelde "Bağlantı oluştur".
+ * Aynı iş için iki giriş noktası, her seferinde "hangisi neydi" sorusunu
+ * sorduruyordu. İkisi tek bir "Paylaş" menüsünde toplandı.
+ *
+ * SÜRE MENÜNÜN İÇİNDE. Panelin sağında ayrı bir seçici olarak durduğunda,
+ * bağlantı üretmeyecek kullanıcıya da sorulmuş oluyordu. Menüde, tam da
+ * kararın verildiği yerde.
+ *
+ * Ham token yalnızca ÜRETİM ANINDA bir kez dönüyor (sunucuda hash'i
+ * saklanıyor), bu yüzden ekranda gösterilip kopyalanması gerekiyor. Sayfa
+ * yenilenince kaybolduğu açıkça yazıyor — kullanıcı "sonra bakarım" diye
+ * kapatmasın.
  */
 export function ShareControls({
   clientId,
@@ -26,8 +37,34 @@ export function ShareControls({
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expiresInDays, setExpiresInDays] = useState<string>('');
+  const [menuAcik, setMenuAcik] = useState(false);
+  const [mailAcik, setMailAcik] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * DIŞARI TIKLAMA VE ESC İLE KAPANIYOR.
+   *
+   * Yalnızca düğmeyle açılıp kapanan bir menü, kullanıcı başka bir yere
+   * tıkladığında ekranda asılı kalıyor ve altındaki içeriği örtüyor.
+   */
+  useEffect(() => {
+    if (!menuAcik) return;
+    const disari = (e: MouseEvent): void => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuAcik(false);
+    };
+    const esc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setMenuAcik(false);
+    };
+    document.addEventListener('mousedown', disari);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', disari);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [menuAcik]);
 
   async function createLink() {
+    setMenuAcik(false);
     setBusy(true);
     setError(null);
     setLink(null);
@@ -44,7 +81,22 @@ export function ShareControls({
           ...(expiresInDays ? { expiresInDays: Number(expiresInDays) } : {}),
         }),
       });
-      setLink(`${window.location.origin}/r/${res.token}`);
+      const adres = `${window.location.origin}/r/${res.token}`;
+      setLink(adres);
+      /*
+       * ÜRETİP HEMEN KOPYALIYOR. Menüdeki seçenek "Bağlantıyı kopyala"
+       * diyor; kullanıcıyı ikinci bir "Kopyala" düğmesine göndermek verdiği
+       * sözü tutmamak olurdu. Kopyalama başarısız olursa (izin yok, güvensiz
+       * bağlam) bağlantı ekranda duruyor ve elle kopyalanabiliyor.
+       */
+      try {
+        await navigator.clipboard.writeText(adres);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Sessiz geçilmiyor: bağlantı kutusu zaten açılıyor ve orada
+        // "Kopyala" düğmesi var.
+      }
     } catch (err) {
       setError(
         err instanceof ApiRequestError
@@ -73,29 +125,83 @@ export function ShareControls({
             sonradan açtığında aynı sayıları görür.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-ink-muted">
-            Süre
-            <select
-              value={expiresInDays}
-              onChange={(e) => setExpiresInDays(e.target.value)}
-              className="rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink"
-            >
-              <option value="">Süresiz</option>
-              <option value="7">7 gün</option>
-              <option value="30">30 gün</option>
-              <option value="90">90 gün</option>
-            </select>
-          </label>
+        <div className="relative" ref={menuRef}>
           <button
             type="button"
-            onClick={createLink}
+            onClick={() => setMenuAcik((a) => !a)}
             disabled={busy || !hasData}
             title={hasData ? undefined : 'Bu dönemde veri yok'}
-            className="rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-haspopup="menu"
+            aria-expanded={menuAcik}
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? 'Oluşturuluyor…' : 'Bağlantı oluştur'}
+            {busy ? 'Oluşturuluyor…' : 'Paylaş'}
           </button>
+
+          {menuAcik && (
+            <div
+              role="menu"
+              className="absolute right-0 z-20 mt-1.5 w-64 rounded-xl border border-line bg-surface p-1.5 shadow-lg"
+            >
+              {/*
+                SÜRE SEÇENEKLERİN ÜSTÜNDE. Kararın verildiği yer burası;
+                panelin sağında ayrı dururken bağlantı üretmeyecek kullanıcıya
+                da sorulmuş oluyordu.
+              */}
+              <label className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-ink-muted">
+                Bağlantı süresi
+                <select
+                  value={expiresInDays}
+                  onChange={(e) => setExpiresInDays(e.target.value)}
+                  className="rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink"
+                >
+                  <option value="">Süresiz</option>
+                  <option value="7">7 gün</option>
+                  <option value="30">30 gün</option>
+                  <option value="90">90 gün</option>
+                </select>
+              </label>
+
+              <div className="my-1 h-px bg-line" />
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={createLink}
+                className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-muted"
+              >
+                <span aria-hidden="true" className="mt-0.5 text-sm">
+                  🔗
+                </span>
+                <span>
+                  <span className="block text-sm font-medium text-ink">Bağlantıyı kopyala</span>
+                  <span className="block text-[11px] text-ink-muted">
+                    Oturum gerektirmeyen gizli sayfa
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuAcik(false);
+                  setMailAcik(true);
+                }}
+                className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-muted"
+              >
+                <span aria-hidden="true" className="mt-0.5 text-sm">
+                  ✉️
+                </span>
+                <span>
+                  <span className="block text-sm font-medium text-ink">Mail yoluyla ilet</span>
+                  <span className="block text-[11px] text-ink-muted">
+                    PDF eki + özet, kendi adresinden
+                  </span>
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -125,6 +231,14 @@ export function ShareControls({
           </div>
         </div>
       )}
+
+      <MailGonderModal
+        clientId={clientId}
+        from={from}
+        to={to}
+        acik={mailAcik}
+        onKapat={() => setMailAcik(false)}
+      />
     </section>
   );
 }

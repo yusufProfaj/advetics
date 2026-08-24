@@ -42,9 +42,19 @@ describe('RaporGonder', () => {
     expect(KAYNAK).not.toContain("apiFetch('/reports/pdf");
   });
 
-  it('veri yokken indirme ve gönderme KAPALI', () => {
-    expect(KAYNAK).toContain('disabled={!hasData');
+  it('KRİTİK: veri yokken indirme ve paylaşma KAPALI', () => {
+    /*
+     * KORUMA İKİ DOSYAYA BÖLÜNDÜ ve iddia da öyle olmalı: "Müşteriye gönder"
+     * düğmesi kalkıp yerine "Paylaş" menüsü geldiğinde (`share-controls.tsx`)
+     * `disabled` kontrolü oraya taşındı. Yalnızca bu dosyaya bakan bir iddia,
+     * korumanın kaybolduğu bir dünyada da geçerdi.
+     *
+     * Veri yokken üretilen bir PDF ya da paylaşım linki, müşteriye BOŞ bir
+     * belge göndermek demek.
+     */
     expect(KAYNAK).toContain('pointer-events-none');
+    const menu = readFileSync(join(__dirname, 'share-controls.tsx'), 'utf8');
+    expect(menu).toContain('disabled={busy || !hasData}');
   });
 
   it('sunucunun KENDİ hata mesajı gösteriliyor', () => {
