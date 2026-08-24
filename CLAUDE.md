@@ -221,6 +221,15 @@ buna göre veriliyor:
   paylaşımlı sunucuda gereksiz yük. Font bulunamazsa AÇIKÇA patlıyor; sessizce
   standart yazı tipine düşmek en kötü davranış. `pdf-yazi-tipi.spec.ts` hem
   cmap kapsamını hem "standart yazı tipi bunu ÇİZEMİYOR" kanıtını tutuyor.
+- **RAPOR KAPAĞINDA AJANSIN DEĞİL ADVETICS LOGOSU BASILIYOR.** Bilinçli bir
+  sapma: beyaz etiketli üründe müşteriye giden belgede ajansın markası
+  görünmüyor. `branding.logoUrl` panel arayüzünde kullanılmaya devam ediyor.
+  Dosya DEPODA (`apps/api/assets/marka/`, `apps/web/public/`), indirilmiyor:
+  uzaktan çekmek belgenin üretimini ağa bağımlı yapardı ve adres cevap
+  vermediğinde rapor logosuz çıkardı. İKİ KOPYA AYRIŞAMAZ — `marka-logosu.
+  spec.ts` SHA-256'larını karşılaştırıyor; biri güncellenip diğeri
+  unutulursa PDF ile ekran farklı logo gösterir. Eksik logo PATLATMIYOR
+  (eksik yazı tipinin aksine): kapak sadeleşiyor, rapor üretiliyor.
 - **`__dirname`'e göre çözülen varlık yolu, `src` ve `dist` DERİNLİĞİNE
   BAĞLI.** Dosya bir alt dizine taşınırsa geliştirmede hiçbir şey olmuyor
   (testler `src` altından koşuyor), üretimde varlık bulunamıyor. Derinliği

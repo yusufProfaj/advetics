@@ -126,14 +126,18 @@ function Cover({ data }: { data: ReportData }) {
     <section className="rpt-page flex min-h-[70vh] flex-col justify-between print:min-h-[240mm]">
       <div className="flex items-start justify-between gap-6">
         <DateBadge from={data.from} to={data.to} />
-        {data.branding.logoUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={data.branding.logoUrl}
-            alt=""
-            className="max-h-14 max-w-[180px] object-contain"
-          />
-        )}
+        {/*
+          ADVETICS LOGOSU — ajansın kendi logosu DEĞİL.
+          Kapakta her zaman bu basılıyor; `branding.logoUrl` panel arayüzünde
+          kullanılmaya devam ediyor ama rapor kapağında kullanılmıyor. Beyaz
+          etiket vaadinden bilinçli bir sapma.
+
+          Dosya `public/` altından: PDF'teki kopyasıyla AYNI dosya olmak
+          zorunda, yoksa ekran ile belge farklı logo gösterir
+          (`marka-logosu.spec.ts` bunu yakalıyor).
+        */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/advetics-logo.png" alt="Advetics" className="max-h-12 max-w-[170px] object-contain" />
       </div>
 
       <div className="py-16">

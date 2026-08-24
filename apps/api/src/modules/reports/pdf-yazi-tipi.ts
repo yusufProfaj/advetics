@@ -113,3 +113,41 @@ export function glifVarMi(veri: Buffer, kod: number): boolean {
   }
   return false;
 }
+
+/**
+ * ADVETICS LOGOSU — depoda, indirilmiyor.
+ *
+ * Rapor kapağında HER ZAMAN bu logo basılıyor; ajansın `branding.logoUrl`
+ * değeri kapakta kullanılmıyor (panel arayüzünde kullanılmaya devam ediyor).
+ * Karar bilinçli ve beyaz etiket vaadinden bir sapma.
+ *
+ * UZAKTAN İNDİRİLMİYOR: müşteriye giden bir belgenin üretimini ağa bağımlı
+ * yapmak, adres bir gün cevap vermediğinde raporun logosuz çıkması demek — ve
+ * bunu ilk gören müşteri olur. Dosya 35 KB ve `git pull` ile geliyor.
+ *
+ * Yol yazı tipleriyle AYNI mantıkla çözülüyor: `__dirname`'e göre üç seviye
+ * yukarısı hem `src` hem `dist` altında `apps/api`. `process.cwd()` worker'ın
+ * nereden başlatıldığına bağlı olurdu ve pm2 altında bu garanti değil.
+ */
+const MARKA_DIZINI = resolve(__dirname, '../../../assets/marka');
+export const LOGO_DOSYASI = 'advetics-logo.png';
+
+/**
+ * Logoyu okur. YOKSA `null` — yazı tipinden farklı olarak PATLAMIYOR.
+ *
+ * Eksik yazı tipi belgeyi okunamaz yapıyor (Türkçe karakterler sessizce
+ * düşüyor); eksik logo yalnızca kapağı sadeleştiriyor. Bir logo yüzünden
+ * müşteriye giden raporun hiç üretilmemesi kabul edilemez.
+ */
+export function logoOku(dizin = MARKA_DIZINI): Buffer | null {
+  const anahtar = `${dizin}/${LOGO_DOSYASI}`;
+  const mevcut = onbellek.get(anahtar);
+  if (mevcut) return mevcut;
+  try {
+    const bayt = readFileSync(resolve(dizin, LOGO_DOSYASI));
+    onbellek.set(anahtar, bayt);
+    return bayt;
+  } catch {
+    return null;
+  }
+}

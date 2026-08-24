@@ -5,7 +5,6 @@ import {
   adresGuvenliMi,
   gorselIndir,
   gorselleriIndir,
-  logoIndir,
   GORSEL_SINIRI,
   turuAnla,
 } from './kreatif-gorseli';
@@ -191,61 +190,5 @@ describe('kreatif görseli — indirme', () => {
     const m = await gorselleriIndir([IZINLI, ikinci], { getir: getir as never });
     expect(m.get(IZINLI)?.ok).toBe(false);
     expect(m.get(ikinci)?.ok).toBe(true);
-  });
-});
-
-describe('logo indirme — beyaz liste yok, IP kontrolü var', () => {
-  const cozumle = (ip: string) => async () => [ip];
-
-  it('KRİTİK: ajansın kendi alan adı KABUL ediliyor', async () => {
-    // Beyaz liste burada uygulanamıyor: logo her müşteride başka bir alan
-    // adında ve liste tutmak her yeni müşteride kod değişikliği demek.
-    const getir = vi.fn(async () => yanit(PNG));
-    const r = await logoIndir('https://profaj.com/logo.png', {
-      getir: getir as never,
-      cozumle: cozumle('93.184.216.34'),
-    });
-    expect(r.ok).toBe(true);
-  });
-
-  it('KRİTİK: İÇ AĞA çözülen alan adı reddediliyor — istek HİÇ yapılmıyor', async () => {
-    /*
-     * Korumayı adres yerine ÇÖZÜLEN IP'ye taşımanın sebebi bu: `evil.com`
-     * pekâlâ `169.254.169.254`e (bulut metadata ucu) çözülebilir ve adres
-     * dizgesine bakan hiçbir kontrol bunu göremez.
-     */
-    const getir = vi.fn(async () => yanit(PNG));
-    for (const ip of ['169.254.169.254', '127.0.0.1', '10.1.2.3', '192.168.1.5', '172.20.0.1', '::1']) {
-      const r = await logoIndir('https://evil.example.com/logo.png', {
-        getir: getir as never,
-        cozumle: cozumle(ip),
-      });
-      expect(r.ok, `${ip} kabul edildi`).toBe(false);
-      expect(r.ok === false && r.sebep).toContain('iç ağ');
-    }
-    expect(getir, 'iç ağ adresine istek yapılmış').not.toHaveBeenCalled();
-  });
-
-  it('KRİTİK: http REDDEDİLİYOR', async () => {
-    const r = await logoIndir('http://profaj.com/logo.png', { cozumle: cozumle('93.184.216.34') });
-    expect(r.ok === false && r.sebep).toContain('https');
-  });
-
-  it('çözülemeyen alan adı SEBEPLE dönüyor', async () => {
-    const r = await logoIndir('https://yok.example/logo.png', {
-      cozumle: async () => {
-        throw new Error('ENOTFOUND');
-      },
-    });
-    expect(r.ok === false && r.sebep).toContain('çözülemedi');
-  });
-
-  it('logo da JPEG/PNG dışını almıyor', async () => {
-    const getir = vi.fn(async () => yanit(WEBP));
-    const r = await logoIndir('https://profaj.com/logo.webp', {
-      getir: getir as never,
-      cozumle: cozumle('93.184.216.34'),
-    });
-    expect(r.ok === false && r.sebep).toContain('desteklenmeyen');
   });
 });
