@@ -6,7 +6,6 @@ import { gunEkle, resolveRange, today } from '@/lib/date-range';
 import { TarihSecici } from '@/components/tarih-secici';
 import { ReportDocument } from '@/components/report/report-document';
 import { ShareControls } from '@/components/report/share-controls';
-import { RaporGonder } from '@/components/report/rapor-gonder';
 
 export const metadata = { title: 'Raporlar — Advetics' };
 export const dynamic = 'force-dynamic';
@@ -100,19 +99,15 @@ export default async function ReportsPage({
       ) : (
         <>
           {/*
-            İKİ DÜĞME, ÜÇ YOL: "PDF indir" ayrı durur çünkü müşteriye bir şey
-            ULAŞTIRMIYOR — belgeyi kendine alıyorsun. Müşteriye ulaştıran iki
-            yol ("Bağlantıyı kopyala", "Mail yoluyla ilet") tek "Paylaş"
-            menüsünde toplandı; öncesinde biri üstte biri altta ayrı ayrı
-            duruyordu ve aynı iş için iki giriş noktası vardı.
-          */}
-          <RaporGonder
-            clientId={clientId}
-            from={from}
-            to={to}
-            hasData={report.platforms.length > 0}
-          />
+            ÜÇ YOL, TEK YER. "PDF indir" ve "Paylaş" yan yana, paylaşım
+            panelinin sağında. Öncesinde indirme sayfanın üstünde ayrı bir
+            satırdaydı ve "Müşteriye gönder" de oradaydı: raporla ilgili bir
+            şey yapmak için kullanıcı iki ayrı yere bakıyordu.
 
+            Yan yana ama AYNI DÜĞME DEĞİL: indirmek belgeyi kendine almak,
+            paylaşmak müşteriye ulaştırmak. İkisini tek menüye koymak farklı
+            iki işi aynı başlık altında toplardı.
+          */}
           <ShareControls
             clientId={clientId}
             from={from}
