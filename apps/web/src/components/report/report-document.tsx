@@ -625,6 +625,39 @@ function TopAds({ data }: { data: ReportData }) {
   );
 }
 
+/**
+ * METİN REKLAMI ÖNİZLEMESİ — Google arama reklamının "kreatifi".
+ *
+ * Arama reklamının görseli yok ve olmayacak; onu anlatan şey METNİ.
+ * Öncesinde yerine boş bir gri kutu duruyordu ve raporu okuyan reklamın ne
+ * dediğini göremiyordu — kutu "burada bir görsel olacaktı" gibi görünüyordu.
+ *
+ * Gerçek arama sonucunun yapısı taklit ediliyor: "Reklam" rozeti, görünen
+ * adres, başlık, açıklama. Uydurma yok — hepsi `creatives` tablosundan
+ * geliyor ve olmayan alan çizilmiyor.
+ */
+function MetinReklamiOnizleme({ ad }: { ad: ReportData['topAds'][number] }) {
+  return (
+    <div className="w-40 shrink-0 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+      <p className="text-[9px] font-bold text-slate-600">Reklam</p>
+      {ad.displayUrl && (
+        <p className="truncate text-[9px] text-slate-500">{ad.displayUrl}</p>
+      )}
+      <p
+        className="mt-1.5 line-clamp-2 text-[11px] font-semibold leading-tight"
+        style={{ color: 'var(--rpt-brand)' }}
+      >
+        {ad.headline ?? ad.name}
+      </p>
+      {ad.description && (
+        <p className="mt-1 line-clamp-3 text-[9px] leading-snug text-slate-600">
+          {ad.description}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function TopAdsSayfasi({
   data,
   platform,
@@ -667,17 +700,19 @@ function TopAdsSayfasi({
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {reklamlar.map((ad) => (
           <div key={ad.id} className="rpt-card flex gap-4 rounded-xl border border-slate-200 p-4">
-            <div className="aspect-[4/5] w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100">
-              {ad.imageUrl && (
-                /* eslint-disable-next-line @next/next/no-img-element */
+            {ad.imageUrl ? (
+              <div className="aspect-[4/5] w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={ad.imageUrl}
                   alt=""
                   referrerPolicy="no-referrer"
                   className="h-full w-full object-contain"
                 />
-              )}
-            </div>
+              </div>
+            ) : (
+              <MetinReklamiOnizleme ad={ad} />
+            )}
             <div className="min-w-0 flex-1">
               <p className="truncate text-[11px] uppercase tracking-wide text-slate-500">
                 {ad.campaignName}

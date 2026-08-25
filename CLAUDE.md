@@ -221,6 +221,15 @@ buna göre veriliyor:
   paylaşımlı sunucuda gereksiz yük. Font bulunamazsa AÇIKÇA patlıyor; sessizce
   standart yazı tipine düşmek en kötü davranış. `pdf-yazi-tipi.spec.ts` hem
   cmap kapsamını hem "standart yazı tipi bunu ÇİZEMİYOR" kanıtını tutuyor.
+- **METİN REKLAMININ "KREATİFİ" METNİDİR.** Google arama reklamının görseli
+  yok ve olmayacak; yerine boş bir gri kutu koymak "burada bir görsel
+  olacaktı" izlenimi bırakıyor ve raporu okuyan reklamın NE DEDİĞİNİ
+  göremiyor. `creatives.description` ve `display_url` veritabanında zaten
+  duruyordu ama rapora hiç taşınmıyordu. Önizleme gerçek arama sonucunun
+  yapısını taklit ediyor (Reklam rozeti · görünen adres · başlık · açıklama)
+  ve UYDURMUYOR: olmayan alan çizilmiyor. Metin önizlemesi görselden daha
+  GENİŞ alan istiyor — 52 puntoda başlık ortasından kırpılıyor ve kırpılmış
+  bir önizleme reklamı göstermek yerine gizliyor.
 - **RAPOR KAPAĞINDA AJANSIN DEĞİL ADVETICS LOGOSU BASILIYOR.** Bilinçli bir
   sapma: beyaz etiketli üründe müşteriye giden belgede ajansın markası
   görünmüyor. `branding.logoUrl` panel arayüzünde kullanılmaya devam ediyor.

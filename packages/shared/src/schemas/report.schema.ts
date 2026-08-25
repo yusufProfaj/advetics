@@ -414,6 +414,16 @@ export interface ReportData {
     campaignName: string;
     imageUrl: string | null;
     headline: string | null;
+    /**
+     * METİN REKLAMI ÖNİZLEMESİ İÇİN — Google arama reklamının görseli YOK.
+     *
+     * Görselli reklamda kreatifi kreatifin kendisi anlatıyor; arama
+     * reklamında anlatan şey METNİ. Yalnızca ad ve rakam göstermek, o
+     * reklamın neye benzediğini raporu okuyandan gizliyordu — kutu boş
+     * kalıyordu ve "burada bir görsel olacaktı" gibi duruyordu.
+     */
+    description: string | null;
+    displayUrl: string | null;
     spendMicros: string;
     conversions: number;
     cpa: number | null;

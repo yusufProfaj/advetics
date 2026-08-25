@@ -622,6 +622,8 @@ export class ReportsService {
         platform: 'meta' | 'google';
         campaign_name: string | null;
         headline: string | null;
+        description: string | null;
+        display_url: string | null;
         asset_urls: unknown;
         impressions: string | number | null;
         clicks: string | number | null;
@@ -648,7 +650,8 @@ export class ReportsService {
          * kez taramak olurdu.
          */
         WITH toplamlar AS (
-          SELECT a.id, a.name, a.platform, c.name AS campaign_name, cr.headline, cr.asset_urls,
+          SELECT a.id, a.name, a.platform, c.name AS campaign_name,
+                 cr.headline, cr.description, cr.display_url, cr.asset_urls,
                  SUM(i.impressions) AS impressions,
                  SUM(i.clicks) AS clicks,
                  SUM(i.spend_micros) AS spend_micros,
@@ -661,7 +664,8 @@ export class ReportsService {
           WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
             AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
             AND i.entity_level = 'ad'::"EntityLevel"
-          GROUP BY a.id, a.name, a.platform, c.name, cr.headline, cr.asset_urls
+          GROUP BY a.id, a.name, a.platform, c.name, cr.headline, cr.description,
+                   cr.display_url, cr.asset_urls
         )
         SELECT * FROM (
           SELECT *, ROW_NUMBER() OVER (PARTITION BY platform ORDER BY spend_micros DESC) AS sira
@@ -690,6 +694,8 @@ export class ReportsService {
         platform: r.platform,
         imageUrl: urls[0] ?? null,
         headline: r.headline,
+        description: r.description,
+        displayUrl: r.display_url,
         spendMicros: t.spendMicros,
         conversions: t.conversions,
         cpa: t.cpa,
