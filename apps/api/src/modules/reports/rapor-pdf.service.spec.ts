@@ -340,6 +340,8 @@ describe('öne çıkan reklamlar', () => {
           campaignName: 'Bagcilar kampanyasi',
           platform: 'meta' as const,
           imageUrl: 'https://scontent.xx.fbcdn.net/v/gorsel.jpg',
+          description: null,
+          displayUrl: null,
           headline: 'Simdi kesfet',
           spendMicros: '821770000',
           conversions: 5,
@@ -353,6 +355,8 @@ describe('öne çıkan reklamlar', () => {
           platform: 'google' as const,
           // GÖRSEL ADRESİ HİÇ YOK: Google arama reklamının normal hâli.
           imageUrl: null,
+          description: 'Urlada deniz manzarali 3+1 ve 4+1 secenekler.',
+          displayUrl: 'egebirlikyapi.com/urla',
           headline: 'Urlada satilik villa',
           spendMicros: '303700000',
           conversions: 15,
@@ -422,7 +426,7 @@ describe('öne çıkan reklamlar', () => {
 
   it('KRİTİK: geniş görsel KAREYE EZİLMİYOR', async () => {
     /*
-     * Reklam görselleri çoğunlukla 1200×628. Sabit 56×56 çizmek onu kareye
+     * Reklam görselleri çoğunlukla 1200×628. Sabit ölçüde çizmek onu kutuya
      * sıkıştırıyor ve müşteriye giden belgenin tamamını özensiz gösteriyor.
      *
      * Ölçüm çizim komutundan: pdf-lib görselin genişlik/yükseklik matrisini
@@ -432,7 +436,7 @@ describe('öne çıkan reklamlar', () => {
     const i = kaynak.indexOf("if (sonuc && 'img' in sonuc)");
     expect(i, 'çizim dalı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     const dilim = kaynak.slice(i, kaynak.indexOf('} else {', i));
-    expect(dilim).toContain('Math.min(KUTU / sonuc.img.width, KUTU / sonuc.img.height)');
+    expect(dilim).toContain('Math.min(gorselG / sonuc.img.width, gorselY / sonuc.img.height)');
     expect(dilim).not.toContain('width: KUTU, height: KUTU');
   });
 
@@ -482,6 +486,42 @@ describe('öne çıkan reklamlar', () => {
     }) as unknown as typeof fetch;
     await svc.uret(veri({ sections: ['summary'] }), { getir: sayan });
     expect(cagri).toBe(0);
+  });
+
+  it('KRİTİK: METİN REKLAMI önizlemesi çiziliyor — boş kutu değil', async () => {
+    /*
+     * Google arama reklamının görseli yok ve olmayacak; onu anlatan şey
+     * METNİ. Öncesinde yerine boş bir gri kutu çiziliyordu ve raporu okuyan
+     * reklamın ne dediğini göremiyordu.
+     */
+    const metinReklami = veri().topAds[1]!;
+    const pdf = await svc.uret(veri({ topAds: [metinReklami] }), { getir: veren });
+    const t = metinler(pdf).join(' ');
+
+    expect(t).toContain('Reklam');
+    expect(t).toContain('egebirlikyapi.com/urla');
+    expect(t).toContain('Urlada deniz manzarali');
+  });
+
+  it('METİN reklamı GÖRSELLİ reklamdan daha geniş önizleme alıyor', () => {
+    /*
+     * 52 puntoda başlık ortasından kırpılıyordu: "İzmir Urlada Satılık
+     * Villa |" diye biten bir önizleme reklamın ne dediğini göstermek
+     * yerine gizliyor. Görselde 52 yeterli — kreatifi kreatifin kendisi
+     * anlatıyor.
+     */
+    const kaynak = readFileSync(join(__dirname, 'rapor-pdf.service.ts'), 'utf8');
+    expect(kaynak).toContain('reklam.imageUrl ? 52 :');
+  });
+
+  it('KRİTİK: KART IZGARASI iki sütun — tek sütunlu liste değil', () => {
+    /*
+     * Tek sütunlu satır listesinde sayfaya altı reklam sığıyor, geri kalanı
+     * "sığmadı" notuna düşüyordu. Panelde de iki sütun.
+     */
+    const kaynak = readFileSync(join(__dirname, 'rapor-pdf.service.ts'), 'utf8');
+    const i = kaynak.indexOf('const SUTUN = 2;');
+    expect(i, 'ızgara tanımı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
   });
 
   it('KRİTİK: her platform AYRI SAYFADA', async () => {
@@ -680,9 +720,18 @@ describe('PDF görselliği', () => {
   it('tek günlük seride grafik çizilmiyor', async () => {
     // KIYAS BOŞ SERİYLE: bir noktayı yirmi noktayla kıyaslamak, koşulu
     // `> 1`den `> 0`a çeviren mutasyonu kaçırıyordu.
+    /*
+     * İDDİA ÇİZİLEN BAŞLIKTA, BAYT SAYISINDA DEĞİL.
+     *
+     * Boş seriyle bayt bayt eşitlik beklemek bir baytlık farkta düşüyordu ve
+     * o fark grafikle ilgili değil (belge başka yerlerden de mikro farklar
+     * taşıyabiliyor). Sınanmak istenen şey tek: bir noktalı seride grafik
+     * ÇİZİLMİYOR.
+     */
     const bir = await svc.uret({ ...VERI, sections: ['meta_campaigns'], daily: gunluk(1) });
-    const bos = await svc.uret({ ...VERI, sections: ['meta_campaigns'], daily: [] });
-    expect(bir.byteLength).toBe(bos.byteLength);
+    const cok = await svc.uret({ ...VERI, sections: ['meta_campaigns'], daily: gunluk(20) });
+    expect(metinler(bir)).not.toContain('Günlük dönüşüm seyri');
+    expect(metinler(cok)).toContain('Günlük dönüşüm seyri');
   });
 
   it('KRİTİK: kampanya tablosunda GENEL TOPLAM satırı var', async () => {

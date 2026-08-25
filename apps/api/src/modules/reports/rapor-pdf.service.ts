@@ -819,94 +819,144 @@ export class RaporPdfService {
      */
     let cizilen = 0;
 
-    for (const reklam of reklamlar) {
-      // SAYFA TAŞMASI: kalan yer bir satıra yetmiyorsa kes. Taşan çizim
-      // pdf-lib'de hata vermiyor, sayfanın dışına düşüyor ve GÖRÜNMÜYOR.
-      if (y < KENAR + KUTU + 10) break;
+    /*
+     * İKİ SÜTUNLU KART IZGARASI — panelin düzeninin aynısı.
+     *
+     * Öncesinde tek sütunlu satır listesiydi: sayfada altı reklam görünüyor,
+     * geri kalanı "sığmadı" notuna düşüyordu. Kart ızgarası aynı sayfaya on
+     * ikisini de sığdırıyor ve panelle aynı belgeyi gösteriyor.
+     */
+    const SUTUN = 2;
+    const ARA = 12;
+    const KART_G = (EN - 2 * KENAR - ARA) / SUTUN;
+    const KART_Y = 104;
 
-      const ust = y;
+    for (const [i, reklam] of reklamlar.entries()) {
+      const sutun = i % SUTUN;
+      const satir = Math.floor(i / SUTUN);
+      const kx = KENAR + sutun * (KART_G + ARA);
+      const ky = y - satir * (KART_Y + ARA);
+
+      // SAYFA TAŞMASI: kalan yer bir karta yetmiyorsa kes. Taşan çizim
+      // pdf-lib'de hata vermiyor, sayfanın dışına düşüyor ve GÖRÜNMÜYOR.
+      if (ky - KART_Y < KENAR) break;
+
+      s.drawRectangle({
+        x: kx,
+        y: ky - KART_Y,
+        width: KART_G,
+        height: KART_Y,
+        borderColor: SLATE.s200,
+        borderWidth: 0.8,
+      });
+
+      const ic = 10;
+      /*
+       * METİN REKLAMI DAHA GENİŞ BİR ALAN İSTİYOR.
+       *
+       * Görsel için 52 punto yeterli — kreatifi kreatifin kendisi anlatıyor.
+       * Metin reklamında anlatan şey METNİN KENDİSİ ve 52 puntoda başlık
+       * ortasından kırpılıyordu: "İzmir Urla'da Satılık Villa |" diye biten
+       * bir önizleme, reklamın ne dediğini göstermek yerine gizliyor.
+       *
+       * Sayfa içinde tutarlı kalıyor: Google sayfasındaki kartların hepsi
+       * metin, Meta'dakilerin hepsi görsel.
+       */
+      const gorselG = reklam.imageUrl ? 52 : 108;
+      const gorselY = KART_Y - ic * 2;
+      const metinX = kx + ic + gorselG + 10;
+      const metinG = KART_G - ic * 2 - gorselG - 10;
       const sonuc = reklam.imageUrl ? ctx.gorseller.get(reklam.imageUrl) : undefined;
 
       if (sonuc && 'img' in sonuc) {
         /*
-         * EN-BOY ORANI KORUNUYOR. Sabit 56×56 çizmek, 1200×628 bir banner'ı
-         * kareye EZİYOR ve bunu ilk gören müşteri oluyor — belgenin tamamı
-         * "özensiz" görünüyor. Görsel kutuya SIĞDIRILIP ortalanıyor.
+         * EN-BOY ORANI KORUNUYOR. Sabit ölçüde çizmek 1200×628 bir banner'ı
+         * eziyor ve bunu ilk gören müşteri oluyor.
          */
-        const o = Math.min(KUTU / sonuc.img.width, KUTU / sonuc.img.height);
-        const g = sonuc.img.width * o;
-        const yk = sonuc.img.height * o;
+        const o = Math.min(gorselG / sonuc.img.width, gorselY / sonuc.img.height);
         s.drawImage(sonuc.img, {
-          x: KENAR + (KUTU - g) / 2,
-          y: ust - KUTU + (KUTU - yk) / 2,
-          width: g,
-          height: yk,
+          x: kx + ic + (gorselG - sonuc.img.width * o) / 2,
+          y: ky - ic - gorselY + (gorselY - sonuc.img.height * o) / 2,
+          width: sonuc.img.width * o,
+          height: sonuc.img.height * o,
         });
+      } else if (reklam.imageUrl) {
+        // ADRES VARDI AMA GELMEDİ: bir arıza, sayısı aşağıda bildiriliyor.
+        alinamayan++;
+        sebepler.add(sonuc && 'hata' in sonuc ? sonuc.hata : 'indirilemedi');
+        this.gorselYeri(ctx, s, ky - ic, gorselG, 'alinamadi', kx + ic, gorselY);
       } else {
-        // ADRES VARDI AMA GELMEDİ ile ADRES HİÇ YOKTU ayrı sayılıyor:
-        // ilki bir arıza, ikincisi Google arama reklamının normal hâli.
-        if (reklam.imageUrl) {
-          alinamayan++;
-          sebepler.add(sonuc && 'hata' in sonuc ? sonuc.hata : 'indirilemedi');
-        }
-        this.gorselYeri(ctx, s, ust, KUTU, reklam.imageUrl ? 'alinamadi' : 'metin');
+        /*
+         * METİN REKLAMI ÖNİZLEMESİ — boş kutu DEĞİL.
+         *
+         * Google arama reklamının görseli yok ve olmayacak; onu anlatan şey
+         * METNİ. Boş bir gri kutu koymak "burada bir görsel olacaktı" gibi
+         * duruyordu ve raporu okuyan reklamın neye benzediğini göremiyordu.
+         */
+        this.metinReklamiOnizleme(ctx, s, reklam, kx + ic, ky - ic, gorselG, gorselY);
       }
 
-      s.drawText(kirp(reklam.name, ctx.kalin, 10, 300), {
-        x: METIN_X,
-        y: ust - 12,
-        size: 10,
-        font: ctx.kalin,
-        color: SIYAH,
-      });
-      s.drawText(kirp(reklam.campaignName, ctx.normal, 8.5, 300), {
-        x: METIN_X,
-        y: ust - 26,
-        size: 8.5,
+      s.drawText(kirp(reklam.campaignName.toLocaleUpperCase('tr'), ctx.normal, 6.5, metinG), {
+        x: metinX,
+        y: ky - ic - 7,
+        size: 6.5,
         font: ctx.normal,
-        color: GRI,
+        color: SLATE.s500,
       });
-      if (reklam.headline) {
-        s.drawText(kirp(reklam.headline, ctx.normal, 8.5, 300), {
-          x: METIN_X,
-          y: ust - 40,
-          size: 8.5,
-          font: ctx.normal,
-          color: GRI,
-        });
-      }
 
-      // Sayılar SAĞA yaslı — göz tek bir dikey çizgide tarıyor.
-      const satirlar = [
-        formatMoney(reklam.spendMicros, ctx.data.currency),
-        `${formatNumber(reklam.conversions)} dönüşüm · EBM ${
-          reklam.cpa === null ? '—' : formatMoney(mikro(reklam.cpa), ctx.data.currency)
-        }`,
-        `TO ${formatPercent(reklam.ctr)}`,
+      /*
+       * BAŞLIK İKİ SATIRA SARILIYOR, kırpılmıyor — panelde de `line-clamp-2`.
+       * Tek satıra kırpmak Meta reklam adlarının ayırt edici kısmını
+       * ("… - LEAD (FORM)" gibi) düşürüyor ve iki kart aynı görünüyor.
+       */
+      sar(reklam.headline ?? reklam.name, ctx.kalin, 8.5, metinG)
+        .slice(0, 2)
+        .forEach((satir, k) => {
+          s.drawText(satir, {
+            x: metinX,
+            y: ky - ic - 21 - k * 11,
+            size: 8.5,
+            font: ctx.kalin,
+            color: SLATE.s900,
+          });
+        });
+
+      /*
+       * DÖRT METRİK 2×2 — panelde de öyle. Tek sütunda alt alta yazmak kartı
+       * uzatıp sayfaya altı kart sığdırırdı.
+       */
+      const kutular: Array<[string, string]> = [
+        ['HARCAMA', formatMoney(reklam.spendMicros, ctx.data.currency)],
+        ['DÖNÜŞÜM', formatNumber(reklam.conversions)],
+        ['TO', formatPercent(reklam.ctr)],
+        ['EBM', reklam.cpa === null ? '—' : formatMoney(mikro(reklam.cpa), ctx.data.currency)],
       ];
-      satirlar.forEach((metin, i) => {
-        const punto = i === 0 ? 10 : 8.5;
-        const font = i === 0 ? ctx.kalin : ctx.normal;
-        s.drawText(metin, {
-          x: SAG - font.widthOfTextAtSize(metin, punto),
-          y: ust - 12 - i * 14,
-          size: punto,
-          font,
-          color: i === 0 ? SIYAH : GRI,
+      /*
+       * SOL SÜTUN DAHA GENİŞ (%58). İki eşit sütunda para tutarı kırpılıyordu
+       * ("1.350,70…") ve kırpılmış bir para tutarı, yanlış sayı göstermekle
+       * aynı şey. Sağdaki sütun dönüşüm/EBM taşıyor ve onlar daha kısa.
+       */
+      const solPay = 0.58;
+      kutular.forEach(([etiket, deger], k) => {
+        const sag = k % 2 === 1;
+        const mx = metinX + (sag ? metinG * solPay : 0);
+        const hucreG = (sag ? 1 - solPay : solPay) * metinG - 4;
+        const my = ky - ic - 50 - Math.floor(k / 2) * 22;
+        s.drawText(etiket, { x: mx, y: my, size: 5.5, font: ctx.normal, color: SLATE.s500 });
+        s.drawText(kirp(deger, ctx.kalin, 8, hucreG), {
+          x: mx,
+          y: my - 10,
+          size: 8,
+          font: ctx.kalin,
+          color: SLATE.s900,
         });
       });
 
       cizilen++;
-      y = ust - KUTU - 14;
     }
 
-    /*
-     * ALINAMAYAN GÖRSEL SAYISI YAZILIYOR.
-     *
-     * Platform CDN adresleri süreli: aynı rapor iki hafta sonra üretilince
-     * görseller sessizce kaybolabiliyor. Sayı yazılmazsa danışman belgeyi
-     * müşteriye gönderdikten sonra öğreniyor.
-     */
+    y -= Math.ceil(cizilen / SUTUN) * (KART_Y + ARA);
+
     if (cizilen < reklamlar.length) {
       s.drawText(
         `${reklamlar.length} reklamdan ${cizilen} tanesi sayfaya sığdı.`,
@@ -937,18 +987,81 @@ export class RaporPdfService {
   }
 
   /** Görsel yerine geçen gri kutu — SEBEBİ yazıyor. */
+  /**
+   * METİN REKLAMI ÖNİZLEMESİ — Google arama reklamının "kreatifi".
+   *
+   * Arama reklamının görseli yok ve olmayacak; onu anlatan şey metni.
+   * Öncesinde yerine boş bir gri kutu çiziliyordu ve raporu okuyan reklamın
+   * neye benzediğini göremiyordu — kutu "burada bir görsel olacaktı" gibi
+   * duruyordu.
+   *
+   * Gerçek arama sonucunun yapısı taklit ediliyor: üstte "Reklam" rozeti ve
+   * görünen adres, altında başlık, en altta açıklama. Uydurma yok — üçü de
+   * `creatives` tablosundan geliyor; olmayan alan çizilmiyor.
+   */
+  private metinReklamiOnizleme(
+    ctx: Ctx,
+    s: PDFPage,
+    reklam: ReportData['topAds'][number],
+    x: number,
+    ust: number,
+    genislik: number,
+    yukseklik: number,
+  ): void {
+    s.drawRectangle({
+      x,
+      y: ust - yukseklik,
+      width: genislik,
+      height: yukseklik,
+      color: SLATE.s50,
+      borderColor: SLATE.s200,
+      borderWidth: 0.5,
+    });
+
+    let y = ust - 9;
+    s.drawText('Reklam', { x: x + 4, y, size: 5, font: ctx.kalin, color: SLATE.s600 });
+    if (reklam.displayUrl) {
+      s.drawText(kirp(reklam.displayUrl, ctx.normal, 5, genislik - 8), {
+        x: x + 4,
+        y: y - 7,
+        size: 5,
+        font: ctx.normal,
+        color: SLATE.s500,
+      });
+    }
+
+    y -= 18;
+    for (const [i, satir] of sar(reklam.headline ?? reklam.name, ctx.kalin, 6, genislik - 8)
+      .slice(0, 2)
+      .entries()) {
+      s.drawText(satir, { x: x + 4, y: y - i * 8, size: 6, font: ctx.kalin, color: ctx.ana });
+    }
+
+    if (reklam.description) {
+      y -= 20;
+      for (const [i, satir] of sar(reklam.description, ctx.normal, 5, genislik - 8)
+        .slice(0, 3)
+        .entries()) {
+        if (y - i * 7 < ust - yukseklik + 3) break;
+        s.drawText(satir, { x: x + 4, y: y - i * 7, size: 5, font: ctx.normal, color: SLATE.s600 });
+      }
+    }
+  }
+
   private gorselYeri(
     ctx: Ctx,
     s: PDFPage,
     ust: number,
     kutu: number,
     sebep: 'metin' | 'alinamadi',
+    x = KENAR,
+    yukseklik = kutu,
   ): void {
     s.drawRectangle({
-      x: KENAR,
-      y: ust - kutu,
+      x,
+      y: ust - yukseklik,
       width: kutu,
-      height: kutu,
+      height: yukseklik,
       color: rgb(0.94, 0.94, 0.95),
     });
     /*
@@ -959,8 +1072,8 @@ export class RaporPdfService {
     const etiket = sebep === 'metin' ? 'metin\nreklamı' : 'görsel\nyok';
     etiket.split('\n').forEach((satir, i) => {
       s.drawText(satir, {
-        x: KENAR + (kutu - ctx.normal.widthOfTextAtSize(satir, 7)) / 2,
-        y: ust - kutu / 2 - 3 - i * 9,
+        x: x + (kutu - ctx.normal.widthOfTextAtSize(satir, 7)) / 2,
+        y: ust - yukseklik / 2 - 3 - i * 9,
         size: 7,
         font: ctx.normal,
         color: GRI,
