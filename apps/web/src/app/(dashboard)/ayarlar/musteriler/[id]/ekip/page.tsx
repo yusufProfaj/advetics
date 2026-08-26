@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { TeamManager, type MemberRow } from '@/components/tenancy/team-manager';
+import { DanismanAta } from '@/components/tenancy/danisman-ata';
 
 export const metadata = { title: 'Workspace ekibi — Advetics' };
 
@@ -68,9 +69,28 @@ export default async function WorkspaceTeamPage({
         </p>
       </div>
 
-      {/* Sessiz kesme yok — kaç kişi listelendiği yazılı. */}
-      <div className="rounded-xl border border-line bg-surface px-5 py-3.5 text-sm">
-        <strong>{members.length}</strong> kişinin bu workspace’e erişimi var
+      {/*
+        Sessiz kesme yok — kaç kişi listelendiği yazılı.
+
+        "DANIŞMAN ATA" SAYAÇ BANDININ İÇİNDE, müşteriler ekranındaki "Yeni
+        müşteri" ile aynı yerde. Ayrı bir satırda tek başına duran bir düğme
+        kendi şeridini kaplıyor ve bandın sağı boş kalıyordu.
+
+        YALNIZCA ORG YÖNETİCİSİNE: `POST /memberships` zaten org yöneticisi
+        istiyor. Düğmeyi herkese gösterip 403 aldırmak, yapılamayacak bir işi
+        yapılabilir göstermek olurdu.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-5 py-3.5 text-sm">
+        <span>
+          <strong>{members.length}</strong> kişinin bu workspace’e erişimi var
+        </span>
+        {session.isOrgAdmin && (
+          <DanismanAta
+            clientId={client.id}
+            clientName={client.name}
+            mevcutUyeIdleri={members.map((m) => m.id)}
+          />
+        )}
       </div>
 
       {members.length === 0 ? (
