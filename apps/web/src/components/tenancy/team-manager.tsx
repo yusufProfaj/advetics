@@ -20,8 +20,14 @@ export const ROLE_TR: Record<Role, string> = {
   client_viewer: 'Görüntüleyici',
 };
 
-/** Rolün ne yapabildiği — seçerken tahmin ettirmemek için. */
-const ROLE_HINT: Record<Role, string> = {
+/**
+ * Rolün ne yapabildiği — seçerken tahmin ettirmemek için.
+ *
+ * DIŞA AÇIK: danışman atama penceresi de aynı açıklamayı gösteriyor. İkinci
+ * bir kopya, rollerin yetkisi değiştiğinde iki ekranın farklı şey anlatması
+ * demekti — ve hangisinin doğru olduğu hiçbir yerde yazmazdı.
+ */
+export const ROLE_HINT: Record<Role, string> = {
   owner: 'Her şey + faturalama + organizasyonu silme',
   admin: 'Her şey, faturalama hariç',
   manager: 'Kampanya kurar, kural yazar, bütçe değiştirir',
