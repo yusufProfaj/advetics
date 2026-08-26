@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { apiFetch } from '@/lib/api';
 
 /**
@@ -86,7 +87,21 @@ export function YonetimPaneli({
 
   if (!acik) return null;
 
-  return (
+  /*
+   * PENCERE `document.body`YE PORTAL EDİLİYOR — ve bu bir tercih değil,
+   * zorunluluk.
+   *
+   * Seçici üst bardaki `<header>`ın içinde ve o başlıkta `backdrop-blur`
+   * var. `backdrop-filter` (tıpkı `transform` ve `filter` gibi) SABİT
+   * konumlu alt öğeler için KAPSAYICI BLOK oluşturuyor: `fixed inset-0`
+   * ekranın tamamına değil, başlığın 64 puntoluk kutusuna yayılıyordu.
+   * Sonuç ekranda görüldü — pencere üst barın içine sıkışmış, altı
+   * kırpılmış hâlde açılıyordu.
+   *
+   * `z-index` büyütmek BU SORUNU ÇÖZMÜYOR: kırpan şey katman sırası değil,
+   * kapsayıcı bloğun kendisi. Tek çözüm ağaçtan çıkmak.
+   */
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -205,6 +220,7 @@ export function YonetimPaneli({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
