@@ -68,6 +68,27 @@ export class ClientsService {
            * ceza hesap seviyesinde.
            */
           specialAdCategories: true,
+          /*
+           * İLETİŞİM VE FİRMA ALANLARI LİSTEDE DÖNÜYOR.
+           *
+           * Müşteri kartı küçüldü ve detay bir pencerede açılıyor; o pencere
+           * bu alanları gösteriyor. Tek müşteri için ikinci bir uç açmak,
+           * pencere her açıldığında bir tur daha demekti.
+           *
+           * Yük önemsiz: hepsi kısa VARCHAR ve müşteri sayısı onlarca.
+           * `connections` listesindeki tuzağın (şifreli token ve JSONB
+           * kolonlarını `include` ile çekmek) tersi bir durum — burada
+           * çekilen şey gerçekten ekranda kullanılıyor.
+           */
+          contactName: true,
+          contactEmail: true,
+          contactPhone: true,
+          website: true,
+          address: true,
+          taxOffice: true,
+          taxNumber: true,
+          iban: true,
+          notes: true,
           /**
            * Reklam hesabı ve ekip sayıları listede GÖRÜNMEK ZORUNDA.
            *

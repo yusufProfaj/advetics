@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import { MusteriArama } from '@/components/tenancy/musteri-arama';
+import { MusteriKarti } from '@/components/tenancy/musteri-karti';
 import type { ConnectionSummary, SpecialAdCategory } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
@@ -43,13 +43,24 @@ interface ClientRow {
   /** Bu müşteriye ATANMIŞ hesaplar — izlemede olup olmadıkları alan içinde. */
   adAccounts: ClientAdAccount[];
   socialProfiles: ClientProfile[];
+  /*
+   * İLETİŞİM VE FİRMA ALANLARI — detay penceresi bunları gösteriyor.
+   *
+   * `serverApiFetch<T>` DENETİMSİZ bir dönüşüm: burada bir alan yazıp uçta
+   * SELECT'e eklemeyi unutmak TypeScript'e hiçbir şey söyletmiyor, alan
+   * `undefined` geliyor ve ekranda sessizce "—" oluyor. Uçtaki karşılığı
+   * `clients.service.ts` içindeki `list()` seçimi.
+   */
+  contactName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  website: string | null;
+  address: string | null;
+  taxOffice: string | null;
+  taxNumber: string | null;
+  iban: string | null;
+  notes: string | null;
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  active: 'Aktif',
-  paused: 'Duraklatıldı',
-  archived: 'Arşivlendi',
-};
 
 export default async function ClientsPage() {
   const session = await requireSession();
@@ -158,130 +169,50 @@ export default async function ClientsPage() {
           çözümleri de taşımak olurdu.
         */
         <MusteriArama
-          kartlar={clients.map((client) => {
-            const watched = client.adAccounts.filter((a) => a.syncEnabled).length;
-            const total = client._count.adAccounts;
-
-            return {
-              id: client.id,
-              ad: client.name,
-              slug: client.slug,
-              icerik: (
-                <div
+          kartlar={clients.map((client) => ({
+            id: client.id,
+            ad: client.name,
+            slug: client.slug,
+            icerik: (
+              <MusteriKarti
+                client={client}
+                canManage={session.isOrgAdmin}
                 /*
-                  DİKEY FLEX: ızgara kartları zaten eşit yüksekliğe uzatıyor
-                  ama alt eylem satırı (Hesapları yönet / Ekibi yönet /
-                  Arşivle) içeriğin bittiği yerde kalıyordu — yan yana iki
-                  kartta iki farklı hizada duruyor ve liste kırık görünüyordu.
-                  `mt-auto` ile satır kartın altına yapışıyor.
+                  YÖNETİM KONTROLLERİ SUNUCUDA KURULUYOR, PENCEREDE ÇİZİLİYOR.
+                  Havuz (`pool`) ve oturumun yönetici olup olmadığı sunucu
+                  tarafı bilgiler; kartı tamamen istemciye taşımak ikisini de
+                  taşımak olurdu.
                 */
-                  className="flex h-full flex-col rounded-xl border border-line bg-surface p-5 shadow-sm"
-                >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="truncate text-base font-semibold text-ink">{client.name}</h2>
-                    <p className="mt-0.5 truncate text-xs text-ink-muted">{client.slug}</p>
+                yonetim={
+                  <div className="space-y-3">
+                    <ClientAssets
+                      clientId={client.id}
+                      clientName={client.name}
+                      adAccounts={client.adAccounts}
+                      profiles={client.socialProfiles}
+                      pool={pool}
+                      canManage={session.isOrgAdmin}
+                    />
+
+                    {/* ÖZEL KATEGORİ BEYANI MÜŞTERİ DÜZEYİNDE: bir emlak
+                        firması her kampanyasında emlakçı ve kampanya başına
+                        sormak bir gün unutulacağı anlamına gelir. */}
+                    <SpecialCategoryPicker
+                      clientId={client.id}
+                      value={client.specialAdCategories ?? []}
+                      canManage={session.isOrgAdmin}
+                    />
+
+                    <ClientActions
+                      clientId={client.id}
+                      clientName={client.name}
+                      accountCount={client._count.adAccounts}
+                    />
                   </div>
-                  {client.status !== 'active' && (
-                    <span className="shrink-0 rounded bg-surface-sunken px-2 py-0.5 text-[11px] font-medium text-ink-muted">
-                      {STATUS_LABEL[client.status] ?? client.status}
-                    </span>
-                  )}
-                </div>
-
-                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <dt className="text-xs text-ink-muted">Reklam hesabı</dt>
-                    <dd className="mt-0.5 font-semibold text-ink">
-                      {total === 0 ? (
-                        <span className="text-ink-muted">yok</span>
-                      ) : (
-                        <>
-                          {watched}
-                          <span className="font-normal text-ink-muted"> / {total} izlemede</span>
-                        </>
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-ink-muted">Ekip</dt>
-                    <dd className="mt-0.5 font-semibold text-ink">
-                      {/*
-                        SAYI BAĞLANTI: her müşteri ayrı bir workspace ve
-                        kendi erişim listesi var. Ajans ekibi ekranı müşteri
-                        hesaplarını bilerek dışarıda bırakıyor, dolayısıyla
-                        onların yönetileceği tek yer burası.
-                      */}
-                      <Link
-                        href={`/ayarlar/musteriler/${client.id}/ekip`}
-                        className="text-brand-strong hover:underline"
-                      >
-                        {client._count.memberships}
-                        <span className="font-normal text-ink-muted"> kişi</span>
-                      </Link>
-                    </dd>
-                  </div>
-                </dl>
-
-                {/*
-                  KANALLAR BAĞLANTISI — bu müşterinin kurulumunun yapıldığı yer.
-                  Platform Bağlantıları ajansın işi (bir kez bağlan); bu ekran
-                  müşterinin işi (hangi hesap kime ait). İkisini ayırmak,
-                  bağlantı ekranının onlarca müşterinin hesabını yan yana
-                  göstermesini bitiriyor.
-                */}
-                <Link
-                  href={`/ayarlar/musteriler/${client.id}/kanallar`}
-                  className="mt-3 flex items-center justify-between rounded-lg border border-line px-3 py-2 text-sm transition hover:bg-surface-sunken"
-                >
-                  <span className="font-medium text-ink">Bağlı kanallar</span>
-                  <span className="text-xs text-ink-muted">Meta · Google · IG · YouTube →</span>
-                </Link>
-
-                {/*
-                  İki uyarı da SESSİZ KALMASI en kolay durumları anlatıyor:
-                  hesabı olmayan müşteri hiç veri getirmez, hesabı bağlı ama
-                  izlemeye açılmamış müşteri de getirmez — ikisi panelde
-                  birebir aynı görünür ("veri yok"), sebepleri farklıdır.
-                */}
-                {total === 0 && (
-                  <p className="mt-4 rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-muted">
-                    Atanmış reklam hesabı yok — bu müşteride hiç veri görünmeyecek.
-                  </p>
-                )}
-                {total > 0 && watched === 0 && (
-                  <p className="mt-4 rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-muted">
-                    {total} hesap atanmış ama hiçbiri izlemede değil — veri çekilmiyor.
-                  </p>
-                )}
-
-                <ClientAssets
-                  clientId={client.id}
-                  clientName={client.name}
-                  adAccounts={client.adAccounts}
-                  profiles={client.socialProfiles}
-                  pool={pool}
-                  canManage={session.isOrgAdmin}
-                />
-
-                {/* ÖZEL KATEGORİ BEYANI MÜŞTERİ KARTINDA: bir emlak firması
-                    her kampanyasında emlakçı ve kampanya başına sormak bir gün
-                    unutulacağı anlamına gelir. */}
-                <SpecialCategoryPicker
-                  clientId={client.id}
-                  value={client.specialAdCategories ?? []}
-                  canManage={session.isOrgAdmin}
-                />
-
-                  <ClientActions
-                    clientId={client.id}
-                    clientName={client.name}
-                    accountCount={total}
-                  />
-                </div>
-              ),
-            };
-          })}
+                }
+              />
+            ),
+          }))}
         />
       )}
     </div>
