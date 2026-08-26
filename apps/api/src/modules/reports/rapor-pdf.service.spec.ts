@@ -795,3 +795,145 @@ describe('PDF görselliği', () => {
     expect(metinler(pdf)).toContain(VERI.client.name);
   });
 });
+
+/**
+ * ═══ ÜÇ TABLO, TEK ÇİZİCİ ═══
+ *
+ * Kampanya tablosu düzgün bir tabloydu; anahtar kelime ve arama terimi
+ * sayfaları DÜZ LİSTEYDİ — solda terim, sağda birleştirilmiş bir metrik
+ * dizesi. Panelde üçü de sütunlu tablo. Kullanıcının tarifi: "html tarafındaki
+ * görünüm ve pdf görünümleri birbirleriyle alakası yok, anahtar kelimeler çok
+ * kötü gözüküyor".
+ */
+describe('PDF tabloları', () => {
+  const KAYNAK = readFileSync(join(__dirname, 'rapor-pdf.service.ts'), 'utf8');
+
+  const KELIMELER = Array.from({ length: 3 }, (_, i) => ({
+    keyword: `kelime ${i}`,
+    spendMicros: String((i + 1) * 1_000_000),
+    impressions: 100,
+    clicks: 10,
+    ctr: 10,
+    cpc: 1.5,
+  }));
+  const TERIMLER = [
+    {
+      term: 'ikon cadde satılık',
+      keyword: 'ikon tower',
+      status: 'NONE' as const,
+      spendMicros: '58770000',
+      clicks: 5,
+      ctr: 17.86,
+      conversions: 0,
+    },
+    {
+      term: 'özemeksan',
+      keyword: 'özemeksan',
+      status: 'ENABLED' as const,
+      spendMicros: '99130000',
+      clicks: 16,
+      ctr: 36.36,
+      conversions: 1,
+    },
+  ];
+
+  it('KRİTİK: ÜÇ bölüm de aynı çiziciden geçiyor', () => {
+    /*
+     * Ayrı ayrı çizildiklerinde biri düzeltilip diğeri unutuluyordu — bu
+     * değişikliğin sebebi tam olarak buydu. Üçü de `tablo()` çağırmalı.
+     */
+    for (const metot of ['private kampanyalar', 'private anahtarKelimeler', 'private aramaTerimleri']) {
+      const i = KAYNAK.indexOf(metot);
+      expect(i, `${metot} bulunamadı — tarama boşa düştü`).toBeGreaterThan(-1);
+      const govde = KAYNAK.slice(i, KAYNAK.indexOf('\n  private ', i + 10));
+      expect(govde, `${metot} kendi tablosunu çiziyor`).toContain('tablo(s, {');
+    }
+  });
+
+  it('KRİTİK: ARAMA TERİMLERİ "Eşleşen Kelime" sütununu taşıyor', async () => {
+    /*
+     * Sütun PDF'te HİÇ YOKTU. Oysa bir terimin hangi anahtar kelimeyle
+     * eşleştiği raporun en eyleme dönük bilgisi: "ikon cadde satılık"
+     * sorgusu "ikon tower" ile eşleşiyorsa orada yanlış bir eşleşme var ve
+     * para oraya akıyor.
+     */
+    const pdf = await svc.uret({ ...VERI, sections: ['google_search_terms'], searchTerms: TERIMLER });
+    const t = metinler(pdf);
+    expect(t).toContain('EŞLEŞEN KELİME');
+    expect(t).toContain('ikon tower');
+  });
+
+  it('KRİTİK: TANIMSIZ terim † ile işaretleniyor', async () => {
+    // `NONE` olan bir terim para harcıyor ama ne anahtar kelime ne negatif
+    // olarak tanımlı; işaretlenmezse diğerlerinin arasında kaybolur.
+    const pdf = await svc.uret({ ...VERI, sections: ['google_search_terms'], searchTerms: TERIMLER });
+    expect(metinler(pdf).some((x) => x.startsWith('† '))).toBe(true);
+  });
+
+  it('KRİTİK: ANAHTAR KELİMELER sütunlu tablo — düz liste değil', async () => {
+    const pdf = await svc.uret({ ...VERI, sections: ['google_keywords'], keywords: KELIMELER });
+    const t = metinler(pdf);
+    for (const baslik of ['ANAHTAR KELİME', 'HARCAMA', 'GÖSTERİM', 'TIKLAMA']) {
+      expect(t, `${baslik} başlığı yok`).toContain(baslik);
+    }
+    // Düz listede metrikler tek dizede birleştiriliyordu ("20 tık" gibi).
+    expect(t.some((x) => x.includes(' tık'))).toBe(false);
+  });
+
+  it('KRİTİK: PARA TUTARI kırpılmıyor', async () => {
+    /*
+     * Ortak çiziciye geçerken sütunlar eşit paylaştırılmıştı ve
+     * "9.930,38 ₺" → "9.930,38…" oluyordu. KIRPILMIŞ BİR PARA TUTARI yanlış
+     * sayı göstermekle aynı şey; harcama sütunu diğerlerinin 1,5 katı.
+     */
+    /*
+     * SÜTUN SETİ GERÇEK RAPORDAKİYLE AYNI. İlk yazımda varsayılan (az
+     * sütunlu) tabloya bakıyordu ve orada eşit paylaştırma da sığıyordu —
+     * "harcama sütununu daralt" mutasyonu yakalanmadı. Kırpılma ancak
+     * sütunlar kalabalıklaşınca oluyor ve kullanıcının raporunda altı
+     * metrik sütunu var.
+     */
+    const pdf = await svc.uret({
+      ...VERI,
+      sections: ['meta_campaigns'],
+      options: {
+        meta_campaigns: {
+          metrics: ['spend', 'impressions', 'reach', 'clicks', 'form', 'message'],
+        },
+      },
+      metaCampaigns: [
+        /*
+         * TUTAR ALTI HANELİ. "9.930,38 ₺" eşit paylaştırmada KIL PAYI
+         * sığıyor (50,8 punto / 50,6 punto sütun) ve mutasyon o sınırda
+         * yakalanmıyordu — iddia ölçüye çapalanmalı, tesadüfe değil.
+         */
+        { ...VERI.metaCampaigns[0]!, name: 'Kampanya A', spendMicros: '123456780000' },
+      ],
+    });
+    /*
+     * İDDİA BEKLENEN TAM DİZEYE ÇAPALI.
+     *
+     * Önce "₺ içeren dizelerin hiçbirinde … yok" diyordum ve bu HİÇBİR ZAMAN
+     * DÜŞMEZDİ: kırpılan tutar sondaki "₺"yi de kaybediyor, dolayısıyla
+     * süzgeç onu zaten dışarıda bırakıyordu. Testin kendisi mutasyonu
+     * göremiyordu.
+     */
+    /*
+     * HİÇBİR HÜCRE KIRPILMAMALI. Önce "beklenen tam dizeyi içeriyor mu"
+     * diyordum ve mutasyon yine yakalanmadı: satırdaki tutar kırpılırken
+     * TOPLAM satırındaki aynı tutar kırpılmıyordu (toplam ham çiziliyordu,
+     * ayrı bir kusur — düzeltildi) ve iddia onu görüp geçiyordu.
+     *
+     * Bu fixture'da kampanya adı kısa ("Kampanya A"), yani meşru bir kırpma
+     * beklenmiyor: tabloda tek bir "…" bile olmamalı.
+     */
+    expect(metinler(pdf).filter((x) => x.includes('…')), 'tabloda kırpılmış hücre var').toEqual([]);
+  });
+
+  it('KRİTİK: sığmayan satır sayısı YAZILIYOR', async () => {
+    // Kırpılmış bir tablo "hepsi bu kadarmış" gibi okunuyor.
+    const cok = Array.from({ length: 200 }, (_, i) => ({ ...KELIMELER[0]!, keyword: `k${i}` }));
+    const pdf = await svc.uret({ ...VERI, sections: ['google_keywords'], keywords: cok });
+    expect(metinler(pdf).some((x) => x.includes('sayfaya sığdı'))).toBe(true);
+  });
+});
