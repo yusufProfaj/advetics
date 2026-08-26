@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
+import { YonetimPaneli } from './tenancy/yonetim-paneli';
 
 interface AvailableClient {
   id: string;
@@ -37,6 +38,8 @@ export function ClientSwitcher({
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const [arama, setArama] = useState('');
+  const [panelAcik, setPanelAcik] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +51,19 @@ export function ClientSwitcher({
   }, []);
 
   const active = availableClients.find((c) => c.id === activeClientId) ?? null;
+
+  /*
+   * ARAMA LİSTEYİ SÜZÜYOR. On beş müşteriden sonra açılır liste kaydırmadan
+   * okunmuyor ve aranan ad ekranın dışında kalıyor.
+   *
+   * Türkçe küçültme AÇIKÇA veriliyor (`toLocaleLowerCase('tr')`): varsayılan
+   * küçültmede "İ" → "i̇" oluyor ve "İkon" araması "ikon" ile eşleşmiyor.
+   */
+  const suzulmus = useMemo(() => {
+    const q = arama.trim().toLocaleLowerCase('tr');
+    if (!q) return availableClients;
+    return availableClients.filter((c) => c.name.toLocaleLowerCase('tr').includes(q));
+  }, [availableClients, arama]);
 
   async function select(clientId: string | null) {
     setOpen(false);
@@ -114,7 +130,12 @@ export function ClientSwitcher({
     <div ref={boxRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          // Arama HER AÇILIŞTA sıfırlanıyor: önceki aramayla açılan bir
+          // liste, kullanıcının aradığı müşteriyi "yok" gibi gösteriyor.
+          setArama('');
+          setOpen((v) => !v);
+        }}
         disabled={pending}
         aria-expanded={open}
         aria-haspopup="listbox"
@@ -142,9 +163,30 @@ export function ClientSwitcher({
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 top-full z-30 mt-1.5 w-72 overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
+          className="absolute left-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
         >
-          {isOrgAdmin && (
+          {/*
+            ARAMA EN ÜSTTE. Liste büyüdükçe aranan ad ekranın dışında kalıyor
+            ve kullanıcı kaydırarak arıyor. `autoFocus`: menü zaten bir
+            tıklamayla açıldı, ikinci bir tıklama istemek gereksiz.
+          */}
+          <div className="border-b border-line p-2">
+            <input
+              autoFocus
+              type="search"
+              value={arama}
+              onChange={(e) => setArama(e.target.value)}
+              placeholder="Müşteri ara…"
+              className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm focus:border-brand focus:outline-none"
+            />
+          </div>
+
+          {/*
+            "TÜM MÜŞTERİLER" ARAMADA GİZLENİYOR. Bir ad arayan kullanıcı için
+            organizasyon geneli görünüm bir sonuç değil; listenin başında
+            durması aranan şeyi bir satır aşağı itiyor.
+          */}
+          {isOrgAdmin && arama.trim() === '' && (
             <>
               <Option
                 label="Tüm müşteriler"
@@ -155,19 +197,65 @@ export function ClientSwitcher({
               <div className="h-px bg-line" />
             </>
           )}
+
           <div className="max-h-72 overflow-y-auto">
-            {availableClients.map((c) => (
-              <Option
-                key={c.id}
-                label={c.name}
-                hint={c.status === 'paused' ? 'Duraklatıldı' : undefined}
-                selected={c.id === activeClientId}
-                onSelect={() => void select(c.id)}
-              />
-            ))}
+            {suzulmus.length === 0 ? (
+              // Boş sonuç SEBEBİYLE yazılıyor: sessiz boş liste "müşteri yok"
+              // ile "arama tutmadı" hâllerini aynı ekrana çeviriyor.
+              <p className="px-3 py-4 text-center text-xs text-ink-muted">
+                “{arama}” ile eşleşen müşteri yok.
+              </p>
+            ) : (
+              suzulmus.map((c) => (
+                <Option
+                  key={c.id}
+                  label={c.name}
+                  hint={c.status === 'paused' ? 'Duraklatıldı' : undefined}
+                  selected={c.id === activeClientId}
+                  onSelect={() => void select(c.id)}
+                />
+              ))
+            )}
           </div>
+
+          {/*
+            YÖNETİM PANELİ — LİSTENİN ÜYESİ DEĞİL, BİR EYLEM.
+            Marka renginde dolu ve beyaz yazılı: bir workspace seçmiyor, yeni
+            bir pencere açıyor. Aynı görünümde olsaydı "bu da bir müşteri mi"
+            diye okunurdu.
+          */}
+          {isOrgAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setPanelAcik(true);
+              }}
+              className="flex w-full items-center gap-2.5 bg-brand px-3 py-2.5 text-left text-white transition hover:opacity-90"
+            >
+              <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0" aria-hidden>
+                <path
+                  d="M3 4.5h14M3 10h14M3 15.5h14"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="text-sm font-medium">Yönetim paneli</span>
+            </button>
+          )}
         </div>
       )}
+
+      <YonetimPaneli
+        acik={panelAcik}
+        onKapat={() => setPanelAcik(false)}
+        activeClientId={activeClientId}
+        onSec={(id) => {
+          setPanelAcik(false);
+          void select(id);
+        }}
+      />
     </div>
   );
 }
