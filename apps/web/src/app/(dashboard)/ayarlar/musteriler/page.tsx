@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { MusteriArama } from '@/components/tenancy/musteri-arama';
 import type { ConnectionSummary, SpecialAdCategory } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
@@ -150,14 +151,23 @@ export default async function ClientsPage() {
           </p>
         </div>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {clients.map((client) => {
+        /*
+          LİSTE ARAMA BİLEŞENİNE VERİLİYOR. Kart içeriği burada, SUNUCUDA
+          kuruluyor; istemci yalnızca hangisinin görüneceğine karar veriyor.
+          Kartları tamamen istemciye taşımak, içlerindeki sunucu tarafı
+          çözümleri de taşımak olurdu.
+        */
+        <MusteriArama
+          kartlar={clients.map((client) => {
             const watched = client.adAccounts.filter((a) => a.syncEnabled).length;
             const total = client._count.adAccounts;
 
-            return (
-              <li
-                key={client.id}
+            return {
+              id: client.id,
+              ad: client.name,
+              slug: client.slug,
+              icerik: (
+                <div
                 /*
                   DİKEY FLEX: ızgara kartları zaten eşit yüksekliğe uzatıyor
                   ama alt eylem satırı (Hesapları yönet / Ekibi yönet /
@@ -165,8 +175,8 @@ export default async function ClientsPage() {
                   kartta iki farklı hizada duruyor ve liste kırık görünüyordu.
                   `mt-auto` ile satır kartın altına yapışıyor.
                 */
-                className="flex flex-col rounded-xl border border-line bg-surface p-5 shadow-sm"
-              >
+                  className="flex h-full flex-col rounded-xl border border-line bg-surface p-5 shadow-sm"
+                >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="truncate text-base font-semibold text-ink">{client.name}</h2>
@@ -263,15 +273,16 @@ export default async function ClientsPage() {
                   canManage={session.isOrgAdmin}
                 />
 
-                <ClientActions
-                  clientId={client.id}
-                  clientName={client.name}
-                  accountCount={total}
-                />
-              </li>
-            );
+                  <ClientActions
+                    clientId={client.id}
+                    clientName={client.name}
+                    accountCount={total}
+                  />
+                </div>
+              ),
+            };
           })}
-        </ul>
+        />
       )}
     </div>
   );
