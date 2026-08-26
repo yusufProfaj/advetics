@@ -204,3 +204,156 @@ export function donusumGrafigi(
 
   return taban - 14;
 }
+
+/**
+ * ═══ TABLO — ÜÇ BÖLÜM İÇİN TEK ÇİZİCİ ═══
+ *
+ * Kampanya tablosu düzgün bir tabloydu; anahtar kelime ve arama terimi
+ * sayfaları ise DÜZ LİSTEYDİ: solda terim, sağda birleştirilmiş bir metrik
+ * dizesi ("203,76 ₺   20 tık   1 dönüşüm"). Panelde üçü de sütunlu tablo.
+ * Aynı raporun iki gösterimi arasındaki en görünür ayrışma buydu — ve
+ * kullanıcının tarifi *"birbirleriyle alakası yok"*.
+ *
+ * Üçü de artık BURADAN geçiyor. Ayrı ayrı çizilirken biri düzeltilip diğeri
+ * unutuluyordu; tek çizici bunu imkânsız kılıyor.
+ *
+ * Panelin tablo dili birebir taşınıyor: 7 punto BÜYÜK HARF başlık (slate-500),
+ * altında 1,6 punto slate-300 kural, satırlar arasında 0,5 punto slate-100
+ * ayırıcı, sayılar SAĞA yaslı.
+ */
+export interface TabloSutunu<T> {
+  baslik: string;
+  /** Sütunun genişlik PAYI. Toplam paya bölünüp kullanılabilir alana yayılıyor. */
+  pay: number;
+  /** Sayı sütunları sağa yaslı; yalnızca ilk (ad) sütunu sola. */
+  sag?: boolean;
+  /** Harcama sütunu kalın — gözün ilk gitmesi gereken sayı o. */
+  kalinDeger?: boolean;
+  deger: (satir: T) => string;
+}
+
+export function tablo<T>(
+  s: PDFPage,
+  opts: {
+    sutunlar: Array<TabloSutunu<T>>;
+    satirlar: T[];
+    x: number;
+    y: number;
+    genislik: number;
+    altSinir: number;
+    normal: PDFFont;
+    kalin: PDFFont;
+    /** Son satır olarak çizilecek toplam; `null` = toplam satırı yok. */
+    toplam?: { etiket: string; degerler: Array<string | null> } | null;
+  },
+): { y: number; cizilen: number } {
+  const { sutunlar, satirlar, x, genislik } = opts;
+  let y = opts.y;
+
+  const toplamPay = sutunlar.reduce((a, c) => a + c.pay, 0);
+  const genislikler = sutunlar.map((c) => (c.pay / toplamPay) * genislik);
+  /** Sütunun sol kenarı. */
+  const solX = (i: number): number =>
+    x + genislikler.slice(0, i).reduce((a, b) => a + b, 0);
+  /** Metnin çizileceği x — sağa yaslıysa sütunun sağ kenarından geri sayılıyor. */
+  const yazX = (i: number, metin: string, font: PDFFont, punto: number): number =>
+    sutunlar[i]!.sag
+      ? solX(i) + genislikler[i]! - font.widthOfTextAtSize(metin, punto)
+      : solX(i);
+
+  // Başlık
+  sutunlar.forEach((c, i) => {
+    const metin = c.baslik.toLocaleUpperCase('tr');
+    s.drawText(metin, { x: yazX(i, metin, opts.kalin, 7), y, size: 7, font: opts.kalin, color: SLATE.s500 });
+  });
+  y -= 7;
+  s.drawLine({
+    start: { x, y },
+    end: { x: x + genislik, y },
+    thickness: 1.6,
+    color: SLATE.s300,
+  });
+  y -= 14;
+
+  let cizilen = 0;
+  for (const satir of satirlar) {
+    // Toplam satırına yer bırak: son satırı çizip toplamı düşürmek, tablonun
+    // en çok bakılan rakamını sessizce yutmak olurdu.
+    if (y < opts.altSinir + (opts.toplam ? 18 : 0)) break;
+
+    s.drawLine({
+      start: { x, y: y - 5 },
+      end: { x: x + genislik, y: y - 5 },
+      thickness: 0.5,
+      color: SLATE.s100,
+    });
+
+    sutunlar.forEach((c, i) => {
+      const font = c.kalinDeger ? opts.kalin : opts.normal;
+      const ham = c.deger(satir);
+      const metin = kisalt(ham, font, 8.5, genislikler[i]! - 6);
+      s.drawText(metin, {
+        x: yazX(i, metin, font, 8.5),
+        y,
+        size: 8.5,
+        font,
+        color: SLATE.s900,
+      });
+    });
+    y -= 15;
+    cizilen++;
+  }
+
+  if (opts.toplam) {
+    y -= 4;
+    s.drawLine({
+      start: { x, y: y + 10 },
+      end: { x: x + genislik, y: y + 10 },
+      thickness: 1.6,
+      color: SLATE.s300,
+    });
+    s.drawText(opts.toplam.etiket.toLocaleUpperCase('tr'), {
+      x,
+      y,
+      size: 7.5,
+      font: opts.kalin,
+      color: SLATE.s500,
+    });
+    opts.toplam.degerler.forEach((deger, i) => {
+      // İlk sütun etiketin kendisi; değerler ikinciden başlıyor.
+      const sutunNo = i + 1;
+      if (sutunNo >= sutunlar.length) return;
+      /*
+       * TOPLANAMAYAN SÜTUNA "—". Boş bırakmak "hesaplanmadı" gibi okunuyordu;
+       * sıfır yazmak ise erişimde "iki kat kitle" demek olurdu.
+       */
+      /*
+       * TOPLAM DA KISALTILIYOR. Gövde hücreleri kısaltılırken toplam satırı
+       * ham çiziliyordu: uzun bir toplam sütunundan taşıp komşu sütunun
+       * üstüne biniyordu ve iki sayı üst üste okunmaz hâle geliyordu.
+       * Taşma kırpmadan daha kötü — kırpma en azından görünür.
+       */
+      const metin = kisalt(deger ?? '—', opts.kalin, 8.5, genislikler[sutunNo]! - 6);
+      s.drawText(metin, {
+        x: yazX(sutunNo, metin, opts.kalin, 8.5),
+        y,
+        size: 8.5,
+        font: opts.kalin,
+        color: deger === null ? SLATE.s400 : SLATE.s900,
+      });
+    });
+    y -= 15;
+  }
+
+  return { y, cizilen };
+}
+
+/** Metni sütuna sığdırır; sığmıyorsa sondan kısaltıp üç nokta koyar. */
+function kisalt(metin: string, font: PDFFont, punto: number, maks: number): string {
+  if (font.widthOfTextAtSize(metin, punto) <= maks) return metin;
+  let kesik = metin;
+  while (kesik.length > 1 && font.widthOfTextAtSize(`${kesik}…`, punto) > maks) {
+    kesik = kesik.slice(0, -1);
+  }
+  return `${kesik}…`;
+}

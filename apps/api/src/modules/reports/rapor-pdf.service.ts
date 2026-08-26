@@ -18,7 +18,7 @@ import {
 } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
-import { donusumGrafigi, okunakliYazi, renk, rozet, SLATE } from './pdf-cizim';
+import { donusumGrafigi, okunakliYazi, renk, rozet, SLATE, tablo } from './pdf-cizim';
 
 /** A4, punto cinsinden. */
 const EN = 595.28;
@@ -385,130 +385,59 @@ export class RaporPdfService {
      * raporun iki farklı sütun setiyle çıkması demek olurdu.
      */
     const sutunlar = resolveColumns(ctx.data.options[bolum]?.metrics, DEFAULT_COLUMNS[bolum]);
+    const t = sumRows(satirlar);
 
     /*
-     * AD SÜTUNU GENİŞLETİLDİ (170 → 200). Meta kampanya adları uzun ve
-     * anlamlı ("Kampanya B · Web Sitesi Ziyareti (Trafik)"); 170 puntoda
-     * tam da ayırt edici kısım kırpılıyordu ve tabloda iki satır aynı
-     * görünüyordu.
-     */
-    const adGenislik = 200;
-    const kalanGenislik = EN - KENAR * 2 - adGenislik;
-    const sutunGenislik = kalanGenislik / sutunlar.length;
-
-    /*
-     * BAŞLIK BANDI — marka renginde dolgu, üstünde okunaklı yazı.
+     * KAMPANYA TABLOSU DA ORTAK ÇİZİCİDEN GEÇİYOR.
      *
-     * Öncesinde başlık gri metindi ve altında ince bir çizgi vardı; tablo
-     * ile üstündeki paragraf birbirine karışıyordu. Bant, tablonun nerede
-     * başladığını tek bakışta söylüyor ve belgeye markanın rengini taşıyan
-     * ikinci öğe.
-     */
-    /*
-     * BAŞLIK SATIRI SADE — panelin tablosunda dolgulu bant YOK.
+     * Üç tablo (kampanya, anahtar kelime, arama terimi) ayrı ayrı
+     * çiziliyordu ve ikisi düz listeydi. Ayrı çizildiklerinde biri
+     * düzeltilip diğeri unutuluyor; tek çizici bunu imkânsız kılıyor.
      *
-     * Önceki hâlde marka renginde dolu bir bant vardı; referansta başlık
-     * 10 punto BÜYÜK HARF, slate-500 ve altında 2 punto slate-300 kural.
-     * Dolgulu bant tablonun ağırlık merkezini başlığa kaydırıyordu, oysa
-     * belgenin konusu rakamlar.
+     * Ad sütunu paya çevrildi: sabit 200 punto, sütun sayısı arttığında
+     * sayıları sıkıştırıyordu.
      */
-    s.drawText('KAMPANYA ADI', { x: KENAR, y, size: 7, font: ctx.kalin, color: SLATE.s500 });
-    sutunlar.forEach((k, i) => {
-      const metin = COLUMN_LABELS[k].toLocaleUpperCase('tr');
-      const x =
-        KENAR + adGenislik + (i + 1) * sutunGenislik - ctx.kalin.widthOfTextAtSize(metin, 7);
-      s.drawText(metin, { x, y, size: 7, font: ctx.kalin, color: SLATE.s500 });
-    });
-    y -= 7;
-    s.drawLine({
-      start: { x: KENAR, y },
-      end: { x: EN - KENAR, y },
-      thickness: 1.6,
-      color: SLATE.s300,
-    });
-    y -= 14;
-
-    for (const r of satirlar) {
-      // SAYFA TAŞMASI: alt kenara gelince yeni sayfa. Kontrol olmadan
-      // satırlar sayfanın dışına çizilir ve PDF hata VERMEZ — sadece
-      // görünmezler.
-      if (y < KENAR + 40) break;
-
-      /*
-       * SATIR AYIRICI — panelin `border-b border-slate-100`ı.
-       *
-       * Zebra dolgu ve harcama payını gösteren veri çubukları kaldırıldı:
-       * ikisi de benim eklemelerimdi ve referansta yok. Panelin tablosu
-       * yalnızca ince bir çizgiyle ayrılıyor; ekstra dolgular belgeyi
-       * "başka bir ürünün çıktısı" gibi gösteriyordu.
-       */
-      s.drawLine({
-        start: { x: KENAR, y: y - 5 },
-        end: { x: EN - KENAR, y: y - 5 },
-        thickness: 0.5,
-        color: SLATE.s100,
-      });
-
-      s.drawText(kirp(r.name, ctx.normal, 8.5, adGenislik - 6), {
-        x: KENAR,
-        y,
-        size: 8.5,
-        font: ctx.normal,
-        color: SIYAH,
-      });
-
-      sutunlar.forEach((k, i) => {
-        const metin = hucre(k, r, ctx.data.currency);
-        const x =
-          // SAĞ HİZA BAŞLIKLA AYNI NOKTADA: ayrışırsa sayı sütunu
-          // başlığından bir tık kayıyor ve tablo eğri görünüyor.
-          KENAR + adGenislik + (i + 1) * sutunGenislik - ctx.normal.widthOfTextAtSize(metin, 8.5);
-        s.drawText(metin, { x, y, size: 8.5, font: ctx.normal, color: SIYAH });
-      });
-      y -= 15;
-    }
-    /*
-     * TOPLAM SATIRI — PANELLE AYNI KAYNAKTAN.
-     *
-     * PDF'te toplam HİÇ YOKTU: aynı rapor ekranda toplamlı, müşteriye giden
-     * belgede toplamsız çıkıyordu. Danışman "bu ay ne kadar harcadık"
-     * sorusunu belgede cevaplayamıyordu.
-     *
-     * `sumRows` ve `COLUMN_TOTALS` artık paylaşılan pakette. Toplamı burada
-     * ikinci kez yazmak, bir sütun eklenip toplamının unutulması demekti ve
-     * TypeScript hiçbir şey demezdi — tablo sessizce kayardı.
-     */
-    if (satirlar.length > 0 && y > KENAR + 24) {
-      const t = sumRows(satirlar);
-      y -= 4;
-      s.drawLine({
-        start: { x: KENAR, y: y + 10 },
-        end: { x: EN - KENAR, y: y + 10 },
-        thickness: 1.6,
-        color: SLATE.s300,
-      });
-      s.drawText('GENEL TOPLAM', { x: KENAR, y, size: 7.5, font: ctx.kalin, color: SLATE.s500 });
-      sutunlar.forEach((k, i) => {
+    const { y: sonY } = tablo(s, {
+      sutunlar: [
+        { baslik: 'Kampanya Adı', pay: 32, deger: (r: ReportCampaignRow) => r.name },
         /*
-         * TOPLANAMAYAN SÜTUNA "—" — panelde de öyle (`text-slate-400`).
-         * Boş bırakmak "hesaplanmadı" gibi okunuyordu; sıfır yazmak ise
-         * erişimde "iki kat kitle" demek olurdu.
+         * HARCAMA SÜTUNU DİĞERLERİNDEN GENİŞ (1,5 kat).
+         *
+         * Eşit paylaştırmada "9.930,38 ₺" kırpılıp "9.930,38…" oluyordu ve
+         * KIRPILMIŞ BİR PARA TUTARI yanlış sayı göstermekle aynı şey. Para
+         * dizesi hem en uzun hem de tablonun en çok bakılan sütunu; ad
+         * sütununun kırpılması ise panelde de böyle (`truncate`).
          */
-        const bicim = COLUMN_TOTALS[k];
-        const metin = bicim ? bicim(t, ctx.data.currency) : '—';
-        s.drawText(metin, {
-          x:
-            KENAR +
-            adGenislik +
-            (i + 1) * sutunGenislik -
-            ctx.kalin.widthOfTextAtSize(metin, 8.5),
-          y,
-          size: 8.5,
-          font: ctx.kalin,
-          color: bicim ? SLATE.s900 : SLATE.s400,
-        });
-      });
-    }
+        ...sutunlar.map((k) => ({
+          baslik: COLUMN_LABELS[k],
+          pay: (68 / (sutunlar.length + (sutunlar.includes('spend') ? 0.5 : 0))) *
+            (k === 'spend' ? 1.5 : 1),
+          sag: true,
+          kalinDeger: k === 'spend',
+          deger: (r: ReportCampaignRow) => hucre(k, r, ctx.data.currency),
+        })),
+      ],
+      satirlar,
+      x: KENAR,
+      y,
+      genislik: EN - 2 * KENAR,
+      altSinir: KENAR + 20,
+      normal: ctx.normal,
+      kalin: ctx.kalin,
+      /*
+       * TOPLAM PANELLE AYNI KAYNAKTAN (`COLUMN_TOTALS`). Burada ikinci kez
+       * yazmak, bir sütun eklenip toplamının unutulması demekti ve
+       * TypeScript hiçbir şey demezdi.
+       */
+      toplam: {
+        etiket: 'Genel toplam',
+        degerler: sutunlar.map((k) => {
+          const bicim = COLUMN_TOTALS[k];
+          return bicim ? bicim(t, ctx.data.currency) : null;
+        }),
+      },
+    });
+    y = sonY;
 
     /*
      * GRAFİK TABLONUN ALTINDA VE YALNIZCA META SAYFASINDA — panelde de öyle
@@ -539,97 +468,139 @@ export class RaporPdfService {
     }
   }
 
+  /**
+   * ANAHTAR KELİME PERFORMANSI — panelle AYNI sütunlar.
+   *
+   * Öncesinde düz listeydi: solda kelime, sağda birleştirilmiş bir metrik
+   * dizesi. Panelde altı sütunlu bir tablo duruyordu ve aynı raporun iki
+   * gösterimi birbirine benzemiyordu.
+   */
   private anahtarKelimeler(ctx: Ctx): void {
     const s = ctx.doc.addPage([EN, BOY]);
-    let y = this.baslik(ctx, s, SECTION_LABELS.google_keywords);
+    const y = this.baslik(ctx, s, SECTION_LABELS.google_keywords, 'Google Ads');
 
-    // `null` "veri yok" DEĞİL, "bu yetenek yok" demek: Google bağlantısı
-    // olmayan müşteride anahtar kelime diye bir şey yok.
+    // `null` "veri yok" DEĞİL, "bu yetenek yok": Google bağlantısı olmayan
+    // müşteride anahtar kelime diye bir şey yok.
     if (ctx.data.keywords === null) {
-      s.drawText('Bu müşteride Google Ads bağlantısı yok.', {
-        x: KENAR,
-        y,
-        size: 10,
-        font: ctx.normal,
-        color: GRI,
-      });
+      this.bosKutu(ctx, s, y, 'Bu müşteride Google Ads bağlantısı bulunmuyor.');
       return;
     }
     if (ctx.data.keywords.length === 0) {
-      s.drawText('Bu dönemde anahtar kelime verisi yok.', {
-        x: KENAR,
-        y,
-        size: 10,
-        font: ctx.normal,
-        color: GRI,
-      });
+      this.bosKutu(ctx, s, y, 'Bu dönemde anahtar kelime verisi yok.');
       return;
     }
 
-    for (const k of ctx.data.keywords) {
-      if (y < KENAR + 40) break;
-      s.drawText(kirp(k.keyword, ctx.normal, 9, 260), {
-        x: KENAR,
-        y,
-        size: 9,
-        font: ctx.normal,
-        color: SIYAH,
-      });
-      const sag = `${formatMoney(k.spendMicros, ctx.data.currency)}   ${formatNumber(k.clicks)} tık   ${formatPercent(k.ctr)}`;
-      s.drawText(sag, {
-        x: EN - KENAR - ctx.normal.widthOfTextAtSize(sag, 9),
-        y,
-        size: 9,
-        font: ctx.normal,
-        color: SIYAH,
-      });
-      y -= 15;
-    }
+    const para = (m: string | null): string => formatMoney(m, ctx.data.currency);
+    const { y: son, cizilen } = tablo(s, {
+      sutunlar: [
+        { baslik: 'Anahtar Kelime', pay: 34, deger: (k) => k.keyword },
+        { baslik: 'Harcama', pay: 14, sag: true, kalinDeger: true, deger: (k) => para(k.spendMicros) },
+        { baslik: 'Gösterim', pay: 13, sag: true, deger: (k) => formatNumber(k.impressions) },
+        { baslik: 'Tıklama', pay: 13, sag: true, deger: (k) => formatNumber(k.clicks) },
+        { baslik: COLUMN_LABELS.ctr, pay: 13, sag: true, deger: (k) => formatPercent(k.ctr) },
+        { baslik: COLUMN_LABELS.cpc, pay: 13, sag: true, deger: (k) => para(mikro(k.cpc)) },
+      ],
+      satirlar: ctx.data.keywords,
+      x: KENAR,
+      y,
+      genislik: EN - 2 * KENAR,
+      altSinir: KENAR + 20,
+      normal: ctx.normal,
+      kalin: ctx.kalin,
+    });
+
+    this.sigmayanlar(ctx, s, son, cizilen, ctx.data.keywords.length, 'anahtar kelime');
   }
 
+
+  /**
+   * ARAMA TERİMLERİ — panelle AYNI sütunlar, "Eşleşen Kelime" dahil.
+   *
+   * Öncesinde düz listeydi ve EŞLEŞEN KELİME sütunu HİÇ YOKTU — oysa bir
+   * terimin hangi anahtar kelimeyle eşleştiği, raporun en eyleme dönük
+   * bilgisi: "ikon cadde satılık" sorgusu "ikon tower" ile eşleşiyorsa
+   * orada yanlış bir eşleşme var ve para oraya akıyor.
+   */
   private aramaTerimleri(ctx: Ctx): void {
     const s = ctx.doc.addPage([EN, BOY]);
-    let y = this.baslik(ctx, s, SECTION_LABELS.google_search_terms);
+    let y = this.baslik(ctx, s, SECTION_LABELS.google_search_terms, 'Google Ads');
 
     if (ctx.data.searchTerms === null) {
-      s.drawText('Bu müşteride Google Ads bağlantısı yok.', {
-        x: KENAR, y, size: 10, font: ctx.normal, color: GRI,
-      });
+      this.bosKutu(ctx, s, y, 'Bu müşteride Google Ads bağlantısı bulunmuyor.');
       return;
     }
     if (ctx.data.searchTerms.length === 0) {
-      s.drawText('Bu dönemde arama terimi verisi yok.', {
-        x: KENAR, y, size: 10, font: ctx.normal, color: GRI,
-      });
+      this.bosKutu(ctx, s, y, 'Bu dönemde arama terimi verisi yok.');
       return;
     }
 
-    s.drawText(
+    for (const [i, satir] of sar(
       'Kullanıcıların arama kutusuna yazdığı sorgular. † işaretli olanlar henüz ' +
         'anahtar kelime ya da negatif olarak tanımlı değil.',
-      { x: KENAR, y, size: 8, font: ctx.normal, color: GRI },
-    );
-    y -= 20;
-
-    for (const t of ctx.data.searchTerms) {
-      if (y < KENAR + 40) break;
-      /*
-       * TANIMSIZ TERİM İŞARETLENİYOR. `NONE` olan bir terim para harcıyor ama
-       * ne anahtar kelime ne negatif olarak tanımlı — raporun en eyleme
-       * dönük satırı bu ve işaretlenmezse diğerlerinin arasında kaybolur.
-       */
-      const isaret = t.status === 'NONE' ? '† ' : '';
-      s.drawText(kirp(`${isaret}${t.term}`, ctx.normal, 9, 250), {
-        x: KENAR, y, size: 9, font: ctx.normal, color: SIYAH,
-      });
-      const sag = `${formatMoney(t.spendMicros, ctx.data.currency)}   ${formatNumber(t.clicks)} tık   ${formatNumber(t.conversions)} dönüşüm`;
-      s.drawText(sag, {
-        x: EN - KENAR - ctx.normal.widthOfTextAtSize(sag, 9),
-        y, size: 9, font: ctx.normal, color: SIYAH,
-      });
-      y -= 15;
+      ctx.normal,
+      8,
+      EN - 2 * KENAR,
+    ).entries()) {
+      s.drawText(satir, { x: KENAR, y: y - i * 11, size: 8, font: ctx.normal, color: SLATE.s500 });
     }
+    y -= 30;
+
+    const para = (m: string | null): string => formatMoney(m, ctx.data.currency);
+    const { y: son, cizilen } = tablo(s, {
+      sutunlar: [
+        {
+          baslik: 'Arama Terimi',
+          pay: 30,
+          /*
+           * TANIMSIZ TERİM İŞARETLENİYOR. `NONE` olan bir terim para
+           * harcıyor ama ne anahtar kelime ne negatif olarak tanımlı —
+           * raporun en eyleme dönük satırı bu ve işaretlenmezse
+           * diğerlerinin arasında kaybolur.
+           */
+          deger: (t) => `${t.status === 'NONE' ? '† ' : ''}${t.term}`,
+        },
+        { baslik: 'Eşleşen Kelime', pay: 24, deger: (t) => t.keyword ?? '—' },
+        { baslik: 'Harcama', pay: 13, sag: true, kalinDeger: true, deger: (t) => para(t.spendMicros) },
+        { baslik: 'Tıklama', pay: 11, sag: true, deger: (t) => formatNumber(t.clicks) },
+        { baslik: COLUMN_LABELS.ctr, pay: 11, sag: true, deger: (t) => formatPercent(t.ctr) },
+        { baslik: 'Dönüşüm', pay: 11, sag: true, deger: (t) => formatNumber(t.conversions) },
+      ],
+      satirlar: ctx.data.searchTerms,
+      x: KENAR,
+      y,
+      genislik: EN - 2 * KENAR,
+      altSinir: KENAR + 20,
+      normal: ctx.normal,
+      kalin: ctx.kalin,
+    });
+
+    this.sigmayanlar(ctx, s, son, cizilen, ctx.data.searchTerms.length, 'arama terimi');
   }
+
+  /**
+   * SIĞMAYAN SATIRLAR SESSİZCE DÜŞMÜYOR.
+   *
+   * Sayfaya kaç satır sığdığı ve toplamın kaç olduğu yazılıyor; yoksa
+   * kırpılmış bir tablo "hepsi bu kadarmış" gibi okunuyor.
+   */
+  private sigmayanlar(
+    ctx: Ctx,
+    s: PDFPage,
+    y: number,
+    cizilen: number,
+    toplam: number,
+    birim: string,
+  ): void {
+    if (cizilen >= toplam) return;
+    s.drawText(`${toplam} ${birim}den ${cizilen} tanesi sayfaya sığdı.`, {
+      x: KENAR,
+      y: y - 6,
+      size: 7.5,
+      font: ctx.normal,
+      color: SLATE.s500,
+    });
+  }
+
 
   private kapanis(ctx: Ctx): void {
     if (!ctx.data.closingText) return;

@@ -221,6 +221,26 @@ buna göre veriliyor:
   paylaşımlı sunucuda gereksiz yük. Font bulunamazsa AÇIKÇA patlıyor; sessizce
   standart yazı tipine düşmek en kötü davranış. `pdf-yazi-tipi.spec.ts` hem
   cmap kapsamını hem "standart yazı tipi bunu ÇİZEMİYOR" kanıtını tutuyor.
+- **AYNI GÖRSEL ÖĞE İKİ KEZ ÇİZİLİYORSA ÜÇÜNCÜSÜNDE AYRIŞIR.** PDF'te üç
+  tablo vardı: kampanya düzgün bir tabloydu, anahtar kelime ve arama terimi
+  ise DÜZ LİSTEYDİ (solda terim, sağda birleştirilmiş metrik dizesi).
+  Panelde üçü de sütunlu tablo; kullanıcının tarifi *"birbirleriyle alakası
+  yok"*. Üçü artık tek çiziciden geçiyor (`tablo()` — `pdf-cizim.ts`).
+  Arama terimlerinde **"Eşleşen Kelime" sütunu PDF'te hiç yoktu** ve o,
+  raporun en eyleme dönük bilgisi: bir sorgu yanlış anahtar kelimeyle
+  eşleşiyorsa para oraya akıyor.
+- **TABLODA TAŞMA KIRPMADAN KÖTÜDÜR.** Gövde hücreleri kısaltılırken toplam
+  satırı ham çiziliyordu: uzun bir toplam sütunundan taşıp komşusunun üstüne
+  biniyor ve iki sayı üst üste okunmaz hâle geliyordu. Kırpma en azından
+  görünür. Ayrıca para sütunu diğerlerinden GENİŞ olmak zorunda — eşit
+  paylaştırmada tutar kırpılıyor ve kırpılmış bir para tutarı yanlış sayı
+  göstermekle aynı şey.
+- **KIRPILAN METİN ARADIĞIN İŞARETİ DE KAYBEDER.** "₺ içeren dizelerin
+  hiçbirinde `…` yok" iddiası HİÇBİR ZAMAN DÜŞMÜYOR: tutar kırpılınca
+  sondaki `₺` de gidiyor ve süzgeç onu zaten dışarıda bırakıyor. Bir sonraki
+  denemede "beklenen tam dizeyi içeriyor" da geçti, çünkü satır kırpılırken
+  TOPLAM satırındaki aynı dize kırpılmıyordu. Doğru iddia: tabloda hiçbir
+  kırpma işareti olmamalı (fixture'da meşru kırpma bırakma).
 - **METİN REKLAMININ "KREATİFİ" METNİDİR.** Google arama reklamının görseli
   yok ve olmayacak; yerine boş bir gri kutu koymak "burada bir görsel
   olacaktı" izlenimi bırakıyor ve raporu okuyan reklamın NE DEDİĞİNİ
