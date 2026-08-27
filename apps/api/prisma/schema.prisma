@@ -812,6 +812,15 @@ enum SyncJobType {
   boost_complete
   /// Google arama terimleri — kullanıcının yazdığı sorgular.
   search_terms
+  /// Advetics 1.0 — reklam hesaplarının PLATFORMDAKİ durumunu tazeler ve
+  /// ödeme sorunu bulursa ajansa mail atar.
+  ///
+  /// Ayrı bir tür olmasının sebebi `structure`dan farklı bir şey yapması:
+  /// yapı taraması bir hesabın İÇİNİ (kampanya, grup, reklam) okuyor,
+  /// bu iş hesabın KENDİSİNİ (account_status, customer.status) okuyor ve
+  /// o bilgi başka hiçbir zamanlanmış işte tazelenmiyordu — yalnızca
+  /// kullanıcı elle "Hesapları yenile" dediğinde.
+  account_status
 }
 
 enum SyncJobStatus {

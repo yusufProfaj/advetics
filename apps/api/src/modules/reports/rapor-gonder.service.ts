@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { createTransport } from 'nodemailer';
 import {
   type ReportMailDraft,
   type ReportQuery,
@@ -11,6 +10,7 @@ import { CryptoService } from '../../crypto/crypto.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { imzaTemizle } from '../email/imza-temizle';
+import { mailGonder } from '../email/mail-gonderici';
 import { raporMailTaslagi } from './rapor-mail';
 import { RaporPdfService } from './rapor-pdf.service';
 import { ReportsService } from './reports.service';
@@ -127,26 +127,23 @@ export class RaporGonderService {
 
     const parola = this.crypto.decrypt(Buffer.from(gonderen.smtp_pass_enc));
     try {
-      const transport = createTransport({
-        host: gonderen.smtp_host,
-        port: Number(gonderen.smtp_port),
-        secure: gonderen.smtp_secure,
-        auth: { user: gonderen.smtp_user, pass: parola },
-      });
-      await transport.sendMail({
-        from: { name: gonderen.from_name, address: gonderen.from_email },
-        to: alici,
-        /*
-         * YANITLAR DANIŞMANA GİTSİN. `from` zaten onun adresi ama bazı
-         * kurumsal sunucular gönderen adresini yeniden yazıyor; `replyTo`
-         * açıkça yazılınca müşterinin "yanıtla"sı her hâlükârda doğru yere
-         * gidiyor.
-         */
-        replyTo: gonderen.from_email,
-        subject: input.subject,
-        html: `${govde}${imza}`,
-        attachments: ekler,
-      });
+      await mailGonder(
+        {
+          fromName: gonderen.from_name,
+          fromEmail: gonderen.from_email,
+          host: gonderen.smtp_host,
+          port: Number(gonderen.smtp_port),
+          secure: gonderen.smtp_secure,
+          user: gonderen.smtp_user,
+          pass: parola,
+        },
+        {
+          to: alici,
+          subject: input.subject,
+          html: `${govde}${imza}`,
+          ...(ekler.length > 0 ? { attachments: ekler } : {}),
+        },
+      );
     } catch (err) {
       const mesaj = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Rapor maili gönderilemedi (${ctx.userId} → ${alici}): ${mesaj}`);

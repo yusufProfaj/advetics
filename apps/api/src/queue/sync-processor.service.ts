@@ -14,6 +14,7 @@ import { RuleExecutorService } from '../modules/rules/rule-executor.service';
 import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
 import { KeywordSyncService } from './keyword-sync.service';
+import { HesapDurumuKontrolService } from '../modules/alerts/hesap-durumu-kontrol.service';
 import { SearchTermSyncService } from './search-term-sync.service';
 import { BoostsService } from '../modules/boosts/boosts.service';
 import { YouTubeSubscribeService } from '../modules/autoboost/youtube-subscribe.service';
@@ -65,6 +66,7 @@ export class SyncProcessorService {
     private readonly boostExecutor: BoostExecutorService,
     private readonly keywords: KeywordSyncService,
     private readonly searchTerms: SearchTermSyncService,
+    private readonly hesapDurumu: HesapDurumuKontrolService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -103,6 +105,13 @@ export class SyncProcessorService {
      * aynı sorguyla bulunuyor; müşteriye bölmek boş iş üretirdi.
      */
     if (payload.jobType === 'boost_complete') return this.boostExecutor.completeEndedBoosts();
+    /*
+     * HESAP DURUMU: platform çağrısı yapıyor ama HESAP BAZINDA DEĞİL
+     * BAĞLANTI bazında — `listAdAccounts` bir bağlantının bütün hesaplarını
+     * tek çağrıda getiriyor. Bu yüzden aşağıdaki hesap döngüsüne girmiyor;
+     * girseydi aynı bağlantı hesap sayısı kadar çağrılırdı.
+     */
+    if (payload.jobType === 'account_status') return this.hesapDurumu.kontrolEt();
 
     const accounts = await this.db.adAccount.findMany({
       // Süzgeç TEK YERDE: teşhis ekranı da aynı sabiti okuyor. Ayrı

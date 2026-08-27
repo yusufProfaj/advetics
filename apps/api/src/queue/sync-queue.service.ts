@@ -244,7 +244,21 @@ export class SyncQueueService implements OnModuleDestroy {
   async installSchedules(): Promise<string[]> {
     const installed: string[] = [];
 
-    const schedules: Array<{ name: string; pattern: string; jobType: SyncJobType }> = [
+    const schedules: Array<{
+      name: string;
+      pattern: string;
+      jobType: SyncJobType;
+      /**
+       * Saat dilimi. Varsayılan UTC ve süpürmelerin çoğu için DOĞRU olan bu:
+       * onlar veri PENCERESİ hakkında ve hesabın kendi zaman dilimine göre
+       * ayrıca hesaplanıyor.
+       *
+       * İSTİSNA İNSANIN OKUDUĞU İŞLER. "Sabah 8'de kontrol et ve mail at"
+       * cümlesindeki 8, ajansın saati — UTC'de 8 demek İstanbul'da 11 demek
+       * ve mail öğleye doğru gelirdi.
+       */
+      tz?: string;
+    }> = [
       // L1 — yapı: 6 saatte bir
       { name: 'sweep:structure', pattern: '17 */6 * * *', jobType: 'structure' },
       // L2 — sıcak metrikler: 30 dakikada bir
@@ -296,6 +310,30 @@ export class SyncQueueService implements OnModuleDestroy {
       // gönderiyi tekrar öne çıkarmak isteyen biri ertesi günü beklememeli.
       // Saatlik olması, en kötü ihtimalle bir saatlik gecikme demek.
       { name: 'sweep:boost-complete', pattern: '37 * * * *', jobType: 'boost_complete' },
+      /*
+       * Advetics 1.0 — HESAP DURUMU: GÜNDE İKİ KEZ, AJANSIN SAATİYLE.
+       *
+       * Reklam hesabının platformdaki durumu (`account_status`,
+       * `customer.status`) başka hiçbir zamanlanmış işte tazelenmiyordu:
+       * `listAdAccounts`ı çağıran tek yol kullanıcının elle bastığı
+       * "Hesapları yenile" idi. Bir hesabın ödemesi alınmasa panel bunu
+       * haftalarca öğrenmiyordu.
+       *
+       * SAAT DİLİMİ AÇIKÇA `Europe/Istanbul`. Diğer bütün süpürmeler UTC ve
+       * bu doğru — onlar veri penceresi hakkında. Bu iş ise İNSANIN OKUDUĞU
+       * bir mail üretiyor: 08:00 UTC, İstanbul'da 11:00 demek ve "sabah
+       * kontrol" isteği karşılanmamış olurdu.
+       *
+       * 08:05 ve 13:05: dakika sıfır değil çünkü tam saatlerde başka
+       * süpürmeler ve platform tarafında yoğunluk var; beş dakika kaydırmak
+       * kota çakışmasını ucuza azaltıyor.
+       */
+      {
+        name: 'sweep:account-status',
+        pattern: '5 8,13 * * *',
+        jobType: 'account_status',
+        tz: 'Europe/Istanbul',
+      },
     ];
 
     for (const s of schedules) {
@@ -303,7 +341,7 @@ export class SyncQueueService implements OnModuleDestroy {
       // dakikada tetiklenirse kota aynı anda tüketilir ve platform bloklar.
       await this.queue.upsertJobScheduler(
         s.name,
-        { pattern: s.pattern, tz: 'UTC' },
+        { pattern: s.pattern, tz: s.tz ?? 'UTC' },
         {
           name: `sweep:${s.jobType}`,
           data: {

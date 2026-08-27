@@ -962,6 +962,64 @@ export class ConnectionsService {
    * bir Business Manager'ı bağlayan biri istemeden 40 hesabın API kotasını
    * yakmasın — hangi hesapların izleneceğini kullanıcı açıkça seçer.
    */
+  /**
+   * ═══ ZAMANLANMIŞ HESAP DURUMU TAZELEME ═══
+   *
+   * Reklam hesabının PLATFORMDAKİ durumu (`account_status`, `customer.status`)
+   * yalnızca kullanıcı elle "Hesapları yenile" dediğinde yazılıyordu:
+   * `listAdAccounts`ı çağıran tek yol oydu. Yani bir hesabın ödemesi bugün
+   * alınmasa panel bunu haftalarca öğrenmiyordu ve uyarı bandı doğru ama
+   * BAYAT bir bilgi gösteriyordu.
+   *
+   * TENANT BAĞLAMI YOK ve olamaz: zamanlanmış iş bir kullanıcının adına
+   * koşmuyor. `discoverAndStore` zaten `PrismaAdminService` üzerinden
+   * yazıyor (BYPASSRLS) — worker ve webhook'un kullandığı yolun aynısı.
+   *
+   * BİR BAĞLANTININ DÜŞMESİ DİĞERLERİNİ DURDURMUYOR. Sekiz bağlantının
+   * ikincisi token hatası verirse kalan altısının hesapları da tazelenmeli;
+   * hata sayılıyor ve çağırana bildiriliyor, çünkü "tazelendi" deyip
+   * yarısını atlamak sessiz hatanın ta kendisi.
+   */
+  async tumBaglantilariTazele(): Promise<{
+    baglanti: number;
+    basarili: number;
+    hatalar: Array<{ connectionId: string; platform: string; mesaj: string }>;
+  }> {
+    const baglantilar = await this.admin.platformConnection.findMany({
+      where: { status: 'active', revokedAt: null },
+      select: { id: true, platform: true },
+    });
+
+    const hatalar: Array<{ connectionId: string; platform: string; mesaj: string }> = [];
+    let basarili = 0;
+
+    for (const conn of baglantilar) {
+      const platform = conn.platform as Platform;
+      try {
+        const provider = this.provider(platform);
+        const token = await this.vault.getAccessToken(conn.id, provider);
+        await this.discoverAndStore(conn.id, platform, token);
+        await this.vault.recordSuccess(conn.id);
+        basarili += 1;
+      } catch (err) {
+        /*
+         * BAŞARISIZLIK BAĞLANTIYA DA YAZILIYOR. Yalnızca sayıp geçmek,
+         * `failure_count` ve `last_error_code` alanlarını bu yolda hiç
+         * güncellemeyecekti ve bağlantı sağlığı ekranı elle yenilemeye
+         * bağımlı kalırdı.
+         */
+        await this.vault.recordFailure(conn.id, err);
+        hatalar.push({
+          connectionId: conn.id,
+          platform,
+          mesaj: err instanceof Error ? err.message : 'bilinmeyen hata',
+        });
+      }
+    }
+
+    return { baglanti: baglantilar.length, basarili, hatalar };
+  }
+
   private async discoverAndStore(
     connectionId: string,
     platform: Platform,
