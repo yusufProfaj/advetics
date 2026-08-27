@@ -2,6 +2,7 @@ export * from './auth/roles';
 export * from './constants/platforms';
 export * from './constants/boost-naming';
 export * from './schemas/auth.schema';
+export * from './schemas/uyari.schema';
 export * from './schemas/ad-builder.schema';
 export * from './schemas/ads-explorer.schema';
 export * from './schemas/autoboost.schema';
