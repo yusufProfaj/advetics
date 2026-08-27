@@ -129,8 +129,7 @@ export class ConnectionsController {
    */
   @Post('authorize')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('connection.write')
-  @RequireOrgAdmin()
+  @RequirePermissions('connection.write', 'connection.manage')
   startOAuth(
     @CurrentTenant() ctx: TenantContext,
     @Body(zodBody(startOAuthSchema)) dto: StartOAuthInput,
@@ -189,8 +188,7 @@ export class ConnectionsController {
   /** Yeniden yetkilendirme — needs_reauth durumundaki bağlantı için. */
   @Post(':id/reauthorize')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('connection.write')
-  @RequireOrgAdmin()
+  @RequirePermissions('connection.write', 'connection.manage')
   async reauthorize(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -249,8 +247,7 @@ export class ConnectionsController {
    * "kayıt bulunamadı" olurdu — yetki sorunu olduğu hiç anlaşılmazdı.
    */
   @Patch('ad-accounts/:id/client')
-  @RequirePermissions('connection.write')
-  @RequireOrgAdmin()
+  @RequirePermissions('connection.write', 'connection.manage')
   assignAdAccount(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -301,8 +298,7 @@ export class ConnectionsController {
   }
 
   @Patch('social-profiles/:id/client')
-  @RequirePermissions('connection.write')
-  @RequireOrgAdmin()
+  @RequirePermissions('connection.write', 'connection.manage')
   assignSocialProfile(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -313,12 +309,17 @@ export class ConnectionsController {
   }
 
   /**
-   * ORG YÖNETİCİSİ İŞİ: ajans geneli bir bağlantıyı kaldırmak BÜTÜN
-   * müşterilerin senkronizasyonunu birden durdurur.
+   * ORG YÖNETİCİSİ İŞİ ve BURADA KALIYOR: ajans geneli bir bağlantıyı
+   * kaldırmak BÜTÜN müşterilerin senkronizasyonunu birden durdurur.
+   *
+   * Kardeş uçlar (`authorize`, `reauthorize`, hesap/sayfa atama)
+   * `connection.manage` yetkisine taşındı — reklam yöneticisi kurulumu
+   * yapabilsin diye. Bu uç taşınmadı: kurmak ile HEPSİNİ birden koparmak
+   * aynı büyüklükte kararlar değil.
    */
   @Post(':id/disconnect')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('connection.write')
+  @RequirePermissions('connection.write', 'connection.manage')
   @RequireOrgAdmin()
   disconnect(
     @CurrentTenant() ctx: TenantContext,

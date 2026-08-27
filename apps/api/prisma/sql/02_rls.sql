@@ -65,6 +65,45 @@ LANGUAGE sql STABLE AS $$
   SELECT COALESCE(NULLIF(current_setting('app.is_org_admin', true), '')::boolean, false);
 $$;
 
+/*
+ * HAVUZ SATIRLARINI (client_id IS NULL) KİM GÖREBİLİR/YAZABİLİR.
+ *
+ * Havuz erişimi uzun süre `app.is_org_admin()` demekti ve o bayrak
+ * `ORG_SCOPED_ROLES`ten (owner/admin) türüyor. Reklam yöneticisi rolü
+ * eklendiğinde ortaya şu çıktı: rolün atama yetkisi olabiliyor ama havuz
+ * satırlarını RLS HİÇ göstermiyor — panelde atanabilecek hesap listesi BOŞ
+ * geliyor ve sebebi hiçbir ekranda yazmıyor. Yetkiyi verip veriyi
+ * göstermemek, bu projede en pahalı hata türü olan sessiz yanlışın ta
+ * kendisi.
+ *
+ * Bayrağı `isOrgAdmin`e eklemek çözüm DEĞİLDİ: o bayrak kullanıcı
+ * oluşturmayı, üyelik vermeyi ve müşteri silmeyi de açıyor.
+ *
+ * `app.can_manage_pool` ayrı bir oturum değişkeni ve `connection.manage`
+ * yetkisinden besleniyor (`prisma.service.ts`). Org yöneticisi HER ZAMAN
+ * geçiyor: değişkeni hiç yazmayan bir çağrı (eski testler, worker) eskisi
+ * gibi davranıyor — varsayılan kapalı, güvenli taraf.
+ */
+CREATE OR REPLACE FUNCTION app.can_manage_pool() RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT app.is_org_admin()
+      OR COALESCE(NULLIF(current_setting('app.can_manage_pool', true), '')::boolean, false);
+$$;
+
+/*
+ * YENİ MÜŞTERİ AÇABİLİR Mİ.
+ *
+ * Havuzdan AYRI bir değişken: bir rol reklam hesabı atayabilip müşteri
+ * açamayabilir ve tersi. Bugün ikisini de aynı roller taşıyor ama tek
+ * değişkene bağlamak, o gün geldiğinde politikayı yeniden çözmek demekti.
+ * `client.write` yetkisinden besleniyor.
+ */
+CREATE OR REPLACE FUNCTION app.can_create_clients() RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT app.is_org_admin()
+      OR COALESCE(NULLIF(current_setting('app.can_create_clients', true), '')::boolean, false);
+$$;
+
 /* Bağlamın gerçekten kurulduğunu doğrular. Politikalarda ilk koşul olarak kullanılır. */
 CREATE OR REPLACE FUNCTION app.has_context() RETURNS boolean
 LANGUAGE sql STABLE AS $$
@@ -247,7 +286,7 @@ CREATE POLICY adv_clients_select ON clients
   );
 
 CREATE POLICY adv_clients_insert ON clients
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.is_org_admin());
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_create_clients());
 
 CREATE POLICY adv_clients_update ON clients
   FOR UPDATE USING (
@@ -286,9 +325,37 @@ CREATE POLICY adv_branding_select ON branding_profiles
     AND (client_id IS NULL OR app.can_access_client(client_id))
   );
 
+/*
+ * MÜŞTERİ AÇAN, O MÜŞTERİNİN MARKA PROFİLİNİ DE YAZABİLMEK ZORUNDA.
+ *
+ * `ClientsService.create` müşteriyle birlikte marka profilini de aynı
+ * transaction'da oluşturuyor. Politika yalnızca `is_org_admin()` derken,
+ * reklam yöneticisinin açtığı her müşteri ikinci adımda düşüyordu ve hata
+ * mesajı marka profilini işaret ettiği için sebep müşteri açma akışında
+ * aranmıyordu.
+ *
+ * ORGANİZASYON VARSAYILANI (client_id IS NULL) HÂLÂ SADECE ORG YÖNETİCİSİNDE:
+ * o profil ajansın beyaz etiket kimliği ve bütün müşterilerin raporunda
+ * görünüyor. Müşteriye ÖZEL profil, müşteriyi açanın işi.
+ */
 CREATE POLICY adv_branding_write ON branding_profiles
-  FOR ALL USING (org_id = app.current_org_id() AND app.is_org_admin())
-          WITH CHECK (org_id = app.current_org_id() AND app.is_org_admin());
+  FOR ALL USING (
+    org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.is_org_admin() OR app.can_create_clients()
+      END
+    )
+  ) WITH CHECK (
+    org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        THEN app.is_org_admin()
+        ELSE app.is_org_admin() OR app.can_create_clients()
+      END
+    )
+  );
 
 -- -----------------------------------------------------------------------------
 -- refresh_tokens / password_reset_tokens
@@ -378,7 +445,7 @@ CREATE POLICY adv_connections_write ON platform_connections
     AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.is_org_admin()
+        THEN app.can_manage_pool()
         ELSE app.can_access_client(client_id)
       END
     )
@@ -387,7 +454,7 @@ CREATE POLICY adv_connections_write ON platform_connections
     AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.is_org_admin()
+        THEN app.can_manage_pool()
         ELSE app.can_access_client(client_id)
       END
     )
@@ -420,7 +487,7 @@ CREATE POLICY adv_ad_accounts_select ON ad_accounts
     AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.is_org_admin()
+        THEN app.can_manage_pool()
         ELSE app.can_access_client(client_id)
       END
     )
@@ -458,7 +525,7 @@ CREATE POLICY adv_ad_accounts_write ON ad_accounts
     AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.is_org_admin()
+        THEN app.can_manage_pool()
         ELSE app.can_access_client(client_id)
       END
     )
@@ -467,7 +534,7 @@ CREATE POLICY adv_ad_accounts_write ON ad_accounts
     AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.is_org_admin()
+        THEN app.can_manage_pool()
         ELSE app.can_access_client(client_id)
       END
     )
@@ -492,7 +559,7 @@ CREATE POLICY adv_social_profiles_select ON social_profiles
     AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.is_org_admin()
+        THEN app.can_manage_pool()
         ELSE app.can_access_client(client_id)
       END
     )
@@ -504,7 +571,7 @@ CREATE POLICY adv_social_profiles_write ON social_profiles
     AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.is_org_admin()
+        THEN app.can_manage_pool()
         ELSE app.can_access_client(client_id)
       END
     )
@@ -513,7 +580,7 @@ CREATE POLICY adv_social_profiles_write ON social_profiles
     AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.is_org_admin()
+        THEN app.can_manage_pool()
         ELSE app.can_access_client(client_id)
       END
     )
@@ -548,7 +615,7 @@ CREATE POLICY adv_oauth_states_insert ON oauth_states
     AND created_by_user_id = app.current_user_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.is_org_admin()
+        THEN app.can_manage_pool()
         ELSE app.can_access_client(client_id)
       END
     )

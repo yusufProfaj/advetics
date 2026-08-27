@@ -1,6 +1,6 @@
 import type { ConnectionSummary, ProviderAvailability } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
-import { requireSession } from '@/lib/session';
+import { hasPermission, requireSession } from '@/lib/session';
 import { ConnectButtons } from '@/components/connect-buttons';
 import { ConnectionCard } from '@/components/connection-card';
 import { HavuzKartlari } from '@/components/connections/havuz-kartlari';
@@ -63,10 +63,12 @@ export default async function ConnectionsPage() {
 
       <CallbackBanner />
 
-      {/* Bağlantı kurmak bütün müşterileri etkiliyor — API de bunu org
-          yöneticisiyle sınırlıyor. Düğmeyi yetkisi olmayana göstermek,
-          tıklayınca 403 almak demekti. */}
-      {session.isOrgAdmin ? (
+      {/* Bağlantı kurmak bütün müşterileri etkiliyor — API de aynı yetkiyi
+          (`connection.manage`) istiyor. Düğmeyi yetkisi olmayana göstermek,
+          tıklayınca 403 almak demekti; TERSİ de aynı derecede kötü ve daha
+          sessiz: yetkisi olana göstermemek. Bu yüzden kapı `isOrgAdmin`e
+          değil yetkinin kendisine bakıyor. */}
+      {hasPermission(session, 'connection.manage') ? (
         <section className="rounded-xl border border-line bg-surface p-5">
           <h2 className="text-sm font-semibold">Yeni bağlantı</h2>
           <p className="mt-1 text-xs text-ink-muted">
@@ -102,7 +104,7 @@ export default async function ConnectionsPage() {
           <HavuzKartlari
             connections={connections}
             clients={session.availableClients}
-            canManage={session.isOrgAdmin}
+            canManage={hasPermission(session, 'connection.manage')}
           />
 
           <IzlenenHesaplar connections={connections} clients={session.availableClients} />
@@ -118,7 +120,7 @@ export default async function ConnectionsPage() {
                 key={c.id}
                 connection={c}
                 clients={session.availableClients}
-                canManage={session.isOrgAdmin}
+                canManage={hasPermission(session, 'connection.manage')}
                 compact
               />
             ))}
