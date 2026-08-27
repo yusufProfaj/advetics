@@ -287,6 +287,12 @@ export class SyncQueueService implements OnModuleDestroy {
        * ve aynı anda koşmaları büyük hesaplarda birbirinin önünü kesiyor.
        */
       { name: 'sweep:searchterms', pattern: '7 5 * * *', jobType: 'search_terms' },
+      /*
+       * Advetics 1.0 — KIRILIMLAR: gecede bir, arama terimlerinden 25 dakika
+       * sonra. Üçü de aynı kota katmanında (`insights_breakdown`) ve aynı
+       * anda koşmaları büyük hesaplarda birbirinin önünü kesiyor.
+       */
+      { name: 'sweep:breakdowns', pattern: '32 5 * * *', jobType: 'insights_breakdowns' },
       // Modül 7 — boost: GÜNDE İKİ KEZ, saatte bir değil.
       //
       // Organik metrikler yavaş değişiyor ve boost kararı bir gönderi için

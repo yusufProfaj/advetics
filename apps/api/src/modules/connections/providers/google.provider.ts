@@ -38,6 +38,9 @@ import {
   type OAuthTokens,
   type PlatformStructure,
   type TokenVerification,
+  BreakdownRequest,
+  DiscoveredBreakdownRow,
+  PlatformBreakdowns,
 } from '../provider.types';
 import { platformFetch } from './http';
 import {
@@ -65,6 +68,79 @@ import {
  *   3. Hesap listesi iki adımdır: `listAccessibleCustomers` yalnızca id verir,
  *      isim/para birimi/zaman dilimi için ayrıca GAQL sorgusu gerekir.
  */
+/**
+ * Boyut → Google sorgu şekli.
+ *
+ * Meta'nın tek parametreli `breakdowns`ının aksine her boyut ayrı kaynak ya
+ * da ayrı segment. Harita TEK YERDE ve eksik anahtar `unsupported` demek.
+ */
+/*
+ * YARDIMCILAR MODÜL DÜZEYİNDE, sınıfın özel metotları DEĞİL.
+ *
+ * İlk hâlim haritadan `this.obj`/`this.str`e uzanıyordu ve onları dışa
+ * açmak gerekiyordu — bir harita uğruna sınıfın yüzeyini genişletmek.
+ */
+function okuNesne(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function okuMetin(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const t = value.trim();
+  return t.length > 0 ? t : undefined;
+}
+
+const GOOGLE_BREAKDOWN: Partial<
+  Record<
+    BreakdownRequest['dimension'],
+    {
+      kaynak: string;
+      alan: string;
+      deger: (row: Record<string, unknown>) => string | undefined;
+    }
+  >
+> = {
+  age: {
+    kaynak: 'age_range_view',
+    alan: 'ad_group_criterion.age_range.type',
+    deger: (r) => okuMetin(okuNesne(okuNesne(r.adGroupCriterion)?.ageRange)?.type),
+  },
+  gender: {
+    kaynak: 'gender_view',
+    alan: 'ad_group_criterion.gender.type',
+    deger: (r) => okuMetin(okuNesne(okuNesne(r.adGroupCriterion)?.gender)?.type),
+  },
+  placement: {
+    // Google'da "yerleşim" en yakın karşılığı AĞ TÜRÜ: arama, arama ortağı,
+    // görüntülü reklam ağı, YouTube. Meta'daki feed/story ayrımının dengi
+    // `detail_placement_view` ama o yalnızca görüntülü reklam ağında dolu.
+    kaynak: 'campaign',
+    alan: 'segments.ad_network_type',
+    deger: (r) => okuMetin(okuNesne(r.segments)?.adNetworkType),
+  },
+  hour: {
+    kaynak: 'campaign',
+    alan: 'segments.hour',
+    deger: (r) => {
+      const h = okuNesne(r.segments)?.hour;
+      // 0 GEÇERLİ BİR SAAT. `if (!h)` yazmak gece yarısını sessizce düşürürdü.
+      return h === undefined || h === null ? undefined : String(h).padStart(2, '0');
+    },
+  },
+  city: {
+    kaynak: 'geographic_view',
+    alan: 'geographic_view.country_criterion_id, segments.geo_target_city',
+    deger: (r) => {
+      // `segments.geo_target_city` "geoTargetConstants/2035120" biçiminde;
+      // kimlik son parça ve ada `geoAdlari` çeviriyor.
+      const ham = okuMetin(okuNesne(r.segments)?.geoTargetCity);
+      return ham?.split('/').pop();
+    },
+  },
+};
+
 @Injectable()
 export class GoogleProvider implements IAdPlatformProvider {
   readonly platform: Platform = 'google';
@@ -747,6 +823,127 @@ export class GoogleProvider implements IAdPlatformProvider {
     }
 
     return { rows: mapped, apiCalls: calls.n, complete: true };
+  }
+
+  /**
+   * ═══ KIRILIM METRİKLERİ ═══
+   *
+   * Meta'daki `breakdowns` parametresinin Google karşılığı YOK: her boyut
+   * ayrı bir KAYNAK (`age_range_view`, `gender_view`) ya da ayrı bir SEGMENT
+   * (`segments.hour`, `segments.ad_network_type`). Bu yüzden tek bir harita
+   * yerine boyut başına sorgu şekli tutuluyor.
+   *
+   * ŞEHİR İKİ ÇAĞRI İSTİYOR. `geographic_view` şehir ADINI değil kriter
+   * KİMLİĞİNİ döndürüyor; adlar `geo_target_constant` kaynağında. İkinci
+   * çağrı görülen kimlikleri TEK SEFERDE çözüyor — kimlik başına sorgu
+   * yüzlerce çağrı demekti.
+   */
+  async fetchBreakdowns(
+    ctx: FetchContext,
+    request: BreakdownRequest,
+  ): Promise<PlatformBreakdowns> {
+    const { accessToken, accountExternalId: customerId, loginCustomerId } = ctx;
+    const calls = { n: 0 };
+
+    for (const d of [request.dateFrom, request.dateTo]) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        throw new PlatformApiError('google', 'permanent', `Geçersiz tarih biçimi: ${d}`);
+      }
+    }
+
+    const sekil = GOOGLE_BREAKDOWN[request.dimension];
+    if (!sekil) return { rows: [], apiCalls: 0, complete: true, unsupported: true };
+
+    const ham = await this.searchGaqlPaged<Record<string, unknown>>(
+      accessToken,
+      customerId,
+      `SELECT ${sekil.alan}, segments.date, customer.currency_code,
+              metrics.impressions, metrics.clicks, metrics.cost_micros,
+              metrics.conversions, metrics.conversions_value
+       FROM ${sekil.kaynak}
+       WHERE segments.date BETWEEN '${request.dateFrom}' AND '${request.dateTo}'`,
+      loginCustomerId,
+      calls,
+    );
+
+    const satirlar: DiscoveredBreakdownRow[] = [];
+    const cozulecekKimlikler = new Set<string>();
+
+    for (const row of ham) {
+      const segments = this.obj(row.segments);
+      const metrics = this.obj(row.metrics);
+      const date = this.str(segments?.date);
+      const deger = sekil.deger(row);
+      if (!date || !deger) continue;
+      if (request.dimension === 'city') cozulecekKimlikler.add(deger);
+
+      satirlar.push({
+        dimension: request.dimension,
+        value: deger.slice(0, 120),
+        date,
+        impressions: Number(metrics?.impressions ?? 0) || 0,
+        clicks: Number(metrics?.clicks ?? 0) || 0,
+        spendMicros: this.micros(metrics?.costMicros) ?? 0n,
+        conversions: Number(metrics?.conversions ?? 0) || 0,
+        conversionValueMicros: googleValueToMicros(metrics?.conversionsValue),
+        currency: (this.str(this.obj(row.customer)?.currencyCode) ?? 'USD')
+          .toUpperCase()
+          .slice(0, 3),
+      });
+    }
+
+    /*
+     * KİMLİKLER ADA ÇEVRİLİYOR. Çeviri başarısız olursa satır ATILMIYOR,
+     * kimlik olduğu gibi kalıyor: "2035120" okunaksız ama satırı düşürmek
+     * o şehrin harcamasını raporun toplamından sessizce çıkarırdı.
+     */
+    if (request.dimension === 'city' && cozulecekKimlikler.size > 0) {
+      const adlar = await this.geoAdlari(
+        accessToken,
+        customerId,
+        loginCustomerId,
+        [...cozulecekKimlikler],
+        calls,
+      );
+      for (const s of satirlar) s.value = adlar.get(s.value) ?? s.value;
+    }
+
+    return { rows: satirlar, apiCalls: calls.n, complete: true, unsupported: false };
+  }
+
+  /** Coğrafi kriter kimliklerini ada çevirir — TEK sorguda. */
+  private async geoAdlari(
+    accessToken: string,
+    customerId: string,
+    loginCustomerId: string | undefined,
+    kimlikler: string[],
+    calls: { n: number },
+  ): Promise<Map<string, string>> {
+    // Kimlikler PLATFORMDAN geldi ama yine de doğrulanıyor: sorguya giren
+    // her değer sayı olmak zorunda (GAQL enjeksiyonuna kapalı olması için).
+    const guvenli = kimlikler.filter((k) => /^\d+$/.test(k));
+    if (guvenli.length === 0) return new Map();
+
+    const rows = await this.searchGaqlPaged<Record<string, unknown>>(
+      accessToken,
+      customerId,
+      `SELECT geo_target_constant.id, geo_target_constant.canonical_name
+       FROM geo_target_constant
+       WHERE geo_target_constant.id IN (${guvenli.join(',')})`,
+      loginCustomerId,
+      calls,
+    );
+
+    const harita = new Map<string, string>();
+    for (const row of rows) {
+      const g = this.obj(row.geoTargetConstant);
+      const id = this.str(g?.id);
+      // `canonical_name` "Izmir,Izmir,Turkey" gibi geliyor — ilk parça
+      // kullanıcının "şehir" dediği şey.
+      const ad = this.str(g?.canonicalName)?.split(',')[0];
+      if (id && ad) harita.set(id, ad);
+    }
+    return harita;
   }
 
   /**

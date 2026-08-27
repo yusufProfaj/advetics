@@ -8,6 +8,7 @@ import { InsightsSyncService } from './insights-sync.service';
 import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
 import { KeywordSyncService } from './keyword-sync.service';
+import { KirilimSyncService } from './kirilim-sync.service';
 import { SearchTermSyncService } from './search-term-sync.service';
 import { QuotaGuardService } from './quota-guard.service';
 import { StructureSyncService } from './structure-sync.service';
@@ -38,6 +39,7 @@ import { SyncProcessorService } from './sync-processor.service';
     LeadSyncService,
     KeywordSyncService,
     SearchTermSyncService,
+    KirilimSyncService,
   ],
   exports: [
     QuotaGuardService,

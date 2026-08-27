@@ -45,6 +45,9 @@ import {
   type PlatformStructure,
   type RateLimitSnapshot,
   type TokenVerification,
+  BreakdownRequest,
+  DiscoveredBreakdownRow,
+  PlatformBreakdowns,
 } from '../provider.types';
 import { parseMetaRateLimit, platformFetch, type PlatformResponse } from './http';
 
@@ -149,6 +152,21 @@ export function actPath(externalId: string): string {
  * orada paylaşım gerçekten performans kazandırabiliyor.
  */
 const ADSET_BUDGET_SHARING = 'false';
+
+/**
+ * Boyut → Meta `breakdowns` parametresi.
+ *
+ * Harita TEK YERDE ve eksik anahtar `unsupported` demek. Switch ile yazmak,
+ * yeni bir boyut eklendiğinde sessizce boş liste döndürme riski taşıyordu.
+ */
+const META_BREAKDOWN: Partial<Record<BreakdownRequest['dimension'], string>> = {
+  age: 'age',
+  gender: 'gender',
+  placement: 'publisher_platform,platform_position',
+  hour: 'hourly_stats_aggregated_by_advertiser_time_zone',
+  // `region`, `city` DEĞİL — bkz. fetchBreakdowns yorumundaki gerekçe.
+  city: 'region',
+};
 
 @Injectable()
 export class MetaProvider implements IAdPlatformProvider {
@@ -1012,6 +1030,144 @@ export class MetaProvider implements IAdPlatformProvider {
     }
 
     return { rows, apiCalls: calls, complete: true };
+  }
+
+  /**
+   * ═══ KIRILIM METRİKLERİ ═══
+   *
+   * Meta'nın `breakdowns` parametresi. Her boyut AYRI ÇAĞRI: Meta çoğu
+   * kombinasyonu reddediyor ("(#100) Breakdowns are not compatible") ve
+   * kabul ettiklerinde de satır sayısı çarpım kadar büyüyor.
+   *
+   * ŞEHİR İÇİN `region` KULLANILIYOR, `city` DEĞİL. Türkiye'de Meta'nın
+   * `region` kovaları illere denk geliyor ("Izmir Province") — kullanıcının
+   * "şehir" dediği şey bu. `city` kovası ise ilçe/semt düzeyine iniyor,
+   * kardinalitesi yüzlere çıkıyor ve raporda okunmaz bir tablo üretiyor.
+   *
+   * SAAT KOVASI REKLAM HESABININ ZAMAN DİLİMİNDE.
+   * `hourly_stats_aggregated_by_advertiser_time_zone` seçildi çünkü panelin
+   * geri kalanı da hesabın zaman dilimini kullanıyor; izleyicinin zaman
+   * dilimine göre toplayan kova ("...by_audience_time_zone") aynı ekranda
+   * iki farklı "gün" tanımı demek olurdu.
+   */
+  async fetchBreakdowns(
+    ctx: FetchContext,
+    request: BreakdownRequest,
+  ): Promise<PlatformBreakdowns> {
+    const kova = META_BREAKDOWN[request.dimension];
+    if (!kova) return { rows: [], apiCalls: 0, complete: true, unsupported: true };
+
+    const act = actPath(ctx.accountExternalId);
+    const url = new URL(`${this.graph}/${act}/insights`);
+    // HESAP SEVİYESİ: rapor "müşterinin kitlesi kim" diye soruyor.
+    url.searchParams.set('level', 'account');
+    url.searchParams.set('time_increment', '1');
+    url.searchParams.set(
+      'time_range',
+      JSON.stringify({ since: request.dateFrom, until: request.dateTo }),
+    );
+    url.searchParams.set('breakdowns', kova);
+    url.searchParams.set('limit', '500');
+    /*
+     * ATIF AYARI BURADA DA AÇIKÇA. `fetchInsights` ile aynı gerekçe: iki
+     * çağrı farklı pencere kullanırsa kırılım toplamı ana rakamı tutmaz ve
+     * fark hiçbir yerde görünmez.
+     */
+    url.searchParams.set('use_unified_attribution_setting', 'true');
+    url.searchParams.set('action_report_time', 'impression');
+    url.searchParams.set('access_token', ctx.accessToken);
+    url.searchParams.set(
+      'fields',
+      ['date_start', 'account_currency', 'impressions', 'clicks', 'spend', 'actions', 'action_values'].join(
+        ',',
+      ),
+    );
+
+    const rows: DiscoveredBreakdownRow[] = [];
+    let next: string | undefined = url.toString();
+    let pages = 0;
+    let calls = 0;
+    const MAX_PAGES = 40;
+
+    while (next && pages < MAX_PAGES) {
+      const res = await platformFetch<GraphPage>('meta', next, {}, parseMetaRateLimit);
+      calls++;
+      if (res.rateLimit && ctx.onRateLimit) await ctx.onRateLimit(res.rateLimit);
+      const body: GraphPage = res.data;
+
+      for (const raw of body.data ?? []) {
+        const date = text(raw.date_start);
+        const deger = this.breakdownDegeri(raw, request.dimension);
+        // DEĞERSİZ SATIR ATILIYOR ama sessizce değil: Meta bazen boş kova
+        // döndürüyor ve o satırın toplamı zaten ana rakamda var.
+        if (!date || !deger) continue;
+
+        const buckets = bucketsFromActions(raw.actions);
+        rows.push({
+          dimension: request.dimension,
+          value: deger.slice(0, 120),
+          date,
+          impressions: Number(raw.impressions ?? 0),
+          clicks: Number(raw.clicks ?? 0),
+          spendMicros: BigInt(Math.round(Number(raw.spend ?? 0) * 1_000_000)),
+          conversions: buckets.form + buckets.message + buckets.purchase,
+          // `pickActionValue` STRING döndürüyor (hassasiyet için); çarpmadan
+          // önce sayıya çevriliyor.
+          conversionValueMicros: BigInt(
+            Math.round(
+              Number(pickActionValue(raw.action_values, CONVERSION_BUCKETS.purchase.actionTypes)) *
+                1_000_000,
+            ),
+          ),
+          currency: text(raw.account_currency) ?? 'TRY',
+        });
+      }
+
+      next = body.paging?.next;
+      pages++;
+    }
+
+    if (next) {
+      this.logger.warn(
+        `Meta kırılım ${MAX_PAGES} sayfada bitmedi (${act}, ${request.dimension}) — KISMİ`,
+      );
+      return { rows, apiCalls: calls, complete: false, unsupported: false };
+    }
+    return { rows, apiCalls: calls, complete: true, unsupported: false };
+  }
+
+  /** Kırılım kovasının değerini ham satırdan okur. */
+  private breakdownDegeri(
+    raw: Record<string, unknown>,
+    dimension: BreakdownRequest['dimension'],
+  ): string | undefined {
+    switch (dimension) {
+      case 'age':
+        return text(raw.age);
+      case 'gender':
+        return text(raw.gender);
+      case 'placement': {
+        /*
+         * PLATFORM VE YERLEŞİM BİRLEŞTİRİLİYOR: "instagram · stories".
+         * Yalnızca `publisher_platform` almak "Instagram" diyor ama feed ile
+         * story'nin performansı çok farklı ve ajans tam o ayrımı istiyor.
+         */
+        const platform = text(raw.publisher_platform);
+        const konum = text(raw.platform_position);
+        if (!platform) return undefined;
+        return konum ? `${platform} · ${konum}` : platform;
+      }
+      case 'hour': {
+        // Meta "00:00:00 - 00:59:59" biçiminde döndürüyor; saat numarası
+        // yeterli ve tabloda sıralanabilir olması için ondan alınıyor.
+        const ham = text(raw.hourly_stats_aggregated_by_advertiser_time_zone);
+        return ham?.slice(0, 2);
+      }
+      case 'city':
+        return text(raw.region);
+      default:
+        return undefined;
+    }
   }
 
   private mapMetaInsightRow(

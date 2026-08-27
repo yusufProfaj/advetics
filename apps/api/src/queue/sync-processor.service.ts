@@ -15,6 +15,7 @@ import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
 import { KeywordSyncService } from './keyword-sync.service';
 import { HesapDurumuKontrolService } from '../modules/alerts/hesap-durumu-kontrol.service';
+import { KirilimSyncService } from './kirilim-sync.service';
 import { SearchTermSyncService } from './search-term-sync.service';
 import { BoostsService } from '../modules/boosts/boosts.service';
 import { YouTubeSubscribeService } from '../modules/autoboost/youtube-subscribe.service';
@@ -67,6 +68,7 @@ export class SyncProcessorService {
     private readonly keywords: KeywordSyncService,
     private readonly searchTerms: SearchTermSyncService,
     private readonly hesapDurumu: HesapDurumuKontrolService,
+    private readonly kirilim: KirilimSyncService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -274,14 +276,20 @@ export class SyncProcessorService {
        * satırları da aynı atıf gecikmesine tabi ve tek gün çekmek kapanmamış
        * dönüşümleri eksik gösterirdi.
        */
-      case 'keyword_insights':
       /*
-       * ARAMA TERİMİ DE AYNI PENCERE. Bu dalı unutmak, işin her gece
-       * `[missing_dates]` ile düşmesi ve verinin HİÇ toplanmaması demek —
-       * anahtar kelimelerde tam olarak bu oldu ve tek iz `sync_jobs`taydı.
-       * `sweep-dates.spec.ts` zamanlayıcı listesiyle bu switch'i
-       * karşılaştırıyor.
+       * KIRILIM: son 7 gün — anahtar kelime ve arama terimiyle AYNI pencere.
+       *
+       * Kitle dağılımı gün içinde anlamlı değişmiyor ama dönüşümler atıf
+       * gecikmesine tabi: tek gün çekmek kapanmamış dönüşümleri eksik
+       * gösterirdi ve kırılım toplamı ana rakamı tutmazdı.
+       *
+       * Bu dalı unutmak, işin her gece `[missing_dates]` ile düşmesi ve
+       * verinin HİÇ toplanmaması demek — anahtar kelimelerde tam olarak bu
+       * oldu ve tek iz `sync_jobs`taydı. `sweep-dates.spec.ts` zamanlayıcı
+       * listesiyle bu switch'i karşılaştırıyor.
        */
+      case 'insights_breakdowns':
+      case 'keyword_insights':
       case 'search_terms':
         return { from: this.shiftDays(todayInTz, -7), to: this.shiftDays(todayInTz, -1) };
       default:
@@ -620,6 +628,20 @@ export class SyncProcessorService {
         await this.recordFailure(syncJobId, err);
         throw err;
       }
+    }
+
+    if (payload.jobType === 'insights_breakdowns') {
+      /*
+       * HESAP BAZINDA ve döngünün İÇİNDE: her hesabın kendi kırılımı var ve
+       * `fetchBreakdowns` hesap seviyesinde toplanmış veri döndürüyor.
+       * Bağlantı bazlı olsaydı hangi hesabın verisi olduğu belirsiz kalırdı.
+       */
+      const r = await this.kirilim.syncAccount({
+        adAccountId: payload.adAccountId!,
+        dateFrom: payload.dateFrom!,
+        dateTo: payload.dateTo!,
+      });
+      return { rows: r.rows, note: r.note };
     }
 
     if (payload.jobType === 'keyword_insights') {

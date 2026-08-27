@@ -54,6 +54,13 @@ export const HESABIN_KENDI_VERISI = [
   { tablo: 'keyword_insights', etiket: 'anahtar kelime metriği' },
   { tablo: 'search_term_insights', etiket: 'arama terimi' },
   /*
+   * KIRILIM VERİSİ DE HESABIN KENDİ VERİSİ. Taşınmazsa eski müşterinin
+   * raporunda artık ona ait olmayan kitle kırılımı (yaş, cinsiyet, şehir)
+   * görünmeye devam eder ve yeni müşteri hiçbir geçmiş göremez — metrikte
+   * düzeltilen hatanın birebir aynısı.
+   */
+  { tablo: 'insight_breakdowns', etiket: 'kitle kırılımı' },
+  /*
    * `sync_jobs` DA TAŞINIYOR ve bu bir tercih değil, teşhisin koşulu.
    *
    * Senkronizasyon durumu ekranı işleri müşteriye göre süzüyor. Taşınmazsa

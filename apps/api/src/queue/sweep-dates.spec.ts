@@ -32,6 +32,12 @@ const TARIH_ISTEYENLER = [
    * hiç toplanmadı.
    */
   'search_terms',
+  /*
+   * KIRILIMLAR. Bu satır olmadan tarama yeni türü HİÇ kontrol etmezdi —
+   * anahtar kelimelerde ve arama terimlerinde tam olarak bu oldu ve veri
+   * aylarca hiç toplanmadı.
+   */
+  'insights_breakdowns',
 ] as const;
 
 // Servis yalnızca saf yardımcısı için kuruluyor; hiçbir bağımlılığa

@@ -246,6 +246,7 @@ model Client {
   bulkBatches     BulkBatch[]
   adDrafts        AdDraft[]
   keywordInsights KeywordInsight[]
+  insightBreakdowns InsightBreakdown[]
   leadForms       LeadForm[]
   leads           Lead[]
   leadCursors     LeadSyncCursor[]
@@ -568,6 +569,7 @@ model AdAccount {
   adDrafts           AdDraft[]
   draftCampaigns     DraftCampaign[]
   keywordInsights    KeywordInsight[]
+  insightBreakdowns  InsightBreakdown[]
   bulkBatches        BulkBatch[]
   assetRefs          AssetPlatformRef[]
   searchTermInsights SearchTermInsight[]
@@ -821,6 +823,10 @@ enum SyncJobType {
   /// o bilgi başka hiçbir zamanlanmış işte tazelenmiyordu — yalnızca
   /// kullanıcı elle "Hesapları yenile" dediğinde.
   account_status
+  /// Advetics 1.0 — yaş/cinsiyet/yerleşim/saat/şehir kırılımları.
+  /// `insights_breakdown` KOTA KATMANI ile karıştırılmasın: o bir hız
+  /// sınırlama etiketi, bu bir iş türü.
+  insights_breakdowns
 }
 
 enum SyncJobStatus {
@@ -1934,6 +1940,80 @@ model SearchTermInsight {
   @@index([clientId, date(sort: Desc)])
   @@index([adAccountId, date(sort: Desc)])
   @@map("search_term_insights")
+}
+
+/// ═══ KIRILIM METRİKLERİ — YAŞ, CİNSİYET, YERLEŞİM, SAAT, ŞEHİR ═══
+///
+/// `insights_daily`YE YAZILMIYOR ve bu kararın tamamı burada. O tablonun
+/// birincil anahtarı `breakdown_key` taşıyor, yani kırılım satırları oraya
+/// TEKNİK OLARAK sığıyor — ama mevcut toplama sorgularının HİÇBİRİ
+/// `breakdown_key`i süzmüyor. Kırılım satırları oraya yazıldığı an her
+/// harcama rakamı kırılım sayısı kadar KATLANIR ve hiçbir hata düşmez;
+/// panel yalnızca yanlış sayı gösterir. `keyword_insights` ve
+/// `search_term_insights` de aynı sebeple ayrı tablolar.
+///
+/// TEK TABLO, TÜR KOLONU İLE. Yaş, cinsiyet, şehir için ayrı tablolar açmak
+/// beş migration, beş RLS politikası ve beş senkronizasyon yolu demekti;
+/// hepsi aynı şekle sahip (boyut → değer → metrikler).
+model InsightBreakdown {
+  clientId    String @map("client_id") @db.Uuid
+  adAccountId String @map("ad_account_id") @db.Uuid
+  platform    Platform
+
+  /// Hangi kırılım — `age`, `gender`, `placement`, `hour`, `city`.
+  dimension BreakdownDimension
+
+  /// Kırılımın DEĞERİ, platformdan geldiği gibi ("25-34", "female",
+  /// "instagram_stories", "14", "İzmir").
+  ///
+  /// NORMALİZE EDİLMİYOR. Meta "female", Google "FEMALE" diyor ve ikisini
+  /// tek dile çevirmek gibi bir istek var — ama çeviri KAYIPLI: Meta
+  /// "unknown" kovası taşıyor, Google "UNDETERMINED" ve ikisi aynı şey
+  /// değil. Ham değer saklanıp GÖSTERİMDE çevriliyor; ters yönde bir
+  /// hatayı geri almak imkânsız olurdu.
+  value String @db.VarChar(120)
+
+  date DateTime @db.Date
+
+  impressions           Int     @default(0)
+  clicks                Int     @default(0)
+  spendMicros           BigInt  @default(0) @map("spend_micros")
+  conversions           Decimal @default(0) @db.Decimal(14, 4)
+  conversionValueMicros BigInt  @default(0) @map("conversion_value_micros")
+
+  currency  String   @db.Char(3)
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccount AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  /// HESAP SEVİYESİNDE TOPLANMIŞ, kampanya seviyesinde DEĞİL.
+  ///
+  /// Kampanya × kırılım × gün, hacmi bir mertebe büyütüyor ve rapor zaten
+  /// hesap toplamını gösteriyor ("müşterinin kitlesi kim"). Kampanya bazlı
+  /// kırılım istenirse ayrı bir karar ve ayrı bir kota konuşması.
+  @@id([date, adAccountId, dimension, value])
+  @@index([clientId, date(sort: Desc)])
+  @@index([adAccountId, dimension, date(sort: Desc)])
+  @@map("insight_breakdowns")
+}
+
+/// Kırılım boyutları.
+///
+/// İLGİ ALANI YOK ve bu bilinçli: Meta'nın Ads Insights API'sinde ilgi
+/// alanı kırılımı BULUNMUYOR — ilgi alanı bir hedefleme girdisi, raporlanan
+/// bir boyut değil. Google tarafında yalnızca hedefleme kriteri olarak
+/// eklenmiş kitleler için kısmi veri var. Tek platformda yarım çalışan bir
+/// boyut, raporda "Meta'da neden boş" sorusunu doğurur; olmayan bir kovayı
+/// uydurmak ise boş tablodan kötü.
+enum BreakdownDimension {
+  age
+  gender
+  /// Meta: publisher_platform + platform_position. Google: ad_network_type.
+  placement
+  /// Reklam hesabının KENDİ zaman diliminde 0-23.
+  hour
+  city
 }
 
 model KeywordInsight {
