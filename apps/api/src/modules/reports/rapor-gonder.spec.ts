@@ -11,13 +11,31 @@ import { describe, expect, it } from 'vitest';
  */
 const KAYNAK = readFileSync(join(__dirname, 'rapor-gonder.service.ts'), 'utf8');
 
+/**
+ * GÖNDERİM ARTIK ORTAK BİR FONKSİYONDA (`email/mail-gonderici.ts`).
+ *
+ * Taşınma sebebi ikinci bir gönderenin (ödeme uyarısı maili) eklenmesiydi:
+ * taşıma kararlarını (`replyTo`, parola çözümü, hata sarmalama) kopyalamak,
+ * onların doğduğu anda ayrışması demekti.
+ *
+ * BU DOSYA HÂLÂ `gonder()`E BAKIYOR çünkü sınadığı şey KAPILAR: doğrulanmış
+ * kimlik, alıcı kontrolü, gövde temizliği, denetim sırası. Taşımanın
+ * kendisine ait iddia (`replyTo`) ise `mail-gonderici.spec.ts`e taşındı —
+ * iddiayı kodun bulunmadığı dosyada tutmak, ilk yeniden düzenlemede boşa
+ * düşen bir tarama demekti. Nitekim tam bu oldu ve bekçi yakaladı.
+ */
+const GONDERICI = readFileSync(
+  join(__dirname, '..', 'email', 'mail-gonderici.ts'),
+  'utf8',
+);
+
 function gonderGovdesi(): string {
   const bas = KAYNAK.indexOf('  async gonder(');
   if (bas === -1) {
     throw new Error('gonder() bulunamadı — tarama boşa düştü, testi güncelle.');
   }
   const g = KAYNAK.slice(bas, KAYNAK.indexOf('\n  private async musteriEpostasi'));
-  if (!g.includes('sendMail')) {
+  if (!g.includes('mailGonder(')) {
     throw new Error('gonder() dilimi mail atmıyor — tarama boşa düştü.');
   }
   return g;
@@ -32,8 +50,8 @@ describe('rapor gönderimi', () => {
     const g = gonderGovdesi();
     const i = g.indexOf('verified_at === null');
     expect(i, 'doğrulama kapısı yok').toBeGreaterThan(-1);
-    // Kapı sendMail'den ÖNCE olmalı.
-    expect(i).toBeLessThan(g.indexOf('sendMail'));
+    // Kapı gönderimden ÖNCE olmalı.
+    expect(i).toBeLessThan(g.indexOf('mailGonder('));
   });
 
   it('KRİTİK: alıcı yoksa açık bir hata — sessizce boşa gönderilmiyor', () => {
@@ -46,11 +64,13 @@ describe('rapor gönderimi', () => {
     const g = gonderGovdesi();
     const i = g.indexOf('imzaTemizle(input.html)');
     expect(i).toBeGreaterThan(-1);
-    expect(i).toBeLessThan(g.indexOf('sendMail'));
+    expect(i).toBeLessThan(g.indexOf('mailGonder('));
   });
 
   it('replyTo AÇIKÇA yazılıyor — bazı sunucular gönderen adresini yeniden yazıyor', () => {
-    expect(gonderGovdesi()).toContain('replyTo: gonderen.from_email');
+    // İDDİA ARTIK ORTAK GÖNDERİCİDE: karar oraya taşındı ve iddiayı burada
+    // tutmak, kodun bulunmadığı dosyayı taramak olurdu.
+    expect(GONDERICI).toContain('replyTo: kimlik.fromEmail');
   });
 
   it('KRİTİK: gönderim DENETİME yazılıyor — kime, ne zaman, hangi dönem', () => {
@@ -61,7 +81,7 @@ describe('rapor gönderimi', () => {
 
   it('denetim GÖNDERİMDEN SONRA — gitmemiş bir mail kaydedilmemeli', () => {
     const g = gonderGovdesi();
-    expect(g.indexOf('sendMail')).toBeLessThan(g.indexOf("action: 'report.emailed'"));
+    expect(g.indexOf('mailGonder(')).toBeLessThan(g.indexOf("action: 'report.emailed'"));
   });
 
   it('SMTP hatası OLDUĞU GİBİ yukarı taşınıyor', () => {
