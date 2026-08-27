@@ -340,6 +340,53 @@ export interface DiscoveredInsightRow {
   raw: unknown;
 }
 
+/**
+ * ═══ KIRILIM BOYUTLARI ═══
+ *
+ * İLGİ ALANI YOK. Meta'nın Ads Insights API'sinde ilgi alanı kırılımı
+ * BULUNMUYOR — ilgi alanı bir hedefleme girdisi, raporlanan bir boyut değil.
+ * Google'da yalnızca hedefleme kriteri olarak eklenmiş kitleler için kısmi
+ * veri var. Tek platformda yarım çalışan bir boyut raporda "Meta'da neden
+ * boş" sorusunu doğurur; uydurmak ise boş tablodan kötü.
+ */
+export type BreakdownDimensionKind = 'age' | 'gender' | 'placement' | 'hour' | 'city';
+
+export interface BreakdownRequest {
+  dimension: BreakdownDimensionKind;
+  /** YYYY-MM-DD — `InsightsRequest` ile aynı sebeple string. */
+  dateFrom: string;
+  dateTo: string;
+  timezone: string;
+}
+
+export interface DiscoveredBreakdownRow {
+  dimension: BreakdownDimensionKind;
+  /** Platformdan geldiği HÂLİYLE. Normalize etmek kayıplı — bkz. şema notu. */
+  value: string;
+  date: string;
+  impressions: number;
+  clicks: number;
+  spendMicros: bigint;
+  conversions: number;
+  conversionValueMicros: bigint;
+  currency: string;
+}
+
+export interface PlatformBreakdowns {
+  rows: DiscoveredBreakdownRow[];
+  apiCalls: number;
+  complete: boolean;
+  /**
+   * Boyut bu platformda DESTEKLENMİYOR.
+   *
+   * Boş bir `rows` ile aynı şey DEĞİL: "veri yok" ile "bu platform bu
+   * kırılımı vermiyor" farklı iki hâl ve ikincisi raporda AÇIKÇA yazılmalı.
+   * Aynı boş tabloya çevirmek, bu projede tekrar eden hata deseninin ta
+   * kendisi.
+   */
+  unsupported: boolean;
+}
+
 export interface PlatformInsights {
   rows: DiscoveredInsightRow[];
   apiCalls: number;
@@ -880,6 +927,19 @@ export interface IAdPlatformProvider {
    * granülerlikte ve tek bir toplam satırı geri düzeltmeyi imkânsız kılardı.
    */
   fetchInsights(ctx: FetchContext, request: InsightsRequest): Promise<PlatformInsights>;
+
+  /**
+   * KIRILIM METRİKLERİ — yaş, cinsiyet, yerleşim, saat, şehir.
+   *
+   * HESAP SEVİYESİNDE toplanmış geliyor: rapor "müşterinin kitlesi kim"
+   * sorusunu soruyor, "hangi kampanyanın kitlesi kim" değil. Kampanya ×
+   * kırılım × gün, hacmi ve kotayı bir mertebe büyütürdü.
+   *
+   * BOYUT BAŞINA AYRI ÇAĞRI ve bu platformun dayattığı bir şey: Meta birden
+   * çok kırılımı birlikte istemeyi çoğu kombinasyonda reddediyor, Google'da
+   * her boyut ayrı bir kaynak (`age_range_view`, `gender_view`…).
+   */
+  fetchBreakdowns(ctx: FetchContext, request: BreakdownRequest): Promise<PlatformBreakdowns>;
 
   /**
    * YAZMA — kural motorunun platforma dokunduğu tek nokta.

@@ -199,7 +199,7 @@ DECLARE
     -- Modül 4 — reklam oluşturucu
     'ad_drafts', 'ad_draft_assets',
     -- Anahtar kelime performansı
-    'keyword_insights', 'search_term_insights',
+    'keyword_insights', 'search_term_insights', 'insight_breakdowns',
     -- Modül 8
     'bulk_batches', 'bulk_items',
     -- Formlar kütüphanesi
@@ -1196,6 +1196,25 @@ CREATE POLICY adv_keyword_insights_insert ON keyword_insights
   FOR INSERT WITH CHECK (app.can_access_client(client_id));
 
 CREATE POLICY adv_keyword_insights_update ON keyword_insights
+  FOR UPDATE USING (app.can_access_client(client_id))
+             WITH CHECK (app.can_access_client(client_id));
+
+-- insight_breakdowns — anahtar kelimeyle AYNI kural.
+--
+-- Kırılım verisi de senkronizasyondan geliyor; DELETE politikası yok, hesap
+-- silinirse CASCADE ile gidiyor.
+--
+-- `client_id` DENORMALİZE ve politikanın join'siz yazılabilmesinin sebebi bu.
+-- Hesap el değiştirdiğinde bu kolonun taşınması `hesap-verisi-tasima.ts`nin
+-- işi — taşınmazsa eski müşterinin raporunda artık ona ait olmayan kitle
+-- kırılımı görünmeye devam eder.
+CREATE POLICY adv_insight_breakdowns_select ON insight_breakdowns
+  FOR SELECT USING (app.can_access_client(client_id));
+
+CREATE POLICY adv_insight_breakdowns_insert ON insight_breakdowns
+  FOR INSERT WITH CHECK (app.can_access_client(client_id));
+
+CREATE POLICY adv_insight_breakdowns_update ON insight_breakdowns
   FOR UPDATE USING (app.can_access_client(client_id))
              WITH CHECK (app.can_access_client(client_id));
 
