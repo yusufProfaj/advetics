@@ -2,6 +2,7 @@ import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { ClientSwitcher } from '@/components/client-switcher';
 import { LogoutButton } from '@/components/logout-button';
+import { UyariBandi } from '@/components/uyari-bandi';
 import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
 import { NavSection } from '@/components/nav';
 import { visibleSections } from '@/lib/nav-sections';
@@ -128,6 +129,21 @@ export default async function DashboardLayout({ children }: { children: React.Re
             onu yenileyen hiçbir çağrı yoktu: kullanıcı tam 15 dakika sonra
             atılıyordu. Ayrıntılı gerekçe bileşenin kendisinde. */}
         <OturumTazeleyici />
+
+        {/*
+          UYARI BANDI LAYOUT'TA, SAYFA GÖVDESİNDE DEĞİL.
+          "Hesap platformda kapalı" ya da "veri gelmiyor" hangi ekranda
+          olunursa olunsun görünmeli; sayfa sayfa eklemek, bir gün eklenmeyen
+          sayfada uyarının sessizce kaybolması demekti.
+
+          MCC bayrağı görünümü belirliyor: "Tüm müşteriler" seçiliyken uyarılar
+          koda göre TOPLANIYOR (12 müşterinin uyarısını tek tek basmak bandı
+          okunmaz yapardı), tek müşteri seçiliyken tek tek ve sayfalı.
+        */}
+        <UyariBandi
+          mcc={session.activeClientId === null && session.availableClients.length > 1}
+        />
+
         <main className="flex-1 px-5 py-6">{children}</main>
 
         {!branding?.hidePoweredBy && (
