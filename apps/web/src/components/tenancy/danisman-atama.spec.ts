@@ -1,25 +1,25 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { adayEngeli, atamalariYurut } from './danisman-atama';
+import { ENGEL_KISI, ENGEL_WORKSPACE, atamaEngeli, atamalariYurut } from './danisman-atama';
 
 const CLIENT = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 const BASKA = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 
-describe('adayEngeli', () => {
+describe('atamaEngeli', () => {
   it('hiç üyeliği olmayan danışman atanabiliyor', () => {
     // Ajans personeli önce açılıp yetkisi sonra veriliyor; üyeliksiz kullanıcı
     // istisna değil normal ve atamanın asıl hedefi tam bu kişi.
-    expect(adayEngeli([], CLIENT)).toBeNull();
+    expect(atamaEngeli([], CLIENT)).toBeNull();
   });
 
   it('başka müşterilerde yetkisi olan danışman atanabiliyor', () => {
-    expect(adayEngeli([{ clientId: BASKA }], CLIENT)).toBeNull();
+    expect(atamaEngeli([{ clientId: BASKA }], CLIENT)).toBeNull();
   });
 
   it('bu workspace’te zaten yetkisi olan engelleniyor', () => {
     // Sunucu mükerrer üyeliği 409 ile reddediyor; seçtirmek hata almaya davet.
-    expect(adayEngeli([{ clientId: CLIENT }], CLIENT)).toBe('Bu workspace’e zaten erişiyor');
+    expect(atamaEngeli([{ clientId: CLIENT }], CLIENT)).toBe('zaten_uye');
   });
 
   it('org geneli erişimi olan engelleniyor', () => {
@@ -29,16 +29,22 @@ describe('adayEngeli', () => {
      * kişi zaten her müşteriyi görüyor. Kontrol kalkarsa hiçbir hata
      * çıkmıyor, yalnızca ekip listesinde kafa karıştıran bir satır oluşuyor.
      */
-    expect(adayEngeli([{ clientId: null }], CLIENT)).toBe(
-      'Tüm müşterilere erişiyor — ayrıca atanması gerekmiyor',
-    );
+    expect(atamaEngeli([{ clientId: null }], CLIENT)).toBe('org_geneli');
+  });
+
+  it('her engel kodunun İKİ ekranda da bir cümlesi var', () => {
+    // Kod eklenip cümlelerden biri unutulursa ekranda `undefined` yazardı.
+    for (const kod of ['zaten_uye', 'org_geneli'] as const) {
+      expect(ENGEL_KISI[kod]).toBeTruthy();
+      expect(ENGEL_WORKSPACE[kod]).toBeTruthy();
+    }
+    // İKİ CÜMLE AYNI OLAMAZ: biri kişiyi, diğeri workspace'i anlatıyor.
+    expect(ENGEL_KISI.zaten_uye).not.toBe(ENGEL_WORKSPACE.zaten_uye);
   });
 
   it('bu workspace yetkisi org geneli yetkiden ÖNCE bildiriliyor', () => {
     // İkisi de varsa doğru cevap "zaten burada": yönetici asıl bunu soruyor.
-    expect(adayEngeli([{ clientId: null }, { clientId: CLIENT }], CLIENT)).toBe(
-      'Bu workspace’e zaten erişiyor',
-    );
+    expect(atamaEngeli([{ clientId: null }, { clientId: CLIENT }], CLIENT)).toBe('zaten_uye');
   });
 });
 
@@ -141,7 +147,7 @@ describe('pencere bu kararları kullanıyor', () => {
   });
 
   it('engel kararı ortak fonksiyondan geliyor', () => {
-    expect(EKRAN_KOD).toContain('adayEngeli(');
+    expect(EKRAN_KOD).toContain('atamaEngeli(');
   });
 
   it('atama döngüsü ortak fonksiyondan geliyor', () => {

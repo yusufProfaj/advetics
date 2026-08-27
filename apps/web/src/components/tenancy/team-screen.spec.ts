@@ -98,55 +98,119 @@ describe('KİMSE KAYBOLMUYOR', () => {
   });
 });
 
+/**
+ * Bir fonksiyonun gövdesini SINIRINA KADAR alır.
+ *
+ * Testler daha önce `slice(i, i + 3500)` gibi sabit uzunluklar kullanıyordu
+ * ve iki yönde de kırılgan: gövde büyüyünce iddia dilimden düşüyor (bu
+ * oturumda üç test böyle düştü), küçülünce dilim KOMŞU fonksiyona taşıyor ve
+ * iddia yanlış gövdede tutuyor — ikincisi sessiz.
+ */
+function govde(kaynak: string, ad: string): string {
+  const kod = yorumsuz(kaynak);
+  const i = kod.indexOf(`function ${ad}`);
+  if (i === -1) throw new Error(`${ad} bulunamadı — tarama boşa düştü`);
+  const sonraki = kod.indexOf('\nfunction ', i + 1);
+  return kod.slice(i, sonraki === -1 ? undefined : sonraki);
+}
+
 describe('DANIŞMAN ATA', () => {
+  const ATA = () => govde(KAYNAK, 'DanismanAtaModal');
+
   it('KRİTİK: org geneli rol buradan VERİLEMİYOR', () => {
     /*
      * Bu ekran "bir müşteriye ata" işi. Buradan owner/admin seçilebilse bir
      * danışman atama işlemi sessizce org yöneticisi üretirdi.
      */
-    const kod = yorumsuz(KAYNAK);
-    const i = kod.indexOf('function DanismanAtaModal');
-    expect(i).toBeGreaterThan(-1);
-    const govde = kod.slice(i, i + 3500);
-    expect(govde).toContain("r !== 'owner' && r !== 'admin'");
+    expect(ATA()).toContain("r !== 'owner' && r !== 'admin'");
   });
 
-  it('zaten yetkisi olan müşteri listede YOK', () => {
-    // Sunucu ikinci üyeliği reddediyor; seçilebilir bırakmak kullanıcıyı
-    // tıklayıp hata almaya göndermek olurdu.
-    expect(yorumsuz(KAYNAK)).toContain('!secilen.memberships.some((m) => m.clientId === c.id)');
+  it('zaten yetkisi olan workspace SEÇİLEMİYOR ve sebebi yazılı', () => {
+    /*
+     * Sunucu ikinci üyeliği 409 ile reddediyor. Önceki hâl o satırı listeden
+     * DÜŞÜRÜYORDU ve "bu müşteri neden yok" sorusu cevapsız kalıyordu; artık
+     * satır duruyor, işaretlenemiyor ve sebebi yanında yazıyor.
+     *
+     * Karar ORTAK FONKSİYONDAN geliyor: aynı kural workspace ekibi
+     * ekranında da uygulanıyor ve iki kopya doğduğu anda ayrışırdı.
+     */
+    const g = ATA();
+    expect(g).toContain('atamaEngeli(');
+    expect(g).toContain('ENGEL_WORKSPACE[');
+    expect(g).toContain('disabled={c.engel !== null || busy}');
   });
 
   it('KRİTİK: akış DANIŞMAN SEÇİMİYLE başlıyor', () => {
     /*
-     * İstenen sıra: önce kim, sonra hangi workspace, sonra hangi rol.
-     * Kişi başına satır içi bir bağlantı, aynı işi satır sayısı kadar
-     * tekrarlıyor ve "önce danışmanı seç" akışını kuramıyordu.
+     * İstenen sıra: önce kim, sonra hangi workspace'ler, sonra hangi rol.
      */
-    const kod = yorumsuz(KAYNAK);
-    const i = kod.indexOf('function DanismanAtaModal');
-    const govde = kod.slice(i, i + 5000);
-    expect(govde).toContain('1 · Danışman');
-    expect(govde).toContain('2 · Workspace');
-    expect(govde).toContain('3 · Rol');
+    const g = ATA();
+    expect(g).toContain('1 · Danışman');
+    expect(g).toContain('2 · Workspace');
+    expect(g).toContain('3 · Rol');
     // Danışman listesi bileşene DIŞARIDAN geliyor — tek kişiye sabitlenmiş
     // bir modal bu akışı kuramaz.
-    expect(govde).toContain('danismanlar');
+    expect(g).toContain('danismanlar');
   });
 
   it('KRİTİK: danışman seçilmeden workspace seçilemiyor', () => {
     // Uygun müşteriler KİME atadığına bağlı; önce hepsini gösterip sonra
     // kısaltmak, seçimi kullanıcının gözü önünde geri almak olurdu.
-    const kod = yorumsuz(KAYNAK);
-    expect(kod).toContain('disabled={!secilen}');
-    expect(kod).toContain('Önce danışman seç');
+    const g = ATA();
+    expect(g).toContain('Önce danışman seç');
   });
 
   it('üyelik ucuna gidiyor, kullanıcı ucuna değil', () => {
-    const kod = yorumsuz(KAYNAK);
-    const i = kod.indexOf('function DanismanAtaModal');
-    const govde = kod.slice(i, i + 3500);
-    expect(govde).toContain("'/memberships'");
+    expect(ATA()).toContain("'/memberships'");
+  });
+
+  it('KRİTİK: TOPLU atama — tek seferde birden çok workspace', () => {
+    /*
+     * Kullanıcının bildirdiği hâli: "tek tek atama yapılıyor". Sekiz
+     * müşteriye bakacak bir danışman için aynı pencere sekiz kez açılıyor ve
+     * danışman ile rol sekiz kez seçiliyordu. İşin kendisi zaten toplu.
+     *
+     * İddia SEÇİM KÜMESİNE çapalı: tek bir `clientId` state'i toplu atama
+     * yapamaz.
+     */
+    const g = ATA();
+    expect(g).toContain('useState<Set<string>>(new Set())');
+    expect(g).toContain('type="checkbox"');
+    expect(g).toContain('Hepsini seç');
+  });
+
+  it('KRİTİK: gönderim ortak yürütücüden geçiyor', () => {
+    /*
+     * `atamalariYurut` sırayla gidiyor, bir hata döngüyü kesmiyor ve her
+     * hedefin sonucunu ayrı sayıyor. Burada elle bir `Promise.all` yazmak,
+     * ilk reddedilende geri kalanların sonucunu belirsiz bırakırdı.
+     */
+    expect(ATA()).toContain('atamalariYurut(');
+  });
+
+  it('KRİTİK: kısmi başarı tek tek yazılıyor ve pencere AÇIK kalıyor', () => {
+    /*
+     * "5 workspace atandı" deyip altıncıyı yutmak, atandığı sanılan yerde
+     * hiçbir şey görememek demek. Pencere hata varsa kapanmıyor: kapatmak o
+     * bilgiyi hiç göstermeden yok ederdi.
+     */
+    const g = ATA();
+    expect(g).toContain('sonuc.hatalar.map(');
+    expect(g).toContain('if (r.hatalar.length === 0) onKapat();');
+  });
+
+  it('KRİTİK: tek rol bütün seçime uygulanıyor ve bu SÖYLENİYOR', () => {
+    /*
+     * Aynı kişinin iki müşteride farklı rolü olabiliyor; toplu atama o
+     * ayrımı yapamıyor. Söylenmezse kullanıcı yaptığını sanır.
+     */
+    expect(ATA()).toContain('Farklı');
+  });
+
+  it('"Hepsini seç" yalnızca ATANABİLİR olanları kapsıyor', () => {
+    // Engelli satırı da işaretlemek, gönderilir gönderilmez 409 yiyecek bir
+    // istek üretirdi.
+    expect(ATA()).toContain('new Set(atanabilir.map((c) => c.id))');
   });
 });
 

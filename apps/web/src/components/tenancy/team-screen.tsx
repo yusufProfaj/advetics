@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation';
 import { ROLES, type Role } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { ROLE_TR, type MemberRow } from '@/components/tenancy/team-manager';
+import {
+  ENGEL_WORKSPACE,
+  atamaEngeli,
+  atamalariYurut,
+  type AtamaSonucu,
+} from '@/components/tenancy/danisman-atama';
 
 interface ClientOption {
   id: string;
@@ -752,49 +758,87 @@ function DanismanAtaModal({
 }) {
   const router = useRouter();
   const [userId, setUserId] = useState('');
-  const [clientId, setClientId] = useState('');
+  const [secili, setSecili] = useState<Set<string>>(new Set());
+  const [arama, setArama] = useState('');
   const [rol, setRol] = useState<Role>('manager');
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  const [sonuc, setSonuc] = useState<AtamaSonucu | null>(null);
 
   const secilen = danismanlar.find((d) => d.id === userId) ?? null;
 
   /*
-   * ZATEN YETKİSİ OLAN MÜŞTERİLER LİSTEDE YOK. Sunucu ikinci bir üyeliği
-   * "zaten bu kapsamda erişimi var" diye reddediyor; seçilebilir bırakmak,
-   * kullanıcıyı tıklayıp hata almaya göndermek olurdu.
+   * WORKSPACE'LER ÇOKLU SEÇİLİYOR — TEK TEK DEĞİL.
    *
-   * DANIŞMAN SEÇİLMEDEN LİSTE BOŞ: hangi müşterilerin uygun olduğu KİME
-   * atadığına bağlı ve önce hepsini gösterip sonra kısaltmak, seçimi
-   * kullanıcının gözü önünde geri almak olurdu.
+   * Önceki hâlde pencere tek bir workspace atıyordu: sekiz müşteriye
+   * bakacak bir danışman için aynı pencere sekiz kez açılıp aynı iki alan
+   * (danışman, rol) sekiz kez seçiliyordu. İşin kendisi zaten toplu —
+   * "şu danışman şu müşterilere baksın" — ve arayüz onu tek tek yapmaya
+   * zorluyordu.
+   *
+   * ENGELLİ WORKSPACE GİZLENMİYOR, SEBEBİ YAZILIYOR. Önceki hâl listeden
+   * DÜŞÜRÜYORDU ve "bu müşteri neden yok" sorusu cevapsız kalıyordu; tek
+   * ipucu, hepsi düştüğünde çıkan uyarıydı.
    */
-  const secilebilirMusteriler = secilen
-    ? clients.filter((c) => !secilen.memberships.some((m) => m.clientId === c.id))
-    : [];
+  const workspaceler = useMemo(() => {
+    const q = arama.trim().toLocaleLowerCase('tr');
+    return clients
+      .map((c) => {
+        const kod = secilen ? atamaEngeli(secilen.memberships, c.id) : null;
+        return { ...c, engel: kod === null ? null : ENGEL_WORKSPACE[kod] };
+      })
+      // Türkçe küçültme açıkça veriliyor: varsayılan `toLowerCase()` "İ"yi
+      // "i̇" yapıyor ve "İkon" araması "ikon" ile eşleşmiyor.
+      .filter((c) => q === '' || c.name.toLocaleLowerCase('tr').includes(q));
+  }, [clients, secilen, arama]);
+
+  const atanabilir = workspaceler.filter((c) => c.engel === null);
+
+  function degistir(id: string): void {
+    const yeni = new Set(secili);
+    if (yeni.has(id)) yeni.delete(id);
+    else yeni.add(id);
+    setSecili(yeni);
+    setSonuc(null);
+  }
 
   async function ata(): Promise<void> {
+    if (!secilen) return;
     setBusy(true);
     setHata(null);
-    try {
-      await apiFetch('/memberships', {
+
+    /*
+     * HEDEF ADI WORKSPACE ADI. Kısmi başarıda "1 tanesi atanamadı" demek,
+     * hangisinin atanmadığını aramak demek.
+     */
+    const hedefler = [...secili].map((id) => ({
+      id,
+      ad: clients.find((c) => c.id === id)?.name ?? id,
+    }));
+
+    const r = await atamalariYurut(hedefler, (clientId) =>
+      apiFetch('/memberships', {
         method: 'POST',
         body: JSON.stringify({ userId, clientId, role: rol }),
-      });
-      router.refresh();
-      onKapat();
-    } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Atama başarısız oldu.');
-    } finally {
-      setBusy(false);
-    }
+      }),
+    );
+
+    setBusy(false);
+    setSonuc(r);
+    setSecili(new Set());
+    router.refresh();
+    // PENCERE KAPANMIYOR: kısmi başarı varsa hangisinin düştüğü burada
+    // yazılı ve kapatmak o bilgiyi hiç göstermeden yok ederdi.
+    if (r.hatalar.length === 0) onKapat();
   }
 
   return (
     <Modal baslik="Danışman ata" onKapat={onKapat}>
       <div className="space-y-3">
         <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
-          Ajans ekibinden birini bir workspace’e bağlar. Bütün müşterilere erişim
-          ayrı bir karar — o yetki yalnızca Sahip ve Yönetici rollerine veriliyor.
+          Ajans ekibinden birini bir ya da daha çok workspace’e bağlar. Bütün
+          müşterilere erişim ayrı bir karar — o yetki yalnızca Sahip ve Yönetici
+          rollerine veriliyor.
         </p>
 
         <label className="block">
@@ -803,9 +847,10 @@ function DanismanAtaModal({
             value={userId}
             onChange={(e) => {
               setUserId(e.target.value);
-              // Danışman değişince müşteri seçimi sıfırlanıyor: uygun
-              // müşteriler kişiye bağlı ve eski seçim geçersiz kalabilir.
-              setClientId('');
+              // Danışman değişince seçim sıfırlanıyor: hangi workspace'lerin
+              // uygun olduğu kişiye bağlı ve eski seçim geçersiz kalabilir.
+              setSecili(new Set());
+              setSonuc(null);
             }}
             className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
           >
@@ -818,29 +863,91 @@ function DanismanAtaModal({
           </select>
         </label>
 
-        <label className="block">
-          <span className="text-[11px] text-ink-muted">2 · Workspace</span>
-          <select
-            value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
-            disabled={!secilen}
-            className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm disabled:opacity-50"
-          >
-            <option value="">{secilen ? 'Seçin…' : 'Önce danışman seç'}</option>
-            {secilebilirMusteriler.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          {/* SEBEBİ YAZILI: boş liste "müşteri yok" ile "bu kişinin zaten
-              hepsinde yetkisi var" arasında ayrım yapmıyordu. */}
-          {secilen && secilebilirMusteriler.length === 0 && (
-            <span className="mt-1 block text-[11px] text-warn">
-              Bu kişinin zaten bütün workspace’lerde yetkisi var.
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-ink-muted">
+              2 · Workspace{secili.size > 0 ? ` (${secili.size} seçildi)` : ''}
             </span>
+            {/* TOPLU SEÇİM YALNIZCA ATANABİLİR OLANLARI kapsıyor: engelli
+                satırı da işaretlemek, gönderilir gönderilmez 409 yiyecek
+                bir istek üretirdi. */}
+            {secilen && atanabilir.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSecili(
+                    secili.size === atanabilir.length
+                      ? new Set()
+                      : new Set(atanabilir.map((c) => c.id)),
+                  )
+                }
+                className="text-[11px] font-medium text-brand-strong hover:underline"
+              >
+                {secili.size === atanabilir.length ? 'Seçimi kaldır' : 'Hepsini seç'}
+              </button>
+            )}
+          </div>
+
+          {!secilen ? (
+            <p className="mt-1 rounded-lg border border-line px-3 py-2 text-[11px] text-ink-muted">
+              Önce danışman seç — hangi workspace’lerin uygun olduğu kişiye bağlı.
+            </p>
+          ) : (
+            <>
+              {/* ARAMA YALNIZCA LİSTE UZUNSA: dört müşteride arama kutusu
+                  cevaptan çok yer kaplıyor. */}
+              {clients.length > 8 && (
+                <input
+                  type="search"
+                  value={arama}
+                  onChange={(e) => setArama(e.target.value)}
+                  placeholder="Workspace ara…"
+                  className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm focus:border-brand focus:outline-none"
+                />
+              )}
+
+              <ul className="mt-1 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-line p-1">
+                {workspaceler.map((c) => (
+                  <li key={c.id}>
+                    <label
+                      className={`flex items-center gap-2.5 rounded px-2 py-1.5 ${
+                        c.engel ? 'cursor-not-allowed opacity-55' : 'cursor-pointer hover:bg-surface-sunken'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={secili.has(c.id)}
+                        disabled={c.engel !== null || busy}
+                        onChange={() => degistir(c.id)}
+                        className="h-3.5 w-3.5 shrink-0 accent-[var(--brand-primary)]"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm text-ink">{c.name}</span>
+                      {c.engel && (
+                        <span className="shrink-0 text-[10px] text-ink-muted">{c.engel}</span>
+                      )}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+
+              {/* SESSİZ KESME YOK ve ÜÇ HÂL AYRI: hiç müşteri yok · arama
+                  eşleşmedi · hepsinde zaten yetkisi var. */}
+              {clients.length === 0 && (
+                <p className="mt-1 text-[11px] text-warn">Henüz müşteri açılmamış.</p>
+              )}
+              {clients.length > 0 && workspaceler.length === 0 && (
+                <p className="mt-1 text-[11px] text-ink-muted">
+                  “{arama}” ile eşleşen workspace yok.
+                </p>
+              )}
+              {workspaceler.length > 0 && atanabilir.length === 0 && (
+                <p className="mt-1 text-[11px] text-warn">
+                  Bu kişinin listedeki workspace’lerin hepsinde zaten yetkisi var.
+                </p>
+              )}
+            </>
           )}
-        </label>
+        </div>
 
         <label className="block">
           <span className="text-[11px] text-ink-muted">3 · Rol</span>
@@ -857,17 +964,51 @@ function DanismanAtaModal({
               </option>
             ))}
           </select>
+          {/* TEK ROL, BÜTÜN SEÇİM İÇİN — ve bu açıkça yazılı. Aynı kişinin
+              iki müşteride farklı rolü olabiliyor; toplu atama o ayrımı
+              yapamıyor ve söylenmezse kullanıcı yaptığını sanır. */}
+          {secili.size > 1 && (
+            <span className="mt-1 block text-[11px] text-ink-muted">
+              Seçilen {secili.size} workspace’in hepsinde bu rol verilecek. Farklı
+              rol gerekiyorsa ayrı ayrı atayın.
+            </span>
+          )}
         </label>
 
         {hata && <p className="text-xs text-danger">{hata}</p>}
 
+        {/* KISMİ BAŞARI TEK TEK YAZILI. "5 workspace atandı" deyip altıncıyı
+            yutmak, atandığı sanılan yerde hiçbir şey görememek demek. */}
+        {sonuc && (
+          <div
+            className={`rounded-lg px-3 py-2 text-[11px] ${
+              sonuc.hatalar.length > 0
+                ? 'border border-danger/30 bg-danger/5 text-danger'
+                : 'bg-surface-sunken text-ink-muted'
+            }`}
+          >
+            <p>
+              <strong>{sonuc.basarili}</strong> workspace’e yetki verildi.
+            </p>
+            {sonuc.hatalar.length > 0 && (
+              <ul className="mt-1 list-disc pl-4">
+                {sonuc.hatalar.map((h) => (
+                  <li key={h}>{h}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={() => void ata()}
-          disabled={busy || userId === '' || clientId === ''}
+          disabled={busy || userId === '' || secili.size === 0}
           className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
         >
-          {busy ? 'Atanıyor…' : 'Yetkilendir'}
+          {busy
+            ? 'Atanıyor…'
+            : `Yetkilendir${secili.size > 0 ? ` (${secili.size})` : ''}`}
         </button>
       </div>
     </Modal>
