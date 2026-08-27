@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { formatNumber } from '@/lib/format';
 import { atamaBildirimi } from '@/lib/atama-bildirimi';
 import { useRouter } from 'next/navigation';
@@ -12,6 +12,7 @@ import {
   type ConnectionSummary,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { Nokta } from '@/components/yukleniyor';
 import { havuzlariCikar, havuzSuz, KANALLAR } from '@/lib/havuz';
 import { PlatformLogo } from '@/components/platform-logo';
 
@@ -76,6 +77,7 @@ function Modal({
   const [kullanici, setKullanici] = useState({ email: '', fullName: '', password: '' });
 
   const [busy, setBusy] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [hata, setHata] = useState<string | null>(null);
   const [sonuc, setSonuc] = useState<ClientSetupResult | null>(null);
 
@@ -141,8 +143,17 @@ function Modal({
         }),
       });
       setSonuc(r);
-      // Liste sunucuda render ediliyor; yenilemeden yeni müşteri görünmez.
-      router.refresh();
+      /*
+       * TAZELEME BEKLEME PENCERESİNİN İÇİNDE.
+       *
+       * `router.refresh()` beklenebilir bir şey döndürmüyor: çağrı hemen
+       * geri geliyor, sunucu render'ı arkada sürüyor. `finally` içindeki
+       * `setBusy(false)` bu yüzden asıl beklemenin BAŞINDA koşuyor ve düğme
+       * "Kuruluyor…" demeyi tam da liste yenilenirken bırakıyordu.
+       * `startTransition` ile `isPending`, yeni liste ekrana gelene kadar
+       * açık kalıyor.
+       */
+      startTransition(() => router.refresh());
     } catch (e) {
       setHata(e instanceof ApiRequestError ? e.message : 'Kurulum başarısız oldu.');
     } finally {
@@ -292,10 +303,16 @@ function Modal({
               <button
                 type="button"
                 onClick={() => void kur()}
-                disabled={busy || ad.trim().length < 2}
+                disabled={busy || isPending || ad.trim().length < 2}
                 className="shrink-0 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
               >
-                {busy ? 'Kuruluyor…' : 'Kur'}
+                {busy || isPending ? (
+                  <>
+                    Kuruluyor <Nokta className="ml-1" />
+                  </>
+                ) : (
+                  'Kur'
+                )}
               </button>
             </div>
           </div>
