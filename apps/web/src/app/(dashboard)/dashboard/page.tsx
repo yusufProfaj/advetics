@@ -3,6 +3,7 @@ import type {
   MetricLevel,
   Platform,
   MetricsBreakdownRow,
+  MetricsClientRow,
   MetricsSummary,
   MetricsTimeseries,
 } from '@advetics/shared';
@@ -23,11 +24,13 @@ import {
   formatRelative,
   formatRoas,
   isStale,
+  microsOf,
 } from '@/lib/format';
 import { MetricCard } from '@/components/metric-card';
 import { MetricStrip } from '@/components/metric-strip';
 import { MetricsChart } from '@/components/metrics-chart';
 import { BreakdownTable } from '@/components/breakdown-table';
+import { MusteriTablosu } from '@/components/musteri-tablosu';
 
 export const metadata = { title: 'Genel Bakış — Advetics' };
 
@@ -115,13 +118,35 @@ export default async function DashboardPage({
 
   // Bir uç noktanın düşmesi TÜM ekranı düşürmemeli: panel açılıp "veri
   // alınamadı" demeli, 500 sayfası göstermemeli.
-  const [summary, series, breakdown] = await Promise.all([
+  /*
+   * MCC GÖRÜNÜMÜ: "Tüm müşteriler" seçiliyken tablo MÜŞTERİ bazlı.
+   *
+   * Bu ekran o hâlde on iki müşterinin kampanyalarını tek bir tabloda
+   * listeliyordu ve hangi satırın kime ait olduğu hiçbir yerde yazmıyordu.
+   * Ajans orada "hangi müşteri ne harcıyor" sorusunu soruyor.
+   *
+   * KOŞUL AKTİF MÜŞTERİ SEÇİMİ, kullanıcının rolü değil: tek müşterisi olan
+   * bir kullanıcıda da `activeClientId` null olabiliyor ve o durumda tek
+   * satırlık bir müşteri tablosu, kampanya listesinden daha az şey söylerdi.
+   */
+  const mcc = session.activeClientId === null && session.availableClients.length > 1;
+
+  const [summary, series, breakdown, musteriler] = await Promise.all([
     serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch(() => null),
     // Tek günlük aralıkta grafik çizilmiyor; sorguyu da atlıyoruz.
     range.days > 1
       ? serverApiFetch<MetricsTimeseries>(`/metrics/timeseries?${base}`).catch(() => null)
       : Promise.resolve<MetricsTimeseries>({ points: [], previous: null }),
-    serverApiFetch<MetricsBreakdownRow[]>(`/metrics/breakdown?${breakdownQs}`).catch(() => null),
+    // MCC görünümünde kampanya tablosu ÇEKİLMİYOR: gösterilmeyecek bir
+    // sorguyu koşmak, en ağır sorgusu boşa giden bir ekran demekti.
+    mcc
+      ? Promise.resolve(null)
+      : serverApiFetch<MetricsBreakdownRow[]>(`/metrics/breakdown?${breakdownQs}`).catch(
+          () => null,
+        ),
+    mcc
+      ? serverApiFetch<MetricsClientRow[]>(`/metrics/clients?${base}`).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const activeClient = session.availableClients.find((c) => c.id === session.activeClientId);
@@ -223,7 +248,13 @@ export default async function DashboardPage({
               />
             ))}
 
-          {breakdown === null ? (
+          {mcc ? (
+            musteriler === null ? (
+              <Notice tone="error">Müşteri dağılımı alınamadı.</Notice>
+            ) : (
+              <MusteriTablosu rows={musteriler} karsilastir={range.karsilastirma !== 'yok'} />
+            )
+          ) : breakdown === null ? (
             <Notice tone="error">Dağılım verisi alınamadı.</Notice>
           ) : (
             <BreakdownTable
@@ -440,11 +471,6 @@ function Notice({ tone, children }: { tone: 'warn' | 'error'; children: React.Re
 }
 
 /** Oranı micros string'e çevirir — `formatMoney` tek bir giriş biçimi bekliyor. */
-function microsOf(value: number | null): string | null {
-  if (value === null) return null;
-  return String(Math.round(value * 1_000_000));
-}
-
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }

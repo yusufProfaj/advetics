@@ -95,3 +95,23 @@ export function isStale(iso: string | null): boolean {
   if (!iso) return true;
   return Date.now() - new Date(iso).getTime() > 2 * 60 * 60 * 1000;
 }
+
+/**
+ * Para birimi cinsinden bir sayıyı micros metnine çevirir.
+ *
+ * TÜRETİLMİŞ ORANLAR (CPA, CPC, CPM) sorgu anında `number` olarak
+ * hesaplanıyor ama `formatMoney` micros METNİ bekliyor — hassasiyet
+ * kaybetmemek için toplam tutarlar string taşınıyor ve biçimlendirici o
+ * sözleşmeye göre yazıldı.
+ *
+ * ÜÇ YERDE AYRI AYRI YAZILMIŞTI (panel, rapor belgesi, müşteri tablosu).
+ * Yuvarlama kuralı değiştiğinde üçünün ayrışması, aynı sayının iki ekranda
+ * farklı görünmesi demekti.
+ *
+ * `null` = hesaplanamaz (dönüşüm yok). Sıfır DEĞİL: "0,00 ₺ CPA" kampanyanın
+ * bedava dönüşüm getirdiğini söyler.
+ */
+export function microsOf(value: number | null): string | null {
+  if (value === null) return null;
+  return String(Math.round(value * 1_000_000));
+}

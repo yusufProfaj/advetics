@@ -16,7 +16,7 @@ import {
   type ColumnKey,
 } from '@advetics/shared';
 import type { ReactNode } from 'react';
-import { formatDayLong, formatMoney, formatNumber, formatPercent } from '@/lib/format';
+import { formatDayLong, formatMoney, formatNumber, formatPercent, microsOf } from '@/lib/format';
 import { ConversionChart } from './conversion-chart';
 
 /**
@@ -945,11 +945,6 @@ function platformNames(data: ReportData): string {
  * rapor ekranda toplamlı, müşteriye giden belgede toplamsız çıkıyordu.
  * Tek kaynak, iki gösterimin ayrışmasını imkânsız kılıyor.
  */
-
-function microsOf(value: number | null): string | null {
-  if (value === null) return null;
-  return String(Math.round(value * 1_000_000));
-}
 
 /**
  * Marka renginin CSS'e enjeksiyonunu güvenli kılar.

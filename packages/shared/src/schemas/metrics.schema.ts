@@ -154,6 +154,28 @@ export const breakdownQuerySchema = metricsQueryBase
 export type BreakdownQuery = z.infer<typeof breakdownQuerySchema>;
 
 /**
+ * Müşteri kırılımı sorgusu.
+ *
+ * `level` YOK ve olmamalı: müşteri toplamı tek bir seviyeden okunuyor
+ * (`TOTALS_LEVEL`) ve onu istekten almak, panelin yanlışlıkla iki seviyeyi
+ * toplayıp harcamayı KATLAMASINA izin vermek olurdu — `insights_daily` aynı
+ * harcamayı hesap, kampanya, grup ve reklam seviyesinde birden taşıyor.
+ *
+ * `adAccountId` de YOK: bu ekran müşteri müşteri bakıyor ve tek bir hesaba
+ * daraltmak sorunun kendisini ortadan kaldırırdı.
+ */
+export const clientBreakdownQuerySchema = z
+  .object({
+    from: isoDate,
+    to: isoDate,
+    platform: z.enum(PLATFORMS).optional(),
+  })
+  .extend(compareAlanlari)
+  .refine(orderOk, ORDER_MSG)
+  .refine(spanOk, SPAN_MSG);
+export type ClientBreakdownQuery = z.infer<typeof clientBreakdownQuerySchema>;
+
+/**
  * Para tutarları STRING olarak taşınıyor.
  *
  * Micros `BigInt` ve JSON'da `BigInt` yok; `Number`a çevirmek 2^53'ün üstünde
@@ -286,6 +308,66 @@ export interface MetricsBreakdownRow extends MetricTotals {
    * zaten var (`hasData`).
    *
    * Karşılaştırma istenmediğinde de `null`.
+   */
+  previous: MetricTotals | null;
+}
+
+/**
+ * ═══ MÜŞTERİ KIRILIMI — MCC GÖRÜNÜMÜ ═══
+ *
+ * "Tüm müşteriler" seçiliyken panel kampanya listeliyordu: on iki müşterinin
+ * kampanyaları tek bir tabloda, hangi satırın kime ait olduğu YAZMADAN. Ajans
+ * o ekranda "hangi müşteri ne harcıyor" sorusunu soruyor ve cevap hiçbir
+ * yerde yoktu.
+ *
+ * VARLIK SATIRINDAN FARKLI BİR ŞEY. `MetricsBreakdownRow` bir kampanyayı /
+ * reklamı anlatıyor: dış kimliği, üst varlığı, platformdaki durumu var.
+ * Müşterinin hiçbiri yok, buna karşılık ONUN olan şeyler var: kaç reklam
+ * hesabı izlemede, harcamanın Meta ile Google arasındaki dağılımı, panelde
+ * hangi workspace'e geçileceği. Aynı tipe sıkıştırmak, iki tarafta da
+ * anlamsız alanlar bırakırdı.
+ */
+export interface MetricsClientPlatformRow extends MetricTotals {
+  platform: (typeof PLATFORMS)[number];
+}
+
+export interface MetricsClientRow extends MetricTotals {
+  clientId: string;
+  name: string;
+  slug: string;
+
+  /**
+   * `null` = müşterinin hesapları KARIŞIK para birimi taşıyor.
+   *
+   * 1 USD + 1 TRY = 2 ne? Kur çevrimi yok. Toplamı yine de basmak, ekranda
+   * anlamı olmayan bir sayı göstermek olurdu; panel bu satırda tutarı değil
+   * uyarıyı gösteriyor. Diğer metrikler (gösterim, tıklama, dönüşüm) para
+   * birimi taşımadığı için toplanmaya devam ediyor.
+   */
+  currency: string | null;
+
+  /** Karışık para birimi hâlinde hangi birimlerin olduğu — sayı yerine bu yazılıyor. */
+  currencies: string[];
+
+  /** İZLEMEDEKİ hesap sayısı. Sıfırsa satır boş görünür ve sebebi budur. */
+  adAccountCount: number;
+
+  /**
+   * Platform dağılımı — bu ekranın istenme sebebi.
+   *
+   * Yalnızca VERİSİ OLAN platformlar geliyor. Sıfırlı bir Google satırı
+   * basmak, Google'a bağlı olmayan bir müşteride "Google 0 ₺" yazmak demek
+   * ve o, "bağlı ama harcamıyor" ile "hiç bağlı değil" hâllerini aynı
+   * gösterirdi.
+   */
+  byPlatform: MetricsClientPlatformRow[];
+
+  /**
+   * Önceki dönem — yüzde değişim için.
+   *
+   * `null` = o müşterinin önceki dönemde HİÇ verisi yok. Sıfırlı bir nesne
+   * döndürmek her yeni müşteriyi "-%100" gösterirdi; kırılım ve özet
+   * uçlarında aynı kural zaten var.
    */
   previous: MetricTotals | null;
 }

@@ -1,8 +1,11 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import {
   breakdownQuerySchema,
+  clientBreakdownQuerySchema,
   metricsQuerySchema,
   type BreakdownQuery,
+  type ClientBreakdownQuery,
+  type MetricsClientRow,
   type MetricsBreakdownRow,
   type MetricsQuery,
   type MetricsSummary,
@@ -59,6 +62,23 @@ export class MetricsController {
     @Query(zodQuery(metricsQuerySchema)) query: MetricsQuery,
   ): Promise<MetricsTimeseries> {
     return this.metrics.timeseries(ctx, query);
+  }
+
+  /**
+   * MÜŞTERİ KIRILIMI — "Tüm müşteriler" görünümünün tablosu.
+   *
+   * Ayrı bir uç, `breakdown`ın bir seviyesi DEĞİL: müşteri satırı varlık
+   * satırından farklı alanlar taşıyor (kaç hesap izlemede, platform dağılımı,
+   * hangi workspace'e geçileceği) ve varlık alanlarının (dış kimlik, üst
+   * varlık, platformdaki durum) hiçbiri müşteride yok.
+   */
+  @Get('clients')
+  @RequirePermissions('insights.read')
+  byClient(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(clientBreakdownQuerySchema)) query: ClientBreakdownQuery,
+  ): Promise<MetricsClientRow[]> {
+    return this.metrics.byClient(ctx, query);
   }
 
   @Get('breakdown')
