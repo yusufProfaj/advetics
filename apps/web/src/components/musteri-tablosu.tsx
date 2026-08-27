@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { MetricsClientRow } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { PlatformLogo } from '@/components/platform-logo';
+import { TamEkranYukleniyor } from '@/components/yukleniyor';
 import { DeltaRozeti } from '@/components/delta-rozeti';
 import { changePercentMicros, formatMoney, formatNumber, microsOf } from '@/lib/format';
 
@@ -33,7 +34,7 @@ export function MusteriTablosu({
   karsilastir: boolean;
 }) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
   const [gecilen, setGecilen] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -65,8 +66,19 @@ export function MusteriTablosu({
   const toplamHarcama = rows.reduce((a, r) => a + BigInt(r.spendMicros), 0n);
   const harcayan = rows.filter((r) => r.spendMicros !== '0').length;
 
+  const bekleyenAd = rows.find((r) => r.clientId === gecilen)?.name ?? null;
+
   return (
     <section className="rounded-xl border border-line bg-surface">
+      {/*
+        SATIRA TIKLAMAK SAYFANIN TAMAMINI DEĞİŞTİRİYOR ve bu sırada ekran
+        hâlâ bütün müşterilerin tablosunu gösteriyor. Örtü olmadan kullanıcı
+        ikinci bir satıra tıklayabiliyor ve hangi geçişin kazandığı belirsiz
+        kalıyor.
+      */}
+      {(gecilen !== null || isPending) && (
+        <TamEkranYukleniyor mesaj={`${bekleyenAd ?? 'Workspace'} görünümüne geçiliyor…`} />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-ink">Müşteriler</h2>

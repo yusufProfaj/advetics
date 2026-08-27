@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { apiFetch } from '@/lib/api';
+import { ApiRequestError, apiFetch } from '@/lib/api';
 import { YonetimPaneli } from './tenancy/yonetim-paneli';
+import { Halka, TamEkranYukleniyor } from './yukleniyor';
 
 interface AvailableClient {
   id: string;
@@ -38,6 +39,16 @@ export function ClientSwitcher({
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+  /* Hangi müşteriye geçildiği ÖRTÜDE YAZILI: "Yükleniyor…" üç saniye sonra
+     "takıldı mı" sorusunu doğuruyor, ad ise bekleyişi anlamlı kılıyor ve
+     yanlış satıra tıklandığını HEMEN gösteriyor. */
+  const [gecilen, setGecilen] = useState<string | null>(null);
+  /*
+   * `isPending` SUNUCU TAZELEMESİNİ kapsıyor, `pending` ise ağ isteğini.
+   * İkisi ayrı: istek bitip tazeleme sürerken de gösterge kalmalı.
+   */
+  const [isPending, startTransition] = useTransition();
   const [arama, setArama] = useState('');
   const [panelAcik, setPanelAcik] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -68,6 +79,8 @@ export function ClientSwitcher({
   async function select(clientId: string | null) {
     setOpen(false);
     setPending(true);
+    setHata(null);
+    setGecilen(availableClients.find((c) => c.id === clientId)?.name ?? null);
     try {
       await apiFetch('/auth/switch-client', {
         method: 'POST',
@@ -99,7 +112,30 @@ export function ClientSwitcher({
         const qs = params.toString();
         router.replace(qs ? `${pathname}?${qs}` : pathname);
       }
-      router.refresh();
+      /*
+       * ═══ BEKLEME GÖSTERGESİ TAM BEKLEME BAŞLARKEN SÖNÜYORDU ═══
+       *
+       * `router.refresh()` beklenebilir bir şey döndürmüyor: çağrı hemen
+       * geri geliyor, sunucu yeniden render'ı ARKADA sürüyor. `finally`
+       * içindeki `setPending(false)` bu yüzden asıl beklemenin BAŞINDA
+       * koşuyordu — cookie yazıldıktan sonra, veri gelmeden önce. Yani
+       * gösterge (o zaman yalnızca düğmeyi devre dışı bırakan bayrak)
+       * kullanıcının beklediği saniyelerde KAPALIYDI.
+       *
+       * `startTransition` doğru mekanizma: `isPending`, tazelenen sunucu
+       * ağacı ekrana uygulanana kadar `true` kalıyor. Gösterge artık
+       * beklemenin kendisini kapsıyor.
+       */
+      startTransition(() => router.refresh());
+    } catch (e) {
+      /*
+       * HATA YUTULMUYOR. Önceki hâlde `catch` HİÇ YOKTU: istek düşünce
+       * tıklama sessizce hiçbir şey yapmıyor, üst bar eski müşteriyi
+       * göstermeye devam ediyor ve sebebi hiçbir yerde yazmıyordu.
+       */
+      setHata(
+        e instanceof ApiRequestError ? e.message : 'Workspace değiştirilemedi.',
+      );
     } finally {
       setPending(false);
     }
@@ -126,8 +162,25 @@ export function ClientSwitcher({
     );
   }
 
+  /*
+   * İKİ BAYRAK BİRLEŞİYOR: `pending` ağ isteğini, `isPending` sunucu
+   * tazelemesini kapsıyor. Yalnızca birine bakmak, beklemenin yarısında
+   * göstergeyi söndürüyordu — düzeltilen arıza tam buydu.
+   */
+  const bekliyor = pending || isPending;
+
   return (
     <div ref={boxRef} className="relative">
+      {/*
+        TAM EKRAN ÖRTÜ: workspace değişirken ekranın yarısı hâlâ ESKİ
+        müşterinin verisini gösteriyor ve tıklanabilir kalması, yanlış
+        müşteride işlem yapma riski demek.
+      */}
+      {bekliyor && (
+        <TamEkranYukleniyor
+          mesaj={`${gecilen ?? 'Tüm müşteriler'} görünümüne geçiliyor…`}
+        />
+      )}
       <button
         type="button"
         onClick={() => {
@@ -136,7 +189,7 @@ export function ClientSwitcher({
           setArama('');
           setOpen((v) => !v);
         }}
-        disabled={pending}
+        disabled={bekliyor}
         aria-expanded={open}
         aria-haspopup="listbox"
         className="flex min-w-[13rem] items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 text-left transition hover:bg-surface-muted disabled:opacity-60"
@@ -150,15 +203,36 @@ export function ClientSwitcher({
             {active ? 'Müşteri görünümü' : `${availableClients.length} müşteri`}
           </span>
         </span>
-        <svg
-          viewBox="0 0 20 20"
-          fill="none"
-          className={`h-4 w-4 shrink-0 text-ink-muted transition ${open ? 'rotate-180' : ''}`}
-          aria-hidden
-        >
-          <path d="m6 8 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
+        {/*
+          BEKLERKEN OK YERİNE GÖSTERGE. Seçicinin kendisi de "bir şey oluyor"
+          demeli: tam ekran örtü gelene kadar geçen ilk anlar da bekleme.
+        */}
+        {bekliyor ? (
+          <Halka />
+        ) : (
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            className={`h-4 w-4 shrink-0 text-ink-muted transition ${open ? 'rotate-180' : ''}`}
+            aria-hidden
+          >
+            <path d="m6 8 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        )}
       </button>
+
+      {/*
+        HATA SEÇİCİNİN ALTINDA. Üst barda bir yerde kaybolması, tıklamanın
+        neden işe yaramadığını yine cevapsız bırakırdı.
+      */}
+      {hata && (
+        <p
+          role="alert"
+          className="absolute left-0 top-full z-40 mt-1 w-80 rounded-lg border border-danger/30 bg-surface px-3 py-2 text-xs text-danger shadow-lg"
+        >
+          {hata}
+        </p>
+      )}
 
       {open && (
         <div

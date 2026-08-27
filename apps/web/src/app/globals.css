@@ -157,3 +157,60 @@ body {
     scrollbar-color: var(--border) transparent;
   }
 }
+
+/**
+ * ═══ YÜKLENİYOR ANİMASYONLARI ═══
+ *
+ * Panelde bir tıklamanın ardından veri beklenirken HİÇBİR ŞEY olmuyordu:
+ * müşteri seçicide `pending` yalnızca düğmeyi devre dışı bırakıyor, ekranda
+ * tek bir işaret çıkmıyordu. Kullanıcının tarifi *"ufak veri getirme
+ * beklemesi yaşıyoruz ama bunu belirten herhangi bir görsel yok"*.
+ *
+ * İŞARET MARKANIN KENDİ İŞARETİNDEN TÜRÜYOR: Advetics wordmark'ının "i"
+ * üzerindeki KIRMIZI NOKTA. Genel bir daire spinner'ı da olurdu ama beyaz
+ * etiketli bir üründe her ekranda görünen bir öğenin markayla ilgisi olması
+ * bedava bir kazanç.
+ *
+ * HEPSİ `prefers-reduced-motion` ALTINDA. Hareket duyarlılığı olan kullanıcı
+ * için animasyonun DURMASI doğru davranış, eksik özellik değil — ama gösterge
+ * kaybolmuyor: nokta ve bant duruyor, yalnızca kıpırdamıyor.
+ */
+@keyframes advetics-nokta {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.55);
+    opacity: 0.35;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes advetics-tarama {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@keyframes advetics-donus {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .advetics-nokta {
+    animation: advetics-nokta 1.05s ease-in-out infinite;
+  }
+  .advetics-tarama {
+    animation: advetics-tarama 1.25s ease-in-out infinite;
+  }
+  .advetics-donus {
+    animation: advetics-donus 0.7s linear infinite;
+  }
+}
