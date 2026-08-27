@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { deriveRoas } from '@advetics/shared';
 import type {
+  ClientBreakdownQuery,
+  MetricsClientRow,
   BreakdownQuery,
   MetricLevel,
   MetricTotals,
@@ -495,6 +497,206 @@ export class MetricsService {
         ${accountFilter}
     `);
     return Number(row?.n ?? 0);
+  }
+
+  /**
+   * ═══ MÜŞTERİ KIRILIMI — MCC GÖRÜNÜMÜ ═══
+   *
+   * "Tüm müşteriler" seçiliyken panel kampanya listeliyordu: on iki
+   * müşterinin kampanyaları tek tabloda ve hangi satırın kime ait olduğu
+   * hiçbir yerde yazmıyordu. Ajans o ekranda "hangi müşteri ne harcıyor"
+   * sorusunu soruyor.
+   *
+   * SEVİYE İSTEKTEN GELMİYOR, `TOTALS_LEVEL` SABİT. `insights_daily` aynı
+   * harcamayı hesap, kampanya, grup ve reklam seviyesinde BİRDEN taşıyor;
+   * seviyeyi filtrelemeyen bir toplam harcamayı dörde katlar ve sonuç hiçbir
+   * hata üretmeden yalnızca YANLIŞ olur. Özet ucu da aynı sabiti kullanıyor,
+   * yani iki ekran birbirini tutuyor.
+   *
+   * PLATFORM DAĞILIMI AYNI TARAMADAN. İkinci bir sorgu koşup JS'te
+   * birleştirmek hem fazladan gidiş-dönüş hem de iki sorgunun süzgeçlerinin
+   * ayrışma riski demekti. `GROUP BY client_id, platform, currency` tek
+   * geçişte üçünü de veriyor; müşteri toplamı satırlardan TÜRETİLİYOR,
+   * ayrıca sorulmuyor.
+   *
+   * `client_id` DENORMALİZE bir kolon ve doğru olan bu: RLS politikaları
+   * join'siz yazılabiliyor. Hesap el değiştirdiğinde taşınması
+   * `hesap-verisi-tasima.ts`'nin işi.
+   */
+  async byClient(
+    ctx: TenantContext,
+    query: ClientBreakdownQuery,
+  ): Promise<MetricsClientRow[]> {
+    const karsilastir = query.compareFrom !== undefined && query.compareTo !== undefined;
+    const prevTo = karsilastir ? query.compareTo! : query.from;
+    const pencereBasi = karsilastir ? query.compareFrom! : query.from;
+
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const rows = await tx.$queryRaw<
+        Array<
+          RawTotals & {
+            prev_impressions: string | number | null;
+            prev_clicks: string | number | null;
+            prev_spend_micros: string | number | bigint | null;
+            prev_conversions: string | number | null;
+            prev_conversion_value_micros: string | number | bigint | null;
+            client_id: string;
+            name: string;
+            slug: string;
+            platform: Platform;
+            currency: string;
+          }
+        >
+      >(
+        Prisma.sql`
+          SELECT i.client_id, cl.name, cl.slug, i.platform, i.currency,
+                 -- TEK TARAMA, IKI PENCERE — kirilim ucuyla ayni desen.
+                 -- Onceki donem bitisik (prevTo = from - 1), yani tek bir
+                 -- tarih araligi ikisini de kapsiyor.
+                 --
+                 -- (SQL yorumunda BACKTICK YOK: sablonu ortasindan kapatiyor
+                 --  ve hata TS1005 olarak cikip sebebini hic soylemiyor.)
+                 SUM(i.impressions) FILTER (WHERE i.date >= ${query.from}::date) AS impressions,
+                 SUM(i.clicks) FILTER (WHERE i.date >= ${query.from}::date) AS clicks,
+                 SUM(i.spend_micros) FILTER (WHERE i.date >= ${query.from}::date) AS spend_micros,
+                 SUM(i.conversions) FILTER (WHERE i.date >= ${query.from}::date) AS conversions,
+                 SUM(i.conversion_value_micros) FILTER (WHERE i.date >= ${query.from}::date)
+                   AS conversion_value_micros,
+                 SUM(i.impressions) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_impressions,
+                 SUM(i.clicks) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_clicks,
+                 SUM(i.spend_micros) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_spend_micros,
+                 SUM(i.conversions) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_conversions,
+                 SUM(i.conversion_value_micros) FILTER (WHERE i.date <= ${prevTo}::date)
+                   AS prev_conversion_value_micros
+          FROM insights_daily i
+          JOIN clients cl ON cl.id = i.client_id
+          WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
+            AND i.entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            ${this.filters(query, 'i')}
+          GROUP BY i.client_id, cl.name, cl.slug, i.platform, i.currency
+        `,
+      );
+
+      /*
+       * İZLEMEDEKİ HESAP SAYISI AYRI SORULUYOR.
+       *
+       * Yukarıdaki taramaya join etmek her metrik satırını hesap sayısı kadar
+       * ÇOĞALTIRDI (klasik fan-out) ve harcama sessizce katlanırdı. Ayrıca
+       * HARCAMASI OLMAYAN müşteri yukarıdaki sorgudan hiç dönmüyor; bu sorgu
+       * onu da getiriyor ve tablo "hesabı var, harcaması yok" satırını
+       * gösterebiliyor — o satır olmasa müşteri ekrandan sessizce düşerdi.
+       */
+      const hesaplar = await tx.$queryRaw<Array<{ client_id: string; n: bigint | number }>>(
+        Prisma.sql`
+          SELECT client_id, COUNT(*) AS n
+          FROM ad_accounts
+          WHERE sync_enabled = true AND client_id IS NOT NULL
+          GROUP BY client_id
+        `,
+      );
+      const hesapSayisi = new Map(hesaplar.map((h) => [h.client_id, Number(h.n)]));
+
+      const musteriler = await tx.$queryRaw<Array<{ id: string; name: string; slug: string }>>(
+        Prisma.sql`
+          SELECT id, name, slug FROM clients WHERE status <> 'archived' ORDER BY name ASC
+        `,
+      );
+
+      type Birikim = {
+        clientId: string;
+        name: string;
+        slug: string;
+        currencies: Set<string>;
+        cari: RawTotals[];
+        onceki: RawTotals[];
+        platformlar: Map<Platform, RawTotals[]>;
+      };
+      const birikim = new Map<string, Birikim>();
+      for (const m of musteriler) {
+        birikim.set(m.id, {
+          clientId: m.id,
+          name: m.name,
+          slug: m.slug,
+          currencies: new Set(),
+          cari: [],
+          onceki: [],
+          platformlar: new Map(),
+        });
+      }
+
+      for (const r of rows) {
+        const b = birikim.get(r.client_id);
+        // Arşivlenmiş müşterinin verisi listeye girmiyor: ekran çalışılan
+        // müşterileri gösteriyor ve arşivi karıştırmak listeyi okunmaz yapardı.
+        if (!b) continue;
+        b.currencies.add(r.currency);
+        b.cari.push(r);
+        b.onceki.push(oncekiSatir(r));
+        const p = b.platformlar.get(r.platform) ?? [];
+        p.push(r);
+        b.platformlar.set(r.platform, p);
+      }
+
+      return [...birikim.values()]
+        .map((b) => {
+          const cari = this.topla(b.cari);
+          const onceki = this.topla(b.onceki);
+          return {
+            clientId: b.clientId,
+            name: b.name,
+            slug: b.slug,
+            /*
+             * KARIŞIK PARA BİRİMİ GİZLENMİYOR. 1 USD + 1 TRY = 2 ne? Kur
+             * çevrimi yok; `null` dönüyor ve panel tutar yerine uyarı
+             * gösteriyor. Özet ucundaki kuralın aynısı.
+             */
+            currency: b.currencies.size === 1 ? [...b.currencies][0]! : null,
+            currencies: [...b.currencies].sort(),
+            adAccountCount: hesapSayisi.get(b.clientId) ?? 0,
+            ...this.totals(cari),
+            byPlatform: [...b.platformlar.entries()]
+              .map(([platform, satirlar]) => ({
+                platform,
+                ...this.totals(this.topla(satirlar)),
+              }))
+              // Sıra HARCAMAYA göre: hangi platformun ağır bastığı bu ekranın
+              // sorusu ve sabit bir alfabetik sıra onu gizlerdi.
+              .sort((a, z) => Number(BigInt(z.spendMicros) - BigInt(a.spendMicros))),
+            // `null` = önceki dönemde HİÇ veri yok. Sıfırlı bir nesne her yeni
+            // müşteriyi "-%100" gösterirdi.
+            previous: this.hasData(onceki) ? this.totals(onceki) : null,
+          };
+        })
+        /*
+         * SIRALAMA CARİ DÖNEM HARCAMASINA GÖRE — kırılım ucuyla aynı gerekçe.
+         * Harcaması olmayan müşteriler sonda ve DÜŞMÜYOR: "hesabı var,
+         * harcaması yok" bu ekranın cevaplaması gereken bir hâl.
+         */
+        .sort((a, z) => {
+          const fark = BigInt(z.spendMicros) - BigInt(a.spendMicros);
+          if (fark !== 0n) return fark > 0n ? 1 : -1;
+          return a.name.localeCompare(z.name, 'tr');
+        });
+    });
+  }
+
+  /** Aynı müşteriye ait ham satırları tek bir toplama indirir. */
+  private topla(satirlar: RawTotals[]): RawTotals {
+    return satirlar.reduce<RawTotals>(
+      (acc, r) => ({
+        impressions: Number(acc.impressions ?? 0) + Number(r.impressions ?? 0),
+        clicks: Number(acc.clicks ?? 0) + Number(r.clicks ?? 0),
+        spend_micros: (
+          BigInt(this.bigintText(acc.spend_micros)) + BigInt(this.bigintText(r.spend_micros))
+        ).toString(),
+        conversions: Number(acc.conversions ?? 0) + Number(r.conversions ?? 0),
+        conversion_value_micros: (
+          BigInt(this.bigintText(acc.conversion_value_micros)) +
+          BigInt(this.bigintText(r.conversion_value_micros))
+        ).toString(),
+      }),
+      { impressions: 0, clicks: 0, spend_micros: '0', conversions: 0, conversion_value_micros: '0' },
+    );
   }
 
   /** Ham toplamları türetilmiş oranlarla birlikte ortak şekle çevirir. */
