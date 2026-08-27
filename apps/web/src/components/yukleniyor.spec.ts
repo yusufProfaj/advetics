@@ -122,6 +122,36 @@ describe('göstergenin kendisi', () => {
     }
   });
 
+  it('KRİTİK: örtü PORTAL ile document.body altına taşınıyor', () => {
+    /*
+     * İlk sürüm `fixed inset-0` ile ekranın tamamını kapladığını sanıyordu;
+     * ekranda ÜST BARIN İÇİNDE, başlığın 64 puntoluk kutusunda çıkıyordu.
+     *
+     * Sebep: müşteri seçici `<header>`ın içinde ve o başlıkta `backdrop-blur`
+     * var. `backdrop-filter` — `transform` ve `filter` gibi — sabit konumlu
+     * alt öğeler için KAPSAYICI BLOK oluşturuyor. Bu tuzağa depoda ÜÇÜNCÜ
+     * kez düşüldü (yönetim paneli, müşteri detayı, bu bileşen); iddia bu
+     * yüzden var.
+     *
+     * İDDİA ÇAĞRIYA ÇAPALI, ADA DEĞİL: `import { createPortal }` satırı
+     * `toContain('createPortal')`ı tek başına geçiriyor ve çağrıyı silmek
+     * testi düşürmüyordu.
+     */
+    const k = kod(YUK);
+    expect(k).toContain('return createPortal(');
+    expect(k).toContain('document.body,');
+    // Sunucuda `document` yok; koşul olmadan varsayılan açık bir kullanım
+    // eklendiğinde sayfa SSR'da çökerdi.
+    expect(k).toContain("typeof document === 'undefined'");
+  });
+
+  it('örtü arkasını gerçekten bulanıklaştırıyor', () => {
+    // `backdrop-blur-sm` neredeyse görünmüyordu ve altındaki tablo okunur
+    // kalıyordu: kullanıcı "hâlâ eski müşteri" ile "yeni müşteri geldi"
+    // arasında ayrım yapamıyordu.
+    expect(kod(YUK)).toContain('backdrop-blur-md');
+  });
+
   it('ekran okuyucuya duyuruluyor', () => {
     const k = kod(YUK);
     expect(k).toContain('role="status"');

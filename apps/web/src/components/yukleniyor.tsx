@@ -1,3 +1,7 @@
+'use client';
+
+import { createPortal } from 'react-dom';
+
 /**
  * ═══ YÜKLENİYOR GÖSTERGELERİ ═══
  *
@@ -60,12 +64,43 @@ export function Halka({ className = 'h-4 w-4' }: { className?: string }) {
  * anlamlı kılıyor ve yanlış müşteriye tıklandığında bunu HEMEN gösteriyor.
  */
 export function TamEkranYukleniyor({ mesaj }: { mesaj: string }) {
-  return (
+  /*
+   * ═══ PORTAL ZORUNLU ═══
+   *
+   * Bu bileşenin ilk hâli `fixed inset-0` ile ekranın tamamını kapladığını
+   * sanıyordu; ekranda ise ÜST BARIN İÇİNDE, başlığın 64 puntoluk kutusuna
+   * sıkışmış olarak çıkıyordu.
+   *
+   * Sebep: müşteri seçici `<header>`ın içinde ve o başlıkta `backdrop-blur`
+   * var. `backdrop-filter` — tıpkı `transform` ve `filter` gibi — SABİT
+   * konumlu alt öğeler için KAPSAYICI BLOK oluşturuyor, yani `fixed` artık
+   * görüntü alanına değil o kutuya göre konumlanıyor. Aynı tuzağa yönetim
+   * paneli penceresinde de düşülmüştü (`yonetim-paneli.tsx`).
+   *
+   * Ağaçtan çıkmak tek güvenilir yol: hangi bileşenin içinden çağrılırsa
+   * çağrılsın (üst bar, ızgara hücresi, `filter` taşıyan bir sarmalayıcı)
+   * örtü ekranın tamamını kaplıyor.
+   *
+   * SSR'DA `document` YOK. Bileşen yalnızca kullanıcı etkileşiminden sonra
+   * görünüyor, yani sunucuda render edilmiyor — ama koşulu yazmamak, ileride
+   * varsayılan açık bir kullanım eklendiğinde sunucuda çöken bir sayfa
+   * demekti.
+   */
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       role="status"
       aria-live="polite"
       aria-busy="true"
-      className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-surface/80 backdrop-blur-sm"
+      /*
+        BULANIKLIK ARTIRILDI (sm → md) ve zemin biraz saydamlaştırıldı.
+        `sm` neredeyse görünmüyordu ve örtünün altındaki tablo hâlâ okunur
+        kalıyordu; okunur kalan bir tablo, kullanıcıya "hâlâ eski müşterinin
+        verisi" ile "yeni müşteri geldi" arasında ayrım yapamadığı bir an
+        bırakıyor.
+      */
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-surface/70 backdrop-blur-md"
     >
       {/*
         LOGO DEPODAKİ DOSYADAN, `branding.logoUrl`DEN DEĞİL.
@@ -85,6 +120,7 @@ export function TamEkranYukleniyor({ mesaj }: { mesaj: string }) {
       </span>
 
       <span className="text-xs text-ink-muted">{mesaj}</span>
-    </div>
+    </div>,
+    document.body,
   );
 }
