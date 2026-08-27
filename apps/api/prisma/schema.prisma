@@ -49,8 +49,10 @@ enum ClientStatus {
 enum Role {
   owner
   admin
+  ad_manager
   manager
   analyst
+  customer_service
   client_viewer
 }
 

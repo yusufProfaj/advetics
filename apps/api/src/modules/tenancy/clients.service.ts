@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type {
   CreateClientInput,
@@ -179,7 +180,31 @@ export class ClientsService {
   }
 
   async create(ctx: TenantContext, input: CreateClientInput, meta: Meta) {
+    /*
+     * KİMLİK ÖNDEN ÜRETİLİYOR — ve sebebi RLS.
+     *
+     * Prisma her INSERT'i `RETURNING` ile yapıyor ve Postgres `RETURNING`
+     * satırını tablonun SELECT POLİTİKASINDAN DA geçiriyor. `adv_clients_
+     * select` "org yöneticisi ya da erişim listendeki müşteri" diyor; yeni
+     * açılan müşterinin kimliği ise o listede olamaz — liste oturum
+     * kurulurken hesaplandı. Sonuç: org yöneticisi olmayan bir kullanıcı
+     * (reklam yöneticisi) müşteriyi AÇABİLİYOR ama çağrı
+     * "new row violates row-level security policy" ile düşüyor. INSERT'in
+     * kendisi geçiyor — düşen yalnızca RETURNING; PGlite'ta ölçüldü
+     * (`rol-havuz-rls.spec.ts`).
+     *
+     * Politikayı gevşetmek yanlış olurdu: "kimse görmediği satırı
+     * oluşturamaz" kuralı yerinde. Doğrusu kapsamı BU TRANSACTION için ve
+     * YALNIZCA az sonra yazılacak kimlikle genişletmek. Kimlik henüz hiçbir
+     * satıra ait değil, dolayısıyla başka hiçbir satırı açmıyor.
+     */
+    const clientId = randomUUID();
+
     return this.prisma.withTenant(ctx, async (tx) => {
+      await tx.$executeRaw`
+        SELECT set_config('app.current_client_ids', ${[...ctx.clientIds, clientId].join(',')}, true)
+      `;
+
       const slug = await uniqueSlug(input.slug ?? input.name, async (candidate) => {
         const found = await tx.client.findFirst({
           where: { orgId: ctx.orgId, slug: candidate },
@@ -190,6 +215,7 @@ export class ClientsService {
 
       const client = await tx.client.create({
         data: {
+          id: clientId,
           orgId: ctx.orgId,
           name: input.name,
           slug,

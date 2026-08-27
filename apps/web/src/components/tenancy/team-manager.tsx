@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ROLES, type Role } from '@advetics/shared';
+import { ORG_SCOPED_ROLES, ROLES, type Role } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 
 /**
@@ -15,8 +15,10 @@ import { apiFetch } from '@/lib/api';
 export const ROLE_TR: Record<Role, string> = {
   owner: 'Sahip',
   admin: 'Yönetici',
+  ad_manager: 'Reklam Yöneticisi',
   manager: 'Kampanya Yöneticisi',
   analyst: 'Analist',
+  customer_service: 'Müşteri Hizmetleri',
   client_viewer: 'Görüntüleyici',
 };
 
@@ -30,18 +32,25 @@ export const ROLE_TR: Record<Role, string> = {
 export const ROLE_HINT: Record<Role, string> = {
   owner: 'Her şey + faturalama + organizasyonu silme',
   admin: 'Her şey, faturalama hariç',
+  ad_manager: 'Kampanya işlerinin tamamı + müşteri açar, platform bağlar, hesap atar',
   manager: 'Kampanya kurar, kural yazar, bütçe değiştirir',
   analyst: 'Okur ve rapor üretir; canlıda aksiyon alamaz',
+  customer_service: 'Okur, rapor üretip paylaşır, potansiyel müşteri listesini işler',
   client_viewer: 'Yalnızca kendi verisini okur',
 };
 
 /**
  * Org geneli erişim (tüm müşteriler) YALNIZCA bu roller için.
+ *
  * Sunucudaki `createMemberSchema` da aynı kuralı uyguluyor; burada
- * tekrarlanmasının sebebi, kullanıcının geçersiz kombinasyonu SEÇEBİLMESİNİ
+ * kullanılmasının sebebi kullanıcının geçersiz kombinasyonu SEÇEBİLMESİNİ
  * engellemek. Sonradan hata göstermek, o hatayı yapmasına izin vermektir.
+ *
+ * LİSTE KOPYALANMIYOR, `@advetics/shared`ten geliyor. Burada elle yazılmış
+ * bir kopya vardı ve reklam yöneticisi rolü eklenince ayrıştı: sunucu org
+ * geneli üyeliği kabul ediyor, panel seçeneği hiç göstermiyordu.
  */
-const ORG_WIDE_ROLES: readonly Role[] = ['owner', 'admin'];
+const ORG_WIDE_ROLES: readonly Role[] = ORG_SCOPED_ROLES;
 
 interface ClientOption {
   id: string;

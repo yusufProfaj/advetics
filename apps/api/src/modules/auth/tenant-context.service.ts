@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import {
   isOrgScopedRole,
+  isOrgAdminRole,
   resolvePermissions,
   type Permission,
   type Role,
@@ -9,14 +10,33 @@ import {
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import type { RequestActor } from '../../common/types/request';
 
-/** Rol genişliği sıralaması — en geniş yetki en başta. */
+/**
+ * Rol genişliği sıralaması — en geniş yetki en başta.
+ *
+ * `Record<Role, number>` OLMASI ÖNEMLİ: yeni rol eklenince TypeScript burayı
+ * derleme hatasıyla gösteriyor. Düz bir nesne ya da `Partial` olsaydı yeni
+ * rol sessizce `undefined` sıralanır ve birden çok üyeliği olan kullanıcının
+ * "en geniş rolü" rastgele seçilirdi.
+ *
+ * SIRA YETKİ KÜMELERİYLE TUTARLI OLMAK ZORUNDA. Analist ilk bakışta müşteri
+ * hizmetlerinden "daha dar" duruyor (kampanya kurmuyor) ama yetki kümesi
+ * onun ÜST KÜMESİ: `sync.trigger`, `bulk.write` ve `user.read` fazladan.
+ * Sıralamayı sezgiyle vermek, iki üyeliği olan bir kullanıcının dar rolünü
+ * "en geniş" seçtirir ve panelde eksik ekran olarak görünür.
+ * `rol-yetkileri.spec.ts` sırayı kümelerle karşılaştırıyor.
+ */
 const ROLE_RANK: Record<Role, number> = {
-  owner: 5,
-  admin: 4,
-  manager: 3,
-  analyst: 2,
+  owner: 7,
+  admin: 6,
+  ad_manager: 5,
+  manager: 4,
+  analyst: 3,
+  customer_service: 2,
   client_viewer: 1,
 };
+
+/** Sıralamayı testin okuyabilmesi için dışa açık. */
+export const ROL_SIRASI: Readonly<Record<Role, number>> = ROLE_RANK;
 
 export interface ResolvedIdentity {
   actor: RequestActor;
@@ -85,7 +105,18 @@ export class TenantContextService {
     const orgScoped = scopedMemberships.filter(
       (m) => m.clientId === null && isOrgScopedRole(m.role as Role),
     );
-    const isOrgAdmin = orgScoped.length > 0;
+
+    /*
+     * ORG GENELİ VERİ ERİŞİMİ İLE ORG YÖNETİCİLİĞİ AYRI.
+     *
+     * `orgScoped.length > 0` = org'daki bütün müşterilerin verisini görür.
+     * `isOrgAdmin` = kullanıcı açar, üyelik verir, müşteri siler, bağlantı
+     * koparır. Reklam yöneticisi birincisini taşıyor, ikincisini TAŞIMIYOR.
+     * İkisini tek bayrakta tutmak, ajans genelinde çalışan bir role personel
+     * hesabı açma yetkisi vermek demekti.
+     */
+    const hasOrgScope = orgScoped.length > 0;
+    const isOrgAdmin = orgScoped.some((m) => isOrgAdminRole(m.role as Role));
 
     // Org geneli yetkili kullanıcılar için erişilebilir client listesini
     // AÇIKÇA genişletiyoruz. RLS'te "hepsi" anlamına gelen bir joker değer
@@ -93,7 +124,7 @@ export class TenantContextService {
     let clientIds: string[];
     let availableClients: Array<{ id: string; name: string; status: string }>;
 
-    if (isOrgAdmin) {
+    if (hasOrgScope) {
       const all = await this.db.client.findMany({
         where: { orgId: user.orgId, status: { not: 'archived' } },
         orderBy: { name: 'asc' },

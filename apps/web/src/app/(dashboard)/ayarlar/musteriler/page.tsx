@@ -2,7 +2,7 @@ import { MusteriArama } from '@/components/tenancy/musteri-arama';
 import { MusteriKarti } from '@/components/tenancy/musteri-karti';
 import type { ConnectionSummary, SpecialAdCategory } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
-import { requireSession } from '@/lib/session';
+import { hasPermission, requireSession } from '@/lib/session';
 import { ClientSetupWizard } from '@/components/tenancy/client-setup-wizard';
 import { ClientActions } from '@/components/tenancy/client-actions';
 import { SpecialCategoryPicker } from '@/components/tenancy/special-category-picker';
@@ -73,9 +73,20 @@ export default async function ClientsPage() {
    * göstermiyor. Yani müşteri düzeyindeki bir kullanıcı için bu liste zaten
    * boş dönüyor ve arayüz de atama kontrollerini göstermiyor.
    */
+  /*
+   * KAPILAR YETKİYE BAKIYOR, `isOrgAdmin`E DEĞİL.
+   *
+   * Uçlar `client.write` / `connection.manage` istiyor ve bu yetkiler artık
+   * org yöneticisi olmayan bir role de (reklam yöneticisi) verilebiliyor.
+   * `isOrgAdmin`e bakan bir ekran o rolde her düğmeyi gizler: API izin verir,
+   * panel göstermez ve arada hiçbir hata mesajı olmaz.
+   */
+  const musteriYazabilir = hasPermission(session, 'client.write');
+  const varlikAtayabilir = hasPermission(session, 'connection.manage');
+
   const [clients, connections] = await Promise.all([
     serverApiFetch<ClientRow[]>('/clients').catch(() => []),
-    session.isOrgAdmin
+    varlikAtayabilir
       ? serverApiFetch<ConnectionSummary[]>('/connections').catch(() => [])
       : Promise.resolve([]),
   ]);
@@ -191,7 +202,7 @@ export default async function ClientsPage() {
                       adAccounts={client.adAccounts}
                       profiles={client.socialProfiles}
                       pool={pool}
-                      canManage={session.isOrgAdmin}
+                      canManage={varlikAtayabilir}
                     />
 
                     {/* ÖZEL KATEGORİ BEYANI MÜŞTERİ DÜZEYİNDE: bir emlak
@@ -200,7 +211,7 @@ export default async function ClientsPage() {
                     <SpecialCategoryPicker
                       clientId={client.id}
                       value={client.specialAdCategories ?? []}
-                      canManage={session.isOrgAdmin}
+                      canManage={musteriYazabilir}
                     />
 
                     <ClientActions

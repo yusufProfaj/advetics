@@ -41,8 +41,15 @@ export class ClientsController {
     return this.clients.findById(ctx, id);
   }
 
+  /*
+   * MÜŞTERİ AÇMAK ARTIK `client.write` YETKİSİYLE — `@RequireOrgAdmin()` ile
+   * DEĞİL. O bayrak aynı zamanda kullanıcı oluşturmayı, üyelik vermeyi ve
+   * müşteri SİLMEYİ de açıyor; müşteri açabilsin diye personel hesabı açma
+   * yetkisi vermek gerekiyordu. `client.write`i taşıyan roller: sahip,
+   * yönetici, reklam yöneticisi. Kampanya yöneticisi TAŞIMIYOR, yani
+   * kapı daralmadı da genişlemedi de — doğru yere taşındı.
+   */
   @Post()
-  @RequireOrgAdmin()
   @RequirePermissions('client.write')
   create(
     @CurrentTenant() ctx: TenantContext,
@@ -64,7 +71,6 @@ export class ClientsController {
    * altında kalmamalı.
    */
   @Post('setup')
-  @RequireOrgAdmin()
   @RequirePermissions('client.write')
   setup(
     @CurrentTenant() ctx: TenantContext,

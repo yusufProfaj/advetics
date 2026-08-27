@@ -9,15 +9,56 @@
 export const ROLES = [
   'owner', // Ajans sahibi. Her şey + faturalama + org silme.
   'admin', // Ajans yöneticisi. Her şey, faturalama hariç.
+  /*
+   * Reklam yöneticisi. Kampanya yöneticisinin yaptığı her şey + müşteri açma
+   * + platform bağlama ve reklam hesabı atama.
+   *
+   * ORG GENELİ ama ORG YÖNETİCİSİ DEĞİL — bkz. ORG_SCOPED_ROLES /
+   * ORG_ADMIN_ROLES ayrımı. Ajans genelinde çalışabiliyor (her müşterinin
+   * verisini görür, hesabını bağlar ve atar) ama `isOrgAdmin` bayrağını
+   * AÇMIYOR: personel hesabı açamaz, üyelik veremez, müşteri silemez,
+   * bağlantı koparamaz.
+   */
+  'ad_manager',
   'manager', // Kampanya yöneticisi. Kural yazar, bütçe değiştirir.
   'analyst', // Analist. Okur, rapor üretir. Canlı aksiyon alamaz.
+  /*
+   * Müşteri hizmetleri. Müşteriyle konuşan kişi: veriyi okur, rapor üretip
+   * paylaşır, potansiyel müşteri listesini işler. Kampanyaya, bütçeye ve
+   * kurala DOKUNAMAZ — para ve yayın kararları bu rolün dışında.
+   */
+  'customer_service',
   'client_viewer', // Müşteri tarafı. Sadece kendi verisini okur.
 ] as const;
 
 export type Role = (typeof ROLES)[number];
 
-/** Org geneli erişime sahip roller (membership.clientId === null olabilir). */
-export const ORG_SCOPED_ROLES: readonly Role[] = ['owner', 'admin'];
+/**
+ * ═══ İKİ AYRI KAVRAM, İKİ AYRI LİSTE ═══
+ *
+ * Uzun süre tek bir liste vardı ve `isOrgAdmin` bayrağı İKİ İŞİ birden
+ * yapıyordu: (1) kullanıcının org'daki BÜTÜN müşterilerin verisini görmesi,
+ * (2) kullanıcı oluşturma, üyelik verme, müşteri silme kapılarının açılması.
+ *
+ * Reklam yöneticisi rolü ikisini ayırmayı zorunlu kıldı: ajans genelinde
+ * çalışıyor (her müşterinin hesabını bağlar, atar) ama personel hesabı
+ * açamamalı ve müşteri silememeli. Tek listede kalsaydı seçenek şuydu —
+ * ya rolü org geneli yapıp hesap ele geçirme yetkisi vermek, ya da org
+ * geneli yapmayıp ajans genelinde çalışamaz hâle getirmek.
+ */
+
+/** Org geneli VERİ erişimi: `membership.clientId === null` tutabilen roller. */
+export const ORG_SCOPED_ROLES: readonly Role[] = ['owner', 'admin', 'ad_manager'];
+
+/**
+ * Org YÖNETİCİSİ: `isOrgAdmin` bayrağını açan roller.
+ *
+ * Bu bayrak `@RequireOrgAdmin()` kapılarını (kullanıcı oluşturma, üyelik
+ * verme, müşteri silme, bağlantı koparma) ve RLS'teki `app.is_org_admin()`
+ * yüklemini besliyor. LİSTE GENİŞLETİLİRKEN o iki yerin ikisi birden
+ * düşünülmeli — bayrak tek başına bir yetki değil, bir yetki DEMETİ.
+ */
+export const ORG_ADMIN_ROLES: readonly Role[] = ['owner', 'admin'];
 
 /**
  * Yetki anahtarları. `kaynak.eylem` formatı.
@@ -45,6 +86,23 @@ export const PERMISSIONS = [
   // Modül 2 — bağlantılar
   'connection.read',
   'connection.write',
+  /**
+   * AJANS DÜZEYİ BAĞLANTI İŞLERİ — `connection.write`ten AYRI.
+   *
+   * `connection.write` günlük iş: izlemeyi aç/kapat, hesapları yenile, boost
+   * hesabını eşle. `connection.manage` ise kurulum: platformu YETKİLENDİR ve
+   * havuzdaki bir reklam hesabını/sayfayı bir MÜŞTERİYE ATA.
+   *
+   * İkisi neden ayrı: atama, bir müşterinin bütün verisinin nereye
+   * yazılacağını belirliyor ve yanlış atama iki müşterinin geçmişini
+   * birbirine karıştırıyor (bkz. `hesap-verisi-tasima.ts`). Kampanya
+   * yöneticisi izlemeyi açabilmeli ama bu kararı verememeli.
+   *
+   * Bu yetki daha önce `@RequireOrgAdmin()` ile ifade ediliyordu; o bayrak
+   * aynı zamanda kullanıcı yönetimini ve müşteri silmeyi de açıyor, yani
+   * atama yetkisi vermek için hesap ele geçirme yetkisi vermek gerekiyordu.
+   */
+  'connection.manage',
 
   // Modül 3–4 — veri
   'insights.read',
@@ -152,6 +210,45 @@ const ANALYST_PERMS: readonly Permission[] = [
   'lead.write',
 ];
 
+/**
+ * Reklam yöneticisi = kampanya yöneticisi + kurulum.
+ *
+ * MANAGER_PERMS'TEN TÜRETİLİYOR, elle kopyalanmıyor. İki liste ayrı
+ * yazılsaydı kampanya yöneticisine eklenen bir yetki burada eksik kalır ve
+ * "daha geniş" olması gereken rol dar kalırdı — hiçbir araç ses çıkarmadan.
+ */
+const AD_MANAGER_PERMS: readonly Permission[] = [
+  ...MANAGER_PERMS,
+  'client.write', // müşteri açar ve bilgilerini düzenler
+  'connection.manage', // platformu yetkilendirir, hesabı müşteriye atar
+];
+
+/**
+ * Müşteri hizmetleri — müşteriyle konuşan kişi.
+ *
+ * OKUMA GENİŞ, YAZMA DAR. Raporu hazırlayıp paylaşabiliyor ve potansiyel
+ * müşteri listesini işleyebiliyor; kampanya, bütçe, kural ve toplu yayın
+ * dışarıda. `lead.export` DE DIŞARIDA: listeyi görmek ile sistemden
+ * ÇIKARMAK farklı sorumluluklar (bkz. PERMISSIONS içindeki not).
+ */
+const CUSTOMER_SERVICE_PERMS: readonly Permission[] = [
+  'org.read',
+  'client.read',
+  // Bağlantıyı GÖRÜR: "veri neden gelmiyor" sorusunun cevabı orada ve bu
+  // soruyu müşteriden ilk duyan kişi bu rol.
+  'connection.read',
+  'branding.read',
+  'insights.read',
+  'budget.read',
+  'rule.read',
+  'boost.read',
+  'report.read',
+  'report.write',
+  'report.share',
+  'lead.read',
+  'lead.write',
+];
+
 const CLIENT_VIEWER_PERMS: readonly Permission[] = [
   'client.read',
   'insights.read',
@@ -166,8 +263,10 @@ const CLIENT_VIEWER_PERMS: readonly Permission[] = [
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   owner: ALL,
   admin: ADMIN_PERMS,
+  ad_manager: AD_MANAGER_PERMS,
   manager: MANAGER_PERMS,
   analyst: ANALYST_PERMS,
+  customer_service: CUSTOMER_SERVICE_PERMS,
   client_viewer: CLIENT_VIEWER_PERMS,
 };
 
@@ -196,4 +295,9 @@ export function resolvePermissions(
 
 export function isOrgScopedRole(role: Role): boolean {
   return ORG_SCOPED_ROLES.includes(role);
+}
+
+/** `isOrgAdmin` bayrağını açar mı. `isOrgScopedRole` ile AYNI ŞEY DEĞİL. */
+export function isOrgAdminRole(role: Role): boolean {
+  return ORG_ADMIN_ROLES.includes(role);
 }

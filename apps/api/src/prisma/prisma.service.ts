@@ -7,7 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
-import type { TenantContext } from '@advetics/shared';
+import type { Permission, TenantContext } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../config/configuration';
 
 /**
@@ -30,6 +30,31 @@ export type TenantClient = Prisma.TransactionClient;
  * BOŞ SONUÇ döndürür (hata değil, sessiz boşluk). Bu davranış kasıtlıdır:
  * güvenli varsayılan, "her şeyi göster" değil "hiçbir şey gösterme"dir.
  */
+/**
+ * Bağlamın bir yetkiyi taşıyıp taşımadığını RLS oturum değişkeni biçiminde
+ * döndürür.
+ *
+ * EKSİK `permissions` SESSİZCE 'off' OLMUYOR, PATLIYOR.
+ *
+ * `TenantContext` elle kurulan iki yer var ve ikisi de `as TenantContext`
+ * cast'i kullanıyor — cast DENETİMSİZ, yani alan eksik bırakıldığında
+ * TypeScript hiçbir şey demiyor. Nitekim `share.service.ts` tam bunu
+ * yapıyordu ve alan eklenince her paylaşılan rapor bağlantısı çalışma
+ * anında düşecekti.
+ *
+ * Sessizce 'off' yazmak daha da kötü olurdu: yetkisi olan bir kullanıcı
+ * havuzu göremez, sebebi hiçbir yerde yazmaz ve hata "panelde hesap
+ * listesi boş" olarak müşteriye ulaşır.
+ */
+function yetkiVar(ctx: TenantContext, izin: Permission): 'on' | 'off' {
+  if (!Array.isArray(ctx.permissions)) {
+    throw new Error(
+      `TenantContext.permissions eksik (org ${ctx.orgId}) — RLS yetki değişkeni kurulamaz`,
+    );
+  }
+  return ctx.permissions.includes(izin) ? 'on' : 'off';
+}
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
@@ -110,6 +135,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           set_config('app.current_user_id',         ${ctx.userId},                true),
           set_config('app.current_client_ids',      ${ctx.clientIds.join(',')},   true),
           set_config('app.is_org_admin',            ${ctx.isOrgAdmin ? 'on' : 'off'}, true),
+          set_config('app.can_manage_pool',         ${yetkiVar(ctx, 'connection.manage')}, true),
+          set_config('app.can_create_clients',      ${yetkiVar(ctx, 'client.write')}, true),
           set_config('app.current_active_client_id', ${ctx.activeClientId ?? ''}, true)
       `;
       return fn(tx);

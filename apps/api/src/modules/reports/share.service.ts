@@ -1,6 +1,12 @@
 import { ForbiddenException, GoneException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import { REPORT_SECTIONS, type ReportData, type ShareInput, type TenantContext } from '@advetics/shared';
+import {
+  REPORT_SECTIONS,
+  ROLE_PERMISSIONS,
+  type ReportData,
+  type ShareInput,
+  type TenantContext,
+} from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { ReportsService } from './reports.service';
@@ -173,12 +179,28 @@ export class ShareService {
     // doğru: rapor mantığının RLS'siz bir yolu OLMAMALI. Bağlam paylaşım
     // kaydından türetiliyor — kullanıcı girdisinden değil — dolayısıyla token
     // hangi müşteriye aitse yalnızca onun verisi görünüyor.
+    /*
+     * YETKİLER AÇIKÇA VERİLİYOR — alan boş bırakılamaz.
+     *
+     * Burası daha önce `permissions`i hiç yazmıyordu ve `as TenantContext`
+     * cast'i bunu gizliyordu. RLS oturum değişkenleri artık yetki
+     * kümesinden besleniyor; eksik alan çalışma anında patlıyor
+     * (`prisma.service.ts` → `yetkiVar`).
+     *
+     * `client_viewer` KÜMESİ KULLANILIYOR, elle bir liste değil: paylaşım
+     * bağlantısı tam olarak müşterinin kendi görebildiği kadarını
+     * gösteriyor. Elle yazılmış bir liste, o rolün yetkisi değiştiğinde
+     * ayrışır ve paylaşılan rapor panelden farklı bir şey gösterirdi.
+     */
     const ctx: TenantContext = {
       orgId: share.orgId,
       userId: SHARE_READER_ID,
       clientIds: [share.clientId],
+      activeClientId: share.clientId,
+      role: 'client_viewer',
       isOrgAdmin: false,
-    } as TenantContext;
+      permissions: [...ROLE_PERMISSIONS.client_viewer],
+    };
 
     return this.reports.build(ctx, {
       clientId: share.clientId,
