@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ROLES, type Role } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { MusteriDetay } from './musteri-detay';
-import { adayEngeli, atamalariYurut, type AtamaSonucu } from './danisman-atama';
+import { ENGEL_KISI, atamaEngeli, atamalariYurut, type AtamaSonucu } from './danisman-atama';
 import { ROLE_TR, ROLE_HINT, type MemberRow } from './team-manager';
 
 /**
@@ -75,7 +75,11 @@ export function DanismanAta({
   }, [acik, ekip, yukleniyor, hata, yukle]);
 
   const adaylar: Aday[] = useMemo(
-    () => (ekip ?? []).map((u) => ({ ...u, engel: adayEngeli(u.memberships, clientId) })),
+    () =>
+      (ekip ?? []).map((u) => {
+        const kod = atamaEngeli(u.memberships, clientId);
+        return { ...u, engel: kod === null ? null : ENGEL_KISI[kod] };
+      }),
     [ekip, clientId],
   );
 
