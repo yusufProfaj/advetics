@@ -18,7 +18,7 @@ import {
 } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
-import { donusumGrafigi, kisalt, okunakliYazi, renk, rozet, SLATE, tablo } from './pdf-cizim';
+import { donusumGrafigi, egri, halka, kisalt, okunakliYazi, renk, rozet, SLATE, tablo } from './pdf-cizim';
 
 /** A4, punto cinsinden. */
 const EN = 595.28;
@@ -41,6 +41,17 @@ const KENAR = 40;
  * "₺34.026,44" PDF'te "34026.44 TRY" demek olurdu — hiçbir hata vermeden ve
  * farkı müşteriye giden belgede gören olurdu.
  */
+/**
+ * Halka dilim renkleri — PANELLE AYNI SIRA.
+ *
+ * Marka rengi ilk, gerisi slate tonları. Farklı sıra, aynı kovanın belgede
+ * ve ekranda farklı renkte görünmesi demekti ve okuyan onları farklı şeyler
+ * sanardı.
+ */
+function pdfDilimRenkleri(markaRengi: RGB): RGB[] {
+  return [markaRengi, SLATE.s700, SLATE.s500, SLATE.s400, SLATE.s300, SLATE.s200, SLATE.s100];
+}
+
 @Injectable()
 export class RaporPdfService {
   /**
@@ -127,6 +138,9 @@ export class RaporPdfService {
           break;
         case 'google_search_terms':
           this.aramaTerimleri(ctx);
+          break;
+        case 'audience_overview':
+          this.kitleOzeti(ctx);
           break;
         case 'audience_age':
         case 'audience_gender':
@@ -557,6 +571,172 @@ export class RaporPdfService {
    * pastel boya çizimi" geri bildiriminin kaynağıydı ve regresyon bekçisi
    * onu yasaklıyor.
    */
+  /**
+   * ═══ KİTLE ÖZETİ — panelin karşılığı ═══
+   *
+   * Panel bu bölümü çiziyorsa PDF de çizmek ZORUNDA. Aynı raporun iki
+   * gösterimi var ve biri diğerinde olmayan bir sayfa taşırsa müşteriye
+   * giden belge ile ekran ayrışıyor — bu depoda bir kez yaşandı ve referans
+   * olarak panel seçildi.
+   *
+   * DİLİM RENKLERİ PANELLE AYNI SIRADA: marka rengi ilk, gerisi slate
+   * tonları. Farklı sıra, aynı kovanın iki belgede farklı renkte görünmesi
+   * demekti ve okuyan onları farklı şeyler sanardı.
+   */
+  private kitleOzeti(ctx: Ctx): void {
+    const s = ctx.doc.addPage([EN, BOY]);
+    const y0 = this.baslik(ctx, s, SECTION_LABELS.audience_overview, this.platformAdlari(ctx));
+
+    const yas = ctx.data.breakdowns.find((b) => b.dimension === 'age');
+    const cinsiyet = ctx.data.breakdowns.find((b) => b.dimension === 'gender');
+    const varMi = (yas?.rows.length ?? 0) > 0 || (cinsiyet?.rows.length ?? 0) > 0;
+
+    if (!varMi) {
+      this.bosKutu(
+        ctx,
+        s,
+        y0,
+        'Kitle verisi henüz toplanmadı. Kırılımlar gecelik güncellemeyle geliyor.',
+      );
+      return;
+    }
+
+    let y = y0;
+
+    /*
+     * ÖZET KARTLARI TOPLAM BLOĞUNDAN, kırılımlardan DEĞİL — panelle aynı
+     * gerekçe: Meta "unknown" kovası taşıyor ve kırılım toplamı ana rakamı
+     * tutmayabiliyor. Kartı kırılımdan türetmek, aynı sayfada kartla
+     * tablonun farklı sayı göstermesi demekti.
+     */
+    const ozet = ctx.data.total ?? ctx.data.platforms[0] ?? null;
+    if (ozet) {
+      const kartlar: Array<[string, string]> = [
+        ['GÖSTERİM', formatNumber(ozet.impressions)],
+        ['HARCAMA', formatMoney(ozet.spendMicros, ctx.data.currency)],
+        // `null` "hesaplanamaz" demek, sıfır DEĞİL.
+        ['TIKL. ORANI', ozet.ctr === null ? '—' : `%${ozet.ctr.toFixed(2)}`],
+        ['FORM', formatNumber(ozet.conversionCounts.form)],
+        ['MESAJ', formatNumber(ozet.conversionCounts.message)],
+      ];
+      const kartEn = (EN - 2 * KENAR - 4 * 6) / kartlar.length;
+      kartlar.forEach(([etiket, deger], i) => {
+        const x = KENAR + i * (kartEn + 6);
+        s.drawRectangle({
+          x,
+          y: y - 34,
+          width: kartEn,
+          height: 34,
+          borderColor: SLATE.s200,
+          borderWidth: 0.8,
+        });
+        s.drawText(etiket, { x: x + 6, y: y - 13, size: 6, font: ctx.normal, color: SLATE.s500 });
+        s.drawText(kisalt(deger, ctx.kalin, 11, kartEn - 12), {
+          x: x + 6,
+          y: y - 28,
+          size: 11,
+          font: ctx.kalin,
+          color: SLATE.s900,
+        });
+      });
+      y -= 50;
+    }
+
+    // Dört halka: gösterim ve tıklamanın cinsiyete ve yaşa göre dağılımı.
+    const paletDizisi = pdfDilimRenkleri(renk(ctx.data.branding.primaryColor));
+
+    const grafikler: Array<[string, typeof yas, 'impressions' | 'clicks']> = [
+      ['Gösterim / Cinsiyet', cinsiyet, 'impressions'],
+      ['Tıklama / Cinsiyet', cinsiyet, 'clicks'],
+      ['Gösterim / Yaş', yas, 'impressions'],
+      ['Tıklama / Yaş', yas, 'clicks'],
+    ];
+
+    const sutunEn = (EN - 2 * KENAR - 3 * 10) / 4;
+    grafikler.forEach(([baslik, blok, alan], i) => {
+      const x = KENAR + i * (sutunEn + 10);
+      s.drawText(baslik, { x, y: y - 8, size: 6.5, font: ctx.kalin, color: SLATE.s500 });
+
+      const dilimler = this.halkaDilimleri(blok, alan);
+      const cx = x + sutunEn / 2;
+      const cy = y - 58;
+      if (dilimler.length === 0) {
+        s.drawText('Veri yok', { x, y: cy, size: 7, font: ctx.normal, color: SLATE.s400 });
+        return;
+      }
+
+      halka(s, {
+        cx,
+        cy,
+        disR: 26,
+        icR: 15,
+        dilimler: dilimler.map((d, j) => ({
+          oran: d.oran,
+          renk: paletDizisi[j % paletDizisi.length]!,
+        })),
+      });
+
+      // LEJANT YÜZDE TAŞIYOR: iki yakın dilimin hangisinin büyük olduğunu
+      // göze bırakmak, halka grafiğin bilinen zayıflığı.
+      dilimler.forEach((d, j) => {
+        const ly = y - 92 - j * 9;
+        s.drawRectangle({
+          x,
+          y: ly,
+          width: 5,
+          height: 5,
+          color: paletDizisi[j % paletDizisi.length]!,
+        });
+        s.drawText(
+          `${kisalt(d.etiket, ctx.normal, 6.5, sutunEn - 34)}  %${(d.oran * 100).toFixed(1)}`,
+          { x: x + 8, y: ly, size: 6.5, font: ctx.normal, color: SLATE.s600 },
+        );
+      });
+    });
+
+    y -= 92 + 8 * 9 + 20;
+
+    // Günlük form eğrisi — panelin altındaki grafiğin karşılığı.
+    if (ctx.data.daily.length >= 2) {
+      s.drawText('GÜNLÜK FORM', { x: KENAR, y, size: 6.5, font: ctx.kalin, color: SLATE.s500 });
+      egri(s, ctx.normal, {
+        x: KENAR,
+        y: y - 60,
+        genislik: EN - 2 * KENAR,
+        yukseklik: 48,
+        degerler: ctx.data.daily.map((d) => d.conversionCounts.form),
+        renk: renk(ctx.data.branding.primaryColor),
+      });
+    }
+  }
+
+  /**
+   * Bir kırılım bloğunu halka dilimlerine çevirir — PANELLE AYNI KURAL.
+   *
+   * En büyük altı, kalanı "Diğer". Yirmi dilimli halka okunmuyor ama kalanı
+   * ATMAK yüzdeleri %100'e tamamlanmaz hâle getirirdi.
+   */
+  private halkaDilimleri(
+    blok: ReportData['breakdowns'][number] | undefined,
+    alan: 'impressions' | 'clicks',
+  ): Array<{ etiket: string; oran: number }> {
+    if (!blok) return [];
+    const sirali = blok.rows
+      .map((r) => ({ etiket: pdfKirilimEtiketi(blok.dimension, r.value, false), deger: r[alan] }))
+      .filter((d) => d.deger > 0)
+      .sort((a, b) => b.deger - a.deger);
+
+    const toplam = sirali.reduce((a, d) => a + d.deger, 0);
+    if (toplam <= 0) return [];
+
+    const ilk = sirali.slice(0, 6);
+    const kalan = sirali.slice(6).reduce((a, d) => a + d.deger, 0);
+    const hepsi =
+      kalan > 0 ? [...ilk, { etiket: `Diğer (${sirali.length - 6})`, deger: kalan }] : ilk;
+
+    return hepsi.map((d) => ({ etiket: d.etiket, oran: d.deger / toplam }));
+  }
+
   private kirilim(ctx: Ctx, bolum: KirilimBolumu): void {
     const s = ctx.doc.addPage([EN, BOY]);
     const boyut = PDF_BOLUM_BOYUT[bolum];
