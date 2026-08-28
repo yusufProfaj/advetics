@@ -56,6 +56,24 @@ export const REPORT_SECTIONS = [
   'google_campaigns',
   'google_keywords',
   'google_search_terms',
+  /*
+   * ═══ KİTLE KIRILIMLARI ═══
+   *
+   * Beş ayrı bölüm, tek bir "kitle" bölümü DEĞİL. Sebebi şablon: müşteri
+   * hizmetleri raporunda yalnızca şehir isteniyor, performans raporunda saat
+   * ve yerleşim. Tek bölüm olsaydı seçim "hepsi ya da hiçbiri" olurdu ve
+   * kullanıcı istemediği üç tabloyu da taşımak zorunda kalırdı.
+   *
+   * İLGİ ALANI YOK: Meta'nın Ads Insights API'sinde ilgi alanı kırılımı
+   * bulunmuyor (hedefleme girdisi, raporlanan boyut değil) ve Google'da
+   * kısmi. Tek platformda yarım çalışan bir bölüm, raporda "Meta'da neden
+   * boş" sorusunu doğurur.
+   */
+  'audience_age',
+  'audience_gender',
+  'audience_placement',
+  'audience_hour',
+  'audience_city',
   'top_ads',
   'closing',
 ] as const;
@@ -68,6 +86,11 @@ export const SECTION_LABELS: Record<ReportSection, string> = {
   google_campaigns: 'Kampanyalar — Google Ads',
   google_keywords: 'Anahtar Kelime Performansı',
   google_search_terms: 'Arama Terimleri',
+  audience_age: 'Yaş Dağılımı',
+  audience_gender: 'Cinsiyet Dağılımı',
+  audience_placement: 'Yerleşim ve Ağ',
+  audience_hour: 'Saat Aralığı',
+  audience_city: 'Şehir Dağılımı',
   top_ads: 'Öne Çıkan Reklamlar',
   closing: 'Kapanış',
 };
@@ -163,6 +186,19 @@ export const reportQuerySchema = z
     to: isoDate,
     /** Şablon verilmezse organizasyon varsayılanı kullanılıyor. */
     templateId: z.string().uuid().optional(),
+    /*
+     * VARSAYILAN ŞABLON KODU — `templateId`den AYRI bir alan.
+     *
+     * Üç varsayılan şablon kodda duruyor, veritabanında değil; onların bir
+     * UUID'si yok. Aynı alanı paylaşsalardı `templateId`nin bazen UUID
+     * bazen "google" olması gerekirdi ve doğrulama ikisini de kabul etmek
+     * zorunda kalırdı — o da geçersiz bir UUID'nin sessizce "bilinmeyen
+     * şablon" sayılması demekti.
+     *
+     * İkisi birden verilirse `templateId` KAZANIYOR: kullanıcının kendi
+     * şablonu, varsayılan bir ön ayardan daha açık bir tercih.
+     */
+    sablon: z.enum(['genel', 'google', 'meta']).optional(),
   })
   .refine((v) => v.from <= v.to, {
     message: 'Başlangıç tarihi bitiş tarihinden sonra olamaz',
@@ -374,6 +410,44 @@ export interface ReportDailyPoint {
   spendMicros: string;
 }
 
+/**
+ * ═══ KIRILIM SATIRI — rapordaki kitle tabloları ═══
+ *
+ * Boyutun DEĞERİ ham geliyor ("25-34", "FEMALE", "instagram · feed", "14",
+ * "Izmir") ve gösterimde çevriliyor. Ham saklamanın gerekçesi şemada:
+ * Meta "unknown", Google "UNDETERMINED" diyor ve ikisi aynı şey değil —
+ * yazma anında birleştirmek geri alınamaz bir kayıp.
+ */
+export interface ReportBreakdownRow {
+  value: string;
+  impressions: number;
+  clicks: number;
+  spendMicros: string;
+  conversions: number;
+  /** Bu satırın toplam harcamadaki payı, 0-100. Tabloda çubuk olarak çiziliyor. */
+  sharePct: number;
+}
+
+export interface ReportBreakdownBlock {
+  dimension: 'age' | 'gender' | 'placement' | 'hour' | 'city';
+  rows: ReportBreakdownRow[];
+  /**
+   * Bu kırılımı VERMEYEN platformlar.
+   *
+   * Boş satır listesiyle AYNI ŞEY DEĞİL: "bu dönemde veri yok" ile "bu
+   * platform bu kırılımı hiç vermiyor" farklı iki hâl ve ikincisi raporda
+   * AÇIKÇA yazılmalı — aksi hâlde müşteri eksik veriyi ajansın hatası sanar.
+   */
+  unsupportedPlatforms: string[];
+  /**
+   * Kesilen satır sayısı. Sessiz kesme yok: 40 şehirden 10'u gösteriliyorsa
+   * "diğer 30" satırı toplamı taşıyor, yoksa tablo toplamı ana rakamı
+   * tutmuyor gibi görünürdü.
+   */
+  otherCount: number;
+  otherSpendMicros: string;
+}
+
 export interface ReportData {
   client: { id: string; name: string };
   branding: {
@@ -408,6 +482,14 @@ export interface ReportData {
   googleCampaigns: ReportCampaignRow[];
   /** Günlük dönüşüm serisi — grafiğin verisi. */
   daily: ReportDailyPoint[];
+  /**
+   * Kitle kırılımları — boyut başına bir blok.
+   *
+   * SEÇİLMEYEN BOYUT HİÇ ÜRETİLMİYOR: şablonda `audience_city` yoksa o sorgu
+   * hiç koşmuyor. Hepsini üretip gösterimde elemek, beş sorgunun dördünü
+   * boşa koşmak demekti.
+   */
+  breakdowns: ReportBreakdownBlock[];
   topAds: Array<{
     id: string;
     name: string;
@@ -621,4 +703,99 @@ export const COLUMN_TOTALS: Record<
 /** Ondalık birimden micros dizgesine — `formatMoney` micros bekliyor. */
 function microsOf(v: number | null): string | null {
   return v === null ? null : String(Math.round(v * 1_000_000));
+}
+
+
+/**
+ * ═══ VARSAYILAN ŞABLONLAR ═══
+ *
+ * Üçü de KODDA, veritabanında değil. Gerekçe: her organizasyona seed ile
+ * yazılan üç satır, kullanıcı birini silince geri gelmeyen bir varsayılan
+ * demekti — ve "Google şablonu nereye gitti" sorusunun cevabı hiçbir yerde
+ * yazmazdı. Kodda duran şablon her zaman var; kullanıcının kendi şablonları
+ * bunların YANINA ekleniyor.
+ *
+ * KIRILIMLAR PLATFORM ŞABLONLARINDA AÇIK, GENELDE KAPALI. Genel rapor
+ * müşteriye giden özet: yaş ve saat tabloları onu üç sayfa uzatıyor ve
+ * "reklamlarım ne yaptı" sorusunu cevaplamıyor. Kullanıcı isterse Rapor
+ * Şablonları ekranından kendi şablonuna ekliyor — bölümler orada zaten
+ * seçilebilir.
+ */
+export const VARSAYILAN_SABLONLAR = [
+  {
+    kod: 'genel',
+    ad: 'Genel Rapor',
+    aciklama: 'Meta ve Google birlikte — müşteriye giden özet.',
+    sections: [
+      'cover',
+      'summary',
+      'meta_campaigns',
+      'google_campaigns',
+      'google_keywords',
+      'google_search_terms',
+      'top_ads',
+      'closing',
+    ],
+  },
+  {
+    kod: 'google',
+    ad: 'Google Ads Şablonu',
+    aciklama: 'Yalnızca Google — anahtar kelime, arama terimi ve kitle kırılımları.',
+    sections: [
+      'cover',
+      'summary',
+      'google_campaigns',
+      'google_keywords',
+      'google_search_terms',
+      'audience_age',
+      'audience_gender',
+      'audience_placement',
+      'audience_hour',
+      'audience_city',
+      'top_ads',
+      'closing',
+    ],
+  },
+  {
+    kod: 'meta',
+    ad: 'Meta Ads Şablonu',
+    aciklama: 'Yalnızca Meta — yerleşim ve kitle kırılımları.',
+    sections: [
+      'cover',
+      'summary',
+      'meta_campaigns',
+      'audience_age',
+      'audience_gender',
+      'audience_placement',
+      'audience_hour',
+      'audience_city',
+      'top_ads',
+      'closing',
+    ],
+  },
+] as const satisfies ReadonlyArray<{
+  kod: string;
+  ad: string;
+  aciklama: string;
+  sections: readonly ReportSection[];
+}>;
+
+export type VarsayilanSablonKodu = (typeof VARSAYILAN_SABLONLAR)[number]['kod'];
+
+export function varsayilanSablon(kod: string | undefined | null) {
+  return VARSAYILAN_SABLONLAR.find((s) => s.kod === kod) ?? VARSAYILAN_SABLONLAR[0];
+}
+
+/**
+ * Şablon PLATFORMA daraltıyor mu.
+ *
+ * Google şablonunda Meta kampanyaları YOK ve bu yalnızca bölüm listesiyle
+ * çözülmüyor: özet kartları, günlük seri ve kitle kırılımları da yalnızca o
+ * platformu göstermeli. Aksi hâlde "Google Ads Şablonu" başlıklı raporun
+ * özetinde Meta harcaması görünür ve tablolar toplamı tutmaz.
+ */
+export function sablonPlatformu(kod: string | undefined | null): 'meta' | 'google' | null {
+  if (kod === 'google') return 'google';
+  if (kod === 'meta') return 'meta';
+  return null;
 }

@@ -764,8 +764,25 @@ describe('PDF görselliği', () => {
      * sayfa altbilgisi ve platform pay çubuğu benim eklemelerimdi ve
      * referansta yok. Biri geri eklenirse belge yeniden panelden ayrışır.
      */
+    /*
+     * TARAMA YORUMLARI ATIYOR — ve bu düzeltme bekçinin kendisini
+     * güçlendiriyor.
+     *
+     * İlk hâli ham kaynağa bakıyordu ve yasağın SEBEBİNİ anlatan bir yorum
+     * ("çubuk çizmek `payCubugu` kalıntısını geri getirirdi") bekçiyi
+     * tetikliyordu. Depo kuralının tersi: iddia yoruma değil KODA çapalanır.
+     * Yorumları atmak, hem yanlış alarmı bitiriyor hem de yasaklı desenin
+     * yalnızca kodda arandığını garanti ediyor.
+     */
+    const kod = KAYNAK.split('\n')
+      .filter((l) => {
+        const t = l.trim();
+        return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+      })
+      .join('\n');
+
     for (const yasak of ['payCubugu', 'altbilgi(', 'acikTon(', 'const BANT']) {
-      expect(KAYNAK, `${yasak} geri gelmiş`).not.toContain(yasak);
+      expect(kod, `${yasak} geri gelmiş`).not.toContain(yasak);
     }
   });
 

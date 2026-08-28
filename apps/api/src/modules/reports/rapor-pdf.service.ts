@@ -18,7 +18,7 @@ import {
 } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
-import { donusumGrafigi, okunakliYazi, renk, rozet, SLATE, tablo } from './pdf-cizim';
+import { donusumGrafigi, kisalt, okunakliYazi, renk, rozet, SLATE, tablo } from './pdf-cizim';
 
 /** A4, punto cinsinden. */
 const EN = 595.28;
@@ -127,6 +127,13 @@ export class RaporPdfService {
           break;
         case 'google_search_terms':
           this.aramaTerimleri(ctx);
+          break;
+        case 'audience_age':
+        case 'audience_gender':
+        case 'audience_placement':
+        case 'audience_hour':
+        case 'audience_city':
+          this.kirilim(ctx, bolum);
           break;
         case 'top_ads':
           this.enIyiReklamlar(ctx);
@@ -339,6 +346,23 @@ export class RaporPdfService {
     return ctx.data.platforms.map((p) => p.label).join(' · ') || 'Veri yok';
   }
 
+  /**
+   * Tablonun üstünde tek satırlık gri not.
+   *
+   * `bosKutu` DEĞİL: o "hiç veri yok" demek ve çerçeveli bir kutu çiziyor.
+   * Bu not tablonun YANINDA duruyor — veri var ama kapsamı dar.
+   */
+  private notSatiri(ctx: Ctx, s: PDFPage, y: number, metin: string): number {
+    s.drawText(kisalt(metin, ctx.normal, 8, EN - 2 * KENAR), {
+      x: KENAR,
+      y: y - 10,
+      size: 8,
+      font: ctx.normal,
+      color: SLATE.s500,
+    });
+    return y - 22;
+  }
+
   /** Panelin `Empty` bileşeni: kesikli çerçeveli, ortalanmış açıklama. */
   private bosKutu(ctx: Ctx, s: PDFPage, y: number, metin: string): void {
     s.drawRectangle({
@@ -521,6 +545,98 @@ export class RaporPdfService {
    * bilgisi: "ikon cadde satılık" sorgusu "ikon tower" ile eşleşiyorsa
    * orada yanlış bir eşleşme var ve para oraya akıyor.
    */
+  /**
+   * ═══ KİTLE KIRILIMI — panelle AYNI tablo ═══
+   *
+   * Beş bölüm tek çiziciden geçiyor: dördü tek satır farkla aynı tablo ve
+   * beş kopya, bir sütun eklendiğinde dördünün unutulması demekti. PDF'te üç
+   * tablonun üç ayrı şekilde çizilmesi tam olarak bu yüzden ayrışmıştı.
+   *
+   * PAY SÜTUNU METİN, ÇUBUK DEĞİL. Panelde çubuk var ama PDF'te vektörel bir
+   * çubuk çizmek `payCubugu` kalıntısını geri getirirdi — o desen "çok
+   * pastel boya çizimi" geri bildiriminin kaynağıydı ve regresyon bekçisi
+   * onu yasaklıyor.
+   */
+  private kirilim(ctx: Ctx, bolum: KirilimBolumu): void {
+    const s = ctx.doc.addPage([EN, BOY]);
+    const boyut = PDF_BOLUM_BOYUT[bolum];
+    const blok = ctx.data.breakdowns.find((b) => b.dimension === boyut);
+    const y0 = this.baslik(ctx, s, SECTION_LABELS[bolum], this.platformAdlari(ctx));
+
+    if (!blok || blok.rows.length === 0) {
+      /*
+       * BOŞ HÂLİN SEBEBİ YAZILI. Kırılım gecelik süpürmeyle toplanıyor;
+       * "veri yok" demek, kullanıcıyı olmayan bir arızayı aramaya gönderir.
+       */
+      this.bosKutu(
+        ctx,
+        s,
+        y0,
+        'Bu dönemde kırılım verisi yok. Kırılımlar gecelik güncellemeyle toplanıyor.',
+      );
+      return;
+    }
+
+    let y = y0;
+    // DESTEKLENMEYEN PLATFORM AÇIKÇA — boş tabloyla aynı şey değil.
+    if (blok.unsupportedPlatforms.length > 0) {
+      const adlar = blok.unsupportedPlatforms
+        .map((p) => (p === 'google' ? 'Google Ads' : 'Meta'))
+        .join(', ');
+      y = this.notSatiri(
+        ctx,
+        s,
+        y,
+        `${adlar} bu kırılımı raporlamıyor — tablo diğer platformu kapsıyor.`,
+      );
+    }
+
+    const para = (m: string): string => formatMoney(m, ctx.data.currency);
+    /*
+     * "DİĞER" SATIRI TABLONUN İÇİNDE, toplam satırı olarak DEĞİL: o bir
+     * toplam değil, kesilen satırların birikimi. Toplam satırı olarak
+     * çizmek onu tablonun tamamının toplamı sanmaya yol açardı.
+     */
+    const satirlar = [
+      ...blok.rows.map((r) => ({ ...r, diger: false })),
+      ...(blok.otherCount > 0
+        ? [
+            {
+              value: `Diğer (${blok.otherCount})`,
+              spendMicros: blok.otherSpendMicros,
+              sharePct: 0,
+              impressions: 0,
+              clicks: 0,
+              conversions: 0,
+              diger: true,
+            },
+          ]
+        : []),
+    ];
+
+    const { y: son, cizilen } = tablo(s, {
+      sutunlar: [
+        { baslik: PDF_BOYUT_BASLIK[boyut] ?? 'Değer', pay: 30, deger: (r) => pdfKirilimEtiketi(boyut, r.value, r.diger) },
+        // PARA SÜTUNU DİĞERLERİNDEN GENİŞ: eşit paylaştırmada tutar
+        // kırpılıyor ve kırpılmış bir para tutarı yanlış sayı göstermekle aynı.
+        { baslik: 'Harcama', pay: 18, sag: true, kalinDeger: true, deger: (r) => para(r.spendMicros) },
+        { baslik: 'Pay', pay: 10, sag: true, deger: (r) => (r.diger ? '' : `%${r.sharePct.toFixed(1)}`) },
+        { baslik: 'Gösterim', pay: 14, sag: true, deger: (r) => (r.diger ? '' : formatNumber(r.impressions)) },
+        { baslik: 'Tıklama', pay: 14, sag: true, deger: (r) => (r.diger ? '' : formatNumber(r.clicks)) },
+        { baslik: 'Dönüşüm', pay: 14, sag: true, deger: (r) => (r.diger ? '' : formatNumber(r.conversions)) },
+      ],
+      satirlar,
+      x: KENAR,
+      y,
+      genislik: EN - 2 * KENAR,
+      altSinir: KENAR + 20,
+      normal: ctx.normal,
+      kalin: ctx.kalin,
+    });
+
+    this.sigmayanlar(ctx, s, son, cizilen, satirlar.length, 'satır');
+  }
+
   private aramaTerimleri(ctx: Ctx): void {
     const s = ctx.doc.addPage([EN, BOY]);
     let y = this.baslik(ctx, s, SECTION_LABELS.google_search_terms, 'Google Ads');
@@ -1223,4 +1339,59 @@ const AYLAR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 
 function gun(iso: string): string {
   const [y, a, g] = iso.split('-');
   return `${Number(g)} ${AYLAR[Number(a) - 1]} ${y}`;
+}
+
+
+/** Rapor bölümü → kırılım boyutu. Panelin `BOLUM_BOYUT`u ile aynı eşleme. */
+type KirilimBolumu =
+  | 'audience_age'
+  | 'audience_gender'
+  | 'audience_placement'
+  | 'audience_hour'
+  | 'audience_city';
+
+const PDF_BOLUM_BOYUT: Record<KirilimBolumu, string> = {
+  audience_age: 'age',
+  audience_gender: 'gender',
+  audience_placement: 'placement',
+  audience_hour: 'hour',
+  audience_city: 'city',
+};
+
+const PDF_BOYUT_BASLIK: Record<string, string> = {
+  age: 'Yaş aralığı',
+  gender: 'Cinsiyet',
+  placement: 'Yerleşim / ağ',
+  hour: 'Saat',
+  city: 'Şehir',
+};
+
+/**
+ * Ham platform değerini okunur hâle çevirir — PANELLE AYNI harita.
+ *
+ * İki tarafın ayrışması, aynı raporun ekranda "Kadın" PDF'te "female"
+ * göstermesi demekti; kullanıcı ikisini yan yana açıyor.
+ *
+ * TANINMAYAN DEĞER OLDUĞU GİBİ: haritada olmayanı "Diğer"e atmak, yeni bir
+ * platform kovası eklendiğinde onu sessizce gizlerdi.
+ */
+function pdfKirilimEtiketi(boyut: string, deger: string, diger: boolean): string {
+  if (diger) return deger;
+  if (boyut === 'hour') return `${deger}:00 — ${deger}:59`;
+  const harita: Record<string, string> = {
+    female: 'Kadın',
+    FEMALE: 'Kadın',
+    male: 'Erkek',
+    MALE: 'Erkek',
+    unknown: 'Bilinmiyor',
+    UNDETERMINED: 'Belirlenemedi',
+    UNKNOWN: 'Bilinmiyor',
+    SEARCH: 'Arama ağı',
+    SEARCH_PARTNERS: 'Arama ortakları',
+    CONTENT: 'Görüntülü reklam ağı',
+    YOUTUBE_SEARCH: 'YouTube arama',
+    YOUTUBE_WATCH: 'YouTube video',
+    MIXED: 'Karma',
+  };
+  return harita[deger] ?? deger;
 }

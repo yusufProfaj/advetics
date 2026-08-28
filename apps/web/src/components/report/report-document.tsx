@@ -10,6 +10,7 @@ import {
   CONVERSION_BUCKETS,
   DEFAULT_COLUMNS,
   METRIC_LABELS,
+  SECTION_LABELS,
   resolveColumns,
   sumRows,
   COLUMN_TOTALS,
@@ -104,6 +105,12 @@ export function ReportDocument({ data }: { data: ReportData }) {
               return <Keywords key={section} data={data} />;
             case 'google_search_terms':
               return <SearchTerms key={section} data={data} />;
+            case 'audience_age':
+            case 'audience_gender':
+            case 'audience_placement':
+            case 'audience_hour':
+            case 'audience_city':
+              return <Kirilim key={section} data={data} section={section} />;
             case 'top_ads':
               return <TopAds key={section} data={data} />;
             case 'closing':
@@ -759,6 +766,166 @@ function Closing({ data }: { data: ReportData }) {
 /* -------------------------------------------------------------------------- */
 /* Parçalar                                                                    */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * ═══ KİTLE KIRILIMI TABLOSU ═══
+ *
+ * Beş bölüm tek bileşenden çiziliyor: dördü tek satır farkla aynı tablo ve
+ * beş kopya, bir sütun eklendiğinde dördünün unutulması demekti.
+ *
+ * PAY ÇUBUĞU SAYININ YANINDA, YERİNE DEĞİL. Yalnızca çubuk göstermek
+ * "İzmir ne kadar harcadı" sorusunu cevapsız bırakıyor; yalnızca sayı ise
+ * dağılımı okumak için satırları zihinden karşılaştırmayı gerektiriyor.
+ */
+function Kirilim({
+  data,
+  section,
+}: {
+  data: ReportData;
+  section: 'audience_age' | 'audience_gender' | 'audience_placement' | 'audience_hour' | 'audience_city';
+}) {
+  const boyut = BOLUM_BOYUT[section];
+  const blok = data.breakdowns.find((b) => b.dimension === boyut);
+  const money = data.currency;
+
+  return (
+    <section className="rpt-page">
+      {/*
+        ALT BAŞLIK KAPSAMI SÖYLÜYOR. Şablon platformu daraltıyorsa tablo
+        yalnızca onu kapsıyor ve bunu yazmamak, toplamı ana rakamdan küçük
+        gören müşteride "eksik" izlenimi bırakırdı.
+      */}
+      <PageHead title={SECTION_LABELS[section]} subtitle={platformNames(data)} />
+
+      {/*
+        DESTEKLENMEYEN PLATFORM AÇIKÇA YAZILIYOR — boş tabloyla aynı şey değil.
+        "Bu dönemde veri yok" ile "bu platform bu kırılımı hiç vermiyor"
+        farklı iki hâl; ikincisini yazmamak, müşterinin eksik veriyi ajansın
+        hatası sanması demek.
+      */}
+      {blok && blok.unsupportedPlatforms.length > 0 && (
+        <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+          {blok.unsupportedPlatforms.map((p) => (p === 'google' ? 'Google Ads' : 'Meta')).join(', ')}
+          {' '}bu kırılımı raporlamıyor — tablodaki sayılar diğer platformu kapsıyor.
+        </p>
+      )}
+
+      {!blok || blok.rows.length === 0 ? (
+        /*
+          BOŞ HÂLİN SEBEBİ YAZILI. Kırılım verisi gecelik süpürmeyle
+          toplanıyor ve hesap yeni bağlandıysa henüz hiç koşmamış olabilir —
+          "veri yok" demek, kullanıcıyı olmayan bir arızayı aramaya gönderir.
+        */
+        <p className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+          Bu dönemde {SECTION_LABELS[section].toLocaleLowerCase('tr')} verisi yok. Kırılımlar
+          gecelik güncellemeyle toplanıyor; hesap yeni bağlandıysa ilk veri ertesi gün geliyor.
+        </p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-300 text-left text-[11px] uppercase tracking-wide text-slate-500">
+              <th className="py-1.5 font-medium">{BOYUT_BASLIK[boyut]}</th>
+              <th className="py-1.5 text-right font-medium">Harcama</th>
+              <th className="py-1.5 pl-3 font-medium">Pay</th>
+              <th className="py-1.5 text-right font-medium">Gösterim</th>
+              <th className="py-1.5 text-right font-medium">Tıklama</th>
+              <th className="py-1.5 text-right font-medium">Dönüşüm</th>
+            </tr>
+          </thead>
+          <tbody>
+            {blok.rows.map((r) => (
+              <tr key={r.value} className="border-b border-slate-100">
+                <td className="py-1.5">{kirilimEtiketi(boyut, r.value)}</td>
+                <td className="py-1.5 text-right tabular-nums">
+                  {formatMoney(r.spendMicros, money)}
+                </td>
+                <td className="py-1.5 pl-3">
+                  <span className="flex items-center gap-2">
+                    <span className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                      <span
+                        className="block h-full rounded-full bg-[var(--rpt-brand)]"
+                        style={{ width: `${Math.min(100, r.sharePct)}%` }}
+                      />
+                    </span>
+                    <span className="text-[11px] tabular-nums text-slate-500">
+                      %{r.sharePct.toFixed(1)}
+                    </span>
+                  </span>
+                </td>
+                <td className="py-1.5 text-right tabular-nums">{formatNumber(r.impressions)}</td>
+                <td className="py-1.5 text-right tabular-nums">{formatNumber(r.clicks)}</td>
+                <td className="py-1.5 text-right tabular-nums">{formatNumber(r.conversions)}</td>
+              </tr>
+            ))}
+
+            {/*
+              KESİLEN SATIRLAR "DİĞER"DE — atılmıyor. 81 ilin hepsini
+              listelemek raporu okunamaz kılar ama kesilenleri atmak tablo
+              toplamını ana rakamdan küçük gösterir ve müşteri "eksik" der.
+            */}
+            {blok.otherCount > 0 && (
+              <tr className="border-b border-slate-100 text-slate-500">
+                <td className="py-1.5">Diğer ({blok.otherCount})</td>
+                <td className="py-1.5 text-right tabular-nums">
+                  {formatMoney(blok.otherSpendMicros, money)}
+                </td>
+                <td colSpan={4} />
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+/** Bölüm → boyut. Ad türetmek yerine açık eşleme — servisle aynı gerekçe. */
+const BOLUM_BOYUT = {
+  audience_age: 'age',
+  audience_gender: 'gender',
+  audience_placement: 'placement',
+  audience_hour: 'hour',
+  audience_city: 'city',
+} as const;
+
+const BOYUT_BASLIK: Record<string, string> = {
+  age: 'Yaş aralığı',
+  gender: 'Cinsiyet',
+  placement: 'Yerleşim / ağ',
+  hour: 'Saat',
+  city: 'Şehir',
+};
+
+/**
+ * Ham platform değerini okunur hâle çevirir.
+ *
+ * ÇEVİRİ GÖSTERİMDE, SAKLAMADA DEĞİL. Meta "female", Google "FEMALE" diyor
+ * ama Meta'nın "unknown" kovası ile Google'ın "UNDETERMINED"ı aynı şey değil;
+ * yazma anında birleştirmek geri alınamaz bir kayıp olurdu.
+ *
+ * TANINMAYAN DEĞER OLDUĞU GİBİ GÖSTERİLİYOR. Haritada olmayan bir değeri
+ * "Diğer"e atmak, yeni bir platform kovası eklendiğinde onu sessizce
+ * gizlerdi.
+ */
+function kirilimEtiketi(boyut: string, deger: string): string {
+  if (boyut === 'hour') return `${deger}:00 — ${deger}:59`;
+  const harita: Record<string, string> = {
+    female: 'Kadın',
+    FEMALE: 'Kadın',
+    male: 'Erkek',
+    MALE: 'Erkek',
+    unknown: 'Bilinmiyor',
+    UNDETERMINED: 'Belirlenemedi',
+    UNKNOWN: 'Bilinmiyor',
+    SEARCH: 'Arama ağı',
+    SEARCH_PARTNERS: 'Arama ortakları',
+    CONTENT: 'Görüntülü reklam ağı',
+    YOUTUBE_SEARCH: 'YouTube arama',
+    YOUTUBE_WATCH: 'YouTube video',
+    MIXED: 'Karma',
+  };
+  return harita[deger] ?? deger;
+}
 
 function PageHead({
   title,
