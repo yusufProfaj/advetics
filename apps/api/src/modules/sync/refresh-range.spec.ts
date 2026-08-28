@@ -29,6 +29,32 @@ const CTX: TenantContext = {
 let enqueued: Array<Record<string, unknown>>;
 let ctrl: SyncController;
 
+/**
+ * Hesap kümesi TESTTEN DEĞİŞTİRİLEBİLİR.
+ *
+ * Anahtar kelime ve arama terimi YALNIZCA Google hesaplarında iş açıyor;
+ * bunu sınamak için iki platformlu bir kurulum gerekiyor. Sabit bir fixture
+ * ile "Meta'da açılmıyor" iddiası yazılamazdı.
+ */
+let hesaplar: Array<Record<string, unknown>>;
+
+const META_HESAP = {
+  id: 'acc-1',
+  clientId: CLIENT,
+  platform: 'meta',
+  name: 'Hesap',
+  lastInsightsSyncAt: null,
+  lastStructureSyncAt: new Date('2026-08-15T00:00:00Z'),
+};
+const GOOGLE_HESAP = {
+  id: 'acc-g',
+  clientId: CLIENT,
+  platform: 'google',
+  name: 'Google Hesap',
+  lastInsightsSyncAt: null,
+  lastStructureSyncAt: new Date('2026-08-15T00:00:00Z'),
+};
+
 const bugun = (): string => new Date().toISOString().slice(0, 10);
 const gunOnce = (n: number): string => {
   const d = new Date();
@@ -38,21 +64,11 @@ const gunOnce = (n: number): string => {
 
 beforeEach(() => {
   enqueued = [];
+  hesaplar = [META_HESAP];
   const prisma = {
     withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) =>
       fn({
-        adAccount: {
-          findMany: async () => [
-            {
-              id: 'acc-1',
-              clientId: CLIENT,
-              platform: 'meta',
-              name: 'Hesap',
-              lastInsightsSyncAt: null,
-              lastStructureSyncAt: new Date('2026-08-15T00:00:00Z'),
-            },
-          ],
-        },
+        adAccount: { findMany: async () => hesaplar },
         socialProfile: { findMany: async () => [] },
       }),
   } as unknown as PrismaService;
@@ -167,6 +183,82 @@ describe('GEÇMİŞ İÇEREN ARALIK', () => {
       expect(kirilim?.delayMs).toBeUndefined();
       // Karşılaştırma: metrik işi GECİKİYOR.
       expect(enqueued.find((e) => e.jobType === 'insights_backfill')?.delayMs).toBeGreaterThan(0);
+    });
+  });
+
+  /**
+   * ═══ ANAHTAR KELİME VE ARAMA TERİMİ DE BU DÜĞMEDE ═══
+   *
+   * Kırılımlarda ve organik gönderilerde öğrenilen dersin aynısı: düğme
+   * raporun bir bölümüne hiç dokunmuyorsa adı ile yaptığı iş ayrışıyor.
+   * İkisi de Google şablonunun bölümleri.
+   */
+  describe('anahtar kelime ve arama terimi', () => {
+    it('KRİTİK: Google hesabında İKİSİ DE açılıyor', async () => {
+      hesaplar = [GOOGLE_HESAP];
+      await ctrl.refresh(CTX, { dateFrom: gunOnce(29), dateTo: bugun() });
+      expect(isler()).toContain('keyword_insights');
+      expect(isler()).toContain('search_terms');
+    });
+
+    it('KRİTİK: META hesabında HİÇ açılmıyor', async () => {
+      /*
+       * Meta'da anahtar kelime ve arama terimi diye bir şey YOK. Sağlayıcı
+       * boş dizi dönüyor ama iş yine de token çözer, kuyruk satırı yazar ve
+       * teşhis ekranında "0 satır" olarak görünüp "neden boş" sorusunu
+       * doğururdu.
+       */
+      hesaplar = [META_HESAP];
+      await ctrl.refresh(CTX, { dateFrom: gunOnce(29), dateTo: bugun() });
+      expect(isler()).not.toContain('keyword_insights');
+      expect(isler()).not.toContain('search_terms');
+    });
+
+    it('karışık portföyde YALNIZCA Google hesabına açılıyor', async () => {
+      hesaplar = [META_HESAP, GOOGLE_HESAP];
+      await ctrl.refresh(CTX, { dateFrom: gunOnce(29), dateTo: bugun() });
+      const kelime = enqueued.filter((e) => e.jobType === 'keyword_insights');
+      expect(kelime).toHaveLength(1);
+      expect(kelime[0]!.adAccountId).toBe('acc-g');
+    });
+
+    it('GEÇMİŞ aralığı alıyor, bugünü değil', async () => {
+      // İkisi de gün bazlı ve bugünün verisi kapanmamış.
+      hesaplar = [GOOGLE_HESAP];
+      await ctrl.refresh(CTX, { dateFrom: gunOnce(29), dateTo: bugun() });
+      expect(isi('keyword_insights')).toMatchObject({
+        dateFrom: gunOnce(29),
+        dateTo: gunOnce(1),
+      });
+    });
+
+    it('KRİTİK: YALNIZCA BUGÜN seçiliyse açılmıyor', async () => {
+      hesaplar = [GOOGLE_HESAP];
+      await ctrl.refresh(CTX, { dateFrom: bugun(), dateTo: bugun() });
+      expect(isler()).not.toContain('keyword_insights');
+      expect(isler()).not.toContain('search_terms');
+    });
+
+    it('KRİTİK: yapı taramasını BEKLİYORLAR', async () => {
+      /*
+       * İkisi de REKLAM GRUBUNA eşleniyor; yapı bitmeden koşarlarsa eşleşme
+       * bulunamıyor ve satır `ad_group_id = null` ile bağlamsız yazılıyor —
+       * atılmıyor ama raporda hangi gruba ait olduğu kayboluyor.
+       *
+       * Kırılımla KARŞILAŞTIRMA: o hesap seviyesinde toplanmış geliyor ve
+       * beklemiyor.
+       */
+      hesaplar = [GOOGLE_HESAP];
+      await ctrl.refresh(CTX, { dateFrom: gunOnce(29), dateTo: bugun() });
+      expect(
+        enqueued.find((e) => e.jobType === 'keyword_insights')?.delayMs,
+      ).toBeGreaterThan(0);
+      expect(
+        enqueued.find((e) => e.jobType === 'search_terms')?.delayMs,
+      ).toBeGreaterThan(0);
+      expect(
+        enqueued.find((e) => e.jobType === 'insights_breakdowns')?.delayMs,
+      ).toBeUndefined();
     });
   });
 });

@@ -453,7 +453,13 @@ export class SyncController {
 
     for (const account of accounts) {
       const isler: Array<{
-        jobType: 'structure' | 'insights_realtime' | 'insights_backfill' | 'insights_breakdowns';
+        jobType:
+          | 'structure'
+          | 'insights_realtime'
+          | 'insights_backfill'
+          | 'insights_breakdowns'
+          | 'keyword_insights'
+          | 'search_terms';
         dateFrom?: string;
         dateTo?: string;
       }> = [{ jobType: 'structure' }];
@@ -488,6 +494,29 @@ export class SyncController {
         isler.push({ jobType: 'insights_breakdowns', dateFrom, dateTo: gecmisSonu });
       }
 
+      /*
+       * ═══ ANAHTAR KELİME VE ARAMA TERİMİ DE BU DÜĞMEDE ═══
+       *
+       * Kırılımlarda ve organik gönderilerde öğrenilen dersin aynısı: düğme
+       * "Şimdi güncelle" diyor ama raporun bir bölümüne hiç dokunmuyorsa adı
+       * ile yaptığı iş ayrışıyor. İkisi de Google şablonunun bölümleri ve
+       * kullanıcı düğmeye basıp o tabloların boş kalmasını "arıza" diye
+       * okuyor.
+       *
+       * YALNIZCA GOOGLE HESAPLARINDA. Meta'da anahtar kelime ve arama terimi
+       * diye bir şey YOK; sağlayıcı boş dizi dönüyor ama iş yine de token
+       * çözüyor, kuyruk satırı yazıyor ve teşhis ekranında "0 satır" olarak
+       * görünüp "neden boş" sorusunu doğuruyor. Erken çıkış servislerde de
+       * var, burada iş HİÇ AÇILMIYOR.
+       *
+       * GEÇMİŞ ARALIK: ikisi de gün bazlı ve bugünün verisi kapanmamış.
+       * Gecelik süpürme de aynı pencereyi (son 7 gün) kullanıyor.
+       */
+      if (gecmisVar && account.platform === 'google') {
+        isler.push({ jobType: 'keyword_insights', dateFrom, dateTo: gecmisSonu });
+        isler.push({ jobType: 'search_terms', dateFrom, dateTo: gecmisSonu });
+      }
+
       for (const is of isler) {
         const res = await this.queue.enqueue({
           clientId: account.clientId,
@@ -512,6 +541,16 @@ export class SyncController {
            * GECİKME YALNIZCA METRİK İŞLERİNE. Yapı ve kırılım beklemiyor:
            * yapı zaten ilk iş, kırılım ise hiçbir varlık satırına
            * eşlenmediği için yapıya bağlı değil.
+           */
+          /*
+           * GECİKME KIRILIM DIŞINDAKİ HER ŞEYE. Metrikler kampanya satırına,
+           * anahtar kelime ve arama terimi ise REKLAM GRUBUNA eşleniyor;
+           * yapı taraması bitmeden koşarlarsa eşleşme bulunamıyor ve satır
+           * `ad_group_id = null` ile bağlamsız yazılıyor — atılmıyor ama
+           * raporda hangi gruba ait olduğu kayboluyor.
+           *
+           * Kırılım tek istisna: hesap seviyesinde toplanmış geliyor ve
+           * hiçbir varlık satırına eşlenmiyor.
            */
           ...(is.jobType === 'structure' || is.jobType === 'insights_breakdowns'
             ? {}
