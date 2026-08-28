@@ -1,6 +1,7 @@
 import type { ConnectionSummary, ProviderAvailability } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
 import { hasPermission, requireSession } from '@/lib/session';
+import { TopluTazeleme } from '@/components/connections/toplu-tazeleme';
 import { ConnectButtons } from '@/components/connect-buttons';
 import { ConnectionCard } from '@/components/connection-card';
 import { HavuzKartlari } from '@/components/connections/havuz-kartlari';
@@ -68,6 +69,17 @@ export default async function ConnectionsPage() {
           tıklayınca 403 almak demekti; TERSİ de aynı derecede kötü ve daha
           sessiz: yetkisi olana göstermemek. Bu yüzden kapı `isOrgAdmin`e
           değil yetkinin kendisine bakıyor. */}
+      {/*
+        TOPLU TAZELEME EN ÜSTTE ve yalnızca org yöneticisine: uç
+        `@RequireOrgAdmin()` istiyor ve düğmeyi yetkisi olmayana göstermek,
+        tıklayınca 403 almak demekti.
+      */}
+      {session.isOrgAdmin && session.availableClients.length > 0 && (
+        <TopluTazeleme
+          workspaceler={session.availableClients.map((c) => ({ id: c.id, name: c.name }))}
+        />
+      )}
+
       {hasPermission(session, 'connection.manage') ? (
         <section className="rounded-xl border border-line bg-surface p-5">
           <h2 className="text-sm font-semibold">Yeni bağlantı</h2>

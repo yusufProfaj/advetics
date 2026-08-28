@@ -23,6 +23,78 @@ export const backfillSchema = z.object({
 export type BackfillInput = z.infer<typeof backfillSchema>;
 
 /**
+ * ═══ TOPLU VERİ TAZELEME ═══
+ *
+ * Seçilen workspace'lerin son N yılının BÜTÜN verisi tek tuşla. Maliyeti
+ * büyük ve geri alınamaz (kota harcanıyor), bu yüzden `apply: false`
+ * varsayılan: önce ne olacağı söyleniyor, sonra uygulanıyor. `sync-cli` ve
+ * `backfill` ucunun deseni bu ve sebebi somut — kapsamsız çalıştırılan bir
+ * sürüm 27 hesaplık portföy için 288 hesap saymıştı.
+ */
+export const bulkRefreshSchema = z.object({
+  /** Seçilen workspace'ler. Boş = hiçbiri; "hepsi" diye örtük bir hâl YOK. */
+  clientIds: z.array(z.string().uuid()).min(1).max(200),
+  /**
+   * Kaç yıl geriye. Üst sınır 3: Meta insights 37 ayla sınırlı ve daha
+   * fazlasını istemek platformdan boş yanıt almak demek — kullanıcıya
+   * "çektim ama veri yok" gibi görünürdü.
+   */
+  years: z.number().int().min(1).max(3).default(2),
+  /**
+   * Kitle kırılımları da çekilsin mi.
+   *
+   * VARSAYILAN KAPALI: pencere başına 5 ek platform çağrısı demek ve iki
+   * yılda bu, metrik maliyetinin yaklaşık iki katı. Açıkça istenmeli.
+   */
+  breakdowns: z.boolean().default(false),
+  apply: z.boolean().default(false),
+});
+export type BulkRefreshInput = z.infer<typeof bulkRefreshSchema>;
+
+export interface BulkRefreshEstimate {
+  applied: false;
+  clientCount: number;
+  accountCount: number;
+  /** Yapı taraması olmayan hesap sayısı — metrikleri yazılamaz, atlanıyor. */
+  noStructure: number;
+  windowCount: number;
+  jobCount: number;
+  dateFrom: string;
+  dateTo: string;
+}
+
+export interface BulkRefreshStarted {
+  applied: true;
+  batchId: string;
+  jobCount: number;
+  skipped: number;
+  accountCount: number;
+}
+
+export interface BulkRefreshProgress {
+  batchId: string;
+  dateFrom: string;
+  dateTo: string;
+  clientCount: number;
+  toplam: number;
+  tamamlanan: number;
+  dusen: number;
+  kosan: number;
+  bekleyen: number;
+  yuzde: number;
+  /** Saniye. `null` = henüz tahmin edilemiyor (örnek yetersiz). */
+  kalanSaniye: number | null;
+  bitti: boolean;
+  /**
+   * Şu an hangi aşamada — kullanıcıya "ne oluyor" demek için.
+   * Yüzde tek başına "neyin %40'ı" sorusunu cevaplamıyor.
+   */
+  asama: string;
+  /** Mükerrer engeline takılıp hiç açılmayan iş sayısı. */
+  atlanan: number;
+}
+
+/**
  * "Şimdi güncelle" gövdesi — EKRANDA SEÇİLİ ARALIK.
  *
  * Düğme bir süre yalnızca BUGÜNÜN verisini tazeliyordu. Kullanıcı "Son 30

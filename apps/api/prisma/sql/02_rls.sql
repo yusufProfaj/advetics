@@ -200,6 +200,7 @@ DECLARE
     'ad_drafts', 'ad_draft_assets',
     -- Anahtar kelime performansı
     'keyword_insights', 'search_term_insights', 'insight_breakdowns',
+    'sync_batches',
     -- Modül 8
     'bulk_batches', 'bulk_items',
     -- Formlar kütüphanesi
@@ -1198,6 +1199,21 @@ CREATE POLICY adv_keyword_insights_insert ON keyword_insights
 CREATE POLICY adv_keyword_insights_update ON keyword_insights
   FOR UPDATE USING (app.can_access_client(client_id))
              WITH CHECK (app.can_access_client(client_id));
+
+-- sync_batches — ORG KAPSAMLI, müşteri kapsamlı DEĞİL.
+--
+-- Parti birden çok workspace'i birden kapsıyor; `client_id` diye tek bir
+-- kolonu yok ve olamaz. Erişim org düzeyinde: partiyi başlatan da, ilerlemeyi
+-- izleyen de ajans personeli.
+CREATE POLICY adv_sync_batches_select ON sync_batches
+  FOR SELECT USING (app.has_context() AND org_id = app.current_org_id());
+
+CREATE POLICY adv_sync_batches_insert ON sync_batches
+  FOR INSERT WITH CHECK (app.has_context() AND org_id = app.current_org_id());
+
+CREATE POLICY adv_sync_batches_update ON sync_batches
+  FOR UPDATE USING (app.has_context() AND org_id = app.current_org_id())
+             WITH CHECK (app.has_context() AND org_id = app.current_org_id());
 
 -- insight_breakdowns — anahtar kelimeyle AYNI kural.
 --

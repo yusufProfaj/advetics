@@ -92,6 +92,7 @@ model Organization {
   branding        BrandingProfile[]
   auditLogs       AuditLog[]
   reportTemplates ReportTemplate[]
+  syncBatches     SyncBatch[]
   monthlyBudgets  MonthlyBudget[]
   rules           Rule[]
   organicPosts    OrganicPost[]
@@ -2059,6 +2060,52 @@ model KeywordInsight {
   @@map("keyword_insights")
 }
 
+/// ═══ TOPLU VERİ TAZELEME PARTİSİ ═══
+///
+/// "Tüm verileri güncelle" tek bir iş DEĞİL: seçilen her workspace'in her
+/// hesabı için yapı taraması + pencerelere bölünmüş metrik işleri açılıyor.
+/// İki yıl tek işte istenemiyor — `backfillSchema` üst sınırı 365 gün ve
+/// gerekçesi yazılı: tek seferde daha fazlası, iş başına dönen satır
+/// sayısını hesabın işleyemeyeceği boyuta çıkarıyor.
+///
+/// PARTİ KAYDI OLMADAN İLERLEME GÖSTERİLEMİYOR. `sync_jobs` satırlarını
+/// zamana göre süzmek denenebilirdi ama aynı anda koşan başka bir tazeleme
+/// ya da gecelik süpürme sayıyı bozardı — ilerleme çubuğu %140 gösterirdi.
+model SyncBatch {
+  id    String @id @default(uuid()) @db.Uuid
+  orgId String @map("org_id") @db.Uuid
+
+  /// Partiyi başlatan kullanıcı — "bunu kim tetikledi" sorusunun cevabı.
+  createdByUserId String @map("created_by_user_id") @db.Uuid
+
+  /// Kapsanan workspace kimlikleri. Ayrı bir tablo değil: parti kısa ömürlü
+  /// ve liste yalnızca özet metninde kullanılıyor.
+  clientIds String[] @map("client_ids") @db.Uuid
+
+  dateFrom DateTime @map("date_from") @db.Date
+  dateTo   DateTime @map("date_to") @db.Date
+
+  /// AÇILAN İŞ SAYISI — ilerleme yüzdesinin paydası.
+  ///
+  /// Kuyruğa eklenirken sayılıyor, sonradan `sync_jobs`tan türetilmiyor:
+  /// mükerrer engeline takılan bir iş satır yazmıyor ve payda küçülürdü —
+  /// yüzde %100'ü aşardı.
+  totalJobs Int @default(0) @map("total_jobs")
+
+  /// Mükerrer engeline takılıp HİÇ açılmayan iş sayısı. Sessizce
+  /// düşürülmüyor: kullanıcı "12 hesap seçtim, 9'u işlendi" görürse sebebini
+  /// bilmeli.
+  skippedJobs Int @default(0) @map("skipped_jobs")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  jobs         SyncJob[]
+
+  @@index([orgId, createdAt(sort: Desc)])
+  @@map("sync_batches")
+}
+
 model SyncJob {
   id       BigInt @id @default(autoincrement())
   clientId String @map("client_id") @db.Uuid
@@ -2097,6 +2144,10 @@ model SyncJob {
   errorCode    String? @map("error_code") @db.VarChar(80)
   errorMessage String? @map("error_message") @db.VarChar(1000)
 
+  /// Toplu tazeleme partisi — `null` = tek başına açılmış iş.
+  batchId     String?   @map("batch_id") @db.Uuid
+  batch       SyncBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
   startedAt   DateTime? @map("started_at") @db.Timestamptz(6)
   finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
   nextRetryAt DateTime? @map("next_retry_at") @db.Timestamptz(6)
@@ -2107,6 +2158,7 @@ model SyncJob {
   @@index([clientId, createdAt(sort: Desc)])
   @@index([status, nextRetryAt])
   @@index([adAccountId, jobType, createdAt(sort: Desc)])
+  @@index([batchId])
   @@map("sync_jobs")
 }
 

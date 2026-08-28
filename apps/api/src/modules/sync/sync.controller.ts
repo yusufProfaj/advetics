@@ -5,11 +5,20 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
   Post,
+  Req,
 } from '@nestjs/common';
 import {
   backfillSchema,
+  bulkRefreshSchema,
   refreshRangeSchema,
+  type BulkRefreshEstimate,
+  type BulkRefreshInput,
+  type BulkRefreshProgress,
+  type BulkRefreshStarted,
   type BackfillInput,
   type RefreshRangeInput,
   type SyncAccountStatus,
@@ -19,11 +28,26 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { Prisma, type SyncJobType } from '@prisma/client';
-import { CurrentTenant, RequirePermissions } from '../../common/decorators';
+import { CurrentTenant, RequireOrgAdmin, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { supurmeDisiSebep } from '../../queue/supurme-kapsami';
+import { AuditService } from '../audit/audit.service';
+import type { AuthedRequest } from '../../common/types/request';
+import { EN_AZ_ORNEK, ilerleme, pencereler, planla } from './toplu-tazeleme';
+
+/**
+ * İş türü → kullanıcıya gösterilecek aşama metni.
+ *
+ * Yüzde tek başına "neyin %40'ı" sorusunu cevaplamıyor; aşama metni onu
+ * cevaplıyor ve TAHMİNLE DEĞİL en son koşan işin türünden türetiliyor.
+ */
+const ASAMA_METNI: Partial<Record<string, string>> = {
+  structure: 'Kampanya yapısı taranıyor',
+  insights_backfill: 'Geçmiş metrikler çekiliyor',
+  insights_breakdowns: 'Kitle kırılımları çekiliyor',
+};
 
 /**
  * Panelden senkronizasyon tetikleme — "Şimdi güncelle".
@@ -159,6 +183,7 @@ export class SyncController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: SyncQueueService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -644,6 +669,241 @@ export class SyncController {
       }),
     );
     return rows.filter((p): p is typeof p & { clientId: string } => p.clientId !== null);
+  }
+
+  /**
+   * ═══ TOPLU VERİ TAZELEME ═══
+   *
+   * Seçilen workspace'lerin son N yılının bütün verisi. `backfill` ucundan
+   * farkı: TEK MÜŞTERİ değil, seçilen workspace'lerin HEPSİ; ve aralık tek
+   * bir işe sığmadığı için pencerelere bölünüyor.
+   *
+   * `apply: false` (varsayılan) HİÇBİR ŞEY YAPMIYOR, yalnızca ne olacağını
+   * söylüyor. Kota geri alınamaz biçimde harcanıyor ve iki yıllık bir tazeleme
+   * yüzlerce çağrı demek — kullanıcı ne kadar olduğunu görmeden basmamalı.
+   *
+   * AKTİF MÜŞTERİ SEÇİMİ ARANMIYOR — `backfill`in aksine. Bu uç zaten hangi
+   * workspace'lerin kapsandığını AÇIKÇA alıyor; ayrıca aktif müşteri istemek,
+   * "Tüm müşteriler" görünümündeyken düğmenin çalışmaması demekti ve düğmenin
+   * bulunduğu ekran (Platform Bağlantıları) tam olarak o görünümde açılıyor.
+   */
+  @Post('bulk-refresh')
+  @HttpCode(HttpStatus.OK)
+  @RequireOrgAdmin()
+  @RequirePermissions('sync.trigger')
+  async bulkRefresh(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(bulkRefreshSchema)) dto: BulkRefreshInput,
+    @Req() req: AuthedRequest,
+  ): Promise<BulkRefreshEstimate | BulkRefreshStarted> {
+    /*
+     * ERİŞİLEBİLİR OLMAYAN WORKSPACE SESSİZCE ATLANMIYOR.
+     * RLS zaten süzüyor ama fark kullanıcıya söylenmezse "12 seçtim, 9
+     * işlendi" hâli sebepsiz kalır.
+     */
+    const izinli = dto.clientIds.filter((id) => ctx.clientIds.includes(id));
+    if (izinli.length === 0) {
+      throw new BadRequestException('Seçilen workspace’lere erişiminiz yok.');
+    }
+
+    const tumHesaplar = await this.enabledAccounts(ctx);
+    const hesaplar = tumHesaplar.filter((a) => izinli.includes(a.clientId));
+
+    /*
+     * YAPI TARAMASI OLMAYAN HESAP ATLANMIYOR — yapı işi zaten planın İLK
+     * adımı ve aynı turda koşuyor. `backfill` ucunda atlanıyordu çünkü orada
+     * yapı işi açılmıyor; burada açılıyor ve atlamak, yeni bağlanan bir
+     * hesabın geçmişinin hiç gelmemesi demekti.
+     */
+    const yapisiz = hesaplar.filter((a) => a.lastStructureSyncAt === null).length;
+
+    const bugun = isoToday();
+    const dateTo = oncekiGun(bugun);
+    const dateFrom = isoDaysAgo(dto.years * 365);
+    const araliklar = pencereler(dateFrom, dateTo);
+
+    const plan = planla({
+      hesaplar: hesaplar.map((a) => ({
+        id: a.id,
+        clientId: a.clientId,
+        platform: a.platform as 'meta' | 'google',
+      })),
+      from: dateFrom,
+      to: dateTo,
+      kirilimlar: dto.breakdowns,
+    });
+
+    if (!dto.apply) {
+      return {
+        applied: false,
+        clientCount: izinli.length,
+        accountCount: hesaplar.length,
+        noStructure: yapisiz,
+        windowCount: araliklar.length,
+        jobCount: plan.length,
+        dateFrom,
+        dateTo,
+      };
+    }
+
+    if (hesaplar.length === 0) {
+      throw new BadRequestException(
+        'Seçilen workspace’lerde izlemeye alınmış hesap yok. Platform Bağlantıları ekranından izlemeye alın.',
+      );
+    }
+
+    const parti = await this.prisma.withTenant(ctx, (tx) =>
+      tx.syncBatch.create({
+        data: {
+          orgId: ctx.orgId,
+          createdByUserId: ctx.userId,
+          clientIds: izinli,
+          dateFrom: new Date(`${dateFrom}T00:00:00Z`),
+          dateTo: new Date(`${dateTo}T00:00:00Z`),
+        },
+        select: { id: true },
+      }),
+    );
+
+    let queued = 0;
+    let skipped = 0;
+    for (const is of plan) {
+      const res = await this.queue.enqueue({
+        clientId: is.clientId,
+        platform: is.platform,
+        jobType: is.jobType,
+        adAccountId: is.adAccountId,
+        batchId: parti.id,
+        /*
+         * `interactive` DEĞİL. Kullanıcı ekranda ilerlemeyi izliyor ama bu
+         * iş saatler sürüyor; `interactive` bayrağı kuyruktaki takılmış iş
+         * tespitini agresifleştiriyor ve yüzlerce işlik bir partide meşru
+         * gecikmeleri "takılmış" sayıp kaldırırdı.
+         */
+        ...(is.dateFrom ? { dateFrom: is.dateFrom, dateTo: is.dateTo } : {}),
+      });
+      if (res.enqueued) queued++;
+      else skipped++;
+    }
+
+    /*
+     * PAYDA KUYRUĞA GİREN İŞ SAYISI, PLANLANAN DEĞİL. Mükerrer engeline
+     * takılan iş `sync_jobs` satırı yazmıyor; planı payda yapmak yüzdeyi
+     * asla %100'e çıkarmazdı.
+     */
+    await this.prisma.withTenant(ctx, (tx) =>
+      tx.syncBatch.update({
+        where: { id: parti.id },
+        data: { totalJobs: queued, skippedJobs: skipped },
+      }),
+    );
+
+    await this.prisma.withTenant(ctx, (tx) =>
+      this.audit.record(tx, ctx, {
+        action: 'sync.bulk_refresh',
+        targetType: 'sync_batch',
+        targetId: parti.id,
+        after: { clientIds: izinli, dateFrom, dateTo, queued, skipped },
+        ip: req.ip ?? null,
+        userAgent: req.get('user-agent') ?? null,
+        requestId: req.requestId,
+      }),
+    );
+
+    return {
+      applied: true,
+      batchId: parti.id,
+      jobCount: queued,
+      skipped,
+      accountCount: hesaplar.length,
+    };
+  }
+
+  /**
+   * Parti ilerlemesi — çubuğun beslendiği yer.
+   *
+   * ORTALAMA SÜRE YALNIZCA BU PARTİDEN. Genel bir ortalama kullanmak, küçük
+   * bir hesabın hızlı işleriyle büyük bir hesabın yavaş işlerini karıştırıp
+   * tahmini sistematik olarak yanlış yapardı.
+   */
+  @Get('bulk-refresh/:id')
+  @RequirePermissions('insights.read')
+  async bulkRefreshProgress(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<BulkRefreshProgress> {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const parti = await tx.syncBatch.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          dateFrom: true,
+          dateTo: true,
+          clientIds: true,
+          totalJobs: true,
+          skippedJobs: true,
+        },
+      });
+      if (!parti) throw new NotFoundException('Tazeleme partisi bulunamadı');
+
+      const sayimlar = await tx.syncJob.groupBy({
+        by: ['status'],
+        where: { batchId: id },
+        _count: { _all: true },
+      });
+      const say = (s: string): number =>
+        sayimlar.find((r) => r.status === s)?._count._all ?? 0;
+
+      /*
+       * ORTALAMA SÜRE TAMAMLANMIŞ İŞLERDEN. `startedAt`/`finishedAt` ikisi
+       * de dolu olanlar sayılıyor: yalnızca `finishedAt`e bakmak, kuyrukta
+       * bekleme süresini de işlem süresi sanmak demekti ve tahmini kat kat
+       * şişirirdi.
+       */
+      const sureler = await tx.$queryRaw<Array<{ ort: number | null; n: bigint | number }>>(
+        Prisma.sql`
+          SELECT AVG(EXTRACT(EPOCH FROM (finished_at - started_at)))::float8 AS ort,
+                 COUNT(*) AS n
+          FROM sync_jobs
+          WHERE batch_id = ${id}::uuid
+            AND started_at IS NOT NULL
+            AND finished_at IS NOT NULL
+        `,
+      );
+      const ornek = Number(sureler[0]?.n ?? 0);
+      const ortalama = ornek >= EN_AZ_ORNEK ? (sureler[0]?.ort ?? null) : null;
+
+      const p = ilerleme(
+        parti.totalJobs,
+        { tamamlanan: say('succeeded'), dusen: say('failed'), kosan: say('running') },
+        ortalama,
+      );
+
+      /*
+       * AŞAMA METNİ — yüzde tek başına "neyin %40'ı" sorusunu cevaplamıyor.
+       * En son koşan işin türünden türetiliyor, tahminle değil.
+       */
+      const sonIs = await tx.syncJob.findFirst({
+        where: { batchId: id, status: { in: ['running', 'succeeded'] } },
+        orderBy: { createdAt: 'desc' },
+        select: { jobType: true, dateFrom: true, dateTo: true },
+      });
+      const asama = p.bitti
+        ? 'Tamamlandı'
+        : sonIs === null
+          ? 'Kuyrukta bekliyor'
+          : ASAMA_METNI[sonIs.jobType] ?? 'İşleniyor';
+
+      return {
+        batchId: parti.id,
+        dateFrom: parti.dateFrom.toISOString().slice(0, 10),
+        dateTo: parti.dateTo.toISOString().slice(0, 10),
+        clientCount: parti.clientIds.length,
+        ...p,
+        asama,
+        atlanan: parti.skippedJobs,
+      };
+    });
   }
 
   private async enabledAccounts(ctx: TenantContext) {

@@ -352,7 +352,7 @@ export async function createHarness(): Promise<Harness> {
         -- org_id/client_id iliskisi bir gun nullable olursa sessizce sizarlar.
         -- (Backtick YOK: sablon dizesini ortasindan kapatiyor — CLAUDE.md.)
         report_shares, report_templates, user_email_accounts,
-        insights_daily, keyword_insights, search_term_insights, insight_breakdowns,
+        insights_daily, keyword_insights, search_term_insights, insight_breakdowns, sync_batches,
         api_usage_log, sync_jobs,
         ads, creatives, ad_groups, campaigns,
         ad_accounts, social_profiles, platform_connections,

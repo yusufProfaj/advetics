@@ -103,6 +103,13 @@ export class SyncQueueService implements OnModuleDestroy {
     socialProfileId?: string;
     /** Modül 5 — kural işi. Bkz. SyncJobPayload.ruleId */
     ruleId?: string;
+    /**
+     * Toplu tazeleme partisi.
+     *
+     * İlerleme çubuğu bu kolona göre sayıyor; verilmezse iş tek başına
+     * açılmış sayılıyor ve hiçbir partinin yüzdesine karışmıyor.
+     */
+    batchId?: string;
     /** Potansiyel müşteri kimliği (`lead_fetch`). */
     externalLeadId?: string;
     /** Formun Meta kimliği (`leads_reconcile`). */
@@ -176,6 +183,9 @@ export class SyncQueueService implements OnModuleDestroy {
         socialProfileId: params.socialProfileId ?? null,
         jobType: params.jobType,
         entityLevel: params.entityLevel ?? null,
+        // TOPLU TAZELEME PARTİSİ. `null` = tek başına açılmış iş; ilerleme
+        // çubuğu bu kolona göre sayıyor.
+        batchId: params.batchId ?? null,
         // Prisma DATE kolonuna string veremiyor; burada Date'e çeviriyoruz ama
         // UTC gün başına sabitleyerek — kayma olmasın.
         dateFrom: params.dateFrom ? new Date(`${params.dateFrom}T00:00:00Z`) : null,
