@@ -207,13 +207,31 @@ describe('kırılım bölümleri', () => {
      * uzatıyor ve "reklamlarım ne yaptı" sorusunu cevaplamıyor. Kullanıcı
      * isterse Rapor Şablonları ekranından kendi şablonuna ekliyor.
      */
-    const kirilim = (kod: string) =>
-      VARSAYILAN_SABLONLAR.find((s) => s.kod === kod)!.sections.filter((b) =>
-        b.startsWith('audience_'),
-      );
-    expect(kirilim('genel')).toEqual([]);
-    expect(kirilim('google')).toHaveLength(5);
-    expect(kirilim('meta')).toHaveLength(5);
+    /*
+     * TABLOLAR VE ÖZET AYRI SAYILIYOR. Önceki hâli `audience_` önekiyle
+     * süzüp "beş tane" diyordu; kitle ÖZETİ bölümü eklendiğinde altı oldu ve
+     * test düştü — ama düşme sebebi bir hata değil, iddianın önek sayımına
+     * dayanmasıydı. Bölüm adları tek tek yazılıyor.
+     */
+    const bolumler = (kod: string): readonly string[] =>
+      VARSAYILAN_SABLONLAR.find((s) => s.kod === kod)!.sections;
+    const TABLOLAR = [
+      'audience_age',
+      'audience_gender',
+      'audience_placement',
+      'audience_hour',
+      'audience_city',
+    ];
+
+    for (const t of [...TABLOLAR, 'audience_overview']) {
+      expect(bolumler('genel'), `genel şablonda ${t} olmamalı`).not.toContain(t);
+    }
+    for (const kod of ['google', 'meta']) {
+      for (const t of TABLOLAR) {
+        expect(bolumler(kod), `${kod} şablonunda ${t} yok`).toContain(t);
+      }
+      expect(bolumler(kod)).toContain('audience_overview');
+    }
   });
 
   it('KRİTİK: seçilmeyen boyut HİÇ sorgulanmıyor', () => {
@@ -296,4 +314,45 @@ describe('PDF çizimi', () => {
       expect(kod(panel), `panel: ${deger}`).toContain(deger);
     }
   });
+  it('KRİTİK: kitle özeti PDF’te de çiziliyor', () => {
+    /*
+     * AYNI RAPORUN İKİ GÖSTERİMİ VAR. Panel bir bölümü çizip PDF çizmezse
+     * müşteriye giden belge ile ekran ayrışıyor — bu depoda bir kez yaşandı
+     * ve referans olarak panel seçildi. Bölüm eklendiğinde iki taraf da
+     * güncellenmek zorunda; test o zorunluluğun kendisi.
+     */
+    const k = kod(PDF);
+    expect(k).toContain("case 'audience_overview':");
+    expect(k).toContain('this.kitleOzeti(ctx)');
+  });
+
+  it('KRİTİK: PDF halkası YAY komutu kullanmıyor', () => {
+    /*
+     * `pdf-lib`in SVG yol ayrıştırıcısına `A` (arc) vermek sürüme bağlı bir
+     * bahis; `M`/`L`/`Z` her sürümde çalışıyor. Ayrıca tek dilim %100
+     * olduğunda yay dejenere olur ve HİÇBİR ŞEY çizilmez — tek cinsiyetli
+     * bir hesapta halka boş görünürdü.
+     */
+    const cizim = readFileSync(join(__dirname, 'pdf-cizim.ts'), 'utf8');
+    const i = cizim.indexOf('export function halka(');
+    expect(i, 'halka() bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const govde = cizim.slice(i, cizim.indexOf('\nexport function', i + 1));
+    expect(govde).toContain('drawSvgPath');
+    expect(govde).not.toMatch(/`A |A \$\{/);
+  });
+
+  it('KRİTİK: özet kartları TOPLAM bloğundan — panelle aynı', () => {
+    // Kırılım toplamı ana rakamı tutmayabiliyor (Meta "unknown" kovası);
+    // kartı kırılımdan türetmek kartla tablonun farklı sayı göstermesi
+    // demekti.
+    expect(kod(PDF)).toContain('const ozet = ctx.data.total ?? ctx.data.platforms[0] ?? null;');
+  });
+
+  it('dilim renkleri MARKA rengiyle başlıyor — panelle aynı sıra', () => {
+    // Farklı sıra, aynı kovanın belgede ve ekranda farklı renkte görünmesi
+    // demekti ve okuyan onları farklı şeyler sanardı.
+    expect(kod(PDF)).toContain('function pdfDilimRenkleri(markaRengi: RGB): RGB[]');
+    expect(kod(PDF)).toContain('return [markaRengi, SLATE.s700');
+  });
+
 });

@@ -18,6 +18,7 @@ import {
 } from '@advetics/shared';
 import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent, microsOf } from '@/lib/format';
+import { KitleOzetiIcerik } from './kitle-ozeti';
 import { ConversionChart } from './conversion-chart';
 
 /**
@@ -49,10 +50,32 @@ export function ReportDocument({ data }: { data: ReportData }) {
               --rpt-brand: ${escapeCss(branding.primaryColor)};
               --rpt-accent: ${escapeCss(branding.accentColor)};
             }
+            /*
+             * EKRANDA BÖLÜM AYRIMI — yazdırmada sayfa sonu zaten var ama
+             * EKRANDA hiçbir şey yoktu ve bölümler uç uca geliyordu.
+             * Kullanıcının tarifi: "tasarımda da çok bitişik".
+             *
+             * İnce bir kural + nefes payı; kart ya da gölge DEĞİL. Referans
+             * panel belgesi beyaz zemin ve ince slate kuralları üzerine
+             * kurulu, kutulanmış bölümler o dili bozardı (bir kez "çok
+             * pastel boya çizimi gibi olmuş" denmişti).
+             */
+            .rpt-page + .rpt-page {
+              margin-top: 3.5rem;
+              padding-top: 3rem;
+              border-top: 1px solid rgb(226 232 240);
+            }
             @media print {
               /* Her bölüm yeni sayfada — referans belgede de böyle. */
               .rpt-page { break-before: page; }
               .rpt-page:first-of-type { break-before: auto; }
+              /* Ekrandaki ayraç yazdırmada GEREKSİZ: sayfa sonu zaten
+                 ayırıyor ve çizgi sayfanın tepesinde yalnız kalırdı. */
+              .rpt-page + .rpt-page {
+                margin-top: 0;
+                padding-top: 0;
+                border-top: none;
+              }
               /* Tablo satırı iki sayfaya BÖLÜNMESİN: yarım satır okunamaz. */
               .rpt tr, .rpt .rpt-card { break-inside: avoid; }
               /* Tarayıcı varsayılanı arka planları basmıyor; marka rengi ve
@@ -105,6 +128,8 @@ export function ReportDocument({ data }: { data: ReportData }) {
               return <Keywords key={section} data={data} />;
             case 'google_search_terms':
               return <SearchTerms key={section} data={data} />;
+            case 'audience_overview':
+              return <KitleOzeti key={section} data={data} />;
             case 'audience_age':
             case 'audience_gender':
             case 'audience_placement':
@@ -925,6 +950,47 @@ function kirilimEtiketi(boyut: string, deger: string): string {
     MIXED: 'Karma',
   };
   return harita[deger] ?? deger;
+}
+
+/**
+ * KİTLE ÖZETİ BÖLÜMÜ.
+ *
+ * İçerik ayrı dosyada (`kitle-ozeti.tsx`) çünkü halka ve eğri çizimleri bu
+ * dosyayı bir kat daha büyütüyordu; burada yalnızca sayfa çerçevesi ve boş
+ * hâlin gerekçesi var.
+ *
+ * ETİKET ÇEVİRİSİ DIŞARIDAN GEÇİYOR. `kirilimEtiketi` bu dosyada ve tablolar
+ * da onu kullanıyor; özet için ikinci bir kopya yazmak, halkada "female"
+ * yazarken tabloda "Kadın" yazması demekti.
+ */
+function KitleOzeti({ data }: { data: ReportData }) {
+  const varMi = data.breakdowns.some(
+    (b) => (b.dimension === 'age' || b.dimension === 'gender') && b.rows.length > 0,
+  );
+
+  return (
+    <section className="rpt-page pt-10">
+      <PageHead title="Kitle Özeti" subtitle={platformNames(data)} />
+
+      {varMi ? (
+        <KitleOzetiIcerik
+          data={data}
+          yasEtiketi={(v) => kirilimEtiketi('age', v)}
+          cinsiyetEtiketi={(v) => kirilimEtiketi('gender', v)}
+        />
+      ) : (
+        /*
+          BOŞ HÂLİN SEBEBİ YAZILI. Kırılım verisi gecelik süpürmeyle
+          toplanıyor; hesap yeni bağlandıysa henüz hiç koşmamış olabilir ve
+          "veri yok" demek kullanıcıyı olmayan bir arızayı aramaya gönderir.
+        */
+        <p className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+          Kitle verisi henüz toplanmadı. Kırılımlar gecelik güncellemeyle geliyor; hesap yeni
+          bağlandıysa ilk veri ertesi gün oluşuyor.
+        </p>
+      )}
+    </section>
+  );
 }
 
 function PageHead({

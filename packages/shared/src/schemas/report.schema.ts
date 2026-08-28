@@ -69,6 +69,18 @@ export const REPORT_SECTIONS = [
    * kısmi. Tek platformda yarım çalışan bir bölüm, raporda "Meta'da neden
    * boş" sorusunu doğurur.
    */
+  /*
+   * KİTLE ÖZETİ — kırılım TABLOLARINDAN önce, tek bakışta okunan sayfa.
+   *
+   * Tablolar "hangi kova ne kadar" sorusunu tam cevaplıyor ama beş tablo art
+   * arda okunmuyor. Özet sayfası aynı veriyi halka grafiklerle veriyor:
+   * gösterim ve tıklamanın cinsiyete ve yaşa göre dağılımı, üstte özet
+   * kartları, altta günlük form eğrisi.
+   *
+   * TABLOLARIN YERİNE GEÇMİYOR, ÖNÜNE GEÇİYOR: grafik ORANI gösteriyor,
+   * tablo SAYIYI. Müşteri ikisini de istiyor.
+   */
+  'audience_overview',
   'audience_age',
   'audience_gender',
   'audience_placement',
@@ -86,6 +98,7 @@ export const SECTION_LABELS: Record<ReportSection, string> = {
   google_campaigns: 'Kampanyalar — Google Ads',
   google_keywords: 'Anahtar Kelime Performansı',
   google_search_terms: 'Arama Terimleri',
+  audience_overview: 'Kitle Özeti',
   audience_age: 'Yaş Dağılımı',
   audience_gender: 'Cinsiyet Dağılımı',
   audience_placement: 'Yerleşim ve Ağ',
@@ -747,6 +760,7 @@ export const VARSAYILAN_SABLONLAR = [
       'google_campaigns',
       'google_keywords',
       'google_search_terms',
+      'audience_overview',
       'audience_age',
       'audience_gender',
       'audience_placement',
@@ -764,6 +778,7 @@ export const VARSAYILAN_SABLONLAR = [
       'cover',
       'summary',
       'meta_campaigns',
+      'audience_overview',
       'audience_age',
       'audience_gender',
       'audience_placement',

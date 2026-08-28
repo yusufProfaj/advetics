@@ -357,3 +357,116 @@ export function kisalt(metin: string, font: PDFFont, punto: number, maks: number
   }
   return `${kesik}…`;
 }
+
+/**
+ * ═══ HALKA GRAFİĞİ ═══
+ *
+ * Panel raporundaki halkaların PDF karşılığı. Aynı sayfa iki yerde
+ * gösteriliyor ve biri diğerinde olmayan bir bölüm çizerse belge ile ekran
+ * ayrışıyor — bu depoda bir kez yaşandı ve referans olarak panel seçildi.
+ *
+ * DİLİMLER ÇOKGENLE ÇİZİLİYOR, YAY KOMUTUYLA DEĞİL. `pdf-lib`in SVG yol
+ * ayrıştırıcısına `A` (arc) komutu vermek sürüme bağlı bir bahis; `M`/`L`/`Z`
+ * her sürümde çalışıyor. Yayı yeterince küçük parçalara bölmek 24 punto
+ * yarıçapta gözle ayırt edilemiyor.
+ *
+ * TAM DAİRE DE ÇALIŞIYOR: tek dilim %100 olduğunda çokgen kapanıyor ve halka
+ * dolu çiziliyor. Yay komutuyla aynı durum dejenere bir yay üretip HİÇBİR ŞEY
+ * çizmezdi — tek cinsiyetli bir hesapta halka boş görünürdü.
+ */
+export function halka(
+  s: PDFPage,
+  opts: {
+    cx: number;
+    cy: number;
+    disR: number;
+    icR: number;
+    dilimler: Array<{ oran: number; renk: RGB }>;
+  },
+): void {
+  let baslangic = -Math.PI / 2; // Saat 12'den başla — panelle aynı.
+
+  for (const d of opts.dilimler) {
+    if (d.oran <= 0) continue;
+    const aci = d.oran * 2 * Math.PI;
+    // Adım sayısı açıyla ölçekleniyor: küçük dilimde fazladan nokta
+    // hesaplamak boşuna, büyük dilimde az nokta köşeli görünür.
+    const adim = Math.max(3, Math.ceil((aci / (2 * Math.PI)) * 64));
+    const noktalar: string[] = [];
+
+    for (let i = 0; i <= adim; i++) {
+      const a = baslangic + (aci * i) / adim;
+      noktalar.push(`${(opts.cx + Math.cos(a) * opts.disR).toFixed(2)} ${(opts.cy + Math.sin(a) * opts.disR).toFixed(2)}`);
+    }
+    for (let i = adim; i >= 0; i--) {
+      const a = baslangic + (aci * i) / adim;
+      noktalar.push(`${(opts.cx + Math.cos(a) * opts.icR).toFixed(2)} ${(opts.cy + Math.sin(a) * opts.icR).toFixed(2)}`);
+    }
+
+    s.drawSvgPath(`M ${noktalar.join(' L ')} Z`, {
+      x: 0,
+      y: s.getHeight(),
+      color: d.renk,
+      borderWidth: 0,
+    });
+
+    baslangic += aci;
+  }
+}
+
+/**
+ * Tek çizgilik eğri — günlük form serisi.
+ *
+ * Nokta ETİKETLERİ yalnızca ilk, son ve en yüksek günde: 31 günlük bir seride
+ * her noktayı etiketlemek sayıları üst üste bindiriyor ve hiçbiri okunmuyor.
+ * Panel de aynı üç noktayı etiketliyor.
+ */
+export function egri(
+  s: PDFPage,
+  font: PDFFont,
+  opts: {
+    x: number;
+    y: number;
+    genislik: number;
+    yukseklik: number;
+    degerler: number[];
+    renk: RGB;
+  },
+): void {
+  const { degerler } = opts;
+  if (degerler.length < 2) return;
+
+  const enYuksek = Math.max(...degerler, 1);
+  const px = (i: number): number => opts.x + (i / (degerler.length - 1)) * opts.genislik;
+  const py = (v: number): number => opts.y + (v / enYuksek) * opts.yukseklik;
+
+  // Taban çizgisi — eğrinin nereye oturduğu görünsün.
+  s.drawLine({
+    start: { x: opts.x, y: opts.y },
+    end: { x: opts.x + opts.genislik, y: opts.y },
+    thickness: 0.6,
+    color: SLATE.s200,
+  });
+
+  for (let i = 1; i < degerler.length; i++) {
+    s.drawLine({
+      start: { x: px(i - 1), y: py(degerler[i - 1]!) },
+      end: { x: px(i), y: py(degerler[i]!) },
+      thickness: 1.2,
+      color: opts.renk,
+    });
+  }
+
+  const zirve = degerler.indexOf(enYuksek);
+  for (const i of [...new Set([0, zirve, degerler.length - 1])]) {
+    s.drawCircle({ x: px(i), y: py(degerler[i]!), size: 1.8, color: opts.renk });
+    const metin = String(degerler[i]);
+    s.drawText(metin, {
+      x: px(i) - font.widthOfTextAtSize(metin, 6) / 2,
+      y: py(degerler[i]!) + 4,
+      size: 6,
+      font,
+      color: SLATE.s500,
+    });
+  }
+}
