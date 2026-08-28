@@ -427,13 +427,40 @@ export class SyncController {
     const bugunVar = dateTo >= bugun;
 
     for (const account of accounts) {
-      const isler: Array<{ jobType: 'structure' | 'insights_realtime' | 'insights_backfill'; dateFrom?: string; dateTo?: string }> =
-        [{ jobType: 'structure' }];
+      const isler: Array<{
+        jobType: 'structure' | 'insights_realtime' | 'insights_backfill' | 'insights_breakdowns';
+        dateFrom?: string;
+        dateTo?: string;
+      }> = [{ jobType: 'structure' }];
       if (gecmisVar) {
         isler.push({ jobType: 'insights_backfill', dateFrom, dateTo: gecmisSonu });
       }
       if (bugunVar) {
         isler.push({ jobType: 'insights_realtime', dateFrom: bugun, dateTo: bugun });
+      }
+
+      /*
+       * ═══ KIRILIMLAR DA BU DÜĞMEDE ═══
+       *
+       * Organik gönderilerde öğrenilen dersin aynısı: düğme "Şimdi güncelle"
+       * diyor ama raporun bir bölümüne hiç dokunmuyorsa adı ile yaptığı iş
+       * ayrışıyor. Kırılım tabloları raporda duruyor; kullanıcı düğmeye
+       * basıp tabloların boş kalmasını "arıza" diye okur ve sebebini hiçbir
+       * ekranda bulamaz.
+       *
+       * YAPI TARAMASINA BAĞLI DEĞİL — gecikme de YOK. Metrik işleri
+       * kampanya satırına bağlanıyor ve o yüzden yapıyı bekliyor; kırılım
+       * ise hesap seviyesinde toplanmış geliyor ve hiçbir varlık satırına
+       * eşlenmiyor. Boşuna beklemek, kullanıcının ekranda beklediği süreyi
+       * uzatırdı.
+       *
+       * GEÇMİŞ ARALIK KULLANILIYOR, bugün değil: kırılım verisi gün
+       * kapandıktan sonra oturuyor ve gecelik süpürme de aynı pencereyi
+       * (son 7 gün) çekiyor. Aralık yalnızca bugünü kapsıyorsa iş hiç
+       * açılmıyor — boşuna kota.
+       */
+      if (gecmisVar) {
+        isler.push({ jobType: 'insights_breakdowns', dateFrom, dateTo: gecmisSonu });
       }
 
       for (const is of isler) {
@@ -456,7 +483,14 @@ export class SyncController {
            * Öncelik farkı (yapı 4, metrik 10) bir BARİYER DEĞİL: worker dört
            * işi paralel çalıştırıyor.
            */
-          ...(is.jobType === 'structure' ? {} : { delayMs: YAPI_ICIN_TANINAN_SURE_MS }),
+          /*
+           * GECİKME YALNIZCA METRİK İŞLERİNE. Yapı ve kırılım beklemiyor:
+           * yapı zaten ilk iş, kırılım ise hiçbir varlık satırına
+           * eşlenmediği için yapıya bağlı değil.
+           */
+          ...(is.jobType === 'structure' || is.jobType === 'insights_breakdowns'
+            ? {}
+            : { delayMs: YAPI_ICIN_TANINAN_SURE_MS }),
           ...(is.dateFrom ? { dateFrom: is.dateFrom, dateTo: is.dateTo } : {}),
         });
         if (res.enqueued) queued++;
