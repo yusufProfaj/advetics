@@ -1,6 +1,7 @@
-import type { ReportData } from '@advetics/shared';
+import { varsayilanSablon, type ReportData } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
+import { SablonSecici } from '@/components/report/sablon-secici';
 import { formatDayLong } from '@/lib/format';
 import { gunEkle, resolveRange, today } from '@/lib/date-range';
 import { TarihSecici } from '@/components/tarih-secici';
@@ -66,7 +67,24 @@ export default async function ReportsPage({
   const from = secilen.from > dun ? dun : secilen.from;
   const to = devamEden ? dun : secilen.to;
 
+  /*
+   * ŞABLON URL'DEN OKUNUYOR ve doğrulama `varsayilanSablon` içinde: bilinmeyen
+   * bir kod genel şablona düşüyor. Adres çubuğuna elle yazılan bir değerin
+   * raporu boş bırakması, hata mesajı olmayan bir arıza olurdu.
+   */
+  const secilenSablon = first(params.sablon);
+  const sablon = varsayilanSablon(secilenSablon).kod;
+
   const qs = new URLSearchParams({ clientId, from, to });
+  /*
+   * ŞABLON YALNIZCA KULLANICI SEÇTİYSE GÖNDERİLİYOR.
+   *
+   * Koşulsuz göndermek, org varsayılanı olarak KAYDEDİLMİŞ bir şablonun
+   * bölüm sırasını sessizce eziyordu: kullanıcı Rapor Şablonları ekranında
+   * yaptığı düzenlemeyi raporda hiç göremiyordu. Seçici yine "Genel Rapor"
+   * yazıyor — kayıtlı şablon da genel raporun bir biçimi.
+   */
+  if (secilenSablon) qs.set('sablon', sablon);
   const report = await serverApiFetch<ReportData>(`/reports/preview?${qs}`).catch(() => null);
 
 
@@ -79,17 +97,25 @@ export default async function ReportsPage({
             {formatDayLong(from)} — {formatDayLong(to)}
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
         {/*
           KARŞILAŞTIRMA KAPALI: rapor belgesi yüzde değişim göstermiyor.
           Çalışmayan bir düğme koymak olmayan bir özellik vaat etmek olurdu.
           Takvimde de dünden sonrası seçilemiyor.
         */}
+        {/*
+          ŞABLON SEÇİCİ TARİHİN SOLUNDA: önce "hangi rapor", sonra "hangi
+          dönem". Ters sıra, dönem seçip şablonu değiştirince aralığın
+          sıfırlandığı izlenimi veriyordu.
+        */}
+        <SablonSecici secili={sablon} />
         <TarihSecici
           aralik={secilen}
           enEskiGun={kapsam?.earliestDate ?? null}
           karsilastirmaVar={false}
           enGecGun={dun}
         />
+        </div>
       </header>
 
       {report === null ? (

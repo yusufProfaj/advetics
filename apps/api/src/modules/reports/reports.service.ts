@@ -4,11 +4,14 @@ import { Prisma } from '@prisma/client';
 import {
   CONVERSION_BUCKETS,
   REPORT_SECTIONS,
+  sablonPlatformu,
+  varsayilanSablon,
   reportOptionsSchema,
   type ReportOptions,
   type ConversionBucket,
   type ConversionCounts,
   type MetricTotals,
+  type ReportBreakdownBlock,
   type ReportCampaignRow,
   type ReportData,
   type ReportDailyPoint,
@@ -90,13 +93,72 @@ function trackedAccounts(alias = ''): Prisma.Sql {
  */
 const TOP_ADS_LIMIT = 12;
 
+/**
+ * Rapor bölümü → kırılım boyutu.
+ *
+ * Harita TEK YERDE. Bölüm adından boyut adını türetmek ("audience_age" →
+ * "age") kısa görünüyor ama bir boyutun adı değiştiğinde sessizce çalışmayan
+ * bir bölüm bırakırdı — eşleşme açık olsun.
+ */
+/**
+ * Şablonun daralttığı platform için SQL süzgeci.
+ *
+ * TEK YERDE. Yedi ayrı sorguya elle yazılsaydı biri unutulduğunda "Google Ads
+ * Şablonu" başlıklı raporun bir tablosunda Meta satırları görünürdü ve o
+ * tablo toplamı özet kartlarını tutmazdı — aynı belgede iki farklı gerçek.
+ * `rapor-platform-suzgeci.spec.ts` her sorgunun bunu kullandığını tarıyor.
+ */
+function platformFiltresi(platform: 'meta' | 'google' | undefined, alias = ''): Prisma.Sql {
+  if (!platform) return Prisma.empty;
+  const p = alias ? `${alias}.platform` : 'platform';
+  return Prisma.sql`AND ${Prisma.raw(p)} = ${platform}::"Platform"`;
+}
+
+const BOYUT_BOLUMLERI = [
+  { section: 'audience_age', dimension: 'age' },
+  { section: 'audience_gender', dimension: 'gender' },
+  { section: 'audience_placement', dimension: 'placement' },
+  { section: 'audience_hour', dimension: 'hour' },
+  { section: 'audience_city', dimension: 'city' },
+] as const;
+
+/**
+ * Kırılım tablosunda gösterilen satır sayısı.
+ *
+ * Kalanı "Diğer" satırında toplanıyor — atmak tablo toplamını ana rakamdan
+ * küçük gösterir ve müşteri "eksik" der.
+ */
+const BREAKDOWN_LIMIT = 12;
+
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async build(
     ctx: TenantContext,
-    params: { clientId: string; from: string; to: string; templateId?: string },
+    params: {
+      clientId: string;
+      from: string;
+      to: string;
+      templateId?: string;
+      /**
+       * VARSAYILAN ŞABLON KODU (`genel` | `google` | `meta`).
+       *
+       * `templateId` verilmişse YOK SAYILIYOR: kullanıcının kendi şablonu,
+       * bir ön ayardan daha açık bir tercih.
+       */
+      sablon?: 'genel' | 'google' | 'meta';
+      /**
+       * ŞABLONUN DARALTTIĞI PLATFORM.
+       *
+       * Google şablonunda Meta kampanyaları yok ve bu yalnızca bölüm
+       * listesiyle çözülmüyor: ÖZET KARTLARI, günlük seri ve kitle
+       * kırılımları da o platformla sınırlı olmalı. Aksi hâlde "Google Ads
+       * Şablonu" başlıklı raporun özetinde Meta harcaması görünür ve
+       * tablolar toplamı tutmaz — aynı belgede iki farklı gerçek.
+       */
+      platform?: 'meta' | 'google';
+    },
   ): Promise<ReportData> {
     return this.prisma.withTenant(ctx, async (tx) => {
       const [client] = await tx.$queryRaw<Array<{ id: string; name: string }>>(
@@ -109,12 +171,42 @@ export class ReportsService {
       const branding = await this.branding(tx, params.clientId);
       const template = await this.template(tx, params.clientId, params.templateId);
 
+      /*
+       * VARSAYILAN ŞABLON BÖLÜM LİSTESİNİ EZİYOR — ama başlığı ve kapanış
+       * metnini EZMİYOR. O ikisi ajansın markası ve müşteriye göre
+       * yazılmış; "Google Ads Şablonu" seçmek kapak başlığını sıfırlamamalı.
+       */
+      /*
+       * ÖN AYAR YALNIZCA KULLANICI SEÇTİYSE UYGULANIYOR.
+       *
+       * İlk hâlim `sablon` verilmediğinde de genel ön ayarı uyguluyordu ve
+       * bu KAYITLI ŞABLONU EZİYORDU: org varsayılanı olarak kaydedilmiş bir
+       * şablonun bölüm sırası sessizce yok sayılıyor, kullanıcı Rapor
+       * Şablonları ekranında yaptığı düzenlemeyi raporda hiç göremiyordu.
+       * Mevcut testler yakaladı.
+       *
+       * Sıra: kendi şablonu (`templateId`) > seçilen ön ayar (`sablon`) >
+       * kayıtlı varsayılan şablon.
+       */
+      const onAyar =
+        params.templateId || !params.sablon ? null : varsayilanSablon(params.sablon);
+      const bolumler = onAyar ? [...onAyar.sections] : template.sections;
+
+      /*
+       * PLATFORM SÜZGECİ ŞABLONDAN TÜRÜYOR ve BÜTÜN sorgulara gidiyor.
+       *
+       * Yalnızca bölüm listesini daraltmak yetmiyordu: "Google Ads Şablonu"
+       * başlıklı raporun ÖZET KARTLARINDA Meta harcaması görünürdü ve
+       * tablolar toplamı tutmazdı — aynı belgede iki farklı gerçek.
+       */
+      const sorgu = { ...params, platform: params.platform ?? sablonPlatformu(params.sablon) ?? undefined };
+
       const [platformBlocks, campaigns, daily, topAds, topAdsMissingPlatforms] = await Promise.all([
-        this.platformBlocks(tx, params),
-        this.campaignRows(tx, params),
-        this.dailySeries(tx, params),
-        this.topAds(tx, params),
-        this.topAdsMissingPlatforms(tx, params),
+        this.platformBlocks(tx, sorgu),
+        this.campaignRows(tx, sorgu),
+        this.dailySeries(tx, sorgu),
+        this.topAds(tx, sorgu),
+        this.topAdsMissingPlatforms(tx, sorgu),
       ]);
 
       // Para birimi: tek ise toplam anlamlı, birden fazlaysa null.
@@ -123,8 +215,17 @@ export class ReportsService {
       const currencies = [...new Set(platformBlocks.map((b) => b.currency).filter(Boolean))];
       const currency = currencies.length === 1 ? currencies[0]! : null;
 
-      const keywords = await this.keywordRows(tx, params);
-      const searchTerms = await this.searchTermRows(tx, params);
+      const keywords = await this.keywordRows(tx, sorgu);
+      const searchTerms = await this.searchTermRows(tx, sorgu);
+
+      /*
+       * KIRILIMLAR YALNIZCA ŞABLONDA SEÇİLİYSE ÇEKİLİYOR.
+       *
+       * Beşini de üretip gösterimde elemek, dört sorguyu boşa koşmak
+       * demekti. Genel şablonda hiçbiri seçili değil ve orada tek bir ek
+       * sorgu bile koşmuyor.
+       */
+      const breakdowns = await this.breakdownBlocks(tx, sorgu, bolumler);
 
       return {
         client,
@@ -133,7 +234,7 @@ export class ReportsService {
         closingText: template.closingText,
         from: params.from,
         to: params.to,
-        sections: template.sections,
+        sections: bolumler,
         options: template.options,
         rangeDays: this.dayCount(params.from, params.to),
         currency,
@@ -142,6 +243,7 @@ export class ReportsService {
         metaCampaigns: campaigns.filter((c) => c.platform === 'meta').map((c) => c.row),
         googleCampaigns: campaigns.filter((c) => c.platform === 'google').map((c) => c.row),
         daily,
+        breakdowns,
         topAds,
         topAdsMissingPlatforms,
         // `null` HÂLÂ "bu yetenek yok" demek — ama artık yalnızca Google
@@ -179,8 +281,15 @@ export class ReportsService {
    */
   private async searchTermRows(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string },
+    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
   ): Promise<ReportData['searchTerms']> {
+    /*
+     * META ŞABLONUNDA HİÇ SORULMUYOR. İkisi de yalnızca Google'da var ve
+     * Meta raporunda o bölümler zaten yok; sorguyu yine de koşmak, hiç
+     * gösterilmeyecek satırları taramak demekti.
+     */
+    if (params.platform === 'meta') return null;
+
     const [hasGoogle] = await tx.$queryRaw<Array<{ n: string | number }>>(Prisma.sql`
       SELECT COUNT(*) AS n FROM ad_accounts
       WHERE client_id = ${params.clientId}::uuid AND platform = 'google'::"Platform"
@@ -242,10 +351,134 @@ export class ReportsService {
     });
   }
 
+  /**
+   * ═══ KİTLE KIRILIMLARI ═══
+   *
+   * Boyut başına bir blok, YALNIZCA şablonda seçilmiş boyutlar için.
+   *
+   * EN ÇOK HARCAYAN N SATIR ve kalanı "Diğer"de toplanıyor. 81 ilin hepsini
+   * listelemek raporu okunamaz kılar; ama kesilen satırları ATMAK tablo
+   * toplamını ana rakamdan küçük gösterir ve müşteri "eksik" der. "Diğer"
+   * satırı ikisini birden çözüyor.
+   *
+   * PAY YÜZDESİ SUNUCUDA HESAPLANIYOR: panel ve PDF aynı sayıyı göstermeli
+   * ve iki tarafta ayrı hesaplamak yuvarlama farkı üretirdi.
+   */
+  private async breakdownBlocks(
+    tx: TxLike,
+    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
+    sections: readonly string[],
+  ): Promise<ReportBreakdownBlock[]> {
+    const istenen = BOYUT_BOLUMLERI.filter((b) => sections.includes(b.section));
+    if (istenen.length === 0) return [];
+
+    const bloklar: ReportBreakdownBlock[] = [];
+
+    for (const { dimension } of istenen) {
+      const rows = await tx.$queryRaw<
+        Array<{
+          value: string;
+          impressions: string | number;
+          clicks: string | number;
+          spend_micros: string | number | bigint;
+          conversions: string | number;
+        }>
+      >(
+        Prisma.sql`
+          SELECT b.value,
+                 SUM(b.impressions)  AS impressions,
+                 SUM(b.clicks)       AS clicks,
+                 SUM(b.spend_micros) AS spend_micros,
+                 SUM(b.conversions)  AS conversions
+          FROM insight_breakdowns b
+          WHERE b.client_id = ${params.clientId}::uuid
+            AND b.date BETWEEN ${params.from}::date AND ${params.to}::date
+            ${
+              params.platform
+                ? Prisma.sql`AND b.platform = ${params.platform}::"Platform"`
+                : Prisma.empty
+            }
+            -- İZLENMEYEN HESAP GİRMİYOR — panelin geri kalanıyla aynı kural.
+            -- Kapatılmış bir hesabın kitlesi raporda görünürse tablo toplamı
+            -- özet kartlarını tutmaz.
+            AND b.ad_account_id IN (SELECT id FROM ad_accounts WHERE sync_enabled = true)
+          GROUP BY b.value
+          ORDER BY SUM(b.spend_micros) DESC NULLS LAST
+        `,
+      );
+
+      /*
+       * DESTEKLENMEYEN PLATFORMLAR AYRI SORULUYOR.
+       *
+       * Boş satır listesi "bu dönemde veri yok" demek; "bu platform bu
+       * kırılımı hiç vermiyor" bambaşka bir şey ve raporda açıkça yazılmalı.
+       * Ayrımı `sync_jobs` notundan değil, harcaması olduğu hâlde bu boyutta
+       * hiç satırı olmayan platformlardan çıkarıyoruz — not biçimine
+       * bağlanmak, not metni değiştiğinde sessizce bozulurdu.
+       */
+      const eksik = await tx.$queryRaw<Array<{ platform: string }>>(
+        Prisma.sql`
+          SELECT DISTINCT i.platform
+          FROM insights_daily i
+          WHERE i.client_id = ${params.clientId}::uuid
+            AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
+            AND i.entity_level = 'campaign'::"EntityLevel"
+            AND i.spend_micros > 0
+            ${
+              params.platform
+                ? Prisma.sql`AND i.platform = ${params.platform}::"Platform"`
+                : Prisma.empty
+            }
+            AND NOT EXISTS (
+              SELECT 1 FROM insight_breakdowns b
+              WHERE b.client_id = i.client_id
+                AND b.platform = i.platform
+                AND b.dimension = ${dimension}::"BreakdownDimension"
+                AND b.date BETWEEN ${params.from}::date AND ${params.to}::date
+            )
+        `,
+      );
+
+      const toplam = rows.reduce((a, r) => a + BigInt(this.bigintText(r.spend_micros)), 0n);
+      const gosterilen = rows.slice(0, BREAKDOWN_LIMIT);
+      const kalan = rows.slice(BREAKDOWN_LIMIT);
+      const kalanHarcama = kalan.reduce((a, r) => a + BigInt(this.bigintText(r.spend_micros)), 0n);
+
+      bloklar.push({
+        dimension,
+        rows: gosterilen.map((r) => {
+          const harcama = BigInt(this.bigintText(r.spend_micros));
+          return {
+            value: r.value,
+            impressions: Number(r.impressions ?? 0),
+            clicks: Number(r.clicks ?? 0),
+            spendMicros: harcama.toString(),
+            conversions: Number(r.conversions ?? 0),
+            // TOPLAM SIFIRSA PAY DA SIFIR — bölme yok. Harcaması olmayan bir
+            // dönemde NaN yazmak, tabloyu tamamen okunmaz yapardı.
+            sharePct: toplam > 0n ? Number((harcama * 10000n) / toplam) / 100 : 0,
+          };
+        }),
+        unsupportedPlatforms: eksik.map((e) => e.platform),
+        otherCount: kalan.length,
+        otherSpendMicros: kalanHarcama.toString(),
+      });
+    }
+
+    return bloklar;
+  }
+
   private async keywordRows(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string },
+    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
   ): Promise<ReportData['keywords']> {
+    /*
+     * META ŞABLONUNDA HİÇ SORULMUYOR. İkisi de yalnızca Google'da var ve
+     * Meta raporunda o bölümler zaten yok; sorguyu yine de koşmak, hiç
+     * gösterilmeyecek satırları taramak demekti.
+     */
+    if (params.platform === 'meta') return null;
+
     const [hasGoogle] = await tx.$queryRaw<Array<{ n: string | number }>>(Prisma.sql`
       SELECT COUNT(*) AS n FROM ad_accounts
       WHERE client_id = ${params.clientId}::uuid AND platform = 'google'::"Platform"
@@ -408,7 +641,7 @@ export class ReportsService {
   /** Platform bazında toplam blok — referans belgenin 2. sayfası. */
   private async platformBlocks(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string },
+    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
   ): Promise<ReportPlatformBlock[]> {
     const rows = await tx.$queryRaw<
       Array<RawMetricRow & { platform: 'meta' | 'google' }>
@@ -427,6 +660,7 @@ export class ReportsService {
                  NULL::uuid AS entity_id
           FROM insights_daily
           WHERE client_id = ${params.clientId}::uuid ${trackedAccounts()}
+            ${platformFiltresi(params.platform)}
             AND date BETWEEN ${params.from}::date AND ${params.to}::date
             AND entity_level = ${LEVEL}
           GROUP BY platform
@@ -463,7 +697,7 @@ export class ReportsService {
   /** Kampanya satırları — erişim ve kova sayıları dâhil. */
   private async campaignRows(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string },
+    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
   ): Promise<Array<{ platform: 'meta' | 'google'; row: ReportCampaignRow }>> {
     const rows = await tx.$queryRaw<
       Array<
@@ -493,6 +727,8 @@ export class ReportsService {
                  COUNT(DISTINCT i.date) AS day_count
           FROM insights_daily i
           WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
+          ${platformFiltresi(params.platform, 'i')}
+            ${platformFiltresi(params.platform, 'i')}
             AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
             AND i.entity_level = ${LEVEL}
           GROUP BY i.entity_id, i.platform
@@ -539,7 +775,7 @@ export class ReportsService {
   /** Günlük dönüşüm serisi — referans belgedeki Form/Mesaj grafiği. */
   private async dailySeries(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string },
+    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
   ): Promise<ReportDailyPoint[]> {
     const rows = await tx.$queryRaw<
       Array<RawBucketRow & { date: Date; spend_micros: string | number | bigint | null }>
@@ -549,6 +785,7 @@ export class ReportsService {
           SELECT date, SUM(spend_micros) AS spend_micros
           FROM insights_daily
           WHERE client_id = ${params.clientId}::uuid ${trackedAccounts()}
+            ${platformFiltresi(params.platform)}
             AND date BETWEEN ${params.from}::date AND ${params.to}::date
             AND entity_level = ${LEVEL}
           GROUP BY date
@@ -594,13 +831,14 @@ export class ReportsService {
    */
   private async topAdsMissingPlatforms(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string },
+    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
   ): Promise<Array<'meta' | 'google'>> {
     const rows = await tx.$queryRaw<Array<{ platform: 'meta' | 'google' }>>(
       Prisma.sql`
         SELECT platform
         FROM insights_daily i
         WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
+          ${platformFiltresi(params.platform, 'i')}
           AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
           AND i.spend_micros > 0
         GROUP BY platform
@@ -613,7 +851,7 @@ export class ReportsService {
     /** En çok harcayan reklamlar — platform başına, creative ile. */
   private async topAds(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string },
+    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
   ): Promise<ReportData['topAds']> {
     const rows = await tx.$queryRaw<
       Array<{
@@ -662,6 +900,8 @@ export class ReportsService {
           JOIN campaigns c ON c.id = g.campaign_id
           LEFT JOIN creatives cr ON cr.id = a.creative_id
           WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
+          ${platformFiltresi(params.platform, 'i')}
+            ${platformFiltresi(params.platform, 'i')}
             AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
             AND i.entity_level = 'ad'::"EntityLevel"
           GROUP BY a.id, a.name, a.platform, c.name, cr.headline, cr.description,
@@ -735,7 +975,7 @@ export class ReportsService {
    * elle yazmak iki listenin zamanla ayrışması demek olurdu.
    */
   private bucketSelect(
-    params: { clientId: string; from: string; to: string },
+    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
     groupBy: Prisma.Sql,
   ): Prisma.Sql {
     /**

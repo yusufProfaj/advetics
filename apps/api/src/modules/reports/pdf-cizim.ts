@@ -349,7 +349,7 @@ export function tablo<T>(
 }
 
 /** Metni sütuna sığdırır; sığmıyorsa sondan kısaltıp üç nokta koyar. */
-function kisalt(metin: string, font: PDFFont, punto: number, maks: number): string {
+export function kisalt(metin: string, font: PDFFont, punto: number, maks: number): string {
   if (font.widthOfTextAtSize(metin, punto) <= maks) return metin;
   let kesik = metin;
   while (kesik.length > 1 && font.widthOfTextAtSize(`${kesik}…`, punto) > maks) {
