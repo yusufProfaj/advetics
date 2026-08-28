@@ -121,4 +121,52 @@ describe('GEÇMİŞ İÇEREN ARALIK', () => {
     await ctrl.refresh(CTX, { dateFrom: gunOnce(29), dateTo: bugun() });
     expect(isler()[0]).toBe('structure');
   });
+
+  /**
+   * ═══ KIRILIMLAR DA BU DÜĞMEDE ═══
+   *
+   * Organik gönderilerde öğrenilen dersin aynısı: düğme "Şimdi güncelle"
+   * diyor ama raporun bir bölümüne hiç dokunmuyorsa adı ile yaptığı iş
+   * ayrışıyor. Kırılım tabloları raporda duruyor ve kullanıcı düğmeye basıp
+   * onların boş kalmasını "arıza" diye okur — sebebi hiçbir ekranda yazmaz.
+   */
+  describe('kitle kırılımları', () => {
+    it('KRİTİK: geçmiş aralıkta kırılım işi AÇILIYOR', async () => {
+      await ctrl.refresh(CTX, { dateFrom: gunOnce(29), dateTo: bugun() });
+      expect(isler()).toContain('insights_breakdowns');
+    });
+
+    it('kırılım GEÇMİŞ aralığı alıyor, bugünü değil', async () => {
+      /*
+       * Kırılım verisi gün kapandıktan sonra oturuyor ve gecelik süpürme de
+       * aynı pencereyi çekiyor. Bugünü göndermek, yarım günün dağılımını
+       * "kapanmış gün" gibi yazmak olurdu.
+       */
+      await ctrl.refresh(CTX, { dateFrom: gunOnce(29), dateTo: bugun() });
+      expect(isi('insights_breakdowns')).toMatchObject({
+        dateFrom: gunOnce(29),
+        dateTo: gunOnce(1),
+      });
+    });
+
+    it('KRİTİK: YALNIZCA BUGÜN seçiliyse kırılım AÇILMIYOR', async () => {
+      // Kapanmamış gün için kırılım çekmek boşa kota.
+      await ctrl.refresh(CTX, { dateFrom: bugun(), dateTo: bugun() });
+      expect(isler()).not.toContain('insights_breakdowns');
+    });
+
+    it('KRİTİK: kırılım GECİKMESİZ — yapıya bağlı değil', async () => {
+      /*
+       * Metrik işleri kampanya satırına bağlanıyor ve o yüzden yapıyı
+       * bekliyor. Kırılım hesap seviyesinde toplanmış geliyor ve hiçbir
+       * varlık satırına eşlenmiyor; boşuna beklemek, kullanıcının ekranda
+       * beklediği süreyi uzatırdı.
+       */
+      await ctrl.refresh(CTX, { dateFrom: gunOnce(29), dateTo: bugun() });
+      const kirilim = enqueued.find((e) => e.jobType === 'insights_breakdowns');
+      expect(kirilim?.delayMs).toBeUndefined();
+      // Karşılaştırma: metrik işi GECİKİYOR.
+      expect(enqueued.find((e) => e.jobType === 'insights_backfill')?.delayMs).toBeGreaterThan(0);
+    });
+  });
 });
