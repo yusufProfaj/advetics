@@ -80,18 +80,74 @@ describe('KRİTİK: platform daraltması', () => {
     }
   });
 
-  it('KRİTİK: süzgeç BÜTÜN sorgulara gidiyor', () => {
-    /*
-     * Bu iddia bir kez üretimde ödenmeye aday bir hatayı yakaladı: `sorgu`
-     * nesnesine `platform` eklendiğinde alt sorguların HİÇBİRİ onu
-     * okumuyordu ve süzgeç sessizce etkisizdi. TypeScript de bir şey
-     * söylemiyordu — fazladan alan hata değil.
-     *
-     * Yedi sorgu: platform blokları, kampanyalar, günlük seri, öne çıkan
-     * reklamlar (×2 sorgu), kırılımlar (×2 sorgu).
-     */
+  /**
+   * Bir metodun gövdesini SINIRINA kadar alır.
+   *
+   * Sabit uzunluklu dilim iki yönde de kırılgan: gövde büyüyünce iddia
+   * dilimden düşüyor, küçülünce komşu metoda taşıyor ve iddia yanlış
+   * gövdede tutuyor — ikincisi sessiz.
+   */
+  const metotGovdesi = (ad: string): string => {
     const k = kod(SERVIS);
-    expect(k.split('platformFiltresi(params.platform').length - 1).toBeGreaterThanOrEqual(7);
+    const i = k.indexOf(`private async ${ad}(`);
+    if (i === -1) throw new Error(`${ad} bulunamadı — tarama boşa düştü`);
+    const sonraki = k.indexOf('\n  private ', i + 1);
+    return k.slice(i, sonraki === -1 ? undefined : sonraki);
+  };
+
+  it.each(['platformBlocks', 'campaignRows', 'dailySeries', 'topAds', 'topAdsMissingPlatforms'])(
+    'KRİTİK: %s süzgeci uyguluyor',
+    (metot) => {
+      /*
+       * Bu iddia bir kez gerçek bir hatayı yakaladı: `sorgu` nesnesine
+       * `platform` eklendiğinde alt sorguların HİÇBİRİ onu okumuyordu ve
+       * süzgeç sessizce etkisizdi. TypeScript bir şey söylemiyordu — fazladan
+       * alan hata değil.
+       *
+       * İDDİA SAYIM DEĞİL, METOT METOT. Önceki hâli "en az yedi yerde geçsin"
+       * diyordu ve o sayı, iki metotta ÇİFT yazılmış satırlar sayesinde
+       * tutuyordu — yani test hatayı doğruluyordu. Kopyalar temizlenince
+       * düştü.
+       */
+      expect(metotGovdesi(metot)).toContain('platformFiltresi(params.platform');
+    },
+  );
+
+  it('KRİTİK: kırılım sorgusu hem PLATFORMU hem BOYUTU süzüyor', () => {
+    /*
+     * BOYUT SÜZGECİ EKSİKTİ ve üretime çıktı: "Yaş Dağılımı" tablosunda
+     * Erkek/Kadın/yerleşim satırları görünüyor, "Cinsiyet Dağılımı" birebir
+     * aynı satırları basıyordu. Her tablo beş boyutu birden gösteriyor,
+     * toplamı beş boyutun toplamı oluyor ve pay yüzdeleri o yanlış toplamdan
+     * hesaplanıyordu. Hiçbir hata düşmedi: boyut yalnızca bloğun etiketinde
+     * kullanılıyordu.
+     */
+    /*
+     * İDDİA ANA SORGUNUN DİLİMİNE ÇAPALI, metodun tamamına değil.
+     *
+     * `breakdownBlocks` İKİ sorgu içeriyor: satırları getiren ana sorgu ve
+     * "bu boyutu vermeyen platformlar" alt sorgusu. İkincisi de aynı boyut
+     * koşulunu taşıyor, yani metot gövdesine bakan bir iddia ANA SORGUDAN
+     * koşul silindiğinde bile tutuyordu — mutasyonda tam bu oldu.
+     */
+    const g = metotGovdesi('breakdownBlocks');
+    const bas = g.indexOf('FROM insight_breakdowns b');
+    const son = g.indexOf('GROUP BY b.value', bas);
+    expect(bas, 'kırılım ana sorgusu bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    expect(son, 'kırılım ana sorgusunun sonu bulunamadı').toBeGreaterThan(bas);
+    const anaSorgu = g.slice(bas, son);
+
+    expect(anaSorgu).toContain('AND b.dimension = ${dimension}::"BreakdownDimension"');
+    expect(anaSorgu).toContain('AND b.platform = ${params.platform}::"Platform"');
+  });
+
+  it('süzgeç hiçbir sorguda İKİ KEZ yazılmıyor', () => {
+    // Zararsız ama kopyalanmış bir koşul, sayıma dayanan iddiaları bozuyor
+    // ve bir sonraki okuyanı "hangisi doğru" diye düşündürüyor.
+    for (const m of ['campaignRows', 'topAds']) {
+      const g = metotGovdesi(m);
+      expect(g.split('platformFiltresi(params.platform').length - 1, `${m} çift süzgeç`).toBe(1);
+    }
   });
 
   it('süzgeç TEK yerde tanımlı', () => {

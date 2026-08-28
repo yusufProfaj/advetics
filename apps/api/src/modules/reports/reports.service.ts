@@ -392,6 +392,23 @@ export class ReportsService {
                  SUM(b.conversions)  AS conversions
           FROM insight_breakdowns b
           WHERE b.client_id = ${params.clientId}::uuid
+            -- ═══ BOYUT SUZGECI — BU SATIR EKSIKTI ═══
+            --
+            -- Yoktu ve sonucu suydu: "Yas Dagilimi" tablosunda Erkek, Kadin,
+            -- "facebook feed" satirlari gorunuyor ve "Cinsiyet Dagilimi"
+            -- tablosu BIREBIR ayni satirlari basiyordu — her tablo bes boyutu
+            -- birden gosteriyordu. Rakamlar da yanlisti: bir tablonun toplami
+            -- bes boyutun toplamiydi ve pay yuzdeleri o yanlis toplama gore
+            -- hesaplaniyordu.
+            --
+            -- Hicbir hata dusmedi: boyut alani yalnizca blogun ETIKETINDE
+            -- kullaniliyordu, sorguya hic girmedigi icin TypeScript de bir
+            -- sey demedi.
+            --
+            -- (SQL yorumunda BACKTICK YOK: sablonu ortasindan kapatiyor ve
+            --  hata TS1005 olarak cikip sebebini hic soylemiyor. Bu yorumun
+            --  ilk hali tam o tuzaga dustu.)
+            AND b.dimension = ${dimension}::"BreakdownDimension"
             AND b.date BETWEEN ${params.from}::date AND ${params.to}::date
             ${
               params.platform
@@ -727,7 +744,6 @@ export class ReportsService {
                  COUNT(DISTINCT i.date) AS day_count
           FROM insights_daily i
           WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
-          ${platformFiltresi(params.platform, 'i')}
             ${platformFiltresi(params.platform, 'i')}
             AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
             AND i.entity_level = ${LEVEL}
@@ -900,7 +916,6 @@ export class ReportsService {
           JOIN campaigns c ON c.id = g.campaign_id
           LEFT JOIN creatives cr ON cr.id = a.creative_id
           WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
-          ${platformFiltresi(params.platform, 'i')}
             ${platformFiltresi(params.platform, 'i')}
             AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
             AND i.entity_level = 'ad'::"EntityLevel"
