@@ -1,7 +1,20 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaAdminService } from '../../prisma/prisma-admin.service';
+import type { CryptoService } from '../../crypto/crypto.service';
 import { AutoBoostQueueService } from './autoboost-queue.service';
+
+/**
+ * Sahte şifreleme — `email-account.service.spec.ts` ile aynı desen.
+ * Sınanan şey ŞİFRELEMENİN KENDİSİ değil: `bildir()`'in gerçekten SMTP
+ * denemesi yaptığı ve doğru alıcı listesini kurduğu.
+ */
+const SAHTE_CRYPTO = {
+  encrypt: (d: string) => Buffer.concat([Buffer.from([1]), Buffer.from(`ENC:${d}`)]),
+  decrypt: (b: Buffer) => b.subarray(1).toString().replace(/^ENC:/, ''),
+  keyVersionOf: (b: Buffer) => b[0] as number,
+} as unknown as CryptoService;
 
 /**
  * KUYRUK BESLEMESİ (Advetics 1.0).
@@ -72,9 +85,41 @@ async function kuyruk(): Promise<Array<{ external_id: string; status: string }>>
   return h.q(`SELECT external_id, status FROM auto_boost_queue_items ORDER BY external_id`);
 }
 
+/** Bildirim testleri için: bir kullanıcı + o müşteriye (ya da org geneline) üyelik. */
+async function kullaniciEkle(
+  email: string,
+  opts: { clientId?: string | null; role?: string } = {},
+): Promise<string> {
+  const userId = randomUUID();
+  await h.q(
+    `INSERT INTO users (id, org_id, email, password_hash, full_name, updated_at)
+     VALUES ($1, $2, $3, 'x', $3, now())`,
+    [userId, IDS.org, email],
+  );
+  await h.q(
+    `INSERT INTO memberships (id, user_id, org_id, client_id, role, updated_at)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4::"Role", now())`,
+    [userId, IDS.org, opts.clientId === undefined ? IDS.client : opts.clientId, opts.role ?? 'manager'],
+  );
+  return userId;
+}
+
+/** hello@profaj.com'un e-posta kimliği — DNS'te var olmayan bir sunucuya kurulu. */
+async function ajansMailKimligiEkle(): Promise<void> {
+  const userId = await kullaniciEkle('hello@profaj.com', { clientId: null, role: 'owner' });
+  await h.q(
+    `INSERT INTO user_email_accounts
+       (id, org_id, user_id, from_name, from_email, smtp_host, smtp_port, smtp_secure,
+        smtp_user, smtp_pass_enc, updated_at)
+     VALUES (gen_random_uuid(), $1, $2, 'Advetics', 'hello@profaj.com',
+             'olmayan.sunucu.gecersiz', 1, false, 'hello@profaj.com', $3, now())`,
+    [IDS.org, userId, SAHTE_CRYPTO.encrypt('parola')],
+  );
+}
+
 beforeAll(async () => {
   h = await createHarness();
-  svc = new AutoBoostQueueService(h.db as unknown as PrismaAdminService);
+  svc = new AutoBoostQueueService(h.db as unknown as PrismaAdminService, SAHTE_CRYPTO);
 });
 afterAll(async () => {
   await h.close();
@@ -268,5 +313,97 @@ describe('enqueueOne — WebSub yolu', () => {
     await svc.enqueueOne({ ...ORTAK, title: 'x'.repeat(5000) });
     const [row] = await h.q<{ title: string }>(`SELECT title FROM auto_boost_queue_items`);
     expect(row!.title.length).toBe(2000);
+  });
+});
+
+/**
+ * ═══ "İLGİLİ DANIŞMANLAR" — KİM BU? ═══
+ *
+ * `danisman-atama.ts`'teki tanımın aynısı: bu müşteriye AÇIKÇA atanmış
+ * (`memberships.client_id = X`) kişiler. İki istisna KRİTİK, ikisi de yanlış
+ * yönde hata üretmeye müsait:
+ *
+ *   · `client_viewer` HARİÇ — bu rol müşterinin KENDİ girişi. Dahil etmek,
+ *     ajansın "bu gönderiyi boostlamayı düşünüyoruz" iç notunu müşteriye
+ *     göndermek olurdu.
+ *   · ORG GENELİ erişimi olanlar (`client_id IS NULL`) DIŞARIDA — onlar bu
+ *     müşteriye özel atanmamış, dahil etmek "danışman" tanımını bozardı.
+ */
+describe('alıcılar — ilgili danışmanlar', () => {
+  it('bu müşteriye atanmış danışman alıcı listesinde', async () => {
+    await kullaniciEkle('yonetici@ajans.com', { clientId: IDS.client, role: 'manager' });
+    const alicilar = await (
+      svc as unknown as { alicilar(orgId: string, clientId: string): Promise<string[]> }
+    ).alicilar(IDS.org, IDS.client);
+    expect(alicilar).toContain('yonetici@ajans.com');
+  });
+
+  it('KRİTİK: client_viewer (müşterinin kendi girişi) alıcı DEĞİL', async () => {
+    await kullaniciEkle('musteri@ege-birlik.com', { clientId: IDS.client, role: 'client_viewer' });
+    const alicilar = await (
+      svc as unknown as { alicilar(orgId: string, clientId: string): Promise<string[]> }
+    ).alicilar(IDS.org, IDS.client);
+    expect(alicilar).not.toContain('musteri@ege-birlik.com');
+  });
+
+  it('KRİTİK: org geneli erişimi olan (bu müşteriye özel atanmamış) alıcı DEĞİL', async () => {
+    await kullaniciEkle('sahip@ajans.com', { clientId: null, role: 'owner' });
+    const alicilar = await (
+      svc as unknown as { alicilar(orgId: string, clientId: string): Promise<string[]> }
+    ).alicilar(IDS.org, IDS.client);
+    expect(alicilar).not.toContain('sahip@ajans.com');
+  });
+});
+
+/**
+ * ═══ BİLDİRİM — YENİ KART GERÇEKTEN MAİL DENEMESİ TETİKLİYOR MU ═══
+ *
+ * `email-account.service.spec.ts` ile AYNI desen: gerçek DNS çözümlemesi
+ * OLMAYAN bir sunucuya karşı deneniyor ve hatanın SESSİZCE yutulmadığı,
+ * `note`'a düştüğü doğrulanıyor. Bu, `bildir()`'in mock'lanmadan GERÇEKTEN
+ * çağrıldığının kanıtı — sahte bir spy, çağrının kendisinin unutulduğu
+ * durumu (bu oturumda `sync-processor.service.ts`'te tam olarak yaşanan
+ * hata) yakalamazdı.
+ */
+describe('bildirim — yeni kart mail denemesi tetikliyor', () => {
+  beforeEach(async () => {
+    await preset({ createdAt: '2026-08-01T00:00:00Z' });
+  });
+
+  it('Instagram yolu (enqueueForProfile): e-posta kimliği yoksa NOT açıkça söylüyor', async () => {
+    await post('p1', '2026-08-18T10:00:00Z');
+    const r = await svc.enqueueForProfile(PROFIL);
+    expect(r.created).toBe(1);
+    expect(r.note).toMatch(/MAİL GÖNDERİLEMEDİ.*e-posta kimliği tanımlı değil/);
+  });
+
+  it('Instagram yolu: e-posta kimliği VARSA gerçek SMTP denemesi yapılır ve düşer', async () => {
+    await ajansMailKimligiEkle();
+    await post('p1', '2026-08-18T10:00:00Z');
+    const r = await svc.enqueueForProfile(PROFIL);
+    expect(r.created).toBe(1);
+    // "e-posta kimliği tanımlı değil" DEĞİL — bu kez kimlik bulundu ve SMTP
+    // denemesi gerçekten yapıldı, DNS çözümlemesi düştü.
+    expect(r.note).toMatch(/MAİL GÖNDERİLEMEDİ/);
+    expect(r.note).not.toMatch(/e-posta kimliği tanımlı değil/);
+  });
+
+  it('YouTube yolu (enqueueOne) da AYNI bildirimi tetikliyor — iki kaynak, tek davranış', async () => {
+    await ajansMailKimligiEkle();
+    const yazildi = await svc.enqueueOne({
+      orgId: IDS.org,
+      clientId: IDS.client,
+      socialProfileId: PROFIL,
+      platform: 'google',
+      externalId: 'video-1',
+      title: 'Test videosu',
+      thumbnailUrl: null,
+      permalink: 'https://www.youtube.com/watch?v=video-1',
+      mediaType: 'video',
+      publishedAt: new Date('2026-08-18T10:00:00Z'),
+    });
+    // enqueueOne bildirim hatasını YUTUYOR (webhook'a 200 dönmek zorunda) —
+    // burada doğrulanan şey kartın yine de yazıldığı, mail sonucu değil.
+    expect(yazildi).toBe(true);
   });
 });

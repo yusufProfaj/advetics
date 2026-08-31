@@ -19,6 +19,7 @@ import { KirilimSyncService } from './kirilim-sync.service';
 import { SearchTermSyncService } from './search-term-sync.service';
 import { BoostsService } from '../modules/boosts/boosts.service';
 import { YouTubeSubscribeService } from '../modules/autoboost/youtube-subscribe.service';
+import { AutoBoostQueueService } from '../modules/autoboost/autoboost-queue.service';
 import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
 import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
 
@@ -64,6 +65,7 @@ export class SyncProcessorService {
     private readonly leads: LeadSyncService,
     private readonly boosts: BoostsService,
     private readonly subscribe: YouTubeSubscribeService,
+    private readonly autoboostQueue: AutoBoostQueueService,
     private readonly boostExecutor: BoostExecutorService,
     private readonly keywords: KeywordSyncService,
     private readonly searchTerms: SearchTermSyncService,
@@ -726,8 +728,31 @@ export class SyncProcessorService {
       }
       try {
         const result = await this.organic.syncProfile(payload.socialProfileId);
+        /*
+         * ORGANİK SÜPÜRME İLE ONAY KUYRUĞU ARASINDAKİ TEK BAĞLANTI BUYDU VE
+         * HİÇ YAZILMAMIŞTI. `AutoBoostQueueService.enqueueForProfile` zaten
+         * vardı ve kendi yorumunda "organik gönderi süpürmesi onu çağırıyor"
+         * diyordu — ama gerçekte hiçbir yerden çağrılmıyordu. Sonuç: gönderi
+         * `organic_posts`a doğru yazılıyordu (bu iş "başarılı" görünüyordu)
+         * ama Bildirim Havuzu'na hiçbir zaman kart düşmüyordu — sessiz ve
+         * dosyanın kendi yorumunun yalanladığı bir eksiklik.
+         *
+         * ÇAĞRI HER BAŞARILI TURDA YAPILIYOR, YALNIZCA `result.rows > 0`
+         * İKEN DEĞİL: `enqueueForProfile` kendi mükerrer engelini
+         * (`ON CONFLICT DO NOTHING`) taşıyor ve zaten kuyruğa girmiş
+         * gönderileri sessizce atlıyor — bu turda hiç yeni satır
+         * yazılmasa bile önceki bir turda yazılıp kuyruğa hiç girmemiş
+         * (ör. ön ayar sonradan açıldıysa) bir satırı burada yakalamak
+         * mümkün.
+         */
+        const kuyrukSonucu = await this.autoboostQueue.enqueueForProfile(
+          payload.socialProfileId,
+        );
         await this.markSucceeded(payload.syncJobId, result.rows, 1);
-        return { rows: result.rows, note: result.note };
+        return {
+          rows: result.rows,
+          note: `${result.note} · ${kuyrukSonucu.note}`,
+        };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
         throw err;
