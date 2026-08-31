@@ -631,17 +631,36 @@ export class SyncProcessorService {
     }
 
     if (payload.jobType === 'insights_breakdowns') {
-      /*
-       * HESAP BAZINDA ve döngünün İÇİNDE: her hesabın kendi kırılımı var ve
-       * `fetchBreakdowns` hesap seviyesinde toplanmış veri döndürüyor.
-       * Bağlantı bazlı olsaydı hangi hesabın verisi olduğu belirsiz kalırdı.
-       */
-      const r = await this.kirilim.syncAccount({
-        adAccountId: payload.adAccountId!,
-        dateFrom: payload.dateFrom!,
-        dateTo: payload.dateTo!,
-      });
-      return { rows: r.rows, note: r.note };
+      if (!payload.adAccountId) {
+        await this.markFailed(syncJobId, 'missing_account', 'insights_breakdowns hesap kimliği olmadan geldi');
+        throw new UnrecoverableError('insights_breakdowns hesap kimliği olmadan geldi');
+      }
+      if (!payload.dateFrom || !payload.dateTo) {
+        await this.markFailed(syncJobId, 'missing_dates', 'insights_breakdowns tarih aralığı olmadan geldi');
+        throw new UnrecoverableError('insights_breakdowns tarih aralığı olmadan geldi');
+      }
+
+      try {
+        /*
+         * HESAP BAZINDA ve döngünün İÇİNDE: her hesabın kendi kırılımı var ve
+         * `fetchBreakdowns` hesap seviyesinde toplanmış veri döndürüyor.
+         * Bağlantı bazlı olsaydı hangi hesabın verisi olduğu belirsiz kalırdı.
+         */
+        const r = await this.kirilim.syncAccount({
+          adAccountId: payload.adAccountId,
+          dateFrom: payload.dateFrom,
+          dateTo: payload.dateTo,
+        });
+        // Bu dal önceden markSucceeded/recordFailure ÇAĞIRMIYORDU: satır
+        // başarıyla bitse bile sync_jobs.status sonsuza dek 'running' kalıyordu
+        // (üretimde 72 satır, bazıları 3 günden eski). Diğer bütün iş
+        // türleriyle AYNI desen — istisna bilinçli değildi, unutulmuştu.
+        await this.markSucceeded(payload.syncJobId, r.rows, r.apiCalls, { note: r.note });
+        return { rows: r.rows, note: r.note };
+      } catch (err) {
+        await this.recordFailure(syncJobId, err);
+        throw err;
+      }
     }
 
     if (payload.jobType === 'keyword_insights') {

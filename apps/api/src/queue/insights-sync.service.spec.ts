@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHarness, seedTenant, IDS, type Harness } from '../../test/pglite-harness';
 import type { PrismaAdminService } from '../prisma/prisma-admin.service';
 import type { ProviderRegistry } from '../modules/connections/provider.registry';
@@ -399,6 +400,57 @@ describe('InsightsSyncService', () => {
       expect(result.rows).toBe(2);
       const dates = (await insightRows()).map((r) => r.date);
       expect(dates.sort()).toEqual(['2026-07-31', '2026-08-01']);
+    });
+  });
+
+  describe('bağlı parametre sınırı — chunk\'lama', () => {
+    // Üretimde `insights_backfill` büyük hesaplarda (ad seviyesi × 7 günlük
+    // pencere) binlerce satır üretebiliyor. Chunk'sız tek INSERT satır başına
+    // 18 parametreyle Postgres/Prisma'nın 32.767 sınırını aşıp "too many bind
+    // variables" ile DETERMİNİSTİK düşüyordu — satır sayısı değişmediği için
+    // her yeniden deneme aynı hatayı üretiyordu.
+    //
+    // Bu koşum ortamının `$executeRaw`'ı gerçek Prisma İstemcisi DEĞİL (bkz.
+    // pglite-harness.ts) — parametre sayısı doğrulamasını yapmıyor, o yüzden
+    // hatanın kendisini burada yeniden üretemeyiz. Onun yerine DAVRANIŞI
+    // sınıyoruz: CHUNK_SIZE'ı aşan bir satır kümesi BİRDEN FAZLA çağrıya
+    // bölünüyor mu. Chunk'lama kaldırılırsa (tek çağrı) bu test düşer.
+    it('CHUNK_SIZE\'ı aşan satır kümesi birden fazla $executeRaw çağrısına bölünür', async () => {
+      const N = 2500;
+      const adIds = Array.from({ length: N }, () => randomUUID());
+      const externalIds = Array.from({ length: N }, (_, i) => `bulk-ad-${i}`);
+
+      await h.q(
+        `INSERT INTO ads (id, ad_group_id, ad_account_id, client_id, platform, external_id, name, status, updated_at)
+         SELECT unnest($1::uuid[]), '77777777-7777-7777-7777-777777777777', $2, $3, 'meta', unnest($4::text[]), 'Reklam', 'active', now()`,
+        [adIds, IDS.adAccount, IDS.client, externalIds],
+      );
+
+      provider.rowsByLevel = {
+        ad: externalIds.map((id) => row({ level: 'ad', entityExternalId: id, date: '2026-08-05' })),
+      };
+
+      const execSpy = vi.spyOn(h.db, '$executeRaw');
+
+      const result = await svc.syncAccount({
+        adAccountId: IDS.adAccount,
+        jobType: 'insights_backfill',
+        dateFrom: '2026-08-05',
+        dateTo: '2026-08-05',
+      });
+
+      expect(result.rows).toBe(N);
+      expect(await rowCount()).toBe(N);
+
+      // 2500 satır, 1000'lik parçalarla 3 çağrı demek (1000 + 1000 + 500).
+      // Chunk'lama kaldırılsaydı bu sayı 1 olurdu ve büyük hesaplarda
+      // üretimde görülen bind-limit hatasına karşılık gelirdi.
+      const insightCalls = execSpy.mock.calls.filter((c) =>
+        (c[0] as { text: string }).text.includes('INSERT INTO insights_daily'),
+      );
+      expect(insightCalls).toHaveLength(3);
+
+      execSpy.mockRestore();
     });
   });
 

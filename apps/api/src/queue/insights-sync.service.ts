@@ -374,44 +374,56 @@ export class InsightsSyncService {
       )`,
     );
 
-    let affected: number;
+    // POSTGRES'İN BAĞLI PARAMETRE SINIRI 32.767 — satır başına 18 parametre
+    // bağlanıyor (aşağıdaki VALUES listesi). Büyük bir hesapta `ad`
+    // seviyesinde tek pencerede binlerce satır gelebiliyor (örn. 1900 reklam
+    // × 7 gün ≈ 13.300 satır × 18 ≈ 240.000 parametre) ve chunk'sız tek INSERT
+    // bu sınırı aşıp "too many bind variables" ile DETERMİNİSTİK olarak
+    // düşüyordu — satır sayısı değişmediği için her yeniden deneme aynı
+    // hatayla düşüyor, retry işe yaramıyordu. 1000 satırlık parçalar
+    // (1000 × 18 = 18.000) sınırın belirgin altında kalıyor.
+    const CHUNK_SIZE = 1000;
+    let affected = 0;
     try {
-      affected = await this.db.$executeRaw(
-        Prisma.sql`
-        INSERT INTO insights_daily (
-          client_id, ad_account_id, platform, entity_level, entity_id,
-          entity_external_id, date, breakdown_key,
-          impressions, clicks, spend_micros,
-          conversions, conversion_value_micros,
-          video_views, engagements, reach, frequency,
-          raw_metrics, currency, fetched_at
-        ) VALUES ${Prisma.join(values)}
-        -- Doğal birincil anahtar. breakdown_key boş string ('') çünkü NULL
-        -- birincil anahtarda hiçbir zaman eşleşmiyor ve her senkronizasyonda
-        -- satır MÜKERRER olurdu.
-        ON CONFLICT (date, entity_level, entity_id, breakdown_key) DO UPDATE SET
-          -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
-          -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
-          -- icin "yeniden senkronize et" tavsiyesi de ise yaramiyordu.
-          -- Kaynak HER ZAMAN hesabin o anki musterisi.
-          client_id = EXCLUDED.client_id,
-          impressions = EXCLUDED.impressions,
-          clicks = EXCLUDED.clicks,
-          spend_micros = EXCLUDED.spend_micros,
-          conversions = EXCLUDED.conversions,
-          conversion_value_micros = EXCLUDED.conversion_value_micros,
-          video_views = EXCLUDED.video_views,
-          engagements = EXCLUDED.engagements,
-          reach = EXCLUDED.reach,
-          frequency = EXCLUDED.frequency,
-          raw_metrics = EXCLUDED.raw_metrics,
-          currency = EXCLUDED.currency,
-          -- Atıf penceresi yüzünden aynı gün günler sonra değişiyor; bu satırın
-          -- ne zaman son kez doğrulandığını bilmek raporda "bayat veri"
-          -- uyarısının dayanağı.
-          fetched_at = now()
-      `,
-      );
+      for (let i = 0; i < values.length; i += CHUNK_SIZE) {
+        const chunk = values.slice(i, i + CHUNK_SIZE);
+        affected += await this.db.$executeRaw(
+          Prisma.sql`
+          INSERT INTO insights_daily (
+            client_id, ad_account_id, platform, entity_level, entity_id,
+            entity_external_id, date, breakdown_key,
+            impressions, clicks, spend_micros,
+            conversions, conversion_value_micros,
+            video_views, engagements, reach, frequency,
+            raw_metrics, currency, fetched_at
+          ) VALUES ${Prisma.join(chunk)}
+          -- Doğal birincil anahtar. breakdown_key boş string ('') çünkü NULL
+          -- birincil anahtarda hiçbir zaman eşleşmiyor ve her senkronizasyonda
+          -- satır MÜKERRER olurdu.
+          ON CONFLICT (date, entity_level, entity_id, breakdown_key) DO UPDATE SET
+            -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
+            -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
+            -- icin "yeniden senkronize et" tavsiyesi de ise yaramiyordu.
+            -- Kaynak HER ZAMAN hesabin o anki musterisi.
+            client_id = EXCLUDED.client_id,
+            impressions = EXCLUDED.impressions,
+            clicks = EXCLUDED.clicks,
+            spend_micros = EXCLUDED.spend_micros,
+            conversions = EXCLUDED.conversions,
+            conversion_value_micros = EXCLUDED.conversion_value_micros,
+            video_views = EXCLUDED.video_views,
+            engagements = EXCLUDED.engagements,
+            reach = EXCLUDED.reach,
+            frequency = EXCLUDED.frequency,
+            raw_metrics = EXCLUDED.raw_metrics,
+            currency = EXCLUDED.currency,
+            -- Atıf penceresi yüzünden aynı gün günler sonra değişiyor; bu satırın
+            -- ne zaman son kez doğrulandığını bilmek raporda "bayat veri"
+            -- uyarısının dayanağı.
+            fetched_at = now()
+        `,
+        );
+      }
     } catch (err) {
       // PARTITION HATASINI AÇIKLA.
       //
