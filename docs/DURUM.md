@@ -605,6 +605,37 @@ Eski 72+2 takılı `sync_jobs` satırı `failed` + açıklayıcı not ile
 işaretlendi; gecelik süpürme veriyi zaten ayrıca tazeliyor, elle yeniden
 tetiklemek gerekmiyor.
 
+### 3.8. 31 Ağustos: Auto-Boost'un Bildirim Havuzu hiç dolmuyordu
+
+Kullanıcı panelde fark etti: `/auto-boost` sayfasında "Bildirim Havuzu"
+her zaman "Onay bekleyen içerik yok" gösteriyordu — Ege Birlik Yapı'da 22
+organik gönderi doğru senkronize olmuş, ön ayar 24 Ağustos'tan beri açıktı,
+ama kuyrukta (`auto_boost_queue_items`) tek satır bile yoktu.
+
+**Sebep:** `AutoBoostQueueService.enqueueForProfile` — organik gönderiyi
+onay kuyruğuna yazan fonksiyon — uzun süredir vardı ama **hiçbir yerden
+çağrılmıyordu**. `autoboost.module.ts`'in kendi yorumu bile "organik
+gönderi süpürmesi (Instagram yolu) onu çağırıyor" diyordu; yorum niyeti
+anlatıyordu, kod hiç yazılmamıştı. `organic-sync.service.ts` gönderiyi
+`organic_posts`a doğru yazıyor, iş `succeeded` kapanıyordu — hata yok, log
+yok, yalnızca hiç dolmayan bir kuyruk.
+
+**Düzeltme:** [sync-processor.service.ts](../apps/api/src/queue/sync-processor.service.ts)'in
+`organic_posts` dalına eksik çağrı eklendi. Aynı oturumda ikinci bir istek
+daha vardı: yeni içerik kuyruğa düştüğünde hello@profaj.com'dan, o
+müşteriye atanmış danışmanlara VE hello@profaj.com'a bildirim maili
+gitsin. `enqueueForProfile` artık `INSERT ... RETURNING` ile yazıyor (yeni
+kart başlığı/bağlantısı maile taşınsın diye) ve YouTube WebSub yolu
+(`enqueueOne`) da AYNI bildirim fonksiyonundan geçiyor — iki kaynak, tek
+davranış. `client_viewer` (müşterinin kendi girişi) alıcı listesinden
+bilinçli dışlandı: onay kuyruğu ajansın iç iş akışı.
+
+Kaynak taraması testiyle kilitlendi (mutasyonla doğrulandı):
+`organic-posts-kuyruk-baglantisi.spec.ts`. Commit `447d0fc`, deploy edildi.
+`sweep:organic` saatte bir (`41 * * * *`) çalışıyor — Ege Birlik Yapı'nın
+3 bekleyen Instagram gönderisi bir sonraki turda ya da elle "Şimdi
+güncelle" ile kuyruğa düşüp mail tetikleyecek.
+
 **Deploy script'i SSH bağlantısı kesilirse yarıda kalabiliyor.** Build
 adımı (`nest build` + `next build`) birkaç dakika sürüyor ve bu sırada
 sessiz kalabiliyor; bir SSH oturumu (ör. uzun bir inaktivite zaman aşımı)
