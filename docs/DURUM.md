@@ -1,6 +1,6 @@
 # Advetics — Durum ve Yol Haritası
 
-> **Son güncelleme:** 2026-08-11
+> **Son güncelleme:** 2026-08-28
 > **Kaynak:** Bu belge koddan doğrulanarak yazıldı, hafızadan değil. Her iddia
 > için dosya yolu verilmiştir; şüphe duyduğun satırı açıp bakabilirsin.
 >
@@ -11,16 +11,28 @@
 
 ## 1. Tek bakışta
 
-| | |
-|---|---|
-| Veritabanı tablosu | **41** |
-| Migration | **21** |
-| API testi | **694** |
-| Web testi | **20** |
-| Panel sayfası | **12** |
-| API controller | **19** |
+| | 2026-08-11 | 2026-08-28 |
+|---|---|---|
+| Veritabanı tablosu | 37 | **52** |
+| Migration | 17 | **50** |
+| API testi | 694 ¹ | **2.020** |
+| Web testi | 20 ¹ | **339** |
+| Panel sayfası | 16 | **29** |
+| API controller | 17 | **25** |
+| RLS politikası | 95 | **151** |
+| Rol | 5 | **7** |
+| Yetki anahtarı | — | **34** |
+| Zamanlanmış süpürme | 8 | **12** |
 
-**İki cümlelik özet:**
+Sol sütun 11 Ağustos'taki commit'ten (`b5a0acc`) SAYILDI, sağ sütun bugünkü
+koddan — ikisi de hafızadan değil. ¹ İşaretli iki satır belgenin o günkü kendi
+metninden: test sayısı koşmadan ölçülemiyor.
+
+**Belgenin kendi sayısı da kaymıştı:** "41 tablo" yazıyordu, o commit'te 37
+vardı. Bu satırlar elle güncellendiğinde kayıyor; bir sonraki güncellemede de
+ölçerek yaz.
+
+**Üç cümlelik özet:**
 
 **Okuma tarafı iki platformda da canlı.** Meta zaten çalışıyordu; Google Basic
 Access 11 Ağustos'ta alındı ve aynı gün baştan sona doğrulandı — 129 hesap
@@ -30,6 +42,11 @@ kuruşuna kadar eşit çıktı.
 **Yazma tarafı hiçbir platformda canlıda çalıştırılmadı.** Kural aksiyonları,
 boost oluşturma, toplu reklam ve Reklam Oluşturucu — dördü de `ads_management`
 onayı olmadan çalıştırılamazdı. Bkz. § 5.
+
+**Rapor ve panel tarafı 11–28 Ağustos arasında büyük ölçüde yeniden yazıldı:**
+sunucu PDF'i, e-posta gönderimi, üç varsayılan şablon, kitle kırılımları, iki
+yeni rol, MCC müşteri görünümü, uyarı bandı ve toplu veri tazeleme. Ayrıntı
+§ 3.6'da.
 
 ---
 
@@ -42,11 +59,11 @@ Senin paylaştığın 7 parçalı mimariye göre. ✅ tamam · 🟡 kısmi · �
 | Yetenek | Durum | Nerede |
 |---|---|---|
 | Çoklu kiracı (org → müşteri → kullanıcı) | ✅ | `prisma/schema.prisma` |
-| Rol ve yetki matrisi | ✅ | `packages/shared/src/auth/roles.ts` |
-| RLS — 60+ politika, `FORCE` edilmiş | ✅ | `prisma/sql/02_rls.sql` |
+| Rol ve yetki matrisi — **7 rol, 34 yetki** | ✅ | `packages/shared/src/auth/roles.ts` |
+| RLS — **151 politika**, `FORCE` edilmiş | ✅ | `prisma/sql/02_rls.sql` |
 | Beyaz etiket (logo, renk, font) | ✅ | `branding_profiles` |
 | Denetim kaydı (append-only) | ✅ | `audit_logs` |
-| Davet akışı | ✅ | `invitations` |
+| ~~Davet akışı~~ | ❌ **KALDIRILDI** | Token üretilip hash'leniyor ve düz metni ATILIYORDU; e-posta altyapısı olmadığı için üretimde kimse daveti kabul edemiyordu. Kullanıcı artık doğrudan oluşuyor, parolayı yönetici belirleyip elden iletiyor. `invitations` tablosu şemada YOK — bu satır 17 gün boyunca yanlış duruyordu |
 | Müşteri altında **çoklu proje/hesap** | ✅ | Bütçe ve kurallar hesap bazlı ayrışıyor |
 
 ### 2 — BASE (Bilgi Bankası, Kitle, Anahtar Kelime, Varlık) ❌
@@ -275,9 +292,15 @@ Bugün "frekans > 3 ise duraklat" kuralı yazılabiliyor. Eksik olan, yorgunluğ
 | Canlı online rapor | ✅ | `/raporlar` + `/r/[token]` |
 | Beyaz etiket rapor | ✅ | Referans PDF'ten çıkarıldı |
 | Paylaşım linki (hash'li token) | ✅ | `share.service.ts` |
-| Yazdırma | 🟡 | Tarayıcı yazdırma; sunucu PDF'i yok |
-| **Zamanlanmış PDF/Excel** | ❌ | **E-posta altyapısı yok** |
-| Anahtar kelime raporu | 🟡 | Veri hattı yazıldı, canlı doğrulanmadı |
+| **Sunucu PDF'i** | ✅ | `rapor-pdf.service.ts` — `pdf-lib`, gömülü DejaVu Sans (Türkçe + ₺ için ZORUNLU), vektörel grafik |
+| **E-posta ile gönderim** | ✅ | `rapor-gonder.service.ts` + `email/mail-gonderici.ts`; SMTP kimliği kullanıcı başına (`user_email_accounts`) |
+| **Üç varsayılan şablon** | ✅ | Genel · Google Ads · Meta Ads — `VARSAYILAN_SABLONLAR`, kodda (veritabanında değil: silinen varsayılan geri gelmezdi) |
+| **Kitle kırılımı** — yaş, cinsiyet, yerleşim, saat, şehir | ✅ | `insight_breakdowns` tablosu + `kirilim-sync.service.ts` |
+| **Kitle Özeti sayfası** | ✅ | Kartlar + 4 halka + günlük form eğrisi; panel ve PDF AYNI sayfayı çiziyor |
+| Anahtar kelime raporu | ✅ | Veri hattı canlı; "Şimdi güncelle" de tetikliyor |
+| Arama terimleri | ✅ | `search_term_insights`; "Eşleşen Kelime" sütunu raporun en eyleme dönük bilgisi |
+| Zamanlanmış (otomatik) rapor gönderimi | ❌ | Gönderim elle tetikleniyor |
+| **İlgi alanı kırılımı** | ❌ **OLAMAZ** | Meta Ads Insights API'sinde ilgi alanı bir KIRILIM değil, hedefleme girdisi. Google'da yalnızca kriter olarak eklenmiş kitleler için kısmi. Tek platformda yarım çalışan bir bölüm raporda "Meta'da neden boş" sorusunu doğurur |
 
 ---
 
@@ -325,6 +348,84 @@ edilebilir:
 görüntüleme Google tarafında boş kalıyor. Doğru alan adlarını tahmin etmek her
 denemede bir canlı tur yakacaktı; alan sondası artık var, gerektiğinde
 saniyeler içinde bulunur.
+
+---
+
+## 3.6. 11–28 Ağustos: rapor ve panel yeniden yazımı
+
+30 commit. Okuma/yazma dengesi değişmedi — bu dönemde **hiçbir platform yazma
+yolu canlıda denenmedi**; iş rapor, panel ve senkronizasyon tarafındaydı.
+
+### Rapor
+
+| Ne | Nerede | Neden dikkat |
+|---|---|---|
+| Sunucu PDF'i | `rapor-pdf.service.ts`, `pdf-cizim.ts` | `pdf-lib` + gömülü DejaVu Sans. **Font gömülmezse `ğ ş ı ₺` sessizce düşüyor** ve bunu ilk gören müşteri oluyor; font bulunamazsa AÇIKÇA patlıyor |
+| PDF = panel | `report-document.tsx` referans | PDF'e kendi görsel dilimi kurmuştum ("çok pastel boya çizimi gibi olmuş"). `rapor-pdf.service.spec.ts` regresyon bekçisi taşıyor: `payCubugu`, `altbilgi(`, `acikTon(`, `const BANT` kaynakta geçerse düşüyor |
+| Üç varsayılan şablon | `VARSAYILAN_SABLONLAR` | **Kodda, veritabanında değil**: seed'le yazılan üç satır, kullanıcı birini silince geri gelmeyen bir varsayılan demekti |
+| Platform daraltması | `platformFiltresi()` | Şablon platformu daraltıyorsa ÖZET KARTLARI ve günlük seri de daralmalı; yalnızca bölüm listesini süzmek aynı belgede iki farklı gerçek üretiyordu |
+| Kitle Özeti | `kitle-ozeti.tsx` + `kitleOzeti()` | Halkalar **çokgenle** çiziliyor, yay komutuyla değil: `pdf-lib`in SVG ayrıştırıcısına `A` vermek sürüme bağlı bir bahis ve tek dilim %100 olduğunda yay dejenere olup HİÇBİR ŞEY çizmiyor |
+| Ekranda bölüm ayrımı | `.rpt-page + .rpt-page` | Yazdırmada sayfa sonu vardı, **ekranda hiçbir ayrım yoktu** |
+
+### Veri
+
+| Ne | Nerede | Neden dikkat |
+|---|---|---|
+| Kitle kırılımı toplanıyor | `insight_breakdowns`, `kirilim-sync.service.ts` | `insights_daily.breakdown_key` kolonu ve `insights_breakdown` kota katmanı hazır duruyordu ama **hiçbir şey onları doldurmuyordu** |
+| Kırılım AYRI tabloda | — | `insights_daily`ye yazmak teknik olarak mümkün ama mevcut toplama sorgularının hiçbiri `breakdown_key`i süzmüyor: satırlar oraya yazıldığı an **her harcama rakamı kırılım sayısı kadar katlanır** ve hiçbir hata düşmez |
+| Reklam seviyesi geçmiş | `insights-sync.service.ts` | `initial_backfill` artık `['campaign','ad_group','ad']`. Derin seviyeler 15 günlük parçalar hâlinde: `time_increment=1` ile yanıt GÜN × VARLIK satırı taşıyor ve 90 gün × reklam tek istekte "reduce the amount of data" ile düşüyor |
+
+### Yetki
+
+**Org geneli VERİ erişimi ile org YÖNETİCİLİĞİ ayrıldı** — bu dönemin en
+yapısal değişikliği. `isOrgAdmin` iki işi birden yapıyordu: (1) org'daki
+bütün müşterilerin verisini görmek, (2) kullanıcı açma / üyelik verme /
+müşteri silme kapılarını açmak.
+
+- `ORG_SCOPED_ROLES` = veri kapsamı (owner, admin, **ad_manager**)
+- `ORG_ADMIN_ROLES` = yetki demeti (owner, admin)
+
+Yeni roller: **Reklam Yöneticisi** (`ad_manager`) ve **Müşteri Hizmetleri**
+(`customer_service`). Reklam Yöneticisi'ni çalışır hâle getirmek YETKİ
+MATRİSİNDEN İBARET DEĞİLDİ — dört katman birden gerekti:
+
+1. Yetki matrisi + yeni `connection.manage` yetkisi
+2. RLS: havuz görünürlüğü `app.is_org_admin()`e bağlıydı → `app.can_manage_pool()`
+3. `INSERT ... RETURNING` SELECT politikasından da geçiyor; yeni açılan
+   müşterinin kimliği erişim listesinde olamadığı için çağrı düşüyordu.
+   Kimlik önden üretilip kapsam O TRANSACTION için genişletiliyor
+4. Marka profili aynı transaction'da yazılıyor ve politikası yalnızca org
+   yöneticisi diyordu
+
+### Panel
+
+| Ne | Neden dikkat |
+|---|---|
+| MCC müşteri görünümü | "Tüm müşteriler" seçiliyken kampanya değil MÜŞTERİ listesi; satıra tıklayınca o workspace'e geçiliyor. Seviye filtresi olmadan harcama 4× çıkıyor — `TOTALS_LEVEL` sabiti |
+| Uyarı bandı | Ödeme sorunu, hesap kapalı, bağlantı yetkisi, veri gelmiyor. Her uyarı verinin OKUNMA ANINI taşıyor: hesap durumu günde iki kez tazeleniyor ve tarihi göstermeyen uyarı düzelmiş bir sorunu ekranda tutar |
+| Bekleme göstergesi | Eksik olan yalnızca görsel değildi: `router.refresh()` beklenebilir bir şey döndürmüyor ve `finally` içindeki `setPending(false)` asıl beklemenin BAŞINDA koşuyordu. `startTransition` doğru mekanizma |
+| Toplu danışman ataması | İki yönde: workspace → danışmanlar, danışman → workspace'ler. Karar tek fonksiyonda (`atamaEngeli`), cümle her ekranın kendi yönünden |
+
+### Senkronizasyon
+
+| İş | Zaman | Not |
+|---|---|---|
+| `sweep:breakdowns` | 05:32 (UTC) | Kitle kırılımları |
+| `sweep:account-status` | **08:05 ve 13:05 (Europe/Istanbul)** | Hesap durumu + ödeme maili. **Tek `tz` istisnası**: diğer süpürmeler veri PENCERESİ hakkında ve UTC doğru; bu iş İNSANIN OKUDUĞU mail üretiyor |
+
+- **"Şimdi güncelle" artık raporun bütün bölümlerini kapsıyor**: yapı,
+  metrik, kırılım, organik gönderi, anahtar kelime, arama terimi. Düğme
+  raporun bir bölümüne dokunmuyorsa adı ile yaptığı iş ayrışıyor.
+- **"Tüm verileri güncelle"** (`sync_batches`): seçili workspace'lerin 2
+  yıllık geçmişi, 90 günlük pencerelere bölünmüş, ilerleme çubuğu + tahmini
+  süre. Tahmin eş zamanlılığa (4) bölünüyor ve örnek yetersizken VERİLMİYOR.
+
+### Güvenlik
+
+`.env.example`'da **somut bir varsayılan parola** duruyordu ve depo herkese
+açık. Değer boşaltıldı, `ornek-env-sir.spec.ts` bekçisi eklendi. **Git
+geçmişinde hâlâ duruyor** — `SEED_ADMIN_EMAIL` hesabının parolası
+döndürülmeli.
 
 ---
 
@@ -461,10 +562,25 @@ gerçek. Ekran kaydı için doğal bir anlatı.
    her gün kota tüketiyor. Bağlantı sayfasındaki arama + izlenenler bloğu bu
    iş için var.
 
+### Hemen — 2026-08-28 deploy'u sonrası doğrulanacaklar
+
+**Beş migration ve RLS değişiklikleri henüz sunucuda değil.** Deploy:
+`su - advetics -c 'cd ~/htdocs/advetics.com && git pull && ./scripts/deploy.sh'`
+
+| # | Ne | Neden |
+|---|---|---|
+| 1 | **Kırılım tabloları kendi boyutunu gösteriyor mu** | Üretime `dimension` süzgeci OLMADAN çıktı: beş tablo da bütün boyutları karışık gösterdi ve toplamlar yanlıştı (`b80f132` düzeltti). "Yaş Dağılımı"nda Erkek/Kadın görünüyorsa düzeltme tutmadı |
+| 2 | **`SEED_ADMIN_EMAIL` hesabının parolası** | `.env.example`'daki varsayılan git geçmişinde duruyor ve depo herkese açık. `db:set-password` ile döndür |
+| 3 | **hello@profaj.com SMTP kimliği tanımlı ve DOĞRULANMIŞ mı** | Ödeme uyarısı maili onunla gidiyor; yoksa `sync_jobs` notuna "e-posta kimliği tanımlı değil" yazılıp sessiz kalır |
+| 4 | Kitle kırılımı ilk gece (05:32) toplanıyor | O gece geçmeden tablolar boş görünür — arıza değil |
+| 5 | "Tüm verileri güncelle" bir-iki workspace ile denenmeli | 12 workspace × 2 hesap × 2 yıl ≈ 240 iş; tahmin ilk turda kalibre olacak |
+
 ### Onay beklerken (kod tarafı)
 
-4. **Bildirim altyapısı.** Uyarıların gerçekten gitmesi için gereken tek şey.
-   Bütçe uyarısı, kural aksiyonu, senkronizasyon hatası — üçü de eşiği zaten
+4. ~~**Bildirim altyapısı.**~~ ✅ **YAPILDI** (2026-08-27/28): panel geneli
+   uyarı bandı (`/alerts`), günde iki kez hesap durumu kontrolü ve ödeme
+   sorunu maili. Kalan: bütçe ve kural aksiyonu uyarıları hâlâ bandın
+   dışında; eşiği zaten
    hesaplıyor, gönderecek kanal yok. *Açtığı: CENTRAL uyarıları, zamanlanmış
    rapor.*
 5. **Sunucu tarafı PDF (Playwright).** Zamanlanmış raporun diğer yarısı.
@@ -502,6 +618,29 @@ hiç çalışmadılar.
 içine alması · `dry_run` karşılaştırmasının her düzenlemede kuralı provaya
 döndürmesi · denetim kaydının `BIGSERIAL` yüzünden düşüp başarılı yazmayı
 "başarısız" göstermesi · `org_id` kolonuna müşteri kimliği yazılması.
+
+**11–28 Ağustos'ta eklenenler** — deseni doğruluyor, hepsi sessizdi:
+
+| Hata | Belirtisi | Nasıl görünmedi |
+|---|---|---|
+| Kırılım sorgusunda `dimension` süzgeci yok | Beş tablo da aynı satırları gösteriyor, toplamlar 5× | Boyut yalnızca bloğun ETİKETİNDE kullanılıyordu, sorguya hiç girmiyordu — TypeScript susuyordu |
+| `platformFiltresi` iki metotta ÇİFT | — | SQL zararsız (aynı koşul iki kez) ama **testi bozuyordu**: "en az yedi yerde geçsin" iddiası tam da kopyalar sayesinde tutuyordu. Test hatayı DOĞRULUYORDU |
+| Alt sorgular `platform` alanını hiç okumuyordu | Şablon daraltması sessizce etkisiz | Nesneye fazladan alan eklemek TypeScript'te hata değil |
+| `share.service.ts` bağlamı `permissions` taşımıyordu | Her paylaşılan rapor bağlantısı çalışma anında düşecekti | `as TenantContext` cast'i denetimsiz |
+| `router.refresh()` beklenmiyor | Bekleme göstergesi tam bekleme başlarken sönüyor | Bayrak vardı, yanlış pencerede açıktı |
+| `backdrop-filter` kapsayıcı blok üretiyor | Tam ekran pencere üst bara sıkışıyor | **ÜÇ KEZ** düşüldü: yönetim paneli, müşteri detayı, bekleme örtüsü |
+| `.env.example`'da gerçek parola | Depoyu okuyan herkes girebilir | Diğer sır alanları yer tutucuydu; bir satır kaçmıştı ve 17 gün durdu |
+
+**Testin kendisi de sessizce boşa düşebiliyor.** Bu dönemde yaşananlar:
+
+- İddia yoruma çapalandı, koda değil (kuralı ANLATAN yorum `toContain`'i geçirdi)
+- İddia `import` satırına çapalandı, çağrıya değil (`createPortal` adı import'ta da var)
+- İddia metodun tamamına çapalandı, ilgili sorguya değil (aynı dize ikinci sorguda da vardı)
+- İddia sayıma dayandı ve sayı kopyalanmış satırlar sayesinde tutuyordu
+- **Mutasyon komutu tutmadı ve test boşuna "geçti"** — iki kez: bir kez yanlış
+  girinti hedeflendi, bir kez iki uçta aynı desen olduğu için yanlış uca
+  uygulandı. **Mutasyonun GERÇEKTEN uygulandığı doğrulanmadan "test tuttu"
+  denemez.**
 
 Pratik sonuç: **yeni bir özellik "çalışıyor gibi görünüyor" ile kabul
 edilmiyor.** Sayının doğru olduğunu gösteren bir test ya da canlı doğrulama
