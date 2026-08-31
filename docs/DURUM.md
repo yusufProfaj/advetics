@@ -1,6 +1,6 @@
 # Advetics — Durum ve Yol Haritası
 
-> **Son güncelleme:** 2026-08-28
+> **Son güncelleme:** 2026-08-31
 > **Kaynak:** Bu belge koddan doğrulanarak yazıldı, hafızadan değil. Her iddia
 > için dosya yolu verilmiştir; şüphe duyduğun satırı açıp bakabilirsin.
 >
@@ -562,18 +562,58 @@ gerçek. Ekran kaydı için doğal bir anlatı.
    her gün kota tüketiyor. Bağlantı sayfasındaki arama + izlenenler bloğu bu
    iş için var.
 
-### Hemen — 2026-08-28 deploy'u sonrası doğrulanacaklar
+### 2026-08-28 deploy'u sonrası doğrulama — TAMAMLANDI (2026-08-31)
 
-**Beş migration ve RLS değişiklikleri henüz sunucuda değil.** Deploy:
-`su - advetics -c 'cd ~/htdocs/advetics.com && git pull && ./scripts/deploy.sh'`
+Sunucuya SSH ile bağlanılıp veritabanından koddan doğrulanarak kontrol edildi.
 
-| # | Ne | Neden |
+| # | Ne | Sonuç |
 |---|---|---|
-| 1 | **Kırılım tabloları kendi boyutunu gösteriyor mu** | Üretime `dimension` süzgeci OLMADAN çıktı: beş tablo da bütün boyutları karışık gösterdi ve toplamlar yanlıştı (`b80f132` düzeltti). "Yaş Dağılımı"nda Erkek/Kadın görünüyorsa düzeltme tutmadı |
-| 2 | **`SEED_ADMIN_EMAIL` hesabının parolası** | `.env.example`'daki varsayılan git geçmişinde duruyor ve depo herkese açık. `db:set-password` ile döndür |
-| 3 | **hello@profaj.com SMTP kimliği tanımlı ve DOĞRULANMIŞ mı** | Ödeme uyarısı maili onunla gidiyor; yoksa `sync_jobs` notuna "e-posta kimliği tanımlı değil" yazılıp sessiz kalır |
-| 4 | Kitle kırılımı ilk gece (05:32) toplanıyor | O gece geçmeden tablolar boş görünür — arıza değil |
-| 5 | "Tüm verileri güncelle" bir-iki workspace ile denenmeli | 12 workspace × 2 hesap × 2 yıl ≈ 240 iş; tahmin ilk turda kalibre olacak |
+| 1 | Kırılım tabloları kendi boyutunu gösteriyor mu | ✅ 5 boyut (age/gender/placement/hour/city) birbirine karışmıyor; `b80f132` tuttu |
+| 2 | `SEED_ADMIN_EMAIL` (yusuf@profaj.com) hesabının parolası | ❌ **HÂLÂ DÖNDÜRÜLMEDİ** — sohbete yapıştırılan eski varsayılan git geçmişinde duruyor. `pnpm --filter @advetics/api db:set-password -- --email yusuf@profaj.com` sunucuda ELLE çalıştırılmalı (parola bir kez ekrana basılır, kaydedilmez) |
+| 3 | hello@profaj.com SMTP kimliği tanımlı ve doğrulanmış mı | ✅ `verified_at: 2026-08-24 06:10`, hata yok |
+| 4 | Kitle kırılımı gecelik toplanıyor mu | ✅ veri 2026-08-30'a kadar geliyor |
+| 5 | "Tüm verileri güncelle" denendi mi | ✅ denendi (1 workspace, 38 iş) — **iki gerçek hata ortaya çıkardı, bkz. §3.7** |
+
+### 3.7. 31 Ağustos: deploy doğrulaması iki sessiz hata buldu, ikisi de düzeltildi ve dağıtıldı
+
+`sync_jobs` içinde 72 satır `insights_breakdowns` işi 3+ gündür `running`
+durumunda takılıydı ve `insights_backfill` işlerinde tekrarlayan bir hata
+vardı: *"too many bind variables in prepared statement, expected maximum of
+32767, received 48816"* (sistemde toplam 19 kez görülmüş).
+
+**Hata 1 — `insights_breakdowns` dalı `markSucceeded`/`recordFailure`
+çağırmıyordu.** [sync-processor.service.ts:633](../apps/api/src/queue/sync-processor.service.ts)
+diğer bütün iş türlerinin sarıldığı `try/catch` deseninden yoksundu; satır
+BAŞARIYLA bitse bile `sync_jobs.status` sonsuza dek `'running'` kalıyordu —
+worker hiç çökmese bile. Bu bir çökme yan etkisi değil, dalın doğuştan
+eksik olan parçasıydı. Düzeltme diğer dallarla AYNI desene sokuldu.
+Kaynak taraması testi: `insights-breakdowns-durum.spec.ts`.
+
+**Hata 2 — `insights_backfill` büyük hesaplarda deterministik çöküyordu.**
+[insights-sync.service.ts:360](../apps/api/src/queue/insights-sync.service.ts)
+`writeRows()` bütün satırları chunk'sız TEK `$executeRaw` çağrısında
+yazıyordu. Satır başına 18 parametre; `ad` seviyesinde 7 günlük pencerede
+~13.300 satır × 18 ≈ 240.000 parametre, Postgres/Prisma'nın 32.767
+sınırının çok üzerinde. Chunk'sızken retry İŞE YARAMAZ — satır sayısı
+değişmediği için her deneme aynı hatayla düşer. 1000'lik parçalara bölündü.
+
+İkisi de mutasyonla doğrulandı (düzeltme geri alınınca ilgili test
+gerçekten düşüyor — chunk testi PGlite'ın kendi mesaj protokolünde gerçek
+bir `RangeError` üretti, üretimdeki hatanın güçlü bir analogu). Commit
+`1f8ce7c`, main'e push edildi, sunucuya dağıtıldı (health check'ler yeşil).
+Eski 72+2 takılı `sync_jobs` satırı `failed` + açıklayıcı not ile
+işaretlendi; gecelik süpürme veriyi zaten ayrıca tazeliyor, elle yeniden
+tetiklemek gerekmiyor.
+
+**Deploy script'i SSH bağlantısı kesilirse yarıda kalabiliyor.** Build
+adımı (`nest build` + `next build`) birkaç dakika sürüyor ve bu sırada
+sessiz kalabiliyor; bir SSH oturumu (ör. uzun bir inaktivite zaman aşımı)
+düşerse `deploy.sh` `pm2 restart`a hiç ulaşmadan ölüyor — ki bu ZARARSIZ
+(canlı süreçler eski koda devam eder), ama `.last-deployed-sha`
+GÜNCELLENMEMİŞ görünür ve bu kafa karıştırır. Elle deploy ederken
+`nohup ./scripts/deploy.sh > deploy-run.log 2>&1 < /dev/null &` ile
+oturumdan bağımsız çalıştırmak ve `.last-deployed-sha` ile bitişi
+doğrulamak daha güvenilir.
 
 ### Onay beklerken (kod tarafı)
 
