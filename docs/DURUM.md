@@ -15,8 +15,8 @@
 |---|---|---|
 | Veritabanı tablosu | 37 | **53** |
 | Migration | 17 | **52** |
-| API testi | 694 ¹ | **2.062** |
-| Web testi | 20 ¹ | **366** |
+| API testi | 694 ¹ | **2.129** |
+| Web testi | 20 ¹ | **372** |
 | Panel sayfası | 16 | **29** |
 | API controller | 17 | **25** |
 | RLS politikası | 95 | **155** |
@@ -580,6 +580,57 @@ Sunucuya SSH ile bağlanılıp veritabanından koddan doğrulanarak kontrol edil
 durumunda takılıydı ve `insights_backfill` işlerinde tekrarlayan bir hata
 vardı: *"too many bind variables in prepared statement, expected maximum of
 32767, received 48816"* (sistemde toplam 19 kez görülmüş).
+
+### 2026-09-02 — Müşteriye giden PDF'te iki görsel hata (`3dda604`)
+
+Kullanıcı Çiftçi Grup raporunun PDF'ini açtı; iki ayrı arıza vardı ve **ikisi
+de sessizdi**: hata yok, log yok, ikisini de ilk gören müşteriye giden belge
+oldu.
+
+**1 — Kitle Özeti sayfasında halkalar sayfanın altında.** Dört halka
+grafiği, başlıklarının ve lejantlarının yanında değil sayfanın alt çeyreğinde
+çiziliyordu. Sebep `pdf-lib`in `drawSvgPath`i: `translate(x, y)` sonrası
+`scale(1, -1)` yayınlıyor, yani mutlak PDF koordinatı verilince grafik yatay
+eksende aynalanıyor (merkez 609,89 yerine 232,00). Yol noktaları artık merkeze
+göre üretiliyor.
+
+Bu hatanın **neden kaçtığı** ayrıca kayda değer: `rapor-pdf.service.spec.ts`
+fixture'ında `breakdowns` alanı hiç yoktu, TypeScript bunu `TS2741` ile
+söylüyordu ama vitest tip denetimi yapmıyor ve 259 test o sayfa **hiç
+üretilmeden** yeşil geçiyordu. Fixture tamamlandı; `reports/` typecheck'i
+artık temiz ve sayfayı gerçekten üreten dört test eklendi.
+
+**2 — "Öne Çıkan Reklamlar"da on reklamın görseli "sunucu 403".**
+`creatives.asset_urls` içindeki Meta CDN adresi imzalı ve süresi doluyor;
+Meta `image_url`ün geçici olduğunu, `thumbnail_url` için kalıcı bir karşılık
+bulunmadığını söylüyor. Yapı taraması delta çalıştığı için değişmemiş bir
+reklamın adresi aylarca tazelenmiyordu. Adres artık rapor üretilirken
+platformdan (`?ids=` ile tek istekte) ve **transaction kapandıktan sonra**
+tazeleniyor; düzeltme `build()` içinde olduğu için PDF, panel ve paylaşım
+bağlantısı birlikte düzeliyor.
+
+Bu yol `GET /reports/shared/:token` üzerinden **anonim tetiklenebiliyor**, o
+yüzden üç koruma var: kota bekçisi (yeni `report_creative` katmanı, tavan %50
+— en düşük), 10 dakikalık önbellek ve 12 saniyelik toplam süre bütçesi.
+Paylaşım linkini tarayan bir bot hesabın kotasını %90'ın üstüne çıkarsaydı
+yapı taraması da reddedilir ve hesap kalıcı kilide girerdi.
+
+**Yol boyunca çıkan üçüncü hata (düzeltmesi YARIM):** Google sağlayıcısı
+`asset_urls`'e adres değil Google Ads **kaynak adı** yazıyor
+(`customers/…/assets/…` — okuduğu alan `AdImageAsset.asset` ve o bir URL
+değil). Değer string olduğu için süzgeçten geçip `imageUrl`e yazılıyor ve
+TRUTHY oluyordu: PDF metin önizlemesi yerine "görsel alınamadı" dalına
+giriyor ve dipnottaki sayaç şişip gerçek arızayı gizliyordu. Süzgeç artık tek
+kaynakta (`gorselAdresleri`) ve kaynak adını eliyor. **Google Display
+reklamlarının görseli raporda hâlâ yok**; gerçek adresi çekmek ayrı bir GAQL
+sorgusu istiyor (`SELECT asset.image_asset.full_size.url FROM asset`) ve o iş
+yapılmadı. Google **arama** reklamlarının görselsiz olması hata değil — onlar
+metin önizlemesiyle çiziliyor ve doğru çalışıyor.
+
+**Test:** 38 yeni test, on mutasyonun onu da yakalandı. Bir mutasyon gerçek
+bir kırılganlık ortaya çıkardı: yarılamanın durma koşulu URL biçimini seçen
+`tekli` değişkenine bağlıydı ve sabitlenirse özyineleme sonsuza gidiyordu
+(süreç bellek taşmasıyla düştü). Durma koşulu artık liste uzunluğuna bağlı.
 
 **Hata 1 — `insights_breakdowns` dalı `markSucceeded`/`recordFailure`
 çağırmıyordu.** [sync-processor.service.ts:633](../apps/api/src/queue/sync-processor.service.ts)

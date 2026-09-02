@@ -478,6 +478,41 @@ buna göre veriliyor:
   senkron olduğu için gömme önden yapılmalı — bir `as` cast'i çözülmemiş
   Promise'i `drawImage`e sokuyor ve hata yalnızca belgede, boş kutu olarak
   görünüyor.
+- **`drawSvgPath` KOORDİNATI TERS ÇEVİRİYOR — çizim başarılı, yer yanlış.**
+  `pdf-lib` bu çağrıda `translate(x, y)` uyguladıktan SONRA `scale(1, -1)`
+  yayınlıyor (1.17.1 `operations.js`: *"SVG path Y axis is opposite
+  pdf-lib's"*), yani çizilen nokta `y - pathY`. Yol noktaları MUTLAK PDF
+  koordinatıyla yazılıp `y: sayfaYuksekligi` verilirse grafik sayfanın yatay
+  orta ekseninde AYNALANIYOR: Kitle Özeti'ndeki dört halka merkezi 609,89
+  yerine 232,00'ye, sayfanın alt çeyreğine düşüyordu ve HİÇBİR hata
+  düşmüyordu. Yol noktalarını MERKEZE GÖRE yaz ve merkezi `{x: cx, y: cy}`
+  olarak ver: ters çevirme o zaman işe yarıyor (SVG'nin -π/2'si PDF'te saat
+  12) ve sayfa yüksekliği hesaba hiç girmiyor. Bu ters çevirme `pdf-lib`de
+  YALNIZCA `drawSvgPath`te var; `drawRectangle`/`drawCircle`/`drawLine`/
+  `drawText` normal PDF koordinatı kullanıyor. `halka-konumu.spec.ts`
+  dönüşümü kütüphanenin kendi kaynağından da doğruluyor.
+- **BİR ÇİZİMİN YAPILDIĞINI DOĞRULAMAK, NEREYE YAPILDIĞINI DOĞRULAMIYOR.**
+  `rapor-sablonlari.spec.ts` `halka()`nın `drawSvgPath` kullandığını zaten
+  kontrol ediyordu ve hatalı sürümde de GEÇTİ. Konum iddiası, dönüşümü
+  uygulayıp sonucu ÖLÇMEK zorunda.
+- **ZORUNLU ALANI EKSİK BIRAKAN FIXTURE, EKSİK KAPSAMIN KENDİSİDİR.**
+  `rapor-pdf.service.spec.ts` fixture'ında `breakdowns` hiç yoktu; TypeScript
+  bunu `TS2741` ile söylüyordu ama **vitest tip denetimi yapmıyor** ve 259
+  test, Kitle Özeti sayfası HİÇ ÜRETİLMEDEN yeşil geçiyordu. Kırmızı bir
+  typecheck kimseyi uyarmıyor — `pnpm --filter @advetics/api typecheck`
+  temiz tutulmalı, yoksa gerçek uyarı gürültünün içinde kayboluyor.
+- **NEST MODÜL KAYDI DERLEMEDE DEĞİL AÇILIŞTA PATLIYOR.** Depoda bağımlılık
+  grafiğini ayağa kaldıran bir test yok: `nest build` başarılı olur, grafik
+  çözülemez ve hata deploy'un ortasında görünür. Yeni bir servis eklerken
+  sağlayıcı listesini ve `imports`u kaynak taramasıyla kilitle
+  (`kreatif-adresi.spec.ts` sonundaki blok).
+- **ÖZYİNELEMENİN DURMA KOŞULUNU SUNUM DEĞİŞKENİNE BAĞLAMA.** Meta kreatif
+  adresi çekiminde liste hatada yarılanıyor ve durma koşulu `tekli`ye
+  bağlıydı — o değişken URL BİÇİMİNİ seçiyor (`?ids=` mi düğüm yolu mu), uzunluğu
+  değil. Biri onu sabitlerse `Math.floor(1 / 2) = 0` yüzünden `slice(0)` aynı
+  tek elemanlı listeyi veriyor ve fonksiyon kendini sonsuza çağırıyor;
+  mutasyon testinde süreç BELLEK TAŞMASIYLA düştü. Durma koşulu doğrudan
+  `idler.length === 1` olmalı.
 - **HESABA BAĞLI OLMAYAN KAYIT, HESABA GÖRE SAYAN RAPORA GİRMİYOR.** Şemsiye
   bütçe `ad_account_id IS NULL` ile duruyor; "kalanları say" sorgusu
   `WHERE ad_account_id = $1` dediği için o satır HİÇ görünmüyordu. Oysa
@@ -514,6 +549,20 @@ okunup varsayılmadı — canlıda doğrulandı.
   okuyup karşılaştır — ama BENZERİ BENZERLE: yazdığın alanın yankısıyla.
   `effective_instagram_media_id` başka bir kimlik uzayında olabiliyor ve onu
   engel saymak çalışan bir yolu kapatıyor.
+- **KREATİF GÖRSEL ADRESİ İMZALI VE ÖLÜYOR — saklanamaz.** `image_url` geçici
+  ve HER Graph çağrısı yenisini üretiyor; `thumbnail_url` için kalıcı bir
+  karşılık HİÇ YOK (kalıcı olan tek şey `AdImage.permanent_url` ve o yalnızca
+  `image_hash` taşıyan kreatiflerde var — gönderi/video boost'larında yok).
+  Bunu DELTA yapı taramasıyla birleştirince adres yazıldığı gün taze, iki
+  hafta sonra ölü oluyor: rapor PDF'inde on reklamın hepsi "sunucu 403".
+  Adres KULLANILACAĞI ANDA tazeleniyor (`kreatif-adresi.service.ts`), yapı
+  taramasında değil — orada tazelemek de işe yaramazdı, çünkü rapor günler
+  sonra üretiliyor.
+- **`?ids=` ÇOKLU SORGUSUNDA TEK KÖTÜ KİMLİK İSTEĞİN TAMAMINI DÜŞÜRÜYOR.**
+  Silinmiş bir kreatif, kalan 23 reklamın da görselini götürüyor. Liste
+  yarılanıp tekrar isteniyor; tek kimliğe inildiğinde DÜĞÜM yoluna
+  (`/{creative-id}`) geçiliyor — `ids` bir kolaylık, düğüm yolu Graph'in en
+  kesin biçimi ve yarılama en sonunda hep bilinen yola düşmeli.
 
 **Webhook'lar** (2026-08 araştırması, iki bağımsız sınayıcıyla)
 
@@ -546,6 +595,17 @@ okunup varsayılmadı — canlıda doğrulandı.
 
 **Google Ads** (2026-08 araştırması, resmi dokümandan)
 
+- **`AdImageAsset.asset` BİR ADRES DEĞİL, KAYNAK ADI.** Değeri
+  `customers/{id}/assets/{id}` biçiminde ve `asset_urls`'e onu yazmak üç katlı
+  bir arıza üretiyor: `new URL()` düşüyor, PDF metin önizlemesi yerine "görsel
+  alınamadı" dalına giriyor (değer string olduğu için TRUTHY) ve dipnottaki
+  sayaç şişip GERÇEK arızayı gizliyor. Adresi almak ayrı bir sorgu istiyor:
+  `SELECT asset.image_asset.full_size.url FROM asset` — ana makine
+  `tpc.googlesyndication.com`. **BU SORGU HENÜZ YAZILMADI**, yani Google
+  Display reklamlarının görseli raporda hâlâ yok (arama reklamlarınınki
+  metin önizlemesiyle geliyor ve o DOĞRU davranış). `gorselAdresleri()`
+  süzgeci kaynak adını eliyor, böylece en azından yanlış dalı ve yalancı
+  sayacı üretmiyor.
 - **`advertising_channel_type = VIDEO` kampanya API'DEN OLUŞTURULAMIYOR.**
   Google Ads API video kampanyalarında yalnızca okuma ve raporlama yapıyor.
   Enum'da `VIDEO_ACTION` gibi değerlerin durması oluşturulabilir olduğunu
@@ -564,7 +624,7 @@ okunup varsayılmadı — canlıda doğrulandı.
 
 ### Test
 
-- `pnpm --filter @advetics/api test` — vitest. Şu an **1.715 API testi**.
+- `pnpm --filter @advetics/api test` — vitest. Şu an **2.129 API testi**.
 - Veritabanına dokunan testler **PGlite** kullanıyor (gerçek Postgres, WASM).
   Şema üretim migration'larından kuruluyor — el yazımı test şeması yok.
 - **RLS testlerde varsayılan olarak KAPALI** (worker rolü BYPASSRLS'i taklit
