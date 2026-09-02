@@ -106,6 +106,13 @@ export class RaporGonderService {
       from: input.from,
       to: input.to,
       ...(input.templateId ? { templateId: input.templateId } : {}),
+      /*
+       * ÖN AYAR DA TAŞINIYOR. Yalnızca `templateId` aktarılıyordu ve ekranda
+       * "Google Ads Şablonu" seçen kullanıcının müşterisine GENEL rapor
+       * gidiyordu — sessizce, çünkü şablonsuz istek de geçerli. Giden belge
+       * ile ekranda görülen aynı olmak zorunda.
+       */
+      ...(input.sablon ? { sablon: input.sablon } : {}),
     };
     const data = await this.reports.build(ctx, query);
 

@@ -39,10 +39,17 @@ describe('rapor tarih aralığı', () => {
   });
 
   it('rapora giden aralık KIRPILMIŞ olan — ham seçim DEĞİL', () => {
-    // `secilen.from/to` doğrudan sorguya girseydi kırpma bir işe yaramazdı.
+    /*
+     * `secilen.from/to` doğrudan sorguya girseydi kırpma bir işe yaramazdı.
+     *
+     * ÇAPA `raporSorgusu(` — sorgu artık elle kurulmuyor, tek bir üreticiden
+     * geçiyor (bkz. `rapor-sorgusu.spec.ts`: şablon PDF'e taşınmıyordu).
+     * Kırpma iddiası o değişiklikten BAĞIMSIZ ve hâlâ geçerli: üreticiye
+     * verilen değerler kırpılmış olanlar mı, ham seçim mi?
+     */
     const g = govde();
-    const i = g.indexOf("new URLSearchParams({ clientId,");
-    expect(i, 'sorgu dizesi bulunamadı').toBeGreaterThan(-1);
+    const i = g.indexOf('raporSorgusu({ clientId,');
+    expect(i, 'sorgu üreticisi bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     const satir = g.slice(i, g.indexOf('\n', i));
     expect(satir).toContain('from, to');
     expect(satir).not.toContain('secilen.');

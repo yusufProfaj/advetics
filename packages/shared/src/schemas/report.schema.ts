@@ -653,6 +653,16 @@ export const reportSendSchema = z.object({
   from: isoDate,
   to: isoDate,
   templateId: z.string().uuid().optional(),
+  /*
+   * ÖN AYAR KODU — `templateId` ile AYNI SORUNUN cevabı, farklı biçimde.
+   *
+   * `reportQuerySchema` bu ikiliyi baştan beri taşıyordu; burada YALNIZCA
+   * `templateId` vardı ve sonucu şuydu: ekranda "Google Ads Şablonu" seçen
+   * kullanıcı müşterisine GENEL raporu maille gönderiyordu. Hata da vermiyordu
+   * — şablonsuz bir istek de geçerli bir istek ve sunucu varsayılanı üretiyor.
+   * Gönderilen belge ekranda görülenden farklı ve bunu ancak alıcı görüyor.
+   */
+  sablon: z.enum(['genel', 'google', 'meta']).optional(),
   /** Alıcı. Boşsa müşterinin `contact_email` alanı kullanılıyor. */
   to_email: z.string().trim().email().optional(),
   subject: z.string().trim().min(1).max(300),

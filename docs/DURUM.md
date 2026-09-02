@@ -723,6 +723,79 @@ listeye ikinci bir kaynak (kare görsel, logo) eklenirse doğrulamanın
 unutulacağı yer tam orası olduğu için duruyor; ikisi birden silinince dört
 test düşüyor.
 
+### 2026-09-02 — Şablon değişince PDF değişmiyordu + Raporlar tek sayfada
+
+Kullanıcının bildirdiği hâl: *"ben şablonu değiştirdiğimde pdf
+oluşturamıyorum"*.
+
+**Hata sessizdi ve klasikti.** Aynı raporu isteyen ÜÇ yol vardı ve her biri
+sorgu dizesini ELLE kuruyordu:
+
+| yol | taşıdığı |
+|---|---|
+| `/reports/preview` (önizleme) | `clientId, from, to, sablon` ✅ |
+| `/reports/pdf` (indirme) | `clientId, from, to` ❌ |
+| `/reports/mail-draft` + `/reports/send` | `clientId, from, to` ❌ |
+
+Hiçbiri hata vermiyor — şablonsuz istek de geçerli bir istek ve sunucu
+varsayılanı üretiyor. Yani ekranda "Google Ads Şablonu" raporunu gören
+kullanıcı **Genel raporu** indiriyor, bunu ancak PDF'i AÇINCA anlıyor;
+müşteriye maille giden belge de aynı şekilde yanlış şablondan gidiyordu ve onu
+yalnızca alıcı görüyordu. CLAUDE.md'deki *"BAĞLANTIYI ELLE BİRLEŞTİRME —
+SÜZGEÇ DÜŞÜYOR"* kuralı bire bir bu; orada panel süzgeçleri kayboluyordu,
+burada şablon. Sorgu artık tek üreticiden (`packages/shared/src/rapor-sorgusu.ts`)
+geliyor ve `rapor-sorgusu.spec.ts` kaynak taramasıyla bunu kilitliyor.
+
+**İKİNCİ VE DAHA SİNSİ YARISI: kayıtlı şablonlar rapor ekranında HİÇ YOKTU.**
+Seçici yalnızca üç ön ayarı tanıyordu; kullanıcı `/raporlar/sablonlar`
+sayfasında bölüm sırasını düzenleyip rapora dönüyor, seçiciden bir şey seçiyor
+ve düzenlemesi kayboluyordu — çünkü `sablon` parametresi konduğu anda sunucu
+ön ayarı uygulayıp kayıtlı şablonun bölüm listesini atıyor
+(`reports.service.ts`: `params.templateId || !params.sablon ? null : …`).
+Şablonun ayrı bir sayfada olması hatanın sebebiydi, dekoru değil.
+
+**Raporlar artık tek sayfa.** Kenar çubuğundaki üç bağlantı (Raporlar, Rapor
+Şablonları, Faturalar) bire indi:
+
+- Şablon seçici hem ön ayarları hem **kayıtlı şablonları** listeliyor;
+  düzenleme ve "yeni şablon" aynı açılır listenin içinde, kaydedilen şablon
+  hemen seçiliyor.
+- Ekran URL'de **tek** `sablon` parametresi taşıyor; UUID mi ön ayar kodu mu
+  olduğu tek yerde (`sablonAlanlari`) ayrılıyor. İki ayrı parametre taşımak,
+  dallardan birinin birini düşürmesi demekti — düzeltilen hatanın kendisi.
+- Faturalar sekme oldu. Yetki süzgeci kaybolmadı, sayfanın içine taşındı:
+  `report.write` şablon düzenlemeyi, `report.share` fatura sekmesini açıyor.
+
+**Bölüm sırası artık sürüklenerek değişiyor.** Satır başına ↑/↓ düğmeleri
+vardı ve gerekçesi kaynakta yazılıydı: *"yedi öğelik bir listede kazancı yok"*.
+Liste **on dörde** çıkınca o gerekçe çürüdü — bir bölümü en alttan en üste
+almak on üç tıklama demek. Kütüphane eklenmedi (tarayıcının kendi HTML5
+olayları); **klavye desteği korundu** — satır odaklanabilir ve ok tuşlarıyla
+taşınıyor, yoksa özellik fareyi kullanamayan için tamamen kapanırdı. Taşıma
+**takas değil araya sokma**: takas eden bir sürükleme kullanıcının bıraktığı
+yere koymaz, iki öğeyi yer değiştirir.
+
+**Bilinen kısıt — sessiz değil, ekranda yazıyor:** paylaşım bağlantısı ön
+ayarları taşıyamıyor (`report_shares.template_id` bir UUID, ön ayarların
+UUID'si yok). Ön ayar seçiliyken Paylaş menüsünde bunun ne anlama geldiği
+yazıyor ve kullanıcı görünümü şablon olarak kaydetmeye yönlendiriliyor.
+
+**Test:** 24 yeni test; 11 mutasyonun 11'i de yakalandı — ama üçü ancak
+testler DÜZELTİLDİKTEN sonra:
+
+1. `onDragOver`dan `preventDefault` silmek testi düşürmüyordu: dilim
+   `indexOf(ad) + 400 karakter`di ve pencere KOMŞU işleyicinin
+   (`onDrop`) içindeki `preventDefault`a kadar uzanıyordu. Sabit uzunluklu
+   dilim, kilitlediğini sandığın şeyi kilitlemiyor — gövde artık süslü
+   parantez sayılarak çıkarılıyor.
+2. "Elle kurulmuş sorgu kalmadı" iddiası ilk yazımda **kırmızı verdi**: kod
+   zaten düzeltilmişti, iddia o sorguyu ANLATAN yoruma eşleşiyordu. Taramalar
+   artık yorumsuz kaynakta yapılıyor — tuzağın tehlikeli yönü ters yönde,
+   pozitif bir `toContain` kod silinse bile yorumla eşleşip geçer.
+3. `paylas-menusu.spec.ts` `<RaporGonder clientId={clientId}` arıyordu ve
+   bileşene prop eklenip satır bölününce düştü; kilitlenmek istenen şey
+   elemanın YERİ, prop'larının yazımı değil.
+
 ### 3.8. 31 Ağustos: Auto-Boost'un Bildirim Havuzu hiç dolmuyordu
 
 Kullanıcı panelde fark etti: `/auto-boost` sayfasında "Bildirim Havuzu"

@@ -99,7 +99,10 @@ describe('paylaş menüsü', () => {
      * İkisini aynı başlık altında toplamak farklı iki işi karıştırırdı.
      */
     expect(GONDER).toContain('PDF indir');
-    expect(MENU).toContain('<RaporGonder clientId={clientId}');
+    // ÇAPA SADECE ELEMAN ADI: bileşene prop eklenince (şablon seçimi) satır
+    // çok satıra bölündü ve "prop'larıyla birlikte" arayan iddia düştü.
+    // Kilitlenen şey elemanın YERİ, prop'larının yazımı değil.
+    expect(MENU).toContain('<RaporGonder');
 
     const menuBasi = MENU.indexOf('role="menu"');
     expect(menuBasi, 'menü bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);

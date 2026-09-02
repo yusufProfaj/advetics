@@ -2,8 +2,15 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { VARSAYILAN_SABLONLAR, varsayilanSablon } from '@advetics/shared';
+import {
+  SABLON_PARAM,
+  SECTION_LABELS,
+  VARSAYILAN_SABLONLAR,
+  varsayilanSablon,
+  type ReportTemplateSummary,
+} from '@advetics/shared';
 import { Halka } from '@/components/yukleniyor';
+import { SablonModal } from './sablon-yonetimi';
 
 /**
  * ═══ ŞABLON SEÇİCİ ═══
@@ -17,15 +24,44 @@ import { Halka } from '@/components/yukleniyor';
  * ikinci kez istemciden çekmek demekti. URL'de olması aynı zamanda
  * paylaşılabilir kılıyor — "şu raporun Google hâlini aç".
  *
+ * ┌─ KAYITLI ŞABLONLAR DA BURADA ─────────────────────────────────────────┐
+ * │ Öncesinde bu liste YALNIZCA üç ön ayarı gösteriyordu ve kullanıcının   │
+ * │ kendi şablonu ayrı bir sayfada (`/raporlar/sablonlar`) düzenleniyordu. │
+ * │ Sonuç, kullanıcının bildirdiği hâl: şablonu düzenliyor, rapor ekranına │
+ * │ dönüyor, seçiciden bir şey seçiyor ve DÜZENLEMESİ KAYBOLUYOR — çünkü   │
+ * │ `sablon` parametresi konduğu anda sunucu ön ayarı uygulayıp kayıtlı    │
+ * │ şablonun bölüm sırasını atıyor. İkisi aynı listede olunca "hangisi     │
+ * │ geçerli" sorusu ortadan kalkıyor: seçilen ne ise rapor da PDF de o.    │
+ * └────────────────────────────────────────────────────────────────────────┘
+ *
+ * DÜZENLEME DE BURADA. Şablonu değiştirmek raporla ilgili bir iş ve
+ * kullanıcının onu kenar çubuğunda ayrı bir sayfada aramasının hiçbir
+ * sebebi yok — üstelik oraya gidip dönmek yukarıdaki hatayı doğuruyordu.
+ *
  * DİĞER SÜZGEÇLER KORUNUYOR. Tarih aralığı ayrı parametrelerde ve elle
  * bağlantı kurmak onları düşürüyordu; mevcut arama dizesi kopyalanıp
  * yalnızca `sablon` değiştiriliyor.
  */
-export function SablonSecici({ secili }: { secili: string }) {
+export function SablonSecici({
+  secili,
+  sablonlar,
+  musteriler,
+  isOrgAdmin,
+  duzenleyebilir,
+}: {
+  /** Ön ayar kodu ya da kayıtlı şablonun UUID'si. */
+  secili: string | null;
+  sablonlar: ReportTemplateSummary[];
+  musteriler: Array<{ id: string; name: string }>;
+  isOrgAdmin: boolean;
+  /** `report.write` — müşteri hesabı raporu okuyor, biçimini değiştirmiyor. */
+  duzenleyebilir: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [acik, setAcik] = useState(false);
+  const [duzenlenen, setDuzenlenen] = useState<ReportTemplateSummary | 'yeni' | null>(null);
   const [isPending, startTransition] = useTransition();
   const kutuRef = useRef<HTMLDivElement>(null);
 
@@ -37,12 +73,13 @@ export function SablonSecici({ secili }: { secili: string }) {
     return () => document.removeEventListener('mousedown', disari);
   }, []);
 
-  const aktif = varsayilanSablon(secili);
+  const kayitli = sablonlar.find((s) => s.id === secili) ?? null;
+  const aktifAd = kayitli ? kayitli.name : varsayilanSablon(secili).ad;
 
-  function sec(kod: string): void {
+  function sec(deger: string): void {
     setAcik(false);
     const p = new URLSearchParams(searchParams?.toString() ?? '');
-    p.set('sablon', kod);
+    p.set(SABLON_PARAM, deger);
     /*
      * `replace`, `push` DEĞİL: şablon değiştirmek bir gezinme değil aynı
      * ekranın başka bir görünümü. Geri düğmesi kullanıcıyı bir önceki
@@ -63,7 +100,7 @@ export function SablonSecici({ secili }: { secili: string }) {
       >
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium leading-tight text-ink">
-            {aktif.ad}
+            {aktifAd}
           </span>
           <span className="block truncate text-[11px] leading-tight text-ink-muted">
             Rapor şablonu
@@ -72,7 +109,12 @@ export function SablonSecici({ secili }: { secili: string }) {
         {isPending ? (
           <Halka className="h-3.5 w-3.5" />
         ) : (
-          <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden>
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            className="h-4 w-4 shrink-0 text-ink-muted"
+            aria-hidden
+          >
             <path d="m6 8 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
         )}
@@ -81,17 +123,20 @@ export function SablonSecici({ secili }: { secili: string }) {
       {acik && (
         <div
           role="listbox"
-          className="absolute left-0 top-full z-30 mt-1.5 w-[22rem] overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
+          className="absolute left-0 top-full z-30 mt-1.5 max-h-[26rem] w-[24rem] overflow-y-auto rounded-xl border border-line bg-surface shadow-lg"
         >
+          <p className="px-3.5 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+            Hazır şablonlar
+          </p>
           {VARSAYILAN_SABLONLAR.map((s) => (
             <button
               key={s.kod}
               type="button"
               role="option"
-              aria-selected={s.kod === aktif.kod}
+              aria-selected={!kayitli && s.kod === varsayilanSablon(secili).kod}
               onClick={() => sec(s.kod)}
               className={`block w-full px-3.5 py-2.5 text-left transition hover:bg-surface-muted ${
-                s.kod === aktif.kod ? 'bg-surface-sunken' : ''
+                !kayitli && s.kod === varsayilanSablon(secili).kod ? 'bg-surface-sunken' : ''
               }`}
             >
               <span className="block text-sm font-medium text-ink">{s.ad}</span>
@@ -105,7 +150,99 @@ export function SablonSecici({ secili }: { secili: string }) {
               </span>
             </button>
           ))}
+
+          {sablonlar.length > 0 && (
+            <>
+              <div className="mt-1 h-px bg-line" />
+              <p className="px-3.5 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                Kendi şablonların
+              </p>
+              {sablonlar.map((t) => (
+                <div
+                  key={t.id}
+                  className={`flex items-start gap-1 pr-1.5 transition hover:bg-surface-muted ${
+                    t.id === secili ? 'bg-surface-sunken' : ''
+                  }`}
+                >
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={t.id === secili}
+                    onClick={() => sec(t.id)}
+                    className="min-w-0 flex-1 px-3.5 py-2.5 text-left"
+                  >
+                    <span className="block truncate text-sm font-medium text-ink">{t.name}</span>
+                    {/*
+                      KAPSAM VE BÖLÜM SIRASI GÖRÜNÜYOR. İki şablonun adı
+                      benzer olabiliyor; ayırt eden şey ne içerdikleri.
+                    */}
+                    <span className="mt-0.5 block truncate text-[11px] leading-snug text-ink-muted">
+                      {t.clientId === null ? 'Organizasyon varsayılanı' : (t.clientName ?? 'Müşteri')}{' '}
+                      · {t.sections.map((s) => SECTION_LABELS[s]).join(' → ')}
+                    </span>
+                  </button>
+                  {duzenleyebilir && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAcik(false);
+                        setDuzenlenen(t);
+                      }}
+                      className="mt-2.5 shrink-0 rounded-md border border-line px-2 py-1 text-[11px] text-ink-muted transition hover:bg-surface hover:text-ink"
+                    >
+                      Düzenle
+                    </button>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+
+          {duzenleyebilir && (
+            <>
+              <div className="mt-1 h-px bg-line" />
+              {/*
+                "YENİ ŞABLON" LİSTENİN SONUNDA, seçeneklerin arasında değil:
+                bu bir rapor seçimi değil, bir yönetim işi. Ayrı bir sayfaya
+                götürmüyor — oraya gidip dönmek tam da düzeltilen hatayı
+                üretiyordu (düzenleme yapılıyor, dönüşte seçici ön ayara
+                geçiyor ve düzenleme kayboluyor).
+              */}
+              <button
+                type="button"
+                onClick={() => {
+                  setAcik(false);
+                  setDuzenlenen('yeni');
+                }}
+                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm text-ink-muted transition hover:bg-surface-muted hover:text-ink"
+              >
+                <span aria-hidden="true">＋</span>
+                Yeni şablon oluştur
+              </button>
+            </>
+          )}
         </div>
+      )}
+
+      {duzenlenen !== null && (
+        <SablonModal
+          sablon={duzenlenen === 'yeni' ? null : duzenlenen}
+          musteriler={musteriler}
+          isOrgAdmin={isOrgAdmin}
+          onKapat={() => setDuzenlenen(null)}
+          /*
+           * KAYDEDİLEN ŞABLON HEMEN SEÇİLİYOR.
+           *
+           * Kaydedip ekranda hiçbir şeyin değişmediğini görmek, düzeltilen
+           * hatanın ta kendisiydi: kullanıcı düzenlemesinin uygulanmadığını
+           * sanıyor. Yeni şablon da seçiliyor, çünkü onu oluşturmanın tek
+           * sebebi kullanmak.
+           */
+          onKaydedildi={(id) => {
+            setDuzenlenen(null);
+            sec(id);
+          }}
+        />
       )}
     </div>
   );

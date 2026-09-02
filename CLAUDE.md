@@ -278,6 +278,22 @@ buna göre veriliyor:
   anahtar sayısı üçten beşe çıktı. Tek üretici (`lib/baglanti.ts`) ve taşınan
   parametreleri tek yerde kur. Belirti "aralık/süzgeç bazen kayboluyor" ve
   hiçbir ekranda görünmüyor.
+- **AYNI BELGEYİ İSTEYEN HER YOL AYNI SORGUYU KURMALI.** Rapor ekranı şablonu
+  URL'de taşıyor ve üç tüketicisi vardı: önizleme, PDF indirme, mail. Üçü de
+  sorgu dizesini ELLE kuruyordu ve yalnızca önizleme `sablon`u taşıyordu.
+  Hiçbiri hata vermiyor — şablonsuz istek de geçerli ve sunucu varsayılanı
+  üretiyor. Belirti kullanıcının cümlesiyle *"şablonu değiştirdiğimde pdf
+  oluşturamıyorum"*: ekranda Google raporunu görüp Genel raporu indiriyor,
+  müşteriye giden maildeki eki ise yalnızca ALICI görüyor. Tek üretici
+  (`rapor-sorgusu.ts`) ve `rapor-sorgusu.spec.ts` kaynak taraması. Ayrıca
+  EKRAN TEK PARAMETRE taşımalı: API `templateId` (UUID) ile `sablon` (ön ayar
+  kodu) alanlarını haklı olarak ayırıyor ama ikisini URL'de ayrı taşımak,
+  dallardan birinin birini düşürmesi demek.
+- **AYNI İŞİN PARÇASI OLAN EKRANI AYRI SAYFAYA KOYMAK HATA ÜRETİYOR.** Şablon
+  düzenleme ayrı sayfadaydı: kullanıcı bölüm sırasını düzenleyip rapora
+  dönüyor, seçiciden bir ön ayar seçiyor ve düzenlemesi kayboluyordu — seçici
+  yalnızca ön ayarları tanıyordu ve `sablon` parametresi kayıtlı şablonu
+  eziyordu. Ayrılık dekor değil, hatanın SEBEBİYDİ.
 - **AYNI SÜZGECİ İKİ YERDE YAZMA.** Zamanlanmış süpürme hesabın platform
   durumuna bakıyordu, elle tetikleyen uç bakmıyordu; belirtisi "elle basınca
   geliyor, kendiliğinden gelmiyor" ve hiçbir ekranda görünmüyordu. Süzgeç tek
@@ -640,6 +656,16 @@ okunup varsayılmadı — canlıda doğrulandı.
   edilmemişti, (2) kırpma testi kırpmanın OLDUĞUNU değil yalnızca sonucun
   şeklini kontrol ediyordu, (3) ad set adının hiç testi yoktu. Testi yazdıktan
   sonra ilgili satırı boz, düştüğünü gör, geri al.
+- **SABİT UZUNLUKLU DİLİM KOMŞUYU YAKALIYOR.** `indexOf('onDragOver') + 400
+  karakter` diliminde `preventDefault` aramak, o çağrıyı SİLDİĞİNDE de
+  geçiyordu: pencere komşu işleyicinin (`onDrop`) içindeki aynı çağrıya kadar
+  uzanıyor. Dilim, sınırlanmak istenen şeyin GERÇEK sınırıyla çıkarılmalı
+  (süslü parantez sayarak); "yakınında geçiyor" bir iddia değil.
+- **TARAMAYI YORUMSUZ KAYNAKTA YAP.** `KAYNAK.replace(/\/\*[\s\S]*?\*\//g, '')`.
+  Bir kuralı ANLATAN yorum aynı dosyada duruyor ve `toContain` ikisini ayırt
+  etmiyor; kural silinse bile yorum eşleşip test yeşil kalıyor. Bu oturumda
+  ters yönde de yakalandı: "şu desen KALMADI" iddiası, deseni anlatan yoruma
+  eşleşip kod DOĞRUYKEN kırmızı verdi.
 - **KAYNAK TARAMASINDA İDDİA YORUMA DEĞİL KODA ÇAPALANIR.** Bir kuralı test
   ederken o kuralı ANLATAN yorum da aynı dosyada duruyor ve `toContain` ikisini
   ayırt etmiyor: `inverse` propunu silmek testi düşürmüyordu, çünkü iki satır
@@ -712,6 +738,18 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   `structure` ve 90 günlük `initial_backfill` kuyruğa giriyor. Sıra önemli —
   metrikler kampanya satırlarına bağlanıyor. `ad-account-assign.spec.ts`
   gerçek veritabanıyla kilitliyor.
+- **RAPORLAR TEK SAYFA: rapor, şablon ve faturalar.** Kenar çubuğunda üç ayrı
+  bağlantıydı; üçü de aynı belgenin parçası ve ayrılmaları gerçek bir hata
+  üretiyordu (yukarıya bkz.). Şablon seçici hem ön ayarları hem kayıtlı
+  şablonları listeliyor, düzenleme aynı listenin içinde; faturalar sekme.
+  Yetki süzgeci kaybolmadı, sayfanın İÇİNE taşındı: `report.write` şablon
+  düzenlemeyi, `report.share` fatura sekmesini açıyor.
+- **BÖLÜM SIRASI SÜRÜKLENEREK DEĞİŞİYOR — ama klavye kaybolmadı.** ↑/↓
+  düğmelerinin gerekçesi "yedi öğelik listede kazancı yok"tu; liste on dörde
+  çıkınca çürüdü. Kütüphane yok (HTML5 olayları). Satır odaklanabilir ve ok
+  tuşlarıyla taşınıyor: yalnızca sürükleme koymak, fare kullanamayan için
+  özelliği TAMAMEN kapatmak olurdu. Taşıma TAKAS DEĞİL ARAYA SOKMA — takas
+  eden bir sürükleme kullanıcının bıraktığı yere koymuyor.
 - **Platform bağlantısı AJANSA ait, müşteriye değil.** Meta/Google bir kez
   yetkilendiriliyor; erişilen bütün reklam hesapları VE sayfalar havuza düşüyor
   ve müşteriye panelden atanıyor. Müşteri başına yeniden yetkilendirme yok —

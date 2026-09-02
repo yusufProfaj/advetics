@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { ReportMailDraft } from '@advetics/shared';
+import { raporSorgusu, sablonAlanlari, type ReportMailDraft } from '@advetics/shared';
 import { ApiRequestError, apiFetch, API_URL } from '@/lib/api';
 
 /**
@@ -20,13 +20,28 @@ export function RaporGonder({
   from,
   to,
   hasData,
+  sablon,
 }: {
   clientId: string;
   from: string;
   to: string;
   hasData: boolean;
+  /** Ekranda seçili şablon — ön ayar kodu ya da kayıtlı şablonun UUID'si. */
+  sablon: string | null;
 }) {
-  const qs = new URLSearchParams({ clientId, from, to });
+  /*
+   * ═══ ŞABLON BU BAĞLANTIYA GİRMİYORDU — DÜZELTİLEN HATA ═══
+   *
+   * Burada `new URLSearchParams({ clientId, from, to })` yazıyordu. Önizleme
+   * şablonu taşıyor, PDF taşımıyordu: ekranda Google raporunu gören kullanıcı
+   * Genel raporu indiriyor ve bunu ancak PDF'i AÇINCA anlıyordu. Hiçbir hata
+   * da düşmüyordu, çünkü şablonsuz istek de geçerli bir istek ve sunucu
+   * varsayılanı üretiyor — bu projenin klasik sessiz hatası.
+   *
+   * Sorgu artık TEK ÜRETİCİDEN (`raporSorgusu`) geliyor; önizleme, PDF ve mail
+   * aynı fonksiyonu çağırıyor ve `rapor-sorgusu.spec.ts` bunu kilitliyor.
+   */
+  const qs = new URLSearchParams(raporSorgusu({ clientId, from, to, sablon }));
 
   return (
     /*
@@ -62,12 +77,21 @@ export function MailGonderModal({
   to,
   acik,
   onKapat,
+  sablon,
 }: {
   clientId: string;
   from: string;
   to: string;
   acik: boolean;
   onKapat: () => void;
+  /**
+   * Ekranda seçili şablon.
+   *
+   * HEM TASLAKTA HEM GÖNDERİMDE gerekiyor: taslak metni rapordaki sayılardan
+   * üretiliyor ve PDF eki de aynı rapordan. Yalnızca birine vermek, mailin
+   * metni ile ekindeki belgenin farklı şablondan gelmesi demekti.
+   */
+  sablon: string | null;
 }) {
   const [taslak, setTaslak] = useState<ReportMailDraft | null>(null);
   const [alici, setAlici] = useState('');
@@ -78,7 +102,7 @@ export function MailGonderModal({
   const [hata, setHata] = useState<string | null>(null);
   const [sonuc, setSonuc] = useState<string | null>(null);
 
-  const qs = new URLSearchParams({ clientId, from, to });
+  const qs = new URLSearchParams(raporSorgusu({ clientId, from, to, sablon }));
 
   /*
    * TASLAK AÇILIŞTA BİR KEZ ÇEKİLİYOR. Her render'da çekmek sunucuya
@@ -118,6 +142,14 @@ export function MailGonderModal({
           clientId,
           from,
           to,
+          /*
+           * ŞABLON GÖVDEYE DE GİRİYOR. Taslağı doğru şablondan çekip
+           * gönderirken göndermemek, müşteriye giden PDF EKİNİN ekrandakinden
+           * farklı olması demekti — ve bunu yalnızca alıcı görürdü.
+           * `sablonAlanlari` UUID mi ön ayar kodu mu olduğunu ayırıyor;
+           * sunucu şeması ikisini ayrı alanda bekliyor.
+           */
+          ...sablonAlanlari(sablon),
           to_email: alici.trim() || undefined,
           subject: konu.trim(),
           html: govde,

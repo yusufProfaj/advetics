@@ -31,4 +31,5 @@ export * from './types/context';
 export * from './tarih';
 export * from './plan-zamani';
 export * from './kreatif-adres';
+export * from './rapor-sorgusu';
 export * from './schemas/rapor-plani.schema';

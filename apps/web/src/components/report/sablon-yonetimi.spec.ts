@@ -11,6 +11,18 @@ import { describe, expect, it } from 'vitest';
  */
 const KAYNAK = readFileSync(join(__dirname, 'sablon-yonetimi.tsx'), 'utf8');
 
+/**
+ * YORUMSUZ KAYNAK — iddia koda çapalansın.
+ *
+ * Bu dosyadaki kuralları ANLATAN yorumlar aynı kaynakta duruyor ve
+ * `toContain` ikisini ayırt etmiyor: kural silinse bile onu anlatan yorum
+ * eşleşip test yeşil kalırdı. CLAUDE.md'de kayıtlı ve bu oturumda bir kez
+ * daha yakalanan tuzak.
+ */
+function kod(kaynak: string): string {
+  return kaynak.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
 function modalGovdesi(): string {
   const bas = KAYNAK.indexOf('function SablonModal(');
   if (bas === -1) {
@@ -85,5 +97,108 @@ describe('şablon yönetimi', () => {
     // Google `actions` dizisi döndürmüyor; o sütunlar raporda her zaman 0
     // görünür ve "hiç form gelmedi" diye okunur.
     expect(KAYNAK).toContain('Google Ads form ve mesaj dökümü');
+  });
+});
+
+/**
+ * ═══ BÖLÜM SIRASI SÜRÜKLENEREK DEĞİŞİYOR ═══
+ *
+ * Satır başına ↑/↓ düğmeleri vardı ve gerekçesi kaynakta yazılıydı: "yedi
+ * öğelik bir listede kazancı yok". Liste ON DÖRT bölüme çıkınca o gerekçe
+ * çürüdü — bir bölümü en alttan en üste almak on üç tıklama demek.
+ *
+ * Kaynak taraması, çünkü buradaki risk render davranışı: sürükleme olayları
+ * jsdom'da gerçek bir sürükleme üretmiyor ve bütün ağacı kurmak bu ekran için
+ * ölçüsüz. Ayrışma ise tek satırlık.
+ */
+describe('bölüm sırası — sürükle bırak', () => {
+  const KOD = kod(KAYNAK);
+
+  it('tarama BOŞA DÜŞMÜYOR', () => {
+    // Bölüm listesi yeniden yazılırsa iddialar sessizce her zaman doğru olurdu.
+    expect(KOD).toContain('SECTION_LABELS[s]');
+    expect(KOD).toContain('tasiSiraya');
+  });
+
+  it('KRİTİK: satır SÜRÜKLENEBİLİR', () => {
+    expect(KOD).toContain('draggable');
+    expect(KOD).toContain('onDragStart');
+    expect(KOD).toContain('onDragOver');
+  });
+
+  /**
+   * BİR OLAY İŞLEYİCİSİNİN GÖVDESİ — süslü parantez sayarak.
+   *
+   * İlk yazımda dilim `indexOf(ad) + 400 karakter`di ve MUTASYON TESTİNDE
+   * BOŞA DÜŞTÜ: `onDragOver`dan `preventDefault`u silmek testi düşürmüyordu,
+   * çünkü 400 karakterlik pencere KOMŞU işleyicinin (`onDrop`) içindeki
+   * `preventDefault`a kadar uzanıyordu. Sabit uzunluklu dilim, kilitlediğini
+   * sandığın şeyi kilitlemiyor.
+   */
+  function isleyici(ad: string): string {
+    const bas = KOD.indexOf(`${ad}={(e) => {`);
+    if (bas === -1) throw new Error(`${ad} bulunamadı — tarama boşa düştü, testi güncelle.`);
+    const acilis = KOD.indexOf('{', KOD.indexOf('=>', bas));
+    let derinlik = 0;
+    for (let i = acilis; i < KOD.length; i++) {
+      if (KOD[i] === '{') derinlik++;
+      else if (KOD[i] === '}') {
+        derinlik--;
+        if (derinlik === 0) return KOD.slice(acilis, i + 1);
+      }
+    }
+    throw new Error(`${ad} gövdesi kapanmadı — tarama boşa düştü.`);
+  }
+
+  it('KRİTİK: `onDragOver` VARSAYILANI ENGELLİYOR', () => {
+    /*
+     * Engellenmezse tarayıcı `drop`u HİÇ tetiklemiyor ve satır kıpırdamıyor —
+     * hatasız, sessiz, "sürükle-bırak çalışmıyor" olarak görünen bir arıza.
+     */
+    expect(isleyici('onDragOver')).toContain('e.preventDefault()');
+  });
+
+  it('KRİTİK: `dataTransfer.setData` ÇAĞRILIYOR — Firefox olmadan başlatmıyor', () => {
+    expect(isleyici('onDragStart')).toContain('dataTransfer.setData');
+  });
+
+  it('KRİTİK: TAKAS DEĞİL ARAYA SOKMA', () => {
+    /*
+     * ↑/↓ komşuyla takas ediyordu ve tek adımda ikisi aynı şey. Sürüklemede
+     * değil: üçüncü sıradaki bir bölümü sona bırakmak, aradakilerin bir üste
+     * kayması demek. Takas yapan bir sürükleme kullanıcının bıraktığı yere
+     * koymuyor, iki öğeyi yer değiştiriyor.
+     */
+    const i = KOD.indexOf('function tasiSiraya');
+    expect(i, 'tasiSiraya bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const govde = KOD.slice(i, KOD.indexOf('\n  }', i));
+    expect(govde).toContain('splice(kaynak, 1)');
+    expect(govde).toContain('splice(hedef, 0,');
+    // Takas deseni KALMAMALI.
+    expect(govde).not.toContain('[kopya[i], kopya[j]]');
+  });
+
+  it('KRİTİK: KLAVYE İLE de taşınabiliyor — erişilebilirlik kaybolmadı', () => {
+    /*
+     * Sürükle-bırak fare gerektiriyor. ↑/↓ düğmelerini kaldırıp yerine
+     * YALNIZCA sürüklemeyi koymak, klavyeyle çalışan kullanıcı için bölüm
+     * sırasını değiştirmeyi TAMAMEN imkânsız yapardı.
+     */
+    expect(KOD).toContain('onKeyDown');
+    expect(KOD).toContain('function klavyeyle');
+    const i = KOD.indexOf('function klavyeyle');
+    const govde = KOD.slice(i, KOD.indexOf('\n  }', i));
+    expect(govde).toContain("'ArrowUp'");
+    expect(govde).toContain("'ArrowDown'");
+    expect(govde).toContain('tasiSiraya');
+    // Satır odaklanabilir olmalı, yoksa tuş olayı hiç gelmez.
+    expect(KOD).toContain('tabIndex={0}');
+  });
+
+  it('KRİTİK: nasıl taşınacağı EKRANDA yazıyor', () => {
+    // ↑/↓ düğmeleri kalkınca kullanıcı özelliğin gittiğini sanıyor; sürüklenebilir
+    // olduğu hiçbir işaretle söylenmezse keşfedilebilir değil.
+    expect(KAYNAK).toContain('sürükle');
+    expect(KOD).toContain('cursor-grab');
   });
 });

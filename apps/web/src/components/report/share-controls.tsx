@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { sablonAlanlari } from '@advetics/shared';
 import { MailGonderModal, RaporGonder } from './rapor-gonder';
 import { RaporPlanla } from './rapor-planla';
 
@@ -27,14 +28,21 @@ export function ShareControls({
   from,
   to,
   hasData,
-  templateId,
+  sablon,
 }: {
   clientId: string;
   from: string;
   to: string;
   hasData: boolean;
-  /** Ekranda seçili şablon — planlanan rapor da onu kullansın. */
-  templateId: string | null;
+  /**
+   * Ekranda seçili şablon — ön ayar kodu ya da kayıtlı şablonun UUID'si.
+   *
+   * TEK DEĞER, ÜÇ TÜKETİCİ. Öncesinde buraya `templateId={null}` SABİT
+   * geçiliyordu ve PDF ile mail ekrandaki seçimi hiç görmüyordu: kullanıcı
+   * Google raporuna bakarken Genel raporu indiriyordu. Seçim artık tek yerden
+   * geliyor ve aşağıdaki üç yol da onu taşıyor.
+   */
+  sablon: string | null;
 }) {
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string | null>(null);
@@ -42,6 +50,8 @@ export function ShareControls({
   const [error, setError] = useState<string | null>(null);
   const [expiresInDays, setExpiresInDays] = useState<string>('');
   const [menuAcik, setMenuAcik] = useState(false);
+  /** Seçim kayıtlı bir şablonsa UUID'si; ön ayarsa `null`. */
+  const kayitliSablonId = sablonAlanlari(sablon).templateId ?? null;
   const [mailAcik, setMailAcik] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -76,9 +86,19 @@ export function ShareControls({
       const res = await apiFetch<{ token: string }>('/reports/shares', {
         method: 'POST',
         body: JSON.stringify({
-          // `templateId` GÖNDERİLMİYOR: sunucu müşteriye özel şablonu bulup,
-          // yoksa tüm bölümleri içeren varsayılanı oluşturuyor. İlk raporu
-          // göndermek için önce şablon kurmak zorunda kalmıyoruz.
+          /*
+           * SEÇİLİ ŞABLON KAYITLIYSA BAĞLANTIYA DA GİRİYOR.
+           *
+           * Öncesinde HİÇ gönderilmiyordu ve gerekçesi "sunucu bulur ya da
+           * oluşturur"du — doğru, ama ekranda bir şablon seçen kullanıcı için
+           * yanlış: müşteri linki açtığında BAŞKA bir raporu görüyordu.
+           *
+           * ÖN AYARLAR BAĞLANTIYA KONULAMIYOR: `report_shares.template_id`
+           * bir UUID ve ön ayarların UUID'si yok. Uydurmak yerine menüde
+           * yazıyoruz — sessizce farklı bir rapor paylaşmaktansa kısıtı
+           * söylemek.
+           */
+          ...(kayitliSablonId ? { templateId: kayitliSablonId } : {}),
           clientId,
           from,
           to,
@@ -144,9 +164,23 @@ export function ShareControls({
             bu hafta harcaması olmayan bir müşteriye plan kurulamaması
             demek olurdu.
           */}
-          <RaporPlanla clientId={clientId} templateId={templateId} />
+          {/*
+            PLANLAMA YALNIZCA KAYITLI ŞABLONU ALABİLİYOR.
+            `report_plans.template_id` bir UUID ve ön ayarların UUID'si YOK —
+            kodda duruyorlar, veritabanında değil. Ön ayar seçiliyken plana
+            `null` geçiyor ve sunucu müşterinin kendi şablonunu bulup yoksa
+            varsayılanı üretiyor; uydurma bir UUID yazmak, planın her koşusunda
+            var olmayan bir şablonu araması demekti.
+          */}
+          <RaporPlanla clientId={clientId} templateId={kayitliSablonId} />
 
-          <RaporGonder clientId={clientId} from={from} to={to} hasData={hasData} />
+          <RaporGonder
+            clientId={clientId}
+            from={from}
+            to={to}
+            hasData={hasData}
+            sablon={sablon}
+          />
 
         <div className="relative" ref={menuRef}>
           <button
@@ -184,6 +218,21 @@ export function ShareControls({
                   <option value="90">90 gün</option>
                 </select>
               </label>
+
+              {/*
+                KISIT EKRANDA YAZIYOR — kararın verildiği yerde.
+                Ön ayar seçiliyken üretilen bağlantı, müşterinin kendi
+                şablonunu (yoksa varsayılanı) gösteriyor. Bunu söylememek,
+                kullanıcının ekranda gördüğünden farklı bir raporu sessizce
+                paylaşması demekti; PDF'te düzelttiğimiz hatanın aynısı.
+              */}
+              {sablon !== null && kayitliSablonId === null && (
+                <p className="mx-1 mt-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900">
+                  Hazır şablonlar bağlantıya taşınmıyor — müşteri, kayıtlı
+                  şablonu (yoksa varsayılanı) görecek. Bu görünümü paylaşmak
+                  için önce şablon olarak kaydet.
+                </p>
+              )}
 
               <div className="my-1 h-px bg-line" />
 
@@ -262,6 +311,7 @@ export function ShareControls({
         to={to}
         acik={mailAcik}
         onKapat={() => setMailAcik(false)}
+        sablon={sablon}
       />
     </section>
   );

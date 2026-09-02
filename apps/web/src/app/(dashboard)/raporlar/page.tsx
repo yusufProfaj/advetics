@@ -1,4 +1,10 @@
-import { kapsananDonemler, varsayilanSablon, type ReportData } from '@advetics/shared';
+import {
+  kapsananDonemler,
+  raporSorgusu,
+  sablonAlanlari,
+  type ReportData,
+  type ReportTemplateSummary,
+} from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { SablonSecici } from '@/components/report/sablon-secici';
@@ -8,6 +14,7 @@ import { TarihSecici } from '@/components/tarih-secici';
 import { ReportDocument } from '@/components/report/report-document';
 import { ShareControls } from '@/components/report/share-controls';
 import { Faturalar } from '@/components/report/faturalar';
+import { RaporSekmeleri } from '@/components/report/rapor-sekmeleri';
 
 export const metadata = { title: 'Raporlar — Advetics' };
 export const dynamic = 'force-dynamic';
@@ -18,6 +25,13 @@ export const dynamic = 'force-dynamic';
  * Ay seçimi TAKVİMSEL, "son 30 gün" gibi kayan değil: rapor bir belge ve
  * müşteriye "Temmuz raporu" gönderiliyor, "son 30 gün raporu" değil. Panelin
  * kayan aralıkları oradaki soru farklı olduğu için doğru — burada yanlış olurdu.
+ *
+ * ┌─ ÜÇ EKRAN TEK SAYFADA ────────────────────────────────────────────────┐
+ * │ Rapor, şablonlar ve faturalar kenar çubuğunda ayrı üç bağlantıydı.    │
+ * │ Üçü de aynı belgenin parçası ve ayrılmaları GERÇEK bir hata           │
+ * │ üretiyordu — bkz. `sablon-secici.tsx`. Şablon düzenleme seçicinin     │
+ * │ içinde, faturalar sekme olarak burada.                                 │
+ * └────────────────────────────────────────────────────────────────────────┘
  */
 export default async function ReportsPage({
   searchParams,
@@ -27,9 +41,13 @@ export default async function ReportsPage({
   const session = await requireSession();
   // Fatura MÜŞTERİYE GİDEN bir belge; yönetimi rapor paylaşma yetkisine bağlı.
   const canShare = hasPermission(session, 'report.share');
+  // Şablonun BİÇİMİNİ değiştirmek okumaktan ayrı bir karar: müşteri hesabı
+  // (client_viewer) raporu okuyor, düzenlemiyor.
+  const canWriteTemplate = hasPermission(session, 'report.write');
   const params = await searchParams;
 
-  const clientId = first(params.musteri) ?? session.activeClientId ?? session.availableClients[0]?.id;
+  const clientId =
+    first(params.musteri) ?? session.activeClientId ?? session.availableClients[0]?.id;
 
   if (!clientId) {
     return (
@@ -70,26 +88,45 @@ export default async function ReportsPage({
   const from = secilen.from > dun ? dun : secilen.from;
   const to = devamEden ? dun : secilen.to;
 
-  /*
-   * ŞABLON URL'DEN OKUNUYOR ve doğrulama `varsayilanSablon` içinde: bilinmeyen
-   * bir kod genel şablona düşüyor. Adres çubuğuna elle yazılan bir değerin
-   * raporu boş bırakması, hata mesajı olmayan bir arıza olurdu.
-   */
-  const secilenSablon = first(params.sablon);
-  const sablon = varsayilanSablon(secilenSablon).kod;
+  const sekme = first(params.sekme) === 'faturalar' && canShare ? 'faturalar' : 'rapor';
 
-  const qs = new URLSearchParams({ clientId, from, to });
   /*
-   * ŞABLON YALNIZCA KULLANICI SEÇTİYSE GÖNDERİLİYOR.
+   * ŞABLON LİSTESİ SEÇİCİYE GİDİYOR.
    *
-   * Koşulsuz göndermek, org varsayılanı olarak KAYDEDİLMİŞ bir şablonun
-   * bölüm sırasını sessizce eziyordu: kullanıcı Rapor Şablonları ekranında
-   * yaptığı düzenlemeyi raporda hiç göremiyordu. Seçici yine "Genel Rapor"
-   * yazıyor — kayıtlı şablon da genel raporun bir biçimi.
+   * Kayıtlı şablonlar bir zamanlar YALNIZCA ayrı bir sayfada görünüyordu ve
+   * rapor ekranı onları hiç tanımıyordu; kullanıcının düzenlemesi raporda ve
+   * PDF'te hiç görünmüyordu. Hata yutulmuyor — `.catch(() => [])` "hiç şablon
+   * yok" ile "istek düştü" hâllerini aynı boş listeye çevirirdi ve ilki burada
+   * TAMAMEN NORMAL bir durum.
    */
-  if (secilenSablon) qs.set('sablon', sablon);
-  const report = await serverApiFetch<ReportData>(`/reports/preview?${qs}`).catch(() => null);
+  let sablonlar: ReportTemplateSummary[] = [];
+  let sablonHatasi: string | null = null;
+  try {
+    sablonlar = await serverApiFetch<ReportTemplateSummary[]>('/reports/templates');
+  } catch (err) {
+    sablonHatasi = err instanceof Error ? err.message : 'Şablonlar alınamadı';
+  }
 
+  /*
+   * ŞABLON URL'DE TEK PARAMETRE, API'DE İKİ ALAN.
+   *
+   * Değer ya bir ön ayar kodu ('genel', 'google') ya da kayıtlı bir şablonun
+   * UUID'si; ayrımı `sablonAlanlari` yapıyor. Ekranda tek parametre olması
+   * bilinçli: iki ayrı parametre taşımak, dallardan birinin birini düşürmesi
+   * demekti — düzeltilen hata tam olarak buydu (önizleme şablonu taşıyor, PDF
+   * taşımıyordu).
+   *
+   * TANINMAYAN DEĞER ŞABLONSUZ SAYILIYOR. Silinmiş bir şablona işaret eden
+   * eski bir bağlantı yüzünden raporun hiç üretilmemesi, sebebi yazmayan boş
+   * bir ekran demekti; sunucu bu durumda müşterinin kendi şablonunu, yoksa
+   * organizasyon varsayılanını üretiyor.
+   */
+  const istenenSablon = first(params.sablon) ?? null;
+  const alanlar = sablonAlanlari(istenenSablon);
+  const sablon = alanlar.templateId ?? alanlar.sablon ?? null;
+
+  const qs = new URLSearchParams(raporSorgusu({ clientId, from, to, sablon }));
+  const report = await serverApiFetch<ReportData>(`/reports/preview?${qs}`).catch(() => null);
 
   return (
     <div className="space-y-5">
@@ -101,27 +138,54 @@ export default async function ReportsPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-        {/*
-          KARŞILAŞTIRMA KAPALI: rapor belgesi yüzde değişim göstermiyor.
-          Çalışmayan bir düğme koymak olmayan bir özellik vaat etmek olurdu.
-          Takvimde de dünden sonrası seçilemiyor.
-        */}
-        {/*
-          ŞABLON SEÇİCİ TARİHİN SOLUNDA: önce "hangi rapor", sonra "hangi
-          dönem". Ters sıra, dönem seçip şablonu değiştirince aralığın
-          sıfırlandığı izlenimi veriyordu.
-        */}
-        <SablonSecici secili={sablon} />
-        <TarihSecici
-          aralik={secilen}
-          enEskiGun={kapsam?.earliestDate ?? null}
-          karsilastirmaVar={false}
-          enGecGun={dun}
-        />
+          {/*
+            KARŞILAŞTIRMA KAPALI: rapor belgesi yüzde değişim göstermiyor.
+            Çalışmayan bir düğme koymak olmayan bir özellik vaat etmek olurdu.
+            Takvimde de dünden sonrası seçilemiyor.
+          */}
+          {/*
+            ŞABLON SEÇİCİ TARİHİN SOLUNDA: önce "hangi rapor", sonra "hangi
+            dönem". Ters sıra, dönem seçip şablonu değiştirince aralığın
+            sıfırlandığı izlenimi veriyordu.
+
+            YALNIZCA RAPOR SEKMESİNDE. Fatura sekmesinde şablonun hiçbir
+            karşılığı yok; orada da göstermek, hiçbir şeyi değiştirmeyen bir
+            seçici bırakmak olurdu.
+          */}
+          {sekme === 'rapor' && (
+            <SablonSecici
+              secili={sablon}
+              sablonlar={sablonlar}
+              musteriler={session.availableClients.map((c) => ({ id: c.id, name: c.name }))}
+              isOrgAdmin={session.isOrgAdmin}
+              duzenleyebilir={canWriteTemplate}
+            />
+          )}
+          <TarihSecici
+            aralik={secilen}
+            enEskiGun={kapsam?.earliestDate ?? null}
+            karsilastirmaVar={false}
+            enGecGun={dun}
+          />
         </div>
       </header>
 
-      {report === null ? (
+      {/*
+        SEKMELER YALNIZCA FATURA YETKİSİ VARSA. Tek sekmelik bir sekme çubuğu
+        gösterecek bir şey değil, kullanıcıya olmayan bir seçim sunmak olurdu.
+      */}
+      {canShare && <RaporSekmeleri aktif={sekme} />}
+
+      {sablonHatasi !== null && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900">
+          Şablon listesi alınamadı ({sablonHatasi}). Rapor varsayılan şablonla
+          üretiliyor; kayıtlı şablonların bu listede görünmüyor.
+        </div>
+      )}
+
+      {sekme === 'faturalar' ? (
+        <FaturaSekmesi clientId={clientId} clientName={musteriAdi(session, clientId)} />
+      ) : report === null ? (
         <div className="rounded-lg border border-red-300 bg-red-50 px-3.5 py-2.5 text-sm text-red-900">
           Rapor oluşturulamadı. API çalışıyor mu?
         </div>
@@ -143,14 +207,13 @@ export default async function ReportsPage({
             to={to}
             hasData={report.platforms.length > 0}
             /*
-              ŞABLON GÖNDERİLMİYOR — paylaşım bağlantısındaki kararın aynısı.
-              Ekrandaki seçici bir KOD taşıyor ('genel', 'google'), planlama
-              tablosu ise şablon UUID'si. İkisini birbirine çevirmek, kullanıcı
-              varsayılan bir şablona bakarken kaydedilecek bir UUID
-              olmaması demek. Sunucu müşteriye özel şablonu bulup yoksa
-              varsayılanı üretiyor; planlanan rapor da o yolu izliyor.
+              SEÇİLİ ŞABLON ARTIK GEÇİYOR — düzeltilen hata buydu.
+              Öncesinde `templateId={null}` sabitti: ekranda Google raporunu
+              gören kullanıcı Genel raporu indiriyordu ve bunu ancak PDF'i
+              AÇINCA anlıyordu. Hiçbir hata da vermiyordu, çünkü şablonsuz
+              istek de geçerli bir istek.
             */
-            templateId={null}
+            sablon={sablon}
           />
 
           {/*
@@ -158,13 +221,14 @@ export default async function ReportsPage({
             biliyor: hangi ayın faturasının gerektiği tarih seçicisinden
             belli, kullanıcı ayı elle yazmıyor ve yanlış aya yükleme riski
             düşüyor. Eksikse burada uyarı çıkıyor — rapor gönderilmeden ÖNCE.
+
+            SEKMEDEKİ TOPLU LİSTEYLE ÇAKIŞMIYOR: burası "bu dönemin faturası"
+            için hızlı yol, sekme ise ayın tamamını tek yerden yönetmek için.
+            İkisi AYNI bileşen — ayrı yazılsalardı biri PDF doğrulamasını ya da
+            "üzerine yazılıyor" uyarısını kaybederdi.
           */}
           {canShare && (
-            <Faturalar
-              clientId={clientId}
-              odakDonemler={kapsananDonemler(from, to)}
-              canWrite
-            />
+            <Faturalar clientId={clientId} odakDonemler={kapsananDonemler(from, to)} canWrite />
           )}
 
           {devamEden && (
@@ -192,6 +256,42 @@ export default async function ReportsPage({
       )}
     </div>
   );
+}
+
+/**
+ * FATURA SEKMESİ — ayın tamamı.
+ *
+ * Bir zamanlar `/raporlar/faturalar` sayfasıydı; içeriği olduğu gibi taşındı.
+ * "Neden otomatik gelmiyor" açıklaması BURADA KALIYOR: kullanıcı sormadan
+ * cevabı görmeli, yoksa her ay yükleme yapan kişi bunu bir eksiklik sanar.
+ */
+function FaturaSekmesi({ clientId, clientName }: { clientId: string; clientName: string }) {
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-ink-muted">
+        {clientName} · platform faturaları rapor mailine ayrı ek olarak gider
+      </p>
+
+      <div className="rounded-xl border border-line bg-surface-muted px-4 py-3 text-xs text-ink-muted">
+        <p className="font-medium text-ink">Faturalar neden otomatik gelmiyor?</p>
+        <p className="mt-1">
+          Google’ın fatura API’si yalnızca <strong>aylık faturalama</strong> (kredi hattı) olan
+          hesaplarda çalışıyor; kartla ödeyen hesaplarda çağrı reddediliyor. Meta’da ise fatura
+          PDF’i döndüren bir uç bulunmuyor — yalnızca fatura kaydı okunabiliyor. Bu yüzden belge
+          platformdan indirilip buraya yükleniyor.
+        </p>
+      </div>
+
+      <Faturalar clientId={clientId} canWrite baslikGoster={false} />
+    </div>
+  );
+}
+
+function musteriAdi(
+  session: { availableClients: Array<{ id: string; name: string }> },
+  clientId: string,
+): string {
+  return session.availableClients.find((c) => c.id === clientId)?.name ?? 'Müşteri';
 }
 
 function first(value: string | string[] | undefined): string | undefined {

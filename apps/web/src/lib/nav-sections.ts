@@ -54,34 +54,23 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
   {
     title: 'Raporlar',
     items: [
+      /*
+       * ═══ RAPORLARIN TEK GİRİŞİ ═══
+       *
+       * Burada üç bağlantı vardı: Raporlar, Rapor Şablonları, Faturalar.
+       * Üçü de AYNI belgenin parçasıydı ve ayrı sayfalara bölünmeleri gerçek
+       * bir hata üretiyordu: kullanıcı şablonunu ayrı sayfada düzenleyip
+       * rapora dönüyor, seçiciden bir ön ayar seçiyor ve düzenlemesi
+       * kayboluyordu (seçici yalnızca ön ayarları tanıyordu, kayıtlı
+       * şablonları değil). Fatura da rapor mailinin EKİ — tek tüketicisi
+       * rapor ekranı.
+       *
+       * Üçü artık `/raporlar` içinde: şablon seçicide hem ön ayarlar hem
+       * kayıtlı şablonlar, faturalar da sekme olarak. Yetki süzgeci
+       * kaybolmadı, sayfanın İÇİNE taşındı — `report.write` şablon
+       * düzenlemeyi, `report.share` fatura sekmesini açıyor.
+       */
       { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6 },
-      {
-        /*
-         * ŞABLONLAR RAPORLARIN ALTINDA ve `report.write` ile kapalı:
-         * müşteri hesabı (client_viewer) raporu OKUYOR, biçimini
-         * değiştirmiyor.
-         */
-        href: '/raporlar/sablonlar',
-        label: 'Rapor Şablonları',
-        icon: 'reports',
-        module: 6,
-        ready: true,
-        perm: 'report.write',
-      },
-      {
-        /*
-         * FATURALAR RAPORLARIN ALTINDA: yüklenen belge rapor mailine
-         * ekleniyor, yani bu ekranın tek tüketicisi rapor. `report.share`
-         * ile kapalı — müşteriye giden bir belgeyi yönetmek, raporu
-         * paylaşma kararının parçası.
-         */
-        href: '/raporlar/faturalar',
-        label: 'Faturalar',
-        icon: 'reports',
-        module: 6,
-        ready: true,
-        perm: 'report.share',
-      },
       {
         href: '/potansiyel-musteriler',
         label: 'Potansiyel Müşteriler',

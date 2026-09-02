@@ -18,10 +18,23 @@ import { apiFetch, ApiRequestError } from '@/lib/api';
  * ŞABLON YÖNETİMİ — bölüm seçimi ve SIRASI.
  *
  * Sıra bir dizinin doğal özelliği ve şablonda öyle saklanıyor; belge de o
- * diziyi olduğu gibi geziyor. Bu yüzden ekranda da liste + yukarı/aşağı
- * yeterli: sürükle-bırak kütüphanesi eklemek, klavyeyle erişilebilirliği
- * kendimizin kurması gereken bir yük getirirdi ve yedi öğelik bir listede
- * kazancı yok.
+ * diziyi olduğu gibi geziyor.
+ *
+ * ┌─ SIRA SÜRÜKLENEREK DEĞİŞİYOR ─────────────────────────────────────────┐
+ * │ Öncesinde satır başına ↑/↓ düğmeleri vardı ve gerekçesi yazılıydı:     │
+ * │ "yedi öğelik bir listede kazancı yok". Liste ON DÖRT bölüme çıktı ve   │
+ * │ o gerekçe çürüdü — bir bölümü en alttan en üste almak on üç tıklama    │
+ * │ demek ve her tıklamada liste kayıyor, kullanıcı takip edemiyor.        │
+ * │                                                                        │
+ * │ KÜTÜPHANE YOK: tarayıcının kendi HTML5 sürükle-bırak olayları          │
+ * │ kullanılıyor. Bir paket eklemek, bu tek ekran için yeni bir bağımlılık │
+ * │ ve yeni bir kırılma yüzeyi demekti.                                    │
+ * │                                                                        │
+ * │ KLAVYE KAYBOLMUYOR — ve bu kritik. Sürükle-bırak fare gerektiriyor;    │
+ * │ ↑/↓ düğmelerini kaldırıp yerine yalnızca sürüklemeyi koymak, klavyeyle │
+ * │ çalışan kullanıcı için özelliği TAMAMEN kapatmak olurdu. Satır         │
+ * │ odaklanabilir ve ok tuşlarıyla taşınıyor; ekranda da yazıyor.          │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
  * METRİK SEÇİMİ KAMPANYA BÖLÜMLERİNDE VAR. Bir süre yoktu ve sebebi
  * yazılıydı: belge sütunlarını sabit setlerden kuruyordu ve çalışmayan bir
@@ -31,95 +44,36 @@ import { apiFetch, ApiRequestError } from '@/lib/api';
  * SEÇİM YALNIZCA SÜTUNLU BÖLÜMLERDE: kapak, özet ve kapanışta gösterilecek
  * bir sütun listesi yok; oraya da bir seçici koymak boş bir vaat olurdu.
  */
-export function SablonYonetimi({
-  sablonlar,
-  musteriler,
-  isOrgAdmin,
-}: {
-  sablonlar: ReportTemplateSummary[];
-  musteriler: Array<{ id: string; name: string }>;
-  isOrgAdmin: boolean;
-}) {
-  const [duzenlenen, setDuzenlenen] = useState<ReportTemplateSummary | 'yeni' | null>(null);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setDuzenlenen('yeni')}
-          className="rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90"
-        >
-          Yeni şablon
-        </button>
-      </div>
-
-      {sablonlar.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-          <p className="text-sm font-medium text-ink">Henüz şablon yok.</p>
-          <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
-            Şablon olmadan rapor <strong>bütün bölümleri</strong> varsayılan
-            sırayla gösteriyor. Bir şablon oluşturmak, yalnızca istediğin
-            bölümleri ve sırayı sabitlemeni sağlıyor.
-          </p>
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {sablonlar.map((t) => (
-            <li key={t.id} className="rounded-xl border border-line bg-surface p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium">{t.name}</p>
-                  <p className="mt-0.5 text-xs text-ink-muted">
-                    {t.clientId === null ? (
-                      <span className="rounded bg-surface-sunken px-1.5 py-0.5">
-                        Organizasyon varsayılanı
-                      </span>
-                    ) : (
-                      <>Müşteri: {t.clientName ?? '—'}</>
-                    )}{' '}
-                    · {t.sections.length} bölüm
-                    {t.shareCount > 0 && <> · {t.shareCount} paylaşım linki</>}
-                  </p>
-                  <p className="mt-1.5 text-xs text-ink-muted">
-                    {t.sections.map((s) => SECTION_LABELS[s]).join(' → ')}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDuzenlenen(t)}
-                  className="rounded-lg border border-line px-3 py-1.5 text-sm transition hover:bg-surface-muted"
-                >
-                  Düzenle
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {duzenlenen !== null && (
-        <SablonModal
-          sablon={duzenlenen === 'yeni' ? null : duzenlenen}
-          musteriler={musteriler}
-          isOrgAdmin={isOrgAdmin}
-          onKapat={() => setDuzenlenen(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function SablonModal({
+/**
+ * ŞABLON DÜZENLEME KUTUSU.
+ *
+ * DIŞA AÇIK: rapor ekranındaki şablon seçici de bunu açıyor. Şablonu ayrı bir
+ * sayfada düzenleyip rapora dönmek, kullanıcının bildirdiği hatanın kendisiydi
+ * — düzenleme yapılıyor, dönüşte seçici bir ön ayara geçiyor ve düzenleme
+ * raporda hiç görünmüyordu. İki ekran AYNI bileşeni kullanıyor; ikinci bir
+ * düzenleme formu yazmak, birinin sütun seçimini ya da silme onayını
+ * kaybetmesi demekti.
+ */
+export function SablonModal({
   sablon,
   musteriler,
   isOrgAdmin,
   onKapat,
+  onKaydedildi,
 }: {
   sablon: ReportTemplateSummary | null;
   musteriler: Array<{ id: string; name: string }>;
   isOrgAdmin: boolean;
   onKapat: () => void;
+  /**
+   * Kaydedilen şablonun kimliği.
+   *
+   * Verilmezse yalnızca kapanıp sayfa yenileniyor (şablon listesi ekranı).
+   * Rapor ekranı bunu kullanıp kaydedilen şablonu HEMEN seçiyor: kaydedip
+   * ekranda hiçbir şeyin değişmediğini görmek, düzeltilen hatanın ta
+   * kendisiydi.
+   */
+  onKaydedildi?: (id: string) => void;
 }) {
   const router = useRouter();
   const [ad, setAd] = useState(sablon?.name ?? 'Aylık müşteri raporu');
@@ -146,12 +100,47 @@ function SablonModal({
 
   const disaridakiler = REPORT_SECTIONS.filter((s) => !secili.includes(s));
 
-  function tasi(i: number, yon: -1 | 1) {
-    const j = i + yon;
-    if (j < 0 || j >= secili.length) return;
+  /** Sürüklenen satırın sırası — bırakılınca `null`. */
+  const [suruklenen, setSuruklenen] = useState<number | null>(null);
+
+  /**
+   * Bir bölümü BAŞKA BİR SIRAYA taşır.
+   *
+   * Sürükleme ve klavye AYNI fonksiyonu çağırıyor. İkisini ayrı yazmak,
+   * birinin sınır kontrolünü (liste başı/sonu) kaybetmesi demekti ve o hata
+   * yalnızca uçlarda görünürdü.
+   *
+   * TAKAS DEĞİL ARAYA SOKMA. ↑/↓ komşuyla takas ediyordu ve tek adımda ikisi
+   * aynı şey; sürüklemede değil — üçüncü sıradaki bir bölümü sona bırakmak,
+   * aradaki bütün bölümlerin bir üste kayması demek. Takas yapan bir sürükleme
+   * kullanıcının bıraktığı yere koymuyor, iki öğeyi yer değiştiriyor.
+   */
+  function tasiSiraya(kaynak: number, hedef: number) {
+    if (hedef < 0 || hedef >= secili.length || kaynak === hedef) return;
     const kopya = [...secili];
-    [kopya[i], kopya[j]] = [kopya[j]!, kopya[i]!];
+    const [tasinan] = kopya.splice(kaynak, 1);
+    kopya.splice(hedef, 0, tasinan!);
     setSecili(kopya);
+  }
+
+  /**
+   * Ok tuşlarıyla taşıma.
+   *
+   * SÜRÜKLE-BIRAK TEK BAŞINA YETMİYOR: fare gerektiriyor ve klavyeyle çalışan
+   * kullanıcı için bölüm sırasını değiştirmek imkânsız hâle gelirdi. Odak
+   * taşınan satırda kalıyor, yoksa kullanıcı her adımda listeyi yeniden
+   * bulmak zorunda kalır.
+   */
+  function klavyeyle(e: React.KeyboardEvent<HTMLLIElement>, i: number) {
+    const yon = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+    if (yon === 0) return;
+    e.preventDefault();
+    tasiSiraya(i, i + yon);
+    const liste = e.currentTarget.parentElement;
+    requestAnimationFrame(() => {
+      const hedef = liste?.children[i + yon];
+      if (hedef instanceof HTMLElement) hedef.focus();
+    });
   }
 
   async function kaydet() {
@@ -166,16 +155,27 @@ function SablonModal({
         sections: secili,
         options: ayarlar,
       };
-      if (sablon) {
-        await apiFetch(`/reports/templates/${sablon.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify(govde),
-        });
-      } else {
-        await apiFetch('/reports/templates', { method: 'POST', body: JSON.stringify(govde) });
-      }
-      onKapat();
+      const kayit = sablon
+        ? await apiFetch<{ id: string }>(`/reports/templates/${sablon.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(govde),
+          })
+        : await apiFetch<{ id: string }>('/reports/templates', {
+            method: 'POST',
+            body: JSON.stringify(govde),
+          });
+
+      /*
+       * ÖNCE YENİLE, SONRA HABER VER.
+       *
+       * `router.refresh()` sunucu bileşenlerini yeniden çalıştırıyor ve
+       * şablon listesi oradan geliyor. Haber verip yenilememek, rapor
+       * ekranının yeni şablonu seçmesi ama listede bulamaması demekti:
+       * seçici kaydedilen şablonun ADINI gösteremez ve ön ayara düşerdi.
+       */
       router.refresh();
+      if (onKaydedildi) onKaydedildi(kayit.id);
+      else onKapat();
     } catch (err) {
       // PLATFORMUN/SUNUCUNUN KENDİ MESAJI EKRANDA. "Bir hata oluştu" demek,
       // "org varsayılanını yalnızca yönetici değiştirebilir" gibi
@@ -272,8 +272,10 @@ function SablonModal({
           <div>
             <p className="text-sm font-medium">Bölümler ve sıra</p>
             <p className="mt-0.5 text-xs text-ink-muted">
-              Rapor bu sırayla üretiliyor. Hiç bölüm bırakmazsan kaydedilemez —
-              boş bir rapor müşteriye gönderilecek bir belge değil.
+              Rapor bu sırayla üretiliyor. Sırayı değiştirmek için bölümü{' '}
+              <strong>sürükle</strong>; klavyeyle taşımak için satıra gel ve{' '}
+              <strong>↑ / ↓</strong> tuşlarını kullan. Hiç bölüm bırakmazsan
+              kaydedilemez — boş bir rapor müşteriye gönderilecek bir belge değil.
             </p>
             {/*
               LİSTE KENDİ İÇİNDE KAYDIRILIYOR. Bölüm sayısı şablona göre
@@ -284,32 +286,52 @@ function SablonModal({
               {secili.map((s, i) => (
                 <li
                   key={s}
-                  className="flex items-center gap-2 rounded-lg border border-line bg-surface-muted px-3 py-1.5 text-sm"
+                  draggable
+                  tabIndex={0}
+                  aria-label={`${SECTION_LABELS[s]} — sıra ${i + 1} / ${secili.length}. Taşımak için sürükleyin ya da ok tuşlarını kullanın.`}
+                  onDragStart={(e) => {
+                    setSuruklenen(i);
+                    /*
+                     * `setData` ŞART. Firefox, veri taşımayan bir sürüklemeyi
+                     * hiç başlatmıyor ve satır kıpırdamıyordu; taşınan değer
+                     * kullanılmıyor, olayın geçerli sayılması için var.
+                     */
+                    e.dataTransfer.setData('text/plain', s);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    // VARSAYILAN ENGELLENMEZSE `drop` HİÇ TETİKLENMİYOR.
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (suruklenen !== null && suruklenen !== i) tasiSiraya(suruklenen, i);
+                    setSuruklenen(i);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setSuruklenen(null);
+                  }}
+                  onDragEnd={() => setSuruklenen(null)}
+                  onKeyDown={(e) => klavyeyle(e, i)}
+                  className={`flex cursor-grab items-center gap-2 rounded-lg border bg-surface-muted px-3 py-1.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-brand/50 ${
+                    suruklenen === i
+                      ? 'border-brand opacity-60'
+                      : 'border-line hover:border-ink-muted/40'
+                  }`}
                 >
+                  {/*
+                    TUTAMAK GÖRÜNÜYOR. Sürüklenebilir olduğu ekranda hiçbir
+                    işaretle söylenmezse kullanıcı ↑/↓ düğmelerinin
+                    kaybolduğunu görüp özelliğin gittiğini sanıyor.
+                  */}
+                  <span aria-hidden="true" className="select-none text-ink-muted">
+                    ⠿
+                  </span>
                   <span className="w-5 text-xs text-ink-muted">{i + 1}.</span>
                   <span className="flex-1">{SECTION_LABELS[s]}</span>
                   <button
                     type="button"
-                    onClick={() => tasi(i, -1)}
-                    disabled={i === 0}
-                    aria-label="Yukarı taşı"
-                    className="rounded px-1.5 text-ink-muted transition hover:text-ink disabled:opacity-30"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => tasi(i, 1)}
-                    disabled={i === secili.length - 1}
-                    aria-label="Aşağı taşı"
-                    className="rounded px-1.5 text-ink-muted transition hover:text-ink disabled:opacity-30"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setSecili(secili.filter((x) => x !== s))}
-                    aria-label="Kaldır"
+                    aria-label={`${SECTION_LABELS[s]} bölümünü kaldır`}
                     className="rounded px-1.5 text-ink-muted transition hover:text-danger"
                   >
                     ✕
