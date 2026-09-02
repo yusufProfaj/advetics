@@ -823,11 +823,33 @@ kitleden geniş bir kümeye çıkardı.
 "Otomatik boost" h2'si + `BildirimHavuzu`nun kendi h2'si). **Menü:** Bilgi
 Bankası Kütüphane'den Akıllı Boost'un altına taşındı.
 
-**AÇIK KALAN:** sayfada boost başlatan BEŞ ayrı düğme var ve üçü farklı API
-ucuna gidiyor, farklı ayar kullanıyor. En kafa karıştırıcısı `manual-boost`
-listesinde yan yana duran ikisi: satıra tıklamak formu besliyor, satırın
-SAĞINDAKİ düğme formu tamamen atlayıp ÖN AYARLA yayınlıyor. Bu birleştirme
-ayrı bir tur.
+**BEŞ YAYIN YOLU İKİYE İNDİ — form kaldırıldı (aynı gün, ikinci tur).**
+
+`manual-boost` listesinde yan yana duran iki yol asıl karmaşıklıktı: satıra
+tıklamak beş adımlı formu besliyor (`POST /boosts/manual`, FORM ayarı),
+satırın SAĞINDAKİ "Yayınla" ise formu tamamen atlayıp ön ayarla yayınlıyordu
+(`POST /autoboost/posts/:id/launch`). Aynı gönderi, hangi düğmeye basıldığına
+göre FARKLI BÜTÇEYLE para harcıyordu.
+
+Kullanıcının kararı: **ön ayar geçerli, form kalksın.** `manual-boost.tsx`
+1.190 → 409 satır. Kaldırılanlar: bütçe/süre girdileri, kampanya seçimi,
+hedefleme bloğu (`ManualTargeting`), `KampanyaSecim`, `SpendLine`, `Blok`,
+`PRESETS` ve `/boosts/manual` çağrısı. Gönderi satırı `<button>` iken `<div>`
+oldu — tıklamanın tek işlevi kaldırılan formu beslemekti ve tıklanan ama
+hiçbir şey yapmayan bir satır, çalışmayan bir düğme göstermekle aynı şey.
+
+Kaldırmak yetenek kaybı DEĞİL: ön ayar aynı turda şehir ve kayıtlı kitle de
+kazandı, yani formun sorduğu her şeyi kapsıyor. Ön ayar artık bir ÖN KOŞUL
+ve yokluğu bantta sebebiyle yazıyor.
+
+`on-ayar-tek-kaynak.spec.ts` kararı kaynak taramasıyla kilitliyor (mutasyonla
+doğrulandı): panel `/boosts/manual` çağırırsa ya da bir bütçe/hedefleme
+girdisi geri gelirse test düşüyor.
+
+**AÇIK KALAN:** `POST /boosts/manual` ucu sunucuda DURUYOR ama panelden
+çağrılmıyor. Doğrudan çağrılırsa ön ayarı yok sayıp gövdedeki bütçeyle para
+harcar. Kaldırılması ayrı bir tur — `boosts.service.ts` mantığı ve testleri
+buna bağlı.
 
 **Deploy script'i SSH bağlantısı kesilirse yarıda kalabiliyor.** Build
 adımı (`nest build` + `next build`) birkaç dakika sürüyor ve bu sırada
