@@ -69,6 +69,20 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         perm: 'report.write',
       },
       {
+        /*
+         * FATURALAR RAPORLARIN ALTINDA: yüklenen belge rapor mailine
+         * ekleniyor, yani bu ekranın tek tüketicisi rapor. `report.share`
+         * ile kapalı — müşteriye giden bir belgeyi yönetmek, raporu
+         * paylaşma kararının parçası.
+         */
+        href: '/raporlar/faturalar',
+        label: 'Faturalar',
+        icon: 'reports',
+        module: 6,
+        ready: true,
+        perm: 'report.share',
+      },
+      {
         href: '/potansiyel-musteriler',
         label: 'Potansiyel Müşteriler',
         icon: 'leads',

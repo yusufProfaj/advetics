@@ -36,7 +36,13 @@ function svcKur(): RaporPlaniService {
     ) => {
       gonderimler.push({ from: p.from, to: p.to, clientId: p.clientId });
       if (gonderimDavranisi === 'hata') throw new Error('SMTP reddetti');
-      return { to: 'musteri@ornek.com', bosDonem: gonderimDavranisi === 'bos' };
+      // `faturasizDonemler` GERÇEK İMZADA VAR: gönderici o dönemin platform
+      // faturası yüklenmemişse burayı doldurur ve çağıran nota yazar.
+      return {
+        to: 'musteri@ornek.com',
+        bosDonem: gonderimDavranisi === 'bos',
+        faturasizDonemler: [],
+      };
     },
   } as unknown as RaporGonderService;
 
@@ -168,7 +174,7 @@ describe('mükerrer gönderim koruması', () => {
     const gonderici = {
       zamanlanmisGonder: async () => {
         gonderimSirasindakiNext = (await planOku()).next_run_at;
-        return { to: 'musteri@ornek.com', bosDonem: false };
+        return { to: 'musteri@ornek.com', bosDonem: false, faturasizDonemler: [] };
       },
     } as unknown as RaporGonderService;
     svc = new RaporPlaniService(

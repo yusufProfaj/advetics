@@ -51,7 +51,18 @@ export class AssetStorageService {
     bytes: Buffer;
     mimeType: string;
   }): Promise<string> {
-    const ext = params.mimeType === 'image/png' ? 'png' : 'jpg';
+    /*
+     * UZANTI MIME'DAN TÜRETİLİYOR. Fatura belgeleri PDF ve eskiden bu satır
+     * her şeye `.jpg` veriyordu: dosya doğru yazılıyor ama diskte yanlış
+     * uzantıyla duruyordu — sunucuda elle bakan biri için yanıltıcı ve bir
+     * gün uzantıya göre servis eden bir kod eklenirse sessizce bozuk.
+     */
+    const ext =
+      params.mimeType === 'application/pdf'
+        ? 'pdf'
+        : params.mimeType === 'image/png'
+          ? 'png'
+          : 'jpg';
     const key = `${params.orgId}/${params.scope}/${randomUUID()}.${ext}`;
     const target = this.absolute(key);
 

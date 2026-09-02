@@ -851,6 +851,72 @@ girdisi geri gelirse test düşüyor.
 harcar. Kaldırılması ayrı bir tur — `boosts.service.ts` mantığı ve testleri
 buna bağlı.
 
+### 3.12. 2 Eylül: platform faturaları rapora ek — ve API'nin ÇIKMAZI
+
+İstek: "Meta ve Google Ads faturalarını rapora ek PDF olarak ekle."
+Kullanıcının asıl derdi net: *"müşteri her şeyi tek pakette görsün"* ve
+**belgenin resmi olması şart**.
+
+**ÖNCE OLABİLİRLİK ARAŞTIRILDI VE İKİ PLATFORMDA DA DUVARA ÇARPILDI.**
+
+| Platform | Durum |
+|---|---|
+| Google | `InvoiceService.ListInvoices` VAR, `pdf_url` alanı VAR, erişim seviyemiz (Basic) YETERLİ — ama **yalnızca aylık faturalama (kredi hattı) hesaplarında** çalışıyor |
+| Meta | Fatura PDF'i döndüren uç **YOK**. `business_invoices` yalnızca metadata veriyor |
+
+Google kısıtı iki bağımsız kaynakla doğrulandı: resmi doküman (*"otomatik
+kredi kartı ödemeleri bu programatik faturalama akışlarıyla uyumlu değil"*)
+ve Google ürün ekibinin forum yanıtı (*"Automatic Payments is currently not
+supported by the API"*). Kartla ödeyen hesapta çağrı
+`Cannot request invoices for a billing setup that is not on monthly
+invoicing` ile düşüyor. Bu projedeki müşteriler kendi kartlarıyla ödüyor.
+
+Meta tarafında insanların kullandığı `act_<id>/transactions` ucu
+**DOKÜMANTE DEĞİL** — Ads Manager arayüzünün içsel çağrısı. Bu projede
+dokümante olmayan uca bağlanmak daha önce pahalıya patladı; kullanılmadı.
+
+**Kendi harcama dökümümüzü üretmek de cevap değildi:** sayılar doğru olurdu
+ama muhasebeye gitmezdi ve fatura yerine sunmak yanlış olurdu.
+
+**Kalan tek dürüst yol elle yükleme** ve kullanıcı bunu onayladı. Ajans
+faturayı platformdan indirip panele yüklüyor, rapor maili o dönemin
+faturalarını **AYRI EK** olarak taşıyor (rapor PDF'ine birleştirilmiyor:
+fatura resmi bir belge ve başka bir belgenin arkasına eklemek bütünlüğünü
+tartışmalı yapardı).
+
+**Tasarım kararları:**
+
+  · **Dönem `YYYY-MM`, tarih aralığı değil.** Fatura bir aya ait; aralık
+    tutmak hiç kullanılmayacak bir ayrım üretirdi.
+  · **Bir dönem + bir platform = bir fatura** (kısmi tekil indeks). İkinci
+    yükleme öncekini DEĞİŞTİRİYOR; iki fatura dursaydı maile hangisinin
+    gireceği belirsiz kalırdı.
+  · **Ayın bir kısmını kapsayan rapor da o ayı sayıyor** — fatura ayın
+    tamamına ait. Yalnızca tam ayları saymak, "1–15 Ağustos" raporunda
+    faturayı sessizce düşürürdü.
+  · **PDF olduğu GÖVDEDEN doğrulanıyor** (`%PDF-` sihirli baytları),
+    `content-type`tan değil: tarayıcı MIME'ı uzantıdan tahmin ediyor.
+  · **Eksik dönem SESSİZ kalmıyor** ama gönderimi de DURDURMUYOR (kullanıcı
+    kararı): panelde uyarı, `sync_jobs` notunda ve denetim kaydında iz.
+  · **Eksik PLATFORM başına aranmıyor, DÖNEM başına.** Müşterinin yalnızca
+    Meta'da reklamı olabilir; "Google faturası eksik" her ay yanlış bir
+    uyarı üretir ve okunmaz hâle gelen uyarı, hiç olmayandan kötü.
+
+Ekran iki yerde, TEK bileşenle: rapor sayfasında (dönem hazır seçili, yanlış
+aya yükleme riski düşük) ve `/raporlar/faturalar`ta (toplu yönetim). Ayrı
+yazılsalardı biri PDF doğrulamasını ya da "üzerine yazılıyor" uyarısını
+kaybederdi.
+
+`fatura.spec.ts` dönem eşleştirmesini ve **maile GERÇEKTEN eklendiğini**
+kilitliyor — ikinci tarama mutasyonla doğrulandı: planlı gönderimden ek
+kaldırılınca test düşüyor. O tarama şart, çünkü `raporEkleri()` doğru
+çalışsa bile ÇAĞRILMAZSA hiçbir birim testi yakalamazdı; Bildirim Havuzu
+aylarca tam bu yüzden boş kaldı.
+
+**AÇIK KALAN:** bir müşterinin Google hesabı aylık faturalamadaysa orada
+otomatik çekme yazılabilir (`pdf_url` + aynı OAuth jetonu). Kullanıcı
+hesapların ödeme yöntemini kontrol edecek.
+
 **Deploy script'i SSH bağlantısı kesilirse yarıda kalabiliyor.** Build
 adımı (`nest build` + `next build`) birkaç dakika sürüyor ve bu sırada
 sessiz kalabiliyor; bir SSH oturumu (ör. uzun bir inaktivite zaman aşımı)

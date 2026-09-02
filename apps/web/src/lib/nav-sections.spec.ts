@@ -61,11 +61,32 @@ describe('menü verisi gerçekten okunuyor', () => {
       'Kütüphane',
       'Ayarlar',
     ]);
-    // AYARLAR'IN DÖRT ÖĞESİNİN DÖRDÜ DE YETKİYLE KAPALI. Sayı testte yazılı
-    // çünkü yetkisiz bir öğe eklemek sessiz bir sızıntı olurdu: Senkronizasyon
-    // Durumu ekranı platformun ham hata mesajlarını basıyor ve `perm` düşerse
-    // müşteri hesabı da görürdü.
-    expect(SECTIONS.flatMap((s) => s.items).filter((i) => i.perm).length).toBe(6);
+    /*
+     * YETKİYLE KAPALI ÖĞELER — ÇIPLAK SAYI YERİNE ADLARIYLA.
+     *
+     * Burada `.toBe(6)` yazıyordu ve menüye yeni bir korumalı öğe eklemek
+     * testi "kırıyordu" — ama kırılma bir SIZINTIYI değil, yalnızca sayının
+     * değiştiğini gösteriyordu. CLAUDE.md: "Sayıma dayanan iddia yazma."
+     *
+     * Asıl korunması gereken şey KİMLERİN kapalı olduğu: Senkronizasyon
+     * Durumu platformun ham hata mesajlarını basıyor ve `perm` düşerse
+     * müşteri hesabı da görürdü. Adları yazmak, hem yeni öğe eklendiğinde
+     * gereksiz kırılmıyor hem de MEVCUT bir korumanın düşmesini yakalıyor.
+     */
+    const korumali = SECTIONS.flatMap((s) => s.items)
+      .filter((i) => i.perm)
+      .map((i) => i.href)
+      .sort();
+    for (const zorunlu of [
+      '/ayarlar/musteriler',
+      '/ayarlar/baglantilar',
+      '/ayarlar/senkronizasyon',
+      '/ayarlar/ekip',
+    ]) {
+      expect(korumali, `${zorunlu} yetkisiz kalmış`).toContain(zorunlu);
+    }
+    // Tarama boşa düşmesin: liste gerçekten dolu.
+    expect(korumali.length).toBeGreaterThanOrEqual(4);
   });
 });
 

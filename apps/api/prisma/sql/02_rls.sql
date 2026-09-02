@@ -200,7 +200,7 @@ DECLARE
     'ad_drafts', 'ad_draft_assets',
     -- Anahtar kelime performansı
     'keyword_insights', 'search_term_insights', 'insight_breakdowns',
-    'sync_batches', 'report_schedules',
+    'sync_batches', 'report_schedules', 'fatura_belgeleri',
     -- Modül 8
     'bulk_batches', 'bulk_items',
     -- Formlar kütüphanesi
@@ -1246,6 +1246,39 @@ CREATE POLICY adv_report_sched_update ON report_schedules
   );
 
 CREATE POLICY adv_report_sched_delete ON report_schedules
+  FOR DELETE USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+-- -----------------------------------------------------------------------------
+-- fatura_belgeleri — MÜŞTERİ KAPSAMLI.
+--
+-- Fatura müşterinin kendi belgesi (ödeme müşterinin kartından yapılıyor) ve
+-- o workspace'e erişen ajans personeli görebilmeli.
+--
+-- DÖRT POLİTİKA DA YAZILI. `sync_jobs`ta UPDATE politikası eksikti ve
+-- sessizce SIFIR SATIR etkiliyordu (CLAUDE.md); burada eksik bir UPDATE
+-- "faturayı değiştirdim ama değişmiyor", eksik bir DELETE ise "yanlış ayın
+-- faturasını sildim, silinmiyor" demek olurdu.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_fatura_select ON fatura_belgeleri
+  FOR SELECT USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_fatura_insert ON fatura_belgeleri
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_fatura_update ON fatura_belgeleri
+  FOR UPDATE USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  ) WITH CHECK (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_fatura_delete ON fatura_belgeleri
   FOR DELETE USING (
     org_id = app.current_org_id() AND app.can_access_client(client_id)
   );

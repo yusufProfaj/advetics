@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -12,7 +13,10 @@ import {
   Query,
   Req,
   Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import {
   reportQuerySchema,
@@ -29,7 +33,15 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { CurrentTenant, Public, RequirePermissions } from '../../common/decorators';
-import { raporPlaniInputSchema, type RaporPlaniInput, type RaporPlaniOzeti } from '@advetics/shared';
+import {
+  raporPlaniInputSchema,
+  FATURA_PLATFORMLARI,
+  donemSchema,
+  type FaturaOzeti,
+  type FaturaPlatformu,
+  type RaporPlaniInput,
+  type RaporPlaniOzeti,
+} from '@advetics/shared';
 import { zodBody, zodQuery } from '../../common/pipes/zod-validation.pipe';
 import { ReportsService } from './reports.service';
 import { ShareService } from './share.service';
@@ -37,6 +49,7 @@ import { ReportTemplatesService } from './report-templates.service';
 import { RaporPdfService } from './rapor-pdf.service';
 import { RaporGonderService } from './rapor-gonder.service';
 import { RaporPlaniService } from './rapor-plani.service';
+import { FaturaService } from './fatura.service';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -51,6 +64,7 @@ export class ReportsController {
     private readonly prisma: PrismaService,
     private readonly gonderService: RaporGonderService,
     private readonly plans: RaporPlaniService,
+    private readonly faturalar: FaturaService,
   ) {}
 
   /** Panelden önizleme — oturumlu, RLS'li. */
@@ -241,6 +255,80 @@ export class ReportsController {
     @Query('clientId', ParseUUIDPipe) clientId: string,
   ): Promise<{ silindi: true }> {
     return this.plans.sil(ctx, id, clientId);
+  }
+
+  /**
+   * ═══ PLATFORM FATURALARI ═══
+   *
+   * `report.share` YETKİSİ — okuma değil PAYLAŞMA kapısı. Fatura müşteriye
+   * GİDEN bir belge; raporu paylaşamayan birinin mail ekine belge koyabilmesi
+   * o kapıyı arka yoldan açmak olurdu.
+   */
+  @Get('faturalar')
+  @RequirePermissions('report.share')
+  listInvoices(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<FaturaOzeti[]> {
+    return this.faturalar.listele(ctx, clientId);
+  }
+
+  @Post('faturalar')
+  @RequirePermissions('report.share')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadInvoice(
+    @CurrentTenant() ctx: TenantContext,
+    // `Express.Multer.File` yerine yapısal tip: @types/multer bu projede yok
+    // ve varlık arşivi de aynı deseni kullanıyor.
+    @UploadedFile() file: { originalname: string; mimetype: string; buffer: Buffer },
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+    @Query('platform') platform: string,
+    @Query('donem') donem: string,
+    @Query('aciklama') aciklama?: string,
+  ): Promise<{ id: string }> {
+    if (!file) throw new BadRequestException('Dosya gelmedi.');
+    if (!(FATURA_PLATFORMLARI as readonly string[]).includes(platform)) {
+      throw new BadRequestException(`Geçersiz platform: ${platform}`);
+    }
+    // Dönem biçimi BURADA da doğrulanıyor: uç doğrudan çağrılabiliyor ve
+    // bozuk bir dönem eşleştirmeyi sessizce boşa düşürürdü.
+    const d = donemSchema.safeParse(donem);
+    if (!d.success) throw new BadRequestException(d.error.issues[0]?.message ?? 'Geçersiz dönem.');
+
+    return this.faturalar.yukle(
+      ctx,
+      {
+        clientId,
+        platform: platform as FaturaPlatformu,
+        donem: d.data,
+        aciklama: aciklama?.trim() || null,
+      },
+      { fileName: file.originalname, mimeType: file.mimetype, bytes: file.buffer },
+    );
+  }
+
+  @Get('faturalar/:id/dosya')
+  @RequirePermissions('report.share')
+  async downloadInvoice(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { buffer, fileName } = await this.faturalar.bytes(ctx, id, clientId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fileName)}"`);
+    res.send(buffer);
+  }
+
+  @Delete('faturalar/:id')
+  @RequirePermissions('report.share')
+  deleteInvoice(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<{ silindi: true }> {
+    return this.faturalar.sil(ctx, id, clientId);
   }
 
   @Post('shares')

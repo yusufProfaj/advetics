@@ -1,5 +1,5 @@
-import { varsayilanSablon, type ReportData } from '@advetics/shared';
-import { requireSession } from '@/lib/session';
+import { kapsananDonemler, varsayilanSablon, type ReportData } from '@advetics/shared';
+import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { SablonSecici } from '@/components/report/sablon-secici';
 import { formatDayLong } from '@/lib/format';
@@ -7,6 +7,7 @@ import { gunEkle, resolveRange, today } from '@/lib/date-range';
 import { TarihSecici } from '@/components/tarih-secici';
 import { ReportDocument } from '@/components/report/report-document';
 import { ShareControls } from '@/components/report/share-controls';
+import { Faturalar } from '@/components/report/faturalar';
 
 export const metadata = { title: 'Raporlar — Advetics' };
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,8 @@ export default async function ReportsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession();
+  // Fatura MÜŞTERİYE GİDEN bir belge; yönetimi rapor paylaşma yetkisine bağlı.
+  const canShare = hasPermission(session, 'report.share');
   const params = await searchParams;
 
   const clientId = first(params.musteri) ?? session.activeClientId ?? session.availableClients[0]?.id;
@@ -149,6 +152,20 @@ export default async function ReportsPage({
             */
             templateId={null}
           />
+
+          {/*
+            FATURA KUTUSU PAYLAŞIM PANELİNİN ALTINDA ve ekrandaki DÖNEMİ
+            biliyor: hangi ayın faturasının gerektiği tarih seçicisinden
+            belli, kullanıcı ayı elle yazmıyor ve yanlış aya yükleme riski
+            düşüyor. Eksikse burada uyarı çıkıyor — rapor gönderilmeden ÖNCE.
+          */}
+          {canShare && (
+            <Faturalar
+              clientId={clientId}
+              odakDonemler={kapsananDonemler(from, to)}
+              canWrite
+            />
+          )}
 
           {devamEden && (
             <div className="rounded-lg border border-sky-300 bg-sky-50 px-3.5 py-2.5 text-sm text-sky-900">

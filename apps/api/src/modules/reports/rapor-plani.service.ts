@@ -360,9 +360,25 @@ export class RaporPlaniService {
           atlanan++;
           notlar.push(`${plan.client_name}: veri yok`);
         } else {
-          await this.sonucYaz(plan.id, 'sent', null, sonuc.to);
+          /*
+           * FATURASIZ DÖNEM SESSİZ KALMIYOR. Rapor gitti ama o ayın platform
+           * faturası yüklenmemişse kullanıcı bunu bilmeli — "müşteri her şeyi
+           * tek pakette görsün" vaadi tam da orada yarım kalıyor. Gönderimi
+           * DURDURMUYORUZ (kullanıcının kararı): geciken rapor, eksik
+           * rapordan kötü.
+           */
+          const eksik = sonuc.faturasizDonemler;
+          await this.sonucYaz(
+            plan.id,
+            'sent',
+            eksik.length > 0 ? `Fatura yüklenmemiş dönem: ${eksik.join(', ')}` : null,
+            sonuc.to,
+          );
           gonderilen++;
-          notlar.push(`${plan.client_name} → ${sonuc.to}`);
+          notlar.push(
+            `${plan.client_name} → ${sonuc.to}` +
+              (eksik.length > 0 ? ` (faturasız: ${eksik.join(', ')})` : ''),
+          );
         }
       } catch (err) {
         const mesaj = err instanceof Error ? err.message : String(err);

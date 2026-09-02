@@ -94,6 +94,7 @@ model Organization {
   reportTemplates ReportTemplate[]
   syncBatches     SyncBatch[]
   reportSchedules ReportSchedule[]
+  faturaBelgeleri FaturaBelgesi[]
   monthlyBudgets  MonthlyBudget[]
   rules           Rule[]
   organicPosts    OrganicPost[]
@@ -172,6 +173,7 @@ model User {
   connectionsCreated PlatformConnection[]
   emailAccount       UserEmailAccount?
   reportSchedules    ReportSchedule[]
+  faturaBelgeleri    FaturaBelgesi[]
 
   @@unique([orgId, email])
   @@index([orgId, status])
@@ -242,6 +244,7 @@ model Client {
   reportTemplates   ReportTemplate[]
   reportShares      ReportShare[]
   reportSchedules   ReportSchedule[]
+  faturaBelgeleri   FaturaBelgesi[]
   monthlyBudgets    MonthlyBudget[]
   rules             Rule[]
   organicPosts      OrganicPost[]
@@ -3025,4 +3028,64 @@ model ReportSchedule {
 enum ReportScheduleFrequency {
   weekly
   monthly
+}
+
+/// ═══ PLATFORM FATURASI — RAPORA EK RESMİ BELGE ═══
+///
+/// Müşteri raporu alırken Meta/Google faturasını da aynı mailde görsün diye.
+/// İstek birebir: "müşteri her şeyi tek pakette görsün."
+///
+/// ELLE YÜKLENİYOR ve bu bir tercih değil, ZORUNLULUK:
+///
+///   · Google'ın `InvoiceService` ucu gerçek ve `pdf_url` alanı var, ama
+///     YALNIZCA aylık faturalama (kredi hattı) hesaplarında çalışıyor.
+///     Kartla ödeyen hesapta `Cannot request invoices for a billing setup
+///     that is not on monthly invoicing` ile düşüyor — resmi doküman ve
+///     Google ürün ekibinin forum yanıtıyla iki kez doğrulandı.
+///   · Meta'da fatura PDF'i döndüren bir uç YOK. `business_invoices`
+///     yalnızca metadata veriyor; `act_<id>/transactions` ise dokümante
+///     değil (Ads Manager'ın içsel çağrısı) ve haber verilmeden kalkabilir.
+///
+/// Belgenin RESMİ olması şart olduğu için kendi ürettiğimiz harcama dökümü
+/// de cevap değildi: sayılar doğru olurdu ama muhasebeye gitmezdi.
+model FaturaBelgesi {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+
+  platform Platform
+
+  /// `YYYY-MM`. TARİH ARALIĞI DEĞİL AY: fatura bir aya ait ve
+  /// başlangıç/bitiş tutmak hiç kullanılmayacak bir ayrım üretirdi.
+  donem String @db.VarChar(7)
+
+  fileName   String @map("file_name") @db.VarChar(255)
+  /// Diskteki yol. Dosyanın kendisi veritabanında DEĞİL: PDF'i BYTEA olarak
+  /// tutmak yedekleri ve her sorguyu ağırlaştırırdı; varlık arşivi de aynı
+  /// deseni kullanıyor (`assets.storage_key`).
+  storageKey String @map("storage_key") @db.VarChar(512)
+  byteSize   Int    @map("byte_size")
+
+  /// Ajansın kendi notu — fatura numarası, tutar. Zorunlu değil.
+  ///
+  /// KOLON ADI `not` DEĞİL: `NOT` SQL'de ayrılmış kelime ve tırnaksız
+  /// kullanıldığı her ham sorguda sözdizimi hatası veriyor.
+  aciklama String? @db.VarChar(200)
+
+  uploadedByUserId String   @map("uploaded_by_user_id") @db.Uuid
+  uploadedAt       DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  uploadedBy   User         @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade)
+
+  /// BİR DÖNEM + BİR PLATFORM = BİR FATURA.
+  ///
+  /// İkinci bir yükleme öncekini DEĞİŞTİRİYOR (upsert), yanına eklenmiyor:
+  /// iki fatura duruyorsa maile hangisinin gireceği belirsiz kalırdı ve
+  /// müşteriye yanlış belge gitmesi sessiz bir hata olurdu.
+  @@unique([clientId, platform, donem])
+  @@index([clientId, donem])
+  @@index([orgId])
+  @@map("fatura_belgeleri")
 }

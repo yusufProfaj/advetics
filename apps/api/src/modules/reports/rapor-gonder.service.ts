@@ -14,6 +14,7 @@ import { mailGonder } from '../email/mail-gonderici';
 import { raporMailTaslagi } from './rapor-mail';
 import { RaporPdfService } from './rapor-pdf.service';
 import { ReportsService } from './reports.service';
+import { FaturaService } from './fatura.service';
 
 interface Meta {
   ip?: string | null;
@@ -46,6 +47,7 @@ export class RaporGonderService {
     private readonly pdf: RaporPdfService,
     private readonly crypto: CryptoService,
     private readonly audit: AuditService,
+    private readonly faturalar: FaturaService,
   ) {}
 
   /** Taslak: sayılar rapordan, anlatı şablondan. Ekranda düzenleniyor. */
@@ -125,6 +127,20 @@ export class RaporGonderService {
         ]
       : [];
 
+    /*
+     * ═══ PLATFORM FATURALARI DA AYNI MAİLDE ═══
+     *
+     * İstek birebir şuydu: "müşteri her şeyi tek pakette görsün."
+     * Rapor PDF'ine BİRLEŞTİRİLMİYOR, AYRI ek olarak gidiyor — faturanın
+     * kendi biçimi resmi bir belge ve onu başka bir belgenin arkasına
+     * eklemek bütünlüğünü tartışmalı hâle getirirdi.
+     *
+     * Fatura EKLENEMEDİYSE gönderim DURMUYOR ama sessiz de kalmıyor:
+     * eksik dönemler denetim kaydına yazılıyor.
+     */
+    const fatura = await this.faturalar.raporEkleri(input.clientId, input.from, input.to);
+    ekler.push(...fatura.ekler);
+
     const parola = this.crypto.decrypt(Buffer.from(gonderen.smtp_pass_enc));
     try {
       await mailGonder(
@@ -167,6 +183,10 @@ export class RaporGonderService {
           subject: input.subject,
           range: `${input.from}..${input.to}`,
           attachedPdf: input.attachPdf,
+          // FATURA İZİ DENETİM KAYDINDA: "faturayı gönderdim mi" sorusunun
+          // aylar sonra cevaplanabilmesi için.
+          faturaEki: fatura.bulunan,
+          faturasizDonemler: fatura.eksikDonemler,
         },
         ...meta,
       }),
@@ -202,7 +222,7 @@ export class RaporGonderService {
       toEmail: string | null;
       attachPdf: boolean;
     },
-  ): Promise<{ to: string; bosDonem: boolean }> {
+  ): Promise<{ to: string; bosDonem: boolean; faturasizDonemler: string[] }> {
     const gonderen = await this.gonderen(ctx);
     if (!gonderen) {
       throw new BadRequestException(
@@ -246,7 +266,7 @@ export class RaporGonderService {
      * panelde sebebiyle görünüyor (CLAUDE.md: "Boş liste NEDENİNİ söylesin").
      */
     if (data.platforms.length === 0) {
-      return { to: alici, bosDonem: true };
+      return { to: alici, bosDonem: true, faturasizDonemler: [] };
     }
 
     const t = raporMailTaslagi(data, gonderen.from_name);
@@ -262,6 +282,10 @@ export class RaporGonderService {
           },
         ]
       : [];
+
+    // Planlı gönderimde de faturalar ekleniyor — elle gönderimle aynı yol.
+    const fatura = await this.faturalar.raporEkleri(params.clientId, params.from, params.to);
+    ekler.push(...fatura.ekler);
 
     await mailGonder(
       {
@@ -281,7 +305,7 @@ export class RaporGonderService {
       },
     );
 
-    return { to: alici, bosDonem: false };
+    return { to: alici, bosDonem: false, faturasizDonemler: fatura.eksikDonemler };
   }
 
   private async musteriEpostasi(ctx: TenantContext, clientId: string): Promise<string | null> {
