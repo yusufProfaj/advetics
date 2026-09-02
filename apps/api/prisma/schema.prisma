@@ -93,6 +93,7 @@ model Organization {
   auditLogs       AuditLog[]
   reportTemplates ReportTemplate[]
   syncBatches     SyncBatch[]
+  reportSchedules ReportSchedule[]
   monthlyBudgets  MonthlyBudget[]
   rules           Rule[]
   organicPosts    OrganicPost[]
@@ -170,6 +171,7 @@ model User {
   passwordResets     PasswordResetToken[]
   connectionsCreated PlatformConnection[]
   emailAccount       UserEmailAccount?
+  reportSchedules    ReportSchedule[]
 
   @@unique([orgId, email])
   @@index([orgId, status])
@@ -237,23 +239,24 @@ model Client {
   creatives Creative[]
   syncJobs  SyncJob[]
 
-  reportTemplates ReportTemplate[]
-  reportShares    ReportShare[]
-  monthlyBudgets  MonthlyBudget[]
-  rules           Rule[]
-  organicPosts    OrganicPost[]
-  boostRules      BoostRule[]
-  boosts          Boost[]
-  bulkBatches     BulkBatch[]
-  adDrafts        AdDraft[]
-  keywordInsights KeywordInsight[]
+  reportTemplates   ReportTemplate[]
+  reportShares      ReportShare[]
+  reportSchedules   ReportSchedule[]
+  monthlyBudgets    MonthlyBudget[]
+  rules             Rule[]
+  organicPosts      OrganicPost[]
+  boostRules        BoostRule[]
+  boosts            Boost[]
+  bulkBatches       BulkBatch[]
+  adDrafts          AdDraft[]
+  keywordInsights   KeywordInsight[]
   insightBreakdowns InsightBreakdown[]
-  leadForms       LeadForm[]
-  leads           Lead[]
-  leadCursors     LeadSyncCursor[]
-  assets          Asset[]
-  adCreatives     AdCreative[]
-  draftCampaigns  DraftCampaign[]
+  leadForms         LeadForm[]
+  leads             Lead[]
+  leadCursors       LeadSyncCursor[]
+  assets            Asset[]
+  adCreatives       AdCreative[]
+  draftCampaigns    DraftCampaign[]
 
   autoBoostPresets       AutoBoostPreset[]
   autoBoostQueueItems    AutoBoostQueueItem[]
@@ -828,6 +831,12 @@ enum SyncJobType {
   /// `insights_breakdown` KOTA KATMANI ile karıştırılmasın: o bir hız
   /// sınırlama etiketi, bu bir iş türü.
   insights_breakdowns
+  /// Advetics 1.0 — zamanlanmış rapor gönderimi.
+  ///
+  /// KÜRESEL tarama, müşteri başına dağılmıyor: zamanı gelmiş planlamalar
+  /// tek sorguyla bulunuyor. Müşteriye bölmek, çoğu müşteride hiç planlama
+  /// olmadığı için boş iş üretirdi (`websub_renew` ile aynı gerekçe).
+  report_schedule
 }
 
 enum SyncJobStatus {
@@ -1162,9 +1171,10 @@ model ReportTemplate {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid
 
-  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client       Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client?          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   shares       ReportShare[]
+  schedules    ReportSchedule[]
 
   @@index([orgId, clientId])
   @@map("report_templates")
@@ -1957,8 +1967,8 @@ model SearchTermInsight {
 /// beş migration, beş RLS politikası ve beş senkronizasyon yolu demekti;
 /// hepsi aynı şekle sahip (boyut → değer → metrikler).
 model InsightBreakdown {
-  clientId    String @map("client_id") @db.Uuid
-  adAccountId String @map("ad_account_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  adAccountId String   @map("ad_account_id") @db.Uuid
   platform    Platform
 
   /// Hangi kırılım — `age`, `gender`, `placement`, `hour`, `city`.
@@ -2145,8 +2155,8 @@ model SyncJob {
   errorMessage String? @map("error_message") @db.VarChar(1000)
 
   /// Toplu tazeleme partisi — `null` = tek başına açılmış iş.
-  batchId     String?   @map("batch_id") @db.Uuid
-  batch       SyncBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  batchId String?    @map("batch_id") @db.Uuid
+  batch   SyncBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   startedAt   DateTime? @map("started_at") @db.Timestamptz(6)
   finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
@@ -2906,4 +2916,113 @@ model AutoBoostSubscription {
 
   @@index([renewAt])
   @@map("auto_boost_subscriptions")
+}
+
+/// ═══ ZAMANLANMIŞ RAPOR GÖNDERİMİ (Advetics 1.0) ═══
+///
+/// `ARCHITECTURE.md` bunu `report_schedules` diye öngörmüştü ve uzun süre
+/// yazılmadı; `docs/DURUM.md` §4'te "planlanan ama yazılmayan" tabloda
+/// duruyordu.
+///
+/// EN BÜYÜK RİSK MÜKERRER GÖNDERİM. Müşteriye aynı raporun iki kez gitmesi
+/// geri alınamıyor ve ajansın işini kötü gösteriyor. Bu yüzden tasarım
+/// "atlamayı, tekrarlamaya tercih ediyor": `next_run_at` gönderimden ÖNCE
+/// ileri atılıyor (atomik karşılaştır-ve-yaz), gönderim düşerse OTOMATİK
+/// TEKRAR DENENMİYOR. Kaçan bir rapor kurtarılabilir (kullanıcı elle
+/// gönderir ve `last_status` ekranda görünür); mükerrer bir rapor
+/// kurtarılamaz.
+///
+/// Aynı denge CLAUDE.md'de kayıtlı: "Kayıt yazılamazsa satır `failed` DEĞİL
+/// `creating` kalmalı — `failed` yazmak satırı yeniden denenebilir yapar ve
+/// platformda İKİNCİ bir kampanya açar."
+model ReportSchedule {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+
+  /// MAİL BU KULLANICININ SMTP KİMLİĞİYLE GİDİYOR.
+  ///
+  /// Elle gönderimde (`rapor-gonder.service.ts`) rapor, gönderen danışmanın
+  /// KENDİ adresinden gidiyor ve bu bilinçli — müşteri tanıdığı kişiden mail
+  /// alıyor. Zamanlanmış gönderimde oturum yok, o yüzden planı KURAN kişi
+  /// saklanıyor.
+  ///
+  /// Bu kimlik bozulursa (hesap silinir, doğrulama düşer) BAŞKA BİR
+  /// GÖNDERİCİYE DÜŞÜLMÜYOR: müşteriye yanlış kişiden mail gitmesi,
+  /// hiç gitmemesinden kötü. Plan `failed` olarak işaretlenip panelde
+  /// gösteriliyor.
+  createdByUserId String @map("created_by_user_id") @db.Uuid
+
+  /// null = müşteriye özel şablon yoksa varsayılan kullanılıyor.
+  templateId String? @map("template_id") @db.Uuid
+
+  frequency ReportScheduleFrequency
+
+  /// weekly: 1 = Pazartesi … 7 = Pazar (ISO). monthly'de NULL.
+  dayOfWeek Int? @map("day_of_week")
+
+  /// monthly: 1–28. weekly'de NULL.
+  ///
+  /// ÜST SINIR 28 ve bu bir kısıt, sessiz bir kırpma değil: 29/30/31 her ayda
+  /// bulunmuyor ve "ayın 31'i" seçen bir plan Şubat'ta ATLANIRDI. Kullanıcı
+  /// sebebini hiçbir ekranda göremezdi.
+  dayOfMonth Int? @map("day_of_month")
+
+  /// Europe/Istanbul saati (0–23).
+  ///
+  /// UTC DEĞİL. Bu iş insanın okuduğu bir mail üretiyor; "sabah 9'da gönder"
+  /// cümlesindeki 9 ajansın saati. Aynı istisna `sweep:account-status`ta da
+  /// var ve gerekçesi orada yazılı.
+  hour Int
+
+  /// Pencere ön ayarı: `7g` | `14g` | `30g` | `bu_ay` | `gecen_ay`.
+  ///
+  /// PENCERE DEĞİL ANAHTAR SAKLANIYOR. Tarihleri saklamak, "her hafta son 7
+  /// gün" isteğini ilk haftanın tarihlerine dondururdu. Pencere gönderim
+  /// ANINDA `raporPenceresi()` ile hesaplanıyor — panelin kullandığı
+  /// fonksiyonun aynısı.
+  rangeKey String @map("range_key") @db.VarChar(20)
+
+  /// null = `clients.contact_email`. Gönderim anında çözülüyor: adres
+  /// değişince planı düzenlemek gerekmesin.
+  toEmail   String? @map("to_email") @db.VarChar(255)
+  attachPdf Boolean @default(true) @map("attach_pdf")
+  enabled   Boolean @default(true)
+
+  /// SIRADAKİ ÇALIŞMA — mükerrer engelinin dayanağı.
+  ///
+  /// Süpürme `enabled AND next_run_at <= now()` satırlarını alıyor ve
+  /// göndermeden ÖNCE bu alanı ileri atıyor. İki worker aynı satırı
+  /// görürse ikincisinin koşullu UPDATE'i sıfır satır etkiliyor ve o tur
+  /// atlanıyor.
+  nextRunAt DateTime @map("next_run_at") @db.Timestamptz(6)
+
+  /// Son turun izi — "neden gitmedi" sorusunun tek cevabı.
+  ///
+  /// CLAUDE.md: "succeeded + rows = 0 BU PROJEDE BİR HATA TÜRÜ" ve "Boş liste
+  /// NEDENİNİ söylesin". `skipped` ayrı bir durum: dönemde veri yoktu,
+  /// gönderilmedi — bu bir hata değil ama sessiz de kalmamalı.
+  lastRunAt  DateTime? @map("last_run_at") @db.Timestamptz(6)
+  lastStatus String?   @map("last_status") @db.VarChar(20)
+  lastError  String?   @map("last_error") @db.VarChar(500)
+  lastSentTo String?   @map("last_sent_to") @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy    User            @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  template     ReportTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  /// Süpürmenin sorgusu: `enabled AND next_run_at <= now()`.
+  @@index([enabled, nextRunAt])
+  @@index([clientId])
+  @@index([orgId])
+  @@map("report_schedules")
+}
+
+enum ReportScheduleFrequency {
+  weekly
+  monthly
 }

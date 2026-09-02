@@ -200,7 +200,7 @@ DECLARE
     'ad_drafts', 'ad_draft_assets',
     -- Anahtar kelime performansı
     'keyword_insights', 'search_term_insights', 'insight_breakdowns',
-    'sync_batches',
+    'sync_batches', 'report_schedules',
     -- Modül 8
     'bulk_batches', 'bulk_items',
     -- Formlar kütüphanesi
@@ -1214,6 +1214,41 @@ CREATE POLICY adv_sync_batches_insert ON sync_batches
 CREATE POLICY adv_sync_batches_update ON sync_batches
   FOR UPDATE USING (app.has_context() AND org_id = app.current_org_id())
              WITH CHECK (app.has_context() AND org_id = app.current_org_id());
+
+-- -----------------------------------------------------------------------------
+-- report_schedules — MÜŞTERİ KAPSAMLI.
+--
+-- Planlama bir workspace'e ait ve o workspace'e erişebilen herkes görebilmeli:
+-- "müşteriye her Pazartesi rapor gidiyor mu" sorusu danışmanın günlük işi.
+--
+-- DÖRT POLİTİKA DA YAZILI ve bu bir titizlik değil bir DERS. `sync_jobs`ta
+-- yalnızca SELECT ve INSERT vardı; UPDATE politikası olmayan tablo hata
+-- vermiyor, SESSİZCE SIFIR SATIR etkiliyor (CLAUDE.md). Burada eksik bir
+-- UPDATE politikası "planı kapattım ama kapanmıyor" demek olurdu.
+--
+-- DELETE de gerekli: kullanıcı kurduğu planlamayı kaldırabilmeli.
+-- -----------------------------------------------------------------------------
+CREATE POLICY adv_report_sched_select ON report_schedules
+  FOR SELECT USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_report_sched_insert ON report_schedules
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_report_sched_update ON report_schedules
+  FOR UPDATE USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  ) WITH CHECK (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
+
+CREATE POLICY adv_report_sched_delete ON report_schedules
+  FOR DELETE USING (
+    org_id = app.current_org_id() AND app.can_access_client(client_id)
+  );
 
 -- insight_breakdowns — anahtar kelimeyle AYNI kural.
 --

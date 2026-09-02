@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { MailGonderModal, RaporGonder } from './rapor-gonder';
+import { RaporPlanla } from './rapor-planla';
 
 /**
  * ═══ PAYLAŞ — TEK GİRİŞ, İKİ YOL ═══
@@ -26,11 +27,14 @@ export function ShareControls({
   from,
   to,
   hasData,
+  templateId,
 }: {
   clientId: string;
   from: string;
   to: string;
   hasData: boolean;
+  /** Ekranda seçili şablon — planlanan rapor da onu kullansın. */
+  templateId: string | null;
 }) {
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string | null>(null);
@@ -133,6 +137,15 @@ export function ShareControls({
             indirmek belgeyi kendine almak, paylaşmak müşteriye ulaştırmak.
             Aynı menüye koymak iki farklı işi tek başlık altında toplardı.
           */}
+          {/*
+            PLANLA "PDF indir"İN SOLUNDA ve VERİYE BAĞLI DEĞİL.
+            Diğer ikisi BU dönemin raporuyla ilgili ve dönem boşsa anlamsız;
+            planlama ise GELECEK dönemleri kuruyor. `hasData` ile kapatmak,
+            bu hafta harcaması olmayan bir müşteriye plan kurulamaması
+            demek olurdu.
+          */}
+          <RaporPlanla clientId={clientId} templateId={templateId} />
+
           <RaporGonder clientId={clientId} from={from} to={to} hasData={hasData} />
 
         <div className="relative" ref={menuRef}>

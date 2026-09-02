@@ -350,6 +350,25 @@ export class SyncQueueService implements OnModuleDestroy {
         jobType: 'account_status',
         tz: 'Europe/Istanbul',
       },
+      /*
+       * Advetics 1.0 — ZAMANLANMIŞ RAPOR: SAATTE BİR, AJANSIN SAATİYLE.
+       *
+       * Planlama "her Pazartesi 09:00" gibi bir SAAT taşıyor; tarama saatte
+       * bir koşup zamanı gelenleri alıyor. Günde bir koşsaydı kullanıcının
+       * seçtiği saatin hiçbir anlamı kalmazdı.
+       *
+       * SAAT DİLİMİ `Europe/Istanbul` ve bu ikinci istisna — birincisi
+       * `sweep:account-status`. Gerekçe aynı: bu iş İNSANIN OKUDUĞU bir mail
+       * üretiyor. UTC saymak "sabah 9" isteğini öğlene kaydırırdı.
+       *
+       * Dakika 19: diğer süpürmelerle (7, 13, 17, 37, 41, 53) çakışmıyor.
+       */
+      {
+        name: 'sweep:report-schedules',
+        pattern: '19 * * * *',
+        jobType: 'report_schedule',
+        tz: 'Europe/Istanbul',
+      },
     ];
 
     for (const s of schedules) {

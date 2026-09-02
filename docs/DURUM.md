@@ -1,6 +1,6 @@
 # Advetics — Durum ve Yol Haritası
 
-> **Son güncelleme:** 2026-08-31
+> **Son güncelleme:** 2026-09-02
 > **Kaynak:** Bu belge koddan doğrulanarak yazıldı, hafızadan değil. Her iddia
 > için dosya yolu verilmiştir; şüphe duyduğun satırı açıp bakabilirsin.
 >
@@ -11,18 +11,18 @@
 
 ## 1. Tek bakışta
 
-| | 2026-08-11 | 2026-08-28 |
+| | 2026-08-11 | 2026-09-02 |
 |---|---|---|
-| Veritabanı tablosu | 37 | **52** |
-| Migration | 17 | **50** |
-| API testi | 694 ¹ | **2.020** |
-| Web testi | 20 ¹ | **339** |
+| Veritabanı tablosu | 37 | **53** |
+| Migration | 17 | **52** |
+| API testi | 694 ¹ | **2.062** |
+| Web testi | 20 ¹ | **366** |
 | Panel sayfası | 16 | **29** |
 | API controller | 17 | **25** |
-| RLS politikası | 95 | **151** |
+| RLS politikası | 95 | **155** |
 | Rol | 5 | **7** |
 | Yetki anahtarı | — | **34** |
-| Zamanlanmış süpürme | 8 | **12** |
+| Zamanlanmış süpürme | 8 | **14** |
 
 Sol sütun 11 Ağustos'taki commit'ten (`b5a0acc`) SAYILDI, sağ sütun bugünkü
 koddan — ikisi de hafızadan değil. ¹ İşaretli iki satır belgenin o günkü kendi
@@ -299,7 +299,7 @@ Bugün "frekans > 3 ise duraklat" kuralı yazılabiliyor. Eksik olan, yorgunluğ
 | **Kitle Özeti sayfası** | ✅ | Kartlar + 4 halka + günlük form eğrisi; panel ve PDF AYNI sayfayı çiziyor |
 | Anahtar kelime raporu | ✅ | Veri hattı canlı; "Şimdi güncelle" de tetikliyor |
 | Arama terimleri | ✅ | `search_term_insights`; "Eşleşen Kelime" sütunu raporun en eyleme dönük bilgisi |
-| Zamanlanmış (otomatik) rapor gönderimi | ❌ | Gönderim elle tetikleniyor |
+| **Zamanlanmış (otomatik) rapor gönderimi** | ✅ | `report_schedules` + `rapor-plani.service.ts`; panelde "Planla" düğmesi. Haftada 1 / ayda 1, dönem ön ayarlı |
 | **İlgi alanı kırılımı** | ❌ **OLAMAZ** | Meta Ads Insights API'sinde ilgi alanı bir KIRILIM değil, hedefleme girdisi. Google'da yalnızca kriter olarak eklenmiş kitleler için kısmi. Tek platformda yarım çalışan bir bölüm raporda "Meta'da neden boş" sorusunu doğurur |
 
 ---
@@ -440,7 +440,7 @@ döndürülmeli.
 | `boost_executions` | `boosts` | Aday + onay + oluşturma tek tabloda |
 | `bulk_jobs` / `bulk_variants` | `bulk_batches` / `bulk_items` | Aynı yapı |
 | `reports` (üretilmiş rapor) | — | Rapor **anlık** üretiliyor, saklanmıyor |
-| `report_schedules` | — | Zamanlanmış rapor yazılmadı |
+| `report_schedules` | `report_schedules` | ✅ 2026-09-02'de yazıldı — plandaki adıyla |
 | `notifications` | — | Bildirim altyapısı yazılmadı |
 | `bulk_assets` | — | Varlık arşivi (BASE) yazılmadı |
 
@@ -635,6 +635,61 @@ Kaynak taraması testiyle kilitlendi (mutasyonla doğrulandı):
 `sweep:organic` saatte bir (`41 * * * *`) çalışıyor — Ege Birlik Yapı'nın
 3 bekleyen Instagram gönderisi bir sonraki turda ya da elle "Şimdi
 güncelle" ile kuyruğa düşüp mail tetikleyecek.
+
+### 3.9. 2 Eylül: zamanlanmış rapor gönderimi
+
+`ARCHITECTURE.md`'nin öngördüğü ama hiç yazılmayan `report_schedules` bu
+oturumda yazıldı. Panelde `/raporlar` ekranında "PDF indir"in solunda
+**Planla** düğmesi: haftada 1 / ayda 1, gün ve saat (İstanbul), rapor dönemi
+ön ayarlı. Kurulu planlar aynı modalde listeleniyor, duraklatılabiliyor.
+
+**En büyük risk mükerrer gönderim** — müşteriye aynı raporun iki kez gitmesi
+geri alınamıyor ve worker `concurrency: 4` ile koşup pm2 tarafından sık
+yeniden başlatılıyor. İki koruma birlikte:
+
+  · **Koşullu UPDATE** (`WHERE id = $ AND next_run_at <= now()`): iki worker
+    aynı satırı görürse ikincisinin claim'i SIFIR satır etkiliyor.
+  · **Önce ileri at, sonra gönder**: sıra tersine olsaydı, gönderimle
+    güncelleme arasında ölen worker'dan sonraki tur aynı raporu tekrar
+    gönderirdi. Bu sırayla en kötü ihtimal bir dönemin ATLANMASI — atlanan
+    rapor kurtarılabilir, mükerrer olan kurtarılamaz. Aynı gerekçeyle
+    **otomatik tekrar deneme YOK**.
+
+**Test yanlış sebeple geçti ve mutasyon bunu gösterdi.** "Aynı plan iki tur
+üst üste koşarsa bir kez gönderilir" testi, claim'deki koşul SİLİNDİĞİNDE de
+geçiyordu: ardışık çağrıda ikinci turu zaten `SELECT` süzgeci eliyordu, atomik
+claim hiç sınanmıyordu. Gerçek yarış `Promise.all` ile iki eşzamanlı
+`calistir()` çağrısıyla kuruldu (her `await` olay döngüsüne yer verdiği için
+iki SELECT, sonra iki UPDATE sırası gerçekten oluşuyor) ve mutasyon artık
+yakalanıyor. CLAUDE.md'deki "mutasyon komutu tutmadı ve test boşuna geçti"
+desenin bir örneği daha.
+
+**Pencere hesabı `packages/shared`a taşındı.** `date-range.ts` `apps/web`
+altındaydı ve worker ona erişemiyor; kalan seçenek hesabı ikinci kez yazmaktı.
+`raporPenceresi()` artık tek tanım ve panel de onu kullanıyor;
+`pencere-uyumu.spec.ts` ikisinin aynı sonucu ürettiğini beş farklı tarihte
+kilitliyor ("bugün rapora girmiyor" kırpması dahil).
+
+**Sıklık × pencere bir uyumluluk matrisi.** Haftalık planda "Geçen ay" YOK
+(aynı rapor ayda dört kez giderdi), aylık planda "Bu ay" YOK (ayın 1'inde
+dönem henüz başlamamış olur ve `raporPenceresi` null döner). `objective-matrix`
+dersi: uyumsuz seçenek arayüzde hiç görünmüyor, sunucu da reddediyor.
+
+**Ayın günü 1–28 ile sınırlı** ve sebebi ekranda yazıyor: 29/30/31 her ayda
+yok ve "ayın 31'i" seçen bir plan Şubat'ta sessizce atlanırdı.
+
+**Gönderen, planı KURAN kullanıcı.** Elle gönderimde rapor danışmanın kendi
+adresinden gidiyor; zamanlanmışta oturum olmadığı için `created_by_user_id`
+saklanıyor. Kimlik bozulursa BAŞKA BİR GÖNDERİCİYE DÜŞÜLMÜYOR — müşteriye
+tanımadığı birinden mail gitmesi, hiç gitmemesinden kötü. Panel `senderReady`
+ile bunu satırın üstünde yazıyor.
+
+**Dönemde veri yoksa gönderilmiyor** (`last_status = 'skipped'`, sebebiyle):
+sıfırlarla dolu otomatik bir mail müşteriye "sistem bozulmuş" diye okunuyor.
+Atlama sessiz değil, listede görünüyor.
+
+`Prisma.sql` şablonu içindeki yorumda backtick tuzağına **bu oturumda da bir
+kez düşüldü** (`TS1005`), CLAUDE.md'de yazılı olmasına rağmen.
 
 **Deploy script'i SSH bağlantısı kesilirse yarıda kalabiliyor.** Build
 adımı (`nest build` + `next build`) birkaç dakika sürüyor ve bu sırada

@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { AlertsModule } from '../modules/alerts/alerts.module';
 import { ConnectionsModule } from '../modules/connections/connections.module';
 import { AutoBoostModule } from '../modules/autoboost/autoboost.module';
+import { ReportsModule } from '../modules/reports/reports.module';
 import { RulesModule } from '../modules/rules/rules.module';
 import { BoostsModule } from '../modules/boosts/boosts.module';
 import { InsightsSyncService } from './insights-sync.service';
@@ -28,7 +29,7 @@ import { SyncProcessorService } from './sync-processor.service';
  */
 @Global()
 @Module({
-  imports: [AutoBoostModule, ConnectionsModule, RulesModule, BoostsModule, AlertsModule],
+  imports: [AutoBoostModule, ConnectionsModule, RulesModule, BoostsModule, AlertsModule, ReportsModule],
   providers: [
     QuotaGuardService,
     SyncQueueService,

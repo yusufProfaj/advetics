@@ -175,6 +175,115 @@ export class RaporGonderService {
     return { sent: true, to: alici };
   }
 
+  /**
+   * ═══ ZAMANLANMIŞ GÖNDERİM — AYNI ÇEKİRDEK, OTURUMSUZ ═══
+   *
+   * `gonder()` ile aynı sınıfta ve aynı yardımcıları kullanıyor. Ayrı bir
+   * servise koymak cazipti; koymadım çünkü ikisi de MÜŞTERİYE mail atıyor ve
+   * CLAUDE.md'nin dersi net: "AYNI ŞEYİ ÜRETEN İKİNCİ FONKSİYON, DOĞDUĞU AN
+   * AYRIŞIR." Ayrışacak şeyler somut: imza temizliği, imzanın eklenmesi,
+   * PDF ekinin adı, doğrulanmamış kimliğin reddi.
+   *
+   * FARKI TEK: gövdeyi kullanıcı yazmıyor, `raporMailTaslagi` üretiyor.
+   * Elle gönderimde danışman metni okuyup düzenliyor (değerlendirme
+   * cümlesini veriden çıkarmak mümkün değil); burada o adım yok ve şablonun
+   * ürettiği nötr metin gidiyor.
+   *
+   * RAPOR BİR KEZ KURULUYOR. `taslak()` + `gonder()` ardışık çağrılsaydı
+   * `reports.build()` iki kez koşardı — aylık raporda ağır bir sorgu.
+   */
+  async zamanlanmisGonder(
+    ctx: TenantContext,
+    params: {
+      clientId: string;
+      from: string;
+      to: string;
+      templateId: string | null;
+      toEmail: string | null;
+      attachPdf: boolean;
+    },
+  ): Promise<{ to: string; bosDonem: boolean }> {
+    const gonderen = await this.gonderen(ctx);
+    if (!gonderen) {
+      throw new BadRequestException(
+        'Planı kuran kullanıcının e-posta kimliği tanımlı değil. ' +
+          'Ayarlar → E-posta Ayarları ekranından kurulmalı.',
+      );
+    }
+    if (gonderen.verified_at === null) {
+      /*
+       * BAŞKA BİR GÖNDERİCİYE DÜŞÜLMÜYOR. Müşteriye tanımadığı bir kişiden
+       * mail gitmesi, hiç gitmemesinden kötü — ve fark hiçbir ekranda
+       * görünmezdi. Plan `failed` işaretlenip panelde gösteriliyor.
+       */
+      throw new BadRequestException(
+        `${gonderen.from_email} adresinin doğrulaması düşmüş. ` +
+          'Ayarlar → E-posta Ayarları ekranından kendine test maili gönder.',
+      );
+    }
+
+    const alici = params.toEmail ?? (await this.musteriEpostasi(ctx, params.clientId));
+    if (!alici) {
+      throw new BadRequestException(
+        'Alıcı yok: planda adres girilmemiş ve müşterinin iletişim e-postası tanımlı değil.',
+      );
+    }
+
+    const query: ReportQuery = {
+      clientId: params.clientId,
+      from: params.from,
+      to: params.to,
+      ...(params.templateId ? { templateId: params.templateId } : {}),
+    };
+    const data = await this.reports.build(ctx, query);
+
+    /*
+     * VERİ YOKSA GÖNDERİLMİYOR — ve bu bir karar, sessiz bir düşme değil.
+     *
+     * Sıfırlarla dolu otomatik bir mail müşteriye "sistem bozulmuş" diye
+     * okunuyor ve ajansın işini kötü gösteriyor. Ama atlamak da sessiz
+     * kalmamalı: çağıran bunu `last_status = 'skipped'` olarak yazıyor ve
+     * panelde sebebiyle görünüyor (CLAUDE.md: "Boş liste NEDENİNİ söylesin").
+     */
+    if (data.platforms.length === 0) {
+      return { to: alici, bosDonem: true };
+    }
+
+    const t = raporMailTaslagi(data, gonderen.from_name);
+    const govde = imzaTemizle(t.html).html;
+    const imza = gonderen.signature_html ? `<br /><br />${gonderen.signature_html}` : '';
+
+    const ekler = params.attachPdf
+      ? [
+          {
+            filename: `${params.clientId}-${params.from}_${params.to}.pdf`,
+            content: await this.pdf.uret(data),
+            contentType: 'application/pdf',
+          },
+        ]
+      : [];
+
+    await mailGonder(
+      {
+        fromName: gonderen.from_name,
+        fromEmail: gonderen.from_email,
+        host: gonderen.smtp_host,
+        port: Number(gonderen.smtp_port),
+        secure: gonderen.smtp_secure,
+        user: gonderen.smtp_user,
+        pass: this.crypto.decrypt(Buffer.from(gonderen.smtp_pass_enc)),
+      },
+      {
+        to: alici,
+        subject: t.subject,
+        html: `${govde}${imza}`,
+        ...(ekler.length > 0 ? { attachments: ekler } : {}),
+      },
+    );
+
+    return { to: alici, bosDonem: false };
+  }
+
   private async musteriEpostasi(ctx: TenantContext, clientId: string): Promise<string | null> {
     const rows = await this.prisma.withTenant(ctx, (tx) =>
       tx.$queryRaw<Array<{ contact_email: string | null }>>(Prisma.sql`

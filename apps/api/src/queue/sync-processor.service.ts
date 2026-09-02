@@ -16,6 +16,7 @@ import { OrganicSyncService } from './organic-sync.service';
 import { KeywordSyncService } from './keyword-sync.service';
 import { HesapDurumuKontrolService } from '../modules/alerts/hesap-durumu-kontrol.service';
 import { KirilimSyncService } from './kirilim-sync.service';
+import { RaporPlaniService } from '../modules/reports/rapor-plani.service';
 import { SearchTermSyncService } from './search-term-sync.service';
 import { BoostsService } from '../modules/boosts/boosts.service';
 import { YouTubeSubscribeService } from '../modules/autoboost/youtube-subscribe.service';
@@ -71,6 +72,7 @@ export class SyncProcessorService {
     private readonly searchTerms: SearchTermSyncService,
     private readonly hesapDurumu: HesapDurumuKontrolService,
     private readonly kirilim: KirilimSyncService,
+    private readonly raporPlani: RaporPlaniService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -116,6 +118,17 @@ export class SyncProcessorService {
      * girseydi aynı bağlantı hesap sayısı kadar çağrılırdı.
      */
     if (payload.jobType === 'account_status') return this.hesapDurumu.kontrolEt();
+    /*
+     * ZAMANLANMIŞ RAPOR DA KÜRESEL. Zamanı gelmiş planlamalar tek sorguyla
+     * bulunuyor; müşteriye bölmek, çoğu müşteride hiç planlama olmadığı için
+     * boş iş üretirdi (`websub_renew` ve `boost_complete` ile aynı gerekçe).
+     *
+     * TARİH PARAMETRESİ İSTEMİYOR ve bu bilinçli: pencere plandaki
+     * `range_key`ten gönderim ANINDA hesaplanıyor. `datesForJob` bu tür için
+     * dal taşımıyor ve taşımamalı — CLAUDE.md'deki `sweep:keywords` tuzağının
+     * tersi durum, orada iş tarih BEKLİYORDU ve üretici dal yoktu.
+     */
+    if (payload.jobType === 'report_schedule') return this.raporPlani.calistir();
 
     const accounts = await this.db.adAccount.findMany({
       // Süzgeç TEK YERDE: teşhis ekranı da aynı sabiti okuyor. Ayrı

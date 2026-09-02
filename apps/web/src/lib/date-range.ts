@@ -16,37 +16,26 @@
  * eski `{ days, offset }` şeması bunları ifade edemiyordu.
  */
 
-/** `YYYY-MM-DD` — UTC gün başına sabitlenmiş. */
-export type IsoDay = string;
+/*
+ * GÜN ARİTMETİĞİ VE PENCERE ÜRETİCİLERİ ARTIK `@advetics/shared` İÇİNDE.
+ *
+ * Sebebi zamanlanmış rapor: planlanmış gönderim WORKER'da (apps/api) koşuyor
+ * ve buradaki bir fonksiyona erişemiyor. Kalan tek seçenek pencere hesabını
+ * orada ikinci kez yazmaktı — CLAUDE.md: "AYNI ŞEYİ ÜRETEN İKİNCİ FONKSİYON,
+ * DOĞDUĞU ANDA AYRIŞIR." Ayrışmanın bedeli burada somut: panelde görülenden
+ * farklı bir dönemi kapsayan bir belge MÜŞTERİYE giderdi.
+ *
+ * Bu dosya ön ayarların ETİKETLERİNİ ve URL çözümlemesini tutmaya devam
+ * ediyor; pencerenin KENDİSİ tek yerden geliyor.
+ */
+export type { IsoDay } from '@advetics/shared';
+export { gunEkle, gunSayisi } from '@advetics/shared';
 
-const GUN_MS = 86_400_000;
+import { PENCERE, ayBasi, bugunUtc, gunEkle, gunSayisi, type IsoDay } from '@advetics/shared';
 
 /** Bugün, UTC. */
 export function today(): IsoDay {
-  return new Date().toISOString().slice(0, 10);
-}
-
-/** Gün ekler/çıkarır. `Date` aritmetiği UTC üzerinden — yerel saat kaymaz. */
-export function gunEkle(gun: IsoDay, n: number): IsoDay {
-  return new Date(Date.parse(`${gun}T00:00:00Z`) + n * GUN_MS).toISOString().slice(0, 10);
-}
-
-/** İki gün arasındaki fark (dahil): `2026-08-01..2026-08-01` = 1. */
-export function gunSayisi(from: IsoDay, to: IsoDay): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / GUN_MS) + 1;
-}
-
-/** Haftanın Pazartesi'si. Türkiye'de hafta Pazartesi başlıyor. */
-function haftaBasi(gun: IsoDay): IsoDay {
-  const d = new Date(`${gun}T00:00:00Z`);
-  // `getUTCDay()` Pazar = 0. Pazartesi'ye çekmek için 0'ı 7 sayıyoruz.
-  const gunNo = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
-  return gunEkle(gun, -(gunNo - 1));
-}
-
-/** Ayın ilk günü. */
-function ayBasi(gun: IsoDay): IsoDay {
-  return `${gun.slice(0, 7)}-01`;
+  return bugunUtc();
 }
 
 /**
@@ -68,68 +57,31 @@ export interface OnAyar {
 }
 
 export const RANGE_PRESETS: OnAyar[] = [
-  { key: 'bugun', label: 'Bugün', bugunDahil: true, pencere: (b) => ({ from: b, to: b }) },
-  {
-    key: 'dun',
-    label: 'Dün',
-    bugunDahil: false,
-    pencere: (b) => ({ from: gunEkle(b, -1), to: gunEkle(b, -1) }),
-  },
+  { key: 'bugun', label: 'Bugün', bugunDahil: true, pencere: (b) => PENCERE.bugun(b) },
+  { key: 'dun', label: 'Dün', bugunDahil: false, pencere: (b) => PENCERE.dun(b) },
   {
     key: 'bu_hafta',
     label: 'Bu hafta (Pzt–Bugün)',
     bugunDahil: true,
-    pencere: (b) => ({ from: haftaBasi(b), to: b }),
+    pencere: (b) => PENCERE.bu_hafta(b),
   },
-  {
-    key: '7g',
-    label: 'Son 7 gün',
-    bugunDahil: false,
-    pencere: (b) => ({ from: gunEkle(b, -7), to: gunEkle(b, -1) }),
-  },
+  { key: '7g', label: 'Son 7 gün', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 7) },
   {
     key: 'gecen_hafta',
     label: 'Geçen hafta (Pzt–Paz)',
     bugunDahil: false,
-    pencere: (b) => {
-      const bu = haftaBasi(b);
-      return { from: gunEkle(bu, -7), to: gunEkle(bu, -1) };
-    },
+    pencere: (b) => PENCERE.gecen_hafta(b),
   },
-  {
-    key: '14g',
-    label: 'Son 14 gün',
-    bugunDahil: false,
-    pencere: (b) => ({ from: gunEkle(b, -14), to: gunEkle(b, -1) }),
-  },
-  {
-    key: 'bu_ay',
-    label: 'Bu ay',
-    bugunDahil: true,
-    pencere: (b) => ({ from: ayBasi(b), to: b }),
-  },
-  {
-    key: '30g',
-    label: 'Son 30 gün',
-    bugunDahil: false,
-    pencere: (b) => ({ from: gunEkle(b, -30), to: gunEkle(b, -1) }),
-  },
+  { key: '14g', label: 'Son 14 gün', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 14) },
+  { key: 'bu_ay', label: 'Bu ay', bugunDahil: true, pencere: (b) => PENCERE.bu_ay(b) },
+  { key: '30g', label: 'Son 30 gün', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 30) },
   {
     key: 'gecen_ay',
     label: 'Geçen ay',
     bugunDahil: false,
-    pencere: (b) => {
-      const buAy = ayBasi(b);
-      const gecenAySonu = gunEkle(buAy, -1);
-      return { from: ayBasi(gecenAySonu), to: gecenAySonu };
-    },
+    pencere: (b) => PENCERE.gecen_ay(b),
   },
-  {
-    key: '90g',
-    label: 'Son 90 gün',
-    bugunDahil: false,
-    pencere: (b) => ({ from: gunEkle(b, -90), to: gunEkle(b, -1) }),
-  },
+  { key: '90g', label: 'Son 90 gün', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 90) },
   {
     /*
      * TÜM ZAMANLAR ELİMİZDEKİ EN ESKİ GÜNDEN BAŞLIYOR — sabit bir yıldan

@@ -139,6 +139,15 @@ export default async function ReportsPage({
             from={from}
             to={to}
             hasData={report.platforms.length > 0}
+            /*
+              ŞABLON GÖNDERİLMİYOR — paylaşım bağlantısındaki kararın aynısı.
+              Ekrandaki seçici bir KOD taşıyor ('genel', 'google'), planlama
+              tablosu ise şablon UUID'si. İkisini birbirine çevirmek, kullanıcı
+              varsayılan bir şablona bakarken kaydedilecek bir UUID
+              olmaması demek. Sunucu müşteriye özel şablonu bulup yoksa
+              varsayılanı üretiyor; planlanan rapor da o yolu izliyor.
+            */
+            templateId={null}
           />
 
           {devamEden && (

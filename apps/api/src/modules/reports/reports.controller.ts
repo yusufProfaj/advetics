@@ -29,12 +29,14 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { CurrentTenant, Public, RequirePermissions } from '../../common/decorators';
+import { raporPlaniInputSchema, type RaporPlaniInput, type RaporPlaniOzeti } from '@advetics/shared';
 import { zodBody, zodQuery } from '../../common/pipes/zod-validation.pipe';
 import { ReportsService } from './reports.service';
 import { ShareService } from './share.service';
 import { ReportTemplatesService } from './report-templates.service';
 import { RaporPdfService } from './rapor-pdf.service';
 import { RaporGonderService } from './rapor-gonder.service';
+import { RaporPlaniService } from './rapor-plani.service';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -48,6 +50,7 @@ export class ReportsController {
     private readonly audit: AuditService,
     private readonly prisma: PrismaService,
     private readonly gonderService: RaporGonderService,
+    private readonly plans: RaporPlaniService,
   ) {}
 
   /** Panelden önizleme — oturumlu, RLS'li. */
@@ -190,6 +193,54 @@ export class ReportsController {
     @Req() req: RequestMeta,
   ): Promise<{ deleted: true; revokedShares: number }> {
     return this.templates.remove(ctx, id, meta(req));
+  }
+
+  /**
+   * ═══ ZAMANLANMIŞ RAPOR ═══
+   *
+   * `report.share` YETKİSİ — `report.write` DEĞİL.
+   *
+   * Planlama bir şablon düzenlemesi değil, MÜŞTERİYE MAIL GÖNDERME kararı;
+   * üstelik tek seferlik değil, tekrarlayan. Şablon yazabilen ama rapor
+   * paylaşamayan birinin otomatik gönderim kurabilmesi, `report.share`
+   * kapısını arka yoldan açmak olurdu.
+   */
+  @Get('schedules')
+  @RequirePermissions('report.share')
+  listSchedules(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<RaporPlaniOzeti[]> {
+    return this.plans.listele(ctx, clientId);
+  }
+
+  @Post('schedules')
+  @RequirePermissions('report.share')
+  createSchedule(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(raporPlaniInputSchema)) body: RaporPlaniInput,
+  ): Promise<{ id: string }> {
+    return this.plans.olustur(ctx, body);
+  }
+
+  @Patch('schedules/:id')
+  @RequirePermissions('report.share')
+  updateSchedule(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(raporPlaniInputSchema)) body: RaporPlaniInput,
+  ): Promise<{ id: string }> {
+    return this.plans.guncelle(ctx, id, body);
+  }
+
+  @Delete('schedules/:id')
+  @RequirePermissions('report.share')
+  deleteSchedule(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<{ silindi: true }> {
+    return this.plans.sil(ctx, id, clientId);
   }
 
   @Post('shares')
