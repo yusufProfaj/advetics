@@ -170,7 +170,7 @@ function kur(
     withTenant: async <T>(_ctx: TenantContext, fn: (t: unknown) => Promise<T>) => fn(tx),
   } as unknown as PrismaService;
 
-  return new SyncController(prisma, null as never);
+  return new SyncController(prisma, null as never, null as never);
 }
 
 describe('GET /sync/status — teşhis', () => {

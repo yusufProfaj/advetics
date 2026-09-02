@@ -127,7 +127,7 @@ describe('Müşteri Hizmetleri', () => {
       'user.write',
       'sync.trigger',
     ] as const) {
-      expect(y.has(p), `olmaması gereken yetki var: ${p}`).toBe(true === false);
+      expect(y.has(p), `olmaması gereken yetki var: ${p}`).toBe(false);
     }
   });
 

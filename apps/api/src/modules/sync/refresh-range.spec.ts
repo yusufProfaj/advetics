@@ -80,7 +80,11 @@ beforeEach(() => {
     },
   } as unknown as SyncQueueService;
 
-  ctrl = new SyncController(prisma, queue);
+  // ÜÇÜNCÜ BAĞIMLILIK (denetim) BU TESTTE KULLANILMIYOR ama VERİLMEK
+  // ZORUNDA: vitest tip denetimi yapmıyor, eksik argüman yalnızca
+  // `pnpm typecheck` ile görünüyor ve orada gürültü yapan her hata
+  // gerçek bir uyarıyı gizliyor.
+  ctrl = new SyncController(prisma, queue, null as never);
 });
 
 const isler = (): string[] => enqueued.map((i) => i.jobType as string);

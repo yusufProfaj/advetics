@@ -43,8 +43,17 @@ const TARIH_ISTEYENLER = [
 // Servis yalnızca saf yardımcısı için kuruluyor; hiçbir bağımlılığa
 // dokunulmuyor. `datesForJob` private — `hesap-sahiplenme.spec.ts` ile aynı
 // desen.
-const N = null as never;
-const proc = new SyncProcessorService(N, N, N, N, N, N, N, N, N, N, N, N, N, N) as unknown as {
+// BAĞIMLILIK LİSTESİ ELLE YAZILMIYOR.
+//
+// Burada 14 tane `N` vardı; servis 18 bağımlılığa çıkınca satır sessizce
+// eksik kaldı ve bunu YALNIZCA `pnpm typecheck` gördü — vitest tip denetimi
+// yapmıyor, test yeşil koşmaya devam etti. Sayıyı elle güncellemek aynı
+// tuzağı her seferinde yeniden kuruyor.
+//
+// Kurucu bağımlılıklarının HİÇBİRİ kullanılmıyor: bu test yalnızca saf
+// yardımcı `datesForJob`u sınıyor ve ona dokunulmuyor. Cast bunu açıkça
+// söylüyor.
+const proc = new (SyncProcessorService as unknown as new () => SyncProcessorService)() as unknown as {
   datesForJob: (t: string, tz: string) => { from: string; to: string } | undefined;
 };
 

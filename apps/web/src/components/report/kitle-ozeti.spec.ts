@@ -47,11 +47,22 @@ describe('bölüm tanımı', () => {
      * ulaştırmak demek.
      */
     for (const s of VARSAYILAN_SABLONLAR) {
-      if (!s.sections.includes('audience_overview')) continue;
+      /*
+       * DİZİ GENİŞLETİLİYOR — aşağıdaki testin yaptığının aynısı.
+       *
+       * `VARSAYILAN_SABLONLAR` `as const` ve her ön ayarın `sections`ı AYRI bir
+       * demet tipi. Döngüde tip bunların BİRLEŞİMİ oluyor ve `includes`/`indexOf`
+       * yalnızca hepsinde ortak olan bölümleri kabul ediyor: 'genel'de kitle
+       * bölümleri yok, dolayısıyla 'audience_overview' argüman olarak
+       * DERLENMİYOR (TS2345). Genişletme yalnızca tipi ilgilendiriyor, çalışma
+       * zamanında hiçbir şey değişmiyor — iddia aynı iddia.
+       */
+      const bolumler = s.sections as readonly string[];
+      if (!bolumler.includes('audience_overview')) continue;
       expect(
-        s.sections.indexOf('audience_overview'),
+        bolumler.indexOf('audience_overview'),
         `${s.kod}: özet tablolardan sonra`,
-      ).toBeLessThan(s.sections.indexOf('audience_age'));
+      ).toBeLessThan(bolumler.indexOf('audience_age'));
     }
   });
 

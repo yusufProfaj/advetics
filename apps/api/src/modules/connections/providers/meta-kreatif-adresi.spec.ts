@@ -46,7 +46,11 @@ afterEach(() => {
 
 describe('fetchCreativeImageUrls', () => {
   it('TEK istekte hepsini alıyor — kreatif başına çağrı yapmıyor', async () => {
-    const f = vi.fn(async () =>
+    // PARAMETRE YAZILI: parametresiz bir `vi.fn`de `mock.calls` boş
+    // demet tipi oluyor ve aşağıdaki `calls[0][0]` DERLENMİYOR (TS2493).
+    // Vitest tip denetimi yapmadığı için hata yalnızca `pnpm typecheck`
+    // ile görünüyordu.
+    const f = vi.fn(async (_url: string) =>
       YANIT({
         '1': { id: '1', image_url: 'https://scontent.xx.fbcdn.net/a.jpg' },
         '2': { id: '2', image_url: 'https://scontent.xx.fbcdn.net/b.jpg' },
@@ -214,7 +218,13 @@ describe('fetchCreativeImageUrls', () => {
      * istek DÜĞÜM yoluna gidiyor. Aynı kreatifi iki kez indirmenin faydası
      * yok, kotası ise var.
      */
-    const f = vi.fn(async () => YANIT({ id: '1', image_url: 'https://x.fbcdn.net/a.jpg' }));
+    // PARAMETRE YAZILI: parametresiz bir `vi.fn`de `mock.calls` boş
+    // demet tipi oluyor ve aşağıdaki `calls[0][0]` DERLENMİYOR (TS2493).
+    // Vitest tip denetimi yapmadığı için hata yalnızca `pnpm typecheck`
+    // ile görünüyordu.
+    const f = vi.fn(async (_url: string) =>
+      YANIT({ id: '1', image_url: 'https://x.fbcdn.net/a.jpg' }),
+    );
     globalThis.fetch = f as unknown as typeof fetch;
 
     const out = await provider().fetchCreativeImageUrls(ctx, ['1', '1', '1']);
