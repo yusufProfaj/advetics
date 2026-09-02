@@ -761,11 +761,17 @@ export class SyncProcessorService {
         const kuyrukSonucu = await this.autoboostQueue.enqueueForProfile(
           payload.socialProfileId,
         );
-        await this.markSucceeded(payload.syncJobId, result.rows, 1);
-        return {
-          rows: result.rows,
-          note: `${result.note} · ${kuyrukSonucu.note}`,
-        };
+        const not = `${result.note} · ${kuyrukSonucu.note}`;
+        /*
+         * NOT `sync_jobs`A DA YAZILIYOR — bir süre yalnızca worker log'una
+         * gidiyordu ve bu, bildirimin çalışıp çalışmadığını GÖRÜNMEZ
+         * yapıyordu: kullanıcının sorusu birebir "gönderi paylaşıldığında
+         * tetikleniyor mu bilmiyorum" oldu. Kart açıldı mı, mail gitti mi,
+         * gitmediyse neden — üçü de bu notun içinde ve teşhis ekranı onu
+         * okuyor. Log rotasyonla kayboluyor, tablo kalıyor.
+         */
+        await this.markSucceeded(payload.syncJobId, result.rows, 1, { note: not });
+        return { rows: result.rows, note: not };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
         throw err;
