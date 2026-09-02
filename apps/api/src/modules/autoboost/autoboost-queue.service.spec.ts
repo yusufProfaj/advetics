@@ -104,7 +104,19 @@ async function kullaniciEkle(
   return userId;
 }
 
-/** hello@profaj.com'un e-posta kimliği — DNS'te var olmayan bir sunucuya kurulu. */
+/**
+ * hello@profaj.com'un e-posta kimliği — BAĞLANTIYI ANINDA REDDEDEN bir adrese.
+ *
+ * ÖNCEDEN var olmayan bir ALAN ADI kullanılıyordu (`olmayan.sunucu.gecersiz`)
+ * ve test tam paket altında KARARSIZDI: DNS çözümlemesi yük altında 10
+ * saniyeyi aşıp vitest zaman aşımına düşüyordu. Yalıtımda geçip toplu koşuda
+ * düşen bir test, bu projede en az yanlış geçen test kadar zararlı — kimse
+ * kırmızıya güvenmemeye başlıyor.
+ *
+ * `127.0.0.1:1` DNS'e HİÇ gitmiyor ve çekirdek bağlantıyı anında
+ * `ECONNREFUSED` ile reddediyor. Sınanan şey değişmedi: kimlik BULUNDU ve
+ * gerçek bir SMTP denemesi YAPILDI.
+ */
 async function ajansMailKimligiEkle(): Promise<void> {
   const userId = await kullaniciEkle('hello@profaj.com', { clientId: null, role: 'owner' });
   await h.q(
@@ -112,7 +124,7 @@ async function ajansMailKimligiEkle(): Promise<void> {
        (id, org_id, user_id, from_name, from_email, smtp_host, smtp_port, smtp_secure,
         smtp_user, smtp_pass_enc, updated_at)
      VALUES (gen_random_uuid(), $1, $2, 'Advetics', 'hello@profaj.com',
-             'olmayan.sunucu.gecersiz', 1, false, 'hello@profaj.com', $3, now())`,
+             '127.0.0.1', 1, false, 'hello@profaj.com', $3, now())`,
     [IDS.org, userId, SAHTE_CRYPTO.encrypt('parola')],
   );
 }
