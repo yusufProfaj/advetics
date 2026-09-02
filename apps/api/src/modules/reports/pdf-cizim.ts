@@ -452,7 +452,29 @@ export function egri(
   const { degerler } = opts;
   if (degerler.length < 2) return;
 
-  const enYuksek = Math.max(...degerler, 1);
+  /*
+   * ═══ İKİ AYRI SAYI: TEPE DEĞER ve ÖLÇEK TAVANI ═══
+   *
+   * Tek sayı kullanmak ÜRETİMDE RAPORUN TAMAMINI DÜŞÜRDÜ (HTTP 500,
+   * `options.y must be of type number, but was actually NaN`).
+   *
+   * Eskiden tek bir `enYuksek = Math.max(...degerler, 1)` vardı ve aşağıda
+   * tepe noktası `degerler.indexOf(enYuksek)` ile aranıyordu. Serinin
+   * TAMAMI SIFIRSA — form dönüşümü hiç olmayan bir müşteride ya da yalnızca
+   * mesaj alan bir hesapta gayet normal — `enYuksek` 1'e sabitleniyor ama 1
+   * dizide YOK: `indexOf` -1 dönüyor, `degerler[-1]` `undefined` oluyor,
+   * `py(undefined)` NaN üretiyor ve pdf-lib fırlatıyor. Tek bir grafiğin tek
+   * bir etiketi yüzünden müşteriye giden belgenin tamamı kayboluyordu.
+   *
+   * `degerler[i]!` içindeki ünlem tam da bu yalanı örtüyordu: TypeScript'e
+   * "burada kesin bir sayı var" deniyor, çalışma anında `undefined` geliyor.
+   *
+   * TABAN 1 YALNIZCA ÖLÇEK İÇİN: sıfıra bölmeyi engelliyor. Tepe noktasını
+   * ararken kullanılamaz, çünkü o dizide gerçekten bulunması gereken bir
+   * değer.
+   */
+  const tepeDeger = Math.max(...degerler);
+  const enYuksek = Math.max(tepeDeger, 1);
   const px = (i: number): number => opts.x + (i / (degerler.length - 1)) * opts.genislik;
   const py = (v: number): number => opts.y + (v / enYuksek) * opts.yukseklik;
 
@@ -473,13 +495,28 @@ export function egri(
     });
   }
 
-  const zirve = degerler.indexOf(enYuksek);
+  /*
+   * TEPE, ÖLÇEK TAVANINDA DEĞİL GERÇEK DEĞERLERDE aranıyor. Dizi boş
+   * olamıyor (yukarıda `length < 2` ile dönülüyor), yani `indexOf` her zaman
+   * geçerli bir sıra veriyor ve `degerler[i]` hiçbir zaman `undefined` olmuyor.
+   */
+  const zirve = degerler.indexOf(tepeDeger);
   for (const i of [...new Set([0, zirve, degerler.length - 1])]) {
-    s.drawCircle({ x: px(i), y: py(degerler[i]!), size: 1.8, color: opts.renk });
-    const metin = String(degerler[i]);
+    const deger = degerler[i];
+    /*
+     * SON SAVUNMA. Buraya `undefined` gelmesi bir mantık hatası demek ve
+     * bugün gelemiyor; ama geldiği gün SESSİZCE ATLANIYOR, belgenin tamamı
+     * düşmüyor. Üretimde tam olarak bunun aksi yaşandı: tek bir etiket
+     * raporu tümden kaybettirdi. Eksik bir nokta etiketi, olmayan bir
+     * rapordan iyidir.
+     */
+    if (deger === undefined || !Number.isFinite(deger)) continue;
+
+    s.drawCircle({ x: px(i), y: py(deger), size: 1.8, color: opts.renk });
+    const metin = String(deger);
     s.drawText(metin, {
       x: px(i) - font.widthOfTextAtSize(metin, 6) / 2,
-      y: py(degerler[i]!) + 4,
+      y: py(deger) + 4,
       size: 6,
       font,
       color: SLATE.s500,

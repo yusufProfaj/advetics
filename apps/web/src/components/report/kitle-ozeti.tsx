@@ -168,14 +168,28 @@ function FormEgrisi({ data }: { data: ReportData }) {
   const noktalar = data.daily.map((d) => d.conversionCounts.form);
   if (noktalar.length < 2) return null;
 
-  const enYuksek = Math.max(...noktalar, 1);
+  /*
+   * TEPE DEĞER ve ÖLÇEK TAVANI AYRI İKİ SAYI — tek sayı kullanmak PDF
+   * tarafında raporun tamamını düşürdü (HTTP 500, `NaN`).
+   *
+   * Taban 1 yalnızca sıfıra bölmeyi engellemek için. Tepe noktasını ararken
+   * kullanılamaz: seri tamamen sıfırsa — form dönüşümü olmayan bir müşteride
+   * gayet normal — 1 dizide bulunmaz, `indexOf` -1 döner ve `noktalar[-1]`
+   * `undefined` olur. Burada bu, SVG'ye `NaN` yazmak ve noktanın SESSİZCE
+   * kaybolması demek; PDF'te aynı hata belgenin tamamını kaybettiriyordu.
+   *
+   * Aynı hesabın iki gösterimi aynı tuzağa ayrı ayrı düşmüştü; ikisi de
+   * burada ve `pdf-cizim.ts`te aynı şekilde düzeltildi.
+   */
+  const tepeDeger = Math.max(...noktalar);
+  const enYuksek = Math.max(tepeDeger, 1);
   const G = 560;
   const Y = 90;
   const x = (i: number): number => (i / (noktalar.length - 1)) * G;
   const y = (v: number): number => Y - (v / enYuksek) * (Y - 12);
 
   const cizgi = noktalar.map((v, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
-  const zirveIndex = noktalar.indexOf(enYuksek);
+  const zirveIndex = noktalar.indexOf(tepeDeger);
 
   return (
     <div>

@@ -1130,3 +1130,80 @@ describe('RaporPdfService — Kitle Özeti sayfası', () => {
     expect(t).not.toContain('%56.8');
   });
 });
+
+/**
+ * ═══ ÜRETİMDE RAPORU DÜŞÜREN SERİ ═══
+ *
+ * Kullanıcı kendi şablonuyla PDF indirmeye çalıştı ve `HTTP 500 ·
+ * "Beklenmeyen bir hata oluştu"` aldı; sunucu log'undaki gerçek hata
+ * `options.y must be of type number, but was actually NaN` idi. Kitle Özeti
+ * sayfasındaki günlük eğri, serinin TAMAMI SIFIR olduğunda tepe noktasını
+ * bulamıyor ve NaN üretiyordu.
+ *
+ * BU FONKSİYON HİÇBİR TESTTE ÇALIŞMIYORDU: paylaşılan fixture `daily: []`
+ * taşıyor ve `egri()` `length < 2` ile hemen dönüyor. "Fonksiyon test
+ * edilmişti ama ÇAĞRILDIĞI test edilmemişti" tuzağının bir başka hâli.
+ */
+describe('RaporPdfService — günlük eğri raporu düşürmüyor', () => {
+  const svc = new RaporPdfService();
+
+  const gunler = (degerler: number[]): ReportData['daily'] =>
+    degerler.map((form, i) => ({
+      date: `2026-08-${String(i + 1).padStart(2, '0')}`,
+      impressions: 100,
+      clicks: 10,
+      spendMicros: '1000000',
+      conversions: form,
+      conversionValueMicros: '0',
+      conversionCounts: { form, message: 0, purchase: 0 },
+    })) as unknown as ReportData['daily'];
+
+  it('KRİTİK: form sayısı HER GÜN SIFIRSA rapor yine üretiliyor', async () => {
+    /*
+     * Tamamen sıfır bir seri istisna değil: form dönüşümü hiç olmayan bir
+     * müşteride, yalnızca mesaj alan bir hesapta ya da dar bir tarih
+     * aralığında gayet normal. Üretimde raporun tamamını kaybettiriyordu.
+     */
+    const pdf = await svc.uret({
+      ...VERI,
+      sections: ['audience_overview'],
+      daily: gunler([0, 0, 0, 0, 0]),
+    });
+
+    expect(pdf.length).toBeGreaterThan(1000);
+    expect(metinler(pdf).join(' ')).toContain('GÜNLÜK FORM');
+  });
+
+  it('dolu seride eğri çiziliyor ve TEPE gün etiketleniyor', async () => {
+    const pdf = await svc.uret({
+      ...VERI,
+      sections: ['audience_overview'],
+      daily: gunler([3, 11, 4]),
+    });
+
+    const t = metinler(pdf);
+    // İlk (3), tepe (11) ve son (4) etiketleri belgede olmalı.
+    expect(t).toContain('11');
+  });
+
+  it('ÖZET sayfasındaki dönüşüm grafiği de sıfır seride düşmüyor', async () => {
+    // Aynı sayfada ikinci bir çizici var (`donusumGrafigi`); o da aynı
+    // veriyle besleniyor ve birlikte sınanmazsa yarısı korunmuş olurdu.
+    const pdf = await svc.uret({
+      ...VERI,
+      sections: ['summary'],
+      daily: gunler([0, 0, 0]),
+    });
+    expect(pdf.length).toBeGreaterThan(1000);
+  });
+
+  it('TEK GÜNLÜK aralıkta eğri çizilmiyor ama rapor üretiliyor', async () => {
+    // `length < 2` dalı: sıfıra bölme burada engelleniyor.
+    const pdf = await svc.uret({
+      ...VERI,
+      sections: ['audience_overview'],
+      daily: gunler([7]),
+    });
+    expect(pdf.length).toBeGreaterThan(1000);
+  });
+});

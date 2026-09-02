@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { PDFPage } from 'pdf-lib';
+import type { PDFFont, PDFPage } from 'pdf-lib';
 import { rgb } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
-import { halka } from './pdf-cizim';
+import { egri, halka } from './pdf-cizim';
 
 /**
  * ═══ HALKA GRAFİĞİ SAYFANIN NERESİNE DÜŞÜYOR ═══
@@ -254,5 +254,126 @@ describe('pdf-lib dönüşümü — varsayım kaynaktan doğrulanıyor', () => {
     ) as { dependencies?: Record<string, string> };
     // Aralık işareti (^ ~) taşımayan tam sürüm: bu dosyadaki kanıt onunla eşleşiyor.
     expect(pkg.dependencies?.['pdf-lib']).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});
+
+/**
+ * ═══ GÜNLÜK EĞRİ — SIFIR SERİ RAPORU DÜŞÜRÜYORDU ═══
+ *
+ * ÜRETİMDE ÇIKTI: kullanıcı kendi şablonuyla PDF indirmeye çalıştı ve
+ * `HTTP 500 · "Beklenmeyen bir hata oluştu"` aldı. Sunucu log'undaki gerçek
+ * hata: `options.y must be of type number, but was actually NaN`.
+ *
+ * Sebep `egri()` içinde iki farklı işin TEK SAYIYA yüklenmesiydi:
+ *   const enYuksek = Math.max(...degerler, 1);   // ölçek tavanı
+ *   const zirve    = degerler.indexOf(enYuksek); // tepe noktası
+ * Seri tamamen sıfırsa `enYuksek` 1'e sabitleniyor ama 1 dizide YOK:
+ * `indexOf` -1, `degerler[-1]` `undefined`, `py(undefined)` NaN ve pdf-lib
+ * fırlatıyor. Tek bir nokta etiketi yüzünden BELGENİN TAMAMI kayboluyordu.
+ *
+ * TAMAMEN SIFIR BİR SERİ İSTİSNA DEĞİL: form dönüşümü hiç olmayan bir
+ * müşteride, yalnızca mesaj alan bir hesapta ya da dar bir tarih aralığında
+ * gayet normal.
+ *
+ * NEDEN KAÇTI: `rapor-pdf.service.spec.ts` fixture'ında `daily: []` yazıyordu
+ * ve `egri()` `length < 2` ile hemen dönüyor — yani bu fonksiyon hiçbir
+ * testte HİÇ ÇALIŞMIYORDU.
+ */
+describe('egri() — sıfır seri', () => {
+  function yakala(): { s: PDFPage; cizimler: Array<{ tip: string; y: unknown }> } {
+    const cizimler: Array<{ tip: string; y: unknown }> = [];
+    const s = {
+      getHeight: () => BOY,
+      getWidth: () => EN,
+      drawLine: (o: { start: { y: number }; end: { y: number } }) => {
+        cizimler.push({ tip: 'line', y: o.start.y });
+        cizimler.push({ tip: 'line', y: o.end.y });
+      },
+      drawCircle: (o: { y: number }) => cizimler.push({ tip: 'circle', y: o.y }),
+      drawText: (_t: string, o: { y: number }) => cizimler.push({ tip: 'text', y: o.y }),
+    } as unknown as PDFPage;
+    return { s, cizimler };
+  }
+
+  const font = {
+    widthOfTextAtSize: (t: string, p: number) => t.length * p * 0.5,
+  } as unknown as PDFFont;
+
+  const CIZIM = { x: 40, y: 300, genislik: 500, yukseklik: 48, renk: rgb(1, 0, 0) };
+
+  it('KRİTİK: seri TAMAMEN SIFIRSA hiçbir koordinat NaN olmuyor', () => {
+    const { s, cizimler } = yakala();
+    egri(s, font, { ...CIZIM, degerler: [0, 0, 0, 0, 0] });
+
+    expect(cizimler.length, 'hiçbir şey çizilmedi — çağrı sessizce düşmüş olabilir').toBeGreaterThan(0);
+    for (const c of cizimler) {
+      expect(Number.isFinite(c.y), `${c.tip} çiziminde geçersiz y: ${String(c.y)}`).toBe(true);
+    }
+  });
+
+  it('KRİTİK: sıfır seride tepe noktası YİNE de etiketleniyor', () => {
+    /*
+     * Sadece "patlamıyor" yetmez: eski kodda `zirve = -1` idi ve
+     * `[...new Set([0, -1, n-1])]` üç nokta üretiyordu. Düzeltme tepe
+     * noktasını gerçek değerlerde arıyor, yani sıfır seride tepe İLK gün
+     * oluyor ve ilk/son ile birleşince İKİ nokta kalıyor.
+     */
+    const { s, cizimler } = yakala();
+    egri(s, font, { ...CIZIM, degerler: [0, 0, 0] });
+
+    const daireler = cizimler.filter((c) => c.tip === 'circle');
+    expect(daireler.length).toBe(2);
+    // Hepsi tabanda: değer sıfır, yükseklik sıfır.
+    for (const d of daireler) expect(d.y).toBe(CIZIM.y);
+  });
+
+  it('gerçek tepe DOĞRU günde etiketleniyor', () => {
+    const { s, cizimler } = yakala();
+    egri(s, font, { ...CIZIM, degerler: [1, 9, 2, 4] });
+
+    const daireler = cizimler.filter((c) => c.tip === 'circle');
+    // İlk (1), tepe (9) ve son (4) — üç ayrı gün.
+    expect(daireler.length).toBe(3);
+    const tepe = CIZIM.y + (9 / 9) * CIZIM.yukseklik;
+    expect(daireler.some((d) => d.y === tepe)).toBe(true);
+  });
+
+  it('KRİTİK: TEPE, ÖLÇEK TAVANINDA DEĞİL GERÇEK DEĞERLERDE aranıyor', () => {
+    /*
+     * BU TEST OLMADAN ASIL DÜZELTME KİLİTLİ DEĞİL — mutasyonla öğrenildi.
+     *
+     * `zirve` satırını hatalı hâline (`indexOf(enYuksek)`) döndürdüğümde
+     * diğer bütün iddialar GEÇTİ, çünkü bir alt satırdaki savunma
+     * (`Number.isFinite` kontrolü) NaN'ı yutup çıktıyı aynı yapıyor.
+     * Yani testler düzeltmeyi değil savunmayı doğruluyordu.
+     *
+     * Ayrım yalnızca tepe değeri 1'in ALTINDA olan bir seride görünüyor:
+     * hatalı sürüm 1'i arıyor, dizide bulamıyor, tepe noktası SESSİZCE
+     * etiketlenmeden kalıyor. Sayaçlar tam sayı olduğu için bu bugün
+     * üretimde oluşmuyor, ama `egri()` imzası `number[]` diyor ve bir gün
+     * oran serisi verildiğinde tepe kaybolurdu — sessizce.
+     */
+    const { s, cizimler } = yakala();
+    egri(s, font, { ...CIZIM, degerler: [0.2, 0.5, 0.1] });
+
+    const daireler = cizimler.filter((c) => c.tip === 'circle');
+    expect(daireler.length, 'ilk, tepe ve son ayrı ayrı etiketlenmeli').toBe(3);
+
+    // Tepe (0.5) ölçek tavanı 1'e göre çiziliyor: taban + yarım yükseklik.
+    const tepeY = CIZIM.y + (0.5 / 1) * CIZIM.yukseklik;
+    expect(daireler.some((d) => d.y === tepeY), 'tepe noktası etiketlenmemiş').toBe(true);
+  });
+
+  it('tek noktalı seri hiç çizilmiyor — sıfıra bölme yok', () => {
+    const { s, cizimler } = yakala();
+    egri(s, font, { ...CIZIM, degerler: [5] });
+    expect(cizimler.length).toBe(0);
+  });
+
+  it('negatif değer bile koordinatı bozmuyor', () => {
+    // Bugün olamıyor ama olduğunda belgeyi düşürmemeli.
+    const { s, cizimler } = yakala();
+    egri(s, font, { ...CIZIM, degerler: [-3, 0, -1] });
+    for (const c of cizimler) expect(Number.isFinite(c.y)).toBe(true);
   });
 });

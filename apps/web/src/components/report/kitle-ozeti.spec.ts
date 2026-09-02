@@ -182,3 +182,37 @@ describe('etiketler ve boş hâl', () => {
     expect(BELGE_KOD.slice(i, i + 1600)).toContain('gecelik güncellemeyle');
   });
 });
+
+/**
+ * ═══ GÜNLÜK EĞRİDE TEPE NOKTASI ═══
+ *
+ * PDF tarafında bu tuzak raporun tamamını düşürdü (`HTTP 500 · options.y …
+ * NaN`) ve panel tarafında AYNI kod duruyordu:
+ *
+ *   const enYuksek   = Math.max(...noktalar, 1);   // ölçek tavanı
+ *   const zirveIndex = noktalar.indexOf(enYuksek); // tepe noktası
+ *
+ * Seri tamamen sıfırsa — form dönüşümü olmayan bir müşteride normal —
+ * `enYuksek` 1'e sabitleniyor ama 1 dizide yok: `indexOf` -1 dönüyor ve
+ * `noktalar[-1]` `undefined` oluyor. Panelde bu PATLAMIYOR, SVG'ye `NaN`
+ * yazıyor ve nokta sessizce kayboluyor — daha sinsi bir hâli.
+ *
+ * `kod()` yorumları attığı için bu iddia AÇIKLAMAYA değil KODA çapalı;
+ * yukarıdaki paragrafın kendisi eşleşme üretmiyor.
+ */
+describe('FormEgrisi — tepe noktası ölçek tavanında aranmıyor', () => {
+  it('KRİTİK: zirve GERÇEK tepe değerinden türetiliyor', () => {
+    expect(OZET_KOD).toContain('const tepeDeger = Math.max(...noktalar)');
+    expect(OZET_KOD).toContain('noktalar.indexOf(tepeDeger)');
+  });
+
+  it('KRİTİK: ölçek tavanı tepe noktası aramasında KULLANILMIYOR', () => {
+    // Hatanın ta kendisi: 1'e sabitlenmiş değeri dizide aramak.
+    expect(OZET_KOD).not.toContain('noktalar.indexOf(enYuksek)');
+  });
+
+  it('ölçek tavanı hâlâ 1 ile korunuyor — sıfıra bölme yok', () => {
+    // Tabanı kaldırmak bu kez sonsuz koordinat üretirdi.
+    expect(OZET_KOD).toContain('Math.max(tepeDeger, 1)');
+  });
+});
