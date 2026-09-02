@@ -150,6 +150,7 @@ function ManualBoostForm({
   const [cinsiyet, setCinsiyet] = useState<'all' | 'male' | 'female'>('all');
 
   const [kitleler, setKitleler] = useState<SavedAudienceList | null>(null);
+  const [kitleHata, setKitleHata] = useState<string | null>(null);
   const [kitle, setKitle] = useState<string>('');
 
   /**
@@ -217,11 +218,34 @@ function ManualBoostForm({
       setKitleler(null);
       return;
     }
+    setKitleHata(null);
     void apiFetch<SavedAudienceList>(
       `/connections/targeting/saved-audiences?adAccountId=${secili.adAccountId}`,
     )
-      .then(setKitleler)
-      .catch(() => setKitleler({ items: [], total: 0 }));
+      .then((k) => {
+        setKitleler(k);
+        setKitleHata(null);
+      })
+      .catch((err: unknown) => {
+        /*
+         * HATA YUTULMUYOR — BURASI CLAUDE.md'NİN AÇIKÇA YASAKLADIĞI DESENDİ.
+         *
+         * Eski hâli `.catch(() => setKitleler({ items: [], total: 0 }))` idi
+         * ve "çağrı düştü" ile "kitle yok"u AYNI ekrana çeviriyordu. Üretimde
+         * bunun bedeli somut oldu: uç `approximate_count` alanı yüzünden 502
+         * dönüyordu, panel ise "Ads Manager'da kayıtlı kitle bulunamadı"
+         * yazıyordu — kullanıcı KENDİ Meta kurulumunu eksik sandı.
+         *
+         * Hemen yanındaki lokasyon araması bunu zaten doğru yapıyordu;
+         * iki bitişik çağrı, iki farklı standart.
+         */
+        setKitleler(null);
+        setKitleHata(
+          err instanceof ApiRequestError
+            ? err.message
+            : 'Kayıtlı kitleler alınamadı.',
+        );
+      });
   }, [secili?.adAccountId]);
 
   // Şehir araması: en az iki harf ve yazma durunca. Her tuşa istek atmak
@@ -607,9 +631,19 @@ function ManualBoostForm({
                 </select>
               </label>
             )}
-            {/* BOŞ AÇILIR LİSTE GÖSTERİLMİYOR — kullanıcı kendi kurulumunda bir
-                şey eksik olduğunu sanmasın (K16). */}
-            {kitleler && kitleler.items.length === 0 && (
+            {/*
+              ÜÇ HÂL AYRI YAZILIYOR: çağrı düştü · kitle yok · kitleler geldi.
+              Eskiden ilk ikisi aynı cümleye çıkıyordu ve gerçek hata
+              yalnızca sunucu logunda kalıyordu.
+            */}
+            {kitleHata !== null && (
+              <p className="rounded-lg border border-danger/40 bg-danger/5 px-3 py-2 text-[11px] text-danger">
+                Kayıtlı kitleler alınamadı — {kitleHata}
+                <br />
+                Aşağıdan lokasyon ve yaş seçerek devam edebilirsin.
+              </p>
+            )}
+            {kitleHata === null && kitleler && kitleler.items.length === 0 && (
               <p className="text-[11px] text-ink-muted">
                 Ads Manager’da kayıtlı kitle bulunamadı — aşağıdan lokasyon ve yaş
                 seçebilirsin.

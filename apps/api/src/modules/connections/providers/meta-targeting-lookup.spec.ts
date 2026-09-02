@@ -67,8 +67,45 @@ describe('mapGeoLocation', () => {
 
 describe('mapSavedAudience', () => {
   it('kimlik, ad ve tahmini büyüklük okunuyor', () => {
-    const o = mapSavedAudience({ id: '123', name: 'Sıcak kitle', approximate_count: 45_000 })!;
+    /*
+     * ALAN ADI `approximate_count` DEĞİL — Meta onu v17'de kaldırdı ve
+     * v25'te istemek `(#100) Tried accessing nonexisting field` ile 502
+     * üretiyordu. Doğrusu alt/üst sınır çifti.
+     */
+    const o = mapSavedAudience({
+      id: '123',
+      name: 'Sıcak kitle',
+      approximate_count_lower_bound: 45_000,
+      approximate_count_upper_bound: 60_000,
+    })!;
+    // ALT SINIR tercih ediliyor: "en az bu kadar" demek, üst sınırla
+    // şişirmekten dürüst.
     expect(o).toEqual({ id: '123', name: 'Sıcak kitle', approximateCount: 45_000 });
+  });
+
+  it('KRİTİK: -1 ÖLÇÜLMEMİŞ demek, sayı değil', () => {
+    /*
+     * Meta pasif lookalike'larda bu alanları -1 döndürüyor. Ham geçirmek
+     * panelde "~-1 kişi" yazdırırdı; `typeof === 'number'` kontrolü -1'i
+     * geçerli sayıyor.
+     */
+    const o = mapSavedAudience({
+      id: '123',
+      name: 'Pasif lookalike',
+      approximate_count_lower_bound: -1,
+      approximate_count_upper_bound: -1,
+    })!;
+    expect(o.approximateCount).toBeNull();
+  });
+
+  it('alt sınır ölçülmemişse ÜST sınıra düşülüyor', () => {
+    const o = mapSavedAudience({
+      id: '123',
+      name: 'Kitle',
+      approximate_count_lower_bound: -1,
+      approximate_count_upper_bound: 80_000,
+    })!;
+    expect(o.approximateCount).toBe(80_000);
   });
 
   it('KRİTİK: büyüklük yoksa NULL, sıfır değil', () => {

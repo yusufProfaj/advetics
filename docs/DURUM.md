@@ -766,6 +766,69 @@ görünmüyordu (kullanıcı tarayıcıyı %67'ye küçültmek zorunda kalıyord
 Kart artık ekran yüksekliğiyle sınırlı; gövde ve bölüm listesi kendi içinde
 kaydırılıyor, başlık ve düğmeler sabit.
 
+### 3.11. 2 Eylül: Auto-Boost paneli — üç düzeltme ve bir keşif
+
+**KEŞİF: istenen "boost ön ayarı ekranı" ZATEN YAZILMIŞTI** — `/kutuphane/
+bilgi-bankasi` altında, menünün bambaşka bir bölümünde. Kullanıcının iki ayrı
+gibi görünen isteği ("Bilgi Bankası'nı Auto-Boost tarafına taşı" + "ön ayar
+ekranı yap") aslında aynı şeyin iki yarısıydı. Şema da her şeyi baştan
+destekliyordu (`savedAudienceId`, `locations`, workspace bazlı kayıt); eksik
+olan yalnızca paneldi.
+
+**① KAYITLI KİTLE UCU ÜRETİMDE BOZUKTU.** `meta.provider.ts` `approximate_count`
+alanını istiyordu; Meta onu Marketing API v17'de (2023) kaldırıp
+`approximate_count_lower_bound`/`_upper_bound` çiftiyle değiştirmiş, v25'te
+çoktan yok. Sonuç `(#100) Tried accessing nonexisting field` → 502.
+
+BELİRTİSİ ÇOK YANILTICIYDI: panel hatayı YUTUP "Ads Manager'da kayıtlı kitle
+bulunamadı" yazıyordu — kullanıcı KENDİ Meta kurulumunu eksik sanıyordu. Bu,
+CLAUDE.md'nin açıkça yasakladığı `.catch(() => setX([]))` deseninin ta
+kendisiydi ve aynı dosyadaki lokasyon araması onu zaten doğru yapıyordu:
+iki bitişik çağrı, iki farklı standart.
+
+İki incelik daha: Meta pasif lookalike'larda bu alanları **-1** döndürüyor
+(panelde "~-1 kişi" yazardı; `typeof === 'number'` -1'i geçerli sayıyor) ve
+`limit=100` sayfalaması hiç izlenmiyordu — 100'den fazla kitlesi olan hesapta
+liste SESSİZCE kesiliyordu.
+
+**② "YAYINLANDI" KARTTA GÖRÜNMÜYORDU — iki ayrı sebep.**
+`router.refresh()` istemci bileşeninin state'ini tazelemiyor: `BildirimHavuzu`
+`use client` ve listeyi kendi `useEffect`'inde çekiyor, bağımlılığı
+`[clientId]` ve o değişmiyor. Sunucuda kart `launched` olmasına rağmen
+ekranda `pending` çizimi duruyordu. Doğru desen AYNI SAYFADA vardı
+(`manual-boost.tsx` → `onYayinlandi={gonderileriYukle}`).
+
+İkinci yarısı: başarı hâli kartta HİÇ çizilmiyordu, yalnızca hata çiziliyordu.
+`OnayDugmesi` onaydan sonra `return null` ile kayboluyor, yerine hiçbir şey
+konmuyordu. Kullanıcının gördüğü tek iz sayfanın en altındaki "Geçmiş"
+satırıydı — tarifi birebir buydu. `externalCampaignId` şemada vardı, API
+dolduruyordu, panelde tek referansı yoktu ("veride duran alan,
+kullanılmıyorsa yoktur").
+
+**③ ÖN AYAR EKRANI AUTO-BOOST'A GELDİ + iki eksik alan eklendi.**
+"Boost ön ayarı" düğmesi başlıkta, modal olarak açılıyor (portal — CLAUDE.md'de
+üç kez düşülen `backdrop-filter` tuzağı). Forma **şehir seçimi** ve
+**kayıtlı/özel hedef kitle** eklendi; ikisi de gövdeye SABİT boş yazılıyordu.
+
+Reklam hesabı bileşenin içinde çözülüyor ve EKRANDA YAZIYOR: Meta'da kayıtlı
+kitle REKLAM HESABI BAŞINA tanımlı, ön ayar ise müşteri bazında. Yazmasaydı
+iki hesaplı bir müşteride kullanıcı yanlış hesabın kitlesini seçip yayında
+"kitle bulunamadı" alırdı.
+
+KAYITLI KİTLE SEÇİLİYSE ŞEHİR/YAŞ/CİNSİYET GÖNDERİLMİYOR ve ekranda yazıyor:
+Meta lokasyon kovalarını BİRLEŞİM olarak uyguluyor, "İzmir + kitle" sessizce
+kitleden geniş bir kümeye çıkardı.
+
+**Panel:** aynı kartta üst üste duran iki başlık kaldırıldı (dış sarmalayıcı
+"Otomatik boost" h2'si + `BildirimHavuzu`nun kendi h2'si). **Menü:** Bilgi
+Bankası Kütüphane'den Akıllı Boost'un altına taşındı.
+
+**AÇIK KALAN:** sayfada boost başlatan BEŞ ayrı düğme var ve üçü farklı API
+ucuna gidiyor, farklı ayar kullanıyor. En kafa karıştırıcısı `manual-boost`
+listesinde yan yana duran ikisi: satıra tıklamak formu besliyor, satırın
+SAĞINDAKİ düğme formu tamamen atlayıp ÖN AYARLA yayınlıyor. Bu birleştirme
+ayrı bir tur.
+
 **Deploy script'i SSH bağlantısı kesilirse yarıda kalabiliyor.** Build
 adımı (`nest build` + `next build`) birkaç dakika sürüyor ve bu sırada
 sessiz kalabiliyor; bir SSH oturumu (ör. uzun bir inaktivite zaman aşımı)

@@ -18,6 +18,7 @@ import {
 import { ManualBoost } from '@/components/boost/manual-boost';
 import { BildirimHavuzu } from '@/components/autoboost/bildirim-havuzu';
 import { YouTubeKanalEkle } from '@/components/autoboost/youtube-kanal-ekle';
+import { BoostOnAyariDugmesi } from '@/components/autoboost/boost-on-ayari';
 
 export const metadata = { title: 'Auto-Boost — Advetics' };
 export const dynamic = 'force-dynamic';
@@ -83,6 +84,12 @@ export default async function AutoBoostPage({
           </p>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {/*
+            ÖN AYAR ÖNCE, "onaylananları oluştur" SONRA — soldan sağa
+            okunduğunda doğru sıra bu: önce NASIL yayınlanacağı, sonra
+            yayınlama eylemi.
+          */}
+          {canWrite && <BoostOnAyariDugmesi clientId={clientId} canWrite={canWrite} />}
           {canApprove && <CreateApprovedButton clientId={clientId} />}
         </div>
       </header>
@@ -134,17 +141,24 @@ export default async function AutoBoostPage({
         org yöneticisine ait; kart onaylayabilen herkesin yeni kanal
         bağlayabilmesi doğru olmazdı.
       */}
-      <div className="min-w-0 space-y-4 rounded-xl border border-line bg-surface p-4">
-        <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-ink">Otomatik boost</h2>
-            <p className="mt-0.5 text-xs text-ink-muted">
-              Yeni gönderi ve videolar burada onayına düşer.
-            </p>
-          </div>
-          {canManageConnections && <YouTubeKanalEkle clientId={clientId} />}
-        </header>
+      {/*
+        SARMALAYICI BAŞLIK KALDIRILDI — AYNI KARTTA ÜST ÜSTE İKİ BAŞLIK VARDI.
+        Burada "Otomatik boost" h2'si ve altında bir açıklama duruyordu;
+        hemen altındaki `BildirimHavuzu` kendi `<section>` ve `<header>`ını
+        taşıyor ve İKİNCİ bir h2 ("Bildirim Havuzu" + sayaç) daha basıyordu.
+        Aynı kutunun içinde iki başlık, iki açıklama — panelin karmaşık
+        görünmesinin en somut sebeplerinden biri.
 
+        Bileşen kendi kartını çizdiği için dış kart da gereksizdi; kanal
+        ekleme düğmesi tek başına kalan tek şey ve o da havuzun üstünde
+        duruyor.
+      */}
+      <div className="min-w-0 space-y-2">
+        {canManageConnections && (
+          <div className="flex justify-end">
+            <YouTubeKanalEkle clientId={clientId} />
+          </div>
+        )}
         <BildirimHavuzu clientId={clientId} />
       </div>
 

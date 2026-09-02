@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type {
   AutoBoostQueueItemRecord,
   AutoBoostQueueList,
@@ -28,7 +28,20 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
   const [saglik, setSaglik] = useState<AutoBoostSubscriptionHealth[]>([]);
   const [hata, setHata] = useState<string | null>(null);
 
-  useEffect(() => {
+  /*
+   * KUYRUĞU YENİDEN ÇEKEN FONKSİYON — `router.refresh()` BUNU YAPMIYOR.
+   *
+   * Bu bileşen `use client` ve listeyi KENDİ state'inde tutuyor.
+   * `router.refresh()` sunucu bileşen ağacını tazeliyor ama istemci
+   * state'ine dokunmuyor; `clientId` de değişmediği için useEffect tekrar
+   * koşmuyordu. Sonuç: sunucuda kart `launched` olmasına rağmen ekrandaki
+   * kart `pending` çizimiyle duruyordu ve kullanıcının gördüğü tek iz
+   * sayfanın en altındaki "Geçmiş" satırıydı — bildirdiği şey birebir buydu.
+   *
+   * Doğru desen zaten aynı sayfada vardı: `manual-boost.tsx` yayından sonra
+   * `onYayinlandi={gonderileriYukle}` ile GERÇEKTEN yeniden çekiyor.
+   */
+  const kuyruguYukle = useCallback((): void => {
     void apiFetch<AutoBoostQueueList>(`/autoboost/queue?clientId=${clientId}`)
       .then((r) => {
         setListe(r);
@@ -46,6 +59,10 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
             : 'Bildirim havuzu yüklenemedi. Sayfayı yenilemeyi dene.',
         ),
       );
+  }, [clientId]);
+
+  useEffect(() => {
+    kuyruguYukle();
 
     /*
      * ABONELİK SAĞLIĞI AYRI ÇEKİLİYOR ve hatası kartları GİZLEMİYOR.
@@ -58,7 +75,7 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
     )
       .then(setSaglik)
       .catch(() => setSaglik([]));
-  }, [clientId]);
+  }, [clientId, kuyruguYukle]);
 
   if (hata) {
     return (
@@ -145,7 +162,16 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
       <ul className="space-y-2">
         {liste.items.map((k) => (
           <li key={k.id}>
-            <Kart kayit={k} onDegisti={() => router.refresh()} />
+            <Kart
+              kayit={k}
+              onDegisti={() => {
+                // İKİSİ BİRDEN: kartın kendi listesi (istemci state'i) VE
+                // sayfanın sunucu tarafı ("Geçmiş" bölümü). Yalnızca
+                // ikincisi yapıldığında kart yayınlandığını göstermiyordu.
+                kuyruguYukle();
+                router.refresh();
+              }}
+            />
           </li>
         ))}
       </ul>
@@ -228,6 +254,34 @@ function Kart({
             Uygulanacak: <strong>{formatMoney(kayit.preset.budgetMicros, 'TRY')}</strong>
             {kayit.preset.budgetMode === 'daily' ? ' / gün' : ' toplam'} ·{' '}
             {kayit.preset.durationDays} gün
+          </p>
+        )}
+
+        {/*
+          ═══ YAYINLANDIĞI KARTTA YAZIYOR ═══
+
+          Bu blok yoktu ve eksikliği kullanıcıdan birebir şu cümleyle geldi:
+          "yayınlandı bildirimi alt tarafta gözüküyor fakat kartta belli
+          olmuyor". Onaydan sonra `OnayDugmesi` `return null` ile kayboluyor,
+          yerine HİÇBİR ŞEY konmuyordu; başarının tek izi sayfanın en
+          altındaki "Geçmiş" satırıydı.
+
+          `externalCampaignId` şemada ZATEN vardı ve API dolduruyordu ama
+          panelde tek bir referansı yoktu — CLAUDE.md: "VERİDE DURAN ALAN,
+          KULLANILMIYORSA YOKTUR."
+        */}
+        {kayit.status === 'launched' && (
+          <p className="mt-1.5 inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-ok/40 bg-ok/5 px-2 py-1 text-[11px] text-ink">
+            <span aria-hidden="true">✓</span>
+            <strong>Yayında</strong>
+            {kayit.externalCampaignId && (
+              <span className="text-ink-muted">· kampanya {kayit.externalCampaignId}</span>
+            )}
+          </p>
+        )}
+        {kayit.status === 'launching' && (
+          <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-muted px-2 py-1 text-[11px] text-ink-muted">
+            Yayına alınıyor…
           </p>
         )}
 

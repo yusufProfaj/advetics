@@ -1529,20 +1529,53 @@ export class MetaProvider implements IAdPlatformProvider {
   async listSavedAudiences(ctx: FetchContext): Promise<SavedAudienceOption[]> {
     const act = actPath(ctx.accountExternalId ?? '');
     const url = new URL(`${this.graph}/${act}/saved_audiences`);
-    url.searchParams.set('fields', 'id,name,approximate_count');
+    /*
+     * `approximate_count` BU DÜĞÜMDE YOK — ÜRETİMDE 502 ÜRETİYORDU.
+     *
+     * Meta o alanı Marketing API v17'de (2023) kaldırıp
+     * `approximate_count_lower_bound` / `_upper_bound` çiftiyle değiştirdi;
+     * v25'te çoktan yok. Graph'in cevabı `(#100) Tried accessing nonexisting
+     * field (approximate_count)` ve panele 502 olarak yansıyordu.
+     *
+     * Belirtisi çok yanıltıcıydı: panel hatayı yutup "Ads Manager'da kayıtlı
+     * kitle bulunamadı" yazıyordu, yani kullanıcı KENDİ Meta kurulumunu
+     * eksik sanıyordu.
+     */
+    url.searchParams.set(
+      'fields',
+      'id,name,approximate_count_lower_bound,approximate_count_upper_bound',
+    );
     url.searchParams.set('limit', '100');
 
-    const res = await platformFetch<GraphPage>(
-      'meta',
-      url.toString(),
-      { headers: { Authorization: `Bearer ${ctx.accessToken}` } },
-      parseMetaRateLimit,
-    );
-    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+    /*
+     * SAYFALAMA İZLENİYOR — `limit=100` SESSİZ BİR KESMEYDİ.
+     *
+     * 100'den fazla kayıtlı kitlesi olan bir hesapta liste sessizce
+     * kırpılıyordu ve panel yine de "N kitle" yazıyordu; aradığı kitleyi
+     * bulamayan kullanıcı için hiçbir açıklama yoktu.
+     *
+     * ÜST SINIR VAR: 20 sayfa (~2.000 kitle). Sınırsız takip, bozuk bir
+     * `paging.next` zincirinde işi sonsuza kadar döndürürdü.
+     */
+    const toplam: SavedAudienceOption[] = [];
+    let sonraki: string | null = url.toString();
+    for (let sayfa = 0; sayfa < 20 && sonraki !== null; sayfa++) {
+      const istek: string = sonraki;
+      const res = await platformFetch<GraphPage>(
+        'meta',
+        istek,
+        { headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+        parseMetaRateLimit,
+      );
+      if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
 
-    return (res.data.data ?? [])
-      .map((row) => mapSavedAudience(row as Record<string, unknown>))
-      .filter((o): o is SavedAudienceOption => o !== null);
+      for (const row of res.data.data ?? []) {
+        const o = mapSavedAudience(row as Record<string, unknown>);
+        if (o !== null) toplam.push(o);
+      }
+      sonraki = res.data.paging?.next ?? null;
+    }
+    return toplam;
   }
 
   /**
@@ -2801,12 +2834,26 @@ export function mapGeoLocation(row: Record<string, unknown>): GeoLocationOption 
 export function mapSavedAudience(row: Record<string, unknown>): SavedAudienceOption | null {
   const id = row.id;
   if (typeof id !== 'string') return null;
-  const count = row.approximate_count;
+  /*
+   * İKİ SINIR ALANI — ve -1 ÖLÇÜLMEMİŞ DEMEK.
+   *
+   * Meta pasif lookalike'larda bu alanları **-1** döndürüyor. Ham sayıyı
+   * geçirmek panelde "~-1 kişi" yazdırırdı; `typeof === 'number'` kontrolü
+   * -1'i geçerli sayıyor. Ölçülmemiş olanı bir sayı gibi göstermek, bu
+   * projede raporlarda da kaçınılan hatanın aynısı.
+   *
+   * Alt sınır tercih ediliyor: kullanıcıya kitlenin EN AZ kaç kişi olduğunu
+   * söylemek, üst sınırla şişirmekten dürüst.
+   */
+  const alt = row.approximate_count_lower_bound;
+  const ust = row.approximate_count_upper_bound;
+  const gecerli = (v: unknown): number | null =>
+    typeof v === 'number' && v >= 0 ? v : null;
 
   return {
     id,
     name: typeof row.name === 'string' && row.name ? row.name : id,
-    approximateCount: typeof count === 'number' ? count : null,
+    approximateCount: gecerli(alt) ?? gecerli(ust),
   };
 }
 

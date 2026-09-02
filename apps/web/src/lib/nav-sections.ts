@@ -25,6 +25,21 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     items: [
       { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1 },
       { href: '/auto-boost', label: 'Akıllı Boost', icon: 'boost', module: 7, ready: true },
+      /*
+       * BİLGİ BANKASI AKILLI BOOST'UN ALTINDA — Kütüphane'den taşındı.
+       *
+       * Kütüphane'de dururken diğer arşivlerle (görsel, kreatif, form) aynı
+       * kovadaydı ve ne işe yaradığı belirsizdi. Asıl tüketicisi Akıllı
+       * Boost: marka sesi ve ürün bilgisi boost metnini besliyor. Menüde
+       * yan yana durmaları, ikisinin aynı işin parçası olduğunu söylüyor.
+       */
+      {
+        href: '/kutuphane/bilgi-bankasi',
+        label: 'Bilgi Bankası',
+        icon: 'knowledge',
+        module: 7,
+        ready: true,
+      },
     ],
   },
   {
@@ -65,13 +80,6 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
   {
     title: 'Kütüphane',
     items: [
-      {
-        href: '/kutuphane/bilgi-bankasi',
-        label: 'Bilgi Bankası',
-        icon: 'knowledge',
-        module: 7,
-        ready: true,
-      },
       {
         href: '/kutuphane/gorseller',
         label: 'Görsel Arşivi',
