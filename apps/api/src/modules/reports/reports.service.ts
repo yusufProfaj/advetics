@@ -2,6 +2,7 @@ import { deriveRoas } from '@advetics/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  gorselAdresleri,
   CONVERSION_BUCKETS,
   REPORT_SECTIONS,
   sablonPlatformu,
@@ -21,6 +22,7 @@ import {
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { emptyCounts, roundCounts } from './conversion-buckets';
+import { KreatifAdresiService } from './kreatif-adresi.service';
 
 /**
  * Rapor verisi toplama.
@@ -132,7 +134,10 @@ const BREAKDOWN_LIMIT = 12;
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly kreatifAdresi: KreatifAdresiService,
+  ) {}
 
   async build(
     ctx: TenantContext,
@@ -157,6 +162,36 @@ export class ReportsService {
        * Şablonu" başlıklı raporun özetinde Meta harcaması görünür ve
        * tablolar toplamı tutmaz — aynı belgede iki farklı gerçek.
        */
+      platform?: 'meta' | 'google';
+    },
+  ): Promise<ReportData> {
+    const data = await this.veriToplaK(ctx, params);
+
+    /*
+     * KREATİF GÖRSEL ADRESLERİ TRANSACTION KAPANDIKTAN SONRA TAZELENİYOR.
+     *
+     * İkisi de zorunlu: (1) saklanan Meta CDN adresi imzalı ve ölüyor, taze
+     * adres olmadan müşteriye giden PDF görselsiz çıkıyor; (2) platform
+     * çağrısı transaction'ın İÇİNDE olamaz — `withTenant` etkileşimli bir
+     * transaction ve Prisma'nın sınırı 5 saniye, Meta çağrısı üretimde 12
+     * saniye sürdü.
+     *
+     * TEK YERDE: hem PDF hem panel hem paylaşım bağlantısı `build()`ten
+     * geçiyor. Yalnızca PDF yolunda tazeleseydim panel kırık kalırdı ve iki
+     * gösterim yine ayrışırdı.
+     */
+    return this.kreatifAdresi.tazele(ctx, data);
+  }
+
+  /** Rapor verisinin TAMAMI tek transaction'da — platform çağrısı yok. */
+  private async veriToplaK(
+    ctx: TenantContext,
+    params: {
+      clientId: string;
+      from: string;
+      to: string;
+      templateId?: string;
+      sablon?: 'genel' | 'google' | 'meta';
       platform?: 'meta' | 'google';
     },
   ): Promise<ReportData> {
@@ -879,6 +914,8 @@ export class ReportsService {
         description: string | null;
         display_url: string | null;
         asset_urls: unknown;
+        creative_external_id: string | null;
+        ad_account_id: string;
         impressions: string | number | null;
         clicks: string | number | null;
         spend_micros: string | number | bigint | null;
@@ -906,6 +943,17 @@ export class ReportsService {
         WITH toplamlar AS (
           SELECT a.id, a.name, a.platform, c.name AS campaign_name,
                  cr.headline, cr.description, cr.display_url, cr.asset_urls,
+                 /*
+                  * TAZE GÖRSEL ADRESİ İÇİN İKİ ALAN.
+                  *
+                  * Saklanan CDN adresi imzalı ve süresi doluyor; rapor
+                  * üretilirken platformdan yenisi isteniyor. Kreatif kimliği
+                  * NEYİ soracağımızı, hesap kimliği HANGİ token ile
+                  * soracağımızı söylüyor. İkisi de burada çekilmezse
+                  * tazeleme için ayrı bir sorgu gerekirdi.
+                  */
+                 cr.external_id AS creative_external_id,
+                 a.ad_account_id::text AS ad_account_id,
                  SUM(i.impressions) AS impressions,
                  SUM(i.clicks) AS clicks,
                  SUM(i.spend_micros) AS spend_micros,
@@ -920,7 +968,7 @@ export class ReportsService {
             AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
             AND i.entity_level = 'ad'::"EntityLevel"
           GROUP BY a.id, a.name, a.platform, c.name, cr.headline, cr.description,
-                   cr.display_url, cr.asset_urls
+                   cr.display_url, cr.asset_urls, cr.external_id, a.ad_account_id
         )
         SELECT * FROM (
           SELECT *, ROW_NUMBER() OVER (PARTITION BY platform ORDER BY spend_micros DESC) AS sira
@@ -939,15 +987,24 @@ export class ReportsService {
         conversions: r.conversions,
         conversion_value_micros: null,
       });
-      const urls = Array.isArray(r.asset_urls)
-        ? r.asset_urls.filter((u): u is string => typeof u === 'string')
-        : [];
+      /*
+       * SÜZGEÇ PAYLAŞILAN YARDIMCIDAN. Burada `typeof u === 'string'` vardı ve
+       * Google'ın KAYNAK ADI (`customers/…/assets/…`) ondan geçiyordu: adres
+       * sanılıp `imageUrl`e yazılıyor, PDF metin önizlemesi yerine "görsel
+       * alınamadı" dalına giriyor ve dipnottaki sayaç şişiyordu. Panel yolu
+       * (`ads.service.ts`) bu kontrolü zaten yapıyordu; iki süzgeç ayrışmıştı.
+       */
+      const urls = gorselAdresleri(r.asset_urls);
       return {
         id: r.id,
         name: r.name ?? '—',
         campaignName: r.campaign_name ?? '—',
         platform: r.platform,
         imageUrl: urls[0] ?? null,
+        // Tazeleme `build()` sonunda koşuyor; buradan çıkarken hata yok.
+        imageUrlHatasi: null,
+        creativeExternalId: r.creative_external_id,
+        adAccountId: r.ad_account_id,
         headline: r.headline,
         description: r.description,
         displayUrl: r.display_url,

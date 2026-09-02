@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { TenantContext } from '@advetics/shared';
+import type { ReportData, TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
+import type { KreatifAdresiService } from './kreatif-adresi.service';
 import { ReportsService } from './reports.service';
 
 /**
@@ -95,7 +96,20 @@ beforeEach(async () => {
     },
   } as unknown as PrismaService;
 
-  svc = new ReportsService(prisma);
+  /*
+   * KREATİF ADRESİ TAZELEME BU TESTLERDE DEVRE DIŞI.
+   *
+   * Buradaki testler SORGULARI sınıyor; tazeleme ise transaction kapandıktan
+   * sonra platforma çıkan ayrı bir adım ve kendi testi var
+   * (`kreatif-adresi.spec.ts`). Gerçeğini bağlamak, sorgu testlerini ağ ve
+   * token'a bağımlı yapardı. `tazele` veriyi OLDUĞU GİBİ döndürüyor, yani bu
+   * dosyadaki iddialar tazelemeden etkilenmiyor.
+   */
+  const kreatifAdresi = {
+    tazele: async (_ctx: TenantContext, data: ReportData): Promise<ReportData> => data,
+  } as unknown as KreatifAdresiService;
+
+  svc = new ReportsService(prisma, kreatifAdresi);
 });
 
 describe('ReportsService — dönüşüm kovaları', () => {

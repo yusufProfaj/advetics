@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ConnectionsModule } from '../connections/connections.module';
+import { KreatifAdresiService } from './kreatif-adresi.service';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { ShareService } from './share.service';
@@ -11,9 +13,17 @@ import { AssetStorageService } from '../ad-builder/asset-storage.service';
 
 /** Modül 6 — White-label raporlama. */
 @Module({
+  /*
+   * BAĞLANTILAR MODÜLÜ: kreatif görselinin TAZE adresini almak için token ve
+   * sağlayıcı gerekiyor. Saklanan Meta CDN adresi imzalı ve ölüyor; raporun
+   * görselleri onsuz gelmiyor. Ters yönde bağımlılık YOK — `ConnectionsModule`
+   * raporlamayı tanımıyor, yani döngü oluşmuyor.
+   */
+  imports: [ConnectionsModule],
   controllers: [ReportsController],
   providers: [
     ReportsService,
+    KreatifAdresiService,
     ShareService,
     ReportTemplatesService,
     RaporPdfService,

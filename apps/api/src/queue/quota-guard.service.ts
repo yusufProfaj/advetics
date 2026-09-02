@@ -45,7 +45,18 @@ export type QuotaLayer =
   /** L6 organik post metrikleri. */
   | 'organic_posts'
   /** L7 ilk backfill. */
-  | 'initial_backfill';
+  | 'initial_backfill'
+  /**
+   * Rapor için kreatif görselinin TAZE adresi.
+   *
+   * Kendi katmanı, çünkü bu trafiğin iki özelliği başka hiçbir katmana
+   * benzemiyor: (1) ANONİM tetiklenebiliyor — paylaşım bağlantısı `@Public()`
+   * ve linki tarayan bir bot her yüklemede platforma çıkarır; (2) eksik bir
+   * kreatif görseli KOZMETİK, oysa kotayı %90'ın üstüne çıkarmak yapı
+   * taramasını da reddettirip hesabı KALICI KİLİDE sokuyor. Yani bu iş,
+   * kesilecek ilk şey olmalı.
+   */
+  | 'report_creative';
 
 /**
  * Kota tüketim yüzdesine göre hangi katmanların çalışabileceği.
@@ -67,6 +78,15 @@ const LAYER_MAX_USAGE: Record<QuotaLayer, number> = {
   // En pahalı ve en az acil olanlar ilk kesilenler.
   insights_breakdown: 60,
   initial_backfill: 60,
+  /*
+   * EN DÜŞÜK TAVAN. Anonim bir paylaşım bağlantısından tetiklenebilen tek
+   * platform trafiği bu; bir bot ya da meraklı bir ziyaretçi sayfayı tekrar
+   * tekrar yükleyerek hesabın kotasını yakarsa YAPI TARAMASI da reddedilir ve
+   * hesap kendi kendini kilitler. Kozmetik bir eksik uğruna alınacak risk
+   * değil — %50'nin üstünde bu iş hiç yapılmıyor, rapor saklanmış adresle
+   * çıkıyor ve sebebi belgede yazıyor.
+   */
+  report_creative: 50,
 };
 
 /**

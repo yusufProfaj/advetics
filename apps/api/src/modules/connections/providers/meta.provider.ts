@@ -1498,6 +1498,152 @@ export class MetaProvider implements IAdPlatformProvider {
    * CANLIDA DOĞRULANMADI — ilk gerçek çağrıda alan adları ve `key` biçimi
    * gözle kontrol edilecek.
    */
+  /**
+   * ═══ KREATİF GÖRSELİNİN TAZE ADRESİ ═══
+   *
+   * `creatives.asset_urls` içinde sakladığımız adres İMZALI ve süresi doluyor.
+   * Meta'nın kendi topluluk cevabı bunu açıkça söylüyor: `image_url` geçici
+   * bir adres ve HER çağrı yenisini üretiyor; `thumbnail_url` için kalıcı bir
+   * karşılık HİÇ YOK. Yapı taraması delta çalıştığı için değişmemiş bir
+   * reklamın adresi aylarca tazelenmiyordu ve rapor üretilirken CDN 403
+   * dönüyordu — müşteriye giden PDF'te on boş kutu, sistemde tek satır log yok.
+   *
+   * TEK İSTEK, `?ids=` İLE. Kreatif başına ayrı çağrı, 24 reklamlık bir
+   * raporda 24 çağrı demekti ve planlı raporlar bunu her hafta tekrarlıyor.
+   * `ids` biçimi Graph API'nin belgelenmiş çoklu-nesne sorgusu.
+   *
+   * ┌─ HATADA YARILANIYOR, PES EDİLMİYOR ───────────────────────────────────┐
+   * │ `?ids=` TEK BİR kötü kimlikte İSTEĞİN TAMAMINI düşürüyor: silinmiş ya  │
+   * │ da erişilemeyen bir kreatif, kalan 23 reklamın da görselini götürür.   │
+   * │ Liste ikiye bölünüp tekrar deneniyor; tek kimliğe inildiğinde hata O   │
+   * │ kimliğe yazılıyor ve diğerleri kurtuluyor. Aynı desen `pagedEdge`teki  │
+   * │ "reduce the amount of data" yarılamasıyla aynı gerekçeye dayanıyor:    │
+   * │ hangi kimliğin sorunlu olduğunu önden bilemiyoruz.                     │
+   * └────────────────────────────────────────────────────────────────────────┘
+   *
+   * `image_url` ÖNCE, `thumbnail_url` SONRA. Gönderi ve video boost'larında
+   * Meta `image_url` döndürmüyor ve elimizdeki tek görsel thumbnail oluyor;
+   * ters sırada her zaman küçük olanı seçerdik.
+   */
+  async fetchCreativeImageUrls(
+    ctx: FetchContext,
+    creativeExternalIds: readonly string[],
+    opts: { timeoutMs?: number; butceBitisi?: number } = {},
+  ): Promise<Map<string, { url: string } | { hata: string }>> {
+    const out = new Map<string, { url: string } | { hata: string }>();
+    const benzersiz = [...new Set(creativeExternalIds.filter((id) => id.trim() !== ''))];
+    if (benzersiz.length === 0) return out;
+
+    /*
+     * PARÇA BOYU 25. Graph'in çoklu istek sınırı 50 olarak belgeleniyor ama o
+     * sınır `batch` ucu için yazılmış; `ids` için ayrıca yazılmamış. Yarısında
+     * durmak, belgelenmemiş bir sınıra yaslanmamak demek — ve zaten tavanımız
+     * 24 (platform başına 12 reklam), yani pratikte tek istek.
+     */
+    const PARCA = 25;
+    for (let i = 0; i < benzersiz.length; i += PARCA) {
+      await this.creativeAdresParcasi(ctx, benzersiz.slice(i, i + PARCA), out, opts);
+    }
+    return out;
+  }
+
+  /**
+   * Bir parçayı ister; düşerse ikiye bölüp tekrar dener.
+   *
+   * TEK KİMLİĞE İNİLDİĞİNDE BİÇİM DEĞİŞİYOR: `?ids=` çoklu sorgusu yerine
+   * DÜĞÜM yolu (`/{creative-id}`) kullanılıyor. Sebebi tahmin bırakmamak —
+   * düğüm yolu Graph API'nin en temel ve en kesin biçimi, `ids` ise çoklu
+   * sorgu kolaylığı. Yarılama en sonunda hep bilinen yola düşüyor; böylece
+   * "hata gerçekten bu kreatifte miydi yoksa istek biçiminde mi" sorusu
+   * ortada kalmıyor.
+   */
+  private async creativeAdresParcasi(
+    ctx: FetchContext,
+    idler: string[],
+    out: Map<string, { url: string } | { hata: string }>,
+    opts: { timeoutMs?: number; butceBitisi?: number },
+  ): Promise<void> {
+    if (idler.length === 0) return;
+
+    /*
+     * BÜTÇE HER DALDA KONTROL EDİLİYOR — yarılamanın DURMA KOŞULU bu.
+     *
+     * Yarılama en kötü hâlde 2N-1 istek üretiyor; her istek 6 saniye
+     * sürebiliyor. Bu adım senkron bir PDF isteğinin içinde koştuğu için,
+     * durma koşulu olmadan kullanıcı dakikalarca bekler ve sonunda yine
+     * görselsiz bir rapor alırdı.
+     */
+    if (opts.butceBitisi !== undefined && Date.now() >= opts.butceBitisi) {
+      for (const id of idler) {
+        if (!out.has(id)) out.set(id, { hata: 'tazeleme süresi doldu' });
+      }
+      return;
+    }
+
+    const tekli = idler.length === 1;
+    const url = new URL(tekli ? `${this.graph}/${idler[0]}` : `${this.graph}/`);
+    if (!tekli) url.searchParams.set('ids', idler.join(','));
+    url.searchParams.set('fields', 'id,image_url,thumbnail_url');
+    /*
+     * BOYUT AÇIKÇA İSTENİYOR. Meta `thumbnail_url`ü varsayılan olarak ~64px
+     * döndürüyor; PDF'te 56 puntoluk bir kutuya konan 64px görsel bulanık
+     * çıkıyor ve "görsel geldi ama okunmuyor" da bir hata türü.
+     */
+    url.searchParams.set('thumbnail_width', '1080');
+    url.searchParams.set('thumbnail_height', '1080');
+
+    try {
+      const res = await platformFetch<Record<string, unknown>>(
+        'meta',
+        url.toString(),
+        {
+          headers: { Authorization: `Bearer ${ctx.accessToken}` },
+          ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+        },
+        parseMetaRateLimit,
+      );
+      if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+
+      for (const id of idler) {
+        /*
+         * TEKLİ İSTEKTE YANIT KREATİFİN KENDİSİ, çoklu istekte kimliğe göre
+         * anahtarlanmış bir harita. İkisini aynı sanmak, tekli yolda her
+         * seferinde "döndürmedi" yazmak demekti — ve o yol tam da hata
+         * ayıklamak için var olan yol.
+         */
+        const nesne = tekli ? res.data : res.data[id];
+        if (!nesne || typeof nesne !== 'object') {
+          out.set(id, { hata: 'platform bu kreatifi döndürmedi' });
+          continue;
+        }
+        const alanlar = nesne as Record<string, unknown>;
+        const adres = text(alanlar.image_url) ?? text(alanlar.thumbnail_url);
+        out.set(id, adres ? { url: adres } : { hata: 'kreatifin görseli yok' });
+      }
+    } catch (err) {
+      /*
+       * TEK KİMLİĞE İNİLDİ: suçlu bu, hatayı ona yaz ve diğerlerini kurtar.
+       *
+       * DURMA KOŞULU UZUNLUĞA BAĞLI, `tekli` DEĞİŞKENİNE DEĞİL — ve bu ayrım
+       * teorik değil, mutasyon testinde SÜRECİ DÜŞÜRDÜ. `tekli` URL biçimini
+       * seçiyor (`?ids=` mi düğüm yolu mu); birisi onu bir gün sabitlerse
+       * (örneğin "hep çoklu biçim kullan") özyineleme burada durmuyor:
+       * `Math.floor(1 / 2) = 0`, yani `slice(0)` AYNI tek elemanlı listeyi
+       * veriyor ve fonksiyon kendini sonsuza çağırıyor. Belirtisi test değil,
+       * ÜRETİMDE bellek taşması olurdu.
+       */
+      if (idler.length === 1) {
+        out.set(idler[0]!, {
+          hata: err instanceof Error ? err.message : 'kreatif adresi alınamadı',
+        });
+        return;
+      }
+      const orta = Math.floor(idler.length / 2);
+      await this.creativeAdresParcasi(ctx, idler.slice(0, orta), out, opts);
+      await this.creativeAdresParcasi(ctx, idler.slice(orta), out, opts);
+    }
+  }
+
   async searchGeoLocations(ctx: FetchContext, query: string): Promise<GeoLocationOption[]> {
     const url = new URL(`${this.graph}/search`);
     url.searchParams.set('type', 'adgeolocation');

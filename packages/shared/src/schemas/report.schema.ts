@@ -507,7 +507,38 @@ export interface ReportData {
     id: string;
     name: string;
     campaignName: string;
+    /**
+     * KREATİF GÖRSELİ — SAKLANMIŞ DEĞİL, TAZELENMİŞ ADRES.
+     *
+     * `creatives.asset_urls` içindeki Meta CDN adresi İMZALI ve süresi
+     * doluyor; her Graph çağrısı YENİ bir adres üretiyor. Yapı taraması delta
+     * çalıştığı için değişmemiş bir reklamın adresi aylarca tazelenmiyor ve
+     * rapor üretilirken CDN 403 dönüyor. Belirtisi: müşteriye giden PDF'te
+     * "görseli alınamadı (sunucu 403)" yazan on kutu.
+     *
+     * Bu alan `build()` içinde, transaction KAPANDIKTAN SONRA platformdan
+     * tazeleniyor (bkz. `kreatif-adresi.service.ts`). Tazeleme düşerse
+     * saklanmış adres kalıyor — çalışma ihtimali düşük ama sıfır değil ve
+     * `null` yazmak "bu metin reklamı" ile karışırdı.
+     */
     imageUrl: string | null;
+    /**
+     * TAZELEME BAŞARISIZSA SEBEBİ — `null` ise tazeleme sorunu yok.
+     *
+     * Sessiz kalmak, "reklamın görseli yok" ile "adresi yenileyemedik"i aynı
+     * boş kutuya çevirirdi; ikisinin yapılacak işi farklı (biri normal, diğeri
+     * bağlantı/kota sorunu).
+     */
+    imageUrlHatasi: string | null;
+    /**
+     * Platformdaki kreatif kimliği — taze adres bununla isteniyor.
+     *
+     * `null` olabilir: kreatifi silinmiş ya da hiç bağlanmamış reklamlar var
+     * ve onlar için tazelenecek bir şey yok.
+     */
+    creativeExternalId: string | null;
+    /** Hangi reklam hesabından — token ve bağlantı oradan bulunuyor. */
+    adAccountId: string;
     headline: string | null;
     /**
      * METİN REKLAMI ÖNİZLEMESİ İÇİN — Google arama reklamının görseli YOK.

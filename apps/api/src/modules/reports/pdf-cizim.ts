@@ -373,6 +373,22 @@ export function kisalt(metin: string, font: PDFFont, punto: number, maks: number
  * TAM DAİRE DE ÇALIŞIYOR: tek dilim %100 olduğunda çokgen kapanıyor ve halka
  * dolu çiziliyor. Yay komutuyla aynı durum dejenere bir yay üretip HİÇBİR ŞEY
  * çizmezdi — tek cinsiyetli bir hesapta halka boş görünürdü.
+ *
+ * YOL NOKTALARI MERKEZE GÖRE, MUTLAK DEĞİL — ve bu bir üslup tercihi değil,
+ * hatanın ta kendisiydi. `drawSvgPath` önce `translate(x, y)` sonra
+ * `scale(1, -1)` uyguluyor (pdf-lib 1.17.1, `operations.js`: "SVG path Y axis
+ * is opposite pdf-lib's"), yani çizilen nokta `y - pathY` oluyor. Yol
+ * noktaları MUTLAK PDF koordinatıyla yazılıp `y: sayfaYuksekligi` verildiğinde
+ * halka sayfanın yatay orta ekseninde AYNALANIYORDU: Kitle Özeti sayfasında
+ * dört halka, başlık ve lejantlarının yanında değil SAYFANIN EN ALTINDA
+ * çiziliyor, aralarında da boş bir şerit kalıyordu. Hiçbir hata düşmedi —
+ * çizim başarılıydı, yalnızca yanlış yerdeydi; bu projenin klasik sessiz
+ * hatası.
+ *
+ * Merkeze göre yazınca `{ x: cx, y: cy }` "halkayı buraya koy" demek oluyor ve
+ * ters çevirme İŞE YARIYOR: SVG'nin y-aşağı uzayında -π/2 açısı, çevrimden
+ * sonra PDF'te saat 12 yönüne düşüyor ve dilimler panelle aynı yönde, saat
+ * yönünde ilerliyor. Sayfa yüksekliği hesaba HİÇ girmiyor.
  */
 export function halka(
   s: PDFPage,
@@ -396,16 +412,16 @@ export function halka(
 
     for (let i = 0; i <= adim; i++) {
       const a = baslangic + (aci * i) / adim;
-      noktalar.push(`${(opts.cx + Math.cos(a) * opts.disR).toFixed(2)} ${(opts.cy + Math.sin(a) * opts.disR).toFixed(2)}`);
+      noktalar.push(`${(Math.cos(a) * opts.disR).toFixed(2)} ${(Math.sin(a) * opts.disR).toFixed(2)}`);
     }
     for (let i = adim; i >= 0; i--) {
       const a = baslangic + (aci * i) / adim;
-      noktalar.push(`${(opts.cx + Math.cos(a) * opts.icR).toFixed(2)} ${(opts.cy + Math.sin(a) * opts.icR).toFixed(2)}`);
+      noktalar.push(`${(Math.cos(a) * opts.icR).toFixed(2)} ${(Math.sin(a) * opts.icR).toFixed(2)}`);
     }
 
     s.drawSvgPath(`M ${noktalar.join(' L ')} Z`, {
-      x: 0,
-      y: s.getHeight(),
+      x: opts.cx,
+      y: opts.cy,
       color: d.renk,
       borderWidth: 0,
     });

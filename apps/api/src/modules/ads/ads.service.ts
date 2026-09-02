@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { gorselAdresleri } from '@advetics/shared';
 import type {
   AdCreative,
   AdDetail,
@@ -494,11 +495,8 @@ export class AdsService {
        * sorgusu (`FROM asset`) gerektiriyor ve hesap başına ek çağrı demek —
        * ayrı bir iş.
        */
-      assetUrls: Array.isArray(r.asset_urls)
-        ? r.asset_urls.filter(
-            (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
-          )
-        : [],
+      // SÜZGEÇ PAYLAŞILAN YARDIMCIDAN — rapor yolu aynısını kullanıyor.
+      assetUrls: gorselAdresleri(r.asset_urls),
     };
   }
 

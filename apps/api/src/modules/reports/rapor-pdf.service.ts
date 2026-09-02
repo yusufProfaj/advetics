@@ -1150,7 +1150,18 @@ export class RaporPdfService {
       } else if (reklam.imageUrl) {
         // ADRES VARDI AMA GELMEDİ: bir arıza, sayısı aşağıda bildiriliyor.
         alinamayan++;
-        sebepler.add(sonuc && 'hata' in sonuc ? sonuc.hata : 'indirilemedi');
+        /*
+         * TAZELEME HATASI VARSA O YAZILIYOR — indirme hatası DEĞİL.
+         *
+         * Saklanan Meta CDN adresi imzalı ve ölüyor; adresi yenileyemediğimiz
+         * durumda indirme kaçınılmaz olarak "sunucu 403" veriyor. O cümleyi
+         * yazmak BELİRTİYİ raporlamak olurdu ve danışmanı CDN'e baktırırdı;
+         * oysa sebep bağlantı tarafında ("token geçersiz", "kota doldu") ve
+         * yapılacak iş orada.
+         */
+        sebepler.add(
+          reklam.imageUrlHatasi ?? (sonuc && 'hata' in sonuc ? sonuc.hata : 'indirilemedi'),
+        );
         this.gorselYeri(ctx, s, ky - ic, gorselG, 'alinamadi', kx + ic, gorselY);
       } else {
         /*

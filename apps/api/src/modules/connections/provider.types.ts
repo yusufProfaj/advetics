@@ -942,6 +942,43 @@ export interface IAdPlatformProvider {
   fetchBreakdowns(ctx: FetchContext, request: BreakdownRequest): Promise<PlatformBreakdowns>;
 
   /**
+   * KREATİF GÖRSELİNİN TAZE ADRESİ — rapor üretilirken.
+   *
+   * İSTEĞE BAĞLI ve sebebi platformların gerçekten farklı olması: Meta'nın
+   * `image_url`/`thumbnail_url` alanları İMZALI ve süresi doluyor — Meta'nın
+   * kendi belgelendirmesinde kalıcı karşılığı yok ve HER çağrı yeni bir adres
+   * üretiyor. Google'ın görsel varlıkları kalıcı adreste duruyor, orada
+   * tazelenecek bir şey yok ve bu metot uygulanmıyor.
+   *
+   * NEDEN YAPI TARAMASINDA ÇÖZÜLEMİYOR: yapı taraması DELTA çalışıyor,
+   * değişmemiş bir reklamın kreatifini yeniden yazmıyor. Yani adres bir kez
+   * yazılıp aylarca öylece duruyor ve rapor üretilirken CDN 403 dönüyor.
+   * Belirtisi müşteriye giden PDF'te "görseli alınamadı (sunucu 403)" yazan
+   * kutular oluyor ve HİÇBİR log'a düşmüyor.
+   *
+   * Kimlik başına sonuç dönüyor: bir kreatif silinmişse kalanlar yine
+   * gelmeli. Boş bir `Map` "hiçbiri alınamadı" demek, "hata yok" değil.
+   */
+  fetchCreativeImageUrls?(
+    ctx: FetchContext,
+    creativeExternalIds: readonly string[],
+    /**
+     * SÜRE KISITI ÇAĞIRANDAN GELİYOR, sağlayıcıdan değil.
+     *
+     * Bu iş SENKRON bir PDF isteğinin içinde koşuyor ve hata hâlinde liste
+     * yarılanarak tekrar deneniyor — yani istek sayısı önceden belli değil.
+     * Bütçeyi çağıran biliyor (kullanıcı ekranda mı bekliyor, planlı gönderim
+     * mi), sağlayıcı bilmiyor.
+     */
+    opts?: {
+      /** Tek istek için zaman aşımı. Verilmezse `platformFetch` varsayılanı. */
+      timeoutMs?: number;
+      /** `Date.now()` cinsinden son an; geçilirse kalanlar denenmiyor. */
+      butceBitisi?: number;
+    },
+  ): Promise<Map<string, { url: string } | { hata: string }>>;
+
+  /**
    * YAZMA — kural motorunun platforma dokunduğu tek nokta.
    *
    * Tek bir metot, aksiyon başına ayrı metot değil: çağıran taraf (kural

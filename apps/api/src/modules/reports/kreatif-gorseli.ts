@@ -54,6 +54,21 @@ export const IZINLI_SONEKLER = [
   '.googleusercontent.com',
   '.gstatic.com',
   '.ggpht.com',
+  /*
+   * Google Ads görsel varlıkları — `https://tpc.googlesyndication.com/simgad/…`.
+   *
+   * SONEK `.googlesyndication.com` DEĞİL, TAM ANA MAKİNE. O sonek `pagead2`,
+   * `googleads` gibi reklam sunucusu alt alanlarını da açardı; görsel yalnızca
+   * `tpc` üzerinden geliyor ve dar tutmak bedava. Başındaki nokta yok, çünkü
+   * kontrol `endsWith` ve tam ana makine zaten kendi kendisiyle bitiyor.
+   *
+   * DİKKAT: bu sonek TEK BAŞINA hiçbir şeyi düzeltmiyor. Bugün `asset_urls`
+   * içinde Google için bir ADRES bile yok — sağlayıcı oraya kaynak adı
+   * (`customers/…/assets/…`) yazıyor ve o değer `gorselAdresleri()`
+   * süzgecinde zaten eleniyor. Sonek, gerçek adresi çeken GAQL sorgusu
+   * yazıldığında hazır olsun diye burada.
+   */
+  'tpc.googlesyndication.com',
 ] as const;
 
 /** Tek görsel için üst sınırlar. */

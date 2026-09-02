@@ -33,6 +33,11 @@ const blok = (over: Record<string, unknown> = {}) =>
   }) as unknown as ReportData['platforms'][number];
 
 const VERI: ReportData = {
+  // Zorunlu ama bu dosyanın iddialarıyla ilgisiz alanlar: eksik bırakmak
+  // typecheck'i kırmızı tutuyordu ve kırmızı bir typecheck kimseyi uyarmıyor —
+  // Kitle Özeti sayfasındaki halka hatası tam da o gürültünün içinde kaçtı.
+  breakdowns: [],
+  topAdsMissingPlatforms: [],
   client: { id: 'c1', name: 'Sabancı İnşaat' },
   branding: {} as ReportData['branding'],
   title: 'Dijital Pazarlama Raporu',

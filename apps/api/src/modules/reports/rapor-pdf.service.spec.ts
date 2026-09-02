@@ -82,6 +82,40 @@ const VERI: ReportData = {
   ] as unknown as ReportData['metaCampaigns'],
   googleCampaigns: [],
   daily: [],
+  /*
+   * KIRILIMLAR FIXTURE'DA VARDI ZANNEDİLİYORDU — YOKTU.
+   *
+   * `ReportData` bu alanı zorunlu kılıyor ve TypeScript de bağırıyordu
+   * (`TS2741: Property 'breakdowns' is missing`), ama vitest tip denetimi
+   * yapmadığı için 259 test yeşil geçiyordu. Sonucu şu oldu: Kitle Özeti
+   * sayfası HİÇBİR testte üretilmiyordu ve halkaların sayfanın en altına
+   * düştüğü hata müşteriye giden PDF'te görüldü. Eksik fixture, eksik
+   * kapsamın kendisiydi.
+   */
+  breakdowns: [
+    {
+      dimension: 'gender',
+      rows: [
+        { value: 'Erkek', impressions: 148_000, clicks: 1500, spendMicros: '14000000000', conversions: 220, sharePct: 56.8 },
+        { value: 'Kadın', impressions: 104_000, clicks: 1410, spendMicros: '9800000000', conversions: 160, sharePct: 39.8 },
+        { value: 'Bilinmiyor', impressions: 1300, clicks: 20, spendMicros: '120000000', conversions: 2, sharePct: 0.5 },
+      ],
+      unsupportedPlatforms: [],
+      otherCount: 0,
+      otherSpendMicros: '0',
+    },
+    {
+      dimension: 'age',
+      rows: [
+        { value: '25-34', impressions: 62_000, clicks: 700, spendMicros: '5900000000', conversions: 95, sharePct: 23.7 },
+        { value: '45-54', impressions: 54_000, clicks: 610, spendMicros: '5100000000', conversions: 80, sharePct: 20.6 },
+        { value: '35-44', impressions: 52_000, clicks: 590, spendMicros: '5000000000', conversions: 77, sharePct: 20.1 },
+      ],
+      unsupportedPlatforms: [],
+      otherCount: 6,
+      otherSpendMicros: '700000000',
+    },
+  ],
   topAds: [],
   topAdsMissingPlatforms: [],
   keywords: [
@@ -340,6 +374,9 @@ describe('öne çıkan reklamlar', () => {
           campaignName: 'Bagcilar kampanyasi',
           platform: 'meta' as const,
           imageUrl: 'https://scontent.xx.fbcdn.net/v/gorsel.jpg',
+          imageUrlHatasi: null,
+          creativeExternalId: '23851',
+          adAccountId: 'aa-1',
           description: null,
           displayUrl: null,
           headline: 'Simdi kesfet',
@@ -355,6 +392,9 @@ describe('öne çıkan reklamlar', () => {
           platform: 'google' as const,
           // GÖRSEL ADRESİ HİÇ YOK: Google arama reklamının normal hâli.
           imageUrl: null,
+          imageUrlHatasi: null,
+          creativeExternalId: null,
+          adAccountId: 'aa-2',
           description: 'Urlada deniz manzarali 3+1 ve 4+1 secenekler.',
           displayUrl: 'egebirlikyapi.com/urla',
           headline: 'Urlada satilik villa',
@@ -838,6 +878,7 @@ describe('PDF tabloları', () => {
       term: 'ikon cadde satılık',
       keyword: 'ikon tower',
       status: 'NONE' as const,
+      impressions: 28,
       spendMicros: '58770000',
       clicks: 5,
       ctr: 17.86,
@@ -847,6 +888,7 @@ describe('PDF tabloları', () => {
       term: 'özemeksan',
       keyword: 'özemeksan',
       status: 'ENABLED' as const,
+      impressions: 28,
       spendMicros: '99130000',
       clicks: 16,
       ctr: 36.36,
@@ -952,5 +994,139 @@ describe('PDF tabloları', () => {
     const cok = Array.from({ length: 200 }, (_, i) => ({ ...KELIMELER[0]!, keyword: `k${i}` }));
     const pdf = await svc.uret({ ...VERI, sections: ['google_keywords'], keywords: cok });
     expect(metinler(pdf).some((x) => x.includes('sayfaya sığdı'))).toBe(true);
+  });
+});
+
+/**
+ * ═══ KİTLE ÖZETİ SAYFASI — GERÇEK BELGEDE ═══
+ *
+ * BU SAYFA HİÇBİR TESTTE ÜRETİLMİYORDU ve hatanın kaçma sebebi tam olarak
+ * buydu: dört halka, başlıklarının ve lejantlarının yanında değil SAYFANIN EN
+ * ALTINDA çiziliyordu, aralarında da boş bir şerit kalıyordu. Hiçbir hata
+ * düşmedi — çizim başarılıydı, yalnızca yanlış yerdeydi — ve bunu ilk gören
+ * müşteriye giden PDF oldu.
+ *
+ * `halka-konumu.spec.ts` çiziciyi TEK BAŞINA sınıyor; burası SAYFAYI sınıyor.
+ * İkisi ayrı işler: çizici doğru çalışıp sayfa onu yanlış yere çağırabilir.
+ */
+describe('RaporPdfService — Kitle Özeti sayfası', () => {
+  const svc = new RaporPdfService();
+
+  /**
+   * `drawSvgPath` yerleşimlerini içerik akışından çıkarır.
+   *
+   * pdf-lib bu çağrı için `translate(x, y)` ardından `scale(1, -1)` yayınlıyor,
+   * yani akışta `1 0 0 1 <x> <y> cm` hemen ardından `1 0 0 -1 0 0 cm` geliyor.
+   * O ikili, belgede yalnızca SVG yolu çizimlerine ait — halkalar dışında
+   * kullanan yok.
+   */
+  function halkaMerkezleri(pdf: Buffer): Array<{ x: number; y: number }> {
+    const ham = pdf.toString('latin1');
+    const akislar: string[] = [];
+    const re = /stream\r?\n/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(ham)) !== null) {
+      const bas = m.index + m[0].length;
+      const son = ham.indexOf('endstream', bas);
+      if (son === -1) continue;
+      try {
+        akislar.push(inflateSync(Buffer.from(ham.slice(bas, son), 'latin1')).toString('latin1'));
+      } catch {
+        /* sıkıştırılmamış */
+      }
+    }
+    const out: Array<{ x: number; y: number }> = [];
+    for (const a of akislar) {
+      for (const mm of a.matchAll(
+        /1 0 0 1 (-?[\d.]+) (-?[\d.]+) cm[\s\S]{0,40}?1 0 0 -1 0 0 cm/g,
+      )) {
+        out.push({ x: Number(mm[1]), y: Number(mm[2]) });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Benzersiz halka merkezleri.
+   *
+   * HER DİLİM AYRI BİR YOL: üç dilimli bir halka üç  üretiyor,
+   * yani çağrı sayısı dilim sayısına bağlı. "Dört halka var" iddiası
+   * MERKEZLERİ saymak zorunda; çağrıları saymak fixture'daki dilim sayısı
+   * değiştiğinde sessizce yanlış olurdu.
+   */
+  function benzersizMerkezler(pdf: Buffer): Array<{ x: number; y: number }> {
+    const gorulen = new Map<string, { x: number; y: number }>();
+    for (const c of halkaMerkezleri(pdf)) gorulen.set(`${c.x}:${c.y}`, c);
+    return [...gorulen.values()];
+  }
+
+  it('KRİTİK: dört halka BAŞLIĞIYLA LEJANTI ARASINDA — sayfanın altında değil', async () => {
+    /*
+     * Sayfa yerleşimi (rapor-pdf.service.ts): baslik() BOY-124 = 717,89
+     * döndürüyor, özet kartlarından sonra 50 punto düşülüyor (y = 667,89),
+     * halka merkezi oradan 58 punto aşağıda = 609,89 ve yarıçapı 26.
+     * Sütun başlığı 659,89'da, ilk lejant satırı 575,89'da.
+     *
+     * Hatalı sürümde merkez BOY - 609,89 = 232,00'ye düşüyordu: sayfanın alt
+     * çeyreği, günlük form eğrisinin bile altı.
+     */
+    const pdf = await svc.uret({ ...VERI, sections: ['audience_overview'] });
+    const merkezler = benzersizMerkezler(pdf);
+
+    expect(merkezler.length, 'dört kırılım halkası bekleniyor').toBe(4);
+    for (const c of merkezler) {
+      // Başlığın ALTINDA, lejantın ÜSTÜNDE.
+      expect(c.y).toBeLessThan(659.89);
+      expect(c.y).toBeGreaterThan(575.89 + 26);
+      // Aynalanmış konum (232) açıkça reddediliyor — hatanın adı burada.
+      expect(Math.abs(c.y - (841.89 - 609.89))).toBeGreaterThan(26);
+    }
+  });
+
+  it('halkalar DÖRT SÜTUNA yayılıyor — üst üste binmiyor', async () => {
+    // Dördü aynı x'te olsaydı tek halka görünür, diğer üçü gizlenirdi.
+    const pdf = await svc.uret({ ...VERI, sections: ['audience_overview'] });
+    const xler = benzersizMerkezler(pdf)
+      .map((c) => c.x)
+      .sort((a, b) => a - b);
+
+    expect(new Set(xler).size).toBe(4);
+    for (let i = 1; i < xler.length; i++) {
+      // Sütun genişliği 121,32; iki halkanın (yarıçap 26) çakışmaması için
+      // aradaki mesafe en az 52 olmalı.
+      expect(xler[i]! - xler[i - 1]!).toBeGreaterThan(52);
+    }
+    // Hepsi sayfanın içinde.
+    for (const x of xler) {
+      expect(x - 26).toBeGreaterThan(0);
+      expect(x + 26).toBeLessThan(595.28);
+    }
+  });
+
+  it('kırılım verisi yoksa SEBEBİ yazılıyor — boş sayfa değil', async () => {
+    const pdf = await svc.uret({ ...VERI, sections: ['audience_overview'], breakdowns: [] });
+    expect(halkaMerkezleri(pdf).length).toBe(0);
+    expect(metinler(pdf).join(' ')).toContain('Kitle verisi');
+  });
+
+  it('KRİTİK: lejant YÜZDESİ SEÇİLEN METRİĞİN payı — harcama payı DEĞİL', async () => {
+    /*
+     * İki yakın dilimin hangisinin büyük olduğunu göze bırakmak halka
+     * grafiğin bilinen zayıflığı; lejant yüzde taşımak zorunda.
+     *
+     * AMA HANGİ YÜZDE: satırda hazır duran `sharePct` HARCAMA payı (fixture'da
+     * %56,8), halkanın çizdiği ise sütunun metriği — gösterim ya da tıklama.
+     * İkisini karıştırmak, halkanın dilimiyle yanındaki sayının farklı şeyler
+     * anlatması demekti ve hiçbir hata düşmezdi. Gösterimde 148.000/253.300 =
+     * %58,4, tıklamada 1.500/2.930 = %51,2 — ikisi de belgede olmalı, çünkü
+     * sayfada dört sütunun ikisi gösterim ikisi tıklama.
+     */
+    const pdf = await svc.uret({ ...VERI, sections: ['audience_overview'] });
+    const t = metinler(pdf).join(' ');
+    expect(t).toContain('Erkek');
+    expect(t).toContain('%58.4');
+    expect(t).toContain('%51.2');
+    // Harcama payı SIZMAMALI.
+    expect(t).not.toContain('%56.8');
   });
 });
