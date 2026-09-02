@@ -6,6 +6,7 @@ import {
   gorselIndir,
   gorselleriIndir,
   GORSEL_SINIRI,
+  IZINLI_SONEKLER,
   turuAnla,
 } from './kreatif-gorseli';
 
@@ -19,10 +20,57 @@ function yanit(bytes: Uint8Array, status = 200): Response {
 
 const IZINLI = 'https://scontent.xx.fbcdn.net/v/t45/gorsel.jpg';
 
+/*
+ * BEYAZ LİSTENİN HER GİRDİSİ İÇİN GERÇEK BİR ÖRNEK ADRES.
+ *
+ * Liste ELLE yazılıyor, `IZINLI_SONEKLER` üzerinde döngü kurulmuyor: döngü
+ * kuran bir test bir soneki SİLDİĞİNDE de geçer (döngü kısalır, iddia tutmaya
+ * devam eder). Nitekim öyleydi — `.gstatic.com` ve `.ggpht.com` silinse
+ * hiçbir test düşmüyordu, yani üç girdi kilitsizdi.
+ *
+ * Aşağıdaki "liste birebir aynı" iddiası bunun ikinci yarısı: yeni bir sonek
+ * eklenip buraya örnek yazılmazsa test düşüyor. Beyaz liste bir SSRF
+ * savunması ve her girdisi bilinçli bir karar olmalı.
+ */
+const ORNEK_ADRESLER: Record<(typeof IZINLI_SONEKLER)[number], string> = {
+  '.fbcdn.net': 'https://scontent.xx.fbcdn.net/v/t45/a.jpg',
+  '.cdninstagram.com': 'https://scontent-lhr8-1.cdninstagram.com/v/t51/b.jpg',
+  '.googleusercontent.com': 'https://lh3.googleusercontent.com/x',
+  '.gstatic.com': 'https://encrypted-tbn0.gstatic.com/images?q=x',
+  '.ggpht.com': 'https://yt3.ggpht.com/a/kanal.jpg',
+  // Google Ads görsel varlığının canlıda beklenen biçimi — görüntülü
+  // reklamın PDF'e girebilmesi bu girdiye bağlı.
+  'tpc.googlesyndication.com': 'https://tpc.googlesyndication.com/simgad/1234567890',
+};
+
 describe('kreatif görseli — adres kontrolü', () => {
   it('KRİTİK: izinli CDN kabul ediliyor', () => {
     expect(adresGuvenliMi(IZINLI).ok).toBe(true);
     expect(adresGuvenliMi('https://lh3.googleusercontent.com/x').ok).toBe(true);
+  });
+
+  it('KRİTİK: beyaz listenin HER girdisi pozitif sınanıyor', () => {
+    for (const sonek of IZINLI_SONEKLER) {
+      const ornek = ORNEK_ADRESLER[sonek];
+      expect(ornek, `${sonek} için örnek adres yok — girdiyi kilitle`).toBeDefined();
+      const r = adresGuvenliMi(ornek);
+      expect(r.ok, `${sonek} reddedildi: ${r.ok === false ? r.sebep : ''}`).toBe(true);
+    }
+  });
+
+  it('KRİTİK: örnek listesi beyaz listeyle BİREBİR aynı', () => {
+    // Sonek eklenip örneği yazılmazsa yukarıdaki döngü onu hiç görmez.
+    expect(Object.keys(ORNEK_ADRESLER).sort()).toEqual([...IZINLI_SONEKLER].sort());
+  });
+
+  it('KRİTİK: Google Ads görsel varlığı yalnızca `tpc` alt alanından', () => {
+    /*
+     * Sonek TAM ANA MAKİNE (`tpc.googlesyndication.com`), `.googlesyndication.
+     * com` DEĞİL: o sonek `pagead2`/`googleads` gibi reklam sunucusu alt
+     * alanlarını da açardı ve görsel oralardan gelmiyor.
+     */
+    expect(adresGuvenliMi('https://pagead2.googlesyndication.com/x.jpg').ok).toBe(false);
+    expect(adresGuvenliMi('https://tpc.googlesyndication.com.evil.com/x.jpg').ok).toBe(false);
   });
 
   it('KRİTİK: bilinmeyen sunucu REDDEDİLİYOR', () => {

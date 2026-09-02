@@ -6,6 +6,7 @@ import {
   googleImageAssetBody,
   googleVideoAssetBody,
 } from './google-demandgen';
+import { gecerliGorselAdresi } from '@advetics/shared';
 import type { GeoLocationOption, Platform, SavedAudienceOption } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
@@ -705,7 +706,16 @@ export class GoogleProvider implements IAdPlatformProvider {
     );
 
     const ads: DiscoveredAd[] = [];
-    const creatives: DiscoveredCreative[] = [];
+    /*
+     * KREATİFLER İKİNCİ TURDA KURULUYOR.
+     *
+     * Görsel varlıklarının GERÇEK ADRESİ bu yanıtta yok — burada yalnızca
+     * kaynak adı (`customers/…/assets/…`) var ve adres ayrı bir sorgu
+     * istiyor. O sorgu ancak BÜTÜN reklamlar okunduktan sonra atılabilir:
+     * reklam başına sormak, yüz reklamlı bir hesapta yüz çağrı demekti.
+     */
+    const kreatifGirdileri: Array<{ id: string; ad: Record<string, unknown> }> = [];
+    const kaynakAdlari = new Set<string>();
     for (const row of adRows) {
       const aga = row.adGroupAd;
       const ad = this.obj(aga?.ad);
@@ -728,10 +738,30 @@ export class GoogleProvider implements IAdPlatformProvider {
         disapprovalReasons: policy?.policyTopicEntries,
         raw: row,
       });
-      creatives.push(this.mapGoogleCreative(id, ad));
+      kreatifGirdileri.push({ id, ad });
+      for (const kaynak of gorselKaynakAdlari(ad)) kaynakAdlari.add(kaynak);
     }
 
-    return { campaigns, adGroups, ads, creatives, complete: true, apiCalls: calls.n };
+    const notes: string[] = [];
+    const gorselAdresleri = await this.gorselVarligiAdresleri(
+      { accessToken, customerId, loginCustomerId },
+      kaynakAdlari,
+      calls,
+      notes,
+    );
+    const creatives = kreatifGirdileri.map(({ id, ad }) =>
+      this.mapGoogleCreative(id, ad, gorselAdresleri),
+    );
+
+    return {
+      campaigns,
+      adGroups,
+      ads,
+      creatives,
+      complete: true,
+      apiCalls: calls.n,
+      ...(notes.length > 0 ? { notes } : {}),
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -1018,13 +1048,131 @@ export class GoogleProvider implements IAdPlatformProvider {
   }
 
   /**
+   * ═══ GÖRSEL VARLIĞININ GERÇEK ADRESİ ═══
+   *
+   * `ad_group_ad.ad.responsive_display_ad.marketing_images` bir ADRES
+   * döndürmüyor; her eleman `AdImageAsset` ve içindeki `asset` alanı bir
+   * kaynak adı: `customers/1234567890/assets/98765`. Adresin kendisi ayrı bir
+   * kaynakta (`asset`) duruyor ve ancak ayrı bir sorguyla okunuyor. Bu sorgu
+   * yazılmadığı sürece görüntülü reklamların görseli ne panelde ne PDF'te
+   * görünüyordu — üstelik kaynak adı adres sanıldığı için "görseli alınamadı"
+   * diye YANLIŞ bir sebeple.
+   *
+   * ┌─ ÖNCE KONTROL, SONRA ÇAĞRI ───────────────────────────────────────────┐
+   * │ Kaynak adı HİÇ toplanmamışsa (arama-only bir hesap — ki çoğu öyle) bu  │
+   * │ sorgu ATILMIYOR. Maliyeti sıfır olan bir ret, aynı hesabın kotasını    │
+   * │ paylaşan yapı/metrik işlerine nefes alacak yer bırakıyor; CLAUDE.md'de │
+   * │ kayıtlı kalıcı kilit tam bu sıranın tersine çevrilmesiyle oluştu.      │
+   * └────────────────────────────────────────────────────────────────────────┘
+   *
+   * ┌─ HATA YAPI TARAMASINI DÜŞÜRMÜYOR ─────────────────────────────────────┐
+   * │ Kampanya/ad group/reklam satırları her şeyin ön koşulu: metrikler bu   │
+   * │ satırlara bağlanıyor ve yapı koşmazsa metrik işi 3.151 satır çekip     │
+   * │ hiçbirini yazamıyor. Kozmetik bir görsel adresi için o zinciri riske   │
+   * │ atmak, kazandığından çok kaybettirir. Ama SESSİZ de geçilmiyor: sebep  │
+   * │ `notes`e yazılıyor ve senkron durumu ekranında görünüyor.              │
+   * └────────────────────────────────────────────────────────────────────────┘
+   *
+   * DÖNEN ADRESİN BEKLENEN BİÇİMİ `https://tpc.googlesyndication.com/simgad/…`
+   * ve bu iddia Google'ın forum kayıtlarından geliyor, resmi bir referans
+   * sayfasından DEĞİL — CANLIDA GÖZLE DOĞRULANMALI. Beklenmedik bir ana
+   * makine gelirse rapor indirmeyi reddedip ana makine adını yazıyor
+   * (`kreatif-gorseli.ts` beyaz listesi), yani yanlış tahminin belirtisi
+   * teşhis edilebilir bir cümle oluyor — sessiz bir boşluk değil.
+   *
+   * ADRESİN ÖMRÜ: imza parametresi taşımıyor, yani Meta'nın imzalı CDN
+   * adresleri gibi çürümüyor GÖRÜNÜYOR. Google bunu yazılı olarak garanti
+   * etmiyor; çürüdüğü gözlenirse karşılığı Meta'daki gibi rapor anında
+   * tazeleme olur (`kreatif-adresi.service.ts`) ve sağlayıcı o zaman
+   * `fetchCreativeImageUrls`i de uygular. Bugün uygulamıyor.
+   */
+  private async gorselVarligiAdresleri(
+    ctx: { accessToken: string; customerId: string; loginCustomerId: string | undefined },
+    kaynakAdlari: ReadonlySet<string>,
+    calls: { n: number },
+    notes: string[],
+  ): Promise<Map<string, string>> {
+    const adresler = new Map<string, string>();
+    if (kaynakAdlari.size === 0) return adresler;
+
+    /*
+     * KİMLİK SORGU METNİNE GÖMÜLÜYOR — GAQL'de bağlı parametre YOK.
+     *
+     * Değer platformdan geliyor ama "platformdan geldi" güvenli demek değil:
+     * yalnızca rakam kabul ediliyor, tanımadığımız bir biçim sorguya HİÇ
+     * girmiyor. Kaynak adının tamamı yerine kimlik kullanılıyor çünkü
+     * `asset.id` süzülebilir bir alan ve sorguyu da kısaltıyor.
+     */
+    const kimlikler = [...kaynakAdlari]
+      .map((k) => varlikKimligi(k))
+      .filter((k): k is string => k !== null);
+    if (kimlikler.length === 0) {
+      notes.push(`görsel adresi: ${kaynakAdlari.size} kaynak adının kimliği okunamadı`);
+      return adresler;
+    }
+
+    try {
+      for (let i = 0; i < kimlikler.length; i += KAYNAK_ADI_PARCASI) {
+        const parca = kimlikler.slice(i, i + KAYNAK_ADI_PARCASI);
+        const rows = await this.searchGaqlPaged<{ asset?: Record<string, unknown> }>(
+          ctx.accessToken,
+          ctx.customerId,
+          `SELECT asset.resource_name, asset.image_asset.full_size.url
+           FROM asset
+           WHERE asset.type = 'IMAGE' AND asset.id IN (${parca.join(',')})`,
+          ctx.loginCustomerId,
+          calls,
+        );
+        for (const row of rows) {
+          const kaynak = this.str(row.asset?.resourceName);
+          const url = this.str(this.obj(this.obj(row.asset?.imageAsset)?.fullSize)?.url);
+          // ADRES OLMAYAN DEĞER HARİTAYA GİRMİYOR: haritanın tek sözü
+          // "bu kaynak adının karşılığı BUDUR" ve o söz tutulmalı.
+          if (kaynak && gecerliGorselAdresi(url)) adresler.set(kaynak, url);
+        }
+      }
+    } catch (err) {
+      /*
+       * KISMİ SONUÇ KORUNUYOR. İkinci parça düştüyse birincinin çözdüğü
+       * adresler hâlâ doğru; hepsini atmak, düzelten yarıyı da kaybetmek
+       * olurdu.
+       */
+      const sebep = errText(err);
+      this.logger.warn(
+        `Google görsel adresi çözülemedi (müşteri ${customerLabel(ctx.customerId)}): ${sebep}`,
+      );
+      notes.push(`görsel adresi alınamadı: ${sebep}`);
+    }
+
+    /*
+     * SESSİZ KESME YOK: kaçının çözüldüğü ve toplamın kaç olduğu yazılıyor.
+     * Bu satır aynı zamanda sorgunun CANLIDA doğrulanma aracı — "0/12" ile
+     * "12/12" arasındaki fark, sorgunun hiç çalışmadığını ilk bakışta
+     * söylüyor. Hepsi çözüldüyse not YAZILMIYOR: her taramada duran bir not
+     * okunmaz hâle gelir.
+     */
+    if (adresler.size < kaynakAdlari.size) {
+      notes.push(`görsel adresi: ${adresler.size}/${kaynakAdlari.size} çözüldü`);
+    }
+    return adresler;
+  }
+
+  /**
    * Google reklamını ortak creative şekline çevirir.
    *
    * RSA/RDA'da başlık ve açıklama LİSTE hâlinde geliyor (Google kombinasyonları
    * kendisi kuruyor). Birincisini alıp tamamını `raw` içinde saklıyoruz:
    * tek bir "headline" göstermek zorundayız ama bilgiyi kaybetmemeliyiz.
+   *
+   * `gorselAdresleri`: kaynak adı → gerçek adres. Boş olabilir (görüntülü
+   * reklam yok, ya da adres sorgusu düştü) ve o hâlde `assetUrls` HİÇ
+   * yazılmıyor — bkz. aşağıdaki not.
    */
-  private mapGoogleCreative(id: string, ad: Record<string, unknown>): DiscoveredCreative {
+  private mapGoogleCreative(
+    id: string,
+    ad: Record<string, unknown>,
+    gorselAdresleri: ReadonlyMap<string, string>,
+  ): DiscoveredCreative {
     const rsa = this.obj(ad.responsiveSearchAd);
     const rda = this.obj(ad.responsiveDisplayAd);
     const source = rsa ?? rda;
@@ -1039,11 +1187,37 @@ export class GoogleProvider implements IAdPlatformProvider {
     };
 
     const finalUrls = Array.isArray(ad.finalUrls) ? ad.finalUrls : [];
-    const images = Array.isArray(rda?.marketingImages)
-      ? rda.marketingImages
-          .map((i) => this.str(this.obj(i)?.asset))
-          .filter((u): u is string => u !== undefined)
-      : [];
+
+    /*
+     * ═══ `assetUrls`'E YALNIZCA GERÇEK ADRES GİRİYOR ═══
+     *
+     * BURADA UZUN SÜRE KAYNAK ADI YAZILIYORDU. Okunan alan
+     * `AdImageAsset.asset` ve o bir URL değil, bir Asset referansı:
+     * `customers/1234567890/assets/98765`. Kaynak adı da bir string olduğu
+     * için her süzgeçten geçiyor, `imageUrl` alanına yazılıyor ve TRUTHY
+     * oluyordu — sonuç, görüntülü reklamın raporda "görseli alınamadı"
+     * kutusuyla çıkması ve dipnottaki sayacın şişmesiydi. Gerçek bir arıza,
+     * uydurma bir arızanın içinde kayboluyordu.
+     *
+     * ÇÖZÜLEMEYEN KAYNAK ADI DÜŞÜYOR, YERİNE KENDİSİ YAZILMIYOR. Yarım bir
+     * değer, hiç değer olmamasından kötü: `undefined` gören rapor metin
+     * önizlemesine düşüyor ve okuyan reklamın NE DEDİĞİNİ görüyor.
+     *
+     * SÜZGEÇ BUGÜN YEDEK: haritaya zaten yalnızca doğrulanmış adres giriyor
+     * (`gorselVarligiAdresleri`). Yine de duruyor, çünkü `.map()` çıktısını
+     * `string[]`e daraltmak için bir süzgeç ZORUNLU ve o süzgecin kuralı
+     * "tanımlı mı" değil "adres mi" olmalı: bu listeye ikinci bir kaynak
+     * eklenirse (kare görseller, logo) doğrulama unutulacak yer tam burası.
+     * Yedek olduğu için mutasyon testinde TEK BAŞINA düşmüyor — asıl kapı
+     * haritanın girişinde ve orası sayaç notuyla kilitli.
+     *
+     * Kural İKİ YERDE YAZILMIYOR, aynı fonksiyon iki yerde ÇAĞRILIYOR;
+     * `gecerliGorselAdresi` okuma tarafının da (`reports.service.ts`,
+     * `ads.service.ts`) süzgeci.
+     */
+    const images = gorselKaynakAdlari(ad)
+      .map((kaynak) => gorselAdresleri.get(kaynak))
+      .filter((u): u is string => gecerliGorselAdresi(u));
 
     return {
       externalId: id,
@@ -1873,3 +2047,58 @@ function customerLabel(id: string): string {
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
+
+/**
+ * Görüntülü reklamın görsel varlıklarının KAYNAK ADLARI.
+ *
+ * Yalnızca `marketing_images` okunuyor ve sebebi GAQL SELECT'i: kare/logo
+ * varyantları istenmiyor. Bir gün istenirse iki yer BİRLİKTE güncellenmeli —
+ * burada okuyup sorguda istememek her zaman boş liste demek, sorguda isteyip
+ * burada okumamak ise bedava veri çekmek.
+ *
+ * Kaynak adı bir ADRES DEĞİL. Bu fonksiyonun döndürdüğü değer doğrudan
+ * `assetUrls`'e YAZILMAZ; `gorselVarligiAdresleri()` haritasından geçmek
+ * zorunda.
+ */
+export function gorselKaynakAdlari(ad: Record<string, unknown>): string[] {
+  const rda = ad.responsiveDisplayAd;
+  const liste =
+    rda && typeof rda === 'object' && !Array.isArray(rda)
+      ? (rda as Record<string, unknown>).marketingImages
+      : undefined;
+  if (!Array.isArray(liste)) return [];
+
+  const cikti: string[] = [];
+  for (const item of liste) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const kaynak = (item as Record<string, unknown>).asset;
+    if (typeof kaynak === 'string' && kaynak.trim().length > 0) cikti.push(kaynak.trim());
+  }
+  return cikti;
+}
+
+/**
+ * `customers/1234567890/assets/98765` → `98765`.
+ *
+ * BİÇİM DOĞRULANIYOR ve bu bir güvenlik kontrolü: kimlik GAQL metnine
+ * gömülüyor, GAQL'in bağlı parametresi yok. Beklenen kalıba uymayan bir değer
+ * `null` dönüyor ve sorguya hiç girmiyor — kaç tanesinin düştüğü çağıran
+ * tarafta sayılıp `notes`e yazılıyor.
+ */
+export function varlikKimligi(kaynakAdi: string): string | null {
+  const m = /^customers\/\d+\/assets\/(\d+)$/.exec(kaynakAdi.trim());
+  return m ? m[1]! : null;
+}
+
+/**
+ * Tek `asset` sorgusuna kaç kimlik giriyor.
+ *
+ * TEK SORGU HEDEF ama garanti değil: her görüntülü reklamda 15'e kadar
+ * pazarlama görseli olabiliyor ve yüz reklamlı bir hesapta liste binleri
+ * bulabilir. Kimlikler sorgu METNİNE gömüldüğü için sınırsız bir liste
+ * sorguyu şişiriyor; 500 kimlik ~6 KB'lik bir metin ve hesapların büyük
+ * çoğunluğu tek parçada bitiyor. Parça başına bir çağrı ekleniyor ve hepsi
+ * `apiCalls`a sayılıyor — kotayı harcayan bir çağrının sayılmaması, kota
+ * bekçisinin kendi ürettiği trafiği görmemesi demek.
+ */
+export const KAYNAK_ADI_PARCASI = 500;

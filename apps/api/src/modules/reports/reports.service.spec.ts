@@ -446,6 +446,136 @@ describe('ReportsService — yapı', () => {
     expect(data.topAdsMissingPlatforms).toEqual([]);
   });
 
+  /**
+   * ═══ GÖRSEL ADRESİ: `asset_urls` İÇİNDE HER ZAMAN ADRES YOK ═══
+   *
+   * Google sağlayıcısı uzun süre `asset_urls`'e Google Ads'in KAYNAK ADINI
+   * yazdı (`customers/…/assets/…`) — okuduğu alan `AdImageAsset.asset` ve o
+   * bir URL değil. Kaynak adı da bir string olduğu için `typeof u ===
+   * 'string'` süzgecinden geçiyor, `imageUrl`e yazılıyor ve TRUTHY oluyordu:
+   * PDF "görseli var ama alınamadı" dalına giriyor, görüntülü reklamın metin
+   * önizlemesine HİÇ ULAŞMIYOR ve dipnottaki sayaç şişiyordu — gerçek bir
+   * arıza uydurma bir arızanın içinde kayboluyordu.
+   *
+   * Sağlayıcı bugün gerçek adresi çekiyor ama `asset_urls` tarihî satırlar
+   * taşıyor ve bu sorgunun süzgeci bir kez de ayrışmıştı (panel yolu kontrol
+   * ediyordu, rapor yolu etmiyordu). Bu yüzden iddia GERÇEK VERİTABANINA
+   * karşı ve `imageUrl` alanının kendisine çapalı.
+   */
+  async function seedReklamVeKreatif(params: {
+    adId: string;
+    platform: 'meta' | 'google';
+    campaignId: string;
+    assetUrls: unknown[];
+    spendMicros: string;
+  }): Promise<void> {
+    const kreatifId = params.adId.replace(/^./, 'c');
+    await h.q(
+      `INSERT INTO creatives (id, ad_account_id, client_id, platform, external_id, headline, asset_urls, updated_at)
+       VALUES ($1, $2, $3, $4::"Platform", $5, 'Başlık', $6::jsonb, now())`,
+      [
+        kreatifId,
+        IDS.adAccount,
+        IDS.client,
+        params.platform,
+        `cr-${params.adId}`,
+        JSON.stringify(params.assetUrls),
+      ],
+    );
+    await h.q(
+      `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, updated_at)
+       VALUES ($1, $2, $3, $4, $5::"Platform", $6, 'G', now())`,
+      [
+        params.adId,
+        params.campaignId,
+        IDS.adAccount,
+        IDS.client,
+        params.platform,
+        `g-${params.adId}`,
+      ],
+    );
+    await h.q(
+      `INSERT INTO ads (id, ad_group_id, ad_account_id, client_id, platform, external_id, name, creative_id, updated_at)
+       VALUES ($1, $1, $2, $3, $4::"Platform", $5, 'Reklam', $6, now())`,
+      [params.adId, IDS.adAccount, IDS.client, params.platform, `ad-${params.adId}`, kreatifId],
+    );
+    await h.q(
+      `INSERT INTO insights_daily
+         (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+          date, breakdown_key, impressions, clicks, spend_micros, conversions,
+          conversion_value_micros, currency, reach, raw_metrics)
+       VALUES ($1, $2, $3::"Platform", 'ad', $4, $5, '2026-08-01'::date, '',
+               10, 1, $6, 0, 0, 'TRY', 0, '{}'::jsonb)`,
+      [
+        IDS.client,
+        IDS.adAccount,
+        params.platform,
+        params.adId,
+        `ad-${params.adId}`,
+        params.spendMicros,
+      ],
+    );
+  }
+
+  const KAYNAK_ADI = 'customers/1234567890/assets/98765';
+  const GERCEK_ADRES = 'https://tpc.googlesyndication.com/simgad/98765';
+
+  it('KRİTİK: Google KAYNAK ADI `imageUrl`e SIZMIYOR', async () => {
+    await seedReklamVeKreatif({
+      adId: 'd0000001-0000-0000-0000-000000000000',
+      platform: 'google',
+      campaignId: CAMP_B,
+      assetUrls: [KAYNAK_ADI],
+      spendMicros: '5000000',
+    });
+
+    const data = await svc.build(CTX, RANGE);
+    const reklam = data.topAds.find((a) => a.id === 'd0000001-0000-0000-0000-000000000000');
+
+    expect(reklam, 'reklam listeye girmedi — test boşa düştü').toBeDefined();
+    expect(reklam!.imageUrl).toBeNull();
+  });
+
+  it('KRİTİK: GERÇEK adres `imageUrl`e geçiyor', async () => {
+    /*
+     * Önceki iddianın tek başına anlamı yok: `imageUrl`i her zaman `null`
+     * yapan bir mutasyon da onu geçirirdi. Süzgecin ELEDİĞİ ve GEÇİRDİĞİ
+     * birlikte kilitleniyor.
+     */
+    await seedReklamVeKreatif({
+      adId: 'd0000002-0000-0000-0000-000000000000',
+      platform: 'google',
+      campaignId: CAMP_B,
+      assetUrls: [GERCEK_ADRES],
+      spendMicros: '4000000',
+    });
+
+    const data = await svc.build(CTX, RANGE);
+    const reklam = data.topAds.find((a) => a.id === 'd0000002-0000-0000-0000-000000000000');
+
+    expect(reklam!.imageUrl).toBe(GERCEK_ADRES);
+  });
+
+  it('KRİTİK: karışık dizide kaynak adı atlanıp ADRES seçiliyor', async () => {
+    /*
+     * Sıra garanti değil: tarihî bir satırda kaynak adı ÖNDE olabiliyor.
+     * "İlkini al" diyen bir kod burada yine kaynak adını seçerdi ve hata
+     * yalnızca bazı reklamlarda görünürdü — teşhisi en zor tür.
+     */
+    await seedReklamVeKreatif({
+      adId: 'd0000003-0000-0000-0000-000000000000',
+      platform: 'google',
+      campaignId: CAMP_B,
+      assetUrls: [KAYNAK_ADI, GERCEK_ADRES],
+      spendMicros: '3000000',
+    });
+
+    const data = await svc.build(CTX, RANGE);
+    const reklam = data.topAds.find((a) => a.id === 'd0000003-0000-0000-0000-000000000000');
+
+    expect(reklam!.imageUrl).toBe(GERCEK_ADRES);
+  });
+
   it('şablon yoksa TÜM bölümler geliyor', async () => {
     await seedRow({ entityId: CAMP_A, date: '2026-08-01' });
     const data = await svc.build(CTX, RANGE);

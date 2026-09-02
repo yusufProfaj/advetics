@@ -153,6 +153,13 @@ export class StructureSyncService {
       `${adCount} reklam`,
       softDeleted > 0 ? `${softDeleted} silindi` : undefined,
       structure.complete ? undefined : 'KISMİ',
+      /*
+       * SAĞLAYICININ NOTLARI DA NOTA GİRİYOR. Taramayı düşürmeyen ama
+       * söylenmesi gereken şeyler burada (örneğin kreatif görselinin adresi
+       * çözülemedi). Yalnızca worker log'una yazmak, kimsenin bakmadığı bir
+       * ize yazmak demek; not senkron durumu ekranında görünüyor.
+       */
+      ...(structure.notes ?? []),
     ]
       .filter(Boolean)
       .join(' · ');

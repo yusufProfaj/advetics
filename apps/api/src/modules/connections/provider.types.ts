@@ -281,6 +281,18 @@ export interface PlatformStructure {
   complete: boolean;
   /** Kaç HTTP çağrısı harcandı — `sync_jobs.api_calls_used` için. */
   apiCalls: number;
+  /**
+   * TARAMAYI DÜŞÜRMEYEN ama söylenmesi gereken şeyler.
+   *
+   * `complete: false` İLE KARIŞTIRILMAMALI: o bayrak "varlık listesi eksik"
+   * demek ve silinme tespitini kapatıyor. Buradaki notlar varlık listesini
+   * etkilemeyen yan sonuçlar için — örneğin kreatif görselinin adresi
+   * çözülemediğinde. Yapı taramasını bunun için düşürmek, her şeyin bağlı
+   * olduğu bir işi kozmetik bir eksik yüzünden kaybetmek olurdu; sessizce
+   * geçmek ise bu projenin tekrar eden hatası. Notlar `sync_jobs.note`
+   * üzerinden senkron durumu ekranında görünüyor.
+   */
+  notes?: string[];
 }
 
 // -----------------------------------------------------------------------------

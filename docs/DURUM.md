@@ -621,11 +621,10 @@ yapı taraması da reddedilir ve hesap kalıcı kilide girerdi.
 değil). Değer string olduğu için süzgeçten geçip `imageUrl`e yazılıyor ve
 TRUTHY oluyordu: PDF metin önizlemesi yerine "görsel alınamadı" dalına
 giriyor ve dipnottaki sayaç şişip gerçek arızayı gizliyordu. Süzgeç artık tek
-kaynakta (`gorselAdresleri`) ve kaynak adını eliyor. **Google Display
-reklamlarının görseli raporda hâlâ yok**; gerçek adresi çekmek ayrı bir GAQL
-sorgusu istiyor (`SELECT asset.image_asset.full_size.url FROM asset`) ve o iş
-yapılmadı. Google **arama** reklamlarının görselsiz olması hata değil — onlar
-metin önizlemesiyle çiziliyor ve doğru çalışıyor.
+kaynakta (`gorselAdresleri`) ve kaynak adını eliyor. Kalan yarısı — gerçek
+adresi çekmek — aşağıdaki maddede tamamlandı. Google **arama** reklamlarının
+görselsiz olması hata değil: onlar metin önizlemesiyle çiziliyor ve doğru
+çalışıyor.
 
 **Test:** 38 yeni test, on mutasyonun onu da yakalandı. Bir mutasyon gerçek
 bir kırılganlık ortaya çıkardı: yarılamanın durma koşulu URL biçimini seçen
@@ -655,6 +654,74 @@ bir `RangeError` üretti, üretimdeki hatanın güçlü bir analogu). Commit
 Eski 72+2 takılı `sync_jobs` satırı `failed` + açıklayıcı not ile
 işaretlendi; gecelik süpürme veriyi zaten ayrıca tazeliyor, elle yeniden
 tetiklemek gerekmiyor.
+
+### 2026-09-02 — Google Display görselinin gerçek adresi çekiliyor
+
+Yukarıdaki üçüncü hatanın kalan yarısı. Süzgeç kaynak adını eliyordu, yani
+rapor artık YANLIŞ bir sebep ("görsel alınamadı") göstermiyordu — ama Google
+görüntülü reklamlarının görseli hâlâ hiçbir yerde yoktu, çünkü elimizde bir
+adres yoktu.
+
+**Adres ikinci bir GAQL sorgusundan geliyor.** `ad_group_ad` yanıtındaki
+`marketing_images[].asset` yalnızca bir referans; adres `asset` kaynağında:
+`SELECT asset.resource_name, asset.image_asset.full_size.url FROM asset
+WHERE asset.type = 'IMAGE' AND asset.id IN (…)`. Sorgu kaynak adlarıyla
+**süzülüyor** — süzgeçsiz bir `FROM asset` hesaba bir kez yüklenmiş her
+görseli döndürürdü. Kimlikler sorgu metnine gömüldüğü için (GAQL'de bağlı
+parametre yok) yalnızca rakam kabul ediliyor ve liste 500'lük parçalara
+bölünüyor.
+
+**Sorgu, kaynak adı toplanmamış hesapta HİÇ atılmıyor.** Hesapların çoğu
+yalnızca arama reklamı taşıyor ve orada bu çağrı bedava değil, kotadan
+yeniyor — CLAUDE.md'nin "ÖNCE KONTROL, SONRA ÇAĞRI" kuralı. Parça başına bir
+çağrı `apiCalls`a sayılıyor; sayılmayan bir çağrı, kota bekçisinin kendi
+ürettiği trafiği görmemesi demek.
+
+**Hata yapı taramasını düşürmüyor ama sessiz de değil.** Kampanya/ad
+group/reklam satırları her şeyin ön koşulu; kozmetik bir görsel adresi için o
+zinciri kaybetmek çok daha pahalı. Bunun yerine `PlatformStructure.notes`
+alanı eklendi ve `sync_jobs.note` üzerinden **senkron durumu ekranında**
+görünüyor: sebep platformun kendi cümlesiyle yazılıyor ve kaç adresin
+çözüldüğü sayılıyor (`görsel adresi: 3/7 çözüldü`). O sayaç aynı zamanda
+canlı doğrulama aracı — "0/7", sorgunun hiç çalışmadığını ilk bakışta
+söylüyor.
+
+**CANLIDA DOĞRULANMADI.** Dönen adresin `https://tpc.googlesyndication.com/
+simgad/…` biçiminde olduğu iddiası Google'ın forum kayıtlarından geliyor,
+resmi bir referans sayfasından değil. Beyaz listeye (`kreatif-gorseli.ts`)
+`tpc.googlesyndication.com` **tam ana makine** olarak eklendi —
+`.googlesyndication.com` soneki `pagead2`/`googleads` gibi reklam sunucusu
+alt alanlarını da açardı. Tahmin yanlışsa belirti teşhis edilebilir bir
+cümle: rapor indirmeyi reddedip gördüğü ana makine adını yazıyor. Adresin
+ömrü de gözlenmeli: imza parametresi taşımıyor, yani Meta'nın imzalı
+adresleri gibi çürümüyor GÖRÜNÜYOR ama Google bunu yazılı olarak garanti
+etmiyor. Çürürse karşılığı Meta'daki gibi rapor anında tazelemedir
+(`kreatif-adresi.service.ts`).
+
+**Test:** 22 yeni test (16'sı yeni `google-gorsel-adresi.spec.ts`, 3'ü beyaz
+liste, 3'ü `reports.service.spec.ts` içinde gerçek veritabanına karşı).
+On iki mutasyonun on ikisi de yakalanıyor, ama oraya iki düzeltmeyle gelindi:
+
+1. **`assetUrls` boş mu diye bakan iddia yetmiyordu.** Haritaya çöp girmesini
+   engelleyen kontrol silindiğinde de geçiyordu, çünkü `mapGoogleCreative`in
+   daraltma süzgeci onu yine eliyor. İddia sayaç notuna da çapalandı: not
+   "1/1 çözüldü" derse harita çöp taşıyor demek.
+2. **Ön koşulun erken dönüşü silindiğinde** sorgu yine atılmıyordu (kimlik
+   listesi boş kalıyor) ama arama-only her hesapta anlamsız bir not
+   beliriyordu; "not YAZILMIYOR" iddiası eklendi.
+
+Beyaz liste tarafında görev tarifinde bildirilen boşluk doğrulandı:
+`.gstatic.com` ve `.ggpht.com` silinse hiçbir test düşmüyordu. Artık her sonek
+için elle yazılmış bir örnek adres var ve örnek listesinin beyaz listeyle
+birebir aynı olduğu AYRICA sınanıyor — `IZINLI_SONEKLER` üzerinde döngü kuran
+bir test, girdi silindiğinde kısalıp yine geçerdi.
+
+Bilerek kilitlenmemiş tek nokta: `mapGoogleCreative`teki `gecerliGorselAdresi`
+süzgeci TEK BAŞINA mutasyonlandığında hiçbir test düşmüyor, çünkü haritanın
+girişindeki kontrol zaten yeterli. Süzgeç daraltma için ZORUNLU olduğu ve bu
+listeye ikinci bir kaynak (kare görsel, logo) eklenirse doğrulamanın
+unutulacağı yer tam orası olduğu için duruyor; ikisi birden silinince dört
+test düşüyor.
 
 ### 3.8. 31 Ağustos: Auto-Boost'un Bildirim Havuzu hiç dolmuyordu
 
