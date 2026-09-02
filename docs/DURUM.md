@@ -739,6 +739,28 @@ hiçbir zaman oluşmuyordu. `toplu-tazeleme.ts` artık ikisini de planlıyor,
 YALNIZCA Google hesaplarında (Meta'da bu iki tablo yok; iş açmak her turda
 kesin düşecek bir iş üretmek olurdu).
 
+**CANLIDA DOĞRULANDI (2026-09-02 08:18 UTC).** Kaşkaloğlu'nun Google hesabı
+düzeltme öncesi 07:07–08:07 arasında dört kez `failed` olmuştu. Deploy sonrası
+elle tetiklenen tur:
+
+| İş | Sonuç |
+|---|---|
+| `structure` | ✅ **14.926 satır** (önce: `received 84093` ile düşüyordu) |
+| `initial_backfill` | ✅ **9.959 satır**, 2026-06-04 … 2026-09-02 |
+
+Yazılan: 78 kampanya · 840 reklam grubu · 7.004 reklam. Sistem genelinde son
+20 dakikada bind/`ON CONFLICT` hatası: **0**.
+
+İKİNCİ ŞEY DE KANITLANDI: `initial_backfill` ELLE TETİKLENMEDİ. Yapı taraması
+başarılı olunca `yapiSonrasiGecmisiKuyrukla` devreye girip 90 günlük geçmişi
+yeniden kuyruğa aldı — "yeni müşteride 90 gün kendiliğinden gelsin" isteğinin
+karşılığı bu zincir ve artık çalışıyor.
+
+**HENÜZ CANLIDA GÖRÜLMEYEN:** `ON CONFLICT` mükerrer düzeltmesi (anahtar
+kelime ve kırılım). O işler gecelik koşuyor (04:47 / 05:07 / 05:32 UTC);
+şimdilik yalnızca mutasyonla doğrulanmış birim testleri var. İlk gece
+sonrası `sync_jobs` kontrol edilmeli.
+
 **Panel:** rapor şablonu modalı 14 bölümde ekranı aşıyor ve "Kaydet"
 görünmüyordu (kullanıcı tarayıcıyı %67'ye küçültmek zorunda kalıyordu).
 Kart artık ekran yüksekliğiyle sınırlı; gövde ve bölüm listesi kendi içinde
