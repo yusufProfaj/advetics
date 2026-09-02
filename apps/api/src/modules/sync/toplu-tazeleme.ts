@@ -75,7 +75,7 @@ export interface PlanlananIs {
   adAccountId: string;
   clientId: string;
   platform: 'meta' | 'google';
-  jobType: 'structure' | 'insights_backfill' | 'insights_breakdowns';
+  jobType: 'structure' | 'insights_backfill' | 'insights_breakdowns' | 'search_terms' | 'keyword_insights';
   dateFrom?: string;
   dateTo?: string;
 }
@@ -125,6 +125,44 @@ export function planla(girdi: PlanGirdisi): PlanlananIs[] {
           clientId: hesap.clientId,
           platform: hesap.platform,
           jobType: 'insights_breakdowns',
+          dateFrom: a.from,
+          dateTo: a.to,
+        });
+      }
+    }
+
+    /*
+     * ═══ ARAMA TERİMİ VE ANAHTAR KELİME GEÇMİŞİ — YALNIZCA GOOGLE ═══
+     *
+     * BU İKİSİ HİÇ ÇEKİLMİYORDU ve belirtisi kullanıcıdan geldi: raporda
+     * "Geçen ay" seçilince arama terimleri tablosu boş çıkıyordu.
+     *
+     * Sebep bir hata değil, bir EKSİKLİK: bu iki tabloyu yalnızca gecelik
+     * süpürme dolduruyor ve o da SON 7 GÜNÜ çekiyor. `initial_backfill` de,
+     * "Tüm verileri güncelle" de kapsamıyordu — yani 8 günden eski hiçbir
+     * arama terimi hiçbir zaman oluşmuyordu. Rapor bölümü "bu dönemde veri
+     * yok" diyor, ki doğru; ama verinin neden hiç toplanmadığını kimse
+     * söylemiyordu.
+     *
+     * META'YA AÇILMIYOR: arama terimi ve anahtar kelime Google Ads'e özel.
+     * Meta hesabı için iş açmak, her turda kesin başarısız olacak bir iş
+     * üretmek olurdu.
+     */
+    if (hesap.platform === 'google') {
+      for (const a of araliklar) {
+        isler.push({
+          adAccountId: hesap.id,
+          clientId: hesap.clientId,
+          platform: hesap.platform,
+          jobType: 'search_terms',
+          dateFrom: a.from,
+          dateTo: a.to,
+        });
+        isler.push({
+          adAccountId: hesap.id,
+          clientId: hesap.clientId,
+          platform: hesap.platform,
+          jobType: 'keyword_insights',
           dateFrom: a.from,
           dateTo: a.to,
         });

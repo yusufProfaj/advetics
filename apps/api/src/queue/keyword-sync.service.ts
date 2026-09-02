@@ -4,6 +4,7 @@ import { ProviderRegistry } from '../modules/connections/provider.registry';
 import { TokenVaultService } from '../modules/connections/token-vault.service';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
 import { QuotaGuardService } from './quota-guard.service';
+import { topluUpsert } from './toplu-yazma';
 
 /**
  * Anahtar kelime performansı senkronizasyonu — yalnızca Google.
@@ -96,22 +97,32 @@ export class KeywordSyncService {
     });
     const groupId = new Map(groups.map((g) => [g.externalId, g.id]));
 
-    const values = result.rows.map(
-      (r) => Prisma.sql`(
+    /*
+     * MÜKERRER TEMİZLİĞİ ZORUNLU. Google aynı gün + aynı criterion için iki
+     * satır döndürebiliyor (farklı reklam gruplarında aynı anahtar kelime,
+     * ya da sayfalama sınırında örtüşme). İkisi de AYNI çakışma anahtarına
+     * düşüyor ve Postgres "ON CONFLICT DO UPDATE command cannot affect row a
+     * second time" diyerek KOMUTUN TAMAMINI reddediyor — üretimde tam olarak
+     * böyle düştü ve binlerce satır kaybedildi.
+     */
+    const sonuc = await topluUpsert({
+      satirlar: result.rows,
+      anahtar: (r) => `${r.date}|${r.externalCriterionId}`,
+      deger: (r) => Prisma.sql`(
+
         ${account.clientId}::uuid, ${account.id}::uuid,
         ${r.adGroupExternalId ? (groupId.get(r.adGroupExternalId) ?? null) : null}::uuid,
         ${r.externalCriterionId}, ${r.keyword}, ${r.matchType},
         ${r.date}::date, ${r.impressions}, ${r.clicks}, ${r.spendMicros}::bigint,
         ${r.conversions}, ${r.conversionValueMicros}::bigint, ${r.currency}, now()
       )`,
-    );
-
-    const written = await this.db.$executeRaw(Prisma.sql`
+      yaz: (values) =>
+        this.db.$executeRaw(Prisma.sql`
       INSERT INTO keyword_insights (
         client_id, ad_account_id, ad_group_id, external_criterion_id,
         keyword, match_type, date, impressions, clicks, spend_micros,
         conversions, conversion_value_micros, currency, fetched_at
-      ) VALUES ${Prisma.join(values, ', ')}
+      ) VALUES ${values}
       ON CONFLICT (date, ad_account_id, external_criterion_id) DO UPDATE SET
         -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
         -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
@@ -131,7 +142,9 @@ export class KeywordSyncService {
         conversion_value_micros = EXCLUDED.conversion_value_micros,
         currency = EXCLUDED.currency,
         fetched_at = now()
-    `);
+        `),
+    });
+    const written = sonuc.yazilan;
 
     const unmatched = result.rows.filter(
       (r) => r.adGroupExternalId && !groupId.has(r.adGroupExternalId),

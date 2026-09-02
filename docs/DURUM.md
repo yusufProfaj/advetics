@@ -691,6 +691,59 @@ Atlama sessiz değil, listede görünüyor.
 `Prisma.sql` şablonu içindeki yorumda backtick tuzağına **bu oturumda da bir
 kez düşüldü** (`TS1005`), CLAUDE.md'de yazılı olmasına rağmen.
 
+### 3.10. 2 Eylül: toplu yazmanın iki hatası — ALTI SERVİSTE BİRDEN
+
+Kullanıcı Kaşkaloğlu Göz Hastanesi'nde "veriler çekilemedi" bildirdi. Teşhis
+ekranında aynı anda dört iş kırmızıydı ve hepsinin kökü İKİ hataydı:
+
+| İş | Hata |
+|---|---|
+| Yapı taraması | `too many bind variables … received 84093` |
+| Arama terimleri | `too many bind variables … received 123615` |
+| Anahtar kelime | `ON CONFLICT … cannot affect row a second time` |
+| Kırılımlar | `ON CONFLICT … cannot affect row a second time` |
+
+**① BAĞLI PARAMETRE SINIRI (32.767).** Toplu `INSERT` elindeki BÜTÜN satırları
+tek sorguya koyuyordu; sınır hesabın büyüklüğüne bırakılmıştı. Hata
+DETERMİNİSTİK — satır sayısı değişmediği için beş deneme de aynı yerde düşüyor
+ve iş kalıcı `failed` oluyor.
+
+**② AYNI PARTİDE AYNI ÇAKIŞMA ANAHTARINDAN İKİ SATIR.** Postgres komutun
+TAMAMINI reddediyor; iki mükerrer satır yüzünden binlerce satır kayboluyor.
+
+**ZİNCİRLEME ETKİSİ ASIL BEDELDİ.** Yapı düşünce kampanya satırı oluşmuyor ve
+bütün metrik işleri — doğru davranarak — "yapı taraması hiç koşmadı" deyip
+düşüyor. Kullanıcının gördüğü şey "yeni müşteride hiç veri gelmiyor" oluyordu;
+sebep yalnızca `sync_jobs` içinde yazılıydı.
+
+**NOKTA DÜZELTMENİN BEDELİ.** Bu hata sınıfı 31 Ağustos'ta `insights-sync`
+içinde düzeltilmişti — ve yalnızca orada. Aynı hata beş serviste daha
+duruyordu ve üretimde patlayana kadar görünmedi. Düzeltme artık TEK KAPIDA
+(`queue/toplu-yazma.ts`): parçalama + mükerrer temizliği, altı servisin
+hepsi oradan geçiyor. Parça boyu satır başına GERÇEK parametre sayısından
+ölçülüyor (`Prisma.Sql.values.length`), elle yazılmıyor — bir kolon
+eklendiğinde kendiliğinden küçülüyor.
+
+`toplu-yazma.spec.ts` bir KAYNAK TARAMASI taşıyor: toplu yazan bir servis
+paylaşılan yardımcıyı kullanmıyorsa ya da `Prisma.join(values)` ile doğrudan
+yazıyorsa test düşüyor. Tarama işini hemen gördü — `insights-sync`'in kendi
+ayrı chunk'lama döngüsünü yakaladı (iki farklı uygulama, tam da kaçınılmak
+istenen şey).
+
+**AYRI BİR EKSİKLİK: arama terimi ve anahtar kelime GEÇMİŞİ hiç çekilmiyordu.**
+Kullanıcının ikinci bildirimi ("raporda geçen ay'a tıkladığımda arama
+terimleri listelenmiyor") bir hata değil bir boşluktu: bu iki tabloyu yalnızca
+gecelik süpürme dolduruyor ve o da SON 7 GÜNÜ çekiyor. Ne `initial_backfill`
+ne "Tüm verileri güncelle" kapsıyordu — 8 günden eski hiçbir arama terimi
+hiçbir zaman oluşmuyordu. `toplu-tazeleme.ts` artık ikisini de planlıyor,
+YALNIZCA Google hesaplarında (Meta'da bu iki tablo yok; iş açmak her turda
+kesin düşecek bir iş üretmek olurdu).
+
+**Panel:** rapor şablonu modalı 14 bölümde ekranı aşıyor ve "Kaydet"
+görünmüyordu (kullanıcı tarayıcıyı %67'ye küçültmek zorunda kalıyordu).
+Kart artık ekran yüksekliğiyle sınırlı; gövde ve bölüm listesi kendi içinde
+kaydırılıyor, başlık ve düğmeler sabit.
+
 **Deploy script'i SSH bağlantısı kesilirse yarıda kalabiliyor.** Build
 adımı (`nest build` + `next build`) birkaç dakika sürüyor ve bu sırada
 sessiz kalabiliyor; bir SSH oturumu (ör. uzun bir inaktivite zaman aşımı)

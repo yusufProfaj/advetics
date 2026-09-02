@@ -206,12 +206,21 @@ function SablonModal({
         if (e.target === e.currentTarget) onKapat();
       }}
     >
-      <div className="w-full max-w-xl rounded-xl border border-line bg-surface p-5 shadow-xl">
-        <h2 className="text-lg font-semibold">
+      {/*
+        KART EKRANDAN UZUN OLAMAZ.
+        14 bölümlü bir şablonda kart viewport'u aşıyordu ve dış kapsayıcı
+        `sm:items-center` ile ortaladığı için taşan kısım YUKARIDAN
+        kırpılıyordu — "Kaydet" düğmesi ekrana hiç girmiyor, kullanıcı
+        tarayıcıyı %67'ye küçültmek zorunda kalıyordu.
+        Çözüm: kartı ekran yüksekliğiyle sınırla, GÖVDEYİ kaydır, başlık ve
+        düğmeler sabit kalsın.
+      */}
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col rounded-xl border border-line bg-surface p-5 shadow-xl">
+        <h2 className="shrink-0 text-lg font-semibold">
           {sablon ? 'Şablonu düzenle' : 'Yeni şablon'}
         </h2>
 
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           <Alan label="Şablon adı">
             <input
               value={ad}
@@ -266,7 +275,12 @@ function SablonModal({
               Rapor bu sırayla üretiliyor. Hiç bölüm bırakmazsan kaydedilemez —
               boş bir rapor müşteriye gönderilecek bir belge değil.
             </p>
-            <ul className="mt-2 space-y-1">
+            {/*
+              LİSTE KENDİ İÇİNDE KAYDIRILIYOR. Bölüm sayısı şablona göre
+              14'e çıkabiliyor; hepsini birden göstermek gövdeyi uzatıp
+              alttaki sütun ayarlarını erişilemez yapıyordu.
+            */}
+            <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-1">
               {secili.map((s, i) => (
                 <li
                   key={s}
@@ -359,7 +373,7 @@ function SablonModal({
           </div>
         )}
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-4 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
           {sablon ? (
             <button
               type="button"

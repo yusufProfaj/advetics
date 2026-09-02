@@ -12,6 +12,7 @@ import { ProviderRegistry } from '../modules/connections/provider.registry';
 import { TokenVaultService } from '../modules/connections/token-vault.service';
 import { shiftDate } from '../modules/budgets/budget-pacing';
 import { QuotaGuardService } from './quota-guard.service';
+import { topluUpsert } from './toplu-yazma';
 
 /**
  * L2 / L3 / L4 — günlük metrikleri platformdan çekip `insights_daily`'ye yazar.
@@ -355,10 +356,24 @@ export class InsightsSyncService {
     }
     if (usable.length === 0) return { rows: 0, skipped };
 
-    // Toplu upsert — satır başına sorgu atmak 30 gün × 4 seviye × N varlıkta
-    // binlerce round-trip demek.
-    const values = usable.map(
-      (r) => Prisma.sql`(
+    /*
+     * PARÇALAMA VE MÜKERRER TEMİZLİĞİ PAYLAŞILAN KAPIDAN (`toplu-yazma.ts`).
+     *
+     * Burada bir süre KENDİ chunk'lama döngüsü vardı ve o, hatanın yalnızca
+     * bu serviste düzeltilmiş olmasının izidir: aynı hata beş serviste daha
+     * duruyordu ve üretimde patladı. İki ayrı chunk'lama uygulaması tutmak,
+     * CLAUDE.md'nin "aynı şeyi üreten ikinci fonksiyon" tuzağı — biri
+     * mükerrer temizliği kazanır, diğeri kazanmaz.
+     */
+    let affected = 0;
+    try {
+      const sonuc = await topluUpsert({
+        satirlar: usable,
+        // Çakışma anahtarı `ON CONFLICT` ile AYNI: (date, entity_level,
+        // entity_id, breakdown_key). `breakdown_key` her zaman '' olduğu için
+        // anahtara girmiyor.
+        anahtar: (r) => `${r.date}|${level}|${idMap.get(r.entityExternalId)!}`,
+        deger: (r) => Prisma.sql`(
         ${account.clientId}::uuid, ${account.id}::uuid, ${account.platform}::"Platform",
         ${level}::"EntityLevel", ${idMap.get(r.entityExternalId)!}::uuid,
         ${r.entityExternalId.slice(0, 128)},
@@ -372,23 +387,8 @@ export class InsightsSyncService {
         ${r.currency},
         now()
       )`,
-    );
-
-    // POSTGRES'İN BAĞLI PARAMETRE SINIRI 32.767 — satır başına 18 parametre
-    // bağlanıyor (aşağıdaki VALUES listesi). Büyük bir hesapta `ad`
-    // seviyesinde tek pencerede binlerce satır gelebiliyor (örn. 1900 reklam
-    // × 7 gün ≈ 13.300 satır × 18 ≈ 240.000 parametre) ve chunk'sız tek INSERT
-    // bu sınırı aşıp "too many bind variables" ile DETERMİNİSTİK olarak
-    // düşüyordu — satır sayısı değişmediği için her yeniden deneme aynı
-    // hatayla düşüyor, retry işe yaramıyordu. 1000 satırlık parçalar
-    // (1000 × 18 = 18.000) sınırın belirgin altında kalıyor.
-    const CHUNK_SIZE = 1000;
-    let affected = 0;
-    try {
-      for (let i = 0; i < values.length; i += CHUNK_SIZE) {
-        const chunk = values.slice(i, i + CHUNK_SIZE);
-        affected += await this.db.$executeRaw(
-          Prisma.sql`
+        yaz: (values) =>
+          this.db.$executeRaw(Prisma.sql`
           INSERT INTO insights_daily (
             client_id, ad_account_id, platform, entity_level, entity_id,
             entity_external_id, date, breakdown_key,
@@ -396,7 +396,7 @@ export class InsightsSyncService {
             conversions, conversion_value_micros,
             video_views, engagements, reach, frequency,
             raw_metrics, currency, fetched_at
-          ) VALUES ${Prisma.join(chunk)}
+          ) VALUES ${values}
           -- Doğal birincil anahtar. breakdown_key boş string ('') çünkü NULL
           -- birincil anahtarda hiçbir zaman eşleşmiyor ve her senkronizasyonda
           -- satır MÜKERRER olurdu.
@@ -421,7 +421,13 @@ export class InsightsSyncService {
             -- ne zaman son kez doğrulandığını bilmek raporda "bayat veri"
             -- uyarısının dayanağı.
             fetched_at = now()
-        `,
+          `),
+      });
+      affected = sonuc.yazilan;
+      if (sonuc.mukerrer > 0) {
+        this.logger.warn(
+          `${account.platform} hesap ${account.id}: ${sonuc.mukerrer} mükerrer ` +
+            `${level} metriği birleştirildi (aynı gün + aynı varlık).`,
         );
       }
     } catch (err) {

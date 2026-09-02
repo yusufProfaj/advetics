@@ -5,6 +5,7 @@ import { ProviderRegistry } from '../modules/connections/provider.registry';
 import { TokenVaultService } from '../modules/connections/token-vault.service';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
 import { QuotaGuardService } from './quota-guard.service';
+import { topluUpsert } from './toplu-yazma';
 
 /**
  * ARAMA TERİMİ senkronizasyonu — yalnızca Google.
@@ -159,21 +160,27 @@ export class SearchTermSyncService {
       });
     }
 
-    const values = [...birlesik.values()].map(
-      (r) => Prisma.sql`(
+    /*
+     * ÇAKIŞMA ANAHTARI ZATEN `birlesik` ile tekilleştirildi (yukarıda);
+     * `topluUpsert` burada PARÇALAMA için kullanılıyor. Üretimde bu yazma
+     * `received 123615` ile düşüyordu — mükerrer değil, SATIR SAYISI sorunu.
+     */
+    const sonuc = await topluUpsert({
+      satirlar: [...birlesik.values()],
+      anahtar: (r) => `${r.date}|${r.hash}`,
+      deger: (r) => Prisma.sql`(
         ${account.clientId}::uuid, ${account.id}::uuid, ${r.adGroupId}::uuid,
         ${r.hash}, ${r.term}, ${r.keywordText ?? null}, ${r.matchType ?? null}, ${r.status},
         ${r.date}::date, ${r.impressions}, ${r.clicks}, ${r.spendMicros}::bigint,
         ${r.conversions}, ${r.conversionValueMicros}::bigint, ${r.currency}, now()
       )`,
-    );
-
-    const written = await this.db.$executeRaw(Prisma.sql`
+      yaz: (values) =>
+        this.db.$executeRaw(Prisma.sql`
       INSERT INTO search_term_insights (
         client_id, ad_account_id, ad_group_id, term_hash, search_term,
         keyword_text, match_type, status, date, impressions, clicks,
         spend_micros, conversions, conversion_value_micros, currency, fetched_at
-      ) VALUES ${Prisma.join(values, ', ')}
+      ) VALUES ${values}
       ON CONFLICT (date, ad_account_id, term_hash) DO UPDATE SET
         -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
         -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
@@ -194,7 +201,9 @@ export class SearchTermSyncService {
         conversion_value_micros = EXCLUDED.conversion_value_micros,
         currency = EXCLUDED.currency,
         fetched_at = now()
-    `);
+        `),
+    });
+    const written = sonuc.yazilan;
 
     const unmatched = result.rows.filter(
       (r) => r.adGroupExternalId && !groupId.has(r.adGroupExternalId),

@@ -6,6 +6,7 @@ import { ProviderRegistry } from '../modules/connections/provider.registry';
 import { CryptoService } from '../crypto/crypto.service';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
 import { QuotaGuardService } from './quota-guard.service';
+import { topluUpsert } from './toplu-yazma';
 
 /**
  * L6 — organik gönderi senkronizasyonu (Modül 7 Auto-Boost'un girdisi).
@@ -136,8 +137,16 @@ export class OrganicSyncService {
     // TEK SORGUDA TOPLU UPSERT. Gönderi başına ayrı sorgu, 50 gönderilik bir
     // sayfada 50 gidiş-dönüş demek; senkronizasyon katmanının geri kalanı da
     // aynı deseni kullanıyor.
-    const values = posts.map(
-      (p) => Prisma.sql`(
+    /*
+     * PARÇALAMA VE MÜKERRER TEMİZLİĞİ — diğer beş senkronizasyon servisiyle
+     * aynı kapıdan. Organik gönderi sayısı reklam metriklerine göre küçük ve
+     * bugüne kadar sınıra dayanmadı; ama tek kapıdan geçmemek, bir gün büyük
+     * bir sayfada aynı hatanın burada da çıkması demekti.
+     */
+    const sonuc = await topluUpsert({
+      satirlar: posts,
+      anahtar: (p) => p.externalId,
+      deger: (p) => Prisma.sql`(
         gen_random_uuid(), ${profile.orgId}::uuid,
         ${profile.clientId}::uuid, ${socialProfileId}::uuid,
         ${p.externalId}, ${p.mediaType}, ${p.message?.slice(0, 3000) ?? null},
@@ -147,15 +156,14 @@ export class OrganicSyncService {
         ${p.likes + p.comments + p.shares + p.saves},
         ${JSON.stringify(p.raw)}::jsonb, now(), now()
       )`,
-    );
-
-    const written = await this.db.$executeRaw(Prisma.sql`
+      yaz: (values) =>
+        this.db.$executeRaw(Prisma.sql`
       INSERT INTO organic_posts (
         id, org_id, client_id, social_profile_id, external_id, media_type,
         message, permalink, thumbnail_url, published_at,
         impressions, reach, likes, comments, shares, saves, video_views,
         engagements, raw, fetched_at, updated_at
-      ) VALUES ${Prisma.join(values, ', ')}
+      ) VALUES ${values}
       ON CONFLICT (social_profile_id, external_id) DO UPDATE SET
         message      = EXCLUDED.message,
         permalink    = EXCLUDED.permalink,
@@ -174,7 +182,9 @@ export class OrganicSyncService {
         -- boosted_at ÜZERİNE YAZILMIYOR: o bizim kaydımız, platformun değil.
         -- Senkronizasyonun onu sıfırlaması, boost edilmiş bir gönderinin
         -- yeniden aday olması demek olurdu.
-    `);
+        `),
+    });
+    const written = sonuc.yazilan;
 
     await this.touch(socialProfileId);
     return { rows: written, note: `${profile.name}: ${posts.length} gönderi` };

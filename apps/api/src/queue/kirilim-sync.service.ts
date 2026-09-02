@@ -5,6 +5,7 @@ import { ProviderRegistry } from '../modules/connections/provider.registry';
 import { TokenVaultService } from '../modules/connections/token-vault.service';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
 import { QuotaGuardService } from './quota-guard.service';
+import { topluUpsert } from './toplu-yazma';
 
 /**
  * ═══ KIRILIM SENKRONİZASYONU — yaş, cinsiyet, yerleşim, saat, şehir ═══
@@ -163,21 +164,32 @@ export class KirilimSyncService {
       currency: string;
     }>,
   ): Promise<number> {
-    const values = rows.map(
-      (r) => Prisma.sql`(
+    /*
+     * MÜKERRER TEMİZLİĞİ ZORUNLU — ÜRETİMDE BU YÜZDEN DÜŞTÜ.
+     *
+     * Aynı gün + aynı boyut + aynı değer iki kez gelebiliyor: Meta bir
+     * kırılımı iki kovaya birden yazabiliyor (örneğin aynı şehir farklı
+     * yerleşimlerde) ve `value` normalize edilmeden saklandığı için ikisi
+     * aynı çakışma anahtarına düşüyor. Postgres o durumda
+     * "ON CONFLICT DO UPDATE command cannot affect row a second time" diyerek
+     * KOMUTUN TAMAMINI reddediyor — beş boyutun hepsi birden kayboluyor.
+     */
+    const sonuc = await topluUpsert({
+      satirlar: rows,
+      anahtar: (r) => `${r.date}|${r.dimension}|${r.value}`,
+      deger: (r) => Prisma.sql`(
         ${clientId}::uuid, ${adAccountId}::uuid, ${platform}::"Platform",
         ${r.dimension}::"BreakdownDimension", ${r.value}, ${r.date}::date,
         ${r.impressions}, ${r.clicks}, ${r.spendMicros}::bigint,
         ${r.conversions}, ${r.conversionValueMicros}::bigint, ${r.currency}, now()
       )`,
-    );
-
-    return this.db.$executeRaw(Prisma.sql`
+      yaz: (values) =>
+        this.db.$executeRaw(Prisma.sql`
       INSERT INTO insight_breakdowns (
         client_id, ad_account_id, platform, dimension, value, date,
         impressions, clicks, spend_micros, conversions,
         conversion_value_micros, currency, fetched_at
-      ) VALUES ${Prisma.join(values, ', ')}
+      ) VALUES ${values}
       ON CONFLICT (date, ad_account_id, dimension, value) DO UPDATE SET
         -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
         -- eski satirlarin client_id'si degismiyordu ve upsert onu atladigi
@@ -190,6 +202,8 @@ export class KirilimSyncService {
         conversion_value_micros = EXCLUDED.conversion_value_micros,
         currency = EXCLUDED.currency,
         fetched_at = now()
-    `);
+    `),
+    });
+    return sonuc.yazilan;
   }
 }

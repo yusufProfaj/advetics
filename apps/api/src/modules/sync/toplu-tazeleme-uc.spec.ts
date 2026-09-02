@@ -112,10 +112,13 @@ describe('tahmin (apply: false)', () => {
       breakdowns: false,
       apply: false,
     }, REQ)) as { jobCount: number; windowCount: number; accountCount: number };
-    // 2 hesap × (1 yapı + 9 pencere) = 20
+    // Meta hesabı: 1 yapı + 9 metrik = 10.
+    // Google hesabı: + 9 arama terimi + 9 anahtar kelime = 28.
+    // (Arama terimi/anahtar kelime geçmişi eskiden HİÇ açılmıyordu; raporda
+    //  "Geçen ay" seçilince tablo boş çıkıyordu.)
     expect(r.accountCount).toBe(2);
     expect(r.windowCount).toBe(9);
-    expect(r.jobCount).toBe(20);
+    expect(r.jobCount).toBe(38);
   });
 
   it('yapı taraması olmayan hesap SAYILIYOR ama atlanmıyor', async () => {

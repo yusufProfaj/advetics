@@ -6,6 +6,7 @@ import { PlatformApiError, type PlatformStructure } from '../modules/connections
 import { ProviderRegistry } from '../modules/connections/provider.registry';
 import { TokenVaultService } from '../modules/connections/token-vault.service';
 import { QuotaGuardService } from './quota-guard.service';
+import { parcalaVeTemizle } from './toplu-yazma';
 
 /**
  * L1 — reklam hiyerarşisini platformdan çekip veritabanına yazar.
@@ -169,7 +170,9 @@ export class StructureSyncService {
   ): Promise<IdMap> {
     if (structure.creatives.length === 0) return new Map();
 
-    const values = structure.creatives.map(
+    return this.runUpsert(
+      structure.creatives,
+      (c) => c.externalId,
       (c) => Prisma.sql`(
         gen_random_uuid(), ${account.id}::uuid, ${account.clientId}::uuid,
         ${account.platform}::"Platform", ${c.externalId}, ${c.creativeType ?? null},
@@ -178,15 +181,12 @@ export class StructureSyncService {
         ${this.cap(c.displayUrl, 512)}, ${this.json(c.assetUrls)}, ${this.json(c.raw)},
         now(), now()
       )`,
-    );
-
-    return this.runUpsert(
-      Prisma.sql`
+      (values) => Prisma.sql`
         INSERT INTO creatives (
           id, ad_account_id, client_id, platform, external_id, creative_type,
           headline, primary_text, description, cta_type, destination_url,
           display_url, asset_urls, raw, synced_at, updated_at
-        ) VALUES ${Prisma.join(values)}
+        ) VALUES ${values}
         ON CONFLICT (platform, external_id) DO UPDATE SET
           -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
           -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
@@ -216,7 +216,9 @@ export class StructureSyncService {
   ): Promise<IdMap> {
     if (structure.campaigns.length === 0) return new Map();
 
-    const values = structure.campaigns.map(
+    return this.runUpsert(
+      structure.campaigns,
+      (c) => c.externalId,
       (c) => Prisma.sql`(
         gen_random_uuid(), ${account.id}::uuid, ${account.clientId}::uuid,
         ${account.platform}::"Platform", ${c.externalId}, ${this.cap(c.name, 512)},
@@ -226,16 +228,13 @@ export class StructureSyncService {
         ${c.startTime ?? null}, ${c.stopTime ?? null}, ${this.json(c.raw)},
         ${c.platformUpdatedAt ?? null}, now(), now()
       )`,
-    );
-
-    return this.runUpsert(
-      Prisma.sql`
+      (values) => Prisma.sql`
         INSERT INTO campaigns (
           id, ad_account_id, client_id, platform, external_id, name, objective,
           status, effective_status, budget_mode, budget_amount_micros,
           bid_strategy, start_time, stop_time, raw, platform_updated_at, synced_at,
           updated_at
-        ) VALUES ${Prisma.join(values)}
+        ) VALUES ${values}
         ON CONFLICT (platform, external_id) DO UPDATE SET
           -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
           -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
@@ -296,7 +295,9 @@ export class StructureSyncService {
     }
     if (usable.length === 0) return new Map();
 
-    const values = usable.map(
+    return this.runUpsert(
+      usable,
+      (g) => g.externalId,
       (g) => Prisma.sql`(
         gen_random_uuid(), ${campaignIds.get(g.campaignExternalId)!}::uuid,
         ${account.id}::uuid, ${account.clientId}::uuid,
@@ -307,16 +308,13 @@ export class StructureSyncService {
         ${this.json(g.targeting)}, ${g.startTime ?? null}, ${g.stopTime ?? null},
         ${this.json(g.raw)}, ${g.platformUpdatedAt ?? null}, now(), now()
       )`,
-    );
-
-    return this.runUpsert(
-      Prisma.sql`
+      (values) => Prisma.sql`
         INSERT INTO ad_groups (
           id, campaign_id, ad_account_id, client_id, platform, external_id, name,
           status, effective_status, budget_mode, budget_amount_micros,
           bid_amount_micros, optimization_goal, targeting, start_time, stop_time,
           raw, platform_updated_at, synced_at, updated_at
-        ) VALUES ${Prisma.join(values)}
+        ) VALUES ${values}
         ON CONFLICT (platform, external_id) DO UPDATE SET
           -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
           -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
@@ -388,7 +386,9 @@ export class StructureSyncService {
     }
     if (usable.length === 0) return 0;
 
-    const values = usable.map(
+    const written = await this.runUpsert(
+      usable,
+      (a) => a.externalId,
       (a) => Prisma.sql`(
         gen_random_uuid(), ${adGroupIds.get(a.adGroupExternalId)!}::uuid,
         ${account.id}::uuid, ${account.clientId}::uuid,
@@ -399,15 +399,12 @@ export class StructureSyncService {
         ${this.json(a.disapprovalReasons)}, ${this.json(a.raw)},
         ${a.platformUpdatedAt ?? null}, now(), now()
       )`,
-    );
-
-    const written = await this.runUpsert(
-      Prisma.sql`
+      (values) => Prisma.sql`
         INSERT INTO ads (
           id, ad_group_id, ad_account_id, client_id, platform, external_id, name,
           status, effective_status, creative_id, preview_url, review_status,
           disapproval_reasons, raw, platform_updated_at, synced_at, updated_at
-        ) VALUES ${Prisma.join(values)}
+        ) VALUES ${values}
         ON CONFLICT (platform, external_id) DO UPDATE SET
           -- MUSTERI DE GUNCELLENIYOR. Hesap baska bir musteriye atandiginda
           -- eski satirlarin client_id'si degismiyordu; upsert onu atladigi
@@ -495,9 +492,43 @@ export class StructureSyncService {
    * yazdığımız için bu otomatizmayı da atlıyoruz; kolonu unutmak tüm
    * senkronizasyonu 23502 ile düşürüyordu.
    */
-  private async runUpsert(query: Prisma.Sql): Promise<IdMap> {
-    const rows = await this.db.$queryRaw<Array<{ id: string; external_id: string }>>(query);
-    return new Map(rows.map((r) => [r.external_id, r.id]));
+  /**
+   * Toplu upsert — PARÇALARA BÖLEREK ve MÜKERRERLERİ TEMİZLEYEREK.
+   *
+   * Üretimde bu metot tek bir dev `INSERT` koşturuyordu ve büyük bir hesapta
+   * `too many bind variables in prepared statement ... received 84093` ile
+   * düşüyordu (Kaşkaloğlu Göz Hastanesi). Hata DETERMİNİSTİK: satır sayısı
+   * değişmediği için beş deneme de aynı yerde düşüyor ve yapı taraması kalıcı
+   * `failed` oluyordu.
+   *
+   * BEDELİ YALNIZCA YAPI DEĞİL: kampanya satırı oluşmayınca bütün metrik
+   * işleri "yapı taraması hiç koşmadı" deyip düşüyor ve kullanıcının gördüğü
+   * şey "yeni müşteride hiç veri gelmiyor" oluyor.
+   *
+   * Bölme ve mükerrer temizliği `toplu-yazma.ts` içinde TEK YERDE: altı
+   * senkronizasyon servisinin hepsi oradan geçiyor.
+   */
+  private async runUpsert<T>(
+    satirlar: readonly T[],
+    anahtar: (satir: T) => string,
+    deger: (satir: T) => Prisma.Sql,
+    sorgu: (values: Prisma.Sql) => Prisma.Sql,
+  ): Promise<IdMap> {
+    const { parcalar, mukerrer } = parcalaVeTemizle({ satirlar, anahtar, deger });
+    if (mukerrer > 0) {
+      // SESSİZ BİRLEŞTİRME YOK. Platform aynı dış kimliği iki kez döndürdüyse
+      // bu ya sayfalama sınırında bir örtüşme ya da veri sorunu; ikisi de
+      // görünmeli.
+      this.logger.warn(`${mukerrer} mükerrer satır birleştirildi (aynı dış kimlik).`);
+    }
+    const map: IdMap = new Map();
+    for (const parca of parcalar) {
+      const rows = await this.db.$queryRaw<Array<{ id: string; external_id: string }>>(
+        sorgu(parca),
+      );
+      for (const r of rows) map.set(r.external_id, r.id);
+    }
+    return map;
   }
 
   /**

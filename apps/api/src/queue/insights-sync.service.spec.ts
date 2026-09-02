@@ -442,13 +442,24 @@ describe('InsightsSyncService', () => {
       expect(result.rows).toBe(N);
       expect(await rowCount()).toBe(N);
 
-      // 2500 satır, 1000'lik parçalarla 3 çağrı demek (1000 + 1000 + 500).
-      // Chunk'lama kaldırılsaydı bu sayı 1 olurdu ve büyük hesaplarda
-      // üretimde görülen bind-limit hatasına karşılık gelirdi.
+      /*
+       * PARÇA SAYISI SABİT DEĞİL — ve iddia da sabit sayıya bağlanmamalı.
+       *
+       * Parça boyu artık `toplu-yazma.ts` içinde satır başına GERÇEK
+       * parametre sayısından hesaplanıyor; bir kolon eklendiğinde boy
+       * kendiliğinden küçülüyor. Buraya "3 çağrı" yazmak, o hesabın
+       * doğruluğunu değil bugünkü kolon sayısını kilitlemek olurdu.
+       *
+       * Kilitlenen ASIL iddia: bölünme GERÇEKTEN oldu ve hiçbir çağrı
+       * Postgres'in sınırına yaklaşmadı.
+       */
       const insightCalls = execSpy.mock.calls.filter((c) =>
         (c[0] as { text: string }).text.includes('INSERT INTO insights_daily'),
       );
-      expect(insightCalls).toHaveLength(3);
+      expect(insightCalls.length).toBeGreaterThan(1);
+      for (const c of insightCalls) {
+        expect((c[0] as { values: unknown[] }).values.length).toBeLessThan(32_767);
+      }
 
       execSpy.mockRestore();
     });

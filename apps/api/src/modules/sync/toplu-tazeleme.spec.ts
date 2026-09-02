@@ -112,8 +112,41 @@ describe('planla', () => {
 
   it('hesap başına yapı + pencere sayısı kadar metrik işi', () => {
     const isler = planla({ hesaplar, from: '2024-08-28', to: '2026-08-27', kirilimlar: false });
-    // 2 hesap × (1 yapı + 9 metrik) = 20
-    expect(isler).toHaveLength(20);
+    // Meta: 1 yapı + 9 metrik. Google: + 9 arama terimi + 9 anahtar kelime.
+    const meta = isler.filter((i) => i.adAccountId === 'a1');
+    const google = isler.filter((i) => i.adAccountId === 'a2');
+    expect(meta).toHaveLength(1 + 9);
+    expect(google).toHaveLength(1 + 9 + 9 + 9);
+  });
+
+  it('KRİTİK: arama terimi ve anahtar kelime GEÇMİŞİ de planlanıyor', () => {
+    /*
+     * BU İŞLER UZUN SÜRE HİÇ AÇILMIYORDU ve belirtisi kullanıcıdan geldi:
+     * raporda "Geçen ay" seçilince arama terimleri tablosu boş çıkıyordu.
+     *
+     * Sebep bir hata değil bir EKSİKLİKTİ: bu iki tabloyu yalnızca gecelik
+     * süpürme dolduruyor ve o da SON 7 GÜNÜ çekiyor. Ne `initial_backfill`
+     * ne de "Tüm verileri güncelle" kapsıyordu — yani 8 günden eski hiçbir
+     * arama terimi hiçbir zaman oluşmuyordu.
+     */
+    const isler = planla({ hesaplar, from: '2024-08-28', to: '2026-08-27', kirilimlar: false });
+    expect(isler.filter((i) => i.jobType === 'search_terms')).toHaveLength(9);
+    expect(isler.filter((i) => i.jobType === 'keyword_insights')).toHaveLength(9);
+  });
+
+  it('KRİTİK: arama terimi/anahtar kelime META hesabına AÇILMIYOR', () => {
+    /*
+     * İkisi de Google Ads'e özel. Meta hesabı için iş açmak, her turda
+     * kesin başarısız olacak bir iş üretmek olurdu — kota harcamadan
+     * düşse bile `sync_jobs` her gün kırmızı satırla dolardı.
+     */
+    const isler = planla({ hesaplar, from: '2024-08-28', to: '2026-08-27', kirilimlar: false });
+    const metaOzel = isler.filter(
+      (i) =>
+        i.adAccountId === 'a1' &&
+        (i.jobType === 'search_terms' || i.jobType === 'keyword_insights'),
+    );
+    expect(metaOzel).toEqual([]);
   });
 
   it('KRİTİK: kırılım OPT-IN — varsayılan kapalı değilse kota ikiye katlanır', () => {
