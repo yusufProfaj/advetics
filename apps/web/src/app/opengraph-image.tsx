@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { ADVETICS_KIRMIZI } from './marka-isareti';
 
 /**
  * Open Graph görseli — çalışma anında üretiliyor.
@@ -44,7 +45,7 @@ export default function OpengraphImage() {
               width: '76px',
               height: '76px',
               borderRadius: '20px',
-              background: '#e11d2e',
+              background: ADVETICS_KIRMIZI,
               fontSize: '40px',
               fontWeight: 700,
             }}
@@ -83,7 +84,7 @@ export default function OpengraphImage() {
             color: '#6b7280',
           }}
         >
-          <div style={{ width: '48px', height: '4px', background: '#e11d2e' }} />
+          <div style={{ width: '48px', height: '4px', background: ADVETICS_KIRMIZI }} />
           advetics.com
         </div>
       </div>

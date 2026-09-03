@@ -16,7 +16,7 @@
 | Veritabanı tablosu | 37 | **53** |
 | Migration | 17 | **54** |
 | API testi | 694 ¹ | **2.225** |
-| Web testi | 20 ¹ | **392** |
+| Web testi | 20 ¹ | **400** |
 | Panel sayfası | 16 | **29** |
 | API controller | 17 | **25** |
 | RLS politikası | 95 | **155** |
