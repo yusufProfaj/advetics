@@ -19,10 +19,31 @@ describe('RaporGonder', () => {
     expect(KAYNAK).toContain('E-posta ayarların doğrulanmamış');
   });
 
-  it('KRİTİK: ALICI BOŞSA gönderilemiyor ve sebebi yazılı', () => {
-    // Sessizce boş bırakmak, "gönder"e basınca hata almak demek.
-    expect(KAYNAK).toContain('alici.trim().length === 0');
-    expect(KAYNAK).toContain('kayıtlı iletişim adresi yok');
+  it('KRİTİK: HİÇ ALICI YOKSA gönderilemiyor ve sebebi yazılı', () => {
+    /*
+     * Alıcı artık LİSTE ve boş liste tek başına engel DEĞİL: müşterinin
+     * kayıtlı adresleri varsa gönderim geçerli. Düğmeyi her boş listede
+     * kapatmak, çoğunlukla hiçbir adres yazmayacak kullanıcıyı her seferinde
+     * adres yazmaya zorlardı.
+     *
+     * Engel yalnızca İKİSİ DE boşken: ne yazılan ne kayıtlı adres var.
+     */
+    expect(KAYNAK).toContain('alici.length === 0 && (taslak?.defaultTo.length ?? 0) === 0');
+    // Ve sebebi ekranda yazıyor — "gönder"e basınca hata almak yetmez.
+    expect(KAYNAK).toContain('bosVarsayilan');
+    const alan = readFileSync(join(__dirname, '../alici-listesi-alani.tsx'), 'utf8');
+    expect(alan).toContain('Müşterinin kayıtlı rapor alıcısı yok');
+  });
+
+  it('KRİTİK: alıcıların birbirini GÖRECEĞİ ekranda yazılı', () => {
+    /*
+     * Tek mail, herkes `To:` alanında — yani her alıcı diğerlerinin adresini
+     * görüyor. Bu bir gizlilik kararı ve kullanıcının GÖNDERMEDEN ÖNCE
+     * bilmesi gerekiyor: danışman + müşteri karışık bir listede sürpriz
+     * olurdu.
+     */
+    const alan = readFileSync(join(__dirname, '../alici-listesi-alani.tsx'), 'utf8');
+    expect(alan).toContain('hepsi birbirinin adresini görecek');
   });
 
   it('mail metni DÜZENLENEBİLİR — anlatı veriden üretilemiyor', () => {
@@ -61,7 +82,24 @@ describe('RaporGonder', () => {
     expect(KAYNAK).toContain('err instanceof ApiRequestError ? err.message');
   });
 
-  it('gönderim sonucu ALICIYI yazıyor — "gönderildi" tek başına yetmiyor', () => {
-    expect(KAYNAK).toContain('adresine gönderildi');
+  it('gönderim sonucu ALICILARI yazıyor — "gönderildi" tek başına yetmiyor', () => {
+    expect(KAYNAK).toContain('adrese gönderildi');
+    expect(KAYNAK).toContain('r.to.join');
+  });
+
+  it('KRİTİK: REDDEDİLEN alıcılar ayrı ve UYARI olarak gösteriliyor', () => {
+    /*
+     * nodemailer, alıcılardan bazıları reddedilse bile FIRLATMIYOR (yalnızca
+     * hepsi reddedilirse). Yani istek başarılı dönüyor ve ekran tek bir
+     * "gönderildi" yazsaydı kullanıcı müşterisinin raporu almadığını günler
+     * sonra öğrenirdi — bu projenin en pahalı hata türü.
+     *
+     * Yeşil kutunun İÇİNE sıkıştırmak da yetmez: kısmi bir arıza başarı gibi
+     * görünürdü. Ayrı kutu ve uyarı rengi.
+     */
+    expect(KAYNAK).toContain('adres reddedildi');
+    expect(KAYNAK).toContain('border-warn/40');
+    // İddia RENGE değil, reddi TAŞIYAN duruma da çapalı olmalı.
+    expect(KAYNAK).toContain('setReddedilen(r.reddedilen)');
   });
 });

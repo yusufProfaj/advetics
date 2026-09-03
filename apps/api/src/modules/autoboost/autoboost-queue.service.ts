@@ -213,7 +213,7 @@ export class AutoBoostQueueService {
     const { konu, html } = yeniIcerikMailiOlustur(clientName, kartlar, panelUrl);
 
     try {
-      await mailGonder(
+      const sonuc = await mailGonder(
         {
           fromName: gonderen.from_name,
           fromEmail: gonderen.from_email,
@@ -223,9 +223,23 @@ export class AutoBoostQueueService {
           user: gonderen.smtp_user,
           pass: this.crypto.decrypt(Buffer.from(gonderen.smtp_pass_enc)),
         },
-        { to: alicilar.join(', '), subject: konu, html },
+        // DİZİ OLARAK VERİLİYOR. Eskiden burada `join(', ')` vardı: tip
+        // "tek alıcı" diyor, kullanım "çok alıcı" yapıyordu. Ayırıcı seçimi
+        // ve tekilleştirme artık `mailGonder` sözleşmesinin parçası.
+        { to: alicilar, subject: konu, html },
       );
-      return `mail gönderildi: ${alicilar.length} alıcı`;
+      /*
+       * KISMİ RET SESSİZ KALMIYOR. nodemailer, alıcılardan bazıları
+       * reddedilse bile FIRLATMIYOR (yalnızca hepsi reddedilirse) — yani
+       * `catch` bu hâli görmüyor. Danışmanlardan birinin adresi bozuksa
+       * bildirim ona gitmiyor ve kimse fark etmiyordu.
+       */
+      if (sonuc.ret.length > 0) {
+        const detay = sonuc.ret.map((r) => `${r.adres} (${r.sebep})`).join(', ');
+        this.logger.error(`Bildirim maili kısmen gitti — reddedilen: ${detay}`);
+        return `mail gönderildi: ${sonuc.kabul.length} alıcı · REDDEDİLEN ${sonuc.ret.length}: ${detay}`;
+      }
+      return `mail gönderildi: ${sonuc.kabul.length} alıcı`;
     } catch (err) {
       const mesaj = err instanceof Error ? err.message : 'bilinmeyen hata';
       this.logger.error(`Yeni içerik bildirim maili gönderilemedi: ${mesaj}`);

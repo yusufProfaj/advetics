@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { AliciListesiAlani } from '@/components/alici-listesi-alani';
 import { useRouter } from 'next/navigation';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 
@@ -22,7 +23,14 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
  */
 export interface MusteriBilgileri {
   contactName: string | null;
-  contactEmail: string | null;
+  /**
+   * RAPOR ALICILARI — tek adres değil liste.
+   *
+   * `contactName`/`contactPhone` tekil kalıyor: onlar "yetkili kişi", bu alan
+   * "rapor kime gidecek". İkisi farklı soru ve müşteride birden çok kişinin
+   * rapor alması kural, istisna değil.
+   */
+  contactEmails: string[];
   contactPhone: string | null;
   website: string | null;
   address: string | null;
@@ -34,9 +42,21 @@ export interface MusteriBilgileri {
 
 type Alan = keyof MusteriBilgileri;
 
-const ALANLAR: { anahtar: Alan; etiket: string; tur: 'text' | 'email' | 'tel' | 'uzun' }[] = [
+/*
+ * `alicilar` TÜRÜ LİSTEYE EKLENDİ, alan listenin DIŞINA çıkarılmadı.
+ *
+ * Rapor alıcıları artık bir dizi ve onu ayrı bir JSX bloğu olarak yazmak
+ * kolaydı; yazmadım. Bu dosyanın tek değişmezi "her alan TEK listeden
+ * türetiliyor" ve `musteri-detay-alanlari.spec.ts` onu kilitliyor. Listenin
+ * dışına çıkan bir alan, bir sonraki eklemede sessizce unutulacak olandır.
+ */
+const ALANLAR: {
+  anahtar: Alan;
+  etiket: string;
+  tur: 'text' | 'email' | 'tel' | 'uzun' | 'alicilar';
+}[] = [
   { anahtar: 'contactName', etiket: 'Yetkili kişi', tur: 'text' },
-  { anahtar: 'contactEmail', etiket: 'E-posta', tur: 'email' },
+  { anahtar: 'contactEmails', etiket: 'Rapor alıcıları', tur: 'alicilar' },
   { anahtar: 'contactPhone', etiket: 'Telefon', tur: 'tel' },
   { anahtar: 'website', etiket: 'İnternet sitesi', tur: 'text' },
   { anahtar: 'taxOffice', etiket: 'Vergi dairesi', tur: 'text' },
@@ -59,9 +79,13 @@ export function MusteriBilgiFormu({
   const [isPending, startTransition] = useTransition();
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
-  const [deger, setDeger] = useState<Record<Alan, string>>(() => {
-    const d = {} as Record<Alan, string>;
-    for (const a of ALANLAR) d[a.anahtar] = baslangic[a.anahtar] ?? '';
+  const [deger, setDeger] = useState<Record<Alan, string | string[]>>(() => {
+    const d = {} as Record<Alan, string | string[]>;
+    for (const a of ALANLAR) {
+      // Liste alanı boş DİZİ ile başlıyor, boş DİZGE ile değil: iki tür aynı
+      // sözlükte duruyor ve karıştırmak `map` çağrısını patlatır.
+      d[a.anahtar] = a.tur === 'alicilar' ? (baslangic.contactEmails ?? []) : (baslangic[a.anahtar] ?? '');
+    }
     return d;
   });
 
@@ -101,17 +125,24 @@ export function MusteriBilgiFormu({
             className={`block text-xs ${a.tur === 'uzun' ? 'sm:col-span-2' : ''}`}
           >
             <span className="text-ink-muted">{a.etiket}</span>
-            {a.tur === 'uzun' ? (
+            {a.tur === 'alicilar' ? (
+              <AliciListesiAlani
+                etiket=""
+                degerler={(deger[a.anahtar] as string[]) ?? []}
+                onChange={(yeni) => setDeger({ ...deger, [a.anahtar]: yeni })}
+                yardim="Rapor maili bu adreslerin hepsine gider."
+              />
+            ) : a.tur === 'uzun' ? (
               <textarea
                 rows={2}
-                value={deger[a.anahtar]}
+                value={deger[a.anahtar] as string}
                 onChange={(e) => setDeger({ ...deger, [a.anahtar]: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs focus:border-brand focus:outline-none"
               />
             ) : (
               <input
                 type={a.tur}
-                value={deger[a.anahtar]}
+                value={deger[a.anahtar] as string}
                 onChange={(e) => setDeger({ ...deger, [a.anahtar]: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs focus:border-brand focus:outline-none"
               />

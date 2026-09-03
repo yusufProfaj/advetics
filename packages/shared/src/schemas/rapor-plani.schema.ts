@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ALICI_UST_SINIRI } from '../alici-listesi';
 
 /**
  * ═══ ZAMANLANMIŞ RAPOR GÖNDERİMİ ═══
@@ -129,8 +130,14 @@ export const raporPlaniInputSchema = z
     hour: SAAT,
     rangeKey: z.string().min(1).max(20),
     templateId: z.string().uuid().nullable().optional(),
-    /** Boşsa `clients.contact_email` kullanılıyor. */
-    toEmail: z.string().email().max(255).nullable().optional(),
+    /**
+     * ALICI LİSTESİ. Boş dizi = müşterinin kayıtlı rapor alıcılarına düş.
+     *
+     * Her eleman AYRI doğrulanıyor: tek dizge alıp sunucuda bölmek daha
+     * kolaydı ama hata "geçersiz alıcı" olurdu ve kullanıcı beş adresten
+     * hangisinin bozuk olduğunu ekrandan bulamazdı.
+     */
+    toEmails: z.array(z.string().trim().email()).max(ALICI_UST_SINIRI).default([]),
     attachPdf: z.boolean().default(true),
     enabled: z.boolean().default(true),
   })
@@ -183,9 +190,14 @@ export interface RaporPlaniOzeti {
   hour: number;
   rangeKey: string;
   templateId: string | null;
-  toEmail: string | null;
-  /** Alıcı boşsa müşterinin kayıtlı adresi — panelde gösterilecek. */
-  cozulenAlici: string | null;
+  toEmails: string[];
+  /**
+   * Gönderim anında GERÇEKTEN kullanılacak liste — panelde gösterilecek.
+   *
+   * Boş dizi "alıcı yok" demek ve plan o hâlde çalışamaz; ekran bunu
+   * söylemek zorunda, yoksa plan sessizce her gece düşer.
+   */
+  cozulenAliciListesi: string[];
   attachPdf: boolean;
   enabled: boolean;
   nextRunAt: string | null;

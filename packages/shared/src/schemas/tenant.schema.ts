@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ALICI_UST_SINIRI, gecerliAdres } from '../alici-listesi';
 import { specialAdCategoriesSchema } from './special-category.schema';
 import { ROLES } from '../auth/roles';
 
@@ -51,18 +52,24 @@ const bosDizgeNull = (max: number) =>
 
 export const clientContactSchema = z.object({
   contactName: bosDizgeNull(120),
-  contactEmail: z
-    .string()
-    .trim()
-    .max(255)
+  /**
+   * RAPOR ALICILARI — tek adres değil liste.
+   *
+   * Müşteride birden çok yetkili olması kural, istisna değil; tek adres her
+   * gönderimde adresleri elle yazmak demekti.
+   *
+   * Doğrulama GİRİŞ ANINDA ve eleman eleman: hangi adresin bozuk olduğunu
+   * kullanıcı "Kaydet"e bastığında değil, alanı bıraktığında görmeli.
+   * Veritabanında da aynı kontrol var (`clients_contact_emails_chk`) —
+   * son savunma hattı.
+   */
+  contactEmails: z
+    .array(z.string().trim())
+    .max(ALICI_UST_SINIRI)
     .optional()
-    .transform((v) => (v === '' || v === undefined ? null : v))
-    .nullable()
-    // GEVŞEK KONTROL, tam RFC değil: tam doğrulama regex'le yapılamıyor ve
-    // denemek geçerli adresleri reddetmekle sonuçlanıyor. Veritabanında da
-    // aynı kontrol var (`clients_contact_email_chk`).
-    .refine((v) => v === null || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), {
-      message: 'Geçerli bir e-posta adresi girin',
+    .transform((v) => (v ?? []).filter((e) => e !== ''))
+    .refine((v) => v.every((e) => gecerliAdres(e)), {
+      message: 'Listede geçerli olmayan bir e-posta adresi var',
     }),
   contactPhone: bosDizgeNull(40),
   website: bosDizgeNull(255),

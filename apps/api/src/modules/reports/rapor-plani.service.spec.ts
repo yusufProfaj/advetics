@@ -28,6 +28,24 @@ let gonderimDavranisi: 'basarili' | 'bos' | 'hata';
 
 const PLAN_ID = 'dddddddd-1111-1111-1111-dddddddddddd';
 
+/**
+ * Sahte gönderim sonucu — TİPİ GERÇEK İMZADAN TÜRETİLİYOR.
+ *
+ * Mock'lar `as unknown as RaporGonderService` ile kuruluyor ve o ÇİFT CAST
+ * eksik alan denetimini tamamen kapatıyor: gerçek imza değiştiğinde
+ * (`to: string` → `to: string[]`) TypeScript hiçbir şey demiyor, testler
+ * çalışma anında `to.join is not a function` ile düşüyor ve sebep testin
+ * kendisinde sanılıyor.
+ *
+ * Dönüş tipini imzadan TÜRETEREK o boşluk kapanıyor: alan eklenir ya da
+ * tipi değişirse burası DERLEMEDE kırılıyor.
+ */
+type GonderimSonucu = Awaited<ReturnType<RaporGonderService['zamanlanmisGonder']>>;
+
+function SahteSonuc(to: string[]): GonderimSonucu {
+  return { to, bosDonem: false, faturasizDonemler: [], reddedilen: [] };
+}
+
 function svcKur(): RaporPlaniService {
   const gonderici = {
     zamanlanmisGonder: async (
@@ -39,9 +57,10 @@ function svcKur(): RaporPlaniService {
       // `faturasizDonemler` GERÇEK İMZADA VAR: gönderici o dönemin platform
       // faturası yüklenmemişse burayı doldurur ve çağıran nota yazar.
       return {
-        to: 'musteri@ornek.com',
+        to: ['musteri@ornek.com'],
         bosDonem: gonderimDavranisi === 'bos',
         faturasizDonemler: [],
+        reddedilen: [],
       };
     },
   } as unknown as RaporGonderService;
@@ -174,7 +193,7 @@ describe('mükerrer gönderim koruması', () => {
     const gonderici = {
       zamanlanmisGonder: async () => {
         gonderimSirasindakiNext = (await planOku()).next_run_at;
-        return { to: 'musteri@ornek.com', bosDonem: false, faturasizDonemler: [] };
+        return SahteSonuc(['musteri@ornek.com']);
       },
     } as unknown as RaporGonderService;
     svc = new RaporPlaniService(

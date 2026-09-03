@@ -212,8 +212,20 @@ model Client {
   /// eklemek, elinde fatura bilgisi olmayan birinin müşteriyi hiç açamaması
   /// demekti.
   contactName  String? @map("contact_name") @db.VarChar(120)
-  contactEmail String? @map("contact_email") @db.VarChar(255)
-  contactPhone String? @map("contact_phone") @db.VarChar(40)
+
+  /// RAPOR ALICILARI — tekil `contact_email` DEĞİL.
+  ///
+  /// Müşteride birden çok yetkili olması kural, istisna değil; tek adres her
+  /// gönderimde adresleri elle yazmak demekti. Boş dizi = tanımlı değil.
+  ///
+  /// AD DEĞİŞTİ (`contact_email` → `contact_emails`) ve bu bilinçli: aynı adla
+  /// çoğullaştırmak, güncellenmemiş bir `$queryRaw` sorgusunun SESSİZCE dizge
+  /// beklemesi demekti. `$queryRaw` denetimsiz bir dönüşüm — tip yalan söyler.
+  ///
+  /// `contactName` ve `contactPhone` TEKİL kalıyor: onlar "yetkili kişi",
+  /// bu alan "rapor kime gidecek". İkisi farklı soru.
+  contactEmails String[] @map("contact_emails")
+  contactPhone  String?  @map("contact_phone") @db.VarChar(40)
   website      String? @db.VarChar(255)
   address      String? @db.VarChar(500)
   taxOffice    String? @map("tax_office") @db.VarChar(120)
@@ -2986,9 +2998,20 @@ model ReportSchedule {
   /// fonksiyonun aynısı.
   rangeKey String @map("range_key") @db.VarChar(20)
 
-  /// null = `clients.contact_email`. Gönderim anında çözülüyor: adres
-  /// değişince planı düzenlemek gerekmesin.
-  toEmail   String? @map("to_email") @db.VarChar(255)
+  /// ALICI LİSTESİ. Boş dizi = `clients.contact_email`e düş.
+  ///
+  /// Gönderim ANINDA çözülüyor (`nihaiAlicilar()`): adres değişince planı
+  /// düzenlemek gerekmesin.
+  ///
+  /// `TEXT[]`, JSONB DEĞİL: değerler homojen (hepsi adres), sorgulanacak bir
+  /// iç yapısı yok ve Prisma bunu `String[]` olarak birinci sınıf
+  /// destekliyor. JSONB, tip güvenliği olmayan bir `unknown` alanı ve her
+  /// okumada elle süzgeç demekti.
+  ///
+  /// NULL YOK, BOŞ DİZİ VAR: "alıcı seçilmemiş" ikisinde de aynı şeyi
+  /// anlatıyor ve iki hâli ayırt etmeyi unutan bir sorgu sessizce yanlış
+  /// davranırdı.
+  toEmails  String[] @map("to_emails")
   attachPdf Boolean @default(true) @map("attach_pdf")
   enabled   Boolean @default(true)
 
@@ -3072,6 +3095,21 @@ model FaturaBelgesi {
   /// kullanıldığı her ham sorguda sözdizimi hatası veriyor.
   aciklama String? @db.VarChar(200)
 
+  /// Dosya içeriğinin SHA-256'sı (64 hex karakter).
+  ///
+  /// TEKİLLİK BURAYA TAŞINDI. Eskiden `(clientId, platform, donem)` tekildi ve
+  /// gerekçesi "iki fatura duruyorsa maile hangisi girecek" idi; cevap artık
+  /// "hepsi". Ama tekilliği tamamen atmak yeni bir sessiz hata açardı: aynı
+  /// PDF iki kez yüklenirse müşteriye AYNI fatura iki ek olarak gider.
+  ///
+  /// DOSYA ADI YETMEZ — aynı fatura iki kez indirilince "fatura (1).pdf"
+  /// oluyor ve ada bakan bir kontrol onu farklı sanardı.
+  ///
+  /// NULL olabilir: bu alan eklenmeden ÖNCE yüklenmiş satırların hash'i yok ve
+  /// SQL içinde hesaplanamaz (dosyalar diskte). Kısmi indeks onları dışarıda
+  /// bırakıyor.
+  dosyaHash String? @map("dosya_hash") @db.VarChar(64)
+
   uploadedByUserId String   @map("uploaded_by_user_id") @db.Uuid
   uploadedAt       DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
 
@@ -3079,13 +3117,17 @@ model FaturaBelgesi {
   client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   uploadedBy   User         @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade)
 
-  /// BİR DÖNEM + BİR PLATFORM = BİR FATURA.
+  /// AYNI DÖNEME BİRDEN ÇOK FATURA GİREBİLİR, AYNI DOSYA İKİ KEZ GİREMEZ.
   ///
-  /// İkinci bir yükleme öncekini DEĞİŞTİRİYOR (upsert), yanına eklenmiyor:
-  /// iki fatura duruyorsa maile hangisinin gireceği belirsiz kalırdı ve
-  /// müşteriye yanlış belge gitmesi sessiz bir hata olurdu.
-  @@unique([clientId, platform, donem])
+  /// YÜKLEMSİZ (kısmi değil) ve bu bilinçli: hash'i NULL olan eski satırlar
+  /// zaten çakışmıyor, çünkü Postgres tekil indekste NULL'ları birbirinden
+  /// FARKLI sayıyor. Kısmi indeks Prisma'da bildirilemiyor ve şemayı
+  /// veritabanından ayrıştırırdı.
+  @@unique([clientId, platform, donem, dosyaHash], map: "fatura_belgeleri_ayni_dosya_key")
   @@index([clientId, donem])
+  /// Ek sırası BELİRLİ olmalı: iki gönderimde ekler farklı sırayla dizilirse
+  /// aynı raporun iki kopyası farklı görünür.
+  @@index([clientId, donem, uploadedAt])
   @@index([orgId])
   @@map("fatura_belgeleri")
 }

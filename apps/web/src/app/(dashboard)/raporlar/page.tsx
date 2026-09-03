@@ -225,7 +225,7 @@ export default async function ReportsPage({
             SEKMEDEKİ TOPLU LİSTEYLE ÇAKIŞMIYOR: burası "bu dönemin faturası"
             için hızlı yol, sekme ise ayın tamamını tek yerden yönetmek için.
             İkisi AYNI bileşen — ayrı yazılsalardı biri PDF doğrulamasını ya da
-            "üzerine yazılıyor" uyarısını kaybederdi.
+            çoklu yükleme kuralını kaybederdi.
           */}
           {canShare && (
             <Faturalar clientId={clientId} odakDonemler={kapsananDonemler(from, to)} canWrite />

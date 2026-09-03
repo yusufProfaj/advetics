@@ -54,6 +54,38 @@ export const FATURA_MIME = 'application/pdf';
 export const FATURA_MAX_BAYT = 10 * 1024 * 1024;
 
 /**
+ * BİR MAİLDEKİ TOPLAM EK BÜTÇESİ (ham bayt).
+ *
+ * Tek fatura varken bu sınıra gerek yoktu; artık bir rapora birden çok fatura
+ * girebiliyor ve üç adet 10 MB'lık PDF maili sunucuda REDDETTİRİR. Reddedilen
+ * bir mail "gönderildi" yazan bir akışın en pahalı hâli: kimse fark etmiyor.
+ *
+ * ┌─ NEDEN 25 DEĞİL 15 ───────────────────────────────────────────────────┐
+ * │ Gmail/Workspace sınırı 25 MB ama o sınır TELDEN GEÇEN boyuta bakıyor   │
+ * │ ve ekler base64 ile kodlanıyor: ham boyut ~%33 şişiyor. 20 MB ham ek,  │
+ * │ telde ~27 MB eder ve sınırı aşar. 15 MB ham ≈ 20 MB kodlanmış, rapor   │
+ * │ PDF'ine ve gövdeye de yer bırakıyor.                                   │
+ * └────────────────────────────────────────────────────────────────────────┘
+ *
+ * Sınıra takılan fatura SESSİZCE düşmüyor: hangisinin neden eklenmediği hem
+ * denetim kaydına hem kullanıcıya yazılıyor.
+ */
+export const MAIL_EK_TOPLAM_SINIRI = 15 * 1024 * 1024;
+
+/**
+ * BİR DÖNEM + PLATFORM İÇİN EN FAZLA FATURA.
+ *
+ * Doğrulama GİRİŞ ANINDA: kullanıcı on birinci faturayı yüklemeye
+ * çalıştığında reddediliyor, gönderim anında sessizce düşürülmüyor. CLAUDE.md
+ * kuralı — "kullanıcı yüklediğinin kullanılamayacağını tıkladığında değil
+ * bıraktığında öğrenmeli".
+ *
+ * On, iş gerçeğinden: bir ayda bir platformdan on ayrı fatura gelmesi zaten
+ * olağandışı; daha yükseği yanlış müşteriye yükleme belirtisi.
+ */
+export const FATURA_MAX_ADET = 10;
+
+/**
  * Dönem — `YYYY-MM`.
  *
  * TARİH ARALIĞI DEĞİL AY SAKLANIYOR. Fatura bir aya ait; başlangıç/bitiş

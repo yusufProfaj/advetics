@@ -185,7 +185,8 @@ export class HesapDurumuKontrolService {
            * değil. Ayrı bir alıcı alanı eklemek, o alanın bir gün yanlış
            * doldurulup müşteri listesinin dışarı gitmesi riski.
            */
-          to: hesap.fromEmail,
+          // TEK ALICI AMA LİSTE OLARAK: `mailGonder` sözleşmesi çoğul.
+          to: [hesap.fromEmail],
           subject: konu,
           html,
         },

@@ -56,7 +56,7 @@ describe('rapor gönderimi', () => {
 
   it('KRİTİK: alıcı yoksa açık bir hata — sessizce boşa gönderilmiyor', () => {
     const g = gonderGovdesi();
-    expect(g).toContain('iletişim e-postası tanımlı değil');
+    expect(g).toContain('kayıtlı rapor alıcısı tanımlı değil');
   });
 
   it('KRİTİK: gövde TEMİZLENİYOR — alıcının istemcisinde açılıyor', () => {

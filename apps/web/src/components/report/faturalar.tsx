@@ -18,6 +18,12 @@ import { ApiRequestError, apiFetch, API_URL } from '@/lib/api';
  * Müşteri raporu alırken Meta/Google faturasını da aynı mailde görsün diye.
  * İstek birebir: "müşteri her şeyi tek pakette görsün."
  *
+ * BİR DÖNEME BİRDEN ÇOK FATURA GİREBİLİR. Önceden `(müşteri, platform, dönem)`
+ * tekildi ve ikinci yükleme öncekini EZİYORDU; ajans ikisini de yükledim
+ * sanıyordu, müşteriye tek belge gidiyordu. Tekillik kaldırılmadı, dosyanın
+ * İÇERİĞİNE taşındı: aynı PDF iki kez yüklenemiyor, çünkü o da müşteriye aynı
+ * faturanın iki kopyası olarak giderdi.
+ *
  * ELLE YÜKLENİYOR ve bu bir eksiklik değil, platformların kısıtı:
  * Google'ın fatura API'si yalnızca aylık faturalama (kredi hattı)
  * hesaplarında çalışıyor — kartla ödeyende hata veriyor. Meta'da ise fatura
@@ -227,7 +233,8 @@ export function Faturalar({
               {yukleniyor ? 'Yükleniyor…' : 'Yükle'}
             </button>
             <span className="text-[11px] text-ink-muted">
-              Aynı dönem + platform için ikinci yükleme öncekini değiştirir.
+              Aynı döneme birden çok fatura yükleyebilirsin; hepsi maile eklenir. Aynı
+              dosya iki kez yüklenemez.
             </span>
           </div>
         </div>

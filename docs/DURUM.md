@@ -14,9 +14,9 @@
 | | 2026-08-11 | 2026-09-02 |
 |---|---|---|
 | Veritabanı tablosu | 37 | **53** |
-| Migration | 17 | **52** |
-| API testi | 694 ¹ | **2.164** |
-| Web testi | 20 ¹ | **390** |
+| Migration | 17 | **54** |
+| API testi | 694 ¹ | **2.207** |
+| Web testi | 20 ¹ | **392** |
 | Panel sayfası | 16 | **29** |
 | API controller | 17 | **25** |
 | RLS politikası | 95 | **155** |
@@ -581,6 +581,51 @@ durumunda takılıydı ve `insights_backfill` işlerinde tekrarlayan bir hata
 vardı: *"too many bind variables in prepared statement, expected maximum of
 32767, received 48816"* (sistemde toplam 19 kez görülmüş).
 
+### 2026-09-03 — Birden çok fatura ve birden çok mail alıcısı
+
+Kullanıcının isteği: *"birden fazla fatura dosyası ve birden fazla kişiye mail
+gönderimi yapabiliyo olmamız lazım"*. İki ayrı kısıt vardı.
+
+**1 — Bir döneme tek fatura.** `fatura_belgeleri` üzerinde
+`(müşteri, platform, dönem)` tekildi ve ikinci yükleme öncekini EZİYORDU;
+ajans ikisini de yükledim sanıyor, müşteriye tek belge gidiyordu. Tekillik
+KALDIRILMADI, dosyanın İÇERİĞİNE (SHA-256) taşındı: aynı döneme farklı
+faturalar serbest, aynı dosya iki kez değil — o da müşteriye aynı belgenin iki
+kopyası olarak giderdi.
+
+Çoğullaşma üç yeni karar getirdi: ek adları çakışmasın diye ikinciden itibaren
+numaralanıyor (`MetaAds-Fatura-2026-08-2.pdf`); toplam ek bütçesi 15 MB ham
+(base64 şişmesiyle ~20 MB — Gmail'in 25 MB sınırının altında) ve sınıra
+takılan fatura sebebiyle bildiriliyor; giriş anında dönem+platform başına en
+fazla 10 fatura.
+
+**2 — Tek alıcı.** Alıcı üç yerde tekildi: gönderim formu, plan kaydı ve
+`clients.contact_email`. Üçü de liste oldu (`TEXT[]`) ve çözüm kuralı — "form
+doluysa o, boşsa müşterinin kayıtlı listesi" — tek fonksiyona çekildi
+(`nihaiAlicilar`); dört ayrı yerde elle yazılıydı ve hata mesajları bile
+farklıydı.
+
+**EN ÖNEMLİ AYRINTI — çoklu alıcı yeni bir sessiz hata açıyor.** nodemailer
+tek alıcıda ret = "hepsi reddedildi" olduğu için fırlatıyor; birden çok
+alıcıda bazıları reddedilse bile `sendMail` BAŞARIYLA dönüyor ve ret yalnızca
+dönüş nesnesinde duruyor. `mailGonder` artık `{ kabul, ret }` döndürüyor, iki
+gönderim yolu da reddi ekrana/plan notuna taşıyor ve denetim kaydına İSTENEN
+değil KABUL EDİLEN adresler yazılıyor.
+
+Panelde alıcı alanı tek bir paylaşılan bileşen (`alici-listesi-alani.tsx`) —
+rapor gönderme, plan ve müşteri formu aynı ayrıştırma kurallarını kullanıyor
+ve ekran "hepsi birbirinin adresini görecek" uyarısını yazıyor (tek mail,
+herkes `To:` alanında).
+
+**Bilinen ve kabul edilen boşluk:** migration'dan önce yüklenmiş faturaların
+hash'i NULL ve mükerrer bekçisinin dışında. Maruziyet neredeyse sıfır (fatura
+özelliği bir gün önce yayına girdi) ve o satırlar silindikçe kendiliğinden
+kapanıyor.
+
+**Test:** 43 yeni test; beş mutasyonun beşi de yakalandı.
+
+---
+
 ### 2026-09-02 — Müşteriye giden PDF'te iki görsel hata (`3dda604`)
 
 Kullanıcı Çiftçi Grup raporunun PDF'ini açtı; iki ayrı arıza vardı ve **ikisi
@@ -1095,7 +1140,7 @@ tartışmalı yapardı).
 
 Ekran iki yerde, TEK bileşenle: rapor sayfasında (dönem hazır seçili, yanlış
 aya yükleme riski düşük) ve `/raporlar/faturalar`ta (toplu yönetim). Ayrı
-yazılsalardı biri PDF doğrulamasını ya da "üzerine yazılıyor" uyarısını
+yazılsalardı biri PDF doğrulamasını ya da çoklu yükleme kuralını
 kaybederdi.
 
 `fatura.spec.ts` dönem eşleştirmesini ve **maile GERÇEKTEN eklendiğini**

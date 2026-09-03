@@ -52,7 +52,7 @@ interface ClientRow {
    * `clients.service.ts` içindeki `list()` seçimi.
    */
   contactName: string | null;
-  contactEmail: string | null;
+  contactEmails: string[];
   contactPhone: string | null;
   website: string | null;
   address: string | null;

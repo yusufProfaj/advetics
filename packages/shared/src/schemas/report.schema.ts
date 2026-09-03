@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ALICI_UST_SINIRI } from '../alici-listesi';
 import type { MetricTotals } from './metrics.schema';
 import { PLATFORMS } from '../constants/platforms';
 import { formatMoney, formatNumber, formatPercent } from '../format';
@@ -663,8 +664,19 @@ export const reportSendSchema = z.object({
    * Gönderilen belge ekranda görülenden farklı ve bunu ancak alıcı görüyor.
    */
   sablon: z.enum(['genel', 'google', 'meta']).optional(),
-  /** Alıcı. Boşsa müşterinin `contact_email` alanı kullanılıyor. */
-  to_email: z.string().trim().email().optional(),
+  /**
+   * ALICI LİSTESİ. Boşsa müşterinin kayıtlı adreslerine düşülüyor.
+   *
+   * DOĞRULAMA GİRİŞ ANINDA: her eleman ayrı ayrı adres olmak zorunda ve Zod
+   * hatası hangi elemanın bozuk olduğunu söylüyor. Tek bir dizge alıp sunucuda
+   * bölmek daha kolaydı ama hata mesajı "geçersiz alıcı" olurdu ve kullanıcı
+   * beş adresten hangisinin bozuk olduğunu ekrandan bulamazdı.
+   *
+   * ÜST SINIR: bir rapor mailinin yirmiden fazla kişiye gitmesi neredeyse her
+   * zaman yanlış listeyi yapıştırmaktan oluyor; kurumsal sağlayıcılar da çok
+   * alıcılı mesajları spam sayıyor.
+   */
+  to_emails: z.array(z.string().trim().email()).max(ALICI_UST_SINIRI).optional(),
   subject: z.string().trim().min(1).max(300),
   html: z.string().min(1).max(200_000),
   /** PDF eki gitsin mi. Kapatmak, yalnızca özet göndermek isteyen için. */
@@ -675,8 +687,13 @@ export type ReportSendInput = z.infer<typeof reportSendSchema>;
 export interface ReportMailDraft {
   subject: string;
   html: string;
-  /** Müşterinin kayıtlı iletişim adresi. Yoksa `null` — ekran bunu söylemeli. */
-  defaultTo: string | null;
+  /**
+   * Müşterinin kayıtlı alıcıları. BOŞ DİZİ olabilir — ekran bunu söylemeli.
+   *
+   * `null` yerine boş dizi: "adres tanımlı değil" tek bir hâl ve iki ayrı
+   * gösterim (null / []) kuran her ekran birini unutuyordu.
+   */
+  defaultTo: string[];
   /** Gönderenin e-posta kimliği doğrulanmış mı. Değilse gönderim kapalı. */
   senderReady: boolean;
   senderEmail: string | null;

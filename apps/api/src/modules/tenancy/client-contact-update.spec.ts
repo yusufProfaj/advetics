@@ -55,21 +55,42 @@ describe('müşteri iletişim bilgisi güncelleme', () => {
       'c1',
       {
         contactName: 'Ayşe Yılmaz',
-        contactEmail: 'ayse@musteri.com',
+        contactEmails: ['ayse@musteri.com'],
         contactPhone: '+90 555 111 22 33',
       } as UpdateClientInput,
       META,
     );
     expect(yazilan).toMatchObject({
       contactName: 'Ayşe Yılmaz',
-      contactEmail: 'ayse@musteri.com',
+      contactEmails: ['ayse@musteri.com'],
       contactPhone: '+90 555 111 22 33',
     });
   });
 
-  it('KRİTİK: `contact_email` rapor gönderiminin alanı — yazılmazsa mail atılamaz', async () => {
-    await svc.update(CTX, 'c1', { contactEmail: 'rapor@musteri.com' } as UpdateClientInput, META);
-    expect(yazilan!.contactEmail).toBe('rapor@musteri.com');
+  it('KRİTİK: `contact_emails` rapor gönderiminin alanı — yazılmazsa mail atılamaz', async () => {
+    await svc.update(
+      CTX,
+      'c1',
+      { contactEmails: ['rapor@musteri.com'] } as UpdateClientInput,
+      META,
+    );
+    expect(yazilan!.contactEmails).toEqual(['rapor@musteri.com']);
+  });
+
+  it('KRİTİK: BİRDEN ÇOK alıcı yazılıyor — liste kırpılmıyor', async () => {
+    /*
+     * Alanın çoğullaşmasının tek sebebi bu: müşteride birden çok yetkilinin
+     * rapor alması kural, istisna değil. Servis listeyi ilk elemana indirseydi
+     * kalan alıcılar SESSİZCE düşerdi ve bunu ancak "bana rapor gelmiyor"
+     * diyen kişi fark ederdi.
+     */
+    await svc.update(
+      CTX,
+      'c1',
+      { contactEmails: ['a@x.com', 'b@x.com', 'c@x.com'] } as UpdateClientInput,
+      META,
+    );
+    expect(yazilan!.contactEmails).toEqual(['a@x.com', 'b@x.com', 'c@x.com']);
   });
 
   it('faturalama alanları da yazılıyor', async () => {
@@ -91,15 +112,21 @@ describe('müşteri iletişim bilgisi güncelleme', () => {
     );
   });
 
-  it('KRİTİK: `null` GEÇERLİ bir değer — alanı temizlemek de bir düzenleme', async () => {
-    // `??` ile yazılsaydı temizleme çalışmaz, kullanıcı yanlış bir adresi
-    // silemezdi ve rapor oraya gitmeye devam ederdi.
-    await svc.update(CTX, 'c1', { contactEmail: null } as UpdateClientInput, META);
-    expect(yazilan).toHaveProperty('contactEmail', null);
+  it('KRİTİK: BOŞ DİZİ geçerli bir değer — listeyi temizlemek de bir düzenleme', async () => {
+    /*
+     * `??` ile yazılsaydı temizleme çalışmaz, kullanıcı yanlış bir adresi
+     * silemezdi ve rapor oraya gitmeye devam ederdi.
+     *
+     * LİSTEDE `null` YOK, BOŞ DİZİ VAR: "temizlendi" ile "hiç girilmedi"
+     * aynı şeyi anlatıyor ve iki hâli ayırt etmek hiçbir soruyu
+     * cevaplamıyordu.
+     */
+    await svc.update(CTX, 'c1', { contactEmails: [] } as UpdateClientInput, META);
+    expect(yazilan).toHaveProperty('contactEmails', []);
   });
 
   it('GÖNDERİLMEYEN alan UPDATE’e GİRMİYOR — kısmi güncelleme diğerlerini silmemeli', async () => {
-    await svc.update(CTX, 'c1', { contactEmail: 'a@b.com' } as UpdateClientInput, META);
+    await svc.update(CTX, 'c1', { contactEmails: ['a@b.com'] } as UpdateClientInput, META);
     expect(yazilan).not.toHaveProperty('contactName');
     expect(yazilan).not.toHaveProperty('iban');
   });

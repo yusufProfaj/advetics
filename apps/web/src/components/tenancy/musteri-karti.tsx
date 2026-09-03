@@ -44,7 +44,7 @@ export interface MusteriKartiVerisi {
   adAccounts: ClientAdAccount[];
   socialProfiles: ClientProfile[];
   contactName: string | null;
-  contactEmail: string | null;
+  contactEmails: string[];
   contactPhone: string | null;
   website: string | null;
   address: string | null;
@@ -273,7 +273,10 @@ export function MusteriKarti({
             >
               <div className="rounded-lg border border-line px-3 py-1">
                 <DetaySatiri etiket="Yetkili kişi" deger={client.contactName} />
-                <DetaySatiri etiket="E-posta" deger={client.contactEmail} />
+                <DetaySatiri
+                  etiket="Rapor alıcıları"
+                  deger={client.contactEmails.length > 0 ? client.contactEmails.join(', ') : null}
+                />
                 <DetaySatiri etiket="Telefon" deger={client.contactPhone} />
                 <DetaySatiri etiket="İnternet sitesi" deger={client.website} />
               </div>

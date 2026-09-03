@@ -82,7 +82,7 @@ export class ClientsService {
            * çekilen şey gerçekten ekranda kullanılıyor.
            */
           contactName: true,
-          contactEmail: true,
+          contactEmails: true,
           contactPhone: true,
           website: true,
           address: true,
@@ -225,7 +225,7 @@ export class ClientsService {
           // İLETİŞİM VE FATURA BİLGİSİ — hepsi opsiyonel, boş dizge şemada
           // `null`'a çevriliyor ("girilmedi" ile "boş girildi" ayrımı).
           contactName: input.contactName,
-          contactEmail: input.contactEmail,
+          contactEmails: input.contactEmails,
           contactPhone: input.contactPhone,
           website: input.website,
           address: input.address,
@@ -289,14 +289,19 @@ export class ClientsService {
            * "Yeni müşteri" sihirbazıydı; müşteri açıldıktan sonra iletişim
            * bilgisi HİÇ düzenlenemiyordu.
            *
-           * `contact_email` rapor gönderiminin okuyacağı alan — bu boşluk
+           * `contact_emails` rapor gönderiminin okuyacağı alan — bu boşluk
            * kapanmadan mail gönderimi kurulamıyordu.
            *
            * `null` GEÇERLİ BİR DEĞER: alanı temizlemek de bir düzenleme.
            * Bu yüzden `!== undefined` kontrolü, `??` değil.
            */
           ...(input.contactName !== undefined ? { contactName: input.contactName } : {}),
-          ...(input.contactEmail !== undefined ? { contactEmail: input.contactEmail } : {}),
+          /*
+           * LİSTEDE `null` YOK, BOŞ DİZİ VAR. Diğer alanlarda `null`
+           * "temizlendi" demek; burada boş dizi aynı işi görüyor ve iki hâli
+           * ayırt etmek hiçbir şey anlatmazdı.
+           */
+          ...(input.contactEmails !== undefined ? { contactEmails: input.contactEmails } : {}),
           ...(input.contactPhone !== undefined ? { contactPhone: input.contactPhone } : {}),
           ...(input.website !== undefined ? { website: input.website } : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),

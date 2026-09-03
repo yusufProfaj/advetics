@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import {
   bugunUtc,
+  nihaiAlicilar,
   raporPenceresi,
   siradakiCalisma,
   type PlanSikligi,
@@ -47,7 +48,7 @@ export class RaporPlaniService {
         SELECT s.id::text, s.client_id::text AS client_id, c.name AS client_name,
                s.frequency::text, s.day_of_week, s.day_of_month, s.hour,
                s.range_key, s.template_id::text AS template_id,
-               s.to_email, c.contact_email, s.attach_pdf, s.enabled,
+               s.to_emails, c.contact_emails, s.attach_pdf, s.enabled,
                s.next_run_at, s.last_run_at, s.last_status, s.last_error, s.last_sent_to,
                u.full_name AS created_by_name, u.email AS created_by_email,
                -- GÖNDERENİN KİMLİĞİ HAZIR MI: kayıtlı VE doğrulanmış.
@@ -73,10 +74,16 @@ export class RaporPlaniService {
       hour: r.hour as number,
       rangeKey: r.range_key as string,
       templateId: (r.template_id as string) ?? null,
-      toEmail: (r.to_email as string) ?? null,
+      toEmails: (r.to_emails as string[]) ?? [],
       // Alıcı boşsa müşterinin kayıtlı adresi gösteriliyor: kullanıcı mailin
       // NEREYE gideceğini planı açmadan görmeli.
-      cozulenAlici: ((r.to_email ?? r.contact_email) as string) ?? null,
+      // ÇÖZÜM TEK YERDEN. Bu satır "planda varsa o, yoksa müşterininki"
+      // kuralını ELLE tekrarlıyordu ve gönderim yolundaki kuralla ayrışabilirdi:
+      // panelde bir adres yazıp başka bir adrese göndermek sessiz bir hatadır.
+      cozulenAliciListesi: nihaiAlicilar({
+        secilen: (r.to_emails as string[]) ?? [],
+        musteriAdresleri: (r.contact_emails as string[]) ?? [],
+      }),
       attachPdf: r.attach_pdf as boolean,
       enabled: r.enabled as boolean,
       nextRunAt: r.next_run_at ? (r.next_run_at as Date).toISOString() : null,
@@ -109,7 +116,7 @@ export class RaporPlaniService {
         INSERT INTO report_schedules (
           id, org_id, client_id, created_by_user_id, template_id,
           frequency, day_of_week, day_of_month, hour, range_key,
-          to_email, attach_pdf, enabled, next_run_at, updated_at
+          to_emails, attach_pdf, enabled, next_run_at, updated_at
         ) VALUES (
           gen_random_uuid(), ${ctx.orgId}::uuid, ${input.clientId}::uuid,
           ${ctx.userId}::uuid, ${input.templateId ?? null}::uuid,
@@ -117,7 +124,7 @@ export class RaporPlaniService {
           ${input.frequency === 'weekly' ? (input.dayOfWeek ?? null) : null},
           ${input.frequency === 'monthly' ? (input.dayOfMonth ?? null) : null},
           ${input.hour}, ${input.rangeKey},
-          ${input.toEmail ?? null}, ${input.attachPdf}, ${input.enabled},
+          ${input.toEmails}, ${input.attachPdf}, ${input.enabled},
           ${next}, now()
         )
         RETURNING id::text
@@ -153,7 +160,7 @@ export class RaporPlaniService {
           day_of_month = ${input.frequency === 'monthly' ? (input.dayOfMonth ?? null) : null},
           hour         = ${input.hour},
           range_key    = ${input.rangeKey},
-          to_email     = ${input.toEmail ?? null},
+          to_emails    = ${input.toEmails},
           attach_pdf   = ${input.attachPdf},
           enabled      = ${input.enabled},
           -- ZAMANLAMA DEGISTIYSE SIRADAKI CALISMA YENIDEN HESAPLANIYOR.
@@ -211,8 +218,8 @@ export class RaporPlaniService {
     }
 
     const [musteri] = await this.prisma.withTenant({ ...ctx, activeClientId: clientId }, (tx) =>
-      tx.$queryRaw<Array<{ contact_email: string | null }>>(Prisma.sql`
-        SELECT contact_email FROM clients WHERE id = ${clientId}::uuid
+      tx.$queryRaw<Array<{ contact_emails: string[] | null }>>(Prisma.sql`
+        SELECT contact_emails FROM clients WHERE id = ${clientId}::uuid
       `),
     );
     if (!musteri) throw new NotFoundException('Müşteri bulunamadı.');
@@ -260,7 +267,7 @@ export class RaporPlaniService {
         day_of_month: number | null;
         hour: number;
         range_key: string;
-        to_email: string | null;
+        to_emails: string[];
         attach_pdf: boolean;
         client_name: string;
       }>
@@ -268,7 +275,7 @@ export class RaporPlaniService {
       SELECT s.id::text, s.org_id::text, s.client_id::text,
              s.created_by_user_id::text, s.template_id::text,
              s.frequency::text AS frequency, s.day_of_week, s.day_of_month,
-             s.hour, s.range_key, s.to_email, s.attach_pdf, c.name AS client_name
+             s.hour, s.range_key, s.to_emails, s.attach_pdf, c.name AS client_name
         FROM report_schedules s
         JOIN clients c ON c.id = s.client_id
        WHERE s.enabled = true
@@ -346,7 +353,7 @@ export class RaporPlaniService {
           from: pencere.from,
           to: pencere.to,
           templateId: plan.template_id,
-          toEmail: plan.to_email,
+          toEmails: plan.to_emails,
           attachPdf: plan.attach_pdf,
         });
 
@@ -372,12 +379,19 @@ export class RaporPlaniService {
             plan.id,
             'sent',
             eksik.length > 0 ? `Fatura yüklenmemiş dönem: ${eksik.join(', ')}` : null,
-            sonuc.to,
+            sonuc.to.join(', '),
           );
           gonderilen++;
+          /*
+           * KISMİ RET NOTA GİRİYOR. nodemailer alıcılardan bazıları
+           * reddedilse bile fırlatmıyor; planlı yolda ekranda bekleyen kimse
+           * olmadığı için tek iz bu not oluyor.
+           */
+          const red = sonuc.reddedilen;
           notlar.push(
-            `${plan.client_name} → ${sonuc.to}` +
-              (eksik.length > 0 ? ` (faturasız: ${eksik.join(', ')})` : ''),
+            `${plan.client_name} → ${sonuc.to.join(', ')}` +
+              (eksik.length > 0 ? ` (faturasız: ${eksik.join(', ')})` : '') +
+              (red.length > 0 ? ` · REDDEDİLEN: ${red.map((x) => x.adres).join(', ')}` : ''),
           );
         }
       } catch (err) {

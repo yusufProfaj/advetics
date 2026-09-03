@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  nihaiAlicilar,
   type ReportMailDraft,
   type ReportQuery,
   type ReportSendInput,
@@ -55,17 +56,16 @@ export class RaporGonderService {
     const data = await this.reports.build(ctx, query);
     const gonderen = await this.gonderen(ctx);
 
-    const musteri = await this.prisma.withTenant(ctx, (tx) =>
-      tx.$queryRaw<Array<{ contact_email: string | null }>>(Prisma.sql`
-        SELECT contact_email FROM clients WHERE id = ${query.clientId}::uuid
-      `),
-    );
+    // TASLAK DA AYNI ÇÖZÜCÜDEN GEÇİYOR: ekranda önerilen liste ile gönderim
+    // anında kullanılan liste aynı olmak zorunda, yoksa kullanıcı gördüğünden
+    // farklı bir adrese göndermiş olur.
+    const musteriAdresleri = await this.musteriEpostalari(ctx, query.clientId);
 
     const t = raporMailTaslagi(data, gonderen?.from_name ?? '');
     return {
       subject: t.subject,
       html: t.html,
-      defaultTo: musteri[0]?.contact_email ?? null,
+      defaultTo: nihaiAlicilar({ secilen: [], musteriAdresleri }),
       /*
        * DOĞRULANMAMIŞ HESAPLA GÖNDERİM KAPALI. "Kaydedildi" doğrulama değil:
        * SMTP kimliği yanlışsa hata ilk gerçek gönderimde çıkar ve o gönderim
@@ -80,7 +80,7 @@ export class RaporGonderService {
     ctx: TenantContext,
     input: ReportSendInput,
     meta: Meta,
-  ): Promise<{ sent: true; to: string }> {
+  ): Promise<{ sent: true; to: string[]; reddedilen: Array<{ adres: string; sebep: string }> }> {
     const gonderen = await this.gonderen(ctx);
     if (!gonderen) {
       throw new BadRequestException(
@@ -94,10 +94,21 @@ export class RaporGonderService {
       );
     }
 
-    const alici = input.to_email ?? (await this.musteriEpostasi(ctx, input.clientId));
-    if (!alici) {
+    /*
+     * ALICI ÇÖZÜMÜ TEK YERDE (`nihaiAlicilar`). Kural — "form doluysa o,
+     * boşsa müşterinin kayıtlı listesi" — elle gönderim ve planlı gönderimde
+     * AYRI AYRI yazılıydı ve hata mesajları bile farklıydı. Çoğullaşınca
+     * ayrışacak karar sayısı arttı (tekilleştirme, boş liste, üst sınır);
+     * ikiye bölünmüş bir kural burada sessizce farklı adrese gönderirdi.
+     */
+    const alicilar = nihaiAlicilar({
+      secilen: input.to_emails ?? [],
+      musteriAdresleri: await this.musteriEpostalari(ctx, input.clientId),
+    });
+    if (alicilar.length === 0) {
       throw new BadRequestException(
-        'Müşterinin iletişim e-postası tanımlı değil. Müşteriler ekranından ekleyebilirsin.',
+        'Alıcı yok: forma adres girilmedi ve müşterinin kayıtlı rapor alıcısı tanımlı değil. ' +
+          'Müşteriler ekranından ekleyebilirsin.',
       );
     }
 
@@ -149,8 +160,9 @@ export class RaporGonderService {
     ekler.push(...fatura.ekler);
 
     const parola = this.crypto.decrypt(Buffer.from(gonderen.smtp_pass_enc));
+    let sonuc: Awaited<ReturnType<typeof mailGonder>>;
     try {
-      await mailGonder(
+      sonuc = await mailGonder(
         {
           fromName: gonderen.from_name,
           fromEmail: gonderen.from_email,
@@ -161,7 +173,7 @@ export class RaporGonderService {
           pass: parola,
         },
         {
-          to: alici,
+          to: alicilar,
           subject: input.subject,
           html: `${govde}${imza}`,
           ...(ekler.length > 0 ? { attachments: ekler } : {}),
@@ -169,7 +181,9 @@ export class RaporGonderService {
       );
     } catch (err) {
       const mesaj = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Rapor maili gönderilemedi (${ctx.userId} → ${alici}): ${mesaj}`);
+      this.logger.warn(
+        `Rapor maili gönderilemedi (${ctx.userId} → ${alicilar.join(', ')}): ${mesaj}`,
+      );
       /*
        * PLATFORMUN KENDİ MESAJI YUKARI TAŞINIYOR. "Gönderilemedi" demek,
        * "kimlik doğrulanamadı" ile "alıcı reddedildi"yi aynı cümleye
@@ -185,7 +199,13 @@ export class RaporGonderService {
         targetId: input.clientId,
         clientId: input.clientId,
         after: {
-          to: alici,
+          /*
+           * KABUL EDİLEN adresler yazılıyor, İSTENEN değil. "Kime gönderdim"
+           * sorusunun aylar sonraki cevabı, sunucunun teslim için kabul
+           * ettiği liste olmalı; reddedilenler ayrı alanda duruyor.
+           */
+          to: sonuc.kabul,
+          reddedilen: sonuc.ret,
           from: gonderen.from_email,
           subject: input.subject,
           range: `${input.from}..${input.to}`,
@@ -194,12 +214,29 @@ export class RaporGonderService {
           // aylar sonra cevaplanabilmesi için.
           faturaEki: fatura.bulunan,
           faturasizDonemler: fatura.eksikDonemler,
+          // Eklenemeyen fatura da iz bırakıyor: boyut sınırına takılan bir
+          // belge, yüklenmemiş bir belgeyle aynı şey değil.
+          faturaAtlanan: fatura.atlanan,
         },
         ...meta,
       }),
     );
 
-    return { sent: true, to: alici };
+    /*
+     * KISMİ RET YUKARI TAŞINIYOR. nodemailer alıcılardan bazıları
+     * reddedilse bile fırlatmıyor (yalnızca hepsi reddedilirse) — yani
+     * yukarıdaki `catch` bu hâli GÖRMÜYOR. Ekran "gönderildi" yazıp
+     * reddedileni saklarsa, kullanıcının müşterisinin raporu almadığını
+     * günler sonra öğrenmesi demek olurdu.
+     */
+    if (sonuc.ret.length > 0) {
+      this.logger.warn(
+        `Rapor maili kısmen gitti — reddedilen: ` +
+          sonuc.ret.map((r) => `${r.adres} (${r.sebep})`).join(', '),
+      );
+    }
+
+    return { sent: true, to: sonuc.kabul, reddedilen: sonuc.ret };
   }
 
   /**
@@ -226,10 +263,15 @@ export class RaporGonderService {
       from: string;
       to: string;
       templateId: string | null;
-      toEmail: string | null;
+      toEmails: readonly string[];
       attachPdf: boolean;
     },
-  ): Promise<{ to: string; bosDonem: boolean; faturasizDonemler: string[] }> {
+  ): Promise<{
+    to: string[];
+    bosDonem: boolean;
+    faturasizDonemler: string[];
+    reddedilen: Array<{ adres: string; sebep: string }>;
+  }> {
     const gonderen = await this.gonderen(ctx);
     if (!gonderen) {
       throw new BadRequestException(
@@ -249,10 +291,15 @@ export class RaporGonderService {
       );
     }
 
-    const alici = params.toEmail ?? (await this.musteriEpostasi(ctx, params.clientId));
-    if (!alici) {
+    // ELLE GÖNDERİMLE AYNI ÇÖZÜCÜ. Kural iki yerde yazılsaydı biri
+    // güncellenmediğinde planlı raporlar sessizce başka adrese giderdi.
+    const alicilar = nihaiAlicilar({
+      secilen: params.toEmails,
+      musteriAdresleri: await this.musteriEpostalari(ctx, params.clientId),
+    });
+    if (alicilar.length === 0) {
       throw new BadRequestException(
-        'Alıcı yok: planda adres girilmemiş ve müşterinin iletişim e-postası tanımlı değil.',
+        'Alıcı yok: planda adres girilmemiş ve müşterinin kayıtlı rapor alıcısı tanımlı değil.',
       );
     }
 
@@ -273,7 +320,7 @@ export class RaporGonderService {
      * panelde sebebiyle görünüyor (CLAUDE.md: "Boş liste NEDENİNİ söylesin").
      */
     if (data.platforms.length === 0) {
-      return { to: alici, bosDonem: true, faturasizDonemler: [] };
+      return { to: alicilar, bosDonem: true, faturasizDonemler: [], reddedilen: [] };
     }
 
     const t = raporMailTaslagi(data, gonderen.from_name);
@@ -294,7 +341,7 @@ export class RaporGonderService {
     const fatura = await this.faturalar.raporEkleri(params.clientId, params.from, params.to);
     ekler.push(...fatura.ekler);
 
-    await mailGonder(
+    const sonuc = await mailGonder(
       {
         fromName: gonderen.from_name,
         fromEmail: gonderen.from_email,
@@ -305,23 +352,47 @@ export class RaporGonderService {
         pass: this.crypto.decrypt(Buffer.from(gonderen.smtp_pass_enc)),
       },
       {
-        to: alici,
+        to: alicilar,
         subject: t.subject,
         html: `${govde}${imza}`,
         ...(ekler.length > 0 ? { attachments: ekler } : {}),
       },
     );
 
-    return { to: alici, bosDonem: false, faturasizDonemler: fatura.eksikDonemler };
+    /*
+     * PLANLI YOLDA KISMİ RET DAHA TEHLİKELİ: ekranda bekleyen kimse yok ve
+     * hata yalnızca plan kaydına bakılırsa görülüyor. Çağıran bunu
+     * `last_status`a yazıyor.
+     */
+    if (sonuc.ret.length > 0) {
+      this.logger.warn(
+        `Planlı rapor kısmen gitti (${params.clientId}) — reddedilen: ` +
+          sonuc.ret.map((r) => `${r.adres} (${r.sebep})`).join(', '),
+      );
+    }
+
+    return {
+      to: sonuc.kabul,
+      bosDonem: false,
+      faturasizDonemler: fatura.eksikDonemler,
+      reddedilen: sonuc.ret,
+    };
   }
 
-  private async musteriEpostasi(ctx: TenantContext, clientId: string): Promise<string | null> {
+  /**
+   * Müşterinin kayıtlı rapor alıcıları.
+   *
+   * DİZİ DÖNÜYOR ve boş dizi "tanımlı değil" demek. Eskiden tek bir
+   * `contact_email` vardı; müşteride birden çok yetkili olması kural, istisna
+   * değil ve tek adres her gönderimde elle adres yazmak demekti.
+   */
+  private async musteriEpostalari(ctx: TenantContext, clientId: string): Promise<string[]> {
     const rows = await this.prisma.withTenant(ctx, (tx) =>
-      tx.$queryRaw<Array<{ contact_email: string | null }>>(Prisma.sql`
-        SELECT contact_email FROM clients WHERE id = ${clientId}::uuid
+      tx.$queryRaw<Array<{ contact_emails: string[] | null }>>(Prisma.sql`
+        SELECT contact_emails FROM clients WHERE id = ${clientId}::uuid
       `),
     );
-    return rows[0]?.contact_email ?? null;
+    return rows[0]?.contact_emails ?? [];
   }
 
   /** Gönderenin kendi e-posta kimliği. RLS zaten yalnızca kendi satırını veriyor. */

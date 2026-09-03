@@ -119,7 +119,13 @@ describe('kaynak taraması — tek üretici', () => {
      * alıcı görürdü.
      */
     const GOVDE = kod(GONDER);
-    const i = GOVDE.indexOf("apiFetch<{ to: string }>('/reports/send'");
+    /*
+     * ÇAPA TİPE DEĞİL UCA. Önce `apiFetch<{ to: string }>` dizesine
+     * çapalıydı ve yanıt tipi çoğullaşınca (`to: string[]`) tarama boşa
+     * düştü. Uç adresi bu dosyanın gerçekten koruduğu şey; yanıt tipi ise
+     * her değişiklikte kayabilen bir ayrıntı.
+     */
+    const i = GOVDE.indexOf("'/reports/send'");
     expect(i, 'gönderme çağrısı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     expect(GOVDE.slice(i, GOVDE.indexOf('});', i))).toContain('...sablonAlanlari(sablon)');
   });

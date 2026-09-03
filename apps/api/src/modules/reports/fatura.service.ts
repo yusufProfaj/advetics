@@ -1,8 +1,11 @@
+import { createHash } from 'node:crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   FATURA_MAX_BAYT,
   FATURA_MIME,
+  FATURA_MAX_ADET,
+  MAIL_EK_TOPLAM_SINIRI,
   kapsananDonemler,
   type FaturaOzeti,
   type FaturaPlatformu,
@@ -95,22 +98,40 @@ export class FaturaService {
     }
 
     /*
-     * ESKİ DOSYA ÖNCE OKUNUYOR — upsert'ten SONRA değil.
+     * ═══ İÇERİK HASH'İ — MÜKERRER YÜKLEMENİN TEK GÜVENİLİR ÖLÇÜTÜ ═══
      *
-     * İlk yazışta bu sorgu `RETURNING` içindeydi ve YANLIŞTI: alt sorgu
-     * upsert'ten sonra koştuğu için YENİ anahtarı döndürüyordu. Eski dosya
-     * diskte yetim kalırdı ve paylaşımlı sunucuda sessiz disk dolması,
-     * diğer siteleri de etkileyen bir arıza.
+     * Aynı döneme artık birden çok fatura girebiliyor ve bu yeni bir sessiz
+     * hata açıyor: kullanıcı aynı PDF'i iki kez yüklerse müşteriye AYNI
+     * fatura iki ek olarak gider ve bunu ilk gören müşteri olur.
+     *
+     * DOSYA ADINA BAKMAK YETMEZ — aynı fatura iki kez indirilince
+     * "fatura (1).pdf" oluyor ve ada bakan bir kontrol onu farklı sanardı.
+     * Boyut da yetmez: iki farklı ayın faturası aynı bayt sayısında olabilir.
      */
+    const hash = createHash('sha256').update(dosya.bytes).digest('hex');
+
     const scoped = { ...ctx, activeClientId: input.clientId };
-    const [mevcut] = await this.prisma.withTenant(scoped, (tx) =>
-      tx.$queryRaw<Array<{ storage_key: string }>>(Prisma.sql`
-        SELECT storage_key FROM fatura_belgeleri
+
+    /*
+     * ADET SINIRI DİSKE YAZMADAN ÖNCE. Sıra önemli: önce kaydedip sonra
+     * reddetmek, her reddedilen yüklemede diskte yetim bir dosya bırakırdı ve
+     * paylaşımlı sunucuda sessiz disk dolması diğer siteleri de etkileyen bir
+     * arıza. Maliyeti sıfır olan bir ret, pahalı adımdan önce gelmeli.
+     */
+    const [sayim] = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$queryRaw<Array<{ adet: bigint }>>(Prisma.sql`
+        SELECT count(*) AS adet FROM fatura_belgeleri
          WHERE client_id = ${input.clientId}::uuid
            AND platform = ${input.platform}::"Platform"
            AND donem = ${input.donem}
       `),
     );
+    if (Number(sayim?.adet ?? 0) >= FATURA_MAX_ADET) {
+      throw new BadRequestException(
+        `Bu dönem ve platform için en fazla ${FATURA_MAX_ADET} fatura yüklenebilir. ` +
+          'Gereksiz olanları silip tekrar dene.',
+      );
+    }
 
     const storageKey = await this.storage.save({
       orgId: ctx.orgId,
@@ -125,28 +146,39 @@ export class FaturaService {
         tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           INSERT INTO fatura_belgeleri (
             id, org_id, client_id, platform, donem, file_name, storage_key,
-            byte_size, aciklama, uploaded_by_user_id, uploaded_at
+            byte_size, dosya_hash, aciklama, uploaded_by_user_id, uploaded_at
           ) VALUES (
             gen_random_uuid(), ${ctx.orgId}::uuid, ${input.clientId}::uuid,
             ${input.platform}::"Platform", ${input.donem},
             ${dosya.fileName.slice(0, 255)}, ${storageKey},
-            ${dosya.bytes.byteLength}, ${input.aciklama ?? null},
+            ${dosya.bytes.byteLength}, ${hash}, ${input.aciklama ?? null},
             ${ctx.userId}::uuid, now()
           )
-          -- AYNI DÖNEM+PLATFORM ÜZERİNE YAZILIYOR. Yanına eklenseydi maile
-          -- hangisinin gireceği belirsiz kalırdı.
-          ON CONFLICT (client_id, platform, donem) DO UPDATE SET
-            file_name = EXCLUDED.file_name,
-            storage_key = EXCLUDED.storage_key,
-            byte_size = EXCLUDED.byte_size,
-            aciklama = EXCLUDED.aciklama,
-            uploaded_by_user_id = EXCLUDED.uploaded_by_user_id,
-            uploaded_at = now()
+          -- AYNI DÖNEME BİRDEN ÇOK FATURA GİREBİLİR, AYNI DOSYA İKİ KEZ
+          -- GİREMEZ. Çakışma ÜZERİNE YAZMIYOR: mükerrer bir yükleme
+          -- kullanıcının hatası ve ona söylenmeli, sessizce yutulmamalı.
+          ON CONFLICT (client_id, platform, donem, dosya_hash) DO NOTHING
           RETURNING id::text
         `),
       );
       const row = rows[0];
-      if (!row) throw new BadRequestException('Fatura kaydedilemedi.');
+      /*
+       * BOŞ DÖNÜŞ "HATA" DEĞİL, "MÜKERRER" DEMEK — ve ikisi ayrı cümleyle
+       * söylenmek zorunda. `DO NOTHING` çakışmada sıfır satır döndürüyor;
+       * bunu genel bir "kaydedilemedi" hatasına çevirmek, kullanıcıyı
+       * olmayan bir arızayı aramaya gönderirdi.
+       */
+      if (!row) {
+        /*
+         * DOSYA BURADA SİLİNMİYOR — aşağıdaki `catch` zaten siliyor.
+         * İkisini birden yapmak dosyayı iki kez silmeye çalışmak demek ve
+         * temizliğin nerede yapıldığı sorusunu iki cevaplı bırakırdı.
+         */
+        throw new BadRequestException(
+          'Bu dosya bu dönem ve platform için zaten yüklü. ' +
+            'Farklı bir fatura yüklemek istiyorsan dosyayı kontrol et.',
+        );
+      }
       id = row.id;
     } catch (err) {
       /*
@@ -158,10 +190,11 @@ export class FaturaService {
       throw err;
     }
 
-    // Üzerine yazıldıysa ESKİ dosya artık kimsenin işine yaramıyor.
-    if (mevcut && mevcut.storage_key !== storageKey) {
-      await this.storage.remove(mevcut.storage_key).catch(() => undefined);
-    }
+    /*
+     * ESKİ DOSYAYI SİLEN BLOK KALDIRILDI. Yükleme artık ÜZERİNE YAZMIYOR,
+     * YANINA EKLİYOR — silinecek bir öncesi yok. Blok bırakılsaydı yeni
+     * yüklenen bir faturanın yanındaki eskisini silerdi.
+     */
     return { id };
   }
 
@@ -214,39 +247,83 @@ export class FaturaService {
     ekler: Array<{ filename: string; content: Buffer; contentType: string }>;
     eksikDonemler: string[];
     bulunan: number;
+    /**
+     * EKLENEMEYEN faturalar ve SEBEBİ.
+     *
+     * Boş liste "sorun yok" demek. Dolu bir liste kullanıcıya GÖSTERİLMEK
+     * zorunda: bir faturanın maile girmemesi, ajansın müşteriye eksik belge
+     * göndermesi demek ve sessiz kalırsa bunu ilk fark eden müşteri olur.
+     */
+    atlanan: Array<{ donem: string; platform: string; sebep: string }>;
   }> {
     const donemler = kapsananDonemler(from, to);
-    if (donemler.length === 0) return { ekler: [], eksikDonemler: [], bulunan: 0 };
+    if (donemler.length === 0) {
+      return { ekler: [], eksikDonemler: [], bulunan: 0, atlanan: [] };
+    }
 
     const rows = await this.admin.$queryRaw<
-      Array<{ donem: string; platform: string; file_name: string; storage_key: string }>
+      Array<{
+        donem: string;
+        platform: string;
+        file_name: string;
+        storage_key: string;
+        byte_size: number;
+      }>
     >(Prisma.sql`
-      SELECT donem, platform::text AS platform, file_name, storage_key
+      SELECT donem, platform::text AS platform, file_name, storage_key, byte_size
         FROM fatura_belgeleri
        WHERE client_id = ${clientId}::uuid
          AND donem IN (${Prisma.join(donemler)})
-       ORDER BY donem, platform
+       -- SIRA TAM BELİRLİ OLMAK ZORUNDA, kimlik sütunu dahil. Aynı döneme
+       -- artık birden çok fatura girebiliyor ve donem+platform ikilisi artık
+       -- TEKİL DEĞİL. Belirsiz bir sıralamada Postgres iki çalıştırmada
+       -- farklı sıra döndürebiliyor; aynı raporun iki gönderimi ekleri farklı
+       -- sırayla taşır ve karşılaştıran kişi bunu veri farkı sanar. Yüklenme
+       -- damgası tek başına yetmiyor: toplu yüklemede iki satırınki aynı olur.
+       ORDER BY donem, platform, uploaded_at, id
     `);
 
     const ekler: Array<{ filename: string; content: Buffer; contentType: string }> = [];
+    const atlanan: Array<{ donem: string; platform: string; sebep: string }> = [];
+    const kullanilanAd = new Map<string, number>();
+    let toplamBayt = 0;
+
     for (const r of rows) {
+      /*
+       * BÜTÇE OKUMADAN ÖNCE KONTROL EDİLİYOR. Dosyayı diskten okuyup sonra
+       * atmak, sınıra takılan her fatura için boşa bellek ve boşa G/Ç demek —
+       * ve 10 MB'lık dosyalarda bu ölçülebilir bir maliyet.
+       */
+      if (toplamBayt + r.byte_size > MAIL_EK_TOPLAM_SINIRI) {
+        atlanan.push({
+          donem: r.donem,
+          platform: r.platform,
+          sebep: `toplam ek boyutu sınırı aşıldı (${Math.round(MAIL_EK_TOPLAM_SINIRI / 1024 / 1024)} MB)`,
+        });
+        continue;
+      }
+
       try {
+        const content = await this.storage.read(r.storage_key);
         ekler.push({
-          filename: dosyaAdi(r.donem, r.platform as FaturaPlatformu, r.file_name),
-          content: await this.storage.read(r.storage_key),
+          filename: benzersizAd(
+            dosyaAdi(r.donem, r.platform as FaturaPlatformu, r.file_name),
+            kullanilanAd,
+          ),
+          content,
           contentType: FATURA_MIME,
         });
+        toplamBayt += r.byte_size;
       } catch (err) {
         /*
          * DOSYA OKUNAMAZSA RAPOR YİNE GİDİYOR. Kayıt var ama disk okunamıyor
          * (taşınmış, silinmiş) — bu bir arıza ama raporu tamamen durdurmak,
          * çalışan bir gönderimi ikincil bir sorun yüzünden iptal etmek olurdu.
-         * Eksik sayılıyor ve nota giriyor.
+         * Sebep hem log'a hem `atlanan` listesine giriyor.
          */
-        this.logger.error(
-          `Fatura dosyası okunamadı (${r.donem}/${r.platform}): ` +
-            `${err instanceof Error ? err.message : String(err)}`,
-        );
+        const sebep = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Fatura dosyası okunamadı (${r.donem}/${r.platform}): ${sebep}`);
+        atlanan.push({ donem: r.donem, platform: r.platform, sebep: 'dosya okunamadı' });
       }
     }
 
@@ -255,11 +332,14 @@ export class FaturaService {
      * müşterinin yalnızca Meta'da reklamı olabilir ve "Google faturası
      * eksik" demek her ay yanlış bir uyarı üretirdi — okunmaz hâle gelen
      * uyarı, hiç olmayan uyarıdan kötü.
+     *
+     * KAYIT VARLIĞINA BAKIYOR, EKLENEBİLDİĞİNE DEĞİL: dosyası okunamayan bir
+     * dönem "yüklenmemiş" değil, bu ikisi ayrı arızalar ve ayrı listelerde.
      */
     const dolu = new Set(rows.map((r) => r.donem));
     const eksikDonemler = donemler.filter((d) => !dolu.has(d));
 
-    return { ekler, eksikDonemler, bulunan: ekler.length };
+    return { ekler, eksikDonemler, bulunan: ekler.length, atlanan };
   }
 }
 
@@ -272,6 +352,29 @@ function dosyaAdi(donem: string, platform: FaturaPlatformu, orijinal: string): s
   void orijinal;
   const etiket = platform === 'google' ? 'GoogleAds' : 'MetaAds';
   return `${etiket}-Fatura-${donem}.pdf`;
+}
+
+/**
+ * ═══ EK ADLARI ÇAKIŞAMAZ ═══
+ *
+ * `dosyaAdi()` "MetaAds-Fatura-2026-08.pdf" üretiyor ve aynı döneme artık
+ * BİRDEN ÇOK fatura girebiliyor: iki ek aynı adı taşırsa mail istemcileri
+ * ikisini de gösteriyor ama kullanıcı hangisinin hangisi olduğunu ayırt
+ * edemiyor, bazıları da indirirken birini diğerinin üstüne yazıyor.
+ *
+ * İKİNCİDEN İTİBAREN NUMARALANIYOR (`-2`, `-3`): ilk dosyanın adı değişmiyor,
+ * çünkü tek faturalı raporlar — bugünkü hâlin ezici çoğunluğu — bu
+ * değişiklikten hiç etkilenmemeli.
+ */
+function benzersizAd(ad: string, kullanilan: Map<string, number>): string {
+  const sayi = (kullanilan.get(ad) ?? 0) + 1;
+  kullanilan.set(ad, sayi);
+  if (sayi === 1) return ad;
+
+  const nokta = ad.lastIndexOf('.');
+  // Uzantısız bir ad gelirse `slice` ile bölmek adı bozardı.
+  if (nokta <= 0) return `${ad}-${sayi}`;
+  return `${ad.slice(0, nokta)}-${sayi}${ad.slice(nokta)}`;
 }
 
 function satirdanOzet(r: Record<string, unknown>): FaturaOzeti {

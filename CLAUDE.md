@@ -529,6 +529,36 @@ buna göre veriliyor:
   tek elemanlı listeyi veriyor ve fonksiyon kendini sonsuza çağırıyor;
   mutasyon testinde süreç BELLEK TAŞMASIYLA düştü. Durma koşulu doğrudan
   `idler.length === 1` olmalı.
+- **ÇOKLU ALICI, KISMİ REDDİ SESSİZ BİR HATAYA ÇEVİRİYOR.** nodemailer tek
+  alıcıda ret = "hepsi reddedildi" olduğu için FIRLATIYOR; birden çok alıcıda
+  bazıları reddedilse bile `sendMail` BAŞARIYLA dönüyor ve ret yalnızca dönüş
+  nesnesindeki `rejected` alanında duruyor (9.0.5 `smtp-connection/index.js`:
+  `if (rejected.length < to.length)`). Yani çoklu alıcıya geçmek bu sessiz
+  hatayı KENDİ ELİMİZLE açıyor. `mailGonder` artık `{ kabul, ret }` döndürüyor
+  ve iki gönderim yolu da `ret`i ekrana/nota taşıyor.
+  `mail-gonderici.spec.ts` davranışı kütüphanenin kendi kaynağından da
+  doğruluyor.
+- **TEKİLLİĞİ KALDIRMADAN ÖNCE NEYİ KORUDUĞUNU SOR.** `fatura_belgeleri`
+  `(müşteri, platform, dönem)` tekildi; "bir döneme birden çok fatura" isteği
+  gelince onu atmak akla yakın görünüyordu. Atmak YENİ bir sessiz hata açardı:
+  aynı PDF iki kez yüklenince müşteriye aynı belge iki ek olarak gider.
+  Tekillik kaldırılmadı, dosyanın İÇERİĞİNE (SHA-256) taşındı.
+- **TEKİL İNDEKSTE `WHERE ... IS NOT NULL` GENELDE GEREKSİZ.** Postgres tekil
+  indekste NULL'ları birbirinden FARKLI sayıyor, yani hash'i olmayan eski
+  satırlar yüklem olmadan da çakışmıyor. Yüklemin bedeli var: kısmi indeksi
+  Prisma bildiremiyor (şema ile veritabanı ayrışıyor) ve `ON CONFLICT`
+  hedefinde yüklemin tekrarlanması gerekiyor.
+- **MAİLİN TOPLAM EK BOYUTU SINIRLANMAK ZORUNDA ve sınır 25 MB DEĞİL.**
+  Ekler base64 ile kodlanıyor ve ham boyut ~%33 şişiyor: 20 MB ham ek telde
+  ~27 MB eder ve Gmail/Workspace sınırını aşar. Ham bütçe 15 MB
+  (`MAIL_EK_TOPLAM_SINIRI`). Sınıra takılan ek SESSİZCE düşmüyor — hangisinin
+  neden eklenmediği hem denetim kaydına hem kullanıcıya yazılıyor.
+- **ÇİFT CAST (`as unknown as X`) EKSİK ALAN DENETİMİNİ TAMAMEN KAPATIYOR.**
+  `rapor-plani.service.spec.ts` mock'ları böyle kuruluyordu; `zamanlanmisGonder`
+  dönüşü `to: string` → `to: string[]` olunca TypeScript hiçbir şey demedi ve
+  testler çalışma anında `to.join is not a function` ile düştü — sebep testin
+  kendisinde sanılıyor. Mock'un dönüş tipini imzadan TÜRET
+  (`Awaited<ReturnType<X['metot']>>`); alan eklenince derleme kırılsın.
 - **HESABA BAĞLI OLMAYAN KAYIT, HESABA GÖRE SAYAN RAPORA GİRMİYOR.** Şemsiye
   bütçe `ad_account_id IS NULL` ile duruyor; "kalanları say" sorgusu
   `WHERE ad_account_id = $1` dediği için o satır HİÇ görünmüyordu. Oysa
@@ -640,7 +670,7 @@ okunup varsayılmadı — canlıda doğrulandı.
 
 ### Test
 
-- `pnpm --filter @advetics/api test` — vitest. Şu an **2.164 API testi**.
+- `pnpm --filter @advetics/api test` — vitest. Şu an **2.207 API testi**.
 - Veritabanına dokunan testler **PGlite** kullanıyor (gerçek Postgres, WASM).
   Şema üretim migration'larından kuruluyor — el yazımı test şeması yok.
 - **RLS testlerde varsayılan olarak KAPALI** (worker rolü BYPASSRLS'i taklit

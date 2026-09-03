@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { raporSorgusu, sablonAlanlari, type ReportMailDraft } from '@advetics/shared';
+import { AliciListesiAlani } from '@/components/alici-listesi-alani';
 import { ApiRequestError, apiFetch, API_URL } from '@/lib/api';
 
 /**
@@ -94,13 +95,14 @@ export function MailGonderModal({
   sablon: string | null;
 }) {
   const [taslak, setTaslak] = useState<ReportMailDraft | null>(null);
-  const [alici, setAlici] = useState('');
+  const [alici, setAlici] = useState<string[]>([]);
   const [konu, setKonu] = useState('');
   const [govde, setGovde] = useState('');
   const [ekPdf, setEkPdf] = useState(true);
   const [bekleyen, setBekleyen] = useState<'taslak' | 'gonder' | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [sonuc, setSonuc] = useState<string | null>(null);
+  const [reddedilen, setReddedilen] = useState<Array<{ adres: string; sebep: string }>>([]);
 
   const qs = new URLSearchParams(raporSorgusu({ clientId, from, to, sablon }));
 
@@ -124,7 +126,7 @@ export function MailGonderModal({
       setTaslak(t);
       setKonu(t.subject);
       setGovde(t.html);
-      setAlici(t.defaultTo ?? '');
+      setAlici(t.defaultTo);
     } catch (err) {
       setHata(err instanceof ApiRequestError ? err.message : 'Taslak alınamadı.');
     } finally {
@@ -136,7 +138,10 @@ export function MailGonderModal({
     setBekleyen('gonder');
     setHata(null);
     try {
-      const r = await apiFetch<{ to: string }>('/reports/send', {
+      const r = await apiFetch<{
+        to: string[];
+        reddedilen: Array<{ adres: string; sebep: string }>;
+      }>('/reports/send', {
         method: 'POST',
         body: JSON.stringify({
           clientId,
@@ -150,13 +155,24 @@ export function MailGonderModal({
            * sunucu şeması ikisini ayrı alanda bekliyor.
            */
           ...sablonAlanlari(sablon),
-          to_email: alici.trim() || undefined,
+          to_emails: alici.length > 0 ? alici : undefined,
           subject: konu.trim(),
           html: govde,
           attachPdf: ekPdf,
         }),
       });
-      setSonuc(`Rapor ${r.to} adresine gönderildi.`);
+      /*
+       * KISMİ RET AYRI GÖSTERİLİYOR. Sunucu bazı alıcıları reddetse bile
+       * istek başarılı dönüyor (nodemailer yalnızca HEPSİ reddedilirse
+       * fırlatıyor); tek bir "gönderildi" cümlesi, raporun ulaşmadığını
+       * günler sonra öğrenmek demekti.
+       */
+      setReddedilen(r.reddedilen);
+      setSonuc(
+        r.to.length > 0
+          ? `Rapor ${r.to.length} adrese gönderildi: ${r.to.join(', ')}`
+          : 'Hiçbir adrese gönderilemedi.',
+      );
       onKapat();
     } catch (err) {
       // Sunucunun KENDİ mesajı: "kimlik doğrulanamadı" ile "alıcı reddedildi"
@@ -177,6 +193,17 @@ export function MailGonderModal({
       */}
       {sonuc && (
         <p className="rounded border border-ok/40 bg-ok/5 px-3 py-2 text-sm">{sonuc}</p>
+      )}
+      {reddedilen.length > 0 && (
+        /*
+         * REDDEDİLEN ALICILAR AYRI VE UYARI RENGİNDE. Yeşil "gönderildi"
+         * kutusunun içine sıkıştırmak, kısmi bir arızayı başarı gibi
+         * gösterirdi — ve bu projede en pahalı hata türü tam olarak o.
+         */
+        <p className="rounded border border-warn/40 bg-warn/5 px-3 py-2 text-sm text-ink">
+          <strong>{reddedilen.length} adres reddedildi</strong> — bu kişilere ULAŞMADI:{' '}
+          {reddedilen.map((r) => `${r.adres} (${r.sebep})`).join(' · ')}
+        </p>
       )}
       {hata && !acik && (
         <p className="rounded border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">
@@ -217,22 +244,18 @@ export function MailGonderModal({
             )}
 
             <div className="mt-3 space-y-3">
-              <label className="block">
-                <span className="text-xs text-ink-muted">Alıcı</span>
-                <input
-                  value={alici}
-                  onChange={(e) => setAlici(e.target.value)}
-                  placeholder="musteri@ornek.com"
-                  className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
-                />
-                {taslak && taslak.defaultTo === null && (
-                  // Sessizce boş bırakmak, "gönder"e basınca hata almak demek.
-                  <span className="mt-1 block text-[11px] text-warn">
-                    Bu müşterinin kayıtlı iletişim adresi yok — Müşteriler ekranından
-                    ekleyebilirsin.
-                  </span>
-                )}
-              </label>
+              {/*
+                * ALICI ARTIK LİSTE. Bileşen paylaşılıyor (plan ekranı ve
+                * müşteri formu da onu kullanıyor): ayrıştırma kuralı üç yerde
+                * ayrı yazılsaydı biri virgülü ayırıcı sayarken diğeri saymaz,
+                * biri tekilleştirirken diğeri aynı adrese iki kez gönderirdi.
+                */}
+              <AliciListesiAlani
+                etiket="Alıcılar"
+                degerler={alici}
+                onChange={setAlici}
+                bosVarsayilan={taslak?.defaultTo ?? []}
+              />
 
               <label className="block">
                 <span className="text-xs text-ink-muted">Konu</span>
@@ -286,7 +309,13 @@ export function MailGonderModal({
                 disabled={
                   bekleyen !== null ||
                   !taslak?.senderReady ||
-                  alici.trim().length === 0 ||
+                  /*
+                   * BOŞ LİSTE DÜĞMEYİ KAPATMIYOR ARTIK — müşterinin kayıtlı
+                   * alıcıları varsa gönderim geçerli. Kapalı tutmak,
+                   * çoğunlukla hiçbir adres yazmayacak kullanıcıyı her
+                   * seferinde adres yazmaya zorlardı.
+                   */
+                  (alici.length === 0 && (taslak?.defaultTo.length ?? 0) === 0) ||
                   konu.trim().length === 0
                 }
                 className="rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"

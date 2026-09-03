@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { AliciListesiAlani } from '@/components/alici-listesi-alani';
 import { formatNumber } from '@/lib/format';
 import { atamaBildirimi } from '@/lib/atama-bildirimi';
 import { useRouter } from 'next/navigation';
@@ -60,9 +61,10 @@ function Modal({
 
   const [ad, setAd] = useState('');
   const [iletisimAcik, setIletisimAcik] = useState(false);
+  // Rapor alıcıları DİZİ olarak tutuluyor; diğer alanlar dizge.
+  const [aliciListesi, setAliciListesi] = useState<string[]>([]);
   const [iletisim, setIletisim] = useState({
     contactName: '',
-    contactEmail: '',
     contactPhone: '',
     website: '',
     address: '',
@@ -129,6 +131,10 @@ function Modal({
         body: JSON.stringify({
           name: temizAd,
           ...iletisim,
+          // Liste ayrı state'te tutuluyor (diğer alanlar dizge); gövdeye
+          // eklemeyi unutmak, sihirbazda girilen alıcıların sessizce
+          // kaybolması demekti.
+          contactEmails: aliciListesi,
           adAccountIds,
           socialProfileIds,
           ...(kullaniciDolu
@@ -223,11 +229,12 @@ function Modal({
                     value={iletisim.contactName}
                     onChange={(v) => setIletisim((s) => ({ ...s, contactName: v }))}
                   />
-                  <Alan
-                    etiket="E-posta"
-                    type="email"
-                    value={iletisim.contactEmail}
-                    onChange={(v) => setIletisim((s) => ({ ...s, contactEmail: v }))}
+                  {/* Müşteri formuyla AYNI bileşen: sihirbazda girilen liste
+                      ile sonradan düzenlenen liste aynı kurallara tabi olmalı. */}
+                  <AliciListesiAlani
+                    etiket="Rapor alıcıları"
+                    degerler={aliciListesi}
+                    onChange={setAliciListesi}
                   />
                   <Alan
                     etiket="Telefon"

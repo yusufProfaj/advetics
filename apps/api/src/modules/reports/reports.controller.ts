@@ -163,7 +163,12 @@ export class ReportsController {
     @CurrentTenant() ctx: TenantContext,
     @Body(zodBody(reportSendSchema)) dto: ReportSendInput,
     @Req() req: RequestMeta,
-  ): Promise<{ sent: true; to: string }> {
+    /*
+     * REDDEDİLEN ALICILAR YANITTA. nodemailer bazı alıcılar reddedilse bile
+     * fırlatmıyor; ekran yalnızca `sent: true` görüp "gönderildi" yazsaydı
+     * kullanıcı müşterisinin raporu almadığını günler sonra öğrenirdi.
+     */
+  ): Promise<{ sent: true; to: string[]; reddedilen: Array<{ adres: string; sebep: string }> }> {
     return this.gonderService.gonder(ctx, dto, meta(req));
   }
 

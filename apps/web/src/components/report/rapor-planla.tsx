@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { AliciListesiAlani } from '@/components/alici-listesi-alani';
 import { createPortal } from 'react-dom';
 import {
   AYIN_GUNU_MAX,
@@ -53,7 +54,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
   const [dayOfMonth, setDayOfMonth] = useState(1);
   const [hour, setHour] = useState(9);
   const [rangeKey, setRangeKey] = useState(varsayilanPencere('weekly'));
-  const [toEmail, setToEmail] = useState('');
+  const [toEmail, setToEmail] = useState<string[]>([]);
   const [attachPdf, setAttachPdf] = useState(true);
   const [duzenlenen, setDuzenlenen] = useState<string | null>(null);
 
@@ -114,7 +115,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
     setDayOfMonth(1);
     setHour(9);
     setRangeKey(varsayilanPencere('weekly'));
-    setToEmail('');
+    setToEmail([]);
     setAttachPdf(true);
   }
 
@@ -125,7 +126,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
     setDayOfMonth(p.dayOfMonth ?? 1);
     setHour(p.hour);
     setRangeKey(p.rangeKey);
-    setToEmail(p.toEmail ?? '');
+    setToEmail(p.toEmails);
     setAttachPdf(p.attachPdf);
   }
 
@@ -141,7 +142,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
         hour,
         rangeKey,
         templateId,
-        toEmail: toEmail.trim() || null,
+        toEmails: toEmail,
         attachPdf,
         enabled: true,
       };
@@ -171,7 +172,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
           hour: p.hour,
           rangeKey: p.rangeKey,
           templateId: p.templateId,
-          toEmail: p.toEmail,
+          toEmails: p.toEmails,
           attachPdf: p.attachPdf,
           enabled: !p.enabled,
         }),
@@ -268,7 +269,10 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                               )}
                             </p>
                             <p className="mt-0.5 text-xs text-ink-muted">
-                              {pencereEtiketi(p.rangeKey)} · {p.cozulenAlici ?? 'alıcı yok'}
+                              {pencereEtiketi(p.rangeKey)} ·{' '}
+                              {p.cozulenAliciListesi.length > 0
+                                ? p.cozulenAliciListesi.join(', ')
+                                : 'alıcı yok'}
                               {p.attachPdf ? ' · PDF ekli' : ''}
                             </p>
                             {p.nextRunAt && p.enabled && (
@@ -433,17 +437,16 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                     </span>
                   </label>
 
-                  <label className="block sm:col-span-2">
-                    <span className="text-xs text-ink-muted">
-                      Alıcı — boş bırakılırsa müşterinin kayıtlı adresi kullanılır
-                    </span>
-                    <input
-                      value={toEmail}
-                      onChange={(e) => setToEmail(e.target.value)}
-                      placeholder="musteri@ornek.com"
-                      className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                  <div className="sm:col-span-2">
+                    {/* Rapor gönderme ekranıyla AYNI bileşen — ayrıştırma
+                        kuralı iki yerde yazılsaydı plan başka bir listeye
+                        gönderirdi ve farkı yalnızca alıcı görürdü. */}
+                    <AliciListesiAlani
+                      etiket="Alıcılar — boş bırakılırsa müşterinin kayıtlı adresleri kullanılır"
+                      degerler={toEmail}
+                      onChange={setToEmail}
                     />
-                  </label>
+                  </div>
 
                   <label className="flex items-center gap-2 text-sm sm:col-span-2">
                     <input
@@ -466,7 +469,10 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                   {planZamaniMetni({ frequency, dayOfWeek, dayOfMonth, hour })}’da,{' '}
                   <strong>{secilebilir.find((p) => p.key === rangeKey)?.label}</strong> dönemini
                   kapsayan rapor{' '}
-                  <strong>{toEmail.trim() || 'müşterinin kayıtlı adresine'}</strong> gönderilecek.
+                  <strong>
+                    {toEmail.length > 0 ? toEmail.join(', ') : 'müşterinin kayıtlı adreslerine'}
+                  </strong>{' '}
+                  gönderilecek.
                 </p>
                 <p className="mt-1 text-[11px] text-ink-muted">
                   Dönemde hiç harcama yoksa mail gönderilmez — sıfırlarla dolu bir rapor

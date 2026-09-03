@@ -78,13 +78,18 @@ describe('müşteri detay penceresinin alan zinciri', () => {
   it('tarama gerçekten bir şey yakaladı', () => {
     // Dilim boşalırsa aşağıdaki "hepsi var" iddiaları BOŞ KÜMEDE doğru olur.
     expect(CIZILEN.length).toBeGreaterThan(8);
-    expect(CIZILEN).toContain('contactEmail');
+    expect(CIZILEN).toContain('contactEmails');
     expect(CIZILEN).toContain('taxNumber');
     expect(listGovdesi().length).toBeGreaterThan(200);
     expect(clientRowGovdesi().length).toBeGreaterThan(200);
   });
 
-  it.each(['contactName', 'contactEmail', 'contactPhone', 'website', 'address', 'taxOffice', 'taxNumber', 'iban', 'notes'])(
+  /*
+   * `contactEmails` ÇOĞUL ve bu zincirin ta kendisi: alan uçtan gelmezse
+   * rapor gönderimi "alıcı yok" der ve kullanıcı müşteriyi düzenlemeye
+   * gittiğinde alanın dolu olduğunu görür — teşhis edilemeyen bir hâl.
+   */
+  it.each(['contactName', 'contactEmails', 'contactPhone', 'website', 'address', 'taxOffice', 'taxNumber', 'iban', 'notes'])(
     '%s alanı uçtan geliyor, tipte tanımlı ve pencerede çiziliyor',
     (alan) => {
       expect(listGovdesi(), `${alan} list() seçiminde yok — uçtan undefined gelir`).toContain(

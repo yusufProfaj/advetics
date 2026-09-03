@@ -95,7 +95,7 @@ describe('kaynak taraması — fatura maile ekleniyor', () => {
   });
 
   it('KRİTİK: PLANLI gönderim de faturaları ekliyor', () => {
-    const g = dilim('async zamanlanmisGonder(', 'private async musteriEpostasi(');
+    const g = dilim('async zamanlanmisGonder(', 'private async musteriEpostalari(');
     expect(g).toContain('this.faturalar.raporEkleri(');
     expect(g).toContain('ekler.push(...fatura.ekler)');
   });
@@ -105,7 +105,7 @@ describe('kaynak taraması — fatura maile ekleniyor', () => {
      * Kullanıcının kararı "uyar ama gönder" idi. Uyarı taşınmazsa karar
      * yalnızca yarısı uygulanmış olur: rapor gider, eksiklik kaybolur.
      */
-    const g = dilim('async zamanlanmisGonder(', 'private async musteriEpostasi(');
+    const g = dilim('async zamanlanmisGonder(', 'private async musteriEpostalari(');
     expect(g).toContain('faturasizDonemler');
   });
 
