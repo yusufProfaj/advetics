@@ -42,7 +42,7 @@ function girdi(over: Partial<ClientSetupInput> = {}): ClientSetupInput {
     reportingCurrency: 'TRY',
     specialAdCategories: [],
     contactName: null,
-    contactEmail: null,
+    contactEmails: [],
     contactPhone: null,
     website: null,
     address: null,

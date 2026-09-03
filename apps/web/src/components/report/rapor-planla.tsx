@@ -54,7 +54,8 @@ export function RaporPlanla({ clientId, templateId }: Props) {
   const [dayOfMonth, setDayOfMonth] = useState(1);
   const [hour, setHour] = useState(9);
   const [rangeKey, setRangeKey] = useState(varsayilanPencere('weekly'));
-  const [toEmail, setToEmail] = useState<string[]>([]);
+  // AD ÇOĞUL: `toEmail` adında bir dizi, okuyanı yanıltıyordu.
+  const [alicilar, setAlicilar] = useState<string[]>([]);
   const [attachPdf, setAttachPdf] = useState(true);
   const [duzenlenen, setDuzenlenen] = useState<string | null>(null);
 
@@ -115,7 +116,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
     setDayOfMonth(1);
     setHour(9);
     setRangeKey(varsayilanPencere('weekly'));
-    setToEmail([]);
+    setAlicilar([]);
     setAttachPdf(true);
   }
 
@@ -126,7 +127,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
     setDayOfMonth(p.dayOfMonth ?? 1);
     setHour(p.hour);
     setRangeKey(p.rangeKey);
-    setToEmail(p.toEmails);
+    setAlicilar(p.toEmails);
     setAttachPdf(p.attachPdf);
   }
 
@@ -142,7 +143,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
         hour,
         rangeKey,
         templateId,
-        toEmails: toEmail,
+        toEmails: alicilar,
         attachPdf,
         enabled: true,
       };
@@ -443,8 +444,8 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                         gönderirdi ve farkı yalnızca alıcı görürdü. */}
                     <AliciListesiAlani
                       etiket="Alıcılar — boş bırakılırsa müşterinin kayıtlı adresleri kullanılır"
-                      degerler={toEmail}
-                      onChange={setToEmail}
+                      degerler={alicilar}
+                      onChange={setAlicilar}
                     />
                   </div>
 
@@ -470,7 +471,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                   <strong>{secilebilir.find((p) => p.key === rangeKey)?.label}</strong> dönemini
                   kapsayan rapor{' '}
                   <strong>
-                    {toEmail.length > 0 ? toEmail.join(', ') : 'müşterinin kayıtlı adreslerine'}
+                    {alicilar.length > 0 ? alicilar.join(', ') : 'müşterinin kayıtlı adreslerine'}
                   </strong>{' '}
                   gönderilecek.
                 </p>
