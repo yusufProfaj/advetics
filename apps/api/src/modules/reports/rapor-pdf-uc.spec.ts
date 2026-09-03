@@ -23,6 +23,15 @@ function pdfGovdesi(): string {
   return g;
 }
 
+/** `Content-Disposition` başlığını üreten fonksiyonun gövdesi. */
+function basligiUreten(): string {
+  const bas = KAYNAK.indexOf('function pdfBasligi(');
+  if (bas === -1) {
+    throw new Error('pdfBasligi bulunamadı — tarama boşa düştü, testi güncelle.');
+  }
+  return KAYNAK.slice(bas);
+}
+
 describe('GET /reports/pdf', () => {
   it('KRİTİK: rapor DIŞARI ÇIKTIĞI için denetime yazılıyor', () => {
     // Potansiyel müşteri CSV'si bu emsali kurdu: "kim, ne zaman, hangi
@@ -46,22 +55,35 @@ describe('GET /reports/pdf', () => {
   it('indirme başlıkları doğru — tarayıcı sekmede AÇMAMALI', () => {
     const g = pdfGovdesi();
     expect(g).toContain("'application/pdf'");
-    expect(g).toContain('attachment; filename=');
+    // Başlık artık `pdfBasligi()` üretiyor; uç onu ÇAĞIRMAK zorunda.
+    expect(g).toContain('pdfBasligi(data)');
+    expect(basligiUreten()).toContain('attachment; filename=');
   });
 
-  it('KRİTİK: dosya adı ASCII’ye indirgeniyor', () => {
+  it('KRİTİK: dosya adı MÜŞTERİ ADI ve BAŞLIK taşıyor — UUID değil', () => {
     /*
-     * Türkçe karakterler ve boşluklar bazı istemcilerde
-     * `Content-Disposition` ayrıştırmasını bozuyor ve dosya "download"
-     * adıyla kaydediliyor.
+     * Kullanıcının bildirdiği hâl mail ekinde
+     * `b4719dbf-...-2026-08-01_2026-08-31.pdf` idi: gelen kutusunda adı
+     * olmayan bir dosya. İndirme ucu da aynı üreticiden geçiyor, çünkü aynı
+     * belgenin iki yolu aynı adı vermek zorunda.
      */
-    const bas = KAYNAK.indexOf('function dosyaAdi(');
-    if (bas === -1) {
-      throw new Error('dosyaAdi bulunamadı — tarama boşa düştü.');
-    }
-    const f = KAYNAK.slice(bas);
-    expect(f).toContain('[ğĞ]');
-    expect(f).toContain('[^a-zA-Z0-9]+');
+    expect(basligiUreten()).toContain('raporDosyaAdi({');
+    expect(basligiUreten()).toContain('musteriAdi: data.client.name');
+    expect(basligiUreten()).toContain('baslik: data.title');
+  });
+
+  it('KRİTİK: başlık İKİ alan birden taşıyor — ASCII yedeği ve UTF-8', () => {
+    /*
+     * `filename` yalnızca ASCII taşıyabiliyor: Türkçe bir ad koymak bazı
+     * istemcilerde başlığı bozuyor ve dosya "download" adıyla kaydediliyor.
+     * `filename*` (RFC 6266) yüzde kodlu UTF-8 taşıyor ve modern tarayıcılar
+     * onu tercih ediyor. Yalnızca birini yazmak ya okunur adı kaybetmek ya da
+     * eski istemcilerde adı tamamen kaybetmek demek.
+     */
+    const f = basligiUreten();
+    expect(f).toContain('asciiDosyaAdi(ad)');
+    expect(f).toContain("filename*=UTF-8''");
+    expect(f).toContain('encodeURIComponent(ad)');
   });
 
   it('okuma izni isteniyor', () => {

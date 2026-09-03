@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   nihaiAlicilar,
+  raporDosyaAdi,
   type ReportMailDraft,
   type ReportQuery,
   type ReportSendInput,
@@ -138,7 +139,17 @@ export class RaporGonderService {
     const ekler = input.attachPdf
       ? [
           {
-            filename: `${input.clientId}-${input.from}_${input.to}.pdf`,
+            /*
+             * EK ADI MÜŞTERİNİN GÖRDÜĞÜ ŞEY. Burada müşterinin UUID'si
+             * yazıyordu ve gelen kutusunda ad yerine rastgele bir dizeye
+             * dönüşüyordu. Üretici TEK — indirme ucu da aynı adı veriyor.
+             */
+            filename: raporDosyaAdi({
+              musteriAdi: data.client.name,
+              baslik: data.title,
+              from: input.from,
+              to: input.to,
+            }),
             content: await this.pdf.uret(data),
             contentType: 'application/pdf',
           },
@@ -330,7 +341,14 @@ export class RaporGonderService {
     const ekler = params.attachPdf
       ? [
           {
-            filename: `${params.clientId}-${params.from}_${params.to}.pdf`,
+            // Elle gönderimle AYNI üretici: iki yol farklı ad verirse aynı
+            // rapor iki farklı belge gibi görünürdü.
+            filename: raporDosyaAdi({
+              musteriAdi: data.client.name,
+              baslik: data.title,
+              from: params.from,
+              to: params.to,
+            }),
             content: await this.pdf.uret(data),
             contentType: 'application/pdf',
           },

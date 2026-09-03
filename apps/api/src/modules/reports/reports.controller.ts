@@ -19,6 +19,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import {
+  asciiDosyaAdi,
+  raporDosyaAdi,
   reportQuerySchema,
   reportSendSchema,
   type ReportMailDraft,
@@ -133,7 +135,7 @@ export class ReportsController {
     );
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${dosyaAdi(data)}"`);
+    res.setHeader('Content-Disposition', pdfBasligi(data));
     res.setHeader('Content-Length', String(bayt.byteLength));
     res.send(bayt);
   }
@@ -386,22 +388,24 @@ function meta(req: RequestMeta): { ip: string | null; userAgent: string | null; 
 }
 
 /**
- * PDF DOSYA ADI — müşteri ve dönem.
+ * PDF İNDİRME BAŞLIĞI — İKİ ALAN BİRDEN.
  *
- * Müşteri adı dosya adına giriyor ama TEMİZLENEREK: Türkçe karakterler ve
- * boşluklar bazı istemcilerde `Content-Disposition` ayrıştırmasını bozuyor ve
- * indirilen dosya "download" adıyla kaydediliyor.
+ * Eskiden yalnızca ASCII'ye indirgenmiş, küçük harfli bir ad vardı
+ * (`ciftci-grup-2026-08-01_2026-08-31.pdf`) ve rapor BAŞLIĞI hiç geçmiyordu.
+ * Ad artık `raporDosyaAdi()` üretiyor — mail ekiyle AYNI fonksiyon.
+ *
+ * `filename` alanı yalnızca ASCII taşıyabiliyor: Türkçe bir ad koymak bazı
+ * istemcilerde başlığı bozuyor ve dosya "download" adıyla kaydediliyor.
+ * `filename*` (RFC 6266) yüzde kodlu UTF-8 taşıyor ve modern tarayıcıların
+ * hepsi onu tercih ediyor. İKİSİ BİRDEN yazılıyor: biri okunur adı verir,
+ * diğeri hiçbir istemcinin dosyayı adsız bırakmamasını garanti eder.
  */
-function dosyaAdi(data: ReportData): string {
-  const ad = data.client.name
-    .replace(/[ğĞ]/g, 'g')
-    .replace(/[üÜ]/g, 'u')
-    .replace(/[şŞ]/g, 's')
-    .replace(/[ıİ]/g, 'i')
-    .replace(/[öÖ]/g, 'o')
-    .replace(/[çÇ]/g, 'c')
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .toLowerCase();
-  return `${ad || 'rapor'}-${data.from}_${data.to}.pdf`;
+function pdfBasligi(data: ReportData): string {
+  const ad = raporDosyaAdi({
+    musteriAdi: data.client.name,
+    baslik: data.title,
+    from: data.from,
+    to: data.to,
+  });
+  return `attachment; filename="${asciiDosyaAdi(ad)}"; filename*=UTF-8''${encodeURIComponent(ad)}`;
 }
