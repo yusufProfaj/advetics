@@ -622,12 +622,21 @@ Temizleyicinin şema kara listesine `blob:`, `file:` ve `cid:` eklendi — üç�
 ekranda ÇALIŞIYOR ama mailde ÖLÜ; gövde artık panelde çizildiği için bu tam
 olarak "önizleme yalan söylüyor" hâliydi.
 
-**ÜRETİMİ KIRDIM ve düzelttim (aynı gün):** editörün doldurma effect'i
-i bağımlılık listesinde taşımıyordu — editör taslak gelmeden monte
-oluyor ve bir daha dolmuyordu, kutu boş kalıyordu. Boş alandan çıkış da
- ile boşluğu state'e geri yazıp taslağı siliyordu. Daha kötüsü: bu
-YANLIŞ davranışı bir test hâline getirmiştim. Karar artık saf bir fonksiyonda
-() ve üç hâli ayrı ayrı sınanıyor.
+**ÜRETİMİ KIRDIM ve aynı gün düzelttim.** Editörün doldurma effect'i `deger`i
+bağımlılık listesinde taşımıyordu: editör, taslak sunucudan GELMEDEN monte
+oluyor ve bir daha dolmuyordu — kutu boş kalıyordu. İkinci belirti bundan
+türüyordu: boş alana tıklayıp çıkınca `onBlur` boşluğu state'e geri yazıp
+sunucudan gelen taslağı da siliyordu, yani "HTML" sekmesi de boş görünüyordu.
+
+Asıl ders testte: bu YANLIŞ davranışı ben kilitlemiştim
+(`toContain('[taslakAnahtari, kodModu]')`). Test yazmak davranışın doğru
+olduğunu kanıtlamıyor, yalnızca değişmeyeceğini garanti ediyor. Karar artık saf
+bir fonksiyonda (`domaYazilmali`) ve üç hâli ayrı ayrı sınanıyor: geç gelen
+taslak, yazarken dokunmama, odakta ama boş alan.
+
+Mutasyon ikinci bir tuzak çıkardı: düzeltmeden sonra hatayı geri koydum ve 17
+testin 17'si de geçti — dilim effect gövdesini de kapsıyordu ve `deger` orada
+zaten geçiyordu. İddia artık bağımlılık dizisinin KENDİSİNE çapalı.
 
 **Yol boyunca bulunan pre-existing hata:** taslak bir kez çekildikten sonra bir
 daha çekilmiyordu (`taslak !== null`). Kullanıcı pencereyi kapatıp tarih
