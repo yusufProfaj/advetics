@@ -600,11 +600,23 @@ buna göre veriliyor:
   satırlar yüklem olmadan da çakışmıyor. Yüklemin bedeli var: kısmi indeksi
   Prisma bildiremiyor (şema ile veritabanı ayrışıyor) ve `ON CONFLICT`
   hedefinde yüklemin tekrarlanması gerekiyor.
-- **MAİLİN TOPLAM EK BOYUTU SINIRLANMAK ZORUNDA ve sınır 25 MB DEĞİL.**
-  Ekler base64 ile kodlanıyor ve ham boyut ~%33 şişiyor: 20 MB ham ek telde
-  ~27 MB eder ve Gmail/Workspace sınırını aşar. Ham bütçe 15 MB
-  (`MAIL_EK_TOPLAM_SINIRI`). Sınıra takılan ek SESSİZCE düşmüyor — hangisinin
-  neden eklenmediği hem denetim kaydına hem kullanıcıya yazılıyor.
+- **MAİL SAĞLAYICISININ SINIRI HAM BOYUTA BAKIYOR, KODLANMIŞ BOYUTA DEĞİL.**
+  Burada tersini yazmıştım: "25 MB sınırı telden geçen boyuta bakıyor, base64
+  %33 şişiriyor, o yüzden ham bütçe 15 MB olmalı". Google'ın kendi dokümanı
+  sınırların *"the total size of the message content and attachments BEFORE
+  ENCODING"* için yazıldığını söylüyor — yani 25 MB HAM. Kendi kendime koyduğum
+  sınır gereksizce dardı ve kullanıcının arşivi maile hiç girmiyordu. Bugün
+  dosya başına 20 MB, toplam mesaj bütçesi 22 MB.
+- **BÜTÇE TOPLAM OLMAK ZORUNDA — TEK BİR EK TÜRÜNÜ SAYMAK YETMİYOR.** Fatura
+  bütçesi rapor PDF'inin payını hesaba katmıyordu: 22 MB fatura + 3 MB PDF,
+  sağlayıcının sınırını tam üstünden aşıyor ve mail SUNUCUDA reddediliyordu.
+  `raporEkleri` artık kullanılmış baytı parametre alıyor. PARAMETRENİN
+  VARSAYILANI 0 olduğu için çağıranın onu geçirmemesi hem derlemede hem
+  servis testinde SESSİZ — iki gönderim yolunu kaynak taramasıyla kilitle
+  (`fatura.spec.ts`), mutasyonla ölçüldü.
+- **KULLANICIYA GÖSTERİLEN SINIR SABİTTEN TÜREMELİ.** Panelde "Üst sınır
+  10 MB" ELLE yazılıydı; sınır 20 MB'a çıkınca mesaj kullanıcıya YANLIŞ sayıyı
+  söylemeye başladı ve hiçbir test bunu görmedi.
 - **ÇİFT CAST (`as unknown as X`) EKSİK ALAN DENETİMİNİ TAMAMEN KAPATIYOR.**
   `rapor-plani.service.spec.ts` mock'ları böyle kuruluyordu; `zamanlanmisGonder`
   dönüşü `to: string` → `to: string[]` olunca TypeScript hiçbir şey demedi ve
@@ -722,7 +734,7 @@ okunup varsayılmadı — canlıda doğrulandı.
 
 ### Test
 
-- `pnpm --filter @advetics/api test` — vitest. Şu an **2.250 API testi**.
+- `pnpm --filter @advetics/api test` — vitest. Şu an **2.253 API testi**.
 - Veritabanına dokunan testler **PGlite** kullanıyor (gerçek Postgres, WASM).
   Şema üretim migration'larından kuruluyor — el yazımı test şeması yok.
 - **RLS testlerde varsayılan olarak KAPALI** (worker rolü BYPASSRLS'i taklit

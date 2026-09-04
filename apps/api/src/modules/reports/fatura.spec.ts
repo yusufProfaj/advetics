@@ -109,6 +109,29 @@ describe('kaynak taraması — fatura maile ekleniyor', () => {
     expect(g).toContain('faturasizDonemler');
   });
 
+  it('KRİTİK: İKİ YOL DA rapor PDF\'inin boyutunu bütçeye geçiriyor', () => {
+    /*
+     * Bütçe eskiden yalnızca faturaları sayıyordu; rapor PDF'inin payı hesaba
+     * hiç girmiyordu ve iki ek birlikte sağlayıcının sınırını aşabiliyordu —
+     * mail SUNUCUDA reddediliyor, kullanıcı sebebini bir SMTP hatasından
+     * okumak zorunda kalıyordu.
+     *
+     * BU TARAMA ŞART çünkü parametrenin VARSAYILANI 0: çağıran onu geçirmeyi
+     * unutursa ne TypeScript ne de servis testi bir şey diyor. Mutasyonla
+     * ölçüldü — argümanı sildim ve 24 testin 24'ü de geçti.
+     */
+    for (const [bas, son] of [
+      ['async gonder(', 'async zamanlanmisGonder('],
+      ['async zamanlanmisGonder(', 'private async musteriEpostalari('],
+    ] as const) {
+      const g = dilim(bas, son);
+      expect(g, `${bas} PDF boyutunu hesaplamıyor`).toContain(
+        'ekler.reduce((t, e) => t + e.content.byteLength, 0)',
+      );
+      expect(g, `${bas} bütçeye geçirmiyor`).toMatch(/raporEkleri\([\s\S]{0,160}kullanilan,/);
+    }
+  });
+
   it('eksik dönem denetim kaydına yazılıyor', () => {
     const g = dilim('async gonder(', 'async zamanlanmisGonder(');
     expect(g).toContain('faturasizDonemler');

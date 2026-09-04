@@ -167,7 +167,19 @@ export class RaporGonderService {
      * Fatura EKLENEMEDİYSE gönderim DURMUYOR ama sessiz de kalmıyor:
      * eksik dönemler denetim kaydına yazılıyor.
      */
-    const fatura = await this.faturalar.raporEkleri(input.clientId, input.from, input.to);
+    /*
+     * PDF'İN BOYUTU BÜTÇEYE GİRİYOR. Eskiden fatura bütçesi PDF'i saymıyordu
+     * ve iki ek birlikte sağlayıcının sınırını aşabiliyordu; mail SUNUCUDA
+     * reddediliyor ve kullanıcı sebebini SMTP hatasından okumak zorunda
+     * kalıyordu.
+     */
+    const kullanilan = ekler.reduce((t, e) => t + e.content.byteLength, 0);
+    const fatura = await this.faturalar.raporEkleri(
+      input.clientId,
+      input.from,
+      input.to,
+      kullanilan,
+    );
     ekler.push(...fatura.ekler);
 
     const parola = this.crypto.decrypt(Buffer.from(gonderen.smtp_pass_enc));
@@ -356,7 +368,14 @@ export class RaporGonderService {
       : [];
 
     // Planlı gönderimde de faturalar ekleniyor — elle gönderimle aynı yol.
-    const fatura = await this.faturalar.raporEkleri(params.clientId, params.from, params.to);
+    // Elle gönderimle aynı: PDF'in payı bütçeye giriyor.
+    const kullanilan = ekler.reduce((t, e) => t + e.content.byteLength, 0);
+    const fatura = await this.faturalar.raporEkleri(
+      params.clientId,
+      params.from,
+      params.to,
+      kullanilan,
+    );
     ekler.push(...fatura.ekler);
 
     const sonuc = await mailGonder(

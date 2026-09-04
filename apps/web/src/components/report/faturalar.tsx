@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  MAIL_EK_TOPLAM_SINIRI,
   FATURA_ETIKETLERI,
   FATURA_KABUL,
   FATURA_MAX_BAYT,
@@ -52,6 +53,7 @@ export function Faturalar({
   const [liste, setListe] = useState<FaturaOzeti[] | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [yukleniyor, setYukleniyor] = useState(false);
+  const [uyari, setUyari] = useState<string | null>(null);
 
   const varsayilanDonem = odakDonemler?.[odakDonemler.length - 1] ?? buAy();
   const [donem, setDonem] = useState(varsayilanDonem);
@@ -92,9 +94,38 @@ export function Faturalar({
      * bağlantısını boşa harcamak demek.
      */
     if (dosya.size > FATURA_MAX_BAYT) {
-      setHata(`Dosya çok büyük (${Math.round(dosya.size / 1024 / 1024)} MB). Üst sınır 10 MB.`);
+      /*
+       * SINIR SABİTTEN YAZILIYOR. Burada "10 MB" ELLE yazılıydı ve sınır
+       * 20 MB'a çıkınca kullanıcıya YANLIŞ sayıyı söylemeye başladı — mesaj
+       * kodla birlikte güncellenmeyen her sabit gibi.
+       */
+      setHata(
+        `Dosya çok büyük (${Math.round(dosya.size / 1024 / 1024)} MB). ` +
+          `Üst sınır ${Math.round(FATURA_MAX_BAYT / 1024 / 1024)} MB.`,
+      );
       return;
     }
+
+    /*
+     * MAİLE SIĞMAYACAK DOSYA YÜKLEME ANINDA SÖYLENİYOR — ve yükleme
+     * DURDURULMUYOR.
+     *
+     * Dosya sınırı (20 MB) ile bir maildeki toplam ek bütçesi (22 MB) ayrı
+     * şeyler: 20 MB'lık tek bir arşiv yüklenebiliyor ama yanına rapor PDF'i
+     * de eklenince bütçeyi aşabiliyor ve o fatura maile GİRMİYOR. Kullanıcı
+     * bunu "Gönder"e bastığında değil, dosyayı seçtiğinde bilmeli.
+     *
+     * Yükleme yine de yapılıyor: dosya panelde duruyor ve oradan indirilip
+     * elle iletilebiliyor. Reddetmek, saklamanın tek faydasını da götürürdü.
+     */
+    const sigmaz = dosya.size > MAIL_EK_TOPLAM_SINIRI * 0.85;
+    setUyari(
+      sigmaz
+        ? `Bu dosya ${Math.round(dosya.size / 1024 / 1024)} MB — rapor PDF'iyle birlikte ` +
+            'mail sınırını aşabilir ve maile eklenmeyebilir. Yüklendikten sonra panelden ' +
+            'indirip elle iletebilirsin.'
+        : null,
+    );
 
     setYukleniyor(true);
     setHata(null);
@@ -164,6 +195,12 @@ export function Faturalar({
             olarak eklenir.
           </p>
         </div>
+      )}
+
+      {uyari !== null && (
+        <p className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-xs text-ink">
+          {uyari}
+        </p>
       )}
 
       {hata !== null && (

@@ -264,6 +264,15 @@ export class FaturaService {
     clientId: string,
     from: string,
     to: string,
+    /**
+     * MAİLDE ZATEN KULLANILMIŞ BAYT — pratikte rapor PDF'i.
+     *
+     * Bütçe eskiden yalnızca faturaları sayıyordu ve PDF'in payı hesaba hiç
+     * girmiyordu: 22 MB fatura + 3 MB PDF, sağlayıcının 25 MB sınırını tam
+     * üstünden aşıyordu ve mail SUNUCUDA reddediliyordu. Bütçeyi çağıran
+     * biliyor, çünkü PDF'i o üretiyor.
+     */
+    kullanilanBayt = 0,
   ): Promise<{
     ekler: Array<{ filename: string; content: Buffer; contentType: string }>;
     eksikDonemler: string[];
@@ -308,7 +317,7 @@ export class FaturaService {
     const ekler: Array<{ filename: string; content: Buffer; contentType: string }> = [];
     const atlanan: Array<{ donem: string; platform: string; sebep: string }> = [];
     const kullanilanAd = new Map<string, number>();
-    let toplamBayt = 0;
+    let toplamBayt = kullanilanBayt;
 
     for (const r of rows) {
       /*
@@ -320,7 +329,9 @@ export class FaturaService {
         atlanan.push({
           donem: r.donem,
           platform: r.platform,
-          sebep: `toplam ek boyutu sınırı aşıldı (${Math.round(MAIL_EK_TOPLAM_SINIRI / 1024 / 1024)} MB)`,
+            sebep:
+            `maildeki toplam ek boyutu sınırı aşıldı ` +
+            `(${Math.round(MAIL_EK_TOPLAM_SINIRI / 1024 / 1024)} MB)`,
         });
         continue;
       }

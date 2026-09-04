@@ -457,3 +457,56 @@ describe('ZIP fatura', () => {
     expect(satir!.mime_type).toBe('application/pdf');
   });
 });
+
+/**
+ * ═══ BÜTÇE TOPLAM MESAJ BÜTÇESİ ═══
+ *
+ * Bütçe eskiden yalnızca faturaları sayıyordu ve rapor PDF'inin payı hesaba
+ * HİÇ girmiyordu: 22 MB fatura + 3 MB PDF, sağlayıcının 25 MB sınırını tam
+ * üstünden aşıyor ve mail SUNUCUDA reddediliyordu — kullanıcı sebebini bir
+ * SMTP hatasından okumak zorunda kalırdı.
+ */
+describe('ek bütçesi — rapor PDF\'i de sayılıyor', () => {
+  /** Bütçenin yarısından biraz fazlasını kaplayan bir fatura. */
+  async function buyukFaturaYukle(ad: string) {
+    const bytes = Buffer.concat([
+      Buffer.from('%PDF-1.4\n'),
+      Buffer.alloc(Math.ceil(MAIL_EK_TOPLAM_SINIRI * 0.55), 0x41),
+      Buffer.from(ad),
+    ]);
+    await svc.yukle(
+      CTX,
+      { clientId: IDS.client, platform: 'meta', donem: '2026-08' } as never,
+      { fileName: `${ad}.pdf`, bytes, mimeType: 'application/pdf' },
+    );
+  }
+
+  it('KRİTİK: PDF payı verilmezse fatura sığıyor, VERİLİRSE sığmıyor', async () => {
+    /*
+     * TEK FATURA bütçenin %55'i. Kullanılan bayt sıfırken sığıyor; rapor
+     * PDF'i bütçenin yarısını yediğinde artık sığmıyor. Parametre yok
+     * sayılsaydı iki çağrı da AYNI sonucu verirdi — mutasyonun yakalayacağı
+     * nokta bu.
+     */
+    await buyukFaturaYukle('a');
+
+    const bos = await svc.raporEkleri(IDS.client, '2026-08-01', '2026-08-31', 0);
+    expect(bos.ekler.length, 'PDF payı yokken fatura sığmalı').toBe(1);
+    expect(bos.atlanan).toEqual([]);
+
+    const doluyken = await svc.raporEkleri(
+      IDS.client,
+      '2026-08-01',
+      '2026-08-31',
+      Math.ceil(MAIL_EK_TOPLAM_SINIRI * 0.5),
+    );
+    expect(doluyken.ekler.length, 'PDF payı hesaba girmemiş').toBe(0);
+    expect(doluyken.atlanan[0]!.sebep).toContain('boyut');
+  });
+
+  it('parametre VERİLMEZSE varsayılan 0 — eski çağrılar bozulmuyor', async () => {
+    await buyukFaturaYukle('b');
+    const out = await svc.raporEkleri(IDS.client, '2026-08-01', '2026-08-31');
+    expect(out.ekler.length).toBe(1);
+  });
+});

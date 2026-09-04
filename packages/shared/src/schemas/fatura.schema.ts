@@ -163,11 +163,15 @@ export function faturaRetSebebi(bytes: Uint8Array): string {
 /**
  * Dosya üst sınırı.
  *
- * Fatura PDF'leri tipik olarak 100 KB altında; 10 MB fazlasıyla yeterli ve
- * paylaşımlı sunucuda disk dolmasına karşı bir tampon. Sınır AŞILDIĞINDA
- * yükleme reddediliyor — sessizce kırpmak bozuk bir PDF üretirdi.
+ * Fatura PDF'leri tipik olarak 100 KB altında ama ARŞİVLER değil: platformun
+ * bir dönem için paketlediği ZIP onlarca fatura taşıyabiliyor ve 10 MB gerçek
+ * kullanımda yetmedi. Sınır AŞILDIĞINDA yükleme reddediliyor — sessizce
+ * kırpmak bozuk bir dosya üretirdi.
+ *
+ * 20 MB, mail sağlayıcısının 25 MB'lık HAM sınırının altında kalacak şekilde
+ * seçildi: tek bir faturanın yanına rapor PDF'i ve gövde de sığmalı.
  */
-export const FATURA_MAX_BAYT = 10 * 1024 * 1024;
+export const FATURA_MAX_BAYT = 20 * 1024 * 1024;
 
 /**
  * BİR MAİLDEKİ TOPLAM EK BÜTÇESİ (ham bayt).
@@ -176,17 +180,30 @@ export const FATURA_MAX_BAYT = 10 * 1024 * 1024;
  * girebiliyor ve üç adet 10 MB'lık PDF maili sunucuda REDDETTİRİR. Reddedilen
  * bir mail "gönderildi" yazan bir akışın en pahalı hâli: kimse fark etmiyor.
  *
- * ┌─ NEDEN 25 DEĞİL 15 ───────────────────────────────────────────────────┐
- * │ Gmail/Workspace sınırı 25 MB ama o sınır TELDEN GEÇEN boyuta bakıyor   │
- * │ ve ekler base64 ile kodlanıyor: ham boyut ~%33 şişiyor. 20 MB ham ek,  │
- * │ telde ~27 MB eder ve sınırı aşar. 15 MB ham ≈ 20 MB kodlanmış, rapor   │
- * │ PDF'ine ve gövdeye de yer bırakıyor.                                   │
+ * ┌─ ÖNCEKİ GEREKÇE YANLIŞTI, DÜZELTİLDİ ─────────────────────────────────┐
+ * │ Burada 15 MB yazıyordu ve gerekçesi şuydu: "25 MB sınırı TELDEN GEÇEN  │
+ * │ boyuta bakıyor, base64 ~%33 şişiriyor, o yüzden ham bütçe 15 olmalı".  │
+ * │ Google'ın kendi dokümanı bunun TERSİNİ söylüyor: sınırlar "the total   │
+ * │ size of the message content and attachments BEFORE ENCODING" için      │
+ * │ yazılmış. Yani 25 MB HAM boyut; base64 şişmesini sağlayıcı zaten hesaba │
+ * │ katıyor (Gmail SMTP'nin EHLO'da bildirdiği `SIZE` değeri de kabaca     │
+ * │ 25 MB × 4/3 kadar). Kendi kendime koyduğum sınır gereksizce dardı ve    │
+ * │ kullanıcının 10 MB'lık arşivi maile hiç girmiyordu.                     │
  * └────────────────────────────────────────────────────────────────────────┘
+ *
+ * 22 MB, 25'ten geriye rapor PDF'i ve gövde için pay bırakıyor. Bütçe artık
+ * TOPLAM MESAJ bütçesi: çağıran, rapor PDF'inin boyutunu geçiriyor ve
+ * faturalar kalandan yiyor — eskiden bütçe yalnızca faturaları sayıyordu ve
+ * PDF'in payı hesaba hiç girmiyordu.
+ *
+ * SAĞLAYICI VARSAYIMI: 25 MB, Google Workspace'in standart sınırı. Farklı bir
+ * SMTP sunucusu daha düşük bir sınır koyuyorsa mail reddedilir ve sebebi
+ * `mailGonder`in fırlattığı hatada görünür — sessiz kalmaz.
  *
  * Sınıra takılan fatura SESSİZCE düşmüyor: hangisinin neden eklenmediği hem
  * denetim kaydına hem kullanıcıya yazılıyor.
  */
-export const MAIL_EK_TOPLAM_SINIRI = 15 * 1024 * 1024;
+export const MAIL_EK_TOPLAM_SINIRI = 22 * 1024 * 1024;
 
 /**
  * BİR DÖNEM + PLATFORM İÇİN EN FAZLA FATURA.
