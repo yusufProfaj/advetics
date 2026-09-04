@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { imzaTemizle } from '@advetics/shared';
+import { domaYazilmali } from './mail-govde-editoru';
 
 /**
  * ═══ MAİL GÖVDESİ: KOD DEĞİL GÖRÜNÜŞ ═══
@@ -76,17 +77,43 @@ describe('rapor gönderme — gövde artık render ediliyor', () => {
     expect(EDITOR).toContain('Gönderimde şunlar kaldırılacak');
   });
 
-  it('KRİTİK: editör KONTROLSÜZ — imleç sıçraması önleniyor', () => {
+  it('KRİTİK: `deger` BAĞIMLILIKTA — taslak geç gelince kutu dolmalı', () => {
     /*
-     * `contentEditable`a her tuş vuruşunda DOM'dan geri yazmak imleci metnin
-     * başına atıyor (React ile klasik çatışma). Doldurma yalnızca taslak
-     * anahtarı değişince yapılıyor; `deger` bağımlılık listesinde OLMAMALI.
+     * ÜRETİMİ KIRAN İDDİANIN KENDİSİ BURADAYDI. Önce şunu yazmıştım:
+     *
+     *     expect(govde).toContain('[taslakAnahtari, kodModu]');
+     *     expect(govde).not.toContain('deger]');
+     *
+     * Yani HATALI davranışı test hâline getirmiştim. Editör, taslak sunucudan
+     * GELMEDEN monte oluyor (`govde` o an boş dizge); `deger` bağımlılıkta
+     * olmayınca effect bir daha koşmuyor ve kutu BOŞ kalıyordu. Kullanıcının
+     * gördüğü hâl: "burası boş, html kısmı da boş".
+     *
+     * Ders: bir bağımlılık listesini "doğru" diye kilitlemeden önce, o listenin
+     * hangi SIRAYI varsaydığını sor. Buradaki varsayım "değer monte olurken
+     * hazır" idi ve yanlıştı.
      */
     const i = EDITOR.indexOf('useEffect(');
     expect(i, 'useEffect bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
-    const govde = EDITOR.slice(i, EDITOR.indexOf('}, [', i) + 40);
-    expect(govde).toContain('[taslakAnahtari, kodModu]');
-    expect(govde, 'deger bağımlılığa eklenmiş — imleç sıçrar').not.toContain('deger]');
+
+    /*
+     * İDDİA BAĞIMLILIK DİZİSİNİN KENDİSİNE ÇAPALI — effect GÖVDESİNE değil.
+     *
+     * İlk denemede dilim `indexOf('}, [') + 40` ile alınıyordu ve `deger`
+     * kelimesi gövdede de geçtiği için (`hedefHtml: deger`, `el.innerHTML =
+     * deger`) iddia, bağımlılık listesinden çıkarılsa BİLE geçiyordu.
+     * Mutasyon testinde yakalandı: üretimi kıran değişikliği geri koydum ve
+     * 17 testin 17'si de geçti. CLAUDE.md'de adı konmuş tuzak — "sabit
+     * uzunluklu dilim komşuyu yakalıyor".
+     */
+    const dizinBas = EDITOR.indexOf('}, [', i);
+    expect(dizinBas, 'bağımlılık dizisi bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const bagimliliklar = EDITOR.slice(dizinBas + 3, EDITOR.indexOf(']', dizinBas) + 1);
+    expect(bagimliliklar, 'deger bağımlılıktan çıkarılmış — geç gelen taslak kutuyu doldurmaz')
+      .toContain('deger');
+
+    // Kararın kendisi saf fonksiyonda; effect onu ÇAĞIRMAK zorunda.
+    expect(EDITOR.slice(i, dizinBas)).toContain('domaYazilmali({');
   });
 });
 
@@ -160,5 +187,55 @@ describe('imzaTemizle — taşıma sonrası davranış', () => {
     for (const etiket of ['<p>', '<h3>', '<ul>', '<li>', '<strong>', '<br']) {
       expect(html, `${etiket} kesilmiş`).toContain(etiket);
     }
+  });
+});
+
+/**
+ * ═══ DOM'A YAZMA KARARI ═══
+ *
+ * Üretimde kutu boş kaldı ve sebebi bu karardı. Karar effect'in içine gömülü
+ * olduğu için hiçbir test onu doğrudan sınayamıyordu — panelde React bileşeni
+ * render eden bir altyapı yok (`vitest.config.ts` bunu bilinçli reddediyor).
+ * Karar saf bir fonksiyona çıkarıldı ve üç hâl ayrı ayrı kilitlendi.
+ */
+describe('domaYazilmali', () => {
+  it('KRİTİK: taslak GEÇ gelince ve alan boşken YAZILIYOR', () => {
+    /*
+     * ÜRETİMDEKİ HATA BUYDU. Editör boş monte oluyor, taslak sonra geliyor;
+     * yazmazsak kutu kalıcı olarak boş kalıyor.
+     */
+    expect(domaYazilmali({ mevcutHtml: '', hedefHtml: '<p>taslak</p>', odakta: false })).toBe(
+      true,
+    );
+  });
+
+  it('KRİTİK: kullanıcı YAZARKEN dokunulmuyor — imleç sıçramaz', () => {
+    expect(
+      domaYazilmali({ mevcutHtml: '<p>yazdım</p>', hedefHtml: '<p>yazdım!</p>', odakta: true }),
+    ).toBe(false);
+  });
+
+  it('KRİTİK: alan ODAKTA ama BOŞSA yine yazılıyor', () => {
+    /*
+     * "Kullanıcı taslak gelmeden alana tıkladı" hâli. Odak yüzünden
+     * dokunmamak, kutuyu kalıcı olarak boş bırakırdı — hatanın dar bir
+     * yarışa dönüşmüş hâli.
+     */
+    expect(domaYazilmali({ mevcutHtml: '', hedefHtml: '<p>taslak</p>', odakta: true })).toBe(true);
+    // Yalnızca boşluk da BOŞ sayılıyor: contentEditable boşken `<br>` ya da
+    // boşluk bırakabiliyor.
+    expect(domaYazilmali({ mevcutHtml: '  \n ', hedefHtml: '<p>t</p>', odakta: true })).toBe(true);
+  });
+
+  it('AYNI içerik yeniden YAZILMIYOR — gereksiz imleç oynaması yok', () => {
+    expect(domaYazilmali({ mevcutHtml: '<p>a</p>', hedefHtml: '<p>a</p>', odakta: false })).toBe(
+      false,
+    );
+    expect(domaYazilmali({ mevcutHtml: '', hedefHtml: '', odakta: false })).toBe(false);
+  });
+
+  it('kullanıcı içeriği TEMİZLEDİYSE state boşalabiliyor', () => {
+    // Odakta değilken hedef boşsa yazılıyor: "hepsini sil" geçerli bir düzenleme.
+    expect(domaYazilmali({ mevcutHtml: '<p>a</p>', hedefHtml: '', odakta: false })).toBe(true);
   });
 });

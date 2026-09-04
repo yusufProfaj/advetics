@@ -52,15 +52,32 @@ export function MailGovdeEditoru({
   const [kodModu, setKodModu] = useState(false);
   const [uyari, setUyari] = useState<string | null>(null);
 
-  /*
-   * TASLAK GELDİĞİNDE BİR KEZ DOLDURULUYOR. Bağımlılık listesinde `deger` YOK
-   * ve bu bilinçli: onu eklemek her yazışta yeniden doldurma ve imleç sıçraması
-   * demek.
+  /**
+   * ═══ DOM'U STATE'TEN DOLDURMA — ve NE ZAMAN DOLDURMAMA ═══
+   *
+   * İLK YAZIŞIMDA BURASI ÜRETİMİ KIRDI: bağımlılık listesi
+   * `[taslakAnahtari, kodModu]` idi ve `deger` YOKTU. Editör, taslak SUNUCUDAN
+   * GELMEDEN monte oluyor (`govde` o an boş dizge), effect bir kez koşup alanı
+   * BOŞ dolduruyor ve taslak geldiğinde bir daha koşmuyordu — kutu boş kalıyordu.
+   *
+   * Daha kötüsü ikinci adımdı: kullanıcı boş alana tıklayıp çıkınca `onBlur`
+   * boş `innerHTML`i state'e GERİ YAZIYOR ve sunucudan gelen taslağı da
+   * siliyordu. Bu yüzden "HTML" sekmesi de boş görünüyordu — iki belirti, tek
+   * sebep.
+   *
+   * `deger` artık bağımlılıkta. İmleç sıçraması şununla önleniyor: alan
+   * ODAKTAYSA ve İÇİ DOLUYSA yazmıyoruz — yani kullanıcı yazarken DOM'a
+   * dokunulmuyor. Odakta ama BOŞSA yazıyoruz; o hâl "kullanıcı taslak gelmeden
+   * alana tıkladı" demek ve orada dokunmamak kutuyu kalıcı olarak boş bırakırdı.
    */
   useEffect(() => {
-    if (alanRef.current && !kodModu) alanRef.current.innerHTML = deger;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taslakAnahtari, kodModu]);
+    const el = alanRef.current;
+    if (!el || kodModu) return;
+    const odakta = typeof document !== 'undefined' && document.activeElement === el;
+    if (domaYazilmali({ mevcutHtml: el.innerHTML, hedefHtml: deger, odakta })) {
+      el.innerHTML = deger;
+    }
+  }, [deger, kodModu, taslakAnahtari]);
 
   /*
    * TEMİZLİK RAPORU — ekranda duran içerik gönderimde kırpılacak mı.
@@ -167,4 +184,40 @@ export function MailGovdeEditoru({
       )}
     </div>
   );
+}
+
+/**
+ * ═══ DOM'A YAZMALI MIYIZ ═══
+ *
+ * SAF FONKSİYON ve bunun sebebi bir üretim hatası: bu karar effect'in içine
+ * gömülüydü, panelde React bileşeni render eden bir test altyapısı yok
+ * (`vitest.config.ts` bunu bilinçli olarak reddediyor) ve yazdığım kaynak
+ * taraması yanlış davranışı KİLİTLEMİŞTİ — `[taslakAnahtari, kodModu]`
+ * bağımlılığını doğru sanıp iddia hâline getirmiştim.
+ *
+ * Karar dışarı çıkınca `node` ortamında doğrudan sınanabiliyor ve üç hâlin
+ * üçü de ayrı ayrı kilitleniyor.
+ */
+export function domaYazilmali(params: {
+  /** Alanın şu anki içeriği. */
+  mevcutHtml: string;
+  /** State'teki hedef içerik. */
+  hedefHtml: string;
+  /** Kullanıcı şu anda bu alanda mı yazıyor. */
+  odakta: boolean;
+}): boolean {
+  // Aynı içeriği yeniden yazmak imleci gereksiz yere oynatıyor.
+  if (params.mevcutHtml === params.hedefHtml) return false;
+
+  /*
+   * KULLANICI YAZARKEN DOKUNMUYORUZ — ama YALNIZCA içerik varsa.
+   *
+   * Alan odakta AMA BOŞSA yazıyoruz: o hâl "kullanıcı taslak gelmeden alana
+   * tıkladı" demek ve orada dokunmamak kutuyu KALICI olarak boş bırakırdı.
+   * Üretimde tam bu oldu — kutu boş kaldı, sonra `onBlur` o boşluğu state'e
+   * geri yazıp sunucudan gelen taslağı da sildi.
+   */
+  if (params.odakta && params.mevcutHtml.trim() !== '') return false;
+
+  return true;
 }

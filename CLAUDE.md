@@ -536,10 +536,27 @@ buna göre veriliyor:
   AYNISI koşuyor — ikinci bir temizleyici doğduğu anda ayrışır ve önizleme
   sessizce yalan söylemeye başlar. Aynı sebeple `blob:`, `file:` ve `cid:`
   şemaları kara listeye eklendi: üçü de ekranda ÇALIŞIYOR, mailde ÖLÜ.
-- **`contentEditable` KONTROLLÜ OLAMAZ — imleç metnin başına sıçrar.** Her tuş
-  vuruşunda `deger`i DOM'a geri yazmak React'in klasik çatışması. Alan
-  KONTROLSÜZ tutuluyor ve yalnızca bir "taslak anahtarı" (müşteri|dönem|şablon)
-  değişince yeniden dolduruluyor; `deger` bağımlılık listesine EKLENMEMELİ.
+- **`contentEditable` KONTROLLÜ OLAMAZ — ama KONTROLSÜZ de bırakılamaz.**
+  Her tuş vuruşunda DOM'a geri yazmak imleci metnin başına atıyor; hiç
+  yazmamak ise SONRADAN gelen değeri kaçırıyor. Rapor mail editörü üretimde
+  BOŞ göründü çünkü effect'in bağımlılığı `[taslakAnahtari, kodModu]` idi:
+  editör, taslak sunucudan gelmeden monte oluyor ve bir daha dolmuyordu.
+  İkinci adım daha kötüydü — kullanıcı boş alana tıklayıp çıkınca `onBlur`
+  boşluğu state'e GERİ YAZIP taslağı da siliyordu; iki belirti, tek sebep.
+  Doğrusu: değer bağımlılıkta OLACAK, yazma kararı ise "alan odaktaysa VE
+  içi doluysa dokunma" olacak. Odakta ama BOŞ olan alan yazılmalı, yoksa
+  "kullanıcı taslak gelmeden tıkladı" hâli kutuyu kalıcı boş bırakıyor.
+- **BİR BAĞIMLILIK LİSTESİNİ TEST HÂLİNE GETİRMEDEN ÖNCE HANGİ SIRAYI
+  VARSAYDIĞINI SOR.** Yukarıdaki hatayı ben KİLİTLEMİŞTİM:
+  `expect(govde).toContain('[taslakAnahtari, kodModu]')` yazıp yanlış
+  davranışı doğru sanmıştım. Test yazmak, davranışın doğru olduğunu
+  KANITLAMIYOR — yalnızca değişmeyeceğini garanti ediyor.
+- **REACT EFFECT'İNİN İÇİNDEKİ KARAR TEST EDİLEMİYOR — DIŞARI ÇIKAR.** Panelde
+  bileşen render eden bir test altyapısı yok (`vitest.config.ts` bunu bilinçli
+  reddediyor), yani effect içindeki mantık yalnızca kaynak taramasıyla
+  sınanabiliyor ve o tarama yanlış şeyi kilitleyebiliyor. "DOM'a yazmalı mıyız"
+  kararı saf bir fonksiyona (`domaYazilmali`) çıkarıldı ve üç hâl ayrı ayrı
+  test edildi.
 - **BİR KEZ ÇEKİLEN TASLAK, KOŞULU DEĞİŞTİĞİNDE BAYAT KALIYOR.** Rapor mail
   taslağı `if (!acik || taslak !== null) return;` ile bir kez çekiliyordu:
   kullanıcı pencereyi kapatıp tarih aralığını değiştirip yeniden açtığında

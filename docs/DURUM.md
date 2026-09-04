@@ -16,7 +16,7 @@
 | Veritabanı tablosu | 37 | **53** |
 | Migration | 17 | **55** |
 | API testi | 694 ¹ | **2.250** |
-| Web testi | 20 ¹ | **412** |
+| Web testi | 20 ¹ | **417** |
 | Panel sayfası | 16 | **29** |
 | API controller | 17 | **25** |
 | RLS politikası | 95 | **155** |
@@ -621,6 +621,13 @@ temizleniyor ve gönderimde kırpılacaklar önceden yazılıyor.
 Temizleyicinin şema kara listesine `blob:`, `file:` ve `cid:` eklendi — üçü de
 ekranda ÇALIŞIYOR ama mailde ÖLÜ; gövde artık panelde çizildiği için bu tam
 olarak "önizleme yalan söylüyor" hâliydi.
+
+**ÜRETİMİ KIRDIM ve düzelttim (aynı gün):** editörün doldurma effect'i
+i bağımlılık listesinde taşımıyordu — editör taslak gelmeden monte
+oluyor ve bir daha dolmuyordu, kutu boş kalıyordu. Boş alandan çıkış da
+ ile boşluğu state'e geri yazıp taslağı siliyordu. Daha kötüsü: bu
+YANLIŞ davranışı bir test hâline getirmiştim. Karar artık saf bir fonksiyonda
+() ve üç hâli ayrı ayrı sınanıyor.
 
 **Yol boyunca bulunan pre-existing hata:** taslak bir kez çekildikten sonra bir
 daha çekilmiyordu (`taslak !== null`). Kullanıcı pencereyi kapatıp tarih
