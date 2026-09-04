@@ -14,9 +14,9 @@
 | | 2026-08-11 | 2026-09-02 |
 |---|---|---|
 | Veritabanı tablosu | 37 | **53** |
-| Migration | 17 | **54** |
-| API testi | 694 ¹ | **2.225** |
-| Web testi | 20 ¹ | **400** |
+| Migration | 17 | **55** |
+| API testi | 694 ¹ | **2.250** |
+| Web testi | 20 ¹ | **412** |
 | Panel sayfası | 16 | **29** |
 | API controller | 17 | **25** |
 | RLS politikası | 95 | **155** |
@@ -580,6 +580,55 @@ Sunucuya SSH ile bağlanılıp veritabanından koddan doğrulanarak kontrol edil
 durumunda takılıydı ve `insights_backfill` işlerinde tekrarlayan bir hata
 vardı: *"too many bind variables in prepared statement, expected maximum of
 32767, received 48816"* (sistemde toplam 19 kez görülmüş).
+
+### 2026-09-04 — Faturada ZIP ve mail metninin önizlemeli editörü
+
+**1 — Fatura artık ZIP de olabiliyor.** Platformlar dönem faturalarını çoğu
+zaman tek tek PDF yerine tek arşiv olarak indirtiyor; ajans onu açıp tek tek
+yüklemek zorunda kalıyordu. Ekran görüntüsü reddi BOZULMADI — fatura resmi bir
+belge.
+
+Tür `mime_type` kolonunda saklanıyor, dosya adından türetilmiyor: üç yer buna
+bağlı (diskteki uzantı, mail ekinin `contentType`ı, panelden açarken
+`Content-Type` başlığı) ve dosya adı kullanıcının verdiği ad — gövdeyle
+uyuşmak zorunda değil. Biçim sihirli baytlardan okunuyor; tarayıcının
+bildirdiği `content-type` artık HİÇ kullanılmıyor (uzantıdan tahmin ediliyor
+ve ZIP için istemciden istemciye değişiyor).
+
+ZIP'in üç imzası var ve yalnızca `PK\x03\x04` kabul ediliyor; boş arşiv
+(`PK\x05\x06`) ve çok parçalı arşiv (`PK\x07\x08`) ayrı ayrı tanınıp AYRI
+cümlelerle reddediliyor — "ZIP değil" demek, doğru dosyayı indirdiğini bilen
+kullanıcıyı olmayan bir arızayı aramaya gönderirdi.
+
+**Parola korumalı arşiv uyarısı arayüzde:** kurumsal mail sunucuları onları
+koşulsuz engelliyor ve sunucumuz bunu sihirli bayttan ayırt EDEMİYOR; belirtisi
+"mail gitti ama ulaşmadı" oluyor. Söylemek tek çare.
+
+Yol boyunca iki kusur kapandı: fatura yükleme ucunda multer boyut sınırı YOKTU
+(diğer iki yükleme ucu koyuyordu) ve depolama katmanı bilinmeyen türe sessizce
+`.jpg` uzantısı veriyordu.
+
+**2 — Mail metni artık render ediliyor.** Alan ham HTML gösteren bir
+`<textarea>` idi; kullanıcının işi "değerlendirme" paragrafını yazmak ve bunu
+etiketlerin arasından yapmak hem yavaş hem hataya açıktı. Artık
+`contentEditable` bir önizleme; "HTML" düğmesiyle koda hâlâ ulaşılabiliyor.
+
+`imza-temizle.ts` `apps/api`den `packages/shared`a TAŞINDI: gönderimde koşan
+temizleyicinin AYNISI panelde de koşuyor. İkinci bir temizleyici yazmak,
+önizlemenin sessizce yalan söylemeye başlaması demekti. Yapıştırma girişte
+temizleniyor ve gönderimde kırpılacaklar önceden yazılıyor.
+
+Temizleyicinin şema kara listesine `blob:`, `file:` ve `cid:` eklendi — üçü de
+ekranda ÇALIŞIYOR ama mailde ÖLÜ; gövde artık panelde çizildiği için bu tam
+olarak "önizleme yalan söylüyor" hâliydi.
+
+**Yol boyunca bulunan pre-existing hata:** taslak bir kez çekildikten sonra bir
+daha çekilmiyordu (`taslak !== null`). Kullanıcı pencereyi kapatıp tarih
+aralığını değiştirip yeniden açtığında mail METNİ eski dönemi anlatıyor, PDF
+EKİ yeni dönem için üretiliyordu — aynı mailde iki farklı gerçek ve farkı
+yalnızca alıcı görür.
+
+---
 
 ### 2026-09-03 — Birden çok fatura ve birden çok mail alıcısı
 

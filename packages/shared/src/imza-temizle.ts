@@ -1,4 +1,19 @@
-import type { SignatureCleanReport } from '@advetics/shared';
+import type { SignatureCleanReport } from './schemas/email-account.schema';
+
+/**
+ * ═══ NEDEN `packages/shared` ALTINDA ═══
+ *
+ * Bu fonksiyon `apps/api` içindeydi ve mail gövdesi GÖNDERİMDE ondan
+ * geçiyordu. Rapor gönderme penceresi gövdeyi artık RENDER EDEREK gösteriyor
+ * (ham HTML yerine) ve CLAUDE.md'nin kuralı net: "önizleme YALAN SÖYLEMEMELİ"
+ * — ekranda görülen, gönderilecek hâlin ta kendisi olmalı.
+ *
+ * Panel `apps/api`yi import edemiyor. Seçenekler paneldeki ikinci bir
+ * temizleyici (doğduğu anda ayrışır ve önizleme sessizce yalan söylemeye
+ * başlar) ya da fonksiyonu ortak pakete taşımaktı. Fonksiyon SAF — tek bir
+ * tip importu dışında bağımlılığı yok, Node API kullanmıyor — yani taşımanın
+ * bedeli sıfır.
+ */
 
 /**
  * ═══ İMZA HTML'İ TEMİZLENİYOR — VE NE ATILDIĞI SÖYLENİYOR ═══
@@ -92,7 +107,23 @@ export function imzaTemizle(giris: string): TemizSonuc {
       // `javascript:` ve `data:` ŞEMALARI ATILIYOR. `data:` görselleri de
       // kapsıyor: mail istemcilerinin çoğu onları zaten engelliyor ve
       // `data:text/html` bir açık kapı.
-      if ((anahtar === 'href' || anahtar === 'src') && /^\s*(javascript|data|vbscript):/i.test(deger)) {
+      /*
+       * ŞEMA BEYAZ LİSTESİ DEĞİL, KARA LİSTE — ve listeye üç şema EKLENDİ.
+       *
+       * `javascript:`, `data:` ve `vbscript:` çalıştırma yüzeyi. `blob:`,
+       * `file:` ve `cid:` ise BAŞKA bir sorun: hepsi ekranda ÇALIŞIYOR ama
+       * mailde ÖLÜ. Mail gövdesi artık panelde render edildiği ve kullanıcı
+       * oraya görsel yapıştırabildiği için bu, önizlemenin YALAN SÖYLEMESİ
+       * demek — panelde görsel görünür, müşteriye kırık gider ve farkı
+       * yalnızca alıcı görür.
+       *
+       * `cid:` mail içi gömülü ek referansı ve biz ek gömmüyoruz; kopyalanan
+       * bir Outlook imzasından geliyor ve alıcıda hiçbir zaman çözülmüyor.
+       */
+      if (
+        (anahtar === 'href' || anahtar === 'src') &&
+        /^\s*(javascript|data|vbscript|blob|file|cid):/i.test(deger)
+      ) {
         removedAttributes.add(`${anahtar}(şema)`);
         continue;
       }

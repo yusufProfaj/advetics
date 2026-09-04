@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  imzaTemizle,
   nihaiAlicilar,
   raporDosyaAdi,
   type ReportMailDraft,
@@ -11,7 +12,6 @@ import {
 import { CryptoService } from '../../crypto/crypto.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { imzaTemizle } from '../email/imza-temizle';
 import { mailGonder } from '../email/mail-gonderici';
 import { raporMailTaslagi } from './rapor-mail';
 import { RaporPdfService } from './rapor-pdf.service';

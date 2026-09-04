@@ -41,8 +41,124 @@ export const FATURA_PLATFORM_ETIKETLERI: Record<FaturaPlatformu, string> = {
   google: 'Google Ads',
 };
 
-/** Yalnızca PDF. Fatura resmi bir belge; ekran görüntüsü kabul edilmiyor. */
-export const FATURA_MIME = 'application/pdf';
+/**
+ * ═══ KABUL EDİLEN FATURA BİÇİMLERİ ═══
+ *
+ * PDF ve ZIP. Ekran görüntüsü (JPEG/PNG) HÂLÂ REDDEDİLİYOR ve bu karar
+ * değişmedi: fatura resmi bir belge, müşteriye giden pakete bir telefon
+ * fotoğrafı koymak onu belge olmaktan çıkarır.
+ *
+ * ZIP NEDEN EKLENDİ: platformlar dönem faturalarını çoğu zaman tek tek PDF
+ * yerine tek bir arşiv olarak indirtiyor; ajans onu açıp tek tek yüklemek
+ * zorunda kalıyordu.
+ *
+ * ┌─ BİÇİM GÖVDEDEN ANLAŞILIYOR, UZANTIDAN DEĞİL ─────────────────────────┐
+ * │ Tarayıcı `content-type`ı uzantıdan TAHMİN ediyor: `.pdf` uzantılı bir  │
+ * │ JPEG "application/pdf" olarak geliyor. Aynı ders raporun kreatif       │
+ * │ görsellerinde de yaşandı — biçim sihirli baytlardan okunuyor.          │
+ * └────────────────────────────────────────────────────────────────────────┘
+ *
+ * ZIP'İN NE İÇERDİĞİ KONTROL EDİLMİYOR ve edilemez: sunucu arşivi AÇMIYOR.
+ * DOCX/XLSX de aslında birer ZIP, yani sihirli bayt "bu bir fatura paketi"
+ * demiyor. Açmamak bilinçli — açmak zip-bomb ve yol kaçışı (Zip Slip) gibi
+ * bütün bir saldırı sınıfını içeri alırdı. Ne yüklendiğinin sorumluluğu
+ * yükleyende ve dosya müşteriye AYNEN gidiyor.
+ */
+export const FATURA_TURLERI = [
+  {
+    mime: 'application/pdf',
+    uzanti: 'pdf',
+    etiket: 'PDF',
+    /** `%PDF-` */
+    imza: [0x25, 0x50, 0x44, 0x46, 0x2d],
+  },
+  {
+    mime: 'application/zip',
+    uzanti: 'zip',
+    etiket: 'ZIP',
+    /**
+     * `PK\x03\x04` — yerel dosya başlığı.
+     *
+     * ZIP'in iki varyantı daha var: `PK\x05\x06` (BOŞ arşiv) ve `PK\x07\x08`
+     * (çok parçalı). İkisi de burada YOK ve bu bilinçli: boş bir arşiv fatura
+     * değil, çok parçalı bir arşivin tek parçası da tek başına açılamıyor.
+     * İkisini de kabul etmek, müşteriye açılamayan bir ek göndermek olurdu.
+     */
+    imza: [0x50, 0x4b, 0x03, 0x04],
+  },
+] as const;
+
+export type FaturaTuru = (typeof FATURA_TURLERI)[number]['mime'];
+
+/**
+ * KABUL EDİLMEYEN ama TANINAN imzalar — yalnızca hata mesajını yazmak için.
+ *
+ * TEK YERDE: bu baytlar hem `faturaRetSebebi` içinde hem testlerde geçiyordu
+ * ve elle iki kez yazılmıştı. Biri güncellenip diğeri unutulsaydı test
+ * geçmeye devam eder, kullanıcı yanlış hata mesajını okurdu.
+ */
+export const TANINAN_IMZALAR = {
+  /** `PK\x05\x06` — BOŞ arşiv (yalnızca EOCD kaydı). */
+  zipBos: [0x50, 0x4b, 0x05, 0x06],
+  /** `PK\x07\x08` — çok parçalı arşivin bir parçası. */
+  zipParcali: [0x50, 0x4b, 0x07, 0x08],
+  jpeg: [0xff, 0xd8, 0xff],
+  png: [0x89, 0x50, 0x4e, 0x47],
+} as const;
+
+/** Panelin `accept` özniteliği ve kullanıcıya gösterilen liste. */
+export const FATURA_KABUL = FATURA_TURLERI.map((t) => `.${t.uzanti}`).join(',');
+export const FATURA_ETIKETLERI = FATURA_TURLERI.map((t) => t.etiket).join(' veya ');
+
+/**
+ * Gövdenin ilk baytlarından biçimi anlar. `null` = kabul edilen bir biçim değil.
+ *
+ * `content-type`a ve uzantıya BAKMIYOR — ikisi de kullanıcının tarayıcısından
+ * geliyor ve ikisi de yanlış olabiliyor.
+ */
+export function faturaTuruAnla(bytes: Uint8Array): (typeof FATURA_TURLERI)[number] | null {
+  for (const tur of FATURA_TURLERI) {
+    if (bytes.length < tur.imza.length) continue;
+    if (tur.imza.every((b, i) => bytes[i] === b)) return tur;
+  }
+  return null;
+}
+
+/**
+ * REDDEDİLEN DOSYA İÇİN AÇIKLAYICI SEBEP.
+ *
+ * "Bu dosya kabul edilmiyor" tek başına kullanıcıyı ne yapacağını bilmez
+ * bırakıyor. Boş bir arşiv ile bir ekran görüntüsü iki AYRI hata ve ikisinin
+ * yapılacak işi farklı: biri yanlış dosyayı indirmiş, diğeri arşivi yanlış
+ * oluşturmuş.
+ */
+export function faturaRetSebebi(bytes: Uint8Array): string {
+  const basliyor = (imza: readonly number[]): boolean =>
+    bytes.length >= imza.length && imza.every((b, i) => bytes[i] === b);
+
+  /*
+   * ZIP'in ÜÇ imzası var ve ikisi bizim için geçersiz. Ayırt etmek şart:
+   * "PK" ile başlayan bir dosyaya "ZIP değil" demek, kullanıcının doğru
+   * dosyayı yüklediğini sanıp aynı hatayı tekrarlaması demekti.
+   */
+  if (basliyor(TANINAN_IMZALAR.zipBos)) {
+    return 'Arşiv BOŞ — içinde dosya yok. Faturayı yeniden indirip tekrar dene.';
+  }
+  if (basliyor(TANINAN_IMZALAR.zipParcali)) {
+    return (
+      'Bu, çok parçalı bir arşivin tek parçası ve tek başına açılamıyor. ' +
+      'Arşivi tek dosya olarak yeniden oluştur.'
+    );
+  }
+  // Ekran görüntüsü en sık yapılan hata; adını koymak en hızlı çözüm.
+  if (basliyor(TANINAN_IMZALAR.jpeg) || basliyor(TANINAN_IMZALAR.png)) {
+    return (
+      'Bu bir görsel (ekran görüntüsü). Fatura resmi bir belge — platformun ' +
+      `indirdiği ${FATURA_ETIKETLERI} dosyasını yükle.`
+    );
+  }
+  return `Yalnızca ${FATURA_ETIKETLERI} kabul ediliyor ve dosya ikisine de benzemiyor.`;
+}
 
 /**
  * Dosya üst sınırı.
@@ -112,6 +228,13 @@ export interface FaturaOzeti {
   platform: FaturaPlatformu;
   donem: string;
   fileName: string;
+  /**
+   * `application/pdf` ya da `application/zip`.
+   *
+   * PANELDE GÖSTERİLİYOR: kullanıcı listede hangi satırın arşiv olduğunu
+   * görebilmeli — bir ZIP'i açmadan içindekini bilemiyor ve maile giden şey o.
+   */
+  mimeType: string;
   byteSize: number;
   aciklama: string | null;
   uploadedByName: string | null;

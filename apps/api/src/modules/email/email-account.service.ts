@@ -7,9 +7,11 @@ import type {
   SignatureCleanReport,
   TenantContext,
 } from '@advetics/shared';
+// AYRI SATIR: yukarıdaki blok `import type` ve oraya bir DEĞER koymak
+// `TS1361` veriyor — tip bloğuna körlemesine eklemek kolay bir hata.
+import { imzaTemizle } from '@advetics/shared';
 import { CryptoService } from '../../crypto/crypto.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { imzaTemizle } from './imza-temizle';
 
 function toPrismaBytes(buf: Buffer): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(buf.byteLength);

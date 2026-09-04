@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { imzaTemizle } from './imza-temizle';
+import { imzaTemizle } from '@advetics/shared';
 
 /**
  * İMZA TEMİZLİĞİ.
@@ -97,5 +97,26 @@ describe('imzaTemizle', () => {
       expect.arrayContaining(['onclick', 'data-aii']),
     );
     expect(oznitelik.html).toBe('<p>a</p>');
+  });
+
+  it('KRİTİK: EKRANDA ÇALIŞAN ama MAİLDE ÖLÜ şemalar atılıyor', () => {
+    /*
+     * `blob:`, `file:` ve `cid:` çalıştırma yüzeyi DEĞİL — başka bir sorun:
+     * hepsi tarayıcıda çözülüyor, mailde çözülmüyor. Mail gövdesi artık
+     * panelde render edildiği ve kullanıcı oraya görsel yapıştırabildiği için
+     * bu, ÖNİZLEMENİN YALAN SÖYLEMESİ demek: panelde görsel görünür,
+     * müşteriye kırık gider ve farkı yalnızca alıcı görür.
+     */
+    for (const sema of ['blob:https://x/abc', 'file:///Users/a/b.png', 'cid:image001.png']) {
+      const r = imzaTemizle(`<img src="${sema}" />`);
+      expect(r.html, `${sema} geçti`).not.toContain(sema);
+    }
+  });
+
+  it('normal adresler ETKİLENMİYOR', () => {
+    // Kara listeyi genişletirken çalışan yolu kesmek en kolay hata.
+    const r = imzaTemizle('<img src="https://profaj.com/a.png" /><a href="https://a.com">x</a>');
+    expect(r.html).toContain('https://profaj.com/a.png');
+    expect(r.html).toContain('https://a.com');
   });
 });

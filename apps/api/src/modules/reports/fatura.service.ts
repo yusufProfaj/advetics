@@ -3,7 +3,9 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import {
   FATURA_MAX_BAYT,
-  FATURA_MIME,
+  FATURA_TURLERI,
+  faturaRetSebebi,
+  faturaTuruAnla,
   FATURA_MAX_ADET,
   MAIL_EK_TOPLAM_SINIRI,
   kapsananDonemler,
@@ -38,7 +40,7 @@ export class FaturaService {
     const rows = await this.prisma.withTenant(scoped, (tx) =>
       tx.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
         SELECT f.id::text, f.client_id::text AS client_id, c.name AS client_name,
-               f.platform::text AS platform, f.donem, f.file_name, f.byte_size,
+               f.platform::text AS platform, f.donem, f.file_name, f.byte_size, f.mime_type,
                f.aciklama, u.full_name AS uploaded_by_name, f.uploaded_at
           FROM fatura_belgeleri f
           JOIN clients c ON c.id = f.client_id
@@ -68,12 +70,19 @@ export class FaturaService {
      * dosyanın kullanıldığı an, müşteriye giden mailin oluşturulduğu an
      * olurdu — yani fark edilmesi en pahalı yer.
      */
-    if (dosya.mimeType !== FATURA_MIME) {
-      throw new BadRequestException(
-        `Yalnızca PDF kabul ediliyor (gelen: ${dosya.mimeType}). ` +
-          'Fatura resmi bir belge; ekran görüntüsü yerine platformun indirdiği PDF gerekiyor.',
-      );
-    }
+    /*
+     * TARAYICININ BİLDİRDİĞİ TÜRE HİÇ BAKILMIYOR.
+     *
+     * Eskiden burada `dosya.mimeType !== FATURA_MIME` kontrolü vardı ve iki
+     * kez yanlıştı: tarayıcı `content-type`ı UZANTIDAN tahmin ediyor (yani
+     * `.pdf` uzantılı bir JPEG "application/pdf" olarak geliyor) ve bazı
+     * istemciler ZIP için `application/x-zip-compressed`, `multipart/x-zip`
+     * gibi farklı değerler gönderiyor — kabul listesini o değerlere göre
+     * yazmak, doğru bir dosyayı yanlış bir başlık yüzünden reddetmek olurdu.
+     *
+     * Tek doğru kaynak GÖVDE; kontrol aşağıda, sihirli baytlarla.
+     */
+    void dosya.mimeType;
     if (dosya.bytes.byteLength === 0) {
       throw new BadRequestException('Dosya boş.');
     }
@@ -91,10 +100,11 @@ export class FaturaService {
      * görsellerinde de yaşandı: biçim GÖVDEDEN (sihirli baytlardan)
      * anlaşılıyor, uzantıdan değil.
      */
-    if (dosya.bytes.subarray(0, 5).toString('latin1') !== '%PDF-') {
-      throw new BadRequestException(
-        'Dosya PDF gibi görünmüyor (içerik başlığı %PDF- değil).',
-      );
+    const tur = faturaTuruAnla(dosya.bytes);
+    if (tur === null) {
+      // SEBEP AYRIŞTIRILIYOR: boş arşiv, çok parçalı arşiv ve ekran görüntüsü
+      // üç ayrı hata ve üçünün yapılacak işi farklı.
+      throw new BadRequestException(faturaRetSebebi(dosya.bytes));
     }
 
     /*
@@ -137,7 +147,9 @@ export class FaturaService {
       orgId: ctx.orgId,
       scope: `faturalar/${input.clientId}`,
       bytes: dosya.bytes,
-      mimeType: FATURA_MIME,
+      // Uzantı BULUNAN türden; yanlış uzantı, panelden açarken dosyayı
+      // bozuk gösterirdi.
+      mimeType: tur.mime,
     });
 
     let id: string;
@@ -146,12 +158,12 @@ export class FaturaService {
         tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           INSERT INTO fatura_belgeleri (
             id, org_id, client_id, platform, donem, file_name, storage_key,
-            byte_size, dosya_hash, aciklama, uploaded_by_user_id, uploaded_at
+            byte_size, mime_type, dosya_hash, aciklama, uploaded_by_user_id, uploaded_at
           ) VALUES (
             gen_random_uuid(), ${ctx.orgId}::uuid, ${input.clientId}::uuid,
             ${input.platform}::"Platform", ${input.donem},
             ${dosya.fileName.slice(0, 255)}, ${storageKey},
-            ${dosya.bytes.byteLength}, ${hash}, ${input.aciklama ?? null},
+            ${dosya.bytes.byteLength}, ${tur.mime}, ${hash}, ${input.aciklama ?? null},
             ${ctx.userId}::uuid, now()
           )
           -- AYNI DÖNEME BİRDEN ÇOK FATURA GİREBİLİR, AYNI DOSYA İKİ KEZ
@@ -217,16 +229,25 @@ export class FaturaService {
     ctx: TenantContext,
     id: string,
     clientId: string,
-  ): Promise<{ buffer: Buffer; fileName: string }> {
+  ): Promise<{ buffer: Buffer; fileName: string; mimeType: string }> {
     const scoped = { ...ctx, activeClientId: clientId };
     const rows = await this.prisma.withTenant(scoped, (tx) =>
-      tx.$queryRaw<Array<{ storage_key: string; file_name: string }>>(Prisma.sql`
-        SELECT storage_key, file_name FROM fatura_belgeleri WHERE id = ${id}::uuid
+      tx.$queryRaw<Array<{ storage_key: string; file_name: string; mime_type: string }>>(Prisma.sql`
+        SELECT storage_key, file_name, mime_type FROM fatura_belgeleri WHERE id = ${id}::uuid
       `),
     );
     const row = rows[0];
     if (!row) throw new NotFoundException('Fatura bulunamadı.');
-    return { buffer: await this.storage.read(row.storage_key), fileName: row.file_name };
+    /*
+     * TÜR DE DÖNÜYOR. Uç eskiden `Content-Type: application/pdf` SABİT
+     * yazıyordu; bir ZIP'i PDF diye bildirmek tarayıcıda bozuk bir görüntüleyici
+     * açardı ve kullanıcı dosyanın bozuk olduğunu sanardı.
+     */
+    return {
+      buffer: await this.storage.read(row.storage_key),
+      fileName: row.file_name,
+      mimeType: row.mime_type,
+    };
   }
 
   /**
@@ -268,9 +289,10 @@ export class FaturaService {
         file_name: string;
         storage_key: string;
         byte_size: number;
+        mime_type: string;
       }>
     >(Prisma.sql`
-      SELECT donem, platform::text AS platform, file_name, storage_key, byte_size
+      SELECT donem, platform::text AS platform, file_name, storage_key, byte_size, mime_type
         FROM fatura_belgeleri
        WHERE client_id = ${clientId}::uuid
          AND donem IN (${Prisma.join(donemler)})
@@ -307,11 +329,13 @@ export class FaturaService {
         const content = await this.storage.read(r.storage_key);
         ekler.push({
           filename: benzersizAd(
-            dosyaAdi(r.donem, r.platform as FaturaPlatformu, r.file_name),
+            dosyaAdi(r.donem, r.platform as FaturaPlatformu, r.mime_type),
             kullanilanAd,
           ),
           content,
-          contentType: FATURA_MIME,
+          // TÜR SATIRDAN. Sabit `application/pdf` yazmak, ZIP ekini PDF diye
+          // bildirmek ve mail istemcisinde açılamayan bir ek üretmek olurdu.
+          contentType: r.mime_type,
         });
         toplamBayt += r.byte_size;
       } catch (err) {
@@ -343,15 +367,18 @@ export class FaturaService {
   }
 }
 
-function dosyaAdi(donem: string, platform: FaturaPlatformu, orijinal: string): string {
+function dosyaAdi(donem: string, platform: FaturaPlatformu, mime: string): string {
   /*
    * DOSYA ADI YENİDEN KURULUYOR. Platformun indirdiği ad genelde
    * "invoice_1234567890.pdf" gibi anlamsız; müşteri mail ekinde hangi ayın
    * hangi platformu olduğunu görmeli. Orijinal ad kayıtta duruyor.
+   *
+   * UZANTI SAKLANAN TÜRDEN, sabit `.pdf` değil: bir ZIP eki `.pdf` adıyla
+   * gitseydi müşterinin istemcisi onu açamaz ve dosya bozuk sanılırdı.
    */
-  void orijinal;
   const etiket = platform === 'google' ? 'GoogleAds' : 'MetaAds';
-  return `${etiket}-Fatura-${donem}.pdf`;
+  const uzanti = FATURA_TURLERI.find((t) => t.mime === mime)?.uzanti ?? 'pdf';
+  return `${etiket}-Fatura-${donem}.${uzanti}`;
 }
 
 /**
@@ -385,6 +412,7 @@ function satirdanOzet(r: Record<string, unknown>): FaturaOzeti {
     platform: r.platform as FaturaPlatformu,
     donem: r.donem as string,
     fileName: r.file_name as string,
+    mimeType: r.mime_type as string,
     byteSize: Number(r.byte_size),
     aciklama: (r.aciklama as string) ?? null,
     uploadedByName: (r.uploaded_by_name as string) ?? null,

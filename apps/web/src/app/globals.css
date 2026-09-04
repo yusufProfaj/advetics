@@ -214,3 +214,92 @@ body {
     animation: advetics-donus 0.7s linear infinite;
   }
 }
+
+/*
+ * ═══ MAİL GÖVDESİ ÖNİZLEMESİ ═══
+ *
+ * Rapor gönderme penceresi mail HTML'ini artık RENDER EDEREK gösteriyor.
+ * Tailwind'in preflight'ı `h3`, `ul`, `li` gibi etiketleri SIFIRLIYOR: stil
+ * verilmezse başlık gövde metniyle aynı boyutta çıkıyor, listenin işaretleri
+ * kayboluyor ve önizleme ham metin gibi görünüyor — kullanıcının şikâyetinin
+ * ta kendisi.
+ *
+ * STİLLER MAİL İSTEMCİSİNİ TAKLİT EDİYOR, PANELİ DEĞİL. Gmail ve Outlook bu
+ * etiketleri kendi varsayılanlarıyla çiziyor; panelin ince tipografisini
+ * uygulamak önizlemeyi güzelleştirir ama YALAN söyletirdi — kullanıcı ekranda
+ * gördüğünden farklı bir mail göndermiş olurdu.
+ *
+ * KAPSAM DAR (`.mail-onizleme` altı): bu kurallar panelin geri kalanına
+ * sızarsa, `h3` kullanan her ekran sessizce değişir.
+ */
+.mail-onizleme {
+  line-height: 1.5;
+  color: var(--ink);
+  /*
+   * KAPSAMA. Beyaz liste `style` özniteliğini GEÇİRİYOR (imzalar renk ve
+   * hizayı onunla taşıyor) ve mail gövdesi artık panelde de çiziliyor.
+   * Yapıştırılan bir `position: fixed` bu kutunun dışına taşıp panelin
+   * üstünü kaplayabilirdi; `contain` onu kutunun içinde tutuyor.
+   */
+  contain: layout paint;
+}
+.mail-onizleme p {
+  margin: 0 0 0.75em;
+}
+.mail-onizleme h1,
+.mail-onizleme h2,
+.mail-onizleme h3,
+.mail-onizleme h4 {
+  margin: 1.1em 0 0.5em;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.mail-onizleme h1 { font-size: 1.5em; }
+.mail-onizleme h2 { font-size: 1.3em; }
+.mail-onizleme h3 { font-size: 1.12em; }
+.mail-onizleme h4 { font-size: 1em; }
+.mail-onizleme ul,
+.mail-onizleme ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.6em;
+}
+.mail-onizleme ul { list-style: disc; }
+.mail-onizleme ol { list-style: decimal; }
+.mail-onizleme li { margin: 0.2em 0; }
+.mail-onizleme strong,
+.mail-onizleme b {
+  font-weight: 700;
+}
+.mail-onizleme em,
+.mail-onizleme i {
+  font-style: italic;
+}
+.mail-onizleme a {
+  color: var(--brand-primary);
+  text-decoration: underline;
+}
+.mail-onizleme table {
+  border-collapse: collapse;
+  margin: 0 0 0.75em;
+  /*
+   * TABLO TAŞMIYOR. Rapor maili geniş tablolar taşıyabiliyor ve dar bir
+   * pencerede yatay taşma, pencerenin tamamını kaydırılabilir yapardı.
+   */
+  max-width: 100%;
+}
+.mail-onizleme th,
+.mail-onizleme td {
+  border: 1px solid var(--line);
+  padding: 0.3em 0.55em;
+  text-align: left;
+}
+.mail-onizleme th { font-weight: 700; }
+.mail-onizleme hr {
+  margin: 1em 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.mail-onizleme img {
+  max-width: 100%;
+  height: auto;
+}

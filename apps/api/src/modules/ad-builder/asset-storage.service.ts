@@ -52,17 +52,26 @@ export class AssetStorageService {
     mimeType: string;
   }): Promise<string> {
     /*
-     * UZANTI MIME'DAN TÜRETİLİYOR. Fatura belgeleri PDF ve eskiden bu satır
-     * her şeye `.jpg` veriyordu: dosya doğru yazılıyor ama diskte yanlış
-     * uzantıyla duruyordu — sunucuda elle bakan biri için yanıltıcı ve bir
-     * gün uzantıya göre servis eden bir kod eklenirse sessizce bozuk.
+     * UZANTI TÜRDEN TÜRETİLİYOR ve BİLİNMEYEN TÜR `bin` OLUYOR.
+     *
+     * Önceden bir if-zinciriydi ve son dalı `jpg`ydi: listede olmayan her tür
+     * sessizce görsel uzantısı alıyordu. Fatura ZIP'i eklendiğinde tam bu
+     * olacaktı — arşiv diske `.jpg` olarak yazılırdı. Dosya içeriği doğru
+     * olduğu için hiçbir şey patlamıyor; yalnızca sunucuda dosyaya bakan biri
+     * onu görsel sanıyor. `bin` en azından "ne olduğunu bilmiyoruz" diyor.
+     *
+     * `bin` DALI BUGÜN ÖLÜ KOD ve bilerek duruyor: varlık yolları
+     * `ACCEPTED_MIME` (yalnızca JPEG/PNG) ile süzülüyor, fatura yolu da
+     * `FATURA_TURLERI` ile. Yeni bir tür eklenip haritaya yazılmadığında
+     * sessizce `.jpg` yazmaktansa `.bin` yazmak, hatayı görünür kılıyor.
      */
-    const ext =
-      params.mimeType === 'application/pdf'
-        ? 'pdf'
-        : params.mimeType === 'image/png'
-          ? 'png'
-          : 'jpg';
+    const UZANTILAR: Record<string, string> = {
+      'application/pdf': 'pdf',
+      'application/zip': 'zip',
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+    };
+    const ext = UZANTILAR[params.mimeType] ?? 'bin';
     const key = `${params.orgId}/${params.scope}/${randomUUID()}.${ext}`;
     const target = this.absolute(key);
 

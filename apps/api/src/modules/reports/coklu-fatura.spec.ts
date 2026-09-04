@@ -82,6 +82,11 @@ function pdf(icerik: string): Buffer {
   return Buffer.from(`%PDF-1.4\n${icerik}`);
 }
 
+/** Geçerli bir ZIP başlığı (`PK\x03\x04`) + içerik. */
+function zip(icerik: string): Buffer {
+  return Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from(icerik)]);
+}
+
 async function yukle(opts: {
   platform?: 'meta' | 'google';
   donem?: string;
@@ -311,5 +316,144 @@ describe('raporEkleri — mail ekleri', () => {
     );
     expect(eksikDonemler).toEqual(['2026-07']);
     expect(atlanan).toEqual([]);
+  });
+});
+
+/**
+ * ═══ ZIP FATURA — UÇTAN UCA ═══
+ *
+ * Tür ÜÇ yerde kullanılıyor (diskteki uzantı, mail ekinin contentType'ı,
+ * panelden açarken Content-Type başlığı) ve üçü de eskiden "PDF" olduğunu
+ * VARSAYIYORDU. Bu blok üçünü de gerçek veritabanıyla sınıyor.
+ */
+describe('ZIP fatura', () => {
+  it('KRİTİK: ZIP yüklenebiliyor', async () => {
+    await svc.yukle(
+      CTX,
+      { clientId: IDS.client, platform: 'meta', donem: '2026-08' } as never,
+      { fileName: 'faturalar.zip', bytes: zip('arsiv'), mimeType: 'application/zip' },
+    );
+    const liste = await svc.listele(CTX, IDS.client);
+    expect(liste.length).toBe(1);
+    expect(liste[0]!.mimeType).toBe('application/zip');
+  });
+
+  it('KRİTİK: mail eki `.zip` adıyla ve DOĞRU içerik tipiyle gidiyor', async () => {
+    /*
+     * Bir ZIP eki `.pdf` adıyla ve `application/pdf` tipiyle gitseydi
+     * müşterinin istemcisi onu açamaz ve dosya bozuk sanılırdı.
+     */
+    await svc.yukle(
+      CTX,
+      { clientId: IDS.client, platform: 'google', donem: '2026-08' } as never,
+      { fileName: 'google.zip', bytes: zip('a'), mimeType: 'application/zip' },
+    );
+
+    const { ekler } = await svc.raporEkleri(IDS.client, '2026-08-01', '2026-08-31');
+    expect(ekler.length).toBe(1);
+    expect(ekler[0]!.filename).toBe('GoogleAds-Fatura-2026-08.zip');
+    expect(ekler[0]!.contentType).toBe('application/zip');
+  });
+
+  it('KRİTİK: aynı dönemde PDF ve ZIP BİRLİKTE gidiyor', async () => {
+    // Ajans hem tekil faturayı hem arşivi yüklemiş olabilir; ikisi de eklenmeli
+    // ve adları çakışmamalı (biri .pdf, biri .zip).
+    await svc.yukle(
+      CTX,
+      { clientId: IDS.client, platform: 'meta', donem: '2026-08' } as never,
+      { fileName: 'a.pdf', bytes: pdf('x'), mimeType: 'application/pdf' },
+    );
+    await svc.yukle(
+      CTX,
+      { clientId: IDS.client, platform: 'meta', donem: '2026-08' } as never,
+      { fileName: 'b.zip', bytes: zip('y'), mimeType: 'application/zip' },
+    );
+
+    const { ekler } = await svc.raporEkleri(IDS.client, '2026-08-01', '2026-08-31');
+    expect(ekler.map((e) => e.filename).sort()).toEqual([
+      'MetaAds-Fatura-2026-08.pdf',
+      'MetaAds-Fatura-2026-08.zip',
+    ]);
+  });
+
+  it('KRİTİK: `bytes()` türü de döndürüyor — indirme ucu ona bakıyor', async () => {
+    /*
+     * `$queryRaw<T>` denetimsiz: alanı SELECT'e eklemeyi unutmak TypeScript'e
+     * hiçbir şey söyletmiyor, alan `undefined` geliyor ve
+     * `setHeader('Content-Type', undefined)` çalışma anında patlıyor.
+     */
+    const { id } = await svc.yukle(
+      CTX,
+      { clientId: IDS.client, platform: 'meta', donem: '2026-08' } as never,
+      { fileName: 'x.zip', bytes: zip('z'), mimeType: 'application/zip' },
+    );
+    const out = await svc.bytes(CTX, id, IDS.client);
+    expect(out.mimeType).toBe('application/zip');
+  });
+
+  it('KRİTİK: TARAYICININ BİLDİRDİĞİ TÜRE bakılmıyor — gövde kazanıyor', async () => {
+    /*
+     * Tarayıcı `content-type`ı UZANTIDAN tahmin ediyor. `.pdf` adıyla
+     * yüklenen bir ZIP, gövdesi ZIP olduğu için ZIP olarak saklanmalı;
+     * bildirilen türe güvenmek yanlış uzantıyla diske yazmak demekti.
+     */
+    await svc.yukle(
+      CTX,
+      { clientId: IDS.client, platform: 'meta', donem: '2026-08' } as never,
+      { fileName: 'yanlis-ad.pdf', bytes: zip('gercekte-zip'), mimeType: 'application/pdf' },
+    );
+    expect((await svc.listele(CTX, IDS.client))[0]!.mimeType).toBe('application/zip');
+  });
+
+  it('EKRAN GÖRÜNTÜSÜ reddediliyor ve sebebi ADIYLA söyleniyor', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await expect(
+      svc.yukle(
+        CTX,
+        { clientId: IDS.client, platform: 'meta', donem: '2026-08' } as never,
+        { fileName: 'ekran.png', bytes: png, mimeType: 'image/png' },
+      ),
+    ).rejects.toThrow('görsel');
+  });
+
+  it('KRİTİK: veritabanı kısıtı da bilinmeyen türü reddediyor', async () => {
+    /*
+     * Son savunma hattı: başka bir kod yolu (script, elle SQL) buraya
+     * "image/png" yazarsa müşteriye ek olarak ekran görüntüsü giderdi.
+     *
+     * İDDİA SEBEBE ÇAPALI. Mesajsız bir `rejects.toThrow()` şemaya bir NOT
+     * NULL kolon eklendiğinde de geçerdi — yanlış sebeple yeşil bir test,
+     * hiç olmayandan kötü.
+     */
+    await expect(
+      h.q(
+        `INSERT INTO fatura_belgeleri
+           (id, org_id, client_id, platform, donem, file_name, storage_key,
+            byte_size, mime_type, uploaded_by_user_id)
+         VALUES (gen_random_uuid(),$1,$2,'meta','2026-08','a.png','k',10,'image/png',$3)`,
+        [IDS.org, IDS.client, IDS.user],
+      ),
+    ).rejects.toThrow('fatura_belgeleri_mime_chk');
+  });
+
+  it('KRİTİK: mime_type VERİLMEZSE varsayılan PDF', async () => {
+    /*
+     * Migration `NOT NULL DEFAULT 'application/pdf'` diyor ve geri doldurma
+     * script'i yazılmadı — çünkü bu migration'dan önceki her satır PDF'ti
+     * (yükleme yolu `%PDF-` dışında her şeyi reddediyordu). Varsayılan
+     * kayarsa eski faturaların hepsi yanlış türle okunur ve mail ekleri
+     * açılamaz hâle gelir.
+     */
+    await h.q(
+      `INSERT INTO fatura_belgeleri
+         (id, org_id, client_id, platform, donem, file_name, storage_key,
+          byte_size, uploaded_by_user_id)
+       VALUES (gen_random_uuid(),$1,$2,'meta','2026-08','eski.pdf','k',10,$3)`,
+      [IDS.org, IDS.client, IDS.user],
+    );
+    const [satir] = await h.q<{ mime_type: string }>(
+      `SELECT mime_type FROM fatura_belgeleri LIMIT 1`,
+    );
+    expect(satir!.mime_type).toBe('application/pdf');
   });
 });

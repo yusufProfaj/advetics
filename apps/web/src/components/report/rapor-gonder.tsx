@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { raporSorgusu, sablonAlanlari, type ReportMailDraft } from '@advetics/shared';
 import { AliciListesiAlani } from '@/components/alici-listesi-alani';
+import { MailGovdeEditoru } from './mail-govde-editoru';
 import { ApiRequestError, apiFetch, API_URL } from '@/lib/api';
 
 /**
@@ -106,16 +107,36 @@ export function MailGonderModal({
 
   const qs = new URLSearchParams(raporSorgusu({ clientId, from, to, sablon }));
 
+  /**
+   * TASLAĞIN KİMLİĞİ — hangi müşteri, hangi dönem, hangi şablon.
+   *
+   * Bu anahtar hem yeniden çekme kararını hem editörün yeniden doldurulmasını
+   * yönetiyor; ikisinin ayrı ölçütlere bakması, gövdenin bir dönemi ekin başka
+   * bir dönemi anlatması demek olurdu.
+   */
+  const taslakAnahtari = `${clientId}|${from}|${to}|${sablon ?? ''}`;
+  const cekilenAnahtar = useRef<string | null>(null);
+
   /*
-   * TASLAK AÇILIŞTA BİR KEZ ÇEKİLİYOR. Her render'da çekmek sunucuya
-   * gereksiz tur attırır ve kullanıcının o sırada yazdığı metnin üzerine
-   * yazardı.
+   * TASLAK AÇILIŞTA ÇEKİLİYOR — ve DÖNEM/ŞABLON DEĞİŞTİYSE YENİDEN.
+   *
+   * Koşul eskiden `taslak !== null` idi: bir kez çekildikten sonra bir daha
+   * ASLA çekilmiyordu. Kullanıcı pencereyi kapatıp tarih aralığını ya da
+   * şablonu değiştirip yeniden açtığında mail METNİ eski dönemi anlatıyor,
+   * PDF EKİ ise yeni dönem için üretiliyordu — aynı mailde iki farklı gerçek
+   * ve farkı yalnızca ALICI görür.
+   *
+   * "Kullanıcının yazdığının üzerine yazma" kaygısı KORUNUYOR: anahtar
+   * değişmediği sürece yeniden çekilmiyor, yani aynı rapor için açıp kapamak
+   * yazılanı silmiyor.
    */
   useEffect(() => {
-    if (!acik || taslak !== null) return;
+    if (!acik) return;
+    if (cekilenAnahtar.current === taslakAnahtari) return;
+    cekilenAnahtar.current = taslakAnahtari;
     void taslakGetir();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [acik]);
+  }, [acik, taslakAnahtari]);
 
   async function taslakGetir() {
     setBekleyen('taslak');
@@ -266,18 +287,23 @@ export function MailGonderModal({
                 />
               </label>
 
-              <label className="block">
-                <span className="text-xs text-ink-muted">
-                  Mail metni — sayılar rapordan geldi, değerlendirme kısmını sen yaz
-                </span>
-                <textarea
-                  value={govde}
-                  onChange={(e) => setGovde(e.target.value)}
-                  rows={12}
-                  spellCheck={false}
-                  className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-xs focus:border-brand focus:outline-none"
-                />
-              </label>
+              {/*
+                HAM HTML YERİNE ÖNİZLEME. Kullanıcı burada "değerlendirme"
+                paragrafını yazıyor ve bunu etiketlerin arasından yapmak hem
+                yavaş hem hataya açıktı — kapanmayan bir etiket müşteriye bozuk
+                bir mail göndermek demek.
+              */}
+              <MailGovdeEditoru
+                deger={govde}
+                onChange={setGovde}
+                /*
+                 * TASLAK ANAHTARI: hangi müşteri/dönem için taslak çekildiğini
+                 * temsil ediyor. Kullanıcı başka bir dönem seçip taslağı
+                 * yenilediğinde editör yeniden dolmalı; her tuş vuruşunda
+                 * değil.
+                 */
+                taslakAnahtari={taslakAnahtari}
+              />
 
               <label className="flex items-center gap-2 text-sm">
                 <input

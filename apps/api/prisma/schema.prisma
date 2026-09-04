@@ -3083,6 +3083,18 @@ model FaturaBelgesi {
   donem String @db.VarChar(7)
 
   fileName   String @map("file_name") @db.VarChar(255)
+
+  /// `application/pdf` ya da `application/zip`.
+  ///
+  /// SAKLANIYOR, DOSYA ADINDAN TÜRETİLMİYOR: üç yer buna bağlı (diskteki
+  /// uzantı, mail ekinin contentType'ı, panelden açarken Content-Type
+  /// başlığı) ve dosya adı kullanıcının verdiği ad — gövdeyle uyuşmak zorunda
+  /// değil. Biçim sihirli baytlardan okunuyor; okunan şey de saklanmalı.
+  ///
+  /// Kabul edilen değerler veritabanında da dayatılıyor
+  /// (`fatura_belgeleri_mime_chk`): başka bir kod yolu buraya "image/png"
+  /// yazarsa müşteriye ek olarak ekran görüntüsü giderdi.
+  mimeType   String @default("application/pdf") @map("mime_type") @db.VarChar(100)
   /// Diskteki yol. Dosyanın kendisi veritabanında DEĞİL: PDF'i BYTEA olarak
   /// tutmak yedekleri ve her sorguyu ağırlaştırırdı; varlık arşivi de aynı
   /// deseni kullanıyor (`assets.storage_key`).

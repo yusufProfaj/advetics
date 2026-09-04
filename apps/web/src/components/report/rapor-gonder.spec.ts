@@ -51,9 +51,15 @@ describe('RaporGonder', () => {
      * Sayılar rapordan geliyor ama "Urla bölgesindeki konut aramalarında..."
      * gibi cümleler uydurulamaz; uydurmak müşteriye yanlış bir strateji
      * anlatmak olurdu.
+     *
+     * ÇAPA `<textarea>`DAN EDİTÖRE TAŞINDI: gövde artık render edilmiş hâlde
+     * düzenleniyor (kullanıcının isteği "kodu değil görünüş"). Eski iddia
+     * düzenlenebilirliği değil, düzenlemenin BİÇİMİNİ kilitliyordu.
      */
-    expect(KAYNAK).toContain('<textarea');
-    expect(KAYNAK).toContain('değerlendirme kısmını sen yaz');
+    expect(KAYNAK).toContain('<MailGovdeEditoru');
+    const editor = readFileSync(join(__dirname, 'mail-govde-editoru.tsx'), 'utf8');
+    expect(editor).toContain('değerlendirme kısmını sen yaz');
+    expect(editor).toContain('contentEditable');
   });
 
   it('PDF DÜZ BAĞLANTI — fetch ile belleğe alınmıyor', () => {

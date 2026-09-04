@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  FATURA_ETIKETLERI,
+  FATURA_KABUL,
   FATURA_MAX_BAYT,
   FATURA_PLATFORMLARI,
   FATURA_PLATFORM_ETIKETLERI,
@@ -81,7 +83,7 @@ export function Faturalar({
   async function gonder(): Promise<void> {
     const dosya = dosyaRef.current?.files?.[0];
     if (!dosya) {
-      setHata('Önce bir PDF seç.');
+      setHata(`Önce bir dosya seç (${FATURA_ETIKETLERI}).`);
       return;
     }
     /*
@@ -215,13 +217,13 @@ export function Faturalar({
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {/* YALNIZCA PDF. Fatura resmi belge; ekran görüntüsü kabul
-                edilmiyor ve sunucu da içeriğin gerçekten PDF olduğunu
-                sihirli baytlardan doğruluyor. */}
+            {/* PDF ya da ZIP. Ekran görüntüsü HÂLÂ kabul edilmiyor — fatura
+                resmi bir belge. Sunucu biçimi sihirli baytlardan doğruluyor;
+                buradaki `accept` yalnızca dosya seçiciyi daraltıyor. */}
             <input
               ref={dosyaRef}
               type="file"
-              accept="application/pdf"
+              accept={FATURA_KABUL}
               className="text-xs text-ink-muted file:mr-2 file:rounded-lg file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-xs"
             />
             <button
@@ -233,8 +235,17 @@ export function Faturalar({
               {yukleniyor ? 'Yükleniyor…' : 'Yükle'}
             </button>
             <span className="text-[11px] text-ink-muted">
-              Aynı döneme birden çok fatura yükleyebilirsin; hepsi maile eklenir. Aynı
-              dosya iki kez yüklenemez.
+              {FATURA_ETIKETLERI}. Aynı döneme birden çok fatura yükleyebilirsin; hepsi
+              maile eklenir. Aynı dosya iki kez yüklenemez.{' '}
+              {/*
+                PAROLA KORUMALI ARŞİV SESSİZ RET ÜRETİYOR: kurumsal mail
+                sunucuları onları koşulsuz engelliyor ve sunucumuz bunu sihirli
+                bayttan AYIRT EDEMİYOR (`PK\x03\x04` ikisinde de aynı).
+                Belirtisi "mail gitti ama müşteriye ulaşmadı" oluyor — bu
+                projenin en pahalı hata türü. Söylemek tek çare.
+              */}
+              <strong>Parola korumalı arşiv yükleme</strong> — mail sunucuları onları
+              engelliyor ve mail sessizce ulaşmıyor.
             </span>
           </div>
         </div>
@@ -262,7 +273,10 @@ export function Faturalar({
                     {f.aciklama ? ` · ${f.aciklama}` : ''}
                   </p>
                   <p className="text-[11px] text-ink-muted">
-                    {f.fileName} · {Math.max(1, Math.round(f.byteSize / 1024))} KB
+                    {/* TÜR GÖRÜNÜYOR: bir ZIP'in içinde ne olduğu açmadan
+                        bilinmiyor ve maile giden şey o. */}
+                    {f.mimeType === 'application/zip' ? 'ZIP' : 'PDF'} · {f.fileName} ·{' '}
+                    {Math.max(1, Math.round(f.byteSize / 1024))} KB
                     {f.uploadedByName ? ` · ${f.uploadedByName}` : ''}
                   </p>
                 </div>

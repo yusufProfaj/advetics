@@ -529,6 +529,41 @@ buna göre veriliyor:
   tek elemanlı listeyi veriyor ve fonksiyon kendini sonsuza çağırıyor;
   mutasyon testinde süreç BELLEK TAŞMASIYLA düştü. Durma koşulu doğrudan
   `idler.length === 1` olmalı.
+- **ÖNİZLEME EKLEMEK, ONU DOĞRU TUTMA BORCU YÜKLENMEK DEMEK.** Mail gövdesi
+  ham HTML olarak `<textarea>`da duruyordu; render edilmiş bir kutuya
+  çevirmek "bu kod" sözünü "müşterinin göreceği bu" sözüne dönüştürüyor. O
+  yüzden temizleyici (`imzaTemizle`) `packages/shared`a taşındı ve panelde de
+  AYNISI koşuyor — ikinci bir temizleyici doğduğu anda ayrışır ve önizleme
+  sessizce yalan söylemeye başlar. Aynı sebeple `blob:`, `file:` ve `cid:`
+  şemaları kara listeye eklendi: üçü de ekranda ÇALIŞIYOR, mailde ÖLÜ.
+- **`contentEditable` KONTROLLÜ OLAMAZ — imleç metnin başına sıçrar.** Her tuş
+  vuruşunda `deger`i DOM'a geri yazmak React'in klasik çatışması. Alan
+  KONTROLSÜZ tutuluyor ve yalnızca bir "taslak anahtarı" (müşteri|dönem|şablon)
+  değişince yeniden dolduruluyor; `deger` bağımlılık listesine EKLENMEMELİ.
+- **BİR KEZ ÇEKİLEN TASLAK, KOŞULU DEĞİŞTİĞİNDE BAYAT KALIYOR.** Rapor mail
+  taslağı `if (!acik || taslak !== null) return;` ile bir kez çekiliyordu:
+  kullanıcı pencereyi kapatıp tarih aralığını değiştirip yeniden açtığında
+  mail METNİ eski dönemi anlatıyor, PDF EKİ yeni dönem için üretiliyordu —
+  aynı mailde iki farklı gerçek ve farkı yalnızca ALICI görür. Koşul artık
+  taslağın KİMLİĞİNE bakıyor; "yazdığının üzerine yazma" kaygısı da korunuyor
+  çünkü aynı kimlikte yeniden çekilmiyor.
+- **DOSYA TÜRÜ SAKLANMAK ZORUNDA, DOSYA ADINDAN TÜRETİLEMEZ.** Fatura PDF ya
+  da ZIP olabiliyor ve tür ÜÇ yerde kullanılıyor: diskteki uzantı, mail
+  ekinin `contentType`ı, panelden açarken `Content-Type` başlığı. Dosya adı
+  kullanıcının verdiği ad ve gövdeyle uyuşmak zorunda değil. Biçim sihirli
+  baytlardan okunuyor; okunan şey `mime_type` kolonuna yazılıyor ve kabul
+  listesi veritabanında da CHECK ile dayatılıyor (`fatura-zip.spec.ts` iki
+  listeyi karşılaştırıyor — ayrışırlarsa INSERT üretimde patlardı).
+- **ZIP'İN ÜÇ İMZASI VAR ve ikisi kabul edilmiyor.** `PK\x03\x04` normal
+  arşiv, `PK\x05\x06` BOŞ arşiv, `PK\x07\x08` çok parçalı. Son ikisi
+  reddediliyor ama AYRI cümlelerle: "ZIP değil" demek, doğru dosyayı
+  indirdiğini bilen kullanıcıyı olmayan bir arızayı aramaya gönderir.
+  Parola korumalı arşivi sihirli bayttan ayırt etmek İMKÂNSIZ ve kurumsal
+  mail sunucuları onları koşulsuz engelliyor — arayüzde açıkça yazılı.
+- **YÜKLEME UCUNDA MULTER SINIRI, SERVİSTEKİ KONTROLDEN ÖNCE GELİR.** Fatura
+  ucunda `FileInterceptor('file')` sınırsızdı: servisin `FATURA_MAX_BAYT`
+  kontrolüne gelene kadar dosya BELLEĞE ALINMIŞ oluyordu. Diğer iki yükleme
+  ucu sınırı zaten koyuyordu; paylaşımlı VPS'te bu diğer siteleri de etkiler.
 - **ÇOKLU ALICI, KISMİ REDDİ SESSİZ BİR HATAYA ÇEVİRİYOR.** nodemailer tek
   alıcıda ret = "hepsi reddedildi" olduğu için FIRLATIYOR; birden çok alıcıda
   bazıları reddedilse bile `sendMail` BAŞARIYLA dönüyor ve ret yalnızca dönüş
@@ -670,7 +705,7 @@ okunup varsayılmadı — canlıda doğrulandı.
 
 ### Test
 
-- `pnpm --filter @advetics/api test` — vitest. Şu an **2.225 API testi**.
+- `pnpm --filter @advetics/api test` — vitest. Şu an **2.250 API testi**.
 - Veritabanına dokunan testler **PGlite** kullanıyor (gerçek Postgres, WASM).
   Şema üretim migration'larından kuruluyor — el yazımı test şeması yok.
 - **RLS testlerde varsayılan olarak KAPALI** (worker rolü BYPASSRLS'i taklit

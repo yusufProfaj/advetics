@@ -19,6 +19,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import {
+  FATURA_MAX_BAYT,
   asciiDosyaAdi,
   raporDosyaAdi,
   reportQuerySchema,
@@ -282,7 +283,15 @@ export class ReportsController {
 
   @Post('faturalar')
   @RequirePermissions('report.share')
-  @UseInterceptors(FileInterceptor('file'))
+  /*
+   * BOYUT SINIRI BURADA DA OLMAK ZORUNDA. Servis `FATURA_MAX_BAYT`i kontrol
+   * ediyor ama o kontrole gelene kadar dosya BELLEĞE ALINMIŞ oluyor: 500 MB'lık
+   * bir yükleme, reddedilmeden önce 500 MB bellek tüketiyor ve paylaşımlı
+   * VPS'te bu diğer siteleri de etkiliyor. Diğer iki yükleme ucu (varlık
+   * arşivi ve reklam kurucu) sınırı zaten koyuyordu; fatura ucu atlanmıştı ve
+   * ZIP kabul edilince tehlike büyüdü — arşivler PDF'lerden çok daha büyük.
+   */
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: FATURA_MAX_BAYT } }))
   uploadInvoice(
     @CurrentTenant() ctx: TenantContext,
     // `Express.Multer.File` yerine yapısal tip: @types/multer bu projede yok
@@ -322,9 +331,35 @@ export class ReportsController {
     @Query('clientId', ParseUUIDPipe) clientId: string,
     @Res() res: Response,
   ): Promise<void> {
-    const { buffer, fileName } = await this.faturalar.bytes(ctx, id, clientId);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fileName)}"`);
+    const { buffer, fileName, mimeType } = await this.faturalar.bytes(ctx, id, clientId);
+
+    /*
+     * TÜR SATIRDAN, SABİT DEĞİL. Burada `application/pdf` yazılıydı ve fatura
+     * ZIP de olabildiği için artık yalan söylüyor: bir arşivi PDF diye
+     * bildirmek tarayıcıda bozuk bir görüntüleyici açar ve kullanıcı dosyanın
+     * bozuk olduğunu sanar.
+     */
+    res.setHeader('Content-Type', mimeType);
+
+    /*
+     * TARAYICI TÜRÜ TAHMİN ETMESİN. `Content-Type` doğruyken bile bazı
+     * tarayıcılar gövdeye bakıp kendi kararını veriyor (MIME sniffing);
+     * kullanıcının yüklediği bir dosyada bu, bildirdiğimizden başka bir şey
+     * olarak çalıştırılması demek.
+     */
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    /*
+     * PDF SEKMEDE AÇILIYOR, ZIP İNDİRİLİYOR. `inline` bir arşimde anlamsız:
+     * tarayıcı onu gösteremiyor ve çoğu istemci yine indirmeye düşüyor ama
+     * bazıları adsız kaydediyor. Ad da yüzde kodlu UTF-8 ile veriliyor —
+     * `filename=` alanı yalnızca ASCII taşıyabiliyor.
+     */
+    const yerlesim = mimeType === 'application/pdf' ? 'inline' : 'attachment';
+    res.setHeader(
+      'Content-Disposition',
+      `${yerlesim}; filename="${asciiDosyaAdi(fileName)}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    );
     res.send(buffer);
   }
 
