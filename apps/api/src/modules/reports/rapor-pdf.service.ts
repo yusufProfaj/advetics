@@ -17,6 +17,7 @@ import {
   type ReportCampaignRow,
   type ReportData,
 } from '@advetics/shared';
+import { kitleBolumuKarari } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
@@ -121,6 +122,23 @@ export class RaporPdfService {
       vurgu: renk(data.branding.accentColor, renk(data.branding.primaryColor)),
     };
 
+    /*
+
+     * KİTLE BÖLÜMÜ KARARI — döngüden ÖNCE, bir kez.
+
+     *
+
+     * Altı bölüm (özet + beş boyut) aynı kaderi paylaşıyor ve kararı her
+
+     * birinde yeniden hesaplamak, birinin gün gelip diğerlerinden ayrışması
+
+     * demekti. Karar `packages/shared`ta ve panel de AYNISINI çağırıyor.
+
+     */
+
+    const kitleKarari = kitleBolumuKarari(ctx.data.platforms.map((p) => p.platform));
+
+
     for (const bolum of data.sections) {
       switch (bolum) {
         case 'cover':
@@ -141,15 +159,22 @@ export class RaporPdfService {
         case 'google_search_terms':
           this.aramaTerimleri(ctx);
           break;
+        /*
+         * KİTLE BÖLÜMLERİ — platform sunmuyorsa SAYFA HİÇ AÇILMIYOR.
+         *
+         * `continue` DEĞİL, sayfa eklenmeden atlanıyor: `kitleOzeti` ilk
+         * satırında `addPage` çağırıyor, yani karar oraya girseydi belgede
+         * BOŞ BİR SAYFA kalırdı. Karar burada, çizimden önce.
+         */
         case 'audience_overview':
-          this.kitleOzeti(ctx);
+          if (kitleKarari.ciz) this.kitleOzeti(ctx, kitleKarari.not);
           break;
         case 'audience_age':
         case 'audience_gender':
         case 'audience_placement':
         case 'audience_hour':
         case 'audience_city':
-          this.kirilim(ctx, bolum);
+          if (kitleKarari.ciz) this.kirilim(ctx, bolum);
           break;
         case 'top_ads':
           this.enIyiReklamlar(ctx);
@@ -585,9 +610,28 @@ export class RaporPdfService {
    * tonları. Farklı sıra, aynı kovanın iki belgede farklı renkte görünmesi
    * demekti ve okuyan onları farklı şeyler sanardı.
    */
-  private kitleOzeti(ctx: Ctx): void {
+  private kitleOzeti(ctx: Ctx, not: string | null): void {
     const s = ctx.doc.addPage([EN, BOY]);
-    const y0 = this.baslik(ctx, s, SECTION_LABELS.audience_overview, this.platformAdlari(ctx));
+    let y0 = this.baslik(ctx, s, SECTION_LABELS.audience_overview, this.platformAdlari(ctx));
+
+    /*
+     * KARMA RAPORDA DIŞARIDA KALAN PLATFORM YAZILIYOR.
+     *
+     * Sayfa Meta ve Google'ı çiziyor; LinkedIn harcaması bu dağılımın DIŞINDA
+     * kalıyor. Söylemezsek kırılım toplamı özet kartlarıyla tutmuyor ve okuyan
+     * ya toplamanın yanlış olduğunu sanıyor ya da farkı hiç görmüyor.
+     */
+    if (not !== null) {
+      s.drawText(not, {
+        x: KENAR,
+        y: y0 - 4,
+        size: 8,
+        font: ctx.normal,
+        color: GRI,
+        maxWidth: EN - 2 * KENAR,
+      });
+      y0 -= 16;
+    }
 
     const yas = ctx.data.breakdowns.find((b) => b.dimension === 'age');
     const cinsiyet = ctx.data.breakdowns.find((b) => b.dimension === 'gender');

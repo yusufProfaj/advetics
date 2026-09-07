@@ -696,6 +696,81 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-07 — LinkedIn Ads üçüncü platform olarak ekleniyor
+
+**Kapsam kilidi kullanıcının kararıyla düştü.** CLAUDE.md "yalnızca Meta ve
+Google — başka platform eklenmemeli" diyordu ve gerekçesi *"istenmedi"*ydi;
+istenince gerekçe kalmadı.
+
+Bu tur OKUMA ya da YAZMA kodu getirmedi. Advertising API "Development Tier"
+başvurusu bugün yapıldı ve onay gelmeden hiçbir çağrı başarılı olamıyor —
+uygulamaya henüz scope atanmamış (Developer Portal > Auth: *"No permissions
+added"*). Getirdiği şey ZEMİN ve üçüncü platformun SESSİZCE KAYBOLDUĞU
+yerlerin kapatılması.
+
+**En pahalı iki tuzak önce kodlandı:**
+
+  · **Seviye eşlemesi.** LinkedIn'in "Campaign"i bizim `campaign`ımız DEĞİL.
+    Hiyerarşi dört seviyeli (Account → Campaign Group → Campaign → Creative)
+    ve isme bakarak eşlemek dördü üçe sıkıştırır: `ad` seviyesi hiç dolmaz,
+    metrikler kampanya satırlarına bağlanamaz ve hiçbir hata düşmez. Eşleme
+    ALANLARA dayandı — LinkedIn Campaign `targetingCriteria` + `dailyBudget`
+    + `unitCost` taşıyor, yani Meta'nın ad set'i. Doğrusu: Campaign Group →
+    `campaign`, Campaign → `ad_group`, Creative → `ad`.
+  · **Para ölçeği.** LinkedIn ondalık STRING istiyor (`"30.00"`), micros
+    değil. Micros yazmak bütçeyi bir milyon katına çıkarıyor ve API bunu
+    GEÇERLİ bir BigDecimal sayıyor: hata yok, sadece harcama.
+
+**TypeScript 47 elle yazılmış `'meta' | 'google'` birleşimi gösterdi.**
+`Record<Platform, ...>` taşıyanlar derlemede kırıldı; koruma çalıştı. Asıl iş
+derlemenin GÖRMEDİKLERİNDEYDİ — en sinsisi `rapor-pdf.service.ts` içindeki
+`PLATFORM_SIRASI`: LinkedIn verisi veritabanında durur, rapor bloğu üretilir,
+ama döngü onu gezmediği için PDF'e HİÇ ÇİZİLMEZ.
+
+**İLK TUR EKSİK KALDI ve bir gerileme açtı.** "Hepsini kapattım" dedim; on yer
+daha vardı. Panelin rapor başlığını ortak tabloya bağlarken PDF ikizini elle
+bıraktım ve ikisi ayrıştı ("Meta (Facebook / Instagram)" / "Meta Ads") —
+LinkedIn'i beklemeyen, Meta ve Google raporlarında CANLI bir hata. Tarama
+artık deseni kaynak ağacında ARIYOR; bilerek dar kalan dört yazma ekranı açık
+bir istisna listesinde ve ikinci bir test o listenin ölü girdi taşımadığını
+kontrol ediyor.
+
+**ÜRÜN KARARI — Kitle Özeti sayfası LinkedIn için ÇİZİLMİYOR.** LinkedIn'in
+pivot listesinde yaş, cinsiyet ve saat HİÇ YOK (karşılığı şirket, sektör,
+ünvan, kıdem). Sayfa çizilseydi her LinkedIn raporunda *"Kitle verisi henüz
+toplanmadı"* yazacaktı ve o cümle YALAN olurdu: veri toplanmadığı için değil,
+boyut platformda olmadığı için boş — ajans "yarın gelir" diye bekler, hiç
+gelmez. Karar saf bir fonksiyonda (`kitleBolumuKarari`) ve PDF ile panel
+AYNISINI çağırıyor. KARMA raporda sayfa çiziliyor ama dışarıda kalan platform
+YAZILIYOR; söylememek, kırılım toplamının özet kartlarıyla tutmamasını
+açıklanamaz bırakırdı.
+
+**Onay modeli Meta'dan daha iyi DEĞİL, daha riskli.** LinkedIn okuma ve yazmayı
+tek onayla veriyor — ama simetrik sonucu şu: `r_ads` de aynı ürüne bağlı.
+Meta'da yazma alınamadı, okuma çalıştı, ürün yarım da olsa ayakta kaldı.
+LinkedIn'de KISMİ BAŞARI HÂLİ YOK: Advertising API reddedilirse hiçbir şey
+yapılamaz ve aynı uygulamadan yeniden başvuru da yok. Süre taahhüdü hiçbir
+resmi sayfada geçmiyor.
+
+**EN BÜYÜK RİSK KOD DEĞİL, DOĞRULANMAMIŞ BİR VARSAYIM.** Havuz modelinin
+tamamı "Business Manager partnerliğiyle paylaşılan hesap
+`adAccountUsers?q=authenticatedUser` sonucunda görünür" varsayımına dayanıyor
+ve bunu kuran tek kaynak bir yardım merkezi makalesi — sürümsüz, API
+sözleşmesi tarif etmiyor. Cevap "hayır"sa havuz modeli LinkedIn'de kurulamaz
+ve alternatifi yok (müşteri başına ayrı yetkilendirme aynı tekil anahtara
+çakışıyor — Meta'da denendi, çürüdü). Onay gelmeden ölçülemiyor.
+
+**Diğer bilinmeyenler:** programatik refresh token bu uygulamaya veriliyor mu
+(verilmezse token 365 değil 60 gün yaşıyor), `refresh_token_expires_in`
+saniye mi dakika mı (doküman kendi örneğiyle çelişiyor), `adAnalytics`in
+15.000 eleman tavanı aşıldığında sessizce mi kesiyor.
+
+**Şemada eksik:** refresh token'ın BİTİŞ tarihini tutacak kolon yok. LinkedIn
+refresh token'ı 365 günde SABİT tarihte ölüyor ve yenilemeyle uzamıyor;
+o kolon olmadan bu ölüm önceden haber verilemiyor.
+
+---
+
 ### 2026-09-07 — Kod iki depoya gidiyor
 
 `Profajai/advetics` ikinci bir kopya olarak eklendi. `origin` iki push adresi

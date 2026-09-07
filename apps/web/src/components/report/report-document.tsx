@@ -18,6 +18,7 @@ import {
   PLATFORMS,
   PLATFORM_LABELS,
 } from '@advetics/shared';
+import { kitleBolumuKarari } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
 import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent, microsOf } from '@/lib/format';
@@ -93,6 +94,12 @@ export function ReportDocument({ data }: { data: ReportData }) {
 
       <div className="rpt mx-auto max-w-[880px] bg-white px-8 py-10 text-slate-900 print:px-0 print:py-0">
         {data.sections.map((section) => {
+          /*
+            Kitle bölümlerinin kaderi — altı bölüm için TEK karar.
+            `packages/shared` → `kitleBolumuKarari`; PDF çizici aynısını
+            çağırıyor.
+          */
+          const kitleKarari = kitleBolumuKarari(data.platforms.map((p) => p.platform));
           switch (section) {
             case 'cover':
               return <Cover key={section} data={data} />;
@@ -131,14 +138,24 @@ export function ReportDocument({ data }: { data: ReportData }) {
               return <Keywords key={section} data={data} />;
             case 'google_search_terms':
               return <SearchTerms key={section} data={data} />;
+            /*
+              KİTLE BÖLÜMLERİ — platform sunmuyorsa BÖLÜM HİÇ ÜRETİLMİYOR.
+              Karar `packages/shared`ta ve PDF çizici AYNISINI çağırıyor;
+              ikisi ayrı yazılsaydı ekran ile müşteriye giden belge farklı
+              sayfa sayısı gösterirdi.
+            */
             case 'audience_overview':
-              return <KitleOzeti key={section} data={data} />;
+              return kitleKarari.ciz ? (
+                <KitleOzeti key={section} data={data} not={kitleKarari.not} />
+              ) : null;
             case 'audience_age':
             case 'audience_gender':
             case 'audience_placement':
             case 'audience_hour':
             case 'audience_city':
-              return <Kirilim key={section} data={data} section={section} />;
+              return kitleKarari.ciz ? (
+                <Kirilim key={section} data={data} section={section} />
+              ) : null;
             case 'top_ads':
               return <TopAds key={section} data={data} />;
             case 'closing':
@@ -971,7 +988,7 @@ function kirilimEtiketi(boyut: string, deger: string): string {
  * da onu kullanıyor; özet için ikinci bir kopya yazmak, halkada "female"
  * yazarken tabloda "Kadın" yazması demekti.
  */
-function KitleOzeti({ data }: { data: ReportData }) {
+function KitleOzeti({ data, not }: { data: ReportData; not: string | null }) {
   const varMi = data.breakdowns.some(
     (b) => (b.dimension === 'age' || b.dimension === 'gender') && b.rows.length > 0,
   );
@@ -979,6 +996,13 @@ function KitleOzeti({ data }: { data: ReportData }) {
   return (
     <section className="rpt-page pt-10">
       <PageHead title="Kitle Özeti" subtitle={platformNames(data)} />
+
+      {/*
+        KARMA RAPORDA DIŞARIDA KALAN PLATFORM YAZILI. Sayfa Meta ve Google'ı
+        çiziyor, LinkedIn harcaması bu dağılımın DIŞINDA kalıyor; söylemezsek
+        kırılım toplamının özet kartlarıyla tutmaması açıklanamaz olurdu.
+      */}
+      {not !== null && <p className="mb-3 text-xs text-slate-500">{not}</p>}
 
       {varMi ? (
         <KitleOzetiIcerik

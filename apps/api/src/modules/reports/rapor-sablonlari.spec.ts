@@ -323,7 +323,23 @@ describe('PDF çizimi', () => {
      */
     const k = kod(PDF);
     expect(k).toContain("case 'audience_overview':");
-    expect(k).toContain('this.kitleOzeti(ctx)');
+    /*
+     * İDDİA ARTIK KOŞULLU ÇAĞRIYA ÇAPALI.
+     *
+     * Bu satır `this.kitleOzeti(ctx)` arıyordu ve 2026-09-07'de düştü — doğru
+     * sebeple: sayfa artık koşullu çiziliyor. LinkedIn kitle kırılımı
+     * SUNMUYOR (pivot listesinde yaş/cinsiyet/saat yok) ve sayfa çizilseydi
+     * her LinkedIn raporunda "Kitle verisi henüz toplanmadı" yazacaktı — veri
+     * toplanmadığı için değil, boyut platformda OLMADIĞI için boş.
+     *
+     * Bölümün İKİ TARAFTA DA olma zorunluluğu değişmedi; yalnızca çağrı
+     * biçimi değişti. `kitleBolumuKarari` kararını `kitle-bolumu.spec.ts`
+     * ayrıca kilitliyor.
+     */
+    expect(k).toContain('this.kitleOzeti(ctx,');
+    expect(k, 'kitle özeti koşulsuz çiziliyor — LinkedIn boş sayfa alır').toContain(
+      'if (kitleKarari.ciz) this.kitleOzeti(ctx,',
+    );
   });
 
   it('KRİTİK: PDF halkası YAY komutu kullanmıyor', () => {
