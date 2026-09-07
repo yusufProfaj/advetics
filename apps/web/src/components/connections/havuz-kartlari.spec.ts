@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { CHANNEL_KINDS } from '@advetics/shared';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -44,19 +45,31 @@ describe('tarama boşa düşmüyor', () => {
 });
 
 describe('kanal kapsamı', () => {
-  it('KRİTİK: BEŞ kanalın hepsi EKRANDA BASILAN listede', () => {
+  it('KRİTİK: kanalların hepsi EKRANDA BASILAN listede', () => {
     /*
-     * ÇAPA `KANALLAR` DİZİSİ, dosyanın tamamı DEĞİL. İlk sürüm dizgeyi
-     * dosyanın herhangi bir yerinde arıyordu ve mutasyon testi BOŞ çıktı:
-     * `youtube`'u ekran listesinden sildim, kanal yine `map` nesnesinin
-     * başlatıcısında geçtiği için test GEÇTİ. Ekranda basılan şey bu dizi.
+     * BU TEST BİR KEZ ELLE YAZILMIŞ LİSTEYİ KİLİTLİYORDU ve LinkedIn
+     * eklenirken DÜŞTÜ — doğru sebeple: `KANALLAR` artık `CHANNEL_KINDS`tan
+     * türüyor ve regex eski biçimi bulamadı. Test sessizce geçmek yerine
+     * "tarama boşa düştü" diye patladı; bekçinin kendi bekçisi çalıştı.
+     *
+     * İDDİA ARTIK ÜRETİCİYE ÇAPALI. Eskiden beş kanal adı burada elle
+     * sayılıydı ve altıncısı eklendiğinde bu test onu istemeden ENGELLERDİ:
+     * kanal ekran listesinde olurdu ama test "beş kanal" diye bilirdi.
+     * Şimdi tek kaynak var, yani liste ile ekran ayrışamıyor.
      */
-    const m = /export const KANALLAR: ChannelKind\[\] = \[([^\]]*)\]/.exec(yorumsuz(HAVUZ));
-    if (!m) throw new Error('KANALLAR dizisi bulunamadı — tarama boşa düştü.');
+    const kod = yorumsuz(HAVUZ);
+    expect(kod, 'KANALLAR artık ortak listeden türemiyor').toContain(
+      'export const KANALLAR: readonly ChannelKind[] = CHANNEL_KINDS;',
+    );
 
-    for (const k of ['meta_ads', 'google_ads', 'facebook', 'instagram', 'youtube']) {
-      expect(m[1], `${k} ekran listesinde yok`).toContain(k);
-    }
+    /*
+     * Ortak listenin kendisi de en az bir reklam hesabı ve bir sosyal profil
+     * kanalı taşımalı — `CHANNEL_KINDS` boşalırsa yukarıdaki iddia BOŞ KÜMEDE
+     * doğru olurdu.
+     */
+    expect(CHANNEL_KINDS).toContain('meta_ads');
+    expect(CHANNEL_KINDS).toContain('linkedin_ads');
+    expect(CHANNEL_KINDS).toContain('youtube');
   });
 
   it('KRİTİK: her kanal için havuz DOLDURULUYOR — liste ile eşleme ayrışmasın', () => {

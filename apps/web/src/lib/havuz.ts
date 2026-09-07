@@ -1,4 +1,5 @@
 import type { ChannelKind, ConnectionSummary } from '@advetics/shared';
+import { CHANNEL_KINDS, platformKanali } from '@advetics/shared';
 
 export interface HavuzOgesi {
   id: string;
@@ -11,14 +12,15 @@ export interface HavuzOgesi {
 
 export type Havuzlar = Record<ChannelKind, HavuzOgesi[]>;
 
-/** Ekranda basılan kanal sırası. */
-export const KANALLAR: ChannelKind[] = [
-  'meta_ads',
-  'google_ads',
-  'facebook',
-  'instagram',
-  'youtube',
-];
+/**
+ * Ekranda basılan kanal sırası.
+ *
+ * `CHANNEL_KINDS`TAN TÜRETİLİYOR. Burada DİZİ olarak elle yazılıydı ve
+ * `Record`ların aksine TypeScript hiçbir şey demiyordu: LinkedIn kovası
+ * doldurulsa bile kart HİÇ BASILMIYORDU. Eksik kart "o kanal bağlı değil"
+ * diye okunur — yani sessizce yanlış bilgi.
+ */
+export const KANALLAR: readonly ChannelKind[] = CHANNEL_KINDS;
 
 /**
  * HAVUZ TÜRETMESİ — TEK YERDE.
@@ -58,7 +60,7 @@ export function havuzlariCikar(connections: ConnectionSummary[]): Havuzlar {
 
   for (const a of connections.flatMap((c) => c.adAccounts)) {
     if (a.clientId !== null) continue;
-    map[a.platform === 'meta' ? 'meta_ads' : 'google_ads'].push({
+    map[platformKanali(a.platform)].push({
       id: a.id,
       name: a.name,
       externalId: a.externalId,

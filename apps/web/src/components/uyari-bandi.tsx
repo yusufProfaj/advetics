@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { platformKanali } from '@advetics/shared';
 import Link from 'next/link';
 import type { Uyari, UyariYaniti } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
@@ -183,7 +184,7 @@ function ToplananBant({
               <li key={anahtarOf(u)} className="flex flex-wrap items-center gap-2 px-4 py-2">
                 {u.platform && (
                   <PlatformLogo
-                    kind={u.platform === 'google' ? 'google_ads' : 'meta_ads'}
+                    kind={platformKanali(u.platform)}
                     className="h-3.5 w-3.5 shrink-0"
                   />
                 )}

@@ -8,6 +8,7 @@ import type {
   MetricsTimeseries,
 } from '@advetics/shared';
 import { METRIC_LEVELS, PLATFORMS } from '@advetics/shared';
+import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { rangeParams, resolveRange } from '@/lib/date-range';
@@ -414,10 +415,14 @@ function PlatformTabs({
   current: Platform | null;
   tasinan: Record<string, string | undefined>;
 }) {
+  /*
+   * SEKMELER `PLATFORMS`TAN. Elle yazılıydı ve tuhaf bir hâl üretiyordu:
+   * `resolvePlatform` LinkedIn'i URL'den ÇÖZÜYOR ama tıklanacak sekme YOK —
+   * yani özellik var, girişi yok.
+   */
   const options: Array<{ key: Platform | null; label: string }> = [
     { key: null, label: 'Tümü' },
-    { key: 'meta', label: 'Meta' },
-    { key: 'google', label: 'Google' },
+    ...PLATFORMS.map((p) => ({ key: p as Platform | null, label: PLATFORM_KISA_ADLARI[p] })),
   ];
   return (
     <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Platform">

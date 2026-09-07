@@ -18,6 +18,7 @@ import {
   PLATFORMS,
   PLATFORM_LABELS,
 } from '@advetics/shared';
+import { PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
 import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent, microsOf } from '@/lib/format';
 import { KitleOzetiIcerik } from './kitle-ozeti';
@@ -621,7 +622,7 @@ function SearchTerms({ data }: { data: ReportData }) {
   );
 }
 
-const PLATFORM_ADI: Record<string, string> = PLATFORM_LABELS;
+const PLATFORM_ADI: Record<string, string> = PLATFORM_KISA_ADLARI;
 
 /**
  * Sayfa sırası — raporun geri kalanıyla AYNI (özet blokları, kampanya
@@ -837,7 +838,7 @@ function Kirilim({
       */}
       {blok && blok.unsupportedPlatforms.length > 0 && (
         <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
-          {blok.unsupportedPlatforms.map((p) => (p === 'google' ? 'Google Ads' : 'Meta')).join(', ')}
+          {blok.unsupportedPlatforms.map((p) => platformKisaAdi(p)).join(', ')}
           {' '}bu kırılımı raporlamıyor — tablodaki sayılar diğer platformu kapsıyor.
         </p>
       )}

@@ -20,6 +20,36 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   linkedin: 'LinkedIn Ads',
 };
 
+/**
+ * KISA AD — rapor, mail ve dar alanlar için.
+ *
+ * `PLATFORM_LABELS` uzun ("Meta (Facebook / Instagram)") ve bir tablo
+ * başlığına ya da rapor alt başlığına sığmıyor. İki tablo olmasının sebebi
+ * bu; kopya değil, iki farklı iş.
+ *
+ * ┌─ BU TABLO BİR GERİLEMEDEN DOĞDU ──────────────────────────────────────┐
+ * │ Kısa ad ONBEŞ ayrı yerde elle yazılıydı ve çoğu iki yolluydu           │
+ * │ (`p === 'google' ? 'Google Ads' : 'Meta'`) — yani LinkedIn'e "Meta"    │
+ * │ diyorlardı. Onları tek tek düzeltmeye çalışırken panelin rapor         │
+ * │ başlığını `PLATFORM_LABELS`a bağladım ve PDF ikizi elle kaldı:         │
+ * │ panel "Meta (Facebook / Instagram)", PDF "Meta Ads" yazmaya başladı.   │
+ * │ CLAUDE.md'nin "aynı raporun iki gösterimi ayrışmamalı" kuralını tam    │
+ * │ onu korumaya çalışırken bozdum.                                        │
+ * │                                                                        │
+ * │ İki gösterim de artık BU tablodan okuyor.                              │
+ * └────────────────────────────────────────────────────────────────────────┘
+ */
+export const PLATFORM_KISA_ADLARI: Record<Platform, string> = {
+  meta: 'Meta Ads',
+  google: 'Google Ads',
+  linkedin: 'LinkedIn Ads',
+};
+
+/** Bilinmeyen bir değer için ham dizeye düşer — `undefined` yazmaktansa. */
+export function platformKisaAdi(platform: string): string {
+  return PLATFORM_KISA_ADLARI[platform as Platform] ?? platform;
+}
+
 /** Meta ve Google'ın farklı hiyerarşi isimlerini tek modele indirger. */
 export const ENTITY_LEVELS = ['account', 'campaign', 'ad_group', 'ad'] as const;
 export type EntityLevel = (typeof ENTITY_LEVELS)[number];
@@ -63,7 +93,12 @@ export const ENTITY_LEVEL_LABELS: Record<Platform, Record<EntityLevel, string>> 
    * Etiketler KULLANICININ GÖRDÜĞÜ ad olmak zorunda: panelde "Kampanya Grubu →
    * Kampanya → Reklam" yazıyor ve bu Campaign Manager'daki adlarla birebir
    * aynı. Bizim iç modelimiz tek tip kalıyor, kullanıcı kendi platformunun
-   * dilini görüyor. `linkedin-seviye-eslemesi.spec.ts` bunu kilitliyor.
+   * dilini görüyor. `linkedin-para.spec.ts` bunu kilitliyor.
+   *
+   * (Burada bir süre `linkedin-seviye-eslemesi.spec.ts` yazıyordu ve ÖYLE BİR
+   * DOSYA YOK. Var olmayan bir teste atıf yapan yorum, iddiayı ANLATAN metni
+   * iddianın KENDİSİ sanmanın bir biçimi — bu depoda adı konmuş bir tuzak ve
+   * ona düşülmüş hâli.)
    */
   linkedin: {
     account: 'Reklam Hesabı',

@@ -1,4 +1,5 @@
 import type { Uyari } from '@advetics/shared';
+import { platformKisaAdi } from '@advetics/shared';
 
 /**
  * ═══ ÖDEME UYARISI MAİLİ — GÖVDE ═══
@@ -76,7 +77,7 @@ export function odemeMailiOlustur(
                 ${yeni ? '<span style="margin-left:6px;padding:1px 6px;border-radius:9999px;background:#e11d2e;color:#fff;font-size:10px;">YENİ</span>' : ''}
               </td>
               <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#6b7280;">
-                ${kacar(u.platform === 'google' ? 'Google Ads' : 'Meta')}
+                ${kacar(u.platform === null ? '—' : platformKisaAdi(u.platform))}
               </td>
               <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;">
                 ${kacar(u.detay)}

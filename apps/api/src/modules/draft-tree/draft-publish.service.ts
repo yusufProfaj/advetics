@@ -17,6 +17,7 @@ import {
   type PublishCheck,
   type TenantContext,
 } from '@advetics/shared';
+import { platformKisaAdi } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
@@ -1058,7 +1059,7 @@ function bidToMinor(amount: string): bigint {
 }
 
 function platformLabel(platform: string): string {
-  return platform === 'google' ? 'Google Ads' : 'Meta';
+  return platformKisaAdi(platform);
 }
 
 /**

@@ -13,6 +13,7 @@ import {
   type DraftGroupRecord,
   type PublishCheck,
 } from '@advetics/shared';
+import { platformKisaAdi } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { CoveragePanel } from './coverage-panel';
 import { CropStudio } from './crop-studio';
@@ -614,7 +615,7 @@ function Sonuc({
             >
               <div className="min-w-0">
                 <p className="text-xs font-medium text-ink">
-                  {c.platform === 'google' ? 'Google Ads' : 'Meta'}
+                  {platformKisaAdi(c.platform)}
                   <span className="ml-1.5 font-normal text-ink-muted">{c.adAccountName}</span>
                 </p>
                 {c.error && <p className="mt-0.5 text-[11px] text-rose-700">{c.error}</p>}

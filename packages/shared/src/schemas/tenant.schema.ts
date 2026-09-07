@@ -253,6 +253,34 @@ export const CHANNEL_KINDS = [
 ] as const;
 export type ChannelKind = (typeof CHANNEL_KINDS)[number];
 
+/**
+ * REKLAM HESABI kanalları — sosyal profil kanallarından ayrı.
+ *
+ * `bagli-kanallar.tsx` bunu `kind === 'meta_ads' || kind === 'google_ads'`
+ * diye ELLE soruyordu ve atama ucunu ona göre seçiyordu: LinkedIn reklam
+ * hesabı sosyal profil sanılıp YANLIŞ UCA gönderilirdi. Belirtisi "atama
+ * çalışmıyor" olurdu ve sebebi bir ternary'de.
+ */
+export const AD_ACCOUNT_CHANNELS = ['meta_ads', 'google_ads', 'linkedin_ads'] as const;
+
+export function kanalReklamHesabiMi(kind: ChannelKind): boolean {
+  return (AD_ACCOUNT_CHANNELS as readonly string[]).includes(kind);
+}
+
+/**
+ * Platform → kanal. Eşleme TEK YERDE ve AÇIK.
+ *
+ * `platform === 'google' ? 'google_ads' : 'meta_ads'` biçiminde DÖRT kopyası
+ * vardı ve hepsi bilinmeyen platformu Meta'ya düşürüyordu — LinkedIn hesabı
+ * Meta logosuyla ve Meta havuzunda görünürdü. Yanlış rozet, eksik rozetten
+ * kötü: kullanıcı sorgulamıyor.
+ */
+export function platformKanali(platform: string): ChannelKind {
+  if (platform === 'google') return 'google_ads';
+  if (platform === 'linkedin') return 'linkedin_ads';
+  return 'meta_ads';
+}
+
 export const CHANNEL_LABELS: Record<ChannelKind, string> = {
   meta_ads: 'Meta Ads',
   google_ads: 'Google Ads',

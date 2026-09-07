@@ -10,6 +10,7 @@ import {
   type ChannelKind,
   type ClientChannels,
 } from '@advetics/shared';
+import { kanalReklamHesabiMi } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { atamaBildirimi, type AtamaYaniti } from '@/lib/atama-bildirimi';
 import { PlatformLogo } from '@/components/platform-logo';
@@ -137,7 +138,14 @@ function useAtama(kind: ChannelKind, itemId: string) {
   const [hata, setHata] = useState<string | null>(null);
   const [bildirim, setBildirim] = useState<string | null>(null);
 
-  const reklamHesabi = kind === 'meta_ads' || kind === 'google_ads';
+  /*
+   * REKLAM HESABI MI — ORTAK FONKSİYONDAN.
+   *
+   * Bu satır iki kanalı elle sayıyordu ve LinkedIn reklam hesabı SOSYAL
+   * PROFİL sanılıp atama isteği YANLIŞ UCA giderdi. Belirtisi "atama
+   * çalışmıyor" olur ve sebebi bir `||` ifadesinde saklanırdı.
+   */
+  const reklamHesabi = kanalReklamHesabiMi(kind);
   const yol = reklamHesabi
     ? `/connections/ad-accounts/${itemId}/client`
     : `/connections/social-profiles/${itemId}/client`;

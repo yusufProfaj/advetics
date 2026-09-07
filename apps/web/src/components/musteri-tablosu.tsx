@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { platformKanali } from '@advetics/shared';
 import { useRouter } from 'next/navigation';
 import type { MetricsClientRow } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
@@ -156,7 +157,7 @@ export function MusteriTablosu({
                         {r.byPlatform.map((p) => (
                           <span key={p.platform} className="flex items-center gap-1.5">
                             <PlatformLogo
-                              kind={p.platform === 'google' ? 'google_ads' : 'meta_ads'}
+                              kind={platformKanali(p.platform)}
                               className="h-3.5 w-3.5"
                             />
                             <span className="text-xs text-ink">

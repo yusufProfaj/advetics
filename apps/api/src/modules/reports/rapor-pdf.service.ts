@@ -17,6 +17,7 @@ import {
   type ReportCampaignRow,
   type ReportData,
 } from '@advetics/shared';
+import { PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
 import { donusumGrafigi, egri, halka, kisalt, okunakliYazi, renk, rozet, SLATE, tablo } from './pdf-cizim';
@@ -762,7 +763,7 @@ export class RaporPdfService {
     // DESTEKLENMEYEN PLATFORM AÇIKÇA — boş tabloyla aynı şey değil.
     if (blok.unsupportedPlatforms.length > 0) {
       const adlar = blok.unsupportedPlatforms
-        .map((p) => (p === 'google' ? 'Google Ads' : 'Meta'))
+        .map((p) => platformKisaAdi(p))
         .join(', ');
       y = this.notSatiri(
         ctx,
@@ -1437,7 +1438,7 @@ interface Ctx {
  * belgenin ayrışması demekti.
  */
 /** Platform kimliğinin insan adı — panelde de aynı iki etiket kullanılıyor. */
-const PLATFORM_ADI: Record<string, string> = { meta: 'Meta Ads', google: 'Google Ads' };
+const PLATFORM_ADI = PLATFORM_KISA_ADLARI;
 
 /**
  * Sayfa sırası — raporun geri kalanıyla AYNI.

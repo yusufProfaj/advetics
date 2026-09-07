@@ -153,3 +153,113 @@ describe('elle yazılmış platform listeleri', () => {
     expect(svc).toContain('Record<Platform, string[]>');
   });
 });
+
+/**
+ * ═══ İKİ YOLLU PLATFORM DALLANMASI KALMADI ═══
+ *
+ * Bu bloğun sebebi bir eksik tarama. Bir önceki turda "üçüncü platformun
+ * sessizce kaybolduğu yerleri kapattım" dedim ve ON YER daha vardı; hepsi
+ * `p === 'google' ? ... : ...` biçimindeydi, yani LinkedIn'e "Meta" diyorlardı.
+ * `Record<Platform, ...>` taşımadıkları için TypeScript hiçbirini görmedi.
+ *
+ * Daha kötüsü, düzeltmeye çalışırken KENDİM bir gerileme açtım: panelin rapor
+ * başlığını `PLATFORM_LABELS`a bağladım, PDF ikizi elle kaldı ve ikisi
+ * ayrıştı ("Meta (Facebook / Instagram)" / "Meta Ads").
+ *
+ * Bu tarama gözle gözden geçirmenin yakalayamadığı şeyi yakalıyor: deseni
+ * ARAYIP sayıyor.
+ */
+describe('iki yollu platform dallanması', () => {
+  const KOK = join(API_SRC, '..', '..', '..');
+
+  /** Kaynak dosyaları topla — testler ve derleme çıktıları hariç. */
+  function kaynaklar(...dizinler: string[]): Array<{ yol: string; icerik: string }> {
+    const sonuc: Array<{ yol: string; icerik: string }> = [];
+    const gez = (d: string): void => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        const tam = join(d, e.name);
+        if (e.isDirectory()) {
+          if (e.name === 'node_modules' || e.name === 'dist' || e.name === '.next') continue;
+          gez(tam);
+        } else if (/\.(ts|tsx)$/.test(e.name) && !e.name.endsWith('.spec.ts')) {
+          sonuc.push({ yol: tam, icerik: kod(readFileSync(tam, 'utf8')) });
+        }
+      }
+    };
+    for (const d of dizinler) gez(join(KOK, d));
+    return sonuc;
+  }
+
+  it('tarama gerçekten dosya buldu', () => {
+    // Dizin yapısı değişirse aşağıdaki iddia BOŞ KÜMEDE doğru olur.
+    const hepsi = kaynaklar('apps/api/src', 'apps/web/src', 'packages/shared/src');
+    expect(hepsi.length).toBeGreaterThan(200);
+  });
+
+  /**
+   * BİLEREK DAR KALAN YAZMA YOLLARI.
+   *
+   * Bu dosyalar iki yollu dallanmayı SÜRDÜRÜYOR ve doğrusu bu: hepsi
+   * `DRAFT_PLATFORMS` / `autoBoostPlatformSchema` gibi kasıtlı olarak dar
+   * listelerle besleniyor ve LinkedIn verisi onlara ULAŞMIYOR — LinkedIn'de
+   * yazma kodu yok. Genişletmek, çalışmayan bir seçeneği arayüzde göstermek
+   * olurdu.
+   *
+   * LİSTE AÇIK ve kısa tutuluyor: buraya bir dosya eklemek, "bu ekran
+   * LinkedIn'i gerçekten görmüyor" diye BİLİNÇLİ bir karar vermek demek.
+   * Sessizce geçen bir istisna, istisna olmaktan çıkar.
+   */
+  const YAZMA_YOLU_ISTISNALARI = [
+    'apps/web/src/components/ad-builder/expert-builder.tsx',
+    'apps/web/src/components/ad-builder/duplicate-panel.tsx',
+    'apps/web/src/components/ad-builder/draft-group-list.tsx',
+    // Auto-Boost bildirim maili: dallanma platform ETİKETİ değil, sosyal
+    // profil türü (YouTube / Instagram). LinkedIn'de karşılığı yok.
+    'apps/api/src/modules/autoboost/yeni-icerik-maili.ts',
+  ];
+
+  it('KRİTİK: iki yollu platform dallanması yalnızca yazma yollarında', () => {
+    /*
+     * Bu desenin tamamı aynı hatayı taşıyor: "google değilse Meta". Üçüncü
+     * platform geldiğinde yanlış etiket, yanlış logo ya da yanlış havuz
+     * üretiyor — ve yanlış rozet, EKSİK rozetten kötü: kullanıcı sorgulamıyor.
+     *
+     * Bu tarama BİR EKSİK TARAMADAN doğdu: elle bakıp "hepsini kapattım"
+     * dedim, on yer daha vardı ve hiçbirini TypeScript görmüyordu.
+     */
+    const suclular = kaynaklar('apps/api/src', 'apps/web/src', 'packages/shared/src')
+      .filter((f) => /===\s*'google'\s*\?[^:]*:\s*'/.test(f.icerik))
+      .map((f) => f.yol.replace(KOK + '/', ''))
+      .filter((y) => !YAZMA_YOLU_ISTISNALARI.includes(y));
+    expect(suclular, 'okuma yolunda iki yollu platform dallanması var').toEqual([]);
+  });
+
+  it('istisna listesi ÖLÜ GİRDİ taşımıyor', () => {
+    /*
+     * İstisna listesi bir kez yazılıp unutulan türden. Dosya taşınır ya da
+     * dallanma düzeltilirse girdi ölü kalır ve liste "burada bilinçli bir
+     * istisna var" diye yalan söylemeye devam eder.
+     */
+    const desenliler = new Set(
+      kaynaklar('apps/api/src', 'apps/web/src', 'packages/shared/src')
+        .filter((f) => /===\s*'google'\s*\?[^:]*:\s*'/.test(f.icerik))
+        .map((f) => f.yol.replace(KOK + '/', '')),
+    );
+    const oluler = YAZMA_YOLU_ISTISNALARI.filter((y) => !desenliler.has(y));
+    expect(oluler, 'istisna listesinde artık gereksiz girdi var').toEqual([]);
+  });
+
+  it('KRİTİK: rapor PDF\'i ve panel AYNI kısa ad tablosundan okuyor', () => {
+    /*
+     * BENİM AÇTIĞIM GERİLEMENİN BEKÇİSİ. İkisi ayrı tablodan okuduğunda
+     * hiçbir test düşmüyordu; fark yalnızca müşteriye giden belgeyle ekranı
+     * yan yana koyunca görünüyordu.
+     */
+    const pdf = kod(readFileSync(join(API_SRC, 'modules', 'reports', 'rapor-pdf.service.ts'), 'utf8'));
+    const panel = kod(
+      readFileSync(join(KOK, 'apps/web/src/components/report/report-document.tsx'), 'utf8'),
+    );
+    expect(pdf).toContain('PLATFORM_ADI = PLATFORM_KISA_ADLARI');
+    expect(panel).toContain('PLATFORM_ADI: Record<string, string> = PLATFORM_KISA_ADLARI');
+  });
+});

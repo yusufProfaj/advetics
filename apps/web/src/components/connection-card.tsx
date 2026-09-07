@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { useRouter } from 'next/navigation';
 import type { ConnectionSummary } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
@@ -8,10 +9,12 @@ import { PlatformLogo, adAccountKanali } from '@/components/platform-logo';
 import { AccountPicker, type PickerClient } from './account-picker';
 import { SocialProfileList } from './social-profile-list';
 
-const PLATFORM_LABEL: Record<string, string> = {
-  meta: 'Meta',
-  google: 'Google Ads',
-};
+/*
+ * Bağlantı kartının başlığı. `Record<string, string>` + `?? c.platform`
+ * fallback'i vardı: LinkedIn bağlantısının BAŞLIĞINDA ham `linkedin` dizesi
+ * görünürdü. TypeScript susuyordu çünkü anahtar `string`.
+ */
+const PLATFORM_LABEL = PLATFORM_KISA_ADLARI;
 
 /**
  * Kart başlığı.

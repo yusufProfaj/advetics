@@ -1,4 +1,6 @@
 import type { AdExplorerRow } from '@advetics/shared';
+import { platformKanali } from '@advetics/shared';
+import { platformKisaAdi } from '@advetics/shared';
 import { formatMoney, formatNumber, formatPercent, formatRoas } from '@/lib/format';
 import { KreatifGorsel } from '@/components/kreatif-gorsel';
 import { PlatformLogo } from '@/components/platform-logo';
@@ -139,10 +141,10 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
                 kampanya adından tahmin edilebiliyordu. */}
             <span className="inline-flex items-center gap-1 rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] text-ink-muted">
               <PlatformLogo
-                kind={ad.platform === 'google' ? 'google_ads' : 'meta_ads'}
+                kind={platformKanali(ad.platform)}
                 className="h-3 w-3"
               />
-              {ad.platform === 'google' ? 'Google Ads' : 'Meta Ads'}
+              {platformKisaAdi(ad.platform)}
             </span>
             {aramaReklami && (
               <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] text-ink-muted">

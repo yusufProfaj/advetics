@@ -14,6 +14,7 @@ import {
   type FaturaYuklemeInput,
   type TenantContext,
 } from '@advetics/shared';
+import { platformKisaAdi } from '@advetics/shared';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AssetStorageService } from '../ad-builder/asset-storage.service';
@@ -387,7 +388,15 @@ function dosyaAdi(donem: string, platform: FaturaPlatformu, mime: string): strin
    * UZANTI SAKLANAN TÜRDEN, sabit `.pdf` değil: bir ZIP eki `.pdf` adıyla
    * gitseydi müşterinin istemcisi onu açamaz ve dosya bozuk sanılırdı.
    */
-  const etiket = platform === 'google' ? 'GoogleAds' : 'MetaAds';
+  /*
+   * ETİKET ORTAK TABLODAN, boşluksuz hâliyle.
+   *
+   * `platform === 'google' ? 'GoogleAds' : 'MetaAds'` yazıyordu ve LinkedIn
+   * faturası müşteriye `MetaAds-Fatura-2026-08.pdf` adıyla giderdi. Ek adı
+   * müşterinin gördüğü ilk şey; yanlış platform adı taşıyan bir fatura,
+   * muhasebede yanlış yere düşer.
+   */
+  const etiket = platformKisaAdi(platform).replace(/\s+/g, '');
   const uzanti = FATURA_TURLERI.find((t) => t.mime === mime)?.uzanti ?? 'pdf';
   return `${etiket}-Fatura-${donem}.${uzanti}`;
 }

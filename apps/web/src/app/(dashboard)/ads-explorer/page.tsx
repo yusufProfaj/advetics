@@ -1,6 +1,7 @@
 import Link from 'next/link';
-import type { AdsExploreQuery, AdsExploreResult } from '@advetics/shared';
+import type { AdsExploreQuery, AdsExploreResult, Platform } from '@advetics/shared';
 import { AD_SORT_FIELDS, AD_STATUSES, PLATFORMS } from '@advetics/shared';
+import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { rangeParams, resolveRange } from '@/lib/date-range';
@@ -149,13 +150,17 @@ export default async function AdsExplorerPage({
               Meta'da her reklamın var: ikisini tek listede karıştırmak hem
               tarama hem de rapora alma işini zorlaştırıyor. */}
           <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Platform">
-            {(
-              [
-                { key: undefined, label: 'Tümü' },
-                { key: 'meta' as const, label: 'Meta Ads' },
-                { key: 'google' as const, label: 'Google Ads' },
-              ] as const
-            ).map((p) => (
+            {/*
+              SEKMELER `PLATFORMS`TAN — elle yazılan liste üçüncü platformu
+              ekranda hiç göstermiyordu.
+            */}
+            {[
+              { key: undefined as Platform | undefined, label: 'Tümü' },
+              ...PLATFORMS.map((pl) => ({
+                key: pl as Platform | undefined,
+                label: PLATFORM_KISA_ADLARI[pl],
+              })),
+            ].map((p) => (
               <Link
                 key={p.label}
                 href={linkWith({ platform: p.key, kampanya: undefined, sayfa: undefined })}
