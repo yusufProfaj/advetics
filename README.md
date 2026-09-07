@@ -29,13 +29,16 @@ Sekiz modülün hepsi yazılmış durumda:
 | 4 | Ads Explorer | Reklam seviyesinde arama, kreatif önizleme, red sebepleri |
 | 5 | Kurallar motoru | Bütçe ve durum otomasyonu; `dry_run` varsayılan |
 | 6 | Beyaz etiketli raporlama | PDF üretimi, mail gönderimi, planlı raporlar, platform faturaları |
-| 7 | Auto-Boost | Yeni Instagram/Facebook gönderilerini onaydan geçirip boostlama |
+| 7 | Auto-Boost | Yeni Instagram/Facebook gönderilerini ve YouTube videolarını (WebSub → Demand Gen) onaydan geçirip boostlama |
 | 8 | Toplu kampanya oluşturucu | Taslak ağacı, çoklu kreatif, `paused_draft` varsayılan |
 
-**Canlıda doğrulanmamış yollar var ve bunlar bilinçli olarak yazılı:** Google yazma yolu
-(kampanya oluşturma) canlıda hiç denenmedi ve Google Display reklamlarının görselleri
-rapora hâlâ gelmiyor. Ayrıntı ve gerekçe: [`CLAUDE.md`](CLAUDE.md) → "Canlıda öğrenilen
-platform gerçekleri".
+**Ayrım "yazıldı mı" değil, "CANLIDA çalıştırıldı mı":** okuma tarafı iki platformda da
+canlı doğrulandı (Google Basic Access, 2026-08-11). **Yazma tarafı hiçbir platformda canlı
+doğrulanmadı** — Meta'da `ads_management` onayı yok, Google'da istek gövdeleri bilgiden
+yazıldı ve ilk gerçek çağrı en küçük bütçeyle yapılmalı. Kural motorunun Google'a yazan
+yolu (`applyAction`) ve toplu oluşturmanın Google dalı (`createAd`) henüz yazılmadı ve
+çağrıldıklarında açık bir hata fırlatıyorlar — sessizce başarılı dönmüyorlar.
+Ayrıntı: [`CLAUDE.md`](CLAUDE.md) → "Canlıda öğrenilen platform gerçekleri".
 
 ---
 
@@ -68,8 +71,12 @@ cp .env.example .env
 ```
 
 `.env` **depo kökünde ve tek** — API, panel ve bütün `prisma/` script'leri oradan
-besleniyor. Zorunlu değişken grupları: `DATABASE_*`, `JWT_*`, `ENCRYPTION_*`,
-`META_*`, `GOOGLE_*`, `REDIS_*`, `SEED_*`.
+besleniyor. **Zorunlu olan yalnızca altı değişken**: `DATABASE_URL`,
+`DIRECT_DATABASE_URL`, `WORKER_DATABASE_URL`, `JWT_ACCESS_SECRET`,
+`JWT_REFRESH_SECRET`, `ENCRYPTION_KEY_V1`. Platform kimlik bilgileri (`META_*`,
+`GOOGLE_*`, `YOUTUBE_API_KEY`) ve Redis **bilinçli olarak opsiyonel** — panel
+platform onayı beklenirken de ayağa kalkabilsin diye. `SEED_*` yalnızca
+`db:seed` adımında isteniyor.
 
 ```bash
 pnpm infra:up      # PostgreSQL 16 + Redis 7
@@ -178,9 +185,14 @@ filtre unutulsa bile başka müşterinin satırı veritabanı seviyesinde görü
 ### Varsayılan kilitli
 
 `JwtAuthGuard` global. Bir rotayı açmak `@Public()` ile **kasıtlı** bir eylem gerektiriyor;
-tersi tasarım er ya da geç korunmayı unutulmuş bir uç üretir. Bugün açık olan uçlar:
-giriş/kayıt/refresh, parola sıfırlama, davet kabul, OAuth callback, platform webhook'ları,
-Meta veri silme, paylaşılan rapor bağlantısı ve doğrulanmış domain için marka bilgisi.
+tersi tasarım er ya da geç korunmayı unutulmuş bir uç üretir. Bugün 17 açık uç var:
+giriş/kayıt/refresh/çıkış, parola sıfırlama, OAuth callback, platform webhook'ları, Meta
+veri silme, paylaşılan rapor bağlantısı, doğrulanmış domain için marka bilgisi ve sağlık.
+
+**`POST /auth/register` bilerek açık ve bu bir borç:** tek organizasyon varsayımıyla
+yazıldı, kaynağında da öyle yazıyor. Çok kiracılı satışa geçilirken bu rota kapatılmalı
+ya da davete bağlanmalı, yoksa herkes kendine organizasyon açabiliyor. Uygulama
+seviyesinde hız sınırı da yok (`@nestjs/throttler` kurulu değil).
 
 ### Denetim kaydı append-only
 

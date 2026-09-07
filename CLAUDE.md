@@ -711,11 +711,12 @@ okunup varsayılmadı — canlıda doğrulandı.
   alınamadı" dalına giriyor (değer string olduğu için TRUTHY) ve dipnottaki
   sayaç şişip GERÇEK arızayı gizliyor. Adresi almak ayrı bir sorgu istiyor:
   `SELECT asset.image_asset.full_size.url FROM asset` — ana makine
-  `tpc.googlesyndication.com`. **BU SORGU HENÜZ YAZILMADI**, yani Google
-  Display reklamlarının görseli raporda hâlâ yok (arama reklamlarınınki
-  metin önizlemesiyle geliyor ve o DOĞRU davranış). `gorselAdresleri()`
-  süzgeci kaynak adını eliyor, böylece en azından yanlış dalı ve yalancı
-  sayacı üretmiyor.
+  `tpc.googlesyndication.com`. **SORGU 199a0b4'te YAZILDI**
+  (`google.provider.ts:1120`) ama CANLIDA DOĞRULANMADI — burada bir süre
+  "henüz yazılmadı" yazıyordu ve o cümle, işi yapılmış sanılan bir şeyi
+  yeniden yaptırır. Arama reklamlarının görseli yok ve olmayacak; onlar metin
+  önizlemesiyle geliyor ve o DOĞRU davranış. `gorselAdresleri()` süzgeci
+  kaynak adını eliyor, böylece yanlış dalı ve yalancı sayacı üretmiyor.
 - **`advertising_channel_type = VIDEO` kampanya API'DEN OLUŞTURULAMIYOR.**
   Google Ads API video kampanyalarında yalnızca okuma ve raporlama yapıyor.
   Enum'da `VIDEO_ACTION` gibi değerlerin durması oluşturulabilir olduğunu
