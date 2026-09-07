@@ -581,6 +581,26 @@ durumunda takılıydı ve `insights_backfill` işlerinde tekrarlayan bir hata
 vardı: *"too many bind variables in prepared statement, expected maximum of
 32767, received 48816"* (sistemde toplam 19 kez görülmüş).
 
+### 2026-09-07 — Kod iki depoya gidiyor
+
+`Profajai/advetics` ikinci bir kopya olarak eklendi. `origin` iki push adresi
+taşıyor: tek `git push origin HEAD:main` ikisine birden gidiyor ve çıktıda iki
+sonuç bloğu görünüyor — tek blok, ikinci adresin düştüğü anlamına geliyor.
+
+**Deploy değişmedi:** sunucudaki klon `yusufProfaj/advetics`ten SSH ile
+çekmeye devam ediyor (doğrulandı) ve dağıtım `advetics` kullanıcısıyla
+yapılıyor.
+
+İlk push HTTP/2 üzerinden üç kez koptu (`Broken pipe`, `Failed sending HTTP2
+data`); `http.version HTTP/1.1` çözdü. Depo 6 MB, yani boyut sorunu değildi.
+
+**Açık kalan risk (yeni değil, ama artık İKİ yerde):** `SEED_ADMIN_PASSWORD`
+varsayılanı git geçmişinde iki commit'te duruyor ve `yusuf@profaj.com`
+hesabının parolası hâlâ döndürülmedi (bkz. §7). Geçmiş ikinci depoya da
+kopyalandı; iki depo da özel ama parolanın döndürülmesi hâlâ bekliyor.
+
+---
+
 ### 2026-09-04 — Faturada ZIP ve mail metninin önizlemeli editörü
 
 **1 — Fatura artık ZIP de olabiliyor.** Platformlar dönem faturalarını çoğu

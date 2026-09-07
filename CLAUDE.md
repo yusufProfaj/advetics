@@ -782,6 +782,29 @@ Türkçe, ne yapıldığını değil **neden** yapıldığını anlatan gövde. 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ```
 
+### Push İKİ DEPOYA gidiyor — deploy YALNIZCA birinden
+
+2026-09-07'den beri iki uzak depo var:
+
+| Depo | Rol |
+|---|---|
+| `yusufProfaj/advetics` | `origin` — **sunucunun çektiği depo**, deploy buradan |
+| `Profajai/advetics` | `profajai` — ikinci kopya |
+
+`origin` İKİ push adresi taşıyor, yani tek bir `git push origin HEAD:main`
+ikisine birden gidiyor ve çıktıda **iki ayrı sonuç bloğu** görünüyor. Tek blok
+görüyorsan ikinci adres düşmüş demektir — kontrol et, yoksa depolar sessizce
+ayrışır ve bunu ancak aylar sonra fark edersin.
+
+**Deploy DEĞİŞMEDİ.** Sunucudaki klon `git@github.com:yusufProfaj/advetics.git`
+adresinden SSH ile çekiyor; yerel push yapılandırması sunucuyu etkilemiyor.
+Deploy hâlâ `advetics` kullanıcısıyla ve eski depodan.
+
+**HTTP/2 İLE PUSH KOPUYOR.** İlk push `RPC failed ... Broken pipe / Failed
+sending HTTP2 data` ile üç kez düştü; `git config http.version HTTP/1.1`
+çözdü. Ayar `.git/config`te (bütün worktree'ler paylaşıyor). Yeni bir klonda
+aynı hata görülürse sebebi budur — depo boyutu değil (6 MB).
+
 ## 4. Mimari — hızlı harita
 
 pnpm workspace monorepo:
