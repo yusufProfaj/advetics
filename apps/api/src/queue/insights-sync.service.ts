@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { Platform } from '@advetics/shared';
 import { UnrecoverableError } from 'bullmq';
 import { assertAssigned } from '../common/utils/ad-account-assignment';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
@@ -335,7 +336,7 @@ export class InsightsSyncService {
   // ---------------------------------------------------------------------------
 
   private async writeRows(
-    account: { id: string; clientId: string; platform: 'meta' | 'google'; externalId: string },
+    account: { id: string; clientId: string; platform: Platform; externalId: string },
     level: InsightsLevel,
     result: PlatformInsights,
   ): Promise<{ rows: number; skipped: number }> {
@@ -462,7 +463,7 @@ export class InsightsSyncService {
    * kampanyanın geçmiş metrikleri raporda kalmalı.
    */
   private async resolveEntityIds(
-    account: { id: string; platform: 'meta' | 'google'; externalId: string },
+    account: { id: string; platform: Platform; externalId: string },
     level: InsightsLevel,
     externalIds: string[],
   ): Promise<Map<string, string>> {

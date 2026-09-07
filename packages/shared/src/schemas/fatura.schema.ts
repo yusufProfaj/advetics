@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PLATFORMS } from '../constants/platforms';
 
 /**
  * ═══ PLATFORM FATURALARI — RAPORA EK RESMİ BELGE ═══
@@ -33,12 +34,21 @@ import { z } from 'zod';
  * Kalan tek dürüst yol: ajans faturayı platformdan indirip yüklüyor.
  */
 
-export const FATURA_PLATFORMLARI = ['meta', 'google'] as const;
+/*
+ * Fatura yüklenebilen platformlar = DESTEKLENEN platformların tamamı.
+ *
+ * Bu liste ayrı tutulmuyor çünkü ayrım gerçek değil: ajans hangi platformda
+ * reklam veriyorsa oradan fatura alıyor. Ayrı bir liste tutmak, üçüncü
+ * platform eklendiğinde "faturayı yükleyemiyorum" hâlini üretirdi ve sebebi
+ * hiçbir ekranda yazmazdı.
+ */
+export const FATURA_PLATFORMLARI = PLATFORMS;
 export type FaturaPlatformu = (typeof FATURA_PLATFORMLARI)[number];
 
 export const FATURA_PLATFORM_ETIKETLERI: Record<FaturaPlatformu, string> = {
   meta: 'Meta Ads',
   google: 'Google Ads',
+  linkedin: 'LinkedIn Ads',
 };
 
 /**

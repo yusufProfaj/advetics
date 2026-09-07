@@ -2,12 +2,20 @@
 
 import { useState } from 'react';
 import type { Platform, ProviderAvailability } from '@advetics/shared';
+import { PLATFORM_LABELS } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 
-const LABELS: Record<Platform, string> = {
-  meta: 'Meta (Facebook / Instagram)',
-  google: 'Google Ads',
-};
+/*
+ * ETİKETLER ORTAK TABLODAN. Burada `Record<Platform, string>` ELLE
+ * yazılıydı ve değerleri `PLATFORM_LABELS` ile birebir aynıydı — yani aynı
+ * metnin üçüncü kopyasıydı. Kopya olduğu için değil, AYRIŞACAĞI için
+ * kaldırıldı: bir platformun adı değiştiğinde biri güncellenip diğeri
+ * unutulur ve kullanıcı aynı ürünün iki farklı adını görür.
+ *
+ * `Record<Platform, ...>` olduğu için dördüncü platform eklendiğinde derleme
+ * yine burada kırılacak — LinkedIn'de tam öyle oldu.
+ */
+const LABELS = PLATFORM_LABELS;
 
 /**
  * BAĞLANTI AJANSA KURULUYOR — hedef workspace SORULMUYOR.

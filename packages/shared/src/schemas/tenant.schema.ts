@@ -246,6 +246,7 @@ export interface ClientSetupResult {
 export const CHANNEL_KINDS = [
   'meta_ads',
   'google_ads',
+  'linkedin_ads',
   'facebook',
   'instagram',
   'youtube',
@@ -255,6 +256,7 @@ export type ChannelKind = (typeof CHANNEL_KINDS)[number];
 export const CHANNEL_LABELS: Record<ChannelKind, string> = {
   meta_ads: 'Meta Ads',
   google_ads: 'Google Ads',
+  linkedin_ads: 'LinkedIn Ads',
   facebook: 'Facebook Sayfası',
   instagram: 'Instagram',
   youtube: 'YouTube Kanalı',
@@ -270,6 +272,7 @@ export const CHANNEL_LABELS: Record<ChannelKind, string> = {
 export const CHANNEL_HINTS: Record<ChannelKind, string> = {
   meta_ads: 'Facebook ve Instagram reklamları buradan yayınlanıyor ve harcama buradan okunuyor.',
   google_ads: 'Google ve YouTube reklamları buradan yayınlanıyor.',
+  linkedin_ads: 'LinkedIn reklamları buradan okunuyor. Yayın yolu henüz yazılmadı.',
   facebook: 'Sayfanın organik gönderileri çekiliyor; Akıllı Boost bunları öne çıkarıyor.',
   instagram: 'Hesabın gönderileri çekiliyor; Akıllı Boost bunları öne çıkarıyor.',
   youtube: 'Yeni video yayınlandığında Akıllı Boost bildirim düşürüyor.',

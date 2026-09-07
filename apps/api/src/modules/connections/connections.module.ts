@@ -4,6 +4,7 @@ import { ConnectionsService } from './connections.service';
 import { MetaWebhookService } from './meta-webhook.service';
 import { ProviderRegistry } from './provider.registry';
 import { GoogleProvider } from './providers/google.provider';
+import { LinkedInProvider } from './providers/linkedin.provider';
 import { MetaProvider } from './providers/meta.provider';
 import { TokenVaultService } from './token-vault.service';
 
@@ -23,6 +24,7 @@ import { TokenVaultService } from './token-vault.service';
     ProviderRegistry,
     MetaProvider,
     GoogleProvider,
+    LinkedInProvider,
   ],
   exports: [ConnectionsService, TokenVaultService, ProviderRegistry],
 })

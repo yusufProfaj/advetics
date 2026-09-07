@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ALICI_UST_SINIRI } from '../alici-listesi';
 import type { MetricTotals } from './metrics.schema';
-import { PLATFORMS } from '../constants/platforms';
+import { PLATFORMS, type Platform } from '../constants/platforms';
 import { formatMoney, formatNumber, formatPercent } from '../format';
 
 /**
@@ -412,7 +412,7 @@ export interface ReportCampaignRow extends MetricTotals {
 }
 
 export interface ReportPlatformBlock extends MetricTotals {
-  platform: 'meta' | 'google';
+  platform: Platform;
   label: string;
   currency: string | null;
   conversionCounts: ConversionCounts;
@@ -867,8 +867,15 @@ export function varsayilanSablon(kod: string | undefined | null) {
  * platformu göstermeli. Aksi hâlde "Google Ads Şablonu" başlıklı raporun
  * özetinde Meta harcaması görünür ve tablolar toplamı tutmaz.
  */
-export function sablonPlatformu(kod: string | undefined | null): 'meta' | 'google' | null {
-  if (kod === 'google') return 'google';
-  if (kod === 'meta') return 'meta';
-  return null;
+export function sablonPlatformu(kod: string | undefined | null): Platform | null {
+  /*
+   * KOD LİSTEDEN ÇÖZÜLÜYOR, ELLE DALLANMIYOR.
+   *
+   * Burada iki `if` vardı ve üçüncü platform eklenince sessizce eskiyordu:
+   * "LinkedIn Ads Şablonu" seçili bir raporun özetinde Meta ve Google
+   * harcaması görünmeye devam ederdi — hata yok, yalnızca yanlış rapor.
+   * Şablon kodu bir platform adıysa o platform, değilse null (Genel).
+   */
+  const eslesen = PLATFORMS.find((p) => p === kod);
+  return eslesen ?? null;
 }

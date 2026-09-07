@@ -66,6 +66,7 @@ enum ActorType {
 enum Platform {
   meta
   google
+  linkedin
 }
 
 // -----------------------------------------------------------------------------

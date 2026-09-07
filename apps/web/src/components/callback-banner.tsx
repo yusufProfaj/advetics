@@ -1,6 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
+import { PLATFORM_LABELS, type Platform } from '@advetics/shared';
 
 /**
  * OAuth dönüşünde sonucu gösterir.
@@ -14,7 +15,13 @@ export function CallbackBanner() {
   if (!result) return null;
 
   const raw = params.get('platform') ?? '';
-  const platform = raw === 'meta' ? 'Meta' : raw === 'google' ? 'Google Ads' : raw;
+  /*
+   * Etiket ORTAK TABLODAN. Üçlü koşul iki platformu tanıyordu; üçüncüsünde
+   * kullanıcıya ham `linkedin` yazardı — çirkin değil, GÜVENSİZ: bağlantı
+   * kurulduğunu söyleyen bir bandın hangi platformdan bahsettiği belirsiz
+   * kalıyordu.
+   */
+  const platform = PLATFORM_LABELS[raw as Platform] ?? raw;
   const accounts = params.get('hesap');
   const message = params.get('mesaj');
 

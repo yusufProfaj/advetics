@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { Platform } from '@advetics/shared';
 import { assertAssigned } from '../common/utils/ad-account-assignment';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
 import { PlatformApiError, type PlatformStructure } from '../modules/connections/provider.types';
@@ -172,7 +173,7 @@ export class StructureSyncService {
   // ---------------------------------------------------------------------------
 
   private async upsertCreatives(
-    account: { id: string; clientId: string; platform: 'meta' | 'google' },
+    account: { id: string; clientId: string; platform: Platform },
     structure: PlatformStructure,
   ): Promise<IdMap> {
     if (structure.creatives.length === 0) return new Map();
@@ -218,7 +219,7 @@ export class StructureSyncService {
   }
 
   private async upsertCampaigns(
-    account: { id: string; clientId: string; platform: 'meta' | 'google' },
+    account: { id: string; clientId: string; platform: Platform },
     structure: PlatformStructure,
   ): Promise<IdMap> {
     if (structure.campaigns.length === 0) return new Map();
@@ -269,7 +270,7 @@ export class StructureSyncService {
   }
 
   private async upsertAdGroups(
-    account: { id: string; clientId: string; platform: 'meta' | 'google' },
+    account: { id: string; clientId: string; platform: Platform },
     structure: PlatformStructure,
     campaignIds: IdMap,
   ): Promise<IdMap> {
@@ -350,7 +351,7 @@ export class StructureSyncService {
   }
 
   private async upsertAds(
-    account: { id: string; clientId: string; platform: 'meta' | 'google' },
+    account: { id: string; clientId: string; platform: Platform },
     structure: PlatformStructure,
     adGroupIds: IdMap,
     creativeIds: IdMap,
@@ -449,7 +450,7 @@ export class StructureSyncService {
    * olanlar platformdan dönmemiş olanlardır.
    */
   private async softDeleteMissing(
-    account: { id: string; platform: 'meta' | 'google' },
+    account: { id: string; platform: Platform },
     structure: PlatformStructure,
   ): Promise<number> {
     // Boş bir tarama sonucu neredeyse kesinlikle bir arıza (yetki kaybı, yanlış

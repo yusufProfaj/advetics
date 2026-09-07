@@ -17,6 +17,9 @@ import type {
   SocialProfileSummary,
   TenantContext,
 } from '@advetics/shared';
+// DEĞER import'u AYRI: `PLATFORMS` bir dizi, yukarıdaki blok `import type`
+// ve oraya değer koymak TS1361 veriyor (bu depoda bir kez düşüldü).
+import { PLATFORMS } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -139,7 +142,7 @@ export class ConnectionsService {
   // ---------------------------------------------------------------------------
 
   availability(): ProviderAvailability[] {
-    const { meta, google, oauthRedirectBaseUrl } = this.config.platforms;
+    const { meta, google, linkedin, oauthRedirectBaseUrl } = this.config.platforms;
 
     const metaMissing: string[] = [];
     if (!meta.appId) metaMissing.push('META_APP_ID');
@@ -152,22 +155,33 @@ export class ConnectionsService {
     if (!google.developerToken) googleMissing.push('GOOGLE_ADS_DEVELOPER_TOKEN');
     if (!oauthRedirectBaseUrl) googleMissing.push('OAUTH_REDIRECT_BASE_URL');
 
-    return [
-      {
-        platform: 'meta',
-        configured: metaMissing.length === 0,
-        missingConfig: metaMissing,
-        requiredScopes: [...this.provider('meta').requiredScopes],
-        optionalScopes: [...this.provider('meta').optionalScopes],
-      },
-      {
-        platform: 'google',
-        configured: googleMissing.length === 0,
-        missingConfig: googleMissing,
-        requiredScopes: [...this.provider('google').requiredScopes],
-        optionalScopes: [...this.provider('google').optionalScopes],
-      },
-    ];
+    const linkedinMissing: string[] = [];
+    if (!linkedin.clientId) linkedinMissing.push('LINKEDIN_CLIENT_ID');
+    if (!linkedin.clientSecret) linkedinMissing.push('LINKEDIN_CLIENT_SECRET');
+    if (!oauthRedirectBaseUrl) linkedinMissing.push('OAUTH_REDIRECT_BASE_URL');
+
+    const eksikler: Record<Platform, string[]> = {
+      meta: metaMissing,
+      google: googleMissing,
+      linkedin: linkedinMissing,
+    };
+
+    /*
+     * LİSTE `PLATFORMS`TAN TÜRETİLİYOR — elle yazılmıyor.
+     *
+     * Burada iki nesne ELLE sayılıyordu ve LinkedIn eklenirken bu ekran onu
+     * hiç göstermeyecekti: hata yok, log yok, yalnızca bağlantı sayfasında
+     * OLMAYAN bir platform. `Record<Platform, ...>` sayesinde dördüncü
+     * platform eklendiğinde DERLEME kırılıyor ve eksik anahtar listesini
+     * yazmayı unutmak imkânsız hâle geliyor.
+     */
+    return PLATFORMS.map((platform) => ({
+      platform,
+      configured: eksikler[platform].length === 0,
+      missingConfig: eksikler[platform],
+      requiredScopes: [...this.provider(platform).requiredScopes],
+      optionalScopes: [...this.provider(platform).optionalScopes],
+    }));
   }
 
   // ---------------------------------------------------------------------------

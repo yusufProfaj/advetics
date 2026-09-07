@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { AssetPlatform } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
 import {
   ACCEPTED_MIME,
@@ -48,7 +49,7 @@ interface AssetRow {
 
 interface RefRow {
   asset_id: string;
-  platform: 'meta' | 'google';
+  platform: AssetPlatform;
   ad_account_id: string;
   ad_account_name: string;
   external_ref: string;

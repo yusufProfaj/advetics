@@ -7,10 +7,12 @@
  * yanlış müşteri adının aylarca gitmesi demek.
  */
 
+import type { AutoBoostPlatform } from '@advetics/shared';
+
 export interface YeniIcerikKarti {
   title: string | null;
   permalink: string | null;
-  platform: 'meta' | 'google';
+  platform: AutoBoostPlatform;
 }
 
 export interface YeniIcerikMailIcerigi {

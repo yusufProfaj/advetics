@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { AutoBoostPlatform } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { CryptoService } from '../../crypto/crypto.service';
@@ -282,7 +283,7 @@ export class AutoBoostQueueService {
     orgId: string;
     clientId: string;
     socialProfileId: string;
-    platform: 'meta' | 'google';
+    platform: AutoBoostPlatform;
     externalId: string;
     title: string | null;
     thumbnailUrl: string | null;
@@ -333,7 +334,7 @@ export class AutoBoostQueueService {
   private async resolvePreset(
     clientId: string,
     socialProfileId: string,
-    platform: 'meta' | 'google',
+    platform: AutoBoostPlatform,
   ): Promise<{ id: string; createdAt: Date; enabled: boolean } | null> {
     const rows = await this.db.$queryRaw<
       Array<{

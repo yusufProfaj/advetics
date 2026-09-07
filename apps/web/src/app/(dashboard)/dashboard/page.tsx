@@ -7,7 +7,7 @@ import type {
   MetricsSummary,
   MetricsTimeseries,
 } from '@advetics/shared';
-import { METRIC_LEVELS } from '@advetics/shared';
+import { METRIC_LEVELS, PLATFORMS } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { rangeParams, resolveRange } from '@/lib/date-range';
@@ -482,7 +482,16 @@ function first(value: string | string[] | undefined): string | undefined {
  * olabilir ve bir yazım hatası yüzünden panelin açılmaması abartı olurdu.
  */
 function resolvePlatform(raw: string | undefined): Platform | null {
-  return raw === 'meta' || raw === 'google' ? raw : null;
+  /*
+   * LİSTEDEN ÇÖZÜLÜYOR, ELLE DALLANMIYOR.
+   *
+   * Burada `raw === 'meta' || raw === 'google'` yazıyordu ve üçüncü platform
+   * eklenince en can sıkıcı hâli üretecekti: LinkedIn süzgecini seçen
+   * kullanıcı bilinmeyen değer sayılıp SESSİZCE "tümü"ye dönerdi. Hata yok,
+   * uyarı yok — sadece yanlış rakamlar. CLAUDE.md'deki "süzgeç bazen
+   * kayboluyor" hatasının aynısı.
+   */
+  return PLATFORMS.find((p) => p === raw) ?? null;
 }
 
 function resolveLevel(raw: string | undefined): MetricLevel {

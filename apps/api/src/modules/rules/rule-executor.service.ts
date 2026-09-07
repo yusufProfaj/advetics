@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { Platform } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
 import type { ActionOutcome, RuleRecord, TenantContext } from '@advetics/shared';
 import { PlatformApiError, type PlatformActionRequest } from '../connections/provider.types';
@@ -22,7 +23,7 @@ import { RulesService, type PendingAction, type TxLike } from './rules.service';
 interface AccountAuth {
   connectionId: string;
   externalId: string;
-  platform: 'meta' | 'google';
+  platform: Platform;
   currency: string;
   grantedScopes: string[];
 }
@@ -248,7 +249,7 @@ export class RuleExecutorService {
         id: string;
         connection_id: string;
         external_id: string;
-        platform: 'meta' | 'google';
+        platform: Platform;
         currency: string;
         granted_scopes: string[];
         status: string;

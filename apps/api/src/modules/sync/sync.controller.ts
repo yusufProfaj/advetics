@@ -28,6 +28,7 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { Prisma, type SyncJobType } from '@prisma/client';
+import type { Platform } from '@advetics/shared';
 import { CurrentTenant, RequireOrgAdmin, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -765,7 +766,7 @@ export class SyncController {
       hesaplar: hesaplar.map((a) => ({
         id: a.id,
         clientId: a.clientId,
-        platform: a.platform as 'meta' | 'google',
+        platform: a.platform as Platform,
       })),
       from: dateFrom,
       to: dateTo,

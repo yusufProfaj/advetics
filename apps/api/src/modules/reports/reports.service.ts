@@ -1,4 +1,5 @@
 import { deriveRoas } from '@advetics/shared';
+import type { Platform } from '@advetics/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -110,7 +111,7 @@ const TOP_ADS_LIMIT = 12;
  * tablo toplamı özet kartlarını tutmazdı — aynı belgede iki farklı gerçek.
  * `rapor-platform-suzgeci.spec.ts` her sorgunun bunu kullandığını tarıyor.
  */
-function platformFiltresi(platform: 'meta' | 'google' | undefined, alias = ''): Prisma.Sql {
+function platformFiltresi(platform: Platform | undefined, alias = ''): Prisma.Sql {
   if (!platform) return Prisma.empty;
   const p = alias ? `${alias}.platform` : 'platform';
   return Prisma.sql`AND ${Prisma.raw(p)} = ${platform}::"Platform"`;
@@ -162,7 +163,7 @@ export class ReportsService {
        * Şablonu" başlıklı raporun özetinde Meta harcaması görünür ve
        * tablolar toplamı tutmaz — aynı belgede iki farklı gerçek.
        */
-      platform?: 'meta' | 'google';
+      platform?: Platform;
     },
   ): Promise<ReportData> {
     const data = await this.veriToplaK(ctx, params);
@@ -192,7 +193,7 @@ export class ReportsService {
       to: string;
       templateId?: string;
       sablon?: 'genel' | 'google' | 'meta';
-      platform?: 'meta' | 'google';
+      platform?: Platform;
     },
   ): Promise<ReportData> {
     return this.prisma.withTenant(ctx, async (tx) => {
@@ -316,7 +317,7 @@ export class ReportsService {
    */
   private async searchTermRows(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
+    params: { clientId: string; from: string; to: string; platform?: Platform },
   ): Promise<ReportData['searchTerms']> {
     /*
      * META ŞABLONUNDA HİÇ SORULMUYOR. İkisi de yalnızca Google'da var ve
@@ -401,7 +402,7 @@ export class ReportsService {
    */
   private async breakdownBlocks(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
+    params: { clientId: string; from: string; to: string; platform?: Platform },
     sections: readonly string[],
   ): Promise<ReportBreakdownBlock[]> {
     const istenen = BOYUT_BOLUMLERI.filter((b) => sections.includes(b.section));
@@ -522,7 +523,7 @@ export class ReportsService {
 
   private async keywordRows(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
+    params: { clientId: string; from: string; to: string; platform?: Platform },
   ): Promise<ReportData['keywords']> {
     /*
      * META ŞABLONUNDA HİÇ SORULMUYOR. İkisi de yalnızca Google'da var ve
@@ -693,10 +694,10 @@ export class ReportsService {
   /** Platform bazında toplam blok — referans belgenin 2. sayfası. */
   private async platformBlocks(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
+    params: { clientId: string; from: string; to: string; platform?: Platform },
   ): Promise<ReportPlatformBlock[]> {
     const rows = await tx.$queryRaw<
-      Array<RawMetricRow & { platform: 'meta' | 'google' }>
+      Array<RawMetricRow & { platform: Platform }>
     >(
       Prisma.sql`
         WITH base AS (
@@ -749,13 +750,13 @@ export class ReportsService {
   /** Kampanya satırları — erişim ve kova sayıları dâhil. */
   private async campaignRows(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
-  ): Promise<Array<{ platform: 'meta' | 'google'; row: ReportCampaignRow }>> {
+    params: { clientId: string; from: string; to: string; platform?: Platform },
+  ): Promise<Array<{ platform: Platform; row: ReportCampaignRow }>> {
     const rows = await tx.$queryRaw<
       Array<
         RawMetricRow &
           RawBucketRow & {
-            platform: 'meta' | 'google';
+            platform: Platform;
             name: string | null;
             status: string | null;
             objective: string | null;
@@ -826,7 +827,7 @@ export class ReportsService {
   /** Günlük dönüşüm serisi — referans belgedeki Form/Mesaj grafiği. */
   private async dailySeries(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
+    params: { clientId: string; from: string; to: string; platform?: Platform },
   ): Promise<ReportDailyPoint[]> {
     const rows = await tx.$queryRaw<
       Array<RawBucketRow & { date: Date; spend_micros: string | number | bigint | null }>
@@ -882,9 +883,9 @@ export class ReportsService {
    */
   private async topAdsMissingPlatforms(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
-  ): Promise<Array<'meta' | 'google'>> {
-    const rows = await tx.$queryRaw<Array<{ platform: 'meta' | 'google' }>>(
+    params: { clientId: string; from: string; to: string; platform?: Platform },
+  ): Promise<Array<Platform>> {
+    const rows = await tx.$queryRaw<Array<{ platform: Platform }>>(
       Prisma.sql`
         SELECT platform
         FROM insights_daily i
@@ -902,13 +903,13 @@ export class ReportsService {
     /** En çok harcayan reklamlar — platform başına, creative ile. */
   private async topAds(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
+    params: { clientId: string; from: string; to: string; platform?: Platform },
   ): Promise<ReportData['topAds']> {
     const rows = await tx.$queryRaw<
       Array<{
         id: string;
         name: string | null;
-        platform: 'meta' | 'google';
+        platform: Platform;
         campaign_name: string | null;
         headline: string | null;
         description: string | null;
@@ -1047,7 +1048,7 @@ export class ReportsService {
    * elle yazmak iki listenin zamanla ayrışması demek olurdu.
    */
   private bucketSelect(
-    params: { clientId: string; from: string; to: string; platform?: 'meta' | 'google' },
+    params: { clientId: string; from: string; to: string; platform?: Platform },
     groupBy: Prisma.Sql,
   ): Prisma.Sql {
     /**

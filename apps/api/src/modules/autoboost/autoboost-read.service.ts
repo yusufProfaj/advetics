@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { AutoBoostPlatform } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
 import {
   abonelikSagligi,
@@ -159,7 +160,7 @@ export class AutoBoostReadService {
         ? {
             id: r.preset_id,
             clientId: r.client_id,
-            platform: r.platform as 'meta' | 'google',
+            platform: r.platform as AutoBoostPlatform,
             socialProfileId: null,
             socialProfileName: r.profile_name,
             enabled: r.preset_enabled ?? false,
@@ -175,7 +176,7 @@ export class AutoBoostReadService {
       id: r.id,
       clientId: r.client_id,
       clientName: r.client_name,
-      platform: r.platform as 'meta' | 'google',
+      platform: r.platform as AutoBoostPlatform,
       externalId: r.external_id,
       title: r.title,
       thumbnailUrl: r.thumbnail_url,

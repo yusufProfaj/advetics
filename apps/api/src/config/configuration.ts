@@ -109,6 +109,30 @@ const envSchema = z.object({
    * https://developers.google.com/google-ads/api/docs/release-notes
    */
   GOOGLE_ADS_API_VERSION: z.string().default('v25'),
+
+  /*
+   * ═══ LINKEDIN ═══
+   *
+   * Meta/Google gibi OPSİYONEL: uygulamanın onaylı bir ürünü olmadan hiçbir
+   * çağrı başarılı olmuyor ve panel onay beklenirken de ayağa kalkmalı.
+   * `availability()` eksik anahtarları ekranda LİSTELİYOR.
+   */
+  LINKEDIN_CLIENT_ID: z.string().optional(),
+  LINKEDIN_CLIENT_SECRET: z.string().optional(),
+
+  /*
+   * SÜRÜM BAŞLIĞI ZORUNLU VE VARSAYILANI YOK. LinkedIn her istekte
+   * `LinkedIn-Version: YYYYMM` bekliyor ve "en yenisi" diye bir davranış
+   * uygulamıyor; başlık eksikse istek düşüyor, sürüm ölmüşse HTTP 426
+   * dönüyor. Her sürüme yalnızca ~12 ay söz veriliyor, yani bu değer yılda
+   * en az bir kez GÜNCELLENMEK ZORUNDA ve bu bir bakım borcu.
+   *
+   * DEĞER TAKVİMDEN TÜRETİLEMEZ: LinkedIn'in ARALIK SÜRÜMÜ YOK
+   * (…202510, 202511, sonra doğrudan 202601). `new Date()`ten ay üreten bir
+   * kod her Aralık ayında bütün istekleri düşürürdü. O yüzden sabit ve elle
+   * yönetiliyor.
+   */
+  LINKEDIN_API_VERSION: z.string().regex(/^\d{6}$/, 'LINKEDIN_API_VERSION YYYYMM olmalı').default('202608'),
   /**
    * YouTube Data API v3 anahtarı — Advetics 1.0 bildirim doğrulaması.
    *
@@ -172,6 +196,12 @@ export interface AppConfig {
       clientId?: string;
       clientSecret?: string;
       developerToken?: string;
+      apiVersion: string;
+    };
+    linkedin: {
+      clientId?: string;
+      clientSecret?: string;
+      /** `LinkedIn-Version` başlığı — YYYYMM, zorunlu, varsayılanı yok. */
       apiVersion: string;
     };
     /**
@@ -254,6 +284,11 @@ export function loadConfig(): AppConfig {
         clientSecret: env.GOOGLE_CLIENT_SECRET,
         developerToken: env.GOOGLE_ADS_DEVELOPER_TOKEN,
         apiVersion: env.GOOGLE_ADS_API_VERSION,
+      },
+      linkedin: {
+        clientId: env.LINKEDIN_CLIENT_ID,
+        clientSecret: env.LINKEDIN_CLIENT_SECRET,
+        apiVersion: env.LINKEDIN_API_VERSION,
       },
       youtube: {
         apiKey: env.YOUTUBE_API_KEY,

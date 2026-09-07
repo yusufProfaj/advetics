@@ -15,6 +15,8 @@ import {
   sumRows,
   COLUMN_TOTALS,
   type ColumnKey,
+  PLATFORMS,
+  PLATFORM_LABELS,
 } from '@advetics/shared';
 import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent, microsOf } from '@/lib/format';
@@ -619,13 +621,18 @@ function SearchTerms({ data }: { data: ReportData }) {
   );
 }
 
-const PLATFORM_ADI: Record<string, string> = { meta: 'Meta Ads', google: 'Google Ads' };
+const PLATFORM_ADI: Record<string, string> = PLATFORM_LABELS;
 
 /**
  * Sayfa sırası — raporun geri kalanıyla AYNI (özet blokları, kampanya
  * tabloları). Ayrılırsa okuyan aynı belgede iki farklı düzenle karşılaşır.
+ *
+ * `PLATFORMS`TAN TÜRETİLİYOR ve bu, PDF'teki ikiziyle (`rapor-pdf.service.ts`
+ * → `PLATFORM_SIRASI`) AYNI kaynağa bakması demek. İkisi elle yazılıydı ve
+ * ayrışmaları an meselesiydi: CLAUDE.md'nin "aynı raporun iki gösterimi varsa
+ * referans biri olmalı" kuralı tam bu çift için yazıldı.
  */
-const PLATFORM_SIRASI = ['meta', 'google'] as const;
+const PLATFORM_SIRASI = PLATFORMS;
 
 /**
  * ÖNE ÇIKAN REKLAMLAR — PLATFORM BAŞINA AYRI SAYFA.

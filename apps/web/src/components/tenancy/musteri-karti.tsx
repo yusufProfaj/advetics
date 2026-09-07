@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { CHANNEL_KINDS, CHANNEL_LABELS } from '@advetics/shared';
 import Link from 'next/link';
 import { PlatformLogo, adAccountKanali, profilKanali } from '@/components/platform-logo';
 import type { ChannelKind } from '@advetics/shared';
@@ -54,22 +55,22 @@ export interface MusteriKartiVerisi {
   notes: string | null;
 }
 
-/** Kanal rozetlerinin sırası SABİT — kart kart değişen bir sıra okunmuyor. */
-const KANAL_SIRASI: ChannelKind[] = [
-  'meta_ads',
-  'google_ads',
-  'facebook',
-  'instagram',
-  'youtube',
-];
+/**
+ * Kanal rozetlerinin sırası SABİT — kart kart değişen bir sıra okunmuyor.
+ *
+ * Liste `CHANNEL_KINDS`tan geliyor: burada ELLE yazılıydı ve yeni bir kanal
+ * eklendiğinde rozet kartlarda hiç görünmeyecekti. Eksik rozet, "o kanal
+ * bağlı değil" diye okunur — yani sessizce YANLIŞ bilgi.
+ */
+const KANAL_SIRASI: readonly ChannelKind[] = CHANNEL_KINDS;
 
-const KANAL_ADI: Record<ChannelKind, string> = {
-  meta_ads: 'Meta Ads',
-  google_ads: 'Google Ads',
-  facebook: 'Facebook sayfası',
-  instagram: 'Instagram hesabı',
-  youtube: 'YouTube kanalı',
-};
+/*
+ * Etiketler burada `CHANNEL_LABELS`tan AYRI yazılıydı ve metinleri de
+ * farklıydı ("Facebook sayfası" / "Facebook Sayfası"). Ortak tabloya
+ * geçirildi; aynı kanalın iki ekranda iki farklı adla görünmesi bu depoda
+ * adı konmuş bir hata türü.
+ */
+const KANAL_ADI: Record<ChannelKind, string> = CHANNEL_LABELS;
 
 export function MusteriKarti({
   client,

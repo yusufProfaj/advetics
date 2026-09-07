@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Platform } from '../constants/platforms';
 
 /**
  * Modül 5 — Aylık bütçe sözleşmeleri.
@@ -127,7 +128,7 @@ export interface BudgetRecord {
   adAccountId: string | null;
   /** Reklam hesabının adı — null ise müşteri geneli satır. */
   adAccountName: string | null;
-  platform: 'meta' | 'google' | null;
+  platform: Platform | null;
   month: string;
   amountMicros: string;
   currency: string;

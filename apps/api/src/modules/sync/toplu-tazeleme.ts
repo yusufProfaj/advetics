@@ -10,6 +10,8 @@
  * taramasıyla görünmüyor.
  */
 
+import type { Platform } from '@advetics/shared';
+
 /**
  * Metrik işi başına en fazla kaç gün.
  *
@@ -74,14 +76,14 @@ export function pencereler(from: string, to: string, pencereGun = PENCERE_GUN): 
 export interface PlanlananIs {
   adAccountId: string;
   clientId: string;
-  platform: 'meta' | 'google';
+  platform: Platform;
   jobType: 'structure' | 'insights_backfill' | 'insights_breakdowns' | 'search_terms' | 'keyword_insights';
   dateFrom?: string;
   dateTo?: string;
 }
 
 export interface PlanGirdisi {
-  hesaplar: Array<{ id: string; clientId: string; platform: 'meta' | 'google' }>;
+  hesaplar: Array<{ id: string; clientId: string; platform: Platform }>;
   from: string;
   to: string;
   /** Kitle kırılımları da çekilsin mi — maliyeti hesap başına ~5 çağrı/pencere. */

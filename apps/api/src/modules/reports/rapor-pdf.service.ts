@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import {
+  PLATFORMS,
   COLUMN_LABELS,
   COLUMN_TOTALS,
   CONVERSION_BUCKETS,
@@ -1444,8 +1445,18 @@ const PLATFORM_ADI: Record<string, string> = { meta: 'Meta Ads', google: 'Google
  * Özet blokları ve kampanya tabloları Meta'yı önce anlatıyor; öne çıkan
  * reklamların sırası ondan ayrılırsa okuyan aynı belgede iki farklı düzenle
  * karşılaşır.
+ *
+ * ┌─ BU LİSTE `PLATFORMS`TAN TÜRETİLİYOR ─────────────────────────────────┐
+ * │ Burada `['meta', 'google']` ELLE yazılıydı ve üçüncü platform         │
+ * │ eklendiğinde en sinsi hatayı üretecekti: LinkedIn verisi              │
+ * │ veritabanında DURUYOR, rapor bloğu ÜRETİLİYOR, ama bu döngü onu       │
+ * │ gezmediği için PDF'e HİÇ ÇİZİLMİYOR. Hata yok, log yok, eksik sayfa   │
+ * │ yalnızca müşteriye giden belgede görünüyor.                           │
+ * │                                                                       │
+ * │ Sıra `PLATFORMS`ın kendi sırası: meta, google, linkedin.              │
+ * └───────────────────────────────────────────────────────────────────────┘
  */
-const PLATFORM_SIRASI = ['meta', 'google'] as const;
+const PLATFORM_SIRASI = PLATFORMS;
 
 const KOVA_ADI: Record<string, string> = Object.fromEntries(
   Object.entries(CONVERSION_BUCKETS).map(([k, v]) => [k, v.label]),

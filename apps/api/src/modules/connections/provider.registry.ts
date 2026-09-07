@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Platform } from '@advetics/shared';
 import { GoogleProvider } from './providers/google.provider';
+import { LinkedInProvider } from './providers/linkedin.provider';
 import { MetaProvider } from './providers/meta.provider';
 import type { IAdPlatformProvider } from './provider.types';
 
@@ -13,16 +14,22 @@ import type { IAdPlatformProvider } from './provider.types';
  * `queue/` katmanı bağlantı yönetimine bağımlı hâle gelir; bu, sync'i test
  * etmek için OAuth akışını da ayağa kaldırmak demek olurdu.
  *
- * Kapsam kilidi: `Platform` birleşimi yalnızca `meta` ve `google` içeriyor, bu
- * yüzden `Record` eksiksiz olmak ZORUNDA — üçüncü bir platform eklenirse
- * derleme burada kırılır. Kasıtlı.
+ * `Record<Platform, ...>` EKSİKSİZ OLMAK ZORUNDA ve bu kasıtlı: yeni bir
+ * platform eklenince derleme TAM BURADA kırılıyor. 2026-09-07'de LinkedIn
+ * eklenirken ağ gerçekten çalıştı — sağlayıcıyı kaydetmeyi unutmak imkânsız
+ * oldu.
+ *
+ * Bu ağın kapsamadığı bir şey var: NEST MODÜL KAYDI. `connections.module.ts`
+ * içindeki sağlayıcı listesi eksik kalırsa DERLEME GEÇER, hata AÇILIŞTA
+ * gelir ve deploy'un ortasında görünür. `linkedin-kayit.spec.ts` bunu kaynak
+ * taramasıyla kilitliyor.
  */
 @Injectable()
 export class ProviderRegistry {
   private readonly byPlatform: Record<Platform, IAdPlatformProvider>;
 
-  constructor(meta: MetaProvider, google: GoogleProvider) {
-    this.byPlatform = { meta, google };
+  constructor(meta: MetaProvider, google: GoogleProvider, linkedin: LinkedInProvider) {
+    this.byPlatform = { meta, google, linkedin };
   }
 
   get(platform: Platform): IAdPlatformProvider {

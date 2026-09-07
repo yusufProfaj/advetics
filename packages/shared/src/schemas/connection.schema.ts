@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PLATFORMS } from '../constants/platforms';
+import { PLATFORMS, type Platform } from '../constants/platforms';
 
 export const platformSchema = z.enum(PLATFORMS);
 
@@ -97,7 +97,7 @@ export type SocialProfileTypeValue =
 
 export interface AdAccountSummary {
   id: string;
-  platform: 'meta' | 'google';
+  platform: Platform;
   externalId: string;
   name: string;
   currency: string;
@@ -138,7 +138,7 @@ export interface SocialProfileSummary {
 
 export interface ConnectionSummary {
   id: string;
-  platform: 'meta' | 'google';
+  platform: Platform;
   accountLabel: string;
   status: ConnectionStatusValue;
   /** ÇEKİRDEK izinlerden eksik olanlar. Dolu ise bağlantı iş görmez. */
@@ -161,7 +161,7 @@ export interface ConnectionSummary {
 
 /** Platform yapılandırılmış mı — UI butonu buna göre aktif/pasif olur. */
 export interface ProviderAvailability {
-  platform: 'meta' | 'google';
+  platform: Platform;
   configured: boolean;
   /** Yapılandırma eksikse ne gerektiği. */
   missingConfig: string[];

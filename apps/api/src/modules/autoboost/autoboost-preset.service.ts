@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import type { AutoBoostPlatform } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
 import {
   autoBoostPresetSettingsSchema,
@@ -54,7 +55,7 @@ export class AutoBoostPresetService {
       return {
         id: r.id,
         clientId: r.client_id,
-        platform: r.platform as 'meta' | 'google',
+        platform: r.platform as AutoBoostPlatform,
         socialProfileId: r.social_profile_id,
         socialProfileName: r.social_profile_name,
         enabled: r.enabled,

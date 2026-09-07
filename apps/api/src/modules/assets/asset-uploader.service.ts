@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { Platform } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
 import type { TenantContext } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -62,7 +63,7 @@ export class AssetUploaderService {
        * çiftinde ve hesaplar zaten platforma özgü — aynı görsel bir Meta
        * hesabında hash, bir Google hesabında kaynak adı olarak duruyor.
        */
-      platform?: 'meta' | 'google';
+      platform?: Platform;
     },
   ): Promise<string> {
     const cached = await this.prisma.withTenant(ctx, (tx) =>

@@ -1,0 +1,11 @@
+-- LinkedIn Ads üçüncü platform olarak ekleniyor
+--
+-- ALTER TYPE ... ADD VALUE aynı transaction içinde KULLANILAMIYOR ve Prisma her
+-- migration dosyasını tek transaction'da çalıştırıyor; bu yüzden komut kendi
+-- dosyasında tek başına duruyor. Aynı dosyada bu değeri kullanan bir INSERT ya
+-- da bir CHECK yazmak "unsafe use of new value" ile düşerdi.
+--
+-- IF NOT EXISTS: migration'ın iki kez koşması (kısmi bir deploy sonrası tekrar)
+-- hata vermesin. Enum değeri geri ALINAMIYOR — Postgres'te DROP VALUE yok — o
+-- yüzden bu dosya tek yönlü ve bilerek küçük.
+ALTER TYPE "Platform" ADD VALUE IF NOT EXISTS 'linkedin';

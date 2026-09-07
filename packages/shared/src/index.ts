@@ -1,5 +1,6 @@
 export * from './auth/roles';
 export * from './constants/platforms';
+export * from './linkedin-para';
 export * from './constants/boost-naming';
 export * from './schemas/auth.schema';
 export * from './schemas/uyari.schema';

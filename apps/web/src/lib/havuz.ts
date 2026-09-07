@@ -34,9 +34,23 @@ export const KANALLAR: ChannelKind[] = [
  * davet ederdi.
  */
 export function havuzlariCikar(connections: ConnectionSummary[]): Havuzlar {
+  /*
+   * KOVALAR ELLE SAYILIYOR — VE BU BİLİNÇLİ.
+   *
+   * `Object.fromEntries(CHANNEL_KINDS.map(...))` daha kısa ama dönüş tipi
+   * `{[k: string]: never[]}` ve `Havuzlar`a çevirmek bir cast istiyor. O cast
+   * TypeScript'in eksik alan denetimini KAPATIYOR: yeni bir kanal eklendiğinde
+   * derleme sessizce geçer ve `map[kind].push(...)` çalışma anında
+   * `undefined`a düşer.
+   *
+   * Açık literal tam tersini yapıyor: LinkedIn eklenirken derleme BURADA
+   * kırıldı ve eksik kova yazılmadan geçmek imkânsız oldu. Kısa olan değil,
+   * yüksek sesle patlayan kazanıyor.
+   */
   const map: Havuzlar = {
     meta_ads: [],
     google_ads: [],
+    linkedin_ads: [],
     facebook: [],
     instagram: [],
     youtube: [],

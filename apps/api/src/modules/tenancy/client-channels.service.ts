@@ -15,6 +15,7 @@ const KAYNAK: Record<ChannelKind, { tablo: 'ad_accounts' | 'social_profiles'; su
   {
     meta_ads: { tablo: 'ad_accounts', suzgec: Prisma.sql`platform = 'meta'` },
     google_ads: { tablo: 'ad_accounts', suzgec: Prisma.sql`platform = 'google'` },
+    linkedin_ads: { tablo: 'ad_accounts', suzgec: Prisma.sql`platform = 'linkedin'` },
     facebook: { tablo: 'social_profiles', suzgec: Prisma.sql`profile_type = 'facebook_page'` },
     instagram: {
       tablo: 'social_profiles',

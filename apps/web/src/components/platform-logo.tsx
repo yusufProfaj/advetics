@@ -41,6 +41,19 @@ export function PlatformLogo({
         </svg>
       );
 
+    case 'linkedin_ads':
+      // LinkedIn — yuvarlatılmış kare, içinde "in".
+      return (
+        <svg {...ortak} fill="none">
+          <rect width="24" height="24" rx="4" fill="#0A66C2" />
+          <circle cx="7.1" cy="6.9" r="1.9" fill="#fff" />
+          <rect x="5.4" y="9.9" width="3.4" height="8.7" fill="#fff" />
+          <path
+            d="M11.2 9.9h3.2v1.2c.5-.9 1.6-1.5 3-1.5 2.3 0 3.4 1.4 3.4 4v5h-3.4v-4.4c0-1.2-.4-1.9-1.5-1.9-1 0-1.6.7-1.6 1.9v4.4h-3.1V9.9Z"
+            fill="#fff"
+          />
+        </svg>
+      );
     case 'google_ads':
       // Google Ads — sarı ve mavi çubuklar, yeşil daire.
       return (
@@ -111,7 +124,20 @@ export function PlatformLogo({
  * doğru diğerinde yanlış çıkması demekti.
  */
 export function adAccountKanali(platform: string): ChannelKind {
-  return platform === 'google' ? 'google_ads' : 'meta_ads';
+  /*
+   * EŞLEME AÇIK — "bilinmeyen ise Meta" DEĞİL.
+   *
+   * Burada `platform === 'google' ? 'google_ads' : 'meta_ads'` yazıyordu ve
+   * LinkedIn eklenince en kötü türden bir hata üretecekti: LinkedIn reklam
+   * hesabının yanında META LOGOSU. Yanlış logo, logosuzdan kötü — kullanıcı
+   * hangi hesaba baktığını sanıyor ve bunu sorgulamıyor.
+   *
+   * Bilinmeyen bir değer artık Meta'ya düşmüyor; `meta_ads` yalnızca
+   * gerçekten Meta olduğunda dönüyor.
+   */
+  if (platform === 'google') return 'google_ads';
+  if (platform === 'linkedin') return 'linkedin_ads';
+  return 'meta_ads';
 }
 
 export function profilKanali(profileType: string): ChannelKind {

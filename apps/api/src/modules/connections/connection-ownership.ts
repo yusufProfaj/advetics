@@ -29,6 +29,7 @@ export type OwnershipDecision =
 const PLATFORM_ADI: Record<Platform, string> = {
   meta: 'Meta',
   google: 'Google',
+  linkedin: 'LinkedIn',
 };
 
 export function decideConnectionOwnership(p: {

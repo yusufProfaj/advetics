@@ -1,4 +1,5 @@
 import type { AdReviewIssue } from '@advetics/shared';
+import type { Platform } from '@advetics/shared';
 
 /**
  * Reddedilme sebeplerini ortak şekle çevirir.
@@ -122,7 +123,7 @@ function parseGoogle(entries: unknown): AdReviewIssue[] {
  * Google'da reddedilme bilgisi `policy_topic_entries`, Meta'da serbest biçimli
  * bir nesne. `disapprovalReasons` kolonunda ikisi de ham hâliyle duruyor.
  */
-export function parseReviewIssues(platform: 'meta' | 'google', raw: unknown): AdReviewIssue[] {
+export function parseReviewIssues(platform: Platform, raw: unknown): AdReviewIssue[] {
   if (raw === null || raw === undefined) return [];
 
   try {
