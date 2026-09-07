@@ -745,6 +745,21 @@ AYNISINI çağırıyor. KARMA raporda sayfa çiziliyor ama dışarıda kalan pla
 YAZILIYOR; söylememek, kırılım toplamının özet kartlarıyla tutmamasını
 açıklanamaz bırakırdı.
 
+**ÜRÜN KARARI — coğrafi kırılımda URN saklanıyor, çözülmüş ad SAKLANMIYOR.**
+LinkedIn'in saklama tablosu Bing kaynaklı lokasyon verisini saklamayı
+yasaklıyor ama yasağın ham `urn:li:geo:...` + sayı satırını kapsayıp
+kapsamadığını AYIRMIYOR; aynı tablonun başka bir satırı URN'ler için süre
+kısıtı olmadığını söylüyor. Yani bu bir HUKUKİ YORUM, "doküman öyle diyor"
+değil — ve kodda öyle yazıyor. Belirsizlikte dar tarafta duruyoruz:
+`insight_breakdowns.value` alanına URN yazılıyor (tablonun zaten kurulu
+deseni: değer HAM saklanıyor, çeviri GÖSTERİMDE yapılıyor), Geo API'den gelen
+ad hiçbir yere — ne kolona, ne önbelleğe, ne log'a.
+
+Bedeli gizlenmiyor: coğrafi kırılımı olan bir LinkedIn raporu AĞA BAĞIMLI
+oluyor. Çözüm başarısız olabilir ve SESSİZ OLMAMALI — satır atılmıyor, ham
+URN gösteriliyor ve sebebi yazılıyor. Satırı düşürmek, o bölgenin harcamasını
+rapordan sessizce silmek olurdu.
+
 **Onay modeli Meta'dan daha iyi DEĞİL, daha riskli.** LinkedIn okuma ve yazmayı
 tek onayla veriyor — ama simetrik sonucu şu: `r_ads` de aynı ürüne bağlı.
 Meta'da yazma alınamadı, okuma çalıştı, ürün yarım da olsa ayakta kaldı.

@@ -341,18 +341,39 @@ export class LinkedInProvider implements IAdPlatformProvider {
   }
 
   /**
-   * KIRILIMLAR — ve burada bir ÜRÜN KARARI bekliyor.
+   * KIRILIMLAR — İKİ KARAR VERİLDİ, KOD HÂLÂ YAZILMADI.
    *
    * Advetics'in "Kitle Özeti" sayfası yaş ve cinsiyet halkaları çiziyor.
    * LinkedIn'in pivot listesinde YAŞ, CİNSİYET ve SAAT YOK; yerlerinde
    * şirket, sektör, ünvan, kıdem ve şirket büyüklüğü var — kırılım B2B.
    *
-   * Yani LinkedIn kırılımları bugünkü `insight_breakdowns` boyutlarına
-   * eşlenmiyor ve olduğu gibi bağlanırsa rapor sayfası her LinkedIn
-   * raporunda "Kitle verisi henüz toplanmadı" yazar. O cümle YANLIŞ olur:
-   * veri toplanmadığı için değil, o boyut platformda OLMADIĞI için boş.
+   * ┌─ KARAR 1: KİTLE ÖZETİ LINKEDIN İÇİN ÇİZİLMİYOR (2026-09-07) ────────┐
+   * │ Sayfa çizilseydi her LinkedIn raporunda "Kitle verisi henüz          │
+   * │ toplanmadı" yazacaktı ve o cümle YALAN olurdu: veri toplanmadığı     │
+   * │ için değil, boyut platformda OLMADIĞI için boş.                      │
+   * │ Uygulaması: `kitleBolumuKarari` (`packages/shared`).                 │
+   * └──────────────────────────────────────────────────────────────────────┘
    *
-   * Karar verilmeden yazılmamalı.
+   * ┌─ KARAR 2: COĞRAFİ KIRILIMDA URN SAKLA, ÇÖZÜLMÜŞ ADI SAKLAMA ────────┐
+   * │ BU KOD YAZILDIĞINDA BAĞLAYICI. `insight_breakdowns.value` alanına    │
+   * │ `urn:li:geo:...` yazılacak; Geo API'den gelen "İstanbul" dizesi      │
+   * │ HİÇBİR YERE yazılmayacak — ne kolona, ne önbelleğe, ne log'a. Ad     │
+   * │ rapor üretilirken çözülüyor.                                         │
+   * │                                                                       │
+   * │ Gerekçe HUKUKİ BİR YORUM, "doküman öyle diyor" DEĞİL: saklama tablosu │
+   * │ Bing kaynaklı lokasyon verisini saklamayı yasaklıyor ama yasağın ham  │
+   * │ URN + sayıyı kapsayıp kapsamadığını AYIRMIYOR. Belirsizlikte dar      │
+   * │ tarafta duruyoruz. Ayrıntı: `linkedin-saklama.ts`.                    │
+   * │                                                                       │
+   * │ Bedeli: coğrafi kırılımı olan rapor AĞA BAĞIMLI oluyor. Çözüm         │
+   * │ başarısız olabilir ve SESSİZ OLMAMALI — satır atılmıyor, URN          │
+   * │ gösteriliyor (`linkedinGeoEtiketi`).                                  │
+   * └──────────────────────────────────────────────────────────────────────┘
+   *
+   * AYRICA YAZILMASI GEREKEN: raporlama verisi en fazla BİR YIL saklanabiliyor
+   * (`LINKEDIN_RAPOR_SAKLAMA_GUN`) ve Advetics metrikleri süresiz tutuyor.
+   * Bu satırları silen süpürme henüz yok; ilk veri akmadan ÖNCE yazılmalı.
+   * İhlalin hiçbir teknik belirtisi yok — bedeli API erişiminin kaybı.
    */
   async fetchBreakdowns(
     _ctx: FetchContext,
