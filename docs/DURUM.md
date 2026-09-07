@@ -1,6 +1,6 @@
 # Advetics — Durum ve Yol Haritası
 
-> **Son güncelleme:** 2026-09-02
+> **Son güncelleme:** 2026-09-07
 > **Kaynak:** Bu belge koddan doğrulanarak yazıldı, hafızadan değil. Her iddia
 > için dosya yolu verilmiştir; şüphe duyduğun satırı açıp bakabilirsin.
 >
@@ -11,15 +11,15 @@
 
 ## 1. Tek bakışta
 
-| | 2026-08-11 | 2026-09-02 |
+| | 2026-08-11 | 2026-09-07 |
 |---|---|---|
-| Veritabanı tablosu | 37 | **53** |
+| Veritabanı tablosu | 37 | **54** |
 | Migration | 17 | **55** |
 | API testi | 694 ¹ | **2.253** |
 | Web testi | 20 ¹ | **417** |
-| Panel sayfası | 16 | **29** |
+| Panel sayfası | 16 | **28** |
 | API controller | 17 | **25** |
-| RLS politikası | 95 | **155** |
+| RLS politikası | 95 | **159** |
 | Rol | 5 | **7** |
 | Yetki anahtarı | — | **34** |
 | Zamanlanmış süpürme | 8 | **14** |
@@ -28,9 +28,15 @@ Sol sütun 11 Ağustos'taki commit'ten (`b5a0acc`) SAYILDI, sağ sütun bugünk�
 koddan — ikisi de hafızadan değil. ¹ İşaretli iki satır belgenin o günkü kendi
 metninden: test sayısı koşmadan ölçülemiyor.
 
-**Belgenin kendi sayısı da kaymıştı:** "41 tablo" yazıyordu, o commit'te 37
-vardı. Bu satırlar elle güncellendiğinde kayıyor; bir sonraki güncellemede de
-ölçerek yaz.
+**BU TABLO ÜÇÜNCÜ KEZ KAYDI ve deseni artık belli.** Önce "41 tablo" yazıyordu,
+o commit'te 37 vardı. Sonra 2 Eylül'de yazılan sütun bayatladı: 53 tablo (54),
+155 politika (159), 29 sayfa (28). Sayfa sayısı AZALDI — üç rapor sayfası
+`0e9ca85`'te tek sayfaya birleşti — yani "hep artar" varsayımı da yanlış.
+Elle güncellenen her sayı kayıyor; ölçerek yaz:
+
+```bash
+grep -cE '^model [A-Z]' apps/api/prisma/schema.prisma && ls apps/api/prisma/migrations | grep -c '^2' && grep -c 'CREATE POLICY' apps/api/prisma/sql/02_rls.sql && find apps/web/src/app -name page.tsx | wc -l
+```
 
 **Üç cümlelik özet:**
 
@@ -41,7 +47,14 @@ kuruşuna kadar eşit çıktı.
 
 **Yazma tarafı hiçbir platformda canlıda çalıştırılmadı.** Kural aksiyonları,
 boost oluşturma, toplu reklam ve Reklam Oluşturucu — dördü de `ads_management`
-onayı olmadan çalıştırılamazdı. Bkz. § 5.
+onayı olmadan çalıştırılamazdı. Google tarafında arama kampanyası
+(`google-write.ts`) ve Demand Gen (`google-demandgen.ts`) YAZILDI ama aynı
+şekilde canlıda çalıştırılmadı. Bkz. § 5.
+
+> **BU BELGENİN TEK AYRIMI BU: "yazıldı" ile "CANLIDA ÇALIŞTIRILDI" aynı şey
+> değil.** İkisini karıştıran bir cümle iki yönde de zarar veriyor — yapılmış
+> bir işi yeniden yaptırıyor ya da denenmemiş bir yolu güvenli gösteriyor. Bir
+> satırı güncellerken hangisini söylediğini açıkça yaz.
 
 **Rapor ve panel tarafı 11–28 Ağustos arasında büyük ölçüde yeniden yazıldı:**
 sunucu PDF'i, e-posta gönderimi, üç varsayılan şablon, kitle kırılımları, iki
@@ -60,26 +73,38 @@ Senin paylaştığın 7 parçalı mimariye göre. ✅ tamam · 🟡 kısmi · �
 |---|---|---|
 | Çoklu kiracı (org → müşteri → kullanıcı) | ✅ | `prisma/schema.prisma` |
 | Rol ve yetki matrisi — **7 rol, 34 yetki** | ✅ | `packages/shared/src/auth/roles.ts` |
-| RLS — **151 politika**, `FORCE` edilmiş | ✅ | `prisma/sql/02_rls.sql` |
+| RLS — **159 politika**, `FORCE` edilmiş | ✅ | `prisma/sql/02_rls.sql` |
 | Beyaz etiket (logo, renk, font) | ✅ | `branding_profiles` |
 | Denetim kaydı (append-only) | ✅ | `audit_logs` |
 | ~~Davet akışı~~ | ❌ **KALDIRILDI** | Token üretilip hash'leniyor ve düz metni ATILIYORDU; e-posta altyapısı olmadığı için üretimde kimse daveti kabul edemiyordu. Kullanıcı artık doğrudan oluşuyor, parolayı yönetici belirleyip elden iletiyor. `invitations` tablosu şemada YOK — bu satır 17 gün boyunca yanlış duruyordu |
 | Müşteri altında **çoklu proje/hesap** | ✅ | Bütçe ve kurallar hesap bazlı ayrışıyor |
 
-### 2 — BASE (Bilgi Bankası, Kitle, Anahtar Kelime, Varlık) ❌
+### 2 — BASE (Bilgi Bankası, Kitle, Anahtar Kelime, Varlık) 🟡
 
 | Yetenek | Durum | Not |
 |---|---|---|
 | Bilgi bankası (marka sesi, ürün bilgisi) | ❌ | Hiç başlanmadı |
-| Kitle kütüphanesi | ❌ | Meta'da `custom_audiences` çekilmiyor |
+| Kitle kütüphanesi | 🟡 | Meta'nın KAYITLI kitleleri çekiliyor (`meta.provider.ts` → `savedAudiences`) ve Auto-Boost ön ayarı onları kullanıyor; kütüphane EKRANI yok. Google tarafı hiç yazılmadı (`google.provider.ts` açık hata fırlatıyor) |
 | Anahtar kelime kütüphanesi | ❌ | Performans verisi geliyor; kütüphane (kayıtlı liste) yok |
 | **Görsel/video varlık arşivi** | 🟡 | `/kutuphane/gorseller` — görsel + logo, mükerrer engeli, hesap başına hash önbelleği; reklam oluşturucu ve toplu oluşturucuya bağlı |
 | **Form kütüphanesi (Anlık Form)** | 🟡 | `/kutuphane/formlar` — sürümleme çalışıyor, Meta yayını doğrulanmadı |
 
-**Bu bölümün ilk parçası doldu.** Formlar kütüphanesi 12 Ağustos'ta yazıldı;
-geri kalanı (bilgi bankası, kitle, varlık arşivi) hâlâ boş. Modül 8'in (toplu
-oluşturucu) gerçek verimi varlık arşivine bağlı: şu an her satıra `image_hash`
-elle giriliyor.
+**Bu bölümün büyük kısmı doldu.** Formlar kütüphanesi 12 Ağustos'ta, görsel
+varlık arşivi 13 Ağustos'ta yazıldı. Toplu oluşturucuda `image_hash` ELLE
+YAZMA derdi de bitti — satırda ham hash yerine arşiv görselinin adı yazılıyor
+(ayrıntı § 2'nin CREATE bölümünde). Boş kalan: marka sesi/ürün bilgisi bankası
+ve anahtar kelime kütüphanesi.
+
+> **DİKKAT — YOL ADI ÇAKIŞIYOR.** `/kutuphane/bilgi-bankasi` VAR ama oradaki
+> şey Auto-Boost ÖN AYARI (Advetics 1.0), bu satırdaki "marka sesi, ürün
+> bilgisi" bankası DEĞİL. Yolu görüp "yazılmış" diye işaretlemek bu belgenin
+> tam da düzeltilen hatası olurdu.
+
+**Bu bölüm belgenin en uzun süre kendiyle çeliştiği yerdi.** Varlık arşivi
+burada "hâlâ boş", § 2 CREATE'te tam sayfa anlatılmış, § 4'te "yazılmadı",
+§ 7'de sıradaki adım olarak duruyordu — dört yer, dört farklı cevap. Bir
+yeteneği iki bölümde birden anlatmak bunu üretiyor; bugün TEK yerde anlatılıp
+diğerlerinden oraya işaret ediliyor.
 
 **Formlar kütüphanesindeki tasarım problemi ve çözümü:** Meta'da yayınlanmış
 form DEĞİŞTİRİLEMİYOR — kullanıcı belirli bir onay metnini kabul ederek veri
@@ -105,10 +130,18 @@ kimliğini değiştirmiyor; yeni formu kullanmak için yeni bir reklam gerekiyor
 | Bütçe pacing | ✅ | `/butce` |
 | Trend izleyici | ❌ | — |
 | Sağlık skoru | ❌ | Girdileri hazır (bütçe, kural, bayatlık) |
-| Uyarılar / bildirimler | ❌ | **E-posta altyapısı hiç yok** |
+| Uyarılar / bildirimler | 🟡 | Panel geneli uyarı bandı (`uyari-bandi.tsx` → `GET /alerts`), günde iki kez hesap durumu kontrolü ve ödeme sorunu maili — 27/28 Ağustos'ta yazıldı. Bütçe ve kural aksiyonu uyarıları hâlâ bandın DIŞINDA |
 
-Uyarı eşiği (`alert_threshold_pct`) bütçe tablosunda **saklanıyor** ve panelde
-gösteriliyor, ama kimseye **bildirim gitmiyor**.
+**Burada 27 Ağustos'tan 7 Eylül'e kadar "E-posta altyapısı hiç yok" yazıyordu**
+ve o cümle üç yerde birden duruyordu (bu tablo, § 4'ün `notifications` satırı,
+§ 7). Oysa altyapı yazılmıştı: `modules/email/` (SMTP kimliği kullanıcı
+başına), `modules/alerts/` ve rapor gönderimi hep onu kullanıyor. Bu belgeye
+bakıp "önce mail altyapısını yaz" diyen biri bir haftayı yeniden yazmakla
+geçirirdi.
+
+Kalan gerçek boşluk dar: uyarı eşiği (`alert_threshold_pct`) bütçe tablosunda
+**saklanıyor** ve panelde gösteriliyor, ama eşiği aşan bütçe için kimseye
+bildirim GİTMİYOR — eşik hesaplanıyor, gönderecek kanal bağlanmamış.
 
 ### 4 — CREATE (Reklam Üretici, Akıllı Boost) 🟡
 
@@ -119,9 +152,9 @@ gösteriliyor, ama kimseye **bildirim gitmiyor**.
 | Görsel yükleme (3 oran) + boyut doğrulama | ✅ | `image-probe.ts`, `asset-storage.service.ts` |
 | Toplu reklam oluşturucu | 🟡 | `/toplu-olustur` — yayın yolu doğrulanmadı |
 | Yayın öncesi doğrulama | ✅ | Karakter sınırı, URL, CTA, mükerrer ad |
-| Auto-Boost (organik → reklam) | 🟡 | `/auto-boost` — oluşturma yolu doğrulanmadı |
+| Auto-Boost (organik → reklam) | 🟡 | `/auto-boost` — Instagram/Facebook gönderisi VE YouTube videosu (WebSub → Demand Gen); oluşturma yolu iki platformda da canlıda doğrulanmadı |
 | Organik gönderi senkronizasyonu | ✅ | `queue/organic-sync.service.ts` |
-| Görsel/video yükleme | 🟡 | Reklam Oluşturucu'da var; kalıcı arşiv (BASE) hâlâ yok |
+| Görsel/video yükleme | ✅ | Reklam Oluşturucu + kalıcı arşiv (`/kutuphane/gorseller`, 13 Ağustos — aşağıda) |
 | **Akıllı varlık yönlendirme** | ✅ | Meta + Google PMax yuva kapsaması, kırpma yüzdesi, eksik yuva tespiti |
 | **Anlık form oluşturucu** | 🟡 | `/kutuphane/formlar` — 5 bölüm + canlı önizleme; yayın doğrulanmadı |
 | **Potansiyel Müşteriler (Lead CRM)** | 🟡 | `/potansiyel-musteriler` — webhook + mutabakat; canlı doğrulanmadı |
@@ -202,11 +235,15 @@ alan = küçük oran / büyük oran; %80 üstü kabul edilebilir kırpma, %50 al
 atama yok. Her yuvaya EN İYİ görsel atanıyor (ilk uyan değil), böylece aynı
 set farklı sırada yüklendiğinde aynı sonucu veriyor.
 
-Google PMax bloğu YAYINI ENGELLEMİYOR ve arayüz bunu yazıyor: Google yazma
-yolu henüz yok, onun engellerini Meta yayınının önüne koymak çalışan bir akışı
-yazılmamış bir özellik yüzünden durdurmak olurdu. **Kare logo eksikliği** ayrı
-bir engel olarak sürekli görünüyor — PMax varlık grubu logosuz oluşturulmuyor
-ve logo yükleme akışı henüz yok.
+Google PMax bloğu YAYINI ENGELLEMİYOR ve arayüz bunu yazıyor: PMax yayın yolu
+yazılmadı (arama kampanyası ve Demand Gen yazıldı ama PMax değil), onun
+engellerini Meta yayınının önüne koymak çalışan bir akışı yazılmamış bir
+özellik yüzünden durdurmak olurdu. **Kare logo eksikliği** ayrı bir engel
+olarak sürekli görünüyor — PMax varlık grubu logosuz oluşturulmuyor.
+
+> Bu paragraf bir süre "logo yükleme akışı henüz yok" diyordu; oysa logo
+> arşivde AYRI BİR TÜR ve alt sınırı bilerek daha düşük (128 piksel). Aynı
+> bölümün iki paragraf yukarısı bunu anlatıyor.
 
 **Potansiyel Müşteriler (Lead CRM) — 12 Ağustos.** `/potansiyel-musteriler`.
 Anlık form kayıtları iki ayrı yoldan geliyor ve bu, yedeklilik değil
@@ -263,11 +300,11 @@ geçtiğinde bambaşka bir ayar bulurdu.
 |---|---|---|
 | Aylık bütçe + pacing | ✅ | `monthly_budgets` |
 | Şemsiye bütçe (Google + Meta birlikte) | ✅ | `budgets.service.ts` |
-| Kural motoru (duraklat/başlat/bütçe) | ✅ | `/kurallar` |
-| Kill-switch | ✅ | Kural motorunun `pause` aksiyonu |
+| Kural motoru (duraklat/başlat/bütçe) | 🟡 | `/kurallar` — prova modu canlıda doğrulandı, AKSİYONLARI hiç çalıştırılmadı (§ 5) |
+| Kill-switch | 🟡 | Kural motorunun `pause` aksiyonu — aynı sebeple canlıda denenmedi |
 | Günlük sert limit | 🟡 | `daily_cap_micros` **saklanıyor, uygulanmıyor** |
 | Otomatik durdurma eşiği | 🟡 | `auto_pause_at_pct` **saklanıyor, uygulanmıyor** |
-| Teklif (bid) yönetimi | ❌ | Teklif **okunuyor**, hiç yazılmıyor |
+| Teklif (bid) yönetimi | 🟡 | `bid_strategy` ad set oluşturulurken KOŞULSUZ yazılıyor (varsayılan `LOWEST_COST_WITHOUT_CAP`) — ama o yol canlıda hiç çalıştırılmadı. Var olan bir kampanyanın teklifini SONRADAN değiştiren bir özellik yok |
 | ROI takibi | 🟡 | ROAS hesaplanıyor; gelir kaynağı yok |
 
 İki alan bilinçli olarak "saklanıyor ama uygulanmıyor": kullanıcının açık
@@ -285,7 +322,7 @@ arayüzde de böyle yazıyor.
 Bugün "frekans > 3 ise duraklat" kuralı yazılabiliyor. Eksik olan, yorgunluğu
 **kendiliğinden** bulup öneren katman.
 
-### 7 — REPORT 🟡
+### 7 — REPORT ✅
 
 | Yetenek | Durum | Nerede |
 |---|---|---|
@@ -300,7 +337,13 @@ Bugün "frekans > 3 ise duraklat" kuralı yazılabiliyor. Eksik olan, yorgunluğ
 | Anahtar kelime raporu | ✅ | Veri hattı canlı; "Şimdi güncelle" de tetikliyor |
 | Arama terimleri | ✅ | `search_term_insights`; "Eşleşen Kelime" sütunu raporun en eyleme dönük bilgisi |
 | **Zamanlanmış (otomatik) rapor gönderimi** | ✅ | `report_schedules` + `rapor-plani.service.ts`; panelde "Planla" düğmesi. Haftada 1 / ayda 1, dönem ön ayarlı |
+| **Platform faturaları ek olarak** | ✅ | Elle yükleme (iki platformda da API'den çekmek MÜMKÜN DEĞİL, § 8, "Platform faturaları rapora ek"); PDF veya ZIP, bir döneme birden çok fatura |
+| **Çoklu alıcı** | ✅ | Gönderim formu, plan kaydı ve müşteri kaydı `TEXT[]`; kısmi ret ekrana taşınıyor |
 | **İlgi alanı kırılımı** | ❌ **OLAMAZ** | Meta Ads Insights API'sinde ilgi alanı bir KIRILIM değil, hedefleme girdisi. Google'da yalnızca kriter olarak eklenmiş kitleler için kısmi. Tek platformda yarım çalışan bir bölüm raporda "Meta'da neden boş" sorusunu doğurur |
+
+Bölüm 🟡 idi ve işaret bayattı: eksik sayılan tek madde ("sunucu tarafı PDF")
+`pdf-lib` ile yazıldı, zamanlanmış gönderim de öyle. Kalan tek ❌ **yapılamaz**
+olarak işaretli — yapılabilecek bir iş değil, platformun kısıtı.
 
 ---
 
@@ -353,8 +396,15 @@ saniyeler içinde bulunur.
 
 ## 3.6. 11–28 Ağustos: rapor ve panel yeniden yazımı
 
-30 commit. Okuma/yazma dengesi değişmedi — bu dönemde **hiçbir platform yazma
-yolu canlıda denenmedi**; iş rapor, panel ve senkronizasyon tarafındaydı.
+Yaklaşık 250 commit — burada "30 commit" yazıyordu ve sekiz kat düşüktü.
+
+Okuma/yazma dengesi bu dönemde de değişmedi ama cümle daha dikkatli
+kurulmalıydı: **13 Ağustos'ta Meta'ya ilk gerçek yazma çağrısı yapıldı** ve üç
+hata çıkardı (§ 4). Doğrusu şu: o tek denemenin dışında hiçbir yazma yolu
+canlıda çalıştırılmadı. Ayrıca iş yalnızca rapor/panel/senkronizasyon
+tarafında değildi — Google'ın arama kampanyası yazma yolu (16 Ağustos) ve
+Demand Gen (19 Ağustos) tam bu pencerede yazıldı; ikisi de canlıda
+denenmedi.
 
 ### Rapor
 
@@ -411,7 +461,7 @@ MATRİSİNDEN İBARET DEĞİLDİ — dört katman birden gerekti:
 | İş | Zaman | Not |
 |---|---|---|
 | `sweep:breakdowns` | 05:32 (UTC) | Kitle kırılımları |
-| `sweep:account-status` | **08:05 ve 13:05 (Europe/Istanbul)** | Hesap durumu + ödeme maili. **Tek `tz` istisnası**: diğer süpürmeler veri PENCERESİ hakkında ve UTC doğru; bu iş İNSANIN OKUDUĞU mail üretiyor |
+| `sweep:account-status` | **08:05 ve 13:05 (Europe/Istanbul)** | Hesap durumu + ödeme maili. **İKİ `tz` istisnasından biri** (ikincisi `sweep:report-schedules`, 2 Eylül): diğer süpürmeler veri PENCERESİ hakkında ve UTC doğru; bu ikisi İNSANIN OKUDUĞU mail üretiyor ve UTC saymak "sabah 9" isteğini öğlene kaydırırdı |
 
 - **"Şimdi güncelle" artık raporun bütün bölümlerini kapsıyor**: yapı,
   metrik, kırılım, organik gönderi, anahtar kelime, arama terimi. Düğme
@@ -441,8 +491,8 @@ döndürülmeli.
 | `bulk_jobs` / `bulk_variants` | `bulk_batches` / `bulk_items` | Aynı yapı |
 | `reports` (üretilmiş rapor) | — | Rapor **anlık** üretiliyor, saklanmıyor |
 | `report_schedules` | `report_schedules` | ✅ 2026-09-02'de yazıldı — plandaki adıyla |
-| `notifications` | — | Bildirim altyapısı yazılmadı |
-| `bulk_assets` | — | Varlık arşivi (BASE) yazılmadı |
+| `notifications` | `alerts` + `user_email_accounts` | Ayrı bir bildirim tablosu yerine uyarı bandı + SMTP kimliği (27/28 Ağustos). Bu satır bir süre "yazılmadı" diyordu; bkz. § 2 CENTRAL |
+| `bulk_assets` | `assets` + `asset_platform_refs` | Varlık arşivi 13 Ağustos'ta yazıldı. İkinci tablo Meta'nın hesap başına `image_hash`ini tutuyor — plan bu ayrımı öngörmemişti |
 
 Plandan **fazla** çıkanlar: `monthly_budgets` (planda yoktu, dört özelliğin
 temeli oldu), `organic_posts` (planda vardı ama alan seti genişledi).
@@ -481,8 +531,9 @@ gerçek API yanıtında görünen bir dize birleştirme hatası. Yazma yolların
 
 ## 5. Doğrulanmamış olan — en kritik bölüm
 
-Bunlar **yazıldı, test edildi, ama canlı Meta API'sinde bir kez bile
-çalıştırılmadı.** Sebep: `ads_management` onayı yok.
+Bunlar **yazıldı, test edildi, ama canlı platform API'sinde bir kez bile
+çalıştırılmadı.** Meta tarafında sebep `ads_management` onayının olmaması;
+Google tarafında sıra kararı.
 
 | Yol | Dosya | Risk |
 |---|---|---|
@@ -492,19 +543,35 @@ Bunlar **yazıldı, test edildi, ama canlı Meta API'sinde bir kez bile
 | Toplu reklam oluşturma | `meta.provider.ts` → `createAd` vb. | **Yüksek** — kısmi başarı yönetimi denenmedi |
 | Reklam Oluşturucu yayını | `meta.provider.ts` → `publishDraft` | **Yüksek** — 4 varlık + anlık form; `asset_feed_spec` yerleşim kuralları hiç denenmedi |
 | **Arşiv hash önbelleği** | `asset-uploader.service.ts` | **Orta** — hesap başına hash mantığı doğru ama tek bir gerçek yükleme yapılmadı; `uploadAdImage` zaten `ads_management` bekliyor |
-| **Google PMax varlık gereksinimleri** | `asset-routing.schema.ts` | **Orta** — oranlar, en küçük/önerilen boyutlar ve logo zorunluluğu Google belgelerinden çıkarıldı; Google yazma yolu hiç yazılmadı, tek bir varlık grubu oluşturulmadı |
+| **Google PMax varlık gereksinimleri** | `asset-routing.schema.ts` | **Orta** — oranlar, en küçük/önerilen boyutlar ve logo zorunluluğu Google belgelerinden çıkarıldı; PMax yazma yolu yazılmadı, tek bir varlık grubu oluşturulmadı |
 | **Leadgen webhook + lead çekme** | `leadgen-webhook.service.ts`, `lead-sync.service.ts` | **Yüksek** — imza doğrulaması, `field_data` biçimi, `filtering` zaman kısıtı ve sayfalama belgeden çıkarıldı; `leads_retrieval` izni yok, gerçek bildirim hiç alınmadı |
 | **Gelişmiş mod yayını** | `meta.provider.ts` → `publishDraft` (teklif/bütçe/takvim alanları) | **Yüksek** — `bid_strategy`, `bid_amount`, `lifetime_budget`, `start_time` alanları hiç gönderilmedi. Uyumluluk matrisi de belgeden çıkarıldı, canlıda sınanmadı |
 | **Kütüphane formu yayını** | `meta.provider.ts` → `createLeadForm` | **Yüksek** — geri alınamaz; `legal_content`, `context_card`, `thank_you_page` eşlemeleri belgeden çıkarıldı, gerçek yanıt görülmedi. `is_optimized_for_quality` eşlemesi (= "daha nitelikli") de doğrulanmadı |
 
-Google yazma yolu **hiç yazılmadı** ve bu artık bilinçli bir sıra kararı:
-okuma tarafı yeni doğrulandı, yazma bir sonraki adım. Meta'daki üç turluk
-deneyim gösterdi ki yazma yolları okuma yollarından daha kırılgan ve her biri
-canlı doğrulama istiyor.
+**Google yazma yolunun bir kısmı YAZILDI** — bu bölüm 16 Ağustos'a kadar
+"hiç yazılmadı" diyordu ve öyle kaldı:
+
+| Yol | Dosya | Durum |
+|---|---|---|
+| Arama kampanyası oluşturma | `google-write.ts` (`214afba`, 16 Ağustos) | Yazıldı · **canlıda hiç çalıştırılmadı** |
+| Demand Gen (YouTube video reklamı) | `google-demandgen.ts` (`5adde27`, 19 Ağustos) | Yazıldı · **canlıda hiç çalıştırılmadı** — `advertising_channel_type = VIDEO` API'den oluşturulamıyor, tek kurulabilir yol bu |
+| Görüntülü reklamın görsel adresi | `google.provider.ts` → `gorselAdresleri` (`199a0b4`, 2 Eylül) | Yazıldı · **canlıda hiç çalıştırılmadı**; rapordaki Display görselleri hâlâ görülmedi |
+| Kural aksiyonu (duraklat/bütçe) | `google.provider.ts` → `applyAction` | **Yazılmadı** — çağrılınca açık hata fırlatıyor |
+| Toplu reklam oluşturma | `google.provider.ts` → `createAd` | **Yazılmadı** — çağrılınca açık hata fırlatıyor |
+| Lokasyon araması, kayıtlı kitle | aynı | **Yazılmadı** — açık hata |
+
+Yazılmayanlar SESSİZCE BAŞARILI DÖNMÜYOR: `PlatformApiError` ile `permanent`
+işaretli açık bir hata fırlatıyorlar. Bu bilinçli — boş dönen bir yazma yolu,
+kullanıcıya "yaptım" der ve platformda hiçbir şey olmaz.
+
+**İstek gövdeleri BİLGİDEN yazıldı, canlı yanıttan değil.** İlk gerçek çağrı
+en küçük bütçeyle yapılmalı. Meta'daki üç turluk deneyim gösterdi ki yazma
+yolları okuma yollarından daha kırılgan ve her biri ayrı canlı doğrulama
+istiyor.
 
 **Birim testleri hata yollarını ve para birimi çevrimini kilitliyor**
-(`meta-write.spec.ts`, `meta-organic.spec.ts`), ama gerçek API yanıtını
-kimse görmedi.
+(`meta-write.spec.ts`, `meta-organic.spec.ts`, `google-write.spec.ts`,
+`google-demandgen.spec.ts`), ama gerçek API yanıtını kimse görmedi.
 
 ### İlk canlı deneme için önerilen sıra
 
@@ -518,9 +585,12 @@ kimse görmedi.
 5. **Toplu oluşturucu — 2 satırlık parti.** Kısmi başarı yönetimini görmek için
    bilerek bir satırı bozuk bırak.
 
-Google tarafında yazma **hiç yazılmadı** ve bu bilinçli: okuma tarafı bile
-canlıda doğrulanmadı, test edilmemiş kodun müşteri kampanyasını değiştirmesi
-kabul edilemez.
+6. **Google — arama kampanyası, en küçük bütçeyle.** Google'ın OKUMA tarafı
+   11 Ağustos'ta canlıda doğrulandı (§ 3.5); burada bir süre "okuma tarafı
+   bile canlıda doğrulanmadı" yazıyordu ve o cümle § 1 ile § 3.5'in ikisiyle
+   birden çelişiyordu. Yazma tarafı ayrı bir iş ve hiç denenmedi:
+   `partialFailure: false` gönderiliyor, yani geçersiz bir işlem sessizce
+   atlanmıyor — bütün parti düşüyor ve bu istenen davranış.
 
 ---
 
@@ -552,6 +622,11 @@ gerçek. Ekran kaydı için doğal bir anlatı.
 
 Öncelik sırasına göre. Her madde neyi açtığıyla birlikte.
 
+> **Bu bölüm bir süre 700 satırlık geçmiş günlüğü taşıyordu.** "Sıradaki
+> adımlar" diye açan biri, ilk gördüğü şey olarak temmuz-eylül arası hata
+> kayıtlarını buluyordu ve gerçek yol haritası 800 satır aşağıdaydı. Günlük
+> § 8'e taşındı; burada yalnızca YAPILACAK iş var.
+
 ### Hemen (başvuru öncesi)
 
 1. **Business Verification'ı başlat.** App Review'un ön koşulu ve en uzun süren
@@ -562,24 +637,64 @@ gerçek. Ekran kaydı için doğal bir anlatı.
    her gün kota tüketiyor. Bağlantı sayfasındaki arama + izlenenler bloğu bu
    iş için var.
 
-### 2026-08-28 deploy'u sonrası doğrulama — TAMAMLANDI (2026-08-31)
+### Onay beklerken (kod tarafı)
 
-Sunucuya SSH ile bağlanılıp veritabanından koddan doğrulanarak kontrol edildi.
+4. ~~**Bildirim altyapısı.**~~ ✅ **YAPILDI** (2026-08-27/28): panel geneli
+   uyarı bandı (`/alerts`), günde iki kez hesap durumu kontrolü ve ödeme
+   sorunu maili. Kalan: bütçe ve kural aksiyonu uyarıları hâlâ bandın
+   dışında; eşiği zaten
+   hesaplıyor, gönderecek kanal yok. *Açtığı: CENTRAL uyarıları, zamanlanmış
+   rapor.*
+5. ~~**Sunucu tarafı PDF (Playwright).**~~ ✅ **YAPILDI** — ama Playwright'la
+   DEĞİL: `pdf-lib` + gömülü DejaVu Sans, grafikler vektörel çiziliyor.
+   Playwright bilinçli olarak reddedildi; paylaşımlı VPS'te headless tarayıcı
+   yeni bir ikili bağımlılık ve yüz megabaytlarca disk demek. Zamanlanmış
+   gönderim de yazıldı (§ 8, "Zamanlanmış rapor gönderimi"). Bu madde 2 Eylül'den beri yapılmıştı ve burada
+   "sıradaki adım" olarak duruyordu.
+6. ~~**BASE — varlık arşivi.**~~ ✅ **YAPILDI** (13 Ağustos): `/kutuphane/gorseller`,
+   `assets` + `asset_platform_refs`. Toplu oluşturucuda `image_hash` elle yazma
+   derdi bitti. Ayrıntı § 2 CREATE'te.
+7. **Sağlık skoru.** Girdileri hazır: bütçe pacing, kural tetiklenmeleri, veri
+   bayatlığı, frekans. Yeni veri gerekmiyor, yalnızca birleştirme.
+8. **Bütçe ve kural aksiyonu uyarılarını uyarı bandına bağla.** Eşik
+   (`alert_threshold_pct`) zaten hesaplanıyor ve mail altyapısı zaten var;
+   eksik olan yalnızca bağlantı. REPORT ve CENTRAL'ın kalan tek boşluğu.
 
-| # | Ne | Sonuç |
-|---|---|---|
-| 1 | Kırılım tabloları kendi boyutunu gösteriyor mu | ✅ 5 boyut (age/gender/placement/hour/city) birbirine karışmıyor; `b80f132` tuttu |
-| 2 | `SEED_ADMIN_EMAIL` (yusuf@profaj.com) hesabının parolası | ❌ **HÂLÂ DÖNDÜRÜLMEDİ** — sohbete yapıştırılan eski varsayılan git geçmişinde duruyor. `pnpm --filter @advetics/api db:set-password -- --email yusuf@profaj.com` sunucuda ELLE çalıştırılmalı (parola bir kez ekrana basılır, kaydedilmez) |
-| 3 | hello@profaj.com SMTP kimliği tanımlı ve doğrulanmış mı | ✅ `verified_at: 2026-08-24 06:10`, hata yok |
-| 4 | Kitle kırılımı gecelik toplanıyor mu | ✅ veri 2026-08-30'a kadar geliyor |
-| 5 | "Tüm verileri güncelle" denendi mi | ✅ denendi (1 workspace, 38 iş) — **iki gerçek hata ortaya çıkardı, bkz. §3.7** |
+### Onay geldikten sonra
 
-### 3.7. 31 Ağustos: deploy doğrulaması iki sessiz hata buldu, ikisi de düzeltildi ve dağıtıldı
+9. **Canlı yazma doğrulaması** (§ 5'teki 6 adımlı sıra).
+10. **Günlük sert limit ve otomatik durdurmayı uygula.** Alanlar hazır, yalnızca
+    kural motoruna bağlanacak.
+11. **Google yazma yolunun kalanı.** Arama kampanyası ve Demand Gen YAZILDI
+    (canlıda denenmedi); `applyAction` ve `createAd` hâlâ yazılmadı. Bu madde
+    bir süre "Google yazma yolu yazılmadı" diyordu — yarısı yanlıştı.
 
-`sync_jobs` içinde 72 satır `insights_breakdowns` işi 3+ gündür `running`
-durumunda takılıydı ve `insights_backfill` işlerinde tekrarlayan bir hata
-vardı: *"too many bind variables in prepared statement, expected maximum of
-32767, received 48816"* (sistemde toplam 19 kez görülmüş).
+### Sonraya bırakılanlar
+
+- A/B test motoru (OPTIMISE)
+- Teklif yönetimi
+- Anahtar kelime kütüphanesi ve marka sesi bilgi bankası (BASE). Kitle
+  kütüphanesinin EKRANI yok ama Meta kayıtlı kitleleri çekiliyor — Auto-Boost
+  ön ayarı onları kullanıyor.
+- `fx_rates` çevrimi — ikinci para birimli müşteri çıkana kadar gereksiz
+
+---
+
+## 8. Değişiklik günlüğü — ters kronolojik
+
+Ne yapıldığı değil **neden** yapıldığı ve neyin sessizce yanlış gittiği. En
+yeni üstte.
+
+**Daha eski iki girdi hâlâ § 3.5 ve § 3.6'da** (11 Ağustos Google canlı
+doğrulaması ve 11–28 Ağustos rapor/panel yeniden yazımı). Oraya bırakıldılar
+çünkü belgenin başka yerlerinden referans veriliyorlar; yeni girdi buraya
+yazılıyor.
+
+Bu günlük § 7 "Sıradaki adımlar"ın ALTINDA duruyordu ve orayı okunmaz
+yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyordu
+(31 Ağustos girdisi 2 Eylül'ünkinden SONRA geliyordu) ve numaralar § 3'ün alt
+bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
+kaydırmıyor.
 
 ### 2026-09-07 — Kod iki depoya gidiyor
 
@@ -598,6 +713,67 @@ data`); `http.version HTTP/1.1` çözdü. Depo 6 MB, yani boyut sorunu değildi.
 varsayılanı git geçmişinde iki commit'te duruyor ve `yusuf@profaj.com`
 hesabının parolası hâlâ döndürülmedi (bkz. §7). Geçmiş ikinci depoya da
 kopyalandı; iki depo da özel ama parolanın döndürülmesi hâlâ bekliyor.
+
+---
+
+### 2026-09-07 — README üç ay geriden geliyordu, `.env.example` kurulumu kırıyordu
+
+**README `3595fc5`'ten (7 Ağustos) beri güncellenmemişti** ve okuyanı yanlış
+yere götürüyordu. En pahalısı dağıtım bölümüydü: *"İKİ pm2 süreci çalışır —
+`advetics-web` ve `advetics-api`"*. ÜÇ süreç var ve eksik yazılan
+`advetics-worker`, bütün senkronizasyonu koşan süreç. O listeye bakarak
+dağıtım yapan biri worker'ı hiç başlatmıyor, panel açılıyor ve HİÇBİR veri
+gelmiyor — belirti "sistem bozuk", sebebi bir belgede.
+
+İkincisi: *"`main` branch'ine her push otomatik dağıtımı tetikler."*
+Ölçüldü, ÇALIŞMIYOR — `47979e1` push edildi, sunucu `6d93d3d`'de kaldı.
+`.github/workflows/deploy.yml` duruyor ama koşmuyor; sebebi araştırılmadı.
+Push edip dağıtıldığını sanmak, bu yanlışların en tehlikelisi.
+
+Uç listesi de yalnızca Modül 1'i sayıyordu; taban yollar controller'lardan
+okunarak yenilendi (`forms` değil `lead-forms`, `draft-tree` değil
+`ad-drafts`/`draft-campaigns`).
+
+**`.env.example` `REDIS_URL`i İKİ KEZ tanımlıyordu** — satır 21'de `6380`
+(docker-compose'un yayınladığı port), satır 120'de `6379`. dotenv aynı
+dosyadaki ikinci atamayı üstüne yazıyor, yani DOĞRU değer dosyada durmasına
+rağmen kopyalayan herkes var OLMAYAN bir porta bakan bir URL alıyordu.
+
+Arıza bu projenin klasik türünden, sessiz: kota bekçisi URL'nin VARLIĞINA
+bakıyor, ERİŞİLEBİLİRLİĞİNE değil (`client !== null`), yani API kotayı "açık"
+sayıp komutları sonsuza kadar kuyrukta bekletiyor. Yüksek sesle ölen tek yer
+worker — ve `pnpm dev` onu zaten başlatmıyor. `ornek-env-sir.spec.ts` artık
+mükerrer anahtarı ve portun compose ile aynı olduğunu tarıyor; ikisi de
+mutasyonla ölçüldü.
+
+Aynı turda README'de dört bayat cümle daha düzeltildi. En sinsisi zorunlu
+ortam değişkenleri listesiydi: `META_*` ve `GOOGLE_*` zorunlu görünüyordu,
+oysa şemada `.optional()` — panel platform onayı beklenirken de ayağa
+kalksın diye BİLİNÇLİ. Zorunlu olan altı değişken var. Eski cümle okuyanı
+"onay gelmeden kurulum yapılamaz" sanmaya götürüyordu.
+
+---
+
+### 2026-09-04 — Fatura sınırı 20 MB, ve kendi yazdığım gerekçe yanlıştı
+
+Kullanıcı 10 MB'lık sınırın dar olduğunu bildirdi. Sınırı yükseltmek kolay
+kısmıydı; asıl bulgu **gerekçenin yanlış olmasıydı**. Bir gün önce buraya
+*"25 MB sınırı telden geçen boyuta bakıyor, base64 %33 şişiriyor, o yüzden ham
+bütçe 15 MB olmalı"* diye yazmıştım. Google'ın kendi dokümanı tam tersini
+söylüyor: sınırlar *"mesaj içeriği ve eklerin KODLANMADAN ÖNCEKİ toplam
+boyutu"* için yazılmış. Yani 25 MB HAM ve kendi kendime koyduğum sınır
+gereksizce dardı.
+
+Bugün dosya başına 20 MB, toplam mesaj bütçesi 22 MB. **Bütçe TOPLAM olmak
+zorunda:** fatura bütçesi rapor PDF'inin payını saymıyordu ve 22 MB fatura +
+3 MB PDF sağlayıcının sınırını tam üstünden aşıp mail SUNUCUDA reddediliyordu.
+`raporEkleri` artık kullanılmış baytı parametre alıyor — ve parametrenin
+varsayılanı 0 olduğu için çağıranın onu geçirmemesi hem derlemede hem servis
+testinde SESSİZ; iki gönderim yolu kaynak taramasıyla kilitlendi.
+
+**Panelde "Üst sınır 10 MB" ELLE yazılıydı** ve sınır değişince kullanıcıya
+YANLIŞ sayıyı söylemeye başladı. Kullanıcıya gösterilen sınır sabitten
+türemeli.
 
 ---
 
@@ -666,6 +842,28 @@ yalnızca alıcı görür.
 
 ---
 
+### 2026-09-03 — Mail ekinin adı ve sekme ikonu
+
+**Rapor PDF'i mail ekinde müşterinin UUID'siyle gidiyordu**
+(`3f8a…-2026-08-01.pdf`). Ek adı müşterinin gördüğü ilk şey ve bir UUID ona
+hiçbir şey söylemiyor; arşivlediğinde de bulunamıyor. Ad artık
+`Müşteri Adı - Dijital Pazarlama Raporu - 2026-08-01_2026-08-31.pdf`.
+
+Dosya adı ASCII olmayan karakter taşıyor (Türkçe müşteri adları) ve mail
+istemcileri bunu farklı yorumluyor: `filename*=UTF-8''…` (RFC 5987) yanında
+ASCII'ye indirgenmiş bir `filename=` de gidiyor — eski istemciler onu okuyor.
+
+**Sekmede genel "dünya" simgesi görünüyordu.** Sebep basitti: `app/` altında
+hiçbir `icon`/`favicon` dosyası yoktu, yani Next.js hiçbir `<link rel="icon">`
+üretmiyordu. İşaret SVG olarak çiziliyor — önce `fontWeight: 700` ile metin
+denendi ve harf İNCE çıktı: `ImageResponse`un gömülü fontu kalın kesimi
+taşımıyor ve ağırlığı SESSİZCE yok sayıyor. Kırmızı elle yazılmadı, logo
+PNG'sinden ÖLÇÜLDÜ ve `marka-isareti.spec.ts` ölçümü her koşuda tekrarlıyor:
+iki değer ayrışırsa sekme ikonu logodan farklı bir kırmızı gösterirdi ve
+kimse fark etmezdi.
+
+---
+
 ### 2026-09-03 — Birden çok fatura ve birden çok mail alıcısı
 
 Kullanıcının isteği: *"birden fazla fatura dosyası ve birden fazla kişiye mail
@@ -679,16 +877,27 @@ faturalar serbest, aynı dosya iki kez değil — o da müşteriye aynı belgeni
 kopyası olarak giderdi.
 
 Çoğullaşma üç yeni karar getirdi: ek adları çakışmasın diye ikinciden itibaren
-numaralanıyor (`MetaAds-Fatura-2026-08-2.pdf`); toplam ek bütçesi 15 MB ham
-(base64 şişmesiyle ~20 MB — Gmail'in 25 MB sınırının altında) ve sınıra
-takılan fatura sebebiyle bildiriliyor; giriş anında dönem+platform başına en
-fazla 10 fatura.
+numaralanıyor (`MetaAds-Fatura-2026-08-2.pdf`); toplam bir ek bütçesi var ve
+sınıra takılan fatura sebebiyle bildiriliyor; giriş anında dönem+platform
+başına en fazla 10 fatura (`FATURA_MAX_ADET`).
+
+> **BÜTÇE GEREKÇESİ O GÜN YANLIŞ YAZILDI ve 4 Eylül'de düzeltildi.** Burada
+> *"15 MB ham (base64 şişmesiyle ~20 MB — Gmail'in 25 MB sınırının altında)"*
+> yazıyordu. Google'ın kendi dokümanı sınırın *"mesaj içeriği ve eklerin
+> KODLANMADAN ÖNCEKİ toplam boyutu"* için geçerli olduğunu söylüyor — yani
+> 25 MB HAM. Kendi kendine konan sınır gereksizce dardı ve kullanıcının arşivi
+> maile hiç girmiyordu. Bugün dosya başına **20 MB** (`FATURA_MAX_BAYT`),
+> toplam mesaj bütçesi **22 MB** (`MAIL_EK_TOPLAM_SINIRI`) ve bütçe rapor
+> PDF'inin payını da sayıyor — tek bir ek türünü saymak, 22 MB fatura + 3 MB
+> PDF'i sunucuda reddettiriyordu.
 
 **2 — Tek alıcı.** Alıcı üç yerde tekildi: gönderim formu, plan kaydı ve
 `clients.contact_email`. Üçü de liste oldu (`TEXT[]`) ve çözüm kuralı — "form
 doluysa o, boşsa müşterinin kayıtlı listesi" — tek fonksiyona çekildi
 (`nihaiAlicilar`); dört ayrı yerde elle yazılıydı ve hata mesajları bile
-farklıydı.
+farklıydı. Üst sınır 20 adres (`ALICI_UST_SINIRI`); ayırıcı virgül, noktalı
+virgül ve satır sonu — BOŞLUK DEĞİL, çünkü boşlukla ayırmak yazım hatası
+taşıyan bir adresi ikiye bölüp ikisini de geçerli sayardı.
 
 **EN ÖNEMLİ AYRINTI — çoklu alıcı yeni bir sessiz hata açıyor.** nodemailer
 tek alıcıda ret = "hepsi reddedildi" olduğu için fırlatıyor; birden çok
@@ -926,38 +1135,7 @@ testler DÜZELTİLDİKTEN sonra:
    bileşene prop eklenip satır bölününce düştü; kilitlenmek istenen şey
    elemanın YERİ, prop'larının yazımı değil.
 
-### 3.8. 31 Ağustos: Auto-Boost'un Bildirim Havuzu hiç dolmuyordu
-
-Kullanıcı panelde fark etti: `/auto-boost` sayfasında "Bildirim Havuzu"
-her zaman "Onay bekleyen içerik yok" gösteriyordu — Ege Birlik Yapı'da 22
-organik gönderi doğru senkronize olmuş, ön ayar 24 Ağustos'tan beri açıktı,
-ama kuyrukta (`auto_boost_queue_items`) tek satır bile yoktu.
-
-**Sebep:** `AutoBoostQueueService.enqueueForProfile` — organik gönderiyi
-onay kuyruğuna yazan fonksiyon — uzun süredir vardı ama **hiçbir yerden
-çağrılmıyordu**. `autoboost.module.ts`'in kendi yorumu bile "organik
-gönderi süpürmesi (Instagram yolu) onu çağırıyor" diyordu; yorum niyeti
-anlatıyordu, kod hiç yazılmamıştı. `organic-sync.service.ts` gönderiyi
-`organic_posts`a doğru yazıyor, iş `succeeded` kapanıyordu — hata yok, log
-yok, yalnızca hiç dolmayan bir kuyruk.
-
-**Düzeltme:** [sync-processor.service.ts](../apps/api/src/queue/sync-processor.service.ts)'in
-`organic_posts` dalına eksik çağrı eklendi. Aynı oturumda ikinci bir istek
-daha vardı: yeni içerik kuyruğa düştüğünde hello@profaj.com'dan, o
-müşteriye atanmış danışmanlara VE hello@profaj.com'a bildirim maili
-gitsin. `enqueueForProfile` artık `INSERT ... RETURNING` ile yazıyor (yeni
-kart başlığı/bağlantısı maile taşınsın diye) ve YouTube WebSub yolu
-(`enqueueOne`) da AYNI bildirim fonksiyonundan geçiyor — iki kaynak, tek
-davranış. `client_viewer` (müşterinin kendi girişi) alıcı listesinden
-bilinçli dışlandı: onay kuyruğu ajansın iç iş akışı.
-
-Kaynak taraması testiyle kilitlendi (mutasyonla doğrulandı):
-`organic-posts-kuyruk-baglantisi.spec.ts`. Commit `447d0fc`, deploy edildi.
-`sweep:organic` saatte bir (`41 * * * *`) çalışıyor — Ege Birlik Yapı'nın
-3 bekleyen Instagram gönderisi bir sonraki turda ya da elle "Şimdi
-güncelle" ile kuyruğa düşüp mail tetikleyecek.
-
-### 3.9. 2 Eylül: zamanlanmış rapor gönderimi
+### 2026-09-02 — Zamanlanmış rapor gönderimi
 
 `ARCHITECTURE.md`'nin öngördüğü ama hiç yazılmayan `report_schedules` bu
 oturumda yazıldı. Panelde `/raporlar` ekranında "PDF indir"in solunda
@@ -1012,7 +1190,7 @@ Atlama sessiz değil, listede görünüyor.
 `Prisma.sql` şablonu içindeki yorumda backtick tuzağına **bu oturumda da bir
 kez düşüldü** (`TS1005`), CLAUDE.md'de yazılı olmasına rağmen.
 
-### 3.10. 2 Eylül: toplu yazmanın iki hatası — ALTI SERVİSTE BİRDEN
+### 2026-09-02 — Toplu yazmanın iki hatası: ALTI SERVİSTE BİRDEN
 
 Kullanıcı Kaşkaloğlu Göz Hastanesi'nde "veriler çekilemedi" bildirdi. Teşhis
 ekranında aynı anda dört iş kırmızıydı ve hepsinin kökü İKİ hataydı:
@@ -1087,7 +1265,7 @@ görünmüyordu (kullanıcı tarayıcıyı %67'ye küçültmek zorunda kalıyord
 Kart artık ekran yüksekliğiyle sınırlı; gövde ve bölüm listesi kendi içinde
 kaydırılıyor, başlık ve düğmeler sabit.
 
-### 3.11. 2 Eylül: Auto-Boost paneli — üç düzeltme ve bir keşif
+### 2026-09-02 — Auto-Boost paneli: üç düzeltme ve bir keşif
 
 **KEŞİF: istenen "boost ön ayarı ekranı" ZATEN YAZILMIŞTI** — `/kutuphane/
 bilgi-bankasi` altında, menünün bambaşka bir bölümünde. Kullanıcının iki ayrı
@@ -1172,7 +1350,7 @@ girdisi geri gelirse test düşüyor.
 harcar. Kaldırılması ayrı bir tur — `boosts.service.ts` mantığı ve testleri
 buna bağlı.
 
-### 3.12. 2 Eylül: platform faturaları rapora ek — ve API'nin ÇIKMAZI
+### 2026-09-02 — Platform faturaları rapora ek, ve API'nin ÇIKMAZI
 
 İstek: "Meta ve Google Ads faturalarını rapora ek PDF olarak ekle."
 Kullanıcının asıl derdi net: *"müşteri her şeyi tek pakette görsün"* ve
@@ -1209,23 +1387,29 @@ tartışmalı yapardı).
 
   · **Dönem `YYYY-MM`, tarih aralığı değil.** Fatura bir aya ait; aralık
     tutmak hiç kullanılmayacak bir ayrım üretirdi.
-  · **Bir dönem + bir platform = bir fatura** (kısmi tekil indeks). İkinci
-    yükleme öncekini DEĞİŞTİRİYOR; iki fatura dursaydı maile hangisinin
-    gireceği belirsiz kalırdı.
+  · ~~**Bir dönem + bir platform = bir fatura**~~ — **BU KARAR 3 EYLÜL'DE
+    AŞILDI.** Gerekçe ("iki fatura dursaydı maile hangisinin gireceği
+    belirsiz kalırdı") yanlış çıktı: ikisi de giriyor, adları numaralanıyor.
+    Tekillik KALDIRILMADI, dosyanın İÇERİĞİNE (SHA-256) taşındı — aynı döneme
+    farklı faturalar serbest, aynı dosya iki kez değil.
   · **Ayın bir kısmını kapsayan rapor da o ayı sayıyor** — fatura ayın
     tamamına ait. Yalnızca tam ayları saymak, "1–15 Ağustos" raporunda
     faturayı sessizce düşürürdü.
-  · **PDF olduğu GÖVDEDEN doğrulanıyor** (`%PDF-` sihirli baytları),
-    `content-type`tan değil: tarayıcı MIME'ı uzantıdan tahmin ediyor.
+  · **Biçim GÖVDEDEN doğrulanıyor** (sihirli baytlar), `content-type`tan
+    değil: tarayıcı MIME'ı uzantıdan tahmin ediyor. O gün yalnızca PDF kabul
+    ediliyordu; **4 Eylül'de ZIP eklendi** ve tür artık `mime_type` kolonunda
+    SAKLANIYOR — dosya adından türetilemiyor.
   · **Eksik dönem SESSİZ kalmıyor** ama gönderimi de DURDURMUYOR (kullanıcı
     kararı): panelde uyarı, `sync_jobs` notunda ve denetim kaydında iz.
   · **Eksik PLATFORM başına aranmıyor, DÖNEM başına.** Müşterinin yalnızca
     Meta'da reklamı olabilir; "Google faturası eksik" her ay yanlış bir
     uyarı üretir ve okunmaz hâle gelen uyarı, hiç olmayandan kötü.
 
-Ekran iki yerde, TEK bileşenle: rapor sayfasında (dönem hazır seçili, yanlış
-aya yükleme riski düşük) ve `/raporlar/faturalar`ta (toplu yönetim). Ayrı
-yazılsalardı biri PDF doğrulamasını ya da çoklu yükleme kuralını
+Ekran TEK bileşen ve o gün iki yerde duruyordu: rapor sayfasında ve
+`/raporlar/faturalar`ta. **İkinci sayfa `0e9ca85`'te silindi** — faturalar
+artık `/raporlar` içinde bir SEKME (bkz. "Şablon değişince PDF değişmiyordu +
+Raporlar tek sayfada"). Bileşenin tek olması o birleştirmeyi ucuza getirdi;
+ayrı yazılsalardı biri biçim doğrulamasını ya da çoklu yükleme kuralını
 kaybederdi.
 
 `fatura.spec.ts` dönem eşleştirmesini ve **maile GERÇEKTEN eklendiğini**
@@ -1248,40 +1432,57 @@ GÜNCELLENMEMİŞ görünür ve bu kafa karıştırır. Elle deploy ederken
 oturumdan bağımsız çalıştırmak ve `.last-deployed-sha` ile bitişi
 doğrulamak daha güvenilir.
 
-### Onay beklerken (kod tarafı)
+### 2026-08-31 — 28 Ağustos deploy'unun sunucuda doğrulanması
 
-4. ~~**Bildirim altyapısı.**~~ ✅ **YAPILDI** (2026-08-27/28): panel geneli
-   uyarı bandı (`/alerts`), günde iki kez hesap durumu kontrolü ve ödeme
-   sorunu maili. Kalan: bütçe ve kural aksiyonu uyarıları hâlâ bandın
-   dışında; eşiği zaten
-   hesaplıyor, gönderecek kanal yok. *Açtığı: CENTRAL uyarıları, zamanlanmış
-   rapor.*
-5. **Sunucu tarafı PDF (Playwright).** Zamanlanmış raporun diğer yarısı.
-   *Açtığı: REPORT'un eksik kalan tek maddesi.*
-6. **BASE — varlık arşivi.** Toplu oluşturucunun `image_hash` elle girme
-   sorununu çözer. *Açtığı: CREATE'in gerçek verimi.*
-7. **Sağlık skoru.** Girdileri hazır: bütçe pacing, kural tetiklenmeleri, veri
-   bayatlığı, frekans. Yeni veri gerekmiyor, yalnızca birleştirme.
+Sunucuya SSH ile bağlanılıp veritabanından koddan doğrulanarak kontrol edildi.
 
-### Onay geldikten sonra
+| # | Ne | Sonuç |
+|---|---|---|
+| 1 | Kırılım tabloları kendi boyutunu gösteriyor mu | ✅ 5 boyut (age/gender/placement/hour/city) birbirine karışmıyor; `b80f132` tuttu |
+| 2 | `SEED_ADMIN_EMAIL` (yusuf@profaj.com) hesabının parolası | ❌ **HÂLÂ DÖNDÜRÜLMEDİ** — sohbete yapıştırılan eski varsayılan git geçmişinde duruyor. `pnpm --filter @advetics/api db:set-password -- --email yusuf@profaj.com` sunucuda ELLE çalıştırılmalı (parola bir kez ekrana basılır, kaydedilmez) |
+| 3 | hello@profaj.com SMTP kimliği tanımlı ve doğrulanmış mı | ✅ `verified_at: 2026-08-24 06:10`, hata yok |
+| 4 | Kitle kırılımı gecelik toplanıyor mu | ✅ veri 2026-08-30'a kadar geliyor |
+| 5 | "Tüm verileri güncelle" denendi mi | ✅ denendi (1 workspace, 38 iş) — **iki gerçek hata ortaya çıkardı, bkz. § 8, "Deploy doğrulaması iki sessiz hata buldu"** |
 
-8. **Canlı yazma doğrulaması** (yukarıdaki 5 adımlı sıra).
-9. **Günlük sert limit ve otomatik durdurmayı uygula.** Alanlar hazır, yalnızca
-   kural motoruna bağlanacak.
-10. **Google yazma yolu.** Okuma canlıda doğrulandı; kampanya oluşturma,
-    duraklatma ve bütçe değiştirme yazılmadı. Meta'daki deneyim, her yazma
-    yolunun ayrı canlı doğrulama istediğini gösterdi.
+### 2026-08-31 — Deploy doğrulaması iki sessiz hata buldu, ikisi de düzeltildi
 
-### Sonraya bırakılanlar
+`sync_jobs` içinde 72 satır `insights_breakdowns` işi 3+ gündür `running`
+durumunda takılıydı ve `insights_backfill` işlerinde tekrarlayan bir hata
+vardı: *"too many bind variables in prepared statement, expected maximum of
+32767, received 48816"* (sistemde toplam 19 kez görülmüş).
 
-- A/B test motoru (OPTIMISE)
-- Teklif yönetimi
-- Kitle ve anahtar kelime kütüphanesi (BASE)
-- `fx_rates` çevrimi — ikinci para birimli müşteri çıkana kadar gereksiz
+### 2026-08-31 — Auto-Boost'un Bildirim Havuzu hiç dolmuyordu
 
----
+Kullanıcı panelde fark etti: `/auto-boost` sayfasında "Bildirim Havuzu"
+her zaman "Onay bekleyen içerik yok" gösteriyordu — Ege Birlik Yapı'da 22
+organik gönderi doğru senkronize olmuş, ön ayar 24 Ağustos'tan beri açıktı,
+ama kuyrukta (`auto_boost_queue_items`) tek satır bile yoktu.
 
-## 8. Bu projede tekrar eden hata deseni
+**Sebep:** `AutoBoostQueueService.enqueueForProfile` — organik gönderiyi
+onay kuyruğuna yazan fonksiyon — uzun süredir vardı ama **hiçbir yerden
+çağrılmıyordu**. `autoboost.module.ts`'in kendi yorumu bile "organik
+gönderi süpürmesi (Instagram yolu) onu çağırıyor" diyordu; yorum niyeti
+anlatıyordu, kod hiç yazılmamıştı. `organic-sync.service.ts` gönderiyi
+`organic_posts`a doğru yazıyor, iş `succeeded` kapanıyordu — hata yok, log
+yok, yalnızca hiç dolmayan bir kuyruk.
+
+**Düzeltme:** [sync-processor.service.ts](../apps/api/src/queue/sync-processor.service.ts)'in
+`organic_posts` dalına eksik çağrı eklendi. Aynı oturumda ikinci bir istek
+daha vardı: yeni içerik kuyruğa düştüğünde hello@profaj.com'dan, o
+müşteriye atanmış danışmanlara VE hello@profaj.com'a bildirim maili
+gitsin. `enqueueForProfile` artık `INSERT ... RETURNING` ile yazıyor (yeni
+kart başlığı/bağlantısı maile taşınsın diye) ve YouTube WebSub yolu
+(`enqueueOne`) da AYNI bildirim fonksiyonundan geçiyor — iki kaynak, tek
+davranış. `client_viewer` (müşterinin kendi girişi) alıcı listesinden
+bilinçli dışlandı: onay kuyruğu ajansın iç iş akışı.
+
+Kaynak taraması testiyle kilitlendi (mutasyonla doğrulandı):
+`organic-posts-kuyruk-baglantisi.spec.ts`. Commit `447d0fc`, deploy edildi.
+`sweep:organic` saatte bir (`41 * * * *`) çalışıyor — Ege Birlik Yapı'nın
+3 bekleyen Instagram gönderisi bir sonraki turda ya da elle "Şimdi
+güncelle" ile kuyruğa düşüp mail tetikleyecek.
+
+## 9. Bu projede tekrar eden hata deseni
 
 Kayda değer: bugüne kadar yakalanan hataların **neredeyse tamamı sessizdi.**
 Hiçbiri hata fırlatmadı, log üretmedi; yalnızca yanlış sayı gösterdiler ya da
