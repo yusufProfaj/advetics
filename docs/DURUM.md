@@ -696,6 +696,65 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-08 — LinkedIn ölçüm turu: havuz modeli ÇALIŞIYOR
+
+Advertising API onayı geldi (Development Tier, 10 scope, `rw_ads` dahil),
+redirect URL kaydedildi, beş hesap beyaz listeye eklendi ve sunucuya
+`LINKEDIN_CLIENT_ID`/`SECRET` girildi. Sonra **kod yazmadan önce** ölçüm turu
+koşuldu — planın 2. aşaması. `google-check` ile aynı gerekçe: dokümanın
+çeliştiği yerleri tahminle doldurmanın bedeli bu depoda ölçülmüş durumda.
+
+**EN BÜYÜK BELİRSİZLİK KAPANDI — havuz modeli LinkedIn'de kurulabiliyor.**
+Developer Portal *"how many Ad Accounts you can MANAGE"* diyor ve "manage"in
+okumayı kapsayıp kapsamadığını ayırmıyordu; kapsıyorsa tek ajans kimliğiyle
+çok hesabı raporlama modeli çökerdi. Ölçüm: beyaz listede **5** hesap varken
+`adAccountUsers?q=authenticatedUser` **9** hesap döndürdü — dördü listede yok.
+**Okuma beyaz listeden bağımsız.** Beyaz liste yalnızca yazma için.
+
+Yan bulgu: ajansın LinkedIn'de erişimi olduğu hesap sayısı 5 değil **9**
+(roller `ACCOUNT_MANAGER` ve `ACCOUNT_BILLING_ADMIN`).
+
+**SEVİYE EŞLEMESİ ÇIKARIMDAN ÖLÇÜME DÖNDÜ.** Gönderilen karar (Campaign Group
+→ `campaign`, Campaign → `ad_group`, Creative → `ad`) canlı veriyle
+doğrulandı: LinkedIn Campaign `targetingCriteria`, `dailyBudget`
+(`{"currencyCode":"TRY","amount":"320"}`), `unitCost` (`"645.33"`),
+`costType: CPM` ve `campaignGroup` referansı taşıyor. Campaign Group ise
+yalnızca `account, name, status, runSchedule, buyingType` — hedefleme yok,
+bütçe yok. Yani LinkedIn Campaign Meta'nın ad set'i. Bu, yapılabilecek en
+pahalı hatanın kapandığı anlamına geliyor.
+
+**PARA BİÇİMİ DOKÜMANDAN KÖTÜ.** Doküman beş ondalıklı örnek veriyor
+(`"19.91833"`); canlıda gelen `"539.700000000000192784"` — ON SEKİZ ondalık,
+kayan noktanın seri hâli. `parseFloat(...) * 1e6` = 539700000.0000002 ve
+`BigInt()` bunu REDDEDİYOR, yani kayan noktalı bir çözümleyici çalışma anında
+PATLARDI. `linkedin-para.ts` tam sayı aritmetiği kullanıyor ve ölçülen üç
+değer teste eklendi.
+
+**TOKEN REJİMİ ÖLÇÜLDÜ.** `expires_in` = 5.183.999 sn (60 gün),
+`refresh_token_expires_in` = 31.535.790 sn — **saniye**, 365 gün (doküman
+örnekleri dakika gibi görünüyordu, değil). Yenilemede AYNI refresh token
+dönüyor, rotasyon yok. Ve TTL geri sayımı İLK YETKİLENDİRMEDEN işliyor:
+yenilemeden sonra 213 saniye AZALMIŞTI. Bağlantı **2027-09-08'de**, hiçbir şey
+bozulmadan, kesin olarak ölecek ve üyenin yeniden yetkilendirmesi gerekecek.
+Şemada o tarihi tutacak kolon HÂLÂ YOK ve ilk bağlantıdan önce eklenmeli.
+
+**Programatik refresh token bu uygulamaya VERİLİYOR** — iki resmî sayfa
+çelişiyordu, cevap netleşti.
+
+**TEŞHİS TUZAĞI:** `introspectToken` refresh token'a da `active: true` diyor;
+aynı token `Authorization: Bearer` olarak 401 `INVALID_ACCESS_TOKEN` alıyor.
+Bu tur yarım saat tam burada kayboldu. Ayırt edici: refresh ~350 karakter /
+365 gün, access ~403 karakter / 60 gün.
+
+**Diğer ölçümler:** `LinkedIn-Version` eksikse **400**, ölü sürümse **426** —
+ve `202512` gerçekten 426 döndü, yani "Aralık sürümü yok" tuzağı gerçek.
+`creatives` ucu `q=criteria` istiyor (`q=search` → 404) ve yanıtı
+`paging.links[].rel=next` taşıyor; `adAnalytics` taşımıyor. `/rest/me`
+`r_basicprofile` istiyor ve token generator onu vermiyor (403) — bağlantının
+ADI oradan çekilecekse scope listesine eklenmeli.
+
+---
+
 ### 2026-09-07 — LinkedIn Ads üçüncü platform olarak ekleniyor
 
 **Kapsam kilidi kullanıcının kararıyla düştü.** CLAUDE.md "yalnızca Meta ve

@@ -71,6 +71,36 @@ describe('linkedinTutarMicros — LinkedIn BEŞ ondalık gönderiyor', () => {
     expect(linkedinTutarMicros('0.01')).toBe(10_000n);
   });
 
+  it('KRİTİK: CANLIDA ÖLÇÜLEN 18 ONDALIK — doküman 5 diyordu', () => {
+    /*
+     * BU DEĞER GERÇEK. 2026-09-08 ölçüm turunda `adAnalytics`ten aynen bu
+     * geldi: "539.700000000000192784" — ON SEKİZ ondalık. LinkedIn'in
+     * dokümanı beş ondalıklı bir örnek veriyor ("19.91833") ve o örneğe göre
+     * yazılmış bir çözümleyici bu değerde patlar ya da kuruş kaydırır.
+     *
+     * Sayı kayan noktanın seri hâli: 539.7 ikili tabanda tam durmuyor ve
+     * LinkedIn onu ondalık string'e çevirirken gürültü de yazılıyor.
+     *
+     * `parseFloat("539.700000000000192784") * 1e6` = 539700000.0000002 ve
+     * `BigInt()` onu REDDEDİYOR — yani kayan noktalı bir uygulama burada
+     * çalışma anında patlardı. Tam sayı aritmetiği hem doğru hem gerekli.
+     */
+    expect(linkedinTutarMicros('539.700000000000192784')).toBe(539_700_000n);
+    expect(linkedinTutarMicros('539.4700000000000674134')).toBe(539_470_000n);
+    expect(linkedinTutarMicros('526.350000000000028826')).toBe(526_350_000n);
+  });
+
+  it('KRİTİK: canlıda ölçülen kampanya bütçesi ve teklifi', () => {
+    /*
+     * Aynı turda `adCampaigns` yanıtından: bütçe `{"currencyCode":"TRY",
+     * "amount":"320"}`, teklif `{"currencyCode":"TRY","amount":"645.33"}`.
+     * Ondalıksız ve iki ondalıklı biçim birlikte geliyor — ikisi de aynı
+     * çözümleyiciden geçmek zorunda.
+     */
+    expect(linkedinTutarMicros('320')).toBe(320_000_000n);
+    expect(linkedinTutarMicros('645.33')).toBe(645_330_000n);
+  });
+
   it('gidiş-dönüş kayıpsız', () => {
     for (const micros of [0n, 1_000_000n, 18_500_000n, 999_990_000n]) {
       expect(linkedinTutarMicros(linkedinTutar(micros))).toBe(micros);
