@@ -66,38 +66,20 @@ export interface InsightsSyncResult {
 const DERIN_SEVIYE_PENCERESI = 15;
 const DERIN_SEVIYELER: ReadonlySet<InsightsLevel> = new Set(['ad_group', 'ad']);
 
-/**
- * Bir seviye için istek pencereleri.
+/*
+ * `istekPencereleri` ARTIK BURADA DEĞİL — `./istek-pencereleri` dosyasında.
  *
- * SINIF DIŞINDA VE SAF: parçalama matematiği bu değişikliğin taşıyıcı
- * parçası — 90 günü kaç isteğe böldüğü, aralarında boşluk ya da örtüşme
- * olup olmadığı. Özel bir metot olarak kalsaydı ancak kaynak taramasıyla
- * sınanabilirdi ve tarama "bölme var" der ama "doğru bölüyor" DEMEZ.
+ * Taşınma sebebi bir ÜRETİM ARIZASI: LinkedIn sağlayıcısı bu fonksiyonu
+ * buradan import edince döngü oluştu (provider → bu servis →
+ * provider.registry → provider) ve Nest açılışta `ProviderRegistry`yi
+ * çözemedi. `tsc` de 2.326 test de bunu görmedi.
  *
- * Sığ seviyeler (hesap, kampanya) tek pencere: bugün 90 günü sorunsuz
- * çekiyorlar ve bölmek çağrı sayısını, dolayısıyla kota tüketimini gereksiz
- * yere katlıyor.
- *
- * Tarihler `YYYY-MM-DD` STRING olarak taşınıyor ve karşılaştırma da öyle
- * yapılıyor: `Date`e çevirmek bu kod tabanında saat dilimi kayması üretiyor
- * ve bir günü sessizce atlatıyor.
+ * Yeniden export ediliyor ki mevcut çağıranlar kırılmasın.
  */
-export function istekPencereleri(
-  level: InsightsLevel,
-  from: string,
-  to: string,
-): Array<{ from: string; to: string }> {
-  if (!DERIN_SEVIYELER.has(level)) return [{ from, to }];
-
-  const out: Array<{ from: string; to: string }> = [];
-  let bas = from;
-  while (bas <= to) {
-    const son = shiftDate(bas, DERIN_SEVIYE_PENCERESI - 1);
-    out.push({ from: bas, to: son > to ? to : son });
-    bas = shiftDate(son, 1);
-  }
-  return out;
-}
+export { istekPencereleri } from './istek-pencereleri';
+// Yeniden export YEREL KAPSAMA getirmiyor — bu servis de kullandığı için
+// ayrıca import ediliyor.
+import { istekPencereleri } from './istek-pencereleri';
 
 const LEVELS_FOR_JOB: Record<string, InsightsLevel[]> = {
   // L2 gün içi: YALNIZCA hesap ve kampanya.

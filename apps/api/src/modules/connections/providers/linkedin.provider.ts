@@ -36,7 +36,15 @@ import {
 } from '../provider.types';
 import { platformFetch } from './http';
 import { linkedinTutarMicros } from '@advetics/shared';
-import { istekPencereleri } from '../../../queue/insights-sync.service';
+/*
+ * DÖNGÜYÜ KIRAN IMPORT. Bu satır bir süre `queue/insights-sync.service`i
+ * gösteriyordu ve ÜRETİMİ DÜŞÜRDÜ: o servis `provider.registry`yi, o da bu
+ * dosyayı import ediyor. Nest açılışta bağımlılığı çözemedi.
+ *
+ * `istek-pencereleri.ts` hiçbir Nest sağlayıcısı tanımıyor ve hiçbirini
+ * import etmiyor — döngüye giremez.
+ */
+import { istekPencereleri } from '../../../queue/istek-pencereleri';
 
 /** Versiyonlu REST tabanı. `/v2/` eski, versiyonsuz uçlar için. */
 const LINKEDIN_API = 'https://api.linkedin.com/rest';
