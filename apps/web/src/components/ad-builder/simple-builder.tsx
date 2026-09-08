@@ -163,7 +163,7 @@ export function SimpleAdBuilder({
           goal,
           targets: [{ platform: 'meta', adAccountId, dailyBudget }],
           socialProfileId: pageId,
-          creativeId: creative.id,
+          creativeIds: [creative.id],
           durationDays: Number(durationDays),
           linkUrl: linkUrl.trim() || undefined,
           whatsappNumber: whatsappNumber.trim() || undefined,

@@ -29,6 +29,7 @@ const CTX: TenantContext = {
 
 const PAGE = '66666666-6666-6666-6666-666666666666';
 const CREATIVE = 'a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1';
+const CREATIVE_B = 'd1d1d1d1-d1d1-d1d1-d1d1-d1d1d1d1d1d1';
 const OTHER_CLIENT = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 const OTHER_CREATIVE = 'b1b1b1b1-b1b1-b1b1-b1b1-b1b1b1b1b1b1';
 const GOOGLE_ACC = '77777777-7777-7777-7777-777777777777';
@@ -41,7 +42,7 @@ function input(patch: Partial<SimpleDraftInput> = {}): SimpleDraftInput {
     goal: 'whatsapp',
     targets: [{ platform: 'meta', adAccountId: IDS.adAccount, dailyBudget: '200' }],
     socialProfileId: PAGE,
-    creativeId: CREATIVE,
+    creativeIds: [CREATIVE],
     durationDays: 7,
     ...patch,
   };
@@ -83,9 +84,10 @@ beforeEach(async () => {
   );
   await h.q(
     `INSERT INTO ad_creatives (id, org_id, client_id, name, texts, updated_at)
-     VALUES ($1, $3, $4, 'Yaz kreatifi', '{"headlines":["Yaz indirimi"]}'::jsonb, now()),
-            ($2, $3, $5, 'Başka müşterinin kreatifi', '{}'::jsonb, now())`,
-    [CREATIVE, OTHER_CREATIVE, IDS.org, IDS.client, OTHER_CLIENT],
+     VALUES ($1, $4, $5, 'Yaz kreatifi', '{"headlines":["Yaz indirimi"]}'::jsonb, now()),
+            ($2, $4, $5, 'İkinci kreatif', '{"headlines":["Alternatif"]}'::jsonb, now()),
+            ($3, $4, $6, 'Başka müşterinin kreatifi', '{}'::jsonb, now())`,
+    [CREATIVE, CREATIVE_B, OTHER_CREATIVE, IDS.org, IDS.client, OTHER_CLIENT],
   );
 });
 
@@ -106,6 +108,18 @@ describe('basit yüzeyden ağaç', () => {
     expect(c.adGroups[0]!.socialProfileName).toBe('Sayfa');
     expect(c.adGroups[0]!.ads).toHaveLength(1);
     expect(c.adGroups[0]!.ads[0]!.creativeName).toBe('Yaz kreatifi');
+  });
+
+  it('ÇOKLU KREATİF: iki kreatif, iki reklam, DB\'den geri okunuyor', async () => {
+    const c = (
+      await svc.createFromSimple(CTX, input({ creativeIds: [CREATIVE, CREATIVE_B] }))
+    ).campaigns[0]!;
+
+    expect(c.adGroups[0]!.ads).toHaveLength(2);
+    expect(c.adGroups[0]!.ads.map((a) => a.creativeName)).toEqual([
+      'Yaz kreatifi',
+      'İkinci kreatif',
+    ]);
   });
 
   it('hedef eşlemesi veritabanına yazılıyor', async () => {
@@ -142,7 +156,7 @@ describe('KAPSAM — RLS\'in yakalayamadıkları', () => {
      * hesabında yayınlamak sessiz ve ciddi bir hata.
      */
     await expect(
-      svc.createFromSimple(CTX, input({ creativeId: OTHER_CREATIVE })),
+      svc.createFromSimple(CTX, input({ creativeIds: [OTHER_CREATIVE] })),
     ).rejects.toThrow(/başka bir müşteriye ait/i);
   });
 
@@ -182,7 +196,7 @@ describe('KAPSAM — RLS\'in yakalayamadıkları', () => {
      * kalırdı: panelde görünür, yayınlanamaz ve kullanıcı sebebini anlamaz.
      */
     await expect(
-      svc.createFromSimple(CTX, input({ creativeId: OTHER_CREATIVE })),
+      svc.createFromSimple(CTX, input({ creativeIds: [OTHER_CREATIVE] })),
     ).rejects.toThrow();
 
     expect(await h.q(`SELECT id FROM draft_campaigns`)).toHaveLength(0);
@@ -226,7 +240,7 @@ describe('silme', () => {
     expect(await h.q(`SELECT id FROM draft_ad_groups`)).toHaveLength(0);
     expect(await h.q(`SELECT id FROM draft_ads`)).toHaveLength(0);
     // Kreatif KALIYOR: kütüphaneye ait, kampanyaya değil.
-    expect(await h.q(`SELECT id FROM ad_creatives`)).toHaveLength(2);
+    expect(await h.q(`SELECT id FROM ad_creatives`)).toHaveLength(3);
   });
 
   it('KRİTİK: yayınlanmış taslak SİLİNEMİYOR', async () => {

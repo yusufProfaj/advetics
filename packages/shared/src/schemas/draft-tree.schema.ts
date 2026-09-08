@@ -133,7 +133,17 @@ export const simpleDraftInputSchema = z.object({
 
   /** Meta'da reklamın yayınlanacağı Facebook sayfası. */
   socialProfileId: z.string().uuid().optional(),
-  creativeId: z.string().uuid(),
+
+  /**
+   * BİRDEN ÇOK KREATİF — aynı reklam grubuna birden çok reklam.
+   *
+   * Uzman yüzeyindeki `creativeIds` ile AYNI sınır (max 10) ve aynı sıra
+   * kuralı: platformda ilk oluşturulan reklam listede de ilk görünüyor.
+   * Tekli kampanyalar (bugüne kadarki tek desen) `creativeIds: [id]` ile
+   * temsil ediliyor — ikinci bir "tekli" tip yazmak, aynı ağacı iki yerden
+   * kurmak demek olurdu.
+   */
+  creativeIds: z.array(z.string().uuid()).min(1, 'En az bir kreatif seç').max(10),
 
   /** 0 = süresiz. */
   durationDays: z.number().int().min(0).max(90).default(7),
@@ -285,7 +295,15 @@ export function buildDraftTree(input: SimpleDraftInput, now: Date): DraftTreePla
             ...(input.linkUrl ? { linkUrl: input.linkUrl } : {}),
             ...(input.whatsappNumber ? { whatsappNumber: input.whatsappNumber } : {}),
           },
-          ads: [{ name: input.name, creativeId: input.creativeId, position: 0 }],
+          // TEKLİ KAMPANYADA AD İSMİ SADE KALIYOR — mevcut davranışı
+          // bozmamak için. Birden çok kreatifte uzman yüzeyiyle aynı
+          // sıralı adlandırma (`— N`) kullanılıyor.
+          ads: input.creativeIds.map((creativeId, position) => ({
+            name:
+              input.creativeIds.length > 1 ? `${input.name} — ${position + 1}` : input.name,
+            creativeId,
+            position,
+          })),
         },
       ],
     });

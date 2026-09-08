@@ -47,7 +47,7 @@ function input(patch: Partial<SimpleDraftInput> = {}): SimpleDraftInput {
     goal: 'whatsapp',
     targets: [{ platform: 'meta', adAccountId: IDS.adAccount, dailyBudget: '200' }],
     socialProfileId: PAGE,
-    creativeId: CREATIVE,
+    creativeIds: [CREATIVE],
     durationDays: 7,
     ...patch,
   };

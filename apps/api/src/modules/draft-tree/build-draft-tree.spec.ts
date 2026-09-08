@@ -18,6 +18,8 @@ const ACC_META = '44444444-4444-4444-4444-444444444444';
 const ACC_GOOGLE = '55555555-5555-5555-5555-555555555555';
 const PAGE = '66666666-6666-6666-6666-666666666666';
 const CREATIVE = 'a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1';
+const CREATIVE_B = 'b1b1b1b1-b1b1-b1b1-b1b1-b1b1b1b1b1b1';
+const CREATIVE_C = 'c1c1c1c1-c1c1-c1c1-c1c1-c1c1c1c1c1c1';
 
 const NOW = new Date('2026-08-16T12:00:00.000Z');
 
@@ -28,7 +30,7 @@ function input(patch: Partial<SimpleDraftInput> = {}): SimpleDraftInput {
     goal: 'whatsapp',
     targets: [{ platform: 'meta', adAccountId: ACC_META, dailyBudget: '200' }],
     socialProfileId: PAGE,
-    creativeId: CREATIVE,
+    creativeIds: [CREATIVE],
     durationDays: 7,
     ...patch,
   };
@@ -46,6 +48,37 @@ describe('tek platform', () => {
     expect(c.adGroups).toHaveLength(1);
     expect(c.adGroups[0]!.ads).toHaveLength(1);
     expect(c.adGroups[0]!.ads[0]!.creativeId).toBe(CREATIVE);
+  });
+
+  it('ÇOKLU KREATİF: aynı reklam grubuna sıralı reklamlar', () => {
+    /**
+     * AI asistanının varlık sebeplerinden biri: acemi kullanıcı bile birden
+     * çok kreatiften seçebilsin. `— N` adlandırması ve sıra uzman yüzeyiyle
+     * (`buildExpertTree`) AYNI kural — ikinci bir eşleme yeri açılmadı.
+     */
+    const c = buildDraftTree(
+      input({ creativeIds: [CREATIVE, CREATIVE_B, CREATIVE_C] }),
+      NOW,
+    ).campaigns[0]!;
+
+    expect(c.adGroups[0]!.ads).toHaveLength(3);
+    expect(c.adGroups[0]!.ads.map((a) => a.creativeId)).toEqual([
+      CREATIVE,
+      CREATIVE_B,
+      CREATIVE_C,
+    ]);
+    expect(c.adGroups[0]!.ads.map((a) => a.name)).toEqual([
+      'Yaz Kampanyası — 1',
+      'Yaz Kampanyası — 2',
+      'Yaz Kampanyası — 3',
+    ]);
+  });
+
+  it('TEKLİ KREATİFTE AD ADI SADE — "— 1" eklenmiyor', () => {
+    // Mevcut tekli davranış aynen korunuyor; yalnızca çoklu kreatifte
+    // sıralı adlandırmaya geçiliyor.
+    const c = buildDraftTree(input(), NOW).campaigns[0]!;
+    expect(c.adGroups[0]!.ads[0]!.name).toBe('Yaz Kampanyası');
   });
 
   it('KRİTİK: hedefin Meta karşılığı doğru eşleniyor', () => {

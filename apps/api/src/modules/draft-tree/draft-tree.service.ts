@@ -118,7 +118,7 @@ export class DraftTreeService {
         {
           clientId: input.clientId,
           socialProfileId: input.socialProfileId,
-          creativeIds: [input.creativeId],
+          creativeIds: input.creativeIds,
         },
         plan,
       );
