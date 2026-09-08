@@ -1,8 +1,34 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { Permission } from '@advetics/shared';
+import type { Permission, TenantContext } from '@advetics/shared';
 import { ORG_ADMIN_KEY, PERMISSIONS_KEY } from '../decorators';
 import type { AuthedRequest } from '../types/request';
+
+/**
+ * Yetki çekirdeği — İKİ GİRİŞ NOKTASINDAN ÇAĞRILIYOR.
+ *
+ * Guard bunu HTTP isteği üstünden çağırıyor; AI asistanının tool-executor'ı
+ * (senkron tool çağrıları, ayrı bir HTTP round-trip'i yok) da AYNI
+ * fonksiyonu her yazma tool'undan önce çağırıyor. İkinci bir yetkilendirme
+ * yolu (örn. tool-executor içine kopyalanmış bir kontrol) doğduğu anda
+ * ayrışma riski taşırdı — biri güncellenip diğeri unutulursa bir rol iki
+ * yerden iki farklı cevap alır.
+ */
+export function assertPermissions(ctx: TenantContext, ...perms: Permission[]): void {
+  if (perms.length === 0) return;
+
+  const granted = new Set(ctx.permissions);
+  const missing = perms.filter((p) => !granted.has(p));
+  if (missing.length > 0) {
+    throw new ForbiddenException(`Eksik yetki: ${missing.join(', ')}`);
+  }
+}
+
+export function assertOrgAdmin(ctx: TenantContext): void {
+  if (!ctx.isOrgAdmin) {
+    throw new ForbiddenException('Bu işlem organizasyon yöneticisi yetkisi gerektirir');
+  }
+}
 
 /**
  * Yetki kontrolü.
@@ -37,17 +63,8 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('Yetki bağlamı bulunamadı');
     }
 
-    if (requiresOrgAdmin && !tenant.isOrgAdmin) {
-      throw new ForbiddenException('Bu işlem organizasyon yöneticisi yetkisi gerektirir');
-    }
-
-    if (required?.length) {
-      const granted = new Set(tenant.permissions);
-      const missing = required.filter((p) => !granted.has(p));
-      if (missing.length > 0) {
-        throw new ForbiddenException(`Eksik yetki: ${missing.join(', ')}`);
-      }
-    }
+    if (requiresOrgAdmin) assertOrgAdmin(tenant);
+    if (required?.length) assertPermissions(tenant, ...required);
 
     return true;
   }
