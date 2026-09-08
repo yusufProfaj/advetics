@@ -696,6 +696,54 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-08 — LinkedIn CANLIDA ÇALIŞIYOR (ve bir üretim kesintisi)
+
+**DURUM: okuma zinciri baştan sona üretimde çalışıyor.** Sunucuda `173c618`
+dağıtılı, üç pm2 süreci de kararlı. Veritabanından doğrulandı:
+
+  · 1 LinkedIn bağlantısı · **7 reklam hesabı** (ölçülen sayıyla birebir)
+  · 28 kampanya grubu · 17 kampanya · 61 kreatif
+  · **411 metrik satırı**, 49.719,02 ₺ harcama
+
+**SEVİYE EŞLEMESİ CANLI VERİYLE DOĞRULANDI.** Üç seviyenin harcama toplamı
+kuruşuna kadar aynı (`campaign` = `ad_group` = `ad` = 49.719,02 ₺) — Google
+doğrulamasında kullanılan iç tutarlılık kontrolünün aynısı. Eşleme yanlış
+olsaydı `ad` seviyesi boş kalırdı.
+
+**AMA ÖNCE ÜRETİM DÜŞTÜ ve sebebi bu belgeye yazılmayı hak ediyor.**
+
+`94fa0bf` dağıtıldığında API ve worker açılışta ölmeye başladı, pm2 on
+denemeden sonra durdurdu: *"Nest can't resolve dependencies of the
+InsightsSyncService ... argument at index [1]"*. Sebep DÖNGÜSEL IMPORT —
+`linkedin.provider` → `queue/insights-sync.service` → `provider.registry` →
+`linkedin.provider`. Sağlayıcı, tarih penceresi parçalayıcısını kuyruk
+servisinden import etmişti.
+
+**HİÇBİR BEKÇİ YAKALAMADI ve üçünün de neden geçtiği ayrı bir ders:**
+
+  · `tsc` temiz geçti — TypeScript döngüsel import'u hata SAYMIYOR.
+  · 2.326 test geçti — depoda Nest bağımlılık grafiğini ayağa kaldıran tek
+    bir test yok (`vitest.config.ts` bunu bilinçli reddediyor).
+  · Modül kaydını kontrol eden kaynak taraması geçti — o, sınıfın `providers`
+    listesinde OLUP OLMADIĞINA bakıyor, import grafiğine değil.
+
+CLAUDE.md bu tuzağı zaten yazıyordu ("Nest modül kaydı derlemede değil
+AÇILIŞTA patlıyor") ama kayıtlı uyarı yalnızca "sağlayıcıyı listeye eklemeyi
+unutma" hâlini kapsıyordu. İkinci biçimi buydu.
+
+Düzeltme: `istekPencereleri` bağımsız bir dosyaya taşındı
+(`queue/istek-pencereleri.ts`) — hiçbir Nest sağlayıcısı tanımıyor, hiçbirini
+import etmiyor, döngüye giremez. **`import-dongusu.spec.ts`** artık import
+grafiğini gerçekten yürüyor ve döngü bulursa ZİNCİRİ yazarak düşüyor; ayrıca
+`providers/` altındaki bir dosyanın `queue/` altındaki bir SERVİSTEN import
+etmesi yasak. Tarama `import type`ı saymıyor — o derlemede siliniyor.
+
+**KURAL (yeni platform ya da yeni sağlayıcı yazan herkes için):** sağlayıcılar
+kuyruk servislerinin ALTINDA duruyor. Ortak olan şey saf bir fonksiyonsa
+bağımsız bir dosyaya taşınır.
+
+---
+
 ### 2026-09-08 — LinkedIn ölçüm turu: havuz modeli ÇALIŞIYOR
 
 Advertising API onayı geldi (Development Tier, 10 scope, `rw_ads` dahil),
