@@ -135,6 +135,8 @@ function makeService(opts: {
   anthropic: AnthropicLike | null;
   prisma?: ReturnType<typeof makeInMemoryPrisma>;
   campaignActions?: Partial<CampaignActionsService>;
+  draftTree?: Partial<DraftTreeService>;
+  creatives?: Partial<CreativeService>;
 }) {
   const mem = opts.prisma ?? makeInMemoryPrisma();
   const config = { aiAssistant: { model: 'test-model' } } as never;
@@ -144,8 +146,9 @@ function makeService(opts: {
     list: vi.fn(),
     createFromSimple: vi.fn(),
     duplicate: vi.fn(),
+    ...opts.draftTree,
   } as unknown as DraftTreeService;
-  const creatives = { create: vi.fn() } as unknown as CreativeService;
+  const creatives = { create: vi.fn(), ...opts.creatives } as unknown as CreativeService;
   const campaignActions = {
     list: vi.fn(),
     getSummary: vi.fn(),
@@ -163,7 +166,7 @@ function makeService(opts: {
     creatives,
     campaignActions,
   );
-  return { svc, mem, campaignActions };
+  return { svc, mem, campaignActions, draftTree, creatives };
 }
 
 describe('sendMessage', () => {
@@ -621,3 +624,187 @@ describe('update_budget tool — girdi doğrulama ve para birimi', () => {
     });
   });
 });
+
+/**
+ * PANELİN ÇİZECEĞİ EYLEMLER — bu yüzey olmadan sohbet arayüzü YAZILAMAZ.
+ *
+ * `sendMessage` bir süre yalnızca `{conversationId, reply}` döndürüyordu:
+ * onay kartının kimliği ve oluşan taslağın kimliği veritabanına yazılıyor
+ * ama arayüze HİÇ ulaşmıyordu. Sonucu somut — canlı mutasyon tool'ları
+ * (`pause_campaign`, `resume_campaign`, `update_budget`) panelden tamamen
+ * kullanılamıyordu: kart çizilemiyor, dolayısıyla onaylanamıyordu.
+ */
+describe('sendMessage — panelin çizeceği eylemler', () => {
+  it('KRİTİK: onay bekleyen mutasyon `actions` içinde ONAY olarak dönüyor', async () => {
+    const getSummary = vi.fn().mockResolvedValue({
+      id: 'camp-1',
+      name: 'Yaz Kampanyası',
+      platform: 'meta',
+      status: 'active',
+      budgetMode: 'daily',
+      budgetAmountMicros: 1_000_000_000n,
+      currency: 'TRY',
+    });
+    const { client } = scriptedAnthropic([
+      toolUseResponse('pause_campaign', { campaignId: 'camp-1' }),
+      textResponse('Onayını bekliyorum.'),
+    ]);
+    const { svc } = makeService({ anthropic: client, campaignActions: { getSummary } });
+
+    const res = await svc.sendMessage(CTX, { message: 'yaz kampanyasını durdur' });
+
+    expect(res.actions).toHaveLength(1);
+    const onay = res.actions[0]!;
+    expect(onay.kind).toBe('onay');
+    if (onay.kind !== 'onay') throw new Error('onay bekleniyordu');
+    // Kimlik OLMADAN kart tıklanamaz; özet OLMADAN kullanıcı neyi
+    // onayladığını bilmez. İkisi de kartın çalışması için zorunlu.
+    expect(onay.confirmationId).toBeTruthy();
+    expect(onay.summary).toContain('Yaz Kampanyası');
+  });
+
+  it('KRİTİK: taslak oluşturan tool `actions` içinde TASLAK olarak dönüyor', async () => {
+    const createFromSimple = vi.fn().mockResolvedValue({
+      groupId: null,
+      name: 'Form kampanyası',
+      campaigns: [{ id: 'draft-1', platform: 'meta', status: 'draft' }],
+    });
+    const { client } = scriptedAnthropic([
+      toolUseResponse('create_draft_campaign', {
+        clientId: 'client-1',
+        name: 'Form kampanyası',
+        goal: 'form',
+        targets: [{ platform: 'meta', adAccountId: 'acc-1', dailyBudget: '500' }],
+        creativeIds: ['cr-1'],
+      }),
+      textResponse('Taslağı hazırladım.'),
+    ]);
+    const { svc } = makeService({ anthropic: client, draftTree: { createFromSimple } });
+
+    const res = await svc.sendMessage(CTX, { message: 'form kampanyası aç' });
+
+    expect(res.actions).toEqual([{ kind: 'taslak' }]);
+  });
+
+  it('KRİTİK: `create_creative` TASLAK SAYILMIYOR — kimliği kreatif, taslak değil', async () => {
+    /*
+     * Bu tool da `targetId` dönüyor. "targetId varsa taslaktır" diyen bir
+     * sınıflandırma kullanıcıyı var olmayan bir taslak sayfasına gönderirdi
+     * ve bağlantı 404 verirdi. Karar `TASLAK_URETEN_TOOLLAR` listesinde ve
+     * bu test onu kilitliyor.
+     */
+    const create = vi.fn().mockResolvedValue({ id: 'creative-1', name: 'Yaz kreatifi' });
+    const { client } = scriptedAnthropic([
+      toolUseResponse('create_creative', {
+        clientId: 'client-1',
+        name: 'Yaz kreatifi',
+        primaryText: 'Metin',
+        assetIds: ['asset-1'],
+      }),
+      textResponse('Kreatifi oluşturdum.'),
+    ]);
+    const { svc } = makeService({ anthropic: client, creatives: { create } });
+
+    const res = await svc.sendMessage(CTX, { message: 'kreatif oluştur' });
+
+    expect(create).toHaveBeenCalled();
+    expect(res.actions).toEqual([]);
+  });
+
+  it('çizilecek bir şey yoksa `actions` BOŞ dönüyor', async () => {
+    const { client } = scriptedAnthropic([textResponse('Merhaba.')]);
+    const { svc } = makeService({ anthropic: client });
+
+    expect((await svc.sendMessage(CTX, { message: 'merhaba' })).actions).toEqual([]);
+  });
+});
+
+/**
+ * SAYFA YENİLENDİĞİNDE GEÇMİŞ GERİ GELİYOR.
+ *
+ * Sohbet `ai_messages`ta zaten duruyordu ama okuyan bir uç yoktu: yenileme
+ * konuşmayı ekrandan siliyor, AÇIK BİR ONAY KARTINI da götürüyordu — canlı
+ * mutasyon teklifi ortada kalıyor ve kullanıcı onu bir daha göremiyordu.
+ */
+describe('getThread', () => {
+  it('konuşma geri yükleniyor — TOOL satırları ekrana çıkmıyor', async () => {
+    const { client } = scriptedAnthropic([
+      toolUseResponse('list_ad_accounts', { clientId: 'client-1' }),
+      textResponse('İki hesap buldum.'),
+    ]);
+    const { svc } = makeService({ anthropic: client });
+    const { conversationId } = await svc.sendMessage(CTX, { message: 'hesapları listele' });
+
+    const thread = await svc.getThread(CTX, conversationId);
+
+    // Kullanıcı mesajı + asistanın SON metni. Aradaki `tool_use` turu ve
+    // `tool_result` satırı ekrana JSON basmamak için eleniyor.
+    expect(thread.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(thread.messages[0]!.text).toBe('hesapları listele');
+    expect(thread.messages[1]!.text).toBe('İki hesap buldum.');
+  });
+
+  it('KRİTİK: AÇIK onay kartı geri geliyor', async () => {
+    const mem = makeInMemoryPrisma();
+    const { svc } = makeService({ anthropic: null, prisma: mem });
+    const conversationId = await seedPending(mem, 'conf-thread-1');
+
+    const thread = await svc.getThread(CTX, conversationId);
+
+    expect(thread.actions).toEqual([
+      { kind: 'onay', confirmationId: 'conf-thread-1', summary: '"Yaz Kampanyası" kampanyasını durdur.' },
+    ]);
+  });
+
+  it('KRİTİK: ONAYLANMIŞ kart bir daha DÖNMÜYOR — çalışmayan düğme gösterilmiyor', async () => {
+    const mem = makeInMemoryPrisma();
+    const applyAction = vi.fn().mockResolvedValue({ campaignId: 'camp-1', before: {}, after: {} });
+    const { svc } = makeService({ anthropic: null, prisma: mem, campaignActions: { applyAction } });
+    const conversationId = await seedPending(mem, 'conf-thread-2');
+
+    expect((await svc.getThread(CTX, conversationId)).actions).toHaveLength(1);
+    await svc.confirm(CTX, conversationId, 'conf-thread-2');
+
+    expect((await svc.getThread(CTX, conversationId)).actions).toEqual([]);
+  });
+
+  it('BAŞKASININ sohbeti okunamıyor', async () => {
+    const mem = makeInMemoryPrisma();
+    const { svc } = makeService({ anthropic: null, prisma: mem });
+    const conversationId = await seedPending(mem, 'conf-thread-3');
+
+    await expect(
+      svc.getThread({ ...CTX, userId: 'baska-kullanici' } as never, conversationId),
+    ).rejects.toThrow();
+  });
+});
+
+/** `confirm` paketindeki kurulumun aynısı — iki blok da aynı satırı yazıyor. */
+async function seedPending(
+  prisma: ReturnType<typeof makeInMemoryPrisma>,
+  confirmationId: string,
+): Promise<string> {
+  const conv = await prisma.prisma.withTenant(CTX, (tx) =>
+    tx.aiConversation.create({
+      data: { orgId: CTX.orgId, clientId: null, userId: CTX.userId },
+      select: { id: true },
+    }),
+  );
+  await prisma.prisma.withTenant(CTX, (tx) =>
+    tx.aiMessage.create({
+      data: {
+        conversationId: conv.id,
+        role: 'tool',
+        content: { type: 'tool_result', tool_use_id: 'tu-1', content: '{}' },
+        toolName: 'pause_campaign',
+        toolResult: {
+          status: 'pending_confirmation',
+          confirmationId,
+          summary: '"Yaz Kampanyası" kampanyasını durdur.',
+          detail: { campaignId: 'camp-1', action: { type: 'pause' } },
+        },
+      },
+    }),
+  );
+  return conv.id as string;
+}

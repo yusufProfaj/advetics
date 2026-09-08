@@ -1,9 +1,10 @@
-import { Body, Controller, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import {
   aiAssistantConfirmInputSchema,
   aiAssistantMessageInputSchema,
   type AiAssistantConfirmInput,
   type AiAssistantMessageInput,
+  type AiAssistantThread,
   type TenantContext,
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
@@ -31,6 +32,21 @@ export class AiAssistantController {
     @Body(zodBody(aiAssistantMessageInputSchema)) input: AiAssistantMessageInput,
   ): Promise<SendMessageResult> {
     return this.assistant.sendMessage(ctx, input);
+  }
+
+  /**
+   * Sohbetin okunabilir hâli — panel sayfa yenilendiğinde buradan geri yükleniyor.
+   *
+   * `bulk.read` YETİYOR: yalnızca okuyor ve `assertOwnConversation` zaten
+   * başkasının sohbetini reddediyor.
+   */
+  @Get('conversations/:conversationId')
+  @RequirePermissions('bulk.read')
+  thread(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ): Promise<AiAssistantThread> {
+    return this.assistant.getThread(ctx, conversationId);
   }
 
   /**

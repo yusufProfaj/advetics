@@ -64,12 +64,23 @@ export default async function AdsHomePage({
       </header>
 
       {canWrite && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/*
+            AI ASİSTAN BURADA, AYRI BİR MENÜ ÖĞESİ DEĞİL: kampanya kurmanın
+            bir başka yolu ve kullanıcı "reklam vereceğim" diye zaten bu
+            sayfaya geliyor. Kenar çubuğuna ayrı satır koymak, aynı işin
+            parçası olan ekranı ayırmak olurdu (CLAUDE.md, rapor/şablon dersi).
+          */}
+          <Giris
+            href={`/reklam-olustur/ai-asistan?musteri=${clientId}`}
+            baslik="AI Asistan"
+            aciklama="Ne istediğini yaz, sohbetten taslak çıksın. Görsel ekleyebilir, bütçeyi konuşarak belirleyebilirsin."
+            vurgu
+          />
           <Giris
             href={`/reklam-olustur/basit?musteri=${clientId}`}
             baslik="Hızlı Reklam"
             aciklama="Ne istediğini söyle, gerisini biz hallederiz. Hedef, kitle ve yerleşim sorulmuyor."
-            vurgu
           />
           <Giris
             href={`/reklam-olustur/uzman?musteri=${clientId}`}
