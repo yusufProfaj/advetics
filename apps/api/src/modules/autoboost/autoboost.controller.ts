@@ -76,7 +76,7 @@ export class AutoBoostController {
     return this.read.subscriptionHealth(ctx, clientId);
   }
 
-  /** Bilgi Bankası — bu müşterinin ön ayarları. */
+  /** "Boost ön ayarı" modalı — bu müşterinin ön ayarları. */
   @Get('presets')
   @RequirePermissions('boost.read')
   listPresets(
@@ -124,7 +124,7 @@ export class AutoBoostController {
    * TEK TIKLA YAYIN — gönderi listesindeki "Yayınla" düğmesi.
    *
    * GÖVDE YALNIZCA MÜŞTERİ KİMLİĞİ TAŞIYOR: bütçe, süre, hedefleme ve ad
-   * Bilgi Bankası ön ayarından geliyor. İstemcinin gönderebileceği bir bütçe
+   * boost ön ayarından geliyor. İstemcinin gönderebileceği bir bütçe
    * alanı OLMAMASI kasıtlı — olsaydı "kullanıcı hiçbir şey girmiyor" iddiası
    * yalnızca arayüzde doğru olurdu ve API'yi doğrudan çağıran biri ön ayarı
    * atlayabilirdi.

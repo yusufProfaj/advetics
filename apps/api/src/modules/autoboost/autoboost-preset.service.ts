@@ -73,8 +73,9 @@ export class AutoBoostPresetService {
   /**
    * Ön ayarı kaydeder — varsa günceller.
    *
-   * ÜSTÜNE YAZMA DAVRANIŞI BİLİNÇLİ: kullanıcı Bilgi Bankası'nda bir platformun
-   * ayarını değiştirdiğinde niyeti "yenisini ekle" değil "bunu değiştir".
+   * ÜSTÜNE YAZMA DAVRANIŞI BİLİNÇLİ: kullanıcı "Boost ön ayarı" modalında bir
+   * platformun ayarını değiştirdiğinde niyeti "yenisini ekle" değil "bunu
+   * değiştir".
    * Ayrı bir "düzenle" akışı kurmak, tek kayıtlı bir tabloda gereksiz
    * sürtünme olurdu.
    */

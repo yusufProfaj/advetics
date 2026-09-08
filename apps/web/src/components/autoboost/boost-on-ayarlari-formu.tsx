@@ -11,7 +11,7 @@ import type {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 
 /**
- * BİLGİ BANKASI — otomatik boost ön ayarları.
+ * OTOMATİK BOOST ÖN AYARLARI.
  *
  * ═══ BU EKRANIN İŞİ ═══
  *
@@ -23,8 +23,14 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
  * yarısı her zaman anlamsız olan alanlar üretirdi: Meta'da kayıtlı kitle ve
  * lokasyon var, Google'da marka adı ve logo ZORUNLU. Sekmeler bu farkı
  * saklamıyor, gösteriyor.
+ *
+ * ESKİDEN "BilgiBankasi" ADINI TAŞIYORDU ve `/kutuphane/bilgi-bankasi`
+ * sayfasının kendisiydi — o isim/rota artık müşterinin GENEL profiline ait
+ * (bkz. `apps/web/src/app/(dashboard)/kutuphane/bilgi-bankasi/page.tsx`).
+ * Bu bileşen yalnızca Akıllı Boost'un onay modalında yaşıyor
+ * (`boost-on-ayari.tsx`), boost'a özel ayarlarla sınırlı.
  */
-export function BilgiBankasi({
+export function BoostOnAyarlariFormu({
   clientId,
   canWrite,
 }: {

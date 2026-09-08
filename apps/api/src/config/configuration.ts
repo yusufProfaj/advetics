@@ -156,6 +156,21 @@ const envSchema = z.object({
    * çöküyor. Boş dizge zaten falsy; okuyan kod onu "yok" sayıyor.
    */
   YOUTUBE_API_KEY: z.string().optional(),
+
+  /*
+   * ═══ AI KAMPANYA ASİSTANI ═══
+   *
+   * OPSİYONEL — `YOUTUBE_API_KEY` ile aynı desen: anahtar yoksa uygulama
+   * açılmaya devam ediyor, yalnızca panel içi sohbet devre dışı kalıyor ve
+   * bunu SÖYLÜYOR. Zorunlu kılmak, bu özelliği kullanmayan bir kurulumun
+   * (ör. yerel geliştirme) hiç açılmaması demekti.
+   *
+   * `.min(1)` YOK: `.env.example` boş dizgeyle gönderiyor, boş dizge zaten
+   * falsy ve okuyan kod "yok" sayıyor.
+   */
+  ANTHROPIC_API_KEY: z.string().optional(),
+  /** Model kimliği elle yönetiliyor — takvimden türetilemez (LinkedIn sürümüyle aynı ders). */
+  ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -212,6 +227,11 @@ export interface AppConfig {
     youtube: {
       apiKey?: string;
     };
+  };
+  /** AI kampanya asistanı — anahtar yoksa özellik devre dışı, uygulama yine açılır. */
+  aiAssistant: {
+    apiKey?: string;
+    model: string;
   };
 }
 
@@ -293,6 +313,10 @@ export function loadConfig(): AppConfig {
       youtube: {
         apiKey: env.YOUTUBE_API_KEY,
       },
+    },
+    aiAssistant: {
+      apiKey: env.ANTHROPIC_API_KEY,
+      model: env.ANTHROPIC_MODEL,
     },
   };
 }

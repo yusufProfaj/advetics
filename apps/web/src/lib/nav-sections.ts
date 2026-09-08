@@ -1,5 +1,6 @@
 import type { Permission } from '@advetics/shared';
 import type { NavEntry } from '@/components/nav';
+import { SAYFA_GIRIS_IZNI } from '@/components/bilgi-bankasi/sekmeler';
 
 /**
  * Kenar çubuğu — KATLANABİLİR bölümler.
@@ -25,21 +26,6 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     items: [
       { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1 },
       { href: '/auto-boost', label: 'Akıllı Boost', icon: 'boost', module: 7, ready: true },
-      /*
-       * BİLGİ BANKASI AKILLI BOOST'UN ALTINDA — Kütüphane'den taşındı.
-       *
-       * Kütüphane'de dururken diğer arşivlerle (görsel, kreatif, form) aynı
-       * kovadaydı ve ne işe yaradığı belirsizdi. Asıl tüketicisi Akıllı
-       * Boost: marka sesi ve ürün bilgisi boost metnini besliyor. Menüde
-       * yan yana durmaları, ikisinin aynı işin parçası olduğunu söylüyor.
-       */
-      {
-        href: '/kutuphane/bilgi-bankasi',
-        label: 'Bilgi Bankası',
-        icon: 'knowledge',
-        module: 7,
-        ready: true,
-      },
     ],
   },
   {
@@ -83,6 +69,43 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
   {
     title: 'Kütüphane',
     items: [
+      /*
+       * BİLGİ BANKASI KÜTÜPHANE'NİN ALTINDA — daha önce Akıllı Boost'un
+       * hemen altındaydı ve içeriği o zaman boost ön ayarlarıydı (bkz.
+       * `boost-on-ayarlari-formu.tsx`). Artık müşterinin GENEL profili:
+       * genel bilgiler, bütçe hedefi, hedef kitle, marka bilgileri, logo —
+       * Görsel Arşivi ve Kreatifler'le aynı raf, kampanyadan/boost'tan
+       * bağımsız.
+       *
+       * ═══ `perm` EKLENDİ, GERÇEKÇESİ ═══
+       *
+       * Satır uzun süre yetkisizdi ve bu bilinçli bir karar değil, eski
+       * içeriğin (boost ön ayarı) kalıntısıydı. İçerik müşteri profiline
+       * dönünce satırın ilk sekmesi bir süre `clients.notes`u — AJANS İÇİ
+       * notu — basıyordu ve yetkisiz menü satırı o sızıntının üç halkasından
+       * biriydi. Not alanı tamamen bırakıldı, ama satır artık sayfanın KENDİ
+       * giriş yetkisini taşıyor.
+       *
+       * Yetki `client.read` ve DEĞERİ ELLE YAZILMIYOR: sayfanın kapısıyla
+       * aynı sabitten (`SAYFA_GIRIS_IZNI`) geliyor. İkisini ayrı yazmak,
+       * birinin değişip diğerinin kalması demekti — menüde görünen ama
+       * açılmayan (ya da tersine, gizlenen ama çalışan) bir satır.
+       *
+       * `client.read` HİÇBİR ROLÜ DIŞARIDA BIRAKMIYOR (client_viewer dahil
+       * hepsinde var) — yani bu satır bugün kimseden gizlenmiyor ve
+       * gizlenmemeli de: Bilgi Bankası müşterinin KENDİ bilgisi. Yetki yine
+       * de yazılı, çünkü `resolvePermissions` override'ı `client.read`i tek
+       * bir kullanıcıdan alabiliyor ve o kullanıcıya boş açılan bir sayfa
+       * göstermenin anlamı yok.
+       */
+      {
+        href: '/kutuphane/bilgi-bankasi',
+        label: 'Bilgi Bankası',
+        icon: 'knowledge',
+        module: 7,
+        ready: true,
+        perm: SAYFA_GIRIS_IZNI,
+      },
       {
         href: '/kutuphane/gorseller',
         label: 'Görsel Arşivi',

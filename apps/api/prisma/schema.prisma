@@ -118,6 +118,8 @@ model Organization {
   autoBoostQueueItems    AutoBoostQueueItem[]
   autoBoostSubscriptions AutoBoostSubscription[]
   userEmailAccounts      UserEmailAccount[]
+  aiConversations        AiConversation[]
+  clientProfiles         ClientProfile[]
 
   @@map("organizations")
 }
@@ -241,6 +243,7 @@ model Client {
   organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   memberships  Membership[]
   branding     BrandingProfile?
+  profile      ClientProfile?
 
   // Modül 2
   connections    PlatformConnection[]
@@ -347,6 +350,59 @@ model BrandingProfile {
 
   @@index([orgId])
   @@map("branding_profiles")
+}
+
+/// Müşterinin GENEL profili — Bilgi Bankası (Kütüphane altında).
+///
+/// `BrandingProfile` İLE KARIŞTIRILMASIN: o ajansın beyaz etiket rapor
+/// markalaşması (logo, renk, e-posta gönderici), müşteriye göstermek için
+/// DEĞİL. Bu model müşterinin KENDİ profili — bütçe hedefi (ayrı
+/// `MonthlyBudget` tablosunda, burada tekrarlanmıyor), hedef kitle, marka
+/// bilgileri, kendi logosu. İleride AI destekli reklam üretiminde bağlam
+/// olarak kullanılacak.
+///
+/// `clientId` NULLABLE DEĞİL — `BrandingProfile`'ın aksine bu model
+/// yalnızca bir müşteriye ait olabilir, ajans geneli hâli yok. RLS
+/// politikası bu yüzden `draft_campaigns` deseniyle aynı: doğrudan
+/// `app.can_access_client(client_id)`.
+model ClientProfile {
+  id       String @id @default(uuid()) @db.Uuid
+  orgId    String @map("org_id") @db.Uuid
+  clientId String @unique @map("client_id") @db.Uuid
+
+  /// "Hedef Kitle" sekmesi — SERBEST METİN. Meta/Google'ın teknik
+  /// hedefleme kovaları (yaş/cinsiyet/kayıtlı kitle) BİLEREK burada değil:
+  /// onlar hesaba/platforma bağımlı ve Akıllı Boost ön ayarında zaten var.
+  /// Bu alan düz dilde "kime satıyoruz".
+  hedefKitle String? @map("hedef_kitle") @db.VarChar(2000)
+
+  /// "Marka bilgileri / öncelikleri" sekmesi — serbest metin.
+  markaBilgileri String? @map("marka_bilgileri") @db.VarChar(2000)
+
+  /// "Bilgi Bankası" sekmesi — serbest metin.
+  ///
+  /// BURASI `clients.notes` DEĞİL VE OLAMAZ. Sekme bir süre o alanı
+  /// kullanıyordu; `clients.notes` kendi açıklamasında AJANS İÇİ ("ekip içi")
+  /// ilan edilmiş bir alan ve `client.read` yetkisi `client_viewer` rolünde,
+  /// yani MÜŞTERİNİN KENDİ hesabında da var. Sonuç: ajansın müşteri hakkında
+  /// tuttuğu iç not, müşterinin gözüne açılıyordu — hata yok, log yok.
+  /// Bilgi Bankası müşteri profilinin parçası, o yüzden burada duruyor.
+  bilgiBankasi String? @map("bilgi_bankasi") @db.VarChar(2000)
+
+  /// "Logo" sekmesi — müşterinin KENDİ marka logosu.
+  /// `assets.kind = 'logo'` olan bir varlığa işaret ediyor (Görsel Arşivi'nde
+  /// zaten ayrı bir tür — Google Performance Max onsuz kampanya kurmuyor).
+  logoAssetId String? @map("logo_asset_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  logoAsset    Asset?       @relation(fields: [logoAssetId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@map("client_profiles")
 }
 
 // -----------------------------------------------------------------------------
@@ -2408,6 +2464,7 @@ model Asset {
   draftAssets   AdDraftAsset[]
   bulkItems     BulkItem[]
   creativeLinks AdCreativeAsset[]
+  clientProfileLogos ClientProfile[]
 
   @@unique([clientId, contentHash], map: "assets_client_hash_uniq")
   @@index([clientId, kind, createdAt(sort: Desc)])
@@ -3143,4 +3200,80 @@ model FaturaBelgesi {
   @@index([clientId, donem, uploadedAt])
   @@index([orgId])
   @@map("fatura_belgeleri")
+}
+
+// =============================================================================
+// MODÜL 9 — AI Kampanya Asistanı
+// =============================================================================
+
+enum AiMessageRole {
+  user
+  assistant
+  tool
+}
+
+/// AI asistanıyla yapılan bir sohbet oturumu.
+///
+/// TASLAK OLUŞTURMA/BÜTÇE/PAUSE aksiyonları normal serviler üzerinden,
+/// kullanıcının KENDİ `TenantContext`'iyle çalışıyor — bu tablo o
+/// aksiyonların YERİNE geçmiyor, yalnızca "hangi promptla, hangi tool
+/// sonucuyla" sorusunun cevabını tutuyor (bkz. AiMessage.toolResult).
+model AiConversation {
+  id    String @id @default(uuid()) @db.Uuid
+  orgId String @map("org_id") @db.Uuid
+
+  /// KASITLI OLARAK Client'A İLİŞKİ YOK — `AuditLog.clientId` ile AYNI
+  /// gerekçe. Bir Prisma ilişkisi ya CASCADE ile bu geçmişi müşteri
+  /// silinince yok ederdi (audit amacını boşaltır) ya da RESTRICT ile
+  /// `reset-clients` script'ini CLAUDE.md'nin uyardığı "riskli adım önce"
+  /// tuzağına bir kez daha düşürürdü. Sahiplik org_id'de duruyor, RLS de
+  /// öyle uyguluyor; client_id yalnızca süzgeç için düz bir kolon.
+  clientId String? @map("client_id") @db.Uuid
+
+  /// Sohbeti başlatan kullanıcı. `AuditLog.actorId` gibi düz kolon, User'a
+  /// FK DEĞİL: kullanıcı hesabı silinse bile bu geçmiş kalmalı.
+  userId String @map("user_id") @db.Uuid
+
+  /// İlk kullanıcı mesajından türetilen kısa başlık — liste ekranı için.
+  title String? @db.VarChar(200)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  messages     AiMessage[]
+
+  @@index([orgId, clientId, updatedAt(sort: Desc)])
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("ai_conversations")
+}
+
+/// Tek bir sohbet turu: kullanıcı mesajı, asistan cevabı ya da bir tool
+/// çağrısının sonucu.
+model AiMessage {
+  id             String @id @default(uuid()) @db.Uuid
+  conversationId String @map("conversation_id") @db.Uuid
+
+  role AiMessageRole
+
+  /// Anthropic mesaj biçimiyle AYNI ŞEKİL, ayrıştırıp yeniden yorumlanmadan
+  /// saklanıyor — bir sonraki tur, geçmişi bu JSON'dan yeniden kuruyor.
+  content Json @db.JsonB
+
+  /// role = 'tool' iken hangi tool çalıştı (`create_draft_campaign` vb.).
+  toolName String? @map("tool_name") @db.VarChar(80)
+
+  /// Yazma tool'unun döndürdüğü {status, reason?, detail?, targetId?}.
+  ///
+  /// `targetId`, `audit_logs.target_id` ile ÇAPRAZ SORGULANABİLİYOR — "bu
+  /// taslağı hangi promptla oluşturdu" sorusu audit_logs şemasına HİÇ
+  /// dokunmadan buradan cevaplanıyor.
+  toolResult Json? @map("tool_result") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
 }

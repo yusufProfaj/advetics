@@ -206,19 +206,31 @@ export class AutoBoostReadService {
   ): string | null {
     if (r.status !== 'pending') return null;
 
+    /*
+     * YÖNLENDİRME BU EKRANIN KENDİ DÜĞMESİNE. Bu cümleler bir süre
+     * "Kütüphane → Bilgi Bankası" diyordu; ön ayar formu oradan alınıp bu
+     * sayfanın üstündeki "Boost ön ayarı" düğmesine taşınınca cümle
+     * kullanıcıyı ARTIK ÖN AYAR TAŞIMAYAN bir sayfaya gönderir oldu — üstelik
+     * aynı ekrandaki elle boost kutusu doğru yeri gösterdiği için kullanıcı
+     * ÇELİŞEN İKİ TALİMAT okuyordu. Ad, `boost-on-ayari.tsx` içindeki düğme
+     * etiketiyle BİREBİR aynı olmak zorunda: metindeki ad ekrandakinden
+     * ayrışırsa kullanıcı olmayan bir düğmeyi arar.
+     */
     if (!r.preset_id) {
       return (
-        'Bu platform için otomatik boost ön ayarı yok. Kütüphane → Bilgi ' +
-        'Bankası’ndan bütçe ve hedefleme tanımla.'
+        'Bu platform için otomatik boost ön ayarı yok. Yukarıdaki ' +
+        '"Boost ön ayarı" düğmesinden bütçe ve hedefleme tanımla.'
       );
     }
     if (r.preset_enabled === false) {
-      return 'Otomatik boost ön ayarı kapalı. Bilgi Bankası’ndan aç.';
+      return 'Otomatik boost ön ayarı kapalı. "Boost ön ayarı" düğmesinden aç.';
     }
     if (parsed && !parsed.success) {
       // Kaydın kendisi bozuk: panelde "hazır" göstermek, yayında patlayan bir
       // düğme göstermek olurdu.
-      return 'Ön ayar kaydı okunamadı; Bilgi Bankası’ndan yeniden kaydet.';
+      return (
+        'Ön ayar kaydı okunamadı; "Boost ön ayarı" düğmesinden yeniden kaydet.'
+      );
     }
     if (!presetVar) return 'Ön ayar okunamadı.';
 

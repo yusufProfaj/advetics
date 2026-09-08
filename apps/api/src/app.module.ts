@@ -18,6 +18,8 @@ import { AdBuilderModule } from './modules/ad-builder/ad-builder.module';
 import { FormsModule } from './modules/forms/forms.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { DraftTreeModule } from './modules/draft-tree/draft-tree.module';
+import { CampaignActionsModule } from './modules/campaign-actions/campaign-actions.module';
+import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module';
 import { StorageModule } from './storage/storage.module';
 import { LeadsModule } from './modules/leads/leads.module';
 import { AutoBoostModule } from './modules/autoboost/autoboost.module';
@@ -61,6 +63,8 @@ import { SyncModule } from './modules/sync/sync.module';
     StorageModule,
     AssetsModule,
     DraftTreeModule,
+    CampaignActionsModule,
+    AiAssistantModule,
     BoostsModule,
     AutoBoostModule,
     BulkModule,

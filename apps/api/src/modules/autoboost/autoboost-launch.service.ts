@@ -16,6 +16,31 @@ import { metaTargetingFrom } from '../boosts/meta-targeting';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 
+/*
+ * ═══ ÖN AYARIN NEREDE OLDUĞU TEK YERDE YAZILI ═══
+ *
+ * Bu cümleler bir süre "Kütüphane → Bilgi Bankası" diyordu. Ön ayar formu
+ * oradan alınıp Akıllı Boost sayfasındaki "Boost ön ayarı" modalına taşınınca
+ * altı ayrı yerde ELLE yazılmış olan o yönlendirme kullanıcıyı artık ön ayar
+ * TAŞIMAYAN bir sayfaya göndermeye başladı — üstelik aynı ekrandaki elle
+ * boost kutusu doğru yeri gösterdiği için kullanıcı ÇELİŞEN İKİ TALİMAT
+ * okuyordu. Altı kopyanın hepsini bulmak da mümkün olmadı: metin kopyalandığı
+ * her yerde ayrı ayrı eskiyor.
+ *
+ * Bugün tek sabit. İki kural:
+ *  1. Düğmenin adı `apps/web/src/components/autoboost/boost-on-ayari.tsx`
+ *     içindeki etiketle BİREBİR aynı — metindeki ad ekrandakinden ayrışırsa
+ *     kullanıcı olmayan bir düğmeyi arar.
+ *  2. SAYFA ADI DA YAZILI ("Akıllı Boost", `nav-sections.ts` etiketi). Bu
+ *     hatalar gönderi listesinden de fırlıyor, yani kullanıcı her zaman
+ *     düğmenin durduğu sayfada değil; yalnızca "yukarıdaki düğme" demek
+ *     oradan gelen kullanıcıyı boşluğa bakmaya gönderirdi.
+ */
+const ON_AYAR_YERI = 'Akıllı Boost sayfasındaki "Boost ön ayarı" düğmesinden';
+
+/** Kayıt bozuk — hem Meta hem Google yolunda aynı cümle. */
+const ON_AYAR_BOZUK = `Ön ayar kaydı okunamadı; ${ON_AYAR_YERI} yeniden kaydet.`;
+
 /**
  * "ONAYLA VE BOOSTLA" — kartın yayına dönüştüğü yer.
  *
@@ -158,9 +183,7 @@ export class AutoBoostLaunchService {
 
     const ayar = autoBoostPresetSettingsSchema.safeParse(kayit.settings);
     if (!ayar.success || ayar.data.platform !== 'meta') {
-      throw new BadRequestException(
-        'Ön ayar kaydı okunamadı; Bilgi Bankası’ndan yeniden kaydet.',
-      );
+      throw new BadRequestException(ON_AYAR_BOZUK);
     }
     const meta = ayar.data;
 
@@ -282,8 +305,11 @@ export class AutoBoostLaunchService {
     kayit: KuyrukSatiri,
   ): Promise<{ status: string; message: string }> {
     if (!kayit.preset_id || !kayit.preset_enabled) {
+      // YAPILACAK İŞ DE YAZILI. Bu cümle bir süre yalnızca durumu bildiriyordu
+      // ("yok ya da kapalı") ve kullanıcıyı ayarın nerede olduğunu aramaya
+      // itiyordu — kardeş Meta cümleleri yönlendirmeyi zaten taşıyordu.
       throw new BadRequestException(
-        'Bu müşteri için YouTube otomatik boost ön ayarı yok ya da kapalı.',
+        `Bu müşteri için YouTube otomatik boost ön ayarı yok ya da kapalı. ${ON_AYAR_YERI} tanımla ya da aç.`,
       );
     }
     if (!kayit.linked_ad_account_id) {
@@ -295,9 +321,7 @@ export class AutoBoostLaunchService {
 
     const ayar = autoBoostPresetSettingsSchema.safeParse(kayit.settings);
     if (!ayar.success || ayar.data.platform !== 'google') {
-      throw new BadRequestException(
-        'Ön ayar kaydı okunamadı; Bilgi Bankası’ndan yeniden kaydet.',
-      );
+      throw new BadRequestException(ON_AYAR_BOZUK);
     }
     const g = ayar.data;
 
@@ -431,9 +455,10 @@ export class AutoBoostLaunchService {
    * GÖNDERİ LİSTESİNDEN TEK TIKLA YAYIN — "Yayınla" / "Tekrar boostla".
    *
    * KULLANICI HİÇBİR ŞEY GİRMİYOR. Bütçe, süre, hedefleme, kayıtlı kitle ve
-   * ad Bilgi Bankası ön ayarından geliyor; ekranda yalnızca gönderi ve bir
-   * düğme var. İstenen buydu: "ben hiçbir şey girmeyeceğim, elle bilgi
-   * bankasını doldurmak dışında".
+   * ad boost ön ayarından geliyor; ekranda yalnızca gönderi ve bir düğme var.
+   * İstenen buydu: "ben hiçbir şey girmeyeceğim, elle bilgi bankasını
+   * doldurmak dışında" — o cümledeki "bilgi bankası" ön ayar formunun ESKİ
+   * yeri; form bugün Akıllı Boost sayfasındaki "Boost ön ayarı" modalında.
    *
    * KUYRUK KARTI AÇILMIYOR ve bu bilinçli. `auto_boost_queue_items` üzerinde
    * (social_profile_id, external_id) TAM tekil indeks var — kısmi değil.
@@ -489,22 +514,19 @@ export class AutoBoostLaunchService {
 
     if (!onAyar) {
       throw new BadRequestException(
-        'Bu müşteri için Meta ön ayarı yok. Kütüphane → Bilgi Bankası’ndan ' +
-          'bütçeyi, süreyi ve hedeflemeyi bir kez tanımla — yayın o ayarlarla ' +
-          'yapılıyor.',
+        `Bu müşteri için Meta ön ayarı yok. ${ON_AYAR_YERI} bütçeyi, süreyi ` +
+          've hedeflemeyi bir kez tanımla — yayın o ayarlarla yapılıyor.',
       );
     }
     if (!onAyar.preset_enabled) {
       throw new BadRequestException(
-        'Bu müşterinin Meta ön ayarı kapalı. Bilgi Bankası’ndan aç.',
+        `Bu müşterinin Meta ön ayarı kapalı. ${ON_AYAR_YERI} aç.`,
       );
     }
 
     const ayar = autoBoostPresetSettingsSchema.safeParse(onAyar.settings);
     if (!ayar.success || ayar.data.platform !== 'meta') {
-      throw new BadRequestException(
-        'Ön ayar kaydı okunamadı; Bilgi Bankası’ndan yeniden kaydet.',
-      );
+      throw new BadRequestException(ON_AYAR_BOZUK);
     }
 
     const boostId = await this.onAyardanBoostAc(scoped, {
@@ -579,7 +601,7 @@ export class AutoBoostLaunchService {
      */
     if (!g.budgetMode || !g.durationDays) {
       throw new BadRequestException(
-        'Ön ayarın bütçesi eksik. Bilgi Bankası’ndan bütçe ve süreyi kaydet.',
+        `Ön ayarın bütçesi eksik. ${ON_AYAR_YERI} bütçe ve süreyi kaydet.`,
       );
     }
 

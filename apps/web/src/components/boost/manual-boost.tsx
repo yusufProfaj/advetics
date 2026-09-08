@@ -314,9 +314,9 @@ function PostRow({ post }: { post: BoostablePostRecord }) {
 /**
  * "YAYINLA" / "TEKRAR BOOSTLA" — tek tıkla yayın.
  *
- * KULLANICI HİÇBİR ŞEY GİRMİYOR. Bütçe, süre, hedefleme ve ad Bilgi
- * Bankası ön ayarından geliyor; bu düğme yalnızca gönderiyi ve müşteriyi
- * söylüyor. İstek gövdesine bütçe koyulabilseydi "ön ayar uygulanıyor"
+ * KULLANICI HİÇBİR ŞEY GİRMİYOR. Bütçe, süre, hedefleme ve ad "Boost ön
+ * ayarı" modalındaki ön ayardan geliyor; bu düğme yalnızca gönderiyi ve
+ * müşteriyi söylüyor. İstek gövdesine bütçe koyulabilseydi "ön ayar uygulanıyor"
  * iddiası yalnızca ekranda doğru olurdu.
  *
  * ÜÇ AYRI ETKİSİZLİK SEBEBİ VE ÜÇÜ DE YAZILI. Düğmeyi sebepsiz kapatmak,

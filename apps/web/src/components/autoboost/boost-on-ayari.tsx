@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { BilgiBankasi } from './bilgi-bankasi';
+import { BoostOnAyarlariFormu } from './boost-on-ayarlari-formu';
 
 /**
  * ═══ BOOST ÖN AYARI — AUTO-BOOST'UN İÇİNDEN ═══
@@ -97,7 +97,7 @@ export function BoostOnAyariDugmesi({
               {/* Gövde kaydırılıyor, başlık sabit — 14 alanlı formda
                   "Kaydet" ekran dışında kalıyordu (şablon modalıyla aynı ders). */}
               <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
-                <BilgiBankasi clientId={clientId} canWrite={canWrite} />
+                <BoostOnAyarlariFormu clientId={clientId} canWrite={canWrite} />
               </div>
             </div>
           </div>,

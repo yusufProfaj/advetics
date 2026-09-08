@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_PERMISSIONS, type Permission } from '@advetics/shared';
+import { SAYFA_GIRIS_IZNI, SEKMELER } from '@/components/bilgi-bankasi/sekmeler';
 import { SECTIONS, visibleSections } from './nav-sections';
 
 /**
@@ -82,11 +83,47 @@ describe('menü verisi gerçekten okunuyor', () => {
       '/ayarlar/baglantilar',
       '/ayarlar/senkronizasyon',
       '/ayarlar/ekip',
+      // Bilgi Bankası bu listeye SONRADAN girdi: yetkisiz olduğu dönemde
+      // ilk sekmesi ajans içi notu basıyordu. Bugün notu basmıyor ama
+      // kapının kendisi kalıcı.
+      '/kutuphane/bilgi-bankasi',
     ]) {
       expect(korumali, `${zorunlu} yetkisiz kalmış`).toContain(zorunlu);
     }
     // Tarama boşa düşmesin: liste gerçekten dolu.
     expect(korumali.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('Bilgi Bankası KÜTÜPHANE bölümünde — içeriği artık müşterinin genel profili', () => {
+    // Bir süre Akıllı Boost'un altında, başlıksız bölümdeydi (o zamanki
+    // içeriği boost ön ayarlarıydı). İçerik değişince konum da değişti;
+    // bu test kararı KİLİTLİYOR — bölüm bilinçsizce geri kaymasın.
+    const bolum = SECTIONS.find((s) => s.items.some((i) => i.label === 'Bilgi Bankası'));
+    expect(bolum?.title).toBe('Kütüphane');
+  });
+
+  it('KRİTİK: Bilgi Bankası satırı SAYFANIN KENDİ giriş yetkisini taşıyor', () => {
+    /*
+     * Bu test bir DAVRANIŞI değil bir KARARI kilitliyor.
+     *
+     * Satır uzun süre yetkisizdi ve bu bilinçli bir karar değildi: sayfa o
+     * zaman boost ön ayarlarıydı, sonra içerik müşteri profiline döndü ve
+     * ilk sekme bir süre `clients.notes`u — AJANS İÇİ notu — bastı. Sızıntı
+     * üç halkanın birleşmesiydi ve biri buydu: menü satırında `perm` yok.
+     *
+     * İDDİA SABİT BİR DİZGEYE DEĞİL, SAYFANIN KAPISINA ÇAPALI: sayfa
+     * `SAYFA_GIRIS_IZNI` ile korunuyor ve menü aynı sabiti kullanıyor. Yetki
+     * bir gün değişirse ikisi BİRLİKTE değişmek zorunda; ayrışırlarsa ya
+     * menüde görünüp açılmayan ya da gizlenip çalışan bir satır olur —
+     * `roles.ts`in "aynı matristen beslenir" kuralının tam ihlali.
+     */
+    const satir = SECTIONS.flatMap((s) => s.items).find((i) => i.label === 'Bilgi Bankası');
+    expect(satir, 'menüde Bilgi Bankası satırı yok — tarama boşa düştü').toBeDefined();
+    expect(satir!.perm).toBe(SAYFA_GIRIS_IZNI);
+    // Kapının kendisi de sekme listesinden türüyor: ilk sekmenin okuma
+    // yetkisi. Elle yazılmış bir sabit, sekme listesi değiştiğinde sessizce
+    // bayatlardı.
+    expect(SAYFA_GIRIS_IZNI).toBe(SEKMELER[0].oku);
   });
 });
 
@@ -109,7 +146,33 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
     expect(gorunen).toContain('Genel Bakış');
     expect(gorunen).toContain('Akıllı Boost');
     expect(gorunen).toContain('Raporlar');
-    expect(gorunen).toContain('Bilgi Bankası');
+  });
+
+  it('Bilgi Bankası GÖRÜNÜYOR — içeriği müşterinin KENDİ bilgisi olduğu için', () => {
+    /*
+     * BU İDDİA AYNI KALDI AMA GEREKÇESİ TAMAMEN DEĞİŞTİ — bir DAVRANIŞ
+     * değil, gözden geçirilmiş bir KARAR kilitleniyor.
+     *
+     * Eskiden yukarıdaki "süzgeç fazla kesmiyor" testinin bir satırıydı ve o
+     * hâliyle sayfanın İÇERİĞİ boost ön ayarıydı. İçerik iki kez değişti ve
+     * ikincisinde satır bir güvenlik sorusuna dönüştü: ilk sekme bir süre
+     * `clients.notes`u (ajans içi not) bastı, yani müşteri hesabının o satırı
+     * GÖRMESİ yanlıştı.
+     *
+     * Karar: sekme `clients.notes`u BIRAKTI, yerine `ClientProfile.
+     * bilgiBankasi` geldi — müşterinin kendi ürün/hizmet bilgisi, sık
+     * sorulanları. Bu bilgi zaten müşteriye ait, o yüzden müşteri hesabı hem
+     * görüyor hem okuyor; `client.write` taşımadığı için DÜZENLEYEMİYOR.
+     *
+     * Satır bir gün yeniden ajans içi bir şey göstermeye başlarsa bu testin
+     * DÜŞMESİ değil, elle gözden geçirilmesi gerekiyor: iddia içeriğe değil
+     * yetkiye bakıyor. O yüzden gerekçe burada yazılı.
+     */
+    expect(etiketler('client_viewer')).toContain('Bilgi Bankası');
+    // client_viewer okuyabiliyor ama YAZAMIYOR — sayfanın "Kaydet" düğmesini
+    // gizleyen koşul bu.
+    expect(ROLE_PERMISSIONS.client_viewer).toContain('client.read');
+    expect(ROLE_PERMISSIONS.client_viewer).not.toContain('client.write');
   });
 });
 

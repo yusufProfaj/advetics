@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConnectionsModule } from '../connections/connections.module';
 import { BrandingController } from './branding.controller';
 import { BrandingService } from './branding.service';
+import { ClientProfileController } from './client-profile.controller';
+import { ClientProfileService } from './client-profile.service';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { ClientSetupService } from './client-setup.service';
@@ -20,8 +22,16 @@ import { OrganizationsController } from './organizations.controller';
     ClientsController,
     MembersController,
     BrandingController,
+    ClientProfileController,
   ],
-  providers: [ClientsService, MembersService, BrandingService, ClientSetupService, ClientChannelsService],
-  exports: [ClientsService, BrandingService],
+  providers: [
+    ClientsService,
+    MembersService,
+    BrandingService,
+    ClientSetupService,
+    ClientChannelsService,
+    ClientProfileService,
+  ],
+  exports: [ClientsService, BrandingService, ClientProfileService],
 })
 export class TenancyModule {}

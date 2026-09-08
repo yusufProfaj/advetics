@@ -319,6 +319,86 @@ export async function createHarness(): Promise<Harness> {
       },
     },
 
+    client: {
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        const rows = await q<{ id: string }>('SELECT id FROM clients WHERE id = $1', [where.id]);
+        return rows[0] ?? null;
+      },
+    },
+
+    /** Bilgi Bankası — `ClientProfileService`in gerçekten kullandığı üç metot. */
+    clientProfile: {
+      findUnique: async ({ where }: { where: { clientId: string } }) => {
+        const rows = await q<Record<string, unknown>>(
+          `SELECT id, client_id, hedef_kitle, marka_bilgileri, bilgi_bankasi, logo_asset_id, updated_at
+           FROM client_profiles WHERE client_id = $1`,
+          [where.clientId],
+        );
+        return rows[0] ? mapClientProfile(rows[0]) : null;
+      },
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        const rows = await q<Record<string, unknown>>(
+          `INSERT INTO client_profiles
+             (id, org_id, client_id, hedef_kitle, marka_bilgileri, bilgi_bankasi,
+              logo_asset_id, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now())
+           RETURNING id, client_id, hedef_kitle, marka_bilgileri, bilgi_bankasi,
+                     logo_asset_id, updated_at`,
+          [
+            data.orgId,
+            data.clientId,
+            data.hedefKitle ?? null,
+            data.markaBilgileri ?? null,
+            data.bilgiBankasi ?? null,
+            data.logoAssetId ?? null,
+          ],
+        );
+        return mapClientProfile(rows[0]!);
+      },
+      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        // BİLİNMEYEN ALANDA HATA — `socialProfile.update` deseniyle aynı
+        // gerekçe: sessizce atlamak, güncellenmemiş bir satırı doğrulanmış
+        // gösterir.
+        const bilinen = ['hedefKitle', 'markaBilgileri', 'bilgiBankasi', 'logoAssetId'];
+        const tanimsiz = Object.keys(data).filter((k) => !bilinen.includes(k));
+        if (tanimsiz.length > 0) {
+          throw new Error(
+            `pglite-harness: clientProfile.update bu alanları tanımıyor: ${tanimsiz.join(', ')}.`,
+          );
+        }
+        if ('hedefKitle' in data) {
+          await q('UPDATE client_profiles SET hedef_kitle = $1 WHERE id = $2', [
+            data.hedefKitle ?? null,
+            where.id,
+          ]);
+        }
+        if ('markaBilgileri' in data) {
+          await q('UPDATE client_profiles SET marka_bilgileri = $1 WHERE id = $2', [
+            data.markaBilgileri ?? null,
+            where.id,
+          ]);
+        }
+        if ('bilgiBankasi' in data) {
+          await q('UPDATE client_profiles SET bilgi_bankasi = $1 WHERE id = $2', [
+            data.bilgiBankasi ?? null,
+            where.id,
+          ]);
+        }
+        if ('logoAssetId' in data) {
+          await q('UPDATE client_profiles SET logo_asset_id = $1 WHERE id = $2', [
+            data.logoAssetId ?? null,
+            where.id,
+          ]);
+        }
+        const rows = await q<Record<string, unknown>>(
+          `SELECT id, client_id, hedef_kitle, marka_bilgileri, bilgi_bankasi, logo_asset_id, updated_at
+           FROM client_profiles WHERE id = $1`,
+          [where.id],
+        );
+        return mapClientProfile(rows[0]!);
+      },
+    },
+
     ...externalIdLookup('campaign', 'campaigns', q),
     ...externalIdLookup('adGroup', 'ad_groups', q),
     ...externalIdLookup('creative', 'creatives', q),
@@ -338,6 +418,8 @@ export async function createHarness(): Promise<Harness> {
   const reset = async (): Promise<void> => {
     await pg.exec(`
       TRUNCATE TABLE
+        ai_messages, ai_conversations,
+        client_profiles,
         draft_ads, draft_ad_groups, draft_campaigns,
         ad_creative_assets, ad_creatives,
         asset_platform_refs, assets,
@@ -394,6 +476,18 @@ async function loadAdAccount(
     syncEnabled: a.sync_enabled,
     lastStructureSyncAt: a.last_structure_sync_at,
     lastInsightsSyncAt: a.last_insights_sync_at,
+  };
+}
+
+function mapClientProfile(r: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: r.id,
+    clientId: r.client_id,
+    hedefKitle: r.hedef_kitle,
+    markaBilgileri: r.marka_bilgileri,
+    bilgiBankasi: r.bilgi_bankasi,
+    logoAssetId: r.logo_asset_id,
+    updatedAt: r.updated_at,
   };
 }
 

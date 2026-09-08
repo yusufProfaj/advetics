@@ -212,7 +212,11 @@ DECLARE
     -- Kreatif (metin havuzu + görsel havuzu)
     'ad_creatives', 'ad_creative_assets',
     -- Kampanya taslağı ağacı
-    'draft_campaigns', 'draft_ad_groups', 'draft_ads'
+    'draft_campaigns', 'draft_ad_groups', 'draft_ads',
+    -- Modül 9 — AI kampanya asistanı, sohbet geçmişi
+    'ai_conversations', 'ai_messages',
+    -- Bilgi Bankası — müşterinin genel profili
+    'client_profiles'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -1342,6 +1346,20 @@ BEGIN
   -- audit_logs append-only: uygulama rolüne UPDATE/DELETE yetkisi hiç verilmez.
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'advetics_app') THEN
     EXECUTE 'REVOKE UPDATE, DELETE ON audit_logs FROM advetics_app';
+    -- ai_messages de append-only — bir sohbet turu yazıldıktan sonra
+    -- değişmez. ai_conversations'ta DELETE'i aynı sebeple kapatıyoruz;
+    -- UPDATE açık kalıyor çünkü başlık/updated_at meşru şekilde tazeleniyor
+    -- (kapsamı RLS'teki adv_ai_conversations_update politikası daraltıyor).
+    EXECUTE 'REVOKE UPDATE, DELETE ON ai_messages FROM advetics_app';
+    EXECUTE 'REVOKE DELETE ON ai_conversations FROM advetics_app';
+    -- client_profiles'ta DELETE POLİTİKASI YOK (satır Client silinince
+    -- CASCADE ile gidiyor, elle silme akışı yok). Politikasız bir komut
+    -- Postgres'e göre hata DEĞİL: DELETE başarıyla dönüp SIFIR satır
+    -- etkiliyor — yani "sildim" diyen bir çağrı hiçbir şey silmiyor ve
+    -- bunu ne hata ne log söylüyor. Yetkiyi de geri alınca aynı çağrı
+    -- "permission denied" ile AÇIKÇA düşüyor; sessiz başarıdan iyisi
+    -- gürültülü başarısızlık. (audit_logs ve ai_messages ile aynı gerekçe.)
+    EXECUTE 'REVOKE DELETE ON client_profiles FROM advetics_app';
   END IF;
 END
 $$;
@@ -1727,3 +1745,109 @@ CREATE POLICY adv_user_email_delete ON user_email_accounts
   FOR DELETE USING (
     org_id = app.current_org_id() AND user_id = app.current_user_id()
   );
+
+-- ============================================================================
+-- MODÜL 9 — AI Kampanya Asistanı, sohbet geçmişi
+-- ============================================================================
+--
+-- ai_conversations.client_id NULLABLE (kullanıcı bir müşteri seçmeden önce
+-- de sohbet başlayabiliyor). Görünürlük audit_logs'un genişletilmiş hâli:
+-- org yöneticisi hepsini görür, SAHİBİ kendi sohbetini müşteri seçilmemiş
+-- olsa bile görür (aksi halde kendi geçmişine devam edemezdi), ve o
+-- müşteriye erişimi olan diğer personel (yönetici sorusu — "bu taslağı
+-- hangi promptla açtı") client_id doluysa görebiliyor.
+--
+-- DELETE politikası KASITLI OLARAK YOK — audit_logs ile aynı gerekçe:
+-- politika tanımlanmamış bir komut RLS altında daima reddedilir ve bu
+-- tablo da bir denetim izinin parçası.
+-- ENABLE/FORCE yukarıdaki tablo listesi döngüsünde yapılıyor.
+
+CREATE POLICY adv_ai_conversations_select ON ai_conversations
+  FOR SELECT USING (
+    org_id = app.current_org_id()
+    AND (
+      app.is_org_admin()
+      OR user_id = app.current_user_id()
+      OR (client_id IS NOT NULL AND app.can_access_client(client_id))
+    )
+  );
+
+-- INSERT'TE client_id DE DENETLENİYOR — SAHİPLİK TEK BAŞINA YETMİYOR.
+--
+-- Politika bir süre yalnızca org_id ve user_id'ye bakıyordu, yani sohbeti
+-- kendi adına açan herkes gövdeye İSTEDİĞİ client_id'yi yazabiliyordu. O
+-- satır sonra yukarıdaki SELECT politikasının
+-- "client_id IS NOT NULL AND app.can_access_client(client_id)" dalıyla O
+-- MÜŞTERİNİN personeline görünüyor: erişimi olmayan biri, erişemediği bir
+-- müşterinin DENETİM İZİNE kendi metnini yerleştiriyor. Bu tablonun varlık
+-- sebebi tam olarak o denetim izi ("bu taslağı hangi promptla açtı") —
+-- güvenilmeyen satır orada durduğu anda tablo cevap veremez hâle geliyor.
+--
+-- NULL SERBEST KALMAK ZORUNDA: client_id NULLABLE ve "henüz seçilmedi"
+-- demek; NULL'ı da can_access_client'a sokmak, müşteri seçmeden sohbet
+-- başlatmayı tamamen kapatırdı (fonksiyon NULL için false döner).
+CREATE POLICY adv_ai_conversations_insert ON ai_conversations
+  FOR INSERT WITH CHECK (
+    org_id = app.current_org_id()
+    AND user_id = app.current_user_id()
+    AND (client_id IS NULL OR app.can_access_client(client_id))
+  );
+
+-- UPDATE yalnızca SAHİBİNE açık (başlık/`updated_at` tazeleme). Görünürlük
+-- (SELECT) daha geniş olabilir ama başka birinin sohbetini değiştirme
+-- yetkisi ayrı bir karar — WITH CHECK'i gevşetmek bunu çözmez, engel burada.
+CREATE POLICY adv_ai_conversations_update ON ai_conversations
+  FOR UPDATE USING (
+    org_id = app.current_org_id() AND user_id = app.current_user_id()
+  ) WITH CHECK (
+    org_id = app.current_org_id() AND user_id = app.current_user_id()
+  );
+
+-- ai_messages KENDİ org_id/client_id TAŞIMIYOR — üst sohbetten JOIN'le
+-- çözülüyor (draft_ad_groups'un draft_campaigns'a bağlandığı desenin aynısı).
+-- UPDATE/DELETE YOK: bir sohbet turu yazıldıktan sonra değişmez.
+
+CREATE POLICY adv_ai_messages_select ON ai_messages
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM ai_conversations c
+      WHERE c.id = ai_messages.conversation_id
+        AND c.org_id = app.current_org_id()
+        AND (
+          app.is_org_admin()
+          OR c.user_id = app.current_user_id()
+          OR (c.client_id IS NOT NULL AND app.can_access_client(c.client_id))
+        )
+    )
+  );
+
+CREATE POLICY adv_ai_messages_insert ON ai_messages
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM ai_conversations c
+      WHERE c.id = ai_messages.conversation_id
+        AND c.org_id = app.current_org_id()
+        AND c.user_id = app.current_user_id()
+    )
+  );
+
+-- ============================================================================
+-- Bilgi Bankası — client_profiles
+-- ============================================================================
+--
+-- `draft_campaigns` İLE AYNI DESEN: client_id NULLABLE DEĞİL (branding_
+-- profiles'ın aksine — bu model yalnızca bir müşteriye ait olabilir),
+-- dolayısıyla app.can_access_client(client_id) doğrudan kullanılabiliyor.
+-- DELETE politikası YOK: satır Client silinince CASCADE ile gidiyor, elle
+-- silme akışı yok.
+-- ENABLE/FORCE yukarıdaki tablo listesi döngüsünde yapılıyor.
+
+CREATE POLICY adv_client_profiles_select ON client_profiles
+  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_client_profiles_insert ON client_profiles
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+CREATE POLICY adv_client_profiles_update ON client_profiles
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
+             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
