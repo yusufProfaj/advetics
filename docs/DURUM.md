@@ -780,6 +780,16 @@ ve alternatifi yok (müşteri başına ayrı yetkilendirme aynı tekil anahtara
 saniye mi dakika mı (doküman kendi örneğiyle çelişiyor), `adAnalytics`in
 15.000 eleman tavanı aşıldığında sessizce mi kesiyor.
 
+**AÇIK GÜVENLİK BORCU — LinkedIn Client Secret sohbete yapıştırıldı ve
+DÖNDÜRÜLMEDİ (2026-09-08).** Kullanıcıya bildirildi, döndürme önerildi ve
+kullanıcı mevcut secret'la devam etmeyi seçti. Döndürmenin maliyeti o an
+SIFIRDI: sunucuda henüz hiçbir `LINKEDIN_*` yoktu, yani o secret'ı kullanan
+tek bir şey bile yoktu. Konsolda tek düğme (*Generate a new Client Secret*).
+
+Bu, `SEED_ADMIN_PASSWORD` ile aynı desen: sohbete giren bir kimlik bilgisi
+sızmış sayılır ve bu depoda o borç zaten bir kez açıldı (§ 7 "Hemen"
+listesindeki 2. madde, hâlâ kapanmadı). İkincisi eklendi.
+
 **Şemada eksik:** refresh token'ın BİTİŞ tarihini tutacak kolon yok. LinkedIn
 refresh token'ı 365 günde SABİT tarihte ölüyor ve yenilemeyle uzamıyor;
 o kolon olmadan bu ölüm önceden haber verilemiyor.
