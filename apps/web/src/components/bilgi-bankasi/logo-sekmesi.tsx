@@ -147,7 +147,7 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
           {busy === 'yukle' ? 'Yükleniyor…' : 'Yeni logo yükle'}
           <input
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/png,image/jpeg"
             className="hidden"
             disabled={busy !== null}
             onChange={(e) => void yukle(e.target.files)}

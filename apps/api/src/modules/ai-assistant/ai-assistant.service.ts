@@ -16,6 +16,8 @@ import { ConnectionsService } from '../connections/connections.service';
 import { DraftTreeService } from '../draft-tree/draft-tree.service';
 import { CreativeService } from '../draft-tree/creative.service';
 import { CampaignActionsService, type CampaignAction } from '../campaign-actions/campaign-actions.service';
+import { ClientProfileService } from '../tenancy/client-profile.service';
+import { baglamiMetne, musteriBaglamiKur } from './musteri-baglami';
 import { ANTHROPIC_CLIENT } from './anthropic-client.provider';
 import { buildSystemPrompt } from './system-prompt';
 import { buildTools } from './tools';
@@ -156,11 +158,12 @@ export class AiAssistantService {
     @Inject(ANTHROPIC_CLIENT) private readonly anthropic: AnthropicLike | null,
     @Inject(CONFIG) config: AppConfig,
     private readonly prisma: PrismaService,
-    clients: ClientsService,
-    connections: ConnectionsService,
+    private readonly clients: ClientsService,
+    private readonly connections: ConnectionsService,
     draftTree: DraftTreeService,
     creatives: CreativeService,
     private readonly campaignActions: CampaignActionsService,
+    private readonly clientProfile: ClientProfileService,
   ) {
     this.model = config.aiAssistant.model;
     this.tools = buildTools({ clients, connections, draftTree, creatives, campaignActions });
@@ -177,6 +180,21 @@ export class AiAssistantService {
       : await this.createConversation(ctx, input);
 
     const history = await this.loadHistory(ctx, conversationId);
+
+    /*
+     * MÜŞTERİ BAĞLAMI HER TURDA YENİDEN KURULUYOR, sohbet başında bir kez
+     * değil: kullanıcı sohbet açıkken panelden hesap atayabiliyor ya da
+     * Bilgi Bankası'nı doldurabiliyor. Bir kez kurup saklamak, asistanın
+     * "bu müşterinin hesabı yok" demeye devam etmesi demekti.
+     */
+    const clientId = await this.sohbetinMusterisi(ctx, conversationId);
+    const baglam = clientId
+      ? await musteriBaglamiKur(
+          { clients: this.clients, clientProfile: this.clientProfile, connections: this.connections },
+          ctx,
+          clientId,
+        )
+      : null;
 
     const userText = input.attachmentAssetIds?.length
       ? `${input.message}\n\n[Sisteme eklenen görsel kimlikleri: ${input.attachmentAssetIds.join(', ')}]`
@@ -197,7 +215,7 @@ export class AiAssistantService {
       const response = await this.anthropic.messages.create({
         model: this.model,
         max_tokens: AiAssistantService.MAX_TOKENS,
-        system: buildSystemPrompt(),
+        system: buildSystemPrompt(baglamiMetne(baglam)),
         tools: anthropicTools,
         messages,
       });
@@ -240,7 +258,7 @@ export class AiAssistantService {
 
       const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
       for (const use of toolUses) {
-        const result = await this.runTool(ctx, use.name, use.input as Record<string, unknown>);
+        const result = await this.runTool(ctx, use.name, use.input as Record<string, unknown>, clientId);
         const block: Anthropic.ToolResultBlockParam = {
           type: 'tool_result',
           tool_use_id: use.id,
@@ -528,9 +546,25 @@ export class AiAssistantService {
     ctx: TenantContext,
     name: string,
     input: Record<string, unknown>,
+    varsayilanClientId: string | null,
   ): Promise<ToolResult> {
     const tool = this.toolMap.get(name);
     if (!tool) return { status: 'failed', reason: `Bilinmeyen tool: ${name}` };
+
+    /*
+     * `clientId` VERİLMEDİYSE SOHBETİN MÜŞTERİSİ KULLANILIYOR.
+     *
+     * Model kimliği yazmayı atlarsa tool "müşteri bulunamadı" ile düşüyordu
+     * ve asistan kullanıcıya müşteriyi SORUYORDU — oysa panel onu zaten
+     * biliyor. Varsayılanı burada, TEK yerde veriyoruz: her tool'un kendi
+     * içinde aynı düşüşü ayrı ayrı yazmak, birinde unutulması demekti.
+     *
+     * Model AÇIKÇA başka bir kimlik yazdıysa ona dokunulmuyor — kullanıcı
+     * gerçekten başka bir müşteriyi kastetmiş olabilir.
+     */
+    if (varsayilanClientId && input.clientId === undefined) {
+      input = { ...input, clientId: varsayilanClientId };
+    }
     try {
       assertPermissions(ctx, ...tool.permissions);
     } catch {
@@ -601,6 +635,25 @@ export class AiAssistantService {
    * mesajında gelmesini bekliyor. Ardışık 'tool' satırları burada tek
    * mesajda TOPLANIYOR.
    */
+  /**
+   * Sohbetin bağlı olduğu müşteri.
+   *
+   * SOHBET AÇILIRKEN YAZILIYOR (`createConversation`) ve sonraki turlarda
+   * BURADAN okunuyor — istemcinin her mesajda tekrar göndermesine
+   * güvenmiyoruz. Panel `clientId`yi yalnızca ilk mesajda yolluyor; devam
+   * eden turlarda tekrar istemek, istemcinin bir turda onu atlamasıyla
+   * asistanın müşteriyi "unutması" demekti.
+   */
+  private async sohbetinMusterisi(
+    ctx: TenantContext,
+    conversationId: string,
+  ): Promise<string | null> {
+    const conv = await this.prisma.withTenant(ctx, (tx) =>
+      tx.aiConversation.findUnique({ where: { id: conversationId }, select: { clientId: true } }),
+    );
+    return conv?.clientId ?? null;
+  }
+
   private async loadHistory(ctx: TenantContext, conversationId: string): Promise<Anthropic.MessageParam[]> {
     const rows = await this.prisma.withTenant(ctx, (tx) =>
       tx.aiMessage.findMany({

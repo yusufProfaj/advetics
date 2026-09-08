@@ -249,7 +249,7 @@ export function AiAsistanSohbeti({
             ref={dosyaRef}
             type="file"
             multiple
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/png,image/jpeg"
             className="hidden"
             disabled={busy || yukleniyorEk}
             onChange={(e) => void ekle(e.target.files)}

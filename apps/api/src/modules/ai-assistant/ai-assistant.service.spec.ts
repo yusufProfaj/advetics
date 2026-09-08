@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { TenantContext } from '@advetics/shared';
+import type { ConnectionSummary, TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ClientsService } from '../tenancy/clients.service';
@@ -7,6 +7,7 @@ import type { ConnectionsService } from '../connections/connections.service';
 import type { DraftTreeService } from '../draft-tree/draft-tree.service';
 import type { CreativeService } from '../draft-tree/creative.service';
 import type { CampaignActionsService } from '../campaign-actions/campaign-actions.service';
+import type { ClientProfileService } from '../tenancy/client-profile.service';
 import { AiAssistantService, type AnthropicLike } from './ai-assistant.service';
 import { buildTools } from './tools';
 import type { ToolResult } from './tool-types';
@@ -135,13 +136,18 @@ function makeService(opts: {
   anthropic: AnthropicLike | null;
   prisma?: ReturnType<typeof makeInMemoryPrisma>;
   campaignActions?: Partial<CampaignActionsService>;
+  clientProfile?: Partial<ClientProfileService>;
+  connections?: Partial<ConnectionsService>;
   draftTree?: Partial<DraftTreeService>;
   creatives?: Partial<CreativeService>;
 }) {
   const mem = opts.prisma ?? makeInMemoryPrisma();
   const config = { aiAssistant: { model: 'test-model' } } as never;
   const clients = { list: vi.fn().mockResolvedValue([{ id: 'client-1', name: 'Sabancı İnşaat' }]) } as unknown as ClientsService;
-  const connections = { list: vi.fn().mockResolvedValue([]) } as unknown as ConnectionsService;
+  const connections = {
+    list: vi.fn().mockResolvedValue([]),
+    ...opts.connections,
+  } as unknown as ConnectionsService;
   const draftTree = {
     list: vi.fn(),
     createFromSimple: vi.fn(),
@@ -156,6 +162,23 @@ function makeService(opts: {
     ...opts.campaignActions,
   } as unknown as CampaignActionsService;
 
+  /*
+   * BAĞLAM KURUCUSUNUN BAĞIMLILIĞI. Profil boş dönüyor: bu paketin konusu
+   * orkestrasyon, bağlam metninin kendisi `musteri-baglami.spec.ts`te.
+   */
+  const clientProfile = {
+    get: vi.fn().mockResolvedValue({
+      id: '',
+      clientId: 'client-1',
+      bilgiBankasi: null,
+      hedefKitle: null,
+      markaBilgileri: null,
+      logoAssetId: null,
+      updatedAt: '',
+    }),
+    ...opts.clientProfile,
+  } as unknown as ClientProfileService;
+
   const svc = new AiAssistantService(
     opts.anthropic,
     config,
@@ -165,8 +188,9 @@ function makeService(opts: {
     draftTree,
     creatives,
     campaignActions,
+    clientProfile,
   );
-  return { svc, mem, campaignActions, draftTree, creatives };
+  return { svc, mem, campaignActions, draftTree, creatives, clientProfile, connections };
 }
 
 describe('sendMessage', () => {
@@ -808,3 +832,122 @@ async function seedPending(
   );
   return conv.id as string;
 }
+
+/**
+ * SEÇİLİ MÜŞTERİ ASİSTANA VERİLİYOR — kullanıcının bildirdiği üç arızanın kökü.
+ *
+ * İlk sürümde asistan seçili müşteriyi hiç bilmiyordu; model `clientId`yi
+ * kendi bulmak zorundaydı ve bulamayınca kullanıcıya SORUYORDU. Kullanıcının
+ * tarifi: *"müşteriye bağlı hesapları göremiyor"*, *"müşteriyi seçtiğimde o
+ * müşteriden reklam oluşturabiliyor olması lazım"*.
+ */
+describe('sohbetin müşterisi', () => {
+  /**
+   * Yalnızca `client-1` için hesap dönen, MÜŞTERİ AYIRT EDEN bir taklit.
+   *
+   * TİP TAM DOLDURULUYOR (`ConnectionSummary`), eksik alanlı bir nesne `as`
+   * ile geçirilmiyor: CLAUDE.md'nin "çift cast eksik alan denetimini tamamen
+   * kapatıyor" dersi. Tip bir alan kazanırsa bu taklit DERLEMEDE kırılıyor —
+   * ve kırılması doğru, çünkü taklit gerçeği izlemek zorunda.
+   */
+  function baglanti(clientId: string): ConnectionSummary {
+    return {
+      id: 'conn-1',
+      platform: 'meta',
+      accountLabel: 'Ajans BM',
+      status: 'active',
+      missingScopes: [],
+      missingOptionalScopes: [],
+      tokenExpiresAt: null,
+      lastVerifiedAt: null,
+      lastErrorCode: null,
+      connectedAt: '2026-09-01T00:00:00.000Z',
+      adAccounts: [
+        {
+          id: 'acc-1',
+          platform: 'meta',
+          externalId: 'act_1',
+          name: 'Sabancı Meta',
+          currency: 'TRY',
+          timezone: 'Europe/Istanbul',
+          status: 'active',
+          syncEnabled: true,
+          isManager: false,
+          lastInsightsSyncAt: null,
+          clientId,
+          clientName: 'Sabancı İnşaat',
+        },
+      ],
+      socialProfiles: [
+        {
+          id: 'page-1',
+          profileType: 'facebook_page',
+          externalId: 'page_1',
+          name: 'Sabancı İnşaat',
+          username: null,
+          pictureUrl: null,
+          linkedAdAccountId: null,
+          syncEnabled: true,
+          clientId,
+          clientName: 'Sabancı İnşaat',
+        },
+      ],
+    };
+  }
+
+  function musteriAyirtEdenConnections() {
+    return {
+      list: vi.fn(
+        async (_ctx: TenantContext, id: string | null): Promise<ConnectionSummary[]> =>
+          id === 'client-1' ? [baglanti(id)] : [],
+      ),
+    };
+  }
+
+  it('KRİTİK: model clientId YAZMASA BİLE sohbetin müşterisi kullanılıyor', async () => {
+    /*
+     * Taklit müşteriyi AYIRT EDİYOR: varsayılan çalışmazsa tool `undefined`
+     * ile çağrılır, boş liste döner ve sonuç `failed` olur. Yani bu iddia
+     * ancak varsayılan gerçekten uygulanıyorsa geçiyor.
+     */
+    const { client } = scriptedAnthropic([
+      toolUseResponse('list_ad_accounts', {}), // clientId BİLEREK YOK
+      textResponse('Hesapları listeledim.'),
+    ]);
+    const { svc, mem } = makeService({ anthropic: client, connections: musteriAyirtEdenConnections() });
+
+    await svc.sendMessage(CTX, { message: 'hesapları göster', clientId: 'client-1' });
+
+    const toolSatiri = mem.messages.find((m) => m.toolName === 'list_ad_accounts');
+    expect((toolSatiri?.toolResult as { status: string }).status).toBe('success');
+  });
+
+  it('model AÇIKÇA başka bir müşteri yazarsa ona DOKUNULMUYOR', async () => {
+    // Kullanıcı gerçekten başka bir müşteriyi kastetmiş olabilir; varsayılan
+    // yalnızca ALAN BOŞSA devreye giriyor.
+    const { client } = scriptedAnthropic([
+      toolUseResponse('list_ad_accounts', { clientId: 'baska-musteri' }),
+      textResponse('Bakıyorum.'),
+    ]);
+    const conns = musteriAyirtEdenConnections();
+    const { svc } = makeService({ anthropic: client, connections: conns });
+
+    await svc.sendMessage(CTX, { message: 'x', clientId: 'client-1' });
+
+    expect(conns.list).toHaveBeenCalledWith(CTX, 'baska-musteri');
+  });
+
+  it('müşteri bağlamı SİSTEM PROMPTUNA giriyor — hesap kimlikleriyle', async () => {
+    const { client, create } = scriptedAnthropic([textResponse('Merhaba.')]);
+    const { svc } = makeService({ anthropic: client, connections: musteriAyirtEdenConnections() });
+
+    await svc.sendMessage(CTX, { message: 'merhaba', clientId: 'client-1' });
+
+    const sistem = (create.mock.calls[0]![0] as { system: string }).system;
+    expect(sistem).toContain('Sabancı İnşaat');
+    expect(sistem).toContain('acc-1');
+    // Sayfa kimliği de girmeli: Meta taslağında socialProfileId ZORUNLU ve
+    // girmezse asistan onu da sorardı.
+    expect(sistem).toContain('page-1');
+  });
+});
