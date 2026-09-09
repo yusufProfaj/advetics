@@ -5,14 +5,31 @@
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- memberships: org geneli erişimin tekilliği
+-- memberships: org geneli erişimin tekilliği — ORGANİZASYON BAŞINA
 --
 -- Postgres'te UNIQUE(user_id, client_id) NULL'ları BİRBİRİNDEN FARKLI sayar.
 -- Yani bir kullanıcıya iki kez org geneli membership verilebilirdi.
--- Partial unique index bunu engeller.
+-- Partial unique index bunu engelliyor.
+--
+-- `org_id` SONRADAN EKLENDİ ve bu bir HATA DÜZELTMESİ. İlk hâli yalnızca
+-- `(user_id)` taşıyordu, yani bir kullanıcı HAYATI BOYUNCA tek bir org
+-- geneli üyeliğe sahip olabiliyordu. O varsayım "bir kullanıcı = bir
+-- organizasyon" dünyasında doğruydu; üst hesap (MCC) katmanıyla çürüdü:
+-- danışman altındaki HER şirkette org geneli yetkili olmak zorunda.
+--
+-- BELİRTİSİ HİÇ AÇIKLAYICI DEĞİLDİ: "Şirket ekle" ne yazılırsa yazılsın
+-- "Bu kayıt zaten mevcut" diyordu — hata mesajı yeni şirketten değil,
+-- kullanıcının BAŞKA bir şirketteki üyeliğinden geliyordu ve ekranda o
+-- bilgiye götüren hiçbir iz yoktu.
+--
+-- ADI DEĞİŞTİ ki eski indeks düşürülüp yenisi kurulabilsin: aynı adla
+-- `CREATE ... IF NOT EXISTS` yazmak, TANIMI DEĞİŞMİŞ bir indeksi sessizce
+-- ATLAR ve düzeltme hiç uygulanmazdı.
 -- -----------------------------------------------------------------------------
-CREATE UNIQUE INDEX IF NOT EXISTS memberships_user_org_scope_uniq
-  ON memberships (user_id)
+DROP INDEX IF EXISTS memberships_user_org_scope_uniq;
+
+CREATE UNIQUE INDEX IF NOT EXISTS memberships_org_scope_uniq
+  ON memberships (user_id, org_id)
   WHERE client_id IS NULL;
 
 -- -----------------------------------------------------------------------------

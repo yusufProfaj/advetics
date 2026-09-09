@@ -120,18 +120,24 @@ export default async function DashboardLayout({ children }: { children: React.Re
             olmayan bir özelliği aramasına yol açardı.
           */}
           <div className="flex min-w-0 items-center gap-2">
-            {session.managerAccount && (
-              <>
-                <SirketSecici
-                  managerAccountName={session.managerAccount.name}
-                  organizations={session.managerAccount.organizations}
-                  activeOrganizationId={session.activeOrganizationId}
-                />
-                <span className="hidden text-ink-muted sm:inline" aria-hidden>
-                  ›
-                </span>
-              </>
-            )}
+            {/*
+              ŞİRKET SEÇİCİ HER ZAMAN BASILIYOR — üst hesabı olmasa bile.
+              Eskiden yalnızca üst hesabı olanlara basılıyordu; "Tüm
+              workspace'ler" eylemi buraya taşınınca o koşul, üst hesabı
+              olmayan kullanıcının ŞİRKET GENELİ GÖRÜNÜMÜ TAMAMEN
+              KAYBETMESİ demeye başladı. Tek şirketli kullanıcıda seçici
+              nereye bakıldığını gösteriyor ve daraltmayı kaldırma
+              düğmesi oluyor.
+            */}
+            <SirketSecici
+              managerAccountName={session.managerAccount?.name ?? session.organization.name}
+              organizations={session.managerAccount?.organizations ?? [session.organization]}
+              activeOrganizationId={session.activeOrganizationId}
+              activeClientId={session.activeClientId}
+            />
+            <span className="hidden text-ink-muted sm:inline" aria-hidden>
+              ›
+            </span>
             <ClientSwitcher
               availableClients={session.availableClients}
               activeClientId={session.activeClientId}

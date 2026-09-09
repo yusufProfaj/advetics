@@ -32,10 +32,13 @@ export function SirketSecici({
   managerAccountName,
   organizations,
   activeOrganizationId,
+  activeClientId,
 }: {
   managerAccountName: string;
   organizations: Sirket[];
   activeOrganizationId: string;
+  /** Seçili workspace — `null` ise zaten şirket geneli görünümdeyiz. */
+  activeClientId: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -56,9 +59,43 @@ export function SirketSecici({
   const aktif = organizations.find((o) => o.id === activeOrganizationId) ?? null;
   const bekliyor = pending || isPending;
 
+  /**
+   * ŞİRKET GENELİ GÖRÜNÜM — "Tüm workspace'ler".
+   *
+   * Bu eylem workspace seçicisinden BURAYA taşındı: hiyerarşi Şirket ›
+   * Workspace ve "hepsi" şirketin tamamı demek, yani karar bir üst
+   * seviyeye ait. İki seçicide birden durması, aynı eylemin iki yeri
+   * olması ve birinin bir gün ötekini tutmaması demekti.
+   *
+   * TAM SAYFA YÜKLEMESİ YOK: şirket değişmiyor, yalnızca daraltma
+   * kalkıyor. `router.refresh()` sunucu bileşenlerini tazelemeye yetiyor
+   * ve açık süzgeçler AYNI şirkete ait olduğu için anlamlarını koruyor.
+   */
+  async function sirketGeneli() {
+    setOpen(false);
+    setPending(true);
+    setHata(null);
+    try {
+      await apiFetch('/auth/switch-client', {
+        method: 'POST',
+        body: JSON.stringify({ clientId: null }),
+      });
+      startTransition(() => {
+        router.refresh();
+        setPending(false);
+      });
+    } catch (e) {
+      setHata(e instanceof ApiRequestError ? e.message : 'Şirket geneli görünüme geçilemedi.');
+      setPending(false);
+    }
+  }
+
   async function sec(organizationId: string) {
     if (organizationId === activeOrganizationId) {
-      setOpen(false);
+      // AYNI ŞİRKET: geçiş değil, DARALTMAYI KALDIRMA. Eskiden burası
+      // hiçbir şey yapmıyordu ve org geneli görünüme dönmenin yolu
+      // workspace seçicisindeydi; o satır kaldırılınca eylem buraya geçti.
+      await sirketGeneli();
       return;
     }
     setOpen(false);
@@ -168,7 +205,15 @@ export function SirketSecici({
                 >
                   <span className="min-w-0 truncate">{o.name}</span>
                   {o.id === activeOrganizationId && (
-                    <span className="shrink-0 text-[11px] text-ink-muted">seçili</span>
+                    /*
+                     * EYLEM ADIYLA YAZILI. "seçili" yazmak, satırın
+                     * tıklanınca ne yapacağını gizliyordu — kullanıcı org
+                     * geneli görünüme dönmek isteyince nereye basacağını
+                     * bilemezdi.
+                     */
+                    <span className="shrink-0 text-[11px] text-ink-muted">
+                      {activeClientId === null ? 'şirket geneli' : 'tüm workspace’ler'}
+                    </span>
                   )}
                 </button>
               </li>

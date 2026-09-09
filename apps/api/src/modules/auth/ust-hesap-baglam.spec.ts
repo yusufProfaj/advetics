@@ -56,6 +56,8 @@ interface Senaryo {
   ustHesap?: { id: string; role: string; status?: string };
   /** Ev şirketindeki üyelikler. */
   uyelikler?: Array<{ clientId: string | null; role: string }>;
+  /** KARDEŞ şirketteki gerçek üyelikler — şirketi açan kişi orada owner olur. */
+  kardesUyelikler?: Array<{ orgId: string; clientId: string | null; role: string }>;
 }
 
 function servis(s: Senaryo) {
@@ -84,13 +86,30 @@ function servis(s: Senaryo) {
           : [],
         memberships: (s.uyelikler ?? [{ clientId: null, role: 'owner' }]).map((u, i) => ({
           id: `m-${i}`,
+          /*
+           * `orgId` FİKSTÜRDE — gerçek satırda da var ve bağlam artık
+           * üyelikleri AKTİF şirkete süzüyor. Alanı vermemek, testin
+           * üretimden farklı bir dünyada koşması demekti.
+           */
+          orgId: ORG_A1,
           clientId: u.clientId,
           role: u.role,
           permissions: null,
           client: u.clientId
             ? { id: u.clientId, name: u.clientId, status: 'active' }
             : null,
-        })),
+        })).concat(
+          (s.kardesUyelikler ?? []).map((u, i) => ({
+            id: `k-${i}`,
+            orgId: u.orgId,
+            clientId: u.clientId,
+            role: u.role,
+            permissions: null,
+            client: u.clientId
+              ? { id: u.clientId, name: u.clientId, status: 'active' }
+              : null,
+          })),
+        ),
       }),
     },
     organization: {
@@ -213,6 +232,47 @@ describe('YETKİ YÜKSELTME KAPALI', () => {
       'uydurma-kimlik',
     );
     expect(r.context.orgId).toBe(ORG_A1);
+  });
+});
+
+describe('ÜYELİK AKTİF ŞİRKETE SÜZÜLÜYOR', () => {
+  it('KRİTİK: başka şirketin workspace kimlikleri bağlama SIZMIYOR', () => {
+    /*
+     * `clientIds` doğrudan `app.current_client_ids()`e yazılıyor ve
+     * `can_access_client()` onu okuyor. Süzgeç olmasa, A şirketindeyken
+     * B'nin workspace kimlikleri bağlamda dolaşırdı.
+     *
+     * Tek org varsayımında bu mümkün DEĞİLDİ (bir kullanıcı = bir org);
+     * üst hesap katmanı o varsayımı bozdu.
+     */
+    return servis({
+      ustHesap: { id: UST_A, role: 'owner' },
+      uyelikler: [{ clientId: 'ws-a1', role: 'analyst' }],
+      kardesUyelikler: [{ orgId: ORG_A2, clientId: 'ws-a2', role: 'analyst' }],
+    })
+      .resolve('user-1', null, null)
+      .then((r) => {
+        expect(r.context.orgId).toBe(ORG_A1);
+        expect(r.context.clientIds).toEqual(['ws-a1']);
+        expect(r.context.clientIds).not.toContain('ws-a2');
+      });
+  });
+
+  it('KRİTİK: kardeş şirketteki GERÇEK üyelik, üst hesap rolünü EZİYOR', async () => {
+    /*
+     * Şirketi AÇAN kişi orada gerçek bir `owner` üyeliği alıyor. Ama başka
+     * biri ona o şirkette DAR bir rol vermiş olabilir; üst hesaptaki geniş
+     * rolün onu ezmesi, kullanıcının o şirkette beklemediği bir yetki
+     * bulması demekti.
+     */
+    const r = await servis({
+      ustHesap: { id: UST_A, role: 'owner' },
+      kardesUyelikler: [{ orgId: ORG_A2, clientId: 'ws-a2', role: 'analyst' }],
+    }).resolve('user-1', null, ORG_A2);
+
+    expect(r.context.orgId).toBe(ORG_A2);
+    expect(r.context.role).toBe('analyst');
+    expect(r.context.isOrgAdmin).toBe(false);
   });
 });
 

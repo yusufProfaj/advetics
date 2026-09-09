@@ -35,14 +35,27 @@ describe('şirket seçici üst barda', () => {
     expect(SAYFA).toContain('manager-account');
   });
 
-  it('KRİTİK: yalnızca ÜST HESABI OLANLARA basılıyor', () => {
+  it('KRİTİK: KOŞULSUZ basılıyor — üst hesabı olmayan da şirket geneline dönebilsin', () => {
     /*
-     * Koşulsuz basmak, bağımsız bir şirkette geçilecek yeri olmayan bir
-     * seçici göstermek demekti — kullanıcı olmayan bir özelliği arar.
-     * `session.managerAccount` null olduğunda blok hiç render edilmiyor.
+     * KARAR TERSİNE ÇEVRİLDİ ve sebebi kayda geçiyor.
+     *
+     * Önce yalnızca üst hesabı olanlara basılıyordu; gerekçe "bağımsız
+     * şirkette geçilecek yer yok" idi ve o zaman DOĞRUYDU. Sonra
+     * "Tüm workspace'ler" eylemi workspace seçicisinden buraya taşındı ve
+     * aynı koşul, üst hesabı olmayan kullanıcının ŞİRKET GENELİ GÖRÜNÜMÜ
+     * TAMAMEN KAYBETMESİ anlamına gelmeye başladı — hiçbir ekranda
+     * görünmeyecek bir gerileme.
+     *
+     * Tek şirketli kullanıcıda seçici hâlâ iş yapıyor: nerede olunduğunu
+     * gösteriyor ve daraltmayı kaldırma düğmesi oluyor.
      */
-    expect(LAYOUT).toContain('{session.managerAccount && (');
-    expect(LAYOUT).toContain('managerAccountName={session.managerAccount.name}');
+    expect(LAYOUT).not.toContain('{session.managerAccount && (');
+    expect(LAYOUT).toContain(
+      'managerAccountName={session.managerAccount?.name ?? session.organization.name}',
+    );
+    expect(LAYOUT).toContain(
+      'organizations={session.managerAccount?.organizations ?? [session.organization]}',
+    );
   });
 
   it('KRİTİK: seçici AKTİF şirketi okuyor, ev şirketini DEĞİL', () => {
@@ -62,6 +75,47 @@ describe('şirket seçici üst barda', () => {
     expect(sirket).toBeGreaterThan(-1);
     expect(workspace).toBeGreaterThan(-1);
     expect(sirket).toBeLessThan(workspace);
+  });
+});
+
+describe('ŞİRKET GENELİ GÖRÜNÜM seçicide', () => {
+  const WS_SECICI = kod('components/client-switcher.tsx');
+
+  it('BOŞA DÜŞME BEKÇİSİ: workspace seçici kaynağı okundu', () => {
+    expect(WS_SECICI).toContain('switch-client');
+  });
+
+  it('KRİTİK: "Tüm workspace’ler" satırı workspace seçiciden KALKTI', () => {
+    /*
+     * Hiyerarşi Şirket › Workspace: "hepsi" şirketin tamamı demek ve o
+     * karar bir üst seviyeye ait. İki seçicide birden durması, aynı eylemin
+     * iki yeri olması ve birinin bir gün ötekini tutmaması demekti.
+     */
+    expect(WS_SECICI).not.toContain('Organizasyon geneli görünüm');
+    expect(WS_SECICI).not.toContain("label=\"Tüm workspace’ler\"");
+  });
+
+  it('KRİTİK: eylem ŞİRKET seçicide ve `clientId: null` gönderiyor', () => {
+    expect(SECICI).toContain('async function sirketGeneli()');
+    expect(SECICI).toContain("JSON.stringify({ clientId: null })");
+  });
+
+  it('KRİTİK: AKTİF şirkete tıklamak artık no-op DEĞİL', () => {
+    /*
+     * Eskiden hiçbir şey yapmıyordu; org geneli görünüme dönmenin yolu
+     * workspace seçicisindeydi. O satır kalkınca burası tek yol oldu —
+     * no-op bırakmak, özelliği ulaşılamaz yapardı.
+     */
+    const secBlogu = blok(SECICI, 'async function sec(');
+    expect(secBlogu).toContain('await sirketGeneli();');
+  });
+
+  it('şirket geneline dönerken TAM SAYFA yüklemesi YOK', () => {
+    // Şirket değişmiyor, yalnızca daraltma kalkıyor; açık süzgeçler aynı
+    // şirkete ait olduğu için anlamlarını koruyor.
+    const blogu = blok(SECICI, 'async function sirketGeneli()');
+    expect(blogu).toContain('router.refresh()');
+    expect(blogu).not.toContain('window.location.assign');
   });
 });
 

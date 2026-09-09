@@ -178,7 +178,7 @@ export function ClientSwitcher({
       */}
       {bekliyor && (
         <TamEkranYukleniyor
-          mesaj={`${gecilen ?? 'Tüm workspace’ler'} görünümüne geçiliyor…`}
+          mesaj={`${gecilen ?? 'Şirket geneli'} görünümüne geçiliyor…`}
         />
       )}
       <button
@@ -197,10 +197,10 @@ export function ClientSwitcher({
         <Avatar name={active?.name ?? '∗'} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium leading-tight">
-            {active?.name ?? 'Tüm workspace’ler'}
+            {active?.name ?? 'Workspace seç'}
           </span>
           <span className="block text-[11px] leading-tight text-ink-muted">
-            {active ? 'Workspace görünümü' : `${availableClients.length} workspace`}
+            {active ? 'Workspace görünümü' : `${availableClients.length} workspace · şirket geneli`}
           </span>
         </span>
         {/*
@@ -260,17 +260,13 @@ export function ClientSwitcher({
             organizasyon geneli görünüm bir sonuç değil; listenin başında
             durması aranan şeyi bir satır aşağı itiyor.
           */}
-          {isOrgAdmin && arama.trim() === '' && (
-            <>
-              <Option
-                label="Tüm workspace’ler"
-                hint="Organizasyon geneli görünüm"
-                selected={activeClientId === null}
-                onSelect={() => void select(null)}
-              />
-              <div className="h-px bg-line" />
-            </>
-          )}
+          {/*
+            "TÜM WORKSPACE'LER" ARTIK ŞİRKET SEÇİCİDE.
+            Hiyerarşi Şirket › Workspace: "hepsi" şirketin tamamı demek ve
+            o karar bir üst seviyeye ait. İki seçicide birden durması,
+            aynı eylemin iki yeri olması ve birinin bir gün ötekini
+            tutmaması demekti.
+          */}
 
           <div className="max-h-72 overflow-y-auto">
             {suzulmus.length === 0 ? (

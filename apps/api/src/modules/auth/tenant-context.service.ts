@@ -114,6 +114,15 @@ export class TenantContextService {
         memberships: {
           select: {
             id: true,
+            /*
+             * `orgId` OKUNMAK ZORUNDA. Bu sorgu org süzgeci TAŞIMIYOR ve
+             * taşıyamaz (aktif şirket aşağıda hesaplanıyor). Tek org
+             * varsayımında zararsızdı; üst hesap (MCC) katmanıyla bir
+             * kullanıcının BİRDEN ÇOK şirkette üyeliği olabiliyor ve
+             * hepsini birden bağlama koymak, başka şirketin workspace
+             * kimliklerini `app.current_client_ids()`e yazmak demekti.
+             */
+            orgId: true,
             clientId: true,
             role: true,
             permissions: true,
@@ -166,33 +175,75 @@ export class TenantContextService {
     const izinliOrgIdler = new Set<string>([user.orgId, ...kardesSirketler.map((o) => o.id)]);
     const activeOrgId =
       requestedOrgId && izinliOrgIdler.has(requestedOrgId) ? requestedOrgId : user.orgId;
-    const evdeMi = activeOrgId === user.orgId;
 
+    // EV organizasyonundaki üyeliğe bakılıyor: kullanıcı hiçbir yere
+    // giremiyorsa oturum kurmanın anlamı yok.
     if (user.memberships.length === 0 && !ustHesap) {
       throw new UnauthorizedException('Hiçbir workspace’e erişim yetkiniz tanımlı değil');
     }
 
     /*
-     * KARDEŞ ŞİRKETTE ÜYELİK SATIRI YOK — üst hesap rolünden SENTETİK bir
-     * org geneli üyelik türetiliyor. `clientId: null` olması kritik: aşağıdaki
-     * `orgScoped` süzgeci tam olarak buna bakıyor ve org geneli erişim
-     * oradan doğuyor.
+     * ÜYELİKLER AKTİF ŞİRKETE SÜZÜLÜYOR.
+     *
+     * `evdeMi` bayrağına bakmak YETMİYOR: şirketi AÇAN kişi orada gerçek bir
+     * `owner` üyeliği alıyor (`manager-account.service.ts`), yani kardeş
+     * şirkette de üyeliği olabiliyor. Süzmeden bırakmak iki yönde de
+     * yanlıştı — A şirketindeyken B'nin workspace kimlikleri bağlama
+     * giriyordu, ve B'ye geçince A'daki dar rol "en geniş rol" seçiminde
+     * kazanabiliyordu.
      */
-    const scopedMemberships = evdeMi
-      ? // Arşivlenmiş workspace'ler erişim listesinden düşer.
-        user.memberships.filter((m) => m.clientId === null || m.client?.status !== 'archived')
-      : [
-          {
-            id: `manager:${ustHesap!.id}`,
-            clientId: null,
-            role: ustHesap!.role,
-            // Üst hesap üyeliği ince ayar TAŞIMIYOR: rol bir şirkette değil,
-            // bir danışmanlığın ALTINDAKİ HEPSİNDE geçerli ve tek tek
-            // istisna yazmanın yeri o şirketin kendi `memberships` satırı.
-            permissions: null,
-            client: null,
-          } as (typeof user.memberships)[number],
-        ];
+    const aktifOrgUyelikleri = user.memberships.filter(
+      (m) =>
+        m.orgId === activeOrgId &&
+        // Arşivlenmiş workspace'ler erişim listesinden düşer.
+        (m.clientId === null || m.client?.status !== 'archived'),
+    );
+
+    /*
+     * ÜYELİK YOKSA üst hesap rolünden SENTETİK bir org geneli üyelik
+     * türetiliyor. `clientId: null` olması kritik: aşağıdaki `orgScoped`
+     * süzgeci tam olarak buna bakıyor ve org geneli erişim oradan doğuyor.
+     *
+     * GERÇEK ÜYELİK VARSA O KAZANIYOR: kendi şirketindeki dar bir rolü üst
+     * hesap rolüyle genişletmek, kullanıcının kendi şirketinde beklemediği
+     * bir yetki bulması demekti.
+     */
+    /*
+     * ÜÇLÜ OPERATÖR DEĞİL AÇIK `if/else if/else` — TİP DARALTMASI İÇİN.
+     *
+     * Önce erken bir `if (... && !ustHesap) throw` + üçlü operatör vardı;
+     * TypeScript o guard'ı üçlünün else dalına BAĞLAYAMIYOR ve `ustHesap!`
+     * yazmak gerekiyordu. `!` o bilgiyi susturur: bir gün bu koşullardan
+     * biri değişirse hata "null.id okunamıyor" gibi sebebi anlatmayan bir
+     * çalışma anı hatasına dönerdi. Bu yapıda daraltma derleyicinin işi.
+     */
+    let scopedMemberships: typeof aktifOrgUyelikleri;
+    if (aktifOrgUyelikleri.length > 0) {
+      scopedMemberships = aktifOrgUyelikleri;
+    } else if (ustHesap) {
+      /*
+       * ÜYELİK YOKSA üst hesap rolünden SENTETİK bir org geneli üyelik.
+       * `clientId: null` olması kritik: aşağıdaki `orgScoped` süzgeci tam
+       * olarak buna bakıyor ve org geneli erişim oradan doğuyor.
+       */
+      scopedMemberships = [
+        {
+          id: `manager:${ustHesap.id}`,
+          orgId: activeOrgId,
+          clientId: null,
+          role: ustHesap.role,
+          // Üst hesap üyeliği ince ayar TAŞIMIYOR: rol bir şirkette değil,
+          // bir danışmanlığın ALTINDAKİ HEPSİNDE geçerli ve tek tek
+          // istisna yazmanın yeri o şirketin kendi `memberships` satırı.
+          permissions: null,
+          client: null,
+        } as (typeof user.memberships)[number],
+      ];
+    } else {
+      // Ne aktif şirkette üyelik ne üst hesap: bağlam KURULAMAZ. Sessizce
+      // boş bir oturum vermek yerine gürültülü patlamak doğru.
+      throw new UnauthorizedException('Bu şirkete erişim yetkiniz tanımlı değil');
+    }
 
     const orgScoped = scopedMemberships.filter(
       (m) => m.clientId === null && isOrgScopedRole(m.role as Role),
