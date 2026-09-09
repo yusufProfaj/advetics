@@ -147,22 +147,46 @@ describe('havuz ajans genelinde — RLS kurulumu', () => {
     expect(sonra).toBeGreaterThan(once);
   });
 
-  it('KRİTİK: HAVUZ ajans geneli, ATANMIŞ satır kendi şirketinde', () => {
+  it('KRİTİK: HAVUZ ajans geneli, ATANMIŞ satır MODA BAĞLI', () => {
     /*
-     * Bu ayrım bir güvenlik sınırı ve testte yakalandı: `can_access_client()`
+     * İKİ DALIN SINIRI FARKLI ve bu bir güvenlik kararı:
+     *
+     *   HAVUZ (client_id NULL) → HER ZAMAN ajans geneli. Havuz satırı bir
+     *     müşterinin verisi değil, ajansın hangi hesaplara erişebildiği.
+     *   ATANMIŞ → `app.org_kapsaminda()`, yani MODA BAĞLI: "tüm şirketler"
+     *     kapalıyken kendi şirketine çivili, açıkken ajans geneli.
+     *
+     * ATANMIŞ DAL DOĞRUDAN `ajans_org_idleri()` KULLANAMAZ — kullansaydı
+     * mod bayrağını ATLAR ve sınır KALICI olarak açılırdı. `can_access_client()`
      * org yöneticisine HER workspace için true dönüyor ve workspace'in
-     * ORG'una hiç bakmıyor. Dıştaki `org_id = current_org_id()` koşulunu
-     * ajans geneline gevşetmek, kardeş şirketin ATANMIŞ hesaplarını
-     * açıyordu.
+     * ORG'una hiç bakmıyor; o dış koşul onu sabitleyen tek şey.
+     *
+     * BU İDDİA BİR KEZ GÜNCELLENDİ: "tüm şirketler" modu gelince atanmış
+     * dal `current_org_id()`den `org_kapsaminda()`ya geçti. Testin düşmesi
+     * doğruydu — sınır gerçekten değişti ve kararın gözden geçirilmesi
+     * gerekiyordu.
      */
     expect(RLS).toContain('THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()');
     expect(RLS).toContain(
-      'ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)',
+      'ELSE app.org_kapsaminda(org_id) AND app.can_access_client(client_id)',
     );
-    // ATANMIŞ dal ajans genelini KULLANMAMALI.
     expect(RLS).not.toContain(
       'ELSE org_id = ANY (app.ajans_org_idleri()) AND app.can_access_client(client_id)',
     );
+  });
+
+  it('KRİTİK: mod bayrağının VARSAYILANI KAPALI', () => {
+    /*
+     * Varsayılanı "açık" yapan bir mutasyon bir tur boyunca hiçbir testi
+     * düşürmedi (bkz. `ust-hesap-havuz-rls.spec.ts`). Bayrağı yazmayı
+     * unutan bir yol, varsayılan açık olsaydı BÜTÜN ajansı görürdü.
+     */
+    expect(RLS).toContain("COALESCE(current_setting('app.tum_sirketler', true), 'off') = 'on'");
+  });
+
+  it('KRİTİK: mod kapsamı AJANSLA sınırlı — "her şey" değil', () => {
+    // `THEN true` yazmak, tek bir cookie ile bütün kiracıları açardı.
+    expect(RLS).toContain('WHEN app.tum_sirketler() THEN satir_org = ANY (app.ajans_org_idleri())');
   });
 
   it('KRİTİK: organizations politikası aynı fonksiyonu kullanıyor', () => {

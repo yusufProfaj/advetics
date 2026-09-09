@@ -140,7 +140,17 @@ export type SwitchClientInput = z.infer<typeof switchClientSchema>;
  * `null` = EV şirketine dön. Ayrı bir "eve dön" ucu yazmak, iki yolun
  * bir gün ayrışması demekti.
  */
+/** "Tüm şirketler" görünümünün sentinel değeri. */
+export const TUM_SIRKETLER = 'all' as const;
+
 export const switchOrganizationSchema = z.object({
-  organizationId: z.string().uuid().nullable(),
+  /**
+   * `null` = EV şirketi, `'all'` = TÜM ŞİRKETLER, UUID = o şirket.
+   *
+   * Sentinel bir DİZGE çünkü `null` zaten "eve dön" anlamını taşıyor ve
+   * üçüncü bir hâli ikinci bir alanla anlatmak, iki alanın birbiriyle
+   * çelişebildiği bir yüzey açardı.
+   */
+  organizationId: z.union([z.string().uuid(), z.literal(TUM_SIRKETLER)]).nullable(),
 });
 export type SwitchOrganizationInput = z.infer<typeof switchOrganizationSchema>;

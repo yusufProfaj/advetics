@@ -179,6 +179,42 @@ LANGUAGE sql STABLE AS $$
   WHERE app.ajansa_ait_org(id, manager_account_id);
 $$;
 
+/*
+ * "TÜM ŞİRKETLER" MODU — üst hesabın altındaki HER şirketi tek pencerede
+ * göstermek için.
+ *
+ * VARSAYILANI KAPALI ve bu kritik: değer verilmezse `current_setting`
+ * boş dönüyor, karşılaştırma false üretiyor ve davranış BUGÜNKÜNÜN AYNISI
+ * kalıyor. Yeni bir mod eklerken varsayılanın "açık" olması, var olan
+ * bütün kurulumların sınırını haber vermeden genişletmek demekti.
+ *
+ * BAYRAĞI YALNIZCA SUNUCU YAZIYOR (`TenantContextService`), ve yalnızca
+ * kullanıcının GERÇEKTEN bir üst hesabı varsa. Bayrak açık olsa bile
+ * kapsam `app.ajans_org_idleri()` ile sınırlı: üst hesabı olmayan bir
+ * kullanıcıda o küme tek elemanlı ve mod hiçbir şey açmıyor.
+ */
+CREATE OR REPLACE FUNCTION app.tum_sirketler() RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT COALESCE(current_setting('app.tum_sirketler', true), 'off') = 'on';
+$$;
+
+/*
+ * BİR SATIRIN ORGANİZASYONU KAPSAMDA MI — TEK KARAR NOKTASI.
+ *
+ * Politikalardaki `app.org_kapsaminda(org_id)` koşulunun yerini alıyor.
+ * Koşulu 160 küsur yere elle yazmak yerine tek fonksiyona bağlamak, modun
+ * bir gün genişletilmesi gerektiğinde tek satır değiştirmek demek — ve
+ * bugün, modun KAPALI olduğunda davranışın birebir aynı kaldığını tek
+ * yerden okunabilir kılıyor.
+ */
+CREATE OR REPLACE FUNCTION app.org_kapsaminda(satir_org uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT CASE
+    WHEN app.tum_sirketler() THEN satir_org = ANY (app.ajans_org_idleri())
+    ELSE satir_org = app.current_org_id()
+  END;
+$$;
+
 CREATE OR REPLACE FUNCTION app.current_active_client_id() RETURNS uuid
 LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('app.current_active_client_id', true), '')::uuid;
@@ -342,42 +378,42 @@ CREATE POLICY adv_organizations_update ON organizations
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_users_select ON users
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (app.is_org_admin() OR id = app.current_user_id())
   );
 
 CREATE POLICY adv_users_insert ON users
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.is_org_admin());
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.is_org_admin());
 
 CREATE POLICY adv_users_update ON users
   FOR UPDATE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (app.is_org_admin() OR id = app.current_user_id())
-  ) WITH CHECK (org_id = app.current_org_id());
+  ) WITH CHECK (app.org_kapsaminda(org_id));
 
 CREATE POLICY adv_users_delete ON users
-  FOR DELETE USING (org_id = app.current_org_id() AND app.is_org_admin());
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.is_org_admin());
 
 -- -----------------------------------------------------------------------------
 -- clients
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_clients_select ON clients
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (app.is_org_admin() OR id = ANY (app.current_client_ids()))
   );
 
 CREATE POLICY adv_clients_insert ON clients
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_create_clients());
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_create_clients());
 
 CREATE POLICY adv_clients_update ON clients
   FOR UPDATE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (app.is_org_admin() OR id = ANY (app.current_client_ids()))
-  ) WITH CHECK (org_id = app.current_org_id());
+  ) WITH CHECK (app.org_kapsaminda(org_id));
 
 CREATE POLICY adv_clients_delete ON clients
-  FOR DELETE USING (org_id = app.current_org_id() AND app.is_org_admin());
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.is_org_admin());
 
 -- -----------------------------------------------------------------------------
 -- memberships
@@ -388,13 +424,13 @@ CREATE POLICY adv_clients_delete ON clients
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_memberships_select ON memberships
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (app.is_org_admin() OR user_id = app.current_user_id())
   );
 
 CREATE POLICY adv_memberships_write ON memberships
-  FOR ALL USING (org_id = app.current_org_id() AND app.is_org_admin())
-          WITH CHECK (org_id = app.current_org_id() AND app.is_org_admin());
+  FOR ALL USING (app.org_kapsaminda(org_id) AND app.is_org_admin())
+          WITH CHECK (app.org_kapsaminda(org_id) AND app.is_org_admin());
 
 -- -----------------------------------------------------------------------------
 -- branding_profiles
@@ -403,7 +439,7 @@ CREATE POLICY adv_memberships_write ON memberships
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_branding_select ON branding_profiles
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (client_id IS NULL OR app.can_access_client(client_id))
   );
 
@@ -422,7 +458,7 @@ CREATE POLICY adv_branding_select ON branding_profiles
  */
 CREATE POLICY adv_branding_write ON branding_profiles
   FOR ALL USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (
       CASE WHEN client_id IS NULL
         THEN app.is_org_admin()
@@ -430,7 +466,7 @@ CREATE POLICY adv_branding_write ON branding_profiles
       END
     )
   ) WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (
       CASE WHEN client_id IS NULL
         THEN app.is_org_admin()
@@ -464,12 +500,12 @@ CREATE POLICY adv_password_resets_own ON password_reset_tokens
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_audit_select ON audit_logs
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (app.is_org_admin() OR (client_id IS NOT NULL AND client_id = ANY (app.current_client_ids())))
   );
 
 CREATE POLICY adv_audit_insert ON audit_logs
-  FOR INSERT WITH CHECK (org_id = app.current_org_id());
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id));
 
 -- =============================================================================
 -- MODÜL 2 — Platform Bağlantıları
@@ -539,7 +575,7 @@ CREATE POLICY adv_connections_select ON platform_connections
         THEN org_id = ANY (app.ajans_org_idleri())
         -- MÜŞTERİYE ÖZEL BAĞLANTI (müşteri kendi hesabını devretmiş):
         -- kendi şirketinde kalıyor.
-        ELSE org_id = app.current_org_id()
+        ELSE app.org_kapsaminda(org_id)
       END
     )
   );
@@ -566,7 +602,7 @@ CREATE POLICY adv_connections_write ON platform_connections
          * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
          * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
          */
-        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
+        ELSE app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
       END
     )
   ) WITH CHECK (
@@ -590,7 +626,7 @@ CREATE POLICY adv_connections_write ON platform_connections
          * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
          * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
          */
-        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
+        ELSE app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
       END
     )
   );
@@ -638,7 +674,7 @@ CREATE POLICY adv_ad_accounts_select ON ad_accounts
          * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
          * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
          */
-        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
+        ELSE app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
       END
     )
   );
@@ -691,7 +727,7 @@ CREATE POLICY adv_ad_accounts_write ON ad_accounts
          * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
          * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
          */
-        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
+        ELSE app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
       END
     )
   ) WITH CHECK (
@@ -715,7 +751,7 @@ CREATE POLICY adv_ad_accounts_write ON ad_accounts
          * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
          * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
          */
-        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
+        ELSE app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
       END
     )
   );
@@ -755,7 +791,7 @@ CREATE POLICY adv_social_profiles_select ON social_profiles
          * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
          * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
          */
-        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
+        ELSE app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
       END
     )
   );
@@ -782,7 +818,7 @@ CREATE POLICY adv_social_profiles_write ON social_profiles
          * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
          * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
          */
-        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
+        ELSE app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
       END
     )
   ) WITH CHECK (
@@ -806,7 +842,7 @@ CREATE POLICY adv_social_profiles_write ON social_profiles
          * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
          * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
          */
-        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
+        ELSE app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
       END
     )
   );
@@ -825,7 +861,7 @@ CREATE POLICY adv_social_profiles_write ON social_profiles
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_oauth_states_select ON oauth_states
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND created_by_user_id = app.current_user_id()
   );
 
@@ -836,7 +872,7 @@ CREATE POLICY adv_oauth_states_select ON oauth_states
 -- akış "geçersiz state" ile ölür, sebebi hiçbir yerde yazmazdı.
 CREATE POLICY adv_oauth_states_insert ON oauth_states
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND created_by_user_id = app.current_user_id()
     AND (
       CASE WHEN client_id IS NULL
@@ -976,7 +1012,7 @@ CREATE POLICY adv_api_usage_select ON api_usage_log
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_report_tpl_select ON report_templates
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (
       app.is_org_admin()
       OR client_id IS NULL
@@ -986,19 +1022,19 @@ CREATE POLICY adv_report_tpl_select ON report_templates
 
 CREATE POLICY adv_report_tpl_insert ON report_templates
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (app.is_org_admin() OR (client_id IS NOT NULL AND app.can_access_client(client_id)))
   );
 
 CREATE POLICY adv_report_tpl_update ON report_templates
   FOR UPDATE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (app.is_org_admin() OR (client_id IS NOT NULL AND app.can_access_client(client_id)))
   );
 
 CREATE POLICY adv_report_tpl_delete ON report_templates
   FOR DELETE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (app.is_org_admin() OR (client_id IS NOT NULL AND app.can_access_client(client_id)))
   );
 
@@ -1015,22 +1051,22 @@ CREATE POLICY adv_report_tpl_delete ON report_templates
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_report_share_select ON report_shares
   FOR SELECT USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_report_share_insert ON report_shares
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_report_share_update ON report_shares
   FOR UPDATE USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_report_share_delete ON report_shares
   FOR DELETE USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 -- =============================================================================
@@ -1058,12 +1094,12 @@ CREATE POLICY adv_report_share_delete ON report_shares
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_monthly_budget_select ON monthly_budgets
   FOR SELECT USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_monthly_budget_insert ON monthly_budgets
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 -- UPDATE'te WITH CHECK de var: USING satırın ESKİ hâlini, WITH CHECK YENİ hâlini
@@ -1071,14 +1107,14 @@ CREATE POLICY adv_monthly_budget_insert ON monthly_budgets
 -- erişilemeyen bir müşteriye taşınabilirdi — satır kendi kiracısından çıkardı.
 CREATE POLICY adv_monthly_budget_update ON monthly_budgets
   FOR UPDATE USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   ) WITH CHECK (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_monthly_budget_delete ON monthly_budgets
   FOR DELETE USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 -- =============================================================================
@@ -1099,21 +1135,21 @@ CREATE POLICY adv_monthly_budget_delete ON monthly_budgets
 -- sınırını koruyor; bir kuralı canlıya almanın yetkisi guard katmanında.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_rules_select ON rules
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_rules_insert ON rules
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- UPDATE'te WITH CHECK de var: USING satırın ESKİ, WITH CHECK YENİ hâlini
 -- denetliyor. Yalnızca USING olsaydı bir kural erişilemeyen bir müşteriye
 -- taşınabilirdi — o müşterinin hesabında çalışan, sahibinin göremediği bir
 -- kural.
 CREATE POLICY adv_rules_update ON rules
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_rules_delete ON rules
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- -----------------------------------------------------------------------------
 -- rule_runs ve rule_action_logs
@@ -1128,7 +1164,7 @@ CREATE POLICY adv_rules_delete ON rules
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_rule_runs_select ON rule_runs
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM rules r
       WHERE r.id = rule_runs.rule_id AND app.can_access_client(r.client_id)
@@ -1137,7 +1173,7 @@ CREATE POLICY adv_rule_runs_select ON rule_runs
 
 CREATE POLICY adv_rule_runs_insert ON rule_runs
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM rules r
       WHERE r.id = rule_runs.rule_id AND app.can_access_client(r.client_id)
@@ -1146,7 +1182,7 @@ CREATE POLICY adv_rule_runs_insert ON rule_runs
 
 CREATE POLICY adv_rule_runs_update ON rule_runs
   FOR UPDATE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM rules r
       WHERE r.id = rule_runs.rule_id AND app.can_access_client(r.client_id)
@@ -1161,7 +1197,7 @@ CREATE POLICY adv_rule_runs_update ON rule_runs
 
 CREATE POLICY adv_rule_actions_select ON rule_action_logs
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM rules r
       WHERE r.id = rule_action_logs.rule_id AND app.can_access_client(r.client_id)
@@ -1170,7 +1206,7 @@ CREATE POLICY adv_rule_actions_select ON rule_action_logs
 
 CREATE POLICY adv_rule_actions_insert ON rule_action_logs
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM rules r
       WHERE r.id = rule_action_logs.rule_id AND app.can_access_client(r.client_id)
@@ -1197,27 +1233,27 @@ CREATE POLICY adv_rule_actions_insert ON rule_action_logs
 -- Sosyal profil silinirse CASCADE ile gidiyorlar.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_organic_posts_select ON organic_posts
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_organic_posts_insert ON organic_posts
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_organic_posts_update ON organic_posts
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_boost_rules_select ON boost_rules
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_boost_rules_insert ON boost_rules
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_boost_rules_update ON boost_rules
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_boost_rules_delete ON boost_rules
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- ---------------------------------------------------------------------------
 -- auto_boost_presets, auto_boost_queue_items  (Advetics 1.0)
@@ -1232,53 +1268,53 @@ CREATE POLICY adv_boost_rules_delete ON boost_rules
 -- onaylama içindir; webhook'un bu politikalardan geçmesi beklenmiyor ve
 -- beklenseydi kayıt sessizce kaybolurdu (`client_id` bağlamı yok).
 CREATE POLICY adv_auto_boost_subscriptions_select ON auto_boost_subscriptions
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_subscriptions_insert ON auto_boost_subscriptions
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_subscriptions_update ON auto_boost_subscriptions
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_subscriptions_delete ON auto_boost_subscriptions
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_presets_select ON auto_boost_presets
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_presets_insert ON auto_boost_presets
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_presets_update ON auto_boost_presets
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_presets_delete ON auto_boost_presets
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_queue_items_select ON auto_boost_queue_items
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_queue_items_insert ON auto_boost_queue_items
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_queue_items_update ON auto_boost_queue_items
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_auto_boost_queue_items_delete ON auto_boost_queue_items
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_boosts_select ON boosts
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_boosts_insert ON boosts
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_boosts_update ON boosts
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- boosts'a DELETE politikası YOK: bir boost para taahhüdü ve kaydı denetim
 -- izidir. İptal etmek `status = 'rejected'` demek, satırı silmek değil.
@@ -1296,21 +1332,21 @@ CREATE POLICY adv_boosts_update ON boosts
 -- işaret edebilir). Kiracı kontrolü partinin üzerinden yapılıyor.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_bulk_batches_select ON bulk_batches
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_bulk_batches_insert ON bulk_batches
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_bulk_batches_update ON bulk_batches
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_bulk_batches_delete ON bulk_batches
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_bulk_items_select ON bulk_items
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM bulk_batches b
       WHERE b.id = bulk_items.batch_id AND app.can_access_client(b.client_id)
@@ -1319,7 +1355,7 @@ CREATE POLICY adv_bulk_items_select ON bulk_items
 
 CREATE POLICY adv_bulk_items_insert ON bulk_items
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM bulk_batches b
       WHERE b.id = bulk_items.batch_id AND app.can_access_client(b.client_id)
@@ -1328,7 +1364,7 @@ CREATE POLICY adv_bulk_items_insert ON bulk_items
 
 CREATE POLICY adv_bulk_items_update ON bulk_items
   FOR UPDATE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM bulk_batches b
       WHERE b.id = bulk_items.batch_id AND app.can_access_client(b.client_id)
@@ -1337,7 +1373,7 @@ CREATE POLICY adv_bulk_items_update ON bulk_items
 
 CREATE POLICY adv_bulk_items_delete ON bulk_items
   FOR DELETE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM bulk_batches b
       WHERE b.id = bulk_items.batch_id AND app.can_access_client(b.client_id)
@@ -1349,17 +1385,17 @@ CREATE POLICY adv_bulk_items_delete ON bulk_items
 -- =============================================================================
 
 CREATE POLICY adv_ad_drafts_select ON ad_drafts
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_ad_drafts_insert ON ad_drafts
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_ad_drafts_update ON ad_drafts
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_ad_drafts_delete ON ad_drafts
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- -----------------------------------------------------------------------------
 -- ad_draft_assets
@@ -1373,7 +1409,7 @@ CREATE POLICY adv_ad_drafts_delete ON ad_drafts
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_ad_draft_assets_select ON ad_draft_assets
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM ad_drafts d
       WHERE d.id = ad_draft_assets.draft_id AND app.can_access_client(d.client_id)
@@ -1382,7 +1418,7 @@ CREATE POLICY adv_ad_draft_assets_select ON ad_draft_assets
 
 CREATE POLICY adv_ad_draft_assets_insert ON ad_draft_assets
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM ad_drafts d
       WHERE d.id = ad_draft_assets.draft_id AND app.can_access_client(d.client_id)
@@ -1391,7 +1427,7 @@ CREATE POLICY adv_ad_draft_assets_insert ON ad_draft_assets
 
 CREATE POLICY adv_ad_draft_assets_update ON ad_draft_assets
   FOR UPDATE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM ad_drafts d
       WHERE d.id = ad_draft_assets.draft_id AND app.can_access_client(d.client_id)
@@ -1400,7 +1436,7 @@ CREATE POLICY adv_ad_draft_assets_update ON ad_draft_assets
 
 CREATE POLICY adv_ad_draft_assets_delete ON ad_draft_assets
   FOR DELETE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM ad_drafts d
       WHERE d.id = ad_draft_assets.draft_id AND app.can_access_client(d.client_id)
@@ -1430,14 +1466,14 @@ CREATE POLICY adv_keyword_insights_update ON keyword_insights
 -- kolonu yok ve olamaz. Erişim org düzeyinde: partiyi başlatan da, ilerlemeyi
 -- izleyen de ajans personeli.
 CREATE POLICY adv_sync_batches_select ON sync_batches
-  FOR SELECT USING (app.has_context() AND org_id = app.current_org_id());
+  FOR SELECT USING (app.has_context() AND app.org_kapsaminda(org_id));
 
 CREATE POLICY adv_sync_batches_insert ON sync_batches
-  FOR INSERT WITH CHECK (app.has_context() AND org_id = app.current_org_id());
+  FOR INSERT WITH CHECK (app.has_context() AND app.org_kapsaminda(org_id));
 
 CREATE POLICY adv_sync_batches_update ON sync_batches
-  FOR UPDATE USING (app.has_context() AND org_id = app.current_org_id())
-             WITH CHECK (app.has_context() AND org_id = app.current_org_id());
+  FOR UPDATE USING (app.has_context() AND app.org_kapsaminda(org_id))
+             WITH CHECK (app.has_context() AND app.org_kapsaminda(org_id));
 
 -- -----------------------------------------------------------------------------
 -- report_schedules — MÜŞTERİ KAPSAMLI.
@@ -1454,24 +1490,24 @@ CREATE POLICY adv_sync_batches_update ON sync_batches
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_report_sched_select ON report_schedules
   FOR SELECT USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_report_sched_insert ON report_schedules
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_report_sched_update ON report_schedules
   FOR UPDATE USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   ) WITH CHECK (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_report_sched_delete ON report_schedules
   FOR DELETE USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 -- -----------------------------------------------------------------------------
@@ -1487,24 +1523,24 @@ CREATE POLICY adv_report_sched_delete ON report_schedules
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_fatura_select ON fatura_belgeleri
   FOR SELECT USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_fatura_insert ON fatura_belgeleri
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_fatura_update ON fatura_belgeleri
   FOR UPDATE USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   ) WITH CHECK (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 CREATE POLICY adv_fatura_delete ON fatura_belgeleri
   FOR DELETE USING (
-    org_id = app.current_org_id() AND app.can_access_client(client_id)
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
   );
 
 -- insight_breakdowns — anahtar kelimeyle AYNI kural.
@@ -1614,17 +1650,17 @@ $$;
 -- iki yere yaymak demek.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_lead_forms_select ON lead_forms
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_lead_forms_insert ON lead_forms
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_lead_forms_update ON lead_forms
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_lead_forms_delete ON lead_forms
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- =============================================================================
 -- POTANSİYEL MÜŞTERİLER
@@ -1646,17 +1682,17 @@ CREATE POLICY adv_lead_forms_delete ON lead_forms
 -- silinebilmeli.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_leads_select ON leads
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_leads_insert ON leads
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_leads_update ON leads
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_leads_delete ON leads
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- -----------------------------------------------------------------------------
 -- lead_sync_cursors
@@ -1666,7 +1702,7 @@ CREATE POLICY adv_leads_delete ON leads
 -- taramanın geçmişi atlaması ya da her turda baştan okuması demek olurdu.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_lead_sync_cursors_select ON lead_sync_cursors
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- =============================================================================
 -- VARLIK ARŞİVİ
@@ -1681,17 +1717,17 @@ CREATE POLICY adv_lead_sync_cursors_select ON lead_sync_cursors
 -- reklamda kullanılıyor" sorusunu sorması, iş kuralını iki yere yaymak olurdu.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_assets_select ON assets
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_assets_insert ON assets
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_assets_update ON assets
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_assets_delete ON assets
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- -----------------------------------------------------------------------------
 -- asset_platform_refs
@@ -1706,7 +1742,7 @@ CREATE POLICY adv_assets_delete ON assets
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_asset_platform_refs_select ON asset_platform_refs
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM assets a
       WHERE a.id = asset_platform_refs.asset_id AND app.can_access_client(a.client_id)
@@ -1715,7 +1751,7 @@ CREATE POLICY adv_asset_platform_refs_select ON asset_platform_refs
 
 CREATE POLICY adv_asset_platform_refs_insert ON asset_platform_refs
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM assets a
       WHERE a.id = asset_platform_refs.asset_id AND app.can_access_client(a.client_id)
@@ -1738,17 +1774,17 @@ CREATE POLICY adv_asset_platform_refs_insert ON asset_platform_refs
 -- veri sızıntısından öte ticari bir sorun.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_ad_creatives_select ON ad_creatives
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_ad_creatives_insert ON ad_creatives
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_ad_creatives_update ON ad_creatives
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_ad_creatives_delete ON ad_creatives
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- -----------------------------------------------------------------------------
 -- ad_creative_assets
@@ -1765,7 +1801,7 @@ CREATE POLICY adv_ad_creatives_delete ON ad_creatives
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_ad_creative_assets_select ON ad_creative_assets
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM ad_creatives c
       WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
@@ -1774,7 +1810,7 @@ CREATE POLICY adv_ad_creative_assets_select ON ad_creative_assets
 
 CREATE POLICY adv_ad_creative_assets_insert ON ad_creative_assets
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM ad_creatives c
       WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
@@ -1783,14 +1819,14 @@ CREATE POLICY adv_ad_creative_assets_insert ON ad_creative_assets
 
 CREATE POLICY adv_ad_creative_assets_update ON ad_creative_assets
   FOR UPDATE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM ad_creatives c
       WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
     )
   )
   WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM ad_creatives c
       WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
@@ -1799,7 +1835,7 @@ CREATE POLICY adv_ad_creative_assets_update ON ad_creative_assets
 
 CREATE POLICY adv_ad_creative_assets_delete ON ad_creative_assets
   FOR DELETE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM ad_creatives c
       WHERE c.id = ad_creative_assets.creative_id AND app.can_access_client(c.client_id)
@@ -1817,17 +1853,17 @@ CREATE POLICY adv_ad_creative_assets_delete ON ad_creative_assets
 -- çocukların erişim kontrolü de buradan türüyor.
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_draft_campaigns_select ON draft_campaigns
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_draft_campaigns_insert ON draft_campaigns
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_draft_campaigns_update ON draft_campaigns
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_draft_campaigns_delete ON draft_campaigns
-  FOR DELETE USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- -----------------------------------------------------------------------------
 -- draft_ad_groups
@@ -1842,7 +1878,7 @@ CREATE POLICY adv_draft_campaigns_delete ON draft_campaigns
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_draft_ad_groups_select ON draft_ad_groups
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM draft_campaigns c
       WHERE c.id = draft_ad_groups.campaign_id AND app.can_access_client(c.client_id)
@@ -1851,7 +1887,7 @@ CREATE POLICY adv_draft_ad_groups_select ON draft_ad_groups
 
 CREATE POLICY adv_draft_ad_groups_insert ON draft_ad_groups
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM draft_campaigns c
       WHERE c.id = draft_ad_groups.campaign_id AND app.can_access_client(c.client_id)
@@ -1860,14 +1896,14 @@ CREATE POLICY adv_draft_ad_groups_insert ON draft_ad_groups
 
 CREATE POLICY adv_draft_ad_groups_update ON draft_ad_groups
   FOR UPDATE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM draft_campaigns c
       WHERE c.id = draft_ad_groups.campaign_id AND app.can_access_client(c.client_id)
     )
   )
   WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM draft_campaigns c
       WHERE c.id = draft_ad_groups.campaign_id AND app.can_access_client(c.client_id)
@@ -1876,7 +1912,7 @@ CREATE POLICY adv_draft_ad_groups_update ON draft_ad_groups
 
 CREATE POLICY adv_draft_ad_groups_delete ON draft_ad_groups
   FOR DELETE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM draft_campaigns c
       WHERE c.id = draft_ad_groups.campaign_id AND app.can_access_client(c.client_id)
@@ -1896,7 +1932,7 @@ CREATE POLICY adv_draft_ad_groups_delete ON draft_ad_groups
 -- -----------------------------------------------------------------------------
 CREATE POLICY adv_draft_ads_select ON draft_ads
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM draft_ad_groups g
       JOIN draft_campaigns c ON c.id = g.campaign_id
@@ -1906,7 +1942,7 @@ CREATE POLICY adv_draft_ads_select ON draft_ads
 
 CREATE POLICY adv_draft_ads_insert ON draft_ads
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM draft_ad_groups g
       JOIN draft_campaigns c ON c.id = g.campaign_id
@@ -1916,7 +1952,7 @@ CREATE POLICY adv_draft_ads_insert ON draft_ads
 
 CREATE POLICY adv_draft_ads_update ON draft_ads
   FOR UPDATE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM draft_ad_groups g
       JOIN draft_campaigns c ON c.id = g.campaign_id
@@ -1924,7 +1960,7 @@ CREATE POLICY adv_draft_ads_update ON draft_ads
     )
   )
   WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM draft_ad_groups g
       JOIN draft_campaigns c ON c.id = g.campaign_id
@@ -1934,7 +1970,7 @@ CREATE POLICY adv_draft_ads_update ON draft_ads
 
 CREATE POLICY adv_draft_ads_delete ON draft_ads
   FOR DELETE USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND EXISTS (
       SELECT 1 FROM draft_ad_groups g
       JOIN draft_campaigns c ON c.id = g.campaign_id
@@ -1959,24 +1995,24 @@ CREATE POLICY adv_draft_ads_delete ON draft_ads
 
 CREATE POLICY adv_user_email_select ON user_email_accounts
   FOR SELECT USING (
-    org_id = app.current_org_id() AND user_id = app.current_user_id()
+    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
   );
 
 CREATE POLICY adv_user_email_insert ON user_email_accounts
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id() AND user_id = app.current_user_id()
+    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
   );
 
 CREATE POLICY adv_user_email_update ON user_email_accounts
   FOR UPDATE USING (
-    org_id = app.current_org_id() AND user_id = app.current_user_id()
+    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
   ) WITH CHECK (
-    org_id = app.current_org_id() AND user_id = app.current_user_id()
+    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
   );
 
 CREATE POLICY adv_user_email_delete ON user_email_accounts
   FOR DELETE USING (
-    org_id = app.current_org_id() AND user_id = app.current_user_id()
+    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
   );
 
 -- ============================================================================
@@ -1997,7 +2033,7 @@ CREATE POLICY adv_user_email_delete ON user_email_accounts
 
 CREATE POLICY adv_ai_conversations_select ON ai_conversations
   FOR SELECT USING (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND (
       app.is_org_admin()
       OR user_id = app.current_user_id()
@@ -2021,7 +2057,7 @@ CREATE POLICY adv_ai_conversations_select ON ai_conversations
 -- başlatmayı tamamen kapatırdı (fonksiyon NULL için false döner).
 CREATE POLICY adv_ai_conversations_insert ON ai_conversations
   FOR INSERT WITH CHECK (
-    org_id = app.current_org_id()
+    app.org_kapsaminda(org_id)
     AND user_id = app.current_user_id()
     AND (client_id IS NULL OR app.can_access_client(client_id))
   );
@@ -2031,9 +2067,9 @@ CREATE POLICY adv_ai_conversations_insert ON ai_conversations
 -- yetkisi ayrı bir karar — WITH CHECK'i gevşetmek bunu çözmez, engel burada.
 CREATE POLICY adv_ai_conversations_update ON ai_conversations
   FOR UPDATE USING (
-    org_id = app.current_org_id() AND user_id = app.current_user_id()
+    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
   ) WITH CHECK (
-    org_id = app.current_org_id() AND user_id = app.current_user_id()
+    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
   );
 
 -- ai_messages KENDİ org_id/client_id TAŞIMIYOR — üst sohbetten JOIN'le
@@ -2045,7 +2081,7 @@ CREATE POLICY adv_ai_messages_select ON ai_messages
     EXISTS (
       SELECT 1 FROM ai_conversations c
       WHERE c.id = ai_messages.conversation_id
-        AND c.org_id = app.current_org_id()
+        AND app.org_kapsaminda(c.org_id)
         AND (
           app.is_org_admin()
           OR c.user_id = app.current_user_id()
@@ -2059,7 +2095,7 @@ CREATE POLICY adv_ai_messages_insert ON ai_messages
     EXISTS (
       SELECT 1 FROM ai_conversations c
       WHERE c.id = ai_messages.conversation_id
-        AND c.org_id = app.current_org_id()
+        AND app.org_kapsaminda(c.org_id)
         AND c.user_id = app.current_user_id()
     )
   );
@@ -2076,14 +2112,14 @@ CREATE POLICY adv_ai_messages_insert ON ai_messages
 -- ENABLE/FORCE yukarıdaki tablo listesi döngüsünde yapılıyor.
 
 CREATE POLICY adv_client_profiles_select ON client_profiles
-  FOR SELECT USING (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_client_profiles_insert ON client_profiles
-  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 CREATE POLICY adv_client_profiles_update ON client_profiles
-  FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
-             WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- ============================================================================
 -- ÜST HESAP (MCC) — manager_accounts, manager_memberships

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { TUM_SIRKETLER } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Halka, TamEkranYukleniyor } from './yukleniyor';
 
@@ -33,12 +34,15 @@ export function SirketSecici({
   organizations,
   activeOrganizationId,
   activeClientId,
+  tumSirketler,
 }: {
   managerAccountName: string;
   organizations: Sirket[];
   activeOrganizationId: string;
   /** Seçili workspace — `null` ise zaten şirket geneli görünümdeyiz. */
   activeClientId: string | null;
+  /** "Tüm şirketler" görünümü açık mı. */
+  tumSirketler: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -87,6 +91,34 @@ export function SirketSecici({
     } catch (e) {
       setHata(e instanceof ApiRequestError ? e.message : 'Şirket geneli görünüme geçilemedi.');
       setPending(false);
+    }
+  }
+
+  /**
+   * TÜM ŞİRKETLER — üst hesabın altındaki her şirket tek pencerede.
+   *
+   * `switch-org` sentinel bir değer alıyor (`'all'`) ve sunucu onu
+   * kullanıcının GERÇEKTEN bir üst hesabı olup olmadığına karşı
+   * doğruluyor. Tam sayfa yükleniyor: kapsam değişince kenar çubuğu,
+   * workspace listesi ve bütün sunucu bileşenleri değişiyor.
+   */
+  async function tumSirketlereGec() {
+    setOpen(false);
+    setPending(true);
+    setHata(null);
+    setGecilen('Tüm şirketler');
+    try {
+      await apiFetch('/auth/switch-org', {
+        method: 'POST',
+        body: JSON.stringify({ organizationId: TUM_SIRKETLER }),
+      });
+      startTransition(() => {
+        window.location.assign('/dashboard');
+      });
+    } catch (e) {
+      setHata(e instanceof ApiRequestError ? e.message : 'Tüm şirketler görünümüne geçilemedi.');
+      setPending(false);
+      setGecilen(null);
     }
   }
 
@@ -147,7 +179,7 @@ export function SirketSecici({
       >
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium leading-tight">
-            {aktif?.name ?? 'Şirket'}
+            {tumSirketler ? 'Tüm şirketler' : (aktif?.name ?? 'Şirket')}
           </span>
           {/*
             ÜST HESABIN ADI ALT SATIRDA. "Hangi danışmanlığın altındayım"
@@ -191,20 +223,48 @@ export function SirketSecici({
             {managerAccountName} · {organizations.length} şirket
           </p>
 
+          {/*
+            TÜM ŞİRKETLER SATIRI YALNIZCA BİRDEN ÇOK ŞİRKET VARSA.
+            Tek şirketli bir üst hesapta "tümü" ile "o şirket" aynı şey ve
+            aynı sonucu veren iki satır göstermek, kullanıcıya aralarında
+            bir fark varmış gibi düşündürürdü.
+          */}
+          {organizations.length > 1 && (
+            <>
+              <button
+                type="button"
+                role="option"
+                aria-selected={tumSirketler}
+                onClick={() => void tumSirketlereGec()}
+                className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition hover:bg-surface-muted ${
+                  tumSirketler ? 'font-semibold text-brand' : 'text-ink'
+                }`}
+              >
+                <span className="min-w-0 truncate">Tüm şirketler</span>
+                <span className="shrink-0 text-[11px] text-ink-muted">
+                  {tumSirketler ? 'seçili' : 'üst hesap geneli'}
+                </span>
+              </button>
+              <div className="h-px bg-line" />
+            </>
+          )}
+
           <ul className="max-h-72 overflow-y-auto py-1">
             {organizations.map((o) => (
               <li key={o.id}>
                 <button
                   type="button"
                   role="option"
-                  aria-selected={o.id === activeOrganizationId}
+                  aria-selected={!tumSirketler && o.id === activeOrganizationId}
                   onClick={() => void sec(o.id)}
                   className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition hover:bg-surface-muted ${
-                    o.id === activeOrganizationId ? 'font-semibold text-brand' : 'text-ink'
+                    !tumSirketler && o.id === activeOrganizationId
+                      ? 'font-semibold text-brand'
+                      : 'text-ink'
                   }`}
                 >
                   <span className="min-w-0 truncate">{o.name}</span>
-                  {o.id === activeOrganizationId && (
+                  {!tumSirketler && o.id === activeOrganizationId && (
                     /*
                      * EYLEM ADIYLA YAZILI. "seçili" yazmak, satırın
                      * tıklanınca ne yapacağını gizliyordu — kullanıcı org

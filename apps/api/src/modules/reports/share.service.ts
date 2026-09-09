@@ -203,6 +203,12 @@ export class ShareService {
        * alan kişiye danışmanlığın altındaki ŞİRKET LİSTESİNİ açardı.
        */
       managerAccountId: null,
+      /*
+       * TÜM ŞİRKETLER MODU KAPALI ve olmalı: paylaşım bağlantısı TEK bir
+       * workspace'in raporunu açıyor. Açık olsaydı bağlantıyı alan kişi
+       * ajansın bütün şirketlerinin verisine bakardı.
+       */
+      tumSirketler: false,
       role: 'client_viewer',
       isOrgAdmin: false,
       permissions: [...ROLE_PERMISSIONS.client_viewer],

@@ -138,7 +138,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           set_config('app.can_manage_pool',         ${yetkiVar(ctx, 'connection.manage')}, true),
           set_config('app.can_create_clients',      ${yetkiVar(ctx, 'client.write')}, true),
           set_config('app.current_active_client_id', ${ctx.activeClientId ?? ''}, true),
-          set_config('app.current_manager_account_id', ${ctx.managerAccountId ?? ''}, true)
+          set_config('app.current_manager_account_id', ${ctx.managerAccountId ?? ''}, true),
+          set_config('app.tum_sirketler', ${ctx.tumSirketler ? 'on' : 'off'}, true)
       `;
       return fn(tx);
     }, opts?.timeoutMs ? { timeout: opts.timeoutMs, maxWait: opts.timeoutMs } : undefined);

@@ -32,6 +32,19 @@ export interface TenantContext {
    */
   managerAccountId: string | null;
 
+  /**
+   * "TÜM ŞİRKETLER" MODU — üst hesabın altındaki her şirket tek pencerede.
+   *
+   * VARSAYILANI `false` ve RLS'te de öyle: `app.org_kapsaminda()` bayrak
+   * kapalıyken `org_id = app.current_org_id()` diyor, yani davranış
+   * bugünküyle birebir aynı. Bayrağı YALNIZCA sunucu yazıyor ve yalnızca
+   * kullanıcının gerçekten bir üst hesabı varsa.
+   *
+   * Bu moddayken `activeClientId` daima `null`: mod bir GENEL BAKIŞ ve
+   * bir workspace seçmek, o workspace'in şirketine geçmek demek.
+   */
+  tumSirketler: boolean;
+
   /** En yüksek yetkili rol. Birden fazla membership varsa en genişi seçilir. */
   role: Role;
 
@@ -89,6 +102,9 @@ export interface SessionResponse {
    * ayırt edememesi demekti.
    */
   activeOrganizationId: string;
+
+  /** "Tüm şirketler" görünümü açık mı — seçicinin işaretlediği satır. */
+  tumSirketler: boolean;
 
   /**
    * Üst hesap (MCC) ve altındaki şirketler — yoksa null.

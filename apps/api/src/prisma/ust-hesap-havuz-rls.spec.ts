@@ -51,6 +51,8 @@ interface Ctx {
   clientIds?: string[];
   isOrgAdmin?: boolean;
   poolYetkisi?: boolean;
+  /** "Tüm şirketler" modu — varsayılanı KAPALI. */
+  tumSirketler?: boolean;
 }
 
 beforeAll(async () => {
@@ -122,6 +124,7 @@ async function asUser<T = Record<string, unknown>>(sql: string, ctx: Ctx): Promi
            set_config('app.current_client_ids',         '${(ctx.clientIds ?? []).join(',')}', false),
            set_config('app.is_org_admin',               '${ctx.isOrgAdmin ? 'on' : 'off'}', false),
            set_config('app.can_manage_pool',            '${ctx.poolYetkisi === false ? 'off' : 'on'}', false),
+           set_config('app.tum_sirketler',              '${ctx.tumSirketler ? 'on' : 'off'}', false),
            set_config('app.current_active_client_id',   '', false)
   `);
   await h.q(`SET ROLE ${APP_ROLE}`);
@@ -279,5 +282,98 @@ describe('şirketler arası ATAMA', () => {
     );
     expect(rows[0]?.client_id).toBeNull();
     expect(rows[0]?.org_id).toBe(ORG_A1);
+  });
+});
+
+describe('"TÜM ŞİRKETLER" MODU', () => {
+  /*
+   * Mod, B adımında BİLEREK kapalı bırakılan sınırı açıyor: atanmış
+   * satırlar normalde kendi şirketine çivili ve o çivi, A2'deki bir
+   * yöneticinin A1'in müşteri verisini görmesini engelleyen tek şey.
+   *
+   * O yüzden burada İKİ YÖN de ölçülüyor: mod AÇIKKEN gerçekten açılıyor
+   * mu, ve mod KAPALIYKEN hiçbir şey değişmiyor mu.
+   */
+  const A1_TUM: Ctx = {
+    orgId: ORG_A1,
+    ustHesap: UST_A,
+    // Modda `clientIds` ajansın TAMAMINI kapsıyor — `TenantContextService`
+    // onu böyle hesaplıyor.
+    clientIds: [WS_A1, WS_A2],
+    isOrgAdmin: true,
+    tumSirketler: true,
+  };
+
+  it('KRİTİK: modda KARDEŞ şirketin ATANMIŞ hesabı görünüyor', async () => {
+    // Tek pencerede bütün ajansı görmenin ta kendisi.
+    expect(await gorunenHesaplar(A1_TUM)).toContain('A2 atanmış');
+  });
+
+  it('KRİTİK: mod KAPALIYKEN görünmüyor — varsayılan değişmedi', async () => {
+    expect(await gorunenHesaplar({ ...A1_TUM, tumSirketler: false })).not.toContain('A2 atanmış');
+  });
+
+  it('KRİTİK: mod BAŞKA AJANSI açmıyor', async () => {
+    /*
+     * Modun kapsamı `app.ajans_org_idleri()` ile sınırlı. Bayrağı açmak
+     * "her şeyi gör" demek olsaydı, tek bir cookie bütün kiracıları
+     * açardı — bu ürünü bitirecek türden bir hata.
+     */
+    const g = await gorunenHesaplar(A1_TUM);
+    expect(g).not.toContain('B havuz');
+    expect(g).not.toContain('Yalnız havuz');
+  });
+
+  it('KRİTİK: ÜST HESABI OLMAYAN kullanıcıda mod hiçbir şey açmıyor', async () => {
+    /*
+     * Bayrağı sunucu yazıyor ve yalnızca üst hesabı olana. Yine de
+     * ölçülüyor: `ajans_org_idleri()` onun için tek elemanlı ve mod
+     * açılsa bile kapsam genişlemiyor — iki katman birden tutuyor.
+     */
+    expect(await gorunenHesaplar({ ...YALNIZ, tumSirketler: true })).toEqual(['Yalnız havuz']);
+  });
+
+  it('KRİTİK: bayrak HİÇ YAZILMAMIŞKEN de mod KAPALI', async () => {
+    /*
+     * BU TESTİN VAR OLUŞ SEBEBİ BİR MUTASYONUN YAKALANMAMASI.
+     *
+     * `app.tum_sirketler()` varsayılanını "açık" yapan bir mutasyon hiçbir
+     * testi düşürmedi — çünkü yardımcı `asUser` bayrağı HER ZAMAN açıkça
+     * yazıyor (`'off'` dahil) ve "hiç yazılmamış" hâli hiç koşmuyordu.
+     *
+     * Oysa üretimde o hâl gerçek: `withTenant` bayrağı bugün yazıyor ama
+     * bir gün bir yol onu atlarsa, varsayılan "açık" olsaydı O YOLDAN GELEN
+     * HER İSTEK bütün ajansı görürdü. Varsayılanın güvenli olması, bayrağı
+     * yazmayı unutmanın bedelini sıfırlıyor.
+     *
+     * Bağlam ELLE kuruluyor: `asUser` kullanılamaz, çünkü o bayrağı yazıyor.
+     */
+    await h.q(`
+      SELECT set_config('app.current_org_id',             '${ORG_A1}', false),
+             set_config('app.current_user_id',            '${USER}', false),
+             set_config('app.current_manager_account_id', '${UST_A}', false),
+             set_config('app.current_client_ids',         '${WS_A1},${WS_A2}', false),
+             set_config('app.is_org_admin',               'on', false),
+             set_config('app.can_manage_pool',            'on', false),
+             set_config('app.current_active_client_id',   '', false),
+             set_config('app.tum_sirketler',              '', false)
+    `);
+    await h.q(`SET ROLE ${APP_ROLE}`);
+    try {
+      const rows = await h.q<{ name: string }>('SELECT name FROM ad_accounts');
+      expect(rows.map((r) => r.name)).not.toContain('A2 atanmış');
+    } finally {
+      await h.q('RESET ROLE');
+    }
+  });
+
+  it('workspace verisi de modda görünüyor — bütçe örneği', async () => {
+    const rows = await asUser<{ n: string }>(
+      'SELECT count(*)::text AS n FROM monthly_budgets',
+      A1_TUM,
+    );
+    // Fikstürde bütçe yok; iddia SORGUNUN KOŞTUĞU: politika `org_kapsaminda`
+    // ile yeniden yazıldı ve sözdizimsel olarak geçerli olmalı.
+    expect(rows[0]?.n).toBe('0');
   });
 });

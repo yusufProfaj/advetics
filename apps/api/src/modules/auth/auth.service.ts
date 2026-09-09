@@ -23,6 +23,7 @@ import { AuditService } from '../audit/audit.service';
 import { TenantContextService } from './tenant-context.service';
 import { TokenService, type IssuedTokens } from './token.service';
 import { ARGON_OPTIONS } from '../../common/utils/password-hash';
+import { TUM_SIRKETLER } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { mailGonder } from '../email/mail-gonderici';
 import { sifirlamaMailiOlustur } from './sifre-sifirlama-maili';
@@ -258,6 +259,7 @@ export class AuthService {
        * ikincisi ev şirketi ve üst hesap altında ikisi farklı oluyor.
        */
       activeOrganizationId: identity.context.orgId,
+      tumSirketler: identity.context.tumSirketler,
       managerAccount: identity.managerAccount,
       permissions: identity.context.permissions,
       isOrgAdmin: identity.context.isOrgAdmin,
@@ -276,6 +278,13 @@ export class AuthService {
   async assertOrgAccess(ctx: TenantContext, organizationId: string | null): Promise<string | null> {
     if (organizationId === null) return null;
 
+    /*
+     * "TÜM ŞİRKETLER" SENTINEL'İ DE DOĞRULANIYOR — sadece geçirilmiyor.
+     * Üst hesabı olmayan biri cookie'sine `all` yazarsa sessizce eve
+     * düşmek yerine açık bir cevap alıyor; sessiz düşüş "tıkladım ama
+     * değişmedi" hâli demek.
+     */
+
     const uyelik = await this.admin.managerMembership.findUnique({
       where: { userId: ctx.userId },
       select: { managerAccountId: true, managerAccount: { select: { status: true } } },
@@ -284,6 +293,8 @@ export class AuthService {
     if (!uyelik || uyelik.managerAccount.status !== 'active') {
       throw new BadRequestException('Bu hesabın bağlı olduğu bir üst hesap yok');
     }
+
+    if (organizationId === TUM_SIRKETLER) return TUM_SIRKETLER;
 
     const hedef = await this.admin.organization.findFirst({
       where: {
@@ -298,6 +309,30 @@ export class AuthService {
       throw new BadRequestException('Bu şirkete erişim yetkiniz yok');
     }
     return hedef.id;
+  }
+
+  /**
+   * Seçilen workspace HANGİ ŞİRKETTE — gerekiyorsa şirket de değişmeli.
+   *
+   * "Tüm şirketler" modunda seçici ajansın BÜTÜN workspace'lerini
+   * listeliyor. Kullanıcı başka bir şirketin workspace'ini seçtiğinde
+   * yalnızca `adv_client` cookie'sini yazmak yetmiyor: `resolve` o
+   * workspace'i aktif şirketin listesinde bulamaz ve seçimi SESSİZCE
+   * düşürür — kullanıcı tıklar, hiçbir şey olmaz ve sebebi hiçbir ekranda
+   * yazmaz.
+   *
+   * `null` = şirket değişmiyor.
+   */
+  async workspaceSirketi(ctx: TenantContext, clientId: string): Promise<string | null> {
+    const client = await this.admin.client.findUnique({
+      where: { id: clientId },
+      select: { orgId: true },
+    });
+    if (!client || client.orgId === ctx.orgId) return null;
+
+    // ERİŞİM YİNE DOĞRULANIYOR: `clientIds` bağlamdan geliyor ama hedef
+    // şirketin gerçekten üst hesabın altında olduğu ayrıca sorulmalı.
+    return this.assertOrgAccess(ctx, client.orgId);
   }
 
   /** Aktif müşteri seçiminin geçerliliğini doğrular. */

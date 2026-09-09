@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import {
+  TUM_SIRKETLER,
   isOrgScopedRole,
   isOrgAdminRole,
   resolvePermissions,
@@ -173,6 +174,34 @@ export class TenantContextService {
      * hesabı olmayan kullanıcı için liste tek elemanlı ve davranış değişmiyor.
      */
     const izinliOrgIdler = new Set<string>([user.orgId, ...kardesSirketler.map((o) => o.id)]);
+
+    /*
+     * "TÜM ŞİRKETLER" MODU — üst hesabı OLANLARA açık, başkasına değil.
+     *
+     * Sentinel doğrulanmadan kabul edilseydi, üst hesabı olmayan bir
+     * kullanıcı cookie'sine `all` yazarak modu açardı. Açsa bile RLS'teki
+     * kapsam `app.ajans_org_idleri()` ile sınırlı ve o küme onun için tek
+     * elemanlı — ama bir güvenlik kontrolünü "zaten diğer katman tutuyor"
+     * diye atlamak, o katmanın bir gün değişmesine bahis oynamak demek.
+     */
+    const tumSirketler = requestedOrgId === TUM_SIRKETLER && ustHesap !== null;
+
+    /*
+     * TÜM ŞİRKETLER MODUNDA `orgId` EV ŞİRKETİ KALIYOR — ve bunun için
+     * FAZLADAN BİR KOŞULA GEREK YOK.
+     *
+     * Sentinel (`'all'`) bir UUID değil, dolayısıyla `izinliOrgIdler`de
+     * asla bulunamıyor ve ifade kendiliğinden ev şirketine düşüyor.
+     * İlk yazımda burada ayrıca `tumSirketler ||` vardı; mutasyon testinde
+     * onu kaldırmak HİÇBİR testi düşürmedi — çünkü hiçbir iş yapmıyordu.
+     * Bir şeyi koruduğunu sandığın gereksiz bir koşul, bir sonraki
+     * okuyucuya var olmayan bir kural anlatıyor.
+     *
+     * `ctx.orgId` yalnızca RLS'i sürmüyor; uygulama kodunda 21 yerde
+     * `orgId: ctx.orgId` olarak YAZMA yollarını da besliyor. Okuma
+     * kapsamını `app.tum_sirketler()` bayrağı genişletiyor; yazma hâlâ tek
+     * bir şirkete çivili.
+     */
     const activeOrgId =
       requestedOrgId && izinliOrgIdler.has(requestedOrgId) ? requestedOrgId : user.orgId;
 
@@ -218,7 +247,24 @@ export class TenantContextService {
      * çalışma anı hatasına dönerdi. Bu yapıda daraltma derleyicinin işi.
      */
     let scopedMemberships: typeof aktifOrgUyelikleri;
-    if (aktifOrgUyelikleri.length > 0) {
+    if (tumSirketler && ustHesap) {
+      /*
+       * MOD, ÜST HESABIN GÖRÜNÜMÜ — rol de oradan geliyor. Ev şirketindeki
+       * dar bir üyelik burada geçerli olsaydı, kullanıcı "tüm şirketler"
+       * deyip yalnızca bir kısmını görürdü ve sebebi hiçbir ekranda
+       * yazmazdı.
+       */
+      scopedMemberships = [
+        {
+          id: `manager:${ustHesap.id}`,
+          orgId: activeOrgId,
+          clientId: null,
+          role: ustHesap.role,
+          permissions: null,
+          client: null,
+        } as (typeof user.memberships)[number],
+      ];
+    } else if (aktifOrgUyelikleri.length > 0) {
       scopedMemberships = aktifOrgUyelikleri;
     } else if (ustHesap) {
       /*
@@ -269,10 +315,15 @@ export class TenantContextService {
 
     if (hasOrgScope) {
       const all = await this.db.client.findMany({
-        // AKTİF organizasyon — ev değil. Üst hesaptan kardeş şirkete geçen
-        // kullanıcı o şirketin workspace'lerini görmek zorunda; `user.orgId`
-        // yazmak, geçişi yapıp boş bir seçici görmek demekti.
-        where: { orgId: activeOrgId, status: { not: 'archived' } },
+        /*
+         * TÜM ŞİRKETLER MODUNDA bütün ajansın workspace'leri; aksi hâlde
+         * AKTİF organizasyonunkiler (ev değil — kardeş şirkete geçen
+         * kullanıcı o şirketin workspace'lerini görmek zorunda).
+         */
+        where: {
+          orgId: tumSirketler ? { in: [...izinliOrgIdler] } : activeOrgId,
+          status: { not: 'archived' },
+        },
         orderBy: { name: 'asc' },
         select: { id: true, name: true, status: true },
       });
@@ -295,8 +346,20 @@ export class TenantContextService {
     // Aktif müşteri seçimi: istenen değer daima erişim listesine karşı doğrulanır.
     // Doğrulamadan geçmeyen bir istek sessizce yok sayılır (403 değil), çünkü
     // bayat bir cookie yüzünden kullanıcıyı kilitlemenin anlamı yok.
-    const activeClientId =
-      requestedClientId && clientIds.includes(requestedClientId) ? requestedClientId : null;
+    /*
+     * TÜM ŞİRKETLER MODUNDA WORKSPACE SEÇİMİ YOK.
+     *
+     * Mod bir GENEL BAKIŞ; bir workspace seçmek, o workspace'in şirketine
+     * geçmek demek ve o karar `switch-client` ucunda veriliyor. Seçimi
+     * burada da geçerli saymak, `ctx.orgId` (ev şirketi) ile seçili
+     * workspace'in şirketi farklı olduğunda yazma yollarını iki dünyaya
+     * birden bakan bir hâle sokardı.
+     */
+    const activeClientId = tumSirketler
+      ? null
+      : requestedClientId && clientIds.includes(requestedClientId)
+        ? requestedClientId
+        : null;
 
     // Etkin rol ve yetkiler:
     //   - Bir müşteri seçiliyse, O müşteriye ait membership belirleyicidir.
@@ -339,6 +402,7 @@ export class TenantContextService {
         clientIds,
         activeClientId,
         managerAccountId: ustHesap?.managerAccountId ?? null,
+        tumSirketler,
         role: effective.role as Role,
         isOrgAdmin,
         permissions,

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { TUM_SIRKETLER } from '@advetics/shared';
 import type { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { TenantContextService } from './tenant-context.service';
 
@@ -121,12 +122,34 @@ function servis(s: Senaryo) {
         ).map((o) => ({ id: o.id, name: o.name, slug: o.slug })),
     },
     client: {
-      findMany: async (args: { where: { orgId: string } }) =>
-        WORKSPACELER.filter((c) => c.orgId === args.where.orgId).map((c) => ({
+      /*
+       * İKİ SORGU ŞEKLİ DE TANINIYOR ve BİLİNMEYEN ŞEKİL PATLIYOR.
+       *
+       * Kod "tüm şirketler" modunda `{ orgId: { in: [...] } }` gönderiyor.
+       * Taklit yalnızca düz dizeyi biliyordu ve karşılaştırma sessizce
+       * false dönüp BOŞ LİSTE üretiyordu — yani test, çalışmayan bir
+       * özelliği "çalışıyor" gösterecek kadar yakın geçti. `pglite-harness`
+       * aynı sebeple bilinmeyen alanda açıkça patlıyor.
+       */
+      findMany: async (args: { where: { orgId: string | { in: string[] } } }) => {
+        const o = args.where.orgId;
+        const eslesir =
+          typeof o === 'string'
+            ? (c: SahteClient) => c.orgId === o
+            : Array.isArray(o?.in)
+              ? (c: SahteClient) => o.in.includes(c.orgId)
+              : null;
+        if (!eslesir) {
+          throw new Error(
+            `sahte client.findMany bu orgId şeklini tanımıyor: ${JSON.stringify(o)}`,
+          );
+        }
+        return WORKSPACELER.filter(eslesir).map((c) => ({
           id: c.id,
           name: c.name,
           status: c.status,
-        })),
+        }));
+      },
     },
   } as unknown as PrismaAdminService;
 
@@ -305,5 +328,55 @@ describe('kardeş şirkette YETKİ üst hesap rolünden geliyor', () => {
     expect(r.context.orgId).toBe(ORG_A1);
     expect(r.context.role).toBe('analyst');
     expect(r.context.isOrgAdmin).toBe(false);
+  });
+});
+
+describe('"TÜM ŞİRKETLER" MODU', () => {
+  const ALTINDA: Senaryo = { ustHesap: { id: UST_A, role: 'owner' } };
+
+  it('KRİTİK: bayrak açılıyor ve workspace listesi BÜTÜN ajansı kapsıyor', async () => {
+    const r = await servis(ALTINDA).resolve('user-1', null, TUM_SIRKETLER);
+    expect(r.context.tumSirketler).toBe(true);
+    expect(r.availableClients.map((c) => c.id).sort()).toEqual(['ws-a1', 'ws-a2']);
+  });
+
+  it('KRİTİK: `orgId` EV ŞİRKETİ kalıyor — yazma yolları tek şirkete çivili', async () => {
+    /*
+     * `ctx.orgId` yalnızca RLS'i sürmüyor; uygulama kodunda 21 yerde
+     * `orgId: ctx.orgId` olarak YAZMA yollarını da besliyor. Moda özel bir
+     * değer koymak, o yazmaların nereye gideceğini belirsiz yapardı.
+     */
+    const r = await servis(ALTINDA).resolve('user-1', null, TUM_SIRKETLER);
+    expect(r.context.orgId).toBe(ORG_A1);
+  });
+
+  it('KRİTİK: modda WORKSPACE SEÇİMİ yok', async () => {
+    /*
+     * Mod bir GENEL BAKIŞ. Seçimi geçerli saymak, `ctx.orgId` (ev şirketi)
+     * ile seçili workspace'in şirketi farklı olduğunda yazma yollarını iki
+     * dünyaya birden bakan bir hâle sokardı.
+     */
+    const r = await servis(ALTINDA).resolve('user-1', 'ws-a2', TUM_SIRKETLER);
+    expect(r.context.activeClientId).toBeNull();
+  });
+
+  it('KRİTİK: ÜST HESABI OLMAYAN kullanıcıda mod AÇILMIYOR', async () => {
+    // Sentinel doğrulanmasaydı cookie'ye `all` yazan herkes modu açardı.
+    const r = await servis({}).resolve('user-1', null, TUM_SIRKETLER);
+    expect(r.context.tumSirketler).toBe(false);
+    expect(r.availableClients.map((c) => c.id)).toEqual(['ws-a1']);
+  });
+
+  it('KRİTİK: ASKIYA ALINMIŞ üst hesapta mod AÇILMIYOR', async () => {
+    const r = await servis({
+      ustHesap: { id: UST_A, role: 'owner', status: 'suspended' },
+    }).resolve('user-1', null, TUM_SIRKETLER);
+    expect(r.context.tumSirketler).toBe(false);
+  });
+
+  it('normal şirket seçiminde bayrak KAPALI', async () => {
+    const r = await servis(ALTINDA).resolve('user-1', null, ORG_A2);
+    expect(r.context.tumSirketler).toBe(false);
+    expect(r.context.orgId).toBe(ORG_A2);
   });
 });

@@ -187,9 +187,21 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     this.auth.assertClientAccess(ctx, dto.clientId);
+
+    /*
+     * WORKSPACE BAŞKA ŞİRKETTEYSE ŞİRKET DE DEĞİŞİYOR.
+     *
+     * "Tüm şirketler" modunda seçici ajansın BÜTÜN workspace'lerini
+     * listeliyor. Yalnızca workspace cookie'sini yazmak, `resolve`un o
+     * seçimi aktif şirkette bulamayıp SESSİZCE düşürmesi demekti:
+     * kullanıcı tıklar, hiçbir şey olmaz.
+     */
+    const yeniSirket = dto.clientId ? await this.auth.workspaceSirketi(ctx, dto.clientId) : null;
+    if (yeniSirket) setActiveOrgCookie(res, this.config, yeniSirket);
+
     setActiveClientCookie(res, this.config, dto.clientId);
     // SEÇİLİ ŞİRKET KORUNUYOR: workspace değiştirmek şirketten çıkmak değil.
-    return this.auth.buildSession(ctx.userId, dto.clientId, ctx.orgId);
+    return this.auth.buildSession(ctx.userId, dto.clientId, yeniSirket ?? ctx.orgId);
   }
 
   // ---------------------------------------------------------------------------

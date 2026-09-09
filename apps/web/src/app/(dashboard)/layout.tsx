@@ -134,6 +134,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               organizations={session.managerAccount?.organizations ?? [session.organization]}
               activeOrganizationId={session.activeOrganizationId}
               activeClientId={session.activeClientId}
+              tumSirketler={session.tumSirketler}
             />
             <span className="hidden text-ink-muted sm:inline" aria-hidden>
               ›
