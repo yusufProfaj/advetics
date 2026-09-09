@@ -1,9 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { loginSchema } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { Alan } from '@/components/auth/alan';
 
 export function LoginForm() {
   const router = useRouter();
@@ -12,6 +14,13 @@ export function LoginForm() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  /*
+   * VARSAYILAN İŞARETLİ. Checkbox eklenmeden önce herkes zaten hatırlanıyordu
+   * (giriş cookie'si her zaman kalıcı yazılıyordu); işaretsiz açmak, hiçbir
+   * şey istememiş bütün kullanıcıları tarayıcı kapanınca çıkışa uğratırdı.
+   * `loginSchema.rememberMe` varsayılanı da bu sebeple `true`.
+   */
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
@@ -23,7 +32,7 @@ export function LoginForm() {
 
     // Aynı Zod şeması API tarafında da çalışıyor. Buradaki doğrulama
     // yalnızca kullanıcıya hızlı geri bildirim içindir — güvenlik değil.
-    const parsed = loginSchema.safeParse({ email, password });
+    const parsed = loginSchema.safeParse({ email, password, rememberMe });
     if (!parsed.success) {
       const errs: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
@@ -68,7 +77,7 @@ export function LoginForm() {
         </div>
       )}
 
-      <Field
+      <Alan
         id="email"
         label="E-posta"
         type="email"
@@ -79,7 +88,7 @@ export function LoginForm() {
         disabled={pending}
       />
 
-      <Field
+      <Alan
         id="password"
         label="Şifre"
         type="password"
@@ -90,6 +99,36 @@ export function LoginForm() {
         disabled={pending}
       />
 
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor="rememberMe" className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+          <input
+            id="rememberMe"
+            name="rememberMe"
+            type="checkbox"
+            checked={rememberMe}
+            disabled={pending}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="h-4 w-4 rounded border-line text-brand focus:ring-2 focus:ring-brand/20"
+          />
+          Beni hatırla
+        </label>
+
+        <Link href="/sifremi-unuttum" className="text-sm text-brand hover:underline">
+          Şifremi unuttum
+        </Link>
+      </div>
+
+      {/*
+        İŞARETSİZKEN NE OLACAĞI YAZIYOR. "Beni hatırla" kutusu tek başına
+        belirsiz: kullanıcı işareti kaldırınca oturumun ne kadar süreceğini
+        bilmiyor ve ortak bilgisayarda tam olarak bu bilgiyi arıyor.
+      */}
+      {!rememberMe && (
+        <p className="text-xs text-ink-muted">
+          Tarayıcıyı kapattığında oturumun kapanacak.
+        </p>
+      )}
+
       <button
         type="submit"
         disabled={pending}
@@ -98,50 +137,5 @@ export function LoginForm() {
         {pending ? 'Giriş yapılıyor…' : 'Giriş yap'}
       </button>
     </form>
-  );
-}
-
-function Field({
-  id,
-  label,
-  type,
-  value,
-  onChange,
-  error,
-  disabled,
-  autoComplete,
-}: {
-  id: string;
-  label: string;
-  type: string;
-  value: string;
-  onChange: (v: string) => void;
-  error?: string;
-  disabled?: boolean;
-  autoComplete?: string;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink">
-        {label}
-      </label>
-      <input
-        id={id}
-        name={id}
-        type={type}
-        autoComplete={autoComplete}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        aria-invalid={error ? 'true' : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
-        className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
-      />
-      {error && (
-        <p id={`${id}-error`} className="mt-1 text-xs text-red-600">
-          {error}
-        </p>
-      )}
-    </div>
   );
 }

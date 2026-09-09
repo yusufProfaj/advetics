@@ -25,23 +25,36 @@ function baseOptions(config: AppConfig): CookieOptions {
   };
 }
 
+/**
+ * "BENİ HATIRLA" BURADA UYGULANIYOR — ve yalnızca burada.
+ *
+ * `tokens.persistent` false ise iki cookie de `maxAge`SİZ yazılıyor. Bu bir
+ * detay değil, özelliğin TAMAMI: `maxAge` taşımayan bir cookie oturum
+ * cookie'sidir ve tarayıcı kapanınca silinir.
+ *
+ * KARAR TOKEN NESNESİNDEN OKUNUYOR, ayrı bir parametreden değil. Ayrı
+ * parametre olsaydı üç çağıran (`register`, `login`, `refresh`) vardı ve
+ * birinin onu geçirmeyi unutması derlemeyi kırmadan mümkün olurdu; sonuç,
+ * o yoldan giren kullanıcının "beni hatırlama" demesine rağmen 30 gün açık
+ * kalan bir oturumu olurdu ve bunu hiçbir ekran göstermezdi.
+ */
 export function setAuthCookies(
   res: Response,
   config: AppConfig,
-  tokens: { accessToken: string; refreshToken: string },
+  tokens: { accessToken: string; refreshToken: string; persistent: boolean },
 ): void {
   const base = baseOptions(config);
 
   res.cookie(ACCESS_COOKIE, tokens.accessToken, {
     ...base,
     path: '/',
-    maxAge: parseTtl(config.jwt.accessTtl),
+    ...(tokens.persistent ? { maxAge: parseTtl(config.jwt.accessTtl) } : {}),
   });
 
   res.cookie(REFRESH_COOKIE, tokens.refreshToken, {
     ...base,
     path: REFRESH_COOKIE_PATH,
-    maxAge: parseTtl(config.jwt.refreshTtl),
+    ...(tokens.persistent ? { maxAge: parseTtl(config.jwt.refreshTtl) } : {}),
   });
 }
 

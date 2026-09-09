@@ -423,6 +423,20 @@ model RefreshToken {
   revokedReason String?   @map("revoked_reason") @db.VarChar(64)
   replacedById  String?   @map("replaced_by_id") @db.Uuid
 
+  /// "Beni hatırla" işaretli miydi.
+  ///
+  /// NEDEN COOKIE'DE DEĞİL SATIRDA: tarayıcı `maxAge`ı geri GÖNDERMİYOR, yani
+  /// gelen bir cookie'ye bakarak oturumun kalıcı olup olmadığı anlaşılamıyor.
+  /// Bilgi burada durmazsa ilk `POST /auth/refresh` çağrısı — ki access token
+  /// 15 dakikada bir onu tetikliyor — kalıcı OLMAYAN bir oturumu sessizce
+  /// 30 günlük kalıcı bir oturuma çevirirdi. Belirti hiçbir ekranda
+  /// görünmez: kullanıcı "beni hatırlama" der, tarayıcıyı kapatır ve ortak
+  /// bilgisayarda oturumu açık kalır.
+  ///
+  /// Rotasyonda AYNEN taşınıyor. Varsayılan `true` = kolonun eklenmesinden
+  /// önceki bütün oturumların davranışı.
+  persistent Boolean @default(true)
+
   ip        String?  @db.Inet
   userAgent String?  @map("user_agent") @db.VarChar(512)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)

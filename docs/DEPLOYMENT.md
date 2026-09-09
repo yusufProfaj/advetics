@@ -307,6 +307,63 @@ anında geçersiz olur.
 
 ---
 
+## 5d. Sistem e-postası (şifre sıfırlama)
+
+"Şifremi unuttum" akışının maili buradan gidiyor. Kullanıcının **kendi** SMTP
+kimliği (Ayarlar > E-posta) rapor gönderimini besliyor ve giriş yapmış olmayı
+gerektiriyor; şifre sıfırlama maili ise tam olarak **giriş yapamayan** birine
+gidiyor. Bu yüzden sunucuya ait ayrı bir gönderici gerekiyor.
+
+**Tanımlı değilse API normal açılır** — yalnızca sıfırlama ekranı, eksik
+değişkenleri **adıyla** söyleyip durur. Sessizce "gönderildi" YAZMAZ: bu akış
+zaten bir kez ölü doğdu (token üretiliyor, hash'leniyor, düz metni atılıyordu)
+ve kimse fark etmedi.
+
+1. **Gmail kullanılacaksa uygulama şifresi üret.** Hesap parolası değil:
+   iki adımlı doğrulama açıkken <https://myaccount.google.com/apppasswords>.
+   Kurumsal bir SMTP kullanılacaksa 465 (SMTPS) ya da 587 (STARTTLS) portu.
+
+2. **Depo kökündeki `.env` dosyasına ekle:**
+
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=465
+   SMTP_SECURE=true
+   SMTP_USER=gonderen@ornek.com
+   SMTP_PASS=uygulama-sifresi
+   SMTP_FROM_EMAIL=gonderen@ornek.com
+   SMTP_FROM_NAME=Advetics
+   ```
+
+   `SMTP_PORT=587` kullanılacaksa `SMTP_SECURE=false` (STARTTLS).
+
+3. **`APP_URL` dolu olsun.** Maildeki sıfırlama bağlantısı buradan kuruluyor;
+   `localhost` kalırsa kullanıcıya tıklanamayan bir link gider. Boş
+   bırakılırsa `OAUTH_REDIRECT_BASE_URL` kullanılıyor — üretimde o zaten dolu
+   (Meta/Google callback'leri ona bağlı) ve iki ayrı zorunlu adres değişkeni,
+   birinin güncellenip diğerinin unutulması demekti.
+
+   ```
+   APP_URL=https://advetics.com
+   ```
+
+4. **Dağıt.** `su - advetics` → `cd ~/htdocs/advetics.com` → `git pull` →
+   `./scripts/deploy.sh`
+
+5. **CANLIDA DOĞRULA — "200 döndü" doğrulama değil.** Giriş ekranından
+   "Şifremi unuttum" → kendi adresin → mail **gerçekten geldi mi**, bağlantı
+   açılıyor mu. SMTP kimliği yanlışsa uç nokta yine başarılı döner (hata
+   numaralandırmayı önlemek için kullanıcıya yansıtılmıyor); arıza
+   `pm2 logs advetics-api` içinde ve denetim kaydında
+   `password.reset_mail_failed` olarak durur.
+
+### Parola `.env` dışına ÇIKMAMALI
+
+Depoya yazılmaz, sohbete yapıştırılmaz. Sızdığından şüphelenilirse Google
+hesabından o uygulama şifresi iptal edilir.
+
+---
+
 ## 6. SSL
 
 **Sites → advetics.com → SSL/TLS → New Let's Encrypt Certificate**

@@ -16,6 +16,9 @@ const PUBLIC_PATHS = [
   '/login',
   '/davet',
   '/sifre-sifirla',
+  // Şifresini unutan kişinin tanımı gereği oturumu YOK; bu satır olmadan
+  // "Şifremi unuttum" bağlantısı kullanıcıyı /login'e geri atardı.
+  '/sifremi-unuttum',
   '/r',
   '/gizlilik',
   '/kosullar',

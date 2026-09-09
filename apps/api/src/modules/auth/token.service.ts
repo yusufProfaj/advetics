@@ -14,6 +14,15 @@ export interface IssuedTokens {
   accessToken: string;
   refreshToken: string;
   refreshExpiresAt: Date;
+  /**
+   * Oturum KALICI mı ("beni hatırla" işaretliydi mi).
+   *
+   * TOKEN'IN YANINDA TAŞINIYOR, ayrı bir parametre olarak DEĞİL. `setAuthCookies`
+   * bunu buradan okuyor; ayrı geçirilseydi `register`, `login` ve `refresh`
+   * yollarından birinin onu geçirmeyi unutması hiçbir derleme hatası
+   * üretmeden mümkün olurdu ve o yol sessizce yanlış ömürlü cookie yazardı.
+   */
+  persistent: boolean;
 }
 
 interface TokenMeta {
@@ -88,10 +97,25 @@ export class TokenService {
     }
   }
 
-  /** Yeni bir oturum başlatır (login / register / davet kabul). */
-  async issueSession(userId: string, orgId: string, meta: TokenMeta = {}): Promise<IssuedTokens> {
+  /**
+   * Yeni bir oturum başlatır (login / register / davet kabul).
+   *
+   * `persistent = false` → "beni hatırla" işaretsiz: cookie'ler oturum
+   * cookie'si olarak yazılıyor ve tarayıcı kapanınca ölüyorlar.
+   *
+   * VERİTABANI ÖMRÜ KISALTILMIYOR ve bu bilinçli: token'a ulaşılabilirliği
+   * cookie belirliyor, cookie gidince satır zaten erişilemez oluyor. İkinci
+   * ve daha kısa bir son kullanma tarihi, tarayıcısını açık tutan kullanıcıyı
+   * çalışmanın ortasında dışarı atardı — kimsenin istemediği bir sürpriz.
+   */
+  async issueSession(
+    userId: string,
+    orgId: string,
+    meta: TokenMeta = {},
+    persistent = true,
+  ): Promise<IssuedTokens> {
     const familyId = randomUUID();
-    return this.issueTokens(userId, orgId, familyId, meta);
+    return this.issueTokens(userId, orgId, familyId, meta, persistent);
   }
 
   private async issueTokens(
@@ -99,6 +123,7 @@ export class TokenService {
     orgId: string,
     familyId: string,
     meta: TokenMeta,
+    persistent: boolean,
     replacesTokenId?: string,
   ): Promise<IssuedTokens> {
     const refreshToken = randomBytes(48).toString('base64url');
@@ -110,6 +135,7 @@ export class TokenService {
         tokenHash: this.hash(refreshToken),
         familyId,
         expiresAt: refreshExpiresAt,
+        persistent,
         ip: meta.ip ?? null,
         userAgent: meta.userAgent?.slice(0, 512) ?? null,
       },
@@ -124,7 +150,7 @@ export class TokenService {
     }
 
     const accessToken = await this.signAccessToken(userId, orgId);
-    return { accessToken, refreshToken, refreshExpiresAt };
+    return { accessToken, refreshToken, refreshExpiresAt, persistent };
   }
 
   /**
@@ -175,6 +201,13 @@ export class TokenService {
       existing.user.orgId,
       existing.familyId,
       meta,
+      /*
+       * KALICILIK ROTASYONDA TAŞINIYOR. Burada sabit `true` yazmak (ya da
+       * varsayılana bırakmak) "beni hatırla" işaretsiz açılmış bir oturumu
+       * İLK yenilemede kalıcıya çevirirdi ve access token 15 dakikada bir
+       * yenilendiği için bu, pratikte özelliğin hiç çalışmaması demek.
+       */
+      existing.persistent,
       existing.id,
     );
   }

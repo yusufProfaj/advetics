@@ -6,6 +6,21 @@ import { z } from 'zod';
  * Uygulama, eksik veya hatalı bir env ile AÇILMAZ. "Sunucu ayakta ama JWT
  * secret'ı boş" durumu, sessizce güvensiz çalışan bir sisteme yol açar.
  */
+/**
+ * BOŞ DİZE = TANIMSIZ.
+ *
+ * `.env.example` isteğe bağlı satırları `VAR=""` olarak taşıyor — değeri
+ * göstermek için değil, satırın VARLIĞINI göstermek için. Ama `z.string()
+ * .url()` boş dizeyi GEÇERSİZ sayıyor ve `.optional()` yalnızca `undefined`ı
+ * geçiriyor; yani örnek dosyayı olduğu gibi kopyalayan bir sunucuda API HİÇ
+ * AÇILMAZDI ve hata mesajı "APP_URL: Invalid url" olurdu — satırı bilerek boş
+ * bırakan kişi için anlamsız. Aynı tuzak `.default()` için de var: boş dize
+ * "tanımlı" sayıldığı için varsayılan devreye girmiyor.
+ */
+function bosIseYok<T extends z.ZodTypeAny>(sema: T) {
+  return z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), sema);
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
@@ -70,6 +85,43 @@ const envSchema = z.object({
 
   ENCRYPTION_KEY_V1: z.string().min(1),
   ENCRYPTION_ACTIVE_KEY_VERSION: z.coerce.number().int().min(1).default(1),
+
+  // ---------------------------------------------------------------------------
+  // SİSTEM E-POSTASI
+  //
+  // Kullanıcının KENDİ SMTP kimliği (`user_email_accounts`) rapor gönderimi
+  // için var ve giriş yapmış olmayı gerektiriyor. Şifre sıfırlama maili ise
+  // tam olarak GİRİŞ YAPAMAYAN birine gidiyor — o yüzden ayrı, sunucuya ait
+  // bir gönderici gerekiyor.
+  //
+  // HEPSİ OPSİYONEL VE EKSİKLİK AÇILIŞTA PATLAMIYOR. Paylaşımlı sunucuda
+  // açılışta hata fırlatmak, yarım yapılandırılmış bir deploy'da API'yi hiç
+  // kaldırmamak demek. Eksiklik `mail.eksikSmtpDegiskenleri` ile taşınıyor
+  // ve KULLANIM ANINDA, sıfırlama ekranında adıyla söyleniyor.
+  // ---------------------------------------------------------------------------
+  SMTP_HOST: bosIseYok(z.string().optional()),
+  SMTP_PORT: bosIseYok(z.coerce.number().int().min(1).max(65535).default(465)),
+  SMTP_SECURE: bosIseYok(
+    z
+      .string()
+      .default('true')
+      .transform((v) => v === 'true' || v === '1'),
+  ),
+  SMTP_USER: bosIseYok(z.string().optional()),
+  SMTP_PASS: bosIseYok(z.string().optional()),
+  SMTP_FROM_EMAIL: bosIseYok(z.string().email().optional()),
+  SMTP_FROM_NAME: bosIseYok(z.string().default('Advetics')),
+
+  /**
+   * Panelin DIŞARIDAN görünen kök adresi. Maillerdeki bağlantılar buradan
+   * kuruluyor — `localhost` kalırsa kullanıcıya tıklanamayan bir link gider.
+   *
+   * Verilmezse `OAUTH_REDIRECT_BASE_URL`e düşüyor: ikisi de AYNI paneli
+   * gösteriyor ve üretimde o zaten dolu (Meta/Google callback'leri ona
+   * bağlı). İki ayrı zorunlu değişken istemek, birinin güncellenip
+   * diğerinin unutulduğu klasik ayrışmayı davet ederdi.
+   */
+  APP_URL: bosIseYok(z.string().url().optional()),
 
   // ---------------------------------------------------------------------------
   // Modül 2 — Platform kimlik bilgileri
@@ -198,6 +250,36 @@ export interface AppConfig {
   };
   cookie: { domain: string; secure: boolean };
   encryption: { keys: Record<number, string>; activeVersion: number };
+  /** Sunucunun kendi e-posta göndericisi — şifre sıfırlama gibi oturumsuz akışlar için. */
+  mail: {
+    /** Maillerdeki bağlantıların kökü. */
+    appUrl: string;
+    /**
+     * Eksiksiz yapılandırılmışsa gönderici kimliği, değilse `null`.
+     *
+     * TEK KARAR NOKTASI: "SMTP hazır mı" sorusu burada bir kez cevaplanıyor.
+     * Her çağıranın alanları tek tek kontrol etmesi, birinin `pass`i
+     * unutması ve `undefined` parolayla sessizce başarısız bir gönderim
+     * denemesi demekti.
+     */
+    smtp: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user: string;
+      pass: string;
+      fromEmail: string;
+      fromName: string;
+    } | null;
+    /**
+     * `smtp` null ise EKSİK olan ortam değişkenlerinin ADLARI.
+     *
+     * Boş bir `null` "yapılandırılmamış" ile "yanlış yapılandırılmış"ı aynı
+     * sessizliğe çevirirdi; hangi satırın eksik olduğunu söylemek, sunucuya
+     * girmeden düzeltilebilir bir arıza demek.
+     */
+    eksikSmtpDegiskenleri: string[];
+  };
   /** Modül 2 — platform kimlik bilgileri. Eksikse ilgili provider devre dışı. */
   platforms: {
     oauthRedirectBaseUrl?: string;
@@ -291,6 +373,7 @@ export function loadConfig(): AppConfig {
       keys: { 1: env.ENCRYPTION_KEY_V1 },
       activeVersion: env.ENCRYPTION_ACTIVE_KEY_VERSION,
     },
+    mail: smtpYapilandirmasi(env),
     platforms: {
       oauthRedirectBaseUrl: env.OAUTH_REDIRECT_BASE_URL,
       meta: {
@@ -318,6 +401,58 @@ export function loadConfig(): AppConfig {
       apiKey: env.ANTHROPIC_API_KEY,
       model: env.ANTHROPIC_MODEL,
     },
+  };
+}
+
+/**
+ * SMTP alanlarını TEK YERDE toplayıp eksikleri ADIYLA raporlar.
+ *
+ * `port`, `secure` ve `fromName` varsayılanlı olduğu için eksik sayılmıyor —
+ * eksik listesine girselerdi hiç SMTP kurmamış bir sunucuda mesaj yedi
+ * değişken sayar ve okunmaz hâle gelirdi.
+ */
+function smtpYapilandirmasi(env: {
+  SMTP_HOST?: string;
+  SMTP_PORT: number;
+  SMTP_SECURE: boolean;
+  SMTP_USER?: string;
+  SMTP_PASS?: string;
+  SMTP_FROM_EMAIL?: string;
+  SMTP_FROM_NAME: string;
+  APP_URL?: string;
+  OAUTH_REDIRECT_BASE_URL?: string;
+}): AppConfig['mail'] {
+  const appUrl = (env.APP_URL ?? env.OAUTH_REDIRECT_BASE_URL ?? 'http://localhost:3000').replace(
+    /\/+$/,
+    '',
+  );
+
+  const zorunlu = {
+    SMTP_HOST: env.SMTP_HOST,
+    SMTP_USER: env.SMTP_USER,
+    SMTP_PASS: env.SMTP_PASS,
+    SMTP_FROM_EMAIL: env.SMTP_FROM_EMAIL,
+  };
+  const eksikSmtpDegiskenleri = Object.entries(zorunlu)
+    .filter(([, deger]) => !deger)
+    .map(([ad]) => ad);
+
+  if (eksikSmtpDegiskenleri.length > 0) {
+    return { appUrl, smtp: null, eksikSmtpDegiskenleri };
+  }
+
+  return {
+    appUrl,
+    smtp: {
+      host: zorunlu.SMTP_HOST as string,
+      port: env.SMTP_PORT,
+      secure: env.SMTP_SECURE,
+      user: zorunlu.SMTP_USER as string,
+      pass: zorunlu.SMTP_PASS as string,
+      fromEmail: zorunlu.SMTP_FROM_EMAIL as string,
+      fromName: env.SMTP_FROM_NAME,
+    },
+    eksikSmtpDegiskenleri: [],
   };
 }
 

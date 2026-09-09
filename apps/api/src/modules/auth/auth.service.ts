@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
@@ -21,6 +23,9 @@ import { AuditService } from '../audit/audit.service';
 import { TenantContextService } from './tenant-context.service';
 import { TokenService, type IssuedTokens } from './token.service';
 import { ARGON_OPTIONS } from '../../common/utils/password-hash';
+import { CONFIG, type AppConfig } from '../../config/configuration';
+import { mailGonder } from '../email/mail-gonderici';
+import { sifirlamaMailiOlustur } from './sifre-sifirlama-maili';
 
 /**
  * Kullanıcı bulunamadığında da gerçek bir doğrulama maliyeti ödenir ki cevap
@@ -57,6 +62,7 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly tenantContext: TenantContextService,
     private readonly audit: AuditService,
+    @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -156,15 +162,21 @@ export class AuthService {
       throw new UnauthorizedException('E-posta veya şifre hatalı');
     }
 
-    return this.completeLogin(user.id, user.orgId, meta);
+    return this.completeLogin(user.id, user.orgId, meta, input.rememberMe);
   }
 
   private async completeLogin(
     userId: string,
     orgId: string,
     meta: RequestMeta,
+    /**
+     * "Beni hatırla". Kayıt (`register`) yolunda parametre verilmiyor ve
+     * kalıcı sayılıyor: yeni organizasyon kuran kişi o anda panelde
+     * çalışmaya başlıyor, ilk işi tekrar giriş yapmak olmamalı.
+     */
+    persistent = true,
   ): Promise<AuthResult> {
-    const tokens = await this.tokens.issueSession(userId, orgId, meta);
+    const tokens = await this.tokens.issueSession(userId, orgId, meta, persistent);
 
     await this.admin.user.update({
       where: { id: userId },
@@ -266,13 +278,32 @@ export class AuthService {
    * Kullanıcı bulunamasa bile başarılı yanıt döner — aksi halde bu endpoint
    * bir e-posta numaralandırma aracına dönüşür.
    *
-   * Dönen token yalnızca geliştirme ortamında kullanılabilir. E-posta gönderimi
-   * Modül 1.5'te eklenecek; o zamana kadar token log'a düşer.
+   * ┌─ SIRA ÖNEMLİ: SMTP KONTROLÜ KULLANICI ARAMASINDAN ÖNCE ───────────────┐
+   * │ SMTP eksikliği kullanıcı bulunduktan SONRA bildirilseydi, hata mesajı │
+   * │ kusursuz bir numaralandırma aracına dönerdi: var olan adres hata      │
+   * │ alır, olmayan adres "gönderildi" alır. Sunucunun yapılandırması       │
+   * │ girilen adresten BAĞIMSIZ bir gerçek; önce o söyleniyor.              │
+   * └──────────────────────────────────────────────────────────────────────┘
+   *
+   * GÖNDERİM HATASI (SMTP kurulu ama parola yanlış, sunucu reddetti…) ise
+   * kullanıcıya yansıtılmıyor ve bu bilinçli bir taviz: o hata yalnızca
+   * KAYITLI adreslerde çıkabildiği için yansıtmak yine aynı oracle'ı açardı.
+   * Sessiz de kalmıyor — ERROR seviyesinde loglanıyor ve denetim kaydına
+   * `password.reset_mail_failed` olarak yazılıyor.
    */
   async requestPasswordReset(
     email: string,
     meta: RequestMeta,
   ): Promise<{ devToken?: string }> {
+    const smtp = this.config.mail.smtp;
+    if (!smtp && this.config.isProduction) {
+      throw new ServiceUnavailableException(
+        'Şifre sıfırlama e-postası gönderilemiyor: sunucuda e-posta göndericisi tanımlı değil ' +
+          `(eksik: ${this.config.mail.eksikSmtpDegiskenleri.join(', ')}). ` +
+          'Yöneticine başvur.',
+      );
+    }
+
     const user = await this.admin.user.findFirst({
       where: { email, status: 'active' },
       select: { id: true, orgId: true },
@@ -308,8 +339,41 @@ export class AuthService {
       ...meta,
     });
 
-    if (process.env.NODE_ENV !== 'production') {
-      this.logger.warn(`[DEV] Şifre sıfırlama token'ı: ${rawToken}`);
+    const { konu, html, baglanti } = sifirlamaMailiOlustur(this.config.mail.appUrl, rawToken);
+
+    if (!smtp) {
+      /*
+       * YALNIZCA GELİŞTİRMEDE BURAYA DÜŞÜLÜYOR (üretimde yukarıda fırlatıldı).
+       * Yerelde kimse SMTP kurmuyor; akışın hiç denenememesi, sıfırlama
+       * sayfasının canlıya ilk kez orada sınanması demek olurdu.
+       */
+      this.logger.warn(`[DEV] Şifre sıfırlama bağlantısı: ${baglanti}`);
+      return { devToken: rawToken };
+    }
+
+    try {
+      const sonuc = await mailGonder(smtp, { to: [email], subject: konu, html });
+      if (sonuc.ret.length > 0) {
+        // KISMİ RET SESSİZCE BAŞARILI DÖNÜYOR (`mail-gonderici.ts`). Tek
+        // alıcı var, yani buraya düşmek "gitmedi" demek.
+        throw new Error(sonuc.ret.map((r) => `${r.adres}: ${r.sebep}`).join('; '));
+      }
+    } catch (err) {
+      const sebep = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `Şifre sıfırlama maili GÖNDERİLEMEDİ (userId=${user.id}): ${sebep}`,
+      );
+      await this.audit.recordUnauthenticated(user.orgId, {
+        action: 'password.reset_mail_failed',
+        targetType: 'user',
+        targetId: user.id,
+        actorId: user.id,
+        ...meta,
+      });
+    }
+
+    if (!this.config.isProduction) {
+      this.logger.warn(`[DEV] Şifre sıfırlama bağlantısı: ${baglanti}`);
       return { devToken: rawToken };
     }
     return {};

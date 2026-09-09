@@ -25,6 +25,20 @@ export const emailSchema = z
 export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, 'Şifre gerekli').max(128),
+  /**
+   * "Beni hatırla".
+   *
+   * VARSAYILANI `true` ÇÜNKÜ BU, CHECKBOX EKLENMEDEN ÖNCEKİ DAVRANIŞ.
+   * Giriş cookie'si her zaman `maxAge` ile yazılıyordu, yani herkes zaten
+   * hatırlanıyordu. Varsayılanı `false` yapmak, bu alanı göndermeyen HER
+   * çağıranı (eski istemci, entegrasyon testi, curl) sessizce "tarayıcı
+   * kapanınca çık" davranışına geçirirdi — kimsenin istemediği bir
+   * regresyon ve belirtisi yalnızca "sürekli çıkış yapıyorum".
+   *
+   * `false` geldiğinde oturum cookie'leri `maxAge`SİZ yazılıyor: tarayıcı
+   * kapanınca ölüyorlar.
+   */
+  rememberMe: z.boolean().default(true),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
