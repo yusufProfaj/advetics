@@ -135,6 +135,50 @@ LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('app.current_manager_account_id', true), '')::uuid;
 $$;
 
+/*
+ * AJANSIN KAPSADIĞI ORGANİZASYONLAR — havuz tablolarının sınırı.
+ *
+ * Platform bağlantısı, reklam hesabı ve sosyal sayfa AJANSA ait, şirkete
+ * değil (CLAUDE.md). Üst hesap (MCC) katmanı gelince "ajans" artık tek bir
+ * organizasyon değil: Profaj'ın altındaki bütün şirketler aynı Meta
+ * yetkilendirmesinden besleniyor ve havuz ortak.
+ *
+ * ŞİRKET BAŞINA AYRI BAĞLANTI MÜMKÜN DEĞİL: müşterilerin kendi Facebook
+ * hesabı yok, ajans onların Business Manager'ına partner olarak ekleniyor,
+ * yani her yetkilendirme AYNI Facebook kullanıcısı oluyor ve ikinci
+ * yetkilendirme birincinin token'ını koparıyor. Bu workspace seviyesinde
+ * denendi ve çürüdü; şirket seviyesinde de aynı sebeple çürür.
+ *
+ * KOŞUL `app.ajansa_ait_org()` İÇİNDE — TEK KARAR NOKTASI. Hem bu fonksiyon
+ * hem `adv_organizations_select` onu çağırıyor, yani "hangi şirketler bu
+ * ajansa ait" sorusunun tek cevabı var.
+ *
+ * KOŞULU BURAYA YAZMAK, POLİTİKAYA GÜVENMEKTEN İYİ. İlk yazımda fonksiyon
+ * düpedüz `SELECT array_agg(id) FROM organizations` diyordu ve sınırı
+ * `adv_organizations_select`e bırakıyordu; o tabloda RLS bir gün kapatılırsa
+ * (koşum ortamı tam olarak bunu yapıyor) havuz BÜTÜN kiracılara açılırdı.
+ * Sınır, ona dayanan fonksiyonun kendi içinde.
+ *
+ * ÖZYİNELEME YOK: `ajansa_ait_org` kolonları PARAMETRE olarak alıyor, tablo
+ * okumuyor. Politika onu çağırdığında yeni bir politika değerlendirmesi
+ * tetiklenmiyor.
+ *
+ * STABLE: sorgu başına bir kez değerlendiriliyor, satır başına değil.
+ */
+CREATE OR REPLACE FUNCTION app.ajansa_ait_org(o_id uuid, o_manager uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT o_id = app.current_org_id()
+      OR (app.current_manager_account_id() IS NOT NULL
+          AND o_manager = app.current_manager_account_id());
+$$;
+
+CREATE OR REPLACE FUNCTION app.ajans_org_idleri() RETURNS uuid[]
+LANGUAGE sql STABLE AS $$
+  SELECT COALESCE(array_agg(id), ARRAY[]::uuid[])
+  FROM organizations
+  WHERE app.ajansa_ait_org(id, manager_account_id);
+$$;
+
 CREATE OR REPLACE FUNCTION app.current_active_client_id() RETURNS uuid
 LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('app.current_active_client_id', true), '')::uuid;
@@ -264,8 +308,23 @@ $$;
 -- organizations
 -- Kullanıcı yalnızca kendi organizasyonunu görür.
 -- -----------------------------------------------------------------------------
+/*
+ * KARDEŞ ŞİRKETLER DE GÖRÜNÜYOR — üst hesap (MCC) altındakiler.
+ *
+ * Şirket değiştirici bu satırları listeliyor ve havuz politikaları
+ * `app.ajans_org_idleri()` üzerinden BURAYA dayanıyor: "hangi şirketler bu
+ * ajansa ait" sorusunun tek cevabı bu politika.
+ *
+ * NE SIZDIRIYOR: kardeş şirketin adı, kısa adı ve planı. Bunlar aynı
+ * danışmanlığın içindeki kişilere zaten görünen bilgiler — kullanıcı zaten
+ * o şirkete GEÇEBİLİYOR. Şirketin VERİSİ bu politikadan geçmiyor; onu
+ * `can_access_client` ve müşteri bazlı politikalar sürüyor.
+ *
+ * `current_manager_account_id()` NULL iken ikinci koşul NULL üretip false'a
+ * düşüyor — üst hesabı olmayan kullanıcı için davranış DEĞİŞMİYOR.
+ */
 CREATE POLICY adv_organizations_select ON organizations
-  FOR SELECT USING (id = app.current_org_id());
+  FOR SELECT USING (app.ajansa_ait_org(id, manager_account_id));
 
 CREATE POLICY adv_organizations_update ON organizations
   FOR UPDATE USING (id = app.current_org_id() AND app.is_org_admin())
@@ -456,29 +515,82 @@ CREATE POLICY adv_audit_insert ON audit_logs
 -- Müşteriye özel bağlantı (müşteri kendi hesabını devretmişse) eski kuralla
 -- devam ediyor.
 -- -----------------------------------------------------------------------------
+--
+-- ═══ SINIR ARTIK `org_id = current_org_id()` DEĞİL, AJANSIN TAMAMI ═══
+--
+-- Üst hesap (MCC) katmanıyla birlikte bir ajans birden çok ŞİRKETE yayılıyor
+-- ve havuz ortak: tek Meta yetkilendirmesi hepsine hizmet ediyor. Şirket
+-- başına ayrı bağlantı mümkün değil — her yetkilendirme aynı Facebook
+-- kullanıcısı oluyor ve ikincisi birincinin token'ını koparıyor.
+--
+-- `app.ajans_org_idleri()` bu kümeyi TEK YERDEN veriyor. Üst hesabı olmayan
+-- kullanıcı için küme tek elemanlı ve DAVRANIŞ DEĞİŞMİYOR.
+--
+-- ATANMIŞ satırlar bundan ETKİLENMİYOR: onları `can_access_client(client_id)`
+-- süzüyor ve o fonksiyon kullanıcının erişebildiği workspace listesine
+-- bakıyor — kardeş şirketin atanmış hesabı orada YOK.
+-- -----------------------------------------------------------------------------
 CREATE POLICY adv_connections_select ON platform_connections
   FOR SELECT USING (
     app.has_context()
-    AND org_id = app.current_org_id()
+    AND (
+      CASE WHEN client_id IS NULL
+        -- AJANS BAĞLANTISI: üst hesabın bütün şirketlerine açık.
+        THEN org_id = ANY (app.ajans_org_idleri())
+        -- MÜŞTERİYE ÖZEL BAĞLANTI (müşteri kendi hesabını devretmiş):
+        -- kendi şirketinde kalıyor.
+        ELSE org_id = app.current_org_id()
+      END
+    )
   );
 
 CREATE POLICY adv_connections_write ON platform_connections
   FOR ALL USING (
     app.has_context()
-    AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.can_manage_pool()
-        ELSE app.can_access_client(client_id)
+        /*
+         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
+         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
+         * bağlantı mümkün değil.
+         */
+        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        /*
+         * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
+         *
+         * `can_access_client()` org yöneticisine HER workspace için true
+         * dönüyor (`is_org_admin() OR target = ANY(client_ids)`) ve
+         * workspace'in ORG'una hiç bakmıyor. Eskiden dıştaki
+         * `org_id = current_org_id()` koşulu onu sabitliyordu; o koşulu
+         * ajans geneline gevşetmek, A2 şirketindeki yöneticiye A1'in
+         * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
+         * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
+         */
+        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
       END
     )
   ) WITH CHECK (
     app.has_context()
-    AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.can_manage_pool()
-        ELSE app.can_access_client(client_id)
+        /*
+         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
+         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
+         * bağlantı mümkün değil.
+         */
+        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        /*
+         * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
+         *
+         * `can_access_client()` org yöneticisine HER workspace için true
+         * dönüyor (`is_org_admin() OR target = ANY(client_ids)`) ve
+         * workspace'in ORG'una hiç bakmıyor. Eskiden dıştaki
+         * `org_id = current_org_id()` koşulu onu sabitliyordu; o koşulu
+         * ajans geneline gevşetmek, A2 şirketindeki yöneticiye A1'in
+         * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
+         * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
+         */
+        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
       END
     )
   );
@@ -507,11 +619,26 @@ CREATE POLICY adv_connections_write ON platform_connections
 CREATE POLICY adv_ad_accounts_select ON ad_accounts
   FOR SELECT USING (
     app.has_context()
-    AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.can_manage_pool()
-        ELSE app.can_access_client(client_id)
+        /*
+         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
+         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
+         * bağlantı mümkün değil.
+         */
+        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        /*
+         * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
+         *
+         * `can_access_client()` org yöneticisine HER workspace için true
+         * dönüyor (`is_org_admin() OR target = ANY(client_ids)`) ve
+         * workspace'in ORG'una hiç bakmıyor. Eskiden dıştaki
+         * `org_id = current_org_id()` koşulu onu sabitliyordu; o koşulu
+         * ajans geneline gevşetmek, A2 şirketindeki yöneticiye A1'in
+         * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
+         * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
+         */
+        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
       END
     )
   );
@@ -545,20 +672,50 @@ CREATE POLICY adv_ad_accounts_select ON ad_accounts
 CREATE POLICY adv_ad_accounts_write ON ad_accounts
   FOR ALL USING (
     app.has_context()
-    AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.can_manage_pool()
-        ELSE app.can_access_client(client_id)
+        /*
+         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
+         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
+         * bağlantı mümkün değil.
+         */
+        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        /*
+         * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
+         *
+         * `can_access_client()` org yöneticisine HER workspace için true
+         * dönüyor (`is_org_admin() OR target = ANY(client_ids)`) ve
+         * workspace'in ORG'una hiç bakmıyor. Eskiden dıştaki
+         * `org_id = current_org_id()` koşulu onu sabitliyordu; o koşulu
+         * ajans geneline gevşetmek, A2 şirketindeki yöneticiye A1'in
+         * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
+         * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
+         */
+        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
       END
     )
   ) WITH CHECK (
     app.has_context()
-    AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.can_manage_pool()
-        ELSE app.can_access_client(client_id)
+        /*
+         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
+         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
+         * bağlantı mümkün değil.
+         */
+        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        /*
+         * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
+         *
+         * `can_access_client()` org yöneticisine HER workspace için true
+         * dönüyor (`is_org_admin() OR target = ANY(client_ids)`) ve
+         * workspace'in ORG'una hiç bakmıyor. Eskiden dıştaki
+         * `org_id = current_org_id()` koşulu onu sabitliyordu; o koşulu
+         * ajans geneline gevşetmek, A2 şirketindeki yöneticiye A1'in
+         * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
+         * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
+         */
+        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
       END
     )
   );
@@ -579,11 +736,26 @@ CREATE POLICY adv_ad_accounts_write ON ad_accounts
 CREATE POLICY adv_social_profiles_select ON social_profiles
   FOR SELECT USING (
     app.has_context()
-    AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.can_manage_pool()
-        ELSE app.can_access_client(client_id)
+        /*
+         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
+         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
+         * bağlantı mümkün değil.
+         */
+        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        /*
+         * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
+         *
+         * `can_access_client()` org yöneticisine HER workspace için true
+         * dönüyor (`is_org_admin() OR target = ANY(client_ids)`) ve
+         * workspace'in ORG'una hiç bakmıyor. Eskiden dıştaki
+         * `org_id = current_org_id()` koşulu onu sabitliyordu; o koşulu
+         * ajans geneline gevşetmek, A2 şirketindeki yöneticiye A1'in
+         * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
+         * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
+         */
+        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
       END
     )
   );
@@ -591,20 +763,50 @@ CREATE POLICY adv_social_profiles_select ON social_profiles
 CREATE POLICY adv_social_profiles_write ON social_profiles
   FOR ALL USING (
     app.has_context()
-    AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.can_manage_pool()
-        ELSE app.can_access_client(client_id)
+        /*
+         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
+         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
+         * bağlantı mümkün değil.
+         */
+        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        /*
+         * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
+         *
+         * `can_access_client()` org yöneticisine HER workspace için true
+         * dönüyor (`is_org_admin() OR target = ANY(client_ids)`) ve
+         * workspace'in ORG'una hiç bakmıyor. Eskiden dıştaki
+         * `org_id = current_org_id()` koşulu onu sabitliyordu; o koşulu
+         * ajans geneline gevşetmek, A2 şirketindeki yöneticiye A1'in
+         * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
+         * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
+         */
+        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
       END
     )
   ) WITH CHECK (
     app.has_context()
-    AND org_id = app.current_org_id()
     AND (
       CASE WHEN client_id IS NULL
-        THEN app.can_manage_pool()
-        ELSE app.can_access_client(client_id)
+        /*
+         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
+         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
+         * bağlantı mümkün değil.
+         */
+        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        /*
+         * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
+         *
+         * `can_access_client()` org yöneticisine HER workspace için true
+         * dönüyor (`is_org_admin() OR target = ANY(client_ids)`) ve
+         * workspace'in ORG'una hiç bakmıyor. Eskiden dıştaki
+         * `org_id = current_org_id()` koşulu onu sabitliyordu; o koşulu
+         * ajans geneline gevşetmek, A2 şirketindeki yöneticiye A1'in
+         * ATANMIŞ hesaplarını açıyordu — bir şirketin müşteri verisini
+         * diğerine. `ust-hesap-havuz-rls.spec.ts` yakaladı.
+         */
+        ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)
       END
     )
   );

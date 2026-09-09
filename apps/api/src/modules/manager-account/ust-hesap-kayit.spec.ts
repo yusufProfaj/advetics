@@ -125,6 +125,54 @@ describe('RLS kurulumu eksiksiz', () => {
   });
 });
 
+describe('havuz ajans genelinde — RLS kurulumu', () => {
+  it('KRİTİK: iki yardımcı fonksiyon da tanımlı', () => {
+    expect(RLS).toContain('CREATE OR REPLACE FUNCTION app.ajansa_ait_org(');
+    expect(RLS).toContain('CREATE OR REPLACE FUNCTION app.ajans_org_idleri()');
+  });
+
+  it('KRİTİK: fonksiyon SIRASI doğru — `current_manager_account_id` ÖNCE', () => {
+    /*
+     * Postgres `LANGUAGE sql` gövdelerini CREATE ANINDA çözümlüyor. Dosya
+     * yukarıdan aşağı uygulandığı için, `ajansa_ait_org` içinde çağrılan
+     * `app.current_manager_account_id()` ondan ÖNCE tanımlı olmak zorunda.
+     *
+     * BU CANLIDA DEĞİL TESTTE YAKALANDI ama üretimde de aynı şekilde
+     * patlardı: `db:rls` "function app.current_manager_account_id() does
+     * not exist" ile düşer ve deploy yarıda kalırdı.
+     */
+    const once = RLS.indexOf('CREATE OR REPLACE FUNCTION app.current_manager_account_id()');
+    const sonra = RLS.indexOf('CREATE OR REPLACE FUNCTION app.ajansa_ait_org(');
+    expect(once).toBeGreaterThan(-1);
+    expect(sonra).toBeGreaterThan(once);
+  });
+
+  it('KRİTİK: HAVUZ ajans geneli, ATANMIŞ satır kendi şirketinde', () => {
+    /*
+     * Bu ayrım bir güvenlik sınırı ve testte yakalandı: `can_access_client()`
+     * org yöneticisine HER workspace için true dönüyor ve workspace'in
+     * ORG'una hiç bakmıyor. Dıştaki `org_id = current_org_id()` koşulunu
+     * ajans geneline gevşetmek, kardeş şirketin ATANMIŞ hesaplarını
+     * açıyordu.
+     */
+    expect(RLS).toContain('THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()');
+    expect(RLS).toContain(
+      'ELSE org_id = app.current_org_id() AND app.can_access_client(client_id)',
+    );
+    // ATANMIŞ dal ajans genelini KULLANMAMALI.
+    expect(RLS).not.toContain(
+      'ELSE org_id = ANY (app.ajans_org_idleri()) AND app.can_access_client(client_id)',
+    );
+  });
+
+  it('KRİTİK: organizations politikası aynı fonksiyonu kullanıyor', () => {
+    // Koşulu iki yerde yazmak, doğdukları anda ayrışan iki kopya demekti.
+    expect(RLS).toContain(
+      'CREATE POLICY adv_organizations_select ON organizations\n  FOR SELECT USING (app.ajansa_ait_org(id, manager_account_id));',
+    );
+  });
+});
+
 describe('koşum ortamı', () => {
   it('KRİTİK: TRUNCATE listesinde iki tablo da var', () => {
     // Eksikse testler arası üyelik satırı sızar ve bir sonraki test

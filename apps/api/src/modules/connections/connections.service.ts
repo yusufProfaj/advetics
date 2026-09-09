@@ -1629,9 +1629,31 @@ export class ConnectionsService {
        * Atama KALKINCA izleme kapanıyor (eski davranış): atanmamış hesabı
        * senkronize etmek boşa kota.
        */
+      /*
+       * `orgId` DE YAZILIYOR — HAVUZ ARTIK ŞİRKETLER ARASI ORTAK.
+       *
+       * Üst hesap (MCC) altında tek Meta yetkilendirmesi bütün şirketlere
+       * hizmet ediyor, yani havuzdaki bir hesabın `org_id`'si yetkilendirmeyi
+       * yapan şirket, atanacağı workspace ise BAŞKA bir şirkette olabiliyor.
+       *
+       * `ad_accounts_client_org_fkey` kompozit yabancı anahtarı
+       * `(client_id, org_id)` çiftinin `clients`ta VAR OLMASINI şart koşuyor.
+       * `org_id`'yi güncellemeden atama denemek, anlaşılmaz bir yabancı
+       * anahtar hatasıyla düşerdi — ve bu, kullanıcıya "bir şeyler ters
+       * gitti" olarak görünen türden.
+       *
+       * `ctx.orgId` KULLANILIYOR, hesabın eski org'u değil: `clientId`
+       * yukarıda `ctx.clientIds` listesine karşı doğrulandı, yani hedef
+       * workspace AKTİF şirkette. Atama kaldırılırken (`clientId === null`)
+       * satır bulunduğu şirkette kalıyor — havuza dönüyor ve havuz ajansın.
+       */
       const after = await tx.adAccount.update({
         where: { id: adAccountId },
-        data: { clientId, syncEnabled: clientId !== null },
+        data: {
+          clientId,
+          syncEnabled: clientId !== null,
+          ...(clientId !== null ? { orgId: ctx.orgId } : {}),
+        },
       });
 
       /*
@@ -1791,9 +1813,19 @@ export class ConnectionsService {
        * Instagram'da, izinlerde, webhook'ta aranıyor — oysa tek eksik bir
        * anahtardı.
        */
+      /*
+       * `orgId` DE YAZILIYOR — gerekçesi `assignAdAccount` ile aynı:
+       * havuz üst hesap (MCC) altında şirketler arası ortak ve
+       * `social_profiles_client_org_fkey` kompozit anahtarı
+       * `(client_id, org_id)` çiftinin `clients`ta var olmasını istiyor.
+       */
       const after = await tx.socialProfile.update({
         where: { id: socialProfileId },
-        data: { clientId, syncEnabled: clientId !== null },
+        data: {
+          clientId,
+          syncEnabled: clientId !== null,
+          ...(clientId !== null ? { orgId: ctx.orgId } : {}),
+        },
       });
 
       await this.audit.record(tx, ctx, {

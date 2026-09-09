@@ -143,8 +143,38 @@ export async function createHarness(): Promise<Harness> {
           lastInsightsSyncAt?: Date;
           clientId?: string | null;
           syncEnabled?: boolean;
+          /*
+           * `orgId` — HAVUZ ARTIK SIRKETLER ARASI ORTAK (ust hesap / MCC).
+           * Havuzdaki satirin org'u yetkilendirmeyi yapan sirket, atandigi
+           * workspace ise baskasinda olabiliyor; `ad_accounts_client_org_fkey`
+           * ikisinin tutarli olmasini istiyor.
+           */
+          orgId?: string;
         };
       }) => {
+        /*
+         * BILINMEYEN ALANDA HATA — `socialProfile.update` deseniyle ayni.
+         *
+         * BU BEKCI BURADA YOKTU ve `orgId` eklenince tam olarak korktugu sey
+         * oldu: taklit alani SESSIZCE dusurdu, servis dogru yaziyordu ama
+         * testler guncellenmemis bir satiri dogrulamis oluyordu. Kardes
+         * tablonun bekcisi vardi, bunun yoktu.
+         */
+        const bilinen = [
+          'lastStructureSyncAt',
+          'lastInsightsSyncAt',
+          'clientId',
+          'syncEnabled',
+          'orgId',
+        ];
+        const tanimsiz = Object.keys(data).filter((k) => !bilinen.includes(k));
+        if (tanimsiz.length > 0) {
+          throw new Error(
+            `pglite-harness: adAccount.update bu alanlari tanimiyor: ${tanimsiz.join(', ')}. ` +
+              'Taklide ekle — yoksa test sessizce guncellenmemis bir satiri dogrulamis olur.',
+          );
+        }
+
         if (data.lastStructureSyncAt) {
           await q('UPDATE ad_accounts SET last_structure_sync_at = $1 WHERE id = $2', [
             data.lastStructureSyncAt,
@@ -171,6 +201,9 @@ export async function createHarness(): Promise<Harness> {
             data.syncEnabled,
             where.id,
           ]);
+        }
+        if (data.orgId !== undefined) {
+          await q('UPDATE ad_accounts SET org_id = $1 WHERE id = $2', [data.orgId, where.id]);
         }
         return (await loadAdAccount(q, where.id)) ?? {};
       },
@@ -219,9 +252,19 @@ export async function createHarness(): Promise<Harness> {
           syncEnabled?: boolean;
           lastSyncAt?: Date;
           linkedAdAccountId?: string | null;
+          /*
+           * `orgId` — HAVUZ ARTIK SIRKETLER ARASI ORTAK.
+           *
+           * Ust hesap (MCC) altinda tek Meta yetkilendirmesi butun
+           * sirketlere hizmet ediyor; havuzdaki satirin org'u yetkilendirmeyi
+           * yapan sirket, atandigi workspace ise baskasinda olabiliyor.
+           * `social_profiles_client_org_fkey` kompozit anahtari ikisinin
+           * tutarli olmasini istiyor, o yuzden atama `org_id`yi de yaziyor.
+           */
+          orgId?: string;
         };
       }) => {
-        const bilinen = ['clientId', 'syncEnabled', 'lastSyncAt', 'linkedAdAccountId'];
+        const bilinen = ['clientId', 'syncEnabled', 'lastSyncAt', 'linkedAdAccountId', 'orgId'];
         const tanimsiz = Object.keys(data).filter((k) => !bilinen.includes(k));
         if (tanimsiz.length > 0) {
           throw new Error(
@@ -250,6 +293,9 @@ export async function createHarness(): Promise<Harness> {
             data.lastSyncAt,
             where.id,
           ]);
+        }
+        if (data.orgId !== undefined) {
+          await q('UPDATE social_profiles SET org_id = $1 WHERE id = $2', [data.orgId, where.id]);
         }
         // `in` kontrolü yine ŞART: null "eşleşmeyi kaldır" demek ve
         // `!== undefined` ile ayırt edilemezdi.
