@@ -33,7 +33,21 @@ export default async function UstHesapPage() {
   let agac: ManagerAccountTree | null = null;
   let yuklemeHatasi: string | null = null;
   try {
-    agac = await serverApiFetch<ManagerAccountTree | null>('/manager-account');
+    /*
+     * `?? null` ZORUNLU — TİP YALAN SÖYLÜYOR.
+     *
+     * NestJS bir uç `null` döndürdüğünde gövdeyi BOŞ bırakıyor ve durum kodu
+     * 200 kalıyor; `handle()` boş gövdede `undefined` dönüyor (`lib/api.ts`
+     * bunu uzun uzun anlatıyor). Yani dönüş tipi `T | null` yazsa da eline
+     * `undefined` geliyor ve TypeScript bunu göremiyor: `serverApiFetch<T>`
+     * denetimsiz bir dönüşüm.
+     *
+     * BU CANLIDA PATLADI: `agac === null` kontrolü `undefined` için false
+     * kalıyor, ekran ağacı çizmeye çalışıyor ve `agac.name` fırlatıyor —
+     * kullanıcı "Bu ekran yüklenemedi" görüyor. `/ayarlar/e-posta` aynı
+     * deseni zaten doğru kullanıyordu.
+     */
+    agac = (await serverApiFetch<ManagerAccountTree | null>('/manager-account')) ?? null;
   } catch (e) {
     yuklemeHatasi = e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı';
   }

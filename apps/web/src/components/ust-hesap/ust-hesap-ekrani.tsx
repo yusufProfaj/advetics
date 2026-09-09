@@ -75,7 +75,14 @@ export function UstHesapEkrani({
         </p>
       )}
 
-      {agac === null ? (
+      {/*
+        `!agac` — `agac === null` DEĞİL. Sayfa değeri `?? null` ile
+        normalleştiriyor ama bu bileşen tek çağıranına bağlı kalmamalı:
+        `undefined` geldiğinde eşitlik kontrolü false kalıyor ve aşağıdaki
+        ağaç `agac.name` ile fırlıyor. Bir sayfa hatası, KULLANICININ tek
+        gördüğü şey oluyor.
+      */}
+      {!agac ? (
         <UstHesapKur
           pending={pending}
           onKur={(name) => void gonder('/manager-account', { name })}
