@@ -49,7 +49,9 @@ const RLS_SQL = readFileSync(join(__dirname, '../../prisma/sql/02_rls.sql'), 'ut
  * test yeşil kalırdı.
  */
 function revokeSatirlari(): string[] {
-  const satirlar = [...RLS_SQL.matchAll(/EXECUTE '(REVOKE [^']*manager_[^']*)'/g)].map((m) => m[1]);
+  const satirlar = [...RLS_SQL.matchAll(/EXECUTE '(REVOKE [^']*manager_[^']*)'/g)]
+    .map((m) => m[1])
+    .filter((x): x is string => typeof x === 'string');
   if (satirlar.length === 0) {
     throw new Error('02_rls.sql içinde manager_* REVOKE satırı bulunamadı — yasak kaldırılmış mı?');
   }

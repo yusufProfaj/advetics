@@ -55,11 +55,15 @@ export class ManagerAccountService {
                 name: true,
                 slug: true,
                 /*
-                 * SAYIM ARŞİVLENMİŞLERİ HARİÇ TUTUYOR. Panelde bir şirketin
-                 * yanında "4 workspace" yazıp içeri girince 2 tane görmek,
+                 * ARŞİVLENMİŞLER HARİÇ. Panelde bir şirketin yanında
+                 * "4 workspace" yazıp içeri girince 2 tane görmek,
                  * kullanıcının veri kaybettiğini sanması demek.
                  */
-                _count: { select: { clients: { where: { status: { not: 'archived' } } } } },
+                clients: {
+                  where: { status: { not: 'archived' } },
+                  orderBy: { name: 'asc' },
+                  select: { id: true, name: true, status: true },
+                },
               },
             },
           },
@@ -80,7 +84,7 @@ export class ManagerAccountService {
         id: o.id,
         name: o.name,
         slug: o.slug,
-        workspaceCount: o._count.clients,
+        workspaces: o.clients,
         isHome: o.id === ctx.orgId,
       })),
     };

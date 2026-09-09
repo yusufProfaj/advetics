@@ -142,7 +142,12 @@ describe('koşum ortamı', () => {
     const dizinler = readdirSync(join(PRISMA, 'migrations'));
     const ustHesap = dizinler.filter((d) => d.includes('ust_hesap'));
     expect(ustHesap).toHaveLength(1);
-    const sql = readFileSync(join(PRISMA, 'migrations', ustHesap[0], 'migration.sql'), 'utf8');
+    const dizin = ustHesap[0];
+    // `!` YERİNE AÇIK KONTROL: `noUncheckedIndexedAccess` altında `[0]`
+    // `undefined` olabiliyor ve `!` o bilgiyi susturur — testin kendisi
+    // sessizce `undefined` bir yola bakabilirdi.
+    if (!dizin) throw new Error('migration dizini bulunamadı');
+    const sql = readFileSync(join(PRISMA, 'migrations', dizin, 'migration.sql'), 'utf8');
     expect(sql).toContain('CREATE TABLE "manager_accounts"');
     expect(sql).toContain('CREATE TABLE "manager_memberships"');
     // Şirket bağı SET NULL olmak zorunda — cascade, bir danışmanlık kaydını

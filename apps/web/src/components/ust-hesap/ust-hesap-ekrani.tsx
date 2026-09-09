@@ -23,9 +23,12 @@ import { Halka } from '@/components/yukleniyor';
  */
 export function UstHesapEkrani({
   ilkAgac,
+  aktifOrgId,
   yuklemeHatasi,
 }: {
   ilkAgac: ManagerAccountTree | null;
+  /** Şu an SEÇİLİ şirket — kartta "Yönet" yerine "buradasın" yazsın diye. */
+  aktifOrgId: string;
   /** Ağaç okunamadıysa SEBEBİ — sessizce "üst hesap yok" göstermiyoruz. */
   yuklemeHatasi: string | null;
 }) {
@@ -89,7 +92,7 @@ export function UstHesapEkrani({
         />
       ) : (
         <>
-          <SirketListesi agac={agac} />
+          <SirketListesi agac={agac} aktifOrgId={aktifOrgId} />
           <SirketEkle
             pending={pending}
             onEkle={(name) => void gonder('/manager-account/organizations', { name })}
@@ -102,54 +105,143 @@ export function UstHesapEkrani({
 
 // ---------------------------------------------------------------------------
 
-function SirketListesi({ agac }: { agac: ManagerAccountTree }) {
+function SirketListesi({
+  agac,
+  aktifOrgId,
+}: {
+  agac: ManagerAccountTree;
+  aktifOrgId: string;
+}) {
   return (
-    <section className="rounded-xl border border-line bg-surface">
-      <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold text-ink">{agac.name}</h2>
-          <p className="text-xs text-ink-muted">Üst hesap · {agac.slug}</p>
-        </div>
-        {/* SESSİZ KESME YOK: kaç şirket olduğu yazılı (CLAUDE.md). */}
-        <span className="shrink-0 text-xs text-ink-muted">
-          {agac.organizations.length} şirket
+    <section className="space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold text-ink">{agac.name}</h2>
+        {/* SESSİZ KESME YOK: kaç şirket ve kaç workspace olduğu yazılı. */}
+        <span className="text-xs text-ink-muted">
+          {agac.organizations.length} şirket ·{' '}
+          {agac.organizations.reduce((n, o) => n + o.workspaces.length, 0)} workspace
         </span>
-      </header>
+      </div>
 
       {agac.organizations.length === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-ink-muted">
+        <p className="rounded-xl border border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
           Bu üst hesaba bağlı şirket yok.
         </p>
       ) : (
-        <ul className="divide-y divide-line">
+        /* IZGARA: şirket sayısı arttıkça dikey yığın ekranı uzatıyor ve
+           geniş ekranda sağda ölü alan bırakıyor. */
+        <ul className="grid gap-3 sm:grid-cols-2">
           {agac.organizations.map((o) => (
-            <li key={o.id} className="flex items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-ink">
-                  {o.name}
-                  {o.isHome && (
-                    /*
-                     * EV ŞİRKETİ İŞARETLİ. Kullanıcının kendi üyeliği orada;
-                     * diğer şirketlerdeki yetkisi üst hesap rolünden geliyor
-                     * ve ikisi farklı olabiliyor. İşaret olmadan "neden bu
-                     * şirkette daha az şey yapabiliyorum" sorusunun cevabı
-                     * hiçbir ekranda yazmıyor.
-                     */
-                    <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-[11px] font-normal text-ink-muted">
-                      kendi şirketin
-                    </span>
-                  )}
-                </p>
-                <p className="text-xs text-ink-muted">{o.slug}</p>
-              </div>
-              <span className="shrink-0 text-xs text-ink-muted">
-                {o.workspaceCount} workspace
-              </span>
-            </li>
+            <SirketKarti key={o.id} sirket={o} aktif={o.id === aktifOrgId} />
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+function SirketKarti({
+  sirket,
+  aktif,
+}: {
+  sirket: ManagerAccountTree['organizations'][number];
+  aktif: boolean;
+}) {
+  const [acik, setAcik] = useState(false);
+  const [gecis, setGecis] = useState(false);
+
+  return (
+    <li className="flex flex-col rounded-xl border border-line bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink">{sirket.name}</p>
+          <p className="truncate text-xs text-ink-muted">{sirket.slug}</p>
+        </div>
+        {sirket.isHome && (
+          /*
+           * EV ŞİRKETİ İŞARETLİ. Kullanıcının kendi üyeliği orada; diğer
+           * şirketlerdeki yetkisi üst hesap rolünden geliyor ve ikisi farklı
+           * olabiliyor. İşaret olmadan "neden bu şirkette daha az şey
+           * yapabiliyorum" sorusunun cevabı hiçbir ekranda yazmıyor.
+           */
+          <span className="shrink-0 rounded bg-surface-muted px-1.5 py-0.5 text-[11px] text-ink-muted">
+            kendi şirketin
+          </span>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setAcik((v) => !v)}
+        aria-expanded={acik}
+        className="mt-3 flex items-center gap-2 rounded-lg bg-surface-sunken px-3 py-2 text-left text-sm font-medium text-ink transition hover:bg-surface-muted"
+      >
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          className={`h-3.5 w-3.5 shrink-0 transition ${acik ? 'rotate-90' : ''}`}
+          aria-hidden
+        >
+          <path d="m8 6 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        Workspace&apos;ler ({sirket.workspaces.length})
+      </button>
+
+      {acik && (
+        <ul className="mt-2 space-y-1 rounded-lg border border-line px-3 py-2">
+          {sirket.workspaces.length === 0 ? (
+            /* BOŞ LİSTE NEDENİNİ SÖYLÜYOR (CLAUDE.md): "henüz eklenmedi" ile
+               "yüklenemedi" aynı boş alana çevrilmemeli. */
+            <li className="py-1 text-xs text-ink-muted">
+              Bu şirkette henüz workspace yok. &quot;Yönet&quot; ile şirkete geçip
+              ekleyebilirsin.
+            </li>
+          ) : (
+            sirket.workspaces.map((w) => (
+              <li key={w.id} className="truncate py-1 text-sm text-ink">
+                {w.name}
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+
+      <div className="mt-3 flex items-center gap-2">
+        {aktif ? (
+          /*
+           * ZATEN SEÇİLİ ŞİRKETTE "Yönet" DÜĞMESİ YOK. Basılsaydı hiçbir şey
+           * değişmeyen bir tam sayfa yüklemesi olurdu ve kullanıcı ekranın
+           * boşuna sıfırlandığını görürdü.
+           */
+          <span className="rounded-lg bg-surface-muted px-3 py-1.5 text-xs text-ink-muted">
+            Şu an bu şirkettesin
+          </span>
+        ) : (
+          <button
+            type="button"
+            disabled={gecis}
+            onClick={() => {
+              setGecis(true);
+              void apiFetch('/auth/switch-org', {
+                method: 'POST',
+                body: JSON.stringify({ organizationId: sirket.id }),
+              })
+                .then(() => {
+                  /* TAM SAYFA: şirket değişince kenar çubuğu, workspace
+                     listesi ve marka renkleri değişiyor; istemci state'i
+                     önceki şirketten kalırsa anlamsız kimlikler taşıyor. */
+                  window.location.assign('/dashboard');
+                })
+                .catch(() => setGecis(false));
+            }}
+            className="inline-flex items-center gap-2 rounded-lg bg-brand px-3.5 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {gecis && <Halka />}
+            Yönet
+          </button>
+        )}
+      </div>
+    </li>
   );
 }
 

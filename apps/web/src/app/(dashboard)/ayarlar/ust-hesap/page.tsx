@@ -4,7 +4,7 @@ import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { hasPermission, requireSession } from '@/lib/session';
 import { UstHesapEkrani } from '@/components/ust-hesap/ust-hesap-ekrani';
 
-export const metadata = { title: 'Üst Hesap — Advetics' };
+export const metadata = { title: 'Şirketler — Advetics' };
 
 /**
  * ÜST HESAP (MCC) — birden çok ŞİRKETİ tek girişle yönetme katmanı.
@@ -53,9 +53,9 @@ export default async function UstHesapPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-5 py-6">
+    <div className="mx-auto w-full max-w-5xl px-5 py-6">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-ink">Üst Hesap</h1>
+        <h1 className="text-2xl font-semibold text-ink">Şirketler</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">
           Google&apos;ın Müşteri Merkezi (MCC) karşılığı: bir danışmanlık, altındaki birden çok
           şirketi tek girişle yönetir. Her şirketin kendi workspace&apos;leri, kendi reklam
@@ -63,7 +63,11 @@ export default async function UstHesapPage() {
         </p>
       </header>
 
-      <UstHesapEkrani ilkAgac={agac} yuklemeHatasi={yuklemeHatasi} />
+      <UstHesapEkrani
+        ilkAgac={agac}
+        aktifOrgId={session.activeOrganizationId}
+        yuklemeHatasi={yuklemeHatasi}
+      />
     </div>
   );
 }

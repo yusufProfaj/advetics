@@ -33,8 +33,15 @@ export interface ManagerAccountTree {
     id: string;
     name: string;
     slug: string;
-    /** Bu şirketteki workspace sayısı — arşivlenmişler HARİÇ. */
-    workspaceCount: number;
+    /**
+     * Şirketin workspace'leri — arşivlenmişler HARİÇ.
+     *
+     * SAYI DEĞİL LİSTE: ekranda "3 workspace" yazıp içini göstermemek,
+     * kullanıcının hangi müşterinin nerede olduğunu bulmak için her şirkete
+     * tek tek geçmesi demekti. Sayı listeden türetiliyor — iki alanı ayrı
+     * göndermek, birinin diğerini tutmadığı bir hâl üretir.
+     */
+    workspaces: Array<{ id: string; name: string; status: string }>;
     /** Kullanıcının EV şirketi mi. */
     isHome: boolean;
   }>;

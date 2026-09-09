@@ -101,6 +101,47 @@ describe('geçişin kendisi', () => {
   });
 });
 
+describe('şirket kartı', () => {
+  const EKRAN = kod('components/ust-hesap/ust-hesap-ekrani.tsx');
+
+  it('BOŞA DÜŞME BEKÇİSİ: ekran kaynağı okundu', () => {
+    expect(EKRAN).toContain('SirketKarti');
+  });
+
+  it('KRİTİK: workspace listesi kartın İÇİNDE — sayı değil AD', () => {
+    /*
+     * Yalnızca "3 workspace" yazıp içini göstermemek, kullanıcının hangi
+     * müşterinin hangi şirkette olduğunu bulmak için her şirkete tek tek
+     * geçmesi demekti. Sayı listeden türetiliyor; iki alan ayrı gelseydi
+     * biri diğerini tutmadığında hangisinin doğru olduğu belirsiz olurdu.
+     */
+    expect(EKRAN).toContain('sirket.workspaces.length');
+    expect(EKRAN).toContain('sirket.workspaces.map');
+  });
+
+  it('KRİTİK: ZATEN SEÇİLİ şirkette "Yönet" düğmesi YOK', () => {
+    /*
+     * Basılsaydı hiçbir şey değişmeyen bir TAM SAYFA yüklemesi olurdu ve
+     * kullanıcı ekranın boşuna sıfırlandığını görürdü.
+     */
+    const kart = blok(EKRAN, 'function SirketKarti');
+    expect(kart).toContain('aktif ? (');
+    expect(kart).toContain('Şu an bu şirkettesin');
+  });
+
+  it('KRİTİK: aktiflik AKTİF şirkete göre, ev şirketine göre DEĞİL', () => {
+    // `isHome` ayrı bir bilgi (üyeliğin nerede olduğu); "şu an neredeyim"
+    // sorusuna cevap vermiyor ve ikisini karıştırmak, ev şirketinde
+    // olmayan kullanıcıya yanlış kartı işaretlerdi.
+    expect(EKRAN).toContain('aktif={o.id === aktifOrgId}');
+  });
+
+  it('boş workspace listesi SEBEBİNİ söylüyor', () => {
+    // "Henüz yok" ile "yüklenemedi" aynı boş alana çevrilmemeli (CLAUDE.md).
+    expect(EKRAN).toContain('Bu şirkette henüz workspace yok');
+  });
+});
+
 describe('ekranın yetkisi', () => {
   it('KRİTİK: sayfa `org.write` istiyor — menü süzgeci tek başına yetmiyor', () => {
     /*
@@ -113,7 +154,7 @@ describe('ekranın yetkisi', () => {
   });
 
   it('KRİTİK: menüde `org.write` ile kapalı', () => {
-    const girdi = SECTIONS.flatMap((s) => s.items).find((i) => i.label === 'Üst Hesap');
+    const girdi = SECTIONS.flatMap((s) => s.items).find((i) => i.label === 'Şirketler');
     expect(girdi).toBeDefined();
     expect(girdi?.perm).toBe('org.write');
   });
@@ -125,16 +166,16 @@ describe('ekranın yetkisi', () => {
      */
     expect(ROLE_PERMISSIONS.ad_manager).not.toContain('org.write');
     const gorunen = etiketler('ad_manager');
-    expect(gorunen).not.toContain('Üst Hesap');
+    expect(gorunen).not.toContain('Şirketler');
   });
 
   it('owner ve admin görüyor', () => {
-    expect(etiketler('owner')).toContain('Üst Hesap');
-    expect(etiketler('admin')).toContain('Üst Hesap');
+    expect(etiketler('owner')).toContain('Şirketler');
+    expect(etiketler('admin')).toContain('Şirketler');
   });
 
   it('KRİTİK: müşteri hesabı (client_viewer) GÖRMÜYOR', () => {
-    expect(etiketler('client_viewer')).not.toContain('Üst Hesap');
+    expect(etiketler('client_viewer')).not.toContain('Şirketler');
   });
 });
 
@@ -147,7 +188,34 @@ describe('ekranın yetkisi', () => {
 function blok(kaynak: string, desen: string): string {
   const bas = kaynak.indexOf(desen);
   if (bas === -1) throw new Error(`Blok bulunamadı: ${desen}`);
-  const acilis = kaynak.indexOf('{', bas);
+
+  /*
+   * PARAMETRE LİSTESİ ATLANIYOR.
+   *
+   * `desen`den sonraki İLK `{`i almak yetmiyor: `function SirketKarti({
+   * sirket, aktif })` yazan bir imzada o `{` GÖVDE değil, yıkılan
+   * parametre nesnesi. İlk yazımda tam olarak öyleydi ve dilim
+   * `{ sirket, aktif }` çıktı — iddia gövdeye hiç bakmadan düştü.
+   * (Şansımıza düştü; ters yönde bir iddia sessizce geçerdi.)
+   */
+  let ara = bas + desen.length;
+  const parantez = kaynak.indexOf('(', ara);
+  const ilkSusluk = kaynak.indexOf('{', ara);
+  if (parantez !== -1 && (ilkSusluk === -1 || parantez < ilkSusluk)) {
+    let d = 0;
+    for (let i = parantez; i < kaynak.length; i++) {
+      if (kaynak[i] === '(') d++;
+      else if (kaynak[i] === ')') {
+        d--;
+        if (d === 0) {
+          ara = i + 1;
+          break;
+        }
+      }
+    }
+  }
+
+  const acilis = kaynak.indexOf('{', ara);
   if (acilis === -1) throw new Error(`Blok açılışı bulunamadı: ${desen}`);
   let derinlik = 0;
   for (let i = acilis; i < kaynak.length; i++) {

@@ -121,9 +121,32 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     /*
      * AJANS İŞİ. `client.read` KULLANILMIYOR: client_viewer'da var (kendi
      * müşterisini okuyabilmeli), ayırt eden şey yönetim yetkisi.
+     *
+     * ADI "AYARLAR" DEĞİL "SİSTEM YÖNETİMİ": içinde ayar olmayan ekranlar
+     * var (Şirketler, Workspace'ler, Ekip) ve "ayar" kelimesi onları
+     * ikinci sınıf gösteriyordu — kullanıcı şirket açmayı bir ayar sanmıyor.
      */
-    title: 'Ayarlar',
+    title: 'Sistem Yönetimi',
     items: [
+      {
+        /*
+         * HİYERARŞİNİN EN DIŞ KATMANI EN ÜSTTE: Şirket → Workspace →
+         * Bağlantı. Menü sırası, kullanıcının kafasındaki ağaçla aynı
+         * olmak zorunda; ters sıra "workspace şirketin içinde mi, dışında
+         * mı" sorusunu doğuruyor.
+         *
+         * `org.write` ile kapalı — bu ekran bir kullanıcının ERİŞEBİLDİĞİ
+         * ŞİRKET KÜMESİNİ değiştiriyor, yani izolasyonun sınırını.
+         * `client.write` (workspace açma) yetmez: `ad_manager` onu taşıyor
+         * ama şirket açamamalı.
+         */
+        href: '/ayarlar/ust-hesap',
+        label: 'Şirketler',
+        icon: 'clients',
+        module: 1,
+        ready: true,
+        perm: 'org.write',
+      },
       {
         href: '/ayarlar/musteriler',
         label: 'Workspace’ler',
@@ -177,22 +200,6 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         module: 6,
         ready: true,
         perm: 'report.share',
-      },
-      {
-        /*
-         * ÜST HESAP (MCC) — `org.write` ile kapalı.
-         *
-         * Bu ekran bir kullanıcının ERİŞEBİLDİĞİ ŞİRKET KÜMESİNİ
-         * değiştiriyor, yani bütün izolasyonun sınırını. `client.write`
-         * (workspace açma) yetmez: `ad_manager` onu taşıyor ama şirket
-         * açamamalı. `org.write` tam olarak sahip ve yöneticide var.
-         */
-        href: '/ayarlar/ust-hesap',
-        label: 'Üst Hesap',
-        icon: 'clients',
-        module: 1,
-        ready: true,
-        perm: 'org.write',
       },
       {
         href: '/ayarlar/ekip',
