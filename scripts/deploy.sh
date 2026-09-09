@@ -88,6 +88,40 @@ log "Ortam kontrolü"
 # -----------------------------------------------------------------------------
 [[ -f .env ]] || die ".env dosyası yok. docs/DEPLOYMENT.md → '6. Ortam değişkenleri' adımını uygula."
 
+# ─── .env SHELL İLE OKUNUYOR: TIRNAKSIZ BOŞLUK DEPLOY'U DÜŞÜRÜYOR ───────────
+#
+# Aşağıda "Derleme" adımında `. ./.env` var (Prisma CLI'ın doğru veritabanına
+# bağlanması için). Yani her DEĞER shell-güvenli olmak zorunda: tırnaksız bir
+# değerdeki boşluk, shell için değerin BİTTİĞİ yer. `SMTP_PASS=abcd efgh`
+# satırı `abcd` atamasını yapıp `efgh`yi KOMUT olarak çalıştırıyor.
+#
+# Canlıda tam olarak bu oldu; Google uygulama şifresini `abcd efgh ijkl mnop`
+# diye boşluklu gösteriyor ve olduğu gibi yapıştırıldı. Geriye kalan tek iz:
+#
+#     ./.env: line 97: ncrj: command not found
+#     ✗ Dağıtım başarısız (çıkış kodu 127)
+#
+# Satır numarası var ama HANGİ ANAHTAR olduğu yok, "ncrj" şifrenin ortasından
+# bir parça ve mesaj `.env`i suçlu göstermiyor. Kontrol burada — `pnpm install`
+# ve derlemeden ÖNCE: bedeli iki dakika değil bir saniye.
+#
+# DEĞER ASLA YAZDIRILMIYOR (`cut -d= -f1`): `.env` parola taşıyor ve deploy
+# çıktısı ekran görüntüsüyle paylaşılıyor.
+#
+# Yüklem: satır bir anahtarla başlıyor, değeri TIRNAKLA BAŞLAMIYOR ve içinde
+# ardından başka karakter gelen bir boşluk var. Sondaki tek bir boşluk
+# (`FOO=bar `) shell için zararsız, o yüzden `[^[:space:]]` şart.
+env_bozuk_satirlar="$(grep -nE "^[A-Za-z_][A-Za-z0-9_]*=[^\"']*[[:space:]]+[^[:space:]]" .env | cut -d= -f1 || true)"
+if [[ -n "$env_bozuk_satirlar" ]]; then
+  printf '\n\033[0;31m✗ .env: tırnaksız değer içinde boşluk\033[0m\n' >&2
+  printf '  Aşağıdaki satırların DEĞERİ tırnak içine alınmalı (değerler gizli tutuldu):\n' >&2
+  printf '    %s\n' $env_bozuk_satirlar >&2
+  printf '\n  Örnek:  SMTP_PASS=abcd efgh   →   SMTP_PASS="abcdefgh"\n' >&2
+  printf '  Gmail uygulama şifresindeki BOŞLUKLARI SİL, sonra tırnağa al.\n' >&2
+  exit 1
+fi
+ok ".env shell-güvenli"
+
 command -v node >/dev/null || die "node bulunamadı"
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 [[ "$NODE_MAJOR" -ge 22 ]] || die "Node.js 22+ gerekli, kurulu sürüm: $(node -v)"

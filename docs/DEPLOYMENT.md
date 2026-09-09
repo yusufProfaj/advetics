@@ -326,16 +326,31 @@ ve kimse fark etmedi.
 2. **Depo kökündeki `.env` dosyasına ekle:**
 
    ```
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=465
-   SMTP_SECURE=true
-   SMTP_USER=gonderen@ornek.com
-   SMTP_PASS=uygulama-sifresi
-   SMTP_FROM_EMAIL=gonderen@ornek.com
-   SMTP_FROM_NAME=Advetics
+   SMTP_HOST="smtp.gmail.com"
+   SMTP_PORT="465"
+   SMTP_SECURE="true"
+   SMTP_USER="gonderen@ornek.com"
+   SMTP_PASS="uygulamasifresibosluksuz"
+   SMTP_FROM_EMAIL="gonderen@ornek.com"
+   SMTP_FROM_NAME="Advetics"
    ```
 
-   `SMTP_PORT=587` kullanılacaksa `SMTP_SECURE=false` (STARTTLS).
+   `SMTP_PORT="587"` kullanılacaksa `SMTP_SECURE="false"` (STARTTLS).
+
+   > **DEĞERLER TIRNAK İÇİNDE OLMAK ZORUNDA.** `deploy.sh` bu dosyayı shell
+   > ile `source` ediyor (`. ./.env`) ve tırnaksız bir değerdeki BOŞLUK,
+   > shell için değerin bittiği yer: `SMTP_PASS=abcd efgh` satırı `abcd`
+   > atamasını yapıp `efgh`yi KOMUT olarak çalıştırıyor ve deploy
+   > `command not found` (çıkış kodu 127) ile düşüyor. Canlıda bir kez oldu.
+   > Google uygulama şifresini `abcd efgh ijkl mnop` diye boşluklu
+   > gösteriyor — **boşlukları sil** ve yine de tırnak içine al.
+   >
+   > Bozuk satır var mı diye bakmak (yalnızca ANAHTAR adlarını yazar,
+   > değerleri değil):
+   >
+   > ```
+   > grep -nE '^[A-Za-z_][A-Za-z0-9_]*=[^"]*[[:space:]]' .env | cut -d= -f1
+   > ```
 
 3. **`APP_URL` dolu olsun.** Maildeki sıfırlama bağlantısı buradan kuruluyor;
    `localhost` kalırsa kullanıcıya tıklanamayan bir link gider. Boş
