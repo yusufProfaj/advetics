@@ -119,6 +119,22 @@ $$;
  * daraltmak, müşteri seçicisinin kendi listesini de daraltıp kullanıcıyı
  * seçtiği müşteriye kilitlerdi.
  */
+/*
+ * Kullanıcının ÜST HESABI (Google MCC karşılığı) — yoksa NULL.
+ *
+ * Üst hesap tabloları organizasyonu AŞIYOR, yani `app.current_org_id()` ile
+ * süzülemiyorlar: bir danışman iki şirketi yönetiyorsa üst hesap satırı
+ * ikisinin de dışında duruyor. Sınır bu değer.
+ *
+ * NULL = kullanıcının üst hesabı yok. Aşağıdaki politikalar NULL ile
+ * karşılaştırmada NULL üretip false'a düşüyor, yani HİÇBİR satır görünmüyor —
+ * güvenli varsayılan.
+ */
+CREATE OR REPLACE FUNCTION app.current_manager_account_id() RETURNS uuid
+LANGUAGE sql STABLE AS $$
+  SELECT NULLIF(current_setting('app.current_manager_account_id', true), '')::uuid;
+$$;
+
 CREATE OR REPLACE FUNCTION app.current_active_client_id() RETURNS uuid
 LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('app.current_active_client_id', true), '')::uuid;
@@ -184,6 +200,8 @@ DECLARE
     -- Modül 3
     'campaigns', 'ad_groups', 'ads', 'creatives', 'insights_daily',
     'fx_rates', 'sync_jobs', 'api_usage_log',
+    -- Üst Hesap (MCC) — organizasyonun ÜSTÜNDE, org_id ile süzülemez
+    'manager_accounts', 'manager_memberships',
     -- Modül 6
     'report_templates', 'report_shares',
     -- Danışman başına e-posta kimliği. Politikası DİĞERLERİNDEN FARKLI:
@@ -1360,6 +1378,19 @@ BEGIN
     -- "permission denied" ile AÇIKÇA düşüyor; sessiz başarıdan iyisi
     -- gürültülü başarısızlık. (audit_logs ve ai_messages ile aynı gerekçe.)
     EXECUTE 'REVOKE DELETE ON client_profiles FROM advetics_app';
+
+    /*
+     * ÜST HESAP TABLOLARINA UYGULAMA ROLÜ YAZAMAZ.
+     *
+     * Bir üst hesap açmak ya da altına şirket eklemek, kullanıcının
+     * ERİŞEBİLDİĞİ ORGANİZASYON KÜMESİNİ büyütüyor — yani bütün RLS'in
+     * dayandığı `app.current_org_id()` sınırını. SQL enjeksiyonu ya da
+     * yanlış yazılmış tek bir servis metodu, kendine üyelik yazıp başka bir
+     * şirketin verisine geçebilirdi. Yazma yolu PrismaAdminService ve
+     * servisteki açık yetki kontrolü.
+     */
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON manager_accounts FROM advetics_app';
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON manager_memberships FROM advetics_app';
   END IF;
 END
 $$;
@@ -1851,3 +1882,34 @@ CREATE POLICY adv_client_profiles_insert ON client_profiles
 CREATE POLICY adv_client_profiles_update ON client_profiles
   FOR UPDATE USING (org_id = app.current_org_id() AND app.can_access_client(client_id))
              WITH CHECK (org_id = app.current_org_id() AND app.can_access_client(client_id));
+
+-- ============================================================================
+-- ÜST HESAP (MCC) — manager_accounts, manager_memberships
+-- ============================================================================
+--
+-- BU İKİ TABLO `org_id` TAŞIMIYOR ve taşıyamaz: var oluş sebepleri birden
+-- çok organizasyonu bir arada tutmak. Sınırları `app.current_manager_
+-- account_id()`, yani kullanıcının kendi üst hesabı.
+--
+-- YAZMA UYGULAMA ROLÜNE KAPALI (aşağıdaki REVOKE). Üst hesap açmak ve altına
+-- şirket eklemek, bir kullanıcının ERİŞEBİLDİĞİ ORGANİZASYON KÜMESİNİ
+-- değiştiriyor — yani bütün RLS'in dayandığı `app.current_org_id()` sınırını.
+-- O kararı RLS politikasına bırakmak, politikanın kendi bekçisini yazmasını
+-- istemek olurdu. Yazma yalnızca PrismaAdminService üzerinden ve servis
+-- katmanındaki açık yetki kontrolüyle yapılıyor.
+
+CREATE POLICY adv_manager_accounts_select ON manager_accounts
+  FOR SELECT USING (app.has_context() AND id = app.current_manager_account_id());
+
+/*
+ * ÜYELİK SATIRLARI: kullanıcı kendi üst hesabındaki HERKESİ görüyor.
+ *
+ * Yalnızca kendi satırını görmek yetmezdi — "bu üst hesapta kimler var"
+ * ekranı tam olarak bu tabloyu okuyor ve bir danışmanlıkta kimin çalıştığı
+ * o üst hesabın içindekiler için gizli bir bilgi değil.
+ */
+CREATE POLICY adv_manager_memberships_select ON manager_memberships
+  FOR SELECT USING (
+    app.has_context() AND manager_account_id = app.current_manager_account_id()
+  );
+

@@ -212,8 +212,13 @@ export class AuthService {
     await this.tokens.revokeAllForUser(ctx.userId, 'logout_all');
   }
 
-  async buildSession(userId: string, activeClientId: string | null): Promise<SessionResponse> {
-    const identity = await this.tenantContext.resolve(userId, activeClientId);
+  async buildSession(
+    userId: string,
+    activeClientId: string | null,
+    /** Üst hesap altında seçili şirket. Geçersizse `resolve` eve düşürüyor. */
+    activeOrgId: string | null = null,
+  ): Promise<SessionResponse> {
+    const identity = await this.tenantContext.resolve(userId, activeClientId, activeOrgId);
 
     const [user, org] = await Promise.all([
       this.admin.user.findUniqueOrThrow({
@@ -248,9 +253,51 @@ export class AuthService {
       memberships: identity.memberships,
       availableClients: identity.availableClients,
       activeClientId: identity.context.activeClientId,
+      /*
+       * `context.orgId` — `organization.id` DEĞİL. Birincisi seçili şirket,
+       * ikincisi ev şirketi ve üst hesap altında ikisi farklı oluyor.
+       */
+      activeOrganizationId: identity.context.orgId,
+      managerAccount: identity.managerAccount,
       permissions: identity.context.permissions,
       isOrgAdmin: identity.context.isOrgAdmin,
     };
+  }
+
+  /**
+   * Şirket geçişinin geçerliliğini doğrular ve hedefi döndürür.
+   *
+   * DOĞRULAMA BURADA DA YAPILIYOR, `resolve`a güvenilmiyor. `resolve`
+   * geçersiz bir seçimi SESSİZCE eve düşürüyor (bayat cookie yüzünden
+   * kullanıcıyı kilitlememek için) — ama kullanıcı düğmeye BASTIĞINDA
+   * sessizce başka bir yere gitmek, "tıkladım ama değişmedi" hâli demek.
+   * Açık istek açık cevap alıyor.
+   */
+  async assertOrgAccess(ctx: TenantContext, organizationId: string | null): Promise<string | null> {
+    if (organizationId === null) return null;
+
+    const uyelik = await this.admin.managerMembership.findUnique({
+      where: { userId: ctx.userId },
+      select: { managerAccountId: true, managerAccount: { select: { status: true } } },
+    });
+
+    if (!uyelik || uyelik.managerAccount.status !== 'active') {
+      throw new BadRequestException('Bu hesabın bağlı olduğu bir üst hesap yok');
+    }
+
+    const hedef = await this.admin.organization.findFirst({
+      where: {
+        id: organizationId,
+        managerAccountId: uyelik.managerAccountId,
+        status: 'active',
+      },
+      select: { id: true },
+    });
+
+    if (!hedef) {
+      throw new BadRequestException('Bu şirkete erişim yetkiniz yok');
+    }
+    return hedef.id;
   }
 
   /** Aktif müşteri seçiminin geçerliliğini doğrular. */

@@ -25,6 +25,7 @@ export * from './schemas/draft-tree.schema';
 export * from './schemas/fatura.schema';
 export * from './schemas/form.schema';
 export * from './schemas/lead.schema';
+export * from './schemas/manager-account.schema';
 export * from './format';
 export * from './schemas/email-account.schema';
 export * from './schemas/metrics.schema';

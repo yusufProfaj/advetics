@@ -22,6 +22,16 @@ export interface TenantContext {
   /** Aktif olarak seçili client (UI'daki client switcher). Org geneli görünümde null. */
   activeClientId: string | null;
 
+  /**
+   * Kullanıcının ÜST HESABI (Google MCC karşılığı) — yoksa null.
+   *
+   * `orgId` ile AYRI: orgId ŞU AN bakılan şirket, bu ise o şirketin (ve
+   * kardeşlerinin) bağlı olduğu danışmanlık. RLS'te üst hesap tablolarının
+   * TEK sınırı bu değer; onlar `org_id` taşımıyor çünkü var oluş sebepleri
+   * birden çok organizasyonu bir arada tutmak.
+   */
+  managerAccountId: string | null;
+
   /** En yüksek yetkili rol. Birden fazla membership varsa en genişi seçilir. */
   role: Role;
 
@@ -69,4 +79,26 @@ export interface SessionResponse {
    * — müşteri seçilemediği için bağlantı kurmak imkânsız hâle geliyordu.
    */
   availableClients: Array<{ id: string; name: string; status: string }>;
+
+  /**
+   * ŞU AN SEÇİLİ şirket. `organization.id` ile aynı olmayabilir.
+   *
+   * `organization` kullanıcının EV şirketi (token da onu taşıyor);
+   * bu alan üst hesap altında geçilen şirket. İkisini tek alanda tutmak,
+   * panelin "hangi şirkettesin" ile "hangi şirkete aitsin" sorularını
+   * ayırt edememesi demekti.
+   */
+  activeOrganizationId: string;
+
+  /**
+   * Üst hesap (MCC) ve altındaki şirketler — yoksa null.
+   *
+   * Şirket değiştiricinin listesi bu. `memberships`ten TÜRETİLEMEZ: kardeş
+   * şirketlerde kullanıcının hiç üyelik satırı yok.
+   */
+  managerAccount: {
+    id: string;
+    name: string;
+    organizations: Array<{ id: string; name: string; slug: string }>;
+  } | null;
 }

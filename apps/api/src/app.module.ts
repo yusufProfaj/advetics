@@ -27,6 +27,7 @@ import { BoostsModule } from './modules/boosts/boosts.module';
 import { BulkModule } from './modules/bulk/bulk.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
+import { ManagerAccountModule } from './modules/manager-account/manager-account.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { EmailModule } from './modules/email/email.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
@@ -53,6 +54,7 @@ import { SyncModule } from './modules/sync/sync.module';
     MetricsModule,
     AlertsModule,
     AdsModule,
+    ManagerAccountModule,
     ReportsModule,
     EmailModule,
     BudgetsModule,

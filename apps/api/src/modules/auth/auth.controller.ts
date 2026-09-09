@@ -18,12 +18,14 @@ import {
   registerOrganizationSchema,
   requestPasswordResetSchema,
   switchClientSchema,
+  switchOrganizationSchema,
   type ChangePasswordInput,
   type ConfirmPasswordResetInput,
   type LoginInput,
   type RegisterOrganizationInput,
   type RequestPasswordResetInput,
   type SwitchClientInput,
+  type SwitchOrganizationInput,
   type TenantContext,
 } from '@advetics/shared';
 import { CurrentTenant, Public } from '../../common/decorators';
@@ -35,6 +37,7 @@ import {
   REFRESH_COOKIE,
   clearAuthCookies,
   setActiveClientCookie,
+  setActiveOrgCookie,
   setAuthCookies,
 } from './cookies';
 
@@ -132,10 +135,41 @@ export class AuthController {
   // Oturum durumu
   // ---------------------------------------------------------------------------
 
-  /** Frontend'in açılışta çağırdığı endpoint. Kullanıcı, org, yetkiler, müşteriler. */
+  /** Frontend'in açılışta çağırdığı endpoint. Kullanıcı, şirket, yetkiler, workspace'ler. */
   @Get('session')
   async session(@CurrentTenant() ctx: TenantContext) {
-    return this.auth.buildSession(ctx.userId, ctx.activeClientId);
+    /*
+     * SEÇİLİ ŞİRKET DE GERİ VERİLİYOR. `ctx.orgId` guard'da zaten cookie'ye
+     * göre doğrulanmış hâli; buraya `null` geçmek, oturum yanıtının her
+     * seferinde EV şirketini göstermesi demekti — üst hesaptan geçen
+     * kullanıcı üstte kendi şirketini, gövdede diğerini görürdü.
+     */
+    return this.auth.buildSession(ctx.userId, ctx.activeClientId, ctx.orgId);
+  }
+
+  /**
+   * ŞİRKET DEĞİŞİMİ — üst hesap (MCC) altındaki kardeş şirketlere geçiş.
+   *
+   * `switch-client` ile aynı desen: seçim cookie'de tutuluyor ve HER
+   * İSTEKTE yeniden doğrulanıyor. Cookie'yi elle değiştirmek erişim
+   * kazandırmaz — `TenantContextService` seçimi kullanıcının üst hesabının
+   * altındaki gerçek şirket listesine karşı süzüyor.
+   *
+   * WORKSPACE SEÇİMİ SIFIRLANIYOR. Yeni şirkette o workspace kimliği
+   * geçersiz; bırakılsaydı `resolve` onu sessizce düşürürdü ama cookie
+   * ekranda bir workspace seçiliymiş gibi durmaya devam ederdi.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post('switch-org')
+  async switchOrganization(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(switchOrganizationSchema)) dto: SwitchOrganizationInput,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const hedef = await this.auth.assertOrgAccess(ctx, dto.organizationId);
+    setActiveOrgCookie(res, this.config, hedef);
+    setActiveClientCookie(res, this.config, null);
+    return this.auth.buildSession(ctx.userId, null, hedef);
   }
 
   /**
@@ -154,7 +188,8 @@ export class AuthController {
   ) {
     this.auth.assertClientAccess(ctx, dto.clientId);
     setActiveClientCookie(res, this.config, dto.clientId);
-    return this.auth.buildSession(ctx.userId, dto.clientId);
+    // SEÇİLİ ŞİRKET KORUNUYOR: workspace değiştirmek şirketten çıkmak değil.
+    return this.auth.buildSession(ctx.userId, dto.clientId, ctx.orgId);
   }
 
   // ---------------------------------------------------------------------------

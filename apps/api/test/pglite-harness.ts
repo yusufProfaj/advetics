@@ -438,7 +438,10 @@ export async function createHarness(): Promise<Harness> {
         api_usage_log, sync_jobs,
         ads, creatives, ad_groups, campaigns,
         ad_accounts, social_profiles, platform_connections,
-        memberships, refresh_tokens, audit_logs, users, clients, organizations
+        memberships, refresh_tokens, audit_logs, users, clients, organizations,
+        -- Ust Hesap: organizations'tan SONRA gelmek zorunda degil (SET NULL)
+        -- ama listede olmali; yoksa testler arasi uyelik satiri sizar.
+        manager_memberships, manager_accounts
       CASCADE;
     `);
   };

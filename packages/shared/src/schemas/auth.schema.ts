@@ -133,3 +133,14 @@ export const switchClientSchema = z.object({
   clientId: z.string().uuid().nullable(),
 });
 export type SwitchClientInput = z.infer<typeof switchClientSchema>;
+
+/**
+ * Şirket değiştirici — üst hesap (MCC) altındaki kardeş şirketlere geçiş.
+ *
+ * `null` = EV şirketine dön. Ayrı bir "eve dön" ucu yazmak, iki yolun
+ * bir gün ayrışması demekti.
+ */
+export const switchOrganizationSchema = z.object({
+  organizationId: z.string().uuid().nullable(),
+});
+export type SwitchOrganizationInput = z.infer<typeof switchOrganizationSchema>;

@@ -47,8 +47,21 @@ export interface ResolvedIdentity {
     clientName: string | null;
     role: Role;
   }>;
-  /** Seçilebilir müşteriler — org yöneticisi için org'daki tümü. */
+  /** Seçilebilir workspace'ler — org yöneticisi için org'daki tümü. */
   availableClients: Array<{ id: string; name: string; status: string }>;
+  /**
+   * Kullanıcının ÜST HESABI ve altındaki şirketler — yoksa null.
+   *
+   * `availableClients` ile aynı gerekçe: bu liste `memberships`ten
+   * TÜRETİLEMEZ. Üst hesap altındaki kardeş şirketlerde kullanıcının hiç
+   * `memberships` satırı YOK; yetkisi `ManagerMembership`ten geliyor.
+   */
+  managerAccount: {
+    id: string;
+    name: string;
+    /** Bu üst hesap altında kullanıcının geçebileceği şirketler. */
+    organizations: Array<{ id: string; name: string; slug: string }>;
+  } | null;
 }
 
 /**
@@ -66,7 +79,21 @@ export interface ResolvedIdentity {
 export class TenantContextService {
   constructor(private readonly db: PrismaAdminService) {}
 
-  async resolve(userId: string, requestedClientId?: string | null): Promise<ResolvedIdentity> {
+  async resolve(
+    userId: string,
+    requestedClientId?: string | null,
+    /**
+     * Panelde seçili ŞİRKET (üst hesap altında geçiş yapılmışsa).
+     *
+     * `requestedClientId` ile AYNI GÜVEN SEVİYESİNDE: cookie'den geliyor,
+     * yani kullanıcının elinde. Aşağıda veritabanından hesaplanan izin
+     * listesine karşı doğrulanıyor; geçmezse EV organizasyonuna düşülüyor.
+     * Bu değer `app.current_org_id()`yi sürüyor, yani BÜTÜN RLS'in sınırı —
+     * doğrulamayı atlamak, cookie düzenleyerek başka bir şirketin verisini
+     * okumak demekti.
+     */
+    requestedOrgId?: string | null,
+  ): Promise<ResolvedIdentity> {
     const user = await this.db.user.findUnique({
       where: { id: userId },
       select: {
@@ -76,6 +103,14 @@ export class TenantContextService {
         fullName: true,
         status: true,
         organization: { select: { status: true } },
+        managerMemberships: {
+          select: {
+            id: true,
+            role: true,
+            managerAccountId: true,
+            managerAccount: { select: { id: true, name: true, status: true } },
+          },
+        },
         memberships: {
           select: {
             id: true,
@@ -93,14 +128,71 @@ export class TenantContextService {
     if (user.organization.status !== 'active') {
       throw new UnauthorizedException('Organizasyon askıya alınmış');
     }
-    if (user.memberships.length === 0) {
+    /*
+     * ═══ ÜST HESAP (MCC) — KARDEŞ ŞİRKETLERE ERİŞİM ═══
+     *
+     * `user_id` tekil olduğu için en fazla bir satır var; `[0]` bir seçim
+     * DEĞİL, şemanın garantisi (bkz. ManagerMembership).
+     */
+    const uyelik = user.managerMemberships[0] ?? null;
+
+    /*
+     * ROL ORG GENELİ OLMAK ZORUNDA. Kardeş şirkette kullanıcının hiç
+     * `memberships` satırı YOK; org geneli olmayan bir rol orada SIFIR
+     * workspace görür — yani "geçtim ama hiçbir şey yok" gibi görünen,
+     * sebebi hiçbir ekranda yazmayan bir çıkmaz. Askıya alınmış üst hesap
+     * da geçiş açmıyor.
+     */
+    const ustHesap =
+      uyelik && uyelik.managerAccount.status === 'active' && isOrgScopedRole(uyelik.role as Role)
+        ? uyelik
+        : null;
+
+    const kardesSirketler = ustHesap
+      ? await this.db.organization.findMany({
+          where: { managerAccountId: ustHesap.managerAccountId, status: 'active' },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, slug: true },
+        })
+      : [];
+
+    /*
+     * İZİN LİSTESİ VERİTABANINDAN HESAPLANIYOR, istekten değil. `activeOrgId`
+     * bütün RLS politikalarının okuduğu `app.current_org_id()`yi sürüyor;
+     * doğrulanmamış bir değer, cookie düzenleyerek başka bir şirketin
+     * verisini okumak demekti. Ev organizasyonu HER ZAMAN listede — üst
+     * hesabı olmayan kullanıcı için liste tek elemanlı ve davranış değişmiyor.
+     */
+    const izinliOrgIdler = new Set<string>([user.orgId, ...kardesSirketler.map((o) => o.id)]);
+    const activeOrgId =
+      requestedOrgId && izinliOrgIdler.has(requestedOrgId) ? requestedOrgId : user.orgId;
+    const evdeMi = activeOrgId === user.orgId;
+
+    if (user.memberships.length === 0 && !ustHesap) {
       throw new UnauthorizedException('Hiçbir workspace’e erişim yetkiniz tanımlı değil');
     }
 
-    // Arşivlenmiş müşteriler erişim listesinden düşer.
-    const scopedMemberships = user.memberships.filter(
-      (m) => m.clientId === null || m.client?.status !== 'archived',
-    );
+    /*
+     * KARDEŞ ŞİRKETTE ÜYELİK SATIRI YOK — üst hesap rolünden SENTETİK bir
+     * org geneli üyelik türetiliyor. `clientId: null` olması kritik: aşağıdaki
+     * `orgScoped` süzgeci tam olarak buna bakıyor ve org geneli erişim
+     * oradan doğuyor.
+     */
+    const scopedMemberships = evdeMi
+      ? // Arşivlenmiş workspace'ler erişim listesinden düşer.
+        user.memberships.filter((m) => m.clientId === null || m.client?.status !== 'archived')
+      : [
+          {
+            id: `manager:${ustHesap!.id}`,
+            clientId: null,
+            role: ustHesap!.role,
+            // Üst hesap üyeliği ince ayar TAŞIMIYOR: rol bir şirkette değil,
+            // bir danışmanlığın ALTINDAKİ HEPSİNDE geçerli ve tek tek
+            // istisna yazmanın yeri o şirketin kendi `memberships` satırı.
+            permissions: null,
+            client: null,
+          } as (typeof user.memberships)[number],
+        ];
 
     const orgScoped = scopedMemberships.filter(
       (m) => m.clientId === null && isOrgScopedRole(m.role as Role),
@@ -126,7 +218,10 @@ export class TenantContextService {
 
     if (hasOrgScope) {
       const all = await this.db.client.findMany({
-        where: { orgId: user.orgId, status: { not: 'archived' } },
+        // AKTİF organizasyon — ev değil. Üst hesaptan kardeş şirkete geçen
+        // kullanıcı o şirketin workspace'lerini görmek zorunda; `user.orgId`
+        // yazmak, geçişi yapıp boş bir seçici görmek demekti.
+        where: { orgId: activeOrgId, status: { not: 'archived' } },
         orderBy: { name: 'asc' },
         select: { id: true, name: true, status: true },
       });
@@ -183,9 +278,16 @@ export class TenantContextService {
       },
       context: {
         userId: user.id,
-        orgId: user.orgId,
+        /*
+         * AKTİF şirket — `actor.orgId` (EV şirketi) ile bilerek AYRI.
+         * `JwtAuthGuard` token'daki org'u `actor.orgId` ile karşılaştırıyor;
+         * buraya aktif değeri yazmak, kardeş şirkete geçen kullanıcının
+         * her isteğini "Oturum geçersiz" ile düşürürdü.
+         */
+        orgId: activeOrgId,
         clientIds,
         activeClientId,
+        managerAccountId: ustHesap?.managerAccountId ?? null,
         role: effective.role as Role,
         isOrgAdmin,
         permissions,
@@ -197,6 +299,13 @@ export class TenantContextService {
         role: m.role as Role,
       })),
       availableClients,
+      managerAccount: ustHesap
+        ? {
+            id: ustHesap.managerAccount.id,
+            name: ustHesap.managerAccount.name,
+            organizations: kardesSirketler,
+          }
+        : null,
     };
   }
 }

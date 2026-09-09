@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../../../common/decorators';
 import type { AuthedRequest } from '../../../common/types/request';
-import { ACCESS_COOKIE, ACTIVE_CLIENT_COOKIE } from '../cookies';
+import { ACCESS_COOKIE, ACTIVE_CLIENT_COOKIE, ACTIVE_ORG_COOKIE } from '../cookies';
 import { TenantContextService } from '../tenant-context.service';
 import { TokenService } from '../token.service';
 
@@ -47,8 +47,30 @@ export class JwtAuthGuard implements CanActivate {
     const requestedClientId =
       req.get('x-active-client') ?? (req.cookies?.[ACTIVE_CLIENT_COOKIE] as string | undefined);
 
-    const identity = await this.tenantContext.resolve(payload.sub, requestedClientId ?? null);
+    /*
+     * SEÇİLİ ŞİRKET — üst hesap (MCC) altında geçiş yapılmışsa.
+     *
+     * `x-active-client` ile aynı desen ve aynı güven seviyesi: burada
+     * güvenilmez veri kabul ediliyor, `TenantContextService` içinde
+     * veritabanından hesaplanan izin listesine karşı süzülüyor.
+     */
+    const requestedOrgId =
+      req.get('x-active-org') ?? (req.cookies?.[ACTIVE_ORG_COOKIE] as string | undefined);
 
+    const identity = await this.tenantContext.resolve(
+      payload.sub,
+      requestedClientId ?? null,
+      requestedOrgId ?? null,
+    );
+
+    /*
+     * KARŞILAŞTIRMA `actor.orgId` İLE — `context.orgId` İLE DEĞİL.
+     *
+     * `actor.orgId` kullanıcının EV organizasyonu ve token da onu taşıyor;
+     * `context.orgId` ise şu an SEÇİLİ olan şirket ve üst hesap altında
+     * ondan farklı olabiliyor. Buraya `context.orgId` yazmak, kardeş şirkete
+     * geçen kullanıcının HER isteğini "Oturum geçersiz" ile düşürürdü.
+     */
     if (identity.actor.orgId !== payload.org) {
       // Token'daki org ile kullanıcının gerçek org'u uyuşmuyor.
       // Normal akışta imkansız; bir manipülasyon göstergesidir.

@@ -74,12 +74,90 @@ enum Platform {
 // -----------------------------------------------------------------------------
 
 /// Ajansın kendisi. MVP'de tek satır; reseller/white-label satışı için gerekli.
+enum ManagerAccountStatus {
+  active
+  suspended
+}
+
+/// ÜST HESAP — Google MCC ("Müşteri Merkezi") karşılığı.
+///
+/// Bir danışman/ajans, ALTINDAKİ birden çok ŞİRKETİ tek girişle yönetiyor.
+/// Hiyerarşi: Üst Hesap → Şirket → Workspace → Reklam Hesabı → Kampanya.
+///
+/// NEDEN ORGANİZASYONUN ÜSTÜNDE, WORKSPACE'İN DEĞİL: workspace zaten
+/// şirketin altında ve bir şirketin birden çok workspace'i olabiliyor.
+/// Danışmanın yönettiği şey ayrı ayrı ŞİRKETLER — her birinin kendi
+/// kullanıcıları, kendi platform bağlantıları ve kendi RLS sınırı var.
+/// Katmanı workspace seviyesine koymak, iki şirketin verisini aynı
+/// `org_id` altında toplamak demekti ve bütün izolasyon oradan geliyor.
+model ManagerAccount {
+  id     String               @id @default(uuid()) @db.Uuid
+  name   String               @db.VarChar(120)
+  slug   String               @unique @db.VarChar(60)
+  status ManagerAccountStatus @default(active)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organizations Organization[]
+  memberships   ManagerMembership[]
+
+  @@map("manager_accounts")
+}
+
+/// Bir kullanıcının ÜST HESAP seviyesindeki yetkisi.
+///
+/// `Membership`ten AYRI bir tablo ve bu bilinçli: `Membership` bir
+/// organizasyona bağlı (`org_id` NOT NULL) ve üst hesap yetkisi tam olarak
+/// organizasyonu AŞAN şey. Aynı tabloya `org_id`si NULL bir satır eklemek,
+/// on beş RLS politikasının okuduğu `memberships` tablosuna "hiçbir org'a
+/// ait olmayan" bir satır sokmak olurdu — o satırın hangi politikada nasıl
+/// eşleşeceğini kestirmek imkânsız.
+///
+/// ROL, üst hesabın altındaki HER şirkette geçerli sayılıyor. Yani burada
+/// `analyst` yazan biri, o şirketlerin hiçbirinde kampanya kuramaz.
+model ManagerMembership {
+  id               String @id @default(uuid()) @db.Uuid
+  managerAccountId String @map("manager_account_id") @db.Uuid
+  userId           String @map("user_id") @db.Uuid
+  role             Role
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  managerAccount ManagerAccount @relation(fields: [managerAccountId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// BİR KULLANICININ TEK ÜST HESABI VAR — `user_id` TEKİL.
+  ///
+  /// Çoklu üyeliğe izin vermek, "hangi üst hesap geçerli" sorusunu açık
+  /// bırakırdı ve kod sessizce ilkini seçerdi; sessiz seçim bu projede bir
+  /// hata türü. Gerçekten gerekirse ikinci bir DEĞİŞTİRİCİ (üst hesap
+  /// seçici) yazılmak zorunda — o zamana kadar belirsizlik şemada kapalı.
+  @@unique([userId])
+  @@index([managerAccountId])
+  @@map("manager_memberships")
+}
+
 model Organization {
   id        String    @id @default(uuid()) @db.Uuid
   name      String    @db.VarChar(120)
   slug      String    @unique @db.VarChar(60)
   plan      OrgPlan   @default(starter)
   status    OrgStatus @default(active)
+
+  /// ÜST HESAP (Google MCC karşılığı). null = bağımsız şirket.
+  ///
+  /// NULLABLE ve öyle KALMALI: bugün canlıdaki tek organizasyonun üst hesabı
+  /// yok ve zorunlu yapmak, var olan satırı migration'da uydurma bir üst
+  /// hesaba bağlamak demekti. Bağımsız bir şirket bu ürünün geçerli bir
+  /// kullanım hâli, geçici bir durum değil.
+  ///
+  /// `onDelete: SetNull` — üst hesabın silinmesi ALTINDAKİ ŞİRKETLERİ
+  /// SİLMEMELİ. Cascade olsaydı bir danışmanlık kaydını silmek, o
+  /// danışmanın bütün müşterilerinin bütün verisini götürürdü.
+  managerAccountId String? @map("manager_account_id") @db.Uuid
+  managerAccount   ManagerAccount? @relation(fields: [managerAccountId], references: [id], onDelete: SetNull)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -171,6 +249,8 @@ model User {
 
   organization       Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
   memberships        Membership[]
+  /// Üst hesap seviyesindeki yetkiler — bkz. ManagerMembership.
+  managerMemberships ManagerMembership[]
   refreshTokens      RefreshToken[]
   passwordResets     PasswordResetToken[]
   connectionsCreated PlatformConnection[]

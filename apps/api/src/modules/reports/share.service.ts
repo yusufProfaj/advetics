@@ -197,6 +197,12 @@ export class ShareService {
       userId: SHARE_READER_ID,
       clientIds: [share.clientId],
       activeClientId: share.clientId,
+      /*
+       * ÜST HESAP YOK ve olmamalı. Paylaşım bağlantısı tek bir workspace'in
+       * raporunu açıyor; buraya bir üst hesap kimliği yazmak, bağlantıyı
+       * alan kişiye danışmanlığın altındaki ŞİRKET LİSTESİNİ açardı.
+       */
+      managerAccountId: null,
       role: 'client_viewer',
       isOrgAdmin: false,
       permissions: [...ROLE_PERMISSIONS.client_viewer],
