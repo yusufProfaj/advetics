@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { TUM_SIRKETLER } from '@advetics/shared';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { TUM_SIRKETLER, orgSecimi } from '@advetics/shared';
 import type { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { TenantContextService } from './tenant-context.service';
 
@@ -378,5 +380,88 @@ describe('"TÜM ŞİRKETLER" MODU', () => {
     const r = await servis(ALTINDA).resolve('user-1', null, ORG_A2);
     expect(r.context.tumSirketler).toBe(false);
     expect(r.context.orgId).toBe(ORG_A2);
+  });
+});
+
+describe('MOD OTURUM YANITINDA KAYBOLMUYOR', () => {
+  /*
+   * CANLIDA GÖRÜLDÜ: "Tüm şirketler"e tıklanıyor, cookie `all` yazılıyor,
+   * guard bağlamı DOĞRU kuruyor (veri ajans geneli geliyor) — ama panel
+   * "Advetics" yazmaya devam ediyordu.
+   *
+   * Sebep: `/auth/session` `ctx.orgId`yi geri gönderiyordu ve o değer modda
+   * EV şirketi (yazma yolları oraya çivili). `buildSession` onu bir SEÇİM
+   * sanıp modu düşürüyordu.
+   *
+   * Belirtisi başlık ile gövdenin ayrışması — bu depoda bir kez "kritik
+   * veri güvenliği ihlali" olarak bildirilen hâlin aynısı.
+   */
+  const CONTROLLER = readFileSync(join(__dirname, 'auth.controller.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  /**
+   * `desen`den başlayan metot GÖVDESİNİ çıkarır.
+   *
+   * PARAMETRE LİSTESİ PARANTEZ SAYARAK ATLANIYOR. İlk `)`e kadar gitmek
+   * YETMİYOR: NestJS dekoratörleri parametrelerin içinde parantez taşıyor
+   * (`@CurrentTenant() ctx`) ve ilk `)` orada kapanıyor; sonraki `{` de
+   * gövde değil `@Res({ passthrough: true })` oluyordu. İlk yazımda tam
+   * olarak öyleydi ve dilim `{ passthrough: true }` çıktı.
+   */
+  function metot(kaynak: string, desen: string): string {
+    const bas = kaynak.indexOf(desen);
+    if (bas === -1) throw new Error(`Metot bulunamadı: ${desen}`);
+    const parBas = kaynak.indexOf('(', bas);
+    let par = 0;
+    let parSon = -1;
+    for (let i = parBas; i < kaynak.length; i++) {
+      if (kaynak[i] === '(') par++;
+      else if (kaynak[i] === ')' && --par === 0) {
+        parSon = i;
+        break;
+      }
+    }
+    const acilis = kaynak.indexOf('{', parSon);
+    let d = 0;
+    for (let i = acilis; i < kaynak.length; i++) {
+      if (kaynak[i] === '{') d++;
+      else if (kaynak[i] === '}' && --d === 0) return kaynak.slice(acilis, i + 1);
+    }
+    throw new Error(`Metot kapanmıyor: ${desen}`);
+  }
+
+  it('BOŞA DÜŞME BEKÇİSİ: controller okundu', () => {
+    expect(CONTROLLER).toContain('buildSession');
+    expect(CONTROLLER).toContain('switch-org');
+  });
+
+  it('KRİTİK: `orgSecimi` modu SENTINEL olarak geri veriyor', () => {
+    expect(orgSecimi({ orgId: ORG_A1, tumSirketler: true })).toBe(TUM_SIRKETLER);
+    expect(orgSecimi({ orgId: ORG_A1, tumSirketler: false })).toBe(ORG_A1);
+  });
+
+  it('KRİTİK: `/auth/session` `ctx.orgId` DEĞİL `orgSecimi(ctx)` gönderiyor', () => {
+    const govde = metot(CONTROLLER, 'async session(');
+    expect(govde).toContain('orgSecimi(ctx)');
+    expect(govde).not.toContain('ctx.activeClientId, ctx.orgId');
+  });
+
+  it('KRİTİK: workspace seçmek MODDAN ÇIKARIYOR — cookie `all` kalmıyor', () => {
+    /*
+     * Modda workspace seçimi YOK (`resolve` onu null'a düşürüyor). Cookie
+     * `all` kalsaydı seçim her istekte sessizce atılırdı: kullanıcı tıklar,
+     * hiçbir şey olmaz ve sebebi hiçbir ekranda yazmaz.
+     */
+    const govde = metot(CONTROLLER, 'async switchClient(');
+    expect(govde).toContain('workspaceSirketi(ctx, dto.clientId)');
+    expect(govde).toContain('setActiveOrgCookie(res, this.config, yeniSecim)');
+  });
+
+  it('workspace seçimi KALKINCA mod korunuyor', () => {
+    // "Şirket geneli" bir daraltmayı kaldırma eylemi, moddan çıkma değil.
+    const govde = metot(CONTROLLER, 'async switchClient(');
+    expect(govde).toContain('dto.clientId === null');
+    expect(govde).toContain('orgSecimi(ctx)');
   });
 });

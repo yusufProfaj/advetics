@@ -54,6 +54,23 @@ export interface TenantContext {
   permissions: Permission[];
 }
 
+/**
+ * BAĞLAMDAKİ ŞİRKET SEÇİMİ — `ctx.orgId` bunu TAŞIYAMIYOR.
+ *
+ * "Tüm şirketler" modunda `orgId` EV şirketi (yazma yolları oraya çivili)
+ * ve mod ayrı bir bayrakta duruyor. `ctx.orgId`yi bir SEÇİM gibi geri
+ * göndermek, modu sessizce düşürüyordu: `/auth/session` her çağrıldığında
+ * bayrak `false` dönüyor, panel "Advetics" yazıyor ama veri ajans geneli
+ * geliyordu — bu depoda bir kez "kritik veri güvenliği ihlali" olarak
+ * bildirilen başlık≠gövde hâlinin aynısı.
+ *
+ * Dönüşüm TEK YERDE. İki uçta ayrı ayrı yazılsaydı biri güncellenip
+ * diğeri unutulurdu ve fark yalnızca o uçtan gelen kullanıcıda görünürdü.
+ */
+export function orgSecimi(ctx: Pick<TenantContext, 'orgId' | 'tumSirketler'>): string {
+  return ctx.tumSirketler ? 'all' : ctx.orgId;
+}
+
 /** Denetim kaydı için istek meta verisi. */
 export interface RequestMeta {
   ip: string | null;

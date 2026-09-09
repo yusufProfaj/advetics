@@ -17,6 +17,7 @@ import {
   loginSchema,
   registerOrganizationSchema,
   requestPasswordResetSchema,
+  orgSecimi,
   switchClientSchema,
   switchOrganizationSchema,
   type ChangePasswordInput,
@@ -139,12 +140,15 @@ export class AuthController {
   @Get('session')
   async session(@CurrentTenant() ctx: TenantContext) {
     /*
-     * SEÇİLİ ŞİRKET DE GERİ VERİLİYOR. `ctx.orgId` guard'da zaten cookie'ye
-     * göre doğrulanmış hâli; buraya `null` geçmek, oturum yanıtının her
-     * seferinde EV şirketini göstermesi demekti — üst hesaptan geçen
-     * kullanıcı üstte kendi şirketini, gövdede diğerini görürdü.
+     * `orgSecimi(ctx)` — `ctx.orgId` DEĞİL.
+     *
+     * "Tüm şirketler" modunda `ctx.orgId` EV şirketi ve modun kendisi ayrı
+     * bir bayrakta. Buraya `ctx.orgId` yazmak modu SESSİZCE düşürüyordu:
+     * guard bağlamı doğru kuruyor (veri ajans geneli geliyor) ama oturum
+     * yanıtı `tumSirketler: false` dönüyor ve panel "Advetics" yazıyordu.
+     * Başlık ile gövdenin ayrışması, bu depoda bir kez sızıntı sanıldı.
      */
-    return this.auth.buildSession(ctx.userId, ctx.activeClientId, ctx.orgId);
+    return this.auth.buildSession(ctx.userId, ctx.activeClientId, orgSecimi(ctx));
   }
 
   /**
@@ -196,12 +200,20 @@ export class AuthController {
      * seçimi aktif şirkette bulamayıp SESSİZCE düşürmesi demekti:
      * kullanıcı tıklar, hiçbir şey olmaz.
      */
-    const yeniSirket = dto.clientId ? await this.auth.workspaceSirketi(ctx, dto.clientId) : null;
-    if (yeniSirket) setActiveOrgCookie(res, this.config, yeniSirket);
+    const yeniSecim: string =
+      dto.clientId === null
+        ? // SEÇİM KALKIYOR, MOD KORUNUYOR: "şirket geneli" bir daraltmayı
+          // kaldırma eylemi, moddan çıkma eylemi değil.
+          orgSecimi(ctx)
+        : // WORKSPACE SEÇMEK MODDAN ÇIKMAK DEMEK. "Tüm şirketler" bir genel
+          // bakış ve orada workspace seçimi YOK (`resolve` onu null'a
+          // düşürüyor); cookie 'all' kalsaydı seçim her istekte sessizce
+          // atılırdı — kullanıcı tıklar, hiçbir şey olmaz.
+          ((await this.auth.workspaceSirketi(ctx, dto.clientId)) ?? ctx.orgId);
 
+    setActiveOrgCookie(res, this.config, yeniSecim);
     setActiveClientCookie(res, this.config, dto.clientId);
-    // SEÇİLİ ŞİRKET KORUNUYOR: workspace değiştirmek şirketten çıkmak değil.
-    return this.auth.buildSession(ctx.userId, dto.clientId, yeniSirket ?? ctx.orgId);
+    return this.auth.buildSession(ctx.userId, dto.clientId, yeniSecim);
   }
 
   // ---------------------------------------------------------------------------
