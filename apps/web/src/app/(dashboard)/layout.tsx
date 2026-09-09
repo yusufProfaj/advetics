@@ -1,6 +1,7 @@
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { ClientSwitcher } from '@/components/client-switcher';
+import { SirketSecici } from '@/components/sirket-secici';
 import { LogoutButton } from '@/components/logout-button';
 import { UyariBandi } from '@/components/uyari-bandi';
 import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
@@ -112,11 +113,31 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {/* İçerik */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-line bg-surface/90 px-5 backdrop-blur">
-          <ClientSwitcher
-            availableClients={session.availableClients}
-            activeClientId={session.activeClientId}
-            isOrgAdmin={session.isOrgAdmin}
-          />
+          {/*
+            İKİ SEÇİCİ SOLDAN SAĞA HİYERARŞİ: Şirket › Workspace.
+            Şirket seçici YALNIZCA üst hesabı olanlara basılıyor — bağımsız
+            bir şirkette geçilecek yer yok ve boş bir seçici, kullanıcının
+            olmayan bir özelliği aramasına yol açardı.
+          */}
+          <div className="flex min-w-0 items-center gap-2">
+            {session.managerAccount && (
+              <>
+                <SirketSecici
+                  managerAccountName={session.managerAccount.name}
+                  organizations={session.managerAccount.organizations}
+                  activeOrganizationId={session.activeOrganizationId}
+                />
+                <span className="hidden text-ink-muted sm:inline" aria-hidden>
+                  ›
+                </span>
+              </>
+            )}
+            <ClientSwitcher
+              availableClients={session.availableClients}
+              activeClientId={session.activeClientId}
+              isOrgAdmin={session.isOrgAdmin}
+            />
+          </div>
           <div className="hidden text-right sm:block">
             <p className="text-[13px] font-medium leading-tight">{session.user.email}</p>
             <p className="text-[11px] leading-tight text-ink-muted">

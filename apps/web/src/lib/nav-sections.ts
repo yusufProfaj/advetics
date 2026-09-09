@@ -179,6 +179,22 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         perm: 'report.share',
       },
       {
+        /*
+         * ÜST HESAP (MCC) — `org.write` ile kapalı.
+         *
+         * Bu ekran bir kullanıcının ERİŞEBİLDİĞİ ŞİRKET KÜMESİNİ
+         * değiştiriyor, yani bütün izolasyonun sınırını. `client.write`
+         * (workspace açma) yetmez: `ad_manager` onu taşıyor ama şirket
+         * açamamalı. `org.write` tam olarak sahip ve yöneticide var.
+         */
+        href: '/ayarlar/ust-hesap',
+        label: 'Üst Hesap',
+        icon: 'clients',
+        module: 1,
+        ready: true,
+        perm: 'org.write',
+      },
+      {
         href: '/ayarlar/ekip',
         label: 'Ekip & Yetkiler',
         icon: 'team',

@@ -76,6 +76,16 @@ const IZINLI: Array<{ neden: string; desen: RegExp }> = [
   { neden: 'KİŞİ — beyaz etiket tanıtımı: paneli GÖREN kişi', desen: /Müşteriniz|Müşterileriniz|müşterilerinize/ },
   { neden: 'KİŞİ — gizlilik metninde veri sahibi', desen: /müşterilerin veya reklam izleyicilerinin|müşteriye görünmez/ },
   { neden: 'KİŞİ — “sistem bozulmuş” diye okuyan insan', desen: /müşteriye “sistem/ },
+  {
+    /*
+     * GOOGLE'IN ÜRÜN ADI. MCC'nin Türkçe arayüzdeki karşılığı "Müşteri
+     * Merkezi"; üst hesap ekranı kavramı tanıtırken o adı veriyor çünkü
+     * kullanıcı onu Google Ads'te tam olarak öyle görüyor. "Workspace
+     * Merkezi" diye bir şey yok ve olsaydı da kimse aratmazdı.
+     */
+    neden: "GOOGLE ÜRÜN ADI — MCC'nin Türkçe karşılığı",
+    desen: /Müşteri Merkezi/,
+  },
 ];
 
 describe('terminoloji: workspace ↔ müşteri', () => {
