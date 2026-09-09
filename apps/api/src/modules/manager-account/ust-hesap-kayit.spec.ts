@@ -173,6 +173,42 @@ describe('havuz ajans genelinde — RLS kurulumu', () => {
   });
 });
 
+describe('workspace taşıma ucu', () => {
+  const SERVICE = kod(readFileSync(join(MODUL_DIZINI, 'manager-account.service.ts'), 'utf8'));
+  const CONTROLLER = kod(readFileSync(join(MODUL_DIZINI, 'manager-account.controller.ts'), 'utf8'));
+
+  it('BOŞA DÜŞME BEKÇİSİ: kaynaklar okundu', () => {
+    expect(SERVICE).toContain('moveWorkspace');
+    expect(CONTROLLER).toContain('workspaces/move');
+  });
+
+  it('KRİTİK: KAYNAK ve HEDEF şirket AYRI AYRI doğrulanıyor', () => {
+    /*
+     * Yalnızca hedefi kontrol etmek, BAŞKA bir ajansın workspace'ini kendi
+     * şirketine çekmeye izin verirdi: `clientId` istemciden geliyor ve tek
+     * başına hiçbir şey kanıtlamıyor. Taşıma RLS DIŞINDA (PrismaAdminService)
+     * koştuğu için izolasyonu yalnızca bu kontroller koruyor.
+     */
+    const govde = SERVICE.slice(SERVICE.indexOf('async moveWorkspace'));
+    expect(govde).toContain('izinli.has(workspace.orgId)');
+    expect(govde).toContain('izinli.has(input.organizationId)');
+    expect(govde).toContain('assertOrgAdmin(ctx)');
+  });
+
+  it('KRİTİK: taşıma TEK TRANSACTION içinde', () => {
+    // Yarım kalmış bir taşıma iki şirketin de verisini sessizce yanlış
+    // yapar: workspace yeni şirkette görünür, verisi eskisinde kalır.
+    const govde = SERVICE.slice(SERVICE.indexOf('async moveWorkspace'));
+    expect(govde).toContain('$transaction');
+    expect(govde).toContain('workspaceTasi(');
+  });
+
+  it('AYNI ŞİRKETE taşıma sessizce başarılı DÖNMÜYOR', () => {
+    // Sessiz başarı, kullanıcının taşındığını sanması demek.
+    expect(SERVICE).toContain('Workspace zaten bu şirkette');
+  });
+});
+
 describe('koşum ortamı', () => {
   it('KRİTİK: TRUNCATE listesinde iki tablo da var', () => {
     // Eksikse testler arası üyelik satırı sızar ve bir sonraki test

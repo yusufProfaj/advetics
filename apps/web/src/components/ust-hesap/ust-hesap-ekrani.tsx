@@ -92,7 +92,14 @@ export function UstHesapEkrani({
         />
       ) : (
         <>
-          <SirketListesi agac={agac} aktifOrgId={aktifOrgId} />
+          <SirketListesi
+            agac={agac}
+            aktifOrgId={aktifOrgId}
+            pending={pending}
+            onTasi={(clientId, organizationId) =>
+              void gonder('/manager-account/workspaces/move', { clientId, organizationId })
+            }
+          />
           <SirketEkle
             pending={pending}
             onEkle={(name) => void gonder('/manager-account/organizations', { name })}
@@ -108,9 +115,13 @@ export function UstHesapEkrani({
 function SirketListesi({
   agac,
   aktifOrgId,
+  pending,
+  onTasi,
 }: {
   agac: ManagerAccountTree;
   aktifOrgId: string;
+  pending: boolean;
+  onTasi: (clientId: string, organizationId: string) => void;
 }) {
   return (
     <section className="space-y-3">
@@ -132,7 +143,23 @@ function SirketListesi({
            geniş ekranda sağda ölü alan bırakıyor. */
         <ul className="grid gap-3 sm:grid-cols-2">
           {agac.organizations.map((o) => (
-            <SirketKarti key={o.id} sirket={o} aktif={o.id === aktifOrgId} />
+            <SirketKarti
+              key={o.id}
+              sirket={o}
+              aktif={o.id === aktifOrgId}
+              pending={pending}
+              /*
+               * TAŞINABİLİR ADAYLAR: DİĞER şirketlerin workspace'leri.
+               * Kendi workspace'lerini listelemek, "buraya ekle" deyip
+               * hiçbir şey yapmayan bir seçenek göstermek olurdu.
+               */
+              adaylar={agac.organizations
+                .filter((d) => d.id !== o.id)
+                .flatMap((d) =>
+                  d.workspaces.map((w) => ({ ...w, sirket: d.name })),
+                )}
+              onTasi={onTasi}
+            />
           ))}
         </ul>
       )}
@@ -143,12 +170,20 @@ function SirketListesi({
 function SirketKarti({
   sirket,
   aktif,
+  pending,
+  adaylar,
+  onTasi,
 }: {
   sirket: ManagerAccountTree['organizations'][number];
   aktif: boolean;
+  pending: boolean;
+  /** BAŞKA şirketlerdeki workspace'ler — buraya taşınabilirler. */
+  adaylar: Array<{ id: string; name: string; sirket: string }>;
+  onTasi: (clientId: string, organizationId: string) => void;
 }) {
   const [acik, setAcik] = useState(false);
   const [gecis, setGecis] = useState(false);
+  const [secilen, setSecilen] = useState('');
 
   return (
     <li className="flex flex-col rounded-xl border border-line bg-surface p-4">
@@ -204,6 +239,45 @@ function SirketKarti({
             ))
           )}
         </ul>
+      )}
+
+      {/*
+        VAR OLAN WORKSPACE'İ BU ŞİRKETE TAŞI.
+        Taşıma 30 tabloda `org_id` güncelliyor; seçici yalnızca BAŞKA
+        şirketlerdeki workspace'leri listeliyor çünkü kendi listesinden
+        seçmek hiçbir şey yapmayan bir seçenek olurdu.
+      */}
+      {adaylar.length > 0 && (
+        <div className="mt-3 flex items-center gap-2">
+          <label htmlFor={`tasi-${sirket.id}`} className="sr-only">
+            Bu şirkete taşınacak workspace
+          </label>
+          <select
+            id={`tasi-${sirket.id}`}
+            value={secilen}
+            disabled={pending}
+            onChange={(e) => setSecilen(e.target.value)}
+            className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
+          >
+            <option value="">Var olan workspace’i taşı…</option>
+            {adaylar.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.sirket})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={pending || secilen === ''}
+            onClick={() => {
+              onTasi(secilen, sirket.id);
+              setSecilen('');
+            }}
+            className="shrink-0 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink hover:bg-surface-muted disabled:opacity-40"
+          >
+            Taşı
+          </button>
+        </div>
       )}
 
       <div className="mt-3 flex items-center gap-2">

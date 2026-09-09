@@ -24,6 +24,20 @@ export const createManagedOrganizationSchema = z.object({
 });
 export type CreateManagedOrganizationInput = z.infer<typeof createManagedOrganizationSchema>;
 
+/**
+ * VAR OLAN bir workspace'i başka bir şirkete taşır.
+ *
+ * Şirket AÇMAK ile workspace TAŞIMAK farklı işler: birincisi boş bir kap
+ * yaratıyor, ikincisi 30 tabloda `org_id` güncelliyor. Aynı uçta toplamak,
+ * "şirket ekle" düğmesinin bir gün veri taşımaya başlaması demekti.
+ */
+export const moveWorkspaceSchema = z.object({
+  clientId: z.string().uuid(),
+  /** Hedef şirket. Kaynak şirket workspace'in kendisinden okunuyor. */
+  organizationId: z.string().uuid(),
+});
+export type MoveWorkspaceInput = z.infer<typeof moveWorkspaceSchema>;
+
 /** Üst hesap ağacı — panelin okuduğu şekil. */
 export interface ManagerAccountTree {
   id: string;

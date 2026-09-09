@@ -2,8 +2,10 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/commo
 import {
   createManagedOrganizationSchema,
   createManagerAccountSchema,
+  moveWorkspaceSchema,
   type CreateManagedOrganizationInput,
   type CreateManagerAccountInput,
+  type MoveWorkspaceInput,
   type TenantContext,
 } from '@advetics/shared';
 import { CurrentTenant } from '../../common/decorators';
@@ -46,5 +48,21 @@ export class ManagerAccountController {
     @Body(zodBody(createManagedOrganizationSchema)) dto: CreateManagedOrganizationInput,
   ) {
     return this.service.createOrganization(ctx, dto);
+  }
+
+  /**
+   * VAR OLAN workspace'i başka bir şirkete taşır.
+   *
+   * `POST /organizations`tan AYRI bir uç: biri boş bir kap yaratıyor,
+   * diğeri 30 tabloda `org_id` güncelliyor. Aynı uçta toplamak, "şirket
+   * ekle" düğmesinin bir gün veri taşımaya başlaması demekti.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post('workspaces/move')
+  async moveWorkspace(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(moveWorkspaceSchema)) dto: MoveWorkspaceInput,
+  ) {
+    return this.service.moveWorkspace(ctx, dto);
   }
 }

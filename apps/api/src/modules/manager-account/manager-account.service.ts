@@ -3,12 +3,14 @@ import type {
   CreateManagedOrganizationInput,
   CreateManagerAccountInput,
   ManagerAccountTree,
+  MoveWorkspaceInput,
   TenantContext,
 } from '@advetics/shared';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { AuditService } from '../audit/audit.service';
 import { assertOrgAdmin } from '../../common/guards/permissions.guard';
 import { uniqueSlug } from '../../common/utils/slug';
+import { workspaceTasi, type WorkspaceTasimaSonucu } from './workspace-tasima';
 
 /**
  * ═══ ÜST HESAP (MCC) ═══
@@ -215,5 +217,100 @@ export class ManagerAccountService {
     const agac = await this.get(ctx);
     if (!agac) throw new BadRequestException('Şirket oluşturuldu ama üst hesap okunamadı');
     return agac;
+  }
+
+  /**
+   * VAR OLAN bir workspace'i üst hesabın BAŞKA bir şirketine taşır.
+   *
+   * ┌─ NEDEN `PrismaAdminService` (RLS DIŞI) ────────────────────────────────┐
+   * │ Taşıma iki organizasyona birden dokunuyor: kaynak satırları OKUNUYOR,  │
+   * │ hedef `org_id` YAZILIYOR. RLS bunu ifade EDEMEZ — her politika tek bir │
+   * │ `app.current_org_id()` biliyor ve UPDATE sonrası yeni satır SELECT     │
+   * │ politikasından da geçmek zorunda (bkz. `ad-account-pool-rls.spec.ts`). │
+   * │ Yani izolasyonu burada UYGULAMA katmanı korumak zorunda ve kontroller  │
+   * │ aşağıda AÇIK: kaynak da hedef de kullanıcının ÜST HESABININ altında    │
+   * │ olmak zorunda.                                                          │
+   * └────────────────────────────────────────────────────────────────────────┘
+   *
+   * TEK TRANSACTION. Yarım kalmış bir taşıma iki şirketin de verisini
+   * sessizce yanlış yapar: workspace yeni şirkette görünür ama bütçesi,
+   * kuralları ve raporları eski şirkette kalır — hata yok, log yok.
+   */
+  async moveWorkspace(
+    ctx: TenantContext,
+    input: MoveWorkspaceInput,
+  ): Promise<ManagerAccountTree & { tasima: WorkspaceTasimaSonucu }> {
+    assertOrgAdmin(ctx);
+
+    const uyelik = await this.admin.managerMembership.findUnique({
+      where: { userId: ctx.userId },
+      select: { managerAccountId: true, managerAccount: { select: { status: true } } },
+    });
+    if (!uyelik || uyelik.managerAccount.status !== 'active') {
+      throw new BadRequestException('Bu hesabın bağlı olduğu bir üst hesap yok');
+    }
+
+    const workspace = await this.admin.client.findUnique({
+      where: { id: input.clientId },
+      select: { id: true, name: true, orgId: true, status: true },
+    });
+    if (!workspace) throw new BadRequestException('Workspace bulunamadı');
+
+    /*
+     * KAYNAK VE HEDEF AYRI AYRI DOĞRULANIYOR. Yalnızca hedefi kontrol etmek,
+     * BAŞKA bir ajansın workspace'ini kendi şirketine çekmeye izin verirdi —
+     * `clientId` istemciden geliyor ve tek başına hiçbir şey kanıtlamıyor.
+     */
+    const sirketler = await this.admin.organization.findMany({
+      where: { managerAccountId: uyelik.managerAccountId, status: 'active' },
+      select: { id: true },
+    });
+    const izinli = new Set(sirketler.map((o) => o.id));
+
+    if (!izinli.has(workspace.orgId)) {
+      throw new BadRequestException('Bu workspace üst hesabının altında değil');
+    }
+    if (!izinli.has(input.organizationId)) {
+      throw new BadRequestException('Hedef şirket üst hesabının altında değil');
+    }
+    if (workspace.orgId === input.organizationId) {
+      // Sessizce başarılı dönmek, kullanıcının taşındığını sanması demek.
+      throw new BadRequestException('Workspace zaten bu şirkette');
+    }
+
+    const tasima = await this.admin.$transaction(
+      async (tx) =>
+        workspaceTasi(
+          { $executeRaw: (sql) => tx.$executeRaw(sql) },
+          workspace.id,
+          workspace.orgId,
+          input.organizationId,
+        ),
+      /*
+       * VARSAYILAN 5 SANİYE YETMEYEBİLİR: 30 tabloda UPDATE ve büyük bir
+       * workspace'te `leads` tek başına on binlerce satır. Transaction
+       * ölürse taşıma yarıda kalmıyor (geri alınıyor) ama kullanıcı sebebi
+       * anlaşılmaz bir hata görürdü.
+       */
+      { timeout: 60_000, maxWait: 60_000 },
+    );
+
+    await this.audit.recordUnauthenticated(input.organizationId, {
+      actorId: ctx.userId,
+      action: 'manager_account.workspace_moved',
+      targetType: 'client',
+      targetId: workspace.id,
+      before: { organizationId: workspace.orgId },
+      after: { organizationId: input.organizationId, tasinan: tasima.tasinan },
+    });
+
+    this.logger.log(
+      `Workspace taşındı: "${workspace.name}" ${workspace.orgId} → ${input.organizationId} ` +
+        `(${tasima.toplam} satır)`,
+    );
+
+    const agac = await this.get(ctx);
+    if (!agac) throw new BadRequestException('Workspace taşındı ama üst hesap okunamadı');
+    return { ...agac, tasima };
   }
 }
