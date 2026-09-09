@@ -224,7 +224,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                 <div>
                   <h2 className="text-lg font-semibold text-ink">Düzenli rapor gönderimi</h2>
                   <p className="mt-0.5 text-xs text-ink-muted">
-                    Rapor seçtiğin sıklıkta otomatik hazırlanıp müşteriye mail atılır.
+                    Rapor seçtiğin sıklıkta otomatik hazırlanıp workspace’e mail atılır.
                     Mail SENİN adresinden gider.
                   </p>
                 </div>
@@ -249,7 +249,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                 {yukleniyor && <p className="mt-2 text-sm text-ink-muted">Yükleniyor…</p>}
                 {!yukleniyor && planlar !== null && planlar.length === 0 && (
                   <p className="mt-2 rounded-lg border border-dashed border-line px-3 py-3 text-sm text-ink-muted">
-                    Bu müşteri için kurulu planlama yok.
+                    Bu workspace için kurulu planlama yok.
                   </p>
                 )}
                 {!yukleniyor && planlar !== null && planlar.length > 0 && (
@@ -443,7 +443,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                         kuralı iki yerde yazılsaydı plan başka bir listeye
                         gönderirdi ve farkı yalnızca alıcı görürdü. */}
                     <AliciListesiAlani
-                      etiket="Alıcılar — boş bırakılırsa müşterinin kayıtlı adresleri kullanılır"
+                      etiket="Alıcılar — boş bırakılırsa workspace’in kayıtlı adresleri kullanılır"
                       degerler={alicilar}
                       onChange={setAlicilar}
                     />
@@ -471,7 +471,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                   <strong>{secilebilir.find((p) => p.key === rangeKey)?.label}</strong> dönemini
                   kapsayan rapor{' '}
                   <strong>
-                    {alicilar.length > 0 ? alicilar.join(', ') : 'müşterinin kayıtlı adreslerine'}
+                    {alicilar.length > 0 ? alicilar.join(', ') : 'workspace’in kayıtlı adreslerine'}
                   </strong>{' '}
                   gönderilecek.
                 </p>

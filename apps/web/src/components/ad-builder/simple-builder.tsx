@@ -256,7 +256,7 @@ export function SimpleAdBuilder({
         <>
           <Blok no={2} baslik="Kampanyaya bir ad ver">
             <div className="grid gap-3 sm:grid-cols-2">
-              <Alan label="Kampanya adı" ipucu="Yalnızca sen göreceksin, müşteriler görmez.">
+              <Alan label="Kampanya adı" ipucu="Yalnızca sen göreceksin, workspace’ler görmez.">
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}

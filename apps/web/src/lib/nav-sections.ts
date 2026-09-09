@@ -126,7 +126,7 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     items: [
       {
         href: '/ayarlar/musteriler',
-        label: 'Müşteriler',
+        label: 'Workspace’ler',
         icon: 'clients',
         module: 1,
         ready: true,

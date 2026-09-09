@@ -320,12 +320,12 @@ export class BoostsService {
     }
     if (p.client_id === null) {
       throw new BadRequestException(
-        'Bu sayfa henüz bir müşteriye atanmamış. Platform Bağlantıları ekranından ata — ' +
+        'Bu sayfa henüz bir workspace’e atanmamış. Platform Bağlantıları ekranından ata — ' +
           'atanmamış sayfanın organik gönderileri çekilmiyor, dolayısıyla boost adayı da oluşmaz.',
       );
     }
     if (p.client_id !== input.clientId) {
-      throw new BadRequestException('Sosyal profil bu müşteriye bağlı değil');
+      throw new BadRequestException('Sosyal profil bu workspace’e bağlı değil');
     }
     // FATURALANDIRMA HESABI OLMADAN BOOST AÇILAMAZ ve bunu kural KAYDEDİLİRKEN
     // söylemek, ayda bir "neden hiç boost açılmadı" sorusunu sordurmaktan iyi.
@@ -531,15 +531,15 @@ export class BoostsService {
 
     if (!say || say.atanmis === 0) {
       return (
-        'Bu müşteriye atanmış bir sayfa yok. Müşteriler ekranından havuzdaki ' +
-        'Facebook sayfasını ya da Instagram hesabını bu müşteriye ata — ' +
+        'Bu workspace’e atanmış bir sayfa yok. Workspace’ler ekranından havuzdaki ' +
+        'Facebook sayfasını ya da Instagram hesabını bu workspace’e ata — ' +
         'atanmamış sayfanın gönderileri hiç çekilmiyor.'
       );
     }
     if (say.izlenen === 0) {
       return (
-        `Bu müşterinin ${say.atanmis} sayfası var ama hiçbirinde gönderi izleme ` +
-        'açık değil. Müşteriler ekranında sayfanın yanındaki "izlemeye al" ile ' +
+        `Bu workspace’in ${say.atanmis} sayfası var ama hiçbirinde gönderi izleme ` +
+        'açık değil. Workspace’ler ekranında sayfanın yanındaki "izlemeye al" ile ' +
         'aç; izleme kapalıyken organik gönderiler çekilmiyor.'
       );
     }
@@ -704,7 +704,7 @@ export class BoostsService {
       return {
         campaigns: [],
         emptyReason:
-          'Bu müşteride henüz yayına çıkmış bir boost kampanyası yok. İlk gönderiyi ' +
+          'Bu workspace’te henüz yayına çıkmış bir boost kampanyası yok. İlk gönderiyi ' +
           'öne çıkardığında kampanya oluşacak ve sonraki gönderileri onun altına ' +
           'ekleyebileceksin.',
       };
@@ -993,7 +993,7 @@ export class BoostsService {
     } else if (!r.linked_ad_account_id) {
       blockedReason =
         'Bu sayfaya bağlı bir reklam hesabı yok — boost faturalandırılamaz. ' +
-        'Müşteriler ekranında sayfanın altındaki "Boost hesabı" seçicisinden ' +
+        'Workspace’ler ekranında sayfanın altındaki "Boost hesabı" seçicisinden ' +
         'bir Meta reklam hesabı seç.';
     } else if (r.has_live_boost) {
       blockedReason =

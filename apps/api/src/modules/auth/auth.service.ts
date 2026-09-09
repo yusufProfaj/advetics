@@ -264,7 +264,7 @@ export class AuthService {
       return;
     }
     if (!ctx.clientIds.includes(clientId)) {
-      throw new BadRequestException('Bu müşteriye erişim yetkiniz yok');
+      throw new BadRequestException('Bu workspace’e erişim yetkiniz yok');
     }
   }
 

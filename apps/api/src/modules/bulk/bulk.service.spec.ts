@@ -144,7 +144,7 @@ describe('parti oluşturma ve doğrulama', () => {
     expect(b.items[1]?.issues.some((i) => i.message.includes('1, 2'))).toBe(true);
   });
 
-  it('başka müşterinin hesabına parti açılamaz', async () => {
+  it('başka workspace’in hesabına parti açılamaz', async () => {
     const other = '99999999-9999-9999-9999-999999999999';
     await h.q(
       `INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1,$2,'D','d',now())`,
@@ -152,7 +152,7 @@ describe('parti oluşturma ve doğrulama', () => {
     );
     await expect(
       svc.create(CTX, batchInput({ clientId: other })),
-    ).rejects.toThrow(/bu müşteriye bağlı değil/i);
+    ).rejects.toThrow(/bu workspace’e bağlı değil/i);
   });
 });
 

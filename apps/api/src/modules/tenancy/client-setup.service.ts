@@ -51,7 +51,7 @@ export class ClientSetupService {
      *
      * `ctx.clientIds` istek başında kuruldu; az önce oluşturulan müşteri
      * orada yok. Atama servisleri erişimi o listeye karşı doğruluyor,
-     * dolayısıyla genişletmeden çağırmak "Müşteri bulunamadı" verirdi.
+     * dolayısıyla genişletmeden çağırmak "Workspace bulunamadı" verirdi.
      *
      * Eklenen tek kimlik, çağıranın BU İSTEKTE kendi oluşturduğu müşteri.
      * Oluşturmak `client.write` istiyor ve o yetki müşteri hesabında yok;
@@ -146,7 +146,7 @@ export class ClientSetupService {
     // KURULUMUN SONUCU LOG'A DA YAZILIYOR: kısmi bir kurulum panelde
     // görülmeden kapatılabilir ve "veri gelmiyor" olarak geri döner.
     this.logger.log(
-      `Müşteri kurulumu "${client.name}": ${assignedAccounts} hesap, ` +
+      `Workspace kurulumu "${client.name}": ${assignedAccounts} hesap, ` +
         `${assignedProfiles} sayfa, kullanıcı ${userCreated ? 'açıldı' : 'yok'}` +
         (failures.length > 0 ? `, ${failures.length} adım BAŞARISIZ` : ''),
     );

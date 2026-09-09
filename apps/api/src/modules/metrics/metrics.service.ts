@@ -479,7 +479,7 @@ export class MetricsService {
       SELECT COUNT(*) AS n FROM ad_accounts
       WHERE sync_enabled = false
         /*
-         * HAVUZ SAYILMIYOR — client_id IS NULL bu workspace'in hesabı DEĞİL.
+         * HAVUZ SAYILMIYOR — client_id IS NULL bu workspace’in hesabı DEĞİL.
          *
          * Keşif her hesabı sync_enabled = false ile yazıyor ve ajansın tek
          * Meta kimliği yüzlerce hesap görüyor. Bu koşul olmadan sayım havuzun

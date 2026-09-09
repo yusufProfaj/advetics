@@ -57,7 +57,7 @@ export default async function ConnectionsPage() {
         <h1 className="text-2xl font-semibold">Platform Bağlantıları</h1>
         <p className="mt-1 text-sm text-ink-muted">
           Meta ve Google Ads hesabını <strong>bir kez</strong> bağla; gelen reklam
-          hesaplarını ve sayfaları müşterilere ata. Atama izlemeyi de açıyor ve
+          hesaplarını ve sayfaları workspace’lere ata. Atama izlemeyi de açıyor ve
           90 günlük geçmişi kuyruğa alıyor — ayrıca bir şey yapmana gerek yok.
         </p>
       </div>
@@ -84,9 +84,9 @@ export default async function ConnectionsPage() {
         <section className="rounded-xl border border-line bg-surface p-5">
           <h2 className="text-sm font-semibold">Yeni bağlantı</h2>
           <p className="mt-1 text-xs text-ink-muted">
-            Bağlantı ajansa kurulur, müşteriye değil: aynı Facebook kullanıcısıyla
+            Bağlantı ajansa kurulur, workspace’e değil: aynı Facebook kullanıcısıyla
             ikinci bir yetkilendirme platformda ilk token’ı geçersiz kılıyor.
-            Müşteri ayrımı hesap ATAMASIYLA yapılıyor.
+            Workspace ayrımı hesap ATAMASIYLA yapılıyor.
           </p>
           <ConnectButtons availability={availability} />
         </section>
@@ -94,7 +94,7 @@ export default async function ConnectionsPage() {
         <div className="rounded-xl border border-line bg-surface-muted p-5">
           <h2 className="text-sm font-semibold">Bağlantı kurma yetkisi yok</h2>
           <p className="mt-1.5 text-sm text-ink-muted">
-            Platform bağlantısı kurmak, kaldırmak ve hesapları müşterilere atamak
+            Platform bağlantısı kurmak, kaldırmak ve hesapları workspace’lere atamak
             organizasyon yöneticisinin işi. Aşağıdaki listeyi görebilirsin.
           </p>
         </div>

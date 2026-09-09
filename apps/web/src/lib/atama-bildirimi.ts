@@ -32,7 +32,7 @@ export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | nu
   if (atandiMi) {
     if ((res.movedRows ?? 0) > 0) {
       parcalar.push(
-        `${formatNumber(res.movedRows!)} kayıt bu müşteriye taşındı — kampanyalar, ` +
+        `${formatNumber(res.movedRows!)} kayıt bu workspace’e taşındı — kampanyalar, ` +
           'kreatifler ve geçmiş metrikler dahil.',
       );
     }
@@ -44,15 +44,15 @@ export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | nu
      * doğuyor ve cevabı hiçbir ekranda yok.
      */
     parcalar.push(
-      `Hesabın ${formatNumber(res.stayingRows!)} kaydı eski müşteride kaldı — silinmedi. ` +
-        'Başka bir müşteriye atadığında taşınacak.',
+      `Hesabın ${formatNumber(res.stayingRows!)} kaydı eski workspace’te kaldı — silinmedi. ` +
+        'Başka bir workspace’e atadığında taşınacak.',
     );
   }
 
   const kalan = res.leftBehind ?? {};
   if (Object.keys(kalan).length > 0) {
     parcalar.push(
-      `Eski müşteride kalanlar: ${adetler(kalan)}. Bunlar birinin kararı ` +
+      `Eski workspace’te kalanlar: ${adetler(kalan)}. Bunlar birinin kararı ` +
         '(bütçe, kural, taslak) ve taşınmıyor.',
     );
   }
@@ -67,7 +67,7 @@ export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | nu
      * taşımadan en çok etkilenen şey hakkında hiçbir şey söylenmezdi.
      */
     parcalar.push(
-      `Eski müşterinin ${adetler(genel)} kaydı bu hesabı artık kapsamıyor — ` +
+      `Eski workspace’in ${adetler(genel)} kaydı bu hesabı artık kapsamıyor — ` +
         'bütçe oranı ve kural kapsamı kayacak, gözden geçir.',
     );
   }
@@ -80,7 +80,7 @@ export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | nu
      */
     parcalar.push(
       `${formatNumber(res.unlinkedBoostPages!)} sayfanın boost faturalandırma bağı koparıldı — ` +
-        'hesap ve sayfa artık farklı müşterilerde. Akıllı Boost için yeniden eşleştir.',
+        'hesap ve sayfa artık farklı workspace’lerde. Akıllı Boost için yeniden eşleştir.',
     );
   }
 

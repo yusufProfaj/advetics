@@ -144,9 +144,9 @@ export function ClientSwitcher({
   if (availableClients.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-line px-3 py-2 text-sm text-ink-muted">
-        Henüz müşteri yok —{' '}
+        Henüz workspace yok —{' '}
         <a href="/ayarlar/musteriler" className="text-brand underline">
-          müşteri ekle
+          workspace ekle
         </a>
       </div>
     );
@@ -178,7 +178,7 @@ export function ClientSwitcher({
       */}
       {bekliyor && (
         <TamEkranYukleniyor
-          mesaj={`${gecilen ?? 'Tüm müşteriler'} görünümüne geçiliyor…`}
+          mesaj={`${gecilen ?? 'Tüm workspace’ler'} görünümüne geçiliyor…`}
         />
       )}
       <button
@@ -197,10 +197,10 @@ export function ClientSwitcher({
         <Avatar name={active?.name ?? '∗'} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium leading-tight">
-            {active?.name ?? 'Tüm müşteriler'}
+            {active?.name ?? 'Tüm workspace’ler'}
           </span>
           <span className="block text-[11px] leading-tight text-ink-muted">
-            {active ? 'Müşteri görünümü' : `${availableClients.length} müşteri`}
+            {active ? 'Workspace görünümü' : `${availableClients.length} workspace`}
           </span>
         </span>
         {/*
@@ -250,7 +250,7 @@ export function ClientSwitcher({
               type="search"
               value={arama}
               onChange={(e) => setArama(e.target.value)}
-              placeholder="Müşteri ara…"
+              placeholder="Workspace ara…"
               className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm focus:border-brand focus:outline-none"
             />
           </div>
@@ -263,7 +263,7 @@ export function ClientSwitcher({
           {isOrgAdmin && arama.trim() === '' && (
             <>
               <Option
-                label="Tüm müşteriler"
+                label="Tüm workspace’ler"
                 hint="Organizasyon geneli görünüm"
                 selected={activeClientId === null}
                 onSelect={() => void select(null)}
@@ -277,7 +277,7 @@ export function ClientSwitcher({
               // Boş sonuç SEBEBİYLE yazılıyor: sessiz boş liste "müşteri yok"
               // ile "arama tutmadı" hâllerini aynı ekrana çeviriyor.
               <p className="px-3 py-4 text-center text-xs text-ink-muted">
-                “{arama}” ile eşleşen müşteri yok.
+                “{arama}” ile eşleşen workspace yok.
               </p>
             ) : (
               suzulmus.map((c) => (

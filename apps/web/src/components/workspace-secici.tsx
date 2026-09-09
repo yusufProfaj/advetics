@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 
 /**
- * Aktif workspace'i seçen düğme ızgarası.
+ * Aktif workspace’i seçen düğme ızgarası.
  *
  * ÜST BARDAKİ DEĞİŞTİRİCİYLE AYNI UCU ÇAĞIRIYOR (`/auth/switch-client`) ve
  * bu kasıtlı: adrese `?musteri=` yazan ikinci bir denetim doğursaydı, üst bar

@@ -143,7 +143,7 @@ function bul(rows: MetricsClientRow[], ad: string): MetricsClientRow {
   return r;
 }
 
-describe('müşteri kırılımı — çift sayım koruması', () => {
+describe('workspace kırılımı — çift sayım koruması', () => {
   it('REGRESYON: dört seviyeye yazılmış harcamayı BİR kez sayar', async () => {
     /*
      * Seviye filtresi kaybolursa 4× çıkıyor ve hiçbir hata düşmüyor: panel
@@ -160,7 +160,7 @@ describe('müşteri kırılımı — çift sayım koruması', () => {
     });
 
     const rows = await svc.byClient(CTX, ARALIK);
-    expect(bul(rows, 'Müşteri').spendMicros).toBe('7612190000');
+    expect(bul(rows, 'Workspace').spendMicros).toBe('7612190000');
   });
 
   it('birden çok gün TOPLANIYOR', async () => {
@@ -174,7 +174,7 @@ describe('müşteri kırılımı — çift sayım koruması', () => {
         spendMicros: '1000000',
       });
     }
-    expect(bul(await svc.byClient(CTX, ARALIK), 'Müşteri').spendMicros).toBe('2000000');
+    expect(bul(await svc.byClient(CTX, ARALIK), 'Workspace').spendMicros).toBe('2000000');
   });
 
   it('aralık DIŞINDAKİ gün sayılmıyor', async () => {
@@ -186,11 +186,11 @@ describe('müşteri kırılımı — çift sayım koruması', () => {
       date: '2026-09-05',
       spendMicros: '5000000',
     });
-    expect(bul(await svc.byClient(CTX, ARALIK), 'Müşteri').spendMicros).toBe('0');
+    expect(bul(await svc.byClient(CTX, ARALIK), 'Workspace').spendMicros).toBe('0');
   });
 });
 
-describe('müşteri ayrımı', () => {
+describe('workspace ayrımı', () => {
   beforeEach(async () => {
     await metrikYaz({
       clientId: IDS.client,
@@ -211,19 +211,19 @@ describe('müşteri ayrımı', () => {
     });
   });
 
-  it('her müşterinin harcaması KENDİ satırında', async () => {
+  it('her workspace’in harcaması KENDİ satırında', async () => {
     // İki müşterinin verisi karışırsa ajans yanlış müşteriye fatura okur.
     const rows = await svc.byClient(CTX, ARALIK);
-    expect(bul(rows, 'Müşteri').spendMicros).toBe('3000000');
+    expect(bul(rows, 'Workspace').spendMicros).toBe('3000000');
     expect(bul(rows, 'B Firması').spendMicros).toBe('1000000');
   });
 
   it('sıralama HARCAMAYA göre — en çok harcayan üstte', async () => {
     const rows = await svc.byClient(CTX, ARALIK);
-    expect(rows.map((r) => r.name).slice(0, 2)).toEqual(['Müşteri', 'B Firması']);
+    expect(rows.map((r) => r.name).slice(0, 2)).toEqual(['Workspace', 'B Firması']);
   });
 
-  it('HARCAMASI OLMAYAN müşteri listeden DÜŞMÜYOR', async () => {
+  it('HARCAMASI OLMAYAN workspace listeden DÜŞMÜYOR', async () => {
     /*
      * "Hesabı var, harcaması yok" bu ekranın cevaplaması gereken bir hâl.
      * Satırı düşürmek onu "böyle bir müşteri yok" ile aynı gösterirdi ve
@@ -240,7 +240,7 @@ describe('müşteri ayrımı', () => {
     expect(sessiz.adAccountCount).toBe(0);
   });
 
-  it('ARŞİVLENMİŞ müşteri listede yok', async () => {
+  it('ARŞİVLENMİŞ workspace listede yok', async () => {
     await h.q(`UPDATE clients SET status = 'archived' WHERE id = $1`, [MUSTERI_B]);
     const rows = await svc.byClient(CTX, ARALIK);
     expect(rows.map((r) => r.name)).not.toContain('B Firması');
@@ -248,7 +248,7 @@ describe('müşteri ayrımı', () => {
 });
 
 describe('platform dağılımı', () => {
-  it('Meta ve Google AYRI satırlarda ve toplamları müşteri toplamına EŞİT', async () => {
+  it('Meta ve Google AYRI satırlarda ve toplamları workspace toplamına EŞİT', async () => {
     /*
      * Ekranın istenme sebebi bu. Dağılım ile toplam ayrı hesaplanırsa aynı
      * satırda iki farklı gerçek yazar; toplam dağılımdan TÜRETİLİYOR.
@@ -271,7 +271,7 @@ describe('platform dağılımı', () => {
       yalnizKampanya: true,
     });
 
-    const r = bul(await svc.byClient(CTX, ARALIK), 'Müşteri');
+    const r = bul(await svc.byClient(CTX, ARALIK), 'Workspace');
     expect(r.spendMicros).toBe('4000000');
 
     const toplam = r.byPlatform.reduce((a, p) => a + BigInt(p.spendMicros), 0n);
@@ -294,7 +294,7 @@ describe('platform dağılımı', () => {
       date: '2026-08-05',
       spendMicros: '3000000',
     });
-    expect(bul(await svc.byClient(CTX, ARALIK), 'Müşteri').byPlatform).toHaveLength(1);
+    expect(bul(await svc.byClient(CTX, ARALIK), 'Workspace').byPlatform).toHaveLength(1);
   });
 });
 
@@ -309,7 +309,7 @@ describe('para birimi', () => {
       spendMicros: '1000000',
       currency: 'TRY',
     });
-    const r = bul(await svc.byClient(CTX, ARALIK), 'Müşteri');
+    const r = bul(await svc.byClient(CTX, ARALIK), 'Workspace');
     expect(r.currency).toBe('TRY');
     expect(r.currencies).toEqual(['TRY']);
   });
@@ -339,7 +339,7 @@ describe('para birimi', () => {
       currency: 'USD',
       yalnizKampanya: true,
     });
-    const r = bul(await svc.byClient(CTX, ARALIK), 'Müşteri');
+    const r = bul(await svc.byClient(CTX, ARALIK), 'Workspace');
     expect(r.currency).toBeNull();
     expect(r.currencies).toEqual(['TRY', 'USD']);
   });
@@ -358,7 +358,7 @@ describe('izlenmeyen hesap', () => {
       spendMicros: '9000000',
     });
     await h.q(`UPDATE ad_accounts SET sync_enabled = false WHERE id = $1`, [IDS.adAccount]);
-    const r = bul(await svc.byClient(CTX, ARALIK), 'Müşteri');
+    const r = bul(await svc.byClient(CTX, ARALIK), 'Workspace');
     expect(r.spendMicros).toBe('0');
     expect(r.adAccountCount).toBe(0);
   });
@@ -374,7 +374,7 @@ describe('önceki dönem', () => {
       date: '2026-08-05',
       spendMicros: '1000000',
     });
-    expect(bul(await svc.byClient(CTX, ARALIK), 'Müşteri').previous).toBeNull();
+    expect(bul(await svc.byClient(CTX, ARALIK), 'Workspace').previous).toBeNull();
   });
 
   it('önceki dönemde veri VARSA doluyor, YOKSA null kalıyor', async () => {
@@ -415,7 +415,7 @@ describe('önceki dönem', () => {
       compareFrom: '2026-07-01',
       compareTo: '2026-07-31',
     });
-    expect(bul(rows, 'Müşteri').previous?.spendMicros).toBe('4000000');
+    expect(bul(rows, 'Workspace').previous?.spendMicros).toBe('4000000');
     // B'nin temmuzda hiç verisi yok — sıfır değil, YOK.
     expect(bul(rows, 'B Firması').previous).toBeNull();
   });
@@ -440,7 +440,7 @@ describe('platform süzgeci', () => {
       spendMicros: '1000000',
       yalnizKampanya: true,
     });
-    const r = bul(await svc.byClient(CTX, { ...ARALIK, platform: 'google' }), 'Müşteri');
+    const r = bul(await svc.byClient(CTX, { ...ARALIK, platform: 'google' }), 'Workspace');
     expect(r.spendMicros).toBe('1000000');
     expect(r.byPlatform.map((p) => p.platform)).toEqual(['google']);
   });

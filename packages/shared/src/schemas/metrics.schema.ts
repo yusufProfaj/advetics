@@ -25,14 +25,14 @@ export type BackfillInput = z.infer<typeof backfillSchema>;
 /**
  * ═══ TOPLU VERİ TAZELEME ═══
  *
- * Seçilen workspace'lerin son N yılının BÜTÜN verisi tek tuşla. Maliyeti
+ * Seçilen workspace’lerin son N yılının BÜTÜN verisi tek tuşla. Maliyeti
  * büyük ve geri alınamaz (kota harcanıyor), bu yüzden `apply: false`
  * varsayılan: önce ne olacağı söyleniyor, sonra uygulanıyor. `sync-cli` ve
  * `backfill` ucunun deseni bu ve sebebi somut — kapsamsız çalıştırılan bir
  * sürüm 27 hesaplık portföy için 288 hesap saymıştı.
  */
 export const bulkRefreshSchema = z.object({
-  /** Seçilen workspace'ler. Boş = hiçbiri; "hepsi" diye örtük bir hâl YOK. */
+  /** Seçilen workspace’ler. Boş = hiçbiri; "hepsi" diye örtük bir hâl YOK. */
   clientIds: z.array(z.string().uuid()).min(1).max(200),
   /**
    * Kaç yıl geriye. Üst sınır 3: Meta insights 37 ayla sınırlı ve daha
@@ -396,7 +396,7 @@ export interface MetricsBreakdownRow extends MetricTotals {
  * reklamı anlatıyor: dış kimliği, üst varlığı, platformdaki durumu var.
  * Müşterinin hiçbiri yok, buna karşılık ONUN olan şeyler var: kaç reklam
  * hesabı izlemede, harcamanın Meta ile Google arasındaki dağılımı, panelde
- * hangi workspace'e geçileceği. Aynı tipe sıkıştırmak, iki tarafta da
+ * hangi workspace’e geçileceği. Aynı tipe sıkıştırmak, iki tarafta da
  * anlamsız alanlar bırakırdı.
  */
 export interface MetricsClientPlatformRow extends MetricTotals {

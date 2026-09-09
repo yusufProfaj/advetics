@@ -29,7 +29,7 @@ export default async function ExpertAdPage({
   if (!clientId) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir müşteri seç</h1>
+        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
       </div>
     );
   }
@@ -65,7 +65,7 @@ export default async function ExpertAdPage({
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
         <h1 className="text-sm font-semibold text-ink">
-          Bu müşteriye henüz reklam hesabı atanmamış
+          Bu workspace’e henüz reklam hesabı atanmamış
         </h1>
         <Link
           href="/ayarlar/baglantilar"
@@ -83,7 +83,7 @@ export default async function ExpertAdPage({
         <div>
           <h1 className="text-xl font-semibold text-ink">Kampanya Kur</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
-            <strong className="text-ink">{client?.name ?? 'Müşteri'}</strong> · amaç,
+            <strong className="text-ink">{client?.name ?? 'Workspace'}</strong> · amaç,
             optimizasyon, kitle ve yerleşim üzerinde tam kontrol.
           </p>
         </div>

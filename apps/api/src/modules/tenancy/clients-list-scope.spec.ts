@@ -69,7 +69,7 @@ beforeEach(() => {
 });
 
 describe('clients.list — kapsam', () => {
-  it('KRİTİK: aktif müşteri daraltması KAPALI', async () => {
+  it('KRİTİK: aktif workspace daraltması KAPALI', async () => {
     await svc.list(CTX);
 
     expect(seenContext!.activeClientId).toBeNull();

@@ -50,10 +50,10 @@ export function supurmeDisiSebep(a: SupurmeAdayi): string | null {
     return 'İzleme kapalı — bu hesap hiçbir zamanlanmış güncellemeye girmiyor.';
   }
   if (a.client === null) {
-    return 'Hesap bir müşteriye atanmamış — atanana kadar veri çekilmiyor.';
+    return 'Hesap bir workspace’e atanmamış — atanana kadar veri çekilmiyor.';
   }
   if (a.client.status !== 'active') {
-    return `Müşteri "${a.client.status}" durumunda — duraklatılmış müşterilerin hesapları güncellenmiyor.`;
+    return `Workspace "${a.client.status}" durumunda — duraklatılmış workspace’lerin hesapları güncellenmiyor.`;
   }
   if (a.connection.status !== 'active') {
     return `Platform bağlantısı "${a.connection.status}" durumunda — yeniden yetkilendirme gerekiyor.`;

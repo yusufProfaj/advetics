@@ -143,9 +143,9 @@ export function ShareControls({
     <section className="rounded-xl border border-line bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-ink">Müşteriyle paylaş</h2>
+          <h2 className="text-sm font-semibold text-ink">Workspace’le paylaş</h2>
           <p className="mt-0.5 text-xs text-ink-muted">
-            Oturum gerektirmeyen gizli bağlantı. Tarih aralığı sabitlenir — müşteri
+            Oturum gerektirmeyen gizli bağlantı. Tarih aralığı sabitlenir — workspace
             sonradan açtığında aynı sayıları görür.
           </p>
         </div>
@@ -228,7 +228,7 @@ export function ShareControls({
               */}
               {sablon !== null && kayitliSablonId === null && (
                 <p className="mx-1 mt-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900">
-                  Hazır şablonlar bağlantıya taşınmıyor — müşteri, kayıtlı
+                  Hazır şablonlar bağlantıya taşınmıyor — workspace, kayıtlı
                   şablonu (yoksa varsayılanı) görecek. Bu görünümü paylaşmak
                   için önce şablon olarak kaydet.
                 </p>

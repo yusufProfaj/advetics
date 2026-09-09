@@ -68,13 +68,13 @@ describe('MCC koşulu', () => {
     expect(SAYFA_KOD.slice(0, i)).toMatch(/mcc\s*\n?\s*\? Promise\.resolve\(null\)/);
   });
 
-  it('müşteri sorgusu da yalnızca MCC modunda koşuyor', () => {
+  it('workspace sorgusu da yalnızca MCC modunda koşuyor', () => {
     const i = SAYFA_KOD.indexOf('/metrics/clients');
     expect(i).toBeGreaterThan(-1);
     expect(SAYFA_KOD.slice(0, i)).toMatch(/mcc\s*\n?\s*\?\s*serverApiFetch/);
   });
 
-  it('platform süzgeci müşteri sorgusuna da gidiyor', () => {
+  it('platform süzgeci workspace sorgusuna da gidiyor', () => {
     // Üst kartlar "toplam" gösterirken tablonun tek platformu listelemesi,
     // aynı ekranda iki farklı gerçek demek olurdu.
     expect(SAYFA_KOD).toContain('/metrics/clients?${base}');
@@ -150,7 +150,7 @@ describe('sayılar yalan söylemiyor', () => {
     expect(TABLO_KOD).not.toContain('* 1_000_000');
   });
 
-  it('sessiz kesme yok: kaç müşteri ve kaçının harcaması olduğu yazılı', () => {
+  it('sessiz kesme yok: kaç workspace ve kaçının harcaması olduğu yazılı', () => {
     expect(TABLO_KOD).toContain('tanesinin bu dönemde harcaması var');
   });
 

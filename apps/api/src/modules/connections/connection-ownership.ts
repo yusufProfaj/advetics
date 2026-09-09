@@ -5,7 +5,7 @@ import type { Platform } from '@advetics/shared';
  *
  * Karar saf bir fonksiyonda çünkü sınanması gereken şey bir SQL değil bir
  * kural, ve yanlış cevabı sessiz: kullanıcı bir workspace seçer, yetkilendirir,
- * ekran "bağlandı" der ve hesaplar BAŞKA bir workspace'te belirir.
+ * ekran "bağlandı" der ve hesaplar BAŞKA bir workspace’te belirir.
  *
  * Sebep zinciri:
  *   · Tekillik `orgId_platform_externalUserId` üzerinde — aynı Meta/Google
@@ -16,10 +16,10 @@ import type { Platform } from '@advetics/shared';
  *     reklam hesaplarına ve sayfalara yazıyor.
  *
  * Üçü birleşince: ikinci workspace için yapılan yetkilendirme, birinci
- * workspace'in altına hesap doldurur.
+ * workspace’in altına hesap doldurur.
  *
  * NULL → workspace geçişi de reddediliyor. Havuzda duran bağlantının altındaki
- * hesapların çoğu BAŞKA müşterilere ait; bağlantıyı tek bir workspace'e
+ * hesapların çoğu BAŞKA müşterilere ait; bağlantıyı tek bir workspace’e
  * işaretlemek sonraki bütün keşifleri oraya yazdırırdı.
  */
 export type OwnershipDecision =
@@ -49,7 +49,7 @@ export function decideConnectionOwnership(p: {
 
   const ad = PLATFORM_ADI[p.platform];
   const neredeydi = mevcut
-    ? `"${p.existingClientName ?? 'başka bir workspace'}" workspace'ine`
+    ? `"${p.existingClientName ?? 'başka bir workspace'}" workspace’ine`
     : 'ajans havuzuna';
   const nereye = p.requestedClientId ? 'Bu workspace' : 'Ajans havuzu';
 

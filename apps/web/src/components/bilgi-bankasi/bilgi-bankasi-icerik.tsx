@@ -78,7 +78,7 @@ export function BilgiBankasiIcerik({
         <p className="text-sm font-semibold text-ink">Görüntüleyebileceğin bölüm yok</p>
         <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">
           Bilgi Bankası bölümleri ayrı yetkiler istiyor: profil bölümleri için
-          müşteri okuma, Bütçe için bütçe okuma, Logo için varlık okuma
+          workspace okuma, Bütçe için bütçe okuma, Logo için varlık okuma
           yetkisi. Hiçbiri hesabında tanımlı değil — yöneticine sor.
         </p>
       </div>
@@ -123,7 +123,7 @@ export function BilgiBankasiIcerik({
           canWrite={yazabilir('bilgi-bankasi')}
           alan="bilgiBankasi"
           baslik="Bilgi Bankası"
-          aciklama="Müşterinin genel bilgileri: ne satıyor, hangi hizmetleri veriyor, sık sorulan sorular. Reklam metni ve AI üretimi bu metni bağlam olarak okuyor."
+          aciklama="Workspace’in genel bilgileri: ne satıyor, hangi hizmetleri veriyor, sık sorulan sorular. Reklam metni ve AI üretimi bu metni bağlam olarak okuyor."
           placeholder="Örn. 20 yıllık emlak ofisiyiz. Konut satışı ve kiralama yapıyoruz; İzmir Bornova ve Karşıyaka'da ofisimiz var. En çok sorulan: komisyon oranı %2 + KDV."
         />
       )}

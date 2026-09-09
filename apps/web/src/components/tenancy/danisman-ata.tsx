@@ -11,7 +11,7 @@ import { ROLE_TR, ROLE_HINT, type MemberRow } from './team-manager';
 /**
  * ═══ DANIŞMAN ATA ═══
  *
- * Bu ekranda var olan bir danışmanı workspace'e atamanın YOLU YOKTU.
+ * Bu ekranda var olan bir danışmanı workspace’e atamanın YOLU YOKTU.
  * "+ Yetki ekle" yalnızca ZATEN bu listede olan kişilerin kartında duruyor —
  * yani daha önce hiç atanmamış bir danışman ekranda hiç görünmüyor ve ona
  * ulaşılamıyor. Geriye tek yol kalıyordu: üstteki "Kullanıcı ekle" formuna
@@ -34,7 +34,7 @@ type Aday = MemberRow & { engel: string | null };
 export function DanismanAta({
   clientId,
   clientName,
-  /** Bu workspace'e HÂLİHAZIRDA erişimi olanlar — mükerrer atama reddediliyor. */
+  /** Bu workspace’e HÂLİHAZIRDA erişimi olanlar — mükerrer atama reddediliyor. */
   mevcutUyeIdleri,
 }: {
   clientId: string;

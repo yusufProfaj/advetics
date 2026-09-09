@@ -105,7 +105,7 @@ export function EpostaAyarlari({
             <p className="font-medium">Henüz doğrulanmadı.</p>
             <p className="mt-1 text-ink-muted">
               Kaydetmek yeterli değil: SMTP bilgisi yanlışsa hata ancak ilk gerçek
-              gönderimde çıkar ve o gönderim <strong>müşteriye gidecek olandır</strong>.
+              gönderimde çıkar ve o gönderim <strong>workspace’e gidecek olandır</strong>.
               Kaydettikten sonra kendine test maili gönder.
             </p>
             {mevcut?.lastError && (

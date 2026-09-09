@@ -43,7 +43,7 @@ export default async function BilgiBankasiPage({
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
         <h1 className="text-sm font-semibold text-ink">Bu sayfaya yetkin yok</h1>
         <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">
-          Bilgi Bankası müşteri profilini gösteriyor ve müşteri okuma yetkisi
+          Bilgi Bankası workspace profilini gösteriyor ve workspace okuma yetkisi
           istiyor. Yetki gerekiyorsa yöneticine sor.
         </p>
       </div>
@@ -68,10 +68,10 @@ export default async function BilgiBankasiPage({
   if (!clientId) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir müşteri seç</h1>
+        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
         <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">
-          Bilgi Bankası müşteri başına tutuluyor: genel bilgiler, bütçe, hedef
-          kitle ve marka bilgileri her müşteride farklı.
+          Bilgi Bankası workspace başına tutuluyor: genel bilgiler, bütçe, hedef
+          kitle ve marka bilgileri her workspace’te farklı.
         </p>
       </div>
     );
@@ -82,7 +82,7 @@ export default async function BilgiBankasiPage({
       <header className="min-w-0">
         <h1 className="text-base font-semibold text-ink">Bilgi Bankası</h1>
         <p className="mt-0.5 text-xs text-ink-muted">
-          Müşterinin genel profili — reklam üretirken ve AI asistanında
+          Workspace’in genel profili — reklam üretirken ve AI asistanında
           bağlam olarak kullanılıyor.
         </p>
         {/*

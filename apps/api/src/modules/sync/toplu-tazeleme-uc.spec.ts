@@ -215,7 +215,7 @@ describe('KRİTİK: kapsam', () => {
     for (const e of enqueued) expect(e.adAccountId).toBe('acc-1');
   });
 
-  it('aktif müşteri seçimi ARANMIYOR', async () => {
+  it('aktif workspace seçimi ARANMIYOR', async () => {
     /*
      * `backfill` istiyor ama bu uç kapsamı açıkça alıyor; aktif müşteri
      * istemek, düğmenin bulunduğu ekran ("Tüm müşteriler" görünümü) tam da o

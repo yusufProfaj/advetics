@@ -244,7 +244,7 @@ describe('kimler alınıyor', () => {
     expect((await svc.calistir()).rows).toBe(0);
   });
 
-  it('KRİTİK: ARŞİVLENMİŞ müşterinin planı alınmıyor', async () => {
+  it('KRİTİK: ARŞİVLENMİŞ workspace’in planı alınmıyor', async () => {
     // Çalışılmayan bir müşteriye otomatik rapor gitmesi, ajansın kontrolü
     // dışında bir iletişim demek.
     await planEkle();

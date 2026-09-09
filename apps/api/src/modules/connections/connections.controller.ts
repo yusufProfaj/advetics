@@ -196,7 +196,7 @@ export class ConnectionsController {
     @Req() req: AuthedRequest,
   ) {
     const platform = this.assertPlatform(platformParam);
-    // `id` SERVİSE GEÇİYOR: bağlantının hangi workspace'e ait olduğu orada
+    // `id` SERVİSE GEÇİYOR: bağlantının hangi workspace’e ait olduğu orada
     // yazılı ve yeniden yetkilendirme sahipliği KORUMAK zorunda.
     return this.connections.reauthorize(ctx, id, platform, this.meta(req));
   }

@@ -141,7 +141,7 @@ async function names(table: string, ctx: Ctx): Promise<string[]> {
 }
 
 describe('ağacın üç seviyesi de süzülüyor', () => {
-  it('kampanya — yalnızca yetkili müşterininki', async () => {
+  it('kampanya — yalnızca yetkili workspace’inki', async () => {
     expect(await names('draft_campaigns', HEPSI)).toEqual(['A kampanyası', 'B kampanyası']);
     expect(await names('draft_campaigns', ONLY_A)).toEqual(['A kampanyası']);
   });
@@ -167,7 +167,7 @@ describe('ağacın üç seviyesi de süzülüyor', () => {
 });
 
 describe('yazma politikaları', () => {
-  it('KRİTİK: başka müşterinin kampanyasına grup EKLENEMİYOR', async () => {
+  it('KRİTİK: başka workspace’in kampanyasına grup EKLENEMİYOR', async () => {
     /**
      * Okuma engelli ama yazma açık kalsaydı, bir kullanıcı göremediği bir
      * kampanyaya reklam grubu ekleyebilirdi — ve o grup yayına çıkıp para
@@ -182,7 +182,7 @@ describe('yazma politikaları', () => {
     ).rejects.toThrow(/row-level security/i);
   });
 
-  it('KRİTİK: başka müşterinin grubuna reklam EKLENEMİYOR', async () => {
+  it('KRİTİK: başka workspace’in grubuna reklam EKLENEMİYOR', async () => {
     await expect(
       asUser(
         `INSERT INTO draft_ads (id, org_id, ad_group_id, creative_id, name, updated_at)
@@ -192,7 +192,7 @@ describe('yazma politikaları', () => {
     ).rejects.toThrow(/row-level security/i);
   });
 
-  it('yetkili müşterinin ağacına yazılabiliyor', async () => {
+  it('yetkili workspace’in ağacına yazılabiliyor', async () => {
     await asUser(
       `INSERT INTO draft_ads (id, org_id, ad_group_id, creative_id, name, position, updated_at)
        VALUES (gen_random_uuid(), '${ORG}', '${GRP_A}', '${CREATIVE_A}', 'Varyant B', 1, now())`,
@@ -201,7 +201,7 @@ describe('yazma politikaları', () => {
     expect(await names('draft_ads', ONLY_A)).toEqual(['A reklamı', 'Varyant B']);
   });
 
-  it('başka müşterinin kampanyası güncellenemiyor', async () => {
+  it('başka workspace’in kampanyası güncellenemiyor', async () => {
     await asUser(
       `UPDATE draft_campaigns SET name = 'Ele geçirildi' WHERE id = '${CAMP_B}'`,
       ONLY_A,

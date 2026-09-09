@@ -166,7 +166,7 @@ export function ConnectionCard({
                 // bağlı HER hesabın senkronizasyonunu durduruyor.
                 if (
                   !confirm(
-                    'Bu bağlantı ajansa ait ve altındaki TÜM müşterilerin hesaplarını besliyor. ' +
+                    'Bu bağlantı ajansa ait ve altındaki TÜM workspace’lerin hesaplarını besliyor. ' +
                       'Kaldırılırsa hepsinin senkronizasyonu durur. Geçmiş veriler korunur. Devam?',
                   )
                 ) {

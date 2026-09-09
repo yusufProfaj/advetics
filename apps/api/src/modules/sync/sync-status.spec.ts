@@ -10,7 +10,7 @@ import { SyncController } from './sync.controller';
  * giriyor, engelin sebebi hangi cümleyle yazılıyor, sayaçlar neyi sayıyor.
  * Prisma'nın süzgeç semantiğini taklit etmek, taklidi test etmek olurdu.
  *
- * Korunan hata gerçek ve pahalı: bir workspace'te Meta verisi hiç gelmiyordu,
+ * Korunan hata gerçek ve pahalı: bir workspace’te Meta verisi hiç gelmiyordu,
  * bağlantı doğruydu ve panelde bakılacak tek bir alan yoktu. Altı ayrı arıza
  * aynı boş grafiğe düşüyor, ayırt etmenin tek yolu sunucuya SSH ile girmekti.
  */

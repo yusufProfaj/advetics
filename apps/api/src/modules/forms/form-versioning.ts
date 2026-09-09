@@ -151,7 +151,7 @@ export function publishWarnings(form: LeadFormRecord): string[] {
 
   if (!form.prefillQuestions.includes('PHONE')) {
     warnings.push(
-      'Telefon sorusu yok. Türkiye’de inşaat ve sağlık müşterilerinde geri dönüşün ' +
+      'Telefon sorusu yok. Türkiye’de inşaat ve sağlık workspace’lerinde geri dönüşün ' +
         'neredeyse tamamı telefonla oluyor.',
     );
   }

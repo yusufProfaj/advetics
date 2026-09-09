@@ -93,7 +93,7 @@ const FEATURES = [
       "reklam seviyesinde karşılaştırın.",
   },
   {
-    title: 'Potansiyel müşteriler',
+    title: 'Potansiyel Müşteriler',
     body:
       "Anlık form kayıtları panele düşer. Webhook'un yanında mutabakat taraması " +
       "da çalışır: bildirim kaçarsa kayıt yine gelir, sessizce kaybolmaz.",
@@ -102,9 +102,9 @@ const FEATURES = [
 
 const AGENCY = [
   {
-    title: 'Çoklu müşteri, çoklu hesap',
+    title: 'Çoklu workspace, çoklu hesap',
     body:
-      "Bir şirketin birden çok projesi ve reklam hesabı olabilir. Müşteriler " +
+      "Bir şirketin birden çok projesi ve reklam hesabı olabilir. Workspace’ler " +
       "birbirini görmez; ayrım veritabanı seviyesinde uygulanıyor, arayüzde " +
       "değil.",
   },
@@ -117,7 +117,7 @@ const AGENCY = [
   {
     title: 'Paylaşılabilir canlı rapor',
     body:
-      "Müşteriye link verin; giriş yapmadan kendi raporunu canlı görsün. " +
+      "Workspace’e link verin; giriş yapmadan kendi raporunu canlı görsün. " +
       "Kendi alan adınız üzerinden de yayınlanabilir.",
   },
   {
@@ -132,7 +132,7 @@ const REPORTING = [
   "Canlı rapor — veriler her senkronizasyonda tazeleniyor, ekran görüntüsü değil.",
   "Reklam hesabı süzgeci her yerde: hangi hesabın rakamına baktığınız hep belli.",
   "Meta ve Google tek raporda, aynı dönem ve aynı metriklerle.",
-  "Yazdırmaya hazır düzen — müşteri toplantısına PDF olarak götürün.",
+  "Yazdırmaya hazır düzen — workspace toplantısına PDF olarak götürün.",
 ];
 
 export default function HomePage() {
@@ -330,7 +330,7 @@ export default function HomePage() {
               <div className="max-w-2xl">
                 <p className="text-sm font-semibold text-[#ff6b78]">Raporlama</p>
                 <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
-                  Müşteriye gösterilecek rapor, sizin markanızla
+                  Workspace’e gösterilecek rapor, sizin markanızla
                 </h2>
                 <p className="mt-4 text-lg leading-relaxed text-[#9aa1ae]">
                   {"Ay sonunda ekran görüntüsü toplamak ve sunum hazırlamak yerine " +

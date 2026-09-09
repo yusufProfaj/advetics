@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { decideConnectionOwnership } from './connection-ownership';
 
 /**
- * Aynı platform hesabının ikinci bir workspace'e bağlanması REDDEDİLİYOR.
+ * Aynı platform hesabının ikinci bir workspace’e bağlanması REDDEDİLİYOR.
  *
  * Kontrol edilmeseydi olan şey sessizdi: tekillik
  * `orgId_platform_externalUserId` üzerinde, `upsert`'ün `update` dalı
@@ -90,7 +90,7 @@ describe('SAHİPLİK DEĞİŞTİRME — hepsi reddediliyor', () => {
   it('KRİTİK: HAVUZDAN workspace’e taşımak da reddediliyor', () => {
     /*
      * Havuzdaki bağlantının altında 157 hesap var ve çoğu BAŞKA müşterilere
-     * ait. Bağlantıyı tek bir workspace'e işaretlemek, sonraki bütün
+     * ait. Bağlantıyı tek bir workspace’e işaretlemek, sonraki bütün
      * keşifleri oraya yazdırırdı.
      */
     const k = decideConnectionOwnership({

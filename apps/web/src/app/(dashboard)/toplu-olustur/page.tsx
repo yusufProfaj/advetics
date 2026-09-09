@@ -34,7 +34,7 @@ export default async function BulkPage({
   if (!clientId) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir müşteri seç</h1>
+        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
       </div>
     );
   }
@@ -62,7 +62,7 @@ export default async function BulkPage({
         <div>
           <h1 className="text-xl font-semibold text-ink">Toplu Oluştur</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
-            <strong className="text-ink">{client?.name ?? 'Müşteri'}</strong> · bir kampanyadan
+            <strong className="text-ink">{client?.name ?? 'Workspace'}</strong> · bir kampanyadan
             varyasyonlar üret. Yazmadığın her alan kaynaktan gelir.
           </p>
         </div>

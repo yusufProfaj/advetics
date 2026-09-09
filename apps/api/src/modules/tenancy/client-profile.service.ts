@@ -54,7 +54,7 @@ export class ClientProfileService {
   ): Promise<ClientProfileRecord> {
     return this.prisma.withTenant(ctx, async (tx) => {
       const client = await tx.client.findUnique({ where: { id: input.clientId } });
-      if (!client) throw new NotFoundException('Müşteri bulunamadı');
+      if (!client) throw new NotFoundException('Workspace bulunamadı');
 
       // LOGO, BU MÜŞTERİNİN VARLIĞI OLMAK ZORUNDA.
       //
@@ -82,7 +82,7 @@ export class ClientProfileService {
           // Mesaj SEBEBİ söylüyor: "geçersiz kimlik" demek, doğru dosyayı
           // seçtiğini bilen kullanıcıyı olmayan bir arızayı aramaya gönderir.
           throw new BadRequestException(
-            'Seçilen logo bu müşterinin görsel arşivinde bulunamadı — logo yalnızca aynı müşterinin varlıklarından seçilebilir.',
+            'Seçilen logo bu workspace’in görsel arşivinde bulunamadı — logo yalnızca aynı workspace’in varlıklarından seçilebilir.',
           );
         }
       }

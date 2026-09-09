@@ -40,7 +40,7 @@ export default async function AdsHomePage({
   if (!clientId) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir müşteri seç</h1>
+        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
       </div>
     );
   }
@@ -58,7 +58,7 @@ export default async function AdsHomePage({
       <header>
         <h1 className="text-xl font-semibold text-ink">Reklamlar</h1>
         <p className="mt-0.5 text-sm text-ink-muted">
-          <strong className="text-ink">{client?.name ?? 'Müşteri'}</strong> · ne yapmak
+          <strong className="text-ink">{client?.name ?? 'Workspace'}</strong> · ne yapmak
           istediğini seç.
         </p>
       </header>
@@ -104,7 +104,7 @@ export default async function AdsHomePage({
         <DraftGroupList groups={groups} />
       ) : (
         <p className="rounded-xl border border-dashed border-line bg-surface px-4 py-8 text-center text-sm text-ink-muted">
-          Bu müşteride henüz kampanya yok.
+          Bu workspace’te henüz kampanya yok.
         </p>
       )}
 

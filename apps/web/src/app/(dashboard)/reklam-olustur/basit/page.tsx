@@ -33,7 +33,7 @@ export default async function SimpleAdPage({
   if (!clientId) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir müşteri seç</h1>
+        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
       </div>
     );
   }
@@ -77,7 +77,7 @@ export default async function SimpleAdPage({
             elemanına düşüyordu; 12 müşteri arasında gezinen bir ajans için
             yanlış hesaba yayın en pahalı sessiz hata. */}
         <p className="mt-0.5 text-sm text-ink-muted">
-          <strong className="text-ink">{client?.name ?? 'Müşteri'}</strong> için reklam
+          <strong className="text-ink">{client?.name ?? 'Workspace'}</strong> için reklam
           oluşturuyorsun. Ne istediğini söyle, gerisini biz hallederiz.
         </p>
         </div>

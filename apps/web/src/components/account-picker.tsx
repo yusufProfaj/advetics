@@ -175,7 +175,7 @@ export function AccountPicker({
 
         {tracked.length === 0 ? (
           <p className="mt-2 text-sm text-ink-muted">
-            Henüz hiçbir hesap izlenmiyor. Önce bir hesabı müşteriye ata, sonra{' '}
+            Henüz hiçbir hesap izlenmiyor. Önce bir hesabı workspace’e ata, sonra{' '}
             <strong>İzle</strong> de.
           </p>
         ) : (
@@ -215,7 +215,7 @@ export function AccountPicker({
           // yaşamamalı.
           <p className="mt-2 text-[11px] text-ink-muted">
             İzlemeyi bıraktığın hesap panelden ve raporlardan çıkar. Verisi silinmez —
-            yeniden izlemeye alırsan geçmişiyle geri gelir. Müşteri atamasını
+            yeniden izlemeye alırsan geçmişiyle geri gelir. Workspace atamasını
             kaldırmak izlemeyi de kapatır.
           </p>
         )}
@@ -271,7 +271,7 @@ export function AccountPicker({
         {search.trim() === '' ? (
           <p className="mt-1.5 text-[11px] text-ink-muted">
             Aramaya başla. Havuz, bu bağlantının eriştiği bütün reklam hesapları —
-            çoğu bu ajansın müşterilerine ait değil. Bir hesabı müşteriye atamadan
+            çoğu bu ajansın workspace’lerine ait değil. Bir hesabı workspace’e atamadan
             izlemeye alamazsın.
           </p>
         ) : results.length === 0 ? (

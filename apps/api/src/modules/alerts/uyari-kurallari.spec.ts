@@ -221,7 +221,7 @@ describe('öncelik: SEBEP yazılıyor, SONUÇ değil', () => {
   });
 });
 
-describe('hesapsız müşteri', () => {
+describe('hesapsız workspace', () => {
   it('uyarı hesap satırı olmadan üretilebiliyor', () => {
     /*
      * Hesap döngüsünün üzerinden üretilemez: hiç hesabı olmayan müşterinin

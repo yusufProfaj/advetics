@@ -165,7 +165,7 @@ describe('boostAssetName — kenar durumlar', () => {
      * OLDUĞUNU hiç doğrulamıyordu. Şimdi kısaldığı ve kesme işareti aldığı
      * ayrı ayrı yazılı.
      */
-    const uzunAd = 'Çok Uzun Bir Müşteri Adı Limited Şirketi Anonim Holding A.Ş.';
+    const uzunAd = 'Çok Uzun Bir Workspace Adı Limited Şirketi Anonim Holding A.Ş.';
     const ad = boostAssetName({
       clientName: uzunAd,
       postMessage: 'Bu yaz hayalinizdeki',
@@ -174,7 +174,7 @@ describe('boostAssetName — kenar durumlar', () => {
     });
     expect(ad).not.toContain(uzunAd);
     expect(ad).toContain('…');
-    expect(ad.startsWith('Çok Uzun Bir Müşteri Adı')).toBe(true);
+    expect(ad.startsWith('Çok Uzun Bir Workspace Adı')).toBe(true);
   });
 
   it('KRİTİK: kırpma SEVİYE EKİNİ yemiyor', () => {
@@ -184,7 +184,7 @@ describe('boostAssetName — kenar durumlar', () => {
      * Kırpma parça bazında, adın tamamı üzerinden değil.
      */
     const ad = boostAssetName({
-      clientName: 'Çok Uzun Bir Müşteri Adı Limited Şirketi Anonim Holding A.Ş.',
+      clientName: 'Çok Uzun Bir Workspace Adı Limited Şirketi Anonim Holding A.Ş.',
       postMessage:
         'Çokuzunbirkelimebunungibi ikincisidebayagıuzunolabiliyor ucuncusudeuzun',
       date: TARIH,
@@ -194,10 +194,10 @@ describe('boostAssetName — kenar durumlar', () => {
     expect(ad).toContain('2026-08-17');
   });
 
-  it('müşteri adı boşsa "Müşteri" yazıyor', () => {
+  it('workspace adı boşsa "Workspace" yazıyor', () => {
     expect(
       boostAssetName({ clientName: '   ', postMessage: 'a b c', date: TARIH, kind: 'ad' }),
-    ).toBe('Müşteri - a b c - 2026-08-17 - Boost - Reklam');
+    ).toBe('Workspace - a b c - 2026-08-17 - Boost - Reklam');
   });
 });
 

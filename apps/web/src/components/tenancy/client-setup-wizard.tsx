@@ -42,7 +42,7 @@ export function ClientSetupWizard({ connections }: { connections: ConnectionSumm
         onClick={() => setAcik(true)}
         className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white transition"
       >
-        + Yeni müşteri
+        + Yeni workspace
       </button>
       {acik && <Modal connections={connections} onKapat={() => setAcik(false)} />}
     </>
@@ -105,7 +105,7 @@ function Modal({
   async function kur(): Promise<void> {
     const temizAd = ad.trim();
     if (temizAd.length < 2) {
-      setHata('Müşteri adı en az 2 karakter olmalı.');
+      setHata('Workspace adı en az 2 karakter olmalı.');
       return;
     }
 
@@ -171,7 +171,7 @@ function Modal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Yeni müşteri kurulumu"
+      aria-label="Yeni workspace kurulumu"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onMouseDown={(e) => {
         if (!kutuRef.current?.contains(e.target as Node)) onKapat();
@@ -183,7 +183,7 @@ function Modal({
       >
         <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
           <h2 className="text-sm font-semibold text-ink">
-            {sonuc ? 'Kurulum tamamlandı' : 'Yeni müşteri kurulumu'}
+            {sonuc ? 'Kurulum tamamlandı' : 'Yeni workspace kurulumu'}
           </h2>
           <button
             type="button"
@@ -200,7 +200,7 @@ function Modal({
           ) : (
             <div className="space-y-4">
               <label className="block">
-                <span className="text-sm font-medium text-ink">Müşteri adı</span>
+                <span className="text-sm font-medium text-ink">Workspace adı</span>
                 <input
                   autoFocus
                   value={ad}
@@ -262,8 +262,8 @@ function Modal({
               <KanalSecimi havuzlar={havuzlar} secili={secili} onDegistir={degistir} />
 
               <Bolum
-                baslik="Müşteri giriş hesabı"
-                alt="İsteğe bağlı. Müşteri yalnızca kendi workspace'ini görür."
+                baslik="Workspace giriş hesabı"
+                alt="İsteğe bağlı. Workspace yalnızca kendi workspace’ini görür."
                 acik={kullaniciAcik}
                 onDegistir={() => setKullaniciAcik((v) => !v)}
               >
@@ -370,14 +370,14 @@ function SonucOzeti({ sonuc }: { sonuc: ClientSetupResult }) {
         <div className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2">
           {sonuc.movedRows > 0 && (
             <p className="text-[11px] text-ink">
-              {formatNumber(sonuc.movedRows)} kayıt eski müşteriden bu müşteriye
+              {formatNumber(sonuc.movedRows)} kayıt eski workspace’ten bu workspace’e
               taşındı — kampanyalar, kreatifler ve geçmiş metrikler dahil. Eski
-              müşterinin raporundaki rakamlar buna göre değişti.
+              workspace’in raporundaki rakamlar buna göre değişti.
             </p>
           )}
           {Object.keys(sonuc.leftBehind).length > 0 && (
             <p className="mt-1 text-[11px] text-ink-muted">
-              Eski müşteride kalanlar:{' '}
+              Eski workspace’te kalanlar:{' '}
               {Object.entries(sonuc.leftBehind)
                 .map(([etiket, n]) => `${formatNumber(n)} ${etiket}`)
                 .join(', ')}
@@ -414,7 +414,7 @@ function SonucOzeti({ sonuc }: { sonuc: ClientSetupResult }) {
             ))}
           </ul>
           <p className="mt-1.5 text-[11px] text-ink-muted">
-            Müşteri oluşturuldu; eksik kalanları “Bağlı kanallar” ekranından
+            Workspace oluşturuldu; eksik kalanları “Bağlı kanallar” ekranından
             ekleyebilirsin.
           </p>
         </div>

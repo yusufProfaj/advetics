@@ -83,7 +83,7 @@ describe('ekip listesi süzgeci', () => {
     expect(w.OR.some((k) => JSON.stringify(k).includes('"none"'))).toBe(true);
   });
 
-  it('KRİTİK: clientId verilince O WORKSPACE’in listesi — müşteri hesapları DAHİL', async () => {
+  it('KRİTİK: clientId verilince O WORKSPACE’in listesi — workspace hesapları DAHİL', async () => {
     /*
      * İKİ LİSTE, İKİ AYRI SORU. Ajans listesi client_viewer'ı dışlıyor
      * (ajansın kaç çalışanı olduğu okunabilmeli). Workspace listesi onları
@@ -96,7 +96,7 @@ describe('ekip listesi süzgeci', () => {
       memberships: { some: { clientId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' } },
     });
     // ROL SÜZGECİ OLMAMALI — olsaydı müşterinin hesapları kendi
-    // workspace'inde de görünmez, yani yönetilemez olurdu.
+    // workspace’inde de görünmez, yani yönetilemez olurdu.
     expect(JSON.stringify(args().where)).not.toContain('client_viewer');
   });
 

@@ -547,7 +547,7 @@ export class RaporPdfService {
     // `null` "veri yok" DEĞİL, "bu yetenek yok": Google bağlantısı olmayan
     // müşteride anahtar kelime diye bir şey yok.
     if (ctx.data.keywords === null) {
-      this.bosKutu(ctx, s, y, 'Bu müşteride Google Ads bağlantısı bulunmuyor.');
+      this.bosKutu(ctx, s, y, 'Bu workspace’te Google Ads bağlantısı bulunmuyor.');
       return;
     }
     if (ctx.data.keywords.length === 0) {
@@ -868,7 +868,7 @@ export class RaporPdfService {
     let y = this.baslik(ctx, s, SECTION_LABELS.google_search_terms, 'Google Ads');
 
     if (ctx.data.searchTerms === null) {
-      this.bosKutu(ctx, s, y, 'Bu müşteride Google Ads bağlantısı bulunmuyor.');
+      this.bosKutu(ctx, s, y, 'Bu workspace’te Google Ads bağlantısı bulunmuyor.');
       return;
     }
     if (ctx.data.searchTerms.length === 0) {

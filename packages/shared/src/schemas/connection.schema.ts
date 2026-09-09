@@ -21,8 +21,8 @@ export const startOAuthSchema = z.object({
    * (`orgId_platform_externalUserId`) ve platform her yeni yetkilendirmede
    * öncekinin token'ını geçersiz kılıyor. Yani workspace başına bağlantı
    * ancak HER WORKSPACE KENDİ platform hesabıyla bağlandığında çalışıyor.
-   * Aynı hesabı ikinci bir workspace'e bağlamak reddediliyor — sessizce
-   * ilkinde bırakmak, kullanıcının başka bir workspace'e bağladığını
+   * Aynı hesabı ikinci bir workspace’e bağlamak reddediliyor — sessizce
+   * ilkinde bırakmak, kullanıcının başka bir workspace’e bağladığını
    * sanması demekti.
    */
   clientId: z.string().uuid().optional(),

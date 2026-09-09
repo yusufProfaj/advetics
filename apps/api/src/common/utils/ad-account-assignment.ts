@@ -29,8 +29,8 @@ export function requireAssignedClientId(account: {
 }): string {
   if (account.clientId === null) {
     throw new BadRequestException(
-      `Bu reklam hesabı (${account.name ?? account.id}) henüz bir müşteriye ` +
-        `atanmamış. Platform Bağlantıları ekranından hesabı bir müşteriye atayın; ` +
+      `Bu reklam hesabı (${account.name ?? account.id}) henüz bir workspace’e ` +
+        `atanmamış. Platform Bağlantıları ekranından hesabı bir workspace’e atayın; ` +
         `atanmamış hesap senkronize edilmez.`,
     );
   }

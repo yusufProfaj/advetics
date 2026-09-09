@@ -86,7 +86,7 @@ export class BrandingService {
     return this.prisma.withTenant(ctx, async (tx) => {
       if (input.clientId) {
         const client = await tx.client.findUnique({ where: { id: input.clientId } });
-        if (!client) throw new NotFoundException('Müşteri bulunamadı');
+        if (!client) throw new NotFoundException('Workspace bulunamadı');
       }
 
       const existing = input.clientId

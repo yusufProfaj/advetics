@@ -32,7 +32,7 @@ describe('RaporGonder', () => {
     // Ve sebebi ekranda yazıyor — "gönder"e basınca hata almak yetmez.
     expect(KAYNAK).toContain('bosVarsayilan');
     const alan = readFileSync(join(__dirname, '../alici-listesi-alani.tsx'), 'utf8');
-    expect(alan).toContain('Müşterinin kayıtlı rapor alıcısı yok');
+    expect(alan).toContain('Workspace’in kayıtlı rapor alıcısı yok');
   });
 
   it('KRİTİK: alıcıların birbirini GÖRECEĞİ ekranda yazılı', () => {

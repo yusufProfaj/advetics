@@ -13,7 +13,7 @@ import { Nokta } from '@/components/yukleniyor';
 /**
  * ═══ TÜM VERİLERİ GÜNCELLE ═══
  *
- * Seçilen workspace'lerin son N yılının bütün verisi tek tuşla.
+ * Seçilen workspace’lerin son N yılının bütün verisi tek tuşla.
  *
  * İKİ ADIM: önce ne olacağı SÖYLENİYOR, sonra uygulanıyor. Kota geri
  * alınamaz biçimde harcanıyor ve iki yıllık bir tazeleme yüzlerce platform

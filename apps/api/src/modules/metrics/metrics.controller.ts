@@ -69,7 +69,7 @@ export class MetricsController {
    *
    * Ayrı bir uç, `breakdown`ın bir seviyesi DEĞİL: müşteri satırı varlık
    * satırından farklı alanlar taşıyor (kaç hesap izlemede, platform dağılımı,
-   * hangi workspace'e geçileceği) ve varlık alanlarının (dış kimlik, üst
+   * hangi workspace’e geçileceği) ve varlık alanlarının (dış kimlik, üst
    * varlık, platformdaki durum) hiçbiri müşteride yok.
    */
   @Get('clients')

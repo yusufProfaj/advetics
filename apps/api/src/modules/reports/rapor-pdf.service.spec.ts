@@ -312,7 +312,7 @@ describe('RaporPdfService', () => {
     expect(olmadan.byteLength).toBeLessThan(ile.byteLength);
   });
 
-  it('belge ÜSTVERİSİ müşteri adını taşıyor — okuyucu sekmesi ve dosya adı', async () => {
+  it('belge ÜSTVERİSİ workspace adını taşıyor — okuyucu sekmesi ve dosya adı', async () => {
     const pdf = await svc.uret(VERI);
     // Başlık üstveride düz metin (UTF-16BE) olarak duruyor.
     expect(icerik(pdf)).toContain('/title');

@@ -50,7 +50,7 @@ const ASSET_OTHER = 'e2e2e2e2-e2e2-e2e2-e2e2-e2e2e2e2e2e2';
 async function seedLogolar(): Promise<void> {
   await h.q(
     `INSERT INTO clients (id, org_id, name, slug, updated_at)
-     VALUES ($1, $2, 'Başka Müşteri', 'baska-musteri', now())`,
+     VALUES ($1, $2, 'Başka Workspace', 'baska-musteri', now())`,
     [CLIENT_OTHER, IDS.org],
   );
   await h.q(
@@ -158,7 +158,7 @@ describe('upsert', () => {
     expect(rows).toHaveLength(1);
   });
 
-  it('bulunamayan müşteri için reddediliyor', async () => {
+  it('bulunamayan workspace için reddediliyor', async () => {
     await expect(
       svc.upsert(CTX, { clientId: '00000000-0000-0000-0000-000000000000', hedefKitle: 'x' }, {}),
     ).rejects.toThrow(/bulunamadı/i);
@@ -187,7 +187,7 @@ describe('upsert — logo varlığı MÜŞTERİYE ait olmak zorunda', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('KENDİ müşterisinin varlığı KABUL EDİLİYOR', async () => {
+  it('KENDİ workspace’inin varlığı KABUL EDİLİYOR', async () => {
     const saved = await svc.upsert(CTX, { clientId: IDS.client, logoAssetId: ASSET_OWN }, {});
     expect(saved.logoAssetId).toBe(ASSET_OWN);
   });

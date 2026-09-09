@@ -191,7 +191,7 @@ describe('kural CRUD', () => {
     );
     await expect(
       svc.create(CTX, ruleInput({ clientId: other, adAccountId: IDS.adAccount })),
-    ).rejects.toThrow(/bu müşteriye bağlı değil/i);
+    ).rejects.toThrow(/bu workspace’e bağlı değil/i);
   });
 
   it('siliniyor', async () => {
@@ -504,7 +504,7 @@ describe('bütçe tüketimi koşulu', () => {
     const DIGER_MUSTERI = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
     await h.q(
       `INSERT INTO clients (id, org_id, name, slug, updated_at)
-       VALUES ($1, $2, 'Eski Müşteri', 'eski', now())`,
+       VALUES ($1, $2, 'Eski Workspace', 'eski', now())`,
       [DIGER_MUSTERI, IDS.org],
     );
     await seedCampaign(CAMPAIGN, 'Kampanya A');

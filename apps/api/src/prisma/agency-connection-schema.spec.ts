@@ -41,7 +41,7 @@ beforeEach(async () => {
   );
   await h.q(
     `INSERT INTO clients (id, org_id, name, slug, updated_at)
-     VALUES ($1, $3, 'Müşteri', 'musteri', now()), ($2, $4, 'Yabancı', 'yabanci', now())`,
+     VALUES ($1, $3, 'Workspace', 'musteri', now()), ($2, $4, 'Yabancı', 'yabanci', now())`,
     [CLIENT, CLIENT_OTHER, ORG, ORG_OTHER],
   );
   await h.q(
@@ -128,7 +128,7 @@ describe('tekillik — organizasyon bazında', () => {
   });
 });
 
-describe('müşteri silinmesi', () => {
+describe('workspace silinmesi', () => {
   it('KRİTİK: hesap SİLİNMİYOR, havuza dönüyor', async () => {
     // Cascade bıraksaydık bir müşteriyi silmek ajansın reklam hesabı kaydını
     // da götürürdü — oysa hesap ajansa ait ve başka müşteriye atanabilir.
@@ -143,7 +143,7 @@ describe('müşteri silinmesi', () => {
     expect(rows[0]!.org_id).toBe(ORG);
   });
 
-  it('müşteriye özel bağlantı da hayatta kalıyor, ajans geneline dönüyor', async () => {
+  it('workspace’e özel bağlantı da hayatta kalıyor, ajans geneline dönüyor', async () => {
     await h.q(`UPDATE platform_connections SET client_id = $1 WHERE id = $2`, [CLIENT, CONN]);
     await h.q(`DELETE FROM clients WHERE id = $1`, [CLIENT]);
 
@@ -177,7 +177,7 @@ describe('sosyal profiller — aynı havuz kuralları', () => {
     );
   });
 
-  it('müşteri silinince sayfa HAVUZA dönüyor, silinmiyor', async () => {
+  it('workspace silinince sayfa HAVUZA dönüyor, silinmiyor', async () => {
     await insertProfile(PROFILE, 'page-1', CLIENT);
     await h.q(`DELETE FROM clients WHERE id = $1`, [CLIENT]);
 
@@ -189,7 +189,7 @@ describe('sosyal profiller — aynı havuz kuralları', () => {
     expect(rows[0]!.org_id).toBe(ORG);
   });
 
-  it('sayfa BAŞKA organizasyonun müşterisine atanamıyor', async () => {
+  it('sayfa BAŞKA organizasyonun workspace’ine atanamıyor', async () => {
     await insertProfile(PROFILE);
     await expect(
       h.q(`UPDATE social_profiles SET client_id = $1`, [CLIENT_OTHER]),
@@ -251,7 +251,7 @@ describe('sosyal profiller — aynı havuz kuralları', () => {
 });
 
 describe('organizasyon tutarlılığı', () => {
-  it('KRİTİK: hesap BAŞKA organizasyonun müşterisine atanamıyor', async () => {
+  it('KRİTİK: hesap BAŞKA organizasyonun workspace’ine atanamıyor', async () => {
     /*
      * Kompozit yabancı anahtar (client_id, org_id) → clients(id, org_id).
      * Olmasaydı RLS'in iki koşulu — org_id eşleşmesi ve can_access_client() —

@@ -13,7 +13,7 @@ import type { MembersService } from './members.service';
  * yapıyor, ve rolü kim belirliyor.
  *
  * Üçü de sessiz hata üretebilecek yerler:
- *   1. Bağlam yeni müşteriyi taşımazsa her atama "Müşteri bulunamadı" verir.
+ *   1. Bağlam yeni müşteriyi taşımazsa her atama "Workspace bulunamadı" verir.
  *   2. Kısmi başarı raporlanmazsa "kuruldu" denir ve veri gelmez.
  *   3. Rol istemciden alınırsa müşteriye teslim edilen hesap ajans yetkisi
  *      taşıyabilir.
@@ -117,17 +117,17 @@ beforeEach(() => {
 });
 
 describe('bağlam', () => {
-  it('KRİTİK: yeni müşteri erişim listesine EKLENİYOR', async () => {
+  it('KRİTİK: yeni workspace erişim listesine EKLENİYOR', async () => {
     /*
      * `ctx.clientIds` istek başında kuruldu; az önce oluşturulan müşteri
      * orada yok. Atama servisleri erişimi o listeye karşı doğruluyor, yani
-     * genişletmeden çağırmak her atamada "Müşteri bulunamadı" verirdi.
+     * genişletmeden çağırmak her atamada "Workspace bulunamadı" verirdi.
      */
     await svc.setup(CTX, girdi({ adAccountIds: [ACC1] }), META);
     expect(c.hesapAtama[0]!.ctx.clientIds).toContain(YENI);
   });
 
-  it('KRİTİK: aktif müşteri daraltması KAPATILIYOR', async () => {
+  it('KRİTİK: aktif workspace daraltması KAPATILIYOR', async () => {
     // Oturumda başka bir müşteri seçiliyse RLS yeni müşterinin satırlarını
     // gizler ve atama güncellemesi kendi görüş alanının dışına düşerdi.
     await svc.setup(CTX, girdi({ adAccountIds: [ACC1] }), META);
@@ -141,7 +141,7 @@ describe('bağlam', () => {
 });
 
 describe('atamalar', () => {
-  it('seçilen bütün hesaplar ve sayfalar YENİ müşteriye atanıyor', async () => {
+  it('seçilen bütün hesaplar ve sayfalar YENİ workspace’e atanıyor', async () => {
     const r = await svc.setup(
       CTX,
       girdi({ adAccountIds: [ACC1, ACC2], socialProfileIds: [PROFIL] }),
@@ -153,7 +153,7 @@ describe('atamalar', () => {
     expect(c.profilAtama[0]!.clientId).toBe(YENI);
   });
 
-  it('hiç hesap seçilmezse atama yapılmıyor — müşteri yine açılıyor', async () => {
+  it('hiç hesap seçilmezse atama yapılmıyor — workspace yine açılıyor', async () => {
     const r = await svc.setup(CTX, girdi(), META);
     expect(r.clientId).toBe(YENI);
     expect(c.hesapAtama).toHaveLength(0);
@@ -190,13 +190,13 @@ describe('KISMİ BAŞARI — sessiz kalmıyor', () => {
     expect(r.clientId).toBe(YENI);
   });
 
-  it('kullanıcı oluşturulamazsa müşteri ve atamalar DURUYOR', async () => {
+  it('kullanıcı oluşturulamazsa workspace ve atamalar DURUYOR', async () => {
     uyePatlar = true;
     const r = await svc.setup(
       CTX,
       girdi({
         adAccountIds: [ACC1],
-        clientUser: { email: 'a@b.com', fullName: 'Müşteri', password: 'uzunParola12' },
+        clientUser: { email: 'a@b.com', fullName: 'Workspace', password: 'uzunParola12' },
       }),
       META,
     );
@@ -216,7 +216,7 @@ describe('MÜŞTERİ HESABI', () => {
     await svc.setup(
       CTX,
       girdi({
-        clientUser: { email: 'a@b.com', fullName: 'Müşteri', password: 'uzunParola12' },
+        clientUser: { email: 'a@b.com', fullName: 'Workspace', password: 'uzunParola12' },
       }),
       META,
     );

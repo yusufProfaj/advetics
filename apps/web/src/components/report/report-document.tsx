@@ -573,7 +573,7 @@ function SearchTerms({ data }: { data: ReportData }) {
       {data.searchTerms === null ? (
         // "Veri yok" DEĞİL "bu yetenek yok": Google bağlantısı olmayan bir
         // müşteride arama terimi diye bir şey yok.
-        <Empty>Bu müşteride Google Ads bağlantısı bulunmuyor.</Empty>
+        <Empty>Bu workspace’te Google Ads bağlantısı bulunmuyor.</Empty>
       ) : data.searchTerms.length === 0 ? (
         <Empty>Bu dönemde arama terimi verisi yok.</Empty>
       ) : (

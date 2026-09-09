@@ -401,7 +401,7 @@ export class AdBuilderService {
        * yayınlamak, sessiz ve ciddi bir hata.
        */
       if (asset.client_id !== draft.clientId) {
-        throw new BadRequestException('Bu görsel başka bir müşteriye ait.');
+        throw new BadRequestException('Bu görsel başka bir workspace’e ait.');
       }
 
       const ratio = matchRatio(asset.width, asset.height);
@@ -638,7 +638,7 @@ export class AdBuilderService {
     `);
     if (!acc) throw new NotFoundException('Reklam hesabı bulunamadı');
     if (acc.client_id !== input.clientId) {
-      throw new BadRequestException('Reklam hesabı bu müşteriye bağlı değil');
+      throw new BadRequestException('Reklam hesabı bu workspace’e bağlı değil');
     }
 
     // `client_id` NULL OLABİLİR (sayfa havuzda). Tip elle yazıldığı için
@@ -658,11 +658,11 @@ export class AdBuilderService {
     // düzeltmek değil, sayfayı müşteriye atamak.
     if (profile.client_id === null) {
       throw new BadRequestException(
-        'Bu sayfa henüz bir müşteriye atanmamış. Platform Bağlantıları ekranından ata.',
+        'Bu sayfa henüz bir workspace’e atanmamış. Platform Bağlantıları ekranından ata.',
       );
     }
     if (profile.client_id !== input.clientId) {
-      throw new BadRequestException('Sayfa bu müşteriye bağlı değil');
+      throw new BadRequestException('Sayfa bu workspace’e bağlı değil');
     }
     // REKLAM SAYFA ADINA YAYINLANIYOR ve Instagram hesabı tek başına bunu
     // yapamıyor: Meta reklamı her zaman bir Facebook sayfasına bağlıyor.

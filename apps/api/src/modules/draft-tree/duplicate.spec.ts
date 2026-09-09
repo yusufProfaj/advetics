@@ -179,7 +179,7 @@ describe('KISMİ BAŞARI — yirmi kopyanın üçü düşebilir', () => {
     expect(sonuc.created.map((c) => c.name)).toEqual(['Geçerli', 'Yine geçerli']);
     expect(sonuc.failed).toHaveLength(1);
     expect(sonuc.failed[0]!.name).toBe('Yabancı kreatif');
-    expect(sonuc.failed[0]!.reason).toContain('başka bir müşteriye ait');
+    expect(sonuc.failed[0]!.reason).toContain('başka bir workspace’e ait');
   });
 
   it('düşen varyasyon YARIM SATIR bırakmıyor', async () => {

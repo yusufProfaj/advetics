@@ -46,9 +46,9 @@ export default async function AiAsistanPage({
   if (!clientId) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir müşteri seç</h1>
+        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
         <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">
-          Asistan taslağı bir müşterinin hesabına kuruyor.
+          Asistan taslağı bir workspace’in hesabına kuruyor.
         </p>
       </div>
     );
@@ -80,7 +80,7 @@ export default async function AiAsistanPage({
       <header className="min-w-0">
         <h1 className="text-base font-semibold text-ink">AI Asistan</h1>
         <p className="mt-0.5 text-xs text-ink-muted">
-          <strong className="text-ink">{client?.name ?? 'Müşteri'}</strong> · Asistan taslak
+          <strong className="text-ink">{client?.name ?? 'Workspace'}</strong> · Asistan taslak
           hazırlar ve canlı değişiklikleri onayına sunar — kendi başına yayınlamaz.
         </p>
       </header>

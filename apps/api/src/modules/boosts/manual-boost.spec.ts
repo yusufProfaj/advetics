@@ -422,7 +422,7 @@ describe('engeller — sunucuda da kontrol ediliyor', () => {
     expect(createBoost).not.toHaveBeenCalled();
   });
 
-  it('başka müşterinin gönderisi bulunamıyor', async () => {
+  it('başka workspace’in gönderisi bulunamıyor', async () => {
     const other = '99999999-9999-9999-9999-999999999999';
     await h.q(
       `INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1,$2,'D','d',now())`,

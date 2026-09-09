@@ -68,7 +68,7 @@ async function canAccess(target: string): Promise<boolean> {
 }
 
 describe('can_access_client — yetki katmanı (değişmedi)', () => {
-  it('org yöneticisi seçim yokken HER müşteriyi görüyor', async () => {
+  it('org yöneticisi seçim yokken HER workspace’i görüyor', async () => {
     await setContext({ clientIds: [CLIENT_A], isOrgAdmin: true, activeClientId: null });
     expect(await canAccess(CLIENT_A)).toBe(true);
     // Listesinde olmayan bir müşteri bile: org geneli yetki bunu kapsıyor ve
@@ -76,7 +76,7 @@ describe('can_access_client — yetki katmanı (değişmedi)', () => {
     expect(await canAccess(CLIENT_C)).toBe(true);
   });
 
-  it('portföy yöneticisi yalnızca kendi müşterilerini görüyor', async () => {
+  it('portföy yöneticisi yalnızca kendi workspace’lerini görüyor', async () => {
     await setContext({ clientIds: [CLIENT_A, CLIENT_B], isOrgAdmin: false, activeClientId: null });
     expect(await canAccess(CLIENT_A)).toBe(true);
     expect(await canAccess(CLIENT_B)).toBe(true);
@@ -90,7 +90,7 @@ describe('can_access_client — yetki katmanı (değişmedi)', () => {
 });
 
 describe('can_access_client — seçim katmanı (düzeltme)', () => {
-  it('ORG YÖNETİCİSİ müşteri seçtiğinde SADECE onu görüyor', async () => {
+  it('ORG YÖNETİCİSİ workspace seçtiğinde SADECE onu görüyor', async () => {
     // Hatanın ta kendisi: bu senaryoda daha önce ikisi de true dönüyordu ve
     // panel Çiftçi Grup seçiliyken Mirnas'ın kampanyalarını gösteriyordu.
     await setContext({ clientIds: [CLIENT_A, CLIENT_B], isOrgAdmin: true, activeClientId: CLIENT_A });
@@ -108,7 +108,7 @@ describe('can_access_client — seçim katmanı (düzeltme)', () => {
     expect(await canAccess(CLIENT_B)).toBe(true);
   });
 
-  it('seçim GENİŞLETMİYOR — erişilemeyen müşteriyi seçmek onu açmıyor', async () => {
+  it('seçim GENİŞLETMİYOR — erişilemeyen workspace’i seçmek onu açmıyor', async () => {
     // Düzeltmenin yanlış yapılabileceği tek yer burası. Seçimi tek başına
     // yeterli saymak, müşteri seçicisini bir yetki yükseltme aracına
     // çevirirdi: portföyünde olmayan bir kimliği göndermek yeterdi.

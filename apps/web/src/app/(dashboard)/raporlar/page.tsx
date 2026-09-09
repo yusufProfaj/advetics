@@ -52,9 +52,9 @@ export default async function ReportsPage({
   if (!clientId) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir müşteri seç</h1>
+        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Rapor müşteri bazında üretiliyor. Üstteki seçiciden bir müşteri seçin.
+          Rapor workspace bazında üretiliyor. Üstteki seçiciden bir workspace seçin.
         </p>
       </div>
     );
@@ -291,7 +291,7 @@ function musteriAdi(
   session: { availableClients: Array<{ id: string; name: string }> },
   clientId: string,
 ): string {
-  return session.availableClients.find((c) => c.id === clientId)?.name ?? 'Müşteri';
+  return session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
 }
 
 function first(value: string | string[] | undefined): string | undefined {

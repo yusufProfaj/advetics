@@ -137,7 +137,7 @@ export function SpecialCategoryPicker({
           öğrenmek, kurduğu kitlenin uygulanmadığını fark etmek demek. */}
       {secili.length > 0 && (
         <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
-          Bu müşterinin kampanyalarında Meta <strong>yaş ve cinsiyet daraltmasına izin
+          Bu workspace’in kampanyalarında Meta <strong>yaş ve cinsiyet daraltmasına izin
           vermiyor</strong>; o alanlar gönderilmeyecek. Beyan her kampanyaya otomatik
           ekleniyor.
         </p>

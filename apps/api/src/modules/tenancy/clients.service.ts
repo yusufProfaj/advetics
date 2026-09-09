@@ -175,7 +175,7 @@ export class ClientsService {
     );
     // RLS erişim yoksa satırı yok sayar; "bulunamadı" ile "yetkin yok" aynı
     // cevabı verir. Bu kasıtlıdır — 403 dönmek, kaydın var olduğunu sızdırır.
-    if (!client) throw new NotFoundException('Müşteri bulunamadı');
+    if (!client) throw new NotFoundException('Workspace bulunamadı');
     return client;
   }
 
@@ -258,7 +258,7 @@ export class ClientsService {
   async update(ctx: TenantContext, id: string, input: UpdateClientInput, meta: Meta) {
     return this.prisma.withTenant(ctx, async (tx) => {
       const before = await tx.client.findUnique({ where: { id } });
-      if (!before) throw new NotFoundException('Müşteri bulunamadı');
+      if (!before) throw new NotFoundException('Workspace bulunamadı');
 
       const after = await tx.client.update({
         where: { id },
@@ -347,7 +347,7 @@ export class ClientsService {
   async archive(ctx: TenantContext, id: string, meta: Meta) {
     return this.prisma.withTenant(ctx, async (tx) => {
       const before = await tx.client.findUnique({ where: { id } });
-      if (!before) throw new NotFoundException('Müşteri bulunamadı');
+      if (!before) throw new NotFoundException('Workspace bulunamadı');
 
       const archived = await tx.client.update({
         where: { id },

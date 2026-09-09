@@ -94,7 +94,7 @@ export class TenantContextService {
       throw new UnauthorizedException('Organizasyon askıya alınmış');
     }
     if (user.memberships.length === 0) {
-      throw new UnauthorizedException('Hiçbir müşteriye erişim yetkiniz tanımlı değil');
+      throw new UnauthorizedException('Hiçbir workspace’e erişim yetkiniz tanımlı değil');
     }
 
     // Arşivlenmiş müşteriler erişim listesinden düşer.

@@ -125,7 +125,7 @@ describe('oluşturma', () => {
     );
     await expect(
       svc.create(CTX, input({ socialProfileId: OTHER_PROFILE })),
-    ).rejects.toThrow(/bu müşteriye ait değil/);
+    ).rejects.toThrow(/bu workspace’e ait değil/);
   });
 
   it('sorusuz form veritabanı seviyesinde reddediliyor', async () => {

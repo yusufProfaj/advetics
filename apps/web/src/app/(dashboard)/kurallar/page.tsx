@@ -43,8 +43,8 @@ export default async function RulesPage({
   if (!clientId) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir müşteri seç</h1>
-        <p className="mt-2 text-sm text-ink-muted">Kurallar müşteri bazında tanımlanıyor.</p>
+        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
+        <p className="mt-2 text-sm text-ink-muted">Kurallar workspace bazında tanımlanıyor.</p>
       </div>
     );
   }
@@ -74,7 +74,7 @@ export default async function RulesPage({
       )
     : null;
 
-  const clientName = session.availableClients.find((c) => c.id === clientId)?.name ?? 'Müşteri';
+  const clientName = session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
 
   return (
     <div className="space-y-5">

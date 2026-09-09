@@ -37,7 +37,7 @@ const OBJECTIVE_UI: Record<
   { label: string; purpose: string; goals: readonly OptimizationGoal[] }
 > = {
   OUTCOME_LEADS: {
-    label: 'Potansiyel müşteri',
+    label: 'Potansiyel Müşteri',
     purpose: 'İletişim bilgisi toplamak — form, WhatsApp ya da mesaj.',
     goals: ['LEAD_GENERATION', 'QUALITY_LEAD', 'CONVERSATIONS', 'OFFSITE_CONVERSIONS', 'LINK_CLICKS'],
   },

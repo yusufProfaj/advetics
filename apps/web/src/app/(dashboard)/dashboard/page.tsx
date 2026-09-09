@@ -151,7 +151,7 @@ export default async function DashboardPage({
   ]);
 
   const activeClient = session.availableClients.find((c) => c.id === session.activeClientId);
-  const scopeLabel = activeClient?.name ?? 'Tüm müşteriler';
+  const scopeLabel = activeClient?.name ?? 'Tüm workspace’ler';
 
   return (
     <div className="space-y-5">
@@ -251,7 +251,7 @@ export default async function DashboardPage({
 
           {mcc ? (
             musteriler === null ? (
-              <Notice tone="error">Müşteri dağılımı alınamadı.</Notice>
+              <Notice tone="error">Workspace dağılımı alınamadı.</Notice>
             ) : (
               <MusteriTablosu rows={musteriler} karsilastir={range.karsilastirma !== 'yok'} />
             )

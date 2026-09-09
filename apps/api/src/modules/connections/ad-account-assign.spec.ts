@@ -86,7 +86,7 @@ beforeEach(async () => {
   await seedTenant(h);
   await h.q(
     `INSERT INTO clients (id, org_id, name, slug, updated_at)
-     VALUES ($1, $2, 'İkinci Müşteri', 'ikinci', now())`,
+     VALUES ($1, $2, 'İkinci Workspace', 'ikinci', now())`,
     [CLIENT_B, IDS.org],
   );
   // Havuzda bekleyen hesap: keşiften geldi, henüz kimseye atanmadı.
@@ -114,7 +114,7 @@ async function auditActions(): Promise<string[]> {
 }
 
 describe('atama', () => {
-  it('havuzdaki hesap müşteriye atanıyor', async () => {
+  it('havuzdaki hesap workspace’e atanıyor', async () => {
     const res = await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
 
     expect(res.changed).toBe(true);
@@ -187,10 +187,10 @@ describe('atama', () => {
     );
   });
 
-  it('ERİŞİLEMEYEN müşteriye atanamıyor', async () => {
+  it('ERİŞİLEMEYEN workspace’e atanamıyor', async () => {
     const foreign = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
     await expect(svc.assignAdAccount(CTX, POOL_ACCOUNT, foreign, META)).rejects.toThrow(
-      /Müşteri bulunamadı/,
+      /Workspace bulunamadı/,
     );
   });
 
@@ -209,7 +209,7 @@ describe('atama', () => {
 // -----------------------------------------------------------------------------
 
 describe('reklam hesabı izlemesi — kapsam', () => {
-  it('BAŞKA müşteri seçiliyken de izleme açılabiliyor', async () => {
+  it('BAŞKA workspace seçiliyken de izleme açılabiliyor', async () => {
     // Sayfanınkiyle aynı gerekçe ve aynı ekran.
     await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
 
@@ -241,7 +241,7 @@ describe('sayfa ataması', () => {
     return rows[0]!;
   }
 
-  it('havuzdaki sayfa müşteriye atanıyor', async () => {
+  it('havuzdaki sayfa workspace’e atanıyor', async () => {
     const res = await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
 
     expect(res.changed).toBe(true);
@@ -285,12 +285,12 @@ describe('sayfa ataması', () => {
     // ekranda "izlemede" görür ve hiçbir gönderi gelmezdi — reklam
     // hesaplarındakiyle birebir aynı gerekçe.
     await expect(svc.setProfileSync(CTX, POOL_PROFILE, true, META)).rejects.toThrow(
-      /henüz bir müşteriye atanmamış/i,
+      /henüz bir workspace’e atanmamış/i,
     );
     expect((await profileRow(POOL_PROFILE)).sync_enabled).toBe(false);
   });
 
-  it('KRİTİK: BAŞKA müşteri seçiliyken de izleme açılabiliyor', async () => {
+  it('KRİTİK: BAŞKA workspace seçiliyken de izleme açılabiliyor', async () => {
     /*
      * Müşteriler ekranı BÜTÜN müşterilerin kartlarını yan yana gösteriyor.
      * `app.can_access_client()` ise oturumdaki seçili müşteriye daraltıyor:
@@ -361,11 +361,11 @@ describe('sayfa ataması', () => {
       await svc.assignSocialProfile(CTX, POOL_PROFILE, CLIENT_B, META);
       await expect(
         svc.setProfileAdAccount(CTX, POOL_PROFILE, IDS.adAccount, META),
-      ).rejects.toThrow(/aynı müşteride/i);
+      ).rejects.toThrow(/aynı workspace’te/i);
       expect(await linked()).toBeNull();
     });
 
-    it('KRİTİK: BAŞKA müşteri seçiliyken de eşleştirilebiliyor', async () => {
+    it('KRİTİK: BAŞKA workspace seçiliyken de eşleştirilebiliyor', async () => {
       // Müşteriler ekranı bütün müşterilerin kartlarını gösteriyor; oturumdaki
       // daraltma yüzünden "bulunamadı" ile düşmemeli.
       await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
@@ -400,7 +400,7 @@ describe('sayfa ataması', () => {
     expect(row.sync_enabled).toBe(false);
   });
 
-  it('KRİTİK: müşterisi değişen sayfanın FORMLARI eski müşteride kalıyor ve sayısı bildiriliyor', async () => {
+  it('KRİTİK: workspace’i değişen sayfanın FORMLARI eski workspace’te kalıyor ve sayısı bildiriliyor', async () => {
     /*
      * Formlar ve toplanmış kayıtlar TAŞINMIYOR — bir markanın topladığı
      * potansiyel müşteriler başka bir markanın CRM'ine geçemez. Ama bu
@@ -431,7 +431,7 @@ describe('ATAMA TEK ADIM — izleme açılıyor ve geçmiş kuyruğa giriyor', (
   /**
    * NEDEN: müşterilerin kendi Facebook hesabı yok, ajans onların Business
    * Manager'ına partner olarak ekleniyor. Yani bağlantı ajans seviyesinde
-   * kalmak zorunda ve bir workspace'in verisi HESAP ONA ATANINCA başlıyor.
+   * kalmak zorunda ve bir workspace’in verisi HESAP ONA ATANINCA başlıyor.
    *
    * "Ata → izlemeyi aç → bekle" üçlüsü kullanıcının angarya dediği şeydi ve
    * ikinci adımı atlamak "atadım ama veri gelmiyor" hâlini üretiyordu.
@@ -568,7 +568,7 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     return rows.map((r) => r.client_id);
   }
 
-  it('KRİTİK: hesabın bütün verisi yeni müşteriye geçiyor', async () => {
+  it('KRİTİK: hesabın bütün verisi yeni workspace’e geçiyor', async () => {
     await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
     await eskiVeriYaz(IDS.client);
 
@@ -591,7 +591,7 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     expect(res.movedRows).toBe(8);
   });
 
-  it('KRİTİK: eski müşteride TEK BİR satır bile kalmıyor', async () => {
+  it('KRİTİK: eski workspace’te TEK BİR satır bile kalmıyor', async () => {
     await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
     await eskiVeriYaz(IDS.client);
     await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
@@ -636,7 +636,7 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     expect(res.movedRows).toBe(8);
   });
 
-  it('havuza geri konunca veri taşınmıyor — eski müşterinin geçmişi', async () => {
+  it('havuza geri konunca veri taşınmıyor — eski workspace’in geçmişi', async () => {
     await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
     await eskiVeriYaz(IDS.client);
 
@@ -683,7 +683,7 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     expect(res.leftBehind).toEqual({ 'aylık bütçe': 1 });
   });
 
-  it('KRİTİK: müşterinin KENDİ kayıtları taşınmıyor ve sayıyla bildiriliyor', async () => {
+  it('KRİTİK: workspace’in KENDİ kayıtları taşınmıyor ve sayıyla bildiriliyor', async () => {
     await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
     await h.q(
       `INSERT INTO monthly_budgets (id, org_id, client_id, ad_account_id, month, amount_micros, currency, updated_at)
@@ -715,7 +715,7 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     expect(res.leftBehind).toEqual({ 'aylık bütçe': 1, kural: 1 });
   });
 
-  it('aynı müşteriye tekrar atamak hiçbir satıra dokunmuyor', async () => {
+  it('aynı workspace’e tekrar atamak hiçbir satıra dokunmuyor', async () => {
     await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
     await eskiVeriYaz(IDS.client);
 
@@ -728,7 +728,7 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     expect(res.leftBehind).toEqual({});
   });
 
-  it('KRİTİK: "kalan" sayısı YALNIZCA eski müşterinin kayıtlarını sayıyor', async () => {
+  it('KRİTİK: "kalan" sayısı YALNIZCA eski workspace’in kayıtlarını sayıyor', async () => {
     /*
      * HESAP GERİ DÖNÜYOR: B → A → B. Her müşteri kendi döneminde bir kural
      * yazmış oluyor ve ikisi de aynı hesabı işaret ediyor.
@@ -762,7 +762,7 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     expect(res.leftBehind).toEqual({ kural: 1 });
   });
 
-  it('KRİTİK: eski müşterinin ŞEMSİYE bütçesi bildiriliyor', async () => {
+  it('KRİTİK: eski workspace’in ŞEMSİYE bütçesi bildiriliyor', async () => {
     /*
      * ŞEMSİYE BÜTÇE `ad_account_id IS NULL` İLE DURUYOR — yani hesapla
      * ilişkisi yok ve hesaba göre sayan hiçbir sorguya düşmüyor. Bu yüzden
@@ -811,7 +811,7 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     expect(res.leftBehind).toEqual({});
   });
 
-  it('KRİTİK: hesap İKİ müşteriden geçmişse sayım yine çalışıyor', async () => {
+  it('KRİTİK: hesap İKİ workspace’ten geçmişse sayım yine çalışıyor', async () => {
     /*
      * ÖNCEKİ SAHİP BİRDEN FAZLA OLABİLİR. Hesap A→B→C gezdiyse ve upsert'ler
      * araya girmişse, satırlar iki farklı müşteride birden duruyor.
@@ -868,7 +868,7 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     expect(res.clientWide).toEqual({});
   });
 
-  it('KRİTİK: ESKİ müşteri de kendi denetim satırını alıyor', async () => {
+  it('KRİTİK: ESKİ workspace de kendi denetim satırını alıyor', async () => {
     /*
      * KAYBEDEN TARAFIN KAYDI. Denetim satırı yalnızca YENİ müşteriye
      * yazılıyordu; doğrudan A→B atamasında A hiçbir iz almıyordu. Oysa
@@ -929,7 +929,7 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     expect(rows[0]!.linked_ad_account_id).toBeNull();
   });
 
-  it('sayfa da AYNI müşterideyse bağ korunuyor', async () => {
+  it('sayfa da AYNI workspace’teyse bağ korunuyor', async () => {
     /*
      * Bağı toptan koparmak, hesabı ve sayfası aynı müşteride kalan bir
      * kurulumda çalışan Akıllı Boost'u sessizce durdururdu — düzeltilen

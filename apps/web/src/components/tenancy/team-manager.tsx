@@ -18,7 +18,7 @@ export const ROLE_TR: Record<Role, string> = {
   ad_manager: 'Reklam Yöneticisi',
   manager: 'Kampanya Yöneticisi',
   analyst: 'Analist',
-  customer_service: 'Müşteri Hizmetleri',
+  customer_service: 'Workspace Hizmetleri',
   client_viewer: 'Görüntüleyici',
 };
 
@@ -32,7 +32,7 @@ export const ROLE_TR: Record<Role, string> = {
 export const ROLE_HINT: Record<Role, string> = {
   owner: 'Her şey + faturalama + organizasyonu silme',
   admin: 'Her şey, faturalama hariç',
-  ad_manager: 'Kampanya işlerinin tamamı + müşteri açar, platform bağlar, hesap atar',
+  ad_manager: 'Kampanya işlerinin tamamı + workspace açar, platform bağlar, hesap atar',
   manager: 'Kampanya kurar, kural yazar, bütçe değiştirir',
   analyst: 'Okur ve rapor üretir; canlıda aksiyon alamaz',
   customer_service: 'Okur, rapor üretip paylaşır, potansiyel müşteri listesini işler',
@@ -139,7 +139,7 @@ export function TeamManager({
     // müşteri seçilmesi ZORUNLU, çünkü müşterisiz bir manager hiçbir şey
     // göremez ve bu sessizce "çalışmıyor" gibi görünür.
     if (!clientId && !orgWideAllowed) {
-      setError('Bu rol için bir müşteri seçin.');
+      setError('Bu rol için bir workspace seçin.');
       return;
     }
 
@@ -252,8 +252,8 @@ export function TeamManager({
           >
             {/* Uyumsuz seçenek HİÇ GÖSTERİLMİYOR. Gösterip sonra reddetmek,
                 kullanıcının o hatayı yapmasına izin vermek demek. */}
-            {orgWideAllowed && <option value="">Tüm müşteriler</option>}
-            {!orgWideAllowed && <option value="">Müşteri seçin…</option>}
+            {orgWideAllowed && <option value="">Tüm workspace’ler</option>}
+            {!orgWideAllowed && <option value="">Workspace seçin…</option>}
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -327,7 +327,7 @@ export function TeamManager({
                     className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface-muted px-3 py-2"
                   >
                     <span className="flex-1 text-sm font-medium text-ink">
-                      {m.client?.name ?? 'Tüm müşteriler'}
+                      {m.client?.name ?? 'Tüm workspace’ler'}
                     </span>
 
                     <select
@@ -380,7 +380,7 @@ export function TeamManager({
 
                 {member.memberships.length === 0 && (
                   <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-muted">
-                    Hiçbir müşteriye yetkisi yok — giriş yapabilir ama panelde hiçbir veri
+                    Hiçbir workspace’e yetkisi yok — giriş yapabilir ama panelde hiçbir veri
                     göremez.
                   </p>
                 )}
@@ -454,7 +454,7 @@ function GrantAccess({
 
   async function submit() {
     if (!clientId && !orgWideAllowed) {
-      onError('Bu rol için bir müşteri seçin.');
+      onError('Bu rol için bir workspace seçin.');
       return;
     }
     setSaving(true);
@@ -479,7 +479,7 @@ function GrantAccess({
         type="button"
         onClick={() => setOpen(true)}
         disabled={disabled || nothingLeft}
-        title={nothingLeft ? 'Bu kullanıcının tüm müşterilerde yetkisi var' : undefined}
+        title={nothingLeft ? 'Bu kullanıcının tüm workspace’lerde yetkisi var' : undefined}
         className="text-xs font-medium text-brand transition hover:underline disabled:opacity-40 disabled:no-underline"
       >
         + Yetki ekle
@@ -513,8 +513,8 @@ function GrantAccess({
           disabled={saving}
           className="flex-1 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink disabled:opacity-60"
         >
-          {orgWideAllowed && !hasOrgWide && <option value="">Tüm müşteriler</option>}
-          {(!orgWideAllowed || hasOrgWide) && <option value="">Müşteri seçin…</option>}
+          {orgWideAllowed && !hasOrgWide && <option value="">Tüm workspace’ler</option>}
+          {(!orgWideAllowed || hasOrgWide) && <option value="">Workspace seçin…</option>}
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -546,7 +546,7 @@ function GrantAccess({
           sorusunun cevabını hiçbir yerde bırakmazdı. */}
       {clients.length === 0 && (
         <p className="mt-1.5 text-[11px] text-amber-700">
-          Atanabilecek müşteri yok — ya hepsinde yetkisi var ya da henüz müşteri
+          Atanabilecek workspace yok — ya hepsinde yetkisi var ya da henüz workspace
           oluşturulmamış.
         </p>
       )}

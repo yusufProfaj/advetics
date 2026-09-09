@@ -86,7 +86,7 @@ beforeEach(async () => {
     `INSERT INTO ad_creatives (id, org_id, client_id, name, texts, updated_at)
      VALUES ($1, $4, $5, 'Yaz kreatifi', '{"headlines":["Yaz indirimi"]}'::jsonb, now()),
             ($2, $4, $5, 'İkinci kreatif', '{"headlines":["Alternatif"]}'::jsonb, now()),
-            ($3, $4, $6, 'Başka müşterinin kreatifi', '{}'::jsonb, now())`,
+            ($3, $4, $6, 'Başka workspace’in kreatifi', '{}'::jsonb, now())`,
     [CREATIVE, CREATIVE_B, OTHER_CREATIVE, IDS.org, IDS.client, OTHER_CLIENT],
   );
 });
@@ -149,7 +149,7 @@ describe('basit yüzeyden ağaç', () => {
 });
 
 describe('KAPSAM — RLS\'in yakalayamadıkları', () => {
-  it('KRİTİK: başka müşterinin kreatifi reddediliyor', async () => {
+  it('KRİTİK: başka workspace’in kreatifi reddediliyor', async () => {
     /**
      * RLS bunu yakalamıyor: iki satır da aynı `org_id`'ye sahip ve politika
      * ikisini de geçiriyor. Bir müşterinin kreatifini diğerinin reklam
@@ -157,7 +157,7 @@ describe('KAPSAM — RLS\'in yakalayamadıkları', () => {
      */
     await expect(
       svc.createFromSimple(CTX, input({ creativeIds: [OTHER_CREATIVE] })),
-    ).rejects.toThrow(/başka bir müşteriye ait/i);
+    ).rejects.toThrow(/başka bir workspace’e ait/i);
   });
 
   it('KRİTİK: atanmamış hesap için AYRI mesaj veriliyor', async () => {
@@ -168,7 +168,7 @@ describe('KAPSAM — RLS\'in yakalayamadıkları', () => {
         CTX,
         input({ targets: [{ platform: 'meta', adAccountId: POOL_ACC, dailyBudget: '200' }] }),
       ),
-    ).rejects.toThrow(/henüz bir müşteriye atanmamış/i);
+    ).rejects.toThrow(/henüz bir workspace’e atanmamış/i);
   });
 
   it('KRİTİK: hesabın platformu kampanyanınkiyle uyuşmalı', async () => {

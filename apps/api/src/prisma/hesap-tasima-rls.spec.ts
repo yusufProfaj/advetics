@@ -203,7 +203,7 @@ describe('veri taşıması — RLS politikaları', () => {
     }
   });
 
-  it('KRİTİK: aktif müşteri SEÇİLİYKEN taşıma REDDEDİLİYOR', async () => {
+  it('KRİTİK: aktif workspace SEÇİLİYKEN taşıma REDDEDİLİYOR', async () => {
     /*
      * `activeClientId` kapatılmazsa `can_access_client(B)` FALSE dönüyor —
      * seçili müşteri A. Bu, atama uç noktasının `activeClientId: null`
@@ -216,7 +216,7 @@ describe('veri taşıması — RLS politikaları', () => {
     ).rejects.toThrow(/row-level security/i);
   });
 
-  it('KRİTİK: erişemediği müşteriye taşıma yapılamıyor', async () => {
+  it('KRİTİK: erişemediği workspace’e taşıma yapılamıyor', async () => {
     // Org yöneticisi olmayan bir kullanıcı B'ye erişemiyorsa, satırı oraya
     // taşımak yetki yükseltmesi olurdu.
     await expect(

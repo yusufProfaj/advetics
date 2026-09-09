@@ -49,8 +49,8 @@ export default async function TeamPage() {
       <div>
         <h1 className="text-2xl font-semibold">Ekip &amp; Yetkiler</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Yetki müşteri bazında verilir: bir kişi bir müşteride yönetici, başka bir
-          müşteride yalnızca görüntüleyici olabilir.
+          Yetki workspace bazında verilir: bir kişi bir workspace’te yönetici, başka bir
+          workspace’te yalnızca görüntüleyici olabilir.
         </p>
       </div>
 
@@ -58,7 +58,7 @@ export default async function TeamPage() {
         SAYAÇ BANDI, EKLEME DÜĞMESİ VE LİSTELER TEK BİLEŞENDE.
         Ekleme formu sayfanın üstünde sabit duruyordu ve her açılışta yer
         kaplıyordu; oysa kullanıcı eklemek seyrek bir iş. Asıl soru
-        ("bu workspace'e kim erişiyor") ise hiç cevaplanmıyordu — kullanıcılar
+        ("bu workspace’e kim erişiyor") ise hiç cevaplanmıyordu — kullanıcılar
         tek tek kart olarak basılıyordu.
       */}
       <TeamScreen
@@ -69,9 +69,9 @@ export default async function TeamPage() {
       />
 
       <p className="text-xs text-ink-muted">
-        Yeni müşteri açmak için{' '}
+        Yeni workspace açmak için{' '}
         <Link href="/ayarlar/musteriler" className="font-medium text-brand-strong hover:underline">
-          Müşteriler
+          Workspace’ler
         </Link>
         , reklam hesabı bağlamak için{' '}
         <Link href="/ayarlar/baglantilar" className="font-medium text-brand-strong hover:underline">

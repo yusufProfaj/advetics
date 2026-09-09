@@ -21,13 +21,13 @@ interface ClientOption {
  * EKİP EKRANI — WORKSPACE'LER KART, KULLANICILAR İÇLERİNDE.
  *
  * Önceki düzen her KULLANICIYI ayrı bir kart olarak basıyordu ve ekranda
- * gerçekten sorulan soru cevapsız kalıyordu: "bu workspace'e kim erişiyor".
+ * gerçekten sorulan soru cevapsız kalıyordu: "bu workspace’e kim erişiyor".
  * Kullanıcı sayısı arttıkça liste uzuyor, bir müşterinin ekibini görmek için
  * kartları tek tek okumak gerekiyordu.
  *
  * İKİ AYRI KÜME ve ayrımı ÜYELİK KAPSAMI belirliyor:
  *   · AJANS EKİBİ — org geneli üyeliği olanlar (`clientId === null`).
- *     Reklamcılar ve yöneticiler; bir workspace'e ait değiller.
+ *     Reklamcılar ve yöneticiler; bir workspace’e ait değiller.
  *   · WORKSPACE ÜYELERİ — üyeliği bir müşteriye bağlı olanlar.
  *
  * Ayrım e-posta alan adına ya da role BAKMIYOR: ajans personeline bir
@@ -54,14 +54,14 @@ export function TeamScreen({
    * AJANS EKİBİ AYRIMI ROLE GÖRE — ÜYELİK KAPSAMINA GÖRE DEĞİL.
    *
    * İki sürüm boyunca kapsama bakıldı ("org geneli üyeliği var mı") ve ikisi
-   * de yanlıştı: bir workspace'e ATANMIŞ DANIŞMAN ile o workspace'in MÜŞTERİ
-   * HESABI kapsam açısından birebir aynı görünüyor. Sonuç: üç workspace'e
+   * de yanlıştı: bir workspace’e ATANMIŞ DANIŞMAN ile o workspace’in MÜŞTERİ
+   * HESABI kapsam açısından birebir aynı görünüyor. Sonuç: üç workspace’e
    * danışman olarak atanmış yusuf@ hesabı "müşteri hesabı" sanıldı ve ajans
    * ekibinden düştü.
    *
    * AYIRT EDEN ŞEY ROL. Müşteriye teslim edilen hesap `client_viewer` olarak
    * açılıyor (kurulum sihirbazı bunu sabit yazıyor ve istemciden almıyor);
-   * danışman hangi workspace'e atanırsa atansın başka bir rol taşıyor.
+   * danışman hangi workspace’e atanırsa atansın başka bir rol taşıyor.
    *
    * Kural sunucudaki `listMembers` süzgeciyle BİREBİR aynı: üyeliği yok ya
    * da en az bir üyeliği `client_viewer` DEĞİL. İkisinin ayrışması, bir
@@ -113,7 +113,7 @@ export function TeamScreen({
             <strong>{members.length}</strong> kullanıcı
           </span>
           <span className="text-ink-muted">
-            <strong className="text-ink">{clients.length}</strong> müşteri
+            <strong className="text-ink">{clients.length}</strong> workspace
           </span>
         </div>
         {canManage && (
@@ -122,7 +122,7 @@ export function TeamScreen({
               ÜÇ DÜĞME, ÜÇ AYRI İŞ ve karışmamaları için ayrı duruyorlar:
                 · Danışman ekle — ajans personeli AÇAR (rolü client_viewer
                   OLAMAZ; onu açan şey zaten danışman olmasıdır)
-                · Danışman ata  — VAR OLAN danışmanı bir workspace'e bağlar
+                · Danışman ata  — VAR OLAN danışmanı bir workspace’e bağlar
                 · Kullanıcı ekle — genel yol; müşteri hesabı da buradan açılır
               Tek bir "ekle" düğmesi, her seferinde "rolü ne olsun, kapsamı ne
               olsun" sorusunu sordurtuyordu.
@@ -164,7 +164,7 @@ export function TeamScreen({
       <section>
         <h2 className="text-sm font-semibold text-ink">Ajans ekibi</h2>
         <p className="mt-0.5 text-xs text-ink-muted">
-          Bütün müşterilere erişimi olan hesaplar — reklamcılar ve yöneticiler.
+          Bütün workspace’lere erişimi olan hesaplar — reklamcılar ve yöneticiler.
         </p>
         {ajansEkibi.length === 0 ? (
           <p className="mt-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
@@ -222,11 +222,11 @@ export function TeamScreen({
       <section>
         <h2 className="text-sm font-semibold text-ink">Workspace’ler</h2>
         <p className="mt-0.5 text-xs text-ink-muted">
-          Bir workspace’e tıkla, o müşteriye erişimi olanları gör.
+          Bir workspace’e tıkla, o workspace’e erişimi olanları gör.
         </p>
         {workspaceler.length === 0 ? (
           <p className="mt-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
-            Henüz müşteri yok.
+            Henüz workspace yok.
           </p>
         ) : (
           <ul className="mt-3 grid items-start gap-3 md:grid-cols-2 2xl:grid-cols-3">
@@ -329,7 +329,7 @@ function WorkspaceKarti({
                arasında ayrım yapmıyordu. */
             <p className="text-xs text-ink-muted">
               Bu workspace’e kimse atanmamış. Ajans ekibi zaten bütün
-              müşterileri görüyor; buraya yalnızca o müşteriye özel erişim
+              workspace’leri görüyor; buraya yalnızca o workspace’e özel erişim
               verilenler düşüyor.
             </p>
           ) : (
@@ -562,7 +562,7 @@ function KullaniciEkleModal({
             className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
           >
             <option value="" disabled={!orgGeneliOlabilir}>
-              Tüm müşteriler {orgGeneliOlabilir ? '' : '(yalnızca Sahip/Yönetici)'}
+              Tüm workspace’ler {orgGeneliOlabilir ? '' : '(yalnızca Sahip/Yönetici)'}
             </option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
@@ -602,9 +602,9 @@ function KullaniciEkleModal({
  * göstermeye yetiyor — bu ekranda tam olarak o yaşandı.
  *
  * KAPSAMSIZ DANIŞMAN AÇILAMIYOR ve bu sunucunun kuralı: bir kullanıcı ya bir
- * workspace'e bağlanır ya da org geneli (yalnızca Yönetici) olur. Erişimi
+ * workspace’e bağlanır ya da org geneli (yalnızca Yönetici) olur. Erişimi
  * olmayan bir hesap giriş yapıp hiçbir şey göremezdi. Sonradan başka
- * workspace'lere "Danışman ata" ile bağlanıyor.
+ * workspace’lere "Danışman ata" ile bağlanıyor.
  */
 function DanismanEkleModal({
   clients,
@@ -677,7 +677,7 @@ function DanismanEkleModal({
             className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
           >
             <option value="">Seçin…</option>
-            <option value="org">Bütün müşteriler (Yönetici)</option>
+            <option value="org">Bütün workspace’ler (Yönetici)</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -739,7 +739,7 @@ function DanismanEkleModal({
  * NEDEN KİŞİDEN BAŞLIYOR: ajans çalışanı önce açılıyor, yetkisi sonra
  * veriliyor. O arada kişi hiçbir müşteriyi göremiyor ve yetkiyi vermenin yolu
  * workspace kartını açıp içeride yetki eklemekti — yani "kimi
- * yetkilendireceğim" sorusuyla başlayan akış, "hangi workspace'e bakayım"
+ * yetkilendireceğim" sorusuyla başlayan akış, "hangi workspace’e bakayım"
  * sorusuyla başlamak zorunda kalıyordu.
  *
  * ORG GENELİ ERİŞİM BURADAN VERİLMİYOR. Bu ekran "bir müşteriye ata" işi;
@@ -837,7 +837,7 @@ function DanismanAtaModal({
       <div className="space-y-3">
         <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
           Ajans ekibinden birini bir ya da daha çok workspace’e bağlar. Bütün
-          müşterilere erişim ayrı bir karar — o yetki yalnızca Sahip ve Yönetici
+          workspace’lere erişim ayrı bir karar — o yetki yalnızca Sahip ve Yönetici
           rollerine veriliyor.
         </p>
 
@@ -847,7 +847,7 @@ function DanismanAtaModal({
             value={userId}
             onChange={(e) => {
               setUserId(e.target.value);
-              // Danışman değişince seçim sıfırlanıyor: hangi workspace'lerin
+              // Danışman değişince seçim sıfırlanıyor: hangi workspace’lerin
               // uygun olduğu kişiye bağlı ve eski seçim geçersiz kalabilir.
               setSecili(new Set());
               setSonuc(null);
@@ -933,7 +933,7 @@ function DanismanAtaModal({
               {/* SESSİZ KESME YOK ve ÜÇ HÂL AYRI: hiç müşteri yok · arama
                   eşleşmedi · hepsinde zaten yetkisi var. */}
               {clients.length === 0 && (
-                <p className="mt-1 text-[11px] text-warn">Henüz müşteri açılmamış.</p>
+                <p className="mt-1 text-[11px] text-warn">Henüz workspace açılmamış.</p>
               )}
               {clients.length > 0 && workspaceler.length === 0 && (
                 <p className="mt-1 text-[11px] text-ink-muted">

@@ -294,7 +294,7 @@ export function Faturalar({
 
       {liste !== null && liste.length === 0 && (
         <p className="rounded-lg border border-dashed border-line px-3 py-3 text-sm text-ink-muted">
-          Bu müşteri için yüklenmiş fatura yok.
+          Bu workspace için yüklenmiş fatura yok.
         </p>
       )}
 

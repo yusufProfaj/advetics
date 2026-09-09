@@ -100,7 +100,7 @@ beforeEach(async () => {
      VALUES ($1, $5, 'Ege Birlik Yapı', 'ege', now()),
             ($2, $5, 'Fenbay', 'fenbay', now()),
             ($3, $5, 'Mirnas', 'mirnas', now()),
-            ($4, $6, 'Rakip Ajans Müşterisi', 'rakip', now())`,
+            ($4, $6, 'Rakip Ajans Workspace’i', 'rakip', now())`,
     [EGE, FENBAY, MIRNAS, BASKA_AJANS_MUSTERISI, ORG, ORG_BASKA],
   );
   await h.q(
@@ -227,7 +227,7 @@ describe('MÜŞTERİ KULLANICISI (client_viewer) — üyelik sınırı AŞILAMAZ
 });
 
 describe('AJANSLAR ARASI — org sınırı', () => {
-  it('KRİTİK: başka ajansın müşterisi HİÇBİR bağlamda görünmüyor', async () => {
+  it('KRİTİK: başka ajansın workspace’i HİÇBİR bağlamda görünmüyor', async () => {
     const hepsi = await havuzdaGorunen({
       isOrgAdmin: true,
       clientIds: [EGE, FENBAY, MIRNAS],
@@ -236,7 +236,7 @@ describe('AJANSLAR ARASI — org sınırı', () => {
     expect(hepsi).not.toContain('Rakip kartı');
   });
 
-  it('KRİTİK: başka ajansın müşteri kimliğini clientIds’e YAZMAK işe yaramıyor', async () => {
+  it('KRİTİK: başka ajansın workspace kimliğini clientIds’e YAZMAK işe yaramıyor', async () => {
     // org_id koşulu ayrı bir katman: erişim listesine yabancı bir kimlik
     // enjekte etmek satırı görünür kılmıyor.
     expect(

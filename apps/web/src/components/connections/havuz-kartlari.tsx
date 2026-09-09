@@ -153,7 +153,7 @@ function HavuzModal({
 
   async function ata(oge: HavuzOgesi): Promise<void> {
     if (!hedef) {
-      setHata('Önce bir müşteri seç.');
+      setHata('Önce bir workspace seç.');
       return;
     }
     setBekleyen(oge.id);
@@ -214,11 +214,11 @@ function HavuzModal({
 
           {clients.length === 0 ? (
             <p className="mt-2 text-[11px] text-danger">
-              Henüz müşteri yok — atama yapabilmek için önce bir müşteri oluştur.
+              Henüz workspace yok — atama yapabilmek için önce bir workspace oluştur.
             </p>
           ) : (
             <label className="mt-2 block">
-              <span className="text-[11px] text-ink-muted">Atanacak müşteri</span>
+              <span className="text-[11px] text-ink-muted">Atanacak workspace</span>
               <select
                 value={hedef}
                 onChange={(e) => setHedef(e.target.value)}

@@ -35,7 +35,7 @@ export class MembersController {
   }
 
   /**
-   * `?clientId=` VERİLİRSE o workspace'in erişim listesi, verilmezse ajans
+   * `?clientId=` VERİLİRSE o workspace’in erişim listesi, verilmezse ajans
    * ekibi. İkisi farklı soru ve müşteri hesapları yalnızca birincisinde var.
    *
    * YETKİ AYNI (`user.read`) ÇÜNKÜ SINIR RLS'TE: erişemediği bir müşterinin

@@ -242,9 +242,9 @@ export class AutoBoostReadService {
      */
     if (!r.linked_ad_account_id) {
       return r.platform === 'meta'
-        ? 'Bu sayfaya bağlı bir reklam hesabı yok. Müşteriler ekranından ' +
+        ? 'Bu sayfaya bağlı bir reklam hesabı yok. Workspace’ler ekranından ' +
             '“Boost hesabı” seç — reklam o hesaptan faturalandırılıyor.'
-        : 'Bu kanala bağlı bir Google Ads hesabı yok. Müşteriler ekranından ' +
+        : 'Bu kanala bağlı bir Google Ads hesabı yok. Workspace’ler ekranından ' +
             'reklam hesabı seç — YouTube reklamı oradan yayınlanıyor.';
     }
 

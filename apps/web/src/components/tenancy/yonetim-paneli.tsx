@@ -57,7 +57,7 @@ export function YonetimPaneli({
          * yüklenmedi", "hiç müşteri yok" ve "çağrı düştü" hâllerini AYNI boş
          * pencereye çevirirdi — bu projede tekrar eden hata deseni.
          */
-        if (!iptal) setHata('Müşteri listesi alınamadı.');
+        if (!iptal) setHata('Workspace listesi alınamadı.');
       });
     return () => {
       iptal = true;
@@ -117,7 +117,7 @@ export function YonetimPaneli({
             <div>
               <h2 className="text-base font-semibold text-ink">Yönetim paneli</h2>
               <p className="text-xs text-ink-muted">
-                Tüm workspace&apos;ler — birini seçince o müşterinin verisine geçilir.
+                Tüm workspace&apos;ler — birini seçince o workspace’in verisine geçilir.
               </p>
             </div>
             <button
@@ -134,7 +134,7 @@ export function YonetimPaneli({
             type="search"
             value={arama}
             onChange={(e) => setArama(e.target.value)}
-            placeholder="Müşteri adı ya da kısa adıyla ara…"
+            placeholder="Workspace adı ya da kısa adıyla ara…"
             className="mt-3 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
           />
         </div>

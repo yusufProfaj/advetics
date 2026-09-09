@@ -106,7 +106,7 @@ export class BulkService {
       `);
       if (!acc) throw new NotFoundException('Reklam hesabı bulunamadı');
       if (acc.client_id !== input.clientId) {
-        throw new BadRequestException('Reklam hesabı bu müşteriye bağlı değil');
+        throw new BadRequestException('Reklam hesabı bu workspace’e bağlı değil');
       }
 
       const [batch] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`

@@ -142,7 +142,7 @@ describe('kural kaydı', () => {
     await expect(svc.createRule(CTX, ruleInput())).rejects.toThrow(/reklam hesabı yok/i);
   });
 
-  it('başka müşterinin profiline kural yazılamaz', async () => {
+  it('başka workspace’in profiline kural yazılamaz', async () => {
     await seedProfile();
     const other = '99999999-9999-9999-9999-999999999999';
     await h.q(
@@ -151,7 +151,7 @@ describe('kural kaydı', () => {
     );
     await expect(
       svc.createRule(CTX, ruleInput({ clientId: other })),
-    ).rejects.toThrow(/bu müşteriye bağlı değil/i);
+    ).rejects.toThrow(/bu workspace’e bağlı değil/i);
   });
 
   it('AYLIK TAVAN tek boost maliyetinden küçükse veritabanı reddediyor', async () => {

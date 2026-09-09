@@ -94,7 +94,7 @@ describe('menü verisi gerçekten okunuyor', () => {
     expect(korumali.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('Bilgi Bankası KÜTÜPHANE bölümünde — içeriği artık müşterinin genel profili', () => {
+  it('Bilgi Bankası KÜTÜPHANE bölümünde — içeriği artık workspace’in genel profili', () => {
     // Bir süre Akıllı Boost'un altında, başlıksız bölümdeydi (o zamanki
     // içeriği boost ön ayarlarıydı). İçerik değişince konum da değişti;
     // bu test kararı KİLİTLİYOR — bölüm bilinçsizce geri kaymasın.
@@ -132,9 +132,9 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
     expect(basliklar('client_viewer')).not.toContain('Ayarlar');
   });
 
-  it('KRİTİK: Müşteriler, Platform Bağlantıları ve Ekip & Yetkiler görünmüyor', () => {
+  it('KRİTİK: Workspace’ler, Platform Bağlantıları ve Ekip & Yetkiler görünmüyor', () => {
     const gorunen = etiketler('client_viewer');
-    expect(gorunen).not.toContain('Müşteriler');
+    expect(gorunen).not.toContain('Workspace’ler');
     expect(gorunen).not.toContain('Platform Bağlantıları');
     expect(gorunen).not.toContain('Ekip & Yetkiler');
   });
@@ -148,7 +148,7 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
     expect(gorunen).toContain('Raporlar');
   });
 
-  it('Bilgi Bankası GÖRÜNÜYOR — içeriği müşterinin KENDİ bilgisi olduğu için', () => {
+  it('Bilgi Bankası GÖRÜNÜYOR — içeriği workspace’in KENDİ bilgisi olduğu için', () => {
     /*
      * BU İDDİA AYNI KALDI AMA GEREKÇESİ TAMAMEN DEĞİŞTİ — bir DAVRANIŞ
      * değil, gözden geçirilmiş bir KARAR kilitleniyor.
@@ -180,7 +180,7 @@ describe('AJANS ROLLERİ', () => {
   it('owner "Çalışma Alanı" kategorisini ve üç ekranını görüyor', () => {
     expect(basliklar('owner')).toContain('Ayarlar');
     const gorunen = etiketler('owner');
-    expect(gorunen).toContain('Müşteriler');
+    expect(gorunen).toContain('Workspace’ler');
     expect(gorunen).toContain('Platform Bağlantıları');
     expect(gorunen).toContain('Ekip & Yetkiler');
   });
@@ -194,7 +194,7 @@ describe('AJANS ROLLERİ', () => {
     // çalışanı, müşteri değil. Yetki matrisi değiştiğinde burası düşerse
     // karar bilinçli olarak gözden geçirilmeli.
     const gorunen = etiketler('analyst');
-    const yonetim = ['Müşteriler', 'Platform Bağlantıları', 'Ekip & Yetkiler'];
+    const yonetim = ['Workspace’ler', 'Platform Bağlantıları', 'Ekip & Yetkiler'];
     const sahipOlduklari = yonetim.filter((y) => gorunen.includes(y));
     expect(sahipOlduklari.length).toBe(
       yonetim.filter((y) => {

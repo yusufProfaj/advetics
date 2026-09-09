@@ -104,7 +104,7 @@ describe('nihaiAlicilar', () => {
     ).toEqual(['a@x.com']);
   });
 
-  it('KRİTİK: seçilen varsa müşterininki EKLENMİYOR, yerine geçiyor', () => {
+  it('KRİTİK: seçilen varsa workspace’inki EKLENMİYOR, yerine geçiyor', () => {
     /*
      * Birleştirmek cazip ("ikisi de gitsin") ama kullanıcının bir raporu
      * SADECE bir kişiye göndermesini imkânsız kılardı: müşterinin kayıtlı
@@ -117,7 +117,7 @@ describe('nihaiAlicilar', () => {
     expect(out).toEqual(['tek@x.com']);
   });
 
-  it('seçilen boşsa müşterinin kayıtlı listesine düşüyor', () => {
+  it('seçilen boşsa workspace’in kayıtlı listesine düşüyor', () => {
     expect(nihaiAlicilar({ secilen: [], musteriAdresleri: ['a@x.com', 'b@x.com'] })).toEqual([
       'a@x.com',
       'b@x.com',

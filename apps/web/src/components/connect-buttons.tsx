@@ -25,7 +25,7 @@ const LABELS = PLATFORM_LABELS;
  * onların Business Manager'ına partner olarak ekleniyor. Yani her
  * yetkilendirme AYNI Facebook kullanıcısı oluyor ve
  * `orgId + platform + externalUserId` tekil anahtarında tek satıra çakışıyor —
- * ikinci workspace'i bağlama denemesi sahiplik korumasına takılıyordu.
+ * ikinci workspace’i bağlama denemesi sahiplik korumasına takılıyordu.
  *
  * Müşteri ayrımı bağlantıda değil, aşağıdaki hesap ATAMASINDA yapılıyor ve
  * atama artık izlemeyi de açıp geçmiş veriyi kuyruğa alıyor.

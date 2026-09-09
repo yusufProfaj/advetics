@@ -33,8 +33,8 @@ describe('ajans ekibi / workspace ayrımı', () => {
   it('KRİTİK: ayrım ROLE göre — üyelik KAPSAMINA göre DEĞİL', () => {
     /*
      * İki sürüm boyunca kapsama bakıldı ("org geneli üyeliği var mı") ve ikisi
-     * de yanlıştı: bir workspace'e ATANMIŞ DANIŞMAN ile o workspace'in
-     * MÜŞTERİ HESABI kapsam açısından birebir aynı görünüyor. Üç workspace'e
+     * de yanlıştı: bir workspace’e ATANMIŞ DANIŞMAN ile o workspace’in
+     * MÜŞTERİ HESABI kapsam açısından birebir aynı görünüyor. Üç workspace’e
      * atanmış yusuf@ hesabı "müşteri hesabı" sanılıp ajans ekibinden düştü.
      *
      * Ayırt eden şey ROL: müşteriye teslim edilen hesap `client_viewer`.
@@ -56,7 +56,7 @@ describe('ajans ekibi / workspace ayrımı', () => {
     expect(m[1]).toContain('m.memberships.length === 0');
   });
 
-  it('workspace üyeleri o müşterinin kimliğiyle eşleşiyor', () => {
+  it('workspace üyeleri o workspace’in kimliğiyle eşleşiyor', () => {
     expect(yorumsuz(KAYNAK)).toContain('x.clientId === c.id');
   });
 });
@@ -142,7 +142,7 @@ describe('DANIŞMAN ATA', () => {
 
   it('KRİTİK: akış DANIŞMAN SEÇİMİYLE başlıyor', () => {
     /*
-     * İstenen sıra: önce kim, sonra hangi workspace'ler, sonra hangi rol.
+     * İstenen sıra: önce kim, sonra hangi workspace’ler, sonra hangi rol.
      */
     const g = ATA();
     expect(g).toContain('1 · Danışman');
@@ -265,7 +265,7 @@ describe('üst bant', () => {
 
 describe('eski düzen geri gelmesin', () => {
   it('KRİTİK: sayfa artık kullanıcıları tek tek kart olarak basmıyor', () => {
-    // Eski ekran her KULLANICIYI kart yapıyordu ve "bu workspace'e kim
+    // Eski ekran her KULLANICIYI kart yapıyordu ve "bu workspace’e kim
     // erişiyor" sorusu cevapsız kalıyordu.
     expect(yorumsuz(SAYFA)).not.toContain('<TeamManager');
   });

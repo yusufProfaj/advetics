@@ -76,7 +76,7 @@ export function SablonModal({
   onKaydedildi?: (id: string) => void;
 }) {
   const router = useRouter();
-  const [ad, setAd] = useState(sablon?.name ?? 'Aylık müşteri raporu');
+  const [ad, setAd] = useState(sablon?.name ?? 'Aylık workspace raporu');
   const [baslik, setBaslik] = useState(sablon?.title ?? '');
   const [kapanis, setKapanis] = useState(sablon?.closingText ?? '');
   const [clientId, setClientId] = useState<string | null>(sablon?.clientId ?? null);

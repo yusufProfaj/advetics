@@ -82,14 +82,14 @@ export function MusteriTablosu({
       )}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold text-ink">Müşteriler</h2>
+          <h2 className="text-sm font-semibold text-ink">Workspace’ler</h2>
           {/*
             SESSİZ KESME YOK: kaç müşteri listelendiği ve kaçının harcaması
             olduğu yazılı. "12 müşteri" ile "12 müşterinin 4'ü harcıyor"
             arasındaki fark, bu ekranda sorulan sorunun kendisi.
           */}
           <p className="mt-0.5 text-xs text-ink-muted">
-            {rows.length} müşteri · {harcayan} tanesinin bu dönemde harcaması var
+            {rows.length} workspace · {harcayan} tanesinin bu dönemde harcaması var
           </p>
         </div>
         <p className="text-xs text-ink-muted">Satıra tıklayınca o workspace’e geçilir</p>
@@ -103,14 +103,14 @@ export function MusteriTablosu({
 
       {rows.length === 0 ? (
         <p className="px-4 py-6 text-center text-sm text-ink-muted">
-          Henüz müşteri açılmamış.
+          Henüz workspace açılmamış.
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted">
-                <th className="px-4 py-2 font-medium">Müşteri</th>
+                <th className="px-4 py-2 font-medium">Workspace</th>
                 <th className="px-3 py-2 font-medium">Platform dağılımı</th>
                 <th className="px-3 py-2 text-right font-medium">Harcama</th>
                 <th className="px-3 py-2 text-right font-medium">Gösterim</th>

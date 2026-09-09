@@ -161,7 +161,7 @@ export default async function DataDeletionPage({
 
       <Section title="Seçenek 3 — Tüm verilerin silinmesini talep et">
         <p>
-          Hesabınıza ve müşteri kaydınıza ait <strong>tüm verilerin</strong> silinmesi için{' '}
+          Hesabınıza ve workspace kaydınıza ait <strong>tüm verilerin</strong> silinmesi için{' '}
           <a href="mailto:hello@profaj.com?subject=Veri%20Silme%20Talebi" className="underline">
             hello@profaj.com
           </a>{' '}

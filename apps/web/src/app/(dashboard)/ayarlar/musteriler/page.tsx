@@ -13,7 +13,7 @@ import {
   type PoolItem,
 } from '@/components/tenancy/client-assets';
 
-export const metadata = { title: 'Müşteriler — Advetics' };
+export const metadata = { title: 'Workspace’ler — Advetics' };
 
 /**
  * Müşteriler — kurulumun İLK adımı.
@@ -131,10 +131,10 @@ export default async function ClientsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Müşteriler</h1>
+        <h1 className="text-2xl font-semibold">Workspace’ler</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Her müşteri bir şirkettir; bir şirketin birden çok reklam hesabı olabilir.
-          Önce müşteriyi açın, sonra hesaplarını bağlayın, en son ekibi yetkilendirin.
+          Her workspace bir şirkettir; bir şirketin birden çok reklam hesabı olabilir.
+          Önce workspace’i açın, sonra hesaplarını bağlayın, en son ekibi yetkilendirin.
         </p>
       </div>
 
@@ -152,7 +152,7 @@ export default async function ClientsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-5 py-3.5 text-sm">
         <div className="flex flex-wrap gap-x-6 gap-y-1">
           <span>
-            <strong>{clients.length}</strong> müşteri
+            <strong>{clients.length}</strong> workspace
           </span>
           <span className="text-ink-muted">
             <strong className="text-ink">{totalAccounts}</strong> reklam hesabı
@@ -166,10 +166,10 @@ export default async function ClientsPage() {
 
       {clients.length === 0 ? (
         <div className="rounded-xl border border-line bg-surface p-8 text-center">
-          <p className="text-sm font-medium text-ink">Henüz müşteri yok</p>
+          <p className="text-sm font-medium text-ink">Henüz workspace yok</p>
           <p className="mx-auto mt-1.5 max-w-md text-sm text-ink-muted">
-            İlk müşteriyi yukarıdan ekleyin. Reklam hesapları müşteriye bağlanıyor,
-            bu yüzden müşteri olmadan hesap bağlanamıyor.
+            İlk workspace’i yukarıdan ekleyin. Reklam hesapları workspace’e bağlanıyor,
+            bu yüzden workspace olmadan hesap bağlanamıyor.
           </p>
         </div>
       ) : (

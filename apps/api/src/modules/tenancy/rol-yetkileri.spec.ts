@@ -65,12 +65,12 @@ describe('Reklam Yöneticisi', () => {
     }
   });
 
-  it('fazladan YALNIZCA müşteri açma ve bağlantı kurulumu var', () => {
+  it('fazladan YALNIZCA workspace açma ve bağlantı kurulumu var', () => {
     const fark = [...y].filter((p) => !ROLE_PERMISSIONS.manager.includes(p)).sort();
     expect(fark).toEqual(['client.write', 'connection.manage']);
   });
 
-  it('kullanıcı yönetimi, faturalama ve müşteri silme YOK', () => {
+  it('kullanıcı yönetimi, faturalama ve workspace silme YOK', () => {
     // Kullanıcının seçtiği sınır buydu: "HÂLÂ YOK: user.write, org.billing,
     // client.delete".
     expect(y.has('user.write')).toBe(false);
@@ -91,7 +91,7 @@ describe('Reklam Yöneticisi', () => {
   });
 });
 
-describe('Müşteri Hizmetleri', () => {
+describe('Workspace Hizmetleri', () => {
   const y = yetkileri('customer_service');
 
   it('okur, rapor üretip paylaşır, potansiyel müşteri listesini işler', () => {
@@ -149,7 +149,7 @@ describe('Müşteri Hizmetleri', () => {
 });
 
 describe('mevcut roller değişmedi', () => {
-  it('Kampanya Yöneticisi müşteri açamıyor ve bağlantı kuramıyor', () => {
+  it('Kampanya Yöneticisi workspace açamıyor ve bağlantı kuramıyor', () => {
     // Yeni yetkilerin ESKİ role sızmadığını kilitliyor: `connection.manage`i
     // MANAGER_PERMS'e eklemek bütün ad_manager testlerini geçirirdi.
     const y = yetkileri('manager');

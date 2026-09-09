@@ -213,7 +213,7 @@ export function hesapUyarilari(h: UyariHesabi, simdi: Date): Uyari[] {
         siddet: 'warn',
         baslik: 'Hesap izlemede değil',
         detay:
-          'Hesap müşteriye atanmış ama izleme kapalı: hiç veri çekilmiyor ve panelde bu hesabın harcaması görünmüyor.',
+          'Hesap workspace’e atanmış ama izleme kapalı: hiç veri çekilmiyor ve panelde bu hesabın harcaması görünmüyor.',
         eylem: { etiket: 'İzlemeyi aç', href: KANALLAR },
       },
     ];
@@ -264,7 +264,7 @@ export function hesapsizMusteriUyarisi(client: { id: string; name: string }): Uy
   return {
     kod: 'musteride_hesap_yok',
     siddet: 'warn',
-    baslik: 'Müşteriye reklam hesabı atanmamış',
+    baslik: 'Workspace’e reklam hesabı atanmamış',
     detay:
       'Bu workspace’te hiçbir ekran veri göstermeyecek. Platform Bağlantıları ekranından havuzdaki bir hesabı atayın.',
     clientId: client.id,

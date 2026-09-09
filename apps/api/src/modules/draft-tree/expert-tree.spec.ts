@@ -206,7 +206,7 @@ describe('servis', () => {
 
     await expect(
       tree.createFromExpert(CTX, input({ creativeIds: [CREATIVE_A, yabanciKreatif] })),
-    ).rejects.toThrow(/başka bir müşteriye ait/i);
+    ).rejects.toThrow(/başka bir workspace’e ait/i);
   });
 });
 

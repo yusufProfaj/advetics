@@ -15,7 +15,7 @@ export interface OdemeMailIcerigi {
   html: string;
 }
 
-/** Aynı workspace'in satırları bir arada dursun — mail müşteri müşteri okunuyor. */
+/** Aynı workspace’in satırları bir arada dursun — mail müşteri müşteri okunuyor. */
 function workspaceBazindaGrupla(uyarilar: Uyari[]): Map<string, Uyari[]> {
   const m = new Map<string, Uyari[]>();
   for (const u of uyarilar) {

@@ -25,7 +25,7 @@ describe('atama bildirimi', () => {
     expect(atamaBildirimi({ movedRows: 0, leftBehind: {} }, true)).toBeNull();
   });
 
-  it('KRİTİK: eski müşteride kalanlar TÜR TÜR sayılıyor', () => {
+  it('KRİTİK: eski workspace’te kalanlar TÜR TÜR sayılıyor', () => {
     const m = atamaBildirimi({ movedRows: 5, leftBehind: { 'aylık bütçe': 2, kural: 1 } }, true);
     expect(m).toContain('2 aylık bütçe');
     expect(m).toContain('1 kural');
@@ -59,7 +59,7 @@ describe('atama bildirimi', () => {
     expect(m).toContain('kayacak');
   });
 
-  it('müşteri geneli kayıt yoksa uyarı da yok', () => {
+  it('workspace geneli kayıt yoksa uyarı da yok', () => {
     const m = atamaBildirimi({ movedRows: 3, clientWide: {} }, true);
     expect(m).not.toContain('kapsamıyor');
   });

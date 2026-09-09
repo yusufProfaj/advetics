@@ -40,9 +40,9 @@ export default async function BudgetPage({
   if (!clientId) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir müşteri seç</h1>
+        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Bütçe müşteri bazında tanımlanıyor. Üstteki seçiciden bir müşteri seçin.
+          Bütçe workspace bazında tanımlanıyor. Üstteki seçiciden bir workspace seçin.
         </p>
       </div>
     );
@@ -64,7 +64,7 @@ export default async function BudgetPage({
   };
 
   const clientName =
-    session.availableClients.find((c) => c.id === clientId)?.name ?? 'Müşteri';
+    session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
 
   return (
     <div className="space-y-5">
@@ -197,7 +197,7 @@ function OverallCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-ink">Müşteri geneli</h2>
+            <h2 className="text-sm font-semibold text-ink">Workspace geneli</h2>
             <StatusChip status={pacing.status} />
           </div>
           <p className="mt-0.5 text-[11px] text-ink-muted">
@@ -293,7 +293,7 @@ function AccountTable({
   if (data.accounts.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center text-sm text-ink-muted">
-        Bu müşteriye bağlı reklam hesabı yok.
+        Bu workspace’e bağlı reklam hesabı yok.
       </div>
     );
   }

@@ -91,7 +91,7 @@ export class AutoBoostQueueService {
      * ile senkronizasyon kuyruğunda da uygulanıyor.
      */
     if (!profil.client_id) {
-      return { created: 0, note: `${profil.name}: müşteriye atanmamış` };
+      return { created: 0, note: `${profil.name}: workspace’e atanmamış` };
     }
 
     const preset = await this.resolvePreset(
@@ -178,7 +178,7 @@ export class AutoBoostQueueService {
     const [musteri] = await this.db.$queryRaw<Array<{ name: string }>>(Prisma.sql`
       SELECT name FROM clients WHERE id = ${clientId}::uuid
     `);
-    const clientName = musteri?.name ?? 'Müşteri';
+    const clientName = musteri?.name ?? 'Workspace';
 
     // HAM SQL — bu dosyanın geri kalanıyla AYNI desen (`db` worker
     // bağlamında BYPASSRLS ve Prisma model erişimi yerine burada hep

@@ -108,16 +108,16 @@ describe('middleware — oturumlu davranış', () => {
   });
 });
 
-describe('middleware — white-label müşteri alan adı', () => {
+describe('middleware — white-label workspace alan adı', () => {
   const HOST = 'musteri-alan-adi.com';
 
-  it('müşteri alan adında kök tanıtım sayfası SERVİS EDİLMİYOR', () => {
+  it('workspace alan adında kök tanıtım sayfası SERVİS EDİLMİYOR', () => {
     // Ajansın tanıtım sayfası müşterinin alan adından çıkmamalı: müşteri o
     // alan adını kendi raporu için bağladı, ajansın satış sayfası için değil.
     expect(redirectPath(middleware(request('/', { host: HOST })))).toBe('/r/bulunamadi');
   });
 
-  it('müşteri alan adı yalnızca rapor sayfalarını servis ediyor', () => {
+  it('workspace alan adı yalnızca rapor sayfalarını servis ediyor', () => {
     expect(redirectPath(middleware(request('/r/abc123', { host: HOST })))).toBeNull();
     expect(redirectPath(middleware(request('/dashboard', { host: HOST })))).toBe(
       '/r/bulunamadi',

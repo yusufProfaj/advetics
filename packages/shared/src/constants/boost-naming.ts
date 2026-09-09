@@ -103,7 +103,7 @@ export function boostAssetName(params: {
   const orta = kelimeler.length > 0 ? kelimeler.join(' ') : (params.mediaLabel ?? 'Gönderi');
 
   return [
-    kirp(params.clientName.trim() || 'Müşteri'),
+    kirp(params.clientName.trim() || 'Workspace'),
     kirp(orta),
     isoDate(params.date),
     'Boost',

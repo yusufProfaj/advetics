@@ -38,7 +38,7 @@ describe('KURU ÇALIŞMA VARSAYILAN', () => {
 });
 
 describe('SİLME SIRASI — üretimde yarım silmeye yol açan iki karar', () => {
-  it('KRİTİK: taslak ağacı müşterilerden ÖNCE siliniyor', () => {
+  it('KRİTİK: taslak ağacı workspace’lerden ÖNCE siliniyor', () => {
     /*
      * `draft_ads.creative_id` → `ad_creatives` bağı `onDelete: Restrict`.
      * Müşteri silinince iki cascade dalı birden işliyor ve Postgres kreatifi
@@ -54,7 +54,7 @@ describe('SİLME SIRASI — üretimde yarım silmeye yol açan iki karar', () =>
     expect(taslak).toBeLessThan(musteri);
   });
 
-  it('KRİTİK: metrikler müşterilerden SONRA siliniyor', () => {
+  it('KRİTİK: metrikler workspace’lerden SONRA siliniyor', () => {
     /*
      * Ters sıra üretimde en pahalı yarıyı yaptırdı: 4.340 metrik satırı
      * silindi, sonra müşteri silme düştü. Metrik verisi Meta'da 37 aylık

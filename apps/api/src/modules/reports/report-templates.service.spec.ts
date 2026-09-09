@@ -50,7 +50,7 @@ beforeEach(async () => {
 });
 
 const SABLON = {
-  name: 'Aylık müşteri raporu',
+  name: 'Aylık workspace raporu',
   sections: ['cover', 'summary', 'meta_campaigns', 'closing'] as const,
 };
 
@@ -59,7 +59,7 @@ describe('oluşturma', () => {
     await svc.create(CTX, { ...SABLON, sections: [...SABLON.sections] }, META);
     const liste = await svc.list(CTX);
     expect(liste).toHaveLength(1);
-    expect(liste[0]!.name).toBe('Aylık müşteri raporu');
+    expect(liste[0]!.name).toBe('Aylık workspace raporu');
     expect(liste[0]!.sections).toEqual(['cover', 'summary', 'meta_campaigns', 'closing']);
   });
 
@@ -202,10 +202,10 @@ describe('yetki', () => {
     ).rejects.toThrow(/org yöneticisi/i);
   });
 
-  it('müşteriye özel şablonu yönetici olmayan da oluşturabiliyor', async () => {
+  it('workspace’e özel şablonu yönetici olmayan da oluşturabiliyor', async () => {
     const musteriCtx = { ...CTX, isOrgAdmin: false } as TenantContext;
     await expect(
-      svc.create(musteriCtx, { name: 'Müşteri şablonu', sections: ['cover'], clientId: IDS.client }, META),
+      svc.create(musteriCtx, { name: 'Workspace şablonu', sections: ['cover'], clientId: IDS.client }, META),
     ).resolves.toBeDefined();
   });
 });

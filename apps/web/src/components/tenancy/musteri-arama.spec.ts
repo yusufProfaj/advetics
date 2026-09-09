@@ -36,7 +36,7 @@ describe('müşteri arama', () => {
      * Türkçe.
      */
     for (const [ad, src] of [
-      ['müşteri arama', ARAMA],
+      ['workspace arama', ARAMA],
       ['yönetim paneli', PANEL],
       ['seçici', SECICI],
     ] as const) {
@@ -79,7 +79,7 @@ describe('müşteri arama', () => {
      */
     for (const [ad, src] of [
       ['seçici', SECICI],
-      ['müşteri arama', ARAMA],
+      ['workspace arama', ARAMA],
       ['yönetim paneli', PANEL],
     ] as const) {
       expect(kod(src), `${ad} boş sonucu açıklamıyor`).toContain('ile eşleşen');
@@ -103,7 +103,7 @@ describe('müşteri arama', () => {
      * `.catch(() => setVeri([]))` yazmak "henüz yüklenmedi", "hiç müşteri
      * yok" ve "çağrı düştü" hâllerini AYNI boş pencereye çevirirdi.
      */
-    expect(kod(PANEL)).toContain("setHata('Müşteri listesi alınamadı.')");
+    expect(kod(PANEL)).toContain("setHata('Workspace listesi alınamadı.')");
     expect(kod(PANEL)).not.toContain('setVeri([])');
   });
 
@@ -111,7 +111,7 @@ describe('müşteri arama', () => {
     expect(kod(PANEL)).toContain("if (e.key === 'Escape') onKapat();");
   });
 
-  it('KRİTİK: müşteri kartları SUNUCUDA kuruluyor', () => {
+  it('KRİTİK: workspace kartları SUNUCUDA kuruluyor', () => {
     /*
      * Kartların kendisini istemciye taşımak, içlerindeki sunucu tarafı veri
      * çözümlerini de taşımak olurdu; istemci yalnızca HANGİ kartın

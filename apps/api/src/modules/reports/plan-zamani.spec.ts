@@ -109,7 +109,7 @@ describe('siradakiCalisma — aylık', () => {
   });
 });
 
-describe('raporPenceresi — müşteriye giden dönem', () => {
+describe('raporPenceresi — workspace’e giden dönem', () => {
   const BUGUN = '2026-09-02'; // Çarşamba
 
   it('KRİTİK: son 7 gün DÜNDE bitiyor — bugün rapora girmiyor', () => {

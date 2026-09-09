@@ -600,7 +600,7 @@ describe('ReportsService — yapı', () => {
     expect(data.title).toBeTruthy();
   });
 
-  it('olmayan müşteri için bulunamadı', async () => {
+  it('olmayan workspace için bulunamadı', async () => {
     await expect(
       svc.build(CTX, { ...RANGE, clientId: '00000000-0000-0000-0000-000000000000' }),
     ).rejects.toThrow(/bulunamadı/);
@@ -661,7 +661,7 @@ describe('ReportsService — şablon', () => {
     expect(data.options).toEqual({});
   });
 
-  it('KRİTİK: aynı müşteride iki şablon varsa EN SON GÜNCELLENEN geliyor', async () => {
+  it('KRİTİK: aynı workspace’te iki şablon varsa EN SON GÜNCELLENEN geliyor', async () => {
     /*
      * Sıralama eskiden yalnızca `client_id NULLS LAST` idi: aynı müşteriye
      * ikinci bir şablon kaydedilince hangisinin geleceği BELİRSİZDİ ve
@@ -672,13 +672,13 @@ describe('ReportsService — şablon', () => {
     expect((await svc.build(CTX, RANGE)).sections).toEqual(['closing']);
   });
 
-  it('müşteriye özel şablon ORG VARSAYILANININ önünde', async () => {
+  it('workspace’e özel şablon ORG VARSAYILANININ önünde', async () => {
     await sablonEkle({ clientId: null, sections: ['cover'] });
     await sablonEkle({ clientId: IDS.client, sections: ['summary'] });
     expect((await svc.build(CTX, RANGE)).sections).toEqual(['summary']);
   });
 
-  it('KRİTİK: BAŞKA müşterinin şablonu kimliğiyle kullanılamıyor', async () => {
+  it('KRİTİK: BAŞKA workspace’in şablonu kimliğiyle kullanılamıyor', async () => {
     /*
      * `templateId` adres çubuğundan geliyor. Org yöneticisi RLS'i geçtiği
      * için sahiplik kontrolü olmadan başka bir müşterinin şablonuyla rapor
@@ -686,7 +686,7 @@ describe('ReportsService — şablon', () => {
      */
     await h.q(
       `INSERT INTO clients (id, org_id, slug, name, timezone, reporting_currency, status, created_at, updated_at)
-       VALUES ($1, $2, 'diger-musteri', 'Diğer Müşteri', 'Europe/Istanbul', 'TRY', 'active', now(), now())`,
+       VALUES ($1, $2, 'diger-musteri', 'Diğer Workspace', 'Europe/Istanbul', 'TRY', 'active', now(), now())`,
       ['dddddddd-dddd-dddd-dddd-dddddddddddd', IDS.org],
     );
     const yabanci = await sablonEkle({

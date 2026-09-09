@@ -74,7 +74,7 @@ function clientRowGovdesi(): string {
   return SAYFA_KOD.slice(bas, son);
 }
 
-describe('müşteri detay penceresinin alan zinciri', () => {
+describe('workspace detay penceresinin alan zinciri', () => {
   it('tarama gerçekten bir şey yakaladı', () => {
     // Dilim boşalırsa aşağıdaki "hepsi var" iddiaları BOŞ KÜMEDE doğru olur.
     expect(CIZILEN.length).toBeGreaterThan(8);

@@ -222,7 +222,7 @@ export class RaporPlaniService {
         SELECT contact_emails FROM clients WHERE id = ${clientId}::uuid
       `),
     );
-    if (!musteri) throw new NotFoundException('Müşteri bulunamadı.');
+    if (!musteri) throw new NotFoundException('Workspace bulunamadı.');
   }
 
   // ---------------------------------------------------------------------------

@@ -63,7 +63,7 @@ beforeEach(() => {
   existingUser = null;
 
   const tx = {
-    client: { findUnique: async () => ({ id: CLIENT, name: 'Müşteri' }) },
+    client: { findUnique: async () => ({ id: CLIENT, name: 'Workspace' }) },
     user: {
       findFirst: async () => existingUser,
       findUnique: async () =>

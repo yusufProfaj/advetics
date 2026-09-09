@@ -103,7 +103,7 @@ export function CreativeLibrary({
 
       {creatives.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line bg-surface px-4 py-8 text-center text-sm text-ink-muted">
-          Bu müşteride henüz kreatif yok.
+          Bu workspace’te henüz kreatif yok.
         </p>
       ) : (
         <ul className="space-y-2">

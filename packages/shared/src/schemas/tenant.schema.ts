@@ -327,7 +327,7 @@ export interface ChannelItem {
 /** Bir kanal tipi için workspace görünümü. */
 export interface ChannelGroup {
   kind: ChannelKind;
-  /** Bu workspace'e atanmış olanlar. */
+  /** Bu workspace’e atanmış olanlar. */
   connected: ChannelItem[];
   /** Havuzda duran, atanabilecek olanlar. */
   available: ChannelItem[];

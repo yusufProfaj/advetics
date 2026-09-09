@@ -177,7 +177,7 @@ export function SablonSecici({
                       benzer olabiliyor; ayırt eden şey ne içerdikleri.
                     */}
                     <span className="mt-0.5 block truncate text-[11px] leading-snug text-ink-muted">
-                      {t.clientId === null ? 'Organizasyon varsayılanı' : (t.clientName ?? 'Müşteri')}{' '}
+                      {t.clientId === null ? 'Organizasyon varsayılanı' : (t.clientName ?? 'Workspace')}{' '}
                       · {t.sections.map((s) => SECTION_LABELS[s]).join(' → ')}
                     </span>
                   </button>

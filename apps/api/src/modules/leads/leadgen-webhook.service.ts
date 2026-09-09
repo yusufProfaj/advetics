@@ -166,7 +166,7 @@ export class LeadgenWebhookService {
           this.logger.error(
             `Leadgen bildirimi ATANMAMIŞ sayfadan: ${pageId} (${profile.id}) — ` +
               `kayıt ${v.leadgen_id} yazılamadı. Sayfayı Platform Bağlantıları ` +
-              `ekranından bir müşteriye ata; ardından form mutabakatı geçmişi toplar.`,
+              `ekranından bir workspace’e ata; ardından form mutabakatı geçmişi toplar.`,
           );
           skipped++;
           continue;

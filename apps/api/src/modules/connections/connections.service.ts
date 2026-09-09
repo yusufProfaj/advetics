@@ -209,7 +209,7 @@ export class ConnectionsService {
    */
   async list(ctx: TenantContext, clientId: string | null): Promise<ConnectionSummary[]> {
     if (clientId && !ctx.clientIds.includes(clientId)) {
-      throw new NotFoundException('Müşteri bulunamadı');
+      throw new NotFoundException('Workspace bulunamadı');
     }
 
     /**
@@ -237,13 +237,13 @@ export class ConnectionsService {
         /*
          * WORKSPACE SEÇİLİYSE BAĞLANTILAR DA SÜZÜLÜYOR — eskiden yalnızca
          * hesaplar süzülüyordu ve sonuç şuydu: ajansın havuz bağlantısı HER
-         * workspace'in ekranında SIFIR hesapla görünüyordu. Kullanıcı
+         * workspace’in ekranında SIFIR hesapla görünüyordu. Kullanıcı
          * "bağlantı var ama hesap yok" sanıyordu; oysa o bağlantı bu
-         * workspace'e ait bile değildi.
+         * workspace’e ait bile değildi.
          *
-         * İKİ DAL, VE İKİNCİSİ GEÇİŞ İÇİN ŞART: bağlantı ya bu workspace'e
+         * İKİ DAL, VE İKİNCİSİ GEÇİŞ İÇİN ŞART: bağlantı ya bu workspace’e
          * AİT, ya da havuz döneminden kalma ve altındaki hesaplardan/
-         * sayfalardan en az biri bu workspace'e ATANMIŞ. İkinci dal olmadan
+         * sayfalardan en az biri bu workspace’e ATANMIŞ. İkinci dal olmadan
          * bugün üretimde çalışan müşteriler bağlantılarını göremezdi —
          * hesapları havuz bağlantısının altında duruyor.
          */
@@ -374,7 +374,7 @@ export class ConnectionsService {
   /**
    * İKİ MODEL: workspace bazlı bağlantı ya da ajans havuzu.
    *
-   * `clientId` VERİLİRSE bağlantı o workspace'e kurulur ve keşfedilen bütün
+   * `clientId` VERİLİRSE bağlantı o workspace’e kurulur ve keşfedilen bütün
    * reklam hesapları/sayfalar doğrudan ona yazılır — havuz adımı yok.
    * VERİLMEZSE eski davranış: bağlantı ajansa kurulur, hesaplar havuza düşer
    * ve `assignAdAccount` ile müşteriye atanır.
@@ -387,7 +387,7 @@ export class ConnectionsService {
    * bağlanmalı. Aynı Meta kimliği bir organizasyonda tek satır
    * (`orgId_platform_externalUserId`) ve platform her yeni yetkilendirmede
    * öncekinin token'ını geçersiz kılıyor — aynı hesabı ikinci bir
-   * workspace'e bağlamak `persistConnection` içinde REDDEDİLİYOR.
+   * workspace’e bağlamak `persistConnection` içinde REDDEDİLİYOR.
    */
   async startOAuth(
     ctx: TenantContext,
@@ -423,7 +423,7 @@ export class ConnectionsService {
       tx.oAuthState.create({
         data: {
           orgId: ctx.orgId,
-          // NULL = ajans havuzu, dolu = o workspace'e kurulan bağlantı.
+          // NULL = ajans havuzu, dolu = o workspace’e kurulan bağlantı.
           // Geri dönüşte bu değer bağlantıya, oradan keşfedilen bütün
           // hesap ve sayfalara akıyor.
           clientId: opts.clientId ?? null,
@@ -453,7 +453,7 @@ export class ConnectionsService {
    * BU METOT OLMADAN WORKSPACE BAZLI BAĞLANTI TEK KULLANIMLIKTI. Uç nokta
    * `startOAuth`'u `clientId` vermeden çağırıyordu, yani state satırına `null`
    * yazılıyordu; geri dönüşte `persistConnection` "havuza bağlanıyor" diye
-   * okuyor ve sahiplik koruması bunu REDDEDİYORDU. Sonuç: bir workspace'e
+   * okuyor ve sahiplik koruması bunu REDDEDİYORDU. Sonuç: bir workspace’e
    * bağlanan hesap, token'ı süresi dolup `needs_reauth` olduğu anda KALICI
    * OLARAK yenilenemez hâle geliyordu — ve kullanıcıya gösterilen mesaj
    * "önce mevcut bağlantıyı kaldır" diyordu, yani tek çıkış yolu bağlantıyı
@@ -463,7 +463,7 @@ export class ConnectionsService {
    * takvimli bir kesintiydi.
    *
    * `id` PARAMETRESİ ARTIK KULLANILIYOR. Eskiden imzada duruyor ama gövdede
-   * hiç okunmuyordu — bağlantının hangi workspace'e ait olduğu tam da orada
+   * hiç okunmuyordu — bağlantının hangi workspace’e ait olduğu tam da orada
    * yazılı olduğu için o parametre bu metodun var oluş sebebi.
    */
   async reauthorize(
@@ -493,7 +493,7 @@ export class ConnectionsService {
       ctx,
       platform,
       // SAHİPLİK OLDUĞU GİBİ TAŞINIYOR: havuz bağlantısı havuz kalıyor,
-      // workspace bağlantısı kendi workspace'inde kalıyor.
+      // workspace bağlantısı kendi workspace’inde kalıyor.
       { forceReconsent: true, redirectTo: '/ayarlar/baglantilar', clientId: conn.clientId ?? undefined },
       meta,
     );
@@ -725,7 +725,7 @@ export class ConnectionsService {
      * dokunmamalı: token tazelemesi sahipliği değiştirmemeli). Ama bu, kontrol
      * edilmezse şu sessiz hatayı üretiyordu:
      *
-     *   1. Meta hesabı X, "Ege Birlik Yapı" workspace'ine bağlanır.
+     *   1. Meta hesabı X, "Ege Birlik Yapı" workspace’ine bağlanır.
      *   2. Kullanıcı "Fenbay"ı seçip AYNI Meta hesabıyla yetkilendirir.
      *   3. Tekillik `orgId_platform_externalUserId` üzerinde: aynı satır
      *      bulunur, `update` koşar, token tazelenir — ama `client_id` HÂLÂ
@@ -734,11 +734,11 @@ export class ConnectionsService {
      *      keşfedilen bütün hesaplar EGE'YE yazılır.
      *
      * Ekran "bağlandı" der, kullanıcı Fenbay'a bağladığını sanır, hesaplar
-     * başka workspace'te görünür. Hata yok, log yok.
+     * başka workspace’te görünür. Hata yok, log yok.
      *
      * NULL → workspace geçişi de reddediliyor: bugün havuzda duran bağlantının
      * altında 157 hesap var ve çoğu BAŞKA müşterilere ait. Onu tek bir
-     * workspace'e işaretlemek, sonraki keşiflerin hepsini o workspace'e
+     * workspace’e işaretlemek, sonraki keşiflerin hepsini o workspace’e
      * yazdırırdı.
      */
     const mevcut = await this.admin.platformConnection.findUnique({
@@ -818,7 +818,7 @@ export class ConnectionsService {
    *
    * NEDEN ATAMADA: müşterilerin kendi Facebook hesabı yok, dolayısıyla
    * bağlantı ajans seviyesinde kalmak zorunda (aynı Meta kimliği tek satır).
-   * Bir workspace'in verisi bağlanınca değil, HESAP ONA ATANINCA başlıyor.
+   * Bir workspace’in verisi bağlanınca değil, HESAP ONA ATANINCA başlıyor.
    * Ata → izlemeyi aç → bekle üçlüsü, kullanıcının "angarya" dediği şeydi ve
    * ikinci adımı atlamak "atadım ama veri gelmiyor" hâlini üretiyordu.
    *
@@ -872,7 +872,7 @@ export class ConnectionsService {
         delayMs: YAPI_ICIN_TANINAN_SURE_MS,
       });
       this.logger.log(
-        `Reklam hesabı ${adAccountId} müşteriye atandı: izleme açıldı, 90 günlük geçmiş kuyruğa eklendi`,
+        `Reklam hesabı ${adAccountId} workspace’e atandı: izleme açıldı, 90 günlük geçmiş kuyruğa eklendi`,
       );
     } catch (err) {
       /*
@@ -913,7 +913,7 @@ export class ConnectionsService {
   ): Promise<void> {
     try {
       // İZLEMEYİ AÇ. Yalnızca BU bağlantının ve BU müşterinin hesapları —
-      // aynı workspace'e ait başka bir bağlantının hesaplarına dokunmuyoruz.
+      // aynı workspace’e ait başka bir bağlantının hesaplarına dokunmuyoruz.
       await this.admin.adAccount.updateMany({
         where: { connectionId, clientId },
         data: { syncEnabled: true },
@@ -1163,7 +1163,7 @@ export class ConnectionsService {
      * AÇMIYOR — var olan satır güncelleniyor ve `connectionId` yeni bağlantıya
      * geçiyor. `clientId` ise NULL kalıyordu.
      *
-     * Sonucu sessizdi: satırın bağlantısı yeni workspace'i gösteriyor,
+     * Sonucu sessizdi: satırın bağlantısı yeni workspace’i gösteriyor,
      * ataması ise hâlâ boş. `ilkVeriCekimi` hesapları
      * `{ connectionId, clientId }` ile arıyor, eşleşme olmuyor, izleme
      * açılmıyor ve geçmiş veri kuyruğa girmiyor. Kullanıcı "bağlandı" görüyor
@@ -1193,10 +1193,10 @@ export class ConnectionsService {
 
       this.logger.log(
         `Bağlantı ${connectionId}: ${hesap.count} reklam hesabı ve ${profil.count} sayfa ` +
-          `bu workspace'e sahiplendirildi` +
+          `bu workspace’e sahiplendirildi` +
           (cakisan > 0
-            ? `. DİKKAT: ${cakisan} hesap BAŞKA bir müşteriye atanmış ve taşınmadı — ` +
-              'aynı reklam hesabı iki müşterinin Meta hesabında görünüyor, elle karar verilmeli'
+            ? `. DİKKAT: ${cakisan} hesap BAŞKA bir workspace’e atanmış ve taşınmadı — ` +
+              'aynı reklam hesabı iki workspace’in Meta hesabında görünüyor, elle karar verilmeli'
             : ''),
       );
     }
@@ -1312,7 +1312,7 @@ export class ConnectionsService {
     if (!account) throw new NotFoundException('Reklam hesabı bulunamadı');
     if (account.clientId === null) {
       throw new BadRequestException(
-        'Bu reklam hesabı henüz bir müşteriye atanmamış. Platform Bağlantıları ' +
+        'Bu reklam hesabı henüz bir workspace’e atanmamış. Platform Bağlantıları ' +
           'ekranından ata.',
       );
     }
@@ -1378,8 +1378,8 @@ export class ConnectionsService {
        */
       if (before.clientId === null && syncEnabled) {
         throw new BadRequestException(
-          `"${before.name}" henüz bir müşteriye atanmamış. Önce hesabı bir ` +
-            `müşteriye atayın; atanmamış hesap senkronize edilmez.`,
+          `"${before.name}" henüz bir workspace’e atanmamış. Önce hesabı bir ` +
+            `workspace’e atayın; atanmamış hesap senkronize edilmez.`,
         );
       }
 
@@ -1453,8 +1453,8 @@ export class ConnectionsService {
        */
       if (before.clientId === null && syncEnabled) {
         throw new BadRequestException(
-          `"${before.name}" henüz bir müşteriye atanmamış. Önce sayfayı bir ` +
-            `müşteriye atayın; atanmamış sayfanın gönderileri çekilmez.`,
+          `"${before.name}" henüz bir workspace’e atanmamış. Önce sayfayı bir ` +
+            `workspace’e atayın; atanmamış sayfanın gönderileri çekilmez.`,
         );
       }
 
@@ -1526,7 +1526,7 @@ export class ConnectionsService {
          */
         if (account.clientId === null || account.clientId !== before.clientId) {
           throw new BadRequestException(
-            'Reklam hesabı bu sayfanın müşterisine atanmamış. Aynı müşteride ' +
+            'Reklam hesabı bu sayfanın workspace’ine atanmamış. Aynı workspace’te ' +
               'olmayan bir hesaptan boost faturalandırılamaz.',
           );
         }
@@ -1579,7 +1579,7 @@ export class ConnectionsService {
     meta: Meta,
   ) {
     if (clientId !== null && !ctx.clientIds.includes(clientId)) {
-      throw new NotFoundException('Müşteri bulunamadı');
+      throw new NotFoundException('Workspace bulunamadı');
     }
 
     const scoped: TenantContext = { ...ctx, activeClientId: null };
@@ -1612,7 +1612,7 @@ export class ConnectionsService {
       // burada, çünkü uç nokta arayüz olmadan da çağrılabiliyor.
       if (clientId !== null && before.managerExternalId === before.externalId) {
         throw new BadRequestException(
-          `"${before.name}" bir yönetici (MCC) hesabı — reklam yayınlamıyor, müşteriye atanamaz.`,
+          `"${before.name}" bir yönetici (MCC) hesabı — reklam yayınlamıyor, workspace’e atanamaz.`,
         );
       }
 
@@ -1754,7 +1754,7 @@ export class ConnectionsService {
     meta: Meta,
   ) {
     if (clientId !== null && !ctx.clientIds.includes(clientId)) {
-      throw new NotFoundException('Müşteri bulunamadı');
+      throw new NotFoundException('Workspace bulunamadı');
     }
 
     const scoped: TenantContext = { ...ctx, activeClientId: null };

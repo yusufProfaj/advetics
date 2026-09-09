@@ -89,7 +89,7 @@ describe('bağlantıdan sonra ilk veri çekimi', () => {
     });
   });
 
-  it('KRİTİK: kapsam BU bağlantı VE BU müşteri — başkasının hesabına dokunmuyor', async () => {
+  it('KRİTİK: kapsam BU bağlantı VE BU workspace — başkasının hesabına dokunmuyor', async () => {
     // `clientId` düşerse aynı bağlantının başka müşterilere atanmış
     // hesapları da açılırdı; `connectionId` düşerse aynı müşterinin başka
     // bağlantısı açılırdı. İkisi de sessiz kota tüketimi.

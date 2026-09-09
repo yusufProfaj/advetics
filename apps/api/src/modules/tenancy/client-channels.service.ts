@@ -33,7 +33,7 @@ interface Satir {
 }
 
 /**
- * BAĞLI KANALLAR — bir workspace'in görünümü.
+ * BAĞLI KANALLAR — bir workspace’in görünümü.
  *
  * Kullanıcı "Meta Ads / Google Ads / Facebook / Instagram / YouTube" diye
  * düşünüyor; veritabanı `ad_accounts` (platforma göre) ve `social_profiles`
@@ -44,7 +44,7 @@ interface Satir {
  * (müşterilerin kendi Facebook hesabı yok, her yetkilendirme aynı kimliğe
  * çakışıyor); bu ekran o havuzdan hangi hesabın hangi müşteriye ait olduğunu
  * seçtiriyor. Başka müşterilerin ATANMIŞ hesapları burada GÖRÜNMÜYOR —
- * yalnızca bu workspace'inkiler ve havuzda bekleyenler.
+ * yalnızca bu workspace’inkiler ve havuzda bekleyenler.
  */
 @Injectable()
 export class ClientChannelsService {
@@ -65,7 +65,7 @@ export class ClientChannelsService {
       const [client] = await tx.$queryRaw<Array<{ name: string }>>(Prisma.sql`
         SELECT name FROM clients WHERE id = ${clientId}::uuid
       `);
-      if (!client) throw new NotFoundException('Müşteri bulunamadı');
+      if (!client) throw new NotFoundException('Workspace bulunamadı');
 
       const groups: ChannelGroup[] = [];
       for (const kind of CHANNEL_KINDS) {

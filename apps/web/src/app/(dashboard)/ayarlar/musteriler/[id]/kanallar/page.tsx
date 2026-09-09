@@ -48,7 +48,7 @@ export default async function ClientChannelsPage({
           href="/ayarlar/musteriler"
           className="text-xs font-medium text-brand-strong hover:underline"
         >
-          ← Müşteriler
+          ← Workspace’ler
         </Link>
         <h1 className="mt-1.5 text-2xl font-semibold">{data.clientName} — Bağlı Kanallar</h1>
         <p className="mt-1 text-sm text-ink-muted">

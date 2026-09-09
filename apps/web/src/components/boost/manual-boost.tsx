@@ -154,7 +154,7 @@ function ManualBoostForm({
         <div className="rounded-xl border border-dashed border-line bg-surface p-6 text-center">
           <p className="text-sm font-semibold text-ink">Öne çıkarılacak gönderi yok</p>
           <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">
-            {posts.emptyReason ?? 'Bu müşteride henüz çekilmiş gönderi yok.'}
+            {posts.emptyReason ?? 'Bu workspace’te henüz çekilmiş gönderi yok.'}
           </p>
         </div>
       )}
@@ -171,7 +171,7 @@ function ManualBoostForm({
         <div className="rounded-xl border border-warn/40 bg-warn/5 px-3 py-2.5">
           <p className="text-xs font-semibold text-ink">Önce boost ön ayarını kur</p>
           <p className="mt-0.5 text-[11px] text-ink-muted">
-            Bu müşteri için Meta ön ayarı tanımlı değil ya da kapalı. Bütçeyi,
+            Bu workspace için Meta ön ayarı tanımlı değil ya da kapalı. Bütçeyi,
             süreyi ve hedeflemeyi yukarıdaki <strong>Boost ön ayarı</strong>{' '}
             düğmesinden bir kez tanımladıktan sonra gönderilerin yanındaki
             “Yayınla” düğmesi çalışır.

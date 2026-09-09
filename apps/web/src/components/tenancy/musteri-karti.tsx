@@ -181,7 +181,7 @@ export function MusteriKarti({
         >
           {varlikSayisi === 0 ? (
             <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-muted">
-              Atanmış varlık yok — bu müşteride hiç veri görünmeyecek.
+              Atanmış varlık yok — bu workspace’te hiç veri görünmeyecek.
             </p>
           ) : (
             <ul className="space-y-1">
@@ -249,7 +249,7 @@ export function MusteriKarti({
         </DetayBolumu>
 
         {duzenle ? (
-          <DetayBolumu baslik="Müşteri bilgileri">
+          <DetayBolumu baslik="Workspace bilgileri">
             <MusteriBilgiFormu
               clientId={client.id}
               baslangic={client}

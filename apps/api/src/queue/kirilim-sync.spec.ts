@@ -81,7 +81,7 @@ describe('KRİTİK: veri AYRI tabloya yazılıyor', () => {
     expect(k).not.toContain('INSERT INTO insights_daily');
   });
 
-  it('upsert idempotent ve müşteriyi de güncelliyor', () => {
+  it('upsert idempotent ve workspace’i de güncelliyor', () => {
     // Hesap başka müşteriye atandığında `client_id` taşınmazsa satır yarım
     // kalır: hesabı doğru, müşterisi eski.
     const k = kod(SERVIS);

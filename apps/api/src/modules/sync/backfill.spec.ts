@@ -128,7 +128,7 @@ describe('backfill', () => {
     // Seçimsiz tetiklemek TÜM portföyün kotasını tek tıkla harcamak olurdu.
     await expect(
       ctrl.backfill({ ...CTX, activeClientId: null }, { days: 90, apply: true }),
-    ).rejects.toThrow(/Önce bir müşteri seçin/);
+    ).rejects.toThrow(/Önce bir workspace seçin/);
     expect(enqueued).toEqual([]);
   });
 

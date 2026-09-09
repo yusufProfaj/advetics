@@ -21,7 +21,7 @@ export interface UyelikOzeti {
  *
  * KOD DÖNÜYOR, CÜMLE DEĞİL. Aynı karar iki ekranda birden veriliyor ve ikisi
  * farklı yönden bakıyor: workspace ekibi ekranı KİŞİ listeliyor ("Bu
- * workspace'e zaten erişiyor"), Ekip & Yetkiler ekranı WORKSPACE listeliyor
+ * workspace’e zaten erişiyor"), Ekip & Yetkiler ekranı WORKSPACE listeliyor
  * ("Zaten yetkisi var"). Cümleyi burada üretmek, iki ekrandan birinin ters
  * okunan bir metin göstermesi demekti; kararı iki yerde yazmak ise doğduğu
  * anda ayrışırdı.
@@ -43,16 +43,16 @@ export function atamaEngeli(uyelikler: UyelikOzeti[], clientId: string): AtamaEn
   return null;
 }
 
-/** KİŞİ listeleyen ekran için (bir workspace'e kimler atanabilir). */
+/** KİŞİ listeleyen ekran için (bir workspace’e kimler atanabilir). */
 export const ENGEL_KISI: Record<AtamaEngeli, string> = {
   zaten_uye: 'Bu workspace’e zaten erişiyor',
-  org_geneli: 'Tüm müşterilere erişiyor — ayrıca atanması gerekmiyor',
+  org_geneli: 'Tüm workspace’lere erişiyor — ayrıca atanması gerekmiyor',
 };
 
 /** WORKSPACE listeleyen ekran için (bir danışman nerelere atanabilir). */
 export const ENGEL_WORKSPACE: Record<AtamaEngeli, string> = {
   zaten_uye: 'Zaten yetkisi var',
-  org_geneli: 'Tüm müşterilere erişiyor',
+  org_geneli: 'Tüm workspace’lere erişiyor',
 };
 
 export interface AtamaSonucu {

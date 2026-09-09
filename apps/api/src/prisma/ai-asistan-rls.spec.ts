@@ -71,7 +71,7 @@ beforeEach(async () => {
 
   await h.q(
     `INSERT INTO ai_conversations (id, org_id, client_id, user_id, title, created_at, updated_at)
-     VALUES ($1, $5, NULL,     $6, 'Müşteri seçilmedi', now(), now()),
+     VALUES ($1, $5, NULL,     $6, 'Workspace seçilmedi', now(), now()),
             ($2, $5, $7,       $6, 'Sabancı — form kampanyası', now(), now()),
             ($3, $5, $8,       $9, 'B sohbeti', now(), now()),
             ($4, $10, NULL,    $6, 'Başka ajans', now(), now())`,
@@ -113,53 +113,61 @@ const OWNER_B: Ctx = { userId: USER_B, clientIds: [CLIENT_B] };
 /** C, A'nın müşterisine erişebiliyor ama SAHİBİ değil — "yönetici sorusu" senaryosu. */
 const STAFF_ON_A: Ctx = { userId: USER_C, clientIds: [CLIENT_A] };
 
-async function visibleTitles(ctx: Ctx): Promise<string[]> {
+/**
+ * Görünen sohbet başlıkları — SIRALAMA TESTİN KONUSU DEĞİL.
+ *
+ * `ORDER BY title` yalnızca sonucu deterministik yapmak için; bu dosya
+ * GÖRÜNÜRLÜĞÜ sınıyor. Bir fikstür adı değiştiğinde (ör. "Müşteri seçilmedi"
+ * → "Workspace seçilmedi") alfabetik sıra kayıyor ve sıraya çapalanmış bir
+ * iddia, RLS politikası KUSURSUZ çalışırken kırmızı veriyor. Bu gerçekten
+ * oldu; iddia artık KÜME olarak kuruluyor.
+ */
+async function visibleTitles(ctx: Ctx): Promise<Set<string>> {
   const rows = await asUser<{ title: string }>(
     'SELECT title FROM ai_conversations ORDER BY title',
     ctx,
   );
-  return rows.map((r) => r.title);
+  return new Set(rows.map((r) => r.title));
 }
 
 describe('ai_conversations — görünürlük', () => {
-  it('SAHİBİ müşteri seçilmemiş sohbeti de görüyor', async () => {
+  it('SAHİBİ workspace seçilmemiş sohbeti de görüyor', async () => {
     // Aksi halde kullanıcı kendi geçmişine devam edemezdi — client_id NULL
     // demek "henüz seçilmedi", "kimsenin değil" değil.
-    expect(await visibleTitles(OWNER_A)).toEqual([
-      'Müşteri seçilmedi',
-      'Sabancı — form kampanyası',
-    ]);
+    expect(await visibleTitles(OWNER_A)).toEqual(
+      new Set(['Workspace seçilmedi', 'Sabancı — form kampanyası']),
+    );
   });
 
-  it('KRİTİK: BAŞKA kullanıcı müşterisiz sohbeti GÖRMÜYOR', async () => {
+  it('KRİTİK: BAŞKA kullanıcı workspace’siz sohbeti GÖRMÜYOR', async () => {
     // client_id NULL olan bir satır yalnızca sahibi ve org yöneticisine açık
     // — audit_logs'un aynı kuralı.
-    expect(await visibleTitles(STAFF_ON_A)).not.toContain('Müşteri seçilmedi');
+    expect((await visibleTitles(STAFF_ON_A)).has('Workspace seçilmedi')).toBe(false);
   });
 
   it('MÜŞTERİYE ERİŞİMİ OLAN PERSONEL sahibi olmadığı sohbeti görüyor — "yönetici sorusu"', async () => {
     // "Bu taslağı hangi promptla oluşturdu" sorusunun cevabı bu satır.
-    expect(await visibleTitles(STAFF_ON_A)).toContain('Sabancı — form kampanyası');
+    expect((await visibleTitles(STAFF_ON_A)).has('Sabancı — form kampanyası')).toBe(true);
   });
 
   it('ERİŞİMİ OLMAYAN kullanıcı ne sahibi olduğu ne erişemediği sohbeti görmüyor', async () => {
-    expect(await visibleTitles(OWNER_B)).toEqual(['B sohbeti']);
+    expect(await visibleTitles(OWNER_B)).toEqual(new Set(['B sohbeti']));
   });
 
   it('ORG YÖNETİCİSİ aynı organizasyondaki her şeyi görüyor', async () => {
-    expect(await visibleTitles(ORG_ADMIN)).toEqual([
-      'B sohbeti',
-      'Müşteri seçilmedi',
-      'Sabancı — form kampanyası',
-    ]);
+    expect(await visibleTitles(ORG_ADMIN)).toEqual(
+      new Set(['B sohbeti', 'Workspace seçilmedi', 'Sabancı — form kampanyası']),
+    );
   });
 
   it('BAŞKA ORGANİZASYONUN sohbeti hiç kimseye görünmüyor', async () => {
-    expect(await visibleTitles(ORG_ADMIN)).not.toContain('Başka ajans');
+    expect((await visibleTitles(ORG_ADMIN)).has('Başka ajans')).toBe(false);
   });
 
   it('BAĞLAM KURULMAMIŞSA hiçbir satır görünmüyor', async () => {
-    expect(await visibleTitles({ userId: USER_A, orgId: null, isOrgAdmin: true })).toEqual([]);
+    expect(await visibleTitles({ userId: USER_A, orgId: null, isOrgAdmin: true })).toEqual(
+      new Set(),
+    );
   });
 });
 
@@ -205,7 +213,7 @@ describe('ai_conversations — yazma', () => {
     ).rejects.toThrow(/row-level security/i);
   });
 
-  it('ERİŞİLEN müşterinin kimliğiyle sohbet açılabiliyor', async () => {
+  it('ERİŞİLEN workspace’in kimliğiyle sohbet açılabiliyor', async () => {
     await asUser(
       `INSERT INTO ai_conversations (id, org_id, client_id, user_id, title, updated_at)
        VALUES (gen_random_uuid(), '${ORG}', '${CLIENT_A}', '${USER_A}', 'A için yeni', now())`,
@@ -221,10 +229,10 @@ describe('ai_conversations — yazma', () => {
     // başlatmayı tamamen kapatırdı — asistanın ilk ekranı budur.
     await asUser(
       `INSERT INTO ai_conversations (id, org_id, client_id, user_id, title, updated_at)
-       VALUES (gen_random_uuid(), '${ORG}', NULL, '${USER_A}', 'Yeni müşterisiz', now())`,
+       VALUES (gen_random_uuid(), '${ORG}', NULL, '${USER_A}', 'Yeni workspace’siz', now())`,
       OWNER_A,
     );
-    const rows = await h.q(`SELECT id FROM ai_conversations WHERE title = 'Yeni müşterisiz'`);
+    const rows = await h.q(`SELECT id FROM ai_conversations WHERE title = 'Yeni workspace’siz'`);
     expect(rows).toHaveLength(1);
   });
 
@@ -249,7 +257,7 @@ describe('ai_messages — üst sohbetten miras alınan görünürlük', () => {
     expect(await visibleMessageCount(OWNER_A)).toBe(1);
   });
 
-  it('müşteriye erişimi olan personel mesajı görüyor', async () => {
+  it('workspace’e erişimi olan personel mesajı görüyor', async () => {
     expect(await visibleMessageCount(STAFF_ON_A)).toBe(1);
   });
 

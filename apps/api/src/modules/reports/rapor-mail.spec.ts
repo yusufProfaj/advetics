@@ -91,7 +91,7 @@ const VERI: ReportData = {
 };
 
 describe('raporMailTaslagi', () => {
-  it('konu müşteri adını ve dönemi taşıyor', () => {
+  it('konu workspace adını ve dönemi taşıyor', () => {
     const t = raporMailTaslagi(VERI, 'Yusuf Algan');
     expect(t.subject).toContain('Sabancı İnşaat');
     expect(t.subject).toContain('Temmuz 2026');

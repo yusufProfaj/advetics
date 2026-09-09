@@ -46,8 +46,8 @@ export default async function AutoBoostPage({
   if (!clientId) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir müşteri seç</h1>
-        <p className="mt-2 text-sm text-ink-muted">Auto-Boost müşteri bazında çalışıyor.</p>
+        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
+        <p className="mt-2 text-sm text-ink-muted">Auto-Boost workspace bazında çalışıyor.</p>
       </div>
     );
   }
@@ -72,7 +72,7 @@ export default async function AutoBoostPage({
   const others = boosts?.filter((b) => b.status !== 'candidate') ?? [];
   const pendingTotal = candidates.reduce((a, b) => a + BigInt(b.totalBudgetMicros), 0n);
 
-  const clientName = session.availableClients.find((c) => c.id === clientId)?.name ?? 'Müşteri';
+  const clientName = session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
 
   return (
     <div className="space-y-5">

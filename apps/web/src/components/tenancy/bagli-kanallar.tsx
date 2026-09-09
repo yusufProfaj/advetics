@@ -16,7 +16,7 @@ import { atamaBildirimi, type AtamaYaniti } from '@/lib/atama-bildirimi';
 import { PlatformLogo } from '@/components/platform-logo';
 
 /**
- * BAĞLI KANALLAR — bir workspace'in kanalları, kart düzeninde.
+ * BAĞLI KANALLAR — bir workspace’in kanalları, kart düzeninde.
  *
  * "Kanal Ekle" havuzdan seçtiriyor, yeni bir OAuth başlatmıyor: bağlantı
  * ajansa ait ve bir kez kuruluyor (müşterilerin kendi Facebook hesabı yok,
@@ -24,7 +24,7 @@ import { PlatformLogo } from '@/components/platform-logo';
  * hangi hesabın bu müşteriye ait olduğunu söylemek.
  *
  * BAŞKA MÜŞTERİLERE ATANMIŞ HESAPLAR BURADA HİÇ GÖRÜNMÜYOR — ne listede ne
- * seçicide. Sunucu zaten yalnızca bu workspace'inkileri ve havuzdakileri
+ * seçicide. Sunucu zaten yalnızca bu workspace’inkileri ve havuzdakileri
  * döndürüyor.
  */
 export function BagliKanallar({ data }: { data: ClientChannels }) {

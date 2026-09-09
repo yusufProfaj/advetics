@@ -164,7 +164,7 @@ export function ClientAssets({
     <div className="mt-4 border-t border-line pt-3">
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-          Bu müşterinin varlıkları
+          Bu workspace’in varlıkları
         </h3>
         {adAccounts.length > 0 && (
           <span className="text-[11px] text-ink-muted">{watched} izlemede</span>
@@ -173,7 +173,7 @@ export function ClientAssets({
 
       {adAccounts.length === 0 && profiles.length === 0 ? (
         <p className="mt-2 text-xs text-ink-muted">
-          Bu müşteriye hiçbir reklam hesabı ya da sayfa atanmamış — panelde hiç veri
+          Bu workspace’e hiçbir reklam hesabı ya da sayfa atanmamış — panelde hiç veri
           görünmeyecek.
         </p>
       ) : (
@@ -214,7 +214,7 @@ export function ClientAssets({
                     )
                   }
                   disabled={busy !== null || isPending}
-                  title="Havuza geri koy — bu müşteriden çıkar"
+                  title="Havuza geri koy — bu workspace’ten çıkar"
                   className="shrink-0 text-[11px] text-ink-muted transition hover:text-danger disabled:opacity-40"
                 >
                   {busy === a.id ? '…' : 'çıkar'}
@@ -240,7 +240,7 @@ export function ClientAssets({
                 p.profileType !== 'youtube_channel' &&
                 (metaAccounts.length === 0 ? (
                   <span
-                    title="Bu müşteriye atanmış Meta reklam hesabı yok"
+                    title="Bu workspace’e atanmış Meta reklam hesabı yok"
                     className="shrink-0 text-[10px] text-amber-700"
                   >
                     boost hesabı yok
@@ -292,7 +292,7 @@ export function ClientAssets({
                       )
                     }
                     disabled={busy !== null || isPending}
-                    title="Havuza geri koy — bu müşteriden çıkar"
+                    title="Havuza geri koy — bu workspace’ten çıkar"
                     className="text-[11px] text-ink-muted transition hover:text-danger disabled:opacity-40"
                   >
                     çıkar

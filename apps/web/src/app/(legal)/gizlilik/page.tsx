@@ -175,7 +175,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             Veritabanı düzeyinde <strong>satır güvenliği (Row Level Security)</strong> uygulanır:
-            bir müşterinin verisi, uygulama katmanındaki bir hata durumunda bile başka bir
+            bir workspace’in verisi, uygulama katmanındaki bir hata durumunda bile başka bir
             müşteriye görünmez.
           </li>
           <li>Veritabanı ve uygulama sunucuları internete kapalıdır; erişim yalnızca yereldir.</li>

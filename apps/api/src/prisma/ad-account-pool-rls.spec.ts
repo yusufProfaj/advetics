@@ -144,7 +144,7 @@ describe('ad_accounts — havuz görünürlüğü', () => {
     expect(await visibleAccounts(ORG_ADMIN)).toEqual(['A hesabı', 'Havuz']);
   });
 
-  it('KRİTİK: müşteri düzeyi kullanıcı HAVUZU GÖRMÜYOR', async () => {
+  it('KRİTİK: workspace düzeyi kullanıcı HAVUZU GÖRMÜYOR', async () => {
     // Havuz, ajansın erişebildiği TÜM reklam hesaplarının listesi (Meta'da
     // 157) ve çoğu başka müşterilere ait. Tek bir kullanıcıya göstermek,
     // ajansın müşteri portföyünü tek ekranda sızdırmak olurdu.
@@ -162,7 +162,7 @@ describe('ad_accounts — havuz görünürlüğü', () => {
     expect(await visibleAccounts({ orgId: null, isOrgAdmin: true })).toEqual([]);
   });
 
-  it('aktif müşteri seçimi ATANMIŞ hesapları daraltıyor, havuzu daraltmıyor', async () => {
+  it('aktif workspace seçimi ATANMIŞ hesapları daraltıyor, havuzu daraltmıyor', async () => {
     // Seçim bir GÖRÜNÜM süzgeci. B seçiliyken A'nın hesabı düşüyor; havuz ise
     // yöneticinin yönetim yüzeyi olduğu için yerinde kalıyor.
     const names = await visibleAccounts({ ...ORG_ADMIN, activeClientId: CLIENT_B });
@@ -171,7 +171,7 @@ describe('ad_accounts — havuz görünürlüğü', () => {
 });
 
 describe('ad_accounts — atama yazma yolu', () => {
-  it('ORG YÖNETİCİSİ havuzdaki hesabı müşteriye atayabiliyor', async () => {
+  it('ORG YÖNETİCİSİ havuzdaki hesabı workspace’e atayabiliyor', async () => {
     await asUser(`UPDATE ad_accounts SET client_id = '${CLIENT_B}' WHERE id = '${ACC_POOL}'`, ORG_ADMIN);
     const rows = await h.q<{ client_id: string | null }>(
       `SELECT client_id FROM ad_accounts WHERE id = '${ACC_POOL}'`,
@@ -179,7 +179,7 @@ describe('ad_accounts — atama yazma yolu', () => {
     expect(rows[0]?.client_id).toBe(CLIENT_B);
   });
 
-  it('KRİTİK: BAŞKA müşteri SEÇİLİYKEN atama REDDEDİLİYOR — atama uç noktası seçimi kapatmalı', async () => {
+  it('KRİTİK: BAŞKA workspace SEÇİLİYKEN atama REDDEDİLİYOR — atama uç noktası seçimi kapatmalı', async () => {
     /*
      * BU BİR POLİTİKA HATASI DEĞİL, POSTGRES KURALI — ve yazılırken deneyle
      * bulundu.
@@ -217,7 +217,7 @@ describe('ad_accounts — atama yazma yolu', () => {
     expect(rows[0]?.client_id).toBe(CLIENT_B);
   });
 
-  it('müşteri düzeyi kullanıcı havuzdaki hesaba DOKUNAMIYOR', async () => {
+  it('workspace düzeyi kullanıcı havuzdaki hesaba DOKUNAMIYOR', async () => {
     // Satır zaten görünmüyor; UPDATE hata vermeden 0 satır etkiliyor. Sessiz
     // gibi duruyor ama doğru olan bu: politika satırı yok sayıyor.
     await asUser(`UPDATE ad_accounts SET sync_enabled = true WHERE id = '${ACC_POOL}'`, CLIENT_USER);
@@ -227,7 +227,7 @@ describe('ad_accounts — atama yazma yolu', () => {
     expect(rows[0]?.sync_enabled).toBe(false);
   });
 
-  it('KRİTİK: kendi hesabını ERİŞEMEDİĞİ müşteriye taşıyamıyor', async () => {
+  it('KRİTİK: kendi hesabını ERİŞEMEDİĞİ workspace’e taşıyamıyor', async () => {
     // USING eski hâli denetliyor, WITH CHECK yenisini. WITH CHECK olmasaydı
     // satır erişilemeyen bir müşteriye TAŞINABİLİRDİ.
     await expect(
@@ -249,14 +249,14 @@ describe('social_profiles — havuz', () => {
     expect(await visibleProfiles(ORG_ADMIN)).toEqual(['A sayfası', 'Havuz sayfası']);
   });
 
-  it('KRİTİK: müşteri düzeyi kullanıcı HAVUZDAKİ SAYFAYI GÖRMÜYOR', async () => {
+  it('KRİTİK: workspace düzeyi kullanıcı HAVUZDAKİ SAYFAYI GÖRMÜYOR', async () => {
     // Havuz, ajansın Meta kimliğinin eriştiği bütün sayfaların listesi —
     // çoğu başka müşterilere ait. Bir müşteri temsilcisine göstermek, ajansın
     // portföyünü tek ekranda sızdırmak olurdu.
     expect(await visibleProfiles(CLIENT_USER)).toEqual(['A sayfası']);
   });
 
-  it('müşteri düzeyi kullanıcı havuzdaki sayfaya DOKUNAMIYOR', async () => {
+  it('workspace düzeyi kullanıcı havuzdaki sayfaya DOKUNAMIYOR', async () => {
     await asUser(
       `UPDATE social_profiles SET client_id = '${CLIENT_A}' WHERE id = '${PROFILE_POOL}'`,
       CLIENT_USER,
@@ -278,7 +278,7 @@ describe('social_profiles — havuz', () => {
     expect(rows[0]?.client_id).toBe(CLIENT_B);
   });
 
-  it('KRİTİK: sayfayı ERİŞEMEDİĞİ müşteriye taşıyamıyor', async () => {
+  it('KRİTİK: sayfayı ERİŞEMEDİĞİ workspace’e taşıyamıyor', async () => {
     await expect(
       asUser(
         `UPDATE social_profiles SET client_id = '${CLIENT_B}' WHERE id = '${PROFILE_ASSIGNED}'`,

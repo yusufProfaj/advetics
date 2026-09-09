@@ -41,7 +41,7 @@ export function ClientActions({
       });
       router.push(path);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Müşteriye geçilemedi.');
+      setError(err instanceof Error ? err.message : 'Workspace’e geçilemedi.');
       setBusy(null);
     }
   }
@@ -103,7 +103,7 @@ export function ClientActions({
             {accountCount > 0
               ? `${accountCount} reklam hesabı ve geçmiş verisi SİLİNMEZ`
               : 'verisi silinmez'}
-            . Geri almak için müşterinin durumunu tekrar aktif yapmak yeterli.
+            . Geri almak için workspace’in durumunu tekrar aktif yapmak yeterli.
           </p>
           <div className="mt-2 flex gap-2">
             <button

@@ -9,7 +9,7 @@ import { PLATFORM_LABELS } from '@advetics/shared';
 /** Elenen kategorilerin Türkçe karşılığı — sayaç anlamsız kalmasın. */
 const ELENME_ETIKETLERI: Record<keyof SyncExcludedCounts, string> = {
   syncDisabled: 'izleme kapalı',
-  clientInactive: 'müşteri aktif değil',
+  clientInactive: 'workspace aktif değil',
   connectionInactive: 'bağlantı yeniden yetki istiyor',
   accountStatus: 'hesabın platform durumu uygun değil',
 };
@@ -21,7 +21,7 @@ const IS_ADLARI: Record<string, string> = {
   initial_backfill: 'İlk geçmiş çekimi',
   organic_posts: 'Organik gönderiler',
   keyword_insights: 'Anahtar kelimeler',
-  leads_reconcile: 'Potansiyel müşteriler',
+  leads_reconcile: 'Potansiyel Müşteriler',
 };
 
 export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
@@ -51,7 +51,7 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
 
         {data.accounts.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-ink-muted">
-            Bu müşteriye hiç reklam hesabı atanmamış. Platform Bağlantıları
+            Bu workspace’e hiç reklam hesabı atanmamış. Platform Bağlantıları
             ekranından havuzdan hesap ata — atama izlemeyi de açıyor ve 90
             günlük geçmişi kuyruğa alıyor.
           </p>
@@ -74,7 +74,7 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
 
         {data.recentJobs.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-ink-muted">
-            Bu müşteri için hiç senkronizasyon işi kaydedilmemiş. Hesap yeni
+            Bu workspace için hiç senkronizasyon işi kaydedilmemiş. Hesap yeni
             atandıysa işler birkaç dakika içinde görünür; görünmüyorsa
             senkronizasyon worker&apos;ı çalışmıyor olabilir.
           </p>

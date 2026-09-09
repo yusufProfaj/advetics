@@ -126,7 +126,7 @@ export class BudgetsService {
       const [client] = await tx.$queryRaw<Array<{ reporting_currency: string }>>(Prisma.sql`
         SELECT reporting_currency FROM clients WHERE id = ${input.clientId}::uuid
       `);
-      if (!client) throw new NotFoundException('Müşteri bulunamadı');
+      if (!client) throw new NotFoundException('Workspace bulunamadı');
 
       if (input.adAccountId) {
         const [acc] = await tx.$queryRaw<Array<{ client_id: string | null }>>(Prisma.sql`
@@ -137,7 +137,7 @@ export class BudgetsService {
         // olurdu: bütçe hiçbir zaman eşleşmeyen bir harcamaya bakardı ve
         // pacing kalıcı olarak "hiç harcanmamış" gösterirdi.
         if (acc.client_id !== input.clientId) {
-          throw new BadRequestException('Reklam hesabı bu müşteriye bağlı değil');
+          throw new BadRequestException('Reklam hesabı bu workspace’e bağlı değil');
         }
       }
 

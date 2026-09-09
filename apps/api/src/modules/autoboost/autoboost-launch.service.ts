@@ -160,7 +160,7 @@ export class AutoBoostLaunchService {
   ): Promise<{ status: string; message: string }> {
     if (!kayit.preset_id || !kayit.preset_enabled) {
       throw new BadRequestException(
-        'Bu müşteri için otomatik boost ön ayarı yok ya da kapalı.',
+        'Bu workspace için otomatik boost ön ayarı yok ya da kapalı.',
       );
     }
     if (!kayit.post_id) {
@@ -176,7 +176,7 @@ export class AutoBoostLaunchService {
     }
     if (!kayit.linked_ad_account_id) {
       throw new BadRequestException(
-        'Bu sayfaya bağlı bir reklam hesabı yok. Müşteriler ekranından ' +
+        'Bu sayfaya bağlı bir reklam hesabı yok. Workspace’ler ekranından ' +
           '"Boost hesabı" seç — reklam o hesaptan faturalandırılıyor.',
       );
     }
@@ -309,12 +309,12 @@ export class AutoBoostLaunchService {
       // ("yok ya da kapalı") ve kullanıcıyı ayarın nerede olduğunu aramaya
       // itiyordu — kardeş Meta cümleleri yönlendirmeyi zaten taşıyordu.
       throw new BadRequestException(
-        `Bu müşteri için YouTube otomatik boost ön ayarı yok ya da kapalı. ${ON_AYAR_YERI} tanımla ya da aç.`,
+        `Bu workspace için YouTube otomatik boost ön ayarı yok ya da kapalı. ${ON_AYAR_YERI} tanımla ya da aç.`,
       );
     }
     if (!kayit.linked_ad_account_id) {
       throw new BadRequestException(
-        'Bu kanala bağlı bir Google reklam hesabı yok. Müşteriler ekranından ' +
+        'Bu kanala bağlı bir Google reklam hesabı yok. Workspace’ler ekranından ' +
           'reklam hesabı seç — reklam o hesaptan faturalandırılıyor.',
       );
     }
@@ -357,7 +357,7 @@ export class AutoBoostLaunchService {
     if (hesap.platform !== 'google') {
       throw new BadRequestException(
         'Bu kanala bağlı hesap bir Google Ads hesabı değil. YouTube reklamı ' +
-          'Google Ads hesabından yayınlanıyor; Müşteriler ekranından doğru ' +
+          'Google Ads hesabından yayınlanıyor; Workspace’ler ekranından doğru ' +
           'hesabı seç.',
       );
     }
@@ -514,13 +514,13 @@ export class AutoBoostLaunchService {
 
     if (!onAyar) {
       throw new BadRequestException(
-        `Bu müşteri için Meta ön ayarı yok. ${ON_AYAR_YERI} bütçeyi, süreyi ` +
+        `Bu workspace için Meta ön ayarı yok. ${ON_AYAR_YERI} bütçeyi, süreyi ` +
           've hedeflemeyi bir kez tanımla — yayın o ayarlarla yapılıyor.',
       );
     }
     if (!onAyar.preset_enabled) {
       throw new BadRequestException(
-        `Bu müşterinin Meta ön ayarı kapalı. ${ON_AYAR_YERI} aç.`,
+        `Bu workspace’in Meta ön ayarı kapalı. ${ON_AYAR_YERI} aç.`,
       );
     }
 

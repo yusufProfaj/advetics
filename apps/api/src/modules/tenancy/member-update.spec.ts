@@ -134,7 +134,7 @@ describe('e-posta çakışması', () => {
 });
 
 describe('kapsam ve denetim', () => {
-  it('KRİTİK: aktif müşteri daraltması KAPATILIYOR', async () => {
+  it('KRİTİK: aktif workspace daraltması KAPATILIYOR', async () => {
     // Oturumda bir müşteri seçiliyken RLS, o müşteriye bağlı olmayan
     // kullanıcı satırını gizler ve güncelleme "kullanıcı bulunamadı" verirdi.
     await svc.updateMemberInfo(CTX, USER, { fullName: 'X' }, META);

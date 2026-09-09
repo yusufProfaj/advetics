@@ -21,7 +21,7 @@ interface ClientRow {
  * yeri olmak zorunda — yoksa oluşturulduktan sonra hiçbir ekranda
  * görünmüyorlar.
  *
- * Bu sayfa o boşluğu kapatıyor: yalnızca bu workspace'e erişimi olanlar,
+ * Bu sayfa o boşluğu kapatıyor: yalnızca bu workspace’e erişimi olanlar,
  * müşterinin kendi hesapları DAHİL. Uç nokta ikisini `?clientId=` ile
  * ayırıyor.
  */
@@ -60,11 +60,11 @@ export default async function WorkspaceTeamPage({
           href="/ayarlar/musteriler"
           className="text-xs font-medium text-brand-strong hover:underline"
         >
-          ← Müşteriler
+          ← Workspace’ler
         </Link>
         <h1 className="mt-1.5 text-2xl font-semibold">{client.name} — Ekip</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Bu workspace’e erişimi olan kişiler. Müşterinin kendi giriş hesapları da
+          Bu workspace’e erişimi olan kişiler. Workspace’in kendi giriş hesapları da
           burada; ajans ekibi listesinde görünmüyorlar.
         </p>
       </div>
@@ -97,7 +97,7 @@ export default async function WorkspaceTeamPage({
         <div className="rounded-xl border border-line bg-surface p-8 text-center">
           <p className="text-sm font-medium text-ink">Bu workspace’e atanmış kimse yok</p>
           <p className="mx-auto mt-1.5 max-w-md text-sm text-ink-muted">
-            Aşağıdaki formdan bir kullanıcı ekleyebilirsin. Müşterinin kendi
+            Aşağıdaki formdan bir kullanıcı ekleyebilirsin. Workspace’in kendi
             görebilmesi için rolü <strong>Görüntüleyici</strong> seç — o rol
             yalnızca bu workspace’i görür ve ajans ekranlarını hiç görmez.
           </p>
@@ -108,7 +108,7 @@ export default async function WorkspaceTeamPage({
       ) : (
         <TeamManager
           members={members}
-          // TEK MÜŞTERİ VERİLİYOR: bu ekrandan başka bir workspace'e yetki
+          // TEK MÜŞTERİ VERİLİYOR: bu ekrandan başka bir workspace’e yetki
           // verilememeli, yoksa "Ege'nin ekibi" ekranından Fenbay'a erişim
           // açılabilirdi.
           clients={[client]}

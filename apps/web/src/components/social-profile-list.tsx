@@ -54,8 +54,8 @@ export function SocialProfileList({
        */
       if (res.leftBehindForms > 0) {
         setNotice(
-          `${res.leftBehindForms} form ve toplanmış kayıtları ESKİ müşteride kaldı — ` +
-            'geçmiş veri taşınmıyor. Yeni müşteri için formu yeniden oluşturman gerekir.',
+          `${res.leftBehindForms} form ve toplanmış kayıtları ESKİ workspace’te kaldı — ` +
+            'geçmiş veri taşınmıyor. Yeni workspace için formu yeniden oluşturman gerekir.',
         );
       }
       startTransition(() => router.refresh());

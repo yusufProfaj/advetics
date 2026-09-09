@@ -67,7 +67,7 @@ export function setActiveClientCookie(
   if (clientId) {
     res.cookie(ACTIVE_CLIENT_COOKIE, clientId, {
       ...base,
-      httpOnly: false, // Frontend'in aktif müşteriyi okuması gerekiyor
+      httpOnly: false, // Frontend'in aktif workspace’i okuması gerekiyor
       path: '/',
       maxAge: parseTtl('30d'),
     });

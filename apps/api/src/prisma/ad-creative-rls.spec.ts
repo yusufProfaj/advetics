@@ -135,7 +135,7 @@ async function visibleCreatives(ctx: Ctx): Promise<string[]> {
 }
 
 describe('ad_creatives görünürlüğü', () => {
-  it('iki müşteriye yetkili kullanıcı ikisini de görüyor', async () => {
+  it('iki workspace’e yetkili kullanıcı ikisini de görüyor', async () => {
     expect(await visibleCreatives(ORG_ADMIN)).toEqual(['A kreatifi', 'B kreatifi']);
   });
 
@@ -180,7 +180,7 @@ describe('ad_creative_assets görünürlüğü', () => {
 });
 
 describe('yazma politikaları', () => {
-  it('KRİTİK: yetkisi olmayan müşteriye kreatif YAZILAMIYOR', async () => {
+  it('KRİTİK: yetkisi olmayan workspace’e kreatif YAZILAMIYOR', async () => {
     // Okuma engelli ama yazma açık kalsaydı, bir kullanıcı erişemediği bir
     // müşterinin kütüphanesine kayıt bırakabilirdi — kendi göremeden.
     await expect(
@@ -192,7 +192,7 @@ describe('yazma politikaları', () => {
     ).rejects.toThrow(/row-level security/i);
   });
 
-  it('KRİTİK: başka müşterinin kreatifi SİLİNEMİYOR', async () => {
+  it('KRİTİK: başka workspace’in kreatifi SİLİNEMİYOR', async () => {
     await asUser(`DELETE FROM ad_creatives WHERE id = '${CREATIVE_B}'`, ONLY_A);
     // Politika DELETE'i eşleştirmiyor: hata yok ama satır da gitmiyor.
     // Sessiz görünen bu davranış doğru olan — Postgres görünmeyen satırı
@@ -200,7 +200,7 @@ describe('yazma politikaları', () => {
     expect(await visibleCreatives(ORG_ADMIN)).toEqual(['A kreatifi', 'B kreatifi']);
   });
 
-  it('yetkili müşteriye yazılabiliyor', async () => {
+  it('yetkili workspace’e yazılabiliyor', async () => {
     await asUser(
       `INSERT INTO ad_creatives (id, org_id, client_id, name, texts, updated_at)
        VALUES (gen_random_uuid(), '${ORG}', '${CLIENT_A}', 'Yeni', '{}'::jsonb, now())`,

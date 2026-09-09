@@ -13,7 +13,7 @@ import { ConnectionsService } from './connections.service';
  *
  * Ama upsert `clientId`'yi bilerek güncellemiyor (havuz modelinde doğruydu:
  * "Hesapları yenile" atamaları sıfırlamamalı). Sonuç sessizdi: satırın
- * BAĞLANTISI yeni workspace'i gösteriyor, ATAMASI hâlâ boş. `ilkVeriCekimi`
+ * BAĞLANTISI yeni workspace’i gösteriyor, ATAMASI hâlâ boş. `ilkVeriCekimi`
  * hesapları `{ connectionId, clientId }` ile arıyor, eşleşme olmuyor, izleme
  * açılmıyor, geçmiş veri gelmiyor — ve ekran "bağlandı" diyor.
  */
@@ -107,7 +107,7 @@ describe('workspace bağlantısı — sahiplenme', () => {
     });
   });
 
-  it('KRİTİK: BAŞKA müşteriye atanmış hesap TAŞINMIYOR', async () => {
+  it('KRİTİK: BAŞKA workspace’e atanmış hesap TAŞINMIYOR', async () => {
     /*
      * `where` yalnızca `clientId: null` satırları kapsıyor. Kapsamasaydı,
      * Mia Yapı'nın Meta hesabından görünen ama Fenbay'a atanmış bir reklam

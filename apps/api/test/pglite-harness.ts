@@ -538,7 +538,7 @@ export async function seedTenant(
   ]);
   await h.q(
     `INSERT INTO clients (id, org_id, name, slug, updated_at)
-     VALUES ($1, $2, 'Müşteri', 'musteri', now())`,
+     VALUES ($1, $2, 'Workspace', 'musteri', now())`,
     [IDS.client, IDS.org],
   );
   await h.q(

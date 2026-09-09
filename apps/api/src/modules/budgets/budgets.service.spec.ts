@@ -149,7 +149,7 @@ describe('tekillik kısıtı', () => {
     expect(all[0]?.amountMicros).toBe('45000000000');
   });
 
-  it('HAM SQL ile ikinci müşteri geneli satır eklenemez', async () => {
+  it('HAM SQL ile ikinci workspace geneli satır eklenemez', async () => {
     // Servis katmanını atlayan bir yol kalmasın: kısıt VERİTABANINDA.
     await svc.upsert(CTX, {
       clientId: IDS.client,
@@ -306,7 +306,7 @@ describe('upsert doğrulaması', () => {
         amount: '10000',
         alertThresholdPct: 80,
       }),
-    ).rejects.toThrow(/bu müşteriye bağlı değil/i);
+    ).rejects.toThrow(/bu workspace’e bağlı değil/i);
   });
 
   it('GÜNLÜK LİMİT aylık bütçeden büyük olamaz', async () => {

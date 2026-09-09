@@ -44,7 +44,7 @@ beforeEach(async () => {
   await seedTenant(h);
   await h.q(
     `INSERT INTO clients (id, org_id, name, slug, updated_at)
-     VALUES ($1, $2, 'Öteki Müşteri', 'oteki', now())`,
+     VALUES ($1, $2, 'Öteki Workspace', 'oteki', now())`,
     [OTEKI, IDS.org],
   );
   /*
@@ -132,7 +132,7 @@ describe('kanal eşlemesi', () => {
 });
 
 describe('GÖRÜNÜRLÜK — asıl güvenlik iddiası', () => {
-  it('KRİTİK: BAŞKA müşteriye atanmış hesap HİÇ görünmüyor', async () => {
+  it('KRİTİK: BAŞKA workspace’e atanmış hesap HİÇ görünmüyor', async () => {
     // Bu müşterinin kendi hesabı da var: "hiçbir şey dönmüyor" ile "yalnızca
     // yabancı olan elenmiş" ayrımı ancak ikisi birlikte sınanınca kuruluyor.
     await hesap(uuid(6), 'meta', OTEKI);
@@ -151,7 +151,7 @@ describe('GÖRÜNÜRLÜK — asıl güvenlik iddiası', () => {
     expect(g.connected).toHaveLength(0);
   });
 
-  it('bu müşteriye atanmış hesap BAĞLI listede', async () => {
+  it('bu workspace’e atanmış hesap BAĞLI listede', async () => {
     await hesap(uuid(8), 'meta', IDS.client);
     const g = await grup('meta_ads');
     expect(g.connected).toHaveLength(1);

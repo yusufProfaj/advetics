@@ -49,7 +49,7 @@ describe('bandın yeri', () => {
     expect(i).toBeLessThan(LAYOUT_KOD.indexOf('<main'));
   });
 
-  it('MCC bayrağı aktif müşteri seçimine bağlı', () => {
+  it('MCC bayrağı aktif workspace seçimine bağlı', () => {
     expect(LAYOUT_KOD).toContain(
       'mcc={session.activeClientId === null && session.availableClients.length > 1}',
     );
@@ -63,7 +63,7 @@ describe('iki görünüm', () => {
     expect(BANT_KOD).toContain('m.get(u.kod)');
   });
 
-  it('KRİTİK: tek müşteride sayfalı — 1/3 göstergesi', () => {
+  it('KRİTİK: tek workspace’te sayfalı — 1/3 göstergesi', () => {
     expect(BANT_KOD).toContain('function TekTekBant');
     expect(BANT_KOD).toContain('{sayfa + 1}/{uyarilar.length}');
   });

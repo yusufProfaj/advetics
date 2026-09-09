@@ -144,7 +144,7 @@ export function AliciListesiAlani({
             </>
           ) : (
             <span className="text-warn">
-              Müşterinin kayıtlı rapor alıcısı yok — en az bir adres eklemelisin.
+              Workspace’in kayıtlı rapor alıcısı yok — en az bir adres eklemelisin.
             </span>
           )}
         </p>

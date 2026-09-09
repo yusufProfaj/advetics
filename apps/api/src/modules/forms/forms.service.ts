@@ -343,12 +343,12 @@ export class FormsService {
     }
     if (profile.client_id === null) {
       throw new BadRequestException(
-        'Bu Facebook sayfası henüz bir müşteriye atanmamış. Platform Bağlantıları ' +
-          'ekranından sayfayı bu müşteriye ata; atanmamış sayfadan gelen kayıtlar yazılamaz.',
+        'Bu Facebook sayfası henüz bir workspace’e atanmamış. Platform Bağlantıları ' +
+          'ekranından sayfayı bu workspace’e ata; atanmamış sayfadan gelen kayıtlar yazılamaz.',
       );
     }
     if (profile.client_id !== input.clientId) {
-      throw new BadRequestException('Seçilen Facebook sayfası bu müşteriye ait değil.');
+      throw new BadRequestException('Seçilen Facebook sayfası bu workspace’e ait değil.');
     }
   }
 

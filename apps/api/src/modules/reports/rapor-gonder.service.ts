@@ -108,8 +108,8 @@ export class RaporGonderService {
     });
     if (alicilar.length === 0) {
       throw new BadRequestException(
-        'Alıcı yok: forma adres girilmedi ve müşterinin kayıtlı rapor alıcısı tanımlı değil. ' +
-          'Müşteriler ekranından ekleyebilirsin.',
+        'Alıcı yok: forma adres girilmedi ve workspace’in kayıtlı rapor alıcısı tanımlı değil. ' +
+          'Workspace’ler ekranından ekleyebilirsin.',
       );
     }
 
@@ -322,7 +322,7 @@ export class RaporGonderService {
     });
     if (alicilar.length === 0) {
       throw new BadRequestException(
-        'Alıcı yok: planda adres girilmemiş ve müşterinin kayıtlı rapor alıcısı tanımlı değil.',
+        'Alıcı yok: planda adres girilmemiş ve workspace’in kayıtlı rapor alıcısı tanımlı değil.',
       );
     }
 

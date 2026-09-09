@@ -206,7 +206,7 @@ export const FATURA_MAX_BAYT = 20 * 1024 * 1024;
  * faturalar kalandan yiyor — eskiden bütçe yalnızca faturaları sayıyordu ve
  * PDF'in payı hesaba hiç girmiyordu.
  *
- * SAĞLAYICI VARSAYIMI: 25 MB, Google Workspace'in standart sınırı. Farklı bir
+ * SAĞLAYICI VARSAYIMI: 25 MB, Google Workspace’in standart sınırı. Farklı bir
  * SMTP sunucusu daha düşük bir sınır koyuyorsa mail reddedilir ve sebebi
  * `mailGonder`in fırlattığı hatada görünür — sessiz kalmaz.
  *

@@ -81,7 +81,7 @@ export class ClientsController {
   }
 
   /**
-   * BAĞLI KANALLAR — bu workspace'in Meta Ads / Google Ads / Facebook /
+   * BAĞLI KANALLAR — bu workspace’in Meta Ads / Google Ads / Facebook /
    * Instagram / YouTube görünümü.
    *
    * `client.read` YETİYOR: yalnızca okuyor. Atama ayrı uçlarda ve

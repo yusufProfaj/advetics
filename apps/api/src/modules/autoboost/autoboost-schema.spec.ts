@@ -161,7 +161,7 @@ describe('Google kısıtı', () => {
 });
 
 describe('ön ayar tekilliği', () => {
-  it('KRİTİK: aynı müşteri+platform için İKİNCİ varsayılan ön ayar açılamıyor', async () => {
+  it('KRİTİK: aynı workspace+platform için İKİNCİ varsayılan ön ayar açılamıyor', async () => {
     /*
      * İki ön ayar olsaydı "onaylanınca hangisi uygulanacak" sorusunun cevabı
      * olmazdı ve seçim sessizce satır sırasına kalırdı.

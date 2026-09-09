@@ -44,7 +44,7 @@ interface ObjectiveRule {
 
 export const OBJECTIVE_RULES: Record<Objective, ObjectiveRule> = {
   OUTCOME_LEADS: {
-    label: 'Potansiyel müşteri',
+    label: 'Potansiyel workspace',
     purpose: 'İletişim bilgisi toplamak — form, WhatsApp ya da mesaj.',
     optimizationGoals: [
       'LEAD_GENERATION',

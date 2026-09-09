@@ -10,7 +10,7 @@ import { ConnectionsService } from './connections.service';
  * yani state satırına `null` yazılıyordu. Geri dönüşte `persistConnection`
  * bunu "havuza bağlanıyor" diye okuyor ve sahiplik koruması REDDEDİYORDU.
  *
- * Sonuç bir ihtimal değil takvimli bir kesintiydi: bir workspace'e bağlanan
+ * Sonuç bir ihtimal değil takvimli bir kesintiydi: bir workspace’e bağlanan
  * Meta hesabı, token'ının süresi dolup `needs_reauth` olduğu anda KALICI
  * OLARAK yenilenemez hâle geliyor ve kullanıcıya gösterilen tek yol
  * "bağlantıyı kaldır" oluyordu.
@@ -85,7 +85,7 @@ describe('yeniden yetkilendirme — sahiplik', () => {
   });
 
   it('KRİTİK: havuz bağlantısı HAVUZ olarak yenileniyor', async () => {
-    // Ters yön de gerçek: havuzdaki bağlantıyı bir workspace'e taşımak
+    // Ters yön de gerçek: havuzdaki bağlantıyı bir workspace’e taşımak
     // sonraki bütün keşifleri oraya yazdırırdı.
     const { svc, gecen } = servis({ clientId: null, platform: 'meta' });
     await svc.reauthorize(CTX, CONN, 'meta', META);

@@ -407,7 +407,7 @@ export class SyncProcessorService {
       });
       if (res.enqueued) enqueued++;
     }
-    return { rows: enqueued, note: `${clients.length} müşteri · ${enqueued} kuyruğa alındı` };
+    return { rows: enqueued, note: `${clients.length} workspace · ${enqueued} kuyruğa alındı` };
   }
 
   /**

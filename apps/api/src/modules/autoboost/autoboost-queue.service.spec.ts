@@ -220,7 +220,7 @@ describe('ön ayar çözümlemesi', () => {
     await post('p1', '2026-08-18T10:00:00Z');
   });
 
-  it('müşteri varsayılanı uygulanıyor', async () => {
+  it('workspace varsayılanı uygulanıyor', async () => {
     await preset({ profileId: null, createdAt: '2026-08-01T00:00:00Z' });
     expect((await svc.enqueueForProfile(PROFIL)).created).toBe(1);
   });
@@ -262,7 +262,7 @@ describe('ön ayar çözümlemesi', () => {
 });
 
 describe('atanmamış profil', () => {
-  it('KRİTİK: müşteriye atanmamış profil kuyruğa GİRMİYOR', async () => {
+  it('KRİTİK: workspace’e atanmamış profil kuyruğa GİRMİYOR', async () => {
     /*
      * `client_id` NULL = ajansın havuzunda. O satır için kart açmak, RLS'in
      * kimseye göstermeyeceği bir kayıt üretmek demek — kart var olur ama
@@ -342,7 +342,7 @@ describe('enqueueOne — WebSub yolu', () => {
  *     müşteriye özel atanmamış, dahil etmek "danışman" tanımını bozardı.
  */
 describe('alıcılar — ilgili danışmanlar', () => {
-  it('bu müşteriye atanmış danışman alıcı listesinde', async () => {
+  it('bu workspace’e atanmış danışman alıcı listesinde', async () => {
     await kullaniciEkle('yonetici@ajans.com', { clientId: IDS.client, role: 'manager' });
     const alicilar = await (
       svc as unknown as { alicilar(orgId: string, clientId: string): Promise<string[]> }
@@ -350,7 +350,7 @@ describe('alıcılar — ilgili danışmanlar', () => {
     expect(alicilar).toContain('yonetici@ajans.com');
   });
 
-  it('KRİTİK: client_viewer (müşterinin kendi girişi) alıcı DEĞİL', async () => {
+  it('KRİTİK: client_viewer (workspace’in kendi girişi) alıcı DEĞİL', async () => {
     await kullaniciEkle('musteri@ege-birlik.com', { clientId: IDS.client, role: 'client_viewer' });
     const alicilar = await (
       svc as unknown as { alicilar(orgId: string, clientId: string): Promise<string[]> }
@@ -358,7 +358,7 @@ describe('alıcılar — ilgili danışmanlar', () => {
     expect(alicilar).not.toContain('musteri@ege-birlik.com');
   });
 
-  it('KRİTİK: org geneli erişimi olan (bu müşteriye özel atanmamış) alıcı DEĞİL', async () => {
+  it('KRİTİK: org geneli erişimi olan (bu workspace’e özel atanmamış) alıcı DEĞİL', async () => {
     await kullaniciEkle('sahip@ajans.com', { clientId: null, role: 'owner' });
     const alicilar = await (
       svc as unknown as { alicilar(orgId: string, clientId: string): Promise<string[]> }

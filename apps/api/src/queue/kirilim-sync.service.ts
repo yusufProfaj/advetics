@@ -56,7 +56,7 @@ export class KirilimSyncService {
      * `assertAssigned()` kuralının bu servisteki karşılığı.
      */
     if (account.clientId === null) {
-      return { rows: 0, apiCalls: 0, note: `${account.name}: hesap müşteriye atanmamış` };
+      return { rows: 0, apiCalls: 0, note: `${account.name}: hesap workspace’e atanmamış` };
     }
 
     const provider = this.providers.get(account.platform);

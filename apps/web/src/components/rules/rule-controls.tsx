@@ -134,7 +134,7 @@ export function RuleControls({
 
       {confirming && (
         <div className="rounded-lg bg-amber-50 px-3 py-2.5 text-xs text-amber-900 ring-1 ring-inset ring-amber-200">
-          <p className="font-semibold">Bu kural müşterinin hesabında gerçekten çalışacak.</p>
+          <p className="font-semibold">Bu kural workspace’in hesabında gerçekten çalışacak.</p>
           <p className="mt-1">
             Bundan sonra saatlik değerlendirmede eşleşen varlıklara{' '}
             <strong>

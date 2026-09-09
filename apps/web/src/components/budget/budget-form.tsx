@@ -108,11 +108,11 @@ export function BudgetForm({
   return (
     <div className="rounded-xl border border-line bg-surface p-4 text-left shadow-sm">
       <h3 className="text-sm font-semibold text-ink">
-        {adAccountName ?? 'Müşteri geneli'} · {monthLabel(month)}
+        {adAccountName ?? 'Workspace geneli'} · {monthLabel(month)}
       </h3>
       {adAccountId === null && (
         <p className="mt-1 text-[11px] text-ink-muted">
-          Şemsiye bütçe: müşterinin tüm reklam hesaplarının toplamı bu tutarla karşılaştırılır.
+          Şemsiye bütçe: workspace’in tüm reklam hesaplarının toplamı bu tutarla karşılaştırılır.
         </p>
       )}
 

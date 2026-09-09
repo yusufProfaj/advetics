@@ -102,11 +102,11 @@ async function visibleTargets(ctx: Ctx): Promise<string[]> {
 }
 
 describe('client_profiles — görünürlük', () => {
-  it('ORG YÖNETİCİSİ erişebildiği müşterinin profilini görüyor', async () => {
+  it('ORG YÖNETİCİSİ erişebildiği workspace’in profilini görüyor', async () => {
     expect(await visibleTargets(ORG_ADMIN)).toEqual(["A'nın hedef kitlesi"]);
   });
 
-  it('KRİTİK: erişimi olmayan müşterinin profili GÖRÜNMÜYOR', async () => {
+  it('KRİTİK: erişimi olmayan workspace’in profili GÖRÜNMÜYOR', async () => {
     expect(await visibleTargets(CLIENT_B_USER)).toEqual([]);
   });
 
@@ -118,7 +118,7 @@ describe('client_profiles — görünürlük', () => {
     expect(await visibleTargets({ orgId: null, isOrgAdmin: true })).toEqual([]);
   });
 
-  it('aktif müşteri seçimi görünürlüğü daraltıyor', async () => {
+  it('aktif workspace seçimi görünürlüğü daraltıyor', async () => {
     expect(await visibleTargets({ ...ORG_ADMIN, activeClientId: CLIENT_B })).toEqual([]);
   });
 });
@@ -146,7 +146,7 @@ describe('client_profiles — yazma', () => {
     expect(rows[0]?.hedef_kitle).toBe("A'nın hedef kitlesi");
   });
 
-  it('KRİTİK: erişimi olmayan müşteri için yeni profil AÇILAMIYOR', async () => {
+  it('KRİTİK: erişimi olmayan workspace için yeni profil AÇILAMIYOR', async () => {
     await expect(
       asUser(
         `INSERT INTO client_profiles (id, org_id, client_id, hedef_kitle, updated_at)
@@ -156,7 +156,7 @@ describe('client_profiles — yazma', () => {
     ).rejects.toThrow(/row-level security/i);
   });
 
-  it('erişimi olan kullanıcı kendi müşterisi için profil açabiliyor', async () => {
+  it('erişimi olan kullanıcı kendi workspace’i için profil açabiliyor', async () => {
     await asUser(
       `INSERT INTO client_profiles (id, org_id, client_id, hedef_kitle, updated_at)
        VALUES (gen_random_uuid(), '${ORG}', '${CLIENT_B}', 'B için yeni', now())`,

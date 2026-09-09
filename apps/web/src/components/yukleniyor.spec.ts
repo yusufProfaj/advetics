@@ -53,11 +53,11 @@ describe('KRİTİK: bekleme penceresi tazelemeyi kapsıyor', () => {
    * yine düşer — çünkü sınanan şey görsel değil, göstergenin AÇIK OLDUĞU
    * ZAMAN ARALIĞI.
    */
-  it('müşteri seçici: refresh startTransition içinde', () => {
+  it('workspace seçici: refresh startTransition içinde', () => {
     expect(SECICI_KOD).toContain('startTransition(() => router.refresh())');
   });
 
-  it('müşteri seçici: gösterge İKİ bayrağı da okuyor', () => {
+  it('workspace seçici: gösterge İKİ bayrağı da okuyor', () => {
     // Yalnızca `pending`e bakmak, ağ isteği bitip tazeleme sürerken
     // göstergeyi söndürüyordu — düzeltilen arızanın ta kendisi.
     expect(SECICI_KOD).toContain('const bekliyor = pending || isPending;');
@@ -69,14 +69,14 @@ describe('KRİTİK: bekleme penceresi tazelemeyi kapsıyor', () => {
     expect(SIHIRBAZ_KOD).toContain('busy || isPending');
   });
 
-  it('müşteri tablosu: geçiş sırasında örtü var', () => {
+  it('workspace tablosu: geçiş sırasında örtü var', () => {
     expect(TABLO_KOD).toContain('{(gecilen !== null || isPending) && (');
     expect(TABLO_KOD).toContain('TamEkranYukleniyor');
   });
 });
 
 describe('KRİTİK: geçiş hatası yutulmuyor', () => {
-  it('müşteri seçicide catch VAR ve mesaj ekrana yazılıyor', () => {
+  it('workspace seçicide catch VAR ve mesaj ekrana yazılıyor', () => {
     /*
      * Önceki hâlde `catch` HİÇ YOKTU: istek düşünce tıklama sessizce hiçbir
      * şey yapmıyor, üst bar eski müşteriyi göstermeye devam ediyordu.

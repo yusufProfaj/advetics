@@ -124,7 +124,7 @@ async function kategoriAta(...kategoriler: string[]): Promise<void> {
 }
 
 describe('beyan platforma gidiyor', () => {
-  it('KRİTİK: müşterinin kategorisi yayın isteğine giriyor', async () => {
+  it('KRİTİK: workspace’in kategorisi yayın isteğine giriyor', async () => {
     /**
      * Bugüne kadar sabit `[]` gidiyordu — yani emlak müşterisi olan bir
      * ajans, farkında olmadan her kampanyada politika ihlali üretiyordu.
@@ -137,7 +137,7 @@ describe('beyan platforma gidiyor', () => {
     expect(req.specialAdCategories).toEqual(['HOUSING']);
   });
 
-  it('kategorisiz müşteride BOŞ DİZİ gidiyor — alan atlanmıyor', async () => {
+  it('kategorisiz workspace’te BOŞ DİZİ gidiyor — alan atlanmıyor', async () => {
     /**
      * Boş geçmek ile hiç göndermemek aynı şey değil: Meta alanı hiç görmezse
      * kendi varsayımını uyguluyor. Boşu da açıkça göndermek gerekiyor.
@@ -192,7 +192,7 @@ describe('hedefleme kısıtı', () => {
     expect(kisitli.removed).toEqual(['yaş alt sınırı', 'yaş üst sınırı', 'cinsiyet']);
   });
 
-  it('kategorisiz müşteride hedefleme DEĞİŞMİYOR', async () => {
+  it('kategorisiz workspace’te hedefleme DEĞİŞMİYOR', async () => {
     const hedefleme = { age_min: 25, age_max: 45, genders: [2] };
     const sonuc = restrictTargetingFor([], hedefleme);
     expect(sonuc.targeting).toBe(hedefleme);
@@ -226,7 +226,7 @@ describe('kontrol ekranı', () => {
     expect(check.ok).toBe(true);
   });
 
-  it('kategorisiz müşteride uyarı YOK', async () => {
+  it('kategorisiz workspace’te uyarı YOK', async () => {
     const c = await tree.createFromSimple(CTX, input());
     const check = await svc.check(CTX, c.campaigns[0]!.id);
     expect(check.warnings.join(' ')).not.toContain('özel reklam kategorisi');

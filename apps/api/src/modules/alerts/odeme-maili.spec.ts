@@ -84,7 +84,7 @@ describe('mail gövdesi', () => {
     expect(html.split('A Firması').length - 1).toBe(1);
   });
 
-  it('KRİTİK: müşteri adı HTML olarak kaçırılıyor', () => {
+  it('KRİTİK: workspace adı HTML olarak kaçırılıyor', () => {
     /*
      * Ad kullanıcı girdisi ve maile gömülüyor. `&` içeren bir firma adı
      * ("A & B Yapı") kaçırılmazsa gövdeyi bozuyor, `<` içeren bir ad ise

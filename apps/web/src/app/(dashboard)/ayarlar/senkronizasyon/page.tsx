@@ -8,7 +8,7 @@ export const metadata = { title: 'Senkronizasyon Durumu — Advetics' };
 /**
  * "BU MÜŞTERİDE VERİ NEDEN YOK" EKRANI.
  *
- * Bu sayfa bir teşhis aracı ve varlık sebebi somut: bir workspace'te Meta
+ * Bu sayfa bir teşhis aracı ve varlık sebebi somut: bir workspace’te Meta
  * verisi hiç gelmiyordu, bağlantı doğruydu, panelde bakılacak tek bir alan
  * yoktu. Altı ayrı arıza (hesap atanmamış / izleme kapalı / bağlantı yeniden
  * yetki istiyor / hesabın platform durumu süpürgeye takılıyor / yapı taraması
@@ -43,9 +43,9 @@ export default async function SenkronizasyonPage() {
       <div>
         <h1 className="text-2xl font-semibold">Senkronizasyon Durumu</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Seçili müşterinin reklam hesapları, veri çekme işlerinin sonucu ve bir
+          Seçili workspace’in reklam hesapları, veri çekme işlerinin sonucu ve bir
           hesap için veri gelmiyorsa <strong>sebebi</strong>. Kenar çubuğundan
-          müşteri değiştirerek her workspace için ayrı ayrı bakabilirsin.
+          workspace değiştirerek her workspace için ayrı ayrı bakabilirsin.
         </p>
       </div>
 

@@ -656,7 +656,7 @@ function OnAyarHedefleme({
      */
     return (
       <p className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-[11px] text-ink">
-        Bu müşteriye izlenen bir Meta reklam hesabı atanmamış. Şehir ve kayıtlı
+        Bu workspace’e izlenen bir Meta reklam hesabı atanmamış. Şehir ve kayıtlı
         kitle seçimi hesap atandıktan sonra açılıyor; şu hâliyle hedefleme{' '}
         <strong>Türkiye geneli</strong> olacak.
       </p>

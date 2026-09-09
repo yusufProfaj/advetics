@@ -137,7 +137,7 @@ describe('havuz görünürlüğü', () => {
     expect(rows).toEqual([]);
   });
 
-  it('Müşteri Hizmetleri havuzu GÖREMİYOR', async () => {
+  it('Workspace Hizmetleri havuzu GÖREMİYOR', async () => {
     const rows = await asUser('SELECT name FROM ad_accounts WHERE client_id IS NULL', MUSTERI_HIZMETLERI);
     expect(rows).toEqual([]);
   });
@@ -154,7 +154,7 @@ describe('havuz görünürlüğü', () => {
 });
 
 describe('havuzdan atama', () => {
-  it('Reklam Yöneticisi havuzdaki hesabı müşteriye ATAYABİLİYOR', async () => {
+  it('Reklam Yöneticisi havuzdaki hesabı workspace’e ATAYABİLİYOR', async () => {
     /*
      * `RETURNING` ile ETKİLENEN SATIR SAYILIYOR. Sıfır satırlık bir UPDATE
      * politikadan bağımsız olarak BAŞARILI dönüyor: "patlamadı" ile yetinen
@@ -176,10 +176,10 @@ describe('havuzdan atama', () => {
   });
 });
 
-describe('müşteri açma', () => {
+describe('workspace açma', () => {
   const YENI = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 
-  it('Reklam Yöneticisi yeni müşteri AÇABİLİYOR', async () => {
+  it('Reklam Yöneticisi yeni workspace AÇABİLİYOR', async () => {
     /*
      * INSERT'İN KENDİSİ ZATEN GEÇİYORDU — DÜŞEN `RETURNING`Dİ.
      *
@@ -210,7 +210,7 @@ describe('müşteri açma', () => {
     ).rejects.toThrow(/row-level security/i);
   });
 
-  it('açtığı müşterinin marka profilini de yazabiliyor', async () => {
+  it('açtığı workspace’in marka profilini de yazabiliyor', async () => {
     // `ClientsService.create` ikisini aynı transaction'da yazıyor; marka
     // profili politikası sadece org yöneticisi derken akış ikinci adımda
     // düşüyordu ve hata müşteri açmayı değil markayı işaret ediyordu.
@@ -233,7 +233,7 @@ describe('müşteri açma', () => {
     ).rejects.toThrow(/row-level security/i);
   });
 
-  it('Kampanya Yöneticisi müşteri AÇAMIYOR', async () => {
+  it('Kampanya Yöneticisi workspace AÇAMIYOR', async () => {
     await expect(
       asUser(
         `INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ('${YENI}','${ORG}','Yeni','yeni', now()) RETURNING id`,
@@ -242,7 +242,7 @@ describe('müşteri açma', () => {
     ).rejects.toThrow(/row-level security/i);
   });
 
-  it('Müşteri Hizmetleri müşteri AÇAMIYOR', async () => {
+  it('Workspace Hizmetleri workspace AÇAMIYOR', async () => {
     await expect(
       asUser(
         `INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ('${YENI}','${ORG}','Yeni','yeni', now()) RETURNING id`,

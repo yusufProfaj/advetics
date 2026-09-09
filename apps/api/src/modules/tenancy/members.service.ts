@@ -64,10 +64,10 @@ export class MembersService {
      * İKİ LİSTE, İKİ AYRI SORU.
      *
      * `clientId` YOKSA soru "ajansın ekibi kim" — müşteri hesapları dışarıda.
-     * `clientId` VARSA soru "bu workspace'e kim erişiyor" ve cevap müşterinin
+     * `clientId` VARSA soru "bu workspace’e kim erişiyor" ve cevap müşterinin
      * KENDİ giriş hesaplarını da içermek zorunda: o ekranın bütün amacı zaten
      * onları yönetmek. Ajans listesinden dışlanmaları, ajans ekibi sayılmamak
-     * içindi; kendi workspace'lerinde gizlenmeleri onları yönetilemez yapardı.
+     * içindi; kendi workspace’lerinde gizlenmeleri onları yönetilemez yapardı.
      */
     /*
      * PARAMETRESİZ DAL `some` DEĞİL `OR` KULLANIYOR — ve sebebi üretimde
@@ -156,7 +156,7 @@ export class MembersService {
     return this.prisma.withTenant(ctx, async (tx) => {
       if (input.clientId) {
         const client = await tx.client.findUnique({ where: { id: input.clientId } });
-        if (!client) throw new NotFoundException('Müşteri bulunamadı');
+        if (!client) throw new NotFoundException('Workspace bulunamadı');
       }
 
       const existing = await tx.user.findFirst({
@@ -328,7 +328,7 @@ export class MembersService {
 
       if (input.clientId) {
         const client = await tx.client.findUnique({ where: { id: input.clientId } });
-        if (!client) throw new NotFoundException('Müşteri bulunamadı');
+        if (!client) throw new NotFoundException('Workspace bulunamadı');
       }
 
       if (user.memberships.some((m) => m.clientId === input.clientId)) {
@@ -369,7 +369,7 @@ export class MembersService {
 
       if (before.clientId === null && !isOrgScopedRole(input.role)) {
         throw new BadRequestException(
-          'Organizasyon geneli bir yetki, müşteri düzeyi bir role çevrilemez',
+          'Organizasyon geneli bir yetki, workspace düzeyi bir role çevrilemez',
         );
       }
 

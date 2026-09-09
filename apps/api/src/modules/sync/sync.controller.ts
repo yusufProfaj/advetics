@@ -191,7 +191,7 @@ export class SyncController {
    * "BU MÜŞTERİDE VERİ NEDEN YOK" SORUSUNUN CEVAP YERİ.
    *
    * Bu uç önce yalnızca "en son ne zaman güncellendi" diyordu. Yetmediği
-   * canlıda görüldü: bir workspace'te Meta verisi hiç gelmiyordu, bağlantı
+   * canlıda görüldü: bir workspace’te Meta verisi hiç gelmiyordu, bağlantı
    * doğruydu ve panelde bakılacak TEK BİR ALAN yoktu. Ayırt edilmesi gereken
    * altı hâlin hepsi aynı boş grafiğe düşüyordu ve tek teşhis yolu sunucuya
    * SSH ile girip `sync-cli -- jobs` çalıştırmaktı.
@@ -408,7 +408,7 @@ export class SyncController {
       // Müşteri seçilmeden tetiklemek, TÜM portföyün kotasını tek tıkla
       // harcamak demekti. Seçim zorunlu.
       throw new BadRequestException(
-        'Önce bir müşteri seçin — güncelleme seçili müşterinin hesapları için çalışır.',
+        'Önce bir workspace seçin — güncelleme seçili workspace’in hesapları için çalışır.',
       );
     }
 
@@ -416,8 +416,8 @@ export class SyncController {
     const profiles = await this.enabledProfiles(ctx);
     if (accounts.length === 0 && profiles.length === 0) {
       throw new BadRequestException(
-        'Bu müşteride izlemeye alınmış hesap ya da sayfa yok. Platform Bağlantıları ' +
-          've Müşteriler ekranından izlemeye al.',
+        'Bu workspace’te izlemeye alınmış hesap ya da sayfa yok. Platform Bağlantıları ' +
+          've Workspace’ler ekranından izlemeye al.',
       );
     }
 
@@ -625,14 +625,14 @@ export class SyncController {
   ) {
     if (!ctx.activeClientId) {
       throw new BadRequestException(
-        'Önce bir müşteri seçin — geçmiş veri seçili müşterinin hesapları için çekilir.',
+        'Önce bir workspace seçin — geçmiş veri seçili workspace’in hesapları için çekilir.',
       );
     }
 
     const accounts = await this.enabledAccounts(ctx);
     if (accounts.length === 0) {
       throw new BadRequestException(
-        'Bu müşteride izlemeye alınmış hesap yok. Platform Bağlantıları ekranından hesap seçin.',
+        'Bu workspace’te izlemeye alınmış hesap yok. Platform Bağlantıları ekranından hesap seçin.',
       );
     }
 
@@ -714,8 +714,8 @@ export class SyncController {
   /**
    * ═══ TOPLU VERİ TAZELEME ═══
    *
-   * Seçilen workspace'lerin son N yılının bütün verisi. `backfill` ucundan
-   * farkı: TEK MÜŞTERİ değil, seçilen workspace'lerin HEPSİ; ve aralık tek
+   * Seçilen workspace’lerin son N yılının bütün verisi. `backfill` ucundan
+   * farkı: TEK MÜŞTERİ değil, seçilen workspace’lerin HEPSİ; ve aralık tek
    * bir işe sığmadığı için pencerelere bölünüyor.
    *
    * `apply: false` (varsayılan) HİÇBİR ŞEY YAPMIYOR, yalnızca ne olacağını
@@ -723,7 +723,7 @@ export class SyncController {
    * yüzlerce çağrı demek — kullanıcı ne kadar olduğunu görmeden basmamalı.
    *
    * AKTİF MÜŞTERİ SEÇİMİ ARANMIYOR — `backfill`in aksine. Bu uç zaten hangi
-   * workspace'lerin kapsandığını AÇIKÇA alıyor; ayrıca aktif müşteri istemek,
+   * workspace’lerin kapsandığını AÇIKÇA alıyor; ayrıca aktif müşteri istemek,
    * "Tüm müşteriler" görünümündeyken düğmenin çalışmaması demekti ve düğmenin
    * bulunduğu ekran (Platform Bağlantıları) tam olarak o görünümde açılıyor.
    */

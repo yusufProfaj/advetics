@@ -31,7 +31,7 @@ export function IzlenenHesaplar({
   const kapaliHesap = atanmisHesap.length - izlenenHesap.length;
   const kapaliProfil = atanmisProfil.length - izlenenProfil.length;
 
-  /** Müşteri başına kaç hesap — hangi workspace'in kurulu olduğunu gösteriyor. */
+  /** Müşteri başına kaç hesap — hangi workspace’in kurulu olduğunu gösteriyor. */
   const musteriBasina = clients
     .map((c) => ({
       ...c,
@@ -62,14 +62,14 @@ export function IzlenenHesaplar({
           {kapaliHesap > 0 && <>{kapaliHesap} reklam hesabı</>}
           {kapaliHesap > 0 && kapaliProfil > 0 && ' ve '}
           {kapaliProfil > 0 && <>{kapaliProfil} sayfa</>} atanmış ama izlemesi
-          KAPALI — bunlardan veri çekilmiyor. Müşterinin “Bağlı kanallar”
+          KAPALI — bunlardan veri çekilmiyor. Workspace’in “Bağlı kanallar”
           ekranından kaldırıp yeniden ekle.
         </p>
       )}
 
       {musteriBasina.length === 0 ? (
         <p className="mt-2 text-[11px] text-ink-muted">
-          Henüz hiçbir müşteriye hesap atanmamış. Yukarıdaki havuz
+          Henüz hiçbir workspace’e hesap atanmamış. Yukarıdaki havuz
           kartlarından ata.
         </p>
       ) : (

@@ -48,7 +48,7 @@ beforeEach(() => {
   svc = new ClientsService(prisma, { record: async () => undefined } as unknown as AuditService);
 });
 
-describe('müşteri iletişim bilgisi güncelleme', () => {
+describe('workspace iletişim bilgisi güncelleme', () => {
   it('KRİTİK: iletişim alanları UPDATE’e geçiyor', async () => {
     await svc.update(
       CTX,

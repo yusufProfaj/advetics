@@ -287,7 +287,7 @@ export class RulesService {
     const [client] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT id FROM clients WHERE id = ${input.clientId}::uuid
     `);
-    if (!client) throw new NotFoundException('Müşteri bulunamadı');
+    if (!client) throw new NotFoundException('Workspace bulunamadı');
 
     if (input.adAccountId) {
       const [acc] = await tx.$queryRaw<Array<{ client_id: string }>>(Prisma.sql`
@@ -297,7 +297,7 @@ export class RulesService {
       // Başka müşterinin hesabına kural yazmak sessiz bir hata olurdu: kural
       // hiçbir varlık bulamaz ve "hiç tetiklenmiyor" diye görünür.
       if (acc.client_id !== input.clientId) {
-        throw new BadRequestException('Reklam hesabı bu müşteriye bağlı değil');
+        throw new BadRequestException('Reklam hesabı bu workspace’e bağlı değil');
       }
     }
   }

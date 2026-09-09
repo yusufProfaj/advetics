@@ -163,7 +163,7 @@ export function AiAsistanSohbeti({
           <div className="my-auto px-6 text-center">
             <p className="text-sm font-semibold text-ink">Ne yapmak istediğini yaz</p>
             <p className="mx-auto mt-1.5 max-w-md text-xs text-ink-muted">
-              Örn. &quot;Bu müşteriye form kampanyası aç, kreatifler ekte, bütçe günde 500 TL
+              Örn. &quot;Bu workspace’e form kampanyası aç, kreatifler ekte, bütçe günde 500 TL
               olsun.&quot; Asistan taslak hazırlar — yayınlama her zaman senin onayınla, panelin
               kendi Yayınla düğmesinden.
             </p>

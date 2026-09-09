@@ -300,7 +300,7 @@ export class DraftPublishService {
       ).removed;
 
       warnings.push(
-        `Bu müşteri özel reklam kategorisinde beyan edilmiş (${etiketler}) — ` +
+        `Bu workspace özel reklam kategorisinde beyan edilmiş (${etiketler}) — ` +
           'kampanya Meta’ya bu beyanla gidiyor.' +
           (dusen.length > 0
             ? ` Meta bu kategoride ${dusen.join(', ')} daraltmasına izin vermiyor; ` +

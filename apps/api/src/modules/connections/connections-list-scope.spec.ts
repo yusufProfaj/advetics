@@ -107,11 +107,11 @@ describe('list — kapsam', () => {
     expect(seenArgs!.select.socialProfiles.where).toEqual({ clientId: CLIENT_B });
   });
 
-  it('ERİŞİLEMEYEN müşteri için sorgu HİÇ çalışmıyor', async () => {
+  it('ERİŞİLEMEYEN workspace için sorgu HİÇ çalışmıyor', async () => {
     // Yetki kontrolü RLS'e bırakılsaydı sonuç boş bir liste olurdu ve
     // "erişimin yok" ile "hesap yok" ayırt edilemezdi.
     await expect(svc.list(CTX, 'ffffffff-ffff-ffff-ffff-ffffffffffff')).rejects.toThrow(
-      /Müşteri bulunamadı/,
+      /Workspace bulunamadı/,
     );
     expect(seenArgs).toBeNull();
   });

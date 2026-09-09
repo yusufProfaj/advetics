@@ -224,7 +224,7 @@ export class ReportTemplatesService {
     if (clientId === null && !ctx.isOrgAdmin) {
       throw new ForbiddenException(
         'Organizasyon geneli şablonu yalnızca org yöneticisi değiştirebilir. ' +
-          'Bu müşteriye özel bir şablon oluşturun.',
+          'Bu workspace’e özel bir şablon oluşturun.',
       );
     }
   }

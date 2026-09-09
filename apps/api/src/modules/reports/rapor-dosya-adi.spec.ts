@@ -22,7 +22,7 @@ describe('raporDosyaAdi', () => {
     to: '2026-08-31',
   };
 
-  it('KRİTİK: müşteri adı, başlık ve tarih aralığı — bu sırayla', () => {
+  it('KRİTİK: workspace adı, başlık ve tarih aralığı — bu sırayla', () => {
     expect(raporDosyaAdi(TEMEL)).toBe(
       'Çiftçi Grup - Dijital Pazarlama Raporu - 2026-08-01_2026-08-31.pdf',
     );
@@ -67,13 +67,13 @@ describe('raporDosyaAdi', () => {
     expect(ad).not.toMatch(/[\r\n]/);
   });
 
-  it('uzun müşteri adı kırpılıyor — dosya adı sınırı var', () => {
+  it('uzun workspace adı kırpılıyor — dosya adı sınırı var', () => {
     const ad = raporDosyaAdi({ ...TEMEL, musteriAdi: 'A'.repeat(300) });
     expect(ad.length).toBeLessThan(200);
     expect(ad).toContain('2026-08-01_2026-08-31.pdf');
   });
 
-  it('müşteri adı ve başlık boşsa TANINABİLİR bir yedek', () => {
+  it('workspace adı ve başlık boşsa TANINABİLİR bir yedek', () => {
     // Boş bir ad, ekin ".pdf" olarak görünmesi demek.
     const ad = raporDosyaAdi({ ...TEMEL, musteriAdi: '   ', baslik: '' });
     expect(ad).toBe('Rapor - 2026-08-01_2026-08-31.pdf');
@@ -141,7 +141,7 @@ describe('kaynak taraması — dosya adı tek üreticiden', () => {
     expect(CONTROLLER).toContain('raporDosyaAdi({');
   });
 
-  it('KRİTİK: müşteri KİMLİĞİ ek adında GEÇMİYOR', () => {
+  it('KRİTİK: workspace KİMLİĞİ ek adında GEÇMİYOR', () => {
     /*
      * Eski hâl `${input.clientId}-${input.from}_${input.to}.pdf` idi.
      * İddia YORUMA değil KODA çapalı: yorumlar bu hatayı ANLATIYOR ve

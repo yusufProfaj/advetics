@@ -202,7 +202,7 @@ export class ReportsService {
       );
       // RLS nedeniyle başka müşterinin kaydı da "bulunamadı" görünüyor —
       // varlığını sızdırmamak doğru davranış.
-      if (!client) throw new NotFoundException('Müşteri bulunamadı');
+      if (!client) throw new NotFoundException('Workspace bulunamadı');
 
       const branding = await this.branding(tx, params.clientId);
       const template = await this.template(tx, params.clientId, params.templateId);

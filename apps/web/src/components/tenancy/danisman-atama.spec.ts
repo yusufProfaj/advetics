@@ -13,7 +13,7 @@ describe('atamaEngeli', () => {
     expect(atamaEngeli([], CLIENT)).toBeNull();
   });
 
-  it('başka müşterilerde yetkisi olan danışman atanabiliyor', () => {
+  it('başka workspace’lerde yetkisi olan danışman atanabiliyor', () => {
     expect(atamaEngeli([{ clientId: BASKA }], CLIENT)).toBeNull();
   });
 
@@ -38,7 +38,7 @@ describe('atamaEngeli', () => {
       expect(ENGEL_KISI[kod]).toBeTruthy();
       expect(ENGEL_WORKSPACE[kod]).toBeTruthy();
     }
-    // İKİ CÜMLE AYNI OLAMAZ: biri kişiyi, diğeri workspace'i anlatıyor.
+    // İKİ CÜMLE AYNI OLAMAZ: biri kişiyi, diğeri workspace’i anlatıyor.
     expect(ENGEL_KISI.zaten_uye).not.toBe(ENGEL_WORKSPACE.zaten_uye);
   });
 

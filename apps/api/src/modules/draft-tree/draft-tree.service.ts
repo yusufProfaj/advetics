@@ -484,11 +484,11 @@ export class DraftTreeService {
       // değil, hesabı müşteriye atamak.
       if (acc.client_id === null) {
         throw new BadRequestException(
-          'Bu reklam hesabı henüz bir müşteriye atanmamış. Platform Bağlantıları ekranından ata.',
+          'Bu reklam hesabı henüz bir workspace’e atanmamış. Platform Bağlantıları ekranından ata.',
         );
       }
       if (acc.client_id !== input.clientId) {
-        throw new BadRequestException('Reklam hesabı bu müşteriye bağlı değil.');
+        throw new BadRequestException('Reklam hesabı bu workspace’e bağlı değil.');
       }
       /**
        * HESABIN PLATFORMU İLE KAMPANYANIN PLATFORMU AYNI OLMAK ZORUNDA.
@@ -514,11 +514,11 @@ export class DraftTreeService {
       if (!profile) throw new NotFoundException('Sayfa bulunamadı');
       if (profile.client_id === null) {
         throw new BadRequestException(
-          'Bu sayfa henüz bir müşteriye atanmamış. Platform Bağlantıları ekranından ata.',
+          'Bu sayfa henüz bir workspace’e atanmamış. Platform Bağlantıları ekranından ata.',
         );
       }
       if (profile.client_id !== input.clientId) {
-        throw new BadRequestException('Sayfa bu müşteriye bağlı değil.');
+        throw new BadRequestException('Sayfa bu workspace’e bağlı değil.');
       }
       if (profile.profile_type !== 'facebook_page') {
         throw new BadRequestException(
@@ -554,8 +554,8 @@ export class DraftTreeService {
     if (yabanci.length > 0) {
       throw new BadRequestException(
         yabanci.length === 1
-          ? 'Bu kreatif başka bir müşteriye ait.'
-          : `${yabanci.length} kreatif başka bir müşteriye ait.`,
+          ? 'Bu kreatif başka bir workspace’e ait.'
+          : `${yabanci.length} kreatif başka bir workspace’e ait.`,
       );
     }
   }

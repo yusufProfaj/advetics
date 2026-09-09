@@ -100,10 +100,10 @@ describe('oluşturma', () => {
     expect(c.assets).toEqual([]);
   });
 
-  it('KRİTİK: başka müşterinin görseli reddediliyor', async () => {
+  it('KRİTİK: başka workspace’in görseli reddediliyor', async () => {
     await expect(
       svc.create(CTX, input({ assetIds: [ASSET_A, ASSET_OTHER] })),
-    ).rejects.toThrow(/başka bir müşteriye ait/i);
+    ).rejects.toThrow(/başka bir workspace’e ait/i);
   });
 
   it('reddedilen kreatif HİÇBİR SATIR bırakmıyor', async () => {
@@ -136,7 +136,7 @@ describe('oluşturma', () => {
 });
 
 describe('listeleme', () => {
-  it('müşterinin kreatifleri dönüyor', async () => {
+  it('workspace’in kreatifleri dönüyor', async () => {
     await svc.create(CTX, input({ name: 'Birinci' }));
     await svc.create(CTX, input({ name: 'İkinci' }));
     const list = await svc.list(CTX, IDS.client);
@@ -251,11 +251,11 @@ describe('güncelleme', () => {
     expect(guncel.name).toBe('Değişti');
   });
 
-  it('başka müşterinin görseli güncellemede de reddediliyor', async () => {
+  it('başka workspace’in görseli güncellemede de reddediliyor', async () => {
     const c = await svc.create(CTX, input());
     await expect(
       svc.update(CTX, c.id, input({ assetIds: [ASSET_OTHER] })),
-    ).rejects.toThrow(/başka bir müşteriye ait/i);
+    ).rejects.toThrow(/başka bir workspace’e ait/i);
   });
 });
 

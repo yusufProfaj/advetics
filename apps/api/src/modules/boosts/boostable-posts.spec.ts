@@ -237,7 +237,7 @@ describe('engeller — gizlenmiyor, sebebiyle dönüyor', () => {
     // Mesaj DOĞRU EKRANI söylüyor: seçici Müşteriler ekranında, Platform
     // Bağlantıları'nda değil. Yanlış ekrana yönlendiren bir teşhis, teşhis
     // olmaktan çıkıyor.
-    expect(p!.blockedReason).toMatch(/Müşteriler ekranı/i);
+    expect(p!.blockedReason).toMatch(/Workspace’ler ekranı/i);
     expect(p!.blockedReason).toMatch(/Boost hesabı/i);
     expect(p!.adAccountId).toBeNull();
   });
@@ -337,7 +337,7 @@ describe('boş listenin sebebi', () => {
     const out = await svc.listBoostablePosts(CTX, { clientId: IDS.client, limit: 30 });
     expect(out.items).toHaveLength(0);
     expect(out.emptyReason).toMatch(/atanmış bir sayfa yok/i);
-    expect(out.emptyReason).toMatch(/Müşteriler ekranı/i);
+    expect(out.emptyReason).toMatch(/Workspace’ler ekranı/i);
   });
 
   it('KRİTİK: sayfa atanmış ama izleme kapalıysa İZLEME söyleniyor', async () => {
@@ -419,7 +419,7 @@ describe('boş listenin sebebi', () => {
 describe('kapsam istekten kuruluyor', () => {
   const BASKA = '99999999-9999-9999-9999-999999999999';
 
-  it('KRİTİK: bağlam İSTENEN müşteriye kuruluyor, oturumdakine değil', async () => {
+  it('KRİTİK: bağlam İSTENEN workspace’e kuruluyor, oturumdakine değil', async () => {
     // PGlite'ta RLS zorlanmadığı için "satır geldi mi" diye bakmak bu kararı
     // SINAMIYOR. Sınanan şey doğrudan kararın kendisi.
     const baskaSecili = { ...CTX, activeClientId: BASKA } as TenantContext;
@@ -478,7 +478,7 @@ describe('ön ayar hazır mı (presetReady)', () => {
     expect(p!.presetReady).toBe(false);
   });
 
-  it('müşteri varsayılanı VARSA hazır', async () => {
+  it('workspace varsayılanı VARSA hazır', async () => {
     await seedProfile(FB, 'facebook_page');
     await seedPost(postId(1), FB, '2026-08-10T12:00:00Z');
     await seedPreset(P1, null);
@@ -496,7 +496,7 @@ describe('ön ayar hazır mı (presetReady)', () => {
     expect(p!.presetReady).toBe(false);
   });
 
-  it('KRİTİK: SAYFAYA ÖZEL kapalı ön ayar, müşteri varsayılanını EZİYOR', async () => {
+  it('KRİTİK: SAYFAYA ÖZEL kapalı ön ayar, workspace varsayılanını EZİYOR', async () => {
     /*
      * Yayın yolu (`gonderiyiYayinla`) ön ayarı `ORDER BY social_profile_id
      * NULLS LAST LIMIT 1` ile seçiyor ve `enabled`'ı SÜZMÜYOR — yani sayfaya

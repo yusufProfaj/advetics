@@ -101,7 +101,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 {session.user.fullName}
               </span>
               <span className="block truncate text-[11px] leading-tight text-ink-muted">
-                {session.isOrgAdmin ? 'Yönetici' : 'Müşteri erişimi'}
+                {session.isOrgAdmin ? 'Yönetici' : 'Workspace erişimi'}
               </span>
             </span>
             <LogoutButton />

@@ -48,7 +48,7 @@ export function MusteriArama({ kartlar }: { kartlar: AranabilirKart[] }) {
           type="search"
           value={arama}
           onChange={(e) => setArama(e.target.value)}
-          placeholder="Müşteri adı ya da kısa adıyla ara…"
+          placeholder="Workspace adı ya da kısa adıyla ara…"
           className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm focus:border-brand focus:outline-none"
         />
         {/*
@@ -58,7 +58,7 @@ export function MusteriArama({ kartlar }: { kartlar: AranabilirKart[] }) {
         */}
         {arama.trim() !== '' && (
           <span className="text-xs text-ink-muted">
-            {suzulmus.length} / {kartlar.length} müşteri
+            {suzulmus.length} / {kartlar.length} workspace
           </span>
         )}
       </div>
@@ -66,7 +66,7 @@ export function MusteriArama({ kartlar }: { kartlar: AranabilirKart[] }) {
       {suzulmus.length === 0 ? (
         <div className="rounded-xl border border-line bg-surface p-8 text-center">
           <p className="text-sm text-ink-muted">
-            “{arama}” ile eşleşen müşteri yok.
+            “{arama}” ile eşleşen workspace yok.
           </p>
         </div>
       ) : (

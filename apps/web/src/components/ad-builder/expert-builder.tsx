@@ -111,8 +111,8 @@ export function ExpertAdBuilder({
     if (platformAccounts.length === 0) {
       list.push(
         google
-          ? 'Bu müşteriye atanmış Google reklam hesabı yok.'
-          : 'Bu müşteriye atanmış Meta reklam hesabı yok.',
+          ? 'Bu workspace’e atanmış Google reklam hesabı yok.'
+          : 'Bu workspace’e atanmış Meta reklam hesabı yok.',
       );
     }
     if (google) {
@@ -395,7 +395,7 @@ export function ExpertAdBuilder({
 
         {creatives.length === 0 ? (
           <p className="mt-3 rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
-            Bu müşteride henüz kreatif yok. <strong>Hızlı Reklam</strong> ekranından bir tane
+            Bu workspace’te henüz kreatif yok. <strong>Hızlı Reklam</strong> ekranından bir tane
             oluşturduğunda burada da görünür.
           </p>
         ) : (

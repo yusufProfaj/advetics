@@ -246,7 +246,7 @@ export class CreativeService {
     const yabanci = rows.filter((r) => r.client_id !== input.clientId);
     if (yabanci.length > 0) {
       throw new BadRequestException(
-        `${yabanci.length} görsel başka bir müşteriye ait — kreatife eklenemez.`,
+        `${yabanci.length} görsel başka bir workspace’e ait — kreatife eklenemez.`,
       );
     }
   }
