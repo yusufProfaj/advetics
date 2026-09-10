@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ORG_SCOPED_ROLES, ROLES, createMemberSchema } from '@advetics/shared';
 import { createHarness, type Harness } from '../../test/pglite-harness';
 
 /**
@@ -109,5 +110,118 @@ describe('org geneli üyelik tekilliği', () => {
   it('workspace bazlı üyelik bu indeksten etkilenmiyor', async () => {
     // Kısmi indeks yalnızca `client_id IS NULL` satırları kapsıyor.
     await expect(uyelikYaz(ORG_A, WS_A)).resolves.toBeDefined();
+  });
+});
+
+describe('ŞİRKET GENELİ YETKİ — `client_viewer` DIŞINDA herkese açık', () => {
+  /*
+   * Danışman şirkete bakıyor, tek bir workspace'e değil. Önce kural
+   * `role IN ('owner','admin')` idi ve DANIŞMANI dışarıda bırakıyordu:
+   * bir kampanya yöneticisi kırk altı workspace'e TEK TEK atanmak
+   * zorundaydı ve her yeni workspace'te o adım unutulabiliyordu —
+   * belirtisi "danışman bazı müşterileri göremiyor", sebebi hiçbir
+   * ekranda yazmıyor.
+   *
+   * AYIRT EDEN ŞEY ROLÜN GENİŞLİĞİ DEĞİL, KİMİN HESABI OLDUĞU.
+   */
+  const DANISMAN_ROLLERI = ROLES.filter((r) => r !== 'client_viewer');
+
+  /*
+   * AYRI KULLANICI. Yukarıdaki paket `USER`a üyelik yazıyor ve
+   * `memberships` iki tekillik taşıyor (`(user_id, client_id)` ve org
+   * başına kısmi indeks); aynı kullanıcıyı kullanmak, sınanan kuralı
+   * DEĞİL tekilliği ölçen bir hata üretiyordu.
+   */
+  const DANISMAN = '88888888-8888-8888-8888-888888888888';
+
+  beforeAll(async () => {
+    await h.q(
+      `INSERT INTO users (id, org_id, email, full_name, password_hash, locale, status, created_at, updated_at)
+       VALUES ($1, $2, 'd@x.com', 'D', 'h', 'tr', 'active', now(), now())
+       ON CONFLICT (id) DO NOTHING`,
+      [DANISMAN, ORG_A],
+    );
+  });
+
+  it('BOŞA DÜŞME BEKÇİSİ: kısıt gerçekten kurulu', async () => {
+    const rows = await h.q<{ n: string }>(
+      `SELECT count(*)::text AS n FROM pg_constraint
+       WHERE conname = 'memberships_org_scope_role_chk'`,
+    );
+    expect(rows[0]?.n).toBe('1');
+    expect(DANISMAN_ROLLERI.length).toBeGreaterThan(3);
+  });
+
+  it('KRİTİK: her danışman rolü şirket geneli olabiliyor', async () => {
+    for (const rol of DANISMAN_ROLLERI) {
+      await expect(
+        h.q(
+          `INSERT INTO memberships (id, user_id, org_id, client_id, role, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, NULL, $3::"Role", now(), now())`,
+          [DANISMAN, ORG_B, rol],
+        ),
+        `rol: ${rol}`,
+      ).resolves.toBeDefined();
+      // Kısmi tekil indeks org başına TEK org geneli satır istiyor.
+      await h.q(`DELETE FROM memberships WHERE user_id = $1 AND org_id = $2 AND client_id IS NULL`, [
+        DANISMAN,
+        ORG_B,
+      ]);
+    }
+  });
+
+  it('KRİTİK: `client_viewer` şirket geneli OLAMIYOR', async () => {
+    /*
+     * Bu kısıtın var oluş sebebi. `client_viewer` müşterinin KENDİ giriş
+     * hesabı; şirket seviyesine çıkarmak, Ege Birlik'in hesabına Fenbay'ın
+     * verisini açmak demek.
+     */
+    await expect(
+      h.q(
+        `INSERT INTO memberships (id, user_id, org_id, client_id, role, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, NULL, 'client_viewer', now(), now())`,
+        [DANISMAN, ORG_B],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('`client_viewer` WORKSPACE bazında normal çalışıyor', async () => {
+    await expect(
+      h.q(
+        `INSERT INTO memberships (id, user_id, org_id, client_id, role, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, 'client_viewer', now(), now())`,
+        [DANISMAN, ORG_A, WS_A],
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it('KRİTİK: Zod şeması ile VERİTABANI aynı kuralı söylüyor', () => {
+    /*
+     * İki katman ayrışırsa uygulama izin verdiği bir satırı veritabanı
+     * reddeder ve kullanıcı anlaşılmaz bir hata görür. Şema kuralı
+     * `ORG_SCOPED_ROLES`tan okuyor; bu test o listenin kısıtla aynı
+     * olduğunu ölçüyor.
+     */
+    expect([...ORG_SCOPED_ROLES].sort()).toEqual([...DANISMAN_ROLLERI].sort());
+
+    for (const rol of DANISMAN_ROLLERI) {
+      const r = createMemberSchema.safeParse({
+        email: 'a@b.com',
+        fullName: 'Danışman',
+        password: 'uzunParola123',
+        role: rol,
+        clientId: null,
+      });
+      expect(r.success, `rol: ${rol}`).toBe(true);
+    }
+
+    const viewer = createMemberSchema.safeParse({
+      email: 'a@b.com',
+      fullName: 'Müşteri hesabı',
+      password: 'uzunParola123',
+      role: 'client_viewer',
+      clientId: null,
+    });
+    expect(viewer.success).toBe(false);
   });
 });

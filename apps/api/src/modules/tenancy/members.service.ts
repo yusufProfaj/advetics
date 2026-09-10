@@ -140,11 +140,20 @@ export class MembersService {
    * ikincisinde yöneticinin yazdığı parola KULLANILMADI.
    */
   async createMember(ctx: TenantContext, input: CreateMemberInput, meta: Meta) {
-    // Şema zaten kısıtlıyor; burada ikinci kez doğruluyoruz çünkü bu kural
-    // bir yetki yükseltme kapısı — org geneli erişim yalnızca owner/admin.
+    /*
+     * Şema zaten kısıtlıyor; burada ikinci kez doğruluyoruz çünkü bu kural
+     * bir yetki yükseltme kapısı.
+     *
+     * KURAL `isOrgScopedRole`TAN OKUNUYOR, rol adları BURAYA
+     * KOPYALANMIYOR — ve o liste genişlediğinde (danışman şirket
+     * seviyesinde yetkilendirilebilmeli) bu kod kendiliğinden doğru kaldı.
+     * Kopyalanmış olsaydı sessizce eski kuralı uygulamaya devam ederdi.
+     * Geride kalan tek şey MESAJDI ve o da düzeltildi: bugün dışarıda
+     * kalan tek rol `client_viewer`, yani müşterinin kendi giriş hesabı.
+     */
     if (input.clientId === null && !isOrgScopedRole(input.role)) {
       throw new BadRequestException(
-        'Organizasyon geneli erişim yalnızca owner ve admin rollerine verilebilir',
+        'Müşteri hesabı (Görüntüleyici) bir workspace’e bağlanmak zorunda',
       );
     }
 
@@ -315,7 +324,7 @@ export class MembersService {
   async addMembership(ctx: TenantContext, input: CreateMembershipInput, meta: Meta) {
     if (input.clientId === null && !isOrgScopedRole(input.role)) {
       throw new BadRequestException(
-        'Organizasyon geneli erişim yalnızca owner ve admin rollerine verilebilir',
+        'Müşteri hesabı (Görüntüleyici) bir workspace’e bağlanmak zorunda',
       );
     }
 

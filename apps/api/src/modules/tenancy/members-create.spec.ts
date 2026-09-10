@@ -152,13 +152,28 @@ describe('createMember', () => {
     expect(calls.membershipCreate).toEqual([]);
   });
 
-  it('ORG GENELİ erişim yalnızca owner/admin rollerine verilebiliyor', async () => {
-    // Bu bir yetki yükseltme kapısı: müşteri seçilmeden verilen bir manager
-    // yetkisi, org'daki HER müşteriye erişim demek olurdu.
+  it('KRİTİK: MÜŞTERİ HESABI şirket geneli olamıyor', async () => {
+    /*
+     * KURAL GENİŞLEDİ AMA KAPI DURUYOR. Eskiden org geneli erişim yalnızca
+     * owner/admin'e açıktı ve bu test `manager`ı reddettiğini ölçüyordu;
+     * danışman şirkete bakmak zorunda olduğu için o kural genişledi.
+     *
+     * Dışarıda kalan tek rol `client_viewer` ve o, kuralın var oluş
+     * sebebi: müşterinin KENDİ giriş hesabı. Şirket seviyesine çıkarmak,
+     * Ege Birlik'in hesabına Fenbay'ın verisini açmak demek.
+     */
     await expect(
-      svc.createMember(CTX, input({ clientId: null, role: 'manager' }), META),
-    ).rejects.toThrow(/Organizasyon geneli/);
+      svc.createMember(CTX, input({ clientId: null, role: 'client_viewer' }), META),
+    ).rejects.toThrow(/workspace/i);
     expect(calls.userCreate).toEqual([]);
+  });
+
+  it('KRİTİK: DANIŞMAN rolü şirket geneli KABUL EDİLİYOR', async () => {
+    // Genişletilen kuralın diğer yönü: `manager` artık şirketin tamamına
+    // atanabiliyor ve kırk altı workspace'e tek tek atanması gerekmiyor.
+    const res = await svc.createMember(CTX, input({ clientId: null, role: 'manager' }), META);
+    expect(res.created).toBe(true);
+    expect(calls.membershipCreate[0]).toMatchObject({ clientId: null, role: 'manager' });
   });
 
   it('org geneli admin kabul ediliyor', async () => {
@@ -212,12 +227,19 @@ describe('addMembership', () => {
     ).rejects.toThrow(/Kullanıcı bulunamadı/);
   });
 
-  it('ORG GENELİ erişim yalnızca owner/admin rollerine verilebiliyor', async () => {
+  it('KRİTİK: MÜŞTERİ HESABI şirket geneli olamıyor', async () => {
+    // Gerekçe `createMember`daki testte; aynı kapı, ikinci giriş yolu.
     existingUser = { id: USER, memberships: [] };
 
     await expect(
-      svc.addMembership(CTX, { userId: USER, role: 'analyst', clientId: null }, META),
-    ).rejects.toThrow(/Organizasyon geneli/);
+      svc.addMembership(CTX, { userId: USER, role: 'client_viewer', clientId: null }, META),
+    ).rejects.toThrow(/workspace/i);
     expect(calls.membershipCreate).toEqual([]);
+  });
+
+  it('DANIŞMAN rolü şirket geneli kabul ediliyor', async () => {
+    existingUser = { id: USER, memberships: [] };
+    await svc.addMembership(CTX, { userId: USER, role: 'analyst', clientId: null }, META);
+    expect(calls.membershipCreate[0]).toMatchObject({ clientId: null, role: 'analyst' });
   });
 });

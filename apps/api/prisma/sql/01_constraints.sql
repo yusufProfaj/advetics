@@ -33,12 +33,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS memberships_org_scope_uniq
   WHERE client_id IS NULL;
 
 -- -----------------------------------------------------------------------------
--- memberships: org geneli erişim yalnızca owner/admin rollerine verilebilir.
--- Bir "analyst"a client_id=NULL vermek, ona tüm müşterileri açardı.
+-- memberships: org geneli erişim `client_viewer` DIŞINDA herkese açık.
+--
+-- KURAL TERS ÇEVRİLDİ. Önce `role IN ('owner','admin')` idi ve DANIŞMANI
+-- dışarıda bırakıyordu: bir kampanya yöneticisi ya da analist, şirketin her
+-- workspace'ine TEK TEK atanmak zorundaydı. Kırk altı workspace'li bir
+-- şirkette bu, kırk altı satır ve her yeni workspace'te unutulacak bir adım —
+-- unutulduğunda belirtisi "danışman bazı müşterileri göremiyor" ve sebebi
+-- hiçbir ekranda yazmıyor.
+--
+-- Ayırt eden şey rolün genişliği DEĞİL, kimin hesabı olduğu:
+--   · Ajans personeli → şirkete bakar, şirketin tamamını görür.
+--   · `client_viewer` → MÜŞTERİNİN KENDİ giriş hesabı; sınırı tam olarak
+--     workspace. Şirket seviyesine çıkarmak, bir müşterinin hesabına
+--     diğerlerinin verisini açmak demek. Bu kısıt tam olarak onu engelliyor.
+--
+-- `ORG_SCOPED_ROLES` (packages/shared) ile AYNI kuralı söylüyor; ikisi
+-- ayrışırsa uygulama izin verdiği bir satırı veritabanı reddeder.
 -- -----------------------------------------------------------------------------
 ALTER TABLE memberships DROP CONSTRAINT IF EXISTS memberships_org_scope_role_chk;
 ALTER TABLE memberships ADD CONSTRAINT memberships_org_scope_role_chk
-  CHECK (client_id IS NOT NULL OR role IN ('owner', 'admin'));
+  CHECK (client_id IS NOT NULL OR role <> 'client_viewer');
 
 -- -----------------------------------------------------------------------------
 -- clients: ISO 4217 para birimi formatı

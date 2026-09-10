@@ -72,7 +72,7 @@ const IZINLI: Array<{ neden: string; desen: RegExp }> = [
   { neden: 'LEAD — nitelikli form/havuz', desen: /nitelikli müşteri|müşteri havuzu|müşteri listesi/ },
   { neden: 'KİŞİ — raporun/mailin ALICISI bir insan', desen: /müşteriye (gönder|mail|gitm|giden)|[Mm]üşteriye gönderdiğin|rapor müşteriye/ },
   { neden: 'KİŞİ — parolayı teslim alan insan', desen: /parolayı müşteriye/ },
-  { neden: 'KİŞİ — "müşteri hesabı" = client_viewer rolüyle açılmış giriş hesabı', desen: /müşteri hesa[bp]/ },
+  { neden: 'KİŞİ — "müşteri hesabı" = client_viewer rolüyle açılmış giriş hesabı', desen: /[Mm]üşteri hesa[bp]/ },  // cümle başında da geçiyor
   { neden: 'KİŞİ — beyaz etiket tanıtımı: paneli GÖREN kişi', desen: /Müşteriniz|Müşterileriniz|müşterilerinize/ },
   { neden: 'KİŞİ — gizlilik metninde veri sahibi', desen: /müşterilerin veya reklam izleyicilerinin|müşteriye görünmez/ },
   { neden: 'KİŞİ — “sistem bozulmuş” diye okuyan insan', desen: /müşteriye “sistem/ },

@@ -140,10 +140,21 @@ describe('Workspace Hizmetleri', () => {
     expect(y.has('lead.export')).toBe(false);
   });
 
-  it('org geneli erişim rolü DEĞİL', () => {
-    // Müşteri hizmetleri müşteri müşteri atanıyor; `clientId: null` bir
-    // üyelik ona bütün ajansın verisini açardı.
-    expect(isOrgScopedRole('customer_service')).toBe(false);
+  it('KRİTİK: ŞİRKET GENELİ olabiliyor ama YÖNETİCİ DEĞİL', () => {
+    /*
+     * KARAR DEĞİŞTİ. Önce burası `isOrgScopedRole('customer_service')`in
+     * FALSE olduğunu kilitliyordu; gerekçe "müşteri müşteri atanıyor" idi.
+     *
+     * Danışman şirkete bakıyor: kırk altı workspace'li bir şirkette tek tek
+     * atama, kırk altı satır ve her yeni workspace'te unutulacak bir adım
+     * demekti — unutulduğunda belirtisi "danışman bazı müşterileri
+     * göremiyor" ve sebebi hiçbir ekranda yazmıyor.
+     *
+     * DEĞİŞMEYEN VE KİLİTLİ KALAN ŞEY: veri erişimi ile YÖNETİCİLİK ayrı.
+     * Şirketin tamamını GÖRMEK, kullanıcı açma / üyelik verme / workspace
+     * silme yetkisi vermiyor.
+     */
+    expect(isOrgScopedRole('customer_service')).toBe(true);
     expect(isOrgAdminRole('customer_service')).toBe(false);
   });
 });

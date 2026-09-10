@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ROLES, type Role } from '@advetics/shared';
+import { ROLES, isOrgScopedRole, type Role } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { ROLE_TR, type MemberRow } from '@/components/tenancy/team-manager';
 import {
@@ -489,7 +489,16 @@ function KullaniciEkleModal({
    * burada tekrarlanmasının sebebi geçersiz kombinasyonun SEÇİLEBİLMESİNİ
    * engellemek — sonradan hata göstermek, o hatayı yapmasına izin vermek.
    */
-  const orgGeneliOlabilir = rol === 'owner' || rol === 'admin';
+  /*
+   * ORG GENELİ ARTIK `client_viewer` DIŞINDA HERKESE AÇIK.
+   *
+   * Önce `rol === 'owner' || rol === 'admin'` yazıyordu ve rol adları
+   * BURAYA KOPYALANMIŞTI. Kural genişleyince (danışman şirket seviyesinde
+   * yetkilendirilebilmeli) bu kopya geride kalır ve ekran, sunucunun
+   * kabul ettiği bir seçeneği kapalı gösterirdi. Artık aynı kaynaktan
+   * okunuyor: `ORG_SCOPED_ROLES`.
+   */
+  const orgGeneliOlabilir = isOrgScopedRole(rol);
 
   async function gonder(): Promise<void> {
     setBusy(true);
@@ -540,9 +549,13 @@ function KullaniciEkleModal({
             onChange={(e) => {
               const yeni = e.target.value as Role;
               setRol(yeni);
-              // Org geneli seçilemeyen bir role geçilince kapsam sıfırlanıyor:
-              // aksi hâlde sunucu reddeder ve sebebi ekranda görünmezdi.
-              if (yeni !== 'owner' && yeni !== 'admin' && clientId === '') setClientId('');
+              /*
+               * MÜŞTERİ HESABINA GEÇİLİNCE KAPSAM ZORUNLU OLUYOR.
+               * `client_viewer` şirket seviyesinde olamaz (müşterinin kendi
+               * giriş hesabı, sınırı workspace); seçim boş kalırsa sunucu
+               * reddeder ve sebebi ekranda görünmezdi.
+               */
+              if (!isOrgScopedRole(yeni) && clientId === '') setClientId('');
             }}
             className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
           >
@@ -562,7 +575,8 @@ function KullaniciEkleModal({
             className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
           >
             <option value="" disabled={!orgGeneliOlabilir}>
-              Tüm workspace’ler {orgGeneliOlabilir ? '' : '(yalnızca Sahip/Yönetici)'}
+              Şirket geneli — bütün workspace’ler
+              {orgGeneliOlabilir ? '' : ' (müşteri hesabı için kapalı)'}
             </option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
@@ -617,8 +631,16 @@ function DanismanEkleModal({
   const [ad, setAd] = useState('');
   const [eposta, setEposta] = useState('');
   const [parola, setParola] = useState('');
-  /** `org` => bütün müşteriler (Yönetici); değilse müşteri kimliği. */
-  const [kapsam, setKapsam] = useState('');
+  /**
+   * `org` => ŞİRKET GENELİ; değilse tek bir workspace kimliği.
+   *
+   * VARSAYILAN ŞİRKET GENELİ. Danışman şirkete bakıyor, tek bir
+   * workspace'e değil; kırk altı workspace'li bir şirkette tek tek atama,
+   * kırk altı satır ve her yeni workspace'te unutulacak bir adım demekti —
+   * unutulduğunda belirtisi "danışman bazı müşterileri göremiyor" ve
+   * sebebi hiçbir ekranda yazmıyor.
+   */
+  const [kapsam, setKapsam] = useState('org');
   const [rol, setRol] = useState<Role>('manager');
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
@@ -635,10 +657,15 @@ function DanismanEkleModal({
           email: eposta.trim(),
           fullName: ad.trim(),
           password: parola,
-          // ORG GENELİ KAPSAMDA ROL ZORLA `admin`: sunucu org geneli erişimi
-          // yalnızca owner/admin'e veriyor ve manager seçili kalırsa istek
-          // reddedilir — sebebi ekranda anlaşılmazdı.
-          role: orgGeneli ? 'admin' : rol,
+          /*
+           * ROL ARTIK ZORLANMIYOR. Eskiden şirket geneli seçilince rol
+           * `admin`e çevriliyordu, çünkü sunucu org geneli erişimi yalnızca
+           * owner/admin'e veriyordu. O kural genişledi (`ORG_SCOPED_ROLES`)
+           * ve zorlama artık ZARARLI olurdu: "Analist" seçen kişiye sessizce
+           * YÖNETİCİ yetkisi vermek — kullanıcı açma ve workspace silme
+           * dahil.
+           */
+          role: rol,
           clientId: orgGeneli ? null : kapsam,
         }),
       });
@@ -655,9 +682,10 @@ function DanismanEkleModal({
     <Modal baslik="Danışman ekle" onKapat={onKapat}>
       <div className="space-y-3">
         <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
-          Ajans personeli açar — müşteri hesabı değil. Davet gönderilmiyor;
-          parolayı sen belirleyip kendin iletiyorsun. Başka workspace’lere
-          sonradan “Danışman ata” ile bağlayabilirsin.
+          Ajans personeli açar — müşteri hesabı değil. Varsayılan olarak
+          ŞİRKETİN TAMAMINA erişir; tek bir workspace’e daraltmak istersen
+          kapsamdan seçebilirsin. Davet gönderilmiyor; parolayı sen
+          belirleyip kendin iletiyorsun.
         </p>
 
         <Alan etiket="Ad soyad" value={ad} onChange={setAd} />
@@ -676,8 +704,7 @@ function DanismanEkleModal({
             onChange={(e) => setKapsam(e.target.value)}
             className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
           >
-            <option value="">Seçin…</option>
-            <option value="org">Bütün workspace’ler (Yönetici)</option>
+            <option value="org">Şirket geneli — bütün workspace’ler</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}

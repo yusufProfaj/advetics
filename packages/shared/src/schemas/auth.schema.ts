@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ROLES } from '../auth/roles';
+import { ROLES, isOrgScopedRole } from '../auth/roles';
 
 /**
  * Şifre politikası.
@@ -76,13 +76,20 @@ export const createMemberSchema = z
     /** null => org geneli erişim. Sadece owner/admin rolleri için geçerli. */
     clientId: z.string().uuid().nullable(),
   })
-  .refine(
-    (v) => v.clientId !== null || v.role === 'owner' || v.role === 'admin',
-    {
-      message: 'Org geneli erişim yalnızca owner ve admin rollerine verilebilir',
-      path: ['clientId'],
-    },
-  );
+  .refine((v) => v.clientId !== null || isOrgScopedRole(v.role), {
+    /*
+     * KURAL TERS: `client_viewer` DIŞINDA herkes şirket seviyesinde
+     * yetkilendirilebilir. Ayırt eden şey rolün genişliği değil, KİMİN
+     * hesabı olduğu — `client_viewer` müşterinin kendi giriş hesabı ve
+     * onun sınırı tam olarak workspace.
+     *
+     * `ORG_SCOPED_ROLES`tan TÜRETİLİYOR, rol adları burada TEKRAR
+     * YAZILMIYOR: iki liste ayrışırsa uygulama izin verdiği bir satırı
+     * veritabanı `memberships_org_scope_role_chk` ile reddeder.
+     */
+    message: 'Müşteri hesabı (Görüntüleyici) bir workspace’e bağlanmak zorunda',
+    path: ['clientId'],
+  });
 export type CreateMemberInput = z.infer<typeof createMemberSchema>;
 
 /**
@@ -104,13 +111,12 @@ export const createMembershipSchema = z
     /** null => org geneli erişim. Sadece owner/admin rolleri için geçerli. */
     clientId: z.string().uuid().nullable(),
   })
-  .refine(
-    (v) => v.clientId !== null || v.role === 'owner' || v.role === 'admin',
-    {
-      message: 'Org geneli erişim yalnızca owner ve admin rollerine verilebilir',
-      path: ['clientId'],
-    },
-  );
+  .refine((v) => v.clientId !== null || isOrgScopedRole(v.role), {
+    // Gerekçe `createMemberSchema`da; iki şema aynı kuralı AYNI kaynaktan
+    // okuyor.
+    message: 'Müşteri hesabı (Görüntüleyici) bir workspace’e bağlanmak zorunda',
+    path: ['clientId'],
+  });
 export type CreateMembershipInput = z.infer<typeof createMembershipSchema>;
 
 export const requestPasswordResetSchema = z.object({ email: emailSchema });

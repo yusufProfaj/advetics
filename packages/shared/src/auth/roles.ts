@@ -47,8 +47,35 @@ export type Role = (typeof ROLES)[number];
  * geneli yapmayıp ajans genelinde çalışamaz hâle getirmek.
  */
 
-/** Org geneli VERİ erişimi: `membership.clientId === null` tutabilen roller. */
-export const ORG_SCOPED_ROLES: readonly Role[] = ['owner', 'admin', 'ad_manager'];
+/**
+ * Org geneli VERİ erişimi: `membership.clientId === null` tutabilen roller.
+ *
+ * ═══ LİSTE DEĞİL, TEK BİR İSTİSNA ═══
+ *
+ * Önce `['owner', 'admin', 'ad_manager']` idi ve DANIŞMANI dışarıda
+ * bırakıyordu: bir kampanya yöneticisi ya da analist, şirketin her
+ * workspace'ine TEK TEK atanmak zorundaydı. Kırk altı workspace'li bir
+ * şirkette bu, kırk altı satır ve her yeni workspace'te unutulacak bir
+ * adım demek — ve unutulduğunda belirtisi "danışman bazı müşterileri
+ * göremiyor" oluyor, sebebi hiçbir ekranda yazmıyor.
+ *
+ * Kural artık ters yazılıyor: `client_viewer` DIŞINDA herkes şirket
+ * seviyesinde yetkilendirilebilir. Çünkü ayırt eden şey rolün genişliği
+ * değil, KİMİN hesabı olduğu:
+ *
+ *   · Ajans personeli (danışman) → şirkete bakar, şirketin tamamını görür.
+ *   · `client_viewer` → MÜŞTERİNİN KENDİ giriş hesabı. Onun sınırı tam
+ *     olarak workspace'tir; şirket seviyesine çıkarmak, Ege Birlik'in
+ *     hesabına Fenbay'ın verisini açmak demek.
+ *
+ * VERİ ERİŞİMİ İLE YÖNETİCİLİK HÂLÂ AYRI: bu liste yalnızca "org'daki
+ * bütün workspace'lerin verisini görür" diyor. Kullanıcı açma, üyelik
+ * verme ve workspace silme `ORG_ADMIN_ROLES`ta ve o liste GENİŞLEMEDİ.
+ *
+ * Veritabanı da aynı kuralı dayatıyor: `memberships_org_scope_role_chk`
+ * (`prisma/sql/01_constraints.sql`).
+ */
+export const ORG_SCOPED_ROLES: readonly Role[] = ROLES.filter((r) => r !== 'client_viewer');
 
 /**
  * Org YÖNETİCİSİ: `isOrgAdmin` bayrağını açan roller.

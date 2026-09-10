@@ -228,13 +228,40 @@ describe('DANIŞMAN EKLE', () => {
     expect(govde).toContain("r !== 'client_viewer'");
   });
 
-  it('KRİTİK: org geneli kapsamda rol ZORLA admin', () => {
-    // Sunucu org geneli erişimi yalnızca owner/admin'e veriyor; manager
-    // seçili kalırsa istek reddedilir ve sebebi ekranda anlaşılmaz.
+  it('KRİTİK: rol ZORLANMIYOR — şirket geneli seçmek yönetici yapmıyor', () => {
+    /*
+     * KARAR TERSİNE ÇEVRİLDİ VE SEBEBİ ÖNEMLİ.
+     *
+     * Eskiden şirket geneli seçilince rol `admin`e ÇEVRİLİYORDU; gerekçe
+     * sunucunun org geneli erişimi yalnızca owner/admin'e vermesiydi ve o
+     * zaman DOĞRUYDU — manager seçili kalırsa istek reddedilir ve sebebi
+     * ekranda anlaşılmazdı.
+     *
+     * Kural genişleyince (`ORG_SCOPED_ROLES` artık `client_viewer` dışında
+     * herkesi kapsıyor) o zorlama ZARARLI hâle geldi: "Analist" seçen
+     * kişiye SESSİZCE yönetici yetkisi vermek — kullanıcı açma ve workspace
+     * silme dahil. Sessizce yetki genişleten bir arayüz, en pahalı hata
+     * türü.
+     */
     const kod = yorumsuz(KAYNAK);
     const i = kod.indexOf('function DanismanEkleModal');
     const govde = kod.slice(i, i + 5000);
-    expect(govde).toContain("orgGeneli ? 'admin' : rol");
+    expect(govde).not.toContain("orgGeneli ? 'admin' : rol");
+    expect(govde).toContain('role: rol,');
+  });
+
+  it('KRİTİK: danışmanın VARSAYILAN kapsamı ŞİRKET GENELİ', () => {
+    /*
+     * Danışman şirkete bakıyor, tek bir workspace'e değil. Varsayılanı boş
+     * bırakmak, kırk altı workspace'li bir şirkette tek tek atama ve her
+     * yeni workspace'te unutulacak bir adım demekti — unutulduğunda
+     * belirtisi "danışman bazı müşterileri göremiyor" ve sebebi hiçbir
+     * ekranda yazmıyor.
+     */
+    const kod = yorumsuz(KAYNAK);
+    const i = kod.indexOf('function DanismanEkleModal');
+    const govde = kod.slice(i, i + 5000);
+    expect(govde).toContain("useState('org')");
   });
 
   it('kapsam zorunlu — erişimsiz hesap açılamıyor', () => {
@@ -306,9 +333,21 @@ describe('yetki kararları', () => {
     expect(yorumsuz(KAYNAK)).toContain('kendisi');
   });
 
-  it('org geneli kapsam yalnızca owner/admin için seçilebilir', () => {
+  it('KRİTİK: şirket geneli kapsam YALNIZCA müşteri hesabına kapalı', () => {
+    /*
+     * KURAL TERS ÇEVRİLDİ. Önce `rol === 'owner' || rol === 'admin'` idi ve
+     * rol adları EKRANA KOPYALANMIŞTI; kural genişleyince (danışman şirket
+     * seviyesinde yetkilendirilebilmeli) o kopya geride kalır ve ekran,
+     * sunucunun KABUL ETTİĞİ bir seçeneği kapalı gösterirdi.
+     *
+     * Ayırt eden şey rolün genişliği değil, KİMİN hesabı olduğu:
+     * `client_viewer` müşterinin kendi giriş hesabı ve sınırı tam olarak
+     * workspace. Ekran artık kararı `ORG_SCOPED_ROLES`tan OKUYOR — üç yer
+     * (ekran, Zod şeması, veritabanı CHECK'i) aynı kaynağa bakıyor.
+     */
     const kod = yorumsuz(KAYNAK);
-    expect(kod).toContain("rol === 'owner' || rol === 'admin'");
+    expect(kod).not.toContain("rol === 'owner' || rol === 'admin'");
+    expect(kod).toContain('isOrgScopedRole(rol)');
   });
 });
 

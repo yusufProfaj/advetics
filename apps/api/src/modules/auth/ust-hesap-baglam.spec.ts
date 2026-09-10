@@ -234,14 +234,18 @@ describe('YETKİ YÜKSELTME KAPALI', () => {
     expect(r.managerAccount).toBeNull();
   });
 
-  it('KRİTİK: ORG GENELİ OLMAYAN üst hesap rolü geçiş açmıyor', async () => {
+  it('KRİTİK: MÜŞTERİ HESABI rolü üst hesapta geçiş açmıyor', async () => {
     /*
-     * Kardeş şirkette kullanıcının hiç `memberships` satırı YOK. Org geneli
-     * olmayan bir rol orada SIFIR workspace görürdü — "geçtim ama hiçbir şey
-     * yok" gibi görünen, sebebi hiçbir ekranda yazmayan bir çıkmaz. Geçiş
-     * baştan açılmıyor.
+     * Kardeş şirkette kullanıcının hiç `memberships` satırı YOK; şirket
+     * geneli OLAMAYAN bir rol orada SIFIR workspace görürdü — "geçtim ama
+     * hiçbir şey yok" gibi görünen, sebebi hiçbir ekranda yazmayan bir
+     * çıkmaz.
+     *
+     * DIŞARIDA KALAN TEK ROL `client_viewer` (danışman rolleri şirket
+     * seviyesine çıktı) ve o, kuralın var oluş sebebi: müşterinin kendi
+     * giriş hesabı hiçbir koşulda şirketler arasında gezinemez.
      */
-    const r = await servis({ ustHesap: { id: UST_A, role: 'analyst' } }).resolve(
+    const r = await servis({ ustHesap: { id: UST_A, role: 'client_viewer' } }).resolve(
       'user-1',
       null,
       ORG_A2,
