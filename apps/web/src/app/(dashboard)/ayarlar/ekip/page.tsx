@@ -133,8 +133,8 @@ export default async function TeamPage() {
 
       <p className="text-xs text-ink-muted">
         Yeni workspace açmak için{' '}
-        <Link href="/ayarlar/musteriler" className="font-medium text-brand-strong hover:underline">
-          Workspace’ler
+        <Link href="/ayarlar/ust-hesap" className="font-medium text-brand-strong hover:underline">
+          Şirketler
         </Link>
         , reklam hesabı bağlamak için{' '}
         <Link href="/ayarlar/baglantilar" className="font-medium text-brand-strong hover:underline">

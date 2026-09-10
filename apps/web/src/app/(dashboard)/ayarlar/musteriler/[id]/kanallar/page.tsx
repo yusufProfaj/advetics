@@ -44,11 +44,14 @@ export default async function ClientChannelsPage({
      */
     <div className="w-full space-y-6">
       <div>
+        {/* GERİ BAĞLANTISI ŞİRKETLER'E: workspace listesi artık orada, ayrı
+            bir sayfada değil. `/ayarlar/musteriler` yönlendiriyor ama bir
+            yönlendirmeye bağlanmak, kullanıcıya fazladan bir tur attırmak. */}
         <Link
-          href="/ayarlar/musteriler"
+          href="/ayarlar/ust-hesap"
           className="text-xs font-medium text-brand-strong hover:underline"
         >
-          ← Workspace’ler
+          ← Şirketler
         </Link>
         <h1 className="mt-1.5 text-2xl font-semibold">{data.clientName} — Bağlı Kanallar</h1>
         <p className="mt-1 text-sm text-ink-muted">

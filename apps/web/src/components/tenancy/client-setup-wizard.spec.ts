@@ -12,7 +12,8 @@ import { describe, expect, it } from 'vitest';
 const DIR = __dirname;
 const FORM = readFileSync(join(DIR, 'client-setup-wizard.tsx'), 'utf8');
 const SAYFA = readFileSync(
-  join(DIR, '..', '..', 'app', '(dashboard)', 'ayarlar', 'musteriler', 'page.tsx'),
+  // Workspace bölümü artık Şirketler sayfasının içinde bir bileşen.
+  join(DIR, 'workspace-bolumu.tsx'),
   'utf8',
 );
 

@@ -139,7 +139,8 @@ describe('müşteri arama', () => {
      */
     expect(kod(ARAMA)).toContain('icerik: ReactNode');
     const sayfa = readFileSync(
-      join(__dirname, '..', '..', 'app', '(dashboard)', 'ayarlar', 'musteriler', 'page.tsx'),
+      // Workspace bölümü artık Şirketler sayfasının içinde bir bileşen.
+      join(__dirname, 'workspace-bolumu.tsx'),
       'utf8',
     );
     expect(kod(sayfa)).toContain('<MusteriArama');

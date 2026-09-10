@@ -22,9 +22,21 @@ export class OrganizationsController {
   @RequirePermissions('org.read')
   async get(@CurrentTenant() ctx: TenantContext) {
     return this.prisma.withTenant(ctx, async (tx) => {
-      // RLS `organizations` üzerinde yalnızca kullanıcının org'unu görünür kılar;
-      // findFirst tek satır döndürmesi garantidir.
+      /*
+       * KİMLİK AÇIKÇA VERİLİYOR — `findFirst()` ARTIK TEK SATIR DEĞİL.
+       *
+       * Burada "RLS zaten tek satır bırakır" yazıyordu ve o cümle üst hesap
+       * (MCC) katmanı geldiğinde ÇÜRÜDÜ: `adv_organizations_select`
+       * politikası aynı ajansın BÜTÜN şirketlerini görünür kılıyor (şirket
+       * seçicinin listesi oradan geliyor). Yüklemsiz bir `findFirst`
+       * rastgele bir kardeş şirketi döndürür ve ekranda başka bir şirketin
+       * adı yazardı — hiçbir hata vermeden.
+       *
+       * "Tüm şirketler" modunda `ctx.orgId` EV şirketi; bu uç o zaman da
+       * tek ve belirli bir şirketi anlatıyor.
+       */
       const org = await tx.organization.findFirst({
+        where: { id: ctx.orgId },
         select: {
           id: true,
           name: true,
@@ -48,7 +60,14 @@ export class OrganizationsController {
     @Req() req: AuthedRequest,
   ) {
     return this.prisma.withTenant(ctx, async (tx) => {
-      const before = await tx.organization.findFirstOrThrow();
+      /*
+       * YÜKLEM ZORUNLU — okuma ucuyla aynı sebep. Yüklemsiz `findFirstOrThrow`
+       * kardeş bir şirketi seçebiliyor; UPDATE politikası (`id =
+       * app.current_org_id()`) onu reddettiği için sonuç veri bozulması değil
+       * ANLAŞILMAZ BİR HATA olurdu: "kayıt bulunamadı" diyen bir kaydet
+       * düğmesi.
+       */
+      const before = await tx.organization.findFirstOrThrow({ where: { id: ctx.orgId } });
 
       const after = await tx.organization.update({
         where: { id: before.id },

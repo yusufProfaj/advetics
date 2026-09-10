@@ -14,7 +14,10 @@ import { Halka } from '@/components/yukleniyor';
  * ÜST HESAP (MCC) EKRANI — ağaç ve iki yazma işlemi.
  *
  * Hiyerarşi: Üst Hesap → Şirket → Workspace → Reklam Hesabı → Kampanya.
- * Bu ekran ilk iki katmanı yönetiyor; workspace'ler kendi ekranında.
+ * Bu bileşen ilk iki katmanı yönetiyor; workspace'lerin DÜZENLENDİĞİ bölüm
+ * aynı sayfada, hemen altında (`WorkspaceBolumu`) ve AKTİF şirkete ait.
+ * Buradaki workspace listeleri ise yalnızca ad gösteriyor — hangi
+ * workspace'in nerede olduğunu şirkete geçmeden görebilmek için.
  *
  * VAR OLAN BİR ŞİRKETİ BAĞLAMA YOK ve bu bilinçli (arka uçta da yok):
  * "şu şirketi üst hesabıma ekle" diyebilmek, başkasının şirketini kendi
@@ -185,13 +188,59 @@ function SirketKarti({
   const [gecis, setGecis] = useState(false);
   const [secilen, setSecilen] = useState('');
 
+  /**
+   * ŞİRKETE GEÇ — tam sayfa yükleme.
+   *
+   * `router.refresh()` YETMİYOR: şirket değişince kenar çubuğu, workspace
+   * listesi ve marka renkleri değişiyor ve istemci state'i önceki şirketten
+   * kalan kimlikleri taşıyor. Yarım tazelenmiş bir ekran, sızıntıdan ayırt
+   * edilemeyecek kadar kötü görünüyor.
+   */
+  function gec(): void {
+    setGecis(true);
+    void apiFetch('/auth/switch-org', {
+      method: 'POST',
+      body: JSON.stringify({ organizationId: sirket.id }),
+    })
+      .then(() => {
+        // AYNI SAYFAYA DÖNÜYOR, `/dashboard`A DEĞİL. Kullanıcı şirketi
+        // düzenlemek için tıkladı; onu Genel Bakış'a atmak, aradığı ekranı
+        // yeniden bulmasını istemek olurdu.
+        window.location.assign('/ayarlar/ust-hesap');
+      })
+      .catch(() => setGecis(false));
+  }
+
   return (
     <li className="flex flex-col rounded-xl border border-line bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-ink">{sirket.name}</p>
-          <p className="truncate text-xs text-ink-muted">{sirket.slug}</p>
-        </div>
+        {/*
+          BAŞLIK BİR DÜĞME: "şirkete tıklayınca o şirkete geçilsin" isteğinin
+          karşılığı. Kartın TAMAMINI tıklanabilir yapmak mümkün değil —
+          içinde workspace taşıma seçicisi ve aç/kapa düğmesi var; iç içe
+          tıklama hedefleri klavyeyle gezilemez hâle getirir.
+        */}
+        {aktif ? (
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-ink">{sirket.name}</p>
+            <p className="truncate text-xs text-ink-muted">{sirket.slug}</p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled={gecis}
+            onClick={gec}
+            className="min-w-0 flex-1 text-left disabled:opacity-50"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="truncate text-sm font-semibold text-brand-strong hover:underline">
+                {sirket.name}
+              </span>
+              {gecis && <Halka />}
+            </span>
+            <span className="block truncate text-xs text-ink-muted">{sirket.slug}</span>
+          </button>
+        )}
         {sirket.isHome && (
           /*
            * EV ŞİRKETİ İŞARETLİ. Kullanıcının kendi üyeliği orada; diğer
@@ -228,8 +277,8 @@ function SirketKarti({
             /* BOŞ LİSTE NEDENİNİ SÖYLÜYOR (CLAUDE.md): "henüz eklenmedi" ile
                "yüklenemedi" aynı boş alana çevrilmemeli. */
             <li className="py-1 text-xs text-ink-muted">
-              Bu şirkette henüz workspace yok. &quot;Yönet&quot; ile şirkete geçip
-              ekleyebilirsin.
+              Bu şirkette henüz workspace yok. Şirkete geçince aşağıdaki
+              &quot;Workspace&apos;ler&quot; bölümünden ekleyebilirsin.
             </li>
           ) : (
             sirket.workspaces.map((w) => (
@@ -283,35 +332,24 @@ function SirketKarti({
       <div className="mt-3 flex items-center gap-2">
         {aktif ? (
           /*
-           * ZATEN SEÇİLİ ŞİRKETTE "Yönet" DÜĞMESİ YOK. Basılsaydı hiçbir şey
+           * ZATEN SEÇİLİ ŞİRKETTE GEÇİŞ DÜĞMESİ YOK. Basılsaydı hiçbir şey
            * değişmeyen bir tam sayfa yüklemesi olurdu ve kullanıcı ekranın
-           * boşuna sıfırlandığını görürdü.
+           * boşuna sıfırlandığını görürdü. Bunun yerine düzenleme bölümünün
+           * AŞAĞIDA olduğu yazılı — yoksa kullanıcı seçili şirketi
+           * düzenlemenin yolunu arar.
            */
           <span className="rounded-lg bg-surface-muted px-3 py-1.5 text-xs text-ink-muted">
-            Şu an bu şirkettesin
+            Şu an bu şirkettesin — aşağıdan düzenle
           </span>
         ) : (
           <button
             type="button"
             disabled={gecis}
-            onClick={() => {
-              setGecis(true);
-              void apiFetch('/auth/switch-org', {
-                method: 'POST',
-                body: JSON.stringify({ organizationId: sirket.id }),
-              })
-                .then(() => {
-                  /* TAM SAYFA: şirket değişince kenar çubuğu, workspace
-                     listesi ve marka renkleri değişiyor; istemci state'i
-                     önceki şirketten kalırsa anlamsız kimlikler taşıyor. */
-                  window.location.assign('/dashboard');
-                })
-                .catch(() => setGecis(false));
-            }}
+            onClick={gec}
             className="inline-flex items-center gap-2 rounded-lg bg-brand px-3.5 py-1.5 text-sm font-medium text-white disabled:opacity-50"
           >
             {gecis && <Halka />}
-            Yönet
+            Bu şirkete geç
           </button>
         )}
       </div>

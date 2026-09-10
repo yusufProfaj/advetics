@@ -123,22 +123,27 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
      * müşterisini okuyabilmeli), ayırt eden şey yönetim yetkisi.
      *
      * ADI "AYARLAR" DEĞİL "SİSTEM YÖNETİMİ": içinde ayar olmayan ekranlar
-     * var (Şirketler, Workspace'ler, Ekip) ve "ayar" kelimesi onları
+     * var (Şirketler, Ekip) ve "ayar" kelimesi onları
      * ikinci sınıf gösteriyordu — kullanıcı şirket açmayı bir ayar sanmıyor.
      */
     title: 'Sistem Yönetimi',
     items: [
       {
         /*
-         * HİYERARŞİNİN EN DIŞ KATMANI EN ÜSTTE: Şirket → Workspace →
-         * Bağlantı. Menü sırası, kullanıcının kafasındaki ağaçla aynı
-         * olmak zorunda; ters sıra "workspace şirketin içinde mi, dışında
-         * mı" sorusunu doğuruyor.
+         * WORKSPACE'LER AYRI BİR SATIR DEĞİL — ŞİRKETLER'İN İÇİNDE.
+         *
+         * "Şirketler" ve "Workspace'ler" yan yana iki satırdı ve menünün
+         * kendisi hiyerarşiyi yanlış anlatıyordu: workspace şirketin
+         * İÇİNDE, kardeşi değil. Yan yana dururken kullanıcı workspace
+         * listesine bakarken hangi şirkette olduğunu ekrandan okuyamıyordu.
+         * `/ayarlar/musteriler` yönlendiriyor (yer imleri ve panel içi
+         * bağlantılar için); alt yolları yerinde duruyor.
          *
          * `org.write` ile kapalı — bu ekran bir kullanıcının ERİŞEBİLDİĞİ
          * ŞİRKET KÜMESİNİ değiştiriyor, yani izolasyonun sınırını.
          * `client.write` (workspace açma) yetmez: `ad_manager` onu taşıyor
-         * ama şirket açamamalı.
+         * ama şirket açamamalı. Workspace bölümü bu sayfanın İÇİNDE ve
+         * kendi yetkisini ayrıca kontrol ediyor.
          */
         href: '/ayarlar/ust-hesap',
         label: 'Şirketler',
@@ -146,14 +151,6 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         module: 1,
         ready: true,
         perm: 'org.write',
-      },
-      {
-        href: '/ayarlar/musteriler',
-        label: 'Workspace’ler',
-        icon: 'clients',
-        module: 1,
-        ready: true,
-        perm: 'client.write',
       },
       {
         href: '/ayarlar/baglantilar',

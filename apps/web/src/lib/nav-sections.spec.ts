@@ -56,7 +56,7 @@ describe('menü verisi gerçekten okunuyor', () => {
     // Sayı testte yazılı çünkü yapı iki kez değişti ve her değişim bir
     // karardı; altıncı bir bölüm eklenirse burası düşer ve karar gözden
     // geçirilir. Son bölümün adı "Ayarlar"dı; içinde ayar OLMAYAN ekranlar
-    // (Şirketler, Workspace'ler, Ekip) o adı yanlış yapıyordu.
+    // (Şirketler, Ekip) o adı yanlış yapıyordu.
     expect(SECTIONS.map((s) => s.title)).toEqual([
       undefined,
       'Reklamlar',
@@ -81,7 +81,9 @@ describe('menü verisi gerçekten okunuyor', () => {
       .map((i) => i.href)
       .sort();
     for (const zorunlu of [
-      '/ayarlar/musteriler',
+      // WORKSPACE'LER ARTIK BU SAYFANIN İÇİNDE — `/ayarlar/musteriler`
+      // menüden kalktı ve yönlendirmeye düştü.
+      '/ayarlar/ust-hesap',
       '/ayarlar/baglantilar',
       '/ayarlar/senkronizasyon',
       '/ayarlar/ekip',
@@ -134,9 +136,11 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
     expect(basliklar('client_viewer')).not.toContain('Sistem Yönetimi');
   });
 
-  it('KRİTİK: Workspace’ler, Platform Bağlantıları ve Ekip & Yetkiler görünmüyor', () => {
+  it('KRİTİK: Şirketler, Platform Bağlantıları ve Ekip & Yetkiler görünmüyor', () => {
     const gorunen = etiketler('client_viewer');
-    expect(gorunen).not.toContain('Workspace’ler');
+    // Şirketler sayfası workspace listesini de İÇERİYOR — tek satır
+    // kapanınca ikisi birden kapanıyor.
+    expect(gorunen).not.toContain('Şirketler');
     expect(gorunen).not.toContain('Platform Bağlantıları');
     expect(gorunen).not.toContain('Ekip & Yetkiler');
   });
@@ -182,7 +186,9 @@ describe('AJANS ROLLERİ', () => {
   it('owner "Sistem Yönetimi" kategorisini ve ekranlarını görüyor', () => {
     expect(basliklar('owner')).toContain('Sistem Yönetimi');
     const gorunen = etiketler('owner');
-    expect(gorunen).toContain('Workspace’ler');
+    // "Workspace'ler" ARTIK BİR MENÜ SATIRI DEĞİL: workspace listesi
+    // Şirketler sayfasının içinde bir bölüm.
+    expect(gorunen).toContain('Şirketler');
     expect(gorunen).toContain('Platform Bağlantıları');
     expect(gorunen).toContain('Ekip & Yetkiler');
   });
@@ -196,7 +202,7 @@ describe('AJANS ROLLERİ', () => {
     // çalışanı, müşteri değil. Yetki matrisi değiştiğinde burası düşerse
     // karar bilinçli olarak gözden geçirilmeli.
     const gorunen = etiketler('analyst');
-    const yonetim = ['Workspace’ler', 'Platform Bağlantıları', 'Ekip & Yetkiler'];
+    const yonetim = ['Şirketler', 'Platform Bağlantıları', 'Ekip & Yetkiler'];
     const sahipOlduklari = yonetim.filter((y) => gorunen.includes(y));
     expect(sahipOlduklari.length).toBe(
       yonetim.filter((y) => {

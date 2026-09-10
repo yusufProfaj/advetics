@@ -194,14 +194,17 @@ describe('şirket kartı', () => {
     expect(EKRAN).toContain('sirket.workspaces.map');
   });
 
-  it('KRİTİK: ZATEN SEÇİLİ şirkette "Yönet" düğmesi YOK', () => {
+  it('KRİTİK: ZATEN SEÇİLİ şirkette geçiş düğmesi YOK', () => {
     /*
      * Basılsaydı hiçbir şey değişmeyen bir TAM SAYFA yüklemesi olurdu ve
-     * kullanıcı ekranın boşuna sıfırlandığını görürdü.
+     * kullanıcı ekranın boşuna sıfırlandığını görürdü. Yerine düzenleme
+     * bölümünün AŞAĞIDA olduğu yazılı — yoksa kullanıcı seçili şirketi
+     * düzenlemenin yolunu arar.
      */
     const kart = blok(EKRAN, 'function SirketKarti');
     expect(kart).toContain('aktif ? (');
-    expect(kart).toContain('Şu an bu şirkettesin');
+    expect(kart).toContain('Şu an bu şirkettesin — aşağıdan düzenle');
+    expect(kart).not.toContain('Yönet');
   });
 
   it('KRİTİK: aktiflik AKTİF şirkete göre, ev şirketine göre DEĞİL', () => {
@@ -214,6 +217,133 @@ describe('şirket kartı', () => {
   it('boş workspace listesi SEBEBİNİ söylüyor', () => {
     // "Henüz yok" ile "yüklenemedi" aynı boş alana çevrilmemeli (CLAUDE.md).
     expect(EKRAN).toContain('Bu şirkette henüz workspace yok');
+  });
+});
+
+describe('WORKSPACE’LER ŞİRKETİN İÇİNDE', () => {
+  const EKRAN = kod('components/ust-hesap/ust-hesap-ekrani.tsx');
+  const BOLUM = kod('components/tenancy/workspace-bolumu.tsx');
+  const NAV = kod('lib/nav-sections.ts');
+  const ESKI_SAYFA = kod('app/(dashboard)/ayarlar/musteriler/page.tsx');
+
+  it('BOŞA DÜŞME BEKÇİSİ: dosyalar okundu', () => {
+    // Dilimler boşalırsa aşağıdaki "içeriyor" iddiaları hep yanlış,
+    // "içermiyor" iddiaları hep DOĞRU olurdu — ikincisi sessiz.
+    expect(BOLUM).toContain('WorkspaceBolumu');
+    expect(NAV).toContain("href: '/ayarlar/ust-hesap'");
+  });
+
+  it('KRİTİK: workspace bölümü Şirketler sayfasında render ediliyor', () => {
+    /*
+     * İsteğin kendisi bu: "workspaceler kısmını şirketlerin içerisine
+     * taşıyacağız". Bölümün var olması yetmiyor — ÇAĞRILDIĞI da
+     * doğrulanmalı; bu depoda bir fonksiyon test edilip çağrıldığı test
+     * edilmediği için bir mutasyon kaçmıştı.
+     */
+    expect(SAYFA).toContain('<WorkspaceBolumu session={session} />');
+  });
+
+  it('KRİTİK: menüde AYRI BİR "Workspace’ler" satırı KALMADI', () => {
+    // İki satır yan yana dururken menünün kendisi hiyerarşiyi yanlış
+    // anlatıyordu: workspace şirketin İÇİNDE, kardeşi değil.
+    expect(NAV).not.toContain("label: 'Workspace’ler'");
+    expect(NAV).not.toContain("href: '/ayarlar/musteriler'");
+  });
+
+  it('KRİTİK: eski adres SİLİNMEDİ, yönlendiriyor', () => {
+    /*
+     * Bu adres panelin dört ayrı yerinden bağlanıyordu ve kullanıcıların
+     * yer imlerinde de duruyor; silmek onları 404'e düşürürdü.
+     */
+    expect(ESKI_SAYFA).toContain("redirect('/ayarlar/ust-hesap')");
+  });
+
+  it('KRİTİK: şirket kartına TIKLAMAK o şirkete geçiriyor', () => {
+    // "Şirkete tıkladığımda şirketi düzenleyebileceğim" — düzenleme aktif
+    // şirkete çivili olduğu için tıklamanın işi önce oraya GEÇMEK.
+    const kart = blok(EKRAN, 'function SirketKarti');
+    expect(kart).toContain('function gec(): void');
+    expect(kart).toContain("apiFetch('/auth/switch-org'");
+
+    /*
+     * İDDİA BAŞLIK DİLİMİNE ÇAPALI.
+     *
+     * İlk hâli kartın TAMAMINDA `onClick={gec}` arıyordu ve kartta İKİ
+     * çağıran var (başlık ve alttaki düğme): başlığın tıklanabilirliğini
+     * silmek testi DÜŞÜRMÜYORDU. Mutasyonda yakalandı.
+     */
+    const baslik = kart.slice(kart.indexOf('aktif ? ('), kart.indexOf('{sirket.isHome'));
+    expect(baslik.length, 'başlık dilimi boş — tarama boşa düştü').toBeGreaterThan(100);
+    expect(baslik).toContain('onClick={gec}');
+  });
+
+  it('KRİTİK: geçiş AYNI SAYFAYA dönüyor — Genel Bakış’a değil', () => {
+    /*
+     * Kullanıcı şirketi DÜZENLEMEK için tıkladı. `/dashboard`a atmak,
+     * aradığı ekranı yeniden bulmasını istemek olurdu.
+     */
+    const kart = blok(EKRAN, 'function SirketKarti');
+    expect(kart).toContain("window.location.assign('/ayarlar/ust-hesap')");
+  });
+
+  it('KRİTİK: "Tüm şirketler" modunda workspace bölümü ÇİZİLMİYOR', () => {
+    /*
+     * O modda `/clients` ajansın BÜTÜN workspace'lerini döndürüyor (RLS
+     * `app.org_kapsaminda` hepsini açıyor) ve hangisinin hangi şirkete ait
+     * olduğu satırda yazmıyor — Genel Bakış'ta yeni düzeltilen düz listenin
+     * aynısı. `/organization` de EV şirketini düzenlerdi, yani ekranın
+     * söylediğinden BAŞKA bir şirketi.
+     */
+    expect(SAYFA).toContain('const sirketKapsami = !session.tumSirketler');
+    expect(SAYFA).toContain('{!sirketKapsami ? (');
+  });
+
+  it('KRİTİK: workspace bölümü hatayı YUTMUYOR', () => {
+    // `.catch(() => [])` bu depoda adı konmuş bir yasak: "henüz yok",
+    // "yüklenemedi" ve "yetkin yok" aynı boş ekrana çevriliyor.
+    expect(BOLUM).not.toContain('.catch(() => [])');
+    expect(BOLUM).toContain('Promise.allSettled');
+    expect(BOLUM).toContain('yuklemeHatalari');
+  });
+});
+
+describe('şirket düzenleme', () => {
+  const FORM = kod('components/ust-hesap/sirket-duzenle.tsx');
+
+  it('BOŞA DÜŞME BEKÇİSİ: form kaynağı okundu', () => {
+    expect(FORM).toContain('SirketDuzenle');
+  });
+
+  it('KRİTİK: form sayfada render ediliyor', () => {
+    // `PATCH /organization` ucu aylardır duruyordu ama panelde HİÇBİR
+    // ÇAĞIRANI YOKTU — şirket adı bir kez yazılıp bir daha düzeltilemiyordu.
+    expect(SAYFA).toContain('<SirketDuzenle sirketAdi=');
+  });
+
+  it('KRİTİK: kaydedilen değer YANITTAN okunuyor', () => {
+    /*
+     * Sunucu kısa adı normalleştiriyor (`slugify`). Gönderdiğimizi
+     * kaydedilmiş saymak, ekranın kaydedilenden FARKLI bir metin göstermesi
+     * demekti — önizlemenin yalan söylemesi.
+     */
+    expect(FORM).toContain('setKayitli({ name: sonuc.name, slug: sonuc.slug })');
+  });
+
+  it('KRİTİK: "değişti mi" sorusu PROP’A değil son KAYITLI değere bakıyor', () => {
+    /*
+     * Prop ile karşılaştırmak iki hâlde yanılıyor: `router.refresh()`
+     * inene kadar prop ESKİ (kaydettiği hâlde "kaydedilmedi" görünür), ve
+     * sunucu değeri normalleştirirse prop hiçbir zaman yazdığına eşitlenmez
+     * — düğme sonsuza kadar açık kalır.
+     */
+    expect(FORM).toContain('const degisti = ad !== kayitli.name || slug !== kayitli.slug');
+  });
+
+  it('KRİTİK: sunucu bileşenleri tazeleniyor', () => {
+    // Şirket adı üst bardaki seçicide, kenar çubuğunda ve bu sayfanın
+    // kartlarında basılıyor; tazelenmezse form yeni adı, ekranın geri
+    // kalanı eskisini gösterir.
+    expect(FORM).toContain('router.refresh()');
   });
 });
 

@@ -79,7 +79,12 @@ describe('kenar çubuğu rotaları', () => {
   it('menü girdileri okunabildi — tarama boşa düşmüyor', () => {
     // Regex tutmazsa liste boşalır ve aşağıdaki testler sessizce geçerdi.
     // Boş taramanın yeşil yanması, testin olmamasından kötü.
-    expect(ENTRIES.length).toBeGreaterThanOrEqual(15);
+    //
+    // SAYININ KENDİSİ İDDİA DEĞİL, yalnızca "tarama bir şey yakaladı"
+    // güvencesi — o yüzden alt sınır gevşek. "Workspace'ler" satırı
+    // Şirketler'in içine taşınınca liste bir azaldı ve sınır 15'ti;
+    // sıkı bir sayı, taşınan her satırda testi sebepsiz kırıyor.
+    expect(ENTRIES.length).toBeGreaterThanOrEqual(12);
     expect(READY.size).toBeGreaterThan(0);
     expect(ENTRIES.map((e) => e.href)).toContain('/dashboard');
   });

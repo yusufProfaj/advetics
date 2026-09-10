@@ -22,7 +22,9 @@ import { describe, expect, it } from 'vitest';
  */
 const KART = readFileSync(join(__dirname, 'musteri-karti.tsx'), 'utf8');
 const SAYFA = readFileSync(
-  join(__dirname, '..', '..', 'app', '(dashboard)', 'ayarlar', 'musteriler', 'page.tsx'),
+  // WORKSPACE BÖLÜMÜ SAYFADAN BİLEŞENE TAŞINDI: workspace listesi artık
+  // Şirketler sayfasının içinde (`/ayarlar/ust-hesap`).
+  join(__dirname, 'workspace-bolumu.tsx'),
   'utf8',
 );
 const SERVIS = readFileSync(

@@ -115,11 +115,24 @@ describe('terminoloji: workspace ↔ müşteri', () => {
     expect(siniflandirilmamis).toEqual([]);
   });
 
-  it('KRİTİK: menüdeki ekran adı "Workspace’ler"', () => {
-    const nav = readFileSync(join(KOK, 'apps/web/src/lib/nav-sections.ts'), 'utf8');
-    expect(nav).toContain("label: 'Workspace’ler'");
+  it('KRİTİK: ekrandaki bölüm adı "Workspace’ler" — "Müşteriler" değil', () => {
+    /*
+     * BU İDDİA YER DEĞİŞTİRDİ, KURAL DEĞİŞMEDİ.
+     *
+     * "Workspace'ler" bir MENÜ SATIRIYDI; workspace listesi Şirketler
+     * sayfasının içine taşınınca satır kalktı ve iddia menüde boşa düştü.
+     * Korunan şey satırın YERİ değil, kullanıcının gördüğü KELİME: bölüm
+     * başlığı hâlâ "Workspace'ler" ve "Müşteriler"e geri dönmemeli.
+     */
+    const bolum = readFileSync(
+      join(KOK, 'apps/web/src/components/tenancy/workspace-bolumu.tsx'),
+      'utf8',
+    );
+    expect(bolum).toContain('Workspace’ler</h2>');
+
     // "Potansiyel Müşteriler" AYRI bir ekran ve adı DEĞİŞMEDİ; onu da
     // yanlışlıkla yeniden adlandırmadığımızı burada kilitliyoruz.
+    const nav = readFileSync(join(KOK, 'apps/web/src/lib/nav-sections.ts'), 'utf8');
     expect(nav).toContain("label: 'Potansiyel Müşteriler'");
   });
 
