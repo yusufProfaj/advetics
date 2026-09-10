@@ -6,6 +6,7 @@ import {
   type BreakdownQuery,
   type ClientBreakdownQuery,
   type MetricsClientRow,
+  type MetricsOrganizationRow,
   type MetricsBreakdownRow,
   type MetricsQuery,
   type MetricsSummary,
@@ -79,6 +80,27 @@ export class MetricsController {
     @Query(zodQuery(clientBreakdownQuerySchema)) query: ClientBreakdownQuery,
   ): Promise<MetricsClientRow[]> {
     return this.metrics.byClient(ctx, query);
+  }
+
+  /**
+   * ŞİRKET KIRILIMI — AJANS ("Tüm şirketler") GÖRÜNÜMÜNÜN TABLOSU.
+   *
+   * `clients` ucunun bir parametresi DEĞİL, ayrı bir uç: satır farklı bir
+   * şey taşıyor (kaç workspace) ve tıklandığında farklı bir iş yapılıyor
+   * (`switch-org`, `switch-client` değil).
+   *
+   * SORGU ŞEMASI ORTAK — kapsam RLS'te. Ajans kapsamında değilken
+   * `app.org_kapsaminda()` yalnızca aktif şirketi geçiriyor ve uç tek
+   * satır dönüyor; yani "ajans modunda mısın" kontrolünü burada ikinci kez
+   * yazmak, aynı kuralı iki yerde tutmak olurdu.
+   */
+  @Get('organizations')
+  @RequirePermissions('insights.read')
+  byOrganization(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(clientBreakdownQuerySchema)) query: ClientBreakdownQuery,
+  ): Promise<MetricsOrganizationRow[]> {
+    return this.metrics.byOrganization(ctx, query);
   }
 
   @Get('breakdown')

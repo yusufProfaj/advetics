@@ -1,7 +1,10 @@
 import Link from 'next/link';
+import { platformKanali, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { baglanti } from '@/lib/baglanti';
 import { DeltaRozeti } from '@/components/delta-rozeti';
-import type { MetricsBreakdownRow, MetricLevel } from '@advetics/shared';
+import { PlatformLogo } from '@/components/platform-logo';
+import { SIRALAMA_YONU, type Siralama } from '@/lib/kirilim-siralama';
+import type { MetricsBreakdownRow, MetricLevel, Platform } from '@advetics/shared';
 import {
   formatDecimal,
   formatMoney,
@@ -51,11 +54,17 @@ export function BreakdownTable({
   level,
   tasinan,
   currency,
+  siralama,
+  limit,
 }: {
   rows: MetricsBreakdownRow[];
   level: MetricLevel;
   tasinan: Record<string, string | undefined>;
   currency: string | null;
+  /** Ekrandaki sıra — satır KÜMESİNİ değiştirmiyor, bkz. `kirilim-siralama.ts`. */
+  siralama: Siralama;
+  /** Sunucudan istenen satır sayısı — kesme ekranda YAZILABİLSİN diye. */
+  limit: number;
 }) {
   // ÖLÜ KOLONU GÖSTERMİYORUZ.
   //
@@ -98,20 +107,64 @@ export function BreakdownTable({
       ) : (
         // Yatay kaydırma KENDİ kabında: sayfanın gövdesi yatay kaymamalı.
         <div className="overflow-x-auto">
-          <table className={`w-full text-sm ${showRoas ? 'min-w-[820px]' : 'min-w-[740px]'}`}>
+          <table className={`w-full text-sm ${showRoas ? 'min-w-[920px]' : 'min-w-[840px]'}`}>
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-muted">
                 <th className="px-4 py-2 font-semibold">Ad</th>
-                <th className="px-3 py-2 text-right font-semibold">Harcama</th>
-                <th className="px-3 py-2 text-right font-semibold">Gösterim</th>
-                <th className="px-3 py-2 text-right font-semibold">Tık</th>
+                {/*
+                  MECRA SÜTUNU — ADIN HEMEN YANINDA.
+                  Platform bilgisi tabloda HİÇ YOKTU: aynı listede Meta ve
+                  Google kampanyaları yan yana duruyor ve hangi harcamanın
+                  hangi mecraya gittiği yalnızca kampanya adından tahmin
+                  edilebiliyordu. Üstteki platform sekmesi süzüyor ama
+                  "Tümü" seçiliyken satır bazında cevap vermiyor.
+                */}
+                <SiraliBaslik
+                  etiket="Mecra"
+                  anahtar="mecra"
+                  aktif={siralama}
+                  tasinan={tasinan}
+                  className="px-3 py-2"
+                />
+                <SiraliBaslik
+                  etiket="Harcama"
+                  anahtar="harcama"
+                  aktif={siralama}
+                  tasinan={tasinan}
+                  className="px-3 py-2 text-right"
+                />
+                <SiraliBaslik
+                  etiket="Gösterim"
+                  anahtar="gosterim"
+                  aktif={siralama}
+                  tasinan={tasinan}
+                  className="px-3 py-2 text-right"
+                />
+                <SiraliBaslik
+                  etiket="Tık"
+                  anahtar="tik"
+                  aktif={siralama}
+                  tasinan={tasinan}
+                  className="px-3 py-2 text-right"
+                />
+                {/* CTR SIRALANMIYOR: türetilmiş bir oran ve gösterimi sıfır
+                    olan satırlarda `null`. Sıralanabilir göstermek, aynı
+                    tabloda anlamı olmayan bir düzen üretirdi. */}
                 <th className="px-3 py-2 text-right font-semibold">CTR</th>
-                <th className="px-3 py-2 text-right font-semibold">Dönüşüm</th>
-                <th
-                  className={`px-3 py-2 text-right font-semibold ${showRoas ? '' : 'pr-4'}`}
-                >
-                  CPA
-                </th>
+                <SiraliBaslik
+                  etiket="Dönüşüm"
+                  anahtar="donusum"
+                  aktif={siralama}
+                  tasinan={tasinan}
+                  className="px-3 py-2 text-right"
+                />
+                <SiraliBaslik
+                  etiket="CPA"
+                  anahtar="cpa"
+                  aktif={siralama}
+                  tasinan={tasinan}
+                  className={`px-3 py-2 text-right ${showRoas ? '' : 'pr-4'}`}
+                />
                 {showRoas && <th className="px-4 py-2 text-right font-semibold">ROAS</th>}
               </tr>
             </thead>
@@ -130,6 +183,9 @@ export function BreakdownTable({
                         {r.parentName}
                       </p>
                     )}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Mecra platform={r.platform} />
                   </td>
                   {/*
                     DELTA HÜCRENİN ALTINDA, YENİ SÜTUN DEĞİL.
@@ -182,7 +238,86 @@ export function BreakdownTable({
           </table>
         </div>
       )}
+
+      {/*
+        SESSİZ KESME YOK.
+        Tablo her zaman HARCAMAYA GÖRE İLK N satırı gösteriyor ve sıralama o
+        kümenin içinde çalışıyor. Bu yazılmazsa "mecraya göre sıraladım ama
+        Google kampanyalarımın çoğu listede yok" hâli hiçbir yerde
+        açıklanmaz. Not yalnızca kesme İHTİMALİ varsa basılıyor — her
+        ekranda duran bir uyarı okunmaz hâle gelir.
+      */}
+      {rows.length >= limit && (
+        <p className="border-t border-line px-4 py-2 text-xs text-ink-muted">
+          Harcamaya göre ilk {limit} satır gösteriliyor
+          {siralama !== 'harcama' ? ' — sıralama bu satırların içinde yapılıyor' : ''}.
+        </p>
+      )}
     </section>
+  );
+}
+
+/**
+ * SIRALANABİLİR SÜTUN BAŞLIĞI — LİNK, BUTON DEĞİL.
+ *
+ * Seçim URL'de duruyor: sayfa sunucu bileşeni kalıyor, bağlantı
+ * paylaşılabiliyor ve tarayıcının geri tuşu çalışıyor. Buton yazmak üçünü de
+ * kaybettirir ve tabloyu istemci bileşenine çevirirdi.
+ *
+ * YÖN SÜTUNA GÖMÜLÜ (`SIRALAMA_YONU`) ve OKLA GÖSTERİLİYOR. İki tıklamalı
+ * artan/azalan bir başlık ikinci bir URL parametresi isterdi; her sütunun
+ * zaten doğru bir yönü var ve CPA'nınki diğerlerinin TERSİ — göstermeden
+ * bırakmak, kullanıcının "en pahalı CPA" beklerken en ucuzu görmesi demekti.
+ */
+function SiraliBaslik({
+  etiket,
+  anahtar,
+  aktif,
+  tasinan,
+  className,
+}: {
+  etiket: string;
+  anahtar: Siralama;
+  aktif: Siralama;
+  tasinan: Record<string, string | undefined>;
+  className: string;
+}) {
+  const secili = aktif === anahtar;
+  const yon = SIRALAMA_YONU[anahtar];
+  return (
+    <th
+      className={`${className} font-semibold`}
+      aria-sort={secili ? (yon === 'artan' ? 'ascending' : 'descending') : 'none'}
+    >
+      <Link
+        href={baglanti('/dashboard', tasinan, { sirala: anahtar })}
+        className={`inline-flex items-center gap-1 transition hover:text-ink ${
+          secili ? 'text-ink' : ''
+        }`}
+      >
+        {etiket}
+        <span aria-hidden className={secili ? '' : 'opacity-0'}>
+          {yon === 'artan' ? '↑' : '↓'}
+        </span>
+      </Link>
+    </th>
+  );
+}
+
+/**
+ * Mecra hücresi — logo VE metin.
+ *
+ * Yalnızca logo koymak, markayı tanımayan için okunamaz bir sütun demek;
+ * yalnızca metin koymak da göz taramasını yavaşlatıyor (bu tablo aynı
+ * ekranda platform sekmeleriyle birlikte duruyor ve oradaki işaretlerle
+ * eşleşmesi gerekiyor).
+ */
+function Mecra({ platform }: { platform: Platform }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <PlatformLogo kind={platformKanali(platform)} className="h-3.5 w-3.5 shrink-0" />
+      <span className="text-xs text-ink-muted">{PLATFORM_KISA_ADLARI[platform]}</span>
+    </span>
   );
 }
 

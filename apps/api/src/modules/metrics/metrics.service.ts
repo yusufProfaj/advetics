@@ -4,6 +4,7 @@ import { deriveRoas } from '@advetics/shared';
 import type {
   ClientBreakdownQuery,
   MetricsClientRow,
+  MetricsOrganizationRow,
   BreakdownQuery,
   MetricLevel,
   MetricTotals,
@@ -671,6 +672,187 @@ export class MetricsService {
          * SIRALAMA CARİ DÖNEM HARCAMASINA GÖRE — kırılım ucuyla aynı gerekçe.
          * Harcaması olmayan müşteriler sonda ve DÜŞMÜYOR: "hesabı var,
          * harcaması yok" bu ekranın cevaplaması gereken bir hâl.
+         */
+        .sort((a, z) => {
+          const fark = BigInt(z.spendMicros) - BigInt(a.spendMicros);
+          if (fark !== 0n) return fark > 0n ? 1 : -1;
+          return a.name.localeCompare(z.name, 'tr');
+        });
+    });
+  }
+
+  /**
+   * ŞİRKET KIRILIMI — AJANS ("Tüm şirketler") GÖRÜNÜMÜNÜN TABLOSU.
+   *
+   * `byClient` ile aynı iskelet, BİR ÜST KATMAN. Ayrı bir metot olmasının
+   * sebebi gruplama anahtarı değil, satırın TAŞIDIĞI ŞEY: şirket satırı kaç
+   * workspace içerdiğini söylüyor ve tıklandığında `switch-org` çağrılıyor.
+   *
+   * ORG KİMLİĞİ `insights_daily`DEN OKUNAMIYOR — o tablo `org_id` TAŞIMIYOR
+   * (denormalize edilen kolon `client_id`, çünkü RLS politikaları join'siz
+   * yazılabilsin diye seçilen anahtar o). Şirket, workspace üzerinden
+   * bulunuyor: `clients.org_id`.
+   *
+   * ŞİRKET LİSTESİ AYRI SORULUYOR ve bu ŞART: harcaması olmayan şirket
+   * yukarıdaki taramadan HİÇ dönmüyor. Yeni açılmış bir şirket ekranda
+   * görünmezse kullanıcı onu açtığını bile doğrulayamaz — bu ekranda
+   * cevaplanması gereken hâllerden biri tam olarak "şirket var, harcaması
+   * yok".
+   */
+  async byOrganization(
+    ctx: TenantContext,
+    query: ClientBreakdownQuery,
+  ): Promise<MetricsOrganizationRow[]> {
+    const karsilastir = query.compareFrom !== undefined && query.compareTo !== undefined;
+    const prevTo = karsilastir ? query.compareTo! : query.from;
+    const pencereBasi = karsilastir ? query.compareFrom! : query.from;
+
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const rows = await tx.$queryRaw<
+        Array<
+          RawTotals & {
+            prev_impressions: string | number | null;
+            prev_clicks: string | number | null;
+            prev_spend_micros: string | number | bigint | null;
+            prev_conversions: string | number | null;
+            prev_conversion_value_micros: string | number | bigint | null;
+            org_id: string;
+            platform: Platform;
+            currency: string;
+          }
+        >
+      >(
+        Prisma.sql`
+          SELECT cl.org_id, i.platform, i.currency,
+                 -- TEK TARAMA, IKI PENCERE — musteri kirilimiyla ayni desen.
+                 --
+                 -- (SQL yorumunda BACKTICK YOK: sablonu ortasindan kapatiyor
+                 --  ve hata TS1005 olarak cikip sebebini hic soylemiyor.)
+                 SUM(i.impressions) FILTER (WHERE i.date >= ${query.from}::date) AS impressions,
+                 SUM(i.clicks) FILTER (WHERE i.date >= ${query.from}::date) AS clicks,
+                 SUM(i.spend_micros) FILTER (WHERE i.date >= ${query.from}::date) AS spend_micros,
+                 SUM(i.conversions) FILTER (WHERE i.date >= ${query.from}::date) AS conversions,
+                 SUM(i.conversion_value_micros) FILTER (WHERE i.date >= ${query.from}::date)
+                   AS conversion_value_micros,
+                 SUM(i.impressions) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_impressions,
+                 SUM(i.clicks) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_clicks,
+                 SUM(i.spend_micros) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_spend_micros,
+                 SUM(i.conversions) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_conversions,
+                 SUM(i.conversion_value_micros) FILTER (WHERE i.date <= ${prevTo}::date)
+                   AS prev_conversion_value_micros
+          FROM insights_daily i
+          JOIN clients cl ON cl.id = i.client_id
+          WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
+            AND i.entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            -- ARSIVLENMIS WORKSPACE'IN VERISI SIRKET TOPLAMINA GIRMIYOR:
+            -- musteri kiriliminda ayni satirlar zaten eleniyor ve iki ekranin
+            -- farkli toplam gostermesi, ikisinin de yanlis sanilmasi demek.
+            AND cl.status <> 'archived'
+            ${this.filters(query, 'i')}
+          GROUP BY cl.org_id, i.platform, i.currency
+        `,
+      );
+
+      /*
+       * ŞİRKETLER VE WORKSPACE SAYISI TEK SORGUDA.
+       *
+       * `LEFT JOIN`: workspace'i olmayan şirket de dönmek zorunda. `COUNT(cl.id)`
+       * kullanılıyor, `COUNT(*)` DEĞİL — ikincisi eşleşme bulunmayan satırda 1
+       * sayardı ve boş bir şirket "1 workspace" görünürdü.
+       */
+      const sirketler = await tx.$queryRaw<
+        Array<{ id: string; name: string; slug: string; n: bigint | number }>
+      >(
+        Prisma.sql`
+          SELECT o.id, o.name, o.slug,
+                 COUNT(cl.id) FILTER (WHERE cl.status <> 'archived') AS n
+          FROM organizations o
+          LEFT JOIN clients cl ON cl.org_id = o.id
+          GROUP BY o.id, o.name, o.slug
+          ORDER BY o.name ASC
+        `,
+      );
+
+      /*
+       * HAVUZ HESABI SAYILMIYOR (`client_id IS NOT NULL`).
+       *
+       * Ajansın tek Meta kimliği yüzlerce hesap görüyor ve hepsi havuza
+       * düşüyor; havuzu saymak her şirkette aynı şişkin sayıyı yazmak ve
+       * gerçekten izlenen hesap sayısını gizlemek olurdu. Genel Bakış'taki
+       * "N hesap izlenmiyor" sayacında aynı hata bir kez yaşandı.
+       */
+      const hesaplar = await tx.$queryRaw<Array<{ org_id: string; n: bigint | number }>>(
+        Prisma.sql`
+          SELECT org_id, COUNT(*) AS n
+          FROM ad_accounts
+          WHERE sync_enabled = true AND client_id IS NOT NULL
+          GROUP BY org_id
+        `,
+      );
+      const hesapSayisi = new Map(hesaplar.map((h) => [h.org_id, Number(h.n)]));
+
+      type Birikim = {
+        organizationId: string;
+        name: string;
+        slug: string;
+        clientCount: number;
+        currencies: Set<string>;
+        cari: RawTotals[];
+        onceki: RawTotals[];
+        platformlar: Map<Platform, RawTotals[]>;
+      };
+      const birikim = new Map<string, Birikim>();
+      for (const o of sirketler) {
+        birikim.set(o.id, {
+          organizationId: o.id,
+          name: o.name,
+          slug: o.slug,
+          clientCount: Number(o.n),
+          currencies: new Set(),
+          cari: [],
+          onceki: [],
+          platformlar: new Map(),
+        });
+      }
+
+      for (const r of rows) {
+        const b = birikim.get(r.org_id);
+        // Şirket listesinden dönmeyen bir org_id yalnızca RLS onu
+        // göstermiyorsa mümkün; sessizce atlıyoruz.
+        if (!b) continue;
+        b.currencies.add(r.currency);
+        b.cari.push(r);
+        b.onceki.push(oncekiSatir(r));
+        const p = b.platformlar.get(r.platform) ?? [];
+        p.push(r);
+        b.platformlar.set(r.platform, p);
+      }
+
+      return [...birikim.values()]
+        .map((b) => {
+          const cari = this.topla(b.cari);
+          const onceki = this.topla(b.onceki);
+          return {
+            organizationId: b.organizationId,
+            name: b.name,
+            slug: b.slug,
+            currency: b.currencies.size === 1 ? [...b.currencies][0]! : null,
+            currencies: [...b.currencies].sort(),
+            clientCount: b.clientCount,
+            adAccountCount: hesapSayisi.get(b.organizationId) ?? 0,
+            ...this.totals(cari),
+            byPlatform: [...b.platformlar.entries()]
+              .map(([platform, satirlar]) => ({
+                platform,
+                ...this.totals(this.topla(satirlar)),
+              }))
+              .sort((a, z) => Number(BigInt(z.spendMicros) - BigInt(a.spendMicros))),
+            previous: this.hasData(onceki) ? this.totals(onceki) : null,
+          };
+        })
+        /*
+         * SIRALAMA CARİ DÖNEM HARCAMASINA GÖRE, harcamayan şirketler sonda ve
+         * DÜŞMÜYOR — müşteri kırılımıyla aynı gerekçe.
          */
         .sort((a, z) => {
           const fark = BigInt(z.spendMicros) - BigInt(a.spendMicros);

@@ -50,10 +50,23 @@ describe('MCC koşulu', () => {
      * Tek müşterisi olan kullanıcıda da `activeClientId` null olabiliyor ve
      * orada tek satırlık bir müşteri tablosu, kampanya listesinden daha az
      * şey söylerdi.
+     *
+     * ÜÇÜNCÜ KOŞUL AJANS KATMANIYLA GELDİ (`!ajansGorunumu`): "Tüm
+     * şirketler" modunda `activeClientId` daima null ve `availableClients`
+     * bütün şirketlerin workspace'lerini taşıyor — yani bu koşul o modda da
+     * doğru olurdu ve ekran şirket yerine düz workspace listesi gösterirdi.
+     *
+     * İDDİA TAM DİZE DEĞİL, DİLİM İÇİNDE ÜÇ PARÇA: tam dize biçimlendirmeye
+     * (satır kaydırma) bağlıydı ve koşul uzayınca kod DOĞRUYKEN kırmızı
+     * verdi. Dilim `const mcc =` ile ilk `;` arasında — komşu satırlara
+     * taşmıyor.
      */
-    expect(SAYFA_KOD).toContain(
-      'const mcc = session.activeClientId === null && session.availableClients.length > 1;',
-    );
+    const bas = SAYFA_KOD.indexOf('const mcc =');
+    expect(bas, 'mcc tanımı yok — tarama boşa düştü').toBeGreaterThan(-1);
+    const dilim = SAYFA_KOD.slice(bas, SAYFA_KOD.indexOf(';', bas));
+    expect(dilim).toContain('!ajansGorunumu');
+    expect(dilim).toContain('session.activeClientId === null');
+    expect(dilim).toContain('session.availableClients.length > 1');
   });
 
   it('KRİTİK: MCC modunda kampanya sorgusu KOŞULMUYOR', () => {
@@ -65,7 +78,11 @@ describe('MCC koşulu', () => {
     expect(i).toBeGreaterThan(-1);
     // Koşul ÇAĞRIDAN GERİYE aranıyor: dosyanın başka bir yerindeki `mcc`
     // geçişine takılan bir iddia hiçbir zaman düşmez.
-    expect(SAYFA_KOD.slice(0, i)).toMatch(/mcc\s*\n?\s*\? Promise\.resolve\(null\)/);
+    //
+    // AJANS GÖRÜNÜMÜ DE ATLIYOR: orada da kampanya tablosu gösterilmiyor.
+    expect(SAYFA_KOD.slice(0, i)).toMatch(
+      /mcc \|\| ajansGorunumu\s*\n?\s*\? Promise\.resolve\(null\)/,
+    );
   });
 
   it('workspace sorgusu da yalnızca MCC modunda koşuyor', () => {

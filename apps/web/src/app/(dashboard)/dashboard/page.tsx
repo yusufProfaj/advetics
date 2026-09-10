@@ -4,6 +4,7 @@ import type {
   Platform,
   MetricsBreakdownRow,
   MetricsClientRow,
+  MetricsOrganizationRow,
   MetricsSummary,
   MetricsTimeseries,
 } from '@advetics/shared';
@@ -32,6 +33,8 @@ import { MetricStrip } from '@/components/metric-strip';
 import { MetricsChart } from '@/components/metrics-chart';
 import { BreakdownTable } from '@/components/breakdown-table';
 import { MusteriTablosu } from '@/components/musteri-tablosu';
+import { SirketTablosu } from '@/components/sirket-tablosu';
+import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
 
 export const metadata = { title: 'Genel Bakış — Advetics' };
 
@@ -50,6 +53,16 @@ export const metadata = { title: 'Genel Bakış — Advetics' };
  * görmesi, panelin güvenilirliğini bitirir.
  */
 export const dynamic = 'force-dynamic';
+
+/**
+ * Kırılım tablosunun satır sınırı.
+ *
+ * SABİT BİR YERDE çünkü iki tüketicisi var: sorgu (`limit=`) ve tablo
+ * (kesmeyi ekranda YAZAN not). İkisini ayrı yazmak, biri değişince notun
+ * yanlış sayıyı söylemesi demekti — panelde "Üst sınır 10 MB" elle yazılıyken
+ * tam olarak bu oldu.
+ */
+const KIRILIM_LIMITI = 25;
 
 export default async function DashboardPage({
   searchParams,
@@ -80,6 +93,7 @@ export default async function DashboardPage({
   });
   const level = resolveLevel(first(params.seviye));
   const platform = resolvePlatform(first(params.platform));
+  const siralama = siralamaCoz(first(params.sirala));
 
   /*
    * BAĞLANTILARDA TAŞINAN SÜZGEÇLER — TEK YERDE.
@@ -94,6 +108,9 @@ export default async function DashboardPage({
     ...rangeParams(range),
     platform: platform ?? undefined,
     seviye: level,
+    // Sıralama da TAŞINIYOR: seviye ya da platform değiştiren kullanıcının
+    // seçtiği sütun düşerse süzgeç kaybolması hatasının aynısı olurdu.
+    sirala: siralama,
   };
 
   const base = new URLSearchParams({ from: range.from, to: range.to });
@@ -115,32 +132,49 @@ export default async function DashboardPage({
   if (platform) base.set('platform', platform);
   const breakdownQs = new URLSearchParams(base);
   breakdownQs.set('level', level);
-  breakdownQs.set('limit', '25');
+  breakdownQs.set('limit', String(KIRILIM_LIMITI));
 
   // Bir uç noktanın düşmesi TÜM ekranı düşürmemeli: panel açılıp "veri
   // alınamadı" demeli, 500 sayfası göstermemeli.
   /*
-   * MCC GÖRÜNÜMÜ: "Tüm müşteriler" seçiliyken tablo MÜŞTERİ bazlı.
+   * ═══ EKRANIN ÜÇ KATMANI: AJANS › ŞİRKET › WORKSPACE ═══
    *
-   * Bu ekran o hâlde on iki müşterinin kampanyalarını tek bir tabloda
-   * listeliyordu ve hangi satırın kime ait olduğu hiçbir yerde yazmıyordu.
-   * Ajans orada "hangi müşteri ne harcıyor" sorusunu soruyor.
+   * Genel Bakış artık hiyerarşiyi izliyor ve her katmanda BİR ALT KATMANI
+   * listeliyor:
    *
-   * KOŞUL AKTİF MÜŞTERİ SEÇİMİ, kullanıcının rolü değil: tek müşterisi olan
-   * bir kullanıcıda da `activeClientId` null olabiliyor ve o durumda tek
-   * satırlık bir müşteri tablosu, kampanya listesinden daha az şey söylerdi.
+   *   · Ajans kapsamında ("Tüm şirketler")  → ŞİRKET tablosu
+   *   · Şirket kapsamında, workspace seçili değilse → WORKSPACE tablosu
+   *   · Workspace seçiliyse → kampanya/reklam kırılımı
+   *
+   * ÖNCEDEN AJANS KATMANI YOKTU: "Tüm şirketler" seçildiğinde bütün
+   * şirketlerin workspace'leri tek düz tabloda listeleniyordu ve hangi
+   * satırın hangi şirkete ait olduğu HİÇBİR YERDE yazmıyordu — "Tüm
+   * müşteriler"de kampanya listelenirken düzeltilen hatanın bir üst
+   * katmandaki tekrarı.
+   *
+   * SIRA ÖNEMLİ: ajans kontrolü ÖNCE geliyor. `tumSirketler` modunda
+   * `activeClientId` daima null ve `availableClients` bütün şirketlerin
+   * workspace'lerini taşıyor, yani `mcc` koşulu da doğru olurdu ve ekran
+   * yine düz workspace listesi gösterirdi.
+   *
+   * WORKSPACE KATMANININ KOŞULU AKTİF SEÇİM, kullanıcının rolü DEĞİL: tek
+   * workspace'i olan bir şirkette de `activeClientId` null olabiliyor ve
+   * orada tek satırlık bir workspace tablosu, kampanya listesinden daha az
+   * şey söylerdi — o yüzden `> 1` koşulu duruyor.
    */
-  const mcc = session.activeClientId === null && session.availableClients.length > 1;
+  const ajansGorunumu = session.tumSirketler;
+  const mcc =
+    !ajansGorunumu && session.activeClientId === null && session.availableClients.length > 1;
 
-  const [summary, series, breakdown, musteriler] = await Promise.all([
+  const [summary, series, breakdown, musteriler, sirketler] = await Promise.all([
     serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch(() => null),
     // Tek günlük aralıkta grafik çizilmiyor; sorguyu da atlıyoruz.
     range.days > 1
       ? serverApiFetch<MetricsTimeseries>(`/metrics/timeseries?${base}`).catch(() => null)
       : Promise.resolve<MetricsTimeseries>({ points: [], previous: null }),
-    // MCC görünümünde kampanya tablosu ÇEKİLMİYOR: gösterilmeyecek bir
-    // sorguyu koşmak, en ağır sorgusu boşa giden bir ekran demekti.
-    mcc
+    // Üst katman görünümlerinde kampanya tablosu ÇEKİLMİYOR: gösterilmeyecek
+    // bir sorguyu koşmak, en ağır sorgusu boşa giden bir ekran demekti.
+    mcc || ajansGorunumu
       ? Promise.resolve(null)
       : serverApiFetch<MetricsBreakdownRow[]>(`/metrics/breakdown?${breakdownQs}`).catch(
           () => null,
@@ -148,10 +182,23 @@ export default async function DashboardPage({
     mcc
       ? serverApiFetch<MetricsClientRow[]>(`/metrics/clients?${base}`).catch(() => null)
       : Promise.resolve(null),
+    ajansGorunumu
+      ? serverApiFetch<MetricsOrganizationRow[]>(`/metrics/organizations?${base}`).catch(
+          () => null,
+        )
+      : Promise.resolve(null),
   ]);
 
   const activeClient = session.availableClients.find((c) => c.id === session.activeClientId);
-  const scopeLabel = activeClient?.name ?? 'Tüm workspace’ler';
+  /*
+   * BAŞLIK GÖVDEYLE AYNI ŞEYİ SÖYLEMEK ZORUNDA. Ajans kapsamında "Tüm
+   * workspace'ler" yazmak, tablo ŞİRKET listelerken başlığın başka bir
+   * katmandan bahsetmesi olurdu; bu depoda başlık≠gövde ayrışması bir kez
+   * "veri sızıntısı" sanıldı.
+   */
+  const scopeLabel = ajansGorunumu
+    ? 'Tüm şirketler'
+    : (activeClient?.name ?? 'Tüm workspace’ler');
 
   return (
     <div className="space-y-5">
@@ -249,7 +296,13 @@ export default async function DashboardPage({
               />
             ))}
 
-          {mcc ? (
+          {ajansGorunumu ? (
+            sirketler === null ? (
+              <Notice tone="error">Şirket dağılımı alınamadı.</Notice>
+            ) : (
+              <SirketTablosu rows={sirketler} karsilastir={range.karsilastirma !== 'yok'} />
+            )
+          ) : mcc ? (
             musteriler === null ? (
               <Notice tone="error">Workspace dağılımı alınamadı.</Notice>
             ) : (
@@ -259,10 +312,18 @@ export default async function DashboardPage({
             <Notice tone="error">Dağılım verisi alınamadı.</Notice>
           ) : (
             <BreakdownTable
-              rows={breakdown}
+              /*
+               * SIRALAMA BURADA UYGULANIYOR, SORGUDA DEĞİL. Satır kümesi her
+               * zaman "harcamaya göre ilk N"; `ORDER BY`ı SQL'e taşımak
+               * kümeyi de değiştirirdi ve "mecraya göre sırala" diyen
+               * kullanıcı bir platformu tabloda HİÇ göremezdi.
+               */
+              rows={kirilimSirala(breakdown, siralama)}
               level={level}
               tasinan={tasinan}
               currency={summary.currency}
+              siralama={siralama}
+              limit={KIRILIM_LIMITI}
             />
           )}
 

@@ -444,6 +444,47 @@ export interface MetricsClientRow extends MetricTotals {
   previous: MetricTotals | null;
 }
 
+/**
+ * ═══ ŞİRKET KIRILIMI — AJANS GÖRÜNÜMÜ ═══
+ *
+ * Hiyerarşi AJANS › ŞİRKET › WORKSPACE. Ajans kapsamında ("Tüm şirketler")
+ * panel WORKSPACE listeliyordu ve o liste şirket sınırını HİÇ göstermiyordu:
+ * altı şirketin kırk workspace'i tek bir düz tabloda, hangisinin kime ait
+ * olduğu yazmadan. Ajansın orada sorduğu soru "hangi ŞİRKET ne harcıyor" ve
+ * cevabı bir üst katmanda.
+ *
+ * `MetricsClientRow` İLE AYNI ŞEY DEĞİL ve tek tipe sıkıştırılamaz: şirket
+ * satırı kaç WORKSPACE taşıdığını söylüyor (workspace'in kendisinde böyle
+ * bir alan yok) ve tıklandığında yapılan iş de farklı — workspace satırı
+ * `switch-client`, şirket satırı `switch-org` çağırıyor.
+ */
+export interface MetricsOrganizationRow extends MetricTotals {
+  organizationId: string;
+  name: string;
+  slug: string;
+
+  /** Karışık para birimi hâlinde `null` — müşteri satırındaki kuralın aynısı. */
+  currency: string | null;
+  currencies: string[];
+
+  /**
+   * ARŞİVLENMEMİŞ workspace sayısı.
+   *
+   * Sıfır olabilir ve o satır DÜŞMÜYOR: yeni açılmış, içi henüz boş bir
+   * şirket ekranda görünmek zorunda — görünmezse kullanıcı onu açtığını
+   * bile doğrulayamaz.
+   */
+  clientCount: number;
+
+  /** İZLEMEDE ve bir workspace'e ATANMIŞ hesap sayısı — havuz sayılmıyor. */
+  adAccountCount: number;
+
+  byPlatform: MetricsClientPlatformRow[];
+
+  /** `null` = önceki dönemde HİÇ veri yok. Sıfırlı nesne "-%100" gösterirdi. */
+  previous: MetricTotals | null;
+}
+
 // -----------------------------------------------------------------------------
 // ROAS — TEK KAYNAK
 // -----------------------------------------------------------------------------
