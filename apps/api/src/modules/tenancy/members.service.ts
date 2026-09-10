@@ -16,6 +16,7 @@ import {
   type UpdateMembershipInput,
   type UpdateMemberInfoInput,
 } from '@advetics/shared';
+import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { hashPassword } from '../../common/utils/password-hash';
@@ -34,6 +35,14 @@ export class MembersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    /*
+     * RLS DIŞI İSTEMCİ — yalnızca BAŞKA ŞİRKETE yetki verirken.
+     *
+     * RLS bunu ifade edemiyor: her politika tek bir `app.current_org_id()`
+     * biliyor. Kullanımı `baskaSirketeYetki`ye kapalı ve orada üç kontrol
+     * AÇIK yazılı.
+     */
+    private readonly admin: PrismaAdminService,
   ) {}
 
   /**
@@ -108,6 +117,15 @@ export class MembersService {
             select: {
               id: true,
               role: true,
+              /*
+               * `orgId` OKUNUYOR — danışman artık BİRDEN ÇOK şirkette
+               * üyelik taşıyabiliyor. Onsuz panel, `clientId: null` bir
+               * üyeliğin HANGİ şirkete ait olduğunu bilemiyor ve "bu
+               * danışman bu şirkete zaten atanmış mı" sorusuna cevap
+               * veremiyordu — sonuç, gönderilir gönderilmez 409 yiyecek
+               * bir seçenek göstermek olurdu.
+               */
+              orgId: true,
               clientId: true,
               permissions: true,
               client: { select: { id: true, name: true } },
@@ -328,6 +346,20 @@ export class MembersService {
       );
     }
 
+    /*
+     * BAŞKA ŞİRKETE YETKİ — RLS DIŞINDA, AMA AÇIK KONTROLLE.
+     *
+     * Danışman ajans seviyesinde duruyor ve birden çok şirkete
+     * yetkilendirilebiliyor. RLS bunu ifade EDEMEZ: her politika tek bir
+     * `app.current_org_id()` biliyor ve başka bir org'a satır yazmak
+     * WITH CHECK'ten geçmiyor. `workspaceTasi` ile aynı desen — izolasyonu
+     * uygulama katmanı koruyor ve kontrol AÇIK.
+     */
+    const hedefOrgId = input.organizationId ?? ctx.orgId;
+    if (hedefOrgId !== ctx.orgId) {
+      return this.baskaSirketeYetki(ctx, { ...input, organizationId: hedefOrgId }, meta);
+    }
+
     return this.prisma.withTenant(ctx, async (tx) => {
       const user = await tx.user.findUnique({
         where: { id: input.userId },
@@ -364,6 +396,92 @@ export class MembersService {
 
       return membership;
     });
+  }
+
+  /**
+   * Kullanıcıya BAŞKA bir şirkette yetki verir (aynı üst hesap altında).
+   *
+   * ÜÇ KONTROL, ÜÇÜ DE AÇIK:
+   *   1. Çağıran org yöneticisi mi (`user.write` zaten guard'da).
+   *   2. Hedef şirket çağıranın ÜST HESABININ altında mı — istemciden gelen
+   *      kimlik tek başına hiçbir şey kanıtlamıyor.
+   *   3. Yetki verilen kullanıcı çağıranın ajansına mı ait — başka bir
+   *      ajansın kullanıcısına yetki vermek, iki kiracıyı birbirine
+   *      bağlamak demekti.
+   */
+  private async baskaSirketeYetki(
+    ctx: TenantContext,
+    input: CreateMembershipInput & { organizationId: string },
+    meta: Meta,
+  ) {
+    const uyelik = await this.admin.managerMembership.findUnique({
+      where: { userId: ctx.userId },
+      select: { managerAccountId: true, managerAccount: { select: { status: true } } },
+    });
+    if (!uyelik || uyelik.managerAccount.status !== 'active') {
+      throw new BadRequestException('Bu hesabın bağlı olduğu bir üst hesap yok');
+    }
+
+    const hedefSirket = await this.admin.organization.findFirst({
+      where: {
+        id: input.organizationId,
+        managerAccountId: uyelik.managerAccountId,
+        status: 'active',
+      },
+      select: { id: true },
+    });
+    if (!hedefSirket) throw new BadRequestException('Bu şirkete yetki veremezsin');
+
+    /*
+     * KULLANICI DA AYNI AJANSA AİT OLMAK ZORUNDA. `users.org_id` kullanıcının
+     * EV şirketi; o şirket üst hesabın altında değilse kullanıcı bize ait
+     * değil ve ona yetki vermek iki kiracıyı bağlamak olurdu.
+     */
+    const hedefKullanici = await this.admin.user.findFirst({
+      where: {
+        id: input.userId,
+        organization: { managerAccountId: uyelik.managerAccountId },
+      },
+      select: { id: true, email: true },
+    });
+    if (!hedefKullanici) throw new NotFoundException('Kullanıcı bulunamadı');
+
+    if (input.clientId) {
+      const workspace = await this.admin.client.findFirst({
+        where: { id: input.clientId, orgId: input.organizationId },
+        select: { id: true },
+      });
+      if (!workspace) throw new NotFoundException('Workspace bu şirkette değil');
+    }
+
+    const mevcut = await this.admin.membership.findFirst({
+      where: { userId: input.userId, orgId: input.organizationId, clientId: input.clientId },
+      select: { id: true },
+    });
+    if (mevcut) throw new ConflictException('Bu kullanıcının zaten bu kapsamda erişimi var');
+
+    const membership = await this.admin.membership.create({
+      data: {
+        userId: hedefKullanici.id,
+        orgId: input.organizationId,
+        clientId: input.clientId,
+        role: input.role as Role,
+      },
+    });
+
+    // Denetim kaydı HEDEF şirkete yazılıyor: "bu şirkete kim erişiyor"
+    // sorusunun cevabı orada aranıyor.
+    await this.audit.recordUnauthenticated(input.organizationId, {
+      actorId: ctx.userId,
+      action: 'membership.granted',
+      targetType: 'user',
+      targetId: hedefKullanici.id,
+      clientId: input.clientId,
+      after: { email: hedefKullanici.email, role: input.role, clientId: input.clientId },
+      ...meta,
+    });
+
+    return membership;
   }
 
   async updateMembership(

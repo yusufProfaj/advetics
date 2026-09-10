@@ -125,28 +125,34 @@ describe('DANIŞMAN ATA', () => {
     expect(ATA()).toContain("r !== 'owner' && r !== 'admin'");
   });
 
-  it('zaten yetkisi olan workspace SEÇİLEMİYOR ve sebebi yazılı', () => {
+  it('zaten yetkisi olan ŞİRKET SEÇİLEMİYOR ve sebebi yazılı', () => {
     /*
-     * Sunucu ikinci üyeliği 409 ile reddediyor. Önceki hâl o satırı listeden
-     * DÜŞÜRÜYORDU ve "bu müşteri neden yok" sorusu cevapsız kalıyordu; artık
-     * satır duruyor, işaretlenemiyor ve sebebi yanında yazıyor.
+     * KAPSAM DEĞİŞTİ, KARAR DEĞİŞMEDİ. Pencere artık workspace'e değil
+     * ŞİRKETE yetki veriyor (danışman ajans seviyesinde duruyor ve şirkete
+     * atanıyor); engel de o seviyede hesaplanıyor.
      *
-     * Karar ORTAK FONKSİYONDAN geliyor: aynı kural workspace ekibi
-     * ekranında da uygulanıyor ve iki kopya doğduğu anda ayrışırdı.
+     * Sunucu ikinci üyeliği 409 ile reddediyor. Satır listeden DÜŞÜRÜLMÜYOR
+     * — düşürmek "bu şirket neden yok" sorusunu cevapsız bırakırdı; satır
+     * duruyor, işaretlenemiyor ve sebebi yanında yazıyor.
+     *
+     * ENGEL `orgId` ÜZERİNDEN BULUNUYOR: bir danışmanın birden çok şirkette
+     * üyeliği olabiliyor ve `clientId === null` tek başına hangi şirket
+     * olduğunu söylemiyor.
      */
     const g = ATA();
-    expect(g).toContain('atamaEngeli(');
-    expect(g).toContain('ENGEL_WORKSPACE[');
+    expect(g).toContain('m.orgId === o.id && m.clientId === null');
+    expect(g).toContain('Zaten şirket geneli yetkisi var');
     expect(g).toContain('disabled={c.engel !== null || busy}');
   });
 
   it('KRİTİK: akış DANIŞMAN SEÇİMİYLE başlıyor', () => {
     /*
-     * İstenen sıra: önce kim, sonra hangi workspace’ler, sonra hangi rol.
+     * İstenen sıra: önce kim, sonra hangi ŞİRKETLER, sonra hangi rol.
+     * İkinci adım workspace'ten şirkete taşındı — danışman şirkete bakıyor.
      */
     const g = ATA();
     expect(g).toContain('1 · Danışman');
-    expect(g).toContain('2 · Workspace');
+    expect(g).toContain('2 · Şirket');
     expect(g).toContain('3 · Rol');
     // Danışman listesi bileşene DIŞARIDAN geliyor — tek kişiye sabitlenmiş
     // bir modal bu akışı kuramaz.

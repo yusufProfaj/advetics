@@ -60,6 +60,8 @@ interface ClientOption {
 interface MembershipRow {
   id: string;
   role: Role;
+  /** Üyeliğin ait olduğu ŞİRKET — danışman birden çok şirkette olabiliyor. */
+  orgId: string;
   clientId: string | null;
   client: { id: string; name: string } | null;
 }

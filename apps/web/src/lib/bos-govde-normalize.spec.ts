@@ -95,29 +95,45 @@ describe('boş gövde normalizasyonu', () => {
          * yine DAR tutuluyor — geniş bir pencere, ilgisiz bir `?? null`ı
          * yakalayıp iddiayı anlamsız yapardı.
          */
+        /*
+         * ZİNCİR ATLANIYOR — VE İÇİ DE SAYILIYOR.
+         *
+         * Normalizasyon üç biçimde yazılabiliyor ve üçü de meşru:
+         *   `(await fetch(...)) ?? null`
+         *   `(await fetch(...).catch(() => null)) ?? null`
+         *   `fetch(...).then((x) => x ?? null)`
+         * Üçüncüsünde `?? null` çağrının ardında DEĞİL, zincirin İÇİNDE.
+         * Görmemek, doğru yazılmış bir çağrıyı "eksik" saymak olurdu.
+         */
         let i = kapanis + 1;
-        const atla = () => {
+        let zincirdeVar = false;
+
+        for (;;) {
           while (i < kaynak.length && /[\s)]/.test(kaynak[i] ?? '')) i++;
-          if (kaynak.startsWith('.catch(', i)) {
-            let d = 0;
-            for (let j = i + '.catch'.length; j < kaynak.length; j++) {
-              if (kaynak[j] === '(') d++;
-              else if (kaynak[j] === ')' && --d === 0) {
-                i = j + 1;
-                return true;
-              }
+          const halka = ['.catch(', '.then('].find((h) => kaynak.startsWith(h, i));
+          if (!halka) break;
+
+          let d = 0;
+          let kapandi = -1;
+          for (let j = i + halka.length - 1; j < kaynak.length; j++) {
+            if (kaynak[j] === '(') d++;
+            else if (kaynak[j] === ')' && --d === 0) {
+              kapandi = j;
+              break;
             }
           }
-          return false;
-        };
-        while (atla());
+          if (kapandi === -1) break;
+          if (/\?\?\s*null/.test(kaynak.slice(i, kapandi + 1))) zincirdeVar = true;
+          i = kapandi + 1;
+        }
+
+        if (zincirdeVar) continue;
+
         /*
-         * PENCERE 32 KARAKTER. 12 ile başlamıştı ve DOĞRU yazılmış bir
-         * çağrıyı kaçırdı: `?? null` satır sonuna sarıldığında araya
-         * satır başı ve altı boşluk giriyor ve `null` pencerenin bir
-         * karakter dışında kalıyordu. Dar tutulmaya devam ediyor — geniş
-         * bir pencere, ilgisiz bir `?? null`ı yakalayıp iddiayı anlamsız
-         * yapardı.
+         * PENCERE 32 KARAKTER. 12 ile başlamıştı ve doğru yazılmış bir
+         * çağrıyı kaçırdı: `?? null` satır sonuna sarıldığında araya satır
+         * başı ve girinti giriyor. Dar tutulmaya devam ediyor — geniş bir
+         * pencere ilgisiz bir `?? null`ı yakalayıp iddiayı anlamsız yapardı.
          */
         const kuyruk = kaynak.slice(i, i + 32);
         if (!/^[\s)]*\?\?\s*null/.test(kuyruk)) {

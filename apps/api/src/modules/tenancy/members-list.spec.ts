@@ -1,3 +1,4 @@
+import type { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { describe, expect, it } from 'vitest';
 import type { TenantContext } from '@advetics/shared';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -41,7 +42,7 @@ function servis(): { svc: MembersService; args: () => Record<string, unknown> } 
   } as unknown as PrismaService;
 
   return {
-    svc: new MembersService(prisma, {} as never),
+    svc: new MembersService(prisma, {} as never, {} as unknown as PrismaAdminService),
     args: () => yakalanan,
   };
 }

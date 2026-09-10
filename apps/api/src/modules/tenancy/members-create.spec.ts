@@ -95,7 +95,14 @@ beforeEach(() => {
     withTenant: async <T>(_ctx: TenantContext, fn: (t: unknown) => Promise<T>) => fn(tx),
   } as unknown as PrismaService;
 
-  svc = new MembersService(prisma, new AuditService(null as unknown as PrismaAdminService));
+  svc = new MembersService(
+    prisma,
+    new AuditService(null as unknown as PrismaAdminService),
+    // BAŞKA ŞİRKETE yetki yolu bu pakette sınanmıyor; boş taklit YETERLİ
+    // ama `undefined` DEĞİL — servis onu enjekte ediyor ve eksik bırakmak
+    // hatayı yapıcıya değil ilk çağrıya taşırdı.
+    {} as unknown as PrismaAdminService,
+  );
 });
 
 describe('createMember', () => {

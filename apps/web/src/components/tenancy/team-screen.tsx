@@ -37,11 +37,18 @@ interface ClientOption {
 export function TeamScreen({
   members,
   clients,
+  sirketler,
   currentUserId,
   canManage,
 }: {
   members: MemberRow[];
   clients: ClientOption[];
+  /**
+   * Üst hesabın altındaki ŞİRKETLER — "Danışman ata" penceresi buraya
+   * yetki veriyor. `clients` (workspace'ler) hâlâ gerekli: müşteri hesabı
+   * ve workspace kartları onlarla çalışıyor.
+   */
+  sirketler: Array<{ id: string; name: string }>;
   currentUserId: string;
   canManage: boolean;
 }) {
@@ -122,7 +129,7 @@ export function TeamScreen({
               ÜÇ DÜĞME, ÜÇ AYRI İŞ ve karışmamaları için ayrı duruyorlar:
                 · Danışman ekle — ajans personeli AÇAR (rolü client_viewer
                   OLAMAZ; onu açan şey zaten danışman olmasıdır)
-                · Danışman ata  — VAR OLAN danışmanı bir workspace’e bağlar
+                · Danışman ata  — VAR OLAN danışmanı bir ŞİRKETE bağlar
                 · Kullanıcı ekle — genel yol; müşteri hesabı da buradan açılır
               Tek bir "ekle" düğmesi, her seferinde "rolü ne olsun, kapsamı ne
               olsun" sorusunu sordurtuyordu.
@@ -256,7 +263,7 @@ export function TeamScreen({
       {atamaAcik && (
         <DanismanAtaModal
           danismanlar={ajansEkibi}
-          clients={clients}
+          sirketler={sirketler}
           onKapat={() => setAtamaAcik(false)}
         />
       )}
@@ -776,11 +783,12 @@ function DanismanEkleModal({
  */
 function DanismanAtaModal({
   danismanlar,
-  clients,
+  sirketler,
   onKapat,
 }: {
   danismanlar: MemberRow[];
-  clients: ClientOption[];
+  /** Üst hesabın altındaki şirketler — yetki artık BURAYA veriliyor. */
+  sirketler: Array<{ id: string; name: string }>;
   onKapat: () => void;
 }) {
   const router = useRouter();
@@ -795,31 +803,40 @@ function DanismanAtaModal({
   const secilen = danismanlar.find((d) => d.id === userId) ?? null;
 
   /*
-   * WORKSPACE'LER ÇOKLU SEÇİLİYOR — TEK TEK DEĞİL.
+   * ŞİRKETLER ÇOKLU SEÇİLİYOR — TEK TEK DEĞİL.
    *
-   * Önceki hâlde pencere tek bir workspace atıyordu: sekiz müşteriye
-   * bakacak bir danışman için aynı pencere sekiz kez açılıp aynı iki alan
-   * (danışman, rol) sekiz kez seçiliyordu. İşin kendisi zaten toplu —
-   * "şu danışman şu müşterilere baksın" — ve arayüz onu tek tek yapmaya
-   * zorluyordu.
+   * Danışman AJANS seviyesinde duruyor; işin kendisi zaten toplu ("şu
+   * danışman şu şirketlere baksın") ve pencereyi her şirket için yeniden
+   * açtırmak, aynı iki alanı (danışman, rol) tekrar tekrar seçtirmek
+   * demekti.
    *
-   * ENGELLİ WORKSPACE GİZLENMİYOR, SEBEBİ YAZILIYOR. Önceki hâl listeden
-   * DÜŞÜRÜYORDU ve "bu müşteri neden yok" sorusu cevapsız kalıyordu; tek
-   * ipucu, hepsi düştüğünde çıkan uyarıydı.
+   * ENGELLİ ŞİRKET GİZLENMİYOR, SEBEBİ YAZILIYOR. Listeden düşürmek "bu
+   * şirket neden yok" sorusunu cevapsız bırakıyordu.
    */
-  const workspaceler = useMemo(() => {
+  const secilebilirSirketler = useMemo(() => {
     const q = arama.trim().toLocaleLowerCase('tr');
-    return clients
-      .map((c) => {
-        const kod = secilen ? atamaEngeli(secilen.memberships, c.id) : null;
-        return { ...c, engel: kod === null ? null : ENGEL_WORKSPACE[kod] };
+    return sirketler
+      .map((o) => {
+        /*
+         * ZATEN ŞİRKET GENELİ YETKİSİ VAR MI. `clientId === null` bir
+         * üyelik o şirketin tamamı demek; ikincisini yazmak 409 yiyor.
+         * `orgId` bu yüzden API'den okunuyor — onsuz hangi şirkete ait
+         * olduğu bilinemezdi.
+         */
+        const mevcut = secilen?.memberships.find(
+          (m) => m.orgId === o.id && m.clientId === null,
+        );
+        return {
+          ...o,
+          engel: mevcut ? `Zaten şirket geneli yetkisi var (${ROLE_TR[mevcut.role]})` : null,
+        };
       })
       // Türkçe küçültme açıkça veriliyor: varsayılan `toLowerCase()` "İ"yi
       // "i̇" yapıyor ve "İkon" araması "ikon" ile eşleşmiyor.
-      .filter((c) => q === '' || c.name.toLocaleLowerCase('tr').includes(q));
-  }, [clients, secilen, arama]);
+      .filter((o) => q === '' || o.name.toLocaleLowerCase('tr').includes(q));
+  }, [sirketler, secilen, arama]);
 
-  const atanabilir = workspaceler.filter((c) => c.engel === null);
+  const atanabilir = secilebilirSirketler.filter((o) => o.engel === null);
 
   function degistir(id: string): void {
     const yeni = new Set(secili);
@@ -835,18 +852,23 @@ function DanismanAtaModal({
     setHata(null);
 
     /*
-     * HEDEF ADI WORKSPACE ADI. Kısmi başarıda "1 tanesi atanamadı" demek,
+     * HEDEF ADI ŞİRKET ADI. Kısmi başarıda "1 tanesi atanamadı" demek,
      * hangisinin atanmadığını aramak demek.
      */
     const hedefler = [...secili].map((id) => ({
       id,
-      ad: clients.find((c) => c.id === id)?.name ?? id,
+      ad: sirketler.find((o) => o.id === id)?.name ?? id,
     }));
 
-    const r = await atamalariYurut(hedefler, (clientId) =>
+    const r = await atamalariYurut(hedefler, (organizationId) =>
       apiFetch('/memberships', {
         method: 'POST',
-        body: JSON.stringify({ userId, clientId, role: rol }),
+        /*
+         * `clientId: null` — ŞİRKET GENELİ. Danışman şirkete bakıyor;
+         * tek bir workspace'e daraltmak istisna ve o, workspace kartındaki
+         * "Danışman ata" ile yapılıyor.
+         */
+        body: JSON.stringify({ userId, clientId: null, role: rol, organizationId }),
       }),
     );
 
@@ -863,9 +885,10 @@ function DanismanAtaModal({
     <Modal baslik="Danışman ata" onKapat={onKapat}>
       <div className="space-y-3">
         <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
-          Ajans ekibinden birini bir ya da daha çok workspace’e bağlar. Bütün
-          workspace’lere erişim ayrı bir karar — o yetki yalnızca Sahip ve Yönetici
-          rollerine veriliyor.
+          Ajans ekibinden birini bir ya da daha çok ŞİRKETE bağlar. Yetki
+          verilen danışman o şirketin BÜTÜN workspace’lerini görür — tek tek
+          atama gerekmiyor. Müşteri hesapları (Görüntüleyici) bu pencereden
+          yetkilendirilemez; onların sınırı tek bir workspace.
         </p>
 
         <label className="block">
@@ -893,7 +916,7 @@ function DanismanAtaModal({
         <div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] text-ink-muted">
-              2 · Workspace{secili.size > 0 ? ` (${secili.size} seçildi)` : ''}
+              2 · Şirket{secili.size > 0 ? ` (${secili.size} seçildi)` : ''}
             </span>
             {/* TOPLU SEÇİM YALNIZCA ATANABİLİR OLANLARI kapsıyor: engelli
                 satırı da işaretlemek, gönderilir gönderilmez 409 yiyecek
@@ -917,24 +940,24 @@ function DanismanAtaModal({
 
           {!secilen ? (
             <p className="mt-1 rounded-lg border border-line px-3 py-2 text-[11px] text-ink-muted">
-              Önce danışman seç — hangi workspace’lerin uygun olduğu kişiye bağlı.
+              Önce danışman seç — hangi şirketlerin uygun olduğu kişiye bağlı.
             </p>
           ) : (
             <>
               {/* ARAMA YALNIZCA LİSTE UZUNSA: dört müşteride arama kutusu
                   cevaptan çok yer kaplıyor. */}
-              {clients.length > 8 && (
+              {sirketler.length > 8 && (
                 <input
                   type="search"
                   value={arama}
                   onChange={(e) => setArama(e.target.value)}
-                  placeholder="Workspace ara…"
+                  placeholder="Şirket ara…"
                   className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm focus:border-brand focus:outline-none"
                 />
               )}
 
               <ul className="mt-1 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-line p-1">
-                {workspaceler.map((c) => (
+                {secilebilirSirketler.map((c) => (
                   <li key={c.id}>
                     <label
                       className={`flex items-center gap-2.5 rounded px-2 py-1.5 ${
@@ -957,19 +980,19 @@ function DanismanAtaModal({
                 ))}
               </ul>
 
-              {/* SESSİZ KESME YOK ve ÜÇ HÂL AYRI: hiç müşteri yok · arama
+              {/* SESSİZ KESME YOK ve ÜÇ HÂL AYRI: hiç şirket yok · arama
                   eşleşmedi · hepsinde zaten yetkisi var. */}
-              {clients.length === 0 && (
-                <p className="mt-1 text-[11px] text-warn">Henüz workspace açılmamış.</p>
+              {sirketler.length === 0 && (
+                <p className="mt-1 text-[11px] text-warn">Henüz şirket açılmamış.</p>
               )}
-              {clients.length > 0 && workspaceler.length === 0 && (
+              {sirketler.length > 0 && secilebilirSirketler.length === 0 && (
                 <p className="mt-1 text-[11px] text-ink-muted">
-                  “{arama}” ile eşleşen workspace yok.
+                  “{arama}” ile eşleşen şirket yok.
                 </p>
               )}
-              {workspaceler.length > 0 && atanabilir.length === 0 && (
+              {secilebilirSirketler.length > 0 && atanabilir.length === 0 && (
                 <p className="mt-1 text-[11px] text-warn">
-                  Bu kişinin listedeki workspace’lerin hepsinde zaten yetkisi var.
+                  Bu kişinin listedeki şirketlerin hepsinde zaten yetkisi var.
                 </p>
               )}
             </>

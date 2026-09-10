@@ -108,8 +108,21 @@ export const createMembershipSchema = z
   .object({
     userId: z.string().uuid(),
     role: z.enum(ROLES),
-    /** null => org geneli erişim. Sadece owner/admin rolleri için geçerli. */
+    /** null => ŞİRKET GENELİ erişim (`client_viewer` hariç herkese açık). */
     clientId: z.string().uuid().nullable(),
+    /**
+     * HANGİ ŞİRKETE — verilmezse AKTİF şirket.
+     *
+     * Danışman AJANS seviyesinde duruyor ve birden çok şirkete
+     * yetkilendirilebiliyor. Bu alan olmadan yetki vermek için önce o
+     * şirkete GEÇMEK gerekiyordu: "Ahmet'i üç şirkete ata" işi, üç kez
+     * şirket değiştirip aynı pencereyi üç kez açmak demekti.
+     *
+     * Sunucu değeri kullanıcının ÜST HESABININ altındaki şirketlere karşı
+     * doğruluyor — istemciden gelen bir kimlik tek başına hiçbir şey
+     * kanıtlamıyor.
+     */
+    organizationId: z.string().uuid().optional(),
   })
   .refine((v) => v.clientId !== null || isOrgScopedRole(v.role), {
     // Gerekçe `createMemberSchema`da; iki şema aynı kuralı AYNI kaynaktan

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ORG_SCOPED_ROLES, ROLES, createMemberSchema } from '@advetics/shared';
 import { createHarness, type Harness } from '../../test/pglite-harness';
@@ -223,5 +225,69 @@ describe('ŞİRKET GENELİ YETKİ — `client_viewer` DIŞINDA herkese açık', 
       clientId: null,
     });
     expect(viewer.success).toBe(false);
+  });
+});
+
+describe('BAŞKA ŞİRKETE YETKİ — sınır uygulama katmanında', () => {
+  /*
+   * Danışman ajans seviyesinde duruyor ve birden çok şirkete
+   * yetkilendirilebiliyor. Bu yazma RLS DIŞINDA koşuyor (`PrismaAdminService`)
+   * çünkü RLS bunu ifade edemiyor: her politika tek bir
+   * `app.current_org_id()` biliyor ve başka bir org'a satır yazmak WITH
+   * CHECK'ten geçmiyor.
+   *
+   * Yani izolasyonu YALNIZCA servisteki açık kontroller koruyor ve o
+   * kontroller kaynak taramasıyla kilitleniyor — kaldırılmaları hiçbir
+   * derleme hatası üretmez.
+   */
+  const KAYNAK = readFileSync(
+    join(__dirname, '../modules/tenancy/members.service.ts'),
+    'utf8',
+  ).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  const govde = (() => {
+    const bas = KAYNAK.indexOf('private async baskaSirketeYetki');
+    if (bas === -1) throw new Error('baskaSirketeYetki bulunamadı — yol kaldırılmış mı?');
+    const son = KAYNAK.indexOf('\n  async updateMembership', bas);
+    return KAYNAK.slice(bas, son === -1 ? undefined : son);
+  })();
+
+  it('KRİTİK: HEDEF ŞİRKET üst hesabın altında mı — doğrulanıyor', () => {
+    /*
+     * İstemciden gelen bir şirket kimliği tek başına hiçbir şey
+     * kanıtlamıyor; doğrulanmazsa başka bir ajansın şirketine yetki yazılır.
+     *
+     * İDDİA `organization.findFirst` SORGUSUNA ÇAPALI, gövdenin tamamına
+     * DEĞİL. İlk yazımda gövdede arıyordu ve mutasyon testinde BOŞA DÜŞTÜ:
+     * aynı dize KULLANICI sorgusunda da geçiyor
+     * (`organization: { managerAccountId: ... }`) ve şirket kontrolünü
+     * silmek testi kırmıyordu.
+     */
+    const sorgu = (() => {
+      const b = govde.indexOf('this.admin.organization.findFirst');
+      expect(b, 'şirket sorgusu bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+      return govde.slice(b, govde.indexOf('});', b));
+    })();
+    expect(sorgu).toContain('managerAccountId: uyelik.managerAccountId');
+    expect(govde).toContain('Bu şirkete yetki veremezsin');
+  });
+
+  it('KRİTİK: YETKİ VERİLEN KULLANICI da aynı ajansa ait mi', () => {
+    /*
+     * Doğrulanmazsa başka bir ajansın kullanıcısına kendi şirketimizde
+     * yetki verilebilirdi — iki kiracıyı birbirine bağlamak.
+     */
+    expect(govde).toContain('organization: { managerAccountId: uyelik.managerAccountId }');
+  });
+
+  it('KRİTİK: MÜKERRER üyelik reddediliyor', () => {
+    // Aynı kapsamda ikinci satır, hangi rolün geçerli olduğunu belirsiz
+    // yapardı.
+    expect(govde).toContain('Bu kullanıcının zaten bu kapsamda erişimi var');
+  });
+
+  it('denetim kaydı HEDEF şirkete yazılıyor', () => {
+    // "Bu şirkete kim erişiyor" sorusunun cevabı orada aranıyor.
+    expect(govde).toContain('recordUnauthenticated(input.organizationId');
   });
 });

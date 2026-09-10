@@ -1,3 +1,4 @@
+import type { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { TenantContext } from '@advetics/shared';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -69,7 +70,7 @@ beforeEach(() => {
     },
   } as unknown as AuditService;
 
-  svc = new MembersService(prisma, audit);
+  svc = new MembersService(prisma, audit, {} as unknown as PrismaAdminService);
 });
 
 describe('alanlar', () => {
