@@ -16,6 +16,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-portfolio": "tsx prisma/seed-portfolio.ts",
     "db:reset-clients": "tsx prisma/reset-clients.ts",
+    "db:workspace-sirketleri": "tsx prisma/workspace-basina-sirket.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "db:set-password": "tsx prisma/set-password.ts",

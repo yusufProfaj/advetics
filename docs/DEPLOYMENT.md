@@ -587,6 +587,35 @@ Root olarak `crontab -e`:
 > Yedekleri **sunucu dışına** da kopyala. Aynı diskteki yedek disk arızasına karşı
 > koruma sağlamaz.
 
+### Tek seferlik: her workspace'e kendi şirketi
+
+Hiyerarşi *Ajans › Şirket › Workspace* olarak kuruldu ama eski veride
+workspace'lerin tamamı ajansın kendi organizasyonunda duruyor. Bu script her
+workspace için bir şirket açıp workspace'i oraya taşıyor.
+
+```bash
+su - advetics && cd ~/htdocs/advetics.com
+pnpm --filter @advetics/api db:workspace-sirketleri
+```
+
+Bu **kuru çalışma**: tek satır yazmaz, ne yapacağını yazdırır. Çıktıyı okuyup
+onayladıktan sonra:
+
+```bash
+sudo -u postgres pg_dump -Fc advetics > /var/backups/advetics-tasima-oncesi.dump
+pnpm --filter @advetics/api db:workspace-sirketleri -- --apply
+```
+
+> **Önce yedek al.** İş 30 tabloda `org_id` güncelliyor ve geri alma yolu yok
+> (workspace'i geri taşımak mümkün, açılan şirketleri geri almak değil).
+
+Script **tekrar çalıştırılabilir**: ikinci koşumda zaten kendi şirketinde olan
+workspace'i atlıyor, yani yarıda kalan bir koşum kalanlarla tamamlanabiliyor.
+
+Kuru çalışma bir **uyarı** basarsa (`üyelikleri birden çok workspace'e
+dağılmış`) o hesabı ÖNCE elden düzelt: iki şirkete birden taşınamıyor ve
+olduğu yerde bırakılırsa taşımadan sonra giriş yapamıyor.
+
 ### Log rotasyonu
 
 pm2 logları sınırsız büyür:
