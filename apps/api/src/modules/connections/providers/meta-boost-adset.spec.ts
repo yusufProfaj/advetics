@@ -106,7 +106,24 @@ describe('süre', () => {
 describe('hedefleme', () => {
   it('VERİLMEZSE ülke geneli TR — kural yolunun bugünkü davranışı', () => {
     const p = buildBoostAdSetParams(req(), 'c-1', NOW);
-    expect(JSON.parse(p.targeting!)).toEqual(DEFAULT_BOOST_TARGETING);
+    /*
+     * `toEqual` DEĞİL `toMatchObject`: gövde artık `targeting_automation`
+     * da taşıyor (Meta ad set seviyesinde `advantage_audience` işaretini
+     * AÇIKÇA istiyor — subcode 1870227). İddianın konusu o değil, hedefleme
+     * verilmediğinde ülke genelinin korunması; işaretin kendisi ayrı bir
+     * testte (`advantage-isareti.spec.ts`) kilitli.
+     */
+    expect(JSON.parse(p.targeting!)).toMatchObject(DEFAULT_BOOST_TARGETING);
+  });
+
+  it('KRİTİK: ADVANTAGE İŞARETİ her ad set’te var', () => {
+    /*
+     * Meta işaret yazılmadan ad set oluşturmayı REDDEDİYOR ve mesaj
+     * amaçtan (etkileşim/erişim/video) bağımsız. Burada yeri: gövdeyi
+     * üreten TEK fonksiyon bu.
+     */
+    const t = JSON.parse(buildBoostAdSetParams(req(), 'c-1', NOW).targeting!);
+    expect(t.targeting_automation).toEqual({ advantage_audience: 0 });
   });
 
   it('KRİTİK: verilen hedefleme OLDUĞU GİBİ gidiyor', () => {
@@ -119,7 +136,8 @@ describe('hedefleme', () => {
       genders: [2],
     };
     const p = buildBoostAdSetParams(req({ targeting }), 'c-1', NOW);
-    expect(JSON.parse(p.targeting!)).toEqual(targeting);
+    // `toMatchObject` — gövde ayrıca `targeting_automation` taşıyor.
+    expect(JSON.parse(p.targeting!)).toMatchObject(targeting);
   });
 
   it('hedefleme JSON DİZGE olarak gidiyor', () => {
@@ -171,7 +189,17 @@ describe('özel reklam kategorisi', () => {
 
   it('beyan yoksa hedefleme AYNEN gidiyor', () => {
     const p = buildBoostAdSetParams(req({ targeting: daraltilmis }), 'c-1', NOW);
-    expect(JSON.parse(p.targeting!)).toEqual(daraltilmis);
+    const t = JSON.parse(p.targeting!);
+    // `toMatchObject` — gövde ayrıca `targeting_automation` taşıyor.
+    expect(t).toMatchObject(daraltilmis);
+    /*
+     * KISITLANAN ALANLARIN GERÇEKTEN DURDUĞU da iddia ediliyor:
+     * `toMatchObject` bir alanın SİLİNMESİNİ yakalamıyor ve iddia
+     * "beyan yoksa hiçbir şey düşmüyor" olduğu için o hâl tam da
+     * yakalanması gereken şey.
+     */
+    expect(t.age_max).toBe(44);
+    expect(t.genders).toEqual([2]);
   });
 
   it('KRİTİK: kısıt ÇAĞIRANA bırakılmıyor — varsayılan hedeflemede de çalışıyor', () => {

@@ -169,7 +169,13 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
         düzeninde kullanıcı neyi onayladığını ancak "İçeriği aç"a basıp
         yeni sekmede bakarak anlıyordu.
       */}
-      <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {/*
+        SIĞDIĞI KADAR KOLON. Üç kolonda kartlar geniş ekranda gereksiz
+        büyüyordu ve tek satıra üçten fazla gönderi sığmıyordu; kart bir
+        gönderi ÖNİZLEMESİ ve onu tanımak için 260 piksel yetiyor.
+        Eşikler kart genişliğine göre seçildi, ekran adına göre değil.
+      */}
+      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         {liste.items.map((k) => (
           <li key={k.id}>
             <Kart

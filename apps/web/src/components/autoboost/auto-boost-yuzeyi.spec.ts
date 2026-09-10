@@ -126,6 +126,16 @@ describe('BİLDİRİM HAVUZU — üç düğme', () => {
     expect(HAVUZ).not.toContain('h-16 w-16');
   });
 
+  it('KRİTİK: SIĞDIĞI KADAR KOLON — geniş ekranda üçle sınırlı değil', () => {
+    /*
+     * Üç kolonda kartlar geniş ekranda gereksiz büyüyordu ve tek satıra
+     * üçten fazla gönderi sığmıyordu. Kart bir gönderi ÖNİZLEMESİ; onu
+     * tanımak için 260 piksel yetiyor.
+     */
+    expect(HAVUZ).toContain('xl:grid-cols-4');
+    expect(HAVUZ).toContain('2xl:grid-cols-5');
+  });
+
   it('KRİTİK: görsel `referrerPolicy="no-referrer"` ile çekiliyor', () => {
     // Meta CDN referrer'lı isteği reddediyor ve beyaz etiket alan adını da
     // sızdırmak istemiyoruz.

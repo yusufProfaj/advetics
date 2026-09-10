@@ -66,19 +66,35 @@ export default async function DashboardLayout({ children }: { children: React.Re
    * İki ayrı yol (ağaçlı / ağaçsız) yazmak, birinin bir gün diğerini
    * tutmaması demekti.
    */
+  /*
+   * AĞAÇ YOKSA OTURUMUN ERİŞİLEBİLİR ŞİRKET LİSTESİ KULLANILIYOR.
+   *
+   * Burada tek elemanlı bir liste kuruluyordu ("aktif şirket") ve DANIŞMANI
+   * KİLİTLİYORDU: üst hesabı olmayan bir danışman birden çok şirkete
+   * yetkili olabiliyor (şirket seviyesi yetki üyelik satırını O ŞİRKETTE
+   * açıyor), ama seçicide yalnızca bulunduğu şirket görünüyordu — yetkisi
+   * olan yere GEÇEMİYORDU.
+   *
+   * WORKSPACE'LER YALNIZCA AKTİF ŞİRKETTE DOLU ve bu doğru: `/clients` RLS
+   * ile aktif şirkete çivili, diğer şirketlerin workspace listesi ancak
+   * oraya geçtikten sonra okunabiliyor. Boş liste "workspace yok" demiyor —
+   * seçici o satırı yine tıklanabilir bir ŞİRKET satırı olarak çiziyor ve
+   * tıklayınca şirket değişiyor.
+   */
   const sirketler: KapsamSirketi[] = agac
     ? agac.organizations.map((o) => ({
         id: o.id,
         name: o.name,
         workspaces: o.workspaces.map((w) => ({ id: w.id, name: w.name })),
       }))
-    : [
-        {
-          id: session.activeOrganizationId,
-          name: session.organization.name,
-          workspaces: session.availableClients.map((c) => ({ id: c.id, name: c.name })),
-        },
-      ];
+    : session.erisilebilirSirketler.map((o) => ({
+        id: o.id,
+        name: o.name,
+        workspaces:
+          o.id === session.activeOrganizationId
+            ? session.availableClients.map((c) => ({ id: c.id, name: c.name }))
+            : [],
+      }));
 
   const themeStyle = branding
     ? ({

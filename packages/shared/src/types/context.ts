@@ -134,4 +134,15 @@ export interface SessionResponse {
     name: string;
     organizations: Array<{ id: string; name: string; slug: string }>;
   } | null;
+
+  /**
+   * KULLANICININ GEÇEBİLECEĞİ BÜTÜN ŞİRKETLER — üst hesabı olmasa da.
+   *
+   * `managerAccount` ajans katmanını anlatıyor ve danışmanda `null` oluyor.
+   * Ama danışman da birden çok şirkete yetkili olabiliyor: şirket seviyesi
+   * yetki verildiğinde üyelik satırı O ŞİRKETTE açılıyor. Seçici yalnızca
+   * `managerAccount`a bakarsa o şirketleri hiç göstermiyor — yetki
+   * veriliyor, kullanıcı oraya GEÇEMİYOR.
+   */
+  erisilebilirSirketler: Array<{ id: string; name: string; slug: string }>;
 }

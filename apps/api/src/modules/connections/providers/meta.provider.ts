@@ -50,6 +50,13 @@ import {
   PlatformBreakdowns,
 } from '../provider.types';
 import { parseMetaRateLimit, platformFetch, type PlatformResponse } from './http';
+/*
+ * ADVANTAGE İŞARETİ HEDEFLEME DOSYASINDA — ve orada olması bilinçli.
+ * `meta-targeting.ts` bu depoda "hedefleme nesnesini üreten TEK yer" olarak
+ * duruyor; işareti burada ikinci kez yazmak, o dosyanın var olma sebebini
+ * bozardı.
+ */
+import { advantageIsaretiyle } from '../../boosts/meta-targeting';
 
 /**
  * Graph API sayfalı yanıtı.
@@ -2327,7 +2334,13 @@ export class MetaProvider implements IAdPlatformProvider {
         campaign_id: campaign.id,
         billing_event: req.spec.billingEvent,
         optimization_goal: req.spec.optimizationGoal,
-        targeting: JSON.stringify({ ...req.targeting, ...req.placements }),
+        /*
+         * ADVANTAGE İŞARETİ BURADA DA. Meta bunu ad set seviyesinde istiyor
+         * ve boost yolu ile reklam oluşturucu AYNI uca yazıyor: yalnızca
+         * birine eklemek, diğerinin ilk çağrıda aynı hatayla düşmesi
+         * demekti — ve o hatayı ikinci kez bulmak zorunda kalırdık.
+         */
+        targeting: JSON.stringify(advantageIsaretiyle({ ...req.targeting, ...req.placements })),
         status: 'ACTIVE',
       };
 
@@ -3363,7 +3376,7 @@ export function buildBoostAdSetParams(
     // varsayılanına düşüyor ve tavanlı bir varsayılan isteği reddediyor.
     bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
     end_time: endTime.toISOString(),
-    targeting: JSON.stringify({ ...targeting, ...yerlesim }),
+    targeting: JSON.stringify(advantageIsaretiyle({ ...targeting, ...yerlesim })),
     status: 'ACTIVE',
   };
 

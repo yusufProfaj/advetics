@@ -261,6 +261,7 @@ export class AuthService {
       activeOrganizationId: identity.context.orgId,
       tumSirketler: identity.context.tumSirketler,
       managerAccount: identity.managerAccount,
+      erisilebilirSirketler: identity.erisilebilirSirketler,
       permissions: identity.context.permissions,
       isOrgAdmin: identity.context.isOrgAdmin,
     };

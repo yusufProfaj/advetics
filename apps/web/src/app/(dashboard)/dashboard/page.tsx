@@ -11,7 +11,7 @@ import type {
 import { METRIC_LEVELS, PLATFORMS } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
-import { serverApiFetch } from '@/lib/api';
+import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { rangeParams, resolveRange } from '@/lib/date-range';
 import { baglanti } from '@/lib/baglanti';
 import { TarihSecici } from '@/components/tarih-secici';
@@ -162,12 +162,34 @@ export default async function DashboardPage({
    * orada tek satırlık bir workspace tablosu, kampanya listesinden daha az
    * şey söylerdi — o yüzden `> 1` koşulu duruyor.
    */
+  /*
+   * Hata mesajı `Promise.all` içinden YAZILIYOR: `allSettled`a çevirmek beş
+   * dalın hepsinin sonucunu açmayı gerektirirdi ve buradaki soru tek —
+   * "özet neden gelmedi".
+   */
+  let ozetHatasi: string | null = null;
+
   const ajansGorunumu = session.tumSirketler;
   const mcc =
     !ajansGorunumu && session.activeClientId === null && session.availableClients.length > 1;
 
+  /*
+   * ═══ HATA YUTULMUYOR — "Metrikler alınamadı" TEK BAŞINA BİR ŞEY SÖYLEMİYOR
+   * ═══
+   *
+   * Bu çağrı `.catch(() => null)` ile susturuluyordu ve ekranda tek bir
+   * cümle kalıyordu: "Metrikler alınamadı. API çalışıyor mu?" Kullanıcı
+   * ajans görünümünde bu ekranı gördü, şirket görünümünde görmedi ve
+   * SEBEBİ HİÇBİR YERDE YAZMIYORDU — teşhis için sunucu loguna bakmak
+   * gerekiyordu. Bu depoda adı konmuş yasağın ta kendisi.
+   *
+   * Sebep artık platformun KENDİ cümlesiyle ekranda; sayfa yine açılıyor.
+   */
   const [summary, series, breakdown, musteriler, sirketler] = await Promise.all([
-    serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch(() => null),
+    serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch((e: unknown) => {
+      ozetHatasi = hataMetni(e);
+      return null;
+    }),
     // Tek günlük aralıkta grafik çizilmiyor; sorguyu da atlıyoruz.
     range.days > 1
       ? serverApiFetch<MetricsTimeseries>(`/metrics/timeseries?${base}`).catch(() => null)
@@ -238,9 +260,13 @@ export default async function DashboardPage({
 
       {summary === null ? (
         <Notice tone="error">
-          Metrikler alınamadı. API çalışıyor mu? Sorun sürerse{' '}
-          <code className="rounded bg-surface-sunken px-1">pm2 logs advetics-api</code> çıktısına
-          bakın.
+          <strong>Metrikler alınamadı.</strong>
+          {ozetHatasi && <span className="ml-1">{ozetHatasi}</span>}
+          <span className="ml-1">
+            Sorun sürerse{' '}
+            <code className="rounded bg-surface-sunken px-1">pm2 logs advetics-api</code> çıktısına
+            bakın.
+          </span>
         </Notice>
       ) : summary.accountCount === 0 ? (
         <EmptyState />
@@ -537,6 +563,11 @@ function Notice({ tone, children }: { tone: 'warn' | 'error'; children: React.Re
 }
 
 /** Oranı micros string'e çevirir — `formatMoney` tek bir giriş biçimi bekliyor. */
+/** Hata mesajını çıkarır — platformun kendi cümlesi ekranda görünmeli. */
+function hataMetni(e: unknown): string {
+  return e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı.';
+}
+
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }

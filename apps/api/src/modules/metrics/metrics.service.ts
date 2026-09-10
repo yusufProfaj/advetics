@@ -52,6 +52,29 @@ import type { TxLike } from '../rules/rules.service';
  */
 const TOTALS_LEVEL: MetricLevel = 'campaign';
 
+/**
+ * ═══ OKUMA TRANSACTION'I İÇİN SÜRE — VARSAYILAN 5 SANİYE YETMİYOR ═══
+ *
+ * `withTenant` etkileşimli bir transaction açıyor ve Prisma'nın varsayılan
+ * sınırı 5 saniye. AJANS KAPSAMINDA ("Tüm şirketler") bu uçlar elli
+ * workspace'in otuz günlük `insights_daily` verisini tarıyor — şirket
+ * kapsamındakinin ellide biri değil, ELLİ KATI. Kullanıcının bildirdiği hâl
+ * birebir buydu: "ajans görünümüne geçtiğimde genel bakışta bu hatayı
+ * alıyorum ama şirket yönetiminde almıyorum".
+ *
+ * ═══ BU BİR YAMA, KÖK ÇÖZÜM DEĞİL ═══
+ *
+ * Süreyi uzatmak sorguyu hızlandırmıyor; sadece ölmesini engelliyor. Uzun
+ * transaction bağlantı havuzunu tutuyor ve o yüzden 20 saniye seçildi, 60
+ * değil. Kök çözüm sorgunun kendisinde: `insights_daily` politikası
+ * `app.can_access_client(client_id)` ile sürülüyor ve o bir FONKSİYON —
+ * indeksten yararlanması `client_id = ANY(...)` kadar kolay değil. Ölçüm
+ * yapılmadan indeks eklemek tahmin olurdu.
+ *
+ * SADECE OKUMA YOLLARINDA. Yazma yolları bu sabiti kullanmıyor.
+ */
+const OKUMA_SURESI_MS = 20_000;
+
 interface RawTotals {
   impressions: string | number | null;
   clicks: string | number | null;
@@ -94,7 +117,7 @@ export class MetricsService {
         earliestDate: row?.en_eski ? this.dateText(row.en_eski) : null,
         latestDate: row?.en_yeni ? this.dateText(row.en_yeni) : null,
       };
-    });
+    }, { timeoutMs: OKUMA_SURESI_MS });
   }
 
   async summary(ctx: TenantContext, query: MetricsQuery): Promise<MetricsSummary> {
@@ -235,7 +258,7 @@ export class MetricsService {
         accountCount: Number(meta?.account_count ?? 0),
         hiddenAccounts,
       };
-    });
+    }, { timeoutMs: OKUMA_SURESI_MS });
   }
 
   /**
@@ -293,7 +316,7 @@ export class MetricsService {
         points: noktalar.filter((p) => p.date >= query.from),
         previous: noktalar.filter((p) => p.date < query.from),
       };
-    });
+    }, { timeoutMs: OKUMA_SURESI_MS });
   }
 
   async breakdown(ctx: TenantContext, query: BreakdownQuery): Promise<MetricsBreakdownRow[]> {
@@ -407,7 +430,7 @@ export class MetricsService {
          */
         previous: karsilastir && this.hasData(oncekiSatir(r)) ? this.totals(oncekiSatir(r)) : null,
       }));
-    });
+    }, { timeoutMs: OKUMA_SURESI_MS });
   }
 
   // ---------------------------------------------------------------------------
@@ -678,7 +701,7 @@ export class MetricsService {
           if (fark !== 0n) return fark > 0n ? 1 : -1;
           return a.name.localeCompare(z.name, 'tr');
         });
-    });
+    }, { timeoutMs: OKUMA_SURESI_MS });
   }
 
   /**
@@ -859,7 +882,7 @@ export class MetricsService {
           if (fark !== 0n) return fark > 0n ? 1 : -1;
           return a.name.localeCompare(z.name, 'tr');
         });
-    });
+    }, { timeoutMs: OKUMA_SURESI_MS });
   }
 
   /** Aynı müşteriye ait ham satırları tek bir toplama indirir. */

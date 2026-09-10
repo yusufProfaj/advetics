@@ -63,6 +63,13 @@ export interface ResolvedIdentity {
     /** Bu üst hesap altında kullanıcının geçebileceği şirketler. */
     organizations: Array<{ id: string; name: string; slug: string }>;
   } | null;
+  /**
+   * Kullanıcının GEÇEBİLECEĞİ bütün şirketler — üst hesabı olmasa da.
+   *
+   * `managerAccount.organizations` ajans katmanını anlatıyor ve danışmanda
+   * `null`; bu liste ise üyeliğin olduğu her şirketi taşıyor.
+   */
+  erisilebilirSirketler: Array<{ id: string; name: string; slug: string }>;
 }
 
 /**
@@ -173,7 +180,29 @@ export class TenantContextService {
      * verisini okumak demekti. Ev organizasyonu HER ZAMAN listede — üst
      * hesabı olmayan kullanıcı için liste tek elemanlı ve davranış değişmiyor.
      */
-    const izinliOrgIdler = new Set<string>([user.orgId, ...kardesSirketler.map((o) => o.id)]);
+    /*
+     * ═══ ÜYELİĞİN OLDUĞU ŞİRKET DE ERİŞİLEBİLİR ═══
+     *
+     * Bu satır olmadan ŞİRKET SEVİYESİ YETKİ ÇALIŞMIYORDU ve arıza sessizdi.
+     *
+     * Danışmana "Sabancı şirketinin tamamına yetki" verildiğinde üyelik
+     * satırı O ŞİRKETTE açılıyor (`baskaSirketeYetki`). Ama danışmanın üst
+     * hesap üyeliği YOK — `kardesSirketler` boş — ve `users.org_id` hâlâ
+     * ajans. Sonuç: `activeOrgId` eve düşüyor, üyelikler aktif şirkete
+     * süzülüyor, Sabancı'daki satır süzgeçten ELENİYOR ve danışman ya
+     * hiçbir şey göremiyor ya da "Bu şirkete erişim yetkiniz tanımlı değil"
+     * ile 401 alıyor. Yetki veriliyor, hiçbir işe yaramıyor.
+     *
+     * ÜYELİK ZATEN YETKİNİN KENDİSİ: bir kullanıcının satırı olan şirkete
+     * geçebilmesi bir genişletme değil, o satırın anlamı. Liste yine
+     * VERİTABANINDAN hesaplanıyor, istekten değil.
+     */
+    const uyelikOrgIdleri = user.memberships.map((m) => m.orgId);
+    const izinliOrgIdler = new Set<string>([
+      user.orgId,
+      ...kardesSirketler.map((o) => o.id),
+      ...uyelikOrgIdleri,
+    ]);
 
     /*
      * "TÜM ŞİRKETLER" MODU — üst hesabı OLANLARA açık, başkasına değil.
@@ -204,6 +233,20 @@ export class TenantContextService {
      */
     const activeOrgId =
       requestedOrgId && izinliOrgIdler.has(requestedOrgId) ? requestedOrgId : user.orgId;
+
+    /*
+     * SEÇİCİNİN LİSTESİ — `managerAccount` TEK BAŞINA YETMİYOR.
+     *
+     * Üst hesabı olmayan bir danışman da birden çok şirkete yetkili
+     * olabiliyor (yukarıdaki üyelik kuralı). O şirketleri seçicide
+     * göstermezsek kullanıcı yetkisi olan bir yere GEÇEMİYOR — yetki
+     * veriliyor, erişilemiyor.
+     */
+    const erisilebilirSirketler = await this.db.organization.findMany({
+      where: { id: { in: [...izinliOrgIdler] }, status: 'active' },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, slug: true },
+    });
 
     // EV organizasyonundaki üyeliğe bakılıyor: kullanıcı hiçbir yere
     // giremiyorsa oturum kurmanın anlamı yok.
@@ -414,6 +457,7 @@ export class TenantContextService {
         role: m.role as Role,
       })),
       availableClients,
+      erisilebilirSirketler,
       managerAccount: ustHesap
         ? {
             id: ustHesap.managerAccount.id,
