@@ -70,7 +70,19 @@ export function MusteriArama({ kartlar }: { kartlar: AranabilirKart[] }) {
           </p>
         </div>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        /*
+         * ÜÇÜNCÜ KOLON `2xl`DE, `xl`DE DEĞİL.
+         *
+         * Bu liste artık Şirketler sayfasının DETAY kolonunda duruyor ve
+         * solunda 19rem'lik bir ray var: `xl` (1280px) eşiğinde üç kart
+         * ~330 piksele düşüyor ve kart içindeki varlık satırları (hesap adı +
+         * boost seçici) satır satır kırılıyor. Eşik KIRILMA NOKTASINA göre
+         * seçilmeli, ekran genişliğine göre değil.
+         *
+         * (Yorum ternary dalının İÇİNDE `{/* *\/}` biçiminde yazılamıyor:
+         *  orası JSX çocuk konumu değil, ifade konumu.)
+         */
+        <ul className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
           {suzulmus.map((k) => (
             <li key={k.id}>{k.icerik}</li>
           ))}

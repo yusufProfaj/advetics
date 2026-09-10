@@ -176,47 +176,173 @@ describe('geçişin kendisi', () => {
   });
 });
 
-describe('şirket kartı', () => {
+describe('ŞİRKET RAYI — kırk şirkette de kullanılabilir', () => {
   const EKRAN = kod('components/ust-hesap/ust-hesap-ekrani.tsx');
 
   it('BOŞA DÜŞME BEKÇİSİ: ekran kaynağı okundu', () => {
-    expect(EKRAN).toContain('SirketKarti');
+    expect(EKRAN).toContain('SirketRayi');
+    expect(EKRAN).toContain('SirketSatiri');
   });
 
-  it('KRİTİK: workspace listesi kartın İÇİNDE — sayı değil AD', () => {
+  it('KRİTİK: KART IZGARASI KALMADI — ray satırları', () => {
     /*
-     * Yalnızca "3 workspace" yazıp içini göstermemek, kullanıcının hangi
-     * müşterinin hangi şirkette olduğunu bulmak için her şirkete tek tek
-     * geçmesi demekti. Sayı listeden türetiliyor; iki alan ayrı gelseydi
-     * biri diğerini tutmadığında hangisinin doğru olduğu belirsiz olurdu.
+     * Her şirket ~200 piksellik bir karttı, iki kolonda: kırk şirket yirmi
+     * satır ve dört bin piksel kaydırma. Asıl iş (seçili şirketi düzenlemek)
+     * o kaydırmanın ALTINDA kalıyordu — kullanıcının cümlesiyle "hiç
+     * kullanışlı değil".
      */
-    expect(EKRAN).toContain('sirket.workspaces.length');
-    expect(EKRAN).toContain('sirket.workspaces.map');
+    expect(EKRAN).not.toContain('SirketKarti');
+    expect(EKRAN).toContain('lg:grid-cols-[19rem_minmax(0,1fr)]');
+  });
+
+  it('KRİTİK: üst hesap DÜŞSE DE workspace bölümü çiziliyor', () => {
+    /*
+     * `children` içinde şirket formu VE workspace bölümü var. Hata ya da
+     * "üst hesap yok" hâlinde erken `return`la geçmek, `/manager-account`
+     * ucu düştüğünde kullanıcının workspace'lerini TAMAMEN kaybetmesi
+     * demekti. Üst hesap bir ÜST katman, workspace yönetiminin ön koşulu
+     * değil.
+     */
+    const govde = blok(EKRAN, 'export function UstHesapEkrani');
+    const erken = govde.slice(govde.indexOf('if (yuklemeHatasi || !agac)'), govde.indexOf('const aktifSirket'));
+    expect(erken.length, 'erken dönüş dilimi boş — tarama boşa düştü').toBeGreaterThan(200);
+    expect(erken).toContain('{children}');
+  });
+
+  it('KRİTİK: ARAMA VAR ve workspace adlarını da tarıyor', () => {
+    /*
+     * Bu ekranda iki soru soruluyor: "şu şirket nerede" ve "şu müşteri
+     * hangi şirkette". İkincisi eskiden kırk kartı tek tek açmakla
+     * cevaplanıyordu.
+     */
+    const ray = blok(EKRAN, 'function SirketRayi');
+    expect(ray).toContain('type="search"');
+    expect(ray).toContain('kucult(x.sirket.name).includes(q)');
+    expect(ray).toContain('kucult(w.name).includes(q)');
+  });
+
+  it('KRİTİK: Türkçe küçültme kullanılıyor — "İkon" araması "ikon" ile eşleşsin', () => {
+    // Varsayılan `toLowerCase()` "İ"yi "i̇" (i + birleşen nokta) yapıyor ve
+    // eşleşme sessizce kaçıyor.
+    expect(EKRAN).toContain("toLocaleLowerCase('tr')");
+  });
+
+  it('KRİTİK: SÜZÜLEN LİSTE kaç şirketten kaçı olduğunu SÖYLÜYOR', () => {
+    // CLAUDE.md: "Sessiz kesme yok."
+    const ray = blok(EKRAN, 'function SirketRayi');
+    expect(ray).toContain('şirketten {suzulmus.length} tanesi gösteriliyor');
+  });
+
+  it('KRİTİK: liste KENDİ KABINDA kayıyor — detay ekrandan çıkmasın', () => {
+    const ray = blok(EKRAN, 'function SirketRayi');
+    expect(ray).toContain('overflow-y-auto');
+    expect(ray).toContain('max-h-[60vh]');
+  });
+
+  it('KRİTİK: workspace ADLARI hâlâ ulaşılabilir — sayı tek başına yetmiyor', () => {
+    /*
+     * Yalnızca "3 workspace" yazıp içini hiç göstermemek, "hangi müşteri
+     * nerede" sorusunu ekrandan cevaplanamaz yapardı. Adlar artık kapalı
+     * başlıyor (kırk şirketin adlarını birden basmak aramanın çözdüğü
+     * sorunu geri getirirdi) ama bir tıklama uzakta.
+     */
+    const satir = blok(EKRAN, 'function SirketSatiri');
+    expect(satir).toContain('sirket.workspaces.length');
+    expect(satir).toContain('sirket.workspaces.map');
+    expect(satir).toContain('aria-expanded={acik}');
+  });
+
+  it('KRİTİK: arama eşleşmesi AÇMADAN görünüyor', () => {
+    // Cevabı bir tıklama daha arkasına koymak, aramayı yarım yapmak olurdu.
+    const satir = blok(EKRAN, 'function SirketSatiri');
+    expect(satir).toContain('{!acik && eslesen.length > 0 && (');
   });
 
   it('KRİTİK: ZATEN SEÇİLİ şirkette geçiş düğmesi YOK', () => {
     /*
      * Basılsaydı hiçbir şey değişmeyen bir TAM SAYFA yüklemesi olurdu ve
-     * kullanıcı ekranın boşuna sıfırlandığını görürdü. Yerine düzenleme
-     * bölümünün AŞAĞIDA olduğu yazılı — yoksa kullanıcı seçili şirketi
-     * düzenlemenin yolunu arar.
+     * kullanıcı ekranın boşuna sıfırlandığını görürdü. Yerine düzenlemenin
+     * SAĞDA olduğu yazılı — yoksa kullanıcı seçili şirketi düzenlemenin
+     * yolunu arar.
      */
-    const kart = blok(EKRAN, 'function SirketKarti');
-    expect(kart).toContain('aktif ? (');
-    expect(kart).toContain('Şu an bu şirkettesin — aşağıdan düzenle');
-    expect(kart).not.toContain('Yönet');
+    const satir = blok(EKRAN, 'function SirketSatiri');
+    expect(satir).toContain('aktif ? (');
+    expect(satir).toContain('şu an buradasın — sağdan düzenle');
+    expect(satir).not.toContain('Yönet');
   });
 
   it('KRİTİK: aktiflik AKTİF şirkete göre, ev şirketine göre DEĞİL', () => {
     // `isHome` ayrı bir bilgi (üyeliğin nerede olduğu); "şu an neredeyim"
     // sorusuna cevap vermiyor ve ikisini karıştırmak, ev şirketinde
-    // olmayan kullanıcıya yanlış kartı işaretlerdi.
-    expect(EKRAN).toContain('aktif={o.id === aktifOrgId}');
+    // olmayan kullanıcıya yanlış satırı işaretlerdi.
+    expect(EKRAN).toContain('aktif={sirket.id === aktifOrgId}');
   });
 
   it('boş workspace listesi SEBEBİNİ söylüyor', () => {
     // "Henüz yok" ile "yüklenemedi" aynı boş alana çevrilmemeli (CLAUDE.md).
     expect(EKRAN).toContain('Bu şirkette henüz workspace yok');
+  });
+
+  it('KRİTİK: AÇILIŞTA seçili satır görüş alanına alınıyor', () => {
+    /*
+     * Şirket değiştirmek TAM SAYFA yüklemesi yapıyor ve dönüşte arama
+     * kutusu boşalıyor; kırk şirketlik alfabetik listede yeni seçilen
+     * şirket kaydırma kabının DIŞINDA kalabiliyor. Kullanıcı tıklıyor,
+     * sayfa yenileniyor ve seçtiği şirketi ekranda göremiyor.
+     */
+    const ray = blok(EKRAN, 'function SirketRayi');
+    expect(ray).toContain("querySelector('[data-aktif=\"true\"]')");
+    expect(ray).toContain("scrollIntoView({ block: 'nearest' })");
+    // İşaret satırda gerçekten basılıyor mu — yoksa seçici hiçbir zaman
+    // eşleşmez ve effect sessizce hiçbir şey yapmaz.
+    expect(blok(EKRAN, 'function SirketSatiri')).toContain(
+      "data-aktif={aktif ? 'true' : undefined}",
+    );
+  });
+
+  it('KRİTİK: ŞİRKET EKLEME FORMU kapalı başlıyor', () => {
+    // Açık dururken ray'in altında kalıcı bir blok kaplıyordu; şirket açmak
+    // seyrek bir iş, her gün yapılan şey listede gezmek.
+    const ray = blok(EKRAN, 'function SirketRayi');
+    expect(ray).toContain('const [ekleAcik, setEkleAcik] = useState(false)');
+    expect(ray).toContain('+ Şirket ekle');
+  });
+});
+
+describe('WORKSPACE TAŞIMA — kırk bin option düğümü kalmadı', () => {
+  const EKRAN = kod('components/ust-hesap/ust-hesap-ekrani.tsx');
+
+  it('KRİTİK: seçici RAY SATIRINDA DEĞİL, detayda TEK tane', () => {
+    /*
+     * Her şirket kartında bir tane vardı ve her biri DİĞER bütün şirketlerin
+     * workspace'lerini listeliyordu: kırk şirkette kırk bin `option` düğümü.
+     * Ekranın yavaşlığının ölçülebilir kısmı buydu ve hiçbir yerde
+     * görünmüyordu.
+     */
+    const satir = blok(EKRAN, 'function SirketSatiri');
+    expect(satir).not.toContain('<select');
+    expect(blok(EKRAN, 'function WorkspaceTasi')).toContain('<select');
+  });
+
+  it('KRİTİK: adaylar YALNIZCA başka şirketlerden', () => {
+    // Kendi workspace'lerini listelemek, "buraya taşı" deyip hiçbir şey
+    // yapmayan bir seçenek göstermek olurdu.
+    expect(blok(EKRAN, 'function WorkspaceTasi')).toContain('.filter((d) => d.id !== hedef.id)');
+  });
+
+  it('KRİTİK: aday yoksa kutu HİÇ çizilmiyor', () => {
+    // Boş bir seçici, yapılabilir bir iş varmış gibi görünüp hiçbir şey
+    // yapmıyor.
+    expect(blok(EKRAN, 'function WorkspaceTasi')).toContain(
+      'if (adaylar.length === 0) return null',
+    );
+  });
+
+  it('KRİTİK: hedef AKTİF şirket — istemciden gelen bir kimlik değil', () => {
+    // Taşıma 30 tabloda `org_id` güncelliyor ve RLS DIŞINDA koşuyor; hedefi
+    // ekranda seçili olandan başka bir yerden almak, o yazmanın kapsamını
+    // belirsiz yapardı.
+    expect(EKRAN).toContain('organizationId: aktifSirket.id');
   });
 });
 
@@ -258,23 +384,23 @@ describe('WORKSPACE’LER ŞİRKETİN İÇİNDE', () => {
     expect(ESKI_SAYFA).toContain("redirect('/ayarlar/ust-hesap')");
   });
 
-  it('KRİTİK: şirket kartına TIKLAMAK o şirkete geçiriyor', () => {
+  it('KRİTİK: şirket satırına TIKLAMAK o şirkete geçiriyor', () => {
     // "Şirkete tıkladığımda şirketi düzenleyebileceğim" — düzenleme aktif
     // şirkete çivili olduğu için tıklamanın işi önce oraya GEÇMEK.
-    const kart = blok(EKRAN, 'function SirketKarti');
-    expect(kart).toContain('function gec(): void');
-    expect(kart).toContain("apiFetch('/auth/switch-org'");
+    const satir = blok(EKRAN, 'function SirketSatiri');
+    expect(satir).toContain('function gec(): void');
+    expect(satir).toContain("apiFetch('/auth/switch-org'");
 
     /*
-     * İDDİA BAŞLIK DİLİMİNE ÇAPALI.
+     * İDDİA SATIR DÜĞMESİNE ÇAPALI, `gec`in VARLIĞINA değil.
      *
-     * İlk hâli kartın TAMAMINDA `onClick={gec}` arıyordu ve kartta İKİ
-     * çağıran var (başlık ve alttaki düğme): başlığın tıklanabilirliğini
-     * silmek testi DÜŞÜRMÜYORDU. Mutasyonda yakalandı.
+     * Bir önceki düzende iddia kartın TAMAMINDA `onClick={gec}` arıyordu ve
+     * kartta İKİ çağıran vardı: başlığın tıklanabilirliğini silmek testi
+     * DÜŞÜRMÜYORDU. Bugün tek çağıran var ve dilim onun etrafında.
      */
-    const baslik = kart.slice(kart.indexOf('aktif ? ('), kart.indexOf('{sirket.isHome'));
-    expect(baslik.length, 'başlık dilimi boş — tarama boşa düştü').toBeGreaterThan(100);
-    expect(baslik).toContain('onClick={gec}');
+    const dugme = satir.slice(satir.indexOf('<button'), satir.indexOf('</button>'));
+    expect(dugme.length, 'satır düğmesi bulunamadı — tarama boşa düştü').toBeGreaterThan(100);
+    expect(dugme).toContain('onClick={gec}');
   });
 
   it('KRİTİK: geçiş AYNI SAYFAYA dönüyor — Genel Bakış’a değil', () => {
@@ -282,8 +408,8 @@ describe('WORKSPACE’LER ŞİRKETİN İÇİNDE', () => {
      * Kullanıcı şirketi DÜZENLEMEK için tıkladı. `/dashboard`a atmak,
      * aradığı ekranı yeniden bulmasını istemek olurdu.
      */
-    const kart = blok(EKRAN, 'function SirketKarti');
-    expect(kart).toContain("window.location.assign('/ayarlar/ust-hesap')");
+    const satir = blok(EKRAN, 'function SirketSatiri');
+    expect(satir).toContain("window.location.assign('/ayarlar/ust-hesap')");
   });
 
   it('KRİTİK: "Tüm şirketler" modunda workspace bölümü ÇİZİLMİYOR', () => {
