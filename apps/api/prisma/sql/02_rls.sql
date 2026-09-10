@@ -1992,28 +1992,39 @@ CREATE POLICY adv_draft_ads_delete ON draft_ads
 -- her seyi goruyor. Fark burada yaziyor ki bir gun "tutarlilik" adina
 -- gevsetilmesin.
 -- ENABLE/FORCE yukarıdaki tablo listesi döngüsünde yapılıyor.
+--
+-- ┌─ ORG YÜKLEMİ KALDIRILDI — VE BU BİR GEVŞETME DEĞİL ────────────────────┐
+-- │                                                                        │
+-- │ Politikalar `app.org_kapsaminda(org_id) AND user_id = ...` idi ve      │
+-- │ SATIRI SAHİBİNDEN GİZLİYORDU: e-posta kimligi kullanicinin AKTIF       │
+-- │ sirketinde degil, olusturuldugu sirkette duruyor. Ajanstan bir sirkete │
+-- │ gecen danisman kendi satirini goremiyor, panel bos form gosteriyor ve  │
+-- │ "Kaydet" INSERT dalina giriyordu — `user_id` TEKIL oldugu icin istek   │
+-- │ benzersizlik ihlaliyle dusuyor ve ekranda "Beklenmeyen bir hata        │
+-- │ olustu" yaziyordu. Kullanicinin bildirdigi hal birebir buydu.          │
+-- │                                                                        │
+-- │ KIMLIK KISIYE AIT, SIRKETE DEGIL. Danismanin bir Gmail uygulama        │
+-- │ parolasi ve bir imzasi var; sirket basina ayri bir kimlik istemek,     │
+-- │ kirk dokuz sirkette kirk dokuz kez parola girdirmek olurdu.            │
+-- │                                                                        │
+-- │ KAPSAM DARALDI, GENISLEMEDI: kalan yuklem `user_id =                   │
+-- │ app.current_user_id()` ve bu mumkun olan EN DAR kapsam. `org_id`       │
+-- │ kolonu KOKEN bilgisi olarak duruyor, erisim siniri olarak degil —      │
+-- │ tablonun butun tuketicileri zaten `user_id` ile sorguluyor.            │
+-- └────────────────────────────────────────────────────────────────────────┘
 
 CREATE POLICY adv_user_email_select ON user_email_accounts
-  FOR SELECT USING (
-    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
-  );
+  FOR SELECT USING (user_id = app.current_user_id());
 
 CREATE POLICY adv_user_email_insert ON user_email_accounts
-  FOR INSERT WITH CHECK (
-    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
-  );
+  FOR INSERT WITH CHECK (user_id = app.current_user_id());
 
 CREATE POLICY adv_user_email_update ON user_email_accounts
-  FOR UPDATE USING (
-    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
-  ) WITH CHECK (
-    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
-  );
+  FOR UPDATE USING (user_id = app.current_user_id())
+  WITH CHECK (user_id = app.current_user_id());
 
 CREATE POLICY adv_user_email_delete ON user_email_accounts
-  FOR DELETE USING (
-    app.org_kapsaminda(org_id) AND user_id = app.current_user_id()
-  );
+  FOR DELETE USING (user_id = app.current_user_id());
 
 -- ============================================================================
 -- MODÜL 9 — AI Kampanya Asistanı, sohbet geçmişi

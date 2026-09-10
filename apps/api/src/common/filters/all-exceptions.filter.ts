@@ -147,6 +147,46 @@ export class AllExceptionsFilter implements ExceptionFilter {
             message: 'İlişkili kayıt geçersiz',
             requestId,
           };
+        /**
+         * HAM SQL HATASI — `$queryRaw` / `$executeRaw`.
+         *
+         * ═══ BU DAL OLMADAN HER ŞEY "Beklenmeyen bir hata oluştu" ═══
+         *
+         * Prisma yalnızca ORM yollarında P2002/P2003/P2025 üretiyor; ham
+         * SQL'de kısıt ihlali `P2010` olarak geliyor ve PostgreSQL'in
+         * SQLSTATE'i `meta` içinde kalıyor. Bu depoda sorguların büyük
+         * kısmı ham SQL (RLS join'siz yazılabilsin diye) — yani en sık
+         * karşılaşılan kısıt hatası tam da mesajı KAYBOLAN dala düşüyordu.
+         *
+         * Canlıda görüldü: e-posta ayarı kaydedilirken benzersizlik ihlali
+         * oluştu ve kullanıcının gördüğü tek şey "Beklenmeyen bir hata
+         * oluştu" oldu — hangi alanın, neden. CLAUDE.md: "Bu cümle bu
+         * projede bir turu tamamen kaybettirdi."
+         */
+        case 'P2010': {
+          const sqlstate = pgKodu(exception.meta);
+          const eslesen = sqlstate ? SQLSTATE_MESAJLARI[sqlstate] : undefined;
+          /*
+           * `requestId` BURADA EKLENİYOR, tabloda DEĞİL. Tabloya sabit bir
+           * değer yazmak, her yanıtın aynı (ve yanlış) istek kimliğini
+           * taşıması demekti — log ile ekranı eşleştirmek imkânsızlaşırdı.
+           */
+          return (
+            (eslesen && { ...eslesen, requestId }) ?? {
+              /*
+               * BİLİNMEYEN KODDA VERİTABANI MESAJI YAZILMIYOR, KODU
+               * YAZILIYOR. Ham mesaj tablo ve kolon adlarını taşıyor ve
+               * panelde göstermek şema bilgisini dışarı vermek olurdu;
+               * SQLSTATE ise teşhis için yeterli ve anlamsız bir dize
+               * değil.
+               */
+              statusCode: HttpStatus.BAD_REQUEST,
+              code: 'DB_ERROR',
+              message: `Veritabanı isteği reddedildi${sqlstate ? ` (kod ${sqlstate})` : ''}`,
+              requestId,
+            }
+          );
+        }
         default:
           break;
       }
@@ -172,4 +212,64 @@ export class AllExceptionsFilter implements ExceptionFilter {
     };
     return map[status] ?? 'ERROR';
   }
+}
+
+/**
+ * PostgreSQL SQLSTATE → kullanıcıya söylenecek cümle.
+ *
+ * ORM dallarıyla AYNI mesajlar kullanılıyor (`P2002` → "Bu kayıt zaten
+ * mevcut"): aynı arıza, hangi yoldan geldiğine göre farklı cümle
+ * göstermemeli — kullanıcı iki ayrı sorun olduğunu sanır.
+ */
+const SQLSTATE_MESAJLARI: Record<
+  string,
+  { statusCode: number; code: string; message: string }
+> = {
+  // unique_violation
+  '23505': {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'ALREADY_EXISTS',
+    message: 'Bu kayıt zaten mevcut',
+  },
+  // foreign_key_violation
+  '23503': {
+    statusCode: HttpStatus.BAD_REQUEST,
+    code: 'INVALID_REFERENCE',
+    message: 'İlişkili kayıt geçersiz',
+  },
+  // not_null_violation
+  '23502': {
+    statusCode: HttpStatus.BAD_REQUEST,
+    code: 'MISSING_FIELD',
+    message: 'Zorunlu bir alan boş bırakıldı',
+  },
+  // check_violation
+  '23514': {
+    statusCode: HttpStatus.BAD_REQUEST,
+    code: 'INVALID_VALUE',
+    message: 'Girilen değer bu alanın kısıtını karşılamıyor',
+  },
+  /*
+   * insufficient_privilege — RLS reddi de buraya düşüyor.
+   * "Yetkiniz yok" demek doğru cevap: satır var ama bu bağlamda
+   * erişilemiyor ve kullanıcıya bunu söylemek, sessizce boş dönmekten iyi.
+   */
+  '42501': {
+    statusCode: HttpStatus.FORBIDDEN,
+    code: 'FORBIDDEN',
+    message: 'Bu kayda erişim yetkiniz yok',
+  },
+};
+
+/**
+ * Prisma'nın `meta` nesnesinden PostgreSQL SQLSTATE'ini okur.
+ *
+ * `meta` DENETİMSİZ (`unknown`): Prisma sürümleri arasında şekli değişiyor
+ * ve `as` ile susturmak, bir gün alan kaybolduğunda çalışma anında
+ * patlamak demekti. Bulunamazsa `null` — çağıran o hâli zaten yazıyor.
+ */
+function pgKodu(meta: unknown): string | null {
+  if (typeof meta !== 'object' || meta === null) return null;
+  const kod = (meta as Record<string, unknown>).code;
+  return typeof kod === 'string' && kod.length > 0 ? kod : null;
 }
