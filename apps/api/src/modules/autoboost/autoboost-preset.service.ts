@@ -8,6 +8,9 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+// TEK TANIM: kart bazında özelleştirme de aynı dönüşümü kullanıyor ve
+// ikinci bir kopya, doğduğu anda ayrışırdı.
+import { toMicros } from './kart-ozellestirme';
 
 /**
  * BİLGİ BANKASI — otomatik boost ön ayarları.
@@ -138,14 +141,6 @@ export class AutoBoostPresetService {
   }
 }
 
-/** Ana para biriminden micros'a. "300,50" ve "300.50" ikisi de kabul. */
-function toMicros(amount: string): bigint {
-  const n = Number(amount.replace(',', '.'));
-  if (!Number.isFinite(n) || n <= 0) throw new BadRequestException('Geçersiz tutar');
-  // YUVARLAMA ÖNCE, BigInt SONRA: `BigInt(300.5 * 1e6)` kesirli sayıda hata
-  // fırlatıyor ve mesaj sebebi söylemiyor.
-  return BigInt(Math.round(n * 1_000_000));
-}
 
 interface PresetRow {
   id: string;

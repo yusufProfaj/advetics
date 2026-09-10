@@ -164,7 +164,7 @@ beforeEach(async () => {
   // Müşterinin KENDİ giriş hesabı — yalnızca bu workspace'e bağlı.
   await h.q(
     `INSERT INTO users (id, org_id, email, password_hash, full_name, updated_at)
-     VALUES ($1, $2, 'musteri@x.com', 'x', 'Müşteri', now())`,
+     VALUES ($1, $2, 'musteri@x.com', 'x', 'Müşteri hesabı', now())`,
     [MUSTERI_HESABI, IDS.org],
   );
   await h.q(

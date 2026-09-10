@@ -68,56 +68,19 @@ export function BoostDecision({
   );
 }
 
-/**
- * Onaylanmışları platformda oluştur.
+/*
+ * ═══ "ONAYLANANLARI ŞİMDİ OLUŞTUR" KALDIRILDI ═══
  *
- * AYRI BİR DÜĞME, onayın otomatik devamı değil. Zamanlanmış iş bunu günde iki
- * kez zaten yapıyor; bu düğme "şimdi olsun" diyen kullanıcı için. Sonucu
- * açıkça yazıyor, çünkü başarısızlık sessiz olmamalı.
+ * Düğme `POST /boosts/create-approved` çağırıyordu: müşterinin ONAYLI
+ * boost'larını toplu hâlde platformda açıyor. Auto-Boost ekranında bir
+ * karşılığı YOKTU — bildirim havuzundan onaylanan kart zaten anında
+ * yayınlanıyor (`decide` → `createOneApproved`), yani düğme neredeyse her
+ * zaman "0 boost oluşturuldu" diyordu.
+ *
+ * Kullanıcının tarifi "o da işlevsiz, o da kalksın" oldu. Uç noktanın
+ * kendisi DURUYOR: kural motorundan gelen adaylar için hâlâ geçerli bir
+ * yol ve zamanlanmış tarama onu kullanıyor.
  */
-export function CreateApprovedButton({ clientId }: { clientId: string }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function run(): Promise<void> {
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await apiFetch<{ created: number; failed: number }>(
-        `/boosts/create-approved?clientId=${clientId}`,
-        { method: 'POST' },
-      );
-      setResult(
-        res.failed > 0
-          ? `${res.created} boost oluşturuldu, ${res.failed} başarısız — sebepleri aşağıda.`
-          : `${res.created} boost oluşturuldu.`,
-      );
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'İşlem başarısız.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="space-y-2">
-      <button
-        type="button"
-        onClick={run}
-        disabled={busy}
-        className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-sunken disabled:opacity-50"
-      >
-        {busy ? 'Oluşturuluyor…' : 'Onaylananları şimdi oluştur'}
-      </button>
-      {result && <p className="text-xs text-ink-muted">{result}</p>}
-      {error && <p className="text-xs text-rose-700">{error}</p>}
-    </div>
-  );
-}
 
 /** Kuralı şimdi çalıştır — aday üretir, platforma dokunmaz. */
 export function RunBoostRuleButton({ ruleId }: { ruleId: string }) {

@@ -10,14 +10,8 @@ import {
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { formatMoney, formatNumber, formatRelative } from '@/lib/format';
-import {
-  BoostDecision,
-  CreateApprovedButton,
-  RunBoostRuleButton,
-} from '@/components/boost/boost-controls';
-import { ManualBoost } from '@/components/boost/manual-boost';
+import { BoostDecision, RunBoostRuleButton } from '@/components/boost/boost-controls';
 import { BildirimHavuzu } from '@/components/autoboost/bildirim-havuzu';
-import { YouTubeKanalEkle } from '@/components/autoboost/youtube-kanal-ekle';
 import { BoostOnAyariDugmesi } from '@/components/autoboost/boost-on-ayari';
 
 export const metadata = { title: 'Auto-Boost — Advetics' };
@@ -26,11 +20,27 @@ export const dynamic = 'force-dynamic';
 /**
  * Modül 7 — Auto-Boost.
  *
- * SAYFANIN TAŞIDIĞI TEK MESAJ: buradaki her onay PARA TAAHHÜDÜ. Onay bekleyen
- * adaylar en üstte, her birinin toplam maliyeti onay düğmesinin ÜZERİNDE
- * yazıyor ve kuralın o gönderiyi neden seçtiği okunabilir.
+ * SAYFANIN TAŞIDIĞI TEK MESAJ: buradaki her onay PARA TAAHHÜDÜ. Harcanacak
+ * tutar her zaman onay düğmesinin ÜSTÜNDE yazıyor. Modül 5'ten farkı bu:
+ * orada karar harcamayı DURDURUYORDU, burada BAŞLATIYOR.
  *
- * Modül 5'ten farkı bu: orada karar harcamayı durduruyordu, burada başlatıyor.
+ * ═══ EKRAN SADELEŞTİ — ÜÇ YÜZEY KALDIRILDI ═══
+ *
+ * Kullanıcının tarifi "çok karışık ve kullanışsız" oldu ve sebebi ölçüldü:
+ * aynı sayfada BEŞ ayrı eylem yüzeyi vardı ve üçü ya çalışmıyordu ya da
+ * bildirim havuzuyla aynı işi ikinci kez yapıyordu.
+ *
+ *   · "Gönderi öne çıkar" — havuzla AYNI işi yapan ikinci bir yayın yolu.
+ *     Aynı gönderi iki farklı yerden, iki farklı ekranla yayınlanabiliyordu.
+ *   · "Onaylananları şimdi oluştur" — havuzdan onaylanan kart zaten anında
+ *     yayınlanıyor; düğme neredeyse her zaman "0 boost oluşturuldu" diyordu.
+ *   · "YouTube kanalı ekle" — kanal bağlama işi Platform Bağlantıları'na
+ *     ait ve orada AYRI bir entegrasyon olarak kurulacak; boost ekranında
+ *     durması, bağlantı kurulumunu boost yetkisinin yanına koyuyordu.
+ *
+ * Geriye TEK bir eylem yüzeyi kaldı: bildirim havuzu. Kural motorunun
+ * adayları, kurallar ve geçmiş onun ALTINDA — üçü de okunacak şeyler,
+ * yapılacak şeyler değil.
  */
 export default async function AutoBoostPage({
   searchParams,
@@ -54,12 +64,6 @@ export default async function AutoBoostPage({
 
   const canApprove = hasPermission(session, 'boost.approve');
   const canWrite = hasPermission(session, 'boost.write');
-  /*
-   * KANAL EKLEME AYRI YETKİ. Bağlantı kurmak/kaldırmak CLAUDE.md'ye göre org
-   * yöneticisi işi; kart onaylayabilen herkesin yeni kanal bağlayabilmesi,
-   * boost yetkisiyle bağlantı yetkisini aynı kefeye koymak olurdu.
-   */
-  const canManageConnections = hasPermission(session, 'connection.write');
 
   const [boosts, rules] = await Promise.all([
     serverApiFetch<BoostRecord[]>(`/boosts?clientId=${clientId}`).catch(() => null),
@@ -83,15 +87,11 @@ export default async function AutoBoostPage({
             {clientName} · günde iki kez değerlendiriliyor
           </p>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {/*
-            ÖN AYAR ÖNCE, "onaylananları oluştur" SONRA — soldan sağa
-            okunduğunda doğru sıra bu: önce NASIL yayınlanacağı, sonra
-            yayınlama eylemi.
-          */}
-          {canWrite && <BoostOnAyariDugmesi clientId={clientId} canWrite={canWrite} />}
-          {canApprove && <CreateApprovedButton clientId={clientId} />}
-        </div>
+        {/*
+          BAŞLIK SATIRINDA TEK DÜĞME: ön ayar. Kartın nasıl yayınlanacağını
+          belirleyen tek yer orası ve sayfadaki diğer her şey onun sonucu.
+        */}
+        {canWrite && <BoostOnAyariDugmesi clientId={clientId} canWrite={canWrite} />}
       </header>
 
 
@@ -100,67 +100,23 @@ export default async function AutoBoostPage({
         seçiliyor: üst bardaki değiştirici.
 
         Burada bütün müşterileri listeleyen ikinci bir şerit vardı ve üst
-        bardaki değiştiriciyle ÇAKIŞIYORDU. Şeritten bir müşteriye geçmek
+        bardaki değiştiriciyle ÇAKIŞIYORDU: şeritten bir müşteriye geçmek
         adrese `?musteri=` yazıyor, sayfalar ise aktif müşteriyi
         `params.musteri ?? session.activeClientId` sırasıyla çözüyor — yani
-        URL cookie'yi eziyordu. Sonuç: üst bar "Ege Birlik Yapı" yazarken
-        gövde Fenbay'ın verisini gösteriyordu.
-
-        Veri sızıntısı DEĞİLDİ (RLS her iki müşteriye de erişimi olan ajans
-        yöneticisi için doğru davranıyor, `workspace-isolation-rls.spec.ts`
-        bunu kanıtlıyor) ama ekranda yazan workspace ile gövdedeki veri
-        birbirini tutmuyordu — sızıntıdan ayırt edilemeyecek kadar kötü bir
-        hâl. Tek denetim, tek cevap.
+        URL cookie'yi eziyordu. Üst bar "Ege Birlik Yapı" yazarken gövde
+        Fenbay'ın verisini gösteriyordu. Sızıntı DEĞİLDİ ama sızıntıdan
+        ayırt edilemeyecek kadar kötü bir hâl.
       */}
 
       {/*
-        ELLE BOOST BU SAYFADA, ayrı bir sayfada değil — kural yolu ve elle yol
-        aynı işin iki üreticisi ve ayırmak "hangi ekrandan hangisi açılıyordu"
-        sorusunu üretirdi.
+        BİLDİRİM HAVUZU EN ÜSTTE ve sayfanın TEK eylem yüzeyi.
 
-        AMA BAŞLIK SATIRININ İÇİNDE DEĞİL, ALTINDA. İlk yazımda başlığın düğme
-        satırındaydı ve dört adımlı form iki düğmenin yanına flex öğesi olarak
-        giriyordu: satırdaki gönderi metni nowrap olduğu için formun min-content
-        genişliği 1142px'e çıkıyor, flex öğesi de `min-width:auto` yüzünden o
-        genişliğin altına küçülemiyordu. Ölçülen sonuç 1280px ekranda 153px
-        yatay BELGE taşmasıydı ve kenar çubuğu sticky yalnızca dikey
-        sabitlediği için sağa kaydırınca sol kenar ekrandan çıkıyordu —
-        kullanıcıya "metinler soldan kesilmiş" görünüyordu.
+        Eskiden "Gönderi öne çıkar" formunun ALTINDAYDI ve gerekçe "havuzun
+        yayın düğmesi henüz bağlanmamıştı" idi. O gerekçe çürüdü: havuz
+        çalışıyor, para harcıyor ve kartların onayı buradan veriliyor.
+        Formun kendisi de kalktı.
       */}
-      <ManualBoost clientId={clientId} canPublish={canApprove} />
-
-      {/*
-        ADVETICS 1.0 — BİLDİRİM HAVUZU VE KANAL EKLEME.
-        
-        Havuz ELLE BOOST'UN ÜSTÜNDE DEĞİL ALTINDA ve bu sıralama bilinçli:
-        elle boost bugün çalışan ve para harcayan yol, havuz ise yeni ve
-        yayın düğmesi henüz bağlanmamış. Çalışmayan bir düğmeyi çalışanın
-        üstüne koymak, kullanıcıyı önce ona yönlendirirdi.
-        
-        Kanal ekleme `connection.write` istiyor — bağlantı kurulumu işi ve
-        org yöneticisine ait; kart onaylayabilen herkesin yeni kanal
-        bağlayabilmesi doğru olmazdı.
-      */}
-      {/*
-        SARMALAYICI BAŞLIK KALDIRILDI — AYNI KARTTA ÜST ÜSTE İKİ BAŞLIK VARDI.
-        Burada "Otomatik boost" h2'si ve altında bir açıklama duruyordu;
-        hemen altındaki `BildirimHavuzu` kendi `<section>` ve `<header>`ını
-        taşıyor ve İKİNCİ bir h2 ("Bildirim Havuzu" + sayaç) daha basıyordu.
-        Aynı kutunun içinde iki başlık, iki açıklama — panelin karmaşık
-        görünmesinin en somut sebeplerinden biri.
-
-        Bileşen kendi kartını çizdiği için dış kart da gereksizdi; kanal
-        ekleme düğmesi tek başına kalan tek şey ve o da havuzun üstünde
-        duruyor.
-      */}
-      <div className="min-w-0 space-y-2">
-        {canManageConnections && (
-          <div className="flex justify-end">
-            <YouTubeKanalEkle clientId={clientId} />
-          </div>
-        )}
-        <BildirimHavuzu clientId={clientId} />
-      </div>
+      <BildirimHavuzu clientId={clientId} />
 
       {boosts === null ? (
         <Notice tone="error">Boost verisi alınamadı.</Notice>

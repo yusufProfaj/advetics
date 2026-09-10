@@ -5,10 +5,12 @@ import {
   boostNameBase,
   MEDIA_TYPE_LABELS,
   type MediaType,
+  type AutoBoostQueueOverride,
   type MetaPresetSettings,
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { butceKipi, butceyiCoz, hedeflemeyiCoz, kartPlatformu } from './kart-ozellestirme';
 import { AssetUploaderService } from '../assets/asset-uploader.service';
 import { BoostExecutorService } from '../boosts/boost-executor.service';
 import { BoostsService } from '../boosts/boosts.service';
@@ -72,6 +74,12 @@ export class AutoBoostLaunchService {
     ctx: TenantContext,
     queueItemId: string,
     approve: boolean,
+    /**
+     * SADECE BU KART İÇİN geçerli ayarlar — ön ayarı DEĞİŞTİRMİYOR.
+     * Verilmeyen alan ön ayardan geliyor; yarısı boş bir nesne, boş
+     * bırakılan alanları sıfırlamak anlamına GELMİYOR.
+     */
+    override?: AutoBoostQueueOverride,
   ): Promise<{ status: string; message: string }> {
     /*
      * BAĞLAM DARALTMASI KAPATILIYOR (`activeClientId: null`).
@@ -140,9 +148,35 @@ export class AutoBoostLaunchService {
       return { status: 'rejected', message: 'Kart reddedildi.' };
     }
 
-    if (kayit.platform === 'google') return this.launchGoogle(ctx, scoped, kayit);
+    /*
+     * ÖZELLEŞTİRME BURADA UYGULANIYOR — DALLARDAN ÖNCE.
+     *
+     * İki yayın dalına ayrı ayrı yazmak, birinin bir gün diğerini
+     * tutmaması demekti: Google dalı bütçeyi ön ayardan okumaya devam
+     * eder ve kullanıcının girdiği tutar SESSİZCE yok sayılırdı.
+     */
+    const butce = butceyiCoz(
+      {
+        budgetMode: butceKipi(kayit.budget_mode),
+        dailyBudgetMicros: kayit.daily_budget_micros,
+        totalBudgetMicros: kayit.total_budget_micros,
+        durationDays: kayit.duration_days,
+      },
+      kartPlatformu(kayit.platform),
+      override,
+    );
+    const ozellestirilmis: KuyrukSatiri = {
+      ...kayit,
+      budget_mode: butce.budgetMode,
+      daily_budget_micros: butce.dailyBudgetMicros,
+      total_budget_micros: butce.totalBudgetMicros,
+      duration_days: butce.durationDays,
+      settings: kayit.settings,
+    };
 
-    return this.launchMeta(ctx, scoped, kayit);
+    if (kayit.platform === 'google') return this.launchGoogle(ctx, scoped, ozellestirilmis);
+
+    return this.launchMeta(ctx, scoped, ozellestirilmis, override);
   }
 
   /**
@@ -157,6 +191,7 @@ export class AutoBoostLaunchService {
     ctx: TenantContext,
     scoped: TenantContext,
     kayit: KuyrukSatiri,
+    override?: AutoBoostQueueOverride,
   ): Promise<{ status: string; message: string }> {
     if (!kayit.preset_id || !kayit.preset_enabled) {
       throw new BadRequestException(
@@ -185,7 +220,15 @@ export class AutoBoostLaunchService {
     if (!ayar.success || ayar.data.platform !== 'meta') {
       throw new BadRequestException(ON_AYAR_BOZUK);
     }
-    const meta = ayar.data;
+    /*
+     * HEDEFLEME ÖN AYAR AYRIŞTIRILDIKTAN SONRA birleştiriliyor: özelleştirme
+     * ham JSON'a değil, DOĞRULANMIŞ nesneye biniyor. Ters sırada bozuk bir
+     * ön ayar üstüne yazılan geçerli bir hedefleme, şemadan geçmiş gibi
+     * görünürdü.
+     */
+    const birlesik = hedeflemeyiCoz(ayar.data, override);
+    if (birlesik.platform !== 'meta') throw new BadRequestException(ON_AYAR_BOZUK);
+    const meta = birlesik;
 
     // --- Kartı KİLİTLE (ikinci onay engelleniyor)
     const kilit = await this.prisma.withTenant(scoped, (tx) =>

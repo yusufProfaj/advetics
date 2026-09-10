@@ -350,9 +350,88 @@ export const autoBoostQueueQuerySchema = z.object({
 });
 export type AutoBoostQueueQuery = z.infer<typeof autoBoostQueueQuerySchema>;
 
-export const autoBoostDecisionSchema = z.object({
-  approve: z.boolean(),
-});
+/**
+ * ═══ KART BAZINDA ÖZELLEŞTİRME ═══
+ *
+ * Ön ayar workspace geneli: "bu müşterinin her gönderisi şu bütçeyle, şu
+ * kitleye". Ama tek bir gönderi bazen farklı davranmayı hak ediyor —
+ * kampanya dönemindeki bir duyuru, yalnızca bir şehre yapılan bir ilan.
+ * Kullanıcının isteği birebir buydu: "sadece o gönderi için kaç gün,
+ * toplamda kaç TL, hangi hedef kitle ve şehir".
+ *
+ * ═══ ÖN AYARI DEĞİŞTİRMİYOR — YALNIZCA BU KARTA UYGULANIYOR ═══
+ *
+ * Kaydedilmiyor; onay isteğiyle birlikte gidiyor ve `boosts` satırına
+ * yazılıyor. Ön ayarı kalıcı değiştirmek, "bir gönderi için" denen bir
+ * ayarın sonraki bütün gönderileri sessizce etkilemesi demekti.
+ *
+ * ALANLARIN HEPSİ İSTEĞE BAĞLI ve verilmeyen alan ÖN AYARDAN geliyor.
+ * Yarısı boş bir nesne göndermek, boş bırakılan alanları sıfırlamak
+ * anlamına GELMEZ.
+ */
+export const autoBoostQueueOverrideSchema = z
+  .object({
+    budget: autoBoostBudgetSchema.optional(),
+    /**
+     * HEDEFLEME YALNIZCA META'DA. Google (Demand Gen) tarafında kitle ve
+     * lokasyon kampanya seviyesinde ve bu ürün orada henüz yazma yapmıyor;
+     * kabul edip yok saymak, kullanıcıya çalışan bir alan göstermek olurdu.
+     */
+    targeting: z
+      .object({
+        /**
+         * Kayıtlı kitle seçilirse DİĞER hedefleme alanları YOK SAYILIYOR —
+         * ön ayardaki kuralın aynısı. Kitle Meta'da kendi lokasyonunu ve
+         * demografisini taşıyor; ikisini birleştirmek "kesişim mi birleşim
+         * mi" sorusunu bizim cevaplamamız demek.
+         */
+        savedAudienceId: z.string().min(1).max(64).nullable(),
+        locations: z
+          .array(
+            z.object({
+              key: z.string().min(1).max(64),
+              type: z.enum(['country', 'region', 'city']),
+            }),
+          )
+          .max(25),
+        ageMin: z.number().int().min(13).max(65),
+        ageMax: z.number().int().min(13).max(65),
+        genders: z.enum(['all', 'male', 'female']),
+      })
+      .optional(),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    if (v.targeting && v.targeting.ageMin > v.targeting.ageMax) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['targeting', 'ageMin'],
+        message: 'Alt yaş üst yaştan büyük olamaz.',
+      });
+    }
+  });
+export type AutoBoostQueueOverride = z.infer<typeof autoBoostQueueOverrideSchema>;
+
+export const autoBoostDecisionSchema = z
+  .object({
+    approve: z.boolean(),
+    override: autoBoostQueueOverrideSchema.optional(),
+  })
+  .superRefine((v, ctx) => {
+    /*
+     * REDDEDERKEN ÖZELLEŞTİRME ANLAMSIZ ve sessiz bırakmak tehlikeli:
+     * kullanıcı bütçeyi düzenleyip yanlışlıkla "Reddet"e basarsa,
+     * düzenlemesinin hiçbir yere gitmediğini hiçbir yerde görmezdi.
+     */
+    if (!v.approve && v.override) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['override'],
+        message: 'Reddedilen bir kart için özelleştirme gönderilemez.',
+      });
+    }
+  });
+export type AutoBoostDecisionInput = z.infer<typeof autoBoostDecisionSchema>;
 
 // -----------------------------------------------------------------------------
 // Abonelik sağlığı — ÖLÜ ADAM DÜĞMESİ

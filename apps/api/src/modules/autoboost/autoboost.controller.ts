@@ -15,6 +15,7 @@ import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import type { AutoBoostQueueList } from '@advetics/shared';
 import {
   autoBoostDecisionSchema,
+  type AutoBoostDecisionInput,
   autoBoostPresetInputSchema,
   type AutoBoostPresetInput,
   type AutoBoostPresetRecord,
@@ -115,9 +116,14 @@ export class AutoBoostController {
   decide(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(zodBody(autoBoostDecisionSchema)) body: { approve: boolean },
+    @Body(zodBody(autoBoostDecisionSchema)) body: AutoBoostDecisionInput,
   ): Promise<{ status: string; message: string }> {
-    return this.launch.decide(ctx, id, body.approve);
+    /*
+     * ÖZELLEŞTİRME BURADAN GEÇİYOR ve ön ayarı DEĞİŞTİRMİYOR. Kaydeden bir
+     * uç değil: kullanıcı "sadece bu gönderi için" dediğinde sonraki
+     * gönderilerin sessizce etkilenmesi, istediğinin tam tersi olurdu.
+     */
+    return this.launch.decide(ctx, id, body.approve, body.override);
   }
 
   /**

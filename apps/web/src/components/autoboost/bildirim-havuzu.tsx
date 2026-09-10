@@ -5,10 +5,12 @@ import { useCallback, useEffect, useState } from 'react';
 import type {
   AutoBoostQueueItemRecord,
   AutoBoostQueueList,
+  AutoBoostQueueOverride,
   AutoBoostSubscriptionHealth,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatMoney, formatRelative } from '@/lib/format';
+import { KartDuzenle } from '@/components/autoboost/kart-duzenle';
 
 /**
  * BİLDİRİM HAVUZU — Advetics 1.0'ın taşıdığı vaat.
@@ -159,11 +161,20 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
         </div>
       )}
 
-      <ul className="space-y-2">
+      {/*
+        IZGARA — DİKEY KARTLAR YAN YANA.
+        Kartlar tam genişlikte yatay şeritlerdi: 64 piksellik bir küçük
+        resim, yanında metin, sağda bir düğme. İçerik bir Instagram
+        gönderisi ve gönderiyi TANIMANIN yolu görselini görmek; şerit
+        düzeninde kullanıcı neyi onayladığını ancak "İçeriği aç"a basıp
+        yeni sekmede bakarak anlıyordu.
+      */}
+      <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {liste.items.map((k) => (
           <li key={k.id}>
             <Kart
               kayit={k}
+              clientId={clientId}
               onDegisti={() => {
                 // İKİSİ BİRDEN: kartın kendi listesi (istemci state'i) VE
                 // sayfanın sunucu tarafı ("Geçmiş" bölümü). Yalnızca
@@ -186,72 +197,143 @@ const PLATFORM_ETIKETI: Record<string, string> = {
 
 function Kart({
   kayit,
+  clientId,
   onDegisti,
 }: {
   kayit: AutoBoostQueueItemRecord;
+  clientId: string;
   onDegisti: () => void;
 }) {
   const [gorselDustu, setGorselDustu] = useState(false);
+  const [duzenleAcik, setDuzenleAcik] = useState(false);
+  const [busy, setBusy] = useState<'onay' | 'ret' | null>(null);
+  const [hata, setHata] = useState<string | null>(null);
+
   const onaylanabilir = kayit.status === 'pending' && kayit.blockedReason === null;
 
-  return (
-    <article className="flex min-w-0 gap-3 rounded-xl border border-line bg-surface p-3">
-      {/*
-        DÜZ `img` — Next/Image DEĞİL. Küçük resimler Meta ve YouTube CDN'inden
-        geliyor ve uzak alan adı yapılandırması gerektiriyordu; elle boost
-        ekranında aynı karar verildi ve görseller ancak öyle göründü.
-        `referrerPolicy` şart: Meta CDN referrer'lı isteği reddediyor.
-      */}
-      {kayit.thumbnailUrl && !gorselDustu ? (
-        <img
-          src={kayit.thumbnailUrl}
-          alt=""
-          referrerPolicy="no-referrer"
-          onError={() => setGorselDustu(true)}
-          className="h-16 w-16 shrink-0 rounded-lg bg-surface-sunken object-cover"
-        />
-      ) : (
-        <div className="grid h-16 w-16 shrink-0 place-items-center rounded-lg bg-surface-sunken text-[10px] text-ink-muted">
-          görsel yok
-        </div>
-      )}
+  /**
+   * KARAR — onayla, reddet ya da ÖZELLEŞTİRİLMİŞ ayarlarla onayla.
+   *
+   * ═══ BU YOL PARA HARCIYOR ═══
+   *
+   * Ara onay adımı YOK: kararı kullanıcı zaten bu ekranda veriyor ve ikinci
+   * kez sormak istenen akışı bozardı. Ama harcanacak tutar düğmelerin
+   * ÜSTÜNDE yazıyor ve engel varsa düğme açılmıyor.
+   */
+  async function karar(approve: boolean, override?: AutoBoostQueueOverride): Promise<void> {
+    setBusy(approve ? 'onay' : 'ret');
+    setHata(null);
+    try {
+      const r = await apiFetch<{ status: string; message: string }>(
+        `/autoboost/queue/${kayit.id}/decision`,
+        {
+          method: 'POST',
+          /*
+           * `override` YALNIZCA VARSA gönderiliyor. Şema `.strict()` ve boş
+           * bir nesne göndermek, "hiçbir alanı değiştirme" ile "hepsini
+           * sıfırla" arasındaki farkı sunucuya taşımak olurdu.
+           */
+          body: JSON.stringify(override ? { approve, override } : { approve }),
+        },
+      );
+      /*
+       * BAŞARISIZ YAYIN DA BİR SONUÇ. Sunucu `failed` dönebiliyor ve mesajı
+       * platformun kendi cümlesini taşıyor; onu göstermeden yenilemek,
+       * kullanıcıya "bir şey oldu ama ne bilmiyorum" bırakırdı.
+       */
+      if (r.status === 'failed') setHata(r.message);
+      setDuzenleAcik(false);
+      onDegisti();
+    } catch (err) {
+      setHata(err instanceof ApiRequestError ? err.message : 'İşlem tamamlanamadı.');
+      throw err;
+    } finally {
+      setBusy(null);
+    }
+  }
 
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span className="rounded border border-line px-1.5 py-0.5 text-[10px] font-medium text-ink-muted">
-            {PLATFORM_ETIKETI[kayit.platform] ?? kayit.platform}
+  return (
+    <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+      {/*
+        ═══ DİKEY GÖNDERİ — 4:5 ═══
+
+        Instagram'ın dikey gönderi oranı. Kare kullanmak dikey gönderilerin
+        ve reels'in üstünü/altını kırpıyor; 4:5 ikisini de gösteriyor ve
+        yatay bir gönderide üstte/altta ince bir zemin bırakıyor —
+        kırpmaktan iyi, çünkü kırpılan yer çoğu zaman ürünün kendisi.
+      */}
+      <div className="relative aspect-[4/5] w-full bg-surface-sunken">
+        {kayit.thumbnailUrl && !gorselDustu ? (
+          /*
+            DÜZ `img` — Next/Image DEĞİL. Küçük resimler Meta ve YouTube
+            CDN'inden geliyor ve uzak alan adı yapılandırması gerektiriyordu;
+            elle boost ekranında aynı karar verildi ve görseller ancak öyle
+            göründü. `referrerPolicy` şart: Meta CDN referrer'lı isteği
+            reddediyor ve beyaz etiket alan adını da sızdırmıyoruz.
+          */
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={kayit.thumbnailUrl}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={() => setGorselDustu(true)}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          /* Görsel yoksa kutu AYNI ORANDA duruyor: ızgarada kartların
+             yüksekliği ayrışırsa göz taraması satır satır yapılamıyor. */
+          <div className="grid h-full w-full place-items-center text-[11px] text-ink-muted">
+            görsel yok
+          </div>
+        )}
+
+        {/* PLATFORM ROZETİ GÖRSELİN ÜSTÜNDE: kartın hangi mecradan geldiği
+            ilk bakışta okunmalı ve metin bloğunda bir satır daha yer
+            kaplamamalı. */}
+        <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
+          {PLATFORM_ETIKETI[kayit.platform] ?? kayit.platform}
+        </span>
+
+        {kayit.status !== 'pending' && (
+          <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
+            {DURUM_ETIKETI[kayit.status] ?? kayit.status}
           </span>
-          {kayit.status !== 'pending' && (
-            <span className="rounded border border-line px-1.5 py-0.5 text-[10px] text-ink-muted">
-              {DURUM_ETIKETI[kayit.status] ?? kayit.status}
-            </span>
-          )}
-          {kayit.publishedAt && (
-            <span className="text-[11px] text-ink-muted">
-              {formatRelative(kayit.publishedAt)}
-            </span>
-          )}
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
+        <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted">
+          {kayit.publishedAt && <span>{formatRelative(kayit.publishedAt)}</span>}
           {kayit.permalink && (
             <a
               href={kayit.permalink}
               target="_blank"
               rel="noreferrer"
-              className="text-[11px] font-medium text-brand hover:underline"
+              className="font-medium text-brand hover:underline"
             >
               İçeriği aç
             </a>
           )}
         </div>
 
-        {/* `line-clamp` — `truncate` DEĞİL: nowrap, formun min-content
-            genişliğini şişirip sayfayı yatay taşırıyordu. */}
-        <p className="mt-1 line-clamp-2 text-sm text-ink">
+        {/* `line-clamp` — `truncate` DEĞİL: nowrap, kartın min-content
+            genişliğini şişirip ızgarayı yatay taşırıyordu. */}
+        <p className="line-clamp-2 min-w-0 text-sm text-ink">
           {kayit.title || 'Başlıksız içerik'}
         </p>
 
+        {/*
+          UYGULANACAK AYAR — DÜĞMELERİN ÜSTÜNDE.
+          Bu düğmeler para harcıyor ve ne kadar harcanacağı karara BAKARKEN
+          görünmeli; altına koymak, kullanıcının tıkladıktan sonra okuması
+          demek olurdu.
+        */}
         {kayit.preset && (
-          <p className="mt-1 text-[11px] text-ink-muted">
-            Uygulanacak: <strong>{formatMoney(kayit.preset.budgetMicros, 'TRY')}</strong>
+          <p className="rounded-lg bg-surface-sunken px-2 py-1.5 text-[11px] text-ink-muted">
+            <strong className="text-ink">
+              {formatMoney(kayit.preset.budgetMicros, 'TRY')}
+            </strong>
             {kayit.preset.budgetMode === 'daily' ? ' / gün' : ' toplam'} ·{' '}
             {kayit.preset.durationDays} gün
           </p>
@@ -262,16 +344,12 @@ function Kart({
 
           Bu blok yoktu ve eksikliği kullanıcıdan birebir şu cümleyle geldi:
           "yayınlandı bildirimi alt tarafta gözüküyor fakat kartta belli
-          olmuyor". Onaydan sonra `OnayDugmesi` `return null` ile kayboluyor,
-          yerine HİÇBİR ŞEY konmuyordu; başarının tek izi sayfanın en
-          altındaki "Geçmiş" satırıydı.
-
-          `externalCampaignId` şemada ZATEN vardı ve API dolduruyordu ama
-          panelde tek bir referansı yoktu — CLAUDE.md: "VERİDE DURAN ALAN,
-          KULLANILMIYORSA YOKTUR."
+          olmuyor". Onaydan sonra düğmeler kayboluyor, yerine HİÇBİR ŞEY
+          konmuyordu; başarının tek izi sayfanın en altındaki "Geçmiş"
+          satırıydı.
         */}
         {kayit.status === 'launched' && (
-          <p className="mt-1.5 inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-ok/40 bg-ok/5 px-2 py-1 text-[11px] text-ink">
+          <p className="inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-ok/40 bg-ok/5 px-2 py-1 text-[11px] text-ink">
             <span aria-hidden="true">✓</span>
             <strong>Yayında</strong>
             {kayit.externalCampaignId && (
@@ -280,7 +358,7 @@ function Kart({
           </p>
         )}
         {kayit.status === 'launching' && (
-          <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-muted px-2 py-1 text-[11px] text-ink-muted">
+          <p className="rounded-lg border border-line bg-surface-muted px-2 py-1 text-[11px] text-ink-muted">
             Yayına alınıyor…
           </p>
         )}
@@ -288,17 +366,80 @@ function Kart({
         {/* ENGEL SEBEBİ SATIRDA. Düğmeyi kapatıp sebebini söylememek,
             kullanıcıya "çalışmıyor" göstermek olurdu. */}
         {kayit.blockedReason && (
-          <p className="mt-1 text-[11px] text-danger">{kayit.blockedReason}</p>
+          <p className="text-[11px] text-danger">{kayit.blockedReason}</p>
+        )}
+        {kayit.error && <p className="text-[11px] text-danger">{kayit.error}</p>}
+        {hata && (
+          <p role="alert" className="text-[11px] text-danger">
+            {hata}
+          </p>
         )}
 
-        {kayit.error && (
-          <p className="mt-1 text-[11px] text-danger">{kayit.error}</p>
+        {/*
+          YOUTUBE KAMPANYASI DURAKLATILMIŞ AÇILIYOR ve bu kullanıcıya
+          SÖYLENİYOR. Meta yolundan farkı bilinçli: Google yazma yolu canlıda
+          hiç çalışmadı ve ilk gerçek çağrının sonucunu insan görmeden para
+          harcamamalı. Söylemezsek kullanıcı "yayınladım" sanıp Ads
+          Manager'da duraklatılmış bir kampanya bulur ve sebebini arar.
+        */}
+        {kayit.status === 'pending' && kayit.platform === 'google' && (
+          <p className="text-[10px] text-ink-muted">
+            Kampanya <strong>duraklatılmış</strong> açılır; Google Ads’te gözden
+            geçirip yayına alman gerekiyor.
+          </p>
+        )}
+
+        {/*
+          ═══ ÜÇ DÜĞME, ÜÇ AYRI KARAR ═══
+
+          Onayla ön ayarla yayınlıyor; Düzenle SADECE BU GÖNDERİ için
+          bütçeyi, süreyi ve hedeflemeyi değiştirip yayınlıyor; Reddet kartı
+          kapatıyor. Düzenle'yi onayın içine gömmek (önce pencere, sonra
+          yayın) çoğunluk için fazladan bir adım olurdu: kartların çoğu ön
+          ayarla yayınlanıyor ve akışın vaadi "tek tık".
+
+          `mt-auto`: ızgaradaki kartlar farklı uzunlukta metin taşıyor ve
+          düğmelerin ALT HİZADA olması göz taramasını satır satır
+          yapılabilir kılıyor.
+        */}
+        {kayit.status === 'pending' && (
+          <div className="mt-auto grid grid-cols-3 gap-1.5 pt-1">
+            <button
+              type="button"
+              onClick={() => void karar(true).catch(() => undefined)}
+              disabled={!onaylanabilir || busy !== null}
+              className="rounded-lg bg-brand px-2 py-2 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-ink-muted"
+            >
+              {busy === 'onay' ? '…' : 'Onayla'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDuzenleAcik(true)}
+              disabled={!onaylanabilir || busy !== null}
+              className="rounded-lg border border-line px-2 py-2 text-xs font-medium text-ink transition hover:bg-surface-sunken disabled:cursor-not-allowed disabled:text-ink-muted"
+            >
+              Düzenle
+            </button>
+            <button
+              type="button"
+              onClick={() => void karar(false).catch(() => undefined)}
+              disabled={busy !== null}
+              className="rounded-lg border border-line px-2 py-2 text-xs font-medium text-ink-muted transition hover:bg-surface-sunken hover:text-danger disabled:cursor-not-allowed"
+            >
+              {busy === 'ret' ? '…' : 'Reddet'}
+            </button>
+          </div>
         )}
       </div>
 
-      <div className="shrink-0 self-center">
-        <OnayDugmesi kayit={kayit} etkin={onaylanabilir} onDegisti={onDegisti} />
-      </div>
+      {duzenleAcik && (
+        <KartDuzenle
+          kayit={kayit}
+          clientId={clientId}
+          onKapat={() => setDuzenleAcik(false)}
+          onYayinla={(override) => karar(true, override)}
+        />
+      )}
     </article>
   );
 }
@@ -310,95 +451,3 @@ const DURUM_ETIKETI: Record<string, string> = {
   launched: 'Yayında',
   failed: 'Başarısız',
 };
-
-/**
- * "Onayla ve Boostla".
- *
- * ═══ BU DÜĞME PARA HARCIYOR ═══
- *
- * Ara onay adımı YOK — kararı kullanıcı zaten bu ekranda veriyor ve ikinci
- * kez sormak istenen akışı bozardı. Ama harcanacak tutar düğmenin ÜSTÜNDE
- * yazıyor (kartın ön ayar satırı) ve engel varsa düğme açılmıyor.
- *
- * İKİ PLATFORM DA AÇIK ama davranışları FARKLI ve fark yazılı: Instagram
- * doğrudan yayına giriyor, YouTube kampanyası DURAKLATILMIŞ açılıyor. Google
- * yazma yolu canlıda hiç çalışmadı ve ilk gerçek çağrının sonucunu insan
- * görmeden para harcamamalı.
- */
-function OnayDugmesi({
-  kayit,
-  etkin,
-  onDegisti,
-}: {
-  kayit: AutoBoostQueueItemRecord;
-  etkin: boolean;
-  onDegisti: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [hata, setHata] = useState<string | null>(null);
-
-  if (kayit.status !== 'pending') return null;
-
-  const acik = etkin && !busy;
-
-  async function karar(approve: boolean): Promise<void> {
-    setBusy(true);
-    setHata(null);
-    try {
-      const r = await apiFetch<{ status: string; message: string }>(
-        `/autoboost/queue/${kayit.id}/decision`,
-        { method: 'POST', body: JSON.stringify({ approve }) },
-      );
-      /*
-       * BAŞARISIZ YAYIN DA BİR SONUÇ. Sunucu `failed` dönebiliyor ve mesajı
-       * platformun kendi cümlesini taşıyor; onu göstermeden yenilemek,
-       * kullanıcıya "bir şey oldu ama ne bilmiyorum" bırakırdı.
-       */
-      if (r.status === 'failed') setHata(r.message);
-      onDegisti();
-    } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'İşlem tamamlanamadı.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="max-w-[12rem] text-right">
-      <button
-        type="button"
-        onClick={() => void karar(true)}
-        disabled={!acik}
-        className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-ink-muted"
-      >
-        {busy ? 'Yayınlanıyor…' : 'Onayla ve Boostla'}
-      </button>
-
-      {acik && (
-        <button
-          type="button"
-          onClick={() => void karar(false)}
-          className="mt-1 block w-full rounded-lg border border-line px-3 py-1 text-[11px] font-medium text-ink-muted hover:bg-surface-sunken"
-        >
-          Reddet
-        </button>
-      )}
-
-      {/*
-        YOUTUBE KAMPANYASI DURAKLATILMIŞ AÇILIYOR ve bu kullanıcıya SÖYLENİYOR.
-        Meta yolundan farkı bilinçli: Google yazma yolu canlıda hiç çalışmadı
-        ve ilk gerçek çağrının sonucunu insan görmeden para harcamamalı.
-        Söylemezsek kullanıcı "yayınladım" sanıp Ads Manager'da duraklatılmış
-        bir kampanya bulur ve sebebini arar.
-      */}
-      {kayit.platform === 'google' && (
-        <p className="mt-1 text-[10px] text-ink-muted">
-          Kampanya <strong>duraklatılmış</strong> açılır; Google Ads’te gözden
-          geçirip yayına alman gerekiyor.
-        </p>
-      )}
-
-      {hata && <p className="mt-1 text-[10px] text-danger">{hata}</p>}
-    </div>
-  );
-}
