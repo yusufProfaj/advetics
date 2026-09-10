@@ -249,11 +249,45 @@ $$;
  * `clients` tablosunun kendi politikası bu fonksiyonu KULLANMIYOR, kuralını
  * inline yazıyor. Bu şart: müşteri listesi daralsaydı, bir müşteri seçen
  * kullanıcı başka bir müşteriye geçemezdi.
+ *
+ * ┌─ `is_org_admin()` KISA DEVRESİ KALDIRILDI — ÖLÇÜLDÜ ───────────────────┐
+ * │                                                                        │
+ * │ Yüklem `is_org_admin() OR target = ANY(current_client_ids())` idi.     │
+ * │ Org yöneticisinde ilk taraf KOŞULSUZ true; panelde bir workspace       │
+ * │ seçili değilse üçüncü satır da true. Geriye `has_context()` kalıyordu  │
+ * │ — YANİ YÜKLEM YOK.                                                     │
+ * │                                                                        │
+ * │ `org_id` TAŞIYAN tablolarda görünmüyordu: politikaları ayrıca          │
+ * │ `app.org_kapsaminda(org_id)` yazıyor. Ama `insights_daily`,            │
+ * │ `campaigns`, `ad_groups`, `ads` ve `creatives` `org_id` TAŞIMIYOR      │
+ * │ (denormalize edilen kolon `client_id`) ve politikaları TEK BAŞINA bu   │
+ * │ fonksiyon. `insights-kiraci-izolasyonu-rls.spec.ts` iki kiracı kurup   │
+ * │ ölçtü: ikisi de görünüyordu.                                           │
+ * │                                                                        │
+ * │ AYNI BOŞLUK YAVAŞLIĞIN DA SEBEBİ. Yüklem ortadan kalkınca              │
+ * │ `@@index([clientId, date DESC, entityLevel])` kullanılamıyor (indeks   │
+ * │ `client_id` ile başlıyor) ve ajans görünümü bütün kiracıların          │
+ * │ satırlarını tarıyordu. Kullanıcının tarifi "ajans tarafına             │
+ * │ tıkladığımda çok bekletiyor"; workspace SEÇİLİYKEN beklemiyordu,       │
+ * │ çünkü orada üçüncü satırın yüklemi geri geliyordu.                     │
+ * │                                                                        │
+ * │ KAPSAM KAYBI YOK: `current_client_ids()` org yöneticisi için ZATEN o   │
+ * │ şirketin (ya da "tüm şirketler" modunda ajansın) BÜTÜN workspace'lerini│
+ * │ taşıyor — `tenant-context.service.ts` `hasOrgScope` dalında listeyi    │
+ * │ veritabanından kuruyor. Kısa devre, o liste var olmadan önceki         │
+ * │ dönemden kalmış bir kestirmeydi.                                       │
+ * │                                                                        │
+ * │ TEK DAVRANIŞ DEĞİŞİKLİĞİ ARŞİVLENMİŞ WORKSPACE'LERDE: `clientIds`      │
+ * │ onları dışarıda bırakıyor, yani arşivli bir workspace'in METRİK ve     │
+ * │ KAMPANYA satırları org yöneticisine de kapanıyor. Workspace'in KENDİSİ │
+ * │ görünür kalıyor (`clients` politikası kendi kuralını yazıyor ve        │
+ * │ `is_org_admin()` orada duruyor), yani arşivden çıkarmak hâlâ mümkün.   │
+ * └────────────────────────────────────────────────────────────────────────┘
  */
 CREATE OR REPLACE FUNCTION app.can_access_client(target uuid) RETURNS boolean
 LANGUAGE sql STABLE AS $$
   SELECT app.has_context()
-     AND (app.is_org_admin() OR target = ANY (app.current_client_ids()))
+     AND target = ANY (app.current_client_ids())
      AND (
        app.current_active_client_id() IS NULL
        OR target = app.current_active_client_id()

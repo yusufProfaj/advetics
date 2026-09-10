@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHarness, type Harness } from '../../test/pglite-harness';
 
@@ -67,12 +69,56 @@ async function canAccess(target: string): Promise<boolean> {
   return rows[0]!.ok;
 }
 
-describe('can_access_client — yetki katmanı (değişmedi)', () => {
-  it('org yöneticisi seçim yokken HER workspace’i görüyor', async () => {
+describe('can_access_client — yetki katmanı', () => {
+  it('KRİTİK: org yöneticisi de LİSTESİYLE sınırlı — kısa devre YOK', async () => {
+    /*
+     * ═══ BU İDDİA TERSİNE ÇEVRİLDİ VE SEBEBİ ÖLÇÜLDÜ ═══
+     *
+     * Eskiden burada "listesinde OLMAYAN bir müşteriyi bile görüyor"
+     * yazıyordu ve gerekçe '"Tümü" görünümünün çalışması buna bağlı' idi.
+     * O gerekçe ÇÜRÜDÜ: `tenant-context.service.ts` org geneli yetkili
+     * kullanıcı için `clientIds`i VERİTABANINDAN kuruyor ve o listede
+     * şirketin bütün workspace'leri zaten var. Kısa devre, liste var
+     * olmadan önceki dönemden kalmıştı.
+     *
+     * Bedeli iki tarafta birden ölçüldü
+     * (`insights-kiraci-izolasyonu-rls.spec.ts`):
+     *
+     *   · İZOLASYON — `insights_daily`, `campaigns`, `ad_groups`, `ads` ve
+     *     `creatives` `org_id` TAŞIMIYOR; politikaları tek başına bu
+     *     fonksiyon. Kısa devre yüklemi tamamen kaldırıyor ve BAŞKA
+     *     kiracının satırları görünüyordu.
+     *   · HIZ — yüklem yokken `@@index([clientId, ...])` kullanılamıyor;
+     *     ajans görünümü bütün kiracıların satırlarını tarıyordu.
+     */
     await setContext({ clientIds: [CLIENT_A], isOrgAdmin: true, activeClientId: null });
     expect(await canAccess(CLIENT_A)).toBe(true);
-    // Listesinde olmayan bir müşteri bile: org geneli yetki bunu kapsıyor ve
-    // "Tümü" görünümünün çalışması buna bağlı.
+    expect(await canAccess(CLIENT_C)).toBe(false);
+  });
+
+  it('KRİTİK: "Tümü" görünümü LİSTEDEN çalışıyor — uygulama katmanı dolduruyor', async () => {
+    /*
+     * Yukarıdaki iddia tek başına bir REGRESYON gibi okunabilir: "org
+     * yöneticisi artık her şeyi göremiyor". Görebiliyor — ama listesi
+     * üzerinden. O listeyi kuran kod BURADA kilitleniyor, yoksa bir gün
+     * daraltılırsa yöneticiler sessizce workspace kaybeder.
+     */
+    const KAYNAK = readFileSync(
+      join(__dirname, '..', 'modules', 'auth', 'tenant-context.service.ts'),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    const bas = KAYNAK.indexOf('if (hasOrgScope)');
+    expect(bas, 'hasOrgScope dalı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const dal = KAYNAK.slice(bas, KAYNAK.indexOf('} else {', bas));
+    expect(dal).toContain('this.db.client.findMany');
+    expect(dal).toContain('clientIds = all.map((c) => c.id)');
+
+    // Ve fonksiyon o listeyi GERÇEKTEN kabul ediyor.
+    await setContext({
+      clientIds: [CLIENT_A, CLIENT_B, CLIENT_C],
+      isOrgAdmin: true,
+      activeClientId: null,
+    });
     expect(await canAccess(CLIENT_C)).toBe(true);
   });
 
