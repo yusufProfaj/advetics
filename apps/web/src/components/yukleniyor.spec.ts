@@ -17,7 +17,8 @@ import { describe, expect, it } from 'vitest';
  * anda sönerdi.
  */
 const YUK = readFileSync(join(__dirname, 'yukleniyor.tsx'), 'utf8');
-const SECICI = readFileSync(join(__dirname, 'client-switcher.tsx'), 'utf8');
+/* Üst bardaki seçici: iki ayrı seçici tek `kapsam-secici`de birleşti. */
+const SECICI = readFileSync(join(__dirname, 'kapsam-secici.tsx'), 'utf8');
 const TABLO = readFileSync(join(__dirname, 'musteri-tablosu.tsx'), 'utf8');
 const SIHIRBAZ = readFileSync(
   join(__dirname, 'tenancy', 'client-setup-wizard.tsx'),
@@ -54,7 +55,13 @@ describe('KRİTİK: bekleme penceresi tazelemeyi kapsıyor', () => {
    * ZAMAN ARALIĞI.
    */
   it('workspace seçici: refresh startTransition içinde', () => {
-    expect(SECICI_KOD).toContain('startTransition(() => router.refresh())');
+    /*
+     * TAZELEME `startTransition` İÇİNDE. Dışarıda çağrılırsa `isPending`
+     * hiç `true` olmuyor ve gösterge sunucu tazelemesi sürerken sönüyor.
+     * Birleşik seçicide çağrı çok satırlı olduğu için iki parça aranıyor.
+     */
+    expect(SECICI_KOD).toContain('startTransition(() => {');
+    expect(SECICI_KOD).toContain('router.refresh();');
   });
 
   it('workspace seçici: gösterge İKİ bayrağı da okuyor', () => {

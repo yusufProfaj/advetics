@@ -1,12 +1,13 @@
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
-import { ClientSwitcher } from '@/components/client-switcher';
-import { SirketSecici } from '@/components/sirket-secici';
+import { KapsamSecici, type KapsamSirketi } from '@/components/kapsam-secici';
 import { LogoutButton } from '@/components/logout-button';
 import { UyariBandi } from '@/components/uyari-bandi';
 import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
 import { NavSection } from '@/components/nav';
 import { visibleSections } from '@/lib/nav-sections';
+
+import type { ManagerAccountTree } from '@advetics/shared';
 
 interface Branding {
   logoUrl: string | null;
@@ -38,6 +39,46 @@ export default async function DashboardLayout({ children }: { children: React.Re
     requireSession(),
     serverApiFetch<Branding>('/branding').catch(() => null),
   ]);
+
+  /*
+   * ÜST HESAP AĞACI — tek seçicinin üç seviyesi için.
+   *
+   * `session.availableClients` YETMİYOR: o yalnızca AKTİF kapsamın
+   * workspace'lerini taşıyor ve hangi şirkete ait olduklarını söylemiyor.
+   * Ağaç, her şirketin workspace'lerini birlikte veriyor — seçici üç
+   * seviyeyi tek pencerede gösterebilsin diye.
+   *
+   * `?? null` ZORUNLU: uç `null` döndüğünde NestJS gövdeyi BOŞ bırakıyor ve
+   * `serverApiFetch` `undefined` dönüyor; tip `| null` yazsa da eline
+   * `undefined` geliyor (`bos-govde-normalize.spec.ts`).
+   *
+   * HATA YUTULMUYOR ama ekranı da kilitlemiyor: ağaç okunamazsa seçici
+   * tek şirketli hâline düşüyor ve panel çalışmaya devam ediyor. Üst
+   * hesabı olmayan kullanıcı için ağaç zaten `null` ve o YOL NORMAL.
+   */
+  const agac = session.managerAccount
+    ? ((await serverApiFetch<ManagerAccountTree | null>('/manager-account').catch(() => null)) ??
+      null)
+    : null;
+
+  /*
+   * AĞAÇ YOKSA TEK ŞİRKETLİ AĞAÇ KURULUYOR — seçici tek bir şekil biliyor.
+   * İki ayrı yol (ağaçlı / ağaçsız) yazmak, birinin bir gün diğerini
+   * tutmaması demekti.
+   */
+  const sirketler: KapsamSirketi[] = agac
+    ? agac.organizations.map((o) => ({
+        id: o.id,
+        name: o.name,
+        workspaces: o.workspaces.map((w) => ({ id: w.id, name: w.name })),
+      }))
+    : [
+        {
+          id: session.activeOrganizationId,
+          name: session.organization.name,
+          workspaces: session.availableClients.map((c) => ({ id: c.id, name: c.name })),
+        },
+      ];
 
   const themeStyle = branding
     ? ({
@@ -119,32 +160,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
             bir şirkette geçilecek yer yok ve boş bir seçici, kullanıcının
             olmayan bir özelliği aramasına yol açardı.
           */}
-          <div className="flex min-w-0 items-center gap-2">
-            {/*
-              ŞİRKET SEÇİCİ HER ZAMAN BASILIYOR — üst hesabı olmasa bile.
-              Eskiden yalnızca üst hesabı olanlara basılıyordu; "Tüm
-              workspace'ler" eylemi buraya taşınınca o koşul, üst hesabı
-              olmayan kullanıcının ŞİRKET GENELİ GÖRÜNÜMÜ TAMAMEN
-              KAYBETMESİ demeye başladı. Tek şirketli kullanıcıda seçici
-              nereye bakıldığını gösteriyor ve daraltmayı kaldırma
-              düğmesi oluyor.
-            */}
-            <SirketSecici
-              managerAccountName={session.managerAccount?.name ?? session.organization.name}
-              organizations={session.managerAccount?.organizations ?? [session.organization]}
-              activeOrganizationId={session.activeOrganizationId}
-              activeClientId={session.activeClientId}
-              tumSirketler={session.tumSirketler}
-            />
-            <span className="hidden text-ink-muted sm:inline" aria-hidden>
-              ›
-            </span>
-            <ClientSwitcher
-              availableClients={session.availableClients}
-              activeClientId={session.activeClientId}
-              isOrgAdmin={session.isOrgAdmin}
-            />
-          </div>
+          <KapsamSecici
+            ajans={session.managerAccount?.name ?? null}
+            sirketler={sirketler}
+            aktifSirketId={session.activeOrganizationId}
+            aktifWorkspaceId={session.activeClientId}
+            tumSirketler={session.tumSirketler}
+          />
           <div className="hidden text-right sm:block">
             <p className="text-[13px] font-medium leading-tight">{session.user.email}</p>
             <p className="text-[11px] leading-tight text-ink-muted">

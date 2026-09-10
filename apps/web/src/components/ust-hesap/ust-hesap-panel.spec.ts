@@ -25,14 +25,45 @@ function kod(yol: string): string {
 }
 
 const LAYOUT = kod('app/(dashboard)/layout.tsx');
-const SECICI = kod('components/sirket-secici.tsx');
+const SECICI = kod('components/kapsam-secici.tsx');
 const SAYFA = kod('app/(dashboard)/ayarlar/ust-hesap/page.tsx');
 
-describe('şirket seçici üst barda', () => {
+describe('TEK SEÇİCİ — ajans › şirket › workspace', () => {
   it('BOŞA DÜŞME BEKÇİSİ: dosyalar gerçekten okundu', () => {
-    expect(LAYOUT).toContain('ClientSwitcher');
+    expect(LAYOUT).toContain('KapsamSecici');
     expect(SECICI).toContain('switch-org');
     expect(SAYFA).toContain('manager-account');
+  });
+
+  it('KRİTİK: İKİ AYRI SEÇİCİ KALMADI', () => {
+    /*
+     * Önce şirket ve workspace ayrı kutulardaydı, aralarında bir `›`.
+     * İkisi aynı ağacın seviyeleri: ayrı kutulara koymak, kullanıcının
+     * "hangisi hangisini kapsıyor" sorusunu ekrandan değil kafasından
+     * cevaplaması demekti ve bir seviye atlamak iki tıklama istiyordu.
+     */
+    expect(LAYOUT).not.toContain('<ClientSwitcher');
+    expect(LAYOUT).not.toContain('<SirketSecici');
+  });
+
+  it('KRİTİK: üç seviye de TIKLANABİLİR', () => {
+    // Ajans satırı olmadan "tüm şirketler" ulaşılamaz; workspace satırı
+    // olmadan seçici bir seviye eksik kalırdı.
+    expect(SECICI).toContain('const ajansaGec =');
+    expect(SECICI).toContain('const sirketeGec =');
+    expect(SECICI).toContain('const workspaceeGec =');
+  });
+
+  it('KRİTİK: workspace seçmek TEK istekle — istemcide zincir YOK', () => {
+    /*
+     * Başka şirketin workspace'ini seçmek şirketi de değiştiriyor, ama o
+     * kararı SUNUCU veriyor (`switch-client` cookie'leri kendisi ayarlıyor).
+     * İstemcide iki çağrıyı zincirlemek, birincisi başarılı ikincisi
+     * başarısız olduğunda yarım bir duruma düşmek demekti.
+     */
+    const blogu = atama(SECICI, 'workspaceeGec');
+    expect(blogu).toContain("'/auth/switch-client'");
+    expect(blogu).not.toContain("'/auth/switch-org'");
   });
 
   it('KRİTİK: KOŞULSUZ basılıyor — üst hesabı olmayan da şirket geneline dönebilsin', () => {
@@ -50,12 +81,10 @@ describe('şirket seçici üst barda', () => {
      * gösteriyor ve daraltmayı kaldırma düğmesi oluyor.
      */
     expect(LAYOUT).not.toContain('{session.managerAccount && (');
-    expect(LAYOUT).toContain(
-      'managerAccountName={session.managerAccount?.name ?? session.organization.name}',
-    );
-    expect(LAYOUT).toContain(
-      'organizations={session.managerAccount?.organizations ?? [session.organization]}',
-    );
+    // Ajans adı YOKSA `null` — seçici o durumda ajans satırını hiç basmıyor
+    // ama kendisi basılıyor ve şirket geneline dönmeyi sağlıyor.
+    expect(LAYOUT).toContain('ajans={session.managerAccount?.name ?? null}');
+    expect(LAYOUT).toContain('sirketler={sirketler}');
   });
 
   it('KRİTİK: seçici AKTİF şirketi okuyor, ev şirketini DEĞİL', () => {
@@ -65,57 +94,40 @@ describe('şirket seçici üst barda', () => {
      * — kullanıcı başka bir şirketin verisine bakarken üst barda kendi
      * şirketini görürdü. Sızıntı değil ama sızıntıdan ayırt edilemez.
      */
-    expect(LAYOUT).toContain('activeOrganizationId={session.activeOrganizationId}');
-    expect(LAYOUT).not.toContain('activeOrganizationId={session.organization.id}');
+    expect(LAYOUT).toContain('aktifSirketId={session.activeOrganizationId}');
+    expect(LAYOUT).not.toContain('aktifSirketId={session.organization.id}');
   });
 
-  it('şirket seçici workspace seçicinin SOLUNDA — hiyerarşi soldan sağa', () => {
-    const sirket = LAYOUT.indexOf('<SirketSecici');
-    const workspace = LAYOUT.indexOf('<ClientSwitcher');
-    expect(sirket).toBeGreaterThan(-1);
-    expect(workspace).toBeGreaterThan(-1);
-    expect(sirket).toBeLessThan(workspace);
+  it('KRİTİK: ağaç okunamazsa panel ÇALIŞMAYA DEVAM ediyor', () => {
+    /*
+     * `/manager-account` düşerse seçici tek şirketli hâline düşüyor ve
+     * panel açılıyor. Ağacı zorunlu kılmak, tek bir uç yüzünden bütün
+     * paneli kilitlemek olurdu.
+     *
+     * `?? null` da ŞART: uç `null` döndüğünde NestJS gövdeyi boş bırakıyor
+     * ve `serverApiFetch` `undefined` dönüyor (`bos-govde-normalize.spec.ts`).
+     */
+    expect(LAYOUT).toContain(".catch(() => null)) ??");
+    expect(LAYOUT).toContain('const sirketler: KapsamSirketi[] = agac');
   });
 });
 
-describe('ŞİRKET GENELİ GÖRÜNÜM seçicide', () => {
-  const WS_SECICI = kod('components/client-switcher.tsx');
-
-  it('BOŞA DÜŞME BEKÇİSİ: workspace seçici kaynağı okundu', () => {
-    expect(WS_SECICI).toContain('switch-client');
-  });
-
-  it('KRİTİK: "Tüm workspace’ler" satırı workspace seçiciden KALKTI', () => {
+describe('ŞİRKET GENELİ GÖRÜNÜM', () => {
+  it('KRİTİK: AKTİF şirkete tıklamak DARALTMAYI KALDIRIYOR — no-op değil', () => {
     /*
-     * Hiyerarşi Şirket › Workspace: "hepsi" şirketin tamamı demek ve o
-     * karar bir üst seviyeye ait. İki seçicide birden durması, aynı eylemin
-     * iki yeri olması ve birinin bir gün ötekini tutmaması demekti.
+     * "Tüm workspace'ler" satırı workspace seçicisinden kalktı; hiyerarşi
+     * Şirket › Workspace ve "hepsi" şirketin tamamı demek. Aktif şirkete
+     * tıklamak no-op bırakılsaydı, şirket geneline dönmenin yolu KALMAZDI.
      */
-    expect(WS_SECICI).not.toContain('Organizasyon geneli görünüm');
-    expect(WS_SECICI).not.toContain("label=\"Tüm workspace’ler\"");
-  });
-
-  it('KRİTİK: eylem ŞİRKET seçicide ve `clientId: null` gönderiyor', () => {
-    expect(SECICI).toContain('async function sirketGeneli()');
-    expect(SECICI).toContain("JSON.stringify({ clientId: null })");
-  });
-
-  it('KRİTİK: AKTİF şirkete tıklamak artık no-op DEĞİL', () => {
-    /*
-     * Eskiden hiçbir şey yapmıyordu; org geneli görünüme dönmenin yolu
-     * workspace seçicisindeydi. O satır kalkınca burası tek yol oldu —
-     * no-op bırakmak, özelliği ulaşılamaz yapardı.
-     */
-    const secBlogu = blok(SECICI, 'async function sec(');
-    expect(secBlogu).toContain('await sirketGeneli();');
+    const blogu = atama(SECICI, 'sirketeGec');
+    expect(blogu).toContain("{ clientId: null }");
   });
 
   it('şirket geneline dönerken TAM SAYFA yüklemesi YOK', () => {
     // Şirket değişmiyor, yalnızca daraltma kalkıyor; açık süzgeçler aynı
-    // şirkete ait olduğu için anlamlarını koruyor.
-    const blogu = blok(SECICI, 'async function sirketGeneli()');
-    expect(blogu).toContain('router.refresh()');
-    expect(blogu).not.toContain('window.location.assign');
+    // şirkete ait olduğu için anlamlarını koruyor. Son parametre `false`.
+    const blogu = atama(SECICI, 'sirketeGec');
+    expect(blogu).toContain('false)');
   });
 });
 
@@ -148,10 +160,19 @@ describe('geçişin kendisi', () => {
     expect(catchBlogu).toContain('ApiRequestError');
   });
 
-  it('aynı şirkete tıklamak istek ATMIYOR', () => {
-    // Gereksiz bir tur ve tam sayfa yüklemesi; kullanıcı hiçbir şey
-    // değiştirmediği hâlde ekranın sıfırlandığını görürdü.
-    expect(SECICI).toContain('if (organizationId === activeOrganizationId)');
+  it('ZATEN şirket genelindeyken tıklamak istek ATMIYOR', () => {
+    /*
+     * KARAR DEĞİŞTİ AMA RUHU AYNI. Eskiden aktif şirkete tıklamak her
+     * durumda no-op'tu; "tüm workspace'ler" satırı workspace seçiciden
+     * kalkınca o tıklama DARALTMAYI KALDIRMA eylemine dönüştü.
+     *
+     * Gereksiz tur yasağı duruyor: zaten şirket genelindeysek hiçbir şey
+     * değiştirmeyen bir istek, kullanıcıya bir bekleme örtüsü ve sonunda
+     * aynı ekranı göstermek demek.
+     */
+    const blogu = atama(SECICI, 'sirketeGec');
+    expect(blogu).toContain('if (buradayiz && !aktifWorkspaceId)');
+    expect(blogu).toContain('setOpen(false);');
   });
 });
 
@@ -280,6 +301,22 @@ function blok(kaynak: string, desen: string): string {
     }
   }
   throw new Error(`Blok kapanmıyor: ${desen}`);
+}
+
+/**
+ * `const <ad> = ...` atamasının GÖVDESİNİ çıkarır — bir sonraki üst
+ * seviye `const`a kadar.
+ *
+ * `blok()` KULLANILAMIYOR: bu handler'lar `function` değil arrow-const ve
+ * gövdeleri süslü parantezle başlamıyor; `blok` ilk `{`i alıyor ve o
+ * ARGÜMAN NESNESİ oluyordu (`{ clientId: w.id }`). Dilim yine sayarak
+ * değil ama sınırı GERÇEK: bir sonraki bildirim.
+ */
+function atama(kaynak: string, ad: string): string {
+  const bas = kaynak.indexOf(`const ${ad} =`);
+  if (bas === -1) throw new Error(`Atama bulunamadı: ${ad}`);
+  const sonraki = kaynak.indexOf('\n  const ', bas + 1);
+  return kaynak.slice(bas, sonraki === -1 ? undefined : sonraki);
 }
 
 function etiketler(rol: keyof typeof ROLE_PERMISSIONS): string[] {

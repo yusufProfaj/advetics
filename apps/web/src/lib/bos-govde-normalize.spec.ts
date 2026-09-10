@@ -84,15 +84,42 @@ describe('boş gövde normalizasyonu', () => {
           }
         }
         /*
-         * Çağrıdan SONRAKİ kısa kuyruk: `?? null` orada olmalı.
+         * Çağrıdan SONRAKİ kuyrukta `?? null` aranıyor.
          *
-         * KAPANIŞ PARANTEZLERİ ATLANIYOR. Deseni yazan biçim şu:
-         *   `(await serverApiFetch<T | null>('/x')) ?? null`
-         * yani çağrının kapanışından sonra ÖNCE dış `await` parantezi
-         * geliyor. İlk yazımda kuyruk `^\s*\?\?` bekliyordu ve DOĞRU
-         * yazılmış iki çağrıyı da "eksik" saydı.
+         * ARADA İKİ ŞEY OLABİLİYOR ve ikisi de meşru:
+         *   1. KAPANIŞ PARANTEZLERİ — `(await fetch(...)) ?? null`
+         *   2. `.catch(...)` ZİNCİRİ — `(await fetch(...).catch(() => null)) ?? null`
+         *
+         * İkisi de ilk yazımda kuyruğu kaçırdı ve DOĞRU yazılmış çağrıları
+         * "eksik" saydı. Kuyruk artık zinciri atlayarak okunuyor; pencere
+         * yine DAR tutuluyor — geniş bir pencere, ilgisiz bir `?? null`ı
+         * yakalayıp iddiayı anlamsız yapardı.
          */
-        const kuyruk = kaynak.slice(kapanis + 1, kapanis + 24);
+        let i = kapanis + 1;
+        const atla = () => {
+          while (i < kaynak.length && /[\s)]/.test(kaynak[i] ?? '')) i++;
+          if (kaynak.startsWith('.catch(', i)) {
+            let d = 0;
+            for (let j = i + '.catch'.length; j < kaynak.length; j++) {
+              if (kaynak[j] === '(') d++;
+              else if (kaynak[j] === ')' && --d === 0) {
+                i = j + 1;
+                return true;
+              }
+            }
+          }
+          return false;
+        };
+        while (atla());
+        /*
+         * PENCERE 32 KARAKTER. 12 ile başlamıştı ve DOĞRU yazılmış bir
+         * çağrıyı kaçırdı: `?? null` satır sonuna sarıldığında araya
+         * satır başı ve altı boşluk giriyor ve `null` pencerenin bir
+         * karakter dışında kalıyordu. Dar tutulmaya devam ediyor — geniş
+         * bir pencere, ilgisiz bir `?? null`ı yakalayıp iddiayı anlamsız
+         * yapardı.
+         */
+        const kuyruk = kaynak.slice(i, i + 32);
         if (!/^[\s)]*\?\?\s*null/.test(kuyruk)) {
           eksik.push(`${dosya.slice(WEB_SRC.length + 1)}: ${m[0]}`);
         }

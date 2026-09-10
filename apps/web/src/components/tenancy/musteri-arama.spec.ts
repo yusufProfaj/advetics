@@ -14,7 +14,13 @@ import { describe, expect, it } from 'vitest';
  */
 const ARAMA = readFileSync(join(__dirname, 'musteri-arama.tsx'), 'utf8');
 const PANEL = readFileSync(join(__dirname, 'yonetim-paneli.tsx'), 'utf8');
-const SECICI = readFileSync(join(__dirname, '..', 'client-switcher.tsx'), 'utf8');
+/*
+ * ÜST BARDAKİ SEÇİCİ ARTIK `kapsam-secici.tsx`. Önce iki ayrı seçici vardı
+ * (şirket ve workspace); ikisi aynı ağacın seviyeleri olduğu için tek
+ * pencerede birleştirildi. Arama artık ŞİRKET VE WORKSPACE adlarında
+ * birlikte çalışıyor — Türkçe küçültme kuralı ikisi için de geçerli.
+ */
+const SECICI = readFileSync(join(__dirname, '..', 'kapsam-secici.tsx'), 'utf8');
 
 /** Yorum satırlarını atar — iddia yoruma değil koda çapalanmalı. */
 function kod(src: string): string {
@@ -47,10 +53,17 @@ describe('müşteri arama', () => {
 
   it('KRİTİK: seçicide arama EN ÜSTTE', () => {
     // Liste büyüdükçe aranan ad ekranın dışında kalıyor.
-    const i = kod(SECICI).indexOf('role="listbox"');
-    expect(i, 'açılır liste bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    /*
+     * AÇILIR LİSTE ARTIK BİR AĞAÇ (`role="tree"`): üç seviye tek pencerede
+     * (ajans › şirket › workspace). İddia aynı kararı koruyor — arama, ilk
+     * seçilebilir satırdan ÖNCE gelmeli.
+     */
+    const i = kod(SECICI).indexOf('role="tree"');
+    expect(i, 'açılır ağaç bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     const dilim = kod(SECICI).slice(i);
-    expect(dilim.indexOf('type="search"')).toBeLessThan(dilim.indexOf('<Option'));
+    const ilkSatir = dilim.indexOf('role="treeitem"');
+    expect(ilkSatir, 'ağaçta hiç satır yok — tarama boşa düştü').toBeGreaterThan(-1);
+    expect(dilim.indexOf('type="search"')).toBeLessThan(ilkSatir);
   });
 
   it('KRİTİK: "Yönetim paneli" bir EYLEM — listenin üyesi gibi görünmüyor', () => {
@@ -61,7 +74,14 @@ describe('müşteri arama', () => {
      */
     const i = kod(SECICI).indexOf('Yönetim paneli');
     expect(i, 'yönetim paneli girişi bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
-    const dugme = kod(SECICI).slice(kod(SECICI).lastIndexOf('<button', i), i);
+    /*
+     * ARTIK BİR `<Link>` (ayrı bir ekrana gidiyor, pencere açmıyor) — ama
+     * KARAR AYNI: marka renginde dolu ve beyaz yazılı, yani bir kapsam
+     * satırı gibi görünmüyor.
+     */
+    const etiket = kod(SECICI).lastIndexOf('<Link', i);
+    expect(etiket, 'yönetim paneli bağlantısı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const dugme = kod(SECICI).slice(etiket, i);
     expect(dugme).toContain('bg-brand');
     expect(dugme).toContain('text-white');
   });
