@@ -4,28 +4,37 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHarness, type Harness } from '../../../test/pglite-harness';
 
 /**
- * ═══ EŞİTLİK ÖNCE, ARALIK SONRA ═══
+ * ═══ GENEL İNDEKSİN SÜTUN SIRASI — VE BİR YANLIŞ TEŞHİSİN KAYDI ═══
  *
- * `insights_daily` indeksi `(client_id, date DESC, entity_level)` idi ve
- * ikinci sütun bir ARALIK yüklemi (`date BETWEEN`). B-tree'de aralık
- * sütunundan SONRA gelen sütun tarama sınırı olamıyor, yani `entity_level`
- * eşitliği indekste değil HEAP'te uygulanıyordu.
+ * Bu dosya bir süre TERSİNİ savundu ve o hâliyle commit edildi. Kayıt
+ * duruyor çünkü aynı yanlış çıkarım kolayca tekrarlanır.
  *
- * Üretim planı (bkz. `prisma/olcum-metrik.ts`) tek bir aylık partition için:
- * indeks 30.033 satır döndürüyor, 5.357 heap bloğu okunuyor ve satırların
- * %84'ü atılıyor — gereken 5.512 satır.
+ * GÖZLEM: üretim planında `entity_level` eşitliği `Index Cond`a girmiyor,
+ * heap `Filter`ında kalıyor; tek bir aylık partition'da 30.033 satır
+ * okunup 24.364'ü atılıyor (5.357 heap bloğu, gereken 5.512 satır).
  *
- * ═══ NEDEN BU TEST GEREKLİ ═══
+ * YANLIŞ TEŞHİS: "eşitlik sütunu aralık sütununun arkasında kalmış, sırayı
+ * değiştir." Kural doğru, buradaki sebep o değil. Sıra
+ * `(client_id, entity_level, date DESC)` yapıldı ve ÜRETİM PLANI BİREBİR
+ * AYNI KALDI — `entity_level` ikinci sütunken bile `Index Cond`a girmedi,
+ * `date` ise üçüncü sütunken girdi.
  *
- * Sıra bozulduğunda HİÇBİR ŞEY PATLAMIYOR: sorgular aynı sonucu döndürüyor,
- * testler yeşil kalıyor, yalnızca yavaşlıyor. Bu depoda düzeltilen
- * hataların neredeyse tamamı bu türden — sessiz.
+ * GERÇEK SEBEP: tablo RLS taşıyor ve Postgres güvenlik yüklemlerinden ÖNCE
+ * yalnızca LEAKPROOF operatörleri çalıştırıyor. `date_ge`/`date_le`
+ * leakproof, `enum_eq` değil. `entity_level` hiçbir sıralamada tarama
+ * sınırı olamıyor. Çare kısmi indeks —
+ * `entity-level-kismi-indeks.spec.ts` bunu ölçerek gösteriyor.
+ *
+ * SIRA NEDEN GERİ ALINDI: kısmi indeksler `campaign` ve `account`
+ * seviyelerini üstlendikten sonra bu genel indeks, seviyesi PARAMETREDEN
+ * gelen sorgulara (kırılım ekranı) kalıyor. Orada `entity_level` zaten
+ * indekse giremiyor ama `date` girebiliyor — yani `date`in İKİNCİ sütun
+ * olması işe yarıyor.
  *
  * İDDİA ŞEMAYA DEĞİL VERİTABANINA ÇAPALI. `schema.prisma` doğru yazılıp
  * migration unutulsa da, migration yazılıp `db:deploy` koşmasa da sonuç
  * aynı: üretimde eski indeks durmaya devam eder. Koşum ortamı şemayı
- * ÜRETİM MIGRATION'LARINDAN kuruyor, yani burada görülen sıra üretimde
- * oluşacak sıra.
+ * ÜRETİM MIGRATION'LARINDAN kuruyor.
  */
 let h: Harness;
 
@@ -61,17 +70,17 @@ describe('tarama boşa düşmüyor', () => {
   });
 });
 
-describe('KRİTİK: indeks sütun sırası', () => {
-  it('eşitlik sütunları ARALIK sütunundan ÖNCE', async () => {
-    expect(await indeksSutunlari('insights_daily_client_id_entity_level_date_idx')).toEqual([
+describe('KRİTİK: genel indeksin sütun sırası', () => {
+  it('`date` İKİNCİ — tarama sınırı olabilen tek sütun o', async () => {
+    expect(await indeksSutunlari('insights_daily_client_id_date_entity_level_idx')).toEqual([
       'client_id',
-      'entity_level',
       'date',
+      'entity_level',
     ]);
   });
 
-  it('ESKİ SIRA KALMADI — iki indeks birden taşımak yazmayı da yavaşlatırdı', async () => {
-    expect(await indeksSutunlari('insights_daily_client_id_date_entity_level_idx')).toEqual([]);
+  it('DENENİP GERİ ALINAN SIRA KALMADI — iki indeks yazmayı da yavaşlatırdı', async () => {
+    expect(await indeksSutunlari('insights_daily_client_id_entity_level_date_idx')).toEqual([]);
   });
 
   it('hesap bazlı indeks DOKUNULMADAN duruyor', async () => {
@@ -105,8 +114,8 @@ describe('KRİTİK: her partition indeksi ALIYOR', () => {
     );
     const adlar = partitionIndeksleri.map((p) => p.relname);
     expect(adlar.length).toBeGreaterThan(0);
-    expect(adlar.some((a) => a.includes('entity_level_date'))).toBe(true);
-    expect(adlar.some((a) => a.includes('date_entity_level'))).toBe(false);
+    expect(adlar.some((a) => a.includes('date_entity_level'))).toBe(true);
+    expect(adlar.some((a) => a.includes('entity_level_date'))).toBe(false);
   });
 });
 
@@ -121,8 +130,8 @@ describe('KRİTİK: şema ile migration AYRIŞMIYOR', () => {
     'utf8',
   );
 
-  it('şema yeni sırayı yazıyor', () => {
-    expect(SEMA).toContain('@@index([clientId, entityLevel, date(sort: Desc)])');
-    expect(SEMA).not.toContain('@@index([clientId, date(sort: Desc), entityLevel])');
+  it('şema veritabanındaki sırayı yazıyor', () => {
+    expect(SEMA).toContain('@@index([clientId, date(sort: Desc), entityLevel])');
+    expect(SEMA).not.toContain('@@index([clientId, entityLevel, date(sort: Desc)])');
   });
 });

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { seviyeLiterali } from './seviye-literali';
 import { deriveRoas } from '@advetics/shared';
 import type {
   ClientBreakdownQuery,
@@ -53,6 +54,17 @@ import type { TxLike } from '../rules/rules.service';
 const TOTALS_LEVEL: MetricLevel = 'campaign';
 
 /**
+ * TOPLAM SEVİYESİ SORGUYA LİTERAL GİRİYOR, PARAMETRE OLARAK DEĞİL.
+ *
+ * `${TOTALS_LEVEL}` yazmak onu bağlı parametre yapıyor ve `insights_daily`
+ * üzerindeki kısmi indeksi kullanılamaz kılıyor: kısmi indeksin yüklemi
+ * PLAN ANINDA kanıtlanmak zorunda ve parametrenin değeri o an bilinmiyor.
+ * Gerekçenin tamamı `seviye-literali.ts` içinde; ölçüm
+ * `entity-level-kismi-indeks.spec.ts`te.
+ */
+const TOPLAM_SEVIYESI = seviyeLiterali(TOTALS_LEVEL);
+
+/**
  * ═══ OKUMA TRANSACTION'I İÇİN SÜRE — VARSAYILAN 5 SANİYE YETMİYOR ═══
  *
  * `withTenant` etkileşimli bir transaction açıyor ve Prisma'nın varsayılan
@@ -66,10 +78,12 @@ const TOTALS_LEVEL: MetricLevel = 'campaign';
  *
  * Süreyi uzatmak sorguyu hızlandırmıyor; sadece ölmesini engelliyor. Uzun
  * transaction bağlantı havuzunu tutuyor ve o yüzden 20 saniye seçildi, 60
- * değil. Kök çözüm sorgunun kendisinde: `insights_daily` politikası
- * `app.can_access_client(client_id)` ile sürülüyor ve o bir FONKSİYON —
- * indeksten yararlanması `client_id = ANY(...)` kadar kolay değil. Ölçüm
- * yapılmadan indeks eklemek tahmin olurdu.
+ * değil.
+ *
+ * ÖLÇÜM SONRADAN YAPILDI ve burada "indeks eklemek tahmin olurdu" yazıyordu;
+ * artık tahmin değil. Üretim planı `entity_level` eşitliğinin indekse hiç
+ * giremediğini gösterdi (RLS + leakproof sırası) ve çare `01_constraints.sql`
+ * içindeki KISMİ indeksler oldu. Ayrıntı: `entity-level-kismi-indeks.spec.ts`.
  *
  * SADECE OKUMA YOLLARINDA. Yazma yolları bu sabiti kullanmıyor.
  */
@@ -96,8 +110,16 @@ export class MetricsService {
    * veri olduğunu söylemek gerekiyor: boş bir başlangıç "o dönemde kampanya
    * yoktu" gibi okunuyor, oysa veri hiç çekilmemiş olabilir.
    *
-   * Tek satır, iki agregat — `@@index([clientId, date DESC, entityLevel])`
-   * üzerinde ucuz.
+   * ═══ UCUZ DEĞİL — VE PANEL ONU ARTIK HER YÜKLEMEDE ÇAĞIRMIYOR ═══
+   *
+   * Burada bir süre "tek satır, iki agregat, indeks üzerinde ucuz" yazıyordu.
+   * Yanlıştı: bu, `insights_daily` üzerindeki TARİH SINIRI OLMAYAN TEK
+   * sorgu. Diğer bütün metrik sorguları `date BETWEEN` ile partition buduyor;
+   * bu, açılmış her ayın partition'ını geziyor. Üretimde ölçüldü: 17.364 ms —
+   * panelin diğer beş isteğinin toplamından fazla.
+   *
+   * Panel artık bu ucu yalnızca "Tüm zamanlar" ön ayarı seçiliyken çağırıyor
+   * (`enEskiGunGerekli`), çünkü ürettiği değeri okuyan tek şey o.
    */
   async coverage(
     ctx: TenantContext,
@@ -109,7 +131,7 @@ export class MetricsService {
         Prisma.sql`
           SELECT MIN(date) AS en_eski, MAX(date) AS en_yeni
           FROM insights_daily
-          WHERE entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+          WHERE entity_level = ${TOPLAM_SEVIYESI}
             ${filters}
         `,
       );
@@ -155,7 +177,7 @@ export class MetricsService {
                  SUM(conversion_value_micros) AS conversion_value_micros
           FROM insights_daily
           WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
-            AND entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            AND entity_level = ${TOPLAM_SEVIYESI}
             ${filters}
         `,
       );
@@ -169,7 +191,7 @@ export class MetricsService {
                  SUM(conversion_value_micros) AS conversion_value_micros
           FROM insights_daily
           WHERE date BETWEEN ${prevFrom}::date AND ${prevTo}::date
-            AND entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            AND entity_level = ${TOPLAM_SEVIYESI}
             ${filters}
         `,
       );
@@ -183,7 +205,7 @@ export class MetricsService {
           SELECT currency, SUM(spend_micros) AS spend_micros
           FROM insights_daily
           WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
-            AND entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            AND entity_level = ${TOPLAM_SEVIYESI}
             ${filters}
           GROUP BY currency
           ORDER BY 2 DESC
@@ -198,7 +220,7 @@ export class MetricsService {
                  COUNT(DISTINCT ad_account_id) AS account_count
           FROM insights_daily
           WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
-            AND entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            AND entity_level = ${TOPLAM_SEVIYESI}
             ${filters}
         `,
       );
@@ -290,7 +312,7 @@ export class MetricsService {
                  SUM(conversion_value_micros) AS conversion_value_micros
           FROM insights_daily
           WHERE date BETWEEN ${pencereBasi}::date AND ${query.to}::date
-            AND entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            AND entity_level = ${TOPLAM_SEVIYESI}
             ${this.filters(ctx, query)}
           GROUP BY date
           ORDER BY date
@@ -620,7 +642,7 @@ export class MetricsService {
           FROM insights_daily i
           JOIN clients cl ON cl.id = i.client_id
           WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
-            AND i.entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            AND i.entity_level = ${TOPLAM_SEVIYESI}
             ${this.filters(ctx, query, 'i')}
           GROUP BY i.client_id, cl.name, cl.slug, i.platform, i.currency
         `,
@@ -791,7 +813,7 @@ export class MetricsService {
           FROM insights_daily i
           JOIN clients cl ON cl.id = i.client_id
           WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
-            AND i.entity_level = ${TOTALS_LEVEL}::"EntityLevel"
+            AND i.entity_level = ${TOPLAM_SEVIYESI}
             -- ARSIVLENMIS WORKSPACE'IN VERISI SIRKET TOPLAMINA GIRMIYOR:
             -- musteri kiriliminda ayni satirlar zaten eleniyor ve iki ekranin
             -- farkli toplam gostermesi, ikisinin de yanlis sanilmasi demek.

@@ -750,3 +750,62 @@ ALTER TABLE clients ADD CONSTRAINT clients_special_categories_chk
 ALTER TABLE social_profiles DROP CONSTRAINT IF EXISTS social_profiles_parent_page_chk;
 ALTER TABLE social_profiles ADD CONSTRAINT social_profiles_parent_page_chk
   CHECK (profile_type = 'instagram_business' OR parent_page_external_id IS NULL);
+
+-- -----------------------------------------------------------------------------
+-- insights_daily: SEVİYE BAŞINA KISMİ İNDEKS
+--
+-- ═══ NEDEN NORMAL BİR İNDEKS SÜTUNU YETMİYOR ═══
+--
+-- `entity_level` zaten `insights_daily_client_id_date_entity_level_idx`
+-- içinde. Üretim planı buna rağmen şunu gösterdi (2026-08 partition'ı,
+-- ajans kapsamı, 30 günlük pencere):
+--
+--   Index Cond:  client_id = ANY (...) AND date >= ... AND date <= ...
+--   Filter:      ... AND (entity_level = 'campaign'::"EntityLevel")
+--   Rows Removed by Filter: 24.364
+--   Heap Blocks: exact=5.357
+--
+-- Yani sütun indekste ama `Index Cond`a GİRMİYOR: indeks 30 bin satır
+-- döndürüyor, her birinin sayfası heap'ten okunuyor ve %84'ü atılıyor.
+--
+-- SEBEP RLS. Tablo satır seviyesi güvenlik taşıyor ve Postgres güvenlik
+-- yüklemlerinden ÖNCE yalnızca LEAKPROOF operatörleri çalıştırıyor. `date`
+-- karşılaştırmaları leakproof (o yüzden `Index Cond`a giriyorlar), enum
+-- eşitliği (`enum_eq`) değil. Sütun sırasını değiştirmek bunu ÇÖZMÜYOR —
+-- denendi ve plan birebir aynı kaldı.
+--
+-- ═══ KISMİ İNDEKS SIRALAMAYI TAMAMEN ATLATIYOR ═══
+--
+-- Kısmi indeksin yüklemi ÇALIŞMA ANINDA DEĞERLENDİRİLMİYOR; planlayıcı
+-- sorgunun yükleminin indeksinkini gerektirdiğini kanıtlıyor ve indeksteki
+-- her satır zaten koşulu sağlıyor. Leakproof sırası devreye hiç girmiyor.
+-- PGlite ile ölçüldü (`entity-level-kismi-indeks.spec.ts`): `entity_level`
+-- `Filter`dan TAMAMEN kalkıyor.
+--
+-- ═══ ŞART: SORGUDA LİTERAL OLMALI ═══
+--
+-- Değer bağlı parametre (`$1`) olursa plan anında bilinmiyor, kanıt
+-- kurulamıyor ve indeks kullanılmıyor. `metrics.service.ts` bu yüzden
+-- `seviyeLiterali()` kullanıyor.
+--
+-- ═══ MALİYET ═══
+--
+-- Her satır TEK bir seviyeye ait, yani iki kısmi indeks birlikte satırların
+-- yalnızca bir kısmını kapsıyor — toplam boyut tek bir tam indeksten küçük.
+-- `ad` ve `ad_group` için indeks BİLEREK YOK: o seviyelerdeki sorgular
+-- (reklam gezgini, rapor) ölçümde yavaş çıkmadı ve ölçülmemiş bir indeks
+-- eklemek, yazma maliyetini kanıtsız artırmak olurdu.
+--
+-- PARTITION'LI EBEVEYNE KURULUYOR: sonradan açılan her aylık partition
+-- indeksi kendiliğinden devralıyor. Partition'a tek tek yazmak, yeni
+-- aylarda sessizce indekssiz partition bırakırdı.
+-- -----------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS insights_daily_kampanya_idx
+  ON insights_daily (client_id, date DESC)
+  WHERE entity_level = 'campaign'::"EntityLevel";
+
+-- `hiddenAccountCount` bunu kullanıyor ve `summary` ucunun İÇİNDEN
+-- çağrılıyor — yani her genel bakış yüklemesinde koşuyor.
+CREATE INDEX IF NOT EXISTS insights_daily_hesap_idx
+  ON insights_daily (client_id, date DESC)
+  WHERE entity_level = 'account'::"EntityLevel";

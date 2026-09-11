@@ -607,11 +607,17 @@ ekliyor. Hiçbir satır yazmıyor — transaction sonunda geri alınıyor.
 
 Çıktıda bakılacak iki şey:
 
-- **`Index Cond` hangi sütunları taşıyor.** `client_id`, `entity_level` ve
-  `date` üçü de orada olmalı. Biri `Filter:` satırına düşmüşse o sütun
-  indekste kullanılmıyor demektir ve `Rows Removed by Filter` ile
-  `Heap Blocks` şişer — 2026-09-11'de düzeltilen arıza tam olarak buydu
-  (`entity_level` heap'te elenip 30.033 satır okunuyordu).
+- **`entity_level` planda GEÇMEMELİ.** Kampanya ve hesap seviyesi sorguları
+  `01_constraints.sql` içindeki KISMİ indekslerden geçiyor; o indekslerin
+  yüklemi çalışma anında değerlendirilmiyor, plan anında kanıtlanıyor.
+  `Filter: ... entity_level = ...` görüyorsan ya kısmi indeks yok ya da
+  sorgu seviyeyi LİTERAL değil bağlı parametre olarak yazıyor — ikisi de
+  `Rows Removed by Filter` ve `Heap Blocks`u şişiriyor.
+
+  > `entity_level`i normal bir indeks sütunu yapmak ÇÖZMÜYOR, denendi.
+  > Tablo RLS taşıyor ve Postgres güvenlik yüklemlerinden önce yalnızca
+  > LEAKPROOF operatörleri çalıştırıyor; `enum_eq` leakproof değil, yani o
+  > sütun hiçbir sıralamada `Index Cond`a giremiyor.
 - **`Rows Removed by Filter` ile dönen satır oranı.** Atılan satır sayısı
   dönenden büyükse boşa I/O yapılıyor.
 

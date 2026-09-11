@@ -1228,15 +1228,20 @@ model InsightsDaily {
   fetchedAt  DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
 
   @@id([date, entityLevel, entityId, breakdownKey])
-  /// EŞİTLİK ÖNCE, ARALIK SONRA — sıra ÖLÇÜLEREK değişti.
+  /// SIRA BİR KEZ DEĞİŞTİRİLDİ VE GERİ ALINDI — sebebi ölçüldü.
   ///
-  /// Önce `[clientId, date, entityLevel]` idi ve `date` bir ARALIK yüklemi
-  /// (`BETWEEN`). B-tree'de aralık sütunundan sonraki sütun tarama sınırı
-  /// olamıyor: `entity_level` eşitliği indekste değil HEAP'te uygulanıyordu.
-  /// Üretim planı tek bir aylık partition'da 30.033 satır okuyup 24.364'ünü
-  /// atıyordu — 5.357 heap bloğu, gereken 5.512 satır için.
-  /// Ayrıntı: `migrations/20260911100000_insights_indeks_sirasi`.
-  @@index([clientId, entityLevel, date(sort: Desc)])
+  /// `[clientId, entityLevel, date]` denendi ("eşitlik önce, aralık sonra")
+  /// ve üretim planı BİREBİR AYNI kaldı: `entity_level` ikinci sütun
+  /// olmasına rağmen `Index Cond`a girmedi. Sebep sıra değil RLS —
+  /// Postgres güvenlik yüklemlerinden önce yalnızca LEAKPROOF operatörleri
+  /// çalıştırıyor ve `enum_eq` leakproof değil.
+  ///
+  /// `entity_level` burada bir TARAMA SINIRI olamıyor; seviyeye göre hızlı
+  /// erişim `01_constraints.sql` içindeki KISMİ indekslerden geliyor. Bu
+  /// genel indeks seviyesi parametreden gelen sorgulara kalıyor ve orada
+  /// `date`in ikinci sütun olması işe yarıyor.
+  /// Ayrıntı: `migrations/20260911140000_insights_indeks_sirasi_geri`.
+  @@index([clientId, date(sort: Desc), entityLevel])
   @@index([adAccountId, date(sort: Desc)])
   @@map("insights_daily")
 }
