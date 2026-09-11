@@ -1,6 +1,7 @@
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { KapsamSecici, type KapsamSirketi } from '@/components/kapsam-secici';
+import { UstHesapSecici } from '@/components/ust-hesap-secici';
 import { LogoutButton } from '@/components/logout-button';
 import { UyariBandi } from '@/components/uyari-bandi';
 import { BildirimSaglayici } from '@/components/bildirim/bildirim-verisi';
@@ -198,6 +199,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
             bir şirkette geçilecek yer yok ve boş bir seçici, kullanıcının
             olmayan bir özelliği aramasına yol açardı.
           */}
+          {/*
+            ═══ İKİ SEÇİCİ, İKİ KATMAN ═══
+            SOLDA hangi DANIŞMANLIĞIN ağacına bakıldığı, sağda o ağacın
+            içinde hangi şirket/workspace. Tek elemanlıysa sol seçici hiç
+            çizilmiyor — geçilecek yer yokken açılır kutu, olmayan bir
+            özelliği aratır.
+          */}
+          <div className="flex min-w-0 items-center gap-2">
+          <UstHesapSecici
+            hesaplar={session.secilebilirUstHesaplar}
+            aktifId={session.managerAccount?.id ?? null}
+            yonetimGorunur={hasPermission(session, 'org.write')}
+          />
           <KapsamSecici
             ajans={session.managerAccount?.name ?? null}
             sirketler={sirketler}
@@ -206,6 +220,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             aktifWorkspaceId={session.activeClientId}
             tumSirketler={session.tumSirketler}
           />
+          </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="text-[13px] font-medium leading-tight">{session.user.email}</p>

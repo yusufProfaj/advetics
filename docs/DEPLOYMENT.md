@@ -558,6 +558,27 @@ pm2 logs
 pm2 monit
 ```
 
+### 9a. Platform sahibi (üst hesap satışı)
+
+Advetics'i işleten taraf üst hesabı bir ÜRÜN olarak satıyor: her müşteri için
+bir üst hesap açıyor, paketini seçiyor ve içine girip ayarlıyor. Bu yetki bir
+organizasyonun da bir üst hesabın da DIŞINDA ve **panelden verilemiyor** —
+o düğmeyi görebilen herkes kendini yükseltebilirdi.
+
+```bash
+pnpm --filter @advetics/api db:platform-admin -- --eposta=hello@profaj.com
+```
+
+Kimde olduğunu görmek için `--liste`, geri almak için `--kaldir`. Değişiklik
+bir sonraki oturum çözümünde geçerli oluyor (sayfayı yenilemek yeterli).
+
+Platform sahibi olan kullanıcı üst barda **üst hesap seçicisini** görüyor ve
+kurduğu her hesaba geçebiliyor. Yeni bir hesap kurarken kendi şirketi o
+hesaba BAĞLANMIYOR — Advetics'in kendi organizasyonu müşterinin portföyüne
+girmiyor.
+
+---
+
 ### 10a. "Panel yavaş" — hangi uç yavaş
 
 Panel TEK bir ekranı çizerken altı ayrı uca istek atıyor (`summary`,

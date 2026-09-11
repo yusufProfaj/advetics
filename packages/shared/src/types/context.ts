@@ -1,3 +1,4 @@
+import type { ManagerPaket } from '../constants/paketler';
 import type { Permission, Role } from '../auth/roles';
 
 /**
@@ -31,6 +32,21 @@ export interface TenantContext {
    * birden çok organizasyonu bir arada tutmak.
    */
   managerAccountId: string | null;
+
+  /**
+   * ═══ PLATFORM SAHİBİ — ADVETICS'İ İŞLETEN TARAF ═══
+   *
+   * Üst hesabı SATAN taraf, henüz üyesi OLMADIĞI bir üst hesabı kurabilmeli
+   * ve içine girebilmeli. Bu yetki bir organizasyonun da bir üst hesabın da
+   * DIŞINDA — o yüzden `role` ya da `permissions` içinde değil.
+   *
+   * RLS'E GİRMİYOR ve bu kasıtlı: gücü politikalarda değil BAĞLAM
+   * ÇÖZÜMÜNDE, yani hangi üst hesaba geçebileceğinde. Geçtikten sonra
+   * `managerAccountId` normal bir değer ve otuz politika bugünkü gibi
+   * çalışıyor. Politikaya dokunmayan bir yetki, izolasyonu delme riski
+   * taşımıyor.
+   */
+  platformAdmin: boolean;
 
   /**
    * "TÜM ŞİRKETLER" MODU — üst hesabın altındaki her şirket tek pencerede.
@@ -132,8 +148,37 @@ export interface SessionResponse {
   managerAccount: {
     id: string;
     name: string;
+    /** Satılan paket — kısıtlar `PAKET_SINIRLARI` içinde. */
+    paket: ManagerPaket;
     organizations: Array<{ id: string; name: string; slug: string }>;
   } | null;
+
+  /**
+   * ═══ GEÇİLEBİLECEK ÜST HESAPLAR — SEÇİCİNİN LİSTESİ ═══
+   *
+   * Uzun süre bir kullanıcının TEK üst hesabı olabiliyordu (`@@unique
+   * ([userId])`) ve liste diye bir şey gerekmiyordu. Advetics'i işleten
+   * taraf üst hesap SATMAYA başlayınca kilidin şartı karşılandı: birden çok
+   * üst hesap ve aralarında geçiş.
+   *
+   * LİSTE ÜYELİKLERDEN TÜRETİLMİYOR. Platform sahibi henüz ÜYESİ OLMADIĞI
+   * bir üst hesaba da geçebiliyor — kurduğu hesaba girip ayarlayabilmesi
+   * gerekiyor. Sunucu listeyi ona göre kuruyor; panel yalnızca çiziyor.
+   *
+   * TEK ELEMANLIYSA SEÇİCİ ÇİZİLMİYOR: geçilecek yer yokken bir açılır
+   * kutu, kullanıcıyı olmayan bir özelliği aramaya gönderir.
+   */
+  secilebilirUstHesaplar: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    paket: ManagerPaket;
+    /** O üst hesabın altındaki şirket sayısı — seçicide ağırlığı gösteriyor. */
+    sirketSayisi: number;
+  }>;
+
+  /** Advetics'i işleten taraf mı — üst hesap kurabiliyor ve hepsine geçebiliyor. */
+  platformAdmin: boolean;
 
   /**
    * KULLANICININ GEÇEBİLECEĞİ BÜTÜN ŞİRKETLER — üst hesabı olmasa da.

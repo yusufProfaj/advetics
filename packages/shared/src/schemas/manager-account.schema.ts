@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { MANAGER_PAKETLERI } from '../constants/paketler';
+import type { ManagerPaket } from '../constants/paketler';
 
 /**
  * ÜST HESAP (Google MCC karşılığı) şemaları.
@@ -8,6 +10,15 @@ import { z } from 'zod';
 
 export const createManagerAccountSchema = z.object({
   name: z.string().trim().min(2, 'Üst hesap adı en az 2 karakter olmalı').max(120),
+  /**
+   * SATILAN PAKET — yalnızca PLATFORM SAHİBİ seçebiliyor.
+   *
+   * Kendi ajansını kuran bir org yöneticisi burayı göndermiyor ve
+   * `baslangic` düşüyor; gönderse bile sunucu YOK SAYIYOR. Aksi hâlde
+   * kullanıcı kendi paketini uca elle istek atarak yükseltirdi — satılan
+   * bir ürünün sınırı, satın alanın elinde olamaz.
+   */
+  paket: z.enum(MANAGER_PAKETLERI).optional(),
 });
 export type CreateManagerAccountInput = z.infer<typeof createManagerAccountSchema>;
 
@@ -43,6 +54,8 @@ export interface ManagerAccountTree {
   id: string;
   name: string;
   slug: string;
+  /** Satılan paket — kısıtlar `PAKET_SINIRLARI` içinde. */
+  paket: ManagerPaket;
   organizations: Array<{
     id: string;
     name: string;
@@ -118,3 +131,9 @@ export const deleteOrganizationSchema = z.object({
   onayAdi: z.string().trim().max(120).optional(),
 });
 export type DeleteOrganizationInput = z.infer<typeof deleteOrganizationSchema>;
+
+/** Üst hesap değiştirme. */
+export const switchManagerAccountSchema = z.object({
+  managerAccountId: z.string().uuid(),
+});
+export type SwitchManagerAccountInput = z.infer<typeof switchManagerAccountSchema>;

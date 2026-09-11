@@ -4,6 +4,7 @@ export * from './linkedin-para';
 export * from './kitle-bolumu';
 export * from './linkedin-saklama';
 export * from './constants/boost-naming';
+export * from './constants/paketler';
 export * from './schemas/auth.schema';
 export * from './schemas/uyari.schema';
 export * from './schemas/ad-builder.schema';

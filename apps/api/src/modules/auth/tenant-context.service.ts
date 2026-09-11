@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import type { ManagerPaket } from '@advetics/shared';
 import {
   TUM_SIRKETLER,
   isOrgScopedRole,
@@ -60,9 +61,19 @@ export interface ResolvedIdentity {
   managerAccount: {
     id: string;
     name: string;
+    paket: ManagerPaket;
     /** Bu üst hesap altında kullanıcının geçebileceği şirketler. */
     organizations: Array<{ id: string; name: string; slug: string }>;
   } | null;
+  /** Geçilebilecek üst hesaplar — seçicinin listesi. */
+  secilebilirUstHesaplar: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    paket: ManagerPaket;
+    sirketSayisi: number;
+  }>;
+  platformAdmin: boolean;
   /**
    * Kullanıcının GEÇEBİLECEĞİ bütün şirketler ve oradaki workspace'leri.
    *
@@ -92,6 +103,38 @@ export interface ResolvedIdentity {
 export class TenantContextService {
   constructor(private readonly db: PrismaAdminService) {}
 
+  /**
+   * Seçilebilir üst hesapların ekranda gereken hâli.
+   *
+   * ŞİRKET SAYISI TEK SORGUDA: hesap başına ayrı bir `count` atmak, on
+   * hesaplı bir platform sahibinde her sayfa yüklemesinde on tur demekti.
+   */
+  private async secilebilirUstHesaplar(
+    idler: string[],
+  ): Promise<
+    Array<{ id: string; name: string; slug: string; paket: ManagerPaket; sirketSayisi: number }>
+  > {
+    if (idler.length === 0) return [];
+    const hesaplar = await this.db.managerAccount.findMany({
+      where: { id: { in: idler }, status: 'active' },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        paket: true,
+        _count: { select: { organizations: true } },
+      },
+    });
+    return hesaplar.map((h) => ({
+      id: h.id,
+      name: h.name,
+      slug: h.slug,
+      paket: h.paket,
+      sirketSayisi: h._count.organizations,
+    }));
+  }
+
   async resolve(
     userId: string,
     requestedClientId?: string | null,
@@ -106,6 +149,16 @@ export class TenantContextService {
      * okumak demekti.
      */
     requestedOrgId?: string | null,
+    /**
+     * Panelde seçili ÜST HESAP.
+     *
+     * `requestedOrgId` ile AYNI güven seviyesinde: çerezden geliyor ve
+     * aşağıda kullanıcının gerçek üyelik listesine (platform sahibinde:
+     * bütün üst hesaplara) karşı doğrulanıyor. Bu değer
+     * `app.current_manager_account_id()`yi sürüyor — üst hesap tablolarının
+     * TEK sınırı o.
+     */
+    requestedManagerAccountId?: string | null,
   ): Promise<ResolvedIdentity> {
     const user = await this.db.user.findUnique({
       where: { id: userId },
@@ -115,13 +168,14 @@ export class TenantContextService {
         email: true,
         fullName: true,
         status: true,
+        platformAdmin: true,
         organization: { select: { status: true } },
         managerMemberships: {
           select: {
             id: true,
             role: true,
             managerAccountId: true,
-            managerAccount: { select: { id: true, name: true, status: true } },
+            managerAccount: { select: { id: true, name: true, slug: true, status: true, paket: true } },
           },
         },
         memberships: {
@@ -151,24 +205,79 @@ export class TenantContextService {
       throw new UnauthorizedException('Organizasyon askıya alınmış');
     }
     /*
-     * ═══ ÜST HESAP (MCC) — KARDEŞ ŞİRKETLERE ERİŞİM ═══
+     * ═══ ÜST HESAP (MCC) — ARTIK BİRDEN ÇOK OLABİLİYOR ═══
      *
-     * `user_id` tekil olduğu için en fazla bir satır var; `[0]` bir seçim
-     * DEĞİL, şemanın garantisi (bkz. ManagerMembership).
-     */
-    const uyelik = user.managerMemberships[0] ?? null;
-
-    /*
+     * Uzun süre `user_id` tekildi ve `[0]` bir seçim değil şemanın
+     * garantisiydi. Advetics'i işleten taraf üst hesap SATMAYA başlayınca
+     * kilidin şartı karşılandı: birden çok üyelik ve aralarında geçiş.
+     *
+     * SEÇİM SESSİZ DEĞİL. Şemadaki eski yorum "kod sessizce ilkini seçerdi"
+     * diye uyarıyordu; burada seçim ÇEREZDEN geliyor, üyelik listesine
+     * karşı doğrulanıyor ve sonuç oturum yanıtında görünüyor. Çerez yoksa
+     * ilk üyeliğe düşülüyor — bu da bir seçim ama ekranda YAZAN bir seçim.
+     *
      * ROL ORG GENELİ OLMAK ZORUNDA. Kardeş şirkette kullanıcının hiç
      * `memberships` satırı YOK; org geneli olmayan bir rol orada SIFIR
-     * workspace görür — yani "geçtim ama hiçbir şey yok" gibi görünen,
-     * sebebi hiçbir ekranda yazmayan bir çıkmaz. Askıya alınmış üst hesap
-     * da geçiş açmıyor.
+     * workspace görür — "geçtim ama hiçbir şey yok" gibi görünen, sebebi
+     * hiçbir ekranda yazmayan bir çıkmaz. Askıya alınmış üst hesap da
+     * geçiş açmıyor.
      */
+    const gecerliUyelikler = user.managerMemberships.filter(
+      (m) => m.managerAccount.status === 'active' && isOrgScopedRole(m.role as Role),
+    );
+
+    /*
+     * ═══ PLATFORM SAHİBİ HER ÜST HESABA GEÇEBİLİYOR ═══
+     *
+     * Üst hesabı SATAN taraf, henüz üyesi olmadığı bir hesabı kurup içine
+     * girebilmeli. Liste ÜYELİKTEN değil doğrudan tablodan geliyor.
+     *
+     * RLS DEĞİŞMİYOR: platform sahibinin gücü burada bitiyor. Bir üst hesaba
+     * geçtikten sonra `managerAccountId` normal bir değer ve otuz politika
+     * bugünkü gibi çalışıyor — politikaya dokunmayan bir yetki, izolasyonu
+     * delme riski taşımıyor.
+     */
+    const platformHesaplari = user.platformAdmin
+      ? await this.db.managerAccount.findMany({
+          where: { status: 'active' },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, slug: true, paket: true },
+        })
+      : [];
+
+    const secilebilirUstHesapIdler = new Set<string>([
+      ...gecerliUyelikler.map((m) => m.managerAccountId),
+      ...platformHesaplari.map((h) => h.id),
+    ]);
+
+    /*
+     * ÇEREZ DOĞRULANIYOR, GEÇERSİZSE İLK ÜYELİĞE DÜŞÜLÜYOR.
+     *
+     * Platform sahibi bir üst hesabı silerse ya da yetkisi geri alınırsa
+     * çerez bayat kalıyor; doğrulamadan geçirmek, `app.current_manager
+     * _account_id()`yi kullanıcının elindeki bir değerle sürmek demekti.
+     */
+    const aktifUstHesapId =
+      requestedManagerAccountId && secilebilirUstHesapIdler.has(requestedManagerAccountId)
+        ? requestedManagerAccountId
+        : (gecerliUyelikler[0]?.managerAccountId ?? platformHesaplari[0]?.id ?? null);
+
+    const uyelik = gecerliUyelikler.find((m) => m.managerAccountId === aktifUstHesapId) ?? null;
+
+    /*
+     * AKTİF ÜST HESAP — üyelikten ya da (platform sahibinde) doğrudan
+     * tablodan. İkisini tek değerde birleştirmek, aşağıdaki her kullanımın
+     * "hangisiydi" sorusunu sormamasını sağlıyor.
+     */
+    const aktifHesapKaydi =
+      uyelik?.managerAccount ??
+      platformHesaplari.find((h) => h.id === aktifUstHesapId) ??
+      null;
+
     const ustHesap =
-      uyelik && uyelik.managerAccount.status === 'active' && isOrgScopedRole(uyelik.role as Role)
-        ? uyelik
-        : null;
+      aktifHesapKaydi === null
+        ? null
+        : { managerAccountId: aktifHesapKaydi.id, managerAccount: aktifHesapKaydi };
 
     const kardesSirketler = ustHesap
       ? await this.db.organization.findMany({
@@ -406,10 +515,18 @@ export class TenantContextService {
        */
       scopedMemberships = [
         {
-          id: `manager:${ustHesap.id}`,
+          id: `manager:${ustHesap.managerAccountId}`,
           orgId: activeOrgId,
           clientId: null,
-          role: ustHesap.role,
+          /*
+           * ROL ÜYELİKTEN, AKTİF HESAP KAYDINDAN DEĞİL.
+           *
+           * Platform sahibi üyesi OLMADIĞI bir üst hesaba da geçebiliyor ve
+           * orada bir rolü yok; `owner` düşülüyor çünkü o hesabı kurup
+           * ayarlaması gereken taraf o. Üyeliği olan kullanıcıda ise rol
+           * üyelikten geliyor ve hiçbir şey değişmiyor.
+           */
+          role: uyelik?.role ?? 'owner',
           permissions: null,
           client: null,
         } as (typeof user.memberships)[number],
@@ -424,10 +541,10 @@ export class TenantContextService {
        */
       scopedMemberships = [
         {
-          id: `manager:${ustHesap.id}`,
+          id: `manager:${ustHesap.managerAccountId}`,
           orgId: activeOrgId,
           clientId: null,
-          role: ustHesap.role,
+          role: uyelik?.role ?? 'owner',
           // Üst hesap üyeliği ince ayar TAŞIMIYOR: rol bir şirkette değil,
           // bir danışmanlığın ALTINDAKİ HEPSİNDE geçerli ve tek tek
           // istisna yazmanın yeri o şirketin kendi `memberships` satırı.
@@ -544,6 +661,7 @@ export class TenantContextService {
       },
       context: {
         userId: user.id,
+        platformAdmin: user.platformAdmin,
         /*
          * AKTİF şirket — `actor.orgId` (EV şirketi) ile bilerek AYRI.
          * `JwtAuthGuard` token'daki org'u `actor.orgId` ile karşılaştırıyor;
@@ -571,9 +689,19 @@ export class TenantContextService {
         ? {
             id: ustHesap.managerAccount.id,
             name: ustHesap.managerAccount.name,
+            paket: ustHesap.managerAccount.paket,
             organizations: kardesSirketler,
           }
         : null,
+      /*
+       * SEÇİCİNİN LİSTESİ — ÜYELİK + (PLATFORM SAHİBİNDE) HEPSİ.
+       *
+       * Şirket sayısı da taşınıyor: seçicide hangi hesabın ağır olduğunu
+       * göstermek, kırk dokuz şirketli ajansla tek şirketli bir müşteriyi
+       * aynı satırda göstermekten iyi.
+       */
+      secilebilirUstHesaplar: await this.secilebilirUstHesaplar([...secilebilirUstHesapIdler]),
+      platformAdmin: user.platformAdmin,
     };
   }
 }

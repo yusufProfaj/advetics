@@ -414,8 +414,13 @@ export class MembersService {
     input: CreateMembershipInput & { organizationId: string },
     meta: Meta,
   ) {
-    const uyelik = await this.admin.managerMembership.findUnique({
-      where: { userId: ctx.userId },
+    /*
+     * AKTİF ÜST HESAP BAĞLAMDAN. `findUnique({ userId })` bir kullanıcının
+     * BİRDEN ÇOK üst hesabı olabildiği andan itibaren yanlış cevap veriyor:
+     * hangisi olduğunu söylemiyor.
+     */
+    const uyelik = await this.admin.managerMembership.findFirst({
+      where: { userId: ctx.userId, managerAccountId: ctx.managerAccountId ?? undefined },
       select: { managerAccountId: true, managerAccount: { select: { status: true } } },
     });
     if (!uyelik || uyelik.managerAccount.status !== 'active') {

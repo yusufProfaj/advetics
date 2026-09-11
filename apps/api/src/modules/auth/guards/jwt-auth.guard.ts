@@ -2,7 +2,12 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../../../common/decorators';
 import type { AuthedRequest } from '../../../common/types/request';
-import { ACCESS_COOKIE, ACTIVE_CLIENT_COOKIE, ACTIVE_ORG_COOKIE } from '../cookies';
+import {
+  ACCESS_COOKIE,
+  ACTIVE_CLIENT_COOKIE,
+  ACTIVE_MANAGER_COOKIE,
+  ACTIVE_ORG_COOKIE,
+} from '../cookies';
 import { TenantContextService } from '../tenant-context.service';
 import { TokenService } from '../token.service';
 
@@ -57,10 +62,19 @@ export class JwtAuthGuard implements CanActivate {
     const requestedOrgId =
       req.get('x-active-org') ?? (req.cookies?.[ACTIVE_ORG_COOKIE] as string | undefined);
 
+    /*
+     * SEÇİLİ ÜST HESAP — bir kullanıcı birden çok üst hesaba üye olabiliyor
+     * ve Advetics'i işleten taraf hepsine geçebiliyor. Aynı desen, aynı
+     * güven seviyesi: burada kabul, orada süzgeç.
+     */
+    const requestedManagerAccountId =
+      req.get('x-active-manager') ?? (req.cookies?.[ACTIVE_MANAGER_COOKIE] as string | undefined);
+
     const identity = await this.tenantContext.resolve(
       payload.sub,
       requestedClientId ?? null,
       requestedOrgId ?? null,
+      requestedManagerAccountId ?? null,
     );
 
     /*

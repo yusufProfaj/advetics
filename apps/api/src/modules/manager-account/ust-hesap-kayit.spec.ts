@@ -247,8 +247,15 @@ describe('koşum ortamı', () => {
      * şemayı üretim migration'larından kuruyor; dosya yoksa testler tabloyu
      * hiç görmez ve hata "relation does not exist" olurdu.
      */
+    /*
+     * TABLOYU KURAN migration aranıyor, "ust_hesap" GEÇEN her dizin değil.
+     * Katman büyüdükçe (`ust_hesap_katmani` — çoklu üyelik, paket, platform
+     * sahibi) ikinci bir dizin doğdu ve `toHaveLength(1)` düştü. Sayıyı
+     * artırmak yanlış olurdu: test bir SAYIYI değil, TABLONUN KURULDUĞUNU
+     * tutuyor.
+     */
     const dizinler = readdirSync(join(PRISMA, 'migrations'));
-    const ustHesap = dizinler.filter((d) => d.includes('ust_hesap'));
+    const ustHesap = dizinler.filter((d) => d.endsWith('_ust_hesap'));
     expect(ustHesap).toHaveLength(1);
     const dizin = ustHesap[0];
     // `!` YERİNE AÇIK KONTROL: `noUncheckedIndexedAccess` altında `[0]`

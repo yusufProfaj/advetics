@@ -19,6 +19,7 @@ import {
   requestPasswordResetSchema,
   orgSecimi,
   switchClientSchema,
+  switchManagerAccountSchema,
   switchOrganizationSchema,
   type ChangePasswordInput,
   type ConfirmPasswordResetInput,
@@ -26,6 +27,7 @@ import {
   type RegisterOrganizationInput,
   type RequestPasswordResetInput,
   type SwitchClientInput,
+  type SwitchManagerAccountInput,
   type SwitchOrganizationInput,
   type TenantContext,
 } from '@advetics/shared';
@@ -38,6 +40,7 @@ import {
   REFRESH_COOKIE,
   clearAuthCookies,
   setActiveClientCookie,
+  setActiveManagerCookie,
   setActiveOrgCookie,
   setAuthCookies,
 } from './cookies';
@@ -174,6 +177,38 @@ export class AuthController {
     setActiveOrgCookie(res, this.config, hedef);
     setActiveClientCookie(res, this.config, null);
     return this.auth.buildSession(ctx.userId, null, hedef);
+  }
+
+  /**
+   * ═══ ÜST HESAP DEĞİŞİMİ ═══
+   *
+   * Uzun süre bir kullanıcının TEK üst hesabı olabiliyordu ve bu uca gerek
+   * yoktu. Advetics'i işleten taraf üst hesap SATMAYA başlayınca gerekti:
+   * `hello@profaj.com` kurduğu her hesaba girip ayarlayabilmeli.
+   *
+   * ŞİRKET VE WORKSPACE SEÇİMİ SIFIRLANIYOR. Yeni üst hesabın altında eski
+   * şirket kimliği geçersiz; bırakılsaydı `resolve` onu sessizce düşürürdü
+   * ama çerez ekranda bir şirket seçiliymiş gibi durmaya devam ederdi —
+   * bu depoda "başlık ≠ gövde" diye bir kez bildirilen hâlin aynısı.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post('switch-manager')
+  async switchManagerAccount(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(switchManagerAccountSchema)) dto: SwitchManagerAccountInput,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.auth.assertManagerAccountAccess(ctx, dto.managerAccountId);
+    setActiveManagerCookie(res, this.config, dto.managerAccountId);
+    setActiveOrgCookie(res, this.config, null);
+    setActiveClientCookie(res, this.config, null);
+    /*
+     * OTURUM YENİ ÜST HESAPLA KURULUYOR. `buildSession`in şirket parametresi
+     * `null`: hangi şirkete düşüleceğini `TenantContextService` yeni hesabın
+     * altından seçiyor ve kararı tek yerde tutmak, panelin kendi tahminini
+     * yazmasından iyi.
+     */
+    return this.auth.buildSession(ctx.userId, null, null, dto.managerAccountId);
   }
 
   /**

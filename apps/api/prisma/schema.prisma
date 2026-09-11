@@ -79,6 +79,18 @@ enum ManagerAccountStatus {
   suspended
 }
 
+/// ÜST HESAP PAKETİ — satılan ürünün kısıtlarını belirliyor.
+///
+/// Kısıtların SAYILARI burada değil `packages/shared` içindeki
+/// `PAKET_SINIRLARI` tablosunda: sayıyı iki yerde tutmak, birini güncelleyip
+/// diğerini unutmak demekti ve fark yalnızca kısıtın yanlış uygulanmasıyla
+/// görünürdü.
+enum ManagerAccountPaket {
+  baslangic
+  buyume
+  ajans
+}
+
 /// ÜST HESAP — Google MCC ("Müşteri Merkezi") karşılığı.
 ///
 /// Bir danışman/ajans, ALTINDAKİ birden çok ŞİRKETİ tek girişle yönetiyor.
@@ -95,6 +107,12 @@ model ManagerAccount {
   name   String               @db.VarChar(120)
   slug   String               @unique @db.VarChar(60)
   status ManagerAccountStatus @default(active)
+
+  /// Satılan paket. Kısıtlar `PAKET_SINIRLARI` (shared) içinde.
+  ///
+  /// Varsayılan `baslangic`: sınırsızı varsayılan yapmak, sonra açılacak her
+  /// üst hesabın sessizce sınırsız doğması demekti.
+  paket ManagerAccountPaket @default(baslangic)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -128,13 +146,20 @@ model ManagerMembership {
   managerAccount ManagerAccount @relation(fields: [managerAccountId], references: [id], onDelete: Cascade)
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  /// BİR KULLANICININ TEK ÜST HESABI VAR — `user_id` TEKİL.
+  /// TEKİLLİK (KULLANICI, ÜST HESAP) ÇİFTİNDE.
   ///
-  /// Çoklu üyeliğe izin vermek, "hangi üst hesap geçerli" sorusunu açık
-  /// bırakırdı ve kod sessizce ilkini seçerdi; sessiz seçim bu projede bir
-  /// hata türü. Gerçekten gerekirse ikinci bir DEĞİŞTİRİCİ (üst hesap
-  /// seçici) yazılmak zorunda — o zamana kadar belirsizlik şemada kapalı.
-  @@unique([userId])
+  /// Uzun süre yalnızca `user_id` tekildi ve gerekçe şuydu: "çoklu üyeliğe
+  /// izin vermek 'hangi üst hesap geçerli' sorusunu açık bırakırdı ve kod
+  /// sessizce ilkini seçerdi; gerçekten gerekirse ikinci bir DEĞİŞTİRİCİ
+  /// (üst hesap seçici) yazılmak zorunda."
+  ///
+  /// Değiştirici YAZILDI (`adv_mgr` çerezi + `/auth/switch-manager`), yani
+  /// kilidin şartı karşılandı. Belirsizlik açılmıyor: aktif üst hesap
+  /// çerezden geliyor ve üyelik listesine karşı doğrulanıyor.
+  ///
+  /// ÇİFT HÂLÂ TEKİL: aynı kullanıcının aynı üst hesapta iki üyeliği
+  /// olamıyor — o kalkarsa "hangi rol geçerli" sorusu doğar.
+  @@unique([userId, managerAccountId])
   @@index([managerAccountId])
   @@map("manager_memberships")
 }
@@ -215,6 +240,23 @@ model User {
   /// TOTP secret — AES-256-GCM ile şifreli. (MFA Modül 1.5'te aktifleşir.)
   mfaSecretEnc       Bytes?     @map("mfa_secret_enc")
   mfaEnabled         Boolean    @default(false) @map("mfa_enabled")
+
+  /// ═══ PLATFORM SAHİBİ — ADVETICS'İ İŞLETEN TARAF ═══
+  ///
+  /// Üst hesabı SATAN taraf, henüz üyesi olmadığı bir üst hesabı kurabilmeli
+  /// ve içine girebilmeli. Bunu bir role sıkıştırmak yanlış olurdu: roller
+  /// bir organizasyonun ya da bir üst hesabın İÇİNDE anlamlı, bu yetki ise
+  /// ikisini de AŞIYOR.
+  ///
+  /// RLS DEĞİŞMİYOR ve bu kasıtlı. Gücü politikalarda değil BAĞLAM
+  /// ÇÖZÜMÜNDE: hangi üst hesaba geçebileceğini belirliyor. Geçtikten sonra
+  /// bütün politikalar bugünkü gibi çalışıyor — otuz politikanın hiçbirine
+  /// yeni bir dal eklenmiyor ve politikaya dokunmayan bir yetki izolasyonu
+  /// delme riski taşımıyor.
+  ///
+  /// ELLE VERİLİYOR (`db:platform-admin`): panelde bir düğme olsaydı, o
+  /// düğmeyi görebilen herkesin kendini yükseltebileceği bir kapı olurdu.
+  platformAdmin      Boolean    @default(false) @map("platform_admin")
   /// İLK GİRİŞTE PAROLA DEĞİŞTİRME ZORUNLU MU.
   ///
   /// Seed ile ya da yönetici tarafından kurulan parolalar geçici sayılıyor:

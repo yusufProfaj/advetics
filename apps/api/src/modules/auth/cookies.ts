@@ -16,6 +16,17 @@ export const ACTIVE_CLIENT_COOKIE = 'adv_client';
 export const ACTIVE_ORG_COOKIE = 'adv_org';
 
 /**
+ * SEÇİLİ ÜST HESAP.
+ *
+ * `adv_org` ile AYNI güven seviyesinde: değer tarayıcıda duruyor ve
+ * `TenantContextService` onu kullanıcının gerçek üyelik listesine (platform
+ * sahibinde: bütün üst hesaplara) karşı doğruluyor. Doğrulanmamış bir değer
+ * `app.current_manager_account_id()`yi sürerdi — üst hesap tablolarının TEK
+ * sınırı o.
+ */
+export const ACTIVE_MANAGER_COOKIE = 'adv_mgr';
+
+/**
  * Refresh cookie yalnızca bu yol altında gönderilir. Böylece her normal API
  * isteğinde tarayıcı uzun ömürlü token'ı taşımaz.
  */
@@ -92,6 +103,26 @@ export function setActiveClientCookie(
  * okuyor. Cookie bir YETKİ taşımıyor, yalnızca bir SEÇİM; yetki her istekte
  * yeniden hesaplanıyor.
  */
+/** Seçili üst hesabı yazar; `null` çerezi siler. */
+export function setActiveManagerCookie(
+  res: Response,
+  config: AppConfig,
+  managerAccountId: string | null,
+): void {
+  const base = baseOptions(config);
+  if (managerAccountId) {
+    res.cookie(ACTIVE_MANAGER_COOKIE, managerAccountId, {
+      ...base,
+      // `httpOnly: false` — `adv_org` ile aynı: panel sunucu bileşenlerinde
+      // okuyor ve değer bir SIR değil, doğrulanan bir SEÇİM.
+      httpOnly: false,
+      path: '/',
+    });
+  } else {
+    res.clearCookie(ACTIVE_MANAGER_COOKIE, { ...base, httpOnly: false, path: '/' });
+  }
+}
+
 export function setActiveOrgCookie(
   res: Response,
   config: AppConfig,
@@ -122,4 +153,6 @@ export function clearAuthCookies(res: Response, config: AppConfig): void {
    * başka bir şirkettesin" sorusunun cevabı hiçbir ekranda yazmazdı.
    */
   res.clearCookie(ACTIVE_ORG_COOKIE, { ...base, httpOnly: false, path: '/' });
+  // ÜST HESAP SEÇİMİ DE: aynı gerekçe, bir katman yukarısı.
+  res.clearCookie(ACTIVE_MANAGER_COOKIE, { ...base, httpOnly: false, path: '/' });
 }

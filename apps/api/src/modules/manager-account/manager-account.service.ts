@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { PAKET_SINIRLARI, paketAsildiMi } from '@advetics/shared';
 import type {
+  ManagerPaket,
   CreateManagedOrganizationInput,
   CreateManagerAccountInput,
   DeleteOrganizationInput,
@@ -42,42 +44,74 @@ export class ManagerAccountService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * AKTİF ÜST HESAP — bağlamdan, yeniden sorulmadan.
+   *
+   * Bu metot beş çağrı yerinin kopyaladığı üç satırı tek yere aldı. Önce
+   * her biri `managerMembership.findUnique({ userId })` yazıyordu ve o
+   * sorgu, bir kullanıcının BİRDEN ÇOK üst hesabı olabildiği andan itibaren
+   * yanlış cevap veriyor: hangisi olduğunu söylemiyor.
+   *
+   * `TenantContextService` çerezi zaten doğrulayıp aktif hesabı seçiyor;
+   * ikinci bir çözüm, ikisinin ayrışması demekti.
+   */
+  private async aktifUstHesap(
+    ctx: TenantContext,
+  ): Promise<{ id: string; paket: ManagerPaket }> {
+    if (ctx.managerAccountId === null) {
+      throw new BadRequestException('Önce bir üst hesap oluşturmalısın');
+    }
+    const hesap = await this.admin.managerAccount.findFirst({
+      where: { id: ctx.managerAccountId, status: 'active' },
+      select: { id: true, paket: true },
+    });
+    if (!hesap) throw new BadRequestException('Bu hesabın bağlı olduğu bir üst hesap yok');
+    return hesap;
+  }
+
   /** Kullanıcının üst hesabı ve altındaki şirketler. Yoksa null. */
   async get(ctx: TenantContext): Promise<ManagerAccountTree | null> {
-    const uyelik = await this.admin.managerMembership.findUnique({
-      where: { userId: ctx.userId },
+    /*
+     * AKTİF ÜST HESAP BAĞLAMDAN GELİYOR — YENİDEN SORULMUYOR.
+     *
+     * Burada `managerMembership`e bakmak, aynı kararı iki yerde tutmak
+     * demekti: `TenantContextService` zaten çerezi doğrulayıp aktif hesabı
+     * seçiyor. Bir kullanıcının birden çok üst hesabı olabildiği için
+     * "üyeliğe bak" artık YANLIŞ CEVAP da veriyor — hangisi olduğunu
+     * söylemiyor.
+     */
+    if (ctx.managerAccountId === null) return null;
+    const kayit = await this.admin.managerAccount.findUnique({
+      where: { id: ctx.managerAccountId },
       select: {
-        managerAccount: {
+        id: true,
+        name: true,
+        slug: true,
+        status: true,
+        paket: true,
+        organizations: {
+          where: { status: 'active' },
+          orderBy: { name: 'asc' },
           select: {
             id: true,
             name: true,
             slug: true,
-            status: true,
-            organizations: {
-              where: { status: 'active' },
+            /*
+             * ARŞİVLENMİŞLER HARİÇ. Panelde bir şirketin yanında
+             * "4 workspace" yazıp içeri girince 2 tane görmek,
+             * kullanıcının veri kaybettiğini sanması demek.
+             */
+            clients: {
+              where: { status: { not: 'archived' } },
               orderBy: { name: 'asc' },
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                /*
-                 * ARŞİVLENMİŞLER HARİÇ. Panelde bir şirketin yanında
-                 * "4 workspace" yazıp içeri girince 2 tane görmek,
-                 * kullanıcının veri kaybettiğini sanması demek.
-                 */
-                clients: {
-                  where: { status: { not: 'archived' } },
-                  orderBy: { name: 'asc' },
-                  select: { id: true, name: true, status: true },
-                },
-              },
+              select: { id: true, name: true, status: true },
             },
           },
         },
       },
     });
 
-    const hesap = uyelik?.managerAccount;
+    const hesap = kayit;
     // Askıya alınmış üst hesap YOK sayılıyor — `TenantContextService` de
     // geçişi kapatıyor, ekranın onu göstermesi ikisinin ayrışması olurdu.
     if (!hesap || hesap.status !== 'active') return null;
@@ -86,6 +120,7 @@ export class ManagerAccountService {
       id: hesap.id,
       name: hesap.name,
       slug: hesap.slug,
+      paket: hesap.paket,
       organizations: hesap.organizations.map((o) => ({
         id: o.id,
         name: o.name,
@@ -108,14 +143,23 @@ export class ManagerAccountService {
   async create(ctx: TenantContext, input: CreateManagerAccountInput): Promise<ManagerAccountTree> {
     assertOrgAdmin(ctx);
 
-    const mevcut = await this.admin.managerMembership.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (mevcut) {
-      // Şemada `user_id` tekil; buradaki kontrol kullanıcıya ANLAŞILIR bir
-      // cevap vermek için — yoksa hata bir tekillik ihlali olarak çıkardı.
-      throw new ConflictException('Bu hesap zaten bir üst hesaba bağlı');
+    /*
+     * ═══ PLATFORM SAHİBİ BİRDEN ÇOK ÜST HESAP KURABİLİYOR ═══
+     *
+     * Advetics'i işleten taraf üst hesabı bir ÜRÜN olarak satıyor; her
+     * müşteri için bir tane açması gerekiyor. Normal bir org yöneticisi ise
+     * kendi ajansını kuruyor ve İKİNCİSİNİN anlamı yok: ikinci bir hesap
+     * açmak, birinci hesabın altındaki şirketleri görünmez yapardı (aktif
+     * hesap tek) ve kullanıcı verisini kaybettiğini sanırdı.
+     */
+    if (!ctx.platformAdmin) {
+      const mevcut = await this.admin.managerMembership.findFirst({
+        where: { userId: ctx.userId },
+        select: { id: true },
+      });
+      if (mevcut) {
+        throw new ConflictException('Bu hesap zaten bir üst hesaba bağlı');
+      }
     }
 
     const evSirketi = await this.admin.organization.findUniqueOrThrow({
@@ -130,15 +174,44 @@ export class ManagerAccountService {
       Boolean(await this.admin.managerAccount.findUnique({ where: { slug: aday }, select: { id: true } })),
     );
 
+    /*
+     * ═══ PAKETİ YALNIZCA PLATFORM SAHİBİ SEÇEBİLİYOR ═══
+     *
+     * Kendi ajansını kuran bir org yöneticisi `baslangic` ile doğuyor.
+     * Gönderilen paketi kabul etmek, satılan bir ürünün sınırını satın
+     * alanın eline vermek demekti — uca elle istek atan herkes kendini
+     * sınırsıza yükseltirdi.
+     */
+    const paket: ManagerPaket = ctx.platformAdmin ? (input.paket ?? 'baslangic') : 'baslangic';
+
     const hesapId = await this.admin.$transaction(async (tx) => {
       const hesap = await tx.managerAccount.create({
-        data: { name: input.name, slug },
+        data: { name: input.name, slug, paket },
         select: { id: true },
       });
-      await tx.organization.update({
-        where: { id: evSirketi.id },
-        data: { managerAccountId: hesap.id },
-      });
+      /*
+       * ═══ EV ŞİRKETİ YALNIZCA KENDİ AJANSINI KURANDA BAĞLANIYOR ═══
+       *
+       * İki farklı iş aynı uçtan geçiyor:
+       *   · ORG YÖNETİCİSİ kendi danışmanlığını kuruyor — ev şirketi onun
+       *     ilk müşterisi ve altına bağlanıyor. Bugünkü davranış.
+       *   · PLATFORM SAHİBİ SATMAK İÇİN hesap açıyor. Ev şirketini (yani
+       *     Advetics'in kendi organizasyonunu) müşterinin üst hesabına
+       *     bağlamak, Advetics'i o müşterinin portföyüne sokmak olurdu —
+       *     ve kırk dokuz şirketli kendi ajansını da oradan koparırdı.
+       */
+      if (!ctx.platformAdmin) {
+        await tx.organization.update({
+          where: { id: evSirketi.id },
+          data: { managerAccountId: hesap.id },
+        });
+      }
+      /*
+       * ÜYELİK HER İKİ HÂLDE DE YAZILIYOR. Platform sahibi zaten her hesaba
+       * geçebiliyor ama üyelik, KURUCUNUN kim olduğunu kalıcı kılıyor:
+       * platform yetkisi bir gün geri alınsa bile kurduğu hesaba erişimi
+       * kalıyor ve o hesap sahipsiz kalmıyor.
+       */
       await tx.managerMembership.create({
         data: { managerAccountId: hesap.id, userId: ctx.userId, role: 'owner' },
       });
@@ -179,12 +252,28 @@ export class ManagerAccountService {
   ): Promise<ManagerAccountTree> {
     assertOrgAdmin(ctx);
 
-    const uyelik = await this.admin.managerMembership.findUnique({
-      where: { userId: ctx.userId },
-      select: { managerAccountId: true, managerAccount: { select: { status: true } } },
+    const ustHesap = await this.aktifUstHesap(ctx);
+
+    /*
+     * ═══ PAKET KISITI — ŞİRKET SAYISI ═══
+     *
+     * Kısıt SAYILARI `PAKET_SINIRLARI` içinde, veritabanında değil: aynı
+     * sayıyı iki yerde tutmak, birini güncelleyip diğerini unutmak demekti
+     * ve fark yalnızca kısıtın yanlış uygulanmasıyla görünürdü.
+     *
+     * SAYIM ARŞİVLİLERİ DE İÇERİYOR mu? HAYIR — `status: 'active'`.
+     * Arşivlenmiş bir şirket ekranda görünmüyor ve kotayı yemesi,
+     * kullanıcının "sildim ama hâlâ dolu" demesi demekti.
+     */
+    const sinir = PAKET_SINIRLARI[ustHesap.paket].maxSirket;
+    const mevcutSirket = await this.admin.organization.count({
+      where: { managerAccountId: ustHesap.id, status: 'active' },
     });
-    if (!uyelik || uyelik.managerAccount.status !== 'active') {
-      throw new BadRequestException('Önce bir üst hesap oluşturmalısın');
+    if (paketAsildiMi(sinir, mevcutSirket)) {
+      throw new BadRequestException(
+        `${PAKET_SINIRLARI[ustHesap.paket].etiket} paketi en fazla ${sinir} şirket ` +
+          `açmaya izin veriyor (şu an ${mevcutSirket}). Paketi yükseltmek gerekiyor.`,
+      );
     }
 
     const slug = await uniqueSlug(input.name, async (aday) =>
@@ -193,7 +282,7 @@ export class ManagerAccountService {
 
     const yeniOrgId = await this.admin.$transaction(async (tx) => {
       const org = await tx.organization.create({
-        data: { name: input.name, slug, managerAccountId: uyelik.managerAccountId },
+        data: { name: input.name, slug, managerAccountId: ustHesap.id },
         select: { id: true },
       });
       /*
@@ -213,7 +302,7 @@ export class ManagerAccountService {
       action: 'manager_account.organization_create',
       targetType: 'organization',
       targetId: yeniOrgId,
-      after: { name: input.name, slug, managerAccountId: uyelik.managerAccountId },
+      after: { name: input.name, slug, managerAccountId: ustHesap.id },
     });
 
     this.logger.log(`Üst hesap altına şirket açıldı: ${input.name} (${yeniOrgId})`);
@@ -391,14 +480,10 @@ export class ManagerAccountService {
     ctx: TenantContext,
     organizationId: string,
   ): Promise<{ name: string }> {
-    const uyelik = await this.admin.managerMembership.findUnique({
-      where: { userId: ctx.userId },
-      select: { managerAccountId: true },
-    });
-    if (!uyelik) throw new BadRequestException('Bu hesabın bağlı olduğu bir üst hesap yok');
+    const ustHesap = await this.aktifUstHesap(ctx);
 
     const org = await this.admin.organization.findFirst({
-      where: { id: organizationId, managerAccountId: uyelik.managerAccountId },
+      where: { id: organizationId, managerAccountId: ustHesap.id },
       select: { name: true },
     });
     if (!org) throw new BadRequestException('Bu şirket bulunamadı');
@@ -481,13 +566,7 @@ export class ManagerAccountService {
   ): Promise<ManagerAccountTree & { tasima: WorkspaceTasimaSonucu }> {
     assertOrgAdmin(ctx);
 
-    const uyelik = await this.admin.managerMembership.findUnique({
-      where: { userId: ctx.userId },
-      select: { managerAccountId: true, managerAccount: { select: { status: true } } },
-    });
-    if (!uyelik || uyelik.managerAccount.status !== 'active') {
-      throw new BadRequestException('Bu hesabın bağlı olduğu bir üst hesap yok');
-    }
+    const ustHesap = await this.aktifUstHesap(ctx);
 
     const workspace = await this.admin.client.findUnique({
       where: { id: input.clientId },
@@ -501,7 +580,7 @@ export class ManagerAccountService {
      * `clientId` istemciden geliyor ve tek başına hiçbir şey kanıtlamıyor.
      */
     const sirketler = await this.admin.organization.findMany({
-      where: { managerAccountId: uyelik.managerAccountId, status: 'active' },
+      where: { managerAccountId: ustHesap.id, status: 'active' },
       select: { id: true },
     });
     const izinli = new Set(sirketler.map((o) => o.id));

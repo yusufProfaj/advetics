@@ -81,7 +81,7 @@ async function main() {
   });
   if (!kullanici) throw new Error(`Kullanıcı bulunamadı: ${EPOSTA}`);
 
-  const ustHesap = await admin.managerMembership.findUnique({
+  const ustHesap = await admin.managerMembership.findFirst({
     where: { userId: kullanici.id },
     select: { managerAccountId: true },
   });

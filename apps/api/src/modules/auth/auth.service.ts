@@ -23,7 +23,7 @@ import { AuditService } from '../audit/audit.service';
 import { TenantContextService } from './tenant-context.service';
 import { TokenService, type IssuedTokens } from './token.service';
 import { ARGON_OPTIONS } from '../../common/utils/password-hash';
-import { TUM_SIRKETLER } from '@advetics/shared';
+import { TUM_SIRKETLER, isOrgScopedRole } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { mailGonder } from '../email/mail-gonderici';
 import { sifirlamaMailiOlustur } from './sifre-sifirlama-maili';
@@ -218,8 +218,15 @@ export class AuthService {
     activeClientId: string | null,
     /** Üst hesap altında seçili şirket. Geçersizse `resolve` eve düşürüyor. */
     activeOrgId: string | null = null,
+    /** Seçili üst hesap. Geçersizse `resolve` ilk üyeliğe düşürüyor. */
+    activeManagerAccountId: string | null = null,
   ): Promise<SessionResponse> {
-    const identity = await this.tenantContext.resolve(userId, activeClientId, activeOrgId);
+    const identity = await this.tenantContext.resolve(
+      userId,
+      activeClientId,
+      activeOrgId,
+      activeManagerAccountId,
+    );
 
     const [user, org] = await Promise.all([
       this.admin.user.findUniqueOrThrow({
@@ -262,6 +269,11 @@ export class AuthService {
       tumSirketler: identity.context.tumSirketler,
       managerAccount: identity.managerAccount,
       erisilebilirSirketler: identity.erisilebilirSirketler,
+      // ÜST HESAP SEÇİCİSİNİN LİSTESİ — tek elemanlıysa panel seçiciyi hiç
+      // çizmiyor (geçilecek yer yokken açılır kutu, olmayan bir özelliği
+      // aratır).
+      secilebilirUstHesaplar: identity.secilebilirUstHesaplar,
+      platformAdmin: identity.context.platformAdmin,
       permissions: identity.context.permissions,
       isOrgAdmin: identity.context.isOrgAdmin,
     };
@@ -286,11 +298,17 @@ export class AuthService {
      * değişmedi" hâli demek.
      */
 
-    const uyelik = await this.admin.managerMembership.findUnique({
-      where: { userId: ctx.userId },
-      select: { managerAccountId: true, managerAccount: { select: { status: true } } },
-    });
-    const ustHesapVar = uyelik !== null && uyelik.managerAccount.status === 'active';
+    /*
+     * AKTİF ÜST HESAP BAĞLAMDAN GELİYOR.
+     *
+     * `findUnique({ userId })` bir kullanıcının BİRDEN ÇOK üst hesabı
+     * olabildiği andan itibaren yanlış cevap veriyor: hangisi olduğunu
+     * söylemiyor. `TenantContextService` çerezi zaten doğrulayıp seçiyor ve
+     * askıya alınmış hesabı da eliyor — ikinci bir çözüm, ikisinin
+     * ayrışması demekti.
+     */
+    const aktifUstHesapId = ctx.managerAccountId;
+    const ustHesapVar = aktifUstHesapId !== null;
 
     /*
      * "TÜM ŞİRKETLER" ÜST HESABA ÖZEL ve öyle kalıyor: mod ajansın
@@ -322,7 +340,7 @@ export class AuthService {
       const kardes = await this.admin.organization.findFirst({
         where: {
           id: organizationId,
-          managerAccountId: uyelik.managerAccountId,
+          managerAccountId: aktifUstHesapId,
           status: 'active',
         },
         select: { id: true },
@@ -341,6 +359,36 @@ export class AuthService {
     if (kendiUyeligi) return organizationId;
 
     throw new BadRequestException('Bu şirkete erişim yetkiniz yok');
+  }
+
+  /**
+   * ═══ ÜST HESABA GEÇİŞ YETKİSİ ═══
+   *
+   * İki yol var ve ikisi de `TenantContextService`teki listeyle AYNI kuralı
+   * uyguluyor:
+   *   · ÜYELİK — kullanıcının o üst hesapta org geneli bir rolü var,
+   *   · PLATFORM SAHİBİ — Advetics'i işleten taraf, henüz üyesi olmadığı
+   *     hesaba da geçebiliyor (kurduğu hesabı ayarlaması gerekiyor).
+   *
+   * İKİSİNİN AYRIŞMASI, seçicide görünen ama tıklanınca reddedilen bir
+   * satır demekti — bu depoda bir kez yaşanmış bir hâl.
+   */
+  async assertManagerAccountAccess(ctx: TenantContext, managerAccountId: string): Promise<void> {
+    const hesap = await this.admin.managerAccount.findFirst({
+      where: { id: managerAccountId, status: 'active' },
+      select: { id: true },
+    });
+    if (!hesap) throw new BadRequestException('Bu üst hesap bulunamadı');
+
+    if (ctx.platformAdmin) return;
+
+    const uyelik = await this.admin.managerMembership.findFirst({
+      where: { userId: ctx.userId, managerAccountId },
+      select: { role: true },
+    });
+    if (!uyelik || !isOrgScopedRole(uyelik.role as Role)) {
+      throw new BadRequestException('Bu üst hesaba erişim yetkiniz yok');
+    }
   }
 
   /**

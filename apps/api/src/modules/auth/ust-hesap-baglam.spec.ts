@@ -61,6 +61,8 @@ interface Senaryo {
   uyelikler?: Array<{ clientId: string | null; role: string }>;
   /** KARDEŞ şirketteki gerçek üyelikler — şirketi açan kişi orada owner olur. */
   kardesUyelikler?: Array<{ orgId: string; clientId: string | null; role: string }>;
+  /** Advetics'i işleten taraf mı — varsayılan HAYIR (bkz. fikstür). */
+  platformAdmin?: boolean;
 }
 
 function servis(s: Senaryo) {
@@ -72,6 +74,12 @@ function servis(s: Senaryo) {
         email: 'a@x.com',
         fullName: 'A',
         status: 'active',
+        /*
+         * PLATFORM SAHİBİ DEĞİL. Bu paketin konusu ÜYELİKTEN gelen erişim.
+         * Varsayılanı `true` yapmak, buradaki bütün izolasyon iddialarını
+         * sessizce geçirirdi — platform sahibi zaten her hesaba geçebiliyor.
+         */
+        platformAdmin: s.platformAdmin ?? false,
         organization: { status: 'active' },
         managerMemberships: s.ustHesap
           ? [
@@ -82,7 +90,9 @@ function servis(s: Senaryo) {
                 managerAccount: {
                   id: s.ustHesap.id,
                   name: `${s.ustHesap.id} Danışmanlık`,
+                  slug: s.ustHesap.id,
                   status: s.ustHesap.status ?? 'active',
+                  paket: 'ajans' as const,
                 },
               },
             ]
@@ -114,6 +124,26 @@ function servis(s: Senaryo) {
           })),
         ),
       }),
+    },
+    /*
+     * ÜST HESAP TABLOSU — seçicinin listesi ve platform sahibinin yolu.
+     *
+     * `findMany` iki yerden çağrılıyor: platform sahibinin geçebileceği
+     * hesaplar ve seçici listesi. Fikstürde olmaması, bağlam çözümünün
+     * `undefined.findMany` ile patlaması demekti.
+     */
+    managerAccount: {
+      findMany: async (args: { where?: { id?: { in: string[] } } } = {}) => {
+        const hepsi = [UST_A, UST_B].map((id) => ({
+          id,
+          name: `${id} Danışmanlık`,
+          slug: id,
+          paket: 'ajans' as const,
+          _count: { organizations: ORGLAR.filter((o) => o.managerAccountId === id).length },
+        }));
+        const idler = args.where?.id?.in;
+        return idler ? hepsi.filter((h) => idler.includes(h.id)) : hepsi;
+      },
     },
     organization: {
       // SÜZGEÇ GERÇEKTEN UYGULANIYOR — hepsini döndürmek testi anlamsız kılardı.

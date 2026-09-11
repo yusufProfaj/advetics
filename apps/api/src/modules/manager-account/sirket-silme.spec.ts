@@ -221,8 +221,15 @@ describe('KRİTİK: silme kapıları KODDA', () => {
      */
     const bas = KAYNAK.indexOf('private async silinecekSirket(');
     const dilim = KAYNAK.slice(bas, KAYNAK.indexOf('\n  }', bas));
-    expect(dilim.length).toBeGreaterThan(200);
-    expect(dilim).toContain('managerAccountId: uyelik.managerAccountId');
+    expect(dilim.length).toBeGreaterThan(150);
+    /*
+     * AKTİF ÜST HESAP BAĞLAMDAN GELİYOR. Önce burada
+     * `managerMembership.findUnique({ userId })` vardı; bir kullanıcının
+     * BİRDEN ÇOK üst hesabı olabildiği andan itibaren o sorgu yanlış cevap
+     * veriyor — hangisi olduğunu söylemiyor.
+     */
+    expect(dilim).toContain('this.aktifUstHesap(ctx)');
+    expect(dilim).toContain('managerAccountId: ustHesap.id');
   });
 
   it('KRİTİK: veri varsa AD ONAYI isteniyor — sunucuda', () => {

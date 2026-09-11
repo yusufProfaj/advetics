@@ -203,6 +203,9 @@ export class ShareService {
        * alan kişiye danışmanlığın altındaki ŞİRKET LİSTESİNİ açardı.
        */
       managerAccountId: null,
+      // PAYLAŞIM BAĞLAMI PLATFORM SAHİBİ DEĞİL: bağlantıyı açan kişi
+      // kimliksiz bir okuyucu, Advetics'i işleten taraf değil.
+      platformAdmin: false,
       /*
        * TÜM ŞİRKETLER MODU KAPALI ve olmalı: paylaşım bağlantısı TEK bir
        * workspace'in raporunu açıyor. Açık olsaydı bağlantıyı alan kişi

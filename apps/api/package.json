@@ -25,7 +25,8 @@
     "worker": "node dist/worker.js",
     "worker:dev": "tsx watch src/worker.ts",
     "youtube-check": "tsx prisma/youtube-check.ts",
-    "olcum-metrik": "tsx prisma/olcum-metrik.ts"
+    "olcum-metrik": "tsx prisma/olcum-metrik.ts",
+    "db:platform-admin": "tsx prisma/platform-admin.ts"
   },
   "dependencies": {
     "@advetics/shared": "workspace:*",
