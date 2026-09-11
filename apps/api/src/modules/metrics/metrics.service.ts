@@ -126,7 +126,7 @@ export class MetricsService {
     query: MetricsQuery,
   ): Promise<{ earliestDate: string | null; latestDate: string | null }> {
     return this.prisma.withTenant(ctx, async (tx) => {
-      const filters = this.filters(ctx, query);
+      const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx));
       const [row] = await tx.$queryRaw<Array<{ en_eski: Date | null; en_yeni: Date | null }>>(
         Prisma.sql`
           SELECT MIN(date) AS en_eski, MAX(date) AS en_yeni
@@ -164,7 +164,7 @@ export class MetricsService {
     const prevFrom = query.compareFrom ?? this.shift(prevTo, -(days - 1));
 
     return this.prisma.withTenant(ctx, async (tx) => {
-      const filters = this.filters(ctx, query);
+      const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx));
 
       const hiddenAccounts = await this.hiddenAccountCount(tx, query);
 
@@ -302,6 +302,7 @@ export class MetricsService {
     const pencereBasi = karsilastir ? query.compareFrom! : query.from;
 
     return this.prisma.withTenant(ctx, async (tx) => {
+      const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx));
       const rows = await tx.$queryRaw<Array<RawTotals & { date: Date }>>(
         Prisma.sql`
           SELECT date,
@@ -313,7 +314,7 @@ export class MetricsService {
           FROM insights_daily
           WHERE date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND entity_level = ${TOPLAM_SEVIYESI}
-            ${this.filters(ctx, query)}
+            ${filters}
           GROUP BY date
           ORDER BY date
         `,
@@ -352,6 +353,7 @@ export class MetricsService {
     const pencereBasi = karsilastir ? query.compareFrom! : query.from;
 
     return this.prisma.withTenant(ctx, async (tx) => {
+      const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx), 'i');
       // Varlık adı ve üst varlık adı seviyeye göre farklı tablodan geliyor.
       // Üç ayrı sorgu yerine LEFT JOIN'lerle tek sorgu: seviye filtresi
       // sayesinde yalnızca biri eşleşiyor.
@@ -413,7 +415,7 @@ export class MetricsService {
           LEFT JOIN ad_groups   ag  ON i.entity_level = 'ad'       AND ag.id = a.ad_group_id
           WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND i.entity_level = ${query.level}::"EntityLevel"
-            ${this.filters(ctx, query, 'i')}
+            ${filters}
           GROUP BY i.entity_id, i.entity_external_id, i.platform, i.currency,
                    c.name, g.name, a.name, acc.name, gc.name, ag.name,
                    c.status, g.status, a.status, acc.status
@@ -465,7 +467,23 @@ export class MetricsService {
    * `Prisma.sql` ile birleştiriliyor, string interpolasyonu YOK — bu değerler
    * kullanıcıdan geliyor ve şablona gömmek SQL enjeksiyonu olurdu.
    */
-  private filters(ctx: TenantContext, query: MetricsQuery, alias = ''): Prisma.Sql {
+  private filters(
+    ctx: TenantContext,
+    query: MetricsQuery,
+    /**
+     * İZLENEN HESAP KİMLİKLERİ — ÖNCEDEN ÇEKİLMİŞ OLARAK GELİYOR.
+     *
+     * Buraya bir ALT SORGU yazmak (`IN (SELECT id FROM ad_accounts …)`)
+     * üretimde ölçülen yavaşlığın TAMAMIYDI. Gerekçesi aşağıda,
+     * `izlenenHesapIdleri` üstünde.
+     *
+     * PARAMETRE ZORUNLU ve `alias`tan ÖNCE: varsayılanı olsaydı bir çağıran
+     * onu geçirmeyi unutur, sorgu yine çalışır ve süzgeç SESSİZCE
+     * kaybolurdu — izlemesi kapalı hesapların harcaması panele karışırdı.
+     */
+    hesaplar: string[],
+    alias = '',
+  ): Prisma.Sql {
     const p = alias ? `${alias}.` : '';
     const parts: Prisma.Sql[] = [];
 
@@ -517,12 +535,55 @@ export class MetricsService {
      * kaybolan veri, bu projede tekrar eden hata deseninin ta kendisi.
      */
     parts.push(
-      Prisma.sql`AND ${Prisma.raw(`${p}ad_account_id`)} IN (
-        SELECT id FROM ad_accounts WHERE sync_enabled = true
-      )`,
+      Prisma.sql`AND ${Prisma.raw(`${p}ad_account_id`)} = ANY(${hesaplar}::uuid[])`,
     );
 
     return Prisma.join(parts, ' ');
+  }
+
+  /**
+   * ═══ İZLENEN HESAPLAR BİR KEZ OKUNUYOR — SATIR BAŞINA DEĞİL ═══
+   *
+   * `filters()` uzun süre şunu yazıyordu:
+   *
+   *     AND ad_account_id IN (SELECT id FROM ad_accounts WHERE sync_enabled)
+   *
+   * Doğru sonucu veriyordu ve ÜRETİMDEKİ YAVAŞLIĞIN TAMAMI buydu. Plan:
+   *
+   *     Nested Loop  (actual time=1.234..1691.171 rows=8014)
+   *       ->  Append  … rows=8054   Buffers: hit=287 read=3060   (59 ms)
+   *       ->  Index Scan using ad_accounts_pkey  (loops=8054)
+   *             Buffers: shared hit=32216
+   *
+   * Yani `insights_daily` taraması 59 MİLİSANİYE; kalan 1.630 ms sekiz bin
+   * kez `ad_accounts`a gidip gelmek. `timeseries`te aynı desen 16.313 döngü
+   * ve 2.475 ms. Üç yavaş ucun da zamanının ~%95'i buradaydı.
+   *
+   * ┌─ NEDEN BU KADAR PAHALI ───────────────────────────────────────────────┐
+   * │ Döngünün okuduğu bloklar ÖNBELLEKTE (`hit`), yani maliyet disk değil  │
+   * │ CPU: `ad_accounts` RLS politikası her satırda yeniden değerlendiriliyor│
+   * │ — `current_setting` çağrıları, KIRK SEKİZ uuid'lik bir metnin         │
+   * │ `string_to_array(...)::uuid[]` ile ayrıştırılması ve                  │
+   * │ `app.ajans_org_idleri()`. Satır başına 0,2 ms; sekiz bin satırda 1,6  │
+   * │ saniye.                                                               │
+   * │                                                                       │
+   * │ Planlayıcı bu planı seçti çünkü `Append`ten 2 SATIR bekliyordu        │
+   * │ (gerçek: 8.054). Kestirimi bozan şey RLS'in fonksiyon yüklemleri ve   │
+   * │ onu düzeltmenin bir yolu yok.                                         │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * Liste önce çekiliyor: RLS o zaman 481 satırda BİR KEZ değerlendiriliyor,
+   * sekiz bin kez değil. Sonuç kümesi birebir aynı — aynı transaction, aynı
+   * bağlam, aynı politika.
+   *
+   * BOŞ LİSTE HİÇBİR SATIR demek ve bu DOĞRU: izlenen hesabı olmayan bir
+   * kapsamda metrik de olmamalı. Eski alt sorgu da aynı sonucu veriyordu.
+   */
+  private async izlenenHesapIdleri(tx: TxLike): Promise<string[]> {
+    const satirlar = await tx.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`SELECT id FROM ad_accounts WHERE sync_enabled = true`,
+    );
+    return satirlar.map((r) => r.id);
   }
 
   /**
@@ -603,6 +664,7 @@ export class MetricsService {
     const pencereBasi = karsilastir ? query.compareFrom! : query.from;
 
     return this.prisma.withTenant(ctx, async (tx) => {
+      const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx), 'i');
       const rows = await tx.$queryRaw<
         Array<
           RawTotals & {
@@ -643,7 +705,7 @@ export class MetricsService {
           JOIN clients cl ON cl.id = i.client_id
           WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND i.entity_level = ${TOPLAM_SEVIYESI}
-            ${this.filters(ctx, query, 'i')}
+            ${filters}
           GROUP BY i.client_id, cl.name, cl.slug, i.platform, i.currency
         `,
       );
@@ -778,6 +840,7 @@ export class MetricsService {
     const pencereBasi = karsilastir ? query.compareFrom! : query.from;
 
     return this.prisma.withTenant(ctx, async (tx) => {
+      const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx), 'i');
       const rows = await tx.$queryRaw<
         Array<
           RawTotals & {
@@ -818,7 +881,7 @@ export class MetricsService {
             -- musteri kiriliminda ayni satirlar zaten eleniyor ve iki ekranin
             -- farkli toplam gostermesi, ikisinin de yanlis sanilmasi demek.
             AND cl.status <> 'archived'
-            ${this.filters(ctx, query, 'i')}
+            ${filters}
           GROUP BY cl.org_id, i.platform, i.currency
         `,
       );

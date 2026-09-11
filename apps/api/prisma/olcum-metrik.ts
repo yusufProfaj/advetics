@@ -22,6 +22,15 @@
  * `ROLLBACK` var; `EXPLAIN ANALYZE` sorguyu GERÇEKTEN çalıştırıyor ama
  * buradakiler `SELECT`.
  *
+ * ═══ DENEME İNDEKSİ KURAMIYOR — VE KURMAMALI ═══
+ *
+ * Bir ara `--aday` bayrağı vardı: tek bir partition'a deneme indeksi kurup
+ * planı yeniden basıyordu. Üretimde `ERROR: must be owner of table` ile
+ * düştü — uygulama rolü tablo sahibi değil ve OLMAMALI (en az yetki).
+ * Kaldırıldı; ayrıca ölçüm o hipotezi (heap'e erişim) zaten çürüttü:
+ * maliyet `insights_daily` taramasında değil, satır başına `ad_accounts`
+ * aramasındaydı.
+ *
  * Kullanım (advetics kullanıcısı, depo kökünde):
  *   pnpm --filter @advetics/api olcum-metrik -- --eposta=kisi@ornek.com
  *
@@ -40,21 +49,6 @@ const EPOSTA =
   ARGV.find((a) => a.startsWith('--eposta='))?.slice('--eposta='.length) ??
   process.env.SEED_ADMIN_EMAIL;
 
-/**
- * ADAY İNDEKS DENEMESİ — `--aday` ile açılıyor, VARSAYILAN KAPALI.
- *
- * Açıkken tek bir aylık partition'a deneme indeksi kuruluyor ve sorgular
- * yeniden planlanıyor. Aynı sorgu İKİ partition'a birden dokunduğu için
- * sonuç kusursuz bir A/B oluyor: biri deneme indeksini taşıyor, diğeri
- * taşımıyor ve ikisinin planı yan yana görünüyor.
- *
- * NEDEN VARSAYILAN KAPALI: `CREATE INDEX` o partition üzerinde ACCESS
- * EXCLUSIVE kilidi alıyor. Partition ~46 bin satır, yani saniyenin altında
- * — ama üretimde koşan bir worker'ı o süre boyunca bekletiyor ve bunun
- * bilerek seçilmesi gerekiyor. Her şey transaction'la birlikte geri
- * alınıyor.
- */
-const ADAY = ARGV.includes('--aday');
 
 /*
  * İKİ İSTEMCİ VE İKİSİ DE GEREKLİ.
@@ -323,59 +317,6 @@ async function main() {
         );
         console.log(`(duvar saati: ${Date.now() - baslangic} ms)`);
         for (const satir of plan) console.log('  ' + planKisalt(String(Object.values(satir)[0])));
-      }
-
-      if (ADAY) {
-        /*
-         * ═══ ADAY: KAPSAYAN (COVERING) KISMİ İNDEKS ═══
-         *
-         * Buraya kadarki ölçümler tek bir şeyi gösteriyor: maliyet
-         * satırları BULMAKTA değil, bulunan satırların SAYFASINI heap'ten
-         * okumakta. `timeseries` TEK taramada 5 saniye sürüyor ve
-         * yapabileceği tek pahalı iş bu.
-         *
-         * Kapsayan indeks sorgunun okuduğu HER kolonu taşıyorsa Postgres
-         * `Index Only Scan` seçip heap'e HİÇ gitmeyebiliyor. "Olabiliyor",
-         * çünkü iki şart var: (1) planlayıcının o planı seçmesi,
-         * (2) görünürlük haritasının kurulu olması (taze yazılmış sayfalar
-         * için değil). İkisi de tahmin edilemez — ölçülmesi gerekiyor.
-         *
-         * A/B TEK PLANDA: indeks YALNIZCA bir partition'a kuruluyor ve
-         * sorgu iki partition'a birden dokunuyor. Aynı planın içinde biri
-         * indeksli, diğeri indekssiz görünüyor.
-         */
-        const [hedef] = await tx.$queryRawUnsafe<Array<{ relname: string }>>(
-          `SELECT c.relname
-             FROM pg_class c
-             JOIN pg_inherits i ON i.inhrelid = c.oid
-             JOIN pg_class p ON p.oid = i.inhparent
-            WHERE p.relname = 'insights_daily' AND c.reltuples > 0
-            ORDER BY c.relname DESC OFFSET 1 LIMIT 1`,
-        );
-        if (!hedef) {
-          console.log('\n(aday denemesi atlandı — uygun partition yok)');
-        } else {
-          console.log(`\n═══ ADAY İNDEKS — ${hedef.relname} ═══`);
-          console.log('  (yalnızca bu partition’a kuruluyor; işlem sonunda geri alınıyor)');
-          await tx.$executeRawUnsafe(
-            `CREATE INDEX aday_kapsayan ON ${hedef.relname} (client_id, date DESC)
-               INCLUDE (ad_account_id, platform, currency, fetched_at, impressions,
-                        clicks, spend_micros, conversions, conversion_value_micros)
-               WHERE entity_level = '${TOTALS_LEVEL}'::"EntityLevel"`,
-          );
-          await tx.$executeRawUnsafe(`ANALYZE ${hedef.relname}`);
-
-          for (const o of olcumler.filter((x) => x.ad.startsWith('summary') || x.ad.startsWith('timeseries'))) {
-            console.log(`\n--- ADAYLA: ${o.ad} ---`);
-            const t0 = Date.now();
-            const plan = await tx.$queryRawUnsafe<Array<Record<string, string>>>(
-              `EXPLAIN (ANALYZE, BUFFERS, TIMING) ${o.sql}`,
-              clientIdler,
-            );
-            console.log(`(duvar saati: ${Date.now() - t0} ms)`);
-            for (const satir of plan) console.log('  ' + planKisalt(String(Object.values(satir)[0])));
-          }
-        }
       }
 
       /*

@@ -627,18 +627,10 @@ db:rls`) ve plan okumanın anlamı yok. Ardından **satır genişliğini** yazı
 sayfa başına kaç satır düştüğü, bir aralık sorgusunun kaç RASTGELE blok
 okuyacağını doğrudan belirliyor.
 
-Sorgu bulduğu satır sayısına göre orantısız yavaşsa (`timeseries` tek taramada
-saniyeler) maliyet satırları bulmakta değil, sayfalarını heap'ten okumakta.
-O durumda `--aday` kapsayan bir indeks deneyip planı yeniden basıyor:
-
-```bash
-pnpm --filter @advetics/api olcum-metrik -- --eposta=kisi@ornek.com --aday
-```
-
-Deneme indeksi YALNIZCA tek bir aylık partition'a kuruluyor (`CREATE INDEX`
-ACCESS EXCLUSIVE kilidi alıyor; ~46 bin satırda saniyenin altında) ve işlem
-sonunda geri alınıyor. Sorgu iki partition'a birden dokunduğu için A/B aynı
-planın içinde görünüyor: biri deneme indeksli, diğeri indekssiz.
+**Plandaki `Nested Loop`lara bak.** 2026-09-11'de ajans yavaşlığının sebebi
+bu çıktı: `loops=8054` ile `ad_accounts`a giden bir döngü, `insights_daily`
+taramasının 59 ms sürdüğü bir sorguda 1.630 ms harcıyordu. `loops=` büyükse
+satır başına yapılan bir iş var demektir ve genellikle bir alt sorgudur.
 
 Script ayrıca `default` partition'a satır düşmüşse uyarı basıyor: o
 satırların tarihi 38 aylık kapsamın dışında. Veri kaybı yok (sorgular onları

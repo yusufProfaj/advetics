@@ -68,20 +68,15 @@ describe('KRİTİK: ölçüm UYGULAMANIN ROLÜYLE koşuyor', () => {
     expect(OLCUM).not.toMatch(/\$executeRawUnsafe\(\s*`?\s*(INSERT|UPDATE|DELETE)/i);
   });
 
-  it('KRİTİK: aday denemesi OPT-IN ve kilidi tek partition’la sınırlı', () => {
+  it('KRİTİK: araç ŞEMA DEĞİŞTİRMİYOR', () => {
     /*
-     * `CREATE INDEX` ACCESS EXCLUSIVE kilidi alıyor. Partition'lı EBEVEYNE
-     * kurulsaydı kilit BÜTÜN aylara yayılırdı ve üretimdeki worker'ı
-     * bekletirdi; tek partition ~46 bin satır, saniyenin altında.
-     *
-     * Varsayılan açık olsaydı "sadece plan bakayım" diyen biri farkında
-     * olmadan üretimde kilit alırdı.
+     * Bir ara `--aday` bayrağı deneme indeksi kuruyordu ve üretimde
+     * `must be owner of table` ile düştü: uygulama rolü tablo sahibi değil
+     * ve olmamalı. Ölçüm aracının ayrıcalık istemesi, onu üretimde
+     * koşulamaz yapıyor — teşhis aracının en kötü özelliği.
      */
-    expect(OLCUM).toContain("const ADAY = ARGV.includes('--aday');");
-    expect(OLCUM).toContain('if (ADAY) {');
-    // Hedef `pg_inherits` ile seçilen bir PARTITION adı; ebeveyn adı değil.
-    expect(OLCUM).toContain('CREATE INDEX aday_kapsayan ON ${hedef.relname}');
-    expect(OLCUM).not.toContain('CREATE INDEX aday_kapsayan ON insights_daily ');
+    expect(OLCUM).not.toContain('CREATE INDEX');
+    expect(OLCUM).not.toContain('ALTER TABLE');
   });
 
   it('KRİTİK: ölçülen sorgular ÜRETİMDEKİ süzgeci taşıyor', () => {
