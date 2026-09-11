@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { ApiRequestError, apiFetch } from '@/lib/api';
 import {
   KARSILASTIRMA_SECENEKLERI,
   MAX_GUN,
   RANGE_PRESETS,
   gunEkle,
   gunSayisi,
+  enEskiGunGerekli,
   karsilastirmaPenceresi,
   today,
   type IsoDay,
@@ -107,18 +109,71 @@ export function TarihSecici({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acik, aralik]);
 
+  /*
+   * SUNUCUDAN GELEN DEĞER ÖNCELİKLİ; panelde arananı yalnızca o yoksa
+   * kullanıyoruz. Tersi, sayfa değeri zaten getirmişken onu istemcide
+   * bulunanla ezmek olurdu.
+   */
+  const [enEskiBulunan, setEnEskiBulunan] = useState<IsoDay | null>(null);
+  const [kapsamAraniyor, setKapsamAraniyor] = useState(false);
+  const [kapsamHatasi, setKapsamHatasi] = useState<string | null>(null);
+  const bilinenEnEski = enEskiGun ?? enEskiBulunan;
+
   const taslakGun = gunSayisi(taslakFrom, taslakTo);
   const taslakKarsPencere = karsilastirmaPenceresi(taslakFrom, taslakTo, taslakKars);
   const asiyor = taslakGun > MAX_GUN;
 
+  /*
+   * ═══ "TÜM ZAMANLAR" EN ESKİ GÜNÜ İSTEDİĞİNDE ARANIYOR ═══
+   *
+   * `enEskiGun`u üreten `/metrics/coverage` metrik tablosundaki tarih sınırı
+   * olmayan tek sorgu ve üretimde 17,4 saniye sürüyor. Sayfa onu artık HER
+   * yüklemede çekmiyor — çoğu yüklemede o değeri hiçbir şey okumuyor.
+   *
+   * AMA ÖNİZLEME YALAN SÖYLEYEMEZ. Değer elde yokken "Tüm zamanlar"a
+   * basıldığında panelde 90 günlük bir taslak görünür, kullanıcı "Uygula"ya
+   * basar ve sunucu BAŞKA bir pencere hesaplardı: panelde yazan dönem ile
+   * bakılan dönem farklı olurdu ve fark hiçbir yerde görünmezdi. O yüzden
+   * değer TIKLANDIĞI AN aranıyor ve arandığı ekranda yazıyor.
+   *
+   * Hata YUTULMUYOR: `.catch(() => null)` ile sessizce 90 güne düşmek,
+   * "arıyorum", "bulamadım" ve "veri yok" hâllerini aynı ekrana çevirirdi.
+   */
+  async function enEskiGunuAra(): Promise<IsoDay | null> {
+    setKapsamHatasi(null);
+    setKapsamAraniyor(true);
+    try {
+      const r = await apiFetch<{ earliestDate: IsoDay | null }>(
+        '/metrics/coverage?from=2026-01-01&to=2026-01-01',
+      );
+      setEnEskiBulunan(r.earliestDate);
+      return r.earliestDate;
+    } catch (e) {
+      setKapsamHatasi(
+        e instanceof ApiRequestError ? e.message : 'En eski veri günü alınamadı.',
+      );
+      return null;
+    } finally {
+      setKapsamAraniyor(false);
+    }
+  }
+
   function onAyarSec(key: string) {
     const on = RANGE_PRESETS.find((p) => p.key === key);
     if (!on) return;
-    const { from, to } = on.pencere(today(), enEskiGun);
+    const uygula = (enEski: IsoDay | null) => {
+      const { from, to } = on.pencere(today(), enEski);
+      setTaslakFrom(from);
+      setTaslakTo(to);
+      setTakvimAy(from.slice(0, 7));
+    };
     setTaslakKey(key);
-    setTaslakFrom(from);
-    setTaslakTo(to);
-    setTakvimAy(from.slice(0, 7));
+    uygula(bilinenEnEski);
+    // Değer zaten elimizdeyse ikinci bir çağrı, en pahalı sorguyu boşuna
+    // tekrarlamak olurdu.
+    if (enEskiGunGerekli(key) && bilinenEnEski === null) {
+      void enEskiGunuAra().then(uygula);
+    }
   }
 
   /** Takvimden gün seçimi: ilk tık başlangıç, ikinci tık bitiş. */
@@ -245,6 +300,20 @@ export function TarihSecici({
               kırpılıyor ve bu KULLANICIYA SÖYLENİYOR. Söylenmezse "tüm
               zamanlar" diye bakıp eksik veriye bakar.
             */}
+            {/*
+              ARANIYOR / BULUNAMADI AYRI AYRI YAZILIYOR. İkisini de sessiz
+              bırakmak, taslakta görünen 90 günlük pencerenin "elimizdeki tüm
+              veri bu" diye okunması demekti.
+            */}
+            {kapsamAraniyor && (
+              <p className="mt-2 text-[11px] text-ink-muted">En eski veri günü aranıyor…</p>
+            )}
+            {kapsamHatasi && (
+              <p role="alert" className="mt-2 rounded border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">
+                {kapsamHatasi} “Tüm zamanlar” şimdilik son 90 günü gösteriyor.
+              </p>
+            )}
+
             {asiyor && (
               <p className="mt-2 rounded border border-warn/40 bg-warn/5 px-2.5 py-1.5 text-[11px] leading-snug">
                 Seçilen aralık {taslakGun} gün. Sunucu en fazla {MAX_GUN} gün tarıyor —

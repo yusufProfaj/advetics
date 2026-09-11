@@ -54,6 +54,21 @@ export interface OnAyar {
   bugunDahil: boolean;
   /** `enEskiGun` yalnızca "Tüm zamanlar" için gerekli; yoksa bugüne düşüyor. */
   pencere: (bugun: IsoDay, enEskiGun: IsoDay | null) => { from: IsoDay; to: IsoDay };
+  /**
+   * PENCERE `enEskiGun` OLMADAN DOĞRU HESAPLANAMIYOR.
+   *
+   * O değeri `/metrics/coverage` üretiyor ve o uç, metrik tablosundaki
+   * TARİH SINIRI OLMAYAN tek sorgu: bütün partition'ları tarıyor ve
+   * üretimde ölçüldüğünde 17,4 saniye sürdü — panelin diğer beş isteğinin
+   * TOPLAMINDAN fazla, üstelik onlardan ÖNCE ve seri olarak.
+   *
+   * Bayrak bu yüzden var: sayfa o isteği yalnızca gerçekten gerektiğinde
+   * atıyor. Koşulu ön ayarın kendisine yazmak, "hangi ön ayarlar bu değere
+   * muhtaç" sorusunun cevabını TEK yerde tutuyor; sayfalarda elle yazılan
+   * bir `=== 'tum_zamanlar'` karşılaştırması, yeni bir ön ayar eklendiğinde
+   * sessizce yanlış pencere göstermek demekti.
+   */
+  enEskiGunGerekir?: boolean;
 }
 
 export const RANGE_PRESETS: OnAyar[] = [
@@ -96,12 +111,45 @@ export const RANGE_PRESETS: OnAyar[] = [
     key: 'tum_zamanlar',
     label: 'Tüm zamanlar',
     bugunDahil: false,
+    enEskiGunGerekir: true,
     pencere: (b, enEski) => ({ from: enEski ?? gunEkle(b, -90), to: gunEkle(b, -1) }),
   },
 ];
 
 export type RangeKey = string;
 export const DEFAULT_RANGE = '30g';
+
+/**
+ * Bu aralık için `/metrics/coverage` çağrılmalı mı?
+ *
+ * Çağrı PAHALI (üretimde 17,4 sn) ve sayfa onu HER yüklemede, diğer
+ * isteklerden ÖNCE ve seri olarak yapıyordu — yani kullanıcının gördüğü
+ * beklemenin en büyük parçası, çoğu yüklemede HİÇ KULLANILMAYAN bir
+ * değerdi: `enEskiGun`u yalnızca "Tüm zamanlar" ön ayarı okuyor.
+ *
+ * `resolveRange`in bilinmeyen anahtarı varsayılana düşürme kuralı burada
+ * da aynen uygulanıyor; ayrışsalardı `?aralik=saçma` yazan biri için sayfa
+ * kapsamı çekmeden "Tüm zamanlar" hesaplamaya çalışırdı.
+ */
+export function enEskiGunGerekli(aralik: string | undefined): boolean {
+  /*
+   * `'ozel'` İÇİN AYRI BİR DAL YOK — VE OLMAMALI.
+   *
+   * Yazmıştım, sonra mutasyonla sildim ve HİÇBİR TEST DÜŞMEDİ: `'ozel'`
+   * ön ayar listesinde olmadığı için zaten varsayılana düşüyor ve
+   * varsayılan bu değeri istemiyor. Yani dal ölü koddu ve ölü bir dal,
+   * okuyanı "demek ki bir şey koruyor" diye yanıltıyor.
+   *
+   * Gerçek değişmez şu: VARSAYILAN ÖN AYAR `enEskiGunGerekir`
+   * TAŞIMAMALI. Taşısaydı özel aralık da (ve bilinmeyen her anahtar da)
+   * boşuna 17 saniyelik sorguyu tetiklerdi. `kapsam-cagrisi.spec.ts` o
+   * değişmezi doğrudan sınıyor.
+   */
+  const on =
+    RANGE_PRESETS.find((x) => x.key === aralik) ??
+    RANGE_PRESETS.find((x) => x.key === DEFAULT_RANGE)!;
+  return on.enEskiGunGerekir === true;
+}
 
 /**
  * SUNUCUNUN KABUL ETTİĞİ EN UZUN ARALIK.

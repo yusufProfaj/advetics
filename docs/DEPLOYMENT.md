@@ -589,6 +589,25 @@ yeniden derleme gerekmiyor.
 Yol log'a MASKELENEREK yazılıyor (`maskPath`): adresinde belirteç taşıyan
 uçlar var ve bu satırlar sohbete yapıştırılıyor.
 
+### 10b. Yavaş sorgunun PLANI
+
+Hangi uç olduğu belliyse sıradaki soru "neden". Cevap sorgu planında ve onu
+üretmek için `psql` açmak gerekmiyor — script `.env`teki `DATABASE_URL`u
+kullanıyor (uygulamanın kendi kimliği, ek yetki yok):
+
+```bash
+pnpm --filter @advetics/api olcum-metrik -- --eposta=kisi@ornek.com
+```
+
+E-posta verilmezse `.env`teki `SEED_ADMIN_EMAIL` kullanılıyor. Script, RLS
+oturum değişkenlerini `PrismaService.withTenant` ile **birebir aynı** kurup
+`EXPLAIN (ANALYZE, BUFFERS)` üretiyor; bağlamsız koşan bir `EXPLAIN`
+üretimdekinden başka bir plan gösterirdi çünkü politikalar sorguya yüklem
+ekliyor. Hiçbir satır yazmıyor — transaction sonunda geri alınıyor.
+
+Çıktıdaki `Seq Scan on insights_daily_*` satırları ve `rows=` ile `actual
+rows=` arasındaki büyük fark, planlayıcının yanıldığı yeri gösterir.
+
 ---
 
 ## 11. Geri alma

@@ -9,7 +9,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { SablonSecici } from '@/components/report/sablon-secici';
 import { formatDayLong } from '@/lib/format';
-import { gunEkle, resolveRange, today } from '@/lib/date-range';
+import { enEskiGunGerekli, gunEkle, resolveRange, today } from '@/lib/date-range';
 import { TarihSecici } from '@/components/tarih-secici';
 import { ReportDocument } from '@/components/report/report-document';
 import { ShareControls } from '@/components/report/share-controls';
@@ -60,9 +60,19 @@ export default async function ReportsPage({
     );
   }
 
-  const kapsam = await serverApiFetch<{ earliestDate: string | null }>(
-    `/metrics/coverage?from=2026-01-01&to=2026-01-01`,
-  ).catch(() => null);
+  /*
+   * KAPSAM YALNIZCA "TÜM ZAMANLAR" SEÇİLİYSE OKUNUYOR.
+   *
+   * `/metrics/coverage` metrik tablosundaki tarih sınırı olmayan tek sorgu
+   * ve üretimde 17,4 saniye sürüyor; panel gibi rapor ekranı da onu HER
+   * yüklemede, diğer isteklerden önce bekliyordu. Değeri okuyan tek şey
+   * "Tüm zamanlar" ön ayarı (`enEskiGunGerekir`).
+   */
+  const kapsam = enEskiGunGerekli(first(params.aralik) ?? 'gecen_ay')
+    ? await serverApiFetch<{ earliestDate: string | null }>(
+        `/metrics/coverage?from=2026-01-01&to=2026-01-01`,
+      ).catch(() => null)
+    : null;
 
   /*
    * ═══ BUGÜN RAPORA GİRMİYOR ═══

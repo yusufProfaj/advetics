@@ -12,7 +12,7 @@ import { METRIC_LEVELS, PLATFORMS } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
-import { rangeParams, resolveRange } from '@/lib/date-range';
+import { enEskiGunGerekli, rangeParams, resolveRange } from '@/lib/date-range';
 import { baglanti } from '@/lib/baglanti';
 import { TarihSecici } from '@/components/tarih-secici';
 import { RefreshButton } from '@/components/refresh-button';
@@ -73,16 +73,28 @@ export default async function DashboardPage({
   const params = await searchParams;
 
   /*
-   * KAPSAM ÖNCE OKUNUYOR: "Tüm zamanlar" ön ayarı elimizdeki en eski veri
-   * gününe dayanıyor. Sabit bir alt sınır hem yüzlerce boş günü tarar hem de
-   * 400 günlük sunucu sınırına takılıp hata sayfası üretirdi.
+   * ═══ KAPSAM YALNIZCA GEREKİYORSA OKUNUYOR ═══
+   *
+   * "Tüm zamanlar" ön ayarı elimizdeki en eski veri gününe dayanıyor. Sabit
+   * bir alt sınır hem yüzlerce boş günü tarar hem de 400 günlük sunucu
+   * sınırına takılıp hata sayfası üretirdi.
+   *
+   * AMA BU ÇAĞRI PAHALI VE SERİ. `/metrics/coverage` metrik tablosundaki
+   * TARİH SINIRI OLMAYAN tek sorgu (`MIN(date)`/`MAX(date)`): bütün
+   * partition'ları tarıyor ve üretimde ÖLÇÜLDÜ — 17.364 ms. Diğer beş
+   * isteğin toplamı 12,5 saniyeydi ve onlar paralel; bu ise `await` ile
+   * hepsinden ÖNCE bekliyordu. Yani ajans genel bakışında kullanıcının
+   * beklediği sürenin en büyük parçası, o yüklemede HİÇ KULLANILMAYAN bir
+   * değer içindi.
    *
    * Hata YUTULMUYOR ama aralığı da düşürmüyor: kapsam alınamazsa "Tüm
    * zamanlar" 90 güne düşüyor ve bu `date-range.ts` içinde yazılı.
    */
-  const kapsam = await serverApiFetch<{ earliestDate: string | null }>(
-    `/metrics/coverage?from=${first(params.baslangic) ?? '2026-01-01'}&to=${first(params.bitis) ?? '2026-01-01'}`,
-  ).catch(() => null);
+  const kapsam = enEskiGunGerekli(first(params.aralik))
+    ? await serverApiFetch<{ earliestDate: string | null }>(
+        `/metrics/coverage?from=${first(params.baslangic) ?? '2026-01-01'}&to=${first(params.bitis) ?? '2026-01-01'}`,
+      ).catch(() => null)
+    : null;
 
   const range = resolveRange({
     aralik: first(params.aralik),
