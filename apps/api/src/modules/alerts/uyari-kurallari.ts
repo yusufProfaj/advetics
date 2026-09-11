@@ -165,43 +165,35 @@ export function hesapUyarilari(h: UyariHesabi, simdi: Date): Uyari[] {
     ];
   }
 
-  // ── 2. Bağlantı hâlleri — panelden çözülüyor ──────────────────────────
-  if (h.connectionStatus !== 'active') {
-    return [
-      {
-        ...t,
-        kod: 'baglanti_yetki_istiyor',
-        siddet: 'error',
-        baslik: 'Platform bağlantısı yeniden yetki istiyor',
-        detay:
-          'Bağlantı kopmuş; bu hesabın verisi güncellenmiyor. Platform Bağlantıları ekranından yeniden yetkilendirin.',
-        eylem: { etiket: 'Bağlantıyı onar', href: KANALLAR },
-      },
-    ];
-  }
-
-  const sonGecerlilik = h.connectionTokenExpiresAt;
-  if (sonGecerlilik !== null) {
-    const kalanGun = (sonGecerlilik.getTime() - simdi.getTime()) / 86_400_000;
-    if (kalanGun <= TOKEN_UYARI_GUNU) {
-      return [
-        {
-          ...t,
-          kod: 'baglanti_token_suresi',
-          // SÜRESİ DOLMUŞSA `error`, DOLMAK ÜZEREYSE `warn`. İkisini aynı
-          // şiddetle göstermek, "bugün hallet" ile "bu hafta hallet"i aynı
-          // yapardı ve bant her gün aynı kırmızıyı gösterirdi.
-          siddet: kalanGun <= 0 ? 'error' : 'warn',
-          baslik:
-            kalanGun <= 0
-              ? 'Bağlantı yetkisinin süresi doldu'
-              : `Bağlantı yetkisi ${Math.max(1, Math.ceil(kalanGun))} gün içinde doluyor`,
-          detay:
-            'Süre dolduğunda veri çekimi durur ve panel sessizce eski rakamları göstermeye devam eder. Yeniden yetkilendirmek bir dakikalık iş.',
-          eylem: { etiket: 'Yeniden yetkilendir', href: KANALLAR },
-        },
-      ];
-    }
+  /*
+   * ── 2. BAĞLANTI HÂLLERİ BURADAN ÇIKTI — SEBEBİ GÜRÜLTÜYDÜ ────────────
+   *
+   * `connectionStatus` ve `connectionTokenExpiresAt` BAĞLANTIYA ait, hesaba
+   * değil. Bu fonksiyon her ATANMIŞ HESAP için koşuyor ve ajansın TEK bir
+   * Meta bağlantısı onlarca hesaba hizmet ediyor — yani tek bir süre uyarısı
+   * onlarca birebir aynı satır üretiyordu.
+   *
+   * Bedeli üç katlıydı:
+   *   · Bant 20 satırla sınırlı (`LIMIT`); kopyalar GERÇEK uyarıları
+   *     (ödeme sorunu, veri gelmiyor) listenin dışına itiyordu.
+   *   · Gizleme anahtarı `kod:adAccountId`; birini kapatmak diğerlerini
+   *     kapatmıyordu ve uyarı "sürekli geri geliyor" gibi görünüyordu.
+   *   · Aynı cümle onlarca kez okunuyordu — bu depoda "481 hesap
+   *     izlenmiyor" sayacıyla aynı hata: uyarı okunmaz hâle geliyor.
+   *
+   * Artık `baglantiUyarilari()` bunu BAĞLANTI BAŞINA BİR KEZ üretiyor.
+   *
+   * BURADA SESSİZ KALMAK ŞART. Bağlantı bozukken hesabın kendi veri
+   * uyarıları ("veri gelmiyor", "veri bayat") DOĞRU ama SEBEBİ aynı ve tek
+   * bir kopuk bağlantı yine onlarca satır üretirdi. Sebep bir üst seviyede
+   * bir kez söyleniyor.
+   */
+  if (h.connectionStatus !== 'active') return [];
+  if (
+    h.connectionTokenExpiresAt !== null &&
+    (h.connectionTokenExpiresAt.getTime() - simdi.getTime()) / 86_400_000 <= TOKEN_UYARI_GUNU
+  ) {
+    return [];
   }
 
   // ── 3. Kurulum eksikleri ──────────────────────────────────────────────
@@ -275,6 +267,93 @@ export function hesapsizMusteriUyarisi(client: { id: string; name: string }): Uy
     eylem: { etiket: 'Hesap ata', href: KANALLAR },
     veriZamani: null,
   };
+}
+
+/** Kuralların okuduğu bağlantı satırı. */
+export interface UyariBaglantisi {
+  id: string;
+  platform: Platform;
+  /** `active` | `needs_reauth` | `error` | `revoked` */
+  status: string;
+  tokenExpiresAt: Date | null;
+  /** Yetkilendirmeyi yapan hesabın etiketi — hangi bağlantı olduğu belli olsun. */
+  accountLabel: string | null;
+  /** Bu bağlantıya bağlı ATANMIŞ hesap sayısı; uyarının ağırlığı bu. */
+  etkilenenHesap: number;
+  /** Verinin son okunma anı — bayatlık ekranda görünmek zorunda. */
+  veriZamani: Date | null;
+}
+
+/**
+ * ═══ BAĞLANTI UYARILARI — BAĞLANTI BAŞINA BİR TANE ═══
+ *
+ * Önce hesap kurallarının içindeydiler ve her atanmış hesap için bir kopya
+ * üretiyorlardı; gerekçe `hesapUyarilari` içinde yazılı.
+ *
+ * `clientId` ve `adAccountId` NULL: bu uyarı bir müşteriye ait değil,
+ * AJANSA ait. Panel bandı `null` müşteriyi ajans geneli olarak çiziyor ve
+ * gizleme anahtarı (`kod:-`) tek bir satırı kapatınca hepsini kapatıyor —
+ * çünkü artık gerçekten tek satır.
+ */
+export function baglantiUyarilari(b: UyariBaglantisi, simdi: Date): Uyari[] {
+  const taban = {
+    clientId: null,
+    clientName: null,
+    adAccountId: null,
+    adAccountName: b.accountLabel,
+    platform: b.platform,
+    veriZamani: b.veriZamani?.toISOString() ?? null,
+  };
+  // KAÇ HESABIN ETKİLENDİĞİ YAZILIYOR: "bir bağlantı koptu" ile "kırk
+  // hesabın verisi durdu" aynı aciliyette değil ve farkı yalnızca bu sayı
+  // gösteriyor.
+  const kapsam = `${b.etkilenenHesap} hesabın verisi bu bağlantıdan geliyor.`;
+
+  if (b.status !== 'active') {
+    return [
+      {
+        ...taban,
+        kod: 'baglanti_yetki_istiyor',
+        siddet: 'error',
+        baslik: 'Platform bağlantısı yeniden yetki istiyor',
+        detay: `Bağlantı kopmuş ve veri güncellenmiyor. ${kapsam} Platform Bağlantıları ekranından yeniden yetkilendirin.`,
+        eylem: { etiket: 'Bağlantıyı onar', href: KANALLAR },
+      },
+    ];
+  }
+
+  if (b.tokenExpiresAt === null) return [];
+  const kalanGun = (b.tokenExpiresAt.getTime() - simdi.getTime()) / 86_400_000;
+  if (kalanGun > TOKEN_UYARI_GUNU) return [];
+
+  return [
+    {
+      ...taban,
+      kod: 'baglanti_token_suresi',
+      // SÜRESİ DOLMUŞSA `error`, DOLMAK ÜZEREYSE `warn`. İkisini aynı
+      // şiddetle göstermek, "bugün hallet" ile "bu hafta hallet"i aynı
+      // yapardı ve bant her gün aynı kırmızıyı gösterirdi.
+      siddet: kalanGun <= 0 ? 'error' : 'warn',
+      baslik:
+        kalanGun <= 0
+          ? 'Bağlantı yetkisinin süresi doldu'
+          : `Bağlantı yetkisi ${Math.max(1, Math.ceil(kalanGun))} gün içinde doluyor`,
+      detay:
+        kalanGun <= 0
+          ? `Veri çekimi durdu ve panel eski rakamları göstermeye devam ediyor. ${kapsam}`
+          : /*
+               ELLE YETKİLENDİRME İSTENMİYOR — SİSTEM ZATEN DENİYOR.
+               Eşik uyarı penceresinden geniş (10 gün > 7 gün), yani tazeleme
+               bu uyarı doğmadan önce denenmiş oluyor. Uyarı buna rağmen
+               görünüyorsa tazeleme BAŞARISIZ demektir ve o zaman elle
+               yetkilendirmek gerçekten gerekiyor. Metin bunu söylüyor;
+               önceki hâli koşulsuz "bir dakikalık iş" diyordu ve kullanıcıyı
+               her gün gereksiz yere çağırıyordu.
+             */
+            `Sistem yetkiyi kendi tazelemeye çalışıyor; bu uyarı duruyorsa deneme başarısız oluyor demektir. ${kapsam}`,
+      eylem: { etiket: 'Yeniden yetkilendir', href: KANALLAR },
+    },
+  ];
 }
 
 /**

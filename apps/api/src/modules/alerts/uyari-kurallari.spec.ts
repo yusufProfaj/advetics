@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   BAYAT_ESIGI_SAAT,
   TOKEN_UYARI_GUNU,
+  baglantiUyarilari,
   googleHesapDurumu,
   hesapUyarilari,
   hesapsizMusteriUyarisi,
   metaHesapDurumu,
   siralaUyarilari,
+  type UyariBaglantisi,
   type UyariHesabi,
 } from './uyari-kurallari';
 
@@ -147,9 +149,33 @@ describe('hesap kapalı', () => {
   });
 });
 
+/**
+ * ═══ BAĞLANTI UYARILARI — BAĞLANTI BAŞINA BİR TANE ═══
+ *
+ * Bu kurallar önce `hesapUyarilari` içindeydi ve HER ATANMIŞ HESAP için bir
+ * kopya üretiyordu. Ajansın TEK Meta bağlantısı onlarca hesaba hizmet
+ * ediyor: tek bir süre uyarısı onlarca birebir aynı satır demekti, bant
+ * `LIMIT` yüzünden gerçek uyarıları dışarı itiyordu ve gizleme anahtarı
+ * hesap bazlı olduğu için biri kapatılınca diğerleri kalıyordu.
+ * Kullanıcının gördüğü hâl: *"sürekli şimdi yetkilendir bildirimi gözüküp
+ * duruyor."*
+ */
+function baglanti(over: Partial<UyariBaglantisi> = {}): UyariBaglantisi {
+  return {
+    id: 'c1',
+    platform: 'meta',
+    status: 'active',
+    tokenExpiresAt: null,
+    accountLabel: 'Profaj Meta',
+    etkilenenHesap: 12,
+    veriZamani: new Date(SIMDI.getTime() - SAAT),
+    ...over,
+  };
+}
+
 describe('bağlantı', () => {
   it('bağlantı aktif değilse yeniden yetki uyarısı', () => {
-    const [u] = hesapUyarilari(hesap({ connectionStatus: 'expired' }), SIMDI);
+    const [u] = baglantiUyarilari(baglanti({ status: 'expired' }), SIMDI);
     expect(u?.kod).toBe('baglanti_yetki_istiyor');
     expect(u?.eylem?.href).toBe('/ayarlar/baglantilar');
   });
@@ -160,12 +186,12 @@ describe('bağlantı', () => {
      * aynı yapardı ve bant her gün aynı kırmızıyı gösterirdi — okunmaz hâle
      * gelen bir uyarı, olmayan bir uyarıyla aynı.
      */
-    const dolmus = hesapUyarilari(
-      hesap({ connectionTokenExpiresAt: new Date(SIMDI.getTime() - GUN) }),
+    const dolmus = baglantiUyarilari(
+      baglanti({ tokenExpiresAt: new Date(SIMDI.getTime() - GUN) }),
       SIMDI,
     )[0];
-    const yaklasan = hesapUyarilari(
-      hesap({ connectionTokenExpiresAt: new Date(SIMDI.getTime() + 3 * GUN) }),
+    const yaklasan = baglantiUyarilari(
+      baglanti({ tokenExpiresAt: new Date(SIMDI.getTime() + 3 * GUN) }),
       SIMDI,
     )[0];
     expect(dolmus?.siddet).toBe('error');
@@ -175,7 +201,80 @@ describe('bağlantı', () => {
 
   it('eşiğin ötesindeki token uyarı üretmiyor', () => {
     const uzak = new Date(SIMDI.getTime() + (TOKEN_UYARI_GUNU + 5) * GUN);
-    expect(hesapUyarilari(hesap({ connectionTokenExpiresAt: uzak }), SIMDI)).toEqual([]);
+    expect(baglantiUyarilari(baglanti({ tokenExpiresAt: uzak }), SIMDI)).toEqual([]);
+  });
+
+  it('KRİTİK: uyarı AJANS seviyesinde — workspace/hesap kimliği taşımıyor', () => {
+    /*
+     * `clientId`/`adAccountId` null olmak zorunda: panel bandının gizleme
+     * anahtarı `kod:adAccountId` ve hesap bazlı bir anahtar, "kapattım ama
+     * geri geliyor" hâlinin ta kendisiydi. Tek satır = tek anahtar.
+     */
+    const [u] = baglantiUyarilari(baglanti({ status: 'needs_reauth' }), SIMDI);
+    expect(u?.clientId).toBeNull();
+    expect(u?.adAccountId).toBeNull();
+  });
+
+  it('KRİTİK: KAÇ HESABIN etkilendiği yazıyor', () => {
+    // "Bir bağlantı koptu" ile "kırk hesabın verisi durdu" aynı aciliyette
+    // değil ve farkı yalnızca bu sayı gösteriyor.
+    const [u] = baglantiUyarilari(baglanti({ status: 'error', etkilenenHesap: 40 }), SIMDI);
+    expect(u?.detay).toContain('40 hesabın');
+  });
+
+  it('KRİTİK: yaklaşan süre ELLE yetkilendirmeye ÇAĞIRMIYOR', () => {
+    /*
+     * Tazeleme eşiği uyarı penceresinden GENİŞ (10 gün > 7 gün), yani sistem
+     * bu uyarı doğmadan önce denemiş oluyor. Metnin koşulsuz "bir dakikalık
+     * iş" demesi, kullanıcıyı her gün gereksiz yere çağırmaktı.
+     */
+    const [u] = baglantiUyarilari(
+      baglanti({ tokenExpiresAt: new Date(SIMDI.getTime() + 3 * GUN) }),
+      SIMDI,
+    );
+    expect(u?.detay).toContain('kendi tazelemeye çalışıyor');
+  });
+});
+
+describe('KRİTİK: hesap kuralları bağlantı hâlini TEKRARLAMIYOR', () => {
+  /*
+   * FİXTURE TETİKLENECEK BİR KURAL TAŞIMAK ZORUNDA — bu testi MUTASYON
+   * yazdırdı. İlk yazımda yalnızca `connectionStatus: 'expired'` veriyordum
+   * ve varsayılan fixture zaten hiç uyarı üretmiyordu: erken dönüşü
+   * SİLDİĞİMDE de sonuç `[]` kalıyordu, yani iddia hiçbir şey tutmuyordu.
+   *
+   * `syncEnabled: false` eklenince fark ölçülebilir oluyor: erken dönüş
+   * varsa `[]`, yoksa `hesap_izleme_kapali`.
+   */
+  it('bağlantı bozukken hesap seviyesinde HİÇ uyarı yok', () => {
+    /*
+     * Sebep bir üst seviyede bir kez söyleniyor. Burada da üretmek, tek bir
+     * kopuk bağlantının onlarca "veri gelmiyor" satırı doğurması demekti —
+     * hepsi doğru, hepsi aynı şeyi söylüyor.
+     */
+    expect(
+      hesapUyarilari(hesap({ connectionStatus: 'expired', syncEnabled: false }), SIMDI),
+    ).toEqual([]);
+  });
+
+  it('token uyarı penceresindeyken hesap seviyesinde HİÇ uyarı yok', () => {
+    expect(
+      hesapUyarilari(
+        hesap({
+          connectionTokenExpiresAt: new Date(SIMDI.getTime() + 3 * GUN),
+          syncEnabled: false,
+        }),
+        SIMDI,
+      ),
+    ).toEqual([]);
+  });
+
+  it('BOŞA DÜŞME BEKÇİSİ: bağlantı sağlamken AYNI fixture uyarı üretiyor', () => {
+    // Yukarıdaki iki iddia, `hesapUyarilari` her zaman boş dönseydi de
+    // geçerdi — o hâlde bütün uyarı sistemi sessizce ölmüş olurdu.
+    expect(hesapUyarilari(hesap({ syncEnabled: false }), SIMDI)[0]?.kod).toBe(
+      'hesap_izleme_kapali',
+    );
   });
 });
 
@@ -250,8 +349,8 @@ describe('sıralama', () => {
      * çıkarırdı; ikincisi reklamların şu anda durduğu anlamına geliyor.
      */
     const odeme = hesapUyarilari(hesap({ raw: { account_status: 3 } }), SIMDI)[0]!;
-    const baglanti = hesapUyarilari(hesap({ connectionStatus: 'expired' }), SIMDI)[0]!;
-    expect(siralaUyarilari([baglanti, odeme]).map((u) => u.kod)).toEqual([
+    const baglantiUyarisi = baglantiUyarilari(baglanti({ status: 'expired' }), SIMDI)[0]!;
+    expect(siralaUyarilari([baglantiUyarisi, odeme]).map((u) => u.kod)).toEqual([
       'hesap_odeme_sorunu',
       'baglanti_yetki_istiyor',
     ]);

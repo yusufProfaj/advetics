@@ -2,9 +2,11 @@ import { Injectable } from '@nestjs/common';
 import type { TenantContext, Uyari, UyariYaniti } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  baglantiUyarilari,
   hesapUyarilari,
   hesapsizMusteriUyarisi,
   siralaUyarilari,
+  type UyariBaglantisi,
   type UyariHesabi,
 } from './uyari-kurallari';
 
@@ -59,11 +61,57 @@ export class AlertsService {
           raw: true,
           clientId: true,
           client: { select: { name: true } },
-          connection: { select: { status: true, tokenExpiresAt: true } },
+          connection: {
+            select: {
+              id: true,
+              platform: true,
+              status: true,
+              tokenExpiresAt: true,
+              accountLabel: true,
+              updatedAt: true,
+            },
+          },
         },
       });
 
       const uyarilar: Uyari[] = [];
+
+      /*
+       * BAĞLANTI UYARILARI BAĞLANTI BAŞINA BİR KEZ.
+       *
+       * Önce hesap kurallarının içindeydiler ve her atanmış hesap için bir
+       * kopya üretiyorlardı: ajansın TEK Meta bağlantısı onlarca hesaba
+       * hizmet ediyor, yani tek bir süre uyarısı onlarca birebir aynı satır
+       * demekti. `LIMIT` 20 olduğu için kopyalar GERÇEK uyarıları listenin
+       * dışına itiyordu ve gizleme anahtarı hesap bazlı olduğu için biri
+       * kapatılınca diğerleri kalıyordu. Kullanıcının gördüğü hâl: *"sürekli
+       * şimdi yetkilendir bildirimi gözüküp duruyor."*
+       *
+       * SAYIM ATANMIŞ HESAPLAR ÜZERİNDEN: sorgu zaten `clientId: { not:
+       * null }` ile süzülü. Hiçbir hesabı atanmamış bir bağlantı buradan
+       * uyarı üretmiyor — müşteri tarafında duran bir şey yok ve o bağlantı
+       * Platform Bağlantıları ekranında zaten kendi durumunu gösteriyor.
+       */
+      const baglantilar = new Map<string, UyariBaglantisi>();
+      for (const h of hesaplar) {
+        const mevcut = baglantilar.get(h.connection.id);
+        if (mevcut) {
+          mevcut.etkilenenHesap += 1;
+          continue;
+        }
+        baglantilar.set(h.connection.id, {
+          id: h.connection.id,
+          platform: h.connection.platform,
+          status: h.connection.status,
+          tokenExpiresAt: h.connection.tokenExpiresAt,
+          accountLabel: h.connection.accountLabel,
+          etkilenenHesap: 1,
+          veriZamani: h.connection.updatedAt,
+        });
+      }
+      for (const b of baglantilar.values()) {
+        uyarilar.push(...baglantiUyarilari(b, simdi));
+      }
 
       for (const h of hesaplar) {
         const satir: UyariHesabi = {

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { PlatformConnection } from '@prisma/client';
 import { CryptoService } from '../../crypto/crypto.service';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
+import type { Platform } from '@advetics/shared';
 import { PlatformApiError, type IAdPlatformProvider } from './provider.types';
 
 /**
@@ -38,14 +39,51 @@ export class TokenVaultService {
   private readonly logger = new Logger(TokenVaultService.name);
 
   /**
-   * Token süresi bu eşiğin altına düştüğünde proaktif yenileniyor.
+   * ═══ YENİLEME EŞİĞİ PLATFORM BAŞINA ═══
    *
-   * 5 dakika: Google token'ı 1 saat yaşar; uzun süren bir senkronizasyon
-   * ortasında dolmasını istemiyoruz. Yenilemeyi çağrı anında yapmak,
-   * zamanlanmış bir yenileme job'ından daha güvenilir — job kaçarsa
-   * senkronizasyon sessizce 401 alır.
+   * Tek bir 5 dakikalık eşik vardı ve Google için DOĞRU: token'ı 1 saat
+   * yaşıyor, uzun bir senkronizasyonun ortasında dolmasını istemiyoruz.
+   *
+   * Meta ve LinkedIn'de aynı sayı bir ARIZA üretiyordu. Token'ları 60 GÜN
+   * yaşıyor ve uyarı bandı süre dolmadan 7 GÜN önce "yeniden yetkilendir"
+   * demeye başlıyor (`TOKEN_UYARI_GUNU`). Sistem ise tazelemeyi son 5
+   * DAKİKAYA bırakıyordu. Sonuç: kullanıcı bir hafta boyunca her gün elle
+   * yetkilendirmeye çağrılıyordu — hâlbuki yapılacak bir şey yoktu, sistem
+   * zaten kendi tazeleyecekti. Kullanıcının cümlesi: *"sürekli şimdi
+   * yetkilendir bildirimi gözüküp duruyor … sürekli yetkilendirme yapmak
+   * istemiyorum."*
+   *
+   * Eşik artık uyarı penceresinden GENİŞ (10 gün > 7 gün): tazeleme, uyarı
+   * hiç doğmadan önce deneniyor. Uyarı yine de çıkıyorsa GERÇEK bir sorun
+   * var demektir — ve o zaman gösterilmesi gerekiyor.
+   *
+   * `Record<Platform, …>` BİLEREK: elle yazılmış platform listeleri bu
+   * depoda üçüncü platformun sessizce kaybolduğu yer (CLAUDE.md). Yeni bir
+   * platform eklendiğinde derleme kırılıyor.
    */
-  private static readonly REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
+  private static readonly YENILEME_ESIGI_MS: Record<Platform, number> = {
+    google: 5 * 60 * 1000,
+    // 60 günlük token. Meta'nın `fb_exchange_token` çağrısı ZATEN UZUN
+    // ÖMÜRLÜ bir token'ı gerçekten uzatıyor mu CANLIDA DOĞRULANMADI; eşik
+    // yalnızca denemeyi erkene alıyor. Uzatmıyorsa uyarı yine çıkar ve o
+    // zaman doğru bir uyarı olur.
+    meta: 10 * 24 * 60 * 60 * 1000,
+    // 60 günlük access token (ölçüldü). Refresh token'ın 365 günü İLK
+    // yetkilendirmeden işliyor ve UZAMIYOR — yani bu bağlantı bir yıl sonra
+    // kesin olarak insan eli istiyor. Eşik onu ertelemiyor, yalnızca
+    // aradaki 60 günlük kesintileri kaldırıyor.
+    linkedin: 10 * 24 * 60 * 60 * 1000,
+  };
+
+  /**
+   * Token'ın GERÇEKTEN dolmak üzere olduğu an.
+   *
+   * Bu eşiğin ALTINDA yenileme başarısızlığı ÖLÜMCÜL (bağlantı
+   * `needs_reauth`'a düşüyor); üstünde DEĞİL — elde hâlâ günlerce geçerli
+   * bir token varken geçici bir ağ hatası yüzünden bütün senkronizasyonu
+   * durdurmak, düzeltmeye çalıştığımız arızadan beterini üretirdi.
+   */
+  private static readonly SON_AN_MS = 5 * 60 * 1000;
 
   constructor(
     private readonly crypto: CryptoService,
@@ -87,15 +125,43 @@ export class TokenVaultService {
       );
     }
 
-    const needsRefresh =
-      conn.tokenExpiresAt !== null &&
-      conn.tokenExpiresAt.getTime() - Date.now() < TokenVaultService.REFRESH_THRESHOLD_MS;
+    const kalanMs =
+      conn.tokenExpiresAt === null ? null : conn.tokenExpiresAt.getTime() - Date.now();
+    const esik = TokenVaultService.YENILEME_ESIGI_MS[provider.platform];
+    const needsRefresh = kalanMs !== null && kalanMs < esik;
 
     if (!needsRefresh && conn.status === 'active') {
       return this.crypto.decrypt(Buffer.from(conn.accessTokenEnc));
     }
 
-    return this.refresh(conn, provider);
+    /*
+     * ELDE HÂLÂ GEÇERLİ BİR TOKEN VARSA YENİLEME ÖLÜMCÜL DEĞİL.
+     *
+     * Eşik 5 dakikadan 10 güne çıkınca yeni bir risk doğdu: on gün önce
+     * yaşanan GEÇİCİ bir yenileme hatası (ağ, platform kesintisi) bağlantıyı
+     * `needs_reauth`'a düşürüp BÜTÜN senkronizasyonu durdururdu — oysa
+     * mevcut token günlerce daha çalışacaktı. Bu, düzeltmeye çalıştığımız
+     * arızadan beteri olurdu.
+     *
+     * O yüzden: token gerçekten son ana yaklaşmadıysa ve bağlantı hâlâ
+     * `active` ise, başarısız yenileme YUTULMUYOR ama ÖLDÜRMÜYOR da —
+     * `recordFailure` sayacı ve hata kodunu yazıyor (teşhis ekranında
+     * görünüyor), iş mevcut token'la sürüyor ve bir sonraki çağrı yeniden
+     * deniyor.
+     */
+    const sonAnda =
+      kalanMs === null || kalanMs < TokenVaultService.SON_AN_MS || conn.status !== 'active';
+    if (sonAnda) return this.refresh(conn, provider);
+
+    try {
+      return await this.refresh(conn, provider);
+    } catch {
+      this.logger.warn(
+        `Erken token yenilemesi başarısız (${provider.platform} bağlantı ${conn.id}). ` +
+          `Mevcut token ${Math.floor(kalanMs / 86_400_000)} gün daha geçerli; iş sürüyor.`,
+      );
+      return this.crypto.decrypt(Buffer.from(conn.accessTokenEnc));
+    }
   }
 
   /**
