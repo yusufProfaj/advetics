@@ -621,6 +621,25 @@ ekliyor. Hiçbir satır yazmıyor — transaction sonunda geri alınıyor.
 - **`Rows Removed by Filter` ile dönen satır oranı.** Atılan satır sayısı
   dönenden büyükse boşa I/O yapılıyor.
 
+Script en başta **indeks envanterini** basıyor: kısmi indeksler görünmüyorsa
+`01_constraints.sql` uygulanmamış demektir (`pnpm --filter @advetics/api
+db:rls`) ve plan okumanın anlamı yok. Ardından **satır genişliğini** yazıyor —
+sayfa başına kaç satır düştüğü, bir aralık sorgusunun kaç RASTGELE blok
+okuyacağını doğrudan belirliyor.
+
+Sorgu bulduğu satır sayısına göre orantısız yavaşsa (`timeseries` tek taramada
+saniyeler) maliyet satırları bulmakta değil, sayfalarını heap'ten okumakta.
+O durumda `--aday` kapsayan bir indeks deneyip planı yeniden basıyor:
+
+```bash
+pnpm --filter @advetics/api olcum-metrik -- --eposta=kisi@ornek.com --aday
+```
+
+Deneme indeksi YALNIZCA tek bir aylık partition'a kuruluyor (`CREATE INDEX`
+ACCESS EXCLUSIVE kilidi alıyor; ~46 bin satırda saniyenin altında) ve işlem
+sonunda geri alınıyor. Sorgu iki partition'a birden dokunduğu için A/B aynı
+planın içinde görünüyor: biri deneme indeksli, diğeri indekssiz.
+
 Script ayrıca `default` partition'a satır düşmüşse uyarı basıyor: o
 satırların tarihi 38 aylık kapsamın dışında. Veri kaybı yok (sorgular onları
 da okuyor) ama kapsam dışı tarih bir senkronizasyon hatasına işaret ediyor

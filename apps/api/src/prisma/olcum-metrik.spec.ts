@@ -57,10 +57,41 @@ describe('KRİTİK: ölçüm UYGULAMANIN ROLÜYLE koşuyor', () => {
     expect(dilim).toContain('tx.$queryRawUnsafe');
   });
 
-  it('KRİTİK: hiçbir satır yazılmıyor — transaction geri alınıyor', () => {
-    // Bir ölçüm aracının "hiçbir şey yazmıyor" iddiası KODDA durmalı;
-    // sonraki bakımda buraya bir UPDATE eklense de geri alınır.
+  it('KRİTİK: hiçbir şey KALICI olmuyor — transaction geri alınıyor', () => {
+    /*
+     * Araç `--aday` ile DENEME İNDEKSİ kurabiliyor, yani "hiçbir yazma
+     * yok" demek artık doğru değil. Doğru olan şu: yazılan her şey aynı
+     * transaction'ın içinde ve sonunda geri alınıyor.
+     */
     expect(OLCUM).toContain('throw new GeriAl();');
-    expect(OLCUM).not.toContain('$executeRawUnsafe');
+    // Veri yazan bir çağrı YOK — yalnızca indeks kuruluyor.
+    expect(OLCUM).not.toMatch(/\$executeRawUnsafe\(\s*`?\s*(INSERT|UPDATE|DELETE)/i);
+  });
+
+  it('KRİTİK: aday denemesi OPT-IN ve kilidi tek partition’la sınırlı', () => {
+    /*
+     * `CREATE INDEX` ACCESS EXCLUSIVE kilidi alıyor. Partition'lı EBEVEYNE
+     * kurulsaydı kilit BÜTÜN aylara yayılırdı ve üretimdeki worker'ı
+     * bekletirdi; tek partition ~46 bin satır, saniyenin altında.
+     *
+     * Varsayılan açık olsaydı "sadece plan bakayım" diyen biri farkında
+     * olmadan üretimde kilit alırdı.
+     */
+    expect(OLCUM).toContain("const ADAY = ARGV.includes('--aday');");
+    expect(OLCUM).toContain('if (ADAY) {');
+    // Hedef `pg_inherits` ile seçilen bir PARTITION adı; ebeveyn adı değil.
+    expect(OLCUM).toContain('CREATE INDEX aday_kapsayan ON ${hedef.relname}');
+    expect(OLCUM).not.toContain('CREATE INDEX aday_kapsayan ON insights_daily ');
+  });
+
+  it('KRİTİK: ölçülen sorgular ÜRETİMDEKİ süzgeci taşıyor', () => {
+    /*
+     * `filters()` her metrik sorgusuna `ad_account_id IN (SELECT id FROM
+     * ad_accounts WHERE sync_enabled = true)` ekliyor. Ölçümden düşmüş
+     * olsaydı plan üretimdekinden BAŞKA bir sorgunun planı olurdu — ve
+     * yanlış yeri optimize etmeye götürürdü.
+     */
+    const adet = OLCUM.split('sync_enabled = true').length - 1;
+    expect(adet).toBeGreaterThanOrEqual(4);
   });
 });
