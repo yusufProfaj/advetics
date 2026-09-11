@@ -484,15 +484,43 @@ describe('WORKSPACE’LER ŞİRKETİN İÇİNDE', () => {
 
 describe('şirket düzenleme', () => {
   const FORM = kod('components/ust-hesap/sirket-duzenle.tsx');
+  const EKRAN = kod('components/ust-hesap/ust-hesap-ekrani.tsx');
 
   it('BOŞA DÜŞME BEKÇİSİ: form kaynağı okundu', () => {
     expect(FORM).toContain('SirketDuzenle');
   });
 
-  it('KRİTİK: form sayfada render ediliyor', () => {
-    // `PATCH /organization` ucu aylardır duruyordu ama panelde HİÇBİR
-    // ÇAĞIRANI YOKTU — şirket adı bir kez yazılıp bir daha düzeltilemiyordu.
-    expect(SAYFA).toContain('<SirketDuzenle sirketAdi=');
+  it('KRİTİK: form ekranda render ediliyor', () => {
+    /*
+     * `PATCH /organization` ucu aylardır duruyordu ama panelde HİÇBİR
+     * ÇAĞIRANI YOKTU — şirket adı bir kez yazılıp bir daha
+     * düzeltilemiyordu. Kural aynı; form SAYFADAN EKRANA taşındı çünkü
+     * artık katlanıyor ve açık/kapalı durumu istemci bileşeninde.
+     */
+    expect(EKRAN).toContain('<SirketDuzenle sirketAdi=');
+    // Sayfa da onu BESLEMEK zorunda: prop gelmezse panel boş açılır.
+    expect(SAYFA).toContain('sirket={sirketKapsami ? sirket : null}');
+  });
+
+  it('KRİTİK: paneller VARSAYILAN KAPALI', () => {
+    /*
+     * Taşıma kutusu ve şirket bilgileri ekranın üstünde SÜREKLİ AÇIK
+     * duruyordu ve workspace listesini aşağı itiyordu. Kullanıcının tarifi:
+     * *"gereksiz ve karışık duruyor … bu kadar açıkta durmasın."*
+     */
+    expect(EKRAN).toContain("useState<'yok' | 'duzenle' | 'tasi' | 'sil'>('yok')");
+    expect(EKRAN).toContain("{panel === 'duzenle' && (");
+    expect(EKRAN).toContain("{panel === 'tasi' && aktifSirket && (");
+  });
+
+  it('KRİTİK: kısa ad GİZLİ — teknik bilgi istiyor', () => {
+    /*
+     * Kullanıcının tarifi: *"slug yazmak teknik bilgi ister."* Tamamen
+     * kaldırmak da çözüm değil (adreslerde kullanılıyor, bir gün
+     * düzeltilebilmeli); varsayılan kapalı.
+     */
+    expect(FORM).toContain('const [gelismis, setGelismis] = useState(false);');
+    expect(FORM).toContain('{gelismis && (');
   });
 
   it('KRİTİK: kaydedilen değer YANITTAN okunuyor', () => {

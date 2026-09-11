@@ -9,6 +9,8 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Halka } from '@/components/yukleniyor';
+import { SirketDuzenle } from './sirket-duzenle';
+import { SirketSil } from './sirket-sil';
 
 type Sirket = ManagerAccountTree['organizations'][number];
 
@@ -52,6 +54,8 @@ export function UstHesapEkrani({
   ilkAgac,
   aktifOrgId,
   yuklemeHatasi,
+  sirket,
+  sirketHatasi,
   children,
 }: {
   ilkAgac: ManagerAccountTree | null;
@@ -59,13 +63,29 @@ export function UstHesapEkrani({
   aktifOrgId: string;
   /** Ağaç okunamadıysa SEBEBİ — sessizce "üst hesap yok" göstermiyoruz. */
   yuklemeHatasi: string | null;
-  /** Seçili şirketin detayı — sunucuda üretiliyor. */
+  /**
+   * AKTİF ŞİRKETİN BİLGİSİ — `children` YERİNE PROP.
+   *
+   * Düzenleme formu bir süre `children` içinden geliyordu ve EKRANDA SÜREKLİ
+   * AÇIKTI; taşıma kutusu da öyle. Kullanıcının tarifi: *"gereksiz ve karışık
+   * duruyor … bu kadar açıkta durmasın."* Paneli katlayabilmek için açık/kapalı
+   * durumunun bu bileşende olması gerekiyor — `children` sunucuda üretiliyor ve
+   * buradan kontrol edilemez.
+   */
+  sirket: { id: string; name: string; slug: string } | null;
+  sirketHatasi: string | null;
+  /** Workspace bölümü — sunucuda üretiliyor. */
   children: React.ReactNode;
 }) {
   const router = useRouter();
   const [agac, setAgac] = useState<ManagerAccountTree | null>(ilkAgac);
   const [hata, setHata] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  /*
+   * TEK SEFERDE TEK PANEL. İkisini birden açık bırakmak, ekranın yine
+   * düzeltmeye çalıştığımız hâle dönmesi demekti.
+   */
+  const [panel, setPanel] = useState<'yok' | 'duzenle' | 'tasi' | 'sil'>('yok');
 
   async function gonder(yol: string, govde: unknown) {
     setPending(true);
@@ -142,29 +162,135 @@ export function UstHesapEkrani({
           onEkle={(name) => void gonder('/manager-account/organizations', { name })}
         />
 
-        <div className="min-w-0 space-y-8">
+        <div className="min-w-0 space-y-6">
           {/*
-            TAŞIMA DETAYDA, RAY'DE DEĞİL. Her satıra bir seçici koymak kırk
-            şirkette kırk bin `option` düğümü demekti ve seçicinin hedefi
-            zaten "şu an bulunduğun şirket".
+            ═══ ŞİRKET BAŞLIĞI VE EYLEMLERİ ═══
+
+            Önce iki kutu (taşıma ve şirket bilgileri) ekranın üstünde SÜREKLİ
+            AÇIK duruyordu ve workspace listesini aşağı itiyordu. Kullanıcının
+            tarifi *"gereksiz ve karışık duruyor"*. Bugün bir başlık satırı ve
+            üç düğme; paneller istendiğinde açılıyor.
           */}
-          {aktifSirket && (
-            <WorkspaceTasi
-              agac={agac}
-              hedef={aktifSirket}
-              pending={pending}
-              onTasi={(clientId) =>
-                void gonder('/manager-account/workspaces/move', {
-                  clientId,
-                  organizationId: aktifSirket.id,
-                })
-              }
-            />
-          )}
+          {sirketHatasi !== null ? (
+            /* SEBEBİ EKRANDA: form olmadan boş bırakmak, "düzenleyemiyorum"
+               ile "yüklenemedi" hâllerini aynı gösterirdi. */
+            <p
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
+              Şirket bilgisi alınamadı: {sirketHatasi}
+            </p>
+          ) : sirket ? (
+            <section className="rounded-xl border border-line bg-surface p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate text-base font-semibold text-ink">{sirket.name}</h2>
+                  <p className="text-[11px] text-ink-muted">{sirket.slug}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <EylemDugmesi
+                    aktif={panel === 'duzenle'}
+                    onClick={() => setPanel((p) => (p === 'duzenle' ? 'yok' : 'duzenle'))}
+                  >
+                    Düzenle
+                  </EylemDugmesi>
+                  <EylemDugmesi
+                    aktif={panel === 'tasi'}
+                    onClick={() => setPanel((p) => (p === 'tasi' ? 'yok' : 'tasi'))}
+                  >
+                    Workspace taşı
+                  </EylemDugmesi>
+                  <button
+                    type="button"
+                    onClick={() => setPanel((p) => (p === 'sil' ? 'yok' : 'sil'))}
+                    className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+                      panel === 'sil'
+                        ? 'border-red-300 bg-red-50 text-red-700'
+                        : 'border-line text-red-600 hover:bg-red-50'
+                    }`}
+                  >
+                    Sil
+                  </button>
+                </div>
+              </div>
+
+              {panel === 'duzenle' && (
+                <div className="mt-4 border-t border-line pt-4">
+                  <SirketDuzenle sirketAdi={sirket.name} sirketSlug={sirket.slug} />
+                </div>
+              )}
+
+              {panel === 'tasi' && aktifSirket && (
+                <div className="mt-4 border-t border-line pt-4">
+                  {/*
+                    TAŞIMA DETAYDA, RAY'DE DEĞİL. Her satıra bir seçici koymak
+                    kırk şirkette kırk bin `option` düğümü demekti ve seçicinin
+                    hedefi zaten "şu an bulunduğun şirket".
+                  */}
+                  <WorkspaceTasi
+                    agac={agac}
+                    hedef={aktifSirket}
+                    pending={pending}
+                    onTasi={(clientId) =>
+                      void gonder('/manager-account/workspaces/move', {
+                        clientId,
+                        organizationId: aktifSirket.id,
+                      })
+                    }
+                  />
+                </div>
+              )}
+
+              {panel === 'sil' && (
+                <div className="mt-4 border-t border-line pt-4">
+                  <SirketSil
+                    organizationId={sirket.id}
+                    onVazgec={() => setPanel('yok')}
+                    onSilindi={() => {
+                      /*
+                       * SİLİNEN ŞİRKETTE KALINAMAZ. Sunucu aktif şirketin
+                       * silinmesini zaten reddediyor, yani buradaki şirket
+                       * BAŞKA bir şirket; yine de ağaç ve üst bardaki seçici
+                       * tazelenmek zorunda, yoksa silinen şirket listede
+                       * durmaya devam eder.
+                       */
+                      setPanel('yok');
+                      window.location.assign('/ayarlar/ust-hesap');
+                    }}
+                  />
+                </div>
+              )}
+            </section>
+          ) : null}
+
           {children}
         </div>
       </div>
     </div>
+  );
+}
+
+/** Panel açan düğme — açıkken işaretli. */
+function EylemDugmesi({
+  aktif,
+  onClick,
+  children,
+}: {
+  aktif: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={aktif}
+      className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+        aktif ? 'border-brand bg-brand-soft text-brand' : 'border-line text-ink hover:bg-surface-muted'
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

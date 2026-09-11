@@ -60,3 +60,61 @@ export interface ManagerAccountTree {
     isHome: boolean;
   }>;
 }
+
+/**
+ * ═══ ŞİRKET SİLME ÖZETİ — NE GİDECEĞİ ÖNCE YAZILIYOR ═══
+ *
+ * `organizations` satırını silmek OTUZ tabloda cascade tetikliyor:
+ * workspace'ler, reklam hesapları, KULLANICILAR, kampanyalar ve bütün
+ * metrik geçmişi. Geri alma yolu yok — Meta 37 aylık sınıra takılıyor ve
+ * Google'da yeniden çekmek kota harcıyor.
+ *
+ * Bu yüzden silme İKİ ADIM: önce ne gideceği sayılıyor, sonra siliniyor.
+ * "Emin misiniz?" diye sorup ne gideceğini söylememek, bu depoda
+ * `reset-clients`in yarım kalıp metrik verisini götürmesiyle aynı sınıf
+ * hata — pahalı yarısı yapılır, kullanıcı ne kaybettiğini sonra öğrenir.
+ */
+export interface SirketSilmeOzeti {
+  organizationId: string;
+  name: string;
+  /** Silinecek workspace adları — SAYI DEĞİL AD: "3 workspace" kimseye ne kaybedeceğini söylemiyor. */
+  workspaceAdlari: string[];
+  /** Bu şirkete ait reklam hesabı sayısı. Silinince metrik geçmişleri de gidiyor. */
+  reklamHesabi: number;
+  /** `users.org_id` bu şirket olan kullanıcılar — silinince GİRİŞ YAPAMAZLAR. */
+  kullanici: number;
+  /** Metrik satırı olan gün sayısı. 0 = kaybedilecek ölçüm yok. */
+  metrikGunu: number;
+  /**
+   * Silme kullanıcının ADINI YAZMASINI istiyor mu.
+   *
+   * Boş bir şirket (yanlışlıkla açılmış bir test kaydı) için tek tık
+   * yeterli; içinde veri olan bir şirkette aynı kolaylık, kazara yapılan
+   * ve geri alınamayan bir silme demek.
+   */
+  adOnayiGerekli: boolean;
+  /**
+   * Silme MÜMKÜN DEĞİLSE sebebi. `null` = silinebilir.
+   *
+   * Düğmeyi sessizce kapatmak yerine sebep yazılıyor: kapalı bir düğme
+   * "neden" sorusunu ekranda bırakıyor ve kullanıcı onu aramaya gidiyor.
+   */
+  engel: string | null;
+}
+
+export interface SilmeYaniti {
+  silindi: true;
+  /** Silinen şirketin adı — ekranda "X silindi" demek için. */
+  name: string;
+}
+
+/**
+ * Şirket silme isteği.
+ *
+ * `onayAdi` yalnızca `adOnayiGerekli` olan şirketlerde zorunlu ve sunucu
+ * bunu KENDİ kontrol ediyor: paneldeki kontrol bir kolaylık, kapı değil.
+ */
+export const deleteOrganizationSchema = z.object({
+  onayAdi: z.string().trim().max(120).optional(),
+});
+export type DeleteOrganizationInput = z.infer<typeof deleteOrganizationSchema>;

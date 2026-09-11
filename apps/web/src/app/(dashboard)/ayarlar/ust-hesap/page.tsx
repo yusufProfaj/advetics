@@ -3,7 +3,6 @@ import type { ManagerAccountTree } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { hasPermission, requireSession } from '@/lib/session';
 import { UstHesapEkrani } from '@/components/ust-hesap/ust-hesap-ekrani';
-import { SirketDuzenle } from '@/components/ust-hesap/sirket-duzenle';
 import { WorkspaceBolumu } from '@/components/tenancy/workspace-bolumu';
 
 export const metadata = { title: 'Şirketler — Advetics' };
@@ -116,10 +115,19 @@ export default async function SirketlerPage() {
         olurdu. Next.js sunucu bileşenlerini `children` üzerinden geçirmeye
         izin veriyor ve bu tam olarak o desen.
       */}
+      {/*
+        ŞİRKET BİLGİSİ ARTIK `children` DEĞİL PROP.
+        Düzenleme ve taşıma panelleri KATLANABİLİR olmak zorunda ve açık/kapalı
+        durumu istemci bileşeninde duruyor; sunucuda üretilen bir `children`
+        oradan kontrol edilemez. Workspace bölümü `children` olarak kalıyor —
+        o gerçekten sunucu tarafı veri çekiyor.
+      */}
       <UstHesapEkrani
         ilkAgac={agac}
         aktifOrgId={session.activeOrganizationId}
         yuklemeHatasi={yuklemeHatasi}
+        sirket={sirketKapsami ? sirket : null}
+        sirketHatasi={sirketKapsami ? sirketHatasi : null}
       >
         {!sirketKapsami ? (
           <p className="rounded-xl border border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
@@ -127,23 +135,8 @@ export default async function SirketlerPage() {
             workspace&apos;lerini düzenlemek için soldan o şirkete geç.
           </p>
         ) : (
-          <>
-            {sirketHatasi ? (
-              /* SEBEBİ EKRANDA: form olmadan boş bırakmak, "düzenleyemiyorum"
-                 ile "yüklenemedi" hâllerini aynı gösterirdi. */
-              <p
-                role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-              >
-                Şirket bilgisi alınamadı: {sirketHatasi}
-              </p>
-            ) : sirket ? (
-              <SirketDuzenle sirketAdi={sirket.name} sirketSlug={sirket.slug} />
-            ) : null}
-
-            {/* WORKSPACE'LER ŞİRKETİN İÇİNDE — ayrı sayfa değil. */}
-            <WorkspaceBolumu session={session} />
-          </>
+          /* WORKSPACE'LER ŞİRKETİN İÇİNDE — ayrı sayfa değil. */
+          <WorkspaceBolumu session={session} />
         )}
       </UstHesapEkrani>
     </div>

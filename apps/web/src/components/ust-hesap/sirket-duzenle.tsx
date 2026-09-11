@@ -47,6 +47,23 @@ export function SirketDuzenle({
   const [pending, setPending] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [kaydedildi, setKaydedildi] = useState(false);
+  /*
+   * ═══ KISA AD GİZLİ — TEKNİK BİLGİ İSTİYOR ═══
+   *
+   * Kullanıcının tarifi: *"şirket oluşturduğumda slug yazmak teknik bilgi
+   * ister değiştirmekte."* Şirket AÇARKEN zaten sorulmuyor (addan
+   * türetiliyor); düzenlemede ise iki eşit alandan biriydi ve ne işe
+   * yaradığı belli değildi.
+   *
+   * TAMAMEN KALDIRMAK DA ÇÖZÜM DEĞİL: kısa ad adreslerde ve dosya adlarında
+   * kullanılıyor, bir gün düzeltilmesi gerekebiliyor. Adı değiştirince
+   * KENDİLİĞİNDEN türetmek ise daha kötü olurdu — paylaşılmış rapor
+   * bağlantıları ve üretilmiş dosya adları sessizce başka bir şeye işaret
+   * etmeye başlardı.
+   *
+   * Çözüm: varsayılan KAPALI, isteyen açıyor.
+   */
+  const [gelismis, setGelismis] = useState(false);
 
   const degisti = ad !== kayitli.name || slug !== kayitli.slug;
 
@@ -90,38 +107,57 @@ export function SirketDuzenle({
   }
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-5">
-      <h2 className="text-sm font-semibold text-ink">Şirket bilgileri</h2>
-      <p className="mt-1 max-w-prose text-sm text-ink-muted">
-        Bu ad seçicide, raporlarda ve müşteriye giden maillerde görünüyor. Kısa ad
-        (slug) adresler ve dosya adları için kullanılıyor.
+    <section>
+      <p className="max-w-prose text-sm text-ink-muted">
+        Bu ad seçicide, raporlarda ve müşteriye giden maillerde görünüyor.
       </p>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-[11px] text-ink-muted">Şirket adı</span>
-          <input
-            value={ad}
-            onChange={(e) => {
-              setAd(e.target.value);
-              setKaydedildi(false);
-            }}
-            disabled={pending}
-            className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
-          />
-        </label>
-        <label className="block">
-          <span className="text-[11px] text-ink-muted">Kısa ad</span>
-          <input
-            value={slug}
-            onChange={(e) => {
-              setSlug(e.target.value);
-              setKaydedildi(false);
-            }}
-            disabled={pending}
-            className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
-          />
-        </label>
+      <label className="mt-3 block max-w-md">
+        <span className="text-[11px] text-ink-muted">Şirket adı</span>
+        <input
+          value={ad}
+          onChange={(e) => {
+            setAd(e.target.value);
+            setKaydedildi(false);
+          }}
+          disabled={pending}
+          className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+        />
+      </label>
+
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() => setGelismis((v) => !v)}
+          aria-expanded={gelismis}
+          className="text-xs text-ink-muted underline-offset-2 transition hover:text-ink hover:underline"
+        >
+          {gelismis ? 'Gelişmiş ayarları gizle' : 'Gelişmiş'}
+        </button>
+        {gelismis && (
+          <label className="mt-2 block max-w-md">
+            <span className="text-[11px] text-ink-muted">
+              Kısa ad — adreslerde ve dosya adlarında kullanılıyor
+            </span>
+            <input
+              value={slug}
+              onChange={(e) => {
+                setSlug(e.target.value);
+                setKaydedildi(false);
+              }}
+              disabled={pending}
+              className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+            />
+            {/*
+              DEĞİŞTİRMENİN BEDELİ YAZILIYOR. Paylaşılmış rapor bağlantıları
+              ve üretilmiş dosya adları eski kısa adı taşıyor; sessizce
+              değiştirmek onları kırar.
+            */}
+            <span className="mt-1 block text-[11px] text-ink-muted">
+              Değiştirmek, daha önce paylaşılmış rapor bağlantılarını bozabilir.
+            </span>
+          </label>
+        )}
       </div>
 
       {hata && (

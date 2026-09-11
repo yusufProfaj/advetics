@@ -22,6 +22,18 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
  * gönderir; TypeScript de bir şey demez çünkü hepsi opsiyonel.
  */
 export interface MusteriBilgileri {
+  /**
+   * WORKSPACE ADI — SONRADAN EKLENDİ.
+   *
+   * Kullanıcının tarifi: *"workspace tıkladığımda ismini düzenleyemiyorum."*
+   * Uç (`PATCH /clients/:id`) adı zaten kabul ediyordu; eksik olan tek şey
+   * form alanıydı. Yanlış yazılmış bir workspace adı seçiciye, raporlara ve
+   * müşteriye giden maillere kadar gidiyor.
+   *
+   * `string | null` DEĞİL `string`: ad ZORUNLU ve boş bırakılamıyor. Diğer
+   * alanlar temizlenebiliyor (boş dizge → `null`), bu temizlenemez.
+   */
+  name: string;
   contactName: string | null;
   /**
    * RAPOR ALICILARI — tek adres değil liste.
@@ -55,6 +67,8 @@ const ALANLAR: {
   etiket: string;
   tur: 'text' | 'email' | 'tel' | 'uzun' | 'alicilar';
 }[] = [
+  // AD İLK SIRADA: formu açan kişinin en sık değiştireceği alan bu.
+  { anahtar: 'name', etiket: 'Workspace adı', tur: 'text' },
   { anahtar: 'contactName', etiket: 'Yetkili kişi', tur: 'text' },
   { anahtar: 'contactEmails', etiket: 'Rapor alıcıları', tur: 'alicilar' },
   { anahtar: 'contactPhone', etiket: 'Telefon', tur: 'tel' },
@@ -100,7 +114,24 @@ export function MusteriBilgiFormu({
        * Şema boş dizgeyi `null`'a çeviriyor, yani temizleme uçta doğru
        * karşılığını buluyor.
        */
-      await apiFetch(`/clients/${clientId}`, { method: 'PATCH', body: JSON.stringify(deger) });
+      /*
+       * AD BOŞ GÖNDERİLEMİYOR.
+       *
+       * Diğer alanlarda boş dizge "temizle" demek ve uç onu `null`a
+       * çeviriyor; ad için aynı şey 400 demek. Sunucunun cevabını
+       * beklemeden alanın yanında söylemek, "Kaydet"e basıp anlaşılmaz bir
+       * hata almaktan iyi.
+       */
+      const yeniAd = String(deger.name ?? '').trim();
+      if (yeniAd.length < 2) {
+        setHata('Workspace adı en az 2 karakter olmalı.');
+        setKaydediliyor(false);
+        return;
+      }
+      await apiFetch(`/clients/${clientId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ ...deger, name: yeniAd }),
+      });
       startTransition(() => router.refresh());
       onBitti();
     } catch (err) {

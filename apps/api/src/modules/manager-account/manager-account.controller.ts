@@ -1,10 +1,22 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+} from '@nestjs/common';
 import {
   createManagedOrganizationSchema,
   createManagerAccountSchema,
+  deleteOrganizationSchema,
   moveWorkspaceSchema,
   type CreateManagedOrganizationInput,
   type CreateManagerAccountInput,
+  type DeleteOrganizationInput,
   type MoveWorkspaceInput,
   type TenantContext,
 } from '@advetics/shared';
@@ -48,6 +60,31 @@ export class ManagerAccountController {
     @Body(zodBody(createManagedOrganizationSchema)) dto: CreateManagedOrganizationInput,
   ) {
     return this.service.createOrganization(ctx, dto);
+  }
+
+  /**
+   * ŞİRKET SİLME ÖZETİ — ne gideceğini SAYIYOR, hiçbir şey silmiyor.
+   *
+   * AYRI BİR UÇ çünkü ekran silmeden ÖNCE göstermek zorunda: silme otuz
+   * tabloda cascade tetikliyor (workspace'ler, reklam hesapları,
+   * KULLANICILAR, bütün metrik geçmişi) ve geri alma yolu yok. "Emin
+   * misiniz?" deyip ne gideceğini söylememek, bu depoda `reset-clients`in
+   * yarım kalıp metrik verisini götürmesiyle aynı sınıf hata.
+   */
+  @Get('organizations/:id/silme-ozeti')
+  async silmeOzeti(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.silmeOzeti(ctx, id);
+  }
+
+  /** Şirketi ve altındaki her şeyi KALICI siler. Kapılar servis katmanında. */
+  @HttpCode(HttpStatus.OK)
+  @Delete('organizations/:id')
+  async silOrganization(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(deleteOrganizationSchema)) dto: DeleteOrganizationInput,
+  ) {
+    return this.service.sil(ctx, id, dto);
   }
 
   /**

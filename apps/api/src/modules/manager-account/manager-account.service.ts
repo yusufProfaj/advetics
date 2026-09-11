@@ -1,9 +1,13 @@
 import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type {
   CreateManagedOrganizationInput,
   CreateManagerAccountInput,
+  DeleteOrganizationInput,
   ManagerAccountTree,
   MoveWorkspaceInput,
+  SilmeYaniti,
+  SirketSilmeOzeti,
   TenantContext,
 } from '@advetics/shared';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
@@ -217,6 +221,210 @@ export class ManagerAccountService {
     const agac = await this.get(ctx);
     if (!agac) throw new BadRequestException('Şirket oluşturuldu ama üst hesap okunamadı');
     return agac;
+  }
+
+  /**
+   * ═══ ŞİRKET SİLME — ÖNCE NE GİDECEĞİ SAYILIYOR ═══
+   *
+   * `organizations` satırını silmek OTUZ tabloda cascade tetikliyor:
+   * workspace'ler, reklam hesapları, KULLANICILAR, kampanyalar ve bütün
+   * metrik geçmişi. Geri alma yolu yok — Meta 37 aylık sınıra takılıyor ve
+   * Google'da yeniden çekmek kota harcıyor.
+   *
+   * "Emin misiniz?" diye sorup NE GİDECEĞİNİ söylememek, bu depoda
+   * `reset-clients`in yarım kalıp metrik verisini götürmesiyle aynı sınıf
+   * hata: pahalı yarısı yapılır, kullanıcı ne kaybettiğini sonra öğrenir.
+   *
+   * SAYI DEĞİL AD DÖNÜYOR (`workspaceAdlari`): "3 workspace" kimseye ne
+   * kaybedeceğini söylemiyor.
+   */
+  async silmeOzeti(ctx: TenantContext, organizationId: string): Promise<SirketSilmeOzeti> {
+    assertOrgAdmin(ctx);
+    const org = await this.silinecekSirket(ctx, organizationId);
+
+    const [workspaceler, reklamHesabi, kullanici, metrik] = await Promise.all([
+      this.admin.client.findMany({
+        where: { orgId: organizationId },
+        select: { name: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.admin.adAccount.count({ where: { orgId: organizationId } }),
+      this.admin.user.count({ where: { orgId: organizationId } }),
+      /*
+       * METRİK GÜNÜ SAYILIYOR, SATIR DEĞİL. "412.877 satır" kimseye bir şey
+       * anlatmıyor; "14 aylık ölçüm" kaybın büyüklüğünü söylüyor.
+       */
+      this.admin.$queryRaw<Array<{ n: bigint }>>(
+        Prisma.sql`SELECT COUNT(DISTINCT date) AS n FROM insights_daily
+                    WHERE client_id IN (SELECT id FROM clients WHERE org_id = ${organizationId}::uuid)`,
+      ),
+    ]);
+
+    const metrikGunu = Number(metrik[0]?.n ?? 0);
+    return {
+      organizationId,
+      name: org.name,
+      workspaceAdlari: workspaceler.map((w) => w.name),
+      reklamHesabi,
+      kullanici,
+      metrikGunu,
+      /*
+       * BOŞ ŞİRKET TEK TIKLA SİLİNİYOR.
+       *
+       * Yanlışlıkla açılmış bir test kaydı için ad yazdırmak angarya; içinde
+       * veri olan bir şirkette aynı kolaylık, kazara yapılan ve geri
+       * alınamayan bir silme demek. Eşik "kaybedilecek bir şey var mı".
+       */
+      adOnayiGerekli:
+        workspaceler.length > 0 || reklamHesabi > 0 || kullanici > 0 || metrikGunu > 0,
+      engel: await this.silmeEngeli(ctx, organizationId),
+    };
+  }
+
+  /**
+   * Şirketi ve altındaki her şeyi KALICI olarak siler.
+   *
+   * ┌─ NEDEN ÜÇ KAPI ───────────────────────────────────────────────────────┐
+   * │ 1. EV ŞİRKETİ SİLİNEMEZ. `users.org_id` oraya bakıyor; silmek         │
+   * │    kullanıcıyı kendi hesabından KİLİTLERDİ ve geri dönüşü yok.        │
+   * │ 2. AKTİF ŞİRKET SİLİNEMEZ. Bulunduğu kapsamı silen kullanıcı,         │
+   * │    var olmayan bir şirkete bakan bir panelde kalırdı.                 │
+   * │ 3. YALNIZCA KENDİ ÜST HESABININ ALTINDAKİLER. Başka bir ajansın       │
+   * │    şirketini silmek, RLS'in ifade edemediği bir yazma olurdu —        │
+   * │    `PrismaAdminService` kullanıldığı için kontrol BURADA yapılmak     │
+   * │    zorunda.                                                            │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * AD ONAYI SUNUCUDA DA SINANIYOR: paneldeki kontrol bir kolaylık, kapı
+   * değil. Uca elle istek atmak kolaylığı atlamak olurdu.
+   */
+  async sil(
+    ctx: TenantContext,
+    organizationId: string,
+    input: DeleteOrganizationInput,
+  ): Promise<SilmeYaniti> {
+    assertOrgAdmin(ctx);
+    const ozet = await this.silmeOzeti(ctx, organizationId);
+    if (ozet.engel !== null) throw new BadRequestException(ozet.engel);
+
+    if (ozet.adOnayiGerekli && (input.onayAdi ?? '').trim() !== ozet.name) {
+      throw new BadRequestException(
+        `Bu şirkette silinecek veri var. Onaylamak için şirket adını birebir yaz: ${ozet.name}`,
+      );
+    }
+
+    /*
+     * DENETİM KAYDI SİLMEDEN ÖNCE YAZILIYOR.
+     *
+     * Sonra yazmak imkânsız: `audit_logs.org_id` silinen şirkete bakıyor ve
+     * o satır cascade ile birlikte giderdi. Kayıt ÇAĞIRANIN şirketine
+     * (`ctx.orgId`) yazılıyor — kimin sildiği orada duruyor.
+     */
+    await this.audit.recordUnauthenticated(ctx.orgId, {
+      actorId: ctx.userId,
+      action: 'manager_account.organization_delete',
+      targetType: 'organization',
+      targetId: organizationId,
+      before: {
+        name: ozet.name,
+        workspace: ozet.workspaceAdlari,
+        reklamHesabi: ozet.reklamHesabi,
+        kullanici: ozet.kullanici,
+        metrikGunu: ozet.metrikGunu,
+      },
+    });
+
+    /*
+     * ═══ FK TAŞIMAYAN TABLOLAR ELLE SİLİNİYOR ═══
+     *
+     * Silmenin geri kalanı cascade ile geliyor ama İKİ tablo `clients`e bir
+     * yabancı anahtarla BAĞLI DEĞİL ve `org_id` de taşımıyorlar:
+     * `insights_daily` (partition'lı — Prisma partition'lı tabloya FK
+     * kuramıyor) ve `api_usage_log`.
+     *
+     * Bu PGlite ile ÖLÇÜLDÜ, şema yorumundan okunmadı: şirketi silip
+     * `insights_daily`i saydığımda satır DURUYORDU. Yetim kalan satırlar
+     * hiçbir ekranda görünmüyor (RLS artık var olmayan bir `client_id`yi
+     * kimseye açmıyor) ama tabloda kalıyorlar — ve o tablo bu depoda
+     * ölçülerek düzeltilen yavaşlığın tam merkezinde.
+     *
+     * ┌─ TEK TRANSACTION, VE BU BİR GÜVENLİK KARARI ──────────────────────┐
+     * │ `reset-clients` bir kez metrikleri silip müşterileri silemeden     │
+     * │ düştü: pahalı yarısı yapıldı, işe yarayan yarısı yapılmadı. Burada │
+     * │ ikisi AYNI transaction'da — org silme bir `Restrict` engeline      │
+     * │ takılırsa metrikler de geri geliyor.                               │
+     * └────────────────────────────────────────────────────────────────────┘
+     *
+     * Kimlikler ÖNCEDEN toplanıyor: org silindikten sonra `clients` de
+     * gitmiş oluyor ve o satırları bulmanın yolu kalmıyor.
+     */
+    const clientIdler = (
+      await this.admin.client.findMany({ where: { orgId: organizationId }, select: { id: true } })
+    ).map((c) => c.id);
+
+    await this.admin.$transaction(
+      async (tx) => {
+        if (clientIdler.length > 0) {
+          await tx.$executeRaw(
+            Prisma.sql`DELETE FROM insights_daily WHERE client_id = ANY(${clientIdler}::uuid[])`,
+          );
+          await tx.$executeRaw(
+            Prisma.sql`DELETE FROM api_usage_log WHERE client_id = ANY(${clientIdler}::uuid[])`,
+          );
+        }
+        await tx.organization.delete({ where: { id: organizationId } });
+      },
+      // Ondört aylık metrik yüz binlerce satır olabiliyor; varsayılan 5
+      // saniye bir şirketi yarım silinmiş bırakmaya yeter.
+      { timeout: 120_000, maxWait: 120_000 },
+    );
+    this.logger.warn(
+      `ŞİRKET SİLİNDİ: ${ozet.name} (${organizationId}) — ` +
+        `${ozet.workspaceAdlari.length} workspace, ${ozet.reklamHesabi} hesap, ` +
+        `${ozet.kullanici} kullanıcı, ${ozet.metrikGunu} günlük metrik.`,
+    );
+    return { silindi: true, name: ozet.name };
+  }
+
+  /** Silinecek şirketi ÜST HESABIN ALTINDAN okur — başkasınınkine dokunulamaz. */
+  private async silinecekSirket(
+    ctx: TenantContext,
+    organizationId: string,
+  ): Promise<{ name: string }> {
+    const uyelik = await this.admin.managerMembership.findUnique({
+      where: { userId: ctx.userId },
+      select: { managerAccountId: true },
+    });
+    if (!uyelik) throw new BadRequestException('Bu hesabın bağlı olduğu bir üst hesap yok');
+
+    const org = await this.admin.organization.findFirst({
+      where: { id: organizationId, managerAccountId: uyelik.managerAccountId },
+      select: { name: true },
+    });
+    if (!org) throw new BadRequestException('Bu şirket bulunamadı');
+    return org;
+  }
+
+  /** Silmeyi imkânsız kılan hâller — sebep METİN olarak dönüyor. */
+  private async silmeEngeli(ctx: TenantContext, organizationId: string): Promise<string | null> {
+    if (organizationId === ctx.orgId) {
+      return 'Şu an bu şirkettesin. Silmeden önce başka bir şirkete geç.';
+    }
+    /*
+     * EV ŞİRKETİ `users.org_id` — `ctx.orgId` DEĞİL.
+     *
+     * İkincisi ŞU AN bakılan şirket ve üst hesap altında ikisi farklı
+     * oluyor. Ev şirketini silmek giriş hesabını da siler (cascade) ve
+     * kullanıcıyı kendi hesabından kilitler — geri dönüşü yok.
+     */
+    const kullanici = await this.admin.user.findUnique({
+      where: { id: ctx.userId },
+      select: { orgId: true },
+    });
+    if (kullanici?.orgId === organizationId) {
+      return 'Kendi şirketin silinemez — giriş hesabın oraya bağlı.';
+    }
+    return null;
   }
 
   /**
