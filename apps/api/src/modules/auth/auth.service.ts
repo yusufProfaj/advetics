@@ -290,26 +290,57 @@ export class AuthService {
       where: { userId: ctx.userId },
       select: { managerAccountId: true, managerAccount: { select: { status: true } } },
     });
+    const ustHesapVar = uyelik !== null && uyelik.managerAccount.status === 'active';
 
-    if (!uyelik || uyelik.managerAccount.status !== 'active') {
-      throw new BadRequestException('Bu hesabın bağlı olduğu bir üst hesap yok');
+    /*
+     * "TÜM ŞİRKETLER" ÜST HESABA ÖZEL ve öyle kalıyor: mod ajansın
+     * GENEL BAKIŞI ve altındaki şirket kümesi üst hesaptan geliyor. Bir
+     * danışmanın iki şirkette üyeliği olması onu ajans yapmıyor.
+     */
+    if (organizationId === TUM_SIRKETLER) {
+      if (!ustHesapVar) {
+        throw new BadRequestException('Bu hesabın bağlı olduğu bir üst hesap yok');
+      }
+      return TUM_SIRKETLER;
     }
 
-    if (organizationId === TUM_SIRKETLER) return TUM_SIRKETLER;
+    /*
+     * ═══ İKİ YOL: ÜST HESAP VEYA ÜYELİK ═══
+     *
+     * Önce YALNIZCA üst hesap yolu vardı ve şirket seviyesi yetkiyi
+     * KULLANILAMAZ yapıyordu: danışmana bir şirketin tamamına yetki
+     * veriliyor, üyelik satırı o şirkette açılıyor, ama geçmeye
+     * çalıştığında "Bu hesabın bağlı olduğu bir üst hesap yok" hatasını
+     * alıyordu. Yetki var, kapı yok.
+     *
+     * İkinci yol `tenant-context.service.ts`teki `izinliOrgIdler` ile
+     * AYNI kuralı uyguluyor: üyeliğin olduğu şirket erişilebilir. İkisinin
+     * ayrışması, seçicide görünen ama tıklanınca reddedilen bir satır
+     * demekti — kullanıcının gördüğü hâlin ta kendisi.
+     */
+    if (ustHesapVar) {
+      const kardes = await this.admin.organization.findFirst({
+        where: {
+          id: organizationId,
+          managerAccountId: uyelik.managerAccountId,
+          status: 'active',
+        },
+        select: { id: true },
+      });
+      if (kardes) return kardes.id;
+    }
 
-    const hedef = await this.admin.organization.findFirst({
+    const kendiUyeligi = await this.admin.membership.findFirst({
       where: {
-        id: organizationId,
-        managerAccountId: uyelik.managerAccountId,
-        status: 'active',
+        userId: ctx.userId,
+        orgId: organizationId,
+        organization: { status: 'active' },
       },
       select: { id: true },
     });
+    if (kendiUyeligi) return organizationId;
 
-    if (!hedef) {
-      throw new BadRequestException('Bu şirkete erişim yetkiniz yok');
-    }
-    return hedef.id;
+    throw new BadRequestException('Bu şirkete erişim yetkiniz yok');
   }
 
   /**

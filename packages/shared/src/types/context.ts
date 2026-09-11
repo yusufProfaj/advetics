@@ -144,5 +144,18 @@ export interface SessionResponse {
    * `managerAccount`a bakarsa o şirketleri hiç göstermiyor — yetki
    * veriliyor, kullanıcı oraya GEÇEMİYOR.
    */
-  erisilebilirSirketler: Array<{ id: string; name: string; slug: string }>;
+  erisilebilirSirketler: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    /**
+     * O ŞİRKETTE KULLANICININ ERİŞEBİLDİĞİ workspace'ler.
+     *
+     * Seçici üst hesabı olmayan kullanıcıda bu listeden besleniyor ve
+     * eskiden yalnızca AKTİF şirketinkini biliyordu: diğer satırlar
+     * "0 workspace · Bu şirkette workspace yok" yazıyordu. Bilgi eksikliği
+     * değil YANLIŞ BİLGİ — workspace vardı, ekranda yok deniyordu.
+     */
+    workspaces: Array<{ id: string; name: string }>;
+  }>;
 }

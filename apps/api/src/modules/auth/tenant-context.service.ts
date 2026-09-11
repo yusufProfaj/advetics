@@ -64,12 +64,17 @@ export interface ResolvedIdentity {
     organizations: Array<{ id: string; name: string; slug: string }>;
   } | null;
   /**
-   * Kullanıcının GEÇEBİLECEĞİ bütün şirketler — üst hesabı olmasa da.
+   * Kullanıcının GEÇEBİLECEĞİ bütün şirketler ve oradaki workspace'leri.
    *
    * `managerAccount.organizations` ajans katmanını anlatıyor ve danışmanda
    * `null`; bu liste ise üyeliğin olduğu her şirketi taşıyor.
    */
-  erisilebilirSirketler: Array<{ id: string; name: string; slug: string }>;
+  erisilebilirSirketler: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    workspaces: Array<{ id: string; name: string }>;
+  }>;
 }
 
 /**
@@ -269,11 +274,75 @@ export class TenantContextService {
      * göstermezsek kullanıcı yetkisi olan bir yere GEÇEMİYOR — yetki
      * veriliyor, erişilemiyor.
      */
+    /*
+     * ═══ SEÇİCİDE GÖRÜNEN KÜME = GEÇİLEBİLEN KÜME ═══
+     *
+     * `izinliOrgIdler` EV ŞİRKETİNİ KOŞULSUZ taşıyor ve bu, `activeOrgId`
+     * için güvenli bir son çare. Ama seçiciye olduğu gibi vermek, orada
+     * üyeliği OLMAYAN bir kullanıcıya tıklanınca reddedilen bir satır
+     * göstermek demekti — `assertOrgAccess` o şirketi kabul etmiyor.
+     *
+     * Seçilebilir küme: üst hesabın kardeşleri + ÜYELİĞİN OLDUĞU şirketler.
+     * `assertOrgAccess` ile BİREBİR aynı kural; ikisinin ayrışması, ekranda
+     * görünen ama açılmayan bir satır demek.
+     */
+    const secilebilirOrgIdler = new Set<string>([
+      ...kardesSirketler.map((o) => o.id),
+      ...uyelikOrgIdleri,
+    ]);
+
     const erisilebilirSirketler = await this.db.organization.findMany({
-      where: { id: { in: [...izinliOrgIdler] }, status: 'active' },
+      where: { id: { in: [...secilebilirOrgIdler] }, status: 'active' },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, slug: true },
     });
+
+    /*
+     * ═══ HER ŞİRKETİN ERİŞİLEBİLİR WORKSPACE'LERİ ═══
+     *
+     * Seçici üst hesabı OLMAYAN kullanıcıda bu listeden besleniyor ve
+     * eskiden yalnızca AKTİF şirketin workspace'lerini biliyordu: diğer
+     * bütün satırlar "0 workspace · Bu şirkette workspace yok" yazıyordu.
+     * Bu bir bilgi eksikliği değil, YANLIŞ BİLGİ — workspace vardı,
+     * ekranda yok deniyordu.
+     *
+     * SORGU UCUZ: `clients` küçük bir tablo ve tek çağrı. Kırk dokuz
+     * şirketli bir ajansta bile birkaç yüz satır.
+     *
+     * SÜZGEÇ ÜYELİĞE GÖRE: şirket geneli üyeliği olan o şirketin
+     * HEPSİNİ görüyor, workspace bazlı üyeliği olan yalnızca kendi
+     * satırlarını — `clientIds` hesabının aktif şirket dışına genişletilmiş
+     * hâli ve aynı kuralı uyguluyor.
+     */
+    const erisimWorkspaceleri = await this.db.client.findMany({
+      where: { orgId: { in: [...secilebilirOrgIdler] }, status: { not: 'archived' } },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, orgId: true },
+    });
+
+    const orgGeneliOlanlar = new Set(
+      user.memberships
+        .filter((m) => m.clientId === null && isOrgScopedRole(m.role as Role))
+        .map((m) => m.orgId),
+    );
+    const uyelikliClientIdler = new Set(
+      user.memberships.map((m) => m.clientId).filter((id): id is string => id !== null),
+    );
+
+    const sirketAgaci = erisilebilirSirketler.map((o) => ({
+      ...o,
+      workspaces: erisimWorkspaceleri
+        .filter(
+          (c) =>
+            c.orgId === o.id &&
+            (orgGeneliOlanlar.has(o.id) ||
+              // ÜST HESAP ALTINDAKİ ŞİRKETTE org geneli erişim üst hesap
+              // rolünden geliyor; ayrıca üyelik satırı olmayabiliyor.
+              kardesSirketler.some((k) => k.id === o.id) ||
+              uyelikliClientIdler.has(c.id)),
+        )
+        .map((c) => ({ id: c.id, name: c.name })),
+    }));
 
     /*
      * HATA MESAJI ŞİRKETİN ADINI SÖYLÜYOR.
@@ -497,7 +566,7 @@ export class TenantContextService {
         role: m.role as Role,
       })),
       availableClients,
-      erisilebilirSirketler,
+      erisilebilirSirketler: sirketAgaci,
       managerAccount: ustHesap
         ? {
             id: ustHesap.managerAccount.id,

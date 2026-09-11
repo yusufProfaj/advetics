@@ -39,6 +39,7 @@ export function KapsamSecici({
   aktifSirketId,
   aktifWorkspaceId,
   tumSirketler,
+  yonetimGorunur,
 }: {
   /** Üst hesap adı — yoksa `null` (bağımsız şirket). */
   ajans: string | null;
@@ -46,6 +47,8 @@ export function KapsamSecici({
   aktifSirketId: string;
   aktifWorkspaceId: string | null;
   tumSirketler: boolean;
+  /** "Yönetim paneli" bağlantısı — `org.write` yoksa basılmıyor. */
+  yonetimGorunur: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -293,8 +296,16 @@ export function KapsamSecici({
                   </button>
 
                   {s.workspaces.length === 0 ? (
+                    /*
+                      "YOK" DEĞİL "ERİŞEBİLDİĞİN YOK".
+                      Liste kullanıcının ERİŞTİĞİ workspace'leri taşıyor;
+                      şirkette başkaları olabilir. "Bu şirkette workspace
+                      yok" demek, görmediği şeyi var olmayan diye
+                      göstermekti — ve bir süre AKTİF şirket dışındaki her
+                      satırda böyle yazıyordu.
+                    */
                     <p className="px-3 py-1 pl-7 text-[11px] text-ink-muted">
-                      Bu şirkette workspace yok.
+                      Bu şirkette erişebildiğin workspace yok.
                     </p>
                   ) : (
                     <ul>
@@ -324,7 +335,13 @@ export function KapsamSecici({
             MARKA RENGİNDE DOLU VE BEYAZ YAZILI — bir kapsam SEÇMİYOR, yeni
             bir ekran açıyor. Diğer satırlarla aynı görünseydi "bu da bir
             şirket mi" diye okunurdu.
+
+            YETKİSİ OLMAYANA GÖSTERİLMİYOR. Sayfa `org.write` istiyor ve
+            yetkisiz kullanıcıyı `/dashboard`a yönlendiriyor: bağlantıyı
+            herkese basmak, tıklayınca sebepsizce başka bir ekrana atılan
+            bir düğme demekti.
           */}
+          {yonetimGorunur && (
           <Link
             href="/ayarlar/ust-hesap"
             onClick={() => setOpen(false)}
@@ -340,6 +357,7 @@ export function KapsamSecici({
             </svg>
             Yönetim paneli
           </Link>
+          )}
         </div>
       )}
     </div>

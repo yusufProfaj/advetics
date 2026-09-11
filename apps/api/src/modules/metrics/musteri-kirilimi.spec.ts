@@ -158,7 +158,7 @@ function bul(rows: MetricsClientRow[], ad: string): MetricsClientRow {
   return r;
 }
 
-describe('KRİTİK: müşteri süzgeci SORGUNUN İÇİNDE', () => {
+describe('KRİTİK: workspace süzgeci SORGUNUN İÇİNDE', () => {
   /*
    * ═══ İZOLASYON RLS'TE, HIZ SORGUDA ═══
    *

@@ -112,6 +112,39 @@ describe('TEK SEÇİCİ — ajans › şirket › workspace', () => {
   });
 });
 
+describe('SEÇİCİ — üst hesabı OLMAYAN kullanıcı', () => {
+  it('KRİTİK: şirket listesi OTURUMDAN, tek elemanlı yedekten DEĞİL', () => {
+    /*
+     * Ağaç yokken burada tek elemanlı bir liste kuruluyordu ("aktif
+     * şirket") ve danışmanı KİLİTLİYORDU: şirket seviyesi yetki üyelik
+     * satırını o şirkette açıyor, ama seçicide yalnızca bulunduğu şirket
+     * görünüyordu.
+     */
+    expect(LAYOUT).toContain('session.erisilebilirSirketler.map((o) => ({');
+    expect(LAYOUT).toContain('workspaces: o.workspaces,');
+  });
+
+  it('KRİTİK: "0 workspace" YALANI KALKTI', () => {
+    /*
+     * Yalnızca AKTİF şirketin workspace'leri doldurulup diğerleri boş
+     * bırakılıyordu ve seçici onları "Bu şirkette workspace yok" diye
+     * çiziyordu. Workspace vardı; ekran yok diyordu.
+     */
+    expect(LAYOUT).not.toContain('o.id === session.activeOrganizationId');
+    expect(SECICI).toContain('Bu şirkette erişebildiğin workspace yok');
+  });
+
+  it('KRİTİK: "Yönetim paneli" YETKİSİ OLMAYANA basılmıyor', () => {
+    /*
+     * Sayfa `org.write` istiyor ve yetkisiz kullanıcıyı `/dashboard`a
+     * yönlendiriyor. Bağlantıyı herkese göstermek, tıklayınca sebepsizce
+     * başka bir ekrana atılan bir düğme demekti.
+     */
+    expect(SECICI).toContain('{yonetimGorunur && (');
+    expect(LAYOUT).toContain("yonetimGorunur={hasPermission(session, 'org.write')}");
+  });
+});
+
 describe('ŞİRKET GENELİ GÖRÜNÜM', () => {
   it('KRİTİK: AKTİF şirkete tıklamak DARALTMAYI KALDIRIYOR — no-op değil', () => {
     /*

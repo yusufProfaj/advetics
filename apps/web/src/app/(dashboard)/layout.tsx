@@ -1,4 +1,4 @@
-import { requireSession } from '@/lib/session';
+import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { KapsamSecici, type KapsamSirketi } from '@/components/kapsam-secici';
 import { LogoutButton } from '@/components/logout-button';
@@ -87,13 +87,22 @@ export default async function DashboardLayout({ children }: { children: React.Re
         name: o.name,
         workspaces: o.workspaces.map((w) => ({ id: w.id, name: w.name })),
       }))
-    : session.erisilebilirSirketler.map((o) => ({
+    : /*
+       * WORKSPACE LİSTESİ ARTIK OTURUMDAN GELİYOR — "0 workspace" YALANI
+       * KALKTI.
+       *
+       * Burada yalnızca AKTİF şirketin workspace'leri doldurulup diğerleri
+       * boş bırakılıyordu ve seçici onları "Bu şirkette workspace yok" diye
+       * çiziyordu. Workspace vardı; ekran yok diyordu. Bilgi eksikliğini
+       * bir olgu gibi göstermek, bu depodaki en pahalı hata türü.
+       *
+       * `erisilebilirSirketler` her şirketin KULLANICININ ERİŞEBİLDİĞİ
+       * workspace'lerini taşıyor (bkz. `tenant-context.service.ts`).
+       */
+      session.erisilebilirSirketler.map((o) => ({
         id: o.id,
         name: o.name,
-        workspaces:
-          o.id === session.activeOrganizationId
-            ? session.availableClients.map((c) => ({ id: c.id, name: c.name }))
-            : [],
+        workspaces: o.workspaces,
       }));
 
   const themeStyle = branding
@@ -179,6 +188,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <KapsamSecici
             ajans={session.managerAccount?.name ?? null}
             sirketler={sirketler}
+            yonetimGorunur={hasPermission(session, 'org.write')}
             aktifSirketId={session.activeOrganizationId}
             aktifWorkspaceId={session.activeClientId}
             tumSirketler={session.tumSirketler}
