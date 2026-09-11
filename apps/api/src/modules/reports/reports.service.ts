@@ -76,9 +76,51 @@ interface RawBucketRow {
  * hesabın harcaması rapora karışmaya devam ederse müşteriye yanlış bir tablo
  * gönderilmiş olur.
  *
- * TEK YERDE TANIMLI ve beş sorguya da aynı parça giriyor. Sorgu başına elle
- * yazmak, birinde unutmak demek — ve unutulan sorgu sessizce eski davranışı
- * sürdürürdü. Panelin karşılığı `MetricsService.filters()`.
+ * SEKİZ ÇAĞRI YERİ VAR ve `bucketSelect()` üç sorguya birden giriyor. Sorgu
+ * başına elle yazmak, birinde unutmak demek — ve unutulan sorgu sessizce eski
+ * davranışı sürdürürdü. Panelin karşılığı `MetricsService.filters()`.
+ *
+ * TEK YER DEĞİL: `breakdownBlocks` aynı alt sorguyu `insight_breakdowns`
+ * üzerinde ELLE yazıyor, çünkü orada süzülen kolon bu yardımcının varsaydığı
+ * tabloda değil. İkisi ayrışırsa hiçbir şey patlamıyor; kırılım tabloları
+ * özet kartlarını tutmayı bırakıyor ve farkı yalnızca raporu okuyan görüyor.
+ *
+ * ═══ ALT SORGU BİLEREK DURUYOR — METRİKTEKİ DÜZELTME BURAYA TAŞINMADI ═══
+ *
+ * `MetricsService` tam bu deseni taşıyordu ve ajans genel bakışındaki
+ * yavaşlığın TAMAMI oydu (f6972fe): `insights_daily` taraması 59 ms sürerken
+ * 8.054 satırın her biri için `ad_accounts` politikası yeniden
+ * değerlendiriliyor ve 1.630 ms harcıyordu. Çözüm listeyi bir kez çekip
+ * `= ANY($1::uuid[])` yazmaktı.
+ *
+ * AYNI DÜZELTME BURADA ZARARLI ve sebebi ölçüldü (`prisma/olcum-rapor.ts`,
+ * üretim ölçekli sentetik veriyle: havuzda 481 hesap, 49 şirket, 48 workspace
+ * kimliği bağlamda). Ayrım tek bir cümlede: PANEL SORGUSU ONLARCA
+ * WORKSPACE'İ, RAPOR SORGUSU TEK WORKSPACE'İ KAPSIYOR.
+ *
+ *   · Panelde `ad_account_id` yüzlerce ayrı değer alıyor; Postgres `Memoize`
+ *     koymuyor ve politika satır başına koşuyor (`loops=8054`).
+ *   · Raporda o kolon, workspace'e atanmış bir avuç hesabı gösteriyor.
+ *     Ölçülen plan: `Memoize · Cache Key: i.ad_account_id · Hits: 44996
+ *     Misses: 4` — `ad_accounts` düğümü `loops=4`. Politika 45 bin kez değil
+ *     DÖRT kez değerlendiriliyor ve alt sorgu zaten ucuz.
+ *
+ * Düzeltmenin bedeli ise satır sayısına değil HAVUZ BÜYÜKLÜĞÜNE bağlı:
+ * `SELECT id FROM ad_accounts WHERE sync_enabled = true` izlemesi açık her
+ * hesabı politikadan geçiriyor. Üretimde ölçülen satır başına maliyet
+ * (~0,2 ms) ile 481 hesap, rapor başına ~100 ms'lik SABİT bir yük demek.
+ * Kazanç 30 günlük bir raporda onlarca milisaniye; yani düzeltme raporu
+ * HIZLANDIRMIYOR, yavaşlatıyor.
+ *
+ * KARAR DEĞİŞİRSE NEYE BAKILACAK: `loops=` değeri. Havuz küçüldüğünde ya da
+ * tek bir workspace'e onlarca hesap atandığında oran tersine dönebilir.
+ * Tahmin etme, yeniden ölç:
+ *
+ *   pnpm --filter @advetics/api olcum-rapor -- --eposta=kisi@ornek.com
+ *
+ * Araç iki varyantı yan yana koşup hangisinin kazandığını yazıyor;
+ * `olcum-rapor.spec.ts` ikisinin BİREBİR aynı satırları döndürdüğünü
+ * kilitliyor.
  */
 function trackedAccounts(alias = ''): Prisma.Sql {
   const column = alias ? `${alias}.ad_account_id` : 'ad_account_id';

@@ -347,6 +347,18 @@ buna göre veriliyor:
   durumuna bakıyordu, elle tetikleyen uç bakmıyordu; belirtisi "elle basınca
   geliyor, kendiliğinden gelmiyor" ve hiçbir ekranda görünmüyordu. Süzgeç tek
   sabitte (`SUPURME_HESAP_KOSULU`) ve teşhis ekranı da onu okuyor.
+- **AYNI SQL DESENİ BİR SORGUDA ARIZA, DİĞERİNDE BEDAVA — ÖLÇMEDEN TAŞIMA.**
+  `ad_account_id IN (SELECT id FROM ad_accounts WHERE sync_enabled)` panelde
+  yavaşlığın TAMAMIYDI (`loops=8054`, 1.630 ms) ve diziye çevrilerek
+  düzeltildi. Aynı desen `reports.service.ts` içinde de duruyor ve orada
+  düzeltme ZARAR EDİYOR: rapor TEK workspace kapsamında koşuyor, yani
+  `ad_account_id` bir avuç ayrı değer alıyor, Postgres `Memoize` koyuyor
+  (`Cache Key: i.ad_account_id · Hits: 44996 Misses: 4`) ve politika 45 bin
+  kez değil DÖRT kez değerlendiriliyor. Düzeltmenin bedeli ise satır sayısına
+  değil HAVUZ BÜYÜKLÜĞÜNE bağlı — listeyi önden çekmek 481 hesabı politikadan
+  geçirmek demek, rapor başına ~100 ms SABİT. Ayıran şey desen değil
+  **süzülen kolonun kaç ayrı değer aldığı**; ölçüm aracı `olcum-rapor.ts`,
+  bakılacak sayı `ad_accounts` düğümündeki `loops=`.
 - **PRISMA `include` İLİŞKİNİN BÜTÜN KOLONLARINI ÇEKİYOR — `select` KULLAN.**
   `/connections` listesi `include` ile kuruluydu ve havuzda 481 reklam hesabı
   varken her satırın `raw` (tam platform yanıtı, JSONB), `rate_limit_state` ve

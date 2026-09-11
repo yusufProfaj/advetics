@@ -730,6 +730,40 @@ olabilir ve o aralık için sonradan partition açmak satır taşımayı gerekti
 > değerleri üretimdeki süreyi değil, **okunan blok sayısını** kıyaslamak
 > için kullanılmalı.
 
+### 10c. Rapor sorgularının planı — AYRI BİR ARAÇ, ÇÜNKÜ AYRI BİR SORU
+
+`olcum-metrik` panelin sorgularını ölçüyor ve orada kapsam onlarca
+workspace. Rapor TEK workspace kapsamında koşuyor ve bu, aynı SQL deseninin
+bambaşka bir plan üretmesine yetiyor:
+
+```bash
+pnpm --filter @advetics/api olcum-rapor -- --eposta=kisi@ornek.com
+```
+
+Seçimlik: `--workspace=<uuid>` (verilmezse pencerede en çok satırı olan
+workspace seçiliyor — en pahalı hâl) ve `--gun=90` (varsayılan 30).
+
+Araç, `reports.service.ts` içindeki `trackedAccounts()` süzgecini **iki
+varyantta** koşup yan yana koyuyor:
+
+| Varyant | Bugünkü hâl | Ölçülen |
+|---|---|---|
+| alt sorgu | `ad_account_id IN (SELECT id FROM ad_accounts WHERE sync_enabled)` | ✔ |
+| dizi | `ad_account_id = ANY($1::uuid[])` + listeyi önden çekme | metrikteki düzeltme |
+
+**Bakılacak yer `ad_accounts` düğümündeki `loops=` değeri:**
+
+- `loops` ≈ metrik satırı sayısı → politika satır başına koşuyor, dizi
+  varyantı kazandırır (panelde durum buydu: `loops=8054`).
+- `loops` ≈ workspace'in hesap sayısı → Postgres `Memoize` koymuş, alt sorgu
+  zaten ucuz ve dizi varyantı **zarar** eder. Raporda ölçülen bu.
+
+Dizi varyantının bedeli metrik satırına değil **havuz büyüklüğüne** bağlı:
+listeyi çekmek izlemesi açık her hesabı (üretimde 481) `ad_accounts`
+politikasından geçiriyor ve bu rapor başına ödenen sabit bir yük. Araç
+sonunda iki tarafı toplayıp hangisinin kazandığını açıkça yazıyor — sayıya
+bakmadan taşınan bir "optimizasyon" raporu yavaşlatabiliyor.
+
 ---
 
 ## 11. Geri alma
