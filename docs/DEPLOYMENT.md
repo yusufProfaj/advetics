@@ -605,8 +605,24 @@ oturum değişkenlerini `PrismaService.withTenant` ile **birebir aynı** kurup
 üretimdekinden başka bir plan gösterirdi çünkü politikalar sorguya yüklem
 ekliyor. Hiçbir satır yazmıyor — transaction sonunda geri alınıyor.
 
-Çıktıdaki `Seq Scan on insights_daily_*` satırları ve `rows=` ile `actual
-rows=` arasındaki büyük fark, planlayıcının yanıldığı yeri gösterir.
+Çıktıda bakılacak iki şey:
+
+- **`Index Cond` hangi sütunları taşıyor.** `client_id`, `entity_level` ve
+  `date` üçü de orada olmalı. Biri `Filter:` satırına düşmüşse o sütun
+  indekste kullanılmıyor demektir ve `Rows Removed by Filter` ile
+  `Heap Blocks` şişer — 2026-09-11'de düzeltilen arıza tam olarak buydu
+  (`entity_level` heap'te elenip 30.033 satır okunuyordu).
+- **`Rows Removed by Filter` ile dönen satır oranı.** Atılan satır sayısı
+  dönenden büyükse boşa I/O yapılıyor.
+
+Script ayrıca `default` partition'a satır düşmüşse uyarı basıyor: o
+satırların tarihi 38 aylık kapsamın dışında. Veri kaybı yok (sorgular onları
+da okuyor) ama kapsam dışı tarih bir senkronizasyon hatasına işaret ediyor
+olabilir ve o aralık için sonradan partition açmak satır taşımayı gerektirir.
+
+> Ölçüm SICAK ÖNBEKLEKTE koşuyor, panel ise çoğu zaman soğukta. Milisaniye
+> değerleri üretimdeki süreyi değil, **okunan blok sayısını** kıyaslamak
+> için kullanılmalı.
 
 ---
 

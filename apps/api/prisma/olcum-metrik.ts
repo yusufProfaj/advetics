@@ -30,6 +30,7 @@
 import { resolve } from 'node:path';
 import { config as loadEnv } from 'dotenv';
 import { PrismaClient } from '@prisma/client';
+import { planKisalt } from './olcum-plan-kisalt';
 
 loadEnv({ path: resolve(__dirname, '../../../.env') });
 
@@ -175,6 +176,19 @@ async function main() {
       );
 
       console.log('\n═══ TABLO BÜYÜKLÜĞÜ ═══');
+      /*
+       * DEFAULT PARTITION GERÇEKTEN SAYILIYOR, `reltuples` TAHMİNİYLE DEĞİL.
+       *
+       * `03_partitions.sql` bu satırları AÇIKÇA bir alarm sinyali sayıyor:
+       * oraya düşen satırın tarihi 38 aylık kapsamın dışında demek ve o
+       * aralık için sonradan partition açmak satırların TAŞINMASINI
+       * gerektiriyor. Tahmini değer `-1` ya da bayat olabiliyor; alarm
+       * niteliğindeki bir sayı tahmin edilmez.
+       */
+      const [saglik] = await tx.$queryRawUnsafe<Array<{ rows_in_default: bigint }>>(
+        'SELECT rows_in_default FROM app.insights_partition_health',
+      );
+      const defaultSatir = Number(saglik?.rows_in_default ?? 0);
       const boyut = await tx.$queryRawUnsafe<Array<{ partition: string; satir: bigint }>>(
         `SELECT c.relname AS partition, c.reltuples::bigint AS satir
            FROM pg_class c
@@ -185,6 +199,15 @@ async function main() {
       );
       for (const b of boyut) console.log(`  ${b.partition.padEnd(28)} ~${b.satir} satır (tahmin)`);
       if (boyut.length === 0) console.log('  (partition bulunamadı — 03_partitions.sql koşmamış olabilir)');
+      if (defaultSatir > 0) {
+        console.log(
+          `\n  ⚠ DEFAULT PARTITION'DA ${defaultSatir} SATIR VAR.\n` +
+            "    Tarihleri 38 aylık kapsamın dışında. Veri kaybı YOK (sorgular\n" +
+            '    onları da okuyor) ama o aralık için partition açmak artık satır\n' +
+            '    taşımayı gerektiriyor ve kapsam dışı tarih bir senkronizasyon\n' +
+            '    hatasına işaret ediyor olabilir.',
+        );
+      }
 
       for (const o of olcumler) {
         console.log(`\n═══ ${o.ad} ═══`);
@@ -194,7 +217,7 @@ async function main() {
           clientIdler,
         );
         console.log(`(duvar saati: ${Date.now() - baslangic} ms)`);
-        for (const satir of plan) console.log('  ' + Object.values(satir)[0]);
+        for (const satir of plan) console.log('  ' + planKisalt(String(Object.values(satir)[0])));
       }
 
       /*

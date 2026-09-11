@@ -1,0 +1,56 @@
+-- =============================================================================
+-- insights_daily — İNDEKS SÜTUN SIRASI: EŞİTLİK ÖNCE, ARALIK SONRA
+-- =============================================================================
+--
+-- ÖLÇÜLDÜ, TAHMİN EDİLMEDİ. Üretimde ajans genel bakışı 49 şirketle
+-- `/metrics/summary` ucunda 5,2 saniye sürüyordu. `EXPLAIN (ANALYZE, BUFFERS)`
+-- (bkz. `prisma/olcum-metrik.ts`) tek bir aylık partition için şunu gösterdi:
+--
+--   Bitmap Index Scan on insights_daily_2026_08_client_id_date_entity_level_idx
+--     Index Cond: (client_id = ANY (...)) AND (date >= ...) AND (date <= ...)
+--                 -> 30.033 satır
+--   Bitmap Heap Scan
+--     Filter: (entity_level = 'campaign')
+--     Rows Removed by Filter: 24.364
+--     Heap Blocks: exact=5.357
+--
+-- Yani indeks 30 bin satır döndürüyor, heap'ten 5.357 blok okunuyor ve
+-- satırların %84'ü ATILIYOR. Gerçekten gereken 5.512 satır.
+--
+-- SEBEP SÜTUN SIRASI. Eski indeks `(client_id, date DESC, entity_level)`:
+-- ikinci sütun bir ARALIK yüklemi (`date BETWEEN`). B-tree'de aralık
+-- sütunundan SONRA gelen sütun tarama sınırı olarak kullanılamıyor —
+-- `entity_level` eşitliği indekste değil HEAP'te uygulanıyor ve her
+-- elenen satır için önce o satırın sayfası diskten okunuyor.
+--
+-- Yeni sıra `(client_id, entity_level, date DESC)`: iki eşitlik önde, aralık
+-- en sonda. Üçü de tarama sınırı oluyor.
+--
+-- ┌─ NEDEN BU ÜRETİMDE 5 SANİYE, ÖLÇÜMDE 117 MİLİSANİYE ──────────────────┐
+-- │ Ölçüm sıcak önbellekte koştu. Boşa okunan 5.357 blok bellekteyken     │
+-- │ ucuz; paylaşımlı VPS'te soğuk önbellekte diskten geliyor ve fark      │
+-- │ oradan çıkıyor. Yani kazanç "%84 daha az blok" — ve o blokların       │
+-- │ nereden geldiği makinenin o anki yüküne bağlı.                        │
+-- └───────────────────────────────────────────────────────────────────────┘
+--
+-- HANGİ SORGULAR ETKİLENİYOR: `insights_daily` okuyan bütün metrik, rapor,
+-- bütçe ve kural sorguları `entity_level`i EŞİTLİKLE süzüyor (tek istisna
+-- `reports.service.ts` içindeki "reklam seviyesi verisi olmayan platformlar"
+-- sorgusu ve o TEK müşteriyle çalışıyor). Yani sıra değişikliği hepsine
+-- yarıyor, hiçbirini bozmuyor.
+--
+-- KİLİT: `CREATE INDEX` partition'lı bir tabloda CONCURRENTLY desteklemiyor
+-- ve ebeveyn + bütün partition'lar üzerinde ACCESS EXCLUSIVE alıyor. Tablo
+-- ~450 bin satır (16 dolu partition); saniyeler sürüyor. Yeni indeks ÖNCE
+-- kuruluyor: arada bir sorgu gelirse indeksiz kalmasın.
+--
+-- YENİ PARTITION'LAR KENDİLİĞİNDEN ALIYOR: partition'lı ebeveyne kurulan
+-- indeks, sonradan eklenen her partition'a otomatik iniyor. `03_partitions.
+-- sql` içindeki `ensure_insights_partition` ayrıca bir şey yapmak zorunda
+-- değil.
+-- =============================================================================
+
+CREATE INDEX "insights_daily_client_id_entity_level_date_idx"
+  ON "insights_daily" ("client_id", "entity_level", "date" DESC);
+
+DROP INDEX IF EXISTS "insights_daily_client_id_date_entity_level_idx";
