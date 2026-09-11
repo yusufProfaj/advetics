@@ -130,10 +130,23 @@ export default async function SirketlerPage() {
         sirketHatasi={sirketKapsami ? sirketHatasi : null}
       >
         {!sirketKapsami ? (
-          <p className="rounded-xl border border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
-            &quot;Tüm şirketler&quot; görünümündesin. Bir şirketin bilgilerini ve
-            workspace&apos;lerini düzenlemek için soldan o şirkete geç.
-          </p>
+          /*
+           * BU BİR UYARI DEĞİL, YÖNERGE — ve öyle görünmek zorunda.
+           *
+           * Önce çerçeveli bir kutuydu ve kullanıcı onu hata sandı
+           * (*"bu uyarıyı veriyo"*). Metin de eksikti: soldaki listeye
+           * tıklamanın ŞİRKETİ DEĞİŞTİRDİĞİNİ söylemiyordu, yani
+           * kullanıcının atacağı adım ekrandan okunmuyordu.
+           */
+          <div className="px-4 py-10 text-center">
+            <p className="text-sm font-medium text-ink">
+              Düzenlemek istediğin şirketi soldaki listeden seç
+            </p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
+              Şu an bütün şirketleri birlikte görüyorsun. Bir şirkete tıklamak seni o
+              şirkete geçirir; bilgileri, workspace&apos;leri ve silme burada açılır.
+            </p>
+          </div>
         ) : (
           /* WORKSPACE'LER ŞİRKETİN İÇİNDE — ayrı sayfa değil. */
           <WorkspaceBolumu session={session} />

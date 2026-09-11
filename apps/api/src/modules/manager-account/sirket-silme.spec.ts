@@ -180,17 +180,37 @@ describe('KRİTİK: silme kapıları KODDA', () => {
     expect(SIL.length, '`sil()` gövdesi boş — tarama boşa düştü').toBeGreaterThan(500);
   });
 
-  it('AKTİF şirket ve EV şirketi silinemiyor', () => {
+  it('KRİTİK: EV şirketi silinemiyor', () => {
     /*
-     * Aktif şirketi silen kullanıcı var olmayan bir kapsama bakan bir
-     * panelde kalırdı; ev şirketini silen ise giriş hesabını da siler
-     * (cascade) ve kendini KİLİTLER — geri dönüşü yok.
+     * Ev şirketini silmek giriş hesabını da siler (cascade) ve kullanıcıyı
+     * kendi hesabından KİLİTLER — geri dönüşü yok. `users.org_id`ye
+     * bakılıyor, `ctx.orgId`ye DEĞİL: ikincisi ŞU AN bakılan şirket ve üst
+     * hesap altında ikisi farklı oluyor.
      */
     const bas = KAYNAK.indexOf('private async silmeEngeli(');
     expect(bas, 'gövde bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     const dilim = KAYNAK.slice(bas, KAYNAK.indexOf('\n  }', bas));
-    expect(dilim).toContain('organizationId === ctx.orgId');
     expect(dilim).toContain('kullanici?.orgId === organizationId');
+  });
+
+  it('KRİTİK: AKTİF şirket kapısı YOK — özellik kullanılamaz oluyordu', () => {
+    /*
+     * ═══ BU BİR GERİ ALMA VE SEBEBİ KULLANICIDAN GELDİ ═══
+     *
+     * Kapı önce vardı: aktif şirketin silinmesini reddediyordu. Gerekçesi
+     * gerçekti (silinen şirkette kalmak, var olmayan bir kapsama bakmak
+     * demek) ama ÖZELLİĞİ KULLANILAMAZ YAPIYORDU: şirketi düzenlemek için
+     * önce ona geçmek gerekiyor (`/organization` RLS ile aktif şirkete
+     * çivili), geçince de silme reddediliyordu. Kullanıcının gördüğü hâl
+     * birebir buydu: *"düzenlemek istediğim şirkete geçtiğimde de bu
+     * şirkettesin şirketi silemezsin hatası veriyor."*
+     *
+     * Çözüm reddetmek değil, SİLDİKTEN SONRA KAPSAMI TAŞIMAK — aşağıdaki
+     * test onu kilitliyor. Bu iddia kapının geri gelmesini engelliyor.
+     */
+    const bas = KAYNAK.indexOf('private async silmeEngeli(');
+    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf('\n  }', bas));
+    expect(dilim).not.toContain('organizationId === ctx.orgId');
   });
 
   it('KRİTİK: YALNIZCA kendi üst hesabının şirketi', () => {
@@ -248,6 +268,33 @@ describe('KRİTİK: silme kapıları KODDA', () => {
     expect(topla, 'toplama bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     expect(transaction).toBeGreaterThan(-1);
     expect(topla).toBeLessThan(transaction);
+  });
+
+  it('KRİTİK: aktif şirket silinince KAPSAM TAŞINIYOR', () => {
+    /*
+     * Çerez AÇIKÇA yazılıyor. Yazılmasaydı silinmiş kimliği taşıyan çerez
+     * kalırdı; `TenantContextService` onu izin listesinde bulamayıp
+     * SESSİZCE eve düşerdi — doğru sonuç ama sessiz, ve sessiz düşüş bu
+     * depoda bir hata türü: kullanıcı hangi şirkette olduğunu ekrandan
+     * okuyamaz.
+     *
+     * WORKSPACE SEÇİMİ DE SIFIRLANIYOR: silinen şirketin workspace'i yeni
+     * kapsamda geçersiz ve bırakılsaydı `resolve` onu sessizce düşürürdü.
+     */
+    const CONTROLLER = readFileSync(
+      resolve(__dirname, 'manager-account.controller.ts'),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    const bas = CONTROLLER.indexOf('async silOrganization(');
+    expect(bas, 'uç bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const dilim = CONTROLLER.slice(bas, CONTROLLER.indexOf('\n  }', bas));
+    expect(dilim).toContain('if (id === ctx.orgId) {');
+    expect(dilim).toContain('setActiveOrgCookie(res, this.config, ev)');
+    expect(dilim).toContain('setActiveClientCookie(res, this.config, null)');
+    // SİLME BAŞARILI OLMADAN çerez yazılmıyor: sıra önemli.
+    expect(dilim.indexOf('await this.service.sil(')).toBeLessThan(
+      dilim.indexOf('setActiveOrgCookie('),
+    );
   });
 
   it('özet HİÇBİR ŞEY SİLMİYOR', () => {

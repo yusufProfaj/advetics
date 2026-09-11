@@ -405,17 +405,31 @@ export class ManagerAccountService {
     return org;
   }
 
-  /** Silmeyi imkânsız kılan hâller — sebep METİN olarak dönüyor. */
+  /**
+   * Silmeyi imkânsız kılan hâller — sebep METİN olarak dönüyor.
+   *
+   * ┌─ "ŞU AN BU ŞİRKETTESİN" KAPISI KALDIRILDI ────────────────────────────┐
+   * │ Aktif şirketin silinmesini reddediyordu ve bu, özelliği KULLANILAMAZ  │
+   * │ yapıyordu: şirketi düzenlemek için ÖNCE ona geçmek gerekiyor          │
+   * │ (`/organization` ucu RLS ile aktif şirkete çivili), geçince de silme  │
+   * │ reddediliyordu. Kullanıcının gördüğü hâl birebir buydu.               │
+   * │                                                                       │
+   * │ Kapının gerekçesi gerçekti — silinen şirkette kalmak, var olmayan bir │
+   * │ kapsama bakmak demek. Ama çözümü REDDETMEK değil, SİLDİKTEN SONRA     │
+   * │ KAPSAMI TAŞIMAK: uç, silme başarılıysa aktif şirket çerezini          │
+   * │ kullanıcının ev şirketine çekiyor.                                    │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * EV ŞİRKETİ KAPISI DURUYOR ve duracak: `users.org_id` oraya bakıyor,
+   * silmek giriş hesabını da siler (cascade) ve kullanıcıyı kendi
+   * hesabından kilitler — geri dönüşü yok.
+   */
   private async silmeEngeli(ctx: TenantContext, organizationId: string): Promise<string | null> {
-    if (organizationId === ctx.orgId) {
-      return 'Şu an bu şirkettesin. Silmeden önce başka bir şirkete geç.';
-    }
     /*
      * EV ŞİRKETİ `users.org_id` — `ctx.orgId` DEĞİL.
      *
      * İkincisi ŞU AN bakılan şirket ve üst hesap altında ikisi farklı
-     * oluyor. Ev şirketini silmek giriş hesabını da siler (cascade) ve
-     * kullanıcıyı kendi hesabından kilitler — geri dönüşü yok.
+     * oluyor.
      */
     const kullanici = await this.admin.user.findUnique({
       where: { id: ctx.userId },
@@ -425,6 +439,23 @@ export class ManagerAccountService {
       return 'Kendi şirketin silinemez — giriş hesabın oraya bağlı.';
     }
     return null;
+  }
+
+  /**
+   * Silmeden sonra kullanıcının düşeceği şirket — EV ŞİRKETİ.
+   *
+   * Uç bunu çereze yazıyor. Yazmasaydı çerez silinmiş bir kimliği taşırdı;
+   * `TenantContextService` onu izin listesinde bulamayıp SESSİZCE eve
+   * düşürürdü — doğru sonuç ama sessiz, ve bu depoda sessiz düşüş bir hata
+   * türü: kullanıcı hangi şirkette olduğunu ekrandan okuyamaz.
+   */
+  async evSirketi(ctx: TenantContext): Promise<string> {
+    const kullanici = await this.admin.user.findUnique({
+      where: { id: ctx.userId },
+      select: { orgId: true },
+    });
+    if (!kullanici) throw new BadRequestException('Kullanıcı bulunamadı');
+    return kullanici.orgId;
   }
 
   /**

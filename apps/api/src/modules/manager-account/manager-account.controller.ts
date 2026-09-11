@@ -8,6 +8,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Res,
 } from '@nestjs/common';
 import {
   createManagedOrganizationSchema,
@@ -20,8 +21,12 @@ import {
   type MoveWorkspaceInput,
   type TenantContext,
 } from '@advetics/shared';
+import type { Response } from 'express';
+import { Inject } from '@nestjs/common';
 import { CurrentTenant } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
+import { CONFIG, type AppConfig } from '../../config/configuration';
+import { setActiveClientCookie, setActiveOrgCookie } from '../auth/cookies';
 import { ManagerAccountService } from './manager-account.service';
 
 /**
@@ -35,7 +40,10 @@ import { ManagerAccountService } from './manager-account.service';
  */
 @Controller('manager-account')
 export class ManagerAccountController {
-  constructor(private readonly service: ManagerAccountService) {}
+  constructor(
+    private readonly service: ManagerAccountService,
+    @Inject(CONFIG) private readonly config: AppConfig,
+  ) {}
 
   /** Üst hesap ağacı — yoksa `null` (hata değil: bağımsız şirket geçerli bir hâl). */
   @Get()
@@ -76,15 +84,39 @@ export class ManagerAccountController {
     return this.service.silmeOzeti(ctx, id);
   }
 
-  /** Şirketi ve altındaki her şeyi KALICI siler. Kapılar servis katmanında. */
+  /**
+   * Şirketi ve altındaki her şeyi KALICI siler. Kapılar servis katmanında.
+   *
+   * ┌─ AKTİF ŞİRKET SİLİNİRSE KAPSAM TAŞINIYOR ─────────────────────────────┐
+   * │ Silme bir süre aktif şirkette REDDEDİLİYORDU ve bu özelliği           │
+   * │ kullanılamaz yapıyordu: şirketi düzenlemek için önce ona geçmek       │
+   * │ gerekiyor (`/organization` RLS ile aktif şirkete çivili), geçince de  │
+   * │ silme reddediliyordu.                                                 │
+   * │                                                                       │
+   * │ Reddetmek yerine SİLDİKTEN SONRA taşıyoruz: çerez kullanıcının ev     │
+   * │ şirketine çekiliyor ve workspace seçimi sıfırlanıyor (silinen         │
+   * │ şirketin workspace'i yeni kapsamda geçersiz).                         │
+   * │                                                                       │
+   * │ ÇEREZ AÇIKÇA YAZILIYOR. Yazmasaydık `TenantContextService` silinmiş   │
+   * │ kimliği izin listesinde bulamayıp sessizce eve düşerdi — doğru sonuç  │
+   * │ ama sessiz, ve sessiz düşüş bu depoda bir hata türü.                  │
+   * └───────────────────────────────────────────────────────────────────────┘
+   */
   @HttpCode(HttpStatus.OK)
   @Delete('organizations/:id')
   async silOrganization(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
     @Body(zodBody(deleteOrganizationSchema)) dto: DeleteOrganizationInput,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.service.sil(ctx, id, dto);
+    const sonuc = await this.service.sil(ctx, id, dto);
+    if (id === ctx.orgId) {
+      const ev = await this.service.evSirketi(ctx);
+      setActiveOrgCookie(res, this.config, ev);
+      setActiveClientCookie(res, this.config, null);
+    }
+    return sonuc;
   }
 
   /**
