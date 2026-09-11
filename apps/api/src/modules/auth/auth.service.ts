@@ -344,27 +344,75 @@ export class AuthService {
   }
 
   /**
-   * Seçilen workspace HANGİ ŞİRKETTE — gerekiyorsa şirket de değişmeli.
+   * SEÇİLEN WORKSPACE HANGİ ŞİRKETTE — ve kullanıcı oraya erişebiliyor mu.
    *
-   * "Tüm şirketler" modunda seçici ajansın BÜTÜN workspace'lerini
-   * listeliyor. Kullanıcı başka bir şirketin workspace'ini seçtiğinde
-   * yalnızca `adv_client` cookie'sini yazmak yetmiyor: `resolve` o
-   * workspace'i aktif şirketin listesinde bulamaz ve seçimi SESSİZCE
-   * düşürür — kullanıcı tıklar, hiçbir şey olmaz ve sebebi hiçbir ekranda
-   * yazmaz.
+   * ═══ NEDEN AYRI BİR METOT ═══
    *
-   * `null` = şirket değişmiyor.
+   * Önce iki ayrı adım vardı: erişim kontrolü `ctx.clientIds` listesine
+   * bakıyor, şirket çözümü AYRI bir metotta yapılıyordu. O liste YALNIZCA
+   * AKTİF ŞİRKETİN workspace'lerini taşıyor ve kontrol çözümden ÖNCE
+   * koşuyordu: A şirketindeyken B'nin bir workspace'ini seçmek HER ZAMAN
+   * "Bu workspace'e erişim yetkiniz yok" ile düşüyordu. Seçici o
+   * workspace'i listeliyor, tıklanınca reddediliyordu — kullanıcının
+   * gördüğü hâl birebir buydu.
+   *
+   * İkiye bölünmüş olması hatanın SEBEBİYDİ: iki adımın sırası bir
+   * kuraldı ve o kuralı hiçbir şey yazmıyordu. Bugün tek metot.
+   *
+   * "Tüm şirketler" modunda çalışıyordu çünkü orada liste bütün ajansı
+   * kapsıyor; yani arıza yalnızca ŞİRKET kapsamındayken görünüyordu.
+   *
+   * SIRA ÖNEMLİ: önce hedef şirkete geçiş yetkisi (`assertOrgAccess` —
+   * üst hesap VEYA üyelik), sonra O ŞİRKETTE bu workspace'e erişim.
+   * Yalnızca ikincisine bakmak, şirkete geçemeyen birine workspace
+   * açardı; yalnızca birincisine bakmak, şirketteki HER workspace'i.
    */
-  async workspaceSirketi(ctx: TenantContext, clientId: string): Promise<string | null> {
+  async workspaceKapsami(ctx: TenantContext, clientId: string): Promise<string> {
     const client = await this.admin.client.findUnique({
       where: { id: clientId },
-      select: { orgId: true },
+      select: { orgId: true, status: true, organization: { select: { status: true } } },
     });
-    if (!client || client.orgId === ctx.orgId) return null;
+    if (!client || client.status === 'archived' || client.organization.status !== 'active') {
+      throw new BadRequestException('Bu workspace bulunamadı');
+    }
 
-    // ERİŞİM YİNE DOĞRULANIYOR: `clientIds` bağlamdan geliyor ama hedef
-    // şirketin gerçekten üst hesabın altında olduğu ayrıca sorulmalı.
-    return this.assertOrgAccess(ctx, client.orgId);
+    /*
+     * AYNI ŞİRKET: bağlamdaki liste zaten doğru cevabı taşıyor ve
+     * `TenantContextService` onu veritabanından kurmuş durumda. İkinci bir
+     * sorgu, aynı kuralı iki yerde tutmak olurdu.
+     */
+    if (client.orgId === ctx.orgId) {
+      if (!ctx.clientIds.includes(clientId)) {
+        throw new BadRequestException('Bu workspace’e erişim yetkiniz yok');
+      }
+      return client.orgId;
+    }
+
+    // ŞİRKETE GEÇİŞ YETKİSİ — yoksa buradan atıyor.
+    await this.assertOrgAccess(ctx, client.orgId);
+
+    /*
+     * ÜST HESAP AJANSIN TAMAMINI KAPSIYOR. Kardeş şirkette üyelik satırı
+     * olmayabiliyor (erişim üst hesap rolünden geliyor) ve orada üyelik
+     * aramak, ajans yöneticisini kendi ajansının workspace'lerinden
+     * dışarıda bırakırdı.
+     */
+    if (ctx.managerAccountId) return client.orgId;
+
+    const uyelik = await this.admin.membership.findFirst({
+      where: {
+        userId: ctx.userId,
+        orgId: client.orgId,
+        // ŞİRKET GENELİ üyelik o şirketin HEPSİNİ açıyor; workspace bazlı
+        // üyelik yalnızca kendi satırını.
+        OR: [{ clientId: null }, { clientId }],
+      },
+      select: { id: true },
+    });
+    if (!uyelik) {
+      throw new BadRequestException('Bu workspace’e erişim yetkiniz yok');
+    }
+    return client.orgId;
   }
 
   /** Aktif müşteri seçiminin geçerliliğini doğrular. */

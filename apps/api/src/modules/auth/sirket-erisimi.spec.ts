@@ -88,7 +88,7 @@ describe('KRİTİK: ŞİRKET DEĞİŞTİRME üst hesap ŞART koşmuyor', () => {
      * alıyordu. Yetki var, kapı yok — kullanıcının gördüğü hâl birebir bu.
      */
     const bas = AUTH.indexOf('async assertOrgAccess(');
-    const dilim = AUTH.slice(bas, AUTH.indexOf('async workspaceSirketi(', bas));
+    const dilim = AUTH.slice(bas, AUTH.indexOf('async workspaceKapsami(', bas));
     expect(dilim.length, 'gövde bulunamadı — tarama boşa düştü').toBeGreaterThan(300);
     expect(dilim).toContain('const kendiUyeligi = await this.admin.membership.findFirst');
     expect(dilim).toContain('if (kendiUyeligi) return organizationId;');
@@ -101,7 +101,7 @@ describe('KRİTİK: ŞİRKET DEĞİŞTİRME üst hesap ŞART koşmuyor', () => {
      * gevşetmek, ona ajansın tamamını açardı.
      */
     const bas = AUTH.indexOf('async assertOrgAccess(');
-    const dilim = AUTH.slice(bas, AUTH.indexOf('async workspaceSirketi(', bas));
+    const dilim = AUTH.slice(bas, AUTH.indexOf('async workspaceKapsami(', bas));
     expect(dilim).toContain('if (organizationId === TUM_SIRKETLER) {');
     expect(dilim).toContain('if (!ustHesapVar) {');
   });
@@ -110,7 +110,7 @@ describe('KRİTİK: ŞİRKET DEĞİŞTİRME üst hesap ŞART koşmuyor', () => {
     // İki yol da tutmuyorsa son satır atıyor; sessizce kabul etmek,
     // cookie düzenleyerek başka bir kiracıya geçmek demekti.
     const bas = AUTH.indexOf('async assertOrgAccess(');
-    const dilim = AUTH.slice(bas, AUTH.indexOf('async workspaceSirketi(', bas));
+    const dilim = AUTH.slice(bas, AUTH.indexOf('async workspaceKapsami(', bas));
     expect(dilim).toContain("throw new BadRequestException('Bu şirkete erişim yetkiniz yok')");
   });
 });

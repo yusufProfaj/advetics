@@ -558,6 +558,37 @@ pm2 logs
 pm2 monit
 ```
 
+### 10a. "Panel yavaş" — hangi uç yavaş
+
+Panel TEK bir ekranı çizerken altı ayrı uca istek atıyor (`summary`,
+`timeseries`, `breakdown`, `clients`, `organizations` ve kapsam). Kullanıcının
+gördüğü süre bunların toplamı; hangisinin yavaş olduğu ne tarayıcıda ne
+panelde görünüyor — hepsi tek bir sunucu render'ının içinde.
+
+API, `YAVAS_ISTEK_MS` (varsayılan 1000) eşiğini AŞAN her isteği tek satır
+olarak log'a yazıyor. Eşiğin altı sessiz: paylaşımlı sunucuda her isteği
+yazmak diski doldurur.
+
+Yavaş sayfayı bir kez açtıktan sonra, `advetics` kullanıcısıyla:
+
+```bash
+pm2 logs advetics-api --lines 200 --nostream | grep YAVAŞ
+```
+
+Çıktı şu biçimde ve doğrudan suçluyu gösteriyor:
+
+```
+[Süre] YAVAŞ 4210ms · GET /api/metrics/organizations?from=... · ok 200
+```
+
+Hiç satır çıkmıyorsa **API tarafı eşiğin altında** demektir; yavaşlık panelin
+kendi render'ında ya da ağda. Eşiği geçici olarak düşürmek için `.env`'e
+`YAVAS_ISTEK_MS="300"` yazıp `pm2 restart advetics-api --update-env` yeterli —
+yeniden derleme gerekmiyor.
+
+Yol log'a MASKELENEREK yazılıyor (`maskPath`): adresinde belirteç taşıyan
+uçlar var ve bu satırlar sohbete yapıştırılıyor.
+
 ---
 
 ## 11. Geri alma

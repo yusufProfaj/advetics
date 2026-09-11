@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { TUM_SIRKETLER } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
+import { gecisHedefi } from '@/lib/kapsam-hedefi';
 import { Halka, TamEkranYukleniyor } from './yukleniyor';
 
 export interface KapsamSirketi {
@@ -32,6 +33,23 @@ export interface KapsamSirketi {
  * ayarlıyor (workspace seçmek şirketi de değiştiriyor). İstemcide iki çağrı
  * zincirlemek, birincisi başarılı ikincisi başarısız olduğunda yarım bir
  * duruma düşmek demekti.
+ *
+ * ═══ 49 ŞİRKETTE ÇÖKEN İLK TASARIM ═══
+ *
+ * İlk hâl her şirketin workspace'lerini AÇIK basıyordu ve workspace'i
+ * olmayan her şirkete iki satırlık gri bir açıklama koyuyordu. Beş şirkette
+ * hoş, kırk dokuzda birkaç yüz satırlık bir duvar: kullanıcının tarifi
+ * *"kullanışsız ve komplike"*. Üç karar bundan çıktı:
+ *
+ *   1. WORKSPACE'LER KAPALI GELİYOR (aktif şirket hariç). Ağacın ikinci
+ *      seviyesi istendiğinde açılıyor; ok TIKLANABİLİR AMA AYRI — şirket
+ *      adına basmak hâlâ o şirkete GEÇİYOR. Aynı düğmeye iki iş yüklemek
+ *      ("bazen açar bazen geçer") en sinsi arayüz hatası.
+ *   2. AKTİF ŞİRKET LİSTENİN BAŞINDA. Alfabetik bir listede nerede
+ *      olduğunu bulmak için kaydırmak, "neredeyim" sorusunu ekrandan değil
+ *      kaydırma çubuğundan cevaplamaktı.
+ *   3. SAYI YAZIYOR. Arama süzdüğünde "49 şirketten 6 tanesi" görünüyor;
+ *      sessiz kesme bu projede yasak (CLAUDE.md).
  */
 export function KapsamSecici({
   ajans,
@@ -59,6 +77,15 @@ export function KapsamSecici({
   const [hata, setHata] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [arama, setArama] = useState('');
+  /*
+   * AÇIK ŞİRKETLER — AKTİF OLAN BAŞLANGIÇTA AÇIK.
+   *
+   * Kullanıcı bulunduğu şirketin workspace'lerini görmek için fazladan bir
+   * tık atmamalı; orası zaten "neredeyim" sorusunun cevabı.
+   */
+  const [acikSirketler, setAcikSirketler] = useState<ReadonlySet<string>>(
+    () => new Set(tumSirketler ? [] : [aktifSirketId]),
+  );
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,6 +118,21 @@ export function KapsamSecici({
       .filter((s) => uyar(s.name) || s.workspaces.length > 0);
   }, [sirketler, arama]);
 
+  /*
+   * AKTİF ŞİRKET BAŞTA, GERİSİ SIRASIYLA — AMA YALNIZCA ARAMA YOKKEN.
+   *
+   * Arama sonucunu bölmek, eşleşmeleri iki ayrı yığına dağıtmak demek:
+   * kullanıcı yazdığı şeyi arıyor, bulunduğu yeri değil.
+   */
+  const aramaVar = arama.trim().length > 0;
+  const { once, digerleri } = useMemo(() => {
+    if (aramaVar || tumSirketler) return { once: [] as KapsamSirketi[], digerleri: suzulmus };
+    return {
+      once: suzulmus.filter((s) => s.id === aktifSirketId),
+      digerleri: suzulmus.filter((s) => s.id !== aktifSirketId),
+    };
+  }, [suzulmus, aramaVar, tumSirketler, aktifSirketId]);
+
   async function git(
     etiket: string,
     yol: '/auth/switch-org' | '/auth/switch-client',
@@ -111,8 +153,14 @@ export function KapsamSecici({
          * bileşenlerinin state'i (açık süzgeçler, seçili hesap kimlikleri)
          * önceki kapsamdan kalırsa anlamsız kimlikler taşıyor ve sessizce
          * boş listeler üretiyor.
+         *
+         * AMA AYNI SAYFADA KALIYORUZ. Buraya uzun süre `/dashboard` sabiti
+         * yazılıydı: kurallar ekranında şirket değiştiren kişi genel bakışa
+         * düşüyordu. `gecisHedefi` yalnızca ESKİ KAPSAMIN KİMLİĞİNİ taşıyan
+         * yol parçalarını kesiyor.
          */
-        startTransition(() => window.location.assign('/dashboard'));
+        const hedef = gecisHedefi(pathname, Object.fromEntries(searchParams?.entries() ?? []));
+        startTransition(() => window.location.assign(hedef));
         return;
       }
       // URL'DEKİ `?musteri=` TEMİZLENİYOR: sayfalar aktif workspace'i
@@ -167,6 +215,14 @@ export function KapsamSecici({
       sirketId !== aktifSirketId || tumSirketler,
     );
 
+  const acKapa = (id: string) =>
+    setAcikSirketler((onceki) => {
+      const yeni = new Set(onceki);
+      if (yeni.has(id)) yeni.delete(id);
+      else yeni.add(id);
+      return yeni;
+    });
+
   const baslik = tumSirketler
     ? (ajans ?? 'Tüm şirketler')
     : (aktifWorkspace?.name ?? aktifSirket?.name ?? 'Kapsam');
@@ -176,11 +232,25 @@ export function KapsamSecici({
       ? (aktifSirket?.name ?? 'Workspace')
       : `${aktifSirket?.workspaces.length ?? 0} workspace · şirket geneli`;
 
+  const sirketDugumu = (s: KapsamSirketi) => (
+    <SirketDugumu
+      key={s.id}
+      sirket={s}
+      aktif={!tumSirketler && s.id === aktifSirketId}
+      aktifWorkspaceId={aktifWorkspaceId}
+      // ARAMADA HEPSİ AÇIK: eşleşen workspace kapalı bir düğümün içinde
+      // kalsaydı arama "sonuç yok" gibi görünürdü.
+      acik={aramaVar || acikSirketler.has(s.id)}
+      okGorunur={!aramaVar}
+      onAcKapa={() => acKapa(s.id)}
+      onSirket={() => sirketeGec(s)}
+      onWorkspace={(w) => workspaceeGec(w, s.id)}
+    />
+  );
+
   return (
     <div ref={boxRef} className="relative">
-      {bekliyor && (
-        <TamEkranYukleniyor mesaj={`${gecilen ?? 'Kapsam'} görünümüne geçiliyor…`} />
-      )}
+      {bekliyor && <TamEkranYukleniyor mesaj={`${gecilen ?? 'Kapsam'} görünümüne geçiliyor…`} />}
 
       <button
         type="button"
@@ -198,9 +268,7 @@ export function KapsamSecici({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium leading-tight">{baslik}</span>
-          <span className="block truncate text-[11px] leading-tight text-ink-muted">
-            {altBaslik}
-          </span>
+          <span className="block truncate text-[11px] leading-tight text-ink-muted">{altBaslik}</span>
         </span>
         {bekliyor ? (
           <Halka />
@@ -228,7 +296,7 @@ export function KapsamSecici({
       {open && (
         <div
           role="tree"
-          className="absolute left-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
+          className="absolute left-0 top-full z-30 mt-1.5 flex w-[21rem] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
         >
           <div className="border-b border-line p-2">
             <input
@@ -236,6 +304,15 @@ export function KapsamSecici({
               type="search"
               value={arama}
               onChange={(e) => setArama(e.target.value)}
+              // ESC KAPATIYOR. Klavyeyle açılan bir menüyü yalnızca fareyle
+              // kapatılabilir bırakmak, klavye kullanıcısını odak tuzağında
+              // bırakmak demekti.
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  setOpen(false);
+                }
+              }}
               placeholder="Şirket ya da workspace ara…"
               className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
             />
@@ -247,26 +324,23 @@ export function KapsamSecici({
             aralarında bir fark varmış gibi düşündürürdü.
           */}
           {ajans && (
-            <>
-              <button
-                type="button"
-                role="treeitem"
-                aria-selected={tumSirketler}
-                onClick={ajansaGec}
-                className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition hover:bg-surface-muted ${
-                  tumSirketler ? 'font-semibold text-brand' : 'text-ink'
-                }`}
-              >
-                <span className="min-w-0 truncate">{ajans}</span>
-                <span className="shrink-0 text-[11px] text-ink-muted">
-                  {tumSirketler ? 'seçili' : 'tüm şirketler'}
-                </span>
-              </button>
-              <div className="h-px bg-line" />
-            </>
+            <button
+              type="button"
+              role="treeitem"
+              aria-selected={tumSirketler}
+              onClick={ajansaGec}
+              className={`flex w-full items-center justify-between gap-2 border-b border-line px-3 py-2 text-left text-sm transition hover:bg-surface-muted ${
+                tumSirketler ? 'font-semibold text-brand' : 'text-ink'
+              }`}
+            >
+              <span className="min-w-0 truncate">{ajans}</span>
+              <span className="shrink-0 text-[11px] text-ink-muted">
+                {tumSirketler ? 'seçili' : 'tüm şirketler'}
+              </span>
+            </button>
           )}
 
-          <div className="max-h-80 overflow-y-auto py-1">
+          <div className="max-h-[24rem] flex-1 overflow-y-auto py-1">
             {suzulmus.length === 0 ? (
               // BOŞ SONUÇ SEBEBİYLE yazılıyor: sessiz boş liste "hiç yok"
               // ile "arama tutmadı" hâllerini aynı ekrana çeviriyor.
@@ -274,62 +348,29 @@ export function KapsamSecici({
                 “{arama}” ile eşleşen şirket ya da workspace yok.
               </p>
             ) : (
-              suzulmus.map((s) => (
-                <div key={s.id}>
-                  <button
-                    type="button"
-                    role="treeitem"
-                    aria-selected={!tumSirketler && s.id === aktifSirketId && !aktifWorkspaceId}
-                    onClick={() => sirketeGec(s)}
-                    className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition hover:bg-surface-muted ${
-                      !tumSirketler && s.id === aktifSirketId
-                        ? 'font-semibold text-brand'
-                        : 'text-ink'
-                    }`}
-                  >
-                    <span className="min-w-0 truncate">{s.name}</span>
-                    <span className="shrink-0 text-[11px] font-normal text-ink-muted">
-                      {!tumSirketler && s.id === aktifSirketId && !aktifWorkspaceId
-                        ? 'şirket geneli'
-                        : `${s.workspaces.length} workspace`}
-                    </span>
-                  </button>
-
-                  {s.workspaces.length === 0 ? (
-                    /*
-                      "YOK" DEĞİL "ERİŞEBİLDİĞİN YOK".
-                      Liste kullanıcının ERİŞTİĞİ workspace'leri taşıyor;
-                      şirkette başkaları olabilir. "Bu şirkette workspace
-                      yok" demek, görmediği şeyi var olmayan diye
-                      göstermekti — ve bir süre AKTİF şirket dışındaki her
-                      satırda böyle yazıyordu.
-                    */
-                    <p className="px-3 py-1 pl-7 text-[11px] text-ink-muted">
-                      Bu şirkette erişebildiğin workspace yok.
-                    </p>
-                  ) : (
-                    <ul>
-                      {s.workspaces.map((w) => (
-                        <li key={w.id}>
-                          <button
-                            type="button"
-                            role="treeitem"
-                            aria-selected={w.id === aktifWorkspaceId}
-                            onClick={() => workspaceeGec(w, s.id)}
-                            className={`flex w-full items-center gap-2 py-1.5 pl-7 pr-3 text-left text-sm transition hover:bg-surface-muted ${
-                              w.id === aktifWorkspaceId ? 'font-semibold text-brand' : 'text-ink'
-                            }`}
-                          >
-                            <span className="min-w-0 truncate">{w.name}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))
+              <>
+                {once.length > 0 && (
+                  <>
+                    <BolumBasligi>Şu an buradasın</BolumBasligi>
+                    {once.map(sirketDugumu)}
+                    {digerleri.length > 0 && <BolumBasligi>Diğer şirketler</BolumBasligi>}
+                  </>
+                )}
+                {digerleri.map(sirketDugumu)}
+              </>
             )}
           </div>
+
+          {/*
+            SAYI HER ZAMAN GÖRÜNÜYOR — SESSİZ KESME YOK.
+            Kırk dokuz şirketin altısı listeleniyorsa bunu kaydırma çubuğunun
+            uzunluğundan tahmin etmek zorunda kalmamalı.
+          */}
+          <p className="border-t border-line px-3 py-1.5 text-[11px] text-ink-muted">
+            {aramaVar
+              ? `${sirketler.length} şirketten ${suzulmus.length} tanesi gösteriliyor`
+              : `${sirketler.length} şirket`}
+          </p>
 
           {/*
             MARKA RENGİNDE DOLU VE BEYAZ YAZILI — bir kapsam SEÇMİYOR, yeni
@@ -342,23 +383,129 @@ export function KapsamSecici({
             bir düğme demekti.
           */}
           {yonetimGorunur && (
-          <Link
-            href="/ayarlar/ust-hesap"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2 border-t border-line bg-brand px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
-          >
-            <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0" aria-hidden>
-              <path
-                d="M3 5h14M3 10h14M3 15h14"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-            </svg>
-            Yönetim paneli
-          </Link>
+            <Link
+              href="/ayarlar/ust-hesap"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 border-t border-line bg-brand px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
+            >
+              <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0" aria-hidden>
+                <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              Yönetim paneli
+            </Link>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function BolumBasligi({ children }: { children: ReactNode }) {
+  return (
+    <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+      {children}
+    </p>
+  );
+}
+
+/**
+ * Bir şirket ve (istenirse açılan) workspace'leri.
+ *
+ * OK AYRI BİR DÜĞME. Şirket adına basmak o şirkete GEÇİYOR, oka basmak
+ * yalnızca AÇIYOR. Tek düğmeye iki iş yüklemek ("workspace'i varsa açar,
+ * yoksa geçer") kullanıcının her tıklamada sonucu tahmin etmesi demekti.
+ */
+function SirketDugumu({
+  sirket,
+  aktif,
+  aktifWorkspaceId,
+  acik,
+  okGorunur,
+  onAcKapa,
+  onSirket,
+  onWorkspace,
+}: {
+  sirket: KapsamSirketi;
+  aktif: boolean;
+  aktifWorkspaceId: string | null;
+  acik: boolean;
+  /** Aramada ağaç zaten açık; oku basmak yalnızca kafa karıştırırdı. */
+  okGorunur: boolean;
+  onAcKapa: () => void;
+  onSirket: () => void;
+  onWorkspace: (w: { id: string; name: string }) => void;
+}) {
+  const workspaceVar = sirket.workspaces.length > 0;
+  const sirketGeneli = aktif && aktifWorkspaceId === null;
+
+  return (
+    <div>
+      <div className={`flex items-center ${aktif ? 'bg-surface-muted/60' : ''}`}>
+        {workspaceVar && okGorunur ? (
+          <button
+            type="button"
+            onClick={onAcKapa}
+            aria-expanded={acik}
+            aria-label={`${sirket.name} workspace’leri`}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition hover:bg-surface-muted"
+          >
+            <svg
+              viewBox="0 0 20 20"
+              fill="none"
+              className={`h-3.5 w-3.5 transition ${acik ? 'rotate-90' : ''}`}
+              aria-hidden
+            >
+              <path d="m8 6 4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+        ) : (
+          <span className="h-7 w-7 shrink-0" aria-hidden />
+        )}
+
+        <button
+          type="button"
+          role="treeitem"
+          aria-selected={sirketGeneli}
+          onClick={onSirket}
+          className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md py-1.5 pr-3 text-left text-sm transition hover:bg-surface-muted ${
+            aktif ? 'font-semibold text-brand' : 'text-ink'
+          }`}
+        >
+          <span className="min-w-0 truncate">{sirket.name}</span>
+          <span className="shrink-0 text-[11px] font-normal text-ink-muted">
+            {sirketGeneli
+              ? 'şirket geneli'
+              : workspaceVar
+                ? `${sirket.workspaces.length} workspace`
+                : /*
+                     "YOK" DEĞİL "ERİŞİMİN YOK".
+                     Liste kullanıcının ERİŞTİĞİ workspace'leri taşıyor;
+                     şirkette başkaları olabilir. "Workspace yok" demek,
+                     görmediği şeyi var olmayan diye göstermekti.
+                   */
+                  'erişimin yok'}
+          </span>
+        </button>
+      </div>
+
+      {workspaceVar && acik && (
+        <ul>
+          {sirket.workspaces.map((w) => (
+            <li key={w.id}>
+              <button
+                type="button"
+                role="treeitem"
+                aria-selected={w.id === aktifWorkspaceId}
+                onClick={() => onWorkspace(w)}
+                className={`flex w-full items-center gap-2 py-1.5 pl-10 pr-3 text-left text-sm transition hover:bg-surface-muted ${
+                  w.id === aktifWorkspaceId ? 'font-semibold text-brand' : 'text-ink'
+                }`}
+              >
+                <span className="min-w-0 truncate">{w.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

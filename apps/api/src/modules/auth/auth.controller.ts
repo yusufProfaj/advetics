@@ -190,26 +190,32 @@ export class AuthController {
     @Body(zodBody(switchClientSchema)) dto: SwitchClientInput,
     @Res({ passthrough: true }) res: Response,
   ) {
-    this.auth.assertClientAccess(ctx, dto.clientId);
-
     /*
-     * WORKSPACE BAŞKA ŞİRKETTEYSE ŞİRKET DE DEĞİŞİYOR.
+     * WORKSPACE BAŞKA ŞİRKETTEYSE ŞİRKET DE DEĞİŞİYOR — VE ERİŞİM ORADA
+     * DOĞRULANIYOR.
      *
-     * "Tüm şirketler" modunda seçici ajansın BÜTÜN workspace'lerini
-     * listeliyor. Yalnızca workspace cookie'sini yazmak, `resolve`un o
-     * seçimi aktif şirkette bulamayıp SESSİZCE düşürmesi demekti:
-     * kullanıcı tıklar, hiçbir şey olmaz.
+     * Önce `assertClientAccess` çağrılıyordu ve o `ctx.clientIds`e bakıyor:
+     * liste YALNIZCA AKTİF ŞİRKETİN workspace'lerini taşıyor. A
+     * şirketindeyken B'nin workspace'ini seçmek her zaman "erişim yetkiniz
+     * yok" ile düşüyordu — seçici listeliyor, tıklanınca reddediliyordu.
+     *
+     * `workspaceKapsami` ikisini birlikte yapıyor: hedef şirkete geçiş
+     * yetkisi VE o şirkette bu workspace'e erişim.
      */
-    const yeniSecim: string =
-      dto.clientId === null
-        ? // SEÇİM KALKIYOR, MOD KORUNUYOR: "şirket geneli" bir daraltmayı
-          // kaldırma eylemi, moddan çıkma eylemi değil.
-          orgSecimi(ctx)
-        : // WORKSPACE SEÇMEK MODDAN ÇIKMAK DEMEK. "Tüm şirketler" bir genel
-          // bakış ve orada workspace seçimi YOK (`resolve` onu null'a
-          // düşürüyor); cookie 'all' kalsaydı seçim her istekte sessizce
-          // atılırdı — kullanıcı tıklar, hiçbir şey olmaz.
-          ((await this.auth.workspaceSirketi(ctx, dto.clientId)) ?? ctx.orgId);
+    let yeniSecim: string;
+    if (dto.clientId === null) {
+      // SEÇİM KALKIYOR, MOD KORUNUYOR: "şirket geneli" bir daraltmayı
+      // kaldırma eylemi, moddan çıkma eylemi değil. Org geneli görünüm
+      // yetkisi burada sınanıyor.
+      this.auth.assertClientAccess(ctx, null);
+      yeniSecim = orgSecimi(ctx);
+    } else {
+      // WORKSPACE SEÇMEK MODDAN ÇIKMAK DEMEK. "Tüm şirketler" bir genel
+      // bakış ve orada workspace seçimi YOK (`resolve` onu null'a
+      // düşürüyor); cookie 'all' kalsaydı seçim her istekte sessizce
+      // atılırdı — kullanıcı tıklar, hiçbir şey olmaz.
+      yeniSecim = await this.auth.workspaceKapsami(ctx, dto.clientId);
+    }
 
     setActiveOrgCookie(res, this.config, yeniSecim);
     setActiveClientCookie(res, this.config, dto.clientId);

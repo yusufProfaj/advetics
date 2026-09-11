@@ -68,7 +68,10 @@ describe('KRİTİK: bekleme penceresi tazelemeyi kapsıyor', () => {
     // Yalnızca `pending`e bakmak, ağ isteği bitip tazeleme sürerken
     // göstergeyi söndürüyordu — düzeltilen arızanın ta kendisi.
     expect(SECICI_KOD).toContain('const bekliyor = pending || isPending;');
-    expect(SECICI_KOD).toContain('{bekliyor && (');
+    // Örtünün KENDİSİ o bayrağa bağlı — değişkenin var olması yetmiyor.
+    expect(SECICI_KOD).toContain('{bekliyor && <TamEkranYukleniyor');
+    // Ve düğme geçiş sürerken kapalı: iki kez tıklamak iki geçiş demekti.
+    expect(SECICI_KOD).toContain('disabled={bekliyor}');
   });
 
   it('kurulum sihirbazı: refresh startTransition içinde', () => {

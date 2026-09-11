@@ -129,9 +129,17 @@ describe('SEÇİCİ — üst hesabı OLMAYAN kullanıcı', () => {
      * Yalnızca AKTİF şirketin workspace'leri doldurulup diğerleri boş
      * bırakılıyordu ve seçici onları "Bu şirkette workspace yok" diye
      * çiziyordu. Workspace vardı; ekran yok diyordu.
+     *
+     * METİN DEĞİŞTİ, KURAL DEĞİŞMEDİ: kırk dokuz şirkette her satırın
+     * altında duran iki satırlık gri paragraf okunmaz bir duvar
+     * üretiyordu; cümle şirketin yanındaki rozete taşındı. Taşınırken
+     * KAYBOLMAMASI gereken şey "yok" ile "erişimin yok" ayrımı — liste
+     * kullanıcının ERİŞTİĞİ workspace'leri taşıyor ve şirkette başkaları
+     * olabilir.
      */
     expect(LAYOUT).not.toContain('o.id === session.activeOrganizationId');
-    expect(SECICI).toContain('Bu şirkette erişebildiğin workspace yok');
+    expect(SECICI).toContain("'erişimin yok'");
+    expect(SECICI).not.toContain("'workspace yok'");
   });
 
   it('KRİTİK: "Yönetim paneli" YETKİSİ OLMAYANA basılmıyor', () => {
@@ -173,7 +181,15 @@ describe('geçişin kendisi', () => {
      * şirketten kalıyor ve o state yeni şirkette anlamsız kimlikler
      * taşıyor — sessizce boş listeler olarak görünürdü.
      */
-    expect(SECICI).toContain("window.location.assign('/dashboard')");
+    expect(SECICI).toContain('window.location.assign(hedef)');
+    /*
+     * HEDEF ARTIK SABİT DEĞİL. `/dashboard` yazılıyken kurallar ekranında
+     * şirket değiştiren kişi genel bakışa düşüyordu: *"herhangi bir
+     * şirkete geçiş yaptığımda genel bakışa atmaması lazım."* Tam sayfa
+     * yüklemesi korunuyor, düşülen yer değişti.
+     */
+    expect(SECICI).toContain('const hedef = gecisHedefi(pathname,');
+    expect(SECICI).not.toContain("window.location.assign('/dashboard')");
   });
 
   it('KRİTİK: hata YUTULMUYOR, ekranda gösteriliyor', () => {

@@ -70,6 +70,16 @@ const envSchema = z.object({
    */
   API_HOST: z.string().default('127.0.0.1'),
   API_GLOBAL_PREFIX: z.string().default('api'),
+
+  /**
+   * YAVAŞ İSTEK EŞİĞİ (ms) — bunun ÜSTÜ log'a yazılıyor, altı sessiz.
+   *
+   * Sunucu 11+ üretim sitesiyle paylaşımlı ve pm2 log'ları diske yazıyor;
+   * her isteği yazmak teşhis için açılan bir kaydın diski doldurması
+   * demekti. Eşik ORTAM DEĞİŞKENİ çünkü teşhis sırasında geçici olarak
+   * düşürülmek isteniyor ve bunun için yeniden derleme gerekmemeli.
+   */
+  YAVAS_ISTEK_MS: z.coerce.number().int().positive().default(1000),
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
 
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET en az 32 karakter olmalı'),
@@ -233,6 +243,8 @@ export interface AppConfig {
   port: number;
   host: string;
   globalPrefix: string;
+  /** Log'a yazılan yavaş istek eşiği (ms). */
+  yavasIstekMs: number;
   corsOrigins: string[];
   database: { url: string; directUrl: string; workerUrl: string };
   redis: {
@@ -344,6 +356,7 @@ export function loadConfig(): AppConfig {
     port: env.API_PORT,
     host: env.API_HOST,
     globalPrefix: env.API_GLOBAL_PREFIX,
+    yavasIstekMs: env.YAVAS_ISTEK_MS,
     corsOrigins: env.CORS_ORIGINS.split(',')
       .map((o) => o.trim())
       .filter(Boolean),

@@ -458,7 +458,7 @@ describe('MOD OTURUM YANITINDA KAYBOLMUYOR', () => {
      * hiçbir şey olmaz ve sebebi hiçbir ekranda yazmaz.
      */
     const govde = metot(CONTROLLER, 'async switchClient(');
-    expect(govde).toContain('workspaceSirketi(ctx, dto.clientId)');
+    expect(govde).toContain('workspaceKapsami(ctx, dto.clientId)');
     expect(govde).toContain('setActiveOrgCookie(res, this.config, yeniSecim)');
   });
 

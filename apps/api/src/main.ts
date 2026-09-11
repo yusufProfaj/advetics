@@ -19,6 +19,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { YavasIstekInterceptor } from './common/interceptors/yavas-istek.interceptor';
 import { requestIdMiddleware } from './common/middleware/request-id.middleware';
 import { CONFIG, type AppConfig } from './config/configuration';
 
@@ -106,6 +107,16 @@ async function bootstrap(): Promise<void> {
   // class-validator + class-transformer gerektirir; iki paralel doğrulama
   // sistemi taşımak, hangi kuralın nerede geçerli olduğunu belirsizleştirir.
   // ParseUUIDPipe gibi tekil pipe'lar kendi başlarına çalışır, sorun değil.
+
+  /*
+   * YAVAŞ İSTEK LOG'U — uç başına süre.
+   *
+   * Panel tek bir ekranı çizerken altı ayrı uca istek atıyor; kullanıcının
+   * gördüğü "yavaş" onların toplamı ve hangisinin yavaş olduğu hiçbir
+   * ekranda yazmıyordu. Ajans genel bakışı üç turdur ÖLÇÜLMEDEN
+   * iyileştirilmeye çalışılıyor.
+   */
+  app.useGlobalInterceptors(new YavasIstekInterceptor(config.yavasIstekMs));
 
   app.enableShutdownHooks();
 
