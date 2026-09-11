@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { TenantContext, Uyari, UyariYaniti } from '@advetics/shared';
+import type { BaglantiDurumu, TenantContext, Uyari, UyariYaniti } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   baglantiUyarilari,
@@ -148,8 +148,32 @@ export class AlertsService {
         if (!atanmisIdler.has(m.id)) uyarilar.push(hesapsizMusteriUyarisi(m));
       }
 
+      /*
+       * DURUM SATIRLARI UYARIDAN AYRI.
+       *
+       * Yetkinin kaç gün sonra dolacağı bir SORUN değil; sorun hâline
+       * gelmeden önce bakılabilen bir bilgi. Uyarı listesine koymak her gün
+       * "yeniden yetkilendir" diye dürtmek demekti.
+       *
+       * KESİLMİYOR (`LIMIT` uygulanmıyor): bağlantı sayısı avuç içi kadar
+       * ve bu bölüm bir liste değil, bir tablo — yarısını göstermek
+       * "hangileri eksik" sorusunu doğururdu.
+       */
+      const baglantiDurumlari: BaglantiDurumu[] = [...baglantilar.values()].map((b) => ({
+        id: b.id,
+        platform: b.platform,
+        etiket: b.accountLabel,
+        durum: b.status,
+        kalanGun:
+          b.tokenExpiresAt === null
+            ? null
+            : Math.floor((b.tokenExpiresAt.getTime() - simdi.getTime()) / 86_400_000),
+        etkilenenHesap: b.etkilenenHesap,
+      }));
+
       const sirali = siralaUyarilari(uyarilar);
       return {
+        baglantilar: baglantiDurumlari,
         uyarilar: sirali.slice(0, LIMIT),
         toplam: sirali.length,
         uretildi: simdi.toISOString(),

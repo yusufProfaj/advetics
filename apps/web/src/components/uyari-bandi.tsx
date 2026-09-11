@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { platformKanali } from '@advetics/shared';
 import Link from 'next/link';
-import type { Uyari, UyariYaniti } from '@advetics/shared';
-import { ApiRequestError, apiFetch } from '@/lib/api';
+import type { Uyari } from '@advetics/shared';
+import { useBildirimVerisi } from '@/components/bildirim/bildirim-verisi';
 import { PlatformLogo } from '@/components/platform-logo';
 import { formatRelative } from '@/lib/format';
 
@@ -26,42 +26,28 @@ import { formatRelative } from '@/lib/format';
  *
  * BANT LAYOUT'TA, sayfa gövdesinde değil: sorun hangi ekranda olursa olsun
  * görünmeli.
+ *
+ * ═══ BANT ARTIK YALNIZCA ACİL OLANI GÖSTERİYOR ═══
+ *
+ * Bir süre `/alerts` çıktısının TAMAMINI basıyordu ve "reklamlar
+ * yayınlanmıyor — hesap askıya alınmış" ile "yetki 6 gün sonra doluyor"
+ * aynı bantta, aynı ağırlıkta duruyordu. Aciliyet ayrımı kaybolunca bant
+ * okunmaz hâle geliyor ve GERÇEK olan da o gürültünün içinde kayboluyor.
+ *
+ * Bugün bant `error` seviyesini taşıyor — "şu anda para ya da veri kaybı
+ * var" hâlleri. `warn` (kurulum eksiği, yaklaşan süre) bildirim panelinde;
+ * orada dürtmeden duruyor ve bakan görüyor.
+ *
+ * VERİ BANDIN DEĞİL, `BildirimSaglayici`NIN. `/alerts` ajansın bütün
+ * atanmış hesaplarını tarıyor (üretimde 481 hesaplı havuz); bant ile zilin
+ * ayrı ayrı çağırması aynı sayfa yüklemesinde o taramayı İKİ KEZ koşturmak
+ * olurdu. Ayrıca iki tüketicinin ayrışması — bant "3 sorun", zil "5" —
+ * ikisinin de yanlış sanılması demek.
  */
 export function UyariBandi({ mcc }: { mcc: boolean }) {
-  const [veri, setVeri] = useState<UyariYaniti | null>(null);
-  const [hata, setHata] = useState<string | null>(null);
+  const { uyarilar: veri, uyariHatasi: hata } = useBildirimVerisi();
   const [gizli, setGizli] = useState<Set<string>>(new Set());
   const [sayfa, setSayfa] = useState(0);
-
-  useEffect(() => {
-    let iptal = false;
-    /*
-     * BANT KENDİ VERİSİNİ ÇEKİYOR. Sunucu bileşeni yapıp her sayfaya
-     * eklemek, her sayfanın kendi veri çekiminin yanına bir tur daha
-     * koymak demekti; bant sayfanın ASIL içeriğini bekletmemeli.
-     */
-    // `apiFetch` KULLANILIYOR, ham `fetch` DEĞİL: taban adres, httpOnly
-    // cookie'nin gitmesi ve hata biçimi orada tek yerde çözülü. İkinci bir
-    // kopya, oturum yenileme davranışının bu bileşende ayrışması demekti.
-    apiFetch<UyariYaniti>('/alerts')
-      .then((d) => {
-        if (!iptal) setVeri(d);
-      })
-      .catch((e: unknown) => {
-        /*
-         * HATA YUTULMUYOR ama BANDI DA KAPLAMIYOR. Uyarı ucu düşerse
-         * kullanıcının asıl işi engellenmemeli; küçük bir satırla
-         * "uyarılar alınamadı" demek yeterli. Sessizce boş bırakmak ise
-         * "hiç uyarı yok" ile "uyarılar gelmedi"yi aynı gösterirdi.
-         */
-        if (!iptal) {
-          setHata(e instanceof ApiRequestError ? e.message : 'bağlantı kurulamadı');
-        }
-      });
-    return () => {
-      iptal = true;
-    };
-  }, []);
 
   // Oturum boyunca gizlenenler. Kalıcı saklamak, düzelmiş sanılan bir sorunu
   // kalıcı olarak görünmez yapardı; sekme kapanınca uyarı geri geliyor.
@@ -78,9 +64,20 @@ export function UyariBandi({ mcc }: { mcc: boolean }) {
   }
 
   const gorunen = useMemo(
-    () => (veri?.uyarilar ?? []).filter((u) => !gizli.has(anahtarOf(u))),
+    () =>
+      (veri?.uyarilar ?? []).filter((u) => u.siddet === 'error' && !gizli.has(anahtarOf(u))),
     [veri, gizli],
   );
+
+  /*
+   * TOPLAM DA ACİLLERİ SAYIYOR.
+   *
+   * `veri.toplam` bütün uyarıları kapsıyor ve bandın "gösterilen 2, toplam
+   * 27" demesi, kullanıcıya 25 acil sorun daha varmış gibi okunurdu.
+   * Kesilmiş liste uyarısı hâlâ doğru çalışıyor: `LIMIT` sunucuda
+   * uygulanıyor ve acil olanlar sıralamada zaten başta.
+   */
+  const acilToplam = (veri?.uyarilar ?? []).filter((u) => u.siddet === 'error').length;
 
   if (hata !== null) {
     return (
@@ -92,11 +89,11 @@ export function UyariBandi({ mcc }: { mcc: boolean }) {
   if (veri === null || gorunen.length === 0) return null;
 
   return mcc ? (
-    <ToplananBant uyarilar={gorunen} toplam={veri.toplam} onGizle={gizle} />
+    <ToplananBant uyarilar={gorunen} toplam={acilToplam} onGizle={gizle} />
   ) : (
     <TekTekBant
       uyarilar={gorunen}
-      toplam={veri.toplam}
+      toplam={acilToplam}
       sayfa={Math.min(sayfa, gorunen.length - 1)}
       setSayfa={setSayfa}
       onGizle={gizle}

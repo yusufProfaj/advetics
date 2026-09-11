@@ -3,6 +3,8 @@ import { serverApiFetch } from '@/lib/api';
 import { KapsamSecici, type KapsamSirketi } from '@/components/kapsam-secici';
 import { LogoutButton } from '@/components/logout-button';
 import { UyariBandi } from '@/components/uyari-bandi';
+import { BildirimSaglayici } from '@/components/bildirim/bildirim-verisi';
+import { BildirimZili } from '@/components/bildirim/bildirim-zili';
 import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
 import { NavSection } from '@/components/nav';
 import { visibleSections } from '@/lib/nav-sections';
@@ -177,6 +179,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </aside>
 
       {/* İçerik */}
+      {/*
+        BİLDİRİM SAĞLAYICISI HEADER İLE BANDI BİRLİKTE SARIYOR.
+        İkisi de `/alerts`i kullanıyor ve DOM'da ayrı yerlerde duruyorlar;
+        ayrı ayrı çağırsalardı ajansın 481 hesaplı havuzu aynı sayfa
+        yüklemesinde iki kez taranırdı. Ayrıca iki tüketicinin farklı sayı
+        göstermesi, ikisinin de yanlış sanılması demek.
+      */}
+      <BildirimSaglayici
+        aktifWorkspaceId={session.activeClientId}
+        boostGorunur={hasPermission(session, 'boost.read')}
+      >
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-line bg-surface/90 px-5 backdrop-blur">
           {/*
@@ -193,11 +206,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
             aktifWorkspaceId={session.activeClientId}
             tumSirketler={session.tumSirketler}
           />
-          <div className="hidden text-right sm:block">
-            <p className="text-[13px] font-medium leading-tight">{session.user.email}</p>
-            <p className="text-[11px] leading-tight text-ink-muted">
-              {session.organization.name} · {session.organization.plan}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="text-[13px] font-medium leading-tight">{session.user.email}</p>
+              <p className="text-[11px] leading-tight text-ink-muted">
+                {session.organization.name} · {session.organization.plan}
+              </p>
+            </div>
+            {/*
+              ZİL ÜST BARDA, HER EKRANDA. Onay bekleyen boostlar bir süre
+              yalnızca /auto-boost sayfasındaydı ve kullanıcı o sayfaya bir
+              onay beklediğini ZATEN bildiğinde giriyordu — kuyruk, işe
+              yarayacağı anda görünmüyordu.
+            */}
+            <BildirimZili />
           </div>
         </header>
 
@@ -228,6 +250,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </footer>
         )}
       </div>
+      </BildirimSaglayici>
     </div>
   );
 }

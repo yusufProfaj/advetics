@@ -26,8 +26,14 @@ function kod(src: string): string {
     .join('\n');
 }
 
+const SAGLAYICI = readFileSync(
+  join(__dirname, 'bildirim', 'bildirim-verisi.tsx'),
+  'utf8',
+);
+
 const BANT_KOD = kod(BANT);
 const LAYOUT_KOD = kod(LAYOUT);
+const SAGLAYICI_KOD = kod(SAGLAYICI);
 
 describe('tarama gerçekten bir şey yakaladı', () => {
   it('dilimler boş değil', () => {
@@ -134,8 +140,72 @@ describe('eylem ve bayatlık', () => {
   });
 
   it('ortak istemciden geçiyor — ham fetch yok', () => {
-    // Taban adres, httpOnly cookie ve hata biçimi `apiFetch`te tek yerde.
-    expect(BANT_KOD).toContain("apiFetch<UyariYaniti>('/alerts')");
-    expect(BANT_KOD).not.toContain('credentials:');
+    /*
+     * ÇEKİM BANTTAN SAĞLAYICIYA TAŞINDI. Kural değişmedi: taban adres,
+     * httpOnly cookie ve hata biçimi `apiFetch`te tek yerde. Değişen şey
+     * çağrının nerede yapıldığı — bant ile zil aynı veriyi kullanıyor ve
+     * ayrı ayrı çağırsalardı 481 hesaplı havuz aynı sayfa yüklemesinde iki
+     * kez taranırdı.
+     */
+    expect(SAGLAYICI_KOD).toContain("apiFetch<UyariYaniti>('/alerts')");
+    expect(SAGLAYICI_KOD).not.toContain('credentials:');
+    // Bant ARTIK kendi çekimini yapmıyor; ikinci bir çekim geri gelirse
+    // tarama yakalasın.
+    expect(BANT_KOD).not.toContain("apiFetch<UyariYaniti>('/alerts')");
+  });
+});
+
+describe('KRİTİK: bant yalnızca ACİL olanı gösteriyor', () => {
+  /*
+   * Bant bir süre `/alerts` çıktısının tamamını basıyordu: "reklamlar
+   * yayınlanmıyor" ile "yetki 6 gün sonra doluyor" aynı ağırlıkta duruyordu
+   * ve aciliyet ayrımı kaybolunca GERÇEK olan da gürültünün içinde
+   * kayboluyordu. `warn` seviyesi artık bildirim panelinde.
+   */
+  it('süzgeç `error` seviyesine çapalı', () => {
+    /*
+     * İDDİA `gorunen` DİLİMİNE ÇAPALI. İlk yazımda dosyanın herhangi bir
+     * yerinde `u.siddet === 'error'` arıyordum ve süzgeci SİLDİĞİMDE de
+     * geçiyordu: iki satır aşağıdaki `acilToplam` aynı ifadeyi taşıyor.
+     * "Yakınında geçiyor" bir iddia değil (CLAUDE.md).
+     */
+    const bas = BANT_KOD.indexOf('const gorunen =');
+    expect(bas, 'süzgeç bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const dilim = BANT_KOD.slice(bas, BANT_KOD.indexOf('const acilToplam'));
+    expect(dilim.length).toBeGreaterThan(50);
+    expect(dilim).toContain("u.siddet === 'error'");
+  });
+
+  it('KRİTİK: TOPLAM da acilleri sayıyor', () => {
+    /*
+     * `veri.toplam` bütün uyarıları kapsıyor. Bandın "gösterilen 2, toplam
+     * 27" demesi, kullanıcıya 25 acil sorun daha varmış gibi okunurdu.
+     */
+    expect(BANT_KOD).toContain('const acilToplam =');
+    expect(BANT_KOD).not.toContain('toplam={veri.toplam}');
+  });
+});
+
+describe('KRİTİK: bildirim paneli üst barda', () => {
+  it('zil layout’ta ve sağlayıcı ikisini birden sarıyor', () => {
+    /*
+     * Zil sayfa gövdesine konsaydı, bir gün eklenmeyen sayfada bildirimler
+     * sessizce kaybolurdu — bandın layout'ta durmasıyla aynı gerekçe.
+     */
+    expect(LAYOUT_KOD).toContain('<BildirimZili />');
+    expect(LAYOUT_KOD).toContain('<BildirimSaglayici');
+    // Sağlayıcı BANDI DA sarmak zorunda; yoksa bant bağlamı bulamaz ve
+    // ekran çalışma anında patlar.
+    const bas = LAYOUT_KOD.indexOf('<BildirimSaglayici');
+    const son = LAYOUT_KOD.indexOf('</BildirimSaglayici>');
+    expect(son, 'sağlayıcı kapanışı bulunamadı — tarama boşa düştü').toBeGreaterThan(bas);
+    expect(LAYOUT_KOD.slice(bas, son)).toContain('<UyariBandi');
+    expect(LAYOUT_KOD.slice(bas, son)).toContain('<BildirimZili />');
+  });
+
+  it('KRİTİK: boost kuyruğu YETKİSİ OLMAYANA hiç istenmiyor', () => {
+    // İstemek 403 demekti ve panel "boost kuyruğu alınamadı" diye bir hata
+    // gösterirdi — yetkisi olmayan kullanıcıya olmayan bir arıza.
+    expect(LAYOUT_KOD).toContain("boostGorunur={hasPermission(session, 'boost.read')}");
   });
 });

@@ -82,4 +82,43 @@ export interface UyariYaniti {
    */
   toplam: number;
   uretildi: string;
+
+  /**
+   * ═══ BAĞLANTI DURUMLARI — UYARI DEĞİL, BİLGİ ═══
+   *
+   * Yetkinin kaç gün sonra dolacağı bir SORUN değil; sorun hâline gelmeden
+   * önce bakılabilen bir DURUM. Uyarı listesine koymak, her gün "yeniden
+   * yetkilendir" diye dürtmek demekti ve kullanıcının bildirdiği arıza tam
+   * olarak buydu: *"sürekli şimdi yetkilendir bildirimi gözüküp duruyor."*
+   *
+   * Bu liste bildirim panelinin ayrı bir bölümünde, SESSİZ duruyor: sayıyı
+   * merak eden bakıyor, kimse dürtülmüyor. Uyarı yalnızca tazeleme
+   * gerçekten başarısız olduğunda (`uyarilar` içinde) doğuyor.
+   *
+   * AYNI UÇTAN GELİYOR çünkü aynı sorgudan çıkıyor: `alerts.service` zaten
+   * bağlantıları okuyor. İkinci bir uç, panelin ikinci bir tur atması ve
+   * iki listenin ayrışabilmesi demekti.
+   */
+  baglantilar: BaglantiDurumu[];
+}
+
+/** Bildirim panelindeki "Durum" bölümünün satırı. */
+export interface BaglantiDurumu {
+  id: string;
+  platform: Platform;
+  /** Yetkilendirmeyi yapan hesabın etiketi — hangi bağlantı olduğu belli olsun. */
+  etiket: string | null;
+  /** `active` | `needs_reauth` | `error` | `revoked` */
+  durum: string;
+  /**
+   * Yetkinin dolmasına kalan TAM gün. `null` = platform bir son tarih
+   * bildirmiyor (Google'da refresh token süresiz).
+   *
+   * NEGATİF OLABİLİR ve öyle kalıyor: "-3 gün" ile "0 gün" farklı şeyler
+   * ve sıfıra kırpmak, süresi üç gün önce dolmuş bir bağlantıyı bugün
+   * dolmuş gibi gösterirdi.
+   */
+  kalanGun: number | null;
+  /** Bu bağlantıya bağlı atanmış hesap sayısı — durumun ağırlığı. */
+  etkilenenHesap: number;
 }
