@@ -131,7 +131,7 @@ describe('KRİTİK: paketi SATIN ALAN seçemiyor', () => {
     const guncelleme = KAYNAK.indexOf('tx.organization.update({');
     expect(guncelleme, 'ev şirketi bağlama bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     const onceki = KAYNAK.slice(Math.max(0, guncelleme - 160), guncelleme);
-    expect(onceki).toContain('if (!ctx.platformAdmin) {');
+    expect(onceki).toContain('if (!ctx.platformAdmin && evSirketi) {');
     expect(KAYNAK).toContain('data: { managerAccountId: hesap.id },');
   });
 
@@ -147,6 +147,63 @@ describe('KRİTİK: paketi SATIN ALAN seçemiyor', () => {
     // kurduğu hesap sahipsiz doğardı.
     expect(uyelik).toBeGreaterThan(kosul);
     expect(dilim.slice(kosul, uyelik)).toContain('}');
+  });
+});
+
+describe('KRİTİK: platform sahibi İKİNCİ hesabı gerçekten açabiliyor', () => {
+  /*
+   * Bir önceki turda yalnızca BAĞLAMA adımı atlanmıştı; ev şirketi
+   * KONTROLÜ kalmıştı. Profaj'ın ev şirketi zaten Profaj'ın üst hesabına
+   * bağlı olduğu için ikinci hesap "Bu şirket zaten bir üst hesaba bağlı"
+   * ile düşerdi — yani satış için açılan özellik ilk kullanımda patlardı.
+   * Yol testsizdi; artık değil.
+   */
+  it('ev şirketi kontrolü platform sahibinde ATLANIYOR', () => {
+    const bas = KAYNAK.indexOf('async create(');
+    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf('\n  }', bas));
+    expect(dilim).toContain('const evSirketi = ctx.platformAdmin\n      ? null');
+    expect(dilim).toContain('if (evSirketi?.managerAccountId) {');
+  });
+
+  it('KRİTİK: create YENİ hesabın ağacını döndürüyor, aktif olanı değil', () => {
+    /*
+     * Bağlam bu istekte hâlâ ESKİ aktif hesabı taşıyor (çerez değişmedi).
+     * `get(ctx)` platform sahibine az önce kurduğu değil içinde bulunduğu
+     * hesabı döndürür ve ekran "kurulmadı" gibi görünürdü.
+     */
+    const bas = KAYNAK.indexOf('async create(');
+    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf('\n  }', bas));
+    expect(dilim).toContain('this.agacOku(hesapId, ctx)');
+    expect(dilim).not.toContain('await this.get(ctx)');
+  });
+});
+
+describe('KRİTİK: paket DÜZENLEME', () => {
+  const UPDATE = (() => {
+    const bas = KAYNAK.indexOf('async update(');
+    if (bas < 0) throw new Error('`update()` bulunamadı — tarama boşa düştü');
+    return KAYNAK.slice(bas, KAYNAK.indexOf('\n  }', bas));
+  })();
+
+  it('paket değişikliği platform sahibi değilse REDDEDİLİYOR, yok sayılmıyor', () => {
+    // Yok saymak, "paketi değiştirdim" sanan kullanıcıya 200 dönüp eski
+    // paketi bırakmaktı — önizlemenin yalan söylemesi.
+    expect(UPDATE).toContain('if (input.paket !== undefined && !ctx.platformAdmin) {');
+    expect(UPDATE).toContain('Paketi yalnızca platform sahibi değiştirebilir');
+  });
+
+  it('KRİTİK: paket KÜÇÜLTÜLÜRKEN mevcut şirket sayısı sınanıyor', () => {
+    /*
+     * Beş şirketli hesabı Başlangıç'a (1 şirket) indirmek, dört şirketi
+     * "fazla" bırakırdı ve hiçbir ekran o fazlalığı göstermiyor.
+     */
+    expect(UPDATE).toContain('if (sinir !== null && mevcutSirket > sinir) {');
+    expect(UPDATE).toContain('Önce şirket sayısını düşürmek gerekiyor');
+  });
+
+  it('denetim kaydı ÖNCEKİ ve SONRAKİ paketi taşıyor', () => {
+    expect(UPDATE).toContain("action: 'manager_account.update'");
+    expect(UPDATE).toContain('before: onceki');
   });
 });
 

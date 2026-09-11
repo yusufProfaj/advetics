@@ -11,6 +11,7 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Halka } from '@/components/yukleniyor';
 import { SirketDuzenle } from './sirket-duzenle';
 import { SirketSil } from './sirket-sil';
+import { UstHesapKarti } from './ust-hesap-karti';
 
 type Sirket = ManagerAccountTree['organizations'][number];
 
@@ -56,6 +57,7 @@ export function UstHesapEkrani({
   yuklemeHatasi,
   sirket,
   sirketHatasi,
+  platformAdmin,
   children,
 }: {
   ilkAgac: ManagerAccountTree | null;
@@ -74,6 +76,8 @@ export function UstHesapEkrani({
    */
   sirket: { id: string; name: string; slug: string } | null;
   sirketHatasi: string | null;
+  /** Advetics'i işleten taraf mı — yeni üst hesap açabiliyor, paket seçebiliyor. */
+  platformAdmin: boolean;
   /** Workspace bölümü — sunucuda üretiliyor. */
   children: React.ReactNode;
 }) {
@@ -154,6 +158,13 @@ export function UstHesapEkrani({
         `1fr` yazmak yetmiyor: içerideki tablolar `min-content`u büyütüp
         ray'i eziyor ve sayfa yatay kayıyor.
       */}
+      {/*
+        ÜST HESABIN KENDİSİ EN ÜSTTE: hangi hesaptasın, paketin ne, ne
+        kadarını doldurdun. Şirket listesinin ÜSTÜNDE çünkü onların hepsini
+        kapsıyor; yanına koymak hiyerarşiyi gizlerdi.
+      */}
+      <UstHesapKarti agac={agac} platformAdmin={platformAdmin} onGuncellendi={setAgac} />
+
       <div className="grid gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
         <SirketRayi
           agac={agac}

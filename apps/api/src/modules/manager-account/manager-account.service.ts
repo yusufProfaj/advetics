@@ -8,6 +8,7 @@ import type {
   DeleteOrganizationInput,
   ManagerAccountTree,
   MoveWorkspaceInput,
+  UpdateManagerAccountInput,
   SilmeYaniti,
   SirketSilmeOzeti,
   TenantContext,
@@ -81,8 +82,23 @@ export class ManagerAccountService {
      * söylemiyor.
      */
     if (ctx.managerAccountId === null) return null;
+    return this.agacOku(ctx.managerAccountId, ctx);
+  }
+
+  /**
+   * Bir üst hesabın ağacını KİMLİKLE okur.
+   *
+   * `get()`ten ayrıldı çünkü `create()` de ona muhtaç: platform sahibi yeni
+   * bir hesap açtığında `get(ctx)` hâlâ ESKİ (aktif) hesabı döndürüyordu —
+   * bağlam o istekte değişmedi. Kullanıcı "oluştur"a basıp aynı ağacı
+   * görür ve kurulmadığını sanırdı.
+   */
+  private async agacOku(
+    managerAccountId: string,
+    ctx: TenantContext,
+  ): Promise<ManagerAccountTree | null> {
     const kayit = await this.admin.managerAccount.findUnique({
-      where: { id: ctx.managerAccountId },
+      where: { id: managerAccountId },
       select: {
         id: true,
         name: true,
@@ -162,11 +178,21 @@ export class ManagerAccountService {
       }
     }
 
-    const evSirketi = await this.admin.organization.findUniqueOrThrow({
-      where: { id: ctx.orgId },
-      select: { id: true, name: true, managerAccountId: true },
-    });
-    if (evSirketi.managerAccountId) {
+    /*
+     * EV ŞİRKETİ KONTROLÜ DE PLATFORM SAHİBİNDE ATLANIYOR.
+     *
+     * Bir önceki turda yalnızca BAĞLAMA adımı atlanmıştı; bu kontrol
+     * kalmıştı ve platform sahibinin ikinci hesabı hiç açılamazdı: Profaj'ın
+     * ev şirketi zaten Profaj'ın üst hesabına bağlı ve "Bu şirket zaten bir
+     * üst hesaba bağlı" ile düşerdi. Yol testsizdi; bu turda testi var.
+     */
+    const evSirketi = ctx.platformAdmin
+      ? null
+      : await this.admin.organization.findUniqueOrThrow({
+          where: { id: ctx.orgId },
+          select: { id: true, name: true, managerAccountId: true },
+        });
+    if (evSirketi?.managerAccountId) {
       throw new ConflictException('Bu şirket zaten bir üst hesaba bağlı');
     }
 
@@ -200,7 +226,7 @@ export class ManagerAccountService {
        *     bağlamak, Advetics'i o müşterinin portföyüne sokmak olurdu —
        *     ve kırk dokuz şirketli kendi ajansını da oradan koparırdı.
        */
-      if (!ctx.platformAdmin) {
+      if (!ctx.platformAdmin && evSirketi) {
         await tx.organization.update({
           where: { id: evSirketi.id },
           data: { managerAccountId: hesap.id },
@@ -229,13 +255,82 @@ export class ManagerAccountService {
       action: 'manager_account.create',
       targetType: 'manager_account',
       targetId: hesapId,
-      after: { name: input.name, slug, homeOrganization: evSirketi.name },
+      after: {
+        name: input.name,
+        slug,
+        paket,
+        // Platform sahibi kurduğunda ev şirketi BAĞLANMIYOR — kayıt bunu
+        // açıkça yazıyor, "bağlandı" sanılmasın.
+        homeOrganization: evSirketi?.name ?? null,
+      },
     });
 
-    const agac = await this.get(ctx);
-    // `get` null dönemez (az önce yazdık) ama tipi nullable; sessizce boş
-    // dönmektense patlamak doğru — boş bir ağaç "kurulmadı" gibi okunurdu.
+    /*
+     * YENİ HESABIN AĞACI DÖNÜYOR — `get(ctx)` DEĞİL.
+     *
+     * Bağlam bu istekte hâlâ ESKİ aktif hesabı taşıyor (çerez henüz
+     * değişmedi). `get(ctx)` platform sahibine az önce kurduğu değil,
+     * içinde bulunduğu hesabı döndürür ve ekran "kurulmadı" gibi görünürdü.
+     */
+    const agac = await this.agacOku(hesapId, ctx);
+    // Az önce yazdık; null dönerse sessizce boş dönmektense patlamak doğru.
     if (!agac) throw new BadRequestException('Üst hesap oluşturuldu ama okunamadı');
+    return agac;
+  }
+
+  /**
+   * Aktif üst hesabı düzenler — ad ve (platform sahibinde) paket.
+   *
+   * PAKET DEĞİŞİKLİĞİ REDDEDİLİYOR, YOK SAYILMIYOR. `create`teki gibi sessizce
+   * düşürmek burada yanlış olurdu: "paketi değiştirdim" diyen bir kullanıcıya
+   * 200 dönüp eski paketi bırakmak, önizlemenin yalan söylemesi.
+   *
+   * PAKET KÜÇÜLTÜLÜRKEN SINIR SINANIYOR: beş şirketli bir hesabı Başlangıç'a
+   * (1 şirket) indirmek, mevcut dört şirketi "fazla" bırakırdı ve hiçbir
+   * ekran o fazlalığı göstermiyor. Önce şirket kapatılır, sonra paket iner.
+   */
+  async update(ctx: TenantContext, input: UpdateManagerAccountInput): Promise<ManagerAccountTree> {
+    assertOrgAdmin(ctx);
+    const ustHesap = await this.aktifUstHesap(ctx);
+
+    if (input.paket !== undefined && !ctx.platformAdmin) {
+      throw new BadRequestException('Paketi yalnızca platform sahibi değiştirebilir');
+    }
+    if (input.paket !== undefined && input.paket !== ustHesap.paket) {
+      const sinir = PAKET_SINIRLARI[input.paket].maxSirket;
+      const mevcutSirket = await this.admin.organization.count({
+        where: { managerAccountId: ustHesap.id, status: 'active' },
+      });
+      if (sinir !== null && mevcutSirket > sinir) {
+        throw new BadRequestException(
+          `${PAKET_SINIRLARI[input.paket].etiket} paketi en fazla ${sinir} şirket alıyor; ` +
+            `bu hesapta ${mevcutSirket} şirket var. Önce şirket sayısını düşürmek gerekiyor.`,
+        );
+      }
+    }
+
+    const onceki = await this.admin.managerAccount.findUniqueOrThrow({
+      where: { id: ustHesap.id },
+      select: { name: true, paket: true },
+    });
+    await this.admin.managerAccount.update({
+      where: { id: ustHesap.id },
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.paket !== undefined ? { paket: input.paket } : {}),
+      },
+    });
+    await this.audit.recordUnauthenticated(ctx.orgId, {
+      actorId: ctx.userId,
+      action: 'manager_account.update',
+      targetType: 'manager_account',
+      targetId: ustHesap.id,
+      before: onceki,
+      after: { name: input.name ?? onceki.name, paket: input.paket ?? onceki.paket },
+    });
+
+    const agac = await this.agacOku(ustHesap.id, ctx);
+    if (!agac) throw new BadRequestException('Üst hesap güncellendi ama okunamadı');
     return agac;
   }
 

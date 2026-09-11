@@ -573,9 +573,16 @@ Kimde olduğunu görmek için `--liste`, geri almak için `--kaldir`. Değişikl
 bir sonraki oturum çözümünde geçerli oluyor (sayfayı yenilemek yeterli).
 
 Platform sahibi olan kullanıcı üst barda **üst hesap seçicisini** görüyor ve
-kurduğu her hesaba geçebiliyor. Yeni bir hesap kurarken kendi şirketi o
-hesaba BAĞLANMIYOR — Advetics'in kendi organizasyonu müşterinin portföyüne
-girmiyor.
+kurduğu her hesaba geçebiliyor. Yeni hesap `/ayarlar/ust-hesap` sayfasındaki
+üst hesap kartından açılıyor (**+ Yeni üst hesap**): ad + paket seçilir,
+kurulunca o hesaba geçilir. Kendi şirketi o hesaba BAĞLANMIYOR — Advetics'in
+kendi organizasyonu müşterinin portföyüne girmiyor.
+
+Paket (Başlangıç 1 şirket · 2 reklam hesabı / Büyüme 5 · 10 / Ajans sınırsız)
+aynı karttan **Düzenle** ile değiştiriliyor ve yalnızca platform sahibi
+değiştirebiliyor; sayılar `packages/shared/src/constants/paketler.ts` içinde.
+Şirket sınırı bugün uygulanıyor, reklam hesabı sınırı `connections` modülüne
+bağlandığında.
 
 ---
 

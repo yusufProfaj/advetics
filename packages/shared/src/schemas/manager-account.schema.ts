@@ -23,6 +23,20 @@ export const createManagerAccountSchema = z.object({
 export type CreateManagerAccountInput = z.infer<typeof createManagerAccountSchema>;
 
 /**
+ * Aktif üst hesabı düzenler.
+ *
+ * `paket` yine yalnızca PLATFORM SAHİBİNDE geçiyor — `create` ile aynı
+ * gerekçe: satılan bir ürünün sınırı satın alanın elinde olamaz. Başkası
+ * gönderirse sunucu YOK SAYMIYOR, REDDEDİYOR: yok saymak, "paketi
+ * değiştirdim" sanan bir kullanıcıya sessizce eski paketi bırakmak olurdu.
+ */
+export const updateManagerAccountSchema = z.object({
+  name: z.string().trim().min(2, 'Üst hesap adı en az 2 karakter olmalı').max(120).optional(),
+  paket: z.enum(MANAGER_PAKETLERI).optional(),
+});
+export type UpdateManagerAccountInput = z.infer<typeof updateManagerAccountSchema>;
+
+/**
  * Üst hesabın altına YENİ bir şirket açar.
  *
  * VAR OLAN bir şirketi bağlamak BİLEREK YOK: o şirketin kendi kullanıcıları

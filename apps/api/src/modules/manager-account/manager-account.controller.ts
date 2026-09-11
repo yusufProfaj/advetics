@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Res,
 } from '@nestjs/common';
@@ -15,10 +16,12 @@ import {
   createManagerAccountSchema,
   deleteOrganizationSchema,
   moveWorkspaceSchema,
+  updateManagerAccountSchema,
   type CreateManagedOrganizationInput,
   type CreateManagerAccountInput,
   type DeleteOrganizationInput,
   type MoveWorkspaceInput,
+  type UpdateManagerAccountInput,
   type TenantContext,
 } from '@advetics/shared';
 import type { Response } from 'express';
@@ -58,6 +61,15 @@ export class ManagerAccountController {
     @Body(zodBody(createManagerAccountSchema)) dto: CreateManagerAccountInput,
   ) {
     return this.service.create(ctx, dto);
+  }
+
+  /** Aktif üst hesabı düzenler — ad ve (platform sahibinde) paket. */
+  @Patch()
+  async update(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(updateManagerAccountSchema)) dto: UpdateManagerAccountInput,
+  ) {
+    return this.service.update(ctx, dto);
   }
 
   /** Üst hesabın altına YENİ şirket açar — MCC'deki "alt hesap ekle". */
