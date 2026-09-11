@@ -20,12 +20,6 @@ import { MetricsService } from './metrics.service';
 let h: Harness;
 let svc: MetricsService;
 
-const CTX: TenantContext = {
-  orgId: IDS.org,
-  userId: IDS.user,
-  clientIds: [IDS.client],
-  isOrgAdmin: true,
-} as TenantContext;
 
 const MUSTERI_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 const HESAP_B = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb';
@@ -33,6 +27,27 @@ const KAMPANYA_A = '66666666-6666-6666-6666-666666666666';
 const GRUP_A = '77777777-7777-7777-7777-777777777777';
 const REKLAM_A = '88888888-8888-8888-8888-888888888888';
 const KAMPANYA_B = '99999999-9999-9999-9999-999999999999';
+
+/*
+ * `clientIds` İKİ WORKSPACE'İ DE TAŞIYOR — ve bu, üretimdeki hâlin aynısı.
+ *
+ * Eskiden yalnızca `IDS.client` yazıyordu ve test yine geçiyordu: RLS'teki
+ * `is_org_admin()` kısa devresi yüklemi tamamen kaldırdığı için liste
+ * hiçbir şeyi süzmüyordu. Kısa devre kalkınca (bkz.
+ * `insights-kiraci-izolasyonu-rls.spec.ts`) ve metrik sorguları müşteri
+ * süzgecini AÇIKÇA yazmaya başlayınca, eksik liste ikinci workspace'i
+ * gerçekten eliyor.
+ *
+ * `TenantContextService` org geneli yetkili kullanıcı için bu listeyi
+ * şirketin BÜTÜN workspace'leriyle dolduruyor; fixture artık onu taklit
+ * ediyor.
+ */
+const CTX: TenantContext = {
+  orgId: IDS.org,
+  userId: IDS.user,
+  clientIds: [IDS.client, MUSTERI_B],
+  isOrgAdmin: true,
+} as TenantContext;
 
 /** Aynı harcamayı DÖRT seviyeye de yazar — platformun yaptığı şey bu. */
 async function metrikYaz(p: {
@@ -142,6 +157,83 @@ function bul(rows: MetricsClientRow[], ad: string): MetricsClientRow {
   if (!r) throw new Error(`${ad} satırı yok — testin dayanağı kayboldu`);
   return r;
 }
+
+describe('KRİTİK: müşteri süzgeci SORGUNUN İÇİNDE', () => {
+  /*
+   * ═══ İZOLASYON RLS'TE, HIZ SORGUDA ═══
+   *
+   * Metrik sorgularında uzun süre HİÇ `client_id` yüklemi yoktu; ayrım
+   * tamamen RLS'e bırakılmıştı. RLS izolasyonu sağlıyor ama yüklemi bir
+   * FONKSİYON çağrısı (`app.can_access_client`) olarak taşıyor ve
+   * planlayıcı onun seçiciliğini kestiremiyor — `@@index([clientId, date
+   * DESC, entityLevel])` kullanılamıyor ve ajans kapsamında sorgu bütün
+   * satırları tarıyordu ("ajans tarafına tıkladığımda çok bekletiyor").
+   *
+   * KOŞUM ORTAMINDA RLS KAPALI (worker rolünün BYPASSRLS'i taklit
+   * ediliyor), yani bu testler YALNIZCA sorgudaki yüklemi ölçüyor. Süzgeç
+   * kaldırılırsa burada düşüyor; mutasyonla doğrulandı — ilk yazımda bu
+   * iki test YOKTU ve süzgeci silmek hiçbir testi kırmıyordu.
+   */
+  it('erişim listesinde OLMAYAN workspace sonuca girmiyor', async () => {
+    await metrikYaz({
+      clientId: IDS.client,
+      adAccountId: IDS.adAccount,
+      platform: 'meta',
+      campaignId: KAMPANYA_A,
+      date: '2026-08-10',
+      spendMicros: '100000000',
+      yalnizKampanya: true,
+    });
+    await metrikYaz({
+      clientId: MUSTERI_B,
+      adAccountId: HESAP_B,
+      platform: 'google',
+      campaignId: KAMPANYA_B,
+      date: '2026-08-10',
+      spendMicros: '250000000',
+      yalnizKampanya: true,
+    });
+
+    const rows = await svc.byClient(
+      { ...CTX, clientIds: [IDS.client] } as TenantContext,
+      ARALIK,
+    );
+    expect(bul(rows, 'Workspace').spendMicros).toBe('100000000');
+    expect(bul(rows, 'B Firması').spendMicros).toBe('0');
+  });
+
+  it('SEÇİLİ workspace varken yalnızca o sayılıyor', async () => {
+    /*
+     * `can_access_client` aktif seçimle zaten daraltıyor; sorguda da
+     * yazmak planlayıcıya elli yerine BİR kimlik vermek demek. İkisi
+     * ayrışırsa ekran ile veritabanı farklı şeyi süzer.
+     */
+    await metrikYaz({
+      clientId: IDS.client,
+      adAccountId: IDS.adAccount,
+      platform: 'meta',
+      campaignId: KAMPANYA_A,
+      date: '2026-08-10',
+      spendMicros: '100000000',
+      yalnizKampanya: true,
+    });
+    await metrikYaz({
+      clientId: MUSTERI_B,
+      adAccountId: HESAP_B,
+      platform: 'google',
+      campaignId: KAMPANYA_B,
+      date: '2026-08-10',
+      spendMicros: '250000000',
+      yalnizKampanya: true,
+    });
+
+    const ozet = await svc.summary(
+      { ...CTX, activeClientId: MUSTERI_B } as TenantContext,
+      ARALIK,
+    );
+    expect(ozet.spendMicros).toBe('250000000');
+  });
+});
 
 describe('workspace kırılımı — çift sayım koruması', () => {
   it('REGRESYON: dört seviyeye yazılmış harcamayı BİR kez sayar', async () => {

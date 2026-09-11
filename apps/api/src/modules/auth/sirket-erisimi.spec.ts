@@ -58,9 +58,63 @@ describe('KRİTİK: üyeliğin olduğu şirket erişilebilir', () => {
      * değerini sürüyor; doğrulanmamış bir değer, cookie düzenleyerek başka
      * bir şirketin verisini okumak demekti.
      */
+    /*
+     * VARSAYILAN DEĞİŞTİ (`user.orgId` → `varsayilanOrg`) ama DOĞRULAMA
+     * AYNI: istekten gelen şirket hâlâ izin listesine karşı sınanıyor.
+     * Değişen şey yalnızca listede bulunmadığında nereye düşüleceği.
+     */
     expect(KAYNAK).toContain(
-      'requestedOrgId && izinliOrgIdler.has(requestedOrgId) ? requestedOrgId : user.orgId',
+      'requestedOrgId && izinliOrgIdler.has(requestedOrgId) ? requestedOrgId : varsayilanOrg',
     );
+  });
+});
+
+describe('KRİTİK: giriş ÜYELİĞİN OLDUĞU şirkete düşüyor', () => {
+  it('ev şirketinde üyelik yoksa üyeliğin olduğu şirkete düşülüyor', () => {
+    /*
+     * `user.orgId` kullanıcının AÇILDIĞI şirket; orada bir üyeliği olduğu
+     * GARANTİ DEĞİL. Danışmana yalnızca bir MÜŞTERİ ŞİRKETİNDE yetki
+     * verildiğinde ev şirketinde hiç satırı kalmıyor ve giriş şu hatayla
+     * düşüyordu: "Bu şirkete erişim yetkiniz tanımlı değil". Kullanıcı
+     * yetkilendirilmiş ama İÇERİ GİREMİYOR.
+     */
+    expect(KAYNAK).toContain(
+      'const evdeUyelikVar = user.memberships.some((m) => m.orgId === user.orgId)',
+    );
+    expect(KAYNAK).toContain('izinliOrgIdler.has(m.orgId)');
+    expect(KAYNAK).toContain(
+      "evdeUyelikVar || ustHesap !== null ? user.orgId : (uyelikliOrg ?? user.orgId)",
+    );
+  });
+
+  it('KRİTİK: ÜST HESABI OLAN için ev şirketi öncelikli kalıyor', () => {
+    /*
+     * Ajans yöneticisi kendi şirketinde üyelik satırı taşımayabiliyor
+     * (sentetik üyelik üst hesap rolünden türüyor). Onu kardeş bir şirkete
+     * atmak, her girişte başka bir yerde uyanması demekti.
+     */
+    const bas = KAYNAK.indexOf('const varsayilanOrg');
+    expect(bas).toBeGreaterThan(-1);
+    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf(';', bas));
+    expect(dilim).toContain('ustHesap !== null');
+  });
+
+  it('KRİTİK: istekten gelen şirket YİNE doğrulanıyor', () => {
+    // Varsayılanı değiştirmek, doğrulamayı gevşetmek DEĞİL: cookie'yi elle
+    // düzenleyerek başka bir şirkete geçmek hâlâ imkânsız.
+    expect(KAYNAK).toContain(
+      'requestedOrgId && izinliOrgIdler.has(requestedOrgId) ? requestedOrgId : varsayilanOrg',
+    );
+  });
+
+  it('erişim hatası ŞİRKETİN ADINI söylüyor', () => {
+    /*
+     * "Bu şirkete erişim yetkiniz tanımlı değil" hangi şirketten
+     * bahsettiğini söylemiyordu ve kullanıcı giriş ekranında kaldı:
+     * yetkisi vardı, başka bir şirketteydi.
+     */
+    expect(KAYNAK).toContain('şirketine erişim yetkiniz tanımlı değil');
+    expect(KAYNAK).toContain('const aktifSirketAdi =');
   });
 });
 

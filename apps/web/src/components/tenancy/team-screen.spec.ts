@@ -29,72 +29,125 @@ describe('tarama boşa düşmüyor', () => {
   });
 });
 
-describe('ajans ekibi / workspace ayrımı', () => {
-  it('KRİTİK: ayrım ROLE göre — üyelik KAPSAMINA göre DEĞİL', () => {
+describe('RAY — kişi listesi', () => {
+  it('KRİTİK: ajans personeli / müşteri hesabı ayrımı ROLE göre, KAPSAMA göre DEĞİL', () => {
     /*
-     * İki sürüm boyunca kapsama bakıldı ("org geneli üyeliği var mı") ve ikisi
-     * de yanlıştı: bir workspace’e ATANMIŞ DANIŞMAN ile o workspace’in
-     * MÜŞTERİ HESABI kapsam açısından birebir aynı görünüyor. Üç workspace’e
-     * atanmış yusuf@ hesabı "müşteri hesabı" sanılıp ajans ekibinden düştü.
+     * İki sürüm boyunca kapsama bakıldı ("org geneli üyeliği var mı") ve
+     * ikisi de yanlıştı: bir workspace'e ATANMIŞ DANIŞMAN ile o
+     * workspace'in MÜŞTERİ HESABI kapsam açısından birebir aynı görünüyor.
+     * Üç workspace'e atanmış yusuf@ hesabı "müşteri hesabı" sanılıp ajans
+     * ekibinden düşmüştü.
      *
      * Ayırt eden şey ROL: müşteriye teslim edilen hesap `client_viewer`.
+     * Kural sunucudaki `listMembers` süzgeciyle BİREBİR aynı — ikisinin
+     * ayrışması, kullanıcının API listesinde olup ekranda görünmemesi
+     * demek.
      */
     const kod = yorumsuz(KAYNAK);
-    const m = /const ajansEkibi = useMemo\(([\s\S]*?)\[members\]/.exec(kod);
-    if (!m) throw new Error('ajansEkibi tanımı bulunamadı — tarama boşa düştü.');
+    const m = /const kisiler: KisiSatiri\[\] = useMemo\(([\s\S]*?)\[members\]/.exec(kod);
+    if (!m) throw new Error('kisiler tanımı bulunamadı — tarama boşa düştü.');
     expect(m[1]).toContain("x.role !== 'client_viewer'");
+    expect(m[1]).toContain('m.memberships.length === 0');
     expect(m[1]).not.toContain('x.clientId === null');
     // Alan adına bakan bir ayrım ilk istisnada yanlış kümeye koyardı.
     expect(kod).not.toContain('@profaj');
   });
 
-  it('KRİTİK: kural sunucudaki süzgeçle aynı biçimde', () => {
-    // İkisinin ayrışması, kullanıcının API listesinde olup ekranda
-    // görünmemesi demek — bu ekranda tam olarak o yaşandı.
+  it('KRİTİK: KİMSE SÜZÜLMÜYOR — herkes TEK listede', () => {
+    /*
+     * ═══ "KAYIP KULLANICI" SAYACI ARTIK GEREKSİZ ═══
+     *
+     * Eski ekranda İKİ liste vardı (ajans ekibi + workspace kartları) ve
+     * ikisine de girmeyen bir kullanıcı SESSİZCE kayboluyordu; sayaç "4
+     * kullanıcı" derken ekranda bir kişi görünüyordu. O yüzden bir "kayıp"
+     * uyarısı eklenmişti.
+     *
+     * Ray TEK liste ve hiçbir süzgeç uygulamıyor — kaybolma yapısal olarak
+     * imkânsız. Uyarı da kalktı: hiçbir zaman çıkmayacak bir uyarıyı
+     * ekranda tutmak, okunmayan uyarı üretmenin yolu.
+     *
+     * İDDİA SÜZGECİN YOKLUĞUNA ÇAPALI: `suzulmus` yalnızca ARAMAYA bağlı.
+     */
     const kod = yorumsuz(KAYNAK);
-    const m = /const ajansEkibi = useMemo\(([\s\S]*?)\[members\]/.exec(kod)!;
-    expect(m[1]).toContain('m.memberships.length === 0');
+    expect(kod).toContain("q === ''\n        ? kisiler");
+    expect(kod).not.toContain('kayipSayisi');
   });
 
-  it('workspace üyeleri o workspace’in kimliğiyle eşleşiyor', () => {
-    expect(yorumsuz(KAYNAK)).toContain('x.clientId === c.id');
+  it('KRİTİK: ARAMA var — ad ve e-posta birlikte', () => {
+    // Kırk dokuz şirketlik bir ajansta kişi listesi de uzuyor; gözle
+    // taramak Şirketler ekranında olduğu gibi burada da çöküyordu.
+    const kod = yorumsuz(KAYNAK);
+    expect(kod).toContain('type="search"');
+    expect(kod).toContain("(k.fullName ?? '').toLocaleLowerCase('tr').includes(q)");
+    expect(kod).toContain("k.email.toLocaleLowerCase('tr').includes(q)");
+  });
+
+  it('KRİTİK: Türkçe küçültme — "İkon" araması "ikon" ile eşleşsin', () => {
+    // Varsayılan `toLowerCase()` "İ"yi "i̇" yapıyor ve eşleşme sessizce
+    // kaçıyor.
+    expect(yorumsuz(KAYNAK)).toContain("arama.trim().toLocaleLowerCase('tr')");
+  });
+
+  it('KRİTİK: SESSİZ KESME YOK — süzülen liste sayıyı söylüyor', () => {
+    expect(yorumsuz(KAYNAK)).toContain('kişiden {suzulmus.length} tanesi gösteriliyor');
+  });
+
+  it('ARAMA SEÇİMİ DÜŞÜRMÜYOR', () => {
+    /*
+     * Aranan kişi listeden çıkınca seçimi sıfırlamak, sağ tarafı
+     * kullanıcıya habersizce boşaltmak olurdu; detay hâlâ o kişiyi
+     * anlatıyor.
+     */
+    expect(yorumsuz(KAYNAK)).toContain(
+      'const secilen = kisiler.find((k) => k.id === secilenId) ?? suzulmus[0] ?? null',
+    );
   });
 });
 
-describe('KİMSE KAYBOLMUYOR', () => {
-  it('KRİTİK: üyeliği OLMAYAN kullanıcı da ajans ekibinde', () => {
+describe('DETAY — "bu kişi nerelere erişiyor"', () => {
+  it('KRİTİK: ŞİRKET ve WORKSPACE yetkileri AYRI bölümlerde', () => {
     /*
-     * İlk sürüm yalnızca org geneli üyeliği olanları alıyordu ve hiçbir
-     * üyeliği olmayan kullanıcı iki listede de çıkmıyordu: sayaç "4
-     * kullanıcı" derken ekranda bir kişi görünüyordu. Ajans personeli önce
-     * açılıp yetkisi sonra verildiği için bu hâl istisna değil, normal.
-     */
-    /*
-     * ÇAPA `ajansEkibi` TANIMININ GÖVDESİ, dosyanın tamamı DEĞİL. İlk sürüm
-     * dizgeyi her yerde arıyordu ve mutasyon testi BOŞ çıktı: koşulu
-     * listeden sildim, aynı dizge satır içindeki "yetkisi yok" kontrolünde
-     * geçtiği için test GEÇTİ.
+     * Aynı düz listede `clientId: null` bir satır ile bir workspace satırı
+     * görsel olarak AYIRT EDİLEMİYORDU — oysa biri o şirketin TAMAMINI,
+     * diğeri tek bir workspace'i açıyor ve aradaki fark bu ekranın bütün
+     * konusu.
      */
     const kod = yorumsuz(KAYNAK);
-    const m = /const ajansEkibi = useMemo\(([\s\S]*?)\[members\]/.exec(kod);
-    if (!m) throw new Error('ajansEkibi tanımı bulunamadı — tarama boşa düştü.');
-    expect(m[1]).toContain('m.memberships.length === 0');
+    expect(kod).toContain('const sirketYetkileri = kisi.memberships.filter((m) => m.clientId === null)');
+    expect(kod).toContain('const workspaceYetkileri = kisi.memberships.filter((m) => m.clientId !== null)');
+    expect(kod).toContain('baslik="Şirket yetkileri"');
+    expect(kod).toContain('baslik="Workspace yetkileri"');
   });
 
-  it('KRİTİK: hiçbir listeye düşmeyen varsa EKRANDA uyarı çıkıyor', () => {
-    // Sayı ile liste birbirini tutmuyorsa bu bir arıza ve sessiz kalmamalı.
+  it('KRİTİK: rol değiştirme ve kaldırma SATIRIN yanında', () => {
+    // Eski ekranda bunlar yalnızca workspace kartının içindeydi; şirket
+    // geneli bir yetkiyi kaldırmanın hiçbir yolu YOKTU.
+    const g = govde(KAYNAK, 'YetkiBolumu');
+    expect(g).toContain("apiFetch(`/memberships/${m.id}`, { method: 'DELETE' })");
+    expect(g).toContain("method: 'PATCH'");
+  });
+
+  it('KRİTİK: ŞİRKET GENELİ satırda `client_viewer` rolü seçilemiyor', () => {
     /*
-     * ÇAPA KOŞULLU RENDER, değişkenin varlığı DEĞİL. `kayipSayisi` tanımlı
-     * kalıp render kapatılabiliyordu ve test yine geçiyordu.
+     * Veritabanı CHECK'i `client_id IS NOT NULL OR role <> 'client_viewer'`
+     * diyor: org geneli bir `client_viewer` satırı REDDEDİLİYOR. Seçeneği
+     * göstermek, kullanıcıyı ham bir kısıt hatasına davet etmek olurdu.
+     * Karar `isOrgScopedRole`tan OKUNUYOR, rol adları kopyalanmıyor.
      */
-    const kod = yorumsuz(KAYNAK);
-    expect(kod).toContain('{kayipSayisi > 0 && (');
-    expect(kod).toContain('hiçbir listede görünmüyor');
+    expect(govde(KAYNAK, 'YetkiBolumu')).toContain(
+      "ROLES.filter((r) => m.clientId !== null || isOrgScopedRole(r as Role))",
+    );
   });
 
-  it('yetkisiz hesabın durumu satırda yazılı', () => {
+  it('KRİTİK: hata YUTULMUYOR', () => {
+    // Sessizce başarısız olan bir yetki değişikliği, kullanıcının verdiğini
+    // sandığı bir erişim demek.
+    expect(govde(KAYNAK, 'YetkiBolumu')).toContain('ApiRequestError');
+  });
+
+  it('YETKİSİZ hesap detayda SÖYLENİYOR', () => {
     // Giriş yapabiliyor ama panelde hiçbir veri göremiyor.
-    expect(yorumsuz(KAYNAK)).toContain('yetkisi yok');
+    expect(yorumsuz(KAYNAK)).toContain('giriş yapabiliyor ama panelde hiçbir');
   });
 });
 
@@ -145,10 +198,13 @@ describe('DANIŞMAN ATA', () => {
     expect(g).toContain('disabled={c.engel !== null || busy}');
   });
 
-  it('KRİTİK: akış DANIŞMAN SEÇİMİYLE başlıyor', () => {
+  it('KRİTİK: üç adım da duruyor — kim, hangi şirketler, hangi rol', () => {
     /*
-     * İstenen sıra: önce kim, sonra hangi ŞİRKETLER, sonra hangi rol.
-     * İkinci adım workspace'ten şirkete taşındı — danışman şirkete bakıyor.
+     * Pencere artık SEÇİLİ kişiyle açılıyor (üst bant yerine kişinin
+     * detayından) ve ilk adım tek seçenekli kalıyor. Adımı kaldırmadım:
+     * pencere kimin yetkilendirildiğini EKRANDA yazmaya devam etmeli —
+     * "hangi kişiye veriyorum" sorusunu hatırlamaya bırakmak, para
+     * harcamayan ama erişim açan bir işlemde de kabul edilemez.
      */
     const g = ATA();
     expect(g).toContain('1 · Danışman');
@@ -220,79 +276,42 @@ describe('DANIŞMAN ATA', () => {
   });
 });
 
-describe('DANIŞMAN EKLE', () => {
-  it('KRİTİK: rol listesinde client_viewer YOK', () => {
+describe('ÜST BANT — tek ekleme düğmesi', () => {
+  it('KRİTİK: "Danışman ekle" ve "Kullanıcı ekle" TEK düğmeye indi', () => {
     /*
-     * `client_viewer` müşteri hesabının rolü. Bir danışmanı onunla açmak,
-     * kişiyi ajans ekibi listesinden düşürüp müşteri hesabı gibi göstermeye
-     * yetiyor.
+     * İkisi AYNI işi yapıyordu; tek fark rolün önceden seçili gelmesiydi.
+     * Yan yana durunca ekranın cevapladığı soru "kimi ekliyorum" değil
+     * "hangi düğmeye basmalıyım" oluyordu — kullanıcının "mantıksız,
+     * kullanışsız" dediği yerin merkezi.
      */
     const kod = yorumsuz(KAYNAK);
-    const i = kod.indexOf('function DanismanEkleModal');
-    expect(i).toBeGreaterThan(-1);
-    const govde = kod.slice(i, i + 5000);
-    expect(govde).toContain("r !== 'client_viewer'");
+    expect(kod).toContain('+ Kişi ekle');
+    expect(kod).not.toContain('setDanismanEkleAcik');
+    expect(kod).not.toContain('DanismanEkleModal');
   });
 
-  it('KRİTİK: rol ZORLANMIYOR — şirket geneli seçmek yönetici yapmıyor', () => {
+  it('KRİTİK: "Şirkete yetki ver" KİŞİNİN DETAYINDA, üst bantta değil', () => {
     /*
-     * KARAR TERSİNE ÇEVRİLDİ VE SEBEBİ ÖNEMLİ.
-     *
-     * Eskiden şirket geneli seçilince rol `admin`e ÇEVRİLİYORDU; gerekçe
-     * sunucunun org geneli erişimi yalnızca owner/admin'e vermesiydi ve o
-     * zaman DOĞRUYDU — manager seçili kalırsa istek reddedilir ve sebebi
-     * ekranda anlaşılmazdı.
-     *
-     * Kural genişleyince (`ORG_SCOPED_ROLES` artık `client_viewer` dışında
-     * herkesi kapsıyor) o zorlama ZARARLI hâle geldi: "Analist" seçen
-     * kişiye SESSİZCE yönetici yetkisi vermek — kullanıcı açma ve workspace
-     * silme dahil. Sessizce yetki genişleten bir arayüz, en pahalı hata
-     * türü.
+     * Bu bir EKLEME değil, SEÇİLİ KİŞİYE yetki verme işi. Üst banttayken
+     * pencere önce "kimi atıyorsun" diye soruyordu — oysa kullanıcı o
+     * kişiyi zaten seçmiş oluyor.
      */
     const kod = yorumsuz(KAYNAK);
-    const i = kod.indexOf('function DanismanEkleModal');
-    const govde = kod.slice(i, i + 5000);
-    expect(govde).not.toContain("orgGeneli ? 'admin' : rol");
-    expect(govde).toContain('role: rol,');
+    expect(kod).toContain('+ Şirkete yetki ver');
+    expect(kod).toContain('onSirketYetkisi={() => setAtananKisi(secilen)}');
+    expect(kod).not.toContain('setAtamaAcik');
   });
 
-  it('KRİTİK: danışmanın VARSAYILAN kapsamı ŞİRKET GENELİ', () => {
-    /*
-     * Danışman şirkete bakıyor, tek bir workspace'e değil. Varsayılanı boş
-     * bırakmak, kırk altı workspace'li bir şirkette tek tek atama ve her
-     * yeni workspace'te unutulacak bir adım demekti — unutulduğunda
-     * belirtisi "danışman bazı müşterileri göremiyor" ve sebebi hiçbir
-     * ekranda yazmıyor.
-     */
-    const kod = yorumsuz(KAYNAK);
-    const i = kod.indexOf('function DanismanEkleModal');
-    const govde = kod.slice(i, i + 5000);
-    expect(govde).toContain("useState('org')");
+  it('KRİTİK: pencere SEÇİLİ kişiyle açılıyor', () => {
+    // Tek elemanlı liste: pencerenin kendi kişi seçici adımı boşa düşmüyor,
+    // zaten tek seçenek var.
+    expect(yorumsuz(KAYNAK)).toContain('danismanlar={[atananKisi]}');
   });
 
-  it('kapsam zorunlu — erişimsiz hesap açılamıyor', () => {
-    const kod = yorumsuz(KAYNAK);
-    const i = kod.indexOf('function DanismanEkleModal');
-    const govde = kod.slice(i, i + 5000);
-    expect(govde).toContain("kapsam === ''");
-  });
-});
-
-describe('üst bant', () => {
-  it('KRİTİK: "Danışman ata" ÜST BANTTA, satır içinde değil', () => {
-    const kod = yorumsuz(KAYNAK);
-    expect(kod).toContain('setAtamaAcik(true)');
-    // Satır içi kişi-bazlı tetikleyici kalmamalı.
-    expect(kod).not.toContain('setAtanan(');
-  });
-
-  it('KRİTİK: üç ayrı düğme — ekle, ata, kullanıcı', () => {
-    // Tek bir "ekle" düğmesi her seferinde "rolü ne olsun, kapsamı ne olsun"
-    // sorusunu sordurtuyordu.
-    const kod = yorumsuz(KAYNAK);
-    expect(kod).toContain('setDanismanEkleAcik(true)');
-    expect(kod).toContain('setAtamaAcik(true)');
-    expect(kod).toContain('setEkleAcik(true)');
+  it('ŞİRKET YETKİSİ yalnızca AJANS personeline teklif ediliyor', () => {
+    // Müşteri hesabının sınırı tam olarak tek bir workspace; ona şirket
+    // geneli yetki teklif etmek, reddedilecek bir seçenek göstermek olurdu.
+    expect(yorumsuz(KAYNAK)).toContain('canManage && kisi.ajans ?');
   });
 });
 

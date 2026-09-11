@@ -231,8 +231,35 @@ export class TenantContextService {
      * kapsamını `app.tum_sirketler()` bayrağı genişletiyor; yazma hâlâ tek
      * bir şirkete çivili.
      */
+    /*
+     * ═══ EV ŞİRKETİNE DÜŞMEK YETMİYOR — ÜYELİĞİN OLDUĞU YERE DÜŞÜYOR ═══
+     *
+     * `user.orgId` kullanıcının AÇILDIĞI şirket; orada bir üyeliği olduğu
+     * GARANTİ DEĞİL. Danışmana yalnızca bir MÜŞTERİ ŞİRKETİNDE yetki
+     * verildiğinde (şirket seviyesi yetki üyelik satırını o şirkette
+     * açıyor) ev şirketinde hiç satırı kalmıyor ve giriş şu hatayla
+     * düşüyordu: "Bu şirkete erişim yetkiniz tanımlı değil".
+     *
+     * Kullanıcı yetkilendirilmiş ama İÇERİ GİREMİYOR — ve hata cümlesi
+     * hangi şirketten bahsettiğini bile söylemiyor.
+     *
+     * SIRA: geçerli istek → üyeliğin olduğu ev şirketi → üyeliğin olduğu
+     * HERHANGİ bir şirket → ev şirketi. Son dal yalnızca hiçbir üyelik
+     * yokken çalışıyor ve orada zaten aşağıdaki kontrol devreye giriyor.
+     *
+     * ÜST HESABI OLAN İÇİN EV ŞİRKETİ ÖNCELİKLİ KALIYOR: ajans yöneticisi
+     * kendi şirketinde üyelik satırı taşımasa bile (sentetik üyelik üst
+     * hesap rolünden türüyor) oraya düşmeli — kardeş bir şirkete
+     * atılması, her girişte başka bir yerde uyanması demekti.
+     */
+    const evdeUyelikVar = user.memberships.some((m) => m.orgId === user.orgId);
+    const uyelikliOrg = user.memberships.find((m) => izinliOrgIdler.has(m.orgId))?.orgId;
+
+    const varsayilanOrg =
+      evdeUyelikVar || ustHesap !== null ? user.orgId : (uyelikliOrg ?? user.orgId);
+
     const activeOrgId =
-      requestedOrgId && izinliOrgIdler.has(requestedOrgId) ? requestedOrgId : user.orgId;
+      requestedOrgId && izinliOrgIdler.has(requestedOrgId) ? requestedOrgId : varsayilanOrg;
 
     /*
      * SEÇİCİNİN LİSTESİ — `managerAccount` TEK BAŞINA YETMİYOR.
@@ -247,6 +274,17 @@ export class TenantContextService {
       orderBy: { name: 'asc' },
       select: { id: true, name: true, slug: true },
     });
+
+    /*
+     * HATA MESAJI ŞİRKETİN ADINI SÖYLÜYOR.
+     *
+     * "Bu şirkete erişim yetkiniz tanımlı değil" hangi şirketten
+     * bahsettiğini söylemiyordu ve kullanıcı giriş ekranında kaldı:
+     * yetkisi vardı, başka bir şirketteydi. Ad, sorunun nerede
+     * aranacağını söylüyor.
+     */
+    const aktifSirketAdi =
+      erisilebilirSirketler.find((o) => o.id === activeOrgId)?.name ?? activeOrgId;
 
     // EV organizasyonundaki üyeliğe bakılıyor: kullanıcı hiçbir yere
     // giremiyorsa oturum kurmanın anlamı yok.
@@ -331,7 +369,9 @@ export class TenantContextService {
     } else {
       // Ne aktif şirkette üyelik ne üst hesap: bağlam KURULAMAZ. Sessizce
       // boş bir oturum vermek yerine gürültülü patlamak doğru.
-      throw new UnauthorizedException('Bu şirkete erişim yetkiniz tanımlı değil');
+      throw new UnauthorizedException(
+        `"${aktifSirketAdi}" şirketine erişim yetkiniz tanımlı değil`,
+      );
     }
 
     const orgScoped = scopedMemberships.filter(

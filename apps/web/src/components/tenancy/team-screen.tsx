@@ -34,6 +34,45 @@ interface ClientOption {
  * müşteride rol verilebiliyor ve müşteri tarafından biri asla org geneli
  * üyelik almıyor. Kapsam tek doğru ölçüt.
  */
+interface KisiSatiri extends MemberRow {
+  /** Ajans personeli mi — müşterinin kendi giriş hesabı değil. */
+  ajans: boolean;
+}
+
+/**
+ * ═══ EKİP & YETKİLER — RAY + DETAY ═══
+ *
+ * ═══ ÖNCEKİ DÜZEN NEDEN ÇALIŞMIYORDU ═══
+ *
+ * Üç "ekle" düğmesi yan yana duruyordu (Danışman ekle · Danışman ata ·
+ * Kullanıcı ekle) ve hangisinin ne yaptığını ekran SÖYLEMİYORDU: ikisi
+ * kullanıcı açıyor, biri var olana yetki veriyordu. Altında BİRBİRİNDEN
+ * KOPUK iki liste vardı — "Ajans ekibi" düz bir satır listesi, "Workspace'ler"
+ * ayrı kartlar — ve aynı üyelik satırı ikisinde birden görünüyordu. Arama
+ * yoktu.
+ *
+ * Sonuç, kullanıcının cümlesiyle: "çok kötü gözüküyor ve mantıksız,
+ * kullanışsız duruyor".
+ *
+ * ═══ EKRANIN SORDUĞU SORU TEK ═══
+ *
+ * "Bu kişi NERELERE erişiyor." Düzen de onu izliyor: SOLDA aranabilir kişi
+ * rayı, SAĞDA seçili kişinin erişimi — şirket yetkileri ve workspace
+ * yetkileri tek yerde, ekleme ve kaldırma satırın yanında.
+ *
+ * Şirketler ekranıyla AYNI desen ve bu bilinçli: panelde iki farklı
+ * "liste + detay" dili olması, her ekranı yeniden öğrenmek demekti.
+ *
+ * ═══ TEK EKLEME DÜĞMESİ ═══
+ *
+ * "Danışman ekle" ile "Kullanıcı ekle" AYNI işi yapıyordu; tek fark
+ * rolün önceden seçili gelmesiydi. Pencerenin kendisi zaten rolü ve
+ * kapsamı soruyor, yani ikinci düğme yalnızca "hangisine basmalıyım"
+ * sorusunu üretiyordu.
+ *
+ * "Danışman ata" ise bir EKLEME değil, seçili kişiye yetki verme işi —
+ * yeri üst bant değil, o kişinin detayı.
+ */
 export function TeamScreen({
   members,
   clients,
@@ -43,254 +82,332 @@ export function TeamScreen({
 }: {
   members: MemberRow[];
   clients: ClientOption[];
-  /**
-   * Üst hesabın altındaki ŞİRKETLER — "Danışman ata" penceresi buraya
-   * yetki veriyor. `clients` (workspace'ler) hâlâ gerekli: müşteri hesabı
-   * ve workspace kartları onlarla çalışıyor.
-   */
+  /** Üst hesabın altındaki ŞİRKETLER — şirket yetkisi buraya veriliyor. */
   sirketler: Array<{ id: string; name: string }>;
   currentUserId: string;
   canManage: boolean;
 }) {
   const [ekleAcik, setEkleAcik] = useState(false);
   const [duzenlenen, setDuzenlenen] = useState<MemberRow | null>(null);
-  const [atamaAcik, setAtamaAcik] = useState(false);
-  const [danismanEkleAcik, setDanismanEkleAcik] = useState(false);
+  const [atananKisi, setAtananKisi] = useState<MemberRow | null>(null);
+  const [arama, setArama] = useState('');
+  const [secilenId, setSecilenId] = useState<string | null>(null);
 
   /*
-   * AJANS EKİBİ AYRIMI ROLE GÖRE — ÜYELİK KAPSAMINA GÖRE DEĞİL.
+   * AJANS PERSONELİ AYRIMI ROLE GÖRE — ÜYELİK KAPSAMINA GÖRE DEĞİL.
    *
    * İki sürüm boyunca kapsama bakıldı ("org geneli üyeliği var mı") ve ikisi
-   * de yanlıştı: bir workspace’e ATANMIŞ DANIŞMAN ile o workspace’in MÜŞTERİ
-   * HESABI kapsam açısından birebir aynı görünüyor. Sonuç: üç workspace’e
-   * danışman olarak atanmış yusuf@ hesabı "müşteri hesabı" sanıldı ve ajans
-   * ekibinden düştü.
+   * de yanlıştı: bir workspace'e ATANMIŞ DANIŞMAN ile o workspace'in MÜŞTERİ
+   * HESABI kapsam açısından birebir aynı görünüyor. Ayırt eden şey ROL:
+   * müşteriye teslim edilen hesap `client_viewer` olarak açılıyor.
    *
-   * AYIRT EDEN ŞEY ROL. Müşteriye teslim edilen hesap `client_viewer` olarak
-   * açılıyor (kurulum sihirbazı bunu sabit yazıyor ve istemciden almıyor);
-   * danışman hangi workspace’e atanırsa atansın başka bir rol taşıyor.
-   *
-   * Kural sunucudaki `listMembers` süzgeciyle BİREBİR aynı: üyeliği yok ya
-   * da en az bir üyeliği `client_viewer` DEĞİL. İkisinin ayrışması, bir
-   * kullanıcının listede olup ekranda görünmemesi demekti — bu ekranda tam
-   * olarak o yaşandı.
-   *
-   * Bir danışman hem burada hem atandığı workspace kartlarında görünüyor ve
-   * bu doğru: ikisi farklı soru — "kim ajans personeli" ve "bu müşteriye kim
-   * erişiyor".
+   * Kural sunucudaki `listMembers` süzgeciyle BİREBİR aynı — ikisinin
+   * ayrışması, bir kullanıcının listede olup ekranda görünmemesi demekti ve
+   * bu ekranda tam olarak o yaşandı.
    */
-  const ajansEkibi = useMemo(
+  const kisiler: KisiSatiri[] = useMemo(
     () =>
-      members.filter(
-        (m) =>
+      members.map((m) => ({
+        ...m,
+        ajans:
           m.memberships.length === 0 ||
           m.memberships.some((x) => x.role !== 'client_viewer'),
-      ),
+      })),
     [members],
   );
 
-  /*
-   * HİÇBİR LİSTEYE DÜŞMEYEN KALDI MI — sessiz kaybolmaya karşı.
-   * Yalnızca müşteriye bağlı üyeliği olan biri workspace kartında görünüyor;
-   * burada sayılan, ikisine de girmeyenler.
-   */
-  const kayipSayisi =
-    members.length -
-    new Set([
-      ...ajansEkibi.map((m) => m.id),
-      ...clients.flatMap((c) =>
-        members.filter((m) => m.memberships.some((x) => x.clientId === c.id)).map((m) => m.id),
-      ),
-    ]).size;
-
-  const workspaceler = useMemo(
+  const q = arama.trim().toLocaleLowerCase('tr');
+  const suzulmus = useMemo(
     () =>
-      clients.map((c) => ({
-        ...c,
-        uyeler: members.filter((m) => m.memberships.some((x) => x.clientId === c.id)),
-      })),
-    [clients, members],
+      q === ''
+        ? kisiler
+        : kisiler.filter(
+            (k) =>
+              (k.fullName ?? '').toLocaleLowerCase('tr').includes(q) ||
+              k.email.toLocaleLowerCase('tr').includes(q),
+          ),
+    [kisiler, q],
   );
 
+  /*
+   * SEÇİM DÜŞMÜYOR: aranan kişi listeden çıkınca seçim korunuyor, çünkü
+   * detay hâlâ o kişiyi anlatıyor. Sıfırlamak, arama kutusuna yazan
+   * kullanıcının sağ tarafını habersizce boşaltırdı.
+   */
+  const secilen = kisiler.find((k) => k.id === secilenId) ?? suzulmus[0] ?? null;
+
+  const ajansSayisi = kisiler.filter((k) => k.ajans).length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-5 py-3.5 text-sm">
-        <div className="flex flex-wrap gap-x-6 gap-y-1">
-          <span>
-            <strong>{members.length}</strong> kullanıcı
-          </span>
-          <span className="text-ink-muted">
-            <strong className="text-ink">{clients.length}</strong> workspace
-          </span>
-        </div>
-        {canManage && (
-          <div className="flex flex-wrap items-center gap-2">
-            {/*
-              ÜÇ DÜĞME, ÜÇ AYRI İŞ ve karışmamaları için ayrı duruyorlar:
-                · Danışman ekle — ajans personeli AÇAR (rolü client_viewer
-                  OLAMAZ; onu açan şey zaten danışman olmasıdır)
-                · Danışman ata  — VAR OLAN danışmanı bir ŞİRKETE bağlar
-                · Kullanıcı ekle — genel yol; müşteri hesabı da buradan açılır
-              Tek bir "ekle" düğmesi, her seferinde "rolü ne olsun, kapsamı ne
-              olsun" sorusunu sordurtuyordu.
-            */}
-            <button
-              type="button"
-              onClick={() => setDanismanEkleAcik(true)}
-              className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken"
-            >
-              + Danışman ekle
-            </button>
-            <button
-              type="button"
-              onClick={() => setAtamaAcik(true)}
-              className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken"
-            >
-              Danışman ata
-            </button>
-            <button
-              type="button"
-              onClick={() => setEkleAcik(true)}
-              className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white transition"
-            >
-              + Kullanıcı ekle
-            </button>
+    <div className="space-y-4">
+      <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-4 lg:self-start">
+          <div className="flex flex-col rounded-xl border border-line bg-surface">
+            <div className="border-b border-line px-3 py-2.5">
+              {/* SESSİZ KESME YOK: kaç kişi ve kaçının ajans personeli
+                  olduğu yazılı. "12 kullanıcı" ile "12'sinin 4'ü ajans" bu
+                  ekranda farklı sorular. */}
+              <p className="text-sm font-semibold text-ink">{kisiler.length} kişi</p>
+              <p className="mt-0.5 text-[11px] text-ink-muted">
+                {ajansSayisi} ajans personeli · {kisiler.length - ajansSayisi} müşteri hesabı
+              </p>
+            </div>
+
+            <div className="border-b border-line p-2">
+              <input
+                type="search"
+                value={arama}
+                onChange={(e) => setArama(e.target.value)}
+                placeholder="Ad ya da e-posta ara…"
+                aria-label="Kişi ara"
+                className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
+              />
+            </div>
+
+            {/* LİSTE KENDİ KABINDA KAYIYOR — sayfayla birlikte kaymak,
+                kişi gezerken detayın ekrandan çıkması demekti. */}
+            <ul className="max-h-[60vh] min-h-0 overflow-y-auto p-1.5">
+              {suzulmus.length === 0 ? (
+                <li className="px-2 py-6 text-center text-xs text-ink-muted">
+                  {kisiler.length === 0
+                    ? 'Henüz kimse eklenmemiş.'
+                    : `“${arama}” ile eşleşen kişi yok.`}
+                </li>
+              ) : (
+                suzulmus.map((k) => (
+                  <li key={k.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSecilenId(k.id)}
+                      aria-current={secilen?.id === k.id ? 'true' : undefined}
+                      className={`w-full rounded-lg px-2 py-1.5 text-left transition ${
+                        secilen?.id === k.id
+                          ? 'bg-brand/10 ring-1 ring-inset ring-brand/30'
+                          : 'hover:bg-surface-sunken'
+                      }`}
+                    >
+                      <span className="block truncate text-sm text-ink">
+                        {k.fullName ?? k.email}
+                        {k.id === currentUserId && (
+                          <span className="ml-1.5 text-[11px] text-ink-muted">(siz)</span>
+                        )}
+                      </span>
+                      <span className="block truncate text-[11px] text-ink-muted">
+                        {ozet(k)}
+                      </span>
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+
+            {q !== '' && kisiler.length > 0 && (
+              <p className="border-t border-line px-3 py-1.5 text-[11px] text-ink-muted">
+                {kisiler.length} kişiden {suzulmus.length} tanesi gösteriliyor
+              </p>
+            )}
+
+            {canManage && (
+              <div className="border-t border-line p-2">
+                {/*
+                  TEK EKLEME DÜĞMESİ. "Danışman ekle" ile "Kullanıcı ekle"
+                  aynı işi yapıyordu; pencere zaten rolü ve kapsamı soruyor.
+                */}
+                <button
+                  type="button"
+                  onClick={() => setEkleAcik(true)}
+                  className="w-full rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white"
+                >
+                  + Kişi ekle
+                </button>
+              </div>
+            )}
           </div>
-        )}
+        </aside>
+
+        <div className="min-w-0">
+          {secilen === null ? (
+            <p className="rounded-xl border border-dashed border-line bg-surface px-4 py-10 text-center text-sm text-ink-muted">
+              Soldan bir kişi seç — erişimleri burada açılır.
+            </p>
+          ) : (
+            <KisiDetayi
+              kisi={secilen}
+              clients={clients}
+              sirketler={sirketler}
+              kendisi={secilen.id === currentUserId}
+              canManage={canManage}
+              onDuzenle={() => setDuzenlenen(secilen)}
+              onSirketYetkisi={() => setAtananKisi(secilen)}
+            />
+          )}
+        </div>
       </div>
-
-      {/* SESSİZ KAYBOLMA UYARISI. Bu sayı sıfırdan büyükse listelerden biri
-          eksik demektir ve sayaçla ekran birbirini tutmuyor. */}
-      {kayipSayisi > 0 && (
-        <p className="rounded-lg bg-warn/10 px-4 py-2.5 text-xs text-warn">
-          {kayipSayisi} kullanıcı hiçbir listede görünmüyor. Bu bir arıza —
-          ekrandaki sayı ile listeler birbirini tutmuyor.
-        </p>
-      )}
-
-      <section>
-        <h2 className="text-sm font-semibold text-ink">Ajans ekibi</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          Bütün workspace’lere erişimi olan hesaplar — reklamcılar ve yöneticiler.
-        </p>
-        {ajansEkibi.length === 0 ? (
-          <p className="mt-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
-            Org geneli erişimi olan kimse yok.
-          </p>
-        ) : (
-          <ul className="mt-3 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
-            {ajansEkibi.map((m) => (
-              <li key={m.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-ink">
-                    {m.fullName ?? m.email}
-                    {m.id === currentUserId && (
-                      <span className="ml-1.5 text-xs font-normal text-ink-muted">(siz)</span>
-                    )}
-                  </span>
-                  <span className="block truncate text-xs text-ink-muted">{m.email}</span>
-                </span>
-                <span className="shrink-0 text-xs text-ink-muted">
-                  {m.memberships.length === 0 ? (
-                    /* YETKİSİZ HESAP SESSİZ KALMIYOR: giriş yapabiliyor ama
-                       panelde hiçbir veri göremiyor ve sebebi yalnızca
-                       burada yazılı. */
-                    <span className="text-warn">yetkisi yok</span>
-                  ) : m.memberships.some((x) => x.clientId === null) ? (
-                    m.memberships
-                      .filter((x) => x.clientId === null)
-                      .map((x) => ROLE_TR[x.role])
-                      .join(', ')
-                  ) : (
-                    /* ORG GENELİ YETKİSİ YOKSA KAÇ WORKSPACE'E ATANDIĞI
-                       YAZILIYOR: rolü tek başına yazmak, üç müşteride üç
-                       farklı rolü olan bir danışmanda yanlış olurdu. */
-                    `${m.memberships.length} workspace`
-                  )}
-                </span>
-                {/* SATIRDA YALNIZCA "Düzenle". Atama üst banda taşındı:
-                    kişi başına bir bağlantı, aynı işi satır sayısı kadar
-                    tekrarlıyordu ve asıl akış "önce danışmanı seç". */}
-                {canManage && (
-                  <button
-                    type="button"
-                    onClick={() => setDuzenlenen(m)}
-                    className="shrink-0 text-xs font-medium text-brand-strong hover:underline"
-                  >
-                    Düzenle
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold text-ink">Workspace’ler</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          Bir workspace’e tıkla, o workspace’e erişimi olanları gör.
-        </p>
-        {workspaceler.length === 0 ? (
-          <p className="mt-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
-            Henüz workspace yok.
-          </p>
-        ) : (
-          <ul className="mt-3 grid items-start gap-3 md:grid-cols-2 2xl:grid-cols-3">
-            {workspaceler.map((w) => (
-              <li key={w.id}>
-                <WorkspaceKarti
-                  workspace={w}
-                  currentUserId={currentUserId}
-                  canManage={canManage}
-                  onDuzenle={setDuzenlenen}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
 
       {ekleAcik && (
         <KullaniciEkleModal clients={clients} onKapat={() => setEkleAcik(false)} />
       )}
-      {danismanEkleAcik && (
-        <DanismanEkleModal clients={clients} onKapat={() => setDanismanEkleAcik(false)} />
-      )}
       {duzenlenen && (
         <UyeDuzenleModal member={duzenlenen} onKapat={() => setDuzenlenen(null)} />
       )}
-      {atamaAcik && (
+      {atananKisi && (
         <DanismanAtaModal
-          danismanlar={ajansEkibi}
+          danismanlar={[atananKisi]}
           sirketler={sirketler}
-          onKapat={() => setAtamaAcik(false)}
+          onKapat={() => setAtananKisi(null)}
         />
       )}
     </div>
   );
 }
 
+/** Ray satırının ikinci satırı — kişinin erişimi TEK CÜMLEDE. */
+function ozet(k: KisiSatiri): string {
+  if (k.memberships.length === 0) return 'yetkisi yok';
+  const sirket = k.memberships.filter((m) => m.clientId === null).length;
+  const workspace = k.memberships.length - sirket;
+  const parcalar: string[] = [];
+  if (sirket > 0) parcalar.push(`${sirket} şirket`);
+  if (workspace > 0) parcalar.push(`${workspace} workspace`);
+  return `${k.ajans ? 'Ajans' : 'Müşteri hesabı'} · ${parcalar.join(' · ')}`;
+}
+
 /**
- * WORKSPACE KARTI — kapalıyken tek satır.
+ * SEÇİLİ KİŞİNİN ERİŞİMİ — ekranın asıl cevabı.
  *
- * Kapalı hâlde yalnızca ad ve üye sayısı duruyor; asıl soru ("kim erişiyor")
- * tıklanınca cevaplanıyor. Beş müşteride üye listelerini birden basmak,
- * ekranı yine kullanıcı listesine çevirirdi.
+ * ŞİRKET VE WORKSPACE YETKİLERİ AYRI BAŞLIKLAR ALTINDA. Aynı düz listede
+ * durduklarında `clientId: null` bir satır ile bir workspace satırı görsel
+ * olarak AYIRT EDİLEMİYORDU — oysa biri o şirketin tamamını, diğeri tek bir
+ * workspace'i açıyor ve aradaki fark bu ekranın bütün konusu.
  */
-function WorkspaceKarti({
-  workspace,
-  currentUserId,
+function KisiDetayi({
+  kisi,
+  clients,
+  sirketler,
+  kendisi,
   canManage,
   onDuzenle,
+  onSirketYetkisi,
 }: {
-  workspace: ClientOption & { uyeler: MemberRow[] };
-  currentUserId: string;
+  kisi: KisiSatiri;
+  clients: ClientOption[];
+  sirketler: Array<{ id: string; name: string }>;
+  kendisi: boolean;
   canManage: boolean;
-  onDuzenle: (m: MemberRow) => void;
+  onDuzenle: () => void;
+  onSirketYetkisi: () => void;
+}) {
+  const sirketYetkileri = kisi.memberships.filter((m) => m.clientId === null);
+  const workspaceYetkileri = kisi.memberships.filter((m) => m.clientId !== null);
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-xl border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-semibold text-ink">
+              {kisi.fullName ?? kisi.email}
+            </h2>
+            <p className="truncate text-sm text-ink-muted">{kisi.email}</p>
+            <p className="mt-1 text-[11px] text-ink-muted">
+              {kisi.ajans
+                ? 'Ajans personeli — şirketlere ve workspace’lere yetkilendirilebilir.'
+                : 'Müşteri hesabı — yalnızca tek bir workspace’e bağlı kalır.'}
+            </p>
+          </div>
+          {canManage && (
+            <button
+              type="button"
+              onClick={onDuzenle}
+              className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken"
+            >
+              Bilgileri düzenle
+            </button>
+          )}
+        </div>
+
+        {/* YETKİSİZ HESAP SESSİZ KALMIYOR: giriş yapabiliyor ama panelde
+            hiçbir veri göremiyor ve sebebi yalnızca burada yazılı. */}
+        {kisi.memberships.length === 0 && (
+          <p className="mt-3 rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">
+            Bu hesabın hiçbir yetkisi yok — giriş yapabiliyor ama panelde hiçbir
+            şey göremiyor.
+          </p>
+        )}
+      </section>
+
+      <YetkiBolumu
+        baslik="Şirket yetkileri"
+        aciklama="Bir şirkete verilen yetki o şirketin BÜTÜN workspace’lerini açar — tek tek atama gerekmiyor."
+        uyelikler={sirketYetkileri}
+        etiket={(m) => sirketler.find((o) => o.id === m.orgId)?.name ?? 'Şirket'}
+        kendisi={kendisi}
+        canManage={canManage}
+        bos="Şirket geneli yetkisi yok."
+        eylem={
+          canManage && kisi.ajans ? (
+            <button
+              type="button"
+              onClick={onSirketYetkisi}
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken"
+            >
+              + Şirkete yetki ver
+            </button>
+          ) : null
+        }
+      />
+
+      <YetkiBolumu
+        baslik="Workspace yetkileri"
+        aciklama="Tek bir workspace’e verilen erişim. Müşteri hesapları yalnızca burada bulunur."
+        uyelikler={workspaceYetkileri}
+        /*
+         * AD ÖNCE ÜYELİĞİN KENDİSİNDEN. `client` ilişkisi uçtan geliyor ve
+         * BAŞKA ŞİRKETTEKİ bir workspace'in adını da taşıyor; `clients`
+         * listesi ise yalnızca AKTİF şirketin workspace'leri. Yalnızca
+         * listeye bakmak, başka şirkette yetkisi olan bir danışmanda
+         * "Workspace" yazan anonim satırlar gösterirdi.
+         */
+        etiket={(m) =>
+          m.client?.name ?? clients.find((c) => c.id === m.clientId)?.name ?? 'Workspace'
+        }
+        kendisi={kendisi}
+        canManage={canManage}
+        bos="Tek bir workspace’e verilmiş yetki yok."
+        eylem={null}
+      />
+    </div>
+  );
+}
+
+/**
+ * Bir yetki kümesi — rol değiştirme ve kaldırma satırın yanında.
+ *
+ * İKİ BÖLÜM AYNI BİLEŞENDEN: şirket ve workspace yetkileri farklı ŞEYLER
+ * ama aynı işlemleri alıyor (rolü değiştir, kaldır). İki kopya yazmak,
+ * birinde bir gün "kendi yetkini değiştiremezsin" kuralının unutulması
+ * demekti.
+ */
+function YetkiBolumu({
+  baslik,
+  aciklama,
+  uyelikler,
+  etiket,
+  kendisi,
+  canManage,
+  bos,
+  eylem,
+}: {
+  baslik: string;
+  aciklama: string;
+  uyelikler: MemberRow['memberships'];
+  etiket: (m: MemberRow['memberships'][number]) => string;
+  kendisi: boolean;
+  canManage: boolean;
+  bos: string;
+  eylem: React.ReactNode;
 }) {
   const router = useRouter();
-  const [acik, setAcik] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -302,6 +419,8 @@ function WorkspaceKarti({
       await fn();
       startTransition(() => router.refresh());
     } catch (e) {
+      // HATA YUTULMUYOR: sessizce başarısız olan bir yetki değişikliği,
+      // kullanıcının verdiğini sandığı bir erişim demek.
       setHata(e instanceof ApiRequestError ? e.message : 'İşlem başarısız oldu.');
     } finally {
       setBusy(null);
@@ -310,111 +429,78 @@ function WorkspaceKarti({
 
   return (
     <section className="rounded-xl border border-line bg-surface">
-      <button
-        type="button"
-        onClick={() => setAcik((v) => !v)}
-        aria-expanded={acik}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-surface-sunken"
-      >
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold text-ink">{workspace.name}</span>
-          <span className="block text-[11px] text-ink-muted">
-            {workspace.uyeler.length === 0
-              ? 'erişimi olan yok'
-              : `${workspace.uyeler.length} kişi erişiyor`}
-          </span>
-        </span>
-        <span className="shrink-0 text-[11px] text-ink-muted">{acik ? 'kapat' : 'aç'}</span>
-      </button>
-
-      {acik && (
-        <div className="border-t border-line px-4 py-3">
-          {hata && <p className="mb-2 text-xs text-danger">{hata}</p>}
-
-          {workspace.uyeler.length === 0 ? (
-            /* SEBEBİ YAZILI: boş liste "kimse yok" ile "yetki verilmedi"
-               arasında ayrım yapmıyordu. */
-            <p className="text-xs text-ink-muted">
-              Bu workspace’e kimse atanmamış. Ajans ekibi zaten bütün
-              workspace’leri görüyor; buraya yalnızca o workspace’e özel erişim
-              verilenler düşüyor.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {workspace.uyeler.map((m) => {
-                const uyelik = m.memberships.find((x) => x.clientId === workspace.id)!;
-                const kendisi = m.id === currentUserId;
-
-                return (
-                  <li key={m.id} className="rounded-lg border border-line px-3 py-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-ink">
-                          {m.fullName ?? m.email}
-                        </span>
-                        <span className="block truncate text-[11px] text-ink-muted">
-                          {m.email}
-                        </span>
-                      </span>
-
-                      <select
-                        value={uyelik.role}
-                        disabled={!canManage || busy !== null || isPending || kendisi}
-                        onChange={(e) =>
-                          void calistir(`r-${uyelik.id}`, () =>
-                            apiFetch(`/memberships/${uyelik.id}`, {
-                              method: 'PATCH',
-                              body: JSON.stringify({ role: e.target.value }),
-                            }),
-                          )
-                        }
-                        className="shrink-0 rounded-lg border border-line bg-surface px-2 py-1 text-[11px] disabled:opacity-50"
-                      >
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {ROLE_TR[r as Role]}
-                          </option>
-                        ))}
-                      </select>
-
-                      {canManage && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => onDuzenle(m)}
-                            className="shrink-0 text-[11px] font-medium text-brand-strong hover:underline"
-                          >
-                            Düzenle
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busy !== null || isPending || kendisi}
-                            onClick={() =>
-                              void calistir(`d-${uyelik.id}`, () =>
-                                apiFetch(`/memberships/${uyelik.id}`, { method: 'DELETE' }),
-                              )
-                            }
-                            className="shrink-0 text-[11px] text-ink-muted transition hover:text-danger disabled:opacity-40"
-                          >
-                            Kaldır
-                          </button>
-                        </>
-                      )}
-                    </div>
-
-                    {/* KENDİ YETKİNİ DEĞİŞTİREMİYORSUN: tek yöneticinin kendini
-                        düşürmesi, panelden geri alınamayan bir kilitlenme. */}
-                    {kendisi && (
-                      <p className="mt-1 text-[10px] text-ink-muted">
-                        Kendi yetkinizi bu ekrandan değiştiremezsiniz.
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-ink">
+            {baslik}
+            <span className="ml-2 text-xs font-normal text-ink-muted">{uyelikler.length}</span>
+          </h3>
+          <p className="mt-0.5 max-w-prose text-[11px] text-ink-muted">{aciklama}</p>
         </div>
+        {eylem}
+      </header>
+
+      {hata && (
+        <p role="alert" className="border-b border-line px-4 py-2 text-xs text-danger">
+          {hata}
+        </p>
+      )}
+
+      {uyelikler.length === 0 ? (
+        <p className="px-4 py-4 text-sm text-ink-muted">{bos}</p>
+      ) : (
+        <ul className="divide-y divide-line/60">
+          {uyelikler.map((m) => (
+            <li key={m.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+              <span className="min-w-0 flex-1 truncate text-sm text-ink">{etiket(m)}</span>
+
+              <select
+                value={m.role}
+                disabled={!canManage || busy !== null || isPending || kendisi}
+                onChange={(e) =>
+                  void calistir(`r-${m.id}`, () =>
+                    apiFetch(`/memberships/${m.id}`, {
+                      method: 'PATCH',
+                      body: JSON.stringify({ role: e.target.value }),
+                    }),
+                  )
+                }
+                className="shrink-0 rounded-lg border border-line bg-surface px-2 py-1 text-[11px] disabled:opacity-50"
+              >
+                {ROLES.filter((r) => m.clientId !== null || isOrgScopedRole(r as Role)).map(
+                  (r) => (
+                    <option key={r} value={r}>
+                      {ROLE_TR[r as Role]}
+                    </option>
+                  ),
+                )}
+              </select>
+
+              {canManage && (
+                <button
+                  type="button"
+                  disabled={busy !== null || isPending || kendisi}
+                  onClick={() =>
+                    void calistir(`d-${m.id}`, () =>
+                      apiFetch(`/memberships/${m.id}`, { method: 'DELETE' }),
+                    )
+                  }
+                  className="shrink-0 text-[11px] text-ink-muted transition hover:text-danger disabled:opacity-40"
+                >
+                  Kaldır
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* KENDİ YETKİNİ DEĞİŞTİREMİYORSUN: tek yöneticinin kendini
+          düşürmesi, panelden geri alınamayan bir kilitlenme. */}
+      {kendisi && uyelikler.length > 0 && (
+        <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted">
+          Kendi yetkinizi bu ekrandan değiştiremezsiniz.
+        </p>
       )}
     </section>
   );
@@ -614,158 +700,17 @@ function KullaniciEkleModal({
   );
 }
 
-/**
- * DANIŞMAN EKLE — ajans personeli açar.
+/*
+ * ═══ "DANIŞMAN EKLE" PENCERESİ KALDIRILDI ═══
  *
- * "Kullanıcı ekle"den farkı ROL KÜMESİ: burada `client_viewer` YOK. Müşteriye
- * teslim edilen hesap o rolle açılıyor ve bir danışmanı yanlışlıkla o rolle
- * açmak, kişiyi ajans ekibi listesinden düşürüp müşteri hesabı gibi
- * göstermeye yetiyor — bu ekranda tam olarak o yaşandı.
+ * `KullaniciEkleModal` ile AYNI işi yapıyordu; tek fark rolün önceden
+ * seçili gelmesi ve `client_viewer`ın listede olmamasıydı. İki düğme yan
+ * yana durunca ekranın cevapladığı soru "kimi ekliyorum" değil "hangi
+ * düğmeye basmalıyım" oluyordu.
  *
- * KAPSAMSIZ DANIŞMAN AÇILAMIYOR ve bu sunucunun kuralı: bir kullanıcı ya bir
- * workspace’e bağlanır ya da org geneli (yalnızca Yönetici) olur. Erişimi
- * olmayan bir hesap giriş yapıp hiçbir şey göremezdi. Sonradan başka
- * workspace’lere "Danışman ata" ile bağlanıyor.
+ * Pencerenin kendisi zaten rolü ve kapsamı soruyor — yani ayrımı kullanıcı
+ * pencerede yapıyor, düğme seçerken değil.
  */
-function DanismanEkleModal({
-  clients,
-  onKapat,
-}: {
-  clients: ClientOption[];
-  onKapat: () => void;
-}) {
-  const router = useRouter();
-  const [ad, setAd] = useState('');
-  const [eposta, setEposta] = useState('');
-  const [parola, setParola] = useState('');
-  /**
-   * `org` => ŞİRKET GENELİ; değilse tek bir workspace kimliği.
-   *
-   * VARSAYILAN ŞİRKET GENELİ. Danışman şirkete bakıyor, tek bir
-   * workspace'e değil; kırk altı workspace'li bir şirkette tek tek atama,
-   * kırk altı satır ve her yeni workspace'te unutulacak bir adım demekti —
-   * unutulduğunda belirtisi "danışman bazı müşterileri göremiyor" ve
-   * sebebi hiçbir ekranda yazmıyor.
-   */
-  const [kapsam, setKapsam] = useState('org');
-  const [rol, setRol] = useState<Role>('manager');
-  const [busy, setBusy] = useState(false);
-  const [hata, setHata] = useState<string | null>(null);
-
-  const orgGeneli = kapsam === 'org';
-
-  async function ekle(): Promise<void> {
-    setBusy(true);
-    setHata(null);
-    try {
-      await apiFetch('/members', {
-        method: 'POST',
-        body: JSON.stringify({
-          email: eposta.trim(),
-          fullName: ad.trim(),
-          password: parola,
-          /*
-           * ROL ARTIK ZORLANMIYOR. Eskiden şirket geneli seçilince rol
-           * `admin`e çevriliyordu, çünkü sunucu org geneli erişimi yalnızca
-           * owner/admin'e veriyordu. O kural genişledi (`ORG_SCOPED_ROLES`)
-           * ve zorlama artık ZARARLI olurdu: "Analist" seçen kişiye sessizce
-           * YÖNETİCİ yetkisi vermek — kullanıcı açma ve workspace silme
-           * dahil.
-           */
-          role: rol,
-          clientId: orgGeneli ? null : kapsam,
-        }),
-      });
-      router.refresh();
-      onKapat();
-    } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Danışman eklenemedi.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal baslik="Danışman ekle" onKapat={onKapat}>
-      <div className="space-y-3">
-        <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
-          Ajans personeli açar — müşteri hesabı değil. Varsayılan olarak
-          ŞİRKETİN TAMAMINA erişir; tek bir workspace’e daraltmak istersen
-          kapsamdan seçebilirsin. Davet gönderilmiyor; parolayı sen
-          belirleyip kendin iletiyorsun.
-        </p>
-
-        <Alan etiket="Ad soyad" value={ad} onChange={setAd} />
-        <Alan etiket="E-posta" type="email" value={eposta} onChange={setEposta} />
-        <Alan
-          etiket="Parola (en az 12 karakter)"
-          type="password"
-          value={parola}
-          onChange={setParola}
-        />
-
-        <label className="block">
-          <span className="text-[11px] text-ink-muted">İlk kapsam</span>
-          <select
-            value={kapsam}
-            onChange={(e) => setKapsam(e.target.value)}
-            className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
-          >
-            <option value="org">Şirket geneli — bütün workspace’ler</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          {/* KAPSAMSIZ AÇILAMADIĞI YAZILI: sunucu reddediyor ve sebebi
-              formda görünmezse "neden ekleyemiyorum" olarak geri gelir. */}
-          <span className="mt-1 block text-[11px] text-ink-muted">
-            Erişimi olmayan hesap açılamıyor — en az bir kapsam gerekiyor.
-          </span>
-        </label>
-
-        {!orgGeneli && (
-          <label className="block">
-            <span className="text-[11px] text-ink-muted">Rol</span>
-            <select
-              value={rol}
-              onChange={(e) => setRol(e.target.value as Role)}
-              className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
-            >
-              {/* `client_viewer` YOK: bu rol müşteri hesabının rolü ve bir
-                  danışmanı onunla açmak, kişiyi ajans ekibinden düşürürdü. */}
-              {ROLES.filter(
-                (r) => r !== 'owner' && r !== 'admin' && r !== 'client_viewer',
-              ).map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_TR[r as Role]}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        {hata && <p className="text-xs text-danger">{hata}</p>}
-
-        <button
-          type="button"
-          onClick={() => void ekle()}
-          disabled={
-            busy ||
-            ad.trim().length < 2 ||
-            eposta.trim() === '' ||
-            parola.length < 12 ||
-            kapsam === ''
-          }
-          className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
-        >
-          {busy ? 'Ekleniyor…' : 'Danışmanı ekle'}
-        </button>
-      </div>
-    </Modal>
-  );
-}
 
 /**
  * DANIŞMAN ATA — üç adım tek ekranda: kim, hangi workspace, hangi rol.

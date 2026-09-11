@@ -104,7 +104,7 @@ export class MetricsService {
     query: MetricsQuery,
   ): Promise<{ earliestDate: string | null; latestDate: string | null }> {
     return this.prisma.withTenant(ctx, async (tx) => {
-      const filters = this.filters(query);
+      const filters = this.filters(ctx, query);
       const [row] = await tx.$queryRaw<Array<{ en_eski: Date | null; en_yeni: Date | null }>>(
         Prisma.sql`
           SELECT MIN(date) AS en_eski, MAX(date) AS en_yeni
@@ -142,7 +142,7 @@ export class MetricsService {
     const prevFrom = query.compareFrom ?? this.shift(prevTo, -(days - 1));
 
     return this.prisma.withTenant(ctx, async (tx) => {
-      const filters = this.filters(query);
+      const filters = this.filters(ctx, query);
 
       const hiddenAccounts = await this.hiddenAccountCount(tx, query);
 
@@ -291,7 +291,7 @@ export class MetricsService {
           FROM insights_daily
           WHERE date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND entity_level = ${TOTALS_LEVEL}::"EntityLevel"
-            ${this.filters(query)}
+            ${this.filters(ctx, query)}
           GROUP BY date
           ORDER BY date
         `,
@@ -391,7 +391,7 @@ export class MetricsService {
           LEFT JOIN ad_groups   ag  ON i.entity_level = 'ad'       AND ag.id = a.ad_group_id
           WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND i.entity_level = ${query.level}::"EntityLevel"
-            ${this.filters(query, 'i')}
+            ${this.filters(ctx, query, 'i')}
           GROUP BY i.entity_id, i.entity_external_id, i.platform, i.currency,
                    c.name, g.name, a.name, acc.name, gc.name, ag.name,
                    c.status, g.status, a.status, acc.status
@@ -443,9 +443,34 @@ export class MetricsService {
    * `Prisma.sql` ile birleştiriliyor, string interpolasyonu YOK — bu değerler
    * kullanıcıdan geliyor ve şablona gömmek SQL enjeksiyonu olurdu.
    */
-  private filters(query: MetricsQuery, alias = ''): Prisma.Sql {
+  private filters(ctx: TenantContext, query: MetricsQuery, alias = ''): Prisma.Sql {
     const p = alias ? `${alias}.` : '';
     const parts: Prisma.Sql[] = [];
+
+    /*
+     * ═══ MÜŞTERİ SÜZGECİ SORGUNUN İÇİNDE — RLS'E BIRAKILMIYOR ═══
+     *
+     * İzolasyonu RLS zaten sağlıyor ve bu satır onu DEĞİŞTİRMİYOR: aynı
+     * kümeyi PLANLAYICIYA GÖRÜNÜR biçimde yazıyor.
+     *
+     * Fark ölçülebilir. RLS yüklemi `app.can_access_client(client_id)` —
+     * bir FONKSİYON çağrısı. Planlayıcı onun seçiciliğini kestiremiyor ve
+     * `@@index([clientId, date DESC, entityLevel])` indeksini güvenle
+     * kullanamıyor; ajans kapsamında (elli workspace, otuz gün) sorgu
+     * bütün satırları tarıyordu. Kullanıcının tarifi "ajans tarafına
+     * tıkladığımda çok bekletiyor".
+     *
+     * SEÇİM VARSA TEK MÜŞTERİ. `can_access_client` zaten öyle daraltıyor;
+     * burada da yazmak, planlayıcıya elli yerine BİR kimlik vermek demek.
+     *
+     * BOŞ LİSTE HİÇBİR SATIR: `= ANY('{}')` false döner ve bu doğru —
+     * hiçbir workspace'e erişimi olmayan kullanıcı hiçbir metrik
+     * görmemeli. RLS de aynı sonucu veriyor.
+     */
+    const kapsam = ctx.activeClientId ? [ctx.activeClientId] : ctx.clientIds;
+    parts.push(
+      Prisma.sql`AND ${Prisma.raw(`${p}client_id`)} = ANY(${kapsam}::uuid[])`,
+    );
     if (query.platform) {
       parts.push(Prisma.sql`AND ${Prisma.raw(`${p}platform`)} = ${query.platform}::"Platform"`);
     }
@@ -596,7 +621,7 @@ export class MetricsService {
           JOIN clients cl ON cl.id = i.client_id
           WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND i.entity_level = ${TOTALS_LEVEL}::"EntityLevel"
-            ${this.filters(query, 'i')}
+            ${this.filters(ctx, query, 'i')}
           GROUP BY i.client_id, cl.name, cl.slug, i.platform, i.currency
         `,
       );
@@ -771,7 +796,7 @@ export class MetricsService {
             -- musteri kiriliminda ayni satirlar zaten eleniyor ve iki ekranin
             -- farkli toplam gostermesi, ikisinin de yanlis sanilmasi demek.
             AND cl.status <> 'archived'
-            ${this.filters(query, 'i')}
+            ${this.filters(ctx, query, 'i')}
           GROUP BY cl.org_id, i.platform, i.currency
         `,
       );
