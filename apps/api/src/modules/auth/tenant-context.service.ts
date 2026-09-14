@@ -171,6 +171,9 @@ export class TenantContextService {
         platformAdmin: true,
         organization: { select: { status: true, managerAccountId: true } },
         managerMemberships: {
+          // SIRA BELİRLİ: aşağıdaki son çare `[0]`ı okuyor ve sırasız bir
+          // ilişki seçiminde `[0]` veritabanının keyfine kalır.
+          orderBy: { createdAt: 'asc' },
           select: {
             id: true,
             role: true,
@@ -257,10 +260,32 @@ export class TenantContextService {
      * çerez bayat kalıyor; doğrulamadan geçirmek, `app.current_manager
      * _account_id()`yi kullanıcının elindeki bir değerle sürmek demekti.
      */
+    /*
+     * VARSAYILAN ÜST HESAP = EV ŞİRKETİNİN HESABI, "ilk üyelik" DEĞİL.
+     *
+     * Çerez yokken (taze giriş) ya da geçersizken hangi hesaba düşüleceği
+     * bir süre `gecerliUyelikler[0]` idi ve ilişki seçiminde `orderBy` de
+     * yoktu: iki üst hesaba üye olan platform sahibi girişte
+     * veritabanının keyfine göre birine düşüyordu. Şemadaki eski yorumun
+     * uyardığı sessiz seçimin ta kendisi.
+     *
+     * Ev şirketinin bağlı olduğu hesap her zaman "kendi ajansı"; oraya
+     * düşmek ne ziyaret ne sürpriz. O hesapta üyelik yoksa üyeliklerin
+     * (artık tarihe göre) ilki, o da yoksa platform listesinin ilki.
+     */
+    const evHesabiUyeligi = gecerliUyelikler.find(
+      (m) => m.managerAccountId === user.organization.managerAccountId,
+    );
+    const varsayilanUstHesapId =
+      evHesabiUyeligi?.managerAccountId ??
+      gecerliUyelikler[0]?.managerAccountId ??
+      platformHesaplari[0]?.id ??
+      null;
+
     const aktifUstHesapId =
       requestedManagerAccountId && secilebilirUstHesapIdler.has(requestedManagerAccountId)
         ? requestedManagerAccountId
-        : (gecerliUyelikler[0]?.managerAccountId ?? platformHesaplari[0]?.id ?? null);
+        : varsayilanUstHesapId;
 
     /*
      * AKTİF ÜST HESAP — üyelikten ya da (platform sahibinde) doğrudan
@@ -305,7 +330,7 @@ export class TenantContextService {
        * (`switch-manager` böyle bir hesaba girerken ilk şirketi açıyor;
        * burası yalnızca bayat/elle yazılmış çerezin son çaresi.)
        */
-      secim = await hesapVeKardesler(gecerliUyelikler[0]?.managerAccountId ?? null);
+      secim = await hesapVeKardesler(varsayilanUstHesapId);
     }
     const { uyelik, ustHesap, kardesSirketler, ziyaret } = secim;
 

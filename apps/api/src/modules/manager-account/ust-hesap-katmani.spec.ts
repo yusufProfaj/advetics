@@ -336,6 +336,32 @@ describe('KRİTİK: üst hesap hiçbir zaman ŞİRKETSİZ kalmıyor', () => {
   });
 });
 
+describe('KRİTİK: oturumu kuran HER uç üst hesabı taşıyor', () => {
+  /*
+   * ═══ ÜRETİMDE YAŞANAN ARIZA ═══
+   *
+   * `switch-manager` çerezi yazıyordu ama `GET /auth/session`, `switch-org`
+   * ve `switch-client` `buildSession`'ı üst hesap kimliği OLMADAN
+   * çağırıyordu. Üst bar (oturum) üyelikten gelen ilk hesaba düşüyor,
+   * sayfalar (guard, çerezi okuyor) diğer hesaba gidiyordu: aynı ekranda
+   * iki üst hesap. Seçici Profaj'ı "seçili" sanıp tıklamayı yutuyor,
+   * kullanıcı geri geçemiyordu; Platform Bağlantıları da öbür hesabın
+   * (boş) sayfasını gösteriyordu — "profaj reklamcılığın bağlantısı gitti".
+   */
+  it('controller’daki her `buildSession` çağrısı 4 argüman geçiyor', () => {
+    const cagrilar = [...CONTROLLER_AUTH.matchAll(/this\.auth\.buildSession\(([^;]*?)\);/gs)].map(
+      (m) => m[1]!,
+    );
+    expect(cagrilar.length, 'hiç çağrı bulunamadı — tarama boşa düştü').toBeGreaterThanOrEqual(4);
+    for (const args of cagrilar) {
+      // Dördüncü argüman ya doğrudan çerezden çözülen değer ya da geçilen hedef.
+      expect(args, `üst hesap taşımayan çağrı: ${args}`).toMatch(
+        /ctx\.managerAccountId|dto\.managerAccountId/,
+      );
+    }
+  });
+});
+
 describe('KRİTİK: platform sahipliği PANELDEN verilemiyor', () => {
   it('hiçbir uç `platform_admin` YAZMIYOR', () => {
     /*

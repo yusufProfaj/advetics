@@ -151,7 +151,19 @@ export class AuthController {
      * yanıtı `tumSirketler: false` dönüyor ve panel "Advetics" yazıyordu.
      * Başlık ile gövdenin ayrışması, bu depoda bir kez sızıntı sanıldı.
      */
-    return this.auth.buildSession(ctx.userId, ctx.activeClientId, orgSecimi(ctx));
+    /*
+     * ÜST HESAP DA TAŞINIYOR — `ctx.managerAccountId` guard'ın ÇEREZDEN çözdüğü
+     * değer. Bir süre burada yoktu: üst bar (bu uç) üyelikten gelen ilk
+     * hesaba düşüyor, sayfalar (guard) çerezdeki hesaba gidiyordu. Aynı
+     * ekranda iki üst hesap; seçici Profaj'ı "seçili" sanıp tıklamayı
+     * yutuyordu — kullanıcı geri geçemiyordu.
+     */
+    return this.auth.buildSession(
+      ctx.userId,
+      ctx.activeClientId,
+      orgSecimi(ctx),
+      ctx.managerAccountId,
+    );
   }
 
   /**
@@ -176,7 +188,7 @@ export class AuthController {
     const hedef = await this.auth.assertOrgAccess(ctx, dto.organizationId);
     setActiveOrgCookie(res, this.config, hedef);
     setActiveClientCookie(res, this.config, null);
-    return this.auth.buildSession(ctx.userId, null, hedef);
+    return this.auth.buildSession(ctx.userId, null, hedef, ctx.managerAccountId);
   }
 
   /**
@@ -254,7 +266,7 @@ export class AuthController {
 
     setActiveOrgCookie(res, this.config, yeniSecim);
     setActiveClientCookie(res, this.config, dto.clientId);
-    return this.auth.buildSession(ctx.userId, dto.clientId, yeniSecim);
+    return this.auth.buildSession(ctx.userId, dto.clientId, yeniSecim, ctx.managerAccountId);
   }
 
   // ---------------------------------------------------------------------------

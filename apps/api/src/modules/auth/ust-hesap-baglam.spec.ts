@@ -65,6 +65,8 @@ interface Senaryo {
   kardesUyelikler?: Array<{ orgId: string; clientId: string | null; role: string }>;
   /** Advetics'i işleten taraf mı — varsayılan HAYIR (bkz. fikstür). */
   platformAdmin?: boolean;
+  /** `ustHesap`tan ÖNCE listelenen ek üyelikler — veritabanı sırasını taklit ediyor. */
+  onceUyelikler?: Array<{ id: string; role: string }>;
   /**
    * EV ŞİRKETİNİN bağlı olduğu üst hesap. Varsayılan `ustHesap.id`
    * (kendi ajansı). Farklı bir değer ZİYARET hâlini kuruyor: platform
@@ -94,6 +96,18 @@ function servis(s: Senaryo) {
         },
         managerMemberships: s.ustHesap
           ? [
+              ...(s.onceUyelikler ?? []).map((u, i) => ({
+                id: `mm-once-${i}`,
+                role: u.role,
+                managerAccountId: u.id,
+                managerAccount: {
+                  id: u.id,
+                  name: `${u.id} Danışmanlık`,
+                  slug: u.id,
+                  status: 'active',
+                  paket: 'ajans' as const,
+                },
+              })),
               {
                 id: 'mm-1',
                 role: s.ustHesap.role,
@@ -583,5 +597,52 @@ describe('ZİYARET — platform sahibi ev şirketinin bağlı OLMADIĞI hesapta'
     const r = await servis(ZIYARET).resolve('user-1', null, null, UST_A);
     expect(r.context.orgId).toBe(ORG_A1);
     expect(r.erisilebilirSirketler.map((o) => o.id)).toEqual([ORG_A1, ORG_A2]);
+  });
+});
+
+describe('VARSAYILAN ÜST HESAP — çerez yokken', () => {
+  it('KRİTİK: ev şirketinin hesabına düşüyor, veritabanının İLK satırına değil', async () => {
+    /*
+     * İki hesaba üye platform sahibi; üyelik listesinde UST_B ÖNCE geliyor
+     * (veritabanı böyle döndürebilir). Ev şirketi UST_A'nın altında.
+     * Eski davranış `[0]` = UST_B'ye düşüyordu — girişte yanlış hesapta
+     * uyanmak.
+     */
+    const r = await servis({
+      platformAdmin: true,
+      onceUyelikler: [{ id: UST_B, role: 'owner' }],
+      ustHesap: { id: UST_A, role: 'owner' },
+      evUstHesabi: UST_A,
+    }).resolve('user-1', null, null, null);
+    expect(r.context.managerAccountId).toBe(UST_A);
+    expect(r.context.orgId).toBe(ORG_A1);
+  });
+
+  it('KRİTİK: üyelik listesi TARİHE göre sıralı — "ilki" veritabanının keyfine bırakılmıyor', () => {
+    /*
+     * Mock üyelikleri zaten sıralı verdiği için `orderBy`nin kalkması burada
+     * davranışla YAKALANAMAZ; kaynak taramasıyla kilitleniyor. Sırasız bir
+     * ilişki seçiminde `[0]` her sorguda farklı satır olabilir.
+     */
+    const KAYNAK = readFileSync(join(__dirname, 'tenant-context.service.ts'), 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
+    const bas = KAYNAK.indexOf('managerMemberships: {');
+    expect(bas, 'seçim bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf('select: {', bas));
+    expect(dilim).toContain("orderBy: { createdAt: 'asc' }");
+  });
+
+  it('BOŞA DÜŞME BEKÇİSİ: ev şirketinin hesabında üyelik YOKSA ilk üyelik', async () => {
+    // Tercih kuralı yalnızca ev hesabı üyeliği varken devreye giriyor;
+    // yoksa yine belirli bir sıraya (tarih) göre ilki.
+    const r = await servis({
+      platformAdmin: true,
+      onceUyelikler: [{ id: UST_B, role: 'owner' }],
+      ustHesap: { id: UST_A, role: 'owner' },
+      evUstHesabi: UST_C,
+    }).resolve('user-1', null, null, null);
+    expect(r.context.managerAccountId).toBe(UST_B);
   });
 });
