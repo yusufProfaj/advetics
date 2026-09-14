@@ -248,7 +248,10 @@ describe('KRİTİK: aktif üst hesap ÇEREZDEN ve DOĞRULANIYOR', () => {
     const bas = AUTH.indexOf('async assertManagerAccountAccess(');
     const dilim = AUTH.slice(bas, AUTH.indexOf('\n  }', bas));
     expect(dilim.length, 'gövde bulunamadı — tarama boşa düştü').toBeGreaterThan(200);
-    expect(dilim).toContain('if (ctx.platformAdmin) return;');
+    // Erken `return` bloğa dönüştü (şirketsiz hesaba girerken ilk şirket
+    // açılıyor); kural aynı: platform sahibi üyelik sorgusuna hiç gelmiyor.
+    expect(dilim).toContain('if (ctx.platformAdmin) {');
+    expect(dilim.indexOf('if (ctx.platformAdmin) {')).toBeLessThan(dilim.indexOf('managerMembership.findFirst'));
     expect(dilim).toContain('isOrgScopedRole(uyelik.role as Role)');
   });
 
@@ -284,6 +287,54 @@ function dataBloklari(kaynak: string): string[] {
   }
   return bloklar;
 }
+
+describe('KRİTİK: üst hesap hiçbir zaman ŞİRKETSİZ kalmıyor', () => {
+  it('platform sahibi kurunca İLK ŞİRKET aynı transaction’da açılıyor', () => {
+    // Şirketsiz hesaba girilince bağlam ev şirketine (Advetics) düşüyor ve
+    // Profaj'ın bağlantıları müşterinin hesabında görünüyordu.
+    const bas = KAYNAK.indexOf('async create(');
+    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf('\n  }', bas));
+    /*
+     * İDDİA DALA ÇAPALI, VARLIĞA DEĞİL. İlk yazımda yalnızca çağrının
+     * gövdede geçtiğine bakıyordum ve MUTASYONLA BOŞA DÜŞTÜ: dalı
+     * `else if (false)` yapınca çağrı ölü kodda durmaya devam etti, tarama
+     * yine buldu. Çağrı, `else` bloğunun İLK ifadesi olmak zorunda —
+     * yorumlar sıyrıldığı için arada yalnızca boşluk kalıyor.
+     */
+    expect(dilim).toMatch(
+      /\} else \{\s*await ilkSirketAc\(tx, \{ managerAccountId: hesap\.id, ad: input\.name/,
+    );
+    expect(dilim).not.toContain('else if (false)');
+  });
+
+  it('KRİTİK: şirketsiz hesaba GEÇERKEN de ilk şirket açılıyor — üretimde böyle hesap var', () => {
+    const bas = AUTH.indexOf('async assertManagerAccountAccess(');
+    const dilim = AUTH.slice(bas, AUTH.indexOf('\n  }', bas));
+    expect(dilim).toContain("where: { managerAccountId, status: 'active' }");
+    // Aynı ders: çağrı `if (!sirketVar)` KOŞULUNUN içinde — koşul `false`
+    // yapıldığında çağrı yine gövdedeydi ve varlık iddiası geçmişti.
+    expect(dilim).toMatch(
+      /if \(!sirketVar\) \{[\s\S]{0,400}?ilkSirketAc\(tx, \{ managerAccountId, ad: kayit\.name, userId: ctx\.userId \}\)/,
+    );
+    // Heal YALNIZCA platform sahibinde: normal üye kurulmamış hesaba giremez.
+    expect(dilim.indexOf('if (ctx.platformAdmin) {')).toBeLessThan(dilim.indexOf('ilkSirketAc('));
+  });
+
+  it('KRİTİK: ziyarette ŞİRKET geçişi kardeşle sınırlı — üyelik yolu kapalı', () => {
+    /*
+     * Bağlamdaki kural uçta da uygulanıyor; ayrışsaydı `switch-org` ile
+     * Advetics müşterinin üst hesabı altında açılırdı.
+     */
+    const bas = AUTH.indexOf('async assertOrgAccess(');
+    const dilim = AUTH.slice(bas, AUTH.indexOf('\n  }', bas));
+    expect(dilim).toContain('ev.organization.managerAccountId !== aktifUstHesapId');
+    expect(dilim).toContain('Bu şirket bu üst hesabın altında değil');
+    // Kapı üyelik sorgusundan ÖNCE.
+    expect(dilim.indexOf('Bu şirket bu üst hesabın altında değil')).toBeLessThan(
+      dilim.indexOf('const kendiUyeligi'),
+    );
+  });
+});
 
 describe('KRİTİK: platform sahipliği PANELDEN verilemiyor', () => {
   it('hiçbir uç `platform_admin` YAZMIYOR', () => {

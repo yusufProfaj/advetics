@@ -23,6 +23,8 @@ import { TenantContextService } from './tenant-context.service';
 
 const UST_A = 'ust-a';
 const UST_B = 'ust-b';
+/** ŞİRKETSİZ üst hesap — ziyaret edilemez, çerez bayat sayılır. */
+const UST_C = 'ust-c';
 
 const ORG_A1 = 'org-a1';
 const ORG_A2 = 'org-a2';
@@ -63,6 +65,12 @@ interface Senaryo {
   kardesUyelikler?: Array<{ orgId: string; clientId: string | null; role: string }>;
   /** Advetics'i işleten taraf mı — varsayılan HAYIR (bkz. fikstür). */
   platformAdmin?: boolean;
+  /**
+   * EV ŞİRKETİNİN bağlı olduğu üst hesap. Varsayılan `ustHesap.id`
+   * (kendi ajansı). Farklı bir değer ZİYARET hâlini kuruyor: platform
+   * sahibi, ev şirketinin bağlı OLMADIĞI bir hesapta.
+   */
+  evUstHesabi?: string | null;
 }
 
 function servis(s: Senaryo) {
@@ -80,7 +88,10 @@ function servis(s: Senaryo) {
          * sessizce geçirirdi — platform sahibi zaten her hesaba geçebiliyor.
          */
         platformAdmin: s.platformAdmin ?? false,
-        organization: { status: 'active' },
+        organization: {
+          status: 'active',
+          managerAccountId: s.evUstHesabi === undefined ? (s.ustHesap?.id ?? null) : s.evUstHesabi,
+        },
         managerMemberships: s.ustHesap
           ? [
               {
@@ -134,7 +145,7 @@ function servis(s: Senaryo) {
      */
     managerAccount: {
       findMany: async (args: { where?: { id?: { in: string[] } } } = {}) => {
-        const hepsi = [UST_A, UST_B].map((id) => ({
+        const hepsi = [UST_A, UST_B, UST_C].map((id) => ({
           id,
           name: `${id} Danışmanlık`,
           slug: id,
@@ -146,12 +157,28 @@ function servis(s: Senaryo) {
       },
     },
     organization: {
-      // SÜZGEÇ GERÇEKTEN UYGULANIYOR — hepsini döndürmek testi anlamsız kılardı.
-      findMany: async (args: { where: { managerAccountId: string; status: string } }) =>
-        ORGLAR.filter(
-          (o) =>
-            o.managerAccountId === args.where.managerAccountId && o.status === args.where.status,
-        ).map((o) => ({ id: o.id, name: o.name, slug: o.slug })),
+      /*
+       * İKİ SORGU ŞEKLİ: kardeşler (`managerAccountId`) ve seçici listesi
+       * (`id: { in }`). İkincisi uzun süre mock'ta YOKTU ve süzgeç
+       * `undefined === managerAccountId` ile boş dönüyordu — hiçbir test
+       * `erisilebilirSirketler`i sormadığı için boşluk görünmedi. Ziyaret
+       * testleri sorunca çıktı. Bilinmeyen şekil PATLIYOR, boş dönmüyor.
+       */
+      findMany: async (args: {
+        where: { managerAccountId?: string; id?: { in: string[] }; status: string };
+      }) => {
+        const w = args.where;
+        const aday = w.managerAccountId !== undefined
+          ? ORGLAR.filter((o) => o.managerAccountId === w.managerAccountId)
+          : w.id !== undefined
+            ? ORGLAR.filter((o) => w.id!.in.includes(o.id))
+            : (() => {
+                throw new Error(`organization.findMany: tanınmayan where ${JSON.stringify(w)}`);
+              })();
+        return aday
+          .filter((o) => o.status === w.status)
+          .map((o) => ({ id: o.id, name: o.name, slug: o.slug }));
+      },
     },
     client: {
       /*
@@ -497,5 +524,64 @@ describe('MOD OTURUM YANITINDA KAYBOLMUYOR', () => {
     const govde = metot(CONTROLLER, 'async switchClient(');
     expect(govde).toContain('dto.clientId === null');
     expect(govde).toContain('orgSecimi(ctx)');
+  });
+});
+
+describe('ZİYARET — platform sahibi ev şirketinin bağlı OLMADIĞI hesapta', () => {
+  /*
+   * ═══ ÜRETİMDE YAŞANAN ARIZA ═══
+   *
+   * Platform sahibi yeni üst hesap kurup içine geçti; bağlam ev şirketini
+   * (Advetics) hem izinli hem varsayılan saydı. Oturum `{üst hesap: YENİ,
+   * şirket: ADVETICS}` gibi tutarsız bir hâle geldi ve `/connections`
+   * `ctx.orgId` ile listelediği için Profaj'ın platform bağlantıları yeni
+   * hesapta göründü. Kullanıcının cümlesi: *"profaj reklamcılıkta bulunan
+   * platform bağlantısı yeni üst hesaba geçiyor."*
+   */
+  const ZIYARET: Senaryo = {
+    platformAdmin: true,
+    ustHesap: { id: UST_A, role: 'owner' },
+    evUstHesabi: UST_A,
+  };
+
+  it('KRİTİK: aktif şirket EV DEĞİL, ziyaret edilen hesabın kardeşi', async () => {
+    const r = await servis(ZIYARET).resolve('user-1', null, null, UST_B);
+    expect(r.context.managerAccountId).toBe(UST_B);
+    expect(r.context.orgId).toBe(ORG_B1);
+    expect(r.availableClients.map((c) => c.id)).toEqual(['ws-b1']);
+  });
+
+  it('KRİTİK: ziyarette ev şirketi İSTENSE de açılmıyor', async () => {
+    // Çerezde `adv_org=ADVETICS` kalmış olabilir; ziyarette o kimlik izinli
+    // değil ve kardeşe düşmeli — ev şirketine değil.
+    const r = await servis(ZIYARET).resolve('user-1', null, ORG_A1, UST_B);
+    expect(r.context.orgId).toBe(ORG_B1);
+  });
+
+  it('KRİTİK: seçici de yalnızca kardeşleri listeliyor', async () => {
+    // Ekranda görünen = geçilebilen. Ev şirketi seçicide dursaydı tıklanınca
+    // ya reddedilir ya da sızıntı yeniden açılırdı.
+    const r = await servis(ZIYARET).resolve('user-1', null, null, UST_B);
+    expect(r.erisilebilirSirketler.map((o) => o.id)).toEqual([ORG_B1]);
+  });
+
+  it('KRİTİK: ŞİRKETSİZ hesaba ziyaret bayat çerez sayılıyor — üyeliğe düşüyor', async () => {
+    /*
+     * Girilecek şirket yokken ev şirketini aktif yapmak sızıntının ta
+     * kendisi. `switch-manager` böyle hesaba girerken ilk şirketi açıyor;
+     * burası elle yazılmış/bayat çerezin son çaresi ve SESSİZ DEĞİL —
+     * `managerAccountId` yanıtta üyeliktekini gösteriyor.
+     */
+    const r = await servis(ZIYARET).resolve('user-1', null, null, UST_C);
+    expect(r.context.managerAccountId).toBe(UST_A);
+    expect(r.context.orgId).toBe(ORG_A1);
+  });
+
+  it('BOŞA DÜŞME BEKÇİSİ: KENDİ hesabında davranış DEĞİŞMEDİ', async () => {
+    // Ziyaret dalı yanlışlıkla herkese uygulansaydı ajans sahibi kendi ev
+    // şirketine düşemezdi. Kendi hesabında ev şirketi hâlâ varsayılan.
+    const r = await servis(ZIYARET).resolve('user-1', null, null, UST_A);
+    expect(r.context.orgId).toBe(ORG_A1);
+    expect(r.erisilebilirSirketler.map((o) => o.id)).toEqual([ORG_A1, ORG_A2]);
   });
 });

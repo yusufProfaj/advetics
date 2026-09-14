@@ -578,6 +578,14 @@ kurduğu her hesaba geçebiliyor. Yeni hesap `/ayarlar/ust-hesap` sayfasındaki
 kurulunca o hesaba geçilir. Kendi şirketi o hesaba BAĞLANMIYOR — Advetics'in
 kendi organizasyonu müşterinin portföyüne girmiyor.
 
+Yeni hesap **ilk şirketiyle birlikte** açılıyor (üst hesabın adıyla; sonra
+yeniden adlandırılır). Şirketsiz bir üst hesaba girilemiyor: bağlamın bir
+şirketi olmak zorunda ve girilecek şirket yokken çözüm ev şirketine (Advetics)
+düşüyordu — Profaj'ın platform bağlantıları müşterinin hesabında görünüyordu.
+Daha önce şirketsiz açılmış bir hesaba ilk girişte ilk şirket kendiliğinden
+açılıyor. Platform sahibi kendi şirketinin bağlı OLMADIĞI bir hesaptayken
+("ziyaret") ev şirketi ne seçicide görünür ne çerezle açılabilir.
+
 Paket (Başlangıç 1 şirket · 2 reklam hesabı / Büyüme 5 · 10 / Ajans sınırsız)
 aynı karttan **Düzenle** ile değiştiriliyor ve yalnızca platform sahibi
 değiştirebiliyor; sayılar `packages/shared/src/constants/paketler.ts` içinde.

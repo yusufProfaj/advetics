@@ -24,6 +24,7 @@ import { TenantContextService } from './tenant-context.service';
 import { TokenService, type IssuedTokens } from './token.service';
 import { ARGON_OPTIONS } from '../../common/utils/password-hash';
 import { TUM_SIRKETLER, isOrgScopedRole } from '@advetics/shared';
+import { ilkSirketAc } from '../manager-account/ilk-sirket';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { mailGonder } from '../email/mail-gonderici';
 import { sifirlamaMailiOlustur } from './sifre-sifirlama-maili';
@@ -346,6 +347,21 @@ export class AuthService {
         select: { id: true },
       });
       if (kardes) return kardes.id;
+
+      /*
+       * ZİYARETTE ÜYELİK YOLU KAPALI. Platform sahibi kendi ev şirketinin
+       * bağlı OLMADIĞI bir üst hesaptayken, Advetics'teki üyeliği ona
+       * Advetics'i o üst hesabın ALTINDA açtırırdı — `tenant-context`teki
+       * sızıntının uç tarafından tekrarı. Kural bağlamla BİREBİR aynı:
+       * ziyarette yalnızca kardeşler.
+       */
+      const ev = await this.admin.user.findUnique({
+        where: { id: ctx.userId },
+        select: { organization: { select: { managerAccountId: true } } },
+      });
+      if (ev && ev.organization.managerAccountId !== aktifUstHesapId) {
+        throw new BadRequestException('Bu şirket bu üst hesabın altında değil');
+      }
     }
 
     const kendiUyeligi = await this.admin.membership.findFirst({
@@ -380,7 +396,31 @@ export class AuthService {
     });
     if (!hesap) throw new BadRequestException('Bu üst hesap bulunamadı');
 
-    if (ctx.platformAdmin) return;
+    if (ctx.platformAdmin) {
+      /*
+       * ŞİRKETSİZ HESABA GİRERKEN İLK ŞİRKET AÇILIYOR.
+       *
+       * Üretimde böyle bir hesap VAR: önceki sürüm platform sahibine ev
+       * şirketini bağlamadan hesap açıyordu ve içine girilince bağlam
+       * Advetics'e düşüyordu. Reddetmek, kimsenin giremediği için kimsenin
+       * şirket ekleyemediği bir hesap bırakırdı. Gerekçenin tamamı
+       * `ilk-sirket.ts` içinde.
+       */
+      const sirketVar = await this.admin.organization.findFirst({
+        where: { managerAccountId, status: 'active' },
+        select: { id: true },
+      });
+      if (!sirketVar) {
+        const kayit = await this.admin.managerAccount.findUniqueOrThrow({
+          where: { id: managerAccountId },
+          select: { name: true },
+        });
+        await this.admin.$transaction((tx) =>
+          ilkSirketAc(tx, { managerAccountId, ad: kayit.name, userId: ctx.userId }),
+        );
+      }
+      return;
+    }
 
     const uyelik = await this.admin.managerMembership.findFirst({
       where: { userId: ctx.userId, managerAccountId },

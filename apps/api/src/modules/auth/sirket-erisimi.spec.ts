@@ -123,9 +123,12 @@ describe('KRİTİK: seçicide görünen = geçilebilen', () => {
      * üyeliği OLMAYAN kullanıcıya tıklanınca REDDEDİLEN bir satır
      * göstermek demekti — `assertOrgAccess` o şirketi kabul etmiyor.
      */
-    expect(KAYNAK).toContain('const secilebilirOrgIdler = new Set<string>([');
+    // Küme artık `ziyaret ? kardeşler : [kardeşler, üyelikler]` — iki dal da
+    // ev şirketini dışarıda bırakıyor; iddia iki dalı birden kapsıyor.
+    expect(KAYNAK).toContain('const secilebilirOrgIdler = new Set<string>(');
     const bas = KAYNAK.indexOf('const secilebilirOrgIdler');
-    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf(']);', bas));
+    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf(');', bas));
+    expect(dilim.length, 'dilim boş — tarama boşa düştü').toBeGreaterThan(80);
     expect(dilim).toContain('kardesSirketler.map((o) => o.id)');
     expect(dilim).toContain('uyelikOrgIdleri');
     expect(dilim).not.toContain('user.orgId');
@@ -173,9 +176,16 @@ describe('KRİTİK: giriş ÜYELİĞİN OLDUĞU şirkete düşüyor', () => {
       'const evdeUyelikVar = user.memberships.some((m) => m.orgId === user.orgId)',
     );
     expect(KAYNAK).toContain('izinliOrgIdler.has(m.orgId)');
-    expect(KAYNAK).toContain(
-      "evdeUyelikVar || ustHesap !== null ? user.orgId : (uyelikliOrg ?? user.orgId)",
+    /*
+     * İFADE ÜÇLÜ TERNARY OLDU: en dışta ZİYARET dalı (platform sahibi, ev
+     * şirketinin bağlı OLMADIĞI üst hesapta → ilk kardeş), altında bu
+     * kural DEĞİŞMEDEN duruyor. Boşluğa duyarsız aranıyor; satır kırılımı
+     * bir kural değil.
+     */
+    expect(KAYNAK).toMatch(
+      /evdeUyelikVar \|\| ustHesap !== null\s*\? user\.orgId\s*: \(uyelikliOrg \?\? user\.orgId\)/,
     );
+    expect(KAYNAK).toMatch(/ziyaret\s*\? \(kardesSirketler\[0\]\?\.id \?\? user\.orgId\)/);
   });
 
   it('KRİTİK: ÜST HESABI OLAN için ev şirketi öncelikli kalıyor', () => {

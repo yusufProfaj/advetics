@@ -169,7 +169,7 @@ export class TenantContextService {
         fullName: true,
         status: true,
         platformAdmin: true,
-        organization: { select: { status: true } },
+        organization: { select: { status: true, managerAccountId: true } },
         managerMemberships: {
           select: {
             id: true,
@@ -262,30 +262,52 @@ export class TenantContextService {
         ? requestedManagerAccountId
         : (gecerliUyelikler[0]?.managerAccountId ?? platformHesaplari[0]?.id ?? null);
 
-    const uyelik = gecerliUyelikler.find((m) => m.managerAccountId === aktifUstHesapId) ?? null;
-
     /*
      * AKTİF ÜST HESAP — üyelikten ya da (platform sahibinde) doğrudan
      * tablodan. İkisini tek değerde birleştirmek, aşağıdaki her kullanımın
      * "hangisiydi" sorusunu sormamasını sağlıyor.
      */
-    const aktifHesapKaydi =
-      uyelik?.managerAccount ??
-      platformHesaplari.find((h) => h.id === aktifUstHesapId) ??
-      null;
+    const hesapVeKardesler = async (id: string | null) => {
+      const uyelik = gecerliUyelikler.find((m) => m.managerAccountId === id) ?? null;
+      const kayit =
+        uyelik?.managerAccount ?? platformHesaplari.find((h) => h.id === id) ?? null;
+      const ustHesap =
+        kayit === null ? null : { managerAccountId: kayit.id, managerAccount: kayit };
+      const kardesSirketler = ustHesap
+        ? await this.db.organization.findMany({
+            where: { managerAccountId: ustHesap.managerAccountId, status: 'active' },
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true, slug: true },
+          })
+        : [];
+      /*
+       * ═══ ZİYARET: EV ŞİRKETİ BU ÜST HESABIN ALTINDA DEĞİL ═══
+       *
+       * Platform sahibi, kendi ev şirketinin (Advetics) bağlı OLMADIĞI bir
+       * üst hesaba geçebiliyor. O hâlde ev şirketi ne izinli ne varsayılan
+       * olabilir; aksi hâlde "yeni müşterinin hesabına giren" platform
+       * sahibi aslında Advetics'in verisine bakar — ve Profaj'ın platform
+       * bağlantıları müşterinin hesabında görünürdü. Kullanıcının bildirdiği
+       * arıza birebir buydu.
+       */
+      const ziyaret =
+        ustHesap !== null && user.organization.managerAccountId !== ustHesap.managerAccountId;
+      return { uyelik, ustHesap, kardesSirketler, ziyaret };
+    };
 
-    const ustHesap =
-      aktifHesapKaydi === null
-        ? null
-        : { managerAccountId: aktifHesapKaydi.id, managerAccount: aktifHesapKaydi };
-
-    const kardesSirketler = ustHesap
-      ? await this.db.organization.findMany({
-          where: { managerAccountId: ustHesap.managerAccountId, status: 'active' },
-          orderBy: { name: 'asc' },
-          select: { id: true, name: true, slug: true },
-        })
-      : [];
+    let secim = await hesapVeKardesler(aktifUstHesapId);
+    if (secim.ziyaret && secim.kardesSirketler.length === 0) {
+      /*
+       * ŞİRKETSİZ HESABA ZİYARET GEÇERSİZ BİR SEÇİM — bayat çerezle aynı
+       * kural: sessizce ev şirketine düşmek yerine ÜYELİKTEN gelen ilk
+       * hesaba düşülüyor ve bu oturum yanıtında görünüyor. Girilecek şirket
+       * yokken ev şirketini aktif yapmak yukarıdaki sızıntının ta kendisi.
+       * (`switch-manager` böyle bir hesaba girerken ilk şirketi açıyor;
+       * burası yalnızca bayat/elle yazılmış çerezin son çaresi.)
+       */
+      secim = await hesapVeKardesler(gecerliUyelikler[0]?.managerAccountId ?? null);
+    }
+    const { uyelik, ustHesap, kardesSirketler, ziyaret } = secim;
 
     /*
      * İZİN LİSTESİ VERİTABANINDAN HESAPLANIYOR, istekten değil. `activeOrgId`
@@ -312,11 +334,16 @@ export class TenantContextService {
      * VERİTABANINDAN hesaplanıyor, istekten değil.
      */
     const uyelikOrgIdleri = user.memberships.map((m) => m.orgId);
-    const izinliOrgIdler = new Set<string>([
-      user.orgId,
-      ...kardesSirketler.map((o) => o.id),
-      ...uyelikOrgIdleri,
-    ]);
+    /*
+     * ZİYARETTE YALNIZCA KARDEŞLER. Ev şirketi ve başka hesaplardaki
+     * üyelikler bu ağacın dışında; listeye girseler `?org=` çerezi ile
+     * Advetics'in verisi müşterinin üst hesabı altında açılırdı.
+     */
+    const izinliOrgIdler = new Set<string>(
+      ziyaret
+        ? kardesSirketler.map((o) => o.id)
+        : [user.orgId, ...kardesSirketler.map((o) => o.id), ...uyelikOrgIdleri],
+    );
 
     /*
      * "TÜM ŞİRKETLER" MODU — üst hesabı OLANLARA açık, başkasına değil.
@@ -369,8 +396,13 @@ export class TenantContextService {
     const evdeUyelikVar = user.memberships.some((m) => m.orgId === user.orgId);
     const uyelikliOrg = user.memberships.find((m) => izinliOrgIdler.has(m.orgId))?.orgId;
 
-    const varsayilanOrg =
-      evdeUyelikVar || ustHesap !== null ? user.orgId : (uyelikliOrg ?? user.orgId);
+    // ZİYARETTE varsayılan ilk kardeş — yukarıda boş olamayacağı garanti
+    // edildi; `?? user.orgId` yalnızca tipin gereği, o dala düşülmüyor.
+    const varsayilanOrg = ziyaret
+      ? (kardesSirketler[0]?.id ?? user.orgId)
+      : evdeUyelikVar || ustHesap !== null
+        ? user.orgId
+        : (uyelikliOrg ?? user.orgId);
 
     const activeOrgId =
       requestedOrgId && izinliOrgIdler.has(requestedOrgId) ? requestedOrgId : varsayilanOrg;
@@ -395,10 +427,11 @@ export class TenantContextService {
      * `assertOrgAccess` ile BİREBİR aynı kural; ikisinin ayrışması, ekranda
      * görünen ama açılmayan bir satır demek.
      */
-    const secilebilirOrgIdler = new Set<string>([
-      ...kardesSirketler.map((o) => o.id),
-      ...uyelikOrgIdleri,
-    ]);
+    const secilebilirOrgIdler = new Set<string>(
+      ziyaret
+        ? kardesSirketler.map((o) => o.id)
+        : [...kardesSirketler.map((o) => o.id), ...uyelikOrgIdleri],
+    );
 
     const erisilebilirSirketler = await this.db.organization.findMany({
       where: { id: { in: [...secilebilirOrgIdler] }, status: 'active' },

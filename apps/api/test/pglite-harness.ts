@@ -372,6 +372,48 @@ export async function createHarness(): Promise<Harness> {
       },
     },
 
+    /**
+     * `ilkSirketAc` (üst hesap katmanı) üç metoda muhtaç: kısa ad çakışma
+     * kontrolü, şirket açma, org geneli üyelik. Üçü de gerçek SQL üzerinden
+     * — koşum ortamının varlık sebebi, üretim şemasına karşı sınamak.
+     */
+    organization: {
+      findUnique: async ({ where }: { where: { slug?: string; id?: string } }) => {
+        const rows = where.slug
+          ? await q<{ id: string }>('SELECT id FROM organizations WHERE slug = $1', [where.slug])
+          : await q<{ id: string }>('SELECT id FROM organizations WHERE id = $1', [where.id]);
+        return rows[0] ?? null;
+      },
+      create: async ({
+        data,
+      }: {
+        data: { name: string; slug: string; managerAccountId?: string | null };
+      }) => {
+        const rows = await q<{ id: string; slug: string }>(
+          `INSERT INTO organizations (id, name, slug, manager_account_id, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, now())
+           RETURNING id, slug`,
+          [data.name, data.slug, data.managerAccountId ?? null],
+        );
+        return rows[0];
+      },
+    },
+
+    membership: {
+      create: async ({
+        data,
+      }: {
+        data: { userId: string; orgId: string; clientId: string | null; role: string };
+      }) => {
+        await q(
+          `INSERT INTO memberships (id, user_id, org_id, client_id, role, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4::"Role", now())`,
+          [data.userId, data.orgId, data.clientId, data.role],
+        );
+        return {};
+      },
+    },
+
     /** Bilgi Bankası — `ClientProfileService`in gerçekten kullandığı üç metot. */
     clientProfile: {
       findUnique: async ({ where }: { where: { clientId: string } }) => {

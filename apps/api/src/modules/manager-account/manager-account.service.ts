@@ -18,6 +18,7 @@ import { AuditService } from '../audit/audit.service';
 import { assertOrgAdmin } from '../../common/guards/permissions.guard';
 import { uniqueSlug } from '../../common/utils/slug';
 import { workspaceTasi, type WorkspaceTasimaSonucu } from './workspace-tasima';
+import { ilkSirketAc } from './ilk-sirket';
 
 /**
  * ═══ ÜST HESAP (MCC) ═══
@@ -231,6 +232,14 @@ export class ManagerAccountService {
           where: { id: evSirketi.id },
           data: { managerAccountId: hesap.id },
         });
+      } else {
+        /*
+         * PLATFORM SAHİBİ KURUYORSA İLK ŞİRKET HEMEN AÇILIYOR. Şirketsiz
+         * bir üst hesaba girilemiyor ve girilmeye çalışılınca bağlam ev
+         * şirketine (Advetics) düşüp Profaj'ın bağlantılarını müşterinin
+         * hesabında gösteriyordu. Gerekçe `ilk-sirket.ts` içinde.
+         */
+        await ilkSirketAc(tx, { managerAccountId: hesap.id, ad: input.name, userId: ctx.userId });
       }
       /*
        * ÜYELİK HER İKİ HÂLDE DE YAZILIYOR. Platform sahibi zaten her hesaba
