@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { ManagerAccountTree } from '@advetics/shared';
+import type { ManagerAccountTree, UstHesapUyesi } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import type { MemberRow } from '@/components/tenancy/team-manager';
@@ -48,7 +48,7 @@ export default async function TeamPage() {
    * Sebep artık ekranda yazıyor ve sayfa yine açılıyor: listeler boş
    * gelse de diğer bölümler çalışmaya devam ediyor.
    */
-  const [uyeSonuc, workspaceSonuc, agacSonuc] = await Promise.allSettled([
+  const [uyeSonuc, workspaceSonuc, agacSonuc, ustEkipSonuc] = await Promise.allSettled([
     serverApiFetch<MemberRow[]>('/members'),
     serverApiFetch<ClientRow[]>('/clients'),
     /*
@@ -59,6 +59,13 @@ export default async function TeamPage() {
      * görünmezlik bir kez canlıda patladı.
      */
     serverApiFetch<ManagerAccountTree | null>('/manager-account').then((x) => x ?? null),
+    /*
+     * ÜST HESAP EKİBİ — yalnızca üst hesap varsa çekiliyor. Yoksa uç boş
+     * liste dönerdi ama boşuna bir istek ve ekranda çizilmeyecek bir bölüm.
+     */
+    session.managerAccount
+      ? serverApiFetch<UstHesapUyesi[]>('/manager-account/members').then((x) => x ?? [])
+      : Promise.resolve<UstHesapUyesi[]>([]),
   ]);
 
   const members = uyeSonuc.status === 'fulfilled' ? (uyeSonuc.value ?? []) : [];
@@ -76,6 +83,17 @@ export default async function TeamPage() {
   const sirketler = agac
     ? agac.organizations.map((o) => ({ id: o.id, name: o.name }))
     : [{ id: session.activeOrganizationId, name: session.organization.name }];
+
+  const ustHesap = session.managerAccount
+    ? {
+        hesapAdi: session.managerAccount.name,
+        uyeler: ustEkipSonuc.status === 'fulfilled' ? ustEkipSonuc.value : [],
+        yonetebilir: session.managerAccount.yonetebilir,
+        // Hata BÖLÜMÜN İÇİNDE yazıyor: "kimse yok" ile "yüklenemedi" ayrı.
+        yuklemeHatasi:
+          ustEkipSonuc.status === 'rejected' ? hataMetni(ustEkipSonuc.reason) : null,
+      }
+    : null;
 
   const yuklemeHatalari = [
     uyeSonuc.status === 'rejected' ? `Ekip listesi: ${hataMetni(uyeSonuc.reason)}` : null,
@@ -112,7 +130,8 @@ export default async function TeamPage() {
         <p className="mt-1 text-sm text-ink-muted">
           Danışmanlar AJANS seviyesinde duruyor ve şirketlere yetkilendiriliyor —
           bir şirkete yetki verilen danışman o şirketin bütün workspace’lerini
-          görür. Müşteri hesapları (Görüntüleyici) tek bir workspace’e bağlı kalır.
+          görür. Müşteri hesapları tek bir workspace’e bağlı kalır. Roller ve ne
+          yapabildikleri aşağıdaki tabloda.
         </p>
       </div>
 
@@ -129,6 +148,7 @@ export default async function TeamPage() {
         sirketler={sirketler}
         currentUserId={session.user.id}
         canManage={session.isOrgAdmin}
+        ustHesap={ustHesap}
       />
 
       <p className="text-xs text-ink-muted">

@@ -1,4 +1,5 @@
 export * from './auth/roles';
+export * from './auth/rol-matrisi';
 export * from './constants/platforms';
 export * from './linkedin-para';
 export * from './kitle-bolumu';

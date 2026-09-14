@@ -4,32 +4,41 @@
  * Bu dosya sistemin TEK yetki kaynağıdır. Backend guard'ları ve frontend
  * UI gizleme mantığı aynı matristen beslenir — ikisinin ayrışması, kullanıcıya
  * tıklayabildiği ama 403 alacağı butonlar göstermek demektir.
+ *
+ * ═══ YEDİ ROLDEN ÜÇE — VE BİR BAYRAK ═══
+ *
+ * Bir süre yedi rol vardı (owner, admin, ad_manager, manager, analyst,
+ * customer_service, client_viewer) ve kullanıcının tarifi *"çok fazla yetki
+ * var, ne neye yarıyor"* idi. Yedi rolün beşi ajans personelinin
+ * tonlarıydı ve hiçbiri panelde AYRI bir ekran açmıyordu — yalnızca aynı
+ * ekranda birkaç düğmeyi kapatıyordu. Seçerken tahmin etmek gerekiyordu ve
+ * tahmin yanlışsa belirtisi "tıkladım, 403" ya da "ekran boş".
+ *
+ * Bugün üç rol ve bir bayrak var; hepsi kullanıcının kendi cümlesiyle
+ * tanımlı:
+ *
+ *   · SAHİP (`users.platform_admin`) — Advetics'i işleten hesap. Her şeyi
+ *     yapar; üst hesap kurar, paket seçer, bütün üst hesaplara geçer. BİR
+ *     ROL DEĞİL: roller bir üst hesabın ya da şirketin İÇİNDE anlamlı, bu
+ *     yetki ikisini de aşıyor. Panelden verilemez (`db:platform-admin`).
+ *   · YÖNETİCİ (`admin`) — verildiği kapsamın tamamını yönetir: kişi
+ *     ekler, şirket açar/siler, platform bağlar. Üst hesapta verilirse
+ *     bütün şirketler, tek şirkette verilirse o şirket. Başka bir üst
+ *     hesabı GÖREMEZ.
+ *   · REKLAM YÖNETİCİSİ (`ad_manager`) — yetkilendirildiği şirketlerin
+ *     workspace'lerini yönetir: reklam yayınlar, kural/bütçe yazar, hesap
+ *     atar, veriyi günceller. Kişi ekleyemez, şirket açamaz/silemez.
+ *   · MÜŞTERİ (`client_viewer`) — workspace'in kendi giriş hesabı. Yalnızca
+ *     Genel Bakış, Reklam Keşfi ve Raporlar; tarih aralığını değiştirir,
+ *     verisini görür ve günceller. Reklam ekranlarını görmez.
+ *
+ * `owner` KALKTI: her şirkette "sahip" diye ikinci bir yönetici tutmanın
+ * tek karşılığı kullanılmayan `org.billing` yetkisiydi; asıl Sahip tek bir
+ * hesap ve bayrakla anlatılıyor. Veritabanındaki eski satırlar
+ * `roller_uce_indi` migration'ıyla `admin`e taşındı.
  */
 
-export const ROLES = [
-  'owner', // Ajans sahibi. Her şey + faturalama + org silme.
-  'admin', // Ajans yöneticisi. Her şey, faturalama hariç.
-  /*
-   * Reklam yöneticisi. Kampanya yöneticisinin yaptığı her şey + müşteri açma
-   * + platform bağlama ve reklam hesabı atama.
-   *
-   * ORG GENELİ ama ORG YÖNETİCİSİ DEĞİL — bkz. ORG_SCOPED_ROLES /
-   * ORG_ADMIN_ROLES ayrımı. Ajans genelinde çalışabiliyor (her müşterinin
-   * verisini görür, hesabını bağlar ve atar) ama `isOrgAdmin` bayrağını
-   * AÇMIYOR: personel hesabı açamaz, üyelik veremez, müşteri silemez,
-   * bağlantı koparamaz.
-   */
-  'ad_manager',
-  'manager', // Kampanya yöneticisi. Kural yazar, bütçe değiştirir.
-  'analyst', // Analist. Okur, rapor üretir. Canlı aksiyon alamaz.
-  /*
-   * Müşteri hizmetleri. Müşteriyle konuşan kişi: veriyi okur, rapor üretip
-   * paylaşır, potansiyel müşteri listesini işler. Kampanyaya, bütçeye ve
-   * kurala DOKUNAMAZ — para ve yayın kararları bu rolün dışında.
-   */
-  'customer_service',
-  'client_viewer', // Müşteri tarafı. Sadece kendi verisini okur.
-] as const;
+export const ROLES = ['admin', 'ad_manager', 'client_viewer'] as const;
 
 export type Role = (typeof ROLES)[number];
 
@@ -50,27 +59,11 @@ export type Role = (typeof ROLES)[number];
 /**
  * Org geneli VERİ erişimi: `membership.clientId === null` tutabilen roller.
  *
- * ═══ LİSTE DEĞİL, TEK BİR İSTİSNA ═══
- *
- * Önce `['owner', 'admin', 'ad_manager']` idi ve DANIŞMANI dışarıda
- * bırakıyordu: bir kampanya yöneticisi ya da analist, şirketin her
- * workspace'ine TEK TEK atanmak zorundaydı. Kırk altı workspace'li bir
- * şirkette bu, kırk altı satır ve her yeni workspace'te unutulacak bir
- * adım demek — ve unutulduğunda belirtisi "danışman bazı müşterileri
- * göremiyor" oluyor, sebebi hiçbir ekranda yazmıyor.
- *
- * Kural artık ters yazılıyor: `client_viewer` DIŞINDA herkes şirket
- * seviyesinde yetkilendirilebilir. Çünkü ayırt eden şey rolün genişliği
- * değil, KİMİN hesabı olduğu:
- *
- *   · Ajans personeli (danışman) → şirkete bakar, şirketin tamamını görür.
- *   · `client_viewer` → MÜŞTERİNİN KENDİ giriş hesabı. Onun sınırı tam
- *     olarak workspace'tir; şirket seviyesine çıkarmak, Ege Birlik'in
- *     hesabına Fenbay'ın verisini açmak demek.
- *
- * VERİ ERİŞİMİ İLE YÖNETİCİLİK HÂLÂ AYRI: bu liste yalnızca "org'daki
- * bütün workspace'lerin verisini görür" diyor. Kullanıcı açma, üyelik
- * verme ve workspace silme `ORG_ADMIN_ROLES`ta ve o liste GENİŞLEMEDİ.
+ * Kural ters yazılıyor: `client_viewer` DIŞINDA herkes şirket seviyesinde
+ * yetkilendirilebilir. Ayırt eden şey rolün genişliği değil, KİMİN hesabı
+ * olduğu: ajans personeli şirkete bakar, `client_viewer` ise MÜŞTERİNİN
+ * KENDİ giriş hesabı ve sınırı tam olarak workspace — şirket seviyesine
+ * çıkarmak, bir workspace'in hesabına komşusunun verisini açmak demek.
  *
  * Veritabanı da aynı kuralı dayatıyor: `memberships_org_scope_role_chk`
  * (`prisma/sql/01_constraints.sql`).
@@ -85,19 +78,44 @@ export const ORG_SCOPED_ROLES: readonly Role[] = ROLES.filter((r) => r !== 'clie
  * yüklemini besliyor. LİSTE GENİŞLETİLİRKEN o iki yerin ikisi birden
  * düşünülmeli — bayrak tek başına bir yetki değil, bir yetki DEMETİ.
  */
-export const ORG_ADMIN_ROLES: readonly Role[] = ['owner', 'admin'];
+export const ORG_ADMIN_ROLES: readonly Role[] = ['admin'];
+
+/**
+ * ═══ HANGİ KAPSAMDA HANGİ ROL VERİLEBİLİR ═══
+ *
+ * Üç kapsam var ve her kapsamda anlamlı olan roller farklı:
+ *
+ *   · ÜST HESAP — bütün şirketler. Yönetici (hepsini yönetir) ya da Reklam
+ *     Yöneticisi (hepsinde reklam işi yapar). Müşteri hesabı olamaz: onun
+ *     sınırı tek workspace.
+ *   · ŞİRKET — o şirketin bütün workspace'leri. Aynı iki rol.
+ *   · WORKSPACE — tek workspace. Reklam Yöneticisi ya da Müşteri. Yönetici
+ *     olamaz: yöneticilik `clientId: null` bir satır ister (`isOrgAdmin`
+ *     oradan doğuyor); tek workspace'e bağlı bir "yönetici" hiçbir yönetim
+ *     kapısını açamaz ve ekranda yalan söylerdi.
+ *
+ * Panel seçicileri bu listelerden besleniyor; sunucu şemaları da aynı
+ * listeyi doğruluyor. İkisi ayrı yazılsaydı biri diğerinin kabul etmediği
+ * bir seçenek gösterirdi.
+ */
+export const UST_HESAP_ROLLERI: readonly Role[] = ['admin', 'ad_manager'];
+export const SIRKET_ROLLERI: readonly Role[] = ['admin', 'ad_manager'];
+export const WORKSPACE_ROLLERI: readonly Role[] = ['ad_manager', 'client_viewer'];
 
 /**
  * Yetki anahtarları. `kaynak.eylem` formatı.
  *
  * Yeni bir yetki eklerken ROLE_PERMISSIONS matrisini de güncelle —
  * tanımsız bırakılan yetki varsayılan olarak REDDEDİLİR.
+ *
+ * `org.billing` ve `rule.revert` KALDIRILDI: ikisini de hiçbir guard ve
+ * hiçbir ekran okumuyordu. Kimsenin kontrol etmediği bir yetki, matriste
+ * "var" görünüp hiçbir şey yapmayan bir satırdır.
  */
 export const PERMISSIONS = [
   // Kiracılık
   'org.read',
   'org.write',
-  'org.billing',
   'client.read',
   'client.write',
   'client.delete',
@@ -122,12 +140,10 @@ export const PERMISSIONS = [
    *
    * İkisi neden ayrı: atama, bir müşterinin bütün verisinin nereye
    * yazılacağını belirliyor ve yanlış atama iki müşterinin geçmişini
-   * birbirine karıştırıyor (bkz. `hesap-verisi-tasima.ts`). Kampanya
-   * yöneticisi izlemeyi açabilmeli ama bu kararı verememeli.
-   *
-   * Bu yetki daha önce `@RequireOrgAdmin()` ile ifade ediliyordu; o bayrak
-   * aynı zamanda kullanıcı yönetimini ve müşteri silmeyi de açıyor, yani
-   * atama yetkisi vermek için hesap ele geçirme yetkisi vermek gerekiyordu.
+   * birbirine karıştırıyor (bkz. `hesap-verisi-tasima.ts`). Reklam
+   * Yöneticisi bunu taşıyor — workspace'i o kuruyor ve reklam hesabı
+   * atanmamış bir workspace boş bir kap; taşımasaydı "workspace yönetir"
+   * cümlesi içi boş kalırdı.
    */
   'connection.manage',
 
@@ -147,7 +163,6 @@ export const PERMISSIONS = [
   'rule.read',
   'rule.write',
   'rule.activate', // dry_run -> live geçişi. Kasıtlı olarak ayrı bir yetki.
-  'rule.revert',
 
   // Modül 6 — raporlar
   'report.read',
@@ -182,16 +197,30 @@ export type Permission = (typeof PERMISSIONS)[number];
 
 const ALL: readonly Permission[] = PERMISSIONS;
 
-const ADMIN_PERMS: readonly Permission[] = ALL.filter((p) => p !== 'org.billing');
-
-const MANAGER_PERMS: readonly Permission[] = [
+/**
+ * Reklam Yöneticisi — "yetkilendirilen şirketlerin workspace'lerini
+ * yönetebilir, reklam hesaplarında yayınlama yapabilir, verileri
+ * güncelleyebilir" (kullanıcının tanımı).
+ *
+ * OLMAYANLAR ve NEDENİ:
+ *   · `user.write` — kişi eklemek ve yetki vermek hesap ele geçirme kapısı;
+ *     Yönetici işi.
+ *   · `org.write` — şirket açmak/silmek/taşımak, bir kullanıcının
+ *     erişebildiği şirket kümesini değiştiriyor; izolasyonun sınırı.
+ *   · `client.delete` — workspace silmek geri alınamıyor (metrik geçmişi
+ *     gidiyor); günlük reklam işinin parçası değil.
+ *   · `branding.write` — beyaz etiket markası ajansın kimliği.
+ */
+const AD_MANAGER_PERMS: readonly Permission[] = [
   'org.read',
   'client.read',
-  'user.read',
+  'client.write', // workspace açar ve bilgilerini düzenler
+  'user.read', // ekibi görür, değiştiremez
   'branding.read',
   'audit.read',
   'connection.read',
   'connection.write',
+  'connection.manage', // platformu yetkilendirir, hesabı workspace'e atar
   'insights.read',
   'sync.trigger',
   'budget.read',
@@ -199,7 +228,6 @@ const MANAGER_PERMS: readonly Permission[] = [
   'rule.read',
   'rule.write',
   'rule.activate',
-  'rule.revert',
   'report.read',
   'report.write',
   'report.share',
@@ -214,95 +242,45 @@ const MANAGER_PERMS: readonly Permission[] = [
   'lead.export',
 ];
 
-const ANALYST_PERMS: readonly Permission[] = [
-  'org.read',
-  'client.read',
-  'user.read',
-  'branding.read',
-  'connection.read',
-  'insights.read',
-  'sync.trigger',
-  // Analist bütçeyi GÖRÜR (rapor ve pacing için gerekli) ama DEĞİŞTİREMEZ.
-  'budget.read',
-  'rule.read',
-  'report.read',
-  'report.write',
-  'report.share',
-  'boost.read',
-  'bulk.read',
-  'bulk.write', // taslak hazırlayabilir, yayınlayamaz
-  'lead.read',
-  // Analist kaydı arayıp durumunu ilerletebilir — asıl işi bu. Ama listeyi
-  // dosya olarak dışarı ÇIKARAMAZ; o ayrı bir sorumluluk.
-  'lead.write',
-];
-
 /**
- * Reklam yöneticisi = kampanya yöneticisi + kurulum.
+ * Müşteri — workspace'in kendi giriş hesabı.
  *
- * MANAGER_PERMS'TEN TÜRETİLİYOR, elle kopyalanmıyor. İki liste ayrı
- * yazılsaydı kampanya yöneticisine eklenen bir yetki burada eksik kalır ve
- * "daha geniş" olması gereken rol dar kalırdı — hiçbir araç ses çıkarmadan.
- */
-const AD_MANAGER_PERMS: readonly Permission[] = [
-  ...MANAGER_PERMS,
-  'client.write', // müşteri açar ve bilgilerini düzenler
-  'connection.manage', // platformu yetkilendirir, hesabı müşteriye atar
-];
-
-/**
- * Müşteri hizmetleri — müşteriyle konuşan kişi.
+ * "Sadece genel bakış, reklam keşfi ve raporlar; tarihleri değiştirip
+ * verisini görebilir, güncelleyebilir; reklam yayınlayamaz, reklam kısmını
+ * göremez" (kullanıcının tanımı).
  *
- * OKUMA GENİŞ, YAZMA DAR. Raporu hazırlayıp paylaşabiliyor ve potansiyel
- * müşteri listesini işleyebiliyor; kampanya, bütçe, kural ve toplu yayın
- * dışarıda. `lead.export` DE DIŞARIDA: listeyi görmek ile sistemden
- * ÇIKARMAK farklı sorumluluklar (bkz. PERMISSIONS içindeki not).
+ * `sync.trigger` VAR: "güncelleyebilir" tam olarak "Şimdi güncelle" düğmesi.
+ * Kota bekçisi platform çağrısını zaten sınırlıyor; düğmeyi gizlemek
+ * müşteriyi "veri neden eski" sorusuyla baş başa bırakırdı.
+ *
+ * `budget.read` VAR ama Aylık Bütçe ekranı YOK: Genel Bakış'taki bütçe
+ * tüketimi bu yetkiyle okunuyor ve o bilgi zaten kendisine ait. Ekranın
+ * menü satırı `budget.write` ile kapalı — o ekran bütçe BELİRLEME yeri.
+ *
+ * `rule.read` ve `boost.read` YOK: ikisi de "reklam kısmı" ve kullanıcı
+ * o bölümün müşteriye görünmemesini istedi. Uyarı paneli boost'u yalnızca
+ * `boost.read` varsa soruyor, yani bu kararın ikinci bir bedeli yok.
  */
-const CUSTOMER_SERVICE_PERMS: readonly Permission[] = [
-  'org.read',
-  'client.read',
-  // Bağlantıyı GÖRÜR: "veri neden gelmiyor" sorusunun cevabı orada ve bu
-  // soruyu müşteriden ilk duyan kişi bu rol.
-  'connection.read',
-  'branding.read',
-  'insights.read',
-  'budget.read',
-  'rule.read',
-  'boost.read',
-  'report.read',
-  'report.write',
-  'report.share',
-  'lead.read',
-  'lead.write',
-];
-
 const CLIENT_VIEWER_PERMS: readonly Permission[] = [
   'client.read',
   'insights.read',
-  // Müşteri kendi bütçesini görebilmeli: raporda ve panelde bütçe tüketimi
-  // gösteriliyor ve o bilgi zaten kendisine ait.
+  'sync.trigger',
   'budget.read',
-  'rule.read',
   'report.read',
-  'boost.read',
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  owner: ALL,
-  admin: ADMIN_PERMS,
+  admin: ALL,
   ad_manager: AD_MANAGER_PERMS,
-  manager: MANAGER_PERMS,
-  analyst: ANALYST_PERMS,
-  customer_service: CUSTOMER_SERVICE_PERMS,
   client_viewer: CLIENT_VIEWER_PERMS,
 };
 
 /**
  * Etkin yetki kümesini hesaplar.
  *
- * `overrides` ince ayar içindir: `{ "rule.activate": false }` ile bir manager'ın
- * kuralları canlıya alması engellenebilir. Override daima rolü ezer — hem
- * kısıtlamak hem genişletmek için kullanılabilir.
+ * `overrides` ince ayar içindir: `{ "rule.activate": false }` ile bir
+ * reklam yöneticisinin kuralları canlıya alması engellenebilir. Override
+ * daima rolü ezer — hem kısıtlamak hem genişletmek için kullanılabilir.
  */
 export function resolvePermissions(
   role: Role,

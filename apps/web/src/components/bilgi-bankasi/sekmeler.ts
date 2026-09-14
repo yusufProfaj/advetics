@@ -88,16 +88,18 @@ export function gorunurSekmeler(izinler: readonly Permission[]): SekmeTanimi[] {
 /**
  * Menüdeki "Bilgi Bankası" satırının ve sayfanın GİRİŞ yetkisi.
  *
- * Sayfanın gerçek kapısı "en az bir sekme görünüyor mu" — ama menü satırı
- * TEK bir `Permission` taşıyabiliyor (`NavEntry.perm`). Sayfanın kimliğini
- * veren üç sekme (Bilgi Bankası, Hedef Kitle, Marka) `client.read` istiyor,
- * o yüzden menüde de o kullanılıyor.
+ * ═══ `client.write` — `client.read` DEĞİL, VE KARAR DEĞİŞTİ ═══
  *
- * AYRIŞMA YÖNÜ KASITLI: `client.read` varsa sayfada en az üç sekme var, yani
- * menüde görünen bağlantı HER ZAMAN açılıyor (403 alacağı bir satır yok).
- * Ters yön yalnızca override ile mümkün — yalnızca `budget.read`/`bulk.read`
- * bırakılmış bir kullanıcıda menü satırı gizlenir ama sayfa açılabilirdi; o
- * kullanıcının kaybı yok, iki sekmenin de kendi ekranı var (`/butce`,
- * `/kutuphane/gorseller`).
+ * Bir süre `SEKMELER[0].oku` (`client.read`) idi ve gerekçesi "Bilgi
+ * Bankası workspace'in KENDİ bilgisi, müşteri hesabı görsün" idi. Kullanıcı
+ * rolleri yeniden tanımlarken müşteri hesabının sınırını açıkça çizdi:
+ * *"sadece genel bakış, reklam keşfi ve raporlar"*. Bu sayfa o üçünden
+ * değil; Kütüphane'nin diğer üç satırıyla birlikte ajans tarafında kalıyor.
+ *
+ * `client.write` seçildi çünkü bu sayfanın sekmelerini DÜZENLEYEN yetki o
+ * ve onu taşıyan her rol (Yönetici, Reklam Yöneticisi) `client.read`i de
+ * taşıyor — yani menüde görünen satır her zaman açılıyor ve en az üç sekme
+ * gösteriyor. Sekmelerin kendi `oku` yetkileri DEĞİŞMEDİ: sayfaya giren
+ * biri override ile `budget.read`i kaybetmişse Bütçe sekmesi yine gizli.
  */
-export const SAYFA_GIRIS_IZNI: Permission = SEKMELER[0].oku;
+export const SAYFA_GIRIS_IZNI: Permission = 'client.write';

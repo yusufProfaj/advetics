@@ -82,7 +82,8 @@ describe('üst hesap modülü kayıtlı', () => {
 
   it('modül controller ve service\'i kaydediyor', () => {
     expect(MODULE).toContain('ManagerAccountController');
-    expect(MODULE).toContain('providers: [ManagerAccountService]');
+    expect(MODULE).toContain('providers: [ManagerAccountService, UstHesapEkibiService]');
+    expect(MODULE).toContain('UstHesapEkibiController');
   });
 });
 

@@ -40,7 +40,7 @@ function input(over: Partial<CreateMemberInput> = {}): CreateMemberInput {
     email: 'yeni@advetics.com',
     fullName: 'Yeni Kullanıcı',
     password: 'cokGuvenliParola9',
-    role: 'manager',
+    role: 'ad_manager',
     clientId: CLIENT,
     ...over,
   } as CreateMemberInput;
@@ -115,7 +115,7 @@ describe('createMember', () => {
       userId: 'yeni-user',
       orgId: ORG,
       clientId: CLIENT,
-      role: 'manager',
+      role: 'ad_manager',
     });
     expect(calls.audit).toEqual(['user.created']);
   });
@@ -178,9 +178,9 @@ describe('createMember', () => {
   it('KRİTİK: DANIŞMAN rolü şirket geneli KABUL EDİLİYOR', async () => {
     // Genişletilen kuralın diğer yönü: `manager` artık şirketin tamamına
     // atanabiliyor ve kırk altı workspace'e tek tek atanması gerekmiyor.
-    const res = await svc.createMember(CTX, input({ clientId: null, role: 'manager' }), META);
+    const res = await svc.createMember(CTX, input({ clientId: null, role: 'ad_manager' }), META);
     expect(res.created).toBe(true);
-    expect(calls.membershipCreate[0]).toMatchObject({ clientId: null, role: 'manager' });
+    expect(calls.membershipCreate[0]).toMatchObject({ clientId: null, role: 'ad_manager' });
   });
 
   it('org geneli admin kabul ediliyor', async () => {
@@ -203,12 +203,12 @@ describe('addMembership', () => {
     // değer oluyordu.
     existingUser = { id: USER, memberships: [] };
 
-    await svc.addMembership(CTX, { userId: USER, role: 'manager', clientId: CLIENT }, META);
+    await svc.addMembership(CTX, { userId: USER, role: 'ad_manager', clientId: CLIENT }, META);
 
     expect(calls.membershipCreate[0]).toMatchObject({
       userId: USER,
       clientId: CLIENT,
-      role: 'manager',
+      role: 'ad_manager',
     });
     expect(calls.userCreate).toEqual([]);
     expect(calls.userUpdate).toEqual([]);
@@ -219,7 +219,7 @@ describe('addMembership', () => {
     existingUser = { id: USER, memberships: [{ clientId: CLIENT }] };
 
     await expect(
-      svc.addMembership(CTX, { userId: USER, role: 'analyst', clientId: CLIENT }, META),
+      svc.addMembership(CTX, { userId: USER, role: 'ad_manager', clientId: CLIENT }, META),
     ).rejects.toThrow(/zaten bu kapsamda/);
     expect(calls.membershipCreate).toEqual([]);
   });
@@ -230,7 +230,7 @@ describe('addMembership', () => {
     existingUser = null;
 
     await expect(
-      svc.addMembership(CTX, { userId: USER, role: 'manager', clientId: CLIENT }, META),
+      svc.addMembership(CTX, { userId: USER, role: 'ad_manager', clientId: CLIENT }, META),
     ).rejects.toThrow(/Kullanıcı bulunamadı/);
   });
 
@@ -246,7 +246,7 @@ describe('addMembership', () => {
 
   it('DANIŞMAN rolü şirket geneli kabul ediliyor', async () => {
     existingUser = { id: USER, memberships: [] };
-    await svc.addMembership(CTX, { userId: USER, role: 'analyst', clientId: null }, META);
-    expect(calls.membershipCreate[0]).toMatchObject({ clientId: null, role: 'analyst' });
+    await svc.addMembership(CTX, { userId: USER, role: 'ad_manager', clientId: null }, META);
+    expect(calls.membershipCreate[0]).toMatchObject({ clientId: null, role: 'ad_manager' });
   });
 });

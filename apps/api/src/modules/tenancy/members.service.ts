@@ -131,6 +131,18 @@ export class MembersService {
               client: { select: { id: true, name: true } },
             },
           },
+          /*
+           * ÜST HESAP ÜYELİĞİ DE OKUNUYOR — yalnızca AKTİF üst hesabınki.
+           *
+           * Üst hesaba eklenen bir Yönetici'nin bu şirkette hiç `memberships`
+           * satırı yok (yetkisi sentetik, `TenantContextService`). Bu alan
+           * olmadan Ekip ekranı ona "Bu hesabın hiçbir yetkisi yok" yazıyordu
+           * — bütün şirketleri yöneten kişi için en yanlış cümle.
+           */
+          managerMemberships: {
+            where: { managerAccountId: ctx.managerAccountId ?? '' },
+            select: { id: true, role: true },
+          },
         },
       }),
     );
@@ -171,7 +183,7 @@ export class MembersService {
      */
     if (input.clientId === null && !isOrgScopedRole(input.role)) {
       throw new BadRequestException(
-        'Müşteri hesabı (Görüntüleyici) bir workspace’e bağlanmak zorunda',
+        'Müşteri hesabı bir workspace’e bağlanmak zorunda',
       );
     }
 
@@ -342,7 +354,7 @@ export class MembersService {
   async addMembership(ctx: TenantContext, input: CreateMembershipInput, meta: Meta) {
     if (input.clientId === null && !isOrgScopedRole(input.role)) {
       throw new BadRequestException(
-        'Müşteri hesabı (Görüntüleyici) bir workspace’e bağlanmak zorunda',
+        'Müşteri hesabı bir workspace’e bağlanmak zorunda',
       );
     }
 
@@ -505,7 +517,7 @@ export class MembersService {
         );
       }
 
-      await this.assertNotLastOwner(tx, before.id, before.role, input.role as Role);
+      await this.assertNotLastAdmin(tx, ctx, before.id, before.role, input.role as Role);
 
       const after = await tx.membership.update({
         where: { id: membershipId },
@@ -540,7 +552,7 @@ export class MembersService {
         throw new BadRequestException('Kendi erişiminizi kaldıramazsınız');
       }
 
-      await this.assertNotLastOwner(tx, membership.id, membership.role, null);
+      await this.assertNotLastAdmin(tx, ctx, membership.id, membership.role, null);
 
       await tx.membership.delete({ where: { id: membershipId } });
 
@@ -558,28 +570,47 @@ export class MembersService {
   }
 
   /**
-   * Son owner'ın rolünün düşürülmesini veya silinmesini engeller.
+   * Şirketin SON YÖNETİCİSİNİN düşürülmesini ya da silinmesini engeller.
    *
-   * Bu kontrol olmadan bir organizasyon kendini kilitleyebilir: owner yetkisi
-   * olan hiç kimse kalmadığında kimse yeni owner atayamaz. Kurtarma yolu
-   * yalnızca veritabanına doğrudan müdahaledir.
+   * Bu kontrol olmadan bir şirket kendini kilitleyebilir: Yönetici kalmadığında
+   * kimse yeni Yönetici atayamaz ve kurtarma yolu veritabanına elle
+   * müdahaledir.
+   *
+   * ÜST HESAP YÖNETİCİSİ DE SAYILIYOR. Üst hesabın altındaki şirketi o
+   * hesabın Yönetici'si sentetik üyelikle zaten yönetiyor; şirketteki tek
+   * `admin` satırı platform sahibinin kuruluşta aldığı üyelik olabiliyor ve
+   * hesabın gerçek sahibi onu kaldırmak isteyecek. "Son yönetici" deyip
+   * reddetmek, kendi hesabından Advetics'i çıkaramayan bir müşteri demekti.
+   * Kilitlenme yalnızca İKİSİ de yoksa gerçek.
    */
-  private async assertNotLastOwner(
+  private async assertNotLastAdmin(
     tx: TenantClient,
+    ctx: TenantContext,
     membershipId: string,
     currentRole: Role,
     nextRole: Role | null,
   ): Promise<void> {
-    if (currentRole !== Role.owner) return;
-    if (nextRole === Role.owner) return;
+    if (currentRole !== Role.admin) return;
+    if (nextRole === Role.admin) return;
 
-    const remainingOwners = await tx.membership.count({
-      where: { role: Role.owner, id: { not: membershipId } },
+    const remainingAdmins = await tx.membership.count({
+      where: { role: Role.admin, clientId: null, id: { not: membershipId } },
     });
+    if (remainingAdmins > 0) return;
 
-    if (remainingOwners === 0) {
+    const org = await tx.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: { managerAccountId: true },
+    });
+    const ustHesapYoneticisi = org?.managerAccountId
+      ? await this.admin.managerMembership.count({
+          where: { managerAccountId: org.managerAccountId, role: Role.admin },
+        })
+      : 0;
+
+    if (ustHesapYoneticisi === 0) {
       throw new BadRequestException(
-        'Organizasyonda en az bir owner kalmalı. Önce başka bir kullanıcıyı owner yapın.',
+        'Şirkette en az bir Yönetici kalmalı. Önce başka bir kullanıcıyı Yönetici yapın.',
       );
     }
   }

@@ -127,12 +127,12 @@ async function main(): Promise<void> {
    * EV ŞİRKETİ = üst hesabın SAHİBİNİN organizasyonu.
    *
    * Şemada "ajansın kendi şirketi" diye bir kolon yok; bağ üyelik üzerinden
-   * kuruluyor (`manager_memberships.role = 'owner'` → o kullanıcının
+   * kuruluyor (`manager_memberships.role = 'admin'` → o kullanıcının
    * `users.org_id`si). Tahmin etmek yerine buradan okumak, yanlış şirketi
    * boşaltma riskini ortadan kaldırıyor.
    */
   const sahip = await prisma.managerMembership.findFirst({
-    where: { managerAccountId: hesap.id, role: 'owner' },
+    where: { managerAccountId: hesap.id, role: 'admin' },
     select: { userId: true, user: { select: { orgId: true, email: true } } },
   });
   if (!sahip) {

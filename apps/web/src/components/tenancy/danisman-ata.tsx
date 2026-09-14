@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ROLES, type Role } from '@advetics/shared';
+import { WORKSPACE_ROLLERI, type Role } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { MusteriDetay } from './musteri-detay';
 import { ENGEL_KISI, atamaEngeli, atamalariYurut, type AtamaSonucu } from './danisman-atama';
@@ -49,7 +49,7 @@ export function DanismanAta({
   const [ekip, setEkip] = useState<MemberRow[] | null>(null);
   const [arama, setArama] = useState('');
   const [secili, setSecili] = useState<Set<string>>(new Set());
-  const [rol, setRol] = useState<Role>('manager');
+  const [rol, setRol] = useState<Role>('ad_manager');
   const [atiyor, setAtiyor] = useState(false);
   const [sonuc, setSonuc] = useState<AtamaSonucu | null>(null);
 
@@ -165,7 +165,8 @@ export function DanismanAta({
             onChange={(e) => setRol(e.target.value as Role)}
             className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"
           >
-            {ROLES.map((r) => (
+            {/* TEK WORKSPACE'E ATAMA: Yönetici yok (bkz. WORKSPACE_ROLLERI). */}
+            {WORKSPACE_ROLLERI.map((r) => (
               <option key={r} value={r}>
                 {ROLE_TR[r]}
               </option>

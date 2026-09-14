@@ -77,11 +77,11 @@ async function main(): Promise<void> {
   if (existingOwnerMembership) {
     await prisma.membership.update({
       where: { id: existingOwnerMembership.id },
-      data: { role: Role.owner },
+      data: { role: Role.admin },
     });
   } else {
     await prisma.membership.create({
-      data: { userId: owner.id, orgId: org.id, clientId: null, role: Role.owner },
+      data: { userId: owner.id, orgId: org.id, clientId: null, role: Role.admin },
     });
   }
 

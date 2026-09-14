@@ -2,7 +2,14 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ORG_SCOPED_ROLES, ROLES, type Role } from '@advetics/shared';
+import {
+  ORG_SCOPED_ROLES,
+  ROL_ACIKLAMASI,
+  ROL_ETIKETI,
+  SIRKET_ROLLERI,
+  WORKSPACE_ROLLERI,
+  type Role,
+} from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 
 /**
@@ -12,44 +19,29 @@ import { apiFetch } from '@/lib/api';
  * B'de yalnızca görüntüleyici olabilir; bu yüzden düzenlenen şey kullanıcı
  * değil, kullanıcı × müşteri eşleşmesi (membership).
  */
-export const ROLE_TR: Record<Role, string> = {
-  owner: 'Sahip',
-  admin: 'Yönetici',
-  ad_manager: 'Reklam Yöneticisi',
-  manager: 'Kampanya Yöneticisi',
-  analyst: 'Analist',
-  customer_service: 'Workspace Hizmetleri',
-  client_viewer: 'Görüntüleyici',
-};
 
 /**
- * Rolün ne yapabildiği — seçerken tahmin ettirmemek için.
+ * ROL ETİKETLERİ VE AÇIKLAMALARI `@advetics/shared`TAN.
  *
- * DIŞA AÇIK: danışman atama penceresi de aynı açıklamayı gösteriyor. İkinci
- * bir kopya, rollerin yetkisi değiştiğinde iki ekranın farklı şey anlatması
- * demekti — ve hangisinin doğru olduğu hiçbir yerde yazmazdı.
+ * Burada iki elle yazılmış kopya vardı (`ROLE_TR`, `ROLE_HINT`) ve roller
+ * yediden üçe inince ikisi de bayatlayacaktı. Kopya değil TAKMA AD: eski
+ * adları kullanan dosyalar çalışmaya devam ediyor, metin tek kaynaktan.
  */
-export const ROLE_HINT: Record<Role, string> = {
-  owner: 'Her şey + faturalama + organizasyonu silme',
-  admin: 'Her şey, faturalama hariç',
-  ad_manager: 'Kampanya işlerinin tamamı + workspace açar, platform bağlar, hesap atar',
-  manager: 'Kampanya kurar, kural yazar, bütçe değiştirir',
-  analyst: 'Okur ve rapor üretir; canlıda aksiyon alamaz',
-  customer_service: 'Okur, rapor üretip paylaşır, potansiyel müşteri listesini işler',
-  client_viewer: 'Yalnızca kendi verisini okur',
-};
+export const ROLE_TR = ROL_ETIKETI;
+export const ROLE_HINT = ROL_ACIKLAMASI;
 
 /**
- * Org geneli erişim (tüm müşteriler) YALNIZCA bu roller için.
+ * Kapsama göre seçilebilir roller — `roles.ts`teki listelerden.
  *
- * Sunucudaki `createMemberSchema` da aynı kuralı uyguluyor; burada
- * kullanılmasının sebebi kullanıcının geçersiz kombinasyonu SEÇEBİLMESİNİ
- * engellemek. Sonradan hata göstermek, o hatayı yapmasına izin vermektir.
- *
- * LİSTE KOPYALANMIYOR, `@advetics/shared`ten geliyor. Burada elle yazılmış
- * bir kopya vardı ve reklam yöneticisi rolü eklenince ayrıştı: sunucu org
- * geneli üyeliği kabul ediyor, panel seçeneği hiç göstermiyordu.
+ * Şirket geneli ("Tüm workspace’ler") seçiliyken Müşteri hesabı yok (sınırı
+ * tek workspace), tek workspace seçiliyken Yönetici yok (yöneticilik
+ * `clientId: null` bir satır ister; tek workspace'e bağlı bir "yönetici"
+ * hiçbir yönetim kapısını açamaz ve ekranda yalan söylerdi).
  */
+export function kapsamRolleri(clientId: string): readonly Role[] {
+  return clientId === '' ? SIRKET_ROLLERI : WORKSPACE_ROLLERI;
+}
+
 const ORG_WIDE_ROLES: readonly Role[] = ORG_SCOPED_ROLES;
 
 interface ClientOption {
@@ -73,6 +65,12 @@ export interface MemberRow {
   status: string;
   lastLoginAt: string | null;
   memberships: MembershipRow[];
+  /**
+   * AKTİF üst hesaptaki üyelik — varsa. Üst hesaba eklenen Yönetici'nin bu
+   * şirkette `memberships` satırı yok; bu alan olmadan ekran ona "yetkisi
+   * yok" yazıyordu.
+   */
+  managerMemberships?: Array<{ id: string; role: Role }>;
 }
 
 function formatDate(value: string | null): string {
@@ -100,7 +98,7 @@ export function TeamManager({
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<Role>('manager');
+  const [role, setRole] = useState<Role>('ad_manager');
   const [clientId, setClientId] = useState<string>('');
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -239,7 +237,7 @@ export function TeamManager({
             disabled={busy !== null}
             className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink disabled:opacity-60"
           >
-            {ROLES.map((r) => (
+            {kapsamRolleri(clientId).map((r) => (
               <option key={r} value={r}>
                 {ROLE_TR[r]}
               </option>
@@ -248,7 +246,14 @@ export function TeamManager({
 
           <select
             value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
+            onChange={(e) => {
+              setClientId(e.target.value);
+              // Kapsam değişince rol listesi değişiyor; eski seçim yeni
+              // listede yoksa ilkine düşülüyor — yoksa seçici boş görünür.
+              if (!kapsamRolleri(e.target.value).includes(role)) {
+                setRole(kapsamRolleri(e.target.value)[0]);
+              }
+            }}
             disabled={busy !== null}
             className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink disabled:opacity-60"
           >
@@ -345,7 +350,7 @@ export function TeamManager({
                       }
                       className="rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink disabled:opacity-50"
                     >
-                      {ROLES.map((r) => (
+                      {kapsamRolleri(m.clientId ?? '').map((r) => (
                         <option key={r} value={r}>
                           {ROLE_TR[r]}
                         </option>
@@ -449,7 +454,7 @@ function GrantAccess({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [clientId, setClientId] = useState('');
-  const [role, setRole] = useState<Role>('manager');
+  const [role, setRole] = useState<Role>('ad_manager');
 
   const orgWideAllowed = ORG_WIDE_ROLES.includes(role);
   const nothingLeft = clients.length === 0 && (hasOrgWide || !orgWideAllowed);
@@ -502,7 +507,7 @@ function GrantAccess({
           disabled={saving}
           className="rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink disabled:opacity-60"
         >
-          {ROLES.map((r) => (
+          {kapsamRolleri(clientId).map((r) => (
             <option key={r} value={r}>
               {ROLE_TR[r]}
             </option>
@@ -511,7 +516,12 @@ function GrantAccess({
 
         <select
           value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
+          onChange={(e) => {
+            setClientId(e.target.value);
+            if (!kapsamRolleri(e.target.value).includes(role)) {
+              setRole(kapsamRolleri(e.target.value)[0]);
+            }
+          }}
           disabled={saving}
           className="flex-1 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink disabled:opacity-60"
         >

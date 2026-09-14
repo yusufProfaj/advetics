@@ -248,7 +248,7 @@ export class ManagerAccountService {
        * kalıyor ve o hesap sahipsiz kalmıyor.
        */
       await tx.managerMembership.create({
-        data: { managerAccountId: hesap.id, userId: ctx.userId, role: 'owner' },
+        data: { managerAccountId: hesap.id, userId: ctx.userId, role: 'admin' },
       });
       return hesap.id;
     });
@@ -396,7 +396,7 @@ export class ManagerAccountService {
        * dışarıda bırakırdı.
        */
       await tx.membership.create({
-        data: { userId: ctx.userId, orgId: org.id, clientId: null, role: 'owner' },
+        data: { userId: ctx.userId, orgId: org.id, clientId: null, role: 'admin' },
       });
       return org.id;
     });

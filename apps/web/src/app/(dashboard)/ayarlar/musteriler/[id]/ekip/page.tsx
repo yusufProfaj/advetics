@@ -101,7 +101,7 @@ export default async function WorkspaceTeamPage({
           <p className="text-sm font-medium text-ink">Bu workspace’e atanmış kimse yok</p>
           <p className="mx-auto mt-1.5 max-w-md text-sm text-ink-muted">
             Aşağıdaki formdan bir kullanıcı ekleyebilirsin. Workspace’in kendi
-            görebilmesi için rolü <strong>Görüntüleyici</strong> seç — o rol
+            görebilmesi için rolü <strong>Müşteri</strong> seç — o rol
             yalnızca bu workspace’i görür ve ajans ekranlarını hiç görmez.
           </p>
           <div className="mt-5 text-left">

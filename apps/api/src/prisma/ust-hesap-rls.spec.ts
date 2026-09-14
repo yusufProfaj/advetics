@@ -98,8 +98,8 @@ beforeAll(async () => {
   `);
   await h.q(`
     INSERT INTO manager_memberships (id, manager_account_id, user_id, role, created_at, updated_at) VALUES
-      (gen_random_uuid(), '${UST_A}', '${USER_A}', 'owner', now(), now()),
-      (gen_random_uuid(), '${UST_B}', '${USER_B}', 'owner', now(), now())
+      (gen_random_uuid(), '${UST_A}', '${USER_A}', 'admin', now(), now()),
+      (gen_random_uuid(), '${UST_B}', '${USER_B}', 'admin', now(), now())
   `);
 });
 
@@ -198,7 +198,7 @@ describe('YAZMA uygulama rolüne KAPALI', () => {
     await expect(
       asUser(
         `INSERT INTO manager_memberships (id, manager_account_id, user_id, role, created_at, updated_at)
-         VALUES (gen_random_uuid(), '${UST_A}', '${USER_YALNIZ}', 'owner', now(), now())`,
+         VALUES (gen_random_uuid(), '${UST_A}', '${USER_YALNIZ}', 'admin', now(), now())`,
         YALNIZ,
       ),
     ).rejects.toThrow(/permission denied/i);

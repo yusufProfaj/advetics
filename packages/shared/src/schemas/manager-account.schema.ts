@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { MANAGER_PAKETLERI } from '../constants/paketler';
 import type { ManagerPaket } from '../constants/paketler';
+import { UST_HESAP_ROLLERI, type Role } from '../auth/roles';
+import { emailSchema, passwordSchema } from './auth.schema';
 
 /**
  * ÜST HESAP (Google MCC karşılığı) şemaları.
@@ -151,3 +153,54 @@ export const switchManagerAccountSchema = z.object({
   managerAccountId: z.string().uuid(),
 });
 export type SwitchManagerAccountInput = z.infer<typeof switchManagerAccountSchema>;
+
+/**
+ * ═══ ÜST HESAP EKİBİ — hesabı yönetecek kişiler ═══
+ *
+ * Bir üst hesap kurulduğunda tek üyesi kurucusuydu ve ikinci bir kişi
+ * eklemenin YOLU YOKTU: ne uç ne ekran. Satılan bir hesabın sahibine
+ * "hesabın hazır" demek, içine girebilen tek kişi platform sahibiyken
+ * anlamsızdı. Kullanıcının cümlesi: *"o üst hesaba bir yetki atamamız
+ * lazım (kişi hesabı eklememiz lazım ki yönetebilsin)"*.
+ *
+ * Roller `UST_HESAP_ROLLERI`nden: Yönetici ya da Reklam Yöneticisi. Müşteri
+ * hesabı burada OLAMAZ — sınırı tek workspace, üst hesap ise bütün
+ * şirketler.
+ *
+ * KİŞİ YOKSA OLUŞUYOR, VARSA YALNIZCA ÜYELİK EKLENİYOR — `createMember` ile
+ * aynı kural: var olan kullanıcının parolasına dokunulmuyor. Bu yüzden
+ * `fullName` ve `password` isteğe bağlı; kullanıcı yoksa sunucu ikisini de
+ * ZORUNLU sayıyor ve eksikse açıkça söylüyor.
+ */
+export const ustHesapUyesiEkleSchema = z.object({
+  email: emailSchema,
+  fullName: z.string().trim().min(2).max(120).optional(),
+  password: passwordSchema.optional(),
+  role: z.enum(UST_HESAP_ROLLERI as [Role, ...Role[]]),
+});
+export type UstHesapUyesiEkleInput = z.infer<typeof ustHesapUyesiEkleSchema>;
+
+export const ustHesapUyesiGuncelleSchema = z.object({
+  role: z.enum(UST_HESAP_ROLLERI as [Role, ...Role[]]),
+});
+export type UstHesapUyesiGuncelleInput = z.infer<typeof ustHesapUyesiGuncelleSchema>;
+
+/** Üst hesap ekibinin bir satırı — panelin okuduğu şekil. */
+export interface UstHesapUyesi {
+  /** `manager_memberships.id` — rol değiştirme ve kaldırma bunu hedefliyor. */
+  id: string;
+  userId: string;
+  email: string;
+  fullName: string;
+  status: string;
+  lastLoginAt: string | null;
+  role: Role;
+  /** Bu kişi bağlamdaki kullanıcı mı — kendi yetkisini değiştiremez. */
+  kendisi: boolean;
+}
+
+export interface UstHesapUyesiEklemeYaniti {
+  uyelik: UstHesapUyesi;
+  /** false => kullanıcı zaten vardı; yazılan parola KULLANILMADI. */
+  created: boolean;
+}

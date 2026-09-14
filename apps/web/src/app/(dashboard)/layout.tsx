@@ -10,7 +10,7 @@ import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
 import { NavSection } from '@/components/nav';
 import { visibleSections } from '@/lib/nav-sections';
 
-import type { ManagerAccountTree } from '@advetics/shared';
+import { ROL_ETIKETI, SAHIP_ETIKETI, type ManagerAccountTree } from '@advetics/shared';
 
 interface Branding {
   logoUrl: string | null;
@@ -171,7 +171,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 {session.user.fullName}
               </span>
               <span className="block truncate text-[11px] leading-tight text-ink-muted">
-                {session.isOrgAdmin ? 'Yönetici' : 'Workspace erişimi'}
+                {/* ROZET ETKİN ROLDEN — Sahip bayrağı önce. Eskiden
+                    isOrgAdmin'e bakıyordu: Reklam Yöneticisi ile Müşteri
+                    aynı etiketi görüyordu. */}
+                {session.platformAdmin ? SAHIP_ETIKETI : ROL_ETIKETI[session.rol]}
               </span>
             </span>
             <LogoutButton />

@@ -212,7 +212,7 @@ export class HesapDurumuKontrolService {
       where: {
         user: {
           memberships: {
-            some: { clientId: null, role: { in: ['owner', 'admin'] } },
+            some: { clientId: null, role: 'admin' },
           },
         },
       },

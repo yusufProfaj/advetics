@@ -2,9 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ROLES, isOrgScopedRole, type Role } from '@advetics/shared';
+import {
+  ROL_ETIKETI,
+  SIRKET_ROLLERI,
+  isOrgScopedRole,
+  type Role,
+  type UstHesapUyesi,
+} from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { ROLE_TR, type MemberRow } from '@/components/tenancy/team-manager';
+import { ROLE_TR, kapsamRolleri, type MemberRow } from '@/components/tenancy/team-manager';
+import { RolAciklamasi, RolMatrisi } from '@/components/tenancy/rol-matrisi';
+import { UstHesapEkibi } from '@/components/tenancy/ust-hesap-ekibi';
 import {
   ENGEL_WORKSPACE,
   atamaEngeli,
@@ -73,12 +81,20 @@ interface KisiSatiri extends MemberRow {
  * "Danışman ata" ise bir EKLEME değil, seçili kişiye yetki verme işi —
  * yeri üst bant değil, o kişinin detayı.
  */
+export interface UstHesapEkipVerisi {
+  hesapAdi: string;
+  uyeler: UstHesapUyesi[];
+  yonetebilir: boolean;
+  yuklemeHatasi: string | null;
+}
+
 export function TeamScreen({
   members,
   clients,
   sirketler,
   currentUserId,
   canManage,
+  ustHesap,
 }: {
   members: MemberRow[];
   clients: ClientOption[];
@@ -86,6 +102,12 @@ export function TeamScreen({
   sirketler: Array<{ id: string; name: string }>;
   currentUserId: string;
   canManage: boolean;
+  /**
+   * ÜST HESAP EKİBİ — üst hesap yoksa `null` ve bölüm hiç çizilmiyor.
+   * Bağımsız bir şirkette "üst hesap ekibi" başlığı, olmayan bir özelliği
+   * aratırdı.
+   */
+  ustHesap: UstHesapEkipVerisi | null;
 }) {
   const [ekleAcik, setEkleAcik] = useState(false);
   const [duzenlenen, setDuzenlenen] = useState<MemberRow | null>(null);
@@ -140,6 +162,21 @@ export function TeamScreen({
 
   return (
     <div className="space-y-4">
+      {/*
+        ROLLER EN ÜSTTE — kullanıcı yetkilendirirken tabloyu görmek istedi.
+        Özet kartlar hep açık, ayrıntılı tablo düğmeyle.
+      */}
+      <RolMatrisi />
+
+      {ustHesap && (
+        <UstHesapEkibi
+          hesapAdi={ustHesap.hesapAdi}
+          uyeler={ustHesap.uyeler}
+          yonetebilir={ustHesap.yonetebilir}
+          yuklemeHatasi={ustHesap.yuklemeHatasi}
+        />
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-4 lg:self-start">
           <div className="flex flex-col rounded-xl border border-line bg-surface">
@@ -263,6 +300,8 @@ export function TeamScreen({
 
 /** Ray satırının ikinci satırı — kişinin erişimi TEK CÜMLEDE. */
 function ozet(k: KisiSatiri): string {
+  const ust = k.managerMemberships?.[0];
+  if (ust) return `Üst hesap · ${ROL_ETIKETI[ust.role]} — bütün şirketler`;
   if (k.memberships.length === 0) return 'yetkisi yok';
   const sirket = k.memberships.filter((m) => m.clientId === null).length;
   const workspace = k.memberships.length - sirket;
@@ -328,11 +367,24 @@ function KisiDetayi({
 
         {/* YETKİSİZ HESAP SESSİZ KALMIYOR: giriş yapabiliyor ama panelde
             hiçbir veri göremiyor ve sebebi yalnızca burada yazılı. */}
-        {kisi.memberships.length === 0 && (
-          <p className="mt-3 rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">
-            Bu hesabın hiçbir yetkisi yok — giriş yapabiliyor ama panelde hiçbir
-            şey göremiyor.
+        {/*
+          ÜST HESAP ÜYELİĞİ ÖNCE SORULUYOR. Üst hesaba eklenen Yönetici'nin bu
+          şirkette hiç üyelik satırı yok; ona "yetkisi yok" demek bütün
+          şirketleri yöneten kişi için en yanlış cümle ve bu ekranda yaşandı.
+        */}
+        {kisi.managerMemberships && kisi.managerMemberships.length > 0 ? (
+          <p className="mt-3 rounded-lg bg-brand/10 px-3 py-2 text-xs text-ink">
+            Üst hesapta <strong>{ROL_ETIKETI[kisi.managerMemberships[0].role]}</strong> —
+            bu üst hesabın altındaki bütün şirketlere erişiyor. Değiştirmek için
+            yukarıdaki “Üst hesap ekibi” bölümünü kullan.
           </p>
+        ) : (
+          kisi.memberships.length === 0 && (
+            <p className="mt-3 rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">
+              Bu hesabın hiçbir yetkisi yok — giriş yapabiliyor ama panelde hiçbir
+              şey göremiyor.
+            </p>
+          )
         )}
       </section>
 
@@ -467,13 +519,13 @@ function YetkiBolumu({
                 }
                 className="shrink-0 rounded-lg border border-line bg-surface px-2 py-1 text-[11px] disabled:opacity-50"
               >
-                {ROLES.filter((r) => m.clientId !== null || isOrgScopedRole(r as Role)).map(
-                  (r) => (
-                    <option key={r} value={r}>
-                      {ROLE_TR[r as Role]}
-                    </option>
-                  ),
-                )}
+                {/* KAPSAMA GÖRE LİSTE: şirket satırında Müşteri yok, workspace
+                    satırında Yönetici yok (gerekçe `roles.ts`). */}
+                {kapsamRolleri(m.clientId ?? '').map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_TR[r]}
+                  </option>
+                ))}
               </select>
 
               {canManage && (
@@ -572,7 +624,7 @@ function KullaniciEkleModal({
   const [ad, setAd] = useState('');
   const [eposta, setEposta] = useState('');
   const [parola, setParola] = useState('');
-  const [rol, setRol] = useState<Role>('manager');
+  const [rol, setRol] = useState<Role>('ad_manager');
   const [clientId, setClientId] = useState('');
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
@@ -652,19 +704,27 @@ function KullaniciEkleModal({
             }}
             className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
           >
-            {ROLES.map((r) => (
+            {kapsamRolleri(clientId).map((r) => (
               <option key={r} value={r}>
-                {ROLE_TR[r as Role]}
+                {ROLE_TR[r]}
               </option>
             ))}
           </select>
+          <RolAciklamasi rol={rol} />
         </label>
 
         <label className="block">
           <span className="text-[11px] text-ink-muted">Kapsam</span>
           <select
             value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
+            onChange={(e) => {
+              setClientId(e.target.value);
+              // Kapsam değişince rol listesi değişiyor; eski seçim yeni listede
+              // yoksa ilkine düşülüyor — yoksa seçici boş görünür.
+              if (!kapsamRolleri(e.target.value).includes(rol)) {
+                setRol(kapsamRolleri(e.target.value)[0]);
+              }
+            }}
             className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
           >
             <option value="" disabled={!orgGeneliOlabilir}>
@@ -740,7 +800,7 @@ function DanismanAtaModal({
   const [userId, setUserId] = useState('');
   const [secili, setSecili] = useState<Set<string>>(new Set());
   const [arama, setArama] = useState('');
-  const [rol, setRol] = useState<Role>('manager');
+  const [rol, setRol] = useState<Role>('ad_manager');
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [sonuc, setSonuc] = useState<AtamaSonucu | null>(null);
@@ -832,7 +892,7 @@ function DanismanAtaModal({
         <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
           Ajans ekibinden birini bir ya da daha çok ŞİRKETE bağlar. Yetki
           verilen danışman o şirketin BÜTÜN workspace’lerini görür — tek tek
-          atama gerekmiyor. Müşteri hesapları (Görüntüleyici) bu pencereden
+          atama gerekmiyor. Müşteri hesapları bu pencereden
           yetkilendirilemez; onların sınırı tek bir workspace.
         </p>
 
@@ -952,13 +1012,21 @@ function DanismanAtaModal({
             disabled={!secilen}
             className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm disabled:opacity-50"
           >
-            {/* ORG GENELİ ROLLER YOK: bu ekran bir müşteriye atama işi. */}
-            {ROLES.filter((r) => r !== 'owner' && r !== 'admin').map((r) => (
+            {/*
+              ŞİRKET SEVİYESİ ROLLER: Yönetici ya da Reklam Yöneticisi.
+              Yönetici burada SEÇİLEBİLİR ve bu bilinçli: "bu şirketin
+              yöneticisi" gerçek bir ihtiyaç (şirketin kendi ekibini
+              yönetsin). Eski ekran owner/admin'i gizliyordu; gerekçe "sessizce
+              yönetici üretmek"ti — artık rol adı ve açıklaması seçicinin
+              altında yazıyor, sessiz değil.
+            */}
+            {SIRKET_ROLLERI.map((r) => (
               <option key={r} value={r}>
-                {ROLE_TR[r as Role]}
+                {ROLE_TR[r]}
               </option>
             ))}
           </select>
+          <RolAciklamasi rol={rol} />
           {/* TEK ROL, BÜTÜN SEÇİM İÇİN — ve bu açıkça yazılı. Aynı kişinin
               iki müşteride farklı rolü olabiliyor; toplu atama o ayrımı
               yapamıyor ve söylenmezse kullanıcı yaptığını sanır. */}

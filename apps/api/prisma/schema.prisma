@@ -46,13 +46,12 @@ enum ClientStatus {
   archived
 }
 
+/// ÜÇ ROL + BİR BAYRAK. `owner`, `manager`, `analyst`, `customer_service`
+/// 2026-09-14'te kaldırıldı (`roller_uce_indi`); Sahip `users.platform_admin`.
+/// Gerekçe `packages/shared/src/auth/roles.ts` başlığında.
 enum Role {
-  owner
   admin
   ad_manager
-  manager
-  analyst
-  customer_service
   client_viewer
 }
 

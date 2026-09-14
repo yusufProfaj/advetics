@@ -124,10 +124,28 @@ describe('menü verisi gerçekten okunuyor', () => {
     const satir = SECTIONS.flatMap((s) => s.items).find((i) => i.label === 'Bilgi Bankası');
     expect(satir, 'menüde Bilgi Bankası satırı yok — tarama boşa düştü').toBeDefined();
     expect(satir!.perm).toBe(SAYFA_GIRIS_IZNI);
-    // Kapının kendisi de sekme listesinden türüyor: ilk sekmenin okuma
-    // yetkisi. Elle yazılmış bir sabit, sekme listesi değiştiğinde sessizce
-    // bayatlardı.
-    expect(SAYFA_GIRIS_IZNI).toBe(SEKMELER[0].oku);
+    /*
+     * KAPI `client.write` — sekmelerin okuma yetkisi DEĞİL. Eskiden
+     * `SEKMELER[0].oku` (`client.read`) idi; müşteri hesabı sayfayı
+     * görüyordu. Kullanıcı müşteri hesabının sınırını üç ekranla çizdi ve
+     * bu sayfa onlardan değil. `client.write` taşıyan her rol `client.read`i
+     * de taşıyor, yani menüde görünen satır her zaman açılıyor.
+     */
+    expect(SAYFA_GIRIS_IZNI).toBe('client.write');
+    expect(SEKMELER[0].yaz).toBe(SAYFA_GIRIS_IZNI);
+  });
+
+  it('KRİTİK: Reklamlar ve Kütüphane bölümlerinin HER satırı yetki taşıyor', () => {
+    /*
+     * Süzme opt-in: yetkisiz satır herkese görünüyor. Müşteri hesabının
+     * "reklam kısmını görmemesi" bu bölümlerde yetkisiz satır kalmamasına
+     * bağlı — biri düşerse müşteri menüde Kurallar'ı görür.
+     */
+    for (const bolum of SECTIONS.filter((s) => s.title === 'Reklamlar' || s.title === 'Kütüphane')) {
+      for (const i of bolum.items) {
+        expect(i.perm, `${i.href} yetkisiz`).toBeTruthy();
+      }
+    }
   });
 });
 
@@ -145,47 +163,35 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
     expect(gorunen).not.toContain('Ekip & Yetkiler');
   });
 
-  it('kendi işini yapabileceği ekranları GÖRÜYOR — süzgeç fazla kesmiyor', () => {
-    // Ters yöndeki hata da gerçek: her şeyi gizleyen bir süzgeç de bu
-    // testlerin ilkini geçerdi.
-    const gorunen = etiketler('client_viewer');
-    expect(gorunen).toContain('Genel Bakış');
-    expect(gorunen).toContain('Akıllı Boost');
-    expect(gorunen).toContain('Raporlar');
+  it('KRİTİK: TAM OLARAK üç ekran görüyor — Genel Bakış, Reklam Keşfi, Raporlar', () => {
+    /*
+     * Kullanıcının tanımı birebir: "müşteri = sadece genel bakış, reklam
+     * keşfi ve raporlar kısmını görebilir". `toEqual`: fazladan bir satır
+     * (Akıllı Boost, Kurallar, Bilgi Bankası) da eksik bir satır da düşürür.
+     * Ters yöndeki hata da gerçek: her şeyi gizleyen bir süzgeç "görmüyor"
+     * testlerini geçerdi.
+     */
+    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'Reklam Keşfi', 'Raporlar']);
   });
 
-  it('Bilgi Bankası GÖRÜNÜYOR — içeriği workspace’in KENDİ bilgisi olduğu için', () => {
+  it('Bilgi Bankası GÖRÜNMÜYOR — karar değişti', () => {
     /*
-     * BU İDDİA AYNI KALDI AMA GEREKÇESİ TAMAMEN DEĞİŞTİ — bir DAVRANIŞ
-     * değil, gözden geçirilmiş bir KARAR kilitleniyor.
-     *
-     * Eskiden yukarıdaki "süzgeç fazla kesmiyor" testinin bir satırıydı ve o
-     * hâliyle sayfanın İÇERİĞİ boost ön ayarıydı. İçerik iki kez değişti ve
-     * ikincisinde satır bir güvenlik sorusuna dönüştü: ilk sekme bir süre
-     * `clients.notes`u (ajans içi not) bastı, yani müşteri hesabının o satırı
-     * GÖRMESİ yanlıştı.
-     *
-     * Karar: sekme `clients.notes`u BIRAKTI, yerine `ClientProfile.
-     * bilgiBankasi` geldi — müşterinin kendi ürün/hizmet bilgisi, sık
-     * sorulanları. Bu bilgi zaten müşteriye ait, o yüzden müşteri hesabı hem
-     * görüyor hem okuyor; `client.write` taşımadığı için DÜZENLEYEMİYOR.
-     *
-     * Satır bir gün yeniden ajans içi bir şey göstermeye başlarsa bu testin
-     * DÜŞMESİ değil, elle gözden geçirilmesi gerekiyor: iddia içeriğe değil
-     * yetkiye bakıyor. O yüzden gerekçe burada yazılı.
+     * Burada tersi kilitliydi ("workspace'in kendi bilgisi, müşteri görsün").
+     * Kullanıcı rolleri yeniden tanımlarken müşteri hesabına üç ekran
+     * bıraktı; Kütüphane onlardan değil. Okuma yetkisi (`client.read`)
+     * duruyor — Genel Bakış'ın workspace adını okuması ona bağlı — ama
+     * sayfa kapısı artık `client.write`.
      */
-    expect(etiketler('client_viewer')).toContain('Bilgi Bankası');
-    // client_viewer okuyabiliyor ama YAZAMIYOR — sayfanın "Kaydet" düğmesini
-    // gizleyen koşul bu.
+    expect(etiketler('client_viewer')).not.toContain('Bilgi Bankası');
     expect(ROLE_PERMISSIONS.client_viewer).toContain('client.read');
     expect(ROLE_PERMISSIONS.client_viewer).not.toContain('client.write');
   });
 });
 
 describe('AJANS ROLLERİ', () => {
-  it('owner "Sistem Yönetimi" kategorisini ve ekranlarını görüyor', () => {
-    expect(basliklar('owner')).toContain('Sistem Yönetimi');
-    const gorunen = etiketler('owner');
+  it('Yönetici "Sistem Yönetimi" kategorisini ve ekranlarını görüyor', () => {
+    expect(basliklar('admin')).toContain('Sistem Yönetimi');
+    const gorunen = etiketler('admin');
     // "Workspace'ler" ARTIK BİR MENÜ SATIRI DEĞİL: workspace listesi
     // Şirketler sayfasının içinde bir bölüm.
     expect(gorunen).toContain('Şirketler');
@@ -193,22 +199,19 @@ describe('AJANS ROLLERİ', () => {
     expect(gorunen).toContain('Ekip & Yetkiler');
   });
 
-  it('admin de görüyor', () => {
-    expect(basliklar('admin')).toContain('Sistem Yönetimi');
-  });
-
-  it('analist ajans içi olduğu için kategoriyi görüyor ama yönetim ekranları yetkisine bağlı', () => {
-    // Bu test bir DAVRANIŞI değil bir KARARI kilitliyor: analist ajans
-    // çalışanı, müşteri değil. Yetki matrisi değiştiğinde burası düşerse
-    // karar bilinçli olarak gözden geçirilmeli.
-    const gorunen = etiketler('analyst');
-    const yonetim = ['Şirketler', 'Platform Bağlantıları', 'Ekip & Yetkiler'];
-    const sahipOlduklari = yonetim.filter((y) => gorunen.includes(y));
-    expect(sahipOlduklari.length).toBe(
-      yonetim.filter((y) => {
-        const item = SECTIONS.flatMap((s) => s.items).find((i) => i.label === y)!;
-        return !item.perm || ROLE_PERMISSIONS.analyst.includes(item.perm);
-      }).length,
-    );
+  it('Reklam Yöneticisi: Sistem Yönetimi bölümünü görüyor, Şirketler ve kişi yönetimi hariç', () => {
+    /*
+     * Bu test bir DAVRANIŞI değil bir KARARI kilitliyor: reklam yöneticisi
+     * ajans çalışanı, müşteri değil — Platform Bağlantıları'nı görmeli
+     * (hesap atıyor). Ama Şirketler `org.write` ile kapalı: şirket açmak
+     * erişilebilen şirket kümesini değiştiriyor ve o Yönetici işi. Ekip &
+     * Yetkiler görünüyor (`user.read`) — listeyi görür, değiştiremez.
+     */
+    const gorunen = etiketler('ad_manager');
+    expect(gorunen).toContain('Platform Bağlantıları');
+    expect(gorunen).toContain('Reklam Oluştur');
+    expect(gorunen).toContain('Kurallar');
+    expect(gorunen).toContain('Ekip & Yetkiler');
+    expect(gorunen).not.toContain('Şirketler');
   });
 });

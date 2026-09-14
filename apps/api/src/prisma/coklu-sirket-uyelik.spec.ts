@@ -57,7 +57,7 @@ afterAll(async () => {
 async function uyelikYaz(orgId: string, clientId: string | null) {
   return h.q(
     `INSERT INTO memberships (id, user_id, org_id, client_id, role, created_at, updated_at)
-     VALUES (gen_random_uuid(), $1, $2, $3, 'owner', now(), now())`,
+     VALUES (gen_random_uuid(), $1, $2, $3, 'admin', now(), now())`,
     [USER, orgId, clientId],
   );
 }
@@ -151,7 +151,10 @@ describe('ŞİRKET GENELİ YETKİ — `client_viewer` DIŞINDA herkese açık', 
        WHERE conname = 'memberships_org_scope_role_chk'`,
     );
     expect(rows[0]?.n).toBe('1');
-    expect(DANISMAN_ROLLERI.length).toBeGreaterThan(3);
+    // Roller yediden üçe indi (2026-09-14): danışman rolü artık iki tane
+    // (Yönetici, Reklam Yöneticisi). Eşik "en az iki" — liste boşalırsa
+    // aşağıdaki döngü hiç dönmez ve iddia boşa geçer.
+    expect(DANISMAN_ROLLERI.length).toBeGreaterThanOrEqual(2);
   });
 
   it('KRİTİK: her danışman rolü şirket geneli olabiliyor', async () => {

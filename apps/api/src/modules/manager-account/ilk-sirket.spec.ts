@@ -4,7 +4,7 @@ import { createHarness, type Harness } from '../../../test/pglite-harness';
 import { ilkSirketAc } from './ilk-sirket';
 
 /**
- * `ilkSirketAc` gerçek veritabanında: şirket + org geneli owner üyeliği.
+ * `ilkSirketAc` gerçek veritabanında: şirket + org geneli Yönetici (admin) üyeliği.
  * Kaynak taraması "çağrılıyor" der; burası "çağrılınca ne olur".
  */
 let h: Harness;
@@ -30,7 +30,7 @@ function tx() {
 }
 
 describe('ilkSirketAc', () => {
-  it('KRİTİK: şirket üst hesabın ALTINDA ve açan kişi org geneli OWNER', async () => {
+  it('KRİTİK: şirket üst hesabın ALTINDA ve açan kişi org geneli YÖNETİCİ', async () => {
     const org = await ilkSirketAc(tx(), { managerAccountId: MGR, ad: 'Yılmaz Mobilya', userId: USER });
     const [satir] = await h.q<{ manager_account_id: string; name: string }>(
       'SELECT manager_account_id, name FROM organizations WHERE id = $1', [org.id]);
@@ -38,7 +38,7 @@ describe('ilkSirketAc', () => {
     expect(satir?.name).toBe('Yılmaz Mobilya');
     const uyelik = await h.q<{ role: string; client_id: string | null }>(
       'SELECT role, client_id FROM memberships WHERE user_id = $1 AND org_id = $2', [USER, org.id]);
-    expect(uyelik).toEqual([{ role: 'owner', client_id: null }]);
+    expect(uyelik).toEqual([{ role: 'admin', client_id: null }]);
   });
 
   it('KRİTİK: kısa ad çakışınca TEKİLLEŞİYOR — ikinci "Yılmaz Mobilya" düşmüyor', async () => {

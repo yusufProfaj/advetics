@@ -592,6 +592,22 @@ değiştirebiliyor; sayılar `packages/shared/src/constants/paketler.ts` içinde
 Şirket sınırı bugün uygulanıyor, reklam hesabı sınırı `connections` modülüne
 bağlandığında.
 
+**Hesabı müşteriye teslim etmek:** hesaba geçip **Ekip & Yetkiler → Üst hesap
+ekibi → + Üst hesaba kişi ekle**. E-posta kayıtlı değilse ad soyad ve parola
+ile yeni kullanıcı açılır (ev şirketi hesabın ilk şirketi), kayıtlıysa yalnızca
+yetki eklenir ve yazılan parola KULLANILMAZ — yanıt hangisinin olduğunu
+söylüyor. Rol **Yönetici** ise kişi hesabın tamamını yönetir ve kendi ekibini
+ekler; başka bir üst hesabı hiçbir zaman göremez. Sahip dışında kimse bu
+ekrandan Sahip yapılamaz.
+
+**Roller (2026-09-14'ten beri üç + Sahip):** Yönetici (`admin`), Reklam
+Yöneticisi (`ad_manager`), Müşteri (`client_viewer`); Sahip = `platform_admin`.
+`roller_uce_indi` migration'ı eski `owner`→`admin`, `manager`/`analyst`/
+`customer_service`→`ad_manager` taşıyor ve `prisma migrate deploy` çıktısına
+kaç satır taşıdığını NOTICE olarak yazıyor — deploy logunda
+`roller_uce_indi:` satırlarına bak. Tablo panelde: Ekip & Yetkiler → "Roller —
+kim ne yapabilir".
+
 ---
 
 ### 10a. "Panel yavaş" — hangi uç yavaş

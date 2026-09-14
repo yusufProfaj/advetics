@@ -122,7 +122,7 @@ function servis(s: Senaryo) {
               },
             ]
           : [],
-        memberships: (s.uyelikler ?? [{ clientId: null, role: 'owner' }]).map((u, i) => ({
+        memberships: (s.uyelikler ?? [{ clientId: null, role: 'admin' }]).map((u, i) => ({
           id: `m-${i}`,
           /*
            * `orgId` FİKSTÜRDE — gerçek satırda da var ve bağlam artık
@@ -246,7 +246,7 @@ describe('üst hesabı OLMAYAN kullanıcı — davranış değişmedi', () => {
 });
 
 describe('üst hesap altında ŞİRKET GEÇİŞİ', () => {
-  const ALTINDA: Senaryo = { ustHesap: { id: UST_A, role: 'owner' } };
+  const ALTINDA: Senaryo = { ustHesap: { id: UST_A, role: 'admin' } };
 
   it('kardeş şirketler listeleniyor', async () => {
     const r = await servis(ALTINDA).resolve('user-1');
@@ -283,7 +283,7 @@ describe('YETKİ YÜKSELTME KAPALI', () => {
      * Geçebilseydi o şirketin bütün kampanya, harcama ve müşteri verisi
      * açılırdı — RLS de izin verirdi, çünkü RLS bu değere GÜVENİYOR.
      */
-    const r = await servis({ ustHesap: { id: UST_A, role: 'owner' } }).resolve(
+    const r = await servis({ ustHesap: { id: UST_A, role: 'admin' } }).resolve(
       'user-1',
       null,
       ORG_B1,
@@ -299,7 +299,7 @@ describe('YETKİ YÜKSELTME KAPALI', () => {
 
   it('KRİTİK: ASKIYA ALINMIŞ üst hesap geçiş açmıyor', async () => {
     const r = await servis({
-      ustHesap: { id: UST_A, role: 'owner', status: 'suspended' },
+      ustHesap: { id: UST_A, role: 'admin', status: 'suspended' },
     }).resolve('user-1', null, ORG_A2);
     expect(r.context.orgId).toBe(ORG_A1);
     expect(r.managerAccount).toBeNull();
@@ -326,7 +326,7 @@ describe('YETKİ YÜKSELTME KAPALI', () => {
   });
 
   it('bilinmeyen bir kimlik geçiş açmıyor', async () => {
-    const r = await servis({ ustHesap: { id: UST_A, role: 'owner' } }).resolve(
+    const r = await servis({ ustHesap: { id: UST_A, role: 'admin' } }).resolve(
       'user-1',
       null,
       'uydurma-kimlik',
@@ -346,9 +346,9 @@ describe('ÜYELİK AKTİF ŞİRKETE SÜZÜLÜYOR', () => {
      * üst hesap katmanı o varsayımı bozdu.
      */
     return servis({
-      ustHesap: { id: UST_A, role: 'owner' },
-      uyelikler: [{ clientId: 'ws-a1', role: 'analyst' }],
-      kardesUyelikler: [{ orgId: ORG_A2, clientId: 'ws-a2', role: 'analyst' }],
+      ustHesap: { id: UST_A, role: 'admin' },
+      uyelikler: [{ clientId: 'ws-a1', role: 'client_viewer' }],
+      kardesUyelikler: [{ orgId: ORG_A2, clientId: 'ws-a2', role: 'client_viewer' }],
     })
       .resolve('user-1', null, null)
       .then((r) => {
@@ -366,12 +366,12 @@ describe('ÜYELİK AKTİF ŞİRKETE SÜZÜLÜYOR', () => {
      * bulması demekti.
      */
     const r = await servis({
-      ustHesap: { id: UST_A, role: 'owner' },
-      kardesUyelikler: [{ orgId: ORG_A2, clientId: 'ws-a2', role: 'analyst' }],
+      ustHesap: { id: UST_A, role: 'admin' },
+      kardesUyelikler: [{ orgId: ORG_A2, clientId: 'ws-a2', role: 'client_viewer' }],
     }).resolve('user-1', null, ORG_A2);
 
     expect(r.context.orgId).toBe(ORG_A2);
-    expect(r.context.role).toBe('analyst');
+    expect(r.context.role).toBe('client_viewer');
     expect(r.context.isOrgAdmin).toBe(false);
   });
 });
@@ -381,13 +381,13 @@ describe('kardeş şirkette YETKİ üst hesap rolünden geliyor', () => {
     // Ev şirketinde YALNIZCA bir workspace'e yetkisi olan kullanıcı bile,
     // üst hesap rolü `owner` olduğu için kardeş şirkette org geneli.
     const r = await servis({
-      ustHesap: { id: UST_A, role: 'owner' },
-      uyelikler: [{ clientId: 'ws-a1', role: 'analyst' }],
+      ustHesap: { id: UST_A, role: 'admin' },
+      uyelikler: [{ clientId: 'ws-a1', role: 'client_viewer' }],
     }).resolve('user-1', null, ORG_A2);
 
     expect(r.context.orgId).toBe(ORG_A2);
     expect(r.context.isOrgAdmin).toBe(true);
-    expect(r.context.role).toBe('owner');
+    expect(r.context.role).toBe('admin');
     expect(r.availableClients.map((c) => c.id)).toEqual(['ws-a2']);
   });
 
@@ -398,18 +398,18 @@ describe('kardeş şirkette YETKİ üst hesap rolünden geliyor', () => {
      * daha spesifik.
      */
     const r = await servis({
-      ustHesap: { id: UST_A, role: 'owner' },
-      uyelikler: [{ clientId: 'ws-a1', role: 'analyst' }],
+      ustHesap: { id: UST_A, role: 'admin' },
+      uyelikler: [{ clientId: 'ws-a1', role: 'client_viewer' }],
     }).resolve('user-1', 'ws-a1');
 
     expect(r.context.orgId).toBe(ORG_A1);
-    expect(r.context.role).toBe('analyst');
+    expect(r.context.role).toBe('client_viewer');
     expect(r.context.isOrgAdmin).toBe(false);
   });
 });
 
 describe('"TÜM ŞİRKETLER" MODU', () => {
-  const ALTINDA: Senaryo = { ustHesap: { id: UST_A, role: 'owner' } };
+  const ALTINDA: Senaryo = { ustHesap: { id: UST_A, role: 'admin' } };
 
   it('KRİTİK: bayrak açılıyor ve workspace listesi BÜTÜN ajansı kapsıyor', async () => {
     const r = await servis(ALTINDA).resolve('user-1', null, TUM_SIRKETLER);
@@ -446,7 +446,7 @@ describe('"TÜM ŞİRKETLER" MODU', () => {
 
   it('KRİTİK: ASKIYA ALINMIŞ üst hesapta mod AÇILMIYOR', async () => {
     const r = await servis({
-      ustHesap: { id: UST_A, role: 'owner', status: 'suspended' },
+      ustHesap: { id: UST_A, role: 'admin', status: 'suspended' },
     }).resolve('user-1', null, TUM_SIRKETLER);
     expect(r.context.tumSirketler).toBe(false);
   });
@@ -554,7 +554,7 @@ describe('ZİYARET — platform sahibi ev şirketinin bağlı OLMADIĞI hesapta'
    */
   const ZIYARET: Senaryo = {
     platformAdmin: true,
-    ustHesap: { id: UST_A, role: 'owner' },
+    ustHesap: { id: UST_A, role: 'admin' },
     evUstHesabi: UST_A,
   };
 
@@ -610,8 +610,8 @@ describe('VARSAYILAN ÜST HESAP — çerez yokken', () => {
      */
     const r = await servis({
       platformAdmin: true,
-      onceUyelikler: [{ id: UST_B, role: 'owner' }],
-      ustHesap: { id: UST_A, role: 'owner' },
+      onceUyelikler: [{ id: UST_B, role: 'admin' }],
+      ustHesap: { id: UST_A, role: 'admin' },
       evUstHesabi: UST_A,
     }).resolve('user-1', null, null, null);
     expect(r.context.managerAccountId).toBe(UST_A);
@@ -639,10 +639,50 @@ describe('VARSAYILAN ÜST HESAP — çerez yokken', () => {
     // yoksa yine belirli bir sıraya (tarih) göre ilki.
     const r = await servis({
       platformAdmin: true,
-      onceUyelikler: [{ id: UST_B, role: 'owner' }],
-      ustHesap: { id: UST_A, role: 'owner' },
+      onceUyelikler: [{ id: UST_B, role: 'admin' }],
+      ustHesap: { id: UST_A, role: 'admin' },
       evUstHesabi: UST_C,
     }).resolve('user-1', null, null, null);
     expect(r.context.managerAccountId).toBe(UST_B);
+  });
+});
+
+describe('ÜST HESAPTAKİ ROL ve yönetebilir — oturum yanıtı', () => {
+  /*
+   * Ekip ekranı "üst hesaba kişi ekle" düğmesini `managerAccount.yonetebilir`
+   * ile açıyor. `isOrgAdmin` YETMİYOR: tek bir şirketin yöneticisi de o
+   * bayrağı taşıyor ve onu üst hesap ekibini yönetebilir saymak, kendini
+   * bütün şirketlerin yöneticisi yapabilmesi demekti. Bu paket ayrımı
+   * kilitliyor.
+   */
+  it('KRİTİK: üst hesapta ad_manager → yonetebilir FALSE, isOrgAdmin ev şirketinde TRUE olsa bile', async () => {
+    const r = await servis({
+      ustHesap: { id: UST_A, role: 'ad_manager' },
+      // Ev şirketinde GERÇEK yönetici üyeliği — isOrgAdmin bundan açılıyor.
+      uyelikler: [{ clientId: null, role: 'admin' }],
+    }).resolve('user-1');
+    expect(r.context.isOrgAdmin).toBe(true);
+    expect(r.managerAccount?.rol).toBe('ad_manager');
+    expect(r.managerAccount?.yonetebilir).toBe(false);
+  });
+
+  it('üst hesapta admin → yonetebilir TRUE', async () => {
+    const r = await servis({ ustHesap: { id: UST_A, role: 'admin' } }).resolve('user-1');
+    expect(r.managerAccount?.rol).toBe('admin');
+    expect(r.managerAccount?.yonetebilir).toBe(true);
+  });
+
+  it('platform sahibi üyesi olmadığı hesapta admin sayılıyor ve yönetebiliyor', async () => {
+    // UST_B'ye ÜYELİK YOK (fikstür yalnızca UST_A'ya üyelik yazıyor); geçiş
+    // platform bayrağından. UST_C şirketsiz — oraya ziyaret bayat çerez
+    // sayılıp üyeliğe düşüyor, bu yüzden burada B.
+    const r = await servis({
+      platformAdmin: true,
+      ustHesap: { id: UST_A, role: 'ad_manager' },
+      evUstHesabi: UST_A,
+    }).resolve('user-1', null, null, UST_B);
+    expect(r.managerAccount?.id).toBe(UST_B);
+    expect(r.managerAccount?.rol).toBe('admin');
+    expect(r.managerAccount?.yonetebilir).toBe(true);
   });
 });

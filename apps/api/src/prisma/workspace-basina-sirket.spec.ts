@@ -86,8 +86,8 @@ describe('kullanicilariAyir', () => {
     const { tasinacak, kalanRiskli } = kullanicilariAyir(
       [
         kullanici('ajans@profaj.com', [
-          { clientId: null, role: 'owner' },
-          { clientId: W, role: 'manager' },
+          { clientId: null, role: 'admin' },
+          { clientId: W, role: 'ad_manager' },
         ]),
       ],
       W,
@@ -99,7 +99,7 @@ describe('kullanicilariAyir', () => {
 
   it('KRİTİK: ÜST HESABA bağlı kullanıcı TAŞINMIYOR', () => {
     const { tasinacak, kalanRiskli } = kullanicilariAyir(
-      [kullanici('sahip@profaj.com', [{ clientId: W, role: 'manager' }], true)],
+      [kullanici('sahip@profaj.com', [{ clientId: W, role: 'ad_manager' }], true)],
       W,
     );
     expect(tasinacak).toEqual([]);
@@ -181,7 +181,7 @@ beforeEach(async () => {
   );
   await h.q(
     `INSERT INTO memberships (id, user_id, org_id, client_id, role, created_at, updated_at)
-     VALUES (gen_random_uuid(), $1, $2, NULL, 'owner', now(), now())`,
+     VALUES (gen_random_uuid(), $1, $2, NULL, 'admin', now(), now())`,
     [AJANS_PERSONELI, IDS.org],
   );
 

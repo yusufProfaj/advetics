@@ -60,17 +60,12 @@ describe('YETKİSİ OLMAYAN SEKME GÖSTERİLMİYOR', () => {
     expect(kodlar('client_viewer')).not.toContain('logo');
   });
 
-  it('KRİTİK: customer_service Logo sekmesini GÖRMÜYOR (bulk.read yok)', () => {
-    expect(ROLE_PERMISSIONS.customer_service).not.toContain('bulk.read');
-    expect(kodlar('customer_service')).not.toContain('logo');
-  });
-
   it('ters yön: her şeyi gizleyen bir süzgeç de yukarıdakileri geçerdi', () => {
     // client_viewer `client.read` ve `budget.read` taşıyor — dört sekmeyi
     // GÖRMELİ. Süzgeç fazla kesiyorsa müşteri kendi bilgisini göremez.
     expect(kodlar('client_viewer')).toEqual(['bilgi-bankasi', 'butce', 'hedef-kitle', 'marka']);
-    // owner her şeyi görüyor.
-    expect(kodlar('owner')).toEqual(SEKMELER.map((s) => s.kod));
+    // Yönetici her şeyi görüyor.
+    expect(kodlar('admin')).toEqual(SEKMELER.map((s) => s.kod));
   });
 
   it('yetkisiz kullanıcıda liste BOŞ — sayfa bunu yazıya döküyor', () => {
@@ -89,7 +84,18 @@ describe('SAYFA GİRİŞ YETKİSİ', () => {
      * olan biri sayfayı BOŞ bulmamalı — menüde görünen ama açılmayan bir
      * satır, `roles.ts`in yasakladığı "tıklayınca 403" durumu.
      */
-    expect(gorunurSekmeler([SAYFA_GIRIS_IZNI]).length).toBeGreaterThan(0);
+    /*
+     * KAPI ARTIK BİR YAZMA YETKİSİ (`client.write`), yani tek başına hiçbir
+     * sekmenin `oku`suna denk gelmiyor — garanti ROL üzerinden veriliyor:
+     * kapıyı taşıyan her rol ilk sekmenin okuma yetkisini de taşımalı.
+     */
+    for (const rol of Object.keys(ROLE_PERMISSIONS) as Array<keyof typeof ROLE_PERMISSIONS>) {
+      if (!ROLE_PERMISSIONS[rol].includes(SAYFA_GIRIS_IZNI)) continue;
+      expect(ROLE_PERMISSIONS[rol], `${rol} kapıyı taşıyor ama ilk sekmeyi okuyamıyor`).toContain(
+        SEKMELER[0].oku,
+      );
+      expect(gorunurSekmeler([...ROLE_PERMISSIONS[rol]]).length).toBeGreaterThan(0);
+    }
   });
 
   it('giriş yetkisini TAŞIYAN her rol sayfada bir şey görüyor', () => {

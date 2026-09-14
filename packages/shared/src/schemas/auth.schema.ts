@@ -87,7 +87,7 @@ export const createMemberSchema = z
      * YAZILMIYOR: iki liste ayrışırsa uygulama izin verdiği bir satırı
      * veritabanı `memberships_org_scope_role_chk` ile reddeder.
      */
-    message: 'Müşteri hesabı (Görüntüleyici) bir workspace’e bağlanmak zorunda',
+    message: 'Müşteri hesabı bir workspace’e bağlanmak zorunda',
     path: ['clientId'],
   });
 export type CreateMemberInput = z.infer<typeof createMemberSchema>;
@@ -127,7 +127,7 @@ export const createMembershipSchema = z
   .refine((v) => v.clientId !== null || isOrgScopedRole(v.role), {
     // Gerekçe `createMemberSchema`da; iki şema aynı kuralı AYNI kaynaktan
     // okuyor.
-    message: 'Müşteri hesabı (Görüntüleyici) bir workspace’e bağlanmak zorunda',
+    message: 'Müşteri hesabı bir workspace’e bağlanmak zorunda',
     path: ['clientId'],
   });
 export type CreateMembershipInput = z.infer<typeof createMembershipSchema>;

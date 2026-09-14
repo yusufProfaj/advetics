@@ -24,17 +24,33 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
   {
     // BAŞLIKSIZ — katlanamaz. Günlük iş bu iki ekranda başlıyor.
     items: [
-      { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1 },
-      { href: '/auto-boost', label: 'Akıllı Boost', icon: 'boost', module: 7, ready: true },
+      { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1, perm: 'insights.read' },
+      /*
+       * ═══ MÜŞTERİ HESABI YALNIZCA ÜÇ EKRAN GÖRÜYOR ═══
+       *
+       * Kullanıcının tanımı: "müşteri = sadece genel bakış, reklam keşfi ve
+       * raporlar; reklam kısmını göremez". Bu yüzden Reklamlar ve Kütüphane
+       * bölümlerinin HER satırı bir yetki taşıyor — yetkisiz satır herkese
+       * görünüyor (süzme opt-in) ve müşteri hesabı Kurallar'ı, Aylık
+       * Bütçe'yi, Akıllı Boost'u menüde görürdü. `nav-sections.spec.ts`
+       * müşteri hesabının gördüğü etiketleri TAM LİSTE olarak kilitliyor.
+       */
+      { href: '/auto-boost', label: 'Akıllı Boost', icon: 'boost', module: 7, ready: true, perm: 'boost.read' },
     ],
   },
   {
     title: 'Reklamlar',
     items: [
-      { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4 },
-      { href: '/reklam-olustur', label: 'Reklam Oluştur', icon: 'create', module: 4, ready: true },
-      { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true },
-      { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true },
+      { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4, perm: 'insights.read' },
+      { href: '/reklam-olustur', label: 'Reklam Oluştur', icon: 'create', module: 4, ready: true, perm: 'bulk.write' },
+      { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true, perm: 'rule.read' },
+      /*
+       * `budget.write`, `budget.read` DEĞİL. Müşteri hesabı `budget.read`
+       * taşıyor — Genel Bakış'taki bütçe tüketimi o yetkiyle okunuyor ve o
+       * bilgi kendisine ait. Ama bu ekran bütçe BELİRLEME yeri; okuma
+       * yetkisiyle açmak müşteriyi kaydedemeyeceği bir forma götürürdü.
+       */
+      { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true, perm: 'budget.write' },
     ],
   },
   {
@@ -56,13 +72,14 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
        * kaybolmadı, sayfanın İÇİNE taşındı — `report.write` şablon
        * düzenlemeyi, `report.share` fatura sekmesini açıyor.
        */
-      { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6 },
+      { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6, perm: 'report.read' },
       {
         href: '/potansiyel-musteriler',
         label: 'Potansiyel Müşteriler',
         icon: 'leads',
         module: 4,
         ready: true,
+        perm: 'lead.read',
       },
     ],
   },
@@ -106,15 +123,18 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         ready: true,
         perm: SAYFA_GIRIS_IZNI,
       },
+      // Üç ekran da `/assets`/`/forms` uçlarını `bulk.read` ile okuyor —
+      // menü aynı yetkiyi taşıyor ki görünen satır her zaman açılsın.
       {
         href: '/kutuphane/gorseller',
         label: 'Görsel Arşivi',
         icon: 'assets',
         module: 2,
         ready: true,
+        perm: 'bulk.read',
       },
-      { href: '/kutuphane/kreatifler', label: 'Kreatifler', icon: 'assets', module: 4, ready: true },
-      { href: '/kutuphane/formlar', label: 'Formlar', icon: 'forms', module: 4, ready: true },
+      { href: '/kutuphane/kreatifler', label: 'Kreatifler', icon: 'assets', module: 4, ready: true, perm: 'bulk.read' },
+      { href: '/kutuphane/formlar', label: 'Formlar', icon: 'forms', module: 4, ready: true, perm: 'bulk.read' },
     ],
   },
   {

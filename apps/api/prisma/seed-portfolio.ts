@@ -103,7 +103,7 @@ interface SeedUser {
   fullName: string;
   passwordEnv: string;
   /** `null` = organizasyon geneli (Master Admin). */
-  role: 'owner' | 'manager';
+  role: 'admin' | 'ad_manager';
   /** Portföy — yalnızca `manager` için. Master Admin zaten hepsini görüyor. */
   clients: string[] | null;
 }
@@ -122,14 +122,14 @@ const USERS: SeedUser[] = [
      * eklemek, iki yetki listesini senkron tutma yükü getirirdi ve ikisi
      * zamanla ayrışırdı.
      */
-    role: 'owner',
+    role: 'admin',
     clients: null,
   },
   {
     email: 'yusuf@profaj.com',
     fullName: 'Yusuf Algan',
     passwordEnv: 'SEED_YUSUF_PASSWORD',
-    role: 'manager',
+    role: 'ad_manager',
     // Tüm portföy — spec'te bu 12 müşteri Yusuf Bey'e atanıyor.
     clients: PORTFOLIO.map((c) => c.name),
   },
@@ -137,7 +137,7 @@ const USERS: SeedUser[] = [
     email: 'ecem@profaj.com',
     fullName: 'Ecem',
     passwordEnv: 'SEED_ECEM_PASSWORD',
-    role: 'manager',
+    role: 'ad_manager',
     /**
      * BOŞ PORTFÖY ve bu bilinçli.
      *

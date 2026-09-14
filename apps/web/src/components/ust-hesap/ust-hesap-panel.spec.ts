@@ -578,7 +578,7 @@ describe('ekranın yetkisi', () => {
   });
 
   it('owner ve admin görüyor', () => {
-    expect(etiketler('owner')).toContain('Şirketler');
+    expect(etiketler('admin')).toContain('Şirketler');
     expect(etiketler('admin')).toContain('Şirketler');
   });
 

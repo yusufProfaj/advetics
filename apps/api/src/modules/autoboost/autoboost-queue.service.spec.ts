@@ -99,7 +99,7 @@ async function kullaniciEkle(
   await h.q(
     `INSERT INTO memberships (id, user_id, org_id, client_id, role, updated_at)
      VALUES (gen_random_uuid(), $1, $2, $3, $4::"Role", now())`,
-    [userId, IDS.org, opts.clientId === undefined ? IDS.client : opts.clientId, opts.role ?? 'manager'],
+    [userId, IDS.org, opts.clientId === undefined ? IDS.client : opts.clientId, opts.role ?? 'ad_manager'],
   );
   return userId;
 }
@@ -118,7 +118,7 @@ async function kullaniciEkle(
  * gerçek bir SMTP denemesi YAPILDI.
  */
 async function ajansMailKimligiEkle(): Promise<void> {
-  const userId = await kullaniciEkle('hello@profaj.com', { clientId: null, role: 'owner' });
+  const userId = await kullaniciEkle('hello@profaj.com', { clientId: null, role: 'admin' });
   await h.q(
     `INSERT INTO user_email_accounts
        (id, org_id, user_id, from_name, from_email, smtp_host, smtp_port, smtp_secure,
@@ -343,7 +343,7 @@ describe('enqueueOne — WebSub yolu', () => {
  */
 describe('alıcılar — ilgili danışmanlar', () => {
   it('bu workspace’e atanmış danışman alıcı listesinde', async () => {
-    await kullaniciEkle('yonetici@ajans.com', { clientId: IDS.client, role: 'manager' });
+    await kullaniciEkle('yonetici@ajans.com', { clientId: IDS.client, role: 'ad_manager' });
     const alicilar = await (
       svc as unknown as { alicilar(orgId: string, clientId: string): Promise<string[]> }
     ).alicilar(IDS.org, IDS.client);
@@ -359,7 +359,7 @@ describe('alıcılar — ilgili danışmanlar', () => {
   });
 
   it('KRİTİK: org geneli erişimi olan (bu workspace’e özel atanmamış) alıcı DEĞİL', async () => {
-    await kullaniciEkle('sahip@ajans.com', { clientId: null, role: 'owner' });
+    await kullaniciEkle('sahip@ajans.com', { clientId: null, role: 'admin' });
     const alicilar = await (
       svc as unknown as { alicilar(orgId: string, clientId: string): Promise<string[]> }
     ).alicilar(IDS.org, IDS.client);

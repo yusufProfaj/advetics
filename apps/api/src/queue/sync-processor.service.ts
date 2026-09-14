@@ -499,7 +499,7 @@ export class SyncProcessorService {
       orgId: rule.orgId,
       clientIds: [rule.clientId],
       activeClientId: rule.clientId,
-      role: 'owner',
+      role: 'admin',
       isOrgAdmin: true,
       permissions: [],
     } as unknown as TenantContext;

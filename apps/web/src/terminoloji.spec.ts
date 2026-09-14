@@ -73,6 +73,17 @@ const IZINLI: Array<{ neden: string; desen: RegExp }> = [
   { neden: 'KİŞİ — raporun/mailin ALICISI bir insan', desen: /müşteriye (gönder|mail|gitm|giden)|[Mm]üşteriye gönderdiğin|rapor müşteriye/ },
   { neden: 'KİŞİ — parolayı teslim alan insan', desen: /parolayı müşteriye/ },
   { neden: 'KİŞİ — "müşteri hesabı" = client_viewer rolüyle açılmış giriş hesabı', desen: /[Mm]üşteri hesa[bp]/ },  // cümle başında da geçiyor
+  {
+    /*
+     * ROL ETİKETİ. Kullanıcı rolü "müşteri" diye adlandırdı ve etiket TEK
+     * yerde tanımlı (`rol-matrisi.ts`); bütün ekranlar oradan okuyor. Desen
+     * o tanım satırına çapalı — ekrana serpiştirilmiş yeni bir "Müşteri"
+     * metni bu izinden geçmez, yine sınıflandırılmak zorunda.
+     */
+    neden: 'KİŞİ — client_viewer rolünün ekran adı, tek tanım satırı',
+    desen: /client_viewer: 'Müşteri',/,
+  },
+  { neden: 'KİŞİ — Müşteri rolünün "Müşteri seç" yönlendirmesi', desen: /rolü <strong>Müşteri<\/strong> seç/ },
   { neden: 'KİŞİ — beyaz etiket tanıtımı: paneli GÖREN kişi', desen: /Müşteriniz|Müşterileriniz|müşterilerinize/ },
   { neden: 'KİŞİ — gizlilik metninde veri sahibi', desen: /müşterilerin veya reklam izleyicilerinin|müşteriye görünmez/ },
   { neden: 'KİŞİ — “sistem bozulmuş” diye okuyan insan', desen: /müşteriye “sistem/ },

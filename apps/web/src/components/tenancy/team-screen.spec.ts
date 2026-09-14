@@ -132,11 +132,11 @@ describe('DETAY — "bu kişi nerelere erişiyor"', () => {
      * Veritabanı CHECK'i `client_id IS NOT NULL OR role <> 'client_viewer'`
      * diyor: org geneli bir `client_viewer` satırı REDDEDİLİYOR. Seçeneği
      * göstermek, kullanıcıyı ham bir kısıt hatasına davet etmek olurdu.
-     * Karar `isOrgScopedRole`tan OKUNUYOR, rol adları kopyalanmıyor.
+     * Karar `kapsamRolleri`nden (→ `SIRKET_ROLLERI`/`WORKSPACE_ROLLERI`)
+     * OKUNUYOR, rol adları kopyalanmıyor: şirket satırında Müşteri hesabı
+     * yok, workspace satırında Yönetici yok.
      */
-    expect(govde(KAYNAK, 'YetkiBolumu')).toContain(
-      "ROLES.filter((r) => m.clientId !== null || isOrgScopedRole(r as Role))",
-    );
+    expect(govde(KAYNAK, 'YetkiBolumu')).toContain("kapsamRolleri(m.clientId ?? '')");
   });
 
   it('KRİTİK: hata YUTULMUYOR', () => {
@@ -170,12 +170,18 @@ function govde(kaynak: string, ad: string): string {
 describe('DANIŞMAN ATA', () => {
   const ATA = () => govde(KAYNAK, 'DanismanAtaModal');
 
-  it('KRİTİK: org geneli rol buradan VERİLEMİYOR', () => {
+  it('KRİTİK: rol listesi ŞİRKET kapsamının listesi — Müşteri hesabı yok', () => {
     /*
-     * Bu ekran "bir müşteriye ata" işi. Buradan owner/admin seçilebilse bir
-     * danışman atama işlemi sessizce org yöneticisi üretirdi.
+     * KARAR DEĞİŞTİ. Eski ekran owner/admin'i gizliyordu ("sessizce org
+     * yöneticisi üretirdi"). Roller üçe inince "bu şirketin Yöneticisi"
+     * gerçek bir ihtiyaç oldu ve rol açıklaması seçicinin altında yazıyor —
+     * sessiz değil. Liste ELLE değil `SIRKET_ROLLERI`nden: Müşteri hesabı
+     * (`client_viewer`) şirket seviyesinde olamaz ve o kural tek kaynakta.
      */
-    expect(ATA()).toContain("r !== 'owner' && r !== 'admin'");
+    const g = ATA();
+    expect(g).toContain('SIRKET_ROLLERI.map(');
+    expect(g).not.toContain('client_viewer');
+    expect(g).toContain('<RolAciklamasi rol={rol} />');
   });
 
   it('zaten yetkisi olan ŞİRKET SEÇİLEMİYOR ve sebebi yazılı', () => {

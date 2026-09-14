@@ -20,8 +20,8 @@
 | Panel sayfası | 16 | **28** |
 | API controller | 17 | **25** |
 | RLS politikası | 95 | **159** |
-| Rol | 5 | **7** |
-| Yetki anahtarı | — | **34** |
+| Rol | 5 | **3 + Sahip bayrağı** |
+| Yetki anahtarı | — | **32** |
 | Zamanlanmış süpürme | 8 | **14** |
 
 Sol sütun 11 Ağustos'taki commit'ten (`b5a0acc`) SAYILDI, sağ sütun bugünkü
@@ -72,7 +72,7 @@ Senin paylaştığın 7 parçalı mimariye göre. ✅ tamam · 🟡 kısmi · �
 | Yetenek | Durum | Nerede |
 |---|---|---|
 | Çoklu kiracı (org → müşteri → kullanıcı) | ✅ | `prisma/schema.prisma` |
-| Rol ve yetki matrisi — **7 rol, 34 yetki** | ✅ | `packages/shared/src/auth/roles.ts` |
+| Rol ve yetki matrisi — **3 rol + Sahip, 32 yetki** | ✅ | `packages/shared/src/auth/roles.ts`, karşılaştırma tablosu `rol-matrisi.ts` |
 | RLS — **159 politika**, `FORCE` edilmiş | ✅ | `prisma/sql/02_rls.sql` |
 | Beyaz etiket (logo, renk, font) | ✅ | `branding_profiles` |
 | Denetim kaydı (append-only) | ✅ | `audit_logs` |
@@ -427,25 +427,44 @@ denenmedi.
 
 ### Yetki
 
-**Org geneli VERİ erişimi ile org YÖNETİCİLİĞİ ayrıldı** — bu dönemin en
-yapısal değişikliği. `isOrgAdmin` iki işi birden yapıyordu: (1) org'daki
-bütün müşterilerin verisini görmek, (2) kullanıcı açma / üyelik verme /
-müşteri silme kapılarını açmak.
+**Yedi rolden üçe + bir bayrak (2026-09-14).** Kullanıcının tarifi *"çok
+fazla yetki var, ne neye yarıyor"* idi; yedi rolün beşi ajans personelinin
+tonlarıydı ve hiçbiri ayrı bir ekran açmıyordu. Yeni model kullanıcının kendi
+cümleleriyle:
 
-- `ORG_SCOPED_ROLES` = veri kapsamı (owner, admin, **ad_manager**)
-- `ORG_ADMIN_ROLES` = yetki demeti (owner, admin)
+| Rol | Kod | Ne yapar |
+|---|---|---|
+| **Sahip** | `users.platform_admin` (bayrak, rol değil) | Her şey: üst hesap kurar, paket seçer, bütün üst hesaplara geçer. Panelden verilemez (`db:platform-admin`) |
+| **Yönetici** | `admin` | Verildiği kapsamın tamamını yönetir: kişi ekler, şirket açar/siler, platform bağlar. Üst hesapta verilirse bütün şirketler, tek şirkette verilirse o şirket. Başka üst hesabı göremez |
+| **Reklam Yöneticisi** | `ad_manager` | Yetkilendirildiği şirketlerin workspace'lerini yönetir: yayınlar, kural/bütçe yazar, hesap atar, veriyi günceller. Kişi ekleyemez, şirket açamaz |
+| **Müşteri** | `client_viewer` | Yalnızca Genel Bakış, Reklam Keşfi, Raporlar. Tarih değiştirir, verisini görür ve günceller (`sync.trigger`). Reklam ekranlarını görmez |
 
-Yeni roller: **Reklam Yöneticisi** (`ad_manager`) ve **Müşteri Hizmetleri**
-(`customer_service`). Reklam Yöneticisi'ni çalışır hâle getirmek YETKİ
-MATRİSİNDEN İBARET DEĞİLDİ — dört katman birden gerekti:
+`owner`, `manager`, `analyst`, `customer_service` KALKTI — `roller_uce_indi`
+migration'ı eski satırları taşıyor (owner→admin, diğer üçü→ad_manager) ve kaç
+satır taşındığını NOTICE ile yazıyor. `org.billing` ve `rule.revert` yetkileri
+de kalktı: hiçbir guard okumuyordu.
 
-1. Yetki matrisi + yeni `connection.manage` yetkisi
-2. RLS: havuz görünürlüğü `app.is_org_admin()`e bağlıydı → `app.can_manage_pool()`
-3. `INSERT ... RETURNING` SELECT politikasından da geçiyor; yeni açılan
-   müşterinin kimliği erişim listesinde olamadığı için çağrı düşüyordu.
-   Kimlik önden üretilip kapsam O TRANSACTION için genişletiliyor
-4. Marka profili aynı transaction'da yazılıyor ve politikası yalnızca org
-   yöneticisi diyordu
+**Kapsam × rol** (`roles.ts`): üst hesap ve şirket → Yönetici/Reklam
+Yöneticisi; workspace → Reklam Yöneticisi/Müşteri. Tek workspace'e bağlı bir
+"yönetici" hiçbir yönetim kapısını açamaz (`isOrgAdmin` `clientId: null`
+ister), o yüzden listede yok.
+
+**Karşılaştırma tablosu** (`rol-matrisi.ts` → Ekip & Yetkiler ekranı): Google
+Ads'in erişim düzeyi tablosuyla aynı biçim; hücreler `ROLE_PERMISSIONS`tan
+TÜRETİLİYOR, elle işaretlenmiyor.
+
+**Üst hesap ekibi** (`/manager-account/members`, `ust-hesap-ekibi.service.ts`):
+üst hesaba kişi ekleme uzun süre YOKTU — kurucu tek üyeydi. Kapı `isOrgAdmin`
+DEĞİL, üst hesap üyeliğinin rolü (ya da platform sahibi): tek şirketin
+yöneticisi kendini bütün şirketlerin yöneticisi yapamasın. Yeni kullanıcının
+ev şirketi üst hesabın en eski şirketi; var olan kullanıcının parolasına
+dokunulmuyor; başka üst hesabın kullanıcısı "bulunamadı".
+
+Menü artık Reklamlar ve Kütüphane bölümlerinin HER satırında yetki taşıyor;
+müşteri hesabının gördüğü etiketler `nav-sections.spec.ts`te tam liste olarak
+kilitli. Bilgi Bankası müşteri hesabından KALKTI (kapı `client.write`).
+
+`ORG_SCOPED_ROLES` = admin, ad_manager · `ORG_ADMIN_ROLES` = admin.
 
 ### Panel
 

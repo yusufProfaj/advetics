@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { ManagerAccountController } from './manager-account.controller';
 import { ManagerAccountService } from './manager-account.service';
+import { UstHesapEkibiController } from './ust-hesap-ekibi.controller';
+import { UstHesapEkibiService } from './ust-hesap-ekibi.service';
 
 /**
  * NEST MODÜL KAYDI DERLEMEDE DEĞİL AÇILIŞTA PATLIYOR (CLAUDE.md).
@@ -9,8 +11,8 @@ import { ManagerAccountService } from './manager-account.service';
  */
 @Module({
   imports: [AuditModule],
-  controllers: [ManagerAccountController],
-  providers: [ManagerAccountService],
+  controllers: [ManagerAccountController, UstHesapEkibiController],
+  providers: [ManagerAccountService, UstHesapEkibiService],
   exports: [ManagerAccountService],
 })
 export class ManagerAccountModule {}

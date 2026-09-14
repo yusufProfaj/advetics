@@ -40,7 +40,7 @@ export async function ilkSirketAc(
   // ÜYELİK `clientId: null` — org geneli. Henüz workspace yok ve org geneli
   // olmayan bir satır, açan kişiyi kendi şirketinden dışarıda bırakırdı.
   await tx.membership.create({
-    data: { userId: girdi.userId, orgId: org.id, clientId: null, role: 'owner' },
+    data: { userId: girdi.userId, orgId: org.id, clientId: null, role: 'admin' },
   });
   return org;
 }

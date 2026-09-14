@@ -106,7 +106,7 @@ export class AuthService {
       });
 
       await tx.membership.create({
-        data: { userId: created.id, orgId: org.id, clientId: null, role: Role.owner },
+        data: { userId: created.id, orgId: org.id, clientId: null, role: Role.admin },
       });
 
       await tx.brandingProfile.create({
@@ -277,6 +277,7 @@ export class AuthService {
       platformAdmin: identity.context.platformAdmin,
       permissions: identity.context.permissions,
       isOrgAdmin: identity.context.isOrgAdmin,
+      rol: identity.context.role,
     };
   }
 

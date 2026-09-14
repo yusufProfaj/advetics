@@ -117,6 +117,14 @@ export interface SessionResponse {
   permissions: Permission[];
   isOrgAdmin: boolean;
   /**
+   * ETKİN ROL — bağlamdaki `ctx.role`.
+   *
+   * Kenar çubuğundaki rozet buradan okuyor. Eskiden `isOrgAdmin ?
+   * 'Yönetici' : 'Workspace erişimi'` yazıyordu: Reklam Yöneticisi ile
+   * Müşteri aynı etiketi görüyordu ve Sahip "Yönetici" oluyordu.
+   */
+  rol: Role;
+  /**
    * Kullanıcının seçebileceği müşteriler, isimleriyle.
    *
    * `memberships`ten TÜRETİLEMEZ: org geneli yetkili bir kullanıcının
@@ -151,6 +159,19 @@ export interface SessionResponse {
     /** Satılan paket — kısıtlar `PAKET_SINIRLARI` içinde. */
     paket: ManagerPaket;
     organizations: Array<{ id: string; name: string; slug: string }>;
+    /**
+     * Kullanıcının BU üst hesaptaki rolü.
+     *
+     * Üyeliği varsa üyelikten; platform sahibi üyesi olmadığı bir hesaba
+     * geçmişse `admin` (hesabı kurup ayarlaması gereken taraf o). Ekip
+     * ekranı "üst hesaba kişi ekle" düğmesini buna bakarak açıyor —
+     * `isOrgAdmin` YETMİYOR: tek bir şirketin yöneticisi de o bayrağı
+     * taşıyor ve onu üst hesap ekibine kişi ekleyebilir saymak, kendini
+     * bütün şirketlerin yöneticisi yapabilmesi demekti.
+     */
+    rol: Role;
+    /** Üst hesap ekibini yönetebilir mi: platform sahibi ya da `admin` üyelik. */
+    yonetebilir: boolean;
   } | null;
 
   /**

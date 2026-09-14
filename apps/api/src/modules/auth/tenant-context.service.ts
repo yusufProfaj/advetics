@@ -28,12 +28,8 @@ import type { RequestActor } from '../../common/types/request';
  * `rol-yetkileri.spec.ts` sırayı kümelerle karşılaştırıyor.
  */
 const ROLE_RANK: Record<Role, number> = {
-  owner: 7,
-  admin: 6,
-  ad_manager: 5,
-  manager: 4,
-  analyst: 3,
-  customer_service: 2,
+  admin: 3,
+  ad_manager: 2,
   client_viewer: 1,
 };
 
@@ -64,6 +60,9 @@ export interface ResolvedIdentity {
     paket: ManagerPaket;
     /** Bu üst hesap altında kullanıcının geçebileceği şirketler. */
     organizations: Array<{ id: string; name: string; slug: string }>;
+    /** Kullanıcının bu üst hesaptaki rolü — gerekçe `SessionResponse.managerAccount.rol`. */
+    rol: Role;
+    yonetebilir: boolean;
   } | null;
   /** Geçilebilecek üst hesaplar — seçicinin listesi. */
   secilebilirUstHesaplar: Array<{
@@ -335,6 +334,14 @@ export class TenantContextService {
     const { uyelik, ustHesap, kardesSirketler, ziyaret } = secim;
 
     /*
+     * ÜST HESAPTAKİ ROL — üyelikten; üyelik yoksa (platform sahibi, üyesi
+     * olmadığı hesapta) `admin`. TEK YERDE hesaplanıyor: sentetik üyelik
+     * iki dalda kuruluyor ve oturum yanıtı da aynı değeri taşıyor; üç yerde
+     * ayrı ayrı `?? 'admin'` yazmak, birinin bir gün farklı düşmesi demek.
+     */
+    const ustHesapRolu: Role = (uyelik?.role as Role | undefined) ?? 'admin';
+
+    /*
      * İZİN LİSTESİ VERİTABANINDAN HESAPLANIYOR, istekten değil. `activeOrgId`
      * bütün RLS politikalarının okuduğu `app.current_org_id()`yi sürüyor;
      * doğrulanmamış bir değer, cookie düzenleyerek başka bir şirketin
@@ -580,11 +587,11 @@ export class TenantContextService {
            * ROL ÜYELİKTEN, AKTİF HESAP KAYDINDAN DEĞİL.
            *
            * Platform sahibi üyesi OLMADIĞI bir üst hesaba da geçebiliyor ve
-           * orada bir rolü yok; `owner` düşülüyor çünkü o hesabı kurup
+           * orada bir rolü yok; `admin` düşülüyor çünkü o hesabı kurup
            * ayarlaması gereken taraf o. Üyeliği olan kullanıcıda ise rol
            * üyelikten geliyor ve hiçbir şey değişmiyor.
            */
-          role: uyelik?.role ?? 'owner',
+          role: ustHesapRolu,
           permissions: null,
           client: null,
         } as (typeof user.memberships)[number],
@@ -602,7 +609,7 @@ export class TenantContextService {
           id: `manager:${ustHesap.managerAccountId}`,
           orgId: activeOrgId,
           clientId: null,
-          role: uyelik?.role ?? 'owner',
+          role: ustHesapRolu,
           // Üst hesap üyeliği ince ayar TAŞIMIYOR: rol bir şirkette değil,
           // bir danışmanlığın ALTINDAKİ HEPSİNDE geçerli ve tek tek
           // istisna yazmanın yeri o şirketin kendi `memberships` satırı.
@@ -749,6 +756,13 @@ export class TenantContextService {
             name: ustHesap.managerAccount.name,
             paket: ustHesap.managerAccount.paket,
             organizations: kardesSirketler,
+            rol: ustHesapRolu,
+            /*
+             * `isOrgAdmin` DEĞİL: o bayrak tek bir şirketin yöneticisinde
+             * de açık ve onu üst hesap ekibine kişi ekleyebilir saymak,
+             * kendini bütün şirketlerin yöneticisi yapabilmesi demek.
+             */
+            yonetebilir: user.platformAdmin || isOrgAdminRole(ustHesapRolu),
           }
         : null,
       /*
