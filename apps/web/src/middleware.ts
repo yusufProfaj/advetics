@@ -144,8 +144,17 @@ export const config = {
    *
    * Statik dosya uzantıları da dışlandı; bunlar için oturum mantığı çalıştırmak
    * gereksiz maliyet.
+   *
+   * LİSTEDE OLMAYAN BİR UZANTI SESSİZCE ÖLÜYOR. `mp4` ilk eklendiğinde
+   * listede yoktu: ana sayfanın hero filmi `/login`'e 307 ile yönleniyor,
+   * `<video>` `MEDIA_ERR_SRC_NOT_SUPPORTED` alıyor ve sayfa hiçbir hata
+   * göstermeden posterde donuyordu. Poster `.jpg` olduğu için ÇALIŞIYORDU —
+   * yani arıza "video yok" değil "video hiç oynamıyor" gibi görünüyor ve
+   * sebebi bu satırda. `public/` altına yeni bir tür dosya koyan herkes
+   * burayı da genişletmek zorunda; `statik-varliklar.spec.ts` iki listeyi
+   * karşılaştırıyor.
    */
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml|opengraph-image|twitter-image|icon|apple-icon|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|txt|xml|webmanifest)$).*)',
+    '/((?!api|_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml|opengraph-image|twitter-image|icon|apple-icon|.*\\.(?:png|jpg|jpeg|gif|svg|webp|avif|ico|txt|xml|webmanifest|mp4|webm|m4v|woff|woff2)$).*)',
   ],
 };

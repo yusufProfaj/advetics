@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { KaydirmaFilmi } from '@/components/landing/kaydirma-filmi';
 import { SiteFooter } from '@/components/landing/site-footer';
 import { SiteNav } from '@/components/landing/site-nav';
 
@@ -142,49 +143,61 @@ export default function HomePage() {
 
       <main>
         {/* ---------------------------------------------------------------- */}
-        {/* Hero                                                             */}
+        {/* Hero — kaydırmayla ilerleyen film                                 */}
         {/* ---------------------------------------------------------------- */}
-        <section className="bg-surface">
-          <div className="mx-auto max-w-4xl px-4 py-20 text-center sm:px-6 sm:py-28">
-            {/* Ham `text-brand` koyu temada 3.80 kontrast veriyor; okunabilir
-                ton zemine göre yön değiştiriyor (globals.css). */}
-            <p className="text-sm font-semibold text-brand-strong">
-              Meta ve Google Ads için tek panel
-            </p>
+        {/*
+          METİN ORTALI DEĞİL SOLA YASLI OLDU ve bu, filmin yanına geçmesinin
+          zorunlu sonucu. Ortalanmış bir metin sütunu, yanındaki 16:9 kutuyla
+          aynı hizada durmuyor: başlık sağa doğru kayıp filmin kenarına
+          yaklaşıyor ve iki sütun arasındaki boşluk gözle eğri görünüyor.
 
-            <h1 className="mt-5 text-4xl font-black leading-[1.08] tracking-tight text-ink sm:text-6xl">
-              Reklamcılık bilmeden
-              <br />
-              reklam verin
-            </h1>
+          Butonlar filmin ÜSTÜNDE değil YANINDA: gerekçe `kaydirma-filmi.tsx`
+          içinde — film neredeyse tamamen beyaz ve panelin kadrajdaki yeri
+          ekrana göre değişiyor, üstüne konan bir buton bazı ekranlarda
+          kartların üstüne düşerdi.
+        */}
+        <KaydirmaFilmi>
+          {/* Ham `text-brand` koyu temada 3.80 kontrast veriyor; okunabilir
+              ton zemine göre yön değiştiriyor (globals.css). */}
+          <p className="text-sm font-semibold text-brand-strong">
+            Meta ve Google Ads için tek panel
+          </p>
 
-            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
-              {"Hedef, optimizasyon, yerleşim, teklif stratejisi — hepsini Advetics " +
-                "karara bağlıyor. Siz ne satmak istediğinizi söyleyin; kampanya " +
-                "kurulsun, bütçe izlensin, rapor kendiliğinden hazırlansın."}
-            </p>
+          <h1
+            id="hero-baslik"
+            className="mt-5 text-4xl font-black leading-[1.08] tracking-tight text-ink sm:text-5xl lg:text-[clamp(2.75rem,3.6vw,3.75rem)]"
+          >
+            Reklamcılık bilmeden
+            <br />
+            reklam verin
+          </h1>
 
-            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <a
-                href={DEMO_MAILTO}
-                className="w-full rounded-lg bg-brand px-6 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 sm:w-auto"
-              >
-                Demo Talep Et
-              </a>
-              <a
-                href="#nasil-calisir"
-                className="w-full rounded-lg border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-surface-muted sm:w-auto"
-              >
-                Nasıl Çalışır?
-              </a>
-            </div>
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-muted">
+            {"Hedef, optimizasyon, yerleşim, teklif stratejisi — hepsini Advetics " +
+              "karara bağlıyor. Siz ne satmak istediğinizi söyleyin; kampanya " +
+              "kurulsun, bütçe izlensin, rapor kendiliğinden hazırlansın."}
+          </p>
 
-            <p className="mt-8 text-sm text-ink-muted">
-              {"Yalnızca Meta ve Google Ads. Onlarca platformu yüzeysel desteklemek " +
-                "yerine ikisini derinlemesine yapıyoruz."}
-            </p>
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <a
+              href={DEMO_MAILTO}
+              className="rounded-lg bg-brand px-6 py-3 text-center text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            >
+              Demo Talep Et
+            </a>
+            <a
+              href="#nasil-calisir"
+              className="rounded-lg border border-line bg-surface px-6 py-3 text-center text-sm font-semibold text-ink transition-colors hover:bg-surface-muted"
+            >
+              Nasıl Çalışır?
+            </a>
           </div>
-        </section>
+
+          <p className="mt-8 max-w-md text-sm text-ink-muted">
+            {"Yalnızca Meta ve Google Ads. Onlarca platformu yüzeysel desteklemek " +
+              "yerine ikisini derinlemesine yapıyoruz."}
+          </p>
+        </KaydirmaFilmi>
 
         {/* ---------------------------------------------------------------- */}
         {/* Platformlar                                                      */}
