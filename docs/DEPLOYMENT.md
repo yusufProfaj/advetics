@@ -610,6 +610,43 @@ kim ne yapabilir".
 
 ---
 
+### 10c. Migration yarıda düştü (P3018)
+
+`prisma migrate deploy` bir migration'ın ortasında hata verirse deploy durur ve
+**bir sonraki deploy da başlamaz** — Prisma başarısız kaydı görünce yeni
+migration uygulamayı reddediyor:
+
+```
+Error: P3018  A migration failed to apply.
+```
+
+**Veritabanı büyük ihtimalle bozulmadı:** Prisma her migration dosyasını tek
+transaction'da koşuyor ve Postgres'te DDL de transaction'a dâhil, yani dosyanın
+ortasında düşen bir migration'ın YAPTIKLARI DA geri alınıyor. Geriye yalnızca
+`_prisma_migrations` tablosundaki başarısız satır kalıyor.
+
+Migration dosyası düzeltilip çekildikten sonra o satır "geri alındı" olarak
+işaretlenir ve deploy tekrar koşar:
+
+```bash
+cd ~/htdocs/advetics.com && set -a && . ./.env && set +a \
+  && pnpm --filter @advetics/api exec prisma migrate resolve --rolled-back <migration_adı>
+./scripts/deploy.sh
+```
+
+**`set -a && . ./.env && set +a` ŞART VE ATLANIYOR.** `schema.prisma`
+`directUrl = env("DIRECT_DATABASE_URL")` istiyor (migration'lar tablo sahibi
+`advetics_migrator` ile koşuyor) ve Prisma CLI kök `.env`i kendiliğinden
+YÜKLEMİYOR — kendi dizinine bakıyor. `deploy.sh` bu satırı derleme adımından
+önce zaten çalıştırdığı için script içinde sorun görünmüyor; komutu ELLE
+koşarken atlanınca `P1012 · Environment variable not found: DIRECT_DATABASE_URL`
+geliyor ve mesaj sebebi söylemiyor.
+
+`--rolled-back` yerine `--applied` KULLANMA: o, migration'ı hiç koşmadan
+"uygulandı" sayar ve şema ile geçmiş sessizce ayrışır.
+
+---
+
 ### 10a. "Panel yavaş" — hangi uç yavaş
 
 Panel TEK bir ekranı çizerken altı ayrı uca istek atıyor (`summary`,
