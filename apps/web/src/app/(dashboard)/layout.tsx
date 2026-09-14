@@ -166,7 +166,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           */}
           <div className="flex min-w-0 items-center gap-2">
           {/* MENÜ DÜĞMESİ YALNIZCA MOBİLDE: masaüstünde kenar çubuğu zaten açık. */}
-          <MobilMenu veri={kenarVerisi} />
+          <MobilMenu veri={kenarVerisi} stil={themeStyle} />
           <UstHesapSecici
             hesaplar={session.secilebilirUstHesaplar}
             aktifId={session.managerAccount?.id ?? null}

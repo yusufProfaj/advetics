@@ -58,6 +58,39 @@ describe('mobil gezinme', () => {
     expect(bas, 'pathname etkisi yok').toBeGreaterThan(-1);
   });
 
+  it('KRİTİK: çekmece `document.body`ye PORTAL ile çiziliyor', () => {
+    /*
+     * Düğme üst barın içinde ve üst bar `backdrop-blur` taşıyor.
+     * `backdrop-filter` uygulanan bir öğe, içindeki `position: fixed`
+     * elemanlar için YENİ BİR KAPSAYICI KUTU kuruyor: `fixed inset-0`
+     * ekranın tamamına değil 64 piksellik üst bara göre çözülüyor ve
+     * çekmece oraya sıkışıyor. Üretimde görüldü, kullanıcının tarifi:
+     * "menü header kısmında açılıyor."
+     *
+     * `z-index` BUNU ÇÖZMÜYOR — sorun yığın sırası değil, koordinatların
+     * neye göre hesaplandığı. Aynı tuzak `transform` ve `filter` için de
+     * geçerli, yani üst bardan blur kalksa bile bir gün animasyonla geri
+     * gelirdi.
+     */
+    expect(MOBIL).toContain("import { createPortal } from 'react-dom'");
+    expect(MOBIL).toContain('document.body,');
+    // Üst bar gerçekten kapsayıcı kutu kuruyor mu: iddia varsayıma değil
+    // layout'un kendisine çapalı. Blur bir gün kalkarsa bu satır düşer ve
+    // portal kararı gözden geçirilir.
+    expect(LAYOUT).toMatch(/<header[^>]*backdrop-blur/);
+  });
+
+  it('KRİTİK: marka renkleri portala da geçiyor', () => {
+    /*
+     * Marka değişkenleri layout'taki bir `div`in inline stilinde duruyor;
+     * portal çekmeceyi o kabın DIŞINA taşıyor ve değişkenler miras
+     * alınmıyor. Logosuz bir müşteride baş harf rozeti ajansın rengi yerine
+     * varsayılan kırmızıyı basardı.
+     */
+    expect(LAYOUT).toContain('stil={themeStyle}');
+    expect(MOBIL).toContain('<div style={stil}');
+  });
+
   it('çekmece Esc ile kapanıyor ve arka plan kaymıyor', () => {
     expect(MOBIL).toContain("e.key === 'Escape'");
     expect(MOBIL).toContain("document.body.style.overflow = 'hidden'");

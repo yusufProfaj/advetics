@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { KenarIcerigi, type KenarVerisi } from '@/components/kenar-cubugu';
 
@@ -14,8 +15,30 @@ import { KenarIcerigi, type KenarVerisi } from '@/components/kenar-cubugu';
  *
  * ÇEKMECE, AÇILIR MENÜ DEĞİL: menüde beş bölüm ve on dört satır var;
  * küçük bir açılır kutu bunları taşımıyor.
+ *
+ * ┌─ ÇEKMECE `document.body`YE TAŞINIYOR — VE BU ZORUNLU ──────────────────┐
+ * │ Düğme üst barın içinde duruyor; üst bar `backdrop-blur` taşıyor.        │
+ * │ `backdrop-filter` uygulanan bir öğe, içindeki `position: fixed`         │
+ * │ elemanlar için YENİ BİR KAPSAYICI KUTU kuruyor: `fixed inset-0` artık   │
+ * │ ekranın tamamına değil, 64 piksellik üst bara göre çözülüyor ve çekmece │
+ * │ oraya sıkışıyor. Kullanıcının gördüğü hâli: "menü header kısmında       │
+ * │ açılıyor."                                                              │
+ * │                                                                         │
+ * │ `z-index` bunu ÇÖZMÜYOR — sorun yığın sırası değil, koordinatların      │
+ * │ neye göre hesaplandığı. Aynı tuzak `transform`, `filter` ve             │
+ * │ `will-change` için de geçerli; üst bardan blur kaldırılsa bile bir gün  │
+ * │ animasyon eklenince geri gelirdi. Portal, çekmeceyi o kutunun tamamen   │
+ * │ dışına çıkarıyor.                                                       │
+ * └─────────────────────────────────────────────────────────────────────────┘
  */
-export function MobilMenu({ veri }: { veri: KenarVerisi }) {
+export function MobilMenu({
+  veri,
+  stil,
+}: {
+  veri: KenarVerisi;
+  /** Marka renkleri. Portal layout'un dışına çıktığı için elden geçiyor. */
+  stil?: React.CSSProperties;
+}) {
   const [acik, setAcik] = useState(false);
   const pathname = usePathname();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -69,34 +92,47 @@ export function MobilMenu({ veri }: { veri: KenarVerisi }) {
         </svg>
       </button>
 
-      {acik && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <button
-            type="button"
-            aria-label="Menüyü kapat"
-            onClick={() => setAcik(false)}
-            className="absolute inset-0 bg-black/40"
-          />
-          <div
-            ref={panelRef}
-            tabIndex={-1}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Menü"
-            className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-line bg-surface shadow-pop outline-none"
-          >
-            <KenarIcerigi
-              veri={veri}
-              /*
-               * KAPATMA `nav`ın ÜSTÜNDE, her bağlantıda DEĞİL. Her satıra
-               * ayrı bir kapatma bağlamak, menüye yeni bir satır eklendiğinde
-               * unutulacak bir adım demekti.
-               */
-              onGezinme={() => setAcik(false)}
+      {acik &&
+        createPortal(
+          /*
+           * MARKA DEĞİŞKENLERİ PORTALA DA GEÇİYOR.
+           *
+           * `--brand-primary` ve arkadaşları layout'taki bir `div`in inline
+           * stilinde duruyor. Portal çekmeceyi `document.body`ye taşıdığı
+           * için o kabın DIŞINA çıkıyor ve değişkenler miras alınmıyor:
+           * logosuz bir müşteride baş harf rozeti (`bg-brand`) ajansın
+           * rengi yerine VARSAYILAN kırmızıyı basardı. Beyaz etiketli bir
+           * üründe müşteriye başkasının rengini göstermek, bu depoda
+           * açıkça yazılı bir kural ihlali.
+           */
+          <div style={stil} className="fixed inset-0 z-50 lg:hidden">
+            <button
+              type="button"
+              aria-label="Menüyü kapat"
+              onClick={() => setAcik(false)}
+              className="absolute inset-0 bg-black/40"
             />
-          </div>
-        </div>
-      )}
+            <div
+              ref={panelRef}
+              tabIndex={-1}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Menü"
+              className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-line bg-surface shadow-pop outline-none"
+            >
+              <KenarIcerigi
+                veri={veri}
+                /*
+                 * KAPATMA `nav`ın ÜSTÜNDE, her bağlantıda DEĞİL. Her satıra
+                 * ayrı bir kapatma bağlamak, menüye yeni bir satır
+                 * eklendiğinde unutulacak bir adım demekti.
+                 */
+                onGezinme={() => setAcik(false)}
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
