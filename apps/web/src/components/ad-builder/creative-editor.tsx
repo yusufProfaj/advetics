@@ -384,7 +384,7 @@ function MetinListesi({
         <button
           type="button"
           onClick={() => onChange([...items, ''])}
-          className="mt-1.5 text-[11px] text-brand underline"
+          className="mt-1.5 text-[11px] text-brand-strong underline"
         >
           + {baslik.toLowerCase()} ekle
         </button>

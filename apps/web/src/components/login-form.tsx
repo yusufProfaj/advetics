@@ -108,12 +108,12 @@ export function LoginForm() {
             checked={rememberMe}
             disabled={pending}
             onChange={(e) => setRememberMe(e.target.checked)}
-            className="h-4 w-4 rounded border-line text-brand focus:ring-2 focus:ring-brand/20"
+            className="h-4 w-4 rounded border-line text-brand-strong focus:ring-2 focus:ring-brand/20"
           />
           Beni hatırla
         </label>
 
-        <Link href="/sifremi-unuttum" className="text-sm text-brand hover:underline">
+        <Link href="/sifremi-unuttum" className="text-sm text-brand-strong hover:underline">
           Şifremi unuttum
         </Link>
       </div>

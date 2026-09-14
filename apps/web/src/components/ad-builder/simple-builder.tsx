@@ -393,7 +393,7 @@ export function SimpleAdBuilder({
                         <button
                           type="button"
                           onClick={() => setCropSource(a)}
-                          className="mt-0.5 w-full text-[10px] text-brand underline"
+                          className="mt-0.5 w-full text-[10px] text-brand-strong underline"
                         >
                           {oran ? 'kırp' : 'kırpıp kullan'}
                         </button>

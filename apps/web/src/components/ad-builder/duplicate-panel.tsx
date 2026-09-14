@@ -271,7 +271,7 @@ export function DuplicatePanel({
           type="button"
           onClick={() => setVariants((prev) => [...prev, bosVaryasyon(prev.length + 1)])}
           disabled={variants.length >= 20}
-          className="mt-2 text-xs font-medium text-brand underline disabled:opacity-40"
+          className="mt-2 text-xs font-medium text-brand-strong underline disabled:opacity-40"
         >
           + Varyasyon ekle
         </button>

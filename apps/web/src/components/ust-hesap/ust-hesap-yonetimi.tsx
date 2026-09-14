@@ -70,7 +70,7 @@ export function UstHesapYonetimi({
               aria-expanded={yeniAcik}
               className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
                 yeniAcik
-                  ? 'border-brand bg-brand-soft text-brand'
+                  ? 'border-brand bg-brand-soft text-brand-strong'
                   : 'border-brand bg-brand text-white hover:opacity-90'
               }`}
             >
@@ -255,7 +255,7 @@ function SatirDugmesi({
   const sinif = aktif
     ? tehlike
       ? 'border-danger bg-danger/10 text-danger'
-      : 'border-brand bg-brand-soft text-brand'
+      : 'border-brand bg-brand-soft text-brand-strong'
     : tehlike
       ? 'border-line text-ink-muted hover:border-danger hover:text-danger'
       : 'border-line text-ink hover:bg-surface-muted';

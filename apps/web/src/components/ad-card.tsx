@@ -4,6 +4,7 @@ import { platformKisaAdi } from '@advetics/shared';
 import { formatMoney, formatNumber, formatPercent, formatRoas } from '@/lib/format';
 import { KreatifGorsel } from '@/components/kreatif-gorsel';
 import { PlatformLogo } from '@/components/platform-logo';
+import { ctaEtiketi, incelemeEtiketi, kreatifTuruEtiketi } from '@/lib/reklam-etiketleri';
 
 const STATUS_STYLE: Record<string, string> = {
   active: 'bg-ok/10 text-ok ring-ok/25',
@@ -146,19 +147,29 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
               />
               {platformKisaAdi(ad.platform)}
             </span>
+            {/*
+              ═══ HAM PLATFORM KODLARI EKRANDAN KALKTI ═══
+              Üçü de Meta ve Google'ın iç kodlarıyla basılıyordu:
+              `RESPONSIVE_SEARCH_AD`, `SHOP_NOW`, `DISAPPROVED`. Paneli
+              kullanan kişi reklamcı bile olmayabilir ve bu ürünün kurucu
+              vaadi tam olarak o. Bilinmeyen kod UYDURULMUYOR, yalnızca
+              okunabilir hâle geliyor (bkz. `reklam-etiketleri.ts`).
+            */}
             {aramaReklami && (
               <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] text-ink-muted">
-                Arama reklamı — görsel yoktur
+                Arama reklamı, görseli yok
               </span>
             )}
-            {ad.creative?.creativeType && (
+            {/* Arama reklamında tür rozeti TEKRAR olurdu: üstteki rozet zaten
+                aynı şeyi söylüyor. */}
+            {ad.creative?.creativeType && !aramaReklami && (
               <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] text-ink-muted">
-                {ad.creative.creativeType}
+                {kreatifTuruEtiketi(ad.creative.creativeType)}
               </span>
             )}
             {ad.creative?.ctaType && (
-              <span className="rounded bg-brand-soft px-1.5 py-0.5 text-[10px] font-medium text-brand">
-                {ad.creative.ctaType}
+              <span className="rounded bg-brand-soft px-1.5 py-0.5 text-[10px] font-medium text-brand-strong">
+                {ctaEtiketi(ad.creative.ctaType)}
               </span>
             )}
           </div>
@@ -171,7 +182,7 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
                 // `noreferrer` de gerekli: platforma hangi panelden
                 // gelindiğini sızdırmaya gerek yok.
                 rel="noopener noreferrer"
-                className="hover:text-brand hover:underline"
+                className="hover:text-brand-strong hover:underline"
               >
                 {ad.creative?.headline ?? ad.name}
               </a>
@@ -195,7 +206,7 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
           {ad.creative?.destinationUrl && (
             <p className="mt-1.5 truncate text-[11px] text-ink-muted">
               →{' '}
-              <span className="text-brand/80" title={ad.creative.destinationUrl}>
+              <span className="text-brand-strong/80" title={ad.creative.destinationUrl}>
                 {ad.creative.displayUrl ?? ad.creative.destinationUrl}
               </span>
             </p>
@@ -224,13 +235,13 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
       {hasIssues && (
         <div className="border-t border-danger/30 bg-danger/5 px-4 py-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-danger">
-            İnceleme sorunu{ad.reviewStatus ? ` · ${ad.reviewStatus}` : ''}
+            İnceleme sorunu{ad.reviewStatus ? ` · ${incelemeEtiketi(ad.reviewStatus)}` : ''}
           </p>
           <ul className="mt-1 space-y-0.5">
             {ad.issues.slice(0, 4).map((issue, i) => (
               <li key={`${issue.topic}-${i}`} className="text-xs text-ink">
                 <span className="font-medium">{issue.topic}</span>
-                {issue.detail && <span className="text-ink-muted"> — {issue.detail}</span>}
+                {issue.detail && <span className="text-ink-muted">: {issue.detail}</span>}
               </li>
             ))}
             {ad.issues.length > 4 && (

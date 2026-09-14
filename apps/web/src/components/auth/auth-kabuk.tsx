@@ -35,7 +35,7 @@ export function AuthKabuk({
 
         {altBaglanti && (
           <p className="mt-4 text-center text-sm">
-            <Link href={altBaglanti.href} className="text-brand hover:underline">
+            <Link href={altBaglanti.href} className="text-brand-strong hover:underline">
               {altBaglanti.metin}
             </Link>
           </p>

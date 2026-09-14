@@ -157,7 +157,7 @@ export function BulkComposer({
             zamanı geri harcamak olurdu. */}
         {assetNames.length > 0 && (
           <details className="mt-1.5">
-            <summary className="cursor-pointer text-[11px] text-brand">
+            <summary className="cursor-pointer text-[11px] text-brand-strong">
               Arşivdeki görsel adları ({assetNames.length})
             </summary>
             <p className="mt-1 font-mono text-[11px] leading-relaxed text-ink-muted">

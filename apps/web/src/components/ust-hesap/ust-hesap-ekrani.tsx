@@ -297,7 +297,7 @@ function EylemDugmesi({
       onClick={onClick}
       aria-expanded={aktif}
       className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-        aktif ? 'border-brand bg-brand-soft text-brand' : 'border-line text-ink hover:bg-surface-muted'
+        aktif ? 'border-brand bg-brand-soft text-brand-strong' : 'border-line text-ink hover:bg-surface-muted'
       }`}
     >
       {children}

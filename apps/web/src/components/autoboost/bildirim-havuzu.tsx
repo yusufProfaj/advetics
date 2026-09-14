@@ -316,7 +316,7 @@ function Kart({
               href={kayit.permalink}
               target="_blank"
               rel="noreferrer"
-              className="font-medium text-brand hover:underline"
+              className="font-medium text-brand-strong hover:underline"
             >
               İçeriği aç
             </a>

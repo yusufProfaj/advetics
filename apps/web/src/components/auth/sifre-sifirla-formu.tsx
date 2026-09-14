@@ -35,7 +35,7 @@ export function SifreSifirlaFormu() {
           Bağlantıyı mailden kopyaladıysan tamamını yapıştırdığından emin ol; bazı mail
           istemcileri uzun adresleri satır sonunda kırıyor.
         </p>
-        <Link href="/sifremi-unuttum" className="inline-block text-sm text-brand hover:underline">
+        <Link href="/sifremi-unuttum" className="inline-block text-sm text-brand-strong hover:underline">
           Yeni bir sıfırlama bağlantısı iste
         </Link>
       </div>

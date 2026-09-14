@@ -172,7 +172,7 @@ export function UstHesapSecici({
                 aria-selected={h.id === aktifId}
                 onClick={() => void gec(h)}
                 className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition hover:bg-surface-muted ${
-                  h.id === aktifId ? 'font-semibold text-brand' : 'text-ink'
+                  h.id === aktifId ? 'font-semibold text-brand-strong' : 'text-ink'
                 }`}
               >
                 <span className="min-w-0">

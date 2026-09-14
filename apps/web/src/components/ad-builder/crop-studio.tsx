@@ -205,7 +205,7 @@ export function CropStudio({
           <button
             type="button"
             onClick={() => setFocal(DEFAULT_FOCAL)}
-            className="mt-1.5 text-[11px] text-brand underline"
+            className="mt-1.5 text-[11px] text-brand-strong underline"
           >
             Odağı sıfırla
           </button>

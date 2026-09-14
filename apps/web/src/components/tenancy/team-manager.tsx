@@ -487,7 +487,7 @@ function GrantAccess({
         onClick={() => setOpen(true)}
         disabled={disabled || nothingLeft}
         title={nothingLeft ? 'Bu kullanıcının tüm workspace’lerde yetkisi var' : undefined}
-        className="text-xs font-medium text-brand transition hover:underline disabled:opacity-40 disabled:no-underline"
+        className="text-xs font-medium text-brand-strong transition hover:underline disabled:opacity-40 disabled:no-underline"
       >
         + Yetki ekle
       </button>

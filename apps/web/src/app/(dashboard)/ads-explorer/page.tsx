@@ -76,6 +76,14 @@ export default async function AdsExplorerPage({
    * orada.
    */
   const platform = pick(first(params.platform), PLATFORMS, undefined);
+  /*
+   * KAMPANYA ÇİPLERİ SESSİZCE KESİLİYORDU. Liste `slice(0, 6)` ile
+   * kırpılıyor ve kalanların VAR OLDUĞU hiçbir yerde yazmıyordu: elli
+   * kampanyalı bir hesapta kullanıcı kırk dördünü hiç göremiyor, süzgecin
+   * eksik olduğunu bilmiyordu. Bu depoda sessiz kesme adı konmuş bir hata
+   * türü. Sayı artık yazılı ve tek tıkla açılıyor.
+   */
+  const tumKampanyalar = first(params.tumkampanya) === '1';
   const page = Math.max(1, Number(first(params.sayfa) ?? 1) || 1);
 
   const qs = new URLSearchParams({
@@ -105,12 +113,18 @@ export default async function AdsExplorerPage({
   try {
     result = await serverApiFetch<AdsExploreResult>(`/ads?${qs}`);
   } catch (err) {
+    /*
+     * HATA KODU EKRANDAN KALKTI, MESAJ KALDI. `(AD_LIST_FAILED, HTTP 500)`
+     * paneli kullanan kişiye hiçbir şey anlatmıyor ve ürkütücü görünüyor;
+     * sunucunun kendi cümlesi teşhis için yeterli. Kod ve durum sunucu
+     * log'unda zaten duruyor.
+     */
     hata =
       err instanceof ApiRequestError
-        ? `${err.message} (${err.code}, HTTP ${err.status})`
+        ? err.message
         : err instanceof Error
           ? err.message
-          : 'Bilinmeyen hata';
+          : 'Bilinmeyen hata.';
   }
 
   /** Mevcut süzgeçleri koruyarak yeni bir bağlantı üretir. */
@@ -128,6 +142,7 @@ export default async function AdsExplorerPage({
       kampanya: campaignId,
       ara: q,
       sorunlu: onlyIssues ? '1' : undefined,
+      tumkampanya: tumKampanyalar ? '1' : undefined,
       platform,
       ...over,
     };
@@ -141,7 +156,7 @@ export default async function AdsExplorerPage({
         <div>
           <h1 className="text-xl font-semibold text-ink">Reklam Keşfi</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
-            {formatDayLong(range.from)} — {formatDayLong(range.to)}
+            {formatDayLong(range.from)} - {formatDayLong(range.to)}
             {result && ` · ${formatNumber(result.total)} reklam`}
           </p>
         </div>
@@ -217,88 +232,145 @@ export default async function AdsExplorerPage({
       </form>
 
       {result === null ? (
-        <Notice>Reklamlar alınamadı — {hata ?? 'sebep bilinmiyor'}</Notice>
+        <Notice>Reklamlar alınamadı. {hata ?? 'Sebep bilinmiyor.'}</Notice>
       ) : (
         <>
-          {/* REKLAM HESABI SÜZGECİ — kampanyalardan önce ve AYRI satırda.
-              Ajans görünümünde onlarca kampanya var ve hangi müşteriye ait
-              olduğu ancak hesaptan anlaşılıyor. Hesap seçilince kampanya
-              listesi de o hesaba daralıyor. */}
-          {result.facets.adAccounts.length > 1 && (
-            <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              <span className="text-ink-muted">Hesap:</span>
+          {/*
+            ═══ SÜZGEÇLER TEK KUTUDA VE ETİKETLİ ═══
+            Hesap, durum, kampanya ve sıralama DÖRT AYRI satırdı; aralarında
+            hiçbir çerçeve yoktu ve hepsi aynı yuvarlak çipe benziyordu.
+            Kullanıcı hangi satırın ne süzdüğünü ancak deneyerek öğreniyordu,
+            üstelik dördü birlikte ilk ekranın tamamını kaplıyordu. Aynı
+            süzgeçler tek kapta, her boyut kendi etiketiyle.
+          */}
+          <div className="space-y-2 rounded-xl border border-line bg-surface px-4 py-3">
+            {result.facets.adAccounts.length > 1 && (
+              <SuzgecSatiri etiket="Hesap">
+                <FilterChip
+                  href={linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined })}
+                  active={!adAccountId}
+                >
+                  Tümü
+                </FilterChip>
+                {result.facets.adAccounts.map((acc) => (
+                  <FilterChip
+                    key={acc.id}
+                    href={linkWith({
+                      hesap: adAccountId === acc.id ? undefined : acc.id,
+                      // Hesap değişince kampanya seçimi geçersiz kalıyor.
+                      kampanya: undefined,
+                      sayfa: undefined,
+                    })}
+                    active={adAccountId === acc.id}
+                  >
+                    {acc.name} ({acc.adCount})
+                  </FilterChip>
+                ))}
+              </SuzgecSatiri>
+            )}
+
+            <SuzgecSatiri etiket="Durum">
               <FilterChip
-                href={linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined })}
-                active={!adAccountId}
+                href={linkWith({ durum: undefined, sorunlu: undefined, sayfa: undefined })}
+                active={!status && !onlyIssues}
               >
                 Tümü
               </FilterChip>
-              {result.facets.adAccounts.map((acc) => (
+              {result.facets.issueCount > 0 && (
                 <FilterChip
-                  key={acc.id}
                   href={linkWith({
-                    hesap: adAccountId === acc.id ? undefined : acc.id,
-                    // Hesap değişince kampanya seçimi geçersiz kalıyor.
-                    kampanya: undefined,
+                    sorunlu: onlyIssues ? undefined : '1',
+                    durum: undefined,
                     sayfa: undefined,
                   })}
-                  active={adAccountId === acc.id}
+                  active={onlyIssues}
+                  tone="danger"
                 >
-                  {acc.name} ({acc.adCount})
+                  Sorunlu ({result.facets.issueCount})
+                </FilterChip>
+              )}
+              {result.facets.statuses.map((st) => (
+                <FilterChip
+                  key={st.status}
+                  href={linkWith({
+                    durum: status === st.status ? undefined : st.status,
+                    sorunlu: undefined,
+                    sayfa: undefined,
+                  })}
+                  active={status === st.status}
+                >
+                  {STATUS_LABEL[st.status] ?? st.status} ({st.count})
                 </FilterChip>
               ))}
-            </div>
-          )}
-
-          {/* Süzgeçler */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <FilterChip href={linkWith({ durum: undefined, sorunlu: undefined, sayfa: undefined })} active={!status && !onlyIssues}>
-              Tümü
-            </FilterChip>
-            {result.facets.issueCount > 0 && (
-              <FilterChip
-                href={linkWith({ sorunlu: onlyIssues ? undefined : '1', durum: undefined, sayfa: undefined })}
-                active={onlyIssues}
-                tone="danger"
-              >
-                Sorunlu ({result.facets.issueCount})
-              </FilterChip>
-            )}
-            {result.facets.statuses.map((s) => (
-              <FilterChip
-                key={s.status}
-                href={linkWith({
-                  durum: status === s.status ? undefined : s.status,
-                  sorunlu: undefined,
-                  sayfa: undefined,
-                })}
-                active={status === s.status}
-              >
-                {STATUS_LABEL[s.status] ?? s.status} ({s.count})
-              </FilterChip>
-            ))}
+            </SuzgecSatiri>
 
             {result.facets.campaigns.length > 1 && (
-              <>
-                <span className="mx-1 h-4 w-px bg-line" />
-                {result.facets.campaigns.slice(0, adAccountId ? 20 : 6).map((c) => (
-                  <FilterChip
-                    key={c.id}
-                    href={linkWith({
-                      kampanya: campaignId === c.id ? undefined : c.id,
-                      sayfa: undefined,
-                    })}
-                    active={campaignId === c.id}
-                  >
-                    {c.name} ({c.adCount})
-                  </FilterChip>
-                ))}
-              </>
+              <SuzgecSatiri etiket="Kampanya">
+                {(() => {
+                  const sinir = tumKampanyalar ? result.facets.campaigns.length : 8;
+                  const gosterilen = result.facets.campaigns.slice(0, sinir);
+                  const kalan = result.facets.campaigns.length - gosterilen.length;
+                  return (
+                    <>
+                      {gosterilen.map((c) => (
+                        <FilterChip
+                          key={c.id}
+                          href={linkWith({
+                            kampanya: campaignId === c.id ? undefined : c.id,
+                            sayfa: undefined,
+                          })}
+                          active={campaignId === c.id}
+                        >
+                          {c.name} ({c.adCount})
+                        </FilterChip>
+                      ))}
+                      {/* SESSİZ KESME YOK: kaçının gizlendiği yazılı ve açılıyor. */}
+                      {kalan > 0 && (
+                        <FilterChip href={linkWith({ tumkampanya: '1' })} active={false}>
+                          +{kalan} kampanya daha
+                        </FilterChip>
+                      )}
+                      {tumKampanyalar && result.facets.campaigns.length > 8 && (
+                        <FilterChip href={linkWith({ tumkampanya: undefined })} active={false}>
+                          Listeyi kısalt
+                        </FilterChip>
+                      )}
+                    </>
+                  );
+                })()}
+              </SuzgecSatiri>
             )}
+
+            <SuzgecSatiri etiket="Sırala">
+              {AD_SORT_FIELDS.map((f) => {
+                const active = sort === f;
+                // Aynı alana tekrar tıklamak yönü çeviriyor — tablo başlığı
+                // davranışının bilinen karşılığı.
+                const nextDir = active && dir === 'desc' ? 'asc' : 'desc';
+                return (
+                  <Link
+                    key={f}
+                    href={linkWith({ sirala: f, yon: nextDir, sayfa: undefined })}
+                    aria-current={active ? 'true' : undefined}
+                    className={`rounded-md px-2 py-1 font-medium transition ${
+                      active ? 'bg-brand-soft text-brand-strong' : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    {SORT_LABEL[f]}
+                    {active && (dir === 'desc' ? ' ↓' : ' ↑')}
+                  </Link>
+                );
+              })}
+            </SuzgecSatiri>
           </div>
 
-          {/* Süzgeç toplamı — SAYFANIN değil, süzgecin tamamının */}
-          <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-line bg-surface px-4 py-2.5 text-xs">
+          {/*
+            SÜZGEÇ TOPLAMI — SAYFANIN değil, süzgecin tamamının.
+            12 piksellik gri bir satırdı ve dipnot gibi duruyordu; oysa
+            ekrandaki en önemli sayı bloğu bu: seçilen süzgecin toplam
+            harcaması. Rakamlar artık okunur boyutta ve etiketleri üstte.
+          */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-xl border border-line bg-surface px-4 py-3 sm:grid-cols-3 lg:grid-cols-6">
             <Total label="Harcama" value={formatMoney(result.totals.spendMicros, result.currency)} />
             <Total label="Gösterim" value={formatNumber(result.totals.impressions)} />
             <Total label="Tık" value={formatNumber(result.totals.clicks)} />
@@ -313,34 +385,11 @@ export default async function AdsExplorerPage({
             />
           </div>
 
-          {/* Sıralama */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="text-ink-muted">Sırala:</span>
-            {AD_SORT_FIELDS.map((f) => {
-              const active = sort === f;
-              // Aynı alana tekrar tıklamak yönü çeviriyor — tablo başlığı
-              // davranışının bilinen karşılığı.
-              const nextDir = active && dir === 'desc' ? 'asc' : 'desc';
-              return (
-                <Link
-                  key={f}
-                  href={linkWith({ sirala: f, yon: nextDir, sayfa: undefined })}
-                  className={`rounded-md px-2 py-1 font-medium transition ${
-                    active ? 'bg-brand-soft text-brand' : 'text-ink-muted hover:text-ink'
-                  }`}
-                >
-                  {SORT_LABEL[f]}
-                  {active && (dir === 'desc' ? ' ↓' : ' ↑')}
-                </Link>
-              );
-            })}
-          </div>
-
           {result.rows.length === 0 ? (
             <div className="rounded-xl border border-dashed border-line bg-surface p-10 text-center">
               <p className="text-sm font-medium text-ink">Bu süzgeçle reklam yok</p>
               <p className="mt-1 text-sm text-ink-muted">
-                Süzgeçleri gevşetin ya da tarih aralığını genişletin.
+                Süzgeçleri kaldır ya da tarih aralığını genişlet.
               </p>
             </div>
           ) : (
@@ -415,16 +464,22 @@ function FilterChip({
   tone?: 'danger';
   children: React.ReactNode;
 }) {
-  const base = 'rounded-full px-2.5 py-1 font-medium transition ring-1 ring-inset';
+  /*
+   * ÇİP ADI KIRPILIYOR. Kampanya adları 80 karakteri bulabiliyor ve tek bir
+   * çip satırın tamamını kaplayıp süzgeci okunmaz yapıyordu. Tam ad `title`
+   * ile duruyor: kırpmak bilgiyi GİZLEMEK değil, ertelemek.
+   */
+  const base =
+    'inline-block max-w-[16rem] truncate align-bottom rounded-full px-2.5 py-1 font-medium transition ring-1 ring-inset';
   const cls = active
     ? tone === 'danger'
       ? 'bg-danger/15 text-danger ring-danger/30'
-      : 'bg-brand-soft text-brand ring-brand/30'
+      : 'bg-brand-soft text-brand-strong ring-brand/30'
     : tone === 'danger'
       ? 'text-danger ring-danger/20 hover:bg-danger/10'
       : 'text-ink-muted ring-line hover:text-ink';
   return (
-    <Link href={href} className={`${base} ${cls}`}>
+    <Link href={href} title={typeof children === 'string' ? children : undefined} className={`${base} ${cls}`}>
       {children}
     </Link>
   );
@@ -432,9 +487,24 @@ function FilterChip({
 
 function Total({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <span className="text-ink-muted">{label}: </span>
-      <span className="font-semibold tabular-nums text-ink">{value}</span>
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">{label}</p>
+      <p className="truncate text-base font-semibold tabular-nums text-ink">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * Süzgeç satırı — solda ne süzdüğü, sağda seçenekler.
+ *
+ * Etiket olmadan dört satır da aynı yuvarlak çipe benziyordu ve kullanıcı
+ * hangisinin ne yaptığını ancak deneyerek öğreniyordu.
+ */
+function SuzgecSatiri({ etiket, children }: { etiket: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      <span className="w-16 shrink-0 text-[11px] text-ink-muted">{etiket}</span>
+      {children}
     </div>
   );
 }

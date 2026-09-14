@@ -157,7 +157,7 @@ export default function HomePage() {
           kartların üstüne düşerdi.
         */}
         <KaydirmaFilmi>
-          {/* Ham `text-brand` koyu temada 3.80 kontrast veriyor; okunabilir
+          {/* Ham `text-brand-strong` koyu temada 3.80 kontrast veriyor; okunabilir
               ton zemine göre yön değiştiriyor (globals.css). */}
           <p className="text-sm font-semibold text-brand-strong">
             Meta ve Google Ads için tek panel
@@ -243,7 +243,7 @@ export default function HomePage() {
                   className="rounded-xl border border-line bg-surface p-6 shadow-sm"
                 >
                   {/*
-                    `text-brand` DEĞİL `text-brand-strong`. Marka kırmızısı
+                    `text-brand-strong` DEĞİL `text-brand-strong`. Marka kırmızısı
                     kendi %8'lik tonunun üstünde 4.20 kontrast veriyor ve
                     16 pikselde eşik 4.5 — ölçüldü. Koyulaştırılmış ton 5.05'e
                     çıkıyor. Fark gözle seçilmiyor, denetimde seçiliyor.

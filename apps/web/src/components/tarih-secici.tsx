@@ -239,7 +239,7 @@ export function TarihSecici({
           {gunAdi(aralik.from)} – {gunAdi(aralik.to)}
         </span>
         {aralik.karsilastirma !== 'yok' && (
-          <span className="rounded bg-brand-soft px-1.5 py-0.5 text-[10px] font-medium text-brand">
+          <span className="rounded bg-brand-soft px-1.5 py-0.5 text-[10px] font-medium text-brand-strong">
             karşılaştırmalı
           </span>
         )}
@@ -259,7 +259,7 @@ export function TarihSecici({
                   type="button"
                   onClick={() => onAyarSec(p.key)}
                   className={`w-full px-4 py-2 text-left text-sm transition hover:bg-surface-muted ${
-                    taslakKey === p.key ? 'bg-brand-soft font-medium text-brand' : ''
+                    taslakKey === p.key ? 'bg-brand-soft font-medium text-brand-strong' : ''
                   }`}
                 >
                   {p.label}
@@ -271,7 +271,7 @@ export function TarihSecici({
                 type="button"
                 onClick={() => setTaslakKey('ozel')}
                 className={`w-full px-4 py-2 text-left text-sm transition hover:bg-surface-muted ${
-                  taslakKey === 'ozel' ? 'bg-brand-soft font-medium text-brand' : ''
+                  taslakKey === 'ozel' ? 'bg-brand-soft font-medium text-brand-strong' : ''
                 }`}
               >
                 Özel
@@ -349,7 +349,7 @@ export function TarihSecici({
                       onClick={() => setTaslakKars(s.key)}
                       className={`rounded-md px-2 py-1 text-xs transition ${
                         taslakKars === s.key
-                          ? 'bg-brand-soft font-medium text-brand'
+                          ? 'bg-brand-soft font-medium text-brand-strong'
                           : 'text-ink-muted hover:text-ink'
                       }`}
                     >
@@ -485,7 +485,7 @@ function Takvim({
                 g === from || g === to
                   ? 'bg-brand font-medium text-white'
                   : g > from && g < to
-                    ? 'bg-brand-soft text-brand'
+                    ? 'bg-brand-soft text-brand-strong'
                     : 'text-ink hover:bg-surface-muted'
               }`}
             >

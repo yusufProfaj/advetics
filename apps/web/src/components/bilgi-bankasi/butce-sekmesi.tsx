@@ -88,7 +88,7 @@ export function ButceSekmesi({ clientId, canWrite }: { clientId: string; canWrit
           <h2 className="text-sm font-semibold text-ink">Bütçe</h2>
           <p className="mt-0.5 text-xs text-ink-muted">
             Şemsiye bütçe hedefi — hesap bazlı detay için{' '}
-            <Link href={`/butce?musteri=${clientId}`} className="text-brand underline">
+            <Link href={`/butce?musteri=${clientId}`} className="text-brand-strong underline">
               Aylık Bütçe
             </Link>
             .

@@ -75,6 +75,47 @@ describe('tema belirteçleri', () => {
   });
 });
 
+describe('marka rengi METİN olarak okunur tonda', () => {
+  it('KRİTİK: `text-brand` yerine `text-brand-strong` kullanılıyor', () => {
+    /*
+     * Ham marka rengi metin olarak her zemine yetmiyor: varsayılan kırmızı
+     * (#e11d2e) koyu yüzeyde 3.80 kontrast veriyor ve eşik 4.5 (globals.css
+     * içinde ÖLÇÜLMÜŞ). Depo bunun için `text-brand-strong` yardımcısını
+     * tanımlamış ama panelde 36 yerde hâlâ ham `text-brand` yazılıydı:
+     * bağlantılar, aktif menü satırı, seçili şirket adı.
+     *
+     * `bg-brand`, `border-brand`, `ring-brand` KAPSAM DIŞI: kontrast kuralı
+     * metin için. Yorum satırları da dışarıda — kuralı ANLATAN cümleyi
+     * yasaklamak gerekçeyi siler.
+     */
+    const bulunan: string[] = [];
+    for (const dosya of KAPSAM) {
+      const satirlar = readFileSync(dosya, 'utf8').split('\n');
+      satirlar.forEach((satir, i) => {
+        const t = satir.trim();
+        if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
+        if (/text-brand(?![-a-z])/.test(satir)) {
+          bulunan.push(`${dosya.slice(KOK.length + 1)}:${i + 1}`);
+        }
+      });
+    }
+    expect(bulunan).toEqual([]);
+  });
+
+  it('okunur ton GERÇEKTEN tanımlı ve temaya göre YÖN değiştiriyor', () => {
+    /*
+     * Tek yönlü karıştırma (yalnızca siyaha) karanlık temada rengi daha da
+     * koyultuyor ve kontrastı 2.95'e düşürüyordu: okunabilirlik için
+     * eklenen katman okunabilirliği bozuyordu.
+     */
+    const css = readFileSync(join(KOK, 'app', 'globals.css'), 'utf8');
+    expect(css).toContain('@utility text-brand-strong');
+    expect(css).toContain('--brand-legible');
+    const karanlik = css.slice(css.indexOf('--brand-legible'));
+    expect(karanlik).toContain('white');
+  });
+});
+
 describe('durum belirteçleri tanımlı', () => {
   const CSS = readFileSync(join(KOK, 'app', 'globals.css'), 'utf8');
 

@@ -310,7 +310,7 @@ export function ClientAssets({
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="text-xs font-medium text-brand transition hover:underline"
+              className="text-xs font-medium text-brand-strong transition hover:underline"
             >
               + Havuzdan ata{pool.length > 0 ? ` (${pool.length} atanmamış)` : ''}
             </button>

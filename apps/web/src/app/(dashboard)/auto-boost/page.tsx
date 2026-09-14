@@ -209,7 +209,7 @@ function BoostCard({
               href={p.permalink}
               target="_blank"
               rel="noreferrer noopener"
-              className="text-[11px] text-brand hover:underline"
+              className="text-[11px] text-brand-strong hover:underline"
             >
               Gönderiyi aç
             </a>

@@ -71,7 +71,8 @@ describe('AdCard', () => {
     // İkisi aynı olsaydı ayrım yapmanın anlamı kalmazdı.
     const g = govde();
     expect(g).toContain('görsel alınamadı');
-    expect(g).toContain('Arama reklamı — görsel yoktur');
+    // Metin kısaldı ve uzun tire kalktı (panel metin kuralı); AYRIM aynı.
+    expect(g).toContain('Arama reklamı, görseli yok');
   });
 
   it('PLATFORM ROZETİ basılıyor — iki platform tek listede', () => {

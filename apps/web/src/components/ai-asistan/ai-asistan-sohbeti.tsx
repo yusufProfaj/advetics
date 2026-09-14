@@ -204,7 +204,7 @@ export function AiAsistanSohbeti({
             <p className="text-ink">Taslak hazır — platforma henüz yayınlanmadı.</p>
             <Link
               href={baglanti('/reklam-olustur', {}, { musteri: clientId })}
-              className="mt-1 inline-block text-sm text-brand underline"
+              className="mt-1 inline-block text-sm text-brand-strong underline"
             >
               Taslakları incele ve yayınla
             </Link>

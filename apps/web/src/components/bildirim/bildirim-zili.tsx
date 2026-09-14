@@ -159,7 +159,7 @@ function BoostBolumu({
             <Link
               href="/auto-boost"
               onClick={onGit}
-              className="text-[11px] font-medium text-brand hover:underline"
+              className="text-[11px] font-medium text-brand-strong hover:underline"
             >
               Tümünü aç
             </Link>
@@ -269,7 +269,7 @@ function SorunBolumu({
                     <Link
                       href={u.eylem.href}
                       onClick={onGit}
-                      className="mt-1 inline-block text-[11px] font-medium text-brand hover:underline"
+                      className="mt-1 inline-block text-[11px] font-medium text-brand-strong hover:underline"
                     >
                       {u.eylem.etiket}
                     </Link>
@@ -313,7 +313,7 @@ function DurumBolumu({
           <Link
             href="/ayarlar/baglantilar"
             onClick={onGit}
-            className="text-[11px] font-medium text-brand hover:underline"
+            className="text-[11px] font-medium text-brand-strong hover:underline"
           >
             Bağlantılar
           </Link>

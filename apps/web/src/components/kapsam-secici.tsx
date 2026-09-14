@@ -330,7 +330,7 @@ export function KapsamSecici({
               aria-selected={tumSirketler}
               onClick={ajansaGec}
               className={`flex w-full items-center justify-between gap-2 border-b border-line px-3 py-2 text-left text-sm transition hover:bg-surface-muted ${
-                tumSirketler ? 'font-semibold text-brand' : 'text-ink'
+                tumSirketler ? 'font-semibold text-brand-strong' : 'text-ink'
               }`}
             >
               <span className="min-w-0 truncate">{ajans}</span>
@@ -468,7 +468,7 @@ function SirketDugumu({
           aria-selected={sirketGeneli}
           onClick={onSirket}
           className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md py-1.5 pr-3 text-left text-sm transition hover:bg-surface-muted ${
-            aktif ? 'font-semibold text-brand' : 'text-ink'
+            aktif ? 'font-semibold text-brand-strong' : 'text-ink'
           }`}
         >
           <span className="min-w-0 truncate">{sirket.name}</span>
@@ -498,7 +498,7 @@ function SirketDugumu({
                 aria-selected={w.id === aktifWorkspaceId}
                 onClick={() => onWorkspace(w)}
                 className={`flex w-full items-center gap-2 py-1.5 pl-10 pr-3 text-left text-sm transition hover:bg-surface-muted ${
-                  w.id === aktifWorkspaceId ? 'font-semibold text-brand' : 'text-ink'
+                  w.id === aktifWorkspaceId ? 'font-semibold text-brand-strong' : 'text-ink'
                 }`}
               >
                 <span className="min-w-0 truncate">{w.name}</span>
