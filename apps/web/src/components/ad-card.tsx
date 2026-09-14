@@ -5,6 +5,7 @@ import { formatMoney, formatNumber, formatPercent, formatRoas } from '@/lib/form
 import { KreatifGorsel } from '@/components/kreatif-gorsel';
 import { PlatformLogo } from '@/components/platform-logo';
 import { ctaEtiketi, incelemeEtiketi, kreatifTuruEtiketi } from '@/lib/reklam-etiketleri';
+import { AramaReklamiOnizleme } from '@/components/arama-reklami-onizleme';
 
 const STATUS_STYLE: Record<string, string> = {
   active: 'bg-ok/10 text-ok ring-ok/25',
@@ -74,6 +75,13 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
    */
   const preview = ad.previewUrl;
 
+  /*
+   * ARAMA REKLAMINDA GÖVDEDEKİ BAŞLIK REKLAMIN ADI. Kreatif başlığı artık
+   * önizleme kutusunda duruyor; ikisini birden basmak aynı cümleyi kartta iki
+   * kez göstermek olurdu. Reklamın kendi adı ise listede aranan şey.
+   */
+  const baslikMetni = aramaReklami ? ad.name : (ad.creative?.headline ?? ad.name);
+
   return (
     <article
       className={`group overflow-hidden rounded-xl border bg-surface transition ${
@@ -87,15 +95,31 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
             kırpıyor — creative inceleme aracında reklamın okunamaması, aracın
             hiç olmaması kadar kötü. `contain` kenarlarda boşluk bırakıyor ama
             reklamın TAMAMI görünüyor. */}
+        {/*
+          ═══ ARAMA REKLAMINDA GÖRSEL DEĞİL, METNİN KENDİSİ ═══
+          Görsel kutusu burada gizleniyordu ve yerine hiçbir şey gelmiyordu:
+          boş bir kutu "eksik bir şey var" izlenimi veriyordu, doğru. Ama
+          hiçbir şey koymamak da ekranın asıl sorusunu cevapsız bırakıyordu:
+          bu reklam NE DİYOR. Metin reklamının kreatifi metnidir.
+
+          AÇIKLAMA İÇİN YEDEK ALAN VAR: Google, RSA açıklamalarının ilkini
+          `primaryText` alanına yazıyor ve `description`ı boş bırakıyor
+          (`mapGoogleCreative`). Yalnızca `description` okumak, her arama
+          reklamının açıklamasını sessizce kaybetmek demekti; raporda tam
+          olarak bu oluyordu.
+        */}
+        {aramaReklami ? (
+          <AramaReklamiOnizleme
+            baslik={ad.creative?.headline ?? null}
+            aciklama={ad.creative?.description ?? ad.creative?.primaryText ?? null}
+            gorunenAdres={ad.creative?.displayUrl ?? ad.creative?.destinationUrl ?? null}
+            className="w-full shrink-0 sm:w-56"
+          />
+        ) : (
         <PreviewLink
           href={preview}
           className={
-            aramaReklami
-              ? // ARAMA REKLAMINDA GÖRSEL KUTUSU YOK. Boş bir 4:5 kutu
-                // göstermek "eksik bir şey var" izlenimi veriyor; oysa
-                // metin reklamında görsel diye bir şey yok.
-                'hidden'
-              : 'relative aspect-[4/5] w-full shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:w-36'
+            'relative aspect-[4/5] w-full shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:w-36'
           }
         >
           {image ? (
@@ -126,6 +150,7 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
             </span>
           )}
         </PreviewLink>
+        )}
 
         {/* İçerik */}
         <div className="min-w-0 flex-1">
@@ -184,17 +209,19 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
                 rel="noopener noreferrer"
                 className="hover:text-brand-strong hover:underline"
               >
-                {ad.creative?.headline ?? ad.name}
+                {baslikMetni}
               </a>
             ) : (
-              (ad.creative?.headline ?? ad.name)
+              baslikMetni
             )}
           </h3>
           <p className="truncate text-xs text-ink-muted">
             {ad.campaignName} · {ad.adGroupName}
           </p>
 
-          {ad.creative?.primaryText && (
+          {/* ARAMA REKLAMINDA METİN ÖNİZLEMEDE: burada tekrar basmak aynı
+              açıklamayı kartta iki kez göstermek olurdu. */}
+          {!aramaReklami && ad.creative?.primaryText && (
             // Üç satırda kırpılıyor: creative metni bazen 500 karakter ve
             // kartı uzatmak listeyi taramayı imkânsız kılıyor. Görsel 4:5
             // olduğu için kart zaten yüksek — üç satır boşluğu dolduruyor.

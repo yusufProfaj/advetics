@@ -985,7 +985,33 @@ export class ReportsService {
          */
         WITH toplamlar AS (
           SELECT a.id, a.name, a.platform, c.name AS campaign_name,
-                 cr.headline, cr.description, cr.display_url, cr.asset_urls,
+                 cr.headline,
+                 /*
+                  * ═══ GOOGLE AÇIKLAMAYI description ALANINA YAZMIYOR ═══
+                  *
+                  * mapGoogleCreative, RSA açıklamalarının ilkini primary_text
+                  * kolonuna koyuyor ve description kolonunu BOŞ bırakıyor
+                  * (Meta'da primary_text gövde metni, description ayrı bir
+                  * alan). Rapor yalnızca description okuyordu, yani HER
+                  * Google arama reklamının açıklama satırı hem PDF'te hem
+                  * ekranda HİÇ çizilmiyordu: metin reklamının en anlatıcı
+                  * yarısı sessizce kayıptı. Hata yok, boş alan yok, yalnızca
+                  * eksik bir satır.
+                  *
+                  * YEDEK YALNIZCA GOOGLE'DA: Meta'da primary_text 500
+                  * karakterlik gövde olabiliyor ve onu arama sonucu
+                  * görünümündeki açıklama satırına koymak yanlış bilgi
+                  * göstermek olurdu.
+                  *
+                  * BU YORUMDA BACKTICK YOK ve bu kasıtlı: Prisma.sql
+                  * şablonunun içindeki backtick şablonu ortasından kapatıyor
+                  * (CLAUDE.md). Bu tuzağa bu düzenlemede bir kez düşüldü.
+                  */
+                 CASE WHEN a.platform = 'google'::"Platform"
+                      THEN COALESCE(cr.description, cr.primary_text)
+                      ELSE cr.description
+                 END AS description,
+                 cr.display_url, cr.asset_urls,
                  /*
                   * TAZE GÖRSEL ADRESİ İÇİN İKİ ALAN.
                   *
@@ -1011,7 +1037,8 @@ export class ReportsService {
             AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
             AND i.entity_level = 'ad'::"EntityLevel"
           GROUP BY a.id, a.name, a.platform, c.name, cr.headline, cr.description,
-                   cr.display_url, cr.asset_urls, cr.external_id, a.ad_account_id
+                   cr.primary_text, cr.display_url, cr.asset_urls, cr.external_id,
+                   a.ad_account_id
         )
         SELECT * FROM (
           SELECT *, ROW_NUMBER() OVER (PARTITION BY platform ORDER BY spend_micros DESC) AS sira

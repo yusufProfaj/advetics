@@ -35,17 +35,30 @@ function baglam(url: string, statusCode = 200): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-/** Gecikmeyi TAKLİT ETMEK yerine saati ileri alıyoruz — test beklemesin. */
+/**
+ * Gecikmeyi TAKLİT ETMEK yerine saati ileri alıyoruz, test beklemesin.
+ *
+ * ┌─ SAAT TAMAMEN SAHTE, GERÇEK SAATE EKLEME YAPILMIYOR ──────────────────┐
+ * │ Önceki hâl her çağrıda GERÇEK saati okuyup ikincisine `ms` ekliyordu.  │
+ * │ İki okuma arasında geçen gerçek süre de farka giriyordu: paket tek     │
+ * │ başına koşarken 4210 çıkıyor, yük altında 4212 oluyordu ve test        │
+ * │ "4210ms" beklediği için SAHTE KIRMIZI veriyordu. Tam paketin ortasında │
+ * │ düşen, tek başına koşunca geçen bir test en pahalı test türü:          │
+ * │ insan onu gerçek bir arıza sanıp arıyor.                               │
+ * │                                                                         │
+ * │ Taban sabit; ikinci okuma tabana `ms` ekliyor. Fark artık TAM olarak   │
+ * │ istenen değer.                                                          │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ */
 function saatiIlerlet(ms: number) {
-  const gercek = process.hrtime.bigint;
+  const taban = 1_000_000_000n;
   let ilk = true;
   vi.spyOn(process.hrtime, 'bigint').mockImplementation(() => {
-    const t = gercek.call(process.hrtime);
     if (ilk) {
       ilk = false;
-      return t;
+      return taban;
     }
-    return t + BigInt(ms) * 1_000_000n;
+    return taban + BigInt(ms) * 1_000_000n;
   });
 }
 

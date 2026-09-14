@@ -51,11 +51,35 @@ describe('AdCard', () => {
     expect(tanim).toContain('/SEARCH/i');
   });
 
-  it('arama reklamında GÖRSEL KUTUSU render EDİLMİYOR', () => {
-    // Boş kutu "eksik bir şey var" izlenimi veriyor; metin reklamında görsel
-    // diye bir şey yok.
-    expect(govde()).toContain("aramaReklami\n              ? //");
-    expect(govde()).toContain("'hidden'");
+  it('KRİTİK: arama reklamında GÖRSEL KUTUSU yerine METİN ÖNİZLEMESİ var', () => {
+    /*
+     * KARAR GENİŞLEDİ. Önce yalnızca "boş kutu gösterilmesin" idi ve doğruydu:
+     * boş bir 4:5 kutu "eksik bir şey var" izlenimi veriyor. Ama yerine
+     * hiçbir şey koymamak ekranın asıl sorusunu cevapsız bırakıyordu: bu
+     * reklam NE DİYOR. Metin reklamının kreatifi metnidir.
+     */
+    const g = govde();
+    expect(g).toContain('<AramaReklamiOnizleme');
+    // Görsel kutusu arama reklamı dalında DEĞİL: koşul önizlemeyi seçiyor.
+    expect(g).toContain('{aramaReklami ? (');
+  });
+
+  it('KRİTİK: açıklama için YEDEK alan okunuyor', () => {
+    /*
+     * Google, RSA açıklamalarının ilkini `primaryText`e yazıyor ve
+     * `description`ı boş bırakıyor (`mapGoogleCreative`). Yalnızca
+     * `description` okumak her arama reklamının açıklamasını sessizce
+     * kaybetmek demekti; raporda tam olarak bu oluyordu.
+     */
+    expect(govde()).toContain('ad.creative?.description ?? ad.creative?.primaryText');
+  });
+
+  it('KRİTİK: başlık ve metin kartta İKİ KEZ basılmıyor', () => {
+    // Kreatif başlığı önizleme kutusunda duruyor; gövdede reklamın kendi adı
+    // yazıyor ve gövde metni arama reklamında hiç tekrarlanmıyor.
+    const g = govde();
+    expect(g).toContain('const baslikMetni = aramaReklami ? ad.name');
+    expect(g).toContain('{!aramaReklami && ad.creative?.primaryText && (');
   });
 
   it('yüklenemeyen görsel için İSTEMCİ bileşeni kullanılıyor', () => {

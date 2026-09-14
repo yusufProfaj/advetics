@@ -468,17 +468,24 @@ describe('ReportsService — yapı', () => {
     campaignId: string;
     assetUrls: unknown[];
     spendMicros: string;
+    /** Kreatifin `description` kolonu. Google bunu HİÇ doldurmuyor. */
+    description?: string | null;
+    /** Kreatifin `primary_text` kolonu. Google RSA açıklaması BURAYA yazılıyor. */
+    primaryText?: string | null;
   }): Promise<void> {
     const kreatifId = params.adId.replace(/^./, 'c');
     await h.q(
-      `INSERT INTO creatives (id, ad_account_id, client_id, platform, external_id, headline, asset_urls, updated_at)
-       VALUES ($1, $2, $3, $4::"Platform", $5, 'Başlık', $6::jsonb, now())`,
+      `INSERT INTO creatives (id, ad_account_id, client_id, platform, external_id, headline,
+                              description, primary_text, asset_urls, updated_at)
+       VALUES ($1, $2, $3, $4::"Platform", $5, 'Başlık', $6, $7, $8::jsonb, now())`,
       [
         kreatifId,
         IDS.adAccount,
         IDS.client,
         params.platform,
         `cr-${params.adId}`,
+        params.description ?? null,
+        params.primaryText ?? null,
         JSON.stringify(params.assetUrls),
       ],
     );
@@ -516,6 +523,73 @@ describe('ReportsService — yapı', () => {
       ],
     );
   }
+
+  /*
+   * ═══ GOOGLE AÇIKLAMASI RAPORDA HİÇ GÖRÜNMÜYORDU ═══
+   *
+   * `mapGoogleCreative` RSA açıklamalarının ilkini `primary_text` kolonuna
+   * yazıyor ve `description` kolonunu BOŞ bırakıyor. Rapor sorgusu yalnızca
+   * `description` okuyordu: HER Google arama reklamının açıklama satırı hem
+   * PDF'te hem ekranda çizilmiyordu. Hata yok, boş alan yok, sadece eksik bir
+   * satır — metin reklamının en anlatıcı yarısı.
+   */
+  it('KRİTİK: Google açıklaması `primary_text`ten geliyor', async () => {
+    await seedReklamVeKreatif({
+      adId: 'd0000009-0000-0000-0000-000000000000',
+      platform: 'google',
+      campaignId: CAMP_B,
+      assetUrls: [],
+      spendMicros: '9000000',
+      description: null,
+      primaryText: 'Urla’da deniz manzaralı daireler',
+    });
+
+    const data = await svc.build(CTX, RANGE);
+    const reklam = data.topAds.find((a) => a.id === 'd0000009-0000-0000-0000-000000000000');
+
+    expect(reklam, 'reklam listeye girmedi — test boşa düştü').toBeDefined();
+    expect(reklam!.description).toBe('Urla’da deniz manzaralı daireler');
+  });
+
+  it('KRİTİK: Meta’da `primary_text` açıklamaya SIZMIYOR', async () => {
+    /*
+     * Yedek yalnızca Google'da. Meta'da `primary_text` 500 karakterlik gövde
+     * metni olabiliyor ve onu arama sonucu görünümündeki açıklama satırına
+     * koymak yanlış bilgi göstermek olurdu. Tek yönlü bir yedeği "her
+     * platformda" yapan bir mutasyon bu testle düşüyor.
+     */
+    await seedReklamVeKreatif({
+      adId: 'd0000010-0000-0000-0000-000000000000',
+      platform: 'meta',
+      campaignId: CAMP_A,
+      assetUrls: [],
+      spendMicros: '8000000',
+      description: null,
+      primaryText: 'Uzun Meta gövde metni',
+    });
+
+    const data = await svc.build(CTX, RANGE);
+    const reklam = data.topAds.find((a) => a.id === 'd0000010-0000-0000-0000-000000000000');
+
+    expect(reklam, 'reklam listeye girmedi — test boşa düştü').toBeDefined();
+    expect(reklam!.description).toBeNull();
+  });
+
+  it('`description` DOLUYSA o kazanıyor — yedek yalnızca boşluğu dolduruyor', async () => {
+    await seedReklamVeKreatif({
+      adId: 'd0000011-0000-0000-0000-000000000000',
+      platform: 'google',
+      campaignId: CAMP_B,
+      assetUrls: [],
+      spendMicros: '7000000',
+      description: 'Gerçek açıklama',
+      primaryText: 'Yedek metin',
+    });
+
+    const data = await svc.build(CTX, RANGE);
+    const reklam = data.topAds.find((a) => a.id === 'd0000011-0000-0000-0000-000000000000');
+    expect(reklam!.description).toBe('Gerçek açıklama');
+  });
 
   const KAYNAK_ADI = 'customers/1234567890/assets/98765';
   const GERCEK_ADRES = 'https://tpc.googlesyndication.com/simgad/98765';
