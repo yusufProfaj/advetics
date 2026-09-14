@@ -21,9 +21,25 @@
 -- yazılıyor; deploy çıktısında görünür.
 --
 -- ENUM DEĞERİ DÜŞÜRÜLEMİYOR (Postgres'te DROP VALUE yok): tip yeniden
--- kuruluyor ve iki kolon yeni tipe çevriliyor. Kısıt (memberships_org_scope_
--- role_chk) kolon tipi değişirken Postgres tarafından yeniden çözülüyor;
--- 01_constraints.sql deploy'da zaten DROP/ADD yapıyor.
+-- kuruluyor ve iki kolon yeni tipe çevriliyor.
+--
+-- ┌─ KISIT ÖNCE DÜŞÜYOR — ÜRETİMDE BİR DEPLOY BUNA TAKILDI ────────────────┐
+-- │ `memberships_org_scope_role_chk` yüklemi `role <> 'client_viewer'` ve  │
+-- │ o literal, kısıt KURULDUĞU ANDAKİ tipe çivili. Kolonu yeni tipe        │
+-- │ çevirince Postgres kısıtı yeniden doğruluyor ve karşılaştırma          │
+-- │ `"Role" <> "Role_eski"` oluyor:                                         │
+-- │   ERROR: operator does not exist: "Role" <> "Role_eski"  (42883)        │
+-- │                                                                         │
+-- │ Testte GÖRÜNMEDİ ve sebebi yapısal: `pglite-harness` şemayı önce        │
+-- │ BÜTÜN migration'lardan kuruyor, `01_constraints.sql`i EN SON           │
+-- │ uyguluyor — yani migration koşarken kısıt henüz yok. Üretimde sıra     │
+-- │ tam tersi: kısıt bir önceki deploy'dan beri duruyor. `roller-uce-indi. │
+-- │ spec.ts` artık ÜRETİM SIRASINI kuruyor (kısıt önce, migration sonra).  │
+-- │                                                                         │
+-- │ Kısıt burada geri de kuruluyor. `db:rls` (01_constraints.sql) zaten    │
+-- │ DROP/ADD yapıyor ama o ADIM MIGRATE'TEN SONRA koşuyor; kurmadan        │
+-- │ bırakmak, veritabanını iki adım arasında kısıtsız bırakırdı.           │
+-- └─────────────────────────────────────────────────────────────────────────┘
 
 DO $$
 DECLARE
@@ -49,6 +65,8 @@ BEGIN
   RAISE NOTICE 'roller_uce_indi: manager_memberships ->ad_manager: % satır', ust;
 END $$;
 
+ALTER TABLE memberships DROP CONSTRAINT IF EXISTS memberships_org_scope_role_chk;
+
 ALTER TYPE "Role" RENAME TO "Role_eski";
 CREATE TYPE "Role" AS ENUM ('admin', 'ad_manager', 'client_viewer');
 
@@ -58,3 +76,8 @@ ALTER TABLE manager_memberships
   ALTER COLUMN role TYPE "Role" USING role::text::"Role";
 
 DROP TYPE "Role_eski";
+
+-- Yüklem 01_constraints.sql'deki ile BİREBİR — ayrışırlarsa `db:rls` adımı
+-- kısıtı sessizce başka bir tanımla değiştirir.
+ALTER TABLE memberships ADD CONSTRAINT memberships_org_scope_role_chk
+  CHECK (client_id IS NOT NULL OR role <> 'client_viewer');

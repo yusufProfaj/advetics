@@ -159,6 +159,22 @@ buna göre veriliyor:
   politikalara ekle.** `rls-coverage.spec.ts` eksikse düşer.
 - **Enum'a değer eklemek AYRI migration dosyası ister.** `ALTER TYPE ... ADD
   VALUE` ile eklenen değer aynı transaction içinde kullanılamıyor.
+- **ENUM'DAN DEĞER ÇIKARIRKEN O TİPE BAKAN KISITLARI ÖNCE DÜŞÜR.** Postgres'te
+  `DROP VALUE` yok; tip yeniden kuruluyor (`RENAME` → `CREATE` → `ALTER COLUMN
+  ... USING`). Ama bir CHECK kısıtının yüklemindeki literal, kısıt KURULDUĞU
+  ANDAKİ tipe çivili: kolon yeni tipe geçerken Postgres kısıtı yeniden
+  doğruluyor ve `ERROR: operator does not exist: "Role" <> "Role_eski"` (42883)
+  ile düşüyor. Kısıt tip takasından ÖNCE düşürülüp SONRA geri kurulmalı —
+  `db:rls` zaten kuracak olsa bile, o adım migrate'ten SONRA koşuyor ve arada
+  veritabanı kısıtsız kalır.
+- **`pglite-harness` VAR OLAN BİR KISITLA ÇAKIŞAN MIGRATION'I YAKALAYAMAZ.**
+  Koşum ortamı şemayı önce BÜTÜN migration'lardan kuruyor, `01_constraints.sql`
+  ve `02_rls.sql`i EN SON uyguluyor. Üretimde sıra tam tersi: kısıtlar bir
+  önceki deploy'dan beri duruyor. Yani şema nesnelerine dokunan bir migration
+  testte yeşil geçip deploy'un ortasında düşebiliyor — ve düştü. Böyle bir
+  migration yazarken üretim sırasını ELLE kur: önceki migration'lar → `01_
+  constraints.sql` → ESKİ VERİ → sınanan migration. Örnek:
+  `roller-uce-indi.spec.ts`.
 - **`audit_logs.id` BIGSERIAL**, UUID değil — insert'te `id` verme.
 - **Meta `image_hash` REKLAM HESABI BAŞINA.** Bir hesabın hash'i diğerinde
   çalışmaz; `asset_platform_refs` bunu tutuyor.
