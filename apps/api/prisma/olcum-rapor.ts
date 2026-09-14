@@ -101,9 +101,17 @@ async function main() {
   });
   if (!kullanici) throw new Error(`Kullanıcı bulunamadı: ${EPOSTA}`);
 
-  const ustHesap = await admin.managerMembership.findUnique({
+  /*
+   * `findFirst`, `findUnique` DEĞİL: bir kullanıcı artık BİRDEN ÇOK üst
+   * hesaba üye olabiliyor (çoklu üyelik), yani `userId` tekil anahtar değil.
+   * Ölçüm için ilk üyelik yeterli ama hangisi olduğu KEYFİ — bu yüzden
+   * seçilen hesap kimliği aşağıda basılıyor, yoksa iki farklı kapsamda
+   * alınan iki ölçüm aynı sanılır.
+   */
+  const ustHesap = await admin.managerMembership.findFirst({
     where: { userId: kullanici.id },
     select: { managerAccountId: true },
+    orderBy: { createdAt: 'asc' },
   });
 
   const orgIdler = ustHesap
@@ -153,7 +161,7 @@ async function main() {
 
   console.log('═══ KAPSAM ═══');
   console.log(`kullanıcı      : ${EPOSTA}`);
-  console.log(`üst hesap      : ${ustHesap ? 'VAR' : 'YOK'}`);
+  console.log(`üst hesap      : ${ustHesap ? ustHesap.managerAccountId : 'YOK'}`);
   console.log(`workspace      : ${clientId}${WORKSPACE ? '' : ' (pencerede en çok satırı olan)'}`);
   console.log(`pencere        : ${from} → ${to} (${GUN} gün)`);
 
