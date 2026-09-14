@@ -235,38 +235,60 @@ export default async function DashboardPage({
     : (activeClient?.name ?? 'Tüm workspace’ler');
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-ink">Genel Bakış</h1>
-          <p className="mt-0.5 text-sm text-ink-muted">
-            {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
-          </p>
+    <div className="space-y-6">
+      {/*
+        ═══ BAŞLIK İKİ SIRA: BAĞLAM ÜSTTE, KONTROLLER ALTTA ═══
+        Üçü (platform sekmeleri, tarih seçici, güncelle) başlıkla AYNI satırda
+        duruyordu ve `flex-wrap` ile sığmayınca alt satıra tek tek düşüp
+        başlığın altını parçalıyordu. Tablette en kötü hâlindeydi. Kontroller
+        artık kendi sırasında: dar ekranda ikiye bölünüyor, asla başlığın
+        altına sızmıyor.
+      */}
+      <header className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold text-ink">Genel Bakış</h1>
+            {/*
+              TAMAMLANMAMIŞ GÜN AYNI SATIRDA. Ayrı bir satırdayken başlık
+              bloğu üç satıra çıkıyordu; uyarı kısa ve bağlamın parçası.
+              Sabah 09:00'da görülen düşük harcama "kampanya durmuş" diye
+              okunuyor, oysa gün bitmemiş.
+            */}
+            <p className="mt-0.5 text-sm text-ink-muted">
+              {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
+              {range.incomplete && (
+                <span className="text-warn-strong"> · Gün bitmedi, rakamlar artacak</span>
+              )}
+            </p>
+          </div>
           {/*
-            TAMAMLANMAMIŞ GÜN AÇIKÇA YAZILIYOR. Sabah 09:00'da görülen düşük
-            harcama "kampanya durmuş" diye okunuyor; oysa gün bitmemiş.
-            Hiçbir hata üretmeyen ama yanlış karar aldıran gösterim tam olarak
-            budur.
+            TAZELİK BAŞLIKTA, SAYFANIN DİBİNDE DEĞİL. "Veriler ne zaman
+            güncellendi" en çok bakılan bilgilerden biriydi ve en az görünen
+            yerde, 12 piksellik gri bir satırda duruyordu. Güncelle düğmesinin
+            hemen yanında olması da doğru: kullanıcı buna bakıp o düğmeye
+            basıyor.
           */}
-          {range.incomplete && (
-            <p className="mt-1 text-xs text-warn-strong">
-              Gün bitmedi, rakamlar artmaya devam edecek.
+          {summary !== null && (
+            <p className="text-[11px] text-ink-muted">
+              {summary.accountCount} reklam hesabı · {formatRelative(summary.lastFetchedAt)}{' '}
+              güncellendi
             </p>
           )}
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <PlatformTabs current={platform} tasinan={tasinan} />
-          <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
-          {/*
-            "GEÇMİŞ VERİYİ ÇEK" DÜĞMESİ KALDIRILDI — işi iki yere dağıldı ve
-            ikisi de kendiliğinden çalışıyor:
-              · Hesap bir müşteriye ATANDIĞINDA 90 günlük geçmiş kendiliğinden
-                kuyruğa giriyor.
-              · "Şimdi güncelle" artık EKRANDA SEÇİLİ ARALIĞI yeniliyor,
-                yalnızca bugünü değil.
-            Üçüncü bir düğme, kullanıcıya hangisine basacağını sorduruyordu.
-          */}
-          <RefreshButton dateFrom={range.from} dateTo={range.to} rangeLabel={range.label} />
+          <div className="flex flex-1 items-center justify-end gap-2">
+            <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
+            {/*
+              "GEÇMİŞ VERİYİ ÇEK" DÜĞMESİ KALDIRILDI: işi iki yere dağıldı ve
+              ikisi de kendiliğinden çalışıyor. Hesap bir workspace'e
+              atandığında 90 günlük geçmiş kuyruğa giriyor; "Şimdi güncelle"
+              de ekranda seçili aralığı yeniliyor. Üçüncü bir düğme,
+              kullanıcıya hangisine basacağını sorduruyordu.
+            */}
+            <RefreshButton dateFrom={range.from} dateTo={range.to} rangeLabel={range.label} />
+          </div>
         </div>
       </header>
 
@@ -282,34 +304,49 @@ export default async function DashboardPage({
         <EmptyState />
       ) : (
         <>
-          {summary.currency === null && summary.byCurrency.length > 1 && (
-            <Notice tone="warn">
-              <strong>Birden fazla para birimi var</strong> (
-              {summary.byCurrency.map((c) => c.currency).join(', ')}). Tutarlar ayrı
-              gösteriliyor.
-            </Notice>
-          )}
+          {/*
+            ═══ UYARILAR TEK KUTUDA ═══
+            Üçü ayrı ayrı tam genişlikte sarı kutulardı ve aynı anda
+            çıkabiliyorlardı: kötü bir günde kullanıcı tek bir rakam görmeden
+            üç katlı bir uyarı duvarına bakıyordu. Aynı bilgi, tek kutuda alt
+            alta satırlar olarak duruyor ve sayfanın ağırlık merkezi
+            rakamlarda kalıyor.
+          */}
+          <Uyarilar
+            satirlar={[
+              summary.currency === null && summary.byCurrency.length > 1 ? (
+                <>
+                  <strong>Birden fazla para birimi var</strong> (
+                  {summary.byCurrency.map((c) => c.currency).join(', ')}). Tutarlar ayrı
+                  gösteriliyor.
+                </>
+              ) : null,
+              /* İZLENMEYEN HESAPLAR SESSİZCE DÜŞMÜYOR. Kapatılan bir hesabın
+                 harcaması toplamdan çıkıyor ve sebebini görmeyen kullanıcı
+                 "harcama neden azaldı" diye sorar. */
+              summary.hiddenAccounts > 0 ? (
+                <>
+                  <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara
+                  dâhil değil. Verileri duruyor; Platform Bağlantıları sayfasından yeniden
+                  açabilirsin.
+                </>
+              ) : null,
+              isStale(summary.lastFetchedAt) ? (
+                <>Veriler {formatRelative(summary.lastFetchedAt)} güncellendi. Güncelleme durmuş olabilir.</>
+              ) : null,
+            ]}
+          />
 
-          {/* İZLENMEYEN HESAPLAR SESSİZCE DÜŞMÜYOR.
-              Kapatılan bir hesabın harcaması toplamdan çıkıyor ve sebebini
-              görmeyen kullanıcı "harcama neden azaldı" diye sorar. Sayıyı
-              yazmak o soruyu önceden cevaplıyor. */}
-          {summary.hiddenAccounts > 0 && (
-            <Notice tone="warn">
-              <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara dâhil
-              değil. Verileri duruyor; Platform Bağlantıları sayfasından yeniden açabilirsin.
-            </Notice>
-          )}
-
-          {isStale(summary.lastFetchedAt) && (
-            <Notice tone="warn">
-              Veriler {formatRelative(summary.lastFetchedAt)} güncellendi. Güncelleme durmuş
-              olabilir.
-            </Notice>
-          )}
-
-          <Cards summary={summary} karsilastir={range.karsilastirma !== 'yok'} />
-          <SecondaryStrip summary={summary} karsilastir={range.karsilastirma !== 'yok'} />
+          {/*
+            ÖZET TEK BLOK: kartlar ve şerit aynı soruyu cevaplıyor, aralarına
+            bölümler arası boşluk koymak ikisini ayrı düşünce birimi gibi
+            gösteriyordu. Dışarıdaki `space-y-6` bölümleri ayırıyor, buradaki
+            `space-y-3` özeti birbirine bağlıyor.
+          */}
+          <div className="space-y-3">
+            <Cards summary={summary} karsilastir={range.karsilastirma !== 'yok'} />
+            <SecondaryStrip summary={summary} karsilastir={range.karsilastirma !== 'yok'} />
+          </div>
 
           {/* TEK GÜNLÜK ARALIKTA GRAFİK YOK.
               Bir gün için zaman serisi tek bir bar demek: kocaman boş bir
@@ -362,15 +399,13 @@ export default async function DashboardPage({
             />
           )}
 
-          <p className="text-xs text-ink-muted">
-            Son güncelleme: {formatRelative(summary.lastFetchedAt)} · {summary.accountCount} reklam
-            hesabı ·{' '}
-            {/* Bu cümle KOŞULLU olmak zorunda. "Bugün" penceresi eklenmeden
-                önce koşulsuzdu ve doğruydu; artık Bugün seçiliyken tam tersini
-                söylüyor olurdu — ekranın kendi verisiyle çelişen bir açıklama,
-                yanlış sayıdan daha çok güven kaybettirir. */}
-            {range.incomplete ? 'Bugün dâhil, gün bitmedi' : 'Bugün dâhil değil'}
-          </p>
+          {/*
+            HESAP SAYISI VE TAZELİK BAŞLIĞA TAŞINDI. Burada kalan tek şey
+            aralığın sınırı ve o da YALNIZCA bugün dâhil değilken yazılıyor:
+            dâhilken başlıktaki uyarı zaten aynı şeyi söylüyor ve iki yerde
+            tekrar etmek, ekranın kendi kendine açıklama yapması demek.
+          */}
+          {!range.incomplete && <p className="text-xs text-ink-muted">Bugün dâhil değil</p>}
         </>
       )}
     </div>
@@ -553,6 +588,31 @@ function EmptyState() {
       >
         Bağlantılara git
       </Link>
+    </div>
+  );
+}
+
+/**
+ * Uyarı listesi — hepsi TEK kutuda.
+ *
+ * `null` satırlar eleniyor ve hiç satır kalmazsa kutu da çizilmiyor: boş bir
+ * çerçeve, kullanıcıya okunacak bir şey varmış gibi görünüyor.
+ */
+function Uyarilar({ satirlar }: { satirlar: Array<React.ReactNode | null> }) {
+  const dolu = satirlar.filter((x): x is React.ReactNode => x !== null && x !== false);
+  if (dolu.length === 0) return null;
+  return (
+    <div
+      role="status"
+      className="rounded-lg border border-warn/30 bg-warn-soft text-sm text-warn-strong"
+    >
+      <ul className="divide-y divide-warn/20">
+        {dolu.map((satir, i) => (
+          <li key={i} className="px-3.5 py-2">
+            {satir}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

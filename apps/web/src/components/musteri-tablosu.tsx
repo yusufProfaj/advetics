@@ -9,6 +9,7 @@ import { PlatformLogo } from '@/components/platform-logo';
 import { TamEkranYukleniyor } from '@/components/yukleniyor';
 import { DeltaRozeti } from '@/components/delta-rozeti';
 import { changePercentMicros, formatMoney, formatNumber, microsOf } from '@/lib/format';
+import { KaydirmaIpucu } from '@/components/kaydirma-ipucu';
 
 /**
  * ═══ MÜŞTERİ TABLOSU — MCC GÖRÜNÜMÜ ═══
@@ -106,7 +107,9 @@ export function MusteriTablosu({
           Henüz workspace açılmamış.
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+          {/* Yatay kaydırma KENDİ kabında: sayfanın gövdesi yatay kaymamalı. */}
+          <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted">
@@ -250,7 +253,9 @@ export function MusteriTablosu({
               </tr>
             </tfoot>
           </table>
-        </div>
+          </div>
+          <KaydirmaIpucu />
+        </>
       )}
     </section>
   );

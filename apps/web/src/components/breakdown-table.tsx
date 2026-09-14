@@ -1,3 +1,4 @@
+import { KaydirmaIpucu } from '@/components/kaydirma-ipucu';
 import Link from 'next/link';
 import { platformKanali, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { baglanti } from '@/lib/baglanti';
@@ -105,8 +106,9 @@ export function BreakdownTable({
           Bu aralıkta bu seviyede veri yok.
         </p>
       ) : (
-        // Yatay kaydırma KENDİ kabında: sayfanın gövdesi yatay kaymamalı.
-        <div className="overflow-x-auto">
+        <>
+          {/* Yatay kaydırma KENDİ kabında: sayfanın gövdesi yatay kaymamalı. */}
+          <div className="overflow-x-auto">
           <table className={`w-full text-sm ${showRoas ? 'min-w-[920px]' : 'min-w-[840px]'}`}>
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-muted">
@@ -236,7 +238,9 @@ export function BreakdownTable({
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+          <KaydirmaIpucu />
+        </>
       )}
 
       {/*

@@ -26,8 +26,20 @@ export function DeltaRozeti({
 }) {
   if (change === null || change === undefined) return null;
   const good = inverse ? change < 0 : change > 0;
+  /*
+   * YÖN YALNIZCA RENKTEN OKUNMUYOR. Ok işareti artışı/azalışı gösteriyor ama
+   * o artışın İYİ mi kötü mü olduğunu yalnızca yeşil/kırmızı söylüyordu;
+   * `inverse` metriklerde (CPA, CPC) yukarı ok KÖTÜ ve renk körlüğünde iki
+   * hâl ayırt edilemiyor. Metin karşılığı ekran okuyucuya ve fare üstüne
+   * geliyor.
+   */
+  const etiket = `Önceki döneme göre ${change > 0 ? 'arttı' : 'azaldı'}, ${
+    good ? 'iyi' : 'kötü'
+  }`;
   return (
     <span
+      title={etiket}
+      aria-label={etiket}
       className={`inline-flex items-center gap-0.5 font-medium tabular-nums ${
         size === 'xs' ? 'text-[10px]' : 'text-xs'
       } ${good ? 'text-ok-strong' : 'text-danger-strong'}`}

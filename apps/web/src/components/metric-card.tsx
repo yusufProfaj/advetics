@@ -27,13 +27,28 @@ export function MetricCard({
 }) {
 
   return (
+    /*
+     * ═══ VURGU MARKA DOLGUSUYLA DEĞİL, TİPOGRAFİYLE ═══
+     *
+     * Vurgulu kart `bg-brand-soft` ile dolduruluyordu. Varsayılan marka rengi
+     * KIRMIZI ve kırmızı zeminli bir "Harcama" kartı sorun varmış gibi
+     * okunuyor. Beyaz etiketli üründe her müşterinin rengi farklı, yani
+     * hangi rengin nasıl okunacağı önceden bilinemiyor: dolgu yerine
+     * kenarlık ve daha büyük rakam kullanmak renkten bağımsız çalışıyor.
+     */
     <div
-      className={`rounded-xl border p-4 ${
-        emphasis ? 'border-brand/30 bg-brand-soft/40' : 'border-line bg-surface'
+      className={`rounded-xl border bg-surface p-4 ${
+        emphasis ? 'border-brand/40' : 'border-line'
       }`}
     >
       <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">{label}</p>
-      <p className="mt-1.5 text-2xl font-semibold tabular-nums text-ink">{value}</p>
+      <p
+        className={`mt-1.5 font-semibold tabular-nums text-ink ${
+          emphasis ? 'text-[28px] leading-8' : 'text-2xl'
+        }`}
+      >
+        {value}
+      </p>
 
       <div className="mt-1 flex min-h-[18px] items-center gap-2 text-xs">
         {/*
