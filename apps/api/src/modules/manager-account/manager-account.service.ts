@@ -1,9 +1,20 @@
-import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PAKET_SINIRLARI, paketAsildiMi } from '@advetics/shared';
+import { PAKET_SINIRLARI, isOrgAdminRole, paketAsildiMi } from '@advetics/shared';
 import type {
   ManagerPaket,
   CreateManagedOrganizationInput,
+  DeleteManagerAccountInput,
+  UstHesapOzeti,
+  UstHesapSilmeOzeti,
+  UstHesapSilmeYaniti,
   CreateManagerAccountInput,
   DeleteOrganizationInput,
   ManagerAccountTree,
@@ -298,9 +309,20 @@ export class ManagerAccountService {
    * (1 şirket) indirmek, mevcut dört şirketi "fazla" bırakırdı ve hiçbir
    * ekran o fazlalığı göstermiyor. Önce şirket kapatılır, sonra paket iner.
    */
-  async update(ctx: TenantContext, input: UpdateManagerAccountInput): Promise<ManagerAccountTree> {
-    assertOrgAdmin(ctx);
-    const ustHesap = await this.aktifUstHesap(ctx);
+  async update(
+    ctx: TenantContext,
+    managerAccountId: string,
+    input: UpdateManagerAccountInput,
+  ): Promise<ManagerAccountTree> {
+    /*
+     * KİMLİK PARAMETREDE — "aktif hesap" DEĞİL.
+     *
+     * Yönetim ekranı bütün hesapları listeliyor ve her satırda Düzenle var.
+     * Aktif hesabı düzenleyen bir uçla çalışsaydı ekran her düzenleme için
+     * önce O HESABA GEÇMEK zorunda kalırdı: kullanıcının bağlamını, açık
+     * şirketini ve workspace seçimini bir ad değişikliği için değiştirmek.
+     */
+    const ustHesap = await this.yonetilebilirHesap(ctx, managerAccountId);
 
     if (input.paket !== undefined && !ctx.platformAdmin) {
       throw new BadRequestException('Paketi yalnızca platform sahibi değiştirebilir');
@@ -341,6 +363,295 @@ export class ManagerAccountService {
     const agac = await this.agacOku(ustHesap.id, ctx);
     if (!agac) throw new BadRequestException('Üst hesap güncellendi ama okunamadı');
     return agac;
+  }
+
+  /**
+   * Bu kullanıcının YÖNETEBİLECEĞİ üst hesap — yoksa açık ret.
+   *
+   * `assertOrgAdmin(ctx)` YETMİYOR ve bu ayrım üst hesap ekibindekiyle aynı:
+   * `isOrgAdmin` TEK BİR ŞİRKETİN yöneticisinde de açık. Kapıyı ona bağlamak,
+   * bir şirket yöneticisinin BAŞKA bir üst hesabın adını ve paketini
+   * değiştirebilmesi demekti — kimliği istekte kendisi yazarak.
+   */
+  private async yonetilebilirHesap(
+    ctx: TenantContext,
+    managerAccountId: string,
+  ): Promise<{ id: string; paket: ManagerPaket; name: string }> {
+    const hesap = await this.admin.managerAccount.findUnique({
+      where: { id: managerAccountId },
+      select: { id: true, paket: true, name: true },
+    });
+    if (!hesap) throw new NotFoundException('Üst hesap bulunamadı');
+    if (ctx.platformAdmin) return hesap;
+
+    const uyelik = await this.admin.managerMembership.findFirst({
+      where: { userId: ctx.userId, managerAccountId },
+      select: { role: true },
+    });
+    /*
+     * ÜYE OLMAYANA "BULUNAMADI" — 403 DEĞİL. 403, o kimlikte bir hesabın VAR
+     * olduğunu söylerdi; platform sahibinin sattığı hesapların varlığı
+     * müşterilere sızmamalı.
+     */
+    if (!uyelik) throw new NotFoundException('Üst hesap bulunamadı');
+    if (!isOrgAdminRole(uyelik.role)) {
+      throw new ForbiddenException('Üst hesap ayarlarını yalnızca Yönetici değiştirebilir');
+    }
+    return hesap;
+  }
+
+  /**
+   * ═══ YÖNETİLEBİLEN ÜST HESAPLAR ═══
+   *
+   * Platform sahibi HEPSİNİ görüyor (sattığı ürünün envanteri); diğerleri
+   * yalnızca üyesi oldukları hesapları. Liste `secilebilirUstHesaplar`dan
+   * AYRI: o seçicinin listesi ve her sayfa yüklemesinde oturum yanıtında
+   * dönüyor — doluluk ve ekip sayıları oraya eklenirse her istekte üç sorgu
+   * daha koşar.
+   */
+  async liste(ctx: TenantContext): Promise<UstHesapOzeti[]> {
+    const where = ctx.platformAdmin
+      ? {}
+      : { memberships: { some: { userId: ctx.userId } } };
+
+    const hesaplar = await this.admin.managerAccount.findMany({
+      where,
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        paket: true,
+        status: true,
+        createdAt: true,
+        _count: {
+          select: {
+            // ARŞİVLENMİŞ/PASİF ŞİRKET SAYILMIYOR: paket sınırı da aktif
+            // şirkete bakıyor ve iki sayının ayrışması "5/5 dolu" yazan ama
+            // şirket eklenebilen bir ekran demekti.
+            organizations: { where: { status: 'active' } },
+            memberships: true,
+          },
+        },
+      },
+    });
+    if (hesaplar.length === 0) return [];
+
+    /*
+     * WORKSPACE SAYISI TEK SORGUDA. Hesap başına ayrı sorgu, kırk dokuz
+     * şirketli bir hesapta ekranı listeleme sayısı kadar sorguya bağlardı.
+     */
+    const idler = hesaplar.map((h) => h.id);
+    const workspaceler = await this.admin.$queryRaw<Array<{ id: string; n: bigint }>>(
+      Prisma.sql`SELECT o.manager_account_id AS id, COUNT(c.id) AS n
+                   FROM organizations o
+                   JOIN clients c ON c.org_id = o.id AND c.status <> 'archived'
+                  WHERE o.manager_account_id = ANY(${idler}::uuid[])
+                    AND o.status = 'active'
+                  GROUP BY 1`,
+    );
+    const wsSayisi = new Map(workspaceler.map((w) => [w.id, Number(w.n)]));
+
+    // EV ŞİRKETİ `users.org_id` — `ctx.orgId` DEĞİL (o, ŞU AN bakılan şirket).
+    const kullanici = await this.admin.user.findUnique({
+      where: { id: ctx.userId },
+      select: { organization: { select: { managerAccountId: true } } },
+    });
+    const evHesapId = kullanici?.organization.managerAccountId ?? null;
+
+    return hesaplar.map((h) => ({
+      id: h.id,
+      name: h.name,
+      slug: h.slug,
+      paket: h.paket,
+      status: h.status,
+      sirketSayisi: h._count.organizations,
+      workspaceSayisi: wsSayisi.get(h.id) ?? 0,
+      uyeSayisi: h._count.memberships,
+      createdAt: h.createdAt.toISOString(),
+      evHesabi: h.id === evHesapId,
+      aktif: h.id === ctx.managerAccountId,
+    }));
+  }
+
+  /**
+   * ÜST HESAP SİLME ÖZETİ — hiçbir şey silmiyor, ne gideceğini SAYIYOR.
+   *
+   * Şirket silmedeki gerekçenin aynısı bir kat yukarıda: silme geri
+   * alınamıyor (Meta 37 aylık sınıra takılıyor, Google'da yeniden çekmek
+   * kota harcıyor) ve "Emin misiniz?" deyip ne gideceğini söylememek bu
+   * depoda `reset-clients`in yarım kalmasıyla aynı sınıf hata.
+   */
+  async ustHesapSilmeOzeti(
+    ctx: TenantContext,
+    managerAccountId: string,
+  ): Promise<UstHesapSilmeOzeti> {
+    /*
+     * ═══ SİLME YALNIZCA PLATFORM SAHİBİNDE ═══
+     *
+     * Hesabı SATAN taraf siliyor. Müşterinin kendi Yöneticisine bu düğmeyi
+     * vermek, satın aldığı her şeyi tek tıkla yok edebilmesi demekti —
+     * üstelik altındaki şirketlerin kullanıcıları da gidiyor. Zaten aşağıdaki
+     * ev şirketi engeli onu her hâlükârda durdururdu; kapıyı burada açıkça
+     * yazmak, o engelin bir yan etki olarak korumasına güvenmekten iyi.
+     */
+    if (!ctx.platformAdmin) {
+      throw new ForbiddenException('Üst hesabı yalnızca Advetics silebilir');
+    }
+    const hesap = await this.yonetilebilirHesap(ctx, managerAccountId);
+
+    const sirketler = await this.admin.organization.findMany({
+      where: { managerAccountId },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    });
+    const orgIdler = sirketler.map((o) => o.id);
+
+    const [workspaceSayisi, reklamHesabi, kullanici, metrik, evKullanici] = await Promise.all([
+      this.admin.client.count({ where: { orgId: { in: orgIdler } } }),
+      this.admin.adAccount.count({ where: { orgId: { in: orgIdler } } }),
+      this.admin.user.count({ where: { orgId: { in: orgIdler } } }),
+      // METRİK GÜNÜ SAYILIYOR, SATIR DEĞİL: "412.877 satır" kimseye bir şey
+      // anlatmıyor, "14 aylık ölçüm" kaybın büyüklüğünü söylüyor.
+      orgIdler.length === 0
+        ? Promise.resolve([{ n: BigInt(0) }])
+        : this.admin.$queryRaw<Array<{ n: bigint }>>(
+            Prisma.sql`SELECT COUNT(DISTINCT date) AS n FROM insights_daily
+                        WHERE client_id IN (SELECT id FROM clients WHERE org_id = ANY(${orgIdler}::uuid[]))`,
+          ),
+      this.admin.user.findUnique({
+        where: { id: ctx.userId },
+        select: { orgId: true },
+      }),
+    ]);
+
+    const metrikGunu = Number(metrik[0]?.n ?? 0);
+    /*
+     * KENDİ HESABINI SİLEMEZSİN. Ev şirketi bu hesabın altındaysa silme
+     * kendi giriş hesabını da götürür: `organizations` silinince `users`
+     * cascade ile gidiyor. Panelden geri dönüşü olmayan tek hata bu olurdu.
+     */
+    const engel = orgIdler.includes(evKullanici?.orgId ?? '')
+      ? 'Kendi üst hesabın silinemez — giriş hesabın bu hesabın altındaki bir şirkete bağlı.'
+      : null;
+
+    return {
+      managerAccountId,
+      name: hesap.name,
+      sirketAdlari: sirketler.map((o) => o.name),
+      workspaceSayisi,
+      reklamHesabi,
+      kullanici,
+      metrikGunu,
+      adOnayiGerekli:
+        sirketler.length > 0 ||
+        workspaceSayisi > 0 ||
+        reklamHesabi > 0 ||
+        kullanici > 0 ||
+        metrikGunu > 0,
+      engel,
+    };
+  }
+
+  /**
+   * Üst hesabı ve ALTINDAKİ HER ŞİRKETİ kalıcı siler.
+   *
+   * ŞİRKETLER BIRAKILAMIYOR: `organizations.manager_account_id`
+   * `ON DELETE SET NULL` taşıyor. Yalnızca hesabı silmek, o şirketleri hiçbir
+   * üst hesabın altında olmayan — seçicide görünmeyen, kimsenin geçemediği —
+   * yetim kayıtlara çevirirdi. Kayıt duruyor, veri duruyor, kimse göremiyor:
+   * bu depodaki sessiz hatanın tarifi.
+   */
+  async ustHesapSil(
+    ctx: TenantContext,
+    managerAccountId: string,
+    input: DeleteManagerAccountInput,
+  ): Promise<UstHesapSilmeYaniti> {
+    const ozet = await this.ustHesapSilmeOzeti(ctx, managerAccountId);
+    if (ozet.engel !== null) throw new BadRequestException(ozet.engel);
+
+    if (ozet.adOnayiGerekli && (input.onayAdi ?? '').trim() !== ozet.name) {
+      throw new BadRequestException(
+        `Bu hesapta silinecek veri var. Onaylamak için üst hesap adını birebir yaz: ${ozet.name}`,
+      );
+    }
+
+    /*
+     * DENETİM KAYDI SİLMEDEN ÖNCE ve ÇAĞIRANIN şirketine yazılıyor.
+     * `audit_logs.org_id` silinen şirketlerden birine bakarsa o satır da
+     * cascade ile giderdi — kimin sildiği kayıtla birlikte yok olurdu.
+     */
+    await this.audit.recordUnauthenticated(ctx.orgId, {
+      actorId: ctx.userId,
+      action: 'manager_account.delete',
+      targetType: 'manager_account',
+      targetId: managerAccountId,
+      before: {
+        name: ozet.name,
+        sirketler: ozet.sirketAdlari,
+        workspace: ozet.workspaceSayisi,
+        reklamHesabi: ozet.reklamHesabi,
+        kullanici: ozet.kullanici,
+        metrikGunu: ozet.metrikGunu,
+      },
+    });
+
+    const orgIdler = (
+      await this.admin.organization.findMany({
+        where: { managerAccountId },
+        select: { id: true },
+      })
+    ).map((o) => o.id);
+    const clientIdler =
+      orgIdler.length === 0
+        ? []
+        : (
+            await this.admin.client.findMany({
+              where: { orgId: { in: orgIdler } },
+              select: { id: true },
+            })
+          ).map((c) => c.id);
+
+    await this.admin.$transaction(
+      async (tx) => {
+        /*
+         * FK TAŞIMAYAN İKİ TABLO ELLE — `insights_daily` (partition'lı, Prisma
+         * FK kuramıyor) ve `api_usage_log`. Şirket silmede bu PGlite ile
+         * ÖLÇÜLDÜ: satırlar cascade'den SAĞ ÇIKIYOR ve yetim kalıyorlar.
+         */
+        if (clientIdler.length > 0) {
+          await tx.$executeRaw(
+            Prisma.sql`DELETE FROM insights_daily WHERE client_id = ANY(${clientIdler}::uuid[])`,
+          );
+          await tx.$executeRaw(
+            Prisma.sql`DELETE FROM api_usage_log WHERE client_id = ANY(${clientIdler}::uuid[])`,
+          );
+        }
+        /*
+         * ŞİRKETLER ÖNCE, HESAP SONRA. Ters sırada `SET NULL` işliyor ve
+         * şirketler hesapsız kalıyor: ikinci adım artık onları BULAMIYOR
+         * (`managerAccountId` NULL) ve yetim kayıtlar geride kalırdı.
+         */
+        if (orgIdler.length > 0) {
+          await tx.organization.deleteMany({ where: { id: { in: orgIdler } } });
+        }
+        await tx.managerAccount.delete({ where: { id: managerAccountId } });
+      },
+      { timeout: 120_000, maxWait: 120_000 },
+    );
+
+    this.logger.warn(
+      `ÜST HESAP SİLİNDİ: ${ozet.name} (${managerAccountId}) — ` +
+        `${ozet.sirketAdlari.length} şirket, ${ozet.workspaceSayisi} workspace, ` +
+        `${ozet.reklamHesabi} hesap, ${ozet.kullanici} kullanıcı, ${ozet.metrikGunu} günlük metrik.`,
+    );
+
+    return {
+      silindi: true,
+      name: ozet.name,
+      sirketSayisi: ozet.sirketAdlari.length,
+      aktifti: ctx.managerAccountId === managerAccountId,
+    };
   }
 
   /**
@@ -638,6 +949,21 @@ export class ManagerAccountService {
    * düşürürdü — doğru sonuç ama sessiz, ve bu depoda sessiz düşüş bir hata
    * türü: kullanıcı hangi şirkette olduğunu ekrandan okuyamaz.
    */
+  /**
+   * Kullanıcının EV üst hesabı — ev şirketinin bağlı olduğu hesap.
+   *
+   * Aktif hesap silindiğinde çerezin gösterdiği yer. `null` dönebiliyor:
+   * ev şirketi hiçbir üst hesaba bağlı olmayabilir (bağımsız şirket) ve o
+   * hâlde çerez temizleniyor — uydurulmuş bir kimlik yazmaktansa boş.
+   */
+  async evUstHesabi(ctx: TenantContext): Promise<string | null> {
+    const kullanici = await this.admin.user.findUnique({
+      where: { id: ctx.userId },
+      select: { organization: { select: { managerAccountId: true } } },
+    });
+    return kullanici?.organization.managerAccountId ?? null;
+  }
+
   async evSirketi(ctx: TenantContext): Promise<string> {
     const kullanici = await this.admin.user.findUnique({
       where: { id: ctx.userId },

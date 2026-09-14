@@ -573,8 +573,8 @@ Kimde olduğunu görmek için `--liste`, geri almak için `--kaldir`. Değişikl
 bir sonraki oturum çözümünde geçerli oluyor (sayfayı yenilemek yeterli).
 
 Platform sahibi olan kullanıcı üst barda **üst hesap seçicisini** görüyor ve
-kurduğu her hesaba geçebiliyor. Yeni hesap `/ayarlar/ust-hesap` sayfasındaki
-üst hesap kartından açılıyor (**+ Yeni üst hesap**): ad + paket seçilir,
+kurduğu her hesaba geçebiliyor. Yeni hesap `/ayarlar/ust-hesaplar` sayfasından
+açılıyor (**+ Yeni üst hesap**): ad + paket seçilir,
 kurulunca o hesaba geçilir. Kendi şirketi o hesaba BAĞLANMIYOR — Advetics'in
 kendi organizasyonu müşterinin portföyüne girmiyor.
 
@@ -591,6 +591,15 @@ aynı karttan **Düzenle** ile değiştiriliyor ve yalnızca platform sahibi
 değiştirebiliyor; sayılar `packages/shared/src/constants/paketler.ts` içinde.
 Şirket sınırı bugün uygulanıyor, reklam hesabı sınırı `connections` modülüne
 bağlandığında.
+
+**Üst hesapların listesi, düzenlenmesi ve silinmesi:** `/ayarlar/ust-hesaplar`
+(menüde **Üst Hesaplar**; üst hesap seçicisinin altındaki "Üst hesap ayarları"
+sekmesi de oraya gidiyor). Platform sahibi bütün hesapları görüyor, bir
+Yönetici yalnızca üyesi olduklarını. **Silme yalnızca platform sahibinde** ve
+hesabın ALTINDAKİ HER ŞİRKETİ götürüyor — workspace'ler, reklam hesapları,
+kullanıcılar ve metrik geçmişi dâhil; ekran silmeden önce ne gideceğini
+sayıyor ve veri varsa hesabın adını birebir yazdırıyor. Kendi giriş hesabını
+barındıran hesap silinemiyor.
 
 **Hesabı müşteriye teslim etmek:** hesaba geçip **Ekip & Yetkiler → Üst hesap
 ekibi → + Üst hesaba kişi ekle**. E-posta kayıtlı değilse ad soyad ve parola

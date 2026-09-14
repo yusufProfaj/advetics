@@ -173,6 +173,26 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         perm: 'org.write',
       },
       {
+        /*
+         * ÜST HESAPLAR — ŞİRKETLER'DEN AYRI SATIR.
+         *
+         * İkisi farklı kapsam: "Şirketler" bir üst hesabın ALTINI yönetiyor,
+         * bu satır hesapların KENDİSİNİ (ad, paket, ekip büyüklüğü, silme,
+         * yeni hesap). Aynı sayfada toplamak, aktif olmayan bir hesabı
+         * düzenlemek için önce ona geçmeyi zorunlu kılıyordu.
+         *
+         * `org.write` — Şirketler ile aynı anahtar ve aynı gerekçe: bu ekran
+         * bir kullanıcının ERİŞEBİLDİĞİ ŞİRKET KÜMESİNİ değiştiriyor.
+         * Platform sahibi burada bütün hesapları görüyor; ayrım sunucuda.
+         */
+        href: '/ayarlar/ust-hesaplar',
+        label: 'Üst Hesaplar',
+        icon: 'clients',
+        module: 1,
+        ready: true,
+        perm: 'org.write',
+      },
+      {
         href: '/ayarlar/baglantilar',
         label: 'Platform Bağlantıları',
         icon: 'plug',

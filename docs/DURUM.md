@@ -466,6 +466,47 @@ kilitli. Bilgi Bankası müşteri hesabından KALKTI (kapı `client.write`).
 
 `ORG_SCOPED_ROLES` = admin, ad_manager · `ORG_ADMIN_ROLES` = admin.
 
+### Üst hesap yönetimi
+
+**Ayrı sayfa: `/ayarlar/ust-hesaplar`.** Üst hesap ayarları Şirketler
+ekranındaki bir kartın içindeydi ve o kart yalnızca AKTİF hesabı biliyordu:
+ikinci bir hesabın adını değiştirmek için önce ona geçmek — bağlamı, açık
+şirketi ve workspace seçimini değiştirmek — gerekiyordu. Silme ise hiç yoktu.
+
+| Ekran | Kapsam |
+|---|---|
+| `/ayarlar/ust-hesaplar` | Hesabın KENDİSİ: liste, ad, paket, ekip büyüklüğü, doluluk, silme, yeni hesap |
+| `/ayarlar/ust-hesap` | Hesabın ALTI: şirketler ve workspace'ler. Kartı artık salt okunur şerit + ayarlara bağlantı |
+
+Uçlar: `GET /manager-account/liste`, `PATCH /manager-account/:id` (kimlik
+yolda — düzenlemek için hesaba geçmek gerekmiyor), `GET /manager-account/:id/
+silme-ozeti`, `DELETE /manager-account/:id`.
+
+**ÜST HESABI SİLMEK ŞİRKETLERİ YETİM BIRAKIYOR** — ve bu ölçüldü
+(`ust-hesap-silme.spec.ts`). `organizations.manager_account_id`
+`ON DELETE SET NULL` taşıyor: naif bir "hesabı sil", altındaki şirketleri
+hiçbir üst hesabın altında OLMAYAN, seçicide görünmeyen, kimsenin geçemediği
+kayıtlara çeviriyor. Silme bu yüzden iki adımlı ve SIRALI: şirketler önce
+(`insights_daily`/`api_usage_log` elle, aynı transaction'da), hesap sonra.
+Ters sıra ikinci adımın şirketleri ARTIK BULAMAMASI demek.
+
+Kapılar: silme yalnızca **platform sahibinde**; ayrıca kullanıcının EV
+şirketini barındıran hesap silinemiyor (giriş hesabı cascade ile giderdi).
+Düzenleme kapısı `isOrgAdmin` DEĞİL, üst hesap üyeliğinin rolü — o bayrak tek
+bir şirketin yöneticisinde de açık ve kapıyı ona bağlamak, başka bir üst
+hesabın paketini değiştirebilmek demekti. Veri varsa ad onayı isteniyor ve
+kontrol SUNUCUDA.
+
+### Giriş
+
+**Şifreyi göster** (`components/auth/alan.tsx`): şifre alanlarında "Göster /
+Gizle". Alanın KENDİSİNE konuldu, bir prop'a değil — üç oturum ekranından
+birinde unutulması demekti ve en çok gereken yer giriş değil şifre BELİRLEME
+ekranı. Bu panelde ayrıca somut bir sebep var: davet akışı yok, şifreyi
+yönetici belirleyip elden iletiyor; elle yazılan on iki karakteri göremeden
+girmek "şifre yanlış" döngüsünün en sık sebebi. Düğme `type="button"` —
+varsayılan `submit` ve formun içinde duruyor.
+
 ### Panel
 
 | Ne | Neden dikkat |

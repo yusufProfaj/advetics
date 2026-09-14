@@ -13,12 +13,14 @@ import {
 } from '@nestjs/common';
 import {
   createManagedOrganizationSchema,
+  deleteManagerAccountSchema,
   createManagerAccountSchema,
   deleteOrganizationSchema,
   moveWorkspaceSchema,
   updateManagerAccountSchema,
   type CreateManagedOrganizationInput,
   type CreateManagerAccountInput,
+  type DeleteManagerAccountInput,
   type DeleteOrganizationInput,
   type MoveWorkspaceInput,
   type UpdateManagerAccountInput,
@@ -29,7 +31,11 @@ import { Inject } from '@nestjs/common';
 import { CurrentTenant } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { CONFIG, type AppConfig } from '../../config/configuration';
-import { setActiveClientCookie, setActiveOrgCookie } from '../auth/cookies';
+import {
+  setActiveClientCookie,
+  setActiveManagerCookie,
+  setActiveOrgCookie,
+} from '../auth/cookies';
 import { ManagerAccountService } from './manager-account.service';
 
 /**
@@ -63,13 +69,70 @@ export class ManagerAccountController {
     return this.service.create(ctx, dto);
   }
 
-  /** Aktif üst hesabı düzenler — ad ve (platform sahibinde) paket. */
-  @Patch()
+  /**
+   * YÖNETİLEBİLEN ÜST HESAPLAR — yönetim ekranının listesi.
+   *
+   * `@Get(':id')` YOK ve olmayacak: `liste` gibi düz bir segment, tek
+   * parametreli bir GET ile aynı kalıba düşer ve hangisinin kazandığı kayıt
+   * sırasına kalırdı.
+   */
+  @Get('liste')
+  async liste(@CurrentTenant() ctx: TenantContext) {
+    return this.service.liste(ctx);
+  }
+
+  /**
+   * Bir üst hesabı düzenler — ad ve (platform sahibinde) paket.
+   *
+   * KİMLİK YOLDA: yönetim ekranı bütün hesapları listeliyor ve aktif olmayan
+   * birini düzenlemek için önce ona GEÇMEK gerekmemeli. Kapı servis
+   * katmanında (`yonetilebilirHesap`) — `isOrgAdmin` yetmiyor, üst hesap
+   * üyeliğinin rolü sorgulanıyor.
+   */
+  @Patch(':id')
   async update(
     @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body(zodBody(updateManagerAccountSchema)) dto: UpdateManagerAccountInput,
   ) {
-    return this.service.update(ctx, dto);
+    return this.service.update(ctx, id, dto);
+  }
+
+  /** Üst hesap silme özeti — ne gideceğini SAYIYOR, hiçbir şey silmiyor. */
+  @Get(':id/silme-ozeti')
+  async ustHesapSilmeOzeti(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.service.ustHesapSilmeOzeti(ctx, id);
+  }
+
+  /**
+   * Üst hesabı ve altındaki HER ŞİRKETİ kalıcı siler. Kapılar serviste.
+   *
+   * ┌─ AKTİF HESAP SİLİNİRSE ÇEREZLER TAŞINIYOR ────────────────────────────┐
+   * │ `adv_mgr` silinmiş bir kimliği gösterirse `TenantContextService` onu  │
+   * │ doğrulayamayıp sessizce varsayılana düşer — doğru sonuç ama SESSİZ,   │
+   * │ ve bu depoda sessiz düşüş bir hata türü. Çerez açıkça EV hesabına     │
+   * │ çekiliyor; şirket ve workspace seçimi de sıfırlanıyor çünkü ikisi de  │
+   * │ silinen hesabın altındaydı.                                           │
+   * └───────────────────────────────────────────────────────────────────────┘
+   */
+  @HttpCode(HttpStatus.OK)
+  @Delete(':id')
+  async ustHesapSil(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(deleteManagerAccountSchema)) dto: DeleteManagerAccountInput,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const sonuc = await this.service.ustHesapSil(ctx, id, dto);
+    if (sonuc.aktifti) {
+      setActiveManagerCookie(res, this.config, await this.service.evUstHesabi(ctx));
+      setActiveOrgCookie(res, this.config, null);
+      setActiveClientCookie(res, this.config, null);
+    }
+    return sonuc;
   }
 
   /** Üst hesabın altına YENİ şirket açar — MCC'deki "alt hesap ekle". */

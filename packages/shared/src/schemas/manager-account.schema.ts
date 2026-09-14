@@ -204,3 +204,69 @@ export interface UstHesapUyesiEklemeYaniti {
   /** false => kullanıcı zaten vardı; yazılan parola KULLANILMADI. */
   created: boolean;
 }
+
+/**
+ * ═══ ÜST HESAP LİSTESİ — "hangi hesaplar var" ═══
+ *
+ * `SessionResponse.secilebilirUstHesaplar` SEÇİCİNİN listesi: geçilebilecek
+ * yerler, ağırlıklarıyla. Yönetim ekranı başka bir soru soruyor — "bu hesap
+ * ne kadar dolu, kim yönetiyor, silinebilir mi" — ve oturum yanıtını her
+ * sayfa yüklemesinde bu alanlarla şişirmenin anlamı yok.
+ */
+export interface UstHesapOzeti {
+  id: string;
+  name: string;
+  slug: string;
+  paket: ManagerPaket;
+  status: 'active' | 'suspended';
+  sirketSayisi: number;
+  workspaceSayisi: number;
+  /** Üst hesap ekibindeki kişi sayısı (`manager_memberships`). */
+  uyeSayisi: number;
+  createdAt: string;
+  /** Kullanıcının EV şirketi bu hesabın altında mı — silinemez olmasının sebebi. */
+  evHesabi: boolean;
+  /** Şu an bu hesapta mı. */
+  aktif: boolean;
+}
+
+/**
+ * ═══ ÜST HESAP SİLME ÖZETİ — ne gideceği ÖNCE yazılıyor ═══
+ *
+ * Üst hesabı silmek ALTINDAKİ HER ŞİRKETİ siliyor ve her şirket otuz tabloda
+ * cascade tetikliyor: workspace'ler, reklam hesapları, KULLANICILAR ve bütün
+ * metrik geçmişi. Şirket silmedeki gerekçenin aynısı, bir kat yukarıda.
+ *
+ * ŞİRKETLERİ BIRAKMAK SEÇENEK DEĞİL: `organizations.manager_account_id`
+ * `ON DELETE SET NULL` taşıyor, yani hesabı silip şirketleri bırakmak onları
+ * hiçbir üst hesabın altında OLMAYAN, seçicide görünmeyen, kimsenin
+ * geçemediği yetim kayıtlara çevirirdi — sessiz hatanın tarifi.
+ */
+export interface UstHesapSilmeOzeti {
+  managerAccountId: string;
+  name: string;
+  /** Silinecek şirket adları — SAYI DEĞİL AD. */
+  sirketAdlari: string[];
+  workspaceSayisi: number;
+  reklamHesabi: number;
+  /** Bu hesabın şirketlerine bağlı kullanıcılar — silinince GİRİŞ YAPAMAZLAR. */
+  kullanici: number;
+  metrikGunu: number;
+  adOnayiGerekli: boolean;
+  /** `null` = silinebilir. Doluysa sebep ekranda yazıyor, düğme sessizce kapanmıyor. */
+  engel: string | null;
+}
+
+export const deleteManagerAccountSchema = z.object({
+  onayAdi: z.string().trim().max(120).optional(),
+});
+export type DeleteManagerAccountInput = z.infer<typeof deleteManagerAccountSchema>;
+
+export interface UstHesapSilmeYaniti {
+  silindi: true;
+  name: string;
+  /** Silinen şirket sayısı — ekranda "X ve 3 şirketi silindi" demek için. */
+  sirketSayisi: number;
+  /** Silinen hesap AKTİF hesap mıydı — panel tam sayfa yenilemek zorunda. */
+  aktifti: boolean;
+}

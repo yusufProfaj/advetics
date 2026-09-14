@@ -79,7 +79,13 @@ describe('KRİTİK: alttaki sabit sekme', () => {
      * bağlantıyı herkese basmak, tıklayınca sebepsizce başka bir ekrana
      * atılan bir düğme demekti.
      */
-    expect(SECICI).toContain('href="/ayarlar/ust-hesap"');
+    /*
+     * HEDEF `/ayarlar/ust-hesaplar` (ÇOĞUL) — hesabın KENDİSİNİN yönetildiği
+     * sayfa. `/ayarlar/ust-hesap` (tekil) bir üst hesabın ALTINI gösteriyor
+     * (şirketler, workspace'ler); seçicinin altındaki sekme "ayarlar" diyor
+     * ve ayarlar oraya taşındı.
+     */
+    expect(SECICI).toContain('href="/ayarlar/ust-hesaplar"');
     expect(SECICI).toContain('Üst hesap ayarları');
     expect(SECICI).toContain('{yonetimGorunur && (');
   });

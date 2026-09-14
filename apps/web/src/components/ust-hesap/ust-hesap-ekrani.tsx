@@ -163,7 +163,7 @@ export function UstHesapEkrani({
         kadarını doldurdun. Şirket listesinin ÜSTÜNDE çünkü onların hepsini
         kapsıyor; yanına koymak hiyerarşiyi gizlerdi.
       */}
-      <UstHesapKarti agac={agac} platformAdmin={platformAdmin} onGuncellendi={setAgac} />
+      <UstHesapKarti agac={agac} />
 
       <div className="grid gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
         <SirketRayi

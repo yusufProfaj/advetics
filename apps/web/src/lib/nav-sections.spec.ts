@@ -84,6 +84,9 @@ describe('menü verisi gerçekten okunuyor', () => {
       // WORKSPACE'LER ARTIK BU SAYFANIN İÇİNDE — `/ayarlar/musteriler`
       // menüden kalktı ve yönlendirmeye düştü.
       '/ayarlar/ust-hesap',
+      // ÜST HESAPLAR (çoğul) — hesabın KENDİSİNİ yöneten sayfa. Yetkisiz
+      // kalırsa müşteri hesabı menüde satılan hesapların varlığını görürdü.
+      '/ayarlar/ust-hesaplar',
       '/ayarlar/baglantilar',
       '/ayarlar/senkronizasyon',
       '/ayarlar/ekip',
@@ -209,6 +212,9 @@ describe('AJANS ROLLERİ', () => {
      */
     const gorunen = etiketler('ad_manager');
     expect(gorunen).toContain('Platform Bağlantıları');
+    // Üst Hesaplar da `org.write` ile kapalı: hesabın kendisini yönetmek
+    // Yönetici işi.
+    expect(gorunen).not.toContain('Üst Hesaplar');
     expect(gorunen).toContain('Reklam Oluştur');
     expect(gorunen).toContain('Kurallar');
     expect(gorunen).toContain('Ekip & Yetkiler');
