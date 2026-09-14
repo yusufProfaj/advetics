@@ -152,7 +152,7 @@ export function UstHesapSecici({
       {hata && (
         <p
           role="alert"
-          className="absolute left-0 top-full z-30 mt-1 w-max max-w-sm rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-700"
+          className="absolute left-0 top-full z-30 mt-1 w-max max-w-sm rounded-lg border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-xs text-danger-strong"
         >
           {hata}
         </p>

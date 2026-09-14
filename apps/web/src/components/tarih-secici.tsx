@@ -309,7 +309,7 @@ export function TarihSecici({
               <p className="mt-2 text-[11px] text-ink-muted">En eski veri günü aranıyor…</p>
             )}
             {kapsamHatasi && (
-              <p role="alert" className="mt-2 rounded border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">
+              <p role="alert" className="mt-2 rounded border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-[11px] text-danger-strong">
                 {kapsamHatasi} “Tüm zamanlar” şimdilik son 90 günü gösteriyor.
               </p>
             )}

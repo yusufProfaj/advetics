@@ -4,7 +4,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { ExpertAdBuilder } from '@/components/ad-builder/expert-builder';
 
-export const metadata = { title: 'Kampanya Kur — Advetics' };
+export const metadata = { title: 'Kampanya Kur · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -104,7 +104,7 @@ export default async function ExpertAdPage({
           forms={forms}
         />
       ) : (
-        <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+        <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
           Kampanya kurmak için yetkin yok.
         </div>
       )}

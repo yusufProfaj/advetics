@@ -27,14 +27,14 @@ export function CallbackBanner() {
 
   const variants: Record<string, { cls: string; title: string; body: string }> = {
     basarili: {
-      cls: 'border-emerald-200 bg-emerald-50/60 text-emerald-900',
+      cls: 'border-ok/30 bg-ok-soft/60 text-ok-strong',
       title: `${platform} bağlantısı kuruldu`,
       body: accounts
         ? `${accounts} reklam hesabı bulundu. İzlemek istediklerini aşağıdan aç — hepsi kapalı başlar.`
         : 'Reklam hesabı bulunamadı. "Hesapları yenile" ile tekrar dene.',
     },
     eksik_izin: {
-      cls: 'border-amber-300 bg-amber-50/60 text-amber-900',
+      cls: 'border-warn/30 bg-warn-soft/60 text-warn-strong',
       title: 'Bağlantı kuruldu ama izinler eksik',
       body: 'Bazı zorunlu izinler verilmedi. Aşağıdaki karttan "Yeniden yetkilendir" ile eksik izinleri tamamla.',
     },
@@ -44,7 +44,7 @@ export function CallbackBanner() {
       body: 'İzin ekranında iptal ettin, hiçbir şey değişmedi.',
     },
     hata: {
-      cls: 'border-red-200 bg-red-50 text-red-800',
+      cls: 'border-danger/30 bg-danger-soft text-danger-strong',
       title: 'Bağlantı kurulamadı',
       body: message ?? 'Bilinmeyen bir hata oluştu.',
     },

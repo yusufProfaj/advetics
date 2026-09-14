@@ -81,7 +81,7 @@ export function SirketSil({
   if (hata !== null && ozet === null) {
     return (
       <Kutu>
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger-strong">
           {hata}
         </p>
         <Vazgec onVazgec={onVazgec} />
@@ -112,7 +112,7 @@ export function SirketSil({
 
   return (
     <Kutu>
-      <h3 className="text-sm font-semibold text-red-700">
+      <h3 className="text-sm font-semibold text-danger-strong">
         “{ozet.name}” kalıcı olarak silinecek
       </h3>
 
@@ -160,14 +160,14 @@ export function SirketSil({
               onChange={(e) => setOnayAdi(e.target.value)}
               disabled={pending}
               placeholder={ozet.name}
-              className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-red-400"
+              className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-danger/30"
             />
           </label>
         </>
       )}
 
       {hata && (
-        <p role="alert" className="mt-2 text-xs text-red-600">
+        <p role="alert" className="mt-2 text-xs text-danger-strong">
           {hata}
         </p>
       )}
@@ -181,7 +181,7 @@ export function SirketSil({
            */
           disabled={pending || (!bosSirket && onayAdi.trim() !== ozet.name)}
           onClick={() => void sil()}
-          className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="inline-flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           {pending && <Halka />}
           {bosSirket ? 'Şirketi sil' : 'Kalıcı olarak sil'}
@@ -193,7 +193,7 @@ export function SirketSil({
 }
 
 function Kutu({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-xl border border-red-200 bg-red-50/60 p-4">{children}</div>;
+  return <div className="rounded-xl border border-danger/30 bg-danger-soft/60 p-4">{children}</div>;
 }
 
 function Satir({ children }: { children: React.ReactNode }) {

@@ -285,7 +285,7 @@ export function AdvancedPanel({
         </p>
         {/* HER STRATEJİNİN BEDELİ YAZIYOR — özellikle tavanlı olanların. */}
         {BID_STRATEGY_META[value.bidStrategy].risk && (
-          <p className="mt-1 text-[11px] text-amber-700">
+          <p className="mt-1 text-[11px] text-warn-strong">
             {BID_STRATEGY_META[value.bidStrategy].risk}
           </p>
         )}

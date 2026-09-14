@@ -3,7 +3,7 @@ import { serverApiFetch, ApiRequestError } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { SenkronDurumu } from '@/components/sync/senkron-durumu';
 
-export const metadata = { title: 'Senkronizasyon Durumu — Advetics' };
+export const metadata = { title: 'Senkronizasyon Durumu · Advetics' };
 
 /**
  * "BU MÜŞTERİDE VERİ NEDEN YOK" EKRANI.

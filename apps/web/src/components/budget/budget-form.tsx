@@ -180,7 +180,7 @@ export function BudgetForm({
       </Field>
 
       {error && (
-        <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-inset ring-rose-200">
+        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}
@@ -207,7 +207,7 @@ export function BudgetForm({
             type="button"
             onClick={remove}
             disabled={busy}
-            className="ml-auto rounded-lg px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-50"
+            className="ml-auto rounded-lg px-3 py-1.5 text-xs font-medium text-danger-strong transition hover:bg-danger-soft"
           >
             Bütçeyi sil
           </button>

@@ -136,11 +136,11 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
       )}
 
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-inset ring-rose-200">
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}
-      {kaydedildi && !error && <p className="text-xs text-emerald-700">Kaydedildi</p>}
+      {kaydedildi && !error && <p className="text-xs text-ok-strong">Kaydedildi</p>}
 
       {canWrite && (
         <label className="inline-block cursor-pointer rounded-lg border border-line bg-surface px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-sunken">

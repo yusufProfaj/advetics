@@ -5,7 +5,7 @@ import { serverApiFetch } from '@/lib/api';
 import { SimpleAdBuilder } from '@/components/ad-builder/simple-builder';
 import { DraftGroupList } from '@/components/ad-builder/draft-group-list';
 
-export const metadata = { title: 'Hızlı Reklam — Advetics' };
+export const metadata = { title: 'Hızlı Reklam · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -101,7 +101,7 @@ export default async function SimpleAdPage({
           libraryTotal={library?.total ?? 0}
         />
       ) : (
-        <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+        <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
           Reklam oluşturmak için yetkin yok.
         </div>
       )}

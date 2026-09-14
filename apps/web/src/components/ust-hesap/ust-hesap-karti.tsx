@@ -59,6 +59,6 @@ export function dolulukMetni(mevcut: number, sinir: number | null, birim: string
 
 function DolulukMetni({ mevcut, sinir, birim }: { mevcut: number; sinir: number | null; birim: string }) {
   const dolu = sinir !== null && mevcut >= sinir;
-  return <span className={dolu ? 'font-medium text-amber-700' : ''}>{dolulukMetni(mevcut, sinir, birim)}</span>;
+  return <span className={dolu ? 'font-medium text-warn-strong' : ''}>{dolulukMetni(mevcut, sinir, birim)}</span>;
 }
 

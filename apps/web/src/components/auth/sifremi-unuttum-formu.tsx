@@ -66,13 +66,13 @@ export function SifremiUnuttumFormu() {
         </p>
 
         {devToken && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-            <p className="text-xs font-semibold text-amber-900">
+          <div className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-2">
+            <p className="text-xs font-semibold text-warn-strong">
               Geliştirme ortamı — bağlantı mail yerine burada
             </p>
             <a
               href={`/sifre-sifirla?token=${encodeURIComponent(devToken)}`}
-              className="mt-1 block break-all text-xs text-amber-900 underline"
+              className="mt-1 block break-all text-xs text-warn-strong underline"
             >
               /sifre-sifirla?token={devToken}
             </a>
@@ -87,7 +87,7 @@ export function SifremiUnuttumFormu() {
       {hata && (
         <div
           role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
         >
           {hata}
         </div>

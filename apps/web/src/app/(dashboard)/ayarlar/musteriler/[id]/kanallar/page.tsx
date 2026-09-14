@@ -5,7 +5,7 @@ import { serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { BagliKanallar } from '@/components/tenancy/bagli-kanallar';
 
-export const metadata = { title: 'Bağlı kanallar — Advetics' };
+export const metadata = { title: 'Bağlı kanallar · Advetics' };
 
 /**
  * BİR WORKSPACE'İN BAĞLI KANALLARI.

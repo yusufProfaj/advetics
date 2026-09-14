@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Veri Silme Talimatları — Advetics',
+  title: 'Veri Silme Talimatları · Advetics',
   description:
     'Advetics üzerindeki reklam hesabı bağlantınızı ve kişisel verilerinizi nasıl sileceğiniz.',
   robots: { index: true, follow: true },
@@ -57,10 +57,10 @@ export default async function DataDeletionPage({
         <div
           className={`mt-5 rounded-xl border p-4 ${
             status?.status === 'completed'
-              ? 'border-emerald-300 bg-emerald-50/70 text-emerald-900'
+              ? 'border-ok/30 bg-ok-soft/70 text-ok-strong'
               : status?.status === 'failed'
-                ? 'border-red-300 bg-red-50/70 text-red-900'
-                : 'border-amber-300 bg-amber-50/70 text-amber-900'
+                ? 'border-danger/30 bg-danger-soft/70 text-danger-strong'
+                : 'border-warn/30 bg-warn-soft/70 text-warn-strong'
           }`}
         >
           <p className="text-sm font-semibold">Silme talebi durumu</p>

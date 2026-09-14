@@ -189,7 +189,7 @@ export function FormBuilder({
            * Aşağıya koymak, kullanıcının alanları doldurup en sonda öğrenmesi
            * demek olurdu.
            */
-          <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+          <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
             <p className="font-semibold">Bu form yayında — içeriği değiştirilemiyor.</p>
             <p className="mt-1 text-xs">
               Meta yayınlanmış formu güncellemiyor: bilgilerini bırakan kişiler mevcut onay
@@ -533,24 +533,24 @@ export function FormBuilder({
            * Kullanıcı "Düzenle"ye bastı ama olacak şey düzenleme değil: Meta'da
            * yeni bir form oluşacak. Bunu onaylamadan hiçbir şey yazılmıyor.
            */
-          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-            <p className="text-sm font-semibold text-amber-900">
+          <div className="rounded-xl border border-warn/30 bg-warn-soft p-4">
+            <p className="text-sm font-semibold text-warn-strong">
               {plan.nextVersion}. sürüm oluşturulacak
             </p>
-            <p className="mt-1 text-xs text-amber-900">{plan.explanation}</p>
+            <p className="mt-1 text-xs text-warn-strong">{plan.explanation}</p>
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={() => void save()}
                 disabled={busy !== null}
-                className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                className="rounded-lg bg-warn px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
               >
                 {busy === 'save' ? 'Oluşturuluyor…' : 'Yeni sürüm oluştur'}
               </button>
               <button
                 type="button"
                 onClick={() => setPlan(null)}
-                className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900"
+                className="rounded-lg border border-warn/30 px-3 py-1.5 text-xs font-medium text-warn-strong"
               >
                 Vazgeç
               </button>
@@ -567,7 +567,7 @@ export function FormBuilder({
         )}
 
         {error && (
-          <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-inset ring-rose-200">
+          <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
             {error}
           </p>
         )}

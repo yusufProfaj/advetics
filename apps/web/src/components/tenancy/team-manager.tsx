@@ -294,7 +294,7 @@ export function TeamManager({
           yapamayınca ikisi de yanlış yerde arar.
         */}
         {notice && (
-          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2 text-xs text-amber-900">
+          <p className="mt-3 rounded-lg border border-warn/30 bg-warn-soft/60 px-3 py-2 text-xs text-warn-strong">
             {notice}
           </p>
         )}
@@ -557,7 +557,7 @@ function GrantAccess({
       {/* MÜŞTERİ YOKSA SEBEBİ YAZILI. Boş bir seçici, "yetki veremiyorum"
           sorusunun cevabını hiçbir yerde bırakmazdı. */}
       {clients.length === 0 && (
-        <p className="mt-1.5 text-[11px] text-amber-700">
+        <p className="mt-1.5 text-[11px] text-warn-strong">
           Atanabilecek workspace yok — ya hepsinde yetkisi var ya da henüz workspace
           oluşturulmamış.
         </p>

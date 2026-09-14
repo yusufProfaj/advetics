@@ -9,7 +9,7 @@ import { serverApiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { FormBuilder } from '@/components/forms/form-builder';
 
-export const metadata = { title: 'Formlar — Advetics' };
+export const metadata = { title: 'Formlar · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -93,7 +93,7 @@ export default async function FormsPage({
           canPublish={canPublish}
         />
       ) : (
-        <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+        <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
           Form oluşturmak için yetkin yok.
         </div>
       )}
@@ -125,7 +125,7 @@ export default async function FormsPage({
                     {f.socialProfileName} · {FORM_TYPE_META[f.formType].label} ·{' '}
                     {LEAD_FORM_STATUS_LABELS[f.status]} · {f.prefillQuestions.length} soru ·{' '}
                     {formatRelative(f.createdAt)}
-                    {f.error && <span className="text-rose-700"> · {f.error}</span>}
+                    {f.error && <span className="text-danger-strong"> · {f.error}</span>}
                   </p>
                 </div>
                 {canWrite && (

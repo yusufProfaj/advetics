@@ -3,7 +3,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { CreativeLibrary } from '@/components/ad-builder/creative-library';
 
-export const metadata = { title: 'Kreatifler — Advetics' };
+export const metadata = { title: 'Kreatifler · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -60,7 +60,7 @@ export default async function CreativesPage({
           libraryAssets={library?.rows ?? []}
         />
       ) : (
-        <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+        <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
           Kreatif düzenlemek için yetkin yok.
         </div>
       )}

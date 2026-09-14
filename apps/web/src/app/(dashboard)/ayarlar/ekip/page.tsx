@@ -5,7 +5,7 @@ import { requireSession } from '@/lib/session';
 import type { MemberRow } from '@/components/tenancy/team-manager';
 import { TeamScreen } from '@/components/tenancy/team-screen';
 
-export const metadata = { title: 'Ekip & Yetkiler — Advetics' };
+export const metadata = { title: 'Ekip & Yetkiler · Advetics' };
 
 interface ClientRow {
   id: string;
@@ -117,7 +117,7 @@ export default async function TeamPage() {
       {yuklemeHatalari.length > 0 && (
         <div
           role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
         >
           {yuklemeHatalari.map((h) => (
             <p key={h}>{h}</p>

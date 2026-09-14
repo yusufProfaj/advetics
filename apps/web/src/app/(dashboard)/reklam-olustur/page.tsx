@@ -10,7 +10,7 @@ import { serverApiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { DraftGroupList } from '@/components/ad-builder/draft-group-list';
 
-export const metadata = { title: 'Reklamlar — Advetics' };
+export const metadata = { title: 'Reklamlar · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -169,7 +169,7 @@ function EskiTaslaklar({ drafts }: { drafts: AdDraftRecord[] }) {
             <p className="text-[11px] text-ink-muted">
               {GOAL_META[d.goal].label} · {AD_DRAFT_STATUS_LABELS[d.status]} ·{' '}
               {formatRelative(d.createdAt)}
-              {d.error && <span className="text-rose-700"> · {d.error}</span>}
+              {d.error && <span className="text-danger-strong"> · {d.error}</span>}
             </p>
           </li>
         ))}

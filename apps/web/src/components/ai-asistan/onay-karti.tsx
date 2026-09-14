@@ -102,9 +102,9 @@ export function OnayKarti({
       ) : (
         <div className="mt-2">
           {sonuc.ok ? (
-            <p className="text-sm text-emerald-700">{sonuc.mesaj}</p>
+            <p className="text-sm text-ok-strong">{sonuc.mesaj}</p>
           ) : (
-            <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-inset ring-rose-200">
+            <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
               {sonuc.mesaj}
             </p>
           )}

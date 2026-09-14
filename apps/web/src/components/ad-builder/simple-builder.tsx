@@ -553,7 +553,7 @@ export function SimpleAdBuilder({
                 </ul>
               </>
             ) : (
-              <p className="text-xs text-emerald-700">Her şey hazır.</p>
+              <p className="text-xs text-ok-strong">Her şey hazır.</p>
             )}
 
             <button
@@ -569,7 +569,7 @@ export function SimpleAdBuilder({
       )}
 
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-inset ring-rose-200">
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}
@@ -618,7 +618,7 @@ function Sonuc({
                   {platformKisaAdi(c.platform)}
                   <span className="ml-1.5 font-normal text-ink-muted">{c.adAccountName}</span>
                 </p>
-                {c.error && <p className="mt-0.5 text-[11px] text-rose-700">{c.error}</p>}
+                {c.error && <p className="mt-0.5 text-[11px] text-danger-strong">{c.error}</p>}
               </div>
               <span className={`shrink-0 text-[11px] font-medium ${durumRengi(c.status)}`}>
                 {DURUM[c.status]}
@@ -647,7 +647,7 @@ function Sonuc({
           {check.blockers.map((b) => (
             <p
               key={b}
-              className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 ring-1 ring-inset ring-rose-200"
+              className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30"
             >
               {b}
             </p>
@@ -655,7 +655,7 @@ function Sonuc({
           {check.warnings.map((w) => (
             <p
               key={w}
-              className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-inset ring-amber-200"
+              className="mt-2 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-strong ring-1 ring-inset ring-warn/30"
             >
               {w}
             </p>
@@ -673,9 +673,9 @@ function Sonuc({
       )}
 
       {hepsiYayinda && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-          <h3 className="text-sm font-semibold text-emerald-900">Reklamın yayında</h3>
-          <p className="mt-1 text-sm text-emerald-800">
+        <div className="rounded-xl border border-ok/30 bg-ok-soft p-4">
+          <h3 className="text-sm font-semibold text-ok-strong">Reklamın yayında</h3>
+          <p className="mt-1 text-sm text-ok-strong">
             Meta reklamı onaylayana kadar birkaç saat geçebilir. Onaylandığında yayına girer ve
             harcamaya başlar. Sonuçları <strong>Genel Bakış</strong> ekranından izleyebilirsin.
           </p>
@@ -683,7 +683,7 @@ function Sonuc({
       )}
 
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-inset ring-rose-200">
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}
@@ -707,8 +707,8 @@ const DURUM: Record<string, string> = {
 };
 
 function durumRengi(status: string): string {
-  if (status === 'published') return 'text-emerald-700';
-  if (status === 'failed') return 'text-rose-700';
+  if (status === 'published') return 'text-ok-strong';
+  if (status === 'failed') return 'text-danger-strong';
   return 'text-ink-muted';
 }
 
@@ -835,7 +835,7 @@ function MetinAlani({
         <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
           {label}
         </span>
-        <span className={`text-[11px] ${asildi ? 'text-amber-700' : 'text-ink-muted'}`}>
+        <span className={`text-[11px] ${asildi ? 'text-warn-strong' : 'text-ink-muted'}`}>
           {value.length}/{limit}
         </span>
       </span>

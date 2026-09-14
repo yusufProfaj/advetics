@@ -3,7 +3,7 @@ import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { EpostaAyarlari } from '@/components/email/eposta-ayarlari';
 
-export const metadata = { title: 'E-posta Ayarları — Advetics' };
+export const metadata = { title: 'E-posta Ayarları · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**

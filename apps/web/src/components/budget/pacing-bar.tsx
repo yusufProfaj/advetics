@@ -11,17 +11,17 @@ import type { BudgetPacing, PacingStatus } from '@advetics/shared';
  */
 
 const TONE: Record<PacingStatus, { bar: string; chip: string; label: string }> = {
-  under: { bar: 'bg-sky-500', chip: 'bg-sky-50 text-sky-700 ring-sky-200', label: 'Yavaş' },
+  under: { bar: 'bg-info', chip: 'bg-info-soft text-info-strong ring-info/30', label: 'Yavaş' },
   on_track: {
-    bar: 'bg-emerald-500',
-    chip: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    bar: 'bg-ok',
+    chip: 'bg-ok-soft text-ok-strong ring-ok/30',
     label: 'Hedefte',
   },
-  over: { bar: 'bg-amber-500', chip: 'bg-amber-50 text-amber-800 ring-amber-200', label: 'Hızlı' },
-  exhausted: { bar: 'bg-rose-500', chip: 'bg-rose-50 text-rose-700 ring-rose-200', label: 'Doldu' },
+  over: { bar: 'bg-warn', chip: 'bg-warn-soft text-warn-strong ring-warn/30', label: 'Hızlı' },
+  exhausted: { bar: 'bg-danger', chip: 'bg-danger-soft text-danger-strong ring-danger/30', label: 'Doldu' },
   no_budget: {
-    bar: 'bg-slate-300',
-    chip: 'bg-slate-100 text-slate-600 ring-slate-200',
+    bar: 'bg-line',
+    chip: 'bg-surface-sunken text-ink-muted ring-line',
     label: 'Bütçe yok',
   },
 };
@@ -101,7 +101,7 @@ export function PaceDelta({ pacing }: { pacing: BudgetPacing }) {
   if (Math.abs(points) < 0.5) return <span className="text-ink-muted">hedefte</span>;
   const sign = points > 0 ? '+' : '−';
   return (
-    <span className={points > 0 ? 'text-amber-700' : 'text-sky-700'}>
+    <span className={points > 0 ? 'text-warn-strong' : 'text-info-strong'}>
       {sign}
       {Math.abs(points).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} puan
     </span>

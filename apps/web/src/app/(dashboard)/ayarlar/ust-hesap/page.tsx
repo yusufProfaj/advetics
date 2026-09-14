@@ -5,7 +5,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { UstHesapEkrani } from '@/components/ust-hesap/ust-hesap-ekrani';
 import { WorkspaceBolumu } from '@/components/tenancy/workspace-bolumu';
 
-export const metadata = { title: 'Şirketler — Advetics' };
+export const metadata = { title: 'Şirketler · Advetics' };
 
 interface OrganizationRow {
   id: string;
@@ -97,7 +97,7 @@ export default async function SirketlerPage() {
      * 1024px'lik bir şeride sıkışıyorlardı — varlık listeleri ve açılır
      * kutular satır satır kırılıyordu.
      */
-    <div className="mx-auto w-full max-w-7xl space-y-8 px-5 py-6">
+    <div className="mx-auto w-full max-w-7xl space-y-8">
       <header>
         <h1 className="text-2xl font-semibold text-ink">Şirketler</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">

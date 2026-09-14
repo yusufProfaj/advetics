@@ -5,7 +5,7 @@ import { requireSession } from '@/lib/session';
 import { TeamManager, type MemberRow } from '@/components/tenancy/team-manager';
 import { DanismanAta } from '@/components/tenancy/danisman-ata';
 
-export const metadata = { title: 'Workspace ekibi — Advetics' };
+export const metadata = { title: 'Workspace ekibi · Advetics' };
 
 interface ClientRow {
   id: string;

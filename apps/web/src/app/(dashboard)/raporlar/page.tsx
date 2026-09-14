@@ -16,7 +16,7 @@ import { ShareControls } from '@/components/report/share-controls';
 import { Faturalar } from '@/components/report/faturalar';
 import { RaporSekmeleri } from '@/components/report/rapor-sekmeleri';
 
-export const metadata = { title: 'Raporlar — Advetics' };
+export const metadata = { title: 'Raporlar · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -187,7 +187,7 @@ export default async function ReportsPage({
       {canShare && <RaporSekmeleri aktif={sekme} />}
 
       {sablonHatasi !== null && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900">
+        <div className="rounded-lg border border-warn/30 bg-warn-soft px-3.5 py-2.5 text-sm text-warn-strong">
           Şablon listesi alınamadı ({sablonHatasi}). Rapor varsayılan şablonla
           üretiliyor; kayıtlı şablonların bu listede görünmüyor.
         </div>
@@ -196,7 +196,7 @@ export default async function ReportsPage({
       {sekme === 'faturalar' ? (
         <FaturaSekmesi clientId={clientId} clientName={musteriAdi(session, clientId)} />
       ) : report === null ? (
-        <div className="rounded-lg border border-red-300 bg-red-50 px-3.5 py-2.5 text-sm text-red-900">
+        <div className="rounded-lg border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-sm text-danger-strong">
           Rapor oluşturulamadı. API çalışıyor mu?
         </div>
       ) : (
@@ -242,7 +242,7 @@ export default async function ReportsPage({
           )}
 
           {devamEden && (
-            <div className="rounded-lg border border-sky-300 bg-sky-50 px-3.5 py-2.5 text-sm text-sky-900">
+            <div className="rounded-lg border border-info/30 bg-info-soft px-3.5 py-2.5 text-sm text-info-strong">
               Seçilen dönem <strong>henüz bitmedi</strong>. Rapor {formatDayLong(to)} tarihine
               kadar olan tamamlanmış günleri kapsıyor; bugünün verisi gün içinde değiştiği için
               dâhil edilmedi — panelde de aynı kural geçerli.
@@ -250,7 +250,7 @@ export default async function ReportsPage({
           )}
 
           {report.platforms.length === 0 && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900">
+            <div className="rounded-lg border border-warn/30 bg-warn-soft px-3.5 py-2.5 text-sm text-warn-strong">
               Bu dönemde harcama kaydı yok — rapor boş görünecek. Senkronizasyonun
               bu tarihleri kapsadığından emin olun.
             </div>

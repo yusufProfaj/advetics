@@ -41,10 +41,10 @@ const STATUS: Record<
   ConnectionSummary['status'],
   { label: string; cls: string; dot: string }
 > = {
-  active: { label: 'Aktif', cls: 'text-emerald-700', dot: 'bg-emerald-500' },
-  needs_reauth: { label: 'Yeniden yetkilendirme gerekli', cls: 'text-amber-700', dot: 'bg-amber-500' },
-  error: { label: 'Hata', cls: 'text-red-700', dot: 'bg-red-500' },
-  revoked: { label: 'Kaldırıldı', cls: 'text-ink-muted', dot: 'bg-slate-400' },
+  active: { label: 'Aktif', cls: 'text-ok-strong', dot: 'bg-ok' },
+  needs_reauth: { label: 'Yeniden yetkilendirme gerekli', cls: 'text-warn-strong', dot: 'bg-warn' },
+  error: { label: 'Hata', cls: 'text-danger-strong', dot: 'bg-danger' },
+  revoked: { label: 'Kaldırıldı', cls: 'text-ink-muted', dot: 'bg-line' },
 };
 
 export function ConnectionCard({
@@ -152,7 +152,7 @@ export function ConnectionCard({
               type="button"
               onClick={() => void run('reauth', reauthorize)}
               disabled={busy !== null || isPending}
-              className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-warn px-2.5 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
             >
               {busy === 'reauth' ? '…' : 'Yeniden yetkilendir'}
             </button>
@@ -175,7 +175,7 @@ export function ConnectionCard({
                 void run('disconnect', () => apiFetch(`/connections/${connection.id}/disconnect`, { method: 'POST' }));
               }}
               disabled={busy !== null || isPending}
-              className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+              className="rounded-lg border border-danger/30 px-2.5 py-1.5 text-xs text-danger-strong transition hover:bg-danger-soft disabled:opacity-50"
             >
               {busy === 'disconnect' ? '…' : 'Kaldır'}
             </button>
@@ -184,14 +184,14 @@ export function ConnectionCard({
       </div>
 
       {error && (
-        <div role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div role="alert" className="mt-3 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong">
           {error}
         </div>
       )}
 
       {/* Çekirdek izin eksiği = bağlantı iş görmez → uyarı */}
       {connection.missingScopes.length > 0 && (
-        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2 text-sm text-amber-900">
+        <div className="mt-3 rounded-lg border border-warn/30 bg-warn-soft/60 px-3 py-2 text-sm text-warn-strong">
           <strong>Eksik çekirdek izinler:</strong> {connection.missingScopes.join(', ')}
           <p className="mt-1 text-xs">
             Bu izinler olmadan senkronizasyon ve otomasyon çalışmaz.

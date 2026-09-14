@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Kullanım Koşulları — Advetics',
+  title: 'Kullanım Koşulları · Advetics',
   description: 'Advetics reklam yönetim platformunun kullanım koşulları.',
   robots: { index: true, follow: true },
 };

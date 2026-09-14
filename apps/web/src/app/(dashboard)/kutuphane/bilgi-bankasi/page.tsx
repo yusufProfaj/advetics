@@ -8,7 +8,7 @@ import {
   gorunurSekmeler,
 } from '@/components/bilgi-bankasi/sekmeler';
 
-export const metadata = { title: 'Bilgi Bankası — Advetics' };
+export const metadata = { title: 'Bilgi Bankası · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**

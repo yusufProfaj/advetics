@@ -38,7 +38,7 @@ export function DraftGroupList({ groups }: { groups: DraftGroupRecord[] }) {
                   {formatRelative(c.createdAt)}
                   {/* HATA SATIRIN YANINDA. Ayrı bir yere koymak, hangi
                       platformun neden düştüğünü belirsiz bırakırdı. */}
-                  {c.error && <span className="text-rose-700"> · {c.error}</span>}
+                  {c.error && <span className="text-danger-strong"> · {c.error}</span>}
                 </span>
               ))}
             </div>
@@ -57,7 +57,7 @@ const DURUM: Record<string, string> = {
 };
 
 function durumRengi(status: string): string {
-  if (status === 'published') return 'text-emerald-700';
-  if (status === 'failed') return 'text-rose-700';
+  if (status === 'published') return 'text-ok-strong';
+  if (status === 'failed') return 'text-danger-strong';
   return 'text-ink-muted';
 }

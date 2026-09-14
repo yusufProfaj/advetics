@@ -310,7 +310,7 @@ export function AccountPicker({
       </div>
 
       {error && (
-        <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-inset ring-rose-200">
+        <p className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}

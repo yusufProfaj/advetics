@@ -4,7 +4,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { DuplicatePanel } from '@/components/ad-builder/duplicate-panel';
 
-export const metadata = { title: 'Toplu Oluştur — Advetics' };
+export const metadata = { title: 'Toplu Oluştur · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -77,7 +77,7 @@ export default async function BulkPage({
       {canWrite ? (
         <DuplicatePanel campaigns={campaigns} creatives={creatives} />
       ) : (
-        <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+        <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
           Toplu oluşturmak için yetkin yok.
         </div>
       )}

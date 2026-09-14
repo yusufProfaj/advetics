@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Gizlilik Politikası — Advetics',
+  title: 'Gizlilik Politikası · Advetics',
   description:
     'Advetics reklam yönetim platformunun kişisel veri işleme, saklama ve silme esasları.',
   // Meta ve Google crawler'larının indeksleyebilmesi için açık.

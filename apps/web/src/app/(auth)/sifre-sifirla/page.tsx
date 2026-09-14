@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { AuthKabuk } from '@/components/auth/auth-kabuk';
 import { SifreSifirlaFormu } from '@/components/auth/sifre-sifirla-formu';
 
-export const metadata = { title: 'Yeni şifre — Advetics' };
+export const metadata = { title: 'Yeni şifre · Advetics' };
 
 export default function SifreSifirlaPage() {
   return (

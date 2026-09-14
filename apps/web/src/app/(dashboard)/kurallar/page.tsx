@@ -16,7 +16,7 @@ import { serverApiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { NewRuleButton, RuleControls } from '@/components/rules/rule-controls';
 
-export const metadata = { title: 'Kurallar — Advetics' };
+export const metadata = { title: 'Kurallar · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -206,7 +206,7 @@ function RunHistory({
               {run.actionCount} aksiyon
             </span>
             {run.dryRun && <span className="text-ink-muted">(prova)</span>}
-            {run.error && <span className="text-rose-700">hata: {run.error}</span>}
+            {run.error && <span className="text-danger-strong">hata: {run.error}</span>}
           </li>
         ))}
       </ul>
@@ -247,25 +247,25 @@ function RunHistory({
 
 function ModeChip({ dryRun, enabled }: { dryRun: boolean; enabled: boolean }) {
   if (!enabled) {
-    return <Chip cls="bg-slate-100 text-slate-600 ring-slate-200">Kapalı</Chip>;
+    return <Chip cls="bg-surface-sunken text-ink-muted ring-line">Kapalı</Chip>;
   }
   return dryRun ? (
-    <Chip cls="bg-sky-50 text-sky-700 ring-sky-200">Prova</Chip>
+    <Chip cls="bg-info-soft text-info-strong ring-info/30">Prova</Chip>
   ) : (
-    <Chip cls="bg-emerald-50 text-emerald-700 ring-emerald-200">Canlı</Chip>
+    <Chip cls="bg-ok-soft text-ok-strong ring-ok/30">Canlı</Chip>
   );
 }
 
 const OUTCOME_TONE: Record<ActionOutcome, string> = {
-  applied: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  simulated: 'bg-sky-50 text-sky-700 ring-sky-200',
-  failed: 'bg-rose-50 text-rose-700 ring-rose-200',
-  skipped_cooldown: 'bg-slate-100 text-slate-600 ring-slate-200',
-  skipped_guard: 'bg-slate-100 text-slate-600 ring-slate-200',
-  skipped_stale_data: 'bg-amber-50 text-amber-800 ring-amber-200',
-  skipped_no_budget: 'bg-amber-50 text-amber-800 ring-amber-200',
-  skipped_capped: 'bg-amber-50 text-amber-800 ring-amber-200',
-  skipped_noop: 'bg-slate-100 text-slate-600 ring-slate-200',
+  applied: 'bg-ok-soft text-ok-strong ring-ok/30',
+  simulated: 'bg-info-soft text-info-strong ring-info/30',
+  failed: 'bg-danger-soft text-danger-strong ring-danger/30',
+  skipped_cooldown: 'bg-surface-sunken text-ink-muted ring-line',
+  skipped_guard: 'bg-surface-sunken text-ink-muted ring-line',
+  skipped_stale_data: 'bg-warn-soft text-warn-strong ring-warn/30',
+  skipped_no_budget: 'bg-warn-soft text-warn-strong ring-warn/30',
+  skipped_capped: 'bg-warn-soft text-warn-strong ring-warn/30',
+  skipped_noop: 'bg-surface-sunken text-ink-muted ring-line',
 };
 
 function OutcomeChip({ outcome }: { outcome: ActionOutcome }) {
@@ -323,8 +323,8 @@ function EmptyState({ canWrite }: { canWrite: boolean }) {
 function Notice({ tone, children }: { tone: 'warn' | 'error'; children: React.ReactNode }) {
   const cls =
     tone === 'error'
-      ? 'bg-rose-50 text-rose-800 ring-rose-200'
-      : 'bg-amber-50 text-amber-900 ring-amber-200';
+      ? 'bg-danger-soft text-danger-strong ring-danger/30'
+      : 'bg-warn-soft text-warn-strong ring-warn/30';
   return <div className={`rounded-xl px-4 py-3 text-sm ring-1 ring-inset ${cls}`}>{children}</div>;
 }
 

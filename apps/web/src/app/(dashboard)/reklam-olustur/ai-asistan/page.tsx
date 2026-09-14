@@ -5,7 +5,7 @@ import { serverApiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { AiAsistanSohbeti } from '@/components/ai-asistan/ai-asistan-sohbeti';
 
-export const metadata = { title: 'AI Asistan — Advetics' };
+export const metadata = { title: 'AI Asistan · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**

@@ -146,7 +146,7 @@ export function RuleEditor({
         // CANLI BİR KURALI DÜZENLEMEK ONU PROVAYA DÖNDÜRÜYOR. Sunucu bunu
         // koşul ya da aksiyon değiştiğinde yapıyor; kullanıcı bunu kaydettikten
         // SONRA öğrenmemeli.
-        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-inset ring-amber-200">
+        <p className="mt-2 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-strong ring-1 ring-inset ring-warn/30">
           Bu kural <strong>canlı</strong>. Koşulu ya da aksiyonu değiştirirsen kural provaya
           döner ve yeniden canlıya alman gerekir.
         </p>
@@ -266,7 +266,7 @@ export function RuleEditor({
                 <button
                   type="button"
                   onClick={() => setConditions((cs) => cs.filter((_, j) => j !== i))}
-                  className="rounded-lg px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
+                  className="rounded-lg px-2 py-1 text-xs text-danger-strong hover:bg-danger-soft"
                 >
                   Kaldır
                 </button>
@@ -286,7 +286,7 @@ export function RuleEditor({
         )}
 
         {budgetConditionAtWrongLevel && (
-          <p className="mt-2 text-xs text-rose-700">
+          <p className="mt-2 text-xs text-danger-strong">
             Bütçe tüketimi koşulu yalnızca kampanya seviyesinde kullanılabilir — bütçe
             kampanya/hesap seviyesinde tanımlı, tek bir reklamın bütçe tüketimi yok.
           </p>
@@ -398,7 +398,7 @@ export function RuleEditor({
       </div>
 
       {error && (
-        <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-inset ring-rose-200">
+        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}

@@ -253,7 +253,7 @@ function SorunBolumu({
               <div className="flex items-start gap-2">
                 <span
                   className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                    u.siddet === 'error' ? 'bg-red-500' : 'bg-amber-500'
+                    u.siddet === 'error' ? 'bg-danger' : 'bg-warn'
                   }`}
                   aria-hidden
                 />
@@ -359,8 +359,8 @@ export function sureMetni(b: Pick<BaglantiDurumu, 'durum' | 'kalanGun'>): string
 
 /** Eşikler `uyari-kurallari.ts` içindeki `TOKEN_UYARI_GUNU` ile aynı fikirde. */
 function renk(b: BaglantiDurumu): string {
-  if (b.durum !== 'active') return 'text-red-600';
-  if (b.kalanGun !== null && b.kalanGun <= 0) return 'text-red-600';
-  if (b.kalanGun !== null && b.kalanGun <= 7) return 'text-amber-600';
+  if (b.durum !== 'active') return 'text-danger-strong';
+  if (b.kalanGun !== null && b.kalanGun <= 0) return 'text-danger-strong';
+  if (b.kalanGun !== null && b.kalanGun <= 7) return 'text-warn-strong';
   return 'text-ink-muted';
 }

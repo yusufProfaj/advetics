@@ -36,7 +36,7 @@ import { MusteriTablosu } from '@/components/musteri-tablosu';
 import { SirketTablosu } from '@/components/sirket-tablosu';
 import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
 
-export const metadata = { title: 'Genel Bakış — Advetics' };
+export const metadata = { title: 'Genel Bakış · Advetics' };
 
 /**
  * Unified Dashboard.
@@ -240,7 +240,7 @@ export default async function DashboardPage({
         <div>
           <h1 className="text-xl font-semibold text-ink">Genel Bakış</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
-            {scopeLabel} · {formatDayLong(range.from)} — {formatDayLong(range.to)}
+            {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
           </p>
           {/*
             TAMAMLANMAMIŞ GÜN AÇIKÇA YAZILIYOR. Sabah 09:00'da görülen düşük
@@ -249,8 +249,8 @@ export default async function DashboardPage({
             budur.
           */}
           {range.incomplete && (
-            <p className="mt-1 text-xs text-warn">
-              Gün henüz tamamlanmadı — rakamlar gün boyunca artmaya devam edecek.
+            <p className="mt-1 text-xs text-warn-strong">
+              Gün bitmedi, rakamlar artmaya devam edecek.
             </p>
           )}
         </div>
@@ -272,13 +272,11 @@ export default async function DashboardPage({
 
       {summary === null ? (
         <Notice tone="error">
-          <strong>Metrikler alınamadı.</strong>
+          {/* TEKNİK AYRINTI EKRANDAN KALKTI: `pm2 logs` komutu müşterinin
+              okuduğu bir ekranda hem anlamsız hem ürkütücü. Sunucunun kendi
+              hata cümlesi duruyor, teşhis için o yeterli. */}
+          <strong>Veriler alınamadı.</strong>
           {ozetHatasi && <span className="ml-1">{ozetHatasi}</span>}
-          <span className="ml-1">
-            Sorun sürerse{' '}
-            <code className="rounded bg-surface-sunken px-1">pm2 logs advetics-api</code> çıktısına
-            bakın.
-          </span>
         </Notice>
       ) : summary.accountCount === 0 ? (
         <EmptyState />
@@ -287,8 +285,8 @@ export default async function DashboardPage({
           {summary.currency === null && summary.byCurrency.length > 1 && (
             <Notice tone="warn">
               <strong>Birden fazla para birimi var</strong> (
-              {summary.byCurrency.map((c) => c.currency).join(', ')}). Kur çevrimi henüz yok, bu
-              yüzden toplamlar birleştirilmiyor — tutarlar para birimi başına ayrı gösteriliyor.
+              {summary.byCurrency.map((c) => c.currency).join(', ')}). Tutarlar ayrı
+              gösteriliyor.
             </Notice>
           )}
 
@@ -299,15 +297,14 @@ export default async function DashboardPage({
           {summary.hiddenAccounts > 0 && (
             <Notice tone="warn">
               <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara dâhil
-              değil. Verileri silinmedi — hesabı Platform Bağlantıları sayfasından yeniden
-              izlemeye alırsan geçmişiyle birlikte geri gelir.
+              değil. Verileri duruyor; Platform Bağlantıları sayfasından yeniden açabilirsin.
             </Notice>
           )}
 
           {isStale(summary.lastFetchedAt) && (
             <Notice tone="warn">
-              Veriler {formatRelative(summary.lastFetchedAt)} güncellendi. Senkronizasyon
-              worker&apos;ı çalışmıyor olabilir.
+              Veriler {formatRelative(summary.lastFetchedAt)} güncellendi. Güncelleme durmuş
+              olabilir.
             </Notice>
           )}
 
@@ -372,9 +369,7 @@ export default async function DashboardPage({
                 önce koşulsuzdu ve doğruydu; artık Bugün seçiliyken tam tersini
                 söylüyor olurdu — ekranın kendi verisiyle çelişen bir açıklama,
                 yanlış sayıdan daha çok güven kaybettirir. */}
-            {range.incomplete
-              ? 'Bugüne bakıyorsunuz — gün bitmediği için rakamlar artmaya devam edecek'
-              : 'Bugün dâhil değil — tamamlanmamış bir gün tüm oranları aşağı çeker'}
+            {range.incomplete ? 'Bugün dâhil, gün bitmedi' : 'Bugün dâhil değil'}
           </p>
         </>
       )}
@@ -547,10 +542,10 @@ function PlatformTabs({
 function EmptyState() {
   return (
     <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-      <h2 className="text-sm font-semibold text-ink">Henüz metrik yok</h2>
+      <h2 className="text-sm font-semibold text-ink">Henüz veri yok</h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
-        Bir platform bağlayın ve reklam hesabını senkronizasyona açın. İlk veri, worker
-        senkronizasyonu tamamladıktan sonra burada görünür.
+        Bir platform bağlayıp reklam hesabını bir workspace&apos;e ata. Veriler kısa süre içinde
+        burada görünür.
       </p>
       <Link
         href="/ayarlar/baglantilar"
@@ -565,10 +560,18 @@ function EmptyState() {
 function Notice({ tone, children }: { tone: 'warn' | 'error'; children: React.ReactNode }) {
   const cls =
     tone === 'warn'
-      ? 'border-amber-300 bg-amber-50 text-amber-900'
-      : 'border-red-300 bg-red-50 text-red-900';
+      ? 'border-warn/30 bg-warn-soft text-warn-strong'
+      : 'border-danger/30 bg-danger-soft text-danger-strong';
   return (
-    <div className={`rounded-lg border px-3.5 py-2.5 text-sm ${cls}`} role="status">
+    /*
+     * HATA `alert`, UYARI `status`. İkisi de `status` iken ekran okuyucu
+     * hatayı sıradan bir güncelleme gibi duyuruyordu: kullanıcı verinin
+     * alınamadığını öğrenmeden sayfada gezinmeye devam ediyordu.
+     */
+    <div
+      className={`rounded-lg border px-3.5 py-2.5 text-sm ${cls}`}
+      role={tone === 'error' ? 'alert' : 'status'}
+    >
       {children}
     </div>
   );

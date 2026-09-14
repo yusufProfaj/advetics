@@ -202,7 +202,7 @@ export function ClientAssets({
                   hesap, hiç atanmamış bir hesapla panelde birebir aynı
                   görünür — ikisi de "veri yok". */}
               {!a.syncEnabled && (
-                <span className="shrink-0 text-[10px] text-amber-700">izlenmiyor</span>
+                <span className="shrink-0 text-[10px] text-warn-strong">izlenmiyor</span>
               )}
               {canManage && (
                 <button
@@ -241,7 +241,7 @@ export function ClientAssets({
                 (metaAccounts.length === 0 ? (
                   <span
                     title="Bu workspace’e atanmış Meta reklam hesabı yok"
-                    className="shrink-0 text-[10px] text-amber-700"
+                    className="shrink-0 text-[10px] text-warn-strong"
                   >
                     boost hesabı yok
                   </span>
@@ -252,7 +252,7 @@ export function ClientAssets({
                     disabled={busy !== null || isPending}
                     title="Boost faturalandırma hesabı"
                     className={`w-24 shrink-0 rounded border border-line bg-surface px-1 py-0.5 text-[10px] outline-none focus:border-brand disabled:opacity-40 ${
-                      p.linkedAdAccountId ? 'text-ink' : 'text-amber-700'
+                      p.linkedAdAccountId ? 'text-ink' : 'text-warn-strong'
                     }`}
                   >
                     <option value="">boost yok</option>
@@ -265,7 +265,7 @@ export function ClientAssets({
                 ))}
 
               {!p.syncEnabled && (
-                <span className="shrink-0 text-[10px] text-amber-700">çekilmiyor</span>
+                <span className="shrink-0 text-[10px] text-warn-strong">çekilmiyor</span>
               )}
 
               {canManage && (
@@ -364,7 +364,7 @@ export function ClientAssets({
       )}
 
       {error && (
-        <p className="mt-2 rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-700 ring-1 ring-inset ring-rose-200">
+        <p className="mt-2 rounded-lg bg-danger-soft px-2.5 py-1.5 text-[11px] text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}

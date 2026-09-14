@@ -97,7 +97,7 @@ export function Alan({
       )}
       </div>
       {error ? (
-        <p id={`${id}-error`} className="mt-1 text-xs text-red-600">
+        <p id={`${id}-error`} className="mt-1 text-xs text-danger-strong">
           {error}
         </p>
       ) : ipucu ? (

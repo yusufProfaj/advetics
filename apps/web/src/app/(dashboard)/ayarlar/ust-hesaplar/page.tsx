@@ -5,7 +5,7 @@ import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { hasPermission, requireSession } from '@/lib/session';
 import { UstHesapYonetimi } from '@/components/ust-hesap/ust-hesap-yonetimi';
 
-export const metadata = { title: 'Üst Hesaplar — Advetics' };
+export const metadata = { title: 'Üst Hesaplar · Advetics' };
 
 /**
  * ═══ ÜST HESAPLAR — hesabın KENDİSİNİN yönetildiği yer ═══
@@ -48,7 +48,7 @@ export default async function UstHesaplarPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 px-5 py-6">
+    <div className="mx-auto w-full max-w-5xl space-y-6">
       <header>
         <h1 className="text-2xl font-semibold text-ink">Üst Hesaplar</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">

@@ -32,7 +32,7 @@ export function MetricStrip({
               {item.change !== null && item.change !== undefined && (
                 <span
                   className={`text-[11px] font-medium tabular-nums ${
-                    good ? 'text-emerald-600' : 'text-red-600'
+                    good ? 'text-ok-strong' : 'text-danger-strong'
                   }`}
                 >
                   {item.change > 0 ? '↑' : '↓'}

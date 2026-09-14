@@ -212,7 +212,7 @@ export function BulkComposer({
       )}
 
       {error && (
-        <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-inset ring-rose-200">
+        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}
@@ -344,7 +344,7 @@ export function PublishButton({
           {readyCount} reklamı yayınla
         </button>
       ) : (
-        <div className="rounded-lg bg-amber-50 px-3 py-2.5 text-xs text-amber-900 ring-1 ring-inset ring-amber-200">
+        <div className="rounded-lg bg-warn-soft px-3 py-2.5 text-xs text-warn-strong ring-1 ring-inset ring-warn/30">
           <p className="font-semibold">
             Meta&apos;da {readyCount} reklam oluşturulacak.
           </p>
@@ -358,14 +358,14 @@ export function PublishButton({
               type="button"
               onClick={publish}
               disabled={busy}
-              className="rounded-lg bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-warn px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
             >
               {busy ? 'Yayınlanıyor…' : 'Anladım, yayınla'}
             </button>
             <button
               type="button"
               onClick={() => setConfirming(false)}
-              className="rounded-lg px-2.5 py-1 text-xs font-medium text-amber-900"
+              className="rounded-lg px-2.5 py-1 text-xs font-medium text-warn-strong"
             >
               Vazgeç
             </button>
@@ -376,7 +376,7 @@ export function PublishButton({
         <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink">{result}</p>
       )}
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-inset ring-rose-200">
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}

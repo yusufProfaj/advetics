@@ -109,7 +109,7 @@ export function MetinSekmesi({
       <p className="text-right text-[11px] text-ink-muted">{deger.length}/2000</p>
 
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-inset ring-rose-200">
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}
@@ -124,7 +124,7 @@ export function MetinSekmesi({
           >
             {busy ? 'Kaydediliyor…' : 'Kaydet'}
           </button>
-          {kaydedildi && <span className="text-xs text-emerald-700">Kaydedildi</span>}
+          {kaydedildi && <span className="text-xs text-ok-strong">Kaydedildi</span>}
         </div>
       )}
     </div>

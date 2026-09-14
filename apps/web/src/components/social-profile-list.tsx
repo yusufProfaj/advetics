@@ -111,18 +111,18 @@ export function SocialProfileList({
           Sayfalar &amp; Instagram ({profiles.length})
         </h4>
         {pooled.length > 0 && (
-          <span className="text-[11px] text-amber-700">{pooled.length} atanmamış</span>
+          <span className="text-[11px] text-warn-strong">{pooled.length} atanmamış</span>
         )}
       </div>
 
       {pooled.length > 0 && (
-        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50/60 p-3">
-          <p className="text-xs text-amber-900">
+        <div className="mt-2 rounded-lg border border-warn/30 bg-warn-soft/60 p-3">
+          <p className="text-xs text-warn-strong">
             <strong>Atanmamış sayfalar</strong> — bunlardan gelen potansiyel müşteri
             kaydı YAZILAMAZ (hangi markaya ait olduğu bilinmiyor) ve organik gönderi
             senkronizasyonu çalışmaz.
           </p>
-          <ul className="mt-1 divide-y divide-amber-200/70">{pooled.map(row)}</ul>
+          <ul className="mt-1 divide-y divide-warn/25">{pooled.map(row)}</ul>
         </div>
       )}
 
@@ -137,12 +137,12 @@ export function SocialProfileList({
       </p>
 
       {notice && (
-        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-inset ring-amber-200">
+        <p className="mt-2 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-strong ring-1 ring-inset ring-warn/30">
           {notice}
         </p>
       )}
       {error && (
-        <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-inset ring-rose-200">
+        <p className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}

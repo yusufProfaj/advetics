@@ -2,13 +2,13 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { KapsamSecici, type KapsamSirketi } from '@/components/kapsam-secici';
 import { UstHesapSecici } from '@/components/ust-hesap-secici';
-import { LogoutButton } from '@/components/logout-button';
 import { UyariBandi } from '@/components/uyari-bandi';
 import { BildirimSaglayici } from '@/components/bildirim/bildirim-verisi';
 import { BildirimZili } from '@/components/bildirim/bildirim-zili';
 import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
-import { NavSection } from '@/components/nav';
 import { visibleSections } from '@/lib/nav-sections';
+import { KenarIcerigi } from '@/components/kenar-cubugu';
+import { MobilMenu } from '@/components/mobil-menu';
 
 import { ROL_ETIKETI, SAHIP_ETIKETI, type ManagerAccountTree } from '@advetics/shared';
 
@@ -116,70 +116,25 @@ export default async function DashboardLayout({ children }: { children: React.Re
       } as React.CSSProperties)
     : undefined;
 
-  const initials = session.organization.name.slice(0, 2).toUpperCase();
+  const kenarVerisi = {
+    bolumler: visibleSections(session.permissions),
+    sirketAdi: session.organization.name,
+    logoUrl: branding?.logoUrl ?? null,
+    kullaniciAdi: session.user.fullName,
+    /* ROZET ETKİN ROLDEN, Sahip bayrağı önce. */
+    rolEtiketi: session.platformAdmin ? SAHIP_ETIKETI : ROL_ETIKETI[session.rol],
+  };
 
   return (
     <div style={themeStyle} className="flex min-h-screen">
       {/* Kenar çubuğu */}
+      {/*
+        KENAR ÇUBUĞU İÇERİĞİ TEK BİLEŞENDE: aynı menü mobilde çekmece olarak
+        da çiziliyor (`MobilMenu`). İki kopya, birinin güncellenmemesi ve
+        telefondaki menünün masaüstünden farklı kalması demekti.
+      */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface lg:flex">
-        <div className="flex h-16 items-center gap-2.5 px-4">
-          {branding?.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={branding.logoUrl} alt="" className="h-8 max-w-[150px] object-contain" />
-          ) : (
-            <>
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-sm font-bold text-white">
-                {initials}
-              </span>
-              <span className="truncate text-[15px] font-semibold tracking-tight">
-                {session.organization.name}
-              </span>
-            </>
-          )}
-        </div>
-
-        <nav className="flex-1 overflow-y-auto px-3 pb-4">
-          {/*
-            MENÜ YETKİYE GÖRE SÜZÜLÜYOR — bölüm boş kalırsa BAŞLIĞI DA
-            basılmıyor.
-
-            Buradaki liste bir süre filtresiz basılıyordu: "Çalışma Alanı"
-            kategorisi (Müşteriler, Platform Bağlantıları, Ekip & Yetkiler)
-            client_viewer rolüne de görünüyordu. Arka uç zaten reddediyordu
-            (`@RequirePermissions`), yani veri sızmıyordu — ama kullanıcıya
-            tıklayabildiği ve 403 alacağı bağlantılar gösteriliyordu ve
-            ajansın iç ekranlarının VARLIĞI müşteriye sızıyordu.
-
-            CLAUDE.md'nin ve roles.ts'in baştan beri söylediği kural bu:
-            backend guard'ları ile arayüz gizleme AYNI matristen beslenir.
-            Yetki anahtarı yazılmamış öğe eskisi gibi herkese görünüyor —
-            süzme opt-in, böylece bir anahtarı atlamak ajans çalışanından
-            çalışan bir ekranı sessizce gizlemiyor.
-          */}
-          {visibleSections(session.permissions).map((section) => (
-            <NavSection key={section.title} title={section.title} items={section.items} />
-          ))}
-        </nav>
-
-        <div className="border-t border-line p-3">
-          <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-[11px] font-semibold uppercase">
-              {session.user.fullName.slice(0, 2)}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium leading-tight">
-                {session.user.fullName}
-              </span>
-              <span className="block truncate text-[11px] leading-tight text-ink-muted">
-                {/* ROZET ETKİN ROLDEN — Sahip bayrağı önce. Eskiden
-                    isOrgAdmin'e bakıyordu: Reklam Yöneticisi ile Müşteri
-                    aynı etiketi görüyordu. */}
-                {session.platformAdmin ? SAHIP_ETIKETI : ROL_ETIKETI[session.rol]}
-              </span>
-            </span>
-            <LogoutButton />
-          </div>
-        </div>
+        <KenarIcerigi veri={kenarVerisi} />
       </aside>
 
       {/* İçerik */}
@@ -210,6 +165,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
             özelliği aratır.
           */}
           <div className="flex min-w-0 items-center gap-2">
+          {/* MENÜ DÜĞMESİ YALNIZCA MOBİLDE: masaüstünde kenar çubuğu zaten açık. */}
+          <MobilMenu veri={kenarVerisi} />
           <UstHesapSecici
             hesaplar={session.secilebilirUstHesaplar}
             aktifId={session.managerAccount?.id ?? null}
@@ -260,7 +217,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
           mcc={session.activeClientId === null && session.availableClients.length > 1}
         />
 
-        <main className="flex-1 px-5 py-6">{children}</main>
+        {/*
+          ═══ GENİŞLİK SINIRI TEK YERDE ═══
+          Sayfaların yalnızca altısı kendi içinde `max-w-*` koyuyordu:
+          Genel Bakış geniş ekranda kenardan kenara yayılıyor, Şirketler'e
+          geçince içerik aniden ortalanıyordu. Gezinirken panel "oynuyor".
+          Sınır burada; sayfalar yalnızca DAHA DAR bir okuma genişliği
+          istiyorsa kendi `max-w`ini koyuyor ve yatay dolguyu TEKRARLAMIYOR
+          (iki kat dolgu, o sayfaları diğerlerinden farklı hizalıyordu).
+        */}
+        <main className="mx-auto w-full max-w-[1400px] flex-1 px-5 py-6">{children}</main>
 
         {!branding?.hidePoweredBy && (
           <footer className="border-t border-line px-5 py-3 text-center text-xs text-ink-muted">

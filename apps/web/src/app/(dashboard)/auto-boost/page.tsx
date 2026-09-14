@@ -14,7 +14,7 @@ import { BoostDecision, RunBoostRuleButton } from '@/components/boost/boost-cont
 import { BildirimHavuzu } from '@/components/autoboost/bildirim-havuzu';
 import { BoostOnAyariDugmesi } from '@/components/autoboost/boost-on-ayari';
 
-export const metadata = { title: 'Auto-Boost — Advetics' };
+export const metadata = { title: 'Auto-Boost · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -123,7 +123,7 @@ export default async function AutoBoostPage({
       ) : (
         <>
           {candidates.length > 0 && (
-            <section className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+            <section className="rounded-xl border border-warn/30 bg-warn-soft/50 p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="text-sm font-semibold text-ink">
                   {candidates.length} gönderi onay bekliyor
@@ -271,7 +271,7 @@ function BoostCard({
         </p>
 
         {boost.error && (
-          <p className="mt-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] text-rose-700">
+          <p className="mt-1.5 rounded-lg bg-danger-soft px-2 py-1 text-[11px] text-danger-strong">
             {boost.error}
           </p>
         )}
@@ -311,11 +311,11 @@ function RuleList({
             <div key={r.id} className="p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-medium text-ink">{r.name}</h3>
-                {!r.enabled && <Chip cls="bg-slate-100 text-slate-600 ring-slate-200">Kapalı</Chip>}
+                {!r.enabled && <Chip cls="bg-surface-sunken text-ink-muted ring-line">Kapalı</Chip>}
                 {r.autoApprove && (
                   // OTOMATİK ONAY GÖRÜNÜR OLMALI: bu kural insan onayı
                   // beklemeden para taahhüt ediyor.
-                  <Chip cls="bg-amber-50 text-amber-800 ring-amber-200">Otomatik onay</Chip>
+                  <Chip cls="bg-warn-soft text-warn-strong ring-warn/30">Otomatik onay</Chip>
                 )}
               </div>
 
@@ -331,7 +331,7 @@ function RuleList({
                 </div>
                 <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken">
                   <div
-                    className={`h-full rounded-full ${pct >= 100 ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                    className={`h-full rounded-full ${pct >= 100 ? 'bg-danger' : 'bg-ok'}`}
                     style={{ width: `${Math.min(pct, 100)}%` }}
                   />
                 </div>
@@ -367,16 +367,16 @@ function describe(r: BoostRuleRecord): string {
 }
 
 const STATUS_TONE: Record<BoostStatus, string> = {
-  candidate: 'bg-amber-50 text-amber-800 ring-amber-200',
-  approved: 'bg-sky-50 text-sky-700 ring-sky-200',
-  rejected: 'bg-slate-100 text-slate-600 ring-slate-200',
-  creating: 'bg-sky-50 text-sky-700 ring-sky-200',
-  active: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  candidate: 'bg-warn-soft text-warn-strong ring-warn/30',
+  approved: 'bg-info-soft text-info-strong ring-info/30',
+  rejected: 'bg-surface-sunken text-ink-muted ring-line',
+  creating: 'bg-info-soft text-info-strong ring-info/30',
+  active: 'bg-ok-soft text-ok-strong ring-ok/30',
   // SÜRESİ DOLMUŞ boost NÖTR renkte — yeşil değil. Yeşil "şu an harcıyor"
   // demek ve biten bir kampanyayı öyle göstermek, aylık harcamayı gözle
   // toplayan birine yanlış sayı verdirirdi.
-  completed: 'bg-slate-100 text-slate-600 ring-slate-200',
-  failed: 'bg-rose-50 text-rose-700 ring-rose-200',
+  completed: 'bg-surface-sunken text-ink-muted ring-line',
+  failed: 'bg-danger-soft text-danger-strong ring-danger/30',
 };
 
 function StatusChip({ status }: { status: BoostStatus }) {
@@ -422,8 +422,8 @@ function EmptyState() {
 function Notice({ tone, children }: { tone: 'warn' | 'error'; children: React.ReactNode }) {
   const cls =
     tone === 'error'
-      ? 'bg-rose-50 text-rose-800 ring-rose-200'
-      : 'bg-amber-50 text-amber-900 ring-amber-200';
+      ? 'bg-danger-soft text-danger-strong ring-danger/30'
+      : 'bg-warn-soft text-warn-strong ring-warn/30';
   return <div className={`rounded-xl px-4 py-3 text-sm ring-1 ring-inset ${cls}`}>{children}</div>;
 }
 

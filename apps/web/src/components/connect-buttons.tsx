@@ -57,7 +57,7 @@ export function ConnectButtons({ availability }: { availability: ProviderAvailab
   return (
     <div className="mt-4 space-y-3">
       {error && (
-        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong">
           {error}
         </div>
       )}

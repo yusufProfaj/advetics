@@ -93,7 +93,7 @@ function PlatformBlock({ coverage }: { coverage: AssetCoverage }) {
       {(coverage.blockers.length > 0 || coverage.warnings.length > 0) && (
         <ul className="mt-2 space-y-0.5">
           {coverage.blockers.map((b, i) => (
-            <li key={`b-${i}`} className={isGoogle ? 'text-[11px] text-ink-muted' : 'text-[11px] text-rose-700'}>
+            <li key={`b-${i}`} className={isGoogle ? 'text-[11px] text-ink-muted' : 'text-[11px] text-danger-strong'}>
               · {b}
             </li>
           ))}
@@ -111,12 +111,12 @@ function PlatformBlock({ coverage }: { coverage: AssetCoverage }) {
 function toneFor(fit: SlotFit): string {
   switch (fit) {
     case 'exact':
-      return 'text-emerald-700';
+      return 'text-ok-strong';
     case 'crop':
       return 'text-ink-muted';
     case 'heavy_crop':
-      return 'text-amber-700';
+      return 'text-warn-strong';
     default:
-      return 'text-rose-700';
+      return 'text-danger-strong';
   }
 }

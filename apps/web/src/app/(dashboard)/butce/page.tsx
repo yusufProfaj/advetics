@@ -6,7 +6,7 @@ import { formatDayLong, formatMoney } from '@/lib/format';
 import { BudgetForm } from '@/components/budget/budget-form';
 import { PaceDelta, PacingBar, StatusChip } from '@/components/budget/pacing-bar';
 
-export const metadata = { title: 'Aylık Bütçe — Advetics' };
+export const metadata = { title: 'Aylık Bütçe · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -392,7 +392,7 @@ function AccountRows({
                           hangi hesabın eksik olduğunu söylemiyor. */}
                       {a.daysElapsed > 0 && a.daysWithData < a.daysElapsed && (
                         <span
-                          className="text-[11px] text-amber-700"
+                          className="text-[11px] text-warn-strong"
                           title={`${a.daysElapsed} günün ${a.daysWithData} günü senkronize`}
                         >
                           {a.daysWithData}/{a.daysElapsed} gün
@@ -450,8 +450,8 @@ function Notice({
 }) {
   const cls =
     tone === 'error'
-      ? 'bg-rose-50 text-rose-800 ring-rose-200'
-      : 'bg-amber-50 text-amber-900 ring-amber-200';
+      ? 'bg-danger-soft text-danger-strong ring-danger/30'
+      : 'bg-warn-soft text-warn-strong ring-warn/30';
   return (
     <div className={`rounded-xl px-4 py-3 text-sm ring-1 ring-inset ${cls}`}>{children}</div>
   );

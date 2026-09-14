@@ -112,7 +112,7 @@ export function RuleControls({
                 })
               }
               disabled={busy !== null}
-              className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900"
+              className="rounded-lg border border-warn/30 bg-warn-soft px-2.5 py-1 text-xs font-medium text-warn-strong"
             >
               Provaya al
             </button>
@@ -126,14 +126,14 @@ export function RuleControls({
             })
           }
           disabled={busy !== null}
-          className="ml-auto rounded-lg px-2.5 py-1 text-xs text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+          className="ml-auto rounded-lg px-2.5 py-1 text-xs text-danger-strong hover:bg-danger-soft disabled:opacity-50"
         >
           Sil
         </button>
       </div>
 
       {confirming && (
-        <div className="rounded-lg bg-amber-50 px-3 py-2.5 text-xs text-amber-900 ring-1 ring-inset ring-amber-200">
+        <div className="rounded-lg bg-warn-soft px-3 py-2.5 text-xs text-warn-strong ring-1 ring-inset ring-warn/30">
           <p className="font-semibold">Bu kural workspace’in hesabında gerçekten çalışacak.</p>
           <p className="mt-1">
             Bundan sonra saatlik değerlendirmede eşleşen varlıklara{' '}
@@ -162,14 +162,14 @@ export function RuleControls({
                 })
               }
               disabled={busy !== null}
-              className="rounded-lg bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white"
+              className="rounded-lg bg-warn px-2.5 py-1 text-xs font-semibold text-white"
             >
               Anladım, canlıya al
             </button>
             <button
               type="button"
               onClick={() => setConfirming(false)}
-              className="rounded-lg px-2.5 py-1 text-xs font-medium text-amber-900"
+              className="rounded-lg px-2.5 py-1 text-xs font-medium text-warn-strong"
             >
               Vazgeç
             </button>
@@ -181,7 +181,7 @@ export function RuleControls({
         <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink">{result}</p>
       )}
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-inset ring-rose-200">
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}

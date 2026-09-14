@@ -21,12 +21,12 @@ const LEVEL_TABS: Array<{ key: MetricLevel; label: string }> = [
 ];
 
 const STATUS_STYLE: Record<string, string> = {
-  active: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
-  paused: 'bg-amber-50 text-amber-700 ring-amber-600/20',
-  deleted: 'bg-slate-100 text-slate-600 ring-slate-500/20',
-  pending_review: 'bg-sky-50 text-sky-700 ring-sky-600/20',
-  ended: 'bg-slate-100 text-slate-600 ring-slate-500/20',
-  unknown: 'bg-slate-100 text-slate-600 ring-slate-500/20',
+  active: 'bg-ok-soft text-ok-strong ring-ok/20',
+  paused: 'bg-warn-soft text-warn-strong ring-warn/20',
+  deleted: 'bg-surface-sunken text-ink-muted ring-ink-muted/20',
+  pending_review: 'bg-info-soft text-info-strong ring-info/20',
+  ended: 'bg-surface-sunken text-ink-muted ring-ink-muted/20',
+  unknown: 'bg-surface-sunken text-ink-muted ring-ink-muted/20',
 };
 
 const STATUS_LABEL: Record<string, string> = {

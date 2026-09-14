@@ -8,7 +8,7 @@ import { HavuzKartlari } from '@/components/connections/havuz-kartlari';
 import { IzlenenHesaplar } from '@/components/connections/izlenen-hesaplar';
 import { CallbackBanner } from '@/components/callback-banner';
 
-export const metadata = { title: 'Platform Bağlantıları — Advetics' };
+export const metadata = { title: 'Platform Bağlantıları · Advetics' };
 
 export default async function ConnectionsPage() {
   const session = await requireSession();

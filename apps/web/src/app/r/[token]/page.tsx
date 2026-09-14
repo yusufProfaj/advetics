@@ -53,10 +53,10 @@ export default async function SharedReportPage({
   if ('error' in result) {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
-        <h1 className="text-lg font-semibold text-slate-900">
+        <h1 className="text-lg font-semibold text-ink">
           {result.error === 'gone' ? 'Bu raporun süresi doldu' : 'Rapor bulunamadı'}
         </h1>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-ink-muted">
           {result.error === 'gone'
             ? 'Ajansınızdan yeni bir bağlantı isteyebilirsiniz.'
             : 'Bağlantı hatalı olabilir ya da iptal edilmiş olabilir.'}
@@ -66,10 +66,10 @@ export default async function SharedReportPage({
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 py-8 print:bg-white print:py-0">
+    <main className="min-h-screen bg-surface-sunken py-8 print:bg-white print:py-0">
       {/* Yazdırma çubuğu basılan çıktıda görünmüyor (`rpt-noprint`). */}
       <div className="rpt-noprint mx-auto mb-4 flex max-w-[880px] items-center justify-between gap-4 px-8">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-muted">
           {result.client.name} · {result.from} — {result.to}
         </p>
         <PrintButton />

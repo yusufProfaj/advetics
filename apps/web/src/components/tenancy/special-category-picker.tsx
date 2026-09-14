@@ -87,7 +87,7 @@ export function SpecialCategoryPicker({
           <span className="block text-xs font-semibold text-ink">Özel reklam kategorisi</span>
           <span
             className={`block truncate text-[11px] ${
-              secili.length > 0 ? 'text-amber-700' : 'text-ink-muted'
+              secili.length > 0 ? 'text-warn-strong' : 'text-ink-muted'
             }`}
           >
             {ozet}
@@ -121,7 +121,7 @@ export function SpecialCategoryPicker({
               title={SPECIAL_AD_CATEGORY_META[k].hint}
               className={`rounded-lg border px-2 py-1 text-[11px] transition disabled:opacity-50 ${
                 acik
-                  ? 'border-amber-300 bg-amber-50 text-amber-900'
+                  ? 'border-warn/30 bg-warn-soft text-warn-strong'
                   : 'border-line text-ink-muted hover:bg-surface-sunken'
               }`}
             >
@@ -136,14 +136,14 @@ export function SpecialCategoryPicker({
           tıkladığında hedeflemesinin daralacağını bilmeli — yayın anında
           öğrenmek, kurduğu kitlenin uygulanmadığını fark etmek demek. */}
       {secili.length > 0 && (
-        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
+        <p className="mt-2 rounded-lg bg-warn-soft px-2.5 py-1.5 text-[11px] text-warn-strong">
           Bu workspace’in kampanyalarında Meta <strong>yaş ve cinsiyet daraltmasına izin
           vermiyor</strong>; o alanlar gönderilmeyecek. Beyan her kampanyaya otomatik
           ekleniyor.
         </p>
       )}
 
-      {error && <p className="mt-2 text-[11px] text-rose-700">{error}</p>}
+      {error && <p className="mt-2 text-[11px] text-danger-strong">{error}</p>}
 
       {canManage && degisti && (
         <button
@@ -156,7 +156,7 @@ export function SpecialCategoryPicker({
         </button>
       )}
       {kaydedildi && !degisti && (
-        <p className="mt-2 text-[11px] text-emerald-700">Beyan kaydedildi.</p>
+        <p className="mt-2 text-[11px] text-ok-strong">Beyan kaydedildi.</p>
       )}
       </div>
       )}

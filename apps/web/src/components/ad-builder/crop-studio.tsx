@@ -218,7 +218,7 @@ export function CropStudio({
               <p className="mb-1 text-[11px] font-medium text-ink">{RATIO_META[p.ratio].label}</p>
               <div
                 className={`overflow-hidden rounded-lg border bg-surface-sunken ${
-                  p.usable ? 'border-line' : 'border-rose-200 opacity-50'
+                  p.usable ? 'border-line' : 'border-danger/30 opacity-50'
                 }`}
                 style={{ aspectRatio: String(RATIO_META[p.ratio].aspect) }}
               >
@@ -236,7 +236,7 @@ export function CropStudio({
                 {p.outWidth}×{p.outHeight}
                 {p.retained < 0.99 && ` · %${Math.round((1 - p.retained) * 100)} kırpılıyor`}
               </p>
-              {!p.usable && <p className="text-[10px] text-rose-700">{p.reason}</p>}
+              {!p.usable && <p className="text-[10px] text-danger-strong">{p.reason}</p>}
             </div>
           ))}
         </div>
@@ -244,7 +244,7 @@ export function CropStudio({
 
       {/* SESSİZ ELEME YOK: kaç oran üretilecek, kaçı neden üretilemiyor. */}
       {uretilebilir.length < plans.length && (
-        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-900 ring-1 ring-inset ring-amber-200">
+        <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-[11px] text-warn-strong ring-1 ring-inset ring-warn/30">
           {plans.length - uretilebilir.length} oran bu görselden üretilemiyor — kaynak
           çözünürlüğü yetmiyor. Kalan {uretilebilir.length} oran yine de kullanılabilir; kare
           her yerleşimde çalışıyor.
@@ -252,12 +252,12 @@ export function CropStudio({
       )}
 
       {sonuc && (
-        <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 ring-1 ring-inset ring-emerald-200">
+        <p className="mt-3 rounded-lg bg-ok-soft px-3 py-2 text-xs text-ok-strong ring-1 ring-inset ring-ok/30">
           {sonuc}
         </p>
       )}
       {error && (
-        <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 ring-1 ring-inset ring-rose-200">
+        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}

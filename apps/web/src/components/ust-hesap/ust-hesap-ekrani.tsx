@@ -133,7 +133,7 @@ export function UstHesapEkrani({
       <div className="space-y-6">
         {hata && <Uyari mesaj={hata} />}
         {yuklemeHatasi ? (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong">
             Üst hesap bilgisi alınamadı: {yuklemeHatasi}
           </p>
         ) : (
@@ -187,7 +187,7 @@ export function UstHesapEkrani({
                ile "yüklenemedi" hâllerini aynı gösterirdi. */
             <p
               role="alert"
-              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
             >
               Şirket bilgisi alınamadı: {sirketHatasi}
             </p>
@@ -216,8 +216,8 @@ export function UstHesapEkrani({
                     onClick={() => setPanel((p) => (p === 'sil' ? 'yok' : 'sil'))}
                     className={`rounded-lg border px-3 py-1.5 text-sm transition ${
                       panel === 'sil'
-                        ? 'border-red-300 bg-red-50 text-red-700'
-                        : 'border-line text-red-600 hover:bg-red-50'
+                        ? 'border-danger/30 bg-danger-soft text-danger-strong'
+                        : 'border-line text-danger-strong hover:bg-danger-soft'
                     }`}
                   >
                     Sil
@@ -309,7 +309,7 @@ function Uyari({ mesaj }: { mesaj: string }) {
   return (
     <p
       role="alert"
-      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+      className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
     >
       {mesaj}
     </p>
@@ -744,7 +744,7 @@ function UstHesapKur({
             aria-invalid={alanHatasi ? 'true' : undefined}
             className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
           />
-          {alanHatasi && <p className="mt-1 text-xs text-red-600">{alanHatasi}</p>}
+          {alanHatasi && <p className="mt-1 text-xs text-danger-strong">{alanHatasi}</p>}
         </div>
         <button
           type="submit"
@@ -802,7 +802,7 @@ function SirketEkle({
         aria-invalid={alanHatasi ? 'true' : undefined}
         className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
       />
-      {alanHatasi && <p className="text-[11px] text-red-600">{alanHatasi}</p>}
+      {alanHatasi && <p className="text-[11px] text-danger-strong">{alanHatasi}</p>}
       {/*
         AÇIKLAMA FORMUN İÇİNDE KALIYOR: var olan bir şirketi buraya bağlamak
         MÜMKÜN DEĞİL ve bunu yazmazsak kullanıcı onu arar. O şirketin kendi

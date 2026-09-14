@@ -184,11 +184,11 @@ export function ExpertAdBuilder({
   if (campaign?.status === 'published') {
     return (
       <div className="space-y-3">
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-          <h3 className="text-sm font-semibold text-emerald-900">
+        <div className="rounded-xl border border-ok/30 bg-ok-soft p-4">
+          <h3 className="text-sm font-semibold text-ok-strong">
             {campaign.platform === 'google' ? 'Kampanya oluşturuldu — DURAKLATILMIŞ' : 'Kampanya yayında'}
           </h3>
-          <p className="mt-1 text-xs text-emerald-800">
+          <p className="mt-1 text-xs text-ok-strong">
             {campaign.platform === 'google' ? 'Google' : 'Meta'} kimliği:{' '}
             <code>{campaign.externalCampaignId}</code> ·{' '}
             {campaign.platform === 'google' ? 'reklam grubu' : 'ad set'}:{' '}
@@ -208,9 +208,9 @@ export function ExpertAdBuilder({
                 {i + 1}. {ad.creativeName}
               </span>
               {ad.externalAdId ? (
-                <code className="text-[11px] text-emerald-700">{ad.externalAdId}</code>
+                <code className="text-[11px] text-ok-strong">{ad.externalAdId}</code>
               ) : (
-                <span className="text-[11px] text-rose-700">{ad.error ?? 'oluşturulamadı'}</span>
+                <span className="text-[11px] text-danger-strong">{ad.error ?? 'oluşturulamadı'}</span>
               )}
             </li>
           ))}
@@ -261,7 +261,7 @@ export function ExpertAdBuilder({
         {/* GOOGLE YOLU CANLIDA HİÇ ÇALIŞTIRILMADI ve bunu seçim anında
             söylüyoruz, yayın anında değil. */}
         {google && (
-          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-inset ring-amber-200">
+          <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-strong ring-1 ring-inset ring-warn/30">
             Google yayın yolu <strong>canlıda ilk kez çalışacak</strong>. Kampanya
             DURAKLATILMIŞ açılır — Google Ads&apos;te gözden geçirip kendin başlatman
             gerekiyor. İlk denemeyi ajansın kendi hesabında ve küçük bütçeyle yap.
@@ -361,7 +361,7 @@ export function ExpertAdBuilder({
           {/* KELİMESİZ KAMPANYA HİÇ GÖSTERİM ALMIYOR ve hiçbir hata da
               vermiyor — sessiz sıfır. Bunu boş alanın altında söylüyoruz. */}
           {keywords.length === 0 ? (
-            <p className="mt-1.5 text-[11px] text-rose-700">
+            <p className="mt-1.5 text-[11px] text-danger-strong">
               Anahtar kelimesiz bir arama kampanyası hiç gösterim almaz ve Google bunu hata
               olarak da bildirmez.
             </p>
@@ -483,7 +483,7 @@ export function ExpertAdBuilder({
               ))}
             </ul>
           ) : (
-            <p className="text-xs text-emerald-700">Ayarlar hazır.</p>
+            <p className="text-xs text-ok-strong">Ayarlar hazır.</p>
           )}
           <button
             type="button"
@@ -512,7 +512,7 @@ export function ExpertAdBuilder({
               {check.blockers.map((b) => (
                 <p
                   key={b}
-                  className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 ring-1 ring-inset ring-rose-200"
+                  className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30"
                 >
                   {b}
                 </p>
@@ -520,7 +520,7 @@ export function ExpertAdBuilder({
               {check.warnings.map((w) => (
                 <p
                   key={w}
-                  className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-inset ring-amber-200"
+                  className="mt-2 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-strong ring-1 ring-inset ring-warn/30"
                 >
                   {w}
                 </p>
@@ -539,7 +539,7 @@ export function ExpertAdBuilder({
       )}
 
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-inset ring-rose-200">
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}

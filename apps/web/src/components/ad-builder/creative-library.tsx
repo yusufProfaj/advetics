@@ -96,7 +96,7 @@ export function CreativeLibrary({
       </button>
 
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 ring-1 ring-inset ring-rose-200">
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}
@@ -141,8 +141,8 @@ export function CreativeLibrary({
                             title={hazir ? 'Hazır' : p.blockers.join(' ')}
                             className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                               hazir
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : 'bg-rose-50 text-rose-700'
+                                ? 'bg-ok-soft text-ok-strong'
+                                : 'bg-danger-soft text-danger-strong'
                             }`}
                           >
                             {FORMAT_TEXT_SPEC[f].label.split(' — ')[0]}: {hazir ? 'hazır' : 'eksik'}
@@ -176,7 +176,7 @@ export function CreativeLibrary({
                     type="button"
                     onClick={() => void sil(c.id)}
                     disabled={busy !== null}
-                    className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                    className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-danger-strong hover:bg-danger-soft disabled:opacity-50"
                   >
                     Sil
                   </button>

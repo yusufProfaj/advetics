@@ -30,7 +30,7 @@ export function DeltaRozeti({
     <span
       className={`inline-flex items-center gap-0.5 font-medium tabular-nums ${
         size === 'xs' ? 'text-[10px]' : 'text-xs'
-      } ${good ? 'text-emerald-600' : 'text-red-600'}`}
+      } ${good ? 'text-ok-strong' : 'text-danger-strong'}`}
     >
       <Ok up={change > 0} />
       {formatPercent(Math.abs(change), 1)}

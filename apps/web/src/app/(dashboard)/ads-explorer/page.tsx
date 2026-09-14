@@ -15,7 +15,7 @@ import { AdCard } from '@/components/ad-card';
  * CLAUDE.md: "Arayüz Türkçe ve iş dilinde." URL değişmiyor — bağlantılar
  * paylaşılmış olabilir.
  */
-export const metadata = { title: 'Reklam Keşfi — Advetics' };
+export const metadata = { title: 'Reklam Keşfi · Advetics' };
 export const dynamic = 'force-dynamic';
 
 const SORT_LABEL: Record<string, string> = {
@@ -418,10 +418,10 @@ function FilterChip({
   const base = 'rounded-full px-2.5 py-1 font-medium transition ring-1 ring-inset';
   const cls = active
     ? tone === 'danger'
-      ? 'bg-red-500/15 text-red-400 ring-red-500/30'
+      ? 'bg-danger/15 text-danger ring-danger/30'
       : 'bg-brand-soft text-brand ring-brand/30'
     : tone === 'danger'
-      ? 'text-red-400 ring-red-500/20 hover:bg-red-500/10'
+      ? 'text-danger ring-danger/20 hover:bg-danger/10'
       : 'text-ink-muted ring-line hover:text-ink';
   return (
     <Link href={href} className={`${base} ${cls}`}>
@@ -441,7 +441,7 @@ function Total({ label, value }: { label: string; value: string }) {
 
 function Notice({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-red-300 bg-red-50 px-3.5 py-2.5 text-sm text-red-900">
+    <div className="rounded-lg border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-sm text-danger-strong">
       {children}
     </div>
   );

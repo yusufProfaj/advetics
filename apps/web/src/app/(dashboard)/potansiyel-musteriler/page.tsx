@@ -7,7 +7,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { LeadTable } from '@/components/leads/lead-table';
 
-export const metadata = { title: 'Potansiyel Müşteriler — Advetics' };
+export const metadata = { title: 'Potansiyel Müşteriler · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -60,7 +60,7 @@ export default async function LeadsPage({
 
   if (!result) {
     return (
-      <div className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-inset ring-rose-200">
+      <div className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
         Kayıtlar yüklenemedi.
       </div>
     );
@@ -91,7 +91,7 @@ export default async function LeadsPage({
 
       {/* VERİ HATTI SAĞLIĞI — liste boşken de görünüyor. */}
       {result.reconciledRatio > 0.3 && (
-        <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+        <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
           <p className="font-semibold">Anlık bildirim gecikmeli çalışıyor olabilir.</p>
           <p className="mt-1 text-xs">
             Kayıtların %{Math.round(result.reconciledRatio * 100)}'i anlık bildirimle değil,

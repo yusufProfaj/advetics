@@ -3,7 +3,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { AssetLibrary } from '@/components/assets/asset-library';
 
-export const metadata = { title: 'Görsel Arşivi — Advetics' };
+export const metadata = { title: 'Görsel Arşivi · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -46,7 +46,7 @@ export default async function AssetsPage({
 
   if (!result) {
     return (
-      <div className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-inset ring-rose-200">
+      <div className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
         Arşiv yüklenemedi.
       </div>
     );

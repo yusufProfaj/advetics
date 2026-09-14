@@ -211,7 +211,7 @@ export function CreativeEditor({
             <section
               key={format}
               className={`rounded-lg border p-3 ${
-                packed.blockers.length > 0 ? 'border-rose-200 bg-rose-50/40' : 'border-line'
+                packed.blockers.length > 0 ? 'border-danger/30 bg-danger-soft/40' : 'border-line'
               }`}
             >
               <h3 className="text-xs font-semibold text-ink">{FORMAT_TEXT_SPEC[format].label}</h3>
@@ -232,17 +232,17 @@ export function CreativeEditor({
 
               {/* ENGELLER VE UYARILAR AYRI — yayın kontrolüyle aynı sözleşme. */}
               {packed.blockers.map((b) => (
-                <p key={b} className="mt-1.5 text-[11px] text-rose-700">
+                <p key={b} className="mt-1.5 text-[11px] text-danger-strong">
                   · {b}
                 </p>
               ))}
               {packed.warnings.map((w) => (
-                <p key={w} className="mt-1.5 text-[11px] text-amber-700">
+                <p key={w} className="mt-1.5 text-[11px] text-warn-strong">
                   · {w}
                 </p>
               ))}
               {packed.blockers.length === 0 && packed.warnings.length === 0 && (
-                <p className="mt-1.5 text-[11px] text-emerald-700">Bu platform için hazır.</p>
+                <p className="mt-1.5 text-[11px] text-ok-strong">Bu platform için hazır.</p>
               )}
             </section>
           ))}
@@ -250,7 +250,7 @@ export function CreativeEditor({
       </div>
 
       {error && (
-        <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 ring-1 ring-inset ring-rose-200">
+        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}
@@ -350,7 +350,7 @@ function MetinListesi({
                   kesilmemeli; kullanıcı hangi platformu kaybettiğini bilerek
                   karar versin. */}
               {item.length > uyariUzunlugu && (
-                <span className="mt-0.5 block text-[11px] text-amber-700">
+                <span className="mt-0.5 block text-[11px] text-warn-strong">
                   {item.length} karakter — Google paketine giremiyor (sınır {uyariUzunlugu}).
                 </span>
               )}
@@ -358,7 +358,7 @@ function MetinListesi({
             <button
               type="button"
               onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="mt-1.5 shrink-0 text-[11px] text-rose-700 hover:underline"
+              className="mt-1.5 shrink-0 text-[11px] text-danger-strong hover:underline"
             >
               sil
             </button>

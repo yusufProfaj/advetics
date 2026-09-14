@@ -32,6 +32,27 @@
   --ok: #16a34a;
   --warn: #d97706;
   --danger: #dc2626;
+  --info: #0284c7;
+
+  /*
+   * ═══ DURUM RENKLERİNİN ZEMİN VE METİN TONLARI ═══
+   *
+   * Panelde 400'den fazla yerde sabit Tailwind paleti yazılıydı
+   * (`bg-amber-50`, `text-rose-700`…) ve 90 tanesi AÇIK ZEMİNDİ. Yüzey
+   * belirteçleri karanlık temada dönüyor, o sınıflar dönmüyordu: koyu bir
+   * sayfanın ortasında bembeyaz uyarı kutuları kalıyordu.
+   *
+   * `-soft` zemin, `-strong` o zemin üzerinde okunan metin. İkisi de temaya
+   * göre dönüyor; bileşenler artık ham palet yazmıyor.
+   */
+  --ok-soft: #ecfdf5;
+  --ok-strong: #047857;
+  --warn-soft: #fffbeb;
+  --warn-strong: #b45309;
+  --danger-soft: #fef2f2;
+  --danger-strong: #b91c1c;
+  --info-soft: #f0f9ff;
+  --info-strong: #0369a1;
 
   --radius: 0.75rem;
   --shadow-card: 0 1px 2px rgb(20 22 28 / 0.04), 0 1px 3px rgb(20 22 28 / 0.06);
@@ -46,6 +67,19 @@
     --border: #2a2e38;
     --text: #f2f4f8;
     --text-muted: #9aa1ae;
+
+    /*
+     * KARANLIKTA ZEMİN KOYU TONA, METİN AÇIK TONA DÖNÜYOR. Aynı değerleri
+     * bırakmak, koyu sayfada göz alan beyaz kutular demekti.
+     */
+    --ok-soft: #0e2b1e;
+    --ok-strong: #6ee7b7;
+    --warn-soft: #2b2008;
+    --warn-strong: #fbbf24;
+    --danger-soft: #2c1315;
+    --danger-strong: #fca5a5;
+    --info-soft: #0b2434;
+    --info-strong: #7dd3fc;
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-pop: 0 10px 24px -6px rgb(0 0 0 / 0.6);
   }
@@ -71,6 +105,15 @@
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-strong: var(--ok-strong);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-strong: var(--warn-strong);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-strong: var(--danger-strong);
+  --color-info-soft: var(--info-soft);
+  --color-info-strong: var(--info-strong);
   --font-sans: var(--brand-font);
   --radius-xl: var(--radius);
 }

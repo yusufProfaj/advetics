@@ -6,12 +6,12 @@ import { KreatifGorsel } from '@/components/kreatif-gorsel';
 import { PlatformLogo } from '@/components/platform-logo';
 
 const STATUS_STYLE: Record<string, string> = {
-  active: 'bg-emerald-500/10 text-emerald-500 ring-emerald-500/25',
-  paused: 'bg-amber-500/10 text-amber-500 ring-amber-500/25',
-  deleted: 'bg-slate-500/10 text-slate-400 ring-slate-500/25',
-  pending_review: 'bg-sky-500/10 text-sky-400 ring-sky-500/25',
-  ended: 'bg-slate-500/10 text-slate-400 ring-slate-500/25',
-  unknown: 'bg-slate-500/10 text-slate-400 ring-slate-500/25',
+  active: 'bg-ok/10 text-ok ring-ok/25',
+  paused: 'bg-warn/10 text-warn ring-warn/25',
+  deleted: 'bg-ink-muted/10 text-ink-muted ring-ink-muted/25',
+  pending_review: 'bg-info/10 text-info ring-info/25',
+  ended: 'bg-ink-muted/10 text-ink-muted ring-ink-muted/25',
+  unknown: 'bg-ink-muted/10 text-ink-muted ring-ink-muted/25',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -76,7 +76,7 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
   return (
     <article
       className={`group overflow-hidden rounded-xl border bg-surface transition ${
-        hasIssues ? 'border-red-500/40' : 'border-line hover:border-brand/40'
+        hasIssues ? 'border-danger/40' : 'border-line hover:border-brand/40'
       }`}
     >
       <div className="flex flex-col gap-4 p-4 sm:flex-row">
@@ -119,7 +119,7 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
             // Tıklanabilir olduğu GÖRÜNMELİ: fareyle üzerine gelmeden
             // anlaşılmayan bir bağlantı, olmayan bir bağlantı gibidir.
             <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/45 group-hover:opacity-100">
-              <span className="rounded-md bg-white/95 px-2 py-1 text-[11px] font-semibold text-slate-900">
+              <span className="rounded-md bg-white/95 px-2 py-1 text-[11px] font-semibold text-ink">
                 Önizlemeyi aç ↗
               </span>
             </span>
@@ -222,8 +222,8 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
       </div>
 
       {hasIssues && (
-        <div className="border-t border-red-500/30 bg-red-500/5 px-4 py-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-red-400">
+        <div className="border-t border-danger/30 bg-danger/5 px-4 py-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-danger">
             İnceleme sorunu{ad.reviewStatus ? ` · ${ad.reviewStatus}` : ''}
           </p>
           <ul className="mt-1 space-y-0.5">

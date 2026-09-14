@@ -88,17 +88,17 @@ export function DuplicatePanel({
         {/* KISMİ BAŞARI: kurulanlar ve düşenler AYRI. Tek bir "başarısız"
             demek, kurulmuş on yedi kampanyayı gizlemek olurdu. */}
         {sonuc.created.length > 0 && (
-          <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <h3 className="text-sm font-semibold text-emerald-900">
+          <section className="rounded-xl border border-ok/30 bg-ok-soft p-4">
+            <h3 className="text-sm font-semibold text-ok-strong">
               {sonuc.created.length} kampanya oluşturuldu
             </h3>
-            <p className="mt-1 text-xs text-emerald-800">
+            <p className="mt-1 text-xs text-ok-strong">
               Hepsi <strong>taslak</strong> — hiçbiri yayınlanmadı. Her birini tek tek
               gözden geçirip yayınlaman gerekiyor.
             </p>
             <ul className="mt-2 space-y-0.5">
               {sonuc.created.map((c) => (
-                <li key={c.id} className="text-xs text-emerald-900">
+                <li key={c.id} className="text-xs text-ok-strong">
                   · {c.name}
                 </li>
               ))}
@@ -107,13 +107,13 @@ export function DuplicatePanel({
         )}
 
         {sonuc.failed.length > 0 && (
-          <section className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-            <h3 className="text-sm font-semibold text-rose-900">
+          <section className="rounded-xl border border-danger/30 bg-danger-soft p-4">
+            <h3 className="text-sm font-semibold text-danger-strong">
               {sonuc.failed.length} varyasyon kurulamadı
             </h3>
             <ul className="mt-2 space-y-1">
               {sonuc.failed.map((f) => (
-                <li key={f.name} className="text-xs text-rose-800">
+                <li key={f.name} className="text-xs text-danger-strong">
                   · <strong>{f.name}</strong> — {f.reason}
                 </li>
               ))}
@@ -258,7 +258,7 @@ export function DuplicatePanel({
                 <button
                   type="button"
                   onClick={() => setVariants((prev) => prev.filter((_, j) => j !== i))}
-                  className="mt-2 text-[11px] text-rose-700 hover:underline"
+                  className="mt-2 text-[11px] text-danger-strong hover:underline"
                 >
                   Bu varyasyonu kaldır
                 </button>
@@ -283,7 +283,7 @@ export function DuplicatePanel({
       </section>
 
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-inset ring-rose-200">
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
           {error}
         </p>
       )}
