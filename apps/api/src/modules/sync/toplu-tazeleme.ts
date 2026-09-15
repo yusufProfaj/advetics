@@ -179,6 +179,8 @@ export interface Ilerleme {
   toplam: number;
   tamamlanan: number;
   dusen: number;
+  /** Kurtarılamadığı için kapatılan iş sayısı. */
+  iptal: number;
   kosan: number;
   bekleyen: number;
   yuzde: number;
@@ -204,10 +206,19 @@ export const ESZAMANLILIK = 4;
 
 export function ilerleme(
   toplam: number,
-  durumlar: { tamamlanan: number; dusen: number; kosan: number },
+  durumlar: { tamamlanan: number; dusen: number; kosan: number; iptal?: number },
   ortalamaSaniye: number | null,
 ): Ilerleme {
-  const biten = durumlar.tamamlanan + durumlar.dusen;
+  /*
+   * İPTAL DE BİTMİŞ SAYILIYOR — ve bu bir hata düzeltmesi.
+   *
+   * `SyncJobStatus` altı değer taşıyor ama burada yalnızca ikisi
+   * sayılıyordu. `cancelled` bir işin son durumu: sayılmadığı için
+   * `bitti` HİÇBİR ZAMAN doğru olmuyor ve çubuk kalıcı olarak takılı
+   * kalıyordu. Payda partinin açılışında sabitleniyor, yani açık kalan tek
+   * bir satır bile yüzdeyi %100'e ulaştırmıyor.
+   */
+  const biten = durumlar.tamamlanan + durumlar.dusen + (durumlar.iptal ?? 0);
   const bekleyen = Math.max(0, toplam - biten - durumlar.kosan);
 
   /*
@@ -228,6 +239,7 @@ export function ilerleme(
     toplam,
     tamamlanan: durumlar.tamamlanan,
     dusen: durumlar.dusen,
+    iptal: durumlar.iptal ?? 0,
     kosan: durumlar.kosan,
     bekleyen,
     yuzde,

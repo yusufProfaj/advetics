@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type {
   BulkRefreshEstimate,
+  BulkRefreshKurtarma,
   BulkRefreshProgress,
   BulkRefreshStarted,
 } from '@advetics/shared';
@@ -40,6 +41,7 @@ export function TopluTazeleme({
   const [ilerleme, setIlerleme] = useState<BulkRefreshProgress | null>(null);
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  const [kurtarmaNotu, setKurtarmaNotu] = useState<string | null>(null);
 
   /*
    * PARTİ KİMLİĞİ SAKLANIYOR. Sayfa yenilenirse ilerleme kaybolmamalı —
@@ -124,6 +126,45 @@ export function TopluTazeleme({
     }
   }
 
+  /**
+   * TAKILAN İŞLERİ GERİ KOYAR.
+   *
+   * Sonuç TEK TEK yazılıyor: "3 iş yeniden başlatıldı" ile "3 iş kapatıldı"
+   * aynı şey değil ve kullanıcı ikincisinde o dönemin verisinin gelmeyeceğini
+   * bilmeli.
+   */
+  async function kurtar(): Promise<void> {
+    if (!parti) return;
+    setBusy(true);
+    setHata(null);
+    setKurtarmaNotu(null);
+    try {
+      const r = await apiFetch<BulkRefreshKurtarma>(`/sync/bulk-refresh/${parti}/kurtar`, {
+        method: 'POST',
+      });
+      const parcalar = [
+        r.yenidenKuyruklanan > 0 ? `${r.yenidenKuyruklanan} iş yeniden başlatıldı` : null,
+        r.kuyrukta > 0 ? `${r.kuyrukta} iş zaten sırada` : null,
+        r.vazgecilen > 0 ? `${r.vazgecilen} iş kapatıldı` : null,
+        r.kalan > 0 ? `${r.kalan} iş kaldı, tekrar bas` : null,
+      ].filter((x): x is string => x !== null);
+      setKurtarmaNotu(parcalar.length > 0 ? parcalar.join(' · ') : 'Takılan iş bulunamadı.');
+      await yokla(parti);
+    } catch (e) {
+      setHata(e instanceof ApiRequestError ? e.message : 'Takılan işler geri konulamadı.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** İzlemeyi bırakır — işler arka planda sürüyor, yalnızca kutu kapanıyor. */
+  function takibiBirak(): void {
+    localStorage.removeItem('advetics.topluTazeleme');
+    setParti(null);
+    setIlerleme(null);
+    setKurtarmaNotu(null);
+  }
+
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -185,7 +226,7 @@ export function TopluTazeleme({
 
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-muted">
             <span>
-              %{ilerleme.yuzde} · {ilerleme.dateFrom} — {ilerleme.dateTo} ·{' '}
+              %{ilerleme.yuzde} · {ilerleme.dateFrom} / {ilerleme.dateTo} ·{' '}
               {ilerleme.clientCount} workspace
             </span>
             <span className="flex items-center gap-3">
@@ -200,23 +241,67 @@ export function TopluTazeleme({
               {ilerleme.atlanan > 0 && (
                 <span>{ilerleme.atlanan} iş zaten kuyruktaydı</span>
               )}
-              {ilerleme.bitti ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    localStorage.removeItem('advetics.topluTazeleme');
-                    setParti(null);
-                    setIlerleme(null);
-                  }}
-                  className="font-medium text-brand-strong hover:underline"
-                >
-                  Kapat
-                </button>
-              ) : (
-                <Nokta />
-              )}
+              {ilerleme.iptal > 0 && <span>{ilerleme.iptal} iş kapatıldı</span>}
+              {!ilerleme.bitti && ilerleme.tani === null && <Nokta />}
+              {/*
+                KAPATMA DÜĞMESİ HER ZAMAN AÇIK.
+                Eskiden yalnızca iş bittiğinde çıkıyordu: bitmeyen bir parti
+                kutuyu kalıcı olarak ekranda bırakıyordu ve kullanıcının
+                yapabileceği hiçbir şey yoktu. İşler arka planda sürüyor,
+                kapanan yalnızca takip.
+              */}
+              <button
+                type="button"
+                onClick={takibiBirak}
+                className="font-medium text-brand-strong hover:underline"
+              >
+                {ilerleme.bitti ? 'Kapat' : 'Takibi bırak'}
+              </button>
             </span>
           </div>
+
+          {/*
+            ═══ DURAN PARTİ AÇIKLANIYOR ═══
+
+            Çubuk %99'da saatlerce durduğunda ekranda hâlâ "İşleniyor"
+            yazıyordu ve kullanıcının elinde hiçbir bilgi yoktu. İki hâl
+            tamamen farklı: kuyrukta bekleyen iş kendiliğinden koşacak, ama
+            kuyruktan düşmüş bir işi kimse almıyor ve o veri hiç gelmiyor.
+          */}
+          {ilerleme.tani && (
+            <div className="mt-3 rounded-lg border border-warn/30 bg-warn-soft p-3">
+              {ilerleme.tani.kayip > 0 ? (
+                <>
+                  <p className="text-xs text-ink">
+                    <strong>{ilerleme.tani.kayip} iş kuyrukta yok.</strong> Bu işler
+                    kendiliğinden başlamıyor, yeniden kuyruğa konması gerekiyor.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void kurtar()}
+                    disabled={busy}
+                    className="mt-2 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+                  >
+                    {busy ? <>Geri konuyor <Nokta className="ml-1" /></> : 'Takılan işleri yeniden başlat'}
+                  </button>
+                </>
+              ) : (
+                <p className="text-xs text-ink">
+                  {ilerleme.tani.kuyrukta} iş sırada bekliyor. Kota penceresi açılınca
+                  kendiliğinden sürecek
+                  {ilerleme.tani.enYakinDeneme &&
+                    `, en erken ${saatMetni(ilerleme.tani.enYakinDeneme)}`}
+                  .
+                </p>
+              )}
+              <p className="mt-1.5 text-[11px] text-ink-muted">
+                Son hareket {gecenSure(ilerleme.tani.sonHareket)}
+                {ilerleme.tani.acikToplam > ilerleme.tani.bakilan &&
+                  ` · ${ilerleme.tani.acikToplam} açık işin ${ilerleme.tani.bakilan} tanesine bakıldı`}
+              </p>
+              {kurtarmaNotu && <p className="mt-1.5 text-[11px] text-ink">{kurtarmaNotu}</p>}
+            </div>
+          )}
 
           {ilerleme.dusen > 0 && (
             <p className="mt-2 text-[11px] text-ink-muted">
@@ -298,7 +383,7 @@ export function TopluTazeleme({
                 beş ek platform çağrısı demek; sessizce açık gelmesi kotayı
                 iki katına çıkarırdı.
               */}
-              Kitle kırılımları da çekilsin (yaş, cinsiyet, şehir…) — kotayı ~2× artırır
+              Kitle kırılımları da çekilsin (yaş, cinsiyet, şehir…). Kotayı ~2× artırır.
             </label>
           </div>
 
@@ -319,8 +404,8 @@ export function TopluTazeleme({
             <div className="rounded-lg border border-warn/30 bg-warn/5 p-3">
               <p className="text-xs text-ink">
                 <strong>{tahmin.accountCount} reklam hesabı</strong> için{' '}
-                <strong>{tahmin.jobCount} iş</strong> açılacak —{' '}
-                {tahmin.dateFrom} ile {tahmin.dateTo} arası, {tahmin.windowCount} pencere.
+                <strong>{tahmin.jobCount} iş</strong> açılacak: {tahmin.dateFrom} ile{' '}
+                {tahmin.dateTo} arası, {tahmin.windowCount} pencere.
               </p>
               {/*
                 YAPI TARAMASI OLMAYAN HESAP SAYISI YAZILI ama iş ATLANMIYOR:
@@ -328,8 +413,8 @@ export function TopluTazeleme({
               */}
               {tahmin.noStructure > 0 && (
                 <p className="mt-1 text-[11px] text-ink-muted">
-                  {tahmin.noStructure} hesabın yapı taraması hiç koşmamış — önce o
-                  çekilecek, metrikler ondan sonra yazılabiliyor.
+                  {tahmin.noStructure} hesabın yapı taraması hiç koşmamış. Önce o çekilecek,
+                  metrikler ondan sonra yazılabiliyor.
                 </p>
               )}
               <p className="mt-1 text-[11px] text-ink-muted">
@@ -375,4 +460,21 @@ function sureMetni(saniye: number): string {
   const sa = Math.floor(dk / 60);
   const kalan = dk % 60;
   return kalan === 0 ? `${sa} sa` : `${sa} sa ${kalan} dk`;
+}
+
+/** ISO zamanı saat:dakika olarak yazar — "14:20". */
+function saatMetni(iso: string): string {
+  return new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * "2 sa 10 dk önce" — takılmanın NE KADAR sürdüğü.
+ *
+ * Mutlak saat yazmak kullanıcıya çıkarma yaptırıyor; asıl soru "ne kadardır
+ * duruyor".
+ */
+function gecenSure(iso: string | null): string {
+  if (iso === null) return 'yok';
+  const saniye = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  return `${sureMetni(saniye)} önce`;
 }

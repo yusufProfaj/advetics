@@ -676,6 +676,61 @@ geliyor ve mesaj sebebi söylemiyor.
 
 ---
 
+### 10d. Toplu tazeleme %99'da duruyor
+
+Belirti: "Tüm verileri güncelle" çubuğu `1259 / 1266 iş · tahmini bir
+dakikadan az` yazıp saatlerce değişmiyor, aşama metni "İşleniyor" diyor ve
+hiçbir log satırı yok.
+
+**Sebep `sync_jobs` ile kuyruğun AYRIŞMASI.** Tablo satırı bir NİYET kaydı,
+kuyruk ise gerçek. Satır `queued`/`running` yazıyorken BullMQ işi Redis'te
+olmayabiliyor:
+
+- worker deploy sırasında öldürüldü, kilit düştü, iş `stalled` sayıldı ve
+  `maxStalledCount` aşılınca atıldı,
+- Redis temizlendi ya da `advetics` öneki değişti,
+- iş kotaya takılıp `throttled` kaldı ve kuyruk kaydı bir şekilde silindi.
+
+Üçünde de o satırı **hiçbir worker almıyor** ve çubuğun paydası partinin
+açılışında sabitlendiği için yüzde asla %100'e ulaşmıyor.
+
+**Panelden çözülüyor.** Parti on dakika hiç kıpırdamazsa ekran kuyruğa sorup
+bitmemiş işleri ikiye ayırıyor:
+
+- *"N iş sırada bekliyor"* — kuyrukta duruyor, kota penceresi açılınca
+  kendiliğinden koşacak. Yapılacak bir şey yok.
+- *"N iş kuyrukta yok"* — kayıp. **Takılan işleri yeniden başlat** düğmesi
+  aynı satırları (yeni satır açmadan) kuyruğa geri koyuyor; hesabı silinmiş
+  ya da izlemeden çıkarılmış işler `cancelled` olarak kapanıyor ve sebebi
+  satıra yazılıyor.
+
+Düğme `sync.trigger` yetkisi ve org yöneticiliği istiyor. Tek turda en fazla
+300 iş geri konuyor; kalan sayı yanıtta yazıyor, düğmeye tekrar basmak
+gerekiyor.
+
+**EN SIK TETİKLEYİCİ: PARTİ KOŞARKEN DEPLOY.** `deploy.sh` `pm2 startOrReload`
+çağırıyor ve worker fork modunda: SIGTERM gidiyor, `kill_timeout: 30000`
+dolunca SIGKILL. Worker `worker.close()` ile çalışan işleri bekliyor ama tek
+bir 90 günlük parça 30 saniyeden uzun sürebiliyor, yani her deploy o anda
+koşan dört işi yarıda kesebiliyor. BullMQ takılan işi BİR kez geri veriyor
+(`maxStalledCount` varsayılanı 1); art arda deploy edilirse ikinci kesilmede
+işi atıyor. Saatler süren bir tazeleme koşarken deploy etmemek en ucuz çözüm.
+
+**İLERİYE DÖNÜK ÖNLEM ALINDI:** worker'ın `failed` dinleyicisi artık yalnızca
+log yazmıyor, BullMQ bir işten NİHAİ olarak vazgeçtiğinde `sync_jobs` satırını
+`kuyruk_vazgecti` koduyla kapatıyor. İş yine kaybolmuş oluyor ama artık
+GÖRÜNÜYOR: çubuk bitiyor, düşen sayısı yazıyor ve sebebi Senkronizasyon
+ekranında okunuyor.
+
+**Elle bakmak gerekirse** (sunucuda, `advetics` kullanıcısıyla):
+
+```bash
+cd ~/htdocs/advetics.com && set -a && . ./.env && set +a \
+  && psql "$DATABASE_URL" -c "SELECT status, count(*) FROM sync_jobs WHERE batch_id = '<parti-id>' GROUP BY status;"
+```
+
+---
+
 ### 10a. "Panel yavaş" — hangi uç yavaş
 
 Panel TEK bir ekranı çizerken altı ayrı uca istek atıyor (`summary`,

@@ -17,8 +17,10 @@ import {
   refreshRangeSchema,
   type BulkRefreshEstimate,
   type BulkRefreshInput,
+  type BulkRefreshKurtarma,
   type BulkRefreshProgress,
   type BulkRefreshStarted,
+  type BulkRefreshTani,
   type BackfillInput,
   type RefreshRangeInput,
   type SyncAccountStatus,
@@ -33,6 +35,7 @@ import { CurrentTenant, RequireOrgAdmin, RequirePermissions } from '../../common
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SyncQueueService } from '../../queue/sync-queue.service';
+import { buildJobId, type SyncJobPayload } from '../../queue/queues';
 import { supurmeDisiSebep } from '../../queue/supurme-kapsami';
 import { AuditService } from '../audit/audit.service';
 import type { AuthedRequest } from '../../common/types/request';
@@ -44,6 +47,47 @@ import { EN_AZ_ORNEK, ilerleme, pencereler, planla } from './toplu-tazeleme';
  * Yüzde tek başına "neyin %40'ı" sorusunu cevaplamıyor; aşama metni onu
  * cevaplıyor ve TAHMİNLE DEĞİL en son koşan işin türünden türetiliyor.
  */
+/**
+ * Partide hiçbir iş bu süre boyunca kıpırdamadıysa TANI KOŞULUYOR.
+ *
+ * Tanı, bitmemiş her iş için Redis'e ayrı bir soru demek ve çubuk beş
+ * saniyede bir yoklanıyor: 1.200 işlik bir partide her yoklamada yüzlerce
+ * sorgu, paylaşımlı bir sunucuda kabul edilemez. Parti ilerlerken tanıya
+ * ihtiyaç da yok — soru ancak çubuk DURDUĞUNDA anlamlı.
+ *
+ * On dakika: en yavaş iş (90 günlük reklam seviyesi geçmiş, parçalar hâlinde)
+ * bile bu süre içinde en az bir parça yazıyor.
+ */
+const DURGUNLUK_MS = 10 * 60_000;
+
+/**
+ * Tanıda en fazla kaç işe bakılır.
+ *
+ * Sınırın kendisi zararsız, SESSİZ OLMASI zararlı olurdu: kaç işe bakıldığı
+ * ve kaç iş açık olduğu ikisi birden dönüyor.
+ */
+const TANI_SINIRI = 200;
+
+/**
+ * Tek kurtarma turunda en fazla kaç iş geri konur.
+ *
+ * Her iş bir Redis sorgusu ve bir tablo güncellemesi; sınırsız bir tur
+ * paylaşımlı sunucuda HTTP isteğini dakikalarca açık tutardı. Kalan iş
+ * sayısı yanıtta DÖNÜYOR — sessiz kesme yok, kullanıcı düğmeye tekrar
+ * basacağını biliyor.
+ */
+const KURTARMA_SINIRI = 300;
+
+/**
+ * AÇIK DURUMLAR — çubuğu bitmekten alıkoyan satırlar.
+ *
+ * `throttled` de buraya dâhil ve sebebi somut: kota reddi bir HATA değil,
+ * iş kota penceresi açılınca devam edecek. Ama tabloda `throttled` duran bir
+ * satırın kuyrukta karşılığı olmayabiliyor ve o zaman "bekliyor" cümlesi
+ * yalan oluyor.
+ */
+const ACIK_DURUMLAR = ['queued', 'running', 'throttled'] as const;
+
 const ASAMA_METNI: Partial<Record<string, string>> = {
   structure: 'Kampanya yapısı taranıyor',
   insights_backfill: 'Geçmiş metrikler çekiliyor',
@@ -872,7 +916,13 @@ export class SyncController {
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<BulkRefreshProgress> {
-    return this.prisma.withTenant(ctx, async (tx) => {
+    /*
+     * TANI TRANSACTION'IN DIŞINDA. `withTenant` etkileşimli bir transaction
+     * açıyor ve Prisma'nın sınırı 5 saniye; tanı her açık iş için Redis'e
+     * ayrı bir soru demek ve iki yüz soru o sınırı rahatça aşar. Transaction
+     * ölürse yanıt da ölür ve kullanıcı çubuğu tamamen kaybeder.
+     */
+    const veri = await this.prisma.withTenant(ctx, async (tx) => {
       const parti = await tx.syncBatch.findUnique({
         where: { id },
         select: {
@@ -882,6 +932,7 @@ export class SyncController {
           clientIds: true,
           totalJobs: true,
           skippedJobs: true,
+          createdAt: true,
         },
       });
       if (!parti) throw new NotFoundException('Tazeleme partisi bulunamadı');
@@ -915,9 +966,32 @@ export class SyncController {
 
       const p = ilerleme(
         parti.totalJobs,
-        { tamamlanan: say('succeeded'), dusen: say('failed'), kosan: say('running') },
+        {
+          tamamlanan: say('succeeded'),
+          dusen: say('failed'),
+          kosan: say('running'),
+          iptal: say('cancelled'),
+        },
         ortalama,
       );
+
+      /*
+       * SON HAREKET — partinin YAŞADIĞINI gösteren tek işaret.
+       *
+       * Yüzde hareketsiz olabilir ama iş koşuyor olabilir (tek bir 90 günlük
+       * çekim on dakika sürüyor). Ayırt eden şey yüzde değil, herhangi bir
+       * işin en son ne zaman başladığı ya da bittiği.
+       */
+      const hareket = await tx.$queryRaw<Array<{ son: Date | null }>>(
+        Prisma.sql`
+          SELECT MAX(GREATEST(started_at, finished_at)) AS son
+          FROM sync_jobs
+          WHERE batch_id = ${id}::uuid
+        `,
+      );
+      const sonHareket = hareket[0]?.son ?? null;
+      const durgun =
+        !p.bitti && Date.now() - (sonHareket ?? parti.createdAt).getTime() > DURGUNLUK_MS;
 
       /*
        * AŞAMA METNİ — yüzde tek başına "neyin %40'ı" sorusunu cevaplamıyor.
@@ -926,24 +1000,275 @@ export class SyncController {
       const sonIs = await tx.syncJob.findFirst({
         where: { batchId: id, status: { in: ['running', 'succeeded'] } },
         orderBy: { createdAt: 'desc' },
-        select: { jobType: true, dateFrom: true, dateTo: true },
+        select: { jobType: true },
       });
-      const asama = p.bitti
-        ? 'Tamamlandı'
-        : sonIs === null
-          ? 'Kuyrukta bekliyor'
-          : ASAMA_METNI[sonIs.jobType] ?? 'İşleniyor';
 
+      // Tanı için açık işlerin KUYRUK KİMLİKLERİ — sorgunun kendisi dışarıda
+      // koşuyor, satırlar burada okunuyor (RLS bu transaction'da).
+      const acikIsler = durgun
+        ? await tx.syncJob.findMany({
+            where: { batchId: id, status: { in: [...ACIK_DURUMLAR] } },
+            orderBy: { createdAt: 'asc' },
+            take: TANI_SINIRI,
+            select: { id: true, queueJobId: true, nextRetryAt: true },
+          })
+        : [];
+
+      return { parti, p, sonHareket, durgun, sonIs, acikIsler, acikToplam: p.toplam - (p.tamamlanan + p.dusen + p.iptal) };
+    });
+
+    const { parti, p } = veri;
+    const tani = veri.durgun
+      ? await this.partiTanisi(veri.acikIsler, veri.sonHareket, veri.acikToplam)
+      : null;
+
+    const asama = p.bitti
+      ? 'Tamamlandı'
+      : tani !== null && tani.kayip > 0
+        ? 'Takıldı'
+        : veri.sonIs === null
+          ? 'Kuyrukta bekliyor'
+          : ASAMA_METNI[veri.sonIs.jobType] ?? 'İşleniyor';
+
+    return {
+      batchId: parti.id,
+      dateFrom: parti.dateFrom.toISOString().slice(0, 10),
+      dateTo: parti.dateTo.toISOString().slice(0, 10),
+      clientCount: parti.clientIds.length,
+      ...p,
+      asama,
+      atlanan: parti.skippedJobs,
+      tani,
+    };
+  }
+
+  /**
+   * ═══ DURAN BİR PARTİNİN BİTMEMİŞ İŞLERİ NEREDE ═══
+   *
+   * İki hâl aynı görünüyor ve İKİSİ TAMAMEN FARKLI:
+   *
+   *   · İş kuyrukta duruyor — kota penceresi açılınca ya da sıra gelince
+   *     koşacak. Yapılacak bir şey yok, beklemek doğru davranış.
+   *   · İş yalnızca TABLODA duruyor — BullMQ kaydı yok. Worker deploy
+   *     sırasında öldürülmüş, iş takılmış sayılıp atılmış ya da Redis
+   *     temizlenmiş olabilir. Bu satırı hiçbir worker almayacak; çubuk
+   *     sonsuza kadar %99'da kalır ve o veri hiç gelmez.
+   *
+   * Tablodan okunan durum ikisini AYIRT EDEMİYOR; ayıran tek şey kuyruğa
+   * sorulan soru.
+   */
+  private async partiTanisi(
+    acikIsler: Array<{ queueJobId: string | null; nextRetryAt: Date | null }>,
+    sonHareket: Date | null,
+    acikToplam: number,
+  ): Promise<BulkRefreshTani> {
+    const kimlikler = acikIsler
+      .map((i) => i.queueJobId)
+      .filter((k): k is string => k !== null);
+    const durum = await this.queue.kuyruktaMi(kimlikler);
+
+    let kuyrukta = 0;
+    let kayip = 0;
+    let enYakin: Date | null = null;
+    for (const is of acikIsler) {
+      // KUYRUK KİMLİĞİ OLMAYAN SATIR KAYIP SAYILIYOR. Kimlik `enqueue`
+      // sırasında yazılıyor; yoksa o satır kuyruğa hiç ulaşmamış demek.
+      const canli = is.queueJobId !== null && durum.get(is.queueJobId) === true;
+      if (canli) {
+        kuyrukta++;
+        if (is.nextRetryAt && (enYakin === null || is.nextRetryAt < enYakin)) {
+          enYakin = is.nextRetryAt;
+        }
+      } else {
+        kayip++;
+      }
+    }
+
+    return {
+      kuyrukta,
+      kayip,
+      enYakinDeneme: enYakin?.toISOString() ?? null,
+      sonHareket: sonHareket?.toISOString() ?? null,
+      bakilan: acikIsler.length,
+      acikToplam,
+    };
+  }
+
+  /**
+   * ═══ TAKILAN İŞLERİ GERİ KOY ═══
+   *
+   * Kuyruktan düşmüş bir iş kendiliğinden geri gelmiyor: `sync_jobs` satırı
+   * açık kalıyor, çubuk %99'da duruyor ve o hesabın o dönemi HİÇ gelmiyor.
+   * Bugüne kadar tek çözüm partiyi baştan başlatmaktı — 1.266 işin 1.259'unu
+   * yeniden koşturmak, saatler ve kota demek.
+   *
+   * YENİ SATIR AÇILMIYOR, VAR OLAN SATIR GERİ KONUYOR. Yüzdenin paydası
+   * partinin açılışında sabitlendi; yeni satır açmak eski satırı sonsuza
+   * kadar açık bırakır ve çubuk yine bitmezdi.
+   *
+   * KURTARILAMAYAN İŞ KAPATILIYOR, ASILI BIRAKILMIYOR. Hesabı silinmiş ya da
+   * izlemeden çıkarılmış bir işi yeniden koymak anlamsız; o satır `cancelled`
+   * olarak kapanıyor ve sebebi yazılıyor. Aksi hâlde çubuk yine bitmez ve
+   * kullanıcı aynı düğmeye sonsuza kadar basardı.
+   */
+  @Post('bulk-refresh/:id/kurtar')
+  @HttpCode(HttpStatus.OK)
+  @RequireOrgAdmin()
+  @RequirePermissions('sync.trigger')
+  async bulkRefreshKurtar(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthedRequest,
+  ): Promise<BulkRefreshKurtarma> {
+    const { isler, acikToplam } = await this.prisma.withTenant(ctx, async (tx) => {
+      const parti = await tx.syncBatch.findUnique({ where: { id }, select: { id: true } });
+      if (!parti) throw new NotFoundException('Tazeleme partisi bulunamadı');
+
+      const acik = { batchId: id, status: { in: [...ACIK_DURUMLAR] } };
       return {
-        batchId: parti.id,
-        dateFrom: parti.dateFrom.toISOString().slice(0, 10),
-        dateTo: parti.dateTo.toISOString().slice(0, 10),
-        clientCount: parti.clientIds.length,
-        ...p,
-        asama,
-        atlanan: parti.skippedJobs,
+        acikToplam: await tx.syncJob.count({ where: acik }),
+        isler: await tx.syncJob.findMany({
+          where: acik,
+          orderBy: { createdAt: 'asc' },
+          take: KURTARMA_SINIRI,
+          select: {
+            id: true,
+            clientId: true,
+            adAccountId: true,
+            jobType: true,
+            entityLevel: true,
+            dateFrom: true,
+            dateTo: true,
+            priority: true,
+            queueJobId: true,
+          },
+        }),
       };
     });
+
+    // Hesabın HÂLÂ izlendiğini doğrula — süzgeç `enabledAccounts` ile aynı.
+    // Ayrı yazmak, bir gün ikisinin ayrışması demek.
+    const hesapIdler = isler
+      .map((i) => i.adAccountId)
+      .filter((h): h is string => h !== null);
+    const hesaplar = new Map(
+      (await this.enabledAccounts(ctx))
+        .filter((h) => hesapIdler.includes(h.id))
+        .map((h) => [h.id, h]),
+    );
+
+    const durum = await this.queue.kuyruktaMi(
+      isler.map((i) => i.queueJobId).filter((k): k is string => k !== null),
+    );
+
+    let yenidenKuyruklanan = 0;
+    let kuyrukta = 0;
+    let vazgecilen = 0;
+
+    for (const is of isler) {
+      if (is.queueJobId !== null && durum.get(is.queueJobId) === true) {
+        kuyrukta++;
+        continue;
+      }
+
+      const hesap = is.adAccountId ? hesaplar.get(is.adAccountId) : undefined;
+      const sebep = kurtarmaEngeli(is, hesap);
+      if (sebep !== null) {
+        await this.prisma.withTenant(ctx, (tx) =>
+          tx.syncJob.update({
+            where: { id: is.id },
+            data: {
+              status: 'cancelled',
+              finishedAt: new Date(),
+              errorCode: 'kurtarilamadi',
+              errorMessage: sebep,
+            },
+          }),
+        );
+        vazgecilen++;
+        continue;
+      }
+
+      const payload: SyncJobPayload = {
+        syncJobId: is.id.toString(),
+        clientId: is.clientId,
+        platform: hesap!.platform as Platform,
+        jobType: is.jobType,
+        adAccountId: is.adAccountId ?? undefined,
+        entityLevel: is.entityLevel ?? undefined,
+        dateFrom: is.dateFrom?.toISOString().slice(0, 10),
+        dateTo: is.dateTo?.toISOString().slice(0, 10),
+      };
+      const jobId =
+        is.queueJobId ??
+        buildJobId({
+          jobType: is.jobType,
+          adAccountId: is.adAccountId ?? undefined,
+          entityLevel: is.entityLevel ?? undefined,
+          dateFrom: payload.dateFrom,
+          dateTo: payload.dateTo,
+        });
+
+      /*
+       * ÖNCE TABLO, SONRA KUYRUK — `enqueue` ile aynı sıra ve aynı sebep.
+       * Ters sırada worker işi alıp `running` yazabiliyor ve bizim
+       * güncellememiz onu `queued`a geri çekiyor: iş koşuyorken tabloda
+       * kuyrukta görünüyor.
+       */
+      await this.prisma.withTenant(ctx, (tx) =>
+        tx.syncJob.update({
+          where: { id: is.id },
+          data: {
+            status: 'queued',
+            startedAt: null,
+            finishedAt: null,
+            nextRetryAt: null,
+            errorCode: null,
+            errorMessage: null,
+            queueJobId: jobId,
+          },
+        }),
+      );
+
+      try {
+        await this.queue.yenidenKuyrukla(payload, jobId, is.priority);
+        yenidenKuyruklanan++;
+      } catch (err) {
+        // Kuyruğa eklenemeyen iş ÖKSÜZ BIRAKILMIYOR: `queued` kalan satır
+        // hiç koşmaz ve çubuk yine bitmez.
+        await this.prisma.withTenant(ctx, (tx) =>
+          tx.syncJob.update({
+            where: { id: is.id },
+            data: {
+              status: 'failed',
+              finishedAt: new Date(),
+              errorCode: 'enqueue_failed',
+              errorMessage: (err instanceof Error ? err.message : String(err)).slice(0, 1000),
+            },
+          }),
+        );
+        vazgecilen++;
+      }
+    }
+
+    await this.prisma.withTenant(ctx, (tx) =>
+      this.audit.record(tx, ctx, {
+        action: 'sync.bulk_refresh_recover',
+        targetType: 'sync_batch',
+        targetId: id,
+        after: { yenidenKuyruklanan, kuyrukta, vazgecilen },
+        ip: req.ip ?? null,
+        userAgent: req.get('user-agent') ?? null,
+        requestId: req.requestId,
+      }),
+    );
+
+    return {
+      yenidenKuyruklanan,
+      kuyrukta,
+      vazgecilen,
+      kalan: Math.max(0, acikToplam - isler.length),
+    };
   }
 
   private async enabledAccounts(ctx: TenantContext) {
@@ -990,4 +1315,25 @@ function isoDaysAgo(n: number): string {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Bir işi geri koymanın önünde ne var — ya da `null`.
+ *
+ * SEBEP CÜMLESİ SATIRA YAZILIYOR. "Kurtarılamadı" tek başına kullanıcıyı
+ * olmayan bir arızayı aramaya gönderiyor; hesabın izlemeden çıkarılmış
+ * olması tamamen meşru bir sebep ve söylenmesi gerekiyor.
+ */
+function kurtarmaEngeli(
+  is: { jobType: SyncJobType; adAccountId: string | null; dateFrom: Date | null; dateTo: Date | null },
+  hesap: { id: string } | undefined,
+): string | null {
+  if (is.adAccountId === null) return 'İş bir reklam hesabına bağlı değil.';
+  if (!hesap) return 'Reklam hesabı artık izlenmiyor ya da bağlantısı kapalı.';
+  // Metrik işleri tarihsiz koşamıyor: worker `missing_dates` ile düşürüyor
+  // ve o düşüş de kotayı harcıyor. Baştan kapatmak daha ucuz.
+  if (is.jobType !== 'structure' && (is.dateFrom === null || is.dateTo === null)) {
+    return 'İşin tarih aralığı eksik.';
+  }
+  return null;
 }

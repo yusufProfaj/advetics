@@ -234,6 +234,25 @@ buna göre veriliyor:
   görünmüyordu. Artık `active`/`delayed` iş yaşlıysa (30 dk) ya da kullanıcı
   ekranda bekliyorsa (interactive) takılmış sayılıp kaldırılıyor; işler
   upsert olduğu için tekrar koşmak güvenli. `takilmis-is.spec.ts`.
+- **`sync_jobs` SATIRI BİR NİYET KAYDI, KUYRUK İSE GERÇEK — İKİSİ AYRIŞIYOR.**
+  Satır `queued`/`running` yazıyorken BullMQ işi Redis'te olmayabiliyor:
+  worker deploy sırasında öldürülüp iş `stalled` sayılıyor ve
+  `maxStalledCount` (varsayılan 1) aşılınca atılıyor. İşleyici o sırada HİÇ
+  koşmadığı için tabloya tek satır bile yazılmıyor ve kayıt sonsuza kadar
+  açık kalıyor. Toplu tazeleme çubuğu `1259 / 1266`da saatlerce durdu, ekran
+  "İşleniyor" yazdı, hiçbir log yoktu. Tabloya bakan hiçbir kontrol bunu
+  göremez — soru KUYRUĞA sorulmalı (`kuyruktaMi`). İki düzeltme birden
+  gerekti: worker'ın `failed` dinleyicisi nihai düşüşte satırı kapatıyor
+  (`kuyruk_vazgecti`) ve panel duran bir partide kayıp işleri geri koyabiliyor.
+  `getState()` OKURKEN `prioritized` DE BEKLEYEN SAYILIYOR: bu ürün her işi
+  öncelikle ekliyor, yalnızca `waiting` arayan bir kontrol normal bekleyen
+  işlerin TAMAMINI kayıp sayardı. `takilan-parti.spec.ts`.
+- **BİR DURUM ENUM'INDAN İKİSİNİ SAYMAK, KALANLARI SONSUZA KADAR AÇIK
+  BIRAKIYOR.** İlerleme yüzdesi `succeeded` + `failed` sayıyordu; `cancelled`
+  hiç sayılmıyordu ve o durumdaki tek bir satır `bitti`yi kalıcı olarak
+  `false` yapıyordu. Payda parti açılışında sabit, yani eksik kalan her satır
+  çubuğu durduruyor. Bir durum makinesine yeni bir SON durum eklerken onu
+  sayan yerleri de aynı commit'te güncelle.
 - **TEŞHİS EKRANI "SON İŞ" GÖSTERİYORSA ARIZAYI GİZLER.** Daha yeni bir
   metrik işi, kotaya takılmış yapı taramasını görünmez yapıyordu. İş TÜRÜ
   başına satır göster: bir tür hiç görünmüyorsa o iş hiç kuyruğa girmemiş

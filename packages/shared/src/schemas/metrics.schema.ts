@@ -79,6 +79,8 @@ export interface BulkRefreshProgress {
   toplam: number;
   tamamlanan: number;
   dusen: number;
+  /** Kurtarılamadığı için kapatılmış iş sayısı. */
+  iptal: number;
   kosan: number;
   bekleyen: number;
   yuzde: number;
@@ -92,6 +94,43 @@ export interface BulkRefreshProgress {
   asama: string;
   /** Mükerrer engeline takılıp hiç açılmayan iş sayısı. */
   atlanan: number;
+  /**
+   * BİTMEMİŞ İŞLERİN KUYRUKTAKİ GERÇEK HÂLİ.
+   *
+   * `null` = işler ilerliyor, tanıya gerek yok. Tanı yalnızca parti
+   * DURDUĞUNDA hesaplanıyor: her bitmemiş iş için Redis'e ayrı bir soru
+   * demek ve çubuk beş saniyede bir yoklanıyor.
+   *
+   * Tablo bu soruyu cevaplayamıyor: satır `queued` yazıyorken BullMQ işi
+   * silinmiş olabilir ve o satırı hiçbir worker almaz. Canlıda görülen
+   * belirti buydu — 1259/1266'da saatlerce duran bir çubuk.
+   */
+  tani: BulkRefreshTani | null;
+}
+
+/** Duran bir partinin bitmemiş işleri — nerede takıldıkları. */
+export interface BulkRefreshTani {
+  /** Kuyrukta gerçekten duruyor (bekliyor, koşuyor ya da kota gecikmesinde). */
+  kuyrukta: number;
+  /** Tabloda açık ama kuyrukta YOK — kimse koşmayacak, elle geri konmalı. */
+  kayip: number;
+  /** Kota gecikmesindeki işlerin en yakın deneme zamanı (ISO). */
+  enYakinDeneme: string | null;
+  /** Partide en son ne zaman bir iş kıpırdadı (ISO). */
+  sonHareket: string | null;
+  /** Tanı kaç işe bakıldığında kesildi — sessiz kesme yok. */
+  bakilan: number;
+  acikToplam: number;
+}
+
+/** Kurtarma sonucu — ne yapıldığı tek tek söyleniyor. */
+export interface BulkRefreshKurtarma {
+  yenidenKuyruklanan: number;
+  kuyrukta: number;
+  /** Kurtarılamadığı için kapatılan işler (hesabı silinmiş, tarihi eksik). */
+  vazgecilen: number;
+  /** Bu turda BAKILMAYAN açık iş — sessiz kesme yok, düğmeye tekrar basılır. */
+  kalan: number;
 }
 
 /**

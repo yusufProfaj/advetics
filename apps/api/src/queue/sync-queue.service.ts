@@ -408,6 +408,65 @@ export class SyncQueueService implements OnModuleDestroy {
     return counts as Record<string, number>;
   }
 
+  /**
+   * ═══ KUYRUĞA SOR: BU İŞ GERÇEKTEN KOŞACAK MI? ═══
+   *
+   * `sync_jobs` satırı bir NİYET kaydı, bir garanti değil. Satır `queued`
+   * yazıyorken BullMQ işi Redis'te olmayabilir: worker deploy sırasında
+   * öldürülmüş ve iş `maxStalledCount` sınırını aşmış olabilir, Redis
+   * temizlenmiş olabilir, ya da `removeOnComplete` işi silmişken tablo
+   * güncellemesi hiç yapılmamış olabilir.
+   *
+   * O satır sonsuza kadar açık kalıyor, hiçbir worker onu almıyor ve toplu
+   * tazeleme çubuğu %99'da duruyor — canlıda bildirilen belirti tam olarak
+   * buydu (1259/1266, saatlerce değişmedi). Tablodan okunan durum bu soruyu
+   * CEVAPLAYAMAZ; tek doğru kaynak kuyruğun kendisi.
+   *
+   * `prioritized` DE BEKLEYEN SAYILIYOR. BullMQ öncelikli eklenen işleri
+   * `waiting` listesine değil ayrı bir sıralı listeye koyuyor ve `getState()`
+   * onlara `prioritized` diyor; bu ürün her işi öncelikle ekliyor, yani
+   * yalnızca `waiting` arayan bir kontrol NORMAL bekleyen işlerin TAMAMINI
+   * "kayıp" sayardı.
+   */
+  async kuyruktaMi(jobIds: string[]): Promise<Map<string, boolean>> {
+    const out = new Map<string, boolean>();
+    if (!this.queueOrNull) return out;
+    for (const id of jobIds) {
+      const job = await this.queue.getJob(id).catch(() => null);
+      if (!job) {
+        out.set(id, false);
+        continue;
+      }
+      const state = await job.getState().catch(() => 'unknown');
+      out.set(
+        id,
+        state === 'waiting' ||
+          state === 'waiting-children' ||
+          state === 'prioritized' ||
+          state === 'active' ||
+          state === 'delayed',
+      );
+    }
+    return out;
+  }
+
+  /**
+   * VAR OLAN BİR `sync_jobs` SATIRINI YENİDEN KUYRUĞA KOYAR.
+   *
+   * `enqueue`den farkı: YENİ SATIR AÇMIYOR. Toplu tazelemede yüzdenin
+   * paydası partinin açılışında sayılan iş sayısı; kurtarma yeni satır
+   * açsaydı eski satır sonsuza kadar açık kalır ve çubuk yine bitmezdi.
+   * Aynı `syncJobId` ile aynı işi yeniden koşturmak güvenli — yapı ve metrik
+   * yazımlarının hepsi upsert.
+   */
+  async yenidenKuyrukla(payload: SyncJobPayload, jobId: string, priority: number): Promise<void> {
+    const mevcut = await this.queue.getJob(jobId).catch(() => null);
+    // Tamamlanmış/başarısız bir kimlik yeniden kullanılamıyor: BullMQ aynı
+    // kimlikle ikinci bir iş kabul etmiyor ve SESSİZCE hiçbir şey yapmıyor.
+    if (mevcut) await mevcut.remove().catch(() => undefined);
+    await this.queue.add(payload.jobType, payload, { jobId, priority });
+  }
+
   /** Testler ve bakım için — kuyruk nesnesine doğrudan erişim. */
   get raw(): Queue<SyncJobPayload> {
     return this.queue;

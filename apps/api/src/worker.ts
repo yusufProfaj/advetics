@@ -9,6 +9,7 @@ import { CONFIG, type AppConfig } from './config/configuration';
 import { QuotaGuardService } from './queue/quota-guard.service';
 import { SyncQueueService } from './queue/sync-queue.service';
 import { QuotaThrottleError, SyncProcessorService } from './queue/sync-processor.service';
+import { nihaiBasarisizlik } from './queue/nihai-basarisizlik';
 import { SYNC_QUEUE, type SyncJobPayload } from './queue/queues';
 
 /**
@@ -144,8 +145,51 @@ async function bootstrap(): Promise<void> {
     },
   );
 
+  /*
+   * ═══ KUYRUKTAN DÜŞEN İŞ TABLOYA DA YAZILIYOR ═══
+   *
+   * Burası uzun süre yalnızca log yazıyordu ve bu bir boşluktu: `sync_jobs`
+   * satırını normalde işleyicinin kendisi kapatıyor, ama işleyicinin HİÇ
+   * KOŞMADIĞI yollar var. En sık olanı `stalled`: worker deploy sırasında
+   * öldürülüyor, kilit düşüyor, BullMQ işi bir kez geri veriyor ve
+   * `maxStalledCount` aşılınca atıyor. İşleyici çalışmadığı için tabloya tek
+   * satır yazılmıyor ve kayıt sonsuza kadar `running` kalıyor.
+   *
+   * Sonucu canlıda görüldü: toplu tazeleme çubuğu 1259/1266'da saatlerce
+   * durdu, ekranda "İşleniyor" yazıyordu ve hiçbir hata hiçbir yerde yoktu.
+   *
+   * YALNIZCA AÇIK SATIRA DOKUNULUYOR (`updateMany` + durum süzgeci).
+   * İşleyici satırı zaten `succeeded` yazmışsa üstüne yazmak, başarılı bir
+   * işi başarısız göstermek olurdu.
+   */
   worker.on('failed', (job, err) => {
-    logger.error(`İş ${job?.id ?? '?'} nihai olarak başarısız: ${err.message}`);
+    logger.error(`İş ${job?.id ?? '?'} başarısız: ${err.message}`);
+    if (!job) return;
+    const nihai = nihaiBasarisizlik({
+      attemptsMade: job.attemptsMade,
+      opts: job.opts,
+      kalici: err instanceof UnrecoverableError,
+    });
+    if (!nihai) return;
+
+    const syncJobId = job.data?.syncJobId;
+    if (!syncJobId) return;
+    void app
+      .get(PrismaAdminService)
+      .syncJob.updateMany({
+        where: { id: BigInt(syncJobId), status: { in: ['queued', 'running', 'throttled'] } },
+        data: {
+          status: 'failed',
+          finishedAt: new Date(),
+          errorCode: 'kuyruk_vazgecti',
+          errorMessage: err.message.slice(0, 1000),
+        },
+      })
+      .catch((e: unknown) =>
+        logger.error(
+          `İş ${job.id} tabloda kapatılamadı: ${e instanceof Error ? e.message : String(e)}`,
+        ),
+      );
   });
   worker.on('error', (err) => {
     logger.error(`Worker hatası: ${err.message}`);
