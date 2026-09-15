@@ -14,8 +14,8 @@ import { describe, expect, it } from 'vitest';
  *      hiçbir yerden atanamaz hâle gelir.
  *   2. Atama havuz ÖĞESİNİN tipine göre doğru uca gidiyor; reklam hesabını
  *      sosyal profil ucuna göndermek 404 verir.
- *   3. Bağlantı kartı `compact` ile çağrılıyor — değilse eski uzun liste
- *      geri gelir ve ekran yine metrelerce uzar.
+ *   3. Sayfa hesapları SATIR SATIR listelemiyor; atama havuz pop-up'ından
+ *      yapılıyor. Liste geri gelirse ekran yine metrelerce uzar.
  */
 const DIR = __dirname;
 const KART = readFileSync(join(DIR, 'havuz-kartlari.tsx'), 'utf8');
@@ -117,8 +117,47 @@ describe('pop-up sözleşmesi', () => {
   });
 });
 
-describe('bağlantı kartı', () => {
-  it('KRİTİK: `compact` ile çağrılıyor — eski uzun liste geri gelmesin', () => {
-    expect(yorumsuz(SAYFA)).toContain('compact');
+describe('bağlantı ekranı hesapları SATIR SATIR listelemiyor', () => {
+  /*
+   * KARAR AYNI, BEKÇİSİ DEĞİŞTİ. Önce `ConnectionCard`a `compact` bayrağı
+   * geçiliyor mu diye bakıyordu; o kart ve bayrağı artık yok (kanal
+   * kartlarına taşındı). Korunan şey bayrak değil SONUÇ: 284 hesabı olan bir
+   * ajansta hesapların düz liste hâlinde basılması ekranı metrelerce
+   * uzatıyordu ve "hangi hesap boşta" sorusu ancak kaydırarak
+   * cevaplanabiliyordu.
+   *
+   * İDDİA VARLIĞA DEĞİL YOKLUĞA ÇAPALI VE BU RİSKLİ: "şu bileşen yok"
+   * iddiası bileşen adı değişirse boşa düşer. O yüzden altta ikinci bir
+   * iddia var: atama yolu GERÇEKTEN havuz pop-up'ından geçiyor.
+   */
+  it('KRİTİK: sayfa hesap listesi bileşeni çizmiyor', () => {
+    const kod = yorumsuz(SAYFA);
+    expect(kod).not.toContain('AccountPicker');
+    expect(kod).not.toContain('SocialProfileList');
+  });
+
+  it('BOŞA DÜŞME BEKÇİSİ: atama yolu havuz kartlarından geçiyor', () => {
+    // Yukarıdaki "yok" iddiası tek başına, sayfa TAMAMEN boşalsa da geçerdi.
+    expect(yorumsuz(SAYFA)).toContain('<HavuzKartlari');
+  });
+
+  it('KRİTİK: kanal kartı hesapları sayıyor, listelemiyor', () => {
+    /*
+     * Sayılar kayboldu sanılmasın diye: kart "12 reklam hesabı · 8 atanmış,
+     * 6 veri çekiyor" diyor. Üç sayı BİRİ DİĞERİNİN İÇİNDE ve kapsama
+     * ilişkisi cümleden okunuyor; önceki ekran aynı hesapları üç ayrı yerde
+     * üç ayrı kelimeyle ("keşfedildi", "boşta", "izlenen") sayıyordu.
+     */
+    const kanal = yorumsuz(readFileSync(join(DIR, 'kanal-kartlari.tsx'), 'utf8'));
+    expect(kanal).toContain('atanmış,');
+    expect(kanal).toContain('veri çekiyor');
+    /*
+     * İDDİA HESAP LİSTESİNE ÇAPALI, GENEL BİR DESENE DEĞİL. İlk yazdığımda
+     * `.map((a) => (` yazmıştım ve bileşen PLATFORMLARI gezerken aynı desene
+     * uyduğu için kod doğruyken kırmızı verdi: yasaklanan şey döngü değil,
+     * HESAPLARI satır satır basmak.
+     */
+    expect(kanal).not.toContain('adAccounts.map(');
+    expect(kanal).not.toContain('socialProfiles.map(');
   });
 });

@@ -307,6 +307,26 @@ anında geçersiz olur.
 
 ---
 
+## 5e. Platform onayları
+
+Bağlantılar teknik olarak hazır ama platformlar üretim erişimi için onay
+istiyor. Bu süreçler 2-6 hafta sürüyor ve geliştirmeye paralel yürütülmeli.
+
+| Onay | Ne gerekiyor |
+|---|---|
+| **Meta App Review** | `ads_management`, `ads_read`, `business_management`, `pages_read_engagement`, `instagram_manage_insights` izinleri. Business Verification ve ekran kaydı demo zorunlu |
+| **Meta Tech Provider** | Müşteri hesaplarını yönetmek için gerekli |
+| **Google Ads Developer Token** | Basic Access onayı olmadan yalnızca test hesapları görünür |
+
+**BU LİSTE BİR SÜRE PANELDE DURUYORDU** ve oradan buraya taşındı. Platform
+Bağlantıları ekranının en altında, "Platform onayları" başlığıyla, izin
+adları ve `ads_management` gibi kodlarla birlikte basılıyordu. Beyaz etiketli
+bir üründe o ekranı ajansın MÜŞTERİSİ de açıyor: kendi paneline girip
+Advetics'in Meta başvuru durumunu ve eksik izin kodlarını okuyordu. Bilgi
+doğruydu ama muhatabı yanlıştı. Kurulumu yapan kişi için yeri burası.
+
+---
+
 ## 5d. Sistem e-postası (şifre sıfırlama)
 
 "Şifremi unuttum" akışının maili buradan gidiyor. Kullanıcının **kendi** SMTP
