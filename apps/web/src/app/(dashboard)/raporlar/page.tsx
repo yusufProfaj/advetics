@@ -54,7 +54,7 @@ export default async function ReportsPage({
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
         <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Rapor workspace bazında üretiliyor. Üstteki seçiciden bir workspace seçin.
+          Rapor workspace bazında üretiliyor. Üstteki seçiciden bir workspace seç.
         </p>
       </div>
     );
@@ -68,11 +68,24 @@ export default async function ReportsPage({
    * yüklemede, diğer isteklerden önce bekliyordu. Değeri okuyan tek şey
    * "Tüm zamanlar" ön ayarı (`enEskiGunGerekir`).
    */
-  const kapsam = enEskiGunGerekli(first(params.aralik) ?? 'gecen_ay')
-    ? await serverApiFetch<{ earliestDate: string | null }>(
+  let kapsam: { earliestDate: string | null } | null = null;
+  let kapsamHatasi: string | null = null;
+  if (enEskiGunGerekli(first(params.aralik) ?? 'gecen_ay')) {
+    try {
+      kapsam = await serverApiFetch<{ earliestDate: string | null }>(
         `/metrics/coverage?from=2026-01-01&to=2026-01-01`,
-      ).catch(() => null)
-    : null;
+      );
+    } catch (err) {
+      /*
+       * BURADA DA `.catch(() => null)` VARDI VE SESSİZDİ. `null` bu değişken
+       * için İKİ ANLAM taşıyor: "sorulmadı" (ön ayar gerektirmiyor) ve
+       * "soruldu ama düştü". İkisi aynı değere çevrilince "Tüm zamanlar"
+       * seçen kullanıcı, en eski tarih okunamadığı için başka bir aralığa
+       * düşüyor ve sebebini hiçbir yerde göremiyordu.
+       */
+      kapsamHatasi = err instanceof Error ? err.message : 'Bağlantı kurulamadı.';
+    }
+  }
 
   /*
    * ═══ BUGÜN RAPORA GİRMİYOR ═══
@@ -136,7 +149,20 @@ export default async function ReportsPage({
   const sablon = alanlar.templateId ?? alanlar.sablon ?? null;
 
   const qs = new URLSearchParams(raporSorgusu({ clientId, from, to, sablon }));
-  const report = await serverApiFetch<ReportData>(`/reports/preview?${qs}`).catch(() => null);
+  /*
+   * HATA YUTULMUYOR. `.catch(() => null)` bu depoda adı konmuş bir yasak ve
+   * tam burada duruyordu: 401 (oturum düştü), 403 (yetki yok), 500 (sorgu
+   * hatası) ve "API kapalı" hâllerinin hepsi aynı cümleye çevriliyordu.
+   * Kullanıcı hangisi olduğunu anlayamıyor, sunucu log'una bakmadan teşhis
+   * edilemiyordu.
+   */
+  let report: ReportData | null = null;
+  let raporHatasi: string | null = null;
+  try {
+    report = await serverApiFetch<ReportData>(`/reports/preview?${qs}`);
+  } catch (err) {
+    raporHatasi = err instanceof Error ? err.message : 'Bağlantı kurulamadı.';
+  }
 
   return (
     <div className="space-y-5">
@@ -144,7 +170,7 @@ export default async function ReportsPage({
         <div>
           <h1 className="text-xl font-semibold text-ink">Raporlar</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
-            {formatDayLong(from)} — {formatDayLong(to)}
+            {formatDayLong(from)} - {formatDayLong(to)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -186,18 +212,53 @@ export default async function ReportsPage({
       */}
       {canShare && <RaporSekmeleri aktif={sekme} />}
 
-      {sablonHatasi !== null && (
-        <div className="rounded-lg border border-warn/30 bg-warn-soft px-3.5 py-2.5 text-sm text-warn-strong">
-          Şablon listesi alınamadı ({sablonHatasi}). Rapor varsayılan şablonla
-          üretiliyor; kayıtlı şablonların bu listede görünmüyor.
-        </div>
-      )}
+
+
+      {/*
+        ═══ UYARILAR TEK KUTUDA ═══
+        Üçü ayrı ayrı tam genişlikte renkli kutulardı ve aynı anda
+        çıkabiliyorlardı (şablon listesi düştü · dönem bitmedi · harcama yok).
+        Üstelik ikisi belgenin ALTINDA, biri üstünde duruyordu: aynı türden
+        bilgi sayfanın iki ucuna dağılmıştı. Hepsi tek kutuda ve belgeden
+        ÖNCE, çünkü hepsi belgeyi nasıl okuyacağını söylüyor.
+      */}
+      <Uyarilar
+        satirlar={[
+          kapsamHatasi !== null ? (
+            <>
+              En eski veri tarihi okunamadı, &ldquo;Tüm zamanlar&rdquo; seçimi varsayılan
+              aralığa düştü.
+            </>
+          ) : null,
+          sablonHatasi !== null ? (
+            <>
+              Şablon listesi alınamadı. Rapor varsayılan şablonla üretiliyor, kayıtlı
+              şablonların listede görünmüyor.
+            </>
+          ) : null,
+          devamEden ? (
+            <>
+              Seçilen dönem <strong>henüz bitmedi</strong>. Rapor {formatDayLong(to)} tarihine
+              kadarki tamamlanmış günleri kapsıyor.
+            </>
+          ) : null,
+          report !== null && report.platforms.length === 0 ? (
+            <>Bu dönemde harcama kaydı yok, rapor boş görünecek.</>
+          ) : null,
+        ]}
+      />
 
       {sekme === 'faturalar' ? (
         <FaturaSekmesi clientId={clientId} clientName={musteriAdi(session, clientId)} />
       ) : report === null ? (
-        <div className="rounded-lg border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-sm text-danger-strong">
-          Rapor oluşturulamadı. API çalışıyor mu?
+        <div
+          role="alert"
+          className="rounded-lg border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-sm text-danger-strong"
+        >
+          {/* "API çalışıyor mu?" müşterinin okuduğu ekranda hem anlamsız hem
+              ürkütücü. Sunucunun kendi cümlesi teşhis için yeterli. */}
+          <strong>Rapor oluşturulamadı.</strong>
+          {raporHatasi && <span className="ml-1">{raporHatasi}</span>}
         </div>
       ) : (
         <>
@@ -241,20 +302,6 @@ export default async function ReportsPage({
             <Faturalar clientId={clientId} odakDonemler={kapsananDonemler(from, to)} canWrite />
           )}
 
-          {devamEden && (
-            <div className="rounded-lg border border-info/30 bg-info-soft px-3.5 py-2.5 text-sm text-info-strong">
-              Seçilen dönem <strong>henüz bitmedi</strong>. Rapor {formatDayLong(to)} tarihine
-              kadar olan tamamlanmış günleri kapsıyor; bugünün verisi gün içinde değiştiği için
-              dâhil edilmedi — panelde de aynı kural geçerli.
-            </div>
-          )}
-
-          {report.platforms.length === 0 && (
-            <div className="rounded-lg border border-warn/30 bg-warn-soft px-3.5 py-2.5 text-sm text-warn-strong">
-              Bu dönemde harcama kaydı yok — rapor boş görünecek. Senkronizasyonun
-              bu tarihleri kapsadığından emin olun.
-            </div>
-          )}
 
           {/* Önizleme müşterinin göreceğinin BİREBİR aynısı: aynı bileşen,
               aynı veri. Ayrı bir "önizleme görünümü" yazmak, gönderilen
@@ -287,12 +334,37 @@ function FaturaSekmesi({ clientId, clientName }: { clientId: string; clientName:
         <p className="mt-1">
           Google’ın fatura API’si yalnızca <strong>aylık faturalama</strong> (kredi hattı) olan
           hesaplarda çalışıyor; kartla ödeyen hesaplarda çağrı reddediliyor. Meta’da ise fatura
-          PDF’i döndüren bir uç bulunmuyor — yalnızca fatura kaydı okunabiliyor. Bu yüzden belge
+          PDF’i döndüren bir uç bulunmuyor, yalnızca fatura kaydı okunabiliyor. Bu yüzden belge
           platformdan indirilip buraya yükleniyor.
         </p>
       </div>
 
       <Faturalar clientId={clientId} canWrite baslikGoster={false} />
+    </div>
+  );
+}
+
+/**
+ * Uyarı listesi — hepsi TEK kutuda.
+ *
+ * `null` satırlar eleniyor ve hiç satır kalmazsa kutu da çizilmiyor: boş bir
+ * çerçeve, kullanıcıya okunacak bir şey varmış gibi görünüyor.
+ */
+function Uyarilar({ satirlar }: { satirlar: Array<React.ReactNode | null> }) {
+  const dolu = satirlar.filter((x): x is React.ReactNode => x !== null && x !== false);
+  if (dolu.length === 0) return null;
+  return (
+    <div
+      role="status"
+      className="rounded-lg border border-warn/30 bg-warn-soft text-sm text-warn-strong"
+    >
+      <ul className="divide-y divide-warn/20">
+        {dolu.map((satir, i) => (
+          <li key={i} className="px-3.5 py-2">
+            {satir}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

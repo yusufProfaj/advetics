@@ -222,7 +222,7 @@ export function MailGonderModal({
          * gösterirdi — ve bu projede en pahalı hata türü tam olarak o.
          */
         <p className="rounded border border-warn/40 bg-warn/5 px-3 py-2 text-sm text-ink">
-          <strong>{reddedilen.length} adres reddedildi</strong> — bu kişilere ULAŞMADI:{' '}
+          <strong>{reddedilen.length} adres reddedildi</strong>, bu kişilere ulaşmadı:{' '}
           {reddedilen.map((r) => `${r.adres} (${r.sebep})`).join(' · ')}
         </p>
       )}

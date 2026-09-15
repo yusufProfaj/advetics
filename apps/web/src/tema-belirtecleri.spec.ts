@@ -16,16 +16,26 @@ import { describe, expect, it } from 'vitest';
  * kendiliğinden fark edilmesi en zor olanı. Bu tarama yenisinin eklenmesini
  * engelliyor.
  *
- * ┌─ TEK İSTİSNA: RAPOR BELGESİ ───────────────────────────────────────────┐
- * │ `components/report/` PDF'in ekrandaki AYNASI ve o belge BEYAZ bir       │
- * │ kâğıt: beyaz zemin, ince gri çizgiler. CLAUDE.md PDF'in referansının    │
- * │ `report-document.tsx` olduğunu söylüyor. Karanlık temada dönmesi,       │
- * │ ekranla basılan belgenin AYRIŞMASI demek olurdu — düzeltmek değil,      │
- * │ yeni bir hata üretmek.                                                  │
+ * ┌─ TEK İSTİSNA: RAPOR BELGESİNİN KENDİSİ ────────────────────────────────┐
+ * │ PDF'in ekrandaki AYNASI beyaz bir kâğıt: beyaz zemin, ince gri          │
+ * │ çizgiler. CLAUDE.md PDF'in referansının `report-document.tsx` olduğunu  │
+ * │ söylüyor. Karanlık temada dönmesi, ekranla basılan belgenin AYRIŞMASI   │
+ * │ demek olurdu; düzeltmek değil, yeni bir hata üretmek.                   │
+ * │                                                                         │
+ * │ İSTİSNA ÖNCE BÜTÜN `components/report/` KLASÖRÜYDÜ VE FAZLA GENİŞTİ.    │
+ * │ O klasörde belge DIŞINDA panel arayüzü de duruyor: paylaşım menüsü,     │
+ * │ fatura kutusu, şablon seçici, yazdırma düğmesi. Onlar panelin bir       │
+ * │ parçası ve karanlık temada dönmeleri gerekiyordu; istisnanın altında    │
+ * │ kaldıkları için ham palet taşımaya devam ediyorlardı. Liste artık       │
+ * │ DOSYA DOSYA: belgeyi kuran üçü.                                          │
  * └─────────────────────────────────────────────────────────────────────────┘
  */
 const KOK = join(__dirname);
-const ISTISNA = ['components/report/'];
+const ISTISNA = [
+  'components/report/report-document.tsx',
+  'components/report/kitle-ozeti.tsx',
+  'components/report/conversion-chart.tsx',
+];
 
 /** Tailwind'in ham renk ailesi + tonu (`bg-amber-50` gibi). */
 const HAM_PALET =
@@ -62,16 +72,35 @@ describe('tema belirteçleri', () => {
     expect(bulunan).toEqual([]);
   });
 
-  it('istisna GERÇEKTEN kullanılıyor — liste bayat değil', () => {
+  it('istisnadaki HER dosya gerçekten var ve gerçekten ham palet taşıyor', () => {
     /*
-     * İstisna listesi bir gün gereksizleşirse (rapor belgesi de
-     * belirteçlere geçerse) bu test düşer ve liste temizlenir. Bayat bir
-     * istisna, bir gün başka bir dosyayı sessizce kapsam dışında bırakır.
+     * İki yönlü bekçi. Bir dosya silinir ya da belirteçlere geçerse istisna
+     * BAYAT kalır ve o yol bir gün başka bir dosyayı sessizce kapsam dışında
+     * bırakır. Liste dosya dosya olduğu için her satır ayrı doğrulanıyor.
      */
-    const rapor = TARANAN.filter((f) => f.includes('components/report/'));
-    expect(rapor.length).toBeGreaterThan(0);
-    const hepsi = rapor.map((f) => readFileSync(f, 'utf8')).join('\n');
-    expect(hepsi.match(HAM_PALET)?.length ?? 0).toBeGreaterThan(0);
+    for (const yol of ISTISNA) {
+      const dosya = TARANAN.find((f) => f.includes(yol));
+      expect(dosya, `${yol} artık yok — istisna listesi bayat`).toBeDefined();
+      const kod = readFileSync(dosya!, 'utf8');
+      expect(
+        kod.match(HAM_PALET)?.length ?? 0,
+        `${yol} artık ham palet taşımıyor — istisnadan çıkarılabilir`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it('KRİTİK: rapor klasöründeki PANEL arayüzü istisnada DEĞİL', () => {
+    /*
+     * Paylaşım menüsü, fatura kutusu ve şablon seçici belge değil panel.
+     * Klasörün tamamını dışarıda bırakmak onları da kapsam dışına almıştı ve
+     * karanlık temada bozuk kalmışlardı.
+     */
+    for (const chrome of ['share-controls.tsx', 'faturalar.tsx', 'sablon-secici.tsx']) {
+      expect(
+        ISTISNA.some((i) => i.includes(chrome)),
+        `${chrome} istisnaya girmiş — o bir panel bileşeni`,
+      ).toBe(false);
+    }
   });
 });
 

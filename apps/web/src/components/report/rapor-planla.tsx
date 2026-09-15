@@ -288,7 +288,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                             */}
                             {!p.senderReady && (
                               <p className="mt-1 rounded border border-warn/40 bg-warn/5 px-2 py-1 text-[11px] text-ink">
-                                {p.createdByEmail} adresinin e-posta kimliği doğrulanmamış —
+                                {p.createdByEmail} adresinin e-posta kimliği doğrulanmamış.
                                 bu plan çalışmayacak.
                               </p>
                             )}
@@ -301,7 +301,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                                 Son tur: {PLAN_SONUC_LABELS[p.lastStatus]}
                                 {p.lastRunAt ? ` · ${tarihMetni(p.lastRunAt)}` : ''}
                                 {p.lastSentTo ? ` · ${p.lastSentTo}` : ''}
-                                {p.lastError ? ` — ${p.lastError}` : ''}
+                                {p.lastError ? `: ${p.lastError}` : ''}
                               </p>
                             )}
                           </div>
@@ -393,7 +393,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                         kısıtla ... ve kısıtı kullanıcıya SÖYLE."
                       */}
                       <span className="mt-1 block text-[11px] text-ink-muted">
-                        28’den büyük günler her ayda bulunmuyor — Şubat’ta rapor
+                        28’den büyük günler her ayda bulunmuyor. Şubat’ta rapor
                         atlanırdı.
                       </span>
                     </label>
@@ -443,7 +443,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                         kuralı iki yerde yazılsaydı plan başka bir listeye
                         gönderirdi ve farkı yalnızca alıcı görürdü. */}
                     <AliciListesiAlani
-                      etiket="Alıcılar — boş bırakılırsa workspace’in kayıtlı adresleri kullanılır"
+                      etiket="Alıcılar (boş bırakılırsa workspace’in kayıtlı adresleri kullanılır)"
                       degerler={alicilar}
                       onChange={setAlicilar}
                     />
@@ -476,7 +476,7 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                   gönderilecek.
                 </p>
                 <p className="mt-1 text-[11px] text-ink-muted">
-                  Dönemde hiç harcama yoksa mail gönderilmez — sıfırlarla dolu bir rapor
+                  Dönemde hiç harcama yoksa mail gönderilmez. Sıfırlarla dolu bir rapor
                   müşteriye “sistem bozulmuş” diye okunuyor. Atlanan tur bu listede
                   sebebiyle görünür.
                 </p>

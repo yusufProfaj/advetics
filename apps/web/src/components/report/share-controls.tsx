@@ -145,7 +145,7 @@ export function ShareControls({
         <div>
           <h2 className="text-sm font-semibold text-ink">Workspace’le paylaş</h2>
           <p className="mt-0.5 text-xs text-ink-muted">
-            Oturum gerektirmeyen gizli bağlantı. Tarih aralığı sabitlenir — workspace
+            Oturum gerektirmeyen gizli bağlantı. Tarih aralığı sabitlenir, workspace
             sonradan açtığında aynı sayıları görür.
           </p>
         </div>
@@ -227,8 +227,8 @@ export function ShareControls({
                 paylaşması demekti; PDF'te düzelttiğimiz hatanın aynısı.
               */}
               {sablon !== null && kayitliSablonId === null && (
-                <p className="mx-1 mt-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900">
-                  Hazır şablonlar bağlantıya taşınmıyor — workspace, kayıtlı
+                <p className="mx-1 mt-1 rounded-lg bg-warn-soft px-2.5 py-1.5 text-[11px] leading-snug text-warn-strong">
+                  Hazır şablonlar bağlantıya taşınmıyor. Workspace, kayıtlı
                   şablonu (yoksa varsayılanı) görecek. Bu görünümü paylaşmak
                   için önce şablon olarak kaydet.
                 </p>
@@ -279,25 +279,25 @@ export function ShareControls({
       </div>
 
       {error && (
-        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900">{error}</p>
+        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong">{error}</p>
       )}
 
       {link && (
-        <div className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3">
-          <p className="text-xs font-semibold text-emerald-900">
-            Bağlantı hazır — bu bağlantı bir daha gösterilmeyecek, şimdi kopyalayın.
+        <div className="mt-3 rounded-lg border border-ok/30 bg-ok-soft p-3">
+          <p className="text-xs font-semibold text-ok-strong">
+            Bağlantı hazır. Bir daha gösterilmeyecek, şimdi kopyala.
           </p>
           <div className="mt-2 flex gap-2">
             <input
               readOnly
               value={link}
               onFocus={(e) => e.currentTarget.select()}
-              className="min-w-0 flex-1 rounded-md border border-emerald-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-800"
+              className="min-w-0 flex-1 rounded-md border border-ok/30 bg-surface px-2 py-1.5 font-mono text-xs text-ink"
             />
             <button
               type="button"
               onClick={copy}
-              className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white"
+              className="rounded-md bg-ok px-3 py-1.5 text-xs font-medium text-white"
             >
               {copied ? 'Kopyalandı' : 'Kopyala'}
             </button>

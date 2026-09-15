@@ -55,10 +55,22 @@ describe('rapor tarih aralığı', () => {
     expect(satir).not.toContain('secilen.');
   });
 
-  it('kırpma KULLANICIYA söyleniyor', () => {
-    // Sessizce kırpmak, "Bu ay" seçen kullanıcının eksik bir raporu tam
-    // sanması demek olurdu.
-    expect(govde()).toContain('{devamEden && (');
+  it('KRİTİK: kırpma KULLANICIYA söyleniyor', () => {
+    /*
+     * Sessizce kırpmak, "Bu ay" seçen kullanıcının eksik bir raporu tam
+     * sanması demek olurdu.
+     *
+     * UYARI ARTIK TEK KUTUDA (üç uyarı ayrı ayrı renkli kutulardı ve ikisi
+     * belgenin altında, biri üstünde duruyordu). İddia o yüzden koşulun
+     * kendisine değil, koşulun UYARI LİSTESİNE girdiğine bakıyor: satır
+     * `devamEden ?` ile başlayıp kırpılan tarihi yazıyor.
+     */
+    const g = govde();
+    const i = g.indexOf('devamEden ? (');
+    expect(i, 'kırpma uyarısı yok').toBeGreaterThan(-1);
+    const dilim = g.slice(i, g.indexOf(') : null', i));
+    expect(dilim).toContain('henüz bitmedi');
+    expect(dilim).toContain('formatDayLong(to)');
   });
 
   it('seçicide KARŞILAŞTIRMA kapalı — rapor delta göstermiyor', () => {

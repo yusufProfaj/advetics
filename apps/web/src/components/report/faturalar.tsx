@@ -121,7 +121,7 @@ export function Faturalar({
     const sigmaz = dosya.size > MAIL_EK_TOPLAM_SINIRI * 0.85;
     setUyari(
       sigmaz
-        ? `Bu dosya ${Math.round(dosya.size / 1024 / 1024)} MB — rapor PDF'iyle birlikte ` +
+        ? `Bu dosya ${Math.round(dosya.size / 1024 / 1024)} MB. Rapor PDF'iyle birlikte ` +
             'mail sınırını aşabilir ve maile eklenmeyebilir. Yüklendikten sonra panelden ' +
             'indirip elle iletebilirsin.'
         : null,
@@ -281,7 +281,7 @@ export function Faturalar({
                 Belirtisi "mail gitti ama müşteriye ulaşmadı" oluyor — bu
                 projenin en pahalı hata türü. Söylemek tek çare.
               */}
-              <strong>Parola korumalı arşiv yükleme</strong> — mail sunucuları onları
+              <strong>Parola korumalı arşiv yükleme</strong>: mail sunucuları onları
               engelliyor ve mail sessizce ulaşmıyor.
             </span>
           </div>

@@ -97,7 +97,7 @@ export function MailGovdeEditoru({
     <div className="min-w-0">
       <div className="flex items-center justify-between">
         <span className="text-xs text-ink-muted">
-          Mail metni — sayılar rapordan geldi, değerlendirme kısmını sen yaz
+          Mail metni. Sayılar rapordan geldi, değerlendirme kısmını sen yaz
         </span>
         {/*
           KOD MODU DURUYOR ama VARSAYILAN DEĞİL. Bir tabloyu elle düzeltmek
@@ -153,7 +153,7 @@ export function MailGovdeEditoru({
             if (ham.trim() === '') {
               setUyari(
                 e.clipboardData.files.length > 0
-                  ? 'Görsel yapıştırılamıyor — mail gövdesine görsel eklenmiyor.'
+                  ? 'Görsel yapıştırılamıyor, mail gövdesine görsel eklenmiyor.'
                   : 'Yapıştırılacak metin bulunamadı.',
               );
               return;

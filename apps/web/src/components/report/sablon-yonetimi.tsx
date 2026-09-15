@@ -275,7 +275,7 @@ export function SablonModal({
               Rapor bu sırayla üretiliyor. Sırayı değiştirmek için bölümü{' '}
               <strong>sürükle</strong>; klavyeyle taşımak için satıra gel ve{' '}
               <strong>↑ / ↓</strong> tuşlarını kullan. Hiç bölüm bırakmazsan
-              kaydedilemez — boş bir rapor müşteriye gönderilecek bir belge değil.
+              kaydedilemez. Boş bir rapor müşteriye gönderilecek bir belge değil.
             </p>
             {/*
               LİSTE KENDİ İÇİNDE KAYDIRILIYOR. Bölüm sayısı şablona göre
@@ -288,7 +288,7 @@ export function SablonModal({
                   key={s}
                   draggable
                   tabIndex={0}
-                  aria-label={`${SECTION_LABELS[s]} — sıra ${i + 1} / ${secili.length}. Taşımak için sürükleyin ya da ok tuşlarını kullanın.`}
+                  aria-label={`${SECTION_LABELS[s]}, sıra ${i + 1} / ${secili.length}. Taşımak için sürükleyin ya da ok tuşlarını kullanın.`}
                   onDragStart={(e) => {
                     setSuruklenen(i);
                     /*
@@ -476,10 +476,10 @@ function SutunSecici({
 
   return (
     <div className="mt-3 rounded-lg border border-line bg-surface-muted p-3">
-      <p className="text-xs font-medium">{SECTION_LABELS[bolum]} — sütunlar</p>
+      <p className="text-xs font-medium">{SECTION_LABELS[bolum]} sütunları</p>
       {secili.length === 0 ? (
         <p className="mt-1 text-[11px] text-ink-muted">
-          Seçim yok — varsayılan sütunlar kullanılacak.
+          Seçim yok, varsayılan sütunlar kullanılacak.
         </p>
       ) : (
         <ul className="mt-1.5 flex flex-wrap gap-1.5">
@@ -537,7 +537,7 @@ function SutunSecici({
 
       {kovaUyarisi && (
         <p className="mt-1.5 rounded border border-warn/40 bg-warn/5 px-2 py-1 text-[11px]">
-          Google Ads form ve mesaj dökümü <strong>vermiyor</strong> — bu sütunlar
+          Google Ads form ve mesaj dökümü <strong>vermiyor</strong>. Bu sütunlar
           raporda her zaman 0 görünecek.
         </p>
       )}
