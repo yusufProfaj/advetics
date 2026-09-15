@@ -112,8 +112,11 @@ export function AdCard({ ad, currency }: { ad: AdExplorerRow; currency: string |
           <AramaReklamiOnizleme
             baslik={ad.creative?.headline ?? null}
             aciklama={ad.creative?.description ?? ad.creative?.primaryText ?? null}
-            gorunenAdres={ad.creative?.displayUrl ?? ad.creative?.destinationUrl ?? null}
-            className="w-full shrink-0 sm:w-56"
+            gorunenAdres={ad.creative?.displayUrl ?? null}
+            hedefAdres={ad.creative?.destinationUrl ?? null}
+            /* Gerçek arama sonucu geniş; 224 pikselde başlık iki satıra
+               bölünüp kırılıyordu ve taklit ettiğimiz görünüm bozuluyordu. */
+            className="w-full shrink-0 sm:w-72"
           />
         ) : (
         <PreviewLink

@@ -64,6 +64,50 @@ describe('AdCard', () => {
     expect(g).toContain('{aramaReklami ? (');
   });
 
+  it('KRİTİK: önizleme GERÇEK arama sonucunun yapısını taşıyor', () => {
+    /*
+     * Kullanıcının isteği: "gerçek reklamdaki gibi görünsün." İlk sürümde
+     * yalnızca rozet, adres ve başlık vardı; eksik olan sıra ve biçimdi.
+     * Gerçek sonuçta: sponsorlu etiketi, site simgesi + alan adı, kırıntı
+     * yolu, MAVİ başlık, açıklama.
+     */
+    const onizleme = readFileSync(
+      join(__dirname, 'arama-reklami-onizleme.tsx'),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(onizleme).toContain('Ücretli sponsorlu reklam');
+    expect(onizleme).toContain('<DunyaSimgesi />');
+    expect(onizleme).toContain('adres.kirintiYolu');
+    expect(onizleme).toContain('text-arama-baslik');
+  });
+
+  it('KRİTİK: site simgesi UZAKTAN çekilmiyor', () => {
+    /*
+     * Gerçek sonuçta orada sitenin favicon'u duruyor. Onu getirmek, panelin
+     * VERİTABANINDAN gelen bir adrese istek atması demek ve bu depoda dışarı
+     * giden her istek beyaz listeyle kapalı (CLAUDE.md).
+     */
+    /*
+     * YORUMSUZ KAYNAKTA aranıyor: kuralı ANLATAN yorumun kendisi "favicon"
+     * kelimesini taşıyor ve ham kaynakta iddia KOD DOĞRUYKEN kırmızı
+     * veriyordu. CLAUDE.md: iddia yoruma değil koda çapalanır.
+     */
+    const onizleme = readFileSync(join(__dirname, 'arama-reklami-onizleme.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//'))
+      .join('\n');
+    expect(onizleme).not.toContain('<img');
+    expect(onizleme).not.toContain('favicon');
+  });
+
+  it('KRİTİK: kart hedef adresi de GEÇİRİYOR — kırıntı yolu ondan türüyor', () => {
+    // `displayUrl` çoğu zaman yalnızca alan adı; yol `destinationUrl`de.
+    // Geçirilmezse önizleme tek satırlık bir adres gösterir ve gerçek
+    // sonuçtan ayrışır.
+    expect(govde()).toContain('hedefAdres={ad.creative?.destinationUrl ?? null}');
+  });
+
   it('KRİTİK: açıklama için YEDEK alan okunuyor', () => {
     /*
      * Google, RSA açıklamalarının ilkini `primaryText`e yazıyor ve

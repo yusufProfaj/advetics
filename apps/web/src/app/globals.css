@@ -54,6 +54,19 @@
   --info-soft: #f0f9ff;
   --info-strong: #0369a1;
 
+  /*
+   * ═══ ARAMA SONUCU BAŞLIK MAVİSİ ═══
+   *
+   * Reklam Keşfi'ndeki arama reklamı önizlemesi Google sonucunun görünümünü
+   * TAKLİT ediyor ve oradaki başlık mavi. Bu MARKA rengi DEĞİL: beyaz
+   * etiketli üründe marka rengi her müşteride farklı, ama Google'ın arama
+   * sonucu herkeste aynı görünüyor ve önizlemenin işi o görünümü
+   * göstermek. Marka rengini kullanmak, müşterinin reklamını olduğundan
+   * başka gösterirdi.
+   */
+  --arama-baslik: #1a0dab;
+  --arama-adres: #4d5156;
+
   --radius: 0.75rem;
   --shadow-card: 0 1px 2px rgb(20 22 28 / 0.04), 0 1px 3px rgb(20 22 28 / 0.06);
   --shadow-pop: 0 4px 6px -1px rgb(20 22 28 / 0.08), 0 10px 24px -6px rgb(20 22 28 / 0.14);
@@ -80,6 +93,9 @@
     --danger-strong: #fca5a5;
     --info-soft: #0b2434;
     --info-strong: #7dd3fc;
+    /* Google'ın kendi karanlık tema karşılıkları. */
+    --arama-baslik: #8ab4f8;
+    --arama-adres: #bdc1c6;
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-pop: 0 10px 24px -6px rgb(0 0 0 / 0.6);
   }
@@ -112,6 +128,8 @@
   --color-warn-strong: var(--warn-strong);
   --color-danger-soft: var(--danger-soft);
   --color-danger-strong: var(--danger-strong);
+  --color-arama-baslik: var(--arama-baslik);
+  --color-arama-adres: var(--arama-adres);
   --color-info-soft: var(--info-soft);
   --color-info-strong: var(--info-strong);
   --font-sans: var(--brand-font);
