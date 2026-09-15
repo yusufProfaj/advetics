@@ -111,8 +111,15 @@ export function RunBoostRuleButton({ ruleId }: { ruleId: string }) {
           .join(' · '),
       );
       router.refresh();
-    } catch {
-      setResult('Kural çalıştırılamadı.');
+    } catch (err) {
+      /*
+       * SEBEP YUTULMUYOR. "Kural çalıştırılamadı" cümlesi kullanıcıyı sebebi
+       * kendi kurulumunda aramaya gönderiyordu; sunucu çoğu zaman doğrudan
+       * söylüyor (kuyruk kapalı, hesap atanmamış, tavan dolu).
+       */
+      setResult(
+        err instanceof ApiRequestError ? err.message : 'Kural çalıştırılamadı.',
+      );
     } finally {
       setBusy(false);
     }

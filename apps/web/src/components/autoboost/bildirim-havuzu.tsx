@@ -58,7 +58,7 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
         setHata(
           err instanceof ApiRequestError
             ? err.message
-            : 'Bildirim havuzu yüklenemedi. Sayfayı yenilemeyi dene.',
+            : 'Yeni içerikler yüklenemedi. Sayfayı yenilemeyi dene.',
         ),
       );
   }, [clientId]);
@@ -81,15 +81,15 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
 
   if (hata) {
     return (
-      <div className="rounded-xl border border-danger/40 bg-surface p-4">
-        <p className="text-sm font-semibold text-danger">Bildirim havuzu açılamadı</p>
+      <div role="alert" className="rounded-xl border border-danger/40 bg-surface p-4">
+        <p className="text-sm font-semibold text-danger">Yeni içerikler listesi açılamadı</p>
         <p className="mt-1 text-xs text-ink-muted">{hata}</p>
       </div>
     );
   }
 
   if (!liste) {
-    return <p className="text-xs text-ink-muted">Bildirim havuzu yükleniyor…</p>;
+    return <p className="text-xs text-ink-muted">Yeni içerikler yükleniyor…</p>;
   }
 
   const bekleyen = liste.items.filter((i) => i.status === 'pending');
@@ -97,8 +97,17 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
   return (
     <section className="min-w-0 space-y-3">
       <header className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
+        {/*
+          BAŞLIK "BİLDİRİM HAVUZU" DEĞİL.
+
+          "Havuz" bizim iç terimimiz; kullanıcının gördüğü şey yeni
+          yayınlanan içerikler. Ayrıca sayfada İKİ onay kuyruğu var ve eski
+          hâlde ikisi de yalnızca "onay bekliyor" diyordu — bir gönderinin
+          neden burada olup diğerinde olmadığı hiçbir yerde yazmıyordu.
+          Buradakiler YENİ, alttakiler kuralın performansa bakıp seçtikleri.
+        */}
         <h2 className="text-sm font-semibold text-ink">
-          Bildirim Havuzu
+          Yeni içerikler
           {bekleyen.length > 0 && (
             <span className="ml-2 rounded-full bg-brand px-2 py-0.5 text-xs font-semibold text-white">
               {bekleyen.length}
@@ -149,8 +158,8 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
         .filter((h) => h.ok && !h.signatureLocked && h.lastNotificationAt)
         .map((h) => (
           <p key={h.socialProfileId} className="text-[11px] text-ink-muted">
-            {h.channelName}: bildirimler imzasız geliyor — koruma yalnızca
-            bildirim adresinin gizli kalmasına dayanıyor.
+            {h.channelName}: bildirimler imzasız geliyor. Koruma yalnızca bildirim
+            adresinin gizli kalmasına dayanıyor.
           </p>
         ))}
 

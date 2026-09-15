@@ -97,6 +97,98 @@ describe('KALDIRILAN YÜZEYLER', () => {
   });
 });
 
+describe('EKRANIN ADI VE BÖLÜM BAŞLIKLARI', () => {
+  it('KRİTİK: sayfa kenar çubuğuyla AYNI adı taşıyor', () => {
+    /*
+     * Menüde "Akıllı Boost" yazıyor, sayfa "Auto-Boost" açılıyordu. Aynı
+     * şeyin iki adı olması kullanıcıya yanlış sayfaya düştüğünü
+     * düşündürüyor; üstelik "Auto-Boost" Türkçe de değil.
+     */
+    expect(SAYFA).toContain('Akıllı Boost');
+    expect(SAYFA).not.toContain('>Auto-Boost<');
+    expect(SAYFA).toContain("title: 'Akıllı Boost · Advetics'");
+  });
+
+  it('KRİTİK: iki onay kuyruğunun başlığı KAYNAĞINI söylüyor', () => {
+    /*
+     * Sayfada iki ayrı onay kuyruğu var ve eskiden ikisi de yalnızca "onay
+     * bekliyor" diyordu: üstteki kartlar YENİ yayınlanan içerikler,
+     * alttakiler kuralın performansa bakıp seçtikleri. Aynı cümle ikisini
+     * de anlattığı için kullanıcı bir gönderinin neden birinde olup
+     * diğerinde olmadığını okuyamıyordu.
+     */
+    expect(HAVUZ).toContain('Yeni içerikler');
+    expect(HAVUZ).not.toContain('Bildirim Havuzu');
+    expect(SAYFA).toContain('Kuralın seçtikleri');
+    expect(SAYFA).not.toContain('gönderi onay bekliyor');
+  });
+
+  it('KRİTİK: değerlendirme sıklığı KURALIN yanında, sayfa başlığında değil', () => {
+    /*
+     * "günde iki kez değerlendiriliyor" sayfa başlığındaydı ve bütün ekran
+     * için geçerli gibi okunuyordu. Yeni içerik kartları yayınlandığı anda
+     * düşüyor; yalnızca kural motoru günde iki kez koşuyor. Kartını bekleyen
+     * kullanıcıya akşamı beklettiren bir cümleydi.
+     */
+    const kurallar = SAYFA.indexOf('Boost kuralları');
+    const siklik = SAYFA.indexOf("08:30 ve 20:30");
+    expect(kurallar, 'kural başlığı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    expect(siklik).toBeGreaterThan(kurallar);
+    expect(SAYFA).not.toContain('günde iki kez değerlendiriliyor');
+  });
+});
+
+describe('SESSİZ HATA YOK', () => {
+  it('KRİTİK: kural listesi okunamazsa SÖYLENİYOR', () => {
+    /*
+     * `.catch(() => null)` ile alınan kural listesi düştüğünde bölüm hiç
+     * çizilmiyordu: kuralı olan kullanıcı, kuralı SİLİNMİŞ gibi bir ekran
+     * görüyordu ve hiçbir yerde tek bir kelime yazmıyordu.
+     */
+    expect(SAYFA).toContain('allSettled');
+    expect(SAYFA).not.toContain('.catch(() => null)');
+    expect(SAYFA).toContain('Kurallar okunamadı');
+  });
+
+  it('KRİTİK: sunucunun kendi cümlesi ekranda', () => {
+    // "Veri alınamadı" kullanıcıyı sebebi kendi kurulumunda aramaya
+    // gönderiyor; mesaj çoğu zaman doğrudan söylüyor.
+    expect(SAYFA).toContain('function hataMetni');
+    expect(SAYFA).toContain('ApiRequestError');
+  });
+
+  it('KRİTİK: kural çalıştırma hatası yutulmuyor', () => {
+    const kontrol = kod('components/boost/boost-controls.tsx');
+    expect(kontrol).not.toContain('} catch {');
+    expect(kontrol).toContain('err instanceof ApiRequestError ? err.message');
+  });
+});
+
+describe('GEÇMİŞ SAYFAYI BOĞMUYOR', () => {
+  it('KRİTİK: geçmiş KESİLİYOR ve kesildiği yazılıyor', () => {
+    /*
+     * `/boosts` ucu limitsiz dönüyor ve her kayıt tam boy kart olarak
+     * çiziliyordu: günde iki boost açan bir workspace'te sayfa bir yıl sonra
+     * yüzlerce görselle açılır. Sessiz kesme de yok — toplam yazılı.
+     */
+    expect(SAYFA).toContain('const gecmisSiniri');
+    expect(SAYFA).toContain('others.slice(0, gecmisSiniri)');
+    expect(SAYFA).toContain('toplam ${others.length}');
+  });
+
+  it('KRİTİK: geçmiş satırı ONAY KARTI DEĞİL', () => {
+    /*
+     * Geçmişte verilecek bir karar yok; aynı kartı kullanmak sayfanın asıl
+     * işini (onay) geçmişin içinde kaybediyordu.
+     */
+    const i = SAYFA.indexOf('function GecmisSatiri');
+    expect(i, 'geçmiş satırı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const dilim = SAYFA.slice(i, i + 2000);
+    expect(dilim).not.toContain('BoostDecision');
+    expect(dilim).toContain('h-9 w-9');
+  });
+});
+
 describe('BİLDİRİM HAVUZU — üç düğme', () => {
   it('KRİTİK: Onayla, Düzenle ve Reddet birlikte', () => {
     // Üç ayrı karar: ön ayarla yayınla · sadece bu gönderi için değiştir ·

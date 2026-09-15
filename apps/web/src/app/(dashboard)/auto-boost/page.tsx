@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import {
   BOOST_METRIC_META,
   BOOST_STATUS_LABELS,
@@ -8,17 +7,24 @@ import {
   type BoostStatus,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
-import { serverApiFetch } from '@/lib/api';
+import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { formatMoney, formatNumber, formatRelative } from '@/lib/format';
 import { BoostDecision, RunBoostRuleButton } from '@/components/boost/boost-controls';
 import { BildirimHavuzu } from '@/components/autoboost/bildirim-havuzu';
 import { BoostOnAyariDugmesi } from '@/components/autoboost/boost-on-ayari';
 
-export const metadata = { title: 'Auto-Boost · Advetics' };
+export const metadata = { title: 'Akıllı Boost · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
- * Modül 7 — Auto-Boost.
+ * Modül 7 — Akıllı Boost.
+ *
+ * ═══ EKRANIN ADI KENAR ÇUBUĞUYLA AYNI ═══
+ *
+ * Menüde "Akıllı Boost" yazıyordu, sayfa "Auto-Boost" açılıyordu. Aynı şeyin
+ * iki adı olması kullanıcıya yanlış sayfaya düştüğünü düşündürüyor ve
+ * "Auto-Boost" zaten Türkçe değil. Aynı sebeple "Bildirim Havuzu" başlığı da
+ * kalktı: havuz bizim iç terimimiz, kullanıcının gördüğü şey yeni içerikler.
  *
  * SAYFANIN TAŞIDIĞI TEK MESAJ: buradaki her onay PARA TAAHHÜDÜ. Harcanacak
  * tutar her zaman onay düğmesinin ÜSTÜNDE yazıyor. Modül 5'ten farkı bu:
@@ -57,7 +63,7 @@ export default async function AutoBoostPage({
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
         <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
-        <p className="mt-2 text-sm text-ink-muted">Auto-Boost workspace bazında çalışıyor.</p>
+        <p className="mt-2 text-sm text-ink-muted">Akıllı Boost workspace bazında çalışıyor.</p>
       </div>
     );
   }
@@ -65,16 +71,51 @@ export default async function AutoBoostPage({
   const canApprove = hasPermission(session, 'boost.approve');
   const canWrite = hasPermission(session, 'boost.write');
 
-  const [boosts, rules] = await Promise.all([
-    serverApiFetch<BoostRecord[]>(`/boosts?clientId=${clientId}`).catch(() => null),
-    serverApiFetch<BoostRuleRecord[]>(`/boosts/rules?clientId=${clientId}`).catch(() => null),
+  /*
+   * HATA YUTULMUYOR — ve buradaki ikinci yutma SESSİZDİ.
+   *
+   * `rules` çekimi düştüğünde `null` dönüyordu ve `{rules !== null && ...}`
+   * koşulu bölümü hiç çizmiyordu: kuralları olan bir kullanıcı, kuralı
+   * SİLİNMİŞ gibi bir ekran görüyordu ve hiçbir yerde tek bir kelime
+   * yazmıyordu. Boost verisinin hatası ise görünüyordu ama sunucunun kendi
+   * cümlesi atılıyordu — "Boost verisi alınamadı" kullanıcıyı sebebi kendi
+   * kurulumunda aramaya gönderiyor.
+   */
+  const [boostSonuc, kuralSonuc] = await Promise.allSettled([
+    serverApiFetch<BoostRecord[]>(`/boosts?clientId=${clientId}`),
+    serverApiFetch<BoostRuleRecord[]>(`/boosts/rules?clientId=${clientId}`),
   ]);
 
-  // Para birimi hesaptan geliyor; adayların hepsi aynı müşterinin hesapları.
+  const boosts = boostSonuc.status === 'fulfilled' ? boostSonuc.value : null;
+  const rules = kuralSonuc.status === 'fulfilled' ? kuralSonuc.value : null;
+
+  /*
+   * PARA BİRİMİ ₺ VARSAYILIYOR — ve burada "hesaptan geliyor" yazıyordu,
+   * yanlıştı.
+   *
+   * Akıllı Boost'un bütün giriş alanları "Tutar (₺)" diyor (ön ayar formu,
+   * kart düzenleme), yani kullanıcının yazdığı sayı ₺. Ekranda başka bir
+   * birim göstermek, girdiğinden farklı bir sayı göstermek olurdu. Reklam
+   * hesabı ₺ dışında bir para biriminde tutuluyorsa sorun burada DEĞİL,
+   * girişte: o hâlde bütçe platforma yanlış birimde gidiyor. Bugün ajansın
+   * bütün hesapları ₺ ve varsayım yazılı duruyor ki bir gün değiştiğinde
+   * aranacak yer belli olsun.
+   */
   const currency = 'TRY';
   const candidates = boosts?.filter((b) => b.status === 'candidate') ?? [];
   const others = boosts?.filter((b) => b.status !== 'candidate') ?? [];
   const pendingTotal = candidates.reduce((a, b) => a + BigInt(b.totalBudgetMicros), 0n);
+
+  /*
+   * GEÇMİŞ KESİLİYOR — VE KESİLDİĞİ YAZILIYOR.
+   *
+   * `/boosts` ucu LİMİTSİZ dönüyor ve burada her kayıt tam boy kart olarak
+   * çiziliyordu: günde iki boost açan bir workspace'te sayfa bir yıl sonra
+   * yüzlerce görselle açılıyor. Geçmiş OKUNACAK bir şey, yapılacak bir şey
+   * değil; onay bekleyenler onun üstünde ve asıl iş orada.
+   */
+  const gecmisSiniri = 10;
+  const gecmis = others.slice(0, gecmisSiniri);
 
   const clientName = session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
 
@@ -82,10 +123,15 @@ export default async function AutoBoostPage({
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Auto-Boost</h1>
-          <p className="mt-0.5 text-sm text-ink-muted">
-            {clientName} · günde iki kez değerlendiriliyor
-          </p>
+          <h1 className="text-xl font-semibold text-ink">Akıllı Boost</h1>
+          {/*
+            DEĞERLENDİRME SIKLIĞI BURADAN KALKTI. "günde iki kez" yalnızca
+            KURAL motoru için doğru; yeni içerik kartları yayınlandığı anda
+            düşüyor. İkisini tek cümlede söylemek, kartını bekleyen
+            kullanıcıya akşamı beklettiriyordu. Sıklık artık kuralların
+            başlığında.
+          */}
+          <p className="mt-0.5 text-sm text-ink-muted">{clientName}</p>
         </div>
         {/*
           BAŞLIK SATIRINDA TEK DÜĞME: ön ayar. Kartın nasıl yayınlanacağını
@@ -109,61 +155,90 @@ export default async function AutoBoostPage({
       */}
 
       {/*
-        BİLDİRİM HAVUZU EN ÜSTTE ve sayfanın TEK eylem yüzeyi.
+        ═══ SAYFANIN SIRASI: ÖNCE YAPILACAK İŞ, SONRA OKUNACAK ŞEYLER ═══
 
-        Eskiden "Gönderi öne çıkar" formunun ALTINDAYDI ve gerekçe "havuzun
-        yayın düğmesi henüz bağlanmamıştı" idi. O gerekçe çürüdü: havuz
-        çalışıyor, para harcıyor ve kartların onayı buradan veriliyor.
-        Formun kendisi de kalktı.
+        1. YENİ İÇERİKLER  — yayınlanır yayınlanmaz düşen kartlar
+        2. KURALIN SEÇTİKLERİ — performansa bakıp seçilen adaylar
+        3. KURALLAR        — seçimi kimin yaptığı
+        4. GEÇMİŞ          — ne olmuş
+
+        İlk ikisi de onay kuyruğu ve eskiden ikisi de yalnızca "onay
+        bekliyor" diyordu: bir gönderinin neden birinde olup diğerinde
+        olmadığı hiçbir yerde yazmıyordu. Başlıklar artık KAYNAĞI söylüyor.
       */}
       <BildirimHavuzu clientId={clientId} />
 
       {boosts === null ? (
-        <Notice tone="error">Boost verisi alınamadı.</Notice>
+        <Notice tone="error">
+          <strong>Boost listesi okunamadı.</strong> {hataMetni(boostSonuc)}
+        </Notice>
       ) : (
-        <>
-          {candidates.length > 0 && (
-            <section className="rounded-xl border border-warn/30 bg-warn-soft/50 p-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-sm font-semibold text-ink">
-                  {candidates.length} gönderi onay bekliyor
-                </h2>
-                {/* TOPLAM TAAHHÜT ÜSTTE. Tek tek onaylarken kaç para
-                    bağlandığını görmek, her karardan sonra hesap yapmaktan
-                    daha güvenilir. */}
-                <span className="text-sm text-ink-muted">
-                  toplam {formatMoney(pendingTotal.toString(), currency)}
-                </span>
-              </div>
-              <div className="mt-3 space-y-3">
-                {candidates.map((b) => (
-                  <BoostCard key={b.id} boost={b} currency={currency} canApprove={canApprove} />
-                ))}
-              </div>
-            </section>
-          )}
+        candidates.length > 0 && (
+          <section className="rounded-xl border border-warn/30 bg-warn-soft/50 p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              {/*
+                BAŞLIK ARTIK KAYNAĞI SÖYLÜYOR.
 
-          {rules !== null && (
-            <RuleList rules={rules} currency={currency} canWrite={canWrite} />
-          )}
-
-          {others.length > 0 && (
-            <section className="overflow-hidden rounded-xl border border-line bg-surface">
-              <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
-                Geçmiş
+                Eski hâli "{n} gönderi onay bekliyor" idi ve bu cümle ÜSTTEKİ
+                kartlar için de birebir doğruydu: aynı ekranda iki ayrı onay
+                kuyruğu vardı ve ikisi de aynı şeyi söylüyordu. Kullanıcı bir
+                gönderinin neden bu listede olup diğerinde olmadığını
+                okuyamıyordu. Üstteki kartlar YENİ YAYINLANAN içerikler,
+                buradakiler ise kuralın performansa bakıp seçtikleri.
+              */}
+              <h2 className="text-sm font-semibold text-ink">
+                Kuralın seçtikleri
+                <span className="ml-2 font-normal text-ink-muted">{candidates.length} gönderi</span>
               </h2>
-              <div className="divide-y divide-line/60">
-                {others.map((b) => (
-                  <div key={b.id} className="p-4">
-                    <BoostCard boost={b} currency={currency} canApprove={false} />
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+              {/* TOPLAM TAAHHÜT ÜSTTE. Tek tek onaylarken kaç para
+                  bağlandığını görmek, her karardan sonra hesap yapmaktan
+                  daha güvenilir. */}
+              <span className="text-sm text-ink-muted">
+                toplam {formatMoney(pendingTotal.toString(), currency)}
+              </span>
+            </div>
+            <div className="mt-3 space-y-3">
+              {candidates.map((b) => (
+                <BoostCard key={b.id} boost={b} currency={currency} canApprove={canApprove} />
+              ))}
+            </div>
+          </section>
+        )
+      )}
 
-          {boosts.length === 0 && rules?.length === 0 && <EmptyState />}
-        </>
+      {/*
+        KURAL LİSTESİ OKUNAMADIYSA SÖYLENİYOR. Bölümü çizmemek, kuralı olan
+        kullanıcıya kuralı silinmiş gibi bir ekran gösteriyordu.
+      */}
+      {rules === null ? (
+        <Notice tone="error">
+          <strong>Kurallar okunamadı.</strong> {hataMetni(kuralSonuc)}
+        </Notice>
+      ) : (
+        <RuleList rules={rules} currency={currency} canWrite={canWrite} />
+      )}
+
+      {gecmis.length > 0 && (
+        <section className="overflow-hidden rounded-xl border border-line bg-surface">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3">
+            <h2 className="text-sm font-semibold text-ink">Geçmiş</h2>
+            {/* SESSİZ KESME YOK: kaç tanesi gösteriliyor ve toplam kaç. */}
+            <span className="text-[11px] text-ink-muted">
+              {others.length > gecmis.length
+                ? `son ${gecmis.length} · toplam ${others.length}`
+                : `${others.length} boost`}
+            </span>
+          </div>
+          <ul className="divide-y divide-line/60">
+            {gecmis.map((b) => (
+              <GecmisSatiri key={b.id} boost={b} currency={currency} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {boosts !== null && boosts.length === 0 && rules !== null && rules.length === 0 && (
+        <EmptyState />
       )}
     </div>
   );
@@ -299,9 +374,16 @@ function RuleList({
 
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-surface">
-      <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
-        Boost kuralları
-      </h2>
+      <div className="border-b border-line px-4 py-3">
+        <h2 className="text-sm font-semibold text-ink">Boost kuralları</h2>
+        {/*
+          SIKLIK KURALIN YANINDA, SAYFA BAŞLIĞINDA DEĞİL. Başlıkta dururken
+          bütün ekran için geçerli gibi okunuyordu; oysa yeni içerik kartları
+          yayınlandığı anda düşüyor ve yalnızca kurallar günde iki kez
+          değerlendiriliyor.
+        */}
+        <p className="mt-0.5 text-[11px] text-ink-muted">Her gün 08:30 ve 20:30'da çalışıyor.</p>
+      </div>
       <div className="divide-y divide-line/60">
         {rules.map((r) => {
           const cap = BigInt(r.monthlyCapMicros);
@@ -424,7 +506,71 @@ function Notice({ tone, children }: { tone: 'warn' | 'error'; children: React.Re
     tone === 'error'
       ? 'bg-danger-soft text-danger-strong ring-danger/30'
       : 'bg-warn-soft text-warn-strong ring-warn/30';
-  return <div className={`rounded-xl px-4 py-3 text-sm ring-1 ring-inset ${cls}`}>{children}</div>;
+  return (
+    // Hata satırı ekran okuyucuya da duyuruluyor; uyarı yalnızca durum.
+    <div
+      role={tone === 'error' ? 'alert' : 'status'}
+      className={`rounded-xl px-4 py-3 text-sm ring-1 ring-inset ${cls}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Düşen isteğin SEBEBİ — sunucunun kendi cümlesi.
+ *
+ * "Veri alınamadı" kullanıcıyı sebebi kendi kurulumunda aramaya gönderiyor;
+ * oysa mesaj çoğu zaman doğrudan söylüyor (yetki yok, workspace bulunamadı).
+ */
+function hataMetni(sonuc: PromiseSettledResult<unknown>): string {
+  if (sonuc.status === 'fulfilled') return '';
+  return sonuc.reason instanceof ApiRequestError
+    ? sonuc.reason.message
+    : 'Sunucuya ulaşılamadı.';
+}
+
+/**
+ * GEÇMİŞ SATIRI — tam boy kart DEĞİL.
+ *
+ * Geçmişteki her boost, onay bekleyenlerle aynı kartla çiziliyordu: 96
+ * piksellik görsel, beş metrik, seçilme sebebi, bütçe dökümü. Ama geçmişte
+ * verilecek bir karar yok; okunan şey "ne, ne zaman, ne kadar, sonuç ne".
+ * Aynı görsel ağırlığı vermek, sayfanın asıl işini (onay) geçmişin içinde
+ * kaybediyordu.
+ */
+function GecmisSatiri({ boost, currency }: { boost: BoostRecord; currency: string | null }) {
+  return (
+    <li className="flex items-center gap-3 px-4 py-2.5">
+      {boost.post.thumbnailUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={boost.post.thumbnailUrl}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className="h-9 w-9 shrink-0 rounded-md bg-surface-sunken object-cover"
+        />
+      ) : (
+        <div className="h-9 w-9 shrink-0 rounded-md bg-surface-sunken" />
+      )}
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm text-ink">
+          {boost.post.message || boost.post.socialProfileName}
+        </p>
+        <p className="text-[11px] text-ink-muted">
+          {boost.post.socialProfileName} · {formatRelative(boost.createdAt)} ·{' '}
+          {formatMoney(boost.totalBudgetMicros, currency)}
+        </p>
+        {/* HATA SATIRDA KALIYOR: başarısız bir boost'un sebebini görmek için
+            başka bir ekrana gitmek gerekmemeli. */}
+        {boost.error && <p className="mt-0.5 text-[11px] text-danger">{boost.error}</p>}
+      </div>
+
+      <StatusChip status={boost.status} />
+    </li>
+  );
 }
 
 function first(v: string | string[] | undefined): string | undefined {
