@@ -41,6 +41,25 @@ export class RaporPlaniService {
   // Kurulum (oturumlu)
   // ---------------------------------------------------------------------------
 
+  /**
+   * ═══ SÜSLEME İÇİN YAPILAN JOIN, ANA SATIRI SÜZMEMELİ ═══
+   *
+   * Bu liste kullanıcının bildirdiği hâlde HEP BOŞ dönüyordu: planlama
+   * kuruluyor, ekran "Bu workspace için kurulu planlama yok" yazmaya devam
+   * ediyordu. Satır yazılmıştı; onu SELECT görmüyordu.
+   *
+   * Sebep `JOIN users` idi. `users` politikası kasıtlı olarak dar:
+   * `org_kapsaminda(org_id) AND (is_org_admin() OR id = current_user_id())`.
+   * Ajans yöneticisi KARDEŞ bir şirkete geçtiğinde `ctx.orgId` o şirket
+   * oluyor ama `users.org_id` EV şirketi olarak kalıyor
+   * (`tenant-context.service.ts` bunu bilerek ayırıyor) — kullanıcı KENDİ
+   * satırını bile okuyamıyor ve INNER JOIN plan satırlarının tamamını
+   * eliyor. Hata yok, log yok, yalnızca boş bir liste.
+   *
+   * KURAL: bir satırın görünürlüğüne YALNIZCA kendi politikası karar verir.
+   * Planı kuranın adı gibi süsleme alanları LEFT JOIN ile alınır; görünmezse
+   * o alan boş kalır, satır kaybolmaz. `rapor-listeleri-rls.spec.ts` ölçüyor.
+   */
   async listele(ctx: TenantContext, clientId: string): Promise<RaporPlaniOzeti[]> {
     const scoped = { ...ctx, activeClientId: clientId };
     const rows = await this.prisma.withTenant(scoped, (tx) =>
@@ -54,10 +73,24 @@ export class RaporPlaniService {
                -- GÖNDERENİN KİMLİĞİ HAZIR MI: kayıtlı VE doğrulanmış.
                -- Plan kurulurken kontrol ediliyor ama sonradan bozulabiliyor;
                -- panel bunu göstermezse plan "açık" görünüp hiç göndermez.
-               (ea.id IS NOT NULL AND ea.verified_at IS NOT NULL) AS sender_ready
+               --
+               -- BAŞKASININ PLANINDA CEVAP "BİLİNMİYOR" — false DEĞİL.
+               -- E-posta kimliği tablosunun politikası satırı YALNIZCA
+               -- sahibine gösteriyor (satır şifreli uygulama parolası
+               -- taşıyor). Yani meslektaşın planında ea her zaman NULL
+               -- geliyor ve eski ifade bunu "kimlik doğrulanmamış" diye
+               -- okuyup panelde ÇALIŞAN bir planı "çalışmayacak" diye
+               -- işaretliyordu. Yanlış alarm, hiç alarm olmamasından kötü:
+               -- kullanıcıyı sağlam bir kurulumu bozmaya gönderiyor.
+               -- (Bu yorumda ters tırnak YOK: Prisma.sql şablonunu ortadan
+               --  kapatıyor ve hata sebebi hiç belli olmuyor.)
+               CASE WHEN s.created_by_user_id = app.current_user_id()
+                    THEN (ea.id IS NOT NULL AND ea.verified_at IS NOT NULL)
+                    ELSE NULL
+               END AS sender_ready
           FROM report_schedules s
-          JOIN clients c ON c.id = s.client_id
-          JOIN users u ON u.id = s.created_by_user_id
+          LEFT JOIN clients c ON c.id = s.client_id
+          LEFT JOIN users u ON u.id = s.created_by_user_id
           LEFT JOIN user_email_accounts ea ON ea.user_id = s.created_by_user_id
          WHERE s.client_id = ${clientId}::uuid
          ORDER BY s.created_at DESC
@@ -93,7 +126,11 @@ export class RaporPlaniService {
       lastSentTo: (r.last_sent_to as string) ?? null,
       createdByName: (r.created_by_name as string) ?? null,
       createdByEmail: (r.created_by_email as string) ?? null,
-      senderReady: r.sender_ready === true,
+      // ÜÇ HÂL: hazır, hazır değil ve BİLİNMİYOR. Üçüncüsü başkasının
+      // planında çıkıyor ve `false`a yuvarlamak yanlış alarm üretiyordu.
+      senderReady: r.sender_ready === null || r.sender_ready === undefined
+        ? null
+        : r.sender_ready === true,
     }));
   }
 

@@ -464,6 +464,32 @@ buna göre veriliyor:
   upsert'i `ad_account_id = EXCLUDED.ad_account_id` yazıp `client_id`'yi
   atlıyordu. Sonuç: satır yarım — hesabı doğru, müşterisi eski — ve "yeniden
   senkronize et" tavsiyesi de işe yaramıyor. `upsert-client-id.spec.ts`.
+- **RLS'Lİ BİR TABLOYA YAPILAN `INNER JOIN` ANA SATIRI SESSİZCE SÜZÜYOR.**
+  Rapor planı ve fatura listeleri `JOIN users` taşıyordu (planı kuranın /
+  faturayı yükleyenin adı için) ve İKİSİ DE BOŞ DÖNÜYORDU. `users` politikası
+  kasıtlı olarak dar: `org_kapsaminda(org_id) AND (is_org_admin() OR id =
+  current_user_id())`. Ajans yöneticisi KARDEŞ bir şirkete geçtiğinde
+  `ctx.orgId` o şirket oluyor ama `users.org_id` EV şirketi olarak kalıyor
+  (`tenant-context.service.ts` bunu bilerek ayırıyor) — kullanıcı KENDİ
+  satırını bile okuyamıyor ve join plan/fatura satırlarının TAMAMINI eliyor.
+  Belirti kullanıcının cümlesiyle: *"planladığımda planlanan bilgiler
+  gözükmüyor, fatura eklediğimde eklenen fatura gözükmüyor ama tekrar
+  eklemeye çalıştığımda bu zaten yüklü diyor"*. O son cümle teşhisin anahtarı:
+  **mükerrer engeli TABLO seviyesinde bir tekil indeks ve indeks RLS'e TABİ
+  DEĞİL** — yani satır yazılmış, SELECT onu görmüyor. KURAL: bir satırın
+  görünürlüğüne YALNIZCA kendi politikası karar verir; ad/etiket gibi süsleme
+  alanları `LEFT JOIN` ile alınır. `rapor-listeleri-rls.spec.ts` servisin
+  GERÇEK sorgusunu kaynaktan çıkarıp çalıştırıyor (kopyalanan bir sorgu
+  düzeltilmiş hâli taşır ve servis eski kalsa bile yeşil geçerdi).
+- **GÖRÜNMEYEN SATIRI "YOK" SAYMAK YANLIŞ ALARM ÜRETİYOR.** Aynı ekranda
+  `sender_ready` alanı `ea.id IS NOT NULL` ile hesaplanıyordu ama
+  `user_email_accounts` politikası satırı YALNIZCA sahibine gösteriyor. Yani
+  meslektaşın planında cevap her zaman "kimlik doğrulanmamış" çıkıyor ve panel
+  ÇALIŞAN bir planı "çalışmayacak" diye işaretliyordu. RLS'li bir tabloda
+  "satır yok" ile "satırı göremiyorum" AYNI ŞEY DEĞİL; ayırt edilemiyorsa
+  alan üç hâlli olmalı (`true` / `false` / `null` = bilinmiyor) ve arayüz
+  yalnızca KESİN bilgide uyarmalı. Yanlış alarm, kullanıcıyı sağlam bir
+  kurulumu bozmaya gönderiyor.
 - **POLİTİKASI OLMAYAN UPDATE HATA VERMEZ, SESSİZCE SIFIR SATIR ETKİLER.**
   `sync_jobs`'ta yalnızca SELECT ve INSERT politikası vardı; taşıma sekiz
   tablodan yedisini taşıyıp sekizincisini sessizce atlıyordu ve belirtisi

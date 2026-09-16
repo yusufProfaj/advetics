@@ -286,10 +286,22 @@ export function RaporPlanla({ clientId, templateId }: Props) {
                               Plan "açık" görünüp hiç göndermeyen bir durum,
                               bu projedeki en pahalı hata türü.
                             */}
-                            {!p.senderReady && (
+                            {/*
+                              UYARI YALNIZCA KESİN BİLGİDE.
+
+                              `senderReady` üç hâlli: `null` "bilinmiyor"
+                              demek ve başkasının planında çıkıyor (e-posta
+                              kimliği satırını RLS yalnızca sahibine
+                              gösteriyor). Eskiden `!p.senderReady` yazıyordu,
+                              yani `null` da uyarı üretiyordu: ÇALIŞAN bir
+                              plan "çalışmayacak" diye işaretleniyor ve
+                              kullanıcı sağlam bir kurulumu bozmaya
+                              gönderiliyordu.
+                            */}
+                            {p.senderReady === false && (
                               <p className="mt-1 rounded border border-warn/40 bg-warn/5 px-2 py-1 text-[11px] text-ink">
-                                {p.createdByEmail} adresinin e-posta kimliği doğrulanmamış.
-                                bu plan çalışmayacak.
+                                {p.createdByEmail ?? 'Planı kuran kişinin'} e-posta kimliği
+                                doğrulanmamış, bu plan çalışmayacak.
                               </p>
                             )}
                             {p.lastStatus && (

@@ -36,6 +36,26 @@ export class FaturaService {
     private readonly storage: AssetStorageService,
   ) {}
 
+  /**
+   * ═══ SÜSLEME İÇİN YAPILAN JOIN, ANA SATIRI SÜZMEMELİ ═══
+   *
+   * Bu liste kullanıcının bildirdiği hâlde HEP BOŞ dönüyordu: fatura
+   * yükleniyor, listede görünmüyor, aynı dosya tekrar yüklenmek istendiğinde
+   * "bu zaten yüklü" diyordu. O ikinci cümle teşhisin anahtarıydı — mükerrer
+   * engeli TABLO seviyesinde bir tekil indeks ve indeks RLS'e TABİ DEĞİL.
+   * Yani satır yazılmıştı, SELECT onu görmüyordu.
+   *
+   * Sebep `JOIN users` idi. `users` politikası kasıtlı olarak dar:
+   * `org_kapsaminda(org_id) AND (is_org_admin() OR id = current_user_id())`.
+   * Ajans yöneticisi KARDEŞ bir şirkete geçtiğinde `ctx.orgId` o şirket
+   * oluyor ama `users.org_id` EV şirketi olarak kalıyor — kullanıcı KENDİ
+   * satırını bile okuyamıyor ve INNER JOIN fatura satırlarının tamamını
+   * eliyor. Hata yok, log yok, yalnızca boş bir liste.
+   *
+   * KURAL: bir satırın görünürlüğüne YALNIZCA kendi politikası karar verir.
+   * Yükleyenin adı gibi süsleme alanları LEFT JOIN ile alınır; görünmezse o
+   * alan boş kalır, satır kaybolmaz. `rapor-listeleri-rls.spec.ts` ölçüyor.
+   */
   async listele(ctx: TenantContext, clientId: string): Promise<FaturaOzeti[]> {
     const scoped = { ...ctx, activeClientId: clientId };
     const rows = await this.prisma.withTenant(scoped, (tx) =>
@@ -44,8 +64,8 @@ export class FaturaService {
                f.platform::text AS platform, f.donem, f.file_name, f.byte_size, f.mime_type,
                f.aciklama, u.full_name AS uploaded_by_name, f.uploaded_at
           FROM fatura_belgeleri f
-          JOIN clients c ON c.id = f.client_id
-          JOIN users u ON u.id = f.uploaded_by_user_id
+          LEFT JOIN clients c ON c.id = f.client_id
+          LEFT JOIN users u ON u.id = f.uploaded_by_user_id
          WHERE f.client_id = ${clientId}::uuid
          ORDER BY f.donem DESC, f.platform
       `),

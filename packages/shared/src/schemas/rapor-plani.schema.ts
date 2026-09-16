@@ -215,6 +215,13 @@ export interface RaporPlaniOzeti {
    * silinebilir ya da ayar değişince `verified_at` NULL'a döner. Panel
    * bunu göstermezse plan "açık" görünüp hiç göndermez — bu projenin
    * klasik sessiz hatası.
+   *
+   * `null` = BİLİNMİYOR, "hazır değil" DEĞİL. E-posta kimliği satırını RLS
+   * yalnızca SAHİBİNE gösteriyor (satır şifreli uygulama parolası taşıyor),
+   * yani meslektaşın planında cevap okunamıyor. Eskiden bu `false`a
+   * yuvarlanıyordu ve panel ÇALIŞAN bir planı "çalışmayacak" diye
+   * işaretliyordu; yanlış alarm, kullanıcıyı sağlam bir kurulumu bozmaya
+   * gönderiyor.
    */
-  senderReady: boolean;
+  senderReady: boolean | null;
 }
