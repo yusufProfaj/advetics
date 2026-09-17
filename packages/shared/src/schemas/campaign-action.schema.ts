@@ -19,6 +19,31 @@ export const campaignActionInputSchema = z.discriminatedUnion('type', [
       .refine((v) => BigInt(v) > 0n, 'Bütçe sıfırdan büyük olmalı'),
     budgetMode: z.enum(['daily', 'lifetime']),
   }),
+  /**
+   * ═══ KOPYALA ═══
+   *
+   * Kopyayı PLATFORM çıkarıyor (`POST /{campaign_id}/copies`), biz değil.
+   * Kendi modelimize çevirmek, hedeflemeyi Meta'nın ham biçiminden bizim
+   * şemamıza taşımak demekti ve çeviri, kaynağıyla aynı sanılan ama farklı
+   * hedefleyen bir kampanya üretme riski taşıyor.
+   *
+   * KOPYA HER ZAMAN DURAKLATILMIŞ AÇILIYOR — sağlayıcı `status_option`u
+   * açıkça yazıyor. Kullanıcı bütçesini gözden geçirip kendisi başlatıyor.
+   */
+  z.object({
+    type: z.literal('copy'),
+    /** Kopyanın adı. Boşsa platformun verdiği ad kalıyor. */
+    name: z.string().trim().min(1).max(200).optional(),
+    /**
+     * Reklam setleri ve reklamlar da kopyalansın mı.
+     *
+     * VARSAYILAN `true`: reklamsız bir kampanya kopyası kullanıcıya hiçbir
+     * şey kazandırmıyor — hedefleme ve kreatif zaten kopyalamanın sebebi.
+     * Meta'nın sınırı belgede yazılı: eşzamanlı çağrıda 3, asenkron çağrıda
+     * 51 alt reklam.
+     */
+    deepCopy: z.boolean().default(true),
+  }),
 ]);
 
 export type CampaignActionInput = z.infer<typeof campaignActionInputSchema>;

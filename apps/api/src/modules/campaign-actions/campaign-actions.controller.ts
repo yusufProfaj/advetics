@@ -44,6 +44,13 @@ export class CampaignActionsController {
     @Param('id', ParseUUIDPipe) campaignId: string,
     @Body(zodBody(campaignActionInputSchema)) input: CampaignActionInput,
   ): Promise<CampaignActionResult> {
+    if (input.type === 'copy') {
+      return this.actions.applyAction(ctx, campaignId, {
+        type: 'copy',
+        name: input.name,
+        deepCopy: input.deepCopy,
+      });
+    }
     if (input.type === 'set_budget') {
       return this.actions.applyAction(ctx, campaignId, {
         type: 'set_budget',

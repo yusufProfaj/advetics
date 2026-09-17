@@ -1318,6 +1318,16 @@ export class MetaProvider implements IAdPlatformProvider {
     ctx: FetchContext,
     action: PlatformActionRequest,
   ): Promise<PlatformActionResult> {
+    /*
+     * ═══ KOPYALAMA AYRI BİR UÇ — ERKEN DÖNÜYOR ═══
+     *
+     * Diğer aksiyonlar varlığın KENDİ yoluna (`/{id}`) yazıyor; kopyalama
+     * `/{id}/copies` ucuna gidiyor ve yanıtı da farklı (yeni kimlik
+     * döndürüyor, `success` değil). Aynı `switch` içinde çözmek, gövdeyi
+     * kurup başka bir yola göndermek olurdu.
+     */
+    if (action.type === 'copy') return this.copyCampaign(ctx, action);
+
     const body = new URLSearchParams();
     let afterState: Record<string, unknown>;
 
@@ -1370,6 +1380,96 @@ export class MetaProvider implements IAdPlatformProvider {
     if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
 
     return { afterState };
+  }
+
+  /**
+   * ═══ KAMPANYA KOPYALAMA ═══
+   *
+   * `POST /{campaign_id}/copies`. Kopyayı Meta çıkarıyor: hedefleme, reklam
+   * setleri ve reklamlar aslına sadık kalıyor ve biz hiçbir şey
+   * çevirmiyoruz.
+   *
+   * `status_option=PAUSED` AÇIKÇA YAZILIYOR. Belge varsayılanın da PAUSED
+   * olduğunu söylüyor ama bu projede platformun varsayılanına güvenmek
+   * yasak: varsayılan bir gün değişirse kopya YAYINA GİRER ve para harcar,
+   * üstelik hiçbir hata da vermez.
+   *
+   * AD İKİNCİ BİR ÇAĞRIYLA VERİLİYOR. `rename_options` yalnızca önek/sonek
+   * ekleyebiliyor, mutlak ad veremiyor. Ad çağrısı düşerse KOPYA YİNE DE
+   * DURUYOR — o yüzden hata yutulmuyor ama kimlik de kaybedilmiyor:
+   * çağırana yeni kimlik dönüyor ve ad hatası ayrıca bildiriliyor.
+   */
+  private async copyCampaign(
+    ctx: FetchContext,
+    action: Extract<PlatformActionRequest, { type: 'copy' }>,
+  ): Promise<PlatformActionResult> {
+    const body = new URLSearchParams();
+    body.set('deep_copy', action.deepCopy ? 'true' : 'false');
+    body.set('status_option', 'PAUSED');
+
+    const res = await platformFetch<{ copied_campaign_id?: string; id?: string }>(
+      'meta',
+      `${this.graph}/${action.externalId}/copies`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ctx.accessToken}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+      },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+
+    /*
+     * KİMLİK İKİ ALANDAN BİRİNDE GELEBİLİYOR. Belge `copied_campaign_id`
+     * diyor; Graph bazı sürümlerde düz `id` döndürüyor. Kimliği kaybetmek,
+     * platformda oluşmuş bir kampanyayı panelde hiç görememek demek.
+     */
+    const yeniId = res.data.copied_campaign_id ?? res.data.id;
+    if (!yeniId) {
+      throw new PlatformApiError(
+        'meta',
+        'permanent',
+        'Kopya oluştu ama platform yeni kampanya kimliğini döndürmedi. ' +
+          'Ads Manager’dan kontrol et.',
+      );
+    }
+
+    let adHatasi: string | null = null;
+    if (action.name) {
+      try {
+        const ad = new URLSearchParams();
+        ad.set('name', action.name);
+        await platformFetch(
+          'meta',
+          `${this.graph}/${yeniId}`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${ctx.accessToken}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: ad.toString(),
+          },
+          parseMetaRateLimit,
+        );
+      } catch (err) {
+        // KOPYA DURUYOR, YALNIZCA ADI KONULAMADI. Hata fırlatmak çağırana
+        // "kopyalama başarısız" dedirtir ve kullanıcı ikinci kez kopyalar.
+        adHatasi = err instanceof Error ? err.message : String(err);
+      }
+    }
+
+    return {
+      afterState: {
+        copiedCampaignId: yeniId,
+        status: 'paused',
+        ...(adHatasi ? { renameError: adHatasi } : {}),
+      },
+      createdExternalId: yeniId,
+    };
   }
 
 

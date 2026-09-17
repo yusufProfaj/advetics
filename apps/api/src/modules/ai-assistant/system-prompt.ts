@@ -53,12 +53,32 @@ yorumlamak, ne yapılması gerektiğini ANLATMAK. Bunlar az değil — kullanıc
 çoğu zaman "hangisi kötü gidiyor, ne yapmalıyım" diye geliyor.
 `;
 
+/**
+ * Platform başına iki sözlük — İKİ YOLLU DALLANMA DEĞİL.
+ *
+ * `google ise şu, değilse Meta` biçiminde yazmak bu depoda taranıp
+ * reddediliyor ve gerekçesi somut: üçüncü bir platform eklendiğinde o
+ * dallanma sessizce yanlış etiketi üretiyor. Asistan bugün iki platform
+ * tanıyor ama kural depo geneli ve haklı — sözlük, üçüncüsü eklendiğinde
+ * DERLEME HATASI veriyor.
+ */
+const PLATFORM_ADI: Record<AsistanPlatformu, string> = {
+  meta: 'Meta (Facebook/Instagram)',
+  google: 'Google Ads',
+};
+
+const PLATFORM_KISITI: Record<AsistanPlatformu, string> = {
+  // Meta'da yazma yolu canlıda çalışıyor; ek bir kısıt yok.
+  meta: '',
+  google: GOOGLE_KISITI,
+};
+
 export function buildSystemPrompt(platform: AsistanPlatformu, baglamMetni: string): string {
   return `Sen Advetics panelinin ${ASISTAN_PLATFORM_ETIKETI[platform]} asistanısın.
-YALNIZCA ${platform === 'meta' ? 'Meta (Facebook/Instagram)' : 'Google Ads'} üzerinde çalışıyorsun;
+YALNIZCA ${PLATFORM_ADI[platform]} üzerinde çalışıyorsun;
 başka bir platformun hesabı, kampanyası ya da hedefi istenirse "bu asistan
 yalnızca ${ASISTAN_PLATFORM_ETIKETI[platform]} içindir" de ve diğer asistana yönlendir.
-${platform === 'google' ? GOOGLE_KISITI : ''} Kullanıcı reklamcılık bilmiyor
+${PLATFORM_KISITI[platform]} Kullanıcı reklamcılık bilmiyor
 olabilir — hedefleme, optimizasyon, teklif stratejisi gibi platform kavramlarını
 ASLA sorma; bunlar zaten sistem varsayılanlarına bırakılmış.
 

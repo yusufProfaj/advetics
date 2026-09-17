@@ -8,6 +8,7 @@ import type {
 } from '@advetics/shared';
 import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
+import { SyncQueueService } from '../../queue/sync-queue.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from '../connections/provider.registry';
 import type { PlatformActionRequest } from '../connections/provider.types';
@@ -27,6 +28,7 @@ import { TokenVaultService } from '../connections/token-vault.service';
  * için anlattığı tam o hata sınıfı).
  */
 export type CampaignAction =
+  | { type: 'copy'; name?: string; deepCopy: boolean }
   | { type: 'pause' }
   | { type: 'resume' }
   | { type: 'set_budget'; amountMicros: bigint; budgetMode: 'daily' | 'lifetime' };
@@ -121,6 +123,7 @@ export class CampaignActionsService {
     private readonly vault: TokenVaultService,
     private readonly quota: QuotaGuardService,
     private readonly audit: AuditService,
+    private readonly queue: SyncQueueService,
   ) {}
 
   /**
@@ -309,16 +312,56 @@ export class CampaignActionsService {
       }),
     );
 
+    /*
+     * ═══ KOPYA PANELDE GÖRÜNMELİ — YAPI TARAMASI KUYRUĞA ═══
+     *
+     * Kopya platformda oluştu ama BİZDE yok: `campaigns` tablosuna onu
+     * ancak yapı taraması yazıyor ve o tarama altı saatte bir koşuyor.
+     * Kuyruğa almadan bırakmak, kullanıcının az önce oluşturduğu kampanyayı
+     * panelde görememesi ve ikinci kez kopyalaması demek.
+     *
+     * KUYRUK HATASI KOPYAYI GEÇERSİZ KILMIYOR: kampanya platformda duruyor
+     * ve dönüş değeri onu söylüyor. Bu yüzden hata yutulmuyor ama
+     * fırlatılmıyor da — yalnızca not olarak dönüyor.
+     */
+    let senkronNotu: string | null = null;
+    if (action.type === 'copy') {
+      try {
+        await this.queue.enqueue({
+          clientId: row.clientId,
+          platform: row.platform,
+          jobType: 'structure',
+          adAccountId: row.adAccountId,
+          // Kullanıcı ekranda bekliyor: takılmış bir yapı taraması varsa
+          // kaldırılıp yenisi konsun.
+          interactive: true,
+        });
+      } catch (err) {
+        senkronNotu =
+          'Kopya oluştu ama senkronizasyon kuyruğa alınamadı: ' +
+          (err instanceof Error ? err.message : String(err));
+      }
+    }
+
     return {
       campaignId,
       campaignName: row.name,
       platform: row.platform,
       before,
-      after: result.afterState,
+      after: { ...result.afterState, ...(senkronNotu ? { senkronNotu } : {}) },
     };
   }
 
   private toPlatformRequest(row: ResolvedCampaign, action: CampaignAction): PlatformActionRequest {
+    if (action.type === 'copy') {
+      return {
+        type: 'copy',
+        level: 'campaign',
+        externalId: row.campaignExternalId,
+        name: action.name,
+        deepCopy: action.deepCopy,
+      };
+    }
     if (action.type === 'set_budget') {
       return {
         type: 'set_budget',

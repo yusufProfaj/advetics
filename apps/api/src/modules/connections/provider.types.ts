@@ -422,6 +422,27 @@ export interface PlatformInsights {
  * içinde yapmak, her sağlayıcıya aynı join'i yazdırmak olurdu.
  */
 export type PlatformActionRequest =
+  /**
+   * ═══ KAMPANYAYI PLATFORMUN KENDİSİ KOPYALIYOR ═══
+   *
+   * Kopyayı BİZ üretmiyoruz ve bu bilinçli bir karar. Canlı bir kampanyadan
+   * kendi taslak modelimizde bir kopya çıkarmak, hedeflemeyi Meta'nın ham
+   * biçiminden bizim şemamıza ÇEVİRMEK demekti; çeviri, kaynağıyla aynı
+   * sanılan ama farklı hedefleyen bir kampanya üretme riski taşıyor.
+   *
+   * `POST /{campaign_id}/copies` platformun kendi ucu: hedefleme, reklam
+   * setleri ve reklamlar aslına sadık kalıyor. Sınır belgede yazılı —
+   * eşzamanlı çağrıda 3, asenkron çağrıda 51 alt reklam.
+   */
+  | {
+      type: 'copy';
+      level: 'campaign';
+      externalId: string;
+      /** Kopyanın adı. Verilmezse Meta kendi adlandırıyor. */
+      name?: string;
+      /** Reklam setleri ve reklamlar da kopyalansın mı (`deep_copy`). */
+      deepCopy: boolean;
+    }
   | { type: 'pause'; level: 'campaign' | 'ad_group' | 'ad'; externalId: string }
   | { type: 'resume'; level: 'campaign' | 'ad_group' | 'ad'; externalId: string }
   | {
@@ -445,6 +466,14 @@ export type PlatformActionRequest =
 export interface PlatformActionResult {
   /** Platformun onayladığı yeni durum — kayda `afterState` olarak yazılıyor. */
   afterState: Record<string, unknown>;
+  /**
+   * Kopyalama sonucu oluşan YENİ kampanyanın platform kimliği.
+   *
+   * Yalnızca `copy` dolduruyor. Çağıran bunu bilmek ZORUNDA: kopya
+   * platformda gerçekten oluştu ve kullanıcı onu panelde göremezse (henüz
+   * senkronize edilmedi) ikinci kez kopyalamaya kalkar.
+   */
+  createdExternalId?: string;
 }
 
 /**

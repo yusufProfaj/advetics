@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import type { CreativeRecord, DraftGroupRecord } from '@advetics/shared';
+import type { CanliKampanyaListesi, CreativeRecord, DraftGroupRecord } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
+import { CanliKampanyalar } from '@/components/ad-builder/canli-kampanyalar';
 import { DuplicatePanel } from '@/components/ad-builder/duplicate-panel';
 
 export const metadata = { title: 'Toplu Oluştur · Advetics' };
@@ -40,6 +41,12 @@ export default async function BulkPage({
   }
 
   const canWrite = hasPermission(session, 'bulk.write');
+  /*
+   * KOPYALAMA CANLI KAMPANYAYA DOKUNUYOR: yetki `budget.write` ve uç
+   * noktanın kendi izniyle aynı. `bulk.write` taslak yazma yetkisi;
+   * ikisini karıştırmak, sunucunun reddedeceği bir düğme göstermek olurdu.
+   */
+  const canManageCampaigns = hasPermission(session, 'budget.write');
   const client = session.availableClients.find((c) => c.id === clientId);
 
   /*
@@ -47,9 +54,18 @@ export default async function BulkPage({
    * yok" diyor ve kullanıcıyı sıfırdan kampanya kurmaya gönderiyordu — oysa
    * kaynak duruyor, yalnızca istek düşmüştü.
    */
-  const [kampanyaSonuc, kreatifSonuc] = await Promise.allSettled([
+  const [kampanyaSonuc, kreatifSonuc, canliSonuc] = await Promise.allSettled([
     serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`),
     serverApiFetch<CreativeRecord[]>(`/creatives?clientId=${clientId}`),
+    /*
+     * YAYINDAKİ KAMPANYALAR — kullanıcının bildirdiği eksik.
+     *
+     * "toplu oluşturda sadece boostlar var ama aktif olan reklam
+     * kampanyalarını seçemiyorum." Taslak çoğaltma yalnızca Advetics'in
+     * kurduklarını görüyor; yayındakiler ayrı bir yolla (platformun kendi
+     * kopyalama ucu) çoğaltılıyor.
+     */
+    serverApiFetch<CanliKampanyaListesi>(`/campaigns?clientId=${clientId}`),
   ]);
 
   if (kampanyaSonuc.status === 'rejected') {
@@ -68,6 +84,7 @@ export default async function BulkPage({
 
   const groups = kampanyaSonuc.value;
   const creatives = kreatifSonuc.status === 'fulfilled' ? kreatifSonuc.value : [];
+  const canli = canliSonuc.status === 'fulfilled' ? canliSonuc.value : null;
 
   /**
    * KAYNAK OLARAK YAYINLANMIŞLAR DA GEÇERLİ.
@@ -95,6 +112,27 @@ export default async function BulkPage({
           Sıfırdan kampanya kur
         </Link>
       </header>
+
+      {/*
+        ═══ İKİ AYRI ÇOĞALTMA YOLU, ÇÜNKÜ İKİ AYRI KAYNAK ═══
+
+        Advetics'te kurulan taslak BİZİM modelimizde duruyor: varyasyonları
+        biz üretiyoruz, metni ve bütçeyi tek tek değiştirebiliyoruz.
+
+        Yayındaki kampanya PLATFORMUN modelinde duruyor ve hedeflemesi
+        Meta'nın ham biçiminde. Onu bizim şemamıza çevirip çoğaltmak,
+        kaynağıyla aynı sanılan ama farklı hedefleyen bir kampanya üretmek
+        olurdu; o yüzden kopyayı platformun kendi ucu çıkarıyor.
+      */}
+      {canli !== null && canli.rows.length > 0 && (
+        <CanliKampanyalar
+          rows={canli.rows}
+          toplam={canli.toplam}
+          canManage={canManageCampaigns}
+          baslik="Yayındaki kampanyadan çoğalt"
+          aciklama="Kopyayı platform çıkarıyor: hedefleme, reklam setleri ve reklamlar aynı kalıyor. Kopya duraklatılmış açılıyor."
+        />
+      )}
 
       {canWrite ? (
         <DuplicatePanel campaigns={campaigns} creatives={creatives} />

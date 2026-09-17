@@ -40,9 +40,12 @@ function makeService(withTenantSpy: ReturnType<typeof vi.fn>) {
     record: vi.fn().mockResolvedValue(undefined),
   } as never;
   const audit = new AuditService({} as never);
+  // Kopyalamadan sonra yapı taraması kuyruğa giriyor; testte kuyruk sahte.
+  const enqueue = vi.fn().mockResolvedValue({ enqueued: true });
+  const queue = { enqueue } as never;
 
-  const svc = new CampaignActionsService(prisma, providers, vault, quota, audit);
-  return { svc, applyAction, canWrite, quota };
+  const svc = new CampaignActionsService(prisma, providers, vault, quota, audit, queue);
+  return { svc, applyAction, canWrite, quota, enqueue };
 }
 
 beforeAll(async () => {
@@ -70,6 +73,79 @@ beforeEach(async () => {
 function realWithTenant() {
   return vi.fn(async (_ctx: TenantContext, fn: (tx: unknown) => Promise<unknown>) => fn(h.db));
 }
+
+describe('KOPYALAMA — kopyayı platform çıkarıyor', () => {
+  /*
+   * Canlı bir kampanyayı KENDİ modelimizde kopyalamak, hedeflemeyi Meta'nın
+   * ham biçiminden bizim şemamıza ÇEVİRMEK demekti ve çeviri, kaynağıyla
+   * aynı sanılan ama farklı hedefleyen bir kampanya üretme riski taşıyor.
+   * Platformun kendi `POST /{id}/copies` ucu bu riski tamamen kaldırıyor.
+   */
+  it('KRİTİK: istek sağlayıcıya `copy` olarak, derin kopya bayrağıyla gidiyor', async () => {
+    const { svc, applyAction } = makeService(realWithTenant());
+    applyAction.mockResolvedValue({
+      afterState: { copiedCampaignId: '999' },
+      createdExternalId: '999',
+    });
+
+    await svc.applyAction(CTX, CAMPAIGN, { type: 'copy', name: 'Yaz — kopya', deepCopy: true });
+
+    expect(applyAction).toHaveBeenCalledWith(expect.anything(), {
+      type: 'copy',
+      level: 'campaign',
+      externalId: 'ext_camp_1',
+      name: 'Yaz — kopya',
+      deepCopy: true,
+    });
+  });
+
+  it('KRİTİK: kopyadan sonra YAPI TARAMASI kuyruğa giriyor', async () => {
+    /*
+     * Kopya platformda var ama BİZDE yok: `campaigns` tablosuna onu ancak
+     * yapı taraması yazıyor ve o altı saatte bir koşuyor. Kuyruğa almamak,
+     * kullanıcının az önce oluşturduğu kampanyayı panelde görememesi ve
+     * ikinci kez kopyalaması demek.
+     */
+    const { svc, applyAction, enqueue } = makeService(realWithTenant());
+    applyAction.mockResolvedValue({ afterState: {}, createdExternalId: '999' });
+
+    await svc.applyAction(CTX, CAMPAIGN, { type: 'copy', deepCopy: true });
+
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ jobType: 'structure', interactive: true }),
+    );
+  });
+
+  it('durdurma/sürdürme yapı taraması TETİKLEMİYOR', async () => {
+    // Ters yön: her aksiyondan sonra tarama kuyruğa atan bir kısayol da
+    // yukarıdaki testi geçerdi ve her düğme basışında kota harcardı.
+    const { svc, applyAction, enqueue } = makeService(realWithTenant());
+    applyAction.mockResolvedValue({ afterState: { status: 'PAUSED' } });
+
+    await svc.applyAction(CTX, CAMPAIGN, { type: 'pause' });
+
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('KRİTİK: kuyruk düşerse KOPYA KAYBOLMUYOR', async () => {
+    /*
+     * Kampanya platformda gerçekten oluştu. Kuyruk hatasını yukarı
+     * fırlatmak, kullanıcıya "kopyalama başarısız" dedirtir ve ikinci bir
+     * kampanya açtırır — para harcayan mükerrerlik.
+     */
+    const { svc, applyAction, enqueue } = makeService(realWithTenant());
+    applyAction.mockResolvedValue({
+      afterState: { copiedCampaignId: '999' },
+      createdExternalId: '999',
+    });
+    enqueue.mockRejectedValue(new Error('redis yok'));
+
+    const sonuc = await svc.applyAction(CTX, CAMPAIGN, { type: 'copy', deepCopy: true });
+
+    expect(sonuc.after).toMatchObject({ copiedCampaignId: '999' });
+    expect(String((sonuc.after as Record<string, unknown>).senkronNotu)).toContain('redis yok');
+  });
+});
 
 describe('applyAction — mutlu yol', () => {
   it('pause: bağlam ÇÖZÜLÜYOR, platforma çağrı yapılıyor, audit_logs yazılıyor', async () => {

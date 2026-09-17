@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { ConnectionsModule } from '../connections/connections.module';
+import { QueueModule } from '../../queue/queue.module';
 import { CampaignActionsController } from './campaign-actions.controller';
 import { CampaignActionsService } from './campaign-actions.service';
 
@@ -12,7 +13,10 @@ import { CampaignActionsService } from './campaign-actions.service';
  * taşıyor. İkisi `IAdPlatformProvider.applyAction`'da buluşuyor.
  */
 @Module({
-  imports: [ConnectionsModule, AuditModule],
+  // `QueueModule` — kampanya KOPYALANDIKTAN sonra yapı taraması kuyruğa
+  // alınıyor: kopya platformda var ama `campaigns` tablosuna onu ancak
+  // tarama yazıyor ve o altı saatte bir koşuyor.
+  imports: [ConnectionsModule, AuditModule, QueueModule],
   controllers: [CampaignActionsController],
   providers: [CampaignActionsService],
   exports: [CampaignActionsService],
