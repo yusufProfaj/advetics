@@ -5,6 +5,7 @@ import { ConnectionsService } from '../connections/connections.service';
 import { DraftTreeService } from '../draft-tree/draft-tree.service';
 import { CreativeService } from '../draft-tree/creative.service';
 import { CampaignActionsService } from '../campaign-actions/campaign-actions.service';
+import { BoostsService } from '../boosts/boosts.service';
 import type { ToolDefinition, ToolResult } from './tool-types';
 
 /**
@@ -28,6 +29,7 @@ interface ToolDeps {
   draftTree: DraftTreeService;
   creatives: CreativeService;
   campaignActions: CampaignActionsService;
+  boosts: BoostsService;
 }
 
 /** Servis hatalarını `ToolResult` sözleşmesine çevirir — LLM'e HAM istisna sızmaz. */
@@ -343,6 +345,209 @@ export function buildTools(deps: ToolDeps): ToolDefinition[] {
           } as const;
         }),
     },
+    {
+      /**
+       * ═══ GÖNDERİ REKLAMI = BOOST ═══
+       *
+       * Kullanıcının istediği "gönderi etkileşimi kampanyası" bu üründe
+       * boost olarak yazılmış ve CANLIDA doğrulanmış bir yol: ad set'te
+       * `destination_type: ON_POST`, Instagram medyasının üç kimlik uzayı,
+       * `object_story_id` yerine ayrı bir `adcreatives` çağrısı… Hepsi
+       * `boosts` modülünde duruyor. Asistana yeni bir yayın yolu yazmak,
+       * canlıda öğrenilmiş bu bilgiyi ikinci kez ve eksik yazmak olurdu.
+       *
+       * KREATİF GÖRSELİ İSTENMİYOR: gönderi zaten kreatifin kendisi.
+       * Asistan bu yolu bilmediği için kullanıcıdan görsel istiyordu.
+       */
+      name: 'list_boostable_posts',
+      description:
+        'Müşterinin bağlı Instagram/Facebook hesaplarındaki SON GÖNDERİLERİ listeler — gönderi reklamı (etkileşim kampanyası) için. Her satırda gönderi kimliği, tarihi, metni ve yayınlanabilir olup olmadığı var.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          clientId: { type: 'string' },
+          limit: { type: 'number', description: 'Kaç gönderi (varsayılan 10)' },
+        },
+        required: ['clientId'],
+      },
+      permissions: ['boost.read'],
+      execute: (ctx, input) =>
+        safe(async () => {
+          const liste = await deps.boosts.listBoostablePosts(ctx, {
+            clientId: String(input.clientId),
+            limit: typeof input.limit === 'number' ? Math.min(30, input.limit) : 10,
+          });
+          if (liste.items.length === 0) {
+            // BOŞ LİSTE SEBEBİNİ SÖYLÜYOR: servis `emptyReason` üretiyor ve
+            // onu atmak, "gönderin yok" ile "sayfa atanmamış"ı aynı boşluğa
+            // çevirirdi.
+            return {
+              status: 'failed',
+              reason: liste.emptyReason ?? 'Boostlanabilir gönderi bulunamadı.',
+            } as const;
+          }
+          return {
+            status: 'success',
+            data: {
+              toplam: liste.total,
+              gonderiler: liste.items.map((p) => ({
+                id: p.id,
+                yayinTarihi: p.publishedAt,
+                metin: p.message?.slice(0, 280) ?? null,
+                tur: p.mediaType,
+                hesap: p.socialProfileName,
+                erisim: p.reach,
+                etkilesim: p.engagements,
+                bagli: p.permalink,
+                /*
+                 * ENGEL VARSA MODELE SÖYLENİYOR. Boostlanamayan bir gönderiyi
+                 * önerip kullanıcıyı onay kartına kadar getirmek, en son anda
+                 * reddedilen bir işlem demek.
+                 */
+                engel: p.blockedReason,
+                uyari: p.warning,
+              })),
+            },
+          } as const;
+        }),
+    },
+
+    {
+      /**
+       * ═══ GÖNDERİYİ REKLAMA ÇEVİR — PARA HARCAR ═══
+       *
+       * `pending_confirmation` DÖNÜYOR, doğrudan yayınlamıyor. Bu araç
+       * çağrıldığında platformda hiçbir şey olmuyor; kullanıcı sohbetteki
+       * onay kartını tıklayana kadar tek kuruş harcanmıyor. Canlı para
+       * mutasyonlarının bu üründeki sözleşmesi bu.
+       */
+      name: 'boost_post',
+      description:
+        'Bir gönderiyi reklama çevirir (etkileşim kampanyası). PARA HARCAR: bu araç yalnızca ONAY KARTI üretir, kullanıcı kartı tıklamadan hiçbir şey yayınlanmaz. Önce list_boostable_posts ile gönderiyi bul.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          clientId: { type: 'string' },
+          organicPostId: { type: 'string', description: 'list_boostable_posts sonucundaki id' },
+          totalBudget: { type: 'string', description: 'TOPLAM bütçe, ana birimde ("300"). En az 20.' },
+          durationDays: { type: 'number', description: 'Kaç gün yayında kalacak (1-30)' },
+          sehirler: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Hedeflenecek şehir adları. Boşsa Türkiye geneli.',
+          },
+          yasMin: { type: 'number' },
+          yasMax: { type: 'number' },
+        },
+        required: ['clientId', 'organicPostId', 'totalBudget', 'durationDays'],
+      },
+      permissions: ['boost.approve'],
+      execute: (ctx, input) =>
+        safe(async () => {
+          const gonderiId = String(input.organicPostId);
+          const liste = await deps.boosts.listBoostablePosts(ctx, {
+            clientId: String(input.clientId),
+            limit: 100,
+          });
+          const gonderi = liste.items.find((p) => p.id === gonderiId);
+          if (!gonderi) {
+            return {
+              status: 'failed',
+              reason: 'Gönderi bulunamadı — önce list_boostable_posts çağır ve oradaki id’yi kullan.',
+            } as const;
+          }
+          /*
+           * ENGEL ÖNCE KONTROL EDİLİYOR. Onay kartını basıp kullanıcıyı
+           * tıklattıktan sonra reddetmek, harcama kararını verdirip sonra
+           * "olmuyor" demek olurdu.
+           */
+          if (gonderi.blockedReason) {
+            return { status: 'failed', reason: gonderi.blockedReason } as const;
+          }
+
+          const gun = Number(input.durationDays);
+          const butce = String(input.totalBudget).replace(',', '.');
+          const sehirAdlari = Array.isArray(input.sehirler)
+            ? (input.sehirler as unknown[]).map(String).filter(Boolean)
+            : [];
+
+          /*
+           * ═══ ŞEHİR ADI META ANAHTARINA ÇEVRİLİYOR ═══
+           *
+           * Meta hedeflemede şehir ADI kabul etmiyor, kendi anahtarını
+           * istiyor. Çeviremediğimiz bir adı SESSİZCE DÜŞÜRMEK, kullanıcının
+           * "İzmir'e ver" dediği reklamı Türkiye geneline açmak olurdu —
+           * bütçenin nereye gittiği tamamen değişir ve hiçbir hata da
+           * görünmez. Çözülemeyen ad varsa kart HİÇ üretilmiyor.
+           */
+          const lokasyonlar: Array<{ key: string; type: 'country' | 'region' | 'city' }> = [];
+          const cozulemeyen: string[] = [];
+          if (sehirAdlari.length > 0) {
+            if (!gonderi.adAccountId) {
+              return {
+                status: 'failed',
+                reason: 'Gönderinin bağlı olduğu reklam hesabı okunamadı, şehir hedeflemesi yapılamıyor.',
+              } as const;
+            }
+            for (const ad of sehirAdlari) {
+              const sonuclar = await deps.connections.searchGeoLocations(
+                ctx,
+                gonderi.adAccountId,
+                ad,
+              );
+              const ilk = sonuclar[0];
+              /*
+               * TÜRÜ DARALTIYORUZ. `GeoLocationOption.type` düz `string`;
+               * boost şeması yalnızca üç değeri kabul ediyor ve bilinmeyen
+               * bir tür (Meta bölge/posta kodu da döndürebiliyor) şemadan
+               * geçmeyip isteği en son anda düşürürdü. Tanımadığımız türü
+               * ÇÖZÜLEMEDİ sayıyoruz: kullanıcı adı netleştirsin.
+               */
+              const tur =
+                ilk && (ilk.type === 'city' || ilk.type === 'region' || ilk.type === 'country')
+                  ? ilk.type
+                  : null;
+              if (ilk && tur) lokasyonlar.push({ key: ilk.key, type: tur });
+              else cozulemeyen.push(ad);
+            }
+          }
+          if (cozulemeyen.length > 0) {
+            return {
+              status: 'failed',
+              reason:
+                `Şu yerleri Meta'da bulamadım: ${cozulemeyen.join(', ')}. ` +
+                'Adı farklı yazmayı dene ya da şehir vermeden (Türkiye geneli) devam edelim.',
+            } as const;
+          }
+
+          const nereye =
+            lokasyonlar.length > 0 ? sehirAdlari.join(', ') : 'Türkiye geneli';
+
+          return {
+            status: 'pending_confirmation',
+            confirmationId: randomUUID(),
+            summary:
+              `${gonderi.socialProfileName} gönderisi ${gun} gün boyunca ` +
+              `TOPLAM ${butce} ₺ bütçeyle reklama çevrilecek · ${nereye}`,
+            detail: {
+              kind: 'boost',
+              boost: {
+                clientId: String(input.clientId),
+                organicPostId: gonderiId,
+                totalBudget: butce,
+                durationDays: gun,
+                // ÇÖZÜLMÜŞ ANAHTARLAR SAKLANIYOR, ADLAR DEĞİL: onay saniyeler
+                // sonra geliyor ve aramayı ikinci kez yapmak, arada değişen
+                // bir sonuçla farklı bir yere harcamak demek olurdu.
+                lokasyonlar,
+                yasMin: typeof input.yasMin === 'number' ? input.yasMin : 18,
+                yasMax: typeof input.yasMax === 'number' ? input.yasMax : 65,
+              },
+            },
+          } as const;
+        }),
+    },
+
     {
       name: 'create_creative',
       description:

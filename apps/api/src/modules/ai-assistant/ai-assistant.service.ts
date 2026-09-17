@@ -30,6 +30,7 @@ import { ClientProfileService } from '../tenancy/client-profile.service';
 import { baglamiMetne, musteriBaglamiKur } from './musteri-baglami';
 import { ANTHROPIC_CLIENT } from './anthropic-client.provider';
 import { buildSystemPrompt } from './system-prompt';
+import { BoostsService } from '../boosts/boosts.service';
 import { buildTools } from './tools';
 import type { ToolDefinition, ToolResult } from './tool-types';
 
@@ -176,9 +177,10 @@ export class AiAssistantService {
     creatives: CreativeService,
     private readonly campaignActions: CampaignActionsService,
     private readonly clientProfile: ClientProfileService,
+    private readonly boosts: BoostsService,
   ) {
     this.model = config.aiAssistant.model;
-    this.tools = buildTools({ clients, connections, draftTree, creatives, campaignActions });
+    this.tools = buildTools({ clients, connections, draftTree, creatives, campaignActions, boosts });
     this.toolMap = new Map(this.tools.map((t) => [t.name, t]));
   }
 
@@ -475,12 +477,45 @@ export class AiAssistantService {
 
     let result: ToolResult;
     try {
-      const applied = await this.campaignActions.applyAction(
-        ctx,
-        pending.detail.campaignId,
-        toCampaignAction(pending.detail.action),
-      );
-      result = { status: 'success', data: applied };
+      if (pending.detail.kind === 'boost') {
+        /*
+         * YETKİ BURADA AYRICA KONTROL EDİLİYOR.
+         *
+         * Uç noktanın kendi dekoratörü `budget.write` istiyor ve bu kampanya
+         * aksiyonları için doğru; ama gönderi reklamı `boost.approve`
+         * istiyor. Kartı üreten araç o izni kontrol etti, ancak onay AYRI
+         * BİR İSTEK: aradaki sürede kullanıcının yetkisi alınmış olabilir ve
+         * para taahhüdü o anki yetkiye bakmak zorunda.
+         */
+        assertPermissions(ctx, 'boost.approve');
+        const b = pending.detail.boost;
+        const boost = await this.boosts.createManualBoost(ctx, {
+          clientId: b.clientId,
+          organicPostId: b.organicPostId,
+          totalBudget: b.totalBudget,
+          durationDays: b.durationDays,
+          targeting: {
+            /*
+             * ANAHTARLAR KART ÜRETİLİRKEN ÇÖZÜLDÜ. Burada yeniden aramak,
+             * onay ile kart arasında değişen bir sonuçla BAŞKA bir yere
+             * harcamak demek olurdu; kullanıcının onayladığı özet o anki
+             * adları yazıyor.
+             */
+            locations: b.lokasyonlar,
+            ageMin: b.yasMin,
+            ageMax: b.yasMax,
+            genders: 'all',
+          },
+        });
+        result = { status: 'success', data: { boostId: boost.id, durum: boost.status } };
+      } else {
+        const applied = await this.campaignActions.applyAction(
+          ctx,
+          pending.detail.campaignId,
+          toCampaignAction(pending.detail.action),
+        );
+        result = { status: 'success', data: applied };
+      }
     } catch (err) {
       result = { status: 'failed', reason: err instanceof Error ? err.message : String(err) };
     }
@@ -832,17 +867,56 @@ export class AiAssistantService {
   }
 }
 
-interface PendingActionDetail {
-  campaignId: string;
-  action:
-    | { type: 'pause' }
-    | { type: 'resume' }
-    | { type: 'set_budget'; amountMicros: string; budgetMode: 'daily' | 'lifetime' };
+/**
+ * Onay kartının arkasındaki iş — İKİ TÜR.
+ *
+ * `kind` YENİ ALAN VE OPSİYONEL: bu alan eklenmeden önce yazılmış kartlar
+ * veritabanında duruyor ve onlarda `kind` yok. Zorunlu yapmak, kullanıcının
+ * açık sohbetindeki bir onayı "bozuk kayıt" sayıp sessizce ölü hâle
+ * getirirdi.
+ */
+type PendingActionDetail =
+  | {
+      kind?: 'campaign';
+      campaignId: string;
+      action:
+        | { type: 'pause' }
+        | { type: 'resume' }
+        | { type: 'set_budget'; amountMicros: string; budgetMode: 'daily' | 'lifetime' };
+    }
+  | { kind: 'boost'; boost: PendingBoost };
+
+interface PendingBoost {
+  clientId: string;
+  organicPostId: string;
+  totalBudget: string;
+  durationDays: number;
+  /** ÇÖZÜLMÜŞ Meta anahtarları — şehir ADI değil. Boş = Türkiye geneli. */
+  lokasyonlar: Array<{ key: string; type: 'country' | 'region' | 'city' }>;
+  yasMin: number;
+  yasMax: number;
 }
 
 function isPendingActionDetail(x: unknown): x is PendingActionDetail {
   if (typeof x !== 'object' || x === null) return false;
   const obj = x as Record<string, unknown>;
+
+  if (obj.kind === 'boost') {
+    const b = obj.boost as Record<string, unknown> | undefined;
+    /*
+     * ALAN ALAN DENETLENİYOR. `detail` veritabanından gelen JSON ve biçimi
+     * garanti değil; denetimsiz bir cast, eksik bir bütçe alanını sessizce
+     * geçirip platforma yanlış tutar gönderirdi.
+     */
+    return (
+      !!b &&
+      typeof b.clientId === 'string' &&
+      typeof b.organicPostId === 'string' &&
+      typeof b.totalBudget === 'string' &&
+      typeof b.durationDays === 'number'
+    );
+  }
+
   if (typeof obj.campaignId !== 'string') return false;
   const action = obj.action as Record<string, unknown> | undefined;
   if (!action || typeof action.type !== 'string') return false;
@@ -856,7 +930,10 @@ function isPendingActionDetail(x: unknown): x is PendingActionDetail {
   return false;
 }
 
-function toCampaignAction(action: PendingActionDetail['action']): CampaignAction {
+/** Yalnızca KAMPANYA kartında anlamlı — boost dalı buraya hiç girmiyor. */
+type KampanyaAksiyonu = Extract<PendingActionDetail, { campaignId: string }>['action'];
+
+function toCampaignAction(action: KampanyaAksiyonu): CampaignAction {
   if (action.type === 'set_budget') {
     return { type: 'set_budget', amountMicros: BigInt(action.amountMicros), budgetMode: action.budgetMode };
   }

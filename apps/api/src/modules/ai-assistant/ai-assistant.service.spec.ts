@@ -190,6 +190,10 @@ function makeService(opts: {
     ...opts.clientProfile,
   } as unknown as ClientProfileService;
 
+  // Gönderi reklamı (boost) yolu bu pakette sınanmıyor; sahte servis yalnızca
+  // yapıcıyı tamamlıyor.
+  const boosts = {} as never;
+
   const svc = new AiAssistantService(
     opts.anthropic,
     config,
@@ -200,6 +204,7 @@ function makeService(opts: {
     creatives,
     campaignActions,
     clientProfile,
+    boosts,
   );
   return { svc, mem, campaignActions, draftTree, creatives, clientProfile, connections };
 }
@@ -521,6 +526,7 @@ describe('update_budget tool — girdi doğrulama ve para birimi', () => {
       clients: {} as never,
       connections: {} as never,
       draftTree: {} as never,
+      boosts: {} as never,
       creatives: {} as never,
       campaignActions: { getSummary } as unknown as CampaignActionsService,
     });
