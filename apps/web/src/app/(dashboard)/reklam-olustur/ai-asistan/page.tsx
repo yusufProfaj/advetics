@@ -1,14 +1,14 @@
-import Link from 'next/link';
 import {
   ASISTAN_PLATFORMLARI,
   ASISTAN_PLATFORM_ETIKETI,
+  type AiAssistantConversationSummary,
   type AiAssistantThread,
   type AsistanPlatformu,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
-import { baglanti } from '@/lib/baglanti';
 import { AiAsistanSohbeti } from '@/components/ai-asistan/ai-asistan-sohbeti';
+import { SohbetListesi } from '@/components/ai-asistan/sohbet-listesi';
 
 export const metadata = { title: 'AI Asistan · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -92,6 +92,27 @@ export default async function AiAsistanPage({
    * göstermek, "geçmiş yok" ile "geçmiş yüklenemedi"yi aynı boşluğa
    * çevirirdi (CLAUDE.md).
    */
+  /*
+   * ═══ SOHBETLER ARTIK LİSTELENİYOR ═══
+   *
+   * Sohbet bugüne kadar yalnızca adres çubuğunda yaşıyordu: sayfayı kapatan
+   * ya da workspace değiştiren kullanıcı ona bir daha ulaşamıyordu. Kayıt
+   * `ai_conversations`ta duruyordu, listeleyen bir ekran yoktu.
+   *
+   * HATA YUTULMUYOR ama sohbeti de ENGELLEMİYOR: liste okunamazsa kullanıcı
+   * yine de yazabilmeli. Boş bir listeyle devam etmek, "sohbetin yok" demek
+   * olurdu; o yüzden hata ayrıca gösteriliyor.
+   */
+  const listeSonuc = await serverApiFetch<AiAssistantConversationSummary[]>(
+    `/ai-assistant/conversations?clientId=${clientId}&platform=${platform}`,
+  ).then(
+    (r) => ({ liste: r, hata: null as string | null }),
+    (e: unknown) => ({
+      liste: [] as AiAssistantConversationSummary[],
+      hata: e instanceof Error ? e.message : 'Sohbet listesi okunamadı.',
+    }),
+  );
+
   const sohbetId = first(params.sohbet) ?? null;
   let thread: AiAssistantThread | null = null;
   let yuklemeHatasi: string | null = null;
@@ -134,6 +155,21 @@ export default async function AiAsistanPage({
         )}
       </header>
 
+      {listeSonuc.hata && (
+        <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger-strong">
+          Sohbet listesi okunamadı: {listeSonuc.hata}
+        </p>
+      )}
+
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row">
+        <SohbetListesi
+          sohbetler={listeSonuc.liste}
+          aktifId={sohbetId}
+          clientId={clientId}
+          platform={platform}
+        />
+
+        <div className="min-w-0 flex-1">
       <AiAsistanSohbeti
         // SOHBET DEĞİŞİNCE BİLEŞEN SIFIRLANIYOR. `useState` yalnızca ilk
         // render'da başlangıç değerini alıyor; anahtar olmadan başka bir
@@ -148,14 +184,8 @@ export default async function AiAsistanPage({
         yuklemeHatasi={yuklemeHatasi}
       />
 
-      {sohbetId && (
-        <Link
-          href={baglanti('/reklam-olustur/ai-asistan', {}, { musteri: clientId, platform })}
-          className="inline-block text-xs text-ink-muted underline hover:text-ink"
-        >
-          Yeni sohbet başlat
-        </Link>
-      )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { Permission, TenantContext } from '@advetics/shared';
+import type { AsistanPlatformu, Permission, TenantContext } from '@advetics/shared';
 
 /**
  * Her yazma tool'unun döndürdüğü YAPILANDIRILMIŞ sonuç.
@@ -32,5 +32,18 @@ export interface ToolDefinition {
   inputSchema: Record<string, unknown>;
   /** Bu tool çalıştırılmadan önce `assertPermissions` ile kontrol edilir. */
   permissions: Permission[];
-  execute(ctx: TenantContext, input: Record<string, unknown>): Promise<ToolResult>;
+  /**
+   * `platform` SOHBETİN PLATFORMU — istekten değil, sohbet satırından.
+   *
+   * Listeleme araçları buna göre SÜZÜYOR. Süzmeden önce Meta asistanı
+   * Google kampanyalarını da listeliyordu ve kullanıcıya "onlar için diğer
+   * asistana geç" dedirtiyordu: kendi listesinde göremeyeceği şeyleri
+   * gösteren bir asistan, her cevabında bir uyarı cümlesi taşımak zorunda
+   * kalıyor.
+   */
+  execute(
+    ctx: TenantContext,
+    input: Record<string, unknown>,
+    platform: AsistanPlatformu,
+  ): Promise<ToolResult>;
 }

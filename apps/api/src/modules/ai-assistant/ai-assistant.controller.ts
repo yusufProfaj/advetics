@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import {
   aiAssistantConfirmInputSchema,
   aiAssistantMessageInputSchema,
   type AiAssistantConfirmInput,
+  type AiAssistantConversationSummary,
   type AiAssistantMessageInput,
+  type AsistanPlatformu,
   type AiAssistantThread,
   type TenantContext,
 } from '@advetics/shared';
@@ -40,6 +42,46 @@ export class AiAssistantController {
    * `bulk.read` YETİYOR: yalnızca okuyor ve `assertOwnConversation` zaten
    * başkasının sohbetini reddediyor.
    */
+  /**
+   * Bu kullanıcının bu workspace'teki sohbetleri — en fazla üç.
+   *
+   * `bulk.read` YETİYOR: yalnızca okuyor ve liste zaten SAHİBİNE özel.
+   */
+  @Get('conversations')
+  @RequirePermissions('bulk.read')
+  conversations(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+    @Query('platform') platform?: string,
+  ): Promise<AiAssistantConversationSummary[]> {
+    /*
+     * SÖZLÜKLE DARALTMA — iki yollu dallanma DEĞİL.
+     *
+     * `google ise şu, değilse Meta` biçiminde yazmak bu depoda taranıp
+     * reddediliyor: üçüncü bir platform eklendiğinde sessizce yanlış değeri
+     * üretiyor. Bilinmeyen değer Meta'ya düşüyor ve sebebi burada yazılı —
+     * asistanı olmayan bir platform istendiğinde sohbeti patlatmak yerine
+     * varsayılanla açılıyor.
+     */
+    const bilinen: Record<string, AsistanPlatformu> = { meta: 'meta', google: 'google' };
+    return this.assistant.listConversations(ctx, clientId, bilinen[platform ?? ''] ?? 'meta');
+  }
+
+  /**
+   * Sohbeti siler. GERİ ALINMIYOR.
+   *
+   * `bulk.write` — okuma yetkisi olan herkesin başkasının (kendi de olsa)
+   * çalışma alanını silebilmesi gerekmiyor; silme bir yazma işi.
+   */
+  @Delete('conversations/:conversationId')
+  @RequirePermissions('bulk.write')
+  removeConversation(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ): Promise<{ silindi: true }> {
+    return this.assistant.deleteConversation(ctx, conversationId);
+  }
+
   @Get('conversations/:conversationId')
   @RequirePermissions('bulk.read')
   thread(

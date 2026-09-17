@@ -110,6 +110,29 @@ export interface AiAssistantThread {
   actions: AiAssistantAction[];
 }
 
+/**
+ * ═══ AYNI ANDA ÜÇ SOHBET ═══
+ *
+ * Sohbet bugüne kadar YALNIZCA adres çubuğunda yaşıyordu: sayfayı kapatan
+ * ya da workspace değiştiren kullanıcı ona bir daha ulaşamıyordu. Kayıt
+ * veritabanında duruyordu, listeleyen bir ekran yoktu.
+ *
+ * SINIR ÜÇ VE BU BİLİNÇLİ. Sınırsız liste, bir süre sonra kullanıcının
+ * hangisinin ne olduğunu bilmediği bir yığın oluyor; üç, "bir işi bitirip
+ * diğerine geçme" ritmiyle uyumlu. Dördüncüyü açmak için birini silmek
+ * gerekiyor ve bu ekranda AÇIKÇA söyleniyor.
+ */
+export const SOHBET_SINIRI = 3;
+
+export interface AiAssistantConversationSummary {
+  id: string;
+  title: string | null;
+  /** Son mesajın zamanı — liste buna göre sıralı. */
+  updatedAt: string;
+  /** Kaç mesaj var: tek mesajlık bir sohbet ile uzun bir plan ayırt edilsin. */
+  messageCount: number;
+}
+
 export interface AiAssistantSendResult {
   conversationId: string;
   reply: string;

@@ -92,3 +92,66 @@ describe('boş ekran', () => {
     expect(SOHBET).toContain('Görseli buraya bırak');
   });
 });
+
+describe('sohbet listesi', () => {
+  const LISTE = yorumsuz(readFileSync(join(__dirname, 'sohbet-listesi.tsx'), 'utf8'));
+  const SAYFA = yorumsuz(
+    readFileSync(
+      join(__dirname, '..', '..', 'app', '(dashboard)', 'reklam-olustur', 'ai-asistan', 'page.tsx'),
+      'utf8',
+    ),
+  );
+
+  it('tarama boşa düşmüyor', () => {
+    expect(LISTE).toContain('export function SohbetListesi');
+    expect(SAYFA).toContain('<SohbetListesi');
+  });
+
+  it('KRİTİK: sınır SABİTTEN okunuyor, ekranda ELLE yazılmıyor', () => {
+    /*
+     * Sınır sunucuda `SOHBET_SINIRI` ile dayatılıyor. Ekranda "3" yazmak,
+     * sınır değiştiğinde kullanıcıya yanlış sayıyı söylemek olurdu — bu
+     * depoda fatura boyutu sınırında bir kez yaşandı.
+     */
+    expect(LISTE).toContain('SOHBET_SINIRI');
+    expect(LISTE).toContain('sohbetler.length >= SOHBET_SINIRI');
+  });
+
+  it('KRİTİK: sınıra ulaşınca SEBEP yazıyor', () => {
+    // Sessizce kaybolan ya da sebepsiz kapanan bir düğme, kullanıcıya
+    // özelliğin bozulduğunu düşündürürdü.
+    expect(LISTE).toContain('birini sil');
+  });
+
+  it('KRİTİK: silme İKİ ADIMDA', () => {
+    // Sohbet geçmişi geri alınamıyor; yanlışlıkla tıklanan bir düğme
+    // kullanıcının yazdığı planı kaybettirirdi.
+    expect(LISTE).toContain('Evet, sil');
+    expect(LISTE).toContain('Vazgeç');
+  });
+
+  it('KRİTİK: açık sohbet silinince LİSTEYE dönülüyor', () => {
+    /*
+     * Aynı adreste kalmak, artık var olmayan bir sohbeti yüklemeye çalışmak
+     * ve kullanıcıya "önceki sohbet yüklenemedi" hatası göstermek demekti.
+     */
+    const i = LISTE.indexOf('async function sil');
+    expect(i, 'silme yok — tarama boşa düştü').toBeGreaterThan(-1);
+    const dilim = LISTE.slice(i, LISTE.indexOf('\n  }', i));
+    expect(dilim).toContain('if (aktif)');
+    expect(dilim).toContain('router.replace');
+  });
+
+  it('KRİTİK: liste okunamazsa sohbet ENGELLENMİYOR', () => {
+    // Liste bir kolaylık; okunamadığında kullanıcı yine de yazabilmeli.
+    // Ama sessiz de kalmamalı.
+    expect(SAYFA).toContain('listeSonuc.hata');
+    expect(SAYFA).toContain('Sohbet listesi okunamadı');
+  });
+
+  it('bağlantılar workspace ve platform parametresini TAŞIYOR', () => {
+    // Elle birleştirilen bir bağlantı süzgeci düşürüyor (CLAUDE.md).
+    expect(LISTE).toContain('baglanti(');
+    expect(LISTE).toContain('musteri: clientId, platform');
+  });
+});

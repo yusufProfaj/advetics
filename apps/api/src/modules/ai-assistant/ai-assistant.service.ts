@@ -1,15 +1,23 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Prisma } from '@prisma/client';
 import type {
   AiAssistantAction,
+  AiAssistantConversationSummary,
   AiAssistantSendResult,
   AiAssistantThread,
   AiAssistantThreadMessage,
   AsistanPlatformu,
   TenantContext,
 } from '@advetics/shared';
-import { ASISTAN_PLATFORMLARI } from '@advetics/shared';
+import { ASISTAN_PLATFORMLARI, SOHBET_SINIRI } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { assertPermissions } from '../../common/guards/permissions.guard';
@@ -616,7 +624,61 @@ export class AiAssistantService {
     } catch {
       return { status: 'failed', reason: 'Bu işlem için yetkin yok.' };
     }
-    return tool.execute(ctx, input);
+    return tool.execute(ctx, input, platform);
+  }
+
+  /**
+   * ═══ BU KULLANICININ BU WORKSPACE'TEKİ SOHBETLERİ ═══
+   *
+   * SAHİBİNE ÖZEL: `assertOwnConversation` zaten başkasının sohbetine mesaj
+   * yazmayı reddediyor; listede göstermek de aynı sınırı taşımak zorunda,
+   * yoksa kullanıcı açamayacağı satırlar görürdü.
+   *
+   * PLATFORMA GÖRE AYRI: Meta ve Google iki ayrı asistan ve sohbetleri de
+   * ayrı. Meta listesinde Google sohbetini göstermek, tıklayınca başka bir
+   * asistana düşmek demekti.
+   */
+  async listConversations(
+    ctx: TenantContext,
+    clientId: string,
+    platform: AsistanPlatformu,
+  ): Promise<AiAssistantConversationSummary[]> {
+    const rows = await this.prisma.withTenant(ctx, (tx) =>
+      tx.aiConversation.findMany({
+        where: { clientId, platform, userId: ctx.userId },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          updatedAt: true,
+          _count: { select: { messages: true } },
+        },
+      }),
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      updatedAt: r.updatedAt.toISOString(),
+      messageCount: r._count.messages,
+    }));
+  }
+
+  /**
+   * Sohbeti siler — mesajlarıyla birlikte.
+   *
+   * GERİ ALINMIYOR ve bu ekranda yazılı. Sohbet geçmişi bir kayıt değil bir
+   * çalışma alanı; sildikten sonra kurtarma beklentisi yaratmak, olmayan bir
+   * özelliği vaat etmek olurdu.
+   */
+  async deleteConversation(ctx: TenantContext, conversationId: string): Promise<{ silindi: true }> {
+    await this.assertOwnConversation(ctx, conversationId);
+    await this.prisma.withTenant(ctx, async (tx) => {
+      // Mesajlar ÖNCE: `ai_messages` sohbete FK ile bağlı ve silme sırası
+      // ters olursa kısıt hatası veriyor.
+      await tx.aiMessage.deleteMany({ where: { conversationId } });
+      await tx.aiConversation.delete({ where: { id: conversationId } });
+    });
+    return { silindi: true };
   }
 
   private async assertOwnConversation(
@@ -644,6 +706,28 @@ export class AiAssistantService {
     // kadarki bütün sohbetler tek asistanla yapıldı ve o asistan pratikte
     // Meta'yı konuşuyordu (Google yazma yolu hiç yazılmadı).
     const platform: AsistanPlatformu = input.platform ?? 'meta';
+
+    /*
+     * ═══ SINIR AÇILIŞTA KONTROL EDİLİYOR ═══
+     *
+     * Kontrolü arayüze bırakmak, ucun doğrudan çağrılmasıyla sınırsız sohbet
+     * açılabilmesi demekti. Sayım SAHİBİ + WORKSPACE + PLATFORM kapsamında:
+     * kullanıcının Meta sohbetleri Google'ınkileri kısıtlamamalı, iki ayrı
+     * asistanın iki ayrı işi var.
+     */
+    if (input.clientId) {
+      const mevcut = await this.prisma.withTenant(ctx, (tx) =>
+        tx.aiConversation.count({
+          where: { clientId: input.clientId, platform, userId: ctx.userId },
+        }),
+      );
+      if (mevcut >= SOHBET_SINIRI) {
+        throw new BadRequestException(
+          `Aynı anda en fazla ${SOHBET_SINIRI} sohbet tutabilirsin. ` +
+            'Yeni bir sohbet başlatmak için birini sil.',
+        );
+      }
+    }
     const conv = await this.prisma.withTenant(ctx, (tx) =>
       tx.aiConversation.create({
         data: {

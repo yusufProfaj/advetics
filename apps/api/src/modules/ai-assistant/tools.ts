@@ -132,10 +132,18 @@ export function buildTools(deps: ToolDeps): ToolDefinition[] {
         required: ['clientId'],
       },
       permissions: ['bulk.read'],
-      execute: (ctx, input) =>
+      execute: (ctx, input, platform) =>
         safe(async () => {
           const groups = await deps.draftTree.list(ctx, String(input.clientId));
-          return { status: 'success', data: groups } as const;
+          /*
+           * GRUBUN İÇİ SÜZÜLÜYOR, GRUP DEĞİL. Bir taslak grubu iki platformun
+           * kampanyasını birden taşıyabiliyor; grubu tamamen atmak, Meta
+           * kampanyası da olan bir niyeti asistandan gizlerdi.
+           */
+          const suzulmus = groups
+            .map((g) => ({ ...g, campaigns: g.campaigns.filter((c) => c.platform === platform) }))
+            .filter((g) => g.campaigns.length > 0);
+          return { status: 'success', data: suzulmus } as const;
         }),
     },
 
@@ -149,11 +157,23 @@ export function buildTools(deps: ToolDeps): ToolDefinition[] {
         required: ['clientId'],
       },
       permissions: ['bulk.read'],
-      execute: (ctx, input) =>
+      execute: (ctx, input, platform) =>
         safe(async () => {
-          const rows = await deps.campaignActions.list(ctx, String(input.clientId));
+          /*
+           * PLATFORMA GÖRE SÜZÜLÜYOR. Süzülmeden önce Meta asistanı Google
+           * kampanyalarını da listeliyor ve her cevabında "onlar için diğer
+           * asistana geç" cümlesi taşımak zorunda kalıyordu.
+           */
+          const hepsi = await deps.campaignActions.list(ctx, String(input.clientId));
+          const rows = hepsi.filter((r) => r.platform === platform);
           if (rows.length === 0) {
-            return { status: 'failed', reason: 'Bu müşterinin yayında kampanyası yok.' } as const;
+            return {
+              status: 'failed',
+              reason:
+                hepsi.length > 0
+                  ? `Bu müşterinin ${platform} tarafında yayında kampanyası yok (diğer platformlarda ${hepsi.length} kampanya var).`
+                  : 'Bu müşterinin yayında kampanyası yok.',
+            } as const;
           }
           return {
             status: 'success',
@@ -184,6 +204,90 @@ export function buildTools(deps: ToolDeps): ToolDefinition[] {
        *
        * OKUMA — onay istemiyor, platforma dokunmuyor.
        */
+      /**
+       * ═══ "HANGİ KAMPANYAM KÖTÜ GİDİYOR" ═══
+       *
+       * Asistanın elinde performans verisi YOKTU ve kullanıcıya birebir
+       * şunu söylüyordu: *"kampanya performansını gösteren bir analiz aracım
+       * yok, 'kötü gidiyor' diyebilecek bir metrik verim yok"*. Oysa veri
+       * `insights_daily`de duruyor ve panelin kampanya listesi onu zaten
+       * okuyor — eksik olan araçtı.
+       *
+       * OKUMA: platforma dokunmuyor, kota harcamıyor, onay istemiyor.
+       */
+      name: 'campaign_performance',
+      description:
+        'Yayındaki kampanyaların performansını verir: harcama, gösterim, tıklama, CTR, dönüşüm ve edinme maliyeti. "Hangisi kötü gidiyor", "nerede para yanıyor" gibi sorularda ÖNCE bunu çağır.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          clientId: { type: 'string' },
+          gun: { type: 'number', description: 'Kaç günlük pencere (varsayılan 30)' },
+        },
+        required: ['clientId'],
+      },
+      permissions: ['insights.read'],
+      execute: (ctx, input, platform) =>
+        safe(async () => {
+          const liste = await deps.campaignActions.canliListe(ctx, String(input.clientId), {
+            gun: typeof input.gun === 'number' ? input.gun : 30,
+            platform,
+          });
+          if (liste.rows.length === 0) {
+            return {
+              status: 'failed',
+              reason: `Bu müşterinin ${platform} tarafında yayında kampanyası yok.`,
+            } as const;
+          }
+          return {
+            status: 'success',
+            data: {
+              /*
+               * VERİSİ OLMAYAN KAMPANYA `null` METRİKLE DÖNÜYOR, sıfırla
+               * değil. "Harcamadı" ile "veri gelmedi" aynı şey değil ve
+               * modelin bunu ayırt etmesi gerekiyor: ilkinde kampanyaya,
+               * ikincisinde senkronizasyona bakılır.
+               */
+              kampanyalar: liste.rows.map((r) => {
+                const m = r.son7Gun;
+                const harcama = m === null ? null : Number(BigInt(m.spendMicros) / 10_000n) / 100;
+                return {
+                  id: r.id,
+                  ad: r.name,
+                  durum: r.status,
+                  platformDurumu: r.effectiveStatus,
+                  paraBirimi: r.currency,
+                  gunlukButce:
+                    r.budgetAmountMicros === null
+                      ? null
+                      : Number(BigInt(r.budgetAmountMicros) / 10_000n) / 100,
+                  veri:
+                    m === null
+                      ? null
+                      : {
+                          harcama,
+                          gosterim: m.impressions,
+                          tiklama: m.clicks,
+                          ctr:
+                            m.impressions === 0
+                              ? 0
+                              : Number(((m.clicks / m.impressions) * 100).toFixed(2)),
+                          donusum: m.conversions,
+                          // EDİNME MALİYETİ YALNIZCA DÖNÜŞÜM VARKEN. Sıfıra
+                          // bölmek yerine `null`: "dönüşüm yok" zaten ayrı
+                          // ve daha önemli bir bilgi.
+                          edinmeMaliyeti:
+                            m.conversions > 0 && harcama !== null
+                              ? Number((harcama / m.conversions).toFixed(2))
+                              : null,
+                        },
+                };
+              }),
+            },
+          } as const;
+        }),
+    },
+    {
       name: 'list_top_creatives',
       description:
         'Bu müşterinin geçmişte EN İYİ performans gösteren reklam kreatiflerini (metin + görsel + CTR) listeler. Yeni bir reklam metni yazmadan ÖNCE çağır: neyin işe yaradığını görüp ona yakın bir metin üret.',

@@ -153,7 +153,24 @@ export class CampaignActionsService {
    * YAYINDAKİ kampanyayı listeden sessizce düşürürdü. Aynı tuzağa taslak
    * listesinde düşüldü ve `taslak-listesi-rls.spec.ts` ile kilitlendi.
    */
-  async canliListe(ctx: TenantContext, clientId: string): Promise<CanliKampanyaListesi> {
+  async canliListe(
+    ctx: TenantContext,
+    clientId: string,
+    /**
+     * Pencere ve platform süzgeci.
+     *
+     * TEK SORGU İKİ TÜKETİCİYE HİZMET EDİYOR: panelin "Yayında olanlar"
+     * listesi (7 gün, bütün platformlar) ve AI asistanı (kendi platformu,
+     * istediği pencere). İkinci bir sorgu yazmak, kırılım süzgeci ya da
+     * pencere kuralı birinde düzeltilip diğerinde unutulunca aynı ekranda
+     * iki farklı rakam demekti.
+     */
+    secenek: { gun?: number; platform?: Platform } = {},
+  ): Promise<CanliKampanyaListesi> {
+    const gun = Math.min(365, Math.max(1, Math.round(secenek.gun ?? 7)));
+    const platformSuzgeci = secenek.platform
+      ? Prisma.sql`AND c.platform = ${secenek.platform}::"Platform"`
+      : Prisma.empty;
     const scoped = { ...ctx, activeClientId: clientId };
     return this.prisma.withTenant(scoped, async (tx) => {
       const rows = await tx.$queryRaw<CanliSatir[]>(Prisma.sql`
@@ -179,9 +196,10 @@ export class CampaignActionsService {
                -- KIRILIMSIZ SATIRLAR. Kırılım satırlarını da toplamak aynı
                -- harcamayı yaş/cinsiyet sayısı kadar tekrar saymak olurdu.
                AND i.breakdown_key = ''
-               AND i.date >= CURRENT_DATE - INTERVAL '7 days'
+               AND i.date >= CURRENT_DATE - ${gun}::int * INTERVAL '1 day'
           ) m ON TRUE
          WHERE c.client_id = ${clientId}::uuid AND c.deleted_at IS NULL
+           ${platformSuzgeci}
          ORDER BY (c.status = 'active'::"EntityStatus") DESC,
                   m.spend_micros DESC NULLS LAST,
                   c.name
@@ -191,8 +209,9 @@ export class CampaignActionsService {
       // SAYIM AYRI SORGUDA: liste kesiliyor ve kaçının dışarıda kaldığını
       // söylemek zorundayız.
       const [sayim] = await tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`
-        SELECT count(*) AS n FROM campaigns
-         WHERE client_id = ${clientId}::uuid AND deleted_at IS NULL
+        SELECT count(*) AS n FROM campaigns c
+         WHERE c.client_id = ${clientId}::uuid AND c.deleted_at IS NULL
+           ${platformSuzgeci}
       `);
 
       return {

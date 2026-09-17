@@ -98,13 +98,35 @@ function servisSorgusu(): string {
   );
   const bas = kaynak.indexOf('async canliListe');
   if (bas === -1) throw new Error('canliListe bulunamadı — tarama boşa düştü');
+
+  /*
+   * METOTTAKİ İLK ŞABLON ARANAN SORGU DEĞİL.
+   *
+   * `canliListe` içinde birden çok `Prisma.sql` var: biri platform
+   * süzgecinin kendisi, biri ana sorgu, biri sayım. İlkini almak — ilk
+   * yazımda öyleydi — süzgeç parçasını yakalayıp "yanlış sorgu" ile
+   * düşürüyordu. Doğrusu: şablonları sırayla gez, ARADIĞIN tabloyu
+   * içereni al.
+   */
   const im = 'Prisma.sql`';
-  const sqlBas = kaynak.indexOf(im, bas);
-  const sqlSon = kaynak.indexOf('`', sqlBas + im.length);
-  const sql = kaynak.slice(sqlBas + im.length, sqlSon);
-  if (!sql.includes('FROM campaigns')) throw new Error('yanlış sorgu yakalandı');
+  let sql: string | null = null;
+  for (let i = kaynak.indexOf(im, bas); i !== -1; i = kaynak.indexOf(im, i + im.length)) {
+    const aday = kaynak.slice(i + im.length, kaynak.indexOf('`', i + im.length));
+    if (aday.includes('FROM campaigns c')) {
+      sql = aday;
+      break;
+    }
+  }
+  if (sql === null) throw new Error('ana sorgu bulunamadı — tarama boşa düştü');
+  /*
+   * Şablondaki bağlı parametrelerin testteki karşılıkları. `platformSuzgeci`
+   * bir Prisma parçası: testte platform süzgeci yok, boş dizeyle karşılığı
+   * "bütün platformlar" oluyor — servisin `Prisma.empty` dalıyla aynı.
+   */
   return sql
     .replace('${clientId}', `'${CLIENT}'`)
+    .replaceAll('${gun}', '7')
+    .replaceAll('${platformSuzgeci}', '')
     .replace('${CANLI_LISTE_SINIRI}', '50');
 }
 

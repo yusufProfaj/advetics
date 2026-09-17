@@ -66,6 +66,17 @@ function makeInMemoryPrisma() {
         Object.assign(row, data);
         return row;
       },
+      /*
+       * SOHBET SAYIMI — sınır kontrolü buna dayanıyor.
+       *
+       * Süzgeç GERÇEKTEN uygulanıyor: her zaman 0 dönen bir sahte sayım,
+       * "aynı workspace'te en fazla üç sohbet" kuralını sınanamaz hâle
+       * getirirdi.
+       */
+      count: async ({ where }: { where: Record<string, unknown> }) =>
+        [...conversations.values()].filter((r) =>
+          Object.entries(where).every(([alan, deger]) => r[alan] === deger),
+        ).length,
     },
     aiMessage: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
@@ -541,7 +552,7 @@ describe('update_budget tool — girdi doğrulama ve para birimi', () => {
       campaignId: 'camp-1',
       amountMicros: '-100',
       budgetMode: 'daily',
-    });
+    }, 'meta');
 
     expect(res.status).toBe('failed');
     expect(getSummary).not.toHaveBeenCalled();
@@ -554,7 +565,7 @@ describe('update_budget tool — girdi doğrulama ve para birimi', () => {
       campaignId: 'camp-1',
       amountMicros: '500.5',
       budgetMode: 'daily',
-    });
+    }, 'meta');
 
     expect(res.status).toBe('failed');
     // LLM'e HAM Zod/JS hatası değil, ne yapması gerektiğini söyleyen bir
@@ -569,7 +580,7 @@ describe('update_budget tool — girdi doğrulama ve para birimi', () => {
       campaignId: 'camp-1',
       amountMicros: '0',
       budgetMode: 'daily',
-    });
+    }, 'meta');
     expect(res.status).toBe('failed');
   });
 
@@ -579,7 +590,7 @@ describe('update_budget tool — girdi doğrulama ve para birimi', () => {
       campaignId: 'camp-1',
       amountMicros: '500000000',
       budgetMode: 'weekly',
-    });
+    }, 'meta');
     expect(res.status).toBe('failed');
     expect(getSummary).not.toHaveBeenCalled();
   });
@@ -590,14 +601,14 @@ describe('update_budget tool — girdi doğrulama ve para birimi', () => {
       campaignId: 'camp-1',
       amountMicros: -100,
       budgetMode: 'daily',
-    });
+    }, 'meta');
     expect(kotu.status).toBe('failed');
 
     const iyi = await budgetTool(getSummary).execute(CTX, {
       campaignId: 'camp-1',
       amountMicros: 2_000_000_000,
       budgetMode: 'daily',
-    });
+    }, 'meta');
     expect(iyi.status).toBe('pending_confirmation');
   });
 
@@ -610,7 +621,7 @@ describe('update_budget tool — girdi doğrulama ve para birimi', () => {
         campaignId: 'camp-1',
         amountMicros: '2000000000',
         budgetMode: 'daily',
-      }),
+      }, 'meta'),
     );
 
     expect(res.summary).toContain('1.000,00 $');
@@ -625,7 +636,7 @@ describe('update_budget tool — girdi doğrulama ve para birimi', () => {
         campaignId: 'camp-1',
         amountMicros: '2000000000',
         budgetMode: 'daily',
-      }),
+      }, 'meta'),
     );
 
     expect(res.summary).toContain('2.000,00 ₺');
@@ -639,7 +650,7 @@ describe('update_budget tool — girdi doğrulama ve para birimi', () => {
         campaignId: 'camp-1',
         amountMicros: '2000000000',
         budgetMode: 'lifetime',
-      }),
+      }, 'meta'),
     );
 
     expect(res.detail).toMatchObject({

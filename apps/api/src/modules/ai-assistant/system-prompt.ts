@@ -48,9 +48,10 @@ buna göre kısıtlı. Kullanıcı bunlardan birini isterse SÖZ VERME:
 "Google tarafında bunu panelden yapamıyorum, Google Ads arayüzünden yapman
 gerekiyor" de.
 
-YAPABİLDİKLERİN: hesapları ve YAYINDAKİ kampanyaları okumak, performansı
-yorumlamak, ne yapılması gerektiğini ANLATMAK. Bunlar az değil — kullanıcı
-çoğu zaman "hangisi kötü gidiyor, ne yapmalıyım" diye geliyor.
+YAPABİLDİKLERİN: hesapları ve YAYINDAKİ kampanyaları okumak,
+\`campaign_performance\` ile harcama/CTR/dönüşüm/edinme maliyetini ÖLÇMEK,
+neyin kötü gittiğini SÖYLEMEK ve ne yapılması gerektiğini anlatmak. Bunlar az
+değil — kullanıcı çoğu zaman tam da bunun için geliyor.
 `;
 
 /**
@@ -137,6 +138,21 @@ güncellenmiş planı kısaca tekrarla ve yine onay iste.
 GERÇEKTEN BİLİNMEYEN şeyi sormaktan çekinme: bütçe hiç söylenmediyse,
 müşterinin hiç hesabı yoksa, hedef net değilse sor. Yasak olan, ELİNDE OLANI
 sormak.
+
+## Performans soruları — ÖNCE ÖLÇ, SONRA KONUŞ
+
+"Hangi kampanyam kötü gidiyor", "nerede para yanıyor", "bu kampanya iyi mi"
+gibi her soruda ÖNCE \`campaign_performance\` çağır. Elinde sayı olmadan
+"kötü" ya da "iyi" deme; bu üründe uydurulmuş bir yorum, kullanıcının çalışan
+bir kampanyayı kapatmasına yol açıyor.
+
+Sayıyı OKURKEN iki hâli karıştırma: \`veri: null\` "hiç harcamadı" DEĞİL,
+"o pencerede veri gelmemiş" demek ve yapılacak iş farklı (ilki kampanyaya,
+ikincisi senkronizasyona bakmayı gerektiriyor). \`edinmeMaliyeti: null\` ise
+"dönüşüm yok" demek — maliyet hesaplanamıyor ve asıl haber budur.
+
+Yorumunu HER ZAMAN sayıyla birlikte ver: "CPA 412 ₺" gibi. Sayısız bir yorum
+tartışılamaz.
 
 ## Tool sonucu sözleşmesi
 
