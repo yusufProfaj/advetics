@@ -43,6 +43,15 @@ function readyModules(): Set<number> {
 
 interface NavEntry {
   href: string;
+  /**
+   * Sorgu dizesi ATILMIŞ yol — dosya sisteminde aranacak olan bu.
+   *
+   * Alt menü öğeleri aynı sayfanın iki bağlamı ve farkları `?platform=`:
+   * `/reklam-olustur/ai-asistan?platform=meta`. Sorguyu yola dâhil etmek
+   * `…/ai-asistan?platform=meta/page.tsx` diye var olmayan bir dosya aramak
+   * olurdu ve test, doğru çalışan bir menüyü kırmızı gösterirdi.
+   */
+  yol: string;
   module: number;
   ready?: boolean;
 }
@@ -62,6 +71,7 @@ function navEntries(): NavEntry[] {
     const readyMatch = block.match(/ready:\s*(true|false)/);
     entries.push({
       href,
+      yol: href.split('?')[0]!,
       module: Number(moduleMatch[1]),
       ready: readyMatch ? readyMatch[1] === 'true' : undefined,
     });
@@ -94,7 +104,7 @@ describe('kenar çubuğu rotaları', () => {
     expect(active.length).toBeGreaterThan(0);
 
     const missing = active.filter(
-      (e) => !existsSync(join(APP_DIR, '(dashboard)', e.href, 'page.tsx')),
+      (e) => !existsSync(join(APP_DIR, '(dashboard)', e.yol, 'page.tsx')),
     );
 
     expect(
@@ -108,7 +118,7 @@ describe('kenar çubuğu rotaları', () => {
     // biten bir özelliğin kullanıcıya hiç görünmemesi demek. Sessiz kayıp.
     const inactive = ENTRIES.filter((e) => !isActive(e));
     const builtButHidden = inactive.filter((e) =>
-      existsSync(join(APP_DIR, '(dashboard)', e.href, 'page.tsx')),
+      existsSync(join(APP_DIR, '(dashboard)', e.yol, 'page.tsx')),
     );
 
     expect(

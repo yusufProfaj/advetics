@@ -1,4 +1,10 @@
-import { CAMPAIGN_GOALS, GOAL_META, GOAL_PLATFORM_SUPPORT } from '@advetics/shared';
+import {
+  ASISTAN_PLATFORM_ETIKETI,
+  CAMPAIGN_GOALS,
+  GOAL_META,
+  GOAL_PLATFORM_SUPPORT,
+  type AsistanPlatformu,
+} from '@advetics/shared';
 
 /**
  * Hedef sözlüğü PROGRAMATİK ÜRETİLİYOR — `GOAL_META`/`GOAL_PLATFORM_SUPPORT`
@@ -6,18 +12,53 @@ import { CAMPAIGN_GOALS, GOAL_META, GOAL_PLATFORM_SUPPORT } from '@advetics/shar
  * besleniyor; metni burada da elle yazmak, bir gün ikisinin ayrışması
  * (birinde "form" güncellenip diğerinde eskisinin kalması) demek olurdu.
  */
-function goalVocabulary(): string {
-  return CAMPAIGN_GOALS.map((goal) => {
-    const meta = GOAL_META[goal];
-    const support = Object.entries(GOAL_PLATFORM_SUPPORT[goal])
-      .map(([platform, s]) => (s.support === 'yes' ? platform : `${platform} (${s.support}: ${s.reason})`))
-      .join(', ');
-    return `  - "${goal}" — ${meta.label}. ${meta.promise} Gerekli: ${meta.requires}. Platform desteği: ${support}.`;
-  }).join('\n');
+function goalVocabulary(platform: AsistanPlatformu): string {
+  /*
+   * SÖZLÜK PLATFORMA GÖRE SÜZÜLÜYOR.
+   *
+   * Eskiden bütün hedefler bütün platform notlarıyla birlikte veriliyordu ve
+   * model "Google'da bu desteklenmiyor" cümlesini okuyup yine de deneyecek
+   * bir konum bulabiliyordu. Desteklenmeyen hedefi promptta HİÇ göstermemek,
+   * o hatanın yolunu tamamen kapatıyor — CLAUDE.md: "tahmin etmektense
+   * kısıtla".
+   */
+  return CAMPAIGN_GOALS.filter((goal) => GOAL_PLATFORM_SUPPORT[goal][platform]?.support === 'yes')
+    .map((goal) => {
+      const meta = GOAL_META[goal];
+      return `  - "${goal}" — ${meta.label}. ${meta.promise} Gerekli: ${meta.requires}.`;
+    })
+    .join('\n');
 }
 
-export function buildSystemPrompt(baglamMetni: string): string {
-  return `Sen Advetics panelinin AI kampanya asistanısın. Kullanıcı reklamcılık bilmiyor
+/**
+ * ═══ GOOGLE'DA YAZMA KODU YOK ═══
+ *
+ * `google.provider.ts` `applyAction`'ı açıkça reddediyor: bağlantı ve okuma
+ * canlıda doğrulandı, eksik olan YAZMA KODU. Modelin bunu bilmesi gerekiyor,
+ * yoksa kullanıcıya "kampanyayı durdurdum" diyecek bir yol arıyor ve her
+ * seferinde platform hatasıyla dönüyor.
+ *
+ * Metin ERİŞİMDEN BAHSETMİYOR ve bu bilinçli: kullanıcıyı çözülmüş bir
+ * sorunu (erişim) çözmeye göndermek yanlış teşhis olurdu.
+ */
+const GOOGLE_KISITI = `
+BUGÜN YAZMA YAPAMIYORSUN. Google tarafında reklam oluşturma ve canlı
+değişiklik (durdurma, sürdürme, bütçe) HENÜZ YAZILMADI; elindeki araçlar da
+buna göre kısıtlı. Kullanıcı bunlardan birini isterse SÖZ VERME:
+"Google tarafında bunu panelden yapamıyorum, Google Ads arayüzünden yapman
+gerekiyor" de.
+
+YAPABİLDİKLERİN: hesapları ve YAYINDAKİ kampanyaları okumak, performansı
+yorumlamak, ne yapılması gerektiğini ANLATMAK. Bunlar az değil — kullanıcı
+çoğu zaman "hangisi kötü gidiyor, ne yapmalıyım" diye geliyor.
+`;
+
+export function buildSystemPrompt(platform: AsistanPlatformu, baglamMetni: string): string {
+  return `Sen Advetics panelinin ${ASISTAN_PLATFORM_ETIKETI[platform]} asistanısın.
+YALNIZCA ${platform === 'meta' ? 'Meta (Facebook/Instagram)' : 'Google Ads'} üzerinde çalışıyorsun;
+başka bir platformun hesabı, kampanyası ya da hedefi istenirse "bu asistan
+yalnızca ${ASISTAN_PLATFORM_ETIKETI[platform]} içindir" de ve diğer asistana yönlendir.
+${platform === 'google' ? GOOGLE_KISITI : ''} Kullanıcı reklamcılık bilmiyor
 olabilir — hedefleme, optimizasyon, teklif stratejisi gibi platform kavramlarını
 ASLA sorma; bunlar zaten sistem varsayılanlarına bırakılmış.
 
@@ -33,7 +74,7 @@ Kullanıcının "form kampanyası", "whatsapp'tan yazsınlar" gibi ifadelerini
 AŞAĞIDAKİ kapalı listeden birine eşle. Hiçbiri net eşleşmiyorsa TAHMİN ETME —
 seçenekleri listele ve sor.
 
-${goalVocabulary()}
+${goalVocabulary(platform)}
 
 ## ÖNCE BAK, SONRA SOR
 

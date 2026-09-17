@@ -1,5 +1,10 @@
 import Link from 'next/link';
-import type { AiAssistantThread } from '@advetics/shared';
+import {
+  ASISTAN_PLATFORMLARI,
+  ASISTAN_PLATFORM_ETIKETI,
+  type AiAssistantThread,
+  type AsistanPlatformu,
+} from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
@@ -29,16 +34,41 @@ export default async function AiAsistanPage({
   const session = await requireSession();
   const params = await searchParams;
 
-  if (!hasPermission(session, 'bulk.read')) {
+  /*
+   * KAPI `bulk.write` — kenar çubuğundaki satırla AYNI anahtar.
+   *
+   * Eskiden `bulk.read`ti ve menüde hiç satırı yoktu, yani fark görünmüyordu.
+   * Artık menüde duruyor: iki anahtarın ayrışması, görünen ama açılmayan bir
+   * satır demek. Ayrıca asistan taslak YAZIYOR ve müşteri hesabı
+   * (`client_viewer`) reklam yayınlayamıyor — bu ekranı da görmemeli.
+   */
+  if (!hasPermission(session, 'bulk.write')) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
         <h1 className="text-sm font-semibold text-ink">Bu sayfaya yetkin yok</h1>
         <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">
-          AI asistanı reklam taslağı hazırlıyor ve reklam okuma yetkisi istiyor.
+          AI asistanı reklam taslağı hazırlıyor ve reklam oluşturma yetkisi istiyor.
         </p>
       </div>
     );
   }
+
+  /*
+   * ═══ PLATFORM ADRESTEN GELİYOR ═══
+   *
+   * İki ayrı asistan var (Meta, Google) ve ikisi ayrı sistem promptu, ayrı
+   * araç kümesi kullanıyor. Seçimi sayfanın İÇİNDE bir sekmeye koymak,
+   * kullanıcıyı menüden sonra ikinci bir seçim yapmaya zorlardı.
+   *
+   * GEÇERSİZ DEĞER META'YA DÜŞÜYOR ve bu sessiz bir düşüş değil: başlıkta
+   * hangi asistanda olduğu yazıyor.
+   */
+  const istenen = first(params.platform);
+  const platform: AsistanPlatformu = (ASISTAN_PLATFORMLARI as readonly string[]).includes(
+    istenen ?? '',
+  )
+    ? (istenen as AsistanPlatformu)
+    : 'meta';
 
   const clientId =
     first(params.musteri) ?? session.activeClientId ?? session.availableClients[0]?.id;
@@ -78,19 +108,39 @@ export default async function AiAsistanPage({
   return (
     <div className="min-w-0 space-y-4">
       <header className="min-w-0">
-        <h1 className="text-base font-semibold text-ink">AI Asistan</h1>
+        <h1 className="text-base font-semibold text-ink">
+          AI Asistan
+          <span className="ml-2 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-strong">
+            {ASISTAN_PLATFORM_ETIKETI[platform]}
+          </span>
+        </h1>
         <p className="mt-0.5 text-xs text-ink-muted">
           <strong className="text-ink">{client?.name ?? 'Workspace'}</strong> · Asistan taslak
-          hazırlar ve canlı değişiklikleri onayına sunar — kendi başına yayınlamaz.
+          hazırlar ve canlı değişiklikleri onayına sunar, kendi başına yayınlamaz.
         </p>
+        {/*
+          GOOGLE'DA YAZMA YOK ve bu ekranda YAZILI. `google.provider` canlı
+          mutasyonu açıkça reddediyor; kullanıcı bunu asistana sorup hata
+          alarak değil, en baştan okuyarak öğrenmeli.
+        */}
+        {platform === 'google' && (
+          <p className="mt-2 rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-ink">
+            <strong>Bu asistan Google tarafında okuyor ve yorumluyor, yazmıyor.</strong>{' '}
+            Reklam oluşturma ve canlı değişiklik (durdurma, sürdürme, bütçe) Google
+            tarafında henüz yazılmadı. Hesaplarını ve yayındaki kampanyalarını sorabilir,
+            ne yapman gerektiğini konuşabilirsin; değişikliği Google Ads arayüzünden
+            yapman gerekiyor.
+          </p>
+        )}
       </header>
 
       <AiAsistanSohbeti
         // SOHBET DEĞİŞİNCE BİLEŞEN SIFIRLANIYOR. `useState` yalnızca ilk
         // render'da başlangıç değerini alıyor; anahtar olmadan başka bir
         // sohbete geçmek eski mesajları ekranda bırakırdı.
-        key={sohbetId ?? 'yeni'}
+        key={`${platform}:${sohbetId ?? 'yeni'}`}
         clientId={clientId}
+        platform={platform}
         conversationId={thread?.conversationId ?? null}
         ilkMesajlar={thread?.messages ?? []}
         ilkAksiyonlar={thread?.actions ?? []}
@@ -99,7 +149,7 @@ export default async function AiAsistanPage({
 
       {sohbetId && (
         <Link
-          href={baglanti('/reklam-olustur/ai-asistan', {}, { musteri: clientId })}
+          href={baglanti('/reklam-olustur/ai-asistan', {}, { musteri: clientId, platform })}
           className="inline-block text-xs text-ink-muted underline hover:text-ink"
         >
           Yeni sohbet başlat

@@ -6,8 +6,10 @@ import type {
   AiAssistantSendResult,
   AiAssistantThread,
   AiAssistantThreadMessage,
+  AsistanPlatformu,
   TenantContext,
 } from '@advetics/shared';
+import { ASISTAN_PLATFORMLARI } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { assertPermissions } from '../../common/guards/permissions.guard';
@@ -35,6 +37,8 @@ export interface SendMessageInput {
   clientId?: string;
   message: string;
   attachmentAssetIds?: string[];
+  /** Yalnızca YENİ sohbette okunuyor; sonrasında satırdaki değer geçerli. */
+  platform?: AsistanPlatformu;
 }
 
 /**
@@ -175,7 +179,16 @@ export class AiAssistantService {
       throw new ServiceUnavailableException('AI asistanı yapılandırılmamış — ANTHROPIC_API_KEY eksik.');
     }
 
-    const conversationId = input.conversationId
+    /*
+     * PLATFORM SOHBETİN KENDİSİNDEN OKUNUYOR, İSTEKTEN DEĞİL.
+     *
+     * İstekteki değer yalnızca sohbet AÇILIRKEN kullanılıyor. Sonraki
+     * mesajlarda kayıtlı değer geçerli: platformu sohbetin ortasında
+     * değiştirmek o ana kadarki bütün bağlamı (hesaplar, hedef sözlüğü,
+     * bütçe modeli) geçersiz kılardı ve model önceki mesajlarına dayanarak
+     * yanlış platformun kampanyasını kurmaya devam ederdi.
+     */
+    const { id: conversationId, platform } = input.conversationId
       ? await this.assertOwnConversation(ctx, input.conversationId)
       : await this.createConversation(ctx, input);
 
@@ -203,7 +216,18 @@ export class AiAssistantService {
     await this.appendMessage(ctx, conversationId, 'user', [{ type: 'text', text: userText }]);
 
     const messages: Anthropic.MessageParam[] = [...history, { role: 'user', content: userText }];
-    const anthropicTools = this.tools.map((t) => ({
+    /*
+     * PLATFORMA GÖRE ARAÇ SÜZGECİ — prompta yazmak YETMİYOR.
+     *
+     * Google'da canlı mutasyon (durdur · sürdür · bütçe) henüz yazılmadı;
+     * `google.provider.applyAction` açıkça reddediyor. Aracı listede
+     * bırakıp modele "kullanma" demek, modelin bir gün yine de deneyip
+     * kullanıcıya platform hatası göstermesi demek. Görmediği aracı
+     * çağıramaz.
+     */
+    const anthropicTools = this.tools
+      .filter((t) => platform === 'meta' || !GOOGLEDA_YOK.has(t.name))
+      .map((t) => ({
       name: t.name,
       description: t.description,
       input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
@@ -215,7 +239,7 @@ export class AiAssistantService {
       const response = await this.anthropic.messages.create({
         model: this.model,
         max_tokens: AiAssistantService.MAX_TOKENS,
-        system: buildSystemPrompt(baglamiMetne(baglam)),
+        system: buildSystemPrompt(platform, baglamiMetne(baglam)),
         tools: anthropicTools,
         messages,
       });
@@ -258,7 +282,13 @@ export class AiAssistantService {
 
       const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
       for (const use of toolUses) {
-        const result = await this.runTool(ctx, use.name, use.input as Record<string, unknown>, clientId);
+        const result = await this.runTool(
+          ctx,
+          use.name,
+          use.input as Record<string, unknown>,
+          clientId,
+          platform,
+        );
         const block: Anthropic.ToolResultBlockParam = {
           type: 'tool_result',
           tool_use_id: use.id,
@@ -547,9 +577,25 @@ export class AiAssistantService {
     name: string,
     input: Record<string, unknown>,
     varsayilanClientId: string | null,
+    platform: AsistanPlatformu,
   ): Promise<ToolResult> {
     const tool = this.toolMap.get(name);
     if (!tool) return { status: 'failed', reason: `Bilinmeyen tool: ${name}` };
+
+    /*
+     * SÜZGEÇ BURADA DA VAR — listeden çıkarmak tek başına bir garanti değil.
+     * Geçmişten geri yüklenen bir sohbet, platform değişmeden önce üretilmiş
+     * bir `tool_use` bloğu taşıyabiliyor.
+     */
+    if (platform !== 'meta' && GOOGLEDA_YOK.has(name)) {
+      return {
+        status: 'failed',
+        reason:
+          'Google tarafında reklam oluşturma ve canlı değişiklik (durdurma, ' +
+          'sürdürme, bütçe) henüz yazılmadı. Bu işi Google Ads arayüzünden ' +
+          'yapman gerekiyor.',
+      };
+    }
 
     /*
      * `clientId` VERİLMEDİYSE SOHBETİN MÜŞTERİSİ KULLANILIYOR.
@@ -573,30 +619,44 @@ export class AiAssistantService {
     return tool.execute(ctx, input);
   }
 
-  private async assertOwnConversation(ctx: TenantContext, conversationId: string): Promise<string> {
+  private async assertOwnConversation(
+    ctx: TenantContext,
+    conversationId: string,
+  ): Promise<{ id: string; platform: AsistanPlatformu }> {
     const conv = await this.prisma.withTenant(ctx, (tx) =>
-      tx.aiConversation.findUnique({ where: { id: conversationId }, select: { id: true, userId: true } }),
+      tx.aiConversation.findUnique({
+        where: { id: conversationId },
+        select: { id: true, userId: true, platform: true },
+      }),
     );
     if (!conv) throw new NotFoundException('Sohbet bulunamadı');
     if (conv.userId !== ctx.userId) {
       throw new ForbiddenException('Bu sohbete yalnızca sahibi mesaj ekleyebilir');
     }
-    return conv.id;
+    return { id: conv.id, platform: asistanPlatformu(conv.platform) };
   }
 
-  private async createConversation(ctx: TenantContext, input: SendMessageInput): Promise<string> {
+  private async createConversation(
+    ctx: TenantContext,
+    input: SendMessageInput,
+  ): Promise<{ id: string; platform: AsistanPlatformu }> {
+    // VARSAYILAN 'meta' ve bu geçmişle tutarlı: platform alanı eklenene
+    // kadarki bütün sohbetler tek asistanla yapıldı ve o asistan pratikte
+    // Meta'yı konuşuyordu (Google yazma yolu hiç yazılmadı).
+    const platform: AsistanPlatformu = input.platform ?? 'meta';
     const conv = await this.prisma.withTenant(ctx, (tx) =>
       tx.aiConversation.create({
         data: {
           orgId: ctx.orgId,
           clientId: input.clientId ?? null,
           userId: ctx.userId,
+          platform,
           title: input.message.slice(0, 200),
         },
         select: { id: true },
       }),
     );
-    return conv.id;
+    return { id: conv.id, platform };
   }
 
   private async touchConversation(ctx: TenantContext, conversationId: string): Promise<void> {
@@ -717,4 +777,45 @@ function toCampaignAction(action: PendingActionDetail['action']): CampaignAction
     return { type: 'set_budget', amountMicros: BigInt(action.amountMicros), budgetMode: action.budgetMode };
   }
   return { type: action.type };
+}
+
+/**
+ * ═══ GOOGLE'DA KARŞILIĞI OLMAYAN ARAÇLAR ═══
+ *
+ * İki grup ve ikisinin de gerekçesi ÖLÇÜLMÜŞ:
+ *
+ *   · Canlı mutasyon (durdur · sürdür · bütçe) — `google.provider.applyAction`
+ *     açıkça reddediyor: "yazma kodu henüz yazılmadı".
+ *   · Taslak kurma — `GOAL_PLATFORM_SUPPORT` bugün Google'da HİÇBİR hedefi
+ *     desteklemiyor (`form: never`, `whatsapp: never`, `website: not_yet`).
+ *     Yani asistan taslak kursa bile kurulacak bir hedef yok.
+ *
+ * ARACI LİSTEDE BIRAKIP "KULLANMA" DEMEK YETMEZ: model bir gün yine dener ve
+ * kullanıcı platform hatası görür. Görmediği aracı çağıramaz.
+ *
+ * Liste `tools.ts`teki adlarla eşleşmek zorunda; ayrışırsa süzgeç sessizce
+ * boşa düşer. `asistan-platformu.spec.ts` iki listeyi karşılaştırıyor.
+ */
+const GOOGLEDA_YOK = new Set([
+  'pause_campaign',
+  'resume_campaign',
+  'update_budget',
+  'create_draft_campaign',
+  'duplicate_draft',
+  'create_creative',
+]);
+
+/**
+ * Veritabanındaki `Platform` enum'ını ASİSTAN platformuna daraltır.
+ *
+ * Sütun `Platform` tipinde (meta · google · linkedin) ama asistanı olan iki
+ * platform var. LinkedIn satırı buraya düşerse varsayılan Meta promptuyla
+ * devam etmek yanlış olurdu; ama sohbeti de patlatmamak gerekiyor —
+ * kullanıcının yazdığı geçmiş orada duruyor. Daraltma AÇIK: bilinmeyen
+ * değer Meta'ya düşüyor ve sebebi burada yazılı.
+ */
+function asistanPlatformu(deger: string): AsistanPlatformu {
+  return (ASISTAN_PLATFORMLARI as readonly string[]).includes(deger)
+    ? (deger as AsistanPlatformu)
+    : 'meta';
 }

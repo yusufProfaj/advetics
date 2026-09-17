@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { Permission } from '@advetics/shared';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 /**
@@ -43,6 +43,19 @@ export interface NavEntry {
    * göstermek demek.
    */
   perm?: Permission;
+  /**
+   * ALT ÖĞELER — aynı ekranın iki ayrı bağlamı.
+   *
+   * Tek kullanımı var ve gerekçesi dar: AI Asistan tek bir sayfa ama İKİ
+   * asistan (Meta, Google) ve ikisi ayrı sistem promptu, ayrı araç kümesi
+   * kullanıyor. Menüde tek satır göstermek kullanıcıyı sayfanın içinde
+   * ikinci bir seçim yapmaya zorlardı; iki ayrı ÜST satır ise aynı ekranı
+   * menüde iki kez göstermek olurdu.
+   *
+   * Alt öğe kendi `perm`ini taşıyabiliyor ama taşımazsa ÜST öğenin yetkisi
+   * geçerli: yetkisi olmayan kullanıcıya üst satır zaten hiç çizilmiyor.
+   */
+  children?: NavEntry[];
 }
 
 // Modül 6 (Raporlar) hazır. Kurallar (5), Auto-Boost (7) ve Toplu Oluşturucu
@@ -134,6 +147,9 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
         {items.map((item) => {
           const ready = item.ready ?? READY_MODULES.has(item.module);
           const active = ready && (pathname === item.href || pathname.startsWith(`${item.href}/`));
+          if (item.children && item.children.length > 0) {
+            return <AltMenu key={item.href} item={item} ready={ready} />;
+          }
           return (
             <li key={item.href}>
               {ready ? (
@@ -171,6 +187,103 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
   );
 }
 
+/**
+ * ALT ÖĞELİ MENÜ SATIRI.
+ *
+ * Üst satır TIKLANABİLİR DEĞİL, açıp kapatıyor: hedefi olmayan bir bağlantı
+ * (`/reklam-olustur/ai-asistan` platformsuz) kullanıcıyı hangi asistanla
+ * konuştuğunu bilmediği bir ekrana götürürdü.
+ *
+ * AKTİF ALT ÖĞE SORGU DİZESİNDEN OKUNUYOR. İki alt öğenin YOLU aynı, farkı
+ * `?platform=`; yalnızca `pathname`e bakan bir kontrol ikisini de aktif
+ * gösterirdi.
+ */
+function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const icinde = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const [acik, setAcik] = useState(false);
+
+  // Sayfadayken bölüm her zaman açık: kapalı bir menünün içindeki sayfada
+  // durmak, kullanıcının nerede olduğunu göremediği bir hâl.
+  const gorunur = acik || icinde;
+
+  if (!ready) {
+    return (
+      <li>
+        <span
+          title={`Modül ${item.module} kapsamında gelecek`}
+          className="flex cursor-not-allowed items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-muted opacity-55"
+        >
+          <Icon name={item.icon} />
+          <span className="flex-1 truncate">{item.label}</span>
+        </span>
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => setAcik((v) => !v)}
+        aria-expanded={gorunur}
+        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+          icinde ? 'font-semibold text-brand-strong' : 'text-ink hover:bg-surface-muted'
+        }`}
+      >
+        <Icon name={item.icon} active={icinde} />
+        <span className="flex-1 truncate text-left">{item.label}</span>
+        <svg
+          viewBox="0 0 20 20"
+          aria-hidden="true"
+          className={`h-3 w-3 shrink-0 transition-transform duration-200 ${gorunur ? 'rotate-90' : ''}`}
+        >
+          <path
+            d="M7.5 5l5 5-5 5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+          gorunur ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <ul className="ml-4 space-y-0.5 border-l border-line pl-2">
+            {item.children?.map((alt) => {
+              const soru = alt.href.split('?')[1] ?? '';
+              const deger = new URLSearchParams(soru).get('platform');
+              const aktif = icinde && params.get('platform') === deger;
+              return (
+                <li key={alt.href}>
+                  <Link
+                    href={alt.href}
+                    aria-current={aktif ? 'page' : undefined}
+                    className={`block truncate rounded-lg px-3 py-1.5 text-[13px] transition ${
+                      aktif
+                        ? 'bg-brand-soft font-semibold text-brand-strong'
+                        : 'text-ink-muted hover:bg-surface-muted hover:text-ink'
+                    }`}
+                  >
+                    {alt.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 /** 20×20 stroke ikonlar — dış bağımlılık eklemeden tutarlı bir set. */
 const ICONS = {
   overview: 'M3 10.5 10 4l7 6.5M5.5 9v7h9V9',
@@ -196,6 +309,7 @@ const ICONS = {
   audit: 'M10 4.5v11M4.5 10h11M6.5 6.5l7 7M13.5 6.5l-7 7',
   sync: 'M4 8a6 6 0 0 1 10.5-4M16 12a6 6 0 0 1-10.5 4M14.5 3.5V7h-3.5M5.5 16.5V13H9',
   mail: 'M3 6h14v9H3zM3 6.5l7 5 7-5',
+  ai: 'M10 3.5 11.3 8 15.5 9.5 11.3 11 10 15.5 8.7 11 4.5 9.5 8.7 8zM15.5 3.5v3M14 5h3',
 } as const;
 
 function Icon({ name, active }: { name: keyof typeof ICONS; active?: boolean }) {

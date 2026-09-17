@@ -9,6 +9,7 @@ import type {
   AiAssistantThreadMessage,
   AssetRecord,
   AssetUploadResult,
+  AsistanPlatformu,
 } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
@@ -34,12 +35,20 @@ import { OnayKarti } from './onay-karti';
  */
 export function AiAsistanSohbeti({
   clientId,
+  platform,
   conversationId: ilkSohbetId,
   ilkMesajlar,
   ilkAksiyonlar,
   yuklemeHatasi,
 }: {
   clientId: string;
+  /**
+   * Hangi asistan. YALNIZCA yeni sohbette gönderiliyor: sunucu var olan bir
+   * sohbette kayıtlı değeri kullanıyor ve buradakini yok sayıyor — platformu
+   * sohbetin ortasında değiştirmek o ana kadarki bütün bağlamı geçersiz
+   * kılardı.
+   */
+  platform: AsistanPlatformu;
   conversationId: string | null;
   ilkMesajlar: AiAssistantThreadMessage[];
   ilkAksiyonlar: AiAssistantAction[];
@@ -83,6 +92,7 @@ export function AiAsistanSohbeti({
         body: JSON.stringify({
           conversationId: sohbetId ?? undefined,
           clientId: sohbetId ? undefined : clientId,
+          platform: sohbetId ? undefined : platform,
           message: metin,
           attachmentAssetIds: gonderilenEkler.length > 0 ? gonderilenEkler : undefined,
         }),

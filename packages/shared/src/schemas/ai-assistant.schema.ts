@@ -6,9 +6,39 @@ import { z } from 'zod';
  * `conversationId` YOKSA yeni sohbet açılır. `clientId` yalnızca yeni
  * sohbette anlamlı — devam eden bir sohbette müşteri zaten belirlenmiş.
  */
+/**
+ * ═══ HER PLATFORMUN KENDİ ASİSTANI ═══
+ *
+ * Tek bir asistan iki platformu birden konuşamıyor ve bu bir tercih değil,
+ * ölçülmüş bir fark: hedefleme sözlüğü, bütçe modeli (Google'da bütçe AYRI
+ * BİR KAYNAK ve kampanya ona referans veriyor), seviye adları ve yazma
+ * kısıtları ayrışıyor. Tek promptla yönetmek "ortalama" bir davranış üretir
+ * ve ikisinde de zayıf olur.
+ *
+ * LinkedIn YOK ve bilerek: o platformda yazma kodu hiç yazılmadı, yani
+ * asistanın kurabileceği bir şey de yok.
+ */
+export const ASISTAN_PLATFORMLARI = ['meta', 'google'] as const;
+export type AsistanPlatformu = (typeof ASISTAN_PLATFORMLARI)[number];
+
+export const ASISTAN_PLATFORM_ETIKETI: Record<AsistanPlatformu, string> = {
+  meta: 'Meta AI',
+  google: 'Google Ads AI',
+};
+
 export const aiAssistantMessageInputSchema = z.object({
   conversationId: z.string().uuid().optional(),
   clientId: z.string().uuid().optional(),
+  /**
+   * Sohbetin platformu — YALNIZCA ilk mesajda anlamlı.
+   *
+   * Sonraki mesajlarda sunucu KAYITLI değeri kullanıyor ve buradaki değeri
+   * yok sayıyor: platformu sohbetin ortasında değiştirmek, o ana kadarki
+   * bütün bağlamı (hesaplar, hedef sözlüğü, bütçe modeli) geçersiz kılardı
+   * ve model önceki mesajlarına dayanarak yanlış platformun kampanyasını
+   * kurmaya devam ederdi.
+   */
+  platform: z.enum(ASISTAN_PLATFORMLARI).optional(),
   message: z.string().trim().min(1, 'Mesaj boş olamaz').max(4000),
   /** Sohbete eklenen, önceden `/assets` ile yüklenmiş görsellerin kimlikleri. */
   attachmentAssetIds: z.array(z.string().uuid()).max(20).optional(),

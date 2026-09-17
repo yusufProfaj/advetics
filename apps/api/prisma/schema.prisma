@@ -3378,6 +3378,14 @@ model AiConversation {
   /// öyle uyguluyor; client_id yalnızca süzgeç için düz bir kolon.
   clientId String? @map("client_id") @db.Uuid
 
+  /// Sohbetin asistanı — Meta ve Google AYRI asistanlar.
+  ///
+  /// SATIRDA SAKLANIYOR, istekte taşınmıyor: sayfası yenilenen bir sohbet
+  /// hangi asistanla başladığını unutursa sistem promptu sessizce diğer
+  /// platformunkine döner ve model yanlış platformun kampanyasını kurmaya
+  /// devam eder.
+  platform Platform @default(meta)
+
   /// Sohbeti başlatan kullanıcı. `AuditLog.actorId` gibi düz kolon, User'a
   /// FK DEĞİL: kullanıcı hesabı silinse bile bu geçmiş kalmalı.
   userId String @map("user_id") @db.Uuid

@@ -209,9 +209,67 @@ describe('MENÜDEKİ AD İLE SAYFANIN ADI AYNI', () => {
         else if (!baslik.includes(oge.label)) {
           eksik.push(`${oge.href}: sekme başlığı "${baslik}" etiketi taşımıyor`);
         }
+
+        /*
+         * ALT ÖĞELER AYNI SAYFAYI AÇIYOR — adları o sayfada geçmeli.
+         *
+         * "Meta AI" ve "Google Ads AI" tek bir ekranın iki bağlamı; sayfa
+         * hangisinde olduğunu YAZMAK zorunda, yoksa kullanıcı menüden
+         * seçtiği asistanla konuşup konuşmadığını bilemez.
+         */
+        for (const alt of oge.children ?? []) {
+          /*
+           * ADI TEK KAYNAKTAN TÜRETEN SAYFA ZATEN UYUMLU. Etiket hem menüde
+           * hem sayfada `ASISTAN_PLATFORM_ETIKETI`den geliyor; düz dize
+           * aramak, doğru çözümü (tek kaynak) yanlış gösterirdi.
+           */
+          if (!kod.includes(alt.label) && !kod.includes('ASISTAN_PLATFORM_ETIKETI')) {
+            eksik.push(`${oge.href}: alt öğe "${alt.label}" sayfada geçmiyor`);
+          }
+        }
       }
     }
     expect(eksik).toEqual([]);
+  });
+});
+
+describe('AI ASİSTAN SATIRI', () => {
+  const ai = SECTIONS.flatMap((b) => b.items).find((i) => i.label === 'AI Asistan');
+
+  it('tarama gerçekten satırı buldu', () => {
+    expect(ai, 'AI Asistan satırı yok').toBeDefined();
+  });
+
+  it('KRİTİK: iki alt öğe — Meta ve Google AYRI asistanlar', () => {
+    /*
+     * Tek satır gösterip seçimi sayfanın içine bırakmak, kullanıcıyı
+     * menüden sonra ikinci bir seçim yapmaya zorlardı. İki ayrı ÜST satır
+     * ise aynı ekranı menüde iki kez göstermek olurdu.
+     */
+    expect(ai!.children?.map((c) => c.label)).toEqual(['Meta AI', 'Google Ads AI']);
+    expect(ai!.children?.map((c) => c.href)).toEqual([
+      '/reklam-olustur/ai-asistan?platform=meta',
+      '/reklam-olustur/ai-asistan?platform=google',
+    ]);
+  });
+
+  it('KRİTİK: `bulk.write` istiyor — müşteri hesabı GÖRMÜYOR', () => {
+    // Asistan taslak yazıyor ve yayın onayı sunacak; müşteri rolü tanımı
+    // gereği reklam yayınlamıyor.
+    expect(ai!.perm).toBe('bulk.write');
+    expect(etiketler('client_viewer')).not.toContain('AI Asistan');
+  });
+
+  it('KRİTİK: `Reklam Oluştur`un hemen ALTINDA', () => {
+    // Kampanya kurmanın bir başka yolu, ayrı bir iş değil.
+    const reklamlar = SECTIONS.find((b) => b.title === 'Reklamlar')!.items.map((i) => i.label);
+    expect(reklamlar.indexOf('AI Asistan')).toBe(reklamlar.indexOf('Reklam Oluştur') + 1);
+  });
+
+  it('alt öğe yetkisi ÜSTÜNKİNİ devralıyor', () => {
+    // Alt öğeye ayrı bir anahtar yazmak, üstü gören ama altında 403 alan
+    // bir kullanıcı üretme riskini iki katına çıkarırdı.
+    for (const c of ai!.children ?? []) expect(c.perm).toBeUndefined();
   });
 });
 
