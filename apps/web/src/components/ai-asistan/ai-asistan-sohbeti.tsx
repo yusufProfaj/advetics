@@ -16,6 +16,7 @@ import { baglanti } from '@/lib/baglanti';
 import { Halka } from '@/components/yukleniyor';
 import { KreatifGorsel } from '@/components/kreatif-gorsel';
 import { OnayKarti } from './onay-karti';
+import { SohbetBalonu } from './sohbet-balonu';
 
 /**
  * AI KAMPANYA ASİSTANI — panel içi sohbet.
@@ -33,9 +34,23 @@ import { OnayKarti } from './onay-karti';
  * geri yükleniyor ve bağlantı paylaşılabiliyor. Bağlantı `baglanti()` ile
  * kuruluyor — elle birleştirmek `?musteri=` süzgecini düşürürdü (CLAUDE.md).
  */
+/**
+ * Boş ekrandaki örnek istemler.
+ *
+ * ÜÇ TANE VE HEPSİ FARKLI BİR İŞİ anlatıyor: yeni kampanya, var olanı
+ * düzenleme, durum sorusu. Beş benzer örnek, kullanıcıya seçenek değil
+ * okuma yükü veriyor.
+ */
+const ORNEK_ISTEMLER = [
+  'Bu workspace’e form kampanyası aç, bütçe günde 500 TL olsun',
+  'Hangi kampanyam kötü gidiyor?',
+  'Geçen ay en iyi çalışan reklam metnine benzer bir metin yaz',
+] as const;
+
 export function AiAsistanSohbeti({
   clientId,
   platform,
+  kullaniciAdi,
   conversationId: ilkSohbetId,
   ilkMesajlar,
   ilkAksiyonlar,
@@ -49,6 +64,14 @@ export function AiAsistanSohbeti({
    * kılardı.
    */
   platform: AsistanPlatformu;
+  /**
+   * Balonun üstünde görünen ad.
+   *
+   * Kimin yazdığı ekranda YAZILI olmak zorunda: eski hâlde yalnızca hizalama
+   * ve renk fark ediyordu ve uzun bir planın ortasında kimin konuştuğu
+   * kayboluyordu.
+   */
+  kullaniciAdi: string;
   conversationId: string | null;
   ilkMesajlar: AiAssistantThreadMessage[];
   ilkAksiyonlar: AiAssistantAction[];
@@ -153,7 +176,19 @@ export function AiAsistanSohbeti({
        * dosyanın ADI ile birlikte söyleniyor.
        */
       if (!file.type.startsWith('image/')) {
-        setHata(`${file.name || 'Dosya'} bir görsel değil, eklenmedi.`);
+        /*
+         * VİDEO AYRI CÜMLEYLE. "Görsel değil" demek, video ekleyen
+         * kullanıcıya dosyasının bozuk olduğunu düşündürüyor; oysa sorun
+         * dosyada değil, bizde: video yükleme Meta'nın AYRI bir ucunu
+         * (`/advideos`), işlenme beklemeyi ve kapak görseli üretmeyi
+         * gerektiriyor ve o yol henüz yazılmadı.
+         */
+        setHata(
+          file.type.startsWith('video/')
+            ? `${file.name || 'Video'} eklenmedi: video reklamları henüz desteklenmiyor, ` +
+                'şimdilik JPEG ya da PNG görsel ekleyebilirsin.'
+            : `${file.name || 'Dosya'} bir görsel değil, eklenmedi (JPEG ya da PNG olmalı).`,
+        );
         continue;
       }
       try {
@@ -218,29 +253,54 @@ export function AiAsistanSohbeti({
         </p>
       )}
 
-      <div className="flex flex-1 flex-col gap-2.5">
+      {/*
+        MESAJ ALANI KENDİ KAYDIRMASINDA. Sayfayı kaydırmak, uzun bir sohbette
+        yazma kutusunu ekrandan çıkarıyor ve kullanıcı her mesajdan sonra
+        aşağı kaydırmak zorunda kalıyordu.
+      */}
+      <div className="flex max-h-[60vh] flex-1 flex-col gap-3 overflow-y-auto pr-1">
         {mesajlar.length === 0 && !yuklemeHatasi && (
-          <div className="my-auto px-6 text-center">
+          <div className="my-auto px-4 text-center">
             <p className="text-sm font-semibold text-ink">Ne yapmak istediğini yaz</p>
             <p className="mx-auto mt-1.5 max-w-md text-xs text-ink-muted">
-              Örn. &quot;Bu workspace’e form kampanyası aç, kreatifler ekte, bütçe günde 500 TL
-              olsun.&quot; Asistan taslak hazırlar — yayınlama her zaman senin onayınla, panelin
-              kendi Yayınla düğmesinden.
+              Asistan taslak hazırlar; yayınlama her zaman senin onayınla oluyor. Görseli
+              buraya sürükleyebilir ya da yapıştırabilirsin.
             </p>
+            {/*
+              ÖRNEK İSTEMLER TIKLANABİLİR. Boş bir kutuya ne yazacağını
+              bilmemek bu ekranın en büyük angaryası: kullanıcı reklamcılık
+              bilmiyor ve "serbest yaz" demek, onu boş sayfayla baş başa
+              bırakmak. Tıklayınca kutuya YAZILIYOR, gönderilmiyor —
+              kullanıcı kendi cümlesine çevirebilmeli.
+            */}
+            <div className="mx-auto mt-3 flex max-w-lg flex-wrap justify-center gap-1.5">
+              {ORNEK_ISTEMLER.map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  onClick={() => setGirdi(o)}
+                  className="rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] text-ink transition hover:border-brand hover:text-brand-strong"
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {mesajlar.map((m, i) => (
-          <div
+          <SohbetBalonu
             key={`${m.createdAt}-${i}`}
-            className={
-              m.role === 'user'
-                ? 'max-w-[78%] self-end whitespace-pre-wrap rounded-xl rounded-br-sm bg-brand px-3 py-2 text-sm leading-relaxed text-white'
-                : 'max-w-[82%] self-start whitespace-pre-wrap rounded-xl rounded-bl-sm border border-line bg-surface px-3 py-2 text-sm leading-relaxed text-ink'
-            }
-          >
-            {m.text}
-          </div>
+            rol={m.role}
+            metin={m.text}
+            /*
+             * ASİSTANIN ADI "Advetics" — model adı ya da "Asistan" değil.
+             * Beyaz etiketli üründe kullanıcı ürünle konuşuyor; hangi modelin
+             * çalıştığı onun sorusu değil.
+             */
+            yazan={m.role === 'user' ? kullaniciAdi : 'Advetics'}
+            zaman={m.createdAt}
+          />
         ))}
 
         {onaylar.map((a) =>
@@ -302,9 +362,28 @@ export function AiAsistanSohbeti({
         </div>
       )}
 
-      <div className="mt-3 flex items-end gap-2">
-        <label className="cursor-pointer rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink hover:bg-surface-sunken">
-          {yukleniyorEk ? 'Yükleniyor…' : 'Görsel ekle'}
+      {/*
+        GİRİŞ TEK KUTUDA. Üç ayrı kenarlıklı öğe (ekle · yaz · gönder) yan
+        yana dururken ekran parçalı görünüyordu; şimdi tek bir çerçeve var ve
+        içindeki düğmeler sade.
+      */}
+      {/*
+        SÜRÜKLEME SIRASINDA NE OLACAĞI YAZIYOR. Vurgulu bir çerçeve tek
+        başına "bırakabilirsin" demiyor; kullanıcı dosyayı havada tutarken
+        okuyabileceği bir cümle görmeli.
+      */}
+      {surukleniyor && (
+        <p className="mt-2 rounded-lg border border-dashed border-brand bg-brand-soft px-3 py-2 text-center text-xs font-medium text-brand-strong">
+          Görseli buraya bırak
+        </p>
+      )}
+
+      <div className="mt-3 flex items-end gap-1.5 rounded-xl border border-line bg-surface p-1.5 focus-within:border-brand">
+        <label
+          title="JPEG ya da PNG görsel"
+          className="cursor-pointer rounded-lg px-2.5 py-2 text-sm text-ink-muted transition hover:bg-surface-sunken hover:text-ink"
+        >
+          {yukleniyorEk ? 'Yükleniyor…' : 'Görsel'}
           <input
             ref={dosyaRef}
             type="file"
@@ -348,16 +427,16 @@ export function AiAsistanSohbeti({
           rows={2}
           maxLength={4000}
           placeholder="Mesaj yaz, görsel sürükle ya da yapıştır…"
-          className="min-w-0 flex-1 resize-none rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
+          className="min-w-0 flex-1 resize-none border-0 bg-transparent px-1.5 py-2 text-sm outline-none"
         />
 
         <button
           type="button"
           onClick={() => void gonder()}
           disabled={busy || girdi.trim() === ''}
-          className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40"
+          className="shrink-0 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
         >
-          Gönder
+          {busy ? 'Yazıyor…' : 'Gönder'}
         </button>
       </div>
     </div>

@@ -141,6 +141,7 @@ export default async function AiAsistanPage({
         key={`${platform}:${sohbetId ?? 'yeni'}`}
         clientId={clientId}
         platform={platform}
+        kullaniciAdi={session.user.fullName || session.user.email}
         conversationId={thread?.conversationId ?? null}
         ilkMesajlar={thread?.messages ?? []}
         ilkAksiyonlar={thread?.actions ?? []}

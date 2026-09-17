@@ -398,6 +398,27 @@ sinyal: asistan yanlış şey öneriyor demektir.
 
 ---
 
+## 4b. VİDEO REKLAMI — bugün YOK, yolu yazılı
+
+Kullanıcı sordu: *"burada sadece görsel mi eklenecek, video yok mu?"*
+Cevap bugün için hayır ve sebebi ölçüldü:
+
+- `ACCEPTED_MIME` yalnızca JPEG ve PNG kabul ediyor; arşiv görsel boyutu
+  doğrulaması da piksel ölçüyor.
+- Yayın yolu `asset_platform_refs`ten gelen bir `image_hash` okuyor.
+- Meta sağlayıcısı video kimliğini ZATEN destekliyor (`video_id` alanı var ve
+  hash biçiminden ayırt ediliyor) — eksik olan ARADAKİ adım: videoyu Meta'nın
+  `/advideos` ucuna yüklemek, işlenmesini beklemek (video hemen
+  kullanılamıyor) ve kapak görseli vermek. Meta video reklamında kapak
+  görselini zorunlu tutuyor.
+
+Yani iş üç parça: yükleme ucu, işlenme yoklaması ve kapak. Ayrı bir faz
+olarak ele alınmalı; bugün sohbete video bırakan kullanıcıya bunu AÇIKÇA
+söyleyen bir mesaj çıkıyor ("video reklamları henüz desteklenmiyor"), sessizce
+reddedilmiyor.
+
+---
+
 ## 5. Cevaplanan sorular
 
 1. **Bildirim nereye düşecek?** → Panel içi uyarı yeterli (K7).
