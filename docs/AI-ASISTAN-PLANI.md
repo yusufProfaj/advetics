@@ -156,6 +156,21 @@ Hedef CPA/ROAS Bilgi Bankası'nda tanımlıysa ona göre, değilse HESABIN KEND�
 geçmişine göre (medyan) karşılaştırılır. İkisi de yoksa o uyarı ÜRETİLMEZ —
 uydurulmuş bir eşik, kullanıcıyı çalışan bir kampanyayı kapatmaya gönderir.
 
+**K7 — Uyarı YALNIZCA panel içinde.** Mail ya da telefon bildirimi yok.
+Gerekçe kullanıcının kararı; teknik gerekçesi de var: mail altyapısı müşteriye
+giden rapor için kurulu ve ajans içi bir uyarıyı oraya bağlamak, bir gün
+yanlış alıcıya "kampanyanız kötü gidiyor" maili göndermenin yolunu açardı.
+
+**K8 — Hedef CPA Bilgi Bankası'nda.** Müşterinin genel profilinin parçası
+(bütçe hedefiyle aynı raf), asistanın her seferinde sorduğu bir şey değil.
+Boş bırakılabilir; boşsa CPA uyarısı hesabın KENDİ medyanına düşer, o da
+yoksa üretilmez (K5).
+
+**K9 — Müşteri hesabı (`client_viewer`) asistanı GÖRMÜYOR.** Menüde satır
+yok, sayfa yetkiyle kapalı. Gerekçe: asistan yayın yapabiliyor ve müşteri
+rolü tanımı gereği reklam yayınlayamıyor. Yetki `bulk.write` — reklam
+ekranlarının kapısıyla aynı anahtar, ikinci bir anahtar uydurulmuyor.
+
 **K6 — Asistan öneriyor, kural motoru uyguluyor.** Otomatik aksiyon isteyen
 kullanıcı için zaten `kurallar` modülü var. Asistan onun yerine geçmiyor;
 öneri sonunda "bunu kural yap" bağlantısı veriyor.
@@ -185,7 +200,64 @@ menü/sayfa adı uyumunu kilitliyor.
 
 ---
 
-### FAZ 1 — Sohbetten yayına (yalnızca Meta)
+### FAZ 1 — Canlı kampanyalar panelde
+*Kullanıcının cümlesi: "sadece adveticsten yayınladığım reklamlar gözüküyor
+… yayında olan kampanyaları da görebilmem düzenleyebilmem lazım … toplu
+oluşturda sadece boostlar var ama aktif olan reklam kampanyalarını
+seçemiyorum".*
+
+**VERİ ZATEN BİZDE.** Gecelik yapı taraması `campaigns`, `ad_groups`, `ads`
+ve `creatives` tablolarını dolduruyor; `ad_groups.targeting` hedeflemeyi
+JSONB olarak, `creatives` başlık/metin/adres alanlarını tutuyor. Eksik olan
+veri değil EKRAN: panelde kampanya SEVİYESİNDE hiçbir liste yok (Reklam
+Keşfi reklam seviyesinde çalışıyor) ve `POST /campaigns/:id/actions` ucu
+(duraklat · sürdür · bütçe) yazılmış ama onu çağıran tek yer asistanın onay
+kartı. Kendi yorumu bunu zaten söylüyor: *"ileride panelin kendi Duraklat
+butonu"*.
+
+**1a — Kampanya listesi ikiye ayrılıyor.** `Reklam Oluştur` sayfasındaki tek
+liste yerine iki bölüm:
+  · **Yayında olanlar** — platformdan senkronize (`campaigns`)
+  · **Advetics'te kurulanlar** — taslak ağacı (`draft_campaigns`)
+Ayrım korunuyor çünkü yapabilecekleri farklı: taslak YAYINLANABİLİR, canlı
+olan DURDURULABİLİR. Satırda ad, platform, gerçek durum
+(`effective_status` — `status` değil: Meta'da kampanya aktif ama seti
+duraklatılmış olabiliyor), günlük bütçe, son 7 günün harcaması ve
+CTR/CPA'sı (`insights_daily`), son senkron zamanı.
+
+**1b — Aksiyonlar satırda.** Duraklat / Sürdür / Bütçeyi değiştir, var olan
+uca bağlı. İkinci bir yazma yolu AÇILMIYOR. Bütçe ve durdurma para kararı
+olduğu için tek adımlı onay: eski değer → yeni değer, ve bütçe değişiminin
+öğrenme evresini sıfırlayacağı yazılı.
+
+**1c — Toplu Oluştur canlı kampanyaları da kaynak alıyor.** Bugün kaynak
+seçici yalnızca `/draft-campaigns` listesinden besleniyor, orada da yalnızca
+Advetics'in kurdukları var (pratikte boost'lar). Seçici iki gruplu olacak.
+Canlı bir kampanyadan taslak üretmek YENİ platform çağrısı gerektirmiyor:
+hedefleme `ad_groups.targeting`, metinler `creatives`, bütçe ve optimizasyon
+hedefi kampanya/set satırlarında duruyor.
+
+**TAŞINAMAYAN ALANLAR SÖYLENECEK — sessiz kopya yok.** Ölçülen kısıtlar:
+  · Meta'da `image_hash` REKLAM HESABI BAŞINA. Aynı hesaba kopyalamak
+    sorunsuz; BAŞKA hesaba kopyalarken görsel yeniden yüklenmek zorunda.
+  · Gönderi ve video boost'larında kalıcı bir görsel kimliği HİÇ YOK
+    (`CLAUDE.md`). O kampanyalar kaynak seçilebilir ama kreatif yeniden
+    kurulur ve ekran bunu SEÇİM ANINDA söyler, yayın anında değil.
+  · Google arama reklamının görseli yok; kopya metin ve anahtar kelime
+    demek. Google yazma yolu canlıda denenmediği için (K3) Google kaynağı
+    ilk sürümde taslak üretir, yayınlamaz.
+
+**Bitti sayılır:** yayında olan bir kampanya panelde görünüyor, oradan
+duraklatılabiliyor, bütçesi değiştirilebiliyor ve Toplu Oluştur'da kaynak
+olarak seçilebiliyor.
+
+**Neden asistandan ÖNCE:** asistanın "bu kampanyayı durdur" önerisi, kullanıcı
+o kampanyayı panelde göremiyorken havada kalır. Uyarı da bir canlı kampanyayı
+işaret edecek. Bu faz, geri kalanının zeminini kuruyor.
+
+---
+
+### FAZ 2 — Sohbetten yayına (yalnızca Meta)
 *Kullanıcının asıl istediği şey bu.*
 
 - Yeni araç: `hazirla_ve_onaya_sun` — taslağı kurar (var olan
@@ -210,7 +282,7 @@ açılıyor ve panelde görünüyor.
 
 ---
 
-### FAZ 2 — Kreatif angaryasını bitirmek
+### FAZ 3 — Kreatif angaryasını bitirmek
 
 - Sohbete **görsel bırakma**: yüklenen görsel varlık arşivine yazılıyor,
   gerekirse `crop-studio` oranlarına otomatik kırpılıyor (kare her zaman
@@ -228,7 +300,7 @@ yayına gidebiliyor; hiçbir ekrana geçmeden.
 
 ---
 
-### FAZ 3 — Performans uyarıları (veri katmanı)
+### FAZ 4 — Performans uyarıları (veri katmanı)
 
 Yeni uyarı kodları (`UYARI_KODLARI` genişliyor), hepsi `insights_daily`'den
 ve hepsi SEVİYE taşıyor (kampanya / reklam seti / reklam):
@@ -236,11 +308,15 @@ ve hepsi SEVİYE taşıyor (kampanya / reklam seti / reklam):
 | Kod | Ne zaman | Neden bu eşik |
 |---|---|---|
 | `harcama_var_donusum_yok` | N gün harcama var, 0 dönüşüm | En pahalı sessiz hâl |
-| `edinme_maliyeti_yuksek` | CPA, hedefin ya da hesap medyanının üstünde | K5 |
+| `edinme_maliyeti_yuksek` | CPA, Bilgi Bankası'ndaki hedefin ya da hesap medyanının üstünde | K5, K8 |
 | `tiklama_orani_dusuyor` | CTR son 7 gün, önceki 7 güne göre düşüşte | Kreatif yorgunluğu |
 | `frekans_yuksek` | Frequency eşiği aşıyor | Aynı kişiye tekrar |
 | `butce_erken_bitiyor` | Günlük bütçe günün ilk saatlerinde tükeniyor | Kaçan talep |
 | `yayin_durdu` | Aktif ama gösterim yok | Reddedilmiş/öğrenmede kalmış |
+
+Hedef CPA alanı Bilgi Bankası'na ekleniyor (K8): müşterinin genel profilinde,
+bütçe hedefinin yanında. Para micros ve `clients` tablosunda değil profil
+kaydında — orası zaten müşterinin kendi bilgisi ve RLS'i kurulu.
 
 Kurallar SAF FONKSİYONLAR (`performans-kurallari.ts`) ve çalıştırılarak
 test ediliyor — kaynak taraması bir eşiği ölçemez. Her uyarı, kararını
@@ -252,7 +328,7 @@ görünüyor ve her biri hangi sayıdan doğduğunu yazıyor.
 
 ---
 
-### FAZ 4 — Uyarıdan asistana köprü
+### FAZ 5 — Uyarıdan asistana köprü
 *"Müşteriyi yönlendirmesi gerekiyor" maddesi.*
 
 - Her performans uyarısında **"Asistana sor"** düğmesi. Tıklayınca sohbet o
@@ -272,17 +348,17 @@ görünüyor ve her biri hangi sayıdan doğduğunu yazıyor.
 
 ---
 
-### FAZ 5 — Google Ads AI'yi yazmaya açmak
+### FAZ 6 — Google Ads AI'yi yazmaya açmak
 
 Ön koşul: Google yazma yolunun canlıda EN KÜÇÜK bütçeyle doğrulanması.
-Doğrulanana kadar Faz 1–4 Google'da yalnızca okuma/öneri üretiyor.
+Doğrulanana kadar Faz 1–5 Google'da yalnızca okuma/öneri üretiyor.
 Google'a özel farklar prompta giriyor: bütçe ayrı kaynak, kampanya ve bütçe
 adları hesapta TEKİL, `partialFailure: false`, video kampanyası API'den
 oluşturulamıyor (Demand Gen yolu).
 
 ---
 
-### FAZ 6 — Ölçüm
+### FAZ 7 — Ölçüm
 
 §0'daki üç sayı panele değil, `docs/DURUM.md`'e yazılıyor: kaç turda yayın,
 kaç uyarı aksiyona döndü, kaç onay reddedildi. Reddedilen onay en değerli
@@ -290,11 +366,16 @@ sinyal: asistan yanlış şey öneriyor demektir.
 
 ---
 
-## 5. Açık sorular
+## 5. Cevaplanan sorular
 
-1. **Bildirim nereye düşecek?** Panel içi uyarı listesi var; e-posta ya da
-   mobil bildirim isteniyor mu? (Rapor maili altyapısı hazır.)
-2. **Hedef CPA/ROAS nereden gelecek?** Bilgi Bankası'na alan eklemek mi,
-   asistanın ilk kurulumda sorması mı?
-3. **Müşteri hesabı (`client_viewer`) asistanı görecek mi?** Bugün reklam
-   ekranlarını göremiyor; asistan yayın yapabildiği için varsayılan HAYIR.
+1. **Bildirim nereye düşecek?** → Panel içi uyarı yeterli (K7).
+2. **Hedef CPA nereden gelecek?** → Bilgi Bankası'na alan olarak eklenecek
+   (K8). Alan boşsa hesabın kendi medyanı, o da yoksa uyarı üretilmez.
+3. **Müşteri hesabı asistanı görecek mi?** → Hayır (K9).
+
+Kalan tek belirsizlik: **canlı kampanyada DÜZENLEME nereye kadar gidecek?**
+Faz 1 duraklatma, sürdürme ve bütçeyi kapsıyor. Hedefleme ve kreatif
+değişikliği platformda çok daha geniş bir yüzey (ve öğrenme evresini
+sıfırlıyor); onlar Faz 5'teki "hedef kitle değiştir / kreatifi yenile"
+önerileriyle birlikte, taslak üzerinden yürüyecek. Doğrudan canlı kampanyanın
+hedeflemesini panelden düzenlemek isteniyorsa ayrıca konuşulmalı.
