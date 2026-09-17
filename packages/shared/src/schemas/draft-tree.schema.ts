@@ -757,3 +757,51 @@ export interface DraftGroupRecord {
   name: string;
   campaigns: DraftCampaignRecord[];
 }
+
+// -----------------------------------------------------------------------------
+// GEÇMİŞTE İŞE YARAYAN KREATİFLER
+// -----------------------------------------------------------------------------
+
+/**
+ * ═══ "NE YAZAYIM, HANGİ GÖRSELİ KOYAYIM" SORUSUNUN CEVABI ═══
+ *
+ * Hedef kullanıcı reklamcılık bilmiyor ve en sık burada takılıyor. Cevap
+ * zaten elimizde: aynı müşterinin YAYINLANMIŞ reklamları ve gerçek
+ * performansları. Bu kayıt platformdan senkronize edilen kreatifi anlatıyor
+ * (taslak kütüphanesindekini değil) — yani gerçekten yayına girmiş olanı.
+ */
+export interface KreatifPerformansi {
+  /** Senkronize kreatif kimliği (`creatives.id`). */
+  id: string;
+  platform: Platform;
+  headline: string | null;
+  primaryText: string | null;
+  description: string | null;
+  /** Platform CDN adresi. İMZALI VE SÜRESİ DOLUYOR — kalıcı sanılmamalı. */
+  thumbnailUrl: string | null;
+
+  impressions: number;
+  clicks: number;
+  /** Yüzde. `impressions` sıfırsa 0. */
+  ctr: number;
+  conversions: number;
+  spendMicros: string;
+
+  /** Bu kreatifle kaç reklam yayınlanmış. */
+  adCount: number;
+  /** En son ne zaman gösterim almış — bayat bir kreatifi ayırt etmek için. */
+  sonGun: string;
+}
+
+export interface KreatifPerformansListesi {
+  rows: KreatifPerformansi[];
+  /**
+   * Yeterli gösterim almadığı için SIRALANMAYAN kreatif sayısı.
+   *
+   * Sessiz kesme yok: üç gösterim almış bir kreatifin CTR'si anlamsız ama
+   * kullanıcı onun da var olduğunu bilmeli.
+   */
+  yetersiz: number;
+  /** Kaç günlük pencereye bakıldı. */
+  gun: number;
+}

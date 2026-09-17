@@ -5,8 +5,11 @@ import type {
   CreativeInput,
   CreativeRecord,
   CreativeTexts,
+  KreatifPerformansListesi,
+  Platform,
   TenantContext,
 } from '@advetics/shared';
+import { siralaKreatifler } from './kreatif-performansi';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { TxLike } from '../rules/rules.service';
 
@@ -49,6 +52,85 @@ export class CreativeService {
         Prisma.sql`c.org_id = ${ctx.orgId}::uuid AND c.client_id = ${clientId}::uuid`,
       ),
     );
+  }
+
+  /**
+   * ═══ GEÇMİŞTE İŞE YARAYAN KREATİFLER ═══
+   *
+   * Kaynak SENKRONİZE kreatifler (`creatives`) — taslak kütüphanesi değil.
+   * Soru "hangi metin/görsel işe yaradı" ve cevabı yalnızca YAYINA GİRMİŞ
+   * olanlarda: kütüphanede duran ama hiç yayınlanmamış bir kreatifin
+   * performansı yok.
+   *
+   * YENİ PLATFORM ÇAĞRISI YOK. Metrikler `insights_daily`nin reklam
+   * seviyesinden; gecelik süpürme onu zaten dolduruyor.
+   *
+   * SIRALAMA BURADA YAPILMIYOR: eşik ve sıra kararı saf bir fonksiyonda
+   * (`siralaKreatifler`) ve orada ÇALIŞTIRILARAK sınanıyor. SQL'e gömmek,
+   * "üç gösterimlik kreatif listeye girmemeli" gibi bir kuralı test
+   * edilemez hâle getirirdi.
+   */
+  async performans(
+    ctx: TenantContext,
+    clientId: string,
+    gun: number,
+  ): Promise<KreatifPerformansListesi> {
+    const scoped = { ...ctx, activeClientId: clientId };
+    const rows = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$queryRaw<PerformansSatiri[]>(Prisma.sql`
+        SELECT cr.id::text AS id, cr.platform::text AS platform,
+               cr.headline, cr.primary_text, cr.description,
+               cr.asset_urls,
+               COUNT(DISTINCT a.id)::int AS ad_count,
+               SUM(i.impressions)::int AS impressions,
+               SUM(i.clicks)::int AS clicks,
+               SUM(i.conversions)::float8 AS conversions,
+               SUM(i.spend_micros)::text AS spend_micros,
+               MAX(i.date) AS son_gun
+          FROM insights_daily i
+          JOIN ads a ON a.id = i.entity_id
+          JOIN creatives cr ON cr.id = a.creative_id
+         WHERE i.client_id = ${clientId}::uuid
+           AND i.entity_level = 'ad'::"EntityLevel"
+           -- KIRILIMSIZ SATIRLAR: kırılımları da toplamak aynı gösterimi
+           -- yaş/cinsiyet sayısı kadar tekrar saymak olurdu.
+           AND i.breakdown_key = ''
+           AND i.date >= CURRENT_DATE - ${gun}::int * INTERVAL '1 day'
+         GROUP BY cr.id, cr.platform, cr.headline, cr.primary_text, cr.description,
+                  cr.asset_urls
+      `),
+    );
+
+    const olculer = rows.map((r) => ({
+      creativeId: r.id,
+      impressions: Number(r.impressions ?? 0),
+      clicks: Number(r.clicks ?? 0),
+      conversions: Number(r.conversions ?? 0),
+      spendMicros: BigInt(r.spend_micros ?? '0'),
+      ham: r,
+    }));
+
+    const { siralanan, yetersiz } = siralaKreatifler(olculer);
+
+    return {
+      rows: siralanan.map((s) => ({
+        id: s.creativeId,
+        platform: s.ham.platform as Platform,
+        headline: s.ham.headline,
+        primaryText: s.ham.primary_text,
+        description: s.ham.description,
+        thumbnailUrl: ilkGorsel(s.ham.asset_urls),
+        impressions: s.impressions,
+        clicks: s.clicks,
+        ctr: s.ctr,
+        conversions: s.conversions,
+        spendMicros: s.spendMicros.toString(),
+        adCount: Number(s.ham.ad_count ?? 0),
+        sonGun: s.ham.son_gun.toISOString().slice(0, 10),
+      })),
+      yetersiz,
+      gun,
+    };
   }
 
   async get(ctx: TenantContext, id: string): Promise<CreativeRecord> {
@@ -315,4 +397,32 @@ function normalizeTexts(raw: Partial<CreativeTexts> | null): CreativeTexts {
     longHeadlines: raw?.longHeadlines ?? [],
     descriptions: raw?.descriptions ?? [],
   };
+}
+
+interface PerformansSatiri {
+  id: string;
+  platform: string;
+  headline: string | null;
+  primary_text: string | null;
+  description: string | null;
+  asset_urls: unknown;
+  ad_count: number | null;
+  impressions: number | null;
+  clicks: number | null;
+  conversions: number | null;
+  spend_micros: string | null;
+  son_gun: Date;
+}
+
+/**
+ * Kreatifin ilk GÖRSEL adresi.
+ *
+ * `asset_urls` bir dizi ve içinde Google'ın KAYNAK ADI da olabiliyor
+ * (`customers/{id}/assets/{id}`) — o bir adres değil ve `new URL()` onda
+ * patlıyor (CLAUDE.md). Yalnızca `http` ile başlayan değer alınıyor.
+ */
+function ilkGorsel(deger: unknown): string | null {
+  if (!Array.isArray(deger)) return null;
+  const url = deger.find((d) => typeof d === 'string' && d.startsWith('http'));
+  return typeof url === 'string' ? url : null;
 }

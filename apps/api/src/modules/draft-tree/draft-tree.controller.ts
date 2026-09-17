@@ -21,6 +21,7 @@ import {
   type DuplicateCampaignInput,
   type DuplicateResult,
   type ExpertDraftInput,
+  type KreatifPerformansListesi,
   type PublishCheck,
   type SimpleDraftInput,
   type TenantContext,
@@ -197,6 +198,30 @@ export class CreativeController {
     @Query('clientId', ParseUUIDPipe) clientId: string,
   ): Promise<CreativeRecord[]> {
     return this.creatives.list(ctx, clientId);
+  }
+
+  /**
+   * GEÇMİŞTE İŞE YARAYAN KREATİFLER.
+   *
+   * `:id` UCUNDAN ÖNCE TANIMLI olmak zorunda: Nest yolları sırayla
+   * eşleştiriyor ve `performans` bir UUID olmadığı için `:id` dalına düşse
+   * `ParseUUIDPipe` onu reddederdi.
+   */
+  @Get('performans')
+  @RequirePermissions('bulk.read')
+  performans(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+    @Query('gun') gun?: string,
+  ): Promise<KreatifPerformansListesi> {
+    /*
+     * PENCERE SINIRLI: 7-365 gün. Sınırsız bir pencere, bütün geçmişi
+     * tarayan bir sorgu demek ve bu ekran bir öneri listesi — maliyeti
+     * faydasını aşmamalı.
+     */
+    const n = Number(gun ?? 90);
+    const gecerli = Number.isFinite(n) ? Math.min(365, Math.max(7, Math.round(n))) : 90;
+    return this.creatives.performans(ctx, clientId, gecerli);
   }
 
   @Get(':id')

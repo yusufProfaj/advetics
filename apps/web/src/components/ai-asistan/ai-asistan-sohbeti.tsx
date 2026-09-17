@@ -67,6 +67,8 @@ export function AiAsistanSohbeti({
   const [ekler, setEkler] = useState<AssetRecord[]>([]);
   const [busy, setBusy] = useState(false);
   const [yukleniyorEk, setYukleniyorEk] = useState(false);
+  /** Sürükle-bırak sırasında kutunun vurgulanması. */
+  const [surukleniyor, setSurukleniyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
   async function gonder(): Promise<void> {
@@ -126,11 +128,34 @@ export function AiAsistanSohbeti({
     }
   }
 
-  async function ekle(files: FileList | null): Promise<void> {
+  /**
+   * ═══ GÖRSELİ SÜRÜKLE, YAPIŞTIR YA DA SEÇ ═══
+   *
+   * Üç yol da AYNI fonksiyona giriyor. Ayrı ayrı yazmak, birinde doğrulama
+   * ya da hata gösterimi unutulunca kullanıcının neden yükleyemediğini
+   * anlamaması demekti.
+   *
+   * `FileList` yerine `File[]` alıyor: pano (`clipboardData.items`) ve
+   * sürükleme (`dataTransfer.files`) farklı kaplar veriyor ve ikisini de
+   * düz diziye indirmek çağıran tarafın işi.
+   */
+  async function ekle(files: readonly File[] | FileList | null): Promise<void> {
     if (!files || files.length === 0) return;
     setYukleniyorEk(true);
     setHata(null);
     for (const file of Array.from(files)) {
+      /*
+       * GÖRSEL OLMAYAN DOSYA BURADA ELENİYOR — sunucuya gitmeden.
+       *
+       * Sürüklemede ve yapıştırmada kullanıcı ne bıraktığını seçmiyor:
+       * bir PDF ya da metin parçası da gelebiliyor. Sunucuya göndermek,
+       * kullanıcının sebebi belirsiz bir hata görmesi demekti; burada
+       * dosyanın ADI ile birlikte söyleniyor.
+       */
+      if (!file.type.startsWith('image/')) {
+        setHata(`${file.name || 'Dosya'} bir görsel değil, eklenmedi.`);
+        continue;
+      }
       try {
         const form = new FormData();
         form.append('file', file);
@@ -161,7 +186,32 @@ export function AiAsistanSohbeti({
   const taslakVar = aksiyonlar.some((a) => a.kind === 'taslak');
 
   return (
-    <div className="flex min-h-[26rem] flex-col rounded-xl border border-line bg-surface-muted p-3.5">
+    <div
+      /*
+       * SÜRÜKLE-BIRAK BÜTÜN KUTUYA. Yalnızca küçük bir alana bırakmayı
+       * zorunlu kılmak, kullanıcıya hedef aratıyor; sohbetin tamamı hedef.
+       *
+       * `onDragOver` PREVENT DEFAULT ETMEK ZORUNDA: etmezse tarayıcı
+       * dosyayı SEKMEDE AÇIYOR ve kullanıcı sohbetten çıkıyor.
+       */
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!surukleniyor) setSurukleniyor(true);
+      }}
+      onDragLeave={(e) => {
+        // Çocuk öğelere geçişte de tetikleniyor; yalnızca kutunun DIŞINA
+        // çıkıldığında vurgu kalkmalı.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setSurukleniyor(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setSurukleniyor(false);
+        void ekle(e.dataTransfer.files);
+      }}
+      className={`flex min-h-[26rem] flex-col rounded-xl border bg-surface-muted p-3.5 transition ${
+        surukleniyor ? 'border-brand ring-2 ring-brand/30' : 'border-line'
+      }`}
+    >
       {yuklemeHatasi && (
         <p className="mb-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
           Önceki sohbet yüklenemedi: {yuklemeHatasi} — yeni bir sohbet başlatabilirsin.
@@ -269,6 +319,24 @@ export function AiAsistanSohbeti({
         <textarea
           value={girdi}
           onChange={(e) => setGirdi(e.target.value)}
+          onPaste={(e) => {
+            /*
+             * EKRAN GÖRÜNTÜSÜ YAPIŞTIRMA. Ajansın en sık yaptığı şeylerden
+             * biri: görseli panoya alıp doğrudan yapıştırmak. Dosya olarak
+             * kaydedip sonra seçtirmek, iki fazladan adım demek.
+             *
+             * `e.preventDefault()` YALNIZCA görsel varsa: metin yapıştırmayı
+             * engellemek, kullanıcının kopyaladığı brief'i kutuya
+             * yazamaması demekti.
+             */
+            const gorseller = Array.from(e.clipboardData?.items ?? [])
+              .filter((i) => i.kind === 'file' && i.type.startsWith('image/'))
+              .map((i) => i.getAsFile())
+              .filter((f): f is File => f !== null);
+            if (gorseller.length === 0) return;
+            e.preventDefault();
+            void ekle(gorseller);
+          }}
           onKeyDown={(e) => {
             // Enter GÖNDERİYOR, Shift+Enter satır atlıyor — sohbet kutusunun
             // beklenen davranışı.
@@ -279,7 +347,7 @@ export function AiAsistanSohbeti({
           }}
           rows={2}
           maxLength={4000}
-          placeholder="Mesaj yaz…"
+          placeholder="Mesaj yaz, görsel sürükle ya da yapıştır…"
           className="min-w-0 flex-1 resize-none rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
         />
 

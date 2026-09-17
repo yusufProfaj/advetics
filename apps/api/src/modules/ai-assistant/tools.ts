@@ -175,6 +175,71 @@ export function buildTools(deps: ToolDeps): ToolDefinition[] {
     },
 
     {
+      /**
+       * ═══ GEÇMİŞTE İŞE YARAYAN METİN VE GÖRSELLER ═══
+       *
+       * Kullanıcının en sık takıldığı soru "ne yazayım". Cevabı elimizde
+       * duruyordu ve asistan ona hiç bakmıyordu: aynı müşterinin YAYINA
+       * GİRMİŞ reklamları ve gerçek performansları.
+       *
+       * OKUMA — onay istemiyor, platforma dokunmuyor.
+       */
+      name: 'list_top_creatives',
+      description:
+        'Bu müşterinin geçmişte EN İYİ performans gösteren reklam kreatiflerini (metin + görsel + CTR) listeler. Yeni bir reklam metni yazmadan ÖNCE çağır: neyin işe yaradığını görüp ona yakın bir metin üret.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          clientId: { type: 'string' },
+          gun: { type: 'number', description: 'Kaç günlük geçmişe bakılacak (varsayılan 90)' },
+        },
+        required: ['clientId'],
+      },
+      permissions: ['bulk.read'],
+      execute: (ctx, input) =>
+        safe(async () => {
+          const liste = await deps.creatives.performans(
+            ctx,
+            String(input.clientId),
+            typeof input.gun === 'number' ? input.gun : 90,
+          );
+          if (liste.rows.length === 0) {
+            /*
+             * BOŞ LİSTE SEBEBİNİ SÖYLÜYOR. "Kreatif yok" ile "yeterli
+             * gösterim almamış" aynı şey değil: ikincisinde geçmiş var ama
+             * güvenilir değil ve model bunu bilmeden "geçmişin yok" diye
+             * cevap verirdi.
+             */
+            return {
+              status: 'failed',
+              reason:
+                liste.yetersiz > 0
+                  ? `Son ${liste.gun} günde ${liste.yetersiz} kreatif var ama hiçbiri güvenilir bir karşılaştırma için yeterli gösterim almamış.`
+                  : `Son ${liste.gun} günde yayınlanmış kreatif bulunamadı.`,
+            } as const;
+          }
+          return {
+            status: 'success',
+            data: {
+              gun: liste.gun,
+              yetersiz: liste.yetersiz,
+              kreatifler: liste.rows.map((r) => ({
+                platform: r.platform,
+                headline: r.headline,
+                primaryText: r.primaryText,
+                description: r.description,
+                // CTR YÜZDE VE YUVARLANMIŞ: modele ondalık gürültü
+                // vermenin faydası yok, karşılaştırma için iki hane yeter.
+                ctr: Number(r.ctr.toFixed(2)),
+                impressions: r.impressions,
+                adCount: r.adCount,
+                sonGun: r.sonGun,
+              })),
+            },
+          } as const;
+        }),
+    },
+    {
       name: 'create_creative',
       description:
         'Sohbete eklenen görsellerden (assetIds) ve üretilen reklam metninden bir kreatif kaydı oluşturur. Bu kreatif daha sonra create_draft_campaign/duplicate_draft tarafından referans alınır.',

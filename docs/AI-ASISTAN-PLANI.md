@@ -324,6 +324,12 @@ açılıyor ve panelde görünüyor.
 **Bitti sayılır:** kullanıcı tek bir görsel bırakıp "bunu kullan" diyerek
 yayına gidebiliyor; hiçbir ekrana geçmeden.
 
+**DURUM:** sürükle-bırak, yapıştırma ve "geçmişte işe yarayanlar" ✅.
+Görselin platformdan İNDİRİLİP arşive alınması (`kreatif-adresi.service.ts`
+taze adresi zaten üretiyor, `kreatif-gorseli.ts` beyaz listeli indirmeyi
+yapıyor) henüz bağlanmadı: bugün çalışan bir kreatifin METNİ kopyalanıyor,
+görseli kullanıcı kendi seçiyor. Bir sonraki adım bu.
+
 ---
 
 ### FAZ 4 — Performans uyarıları (veri katmanı)
