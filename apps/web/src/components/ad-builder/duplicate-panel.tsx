@@ -149,7 +149,12 @@ export function DuplicatePanel({
         >
           {campaigns.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name} · {c.platform === 'google' ? 'Google' : 'Meta'} · {c.adAccountName}
+              {/* Hesap adı NULL olabiliyor: hesap başka bir workspace'e
+                  taşınmışsa RLS satırı göstermiyor. Kampanya yine seçilebilir
+                  olmalı — kaynağı kopyalamak hesabın adını okumayı
+                  gerektirmiyor. */}
+              {c.name} · {c.platform === 'google' ? 'Google' : 'Meta'}
+              {c.adAccountName ? ` · ${c.adAccountName}` : ''}
             </option>
           ))}
         </select>

@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ROLE_PERMISSIONS, type Permission } from '@advetics/shared';
 import { SAYFA_GIRIS_IZNI, SEKMELER } from '@/components/bilgi-bankasi/sekmeler';
@@ -149,6 +151,67 @@ describe('menü verisi gerçekten okunuyor', () => {
         expect(i.perm, `${i.href} yetkisiz`).toBeTruthy();
       }
     }
+  });
+});
+
+describe('MENÜDEKİ AD İLE SAYFANIN ADI AYNI', () => {
+  it('KRİTİK: her menü öğesinin etiketi kendi sayfasında geçiyor', () => {
+    /*
+     * Bu kural iki kez ÇİĞNENDİ ve ikisini de kullanıcı fark etti:
+     * menüde "Akıllı Boost" yazarken sayfa "Auto-Boost" başlığıyla,
+     * menüde "Reklam Oluştur" yazarken sayfa "Reklamlar" başlığıyla
+     * açılıyordu. Aynı şeyin iki adı olması kullanıcıya yanlış sayfaya
+     * düştüğünü düşündürüyor ve panelin dilini de bozuyor.
+     *
+     * TypeScript bunu göremiyor: etiket bir dize, başlık başka bir dize.
+     * İddia sayfanın KAYNAĞINDA etiketin geçmesini istiyor — ilk `h1`e
+     * bakmak yanlış olurdu, çünkü çoğu sayfa önce "Önce bir workspace seç"
+     * koruma ekranını basıyor.
+     */
+    const kok = join(__dirname, '..', 'app', '(dashboard)');
+    const eksik: string[] = [];
+    for (const bolum of SECTIONS) {
+      for (const oge of bolum.items) {
+        const dosya = join(kok, oge.href.replace(/^\//, ''), 'page.tsx');
+        // Sayfanın VARLIĞINI başka bir test kilitliyor; burada yokluk
+        // sessizce atlanmamalı, iddiaya girmeli.
+        if (!existsSync(dosya)) {
+          eksik.push(`${oge.href}: sayfa yok`);
+          continue;
+        }
+        /*
+         * TARAMA YORUMSUZ KAYNAKTA. İlk yazımda ham kaynağa bakıyordu ve
+         * mutasyon testinde BOŞ ÇIKTI: başlığı eski hâline döndürdüğümde
+         * test yeşil kaldı, çünkü kuralı ANLATAN yorum ("menüde 'Reklam
+         * Oluştur' yazıyordu…") aynı dosyada duruyor ve `includes` ikisini
+         * ayırt etmiyor. CLAUDE.md'de adı konmuş tuzak.
+         */
+        const kod = readFileSync(dosya, 'utf8')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+          .replace(/^\s*\/\/.*$/gm, '');
+        if (!kod.includes(oge.label)) {
+          eksik.push(`${oge.href}: sayfada "${oge.label}" geçmiyor`);
+          continue;
+        }
+
+        /*
+         * SEKME BAŞLIĞI DA AYNI ADI TAŞIYOR.
+         *
+         * Kaynakta geçmesi tek başına gevşek: ad bir yardım cümlesinde
+         * geçiyor olabilir ve başlık hâlâ başka bir şey diyebilir. Tarayıcı
+         * sekmesi kullanıcının menüden sonra gördüğü ikinci ad; ikisi
+         * ayrışırsa yer imleri ve sekme listesi menüden bağımsız bir isim
+         * kümesi üretiyor.
+         */
+        const baslik = /metadata\s*=\s*\{\s*title:\s*'([^']+)'/.exec(kod)?.[1];
+        if (baslik === undefined) eksik.push(`${oge.href}: metadata.title yok`);
+        else if (!baslik.includes(oge.label)) {
+          eksik.push(`${oge.href}: sekme başlığı "${baslik}" etiketi taşımıyor`);
+        }
+      }
+    }
+    expect(eksik).toEqual([]);
   });
 });
 

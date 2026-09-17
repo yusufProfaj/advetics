@@ -55,6 +55,97 @@ describe('giriş kartları', () => {
   });
 });
 
+describe('SESSİZ HATA YOK — kampanya listesini okuyan ÜÇ SAYFA', () => {
+  /*
+   * Aynı liste (`/draft-campaigns`) üç ekranda okunuyordu ve ÜÇÜ DE
+   * `.catch(() => [])` ile yutuyordu. Üçünün belirtisi ayrı ve üçü de yalan:
+   *
+   *   · Hub      → "Bu workspace'te henüz kampanya yok"
+   *   · Toplu    → "kaynak kampanya yok" (kullanıcıyı sıfırdan kurmaya iter)
+   *   · Hızlı    → EN KÖTÜSÜ: `/connections` boş kalınca "Meta bağlantın yok"
+   *                ekranı basılıyor ve kullanıcı sağlam bir bağlantıyı
+   *                düzeltmeye gönderiliyordu.
+   */
+  const SAYFALAR: Array<[string, string]> = [
+    ['hub', join(__dirname, 'page.tsx')],
+    ['hızlı', join(__dirname, 'basit', 'page.tsx')],
+    ['toplu', join(__dirname, '..', 'toplu-olustur', 'page.tsx')],
+  ];
+
+  it('tarama gerçekten sayfaları okudu', () => {
+    for (const [ad, yol] of SAYFALAR) {
+      expect(readFileSync(yol, 'utf8'), `${ad} okunamadı`).toContain('/draft-campaigns');
+    }
+  });
+
+  it('KRİTİK: hiçbiri `.catch(() => [])` kullanmıyor', () => {
+    const suclu = SAYFALAR.filter(([, yol]) =>
+      yorumsuz(readFileSync(yol, 'utf8')).includes('.catch(() => []'),
+    ).map(([ad]) => ad);
+    expect(suclu).toEqual([]);
+  });
+
+  it('KRİTİK: üçü de sebebi EKRANA yazıyor', () => {
+    for (const [ad, yol] of SAYFALAR) {
+      const kod = yorumsuz(readFileSync(yol, 'utf8'));
+      expect(kod, `${ad}: allSettled yok`).toContain('allSettled');
+      expect(kod, `${ad}: sunucunun mesajı basılmıyor`).toContain('ApiRequestError');
+    }
+  });
+
+  it('KRİTİK: bağlantı çağrısı düşerse "eksik ön koşul" ekranı BASILMIYOR', () => {
+    /*
+     * Sıra önemli: hata dalı `Missing` çağrısından ÖNCE dönmeli. Sonra
+     * gelirse `metaAccounts.length === 0` koşulu zaten çalışmış ve ekran
+     * yalan söylemiş olur.
+     */
+    const kod = yorumsuz(readFileSync(join(__dirname, 'basit', 'page.tsx'), 'utf8'));
+    const hata = kod.indexOf("baglantiSonuc.status === 'rejected'");
+    const eksik = kod.indexOf('<Missing');
+    expect(hata, 'hata dalı yok').toBeGreaterThan(-1);
+    expect(eksik, 'Missing ekranı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    expect(hata).toBeLessThan(eksik);
+  });
+});
+
+describe('HUB: kartlar ve liste', () => {
+  const HUB_KOD = yorumsuz(KAYNAK);
+
+  it('KRİTİK: kartlar İKİ GRUBA ayrılmış', () => {
+    /*
+     * Beş kart tek ızgaradaydı ve aralarındaki fark okunmuyordu: üçü
+     * sıfırdan kampanya kuruyor, ikisi VAR OLAN bir şeyden üretiyor. İlk kez
+     * gelen kullanıcı için ikinci grup boş bir ekrana çıkıyor.
+     */
+    expect(HUB_KOD).toContain('Sıfırdan kampanya');
+    expect(HUB_KOD).toContain('Var olandan üret');
+  });
+
+  it('KRİTİK: boost kartı kenar çubuğuyla AYNI adı taşıyor', () => {
+    // Kart "Gönderiyi Öne Çıkar", menü "Akıllı Boost" diyordu: tek ekran,
+    // iki ad.
+    expect(HUB_KOD).toContain('baslik="Akıllı Boost"');
+    expect(HUB_KOD).not.toContain('Gönderiyi Öne Çıkar');
+  });
+
+  it('KRİTİK: liste KESİLİYOR ve kesildiği yazılıyor', () => {
+    /*
+     * `/draft-campaigns` limitsiz dönüyor ve kampanya başına ad gruplarını
+     * ve reklamları da çekiyor. Bir yıl kampanya kuran workspace'te sayfa
+     * yüzlerce satırla açılır ve asıl iş en üstte kaybolur.
+     */
+    expect(HUB_KOD).toContain('LISTE_SINIRI');
+    expect(HUB_KOD).toContain('slice(0, LISTE_SINIRI)');
+    expect(HUB_KOD).toContain('toplam={groups.length}');
+  });
+
+  it('KRİTİK: yetkisiz kullanıcıya SEBEP yazılıyor', () => {
+    // Kartlar yetkiye bağlı; sebepsiz boş bir ekran kullanıcıyı olmayan bir
+    // arızayı aramaya gönderir.
+    expect(HUB_KOD).toContain('Reklam oluşturmak yöneticinin işi.');
+  });
+});
+
 /**
  * ONAY KARTI — "200 döndü doğrulama değil" ilkesinin arayüzdeki karşılığı.
  *

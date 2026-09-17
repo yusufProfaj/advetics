@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { CreativeRecord, DraftGroupRecord } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
-import { serverApiFetch } from '@/lib/api';
+import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { DuplicatePanel } from '@/components/ad-builder/duplicate-panel';
 
 export const metadata = { title: 'Toplu Oluştur · Advetics' };
@@ -42,10 +42,32 @@ export default async function BulkPage({
   const canWrite = hasPermission(session, 'bulk.write');
   const client = session.availableClients.find((c) => c.id === clientId);
 
-  const [groups, creatives] = await Promise.all([
-    serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`).catch(() => []),
-    serverApiFetch<CreativeRecord[]>(`/creatives?clientId=${clientId}`).catch(() => []),
+  /*
+   * HATA YUTULMUYOR. Kampanya listesi boş kalınca bu ekran "kaynak kampanya
+   * yok" diyor ve kullanıcıyı sıfırdan kampanya kurmaya gönderiyordu — oysa
+   * kaynak duruyor, yalnızca istek düşmüştü.
+   */
+  const [kampanyaSonuc, kreatifSonuc] = await Promise.allSettled([
+    serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`),
+    serverApiFetch<CreativeRecord[]>(`/creatives?clientId=${clientId}`),
   ]);
+
+  if (kampanyaSonuc.status === 'rejected') {
+    return (
+      <div
+        role="alert"
+        className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger-strong"
+      >
+        <strong>Kampanya listesi okunamadı.</strong>{' '}
+        {kampanyaSonuc.reason instanceof ApiRequestError
+          ? kampanyaSonuc.reason.message
+          : 'Sunucuya ulaşılamadı.'}
+      </div>
+    );
+  }
+
+  const groups = kampanyaSonuc.value;
+  const creatives = kreatifSonuc.status === 'fulfilled' ? kreatifSonuc.value : [];
 
   /**
    * KAYNAK OLARAK YAYINLANMIŞLAR DA GEÇERLİ.

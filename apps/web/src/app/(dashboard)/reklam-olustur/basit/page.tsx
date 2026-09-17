@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { AssetListResult, DraftGroupRecord } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
-import { serverApiFetch } from '@/lib/api';
+import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { SimpleAdBuilder } from '@/components/ad-builder/simple-builder';
 import { DraftGroupList } from '@/components/ad-builder/draft-group-list';
 
@@ -41,18 +41,44 @@ export default async function SimpleAdPage({
   const canWrite = hasPermission(session, 'bulk.write');
   const client = session.availableClients.find((c) => c.id === clientId);
 
-  const [connections, library, groups] = await Promise.all([
+  /*
+   * ═══ BAĞLANTI ÇAĞRISI DÜŞERSE EKRAN YALAN SÖYLÜYORDU ═══
+   *
+   * Üçü de `.catch(() => [])` ile alınıyordu. En pahalısı birincisi: liste
+   * boş kalınca `metaAccounts.length === 0` oluyor ve sayfa "Eksik ön koşul"
+   * ekranını basıyordu — yani "Meta bağlantın yok, hesap atanmamış". Oysa
+   * bağlantı yerinde, yalnızca istek düşmüştü. Kullanıcı olmayan bir arızayı
+   * düzeltmeye, Platform Bağlantıları ekranına gönderiliyordu.
+   */
+  const [baglantiSonuc, arsivSonuc, kampanyaSonuc] = await Promise.allSettled([
     serverApiFetch<
       Array<{
         adAccounts: Array<{ id: string; name: string; currency: string; platform: string }>;
         socialProfiles: Array<{ id: string; name: string; profileType: string }>;
       }>
-    >(`/connections?clientId=${clientId}`).catch(() => []),
-    serverApiFetch<AssetListResult>(
-      `/assets?clientId=${clientId}&kind=image&limit=60&offset=0`,
-    ).catch(() => null),
-    serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`).catch(() => []),
+    >(`/connections?clientId=${clientId}`),
+    serverApiFetch<AssetListResult>(`/assets?clientId=${clientId}&kind=image&limit=60&offset=0`),
+    serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`),
   ]);
+
+  if (baglantiSonuc.status === 'rejected') {
+    return (
+      <div
+        role="alert"
+        className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger-strong"
+      >
+        <strong>Reklam hesapları okunamadı.</strong>{' '}
+        {baglantiSonuc.reason instanceof ApiRequestError
+          ? baglantiSonuc.reason.message
+          : 'Sunucuya ulaşılamadı.'}{' '}
+        Bağlantıların yerinde olabilir; sayfayı yenilemeyi dene.
+      </div>
+    );
+  }
+
+  const connections = baglantiSonuc.value;
+  const library = arsivSonuc.status === 'fulfilled' ? arsivSonuc.value : null;
+  const groups = kampanyaSonuc.status === 'fulfilled' ? kampanyaSonuc.value : [];
 
   const accounts = connections.flatMap((c) => c.adAccounts ?? []);
   // REKLAM SAYFA ADINA YAYINLANIYOR ve Instagram hesabı tek başına bunu

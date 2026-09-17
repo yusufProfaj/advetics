@@ -42,7 +42,8 @@ interface CampaignRow {
   source_campaign_id: string | null;
   platform: DraftPlatform;
   ad_account_id: string;
-  ad_account_name: string;
+  /** Hesap satırı görünmüyorsa NULL — bkz. selectTree'deki LEFT JOIN notu. */
+  ad_account_name: string | null;
   name: string;
   surface: DraftSurface;
   goal: CampaignGoal | null;
@@ -581,7 +582,13 @@ export class DraftTreeService {
              c.budget_mode, c.budget_amount_micros, c.start_at, c.end_at, c.status,
              c.external_campaign_id, c.error, c.published_at, c.created_at
       FROM draft_campaigns c
-      JOIN ad_accounts a ON a.id = c.ad_account_id
+      -- LEFT JOIN: hesabın ADI süsleme, kampanyanın görünürlük şartı DEĞİL.
+      -- ad_accounts politikası ATANMIŞ satırı aktif workspace'e daraltıyor;
+      -- reklam hesabı başka bir workspace'e taşınınca (bu üründe normal bir
+      -- işlem) iç birleştirme o hesapla kurulmuş YAYINDAKİ kampanyayı
+      -- listeden sessizce düşürüyordu. Platformda çalışan, para harcayan bir
+      -- kampanya panelden kaybolamaz. taslak-listesi-rls.spec.ts ölçüyor.
+      LEFT JOIN ad_accounts a ON a.id = c.ad_account_id
       WHERE ${where}
       ORDER BY c.created_at DESC, c.platform
     `);
@@ -661,7 +668,7 @@ export class DraftTreeService {
       sourceCampaignId: c.source_campaign_id,
       platform: c.platform,
       adAccountId: c.ad_account_id,
-      adAccountName: c.ad_account_name,
+      adAccountName: c.ad_account_name ?? null,
       name: c.name,
       surface: c.surface,
       goal: c.goal,

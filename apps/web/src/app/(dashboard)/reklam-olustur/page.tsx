@@ -6,15 +6,22 @@ import {
   type DraftGroupRecord,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
-import { serverApiFetch } from '@/lib/api';
+import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { DraftGroupList } from '@/components/ad-builder/draft-group-list';
 
-export const metadata = { title: 'Reklamlar · Advetics' };
+export const metadata = { title: 'Reklam Oluştur · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
- * Reklamlar — GİRİŞ KAPISI.
+ * Reklam Oluştur — GİRİŞ KAPISI.
+ *
+ * ═══ EKRANIN ADI KENAR ÇUBUĞUYLA AYNI ═══
+ *
+ * Menüde "Reklam Oluştur" yazıyordu, sayfa "Reklamlar" başlığıyla
+ * açılıyordu. Aynı şeyin iki adı olması kullanıcıya yanlış sayfaya düştüğünü
+ * düşündürüyor. Aynı sebeple "Gönderiyi Öne Çıkar" kartı da "Akıllı Boost"
+ * oldu: kart ile kenar çubuğu AYNI ekranı açıyor ve iki ayrı ad taşıyordu.
  *
  * Bu sayfa eskiden sihirbazın kendisiydi. Artık dört başlangıç noktası ve
  * kampanya listesi: kullanıcı "reklam vereceğim" diye geliyor, biz de ona
@@ -48,60 +55,127 @@ export default async function AdsHomePage({
   const canWrite = hasPermission(session, 'bulk.write');
   const client = session.availableClients.find((c) => c.id === clientId);
 
-  const [groups, legacy] = await Promise.all([
-    serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`).catch(() => []),
-    serverApiFetch<AdDraftRecord[]>(`/ad-drafts?clientId=${clientId}`).catch(() => []),
+  /*
+   * HATA YUTULMUYOR. İkisi de `.catch(() => [])` ile alınıyordu ve bu depoda
+   * adı konmuş bir yasak: liste okunamadığında ekran "Bu workspace'te henüz
+   * kampanya yok" yazıyordu. İki cümle tamamen farklı iş — birincisinde
+   * kullanıcı kampanya kurar, ikincisinde kurduğu kampanyaların kaybolduğunu
+   * sanır.
+   */
+  const [kampanyaSonuc, eskiSonuc] = await Promise.allSettled([
+    serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`),
+    serverApiFetch<AdDraftRecord[]>(`/ad-drafts?clientId=${clientId}`),
   ]);
+
+  const groups = kampanyaSonuc.status === 'fulfilled' ? kampanyaSonuc.value : null;
+  const legacy = eskiSonuc.status === 'fulfilled' ? eskiSonuc.value : [];
+
+  /*
+   * LİSTE KESİLİYOR — VE KESİLDİĞİ YAZILIYOR.
+   *
+   * `/draft-campaigns` limitsiz dönüyor ve her kampanya için AD GRUPLARINI
+   * ve REKLAMLARI da çekiyor (üç sorgu). Bu ekran satır başına yalnızca ad,
+   * platform, durum ve tarih basıyor; bir yıl kampanya kuran workspace'te
+   * sayfa yüzlerce satırla açılır ve asıl iş (yeni kampanya kurmak) en üstte
+   * kaybolur.
+   */
+  const LISTE_SINIRI = 10;
+  const gosterilen = groups?.slice(0, LISTE_SINIRI) ?? [];
 
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-xl font-semibold text-ink">Reklamlar</h1>
+        <h1 className="text-xl font-semibold text-ink">Reklam Oluştur</h1>
         <p className="mt-0.5 text-sm text-ink-muted">
           <strong className="text-ink">{client?.name ?? 'Workspace'}</strong> · ne yapmak
           istediğini seç.
         </p>
       </header>
 
-      {canWrite && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {canWrite ? (
+        <>
           {/*
-            AI ASİSTAN BURADA, AYRI BİR MENÜ ÖĞESİ DEĞİL: kampanya kurmanın
-            bir başka yolu ve kullanıcı "reklam vereceğim" diye zaten bu
-            sayfaya geliyor. Kenar çubuğuna ayrı satır koymak, aynı işin
-            parçası olan ekranı ayırmak olurdu (CLAUDE.md, rapor/şablon dersi).
+            ═══ BEŞ KART İKİ GRUBA AYRILDI ═══
+
+            Hepsi tek ızgaradaydı ve aralarındaki fark okunmuyordu: üçü
+            SIFIRDAN kampanya kuruyor, ikisi VAR OLAN bir şeyden üretiyor
+            (çalışan bir kampanyadan ya da yayınlanmış bir gönderiden). İkinci
+            gruba girebilmek için elde zaten bir şey olması gerekiyor; ilk kez
+            gelen kullanıcıya onları birinci sınıf seçenek gibi göstermek,
+            boş bir ekrana götürmek demekti.
           */}
-          <Giris
-            href={`/reklam-olustur/ai-asistan?musteri=${clientId}`}
-            baslik="AI Asistan"
-            aciklama="Ne istediğini yaz, sohbetten taslak çıksın. Görsel ekleyebilir, bütçeyi konuşarak belirleyebilirsin."
-            vurgu
-          />
-          <Giris
-            href={`/reklam-olustur/basit?musteri=${clientId}`}
-            baslik="Hızlı Reklam"
-            aciklama="Ne istediğini söyle, gerisini biz hallederiz. Hedef, kitle ve yerleşim sorulmuyor."
-          />
-          <Giris
-            href={`/reklam-olustur/uzman?musteri=${clientId}`}
-            baslik="Kampanya Kur"
-            aciklama="Amaç, optimizasyon, kitle ve yerleşim üzerinde tam kontrol. Meta ve Google."
-          />
-          <Giris
-            href={`/toplu-olustur?musteri=${clientId}`}
-            baslik="Toplu Oluştur"
-            aciklama="Çalışan bir kampanyadan varyasyonlar üret. Yazmadığın alan kaynaktan gelir."
-          />
-          <Giris
-            href={`/auto-boost?musteri=${clientId}`}
-            baslik="Gönderiyi Öne Çıkar"
-            aciklama="Kural kur, iyi giden gönderiler onayına düşsün."
-          />
-        </div>
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold text-ink">Sıfırdan kampanya</h2>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {/*
+                AI ASİSTAN BURADA, AYRI BİR MENÜ ÖĞESİ DEĞİL: kampanya kurmanın
+                bir başka yolu ve kullanıcı "reklam vereceğim" diye zaten bu
+                sayfaya geliyor. Kenar çubuğuna ayrı satır koymak, aynı işin
+                parçası olan ekranı ayırmak olurdu (CLAUDE.md, rapor/şablon dersi).
+              */}
+              <Giris
+                href={`/reklam-olustur/ai-asistan?musteri=${clientId}`}
+                baslik="AI Asistan"
+                aciklama="Ne istediğini yaz, sohbetten taslak çıksın. Görsel ekleyebilir, bütçeyi konuşarak belirleyebilirsin."
+                vurgu
+              />
+              <Giris
+                href={`/reklam-olustur/basit?musteri=${clientId}`}
+                baslik="Hızlı Reklam"
+                aciklama="Ne istediğini söyle, gerisini biz hallederiz. Hedef, kitle ve yerleşim sorulmuyor."
+              />
+              <Giris
+                href={`/reklam-olustur/uzman?musteri=${clientId}`}
+                baslik="Kampanya Kur"
+                aciklama="Amaç, optimizasyon, kitle ve yerleşim üzerinde tam kontrol. Meta ve Google."
+              />
+            </div>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold text-ink">Var olandan üret</h2>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Giris
+                href={`/toplu-olustur?musteri=${clientId}`}
+                baslik="Toplu Oluştur"
+                aciklama="Çalışan bir kampanyadan varyasyonlar üret. Yazmadığın alan kaynaktan gelir."
+              />
+              {/*
+                AD KENAR ÇUBUĞUYLA AYNI. Kart "Gönderiyi Öne Çıkar" diyordu,
+                menü aynı ekrana "Akıllı Boost" diyordu: tek ekran, iki ad.
+              */}
+              <Giris
+                href={`/auto-boost?musteri=${clientId}`}
+                baslik="Akıllı Boost"
+                aciklama="Kural kur, iyi giden gönderiler onayına düşsün."
+              />
+            </div>
+          </section>
+        </>
+      ) : (
+        // SEBEPSİZ BOŞ EKRAN YOK: kartlar yetkiye bağlı ve yetkisi olmayan
+        // kullanıcı neden hiçbir düğme göremediğini bilmeli.
+        <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
+          Reklam oluşturmak yöneticinin işi. Kurulan kampanyaları görebilirsin.
+        </p>
       )}
 
-      {groups.length > 0 ? (
-        <DraftGroupList groups={groups} />
+      {groups === null ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger-strong"
+        >
+          <strong>Kampanya listesi okunamadı.</strong>{' '}
+          {kampanyaSonuc.status === 'rejected' && kampanyaSonuc.reason instanceof ApiRequestError
+            ? kampanyaSonuc.reason.message
+            : 'Sunucuya ulaşılamadı.'}
+        </div>
+      ) : gosterilen.length > 0 ? (
+        <DraftGroupList
+          groups={gosterilen}
+          toplam={groups.length}
+          baslik="Kurulan kampanyalar"
+        />
       ) : (
         <p className="rounded-xl border border-dashed border-line bg-surface px-4 py-8 text-center text-sm text-ink-muted">
           Bu workspace’te henüz kampanya yok.

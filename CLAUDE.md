@@ -481,6 +481,14 @@ buna göre veriliyor:
   alanları `LEFT JOIN` ile alınır. `rapor-listeleri-rls.spec.ts` servisin
   GERÇEK sorgusunu kaynaktan çıkarıp çalıştırıyor (kopyalanan bir sorgu
   düzeltilmiş hâli taşır ve servis eski kalsa bile yeşil geçerdi).
+- **AYNI EKRANIN MENÜDE VE SAYFADA İKİ AYRI ADI OLUYOR.** Kenar çubuğu
+  "Akıllı Boost" derken sayfa "Auto-Boost", "Reklam Oluştur" derken sayfa
+  "Reklamlar" başlığıyla açılıyordu; kullanıcı yanlış sayfaya düştüğünü
+  sanıyor. TypeScript göremiyor (ikisi de düz dize) ve iki kez üst üste
+  oldu. `nav-sections.spec.ts` artık her menü öğesi için sayfanın KAYNAĞINDA
+  ve `metadata.title` içinde etiketin geçtiğini kilitliyor. Tarama YORUMSUZ
+  kaynakta yapılıyor: ilk yazımda ham kaynağa bakıyordu ve mutasyon testinde
+  boş çıktı, çünkü kuralı ANLATAN yorum eşleşiyordu.
 - **GÖRÜNMEYEN SATIRI "YOK" SAYMAK YANLIŞ ALARM ÜRETİYOR.** Aynı ekranda
   `sender_ready` alanı `ea.id IS NOT NULL` ile hesaplanıyordu ama
   `user_email_accounts` politikası satırı YALNIZCA sahibine gösteriyor. Yani

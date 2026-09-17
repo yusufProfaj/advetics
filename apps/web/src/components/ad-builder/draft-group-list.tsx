@@ -13,13 +13,33 @@ import { formatRelative } from '@/lib/format';
  * ya yayına girmiş ve para harcayan bir kampanyayı gizlemek ya da hiç
  * oluşmamış bir kampanyayı var göstermek olurdu.
  */
-export function DraftGroupList({ groups }: { groups: DraftGroupRecord[] }) {
+export function DraftGroupList({
+  groups,
+  /**
+   * Kaç kampanya OLDUĞU — kaç tanesinin gösterildiği değil.
+   *
+   * SESSİZ KESME YOK: liste kırpılıyorsa kullanıcı kaçının dışarıda
+   * kaldığını görmeli. Verilmezse gösterilen sayı toplam sayılıyor.
+   */
+  toplam,
+  baslik = 'Önceki reklamların',
+}: {
+  groups: DraftGroupRecord[];
+  toplam?: number;
+  baslik?: string;
+}) {
+  const tumu = toplam ?? groups.length;
   return (
     <section className="rounded-xl border border-line bg-surface">
-      <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
-        Önceki reklamların
-        <span className="ml-1.5 font-normal text-ink-muted">({groups.length})</span>
-      </h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3">
+        <h2 className="text-sm font-semibold text-ink">
+          {baslik}
+          <span className="ml-1.5 font-normal text-ink-muted">({tumu})</span>
+        </h2>
+        {tumu > groups.length && (
+          <span className="text-[11px] text-ink-muted">son {groups.length} tanesi</span>
+        )}
+      </div>
       <ul>
         {groups.map((g) => (
           <li

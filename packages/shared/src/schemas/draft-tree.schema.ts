@@ -721,7 +721,14 @@ export interface DraftCampaignRecord {
   sourceCampaignId: string | null;
   platform: DraftPlatform;
   adAccountId: string;
-  adAccountName: string;
+  /**
+   * `null` = hesap satırı OKUNAMIYOR, hesap yok demek DEĞİL.
+   *
+   * Reklam hesabı başka bir workspace'e taşınmış olabilir ve RLS o satırı
+   * aktif workspace'e daraltıyor. Kampanyayı listeden düşürmek yerine adı
+   * boş bırakıyoruz: platformda çalışan bir kampanya panelden kaybolamaz.
+   */
+  adAccountName: string | null;
   name: string;
   surface: DraftSurface;
   goal: CampaignGoal | null;
