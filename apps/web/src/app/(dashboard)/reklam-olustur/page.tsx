@@ -3,12 +3,14 @@ import {
   AD_DRAFT_STATUS_LABELS,
   GOAL_META,
   type AdDraftRecord,
+  type CanliKampanyaListesi,
   type DraftGroupRecord,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { DraftGroupList } from '@/components/ad-builder/draft-group-list';
+import { CanliKampanyalar } from '@/components/ad-builder/canli-kampanyalar';
 
 export const metadata = { title: 'Reklam Oluştur · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -53,6 +55,12 @@ export default async function AdsHomePage({
   }
 
   const canWrite = hasPermission(session, 'bulk.write');
+  /*
+   * AKSİYON YETKİSİ AYRI: `budget.write`. Kampanyayı GÖREBİLEN herkesin
+   * onu durdurabilmesi gerekmiyor ve uç noktanın kendi izni de bu — ikisini
+   * aynı anahtara bağlamak, sunucunun reddedeceği bir düğme göstermek olurdu.
+   */
+  const canManage = hasPermission(session, 'budget.write');
   const client = session.availableClients.find((c) => c.id === clientId);
 
   /*
@@ -62,13 +70,22 @@ export default async function AdsHomePage({
    * kullanıcı kampanya kurar, ikincisinde kurduğu kampanyaların kaybolduğunu
    * sanır.
    */
-  const [kampanyaSonuc, eskiSonuc] = await Promise.allSettled([
+  const [kampanyaSonuc, eskiSonuc, canliSonuc] = await Promise.allSettled([
     serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`),
     serverApiFetch<AdDraftRecord[]>(`/ad-drafts?clientId=${clientId}`),
+    /*
+     * YAYINDA OLANLAR — platformdan senkronize edilenler.
+     *
+     * Bu liste bugüne kadar YOKTU: panelde yalnızca Advetics'in kurduğu
+     * taslaklar görünüyordu ve kullanıcı platformda çalışan kampanyalarını
+     * göremiyordu. Veri zaten `campaigns` tablosunda duruyordu.
+     */
+    serverApiFetch<CanliKampanyaListesi>(`/campaigns?clientId=${clientId}`),
   ]);
 
   const groups = kampanyaSonuc.status === 'fulfilled' ? kampanyaSonuc.value : null;
   const legacy = eskiSonuc.status === 'fulfilled' ? eskiSonuc.value : [];
+  const canli = canliSonuc.status === 'fulfilled' ? canliSonuc.value : null;
 
   /*
    * LİSTE KESİLİYOR — VE KESİLDİĞİ YAZILIYOR.
@@ -158,6 +175,31 @@ export default async function AdsHomePage({
         <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
           Reklam oluşturmak yöneticinin işi. Kurulan kampanyaları görebilirsin.
         </p>
+      )}
+
+      {/*
+        SIRA: ÖNCE YAYINDA OLANLAR. Kullanıcının günlük işi yayındaki
+        kampanyada: hangisi para harcıyor, hangisi durdurulmalı. Advetics'te
+        kurulan taslaklar onun altında — onlar yapılacak iş, bu ise DURUM.
+      */}
+      {canliSonuc.status === 'rejected' ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger-strong"
+        >
+          <strong>Yayındaki kampanyalar okunamadı.</strong>{' '}
+          {canliSonuc.reason instanceof ApiRequestError
+            ? canliSonuc.reason.message
+            : 'Sunucuya ulaşılamadı.'}
+        </div>
+      ) : (
+        canli !== null && (
+          <CanliKampanyalar
+            rows={canli.rows}
+            toplam={canli.toplam}
+            canManage={canManage}
+          />
+        )
       )}
 
       {groups === null ? (

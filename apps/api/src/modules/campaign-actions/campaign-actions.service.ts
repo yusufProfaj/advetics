@@ -1,6 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { Platform, TenantContext } from '@advetics/shared';
+import type {
+  CanliKampanyaListesi,
+  CanliKampanyaOzeti,
+  Platform,
+  TenantContext,
+} from '@advetics/shared';
 import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { AuditService } from '../audit/audit.service';
@@ -127,6 +132,73 @@ export class CampaignActionsService {
    * değil — panelin analiz ekranıyla aynı ağır sorguyu tekrar çalıştırmak
    * gereksiz yük olurdu.
    */
+  /**
+   * ═══ PANELDEKİ "YAYINDA OLANLAR" LİSTESİ ═══
+   *
+   * `list()`ten farkı: bu liste EKRAN için ve satır başına durum, hesap adı,
+   * son senkron ve SON 7 GÜNÜN performansı taşıyor. `list()` asistanın
+   * "hangi kampanyayı kastediyorsun" sorusu için yazılmıştı ve orada bu
+   * alanların hiçbiri gerekmiyor.
+   *
+   * YENİ PLATFORM ÇAĞRISI YOK. Metrikler `insights_daily`den; gecelik
+   * süpürme onu zaten dolduruyor ve bir liste ekranı için kota harcamak,
+   * kotayı asıl işten (senkronizasyon) çalmak olurdu.
+   *
+   * `LEFT JOIN ad_accounts` — İÇ BİRLEŞTİRME DEĞİL. `ad_accounts`
+   * politikası ATANMIŞ satırı aktif workspace'e daraltıyor; reklam hesabı
+   * başka bir workspace'e taşınmışsa iç birleştirme, o hesapla kurulmuş
+   * YAYINDAKİ kampanyayı listeden sessizce düşürürdü. Aynı tuzağa taslak
+   * listesinde düşüldü ve `taslak-listesi-rls.spec.ts` ile kilitlendi.
+   */
+  async canliListe(ctx: TenantContext, clientId: string): Promise<CanliKampanyaListesi> {
+    const scoped = { ...ctx, activeClientId: clientId };
+    return this.prisma.withTenant(scoped, async (tx) => {
+      const rows = await tx.$queryRaw<CanliSatir[]>(Prisma.sql`
+        SELECT c.id::text AS id, c.name, c.platform::text AS platform,
+               c.objective, c.status::text AS status, c.effective_status,
+               c.budget_mode::text AS budget_mode,
+               c.budget_amount_micros::text AS budget_amount_micros,
+               c.ad_account_id::text AS ad_account_id,
+               a.name AS ad_account_name, a.currency,
+               c.synced_at,
+               m.spend_micros::text AS spend_micros, m.impressions, m.clicks,
+               m.conversions::float8 AS conversions
+          FROM campaigns c
+          LEFT JOIN ad_accounts a ON a.id = c.ad_account_id
+          LEFT JOIN LATERAL (
+            SELECT SUM(i.spend_micros) AS spend_micros,
+                   SUM(i.impressions)  AS impressions,
+                   SUM(i.clicks)       AS clicks,
+                   SUM(i.conversions)  AS conversions
+              FROM insights_daily i
+             WHERE i.entity_level = 'campaign'::"EntityLevel"
+               AND i.entity_id = c.id
+               -- KIRILIMSIZ SATIRLAR. Kırılım satırlarını da toplamak aynı
+               -- harcamayı yaş/cinsiyet sayısı kadar tekrar saymak olurdu.
+               AND i.breakdown_key = ''
+               AND i.date >= CURRENT_DATE - INTERVAL '7 days'
+          ) m ON TRUE
+         WHERE c.client_id = ${clientId}::uuid AND c.deleted_at IS NULL
+         ORDER BY (c.status = 'active'::"EntityStatus") DESC,
+                  m.spend_micros DESC NULLS LAST,
+                  c.name
+         LIMIT ${CANLI_LISTE_SINIRI}
+      `);
+
+      // SAYIM AYRI SORGUDA: liste kesiliyor ve kaçının dışarıda kaldığını
+      // söylemek zorundayız.
+      const [sayim] = await tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`
+        SELECT count(*) AS n FROM campaigns
+         WHERE client_id = ${clientId}::uuid AND deleted_at IS NULL
+      `);
+
+      return {
+        rows: rows.map(toCanliOzet),
+        toplam: Number(sayim?.n ?? rows.length),
+      };
+    });
+  }
+
   async list(ctx: TenantContext, clientId: string): Promise<CampaignSummary[]> {
     const rows = await this.prisma.withTenant(ctx, (tx) =>
       tx.campaign.findMany({
@@ -311,4 +383,65 @@ export class CampaignActionsService {
       grantedScopes: r.granted_scopes ?? [],
     };
   }
+}
+
+/**
+ * Ekran listesinin üst sınırı.
+ *
+ * Büyük bir hesapta yüzlerce kampanya var ve hepsini tek sayfaya basmak
+ * ekranı okunmaz yapıyor. Sınırın kendisi zararsız, SESSİZ OLMASI zararlı:
+ * `toplam` ayrıca dönüyor ve ekran kaçının gösterildiğini yazıyor.
+ */
+const CANLI_LISTE_SINIRI = 50;
+
+interface CanliSatir {
+  id: string;
+  name: string;
+  platform: string;
+  objective: string | null;
+  status: string;
+  effective_status: string | null;
+  budget_mode: string;
+  budget_amount_micros: string | null;
+  ad_account_id: string;
+  ad_account_name: string | null;
+  currency: string | null;
+  synced_at: Date;
+  spend_micros: string | null;
+  impressions: number | null;
+  clicks: number | null;
+  conversions: number | null;
+}
+
+function toCanliOzet(r: CanliSatir): CanliKampanyaOzeti {
+  return {
+    id: r.id,
+    name: r.name,
+    platform: r.platform as Platform,
+    objective: r.objective,
+    status: r.status,
+    effectiveStatus: r.effective_status,
+    budgetMode: r.budget_mode,
+    budgetAmountMicros: r.budget_amount_micros,
+    currency: r.currency,
+    adAccountId: r.ad_account_id,
+    adAccountName: r.ad_account_name,
+    syncedAt: r.synced_at.toISOString(),
+    /*
+     * HİÇ SATIR YOKSA `null` — SIFIR DEĞİL.
+     *
+     * "Bu kampanya 7 gündür hiç harcamadı" ile "bu kampanyanın verisi
+     * gelmedi" aynı şey değil ve ikisinin yapılacak işi farklı: birincisinde
+     * kampanyaya bakılır, ikincisinde senkronizasyona.
+     */
+    son7Gun:
+      r.spend_micros === null
+        ? null
+        : {
+            spendMicros: r.spend_micros,
+            impressions: Number(r.impressions ?? 0),
+            clicks: Number(r.clicks ?? 0),
+            conversions: Number(r.conversions ?? 0),
+          },
+  };
 }
