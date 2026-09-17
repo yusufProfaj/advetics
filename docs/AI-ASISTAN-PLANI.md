@@ -237,6 +237,32 @@ Canlı bir kampanyadan taslak üretmek YENİ platform çağrısı gerektirmiyor:
 hedefleme `ad_groups.targeting`, metinler `creatives`, bütçe ve optimizasyon
 hedefi kampanya/set satırlarında duruyor.
 
+**1c ÖLÇÜLDÜ VE PLAN DEĞİŞTİ — KOPYAYI BİZ DEĞİL PLATFORM ÇIKARACAK.**
+
+İlk plan "canlı kampanyadan taslak üret, sonra var olan çoğaltma akışını
+kullan" diyordu. Kod okunduğunda iki duvar çıktı:
+
+  1. **Çoğaltma SQL seviyesinde taslak tablolarından kopyalıyor**
+     (`INSERT ... SELECT FROM draft_campaigns`). Canlı kampanya o tablolarda
+     değil; `campaigns`/`ad_groups` satırlarından bir taslak ÜRETMEK gerekiyor.
+  2. **Üretilen taslak SADIK OLAMIYOR.** Hedefleme `ad_groups.targeting`
+     içinde Meta'nın HAM biçiminde duruyor; bizim uzman yüzeyimizin
+     `advanced` şeması bambaşka bir model. Çeviri yazmak, kaynağıyla AYNI
+     sanılan ama farklı hedefleyen bir kampanya üretmek demek — bu projenin
+     tanımı gereği en pahalı hata türü. Kreatifler de ayrı: taslak reklamı
+     `ad_creatives`e bakıyor, senkronize kreatifler `creatives` tablosunda ve
+     görselleri platformun imzalı (ölen) adreslerinde.
+
+**META'NIN KENDİ KOPYALAMA UCU VAR:** `POST /v25.0/{campaign_id}/copies`
+(`deep_copy`, `status_option` varsayılan PAUSED, `rename_options`). Kampanyayı
+Meta kendi kopyalıyor: hedefleme, reklam setleri ve reklamlar aslına SADIK
+kalıyor ve biz hiçbir şey çevirmiyoruz. Sınır: eşzamanlı çağrıda 3, asenkron
+çağrıda 51 alt reklam.
+
+Bu bir YAZMA yolu ve canlıda hiç denenmedi; `ads_management` istiyor ve
+gerçek nesne üretiyor. O yüzden ayrı bir adım olarak ve kullanıcının onayıyla
+açılacak. Panel tarafı hazır: liste ve aksiyonlar (1a/1b) bitti.
+
 **TAŞINAMAYAN ALANLAR SÖYLENECEK — sessiz kopya yok.** Ölçülen kısıtlar:
   · Meta'da `image_hash` REKLAM HESABI BAŞINA. Aynı hesaba kopyalamak
     sorunsuz; BAŞKA hesaba kopyalarken görsel yeniden yüklenmek zorunda.
@@ -248,8 +274,8 @@ hedefi kampanya/set satırlarında duruyor.
     ilk sürümde taslak üretir, yayınlamaz.
 
 **Bitti sayılır:** yayında olan bir kampanya panelde görünüyor, oradan
-duraklatılabiliyor, bütçesi değiştirilebiliyor ve Toplu Oluştur'da kaynak
-olarak seçilebiliyor.
+duraklatılabiliyor, bütçesi değiştirilebiliyor (1a/1b ✅) ve Toplu Oluştur'da
+kaynak olarak seçilebiliyor (1c — Meta'nın kopyalama ucuyla, onay bekliyor).
 
 **Neden asistandan ÖNCE:** asistanın "bu kampanyayı durdur" önerisi, kullanıcı
 o kampanyayı panelde göremiyorken havada kalır. Uyarı da bir canlı kampanyayı
