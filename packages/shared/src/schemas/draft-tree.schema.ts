@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Platform } from '../constants/platforms';
 import { CAMPAIGN_GOALS, type CampaignGoal } from './ad-builder.schema';
 import { GOAL_SPEC, advancedSettingsSchema } from './campaign-advanced.schema';
 

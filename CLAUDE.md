@@ -481,6 +481,18 @@ buna göre veriliyor:
   alanları `LEFT JOIN` ile alınır. `rapor-listeleri-rls.spec.ts` servisin
   GERÇEK sorgusunu kaynaktan çıkarıp çalıştırıyor (kopyalanan bir sorgu
   düzeltilmiş hâli taşır ve servis eski kalsa bile yeşil geçerdi).
+- **`apps/*` TYPECHECK'İ TEMİZ OLMASI, `packages/shared`İN DERLENDİĞİ
+  ANLAMINA GELMİYOR.** İkisi de `@advetics/shared`ı DERLENMİŞ `dist`ten
+  okuyor; kaynakta bir tip hatası varsa panel ve API typecheck'i ESKİ
+  bildirimleri görüp yeşil geçiyor. Bu oturumda tam olarak bu oldu:
+  `draft-tree.schema.ts`e `Platform` tipi kullanan bir arayüz eklendi ama
+  import edilmedi; `pnpm --filter @advetics/shared build` çıktısı ÇIKTI
+  YUTULARAK (`>/dev/null 2>&1`) koşturulduğu için hata görünmedi, sonraki
+  bütün kontroller bayat `dist`i okudu ve hata DEPLOY'un ortasında,
+  sunucudaki derlemede patladı (`TS2304: Cannot find name 'Platform'`).
+  KURAL: shared'a dokunan her değişiklikten sonra derlemeyi ÇIKTISIYLA
+  birlikte koş; bir komutun çıktısını yutmak, bu depoda hata gizlemenin en
+  hızlı yolu.
 - **AYNI EKRANIN MENÜDE VE SAYFADA İKİ AYRI ADI OLUYOR.** Kenar çubuğu
   "Akıllı Boost" derken sayfa "Auto-Boost", "Reklam Oluştur" derken sayfa
   "Reklamlar" başlığıyla açılıyordu; kullanıcı yanlış sayfaya düştüğünü
