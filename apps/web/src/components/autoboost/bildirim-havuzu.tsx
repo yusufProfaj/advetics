@@ -3,14 +3,53 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  AutoBoostPlatform,
   AutoBoostQueueItemRecord,
   AutoBoostQueueList,
   AutoBoostQueueOverride,
   AutoBoostSubscriptionHealth,
+  ChannelKind,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatMoney, formatRelative } from '@/lib/format';
 import { KartDuzenle } from '@/components/autoboost/kart-duzenle';
+import { PlatformLogo } from '@/components/platform-logo';
+
+/**
+ * ═══ PLATFORM TABLOLARI — HEPSİ `Record`, HİÇBİRİ KOŞUL ZİNCİRİ ═══
+ *
+ * Bu ekran iki kaynaktan besleniyor (Instagram gönderisi, YouTube videosu) ve
+ * ikisinin görsel oranı, mecra adı ve logosu farklı. Elle yazılmış bir koşul
+ * ("google değilse Instagram") üçüncü bir kaynak eklendiğinde YANLIŞ ROZET
+ * üretir — ve yanlış rozet, eksik rozetten kötüdür: kullanıcı sorgulamaz.
+ */
+const PLATFORM_ETIKETI: Record<AutoBoostPlatform, string> = {
+  meta: 'Instagram',
+  google: 'YouTube',
+};
+
+const PLATFORM_KANALI: Record<AutoBoostPlatform, ChannelKind> = {
+  meta: 'instagram',
+  google: 'youtube',
+};
+
+/**
+ * GÖRSEL ORANI PLATFORMA GÖRE DEĞİŞİYOR ve kart oranı DEĞİŞMİYOR.
+ *
+ * Instagram gönderisi dikey (4:5), YouTube küçük resmi yatay (16:9). Kart
+ * kutusunu içeriğe göre değiştirmek ızgaradaki satırların hizasını bozuyor ve
+ * göz taraması satır satır yapılamaz hâle geliyor. Yatay görseli 4:5'e
+ * KIRPMAK ise videonun iki yanını kesiyor; küçük resimde metin çoğu zaman tam
+ * oraya yazılıyor.
+ *
+ * Çözüm: yatay görsel kutuya SIĞDIRILIYOR ve arkasına kendisinin bulanık,
+ * büyütülmüş bir kopyası konuyor. Boşluk düz gri kalsaydı kart eksik
+ * görünürdü; kırpma ise bilgiyi GÖTÜRÜYOR.
+ */
+const GORSEL_BICIMI: Record<AutoBoostPlatform, { oturtma: string; bulanikZemin: boolean }> = {
+  meta: { oturtma: 'object-cover', bulanikZemin: false },
+  google: { oturtma: 'object-contain', bulanikZemin: true },
+};
 
 /**
  * BİLDİRİM HAVUZU — Advetics 1.0'ın taşıdığı vaat.
@@ -29,6 +68,20 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
   const [liste, setListe] = useState<AutoBoostQueueList | null>(null);
   const [saglik, setSaglik] = useState<AutoBoostSubscriptionHealth[]>([]);
   const [hata, setHata] = useState<string | null>(null);
+  /**
+   * MECRA SÜZGECİ — `'hepsi'` varsayılan.
+   *
+   * Instagram gönderileri ve YouTube videoları aynı ızgarada duruyor ve bu
+   * doğru: ikisi de aynı kararı bekliyor. Ama bir kanalın videolarını
+   * toplu gözden geçirmek isteyen kullanıcı, araya karışmış on gönderiyi
+   * elemek zorunda kalıyordu.
+   *
+   * SÜZGEÇ SUNUCUYA GİTMİYOR: liste zaten en fazla 50 kart ve süzgeci
+   * sunucuya taşımak, her tıklamada yeni bir istek ve yeni bir "toplam"
+   * demekti — sayaçlar süzgece göre değişince "sessiz kesme yok" kuralı
+   * okunamaz hâle gelirdi.
+   */
+  const [suzgec, setSuzgec] = useState<AutoBoostPlatform | 'hepsi'>('hepsi');
 
   /*
    * KUYRUĞU YENİDEN ÇEKEN FONKSİYON — `router.refresh()` BUNU YAPMIYOR.
@@ -94,6 +147,17 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
 
   const bekleyen = liste.items.filter((i) => i.status === 'pending');
 
+  /*
+   * SEKME YALNIZCA İKİ KAYNAK DA VARSA ÇİZİLİYOR. Tek kaynaklı bir
+   * workspace'te süzgeç göstermek, hiçbir işe yaramayan bir seçim sunmak ve
+   * ekranı gereksiz kalabalıklaştırmak olurdu.
+   */
+  const sayilar = new Map<AutoBoostPlatform, number>();
+  for (const k of liste.items) sayilar.set(k.platform, (sayilar.get(k.platform) ?? 0) + 1);
+  const mecralar = [...sayilar.keys()];
+  const gosterilen =
+    suzgec === 'hepsi' ? liste.items : liste.items.filter((k) => k.platform === suzgec);
+
   return (
     <section className="min-w-0 space-y-3">
       <header className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
@@ -119,10 +183,35 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
           toplamın kaç olduğu her zaman yazılı.
         */}
         <p className="text-[11px] text-ink-muted">
-          {liste.items.length} kart gösteriliyor
+          {/* SÜZGEÇ AÇIKKEN KAÇ KARTIN GİZLENDİĞİ DE YAZIYOR: süzgeci
+              unutan kullanıcı eksik listeyi "kart gelmemiş" diye okur. */}
+          {gosterilen.length} kart gösteriliyor
+          {gosterilen.length < liste.items.length &&
+            ` · ${liste.items.length - gosterilen.length} kart süzgeçte`}
           {liste.total > liste.items.length && ` · toplam ${liste.total}, en yeniler`}
         </p>
       </header>
+
+      {mecralar.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          <SuzgecDugmesi
+            etiket="Tümü"
+            adet={liste.items.length}
+            secili={suzgec === 'hepsi'}
+            onSec={() => setSuzgec('hepsi')}
+          />
+          {mecralar.map((m) => (
+            <SuzgecDugmesi
+              key={m}
+              etiket={PLATFORM_ETIKETI[m]}
+              kanal={PLATFORM_KANALI[m]}
+              adet={sayilar.get(m) ?? 0}
+              secili={suzgec === m}
+              onSec={() => setSuzgec(m)}
+            />
+          ))}
+        </div>
+      )}
 
       {/*
         ÖLÜ ADAM DÜĞMESİ — kartlardan ÖNCE.
@@ -170,6 +259,16 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
         </div>
       )}
 
+      {/* SÜZGEÇ YÜZÜNDEN BOŞALAN LİSTE, GERÇEKTEN BOŞ LİSTEYLE AYNI
+          GÖRÜNMEMELİ: biri "kart yok", diğeri "kartlar başka sekmede". */}
+      {liste.items.length > 0 && gosterilen.length === 0 && (
+        <div className="rounded-xl border border-dashed border-line bg-surface p-6 text-center">
+          <p className="text-sm text-ink-muted">
+            Bu mecrada kart yok. Diğer sekmelerde {liste.items.length} kart var.
+          </p>
+        </div>
+      )}
+
       {/*
         IZGARA — DİKEY KARTLAR YAN YANA.
         Kartlar tam genişlikte yatay şeritlerdi: 64 piksellik bir küçük
@@ -185,7 +284,7 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
         Eşikler kart genişliğine göre seçildi, ekran adına göre değil.
       */}
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-        {liste.items.map((k) => (
+        {gosterilen.map((k) => (
           <li key={k.id}>
             <Kart
               kayit={k}
@@ -205,10 +304,43 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
   );
 }
 
-const PLATFORM_ETIKETI: Record<string, string> = {
-  meta: 'Instagram',
-  google: 'YouTube',
-};
+/**
+ * MECRA SEKMESİ — logo + ad + sayı.
+ *
+ * Yalnızca ad yazmak yetmiyordu: kullanıcı hangi sekmede kaç kart olduğunu
+ * göremeden süzgeci deneyerek kullanıyor. Sayı, boş bir sekmeye tıklamayı
+ * baştan gereksiz kılıyor.
+ */
+function SuzgecDugmesi({
+  etiket,
+  kanal,
+  adet,
+  secili,
+  onSec,
+}: {
+  etiket: string;
+  kanal?: ChannelKind;
+  adet: number;
+  secili: boolean;
+  onSec: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSec}
+      aria-pressed={secili}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+        secili
+          ? 'border-brand bg-brand text-white'
+          : 'border-line bg-surface text-ink-muted hover:text-ink'
+      }`}
+    >
+      {kanal && <PlatformLogo kind={kanal} className="h-3.5 w-3.5" />}
+      {etiket}
+      <span className={secili ? 'text-white/80' : 'text-ink-muted'}>{adet}</span>
+    </button>
+  );
+}
 
 function Kart({
   kayit,
@@ -225,6 +357,7 @@ function Kart({
   const [hata, setHata] = useState<string | null>(null);
 
   const onaylanabilir = kayit.status === 'pending' && kayit.blockedReason === null;
+  const bicim = GORSEL_BICIMI[kayit.platform];
 
   /**
    * KARAR — onayla, reddet ya da ÖZELLEŞTİRİLMİŞ ayarlarla onayla.
@@ -277,24 +410,43 @@ function Kart({
         yatay bir gönderide üstte/altta ince bir zemin bırakıyor —
         kırpmaktan iyi, çünkü kırpılan yer çoğu zaman ürünün kendisi.
       */}
-      <div className="relative aspect-[4/5] w-full bg-surface-sunken">
+      <div className="relative aspect-[4/5] w-full overflow-hidden bg-surface-sunken">
         {kayit.thumbnailUrl && !gorselDustu ? (
-          /*
-            DÜZ `img` — Next/Image DEĞİL. Küçük resimler Meta ve YouTube
-            CDN'inden geliyor ve uzak alan adı yapılandırması gerektiriyordu;
-            elle boost ekranında aynı karar verildi ve görseller ancak öyle
-            göründü. `referrerPolicy` şart: Meta CDN referrer'lı isteği
-            reddediyor ve beyaz etiket alan adını da sızdırmıyoruz.
-          */
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={kayit.thumbnailUrl}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onError={() => setGorselDustu(true)}
-            className="h-full w-full object-cover"
-          />
+          <>
+            {/*
+              BULANIK ZEMİN — yalnızca kutuya sığdırılan görsellerde.
+              Sığdırma iki yanda boşluk bırakıyor ve düz gri bir boşluk kartı
+              "yüklenmemiş" gösteriyor. Zemin görselin kendisinden geliyor,
+              yani kart hep içeriğin renginde.
+            */}
+            {bicim.bulanikZemin && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={kayit.thumbnailUrl}
+                alt=""
+                aria-hidden="true"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                className="absolute inset-0 h-full w-full scale-125 object-cover opacity-50 blur-xl"
+              />
+            )}
+            {/*
+              DÜZ `img` — Next/Image DEĞİL. Küçük resimler Meta ve YouTube
+              CDN'inden geliyor ve uzak alan adı yapılandırması gerektiriyordu;
+              elle boost ekranında aynı karar verildi ve görseller ancak öyle
+              göründü. `referrerPolicy` şart: Meta CDN referrer'lı isteği
+              reddediyor ve beyaz etiket alan adını da sızdırmıyoruz.
+            */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={kayit.thumbnailUrl}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setGorselDustu(true)}
+              className={`relative h-full w-full ${bicim.oturtma}`}
+            />
+          </>
         ) : (
           /* Görsel yoksa kutu AYNI ORANDA duruyor: ızgarada kartların
              yüksekliği ayrışırsa göz taraması satır satır yapılamıyor. */
@@ -303,11 +455,24 @@ function Kart({
           </div>
         )}
 
-        {/* PLATFORM ROZETİ GÖRSELİN ÜSTÜNDE: kartın hangi mecradan geldiği
-            ilk bakışta okunmalı ve metin bloğunda bir satır daha yer
-            kaplamamalı. */}
-        <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
-          {PLATFORM_ETIKETI[kayit.platform] ?? kayit.platform}
+        {/*
+          ROZET ARTIK HESABIN ADINI DA TAŞIYOR.
+
+          "Instagram" yazması hangi Instagram hesabı olduğunu söylemiyordu; bir
+          workspace'te birden çok hesap ve kanal olabiliyor ve kullanıcı
+          onayladığı içeriğin hangi markaya ait olduğunu ancak içeriği açarak
+          görüyordu. Logo metin yerine geçiyor: mecra adını da yazmak, dar
+          kartta hesap adını kırpardı.
+
+          HESAP ADI GÖRÜNMÜYORSA MECRA ADI YAZILIYOR. Hesap havuza geri
+          konmuşsa RLS satırı göstermiyor ve boş bir rozet, rozetin hiç
+          olmamasından kötü.
+        */}
+        <span className="absolute left-2 top-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
+          <PlatformLogo kind={PLATFORM_KANALI[kayit.platform]} className="h-3 w-3 shrink-0" />
+          <span className="truncate">
+            {kayit.socialProfileName ?? PLATFORM_ETIKETI[kayit.platform]}
+          </span>
         </span>
 
         {kayit.status !== 'pending' && (

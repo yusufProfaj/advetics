@@ -317,6 +317,17 @@ export interface AutoBoostQueueItemRecord {
   platform: AutoBoostPlatform;
   /** Instagram medya kimliği ya da YouTube video kimliği. */
   externalId: string;
+  /**
+   * KARTIN GELDİĞİ HESAP — Instagram sayfası ya da YouTube kanalı.
+   *
+   * Bir workspace'te birden çok hesap olabiliyor ve platform rozeti
+   * "Instagram" demekle yetiniyordu: hangi marka hesabından geldiği
+   * yazmadığında kullanıcı neyi onayladığını ancak içeriği açarak görüyor.
+   *
+   * NULL OLABİLİR: hesap havuza geri konmuşsa RLS satırı göstermiyor ve
+   * "göremiyorum" ile "yok" aynı şey değil.
+   */
+  socialProfileName: string | null;
   title: string | null;
   thumbnailUrl: string | null;
   permalink: string | null;

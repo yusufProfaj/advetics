@@ -4,9 +4,11 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
+  Req,
 } from '@nestjs/common';
 import { z } from 'zod';
 import type { TenantContext } from '@advetics/shared';
@@ -25,6 +27,8 @@ import { AutoBoostPresetService } from './autoboost-preset.service';
 import { AutoBoostLaunchService } from './autoboost-launch.service';
 import { AutoBoostReadService } from './autoboost-read.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
+import { ConnectionsService } from '../connections/connections.service';
+import type { AuthedRequest } from '../../common/types/request';
 
 /**
  * Tek tıkla yayın gövdesi — SADECE müşteri kimliği.
@@ -44,8 +48,22 @@ const presetLaunchSchema = z.object({ clientId: z.string().uuid() }).strict();
  * açılması riskini taşırdı.
  */
 
+const kanalAtaSchema = z.object({
+  /** NULL = workspace'ten çıkar, havuza geri koy. */
+  clientId: z.string().uuid().nullable(),
+});
+
 const kanalEkleSchema = z.object({
-  clientId: z.string().uuid(),
+  /**
+   * NULL = HAVUZA EKLE, henüz bir workspace'e atama.
+   *
+   * Kanal bağlamak bir kurulum işi ve bağlantı ekranında yapılıyor; hangi
+   * workspace'e ait olduğu ORADA, atama listesinde seçiliyor — Instagram
+   * hesabıyla birebir aynı akış. Alanı zorunlu tutmak, kanalı ekleyen kişiyi
+   * o anda bir workspace seçmeye zorlar ve seçim yanlışsa kanal yanlış
+   * müşteride abone olurdu.
+   */
+  clientId: z.string().uuid().nullable().default(null),
   /**
    * Kullanıcının yapıştırdığı şey — kanal kimliği, @tanıtıcı ya da adres.
    * Hangi biçim olduğu sunucuda çözülüyor; kullanıcıya "kanal kimliğini gir"
@@ -61,6 +79,14 @@ export class AutoBoostController {
     private readonly read: AutoBoostReadService,
     private readonly launch: AutoBoostLaunchService,
     private readonly presets: AutoBoostPresetService,
+    /**
+     * SAHİPLİK DEĞİŞİMİ MEVCUT KAPIDAN GEÇİYOR.
+     *
+     * `assignSocialProfile` denetim kaydını, `org_id` taşımasını ve eski
+     * müşteride kalan form sayısını zaten yazıyor. İkinci bir atama yolu
+     * yazmak, bunların birini unutup sessizce yarım bir satır üretmekti.
+     */
+    private readonly connections: ConnectionsService,
   ) {}
 
   /**
@@ -179,5 +205,46 @@ export class AutoBoostController {
     @Body(zodBody(kanalEkleSchema)) input: z.infer<typeof kanalEkleSchema>,
   ): Promise<{ socialProfileId: string; channelId: string; title: string }> {
     return this.subscribe.addChannel(ctx, input);
+  }
+
+  /**
+   * YouTube kanalını bir workspace'e atar ya da havuza geri koyar.
+   *
+   * ═══ NEDEN AYRI BİR UÇ ═══
+   *
+   * Instagram sayfası için atama SAHİPLİK değişiminden ibaret; YouTube'da
+   * aynı hareket üç iş birden yapıyor: sahiplik, hub aboneliği ve kanalın
+   * son videolarının kuyruğa düşmesi. Bunları panelin iki ayrı çağrısına
+   * bölmek, birincisi başarıp ikincisi düştüğünde "kanal atandı ama kart
+   * gelmiyor" hâlini üretirdi — bu projenin klasik yarım satırı.
+   *
+   * `connection.write` — kanal eklemekle aynı yetki ve aynı gerekçe.
+   */
+  @Patch('youtube/channels/:socialProfileId/client')
+  @RequirePermissions('connection.write')
+  async setYouTubeChannelClient(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('socialProfileId', ParseUUIDPipe) socialProfileId: string,
+    @Body(zodBody(kanalAtaSchema)) input: z.infer<typeof kanalAtaSchema>,
+    @Req() req: AuthedRequest,
+  ): Promise<{ clientId: string | null; kartlar: number; note: string }> {
+    const atama = await this.connections.assignSocialProfile(
+      ctx,
+      socialProfileId,
+      input.clientId,
+      { ip: req.ip ?? null, userAgent: req.get('user-agent') ?? null, requestId: req.requestId },
+    );
+
+    if (input.clientId === null) {
+      await this.subscribe.kanaliCoz(ctx, socialProfileId);
+      return {
+        clientId: null,
+        kartlar: 0,
+        note: 'Kanal havuza geri kondu, bildirim aboneliği kapatıldı.',
+      };
+    }
+
+    const sonuc = await this.subscribe.kanaliBagla(ctx, socialProfileId, input.clientId);
+    return { clientId: atama.clientId, kartlar: sonuc.kartlar, note: sonuc.note };
   }
 }

@@ -755,6 +755,17 @@ buna göre veriliyor:
   taşımadan en çok o etkileniyor: ay ortasında hesap gidince eski müşterinin
   harcaması düşüyor, bütçe bekçisi olmayan bir boşluk görüyor ve kuralların
   bütçe ARTIRMASINA izin veriyor. Ayrı sorulup ayrı söyleniyor.
+- **YOUTUBE KANALI GOOGLE BAĞLANTISININ ALTINDA YAŞIYOR — "bu bağlantının
+  sosyal profilleri" SORGUSU ONU DA GETİRİYOR.** `social_profiles` üç tür
+  taşıyor ve `youtube_channel` kendi OAuth'u olmadığı için ajansın Google
+  bağlantısına iliştiriliyor. Organik gönderi süpürmesi Meta'nın uçlarını
+  çağırıyor: kanal oraya düştüğünde iş KALICI olarak düşüyor ve panelde
+  sebebi yazmayan başarısız bir iş kalıyor. Profil türüne göre süzmek
+  ZORUNLU ve süzgeç AÇIK UÇLU OLMAMALI (`{ in: [...] }`, `{ not: ... }`
+  değil): yeni bir tür eklendiğinde varsayılan DIŞARIDA kalmalı, yanlış uca
+  gitmek eksik çekimden pahalı. Zamanlanmış süpürme bunu `connection.platform
+  = 'meta'` ile zaten yapıyordu; atama yolundaki ikinci sorgu yapmıyordu —
+  aynı süzgeci iki yerde yazmanın klasik sonucu.
 - **`ad_accounts`, `platform_connections` ve `social_profiles` içinde
   `client_id` NULLABLE.** NULL = ajansın havuzunda, müşteriye atanmamış.
   Sahiplik `org_id`'de. Bu satırlar için senkronizasyon kuyruğa GİRMEMELİ —

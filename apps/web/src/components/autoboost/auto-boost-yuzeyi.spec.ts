@@ -74,12 +74,21 @@ describe('KALDIRILAN YÜZEYLER', () => {
     );
   });
 
-  it('KRİTİK: "YouTube kanalı ekle" YOK', () => {
-    // Kanal bağlama işi Platform Bağlantıları'na ait ve orada ayrı bir
-    // entegrasyon olarak kurulacak.
+  it('KRİTİK: "YouTube kanalı ekle" BU EKRANDA DEĞİL — bağlantılar ekranında', () => {
+    /*
+     * Kanal bağlamak bir BAĞLANTI KURULUMU işi. Boost ekranında dururken
+     * kurulumu boost yetkisinin yanına koyuyordu: kart onaylayabilen herkes
+     * yeni kanal bağlayabiliyordu.
+     *
+     * İddia "hiçbir yerde yok" DEĞİL "burada yok": ekran gerçekten kuruldu
+     * ve "yok" diyen bir test, taşındığını değil silindiğini kilitlerdi.
+     */
     expect(SAYFA).not.toContain('YouTubeKanalEkle');
     expect(existsSync(join(WEB_SRC, 'components/autoboost/youtube-kanal-ekle.tsx'))).toBe(
       false,
+    );
+    expect(existsSync(join(WEB_SRC, 'components/connections/youtube-kanal-ekle.tsx'))).toBe(
+      true,
     );
   });
 
@@ -304,5 +313,68 @@ describe('SADECE BU GÖNDERİ İÇİN — düzenleme penceresi', () => {
     // ve kullanıcı bedava sanır.
     expect(DUZENLE).toContain('return null');
     expect(DUZENLE).toContain('Tutar girilince toplam taahhüt burada yazacak');
+  });
+});
+
+describe('İKİ MECRA TEK EKRANDA', () => {
+  /*
+   * Instagram gönderisi ve YouTube videosu aynı ızgarada duruyor ve bu doğru:
+   * ikisi de aynı kararı bekliyor. Ama ikisinin görsel oranı, mecra adı ve
+   * logosu farklı ve bu farkları elle yazılmış koşullarla yönetmek, üçüncü
+   * bir kaynakta YANLIŞ ROZET üretir — yanlış rozet eksik rozetten kötüdür,
+   * kullanıcı sorgulamaz.
+   */
+  it('KRİTİK: mecra tabloları `Record` — koşul zinciri değil', () => {
+    expect(HAVUZ).toContain('Record<AutoBoostPlatform, string>');
+    expect(HAVUZ).toContain('Record<AutoBoostPlatform, ChannelKind>');
+    expect(HAVUZ).toContain('GORSEL_BICIMI');
+  });
+
+  it('KRİTİK: YATAY GÖRSEL KIRPILMIYOR — kutuya sığdırılıyor', () => {
+    /*
+     * YouTube küçük resmi 16:9 ve kart kutusu 4:5. `object-cover` iki yanı
+     * kesiyor; küçük resimde metin çoğu zaman tam oraya yazılıyor. Kart
+     * oranını içeriğe göre değiştirmek ise ızgaradaki satır hizasını bozuyor.
+     */
+    const blok = HAVUZ.slice(HAVUZ.indexOf('GORSEL_BICIMI'), HAVUZ.indexOf('BİLDİRİM HAVUZU'));
+    expect(blok).toContain("google: { oturtma: 'object-contain'");
+    expect(blok).toContain("meta: { oturtma: 'object-cover'");
+  });
+
+  it('KRİTİK: sığdırılan görselin arkasında BULANIK ZEMİN var', () => {
+    // Düz gri boşluk kartı "yüklenmemiş" gösteriyor; zemin görselin
+    // kendisinden geliyor.
+    // İddia ANAHTARA değil KULLANIMA çapalı: tabloda alan durup JSX'te hiç
+    // okunmasa, "bulanikZemin geçiyor" testi yine yeşil kalırdı.
+    expect(HAVUZ).toContain('{bicim.bulanikZemin && (');
+    expect(HAVUZ).toContain('blur-xl');
+  });
+
+  it('KRİTİK: rozet HESABIN ADINI taşıyor', () => {
+    /*
+     * "Instagram" yazması hangi Instagram hesabı olduğunu söylemiyordu; bir
+     * workspace'te birden çok hesap ve kanal olabiliyor.
+     */
+    expect(HAVUZ).toContain('kayit.socialProfileName ??');
+  });
+
+  it('KRİTİK: MECRA SÜZGECİ var ve sayıları yazıyor', () => {
+    expect(HAVUZ).toContain('SuzgecDugmesi');
+    expect(HAVUZ).toContain("useState<AutoBoostPlatform | 'hepsi'>('hepsi')");
+  });
+
+  it('KRİTİK: SÜZGEÇ TEK KAYNAKTA ÇİZİLMİYOR', () => {
+    // Tek kaynaklı bir workspace'te süzgeç, hiçbir işe yaramayan bir seçim.
+    expect(HAVUZ).toContain('mecralar.length > 1');
+  });
+
+  it('KRİTİK: süzgecin gizlediği kart sayısı YAZILI', () => {
+    /*
+     * Süzgeci unutan kullanıcı eksik listeyi "kart gelmemiş" diye okur.
+     * Ayrıca süzgeç yüzünden boşalan liste, GERÇEKTEN boş listeyle aynı
+     * görünmemeli: biri "kart yok", diğeri "kartlar başka sekmede".
+     */
+    expect(HAVUZ).toContain('kart süzgeçte');
+    expect(HAVUZ).toContain('Bu mecrada kart yok');
   });
 });

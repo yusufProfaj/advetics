@@ -944,7 +944,24 @@ export class ConnectionsService {
        * getiriyor (tek seferlik ilk çekim).
        */
       const profiller = await this.admin.socialProfile.findMany({
-        where: { connectionId, clientId },
+        where: {
+          connectionId,
+          clientId,
+          /*
+           * YOUTUBE KANALI BU LİSTEYE GİREMEZ.
+           *
+           * Organik süpürme Meta'nın gönderi uçlarını çağırıyor ve bir
+           * YouTube kanalı oraya düştüğünde iş KALICI olarak düşüyor
+           * (`organic-sync.service.ts` açıkça patlıyor). Kanal aynı Google
+           * bağlantısının altında yaşadığı için süzgeçsiz bir sorgu onu
+           * yakalıyordu: Google reklam hesabı atanan her workspace'te,
+           * panelde sebebi yazmayan başarısız bir iş kalırdı.
+           *
+           * Liste AÇIK uçlu değil: yeni bir profil türü eklendiğinde
+           * varsayılan DIŞARIDA kalmak, yanlış uca gitmekten iyi.
+           */
+          profileType: { in: ['facebook_page', 'instagram_business'] },
+        },
         select: { id: true },
       });
       for (const p of profiller) {

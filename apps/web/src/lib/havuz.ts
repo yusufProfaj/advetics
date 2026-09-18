@@ -1,4 +1,8 @@
-import type { ChannelKind, ConnectionSummary } from '@advetics/shared';
+import type {
+  ChannelKind,
+  ConnectionSummary,
+  SocialProfileTypeValue,
+} from '@advetics/shared';
 import { CHANNEL_KINDS, platformKanali } from '@advetics/shared';
 
 export interface HavuzOgesi {
@@ -8,6 +12,36 @@ export interface HavuzOgesi {
   isManager: boolean;
   /** Reklam hesabı mı, sosyal profil mi — atama ucu buna göre seçiliyor. */
   reklamHesabi: boolean;
+  /**
+   * ATAMA UCU ÖĞEYLE BİRLİKTE GELİYOR — çağıran yerde seçilmiyor.
+   *
+   * Üç ayrı uç var ve seçim iki ekranda birden gerekiyor (havuz penceresi ve
+   * workspace varlıkları). İki yerde ayrı yazılsaydı biri YouTube dalını
+   * unuturdu: kanal atanır, hub aboneliği kurulmaz ve panel "atandı" der —
+   * kart hiç gelmez, hiçbir yerde tek kelime yazmaz.
+   */
+  atamaYolu: string;
+}
+
+/**
+ * PROFİL TÜRÜ → ATAMA UCU.
+ *
+ * `Record` BİLEREK: elle yazılmış bir koşul zinciri yeni bir profil türü
+ * eklendiğinde sessizce yanlış uca gider, `Record` ise derlemeyi kırar.
+ *
+ * YOUTUBE AYRI UÇTA ÇÜNKÜ ATAMA ÜÇ İŞ YAPIYOR: sahiplik, hub aboneliği ve
+ * kanalın son videolarının kuyruğa düşmesi. Meta sayfasında yalnızca ilki
+ * var.
+ */
+const PROFIL_ATAMA_UCU: Record<SocialProfileTypeValue, (id: string) => string> = {
+  facebook_page: (id) => `/connections/social-profiles/${id}/client`,
+  instagram_business: (id) => `/connections/social-profiles/${id}/client`,
+  youtube_channel: (id) => `/autoboost/youtube/channels/${id}/client`,
+};
+
+/** Bir sosyal profilin atama/çıkarma ucu — TEK ÜRETİCİ. */
+export function profilAtamaYolu(profileType: SocialProfileTypeValue, id: string): string {
+  return PROFIL_ATAMA_UCU[profileType](id);
 }
 
 export type Havuzlar = Record<ChannelKind, HavuzOgesi[]>;
@@ -66,6 +100,7 @@ export function havuzlariCikar(connections: ConnectionSummary[]): Havuzlar {
       externalId: a.externalId,
       isManager: a.isManager,
       reklamHesabi: true,
+      atamaYolu: `/connections/ad-accounts/${a.id}/client`,
     });
   }
 
@@ -86,6 +121,7 @@ export function havuzlariCikar(connections: ConnectionSummary[]): Havuzlar {
       externalId: p.externalId,
       isManager: false,
       reklamHesabi: false,
+      atamaYolu: profilAtamaYolu(p.profileType, p.id),
     });
   }
 

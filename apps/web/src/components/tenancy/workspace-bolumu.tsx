@@ -2,6 +2,7 @@ import { MusteriArama } from '@/components/tenancy/musteri-arama';
 import { MusteriKarti } from '@/components/tenancy/musteri-karti';
 import type { ConnectionSummary, SpecialAdCategory } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
+import { profilAtamaYolu } from '@/lib/havuz';
 import { hasPermission, type SessionResponse } from '@/lib/session';
 import { ClientSetupWizard } from '@/components/tenancy/client-setup-wizard';
 import { ClientActions } from '@/components/tenancy/client-actions';
@@ -141,6 +142,7 @@ export async function WorkspaceBolumu({ session }: { session: SessionResponse })
         externalId: a.externalId,
         kind: 'ad_account' as const,
         isManager: a.isManager,
+        atamaYolu: `/connections/ad-accounts/${a.id}/client`,
       })),
     ...connections
       .flatMap((c) => c.socialProfiles)
@@ -150,6 +152,7 @@ export async function WorkspaceBolumu({ session }: { session: SessionResponse })
         name: p.name,
         externalId: p.externalId,
         kind: 'social_profile' as const,
+        atamaYolu: profilAtamaYolu(p.profileType, p.id),
       })),
   ];
 

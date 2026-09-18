@@ -4,6 +4,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { TopluTazeleme } from '@/components/connections/toplu-tazeleme';
 import { KanalKartlari } from '@/components/connections/kanal-kartlari';
 import { HavuzKartlari } from '@/components/connections/havuz-kartlari';
+import { YouTubeKanalEkle } from '@/components/connections/youtube-kanal-ekle';
 import { IzlenenHesaplar } from '@/components/connections/izlenen-hesaplar';
 import { CallbackBanner } from '@/components/callback-banner';
 
@@ -135,6 +136,16 @@ export default async function ConnectionsPage() {
               clients={session.availableClients}
               canManage={canManage}
             />
+
+            {/*
+              YOUTUBE KANALI HAVUZUN YANINDA, AYRI BİR EKRANDA DEĞİL.
+
+              Kanal eklemek havuza hesap eklemekle aynı iş ve sonucu da aynı
+              yere düşüyor: üstteki YouTube kartının sayacı. Akıllı Boost
+              ekranında duruyordu ve orada bağlantı kurulumunu boost
+              yetkisinin yanına koyuyordu.
+            */}
+            <YouTubeKanalEkle canManage={canManage} />
           </section>
 
           {/* 3. ATANANLAR: hangi workspace neyi kullanıyor. */}

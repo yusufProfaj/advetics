@@ -43,6 +43,19 @@ export type YouTubeVideoSonucu =
   | { durum: 'bulunamadi' }
   | { durum: 'hata'; message: string };
 
+/**
+ * KANALIN SON VİDEOLARI — üçü de ayrı iş.
+ *
+ * `bos` ile `bulunamadi` ayrı: birincisi "kanal duruyor ama hiç video
+ * yüklenmemiş" (yeni açılmış kanal), ikincisi "bu kimlikte kanal yok".
+ * İkisini tek cevapta toplamak, panelde "kanal yanlış mı eklendi" sorusunu
+ * cevapsız bırakırdı.
+ */
+export type YouTubeSonVideolarSonucu =
+  | { durum: 'bulundu'; videolar: YouTubeVideo[] }
+  | { durum: 'bulunamadi' }
+  | { durum: 'hata'; message: string };
+
 export interface YouTubeKanal {
   channelId: string;
   title: string;
@@ -220,5 +233,145 @@ export class YouTubeApiService {
           null,
       },
     };
+  }
+  /**
+   * KANALIN SON VİDEOLARI — kanal bir workspace'e atandığı anda çekiliyor.
+   *
+   * ═══ NEDEN GEREKLİ ═══
+   *
+   * YouTube tarafında kart YALNIZCA WebSub bildiriminden doğuyor, yani ilk
+   * kart ancak kanal atandıktan SONRA yüklenen ilk videoda düşüyor. Haftada
+   * bir video yükleyen bir kanalda bu, panelin bir hafta boyunca boş durması
+   * demek ve kullanıcı bunu "çalışmıyor" diye okuyor — Instagram tarafında
+   * bildirilen belirti birebir buydu.
+   *
+   * ═══ ARAMA DEĞİL, YÜKLEME OYNATMA LİSTESİ ═══
+   *
+   * `search.list` ile de son videolar alınabilirdi ama o çağrı 100 KOTA
+   * BİRİMİ; burada iki çağrı toplam 2 birim tutuyor. Günlük kota 10.000 ve
+   * `videos.list` her bildirimde çalışıyor — pahalı yolu seçmek, kotayı asıl
+   * işi yapan çağrıdan çalmak olurdu.
+   *
+   * YÜKLEME LİSTESİ KİMLİĞİ SORULUYOR, TÜRETİLMİYOR. `UC…` → `UU…` dönüşümü
+   * sahada çalışıyor ama Google bunu garanti etmiyor; garanti edilmeyen bir
+   * kısayolun bozulduğu gün belirti yine "hiç kart gelmiyor" olurdu.
+   *
+   * SHORTS DA BU LİSTEDE. Yükleme oynatma listesi kısa videoları da taşıyor,
+   * yani ayrı bir çağrıya gerek yok.
+   */
+  async listRecentVideos(channelId: string, limit: number): Promise<YouTubeSonVideolarSonucu> {
+    const key = this.config.platforms.youtube.apiKey;
+    if (!key) {
+      return {
+        durum: 'hata',
+        message:
+          'YOUTUBE_API_KEY tanımlı değil; kanalın son videoları çekilemiyor. ' +
+          'Adımlar: docs/DEPLOYMENT.md §5c',
+      };
+    }
+
+    // --- 1. Yükleme oynatma listesinin kimliği
+    const kanalUrl = new URL('https://www.googleapis.com/youtube/v3/channels');
+    kanalUrl.searchParams.set('part', 'contentDetails');
+    kanalUrl.searchParams.set('id', channelId);
+    kanalUrl.searchParams.set('key', key);
+
+    const kanalGovde = await this.iste<{
+      items?: Array<{
+        contentDetails?: { relatedPlaylists?: { uploads?: string } };
+      }>;
+    }>(kanalUrl);
+    if (kanalGovde.durum !== 'bulundu') return kanalGovde;
+
+    const liste = kanalGovde.govde.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+    if (!liste) return { durum: 'bulunamadi' };
+
+    // --- 2. Listenin başı
+    const videoUrl = new URL('https://www.googleapis.com/youtube/v3/playlistItems');
+    videoUrl.searchParams.set('part', 'snippet,contentDetails');
+    videoUrl.searchParams.set('playlistId', liste);
+    videoUrl.searchParams.set('maxResults', String(Math.min(Math.max(limit, 1), 50)));
+    videoUrl.searchParams.set('key', key);
+
+    const videoGovde = await this.iste<{
+      items?: Array<{
+        snippet?: {
+          title?: string;
+          channelId?: string;
+          resourceId?: { videoId?: string };
+          thumbnails?: Record<string, { url?: string } | undefined>;
+        };
+        contentDetails?: { videoId?: string; videoPublishedAt?: string };
+      }>;
+    }>(videoUrl);
+    if (videoGovde.durum !== 'bulundu') return videoGovde;
+
+    const videolar: YouTubeVideo[] = [];
+    for (const item of videoGovde.govde.items ?? []) {
+      const id = item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId;
+      if (!id) continue;
+
+      /*
+       * TARİH `contentDetails.videoPublishedAt`TAN OKUNUYOR.
+       *
+       * `snippet.publishedAt` videonun LİSTEYE EKLENDİĞİ an; yükleme
+       * listesinde ikisi genelde aynı ama eski bir video yeniden
+       * yayınlandığında ayrışıyor ve kart "bugün yayınlandı" derdi.
+       */
+      const t = item.contentDetails?.videoPublishedAt
+        ? new Date(item.contentDetails.videoPublishedAt)
+        : null;
+
+      videolar.push({
+        id,
+        // Kanal kimliği listeden değil ÇAĞRIDAN geliyor: oynatma listesindeki
+        // `snippet.channelId` listenin sahibini değil videonun kanalını
+        // gösteriyor ve ikisi işbirliği videolarında ayrışabiliyor.
+        channelId,
+        title: item.snippet?.title ?? '',
+        publishedAt: t && !Number.isNaN(+t) ? t : null,
+        thumbnailUrl:
+          item.snippet?.thumbnails?.maxres?.url ??
+          item.snippet?.thumbnails?.high?.url ??
+          item.snippet?.thumbnails?.medium?.url ??
+          item.snippet?.thumbnails?.default?.url ??
+          null,
+      });
+    }
+
+    return { durum: 'bulundu', videolar };
+  }
+
+  /**
+   * ORTAK İSTEK — iki çağrının da hata yolu AYNI olmak zorunda.
+   *
+   * Ayrı yazılsaydı biri Google'ın kendi mesajını taşır, diğeri "HTTP 403"
+   * derdi; 403'ün üç ayrı sebebi var ve hangisi olduğunu yalnızca Google'ın
+   * metni söylüyor.
+   */
+  private async iste<T>(
+    url: URL,
+  ): Promise<{ durum: 'bulundu'; govde: T } | { durum: 'hata'; message: string }> {
+    let res: Response;
+    try {
+      res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    } catch (err) {
+      return {
+        durum: 'hata',
+        message: `YouTube API'ye ulaşılamadı: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+
+    const govde = (await res.json().catch(() => null)) as (T & {
+      error?: { message?: string };
+    }) | null;
+
+    if (!res.ok || !govde) {
+      const mesaj = govde?.error?.message ?? `HTTP ${res.status}`;
+      this.logger.warn(`YouTube API ${res.status}: ${mesaj}`);
+      return { durum: 'hata', message: `YouTube API: ${mesaj}` };
+    }
+
+    return { durum: 'bulundu', govde };
   }
 }

@@ -89,12 +89,36 @@ describe('kanal kapsamı', () => {
 });
 
 describe('atama ucu', () => {
-  it('KRİTİK: reklam hesabı ve sosyal profil AYRI uçlara gidiyor', () => {
-    const kod = yorumsuz(KART);
+  /*
+   * UÇ SEÇİMİ ARTIK `lib/havuz.ts` İÇİNDE — bileşende değil.
+   *
+   * Üç ayrı uç var (reklam hesabı, Meta sayfası, YouTube kanalı) ve seçim iki
+   * ekranda birden gerekiyordu: havuz penceresi ve workspace varlıkları.
+   * İkisinde ayrı yazılınca birinde YouTube dalı unutuluyor; kanal atanıyor,
+   * hub aboneliği kurulmuyor ve panel "atandı" diyor — kart hiç gelmiyor.
+   */
+  it('KRİTİK: üç uç da TEK ÜRETİCİDE tanımlı', () => {
+    const kod = yorumsuz(HAVUZ);
     expect(kod).toContain('/connections/ad-accounts/');
     expect(kod).toContain('/connections/social-profiles/');
-    // Seçim öğenin tipine bağlı olmalı, sabit değil.
-    expect(kod).toContain('reklamHesabi');
+    expect(kod).toContain('/autoboost/youtube/channels/');
+  });
+
+  it('KRİTİK: profil ucu `Record` ile seçiliyor — koşul zinciriyle değil', () => {
+    /*
+     * Koşul zinciri yeni bir profil türünde SESSİZCE yanlış uca gider;
+     * `Record<SocialProfileTypeValue, ...>` derlemeyi kırar.
+     */
+    const kod = yorumsuz(HAVUZ);
+    expect(kod).toContain('Record<SocialProfileTypeValue, (id: string) => string>');
+    expect(kod).toContain('youtube_channel: (id)');
+  });
+
+  it('KRİTİK: bileşen ucu KENDİ KURMUYOR — öğeden okuyor', () => {
+    // Bileşende yeniden kurulursa tek üretici kuralı sessizce çürür.
+    const kod = yorumsuz(KART);
+    expect(kod).toContain('oge.atamaYolu');
+    expect(kod).not.toContain('/connections/ad-accounts/');
   });
 });
 

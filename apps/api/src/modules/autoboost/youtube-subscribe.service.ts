@@ -12,11 +12,13 @@ import {
 } from './websub-token';
 import { parseChannelInput } from './youtube-channel';
 import { YouTubeApiService } from './youtube-api.service';
+import { AutoBoostQueueService } from './autoboost-queue.service';
 import {
   buildCallbackUrl,
   buildSubscribeBody,
   YOUTUBE_HUB_URL,
   youtubeTopicUrl,
+  youtubeWatchUrl,
 } from './youtube-websub';
 
 /**
@@ -34,6 +36,16 @@ import {
  * `verified_at` NULL. Kullanıcıya "kuruluyor" denmesi ve doğrulanmadığında
  * bunun GÖRÜNMESİ gerekiyor (ölü adam düğmesi).
  */
+/**
+ * ATAMADA KAÇ VİDEO ÇEKİLİYOR.
+ *
+ * Instagram tarafındaki ilk çekimle AYNI mantık, sayı DAHA KÜÇÜK: YouTube'da
+ * içerik üretim hızı düşük ve on video çoğu kanalda aylar geriye gider. Ayı
+ * geçmiş bir videoyu reklama çevirmek kullanıcıya bir seçim değil, elemesi
+ * gereken bir liste verirdi.
+ */
+const ATAMADA_CEKILEN_VIDEO = 5;
+
 @Injectable()
 export class YouTubeSubscribeService {
   private readonly logger = new Logger(YouTubeSubscribeService.name);
@@ -49,6 +61,11 @@ export class YouTubeSubscribeService {
      */
     private readonly db: PrismaAdminService,
     private readonly youtube: YouTubeApiService,
+    /**
+     * TOHUMLAMA MEVCUT KAPIDAN GEÇİYOR. Kuyruğa yazan ikinci bir SQL yazmak,
+     * mükerrer engellemesini ve alan listesini ikiye ayırmak olurdu.
+     */
+    private readonly kuyruk: AutoBoostQueueService,
   ) {}
 
   /**
@@ -60,8 +77,8 @@ export class YouTubeSubscribeService {
    */
   async addChannel(
     ctx: TenantContext,
-    input: { clientId: string; channelInput: string },
-  ): Promise<{ socialProfileId: string; channelId: string; title: string }> {
+    input: { clientId: string | null; channelInput: string },
+  ): Promise<{ socialProfileId: string; channelId: string; title: string; assigned: boolean }> {
     // --- 1. Girdiyi çöz
     const girdi = parseChannelInput(input.channelInput);
     if (girdi.kind === 'unsupported') {
@@ -80,7 +97,7 @@ export class YouTubeSubscribeService {
     }
     const kanal = sonuc.kanal;
 
-    return this.prisma.withTenant(ctx, async (tx) => {
+    const sonucKayit = await this.prisma.withTenant(ctx, async (tx) => {
       /*
        * BAĞLANTI ZORUNLU. `social_profiles.connection_id` NOT NULL ve elle
        * eklenen kanalın kendi OAuth bağlantısı yok — ajansın Google
@@ -126,7 +143,11 @@ export class YouTubeSubscribeService {
           false, now()
         )
         ON CONFLICT (org_id, external_id) DO UPDATE SET
-          client_id = EXCLUDED.client_id,
+          -- HAVUZA EKLEME VAR OLAN ATAMAYI BOZMUYOR. Kanal bir workspace'e
+          -- atanmışken bağlantı ekranından yeniden eklendiğinde düz atama
+          -- onu havuza geri düşürürdü: abonelik o workspace'e bağlı kalır,
+          -- kart gelmeye devam eder ama panelde kanal ATANMAMIŞ görünürdü.
+          client_id = COALESCE(EXCLUDED.client_id, social_profiles.client_id),
           name = EXCLUDED.name,
           picture_url = EXCLUDED.picture_url,
           updated_at = now()
@@ -134,50 +155,260 @@ export class YouTubeSubscribeService {
       `);
       if (!profil) throw new Error('Kanal profili yazılamadı');
 
-      // --- 4. Abonelik satırı (belirteç TÜRETİLİYOR, saklanmıyor)
-      const nonce = newTokenNonce();
-      const token = deriveCallbackToken({
-        masterKey: this.masterKey(),
-        socialProfileId: profil.id,
-        nonce,
-      });
+      /*
+       * ═══ ABONELİK YALNIZCA ATANMIŞ KANALDA ═══
+       *
+       * `auto_boost_subscriptions.client_id` NOT NULL ve olması gereken de
+       * bu: kart bir workspace'e düşüyor, sahipsiz kart diye bir şey yok.
+       * Havuzdaki kanal için hub'a abone olmak, hiçbir yere yazılamayacak
+       * bildirimler almak ve her on günde bir onları yenilemek olurdu.
+       *
+       * Abonelik kanal bir workspace'e ATANDIĞINDA kuruluyor (`kanaliBagla`).
+       */
+      const belirtec =
+        input.clientId === null
+          ? null
+          : await this.abonelikKur(tx, {
+              orgId: ctx.orgId,
+              clientId: input.clientId,
+              socialProfileId: profil.id,
+              channelId: kanal.channelId,
+            });
 
-      await tx.$executeRaw(Prisma.sql`
-        INSERT INTO auto_boost_subscriptions (
-          id, org_id, client_id, social_profile_id, topic_url,
-          token_nonce, callback_token_hash, updated_at
-        ) VALUES (
-          gen_random_uuid(), ${ctx.orgId}::uuid, ${input.clientId}::uuid,
-          ${profil.id}::uuid, ${youtubeTopicUrl(kanal.channelId)},
-          ${nonce}, ${hashCallbackToken(token)}, now()
-        )
-        -- YENİDEN EKLEMEDE BELİRTEÇ YENİLENİYOR ve bu KASITLI: eski adres
-        -- ölüyor. Kullanıcı bir kanalı yeniden eklediğinde niyeti genelde
-        -- "bozulmuştu, düzelt" oluyor ve sızmış bir belirteç varsa burada
-        -- kapanıyor.
-        ON CONFLICT (social_profile_id) DO UPDATE SET
-          token_nonce = EXCLUDED.token_nonce,
-          callback_token_hash = EXCLUDED.callback_token_hash,
-          topic_url = EXCLUDED.topic_url,
-          verified_at = NULL, renew_at = NULL, denied_reason = NULL,
-          -- İMZA KİLİDİ DE SIFIRLANIYOR: yeni secret ile hub'ın imzalayıp
-          -- imzalamayacağı yeniden öğrenilecek. Kilidi taşımak, imzasız
-          -- gelen meşru bildirimleri reddetmek olurdu.
-          signature_seen_at = NULL,
-          updated_at = now()
-      `);
-
-      // --- 5. Hub'a istek (dış çağrı EN SONDA)
-      await this.sendSubscribe({
+      this.logger.log(
+        `YouTube kanalı eklendi: ${kanal.title} (${kanal.channelId})` +
+          (input.clientId === null ? ' — havuza' : ''),
+      );
+      return {
         socialProfileId: profil.id,
-        token,
-        nonce,
         channelId: kanal.channelId,
+        title: kanal.title,
+        assigned: input.clientId !== null,
+        belirtec,
+      };
+    });
+
+    if (sonucKayit.belirtec) {
+      await this.sendSubscribe({
+        socialProfileId: sonucKayit.socialProfileId,
+        token: sonucKayit.belirtec.token,
+        nonce: sonucKayit.belirtec.nonce,
+        channelId: sonucKayit.channelId,
         mode: 'subscribe',
       });
+    }
 
-      this.logger.log(`YouTube kanalı eklendi: ${kanal.title} (${kanal.channelId})`);
-      return { socialProfileId: profil.id, channelId: kanal.channelId, title: kanal.title };
+    return {
+      socialProfileId: sonucKayit.socialProfileId,
+      channelId: sonucKayit.channelId,
+      title: sonucKayit.title,
+      assigned: sonucKayit.assigned,
+    };
+  }
+
+  /**
+   * ABONELİK SATIRI + HUB İSTEĞİ — kanal ekleme ve atama AYNI yoldan geçiyor.
+   *
+   * İki ayrı yerde yazılsaydı biri belirteci yeniler diğeri yenilemez, biri
+   * imza kilidini sıfırlar diğeri taşırdı; ayrıştığı gün ortaya çıkan şey ya
+   * hiç bildirim gelmemesi ya da imzasız bildirimin sessizce reddedilmesi
+   * olurdu.
+   */
+  private async abonelikKur(
+    tx: Prisma.TransactionClient,
+    params: { orgId: string; clientId: string; socialProfileId: string; channelId: string },
+  ): Promise<{ token: string; nonce: string }> {
+    // Belirteç TÜRETİLİYOR, saklanmıyor.
+    const nonce = newTokenNonce();
+    const token = deriveCallbackToken({
+      masterKey: this.masterKey(),
+      socialProfileId: params.socialProfileId,
+      nonce,
+    });
+
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO auto_boost_subscriptions (
+        id, org_id, client_id, social_profile_id, topic_url,
+        token_nonce, callback_token_hash, updated_at
+      ) VALUES (
+        gen_random_uuid(), ${params.orgId}::uuid, ${params.clientId}::uuid,
+        ${params.socialProfileId}::uuid, ${youtubeTopicUrl(params.channelId)},
+        ${nonce}, ${hashCallbackToken(token)}, now()
+      )
+      -- YENİDEN EKLEMEDE BELİRTEÇ YENİLENİYOR ve bu KASITLI: eski adres
+      -- ölüyor. Kullanıcı bir kanalı yeniden eklediğinde niyeti genelde
+      -- "bozulmuştu, düzelt" oluyor ve sızmış bir belirteç varsa burada
+      -- kapanıyor.
+      ON CONFLICT (social_profile_id) DO UPDATE SET
+        client_id = EXCLUDED.client_id,
+        token_nonce = EXCLUDED.token_nonce,
+        callback_token_hash = EXCLUDED.callback_token_hash,
+        topic_url = EXCLUDED.topic_url,
+        verified_at = NULL, renew_at = NULL, denied_reason = NULL,
+        -- İMZA KİLİDİ DE SIFIRLANIYOR: yeni secret ile hub'ın imzalayıp
+        -- imzalamayacağı yeniden öğrenilecek. Kilidi taşımak, imzasız
+        -- gelen meşru bildirimleri reddetmek olurdu.
+        signature_seen_at = NULL,
+        updated_at = now()
+    `);
+
+    /*
+     * HUB ÇAĞRISI BURADA DEĞİL — ÇAĞIRAN, TRANSACTION KAPANDIKTAN SONRA
+     * YAPIYOR.
+     *
+     * `withTenant` etkileşimli bir transaction açıyor ve Prisma'nın sınırı 5
+     * saniye; hub yavaş cevap verdiğinde transaction ölüyor ve abonelik
+     * satırı GERİ ALINIYOR — kanal eklenmiş görünür, abonelik hiç olmazdı.
+     */
+    return { token, nonce };
+  }
+
+  /**
+   * KANAL BİR WORKSPACE'E ATANDI — abonelik kurulur ve son videolar çekilir.
+   *
+   * ═══ ATAMA ÜÇ İŞ BİRDEN ═══
+   *
+   * Reklam hesabı atamasıyla aynı karar: "ata → aboneliği kur → bekle"
+   * üçlüsü kullanıcının angarya dediği şeydi ve ikinci adımı atlamak
+   * "atadım ama kart gelmiyor" hâlini üretiyordu.
+   *
+   *   1. sahiplik   — çağıran yaptı (`assignSocialProfile`)
+   *   2. abonelik   — bundan sonraki her yükleme kart olarak düşecek
+   *   3. son videolar — panel BUGÜN dolu açılsın diye
+   *
+   * ÜÇÜNCÜSÜ OLMADAN İLK KART, KANALIN BİR SONRAKİ VİDEOSUNU BEKLİYOR.
+   * Haftada bir video yükleyen bir kanalda bu, panelin bir hafta boş durması
+   * demek.
+   *
+   * TOHUMLAMA DÜŞERSE ATAMA GERİ ALINMIYOR: abonelik kuruldu ve bundan
+   * sonraki videolar gelecek. Sebep NOTTA dönüyor — sessizce yutmak,
+   * kullanıcıya boş bir panel ve hiçbir açıklama bırakırdı.
+   */
+  async kanaliBagla(
+    ctx: TenantContext,
+    socialProfileId: string,
+    clientId: string,
+  ): Promise<{ kartlar: number; note: string }> {
+    const belirtec = await this.prisma.withTenant(ctx, async (tx) => {
+      const [profil] = await tx.$queryRaw<
+        Array<{ external_id: string; profile_type: string; name: string }>
+      >(Prisma.sql`
+        SELECT external_id, profile_type::text AS profile_type, name
+        FROM social_profiles WHERE id = ${socialProfileId}::uuid
+      `);
+      if (!profil) throw new BadRequestException('Kanal bulunamadı');
+      if (profil.profile_type !== 'youtube_channel') {
+        // Çağıranın hatası ve sessizce geçmemeli: Meta sayfası için hub
+        // aboneliği kurmak, hiçbir zaman bildirim gelmeyecek bir kayıt
+        // üretir ve panel onu "kurulu" gösterirdi.
+        throw new BadRequestException('Bu profil bir YouTube kanalı değil.');
+      }
+
+      return {
+        ...(await this.abonelikKur(tx, {
+          orgId: ctx.orgId,
+          clientId,
+          socialProfileId,
+          channelId: profil.external_id,
+        })),
+        channelId: profil.external_id,
+        name: profil.name,
+      };
+    });
+
+    await this.sendSubscribe({
+      socialProfileId,
+      token: belirtec.token,
+      nonce: belirtec.nonce,
+      channelId: belirtec.channelId,
+      mode: 'subscribe',
+    });
+
+    const sonuc = await this.youtube.listRecentVideos(
+      belirtec.channelId,
+      ATAMADA_CEKILEN_VIDEO,
+    );
+    if (sonuc.durum === 'hata') {
+      return { kartlar: 0, note: `Bildirimler kuruldu. Son videolar çekilemedi: ${sonuc.message}` };
+    }
+    if (sonuc.durum === 'bulunamadi') {
+      return {
+        kartlar: 0,
+        note: 'Bildirimler kuruldu. Kanalda henüz yüklenmiş video yok.',
+      };
+    }
+
+    let kartlar = 0;
+    for (const video of sonuc.videolar) {
+      const yazildi = await this.kuyruk.enqueueOne({
+        orgId: ctx.orgId,
+        clientId,
+        socialProfileId,
+        platform: 'google',
+        externalId: video.id,
+        title: video.title,
+        thumbnailUrl: video.thumbnailUrl,
+        permalink: youtubeWatchUrl(video.id),
+        mediaType: 'video',
+        publishedAt: video.publishedAt,
+        // KURULUM ÇEKİMİ: mail "yeni içerik" diyor ve bu videolar yeni değil.
+        bildirim: false,
+      });
+      if (yazildi) kartlar += 1;
+    }
+
+    this.logger.log(`YouTube kanalı atandı: ${belirtec.name} — ${kartlar} kart açıldı.`);
+    return {
+      kartlar,
+      note:
+        kartlar > 0
+          ? `Bildirimler kuruldu, son ${kartlar} video Akıllı Boost'a düştü.`
+          : 'Bildirimler kuruldu. Son videolar zaten listede.',
+    };
+  }
+
+  /**
+   * KANAL WORKSPACE'TEN ÇIKARILDI — abonelik KAPATILIR.
+   *
+   * Satırı bırakmak, bildirimlerin gelmeye devam etmesi ve kartların ARTIK O
+   * KANALA SAHİP OLMAYAN workspace'e düşmesi demekti; `client_id` abonelik
+   * satırında ayrıca duruyor ve kimse onu güncellemiyordu.
+   *
+   * HUB'A DA SÖYLENİYOR: yalnızca satırı silmek, hub'ın on gün daha bize
+   * bildirim göndermesi demek. Gelen bildirim artık eşleşmiyor ve sessizce
+   * düşüyor — yani zararsız, ama boşa trafik ve teşhiste yanıltıcı bir iz.
+   */
+  async kanaliCoz(ctx: TenantContext, socialProfileId: string): Promise<void> {
+    const kayit = await this.prisma.withTenant(ctx, async (tx) => {
+      const [row] = await tx.$queryRaw<
+        Array<{ token_nonce: string; channel_external_id: string }>
+      >(Prisma.sql`
+        SELECT s.token_nonce, sp.external_id AS channel_external_id
+        FROM auto_boost_subscriptions s
+        JOIN social_profiles sp ON sp.id = s.social_profile_id
+        WHERE s.social_profile_id = ${socialProfileId}::uuid
+      `);
+      if (!row) return null;
+
+      await tx.$executeRaw(Prisma.sql`
+        DELETE FROM auto_boost_subscriptions
+        WHERE social_profile_id = ${socialProfileId}::uuid
+      `);
+      return row;
+    });
+
+    if (!kayit) return;
+
+    await this.sendSubscribe({
+      socialProfileId,
+      token: deriveCallbackToken({
+        masterKey: this.masterKey(),
+        socialProfileId,
+        nonce: kayit.token_nonce,
+      }),
+      nonce: kayit.token_nonce,
+      channelId: kayit.channel_external_id,
+      mode: 'unsubscribe',
     });
   }
 

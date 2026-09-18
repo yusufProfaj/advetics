@@ -23,6 +23,8 @@ const ACC2 = '55555555-5555-5555-5555-555555555555';
 interface Cagrilar {
   hesapGuncelle: Array<Record<string, unknown>>;
   profilGuncelle: Array<Record<string, unknown>>;
+  /** `socialProfile.findMany` süzgeci — YouTube kanalının elenmesi burada. */
+  profilSorgusu: Array<Record<string, unknown>>;
   isler: Array<Record<string, unknown>>;
 }
 
@@ -38,7 +40,12 @@ function servis(
   svc: ConnectionsService;
   c: Cagrilar;
 } {
-  const c: Cagrilar = { hesapGuncelle: [], profilGuncelle: [], isler: [] };
+  const c: Cagrilar = {
+    hesapGuncelle: [],
+    profilGuncelle: [],
+    profilSorgusu: [],
+    isler: [],
+  };
 
   const admin = {
     adAccount: {
@@ -55,7 +62,10 @@ function servis(
       },
       // Gönderi çekimi için profiller okunuyor: izlemeyi açmak tek başına
       // yetmiyordu, yeni workspace bir sonraki süpürmeyi bekliyordu.
-      findMany: () => Promise.resolve(profiller),
+      findMany: (a: Record<string, unknown>) => {
+        c.profilSorgusu.push(a);
+        return Promise.resolve(profiller);
+      },
     },
   } as unknown as PrismaAdminService;
 
@@ -204,5 +214,35 @@ describe('organik gönderi çekimi', () => {
     const { svc, c } = servis([{ id: ACC1, name: 'A' }]);
     await calistir(svc);
     expect(c.isler.some((i) => i.jobType === 'organic_posts')).toBe(false);
+  });
+});
+
+describe('YouTube kanalı organik süpürmeye girmiyor', () => {
+  /*
+   * Kanal, Google bağlantısının ALTINDA yaşıyor ve süzgeçsiz bir sorgu onu
+   * yakalıyor. Organik süpürme Meta'nın gönderi uçlarını çağırıyor: kanal
+   * oraya düştüğünde iş KALICI olarak düşüyor ve panelde sebebi yazmayan
+   * başarısız bir iş kalıyor.
+   */
+  it('KRİTİK: profil sorgusu yalnızca Meta profil türlerini istiyor', async () => {
+    const { svc, c } = servis([], [{ id: 'prof-1' }]);
+    await calistir(svc);
+
+    const sorgu = c.profilSorgusu[0]?.where as Record<string, unknown> | undefined;
+    expect(sorgu, 'profil sorgusu hiç yapılmadı').toBeDefined();
+    expect(sorgu?.profileType).toEqual({ in: ['facebook_page', 'instagram_business'] });
+  });
+
+  it('KRİTİK: süzgeç AÇIK UÇLU DEĞİL — yeni tür varsayılan olarak dışarıda', async () => {
+    /*
+     * `{ not: 'youtube_channel' }` de kanalı elerdi ama yeni bir profil türü
+     * eklendiğinde onu SESSİZCE içeri alırdı; yanlış uca gitmek, eksik
+     * çekimden pahalı.
+     */
+    const { svc, c } = servis([], [{ id: 'prof-1' }]);
+    await calistir(svc);
+
+    const sorgu = c.profilSorgusu[0]?.where as Record<string, unknown> | undefined;
+    expect(JSON.stringify(sorgu)).not.toContain('not');
   });
 });

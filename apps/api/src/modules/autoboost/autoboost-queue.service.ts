@@ -190,11 +190,26 @@ export class AutoBoostQueueService {
       this.logger.log(
         `${profil.name}: ${created} yeni gönderi onay kuyruğuna eklendi`,
       );
-      const mailNotu = await this.bildir(
-        profil.org_id,
-        profil.client_id,
-        yeniKartlar.map((k) => ({ title: k.title, permalink: k.permalink, platform: 'meta' as const })),
-      );
+      /*
+       * İLK ÇEKİMDE MAİL GİTMİYOR.
+       *
+       * Mailin konusu "yeni içerik yayınlandı" ve ilk çekimde bu YANLIŞ: o
+       * gönderiler haftalar önce yayınlandı, sadece bizim listemize şimdi
+       * girdiler. On tanesini birden "yeni" diye bildirmek, kullanıcının o
+       * maili bir daha okumamasını öğretirdi — ve bir sonraki mail GERÇEK
+       * bir yeni gönderi olacak.
+       */
+      const mailNotu = ilkCekim
+        ? 'kurulum çekimi, mail gönderilmedi'
+        : await this.bildir(
+            profil.org_id,
+            profil.client_id,
+            yeniKartlar.map((k) => ({
+              title: k.title,
+              permalink: k.permalink,
+              platform: 'meta' as const,
+            })),
+          );
       return {
         created,
         note: `${profil.name}: ${created} ${ilkCekim ? 'kart (ilk çekim)' : 'yeni kart'} · ${mailNotu}`,
@@ -334,6 +349,18 @@ export class AutoBoostQueueService {
     permalink: string | null;
     mediaType: string | null;
     publishedAt: Date | null;
+    /**
+     * KURULUM ÇEKİMİNDE MAİL GİTMİYOR.
+     *
+     * Mailin konusu "yeni içerik yayınlandı" ve kanal ilk atandığında bu
+     * YANLIŞ: o videolar haftalar önce yayınlandı, sadece bizim listemize
+     * şimdi girdiler. Beş tanesini birden "yeni" diye bildirmek, kullanıcıya
+     * o maili bir daha okumamayı öğretirdi — ve bir sonraki mail GERÇEK bir
+     * yeni video olacak.
+     *
+     * VARSAYILAN AÇIK: webhook yolu bu alanı hiç geçmiyor ve geçmemeli.
+     */
+    bildirim?: boolean;
   }): Promise<boolean> {
     const yazilan = await this.db.$executeRaw(Prisma.sql`
       INSERT INTO auto_boost_queue_items (
@@ -349,7 +376,7 @@ export class AutoBoostQueueService {
       ON CONFLICT (social_profile_id, external_id) DO NOTHING
     `);
 
-    if (yazilan > 0) {
+    if (yazilan > 0 && params.bildirim !== false) {
       // AYNI BİLDİRİM YOLU — Instagram süpürmesiyle (`enqueueForProfile`)
       // aynı `bildir()`. Hata olsa da yutuluyor: kart zaten yazıldı, webhook
       // hub'a 200 dönmek zorunda.

@@ -160,10 +160,9 @@ function HavuzModal({
     setHata(null);
     setBildirim(null);
     try {
-      const yol = oge.reklamHesabi
-        ? `/connections/ad-accounts/${oge.id}/client`
-        : `/connections/social-profiles/${oge.id}/client`;
-      const res = await apiFetch<AtamaYaniti>(yol, {
+      // UÇ ÖĞENİN KENDİSİNDE (`havuz.ts`): burada seçmek, YouTube kanalının
+      // hub aboneliğini kuran ucu atlamanın en kolay yoluydu.
+      const res = await apiFetch<AtamaYaniti>(oge.atamaYolu, {
         method: 'PATCH',
         body: JSON.stringify({ clientId: hedef }),
       });

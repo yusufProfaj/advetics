@@ -112,7 +112,12 @@ export class AutoBoostReadService {
                COUNT(*) OVER () AS total
         FROM auto_boost_queue_items q
         JOIN clients cl ON cl.id = q.client_id
-        JOIN social_profiles sp ON sp.id = q.social_profile_id
+        -- DIŞ BİRLEŞİM, İÇ BİRLEŞİM DEĞİL: social_profiles RLS'li ve
+        -- politikası havuzdaki satırı (client_id IS NULL) yalnızca org yöneticisine
+        -- açıyor. Kanal workspace'ten çıkarıldığı an, o workspace'in
+        -- kullanıcısı KENDİ kartlarının TAMAMINI kaybederdi — kartlar
+        -- duruyor, sadece süsleme alanı görünmüyor.
+        LEFT JOIN social_profiles sp ON sp.id = q.social_profile_id
         -- ÖN AYAR AYNI ÇÖZÜMLEME SIRASIYLA: profil bazlı varsayılanı eziyor.
         -- Sıra kuyruk beslemesindekiyle AYNI olmak zorunda; ayrışırsa kartta
         -- gösterilen ayar ile yayınlanan ayar farklı olur.
@@ -159,10 +164,19 @@ export class AutoBoostReadService {
    */
   private async bosSebep(scoped: TenantContext, clientId: string): Promise<string> {
     const [durum] = await this.prisma.withTenant(scoped, (tx) =>
-      tx.$queryRaw<Array<{ profil: number; on_ayar: number; gonderi: number }>>(Prisma.sql`
+      tx.$queryRaw<
+        Array<{ sayfa: number; kanal: number; on_ayar: number; gonderi: number }>
+      >(Prisma.sql`
         SELECT
+          -- SAYFA VE KANAL AYRI SAYILIYOR: YouTube kanalında izleme anahtarı
+          -- BİLEREK KAPALI (içerik süpürmeyle değil bildirimle geliyor), yani
+          -- tek koşullu bir sayım yalnızca kanalı olan bir workspace'e
+          -- "hiç hesap atanmamış" derdi.
           (SELECT count(*)::int FROM social_profiles
-            WHERE client_id = ${clientId}::uuid AND sync_enabled) AS profil,
+            WHERE client_id = ${clientId}::uuid AND sync_enabled) AS sayfa,
+          (SELECT count(*)::int FROM social_profiles
+            WHERE client_id = ${clientId}::uuid
+              AND profile_type = 'youtube_channel') AS kanal,
           (SELECT count(*)::int FROM auto_boost_presets
             WHERE client_id = ${clientId}::uuid AND enabled) AS on_ayar,
           (SELECT count(*)::int FROM organic_posts
@@ -170,10 +184,10 @@ export class AutoBoostReadService {
       `),
     );
 
-    if (!durum || durum.profil === 0) {
+    if (!durum || durum.sayfa + durum.kanal === 0) {
       return (
-        'Bu workspace’e izlenen bir Instagram/Facebook sayfası atanmamış. ' +
-        'Platform Bağlantıları ekranından sayfayı bu workspace’e ata.'
+        'Bu workspace’e izlenen bir Instagram sayfası ya da YouTube kanalı ' +
+        'atanmamış. Platform Bağlantıları ekranından hesabı bu workspace’e ata.'
       );
     }
     if (durum.on_ayar === 0) {
@@ -182,7 +196,14 @@ export class AutoBoostReadService {
         'bütçe ve süre bilinmeden onaylanabilir bir kart oluşmaz.'
       );
     }
-    if (durum.gonderi === 0) {
+    /*
+     * GÖNDERİ SAYISI YALNIZCA INSTAGRAM İÇİN BİR CEVAP.
+     *
+     * `organic_posts` tablosuna YouTube hiç yazmıyor: video kartı bildirimden
+     * doğrudan kuyruğa giriyor. Koşulu kanala da uygulamak, kanalı olan her
+     * workspace'e sonsuza kadar "hiç gönderi çekilmemiş" dedirtirdi.
+     */
+    if (durum.sayfa > 0 && durum.gonderi === 0) {
       return (
         'Sayfadan henüz hiç gönderi çekilmemiş. Gönderiler 15 dakikada bir ' +
         'taranıyor; yeni bağlanan bir sayfada ilk tarama biraz sürebilir.'
@@ -232,6 +253,15 @@ export class AutoBoostReadService {
       permalink: r.permalink,
       mediaType: r.media_type,
       publishedAt: r.published_at?.toISOString() ?? null,
+      /*
+       * KARTIN GELDİĞİ HESAP KARTTA YAZIYOR.
+       *
+       * Bir workspace'te birden çok Instagram hesabı ve YouTube kanalı
+       * olabiliyor; hangisinden geldiği yazmadığında kullanıcı onayladığı
+       * içeriğin hangi markaya ait olduğunu göremiyor. Platform rozeti
+       * "Instagram" diyor ama hangi Instagram hesabı olduğunu söylemiyor.
+       */
+      socialProfileName: r.profile_name,
       status: r.status as AutoBoostQueueItemRecord['status'],
       preset,
       blockedReason: this.blockedReason(r, preset !== null, parsed),
@@ -317,7 +347,7 @@ interface QueueRow {
   external_campaign_id: string | null;
   created_at: Date;
   signature_state: string | null;
-  profile_name: string;
+  profile_name: string | null;
   linked_ad_account_id: string | null;
   preset_id: string | null;
   preset_enabled: boolean | null;

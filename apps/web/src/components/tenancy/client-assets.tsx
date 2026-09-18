@@ -3,6 +3,8 @@
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { profilAtamaYolu } from '@/lib/havuz';
+import type { SocialProfileTypeValue } from '@advetics/shared';
 import { PlatformLogo, adAccountKanali, profilKanali } from '@/components/platform-logo';
 
 /**
@@ -30,7 +32,12 @@ export interface ClientAdAccount {
 export interface ClientProfile {
   id: string;
   name: string;
-  profileType: string;
+  /**
+   * DÜZ `string` DEĞİL: atama ucu bu alandan seçiliyor ve yeni bir profil
+   * türü eklendiğinde derlemenin KIRILMASI gerekiyor. Düz metin bırakmak,
+   * bilinmeyen bir türün sessizce Meta ucuna gitmesi demekti.
+   */
+  profileType: SocialProfileTypeValue;
   /** Organik gönderi senkronizasyonu. Kapalıyken Akıllı Boost gönderi görmüyor. */
   syncEnabled: boolean;
   /**
@@ -49,6 +56,15 @@ export interface PoolItem {
   kind: 'ad_account' | 'social_profile';
   /** Yönetici (MCC) hesapları reklam yayınlamıyor; atanamıyor. */
   isManager?: boolean;
+  /**
+   * ATAMA UCU — `lib/havuz.ts` üretiyor, burada seçilmiyor.
+   *
+   * YouTube kanalı ayrı bir uçtan geçiyor (hub aboneliği ve son videolar da
+   * orada kuruluyor) ve seçimi iki ekranda ayrı yazmak, birinde o dalın
+   * unutulması demekti: kanal atanır, kart hiç gelmez, hiçbir yerde tek
+   * kelime yazmaz.
+   */
+  atamaYolu: string;
 }
 
 
@@ -86,9 +102,8 @@ export function ClientAssets({
   async function assign(item: PoolItem, target: string | null): Promise<void> {
     setBusy(item.id);
     setError(null);
-    const path = item.kind === 'ad_account' ? 'ad-accounts' : 'social-profiles';
     try {
-      await apiFetch(`/connections/${path}/${item.id}/client`, {
+      await apiFetch(item.atamaYolu, {
         method: 'PATCH',
         body: JSON.stringify({ clientId: target }),
       });
@@ -209,7 +224,13 @@ export function ClientAssets({
                   type="button"
                   onClick={() =>
                     void assign(
-                      { id: a.id, name: a.name, externalId: a.externalId, kind: 'ad_account' },
+                      {
+                        id: a.id,
+                        name: a.name,
+                        externalId: a.externalId,
+                        kind: 'ad_account',
+                        atamaYolu: `/connections/ad-accounts/${a.id}/client`,
+                      },
                       null,
                     )
                   }
@@ -287,7 +308,13 @@ export function ClientAssets({
                     type="button"
                     onClick={() =>
                       void assign(
-                        { id: p.id, name: p.name, externalId: '', kind: 'social_profile' },
+                        {
+                          id: p.id,
+                          name: p.name,
+                          externalId: '',
+                          kind: 'social_profile',
+                          atamaYolu: profilAtamaYolu(p.profileType, p.id),
+                        },
                         null,
                       )
                     }

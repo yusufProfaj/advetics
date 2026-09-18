@@ -13,6 +13,16 @@ import { formatNumber } from './format';
  * birinde güncellenmeyen bir cümle bırakmanın kestirme yolu.
  */
 export type AtamaYaniti = {
+  /**
+   * SUNUCUNUN KENDİ CÜMLESİ — varsa en başa yazılıyor.
+   *
+   * YouTube kanalı atandığında sunucu üç iş birden yapıyor (sahiplik, hub
+   * aboneliği, son videoların çekilmesi) ve sonucu yalnızca o biliyor: kaç
+   * kart açıldı, abonelik kuruldu ama videolar çekilemedi mi. Burada
+   * yeniden üretmek, sunucudaki gerçekle panelin cümlesinin ayrışması
+   * demekti.
+   */
+  note?: string;
   movedRows?: number;
   stayingRows?: number;
   leftBehind?: Record<string, number>;
@@ -28,6 +38,8 @@ function adetler(kalan: Record<string, number>): string {
 
 export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | null {
   const parcalar: string[] = [];
+
+  if (res.note) parcalar.push(res.note);
 
   if (atandiMi) {
     if ((res.movedRows ?? 0) > 0) {
