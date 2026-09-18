@@ -279,8 +279,22 @@ export class SyncQueueService implements OnModuleDestroy {
       { name: 'sweep:daily', pattern: '7 * * * *', jobType: 'insights_daily' },
       // L4 — geri düzeltme: günde bir, gece
       { name: 'sweep:backfill', pattern: '23 3 * * *', jobType: 'insights_backfill' },
-      // L6 — organik postlar: saatte bir
-      { name: 'sweep:organic', pattern: '41 * * * *', jobType: 'organic_posts' },
+      /*
+       * L6 — ORGANİK GÖNDERİLER: 15 DAKİKADA BİR.
+       *
+       * Saatte birdi ve kullanıcının isteği "gönderi paylaşıldığı an bildirim
+       * gelsin" oldu. GERÇEK TETİKLEYİCİ MÜMKÜN DEĞİL: Instagram'da "yeni
+       * gönderi" webhook'u YOK (2026-08 araştırması, iki bağımsız
+       * sınayıcıyla doğrulandı) ve Facebook Sayfa `feed` alanı da
+       * kullanılamıyor — crosspost açık müşteride tetikleniyor, IG-only
+       * paylaşanda hiç. Tespitin tek yolu yoklama.
+       *
+       * Dörde katlanan çağrı sayısı sosyal profil BAŞINA saatte dört istek
+       * demek; kota reklam hesabı tarafında tutuluyor ve organik uçlar o
+       * bütçeyi paylaşmıyor. Daha sık (5 dk) yapmak, kazanılan on dakika
+       * için üç kat daha fazla çağrı olurdu.
+       */
+      { name: 'sweep:organic', pattern: '*/15 * * * *', jobType: 'organic_posts' },
       // Modül 5 — kural değerlendirmesi: saatte bir.
       //
       // Veri günlük granülerlikte, yani saatte birden sık değerlendirmenin

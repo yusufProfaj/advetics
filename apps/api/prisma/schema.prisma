@@ -2989,6 +2989,15 @@ model AutoBoostPreset {
   /// sessizce yok sayılması demek olurdu.)
   settings Json @db.JsonB
 
+  /// İLK ÇEKİM DAMGASI — son N gönderi bir kez kuyruğa alındı mı.
+  ///
+  /// Kuyruk normalde yalnızca ÖN AYARDAN SONRA yayınlanan gönderileri karta
+  /// çeviriyor. Yeni kurulan bir workspace'te bu, hiç kart görünmemesi
+  /// demek ve kullanıcı bunu "Akıllı Boost çalışmıyor" diye okuyor. Damga
+  /// NULL iken ilk süpürme son N gönderiyi kurala bakmadan alıyor ve burayı
+  /// dolduruyor — tam bir kez.
+  seedAt DateTime? @map("seed_at") @db.Timestamptz(6)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid

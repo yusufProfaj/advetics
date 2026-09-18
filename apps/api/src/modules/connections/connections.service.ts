@@ -931,6 +931,34 @@ export class ConnectionsService {
         data: { syncEnabled: true },
       });
 
+      /*
+       * ═══ GÖNDERİLER DE HEMEN ÇEKİLİYOR ═══
+       *
+       * İzlemeyi açmak tek başına yetmiyordu: organik süpürme zamanlanmış bir
+       * iş ve yeni kurulan bir workspace bir sonraki turu BEKLİYORDU. Bu
+       * sürede Akıllı Boost ekranı boş duruyor ve kullanıcı bunu "çalışmıyor"
+       * diye okuyor — bildirilen belirti buydu.
+       *
+       * Kuyruğa alınan iş gönderileri çekiyor; `enqueueForProfile` de aynı
+       * işin sonunda koşuyor ve ön ayar varsa son gönderileri KART hâline
+       * getiriyor (tek seferlik ilk çekim).
+       */
+      const profiller = await this.admin.socialProfile.findMany({
+        where: { connectionId, clientId },
+        select: { id: true },
+      });
+      for (const p of profiller) {
+        await this.queue.enqueue({
+          clientId,
+          platform,
+          jobType: 'organic_posts',
+          socialProfileId: p.id,
+          // Kullanıcı ekranda bekliyor: takılmış bir iş varsa kaldırılıp
+          // yenisi konsun.
+          interactive: true,
+        });
+      }
+
       const bugun = new Date();
       const baslangic = new Date(bugun.getTime() - 90 * 86_400_000);
       const gun = (d: Date): string => d.toISOString().slice(0, 10);

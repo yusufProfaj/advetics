@@ -25,6 +25,16 @@ import { yeniIcerikMailiOlustur, type YeniIcerikKarti } from './yeni-icerik-mail
  * SESSİZCE kaybolurdu — `client_id` bağlamı olmayan bir satırı RLS kimseye
  * göstermiyor.
  */
+/**
+ * İLK ÇEKİMDE KAÇ GÖNDERİ.
+ *
+ * Kullanıcının isteği "son 10 gönderi bildirim gelmiş gibi düşsün". On,
+ * kullanıcıya gerçek bir seçim bırakacak kadar çok; istemediği kart tek
+ * tıkla reddediliyor. Sayının kendisi zararsız ama SESSİZ olması zararlı
+ * olurdu: iş notunda "(ilk çekim)" olarak yazılıyor.
+ */
+const ILK_CEKIM_ADEDI = 10;
+
 @Injectable()
 export class AutoBoostQueueService {
   private readonly logger = new Logger(AutoBoostQueueService.name);
@@ -123,6 +133,26 @@ export class AutoBoostQueueService {
      * yazılan satırları döndürüyor — mükerrer engeline takılanlar hiç
      * görünmüyor, yani mail asla eski bir gönderiyi "yeni" diye göstermez.
      */
+    /*
+     * ═══ İLK ÇEKİM — TEK SEFERLİK ═══
+     *
+     * Normal kural: yalnızca ÖN AYARDAN SONRA yayınlanan gönderiler karta
+     * dönüyor. Gerekçesi doğru (ön ayar açıldığında son doksan günün
+     * gönderileri kuyruğa dolmasın) ama bedeli ölçülmedi: yeni kurulan bir
+     * workspace'te HİÇBİR KART görünmüyor ve kullanıcı bunu "Akıllı Boost
+     * çalışmıyor" diye okuyor — bildirilen belirti birebir buydu.
+     *
+     * Ön ayar HENÜZ TOHUMLANMAMIŞSA son `ILK_CEKIM_ADEDI` gönderi kurala
+     * BAKILMADAN alınıyor ve damga konuyor. `seed_at` NULL olduğu için var
+     * olan bütün workspace'ler bir sonraki süpürmede kendiliğinden
+     * düzeliyor; ayrı bir script gerekmiyor.
+     */
+    const ilkCekim = preset.seedAt === null;
+    const tarihKosulu = ilkCekim
+      ? Prisma.empty
+      : Prisma.sql`AND p.published_at > ${preset.createdAt}`;
+    const sinir = ilkCekim ? Prisma.sql`LIMIT ${ILK_CEKIM_ADEDI}` : Prisma.empty;
+
     const yeniKartlar = await this.db.$queryRaw<
       Array<{ title: string | null; permalink: string | null }>
     >(Prisma.sql`
@@ -135,14 +165,25 @@ export class AutoBoostQueueService {
              p.media_type::text, p.published_at, now()
       FROM organic_posts p
       WHERE p.social_profile_id = ${socialProfileId}::uuid
-        -- ÖN AYARDAN SONRA YAYINLANANLAR. Bu koşul olmadan otomatik boost
-        -- ilk açıldığında son 90 günün gönderileri kuyruğa dolardı.
-        AND p.published_at > ${preset.createdAt}
+        ${tarihKosulu}
+      ORDER BY p.published_at DESC
+      ${sinir}
       -- MÜKERRER ENGELLEME KISITTA, sorguda değil: iki süpürme aynı anda
       -- koşabiliyor ve "önce bak sonra yaz" yarışı kaybediyor.
       ON CONFLICT (social_profile_id, external_id) DO NOTHING
       RETURNING title, permalink
     `);
+
+    /*
+     * DAMGA YAZMADAN ÖNCE DEĞİL, SONRA. Tohumlama başarısız olursa damga da
+     * konmuyor ve bir sonraki süpürme yeniden deniyor; önce damgalamak,
+     * bir kerelik fırsatı sessizce harcamak olurdu.
+     */
+    if (ilkCekim) {
+      await this.db.$executeRaw(Prisma.sql`
+        UPDATE auto_boost_presets SET seed_at = now() WHERE id = ${preset.id}::uuid
+      `);
+    }
 
     const created = yeniKartlar.length;
     if (created > 0) {
@@ -154,7 +195,10 @@ export class AutoBoostQueueService {
         profil.client_id,
         yeniKartlar.map((k) => ({ title: k.title, permalink: k.permalink, platform: 'meta' as const })),
       );
-      return { created, note: `${profil.name}: ${created} yeni kart · ${mailNotu}` };
+      return {
+        created,
+        note: `${profil.name}: ${created} ${ilkCekim ? 'kart (ilk çekim)' : 'yeni kart'} · ${mailNotu}`,
+      };
     }
     return { created, note: `${profil.name}: ${created} yeni kart` };
   }
@@ -335,16 +379,17 @@ export class AutoBoostQueueService {
     clientId: string,
     socialProfileId: string,
     platform: AutoBoostPlatform,
-  ): Promise<{ id: string; createdAt: Date; enabled: boolean } | null> {
+  ): Promise<{ id: string; createdAt: Date; enabled: boolean; seedAt: Date | null } | null> {
     const rows = await this.db.$queryRaw<
       Array<{
         id: string;
         created_at: Date;
         enabled: boolean;
+        seed_at: Date | null;
         social_profile_id: string | null;
       }>
     >(Prisma.sql`
-      SELECT id::text AS id, created_at, enabled,
+      SELECT id::text AS id, created_at, enabled, seed_at,
              social_profile_id::text AS social_profile_id
       FROM auto_boost_presets
       WHERE client_id = ${clientId}::uuid
@@ -359,6 +404,6 @@ export class AutoBoostQueueService {
 
     const p = rows[0];
     if (!p || !p.enabled) return null;
-    return { id: p.id, createdAt: p.created_at, enabled: p.enabled };
+    return { id: p.id, createdAt: p.created_at, enabled: p.enabled, seedAt: p.seed_at };
   }
 }

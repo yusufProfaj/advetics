@@ -137,12 +137,61 @@ export class AutoBoostReadService {
     return {
       items,
       total: Number(rows[0]?.total ?? 0),
-      emptyReason:
-        items.length === 0
-          ? 'Onay bekleyen içerik yok. Yeni bir Instagram gönderisi ya da YouTube ' +
-            'videosu yayınlandığında kart burada belirir.'
-          : null,
+      emptyReason: items.length === 0 ? await this.bosSebep(scoped, clientId) : null,
     };
+  }
+
+  /**
+   * ═══ BOŞ LİSTE NEDEN BOŞ ═══
+   *
+   * Tek bir cümle yazıyordu: "yeni bir gönderi yayınlandığında kart burada
+   * belirir". O cümle DÖRT ayrı hâli aynı kefeye koyuyor ve üçünde YANLIŞ:
+   *
+   *   · workspace'e hiç sosyal profil atanmamış → kart hiç gelmeyecek
+   *   · profil var ama ön ayar yok → kart üretilmiyor
+   *   · ön ayar var ama hiç gönderi çekilmemiş → süpürme koşmamış
+   *   · her şey yerinde, gerçekten yeni gönderi yok → doğru cümle
+   *
+   * Kullanıcının bildirdiği belirti tam da buydu: "bazı şirketlerin
+   * workspace'lerinde autoboost gelmiyor". Ekran sebebi söylemediği için
+   * teşhis kodda aranıyordu. Bu projenin kendi kuralı: boş liste NEDENİNİ
+   * söylemek zorunda.
+   */
+  private async bosSebep(scoped: TenantContext, clientId: string): Promise<string> {
+    const [durum] = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$queryRaw<Array<{ profil: number; on_ayar: number; gonderi: number }>>(Prisma.sql`
+        SELECT
+          (SELECT count(*)::int FROM social_profiles
+            WHERE client_id = ${clientId}::uuid AND sync_enabled) AS profil,
+          (SELECT count(*)::int FROM auto_boost_presets
+            WHERE client_id = ${clientId}::uuid AND enabled) AS on_ayar,
+          (SELECT count(*)::int FROM organic_posts
+            WHERE client_id = ${clientId}::uuid) AS gonderi
+      `),
+    );
+
+    if (!durum || durum.profil === 0) {
+      return (
+        'Bu workspace’e izlenen bir Instagram/Facebook sayfası atanmamış. ' +
+        'Platform Bağlantıları ekranından sayfayı bu workspace’e ata.'
+      );
+    }
+    if (durum.on_ayar === 0) {
+      return (
+        'Otomatik boost ön ayarı yok. Ön ayar olmadan kart üretilmiyor: ' +
+        'bütçe ve süre bilinmeden onaylanabilir bir kart oluşmaz.'
+      );
+    }
+    if (durum.gonderi === 0) {
+      return (
+        'Sayfadan henüz hiç gönderi çekilmemiş. Gönderiler 15 dakikada bir ' +
+        'taranıyor; yeni bağlanan bir sayfada ilk tarama biraz sürebilir.'
+      );
+    }
+    return (
+      'Onay bekleyen içerik yok. Yeni bir Instagram gönderisi ya da YouTube ' +
+      'videosu yayınlandığında kart burada belirir.'
+    );
   }
 
   private toRecord(r: QueueRow): AutoBoostQueueItemRecord {

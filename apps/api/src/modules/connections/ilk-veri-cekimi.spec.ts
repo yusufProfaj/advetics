@@ -26,7 +26,15 @@ interface Cagrilar {
   isler: Array<Record<string, unknown>>;
 }
 
-function servis(hesaplar = [{ id: ACC1, name: 'A' }, { id: ACC2, name: 'B' }]): {
+function servis(
+  hesaplar = [{ id: ACC1, name: 'A' }, { id: ACC2, name: 'B' }],
+  /*
+   * SOSYAL PROFİLLER VARSAYILAN OLARAK BOŞ. Bu dosyadaki testlerin çoğu
+   * reklam hesabı işlerini sayıyor; profil eklemek her sayımı bir organik
+   * işle şişirirdi. Gönderi çekimini sınayan test kendi profilini veriyor.
+   */
+  profiller: Array<{ id: string }> = [],
+): {
   svc: ConnectionsService;
   c: Cagrilar;
 } {
@@ -45,6 +53,9 @@ function servis(hesaplar = [{ id: ACC1, name: 'A' }, { id: ACC2, name: 'B' }]): 
         c.profilGuncelle.push(a);
         return Promise.resolve({ count: 0 });
       },
+      // Gönderi çekimi için profiller okunuyor: izlemeyi açmak tek başına
+      // yetmiyordu, yeni workspace bir sonraki süpürmeyi bekliyordu.
+      findMany: () => Promise.resolve(profiller),
     },
   } as unknown as PrismaAdminService;
 
@@ -159,5 +170,39 @@ describe('bağlantıdan sonra ilk veri çekimi', () => {
       enqueue: () => Promise.reject(new Error('redis yok')),
     };
     await expect(calistir(svc)).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * ═══ GÖNDERİLER DE HEMEN ÇEKİLİYOR ═══
+ *
+ * İzlemeyi açmak tek başına yetmiyordu: organik süpürme zamanlanmış bir iş ve
+ * yeni kurulan bir workspace bir sonraki turu bekliyordu. O sürede Akıllı
+ * Boost ekranı boş duruyor ve kullanıcı bunu "çalışmıyor" diye okuyor —
+ * bildirilen belirti buydu.
+ */
+describe('organik gönderi çekimi', () => {
+  it('KRİTİK: her sosyal profil için organic_posts işi kuyruğa giriyor', async () => {
+    const { svc, c } = servis([], [{ id: 'prof-1' }, { id: 'prof-2' }]);
+    await calistir(svc);
+
+    const organik = c.isler.filter((i) => i.jobType === 'organic_posts');
+    expect(organik.map((i) => i.socialProfileId)).toEqual(['prof-1', 'prof-2']);
+  });
+
+  it('kullanıcı ekranda beklediği için `interactive` gönderiliyor', async () => {
+    // Takılmış bir iş varsa kaldırılıp yenisi konsun: mükerrer engeli
+    // kalıcı kilit üretebiliyor (CLAUDE.md).
+    const { svc, c } = servis([], [{ id: 'prof-1' }]);
+    await calistir(svc);
+    expect(c.isler.find((i) => i.jobType === 'organic_posts')?.interactive).toBe(true);
+  });
+
+  it('profil yoksa organik iş de YOK', async () => {
+    // Ters yön: profil olmadan iş açmak, hiçbir şey çekmeyecek bir işi
+    // kuyruğa koymak olurdu.
+    const { svc, c } = servis([{ id: ACC1, name: 'A' }]);
+    await calistir(svc);
+    expect(c.isler.some((i) => i.jobType === 'organic_posts')).toBe(false);
   });
 });

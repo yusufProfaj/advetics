@@ -50,15 +50,30 @@ async function seedProfile(
   );
 }
 
-/** Ön ayar. `createdAt` açıkça veriliyor: "ne zamandan itibaren" kuralı buna bağlı. */
+/**
+ * Ön ayar. `createdAt` açıkça veriliyor: "ne zamandan itibaren" kuralı buna
+ * bağlı.
+ *
+ * `tohumlandi` VARSAYILAN OLARAK TRUE ve bu bilinçli: bu dosyadaki testlerin
+ * çoğu STEADY-STATE davranışı sınıyor (bir süredir çalışan bir kurulum). İlk
+ * çekim ayrı bir describe'da ve orada açıkça `tohumlandi: false` veriliyor.
+ * Varsayılanı false yapmak, her testin ilk süpürmesini tohum turuna
+ * çevirirdi ve tarih kuralı hiçbir yerde sınanamazdı.
+ */
 async function preset(
-  opts: { profileId?: string | null; enabled?: boolean; createdAt?: string; platform?: string } = {},
+  opts: {
+    profileId?: string | null;
+    enabled?: boolean;
+    createdAt?: string;
+    platform?: string;
+    tohumlandi?: boolean;
+  } = {},
 ): Promise<void> {
   await h.q(
     `INSERT INTO auto_boost_presets (id, org_id, client_id, platform, social_profile_id,
-       enabled, budget_mode, daily_budget_micros, settings, created_at, updated_at)
+       enabled, budget_mode, daily_budget_micros, settings, created_at, seed_at, updated_at)
      VALUES (gen_random_uuid(), $1, $2, $3::"Platform", $4, $5, 'daily', 50000000,
-             '{}'::jsonb, $6, now())`,
+             '{}'::jsonb, $6, $7, now())`,
     [
       IDS.org,
       IDS.client,
@@ -66,6 +81,7 @@ async function preset(
       opts.profileId ?? null,
       opts.enabled ?? true,
       opts.createdAt ?? '2026-08-01T00:00:00Z',
+      (opts.tohumlandi ?? true) ? new Date().toISOString() : null,
     ],
   );
 }
@@ -165,6 +181,12 @@ describe('ön ayar yoksa kart YOK', () => {
 });
 
 describe('"ne zamandan itibaren" kuralı', () => {
+  /*
+   * ÖN AYAR TOHUMLANMIŞ: bu blok STEADY-STATE davranışı sınıyor. İlk çekim
+   * (tek seferlik tohum) kuralı BİR KEZ gevşetiyor ve kendi describe'ında
+   * sınanıyor; ikisini karıştırmak, tarih kuralını hiç sınanmamış hâle
+   * getirirdi.
+   */
   beforeEach(async () => {
     await preset({ createdAt: '2026-08-10T00:00:00Z' });
   });
@@ -417,5 +439,91 @@ describe('bildirim — yeni kart mail denemesi tetikliyor', () => {
     // enqueueOne bildirim hatasını YUTUYOR (webhook'a 200 dönmek zorunda) —
     // burada doğrulanan şey kartın yine de yazıldığı, mail sonucu değil.
     expect(yazildi).toBe(true);
+  });
+});
+
+/**
+ * ═══ İLK ÇEKİM — TEK SEFERLİK TOHUM ═══
+ *
+ * Kullanıcının bildirdiği hâl: *"bazı şirketlerin workspace'lerinde autoboost
+ * gelmiyor"*. Sebebi kuralın kendisiydi: kart yalnızca ÖN AYARDAN SONRA
+ * yayınlanan gönderiden üretiliyordu ve yeni kurulan bir workspace'te öyle
+ * bir gönderi yoktu. Kullanıcı bunu "çalışmıyor" diye okuyor.
+ *
+ * Tohum tam BİR KEZ koşuyor ve damgası ön ayarda duruyor.
+ */
+describe('ilk çekim', () => {
+  it('KRİTİK: ön ayardan ÖNCEKİ gönderiler ilk süpürmede kuyruğa giriyor', async () => {
+    await preset({ createdAt: '2026-09-01T00:00:00Z', tohumlandi: false });
+    await post('eski-1', '2026-08-01T10:00:00Z');
+    await post('eski-2', '2026-08-15T10:00:00Z');
+
+    const sonuc = await svc.enqueueForProfile(PROFIL);
+
+    expect(sonuc.created).toBe(2);
+    expect((await kuyruk()).map((k) => k.external_id)).toEqual(['eski-1', 'eski-2']);
+  });
+
+  it('KRİTİK: TEK SEFERLİK — ikinci süpürme eskileri TEKRAR almıyor', async () => {
+    /*
+     * İkinci kez tohumlamak, kullanıcının reddettiği kartları geri getirmek
+     * demek olurdu: reddedilen kart kuyrukta `rejected` olarak duruyor ve
+     * mükerrer engeli onu koruyor, ama tohum damgası olmadan her süpürme
+     * eski gönderileri yeniden denerdi.
+     */
+    await preset({ createdAt: '2026-09-01T00:00:00Z', tohumlandi: false });
+    await post('eski-1', '2026-08-01T10:00:00Z');
+
+    await svc.enqueueForProfile(PROFIL);
+    await h.q(`DELETE FROM auto_boost_queue_items`);
+    const ikinci = await svc.enqueueForProfile(PROFIL);
+
+    expect(ikinci.created).toBe(0);
+    expect(await kuyruk()).toEqual([]);
+  });
+
+  it('KRİTİK: tohumdan SONRA normal kural geçerli', async () => {
+    // Tohum kuralı kalıcı olarak gevşetmiyor: damgadan sonra yalnızca ön
+    // ayardan sonra yayınlananlar giriyor.
+    await preset({ createdAt: '2026-09-01T00:00:00Z', tohumlandi: false });
+    await post('eski-1', '2026-08-01T10:00:00Z');
+    await svc.enqueueForProfile(PROFIL);
+    await h.q(`DELETE FROM auto_boost_queue_items`);
+
+    await post('yeni-1', '2026-09-10T10:00:00Z');
+    const sonra = await svc.enqueueForProfile(PROFIL);
+
+    expect(sonra.created).toBe(1);
+    expect((await kuyruk()).map((k) => k.external_id)).toEqual(['yeni-1']);
+  });
+
+  it('KRİTİK: tohum EN YENİ gönderilerden başlıyor ve sayısı sınırlı', async () => {
+    /*
+     * Sınırsız tohum, üç yıllık bir hesapta yüzlerce kart demek: her biri
+     * tek tıkla para harcayabilen bir düğme. Sıra da önemli — en yeniler
+     * kullanıcının hatırladığı ve boostlamak isteyebileceği gönderiler.
+     */
+    await preset({ createdAt: '2026-09-01T00:00:00Z', tohumlandi: false });
+    for (let i = 0; i < 14; i++) {
+      await post(`p-${String(i).padStart(2, '0')}`, `2026-08-${String(i + 1).padStart(2, '0')}T10:00:00Z`);
+    }
+
+    const sonuc = await svc.enqueueForProfile(PROFIL);
+
+    expect(sonuc.created).toBe(10);
+    const kuyruktakiler = (await kuyruk()).map((k) => k.external_id);
+    // En eski dördü (p-00…p-03) dışarıda kalmalı.
+    expect(kuyruktakiler).not.toContain('p-00');
+    expect(kuyruktakiler).toContain('p-13');
+  });
+
+  it('damga ön ayarda duruyor', async () => {
+    await preset({ createdAt: '2026-09-01T00:00:00Z', tohumlandi: false });
+    await post('eski-1', '2026-08-01T10:00:00Z');
+
+    await svc.enqueueForProfile(PROFIL);
+
+    const [row] = await h.q<{ seed_at: Date | null }>(`SELECT seed_at FROM auto_boost_presets`);
+    expect(row?.seed_at).not.toBeNull();
   });
 });
