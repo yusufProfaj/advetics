@@ -526,4 +526,50 @@ describe('ilk çekim', () => {
     const [row] = await h.q<{ seed_at: Date | null }>(`SELECT seed_at FROM auto_boost_presets`);
     expect(row?.seed_at).not.toBeNull();
   });
+
+  it('KRİTİK: SAYFANIN HİÇ GÖNDERİSİ YOKSA DAMGA BASILMIYOR', async () => {
+    /*
+     * ÜRETİMDE DÜŞÜLEN HATA. Damga koşulsuzdu: deploy'dan sonraki ilk
+     * süpürme, gönderileri HENÜZ ÇEKİLMEMİŞ bir sayfada koştu, sıfır kart
+     * üretti ve damgayı bastı. Gönderiler ertesi saat geldi ama ön ayar
+     * artık "tohumlandı" sayıldığı için son 10 gönderi BİR DAHA HİÇ
+     * çekilmedi — kullanıcının cümlesiyle: "neden son 10 gönderiyi çekmedin
+     * bütün hesaplarda".
+     */
+    await preset({ createdAt: '2026-09-01T00:00:00Z', tohumlandi: false });
+
+    await svc.enqueueForProfile(PROFIL);
+
+    const [row] = await h.q<{ seed_at: Date | null }>(`SELECT seed_at FROM auto_boost_presets`);
+    expect(row?.seed_at).toBeNull();
+  });
+
+  it('KRİTİK: gönderiler sonradan geldiğinde ilk çekim YİNE çalışıyor', async () => {
+    // Yukarıdaki damganın gerçek bedeli bu: fırsat harcanmamışsa bir sonraki
+    // süpürme tohumlamayı yapabilmeli.
+    await preset({ createdAt: '2026-09-01T00:00:00Z', tohumlandi: false });
+    await svc.enqueueForProfile(PROFIL);
+
+    await post('eski-1', '2026-08-01T10:00:00Z');
+    const sonuc = await svc.enqueueForProfile(PROFIL);
+
+    expect(sonuc.created).toBe(1);
+  });
+
+  it('gönderi duruyor ama hepsi zaten kuyruktaysa damga YİNE basılıyor', async () => {
+    /*
+     * Koşul "kaç satır yazıldı" değil "sayfanın gönderisi var mı": gönderi
+     * duruyorsa tohumlama GERÇEKTEN oldu, kartın mükerrer engeline takılması
+     * fırsatın harcanmadığı anlamına gelmez.
+     */
+    await preset({ createdAt: '2026-09-01T00:00:00Z', tohumlandi: false });
+    await post('eski-1', '2026-08-01T10:00:00Z');
+    await svc.enqueueForProfile(PROFIL);
+
+    await h.q(`UPDATE auto_boost_presets SET seed_at = NULL`);
+    await svc.enqueueForProfile(PROFIL);
+
+    const [row] = await h.q<{ seed_at: Date | null }>(`SELECT seed_at FROM auto_boost_presets`);
+    expect(row?.seed_at).not.toBeNull();
+  });
 });

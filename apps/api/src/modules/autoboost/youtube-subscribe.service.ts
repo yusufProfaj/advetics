@@ -291,9 +291,10 @@ export class YouTubeSubscribeService {
   ): Promise<{ kartlar: number; note: string }> {
     const belirtec = await this.prisma.withTenant(ctx, async (tx) => {
       const [profil] = await tx.$queryRaw<
-        Array<{ external_id: string; profile_type: string; name: string }>
+        Array<{ external_id: string; profile_type: string; name: string; org_id: string }>
       >(Prisma.sql`
-        SELECT external_id, profile_type::text AS profile_type, name
+        SELECT external_id, profile_type::text AS profile_type, name,
+               org_id::text AS org_id
         FROM social_profiles WHERE id = ${socialProfileId}::uuid
       `);
       if (!profil) throw new BadRequestException('Kanal bulunamadı');
@@ -304,15 +305,27 @@ export class YouTubeSubscribeService {
         throw new BadRequestException('Bu profil bir YouTube kanalı değil.');
       }
 
+      /*
+       * ORG PROFİL SATIRINDAN OKUNUYOR, `ctx.orgId`DEN DEĞİL.
+       *
+       * Atama bu satırın `org_id`'sini HEDEF WORKSPACE'in şirketine çekti
+       * (bkz. `musteriOrgId`). "Tüm şirketler" modunda `ctx.orgId` ev şirketi
+       * olarak kalıyor ve onu yazmak, abonelik ile kartları o workspace'in
+       * şirketinden BAŞKA bir şirkete yazmak olurdu: yabancı anahtar
+       * tutuyor (ikisi de ayrı ayrı geçerli) ama RLS o satırları
+       * workspace'in kullanıcısına HİÇ göstermezdi — kart gelir, kimse
+       * göremez.
+       */
       return {
         ...(await this.abonelikKur(tx, {
-          orgId: ctx.orgId,
+          orgId: profil.org_id,
           clientId,
           socialProfileId,
           channelId: profil.external_id,
         })),
         channelId: profil.external_id,
         name: profil.name,
+        orgId: profil.org_id,
       };
     });
 
@@ -341,7 +354,7 @@ export class YouTubeSubscribeService {
     let kartlar = 0;
     for (const video of sonuc.videolar) {
       const yazildi = await this.kuyruk.enqueueOne({
-        orgId: ctx.orgId,
+        orgId: belirtec.orgId,
         clientId,
         socialProfileId,
         platform: 'google',

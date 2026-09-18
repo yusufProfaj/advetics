@@ -31,6 +31,10 @@ const POOL_ACCOUNT = '99999999-9999-9999-9999-999999999999';
 const MCC_ACCOUNT = '98989898-9898-9898-9898-989898989898';
 const POOL_PROFILE = '97979797-9797-9797-9797-979797979797';
 
+/** KARDEŞ ŞİRKET — "Tüm şirketler" modunun sınandığı yer. */
+const ORG_KARDES = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+const CLIENT_KARDES = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+
 const CTX: TenantContext = {
   orgId: IDS.org,
   userId: IDS.user,
@@ -89,6 +93,25 @@ beforeEach(async () => {
      VALUES ($1, $2, 'İkinci Workspace', 'ikinci', now())`,
     [CLIENT_B, IDS.org],
   );
+  /*
+   * KARDEŞ ŞİRKET VE ONUN WORKSPACE'İ.
+   *
+   * Üst hesap (MCC) altında çalışan ajans yöneticisi "Tüm şirketler" modunda
+   * bu workspace'i de listede görüyor ama `ctx.orgId` EV ŞİRKETİ kalıyor
+   * (`tenant-context.service.ts` bunu bilerek yapıyor). Atama yolunun
+   * `org_id` kolonuna ne yazdığı tam burada ölçülüyor.
+   */
+  await h.q(
+    `INSERT INTO organizations (id, name, slug, updated_at)
+     VALUES ($1, 'Kardeş Şirket', 'kardes', now())`,
+    [ORG_KARDES],
+  );
+  await h.q(
+    `INSERT INTO clients (id, org_id, name, slug, updated_at)
+     VALUES ($1, $2, 'Kardeş Workspace', 'kardes-ws', now())`,
+    [CLIENT_KARDES, ORG_KARDES],
+  );
+
   // Havuzda bekleyen hesap: keşiften geldi, henüz kimseye atanmadı.
   await h.q(
     `INSERT INTO ad_accounts
@@ -965,5 +988,79 @@ describe('hesap el değiştirince verisi de taşınıyor', () => {
     const after = rows[0]!.after as { tasinanSatirlar?: Record<string, number> };
     expect(after.tasinanSatirlar?.insights_daily).toBe(1);
     expect(after.tasinanSatirlar?.campaigns).toBe(1);
+  });
+});
+
+describe('ŞİRKETLER ARASI ATAMA', () => {
+  /*
+   * ═══ ÜRETİMDE DÜŞÜLEN HATA ═══
+   *
+   * Atama yolları `org_id` kolonuna `ctx.orgId` yazıyordu ve gerekçesi
+   * yazılıydı: "clientId doğrulandı, yani hedef workspace AKTİF şirkette".
+   * O cümle "Tüm şirketler" modunda DOĞRU DEĞİL: `ctx.clientIds` bütün
+   * kardeş şirketlerin workspace'lerini taşıyor ama `ctx.orgId` ev şirketi
+   * kalıyor.
+   *
+   * Sonuç `(client_id, org_id)` kompozit yabancı anahtarının ihlali ve
+   * panelde TEK BİR CÜMLE: "İlişkili kayıt geçersiz". Kullanıcı ne olduğunu
+   * hiçbir yerde okuyamıyordu.
+   */
+  const TUM_SIRKETLER_CTX: TenantContext = {
+    ...CTX,
+    // Ev şirketi — "Tüm şirketler" modunda bu DEĞİŞMİYOR.
+    orgId: IDS.org,
+    clientIds: [IDS.client, CLIENT_B, CLIENT_KARDES],
+  } as TenantContext;
+
+  it('KRİTİK: kardeş şirketin workspace’ine hesap atanabiliyor', async () => {
+    await expect(
+      svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, CLIENT_KARDES, META),
+    ).resolves.toMatchObject({ clientId: CLIENT_KARDES });
+  });
+
+  it('KRİTİK: hesabın şirketi HEDEF WORKSPACE’in şirketi oluyor', async () => {
+    // `ctx.orgId` yazılsaydı satır kardeş şirketin workspace'ini gösterip
+    // ev şirketinde kalırdı — kompozit anahtarın engellediği tam olarak bu.
+    await svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, CLIENT_KARDES, META);
+
+    const [row] = await h.q<{ org_id: string }>(
+      'SELECT org_id FROM ad_accounts WHERE id = $1',
+      [POOL_ACCOUNT],
+    );
+    expect(row?.org_id).toBe(ORG_KARDES);
+  });
+
+  it('KRİTİK: kardeş şirketin workspace’ine sayfa/kanal atanabiliyor', async () => {
+    await h.q(
+      `INSERT INTO social_profiles
+         (id, org_id, client_id, connection_id, profile_type, external_id, name,
+          sync_enabled, updated_at)
+       VALUES ($1, $2, NULL, $3, 'instagram_business', 'ig-havuz', 'Havuz sayfası',
+               false, now())`,
+      [POOL_PROFILE, IDS.org, IDS.connection],
+    );
+
+    await expect(
+      svc.assignSocialProfile(TUM_SIRKETLER_CTX, POOL_PROFILE, CLIENT_KARDES, META),
+    ).resolves.toMatchObject({ clientId: CLIENT_KARDES });
+
+    const [row] = await h.q<{ org_id: string }>(
+      'SELECT org_id FROM social_profiles WHERE id = $1',
+      [POOL_PROFILE],
+    );
+    expect(row?.org_id).toBe(ORG_KARDES);
+  });
+
+  it('atama KALKINCA satır bulunduğu şirkette kalıyor', async () => {
+    // Havuz ajansın; kaldırma satırı ev şirketine geri taşımamalı.
+    await svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, CLIENT_KARDES, META);
+    await svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, null, META);
+
+    const [row] = await h.q<{ org_id: string; client_id: string | null }>(
+      'SELECT org_id, client_id FROM ad_accounts WHERE id = $1',
+      [POOL_ACCOUNT],
+    );
+    expect(row?.client_id).toBeNull();
+    expect(row?.org_id).toBe(ORG_KARDES);
   });
 });

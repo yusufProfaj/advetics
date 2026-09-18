@@ -190,20 +190,40 @@ export async function createHarness(): Promise<Harness> {
         // `clientId` UNDEFINED ile NULL AYRI ŞEYLER: undefined "dokunma",
         // null "havuza geri koy". `if (data.clientId)` yazmak, atamayı
         // kaldırma yolunu sessizce çalışmaz hâle getirirdi.
-        if ('clientId' in data) {
-          await q('UPDATE ad_accounts SET client_id = $1 WHERE id = $2', [
-            data.clientId ?? null,
-            where.id,
-          ]);
+        /*
+         * SAHİPLİK ALANLARI TEK DEYİMDE YAZILIYOR — `client_id` ve `org_id` AYRI
+         * UPDATE'lerle değil.
+         *
+         * `(client_id, org_id)` kompozit yabancı anahtarı her DEYİMİN sonunda
+         * doğrulanıyor. Gerçek Prisma iki alanı TEK bir UPDATE ile yazıyor ve ara
+         * durum hiç oluşmuyor; taklit ikiye bölünce önce `client_id` kardeş şirketin
+         * workspace'ine, `org_id` hâlâ eski şirkete bakıyor ve kısıt PATLIYOR.
+         *
+         * Yani taklit, ÇALIŞAN kodu düşürüyordu: bir testin "gerçek veritabanı"
+         * olması, gerçek sorguyu kurduğu anlamına gelmiyor.
+         */
+        if ('clientId' in data || data.orgId !== undefined) {
+          const set: string[] = [];
+          const deger: unknown[] = [];
+          if ('clientId' in data) {
+            deger.push(data.clientId ?? null);
+            set.push(`client_id = $${deger.length}`);
+          }
+          if (data.orgId !== undefined) {
+            deger.push(data.orgId);
+            set.push(`org_id = $${deger.length}`);
+          }
+          deger.push(where.id);
+          await q(
+            `UPDATE ad_accounts SET ${set.join(', ')} WHERE id = $${deger.length}`,
+            deger,
+          );
         }
         if (data.syncEnabled !== undefined) {
           await q('UPDATE ad_accounts SET sync_enabled = $1 WHERE id = $2', [
             data.syncEnabled,
             where.id,
           ]);
-        }
-        if (data.orgId !== undefined) {
-          await q('UPDATE ad_accounts SET org_id = $1 WHERE id = $2', [data.orgId, where.id]);
         }
         return (await loadAdAccount(q, where.id)) ?? {};
       },
@@ -276,11 +296,26 @@ export async function createHarness(): Promise<Harness> {
 
         // `clientId` için `in` kontrolü: undefined "dokunma", null "havuza
         // geri koy" — ikisi ayrı komut.
-        if ('clientId' in data) {
-          await q('UPDATE social_profiles SET client_id = $1 WHERE id = $2', [
-            data.clientId ?? null,
-            where.id,
-          ]);
+        //
+        // SAHİPLİK ALANLARI TEK DEYİMDE: gerekçesi `adAccount.update`
+        // içindeki notta — kompozit yabancı anahtar her deyimin sonunda
+        // doğrulanıyor ve ayrı yazmak ÇALIŞAN kodu düşürüyordu.
+        if ('clientId' in data || data.orgId !== undefined) {
+          const set: string[] = [];
+          const deger: unknown[] = [];
+          if ('clientId' in data) {
+            deger.push(data.clientId ?? null);
+            set.push(`client_id = $${deger.length}`);
+          }
+          if (data.orgId !== undefined) {
+            deger.push(data.orgId);
+            set.push(`org_id = $${deger.length}`);
+          }
+          deger.push(where.id);
+          await q(
+            `UPDATE social_profiles SET ${set.join(', ')} WHERE id = $${deger.length}`,
+            deger,
+          );
         }
         if (data.syncEnabled !== undefined) {
           await q('UPDATE social_profiles SET sync_enabled = $1 WHERE id = $2', [
@@ -293,9 +328,6 @@ export async function createHarness(): Promise<Harness> {
             data.lastSyncAt,
             where.id,
           ]);
-        }
-        if (data.orgId !== undefined) {
-          await q('UPDATE social_profiles SET org_id = $1 WHERE id = $2', [data.orgId, where.id]);
         }
         // `in` kontrolü yine ŞART: null "eşleşmeyi kaldır" demek ve
         // `!== undefined` ile ayırt edilemezdi.

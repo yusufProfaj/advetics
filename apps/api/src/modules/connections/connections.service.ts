@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Platform as PrismaPlatform, type Prisma } from '@prisma/client';
+import { Platform as PrismaPlatform, Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import type {
   AdAccountSummary,
@@ -1617,6 +1617,39 @@ export class ConnectionsService {
    * eleniyor; `sync_enabled` açık kalsaydı kullanıcı hesabın hâlâ senkronize
    * olduğunu sanır, hiçbir hata görmez ve veri gelmezdi.
    */
+  /**
+   * HEDEF WORKSPACE'İN ŞİRKETİ — `ctx.orgId` DEĞİL.
+   *
+   * ═══ BU FONKSİYON BİR ÜRETİM HATASINDAN DOĞDU ═══
+   *
+   * Atama yolları `org_id` kolonuna `ctx.orgId` yazıyordu ve gerekçesi
+   * yazılıydı: "clientId yukarıda ctx.clientIds listesine karşı doğrulandı,
+   * yani hedef workspace AKTİF şirkette". O cümle "Tüm şirketler" modunda
+   * DOĞRU DEĞİL. `ctx.clientIds` orada bütün kardeş şirketlerin
+   * workspace'lerini taşıyor ama `ctx.orgId` EV ŞİRKETİ olarak kalıyor
+   * (`tenant-context.service.ts` bunu bilerek yapıyor: okuma kapsamı
+   * genişliyor, yazma tek şirkete çivili).
+   *
+   * Sonuç: üst hesap "Tüm şirketler" moduyla çalışırken başka bir şirketin
+   * workspace'ine hesap/sayfa/kanal atamak `(client_id, org_id)` kompozit
+   * yabancı anahtarını ihlal ediyor ve panelde YALNIZCA "İlişkili kayıt
+   * geçersiz" yazıyordu. Kullanıcının gördüğü şey, sebebi hiçbir yerde
+   * yazmayan bir ret.
+   *
+   * Doğrusu: kompozit anahtar `(client_id, org_id)` çiftinin `clients`ta var
+   * olmasını istiyor, yani `org_id` HEDEF MÜŞTERİDEN okunmalı.
+   */
+  private async musteriOrgId(
+    tx: Prisma.TransactionClient,
+    clientId: string,
+  ): Promise<string> {
+    const [row] = await tx.$queryRaw<Array<{ org_id: string }>>(Prisma.sql`
+      SELECT org_id::text AS org_id FROM clients WHERE id = ${clientId}::uuid
+    `);
+    if (!row) throw new NotFoundException('Workspace bulunamadı');
+    return row.org_id;
+  }
+
   async assignAdAccount(
     ctx: TenantContext,
     adAccountId: string,
@@ -1687,17 +1720,18 @@ export class ConnectionsService {
        * anahtar hatasıyla düşerdi — ve bu, kullanıcıya "bir şeyler ters
        * gitti" olarak görünen türden.
        *
-       * `ctx.orgId` KULLANILIYOR, hesabın eski org'u değil: `clientId`
-       * yukarıda `ctx.clientIds` listesine karşı doğrulandı, yani hedef
-       * workspace AKTİF şirkette. Atama kaldırılırken (`clientId === null`)
-       * satır bulunduğu şirkette kalıyor — havuza dönüyor ve havuz ajansın.
+       * ORG HEDEF MÜŞTERİDEN OKUNUYOR, `ctx.orgId`DEN DEĞİL. Burada bir süre
+       * "clientId doğrulandı, yani hedef workspace AKTİF şirkette" yazıyordu
+       * ve o cümle "Tüm şirketler" modunda yanlıştı — gerekçesi
+       * `musteriOrgId` üzerinde. Atama kaldırılırken (`clientId === null`)
+       * satır bulunduğu şirkette kalıyor: havuza dönüyor ve havuz ajansın.
        */
       const after = await tx.adAccount.update({
         where: { id: adAccountId },
         data: {
           clientId,
           syncEnabled: clientId !== null,
-          ...(clientId !== null ? { orgId: ctx.orgId } : {}),
+          ...(clientId !== null ? { orgId: await this.musteriOrgId(tx, clientId) } : {}),
         },
       });
 
@@ -1863,13 +1897,14 @@ export class ConnectionsService {
        * havuz üst hesap (MCC) altında şirketler arası ortak ve
        * `social_profiles_client_org_fkey` kompozit anahtarı
        * `(client_id, org_id)` çiftinin `clients`ta var olmasını istiyor.
+       * Değer HEDEF MÜŞTERİDEN geliyor; sebebi `musteriOrgId` üzerinde.
        */
       const after = await tx.socialProfile.update({
         where: { id: socialProfileId },
         data: {
           clientId,
           syncEnabled: clientId !== null,
-          ...(clientId !== null ? { orgId: ctx.orgId } : {}),
+          ...(clientId !== null ? { orgId: await this.musteriOrgId(tx, clientId) } : {}),
         },
       });
 

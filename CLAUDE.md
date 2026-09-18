@@ -755,6 +755,34 @@ buna göre veriliyor:
   taşımadan en çok o etkileniyor: ay ortasında hesap gidince eski müşterinin
   harcaması düşüyor, bütçe bekçisi olmayan bir boşluk görüyor ve kuralların
   bütçe ARTIRMASINA izin veriyor. Ayrı sorulup ayrı söyleniyor.
+- **"TÜM ŞİRKETLER" MODUNDA `ctx.orgId` EV ŞİRKETİ KALIYOR — YAZMA YOLLARI
+  BUNU BİLMEK ZORUNDA.** `tenant-context.service.ts` okuma kapsamını
+  `app.tum_sirketler()` ile genişletiyor ama `ctx.orgId`'yi bilerek ev
+  şirketinde bırakıyor. Atama yolları `org_id` kolonuna `ctx.orgId` yazıyordu
+  ve gerekçe olarak *"clientId doğrulandı, yani hedef workspace AKTİF
+  şirkette"* yazılıydı; o cümle bu modda YANLIŞ — `ctx.clientIds` bütün
+  kardeş şirketlerin workspace'lerini taşıyor. Sonuç `(client_id, org_id)`
+  kompozit yabancı anahtarının ihlali ve panelde TEK BİR CÜMLE: "İlişkili
+  kayıt geçersiz". Kompozit anahtarın istediği şey zaten çiftin `clients`ta
+  VAR OLMASI, yani `org_id` HEDEF MÜŞTERİDEN okunmalı (`musteriOrgId`).
+  Aynı kural türev kayıtlar için de geçerli: abonelik ve kart satırları
+  profilin org'undan besleniyor — `ctx`ten yazmak yabancı anahtarı geçer ama
+  RLS o satırları workspace'in kullanıcısına HİÇ göstermez.
+- **`pglite-harness` TAKLİTLERİ ALANLARI AYRI DEYİMLERE BÖLMEMELİ.** Kompozit
+  yabancı anahtar HER DEYİMİN sonunda doğrulanıyor. Gerçek Prisma `client_id`
+  ve `org_id`'yi tek UPDATE ile yazıyor; taklit ikiye bölünce ara durum
+  oluşuyor ve kısıt patlıyor — yani taklit ÇALIŞAN kodu düşürüyordu. Bir
+  testin "gerçek veritabanı" kullanması, gerçek sorguyu kurduğu anlamına
+  gelmiyor.
+- **TEK SEFERLİK BİR DAMGA, "YAPACAK İŞ YOKKEN" BASILIRSA FIRSAT SESSİZCE
+  HARCANIYOR.** Akıllı Boost ilk çekimi `seed_at`i KOŞULSUZ basıyordu:
+  deploy'dan sonraki ilk süpürme, gönderileri henüz çekilmemiş bir sayfada
+  koştu, sıfır kart üretti ve damgayı bastı. Gönderiler ertesi saat geldi ama
+  ön ayar artık "tohumlandı" sayıldığı için son 10 gönderi BİR DAHA HİÇ
+  çekilmedi ve hiçbir yerde tek kelime yazmadı. Damganın koşulu "kaç satır
+  yazıldı" DEĞİL "yapılacak iş gerçekten var mıydı" olmalı ve kontrol AYNI
+  DEYİMDE durmalı. Üretimde zaten harcanmış damgaları geri almak ayrı bir
+  migration istedi.
 - **YOUTUBE KANALI GOOGLE BAĞLANTISININ ALTINDA YAŞIYOR — "bu bağlantının
   sosyal profilleri" SORGUSU ONU DA GETİRİYOR.** `social_profiles` üç tür
   taşıyor ve `youtube_channel` kendi OAuth'u olmadığı için ajansın Google

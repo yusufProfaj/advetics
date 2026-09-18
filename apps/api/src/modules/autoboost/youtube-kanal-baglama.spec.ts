@@ -206,3 +206,51 @@ describe('kanal workspace’ten çıkarılıyor', () => {
     await expect(svc.kanaliCoz(CTX, PROFIL)).resolves.toBeUndefined();
   });
 });
+
+describe('şirketler arası atama', () => {
+  /*
+   * "Tüm şirketler" modunda `ctx.orgId` EV ŞİRKETİ olarak kalıyor ama kanal,
+   * atandığı workspace'in şirketine taşınıyor. Abonelik ve kartlar `ctx`ten
+   * okunsaydı yabancı anahtar TUTARDI (ikisi de tek başına geçerli) ama RLS
+   * o satırları workspace'in kullanıcısına HİÇ göstermezdi: kart gelir,
+   * kimse göremez — bu projenin en sevmediği hata türü.
+   */
+  const ORG_KARDES = 'cccccccc-3333-3333-3333-cccccccccccc';
+  const CLIENT_KARDES = 'dddddddd-3333-3333-3333-dddddddddddd';
+
+  it('KRİTİK: abonelik ve kartlar PROFİLİN şirketine yazılıyor', async () => {
+    await h.q(
+      `INSERT INTO organizations (id, name, slug, updated_at)
+       VALUES ($1, 'Kardeş', 'kardes', now())`,
+      [ORG_KARDES],
+    );
+    await h.q(
+      `INSERT INTO clients (id, org_id, name, slug, updated_at)
+       VALUES ($1, $2, 'Kardeş Workspace', 'kardes-ws', now())`,
+      [CLIENT_KARDES, ORG_KARDES],
+    );
+    /*
+     * ATAMA BU İKİSİNİ BİRLİKTE YAZIYOR (`assignSocialProfile` →
+     * `musteriOrgId`); burada o sonuç kurulu kabul ediliyor. Tek başına
+     * `org_id` yazmak kompozit anahtarı ihlal ediyor — kuralın ta kendisi.
+     */
+    await h.q(`UPDATE social_profiles SET org_id = $1, client_id = $2 WHERE id = $3`, [
+      ORG_KARDES,
+      CLIENT_KARDES,
+      PROFIL,
+    ]);
+
+    await svc.kanaliBagla(CTX, PROFIL, CLIENT_KARDES);
+
+    const [abonelik] = await h.q<{ org_id: string }>(
+      `SELECT org_id FROM auto_boost_subscriptions WHERE social_profile_id = $1`,
+      [PROFIL],
+    );
+    const [kart] = await h.q<{ org_id: string }>(
+      `SELECT org_id FROM auto_boost_queue_items WHERE social_profile_id = $1 LIMIT 1`,
+      [PROFIL],
+    );
+    expect(abonelik?.org_id).toBe(ORG_KARDES);
+    expect(kart?.org_id).toBe(ORG_KARDES);
+  });
+});

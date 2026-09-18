@@ -175,13 +175,31 @@ export class AutoBoostQueueService {
     `);
 
     /*
-     * DAMGA YAZMADAN ÖNCE DEĞİL, SONRA. Tohumlama başarısız olursa damga da
-     * konmuyor ve bir sonraki süpürme yeniden deniyor; önce damgalamak,
-     * bir kerelik fırsatı sessizce harcamak olurdu.
+     * ═══ DAMGA YALNIZCA ÇEKECEK GÖNDERİ VARSA ═══
+     *
+     * İlk yazımda damga KOŞULSUZDU ve üretimde tam olarak şu oldu: deploy'dan
+     * sonraki ilk süpürme, gönderileri HENÜZ ÇEKİLMEMİŞ bir sayfada koştu,
+     * sıfır kart üretti ve damgayı bastı. Tek seferlik fırsat harcandı;
+     * gönderiler ertesi saat geldi ama ön ayar artık "tohumlandı" sayıldığı
+     * için son 10 gönderi BİR DAHA HİÇ çekilmedi. Belirti kullanıcının
+     * cümlesiyle: "neden son 10 gönderiyi çekmedin bütün hesaplarda".
+     *
+     * Koşul "kaç satır yazıldı" DEĞİL "sayfanın hiç gönderisi var mı":
+     * gönderiler duruyor ama onu ya kart hâline getirdik ya da zaten
+     * kuyruktaydı — ikisinde de tohumlama GERÇEKTEN oldu ve damga hak
+     * edildi. Sıfır satır ise yalnızca "çekecek bir şey yoktu" demek.
+     *
+     * Kontrol AYNI DEYİMDE: ayrı bir SELECT ile bakmak, iki ifade arasında
+     * gönderi gelirse yanlış karar verirdi.
      */
     if (ilkCekim) {
       await this.db.$executeRaw(Prisma.sql`
-        UPDATE auto_boost_presets SET seed_at = now() WHERE id = ${preset.id}::uuid
+        UPDATE auto_boost_presets SET seed_at = now()
+        WHERE id = ${preset.id}::uuid
+          AND EXISTS (
+            SELECT 1 FROM organic_posts
+            WHERE social_profile_id = ${socialProfileId}::uuid
+          )
       `);
     }
 
