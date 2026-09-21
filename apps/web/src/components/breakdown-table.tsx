@@ -1,4 +1,8 @@
+'use client';
+
+import { Fragment, useState } from 'react';
 import { KaydirmaIpucu } from '@/components/kaydirma-ipucu';
+import { ReklamOnizleme } from '@/components/reklam-onizleme';
 import Link from 'next/link';
 import { platformKanali, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { baglanti } from '@/lib/baglanti';
@@ -95,6 +99,7 @@ export function BreakdownTable({
   currency,
   siralama,
   limit,
+  range,
 }: {
   rows: MetricsBreakdownRow[];
   level: MetricLevel;
@@ -104,6 +109,14 @@ export function BreakdownTable({
   siralama: Siralama;
   /** Sunucudan istenen satır sayısı — kesme ekranda YAZILABİLSİN diye. */
   limit: number;
+  /**
+   * Açılan reklamın önizlemesi bu aralıkta çekiliyor.
+   *
+   * `tasinan` içindeki `aralik`/`baslangic`/`bitis` ÖN AYAR KODLARI, çözülmüş
+   * tarihler değil; önizleme ucu gerçek tarihleri istiyor. Bileşende yeniden
+   * çözmek, aynı aralığı iki yerde hesaplamak ve bir gün ayrışmak olurdu.
+   */
+  range: { from: string; to: string };
 }) {
   // ÖLÜ KOLONU GÖSTERMİYORUZ.
   //
@@ -114,6 +127,23 @@ export function BreakdownTable({
   // Tek satırda bile gelir varsa kolon kalıyor — o zaman karşılaştırma anlamlı.
   const showRoas = rows.some((r) => r.roas !== null);
   const altBasamak = ALT_BASAMAK[level];
+
+  /**
+   * ═══ TEK BİR ÖNİZLEME AÇIK ═══
+   *
+   * Kullanıcının isteği birebir: "farklı reklamın önizlemesini görmek
+   * istediğimde diğerinin kapanıp tıkladığım reklamın açılması gerekiyor".
+   * Tek bir kimlik tutmak bunu kendiliğinden sağlıyor — açık kümesi tutup
+   * "yalnızca biri" kuralını elle uygulamak, kuralın bir dalda unutulduğu
+   * yer olurdu.
+   *
+   * SEÇİM URL'DE DEĞİL. Bu sayfada her seçim adreste duruyor ve sebebi iyi
+   * (paylaşılabilir, JS'siz çalışıyor); önizleme ise İSTİSNA: sayfa
+   * `force-dynamic` ve adres değişimi özet, grafik ve kırılım sorgularının
+   * TAMAMINI yeniden koşturuyordu. Bir kutuyu açıp kapatmanın bedeli
+   * olamaz.
+   */
+  const [acikReklam, setAcikReklam] = useState<string | null>(null);
 
   return (
     <section className="rounded-xl border border-line bg-surface">
@@ -211,7 +241,8 @@ export function BreakdownTable({
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={`${r.entityId}-${r.currency}`} className="border-b border-line/60 last:border-0">
+                <Fragment key={`${r.entityId}-${r.currency}`}>
+                <tr className="border-b border-line/60 last:border-0">
                   <td className="max-w-[260px] px-4 py-2.5">
                     <div className="flex items-center gap-2">
                       {/*
@@ -228,6 +259,37 @@ export function BreakdownTable({
                         >
                           {r.name}
                         </Link>
+                      ) : level === 'ad' ? (
+                        /*
+                          REKLAM SEVİYESİNDE AD BİR AÇMA DÜĞMESİ.
+                          Hiyerarşinin son basamağı ve altında gidilecek bir
+                          liste yok; gidilecek şey reklamın KENDİSİ — nasıl
+                          göründüğü. Bağlantı yapmak, hiçbir yere gitmeyen
+                          bir bağlantı olurdu.
+                        */
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAcikReklam((a) => (a === r.entityId ? null : r.entityId))
+                          }
+                          aria-expanded={acikReklam === r.entityId}
+                          title={`${r.name} — önizlemeyi ${
+                            acikReklam === r.entityId ? 'kapat' : 'aç'
+                          }`}
+                          className="flex min-w-0 items-center gap-1 text-left font-medium text-ink transition hover:text-brand-strong"
+                        >
+                          {/* OK YÖNÜ DURUMU SÖYLÜYOR: açılabilir olduğu
+                              tıklamadan ÖNCE anlaşılmalı. */}
+                          <span
+                            aria-hidden="true"
+                            className={`shrink-0 text-[10px] text-ink-muted transition-transform ${
+                              acikReklam === r.entityId ? 'rotate-90' : ''
+                            }`}
+                          >
+                            ▶
+                          </span>
+                          <span className="truncate">{r.name}</span>
+                        </button>
                       ) : (
                         <span className="truncate font-medium text-ink" title={r.name}>
                           {r.name}
@@ -290,6 +352,25 @@ export function BreakdownTable({
                     </td>
                   )}
                 </tr>
+                {/*
+                  ÖNİZLEME KENDİ SATIRINDA, `colSpan` ile.
+                  Hücrenin içine koymak tablo düzenini bozuyor: kart sütun
+                  genişliğine sıkışıp okunmaz hâle geliyor ve komşu
+                  hücrelerin yüksekliğini şişiriyor.
+                */}
+                {acikReklam === r.entityId && (
+                  <tr className="border-b border-line/60 bg-surface-sunken/40">
+                    <td colSpan={showRoas ? 9 : 8} className="p-0">
+                      <ReklamOnizleme
+                        adId={r.entityId}
+                        from={range.from}
+                        to={range.to}
+                        currency={currency ?? r.currency}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

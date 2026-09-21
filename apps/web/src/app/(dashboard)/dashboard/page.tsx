@@ -497,6 +497,10 @@ export default async function DashboardPage({
               currency={summary.currency}
               siralama={siralama}
               limit={KIRILIM_LIMITI}
+              /* ÇÖZÜLMÜŞ TARİHLER: `tasinan` ön ayar kodu taşıyor ("son30"),
+                 önizleme ucu gerçek tarih istiyor. İkinci kez çözmek, aynı
+                 aralığı iki yerde hesaplamak olurdu. */
+              range={{ from: range.from, to: range.to }}
             />
           )}
 

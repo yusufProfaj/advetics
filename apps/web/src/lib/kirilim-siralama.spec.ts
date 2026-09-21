@@ -247,11 +247,28 @@ describe('kırılım tablosu — mecra sütunu', () => {
     expect(KAYNAK).toContain('Harcamaya göre ilk {limit} satır');
   });
 
-  it('başlıklar LİNK — tablo sunucu bileşeni kalıyor', () => {
-    // Buton yazmak seçimi URL'den alır, bağlantıyı paylaşılamaz yapar ve
-    // tabloyu istemci bileşenine çevirirdi.
-    expect(KAYNAK).not.toContain("'use client'");
+  it('KRİTİK: SÜZGEÇLER LİNK — istemci state\'ine kaçmıyor', () => {
+    /*
+     * Sıralama ve seviye seçimi URL'de duruyor: paylaşılabiliyor, yeni
+     * sekmede açılıyor ve sunucuda render ediliyor. Buton yazmak üçünü de
+     * kaybettirirdi.
+     *
+     * İDDİA BİR SÜRE "`use client` HİÇ YOK" DİYORDU ve bu, kuralı değil
+     * onun o günkü SONUCUNU kilitliyordu. Reklam önizlemesi (hiyerarşinin
+     * son basamağı) gerçek istemci state'i istiyor: açılıp kapanan bir kutu
+     * için adresi değiştirmek, `force-dynamic` sayfada özet + grafik +
+     * kırılım sorgularının TAMAMINI yeniden koşturuyordu.
+     *
+     * Korunması gereken kural şu: süzgeçler bağlantı KALSIN ve istemci
+     * state'i TEK BİR şey için var olsun. İkincisi sayıyla kilitleniyor —
+     * ikinci bir `useState` eklendiği gün bu test soruyu yeniden sordurur.
+     */
     expect(KAYNAK).toContain("baglanti('/dashboard', tasinan, { sirala: anahtar })");
+    expect(KAYNAK).toContain("{ seviye: tab.key, ...tab.dusen }");
+    // İMPORT SAYILMIYOR: yalnızca GERÇEK state kurulumları.
+    const state = (KAYNAK.match(/\]\s*=\s*useState/g) ?? []).length;
+    expect(state, 'tabloda beklenenden fazla istemci state\'i var').toBe(1);
+    expect(KAYNAK).toContain('const [acikReklam, setAcikReklam]');
   });
 });
 
