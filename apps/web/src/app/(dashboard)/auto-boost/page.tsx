@@ -166,7 +166,7 @@ export default async function AutoBoostPage({
         bekliyor" diyordu: bir gönderinin neden birinde olup diğerinde
         olmadığı hiçbir yerde yazmıyordu. Başlıklar artık KAYNAĞI söylüyor.
       */}
-      <BildirimHavuzu clientId={clientId} />
+      <BildirimHavuzu clientId={clientId} canWrite={canWrite} />
 
       {boosts === null ? (
         <Notice tone="error">

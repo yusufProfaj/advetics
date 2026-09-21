@@ -573,3 +573,87 @@ describe('ilk çekim', () => {
     expect(row?.seed_at).not.toBeNull();
   });
 });
+
+describe('geçmiş çekimi — kullanıcının bastığı düğme', () => {
+  /*
+   * Otomatik tohum TEK SEFERLİK ve koşullardan biri o an yerinde değilse
+   * (gönderi henüz çekilmemiş, ön ayar sonradan açılmış, sayfa sonradan
+   * atanmış) fırsat harcanıyordu. Üretimde bir workspace'te YouTube kartları
+   * geldi, Instagram kartları gelmedi ve kullanıcının elinde hiçbir düğme
+   * yoktu.
+   */
+  it('KRİTİK: TOHUMLANMIŞ ön ayarda bile geçmiş gönderiler karta dönüyor', async () => {
+    await preset({ createdAt: '2026-09-01T00:00:00Z' });
+    await post('eski-1', '2026-08-01T10:00:00Z');
+    await post('eski-2', '2026-08-02T10:00:00Z');
+
+    const sonuc = await svc.enqueueForProfile(PROFIL, { gecmis: true });
+
+    expect(sonuc.created).toBe(2);
+  });
+
+  it('KRİTİK: TOHUMLANMIŞ ÖN AYARIN DAMGASINI DEĞİŞTİRMİYOR', async () => {
+    /*
+     * Düğme bir kurulum adımı değil, kullanıcının istediği bir iş: istediği
+     * kadar basabilmeli ve her basış tek seferlik tohumun kaydını
+     * oynatmamalı. (Ön ayar HENÜZ tohumlanmamışsa damga yine basılıyor ve
+     * doğrusu bu: son gönderiler gerçekten çekildi, tohumun yapacağı iş
+     * kalmadı.)
+     */
+    await preset({ createdAt: '2026-09-01T00:00:00Z' });
+    await post('eski-1', '2026-08-01T10:00:00Z');
+    const [once] = await h.q<{ seed_at: Date }>(`SELECT seed_at FROM auto_boost_presets`);
+
+    await svc.enqueueForProfile(PROFIL, { gecmis: true });
+
+    const [sonra] = await h.q<{ seed_at: Date }>(`SELECT seed_at FROM auto_boost_presets`);
+    expect(sonra?.seed_at).toEqual(once?.seed_at);
+  });
+
+  it('son 10 ile sınırlı ve EN YENİLER geliyor', async () => {
+    await preset({ createdAt: '2026-09-01T00:00:00Z' });
+    for (let i = 0; i < 14; i++) {
+      await post(`p-${String(i).padStart(2, '0')}`, `2026-08-${String(i + 1).padStart(2, '0')}T10:00:00Z`);
+    }
+
+    const sonuc = await svc.enqueueForProfile(PROFIL, { gecmis: true });
+
+    expect(sonuc.created).toBe(10);
+    const kuyruktakiler = (await kuyruk()).map((k) => k.external_id);
+    expect(kuyruktakiler).toContain('p-13');
+    expect(kuyruktakiler).not.toContain('p-00');
+  });
+
+  it('KRİTİK: SIFIR KARTIN SEBEBİ YAZILI — arşiv boş', async () => {
+    /*
+     * Kullanıcı düğmeye bastı ve hiçbir şey olmadı. "0 yeni kart" demek onu
+     * sebebi kendi kurulumunda aramaya gönderir; iki hâl var ve ikisinin
+     * yapılacak işi farklı.
+     */
+    await preset({ createdAt: '2026-09-01T00:00:00Z' });
+
+    const sonuc = await svc.enqueueForProfile(PROFIL, { gecmis: true });
+
+    expect(sonuc.created).toBe(0);
+    expect(sonuc.note).toContain('arşivde gönderi yok');
+  });
+
+  it('KRİTİK: SIFIR KARTIN SEBEBİ YAZILI — hepsi zaten listede', async () => {
+    await preset({ createdAt: '2026-09-01T00:00:00Z' });
+    await post('eski-1', '2026-08-01T10:00:00Z');
+    await svc.enqueueForProfile(PROFIL, { gecmis: true });
+
+    const sonuc = await svc.enqueueForProfile(PROFIL, { gecmis: true });
+
+    expect(sonuc.created).toBe(0);
+    expect(sonuc.note).toContain('zaten listede');
+  });
+
+  it('parametresiz çağrı ESKİ KURALDA kalıyor', async () => {
+    // Süpürme yolu değişmemeli: ön ayardan önceki gönderiler kart olmaz.
+    await preset({ createdAt: '2026-09-01T00:00:00Z' });
+    await post('eski-1', '2026-08-01T10:00:00Z');
+
+    expect((await svc.enqueueForProfile(PROFIL)).created).toBe(0);
+  });
+});

@@ -378,3 +378,48 @@ describe('İKİ MECRA TEK EKRANDA', () => {
     expect(HAVUZ).toContain('Bu mecrada kart yok');
   });
 });
+
+describe('GEÇMİŞ İÇERİK DÜĞMESİ', () => {
+  /*
+   * Kart üretiminin iki otomatik yolu da TEK SEFERLİKTİ (ön ayarın tohum
+   * damgası, kanalın atanma anı). Koşullardan biri o an yerinde değilse
+   * fırsat harcanıyor ve kullanıcının elinde hiçbir düğme kalmıyordu —
+   * üretimde bir workspace'te YouTube kartları geldi, Instagram kartları
+   * gelmedi.
+   */
+  it('KRİTİK: düğme var ve kendi ucunu çağırıyor', () => {
+    expect(HAVUZ).toContain("'/autoboost/gecmis-icerik'");
+    expect(HAVUZ).toContain('Geçmiş içerikleri getir');
+  });
+
+  it('KRİTİK: YETKİYE BAĞLI — okuyan kullanıcıda çizilmiyor', () => {
+    // Kart üretmek `boost.write` işi; okuma yetkisi olan kullanıcıya
+    // çalışmayacak bir düğme göstermek "bozuk" olarak okunur.
+    expect(HAVUZ).toContain('{canWrite && (');
+    expect(kod('app/(dashboard)/auto-boost/page.tsx')).toContain('canWrite={canWrite}');
+  });
+
+  it('KRİTİK: SONUÇ PROFİL BAZINDA YAZILIYOR', () => {
+    /*
+     * Tek bir "0 kart" cümlesi, düğmenin bozuk olduğunu düşündürüyor. Sunucu
+     * her profil için sebebini söylüyor (arşiv boş, ön ayar yok, kota
+     * doldu) ve ekran onu OLDUĞU GİBİ taşıyor.
+     */
+    expect(HAVUZ).toContain('gecmisNotlari');
+    expect(HAVUZ).toContain('r.notlar');
+  });
+
+  it('KRİTİK: çekimden sonra liste YENİDEN ÇEKİLİYOR', () => {
+    // `router.refresh()` istemci state'ine dokunmuyor; kartlar bu bileşenin
+    // kendi state'inde duruyor ve yenilenmezse düğme hiçbir şey yapmamış
+    // gibi görünürdü.
+    /*
+     * İDDİA TEK SATIRA ÇAPALI, "yakınında geçiyor"a DEĞİL.
+     *
+     * İlk yazımda dilim `gecmisiCek`ten dosya SONUNA kadar uzanıyordu ve
+     * çağrıyı silmek testi düşürmüyordu: aynı ad `useEffect` içinde de
+     * geçiyor. Bu depoda üçüncü kez düşülen tuzak.
+     */
+    expect(HAVUZ).toContain('setGecmisNotlari(r.notlar);\n      kuyruguYukle();');
+  });
+});

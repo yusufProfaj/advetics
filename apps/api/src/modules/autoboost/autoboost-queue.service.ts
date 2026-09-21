@@ -33,7 +33,7 @@ import { yeniIcerikMailiOlustur, type YeniIcerikKarti } from './yeni-icerik-mail
  * tıkla reddediliyor. Sayının kendisi zararsız ama SESSİZ olması zararlı
  * olurdu: iş notunda "(ilk çekim)" olarak yazılıyor.
  */
-const ILK_CEKIM_ADEDI = 10;
+export const ILK_CEKIM_ADEDI = 10;
 
 @Injectable()
 export class AutoBoostQueueService {
@@ -73,7 +73,21 @@ export class AutoBoostQueueService {
    *    `ON CONFLICT DO NOTHING` + tekil indeks. Sorguyla ayıklamak, iki
    *    süpürme aynı anda koştuğunda yarışı kaybederdi.
    */
-  async enqueueForProfile(socialProfileId: string): Promise<{
+  async enqueueForProfile(
+    socialProfileId: string,
+    opts: {
+      /**
+       * GEÇMİŞ ÇEKİMİ — kullanıcı düğmeye bastı.
+       *
+       * Tarih kuralını atlayıp arşivdeki son gönderileri karta çeviriyor.
+       * Tek seferlik tohumdan FARKI damgaya dokunmaması: bu bir kurulum
+       * adımı değil, kullanıcının istediği bir iş ve istediği kadar
+       * tekrarlanabilmeli. Mükerrer engeli kısıtta olduğu için ikinci basış
+       * zaten hiçbir şey üretmiyor.
+       */
+      gecmis?: boolean;
+    } = {},
+  ): Promise<{
     created: number;
     note: string;
   }> {
@@ -148,10 +162,19 @@ export class AutoBoostQueueService {
      * düzeliyor; ayrı bir script gerekmiyor.
      */
     const ilkCekim = preset.seedAt === null;
-    const tarihKosulu = ilkCekim
+    const gecmisCekimi = opts.gecmis === true;
+    /*
+     * İKİ YOL AYNI SORGUYU KURUYOR: tek seferlik tohum ve kullanıcının
+     * bastığı geçmiş çekimi. İkisini ayrı sorgularla yazmak, birinde
+     * sıralamayı ya da sınırı unutmanın kestirme yoluydu — biri son 10
+     * gönderiyi getirirken diğeri EN ESKİ 10'u getirirdi ve fark yalnızca
+     * kullanıcının ekranında görünürdü.
+     */
+    const kuralsiz = ilkCekim || gecmisCekimi;
+    const tarihKosulu = kuralsiz
       ? Prisma.empty
       : Prisma.sql`AND p.published_at > ${preset.createdAt}`;
-    const sinir = ilkCekim ? Prisma.sql`LIMIT ${ILK_CEKIM_ADEDI}` : Prisma.empty;
+    const sinir = kuralsiz ? Prisma.sql`LIMIT ${ILK_CEKIM_ADEDI}` : Prisma.empty;
 
     const yeniKartlar = await this.db.$queryRaw<
       Array<{ title: string | null; permalink: string | null }>
@@ -217,8 +240,8 @@ export class AutoBoostQueueService {
        * maili bir daha okumamasını öğretirdi — ve bir sonraki mail GERÇEK
        * bir yeni gönderi olacak.
        */
-      const mailNotu = ilkCekim
-        ? 'kurulum çekimi, mail gönderilmedi'
+      const mailNotu = kuralsiz
+        ? 'geçmiş çekimi, mail gönderilmedi'
         : await this.bildir(
             profil.org_id,
             profil.client_id,
@@ -230,9 +253,31 @@ export class AutoBoostQueueService {
           );
       return {
         created,
-        note: `${profil.name}: ${created} ${ilkCekim ? 'kart (ilk çekim)' : 'yeni kart'} · ${mailNotu}`,
+        note: `${profil.name}: ${created} ${kuralsiz ? 'kart (geçmiş)' : 'yeni kart'} · ${mailNotu}`,
       };
     }
+    /*
+     * SIFIR KART GEÇMİŞ ÇEKİMİNDE BİR CEVAP DEĞİL.
+     *
+     * Kullanıcı düğmeye bastı ve hiçbir şey olmadı; "0 yeni kart" demek onu
+     * sebebi kendi kurulumunda aramaya gönderiyor. İki hâl var ve ikisinin
+     * yapılacak işi farklı: arşiv boş (gönderi hiç çekilmemiş, beklemeli) ya
+     * da gönderiler zaten kartta (yapılacak bir şey yok).
+     */
+    if (gecmisCekimi) {
+      const [sayim] = await this.db.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+        SELECT count(*)::int AS n FROM organic_posts
+        WHERE social_profile_id = ${socialProfileId}::uuid
+      `);
+      return {
+        created,
+        note:
+          (sayim?.n ?? 0) === 0
+            ? `${profil.name}: arşivde gönderi yok, gönderiler çekiliyor`
+            : `${profil.name}: geçmiş gönderiler zaten listede`,
+      };
+    }
+
     return { created, note: `${profil.name}: ${created} yeni kart` };
   }
 

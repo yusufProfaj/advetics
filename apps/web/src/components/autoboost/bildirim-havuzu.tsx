@@ -63,7 +63,13 @@ const GORSEL_BICIMI: Record<AutoBoostPlatform, { oturtma: string; bulanikZemin: 
  * sebebi kendi kurulumunda aramaya iter ve bu ekranda daha önce tam olarak o
  * oldu.
  */
-export function BildirimHavuzu({ clientId }: { clientId: string }) {
+export function BildirimHavuzu({
+  clientId,
+  canWrite,
+}: {
+  clientId: string;
+  canWrite: boolean;
+}) {
   const router = useRouter();
   const [liste, setListe] = useState<AutoBoostQueueList | null>(null);
   const [saglik, setSaglik] = useState<AutoBoostSubscriptionHealth[]>([]);
@@ -82,6 +88,9 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
    * okunamaz hâle gelirdi.
    */
   const [suzgec, setSuzgec] = useState<AutoBoostPlatform | 'hepsi'>('hepsi');
+  /** Geçmiş çekiminin profil bazlı sonucu — boş kalırsa düğme sessiz görünür. */
+  const [gecmisNotlari, setGecmisNotlari] = useState<string[] | null>(null);
+  const [gecmisBekliyor, setGecmisBekliyor] = useState(false);
 
   /*
    * KUYRUĞU YENİDEN ÇEKEN FONKSİYON — `router.refresh()` BUNU YAPMIYOR.
@@ -115,6 +124,35 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
         ),
       );
   }, [clientId]);
+
+  /**
+   * GEÇMİŞ İÇERİĞİ ÇEK — tek seferlik otomatik tohumun elle karşılığı.
+   *
+   * Otomatik yolların ikisi de tek seferlikti ve koşullardan biri o an
+   * yerinde değilse fırsat harcanıyordu; üretimde bir workspace'te YouTube
+   * kartları geldi, Instagram kartları gelmedi ve kullanıcının yapabileceği
+   * bir şey yoktu.
+   */
+  async function gecmisiCek(): Promise<void> {
+    setGecmisBekliyor(true);
+    setGecmisNotlari(null);
+    try {
+      const r = await apiFetch<{ kartlar: number; notlar: string[] }>(
+        '/autoboost/gecmis-icerik',
+        { method: 'POST', body: JSON.stringify({ clientId }) },
+      );
+      // SONUÇ PROFİL BAZINDA YAZILIYOR: "0 kart" tek başına, düğmenin bozuk
+      // olduğunu düşündürüyor. Sunucu her profil için sebebini söylüyor.
+      setGecmisNotlari(r.notlar);
+      kuyruguYukle();
+    } catch (err) {
+      setGecmisNotlari([
+        err instanceof ApiRequestError ? err.message : 'Geçmiş içerik çekilemedi.',
+      ]);
+    } finally {
+      setGecmisBekliyor(false);
+    }
+  }
 
   useEffect(() => {
     kuyruguYukle();
@@ -182,15 +220,38 @@ export function BildirimHavuzu({ clientId }: { clientId: string }) {
           SAYAÇ KOŞULSUZ — "sessiz kesme yok". Kaç kayıt gösterildiği ve
           toplamın kaç olduğu her zaman yazılı.
         */}
-        <p className="text-[11px] text-ink-muted">
-          {/* SÜZGEÇ AÇIKKEN KAÇ KARTIN GİZLENDİĞİ DE YAZIYOR: süzgeci
-              unutan kullanıcı eksik listeyi "kart gelmemiş" diye okur. */}
-          {gosterilen.length} kart gösteriliyor
-          {gosterilen.length < liste.items.length &&
-            ` · ${liste.items.length - gosterilen.length} kart süzgeçte`}
-          {liste.total > liste.items.length && ` · toplam ${liste.total}, en yeniler`}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-[11px] text-ink-muted">
+            {/* SÜZGEÇ AÇIKKEN KAÇ KARTIN GİZLENDİĞİ DE YAZIYOR: süzgeci
+                unutan kullanıcı eksik listeyi "kart gelmemiş" diye okur. */}
+            {gosterilen.length} kart gösteriliyor
+            {gosterilen.length < liste.items.length &&
+              ` · ${liste.items.length - gosterilen.length} kart süzgeçte`}
+            {liste.total > liste.items.length && ` · toplam ${liste.total}, en yeniler`}
+          </p>
+          {canWrite && (
+            <button
+              type="button"
+              onClick={() => void gecmisiCek()}
+              disabled={gecmisBekliyor}
+              title="Sayfanın ve kanalın son gönderilerini onay kartına çevirir"
+              className="rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-40"
+            >
+              {gecmisBekliyor ? 'Getiriliyor…' : 'Geçmiş içerikleri getir'}
+            </button>
+          )}
+        </div>
       </header>
+
+      {gecmisNotlari && (
+        <div className="rounded-xl border border-line bg-surface-sunken px-3 py-2">
+          <ul className="space-y-0.5 text-[11px] text-ink-muted">
+            {gecmisNotlari.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {mecralar.length > 1 && (
         <div className="flex flex-wrap gap-1.5">

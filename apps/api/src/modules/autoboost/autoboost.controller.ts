@@ -26,6 +26,7 @@ import {
 import { AutoBoostPresetService } from './autoboost-preset.service';
 import { AutoBoostLaunchService } from './autoboost-launch.service';
 import { AutoBoostReadService } from './autoboost-read.service';
+import { GecmisIcerikService } from './gecmis-icerik.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
 import { ConnectionsService } from '../connections/connections.service';
 import type { AuthedRequest } from '../../common/types/request';
@@ -47,6 +48,8 @@ const presetLaunchSchema = z.object({ clientId: z.string().uuid() }).strict();
  * `@Public()`'in yanlışlıkla sınıf seviyesine kayması ve BÜTÜN uçların
  * açılması riskini taşırdı.
  */
+
+const gecmisIcerikSchema = z.object({ clientId: z.string().uuid() });
 
 const kanalAtaSchema = z.object({
   /** NULL = workspace'ten çıkar, havuza geri koy. */
@@ -79,6 +82,7 @@ export class AutoBoostController {
     private readonly read: AutoBoostReadService,
     private readonly launch: AutoBoostLaunchService,
     private readonly presets: AutoBoostPresetService,
+    private readonly gecmis: GecmisIcerikService,
     /**
      * SAHİPLİK DEĞİŞİMİ MEVCUT KAPIDAN GEÇİYOR.
      *
@@ -188,6 +192,28 @@ export class AutoBoostController {
     @Query('clientId', ParseUUIDPipe) clientId: string,
   ): Promise<AutoBoostQueueList> {
     return this.read.listQueue(ctx, clientId);
+  }
+
+  /**
+   * GEÇMİŞ İÇERİĞİ KUYRUĞA ÇEKER — kullanıcının bastığı düğme.
+   *
+   * ═══ NEDEN BİR UÇ NOKTA GEREKTİ ═══
+   *
+   * Kart üretiminin iki otomatik yolu da TEK SEFERLİKTİ (ön ayarın tohum
+   * damgası, kanalın atanma anı). Koşullardan biri o an yerinde değilse
+   * fırsat harcanıyor ve kullanıcının elinde hiçbir düğme kalmıyordu.
+   *
+   * `boost.write` İSTİYOR, `boost.approve` DEĞİL: bu uç PARA HARCAMIYOR,
+   * yalnızca onay bekleyen kart üretiyor. Harcama kararı kartın kendi
+   * düğmesinde ve o ayrı bir yetki.
+   */
+  @Post('gecmis-icerik')
+  @RequirePermissions('boost.write')
+  gecmisIcerik(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(gecmisIcerikSchema)) body: { clientId: string },
+  ): Promise<{ kartlar: number; notlar: string[] }> {
+    return this.gecmis.cek(ctx, body.clientId);
   }
 
   /**
