@@ -30,6 +30,8 @@ const config = { aiAssistant: { model: 'test-model' } } as unknown as AppConfig;
 const clients = { list: async () => [] } as never;
 const clientProfile = { get: async () => null } as never;
 const connections = { list: async () => [] } as never;
+/** Görsel okuma taklidi — testlerin çoğu görselsiz çağırıyor. */
+const assets = { bytes: async () => ({ buffer: Buffer.from('x'), mimeType: 'image/png' }) } as never;
 
 function servis(metin: string | null): ReklamMetniService {
   const anthropic: AnthropicLike | null =
@@ -42,7 +44,7 @@ function servis(metin: string | null): ReklamMetniService {
             })) as never,
           },
         };
-  return new ReklamMetniService(config, anthropic, clients, clientProfile, connections);
+  return new ReklamMetniService(config, anthropic, clients, clientProfile, connections, assets);
 }
 
 const GIRDI = { clientId: 'c', goal: 'whatsapp' as const };
@@ -128,14 +130,24 @@ describe('modele giden istek', () => {
         create: vi.fn(async () => ({ content: [{ type: 'text', text: 'ANA METIN: x' }] })),
       },
     } as unknown as AnthropicLike;
-    const svc = new ReklamMetniService(config, anthropic, clients, clientProfile, connections);
+    const svc = new ReklamMetniService(
+      config,
+      anthropic,
+      clients,
+      clientProfile,
+      connections,
+      assets,
+    );
 
     await svc.yaz(CTX, { clientId: 'c', goal: 'form' });
 
     const cagri = (anthropic.messages.create as unknown as { mock: { calls: unknown[][] } })
-      .mock.calls[0]![0] as { messages: Array<{ content: string }>; system: string };
-    expect(cagri.messages[0]!.content).toContain('Anlık form');
-    expect(cagri.messages[0]!.content).not.toContain('OUTCOME_LEADS');
+      .mock.calls[0]![0] as {
+      messages: Array<{ content: Array<{ type: string; text?: string }> }>;
+    };
+    const metin = cagri.messages[0]!.content.map((b) => b.text ?? '').join(' ');
+    expect(metin).toContain('Anlık form');
+    expect(metin).not.toContain('OUTCOME_LEADS');
   });
 
   it('KRİTİK: OKUNABİLİRLİK SINIRLARI talimatta', () => {

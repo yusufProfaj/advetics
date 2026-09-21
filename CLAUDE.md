@@ -854,6 +854,17 @@ okunup varsayılmadı — canlıda doğrulandı.
   (`/{creative-id}`) geçiliyor — `ids` bir kolaylık, düğüm yolu Graph'in en
   kesin biçimi ve yarılama en sonunda hep bilinen yola düşmeli.
 
+- **CLICK-TO-WHATSAPP'TA NUMARA SORULMAZ — META ONU SAYFADAN ALIYOR.**
+  Doğru kurulum: ad set'te `destination_type: WHATSAPP` + `promoted_object.
+  page_id`, kreatifte SABİT bağlantı `https://api.whatsapp.com/send` ve CTA
+  değeri `{ app_destination: 'WHATSAPP' }`. Panel bir süre `wa.me/<numara>`
+  kuruyor ve numarayı kullanıcıya elle yazdırıyordu: Meta'da zaten tanımlı
+  bir bilgiyi ikinci kez girmek, ve yazılan numara ile sayfaya bağlı numara
+  ayrıştığında reklamın BAŞKA BİR HATTA düşmesi — hiçbir hata vermeden.
+  CTA değerinde `{ link }` göndermek de belgelenen biçim değil: Meta kabul
+  edip butonu tarayıcıya yönlendirebiliyor, yani reklam yayınlanır ve
+  tıklayan kişi WhatsApp yerine bir web sayfası görür.
+
 **Webhook'lar** (2026-08 araştırması, iki bağımsız sınayıcıyla)
 
 - **Instagram'da "yeni gönderi" WEBHOOK'U YOK.** Abone olunabilir alanlar

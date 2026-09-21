@@ -620,7 +620,6 @@ export function buildTools(deps: ToolDeps): ToolDefinition[] {
           creativeIds: { type: 'array', items: { type: 'string' }, minItems: 1 },
           durationDays: { type: 'number', description: '0 = süresiz. Belirtilmezse 7.' },
           linkUrl: { type: 'string', description: "goal='website' iken zorunlu" },
-          whatsappNumber: { type: 'string' },
         },
         required: ['clientId', 'name', 'goal', 'targets', 'creativeIds'],
       },
@@ -637,7 +636,6 @@ export function buildTools(deps: ToolDeps): ToolDefinition[] {
             creativeIds: input.creativeIds as string[],
             durationDays: typeof input.durationDays === 'number' ? input.durationDays : 7,
             linkUrl: input.linkUrl ? String(input.linkUrl) : undefined,
-            whatsappNumber: input.whatsappNumber ? String(input.whatsappNumber) : undefined,
           });
           if (group.campaigns.length === 0) {
             return {

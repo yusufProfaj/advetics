@@ -353,6 +353,19 @@ export const reklamMetniIstegiSchema = z.object({
   goal: z.enum(CAMPAIGN_GOALS),
   campaignName: z.string().trim().max(200).optional(),
   linkUrl: z.string().trim().max(2000).optional(),
+  /**
+   * SEÇİLİ GÖRSELLER — model onlara BAKARAK yazıyor.
+   *
+   * Kullanıcının cümlesi: "görselleri tarayıp yapay zekanın yazması için
+   * butona tıklarsın". Görseli görmeden yazılan metin, reklamın gösterdiği
+   * şeyle ilgisiz olabiliyor — "hizmetimizi keşfedin" gibi her işe uyan ve
+   * hiçbir işe yaramayan cümleler çıkıyor.
+   *
+   * ÜÇ İLE SINIRLI: her görsel isteğe base64 olarak giriyor ve dördüncüsü
+   * metne kayda değer bir şey eklemiyor; sınırsız bırakmak yirmi görselli
+   * bir seçimde isteği şişirip zaman aşımına düşürürdü.
+   */
+  assetIds: z.array(z.string().uuid()).max(3).optional(),
 });
 export type ReklamMetniIstegi = z.infer<typeof reklamMetniIstegiSchema>;
 

@@ -504,7 +504,6 @@ export class DraftPublishService {
         headline: packed.headlines[0],
         description: packed.descriptions[0],
         linkUrl: (group.settings?.linkUrl as string | undefined) ?? undefined,
-        whatsappNumber: (group.settings?.whatsappNumber as string | undefined) ?? undefined,
         dailyBudgetMicros: BigInt(campaign.budgetAmountMicros!),
         endTime: campaign.endAt ? new Date(campaign.endAt) : null,
         startTime: campaign.startAt ? new Date(campaign.startAt) : null,

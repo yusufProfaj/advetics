@@ -50,7 +50,7 @@ export default async function SimpleAdPage({
    * bağlantı yerinde, yalnızca istek düşmüştü. Kullanıcı olmayan bir arızayı
    * düzeltmeye, Platform Bağlantıları ekranına gönderiliyordu.
    */
-  const [baglantiSonuc, arsivSonuc, kampanyaSonuc] = await Promise.allSettled([
+  const [baglantiSonuc, arsivSonuc, kampanyaSonuc, profilSonuc] = await Promise.allSettled([
     serverApiFetch<
       Array<{
         adAccounts: Array<{ id: string; name: string; currency: string; platform: string }>;
@@ -59,6 +59,19 @@ export default async function SimpleAdPage({
     >(`/connections?clientId=${clientId}`),
     serverApiFetch<AssetListResult>(`/assets?clientId=${clientId}&kind=image&limit=60&offset=0`),
     serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`),
+    /*
+     * WORKSPACE KARTI — SİTE ADRESİ İÇİN.
+     *
+     * Kullanıcının cümlesi: "manuel gireceğim tek yer metinler ve kreatif
+     * görselleri". Site adresi workspace kartında zaten duruyor; onu boş bir
+     * kutu olarak sormak, bildiğimiz bir bilgiyi ikinci kez yazdırmaktı.
+     *
+     * Hatası ekranı düşürmüyor: adres gelmezse kutu boş açılıyor ve
+     * kullanıcı yazıyor — eskisi gibi.
+     */
+    serverApiFetch<Array<{ id: string; website: string | null }>>('/clients').catch(
+      () => null,
+    ),
   ]);
 
   if (baglantiSonuc.status === 'rejected') {
@@ -125,6 +138,11 @@ export default async function SimpleAdPage({
           pages={pages}
           libraryAssets={library?.rows ?? []}
           libraryTotal={library?.total ?? 0}
+          clientWebsite={
+            profilSonuc.status === 'fulfilled'
+              ? (profilSonuc.value?.find((c) => c.id === clientId)?.website ?? null)
+              : null
+          }
         />
       ) : (
         <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">

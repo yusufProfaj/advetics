@@ -129,3 +129,74 @@ describe('metinleri yapay zekâ dolduruyor', () => {
     expect(KAYNAK).toContain('disabled={!goal || busy !== null}');
   });
 });
+
+describe('MANUEL GİRİLEN TEK ŞEY: METİN VE GÖRSEL', () => {
+  /*
+   * Kullanıcının cümlesi: "başka herhangi bir bilgi doldurmak istemiyorum,
+   * diğerlerinin hepsinin otomatik olması lazım ya da seçenekli olması lazım;
+   * manuel gireceğim tek yer metinler ve kreatif görselleri".
+   */
+  it('KRİTİK: WHATSAPP NUMARASI HİÇ SORULMUYOR', () => {
+    /*
+     * Kullanıcının verdiği örnek buydu. Meta numarayı ad set'ten alıyor
+     * (`destination_type: WHATSAPP` + `promoted_object.page_id`); elle
+     * yazdırmak, Meta'da zaten tanımlı bir bilgiyi ikinci kez ve HATALI
+     * girme fırsatıydı — yazılan numara ile mesaj düşen numara ayrıştığında
+     * kimse fark etmiyor.
+     */
+    expect(KAYNAK).not.toContain('whatsappNumber');
+    expect(KAYNAK).not.toContain('905551112233');
+  });
+
+  it('KRİTİK: KAMPANYA ADI kendiliğinden yazılıyor', () => {
+    // Yalnızca ajansın gördüğü bir etiket; kullanıcıdan istemek sonucu
+    // değiştirmeyen bir yazma işiydi.
+    expect(KAYNAK).toContain('export function otomatikAd(');
+    expect(KAYNAK).toContain('setName(otomatikAd(secilen))');
+  });
+
+  it('KRİTİK: ad ZORUNLU EKSİK listesinde DEĞİL', () => {
+    // Otomatik dolan bir alanı "devam etmek için" listesine koymak,
+    // kullanıcıyı hiç yapmadığı bir eksikle karşılamak olurdu.
+    expect(KAYNAK).not.toContain("list.push('Kampanyaya bir ad ver.')");
+  });
+
+  it('KRİTİK: SİTE ADRESİ workspace kartından ÖN DOLGU', () => {
+    expect(KAYNAK).toContain('clientWebsite');
+    expect(KAYNAK).toContain("setLinkUrl((cur) => cur || clientWebsite)");
+  });
+
+  it('KRİTİK: hesap ve sayfa YALNIZCA BİRDEN FAZLAYSA soruluyor', () => {
+    // Tek seçenekte açılır liste göstermek, cevabı belli bir soru sormak.
+    expect(KAYNAK).toContain('accounts.length > 1');
+    expect(KAYNAK).toContain('pages.length > 1');
+  });
+
+  it('KRİTİK: SÜRE SEÇENEK — yazılan sayı değil', () => {
+    /*
+     * Eski hâl bir sayı kutusuydu ve "0 yazarsan süresiz olur" diyordu:
+     * süresiz kampanya KEŞFEDİLMESİ gereken bir davranıştı. Kullanıcının
+     * istediği kurgu "süresiz mi belirli bir süre mi açık kalacağını
+     * seçersin".
+     */
+    expect(KAYNAK).toContain('SURE_SECENEKLERI');
+    expect(KAYNAK).toContain('Süresiz — sen durdurana kadar');
+    expect(KAYNAK).not.toContain('0 yazarsan süresiz olur');
+  });
+});
+
+describe('yapay zekâ GÖRSELLERE BAKIYOR', () => {
+  it('KRİTİK: seçili görseller isteğe giriyor', () => {
+    /*
+     * Kullanıcının cümlesi: "görselleri tarayıp yapay zekanın yazması için
+     * butona tıklarsın". Görseli görmeden yazılan metin her işe uyan ve
+     * hiçbir işe yaramayan cümleler üretiyor.
+     */
+    expect(KAYNAK).toContain('assetIds: assetIds.slice(0, 3)');
+  });
+
+  it('düğmenin altındaki cümle görsel seçilince DEĞİŞİYOR', () => {
+    // Kullanıcı görsele bakıp bakmadığını bilmeli.
+    expect(KAYNAK).toContain('Seçtiğin görsellere bakarak yazar');
+  });
+});

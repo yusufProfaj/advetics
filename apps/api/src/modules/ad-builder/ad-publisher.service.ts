@@ -124,7 +124,6 @@ export class AdPublisherService {
         headline: draft.headline ?? undefined,
         description: draft.description ?? undefined,
         linkUrl: draft.linkUrl ?? undefined,
-        whatsappNumber: draft.whatsappNumber ?? undefined,
         dailyBudgetMicros: BigInt(draft.dailyBudgetMicros),
         // Gelişmiş modda takvim kullanıcının; hızlı modda süreden türüyor.
         endTime: schedule?.endAt ?? endTimeFor(draft.durationDays, new Date()),

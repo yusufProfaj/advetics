@@ -150,7 +150,6 @@ export const simpleDraftInputSchema = z.object({
   durationDays: z.number().int().min(0).max(90).default(7),
 
   linkUrl: z.string().trim().max(2048).optional(),
-  whatsappNumber: z.string().trim().max(20).optional(),
 });
 
 export type SimpleDraftInput = z.infer<typeof simpleDraftInputSchema>;
@@ -294,7 +293,6 @@ export function buildDraftTree(input: SimpleDraftInput, now: Date): DraftTreePla
             billingEvent: spec.billingEvent,
             ...(spec.destinationType ? { destinationType: spec.destinationType } : {}),
             ...(input.linkUrl ? { linkUrl: input.linkUrl } : {}),
-            ...(input.whatsappNumber ? { whatsappNumber: input.whatsappNumber } : {}),
           },
           // TEKLİ KAMPANYADA AD İSMİ SADE KALIYOR — mevcut davranışı
           // bozmamak için. Birden çok kreatifte uzman yüzeyiyle aynı
@@ -409,8 +407,7 @@ export const expertDraftInputSchema = z
     keywords: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
 
     linkUrl: z.string().trim().max(2048).optional(),
-    whatsappNumber: z.string().trim().max(20).optional(),
-  })
+    })
   /**
    * PLATFORMA GÖRE ZORUNLULUK — tek şema, iki kural kümesi.
    *
@@ -596,8 +593,7 @@ export function buildExpertTree(input: ExpertDraftInput, now: Date): DraftTreePl
               ...(a.conversionEvent ? { conversionEvent: a.conversionEvent } : {}),
               ...(a.startAt ? { startAt: a.startAt } : {}),
               ...(input.linkUrl ? { linkUrl: input.linkUrl } : {}),
-              ...(input.whatsappNumber ? { whatsappNumber: input.whatsappNumber } : {}),
-            },
+              },
             ads: input.creativeIds.map((creativeId, position) => ({
               // AD SIRAYLA: Ads Manager'da hangi varyantın hangisi olduğu
               // ancak addan anlaşılıyor ve hepsine aynı adı vermek, uzmanı

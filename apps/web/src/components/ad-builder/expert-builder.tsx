@@ -66,7 +66,6 @@ export function ExpertAdBuilder({
   const [creativeIds, setCreativeIds] = useState<string[]>([]);
   const [leadFormId, setLeadFormId] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
-  const [whatsappNumber, setWhatsappNumber] = useState('');
 
   /**
    * Ayarlar HIZLI MODUN KARARLARIYLA DOLU BAŞLIYOR.
@@ -149,7 +148,6 @@ export function ExpertAdBuilder({
           advanced: google ? undefined : advanced,
           keywords: google ? keywords : [],
           linkUrl: linkUrl.trim() || undefined,
-          whatsappNumber: google ? undefined : whatsappNumber.trim() || undefined,
         }),
       });
       setCampaign(created);
@@ -327,16 +325,17 @@ export function ExpertAdBuilder({
               className={input}
             />
           </Alan>
-          {!google && (
-            <Alan label="WhatsApp numarası" ipucu="Boşsa sayfaya bağlı numara kullanılır.">
-              <input
-                value={whatsappNumber}
-                onChange={(e) => setWhatsappNumber(e.target.value)}
-                placeholder="905551112233"
-                className={input}
-              />
-            </Alan>
-          )}
+          {/*
+            WHATSAPP NUMARASI ARTIK SORULMUYOR — uzman modda da.
+
+            Meta numarayı ad set'ten alıyor: `destination_type: WHATSAPP` +
+            `promoted_object.page_id` ikilisi sayfaya BAĞLI WhatsApp
+            hesabını kullandırıyor ve kreatifteki bağlantı sabit
+            (`api.whatsapp.com/send`). Alanı bırakmak, doldurulan ama
+            HİÇBİR ŞEYİ DEĞİŞTİRMEYEN bir kutu göstermek olurdu — yazılan
+            numara ile gerçekte mesaj düşen numara ayrıştığında kimse fark
+            etmezdi.
+          */}
         </div>
       </section>
 

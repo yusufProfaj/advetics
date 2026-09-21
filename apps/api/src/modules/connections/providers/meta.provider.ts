@@ -3693,10 +3693,26 @@ function buildCreativeSpec(
   req: PublishDraftRequest,
   leadFormId: string | undefined,
 ): Record<string, string> {
+  /*
+   * ═══ WHATSAPP REKLAMINDA NUMARA SORULMUYOR ═══
+   *
+   * Bağlantı SABİT ve Meta'nın belgelediği adres: `api.whatsapp.com/send`.
+   * Hangi numaraya gideceğini ad set belirliyor — `destination_type:
+   * WHATSAPP` + `promoted_object.page_id` ikilisi Meta'ya sayfaya BAĞLI
+   * WhatsApp hesabını kullandırıyor.
+   *
+   * Önceki hâl `wa.me/<numara>` kuruyordu ve numarayı kullanıcıya elle
+   * yazdırıyordu. İki sorunu vardı: (1) kullanıcının zaten Meta'da tanımlı
+   * olan bir bilgiyi ikinci kez, elle ve HATALI yazabileceği bir alan,
+   * (2) sayfaya bağlı numara ile yazılan numara ayrıştığında reklam başka
+   * bir hatta düşüyor ve bunu kimse fark etmiyor.
+   *
+   * Kullanıcının cümlesi: "en ufak örneği whatsapp numarasını elimle
+   * yazmamam gerekiyor metadan çekmesi lazım". Doğrusu çekmek bile değil —
+   * HİÇ SORMAMAK.
+   */
   const link = req.spec.destinationType === 'WHATSAPP'
-    // WhatsApp reklamında bağlantı, numaraya giden wa.me adresi. Numara
-    // verilmemişse Meta sayfaya bağlı numarayı kullanıyor.
-    ? (req.whatsappNumber ? `https://wa.me/${req.whatsappNumber}` : `https://wa.me/`)
+    ? 'https://api.whatsapp.com/send'
     : (req.linkUrl ?? `https://facebook.com/${req.pageExternalId}`);
 
   /**
@@ -3733,9 +3749,21 @@ function buildCreativeSpec(
           ...(req.description ? { description: req.description } : {}),
           link,
           ...(hash ? { image_hash: hash } : {}),
+          /*
+           * CTA DEĞERİ VARIŞ TİPİNE GÖRE.
+           *
+           * WhatsApp'ta Meta `app_destination` bekliyor; `{ link }` vermek
+           * belgelenen biçim DEĞİL ve Meta onu sessizce kabul edip butonu
+           * tarayıcıya yönlendirebiliyor — reklam yayınlanır, tıklayan kişi
+           * WhatsApp yerine bir web sayfası görür ve hiçbir hata düşmez.
+           */
           call_to_action: {
             type: req.spec.callToAction,
-            value: leadFormId ? { lead_gen_form_id: leadFormId } : { link },
+            value: leadFormId
+              ? { lead_gen_form_id: leadFormId }
+              : req.spec.destinationType === 'WHATSAPP'
+                ? { app_destination: 'WHATSAPP' }
+                : { link },
           },
         },
       }),

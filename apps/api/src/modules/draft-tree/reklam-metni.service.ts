@@ -11,12 +11,33 @@ import {
 import { ClientsService } from '../tenancy/clients.service';
 import { ClientProfileService } from '../tenancy/client-profile.service';
 import { ConnectionsService } from '../connections/connections.service';
+import { AssetsService } from '../assets/assets.service';
 
 export interface AnthropicLike {
   messages: {
     create(params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message>;
   };
 }
+
+/**
+ * MODELİN KABUL ETTİĞİ GÖRSEL TÜRLERİ. Başka bir tür göndermek isteğin
+ * TAMAMINI düşürüyor — bir görsel yüzünden metin hiç yazılmamış oluyor.
+ */
+const DESTEKLENEN_TURLER = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
+type DesteklenenTur = (typeof DESTEKLENEN_TURLER)[number];
+
+/** Dördüncü görsel metne kayda değer bir şey eklemiyor; istek ise şişiyor. */
+const GORSEL_SINIRI = 3;
+
+/**
+ * TEK GÖRSEL ÜST SINIRI.
+ *
+ * Model isteğinde base64 boyutu ham boyutun ~4/3'ü; büyük bir dosya hem
+ * zaman aşımı hem gereksiz maliyet. Arşivdeki görseller zaten bunun
+ * altında ama sınır burada da yazılı: arşiv sınırı bir gün gevşerse bu
+ * çağrı sessizce yavaşlamamalı.
+ */
+const GORSEL_UST_BAYT = 4 * 1024 * 1024;
 
 export interface ReklamMetni {
   primaryText: string;
@@ -63,11 +84,18 @@ export class ReklamMetniService {
     private readonly clients: ClientsService,
     private readonly clientProfile: ClientProfileService,
     private readonly connections: ConnectionsService,
+    private readonly assets: AssetsService,
   ) {}
 
   async yaz(
     ctx: TenantContext,
-    input: { clientId: string; goal: CampaignGoal; campaignName?: string; linkUrl?: string },
+    input: {
+      clientId: string;
+      goal: CampaignGoal;
+      campaignName?: string;
+      linkUrl?: string;
+      assetIds?: string[];
+    },
   ): Promise<ReklamMetni> {
     if (!this.anthropic) {
       throw new BadRequestException(
@@ -82,6 +110,8 @@ export class ReklamMetniService {
     };
     const baglam = await musteriBaglamiKur(deps, ctx, input.clientId);
 
+    const gorseller = await this.gorselBloklari(ctx, input.assetIds ?? []);
+
     const response = await this.anthropic.messages.create({
       model: this.config.aiAssistant.model,
       max_tokens: 1024,
@@ -89,17 +119,83 @@ export class ReklamMetniService {
       messages: [
         {
           role: 'user',
-          content:
-            `${baglamiMetne(baglam)}\n\n` +
-            `Kampanya tipi: ${HEDEF_ACIKLAMASI[input.goal]}\n` +
-            (input.campaignName ? `Kampanya adı: ${input.campaignName}\n` : '') +
-            (input.linkUrl ? `Yönlendirilecek adres: ${input.linkUrl}\n` : '') +
-            'Bu kampanya için reklam metinlerini yaz.',
+          content: [
+            /*
+             * GÖRSELLER METİNDEN ÖNCE.
+             *
+             * Model içeriği sırayla okuyor: talimat önce gelirse görseli
+             * "ek bilgi" sayıyor ve çoğu zaman hiç anmıyor. Önce koymak,
+             * metnin GÖRDÜĞÜ şeyden doğmasını sağlıyor.
+             */
+            ...gorseller,
+            {
+              type: 'text' as const,
+              text:
+                `${baglamiMetne(baglam)}\n\n` +
+                `Kampanya tipi: ${HEDEF_ACIKLAMASI[input.goal]}\n` +
+                (input.campaignName ? `Kampanya adı: ${input.campaignName}\n` : '') +
+                (input.linkUrl ? `Yönlendirilecek adres: ${input.linkUrl}\n` : '') +
+                (gorseller.length > 0
+                  ? 'Yukarıdaki görseller bu reklamda kullanılacak; metin onlarla ' +
+                    'uyumlu olsun ve görselde OLMAYAN bir şeyi anlatmasın.\n'
+                  : '') +
+                'Bu kampanya için reklam metinlerini yaz.',
+            },
+          ],
         },
       ],
     });
 
     return this.coz(response);
+  }
+
+  /**
+   * ═══ SEÇİLİ GÖRSELLERİ MODELE VERME ═══
+   *
+   * Kullanıcının cümlesi: "görselleri tarayıp yapay zekanın yazması için
+   * butona tıklarsın". Görseli görmeden yazılan metin her işe uyan ve hiçbir
+   * işe yaramayan cümleler üretiyor.
+   *
+   * OKUNAMAYAN GÖRSEL SESSİZCE ATLANIYOR — ve bu bilinçli. Metin yazımı bir
+   * kolaylık; tek bir bozuk dosya yüzünden düğmenin hiç çalışmaması,
+   * çözdüğünden çok sorun üretirdi. Ama log'a düşüyor: hiçbiri okunamazsa
+   * kullanıcı "görsele bakmamış" diyecek ve sebebi bir yerde yazılı olmalı.
+   *
+   * DESTEKLENMEYEN BİÇİM DE ATLANIYOR. Model yalnızca JPEG, PNG, GIF ve WebP
+   * kabul ediyor; başka bir tür göndermek isteğin TAMAMINI düşürürdü.
+   */
+  private async gorselBloklari(
+    ctx: TenantContext,
+    assetIds: string[],
+  ): Promise<Array<{ type: 'image'; source: { type: 'base64'; media_type: DesteklenenTur; data: string } }>> {
+    const bloklar: Array<{
+      type: 'image';
+      source: { type: 'base64'; media_type: DesteklenenTur; data: string };
+    }> = [];
+
+    for (const id of assetIds.slice(0, GORSEL_SINIRI)) {
+      try {
+        const { buffer, mimeType } = await this.assets.bytes(ctx, id);
+        if (!(DESTEKLENEN_TURLER as readonly string[]).includes(mimeType)) {
+          this.logger.warn(`Metin yazımında atlanan görsel (${id}): desteklenmeyen tür ${mimeType}`);
+          continue;
+        }
+        if (buffer.length > GORSEL_UST_BAYT) {
+          this.logger.warn(`Metin yazımında atlanan görsel (${id}): ${buffer.length} bayt`);
+          continue;
+        }
+        bloklar.push({
+          type: 'image',
+          source: { type: 'base64', media_type: mimeType as DesteklenenTur, data: buffer.toString('base64') },
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Metin yazımında görsel okunamadı (${id}): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    return bloklar;
   }
 
   /**

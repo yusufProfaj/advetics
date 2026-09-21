@@ -42,6 +42,23 @@ import { CropStudio } from './crop-studio';
 
 type Step = 'form' | 'created';
 
+/**
+ * SÜRE SEÇENEKLERİ.
+ *
+ * Yedi gün varsayılan: bir haftadan kısası Meta'nın öğrenme evresini
+ * tamamlamasına yetmiyor ve kampanya kapandığında elde karşılaştırılabilir
+ * bir sonuç kalmıyor.
+ *
+ * SÜRESİZ LİSTENİN SONUNDA ve ne demek olduğu etiketinde yazıyor —
+ * "unutulan kampanya" bu üründe en pahalı kullanıcı hatası.
+ */
+const SURE_SECENEKLERI = [
+  { value: '7', label: '7 gün' },
+  { value: '14', label: '14 gün' },
+  { value: '30', label: '30 gün' },
+  { value: '0', label: 'Süresiz — sen durdurana kadar' },
+] as const;
+
 const BUDGET_PRESETS = [
   { label: 'Küçük başla', value: '100', hint: 'Sonuçları görmek için yeterli.' },
   { label: 'Dengeli', value: '250', hint: 'Çoğu kampanyanın başladığı yer.' },
@@ -54,16 +71,44 @@ export function SimpleAdBuilder({
   pages,
   libraryAssets,
   libraryTotal,
+  clientWebsite,
 }: {
   clientId: string;
   accounts: Array<{ id: string; name: string; currency: string }>;
   pages: Array<{ id: string; name: string }>;
   libraryAssets: AssetRecord[];
   libraryTotal: number;
+  /** Workspace kartındaki site adresi — web kampanyasında ön dolgu. */
+  clientWebsite: string | null;
 }) {
   const router = useRouter();
 
   const [goal, setGoal] = useState<CampaignGoal | null>(null);
+
+  /**
+   * HEDEF SEÇİLİNCE AD VE ADRES KENDİLİĞİNDEN DOLUYOR.
+   *
+   * `useEffect` DEĞİL, seçim anında: effect yazsaydık kullanıcının elle
+   * değiştirdiği adı bir sonraki render'da geri ezerdi. Karar tek bir yerde
+   * ve yalnızca hedef DEĞİŞTİĞİNDE çalışıyor.
+   */
+  function hedefSec(secilen: CampaignGoal): void {
+    setGoal(secilen);
+    setName(otomatikAd(secilen));
+    // SİTE ADRESİ WORKSPACE KARTINDAN. Kullanıcı isterse değiştiriyor; boş bir
+    // kutu bırakmak, zaten bildiğimiz bir bilgiyi ona yazdırmak olurdu.
+    if (secilen === 'website' && clientWebsite) setLinkUrl((cur) => cur || clientWebsite);
+  }
+  /**
+   * KAMPANYA ADI KENDİLİĞİNDEN YAZILIYOR.
+   *
+   * Yalnızca ajansın gördüğü bir etiket ve kullanıcıdan istemek, sonucu
+   * değiştirmeyen bir yazma işiydi. Hedef seçildiğinde doluyor; kullanıcı
+   * yine de değiştirebiliyor (oluşturulan kampanya kartında görünüyor).
+   *
+   * TARİH İÇERİYOR: aynı hedefle ikinci bir kampanya kurulduğunda listede
+   * birbirinden ayırt edilebilsin.
+   */
   const [name, setName] = useState('');
   const [adAccountId, setAdAccountId] = useState(accounts[0]?.id ?? '');
   const [pageId, setPageId] = useState(pages[0]?.id ?? '');
@@ -71,7 +116,6 @@ export function SimpleAdBuilder({
   const [headline, setHeadline] = useState('');
   const [description, setDescription] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
-  const [whatsappNumber, setWhatsappNumber] = useState('');
   const [assetIds, setAssetIds] = useState<string[]>([]);
   const [dailyBudget, setDailyBudget] = useState<string>(BUDGET_PRESETS[1].value);
   /** Kırpma stüdyosuna girilen kaynak görsel. */
@@ -101,7 +145,6 @@ export function SimpleAdBuilder({
   const eksikler = useMemo(() => {
     const list: string[] = [];
     if (!goal) list.push('Ne istediğini seç.');
-    if (!name.trim()) list.push('Kampanyaya bir ad ver.');
     if (!primaryText.trim()) list.push('Reklamın ana metnini yaz.');
     if (goal === 'website' && !linkUrl.trim()) list.push('Web sitesi adresini yaz.');
     if (assetIds.length === 0) list.push('En az bir görsel seç.');
@@ -228,6 +271,9 @@ export function SimpleAdBuilder({
           goal,
           campaignName: name.trim() || undefined,
           linkUrl: linkUrl.trim() || undefined,
+          // SEÇİLİ GÖRSELLER MODELE GİDİYOR: metin gördüğü şeyden doğsun.
+          // Üçle sınırlı — sunucu da aynı sınırı uyguluyor.
+          assetIds: assetIds.slice(0, 3),
         }),
       });
       setPrimaryText(r.primaryText);
@@ -280,7 +326,6 @@ export function SimpleAdBuilder({
           creativeIds: [creative.id],
           durationDays: Number(durationDays),
           linkUrl: linkUrl.trim() || undefined,
-          whatsappNumber: whatsappNumber.trim() || undefined,
         }),
       });
 
@@ -350,7 +395,7 @@ export function SimpleAdBuilder({
             <button
               key={g}
               type="button"
-              onClick={() => setGoal(g)}
+              onClick={() => hedefSec(g)}
               className={`rounded-xl border p-3 text-left transition ${
                 goal === g ? 'border-brand bg-brand-soft' : 'border-line hover:bg-surface-sunken'
               }`}
@@ -368,84 +413,79 @@ export function SimpleAdBuilder({
 
       {goal && (
         <>
-          <Blok no={2} baslik="Kampanyaya bir ad ver">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Alan label="Kampanya adı" ipucu="Yalnızca sen göreceksin, workspace’ler görmez.">
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ağustos — Teklif Kampanyası"
-                  className={input}
-                />
-              </Alan>
+          {/*
+            ═══ 2. AYARLAR TEK SATIR — SORU DEĞİL, BİLGİ ═══
 
-              {/* HESAP VE SAYFA YALNIZCA BİRDEN FAZLAYSA SORULUYOR.
-                  Tek seçenek varken açılır liste göstermek, kullanıcıya
-                  cevabı belli bir soru sormak. Eski sihirbaz her zaman
-                  soruyordu ve sessizce ilk elemanı seçiyordu. */}
-              {accounts.length > 1 && (
-                <Alan label="Reklam hesabı">
-                  <select
-                    value={adAccountId}
-                    onChange={(e) => setAdAccountId(e.target.value)}
-                    className={input}
+            Kullanıcının cümlesi: "başka herhangi bir bilgi doldurmak
+            istemiyorum, diğerlerinin hepsinin otomatik olması lazım ya da
+            seçenekli olması lazım; manuel gireceğim tek yer metinler ve
+            kreatif görselleri".
+
+            Burada üç şey vardı ve üçü de kalktı:
+
+              · KAMPANYA ADI artık kendiliğinden yazılıyor (hedef + tarih).
+                Yalnızca ajansın gördüğü bir etiket; kullanıcıdan istemek,
+                sonucu değiştirmeyen bir yazma işi.
+              · WHATSAPP NUMARASI HİÇ SORULMUYOR. Meta numarayı sayfaya bağlı
+                WhatsApp hesabından alıyor (`destination_type: WHATSAPP` +
+                `promoted_object.page_id`); elle yazdırmak, Meta'da zaten
+                tanımlı bir bilgiyi ikinci kez ve hatalı girme fırsatıydı.
+              · WEB SİTESİ ADRESİ workspace kartından geliyor; yalnızca başka
+                bir sayfaya göndermek isteyen düzeltiyor.
+
+            Hesap ve sayfa yalnızca BİRDEN FAZLAYSA soruluyor: tek seçenekte
+            açılır liste göstermek, cevabı belli bir soru sormak.
+          */}
+          {(accounts.length > 1 || pages.length > 1 || goal === 'website') && (
+            <Blok no={2} baslik="Ayarlar" altBaslik="Gerisini biz dolduruyoruz.">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {accounts.length > 1 && (
+                  <Alan label="Reklam hesabı">
+                    <select
+                      value={adAccountId}
+                      onChange={(e) => setAdAccountId(e.target.value)}
+                      className={input}
+                    >
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Alan>
+                )}
+                {pages.length > 1 && (
+                  <Alan label="Hangi sayfa adına yayınlansın">
+                    <select
+                      value={pageId}
+                      onChange={(e) => setPageId(e.target.value)}
+                      className={input}
+                    >
+                      {pages.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Alan>
+                )}
+
+                {goal === 'website' && (
+                  <Alan
+                    label="Web sitesi adresi"
+                    ipucu="Workspace kartından geldi; başka bir sayfaya göndermek istersen değiştir."
                   >
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </Alan>
-              )}
-              {pages.length > 1 && (
-                <Alan label="Hangi sayfa adına yayınlansın">
-                  <select
-                    value={pageId}
-                    onChange={(e) => setPageId(e.target.value)}
-                    className={input}
-                  >
-                    {pages.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </Alan>
-              )}
-
-              {goal === 'website' && (
-                <Alan label="Web sitesi adresi">
-                  <input
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    placeholder="https://siteniz.com/urun"
-                    className={input}
-                  />
-                </Alan>
-              )}
-              {goal === 'whatsapp' && (
-                <Alan
-                  label="WhatsApp numarası (opsiyonel)"
-                  ipucu="Boş bırakırsan sayfaya bağlı numara kullanılır."
-                >
-                  <input
-                    value={whatsappNumber}
-                    onChange={(e) => setWhatsappNumber(e.target.value)}
-                    placeholder="905551112233"
-                    className={input}
-                  />
-                </Alan>
-              )}
-            </div>
-
-            {(accounts.length === 1 || pages.length === 1) && (
-              <p className="mt-2 text-[11px] text-ink-muted">
-                {accounts.length === 1 && `Reklam hesabı: ${accounts[0]!.name}. `}
-                {pages.length === 1 && `Sayfa: ${pages[0]!.name}.`}
-              </p>
-            )}
-          </Blok>
+                    <input
+                      value={linkUrl}
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      placeholder="https://siteniz.com/urun"
+                      className={input}
+                    />
+                  </Alan>
+                )}
+              </div>
+            </Blok>
+          )}
 
           {/* 3. Görseller — HAVUZ, oran kutusu değil */}
           <Blok
@@ -619,9 +659,11 @@ export function SimpleAdBuilder({
               {/* EZDİĞİ AÇIKÇA YAZILI: sessizce birleştirmek, kullanıcının
                   yazdığı cümleyi bulamaması demekti. */}
               <span className="text-[11px] text-ink-muted">
-                {goal
-                  ? 'Üç alanı da yeniden yazar; yazdıklarının üzerine yazılır.'
-                  : 'Önce ne istediğini seç.'}
+                {!goal
+                  ? 'Önce ne istediğini seç.'
+                  : assetIds.length > 0
+                    ? 'Seçtiğin görsellere bakarak yazar; yazdıklarının üzerine yazılır.'
+                    : 'Üç alanı da yeniden yazar; yazdıklarının üzerine yazılır. Görsel seçersen onlara da bakar.'}
               </span>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
@@ -694,18 +736,29 @@ export function SimpleAdBuilder({
                   className={input}
                 />
               </Alan>
-              <Alan
-                label="Kaç gün yayında kalsın"
-                ipucu="0 yazarsan süresiz olur ve sen durdurana kadar harcar."
-              >
-                <input
-                  type="number"
-                  min={0}
-                  max={90}
+              {/*
+                ═══ SÜRE: SEÇENEK, YAZILAN SAYI DEĞİL ═══
+
+                Eski hâl bir sayı kutusuydu ve "0 yazarsan süresiz olur"
+                diyordu — süresiz kampanya, KEŞFEDİLMESİ gereken bir
+                davranıştı. Kullanıcının istediği kurgu birebir: "süresiz mi
+                belirli bir süre mi açık kalacağını seçersin".
+
+                SÜRESİZ AÇIKÇA SEÇİLİYOR ve ne demek olduğu yanında yazıyor:
+                bu üründe "unutulan kampanya" en pahalı kullanıcı hatası.
+              */}
+              <Alan label="Ne kadar yayında kalsın">
+                <select
                   value={durationDays}
                   onChange={(e) => setDurationDays(e.target.value)}
                   className={input}
-                />
+                >
+                  {SURE_SECENEKLERI.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </Alan>
             </div>
 
@@ -1080,3 +1133,19 @@ function Alan({
 
 const input =
   'w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand';
+
+/**
+ * KAMPANYA ADI — hedef + tarih.
+ *
+ * Kullanıcıdan istenmeyen tek "isim" alanı buydu ve sonucu hiç
+ * değiştirmiyordu: ad yalnızca ajansın listesinde görünüyor, müşteriye ve
+ * Meta'ya giden hiçbir şeyi etkilemiyor.
+ *
+ * TARİH ŞART: aynı hedefle ikinci bir kampanya kurulduğunda listede
+ * birbirinden ayırt edilebilsin. Saat yok — aynı gün iki kampanya kuran
+ * kullanıcı zaten ikisini de görüyor ve adı elle değiştirebiliyor.
+ */
+export function otomatikAd(goal: CampaignGoal, now = new Date()): string {
+  const gun = now.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' });
+  return `${GOAL_META[goal].label} — ${gun}`;
+}

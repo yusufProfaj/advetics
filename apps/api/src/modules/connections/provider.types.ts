@@ -759,7 +759,6 @@ export interface PublishDraftRequest {
   headline?: string;
   description?: string;
   linkUrl?: string;
-  whatsappNumber?: string;
   dailyBudgetMicros: bigint;
   /** null = süresiz. */
   endTime: Date | null;
