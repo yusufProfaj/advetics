@@ -78,6 +78,9 @@ export function SimpleAdBuilder({
   const [cropSource, setCropSource] = useState<AssetRecord | null>(null);
   /** Stüdyodan dönen görseller — sayfa yenilenene kadar arşiv listesine eklenir. */
   const [uretilenler, setUretilenler] = useState<AssetRecord[]>([]);
+  /** Bu ekrandan yüklenen görseller — sekme değiştirmeden. */
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [yuklemeNotu, setYuklemeNotu] = useState<string | null>(null);
   const [durationDays, setDurationDays] = useState('7');
 
   const [step, setStep] = useState<Step>('form');
@@ -127,6 +130,117 @@ export function SimpleAdBuilder({
   const uymayanSayisi = gosterilen.filter(
     (a) => matchRatio(a.width, a.height) === null,
   ).length;
+
+  /**
+   * ═══ GÖRSEL BU EKRANDAN YÜKLENİYOR ═══
+   *
+   * Kullanıcının bildirdiği hâl: "illa arşive yüklemem gerekiyorsa sekme
+   * değiştirmeyim, kampanya kurma ekranından görseli ekleyebileceğim şekilde
+   * yapmanı istiyorum".
+   *
+   * Eski ekran boş arşivde yalnızca "Kütüphane → Görsel Arşivi bölümünden
+   * yükleyebilirsin" yazıyordu: kullanıcı yazdığı metni kaybetmemek için
+   * yeni sekme açıyor, yüklüyor, geri dönüyor ve listeyi tazelemek için
+   * sayfayı yeniliyordu — yazdığı her şey gidiyordu.
+   *
+   * AYNI UÇ KULLANILIYOR (`POST /assets`): ikinci bir yükleme yolu yazmak,
+   * mükerrer kontrolünü ve boyut sınırını ikinci kez yazmak olurdu.
+   * Yüklenen görsel arşive de giriyor — burada yüklemek onu "tek seferlik"
+   * yapmıyor.
+   */
+  async function gorselYukle(files: FileList | null): Promise<void> {
+    if (!files || files.length === 0) return;
+    setYukleniyor(true);
+    setYuklemeNotu(null);
+    setError(null);
+
+    let eklendi = 0;
+    let mukerrer = 0;
+
+    for (const file of Array.from(files)) {
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        // `apiFetch` JSON gövdesi kuruyor; multipart için doğrudan fetch.
+        // Content-Type ELLE VERİLMİYOR: tarayıcı boundary'yi kendisi ekliyor.
+        const res = await fetch(`${API_URL}/assets?clientId=${clientId}&kind=image`, {
+          method: 'POST',
+          credentials: 'include',
+          body: form,
+        });
+        if (!res.ok) {
+          const b = (await res.json().catch(() => null)) as { message?: string } | null;
+          throw new Error(b?.message ?? `${file.name} yüklenemedi`);
+        }
+        const result = (await res.json()) as { asset: AssetRecord; duplicate: boolean };
+        /*
+         * MÜKERRER GÖRSEL DE SEÇİLİYOR. Aynı dosyayı ikinci kez yükleyen
+         * kullanıcı onu kullanmak istiyor; "zaten vardı" deyip seçmemek,
+         * listede aramasına yol açardı.
+         */
+        if (result.duplicate) mukerrer++;
+        else {
+          eklendi++;
+          setUretilenler((cur) => [result.asset, ...cur]);
+        }
+        setAssetIds((cur) => (cur.includes(result.asset.id) ? cur : [...cur, result.asset.id]));
+      } catch (err) {
+        // HATA YUTULMUYOR: sunucunun kendi cümlesi (boyut, biçim, kota)
+        // ekranda görünmeli.
+        setError(err instanceof Error ? err.message : 'Görsel yüklenemedi.');
+      }
+    }
+
+    setYuklemeNotu(
+      [eklendi > 0 ? `${eklendi} görsel eklendi` : null, mukerrer > 0 ? `${mukerrer} zaten arşivdeydi` : null]
+        .filter(Boolean)
+        .join(' · ') || null,
+    );
+    setYukleniyor(false);
+  }
+
+  /**
+   * ═══ METİNLERİ YAPAY ZEKÂ DOLDURUYOR ═══
+   *
+   * Kullanıcının isteği: "metinleri oluşturmak istersem de yapay zeka ile
+   * doldur diyeyim doldursun bütün metinleri".
+   *
+   * ÜÇ ALANI BİRDEN dolduruyor: ana metin, başlık ve açıklama birbirine
+   * bağlı bir bütün ve ayrı ayrı üretmek üç farklı reklam gibi konuşan bir
+   * metin çıkarırdı.
+   *
+   * YAZILANI EZİYOR VE BU AÇIKÇA YAZILI (düğmenin altında). Sessizce
+   * birleştirmek, kullanıcının yazdığı cümleyi bulamaması demekti.
+   */
+  async function metinleriDoldur(): Promise<void> {
+    if (!goal) return;
+    setBusy('ai');
+    setError(null);
+    try {
+      const r = await apiFetch<{
+        primaryText: string;
+        headline: string;
+        description: string;
+      }>('/creatives/metin-onerisi', {
+        method: 'POST',
+        body: JSON.stringify({
+          clientId,
+          goal,
+          campaignName: name.trim() || undefined,
+          linkUrl: linkUrl.trim() || undefined,
+        }),
+      });
+      setPrimaryText(r.primaryText);
+      setHeadline(r.headline);
+      setDescription(r.description);
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError ? err.message : 'Metinler oluşturulamadı.',
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function olustur(): Promise<void> {
     if (!goal) return;
@@ -339,10 +453,47 @@ export function SimpleAdBuilder({
             baslik="Görselleri seç"
             altBaslik="Birden fazla seçebilirsin; hangisinin nereye gideceğine biz karar veririz."
           >
+            {/*
+              YÜKLEME KUTUSU HER ZAMAN BURADA — boş arşivde de, dolu arşivde de.
+              Eski ekran boşken yalnızca "Görsel Arşivi'nden yükleyebilirsin"
+              yazıyordu: kullanıcı sekme değiştirip geri döndüğünde yazdığı
+              metni kaybediyordu.
+            */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <label
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken ${
+                  yukleniyor ? 'pointer-events-none opacity-50' : ''
+                }`}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  disabled={yukleniyor}
+                  onChange={(e) => {
+                    void gorselYukle(e.target.files);
+                    // AYNI DOSYAYI TEKRAR SEÇEBİLMEK İÇİN: input değeri
+                    // temizlenmezse `change` bir daha tetiklenmiyor.
+                    e.target.value = '';
+                  }}
+                />
+                {yukleniyor ? 'Yükleniyor…' : 'Bilgisayardan görsel yükle'}
+              </label>
+              {/* YÜKLENEN GÖRSEL KENDİLİĞİNDEN SEÇİLİYOR: yükleyip bir de
+                  listeden bulup tıklamak gereksiz bir adım. */}
+              <span className="text-[11px] text-ink-muted">
+                Yüklenen görsel arşive de eklenir ve kendiliğinden seçilir.
+              </span>
+              {yuklemeNotu && (
+                <span className="text-[11px] text-ok-strong">{yuklemeNotu}</span>
+              )}
+            </div>
+
             {gosterilen.length === 0 ? (
               <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
-                Arşivde henüz görsel yok. <strong>Kütüphane → Görsel Arşivi</strong> bölümünden
-                yükleyebilirsin.
+                Henüz görsel yok. Yukarıdaki düğmeyle bilgisayarından yükleyebilir ya da
+                <strong> Kütüphane → Görsel Arşivi</strong> bölümünü kullanabilirsin.
               </p>
             ) : (
               <>
@@ -449,6 +600,30 @@ export function SimpleAdBuilder({
 
           {/* 4. Metin + önizleme */}
           <Blok no={4} baslik="Ne yazalım?">
+            {/*
+              ═══ YAPAY ZEKÂ İLE DOLDUR ═══
+              Kullanıcının isteği: "metinleri oluşturmak istersem de yapay
+              zeka ile doldur diyeyim doldursun bütün metinleri". Üç alan
+              birden doldurulıyor — ayrı ayrı üretmek üç farklı reklam gibi
+              konuşan bir metin çıkarırdı.
+            */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void metinleriDoldur()}
+                disabled={!goal || busy !== null}
+                className="rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-medium text-brand-strong transition hover:bg-brand/10 disabled:opacity-40"
+              >
+                {busy === 'ai' ? 'Yazılıyor…' : 'Yapay zekâ ile doldur'}
+              </button>
+              {/* EZDİĞİ AÇIKÇA YAZILI: sessizce birleştirmek, kullanıcının
+                  yazdığı cümleyi bulamaması demekti. */}
+              <span className="text-[11px] text-ink-muted">
+                {goal
+                  ? 'Üç alanı da yeniden yazar; yazdıklarının üzerine yazılır.'
+                  : 'Önce ne istediğini seç.'}
+              </span>
+            </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3">
                 <MetinAlani

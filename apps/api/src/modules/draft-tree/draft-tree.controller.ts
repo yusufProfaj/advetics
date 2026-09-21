@@ -25,10 +25,14 @@ import {
   type PublishCheck,
   type SimpleDraftInput,
   type TenantContext,
+  reklamMetniIstegiSchema,
+  type ReklamMetniIstegi,
+  type ReklamMetniOnerisi,
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { CreativeService } from './creative.service';
+import { ReklamMetniService } from './reklam-metni.service';
 import { DraftPublishService } from './draft-publish.service';
 import { DraftTreeService } from './draft-tree.service';
 
@@ -189,7 +193,25 @@ export class DraftTreeController {
  */
 @Controller('creatives')
 export class CreativeController {
-  constructor(private readonly creatives: CreativeService) {}
+  constructor(
+    private readonly creatives: CreativeService,
+    private readonly metin: ReklamMetniService,
+  ) {}
+
+  /**
+   * REKLAM METNİNİ YAPAY ZEKÂ YAZSIN.
+   *
+   * `bulk.write` — kreatif yazmakla aynı yetki. Okuma yetkisi olan bir
+   * kullanıcıya model çağırtmak, maliyeti olan bir ucu okumaya açmak olurdu.
+   */
+  @Post('metin-onerisi')
+  @RequirePermissions('bulk.write')
+  metinOnerisi(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(reklamMetniIstegiSchema)) body: ReklamMetniIstegi,
+  ): Promise<ReklamMetniOnerisi> {
+    return this.metin.yaz(ctx, body);
+  }
 
   @Get()
   @RequirePermissions('bulk.read')

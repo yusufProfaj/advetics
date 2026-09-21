@@ -340,3 +340,24 @@ export interface PublishCheck {
    */
   assetCoverage: AssetCoverage[];
 }
+
+/**
+ * YAPAY ZEKÂ METİN İSTEĞİ.
+ *
+ * Kampanya adı ve adres İSTEĞE BAĞLI: kullanıcı henüz doldurmamış olabilir ve
+ * metin yazmak için ikisi de zorunlu değil. Zorunlu tutmak, düğmeyi
+ * kullanıcının "önce şunu doldur" duvarına çevirirdi.
+ */
+export const reklamMetniIstegiSchema = z.object({
+  clientId: z.string().uuid(),
+  goal: z.enum(CAMPAIGN_GOALS),
+  campaignName: z.string().trim().max(200).optional(),
+  linkUrl: z.string().trim().max(2000).optional(),
+});
+export type ReklamMetniIstegi = z.infer<typeof reklamMetniIstegiSchema>;
+
+export interface ReklamMetniOnerisi {
+  primaryText: string;
+  headline: string;
+  description: string;
+}
