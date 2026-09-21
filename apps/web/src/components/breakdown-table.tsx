@@ -15,11 +15,49 @@ import {
   changePercent,
 } from '@/lib/format';
 
-const LEVEL_TABS: Array<{ key: MetricLevel; label: string }> = [
-  { key: 'campaign', label: 'Kampanya' },
-  { key: 'ad_group', label: 'Reklam seti' },
-  { key: 'ad', label: 'Reklam' },
+/**
+ * ═══ SEVİYE SEKMELERİ ODAĞI DA YÖNETİYOR ═══
+ *
+ * Hiyerarşi kampanya › reklam seti › reklam ve kullanıcı bir kampanyanın
+ * İÇİNDEYKEN sekme değiştirebiliyor. Sekme yalnızca seviyeyi değiştirseydi
+ * "Kampanya"ya basmak, kartlar tek kampanyayı gösterirken tablonun bütün
+ * kampanyaları listelemesi demek olurdu — aynı ekranda iki farklı gerçek.
+ *
+ * Her sekme HANGİ ODAĞI DÜŞÜRECEĞİNİ kendisi söylüyor:
+ *   · Kampanya   → ikisini de düşür (workspace geneline çık)
+ *   · Reklam seti → kampanyayı koru, reklam setini düşür
+ *   · Reklam      → ikisini de koru
+ */
+const LEVEL_TABS: Array<{
+  key: MetricLevel;
+  label: string;
+  dusen: Record<string, undefined>;
+}> = [
+  { key: 'campaign', label: 'Kampanya', dusen: { kampanya: undefined, reklamSeti: undefined } },
+  { key: 'ad_group', label: 'Reklam seti', dusen: { reklamSeti: undefined } },
+  { key: 'ad', label: 'Reklam', dusen: {} },
 ];
+
+/**
+ * ═══ SATIRDAN BİR ALT BASAMAĞA İNMEK ═══
+ *
+ * `Record` BİLEREK: elle yazılmış bir koşul zinciri yeni bir seviye
+ * eklendiğinde sessizce yanlış yere giderdi. `null` = daha alt basamak yok
+ * (reklam en derin seviye) ve satır bağlantı OLMUYOR — tıklanabilir görünen
+ * ama hiçbir şey yapmayan bir bağlantı, bozuk bir ekrandan ayırt edilemez.
+ */
+const ALT_BASAMAK: Record<MetricLevel, ((entityId: string) => Record<string, string>) | null> = {
+  /*
+   * HESAP SEVİYESİ BU TABLODA SEÇİLEMİYOR (sekmelerde yok) ama `MetricLevel`
+   * onu taşıyor ve `Record` eksik bırakmaya izin vermiyor — doğrusu bu:
+   * seviye bir gün sekmelere eklenirse derleme BURADA kırılacak ve satırın
+   * nereye gideceği bilinçli olarak yazılacak.
+   */
+  account: null,
+  campaign: (id) => ({ seviye: 'ad_group', kampanya: id }),
+  ad_group: (id) => ({ seviye: 'ad', reklamSeti: id }),
+  ad: null,
+};
 
 const STATUS_STYLE: Record<string, string> = {
   active: 'bg-ok-soft text-ok-strong ring-ok/20',
@@ -75,6 +113,7 @@ export function BreakdownTable({
   //
   // Tek satırda bile gelir varsa kolon kalıyor — o zaman karşılaştırma anlamlı.
   const showRoas = rows.some((r) => r.roas !== null);
+  const altBasamak = ALT_BASAMAK[level];
 
   return (
     <section className="rounded-xl border border-line bg-surface">
@@ -87,7 +126,7 @@ export function BreakdownTable({
               // TAŞINAN SÜZGEÇLERLE. Eskiden yalnızca `aralik` yazılıyordu ve
               // `platform` DÜŞÜYORDU: "Meta" seçip seviye değiştiren kullanıcı
               // sessizce bütün platformlara dönüyordu.
-              href={baglanti('/dashboard', tasinan, { seviye: tab.key })}
+              href={baglanti('/dashboard', tasinan, { seviye: tab.key, ...tab.dusen })}
               aria-current={level === tab.key ? 'page' : undefined}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
                 level === tab.key
@@ -175,9 +214,25 @@ export function BreakdownTable({
                 <tr key={`${r.entityId}-${r.currency}`} className="border-b border-line/60 last:border-0">
                   <td className="max-w-[260px] px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                      <span className="truncate font-medium text-ink" title={r.name}>
-                        {r.name}
-                      </span>
+                      {/*
+                        AD BAĞLANTI — bir alt basamağa iniyor.
+                        Reklam seviyesinde alt basamak yok ve orada düz metin
+                        kalıyor: tıklanabilir görünüp hiçbir şey yapmayan bir
+                        bağlantı, bozuk bir ekrandan ayırt edilemez.
+                      */}
+                      {altBasamak ? (
+                        <Link
+                          href={baglanti('/dashboard', tasinan, altBasamak(r.entityId))}
+                          className="truncate font-medium text-ink transition hover:text-brand-strong hover:underline"
+                          title={`${r.name} — içine gir`}
+                        >
+                          {r.name}
+                        </Link>
+                      ) : (
+                        <span className="truncate font-medium text-ink" title={r.name}>
+                          {r.name}
+                        </span>
+                      )}
                       <StatusPill status={r.status} />
                     </div>
                     {r.parentName && (

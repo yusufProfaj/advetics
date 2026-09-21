@@ -1,6 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import {
   breakdownQuerySchema,
+  hierarchyPathQuerySchema,
   clientBreakdownQuerySchema,
   metricsQuerySchema,
   type BreakdownQuery,
@@ -13,6 +14,7 @@ import {
   type MetricsTimeseries,
   type TenantContext,
 } from '@advetics/shared';
+import type { HierarchyPathQuery, MetricsHierarchyPath } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodQuery } from '../../common/pipes/zod-validation.pipe';
 import { MetricsService } from './metrics.service';
@@ -101,6 +103,22 @@ export class MetricsController {
     @Query(zodQuery(clientBreakdownQuerySchema)) query: ClientBreakdownQuery,
   ): Promise<MetricsOrganizationRow[]> {
     return this.metrics.byOrganization(ctx, query);
+  }
+
+  /**
+   * EKMEK KIRINTISININ İSİMLERİ.
+   *
+   * Kırılım listesi boş dönebiliyor (o aralıkta veri yok) ve o hâlde ad
+   * yalnızca buradan okunabiliyor — kullanıcı hangi kampanyanın içinde
+   * olduğunu her zaman görmeli.
+   */
+  @Get('kirilim-yolu')
+  @RequirePermissions('insights.read')
+  hierarchyPath(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(hierarchyPathQuerySchema)) query: HierarchyPathQuery,
+  ): Promise<MetricsHierarchyPath> {
+    return this.metrics.hierarchyPath(ctx, query);
   }
 
   @Get('breakdown')

@@ -242,8 +242,29 @@ const compareAlanlari = {
   compareTo: isoDate.optional(),
 };
 
+/**
+ * ═══ ODAK — GOOGLE ADS'TEKİ GİBİ HİYERARŞİDE İNMEK ═══
+ *
+ * Şirket › workspace › kampanya › reklam seti › reklam. Bir kampanyaya
+ * tıklandığında ekranın TAMAMI o kampanyaya daralıyor: üstteki kartlar,
+ * grafik ve tablo. Yalnızca tabloyu daraltmak, aynı ekranda iki farklı
+ * gerçek göstermek olurdu — kartlar workspace'in toplamını, tablo tek bir
+ * kampanyanın satırlarını.
+ *
+ * İKİ ALAN, İKİ FARKLI İŞ:
+ *   · Özet ve grafikte odak VARLIĞIN KENDİSİ (o kampanyanın satırları).
+ *   · Kırılım tablosunda odak ÜST VARLIK (o kampanyanın ALTINDAKİLER).
+ * Aynı parametre iki yerde farklı anlam taşıyor ve bu bilinçli: kullanıcı
+ * için ikisi tek bir şey — "bu kampanyadayım".
+ */
+const odakAlanlari = {
+  campaignId: z.string().uuid().optional(),
+  adGroupId: z.string().uuid().optional(),
+};
+
 export const metricsQuerySchema = metricsQueryBase
   .extend(compareAlanlari)
+  .extend(odakAlanlari)
   .refine(orderOk, ORDER_MSG)
   .refine(spanOk, SPAN_MSG);
 
@@ -256,6 +277,7 @@ export const breakdownQuerySchema = metricsQueryBase
    * ayrı yazılsalardı panelin iki ucu farklı pencerelerle karşılaştırırdı.
    */
   .extend(compareAlanlari)
+  .extend(odakAlanlari)
   .extend({
     level: z.enum(METRIC_LEVELS).default('campaign'),
     limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -263,6 +285,30 @@ export const breakdownQuerySchema = metricsQueryBase
   .refine(orderOk, ORDER_MSG)
   .refine(spanOk, SPAN_MSG);
 export type BreakdownQuery = z.infer<typeof breakdownQuerySchema>;
+
+/**
+ * KIRILIM YOLU — ekmek kırıntısının okuduğu isimler.
+ *
+ * ═══ NEDEN AYRI BİR UÇ ═══
+ *
+ * Kampanyanın adı kırılım satırlarında da duruyor (`parentName`) ama liste
+ * BOŞ olabiliyor: o kampanyanın seçili aralıkta hiç reklam seti verisi
+ * yoksa tablo boş döner ve ekmek kırıntısı adsız kalırdı — kullanıcı hangi
+ * kampanyanın içinde olduğunu göremez. Ad, VERİDEN değil YAPIDAN okunmalı.
+ *
+ * Adı adrese yazmak da düşünüldü ve reddedildi: kampanya yeniden
+ * adlandırıldığında bağlantı eski adı taşımaya devam ederdi.
+ */
+export interface MetricsHierarchyPath {
+  campaign: { id: string; name: string } | null;
+  adGroup: { id: string; name: string } | null;
+}
+
+export const hierarchyPathQuerySchema = z.object({
+  campaignId: z.string().uuid().optional(),
+  adGroupId: z.string().uuid().optional(),
+});
+export type HierarchyPathQuery = z.infer<typeof hierarchyPathQuerySchema>;
 
 /**
  * Müşteri kırılımı sorgusu.

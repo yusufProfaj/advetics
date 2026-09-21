@@ -69,17 +69,29 @@ describe('KRİTİK: hesap süzgeci ALT SORGU değil', () => {
 });
 
 describe('KRİTİK: HER metrik sorgusu süzgeci alıyor', () => {
-  it('`filters` çağrısı ile `withTenant` gövdesi sayısı EŞİT', () => {
+  it('`insights_daily` OKUYAN her gövde süzgeci kuruyor', () => {
     /*
      * Bir gövdenin süzgeci unutması, o ucun izlemesi KAPALI hesapların
      * harcamasını panele taşıması demek — sessiz ve yanlış bir sayı.
-     * Sayılar elle sabitlenmiyor, birbirine karşı sınanıyor: yeni bir uç
-     * eklendiğinde test kendiliğinden onu da kapsıyor.
+     *
+     * İDDİA "HER GÖVDE" DEĞİL, "METRİK OKUYAN HER GÖVDE".
+     *
+     * Eskiden iki sayı eşitleniyordu (`withTenant` gövdesi = `filters`
+     * çağrısı) ve ekmek kırıntısının isimlerini okuyan uç eklendiğinde
+     * KIRMIZI verdi: o uç `campaigns`/`ad_groups` satırını birincil
+     * anahtarla okuyor, `insights_daily`ye hiç dokunmuyor ve orada süzgeç
+     * anlamsız — izolasyonu RLS yapıyor. Sayıyı bir artırmak kuralı
+     * gevşetirdi; iddia artık gövdenin NE OKUDUĞUNA bakıyor.
      */
-    const govdeler = KAYNAK.split('this.prisma.withTenant(ctx, async (tx) => {').length - 1;
-    const cagrilar = KAYNAK.split('const filters = this.filters(ctx, query,').length - 1;
-    expect(govdeler).toBeGreaterThan(4);
-    expect(cagrilar).toBe(govdeler);
+    const govdeler = KAYNAK.split('this.prisma.withTenant(ctx, async (tx) => {').slice(1);
+    const metrikOkuyan = govdeler.filter((g) => g.includes('FROM insights_daily'));
+    expect(metrikOkuyan.length, 'tarama boşa düştü').toBeGreaterThan(4);
+    for (const g of metrikOkuyan) {
+      expect(
+        g.includes('const filters = this.filters(ctx, query,'),
+        'insights_daily okuyan bir gövde süzgeç kurmuyor',
+      ).toBe(true);
+    }
   });
 
   it('KRİTİK: her çağrı listeyi GERÇEKTEN geçiriyor', () => {

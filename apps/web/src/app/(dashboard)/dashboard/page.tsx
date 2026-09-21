@@ -4,6 +4,7 @@ import type {
   Platform,
   MetricsBreakdownRow,
   MetricsClientRow,
+  MetricsHierarchyPath,
   MetricsOrganizationRow,
   MetricsSummary,
   MetricsTimeseries,
@@ -33,6 +34,7 @@ import { MetricStrip } from '@/components/metric-strip';
 import { MetricsChart } from '@/components/metrics-chart';
 import { BreakdownTable } from '@/components/breakdown-table';
 import { MusteriTablosu } from '@/components/musteri-tablosu';
+import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { SirketTablosu } from '@/components/sirket-tablosu';
 import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
 
@@ -103,9 +105,35 @@ export default async function DashboardPage({
     karsilastir: first(params.karsilastir),
     enEskiGun: kapsam?.earliestDate ?? null,
   });
-  const level = resolveLevel(first(params.seviye));
   const platform = resolvePlatform(first(params.platform));
   const siralama = siralamaCoz(first(params.sirala));
+
+  /*
+   * ═══ ODAK: HİYERARŞİDE İNİLEN VARLIK ═══
+   *
+   * Kullanıcının isteği Google Ads'teki kampanya hiyerarşisi: şirket ›
+   * workspace › kampanya › reklam seti › reklam, her basamak tıklanabilir.
+   * Kampanyaya tıklandığında ekranın TAMAMI ona daralıyor — kartlar, grafik
+   * ve tablo. Yalnızca tabloyu daraltmak, aynı ekranda iki farklı gerçek
+   * göstermek olurdu.
+   */
+  const kampanya = first(params.kampanya);
+  const reklamSeti = first(params.reklamSeti);
+
+  /*
+   * ODAKLIYKEN SEVİYE BİR ALT BASAMAĞA ÇEKİLİYOR.
+   *
+   * Bir kampanyanın içindeyken "kampanya" seviyesi anlamsız: kartlar tek
+   * kampanyayı gösterirken tablo bütün kampanyaları listelerdi. Arayüzde bu
+   * hâle düşmenin yolu yok (sekme odağı temizliyor) ama adres elle
+   * yazılabiliyor ve sunucu buna bahis oynamamalı.
+   */
+  const istenenSeviye = resolveLevel(first(params.seviye));
+  const level = reklamSeti
+    ? 'ad'
+    : kampanya && istenenSeviye === 'campaign'
+      ? 'ad_group'
+      : istenenSeviye;
 
   /*
    * BAĞLANTILARDA TAŞINAN SÜZGEÇLER — TEK YERDE.
@@ -123,6 +151,11 @@ export default async function DashboardPage({
     // Sıralama da TAŞINIYOR: seviye ya da platform değiştiren kullanıcının
     // seçtiği sütun düşerse süzgeç kaybolması hatasının aynısı olurdu.
     sirala: siralama,
+    // ODAK DA TAŞINIYOR: platform sekmesi ya da tarih değiştiren kullanıcı
+    // bulunduğu kampanyadan düşmemeli. Aynı unutkanlık `platform`ta
+    // yaşanmıştı.
+    kampanya,
+    reklamSeti,
   };
 
   const base = new URLSearchParams({ from: range.from, to: range.to });
@@ -142,6 +175,14 @@ export default async function DashboardPage({
   // "toplam" gösterirken tablonun tek platformu listelemesi demek olurdu —
   // aynı ekranda iki farklı gerçek.
   if (platform) base.set('platform', platform);
+  /*
+   * ODAK ÜÇ SORGUYA DA gidiyor. Yalnızca tabloya uygulamak, üstteki
+   * kartların workspace toplamını gösterirken tablonun tek bir kampanyanın
+   * satırlarını listelemesi demek olurdu — platform süzgecinde aynı karar
+   * aynı gerekçeyle verildi.
+   */
+  if (kampanya) base.set('campaignId', kampanya);
+  if (reklamSeti) base.set('adGroupId', reklamSeti);
   const breakdownQs = new URLSearchParams(base);
   breakdownQs.set('level', level);
   breakdownQs.set('limit', String(KIRILIM_LIMITI));
@@ -197,7 +238,7 @@ export default async function DashboardPage({
    *
    * Sebep artık platformun KENDİ cümlesiyle ekranda; sayfa yine açılıyor.
    */
-  const [summary, series, breakdown, musteriler, sirketler] = await Promise.all([
+  const [summary, series, breakdown, musteriler, sirketler, yol] = await Promise.all([
     serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch((e: unknown) => {
       ozetHatasi = hataMetni(e);
       return null;
@@ -221,6 +262,22 @@ export default async function DashboardPage({
           () => null,
         )
       : Promise.resolve(null),
+    /*
+     * EKMEK KIRINTISININ İSİMLERİ — yalnızca odaklıyken çekiliyor.
+     *
+     * Ad kırılım satırlarında da duruyor (`parentName`) ama liste BOŞ
+     * olabiliyor: seçili aralıkta o kampanyanın hiç reklam seti verisi
+     * yoksa tablo boş döner ve şerit adsız kalırdı. Ad VERİDEN değil
+     * YAPIDAN okunmalı.
+     */
+    kampanya || reklamSeti
+      ? serverApiFetch<MetricsHierarchyPath>(
+          `/metrics/kirilim-yolu?${new URLSearchParams({
+            ...(kampanya ? { campaignId: kampanya } : {}),
+            ...(reklamSeti ? { adGroupId: reklamSeti } : {}),
+          })}`,
+        ).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const activeClient = session.availableClients.find((c) => c.id === session.activeClientId);
@@ -233,6 +290,43 @@ export default async function DashboardPage({
   const scopeLabel = ajansGorunumu
     ? 'Tüm şirketler'
     : (activeClient?.name ?? 'Tüm workspace’ler');
+
+  /*
+   * ═══ ŞERİDİN BASAMAKLARI — VAR OLANLAR ═══
+   *
+   * Basamak sayısı kullanıcının kurulumuna göre değişiyor ve eksik olanı
+   * boş çizmek yerine HİÇ çizmiyoruz: üst hesabı olmayan bir kullanıcıya
+   * "Tüm şirketler" göstermek, gidemeyeceği bir yere kapı açmak olurdu.
+   *
+   * SON BASAMAK BULUNDUĞUN YER ve bileşen onu bağlantı yapmıyor.
+   */
+  const basamaklar: YolBasamagi[] = [];
+  if (session.managerAccount) {
+    basamaklar.push({ ad: session.managerAccount.name, kapsam: { tip: 'ajans' } });
+  }
+  if (!ajansGorunumu) {
+    const sirketAdi =
+      session.managerAccount?.organizations.find((o) => o.id === session.activeOrganizationId)
+        ?.name ?? session.organization.name;
+    basamaklar.push({ ad: sirketAdi, kapsam: { tip: 'sirket' } });
+  }
+  if (activeClient) {
+    // WORKSPACE BASAMAĞI ODAĞI TEMİZLİYOR: kampanyanın içinden workspace'e
+    // dönmenin yolu bu.
+    basamaklar.push({
+      ad: activeClient.name,
+      sorgu: { kampanya: undefined, reklamSeti: undefined, seviye: 'campaign' },
+    });
+  }
+  if (yol?.campaign) {
+    basamaklar.push({
+      ad: yol.campaign.name,
+      sorgu: { kampanya: yol.campaign.id, reklamSeti: undefined, seviye: 'ad_group' },
+    });
+  }
+  if (yol?.adGroup) {
+    basamaklar.push({ ad: yol.adGroup.name, sorgu: { reklamSeti: yol.adGroup.id, seviye: 'ad' } });
+  }
 
   return (
     <div className="space-y-6">
@@ -247,6 +341,13 @@ export default async function DashboardPage({
       <header className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
           <div className="min-w-0">
+            {/* ŞERİT BAŞLIĞIN ÜSTÜNDE: "neredeyim" sorusunun cevabı, sayfanın
+                adından önce okunmalı. */}
+            {basamaklar.length > 1 && (
+              <div className="mb-1">
+                <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} />
+              </div>
+            )}
             <h1 className="text-xl font-semibold text-ink">Genel Bakış</h1>
             {/*
               TAMAMLANMAMIŞ GÜN AYNI SATIRDA. Ayrı bir satırdayken başlık

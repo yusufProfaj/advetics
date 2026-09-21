@@ -62,8 +62,19 @@ describe('AJANS KAPSAMINDA sorgu süresi', () => {
      * engelliyor. Kök çözüm sorgunun kendisinde ve ölçüm istiyor.
      */
     expect(METRIK).toContain('const OKUMA_SURESI_MS = 20_000');
-    // ALTI OKUMA YOLUNUN HEPSİ: birine eklemek, diğerinin aynı hatayla
-    // düşmesi ve hatayı ikinci kez aramamız demekti.
-    expect(METRIK.split('timeoutMs: OKUMA_SURESI_MS').length - 1).toBe(6);
+    /*
+     * HER OKUMA YOLU — SABİT BİR SAYI DEĞİL.
+     *
+     * İddia bir süre "altı tane olmalı" diyordu ve yeni bir okuma ucu
+     * eklendiğinde KIRMIZI verdi: doğru davranan koda "yanlış" dedi ve
+     * düzeltmesi sayıyı artırmaktı. Sayıyı artırmak da kuralı korumuyor —
+     * yedinci ucu timeout'suz yazan biri testi yine geçerdi.
+     *
+     * Kural aslında şu: `withTenant` açan her yol süreyi geçirmek zorunda.
+     * İddia artık onu ölçüyor.
+     */
+    const acilan = METRIK.split('withTenant(').length - 1;
+    expect(acilan).toBeGreaterThan(5);
+    expect(METRIK.split('timeoutMs: OKUMA_SURESI_MS').length - 1).toBe(acilan);
   });
 });

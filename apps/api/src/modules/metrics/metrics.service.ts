@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { seviyeLiterali } from './seviye-literali';
 import { deriveRoas } from '@advetics/shared';
 import type {
+  HierarchyPathQuery,
+  MetricsHierarchyPath,
   ClientBreakdownQuery,
   MetricsClientRow,
   MetricsOrganizationRow,
@@ -63,6 +65,16 @@ const TOTALS_LEVEL: MetricLevel = 'campaign';
  * `entity-level-kismi-indeks.spec.ts`te.
  */
 const TOPLAM_SEVIYESI = seviyeLiterali(TOTALS_LEVEL);
+
+/**
+ * ERİŞİMİN OKUNDUĞU SEVİYE — toplamlarınkinden AYRI ve bu bilinçli.
+ *
+ * Erişim tekil kullanıcı: kampanyalar arasında toplanamıyor çünkü aynı kişi
+ * ikisini de görmüş olabilir. Platform hesap seviyesinde tekilleştirerek
+ * bildiriyor. Sabit olarak yazılı ki `TOTALS_LEVEL` bir gün değiştiğinde
+ * erişim onunla birlikte SESSİZCE kaymasın.
+ */
+const ERISIM_SEVIYESI = seviyeLiterali('account');
 
 /**
  * ═══ OKUMA TRANSACTION'I İÇİN SÜRE — VARSAYILAN 5 SANİYE YETMİYOR ═══
@@ -165,6 +177,12 @@ export class MetricsService {
 
     return this.prisma.withTenant(ctx, async (tx) => {
       const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx));
+      /*
+       * ODAK BÜTÜN ÖZET SORGULARINI DEĞİŞTİRİYOR. Yalnızca birini
+       * daraltmak, aynı ekranda iki farklı gerçek göstermek olurdu:
+       * harcama kampanyanın, gösterim workspace'in.
+       */
+      const odak = this.odak(query);
 
       const hiddenAccounts = await this.hiddenAccountCount(tx, query);
 
@@ -177,7 +195,8 @@ export class MetricsService {
                  SUM(conversion_value_micros) AS conversion_value_micros
           FROM insights_daily
           WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
-            AND entity_level = ${TOPLAM_SEVIYESI}
+            AND entity_level = ${odak.seviye}
+            ${odak.filtre}
             ${filters}
         `,
       );
@@ -191,7 +210,8 @@ export class MetricsService {
                  SUM(conversion_value_micros) AS conversion_value_micros
           FROM insights_daily
           WHERE date BETWEEN ${prevFrom}::date AND ${prevTo}::date
-            AND entity_level = ${TOPLAM_SEVIYESI}
+            AND entity_level = ${odak.seviye}
+            ${odak.filtre}
             ${filters}
         `,
       );
@@ -205,7 +225,8 @@ export class MetricsService {
           SELECT currency, SUM(spend_micros) AS spend_micros
           FROM insights_daily
           WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
-            AND entity_level = ${TOPLAM_SEVIYESI}
+            AND entity_level = ${odak.seviye}
+            ${odak.filtre}
             ${filters}
           GROUP BY currency
           ORDER BY 2 DESC
@@ -220,7 +241,8 @@ export class MetricsService {
                  COUNT(DISTINCT ad_account_id) AS account_count
           FROM insights_daily
           WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
-            AND entity_level = ${TOPLAM_SEVIYESI}
+            AND entity_level = ${odak.seviye}
+            ${odak.filtre}
             ${filters}
         `,
       );
@@ -238,10 +260,26 @@ export class MetricsService {
         Array<{ total_reach: string | number | null; day_count: string | number }>
       >(
         Prisma.sql`
-          SELECT SUM(reach) AS total_reach, COUNT(DISTINCT date) AS day_count
+          -- SIFIR ERİŞİM = BİLDİRİLMEDİ, "kimseye ulaşmadı" DEĞİL.
+          --
+          -- Kolonun varsayilani 0 ve platform her seviyede erisim
+          -- bildirmiyor (Meta reklam seti seviyesinde cogu zaman
+          -- bildirmiyor). Ham toplami yazmak, gosterim almis bir reklam
+          -- setinin kartinda "0 kisiye ulasildi" gostermek olurdu; gosterim
+          -- varken erisim sifir OLAMAZ, yani sifir tek basina "bilmiyoruz"
+          -- demek.
+          SELECT NULLIF(SUM(reach), 0) AS total_reach, COUNT(DISTINCT date) AS day_count
           FROM insights_daily
           WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
-            AND entity_level = 'account'::"EntityLevel"
+            -- ODAKLIYKEN ERİŞİM DE ODAKTAN OKUNUYOR.
+            --
+            -- Hesap seviyesinden okumaya devam etmek, tek bir kampanyaya
+            -- inmis kullaniciya BUTUN HESABIN erisimini gostermek olurdu ve
+            -- o sayi kartta kampanyanınmis gibi durur. Platform o seviyede
+            -- erisim bildirmiyorsa sonuc bos kaliyor ve kart bilinmiyor
+            -- diyor: yanlis sayidan iyi.
+            AND entity_level = ${odak.erisimSeviyesi}
+            ${odak.filtre}
             ${filters}
         `,
       );
@@ -303,6 +341,9 @@ export class MetricsService {
 
     return this.prisma.withTenant(ctx, async (tx) => {
       const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx));
+      // GRAFİK DE ODAĞA UYUYOR: kartlar kampanyayı, grafik workspace'i
+      // gösterseydi aynı ekranda iki farklı gerçek olurdu.
+      const odak = this.odak(query);
       const rows = await tx.$queryRaw<Array<RawTotals & { date: Date }>>(
         Prisma.sql`
           SELECT date,
@@ -313,7 +354,8 @@ export class MetricsService {
                  SUM(conversion_value_micros) AS conversion_value_micros
           FROM insights_daily
           WHERE date BETWEEN ${pencereBasi}::date AND ${query.to}::date
-            AND entity_level = ${TOPLAM_SEVIYESI}
+            AND entity_level = ${odak.seviye}
+            ${odak.filtre}
             ${filters}
           GROUP BY date
           ORDER BY date
@@ -342,6 +384,46 @@ export class MetricsService {
     }, { timeoutMs: OKUMA_SURESI_MS });
   }
 
+  /**
+   * EKMEK KIRINTISININ İSİMLERİ — yapıdan okunuyor, metrikten değil.
+   *
+   * Kırılım satırları kampanya adını zaten taşıyor ama liste BOŞ olabiliyor:
+   * seçili aralıkta o kampanyanın hiç reklam seti verisi yoksa tablo boş
+   * döner ve kullanıcı hangi kampanyanın içinde olduğunu göremezdi.
+   *
+   * REKLAM SETİ VERİLDİĞİNDE KAMPANYA ONDAN TÜRETİLİYOR: adres yalnızca
+   * reklam seti taşıyor olsa bile üst basamak çizilebilmeli.
+   */
+  async hierarchyPath(
+    ctx: TenantContext,
+    query: HierarchyPathQuery,
+  ): Promise<MetricsHierarchyPath> {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const [set] = query.adGroupId
+        ? await tx.$queryRaw<Array<{ id: string; name: string; campaign_id: string }>>(
+            Prisma.sql`
+              SELECT id::text AS id, name, campaign_id::text AS campaign_id
+              FROM ad_groups WHERE id = ${query.adGroupId}::uuid
+            `,
+          )
+        : [];
+
+      const kampanyaId = set?.campaign_id ?? query.campaignId ?? null;
+      const [kampanya] = kampanyaId
+        ? await tx.$queryRaw<Array<{ id: string; name: string }>>(
+            Prisma.sql`
+              SELECT id::text AS id, name FROM campaigns WHERE id = ${kampanyaId}::uuid
+            `,
+          )
+        : [];
+
+      return {
+        campaign: kampanya ? { id: kampanya.id, name: kampanya.name } : null,
+        adGroup: set ? { id: set.id, name: set.name } : null,
+      };
+    }, { timeoutMs: OKUMA_SURESI_MS });
+  }
+
   async breakdown(ctx: TenantContext, query: BreakdownQuery): Promise<MetricsBreakdownRow[]> {
     /*
      * KARŞILAŞTIRMA PENCERESİ İSTEKTEN GELİYOR — özet uçla aynı kural.
@@ -354,6 +436,33 @@ export class MetricsService {
 
     return this.prisma.withTenant(ctx, async (tx) => {
       const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx), 'i');
+
+      /*
+       * ═══ KIRILIMDA ODAK "ÜST VARLIK" DEMEK ═══
+       *
+       * Özet ve grafikte odak varlığın KENDİSİ; burada ALTINDAKİLER. Aynı
+       * parametre iki anlam taşıyor ve bu bilinçli — kullanıcı için ikisi
+       * tek bir şey: "bu kampanyadayım".
+       *
+       * KAMPANYA SÜZGECİ İKİ SEVİYEDE ÇALIŞIYOR. Reklam seti satırlarında
+       * kampanya `g.campaign_id`, reklam satırlarında ise reklamın ad
+       * set'inin kampanyası (`ag.campaign_id`). Yalnızca birini yazmak,
+       * kampanyaya inip "Reklam" sekmesine geçen kullanıcıya BÜTÜN
+       * workspace'in reklamlarını gösterirdi.
+       *
+       * KAMPANYA SEVİYESİNDE HİÇ UYGULANMIYOR: o satırlarda `g` ve `ag`
+       * NULL ve `NULL = x` hiçbir satırı geçirmez — kampanya listesi boş
+       * çıkardı. Kullanıcı "Kampanyalar"a bastığında odak zaten temizleniyor
+       * ama sunucu buna bahis oynamıyor.
+       */
+      const kampanyaFiltresi =
+        query.campaignId && query.level !== 'campaign'
+          ? Prisma.sql`AND COALESCE(g.campaign_id, ag.campaign_id) = ${query.campaignId}::uuid`
+          : Prisma.empty;
+      const setFiltresi =
+        query.adGroupId && query.level === 'ad'
+          ? Prisma.sql`AND a.ad_group_id = ${query.adGroupId}::uuid`
+          : Prisma.empty;
       // Varlık adı ve üst varlık adı seviyeye göre farklı tablodan geliyor.
       // Üç ayrı sorgu yerine LEFT JOIN'lerle tek sorgu: seviye filtresi
       // sayesinde yalnızca biri eşleşiyor.
@@ -415,6 +524,8 @@ export class MetricsService {
           LEFT JOIN ad_groups   ag  ON i.entity_level = 'ad'       AND ag.id = a.ad_group_id
           WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND i.entity_level = ${query.level}::"EntityLevel"
+            ${kampanyaFiltresi}
+            ${setFiltresi}
             ${filters}
           GROUP BY i.entity_id, i.entity_external_id, i.platform, i.currency,
                    c.name, g.name, a.name, acc.name, gc.name, ag.name,
@@ -467,6 +578,63 @@ export class MetricsService {
    * `Prisma.sql` ile birleştiriliyor, string interpolasyonu YOK — bu değerler
    * kullanıcıdan geliyor ve şablona gömmek SQL enjeksiyonu olurdu.
    */
+  /**
+   * ═══ ODAK: HİYERARŞİDE İNİLEN VARLIK ═══
+   *
+   * Kullanıcı bir kampanyaya tıkladığında ekranın TAMAMI ona daralıyor.
+   * Burada üretilen iki parça, özet ve grafik sorgularındaki iki satırı
+   * değiştiriyor: hangi seviyeden okunacağı ve hangi varlık.
+   *
+   * SEVİYE DE DEĞİŞMEK ZORUNDA, yalnızca `entity_id` süzmek YETMEZ:
+   * toplamlar hesap seviyesinden (`TOTALS_LEVEL`) okunuyor ve bir kampanya
+   * kimliği o seviyede HİÇBİR satırla eşleşmiyor. Yalnızca kimliği süzen bir
+   * kod, her odakta boş ekran üretirdi — hata vermeden.
+   *
+   * REKLAM SETİ KAMPANYAYI EZİYOR: ikisi birlikte geldiğinde daha dar olan
+   * kazanıyor. İkisini AND ile birleştirmek, aynı satırın hem kampanya hem
+   * reklam seti kimliği taşımasını beklemek olurdu — `entity_id` tek bir
+   * varlık.
+   */
+  private odak(query: { campaignId?: string; adGroupId?: string }): {
+    seviye: Prisma.Sql;
+    filtre: Prisma.Sql;
+    /**
+     * ERİŞİMİN OKUNACAĞI SEVİYE — DİĞERLERİYLE AYNI DEĞİL.
+     *
+     * Erişim TEKİL kullanıcı ve kampanyalar arasında TOPLANAMIYOR: aynı kişi
+     * iki kampanyayı da görmüş olabilir. Bu yüzden odaksız hâlde HESAP
+     * seviyesinden okunuyor — toplamlar kampanya seviyesinden okunsa bile.
+     *
+     * ODAKLIYKEN TEK BİR VARLIK var, yani toplama sorusu doğmuyor ve doğru
+     * cevap o varlığın kendi satırı. Bu ayrımı kaldırıp erişimi de
+     * toplamlarla aynı seviyeden okumak, odaksız ekranda kampanyalar arası
+     * MÜKERRER SAYIM demekti — mutasyon testinde birebir bu yakalandı.
+     */
+    erisimSeviyesi: Prisma.Sql;
+  } {
+    if (query.adGroupId) {
+      const seviye = seviyeLiterali('ad_group');
+      return {
+        seviye,
+        filtre: Prisma.sql`AND entity_id = ${query.adGroupId}::uuid`,
+        erisimSeviyesi: seviye,
+      };
+    }
+    if (query.campaignId) {
+      const seviye = seviyeLiterali('campaign');
+      return {
+        seviye,
+        filtre: Prisma.sql`AND entity_id = ${query.campaignId}::uuid`,
+        erisimSeviyesi: seviye,
+      };
+    }
+    return {
+      seviye: TOPLAM_SEVIYESI,
+      filtre: Prisma.empty,
+      erisimSeviyesi: ERISIM_SEVIYESI,
+    };
+  }
+
   private filters(
     ctx: TenantContext,
     query: MetricsQuery,

@@ -235,10 +235,32 @@ describe('KRİTİK: servis LİTERAL biçimi kullanıyor', () => {
     expect(KAYNAK).toContain('const TOPLAM_SEVIYESI = seviyeLiterali(TOTALS_LEVEL);');
   });
 
-  it('toplam seviyesini süzen HER sorgu literali kullanıyor', () => {
-    // Sayı sabitlenmiyor (sorgu eklenebilir); aranan şey parametreli
-    // biçimin HİÇ kalmaması ve literalin birden çok yerde geçmesi.
-    const literal = KAYNAK.split('entity_level = ${TOPLAM_SEVIYESI}').length - 1;
-    expect(literal).toBeGreaterThanOrEqual(6);
+  it('KRİTİK: `entity_level` süzen HER sorgu literal üreticisinden geçiyor', () => {
+    /*
+     * KURAL: `entity_level` bağlı parametreyle süzülmemeli — parametreli
+     * biçim kısmi indeksi kullanılamaz hâle getiriyor.
+     *
+     * İDDİA SAYI SAYMIYOR. Bir süre "literal en az altı yerde geçmeli"
+     * diyordu ve hiyerarşi odağı eklenince KIRMIZI verdi: sorguların bir
+     * kısmı `TOPLAM_SEVIYESI` yerine `odak.seviye` kullanmaya başladı ve o
+     * da bir literal üreticisi. Sayıyı güncellemek kuralı korumazdı —
+     * yedinci sorguyu parametreyle yazan biri testi yine geçerdi.
+     *
+     * Doğru iddia: her kullanım İZİNLİ ÜRETİCİLERDEN biri olmalı.
+     */
+    const IZINLI = new Set([
+      'TOPLAM_SEVIYESI',
+      'ERISIM_SEVIYESI',
+      'odak.seviye',
+      'odak.erisimSeviyesi',
+      // Kırılım seviyesi KULLANICIDAN geliyor ve kısmi indeks zaten onu
+      // kapsamıyor; açık cast ile bağlı parametre burada doğru biçim.
+      'query.level',
+    ]);
+    const kullanimlar = [...KAYNAK.matchAll(/entity_level = \$\{([^}]+)\}/g)].map((m) =>
+      (m[1] ?? '').trim(),
+    );
+    expect(kullanimlar.length, 'tarama boşa düştü').toBeGreaterThan(5);
+    expect(kullanimlar.filter((k) => !IZINLI.has(k))).toEqual([]);
   });
 });
