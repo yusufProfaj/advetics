@@ -21,7 +21,18 @@ import { kitleBolumuKarari } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
-import { donusumGrafigi, egri, halka, kisalt, okunakliYazi, renk, rozet, SLATE, tablo } from './pdf-cizim';
+import {
+  donusumGrafigi,
+  egri,
+  halka,
+  kisalt,
+  okunakliYazi,
+  renk,
+  rozet,
+  SLATE,
+  tablo,
+  type TabloSutunu,
+} from './pdf-cizim';
 
 /** A4, punto cinsinden. */
 const EN = 595.28;
@@ -158,6 +169,9 @@ export class RaporPdfService {
           break;
         case 'google_search_terms':
           this.aramaTerimleri(ctx);
+          break;
+        case 'conversion_detail':
+          this.donusumDetayi(ctx);
           break;
         /*
          * KİTLE BÖLÜMLERİ — platform sunmuyorsa SAYFA HİÇ AÇILMIYOR.
@@ -861,6 +875,105 @@ export class RaporPdfService {
     });
 
     this.sigmayanlar(ctx, s, son, cizilen, satirlar.length, 'satır');
+  }
+
+  /**
+   * ═══ DÖNÜŞÜM DETAYI ═══
+   *
+   * Raporda tek bir "Dönüşüm" sayısı vardı ve NEYİN kaç tane olduğu hiçbir
+   * yerde yazmıyordu. Kullanıcının cümlesi: "dönüşümlerde ne olarak
+   * adlandırdıysam 'whatsapp tıklaması' 'site içi telefon araması' gibi gibi
+   * dönüşümleri raporda düzgün bir şekilde görebilmem lazım".
+   *
+   * BOŞ LİSTENİN SEBEBİ YAZILI. "Bu dönemde dönüşüm yok" ile "platform
+   * detayı vermedi" farklı işler ve bu belge MÜŞTERİYE gidiyor: sebebi
+   * yazmayan bir boş tablo, ajansın ölçüm kurmadığı izlenimi bırakır.
+   */
+  private donusumDetayi(ctx: Ctx): void {
+    const s = ctx.doc.addPage([EN, BOY]);
+    let y = this.baslik(ctx, s, SECTION_LABELS.conversion_detail);
+
+    const { rows, errors } = ctx.data.conversionDetail;
+
+    if (errors.length > 0) {
+      for (const [i, satir] of sar(
+        `Dönüşüm detayı alınamadı: ${errors.join(' · ')}`,
+        ctx.normal,
+        8,
+        EN - 2 * KENAR,
+      ).entries()) {
+        s.drawText(satir, {
+          x: KENAR,
+          y: y - i * 11,
+          size: 8,
+          font: ctx.normal,
+          color: SLATE.s500,
+        });
+      }
+      y -= 12 * sar(`Dönüşüm detayı alınamadı: ${errors.join(' · ')}`, ctx.normal, 8, EN - 2 * KENAR).length + 8;
+    }
+
+    if (rows.length === 0) {
+      this.bosKutu(
+        ctx,
+        s,
+        y,
+        errors.length > 0
+          ? 'Detay gelmediği için liste boş.'
+          : 'Bu dönemde kayıtlı dönüşüm yok.',
+      );
+      return;
+    }
+
+    /*
+     * AÇIKLAMA SATIRI ZORUNLU. Google satırlarındaki adlar müşterinin kendi
+     * Google Ads kurulumundaki adlar; Meta satırları ise gruplanmış geliyor
+     * (platform özel dönüşümün adını insights yanıtında vermiyor). Bunu
+     * yazmadan iki mecrayı yan yana koymak, "Meta'da neden benim adlarım
+     * yok" sorusunu cevapsız bırakırdı.
+     */
+    for (const [i, satir] of sar(
+      'Google satırlarında adlar Google Ads hesabındaki dönüşüm eylemi adlarıdır. ' +
+        'Meta satırları gruplanmış gelir: platform, özel dönüşümün adını raporlamıyor.',
+      ctx.normal,
+      8,
+      EN - 2 * KENAR,
+    ).entries()) {
+      s.drawText(satir, { x: KENAR, y: y - i * 11, size: 8, font: ctx.normal, color: SLATE.s500 });
+    }
+    y -= 30;
+
+    // PARA SÜTUNU YALNIZCA DEĞER VARSA: lead ve mesaj dönüşümlerinin parasal
+    // karşılığı yok ve baştan sona "—" yazan bir sütun yer kaplıyor.
+    const degerVar = rows.some((r) => r.valueMicros !== '0');
+    type Satir = (typeof rows)[number];
+    const sutunlar: Array<TabloSutunu<Satir>> = [
+      { baslik: 'Dönüşüm', pay: degerVar ? 46 : 62, deger: (r) => r.name },
+      { baslik: 'Mecra', pay: 18, deger: (r) => PLATFORM_KISA_ADLARI[r.platform] },
+      { baslik: 'Adet', pay: 20, sag: true, kalinDeger: true, deger: (r) => formatNumber(r.count) },
+    ];
+    if (degerVar) {
+      sutunlar.push({
+        baslik: 'Değer',
+        pay: 16,
+        sag: true,
+        deger: (r) =>
+          r.valueMicros === '0' ? '—' : formatMoney(r.valueMicros, ctx.data.currency),
+      });
+    }
+
+    const { y: son, cizilen } = tablo(s, {
+      sutunlar,
+      satirlar: rows,
+      x: KENAR,
+      y,
+      genislik: EN - 2 * KENAR,
+      altSinir: KENAR + 20,
+      normal: ctx.normal,
+      kalin: ctx.kalin,
+    });
+
+    this.sigmayanlar(ctx, s, son, cizilen, rows.length, 'dönüşüm');
   }
 
   private aramaTerimleri(ctx: Ctx): void {

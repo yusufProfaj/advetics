@@ -118,6 +118,14 @@ const VERI: ReportData = {
   ],
   topAds: [],
   topAdsMissingPlatforms: [],
+  conversionDetail: {
+    rows: [
+      { platform: 'google' as const, name: 'WhatsApp tıklaması', count: 42, valueMicros: '0' },
+      { platform: 'google' as const, name: 'Site içi telefon araması', count: 17, valueMicros: '0' },
+      { platform: 'meta' as const, name: 'Form', count: 9, valueMicros: '0' },
+    ],
+    errors: [],
+  },
   keywords: [
     { keyword: 'urla satılık villa', spendMicros: '3037000000', impressions: 6250, clicks: 302, ctr: 4.83, cpc: 10.05 },
   ],
@@ -1205,5 +1213,42 @@ describe('RaporPdfService — günlük eğri raporu düşürmüyor', () => {
       daily: gunler([7]),
     });
     expect(pdf.length).toBeGreaterThan(1000);
+  });
+});
+
+describe('DÖNÜŞÜM DETAYI bölümü', () => {
+  /*
+   * Raporda tek bir "Dönüşüm" sayısı vardı ve NEYİN kaç tane olduğu hiçbir
+   * yerde yazmıyordu. Kullanıcının cümlesi: "dönüşümlerde ne olarak
+   * adlandırdıysam 'whatsapp tıklaması' 'site içi telefon araması' gibi gibi
+   * dönüşümleri raporda düzgün bir şekilde görebilmem lazım".
+   */
+  const bolum = (over: Partial<ReportData['conversionDetail']> = {}): ReportData => ({
+    ...VERI,
+    sections: ['conversion_detail'],
+    conversionDetail: { ...VERI.conversionDetail, ...over },
+  });
+
+  it('KRİTİK: dönüşüm eylemi ADLARI belgeye çiziliyor', async () => {
+    const t = metinler(await svc.uret(bolum())).join(' ');
+
+    expect(t).toContain('WhatsApp');
+    expect(t).toContain('telefon');
+    expect(t).toContain('42');
+  });
+
+  it('KRİTİK: BOŞ LİSTENİN SEBEBİ yazılı', async () => {
+    /*
+     * Bu belge MÜŞTERİYE gidiyor: sebebi yazmayan boş bir tablo, ajansın
+     * ölçüm kurmadığı izlenimi bırakır.
+     */
+    const t = metinler(await svc.uret(bolum({ rows: [] }))).join(' ');
+    expect(t).toContain('kayıtlı dönüşüm yok');
+  });
+
+  it('KRİTİK: "dönüşüm yok" ile "detay alınamadı" AYRI cümleler', async () => {
+    const t = metinler(await svc.uret(bolum({ rows: [], errors: ['kota doldu'] }))).join(' ');
+    expect(t).toContain('kota doldu');
+    expect(t).toContain('Detay gelmediği için');
   });
 });

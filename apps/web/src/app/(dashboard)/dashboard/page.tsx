@@ -4,6 +4,7 @@ import type {
   Platform,
   MetricsBreakdownRow,
   MetricsClientRow,
+  MetricsConversionDetail,
   MetricsHierarchyPath,
   MetricsOrganizationRow,
   MetricsSummary,
@@ -33,6 +34,7 @@ import { MetricCard } from '@/components/metric-card';
 import { MetricStrip } from '@/components/metric-strip';
 import { MetricsChart } from '@/components/metrics-chart';
 import { BreakdownTable } from '@/components/breakdown-table';
+import { DonusumDetay } from '@/components/donusum-detay';
 import { MusteriTablosu } from '@/components/musteri-tablosu';
 import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { SirketTablosu } from '@/components/sirket-tablosu';
@@ -238,7 +240,8 @@ export default async function DashboardPage({
    *
    * Sebep artık platformun KENDİ cümlesiyle ekranda; sayfa yine açılıyor.
    */
-  const [summary, series, breakdown, musteriler, sirketler, yol] = await Promise.all([
+  const [summary, series, breakdown, musteriler, sirketler, donusum, yol] =
+    await Promise.all([
     serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch((e: unknown) => {
       ozetHatasi = hataMetni(e);
       return null;
@@ -270,6 +273,20 @@ export default async function DashboardPage({
      * yoksa tablo boş döner ve şerit adsız kalırdı. Ad VERİDEN değil
      * YAPIDAN okunmalı.
      */
+    /*
+     * DÖNÜŞÜM DETAYI — üst katman görünümlerinde ÇEKİLMİYOR.
+     *
+     * Ajans ve şirket kapsamında ekran şirket/workspace listeliyor; dönüşüm
+     * eylemleri o katmanda anlamsız (hangi workspace'in WhatsApp tıklaması
+     * olduğu yazmıyor) ve sorgu ham JSONB gövdelerini çekiyor — gösterilmeyen
+     * bir listeyi doldurmak, en pahalı sorgulardan birini boşa koşturmak
+     * olurdu.
+     */
+    mcc || ajansGorunumu
+      ? Promise.resolve(null)
+      : serverApiFetch<MetricsConversionDetail>(`/metrics/donusum-detay?${base}`).catch(
+          () => null,
+        ),
     kampanya || reklamSeti
       ? serverApiFetch<MetricsHierarchyPath>(
           `/metrics/kirilim-yolu?${new URLSearchParams({
@@ -484,6 +501,16 @@ export default async function DashboardPage({
           ) : breakdown === null ? (
             <Notice tone="error">Dağılım verisi alınamadı.</Notice>
           ) : (
+            <>
+            {/*
+              DÖNÜŞÜM DETAYI TABLONUN ÜSTÜNDE.
+              Kırılım tablosu "hangi kampanya ne harcadı" sorusunu, bu tablo
+              "o dönüşümler NEYDİ" sorusunu cevaplıyor. İkincisi sayılara
+              ANLAM veriyor; altına koymak, kullanıcının 25 satırı geçip
+              bulmasını beklemek olurdu.
+            */}
+            {donusum !== null && <DonusumDetay detay={donusum} currency={summary.currency} />}
+
             <BreakdownTable
               /*
                * SIRALAMA BURADA UYGULANIYOR, SORGUDA DEĞİL. Satır kümesi her
@@ -502,6 +529,7 @@ export default async function DashboardPage({
                  aralığı iki yerde hesaplamak olurdu. */
               range={{ from: range.from, to: range.to }}
             />
+            </>
           )}
 
           {/*

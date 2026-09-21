@@ -1,4 +1,4 @@
-import { deriveRoas } from '@advetics/shared';
+import { deriveRoas, donusumToplami } from '@advetics/shared';
 import type { Platform } from '@advetics/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -297,6 +297,17 @@ export class ReportsService {
       const searchTerms = await this.searchTermRows(tx, sorgu);
 
       /*
+       * DÖNÜŞÜM DETAYI YALNIZCA ŞABLONDA SEÇİLİYSE ÇEKİLİYOR.
+       *
+       * Sorgu ham JSONB gövdelerini okuyor ve bölüm her şablonda yok;
+       * kırılımlarda verilen kararın aynısı — gösterilmeyecek bir tablo
+       * için sorgu koşturmak, en pahalı sorgulardan birini boşa harcamak.
+       */
+      const conversionDetail = bolumler.includes('conversion_detail')
+        ? await this.conversionDetailRows(tx, sorgu)
+        : { rows: [], errors: [] };
+
+      /*
        * KIRILIMLAR YALNIZCA ŞABLONDA SEÇİLİYSE ÇEKİLİYOR.
        *
        * Beşini de üretip gösterimde elemek, dört sorguyu boşa koşmak
@@ -330,6 +341,7 @@ export class ReportsService {
         // anahtar kelime diye bir şey yok.
         keywords,
         searchTerms,
+        conversionDetail,
         generatedAt: new Date().toISOString(),
       };
     });
@@ -561,6 +573,59 @@ export class ReportsService {
     }
 
     return bloklar;
+  }
+
+  /**
+   * ═══ ADLANDIRILMIŞ DÖNÜŞÜMLER ═══
+   *
+   * Raporda tek bir "Dönüşüm" sayısı vardı ve NEYİN kaç tane olduğu hiçbir
+   * yerde yazmıyordu. Kullanıcının cümlesi: "dönüşümlerde ne olarak
+   * adlandırdıysam 'whatsapp tıklaması' 'site içi telefon araması' gibi gibi
+   * dönüşümleri raporda düzgün bir şekilde görebilmem lazım".
+   *
+   * ÇÖZÜMLEME SQL'DE DEĞİL: Google adları ve Meta kovaları tek bir yerde
+   * (`donusumDetaylari`) çözülüyor ve panel de aynı fonksiyondan besleniyor.
+   * SQL'e taşımak aynı kararı ikinci bir dilde tekrar etmek olurdu — rapor
+   * ile panel farklı sayı gösterdiği gün sebebi bulunamazdı. Bu depoda
+   * "Form/Mesaj" sayıları tam olarak böyle ayrışmıştı (114'e karşı 153).
+   *
+   * KAMPANYA SEVİYESİ (`LEVEL`) okunuyor — hesap seviyesi değil. Dönüşüm
+   * eylemi kırılımı reklam hesabı satırında da var ama kampanya seviyesi
+   * hem toplamla tutarlı hem de platform süzgecine açık.
+   */
+  private async conversionDetailRows(
+    tx: TxLike,
+    params: { clientId: string; from: string; to: string; platform?: Platform },
+  ): Promise<ReportData['conversionDetail']> {
+    const rows = await tx.$queryRaw<Array<{ platform: Platform; raw_metrics: unknown }>>(
+      Prisma.sql`
+        SELECT i.platform, i.raw_metrics
+        FROM insights_daily i
+        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
+          AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
+          AND i.entity_level = ${LEVEL}
+          AND i.raw_metrics IS NOT NULL
+          ${
+            params.platform
+              ? Prisma.sql`AND i.platform = ${params.platform}::"Platform"`
+              : Prisma.empty
+          }
+      `,
+    );
+
+    const { satirlar, hatalar } = donusumToplami(
+      rows.map((r) => ({ platform: r.platform, raw: r.raw_metrics })),
+    );
+
+    return {
+      rows: satirlar.map((x) => ({
+        platform: x.platform as Platform,
+        name: x.ad,
+        count: x.sayi,
+        valueMicros: x.degerMikros,
+      })),
+      errors: hatalar,
+    };
   }
 
   private async keywordRows(

@@ -817,6 +817,26 @@ export class GoogleProvider implements IAdPlatformProvider {
       calls,
     );
 
+    /*
+     * ═══ DÖNÜŞÜM DETAYI — AYRI BİR SORGU ═══
+     *
+     * Kullanıcının isteği birebir: "google adsteki dönüşümleri ne dönüşümler
+     * olduğunu bilmiyorum... 'whatsapp tıklaması' 'site içi telefon araması'
+     * gibi".
+     *
+     * `metrics.conversions` TEK BİR SAYI ve hangi eylemlerden oluştuğunu
+     * söylemiyor. Kırılım `segments.conversion_action_name` ile geliyor ama
+     * AYNI SORGUYA EKLENEMEZ: segment satırı çoğaltıyor ve gösterim/tıklama
+     * her dönüşüm eylemi için TEKRAR EDİYOR — tek sorguya koymak harcamayı
+     * eylem sayısı kadar katlardı. Sessiz ve pahalı bir hata.
+     */
+    const detaylar = await this.donusumDetaylari(
+      { accessToken, customerId, loginCustomerId },
+      view,
+      request,
+      calls,
+    );
+
     const mapped: DiscoveredInsightRow[] = [];
     for (const row of rows) {
       const segments = this.obj(row.segments);
@@ -848,11 +868,103 @@ export class GoogleProvider implements IAdPlatformProvider {
         // 0 ile "bilinmiyor" arasındaki fark rapor katmanında platforma göre
         // ele alınacak.
         reach: 0,
-        raw: row,
+        /*
+         * DETAY HAM GÖVDEYE İLİŞTİRİLİYOR, YENİ KOLONA DEĞİL.
+         *
+         * `raw_metrics` zaten saklanıyor ve Meta'nın dönüşüm kovaları da
+         * oradan SORGU ANINDA türetiliyor. Aynı deseni izlemek, dönüşüm
+         * eylemlerini okumak için yeni bir tablo, yeni bir RLS politikası ve
+         * yeni bir süpürme işi açmamak demek — ayrıca adlandırma kararı
+         * değiştiğinde 90 günlük veriyi yeniden çekmek gerekmiyor.
+         */
+        raw: {
+          ...row,
+          ...(detaylar.hata !== null
+            ? // HATA GÖVDEDE TAŞINIYOR: okuma katmanı "dönüşüm yok" ile
+              // "detay alınamadı"yı ayırt edebilmeli.
+              { conversionActionsError: detaylar.hata }
+            : { conversionActions: detaylar.kayitlar.get(`${entityExternalId}|${date}`) ?? [] }),
+        },
       });
     }
 
     return { rows: mapped, apiCalls: calls.n, complete: true };
+  }
+
+  /**
+   * ═══ DÖNÜŞÜM EYLEMİ KIRILIMI ═══
+   *
+   * Kullanıcının Google Ads'te kendi verdiği adlarla ("WhatsApp tıklaması",
+   * "Site içi telefon araması") dönüşüm sayıları.
+   *
+   * YALNIZCA DÖNÜŞÜM METRİKLERİ SEÇİLİYOR. `segments.conversion_action_name`
+   * satırı eylem başına çoğaltıyor; gösterim ve tıklama her satırda TEKRAR
+   * EDİYOR ve onları da seçmek toplamı eylem sayısı kadar katlardı.
+   *
+   * HATA ANA ÇEKİMİ DÜŞÜRMÜYOR. Bu kırılım bir EK: bir müşteride alan
+   * reddedilse bile günlük metrikler gelmeye devam etmeli. Ama sessiz de
+   * kalmıyor — Google'ın kendi mesajı ham gövdeye yazılıyor ve panel
+   * "dönüşüm yok" ile "detay alınamadı"yı ayırt edebiliyor.
+   */
+  private async donusumDetaylari(
+    kimlik: { accessToken: string; customerId: string; loginCustomerId?: string },
+    view: (typeof GOOGLE_VIEW)[InsightsLevel],
+    request: InsightsRequest,
+    calls: { n: number },
+  ): Promise<{
+    kayitlar: Map<string, Array<{ name: string; conversions: number; valueMicros: string }>>;
+    hata: string | null;
+  }> {
+    const kayitlar = new Map<
+      string,
+      Array<{ name: string; conversions: number; valueMicros: string }>
+    >();
+
+    let rows: Array<Record<string, unknown>>;
+    try {
+      rows = await this.searchGaqlPaged<Record<string, unknown>>(
+        kimlik.accessToken,
+        kimlik.customerId,
+        `SELECT ${view.idField}, segments.date, segments.conversion_action_name,
+                metrics.conversions, metrics.conversions_value
+         FROM ${view.resource}
+         WHERE segments.date BETWEEN '${request.dateFrom}' AND '${request.dateTo}'`,
+        kimlik.loginCustomerId,
+        calls,
+      );
+    } catch (err) {
+      const mesaj = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Google dönüşüm detayı alınamadı (${kimlik.customerId}): ${mesaj}`);
+      return { kayitlar, hata: mesaj };
+    }
+
+    for (const row of rows) {
+      const segments = this.obj(row.segments);
+      const metrics = this.obj(row.metrics);
+      const date = this.str(segments?.date);
+      const ad = this.str(segments?.conversionActionName);
+      if (!date || !ad) continue;
+
+      const entityExternalId =
+        request.level === 'account' ? kimlik.customerId : view.readId(row, this);
+      if (!entityExternalId) continue;
+
+      const sayi = Number(metrics?.conversions ?? 0) || 0;
+      // SIFIR SATIR ATLANMIYOR OLSAYDI liste, o dönemde hiç gerçekleşmemiş
+      // eylemlerle dolardı; Google her tanımlı eylem için satır döndürüyor.
+      if (sayi === 0) continue;
+
+      const anahtar = `${entityExternalId}|${date}`;
+      const liste = kayitlar.get(anahtar) ?? [];
+      liste.push({
+        name: ad,
+        conversions: sayi,
+        valueMicros: googleValueToMicros(metrics?.conversionsValue).toString(),
+      });
+      kayitlar.set(anahtar, liste);
+    }
+
+    return { kayitlar, hata: null };
   }
 
   /**

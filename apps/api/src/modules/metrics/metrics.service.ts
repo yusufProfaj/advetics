@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { seviyeLiterali } from './seviye-literali';
-import { deriveRoas } from '@advetics/shared';
+import { deriveRoas, donusumToplami } from '@advetics/shared';
 import type {
   HierarchyPathQuery,
+  MetricsConversionDetail,
   MetricsHierarchyPath,
   ClientBreakdownQuery,
   MetricsClientRow,
@@ -380,6 +381,63 @@ export class MetricsService {
       return {
         points: noktalar.filter((p) => p.date >= query.from),
         previous: noktalar.filter((p) => p.date < query.from),
+      };
+    }, { timeoutMs: OKUMA_SURESI_MS });
+  }
+
+  /**
+   * ═══ DÖNÜŞÜM DETAYI ═══
+   *
+   * "Dönüşüm: 47" tek başına bir şey söylemiyor: 47'nin kaçı WhatsApp
+   * tıklaması, kaçı telefon araması. Kullanıcının bildirdiği eksik birebir
+   * buydu.
+   *
+   * ODAK NE İSE O SEVİYEDEN OKUNUYOR (`odak`): workspace genelinde kampanya
+   * satırları, bir kampanyanın içinde o kampanyanın satırı, bir reklam
+   * setinin içinde o setin satırı. Sabit bir seviyeden okumak, kullanıcı
+   * kampanyaya indiğinde ona BÜTÜN workspace'in dönüşümlerini göstermek
+   * olurdu.
+   *
+   * HAM GÖVDE ÇEKİLİYOR, SQL'DE TOPLANMIYOR. Dönüşüm adları JSONB dizisinin
+   * içinde ve Meta tarafında kova çözümlemesi bir ÖNCELİK SIRASI istiyor
+   * (ilk dolu tür kazanıyor, toplanmıyor); bunu SQL'de yazmak aynı kararı
+   * ikinci bir dilde tekrar etmek ve bir gün ayrışmak olurdu. Çözümleme tek
+   * yerde: `donusumDetaylari`.
+   */
+  async conversionDetail(
+    ctx: TenantContext,
+    query: MetricsQuery,
+  ): Promise<MetricsConversionDetail> {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx));
+      const odak = this.odak(query);
+
+      const rows = await tx.$queryRaw<Array<{ platform: Platform; raw_metrics: unknown }>>(
+        Prisma.sql`
+          SELECT platform, raw_metrics
+          FROM insights_daily
+          WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
+            AND entity_level = ${odak.seviye}
+            ${odak.filtre}
+            -- HAM GÖVDESİ OLMAYAN SATIR ATLANIYOR: eski senkronizasyonlarda
+            -- kolon boş olabiliyor ve onları çekmek boşuna bellek.
+            AND raw_metrics IS NOT NULL
+            ${filters}
+        `,
+      );
+
+      const { satirlar, hatalar } = donusumToplami(
+        rows.map((r) => ({ platform: r.platform, raw: r.raw_metrics })),
+      );
+
+      return {
+        satirlar: satirlar.map((s) => ({
+          platform: s.platform as Platform,
+          ad: s.ad,
+          sayi: s.sayi,
+          degerMikros: s.degerMikros,
+        })),
+        hatalar,
       };
     }, { timeoutMs: OKUMA_SURESI_MS });
   }

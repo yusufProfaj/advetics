@@ -138,6 +138,8 @@ export function ReportDocument({ data }: { data: ReportData }) {
               return <Keywords key={section} data={data} />;
             case 'google_search_terms':
               return <SearchTerms key={section} data={data} />;
+            case 'conversion_detail':
+              return <DonusumDetayi key={section} data={data} />;
             /*
               KİTLE BÖLÜMLERİ — platform sunmuyorsa BÖLÜM HİÇ ÜRETİLMİYOR.
               Karar `packages/shared`ta ve PDF çizici AYNISINI çağırıyor;
@@ -566,6 +568,99 @@ function Keywords({ data }: { data: ReportData }) {
  * Fark paranın nereye gittiğini gösteriyor: geniş eşlemeli bir kelime hiç
  * istemediğimiz sorgulara da gösterim alabiliyor.
  */
+/**
+ * ═══ DÖNÜŞÜM DETAYI ═══
+ *
+ * Raporda tek bir "Dönüşüm" sayısı vardı ve NEYİN kaç tane olduğu hiçbir
+ * yerde yazmıyordu. Kullanıcının cümlesi: "dönüşümlerde ne olarak
+ * adlandırdıysam 'whatsapp tıklaması' 'site içi telefon araması' gibi gibi
+ * dönüşümleri raporda düzgün bir şekilde görebilmem lazım".
+ *
+ * BU BELGE MÜŞTERİYE GİDİYOR. Boş bir tablo sebebini yazmazsa ajansın ölçüm
+ * kurmadığı izlenimini bırakır; "dönüşüm yok" ile "platform detayı vermedi"
+ * ayrı cümlelerle yazılıyor.
+ *
+ * PDF ÇİZİCİ AYNI KARARLARI İZLİYOR (`rapor-pdf.service.ts`): aynı sütunlar,
+ * aynı açıklama, para sütunu aynı koşulla. Bu depoda ekran ile belge bir kez
+ * ayrıştı ve fark yalnızca ALICI tarafından görüldü.
+ */
+function DonusumDetayi({ data }: { data: ReportData }) {
+  const { rows, errors } = data.conversionDetail;
+  // PARA SÜTUNU YALNIZCA DEĞER VARSA: lead ve mesaj dönüşümlerinin parasal
+  // karşılığı yok ve baştan sona "—" yazan bir sütun yer kaplıyor.
+  const degerVar = rows.some((r) => r.valueMicros !== '0');
+
+  return (
+    <section className="rpt-page pt-10">
+      <PageHead title="Dönüşüm Detayı" subtitle="Meta ve Google Ads" />
+
+      {errors.length > 0 && (
+        <p className="mt-4 text-xs text-amber-600">
+          Dönüşüm detayı alınamadı: {errors.join(' · ')}
+        </p>
+      )}
+
+      {rows.length === 0 ? (
+        <Empty>
+          {errors.length > 0
+            ? 'Detay gelmediği için liste boş.'
+            : 'Bu dönemde kayıtlı dönüşüm yok.'}
+        </Empty>
+      ) : (
+        <>
+          <p className="mt-4 text-xs text-slate-500">
+            Google satırlarında adlar Google Ads hesabındaki dönüşüm eylemi adlarıdır.
+            Meta satırları gruplanmış gelir: platform, özel dönüşümün adını
+            raporlamıyor.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[420px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b-2 border-slate-300 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                  <th className="py-2 pr-3">Dönüşüm</th>
+                  <th className="px-2 py-2">Mecra</th>
+                  <th className={degerVar ? 'px-2 py-2 text-right' : 'py-2 pl-2 text-right'}>
+                    Adet
+                  </th>
+                  {degerVar && <th className="py-2 pl-2 text-right">Değer</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={`${r.platform}-${r.name}`} className="border-b border-slate-100">
+                    <td className="max-w-[260px] py-2.5 pr-3 font-medium">
+                      <span className="block truncate" title={r.name}>
+                        {r.name}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2.5 text-slate-500">
+                      {PLATFORM_KISA_ADLARI[r.platform]}
+                    </td>
+                    <td
+                      className={`text-right font-semibold tabular-nums ${
+                        degerVar ? 'px-2 py-2.5' : 'py-2.5 pl-2'
+                      }`}
+                    >
+                      {formatNumber(r.count)}
+                    </td>
+                    {degerVar && (
+                      <td className="py-2.5 pl-2 text-right tabular-nums text-slate-500">
+                        {r.valueMicros === '0'
+                          ? '—'
+                          : formatMoney(r.valueMicros, data.currency, { decimals: 2 })}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function SearchTerms({ data }: { data: ReportData }) {
   return (
     <section className="rpt-page pt-10">

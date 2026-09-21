@@ -304,6 +304,28 @@ export interface MetricsHierarchyPath {
   adGroup: { id: string; name: string } | null;
 }
 
+/**
+ * DÖNÜŞÜM DETAYI — hangi dönüşüm eyleminden kaç tane geldi.
+ *
+ * Panelde tek bir "Dönüşüm: 47" sayısı vardı ve neyin 47 olduğu hiçbir yerde
+ * yazmıyordu. Google'da adlar KULLANICININ kendi verdiği adlar; Meta'da
+ * tekilleştirilmiş kovalar (sebep: `donusum-detaylari.ts`).
+ */
+export interface MetricsConversionDetail {
+  satirlar: Array<{
+    platform: (typeof PLATFORMS)[number];
+    ad: string;
+    sayi: number;
+    degerMikros: string;
+  }>;
+  /**
+   * DETAY ALINAMADIYSA SEBEBİ. Boş liste iki şey demek olabilir ve ikisinin
+   * yapılacak işi farklı: "bu dönemde dönüşüm yok" ile "Google detayı
+   * vermedi".
+   */
+  hatalar: string[];
+}
+
 export const hierarchyPathQuerySchema = z.object({
   campaignId: z.string().uuid().optional(),
   adGroupId: z.string().uuid().optional(),

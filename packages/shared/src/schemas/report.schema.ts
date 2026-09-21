@@ -58,6 +58,20 @@ export const REPORT_SECTIONS = [
   'google_keywords',
   'google_search_terms',
   /*
+   * ═══ DÖNÜŞÜM DETAYI ═══
+   *
+   * Raporda tek bir "Dönüşüm" sayısı vardı ve NEYİN kaç tane olduğu hiçbir
+   * yerde yazmıyordu. Kullanıcının cümlesi: "dönüşümlerde ne olarak
+   * adlandırdıysam 'whatsapp tıklaması' 'site içi telefon araması' gibi gibi
+   * dönüşümleri raporda düzgün bir şekilde görebilmem lazım".
+   *
+   * KAMPANYA TABLOLARINDAN AYRI BİR BÖLÜM: kampanya tablosu "hangi kampanya
+   * ne harcadı" sorusunu cevaplıyor, bu tablo o dönüşümlerin NE olduğunu.
+   * Kampanya tablosuna sütun olarak eklemek, eylem sayısı kadar sütun
+   * demekti ve her müşteride farklı bir tablo genişliği.
+   */
+  'conversion_detail',
+  /*
    * ═══ KİTLE KIRILIMLARI ═══
    *
    * Beş ayrı bölüm, tek bir "kitle" bölümü DEĞİL. Sebebi şablon: müşteri
@@ -99,6 +113,7 @@ export const SECTION_LABELS: Record<ReportSection, string> = {
   google_campaigns: 'Kampanyalar — Google Ads',
   google_keywords: 'Anahtar Kelime Performansı',
   google_search_terms: 'Arama Terimleri',
+  conversion_detail: 'Dönüşüm Detayı',
   audience_overview: 'Kitle Özeti',
   audience_age: 'Yaş Dağılımı',
   audience_gender: 'Cinsiyet Dağılımı',
@@ -617,6 +632,25 @@ export interface ReportData {
     conversions: number;
     ctr: number | null;
   }>;
+  /**
+   * ADLANDIRILMIŞ DÖNÜŞÜMLER.
+   *
+   * Google'da adlar KULLANICININ Google Ads'te verdiği adlar; Meta'da
+   * tekilleştirilmiş kovalar (sebep: `donusum-detaylari.ts`). Fark
+   * gizlenmiyor — her satır mecrasını taşıyor.
+   *
+   * `hatalar` BOŞ LİSTEDEN AYRI BİR ŞEY: "bu dönemde dönüşüm yok" ile
+   * "Google detayı vermedi" farklı işler ve rapor müşteriye gidiyor.
+   */
+  conversionDetail: {
+    rows: Array<{
+      platform: (typeof PLATFORMS)[number];
+      name: string;
+      count: number;
+      valueMicros: string;
+    }>;
+    errors: string[];
+  };
   generatedAt: string;
 }
 
@@ -804,6 +838,7 @@ export const VARSAYILAN_SABLONLAR = [
       'google_campaigns',
       'google_keywords',
       'google_search_terms',
+      'conversion_detail',
       'top_ads',
       'closing',
     ],
@@ -818,6 +853,7 @@ export const VARSAYILAN_SABLONLAR = [
       'google_campaigns',
       'google_keywords',
       'google_search_terms',
+      'conversion_detail',
       'audience_overview',
       'audience_age',
       'audience_gender',
@@ -836,6 +872,7 @@ export const VARSAYILAN_SABLONLAR = [
       'cover',
       'summary',
       'meta_campaigns',
+      'conversion_detail',
       'audience_overview',
       'audience_age',
       'audience_gender',

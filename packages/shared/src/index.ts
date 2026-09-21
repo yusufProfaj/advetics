@@ -3,6 +3,7 @@ export * from './auth/rol-matrisi';
 export * from './constants/platforms';
 export * from './linkedin-para';
 export * from './kitle-bolumu';
+export * from './donusum-detaylari';
 export * from './linkedin-saklama';
 export * from './constants/boost-naming';
 export * from './constants/paketler';

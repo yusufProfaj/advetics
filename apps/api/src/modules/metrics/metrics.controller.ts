@@ -14,7 +14,11 @@ import {
   type MetricsTimeseries,
   type TenantContext,
 } from '@advetics/shared';
-import type { HierarchyPathQuery, MetricsHierarchyPath } from '@advetics/shared';
+import type {
+  HierarchyPathQuery,
+  MetricsConversionDetail,
+  MetricsHierarchyPath,
+} from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodQuery } from '../../common/pipes/zod-validation.pipe';
 import { MetricsService } from './metrics.service';
@@ -112,6 +116,23 @@ export class MetricsController {
    * yalnızca buradan okunabiliyor — kullanıcı hangi kampanyanın içinde
    * olduğunu her zaman görmeli.
    */
+  /**
+   * DÖNÜŞÜM DETAYI — hangi dönüşüm eyleminden kaç tane.
+   *
+   * Odak parametrelerini (`campaignId`, `adGroupId`) diğer metrik uçlarıyla
+   * AYNI şemadan alıyor: kampanya seçiliyken kartlar o kampanyayı
+   * gösterirken dönüşüm listesinin workspace genelini göstermesi, aynı
+   * ekranda iki farklı gerçek olurdu.
+   */
+  @Get('donusum-detay')
+  @RequirePermissions('insights.read')
+  conversionDetail(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(metricsQuerySchema)) query: MetricsQuery,
+  ): Promise<MetricsConversionDetail> {
+    return this.metrics.conversionDetail(ctx, query);
+  }
+
   @Get('kirilim-yolu')
   @RequirePermissions('insights.read')
   hierarchyPath(

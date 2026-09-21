@@ -755,6 +755,21 @@ buna göre veriliyor:
   taşımadan en çok o etkileniyor: ay ortasında hesap gidince eski müşterinin
   harcaması düşüyor, bütçe bekçisi olmayan bir boşluk görüyor ve kuralların
   bütçe ARTIRMASINA izin veriyor. Ayrı sorulup ayrı söyleniyor.
+- **SEGMENT EKLEMEK SATIRI ÇOĞALTIYOR — AYNI SORGUYA KOYMA.** Google'da
+  dönüşüm eylemi kırılımı `segments.conversion_action_name` ile geliyor ve o
+  segment satırı EYLEM BAŞINA çoğaltıyor: gösterim, tıklama ve HARCAMA her
+  satırda tekrar ediyor. Ana metrik sorgusuna eklemek toplamı eylem sayısı
+  kadar katlardı ve hiçbir hata düşmezdi — müşteriye yanlış harcama. Segment
+  AYRI sorguda ve o sorgu YALNIZCA dönüşüm metriklerini seçiyor. Simetrik
+  tehlike de geçerli: segmentli sorguya gösterim eklemek, o satırların bir
+  gün toplamlara karışması demek. `google-donusum-segmenti.spec.ts` ikisini
+  de tarıyor.
+- **YAN ÖZELLİĞİN HATASI ANA ÇEKİMİ DÜŞÜRMEMELİ — AMA SESSİZ DE KALMAMALI.**
+  Dönüşüm detayı bir EK: bir müşteride alan reddedilse bile günlük metrikler
+  gelmeye devam etmeli. Hata `raw_metrics` içine yazılıyor
+  (`conversionActionsError`) ve okuma katmanı "dönüşüm yok" ile "detay
+  alınamadı"yı ayırt ediyor. İkisini aynı boş listeye çevirmek, kullanıcıyı
+  sebebi kendi platform kurulumunda aramaya gönderir.
 - **"TÜM ŞİRKETLER" MODUNDA `ctx.orgId` EV ŞİRKETİ KALIYOR — YAZMA YOLLARI
   BUNU BİLMEK ZORUNDA.** `tenant-context.service.ts` okuma kapsamını
   `app.tum_sirketler()` ile genişletiyor ama `ctx.orgId`'yi bilerek ev
