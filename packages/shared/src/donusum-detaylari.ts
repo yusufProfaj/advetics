@@ -194,3 +194,40 @@ export function donusumToplami(
 
   return { satirlar, hatalar: [...hatalar] };
 }
+
+/**
+ * ═══ BOŞ DÖNÜŞÜM LİSTESİNİN SEBEBİ ═══
+ *
+ * ÜRETİMDE GÖRÜLEN HÂL: kampanya tablosu 49 dönüşüm gösterirken dönüşüm
+ * detayı "bu aralıkta kayıtlı dönüşüm yok" diyordu. Cümle YANLIŞTI ve
+ * kullanıcının bildirdiği şey de buydu: "meta adste gözüküyor burada
+ * gözükmüyor".
+ *
+ * Sebep: detay `raw_metrics` içinde saklanıyor. Meta'nın aksiyon dizisi
+ * BAŞINDAN BERİ orada, Google'ın dönüşüm eylemi kırılımı ise yeni — o alanı
+ * çeken kod yazılmadan önce senkronize edilmiş günlerde YOK. Yani aynı
+ * ekranda Meta dolu, Google boş görünüyor ve bu bir arıza değil, verinin
+ * yaşı.
+ *
+ * ÜÇ HÂL, ÜÇ AYRI CÜMLE ve üçünün yapılacak işi farklı:
+ *   · platform detayı vermedi      → sebep platformun kendi mesajında
+ *   · dönüşüm var, detay kayıtlı değil → o günleri yeniden senkronize et
+ *   · gerçekten dönüşüm yok        → yapılacak bir şey yok
+ *
+ * TEK ÜRETİCİ: panel, rapor ekranı ve PDF aynı cümleyi kullanıyor. Üç yerde
+ * ayrı yazmak, birinde güncellenmeyen bir cümle bırakmanın kestirme yolu.
+ */
+export function donusumBosSebebi(params: {
+  hataVar: boolean;
+  toplamDonusum: number;
+}): string {
+  if (params.hataVar) return 'Detay gelmediği için liste boş.';
+  if (params.toplamDonusum > 0) {
+    return (
+      `Bu aralıkta ${params.toplamDonusum} dönüşüm var ama dönüşüm adları kayıtlı ` +
+      'değil. Detay yalnızca yeni senkronize edilen günlerde geliyor; bu günleri ' +
+      'yeniden çekince adlar dolar.'
+    );
+  }
+  return 'Bu aralıkta kayıtlı dönüşüm yok.';
+}

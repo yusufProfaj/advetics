@@ -19,7 +19,7 @@ import {
   PLATFORM_LABELS,
 } from '@advetics/shared';
 import { kitleBolumuKarari } from '@advetics/shared';
-import { PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
+import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
 import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent, microsOf } from '@/lib/format';
 import { KitleOzetiIcerik } from './kitle-ozeti';
@@ -602,9 +602,10 @@ function DonusumDetayi({ data }: { data: ReportData }) {
 
       {rows.length === 0 ? (
         <Empty>
-          {errors.length > 0
-            ? 'Detay gelmediği için liste boş.'
-            : 'Bu dönemde kayıtlı dönüşüm yok.'}
+          {donusumBosSebebi({
+            hataVar: errors.length > 0,
+            toplamDonusum: data.conversionDetail.totalConversions,
+          })}
         </Empty>
       ) : (
         <>

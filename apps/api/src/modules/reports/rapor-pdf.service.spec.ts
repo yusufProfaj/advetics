@@ -125,6 +125,7 @@ const VERI: ReportData = {
       { platform: 'meta' as const, name: 'Form', count: 9, valueMicros: '0' },
     ],
     errors: [],
+    totalConversions: 68,
   },
   keywords: [
     { keyword: 'urla satılık villa', spendMicros: '3037000000', impressions: 6250, clicks: 302, ctr: 4.83, cpc: 10.05 },
@@ -1242,8 +1243,19 @@ describe('DÖNÜŞÜM DETAYI bölümü', () => {
      * Bu belge MÜŞTERİYE gidiyor: sebebi yazmayan boş bir tablo, ajansın
      * ölçüm kurmadığı izlenimi bırakır.
      */
-    const t = metinler(await svc.uret(bolum({ rows: [] }))).join(' ');
+    const t = metinler(await svc.uret(bolum({ rows: [], totalConversions: 0 }))).join(' ');
     expect(t).toContain('kayıtlı dönüşüm yok');
+  });
+
+  it('KRİTİK: DÖNÜŞÜM VARKEN "dönüşüm yok" YAZMIYOR', async () => {
+    /*
+     * Üretimde görülen hâl: kampanya tablosu 49 dönüşüm gösterirken dönüşüm
+     * bölümü "kayıtlı dönüşüm yok" diyordu. Aynı belgede iki farklı gerçek
+     * ve yanlış olan, müşterinin okuduğu cümleydi.
+     */
+    const t = metinler(await svc.uret(bolum({ rows: [], totalConversions: 49 }))).join(' ');
+    expect(t).toContain('49');
+    expect(t).not.toContain('kayıtlı dönüşüm yok');
   });
 
   it('KRİTİK: "dönüşüm yok" ile "detay alınamadı" AYRI cümleler', async () => {

@@ -412,9 +412,14 @@ export class MetricsService {
       const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx));
       const odak = this.odak(query);
 
-      const rows = await tx.$queryRaw<Array<{ platform: Platform; raw_metrics: unknown }>>(
+      const rows = await tx.$queryRaw<
+        Array<{ platform: Platform; raw_metrics: unknown; conversions: string | number | null }>
+      >(
         Prisma.sql`
-          SELECT platform, raw_metrics
+          -- TOPLAM AYNI SORGUDAN: ikinci bir sorgu koşmak, iki sayının
+          -- farklı süzgeçlerle gelmesine kapı açardı ve fark tam da
+          -- "dönüşüm var ama detay yok" cümlesini yanlışlardı.
+          SELECT platform, raw_metrics, conversions
           FROM insights_daily
           WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
             AND entity_level = ${odak.seviye}
@@ -438,6 +443,9 @@ export class MetricsService {
           degerMikros: s.degerMikros,
         })),
         hatalar,
+        toplamDonusum: Math.round(
+          rows.reduce((a, r) => a + (Number(r.conversions ?? 0) || 0), 0),
+        ),
       };
     }, { timeoutMs: OKUMA_SURESI_MS });
   }

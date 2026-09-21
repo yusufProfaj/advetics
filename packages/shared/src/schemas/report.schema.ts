@@ -650,6 +650,11 @@ export interface ReportData {
       valueMicros: string;
     }>;
     errors: string[];
+    /**
+     * Aynı kapsamdaki TOPLAM dönüşüm — boş listenin üçüncü hâlini ayırt
+     * etmek için (gerekçe: `MetricsConversionDetail.toplamDonusum`).
+     */
+    totalConversions: number;
   };
   generatedAt: string;
 }

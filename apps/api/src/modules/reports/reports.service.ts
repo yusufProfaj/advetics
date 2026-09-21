@@ -305,7 +305,7 @@ export class ReportsService {
        */
       const conversionDetail = bolumler.includes('conversion_detail')
         ? await this.conversionDetailRows(tx, sorgu)
-        : { rows: [], errors: [] };
+        : { rows: [], errors: [], totalConversions: 0 };
 
       /*
        * KIRILIMLAR YALNIZCA ŞABLONDA SEÇİLİYSE ÇEKİLİYOR.
@@ -597,9 +597,13 @@ export class ReportsService {
     tx: TxLike,
     params: { clientId: string; from: string; to: string; platform?: Platform },
   ): Promise<ReportData['conversionDetail']> {
-    const rows = await tx.$queryRaw<Array<{ platform: Platform; raw_metrics: unknown }>>(
+    const rows = await tx.$queryRaw<
+      Array<{ platform: Platform; raw_metrics: unknown; conversions: string | number | null }>
+    >(
       Prisma.sql`
-        SELECT i.platform, i.raw_metrics
+        -- TOPLAM AYNI SORGUDAN: ikinci bir sorgu iki sayının farklı
+        -- süzgeçlerle gelmesine kapı açardı.
+        SELECT i.platform, i.raw_metrics, i.conversions
         FROM insights_daily i
         WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
           AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
@@ -625,6 +629,9 @@ export class ReportsService {
         valueMicros: x.degerMikros,
       })),
       errors: hatalar,
+      totalConversions: Math.round(
+        rows.reduce((a, r) => a + (Number(r.conversions ?? 0) || 0), 0),
+      ),
     };
   }
 

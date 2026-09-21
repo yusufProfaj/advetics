@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { donusumDetaylari, donusumToplami } from '@advetics/shared';
+import { donusumBosSebebi, donusumDetaylari, donusumToplami } from '@advetics/shared';
 
 /**
  * ═══ ADLANDIRILMIŞ DÖNÜŞÜM DETAYI ═══
@@ -176,5 +176,45 @@ describe('toplama', () => {
     const bozuk = { platform: 'google', raw: { conversionActionsError: 'kota doldu' } };
     const { hatalar } = donusumToplami([bozuk, bozuk, bozuk]);
     expect(hatalar).toEqual(['kota doldu']);
+  });
+});
+
+describe('boş listenin sebebi', () => {
+  /*
+   * ÜRETİMDE GÖRÜLEN HÂL: kampanya tablosu 49 dönüşüm gösterirken dönüşüm
+   * detayı "bu aralıkta kayıtlı dönüşüm yok" diyordu. Cümle yanlıştı ve
+   * kullanıcı bunu "meta adste gözüküyor burada gözükmüyor" diye bildirdi.
+   *
+   * Sebep verinin YAŞI: detay `raw_metrics` içinde saklanıyor, Meta'nın
+   * aksiyon dizisi baştan beri orada, Google'ın dönüşüm eylemi kırılımı ise
+   * o alanı çeken kod yazılmadan önceki günlerde yok.
+   */
+  it('KRİTİK: DÖNÜŞÜM VARKEN "dönüşüm yok" DENMİYOR', () => {
+    const c = donusumBosSebebi({ hataVar: false, toplamDonusum: 49 });
+    expect(c).toContain('49');
+    expect(c).not.toContain('kayıtlı dönüşüm yok');
+  });
+
+  it('KRİTİK: yapılacak işi SÖYLÜYOR', () => {
+    // "Detay yok" demek yetmiyor; kullanıcının ne yapacağı yazılı olmalı.
+    expect(donusumBosSebebi({ hataVar: false, toplamDonusum: 3 })).toContain(
+      'yeniden çekince',
+    );
+  });
+
+  it('gerçekten dönüşüm yoksa düz cümle', () => {
+    expect(donusumBosSebebi({ hataVar: false, toplamDonusum: 0 })).toBe(
+      'Bu aralıkta kayıtlı dönüşüm yok.',
+    );
+  });
+
+  it('KRİTİK: HATA her şeyden ÖNCELİKLİ', () => {
+    /*
+     * Platform detayı vermediyse "yeniden çek" tavsiyesi işe yaramaz —
+     * kullanıcıyı boşuna senkronizasyona gönderirdi.
+     */
+    expect(donusumBosSebebi({ hataVar: true, toplamDonusum: 49 })).toBe(
+      'Detay gelmediği için liste boş.',
+    );
   });
 });

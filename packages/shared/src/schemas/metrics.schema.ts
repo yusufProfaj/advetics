@@ -324,6 +324,20 @@ export interface MetricsConversionDetail {
    * vermedi".
    */
   hatalar: string[];
+  /**
+   * AYNI KAPSAMDAKİ TOPLAM DÖNÜŞÜM — boş listenin ÜÇÜNCÜ hâlini ayırt etmek
+   * için.
+   *
+   * Üretimde görülen hâl: kampanya tablosu 49 dönüşüm gösterirken dönüşüm
+   * detayı "bu aralıkta kayıtlı dönüşüm yok" diyordu. İkisi de doğruydu ama
+   * cümle YANLIŞTI — dönüşüm var, o günlerin DETAYI yok. Detay
+   * `raw_metrics` içinde saklanıyor ve Google tarafında bu alan özellik
+   * yazılmadan önce senkronize edilen günlerde HİÇ yok.
+   *
+   * Bu sayı olmadan üç hâl ayırt edilemiyor: gerçekten dönüşüm yok / dönüşüm
+   * var ama detay kayıtlı değil / platform detayı vermedi.
+   */
+  toplamDonusum: number;
 }
 
 export const hierarchyPathQuerySchema = z.object({

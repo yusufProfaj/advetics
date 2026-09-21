@@ -38,7 +38,7 @@ const VERI: ReportData = {
   // Kitle Özeti sayfasındaki halka hatası tam da o gürültünün içinde kaçtı.
   breakdowns: [],
   topAdsMissingPlatforms: [],
-  conversionDetail: { rows: [], errors: [] },
+  conversionDetail: { rows: [], errors: [], totalConversions: 0 },
   client: { id: 'c1', name: 'Sabancı İnşaat' },
   branding: {} as ReportData['branding'],
   title: 'Dijital Pazarlama Raporu',

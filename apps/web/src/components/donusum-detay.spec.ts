@@ -61,14 +61,25 @@ describe('genel bakışta', () => {
     expect(oncesi).toContain('Promise.resolve(null)');
   });
 
-  it('KRİTİK: BOŞ LİSTENİN SEBEBİ yazılı', () => {
+  it('KRİTİK: BOŞ LİSTENİN SEBEBİ ORTAK ÜRETİCİDEN', () => {
     /*
-     * "Bu dönemde dönüşüm yok" ile "platform detayı vermedi" farklı işler;
-     * ikisini aynı boş kutuya çevirmek bu depoda adı konmuş yasak.
+     * Üç hâl var ve üçünün yapılacak işi farklı: platform detayı vermedi /
+     * dönüşüm var ama detay kayıtlı değil / gerçekten dönüşüm yok.
+     *
+     * Cümleyi burada ELLE yazmak, üretimde görülen hatanın kapısıydı:
+     * kutu "kayıtlı dönüşüm yok" derken kampanya tablosu 49 dönüşüm
+     * gösteriyordu.
      */
     expect(PANEL).toContain('Dönüşüm detayı alınamadı:');
-    expect(PANEL).toContain('Bu aralıkta kayıtlı dönüşüm yok.');
-    expect(PANEL).toContain('Detay gelmediği için liste boş.');
+    expect(PANEL).toContain('donusumBosSebebi({');
+    expect(PANEL).toContain('toplamDonusum: detay.toplamDonusum');
+  });
+
+  it('KRİTİK: SAYAÇ adlandırılmış ile TOPLAMI birlikte yazıyor', () => {
+    // Yalnızca adlandırılmışı yazmak, kampanya tablosuyla çelişen bir "0"
+    // gösteriyordu.
+    expect(PANEL).toContain('adlandırılmış');
+    expect(PANEL).toContain('formatNumber(detay.toplamDonusum)');
   });
 
   it('KRİTİK: META SATIRLARININ neden gruplanmış olduğu yazılı', () => {
@@ -97,10 +108,18 @@ describe('rapor ile PDF AYNI kararları veriyor', () => {
     expect(PDF).toContain('Meta satırları gruplanmış gelir');
   });
 
-  it('KRİTİK: boş liste sebebi ikisinde de AYRIŞTIRILMIŞ', () => {
+  it('KRİTİK: boş liste sebebi ÜÇ YÜZEYDE de ORTAK ÜRETİCİDEN', () => {
+    /*
+     * Cümle üç yerde ayrı yazılsaydı, birinde güncellenmeyen bir metin
+     * kalırdı — ve bu depoda ekran ile müşteriye giden belge bir kez
+     * ayrıştı, farkı yalnızca alıcı gördü.
+     */
+    for (const kaynak of [PANEL, RAPOR, PDF]) {
+      expect(kaynak).toContain('donusumBosSebebi(');
+    }
+    // Elle yazılmış kopyalar GERİ GELMESİN.
     for (const kaynak of [RAPOR, PDF]) {
-      expect(kaynak).toContain('Detay gelmediği için liste boş.');
-      expect(kaynak).toContain('kayıtlı dönüşüm yok');
+      expect(kaynak).not.toContain("'Bu dönemde kayıtlı dönüşüm yok.'");
     }
   });
 });

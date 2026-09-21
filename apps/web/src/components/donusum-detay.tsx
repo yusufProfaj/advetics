@@ -1,5 +1,5 @@
 import type { MetricsConversionDetail } from '@advetics/shared';
-import { platformKanali, PLATFORM_KISA_ADLARI } from '@advetics/shared';
+import { donusumBosSebebi, platformKanali, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { PlatformLogo } from '@/components/platform-logo';
 import { formatMoney, formatNumber } from '@/lib/format';
 
@@ -37,8 +37,14 @@ export function DonusumDetay({
     <section className="rounded-xl border border-line bg-surface">
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3">
         <h3 className="text-sm font-semibold text-ink">Dönüşüm detayı</h3>
+        {/*
+          SAYAÇ İKİ SAYIYI DA YAZIYOR: kaç eylem adlandırılmış ve kapsamda
+          toplam kaç dönüşüm var. Yalnızca birincisini yazmak, altındaki
+          kampanya tablosuyla çelişen bir "0" gösteriyordu.
+        */}
         <span className="text-[11px] text-ink-muted">
-          {detay.satirlar.length} eylem · toplam {formatNumber(toplam)}
+          {detay.satirlar.length} eylem · adlandırılmış {formatNumber(toplam)} / toplam{' '}
+          {formatNumber(detay.toplamDonusum)}
         </span>
       </header>
 
@@ -58,10 +64,17 @@ export function DonusumDetay({
       )}
 
       {detay.satirlar.length === 0 ? (
-        <p className="px-4 py-8 text-center text-sm text-ink-muted">
-          {detay.hatalar.length > 0
-            ? 'Detay gelmediği için liste boş.'
-            : 'Bu aralıkta kayıtlı dönüşüm yok.'}
+        <p className="mx-auto max-w-lg px-4 py-8 text-center text-sm text-ink-muted">
+          {/*
+            SEBEP TEK ÜRETİCİDEN. Üretimde bu kutu "kayıtlı dönüşüm yok"
+            derken hemen altındaki kampanya tablosu 49 dönüşüm gösteriyordu —
+            cümle yanlıştı ve kullanıcı bunu "meta'da gözüküyor burada
+            gözükmüyor" diye bildirdi.
+          */}
+          {donusumBosSebebi({
+            hataVar: detay.hatalar.length > 0,
+            toplamDonusum: detay.toplamDonusum,
+          })}
         </p>
       ) : (
         <div className="overflow-x-auto">

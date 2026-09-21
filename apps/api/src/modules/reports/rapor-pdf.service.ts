@@ -18,7 +18,7 @@ import {
   type ReportData,
 } from '@advetics/shared';
 import { kitleBolumuKarari } from '@advetics/shared';
-import { PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
+import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
 import {
@@ -893,7 +893,7 @@ export class RaporPdfService {
     const s = ctx.doc.addPage([EN, BOY]);
     let y = this.baslik(ctx, s, SECTION_LABELS.conversion_detail);
 
-    const { rows, errors } = ctx.data.conversionDetail;
+    const { rows, errors, totalConversions } = ctx.data.conversionDetail;
 
     if (errors.length > 0) {
       for (const [i, satir] of sar(
@@ -914,13 +914,16 @@ export class RaporPdfService {
     }
 
     if (rows.length === 0) {
+      /*
+       * SEBEP TEK ÜRETİCİDEN — panel ve rapor ekranı da aynı cümleyi
+       * kullanıyor. Üç yerde ayrı yazmak, birinde güncellenmeyen bir cümle
+       * bırakmanın kestirme yolu.
+       */
       this.bosKutu(
         ctx,
         s,
         y,
-        errors.length > 0
-          ? 'Detay gelmediği için liste boş.'
-          : 'Bu dönemde kayıtlı dönüşüm yok.',
+        donusumBosSebebi({ hataVar: errors.length > 0, toplamDonusum: totalConversions }),
       );
       return;
     }
