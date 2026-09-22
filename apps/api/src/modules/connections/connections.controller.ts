@@ -269,6 +269,23 @@ export class ConnectionsController {
    * bütün müşterileri kapsıyor), ama kendi müşterisinin sayfasının izlemesini
    * açmak o müşteriyle çalışan kişinin işi.
    */
+  /**
+   * SAYFAYA BAĞLI WHATSAPP NUMARASI — TEYİT İÇİN.
+   *
+   * `connection.read` yetiyor: yalnızca okuyor ve reklam kuran herkesin
+   * hangi hatta mesaj düşeceğini görmesi gerekiyor. Yazma yetkisine
+   * bağlamak, kampanya kurabilen ama numarayı göremeyen bir kullanıcı
+   * bırakırdı.
+   */
+  @Get('social-profiles/:id/whatsapp')
+  @RequirePermissions('connection.read')
+  pageWhatsapp(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ number: string | null; error: string | null }> {
+    return this.connections.pageWhatsapp(ctx, id);
+  }
+
   @Patch('social-profiles/:id/sync')
   @RequirePermissions('connection.write')
   setProfileSync(

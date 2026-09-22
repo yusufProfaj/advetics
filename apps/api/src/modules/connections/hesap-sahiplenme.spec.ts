@@ -82,6 +82,9 @@ function servis(connClientId: string | null, cakisanSayisi = 0): {
     registry,
     {} as never,
     {} as never,
+    // ŞİFRE ÇÖZÜCÜ — yalnızca `pageWhatsapp` kullanıyor; bu testlerde o
+    // yol koşmuyor.
+    {} as never,
   );
   return { svc, c };
 }

@@ -76,6 +76,9 @@ beforeAll(async () => {
         kuyruk.push(payload);
         return Promise.resolve({ enqueued: true });
       } } as never,
+    // ŞİFRE ÇÖZÜCÜ — yalnızca `pageWhatsapp` kullanıyor; bu testlerde o
+    // yol koşmuyor.
+    {} as never,
   );
 });
 

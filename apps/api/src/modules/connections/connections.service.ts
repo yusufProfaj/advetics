@@ -33,6 +33,8 @@ import {
   type IAdPlatformProvider,
 } from './provider.types';
 import { TokenVaultService } from './token-vault.service';
+import { CryptoService } from '../../crypto/crypto.service';
+import { MetaProvider } from './providers/meta.provider';
 import { hesapVerisiniTasi, type TasimaSonucu } from './hesap-verisi-tasima';
 
 interface Meta {
@@ -120,7 +122,59 @@ export class ConnectionsService {
     private readonly registry: ProviderRegistry,
     @Inject(CONFIG) private readonly config: AppConfig,
     private readonly queue: SyncQueueService,
+    /**
+     * SAYFA TOKEN'INI ÇÖZMEK İÇİN — EN SONDA.
+     *
+     * Parametre listenin sonuna eklendi: testler bağımlılıkları KONUMLA
+     * geçiriyor ve araya sokmak, hiçbiri derlemede görünmeden hepsini
+     * kaydırırdı.
+     */
+    private readonly crypto: CryptoService,
   ) {}
+
+  /**
+   * ═══ SAYFAYA BAĞLI WHATSAPP NUMARASI — TEYİT İÇİN ═══
+   *
+   * Kullanıcının isteği: "whatsapp numarasının doğru olup olmadığını teyit
+   * etmem için gözükmesini istiyorum". Reklam numarayı sormuyor (Meta onu
+   * sayfadan alıyor) ama hangi hatta mesaj düşeceği yayından ÖNCE
+   * görünmeli — yanlış hat, ancak müşteri "hiç mesaj gelmiyor" dediğinde
+   * fark ediliyor.
+   *
+   * ÜÇ HÂL AYRI AYRI DÖNÜYOR ve üçünün yapılacak işi farklı: numara geldi /
+   * sayfada okunamıyor / çağrı düştü. Tek bir `null`, "numara yok" ile
+   * "okuyamadık"ı aynı kutuya çevirirdi.
+   */
+  async pageWhatsapp(
+    ctx: TenantContext,
+    socialProfileId: string,
+  ): Promise<{ number: string | null; error: string | null }> {
+    const profil = await this.prisma.withTenant(ctx, (tx) =>
+      tx.socialProfile.findUnique({ where: { id: socialProfileId } }),
+    );
+    if (!profil) throw new NotFoundException('Sayfa bulunamadı');
+    if (!profil.pageAccessTokenEnc) {
+      return {
+        number: null,
+        error:
+          'Sayfa token’ı yok. "Hesapları yenile" ile sayfayı yeniden keşfedince numara okunabilir.',
+      };
+    }
+
+    const provider = this.registry.get('meta');
+    // ARAYÜZDE YOK, SAĞLAYICIDA VAR: `IAdPlatformProvider` 29 metot taşıyor
+    // ve Meta'ya özgü bir okuma için otuzuncuyu eklemek, Google ve
+    // LinkedIn'e karşılığı olmayan bir metot dayatmak olurdu.
+    if (!(provider instanceof MetaProvider)) {
+      return { number: null, error: 'Bu okuma yalnızca Meta sayfalarında var.' };
+    }
+
+    const sonuc = await provider.fetchPageWhatsapp({
+      pageExternalId: profil.externalId,
+      pageAccessToken: this.crypto.decrypt(Buffer.from(profil.pageAccessTokenEnc)),
+    });
+    return { number: sonuc.number, error: sonuc.hata };
+  }
 
   private provider(platform: Platform): IAdPlatformProvider {
     return this.registry.get(platform);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CAMPAIGN_GOALS,
   GOAL_META,
@@ -16,6 +16,7 @@ import {
 import { platformKisaAdi } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { CoveragePanel } from './coverage-panel';
+import { Sihirbaz, type SihirbazAdimi } from './sihirbaz';
 import { CropStudio } from './crop-studio';
 
 /**
@@ -128,6 +129,22 @@ export function SimpleAdBuilder({
   const [durationDays, setDurationDays] = useState('7');
 
   const [step, setStep] = useState<Step>('form');
+  /** Sihirbazda kaçıncı adım — 0 tabanlı. */
+  const [adim, setAdim] = useState(0);
+  /**
+   * SAYFAYA BAĞLI WHATSAPP NUMARASI — TEYİT İÇİN.
+   *
+   * Kullanıcının isteği: "whatsapp numarasının doğru olup olmadığını teyit
+   * etmem için gözükmesini istiyorum". Reklam numarayı SORMUYOR (Meta onu
+   * sayfadan alıyor) ama hangi hatta mesaj düşeceği yayından ÖNCE
+   * görünmeli — yanlış hat, ancak müşteri "hiç mesaj gelmiyor" dediğinde
+   * fark ediliyor.
+   *
+   * ÜÇ HÂL AYRI: okunuyor / numara yok / okunamadı.
+   */
+  const [whatsapp, setWhatsapp] = useState<
+    { durum: 'bekliyor' } | { durum: 'geldi'; numara: string | null; hata: string | null }
+  >({ durum: 'bekliyor' });
   const [group, setGroup] = useState<DraftGroupRecord | null>(null);
   const [check, setCheck] = useState<PublishCheck | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -191,6 +208,35 @@ export function SimpleAdBuilder({
    * Yüklenen görsel arşive de giriyor — burada yüklemek onu "tek seferlik"
    * yapmıyor.
    */
+  /*
+   * NUMARA YALNIZCA WHATSAPP HEDEFİNDE VE SAYFA BELLİYKEN çekiliyor.
+   * Her sayfa yüklemesinde çağırmak, kullanılmayacak bir Graph isteği
+   * demekti.
+   */
+  useEffect(() => {
+    if (goal !== 'whatsapp' || !pageId) return;
+    let birakildi = false;
+    setWhatsapp({ durum: 'bekliyor' });
+    void apiFetch<{ number: string | null; error: string | null }>(
+      `/connections/social-profiles/${pageId}/whatsapp`,
+    )
+      .then((r) => {
+        if (!birakildi) setWhatsapp({ durum: 'geldi', numara: r.number, hata: r.error });
+      })
+      .catch((e: unknown) => {
+        if (birakildi) return;
+        // HATA YUTULMUYOR: "numara yok" ile "okuyamadık" ayrı hâller.
+        setWhatsapp({
+          durum: 'geldi',
+          numara: null,
+          hata: e instanceof ApiRequestError ? e.message : 'Numara okunamadı.',
+        });
+      });
+    return () => {
+      birakildi = true;
+    };
+  }, [goal, pageId]);
+
   async function gorselYukle(files: FileList | null): Promise<void> {
     if (!files || files.length === 0) return;
     setYukleniyor(true);
@@ -386,57 +432,47 @@ export function SimpleAdBuilder({
     );
   }
 
-  return (
-    <div className="space-y-5">
-      {/* 1. Ne istiyorsun */}
-      <Blok no={1} baslik="Ne olsun?">
-        <div className="grid gap-2 sm:grid-cols-3">
-          {CAMPAIGN_GOALS.map((g) => (
-            <button
-              key={g}
-              type="button"
-              onClick={() => hedefSec(g)}
-              className={`rounded-xl border p-3 text-left transition ${
-                goal === g ? 'border-brand bg-brand-soft' : 'border-line hover:bg-surface-sunken'
-              }`}
-            >
-              <span className="block text-sm font-semibold text-ink">{GOAL_META[g].label}</span>
-              <span className="mt-1 block text-xs text-ink-muted">{GOAL_META[g].promise}</span>
-              {/* PLATFORM SORU DEĞİL, SONUÇ. */}
-              <span className="mt-2 block text-[11px] font-medium text-ink-muted">
-                {platformEtiketi(g)}
-              </span>
-            </button>
-          ))}
-        </div>
-      </Blok>
+  /**
+   * ═══ SİHİRBAZIN ADIMLARI ═══
+   *
+   * Sıra kullanıcının tarif ettiği akış: hedef → görsel → metin → bütçe →
+   * özet. Ayarlar (hesap/sayfa/adres) kendi adımı DEĞİL: çoğu workspace'te
+   * hiç çizilmiyor ve tek seçenekli bir adım, cevabı belli bir soruyu ayrı
+   * bir ekrana koymak olurdu — hedefin hemen altında duruyor.
+   *
+   * HER ADIM KENDİ TAMAMLANMA KOŞULUNU TAŞIYOR ve eksikse SEBEBİ yazılı:
+   * kapalı bir "Devam" düğmesi tek başına "bozuk" olarak okunuyor.
+   */
+  const adimlar: SihirbazAdimi[] = [
+    {
+      ad: 'Hedef',
+      baslik: 'Ne olsun?',
+      altBaslik: 'Reklamın işi ne: form mu, mesaj mı, site ziyareti mi.',
+      tamam: goal !== null,
+      eksik: 'Önce bir hedef seç.',
+      icerik: (
+        <div className="space-y-5">
 
-      {goal && (
-        <>
-          {/*
-            ═══ 2. AYARLAR TEK SATIR — SORU DEĞİL, BİLGİ ═══
-
-            Kullanıcının cümlesi: "başka herhangi bir bilgi doldurmak
-            istemiyorum, diğerlerinin hepsinin otomatik olması lazım ya da
-            seçenekli olması lazım; manuel gireceğim tek yer metinler ve
-            kreatif görselleri".
-
-            Burada üç şey vardı ve üçü de kalktı:
-
-              · KAMPANYA ADI artık kendiliğinden yazılıyor (hedef + tarih).
-                Yalnızca ajansın gördüğü bir etiket; kullanıcıdan istemek,
-                sonucu değiştirmeyen bir yazma işi.
-              · WHATSAPP NUMARASI HİÇ SORULMUYOR. Meta numarayı sayfaya bağlı
-                WhatsApp hesabından alıyor (`destination_type: WHATSAPP` +
-                `promoted_object.page_id`); elle yazdırmak, Meta'da zaten
-                tanımlı bir bilgiyi ikinci kez ve hatalı girme fırsatıydı.
-              · WEB SİTESİ ADRESİ workspace kartından geliyor; yalnızca başka
-                bir sayfaya göndermek isteyen düzeltiyor.
-
-            Hesap ve sayfa yalnızca BİRDEN FAZLAYSA soruluyor: tek seçenekte
-            açılır liste göstermek, cevabı belli bir soru sormak.
-          */}
-          {(accounts.length > 1 || pages.length > 1 || goal === 'website') && (
+          <div className="grid gap-2 sm:grid-cols-3">
+            {CAMPAIGN_GOALS.map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => hedefSec(g)}
+                className={`rounded-xl border p-3 text-left transition ${
+                  goal === g ? 'border-brand bg-brand-soft' : 'border-line hover:bg-surface-sunken'
+                }`}
+              >
+                <span className="block text-sm font-semibold text-ink">{GOAL_META[g].label}</span>
+                <span className="mt-1 block text-xs text-ink-muted">{GOAL_META[g].promise}</span>
+                {/* PLATFORM SORU DEĞİL, SONUÇ. */}
+                <span className="mt-2 block text-[11px] font-medium text-ink-muted">
+                  {platformEtiketi(g)}
+                </span>
+              </button>
+            ))}
+          </div>
+{(accounts.length > 1 || pages.length > 1 || goal === 'website') && (
             <Blok no={2} baslik="Ayarlar" altBaslik="Gerisini biz dolduruyoruz.">
               <div className="grid gap-3 sm:grid-cols-2">
                 {accounts.length > 1 && (
@@ -486,315 +522,355 @@ export function SimpleAdBuilder({
               </div>
             </Blok>
           )}
-
-          {/* 3. Görseller — HAVUZ, oran kutusu değil */}
-          <Blok
-            no={3}
-            baslik="Görselleri seç"
-            altBaslik="Birden fazla seçebilirsin; hangisinin nereye gideceğine biz karar veririz."
-          >
-            {/*
-              YÜKLEME KUTUSU HER ZAMAN BURADA — boş arşivde de, dolu arşivde de.
-              Eski ekran boşken yalnızca "Görsel Arşivi'nden yükleyebilirsin"
-              yazıyordu: kullanıcı sekme değiştirip geri döndüğünde yazdığı
-              metni kaybediyordu.
-            */}
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <label
-                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken ${
-                  yukleniyor ? 'pointer-events-none opacity-50' : ''
-                }`}
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  disabled={yukleniyor}
-                  onChange={(e) => {
-                    void gorselYukle(e.target.files);
-                    // AYNI DOSYAYI TEKRAR SEÇEBİLMEK İÇİN: input değeri
-                    // temizlenmezse `change` bir daha tetiklenmiyor.
-                    e.target.value = '';
-                  }}
-                />
-                {yukleniyor ? 'Yükleniyor…' : 'Bilgisayardan görsel yükle'}
-              </label>
-              {/* YÜKLENEN GÖRSEL KENDİLİĞİNDEN SEÇİLİYOR: yükleyip bir de
-                  listeden bulup tıklamak gereksiz bir adım. */}
-              <span className="text-[11px] text-ink-muted">
-                Yüklenen görsel arşive de eklenir ve kendiliğinden seçilir.
-              </span>
-              {yuklemeNotu && (
-                <span className="text-[11px] text-ok-strong">{yuklemeNotu}</span>
-              )}
-            </div>
-
-            {gosterilen.length === 0 ? (
-              <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
-                Henüz görsel yok. Yukarıdaki düğmeyle bilgisayarından yükleyebilir ya da
-                <strong> Kütüphane → Görsel Arşivi</strong> bölümünü kullanabilirsin.
-              </p>
-            ) : (
-              <>
-                <ul className="grid gap-2 sm:grid-cols-6">
-                  {gosterilen.map((a) => {
-                    const oran = matchRatio(a.width, a.height);
-                    const secili = assetIds.includes(a.id);
-                    return (
-                      <li key={a.id}>
-                        <button
-                          type="button"
-                          disabled={oran === null}
-                          onClick={() =>
-                            setAssetIds((prev) =>
-                              prev.includes(a.id)
-                                ? prev.filter((x) => x !== a.id)
-                                : [...prev, a.id],
-                            )
-                          }
-                          title={
-                            oran
-                              ? `${a.name} · ${a.width}×${a.height}`
-                              : `${a.name} · ${a.width}×${a.height} — bu oran Meta reklamında kullanılamıyor`
-                          }
-                          className={`block w-full overflow-hidden rounded-lg border-2 bg-surface-sunken transition ${
-                            secili
-                              ? 'border-brand'
-                              : oran
-                                ? 'border-transparent hover:border-line'
-                                : 'cursor-not-allowed border-transparent opacity-35'
-                          }`}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={`${API_URL}${a.previewUrl}`}
-                            alt={a.name}
-                            className="aspect-square w-full object-contain"
-                            loading="lazy"
-                          />
-                          <span className="block truncate px-1 pb-1 text-[10px] text-ink-muted">
-                            {secili ? `✓ ${assetIds.indexOf(a.id) + 1}.` : oran ? a.name : 'oran uymuyor'}
-                          </span>
-                        </button>
-
-                        {/* KIRPMA HER GÖRSELDE VAR, yalnızca uymayanlarda değil.
-                            Kare bir fotoğraftan dikey üretmek de anlamlı: dikey
-                            görsel yoksa Hikâyeler yerleşimi hiç açılmıyor. */}
-                        <button
-                          type="button"
-                          onClick={() => setCropSource(a)}
-                          className="mt-0.5 w-full text-[10px] text-brand-strong underline"
-                        >
-                          {oran ? 'kırp' : 'kırpıp kullan'}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                {/* SESSİZ ELEME YOK: kaç görsel gösteriliyor, kaçı neden
-                    kullanılamıyor ve toplam kaç tane var — üçü de yazıyor.
-                    ARTIK ÇÖZÜMÜ DE SÖYLÜYOR: uymayan görsel çöp değil,
-                    kırpılabilir. */}
-                <p className="mt-2 text-[11px] text-ink-muted">
-                  {gosterilen.length} görsel gösteriliyor
-                  {libraryTotal > libraryAssets.length && ` (arşivde toplam ${libraryTotal})`}.
-                  {uymayanSayisi > 0 &&
-                    ` Soluk görünen ${uymayanSayisi} tanesi Meta reklamına uymayan oranlarda — ` +
-                      'altlarındaki "kırpıp kullan" ile üç orana çevirebilirsin.'}
-                </p>
-
-                {cropSource && (
-                  <div className="mt-3">
-                    <CropStudio
-                      clientId={clientId}
-                      source={cropSource}
-                      onCancel={() => setCropSource(null)}
-                      onDone={(uretilen) => {
-                        /**
-                         * ÜRETİLEN GÖRSELLER KENDİLİĞİNDEN SEÇİLİYOR.
-                         *
-                         * Kullanıcı zaten "bunu kullanacağım" diyerek kırptı;
-                         * bir de listeden tek tek seçmesini istemek, aracın
-                         * kurtardığı işi geri vermek olurdu.
-                         */
-                        setUretilenler((prev) => [
-                          ...uretilen.filter((u) => !prev.some((p) => p.id === u.id)),
-                          ...prev,
-                        ]);
-                        setAssetIds((prev) => [
-                          ...new Set([...prev, ...uretilen.map((u) => u.id)]),
-                        ]);
-                        setCropSource(null);
-                        // Arşiv listesi de tazelensin: sayfa yenilenince
-                        // görseller sunucudan gelir ve yerel liste erir.
-                        router.refresh();
-                      }}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </Blok>
-
-          {/* 4. Metin + önizleme */}
-          <Blok no={4} baslik="Ne yazalım?">
-            {/*
-              ═══ YAPAY ZEKÂ İLE DOLDUR ═══
-              Kullanıcının isteği: "metinleri oluşturmak istersem de yapay
-              zeka ile doldur diyeyim doldursun bütün metinleri". Üç alan
-              birden doldurulıyor — ayrı ayrı üretmek üç farklı reklam gibi
-              konuşan bir metin çıkarırdı.
-            */}
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void metinleriDoldur()}
-                disabled={!goal || busy !== null}
-                className="rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-medium text-brand-strong transition hover:bg-brand/10 disabled:opacity-40"
-              >
-                {busy === 'ai' ? 'Yazılıyor…' : 'Yapay zekâ ile doldur'}
-              </button>
-              {/* EZDİĞİ AÇIKÇA YAZILI: sessizce birleştirmek, kullanıcının
-                  yazdığı cümleyi bulamaması demekti. */}
-              <span className="text-[11px] text-ink-muted">
-                {!goal
-                  ? 'Önce ne istediğini seç.'
-                  : assetIds.length > 0
-                    ? 'Seçtiğin görsellere bakarak yazar; yazdıklarının üzerine yazılır.'
-                    : 'Üç alanı da yeniden yazar; yazdıklarının üzerine yazılır. Görsel seçersen onlara da bakar.'}
-              </span>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-3">
-                <MetinAlani
-                  label="Ana metin"
-                  ipucu="Reklamın üstünde görünen yazı."
-                  value={primaryText}
-                  onChange={setPrimaryText}
-                  limit={125}
-                  rows={4}
-                />
-                <MetinAlani
-                  label="Başlık"
-                  ipucu="Görselin altında kalın yazıyla görünür."
-                  value={headline}
-                  onChange={setHeadline}
-                  limit={40}
-                />
-                <MetinAlani
-                  label="Açıklama"
-                  ipucu="Başlığın altında küçük yazı. Boş bırakılabilir."
-                  value={description}
-                  onChange={setDescription}
-                  limit={30}
-                />
-              </div>
-
-              <Onizleme
-                pageName={pages.find((p) => p.id === pageId)?.name ?? 'Sayfan'}
-                primaryText={primaryText}
-                headline={headline}
-                description={description}
-                goal={goal}
-                asset={gosterilen.find((a) => a.id === assetIds[0])}
+        </div>
+      ),
+    },
+    {
+      ad: 'Görsel',
+      baslik: 'Reklamda ne görünsün?',
+      altBaslik: 'Bilgisayarından yükle ya da arşivden seç. Hangisinin nereye gideceğine biz karar veririz.',
+      tamam: assetIds.length > 0,
+      eksik: 'En az bir görsel seç.',
+      icerik: <div className="space-y-4">
+        {/* 3. Görseller — HAVUZ, oran kutusu değil */}
+        <>
+          {/*
+            YÜKLEME KUTUSU HER ZAMAN BURADA — boş arşivde de, dolu arşivde de.
+            Eski ekran boşken yalnızca "Görsel Arşivi'nden yükleyebilirsin"
+            yazıyordu: kullanıcı sekme değiştirip geri döndüğünde yazdığı
+            metni kaybediyordu.
+          */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <label
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken ${
+                yukleniyor ? 'pointer-events-none opacity-50' : ''
+              }`}
+            >
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                disabled={yukleniyor}
+                onChange={(e) => {
+                  void gorselYukle(e.target.files);
+                  // AYNI DOSYAYI TEKRAR SEÇEBİLMEK İÇİN: input değeri
+                  // temizlenmezse `change` bir daha tetiklenmiyor.
+                  e.target.value = '';
+                }}
               />
-            </div>
-          </Blok>
-
-          {/* 5. Bütçe — HAZIR KARTLAR */}
-          <Blok no={5} baslik="Günde ne kadar harcayalım?">
-            <div className="grid gap-2 sm:grid-cols-3">
-              {BUDGET_PRESETS.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() => setDailyBudget(p.value)}
-                  className={`rounded-xl border p-3 text-left transition ${
-                    dailyBudget === p.value
-                      ? 'border-brand bg-brand-soft'
-                      : 'border-line hover:bg-surface-sunken'
-                  }`}
-                >
-                  <span className="block text-sm font-semibold text-ink">
-                    {p.value} {currency}
-                    <span className="font-normal text-ink-muted"> / gün</span>
-                  </span>
-                  <span className="mt-0.5 block text-xs text-ink-muted">{p.label}</span>
-                  <span className="mt-1 block text-[11px] text-ink-muted">{p.hint}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Alan label={`Başka bir tutar (${currency})`}>
-                <input
-                  value={dailyBudget}
-                  onChange={(e) => setDailyBudget(e.target.value)}
-                  inputMode="decimal"
-                  className={input}
-                />
-              </Alan>
-              {/*
-                ═══ SÜRE: SEÇENEK, YAZILAN SAYI DEĞİL ═══
-
-                Eski hâl bir sayı kutusuydu ve "0 yazarsan süresiz olur"
-                diyordu — süresiz kampanya, KEŞFEDİLMESİ gereken bir
-                davranıştı. Kullanıcının istediği kurgu birebir: "süresiz mi
-                belirli bir süre mi açık kalacağını seçersin".
-
-                SÜRESİZ AÇIKÇA SEÇİLİYOR ve ne demek olduğu yanında yazıyor:
-                bu üründe "unutulan kampanya" en pahalı kullanıcı hatası.
-              */}
-              <Alan label="Ne kadar yayında kalsın">
-                <select
-                  value={durationDays}
-                  onChange={(e) => setDurationDays(e.target.value)}
-                  className={input}
-                >
-                  {SURE_SECENEKLERI.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </Alan>
-            </div>
-
-            {/* NE SEÇTİĞİMİZİ SÖYLÜYORUZ. "Biz hallederiz" demek yeterli
-                değil: kullanıcı neyin kararını devrettiğini bilmeli. */}
-            <p className="mt-3 text-xs text-ink-muted">{bizNeSectik(goal)}</p>
-          </Blok>
-
-          {/* Eksikler ve oluştur */}
-          <div className="rounded-xl border border-line bg-surface p-4">
-            {eksikler.length > 0 ? (
-              <>
-                <p className="text-xs font-medium text-ink">Devam etmek için:</p>
-                <ul className="mt-1.5 space-y-0.5">
-                  {eksikler.map((e) => (
-                    <li key={e} className="text-xs text-ink-muted">
-                      · {e}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p className="text-xs text-ok-strong">Her şey hazır.</p>
+              {yukleniyor ? 'Yükleniyor…' : 'Bilgisayardan görsel yükle'}
+            </label>
+            {/* YÜKLENEN GÖRSEL KENDİLİĞİNDEN SEÇİLİYOR: yükleyip bir de
+                listeden bulup tıklamak gereksiz bir adım. */}
+            <span className="text-[11px] text-ink-muted">
+              Yüklenen görsel arşive de eklenir ve kendiliğinden seçilir.
+            </span>
+            {yuklemeNotu && (
+              <span className="text-[11px] text-ok-strong">{yuklemeNotu}</span>
             )}
+          </div>
 
+          {gosterilen.length === 0 ? (
+            <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
+              Henüz görsel yok. Yukarıdaki düğmeyle bilgisayarından yükleyebilir ya da
+              <strong> Kütüphane → Görsel Arşivi</strong> bölümünü kullanabilirsin.
+            </p>
+          ) : (
+            <>
+              <ul className="grid gap-2 sm:grid-cols-6">
+                {gosterilen.map((a) => {
+                  const oran = matchRatio(a.width, a.height);
+                  const secili = assetIds.includes(a.id);
+                  return (
+                    <li key={a.id}>
+                      <button
+                        type="button"
+                        disabled={oran === null}
+                        onClick={() =>
+                          setAssetIds((prev) =>
+                            prev.includes(a.id)
+                              ? prev.filter((x) => x !== a.id)
+                              : [...prev, a.id],
+                          )
+                        }
+                        title={
+                          oran
+                            ? `${a.name} · ${a.width}×${a.height}`
+                            : `${a.name} · ${a.width}×${a.height} — bu oran Meta reklamında kullanılamıyor`
+                        }
+                        className={`block w-full overflow-hidden rounded-lg border-2 bg-surface-sunken transition ${
+                          secili
+                            ? 'border-brand'
+                            : oran
+                              ? 'border-transparent hover:border-line'
+                              : 'cursor-not-allowed border-transparent opacity-35'
+                        }`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`${API_URL}${a.previewUrl}`}
+                          alt={a.name}
+                          className="aspect-square w-full object-contain"
+                          loading="lazy"
+                        />
+                        <span className="block truncate px-1 pb-1 text-[10px] text-ink-muted">
+                          {secili ? `✓ ${assetIds.indexOf(a.id) + 1}.` : oran ? a.name : 'oran uymuyor'}
+                        </span>
+                      </button>
+
+                      {/* KIRPMA HER GÖRSELDE VAR, yalnızca uymayanlarda değil.
+                          Kare bir fotoğraftan dikey üretmek de anlamlı: dikey
+                          görsel yoksa Hikâyeler yerleşimi hiç açılmıyor. */}
+                      <button
+                        type="button"
+                        onClick={() => setCropSource(a)}
+                        className="mt-0.5 w-full text-[10px] text-brand-strong underline"
+                      >
+                        {oran ? 'kırp' : 'kırpıp kullan'}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {/* SESSİZ ELEME YOK: kaç görsel gösteriliyor, kaçı neden
+                  kullanılamıyor ve toplam kaç tane var — üçü de yazıyor.
+                  ARTIK ÇÖZÜMÜ DE SÖYLÜYOR: uymayan görsel çöp değil,
+                  kırpılabilir. */}
+              <p className="mt-2 text-[11px] text-ink-muted">
+                {gosterilen.length} görsel gösteriliyor
+                {libraryTotal > libraryAssets.length && ` (arşivde toplam ${libraryTotal})`}.
+                {uymayanSayisi > 0 &&
+                  ` Soluk görünen ${uymayanSayisi} tanesi Meta reklamına uymayan oranlarda — ` +
+                    'altlarındaki "kırpıp kullan" ile üç orana çevirebilirsin.'}
+              </p>
+
+              {cropSource && (
+                <div className="mt-3">
+                  <CropStudio
+                    clientId={clientId}
+                    source={cropSource}
+                    onCancel={() => setCropSource(null)}
+                    onDone={(uretilen) => {
+                      /**
+                       * ÜRETİLEN GÖRSELLER KENDİLİĞİNDEN SEÇİLİYOR.
+                       *
+                       * Kullanıcı zaten "bunu kullanacağım" diyerek kırptı;
+                       * bir de listeden tek tek seçmesini istemek, aracın
+                       * kurtardığı işi geri vermek olurdu.
+                       */
+                      setUretilenler((prev) => [
+                        ...uretilen.filter((u) => !prev.some((p) => p.id === u.id)),
+                        ...prev,
+                      ]);
+                      setAssetIds((prev) => [
+                        ...new Set([...prev, ...uretilen.map((u) => u.id)]),
+                      ]);
+                      setCropSource(null);
+                      // Arşiv listesi de tazelensin: sayfa yenilenince
+                      // görseller sunucudan gelir ve yerel liste erir.
+                      router.refresh();
+                    }}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </>
+
+        {/* 4. Metin + önizleme */}
+      </div>,
+    },
+    {
+      ad: 'Metin',
+      baslik: 'Ne yazalım?',
+      altBaslik: 'Yaz ya da yapay zekâya yazdır; görsellere bakarak yazıyor.',
+      tamam: primaryText.trim().length > 0,
+      eksik: 'Ana metni yaz ya da yapay zekâya yazdır.',
+      icerik: <div className="space-y-4">
+        <>
+          {/*
+            ═══ YAPAY ZEKÂ İLE DOLDUR ═══
+            Kullanıcının isteği: "metinleri oluşturmak istersem de yapay
+            zeka ile doldur diyeyim doldursun bütün metinleri". Üç alan
+            birden doldurulıyor — ayrı ayrı üretmek üç farklı reklam gibi
+            konuşan bir metin çıkarırdı.
+          */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={olustur}
-              disabled={eksikler.length > 0 || busy !== null}
-              className="mt-3 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40"
+              onClick={() => void metinleriDoldur()}
+              disabled={!goal || busy !== null}
+              className="rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-medium text-brand-strong transition hover:bg-brand/10 disabled:opacity-40"
             >
-              {busy === 'create' ? 'Hazırlanıyor…' : 'Reklamı hazırla'}
+              {busy === 'ai' ? 'Yazılıyor…' : 'Yapay zekâ ile doldur'}
             </button>
+            {/* EZDİĞİ AÇIKÇA YAZILI: sessizce birleştirmek, kullanıcının
+                yazdığı cümleyi bulamaması demekti. */}
+            <span className="text-[11px] text-ink-muted">
+              {!goal
+                ? 'Önce ne istediğini seç.'
+                : assetIds.length > 0
+                  ? 'Seçtiğin görsellere bakarak yazar; yazdıklarının üzerine yazılır.'
+                  : 'Üç alanı da yeniden yazar; yazdıklarının üzerine yazılır. Görsel seçersen onlara da bakar.'}
+            </span>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-3">
+              <MetinAlani
+                label="Ana metin"
+                ipucu="Reklamın üstünde görünen yazı."
+                value={primaryText}
+                onChange={setPrimaryText}
+                limit={125}
+                rows={4}
+              />
+              <MetinAlani
+                label="Başlık"
+                ipucu="Görselin altında kalın yazıyla görünür."
+                value={headline}
+                onChange={setHeadline}
+                limit={40}
+              />
+              <MetinAlani
+                label="Açıklama"
+                ipucu="Başlığın altında küçük yazı. Boş bırakılabilir."
+                value={description}
+                onChange={setDescription}
+                limit={30}
+              />
+            </div>
+
+            <Onizleme
+              pageName={pages.find((p) => p.id === pageId)?.name ?? 'Sayfan'}
+              primaryText={primaryText}
+              headline={headline}
+              description={description}
+              goal={goal}
+              asset={gosterilen.find((a) => a.id === assetIds[0])}
+            />
           </div>
         </>
-      )}
+
+        {/* 5. Bütçe — HAZIR KARTLAR */}
+      </div>,
+    },
+    {
+      ad: 'Bütçe',
+      baslik: 'Günde ne kadar harcayalım?',
+      altBaslik: 'Her gün bu kadar harcanır; istediğin an durdurabilirsin.',
+      tamam: Number(dailyBudget) > 0,
+      eksik: 'Günlük bütçe gir.',
+      icerik: <div className="space-y-4">
+        <>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {BUDGET_PRESETS.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => setDailyBudget(p.value)}
+                className={`rounded-xl border p-3 text-left transition ${
+                  dailyBudget === p.value
+                    ? 'border-brand bg-brand-soft'
+                    : 'border-line hover:bg-surface-sunken'
+                }`}
+              >
+                <span className="block text-sm font-semibold text-ink">
+                  {p.value} {currency}
+                  <span className="font-normal text-ink-muted"> / gün</span>
+                </span>
+                <span className="mt-0.5 block text-xs text-ink-muted">{p.label}</span>
+                <span className="mt-1 block text-[11px] text-ink-muted">{p.hint}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Alan label={`Başka bir tutar (${currency})`}>
+              <input
+                value={dailyBudget}
+                onChange={(e) => setDailyBudget(e.target.value)}
+                inputMode="decimal"
+                className={input}
+              />
+            </Alan>
+            {/*
+              ═══ SÜRE: SEÇENEK, YAZILAN SAYI DEĞİL ═══
+
+              Eski hâl bir sayı kutusuydu ve "0 yazarsan süresiz olur"
+              diyordu — süresiz kampanya, KEŞFEDİLMESİ gereken bir
+              davranıştı. Kullanıcının istediği kurgu birebir: "süresiz mi
+              belirli bir süre mi açık kalacağını seçersin".
+
+              SÜRESİZ AÇIKÇA SEÇİLİYOR ve ne demek olduğu yanında yazıyor:
+              bu üründe "unutulan kampanya" en pahalı kullanıcı hatası.
+            */}
+            <Alan label="Ne kadar yayında kalsın">
+              <select
+                value={durationDays}
+                onChange={(e) => setDurationDays(e.target.value)}
+                className={input}
+              >
+                {SURE_SECENEKLERI.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Alan>
+          </div>
+
+          {/* NE SEÇTİĞİMİZİ SÖYLÜYORUZ. "Biz hallederiz" demek yeterli
+              değil: kullanıcı neyin kararını devrettiğini bilmeli. */}
+          <p className="mt-3 text-xs text-ink-muted">{bizNeSectik(goal)}</p>
+        </>
+      </div>,
+    },
+    {
+      ad: 'Özet',
+      baslik: 'Son bir kez bakalım',
+      altBaslik: 'Yayına almadan önce ne kurulacağını gör.',
+      tamam: eksikler.length === 0,
+      eksik: eksikler[0],
+      icerik: (
+        <Ozet
+          goal={goal}
+          name={name}
+          onName={setName}
+          adAccount={accounts.find((a) => a.id === adAccountId)?.name ?? '—'}
+          page={pages.find((p) => p.id === pageId)?.name ?? '—'}
+          gorselSayisi={assetIds.length}
+          primaryText={primaryText}
+          headline={headline}
+          dailyBudget={dailyBudget}
+          currency={currency}
+          durationDays={durationDays}
+          linkUrl={linkUrl}
+          whatsapp={whatsapp}
+          eksikler={eksikler}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <Sihirbaz
+        adimlar={adimlar}
+        aktif={adim}
+        onAktif={setAdim}
+        sonAdimDugmesi={
+          <button
+            type="button"
+            onClick={olustur}
+            disabled={eksikler.length > 0 || busy !== null}
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:opacity-40"
+          >
+            {busy === 'create' ? 'Hazırlanıyor…' : 'Reklamı hazırla'}
+          </button>
+        }
+      />
 
       {error && (
         <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
@@ -947,6 +1023,154 @@ function durumRengi(status: string): string {
  * yerde ayrı liste tutmak, arayüzün "Google'da da çıkar" deyip sunucunun onu
  * atlaması demek olurdu.
  */
+/**
+ * ═══ ÖZET ADIMI ═══
+ *
+ * Yayına almadan önce NE KURULACAĞINI tek ekranda gösteriyor. Eski akışta
+ * böyle bir durak yoktu: kullanıcı beş bloğu doldurup düğmeye basıyor ve
+ * ne kurulduğunu ancak sonuç ekranında görüyordu.
+ *
+ * ═══ WHATSAPP NUMARASI BURADA TEYİT EDİLİYOR ═══
+ *
+ * Kullanıcının isteği birebir: "whatsapp numarasının doğru olup olmadığını
+ * teyit etmem için gözükmesini istiyorum". Numara SORULMUYOR (Meta onu
+ * sayfaya bağlı WhatsApp hesabından alıyor) ama hangi hatta mesaj düşeceği
+ * yayından ÖNCE görünmeli — yanlış hat, ancak müşteri "hiç mesaj gelmiyor"
+ * dediğinde fark ediliyor.
+ *
+ * ÜÇ HÂL AYRI AYRI YAZILIYOR ve üçünün yapılacak işi farklı:
+ *   · numara geldi   → teyit et
+ *   · okunamadı      → Ads Manager'dan bak (kampanya yine kurulabilir)
+ *   · çağrı düştü    → sebep platformun kendi cümlesiyle
+ */
+function Ozet({
+  goal,
+  name,
+  onName,
+  adAccount,
+  page,
+  gorselSayisi,
+  primaryText,
+  headline,
+  dailyBudget,
+  currency,
+  durationDays,
+  linkUrl,
+  whatsapp,
+  eksikler,
+}: {
+  goal: CampaignGoal | null;
+  name: string;
+  onName: (v: string) => void;
+  adAccount: string;
+  page: string;
+  gorselSayisi: number;
+  primaryText: string;
+  headline: string;
+  dailyBudget: string;
+  currency: string;
+  durationDays: string;
+  linkUrl: string;
+  whatsapp:
+    | { durum: 'bekliyor' }
+    | { durum: 'geldi'; numara: string | null; hata: string | null };
+  eksikler: string[];
+}) {
+  const sure = SURE_SECENEKLERI.find((o) => o.value === durationDays)?.label ?? `${durationDays} gün`;
+  const toplam =
+    Number(durationDays) > 0 ? Number(dailyBudget) * Number(durationDays) : null;
+
+  return (
+    <div className="space-y-4">
+      {/* AD DÜZENLENEBİLİR AMA ZORUNLU DEĞİL: kendiliğinden dolduruldu,
+          isteyen değiştiriyor. */}
+      <Alan label="Kampanya adı" ipucu="Yalnızca sen göreceksin.">
+        <input value={name} onChange={(e) => onName(e.target.value)} className={input} />
+      </Alan>
+
+      <dl className="grid gap-x-6 gap-y-2.5 rounded-xl bg-surface-sunken px-4 py-3 sm:grid-cols-2">
+        <Satir etiket="Hedef" deger={goal ? GOAL_META[goal].label : '—'} />
+        <Satir etiket="Reklam hesabı" deger={adAccount} />
+        <Satir etiket="Sayfa" deger={page} />
+        <Satir etiket="Görsel" deger={`${gorselSayisi} adet`} />
+        <Satir
+          etiket="Bütçe"
+          deger={
+            toplam === null
+              ? `${dailyBudget} ${currency}/gün · süresiz`
+              : `${dailyBudget} ${currency}/gün · ${sure} · toplam ${toplam} ${currency}`
+          }
+        />
+        {goal === 'website' && <Satir etiket="Adres" deger={linkUrl || '—'} />}
+      </dl>
+
+      {goal === 'whatsapp' && (
+        <div className="rounded-xl border border-line px-4 py-3">
+          <p className="text-xs font-semibold text-ink">Mesajlar nereye düşecek?</p>
+          {whatsapp.durum === 'bekliyor' ? (
+            <p className="mt-1 text-xs text-ink-muted">Numara okunuyor…</p>
+          ) : whatsapp.numara ? (
+            <>
+              <p className="mt-1 text-sm font-semibold tabular-nums text-ink">
+                {whatsapp.numara}
+              </p>
+              <p className="mt-1 text-[11px] text-ink-muted">
+                Sayfaya bağlı WhatsApp hesabı. Yanlışsa Meta Business Suite’ten sayfanın
+                WhatsApp bağlantısını değiştir.
+              </p>
+            </>
+          ) : (
+            /*
+              "OKUNAMADI" KAMPANYAYI ENGELLEMİYOR ve bu kasıtlı: numara Meta
+              tarafında zaten tanımlı olabilir, biz yalnızca okuyamıyoruz.
+              Engellemek, çalışan bir kurulumu durdurmak olurdu.
+            */
+            <>
+              <p className="mt-1 text-xs text-warn-strong">
+                {whatsapp.hata ?? 'Bu sayfada bağlı WhatsApp numarası okunamadı.'}
+              </p>
+              <p className="mt-1 text-[11px] text-ink-muted">
+                Kampanya yine kurulabilir: Meta numarayı sayfadan kendisi alıyor. Hangi
+                numara olduğunu Meta Business Suite’ten doğrulayabilirsin.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="rounded-xl border border-line px-4 py-3">
+        <p className="text-xs font-semibold text-ink">Reklam metni</p>
+        {headline && <p className="mt-1 text-sm font-medium text-ink">{headline}</p>}
+        <p className="mt-0.5 whitespace-pre-line text-xs text-ink-muted">{primaryText}</p>
+      </div>
+
+      {eksikler.length > 0 && (
+        <div className="rounded-xl bg-warn-soft px-4 py-3 ring-1 ring-inset ring-warn/30">
+          <p className="text-xs font-medium text-warn-strong">Yayına almadan önce:</p>
+          <ul className="mt-1 space-y-0.5">
+            {eksikler.map((e) => (
+              <li key={e} className="text-xs text-warn-strong">
+                · {e}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Satir({ etiket, deger }: { etiket: string; deger: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-xs text-ink-muted">{etiket}</dt>
+      <dd className="min-w-0 truncate text-xs font-medium text-ink" title={deger}>
+        {deger}
+      </dd>
+    </div>
+  );
+}
+
 function platformEtiketi(goal: CampaignGoal): string {
   const calisanlar = (['meta', 'google'] as const).filter(
     (p) => GOAL_PLATFORM_SUPPORT[goal][p].support === 'yes',
@@ -956,7 +1180,15 @@ function platformEtiketi(goal: CampaignGoal): string {
 }
 
 /** Bizim kullanıcı adına verdiğimiz kararların düz Türkçe özeti. */
-function bizNeSectik(goal: CampaignGoal): string {
+/**
+ * NE SEÇTİĞİMİZİ SÖYLEYEN CÜMLE.
+ *
+ * `null` HEDEF DE GEÇERLİ BİR GİRDİ: sihirbazın adım dizisi hedef
+ * seçilmeden de kuruluyor ve bir `!` ile tipi susturmak, gerçekten null
+ * olduğu bir anda çalışma zamanında patlamak demekti.
+ */
+function bizNeSectik(goal: CampaignGoal | null): string {
+  if (!goal) return '';
   const ortak =
     'Kitle: Türkiye, 18+, daraltma yok. Yerleşim: seçtiğin görsel oranlarına göre. ' +
     'Teklif: en düşük maliyet.';
@@ -982,7 +1214,8 @@ function Onizleme({
   primaryText: string;
   headline: string;
   description: string;
-  goal: CampaignGoal;
+  /** Hedef seçilmeden de çiziliyor: önizleme boş bir çerçeve olarak duruyor. */
+  goal: CampaignGoal | null;
   asset: AssetRecord | undefined;
 }) {
   const cta =

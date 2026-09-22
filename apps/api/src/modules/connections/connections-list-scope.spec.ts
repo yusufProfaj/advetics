@@ -75,6 +75,9 @@ beforeEach(() => {
       // KUYRUK — yalnızca `ilkVeriCekimi` kullanıyor ve bu testlerde o yol
     // koşmuyor. Çağrılırsa SESSİZCE geçmesin diye fırlatan bir yerine koyma.
     { enqueue: () => { throw new Error('kuyruk bu testte beklenmiyor'); } } as never,
+    // ŞİFRE ÇÖZÜCÜ — yalnızca `pageWhatsapp` kullanıyor; bu testlerde o
+    // yol koşmuyor.
+    {} as never,
   );
 });
 

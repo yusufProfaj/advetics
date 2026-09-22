@@ -84,6 +84,9 @@ function servis(
     {} as never,
     {} as never,
     queue,
+    // ŞİFRE ÇÖZÜCÜ — yalnızca `pageWhatsapp` kullanıyor; bu testlerde o
+    // yol koşmuyor.
+    {} as never,
   );
   return { svc, c };
 }

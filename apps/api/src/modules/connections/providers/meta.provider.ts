@@ -1489,6 +1489,66 @@ export class MetaProvider implements IAdPlatformProvider {
    * istek atmak kotayı gereksiz yakıyor. Meta iç içe alan sözdizimiyle
    * (`insights.metric(...)`) tek çağrıda veriyor.
    */
+  /**
+   * ═══ SAYFAYA BAĞLI WHATSAPP NUMARASI ═══
+   *
+   * Kullanıcının isteği: "whatsapp numarasının doğru olup olmadığını teyit
+   * etmem için gözükmesini istiyorum, birden fazla seçenek olabilir çünkü".
+   *
+   * Reklam numarayı SORMUYOR (ad set `destination_type: WHATSAPP` +
+   * `promoted_object.page_id` ikilisiyle Meta sayfaya bağlı numarayı
+   * kullanıyor) ama kullanıcının HANGİ numaraya mesaj düşeceğini yayından
+   * ÖNCE görmesi gerekiyor. Yanlış hatta düşen bir kampanya, ancak müşteri
+   * "hiç mesaj gelmiyor" dediğinde fark ediliyor.
+   *
+   * ═══ ÜÇ HÂLLİ CEVAP ═══
+   *
+   * `whatsapp_number` Page düğümünde BELGELENMİŞ BİR ALAN DEĞİL: sahada
+   * çalışıyor ama Meta'nın Click-to-WhatsApp kılavuzunda listelenmiyor.
+   * Yani üç ayrı sonuç mümkün ve üçünün yapılacak işi farklı:
+   *
+   *   · numara geldi        → ekranda gösterilip teyit ediliyor
+   *   · alan yok/boş        → sayfada bağlı numara okunamıyor (hata DEĞİL)
+   *   · çağrı düştü         → sebep Meta'nın kendi cümlesiyle taşınıyor
+   *
+   * Tek bir `null` döndürmek üçünü aynı boş kutuya çevirirdi ve kullanıcı
+   * "numara yok" ile "okuyamadık"ı ayırt edemezdi.
+   *
+   * HATA FIRLATMIYOR. Bu bir TEYİT ekranı; okunamaması kampanya kurmayı
+   * engellememeli, yalnızca "doğrulayamadık" demeli.
+   */
+  async fetchPageWhatsapp(params: {
+    pageExternalId: string;
+    pageAccessToken: string;
+  }): Promise<{ number: string | null; hata: string | null }> {
+    const url = new URL(`${this.graph}/${params.pageExternalId}`);
+    url.searchParams.set('fields', 'whatsapp_number');
+    url.searchParams.set('access_token', params.pageAccessToken);
+
+    try {
+      const { data } = await platformFetch<{ whatsapp_number?: string }>(
+        'meta',
+        url.toString(),
+        {},
+        parseMetaRateLimit,
+      );
+      const numara = typeof data.whatsapp_number === 'string' ? data.whatsapp_number.trim() : '';
+      return { number: numara || null, hata: null };
+    } catch (err) {
+      /*
+       * "NONEXISTING FIELD" BİR ARIZA DEĞİL.
+       *
+       * Meta bu alanı bazı sayfalarda hiç sunmuyor ve hatayı `(#100) Tried
+       * accessing nonexisting field` ile veriyor. Onu kırmızı bir hata
+       * olarak göstermek, çalışan bir kurulumu bozuk gibi gösterirdi.
+       */
+      const mesaj = err instanceof Error ? err.message : String(err);
+      if (/nonexisting field/i.test(mesaj)) return { number: null, hata: null };
+      this.logger.warn(`Sayfa WhatsApp numarası okunamadı (${params.pageExternalId}): ${mesaj}`);
+      return { number: null, hata: mesaj };
+    }
+  }
+
   async fetchOrganicPosts(params: {
     pageAccessToken: string;
     profileExternalId: string;
