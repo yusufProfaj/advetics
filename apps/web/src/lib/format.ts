@@ -73,6 +73,24 @@ export function formatDayLong(iso: string): string {
 }
 
 /**
+ * Tam zaman damgası → "5 Ağu 2026".
+ *
+ * `formatDayShort` GÜN DİZESİ bekliyor (`YYYY-MM-DD`) ve sonuna `T00:00:00Z`
+ * ekliyor; ona tam bir zaman damgası vermek "Invalid Date" üretiyor ve ekranda
+ * sessizce boş bir hücre bırakıyor.
+ *
+ * GÖRELİ DEĞİL MUTLAK. Göreli zaman tazelik sorusunun cevabı ("veri ne kadar
+ * eski"); burada sorulan şey gönderinin TARİHİ ve "47 gün önce" bir takvim
+ * günü değil.
+ */
+export function formatTarih(iso: string | null): string {
+  if (!iso) return 'tarih yok';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'tarih yok';
+  return d.toLocaleDateString(TR, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
  * "3 dk önce" / "2 sa önce".
  *
  * Mutlak zaman yerine göreli: kullanıcının sorusu "veri ne kadar taze" ve

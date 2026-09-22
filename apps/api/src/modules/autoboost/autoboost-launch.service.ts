@@ -686,6 +686,93 @@ export class AutoBoostLaunchService {
     });
   }
 
+  /**
+   * ═══ TEKRAR BOOSTLA ═══
+   *
+   * Kartı KARARA GERİ AÇIYOR — para harcamıyor. Harcama kararı yine
+   * "Onayla"da ve o ayrı bir yetki (`boost.approve`); bu uç yalnızca kartı
+   * yeniden onaylanabilir hâle getiriyor, tıpkı geçmiş içerik çekiminin kart
+   * üretmesi gibi.
+   *
+   * ═══ NEDEN YENİ BİR KART AÇILMIYOR ═══
+   *
+   * `auto_boost_queue_items` tekil anahtarı `(social_profile_id, external_id)`
+   * ve bu anahtar bilerek dar: webhook teslimi mükerrer olabiliyor ve ikinci
+   * bir kart aynı gönderi için İKİ REKLAM demek. Yani tekrar boost, var olan
+   * kaydın durumunu geri almak zorunda.
+   *
+   * KİMLİKLER SİLİNMİYOR. `external_campaign_id`, `boost_id` ve `launched_at`
+   * yerinde kalıyor: kart yeniden onaylanmazsa önceki yayının izi kartta
+   * durmaya devam ediyor, onaylanırsa yayın yolu zaten üzerine yazıyor.
+   * Silmek, "daha önce boostlanmıştı" bilgisini bu ekrandan sessizce
+   * kaldırırdı.
+   */
+  async tekrarBoostla(
+    ctx: TenantContext,
+    queueItemId: string,
+  ): Promise<{ status: string; message: string }> {
+    // Karar yolundaki gerekçenin aynısı: daraltma açıkken UPDATE sonrası satır
+    // kendi görüş alanının dışına düşebiliyor.
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+
+    const [kayit] = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$queryRaw<Array<{ status: string; aktif_biter: Date | null }>>(Prisma.sql`
+        SELECT q.status, aktif.biter AS aktif_biter
+        FROM auto_boost_queue_items q
+        -- AKTİF BOOST ENGELİ: boosts_active_post_uniq aynı gönderi için
+        -- ikinci bir aktif boost'a izin vermiyor. Kartı karara açıp onayda
+        -- veritabanı hatası vermek, sebebi yazmayan bir ret olurdu.
+        LEFT JOIN LATERAL (
+          SELECT b.created_on_platform_at + make_interval(days => b.duration_days) AS biter
+          FROM boosts b
+          JOIN organic_posts op ON op.id = b.organic_post_id
+          WHERE op.social_profile_id = q.social_profile_id
+            AND op.external_id = q.external_id
+            AND b.status IN ('candidate', 'approved', 'creating', 'active')
+          LIMIT 1
+        ) aktif ON true
+        WHERE q.id = ${queueItemId}::uuid
+      `),
+    );
+
+    if (!kayit) throw new NotFoundException('Kart bulunamadı');
+
+    if (!TEKRAR_ACIK_DURUMLAR.has(kayit.status)) {
+      throw new BadRequestException(
+        kayit.status === 'pending'
+          ? 'Bu kart zaten onay bekliyor.'
+          : 'Bu kart şu anda işleniyor; tekrar boostlamak için sonucunu bekle.',
+      );
+    }
+
+    if (kayit.aktif_biter) {
+      throw new BadRequestException(
+        'Önceki boost hâlâ yayında. Aynı gönderi için ikinci bir kampanya ' +
+          'açılamıyor; süresi bittiğinde tekrar boostlayabilirsin.',
+      );
+    }
+
+    /*
+     * DURUM KOŞULU UPDATE'İN İÇİNDE DE VAR. Yukarıdaki okumayla bu yazma
+     * arasında başka bir oturum kartı onaylamış olabilir; koşulsuz bir UPDATE
+     * yayına alınmakta olan kartı geri açardı.
+     */
+    const satir = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE auto_boost_queue_items
+        SET status = 'pending', error = NULL, updated_at = now()
+        WHERE id = ${queueItemId}::uuid
+          AND status IN ('launched', 'rejected', 'failed')
+      `),
+    );
+
+    if (satir === 0) {
+      throw new BadRequestException('Kartın durumu değişti. Sayfayı yenile.');
+    }
+
+    return { status: 'pending', message: 'Kart tekrar onay bekliyor.' };
+  }
+
   private async geriAl(ctx: TenantContext, id: string, mesaj: string): Promise<void> {
     await this.prisma.withTenant(ctx, (tx) =>
       tx.$executeRaw(Prisma.sql`
@@ -697,6 +784,15 @@ export class AutoBoostLaunchService {
   }
 }
 
+
+/**
+ * TEKRAR BOOSTLAMAYA AÇIK DURUMLAR.
+ *
+ * Okuma katmanındaki listeyle aynı olmak zorunda: ayrışırlarsa panel açık bir
+ * düğme gösterip sunucu reddeder ve kullanıcı sebebi kendi kurulumunda arar.
+ * `autoboost-tekrar-boost.spec.ts` iki listeyi karşılaştırıyor.
+ */
+const TEKRAR_ACIK_DURUMLAR = new Set(['launched', 'rejected', 'failed']);
 
 /** Gönderi yolunda okunan ön ayar satırı. */
 interface OnAyarSatiri {

@@ -11,7 +11,7 @@ import type {
   ChannelKind,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { formatMoney, formatRelative } from '@/lib/format';
+import { formatMoney, formatNumber, formatPercent, formatTarih } from '@/lib/format';
 import { KartDuzenle } from '@/components/autoboost/kart-duzenle';
 import { PlatformLogo } from '@/components/platform-logo';
 
@@ -52,6 +52,32 @@ const GORSEL_BICIMI: Record<AutoBoostPlatform, { oturtma: string; bulanikZemin: 
 };
 
 /**
+ * TEKRAR BOOSTLAMAYA AÇIK DURUMLAR — sunucudaki listeyle AYNI.
+ *
+ * Ayrışırlarsa panel açık bir düğme gösterir ve sunucu reddeder; kullanıcı
+ * sebebi kendi kurulumunda arar. `autoboost-tekrar-boost.spec.ts` iki listeyi
+ * karşılaştırıyor.
+ */
+const TEKRAR_ACIK_DURUMLAR = new Set(['launched', 'rejected', 'failed']);
+
+/**
+ * ═══ DURUM SÜZGECİ ═══
+ *
+ * Yayınlanan kart artık listeden ÇIKMIYOR: kullanıcı gönderilerini tarih
+ * sırasında, boostlanmış olanlarla birlikte görmek istedi. Bedeli liste
+ * uzunluğu — bir yıl sonra onay bekleyen üç kart, yayınlanmış yüz kartın
+ * arasında kalıyor. Süzgeç o bedeli ödüyor ve kaç kartın gizlendiği her
+ * zaman yazılı.
+ */
+const DURUM_SUZGECLERI = [
+  { anahtar: 'bekleyen', etiket: 'Onay bekliyor', durumlar: ['pending'] },
+  { anahtar: 'yayinda', etiket: 'Yayında', durumlar: ['launched', 'launching', 'approved'] },
+  { anahtar: 'kapali', etiket: 'Kapanan', durumlar: ['rejected', 'failed'] },
+] as const;
+
+type DurumSuzgeci = (typeof DURUM_SUZGECLERI)[number]['anahtar'] | 'hepsi';
+
+/**
  * BİLDİRİM HAVUZU — Advetics 1.0'ın taşıdığı vaat.
  *
  * Yeni gönderi/video yayınlanır → kart düşer → tek tıkla yayına girer.
@@ -88,6 +114,7 @@ export function BildirimHavuzu({
    * okunamaz hâle gelirdi.
    */
   const [suzgec, setSuzgec] = useState<AutoBoostPlatform | 'hepsi'>('hepsi');
+  const [durumSuzgeci, setDurumSuzgeci] = useState<DurumSuzgeci>('hepsi');
   /** Geçmiş çekiminin profil bazlı sonucu — boş kalırsa düğme sessiz görünür. */
   const [gecmisNotlari, setGecmisNotlari] = useState<string[] | null>(null);
   const [gecmisBekliyor, setGecmisBekliyor] = useState(false);
@@ -120,7 +147,7 @@ export function BildirimHavuzu({
         setHata(
           err instanceof ApiRequestError
             ? err.message
-            : 'Yeni içerikler yüklenemedi. Sayfayı yenilemeyi dene.',
+            : 'İçerikler yüklenemedi. Sayfayı yenilemeyi dene.',
         ),
       );
   }, [clientId]);
@@ -173,14 +200,14 @@ export function BildirimHavuzu({
   if (hata) {
     return (
       <div role="alert" className="rounded-xl border border-danger/40 bg-surface p-4">
-        <p className="text-sm font-semibold text-danger">Yeni içerikler listesi açılamadı</p>
+        <p className="text-sm font-semibold text-danger">İçerik listesi açılamadı</p>
         <p className="mt-1 text-xs text-ink-muted">{hata}</p>
       </div>
     );
   }
 
   if (!liste) {
-    return <p className="text-xs text-ink-muted">Yeni içerikler yükleniyor…</p>;
+    return <p className="text-xs text-ink-muted">İçerikler yükleniyor…</p>;
   }
 
   const bekleyen = liste.items.filter((i) => i.status === 'pending');
@@ -193,23 +220,40 @@ export function BildirimHavuzu({
   const sayilar = new Map<AutoBoostPlatform, number>();
   for (const k of liste.items) sayilar.set(k.platform, (sayilar.get(k.platform) ?? 0) + 1);
   const mecralar = [...sayilar.keys()];
-  const gosterilen =
-    suzgec === 'hepsi' ? liste.items : liste.items.filter((k) => k.platform === suzgec);
+
+  const durumSayilari = new Map<DurumSuzgeci, number>();
+  for (const d of DURUM_SUZGECLERI) {
+    const n = liste.items.filter((k) =>
+      (d.durumlar as readonly string[]).includes(k.status),
+    ).length;
+    if (n > 0) durumSayilari.set(d.anahtar, n);
+  }
+
+  const gosterilen = liste.items.filter((k) => {
+    if (suzgec !== 'hepsi' && k.platform !== suzgec) return false;
+    if (durumSuzgeci === 'hepsi') return true;
+    const d = DURUM_SUZGECLERI.find((x) => x.anahtar === durumSuzgeci);
+    return d ? (d.durumlar as readonly string[]).includes(k.status) : true;
+  });
 
   return (
     <section className="min-w-0 space-y-3">
       <header className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
         {/*
-          BAŞLIK "BİLDİRİM HAVUZU" DEĞİL.
+          BAŞLIK "BİLDİRİM HAVUZU" DEĞİL — "YENİ İÇERİKLER" DE DEĞİL.
 
-          "Havuz" bizim iç terimimiz; kullanıcının gördüğü şey yeni
-          yayınlanan içerikler. Ayrıca sayfada İKİ onay kuyruğu var ve eski
-          hâlde ikisi de yalnızca "onay bekliyor" diyordu — bir gönderinin
-          neden burada olup diğerinde olmadığı hiçbir yerde yazmıyordu.
-          Buradakiler YENİ, alttakiler kuralın performansa bakıp seçtikleri.
+          "Havuz" bizim iç terimimiz. "Yeni içerikler" ise artık YANLIŞ:
+          yayınlanmış ve reddedilmiş kartlar listeden çıkmıyor, yani liste
+          birkaç hafta sonra çoğunlukla ESKİ içerikten oluşuyor. Başlığın
+          listeyi anlatmaması, bu depoda bir kez menü ile sayfa arasında
+          yaşandı ve kullanıcıya yanlış ekranda olduğunu düşündürdü.
+
+          Sayfada İKİ onay kuyruğu var ve başlıklar KAYNAĞI söylemek zorunda:
+          buradakiler hesabın kendi gönderileri, alttakiler kuralın
+          performansa bakıp seçtikleri.
         */}
         <h2 className="text-sm font-semibold text-ink">
-          Yeni içerikler
+          İçerikler
           {bekleyen.length > 0 && (
             <span className="ml-2 rounded-full bg-brand px-2 py-0.5 text-xs font-semibold text-white">
               {bekleyen.length}
@@ -253,24 +297,56 @@ export function BildirimHavuzu({
         </div>
       )}
 
-      {mecralar.length > 1 && (
-        <div className="flex flex-wrap gap-1.5">
-          <SuzgecDugmesi
-            etiket="Tümü"
-            adet={liste.items.length}
-            secili={suzgec === 'hepsi'}
-            onSec={() => setSuzgec('hepsi')}
-          />
-          {mecralar.map((m) => (
-            <SuzgecDugmesi
-              key={m}
-              etiket={PLATFORM_ETIKETI[m]}
-              kanal={PLATFORM_KANALI[m]}
-              adet={sayilar.get(m) ?? 0}
-              secili={suzgec === m}
-              onSec={() => setSuzgec(m)}
-            />
-          ))}
+      {/*
+        SÜZGEÇLER TEK SATIRDA — durum solda, mecra sağda.
+
+        İkisini ayrı satırlara koymak, listenin üstünde iki şeritlik bir çubuk
+        bırakıyordu ve asıl iş (kartlar) ekranın altına iniyordu. İkisi de
+        yalnızca SEÇENEK VARSA çiziliyor: tek mecralı bir workspace'te mecra
+        sekmesi hiçbir işe yaramayan bir seçim.
+      */}
+      {(durumSayilari.size > 1 || mecralar.length > 1) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {durumSayilari.size > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              <SuzgecDugmesi
+                etiket="Tümü"
+                adet={liste.items.length}
+                secili={durumSuzgeci === 'hepsi'}
+                onSec={() => setDurumSuzgeci('hepsi')}
+              />
+              {DURUM_SUZGECLERI.filter((d) => durumSayilari.has(d.anahtar)).map((d) => (
+                <SuzgecDugmesi
+                  key={d.anahtar}
+                  etiket={d.etiket}
+                  adet={durumSayilari.get(d.anahtar) ?? 0}
+                  secili={durumSuzgeci === d.anahtar}
+                  onSec={() => setDurumSuzgeci(d.anahtar)}
+                />
+              ))}
+            </div>
+          )}
+
+          {mecralar.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              <SuzgecDugmesi
+                etiket="Her mecra"
+                adet={liste.items.length}
+                secili={suzgec === 'hepsi'}
+                onSec={() => setSuzgec('hepsi')}
+              />
+              {mecralar.map((m) => (
+                <SuzgecDugmesi
+                  key={m}
+                  etiket={PLATFORM_ETIKETI[m]}
+                  kanal={PLATFORM_KANALI[m]}
+                  adet={sayilar.get(m) ?? 0}
+                  secili={suzgec === m}
+                  onSec={() => setSuzgec(m)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -325,26 +401,24 @@ export function BildirimHavuzu({
       {liste.items.length > 0 && gosterilen.length === 0 && (
         <div className="rounded-xl border border-dashed border-line bg-surface p-6 text-center">
           <p className="text-sm text-ink-muted">
-            Bu mecrada kart yok. Diğer sekmelerde {liste.items.length} kart var.
+            Bu süzgeçte kart yok. Diğer sekmelerde {liste.items.length} kart var.
           </p>
         </div>
       )}
 
       {/*
-        IZGARA — DİKEY KARTLAR YAN YANA.
-        Kartlar tam genişlikte yatay şeritlerdi: 64 piksellik bir küçük
-        resim, yanında metin, sağda bir düğme. İçerik bir Instagram
-        gönderisi ve gönderiyi TANIMANIN yolu görselini görmek; şerit
-        düzeninde kullanıcı neyi onayladığını ancak "İçeriği aç"a basıp
-        yeni sekmede bakarak anlıyordu.
+        ═══ SATIR LİSTESİ — IZGARA DEĞİL ═══
+
+        Kartlar dikey ızgaradaydı ve her kart yalnızca görsel + başlık
+        taşıyabiliyordu. Yayınlanmış kart artık listede kalıyor ve onunla
+        birlikte taşınması gereken şey de büyüdü: harcama, gösterim, tık,
+        dönüşüm. Bunlar 260 piksellik bir kutuya sığmıyor.
+
+        Satır düzeninin ikinci kazancı SIRALAMA: kartlar gönderi tarihine göre
+        diziliyor ve tek sütunda tarih sırası okunabiliyor. Izgarada aynı sıra
+        soldan sağa, sonra alta atlıyor ve göz onu takip etmiyor.
       */}
-      {/*
-        SIĞDIĞI KADAR KOLON. Üç kolonda kartlar geniş ekranda gereksiz
-        büyüyordu ve tek satıra üçten fazla gönderi sığmıyordu; kart bir
-        gönderi ÖNİZLEMESİ ve onu tanımak için 260 piksel yetiyor.
-        Eşikler kart genişliğine göre seçildi, ekran adına göre değil.
-      */}
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+      <ul className="space-y-2">
         {gosterilen.map((k) => (
           <li key={k.id}>
             <Kart
@@ -414,11 +488,13 @@ function Kart({
 }) {
   const [gorselDustu, setGorselDustu] = useState(false);
   const [duzenleAcik, setDuzenleAcik] = useState(false);
-  const [busy, setBusy] = useState<'onay' | 'ret' | null>(null);
+  const [busy, setBusy] = useState<'onay' | 'ret' | 'tekrar' | null>(null);
   const [hata, setHata] = useState<string | null>(null);
 
   const onaylanabilir = kayit.status === 'pending' && kayit.blockedReason === null;
   const bicim = GORSEL_BICIMI[kayit.platform];
+  const yayinda = kayit.status === 'launched';
+  const tekrarGosterilsin = TEKRAR_ACIK_DURUMLAR.has(kayit.status);
 
   /**
    * KARAR — onayla, reddet ya da ÖZELLEŞTİRİLMİŞ ayarlarla onayla.
@@ -427,7 +503,7 @@ function Kart({
    *
    * Ara onay adımı YOK: kararı kullanıcı zaten bu ekranda veriyor ve ikinci
    * kez sormak istenen akışı bozardı. Ama harcanacak tutar düğmelerin
-   * ÜSTÜNDE yazıyor ve engel varsa düğme açılmıyor.
+   * YANINDA yazıyor ve engel varsa düğme açılmıyor.
    */
   async function karar(approve: boolean, override?: AutoBoostQueueOverride): Promise<void> {
     setBusy(approve ? 'onay' : 'ret');
@@ -461,17 +537,56 @@ function Kart({
     }
   }
 
-  return (
-    <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface">
-      {/*
-        ═══ DİKEY GÖNDERİ — 4:5 ═══
+  /**
+   * TEKRAR BOOSTLA — kartı karara geri açıyor, PARA HARCAMIYOR.
+   *
+   * Harcama yine "Onayla"da. İki adım olması bilinçli: iyi giden bir gönderiyi
+   * yeniden boostlamak tek tıkla para harcamak olmamalı, çünkü bütçe ve süre
+   * bu arada değişmiş olabilir ve kullanıcı onları kararı verirken görüyor.
+   */
+  async function tekrarBoostla(): Promise<void> {
+    setBusy('tekrar');
+    setHata(null);
+    try {
+      await apiFetch<{ status: string; message: string }>(
+        `/autoboost/queue/${kayit.id}/tekrar`,
+        { method: 'POST' },
+      );
+      onDegisti();
+    } catch (err) {
+      setHata(err instanceof ApiRequestError ? err.message : 'Kart tekrar açılamadı.');
+    } finally {
+      setBusy(null);
+    }
+  }
 
-        Instagram'ın dikey gönderi oranı. Kare kullanmak dikey gönderilerin
-        ve reels'in üstünü/altını kırpıyor; 4:5 ikisini de gösteriyor ve
-        yatay bir gönderide üstte/altta ince bir zemin bırakıyor —
-        kırpmaktan iyi, çünkü kırpılan yer çoğu zaman ürünün kendisi.
+  return (
+    /*
+      ═══ SATIR KARTI — IZGARA DEĞİL ═══
+
+      Kartlar dikey ızgaradaydı ve her kart yalnızca görsel + başlık
+      taşıyabiliyordu; yayınlanmış bir kartın SONUCU (harcama, gösterim,
+      dönüşüm) sığmıyordu ve kullanıcı boostladığı gönderinin ne yaptığını
+      görmek için Genel Bakış'a gidip kampanyayı aramak zorundaydı.
+
+      Satır düzeni üç bölgeyi yan yana koyuyor: NE (görsel), HANGİSİ (metin ve
+      karar), NE OLDU (rakamlar). Dar ekranda alt alta yığılıyor — rakam
+      sütununu 400 pikselde yanda tutmak, başlığı iki karaktere düşürürdü.
+    */
+    <article
+      className={`flex min-w-0 flex-col gap-3 rounded-2xl border p-3 transition sm:flex-row sm:gap-4 sm:p-4 ${
+        yayinda ? 'border-line/70 bg-surface-sunken/40' : 'border-line bg-surface'
+      }`}
+    >
+      {/*
+        ═══ GÖRSEL KUTUSU KARE ═══
+
+        Satır düzeninde kart yüksekliğini görsel belirliyor; 4:5 kutu satırı
+        gereksiz uzatıp ekrana sığan kart sayısını düşürüyordu. Kare kutu
+        dikey gönderiyi de yatay küçük resmi de tanınır tutuyor ve tanımak
+        için bu yeterli — ayrıntı için "Gönderiyi aç" var.
       */}
-      <div className="relative aspect-[4/5] w-full overflow-hidden bg-surface-sunken">
+      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-surface-sunken sm:h-28 sm:w-28">
         {kayit.thumbnailUrl && !gorselDustu ? (
           <>
             {/*
@@ -493,10 +608,20 @@ function Kart({
             )}
             {/*
               DÜZ `img` — Next/Image DEĞİL. Küçük resimler Meta ve YouTube
-              CDN'inden geliyor ve uzak alan adı yapılandırması gerektiriyordu;
-              elle boost ekranında aynı karar verildi ve görseller ancak öyle
-              göründü. `referrerPolicy` şart: Meta CDN referrer'lı isteği
-              reddediyor ve beyaz etiket alan adını da sızdırmıyoruz.
+              CDN'inden geliyor ve uzak alan adı yapılandırması gerektiriyordu.
+              `referrerPolicy` şart: Meta CDN referrer'lı isteği reddediyor ve
+              beyaz etiket alan adını da sızdırmıyoruz.
+
+              ═══ YAYINLANMIŞ GÖNDERİ BULANIK ═══
+
+              Kullanıcının isteği birebir buydu: boostlanan gönderi listeden
+              çıkmıyor, bulanıklaşıp "Yayınlandı" diyor. Kazancı tarama:
+              onlarca kartlık bir listede hangilerinin işi bittiği tek bakışta
+              görünüyor ve gönderi tarih sırasındaki yerini koruyor.
+
+              BULANIKLIK TEK BAŞINA İŞARET DEĞİL — üstünde yazı da var. Renk
+              ya da efekt tek başına anlam taşırsa, göremeyen kullanıcı için
+              o anlam hiç yok.
             */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -505,104 +630,99 @@ function Kart({
               loading="lazy"
               referrerPolicy="no-referrer"
               onError={() => setGorselDustu(true)}
-              className={`relative h-full w-full ${bicim.oturtma}`}
+              className={`relative h-full w-full ${bicim.oturtma} ${
+                yayinda ? 'scale-105 blur-[3px]' : ''
+              }`}
             />
           </>
         ) : (
-          /* Görsel yoksa kutu AYNI ORANDA duruyor: ızgarada kartların
-             yüksekliği ayrışırsa göz taraması satır satır yapılamıyor. */
-          <div className="grid h-full w-full place-items-center text-[11px] text-ink-muted">
+          /* Görsel yoksa kutu AYNI ORANDA duruyor: satırların yüksekliği
+             ayrışırsa göz taraması satır satır yapılamıyor. */
+          <div className="grid h-full w-full place-items-center px-1 text-center text-[11px] text-ink-muted">
             görsel yok
           </div>
         )}
 
-        {/*
-          ROZET ARTIK HESABIN ADINI DA TAŞIYOR.
-
-          "Instagram" yazması hangi Instagram hesabı olduğunu söylemiyordu; bir
-          workspace'te birden çok hesap ve kanal olabiliyor ve kullanıcı
-          onayladığı içeriğin hangi markaya ait olduğunu ancak içeriği açarak
-          görüyordu. Logo metin yerine geçiyor: mecra adını da yazmak, dar
-          kartta hesap adını kırpardı.
-
-          HESAP ADI GÖRÜNMÜYORSA MECRA ADI YAZILIYOR. Hesap havuza geri
-          konmuşsa RLS satırı göstermiyor ve boş bir rozet, rozetin hiç
-          olmamasından kötü.
-        */}
-        <span className="absolute left-2 top-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
-          <PlatformLogo kind={PLATFORM_KANALI[kayit.platform]} className="h-3 w-3 shrink-0" />
-          <span className="truncate">
-            {kayit.socialProfileName ?? PLATFORM_ETIKETI[kayit.platform]}
-          </span>
-        </span>
-
-        {kayit.status !== 'pending' && (
-          <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
-            {DURUM_ETIKETI[kayit.status] ?? kayit.status}
+        {yayinda && (
+          <span className="absolute inset-0 grid place-items-center bg-black/45 text-[11px] font-semibold uppercase tracking-wide text-white">
+            Yayınlandı
           </span>
         )}
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
-        <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted">
-          {kayit.publishedAt && <span>{formatRelative(kayit.publishedAt)}</span>}
-          {kayit.permalink && (
-            <a
-              href={kayit.permalink}
-              target="_blank"
-              rel="noreferrer"
-              className="font-medium text-brand-strong hover:underline"
-            >
-              İçeriği aç
-            </a>
-          )}
+      {/* ═══ ORTA BÖLGE: HANGİ İÇERİK, HANGİ KARAR ═══ */}
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <DurumRozeti kayit={kayit} />
+          {/*
+            ROZET HESABIN ADINI TAŞIYOR.
+
+            "Instagram" yazması hangi Instagram hesabı olduğunu söylemiyordu;
+            bir workspace'te birden çok hesap ve kanal olabiliyor ve kullanıcı
+            onayladığı içeriğin hangi markaya ait olduğunu ancak içeriği açarak
+            görüyordu.
+
+            HESAP ADI GÖRÜNMÜYORSA MECRA ADI YAZILIYOR: hesap havuza geri
+            konmuşsa RLS satırı göstermiyor ve boş bir rozet, rozetin hiç
+            olmamasından kötü.
+          */}
+          <span className="inline-flex min-w-0 items-center gap-1 rounded-md bg-surface-sunken px-1.5 py-0.5 text-[11px] text-ink-muted">
+            <PlatformLogo
+              kind={PLATFORM_KANALI[kayit.platform]}
+              className="h-3 w-3 shrink-0"
+            />
+            <span className="truncate">
+              {kayit.socialProfileName ?? PLATFORM_ETIKETI[kayit.platform]}
+            </span>
+          </span>
         </div>
 
         {/* `line-clamp` — `truncate` DEĞİL: nowrap, kartın min-content
-            genişliğini şişirip ızgarayı yatay taşırıyordu. */}
-        <p className="line-clamp-2 min-w-0 text-sm text-ink">
+            genişliğini şişirip satırı yatay taşırıyordu. */}
+        <p className="line-clamp-2 min-w-0 text-sm font-semibold text-ink">
           {kayit.title || 'Başlıksız içerik'}
         </p>
 
         {/*
-          UYGULANACAK AYAR — DÜĞMELERİN ÜSTÜNDE.
-          Bu düğmeler para harcıyor ve ne kadar harcanacağı karara BAKARKEN
-          görünmeli; altına koymak, kullanıcının tıkladıktan sonra okuması
-          demek olurdu.
-        */}
-        {kayit.preset && (
-          <p className="rounded-lg bg-surface-sunken px-2 py-1.5 text-[11px] text-ink-muted">
-            <strong className="text-ink">
-              {formatMoney(kayit.preset.budgetMicros, 'TRY')}
-            </strong>
-            {kayit.preset.budgetMode === 'daily' ? ' / gün' : ' toplam'} ·{' '}
-            {kayit.preset.durationDays} gün
-          </p>
-        )}
+          ═══ İKİ TARİH, İKİ AYRI SORU ═══
 
-        {/*
-          ═══ YAYINLANDIĞI KARTTA YAZIYOR ═══
-
-          Bu blok yoktu ve eksikliği kullanıcıdan birebir şu cümleyle geldi:
-          "yayınlandı bildirimi alt tarafta gözüküyor fakat kartta belli
-          olmuyor". Onaydan sonra düğmeler kayboluyor, yerine HİÇBİR ŞEY
-          konmuyordu; başarının tek izi sayfanın en altındaki "Geçmiş"
-          satırıydı.
+          Sıralama GÖNDERİNİN tarihine göre ve o tarih burada MUTLAK yazıyor:
+          "47 gün önce" bir takvim günü değil ve kullanıcı kartı kendi
+          içerik takviminde arıyor. Reklamın açıldığı tarih ayrı yazılıyor —
+          ikisi arasında haftalar olabiliyor ve tek bir tarih göstermek,
+          hangisi olduğunu okuyana tahmin ettirirdi.
         */}
-        {kayit.status === 'launched' && (
-          <p className="inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-ok/40 bg-ok/5 px-2 py-1 text-[11px] text-ink">
-            <span aria-hidden="true">✓</span>
-            <strong>Yayında</strong>
-            {kayit.externalCampaignId && (
-              <span className="text-ink-muted">· kampanya {kayit.externalCampaignId}</span>
-            )}
-          </p>
-        )}
-        {kayit.status === 'launching' && (
-          <p className="rounded-lg border border-line bg-surface-muted px-2 py-1 text-[11px] text-ink-muted">
-            Yayına alınıyor…
-          </p>
-        )}
+        <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-ink-muted">
+          <span>
+            <span className="text-ink-muted">Gönderi:</span>{' '}
+            <span className="font-medium text-ink">{formatTarih(kayit.publishedAt)}</span>
+          </span>
+          {kayit.launchedAt && (
+            <span>
+              <span className="text-ink-muted">Yayın:</span>{' '}
+              <span className="font-medium text-ink">{formatTarih(kayit.launchedAt)}</span>
+            </span>
+          )}
+          {kayit.permalink && (
+            /*
+              BAĞLANTI MARKA RENGİNDE DEĞİL.
+
+              Kartta tek bir birincil eylem var ve o "Onayla". Aynı kartta
+              marka renginde ikinci bir öğe, gözün nereye gideceğini
+              belirsizleştiriyordu. Bağlantı olduğu ALTI ÇİZİLİ olmasından
+              anlaşılıyor — renkle değil, çünkü renk tek başına anlam
+              taşımamalı.
+            */
+            <a
+              href={kayit.permalink}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-ink-muted underline underline-offset-2 transition hover:text-ink"
+            >
+              Gönderiyi aç
+            </a>
+          )}
+        </p>
 
         {/* ENGEL SEBEBİ SATIRDA. Düğmeyi kapatıp sebebini söylememek,
             kullanıcıya "çalışmıyor" göstermek olurdu. */}
@@ -620,8 +740,7 @@ function Kart({
           YOUTUBE KAMPANYASI DURAKLATILMIŞ AÇILIYOR ve bu kullanıcıya
           SÖYLENİYOR. Meta yolundan farkı bilinçli: Google yazma yolu canlıda
           hiç çalışmadı ve ilk gerçek çağrının sonucunu insan görmeden para
-          harcamamalı. Söylemezsek kullanıcı "yayınladım" sanıp Ads
-          Manager'da duraklatılmış bir kampanya bulur ve sebebini arar.
+          harcamamalı.
         */}
         {kayit.status === 'pending' && kayit.platform === 'google' && (
           <p className="text-[10px] text-ink-muted">
@@ -631,46 +750,78 @@ function Kart({
         )}
 
         {/*
-          ═══ ÜÇ DÜĞME, ÜÇ AYRI KARAR ═══
+          ═══ DÖRT DÜĞME, DÖRT AYRI KARAR ═══
 
-          Onayla ön ayarla yayınlıyor; Düzenle SADECE BU GÖNDERİ için
-          bütçeyi, süreyi ve hedeflemeyi değiştirip yayınlıyor; Reddet kartı
-          kapatıyor. Düzenle'yi onayın içine gömmek (önce pencere, sonra
-          yayın) çoğunluk için fazladan bir adım olurdu: kartların çoğu ön
-          ayarla yayınlanıyor ve akışın vaadi "tek tık".
+          Onayla ön ayarla yayınlıyor; Düzenle SADECE BU GÖNDERİ için bütçeyi,
+          süreyi ve hedeflemeyi değiştirip yayınlıyor; Reddet kartı kapatıyor;
+          Tekrar boostla kapanmış bir kartı karara geri açıyor.
 
-          `mt-auto`: ızgaradaki kartlar farklı uzunlukta metin taşıyor ve
-          düğmelerin ALT HİZADA olması göz taramasını satır satır
-          yapılabilir kılıyor.
+          `mt-auto`: satırların yüksekliği metin uzunluğuna göre değişiyor ve
+          düğmelerin ALT HİZADA olması göz taramasını satır satır yapılabilir
+          kılıyor.
         */}
-        {kayit.status === 'pending' && (
-          <div className="mt-auto grid grid-cols-3 gap-1.5 pt-1">
-            <button
-              type="button"
-              onClick={() => void karar(true).catch(() => undefined)}
-              disabled={!onaylanabilir || busy !== null}
-              className="rounded-lg bg-brand px-2 py-2 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-ink-muted"
-            >
-              {busy === 'onay' ? '…' : 'Onayla'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setDuzenleAcik(true)}
-              disabled={!onaylanabilir || busy !== null}
-              className="rounded-lg border border-line px-2 py-2 text-xs font-medium text-ink transition hover:bg-surface-sunken disabled:cursor-not-allowed disabled:text-ink-muted"
-            >
-              Düzenle
-            </button>
-            <button
-              type="button"
-              onClick={() => void karar(false).catch(() => undefined)}
-              disabled={busy !== null}
-              className="rounded-lg border border-line px-2 py-2 text-xs font-medium text-ink-muted transition hover:bg-surface-sunken hover:text-danger disabled:cursor-not-allowed"
-            >
-              {busy === 'ret' ? '…' : 'Reddet'}
-            </button>
-          </div>
-        )}
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+          {kayit.status === 'pending' && (
+            <>
+              <button
+                type="button"
+                onClick={() => void karar(true).catch(() => undefined)}
+                disabled={!onaylanabilir || busy !== null}
+                className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-ink-muted"
+              >
+                {busy === 'onay' ? 'Yayınlanıyor…' : 'Onayla'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDuzenleAcik(true)}
+                disabled={!onaylanabilir || busy !== null}
+                className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:text-ink-muted"
+              >
+                Düzenle
+              </button>
+              <button
+                type="button"
+                onClick={() => void karar(false).catch(() => undefined)}
+                disabled={busy !== null}
+                className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-sunken hover:text-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed"
+              >
+                {busy === 'ret' ? '…' : 'Reddet'}
+              </button>
+            </>
+          )}
+
+          {tekrarGosterilsin && (
+            <>
+              <button
+                type="button"
+                onClick={() => void tekrarBoostla()}
+                disabled={busy !== null || kayit.reBoostBlockedReason !== null}
+                /*
+                  ENGEL SEBEBİ `title`DA DEĞİL YANINDA — aşağıdaki satırda
+                  yazılı. Kapalı bir düğmeye ipucu koymak, sebebi yalnızca
+                  fareyle üstüne gelen kullanıcıya söylemek olurdu.
+                */
+                className="rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-semibold text-brand-strong transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:border-line disabled:bg-transparent disabled:text-ink-muted disabled:opacity-70"
+              >
+                {busy === 'tekrar' ? '…' : 'Tekrar boostla'}
+              </button>
+              {kayit.reBoostBlockedReason && (
+                <span className="text-[11px] text-ink-muted">
+                  {kayit.reBoostBlockedReason}
+                </span>
+              )}
+            </>
+          )}
+
+          {kayit.status === 'launching' && (
+            <span className="text-[11px] text-ink-muted">Yayına alınıyor…</span>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ SAĞ BÖLGE: NE OLACAK / NE OLDU ═══ */}
+      <div className="w-full shrink-0 border-t border-line/60 pt-3 sm:w-56 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+        <SagBolge kayit={kayit} />
       </div>
 
       {duzenleAcik && (
@@ -685,7 +836,144 @@ function Kart({
   );
 }
 
+/**
+ * ═══ SAĞ SÜTUN KARTIN DURUMUNA GÖRE DEĞİŞİYOR ═══
+ *
+ * Onay bekleyen kartta sorulan şey "ne kadara mal olacak", yayınlanmış kartta
+ * "ne oldu". Aynı alanı iki soruya birden ayırmak yerine soru kartın
+ * durumundan okunuyor; iki bloğu üst üste çizmek, karar anında okunması
+ * gereken tutarı ikinci sıraya düşürürdü.
+ */
+function SagBolge({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
+  if (kayit.performance) {
+    const p = kayit.performance;
+    /*
+     * CTR VE EBM BURADA HESAPLANIYOR, SUNUCUDA DEĞİL.
+     *
+     * İkisi de türetilmiş: gösterim yoksa CTR TANIMSIZ, dönüşüm yoksa EBM
+     * TANIMSIZ ve ikisinde de "%0" yazmak "kampanyan çalışmıyor" demek olur.
+     * `null` geçmek biçimlendiriciye "—" yazdırıyor.
+     */
+    const ctr = p.impressions > 0 ? (p.clicks / p.impressions) * 100 : null;
+    /*
+     * DÖNÜŞÜM ONDALIKLI GELEBİLİYOR ve BÖLEN SIFIRA YUVARLANABİLİYOR.
+     *
+     * Google kısmi dönüşüm döndürüyor (`0,4` gibi). `conversions > 0` koşulu
+     * geçiyor ama binde bire yuvarlanan bölen SIFIR olabiliyor ve `BigInt`
+     * bölmesi sıfıra bölümde RangeError fırlatıyor — kartın tamamı çizilmez
+     * hâle gelirdi. Koşul BÖLENİN kendisine bakıyor.
+     *
+     * Çarpan bölmeden ÖNCE: sonra çarpmak, tam sayı bölmesinde her tutarı
+     * bine yuvarlardı.
+     */
+    const bolen = Math.round(p.conversions * 1000);
+    const cpa =
+      bolen > 0 ? ((BigInt(p.spendMicros) * 1000n) / BigInt(bolen)).toString() : null;
+
+    return (
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+        <Olcum etiket="Harcama" deger={formatMoney(p.spendMicros, 'TRY')} vurgulu />
+        <Olcum etiket="Dönüşüm" deger={formatNumber(p.conversions)} vurgulu />
+        <Olcum etiket="Gösterim" deger={formatNumber(p.impressions)} />
+        <Olcum etiket="Tık" deger={formatNumber(p.clicks)} />
+        <Olcum etiket="TO" deger={formatPercent(ctr)} />
+        <Olcum etiket="EBM" deger={formatMoney(cpa, 'TRY')} />
+      </dl>
+    );
+  }
+
+  /*
+   * SAYI YOKSA SEBEBİ YAZIYOR. "Kampanya henüz senkronize edilmedi" ile
+   * "hiç gösterim almadı" aynı boş alana çevrilirse, kullanıcı çalışan bir
+   * kampanyayı bozuk sanıp aramaya çıkar.
+   */
+  if (kayit.performanceNote) {
+    return <p className="text-[11px] text-ink-muted">{kayit.performanceNote}</p>;
+  }
+
+  /*
+   * UYGULANACAK AYAR — KARARIN YANINDA.
+   * Bu düğmeler para harcıyor ve ne kadar harcanacağı karara BAKARKEN
+   * görünmeli; altına koymak, kullanıcının tıkladıktan sonra okuması demek
+   * olurdu.
+   */
+  if (kayit.preset) {
+    return (
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5 sm:grid-cols-1">
+        <Olcum
+          etiket={kayit.preset.budgetMode === 'daily' ? 'Günlük bütçe' : 'Toplam bütçe'}
+          deger={formatMoney(kayit.preset.budgetMicros, 'TRY')}
+          vurgulu
+        />
+        <Olcum etiket="Süre" deger={`${kayit.preset.durationDays} gün`} />
+      </dl>
+    );
+  }
+
+  return <p className="text-[11px] text-ink-muted">Ön ayar yok.</p>;
+}
+
+/**
+ * ÖLÇÜM HÜCRESİ — etiket üstte, sayı altta.
+ *
+ * `tabular-nums`: sayılar alt alta duruyor ve orantılı rakamlarda basamaklar
+ * hizalanmıyor; hizalanmayan bir sütunda iki satırı karşılaştırmak gözle
+ * yapılamıyor.
+ */
+function Olcum({
+  etiket,
+  deger,
+  vurgulu = false,
+}: {
+  etiket: string;
+  deger: string;
+  vurgulu?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="truncate text-[10px] uppercase tracking-wide text-ink-muted">
+        {etiket}
+      </dt>
+      <dd
+        className={`truncate tabular-nums ${
+          vurgulu ? 'text-sm font-semibold text-ink' : 'text-sm text-ink'
+        }`}
+      >
+        {deger}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * DURUM ROZETİ — renk TEK BAŞINA anlam taşımıyor, metin de var.
+ *
+ * Yayınlanmış kart yeşil DEĞİL nötr: yeşil "her şey yolunda" diye okunuyor
+ * ve süresi dolmuş bir boost ile hâlâ harcayan bir boost aynı renkte
+ * görünürse, aylık harcamayı gözle toplayan biri yanlış sayıya varır.
+ */
+function DurumRozeti({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
+  const ton = DURUM_TONU[kayit.status] ?? 'bg-surface-sunken text-ink-muted ring-line';
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${ton}`}
+    >
+      {DURUM_ETIKETI[kayit.status] ?? kayit.status}
+    </span>
+  );
+}
+
+const DURUM_TONU: Record<string, string> = {
+  pending: 'bg-warn-soft text-warn-strong ring-warn/30',
+  approved: 'bg-info-soft text-info-strong ring-info/30',
+  launching: 'bg-info-soft text-info-strong ring-info/30',
+  launched: 'bg-surface-sunken text-ink-muted ring-line',
+  rejected: 'bg-surface-sunken text-ink-muted ring-line',
+  failed: 'bg-danger-soft text-danger-strong ring-danger/30',
+};
+
 const DURUM_ETIKETI: Record<string, string> = {
+  pending: 'Onay bekliyor',
   approved: 'Onaylandı',
   rejected: 'Reddedildi',
   launching: 'Yayına alınıyor',

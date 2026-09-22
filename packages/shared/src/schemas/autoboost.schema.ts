@@ -310,6 +310,24 @@ export const autoBoostQueueStatusSchema = z.enum([
 ]);
 export type AutoBoostQueueStatus = z.infer<typeof autoBoostQueueStatusSchema>;
 
+/**
+ * ═══ YAYINDAKİ BOOSTUN ÖLÇÜLEN PERFORMANSI ═══
+ *
+ * Kart onaydan önce "ne kadar harcayacağım", onaydan sonra "ne oldu" sorusunu
+ * taşıyor ve ikincisinin cevabı bu ekranda hiç yoktu: kullanıcı boostladığı
+ * gönderinin sonucunu görmek için Genel Bakış'a gidip kampanyayı aramak
+ * zorundaydı.
+ *
+ * SAYILAR TÜRETİLMİYOR, HAM GELİYOR. CTR ve EBM panelde hesaplanıyor; burada
+ * hesaplayıp göndermek, aynı bölmeyi iki yerde yazmak olurdu.
+ */
+export interface AutoBoostQueuePerformance {
+  spendMicros: string;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+}
+
 export interface AutoBoostQueueItemRecord {
   id: string;
   clientId: string;
@@ -343,6 +361,31 @@ export interface AutoBoostQueueItemRecord {
   blockedReason: string | null;
   error: string | null;
   externalCampaignId: string | null;
+  /**
+   * REKLAMIN YAYINA GİRDİĞİ AN — `publishedAt` İLE AYNI ŞEY DEĞİL.
+   *
+   * `publishedAt` gönderinin Instagram/YouTube'da yayınlandığı tarih; bu ise
+   * reklamın açıldığı tarih. Kart ikisini birden gösteriyor çünkü aralarında
+   * haftalar olabiliyor ve "ne zaman paylaşıldı" ile "ne zaman boostlandı"
+   * iki ayrı soru.
+   */
+  launchedAt: string | null;
+  /**
+   * Yayına alınmış kartın ölçülen performansı. `null` = sayı YOK; sebebi
+   * `performanceNote` içinde ve ikisi ayrı: "sıfır harcama" ile "kampanya
+   * henüz senkronize edilmedi" aynı şey değil.
+   */
+  performance: AutoBoostQueuePerformance | null;
+  performanceNote: string | null;
+  /**
+   * Tekrar boostlamayı engelleyen sebep — `null` ise düğme açık.
+   *
+   * En sık sebep: önceki boost hâlâ yayında. `boosts_active_post_uniq` kısmi
+   * tekil indeksi aynı gönderi için ikinci bir aktif boost'a izin vermiyor ve
+   * engeli yayın anında öğrenmek, kullanıcıya sebebi yazmayan bir veritabanı
+   * hatası göstermek olurdu.
+   */
+  reBoostBlockedReason: string | null;
   createdAt: string;
 }
 

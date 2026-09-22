@@ -126,7 +126,18 @@ describe('EKRANIN ADI VE BÖLÜM BAŞLIKLARI', () => {
      * de anlattığı için kullanıcı bir gönderinin neden birinde olup
      * diğerinde olmadığını okuyamıyordu.
      */
-    expect(HAVUZ).toContain('Yeni içerikler');
+    /*
+     * "Yeni içerikler" başlığı da kalktı: yayınlanmış ve reddedilmiş kartlar
+     * artık listeden çıkmıyor, yani liste birkaç hafta sonra çoğunlukla ESKİ
+     * içerikten oluşuyor ve başlık listeyi anlatmıyordu.
+     */
+    /*
+     * İDDİA BAŞLIK ETİKETİNE ÇAPALI: "İçerikler" dosyanın başka yerlerinde de
+     * geçiyor (yükleniyor, açılamadı) ve yalnızca onu aramak, başlık silinse
+     * bile yeşil kalırdı.
+     */
+    expect(HAVUZ).toContain('<h2 className="text-sm font-semibold text-ink">\n          İçerikler');
+    expect(HAVUZ).not.toContain('Yeni içerikler');
     expect(HAVUZ).not.toContain('Bildirim Havuzu');
     expect(SAYFA).toContain('Kuralın seçtikleri');
     expect(SAYFA).not.toContain('gönderi onay bekliyor');
@@ -198,13 +209,14 @@ describe('GEÇMİŞ SAYFAYI BOĞMUYOR', () => {
   });
 });
 
-describe('BİLDİRİM HAVUZU — üç düğme', () => {
-  it('KRİTİK: Onayla, Düzenle ve Reddet birlikte', () => {
-    // Üç ayrı karar: ön ayarla yayınla · sadece bu gönderi için değiştir ·
-    // kartı kapat.
+describe('BİLDİRİM HAVUZU — dört düğme', () => {
+  it('KRİTİK: Onayla, Düzenle, Reddet ve Tekrar boostla birlikte', () => {
+    // Dört ayrı karar: ön ayarla yayınla · sadece bu gönderi için değiştir ·
+    // kartı kapat · kapanmış kartı karara geri aç.
     expect(HAVUZ).toContain('Onayla');
     expect(HAVUZ).toContain('Düzenle');
     expect(HAVUZ).toContain('Reddet');
+    expect(HAVUZ).toContain('Tekrar boostla');
   });
 
   it('KRİTİK: Düzenle ONAYIN İÇİNE gömülmedi — ayrı düğme', () => {
@@ -216,25 +228,58 @@ describe('BİLDİRİM HAVUZU — üç düğme', () => {
     expect(HAVUZ).toContain('onClick={() => void karar(true).catch(() => undefined)}');
   });
 
-  it('KRİTİK: kart DİKEY gönderi tasarımında — 4:5', () => {
+  it('KRİTİK: kart SATIR düzeninde — dikey ızgara değil', () => {
     /*
-     * Kartlar yatay şeritlerdi ve görsel 64 pikseldi; kullanıcı neyi
-     * onayladığını ancak içeriği yeni sekmede açarak anlıyordu. Kare oran
-     * dikey gönderilerin ve reels'in üstünü/altını kırpıyor.
+     * Kartlar 4:5 oranında dikey ızgara kutularıydı ve o düzen bir şeyi
+     * taşıyamıyordu: yayınlanmış kartın SONUCU. Kullanıcı boostladığı
+     * gönderinin ne yaptığını görmek için Genel Bakış'a gidip kampanyayı
+     * aramak zorundaydı.
+     *
+     * Satır düzeni üç bölgeyi yan yana koyuyor (görsel · metin ve karar ·
+     * rakamlar) ve dar ekranda alt alta yığılıyor.
      */
-    expect(HAVUZ).toContain('aspect-[4/5]');
-    expect(HAVUZ).toContain('object-cover');
-    expect(HAVUZ).not.toContain('h-16 w-16');
+    expect(HAVUZ).toContain('sm:flex-row');
+    expect(HAVUZ).toContain('h-24 w-24 shrink-0');
+    expect(HAVUZ).not.toContain('aspect-[4/5]');
   });
 
-  it('KRİTİK: SIĞDIĞI KADAR KOLON — geniş ekranda üçle sınırlı değil', () => {
+  it('KRİTİK: TEK SÜTUN — ızgara değil', () => {
     /*
-     * Üç kolonda kartlar geniş ekranda gereksiz büyüyordu ve tek satıra
-     * üçten fazla gönderi sığmıyordu. Kart bir gönderi ÖNİZLEMESİ; onu
-     * tanımak için 260 piksel yetiyor.
+     * Izgarada sıra soldan sağa akıp alta atlıyor ve göz onu takip etmiyor;
+     * kartlar artık GÖNDERİ TARİHİNE göre diziliyor ve tarih sırası ancak
+     * tek sütunda okunabiliyor.
      */
-    expect(HAVUZ).toContain('xl:grid-cols-4');
-    expect(HAVUZ).toContain('2xl:grid-cols-5');
+    expect(HAVUZ).toContain('<ul className="space-y-2">');
+    expect(HAVUZ).not.toContain('xl:grid-cols-4');
+    expect(HAVUZ).not.toContain('2xl:grid-cols-5');
+  });
+
+  it('KRİTİK: YAYINLANMIŞ GÖNDERİ BULANIK — ve üstünde YAZIYOR', () => {
+    /*
+     * Kullanıcının isteği birebir: boostlanan gönderi listeden çıkmıyor,
+     * bulanıklaşıp "Yayınlandı" diyor.
+     *
+     * İDDİA İKİ PARÇALI ve ikincisi asıl olan: bulanıklık TEK BAŞINA işaret
+     * olamaz. Bir efekt ya da renk tek başına anlam taşırsa, onu göremeyen
+     * kullanıcı için o anlam hiç yok.
+     */
+    expect(HAVUZ).toContain("yayinda ? 'scale-105 blur-[3px]' : ''");
+    expect(HAVUZ).toContain('{yayinda && (');
+    expect(HAVUZ).toContain('Yayınlandı');
+  });
+
+  it('KRİTİK: SIRALAMA GÖNDERİ TARİHİNE GÖRE — mutlak tarih yazılı', () => {
+    /*
+     * Kart üstünde "3 gün önce" yazıyordu. Göreli zaman tazelik sorusunun
+     * cevabı; burada sorulan şey gönderinin TARİHİ ve kullanıcı kartı kendi
+     * içerik takviminde arıyor.
+     *
+     * İKİ TARİH AYRI: gönderinin yayın tarihi ile reklamın açıldığı tarih
+     * arasında haftalar olabiliyor.
+     */
+    expect(HAVUZ).toContain('formatTarih(kayit.publishedAt)');
+    expect(HAVUZ).toContain('formatTarih(kayit.launchedAt)');
+    expect(HAVUZ).not.toContain('formatRelative(kayit.publishedAt)');
   });
 
   it('KRİTİK: görsel `referrerPolicy="no-referrer"` ile çekiliyor', () => {
@@ -243,20 +288,96 @@ describe('BİLDİRİM HAVUZU — üç düğme', () => {
     expect(HAVUZ).toContain('referrerPolicy="no-referrer"');
   });
 
-  it('KRİTİK: harcanacak tutar DÜĞMELERİN ÜSTÜNDE', () => {
-    // Bu düğmeler para harcıyor; tutarı altına koymak, kullanıcının
-    // tıkladıktan sonra okuması demek olurdu.
+  it('KRİTİK: harcanacak tutar KARARIN YANINDA — kartın kendi sütununda', () => {
     /*
-     * İDDİA DÜĞME SATIRINA ÇAPALI, `grid-cols-3`E DEĞİL.
-     * İlk yazımda öyleydi ve havuzun KENDİ ızgarası (`xl:grid-cols-3`)
-     * dosyada daha ÖNCE geçtiği için iddia yanlış yeri ölçtü — kod
-     * doğruyken kırmızı verdi.
+     * Bu düğmeler para harcıyor ve tutar karara BAKARKEN görünmeli.
+     * Eskiden düğmelerin üstündeydi; satır düzeninde sağ sütuna taşındı ve
+     * orada her zaman görünür — metin uzunluğu ne olursa olsun aşağı
+     * kaymıyor.
+     *
+     * İDDİA SÜTUNUN VARLIĞINA DEĞİL İÇERİĞİNE ÇAPALI: sütun dursa ve
+     * bütçeyi çizmese, "sağ sütun var" testi yine yeşil kalırdı.
      */
-    const butce = HAVUZ.indexOf('kayit.preset.budgetMicros');
-    const dugmeler = HAVUZ.indexOf('grid grid-cols-3 gap-1.5');
-    expect(butce).toBeGreaterThan(-1);
-    expect(dugmeler, 'düğme satırı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
-    expect(dugmeler).toBeGreaterThan(butce);
+    expect(HAVUZ).toContain('function SagBolge(');
+    expect(HAVUZ).toContain("formatMoney(kayit.preset.budgetMicros, 'TRY')");
+    expect(HAVUZ).toContain('<SagBolge kayit={kayit} />');
+  });
+
+  it('KRİTİK: YAYINDAKİ KARTIN SONUCU GÖSTERİLİYOR', () => {
+    /*
+     * Kart onaydan önce "ne kadara mal olacak", onaydan sonra "ne oldu"
+     * sorusunu taşıyor ve ikincisinin cevabı bu ekranda hiç yoktu.
+     */
+    expect(HAVUZ).toContain('kayit.performance');
+    expect(HAVUZ).toContain('etiket="Harcama"');
+    expect(HAVUZ).toContain('etiket="Dönüşüm"');
+  });
+
+  it('KRİTİK: SAYI YOKSA SEBEBİ YAZIYOR', () => {
+    /*
+     * "Kampanya henüz senkronize edilmedi" ile "hiç gösterim almadı" aynı
+     * boş alana çevrilirse, kullanıcı çalışan bir kampanyayı bozuk sanıp
+     * aramaya çıkar.
+     */
+    expect(HAVUZ).toContain('kayit.performanceNote');
+  });
+
+  it('KRİTİK: TO ve EBM TANIMSIZKEN SIFIR GÖSTERİLMİYOR', () => {
+    /*
+     * Gösterim yoksa TO tanımsız, dönüşüm yoksa EBM tanımsız. "%0" yazmak
+     * müşteriye "kampanyan çalışmıyor" demek olur.
+     *
+     * EBM'nin böleni ayrıca SIFIRA YUVARLANABİLİYOR (Google kısmi dönüşüm
+     * döndürüyor) ve `BigInt` bölmesi sıfıra bölümde fırlatıyor — kartın
+     * tamamı çizilmez hâle gelirdi. Koşul bölenin KENDİSİNE bakıyor.
+     */
+    expect(HAVUZ).toContain('p.impressions > 0 ? (p.clicks / p.impressions) * 100 : null');
+    expect(HAVUZ).toContain('const bolen = Math.round(p.conversions * 1000)');
+    expect(HAVUZ).toContain('bolen > 0 ?');
+  });
+});
+
+describe('TEKRAR BOOSTLA', () => {
+  /*
+   * Kullanıcının isteği: yayınlanmış gönderi listede kalıyor ve tekrar
+   * boostlanabiliyor. Tehlike, aynı gönderi için ikinci bir AKTİF kampanya:
+   * boosts_active_post_uniq kısmi tekil indeksi buna izin vermiyor ve engeli
+   * onay anında öğrenmek, sebebi yazmayan bir veritabanı hatası göstermek
+   * olurdu.
+   */
+  it('KRİTİK: kendi ucunu çağırıyor — karar ucunu DEĞİL', () => {
+    // Karar ucu yalnızca `pending` kart kabul ediyor; kapanmış bir kartı
+    // oraya göndermek "bu kart zaten işlendi" ile dönerdi.
+    expect(HAVUZ).toContain('/tekrar');
+    expect(HAVUZ).toContain('async function tekrarBoostla()');
+  });
+
+  it('KRİTİK: ENGEL SEBEBİ EKRANDA — `title` ipucunda değil', () => {
+    /*
+     * Kapalı bir düğmeye ipucu koymak, sebebi yalnızca fareyle üstüne gelen
+     * kullanıcıya söylemek olurdu; dokunmatik ve klavye kullanıcısı hiçbir
+     * şey görmez.
+     */
+    expect(HAVUZ).toContain('{kayit.reBoostBlockedReason && (');
+    expect(HAVUZ).toContain('disabled={busy !== null || kayit.reBoostBlockedReason !== null}');
+  });
+
+  it('KRİTİK: AÇIK DURUM LİSTESİ SUNUCUYLA AYNI', () => {
+    /*
+     * Ayrışırlarsa panel açık bir düğme gösterir ve sunucu reddeder;
+     * kullanıcı sebebi kendi kurulumunda arar. İki dosyadaki liste birebir
+     * karşılaştırılıyor — biri güncellenip diğeri unutulursa test düşüyor.
+     */
+    const api = readFileSync(
+      join(WEB_SRC, '../../../apps/api/src/modules/autoboost/autoboost-launch.service.ts'),
+      'utf8',
+    );
+    const desen = /const TEKRAR_ACIK_DURUMLAR = new Set\((\[[^\]]*\])\)/;
+    const panelde = desen.exec(HAVUZ)?.[1];
+    const sunucuda = desen.exec(api)?.[1];
+    expect(panelde, 'panelde liste bulunamadı — tarama boşa düştü').toBeTruthy();
+    expect(sunucuda, 'sunucuda liste bulunamadı — tarama boşa düştü').toBeTruthy();
+    expect(panelde).toBe(sunucuda);
   });
 });
 
@@ -336,7 +457,17 @@ describe('İKİ MECRA TEK EKRANDA', () => {
      * kesiyor; küçük resimde metin çoğu zaman tam oraya yazılıyor. Kart
      * oranını içeriğe göre değiştirmek ise ızgaradaki satır hizasını bozuyor.
      */
-    const blok = HAVUZ.slice(HAVUZ.indexOf('GORSEL_BICIMI'), HAVUZ.indexOf('BİLDİRİM HAVUZU'));
+    /*
+     * DİLİM TABLONUN KENDİ SINIRINDAN ÇIKARILIYOR.
+     *
+     * Eskiden bitiş işareti bir YORUM metniydi ve yorumlar taramadan önce
+     * siliniyor: `indexOf` -1 dönüyor, `slice(i, -1)` dosyanın sonuna kadar
+     * uzanıyordu. Test geçiyordu ama tabloyu değil dosyanın tamamını
+     * ölçüyordu.
+     */
+    const bas = HAVUZ.indexOf('const GORSEL_BICIMI');
+    expect(bas, 'tablo bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const blok = HAVUZ.slice(bas, HAVUZ.indexOf('};', bas));
     expect(blok).toContain("google: { oturtma: 'object-contain'");
     expect(blok).toContain("meta: { oturtma: 'object-cover'");
   });
@@ -368,6 +499,17 @@ describe('İKİ MECRA TEK EKRANDA', () => {
     expect(HAVUZ).toContain('mecralar.length > 1');
   });
 
+  it('KRİTİK: DURUM SÜZGECİ var — yayınlananlar listede kalıyor', () => {
+    /*
+     * Yayınlanan kart artık listeden çıkmıyor (kullanıcının isteği) ve bunun
+     * bedeli liste uzunluğu: bir yıl sonra onay bekleyen üç kart, yayınlanmış
+     * yüz kartın arasında kalıyor. Süzgeç o bedeli ödüyor.
+     */
+    expect(HAVUZ).toContain('DURUM_SUZGECLERI');
+    expect(HAVUZ).toContain("etiket: 'Onay bekliyor'");
+    expect(HAVUZ).toContain("etiket: 'Yayında'");
+  });
+
   it('KRİTİK: süzgecin gizlediği kart sayısı YAZILI', () => {
     /*
      * Süzgeci unutan kullanıcı eksik listeyi "kart gelmemiş" diye okur.
@@ -375,7 +517,7 @@ describe('İKİ MECRA TEK EKRANDA', () => {
      * görünmemeli: biri "kart yok", diğeri "kartlar başka sekmede".
      */
     expect(HAVUZ).toContain('kart süzgeçte');
-    expect(HAVUZ).toContain('Bu mecrada kart yok');
+    expect(HAVUZ).toContain('Bu süzgeçte kart yok');
   });
 });
 

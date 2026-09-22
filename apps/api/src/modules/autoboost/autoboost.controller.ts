@@ -157,6 +157,24 @@ export class AutoBoostController {
   }
 
   /**
+   * ═══ TEKRAR BOOSTLA ═══
+   *
+   * Yayınlanmış, reddedilmiş ya da düşmüş bir kartı KARARA geri açıyor.
+   *
+   * `boost.write` İSTİYOR, `boost.approve` DEĞİL: bu uç para harcamıyor,
+   * yalnızca kartı yeniden onaylanabilir yapıyor. Harcama kararı "Onayla"da
+   * ve o ayrı bir yetki — geçmiş içerik çekimiyle aynı ayrım.
+   */
+  @Post('queue/:id/tekrar')
+  @RequirePermissions('boost.write')
+  tekrar(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ status: string; message: string }> {
+    return this.launch.tekrarBoostla(ctx, id);
+  }
+
+  /**
    * TEK TIKLA YAYIN — gönderi listesindeki "Yayınla" düğmesi.
    *
    * GÖVDE YALNIZCA MÜŞTERİ KİMLİĞİ TAŞIYOR: bütçe, süre, hedefleme ve ad

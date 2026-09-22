@@ -7,11 +7,23 @@ import {
 import {
   autoBoostPresetSettingsSchema,
   type AutoBoostQueueItemRecord,
+  type AutoBoostQueuePerformance,
   type AutoBoostQueueList,
   type AutoBoostSubscriptionHealth,
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { seviyeLiterali } from '../metrics/seviye-literali';
+
+/**
+ * Performans toplamı KAMPANYA seviyesinden okunuyor.
+ *
+ * Boost tek bir kampanya açıyor; reklam seviyesinden toplamak aynı sayıyı
+ * daha pahalı üretirdi ve `insights_daily` üzerindeki kısmi indeks kampanya
+ * seviyesi için kurulu. Literal üreticisinden geçmek ZORUNLU: bağlı parametre
+ * kısmi indeksi kullanılamaz hâle getiriyor (`seviye-literali.ts`).
+ */
+const KAMPANYA_SEVIYESI = seviyeLiterali('campaign');
 
 /**
  * BİLDİRİM HAVUZUNUN OKUMA YOLU.
@@ -99,11 +111,15 @@ export class AutoBoostReadService {
 
     const rows = await this.prisma.withTenant(scoped, (tx) =>
       tx.$queryRaw<QueueRow[]>(Prisma.sql`
+        SELECT * FROM (
         SELECT q.id::text AS id, q.client_id::text AS client_id, cl.name AS client_name,
                q.platform::text AS platform, q.external_id, q.title, q.thumbnail_url,
                q.permalink, q.media_type, q.published_at, q.status,
-               q.error, q.external_campaign_id, q.created_at,
+               q.error, q.external_campaign_id, q.created_at, q.launched_at,
                q.signature_state,
+               kmp.id::text AS kampanya_id,
+               perf.gun, perf.spend_micros, perf.impressions, perf.clicks, perf.conversions,
+               aktif.biter AS aktif_boost_biter,
                sp.name AS profile_name,
                sp.linked_ad_account_id::text AS linked_ad_account_id,
                p.id::text AS preset_id, p.enabled AS preset_enabled,
@@ -128,12 +144,73 @@ export class AutoBoostReadService {
           ORDER BY ap.social_profile_id NULLS LAST
           LIMIT 1
         ) p ON true
+        -- ═══ YAYINDAKİ BOOSTUN SONUCU ═══
+        --
+        -- Kampanya satırı yapı taramasından geliyor ve boost açıldıktan
+        -- SONRA oluşuyor; yani yeni yayınlanan bir kartta satır HENÜZ YOK.
+        -- Bu yüzden iki aşama ayrı: kampanya bulunamadıysa "veri gelmedi",
+        -- bulunup metriği yoksa "gösterim yok". İkisini aynı boş alana
+        -- çevirmek, kullanıcıyı çalışan bir kampanyayı aramaya gönderirdi.
+        --
+        -- DIŞ BİRLEŞİM ZORUNLU: campaigns ve insights_daily RLS'li ve iç
+        -- birleşim kartın KENDİSİNİ süzerdi.
+        LEFT JOIN LATERAL (
+          SELECT c.id FROM campaigns c
+          WHERE c.client_id = q.client_id AND c.external_id = q.external_campaign_id
+          LIMIT 1
+        ) kmp ON q.external_campaign_id IS NOT NULL
+        LEFT JOIN LATERAL (
+          -- GÜN SAYISI DA OKUNUYOR ve bu satır kritik: toplamlar COALESCE ile
+          -- sıfıra düşüyor, yani "hiç satır yok" ile "satırlar sıfır" AYNI
+          -- görünüyordu. İkisi farklı iş: birincisinde metrik senkronizasyonu
+          -- henüz koşmadı, ikincisinde kampanya gerçekten gösterim almadı.
+          SELECT COUNT(*)::int AS gun,
+                 COALESCE(SUM(i.spend_micros), 0)::text AS spend_micros,
+                 COALESCE(SUM(i.impressions), 0)::int AS impressions,
+                 COALESCE(SUM(i.clicks), 0)::int AS clicks,
+                 COALESCE(SUM(i.conversions), 0)::float8 AS conversions
+          FROM insights_daily i
+          WHERE i.entity_level = ${KAMPANYA_SEVIYESI} AND i.entity_id = kmp.id
+        ) perf ON kmp.id IS NOT NULL
+        -- ═══ TEKRAR BOOSTLAMANIN ÖNÜNDEKİ ENGEL ═══
+        --
+        -- boosts_active_post_uniq kısmi tekil indeksi aynı gönderi için
+        -- ikinci bir aktif boost'a izin vermiyor. Engeli onay anında
+        -- öğrenmek, kullanıcıya sebebi yazmayan bir veritabanı hatası
+        -- göstermek olurdu; kart düğmeyi baştan kapatıp tarihi yazıyor.
+        LEFT JOIN LATERAL (
+          SELECT b.created_on_platform_at + make_interval(days => b.duration_days) AS biter
+          FROM boosts b
+          JOIN organic_posts op ON op.id = b.organic_post_id
+          WHERE op.social_profile_id = q.social_profile_id
+            AND op.external_id = q.external_id
+            AND b.status IN ('candidate', 'approved', 'creating', 'active')
+          LIMIT 1
+        ) aktif ON true
         WHERE q.client_id = ${clientId}::uuid
         ORDER BY
-          -- BEKLEYENLER ÖNCE: kullanıcının işi onlar.
+          -- ═══ SEÇİM SIRASI GÖSTERİM SIRASIYLA AYNI DEĞİL ═══
+          --
+          -- Kullanıcı kartların GÖNDERİ TARİHİNE göre sıralanmasını istedi ve
+          -- yayınlananlar listede kalıyor. Yalnızca tarihe göre sıralayıp 50
+          -- satır almak, yüzlerce yayınlanmış gönderisi olan bir workspace'te
+          -- ONAY BEKLEYEN kartları limitin altında bırakırdı: kullanıcının
+          -- yapacak işi olan kart ekrandan sessizce düşerdi.
+          --
+          -- Bu yüzden LİMİTİ bekleyenler kazanıyor, SIRAYI tarih: dıştaki
+          -- sorgu aynı satırları gönderi tarihine göre yeniden diziyor.
           CASE WHEN q.status = 'pending' THEN 0 ELSE 1 END,
+          q.published_at DESC NULLS LAST,
           q.created_at DESC
         LIMIT 50
+      ) t
+      ORDER BY
+        -- GÖSTERİM SIRASI: GÖNDERİNİN yayın tarihi — reklamın değil.
+        -- Tarihi olmayan kart (nadiren YouTube bildiriminde eksik gelir) en
+        -- sona düşüyor; kuyruğa giriş anına göre sıralamak onu araya
+        -- serpiştirip sıralamayı okunmaz yapardı.
+        published_at DESC NULLS LAST,
+        created_at DESC
       `),
     );
 
@@ -267,8 +344,75 @@ export class AutoBoostReadService {
       blockedReason: this.blockedReason(r, preset !== null, parsed),
       error: r.error,
       externalCampaignId: r.external_campaign_id,
+      launchedAt: r.launched_at?.toISOString() ?? null,
+      performance: this.performans(r),
+      performanceNote: this.performansNotu(r),
+      reBoostBlockedReason: this.tekrarEngeli(r),
       createdAt: r.created_at.toISOString(),
     };
+  }
+
+  /**
+   * Yayına alınmış kartın ölçülen performansı.
+   *
+   * KAMPANYA SATIRI YOKSA SAYI DA YOK. Sıfır göndermek, henüz senkronize
+   * edilmemiş bir kampanyayı "hiç harcamadı" diye göstermek olurdu ve
+   * kullanıcı çalışan bir reklamı bozuk sanardı.
+   */
+  private performans(r: QueueRow): AutoBoostQueuePerformance | null {
+    // GÜN SATIRI YOKSA SAYI DA YOK. Sıfır göstermek, metrikleri henüz
+    // çekilmemiş bir kampanyayı "hiç gösterim almadı" diye göstermek olurdu.
+    if (!r.kampanya_id || !r.gun || r.spend_micros === null) return null;
+    return {
+      spendMicros: r.spend_micros,
+      impressions: r.impressions ?? 0,
+      clicks: r.clicks ?? 0,
+      conversions: r.conversions ?? 0,
+    };
+  }
+
+  /**
+   * Sayı yoksa NEDEN yok.
+   *
+   * Üç hâl birbirinden ayrılıyor: kart hiç yayınlanmadı, kampanya henüz
+   * senkronize edilmedi, kampanya var ama gün verisi yok. Üçünü aynı boş
+   * alana çevirmek bu ekranda daha önce yapıldı ve sebebi teşhis edilemedi.
+   */
+  private performansNotu(r: QueueRow): string | null {
+    if (r.status !== 'launched') return null;
+    if (!r.external_campaign_id) {
+      return 'Kampanya kimliği kaydedilmemiş; performans eşleştirilemiyor.';
+    }
+    if (!r.kampanya_id) {
+      return 'Kampanya henüz senkronize edilmedi. Rakamlar ilk taramadan sonra görünür.';
+    }
+    if (!r.gun) {
+      return 'Kampanya açıldı, ölçülmüş bir gün verisi henüz yok.';
+    }
+    return null;
+  }
+
+  /**
+   * Tekrar boostlamayı engelleyen sebep.
+   *
+   * Yalnızca SON DURUMDAKİ kartlar tekrar boostlanabiliyor: yayına alınmakta
+   * olan bir kartı geri almak, platformda oluşmuş bir kampanyayı kayıtsız
+   * bırakırdı.
+   */
+  private tekrarEngeli(r: QueueRow): string | null {
+    if (!TEKRAR_ACIK_DURUMLAR.has(r.status)) {
+      return 'Bu kart şu anda işleniyor; tekrar boostlamak için sonucunu bekle.';
+    }
+    if (r.aktif_boost_biter) {
+      const gun = Math.max(
+        0,
+        Math.ceil((r.aktif_boost_biter.getTime() - Date.now()) / 86_400_000),
+      );
+      return gun > 0
+        ? `Önceki boost hâlâ yayında; ${gun} gün sonra tekrar boostlayabilirsin.`
+        : 'Önceki boost hâlâ yayında. Süresi bittiğinde tekrar boostlayabilirsin.';
+    }
+    return null;
   }
 
   /**
@@ -331,6 +475,16 @@ export class AutoBoostReadService {
   }
 }
 
+/**
+ * TEKRAR BOOSTLAMAYA AÇIK DURUMLAR — kapsayıcı değil AÇIK LİSTE.
+ *
+ * `pending` ve `launching` dışarıda: birincisinde zaten karar bekleniyor,
+ * ikincisinde platform çağrısı sürüyor ve kartı geri almak, oluşmuş bir
+ * kampanyayı kayıtsız bırakırdı. Yeni bir durum eklendiğinde varsayılan
+ * DIŞARIDA kalıyor — açık listenin sebebi bu.
+ */
+const TEKRAR_ACIK_DURUMLAR = new Set(['launched', 'rejected', 'failed']);
+
 interface QueueRow {
   id: string;
   client_id: string;
@@ -346,7 +500,15 @@ interface QueueRow {
   error: string | null;
   external_campaign_id: string | null;
   created_at: Date;
+  launched_at: Date | null;
   signature_state: string | null;
+  kampanya_id: string | null;
+  gun: number | null;
+  spend_micros: string | null;
+  impressions: number | null;
+  clicks: number | null;
+  conversions: number | null;
+  aktif_boost_biter: Date | null;
   profile_name: string | null;
   linked_ad_account_id: string | null;
   preset_id: string | null;
