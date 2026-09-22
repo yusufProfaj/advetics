@@ -2584,10 +2584,15 @@ model Asset {
   orgId    String @map("org_id") @db.Uuid
   clientId String @map("client_id") @db.Uuid
 
-  /// image | logo
+  /// image | logo | video
   ///
   /// Logo ayrı bir tür: markaya ait, kampanyadan kampanyaya değişmiyor ve
   /// Google Performance Max onsuz kampanya oluşturmuyor.
+  ///
+  /// Video da ayrı: Meta'da `/advideos` ucundan yükleniyor, hash yerine
+  /// video kimliği taşıyor ve kreatif `link_data` değil `video_data`
+  /// kuruyor. Kabul edilen değerler `01_constraints.sql` içindeki
+  /// `assets_kind_chk` ile dayatılıyor.
   kind String @default("image") @db.VarChar(12)
 
   name     String @db.VarChar(200)

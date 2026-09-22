@@ -50,7 +50,8 @@ export default async function SimpleAdPage({
    * bağlantı yerinde, yalnızca istek düşmüştü. Kullanıcı olmayan bir arızayı
    * düzeltmeye, Platform Bağlantıları ekranına gönderiliyordu.
    */
-  const [baglantiSonuc, arsivSonuc, kampanyaSonuc, profilSonuc] = await Promise.allSettled([
+  const [baglantiSonuc, arsivSonuc, videoSonuc, kampanyaSonuc, profilSonuc] =
+    await Promise.allSettled([
     serverApiFetch<
       Array<{
         adAccounts: Array<{ id: string; name: string; currency: string; platform: string }>;
@@ -58,6 +59,16 @@ export default async function SimpleAdPage({
       }>
     >(`/connections?clientId=${clientId}`),
     serverApiFetch<AssetListResult>(`/assets?clientId=${clientId}&kind=image&limit=60&offset=0`),
+    /*
+     * VİDEOLAR AYRI ÇEKİLİYOR — `kind` süzgeci tek değer alıyor.
+     *
+     * Süzgeci hiç vermemek logoları da getirirdi ve logo bir reklam
+     * kreatifi değil: listede görünmesi, kullanıcının yanlışlıkla logoyu
+     * reklam görseli olarak seçmesine kapı açardı.
+     */
+    serverApiFetch<AssetListResult>(
+      `/assets?clientId=${clientId}&kind=video&limit=30&offset=0`,
+    ).catch(() => null),
     serverApiFetch<DraftGroupRecord[]>(`/draft-campaigns?clientId=${clientId}`),
     /*
      * WORKSPACE KARTI — SİTE ADRESİ İÇİN.
@@ -92,6 +103,9 @@ export default async function SimpleAdPage({
   const connections = baglantiSonuc.value;
   const library = arsivSonuc.status === 'fulfilled' ? arsivSonuc.value : null;
   const groups = kampanyaSonuc.status === 'fulfilled' ? kampanyaSonuc.value : [];
+  // VİDEOLAR LİSTENİN BAŞINDA: yeni eklenen bir yetenek ve arşivde
+  // görsellerin arasında kaybolursa kimse denemez.
+  const videolar = videoSonuc.status === 'fulfilled' ? videoSonuc.value : null;
 
   const accounts = connections.flatMap((c) => c.adAccounts ?? []);
   // REKLAM SAYFA ADINA YAYINLANIYOR ve Instagram hesabı tek başına bunu
@@ -136,8 +150,8 @@ export default async function SimpleAdPage({
           clientId={clientId}
           accounts={metaAccounts}
           pages={pages}
-          libraryAssets={library?.rows ?? []}
-          libraryTotal={library?.total ?? 0}
+          libraryAssets={[...(videolar?.rows ?? []), ...(library?.rows ?? [])]}
+          libraryTotal={(library?.total ?? 0) + (videolar?.total ?? 0)}
           clientWebsite={
             profilSonuc.status === 'fulfilled'
               ? (profilSonuc.value?.find((c) => c.id === clientId)?.website ?? null)

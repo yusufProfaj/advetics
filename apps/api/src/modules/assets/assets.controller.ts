@@ -17,6 +17,7 @@ import type { Response } from 'express';
 import {
   ASSET_KINDS,
   MAX_IMAGE_BYTES,
+  MAX_VIDEO_BYTES,
   assetQuerySchema,
   assetRenameSchema,
   type AssetKind,
@@ -74,7 +75,15 @@ export class AssetsController {
 
   @Post()
   @RequirePermissions('bulk.write')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMAGE_BYTES } }))
+  /*
+   * MULTER SINIRI EN YÜKSEK OLANA GÖRE — SERVİS TÜRE GÖRE DARALTIYOR.
+   *
+   * Bu sınır servisteki kontrolden ÖNCE geliyor: `MAX_IMAGE_BYTES` bırakmak,
+   * geçerli bir videoyu servis hiç görmeden reddetmek demekti. Gerçek sınır
+   * (görselde 30 MB, videoda 200 MB) `assets.service.ts` içinde ve orada
+   * sebebiyle söyleniyor.
+   */
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_VIDEO_BYTES } }))
   upload(
     @CurrentTenant() ctx: TenantContext,
     // `Express.Multer.File` yerine yapısal tip: @types/multer bu projede yok

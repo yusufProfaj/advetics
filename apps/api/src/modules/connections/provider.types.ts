@@ -818,6 +818,14 @@ export interface PublishDraftRequest {
   leadFormExternalId?: string;
   /** İlk eleman DAİMA kare — tek görselli yolda o kullanılıyor. */
   images: Array<{ ratio: 'square' | 'vertical' | 'horizontal'; hash: string }>;
+  /**
+   * VİDEO REKLAMI — görselden AYRI kimlik uzayı.
+   *
+   * Meta videoyu `/advideos`a alıyor ve `video_id` döndürüyor; görselin
+   * `image_hash`i ile aynı alana yazmak Meta tarafından reddediliyor.
+   * Doluysa kreatif `link_data` değil `video_data` kuruyor.
+   */
+  video?: { videoId: string };
   targeting: Record<string, unknown>;
   placements: Record<string, string[]>;
   /** Tek görselde null — basit kreatif yeterli. */
@@ -1224,6 +1232,19 @@ export interface IAdPlatformProvider {
    * çağrı olduğu için birinin patlaması diğerlerini durdurmuyor.
    */
   createAd(ctx: FetchContext, request: CreateAdRequest): Promise<CreateAdResult>;
+
+  /**
+   * REKLAM VİDEOSU YÜKLEME — İSTEĞE BAĞLI.
+   *
+   * Arayüzde ZORUNLU DEĞİL ve bu bilinçli: Google'da reklam videosu
+   * YouTube'a yükleniyor (ayrı bir kimlik ve ayrı bir izin), LinkedIn'de
+   * yazma kodu hiç yok. Zorunlu kılmak, iki sağlayıcıya çalışmayan bir
+   * metot yazdırmak olurdu — kısmi sağlayıcı bu depoda kabul edilmiş desen.
+   */
+  uploadAdVideo?(
+    ctx: FetchContext,
+    params: { name: string; bytes: Buffer; mimeType: string },
+  ): Promise<{ videoId: string; hazir: boolean; not: string | null }>;
 }
 
 export const AD_PLATFORM_PROVIDERS = 'AD_PLATFORM_PROVIDERS';

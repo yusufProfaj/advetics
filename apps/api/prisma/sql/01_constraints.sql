@@ -605,9 +605,14 @@ ALTER TABLE leads ADD CONSTRAINT leads_contact_chk
 -- VARLIK ARŞİVİ — assets
 -- =============================================================================
 
+-- TÜR LİSTESİ `ASSET_KINDS` İLE AYNI OLMAK ZORUNDA. Kolon düz metin
+-- (`VarChar(12)`), yani Prisma hiçbir şey dayatmıyor: paylaşılan listeye
+-- eklenen bir tür burada eklenmezse yükleme üretimde 23514 ile düşüyor ve
+-- mesaj kısıt adından ibaret. `varlik-turleri.spec.ts` iki listeyi
+-- karşılaştırıyor.
 ALTER TABLE assets DROP CONSTRAINT IF EXISTS assets_kind_chk;
 ALTER TABLE assets ADD CONSTRAINT assets_kind_chk
-  CHECK (kind IN ('image', 'logo'));
+  CHECK (kind IN ('image', 'logo', 'video'));
 
 ALTER TABLE assets DROP CONSTRAINT IF EXISTS assets_dimensions_chk;
 ALTER TABLE assets ADD CONSTRAINT assets_dimensions_chk

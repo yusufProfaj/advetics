@@ -23,6 +23,8 @@ let tree: DraftTreeService;
 let svc: DraftPublishService;
 
 const publishDraft = vi.fn();
+const uploadAdVideo = vi.fn();
+const assetBytes = vi.fn();
 const canWrite = vi.fn();
 const ensureExternalRef = vi.fn();
 
@@ -61,10 +63,12 @@ beforeAll(async () => {
   svc = new DraftPublishService(
     prisma,
     tree,
-    { get: () => ({ platform: 'meta', publishDraft, canWrite }) } as never,
+    { get: () => ({ platform: 'meta', publishDraft, canWrite, uploadAdVideo }) } as never,
     { getAccessToken: async () => 'token' } as never,
     { acquire: async () => ({ allowed: true, usagePercent: 5 }), record: async () => {} } as never,
     { ensureExternalRef } as never,
+    // VARLIK OKUYUCU — yalnızca video yolunda kullanılıyor.
+    { bytes: assetBytes } as never,
   );
 });
 
@@ -115,6 +119,10 @@ beforeEach(async () => {
   canWrite.mockReturnValue({ ok: true, missing: [] });
   ensureExternalRef.mockReset();
   ensureExternalRef.mockResolvedValue('hesap-hash-1');
+  uploadAdVideo.mockReset();
+  uploadAdVideo.mockResolvedValue({ videoId: 'vid-1', hazir: true, not: null });
+  assetBytes.mockReset();
+  assetBytes.mockResolvedValue({ buffer: Buffer.from('mp4'), mimeType: 'video/mp4' });
   publishDraft.mockResolvedValue({
     campaignId: 'c-1',
     adSetId: 'as-1',
@@ -335,5 +343,69 @@ describe('KISMİ BAŞARI — K13 kararının sınavı', () => {
 
     await svc.publishGroup(CTX, created.campaigns[0]!.id);
     expect(publishDraft).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ═══ VİDEO KREATİFİ ═══
+ *
+ * Video görselle AYNI TABLODA duruyor (`assets.kind`) ama Meta'da tamamen
+ * ayrı bir yoldan geçiyor: `/advideos`, hash değil video kimliği, ve kreatif
+ * `link_data` değil `video_data`. Ayrım yapılmazsa video, görsel döngüsüne
+ * düşüyor — orada oran kovasına oturmadığı için "atlandı" diye log'a yazılıp
+ * SESSİZCE kayboluyor ve reklam görselsiz yayınlanıyor.
+ */
+const VIDEO = 'd1d1d1d1-d1d1-d1d1-d1d1-d1d1d1d1d1d1';
+
+async function videoEkle(): Promise<void> {
+  await h.q(
+    `INSERT INTO assets
+       (id, org_id, client_id, kind, name, file_name, mime_type, byte_size,
+        width, height, storage_key, content_hash, updated_at)
+     VALUES ($1, $2, $3, 'video', 'Tanıtım', 't.mp4', 'video/mp4', 900,
+             1080, 1920, 'v/1', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', now())`,
+    [VIDEO, IDS.org, IDS.client],
+  );
+  await h.q(
+    `INSERT INTO ad_creative_assets (id, org_id, creative_id, asset_id, position)
+     VALUES (gen_random_uuid(), $1, $2, $3, 1)`,
+    [IDS.org, CREATIVE, VIDEO],
+  );
+}
+
+describe('video kreatifi', () => {
+  it('KRİTİK: video `/advideos` yoluna gidiyor ve kimliği yayına taşınıyor', async () => {
+    await videoEkle();
+    const created = await tree.createFromSimple(CTX, input());
+    await svc.publish(CTX, created.campaigns[0]!.id);
+
+    expect(uploadAdVideo).toHaveBeenCalledTimes(1);
+    expect(assetBytes.mock.calls[0]![1]).toBe(VIDEO);
+    expect(publishDraft.mock.calls[0]![1].video).toEqual({ videoId: 'vid-1' });
+  });
+
+  it('KRİTİK: video GÖRSEL DÖNGÜSÜNE girmiyor', async () => {
+    /*
+     * Girseydi `ensureExternalRef` video kimliğiyle de çağrılırdı: Meta
+     * `/adimages`e video baytı kabul etmiyor ve hata mesajı dosyanın
+     * türünden değil boyutundan söz ediyor.
+     */
+    await videoEkle();
+    const created = await tree.createFromSimple(CTX, input());
+    await svc.publish(CTX, created.campaigns[0]!.id);
+
+    const yuklenen = ensureExternalRef.mock.calls.map((c) => c[1].assetId);
+    expect(yuklenen).toContain(ASSET);
+    expect(yuklenen).not.toContain(VIDEO);
+  });
+
+  it('videosuz kreatifte video yolu HİÇ koşmuyor', async () => {
+    // Her yayında bir kez daha çağrılan boş bir video yolu, kotayı ve
+    // yükleme süresini sebepsiz harcardı.
+    const created = await tree.createFromSimple(CTX, input());
+    await svc.publish(CTX, created.campaigns[0]!.id);
+
+    expect(uploadAdVideo).not.toHaveBeenCalled();
+    expect(publishDraft.mock.calls[0]![1].video).toBeUndefined();
   });
 });

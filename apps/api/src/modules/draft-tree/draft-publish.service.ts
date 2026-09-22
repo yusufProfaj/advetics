@@ -4,11 +4,13 @@ import {
   coverageFor,
   matchRatio,
   packTextsFor,
+  videoMu,
   restrictTargetingFor,
   SPECIAL_AD_CATEGORY_META,
   type SpecialAdCategory,
   type AdvancedSettings,
   type AssetCoverage,
+  type AssetKind,
   type AssetRatio,
   type CreativeTexts,
   type DraftAdGroupRecord,
@@ -18,6 +20,7 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { platformKisaAdi } from '@advetics/shared';
+import { AssetsService } from '../assets/assets.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
@@ -69,6 +72,8 @@ export class DraftPublishService {
     private readonly vault: TokenVaultService,
     private readonly quota: QuotaGuardService,
     private readonly assetUploader: AssetUploaderService,
+    /** Video baytları buradan okunuyor — `/advideos` dosyanın kendisini istiyor. */
+    private readonly assets: AssetsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -467,6 +472,45 @@ export class DraftPublishService {
       const images = google
         ? []
         : await this.uploadImages(ctx, campaign.adAccountId, creative, fetchCtx);
+
+      /*
+       * ═══ VİDEO AYRI UÇTAN YÜKLENİYOR ═══
+       *
+       * Meta reklam videosunu `/advideos`a alıyor ve ASENKRON işliyor;
+       * `/adimages` yolundan farklı bir kimlik uzayı (hash değil, video
+       * kimliği). Aynı döngüye sıkıştırmak, videoyu hash'i olmayan bir
+       * görsel sanmak olurdu.
+       *
+       * TEK VİDEO: kreatifte birden çok video varsa ilki kullanılıyor.
+       * Meta tek bir kreatifte iki video oynatmıyor ve "hangisi" sorusunu
+       * sessizce cevaplamak yerine sıraya güveniyoruz (kullanıcı seçimi
+       * zaten sıralı).
+       */
+      const videoAsset = google
+        ? undefined
+        : creative.assets.find((a) => videoMu(a.kind as AssetKind));
+      let video: { videoId: string } | undefined;
+      if (videoAsset) {
+        const bytes = await this.assets.bytes(ctx, videoAsset.id);
+        const sonuc = await this.providers.get('meta').uploadAdVideo?.(fetchCtx, {
+          name: `advetics-${videoAsset.id}`,
+          bytes: bytes.buffer,
+          mimeType: bytes.mimeType,
+        });
+        if (!sonuc) {
+          throw new BadRequestException('Bu platformda video reklamı desteklenmiyor.');
+        }
+        video = { videoId: sonuc.videoId };
+        /*
+         * HAZIR OLDUĞU DOĞRULANAMADIYSA YAYIN YİNE DENENİYOR ve not
+         * log'a düşüyor. Meta hazır değilse kendi mesajıyla reddediyor ve
+         * o mesaj zaten kullanıcıya gidiyor; burada durmak, işlenmesi
+         * biten bir videoyu boşuna reddetmek olurdu.
+         */
+        if (!sonuc.hazir && sonuc.not) {
+          this.logger.warn(`Video yayına hazır sayılmadı (${videoAsset.id}): ${sonuc.not}`);
+        }
+      }
       const packed = packTextsFor(
         google ? 'google_rsa' : 'meta_single_image',
         creative.texts,
@@ -511,6 +555,7 @@ export class DraftPublishService {
         leadFormExternalId: auth.leadFormExternalId,
         currency: auth.currency,
         images,
+        video,
         // GOOGLE RSA METİNLERİ AYRI ALANDA: Meta bir başlık alıyor, Google
         // en az üç istiyor ve aynı alanı paylaştırmak Google'ın reddettiği
         // bir paket üretirdi.
@@ -744,6 +789,9 @@ export class DraftPublishService {
     const out: Array<{ ratio: AssetRatio; hash: string }> = [];
 
     for (const asset of creative.assets) {
+      // VİDEO BU DÖNGÜDE YOK: kendi ucundan (`/advideos`) yükleniyor ve
+      // burada oran kovasına oturmadığı için "atlandı" diye log'a düşerdi.
+      if (videoMu(asset.kind as AssetKind)) continue;
       const ratio = matchRatio(asset.width, asset.height);
       /**
        * ORANA OTURMAYAN GÖRSEL ATLANMIYOR, SAYILIYOR.
@@ -786,9 +834,12 @@ export class DraftPublishService {
       if (!row) throw new BadRequestException('Kreatif bulunamadı');
 
       const assets = await tx.$queryRaw<
-        Array<{ id: string; width: number; height: number }>
+        Array<{ id: string; width: number; height: number; kind: string }>
       >(Prisma.sql`
-        SELECT a.id::text AS id, a.width, a.height
+        -- TÜR KOLONU DA OKUNUYOR: video ile görsel aynı tabloda duruyor ve
+        -- ayırt edilmezse video, oran kovalarına oturmayan bir görsel
+        -- sanılıp SESSİZCE atlanıyordu.
+        SELECT a.id::text AS id, a.width, a.height, a.kind
         FROM ad_creative_assets ca
         JOIN assets a ON a.id = ca.asset_id
         WHERE ca.creative_id = ${creativeId}::uuid
@@ -983,7 +1034,7 @@ export class DraftPublishService {
 
 interface LoadedCreative {
   texts: CreativeTexts;
-  assets: Array<{ id: string; width: number; height: number }>;
+  assets: Array<{ id: string; width: number; height: number; kind: string }>;
 }
 
 /**

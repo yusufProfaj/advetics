@@ -2446,6 +2446,126 @@ export class MetaProvider implements IAdPlatformProvider {
   }
 
   /**
+   * ═══ REKLAM VİDEOSU YÜKLEME ═══
+   *
+   * `POST /act_{id}/advideos`, çok parçalı (multipart) gövde ve alan adı
+   * `source` — Meta'nın belgelediği tek yol. Görselde kullandığımız
+   * form-encoded base64 burada YOK: video ucu yalnızca multipart kabul
+   * ediyor.
+   *
+   * SINIR `FormData` İLE KURULUYOR, ELLE DEĞİL. Node 18'den beri global
+   * `FormData` ve `Blob` var; sınırı (boundary) elle yazmak tek bir yanlış
+   * baytta "geçersiz istek" veriyor ve mesaj hangi baytın yanlış olduğunu
+   * söylemiyor.
+   *
+   * ═══ YÜKLEME BİTTİĞİNDE VİDEO HAZIR DEĞİL ═══
+   *
+   * Meta videoyu ASENKRON işliyor: yükleme 200 dönüyor ama kreatif hemen
+   * kurulursa "video is still being processed" ile reddediliyor. Bu yüzden
+   * işleme durumu bekleniyor (`videoHazirBekle`).
+   */
+  async uploadAdVideo(
+    ctx: FetchContext,
+    params: { name: string; bytes: Buffer; mimeType: string },
+  ): Promise<{ videoId: string; hazir: boolean; not: string | null }> {
+    const form = new FormData();
+    form.append('source', new Blob([new Uint8Array(params.bytes)], { type: params.mimeType }), params.name);
+    // BAŞLIK ZORUNLU: Meta boş başlıkta isteği reddediyor.
+    form.append('title', params.name.slice(0, 255));
+
+    const res = await platformFetch<{ id?: string }>(
+      'meta',
+      `${this.graph}/${actPath(ctx.accountExternalId)}/advideos`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ctx.accessToken}` },
+        // Content-Type ELLE VERİLMİYOR: `FormData` sınırı kendisi ekliyor
+        // ve elle yazılan bir başlık onu geçersiz kılıyor.
+        body: form,
+        // 200 MB'lık bir dosya varsayılan 30 saniyede bitmiyor.
+        timeoutMs: 600_000,
+      },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+
+    const videoId = res.data.id;
+    if (!videoId) {
+      throw new PlatformApiError(
+        'meta',
+        'permanent',
+        'Video yüklendi ama Meta kimlik döndürmedi — yanıt beklenmedik şekilde geldi.',
+      );
+    }
+
+    const bekleme = await this.videoHazirBekle(ctx, videoId);
+    return { videoId, hazir: bekleme.hazir, not: bekleme.not };
+  }
+
+  /**
+   * ═══ VİDEONUN İŞLENMESİNİ BEKLEME ═══
+   *
+   * `GET /{video_id}?fields=status` → `{ status: { video_status: 'ready' |
+   * 'processing' | 'error' } }`.
+   *
+   * BU ALAN META'NIN REKLAM VİDEOSU KILAVUZUNDA BELGELENMİYOR — sahada
+   * çalışıyor ama kılavuz yalnızca yükleme ve kreatif adımlarını anlatıyor.
+   * O yüzden okunamaması ARIZA SAYILMIYOR: durum alınamazsa bekleme
+   * bırakılıyor ve çağıran "hazır olduğunu doğrulayamadık" notunu alıyor.
+   * Yayın yine deneniyor; Meta hazır değilse kendi mesajıyla reddediyor ve
+   * o mesaj kullanıcıya gidiyor.
+   *
+   * SONSUZA KADAR BEKLENMİYOR: bir dakikalık videonun işlenmesi saniyeler
+   * sürüyor, dakikalar değil. Üst sınıra takılmak "hazır diyemedik" demek,
+   * "başarısız" değil.
+   */
+  private async videoHazirBekle(
+    ctx: FetchContext,
+    videoId: string,
+  ): Promise<{ hazir: boolean; not: string | null }> {
+    const basla = Date.now();
+    let bekleme = 2_000;
+
+    while (Date.now() - basla < VIDEO_ISLEME_SINIRI_MS) {
+      let durum: string | undefined;
+      try {
+        const res = await platformFetch<{ status?: { video_status?: string } }>(
+          'meta',
+          `${this.graph}/${videoId}?fields=status&access_token=${encodeURIComponent(ctx.accessToken)}`,
+          {},
+          parseMetaRateLimit,
+        );
+        durum = res.data.status?.video_status;
+      } catch (err) {
+        const mesaj = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Video durumu okunamadı (${videoId}): ${mesaj}`);
+        return { hazir: false, not: `Videonun hazır olduğu doğrulanamadı: ${mesaj}` };
+      }
+
+      if (durum === 'ready') return { hazir: true, not: null };
+      if (durum === 'error') {
+        // İŞLEME HATASI KALICI: aynı dosyayı tekrar beklemek bir şeyi
+        // değiştirmiyor ve kullanıcı sebebini bilmeli.
+        throw new PlatformApiError(
+          'meta',
+          'permanent',
+          'Meta videoyu işleyemedi. Dosya bozuk olabilir ya da biçim desteklenmiyor.',
+        );
+      }
+
+      await new Promise((r) => setTimeout(r, bekleme));
+      // ÜSTEL GERİ ÇEKİLME: iki saniyede bir sormak, uzun videoda onlarca
+      // gereksiz çağrı demek.
+      bekleme = Math.min(bekleme * 2, 15_000);
+    }
+
+    return {
+      hazir: false,
+      not: 'Video hâlâ işleniyor. Yayın denenebilir; Meta hazır değilse kendi mesajıyla reddeder.',
+    };
+  }
+
+  /**
    * Taslaktan tam reklam: kampanya + ad set + kreatif + reklam.
    *
    * SIRA VE DURUMLAR ÖNEMLİ. Kampanya PAUSED açılıyor, en sonda ACTIVE'e
@@ -3796,6 +3916,40 @@ function buildCreativeSpec(
    * doğru alan denenip Ads Manager'dan formun gerçekten bağlandığı
    * doğrulanmalı; ondan sonra bu kısıt kalkabilir.
    */
+  /*
+   * ═══ VİDEO EN ÖNDE ═══
+   *
+   * Video varsa kreatif `video_data` kuruyor ve görsel yolu HİÇ
+   * çalışmıyor: Meta tek bir kreatifte hem video hem görsel kabul etmiyor
+   * ve ikisini birden göndermek "Invalid parameter" ile dönüyor.
+   *
+   * `image_url` VERİLMİYOR ve bu bilinçli: küçük resmi Meta videodan
+   * kendisi üretiyor. Üretmek için ayrı bir uç (`/{video_id}/thumbnails`)
+   * var ama o uç Meta'nın reklam videosu kılavuzunda belgelenmiyor;
+   * belgelenmemiş bir uçtan okunan adresi kreatife yazmak, bir gün sessizce
+   * küçük resimsiz reklam üretmek olurdu. Meta'nın kendi seçimi bilinen yol.
+   */
+  if (req.video) {
+    return {
+      object_story_spec: JSON.stringify({
+        page_id: req.pageExternalId,
+        video_data: {
+          video_id: req.video.videoId,
+          message: req.primaryText,
+          ...(req.headline ? { title: req.headline } : {}),
+          ...(req.description ? { link_description: req.description } : {}),
+          call_to_action: {
+            type: req.spec.callToAction,
+            value:
+              req.spec.destinationType === 'WHATSAPP'
+                ? { app_destination: 'WHATSAPP' }
+                : { link },
+          },
+        },
+      }),
+    };
+  }
+
   if (req.images.length <= 1 || leadFormId) {
     // Kare her zaman ilk sırada (`ad-publisher` sıralıyor), yani çok görsel
     // yüklenmiş bir form kampanyasında akışa uygun olan seçiliyor.
@@ -3856,6 +4010,16 @@ function buildCreativeSpec(
  * yazma için ikinci bir izin gerektiğinde onun izin ekranına eklenmesini de
  * zorunlu kılardı — istenmeyen bir bağ.
  */
+/**
+ * VİDEO İŞLENMESİ İÇİN ÜST SINIR.
+ *
+ * Bir dakikalık reklam videosunun işlenmesi saniyeler sürüyor. İki dakika,
+ * yavaş bir günde bile fazlasıyla yeterli; daha uzun beklemek kullanıcıyı
+ * ekranda tutmak demek ve sınıra takılmak "başarısız" değil "hazır
+ * diyemedik" anlamına geliyor.
+ */
+const VIDEO_ISLEME_SINIRI_MS = 120_000;
+
 const WRITE_SCOPES = ['ads_management'] as const;
 
 /**

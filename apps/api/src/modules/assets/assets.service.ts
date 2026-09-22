@@ -3,6 +3,10 @@ import type { AssetPlatform } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
 import {
   ACCEPTED_MIME,
+  ACCEPTED_VIDEO_MIME,
+  MAX_VIDEO_BYTES,
+  MAX_VIDEO_SECONDS,
+  videoMu,
   ASSET_KINDS,
   ASSET_KIND_META,
   MAX_IMAGE_BYTES,
@@ -18,6 +22,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { TxLike } from '../rules/rules.service';
 import { AssetStorageService } from '../ad-builder/asset-storage.service';
 import { probeImage } from '../ad-builder/image-probe';
+import { probeVideo } from '../ad-builder/video-probe';
 
 /**
  * Varlık arşivi — müşteri bazlı görsel kütüphanesi.
@@ -152,23 +157,68 @@ export class AssetsService {
       name?: string;
     },
   ): Promise<AssetUploadResult> {
-    if (!(ACCEPTED_MIME as readonly string[]).includes(params.mimeType)) {
-      throw new BadRequestException('Yalnızca JPEG ve PNG yüklenebiliyor.');
-    }
-    if (params.bytes.length > MAX_IMAGE_BYTES) {
-      throw new BadRequestException(
-        `Dosya çok büyük (${Math.round(params.bytes.length / 1024 / 1024)} MB). ` +
-          `En fazla ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`,
-      );
+    /*
+     * ═══ VİDEO AYRI YOLDAN GEÇİYOR ═══
+     *
+     * Biçim listesi, boyut sınırı ve ölçüm yöntemi videoda farklı. Tek bir
+     * yolda toplamak, logo yüklerken MP4 kabul etmek demekti: kullanıcı
+     * yanlış kutuya video bırakır, sistem onu logo olarak kaydeder ve hata
+     * ancak Google kampanyası kurulurken çıkar.
+     */
+    const video = videoMu(params.kind);
+
+    if (video) {
+      if (!(ACCEPTED_VIDEO_MIME as readonly string[]).includes(params.mimeType)) {
+        throw new BadRequestException('Video olarak yalnızca MP4 ve MOV yüklenebiliyor.');
+      }
+      if (params.bytes.length > MAX_VIDEO_BYTES) {
+        throw new BadRequestException(
+          `Video çok büyük (${Math.round(params.bytes.length / 1024 / 1024)} MB). ` +
+            `En fazla ${MAX_VIDEO_BYTES / 1024 / 1024} MB.`,
+        );
+      }
+    } else {
+      if (!(ACCEPTED_MIME as readonly string[]).includes(params.mimeType)) {
+        throw new BadRequestException('Yalnızca JPEG ve PNG yüklenebiliyor.');
+      }
+      if (params.bytes.length > MAX_IMAGE_BYTES) {
+        throw new BadRequestException(
+          `Dosya çok büyük (${Math.round(params.bytes.length / 1024 / 1024)} MB). ` +
+            `En fazla ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`,
+        );
+      }
     }
 
-    const probe = probeImage(params.bytes);
-    if (!probe.ok) {
+    let info: { width: number; height: number };
+
+    if (video) {
+      const vp = probeVideo(params.bytes);
+      // Sebep `probeVideo` içinde yazılı ("üstverisi okunamadı", "MP4 değil");
+      // genel bir hataya çevirmek teşhisi kullanıcıdan saklamak olurdu.
+      if (!vp.ok) throw new BadRequestException(vp.reason);
+
+      /*
+       * SÜRE SINIRI GİRİŞTE, YAYINDA DEĞİL.
+       *
+       * Uzun bir videoyu kabul edip Meta'nın reddetmesini beklemek,
+       * kullanıcının 200 MB yükleyip kampanyayı kurup en sonda hata
+       * görmesi demek. `null` süre ENGELLEMİYOR: ölçemediğimiz bir şeyi
+       * gerekçe yapmak, geçerli bir videoyu reddetmek olurdu.
+       */
+      if (vp.info.durationSec !== null && vp.info.durationSec > MAX_VIDEO_SECONDS) {
+        throw new BadRequestException(
+          `Video ${Math.round(vp.info.durationSec)} saniye. ` +
+            `Reklam videosu en fazla ${MAX_VIDEO_SECONDS} saniye olmalı.`,
+        );
+      }
+      info = vp.info;
+    } else {
+      const probe = probeImage(params.bytes);
       // `probeImage` sebebi yazıyor ("PNG dosyası bozuk görünüyor"); onu
       // aynen geçirmek, kullanıcıya genel bir hata vermekten iyi.
-      throw new BadRequestException(probe.reason);
+      if (!probe.ok) throw new BadRequestException(probe.reason);
+      info = probe.info;
     }
-    const info = probe.info;
 
     /**
      * ALT SINIR TÜRE GÖRE.

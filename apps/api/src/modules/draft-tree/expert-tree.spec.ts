@@ -84,6 +84,8 @@ beforeAll(async () => {
     { getAccessToken: async () => 'token' } as never,
     { acquire: async () => ({ allowed: true, usagePercent: 5 }), record: async () => {} } as never,
     { ensureExternalRef } as never,
+    // VARLIK OKUYUCU — yalnızca video yolunda kullanılıyor.
+    {} as never,
   );
 });
 

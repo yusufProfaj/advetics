@@ -20,8 +20,13 @@ import type { AssetPlatform } from './asset-routing.schema';
 // Tür
 // -----------------------------------------------------------------------------
 
-export const ASSET_KINDS = ['image', 'logo'] as const;
+export const ASSET_KINDS = ['image', 'logo', 'video'] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
+
+/** Türün dosyası video mu — arşiv, önizleme ve yayın yolları buna bakıyor. */
+export function videoMu(kind: AssetKind): boolean {
+  return kind === 'video';
+}
 
 export const ASSET_KIND_META: Record<
   AssetKind,
@@ -44,7 +49,72 @@ export const ASSET_KIND_META: Record<
      */
     minEdge: 128,
   },
+  video: {
+    label: 'Video',
+    hint: 'Reklamda oynatılacak video. MP4 ya da MOV.',
+    /**
+     * VİDEODA ALT SINIR 120 PİKSEL.
+     *
+     * Meta reklam videosunda en kısa kenar için 120 piksel istiyor; görselin
+     * 300'lük sınırını uygulamak, platformun kabul ettiği bir videoyu
+     * reddetmek olurdu.
+     */
+    minEdge: 120,
+  },
 };
+
+/**
+ * VİDEO BİÇİMLERİ — GÖRSELDEN AYRI LİSTE.
+ *
+ * Tek bir listede toplamak, logo yüklerken MP4 kabul etmek demekti: kullanıcı
+ * yanlış kutuya video bırakır, sistem onu logo olarak kaydeder ve hata ancak
+ * Google kampanyası kurulurken çıkar.
+ */
+export const ACCEPTED_VIDEO_MIME = ['video/mp4', 'video/quicktime'] as const;
+
+/**
+ * VİDEO ÜST SINIRI — GÖRSELDEN YÜKSEK.
+ *
+ * Meta 4 GB'a kadar kabul ediyor ama bu sunucu 11 siteyle paylaşılıyor ve
+ * dosya İSTEK BOYUNCA BELLEKTE duruyor (`FileInterceptor` bellekte
+ * tutuyor). 200 MB, bir dakikalık 1080p reklam videosu için fazlasıyla
+ * yeterli ve paylaşımlı makinede güvenli.
+ */
+export const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+
+/**
+ * VİDEO SÜRE ÜST SINIRI — SANİYE.
+ *
+ * Meta teknik olarak 241 dakikaya kadar kabul ediyor ama akışta izlenen
+ * reklam videosu 15-60 saniye; daha uzunu yüklemek kullanıcının bekleyeceği
+ * bir yükleme ve izlenmeyecek bir reklam demek. Sınır GİRİŞTE söyleniyor,
+ * yayın anında değil.
+ */
+export const MAX_VIDEO_SECONDS = 180;
+
+/**
+ * ═══ VİDEODA ORAN KOVASI YOK, ARALIK VAR ═══
+ *
+ * Görseller üç kovaya oturuyor (kare, 9:16, 16:9) çünkü Meta bir yerleşim
+ * için görsel bulamazsa reklamı orada hiç göstermiyor: eksik kova = kapalı
+ * yerleşim. Videoda öyle değil, TEK video bütün yerleşimlere gidiyor ve Meta
+ * onu yerleşim başına kendisi kırpıyor. Kabul ettiği aralık 9:16 ile 1.91:1
+ * arasında.
+ *
+ * Kovayı videoya da uygulamak, akışın EN YAYGIN video oranını (4:5 = 0,8)
+ * seçilemez yapıyordu: hiçbir kovaya %8 toleransla girmiyor, tıklanamıyor ve
+ * altındaki kaçış yolu ("kırpıp kullan") görsel kırpıcısına gidiyor — yani
+ * videoda hiç çalışmıyor. Kullanıcı dosyayı yüklüyor, karşısında soluk bir
+ * kutu buluyor ve yapacak bir şey yok.
+ */
+export const VIDEO_ORAN_ALT = 9 / 16;
+export const VIDEO_ORAN_UST = 1.91;
+
+export function videoOraniUygun(width: number, height: number): boolean {
+  if (width <= 0 || height <= 0) return false;
+  const oran = width / height;
+  return oran >= VIDEO_ORAN_ALT - 0.01 && oran <= VIDEO_ORAN_UST + 0.01;
+}
 
 // -----------------------------------------------------------------------------
 // Kayıt

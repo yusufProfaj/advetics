@@ -53,7 +53,7 @@ describe('görsel bu ekrandan yükleniyor', () => {
      * İkinci bir yükleme yolu, mükerrer kontrolünü ve boyut sınırını ikinci
      * kez yazmak olurdu; biri güncellenmediğinde aynı dosya iki kayıt açar.
      */
-    expect(KAYNAK).toContain('`${API_URL}/assets?clientId=${clientId}&kind=image`');
+    expect(KAYNAK).toContain('`${API_URL}/assets?clientId=${clientId}&kind=${kind}`');
   });
 
   it('KRİTİK: yüklenen görsel KENDİLİĞİNDEN seçiliyor', () => {
@@ -198,5 +198,60 @@ describe('yapay zekâ GÖRSELLERE BAKIYOR', () => {
   it('düğmenin altındaki cümle görsel seçilince DEĞİŞİYOR', () => {
     // Kullanıcı görsele bakıp bakmadığını bilmeli.
     expect(KAYNAK).toContain('Seçtiğin görsellere bakarak yazar');
+  });
+});
+
+describe('VİDEO AYNI ADIMDAN YÜKLENİYOR', () => {
+  /*
+   * Ayrı bir sekmeye ya da ayrı bir kampanya tipine koymak, kullanıcıyı
+   * "videolu reklam nasıl veriliyor" diye aratırdı. Aynı adım, iki düğme.
+   */
+  it('KRİTİK: video düğmesi var ve doğru türle yüklüyor', () => {
+    expect(KAYNAK).toContain("accept=\"video/mp4,video/quicktime\"");
+    expect(KAYNAK).toContain("void gorselYukle(e.target.files, 'video')");
+  });
+
+  it('KRİTİK: yükleme ucu TÜRÜ parametre alıyor — ikinci bir yol yok', () => {
+    // Video için ayrı bir uç yazmak, mükerrer kontrolünü ve boyut sınırını
+    // ikinci kez yazmak olurdu.
+    expect(KAYNAK).toContain("kind: 'image' | 'video' = 'image'");
+  });
+
+  it('KRİTİK: VİDEO İLE GÖRSEL BİR ARADA SEÇİLEMİYOR', () => {
+    /*
+     * Meta tek kreatifte ikisini kabul etmiyor ve ikisini birden göndermek
+     * "Invalid parameter" ile dönüyor. Yayın anında hata vermek yerine
+     * SEÇİM ANINDA diğeri bırakılıyor — doğrulama kullanım anında değil
+     * giriş anında.
+     */
+    expect(KAYNAK).toContain('const secilenVideo = videoMu(a.kind);');
+    expect(KAYNAK).toContain('return secilenVideo ? [a.id] : [...kalan, a.id];');
+  });
+
+  it('KRİTİK: video `<video>` ile çiziliyor — `<img>` ile değil', () => {
+    /*
+     * Sunucuda küçük resim üretmek ffmpeg demekti ve paylaşımlı VPS'e
+     * sistem ikilisi kurmak yasak. Tarayıcı ilk kareyi kendisi gösteriyor.
+     */
+    expect(KAYNAK).toContain('{video ? (');
+    expect(KAYNAK).toContain('preload="metadata"');
+  });
+
+  it('KRİTİK: VİDEO ORAN KOVASINA SOKULMUYOR', () => {
+    /*
+     * Görsel üç kovaya oturmak zorunda (eksik kova = kapalı yerleşim), video
+     * ise bir ARALIĞA giriyor. Aynı kuralı ikisine birden uygulamak akışın en
+     * yaygın video oranını (4:5) seçilemez yapıyordu ve altındaki kaçış yolu
+     * görsel kırpıcısına gidiyor — videoda hiç çalışmıyor.
+     */
+    expect(KAYNAK).toContain('videoOraniUygun(a.width, a.height)');
+    expect(KAYNAK).toContain('matchRatio(a.width, a.height) !== null');
+    expect(KAYNAK).toContain('disabled={!uygun}');
+  });
+
+  it('KRİTİK: VİDEODA KIRPMA DÜĞMESİ YOK', () => {
+    // Kırpıcı görsel kırpıyor; videoda basıldığında yapacağı bir şey yok ve
+    // çalışmayan bir düğme kullanıcıyı olmayan bir çözüme gönderir.
+    expect(KAYNAK).toContain('{!video && (');
   });
 });

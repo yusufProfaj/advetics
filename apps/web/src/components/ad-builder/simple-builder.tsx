@@ -1,19 +1,20 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CAMPAIGN_GOALS,
   GOAL_META,
   GOAL_PLATFORM_SUPPORT,
   matchRatio,
+  type AssetKind,
   type AssetRecord,
   type CampaignGoal,
   type CreativeRecord,
   type DraftGroupRecord,
   type PublishCheck,
 } from '@advetics/shared';
-import { platformKisaAdi } from '@advetics/shared';
+import { platformKisaAdi, videoMu, videoOraniUygun } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { CoveragePanel } from './coverage-panel';
 import { Sihirbaz, type SihirbazAdimi } from './sihirbaz';
@@ -187,9 +188,22 @@ export function SimpleAdBuilder({
     return [...uretilenler.filter((a) => !arsivKimlikleri.has(a.id)), ...libraryAssets];
   }, [libraryAssets, uretilenler]);
 
-  const uymayanSayisi = gosterilen.filter(
-    (a) => matchRatio(a.width, a.height) === null,
-  ).length;
+  /**
+   * SEÇİLEBİLİRLİK TÜRE GÖRE. Görsel üç orana oturmak zorunda (eksik kova =
+   * kapalı yerleşim), video ise bir ARALIĞA giriyor ve Meta yerleşim başına
+   * kendisi kırpıyor. Aynı kuralı ikisine birden uygulamak 4:5 videoyu
+   * seçilemez yapıyordu ve altındaki "kırpıp kullan" görsel kırpıcısına
+   * gidiyor, yani videoda kaçış yolu da yoktu.
+   */
+  const secilebilir = useCallback(
+    (a: { kind: AssetKind; width: number; height: number }) =>
+      videoMu(a.kind)
+        ? videoOraniUygun(a.width, a.height)
+        : matchRatio(a.width, a.height) !== null,
+    [],
+  );
+
+  const uymayanSayisi = gosterilen.filter((a) => !secilebilir(a)).length;
 
   /**
    * ═══ GÖRSEL BU EKRANDAN YÜKLENİYOR ═══
@@ -237,7 +251,7 @@ export function SimpleAdBuilder({
     };
   }, [goal, pageId]);
 
-  async function gorselYukle(files: FileList | null): Promise<void> {
+  async function gorselYukle(files: FileList | null, kind: 'image' | 'video' = 'image'): Promise<void> {
     if (!files || files.length === 0) return;
     setYukleniyor(true);
     setYuklemeNotu(null);
@@ -252,7 +266,7 @@ export function SimpleAdBuilder({
       try {
         // `apiFetch` JSON gövdesi kuruyor; multipart için doğrudan fetch.
         // Content-Type ELLE VERİLMİYOR: tarayıcı boundary'yi kendisi ekliyor.
-        const res = await fetch(`${API_URL}/assets?clientId=${clientId}&kind=image`, {
+        const res = await fetch(`${API_URL}/assets?clientId=${clientId}&kind=${kind}`, {
           method: 'POST',
           credentials: 'include',
           body: form,
@@ -561,10 +575,35 @@ export function SimpleAdBuilder({
               />
               {yukleniyor ? 'Yükleniyor…' : 'Bilgisayardan görsel yükle'}
             </label>
-            {/* YÜKLENEN GÖRSEL KENDİLİĞİNDEN SEÇİLİYOR: yükleyip bir de
+            {/*
+              ═══ VİDEO AYNI ADIMDAN ═══
+
+              Ayrı bir sekmeye ya da ayrı bir kampanya tipine koymak,
+              kullanıcıyı "videolu reklam nasıl veriliyor" diye aratırdı.
+              Aynı adım, iki düğme.
+            */}
+            <label
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken focus-within:ring-2 focus-within:ring-brand ${
+                yukleniyor ? 'pointer-events-none opacity-50' : ''
+              }`}
+            >
+              <input
+                type="file"
+                accept="video/mp4,video/quicktime"
+                className="hidden"
+                disabled={yukleniyor}
+                onChange={(e) => {
+                  void gorselYukle(e.target.files, 'video');
+                  e.target.value = '';
+                }}
+              />
+              Video yükle
+            </label>
+            {/* YÜKLENEN DOSYA KENDİLİĞİNDEN SEÇİLİYOR: yükleyip bir de
                 listeden bulup tıklamak gereksiz bir adım. */}
             <span className="text-[11px] text-ink-muted">
-              Yüklenen görsel arşive de eklenir ve kendiliğinden seçilir.
+              Yüklenen dosya arşive de eklenir ve kendiliğinden seçilir. Video ile görsel
+              aynı reklamda kullanılamıyor; video seçersen görseller bırakılır.
             </span>
             {yuklemeNotu && (
               <span className="text-[11px] text-ok-strong">{yuklemeNotu}</span>
@@ -580,55 +619,99 @@ export function SimpleAdBuilder({
             <>
               <ul className="grid gap-2 sm:grid-cols-6">
                 {gosterilen.map((a) => {
+                  const video = videoMu(a.kind);
                   const oran = matchRatio(a.width, a.height);
+                  const uygun = secilebilir(a);
                   const secili = assetIds.includes(a.id);
                   return (
                     <li key={a.id}>
                       <button
                         type="button"
-                        disabled={oran === null}
+                        disabled={!uygun}
                         onClick={() =>
-                          setAssetIds((prev) =>
-                            prev.includes(a.id)
-                              ? prev.filter((x) => x !== a.id)
-                              : [...prev, a.id],
-                          )
+                          /*
+                            ═══ VİDEO VE GÖRSEL BİR ARADA SEÇİLEMİYOR ═══
+
+                            Meta tek kreatifte ikisini kabul etmiyor ve
+                            ikisini birden göndermek "Invalid parameter" ile
+                            dönüyor. Kullanıcıya yayın anında hata vermek
+                            yerine SEÇİM ANINDA diğerini bırakıyoruz —
+                            doğrulama kullanım anında değil giriş anında.
+                          */
+                          setAssetIds((prev) => {
+                            if (prev.includes(a.id)) return prev.filter((x) => x !== a.id);
+                            const secilenVideo = videoMu(a.kind);
+                            const kalan = prev.filter((id) => {
+                              const o = gosterilen.find((x) => x.id === id);
+                              return o ? videoMu(o.kind) === secilenVideo : false;
+                            });
+                            // VİDEO TEK: ikinci bir video seçmek, hangisinin
+                            // oynatılacağını belirsiz bırakırdı.
+                            return secilenVideo ? [a.id] : [...kalan, a.id];
+                          })
                         }
                         title={
-                          oran
+                          uygun
                             ? `${a.name} · ${a.width}×${a.height}`
                             : `${a.name} · ${a.width}×${a.height} — bu oran Meta reklamında kullanılamıyor`
                         }
                         className={`block w-full overflow-hidden rounded-lg border-2 bg-surface-sunken transition ${
                           secili
                             ? 'border-brand'
-                            : oran
+                            : uygun
                               ? 'border-transparent hover:border-line'
                               : 'cursor-not-allowed border-transparent opacity-35'
                         }`}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {/*
+                          VİDEO `<video>` İLE ÇİZİLİYOR, `<img>` İLE DEĞİL.
+                          Tarayıcı ilk kareyi kendisi gösteriyor; sunucuda
+                          küçük resim üretmek ffmpeg demekti ve bu paylaşımlı
+                          VPS'e sistem ikilisi kurmak yasak (CLAUDE.md §1).
+
+                          `preload="metadata"`: bütün dosyayı indirmeden ilk
+                          kare geliyor. `preload="auto"` altı videolu bir
+                          arşivde yüzlerce megabayt indirirdi.
+                        */}
+                        {video ? (
+                          <video
+                            src={`${API_URL}${a.previewUrl}`}
+                            className="aspect-square w-full bg-black object-contain"
+                            preload="metadata"
+                            muted
+                            playsInline
+                          />
+                        ) : (
+                        /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={`${API_URL}${a.previewUrl}`}
                           alt={a.name}
                           className="aspect-square w-full object-contain"
                           loading="lazy"
                         />
+                        )}
                         <span className="block truncate px-1 pb-1 text-[10px] text-ink-muted">
-                          {secili ? `✓ ${assetIds.indexOf(a.id) + 1}.` : oran ? a.name : 'oran uymuyor'}
+                          {secili ? `✓ ${assetIds.indexOf(a.id) + 1}.` : uygun ? a.name : 'oran uymuyor'}
                         </span>
                       </button>
 
                       {/* KIRPMA HER GÖRSELDE VAR, yalnızca uymayanlarda değil.
                           Kare bir fotoğraftan dikey üretmek de anlamlı: dikey
-                          görsel yoksa Hikâyeler yerleşimi hiç açılmıyor. */}
-                      <button
-                        type="button"
-                        onClick={() => setCropSource(a)}
-                        className="mt-0.5 w-full text-[10px] text-brand-strong underline"
-                      >
-                        {oran ? 'kırp' : 'kırpıp kullan'}
-                      </button>
+                          görsel yoksa Hikâyeler yerleşimi hiç açılmıyor.
+
+                          VİDEODA YOK: kırpıcı görsel kırpıyor ve videoya
+                          basıldığında yapacağı bir şey yok. Çalışmayan bir
+                          düğme göstermek, kullanıcıyı olmayan bir çözüme
+                          gönderir. */}
+                      {!video && (
+                        <button
+                          type="button"
+                          onClick={() => setCropSource(a)}
+                          className="mt-0.5 w-full text-[10px] text-brand-strong underline"
+                        >
+                          {oran ? 'kırp' : 'kırpıp kullan'}
+                        </button>
+                      )}
                     </li>
                   );
                 })}
@@ -643,7 +726,7 @@ export function SimpleAdBuilder({
                 {libraryTotal > libraryAssets.length && ` (arşivde toplam ${libraryTotal})`}.
                 {uymayanSayisi > 0 &&
                   ` Soluk görünen ${uymayanSayisi} tanesi Meta reklamına uymayan oranlarda — ` +
-                    'altlarındaki "kırpıp kullan" ile üç orana çevirebilirsin.'}
+                    'görselleri altlarındaki "kırpıp kullan" ile çevirebilirsin.'}
               </p>
 
               {cropSource && (
