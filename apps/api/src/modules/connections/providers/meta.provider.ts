@@ -232,6 +232,50 @@ export class MetaProvider implements IAdPlatformProvider {
     'read_insights',
     'instagram_basic',
     'instagram_manage_insights',
+    /**
+     * `leads_retrieval` — POTANSİYEL MÜŞTERİ KAYITLARI. Listede YOKTU.
+     *
+     * Kod bu izni üç yerde şart koşuyor ve kullanıcıya AÇIKÇA "bağlantıyı
+     * `leads_retrieval` izniyle yeniden kur" diyor (`lead-sync.service.ts`,
+     * `leads.service.ts`, `provider.types.ts#fetchLead`). Ama izin ekranı onu
+     * HİÇ İSTEMİYORDU: `buildAuthorizeUrl` yalnızca bu listeyi gönderiyor.
+     *
+     * Yani tavsiye ÇALIŞAMAZ bir tavsiyeydi. Kullanıcı "yeniden yetkilendir"e
+     * basıyor, Meta ekranı gösteriyor, izin verilmiyor çünkü istenmiyor,
+     * kayıtlar yine gelmiyor ve ekranda AYNI cümle duruyor. Sonsuz döngü ve
+     * hiçbir yerde tek satır hata yok.
+     */
+    'leads_retrieval',
+    /**
+     * `pages_manage_ads` — kayıt çekmenin İKİNCİ yarısı.
+     *
+     * CANLIDA DOĞRULANMADI, Meta'nın Lead Ads belgesindeki izin listesinden
+     * alındı: sayfa token'ıyla `/{form-id}/leads` okumak `leads_retrieval`
+     * yanında bunu da istiyor. Tek başına `leads_retrieval` eklemek, yarısı
+     * eksik bir izin seti yüzünden aynı arızayı ikinci kez teşhis ettirirdi.
+     *
+     * Yanılıyorsak bedeli SIFIR: izin ekranında bir satır fazla görünür,
+     * hiçbir kod yolu bu kapsama bakmıyor. Doğruysak bedeli bir tur.
+     */
+    'pages_manage_ads',
+    /**
+     * `ads_mcp_management` — META'NIN KENDİ ADS MCP SUNUCUSU.
+     *
+     * Bu izin Advetics'in HİÇBİR kod yolunu beslemiyor ve beslemeyecek:
+     * sağlayıcı Graph'e düz REST atıyor. Yaptığı tek şey, kullanıcı token'ına
+     * bu kapsamı EKLEMEK — Meta'nın barındırdığı Ads MCP sunucusu token'da
+     * onu görmezse çağrıyı reddediyor. Yani burada olması, token'ı bir yapay
+     * zekâ istemcisine (Claude vb.) verip reklam hesaplarını oradan
+     * yönetebilmek için.
+     *
+     * UYGULAMA PANELİNDE DURUMU "Ready for testing": yani izin YALNIZCA
+     * uygulamada rolü olan kişilere (yönetici, geliştirici, test kullanıcısı)
+     * veriliyor. Rolü olmayan bir müşteri yetkilendirdiğinde Meta izni sessizce
+     * ATLIYOR — hata yok, `granted_scopes` içinde yok. Bu yüzden `required`
+     * DEĞİL: çekirdeğe koymak, App Review onaylayana kadar bütün müşteri
+     * bağlantılarını `needs_reauth` göstermek olurdu.
+     */
+    'ads_mcp_management',
   ] as const;
 
   /** İzin ekranında istenen tüm scope'lar. */

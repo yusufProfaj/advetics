@@ -10,6 +10,7 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { PlatformLogo, adAccountKanali } from '@/components/platform-logo';
+import { eksikIzinMetni } from '@/lib/izin-etiketleri';
 
 /**
  * ═══ KANAL KARTLARI — BAĞLANMAK VE BAĞLANTININ DURUMU AYNI YERDE ═══
@@ -316,9 +317,11 @@ function BaglantiSatiri({
 
       {baglanti.missingScopes.length === 0 && baglanti.missingOptionalScopes.length > 0 && (
         /* Bağlantı ÇALIŞIYOR, yalnızca bir özellik kapalı. Bunu hata gibi
-           göstermek kullanıcıyı olmayan bir arızayı aramaya gönderir. */
+           göstermek kullanıcıyı olmayan bir arızayı aramaya gönderir.
+           HANGİ özelliğin kapalı olduğu yazılıyor: sabit bir cümle listeye
+           ikinci bir izin girdiği anda yanlış özelliği söylemeye başlıyor. */
         <p className="mt-1.5 text-[11px] text-ink-muted">
-          Akıllı Boost için ek izin bekliyor. Bağlantının geri kalanı çalışıyor.
+          {eksikIzinMetni(baglanti.missingOptionalScopes)}
         </p>
       )}
 
