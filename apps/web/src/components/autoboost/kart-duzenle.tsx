@@ -1,9 +1,9 @@
 'use client';
 
-import { hedeflemeLokasyonu } from '@advetics/shared';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   autoBoostQueueOverrideSchema,
+  hedeflemeLokasyonu,
   type AutoBoostQueueItemRecord,
   type AutoBoostQueueOverride,
   type GeoLocationOption,
@@ -11,13 +11,21 @@ import {
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
 
 /**
- * ═══ SADECE BU GÖNDERİ İÇİN ═══
+ * ═══ SADECE BU GÖNDERİ İÇİN — AYRI PENCEREDE DEĞİL, KARTIN ÜSTÜNDE ═══
  *
- * Ön ayar workspace geneli: "bu müşterinin her gönderisi şu bütçeyle, şu
- * kitleye". Tek bir gönderi bazen farklı davranmayı hak ediyor — kampanya
- * dönemindeki bir duyuru, yalnızca bir şehre yapılan bir ilan.
+ * Bu düzenleme bir süre modal penceredeydi ve kullanıcının tarifi şuydu:
+ * *"düzenle diyince ayrı bir pop up açılması yerine konum yaş cinsiyet
+ * yerleri düzenlenebilir bir moda geçmesi daha doğru olur"*. Haklı sebebi
+ * var: pencere kartın ÜSTÜNÜ örtüyordu, yani kullanıcı neyi düzenlediğini —
+ * gönderinin görselini, metnini, tarihini — düzenlerken göremiyordu. Karar
+ * "şu gönderiye şu kitleye şu bütçeyle" ve üçünden biri ekrandan kalkınca
+ * karar yarım kalıyor.
  *
- * ═══ PENCERE ÖN AYARI DEĞİŞTİRMİYOR ═══
+ * Bugün alanlar DEĞERİN DURDUĞU YERDE açılıyor: hedefleme özeti hedefleme
+ * denetimlerine, bütçe okuması bütçe alanlarına dönüşüyor. Kart yerinde
+ * kalıyor.
+ *
+ * ═══ ÖN AYAR DEĞİŞMİYOR ═══
  *
  * Kaydeden bir uç yok: değerler onay isteğiyle birlikte gidiyor ve yalnızca
  * o kartın reklamına yazılıyor. Bunu ekranda YAZMAK zorundayız — "düzenle"
@@ -27,26 +35,46 @@ import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
  * ALANLAR ÖN AYARDAN DOLU BAŞLIYOR. Boş bir form, kullanıcının hiç
  * dokunmadığı alanları da yeniden düşünmesini isterdi; buradaki iş
  * "varsayılanın bir kısmını değiştir".
- *
- * PENCERE ONAYI DA KENDİSİ VERİYOR ("Bu ayarlarla yayınla"). Ayrı bir
- * "kaydet" adımı, kaydedilecek bir yer olmadığı için yalan olurdu ve
- * kullanıcı kapatınca düzenlemesinin nereye gittiğini bilemezdi.
  */
-export function KartDuzenle({
-  kayit,
-  clientId,
-  onKapat,
-  onYayinla,
-}: {
-  kayit: AutoBoostQueueItemRecord;
-  clientId: string;
-  onKapat: () => void;
-  /** Pencerenin ürettiği ayarlarla onayı çalıştırır. */
-  onYayinla: (override: AutoBoostQueueOverride) => Promise<void>;
-}) {
+export interface KartDuzenleDurumu {
+  kip: 'daily' | 'lifetime';
+  setKip: (v: 'daily' | 'lifetime') => void;
+  tutar: string;
+  setTutar: (v: string) => void;
+  gun: number;
+  setGun: (v: number) => void;
+  kitleId: string | null;
+  setKitleId: (v: string | null) => void;
+  lokasyonlar: GeoLocationOption[];
+  setLokasyonlar: (v: GeoLocationOption[]) => void;
+  yasMin: number;
+  setYasMin: (v: number) => void;
+  yasMax: number;
+  setYasMax: (v: number) => void;
+  cinsiyet: 'all' | 'male' | 'female';
+  setCinsiyet: (v: 'all' | 'male' | 'female') => void;
+  /** Google'da toplam bütçe yok — kip seçeneği orada hiç gösterilmiyor. */
+  gunlukZorunlu: boolean;
+  metaAyar: boolean;
+  onAyarVar: boolean;
+  hata: string | null;
+  /** Doğrulanmış override; geçersizse `null` ve `hata` doluyor. */
+  topla: () => AutoBoostQueueOverride | null;
+}
+
+/**
+ * Düzenleme durumunu kart bileşenine veriyor.
+ *
+ * ═══ NEDEN HOOK, NEDEN TEK BİLEŞEN DEĞİL ═══
+ *
+ * Alanlar kartın İKİ AYRI SÜTUNUNDA açılıyor: hedefleme solda, bütçe sağda.
+ * Tek bir çocuk bileşen ikisini birden kaplayamıyor. Durumu hook'ta tutmak,
+ * iki alan grubunun aynı kaynaktan beslenmesini ve doğrulamanın TEK yerde
+ * kalmasını sağlıyor — iki ayrı kopya doğduğu anda biri şemayı atlardı.
+ */
+export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDurumu {
   const preset = kayit.preset;
-  const metaAyar =
-    preset && preset.settings.platform === 'meta' ? preset.settings : null;
+  const metaAyar = preset && preset.settings.platform === 'meta' ? preset.settings : null;
 
   const [kip, setKip] = useState<'daily' | 'lifetime'>(preset?.budgetMode ?? 'lifetime');
   const [tutar, setTutar] = useState(
@@ -60,13 +88,14 @@ export function KartDuzenle({
       key: l.key,
       type: l.type,
       /*
-       * ÖN AYARDA ETİKET SAKLANMIYOR (yalnızca anahtar + tür): Meta'nın
-       * kendi adı canlıdan geliyor. Anahtarı göstermek, hiçbir şey
-       * göstermemekten iyi — kullanıcı hangi yerin seçili olduğunu
-       * görmeli. Ön ayar formunda da aynı yedek kullanılıyor.
+       * ESKİ ÖN AYARLARDA ETİKET YOK — yalnızca anahtar saklanıyordu ve
+       * şehir anahtarı Meta'nın sayısal kimliği ("3684"). Anahtarı TÜRÜYLE
+       * göstermek, çıplak sayıdan iyi: en azından neyin seçili olduğu
+       * anlaşılıyor. Kullanıcı konumu yeniden seçtiğinde adı da kaydediliyor
+       * ve bir daha bu yedeğe düşmüyor.
        */
-      name: l.key,
-      label: l.key,
+      name: l.label ?? anahtarEtiketi(l.key, l.type),
+      label: l.label ?? anahtarEtiketi(l.key, l.type),
       countryCode: null,
     })),
   );
@@ -75,27 +104,11 @@ export function KartDuzenle({
   const [cinsiyet, setCinsiyet] = useState<'all' | 'male' | 'female'>(
     metaAyar?.genders ?? 'all',
   );
-
-  const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
-  const kutuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onKapat();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onKapat]);
-
-  /*
-   * GOOGLE'DA TOPLAM BÜTÇE YOK — kip seçeneği orada hiç gösterilmiyor.
-   * Bütçe Google'da ayrı bir kaynak ve günlük; seçtirip sunucuda reddetmek,
-   * kullanıcıyı çalışmayan bir seçeneğe davet etmek olurdu.
-   */
   const gunlukZorunlu = kayit.platform === 'google';
 
-  async function yayinla(): Promise<void> {
+  function topla(): AutoBoostQueueOverride | null {
     const override: AutoBoostQueueOverride = {
       budget: { mode: gunlukZorunlu ? 'daily' : kip, amount: tutar.trim(), durationDays: gun },
       ...(metaAyar
@@ -120,235 +133,226 @@ export function KartDuzenle({
     const parsed = autoBoostQueueOverrideSchema.safeParse(override);
     if (!parsed.success) {
       setHata(parsed.error.issues[0]?.message ?? 'Geçersiz değer');
-      return;
+      return null;
     }
-
-    setBusy(true);
     setHata(null);
-    try {
-      await onYayinla(parsed.data);
-    } catch (e) {
-      setHata(e instanceof Error ? e.message : 'İşlem tamamlanamadı.');
-      setBusy(false);
-    }
+    return parsed.data;
   }
 
-  const toplam = hesaplananToplam(gunlukZorunlu ? 'daily' : kip, tutar, gun);
+  return {
+    kip,
+    setKip,
+    tutar,
+    setTutar,
+    gun,
+    setGun,
+    kitleId,
+    setKitleId,
+    lokasyonlar,
+    setLokasyonlar,
+    yasMin,
+    setYasMin,
+    yasMax,
+    setYasMax,
+    cinsiyet,
+    setCinsiyet,
+    gunlukZorunlu,
+    metaAyar: metaAyar !== null,
+    onAyarVar: preset !== null,
+    hata,
+    topla,
+  };
+}
+
+/**
+ * ═══ HEDEFLEME ALANLARI — ÖZETİN DURDUĞU YERDE ═══
+ *
+ * Okuma hâlinde burada "Konum · Yaş · Cinsiyet" özeti duruyor; düzenleme
+ * hâlinde aynı yerde aynı üç şeyin denetimleri açılıyor. Alanların yeri
+ * değişmediği için kullanıcı neyi değiştirdiğini aramıyor.
+ */
+export function HedeflemeAlanlari({
+  d,
+  clientId,
+}: {
+  d: KartDuzenleDurumu;
+  clientId: string;
+}) {
+  if (!d.metaAyar) {
+    /* HEDEFLEME YALNIZCA INSTAGRAM'DA — sebebi yazılı, alan gizli. */
+    return (
+      <p className="rounded-lg border border-line bg-surface-muted px-3 py-2 text-[11px] text-ink-muted">
+        Hedef kitle ve şehir seçimi Instagram kartlarında açık. YouTube tarafında
+        hedefleme kampanya seviyesinde ve bu ekrandan yönetilmiyor.
+      </p>
+    );
+  }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Bu gönderi için ayarlar"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onMouseDown={(e) => {
-        if (!kutuRef.current?.contains(e.target as Node)) onKapat();
-      }}
-    >
-      <div
-        ref={kutuRef}
-        className="flex max-h-[88vh] w-full max-w-lg flex-col rounded-2xl border border-line bg-surface shadow-xl"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-3.5">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-ink">Sadece bu gönderi için</h2>
-            {/* KALICI OLMADIĞI YAZILI — "düzenle" kelimesi kalıcı bir ayar
-                değişikliği gibi okunuyor. */}
-            <p className="mt-0.5 text-[11px] text-ink-muted">
-              Ön ayar değişmiyor; bu ayarlar yalnızca bu karta uygulanıyor.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onKapat}
-            className="shrink-0 text-xs text-ink-muted transition hover:text-ink"
-          >
-            Kapat
-          </button>
+    /*
+      ALAN KUTUSU NÖTR — MARKA RENGİ DEĞİL.
+
+      Düzenleme hâli zaten üç yerde işaretli: kartın halkası, "Düzenleniyor"
+      rozeti ve birincil düğme. Alan kutusunu da markaya boyamak dördüncü bir
+      kırmızı yüzey demekti ve ekranda gözün nereye gideceği belirsizleşiyor —
+      oysa orada okunması gereken şey ALANLARIN KENDİSİ.
+    */
+    <fieldset className="space-y-2.5 rounded-xl border border-line bg-surface-sunken/60 p-3">
+      <legend className="px-1 text-[11px] font-semibold text-ink">Hedef kitle ve şehir</legend>
+
+      {/* AYNI SEÇİCİ ÖN AYAR FORMUNDA DA KULLANILIYOR: ikinci bir kopya
+          doğduğu anda ayrışır ve iki ekran farklı hedefleme kurardı. */}
+      <HedeflemeSecici
+        clientId={clientId}
+        lokasyonlar={d.lokasyonlar}
+        setLokasyonlar={d.setLokasyonlar}
+        kitleId={d.kitleId}
+        setKitleId={d.setKitleId}
+      />
+
+      {!d.kitleId && (
+        <div className="grid gap-2 sm:grid-cols-3">
+          <label className="block">
+            <span className="text-[11px] text-ink-muted">Yaş (alt)</span>
+            <input
+              type="number"
+              min={13}
+              max={65}
+              value={d.yasMin}
+              onChange={(e) => d.setYasMin(Number(e.target.value))}
+              className={ALAN}
+            />
+          </label>
+          <label className="block">
+            <span className="text-[11px] text-ink-muted">Yaş (üst)</span>
+            <input
+              type="number"
+              min={13}
+              max={65}
+              value={d.yasMax}
+              onChange={(e) => d.setYasMax(Number(e.target.value))}
+              className={ALAN}
+            />
+          </label>
+          <label className="block">
+            <span className="text-[11px] text-ink-muted">Cinsiyet</span>
+            <select
+              value={d.cinsiyet}
+              onChange={(e) => d.setCinsiyet(e.target.value as 'all' | 'male' | 'female')}
+              className={ALAN}
+            >
+              <option value="all">Hepsi</option>
+              <option value="female">Kadın</option>
+              <option value="male">Erkek</option>
+            </select>
+          </label>
         </div>
-
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          {!preset && (
-            /* ÖN AYAR YOKSA DÜZENLENECEK BİR TABAN DA YOK. Boş bir form
-               göstermek, kaydedilemeyecek bir şeyi doldurtmak olurdu. */
-            <p className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-xs text-ink">
-              Bu workspace için boost ön ayarı yok. Önce ön ayarı kur; bu
-              pencere onun üstüne yazıyor.
-            </p>
-          )}
-
-          <fieldset className="space-y-3">
-            <legend className="text-xs font-medium text-ink">Bütçe ve süre</legend>
-
-            {!gunlukZorunlu && (
-              <div className="flex gap-2">
-                {(
-                  [
-                    ['lifetime', 'Toplam bütçe'],
-                    ['daily', 'Günlük bütçe'],
-                  ] as const
-                ).map(([k, etiket]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setKip(k)}
-                    aria-pressed={kip === k}
-                    className={`flex-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                      kip === k
-                        ? 'border-brand bg-brand/10 text-brand-strong'
-                        : 'border-line text-ink-muted hover:bg-surface-sunken'
-                    }`}
-                  >
-                    {etiket}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className="text-[11px] text-ink-muted">
-                  {gunlukZorunlu || kip === 'daily' ? 'Günlük tutar (₺)' : 'Toplam tutar (₺)'}
-                </span>
-                <input
-                  inputMode="decimal"
-                  value={tutar}
-                  onChange={(e) => setTutar(e.target.value)}
-                  placeholder="300"
-                  className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[11px] text-ink-muted">Kaç gün</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={gun}
-                  onChange={(e) => setGun(Number(e.target.value))}
-                  className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
-                />
-              </label>
-            </div>
-
-            {/*
-              TOPLAM TAAHHÜT EKRANDA — düğmenin ÜSTÜNDE.
-              Günlük bütçede "kaç para bağlanıyor" sorusunun cevabı çarpım
-              ve onu kullanıcıya yaptırmak, her karardan sonra hesap
-              yaptırmak demekti.
-            */}
-            <p className="text-[11px] text-ink-muted">
-              {toplam === null
-                ? 'Tutar girilince toplam taahhüt burada yazacak.'
-                : gunlukZorunlu || kip === 'daily'
-                  ? `Toplam taahhüt: ${toplam} ₺ (${gun} gün × günlük tutar)`
-                  : `Toplam taahhüt: ${toplam} ₺ · ${gun} güne yayılacak`}
-            </p>
-
-            {gunlukZorunlu && (
-              <p className="text-[11px] text-ink-muted">
-                YouTube tarafında toplam bütçe yok — bütçe kampanya seviyesinde
-                ve günlük.
-              </p>
-            )}
-          </fieldset>
-
-          {metaAyar ? (
-            <fieldset className="space-y-3">
-              <legend className="text-xs font-medium text-ink">Hedef kitle ve şehir</legend>
-
-              {/* AYNI SEÇİCİ ÖN AYAR FORMUNDA DA KULLANILIYOR: ikinci bir
-                  kopya doğduğu anda ayrışır ve iki ekran farklı hedefleme
-                  kurardı. */}
-              <HedeflemeSecici
-                clientId={clientId}
-                lokasyonlar={lokasyonlar}
-                setLokasyonlar={setLokasyonlar}
-                kitleId={kitleId}
-                setKitleId={setKitleId}
-              />
-
-              {!kitleId && (
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <label className="block">
-                    <span className="text-[11px] text-ink-muted">Yaş (alt)</span>
-                    <input
-                      type="number"
-                      min={13}
-                      max={65}
-                      value={yasMin}
-                      onChange={(e) => setYasMin(Number(e.target.value))}
-                      className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-[11px] text-ink-muted">Yaş (üst)</span>
-                    <input
-                      type="number"
-                      min={13}
-                      max={65}
-                      value={yasMax}
-                      onChange={(e) => setYasMax(Number(e.target.value))}
-                      className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-[11px] text-ink-muted">Cinsiyet</span>
-                    <select
-                      value={cinsiyet}
-                      onChange={(e) =>
-                        setCinsiyet(e.target.value as 'all' | 'male' | 'female')
-                      }
-                      className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
-                    >
-                      <option value="all">Hepsi</option>
-                      <option value="female">Kadın</option>
-                      <option value="male">Erkek</option>
-                    </select>
-                  </label>
-                </div>
-              )}
-            </fieldset>
-          ) : (
-            /* HEDEFLEME YALNIZCA INSTAGRAM'DA — sebebi yazılı, alan gizli. */
-            <p className="rounded-lg border border-line bg-surface-muted px-3 py-2 text-[11px] text-ink-muted">
-              Hedef kitle ve şehir seçimi Instagram kartlarında açık. YouTube
-              tarafında hedefleme kampanya seviyesinde ve bu ekrandan
-              yönetilmiyor.
-            </p>
-          )}
-
-          {hata && (
-            <p role="alert" className="text-xs text-danger">
-              {hata}
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between gap-3 border-t border-line px-5 py-3">
-          <button
-            type="button"
-            onClick={onKapat}
-            className="text-xs text-ink-muted transition hover:text-ink"
-          >
-            Vazgeç
-          </button>
-          {/*
-            PENCERE ONAYI DA KENDİSİ VERİYOR. Ayrı bir "kaydet" adımı,
-            kaydedilecek bir yer olmadığı için yalan olurdu.
-          */}
-          <button
-            type="button"
-            disabled={busy || !preset}
-            onClick={() => void yayinla()}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-          >
-            {busy ? 'Yayınlanıyor…' : 'Bu ayarlarla yayınla'}
-          </button>
-        </div>
-      </div>
-    </div>
+      )}
+    </fieldset>
   );
+}
+
+/**
+ * ═══ BÜTÇE ALANLARI — OKUMADAKİ YERİNDE ═══
+ *
+ * Kartın sağ sütununda okuma hâlinde bütçe ve süre yazıyor; düzenleme
+ * hâlinde aynı sütun aynı iki değerin alanlarına dönüşüyor.
+ */
+export function ButceAlanlari({ d }: { d: KartDuzenleDurumu }) {
+  const toplam = hesaplananToplam(d.gunlukZorunlu ? 'daily' : d.kip, d.tutar, d.gun);
+
+  return (
+    <fieldset className="space-y-2.5">
+      <legend className="text-[11px] font-semibold text-ink">Bütçe ve süre</legend>
+
+      {!d.gunlukZorunlu && (
+        <div className="flex gap-1.5">
+          {(
+            [
+              ['lifetime', 'Toplam'],
+              ['daily', 'Günlük'],
+            ] as const
+          ).map(([k, etiket]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => d.setKip(k)}
+              aria-pressed={d.kip === k}
+              className={`flex-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition ${
+                d.kip === k
+                  ? 'border-brand bg-brand/10 text-brand-strong'
+                  : 'border-line text-ink-muted hover:bg-surface-sunken'
+              }`}
+            >
+              {etiket}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <label className="block">
+        <span className="text-[11px] text-ink-muted">
+          {d.gunlukZorunlu || d.kip === 'daily' ? 'Günlük tutar (₺)' : 'Toplam tutar (₺)'}
+        </span>
+        <input
+          inputMode="decimal"
+          value={d.tutar}
+          onChange={(e) => d.setTutar(e.target.value)}
+          placeholder="300"
+          className={ALAN}
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-[11px] text-ink-muted">Kaç gün</span>
+        <input
+          type="number"
+          min={1}
+          max={30}
+          value={d.gun}
+          onChange={(e) => d.setGun(Number(e.target.value))}
+          className={ALAN}
+        />
+      </label>
+
+      {/*
+        TOPLAM TAAHHÜT EKRANDA — düğmenin ÜSTÜNDE.
+        Günlük bütçede "kaç para bağlanıyor" sorusunun cevabı çarpım ve onu
+        kullanıcıya yaptırmak, her karardan sonra hesap yaptırmak demekti.
+      */}
+      <p className="text-[11px] text-ink-muted">
+        {toplam === null
+          ? 'Tutar girilince toplam taahhüt burada yazacak.'
+          : d.gunlukZorunlu || d.kip === 'daily'
+            ? `Toplam taahhüt: ${toplam} ₺ (${d.gun} gün × günlük tutar)`
+            : `Toplam taahhüt: ${toplam} ₺ · ${d.gun} güne yayılacak`}
+      </p>
+
+      {d.gunlukZorunlu && (
+        <p className="text-[11px] text-ink-muted">
+          YouTube tarafında toplam bütçe yok — bütçe kampanya seviyesinde ve günlük.
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
+const ALAN =
+  'mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none transition focus:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand';
+
+/**
+ * Etiketi olmayan lokasyon anahtarı → okunabilir yedek.
+ *
+ * Şehir ve bölge anahtarı Meta'nın sayısal kimliği ("3684") ve ekranda çıplak
+ * hâliyle hiçbir soruyu cevaplamıyordu. Türüyle birlikte göstermek en azından
+ * NEYİN seçili olduğunu söylüyor. Ülke anahtarı zaten okunabilir ("TR").
+ *
+ * KALICI ÇÖZÜM DEĞİL, YEDEK: ad alanı şemaya sonradan eklendi ve eski ön
+ * ayarlarda yok. Kullanıcı konumu yeniden seçtiğinde adı da kaydediliyor.
+ */
+function anahtarEtiketi(key: string, type: 'country' | 'region' | 'city'): string {
+  if (type === 'country') return key;
+  return `${type === 'city' ? 'Şehir' : 'Bölge'} #${key}`;
 }
 
 /**

@@ -13,7 +13,11 @@ import type {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { hedeflemeOzeti } from '@advetics/shared';
 import { formatMoney, formatNumber, formatPercent, formatTarih } from '@/lib/format';
-import { KartDuzenle } from '@/components/autoboost/kart-duzenle';
+import {
+  ButceAlanlari,
+  HedeflemeAlanlari,
+  useKartDuzenle,
+} from '@/components/autoboost/kart-duzenle';
 import { PlatformLogo } from '@/components/platform-logo';
 
 /**
@@ -488,7 +492,16 @@ function Kart({
   onDegisti: () => void;
 }) {
   const [gorselDustu, setGorselDustu] = useState(false);
+  /*
+   * ═══ DÜZENLEME KARTIN ÜSTÜNDE, AYRI PENCEREDE DEĞİL ═══
+   *
+   * Pencere kartın ÜSTÜNÜ örtüyordu: kullanıcı neyi düzenlediğini —
+   * gönderinin görselini, metnini, tarihini — düzenlerken göremiyordu. Karar
+   * "şu gönderiye şu kitleye şu bütçeyle" ve üçünden biri ekrandan kalkınca
+   * karar yarım kalıyor.
+   */
   const [duzenleAcik, setDuzenleAcik] = useState(false);
+  const duzenle = useKartDuzenle(kayit);
   /** Sunucunun kendi cümlesi — "sürdürüldü ama üst seviyede duraklatılmış" gibi. */
   const [not, setNot] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -524,6 +537,19 @@ function Kart({
    * kez sormak istenen akışı bozardı. Ama harcanacak tutar düğmelerin
    * YANINDA yazıyor ve engel varsa düğme açılmıyor.
    */
+  /**
+   * DÜZENLEME AÇIKKEN YAYIN, ALANLARDAN OKUNUYOR.
+   *
+   * Şema panelde de koşuyor ve geçersiz değer düğmeye basıldığında alanın
+   * yanında yazıyor: "yayınla"ya basıp 400 yemek, para harcayan bir düğmede
+   * kullanıcıyı ikinci kez denemeye itiyor.
+   */
+  async function duzenlenmisYayinla(): Promise<void> {
+    const override = duzenle.topla();
+    if (!override) return;
+    await karar(true, override).catch(() => undefined);
+  }
+
   async function karar(approve: boolean, override?: AutoBoostQueueOverride): Promise<void> {
     setBusy(approve ? 'onay' : 'ret');
     setHata(null);
@@ -632,8 +658,17 @@ function Kart({
       sütununu 400 pikselde yanda tutmak, başlığı iki karaktere düşürürdü.
     */
     <article
+      /*
+        DÜZENLENEN KART GÖRÜNÜR ŞEKİLDE AYRILIYOR — ama renkle DEĞİL yalnızca:
+        üstteki rozet "Düzenleniyor" yazıyor. Bir durumu tek başına renge
+        bağlamak, onu göremeyen kullanıcı için o durumun hiç olmaması demek.
+      */
       className={`flex min-w-0 flex-col gap-3 rounded-2xl border p-3 transition sm:flex-row sm:gap-4 sm:p-4 ${
-        yayinda ? 'border-line/70 bg-surface-sunken/40' : 'border-line bg-surface'
+        duzenleAcik
+          ? 'border-brand/50 bg-surface ring-1 ring-brand/20'
+          : yayinda
+            ? 'border-line/70 bg-surface-sunken/40'
+            : 'border-line bg-surface'
       }`}
     >
       {/*
@@ -711,7 +746,13 @@ function Kart({
       {/* ═══ ORTA BÖLGE: HANGİ İÇERİK, HANGİ KARAR ═══ */}
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <DurumRozeti kayit={kayit} />
+          {duzenleAcik ? (
+            <span className="inline-flex shrink-0 items-center rounded-md bg-brand/10 px-1.5 py-0.5 text-[11px] font-medium text-brand-strong ring-1 ring-inset ring-brand/30">
+              Düzenleniyor
+            </span>
+          ) : (
+            <DurumRozeti kayit={kayit} />
+          )}
           {/*
             ROZET HESABIN ADINI TAŞIYOR.
 
@@ -806,8 +847,19 @@ function Kart({
           )}
         </p>
 
-        {/* KİME GİDİYOR — bütçenin yanında, karar verilirken okunuyor. */}
-        <Hedefleme kayit={kayit} />
+        {/*
+          ═══ AYNI YER, İKİ HÂL ═══
+
+          Okuma hâlinde hedefleme ÖZETİ, düzenleme hâlinde aynı üç şeyin
+          DENETİMLERİ. Alanların yeri değişmediği için kullanıcı neyi
+          değiştireceğini aramıyor ve düzenlerken gönderinin kendisini
+          görmeye devam ediyor.
+        */}
+        {duzenleAcik ? (
+          <HedeflemeAlanlari d={duzenle} clientId={clientId} />
+        ) : (
+          <Hedefleme kayit={kayit} />
+        )}
 
         {/* ENGEL SEBEBİ SATIRDA. Düğmeyi kapatıp sebebini söylememek,
             kullanıcıya "çalışmıyor" göstermek olurdu. */}
@@ -856,6 +908,53 @@ function Kart({
           kılıyor.
         */}
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+          {/*
+            ═══ DÜZENLEME HÂLİNDE İKİ DÜĞME ═══
+
+            Ayrı bir "kaydet" adımı yok ve olamaz: kaydedilecek bir yer yok,
+            değerler onay isteğiyle birlikte gidiyor. "Kaydet" yazmak,
+            kullanıcıya ön ayarın değiştiği izlenimini verirdi.
+
+            VAZGEÇ HER ZAMAN VAR: düzenlemeye giren kullanıcının çıkış yolu
+            olmak zorunda ve o yol gizli bir tuş değil görünür bir düğme.
+          */}
+          {duzenleAcik ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void duzenlenmisYayinla()}
+                disabled={busy !== null || !duzenle.onAyarVar}
+                className={BIRINCIL_DUGME}
+              >
+                {busy === 'onay' ? 'Yayınlanıyor…' : 'Bu ayarlarla yayınla'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDuzenleAcik(false)}
+                disabled={busy !== null}
+                className={SESSIZ_DUGME}
+              >
+                Vazgeç
+              </button>
+              {/* ÖN AYAR YOKSA DÜZENLENECEK BİR TABAN DA YOK. */}
+              {!duzenle.onAyarVar && (
+                <span className="text-[11px] text-ink-muted">
+                  Bu workspace için boost ön ayarı yok; önce ön ayarı kur.
+                </span>
+              )}
+              {/* KALICI OLMADIĞI YAZILI — "düzenle" kelimesi kalıcı bir ayar
+                  değişikliği gibi okunuyor. */}
+              <span className="text-[11px] text-ink-muted">
+                Ön ayar değişmiyor; bu ayarlar yalnızca bu karta uygulanıyor.
+              </span>
+              {duzenle.hata && (
+                <p role="alert" className="text-[11px] text-danger">
+                  {duzenle.hata}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
           {kayit.status === 'pending' && (
             <>
               <button
@@ -972,6 +1071,8 @@ function Kart({
               )}
             </>
           )}
+            </>
+          )}
 
           {kayit.status === 'launching' && (
             <span className="text-[11px] text-ink-muted">Yayına alınıyor…</span>
@@ -981,17 +1082,9 @@ function Kart({
 
       {/* ═══ SAĞ BÖLGE: NE OLACAK / NE OLDU ═══ */}
       <div className="w-full shrink-0 border-t border-line/60 pt-3 sm:w-56 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
-        <SagBolge kayit={kayit} />
+        {duzenleAcik ? <ButceAlanlari d={duzenle} /> : <SagBolge kayit={kayit} />}
       </div>
 
-      {duzenleAcik && (
-        <KartDuzenle
-          kayit={kayit}
-          clientId={clientId}
-          onKapat={() => setDuzenleAcik(false)}
-          onYayinla={(override) => karar(true, override)}
-        />
-      )}
     </article>
   );
 }

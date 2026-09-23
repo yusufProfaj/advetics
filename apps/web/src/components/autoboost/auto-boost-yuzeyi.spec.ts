@@ -49,7 +49,7 @@ describe('tarama boşa düşmüyor', () => {
   it('dosyalar okundu ve beklenen gövdeyi taşıyor', () => {
     expect(SAYFA).toContain('BildirimHavuzu');
     expect(HAVUZ).toContain('function Kart(');
-    expect(DUZENLE).toContain('export function KartDuzenle');
+    expect(DUZENLE).toContain('export function useKartDuzenle');
   });
 });
 
@@ -452,7 +452,7 @@ describe('TEKRAR BOOSTLA', () => {
   });
 });
 
-describe('SADECE BU GÖNDERİ İÇİN — düzenleme penceresi', () => {
+describe('SADECE BU GÖNDERİ İÇİN — KARTIN ÜSTÜNDE DÜZENLEME', () => {
   it('KRİTİK: bütçe, süre, kitle ve şehir birlikte sunuluyor', () => {
     // Kullanıcının isteği birebir buydu: "kaç gün, toplamda kaç TL, hangi
     // hedef kitle ve şehir".
@@ -474,13 +474,65 @@ describe('SADECE BU GÖNDERİ İÇİN — düzenleme penceresi', () => {
     expect(existsSync(join(WEB_SRC, 'components/autoboost/hedefleme-secici.tsx'))).toBe(true);
   });
 
-  it('KRİTİK: pencere ÖN AYARI KAYDETMİYOR — kaydeden uç çağrılmıyor', () => {
+  it('KRİTİK: DÜZENLEME ÖN AYARI KAYDETMİYOR — kaydeden uç çağrılmıyor', () => {
     /*
      * "Sadece o gönderi için" denen bir ayarın sonraki bütün gönderileri
-     * sessizce etkilemesi, istenenin tam tersi olurdu.
+     * sessizce etkilemesi, istenenin tam tersi olurdu. Cümle kartta yazılı:
+     * "düzenle" kelimesi kalıcı bir ayar değişikliği gibi okunuyor.
      */
     expect(DUZENLE).not.toContain('/autoboost/presets');
-    expect(DUZENLE).toContain('Ön ayar değişmiyor');
+    expect(HAVUZ).toContain('Ön ayar değişmiyor');
+  });
+
+  it('KRİTİK: AYRI PENCERE YOK — alanlar KARTIN ÜSTÜNDE açılıyor', () => {
+    /*
+     * Pencere kartın ÜSTÜNÜ örtüyordu: kullanıcı neyi düzenlediğini —
+     * gönderinin görselini, metnini, tarihini — düzenlerken göremiyordu.
+     * Karar "şu gönderiye şu kitleye şu bütçeyle" ve üçünden biri ekrandan
+     * kalkınca karar yarım kalıyor.
+     */
+    expect(DUZENLE).not.toContain("role=\"dialog\"");
+    expect(DUZENLE).not.toContain('aria-modal');
+    expect(DUZENLE).not.toContain('fixed inset-0');
+  });
+
+  it('KRİTİK: ALANLAR DEĞERİN DURDUĞU YERDE AÇILIYOR', () => {
+    /*
+     * Hedefleme özeti hedefleme denetimlerine, bütçe okuması bütçe alanlarına
+     * dönüşüyor — ikisi de kendi sütununda. Alanların yeri değişmediği için
+     * kullanıcı neyi değiştireceğini aramıyor.
+     */
+    expect(HAVUZ).toContain('<HedeflemeAlanlari d={duzenle} clientId={clientId} />');
+    expect(HAVUZ).toContain('duzenleAcik ? <ButceAlanlari d={duzenle} /> : <SagBolge');
+  });
+
+  it('KRİTİK: DÜZENLENEN KART İŞARETLİ — ve renkle DEĞİL yalnızca', () => {
+    // Bir durumu tek başına renge bağlamak, onu göremeyen kullanıcı için o
+    // durumun hiç olmaması demek.
+    expect(HAVUZ).toContain('Düzenleniyor');
+  });
+
+  it('KRİTİK: VAZGEÇ DÜĞMESİ VAR — çıkış yolu gizli tuş değil', () => {
+    /*
+     * Pencerede Esc ve dışarı tıklama vardı; satır içi düzenlemede ikisi de
+     * yok ve olmamalı (Esc listesi sayfadaki her kart için kurulurdu).
+     * Çıkış yolu GÖRÜNÜR bir düğme.
+     */
+    expect(HAVUZ).toContain('Vazgeç');
+    expect(HAVUZ).toContain('onClick={() => setDuzenleAcik(false)}');
+  });
+
+  it('KRİTİK: DÜZENLEME DALI GERÇEKTEN BAĞLI', () => {
+    /*
+     * İDDİA DÜĞME METNİNE DEĞİL DALIN KOŞULUNA ÇAPALI — mutasyon testinde
+     * ilk yazım BOŞ ÇIKTI: koşulu sabitlemek (dal hiç çizilmesin) testi
+     * düşürmüyordu, çünkü "Vazgeç" dizesi kaynakta duruyordu. Kaynak
+     * taramasında bir dizenin VARLIĞI, o dalın çiziliyor olduğunu
+     * kanıtlamıyor.
+     */
+    expect(HAVUZ).toContain('{duzenleAcik ? (');
+    expect(HAVUZ).toContain('onClick={() => void duzenlenmisYayinla()}');
+    expect(HAVUZ).toContain('async function duzenlenmisYayinla()');
   });
 
   it('KRİTİK: `override` yalnızca VARSA gönderiliyor', () => {
@@ -497,7 +549,7 @@ describe('SADECE BU GÖNDERİ İÇİN — düzenleme penceresi', () => {
      * reddetmek, kullanıcıyı çalışmayan bir seçeneğe davet etmek olurdu.
      */
     expect(DUZENLE).toContain("const gunlukZorunlu = kayit.platform === 'google'");
-    expect(DUZENLE).toContain('{!gunlukZorunlu && (');
+    expect(DUZENLE).toContain('{!d.gunlukZorunlu && (');
   });
 
   it('KRİTİK: toplam taahhüt tutar girilmeden SIFIR gösterilmiyor', () => {
