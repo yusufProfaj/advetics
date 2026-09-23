@@ -6,6 +6,7 @@ import { AutoBoostQueueService } from './autoboost-queue.service';
 import { AutoBoostLaunchService } from './autoboost-launch.service';
 import { AutoBoostPresetService } from './autoboost-preset.service';
 import { AutoBoostReadService } from './autoboost-read.service';
+import { BoostKontrolService } from './boost-kontrol.service';
 import { GecmisIcerikService } from './gecmis-icerik.service';
 import { YouTubeApiService } from './youtube-api.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
@@ -31,6 +32,7 @@ import { YouTubeWebSubService } from './youtube-websub.service';
     AutoBoostLaunchService,
     AutoBoostPresetService,
     AutoBoostReadService,
+    BoostKontrolService,
     GecmisIcerikService,
     YouTubeApiService,
     YouTubeSubscribeService,

@@ -1,5 +1,6 @@
 'use client';
 
+import { hedeflemeLokasyonu } from '@advetics/shared';
 import { useEffect, useRef, useState } from 'react';
 import {
   autoBoostQueueOverrideSchema,
@@ -365,24 +366,4 @@ function hesaplananToplam(
   if (!Number.isFinite(n) || n <= 0 || !Number.isFinite(gun) || gun <= 0) return null;
   const toplam = kip === 'daily' ? n * gun : n;
   return toplam.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
-}
-
-/**
- * `GeoLocationOption` → hedefleme kovası.
- *
- * `type` seçicide `string` (Meta'nın döndürdüğü ham değer); hedefleme şeması
- * ise üç değerli bir birleşim istiyor. `as` ile susturmak, Meta bir gün
- * dördüncü bir tür döndürdüğünde onu SESSİZCE geçirmek olurdu — ve o istek
- * yayında "integer bekleniyor" gibi sebebi anlaşılmayan bir hatayla düşerdi.
- * Tanınmayan tür burada ELENİYOR ve seçici zaten yalnızca aranabilir üç türü
- * listeliyor.
- */
-function hedeflemeLokasyonu(l: GeoLocationOption): {
-  key: string;
-  type: 'country' | 'region' | 'city';
-} | never {
-  if (l.type === 'country' || l.type === 'region' || l.type === 'city') {
-    return { key: l.key, type: l.type };
-  }
-  throw new Error(`Tanınmayan lokasyon türü: ${l.type}`);
 }

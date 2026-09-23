@@ -209,14 +209,85 @@ describe('GEÇMİŞ SAYFAYI BOĞMUYOR', () => {
   });
 });
 
-describe('BİLDİRİM HAVUZU — dört düğme', () => {
-  it('KRİTİK: Onayla, Düzenle, Reddet ve Tekrar boostla birlikte', () => {
-    // Dört ayrı karar: ön ayarla yayınla · sadece bu gönderi için değiştir ·
-    // kartı kapat · kapanmış kartı karara geri aç.
-    expect(HAVUZ).toContain('Onayla');
+describe('BİLDİRİM HAVUZU — üç hâl, üç düğme takımı', () => {
+  it('KRİTİK: KARAR BEKLEYEN kartta Yayınla · Düzenle · Yayınlama', () => {
+    /*
+     * Etiketler kullanıcının kendi kelimeleri. "Onayla/Reddet" ikilisi bir
+     * ONAY SÜRECİ anlatıyordu; buradaki karar ise "bunu yayınla" ya da
+     * "bunu yayınlama" — aynı şey değil ve yanlış kelime, kullanıcıya
+     * onaylaması gereken bir merci varmış izlenimi veriyordu.
+     */
+    expect(HAVUZ).toContain('Yayınla');
     expect(HAVUZ).toContain('Düzenle');
-    expect(HAVUZ).toContain('Reddet');
-    expect(HAVUZ).toContain('Tekrar boostla');
+    expect(HAVUZ).toContain('Yayınlama');
+    expect(HAVUZ).not.toContain('>Onayla<');
+    expect(HAVUZ).not.toContain('Reddet');
+  });
+
+  it('KRİTİK: YAYINDAKİ kartta Duraklat · Düzenle · İptal', () => {
+    /*
+     * Kart yayına girdikten sonra panelde yapılacak hiçbir şey kalmıyordu:
+     * reklam Meta'da harcamaya devam ediyor, kullanıcı onu durdurmak için
+     * Ads Manager'a gidiyordu. Başlatabilip durduramayan bir panel, "reklamcı
+     * olmayan da kullanabilsin" vaadini tutmuyor.
+     */
+    expect(HAVUZ).toContain('Yayını duraklat');
+    expect(HAVUZ).toContain('Yayını sürdür');
+    expect(HAVUZ).toContain('İptal');
+  });
+
+  it('KRİTİK: KAPANMIŞ kartta Tekrar yayınla · Düzenle · Yayınlama', () => {
+    expect(HAVUZ).toContain('Tekrar yayınla');
+    expect(HAVUZ).toContain('function kapat()');
+  });
+
+  it('KRİTİK: DÜĞME TAKIMI `boostDurumu`NDAN SEÇİLİYOR — kart durumundan değil', () => {
+    /*
+     * Kart `launched` olduğu hâlde kampanya çoktan bitmiş olabilir. Bitmiş
+     * bir kampanyaya "duraklat" göstermek, basıldığında hata veren bir düğme
+     * göstermek olurdu.
+     */
+    expect(HAVUZ).toContain("kayit.boostDurumu === 'active'");
+    expect(HAVUZ).toContain("kayit.boostDurumu === 'paused'");
+    expect(HAVUZ).toContain('const tekrarGosterilsin = !canli');
+  });
+
+  it('KRİTİK: İPTAL ile YAYINLAMA AYRI İŞLER', () => {
+    /*
+     * İptal yayındaki reklamı DURDURUYOR; Yayınlama yalnızca kartı
+     * kapatıyor. Birleştirmek, listeden kaldırmak isteyen kullanıcının
+     * farkında olmadan yayındaki reklamı durdurması olurdu.
+     */
+    expect(HAVUZ).toContain("yayinKontrol('iptal')");
+    expect(HAVUZ).toContain("/kapat`");
+  });
+
+  it('KRİTİK: KİME GİDİYOR KARTTA YAZIYOR', () => {
+    /*
+     * Hedefleme ön ayarın içinde duruyordu ve kartta hiç görünmüyordu:
+     * kullanıcı onayladığı reklamın kime gideceğini görmek için ön ayarı
+     * açmak zorundaydı. Her onay para harcıyor ve kime harcandığı, ne kadar
+     * harcandığı kadar önemli.
+     */
+    expect(HAVUZ).toContain('hedeflemeOzeti(kayit.preset.settings)');
+    expect(HAVUZ).toContain('<Hedefleme kayit={kayit} />');
+  });
+
+  it('KRİTİK: ROZET KAMPANYANIN DURUMUNU SÖYLÜYOR', () => {
+    /*
+     * Kart yayına girdikten sonra durumu `launched` olarak KALIYOR: kampanya
+     * duraklatılsa da bitse de kart aynı. Rozet kart durumundan okununca
+     * süresi dolmuş bir boost "Yayında" yazıyor, hemen altındaki düğme
+     * "Tekrar yayınla" diyordu — aynı kartta iki farklı gerçek.
+     */
+    expect(HAVUZ).toContain('const anahtar = kayit.boostDurumu ?? kayit.status;');
+    expect(HAVUZ).toContain("paused: 'Duraklatıldı'");
+  });
+
+  it('KRİTİK: GÖNDERİ METNİNİN TAMAMI AÇILABİLİYOR', () => {
+    // İki satıra kırpılıyordu ve kırpılan yer çoğu zaman teklifin kendisiydi.
+    expect(HAVUZ).toContain('Metnin tamamı');
+    expect(HAVUZ).toContain("metinAcik ? '' : 'line-clamp-2'");
   });
 
   it('KRİTİK: Düzenle ONAYIN İÇİNE gömülmedi — ayrı düğme', () => {

@@ -11,6 +11,7 @@ import type {
   ChannelKind,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { hedeflemeOzeti } from '@advetics/shared';
 import { formatMoney, formatNumber, formatPercent, formatTarih } from '@/lib/format';
 import { KartDuzenle } from '@/components/autoboost/kart-duzenle';
 import { PlatformLogo } from '@/components/platform-logo';
@@ -488,13 +489,31 @@ function Kart({
 }) {
   const [gorselDustu, setGorselDustu] = useState(false);
   const [duzenleAcik, setDuzenleAcik] = useState(false);
-  const [busy, setBusy] = useState<'onay' | 'ret' | 'tekrar' | null>(null);
+  /** Sunucunun kendi cümlesi — "sürdürüldü ama üst seviyede duraklatılmış" gibi. */
+  const [not, setNot] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  /** Uzun gönderi metni varsayılan olarak iki satır; tamamı istenirse açılıyor. */
+  const [metinAcik, setMetinAcik] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
   const onaylanabilir = kayit.status === 'pending' && kayit.blockedReason === null;
   const bicim = GORSEL_BICIMI[kayit.platform];
   const yayinda = kayit.status === 'launched';
-  const tekrarGosterilsin = TEKRAR_ACIK_DURUMLAR.has(kayit.status);
+  /*
+   * ═══ KARTIN ÜÇ HÂLİ, ÜÇ AYRI DÜĞME TAKIMI ═══
+   *
+   *   · KARAR BEKLİYOR → Yayınla · Düzenle · Yayınlama
+   *   · YAYINDA        → Yayını duraklat/sürdür · Düzenle · İptal
+   *   · KAPANMIŞ       → Tekrar yayınla · Düzenle · Yayınlama
+   *
+   * Ayrım `boostDurumu`dan geliyor, kartın kendi durumundan DEĞİL: kart
+   * `launched` olduğu hâlde kampanya çoktan bitmiş olabilir ve bitmiş bir
+   * kampanyaya "duraklat" göstermek, basıldığında hata veren bir düğme
+   * göstermek olurdu.
+   */
+  const canli = kayit.boostDurumu === 'active' || kayit.boostDurumu === 'paused';
+  const duraklatilmis = kayit.boostDurumu === 'paused';
+  const tekrarGosterilsin = !canli && TEKRAR_ACIK_DURUMLAR.has(kayit.status);
 
   /**
    * KARAR — onayla, reddet ya da ÖZELLEŞTİRİLMİŞ ayarlarla onayla.
@@ -532,6 +551,45 @@ function Kart({
     } catch (err) {
       setHata(err instanceof ApiRequestError ? err.message : 'İşlem tamamlanamadı.');
       throw err;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * YAYIN KONTROLÜ — duraklat, sürdür, iptal.
+   *
+   * Üçü de PLATFORMA GİDİYOR ve sonucu sunucudan gelen cümleyle söylüyor:
+   * "sürdürüldü" demek yetmiyor, hesap üst seviyede duraklatılmışsa reklam
+   * yine çıkmıyor ve bunu kullanıcıya söyleyen tek yer o mesaj.
+   */
+  async function yayinKontrol(uc: 'duraklat' | 'surdur' | 'iptal'): Promise<void> {
+    setBusy(uc);
+    setHata(null);
+    setNot(null);
+    try {
+      const r = await apiFetch<{ status: string; message: string }>(
+        `/autoboost/queue/${kayit.id}/${uc}`,
+        { method: 'POST' },
+      );
+      setNot(r.message);
+      onDegisti();
+    } catch (err) {
+      setHata(err instanceof ApiRequestError ? err.message : 'İşlem tamamlanamadı.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** KARTI KAPAT — "bir daha yayınlama". Yayındaki reklama DOKUNMUYOR. */
+  async function kapat(): Promise<void> {
+    setBusy('kapat');
+    setHata(null);
+    try {
+      await apiFetch(`/autoboost/queue/${kayit.id}/kapat`, { method: 'POST' });
+      onDegisti();
+    } catch (err) {
+      setHata(err instanceof ApiRequestError ? err.message : 'Kart kapatılamadı.');
     } finally {
       setBusy(null);
     }
@@ -677,11 +735,35 @@ function Kart({
           </span>
         </div>
 
-        {/* `line-clamp` — `truncate` DEĞİL: nowrap, kartın min-content
-            genişliğini şişirip satırı yatay taşırıyordu. */}
-        <p className="line-clamp-2 min-w-0 text-sm font-semibold text-ink">
+        {/*
+          ═══ GÖNDERİ METNİ AÇILABİLİR ═══
+
+          İki satıra kırpılıyordu ve kırpılan yer çoğu zaman teklifin
+          kendisiydi: kullanıcı neyi onayladığını görmek için gönderiyi yeni
+          sekmede açmak zorundaydı. Varsayılan hâlâ iki satır — on kartlık bir
+          listede her metnin tamamını açmak listeyi okunmaz yapıyor — ama
+          tamamı bir tık uzakta.
+
+          `line-clamp` kullanılıyor, `truncate` DEĞİL: nowrap kartın
+          min-content genişliğini şişirip satırı yatay taşırıyordu.
+        */}
+        <p
+          className={`min-w-0 whitespace-pre-line text-sm font-semibold text-ink ${
+            metinAcik ? '' : 'line-clamp-2'
+          }`}
+        >
           {kayit.title || 'Başlıksız içerik'}
         </p>
+        {(kayit.title?.length ?? 0) > 110 && (
+          <button
+            type="button"
+            onClick={() => setMetinAcik(!metinAcik)}
+            aria-expanded={metinAcik}
+            className="self-start rounded text-[11px] font-medium text-ink-muted underline underline-offset-2 transition hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          >
+            {metinAcik ? 'Metni kısalt' : 'Metnin tamamı'}
+          </button>
+        )}
 
         {/*
           ═══ İKİ TARİH, İKİ AYRI SORU ═══
@@ -724,6 +806,9 @@ function Kart({
           )}
         </p>
 
+        {/* KİME GİDİYOR — bütçenin yanında, karar verilirken okunuyor. */}
+        <Hedefleme kayit={kayit} />
+
         {/* ENGEL SEBEBİ SATIRDA. Düğmeyi kapatıp sebebini söylememek,
             kullanıcıya "çalışmıyor" göstermek olurdu. */}
         {kayit.blockedReason && (
@@ -733,6 +818,16 @@ function Kart({
         {hata && (
           <p role="alert" className="text-[11px] text-danger">
             {hata}
+          </p>
+        )}
+        {/*
+          SUNUCUNUN KENDİ CÜMLESİ. "Sürdürüldü" demek yetmiyor: hesap ya da
+          kampanya üst seviyede duraklatılmışsa Meta reklamı yine göstermiyor
+          ve bunu söyleyen tek yer bu mesaj.
+        */}
+        {not && (
+          <p role="status" className="text-[11px] text-ink-muted">
+            {not}
           </p>
         )}
 
@@ -767,15 +862,15 @@ function Kart({
                 type="button"
                 onClick={() => void karar(true).catch(() => undefined)}
                 disabled={!onaylanabilir || busy !== null}
-                className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-ink-muted"
+                className={BIRINCIL_DUGME}
               >
-                {busy === 'onay' ? 'Yayınlanıyor…' : 'Onayla'}
+                {busy === 'onay' ? 'Yayınlanıyor…' : 'Yayınla'}
               </button>
               <button
                 type="button"
                 onClick={() => setDuzenleAcik(true)}
                 disabled={!onaylanabilir || busy !== null}
-                className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:text-ink-muted"
+                className={IKINCIL_DUGME}
               >
                 Düzenle
               </button>
@@ -783,9 +878,50 @@ function Kart({
                 type="button"
                 onClick={() => void karar(false).catch(() => undefined)}
                 disabled={busy !== null}
-                className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-sunken hover:text-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed"
+                className={SESSIZ_DUGME}
               >
-                {busy === 'ret' ? '…' : 'Reddet'}
+                {busy === 'ret' ? '…' : 'Yayınlama'}
+              </button>
+            </>
+          )}
+
+          {/*
+            ═══ YAYINDAKİ KART ═══
+
+            Duraklat harcamayı durduruyor ve geri alınabilir; İptal boost'u
+            bitiriyor ve gönderiyi yeniden boostlanabilir bırakıyor. İkisini
+            tek düğmede toplamak, "biraz durdur" ile "bu iş bitti"yi aynı
+            tıklamaya bağlamak olurdu.
+          */}
+          {canli && (
+            <>
+              <button
+                type="button"
+                onClick={() => void yayinKontrol(duraklatilmis ? 'surdur' : 'duraklat')}
+                disabled={busy !== null}
+                className={duraklatilmis ? BIRINCIL_DUGME : IKINCIL_DUGME}
+              >
+                {busy === 'duraklat' || busy === 'surdur'
+                  ? '…'
+                  : duraklatilmis
+                    ? 'Yayını sürdür'
+                    : 'Yayını duraklat'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDuzenleAcik(true)}
+                disabled={busy !== null}
+                className={IKINCIL_DUGME}
+              >
+                Düzenle
+              </button>
+              <button
+                type="button"
+                onClick={() => void yayinKontrol('iptal')}
+                disabled={busy !== null}
+                className={SESSIZ_DUGME}
+              >
+                {busy === 'iptal' ? '…' : 'İptal'}
               </button>
             </>
           )}
@@ -801,10 +937,34 @@ function Kart({
                   yazılı. Kapalı bir düğmeye ipucu koymak, sebebi yalnızca
                   fareyle üstüne gelen kullanıcıya söylemek olurdu.
                 */
-                className="rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-semibold text-brand-strong transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:border-line disabled:bg-transparent disabled:text-ink-muted disabled:opacity-70"
+                className={BIRINCIL_DUGME}
               >
-                {busy === 'tekrar' ? '…' : 'Tekrar boostla'}
+                {busy === 'tekrar' ? '…' : 'Tekrar yayınla'}
               </button>
+              <button
+                type="button"
+                onClick={() => setDuzenleAcik(true)}
+                disabled={busy !== null || kayit.reBoostBlockedReason !== null}
+                className={IKINCIL_DUGME}
+              >
+                Düzenle
+              </button>
+              {/*
+                KAPANMIŞ KARTTA "YAYINLAMA" YALNIZCA KARTI KAPATIYOR.
+                Yayındaki bir reklamı durdurmak İPTAL'in işi; ikisini
+                birleştirmek, listeden kaldırmak isteyen kullanıcının farkında
+                olmadan yayındaki reklamı durdurması olurdu.
+              */}
+              {kayit.status !== 'rejected' && (
+                <button
+                  type="button"
+                  onClick={() => void kapat()}
+                  disabled={busy !== null}
+                  className={SESSIZ_DUGME}
+                >
+                  {busy === 'kapat' ? '…' : 'Yayınlama'}
+                </button>
+              )}
               {kayit.reBoostBlockedReason && (
                 <span className="text-[11px] text-ink-muted">
                   {kayit.reBoostBlockedReason}
@@ -914,6 +1074,36 @@ function SagBolge({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
 }
 
 /**
+ * ═══ KİME GİDİYOR ═══
+ *
+ * Hedefleme ön ayarın içinde duruyordu ve kartta HİÇ görünmüyordu: kullanıcı
+ * onayladığı reklamın kime gideceğini görmek için ön ayarı açmak zorundaydı.
+ * Bu ekranda her onay para harcıyor ve kime harcandığı, ne kadar harcandığı
+ * kadar önemli.
+ *
+ * ÖZET ORTAK ÜRETİCİDEN (`hedeflemeOzeti`): kart, düzenleme penceresi ve ön
+ * ayar formu aynı cümleyi göstermek zorunda ve ikinci bir üretici doğduğu an
+ * ayrışır.
+ */
+function Hedefleme({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
+  if (!kayit.preset) return null;
+  const satirlar = hedeflemeOzeti(kayit.preset.settings);
+
+  return (
+    <dl className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-[11px]">
+      {satirlar.map((r) => (
+        <div key={r.etiket} className="min-w-0">
+          <dt className="truncate text-ink-muted">{r.etiket}</dt>
+          <dd className="truncate font-medium text-ink" title={r.deger}>
+            {r.deger}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
  * ÖLÇÜM HÜCRESİ — etiket üstte, sayı altta.
  *
  * `tabular-nums`: sayılar alt alta duruyor ve orantılı rakamlarda basamaklar
@@ -953,27 +1143,78 @@ function Olcum({
  * görünürse, aylık harcamayı gözle toplayan biri yanlış sayıya varır.
  */
 function DurumRozeti({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
-  const ton = DURUM_TONU[kayit.status] ?? 'bg-surface-sunken text-ink-muted ring-line';
+  /*
+   * ═══ ROZET KAMPANYANIN DURUMUNU SÖYLÜYOR, KARTINKİNİ DEĞİL ═══
+   *
+   * Kart yayına girdikten sonra durumu `launched` olarak KALIYOR: kampanya
+   * duraklatılsa da bitse de kart aynı. Rozet kart durumundan okununca
+   * süresi dolmuş bir boost "Yayında" yazıyor ve hemen altındaki düğme
+   * "Tekrar yayınla" diyordu — aynı kartta iki farklı gerçek.
+   *
+   * Kampanya durumu biliniyorsa o kazanıyor; bilinmiyorsa (henüz
+   * yayınlanmamış kart ya da YouTube yolu) kartın kendi durumu yazılıyor.
+   */
+  const anahtar = kayit.boostDurumu ?? kayit.status;
+  const ton = DURUM_TONU[anahtar] ?? 'bg-surface-sunken text-ink-muted ring-line';
   return (
     <span
       className={`inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${ton}`}
     >
-      {DURUM_ETIKETI[kayit.status] ?? kayit.status}
+      {DURUM_ETIKETI[anahtar] ?? anahtar}
     </span>
   );
 }
 
+/**
+ * ═══ DÜĞME SINIFLARI TEK TANIMDA ═══
+ *
+ * Kartın üç hâli var ve her hâlde üç düğme çiziliyor: dokuz yerde aynı uzun
+ * sınıf dizesi. Elle kopyalanınca biri odak halkasını, biri kapalı hâlini
+ * düşürüyor ve fark yalnızca klavyeyle gezen kullanıcıda görünüyor.
+ *
+ * ODAK HALKASI HER ÜÇÜNDE DE VAR: `focus-visible` olmadan klavye kullanıcısı
+ * hangi düğmede olduğunu göremiyor ve bu düğmeler para harcıyor.
+ */
+const BIRINCIL_DUGME =
+  'rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-ink-muted';
+
+const IKINCIL_DUGME =
+  'rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:text-ink-muted disabled:opacity-70';
+
+const SESSIZ_DUGME =
+  'rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-sunken hover:text-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-70';
+
 const DURUM_TONU: Record<string, string> = {
   pending: 'bg-warn-soft text-warn-strong ring-warn/30',
+  candidate: 'bg-warn-soft text-warn-strong ring-warn/30',
   approved: 'bg-info-soft text-info-strong ring-info/30',
   launching: 'bg-info-soft text-info-strong ring-info/30',
+  creating: 'bg-info-soft text-info-strong ring-info/30',
+  /*
+   * YAYINDAKİ KAMPANYA YEŞİL: para O AN harcanıyor ve bu, kartın taşıdığı
+   * en önemli bilgi. Biten ve reddedilen nötr; duraklatılmış UYARI renginde
+   * çünkü yapılacak bir iş var — ya sürdürülecek ya iptal edilecek.
+   */
+  active: 'bg-ok-soft text-ok-strong ring-ok/30',
   launched: 'bg-surface-sunken text-ink-muted ring-line',
+  completed: 'bg-surface-sunken text-ink-muted ring-line',
+  paused: 'bg-warn-soft text-warn-strong ring-warn/30',
   rejected: 'bg-surface-sunken text-ink-muted ring-line',
   failed: 'bg-danger-soft text-danger-strong ring-danger/30',
 };
 
 const DURUM_ETIKETI: Record<string, string> = {
   pending: 'Onay bekliyor',
+  /*
+   * BOOST DURUMLARI DA BU TABLODA. Rozet iki kaynaktan besleniyor (kartın
+   * durumu ve kampanyanın durumu) ve ikisi için ayrı tablo tutmak, birine
+   * eklenip diğerine eklenmeyen bir değerin ekranda ham hâliyle görünmesi
+   * demek olurdu.
+   */
+  completed: 'Süresi doldu',
+  paused: 'Duraklatıldı',
+  creating: 'Oluşturuluyor',
+  candidate: 'Onay bekliyor',
   approved: 'Onaylandı',
   rejected: 'Reddedildi',
   launching: 'Yayına alınıyor',

@@ -77,6 +77,22 @@ export const metaPresetSettingsSchema = z.object({
       z.object({
         key: z.string().min(1).max(64),
         type: z.enum(['country', 'region', 'city']),
+        /**
+         * OKUNABİLİR AD — YALNIZCA GÖSTERİM İÇİN.
+         *
+         * Şema uzun süre yalnızca `key` tutuyordu ve şehir anahtarı Meta'nın
+         * sayısal kimliği: panelde "2343687" yazıyordu. "Kimi hedefliyorum"
+         * sorusunun cevabı okunamıyordu ve kullanıcı ön ayarı açmadan
+         * göremiyordu.
+         *
+         * META'YA GİTMİYOR: `meta-targeting.ts` lokasyonu alan alan
+         * kuruyor (`{ key }`), yani bu alan istek gövdesine sızmıyor.
+         *
+         * İSTEĞE BAĞLI: alan eklenmeden kaydedilmiş ön ayarlar geçerli
+         * kalıyor ve gösterimde anahtara düşülüyor. Zorunlu yapmak, var olan
+         * her ön ayarı bir gecede geçersiz kılardı.
+         */
+        label: z.string().min(1).max(120).optional(),
       }),
     )
     .max(25)
@@ -370,6 +386,19 @@ export interface AutoBoostQueueItemRecord {
    * iki ayrı soru.
    */
   launchedAt: string | null;
+  /**
+   * YAYINDAKİ BOOST'UN DURUMU — kartın hangi düğmeleri göstereceğini bu
+   * belirliyor.
+   *
+   * `'active'`  → yayında: duraklat · düzenle · iptal
+   * `'paused'`  → duraklatılmış: sürdür · düzenle · iptal
+   * diğerleri   → bitmiş: tekrar yayınla · düzenle · yayınlama
+   *
+   * `null` OLABİLİR ve iki ayrı sebebi var: kart hiç yayınlanmadı ya da
+   * YouTube yolundan geçti (orada `boosts` satırı yok, kampanya Google Ads'te
+   * yönetiliyor). İkisinde de yayın kontrolü sunulmuyor.
+   */
+  boostDurumu: string | null;
   /**
    * Yayına alınmış kartın ölçülen performansı. `null` = sayı YOK; sebebi
    * `performanceNote` içinde ve ikisi ayrı: "sıfır harcama" ile "kampanya

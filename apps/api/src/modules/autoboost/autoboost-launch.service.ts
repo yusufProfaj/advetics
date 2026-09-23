@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { CANLI_BOOST_SQL } from '../boosts/canli-boost';
 import {
   autoBoostPresetSettingsSchema,
   boostNameBase,
@@ -728,7 +729,7 @@ export class AutoBoostLaunchService {
           JOIN organic_posts op ON op.id = b.organic_post_id
           WHERE op.social_profile_id = q.social_profile_id
             AND op.external_id = q.external_id
-            AND b.status IN ('candidate', 'approved', 'creating', 'active')
+            AND b.status IN (${CANLI_BOOST_SQL})
           LIMIT 1
         ) aktif ON true
         WHERE q.id = ${queueItemId}::uuid
@@ -771,6 +772,44 @@ export class AutoBoostLaunchService {
     }
 
     return { status: 'pending', message: 'Kart tekrar onay bekliyor.' };
+  }
+
+  /**
+   * ═══ KARTI KAPAT — "BİR DAHA YAYINLAMA" ═══
+   *
+   * Yayınlanmış ya da düşmüş bir kartta kullanıcının verebileceği ikinci bir
+   * karar var: bu gönderiyi bir daha boostlamayacağım. Kart `rejected`
+   * oluyor, "Kapanan" süzgecine düşüyor ve tekrar yayınlama düğmesi
+   * göstermiyor.
+   *
+   * KAMPANYAYA DOKUNMUYOR. Yayındaki bir reklamı durdurmak İPTAL'in işi ve o
+   * ayrı bir uç; burada değiştirilen tek şey kartın kendi durumu. İkisini
+   * birleştirmek, "listeden kaldır" diyen kullanıcının farkında olmadan
+   * yayındaki reklamı durdurması olurdu.
+   */
+  async kapat(ctx: TenantContext, queueItemId: string): Promise<{ status: string; message: string }> {
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+
+    const n = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE auto_boost_queue_items
+        SET status = 'rejected', approved_by = ${ctx.userId}::uuid,
+            approved_at = now(), updated_at = now()
+        WHERE id = ${queueItemId}::uuid
+          AND status IN ('pending', 'launched', 'failed')
+      `),
+    );
+
+    if (n === 0) {
+      /*
+       * SIFIR SATIR İKİ ANLAMA GELİYOR ve ikisi de kullanıcıya aynı işi
+       * yaptırıyor: kart yok ya da durumu bu arada değişti. Ayırmak için
+       * ikinci bir sorgu atmak, kazancı olmayan bir çağrı olurdu.
+       */
+      throw new BadRequestException('Kart bulunamadı ya da durumu değişti. Sayfayı yenile.');
+    }
+
+    return { status: 'rejected', message: 'Kart kapatıldı.' };
   }
 
   private async geriAl(ctx: TenantContext, id: string, mesaj: string): Promise<void> {

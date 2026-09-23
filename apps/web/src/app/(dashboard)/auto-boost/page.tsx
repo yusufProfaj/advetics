@@ -458,6 +458,10 @@ const STATUS_TONE: Record<BoostStatus, string> = {
   // demek ve biten bir kampanyayı öyle göstermek, aylık harcamayı gözle
   // toplayan birine yanlış sayı verdirirdi.
   completed: 'bg-surface-sunken text-ink-muted ring-line',
+  // DURAKLATILMIŞ boost UYARI renginde, nötr DEĞİL: yapılacak bir iş var —
+  // ya sürdürülecek ya iptal edilecek. Biten bir boostla aynı renkte
+  // göstermek, unutulmuş bir kampanyayı görünmez yapardı.
+  paused: 'bg-warn-soft text-warn-strong ring-warn/30',
   failed: 'bg-danger-soft text-danger-strong ring-danger/30',
 };
 

@@ -26,6 +26,7 @@ import {
 import { AutoBoostPresetService } from './autoboost-preset.service';
 import { AutoBoostLaunchService } from './autoboost-launch.service';
 import { AutoBoostReadService } from './autoboost-read.service';
+import { BoostKontrolService } from './boost-kontrol.service';
 import { GecmisIcerikService } from './gecmis-icerik.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
 import { ConnectionsService } from '../connections/connections.service';
@@ -50,6 +51,20 @@ const presetLaunchSchema = z.object({ clientId: z.string().uuid() }).strict();
  */
 
 const gecmisIcerikSchema = z.object({ clientId: z.string().uuid() });
+
+/**
+ * Bütçe girdisi — ön ayar formundaki `autoBoostBudgetSchema.amount` ile AYNI
+ * kural. Alt sınır 20 ₺: daha küçük bütçe Meta'da dağıtım almıyor ve
+ * kullanıcı "yayında ama gösterim yok" hâlini teşhis edemiyor.
+ */
+const butceSchema = z.object({
+  amount: z
+    .string()
+    .regex(/^\d+([.,]\d{1,2})?$/, 'Geçerli bir tutar gir')
+    .refine((v) => Number(v.replace(',', '.')) >= 20, {
+      message: 'En az 20 ₺ — daha küçük bütçe dağıtım almıyor',
+    }),
+});
 
 const kanalAtaSchema = z.object({
   /** NULL = workspace'ten çıkar, havuza geri koy. */
@@ -83,6 +98,7 @@ export class AutoBoostController {
     private readonly launch: AutoBoostLaunchService,
     private readonly presets: AutoBoostPresetService,
     private readonly gecmis: GecmisIcerikService,
+    private readonly kontrol: BoostKontrolService,
     /**
      * SAHİPLİK DEĞİŞİMİ MEVCUT KAPIDAN GEÇİYOR.
      *
@@ -157,6 +173,59 @@ export class AutoBoostController {
   }
 
   /**
+   * ═══ YAYINDAKİ BOOST'UN KONTROLÜ ═══
+   *
+   * Üçü de `boost.approve` istiyor: ikisi harcamayı durduruyor, biri yeniden
+   * başlatıyor ve üçü de CANLI BİR KAMPANYANIN parasını yönetiyor. Okuma
+   * yetkisiyle aynı kefeye koymak, kartları görebilen herkesin yayını
+   * durdurabilmesi demekti.
+   */
+  @Post('queue/:id/duraklat')
+  @RequirePermissions('boost.approve')
+  duraklat(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ status: string; message: string }> {
+    return this.kontrol.duraklat(ctx, id);
+  }
+
+  @Post('queue/:id/surdur')
+  @RequirePermissions('boost.approve')
+  surdur(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ status: string; message: string }> {
+    return this.kontrol.surdur(ctx, id);
+  }
+
+  /**
+   * YAYINDAKİ BOOST'UN BÜTÇESİ.
+   *
+   * Tutar ANA PARA BİRİMİNDE geliyor ("300" = 300 ₺) ve micros'a burada
+   * çevriliyor — ön ayar formuyla aynı sözleşme. İstemcinin micros
+   * göndermesi, bir sıfır fazlasında bütçeyi bin katına çıkarırdı.
+   */
+  @Post('queue/:id/butce')
+  @RequirePermissions('boost.approve')
+  async butce(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(butceSchema)) body: { amount: string },
+  ): Promise<{ status: string; message: string }> {
+    const micros = BigInt(Math.round(Number(body.amount.replace(',', '.')) * 1_000_000));
+    return this.kontrol.butceGuncelle(ctx, id, micros);
+  }
+
+  @Post('queue/:id/iptal')
+  @RequirePermissions('boost.approve')
+  iptal(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ status: string; message: string }> {
+    return this.kontrol.iptal(ctx, id);
+  }
+
+  /**
    * ═══ TEKRAR BOOSTLA ═══
    *
    * Yayınlanmış, reddedilmiş ya da düşmüş bir kartı KARARA geri açıyor.
@@ -172,6 +241,21 @@ export class AutoBoostController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ status: string; message: string }> {
     return this.launch.tekrarBoostla(ctx, id);
+  }
+
+  /**
+   * KARTI KAPAT — "bir daha yayınlama".
+   *
+   * `boost.write` İSTİYOR: para harcamıyor ve yayındaki bir reklama
+   * dokunmuyor; yalnızca kartın durumunu değiştiriyor.
+   */
+  @Post('queue/:id/kapat')
+  @RequirePermissions('boost.write')
+  kapat(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ status: string; message: string }> {
+    return this.launch.kapat(ctx, id);
   }
 
   /**

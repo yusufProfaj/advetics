@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AutoBoostPlatform } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
+import { CANLI_BOOST_SQL } from '../boosts/canli-boost';
 import {
   abonelikSagligi,
 } from './youtube-websub';
@@ -120,6 +121,7 @@ export class AutoBoostReadService {
                kmp.id::text AS kampanya_id,
                perf.gun, perf.spend_micros, perf.impressions, perf.clicks, perf.conversions,
                aktif.biter AS aktif_boost_biter,
+               kendi.status AS boost_durumu,
                sp.name AS profile_name,
                sp.linked_ad_account_id::text AS linked_ad_account_id,
                p.id::text AS preset_id, p.enabled AS preset_enabled,
@@ -184,9 +186,15 @@ export class AutoBoostReadService {
           JOIN organic_posts op ON op.id = b.organic_post_id
           WHERE op.social_profile_id = q.social_profile_id
             AND op.external_id = q.external_id
-            AND b.status IN ('candidate', 'approved', 'creating', 'active')
+            AND b.status IN (${CANLI_BOOST_SQL})
           LIMIT 1
         ) aktif ON true
+        -- KARTIN KENDİ BOOST'U — ustteki aktif birlesimiyle AYNI SEY DEGIL.
+        -- O, gonderi icin canli HERHANGI bir boost ariyor (tekrar boostlama
+        -- engeli); bu ise bu kartin yayina aldigi kaydin durumu ve kartin
+        -- hangi dugmeleri gosterecegini o belirliyor.
+        -- (SQL yorumunda ters tirnak YASAK — sablonu ortasindan kapatiyor.)
+        LEFT JOIN boosts kendi ON kendi.id = q.boost_id
         WHERE q.client_id = ${clientId}::uuid
         ORDER BY
           -- ═══ SEÇİM SIRASI GÖSTERİM SIRASIYLA AYNI DEĞİL ═══
@@ -345,6 +353,7 @@ export class AutoBoostReadService {
       error: r.error,
       externalCampaignId: r.external_campaign_id,
       launchedAt: r.launched_at?.toISOString() ?? null,
+      boostDurumu: r.boost_durumu,
       performance: this.performans(r),
       performanceNote: this.performansNotu(r),
       reBoostBlockedReason: this.tekrarEngeli(r),
@@ -509,6 +518,7 @@ interface QueueRow {
   clicks: number | null;
   conversions: number | null;
   aktif_boost_biter: Date | null;
+  boost_durumu: string | null;
   profile_name: string | null;
   linked_ad_account_id: string | null;
   preset_id: string | null;

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { CANLI_BOOST_SQL } from './canli-boost';
 import { boostAssetName, MEDIA_TYPE_LABELS } from '@advetics/shared';
 import type {
   BoostablePostList,
@@ -286,7 +287,7 @@ export class BoostsService {
                  -- REDDEDİLEN VE BAŞARISIZ boost'lar taahhüt SAYILMIYOR:
                  -- para taahhüt edilmedi. Saymak, bir kez reddedilen adayın
                  -- tavanı ay boyunca işgal etmesi demek olurdu.
-                 AND b.status IN ('candidate', 'approved', 'creating', 'active')
+                 AND b.status IN (${CANLI_BOOST_SQL})
                  AND b.created_at >= date_trunc('month', now())
              ), 0) AS committed_micros
       FROM boost_rules r
@@ -387,7 +388,7 @@ export class BoostsService {
              EXISTS (
                SELECT 1 FROM boosts b
                WHERE b.organic_post_id = p.id
-                 AND b.status IN ('candidate', 'approved', 'creating', 'active')
+                 AND b.status IN (${CANLI_BOOST_SQL})
              ) AS has_live_boost,
              -- BU SORGUDA ÖN AYAR OKUNMUYOR: yayın yolu ön ayarı kendi
              -- okuyor ve eksikse kendi cümlesini söylüyor. Burada false
@@ -462,7 +463,7 @@ export class BoostsService {
                EXISTS (
                  SELECT 1 FROM boosts b
                  WHERE b.organic_post_id = p.id
-                   AND b.status IN ('candidate', 'approved', 'creating', 'active')
+                   AND b.status IN (${CANLI_BOOST_SQL})
                ) AS has_live_boost,
                -- "YAYINLA" DÜĞMESİ ÇALIŞIR MI — ön ayar var ve açık mı.
                --
@@ -609,7 +610,7 @@ export class BoostsService {
         ), 0) AS committed
         FROM boosts b
         WHERE b.client_id = ${clientId}::uuid
-          AND b.status IN ('candidate', 'approved', 'creating', 'active')
+          AND b.status IN (${CANLI_BOOST_SQL})
           AND b.created_at >= date_trunc('month', now())
       `);
 

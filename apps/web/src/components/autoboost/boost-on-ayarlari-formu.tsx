@@ -1,5 +1,6 @@
 'use client';
 
+import { hedeflemeLokasyonu } from '@advetics/shared';
 import { useEffect, useState } from 'react';
 import type {
   AssetListResult,
@@ -227,9 +228,13 @@ function MetaForm({
              * olarak uyguluyor — "İzmir + kitle" sessizce kitleden geniş
              * bir kümeye çıkardı.
              */
-            locations: kitleId
-              ? []
-              : lokasyonlar.map((l) => ({ key: l.key, type: l.type })),
+            /*
+             * ORTAK ÜRETİCİ. Burada `{ key, type }` elle yazılıyordu ve kart
+             * düzenleme penceresi kendi kopyasını taşıyordu; ikisi de adı
+             * düşürüyordu ve ad alanı eklenince yalnızca birine eklemek, iki
+             * ekranın aynı ön ayar için farklı kitle anlatması olurdu.
+             */
+            locations: kitleId ? [] : lokasyonlar.map(hedeflemeLokasyonu),
             ageMin: yasMin,
             ageMax: yasMax,
             genders: cinsiyet,

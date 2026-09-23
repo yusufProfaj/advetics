@@ -186,9 +186,42 @@ export const BOOST_STATUSES = [
    * okunuyor.
    */
   'completed',
+  /**
+   * ELLE DURAKLATILMIŞ boost — kampanya Meta'da PAUSED, süresi dolmadı.
+   *
+   * `completed` İLE AYNI ŞEY DEĞİL ve ayrımı kaybetmek pahalı: biten bir
+   * boost'un yapacak işi yok, duraklatılmış bir boost ise SÜRDÜRÜLMEYİ
+   * bekliyor ve ajansın bunu görmesi gerekiyor. İkisini tek durumda toplamak,
+   * yanlışlıkla duraklatılmış bir kampanyayı sonsuza kadar durdurmak olurdu.
+   *
+   * CANLI SAYILIYOR: `boosts_active_post_uniq` bu durumu da kapsıyor, yani
+   * duraklatılmışken aynı gönderi için ikinci bir boost açılamıyor. Açılsaydı
+   * sürdürme anında aynı gönderiye iki kampanya birden harcamaya başlardı.
+   */
+  'paused',
   'failed',
 ] as const;
 export type BoostStatus = (typeof BOOST_STATUSES)[number];
+
+/**
+ * ═══ CANLI BOOST DURUMLARI — TEK TANIM ═══
+ *
+ * "Bu gönderinin canlı bir boost'u var mı" sorusu BEŞ ayrı SQL sorgusunda
+ * elle yazılıyordu ve `boosts_active_post_uniq` kısmi tekil indeksi altıncı
+ * kopyaydı. Listeye `paused` eklenirken altısının da güncellenmesi gerekti;
+ * biri unutulsaydı duraklatılmış bir kampanya varken ikinci bir boost
+ * açılabilir ve sürdürme anında aynı gönderiye iki kampanya harcardı.
+ *
+ * `rejected`, `completed` ve `failed` DIŞARIDA: üçü de son durum ve gönderiyi
+ * yeniden boostlanabilir bırakıyor.
+ */
+export const CANLI_BOOST_DURUMLARI = [
+  'candidate',
+  'approved',
+  'creating',
+  'active',
+  'paused',
+] as const satisfies readonly BoostStatus[];
 
 export const BOOST_STATUS_LABELS: Record<BoostStatus, string> = {
   candidate: 'Onay bekliyor',
@@ -197,6 +230,7 @@ export const BOOST_STATUS_LABELS: Record<BoostStatus, string> = {
   creating: 'Oluşturuluyor',
   active: 'Yayında',
   completed: 'Süresi doldu',
+  paused: 'Duraklatıldı',
   failed: 'Başarısız',
 };
 

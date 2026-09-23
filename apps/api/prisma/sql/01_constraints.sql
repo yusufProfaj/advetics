@@ -235,7 +235,12 @@ ALTER TABLE boosts ADD CONSTRAINT boosts_status_chk
   -- 'completed' = süresi dolmuş boost. Bu değer olmadan bir gönderi bir kez
   -- boostlandıktan sonra ÖMÜR BOYU kilitli kalıyordu: `boosts_active_post_uniq`
   -- 'active' durumunu kapsıyor ve hiçbir kod yolu o durumdan çıkmıyordu.
-  CHECK (status IN ('candidate', 'approved', 'rejected', 'creating', 'active', 'completed', 'failed'));
+  --
+  -- 'paused' = ELLE duraklatılmış boost; süresi dolmadı, sürdürülmeyi
+  -- bekliyor. 'completed' ile aynı kefeye koymak, yanlışlıkla duraklatılan
+  -- bir kampanyayı sonsuza kadar durdurmak olurdu.
+  CHECK (status IN ('candidate', 'approved', 'rejected', 'creating', 'active',
+                    'completed', 'paused', 'failed'));
 
 -- -----------------------------------------------------------------------------
 -- boosts: BAŞARISIZ kayıtta sebep zorunlu.
@@ -251,10 +256,13 @@ ALTER TABLE boosts ADD CONSTRAINT boosts_error_chk
 -- eşleştirmek imkânsız. "Aktif" işaretlenip kimliği olmayan bir kayıt,
 -- panelde çalışıyor görünen ama takip edilemeyen bir harcama demek.
 -- -----------------------------------------------------------------------------
+-- DURAKLATILMIŞ BOOST DA KİMLİKLERİNİ TAŞIMAK ZORUNDA: sürdürme çağrısı
+-- kampanya kimliğini kullanıyor ve kimliksiz bir 'paused' satır, panelde
+-- "sürdür" düğmesi gösterip çağrıda patlamak demek olurdu.
 ALTER TABLE boosts DROP CONSTRAINT IF EXISTS boosts_active_ids_chk;
 ALTER TABLE boosts ADD CONSTRAINT boosts_active_ids_chk
   CHECK (
-    status <> 'active'
+    status NOT IN ('active', 'paused')
     OR (external_campaign_id IS NOT NULL AND external_ad_set_id IS NOT NULL
         AND external_ad_id IS NOT NULL)
   );
