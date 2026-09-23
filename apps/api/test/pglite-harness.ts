@@ -247,6 +247,34 @@ export async function createHarness(): Promise<Harness> {
           name: p.name,
           syncEnabled: p.sync_enabled,
           linkedAdAccountId: p.linked_ad_account_id,
+          /*
+           * ŞİFRELİ SAYFA TOKEN'I DA DÖNÜYOR.
+           *
+           * `lead-sync.service.ts` bu alan olmadan "sayfa token'ı yok" diye
+           * düşüyor. Taklidin alanı atlaması, gerçek kod doğru çalışırken
+           * testin ÇALIŞMAYAN bir yolu doğrulaması demek olurdu.
+           */
+          pageAccessTokenEnc: p.page_access_token_enc ?? null,
+        };
+      },
+      findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
+        const rows = await q<Record<string, unknown>>(
+          'SELECT * FROM social_profiles WHERE id = $1',
+          [where.id],
+        );
+        const p = rows[0];
+        if (!p) throw new Error(`social_profile bulunamadı: ${where.id}`);
+        return {
+          id: p.id,
+          orgId: p.org_id,
+          clientId: p.client_id,
+          connectionId: p.connection_id,
+          profileType: p.profile_type,
+          externalId: p.external_id,
+          name: p.name,
+          syncEnabled: p.sync_enabled,
+          linkedAdAccountId: p.linked_ad_account_id,
+          pageAccessTokenEnc: p.page_access_token_enc ?? null,
         };
       },
       /**

@@ -6,6 +6,7 @@ import {
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { LeadTable } from '@/components/leads/lead-table';
+import { Son30Gun } from '@/components/leads/son-30-gun';
 
 export const metadata = { title: 'Potansiyel Müşteriler · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -75,18 +76,35 @@ export default async function LeadsPage({
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink">Potansiyel Müşteriler</h1>
+          {/*
+            AÇIKLAMA KAPSAMI DA SÖYLÜYOR.
+
+            Ekran bir süre yalnızca panelde üretilmiş formların kayıtlarını
+            topluyordu ve cümle bunu hiç yazmıyordu; Meta Ads Manager'da
+            kurulmuş formların kayıtları hiç gelmiyor, kullanıcı da sebebini
+            bilmiyordu.
+          */}
           <p className="mt-0.5 text-sm text-ink-muted">
-            Anlık formu dolduran kişiler. Yeni kayıtlar birkaç saniye içinde düşer.
+            Anlık formu dolduran kişiler. Meta’da kurulmuş formlar da dahil; yeni
+            kayıtlar birkaç saniye içinde düşer.
           </p>
         </div>
-        {canExport && total > 0 && (
-          <a
-            href={`${process.env.NEXT_PUBLIC_API_URL ?? ''}/leads/export?${query.toString()}`}
-            className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-sunken"
-          >
-            CSV indir
-          </a>
-        )}
+        <div className="flex flex-wrap items-start gap-2">
+          {/*
+            DÜĞME LİSTE BOŞKEN DE DURUYOR — asıl gerekli olduğu an o.
+            Kayıt varken gizlemek, "gelmiyor" diyen kullanıcıya hiçbir şey
+            bırakmamak olurdu.
+          */}
+          {canWrite && <Son30Gun clientId={clientId} />}
+          {canExport && total > 0 && (
+            <a
+              href={`${process.env.NEXT_PUBLIC_API_URL ?? ''}/leads/export?${query.toString()}`}
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken"
+            >
+              CSV indir
+            </a>
+          )}
+        </div>
       </header>
 
       {/* VERİ HATTI SAĞLIĞI — liste boşken de görünüyor. */}
@@ -104,12 +122,16 @@ export default async function LeadsPage({
       {total === 0 ? (
         <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
           <h2 className="text-sm font-semibold text-ink">Henüz kayıt yok</h2>
-          {/* BOŞ LİSTE İKİ ANLAMA GELİYOR ve hangisi olduğunu söylemek şart. */}
-          <p className="mx-auto mt-2 max-w-md text-xs text-ink-muted">
-            Formu dolduran biri olduğunda kaydı burada görürsün. Yayında bir form
-            reklamın varsa ve saatlerdir hiç kayıt düşmediyse, Kütüphane &gt; Formlar
-            bölümünden formun yayında olduğunu doğrula.
-          </p>
+          {/*
+            ═══ BOŞ LİSTE SEBEBİNİ SÖYLÜYOR ═══
+
+            Burada tek bir cümle vardı ve DÖRT ayrı hâli aynı kefeye
+            koyuyordu: sayfa atanmamış · sayfa token'ı yok · tarama hiç
+            koşmamış · gerçekten kayıt yok. Üçünde yanlış, ve kullanıcının
+            bildirdiği belirti tam da buydu: "potansiyel müşteriler gelmiyor".
+            Sebep artık sunucudan geliyor.
+          */}
+          <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">{result.emptyReason}</p>
         </div>
       ) : (
         <LeadTable

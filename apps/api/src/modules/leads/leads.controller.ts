@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Header,
   Param,
@@ -13,6 +14,7 @@ import {
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { z } from 'zod';
 import {
   leadQuerySchema,
   leadUpdateSchema,
@@ -25,6 +27,9 @@ import { CurrentTenant, Public, RequirePermissions } from '../../common/decorato
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { LeadgenWebhookService, type LeadgenPayload } from './leadgen-webhook.service';
 import { LeadsService } from './leads.service';
+import { LeadSyncService } from '../../queue/lead-sync.service';
+
+const gecmisKayitSchema = z.object({ clientId: z.string().uuid() });
 
 /**
  * Potansiyel müşteriler + Meta leadgen webhook.
@@ -43,6 +48,7 @@ export class LeadsController {
   constructor(
     private readonly leads: LeadsService,
     private readonly webhook: LeadgenWebhookService,
+    private readonly sync: LeadSyncService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -103,6 +109,43 @@ export class LeadsController {
   // ---------------------------------------------------------------------------
   // Panel
   // ---------------------------------------------------------------------------
+
+  /**
+   * ═══ SON 30 GÜNÜ GETİR ═══
+   *
+   * Zamanlanmış mutabakat imleçten devam ediyor ve imleç bir kez ilerledikten
+   * sonra geçmişe dönmüyor. Bu uç imleci YOK SAYIP 30 günü baştan tarıyor;
+   * panel yeni bağlandığında ya da tarama bir dönem hiç koşmadığında elde
+   * tutulacak tek düğme bu.
+   *
+   * MÜKERRER TEHLİKESİ YOK: `leads_external_uniq` tekil indeksi ve
+   * `ON CONFLICT DO NOTHING` aynı kaydı ikinci kez yazmıyor. Engel bizim
+   * kontrolümüze değil veritabanına dayanıyor — iki tarama aynı anda koşsa
+   * bile klon üretmiyor.
+   *
+   * `lead.write` İSTİYOR: kayıt yazıyor ama PARA HARCAMIYOR ve kişisel veriyi
+   * dışarı çıkarmıyor; `lead.export` ayrı bir yetki ve öyle kalıyor.
+   */
+  @Post('son-30-gun')
+  @RequirePermissions('lead.write')
+  async gecmisKayitlar(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(gecmisKayitSchema)) body: { clientId: string },
+  ): Promise<{ kayitlar: number; notlar: string[] }> {
+    /*
+     * YETKİ KONTROLÜ BURADA, RLS'E BIRAKILMIYOR.
+     *
+     * `LeadSyncService` worker servisi ve `PrismaAdminService` (BYPASSRLS)
+     * kullanıyor — yani RLS bu yolda HİÇ devrede değil. Kontrol yapılmazsa
+     * kimliği bilen herkes başka bir şirketin kayıtlarını çektirebilirdi.
+     */
+    if (!ctx.clientIds.includes(body.clientId)) {
+      throw new ForbiddenException('Bu workspace’e erişimin yok.');
+    }
+
+    const sonuc = await this.sync.reconcile(body.clientId, { gecmis: true });
+    return { kayitlar: sonuc.rows, notlar: sonuc.notlar };
+  }
 
   @Get()
   @RequirePermissions('lead.read')

@@ -42,6 +42,54 @@ describe('süpürme kapsamı', () => {
   });
 });
 
+describe('POTANSİYEL MÜŞTERİ SÜPÜRMESİNİN ÖN KOŞULU', () => {
+  const KAYNAK = join(__dirname, 'sync-processor.service.ts');
+
+  /*
+   * ═══ KOŞUL SAYFAYA BAKIYOR, KENDİ FORMLARIMIZA DEĞİL ═══
+   *
+   * Burada bir süre `leadForms: { some: ... }` yazıyordu: yalnızca PANELDE
+   * form üretmiş workspace'ler süpürmeye giriyordu. Ajansların formlarının çoğu
+   * doğrudan Meta Ads Manager'da kurulmuş ve onların bizde satırı yok — o
+   * workspace'ler için mutabakat işi HİÇ kuyruğa girmiyordu ve belirti
+   * "potansiyel müşteriler gelmiyor" oluyordu.
+   *
+   * Gerçek ön koşul sayfa: anlık form kayıtları Facebook sayfasının altında
+   * yaşıyor.
+   */
+  function dilim(): string {
+    /*
+     * TARAMA YORUMSUZ KAYNAKTA.
+     *
+     * Kuralı ANLATAN yorum aynı dosyada duruyor ve eski biçimi ("leadForms:
+     * ...") kelimesi kelimesine yazıyor. Ham kaynakta arayan bir iddia o
+     * yoruma eşleşiyor ve KOD DOĞRUYKEN kırmızı veriyor — bu oturumda tam
+     * olarak o oldu.
+     */
+    const src = readFileSync(KAYNAK, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const i = src.indexOf("if (payload.jobType === 'leads_reconcile') {");
+    if (i === -1) {
+      throw new Error('leads_reconcile dalı bulunamadı — tarama boşa düştü, testi güncelle.');
+    }
+    const j = src.indexOf('select: { id: true }', i);
+    if (j === -1) {
+      throw new Error('workspace sorgusu bulunamadı — tarama boşa düştü, testi güncelle.');
+    }
+    return src.slice(i, j);
+  }
+
+  it('KRİTİK: workspace seçimi SOSYAL PROFİLE bakıyor', () => {
+    expect(dilim()).toContain('socialProfiles: {');
+    expect(dilim()).toContain("profileType: 'facebook_page'");
+  });
+
+  it('KRİTİK: KENDİ FORMLARIMIZ ÖN KOŞUL DEĞİL', () => {
+    // Bu satır geri gelirse Meta'da form kuran her ajans yine karanlıkta
+    // kalır ve hiçbir ekranda tek kelime yazmaz.
+    expect(dilim()).not.toContain('leadForms:');
+  });
+});
+
 describe('supurmeDisiSebep', () => {
   const SAGLAM = {
     syncEnabled: true,

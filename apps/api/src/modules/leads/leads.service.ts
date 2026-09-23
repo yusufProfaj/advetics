@@ -14,6 +14,9 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
+/** `withTenant` yürütücüsünün bu serviste kullanılan yüzeyi. */
+type TxLike = { $queryRaw: <T>(q: Prisma.Sql) => Promise<T> };
+
 /**
  * Potansiyel müşteriler — okuma ve durum yönetimi.
  *
@@ -115,13 +118,70 @@ export class LeadsService {
         FROM leads l WHERE ${statusWhere}
       `);
 
+      const total = Number(countRow?.total ?? 0);
+
       return {
         rows: rows.map(toRecord),
-        total: Number(countRow?.total ?? 0),
+        total,
         byStatus,
         reconciledRatio: ratioRow?.ratio ?? 0,
+        emptyReason: total === 0 ? await this.bosSebep(tx, query.clientId) : null,
       };
     });
+  }
+
+  /**
+   * ═══ BOŞ LİSTE NEDEN BOŞ ═══
+   *
+   * Ekran tek bir cümle yazıyordu: "formu dolduran biri olduğunda kaydı
+   * burada görürsün". O cümle DÖRT ayrı hâli aynı kefeye koyuyor ve üçünde
+   * YANLIŞ:
+   *
+   *   · workspace'e hiç Facebook sayfası atanmamış → kayıt hiç gelmeyecek
+   *   · sayfa var ama sayfa token'ı yok → çağrı yapılamıyor
+   *   · ikisi de var ama tarama hiç koşmamış → düğmeye basılmalı
+   *   · her şey yerinde, gerçekten kayıt yok → doğru cümle
+   *
+   * Kullanıcının bildirdiği belirti tam da buydu: "potansiyel müşteriler
+   * gelmiyor". Ekran sebebi söylemediği için teşhis kodda arandı.
+   */
+  private async bosSebep(tx: TxLike, clientId: string): Promise<string> {
+    const [durum] = await tx.$queryRaw<
+      Array<{ sayfa: number; tokenli: number; imlec: number }>
+    >(Prisma.sql`
+      SELECT
+        (SELECT count(*)::int FROM social_profiles
+          WHERE client_id = ${clientId}::uuid AND profile_type = 'facebook_page') AS sayfa,
+        (SELECT count(*)::int FROM social_profiles
+          WHERE client_id = ${clientId}::uuid AND profile_type = 'facebook_page'
+            AND page_access_token_enc IS NOT NULL) AS tokenli,
+        (SELECT count(*)::int FROM lead_sync_cursors
+          WHERE client_id = ${clientId}::uuid AND last_run_at IS NOT NULL) AS imlec
+    `);
+
+    if (!durum || durum.sayfa === 0) {
+      return (
+        'Bu workspace’e atanmış bir Facebook sayfası yok. Anlık form kayıtları ' +
+        'sayfanın altında yaşıyor; Platform Bağlantıları ekranından sayfayı bu ' +
+        'workspace’e ata.'
+      );
+    }
+    if (durum.tokenli === 0) {
+      return (
+        'Sayfa atanmış ama sayfa token’ı yok. Meta bağlantısını leads_retrieval ' +
+        'izniyle yeniden kur — kayıtlar sayfa token’ı olmadan çekilemiyor.'
+      );
+    }
+    if (durum.imlec === 0) {
+      return (
+        'Form taraması bu workspace’te henüz hiç koşmadı. “Son 30 günü getir” ' +
+        'düğmesi geçmiş kayıtları hemen çeker.'
+      );
+    }
+    return (
+      'Tarama koştu ve son 30 günde kayıt bulunamadı. Yayında bir form reklamı ' +
+      'varsa Meta Ads Manager’da formun o reklama bağlı olduğunu doğrula.'
+    );
   }
 
   async get(ctx: TenantContext, id: string): Promise<LeadRecord> {

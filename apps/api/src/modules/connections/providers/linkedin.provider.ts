@@ -1092,6 +1092,11 @@ export class LinkedInProvider implements IAdPlatformProvider {
     throw new PlatformApiError('linkedin', 'permanent', 'LinkedIn lead çekimi henüz yazılmadı.');
   }
 
+  /** Anlık form Meta'ya özgü; burada form listesi de yok. */
+  async listPageLeadForms(): Promise<never> {
+    throw new PlatformApiError('linkedin', 'permanent', "LinkedIn Ads'te anlık form yok.");
+  }
+
   async fetchFormLeads(): Promise<never> {
     throw new PlatformApiError('linkedin', 'permanent', 'LinkedIn form leadleri henüz yazılmadı.');
   }

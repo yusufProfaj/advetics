@@ -195,10 +195,30 @@ export class SyncProcessorService {
      * form başına hata yönetimi orada yapılıyor.
      */
     if (payload.jobType === 'leads_reconcile') {
+      /*
+       * ═══ KOŞUL SAYFAYA BAKIYOR, KENDİ FORMLARIMIZA DEĞİL ═══
+       *
+       * Burada bir süre `leadForms: { some: { externalFormId: { not: null } } }`
+       * yazıyordu: yalnızca PANELDE form üretmiş müşteriler süpürmeye
+       * giriyordu. Ajansların formlarının çoğu ise doğrudan Meta Ads
+       * Manager'da kurulmuş ve onların bizde satırı yok — o müşteriler için
+       * mutabakat işi HİÇ kuyruğa girmiyordu. Belirti "potansiyel müşteriler
+       * gelmiyor" ve hiçbir ekranda tek kelime yazmıyordu.
+       *
+       * Gerçek ön koşul sayfa: anlık form kayıtları Facebook sayfasının
+       * altında yaşıyor ve çağrı sayfa token'ı istiyor. Token'ı olmayan
+       * sayfa da listeye giriyor — servis sebebi kullanıcıya yazıyor;
+       * burada elemek, arızayı yalnızca log'a gömmek olurdu.
+       */
       const clients = await this.db.client.findMany({
         where: {
           status: 'active',
-          leadForms: { some: { externalFormId: { not: null } } },
+          socialProfiles: {
+            some: {
+              profileType: 'facebook_page',
+              connection: { status: 'active', platform: 'meta' },
+            },
+          },
         },
         select: { id: true },
       });

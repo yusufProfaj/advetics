@@ -34,6 +34,7 @@ import {
   type PlatformActionRequest,
   type CreateLeadFormRequest,
   type DiscoveredLead,
+  type DiscoveredLeadForm,
   type PublishDraftRequest,
   type PublishDraftResult,
   type PlatformActionResult,
@@ -2884,6 +2885,97 @@ export class MetaProvider implements IAdPlatformProvider {
   // ---------------------------------------------------------------------------
   // POTANSİYEL MÜŞTERİLER
   // ---------------------------------------------------------------------------
+
+  /**
+   * ═══ SAYFANIN BÜTÜN FORMLARI — KİMİN ÜRETTİĞİ FARK ETMEZ ═══
+   *
+   * Mutabakat taraması bir süre yalnızca panelde üretilmiş formları
+   * (`lead_forms` tablosu) geziyordu. Ajansların formlarının çoğu ise
+   * doğrudan Meta Ads Manager'da kurulmuş ve onların bizde satırı yok: o
+   * formlar HİÇ taranmıyordu ve doldurulan formlar panele düşmüyordu — hata
+   * yok, log yok, yalnızca boş bir liste.
+   *
+   * ARŞİVLENMİŞ FORM DA GELİYOR. Meta arşivlenmiş formun geçmiş kayıtlarını
+   * saklamaya devam ediyor ve son 30 günün kayıtları arşivlenen bir formdan
+   * gelmiş olabilir; süzmek o kayıtları sessizce atlamak olurdu.
+   */
+  async listPageLeadForms(params: {
+    pageAccessToken: string;
+    pageExternalId: string;
+    onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
+  }): Promise<DiscoveredLeadForm[]> {
+    const out: DiscoveredLeadForm[] = [];
+    let pages = 0;
+
+    const first = new URL(`${this.graph}/${params.pageExternalId}/leadgen_forms`);
+    first.searchParams.set('fields', ['id', 'name', 'status'].join(','));
+    first.searchParams.set('limit', '100');
+
+    let url: string = first.toString();
+    let next: string | null = null;
+
+    while (pages < MAX_LEAD_PAGES) {
+      const res: PlatformResponse<GraphPage> = await platformFetch<GraphPage>(
+        'meta',
+        url,
+        // SAYFA TOKEN'I ZORUNLU: `leadgen_forms` sayfanın altında yaşıyor ve
+        // kullanıcı token'ıyla çağrı, izinler doğru olsa bile "(#200) izin
+        // gerekiyor" ile dönüyor.
+        { headers: { Authorization: `Bearer ${params.pageAccessToken}` } },
+        parseMetaRateLimit,
+      );
+      if (res.rateLimit) await params.onRateLimit?.(res.rateLimit);
+
+      for (const row of res.data.data ?? []) {
+        const f = row as unknown as { id?: string; name?: string; status?: string };
+        if (!f.id) continue;
+        out.push({
+          externalFormId: f.id,
+          // ADI OLMAYAN FORM KİMLİĞİYLE ANILIYOR. Boş bir ad, panelde
+          // "hangi form" sorusunu cevapsız bırakır ve kayıt sahipsiz görünür.
+          name: f.name?.trim() || `Form ${f.id}`,
+          status: f.status ?? null,
+        });
+      }
+
+      pages++;
+      next = res.data.paging?.next ?? null;
+      if (!next) break;
+      url = next;
+    }
+
+    if (next) {
+      // SESSİZ KESME YOK: sayfa sınırına takıldıysak söylüyoruz, yoksa
+      // taranmayan formlar "kayıt yok" olarak görünürdü.
+      this.logger.warn(
+        `Sayfa ${params.pageExternalId}: form listesi ${MAX_LEAD_PAGES} sayfada kesildi`,
+      );
+    }
+    return out;
+  }
+
+  /**
+   * Bir formun ADINI çeker.
+   *
+   * Webhook yolunda formun tamamını listelemek pahalı: tek bir kayıt için
+   * sayfanın bütün formlarını okumak gereksiz çağrı demek. Bu uç yalnızca
+   * bizde satırı OLMAYAN formlarda çağrılıyor.
+   */
+  async fetchLeadFormName(params: {
+    pageAccessToken: string;
+    externalFormId: string;
+  }): Promise<string | null> {
+    const url = new URL(`${this.graph}/${params.externalFormId}`);
+    url.searchParams.set('fields', 'name');
+
+    const res = await platformFetch<{ name?: string }>(
+      'meta',
+      url.toString(),
+      { headers: { Authorization: `Bearer ${params.pageAccessToken}` } },
+      parseMetaRateLimit,
+    );
+    return res.data.name?.trim() || null;
+  }
 
   /**
    * Tek kaydı çeker.

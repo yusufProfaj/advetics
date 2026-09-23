@@ -1944,6 +1944,11 @@ export class GoogleProvider implements IAdPlatformProvider {
     throw new PlatformApiError('google', 'permanent', "Google Ads'te anlık form kaydı yok.");
   }
 
+  /** Anlık form Meta'ya özgü; burada form listesi de yok. */
+  async listPageLeadForms(): Promise<never> {
+    throw new PlatformApiError('google', 'permanent', "Google Ads'te anlık form yok.");
+  }
+
   async fetchFormLeads(): Promise<never> {
     throw new PlatformApiError('google', 'permanent', "Google Ads'te anlık form kaydı yok.");
   }

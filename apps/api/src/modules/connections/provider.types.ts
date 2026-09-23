@@ -711,6 +711,27 @@ export interface DiscoveredLead {
   fields: Array<{ name: string; label: string; value: string }>;
 }
 
+/**
+ * Sayfanın Meta'daki anlık formu.
+ *
+ * ═══ BU TİP NEDEN VAR ═══
+ *
+ * Panel bir süre yalnızca KENDİ ürettiği formları tanıyordu (`lead_forms`
+ * tablosu) ve mutabakat taraması da o tablodan besleniyordu. Ajansların
+ * formlarının çoğu ise doğrudan Meta Ads Manager'da kurulmuş: o formların
+ * bizde satırı yok, yani taranmıyorlardı ve doldurulan formlar panele HİÇ
+ * düşmüyordu — hata yok, log yok, yalnızca boş bir liste.
+ *
+ * Formların kaynağı artık Meta: sayfanın altındaki bütün formlar okunuyor,
+ * kimin ürettiği fark etmiyor.
+ */
+export interface DiscoveredLeadForm {
+  externalFormId: string;
+  name: string;
+  /** ACTIVE | ARCHIVED | DRAFT — arşivlenmiş form da geçmiş kayıt taşıyor. */
+  status: string | null;
+}
+
 export interface CreateLeadFormRequest {
   pageExternalId: string;
   /**
@@ -1187,6 +1208,32 @@ export interface IAdPlatformProvider {
     externalLeadId: string;
     onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
   }): Promise<DiscoveredLead>;
+
+  /**
+   * Sayfanın Meta'daki BÜTÜN anlık formlarını listeler.
+   *
+   * Panelde üretilmiş formlarla sınırlı değil: ajansların formlarının çoğu
+   * doğrudan Meta Ads Manager'da kuruluyor ve onların bizde satırı yok.
+   * Kaynak listeyi kendi tablomuzdan okumak, o formları HİÇ taramamak
+   * demekti.
+   */
+  listPageLeadForms(params: {
+    pageAccessToken: string;
+    pageExternalId: string;
+    onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
+  }): Promise<DiscoveredLeadForm[]>;
+
+  /**
+   * Bir formun ADINI çeker.
+   *
+   * İSTEĞE BAĞLI: yalnızca Meta'da anlık form var. Webhook yolunda tek bir
+   * kayıt için sayfanın bütün formlarını listelemek gereksiz çağrı demek;
+   * bu uç yalnızca bizde satırı OLMAYAN formlarda çağrılıyor.
+   */
+  fetchLeadFormName?(params: {
+    pageAccessToken: string;
+    externalFormId: string;
+  }): Promise<string | null>;
 
   /**
    * Bir formun kayıtlarını tarar — MUTABAKAT İÇİN.

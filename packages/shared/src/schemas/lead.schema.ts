@@ -142,4 +142,15 @@ export interface LeadListResult {
    * edilemez: kayıtlar geliyor, yalnızca saatler geç geliyor.
    */
   reconciledRatio: number;
+  /**
+   * Liste BOŞSA neden boş — bu üründe boş liste sebebini söylemek zorunda.
+   *
+   * "Kimse form doldurmadı" ile "sistem çalışmıyor" aynı boş alana
+   * çevrildiğinde ajans günlerce bekliyor. Kullanıcının bildirdiği hâl
+   * birebir buydu: *"potansiyel müşteriler gelmiyor"* — ekran sebebi
+   * söylemediği için teşhis kodda arandı.
+   *
+   * Liste doluysa `null`.
+   */
+  emptyReason: string | null;
 }

@@ -95,74 +95,180 @@ export class LeadSyncService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Bir müşterinin tüm yayınlanmış formlarını tarar.
+   * ═══ FORM LİSTESİNİN KAYNAĞI META, KENDİ TABLOMUZ DEĞİL ═══
    *
-   * FORM BAŞINA AYRI HATA YÖNETİMİ. Bir formun token'ı bozuksa diğerleri
-   * taranmaya devam ediyor; tek try/catch olsaydı ilk hata bütün müşteriyi
-   * karanlıkta bırakırdı.
+   * Bu fonksiyon bir süre yalnızca `lead_forms` tablosunu geziyordu: panelde
+   * ÜRETİLMİŞ formlar. Ajansların formlarının çoğu ise doğrudan Meta Ads
+   * Manager'da kurulmuş ve onların bizde satırı yok — o formlar HİÇ
+   * taranmıyordu. Belirti kullanıcının cümlesiyle "potansiyel müşteriler
+   * gelmiyor": reklam yayında, form doldruluyor, panel boş ve hiçbir yerde
+   * hata yok.
+   *
+   * Bugün kaynak sayfanın kendisi: müşteriye atanmış her Facebook sayfasının
+   * altındaki BÜTÜN formlar okunuyor, kimin ürettiği fark etmiyor.
+   *
+   * SAYFA BAŞINA ve FORM BAŞINA AYRI HATA YÖNETİMİ. Bir sayfanın token'ı
+   * bozuksa diğerleri taranmaya devam ediyor; tek try/catch olsaydı ilk hata
+   * bütün müşteriyi karanlıkta bırakırdı.
    */
-  async reconcile(clientId: string): Promise<{ rows: number; note: string }> {
-    const forms = await this.db.$queryRaw<
-      Array<{ external_form_id: string; social_profile_id: string; name: string }>
+  async reconcile(
+    clientId: string,
+    opts: { gecmis?: boolean } = {},
+  ): Promise<{ rows: number; note: string; notlar: string[] }> {
+    const profiles = await this.db.$queryRaw<
+      Array<{ id: string; name: string; external_id: string; token_var: boolean }>
     >(Prisma.sql`
-      SELECT DISTINCT ON (f.external_form_id)
-             f.external_form_id, f.social_profile_id::text AS social_profile_id, f.name
-      FROM lead_forms f
-      WHERE f.client_id = ${clientId}::uuid
-        AND f.external_form_id IS NOT NULL
-      ORDER BY f.external_form_id, f.created_at DESC
+      SELECT sp.id::text AS id, sp.name, sp.external_id,
+             (sp.page_access_token_enc IS NOT NULL) AS token_var
+      FROM social_profiles sp
+      WHERE sp.client_id = ${clientId}::uuid
+        AND sp.profile_type = 'facebook_page'
+      ORDER BY sp.name
     `);
 
-    if (forms.length === 0) {
-      return { rows: 0, note: 'yayınlanmış form yok' };
+    if (profiles.length === 0) {
+      /*
+       * SEBEP YAZILIYOR. "0 kayıt" tek başına, sistemin bozuk olduğunu
+       * düşündürüyor; oysa yapılacak iş belli: sayfayı workspace'e ata.
+       */
+      return {
+        rows: 0,
+        note: 'atanmış Facebook sayfası yok',
+        notlar: [
+          'Bu workspace’e atanmış bir Facebook sayfası yok. ' +
+            'Anlık form kayıtları sayfanın altında yaşıyor; Platform Bağlantıları ' +
+            'ekranından sayfayı bu workspace’e ata.',
+        ],
+      };
     }
 
     let total = 0;
-    let failed = 0;
+    let basarisiz = 0;
+    const notlar: string[] = [];
 
-    for (const form of forms) {
+    for (const profile of profiles) {
+      if (!profile.token_var) {
+        basarisiz++;
+        notlar.push(
+          `${profile.name}: sayfa token’ı yok. Meta bağlantısını ` +
+            '`leads_retrieval` izniyle yeniden kur.',
+        );
+        continue;
+      }
+
       try {
-        total += await this.reconcileForm(clientId, form.social_profile_id, form.external_form_id);
+        const sonuc = await this.sayfayiTara(clientId, profile, opts.gecmis === true);
+        total += sonuc.rows;
+        notlar.push(`${profile.name}: ${sonuc.not}`);
       } catch (err) {
-        failed++;
-        const message = err instanceof Error ? err.message : String(err);
-        this.logger.error(`Form ${form.name} taranamadı: ${message}`);
-        await this.db.$executeRaw(Prisma.sql`
-          UPDATE lead_sync_cursors
-          SET last_error = ${message.slice(0, 1000)}, last_run_at = now(), updated_at = now()
-          WHERE external_form_id = ${form.external_form_id}
-        `);
+        basarisiz++;
+        const mesaj = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Sayfa ${profile.name} taranamadı: ${mesaj}`);
+        notlar.push(`${profile.name}: ${mesaj}`);
       }
     }
 
     /**
      * TÜMÜ BAŞARISIZSA İŞ BAŞARISIZ.
      *
-     * Kısmi başarıyı başarı saymak doğru (bir form bozuk, diğerleri çalışıyor)
-     * ama hepsinin patladığı bir turu "tamamlandı" diye kaydetmek, iş
-     * listesinde yeşil görünen tamamen ölü bir mutabakat demek olurdu.
+     * Kısmi başarıyı başarı saymak doğru (bir sayfa bozuk, diğerleri
+     * çalışıyor) ama hepsinin patladığı bir turu "tamamlandı" diye kaydetmek,
+     * iş listesinde yeşil görünen tamamen ölü bir mutabakat demek olurdu.
      */
-    if (failed === forms.length) {
+    if (basarisiz === profiles.length) {
       throw new PlatformApiError(
         'meta',
         'permanent',
-        `${failed} formun hiçbiri taranamadı`,
+        `${basarisiz} sayfanın hiçbiri taranamadı: ${notlar.join(' · ')}`,
       );
     }
 
     return {
       rows: total,
-      note:
-        failed > 0
-          ? `${forms.length - failed}/${forms.length} form tarandı, ${total} yeni kayıt`
-          : `${forms.length} form tarandı, ${total} yeni kayıt`,
+      note: `${profiles.length - basarisiz}/${profiles.length} sayfa tarandı, ${total} yeni kayıt`,
+      notlar,
     };
+  }
+
+  /**
+   * Bir sayfanın bütün formlarını tarar.
+   *
+   * FORM LİSTESİ META'DAN, ama kendi yayınladığımız formlar da BİRLEŞTİRİLİYOR:
+   * Meta listesi sayfa sınırına takılabiliyor ve bizde satırı olan bir formun
+   * o yüzden atlanması, kendi kurduğumuz akışın sessizce çalışmaması olurdu.
+   */
+  private async sayfayiTara(
+    clientId: string,
+    profile: { id: string; name: string; external_id: string },
+    gecmis: boolean,
+  ): Promise<{ rows: number; not: string }> {
+    const yuklenen = await this.loadProfile(profile.id);
+    const provider = this.providers.get('meta');
+
+    await this.acquire(profile.id);
+    const metaFormlari = await provider.listPageLeadForms({
+      pageAccessToken: yuklenen.pageToken,
+      pageExternalId: profile.external_id,
+      onRateLimit: (snapshot) =>
+        this.quota.record({
+          platform: 'meta',
+          adAccountId: profile.id,
+          endpoint: 'leads:forms',
+          snapshot,
+        }),
+    });
+
+    const bizimkiler = await this.db.$queryRaw<Array<{ external_form_id: string; name: string }>>(
+      Prisma.sql`
+        SELECT DISTINCT ON (f.external_form_id) f.external_form_id, f.name
+        FROM lead_forms f
+        WHERE f.social_profile_id = ${profile.id}::uuid
+          AND f.external_form_id IS NOT NULL
+        ORDER BY f.external_form_id, f.created_at DESC
+      `,
+    );
+
+    const adlar = new Map<string, string>();
+    for (const f of metaFormlari) adlar.set(f.externalFormId, f.name);
+    // KENDİ ADIMIZ ÖNCELİKLİ: panelde form neyse kayıtta da o yazsın.
+    for (const f of bizimkiler) adlar.set(f.external_form_id, f.name);
+
+    if (adlar.size === 0) {
+      return { rows: 0, not: 'bu sayfada anlık form yok' };
+    }
+
+    let rows = 0;
+    let basarisiz = 0;
+
+    for (const [externalFormId, ad] of adlar) {
+      try {
+        rows += await this.reconcileForm(clientId, profile.id, externalFormId, ad, gecmis);
+      } catch (err) {
+        basarisiz++;
+        const mesaj = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Form ${ad} taranamadı: ${mesaj}`);
+        await this.db.$executeRaw(Prisma.sql`
+          UPDATE lead_sync_cursors
+          SET last_error = ${mesaj.slice(0, 1000)}, last_run_at = now(), updated_at = now()
+          WHERE external_form_id = ${externalFormId}
+        `);
+      }
+    }
+
+    // SESSİZ KESME YOK: kaç form tarandı, kaçı düştü, kaç kayıt geldi.
+    const not =
+      basarisiz > 0
+        ? `${adlar.size - basarisiz}/${adlar.size} form tarandı, ${rows} yeni kayıt`
+        : `${adlar.size} form tarandı, ${rows} yeni kayıt`;
+    return { rows, not };
   }
 
   private async reconcileForm(
     clientId: string,
     socialProfileId: string,
     externalFormId: string,
+    formAdi: string,
+    gecmis: boolean,
   ): Promise<number> {
     const profile = await this.loadProfile(socialProfileId);
     const provider = this.providers.get('meta');
@@ -171,9 +277,19 @@ export class LeadSyncService {
       SELECT synced_through FROM lead_sync_cursors WHERE external_form_id = ${externalFormId}
     `);
 
-    const since = cursor?.synced_through
-      ? new Date(cursor.synced_through.getTime() - OVERLAP_MS)
-      : new Date(Date.now() - FIRST_SCAN_DAYS * 86_400_000);
+    /*
+     * ═══ GEÇMİŞ ÇEKİMİ İMLECİ YOK SAYIYOR ═══
+     *
+     * Kullanıcı "son 30 günün bütün kayıtlarını getir" dediğinde imleçten
+     * devam etmek hiçbir şey getirmez: imleç zaten en yeni kayıtta duruyor.
+     * Mükerrer kayıt tehlikesi YOK — `ON CONFLICT (external_lead_id) DO
+     * NOTHING` onu veritabanı seviyesinde engelliyor ve engel bizim
+     * kontrolümüze değil, tekil indekse dayanıyor.
+     */
+    const since =
+      gecmis || !cursor?.synced_through
+        ? new Date(Date.now() - FIRST_SCAN_DAYS * 86_400_000)
+        : new Date(cursor.synced_through.getTime() - OVERLAP_MS);
 
     await this.acquire(socialProfileId);
 
@@ -190,7 +306,7 @@ export class LeadSyncService {
         }),
     });
 
-    const written = await this.persist(profile, leads, 'reconcile');
+    const written = await this.persist(profile, leads, 'reconcile', formAdi);
 
     /**
      * İMLEÇ EN YENİ KAYDA GÖRE, "şimdi"ye göre DEĞİL.
@@ -251,8 +367,25 @@ export class LeadSyncService {
     profile: ProfileRow,
     leads: DiscoveredLead[],
     source: 'webhook' | 'reconcile',
+    /**
+     * Meta'dan okunan form adı — bizde satırı OLMAYAN formlar için.
+     *
+     * Bu parametre olmadan Meta Ads Manager'da kurulmuş bir formdan gelen
+     * kaydın adı NULL kalıyordu ve panelde "hangi form" sorusu cevapsızdı:
+     * kayıt var, nereden geldiği yok.
+     */
+    formAdiYedegi?: string | null,
   ): Promise<number> {
     let written = 0;
+    /*
+     * FORM ADI ÖNBELLEĞİ — TUR BAŞINA.
+     *
+     * Aynı formdan gelen on kayıt için Meta'ya on kez sormak gereksiz çağrı
+     * ve kota. Önbellek yalnızca bu çağrı boyunca yaşıyor: kalıcı bir tablo
+     * tutmak, Meta'da adı değişen bir formun panelde eski adıyla kalması
+     * demek olurdu.
+     */
+    const metaAdlari = new Map<string, string | null>();
 
     for (const lead of leads) {
       if (!lead.externalLeadId) continue;
@@ -281,6 +414,22 @@ export class LeadSyncService {
       const formName = lead.externalFormId
         ? await this.formNameFor(lead.externalFormId)
         : null;
+      /*
+       * ═══ FORM ADI ÜÇ KAYNAKTAN, BU SIRAYLA ═══
+       *
+       *   1. kendi tablomuz (panelde üretilmiş form),
+       *   2. taramanın Meta'dan getirdiği ad,
+       *   3. tek kayıt için Meta'ya sorulan ad.
+       *
+       * Üçüncüsü WEBHOOK YOLU İÇİN: oradan tek bir kayıt geliyor ve form
+       * listesi hiç okunmuyor. Bu olmadan Meta Ads Manager'da kurulmuş bir
+       * formdan düşen kaydın adı NULL kalıyordu ve panelde "hangi form"
+       * sorusu cevapsızdı — kayıt var, nereden geldiği yok.
+       */
+      let formAdi = formName?.name ?? formAdiYedegi ?? null;
+      if (!formAdi && lead.externalFormId) {
+        formAdi = await this.metaFormAdi(profile, lead.externalFormId, metaAdlari);
+      }
 
       const n = await this.db.$executeRaw(Prisma.sql`
         INSERT INTO leads (
@@ -291,7 +440,7 @@ export class LeadSyncService {
           gen_random_uuid(), ${profile.orgId}::uuid, ${profile.clientId}::uuid,
           ${lead.externalLeadId},
           ${formName?.id ?? null}::uuid, ${profile.id}::uuid,
-          ${lead.externalAdId}, ${campaignName}, ${formName?.name ?? null},
+          ${lead.externalAdId}, ${campaignName}, ${formAdi},
           ${contact.fullName}, ${contact.email}, ${contact.phone},
           ${JSON.stringify(lead.fields)}::jsonb, ${source}, ${lead.submittedAt}, now()
         )
@@ -306,6 +455,39 @@ export class LeadSyncService {
     }
 
     return written;
+  }
+
+  /**
+   * Formun adını Meta'dan okur — YALNIZCA bizde satırı yoksa.
+   *
+   * ÇAĞRI DÜŞERSE KAYIT YAZILMAYA DEVAM EDİYOR. Ad bir süsleme alanı;
+   * onun için kişisel veri taşıyan bir kaydı düşürmek, gerçek bir müşteriyi
+   * kaybetmek olurdu.
+   */
+  private async metaFormAdi(
+    profile: ProfileRow,
+    externalFormId: string,
+    onbellek: Map<string, string | null>,
+  ): Promise<string | null> {
+    const kayitli = onbellek.get(externalFormId);
+    if (kayitli !== undefined) return kayitli;
+
+    let ad: string | null = null;
+    try {
+      // İSTEĞE BAĞLI METOT: arayüzde `?` ile duruyor çünkü yalnızca Meta'da
+      // anlık form var. Yoksa ad boş kalıyor, kayıt yine yazılıyor.
+      ad =
+        (await this.providers.get('meta').fetchLeadFormName?.({
+          pageAccessToken: profile.pageToken,
+          externalFormId,
+        })) ?? null;
+    } catch (err) {
+      this.logger.warn(
+        `Form adı okunamadı (${externalFormId}): ${err instanceof Error ? err.message : err}`,
+      );
+    }
+    onbellek.set(externalFormId, ad);
+    return ad;
   }
 
   private async campaignNameFor(externalAdId: string): Promise<string | null> {

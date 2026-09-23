@@ -248,3 +248,57 @@ describe('CSV dışa aktarma', () => {
     expect(csv.split('\r\n')).toHaveLength(206);
   });
 });
+
+/**
+ * ═══ BOŞ LİSTE NEDEN BOŞ ═══
+ *
+ * Ekran tek bir cümle yazıyordu ve DÖRT ayrı hâli aynı kefeye koyuyordu.
+ * Kullanıcının bildirdiği belirti tam da buydu: "potansiyel müşteriler
+ * gelmiyor" — sebep ekranda yazmadığı için teşhis kodda arandı.
+ */
+describe('boş listenin sebebi', () => {
+  async function sebep(): Promise<string | null> {
+    const r = await svc.list(CTX, {
+      clientId: IDS.client,
+      limit: 50,
+      offset: 0,
+    } as Parameters<LeadsService['list']>[1]);
+    return r.emptyReason;
+  }
+
+  it('KRİTİK: SAYFA ATANMAMIŞSA bunu söylüyor', async () => {
+    // `beforeEach` bir sayfa ekliyor; bu test onu geri alıyor.
+    await h.q(`DELETE FROM social_profiles`);
+    expect(await sebep()).toContain('Facebook sayfası yok');
+  });
+
+  it('KRİTİK: SAYFA VAR TOKEN YOKSA bunu söylüyor', async () => {
+    // Token olmadan çağrı yapılamıyor; "kayıt yok" demek kullanıcıyı sebebi
+    // Meta'da aramaya gönderirdi.
+    expect(await sebep()).toContain('token');
+  });
+
+  it('KRİTİK: TOKEN VAR TARAMA HİÇ KOŞMAMIŞSA DÜĞMEYE YÖNLENDİRİYOR', async () => {
+    await h.q(`UPDATE social_profiles SET page_access_token_enc = $1`, [Buffer.from('x')]);
+    expect(await sebep()).toContain('Son 30 günü getir');
+  });
+
+  it('KRİTİK: HER ŞEY YERİNDEYSE DOĞRU CÜMLE', async () => {
+    await h.q(`UPDATE social_profiles SET page_access_token_enc = $1`, [Buffer.from('x')]);
+    await h.q(
+      `INSERT INTO lead_sync_cursors (id, org_id, client_id, social_profile_id,
+         external_form_id, last_run_at, updated_at)
+       VALUES (gen_random_uuid(),$1,$2,$3,'meta-form-1', now(), now())`,
+      [IDS.org, IDS.client, PROFILE],
+    );
+    const s = await sebep();
+    expect(s).toContain('kayıt bulunamadı');
+    // YANLIŞ YÖNLENDİRME YOK: her şey yerindeyken sayfa atamaya gönderilmiyor.
+    expect(s).not.toContain('Facebook sayfası yok');
+  });
+
+  it('LİSTE DOLUYSA SEBEP YOK', async () => {
+    await insertLead({ fullName: 'Ahmet' });
+    expect(await sebep()).toBeNull();
+  });
+});
