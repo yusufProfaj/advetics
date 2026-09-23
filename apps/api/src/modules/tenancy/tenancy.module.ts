@@ -4,6 +4,7 @@ import { BrandingController } from './branding.controller';
 import { BrandingService } from './branding.service';
 import { ClientProfileController } from './client-profile.controller';
 import { ClientProfileService } from './client-profile.service';
+import { BilgiBankasiAiService } from './bilgi-bankasi-ai.service';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { ClientSetupService } from './client-setup.service';
@@ -31,6 +32,7 @@ import { OrganizationsController } from './organizations.controller';
     ClientSetupService,
     ClientChannelsService,
     ClientProfileService,
+    BilgiBankasiAiService,
   ],
   exports: [ClientsService, BrandingService, ClientProfileService],
 })

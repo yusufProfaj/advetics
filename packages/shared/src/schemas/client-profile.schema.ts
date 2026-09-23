@@ -31,6 +31,22 @@ export const upsertClientProfileSchema = z.object({
 
 export type UpsertClientProfileInput = z.infer<typeof upsertClientProfileSchema>;
 
+/**
+ * Yapay zekânın ürettiği BİLGİ BANKASI TASLAĞI.
+ *
+ * KAYDEDİLMİŞ DEĞİL: uç bu nesneyi döndürüyor, veritabanına yazmıyor. Yapay
+ * zekânın ürettiği ve gerçek bir işletmeyi anlatan metin, reklam metnini
+ * besleyen bir kayda insan görmeden girmemeli. Kullanıcı ekranda görüyor,
+ * düzeltiyor ve kendi kaydediyor.
+ */
+export interface BilgiBankasiTaslak {
+  bilgiBankasi: string;
+  hedefKitle: string;
+  markaBilgileri: string;
+  /** Hangi adresten okundu — taslağın dayanağı ekranda yazıyor. */
+  kaynak: string;
+}
+
 export interface ClientProfileRecord {
   id: string;
   clientId: string;

@@ -1,6 +1,8 @@
 import type { Permission } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { BilgiBankasiIcerik } from '@/components/bilgi-bankasi/bilgi-bankasi-icerik';
+import { WorkspaceSecici } from '@/components/bilgi-bankasi/workspace-secici';
+import { AiDoldur } from '@/components/bilgi-bankasi/ai-doldur';
 import {
   SAYFA_GIRIS_IZNI,
   SEKMELER,
@@ -62,20 +64,31 @@ export default async function BilgiBankasiPage({
   const izinler: Permission[] = SEKME_IZINLERI.filter((p) => hasPermission(session, p));
   const gizliSekmeSayisi = SEKMELER.length - gorunurSekmeler(izinler).length;
 
-  const clientId =
-    first(params.musteri) ?? session.activeClientId ?? session.availableClients[0]?.id;
+  /*
+   * ═══ WORKSPACE SESSİZCE SEÇİLMİYOR ═══
+   *
+   * Burada `activeClientId ?? availableClients[0]` yazıyordu: şirket seçili
+   * olup workspace seçilmemişse listedeki İLK workspace açılıyordu ve
+   * başlıkta adı da yazmıyordu. Kullanıcı şirketin bilgi bankasını
+   * düzenlediğini sanarken bambaşka bir workspace'in kaydını değiştiriyordu
+   * — ve bu kayıt reklam metnini besliyor, yani yanlış workspace'e yazılan
+   * bir cümle başka bir markanın reklamında çıkıyor.
+   *
+   * `activeClientId` HÂLÂ GEÇERLİ bir seçim: üst bardaki değiştiriciden
+   * seçilmiş demek, yani kullanıcı onu bir kez söylemiş. Otomatik olan tek
+   * şey listenin ilk satırına düşmekti ve o kalktı.
+   */
+  const clientId = first(params.musteri) ?? session.activeClientId ?? null;
+  const workspaceler = session.availableClients
+    .filter((c) => c.status === 'active')
+    .map((c) => ({ id: c.id, name: c.name }));
+  const aktifWorkspace = clientId
+    ? (workspaceler.find((w) => w.id === clientId) ?? null)
+    : null;
 
-  if (!clientId) {
-    return (
-      <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
-        <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">
-          Bilgi Bankası workspace başına tutuluyor: genel bilgiler, bütçe, hedef
-          kitle ve marka bilgileri her workspace’te farklı.
-        </p>
-      </div>
-    );
-  }
+  const sirketAdi =
+    session.managerAccount?.organizations.find((o) => o.id === session.activeOrganizationId)
+      ?.name ?? session.organization.name;
 
   return (
     <div className="min-w-0 space-y-4">
@@ -100,7 +113,31 @@ export default async function BilgiBankasiPage({
         )}
       </header>
 
-      <BilgiBankasiIcerik clientId={clientId} izinler={izinler} />
+      <WorkspaceSecici
+        workspaceler={workspaceler}
+        aktif={aktifWorkspace}
+        sirketAdi={session.tumSirketler ? 'Tüm şirketler' : sirketAdi}
+      />
+
+      {/*
+        SEÇİM YAPILMADAN İÇERİK ÇİZİLMİYOR. Boş bir sekme çubuğu göstermek,
+        "workspace seçilmedi" ile "bu workspace'in bilgisi boş" hâllerini aynı
+        ekrana çevirirdi.
+      */}
+      {aktifWorkspace && (
+        <>
+          {/*
+            DOLDUR DÜĞMESİ SEKMELERİN ÜSTÜNDE — bir sekmenin içinde değil.
+            Üretilen taslak ÜÇ sekmeyi birden dolduruyor; birinin içine
+            koymak, diğer iki sekmenin oradan değiştiğini görünmez yapardı.
+          */}
+          <AiDoldur
+            clientId={aktifWorkspace.id}
+            canWrite={hasPermission(session, 'client.write')}
+          />
+          <BilgiBankasiIcerik clientId={aktifWorkspace.id} izinler={izinler} />
+        </>
+      )}
     </div>
   );
 }

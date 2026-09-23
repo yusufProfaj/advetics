@@ -19,6 +19,7 @@ import { FormsModule } from './modules/forms/forms.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { DraftTreeModule } from './modules/draft-tree/draft-tree.module';
 import { CampaignActionsModule } from './modules/campaign-actions/campaign-actions.module';
+import { AnthropicModule } from './modules/ai-assistant/anthropic.module';
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module';
 import { StorageModule } from './storage/storage.module';
 import { LeadsModule } from './modules/leads/leads.module';
@@ -66,6 +67,7 @@ import { SyncModule } from './modules/sync/sync.module';
     AssetsModule,
     DraftTreeModule,
     CampaignActionsModule,
+    AnthropicModule,
     AiAssistantModule,
     BoostsModule,
     AutoBoostModule,
