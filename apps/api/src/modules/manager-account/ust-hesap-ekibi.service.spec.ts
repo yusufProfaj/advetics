@@ -55,6 +55,14 @@ let kalanYonetici = 1;
 
 const KULLANICI = {
   id: O,
+  /*
+   * EV ŞİRKETİ — AJANSIN KENDİ ŞİRKETİ.
+   *
+   * Fixture'a `orgId` eklendi çünkü `ekle` artık var olan kullanıcının
+   * ev şirketinde olmasını ŞART KOŞUYOR: müşteri şirketinin kullanıcısını
+   * üst hesap ekibine almak, ona altındaki bütün şirketleri açardı.
+   */
+  orgId: ORG,
   email: 'o@musteri.com',
   fullName: 'O Kişi',
   status: 'active',
@@ -185,6 +193,36 @@ describe('ekle — var olan kullanıcı', () => {
     await expect(
       svc.ekle(ctx(), { email: KULLANICI.email, role: 'admin' }, META),
     ).rejects.toMatchObject({ status: 404 });
+    expect(calls.uyelikCreate).toEqual([]);
+  });
+
+  it('KRİTİK: MÜŞTERİ ŞİRKETİNİN kullanıcısı üst hesap ekibine ALINAMIYOR', async () => {
+    /*
+     * ═══ BU KAPI TİCARİ BİR SIZINTIYI KAPATIYOR ═══
+     *
+     * Bir üstteki kontrol yalnızca "aynı üst hesabın altında mı" diyor ve
+     * MÜŞTERİ ŞİRKETLERİ DE O ÜST HESABIN ALTINDA — yani 3A Makina'nın
+     * kendi yöneticisi o kontrolden GEÇİYORDU. Tek satır `ManagerMembership`,
+     * o kişiye ajansın bütün şirketlerini açıyor: `TenantContextService`
+     * kardeş şirketlerde sentetik org geneli üyelik kuruyor ve
+     * `app.ajansa_ait_org` ikinci dalı açılınca havuz görünür hâle geliyor.
+     * Farkı `musteri-sirketi-izolasyon.spec.ts` ölçüyor.
+     *
+     * Panelde iki ekleme kutusu yan yana ("üst hesap ekibi" / "bu şirkete
+     * kişi ekle") ve ikisi de bir e-posta alanı. Yanlış kutuya yazmak
+     * geri alınabilir ama sızıntı geri alınamaz.
+     */
+    mevcutKullanici = {
+      ...KULLANICI,
+      orgId: '99999999-9999-9999-9999-999999999999',
+      organization: { managerAccountId: MGR },
+      managerMemberships: [],
+    };
+    await expect(
+      svc.ekle(ctx(), { email: KULLANICI.email, role: 'admin' }, META),
+    ).rejects.toThrow(/müşteri şirketinin hesabı/i);
+    // ÜYELİK AÇILMADIĞI DA SINANIYOR: hata fırlatan ama satırı yazan bir
+    // kod yolu, testi geçerken sızıntıyı üretmeye devam ederdi.
     expect(calls.uyelikCreate).toEqual([]);
   });
 

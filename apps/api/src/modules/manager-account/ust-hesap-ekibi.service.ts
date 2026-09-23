@@ -124,6 +124,29 @@ export class UstHesapEkibiService {
    * açarak yapıyor; aynı e-postayı iki kiracıda paylaşmak `users.email`
    * tekilliğine çarpıyor ve bu bilinçli.
    */
+  /**
+   * ÜST HESABIN EV ŞİRKETİ — ajansın KENDİ şirketi.
+   *
+   * "En eski aktif şirket" tanımı iki dalda da aynı olmak zorundaydı: yeni
+   * kullanıcı buraya AÇILIYOR, var olan kullanıcı ise burada OLMAK zorunda.
+   * İki yerde ayrı yazılsaydı biri güncellendiğinde ekleme kapısı ile
+   * açılan hesabın yeri ayrışırdı — ve o ayrışmanın belirtisi, kişinin
+   * girişte yanlış şirkette uyanması olurdu.
+   */
+  private async evSirketi(managerAccountId: string): Promise<{ id: string }> {
+    const ev = await this.admin.organization.findFirst({
+      where: { managerAccountId, status: 'active' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (!ev) {
+      // `ilk-sirket.ts` bunu imkânsız kılıyor; yine de sessizce başka bir
+      // yere yazmak yerine açıkça duruyoruz.
+      throw new BadRequestException('Üst hesabın altında şirket yok — önce şirket açılmalı');
+    }
+    return ev;
+  }
+
   async ekle(
     ctx: TenantContext,
     input: UstHesapUyesiEkleInput,
@@ -135,6 +158,7 @@ export class UstHesapEkibiService {
       where: { email: input.email },
       select: {
         id: true,
+        orgId: true,
         email: true,
         fullName: true,
         status: true,
@@ -147,6 +171,38 @@ export class UstHesapEkibiService {
     if (mevcut) {
       if (mevcut.organization.managerAccountId !== managerAccountId) {
         throw new NotFoundException('Kullanıcı bulunamadı');
+      }
+      /*
+       * ═══ MÜŞTERİ ŞİRKETİNİN KULLANICISI ÜST HESAP EKİBİNE ALINAMAZ ═══
+       *
+       * Yukarıdaki kontrol yalnızca "aynı üst hesabın altında mı" diyor ve
+       * MÜŞTERİ ŞİRKETLERİ DE O ÜST HESABIN ALTINDA. Yani 3A Makina'nın
+       * kendi yöneticisi bu kontrolden GEÇİYORDU ve bir satır üyelik, ona
+       * 48 şirketin tamamını açıyordu: `ManagerMembership` rolü üst hesabın
+       * altındaki HER şirkette geçerli sayılıyor (`TenantContextService`
+       * sentetik org geneli üyelik kuruyor) ve `app.ajansa_ait_org` ikinci
+       * dalı açılınca ajansın bütün havuzu görünür hâle geliyor.
+       * `musteri-sirketi-izolasyon.spec.ts` bu farkı ÖLÇÜYOR.
+       *
+       * Panelde iki ekleme yolu yan yana duruyor ("üst hesap ekibi" ve "bu
+       * şirkete kişi ekle") ve ikisi de bir e-posta kutusu. Tek harflik bir
+       * seçim hatası ticari sızıntı üretemez.
+       *
+       * SINIR EV ŞİRKETİ: üst hesap ekibi ajans personelidir ve personel ev
+       * şirketinde yaşıyor (`workspace-basina-sirket.ts` taşımada onları
+       * bilerek yerinde bırakıyor). Yeni kullanıcı dalı da zaten kişiyi ev
+       * şirketine açıyor — iki dal artık AYNI kuralı uyguluyor.
+       *
+       * MESAJ AÇIK: "bulunamadı" demek, kullanıcıyı var olmayan bir yazım
+       * hatası aramaya gönderirdi. Burada kullanıcı gerçek ve kapı bilinçli.
+       */
+      const evSirketi = await this.evSirketi(managerAccountId);
+      if (mevcut.orgId !== evSirketi.id) {
+        throw new BadRequestException(
+          'Bu kullanıcı bir müşteri şirketinin hesabı. Üst hesap ekibine eklemek ona ' +
+            'üst hesabın altındaki BÜTÜN şirketleri açar. Yetkiyi o kişinin kendi ' +
+            'şirketinde ver.',
+        );
       }
       if (mevcut.managerMemberships.length > 0) {
         throw new ConflictException(
@@ -180,16 +236,7 @@ export class UstHesapEkibiService {
       );
     }
 
-    const evSirketi = await this.admin.organization.findFirst({
-      where: { managerAccountId, status: 'active' },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    });
-    if (!evSirketi) {
-      // `ilk-sirket.ts` bunu imkânsız kılıyor; yine de sessizce başka bir
-      // yere yazmak yerine açıkça duruyoruz.
-      throw new BadRequestException('Üst hesabın altında şirket yok — önce şirket açılmalı');
-    }
+    const evSirketi = await this.evSirketi(managerAccountId);
 
     // Hash transaction DIŞINDA: argon2 kasıtlı yavaş (bkz. members.service).
     const passwordHash = await hashPassword(input.password);
