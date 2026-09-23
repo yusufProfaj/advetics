@@ -36,7 +36,19 @@ export interface HavuzOgesi {
    * o satır token'ı olmayan bir bağlantıya bağlı, yani atansa bile veri
    * çekmez.
    */
-  baglanti: { etiket: string | null; durum: ConnectionSummary['status'] };
+  baglanti: {
+    etiket: string | null;
+    durum: ConnectionSummary['status'];
+    /**
+     * AJANSIN MI, ŞİRKETİN KENDİSİNİN Mİ.
+     *
+     * İki havuzun kuralı farklı: ajansın hesabı her şirkete atanabiliyor,
+     * şirketinki yalnızca kendi workspace'lerine. "Her birine workspace aç"
+     * yalnızca şirketin kendi hesaplarında görünüyor; ajansın havuzunda
+     * görünseydi tek tıkla yüzlerce workspace açardı.
+     */
+    sahip: ConnectionSummary['sahip'];
+  };
 }
 
 /**
@@ -122,7 +134,7 @@ export function havuzlariCikar(connections: ConnectionSummary[]): Havuzlar {
         isManager: a.isManager,
         reklamHesabi: true,
         atamaYolu: `/connections/ad-accounts/${a.id}/client`,
-        baglanti: { etiket: c.accountLabel, durum: c.status },
+        baglanti: { etiket: c.accountLabel, durum: c.status, sahip: c.sahip },
       });
     }
   }
@@ -146,7 +158,7 @@ export function havuzlariCikar(connections: ConnectionSummary[]): Havuzlar {
         isManager: false,
         reklamHesabi: false,
         atamaYolu: profilAtamaYolu(p.profileType, p.id),
-        baglanti: { etiket: c.accountLabel, durum: c.status },
+        baglanti: { etiket: c.accountLabel, durum: c.status, sahip: c.sahip },
       });
     }
   }
@@ -163,4 +175,47 @@ export function havuzSuz(ogeler: HavuzOgesi[], arama: string): HavuzOgesi[] {
       o.name.toLocaleLowerCase('tr').includes(q) ||
       o.externalId.toLocaleLowerCase('tr').includes(q),
   );
+}
+
+/**
+ * ═══ "HER BİRİNE WORKSPACE AÇ" — HANGİ HESAPLAR ═══
+ *
+ * Müşteri kendi Meta'sını bağlayınca hesapları kendi havuzuna düşüyor ve
+ * isteği birebir *"reklam hesaplarının sayısı kadar workspace
+ * oluşturabilmesi"*. Tek tek "yeni workspace → ata" döngüsü on hesapta
+ * yirmi adım demekti.
+ *
+ * YALNIZCA ŞİRKETİN KENDİ BAĞLANTISI. Ajansın havuzu yüzlerce hesap taşıyor
+ * ve çoğu başka müşterilere ait; orada bu düğme tek tıkla yüzlerce yanlış
+ * workspace açardı. Ayrıca ajansın hesabı hangi müşteriye aitse ORADA
+ * workspace'e bağlanmalı, bulunduğun şirkette değil.
+ *
+ * DIŞARIDA KALANLAR VE NEDENİ:
+ *   · Yönetici (MCC) hesabı — reklam yayınlamıyor, sunucu zaten reddediyor.
+ *   · Kaldırılmış bağlantının satırı — atansa da veri çekmez; boş bir
+ *     workspace açmak "kurdum ama veri gelmiyor" hâlini üretirdi.
+ *   · Sayfalar ve kanallar — workspace bir reklam hesabı etrafında kuruluyor;
+ *     sayfa hangi hesabın workspace'ine gideceğini söylemiyor.
+ */
+export function workspaceAcilacaklar(ogeler: HavuzOgesi[]): HavuzOgesi[] {
+  return ogeler.filter(
+    (o) =>
+      o.reklamHesabi &&
+      !o.isManager &&
+      o.baglanti.sahip === 'sirket' &&
+      o.baglanti.durum !== 'revoked',
+  );
+}
+
+/**
+ * WORKSPACE ADI HESABIN ADI — sınırlara sığdırılarak.
+ *
+ * Sunucu adı 2–120 karakter istiyor (`createClientSchema`). Meta'da hesap
+ * adı boş ya da tek harf olabiliyor; o durumda dış kimlik kullanılıyor.
+ * Sessizce reddedilen bir istek, döngünün ortasında sebepsiz bir boşluk
+ * bırakırdı. Kısa ad çakışmasını sunucu çözüyor (`uniqueSlug`).
+ */
+export function workspaceAdi(o: Pick<HavuzOgesi, 'name' | 'externalId'>): string {
+  const ad = o.name.trim();
+  return (ad.length >= 2 ? ad : o.externalId).slice(0, 120);
 }

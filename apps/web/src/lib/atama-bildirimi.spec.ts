@@ -4,6 +4,20 @@ import { describe, expect, it } from 'vitest';
 import { atamaBildirimi } from './atama-bildirimi';
 
 describe('atama bildirimi', () => {
+  it('KRİTİK: kaldırmada satırın NEREDE kaldığı yazılıyor — sunucunun cümlesiyle', () => {
+    /*
+     * Atama kalkınca satır sahibine dönüyor; ajans havuzunda ikizi varsa
+     * dönemiyor ve şirketin havuzunda kalıyor. Söylenmezse kullanıcı hesabı
+     * ajans havuzunda arar ve bulamaz.
+     */
+    const m = atamaBildirimi({ poolNote: 'act_1 bu kayıt şirketin havuzunda kaldı.' }, false);
+    expect(m).toContain('şirketin havuzunda kaldı');
+  });
+
+  it('not yoksa cümle de yok', () => {
+    expect(atamaBildirimi({ poolNote: null }, false)).toBeNull();
+  });
+
   it('KRİTİK: taşınan kayıt sayısı yazılıyor', () => {
     const m = atamaBildirimi({ movedRows: 1420, leftBehind: {} }, true);
     expect(m).toContain('1.420');

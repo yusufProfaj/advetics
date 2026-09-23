@@ -8,9 +8,17 @@ import {
   type ChannelKind,
   type ConnectionSummary,
 } from '@advetics/shared';
+import type { ClientSetupResult } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { atamaBildirimi, type AtamaYaniti } from '@/lib/atama-bildirimi';
-import { havuzlariCikar, havuzSuz, KANALLAR, type HavuzOgesi } from '@/lib/havuz';
+import {
+  havuzlariCikar,
+  havuzSuz,
+  KANALLAR,
+  workspaceAcilacaklar,
+  workspaceAdi,
+  type HavuzOgesi,
+} from '@/lib/havuz';
 import { PlatformLogo } from '@/components/platform-logo';
 
 interface Musteri {
@@ -33,10 +41,13 @@ export function HavuzKartlari({
   connections,
   clients,
   canManage,
+  workspaceAcabilir,
 }: {
   connections: ConnectionSummary[];
   clients: Musteri[];
   canManage: boolean;
+  /** `client.write` — toplu workspace açma ancak onunla. */
+  workspaceAcabilir: boolean;
 }) {
   const [acikKanal, setAcikKanal] = useState<ChannelKind | null>(null);
 
@@ -61,6 +72,7 @@ export function HavuzKartlari({
           kind={acikKanal}
           ogeler={havuzlar[acikKanal]}
           clients={clients}
+          workspaceAcabilir={workspaceAcabilir}
           onKapat={() => setAcikKanal(null)}
         />
       )}
@@ -126,11 +138,13 @@ function HavuzModal({
   kind,
   ogeler,
   clients,
+  workspaceAcabilir,
   onKapat,
 }: {
   kind: ChannelKind;
   ogeler: HavuzOgesi[];
   clients: Musteri[];
+  workspaceAcabilir: boolean;
   onKapat: () => void;
 }) {
   const router = useRouter();
@@ -150,6 +164,65 @@ function HavuzModal({
   }, [onKapat]);
 
   const suzulmus = useMemo(() => havuzSuz(ogeler, arama), [ogeler, arama]);
+
+  /*
+   * ═══ HER BİRİNE WORKSPACE AÇ ═══
+   *
+   * Aday listesi ARAMADAN BAĞIMSIZ: arama bir görünüm, toplu işlem bir
+   * karar. Arama kutusunda bir şey yazılıyken düğmeye basıp yalnızca
+   * görünenlere workspace açmak, kullanıcının ne yaptığını bilmediği bir
+   * kısmi işlem olurdu.
+   *
+   * İKİ ADIM: önce kaç workspace açılacağı yazıyor, sonra onay. Açılan
+   * workspace geri alınabilir ama tek tek; bir yanlış tık on workspace'lik
+   * bir temizlik demekti.
+   *
+   * SIRAYLA, PARALEL DEĞİL: her istek sunucuda bir kurulum sihirbazı turu
+   * (workspace + atama + izleme + geçmiş kuyruğu). Hepsini birden atmak
+   * paylaşımlı sunucuda bir yük dalgası ve kuyrukta aynı anda on yapı
+   * taraması demekti.
+   */
+  const adaylar = useMemo(() => workspaceAcilacaklar(ogeler), [ogeler]);
+  const [topluOnay, setTopluOnay] = useState(false);
+  const [toplu, setToplu] = useState<{
+    sira: number;
+    toplam: number;
+    acilan: string[];
+    hatalar: Array<{ ad: string; sebep: string }>;
+    bitti: boolean;
+  } | null>(null);
+
+  async function herBirineWorkspaceAc(): Promise<void> {
+    const liste = adaylar;
+    setTopluOnay(false);
+    setHata(null);
+    setBildirim(null);
+    const acilan: string[] = [];
+    const hatalar: Array<{ ad: string; sebep: string }> = [];
+    setToplu({ sira: 0, toplam: liste.length, acilan, hatalar, bitti: false });
+    for (const [i, o] of liste.entries()) {
+      const ad = workspaceAdi(o);
+      try {
+        const r = await apiFetch<ClientSetupResult>('/clients/setup', {
+          method: 'POST',
+          body: JSON.stringify({ name: ad, adAccountIds: [o.id] }),
+        });
+        /*
+         * WORKSPACE AÇILDI AMA HESAP ATANAMADIYSA BU BİR BAŞARI DEĞİL.
+         * Sihirbaz kısmi başarıyı geri almıyor ve sebebi `failures` içinde
+         * dönüyor; onu yutmak "açtım ama boş" workspace'i sessiz bırakırdı.
+         */
+        const atanamadi = r?.failures.find((f) => f.kind === 'adAccount');
+        if (atanamadi) hatalar.push({ ad, sebep: `workspace açıldı, hesap atanamadı: ${atanamadi.reason}` });
+        else acilan.push(ad);
+      } catch (e) {
+        hatalar.push({ ad, sebep: e instanceof ApiRequestError ? e.message : 'İstek başarısız oldu.' });
+      }
+      setToplu({ sira: i + 1, toplam: liste.length, acilan: [...acilan], hatalar: [...hatalar], bitti: false });
+    }
+    setToplu({ sira: liste.length, toplam: liste.length, acilan, hatalar, bitti: true });
+    router.refresh();
+  }
 
   async function ata(oge: HavuzOgesi): Promise<void> {
     if (!hedef) {
@@ -244,6 +317,70 @@ function HavuzModal({
           <p className="mt-1.5 text-[11px] text-ink-muted">
             {suzulmus.length} / {ogeler.length} hesap
           </p>
+
+          {workspaceAcabilir && adaylar.length > 0 && toplu === null && (
+            <div className="mt-2 rounded-lg border border-line bg-surface-muted/50 px-3 py-2">
+              {topluOnay ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-ink">
+                    {adaylar.length} workspace açılacak, her biri bir hesapla.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTopluOnay(false)}
+                      className="rounded-lg border border-line px-2.5 py-1 text-[11px] text-ink transition hover:bg-surface-muted"
+                    >
+                      Vazgeç
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void herBirineWorkspaceAc()}
+                      className="rounded-lg bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition"
+                    >
+                      Onayla
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-ink-muted">
+                    Şirketin kendi bağlantısından {adaylar.length} hesap bekliyor.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setTopluOnay(true)}
+                    disabled={bekleyen !== null}
+                    className="rounded-lg bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition disabled:opacity-40"
+                  >
+                    Her birine workspace aç
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* İLERLEME VE SONUÇ — hangi hesabın açıldığı, hangisinin neden
+              açılamadığı AYRI AYRI. "Tamamlandı" deyip eksiklerini saklamak,
+              eksik workspace'i aylarca fark ettirmezdi. */}
+          {toplu && (
+            <div className="mt-2 rounded-lg border border-line px-3 py-2 text-xs">
+              <p className="text-ink">
+                {toplu.bitti
+                  ? `${toplu.acilan.length} workspace açıldı${toplu.hatalar.length > 0 ? `, ${toplu.hatalar.length} açılamadı` : ''}.`
+                  : `Açılıyor: ${toplu.sira} / ${toplu.toplam}`}
+              </p>
+              {toplu.hatalar.length > 0 && (
+                <ul className="mt-1 space-y-0.5 text-danger">
+                  {toplu.hatalar.map((h) => (
+                    <li key={h.ad}>
+                      {h.ad}: {h.sebep}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
@@ -270,6 +407,11 @@ function HavuzModal({
                           "Biltaş · 3421122929" yan yana çıktı. Ayıran tek şey
                           satırın hangi bağlantıdan geldiği. */}
                       {o.baglanti.etiket && ` · ${o.baglanti.etiket}`}
+                      {/* SAHİP YAZILI: ajansın hesabı her şirkete, şirketinki
+                          yalnızca kendi workspace'lerine atanabiliyor. Bunu
+                          atamaya basınca öğrenmek, girişte değil kullanım
+                          anında doğrulama olurdu (CLAUDE.md). */}
+                      {` · ${o.baglanti.sahip === 'ajans' ? 'Ajans bağlantısı' : 'Şirket bağlantısı'}`}
                     </p>
                     {/* KALDIRILMIŞ BAĞLANTININ SATIRI ATANABİLİR AMA VERİ
                         ÇEKMEZ: token'ı silinmiş bir bağlantıya bağlı. Bunu

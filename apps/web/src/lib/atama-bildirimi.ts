@@ -23,6 +23,15 @@ export type AtamaYaniti = {
    * demekti.
    */
   note?: string;
+  /**
+   * KALDIRMADA SATIR NEREYE DÖNDÜ — sunucunun cümlesi, varsa.
+   *
+   * Atama kalkınca satır sahibine (bağlantının şirketine) dönüyor. Ajansın
+   * havuzunda aynı hesabın ikizi varsa dönemiyor ve şirketin havuzunda
+   * kalıyor; bunu söylemeden geçmek, kullanıcıyı hesabı ajans havuzunda
+   * aramaya gönderirdi.
+   */
+  poolNote?: string | null;
   movedRows?: number;
   stayingRows?: number;
   leftBehind?: Record<string, number>;
@@ -40,6 +49,7 @@ export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | nu
   const parcalar: string[] = [];
 
   if (res.note) parcalar.push(res.note);
+  if (res.poolNote) parcalar.push(res.poolNote);
 
   if (atandiMi) {
     if ((res.movedRows ?? 0) > 0) {

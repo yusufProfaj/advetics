@@ -185,3 +185,45 @@ describe('bağlantı ekranı hesapları SATIR SATIR listelemiyor', () => {
     expect(kanal).not.toContain('socialProfiles.map(');
   });
 });
+
+describe('KRİTİK: "her birine workspace aç"', () => {
+  const K = yorumsuz(KART);
+  const bas = K.indexOf('async function herBirineWorkspaceAc');
+  if (bas === -1) throw new Error('herBirineWorkspaceAc bulunamadı — tarama boşa düştü');
+  const son = K.indexOf('router.refresh();', bas);
+  const govde = K.slice(bas, son);
+
+  it('gövde yakalandı', () => {
+    expect(govde.length).toBeGreaterThan(500);
+  });
+
+  it('aday listesi ARAMADAN değil saf süzgeçten — ajansın hesapları dışarıda', () => {
+    // Arama bir görünüm, toplu işlem bir karar; `suzulmus` ile kurulsaydı
+    // arama kutusundaki bir harf kısmi bir işlem üretirdi.
+    expect(K).toContain('useMemo(() => workspaceAcilacaklar(ogeler), [ogeler])');
+    expect(govde).not.toContain('suzulmus');
+  });
+
+  it('mevcut kurulum sihirbazından geçiyor — yeni bir yazma yolu yok', () => {
+    expect(govde).toContain("apiFetch<ClientSetupResult>('/clients/setup'");
+    expect(govde).toContain('adAccountIds: [o.id]');
+  });
+
+  it('KRİTİK: SIRAYLA — paralel değil', () => {
+    expect(govde).toContain('for (const [i, o] of liste.entries())');
+    expect(govde).not.toContain('Promise.all');
+  });
+
+  it('KRİTİK: hesap atanamadıysa BAŞARI sayılmıyor — sihirbazın failures alanı okunuyor', () => {
+    expect(govde).toContain("r?.failures.find((f) => f.kind === 'adAccount')");
+  });
+
+  it('KRİTİK: iki adım — önce sayı, sonra onay', () => {
+    expect(K).toContain('onClick={() => setTopluOnay(true)}');
+    expect(K).toContain('onClick={() => void herBirineWorkspaceAc()}');
+  });
+
+  it('sayfa yetkiyi client.write’dan veriyor', () => {
+    expect(yorumsuz(SAYFA)).toContain("workspaceAcabilir={hasPermission(session, 'client.write')}");
+  });
+});

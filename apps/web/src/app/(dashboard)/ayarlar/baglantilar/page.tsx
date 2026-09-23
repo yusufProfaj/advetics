@@ -135,6 +135,7 @@ export default async function ConnectionsPage() {
               connections={connections}
               clients={session.availableClients}
               canManage={canManage}
+              workspaceAcabilir={hasPermission(session, 'client.write')}
             />
 
             {/*
