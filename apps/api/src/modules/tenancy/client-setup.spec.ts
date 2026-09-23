@@ -24,6 +24,8 @@ const YENI = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 const ACC1 = '44444444-4444-4444-4444-444444444444';
 const ACC2 = '55555555-5555-5555-5555-555555555555';
 const PROFIL = '66666666-6666-6666-6666-666666666666';
+const IG = '77777777-7777-7777-7777-777777777777';
+const KANAL = '88888888-8888-8888-8888-888888888888';
 
 const CTX: TenantContext = {
   orgId: ORG,
@@ -59,6 +61,7 @@ function girdi(over: Partial<ClientSetupInput> = {}): ClientSetupInput {
 interface Cagrilar {
   hesapAtama: Array<{ ctx: TenantContext; id: string; clientId: string | null }>;
   profilAtama: Array<{ id: string; clientId: string | null }>;
+  boost: Array<{ sayfa: string; hesap: string | null }>;
   uye: Array<Record<string, unknown>>;
 }
 
@@ -69,9 +72,18 @@ let patlayan: Set<string>;
 /** Hesap kimliği → o hesabın atamasında dönen taşıma sayıları. */
 let tasima: Map<string, { movedRows: number; leftBehind: Record<string, number> }>;
 let uyePatlar: boolean;
+/** Profil kimliği → türü. Tanımsız olan `facebook_page` sayılıyor. */
+let profilTuru: Map<string, string>;
+/** Boost bağlamasında patlayacak sayfalar. */
+let boostPatlayan: Set<string>;
 
 beforeEach(() => {
-  c = { hesapAtama: [], profilAtama: [], uye: [] };
+  c = { hesapAtama: [], profilAtama: [], boost: [], uye: [] };
+  profilTuru = new Map([
+    [IG, 'instagram_business'],
+    [KANAL, 'youtube_channel'],
+  ]);
+  boostPatlayan = new Set();
   tasima = new Map();
   patlayan = new Set();
   uyePatlar = false;
@@ -101,7 +113,16 @@ beforeEach(() => {
       clientId: string | null,
     ) => {
       c.profilAtama.push({ id, clientId });
-      return {};
+      // TAKLİT GERÇEK SÖZLEŞMEYİ TAŞIYOR: kurulum türe bakarak boost
+      // hesabını bağlıyor; boş nesne dönmek o dalı hiç sınamamak olurdu.
+      return { id, profileType: profilTuru.get(id) ?? 'facebook_page' };
+    },
+    setProfileAdAccount: async (_ctx: TenantContext, sayfa: string, hesap: string | null) => {
+      if (boostPatlayan.has(sayfa)) {
+        throw new Error('Reklam hesabı bu sayfanın workspace’ine atanmamış.');
+      }
+      c.boost.push({ sayfa, hesap });
+      return { id: sayfa, linkedAdAccountId: hesap };
     },
   } as unknown as ConnectionsService;
 
@@ -257,5 +278,92 @@ describe('havuzdan gelen hesabın geçmişi', () => {
     const res = await svc.setup(CTX, girdi({ adAccountIds: [ACC1] }), META);
     expect(res.movedRows).toBe(0);
     expect(res.leftBehind).toEqual({});
+  });
+});
+
+describe('BOOST HESABI — kurulumda bağlanıyor', () => {
+  /*
+   * Akıllı Boost'un ön koşulu sayfa → reklam hesabı eşleşmesi ve kurulum
+   * onu hiç yazmıyordu. Kural yalnızca sistemi kuran kişinin kafasındaydı:
+   * sayfa atanıyor, her gönderi "bağlı reklam hesabı yok" diyordu.
+   */
+  it('KRİTİK: seçilen boost hesabı atanan Meta sayfalarına BAĞLANIYOR', async () => {
+    const r = await svc.setup(
+      CTX,
+      girdi({ adAccountIds: [ACC1], socialProfileIds: [PROFIL, IG], boostHesabiId: ACC1 }),
+      META,
+    );
+    expect(c.boost).toEqual([
+      { sayfa: PROFIL, hesap: ACC1 },
+      { sayfa: IG, hesap: ACC1 },
+    ]);
+    expect(r.boostBaglanan).toBe(2);
+    expect(r.failures).toEqual([]);
+  });
+
+  it('KRİTİK: YouTube kanalına Meta hesabı BAĞLANMIYOR', async () => {
+    const r = await svc.setup(
+      CTX,
+      girdi({ adAccountIds: [ACC1], socialProfileIds: [PROFIL, KANAL], boostHesabiId: ACC1 }),
+      META,
+    );
+    expect(c.boost.map((b) => b.sayfa)).toEqual([PROFIL]);
+    expect(r.boostBaglanan).toBe(1);
+  });
+
+  it('boost hesabı verilmezse hiçbir sayfaya dokunulmuyor', async () => {
+    const r = await svc.setup(CTX, girdi({ adAccountIds: [ACC1], socialProfileIds: [PROFIL] }), META);
+    expect(c.boost).toEqual([]);
+    expect(r.boostBaglanan).toBe(0);
+  });
+
+  it('atanamayan sayfaya boost bağlanmaya ÇALIŞILMIYOR', async () => {
+    const connections = svc['connections'] as unknown as {
+      assignSocialProfile: (...a: unknown[]) => Promise<unknown>;
+    };
+    const asil = connections.assignSocialProfile;
+    connections.assignSocialProfile = async (...a: unknown[]) => {
+      if (a[1] === PROFIL) throw new Error('Sayfa bulunamadı');
+      return asil(...a);
+    };
+    const r = await svc.setup(
+      CTX,
+      girdi({ adAccountIds: [ACC1], socialProfileIds: [PROFIL, IG], boostHesabiId: ACC1 }),
+      META,
+    );
+    expect(c.boost.map((b) => b.sayfa)).toEqual([IG]);
+    expect(r.failures.map((f) => f.kind)).toEqual(['socialProfile']);
+  });
+
+  it('KRİTİK: bağlanamayan sayfa SEBEBİYLE dönüyor, diğerleri bağlanıyor', async () => {
+    boostPatlayan.add(PROFIL);
+    const r = await svc.setup(
+      CTX,
+      girdi({ adAccountIds: [ACC1], socialProfileIds: [PROFIL, IG], boostHesabiId: ACC1 }),
+      META,
+    );
+    expect(r.boostBaglanan).toBe(1);
+    expect(r.failures).toEqual([
+      { kind: 'boost', id: PROFIL, reason: expect.stringContaining('atanmamış') },
+    ]);
+  });
+
+  it('bağlama genişletilmiş bağlamla yapılıyor — yeni workspace görünür', async () => {
+    let gorulen: TenantContext | null = null;
+    const connections = svc['connections'] as unknown as {
+      setProfileAdAccount: (ctx: TenantContext, ...a: unknown[]) => Promise<unknown>;
+    };
+    connections.setProfileAdAccount = async (ctx: TenantContext) => {
+      gorulen = ctx;
+      return {};
+    };
+    await svc.setup(
+      CTX,
+      girdi({ adAccountIds: [ACC1], socialProfileIds: [PROFIL], boostHesabiId: ACC1 }),
+      META,
+    );
+    expect(gorulen).not.toBeNull();
+    expect(gorulen!.clientIds).toContain(YENI);
+    expect(gorulen!.activeClientId).toBeNull();
   });
 });

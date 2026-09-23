@@ -21,7 +21,7 @@ const YUK = readFileSync(join(__dirname, 'yukleniyor.tsx'), 'utf8');
 const SECICI = readFileSync(join(__dirname, 'kapsam-secici.tsx'), 'utf8');
 const TABLO = readFileSync(join(__dirname, 'musteri-tablosu.tsx'), 'utf8');
 const SIHIRBAZ = readFileSync(
-  join(__dirname, 'tenancy', 'client-setup-wizard.tsx'),
+  join(__dirname, 'kurulum', 'kurulum-sihirbazi.tsx'),
   'utf8',
 );
 const CSS = readFileSync(join(__dirname, '..', 'app', 'globals.css'), 'utf8');
@@ -74,9 +74,12 @@ describe('KRİTİK: bekleme penceresi tazelemeyi kapsıyor', () => {
     expect(SECICI_KOD).toContain('disabled={bekliyor}');
   });
 
-  it('kurulum sihirbazı: refresh startTransition içinde', () => {
+  it('kurulum sihirbazı: hesap yenileme tazelemesi startTransition içinde', () => {
     expect(SIHIRBAZ_KOD).toContain('startTransition(() => router.refresh())');
-    expect(SIHIRBAZ_KOD).toContain('busy || isPending');
+    // Düğmeler tazeleme bitene kadar kapalı: yarım yenilenmiş listede
+    // ikinci bir "Hesapları yenile" iki kez kota harcar.
+    expect(SIHIRBAZ_KOD).toContain('yenileniyor={isPending}');
+    expect(SIHIRBAZ_KOD).toContain('const meslul = bekleyen !== null || yenileniyor;');
   });
 
   it('workspace tablosu: geçiş sırasında örtü var', () => {

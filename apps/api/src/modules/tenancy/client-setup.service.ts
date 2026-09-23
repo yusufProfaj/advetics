@@ -4,6 +4,9 @@ import { ConnectionsService } from '../connections/connections.service';
 import { ClientsService } from './clients.service';
 import { MembersService } from './members.service';
 
+/** Boost'un çalıştığı profil türleri — Meta sayfası ve Instagram hesabı. */
+const BOOST_PROFIL_TURLERI: readonly string[] = ['facebook_page', 'instagram_business'];
+
 interface Meta {
   ip?: string | null;
   userAgent?: string | null;
@@ -103,16 +106,58 @@ export class ClientSetupService {
       }
     }
 
+    /*
+     * BOOST'A UYGUN SAYFALAR AYRI TUTULUYOR. YouTube kanalı da sosyal profil
+     * ama boost Meta'da çalışıyor; kanala bir Meta reklam hesabı bağlamak
+     * hiçbir yerde hata vermezdi ve bir gün onu okuyan bir kod yanlış yola
+     * girerdi. Liste AÇIK UÇLU DEĞİL: yeni bir profil türü eklendiğinde
+     * varsayılan DIŞARIDA kalır.
+     */
+    const boostSayfalari: string[] = [];
+
     for (const id of input.socialProfileIds) {
       try {
-        await this.connections.assignSocialProfile(scoped, id, client.id, meta);
+        const atanan = await this.connections.assignSocialProfile(scoped, id, client.id, meta);
         assignedProfiles++;
+        if (BOOST_PROFIL_TURLERI.includes(atanan.profileType)) boostSayfalari.push(id);
       } catch (err) {
         failures.push({
           kind: 'socialProfile',
           id,
           reason: err instanceof Error ? err.message : 'Atanamadı',
         });
+      }
+    }
+
+    /*
+     * ═══ BOOST HESABI KURULUMDA BAĞLANIYOR ═══
+     *
+     * Sayfa atanıp boost hesabı bağlanmazsa Akıllı Boost her gönderide
+     * "bağlı reklam hesabı yok" diyor ve çaresi başka bir ekrandaki küçük
+     * bir açılır kutu. Kural yalnızca sistemi kuran kişinin kafasındaydı.
+     *
+     * MEVCUT YOLDAN (`setProfileAdAccount`): hesabın Meta olduğunu VE aynı
+     * workspace'te durduğunu o doğruluyor. Yanlış hesap başka bir müşterinin
+     * bütçesinden harcamak demek; ikinci bir doğrulama yazmak, ikisinin bir
+     * gün ayrışması demekti.
+     *
+     * HESAP ATAMASI BAŞARISIZ OLDUYSA bağlama da düşecek ve sebebi ayrı bir
+     * satır olarak yazılıyor: "hesap atanamadı" ile "boost bağlanamadı" iki
+     * ayrı iş.
+     */
+    let boostBaglanan = 0;
+    if (input.boostHesabiId) {
+      for (const sayfaId of boostSayfalari) {
+        try {
+          await this.connections.setProfileAdAccount(scoped, sayfaId, input.boostHesabiId, meta);
+          boostBaglanan++;
+        } catch (err) {
+          failures.push({
+            kind: 'boost',
+            id: sayfaId,
+            reason: err instanceof Error ? err.message : 'Boost hesabı bağlanamadı',
+          });
+        }
       }
     }
 
@@ -147,7 +192,8 @@ export class ClientSetupService {
     // görülmeden kapatılabilir ve "veri gelmiyor" olarak geri döner.
     this.logger.log(
       `Workspace kurulumu "${client.name}": ${assignedAccounts} hesap, ` +
-        `${assignedProfiles} sayfa, kullanıcı ${userCreated ? 'açıldı' : 'yok'}` +
+        `${assignedProfiles} sayfa, ${boostBaglanan} boost bağı, ` +
+        `kullanıcı ${userCreated ? 'açıldı' : 'yok'}` +
         (failures.length > 0 ? `, ${failures.length} adım BAŞARISIZ` : ''),
     );
 
@@ -158,6 +204,7 @@ export class ClientSetupService {
       assignedProfiles,
       userCreated,
       failures,
+      boostBaglanan,
       movedRows,
       leftBehind,
     };

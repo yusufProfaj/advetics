@@ -1,12 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  createManagedOrganizationSchema,
-  createManagerAccountSchema,
-  type ManagerAccountTree,
-} from '@advetics/shared';
+import type { ManagerAccountTree } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Halka } from '@/components/yukleniyor';
 import { SirketDuzenle } from './sirket-duzenle';
@@ -137,10 +134,7 @@ export function UstHesapEkrani({
             Üst hesap bilgisi alınamadı: {yuklemeHatasi}
           </p>
         ) : (
-          <UstHesapKur
-            pending={pending}
-            onKur={(name) => void gonder('/manager-account', { name })}
-          />
+          <UstHesapKur />
         )}
         {children}
       </div>
@@ -166,12 +160,7 @@ export function UstHesapEkrani({
       <UstHesapKarti agac={agac} />
 
       <div className="grid gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
-        <SirketRayi
-          agac={agac}
-          aktifOrgId={aktifOrgId}
-          pending={pending}
-          onEkle={(name) => void gonder('/manager-account/organizations', { name })}
-        />
+        <SirketRayi agac={agac} aktifOrgId={aktifOrgId} />
 
         <div className="min-w-0 space-y-6">
           {/*
@@ -335,16 +324,11 @@ const kucult = (s: string): string => s.toLocaleLowerCase('tr');
 function SirketRayi({
   agac,
   aktifOrgId,
-  pending,
-  onEkle,
 }: {
   agac: ManagerAccountTree;
   aktifOrgId: string;
-  pending: boolean;
-  onEkle: (name: string) => void;
 }) {
   const [arama, setArama] = useState('');
-  const [ekleAcik, setEkleAcik] = useState(false);
   const listeRef = useRef<HTMLUListElement>(null);
 
   /*
@@ -442,29 +426,21 @@ function SirketRayi({
         )}
 
         <div className="border-t border-line p-2">
-          {ekleAcik ? (
-            <SirketEkle
-              pending={pending}
-              onEkle={(name) => {
-                onEkle(name);
-                setEkleAcik(false);
-              }}
-              onVazgec={() => setEkleAcik(false)}
-            />
-          ) : (
-            /*
-              EKLEME FORMU KAPALI BAŞLIYOR. Açık dururken ray'in altında
-              kalıcı bir blok kaplıyordu; şirket açmak seyrek bir iş ve
-              her gün yapılan şey listede gezmek.
-            */
-            <button
-              type="button"
-              onClick={() => setEkleAcik(true)}
-              className="w-full rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink transition hover:bg-surface-sunken"
-            >
-              + Şirket ekle
-            </button>
-          )}
+          {/*
+            ŞİRKET SİHİRBAZLA AÇILIYOR, BURADAKİ SATIR İÇİ FORMLA DEĞİL.
+
+            Form yalnızca adı soruyordu ve şirket BOŞ açılıyordu: bağlantı
+            yok, workspace yok. Sonraki üç adım (şirkete geç, Meta/Google'ı
+            O ŞİRKETTE bağla, workspace kurup hesap ata) hiçbir ekranda
+            yazmıyordu ve yalnızca sistemi kuran kişi biliyordu. Sihirbaz
+            aynı adımları sırayla yürütüyor.
+          */}
+          <Link
+            href="/kurulum?tur=sirket"
+            className="block w-full rounded-lg border border-line px-3 py-1.5 text-center text-sm font-medium text-ink transition hover:bg-surface-sunken"
+          >
+            + Şirket ekle
+          </Link>
         </div>
       </div>
     </aside>
@@ -698,138 +674,25 @@ function WorkspaceTasi({
 
 // ---------------------------------------------------------------------------
 
-function UstHesapKur({
-  pending,
-  onKur,
-}: {
-  pending: boolean;
-  onKur: (name: string) => void;
-}) {
-  const [ad, setAd] = useState('');
-  const [alanHatasi, setAlanHatasi] = useState<string | undefined>();
-
+function UstHesapKur() {
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
       <h2 className="text-sm font-semibold text-ink">Üst hesap oluştur</h2>
       <p className="mt-1 max-w-prose text-sm text-ink-muted">
-        Google&apos;ın Müşteri Merkezi (MCC) gibi çalışır: birden çok şirketi tek girişle
-        yönetirsin. Şu anki şirketin bu üst hesabın altına bağlanır, sonra yanına yenilerini
-        ekleyebilirsin.
+        Birden çok şirketi tek girişle yönetmek için. Şu anki şirketin bu üst hesabın altına
+        bağlanır, sonra yanına yenilerini ekleyebilirsin.
       </p>
-
-      <form
-        className="mt-4 flex flex-wrap items-start gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const parsed = createManagerAccountSchema.safeParse({ name: ad });
-          if (!parsed.success) {
-            setAlanHatasi(parsed.error.issues[0]?.message);
-            return;
-          }
-          setAlanHatasi(undefined);
-          onKur(parsed.data.name);
-        }}
-        noValidate
-      >
-        <div className="min-w-[16rem] flex-1">
-          <label htmlFor="ustHesapAdi" className="sr-only">
-            Üst hesap adı
-          </label>
-          <input
-            id="ustHesapAdi"
-            value={ad}
-            onChange={(e) => setAd(e.target.value)}
-            disabled={pending}
-            placeholder="Örn. Profaj Danışmanlık"
-            aria-invalid={alanHatasi ? 'true' : undefined}
-            className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
-          />
-          {alanHatasi && <p className="mt-1 text-xs text-danger-strong">{alanHatasi}</p>}
-        </div>
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {pending && <Halka />}
-          Oluştur
-        </button>
-      </form>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-function SirketEkle({
-  pending,
-  onEkle,
-  onVazgec,
-}: {
-  pending: boolean;
-  onEkle: (name: string) => void;
-  onVazgec: () => void;
-}) {
-  const [ad, setAd] = useState('');
-  const [alanHatasi, setAlanHatasi] = useState<string | undefined>();
-
-  return (
-    <form
-      className="space-y-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const parsed = createManagedOrganizationSchema.safeParse({ name: ad });
-        if (!parsed.success) {
-          setAlanHatasi(parsed.error.issues[0]?.message);
-          return;
-        }
-        setAlanHatasi(undefined);
-        onEkle(parsed.data.name);
-        setAd('');
-      }}
-      noValidate
-    >
-      <label htmlFor="sirketAdi" className="block text-[11px] text-ink-muted">
-        Yeni şirket adı
-      </label>
-      <input
-        id="sirketAdi"
-        value={ad}
-        onChange={(e) => setAd(e.target.value)}
-        disabled={pending}
-        autoFocus
-        placeholder="Örn. Sabancı İnşaat A.Ş."
-        aria-invalid={alanHatasi ? 'true' : undefined}
-        className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
-      />
-      {alanHatasi && <p className="text-[11px] text-danger-strong">{alanHatasi}</p>}
       {/*
-        AÇIKLAMA FORMUN İÇİNDE KALIYOR: var olan bir şirketi buraya bağlamak
-        MÜMKÜN DEĞİL ve bunu yazmazsak kullanıcı onu arar. O şirketin kendi
-        kullanıcıları ve kendi verisi var; devri iki tarafın da onayını
-        gerektirir.
+        SİHİRBAZA GİDİYOR. Buradaki form yalnızca adı soruyordu; sonraki
+        adımlar (platform bağlama, workspace, hesap atama) hiçbir ekranda
+        yazmıyordu.
       */}
-      <p className="text-[11px] text-ink-muted">
-        Yeni bir şirket açar ve seni sahibi yapar. Var olan bir şirketi buraya bağlamak
-        mümkün değil.
-      </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {pending && <Halka />}
-          Ekle
-        </button>
-        <button
-          type="button"
-          onClick={onVazgec}
-          className="text-xs text-ink-muted transition hover:text-ink"
-        >
-          Vazgeç
-        </button>
-      </div>
-    </form>
+      <Link
+        href="/kurulum?tur=ust-hesap"
+        className="mt-4 inline-flex items-center rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+      >
+        Kurulumu başlat
+      </Link>
+    </section>
   );
 }

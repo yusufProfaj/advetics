@@ -1,10 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   MANAGER_PAKETLERI,
   PAKET_SINIRLARI,
-  createManagerAccountSchema,
   updateManagerAccountSchema,
   type ManagerPaket,
   type UstHesapOzeti,
@@ -42,7 +42,6 @@ export function UstHesapYonetimi({
   platformAdmin: boolean;
   yuklemeHatasi: string | null;
 }) {
-  const [yeniAcik, setYeniAcik] = useState(false);
   const [acikPanel, setAcikPanel] = useState<string | null>(null);
 
   return (
@@ -64,18 +63,18 @@ export function UstHesapYonetimi({
             </p>
           </div>
           {platformAdmin && (
-            <button
-              type="button"
-              onClick={() => setYeniAcik((a) => !a)}
-              aria-expanded={yeniAcik}
-              className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                yeniAcik
-                  ? 'border-brand bg-brand-soft text-brand-strong'
-                  : 'border-brand bg-brand text-white hover:opacity-90'
-              }`}
+            /*
+              YENİ HESAP SİHİRBAZDA KURULUYOR. Buradaki form yalnızca ad ve
+              paket soruyordu; hesap şirketsiz bir kabuk gibi açılıyor ve
+              içine platform bağlamak, workspace kurmak ayrı ekranlarda,
+              hiçbir yerde yazmayan bir sırayla yapılıyordu.
+            */
+            <Link
+              href="/kurulum?tur=ust-hesap"
+              className="shrink-0 rounded-lg border border-brand bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
             >
               + Yeni üst hesap
-            </button>
+            </Link>
           )}
         </header>
 
@@ -83,12 +82,6 @@ export function UstHesapYonetimi({
           <p role="alert" className="border-b border-line px-4 py-2 text-xs text-danger">
             Üst hesaplar yüklenemedi: {yuklemeHatasi}
           </p>
-        )}
-
-        {yeniAcik && platformAdmin && (
-          <div className="border-b border-line px-4 py-4">
-            <YeniUstHesap onVazgec={() => setYeniAcik(false)} />
-          </div>
         )}
 
         {hesaplar.length === 0 && !yuklemeHatasi ? (
@@ -267,7 +260,7 @@ function SatirDugmesi({
 }
 
 /** Paket seçimi — üç kart, her birinde ne aldığı yazılı. */
-function PaketSecici({
+export function PaketSecici({
   deger,
   onChange,
   disabled,
@@ -586,82 +579,3 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
   );
 }
 
-/**
- * Platform sahibi için yeni üst hesap.
- *
- * KURULUNCA O HESABA GEÇİLİYOR. Kurup eski hesapta kalmak, kullanıcının
- * "kurdum ama nerede" diye seçiciyi aramasıydı — ve kurduğu hesabı hemen
- * ayarlaması gerekiyor (şirket açmak, ekip eklemek).
- */
-function YeniUstHesap({ onVazgec }: { onVazgec: () => void }) {
-  const [ad, setAd] = useState('');
-  const [paket, setPaket] = useState<ManagerPaket>('baslangic');
-  const [pending, setPending] = useState(false);
-  const [hata, setHata] = useState<string | null>(null);
-
-  async function kur(): Promise<void> {
-    const parsed = createManagerAccountSchema.safeParse({ name: ad, paket });
-    if (!parsed.success) {
-      setHata(parsed.error.issues[0]?.message ?? 'Geçersiz değer');
-      return;
-    }
-    setPending(true);
-    setHata(null);
-    try {
-      const yeni = await apiFetch<{ id: string }>('/manager-account', {
-        method: 'POST',
-        body: JSON.stringify(parsed.data),
-      });
-      await apiFetch('/auth/switch-manager', {
-        method: 'POST',
-        body: JSON.stringify({ managerAccountId: yeni.id }),
-      });
-      window.location.assign('/ayarlar/ust-hesaplar');
-    } catch (e) {
-      // HATA YUTULMUYOR. İki adım var (kur, geç); ikincisi düşerse hesap
-      // kurulmuş ama geçilmemiş olur ve bunu kullanıcıya söylemek şart.
-      setHata(e instanceof ApiRequestError ? e.message : 'Üst hesap kurulamadı.');
-      setPending(false);
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <p className="max-w-prose text-sm text-ink-muted">
-        Satılan her üst hesap için bir tane açılır. Kendi şirketin bu hesaba{' '}
-        <strong>bağlanmaz</strong>; kurulunca o hesaba geçersin ve içine şirket açarsın.
-      </p>
-      <label className="block max-w-md">
-        <span className="text-[11px] text-ink-muted">Üst hesap adı</span>
-        <input
-          value={ad}
-          onChange={(e) => setAd(e.target.value)}
-          disabled={pending}
-          autoFocus
-          placeholder="Örn. Yılmaz Mobilya"
-          className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
-        />
-      </label>
-      <PaketSecici deger={paket} onChange={setPaket} disabled={pending} />
-      {hata && (
-        <p role="alert" className="text-xs text-danger">
-          {hata}
-        </p>
-      )}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => void kur()}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-        >
-          {pending && <Halka />}
-          Kur ve geç
-        </button>
-        <button type="button" onClick={onVazgec} className="text-xs text-ink-muted transition hover:text-ink">
-          Vazgeç
-        </button>
-      </div>
-    </div>
-  );
-}

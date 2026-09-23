@@ -1,10 +1,10 @@
+import Link from 'next/link';
 import { MusteriArama } from '@/components/tenancy/musteri-arama';
 import { MusteriKarti } from '@/components/tenancy/musteri-karti';
 import type { ConnectionSummary, SpecialAdCategory } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { profilAtamaYolu } from '@/lib/havuz';
 import { hasPermission, type SessionResponse } from '@/lib/session';
-import { ClientSetupWizard } from '@/components/tenancy/client-setup-wizard';
 import { ClientActions } from '@/components/tenancy/client-actions';
 import { SpecialCategoryPicker } from '@/components/tenancy/special-category-picker';
 import {
@@ -207,7 +207,20 @@ export async function WorkspaceBolumu({ session }: { session: SessionResponse })
             <strong className="text-ink">{totalWatched}</strong> tanesi izlemede
           </span>
         </div>
-        <ClientSetupWizard connections={connections} />
+        {/*
+          YENİ WORKSPACE SİHİRBAZDA KURULUYOR. Buradaki pencere platform
+          bağlantısını bilmiyordu (yeni şirkette havuz BOŞ ve pencere yalnızca
+          "havuzda hesap yok" diyordu), boost hesabını hiç bağlamıyordu ve
+          Meta'nın özel kategorisini sormuyordu.
+        */}
+        {hasPermission(session, 'client.write') && (
+          <Link
+            href="/kurulum?tur=workspace"
+            className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            + Yeni workspace
+          </Link>
+        )}
       </div>
 
       {clients.length === 0 ? (

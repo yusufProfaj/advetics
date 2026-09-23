@@ -302,9 +302,42 @@ describe('KRİTİK: üst hesap hiçbir zaman ŞİRKETSİZ kalmıyor', () => {
      * yorumlar sıyrıldığı için arada yalnızca boşluk kalıyor.
      */
     expect(dilim).toMatch(
-      /\} else \{\s*await ilkSirketAc\(tx, \{ managerAccountId: hesap\.id, ad: input\.name/,
+      /\} else \{\s*await ilkSirketAc\(tx, \{\s*managerAccountId: hesap\.id,\s*ad: input\.sirketAdi \?\? input\.name,/,
     );
     expect(dilim).not.toContain('else if (false)');
+  });
+
+  it('KRİTİK: sihirbazın verdiği ŞİRKET ADI ilk şirkete gidiyor, yoksa üst hesabın adı', () => {
+    /*
+     * Sihirbaz üst hesabı ve şirketi iki ayrı adımda soruyor ama TEK
+     * çağrıyla kuruyor. Ad düşerse şirket üst hesabın adıyla açılır ve
+     * kullanıcı bunu yalnızca şirket listesinde fark eder.
+     */
+    const bas = KAYNAK.indexOf('async create(');
+    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf('\n  }', bas));
+    expect(dilim).toContain('ad: input.sirketAdi ?? input.name');
+  });
+
+  it('KRİTİK: org yöneticisinde şirket adı REDDEDİLİYOR, yok sayılmıyor', () => {
+    // Orada ilk şirket açılmıyor, var olan ev şirketi bağlanıyor; adı kabul
+    // edip yok saymak "şirketin X olacak" diyen ekranı yalancı yapardı.
+    const bas = KAYNAK.indexOf('async create(');
+    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf('\n  }', bas));
+    expect(dilim).toMatch(
+      /if \(!ctx\.platformAdmin && input\.sirketAdi !== undefined\) \{\s*throw new BadRequestException/,
+    );
+    // Kontrol TRANSACTION'DAN ÖNCE: sonra olsaydı hesap açılmış olurdu.
+    expect(dilim.indexOf('input.sirketAdi !== undefined')).toBeLessThan(
+      dilim.indexOf('this.admin.$transaction'),
+    );
+  });
+
+  it('KRİTİK: şirket açma YENİ ŞİRKETİN KİMLİĞİNİ döndürüyor', () => {
+    // Sihirbaz şirketi açtıktan sonra ona GEÇİYOR; kimliği ağaçta adla
+    // aramak aynı adlı iki şirkette yanlışını seçerdi.
+    const bas = KAYNAK.indexOf('async createOrganization(');
+    const dilim = KAYNAK.slice(bas, KAYNAK.indexOf('\n  }', bas));
+    expect(dilim).toContain('return { ...agac, olusturulanSirketId: yeniOrgId };');
   });
 
   it('KRİTİK: şirketsiz hesaba GEÇERKEN de ilk şirket açılıyor — üretimde böyle hesap var', () => {

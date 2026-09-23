@@ -310,6 +310,7 @@ const ICONS = {
   sync: 'M4 8a6 6 0 0 1 10.5-4M16 12a6 6 0 0 1-10.5 4M14.5 3.5V7h-3.5M5.5 16.5V13H9',
   mail: 'M3 6h14v9H3zM3 6.5l7 5 7-5',
   ai: 'M10 3.5 11.3 8 15.5 9.5 11.3 11 10 15.5 8.7 11 4.5 9.5 8.7 8zM15.5 3.5v3M14 5h3',
+  setup: 'M4 5.5h1.5M4 10h1.5M4 14.5h1.5M8.5 5.5H16M8.5 10H16M8.5 14.5h4M14 13l1.5 1.5L18 12',
 } as const;
 
 function Icon({ name, active }: { name: keyof typeof ICONS; active?: boolean }) {

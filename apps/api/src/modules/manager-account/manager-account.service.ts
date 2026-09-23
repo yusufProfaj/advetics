@@ -18,6 +18,7 @@ import type {
   CreateManagerAccountInput,
   DeleteOrganizationInput,
   ManagerAccountTree,
+  SirketOlusturmaSonucu,
   MoveWorkspaceInput,
   UpdateManagerAccountInput,
   SilmeYaniti,
@@ -198,6 +199,20 @@ export class ManagerAccountService {
      * ev şirketi zaten Profaj'ın üst hesabına bağlı ve "Bu şirket zaten bir
      * üst hesaba bağlı" ile düşerdi. Yol testsizdi; bu turda testi var.
      */
+    /*
+     * ŞİRKET ADI YALNIZCA İLK ŞİRKET AÇILIYORSA ANLAMLI.
+     *
+     * Org yöneticisinde ilk şirket açılmıyor, VAR OLAN ev şirketi bağlanıyor.
+     * Adı kabul edip yok saymak, sihirbazın "şirketin X adıyla açılacak"
+     * demesine rağmen başka bir adla kalan bir şirket bırakırdı. Sihirbaz
+     * bu hâlde alanı hiç göstermiyor; buraya gelen istek elle atılmıştır.
+     */
+    if (!ctx.platformAdmin && input.sirketAdi !== undefined) {
+      throw new BadRequestException(
+        'Mevcut şirketin bu üst hesabın ilk şirketi olur; şirket adı burada seçilmiyor.',
+      );
+    }
+
     const evSirketi = ctx.platformAdmin
       ? null
       : await this.admin.organization.findUniqueOrThrow({
@@ -250,7 +265,11 @@ export class ManagerAccountService {
          * şirketine (Advetics) düşüp Profaj'ın bağlantılarını müşterinin
          * hesabında gösteriyordu. Gerekçe `ilk-sirket.ts` içinde.
          */
-        await ilkSirketAc(tx, { managerAccountId: hesap.id, ad: input.name, userId: ctx.userId });
+        await ilkSirketAc(tx, {
+          managerAccountId: hesap.id,
+          ad: input.sirketAdi ?? input.name,
+          userId: ctx.userId,
+        });
       }
       /*
        * ÜYELİK HER İKİ HÂLDE DE YAZILIYOR. Platform sahibi zaten her hesaba
@@ -664,7 +683,7 @@ export class ManagerAccountService {
   async createOrganization(
     ctx: TenantContext,
     input: CreateManagedOrganizationInput,
-  ): Promise<ManagerAccountTree> {
+  ): Promise<SirketOlusturmaSonucu> {
     assertOrgAdmin(ctx);
 
     const ustHesap = await this.aktifUstHesap(ctx);
@@ -724,7 +743,7 @@ export class ManagerAccountService {
 
     const agac = await this.get(ctx);
     if (!agac) throw new BadRequestException('Şirket oluşturuldu ama üst hesap okunamadı');
-    return agac;
+    return { ...agac, olusturulanSirketId: yeniOrgId };
   }
 
   /**

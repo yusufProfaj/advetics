@@ -349,12 +349,18 @@ describe('ŞİRKET RAYI — kırk şirkette de kullanılabilir', () => {
     );
   });
 
-  it('KRİTİK: ŞİRKET EKLEME FORMU kapalı başlıyor', () => {
-    // Açık dururken ray'in altında kalıcı bir blok kaplıyordu; şirket açmak
-    // seyrek bir iş, her gün yapılan şey listede gezmek.
+  it('KRİTİK: ŞİRKET EKLEME SİHİRBAZA gidiyor — satır içi form YOK', () => {
+    /*
+     * Satır içi form şirketi BOŞ açıyordu (bağlantı yok, workspace yok) ve
+     * sonraki adımlar hiçbir ekranda yazmıyordu. Ray'de yalnızca sihirbaza
+     * giden bir bağlantı kalıyor; form geri gelirse iki ayrı kurulum yolu
+     * doğar ve biri eksik kalır.
+     */
     const ray = blok(EKRAN, 'function SirketRayi');
-    expect(ray).toContain('const [ekleAcik, setEkleAcik] = useState(false)');
+    expect(ray).toContain('href="/kurulum?tur=sirket"');
     expect(ray).toContain('+ Şirket ekle');
+    expect(EKRAN).not.toContain("'/manager-account/organizations'");
+    expect(EKRAN).not.toContain('function SirketEkle');
   });
 });
 

@@ -21,6 +21,22 @@ export const createManagerAccountSchema = z.object({
    * bir ürünün sınırı, satın alanın elinde olamaz.
    */
   paket: z.enum(MANAGER_PAKETLERI).optional(),
+  /**
+   * İLK ŞİRKETİN ADI — kurulum sihirbazı üst hesabı ve şirketi AYNI ANDA
+   * soruyor.
+   *
+   * Verilmezse ilk şirket üst hesabın adıyla açılıyor (`ilk-sirket.ts`).
+   * Sihirbaz iki adı ayrı adımlarda sorup ikinci adımı ayrı bir yeniden
+   * adlandırma çağrısına bıraksaydı, iki çağrının arasında düşen bir istek
+   * şirketi yanlış adla bırakırdı ve kullanıcı bunu ancak şirket listesinde
+   * görürdü.
+   *
+   * YALNIZCA PLATFORM SAHİBİNDE GEÇERLİ. Kendi ajansını kuran bir org
+   * yöneticisinde ilk şirket AÇILMIYOR, var olan şirketi bağlanıyor; orada
+   * bu alanı kabul edip yok saymak, "şirketin adı X olacak" diyen ekranın
+   * yalan söylemesi olurdu. Sunucu reddediyor.
+   */
+  sirketAdi: z.string().trim().min(2, 'Şirket adı en az 2 karakter olmalı').max(120).optional(),
 });
 export type CreateManagerAccountInput = z.infer<typeof createManagerAccountSchema>;
 
@@ -50,6 +66,17 @@ export const createManagedOrganizationSchema = z.object({
   name: z.string().trim().min(2, 'Şirket adı en az 2 karakter olmalı').max(120),
 });
 export type CreateManagedOrganizationInput = z.infer<typeof createManagedOrganizationSchema>;
+
+/**
+ * Şirket açma sonucu — ağaç ARTI yeni şirketin kimliği.
+ *
+ * Ağaç tek başına yetmiyor: sihirbaz şirketi açtıktan sonra O ŞİRKETE
+ * geçmek zorunda (bağlantı ve workspace oraya kurulacak). Kimliği ağaçtan
+ * adla aramak, aynı adı taşıyan iki şirkette yanlışını seçerdi.
+ */
+export interface SirketOlusturmaSonucu extends ManagerAccountTree {
+  olusturulanSirketId: string;
+}
 
 /**
  * VAR OLAN bir workspace'i başka bir şirkete taşır.

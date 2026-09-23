@@ -194,6 +194,25 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     items: [
       {
         /*
+         * KURULUM SİHİRBAZI EN ÜSTTE. Yeni bir müşteriyi sisteme almak bu
+         * bölümün en sık ve en çok hata üreten işi: üst hesap, şirket,
+         * platform bağlantısı ve workspace dört ayrı ekrandaydı ve
+         * aralarındaki sıra hiçbir yerde yazmıyordu.
+         *
+         * `client.write` — en dar kurulum (workspace) bunu istiyor. Üst
+         * hesap ve şirket kartları sayfanın İÇİNDE kendi yetkileriyle
+         * kapanıyor ve sebebi yazıyor; menüyü `org.write` ile kapatmak,
+         * workspace kurabilen bir reklam yöneticisinden sihirbazı gizlerdi.
+         */
+        href: '/kurulum',
+        label: 'Kurulum Sihirbazı',
+        icon: 'setup',
+        module: 1,
+        ready: true,
+        perm: 'client.write',
+      },
+      {
+        /*
          * WORKSPACE'LER AYRI BİR SATIR DEĞİL — ŞİRKETLER'İN İÇİNDE.
          *
          * "Şirketler" ve "Workspace'ler" yan yana iki satırdı ve menünün

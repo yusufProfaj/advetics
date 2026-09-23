@@ -190,6 +190,22 @@ export const clientSetupSchema = createClientSchema.extend({
       password: z.string().min(10).max(200),
     })
     .optional(),
+  /**
+   * BOOST HESABI — atanan sayfaların boost harcamasını yapacak Meta hesabı.
+   *
+   * Akıllı Boost'un ön koşulu (`social_profiles.linked_ad_account_id`) ve
+   * kurulum onu HİÇ yazmıyordu: workspace kurulup sayfa atandıktan sonra
+   * her gönderi "bu sayfaya bağlı bir reklam hesabı yok" diyordu ve çaresi
+   * Şirketler ekranındaki küçük bir açılır kutudaydı. Bu kuralı yalnızca
+   * sistemi kuran kişi biliyordu.
+   *
+   * SEÇİMİ İSTEMCİ YAPIYOR ve bu bilerek: tek Meta hesabı seçildiyse panel
+   * onu kendiliğinden gönderiyor, birden çoksa soruyor. Sunucunun "tek
+   * hesap varsa onu seç" demesi, iki hesaplı kurulumda sessizce HİÇBİRİNİ
+   * seçmemek ya da yanlışını seçmek arasında kalırdı. Hesap bu kurulumda
+   * atananlardan biri olmak zorunda; doğrulama `setProfileAdAccount`ta.
+   */
+  boostHesabiId: z.string().uuid().nullable().optional(),
 });
 export type ClientSetupInput = z.infer<typeof clientSetupSchema>;
 
@@ -210,7 +226,16 @@ export interface ClientSetupResult {
    * kullanıcı bunu ekranda görmeli. "Kuruldu" deyip eksik bırakmak, veri
    * gelmediğinde sebebin aranacağı yeri gizlerdi.
    */
-  failures: Array<{ kind: 'adAccount' | 'socialProfile' | 'user'; id: string; reason: string }>;
+  failures: Array<{
+    kind: 'adAccount' | 'socialProfile' | 'user' | 'boost';
+    id: string;
+    reason: string;
+  }>;
+  /**
+   * Boost hesabı bağlanan sayfa sayısı. Sıfırsa ve sayfa atandıysa ekran
+   * bunu söylüyor: Akıllı Boost o sayfada çalışmaz.
+   */
+  boostBaglanan: number;
   /**
    * Havuzdan alınan hesaplarla birlikte YENİ müşteriye taşınan satır sayısı.
    *

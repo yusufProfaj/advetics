@@ -111,6 +111,21 @@ type BaglantiSatiri = Prisma.PlatformConnectionGetPayload<{
   select: typeof BAGLANTI_ALANLARI;
 }>;
 
+/**
+ * OAUTH DÖNÜŞ ADRESİ — sorgu dizesi VARSA `&` ile eklenir.
+ *
+ * Dönüş yolu uzun süre sorgusuz bir yoldu (`/ayarlar/baglantilar`) ve
+ * sonuç `${yol}?connection=...` diye elle birleştiriliyordu. Kurulum
+ * sihirbazı kendi adımını sorguda taşıyor (`/kurulum?tur=sirket&adim=...`)
+ * ve elle birleştirme İKİNCİ bir `?` üretiyordu: tarayıcı onu `adim`
+ * değerinin parçası sayıyor, sihirbaz adımı tanımıyor ve kullanıcı
+ * bağlandıktan sonra sihirbazın BAŞINA dönüyordu. Hata yok, yalnızca
+ * yanlış ekran.
+ */
+export function donusAdresi(yol: string, sorgu: string): string {
+  return `${yol}${yol.includes('?') ? '&' : '?'}${sorgu}`;
+}
+
 @Injectable()
 export class ConnectionsService {
   private readonly logger = new Logger(ConnectionsService.name);
@@ -631,21 +646,27 @@ export class ConnectionsService {
       });
 
       if (declined) {
-        return { redirectPath: `${backTo}?connection=iptal&platform=${platform}` };
+        return { redirectPath: donusAdresi(backTo, `connection=iptal&platform=${platform}`) };
       }
 
       const reason = describePlatformOAuthError(platform, platformError, platformErrorText);
       this.logger.error(`OAuth başarısız (${platform}): ${platformError} — ${platformErrorText ?? ''}`);
       return {
-        redirectPath: `${backTo}?connection=hata&platform=${platform}&mesaj=${encodeURIComponent(reason)}`,
+        redirectPath: donusAdresi(
+          backTo,
+          `connection=hata&platform=${platform}&mesaj=${encodeURIComponent(reason)}`,
+        ),
       };
     }
 
     if (!params.code) {
       return {
-        redirectPath: `${backTo}?connection=hata&platform=${platform}&mesaj=${encodeURIComponent(
-          'Yetkilendirme kodu dönmedi. Platform izin ekranını tamamlamadan geri dönülmüş olabilir.',
-        )}`,
+        redirectPath: donusAdresi(
+          backTo,
+          `connection=hata&platform=${platform}&mesaj=${encodeURIComponent(
+            'Yetkilendirme kodu dönmedi. Platform izin ekranını tamamlamadan geri dönülmüş olabilir.',
+          )}`,
+        ),
       };
     }
 
@@ -719,7 +740,7 @@ export class ConnectionsService {
         platform,
         hesap: String(discovered.adAccounts),
       });
-      return { redirectPath: `${backTo}?${q.toString()}` };
+      return { redirectPath: donusAdresi(backTo, q.toString()) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`OAuth callback başarısız (${platform}): ${message}`);
@@ -755,7 +776,7 @@ export class ConnectionsService {
         platform,
         mesaj: baglantiHatasiMetni(err).slice(0, 300),
       });
-      return { redirectPath: `${backTo}?${q.toString()}` };
+      return { redirectPath: donusAdresi(backTo, q.toString()) };
     }
   }
 
@@ -1936,6 +1957,9 @@ export class ConnectionsService {
           id: before.id,
           clientId: before.clientId,
           syncEnabled: before.syncEnabled,
+          // TÜR DÖNÜYOR: kurulum boost hesabını yalnızca Meta sayfalarına
+          // bağlıyor ve YouTube kanalını ayırt etmenin tek yolu bu.
+          profileType: before.profileType,
           changed: false,
           leftBehindForms: 0,
         };
@@ -1989,6 +2013,7 @@ export class ConnectionsService {
         id: after.id,
         clientId: after.clientId,
         syncEnabled: after.syncEnabled,
+        profileType: after.profileType,
         changed: true,
         leftBehindForms,
       };

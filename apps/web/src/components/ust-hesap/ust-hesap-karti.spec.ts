@@ -200,7 +200,8 @@ describe('KRİTİK: hesap değiştiren işlemler TAM SAYFA yeniliyor', () => {
      * ekran, kullanıcıya işlemin yapılmadığını düşündürüyor.
      */
     expect(YONETIM).not.toContain('router.refresh()');
-    expect((YONETIM.match(/window\.location\.assign/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    // Yeni hesap kurma sihirbaza taşındı; geçiş, düzenleme ve silme burada.
+    expect((YONETIM.match(/window\.location\.assign/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
   it('AKTİF hesap silinince panele dönüyor — silinmiş bağlamda kalmıyor', () => {
@@ -210,26 +211,23 @@ describe('KRİTİK: hesap değiştiren işlemler TAM SAYFA yeniliyor', () => {
   });
 });
 
-describe('KRİTİK: yeni hesap KURULUNCA ona geçiliyor', () => {
-  it('önce kur, sonra switch-manager, sonra tam sayfa', () => {
-    /*
-     * Kurup eski hesapta kalmak, kullanıcının "kurdum ama nerede" diye
-     * seçiciyi aramasıydı. Sıra önemli: geçiş kurulmadan yapılamaz.
-     */
-    const bas = YONETIM.indexOf('async function kur(');
-    expect(bas, 'kur bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
-    const dilim = YONETIM.slice(bas, bas + 1400);
-    const kur = dilim.indexOf("apiFetch<{ id: string }>('/manager-account'");
-    const gec = dilim.indexOf('/auth/switch-manager');
-    const sayfa = dilim.indexOf('window.location.assign');
-    expect(kur).toBeGreaterThan(-1);
-    expect(gec).toBeGreaterThan(kur);
-    expect(sayfa).toBeGreaterThan(gec);
-    expect(dilim).toContain('managerAccountId: yeni.id');
+describe('KRİTİK: yeni hesap SİHİRBAZDA kuruluyor', () => {
+  /*
+   * Buradaki form yalnızca ad ve paket soruyordu; hesap boş bir kabuk gibi
+   * açılıyor, platform bağlama ve workspace kurma hiçbir yerde yazmayan bir
+   * sırayla ayrı ekranlarda yapılıyordu. Kurma artık tek yolda ve o yolun
+   * kararları `kurulum.spec.ts` içinde. Burada iki yolun geri doğmadığı
+   * kilitli: ikinci bir kurma formu, sihirbazın eklediği adımları atlar.
+   */
+  it('düğme sihirbaza gidiyor ve yalnızca platform sahibinde', () => {
+    expect(YONETIM).toContain('href="/kurulum?tur=ust-hesap"');
+    const bag = YONETIM.indexOf('href="/kurulum?tur=ust-hesap"');
+    expect(YONETIM.lastIndexOf('{platformAdmin && (', bag)).toBeGreaterThan(-1);
   });
 
-  it('paket seçilerek gönderiliyor', () => {
-    expect(YONETIM).toContain('createManagerAccountSchema.safeParse({ name: ad, paket })');
+  it('eski kurma formu KALMADI', () => {
+    expect(YONETIM).not.toContain('function YeniUstHesap');
+    expect(YONETIM).not.toContain("apiFetch<{ id: string }>('/manager-account'");
   });
 });
 
