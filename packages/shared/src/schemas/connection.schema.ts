@@ -155,6 +155,16 @@ export interface ConnectionSummary {
   lastVerifiedAt: string | null;
   lastErrorCode: string | null;
   connectedAt: string;
+  /**
+   * BAĞLANTININ SAHİBİ — ajansın mı, bu şirketin kendisinin mi.
+   *
+   * Müşteri kendi Meta'sını bağlayınca iki tür havuz oluyor ve kurallar
+   * farklı: ajansın hesabı her şirkete atanabiliyor, şirketinki yalnızca
+   * kendi workspace'lerine (`hesap-sahipligi.ts`). Ekran bunu bilmezse
+   * "her hesaba workspace aç" ajansın 481 hesabında da görünür ve tek
+   * tıkla 481 workspace açardı.
+   */
+  sahip: 'ajans' | 'sirket';
   adAccounts: AdAccountSummary[];
   socialProfiles: SocialProfileSummary[];
 }

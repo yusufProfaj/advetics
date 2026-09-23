@@ -27,6 +27,7 @@ import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from './provider.registry';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { decideConnectionOwnership } from './connection-ownership';
+import { baglantiKorunsunMu, cakismaKarari, sahiplikKarari } from './hesap-sahipligi';
 import {
   PlatformApiError,
   type FetchContext,
@@ -94,6 +95,9 @@ const PROFIL_ALANLARI = {
 
 const BAGLANTI_ALANLARI = {
   id: true,
+  // SAHİBİ SÖYLEMEK İÇİN — `toSummary` bağlantının ajansın mı şirketin mi
+  // olduğunu buradan çıkarıyor. Yanıta kimlik olarak GİTMİYOR.
+  orgId: true,
   platform: true,
   accountLabel: true,
   status: true,
@@ -302,6 +306,20 @@ export class ConnectionsService {
      */
     const scoped: TenantContext = { ...ctx, activeClientId: clientId };
 
+    /*
+     * AJANS ŞİRKETİ BİR KEZ OKUNUYOR — bağlantının sahibini ekranda
+     * yazabilmek için. Üst hesap üyeliği yoksa bilinmiyor ve bu doğru:
+     * üyeliği olmayan kullanıcı politika gereği yalnızca KENDİ şirketinin
+     * bağlantılarını görüyor, hepsi "şirketin".
+     */
+    const [ajans] = ctx.managerAccountId
+      ? await this.admin.$queryRaw<Array<{ ajans_org_id: string | null }>>(Prisma.sql`
+          SELECT ajans_org_id::text AS ajans_org_id FROM manager_accounts
+           WHERE id = ${ctx.managerAccountId}::uuid
+        `)
+      : [];
+    const ajansOrgId = ajans?.ajans_org_id ?? null;
+
     return this.prisma.withTenant(scoped, async (tx) => {
       const rows = await tx.platformConnection.findMany({
         /*
@@ -371,7 +389,7 @@ export class ConnectionsService {
         },
       });
 
-      return rows.map((c) => this.toSummary(c));
+      return rows.map((c) => this.toSummary(c, ajansOrgId));
     });
   }
 
@@ -384,6 +402,7 @@ export class ConnectionsService {
    */
   private toSummary(
     c: BaglantiSatiri,
+    ajansOrgId: string | null,
   ): ConnectionSummary {
     const prov = this.provider(c.platform as Platform);
     const missingScopes = prov.requiredScopes.filter((s) => !c.grantedScopes.includes(s));
@@ -402,6 +421,7 @@ export class ConnectionsService {
       lastVerifiedAt: c.lastVerifiedAt?.toISOString() ?? null,
       lastErrorCode: c.lastErrorCode,
       connectedAt: c.createdAt.toISOString(),
+      sahip: ajansOrgId !== null && c.orgId === ajansOrgId ? 'ajans' : 'sirket',
       adAccounts: c.adAccounts.map(
         (a): AdAccountSummary => ({
           id: a.id,
@@ -1179,7 +1199,42 @@ export class ConnectionsService {
     });
 
     const accounts = await provider.listAdAccounts(accessToken);
+
+    /*
+     * K3 — ATANMIŞ SATIRIN BAĞLANTISI KEŞİFLE ELE GEÇİRİLMİYOR.
+     *
+     * Var olan satırlar TEK sorguda okunuyor: hesap başına ayrı bir okuma,
+     * 481 hesaplık bir havuzda her yenilemede 481 ek tur demekti. Kararın
+     * gerekçesi `hesap-sahipligi.ts#baglantiKorunsunMu`.
+     */
+    const mevcutHesaplar = new Map(
+      (
+        await this.admin.adAccount.findMany({
+          where: {
+            orgId: conn.orgId,
+            platform: platform as PrismaPlatform,
+            externalId: { in: accounts.map((a) => a.externalId) },
+          },
+          select: {
+            externalId: true,
+            clientId: true,
+            connectionId: true,
+            connection: { select: { status: true } },
+          },
+        })
+      ).map((r) => [r.externalId, r]),
+    );
+
     for (const a of accounts) {
+      const mevcut = mevcutHesaplar.get(a.externalId);
+      const koru =
+        mevcut !== undefined &&
+        baglantiKorunsunMu({
+          mevcutClientId: mevcut.clientId,
+          mevcutConnectionId: mevcut.connectionId,
+          mevcutBaglantiDurumu: mevcut.connection.status,
+          yeniConnectionId: connectionId,
+        });
       await this.admin.adAccount.upsert({
         where: {
           // ORGANİZASYON BAZLI. Müşteri bazlıyken ajansın 157 hesabı her
@@ -1212,7 +1267,11 @@ export class ConnectionsService {
           // kullanıcının seçimi ve yaptığı müşteri ATAMASI her hesap
           // yenilemesinde sıfırlanmamalı. Sıfırlansaydı "Hesapları yenile"
           // düğmesi bütün atamaları sessizce havuza geri döndürürdü.
-          connectionId,
+          //
+          // `connectionId` de ATANMIŞ satırda korunuyor (K3): yazılsaydı
+          // müşterinin kendi bağlantısı ajansın atadığı hesabı devralır ve
+          // müşteri bağlantısını kaldırdığında o hesabın verisi dururdu.
+          ...(koru ? {} : { connectionId }),
           name: a.name,
           currency: a.currency,
           timezone: a.timezone,
@@ -1227,7 +1286,31 @@ export class ConnectionsService {
     if (platform === 'meta') {
       const profiles = await provider.listSocialProfiles(accessToken);
 
+      // K3 sayfalarda da — aynı gerekçe, aynı tek sorgu.
+      const mevcutSayfalar = new Map(
+        (
+          await this.admin.socialProfile.findMany({
+            where: { orgId: conn.orgId, externalId: { in: profiles.map((p) => p.externalId) } },
+            select: {
+              externalId: true,
+              clientId: true,
+              connectionId: true,
+              connection: { select: { status: true } },
+            },
+          })
+        ).map((r) => [r.externalId, r]),
+      );
+
       for (const p of profiles) {
+        const mevcut = mevcutSayfalar.get(p.externalId);
+        const koru =
+          mevcut !== undefined &&
+          baglantiKorunsunMu({
+            mevcutClientId: mevcut.clientId,
+            mevcutConnectionId: mevcut.connectionId,
+            mevcutBaglantiDurumu: mevcut.connection.status,
+            yeniConnectionId: connectionId,
+          });
         const pageToken = p.pageAccessToken ? this.vault.encrypt(p.pageAccessToken) : null;
         await this.admin.socialProfile.upsert({
           // ORGANİZASYON BAZLI, bağlantı bazlı DEĞİL. İkinci bir Meta kimliği
@@ -1258,7 +1341,12 @@ export class ConnectionsService {
             // seçimlerini sessizce sıfırlamamalı. `connectionId` güncelleniyor
             // çünkü sayfa ikinci bir kimlikle yeniden keşfedilmiş olabilir ve
             // sayfa token'ı o bağlantıdan geliyor.
-            connectionId,
+            //
+            // ATANMIŞ SAYFADA İKİSİ DE KORUNUYOR (K3): bağlantı ve onun sayfa
+            // token'ı birlikte gidiyor. Yalnızca bağlantıyı koruyup token'ı
+            // yazmak, sayfanın bir bağlantıya ait görünüp başkasının
+            // token'ıyla yayın yapması demekti.
+            ...(koru ? {} : { connectionId }),
             name: p.name,
             username: p.username ?? null,
             pictureUrl: p.pictureUrl ?? null,
@@ -1273,7 +1361,7 @@ export class ConnectionsService {
              * olurdu — atamalarla birlikte.
              */
             parentPageExternalId: p.parentPageExternalId ?? null,
-            ...(pageToken
+            ...(pageToken && !koru
               ? { pageAccessTokenEnc: pageToken.data, keyVersion: pageToken.keyVersion }
               : {}),
             raw: p.raw as Prisma.InputJsonValue,
@@ -1738,6 +1826,81 @@ export class ConnectionsService {
     return row.org_id;
   }
 
+  /**
+   * SAHİPLİK KARARINI UYGULAR — hesap ve sayfa atamasının ortak kapısı.
+   *
+   * Karar `hesap-sahipligi.ts` içinde ve saf; burası yalnızca girdilerini
+   * topluyor.
+   *
+   * BAĞLANTININ ŞİRKETİ ve AJANS ŞİRKETİ ADMİN İSTEMCİSİYLE OKUNUYOR. RLS
+   * altında müşteri admini ajansın bağlantısını GÖREMİYOR (doğrusu bu) ve
+   * görünmeyen satır "yok" sayılamaz (CLAUDE.md). Okunan şey yalnızca bir
+   * kimlik ve kullanıcının zaten GÖREBİLDİĞİ bir satırın bağlantısına ait;
+   * dışarı hiçbir şey dönmüyor, karar için kullanılıyor.
+   *
+   * ÇAKIŞMA DA ADMİN İSTEMCİSİYLE: hedef şirketteki ikiz satır bu kişiye
+   * görünmeyebilir ve görünmediği için "yok" sayılırsa tekil anahtar
+   * UPDATE'te patlar — kullanıcı sebepsiz bir "kayıt zaten var" görür.
+   */
+  private async sahiplikUygula(
+    tx: Prisma.TransactionClient,
+    ctx: TenantContext,
+    p: {
+      tur: string;
+      ad: string;
+      satirOrgId: string;
+      connectionId: string;
+      hedefClientId: string | null;
+      cakisanVarMi: (orgId: string) => Promise<boolean>;
+    },
+  ): Promise<{ orgId: string; not: string | null }> {
+    /*
+     * TEK SORGU, HAM SQL. İki ayrı model okuması yerine tek tur; ham olması
+     * test koşum ortamının onu gerçek şemaya karşı çalıştırabilmesi için
+     * (`pglite-harness` model yüzeyini taklit ediyor, SQL'i taklit etmiyor).
+     */
+    const [baglanti] = await this.admin.$queryRaw<
+      Array<{ org_id: string; ajans_org_id: string | null }>
+    >(Prisma.sql`
+      SELECT c.org_id::text AS org_id,
+             (SELECT m.ajans_org_id::text FROM manager_accounts m
+               WHERE m.id = ${ctx.managerAccountId}::uuid) AS ajans_org_id
+        FROM platform_connections c
+       WHERE c.id = ${p.connectionId}::uuid
+    `);
+    // Yabancı anahtar bağlantının var olduğunu garanti ediyor; yoksa
+    // tahminle devam etmek yerine duruyoruz.
+    if (!baglanti) throw new NotFoundException('Bağlantı bulunamadı');
+
+    const hedefOrgId =
+      p.hedefClientId === null ? null : await this.musteriOrgId(tx, p.hedefClientId);
+
+    const karar = sahiplikKarari({
+      tur: p.tur,
+      ad: p.ad,
+      satirOrgId: p.satirOrgId,
+      baglantiOrgId: baglanti.org_id,
+      hedefOrgId,
+      aktifOrgId: ctx.orgId,
+      // `Boolean`, `!== null` DEĞİL: alan bir yerde `undefined` gelirse
+      // (eksik kurulmuş bir bağlam) üyelik VAR sayılmasın — kapalı düşsün.
+      ustHesapVar: Boolean(ctx.managerAccountId),
+      ajansOrgId: baglanti.ajans_org_id,
+    });
+    if (!karar.ok) throw new BadRequestException(karar.mesaj);
+
+    const cakisma = cakismaKarari({
+      atama: p.hedefClientId !== null,
+      ad: p.ad,
+      satirOrgId: p.satirOrgId,
+      yeniOrgId: karar.yeniOrgId,
+      cakisanVar:
+        karar.yeniOrgId === p.satirOrgId ? false : await p.cakisanVarMi(karar.yeniOrgId),
+    });
+    if (!cakisma.ok) throw new BadRequestException(cakisma.mesaj);
+    return { orgId: cakisma.orgId, not: cakisma.not };
+  }
+
   async assignAdAccount(
     ctx: TenantContext,
     adAccountId: string,
@@ -1770,6 +1933,7 @@ export class ConnectionsService {
           stayingRows: 0,
           clientWide: {} as TasimaSonucu['musteriGeneli'],
           unlinkedBoostPages: 0,
+          poolNote: null as string | null,
         };
       }
 
@@ -1781,6 +1945,29 @@ export class ConnectionsService {
           `"${before.name}" bir yönetici (MCC) hesabı — reklam yayınlamıyor, workspace’e atanamaz.`,
         );
       }
+
+      /*
+       * SAHİPLİK — satır hangi şirkete gidecek ve bu kişi onu taşıyabilir mi.
+       * Kurallar ve gerekçeleri `hesap-sahipligi.ts` içinde (K1, K2, K4).
+       */
+      const sahiplik = await this.sahiplikUygula(tx, ctx, {
+        tur: 'reklam hesabı',
+        ad: before.name,
+        satirOrgId: before.orgId,
+        connectionId: before.connectionId,
+        hedefClientId: clientId,
+        cakisanVarMi: async (orgId) => {
+          const ikiz = await this.admin.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            SELECT id::text AS id FROM ad_accounts
+             WHERE platform = ${before.platform}::"Platform"
+               AND external_id = ${before.externalId}
+               AND org_id = ${orgId}::uuid
+               AND id <> ${before.id}::uuid
+             LIMIT 1
+          `);
+          return ikiz.length > 0;
+        },
+      });
 
       /*
        * ATAMA İZLEMEYİ AÇIYOR — ayrı bir adım DEĞİL.
@@ -1811,15 +1998,20 @@ export class ConnectionsService {
        * ORG HEDEF MÜŞTERİDEN OKUNUYOR, `ctx.orgId`DEN DEĞİL. Burada bir süre
        * "clientId doğrulandı, yani hedef workspace AKTİF şirkette" yazıyordu
        * ve o cümle "Tüm şirketler" modunda yanlıştı — gerekçesi
-       * `musteriOrgId` üzerinde. Atama kaldırılırken (`clientId === null`)
-       * satır bulunduğu şirkette kalıyor: havuza dönüyor ve havuz ajansın.
+       * `musteriOrgId` üzerinde.
+       *
+       * KALDIRMADA SATIR SAHİBİNE DÖNÜYOR. Burada bir süre "bulunduğu
+       * şirkette kalıyor, havuz ajansın" yazıyordu; iki havuz olunca o cümle
+       * yanlışlaştı: ajansın hesabı 3A'dan çözülünce 3A'nın havuzuna düşer ve
+       * bir daha hiçbir kardeş şirketten görünmezdi. Hangi şirkete gideceğine
+       * `sahiplikUygula` karar veriyor.
        */
       const after = await tx.adAccount.update({
         where: { id: adAccountId },
         data: {
           clientId,
           syncEnabled: clientId !== null,
-          ...(clientId !== null ? { orgId: await this.musteriOrgId(tx, clientId) } : {}),
+          orgId: sahiplik.orgId,
         },
       });
 
@@ -1897,6 +2089,7 @@ export class ConnectionsService {
         stayingRows: tasima.kalanVeri,
         clientWide: tasima.musteriGeneli,
         unlinkedBoostPages: tasima.koparilanFaturaBagi,
+        poolNote: sahiplik.not,
       };
     },
     /*
@@ -1962,8 +2155,29 @@ export class ConnectionsService {
           profileType: before.profileType,
           changed: false,
           leftBehindForms: 0,
+          poolNote: null as string | null,
         };
       }
+
+      // SAHİPLİK — reklam hesabı atamasıyla AYNI kapı (`hesap-sahipligi.ts`).
+      // Sayfanın tekil anahtarı `(org_id, external_id)`; platform yok.
+      const sahiplik = await this.sahiplikUygula(tx, ctx, {
+        tur: 'sayfa',
+        ad: before.name,
+        satirOrgId: before.orgId,
+        connectionId: before.connectionId,
+        hedefClientId: clientId,
+        cakisanVarMi: async (orgId) => {
+          const ikiz = await this.admin.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            SELECT id::text AS id FROM social_profiles
+             WHERE external_id = ${before.externalId}
+               AND org_id = ${orgId}::uuid
+               AND id <> ${before.id}::uuid
+             LIMIT 1
+          `);
+          return ikiz.length > 0;
+        },
+      });
 
       // ESKİ MÜŞTERİDE KALACAK FORM SAYISI. Sessiz bırakmak, kullanıcının
       // sayfayı taşıdıktan sonra "formlarım nerede" diye aramasına yol açardı.
@@ -1995,7 +2209,8 @@ export class ConnectionsService {
         data: {
           clientId,
           syncEnabled: clientId !== null,
-          ...(clientId !== null ? { orgId: await this.musteriOrgId(tx, clientId) } : {}),
+          // Kaldırmada SAHİBİNE dönüyor — bkz. `assignAdAccount`.
+          orgId: sahiplik.orgId,
         },
       });
 
@@ -2016,6 +2231,7 @@ export class ConnectionsService {
         profileType: after.profileType,
         changed: true,
         leftBehindForms,
+        poolNote: sahiplik.not,
       };
     });
   }

@@ -258,6 +258,17 @@ export class ManagerAccountService {
           where: { id: evSirketi.id },
           data: { managerAccountId: hesap.id },
         });
+        /*
+         * KENDİ AJANSINI KURANIN EV ŞİRKETİ AJANS ŞİRKETİ. Bağlantıları
+         * orada ve havuzu oradan açılacak; yazılmasaydı havuz kapalı düşer,
+         * ikinci şirkette atama ekranı boş görünürdü. Sıra önemli: kompozit
+         * anahtar şirketin BU hesabın altında olmasını istiyor, yani önce
+         * bağlama, sonra ajans.
+         */
+        await tx.managerAccount.update({
+          where: { id: hesap.id },
+          data: { ajansOrgId: evSirketi.id },
+        });
       } else {
         /*
          * PLATFORM SAHİBİ KURUYORSA İLK ŞİRKET HEMEN AÇILIYOR. Şirketsiz

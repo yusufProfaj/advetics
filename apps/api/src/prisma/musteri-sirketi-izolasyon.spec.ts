@@ -40,6 +40,7 @@ const USER_3A = 'd1d1d1d1-d1d1-d1d1-d1d1-d1d1d1d1d1d1';
 
 const CONN_PROFAJ = 'e1e1e1e1-e1e1-e1e1-e1e1-e1e1e1e1e1e1';
 const CONN_3A = 'f1f1f1f1-f1f1-f1f1-f1f1-f1f1f1f1f1f1';
+const CONN_3A_META = 'f2f2f2f2-f2f2-f2f2-f2f2-f2f2f2f2f2f2';
 
 const ACC_PROFAJ_HAVUZ = '01010101-0101-0101-0101-010101010101';
 const ACC_BILTAS = '02020202-0202-0202-0202-020202020202';
@@ -49,6 +50,7 @@ const ACC_3A_HAVUZ = '04040404-0404-0404-0404-040404040404';
 const SAYFA_PROFAJ_HAVUZ = '05050505-0505-0505-0505-050505050505';
 const SAYFA_BILTAS = '06060606-0606-0606-0606-060606060606';
 const KANAL_3A = '07070707-0707-0707-0707-070707070707';
+const SAYFA_3A_HAVUZ = '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a';
 
 const KAMP_BILTAS = '08080808-0808-0808-0808-080808080808';
 const KAMP_3A = '09090909-0909-0909-0909-090909090909';
@@ -57,6 +59,13 @@ const KAMP_3A = '09090909-0909-0909-0909-090909090909';
 const APP_ROLE = 'advetics_musteri_izolasyon_test';
 
 const RLS_TABLOLARI = [
+  /*
+   * `manager_accounts` DA AÇIK: havuz politikası ajans şirketini
+   * `app.ajans_org_id()` ile bu tablodan okuyor ve üretimde o okuma da bir
+   * politikadan geçiyor. Kapalı bıraksaydık fonksiyon koşum ortamında her
+   * satırı görür, üretimde görmeyebilirdi.
+   */
+  'manager_accounts',
   'organizations',
   'clients',
   'platform_connections',
@@ -96,6 +105,11 @@ beforeAll(async () => {
             ($3, 'Biltaş',             'biltas',     'active', $4, now())`,
     [ORG_PROFAJ, ORG_3A, ORG_BILTAS, UST_PROFAJ],
   );
+  /*
+   * AJANS ŞİRKETİ PROFAJ. Havuzu kardeş şirketlere açan tek şey bu satır;
+   * yazılmasaydı Profaj'ın havuzu da yalnızca kendi şirketinde kalırdı.
+   */
+  await h.q(`UPDATE manager_accounts SET ajans_org_id = $1 WHERE id = $2`, [ORG_PROFAJ, UST_PROFAJ]);
   await h.q(
     `INSERT INTO clients (id, org_id, name, slug, updated_at)
      VALUES ($1, $3, '3A Makina', '3a-ws', now()),
@@ -122,8 +136,9 @@ beforeAll(async () => {
        (id, org_id, client_id, platform, status, external_user_id, account_label,
         access_token_enc, granted_scopes, connected_by_user_id, updated_at)
      VALUES ($1, $3, NULL, 'meta',   'active', 'profaj-bm', 'Profaj BM',  '\\x00', '{}', $5, now()),
-            ($2, $4, NULL, 'google', 'active', '3a-google', '3A Google',  '\\x00', '{}', $6, now())`,
-    [CONN_PROFAJ, CONN_3A, ORG_PROFAJ, ORG_3A, USER_PROFAJ, USER_3A],
+            ($2, $4, NULL, 'google', 'active', '3a-google', '3A Google',  '\\x00', '{}', $6, now()),
+            ($7, $4, NULL, 'meta',   'active', '3a-meta',   '3A Meta',    '\\x00', '{}', $6, now())`,
+    [CONN_PROFAJ, CONN_3A, ORG_PROFAJ, ORG_3A, USER_PROFAJ, USER_3A, CONN_3A_META],
   );
 
   await h.q(
@@ -154,7 +169,8 @@ beforeAll(async () => {
        (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
      VALUES ($1, $4, NULL, $7, 'facebook_page',   'page_havuz',  'PROFAJ HAVUZ SAYFASI', now()),
             ($2, $6, $5,   $7, 'facebook_page',   'page_biltas', 'BILTAS SAYFASI',       now()),
-            ($3, $8, $9,   $10,'youtube_channel', 'yt_3a',       '3A YOUTUBE KANALI',    now())`,
+            ($3, $8, $9,   $10,'youtube_channel', 'yt_3a',       '3A YOUTUBE KANALI',    now()),
+            ($11,$8, NULL, $12,'facebook_page',   'page_3a',     '3A HAVUZ SAYFASI',     now())`,
     [
       SAYFA_PROFAJ_HAVUZ,
       SAYFA_BILTAS,
@@ -166,6 +182,8 @@ beforeAll(async () => {
       ORG_3A,
       WS_3A,
       CONN_3A,
+      SAYFA_3A_HAVUZ,
+      CONN_3A_META,
     ],
   );
 
@@ -199,6 +217,8 @@ interface Ctx {
   /** Üst hesap üyeliği OLMAYAN kullanıcıda boş — `TenantContextService` null yazıyor. */
   managerAccountId?: string | null;
   activeClientId?: string | null;
+  /** "Tüm şirketler" modu — `app.tum_sirketler()`. */
+  tumSirketler?: boolean;
 }
 
 async function asUser<T = Record<string, unknown>>(sql: string, ctx: Ctx): Promise<T[]> {
@@ -208,7 +228,8 @@ async function asUser<T = Record<string, unknown>>(sql: string, ctx: Ctx): Promi
            set_config('app.current_client_ids',        '${ctx.clientIds.join(',')}', false),
            set_config('app.is_org_admin',              '${ctx.isOrgAdmin ? 'on' : 'off'}', false),
            set_config('app.current_manager_account_id','${ctx.managerAccountId ?? ''}', false),
-           set_config('app.current_active_client_id',  '${ctx.activeClientId ?? ''}', false)
+           set_config('app.current_active_client_id',  '${ctx.activeClientId ?? ''}', false),
+           set_config('app.tum_sirketler',             '${ctx.tumSirketler ? 'on' : 'off'}', false)
   `);
   await h.q(`SET ROLE ${APP_ROLE}`);
   try {
@@ -275,7 +296,7 @@ describe('KURULUM GERÇEKTEN YAZILDI — tarama boşa düşmüyor', () => {
     const hesaplar = await h.q<{ n: string }>('SELECT count(*) AS n FROM ad_accounts');
     expect(Number(hesaplar[0]?.n)).toBe(4);
     const sayfalar = await h.q<{ n: string }>('SELECT count(*) AS n FROM social_profiles');
-    expect(Number(sayfalar[0]?.n)).toBe(3);
+    expect(Number(sayfalar[0]?.n)).toBe(4);
     const kampanyalar = await h.q<{ n: string }>('SELECT count(*) AS n FROM campaigns');
     expect(Number(kampanyalar[0]?.n)).toBe(2);
     const metrikler = await h.q<{ n: string }>('SELECT count(*) AS n FROM insights_daily');
@@ -324,14 +345,14 @@ describe('KRİTİK: 3A yöneticisi AJANSIN portföyünden tek satır göremiyor'
       'SELECT account_label FROM platform_connections ORDER BY account_label',
       ADMIN_3A,
     );
-    expect(gorunen.map((r) => r.account_label)).toEqual(['3A Google']);
+    expect(gorunen.map((r) => r.account_label)).toEqual(['3A Google', '3A Meta']);
   });
 
-  it('kampanyalar — başka müşterinin kampanyası YOK', async () => {
+  it('kampanyalar — başka şirketin kampanyası YOK', async () => {
     expect(await adlar('campaigns', ADMIN_3A)).toEqual(['3A KAMPANYASI']);
   });
 
-  it('metrikler — başka müşterinin harcaması YOK', async () => {
+  it('metrikler — başka şirketin harcaması YOK', async () => {
     const satirlar = await asUser<{ spend_micros: string }>(
       'SELECT spend_micros FROM insights_daily',
       ADMIN_3A,
@@ -352,7 +373,7 @@ describe('KRİTİK: 3A yöneticisi KENDİ varlıklarını görüyor', () => {
   });
 
   it('kendi YouTube kanalını görüyor', async () => {
-    expect(await adlar('social_profiles', ADMIN_3A)).toEqual(['3A YOUTUBE KANALI']);
+    expect(await adlar('social_profiles', ADMIN_3A)).toEqual(['3A HAVUZ SAYFASI', '3A YOUTUBE KANALI']);
   });
 });
 
@@ -372,7 +393,7 @@ describe('KRİTİK: AJANS, MÜŞTERİNİN İÇİNDEYKEN KENDİ HAVUZUNU KULLANAB
     expect(gorunen).toContain('3A HESABI');
   });
 
-  it('KRİTİK: buradayken BAŞKA müşterinin ATANMIŞ hesabı yine görünmüyor', async () => {
+  it('KRİTİK: buradayken BAŞKA şirketin ATANMIŞ hesabı yine görünmüyor', async () => {
     /*
      * Havuz (`client_id IS NULL`) ajans geneli, ATANMIŞ satır ise kendi
      * şirketine çivili. Ajans yöneticisi bile 3A'nın içindeyken Biltaş'ın
@@ -405,5 +426,150 @@ describe('KRİTİK: ÜST HESAP ÜYELİĞİ SINIRI KALDIRIYOR — bu yüzden veri
     // İki iddianın tek farkı `managerAccountId`. Yukarıdaki test tek başına
     // dursaydı "havuz zaten hep görünüyor" ihtimalini elemezdi.
     expect(await adlar('ad_accounts', ADMIN_3A)).not.toContain('PROFAJ HAVUZU');
+  });
+});
+
+/**
+ * AJANSIN YÖNETİCİSİ, BAŞKA BİR MÜŞTERİNİN (Biltaş) İÇİNDEYKEN.
+ *
+ * Tehlikeli yön bu: ajans yöneticisinin elinde bütün şirketler var ve bir
+ * müşterinin kendi bağladığı hesap, başka bir müşterinin ekranında
+ * görünürse ona atanabilir.
+ */
+const PROFAJ_BILTAS_ICINDE: Ctx = {
+  orgId: ORG_BILTAS,
+  userId: USER_PROFAJ,
+  clientIds: [WS_BILTAS],
+  isOrgAdmin: true,
+  managerAccountId: UST_PROFAJ,
+};
+
+/** "Tüm şirketler" modu — `orgId` ev şirketi kalıyor, kapsam ajans geneli. */
+const PROFAJ_TUM: Ctx = {
+  orgId: ORG_PROFAJ,
+  userId: USER_PROFAJ,
+  clientIds: [WS_3A, WS_BILTAS],
+  isOrgAdmin: true,
+  managerAccountId: UST_PROFAJ,
+  tumSirketler: true,
+};
+
+describe('KRİTİK: MÜŞTERİNİN KENDİ HAVUZU BAŞKA MÜŞTERİYE AÇILMIYOR', () => {
+  it('Biltaş’ın içindeyken 3A’nın kendi bağladığı hesap GÖRÜNMÜYOR — ajansınki görünüyor', async () => {
+    /*
+     * Eski yüklem (`org_id = ANY (app.ajans_org_idleri())`) iki havuzu
+     * ayırt etmiyordu: 3A'nın kendi Meta'sı da ajans geneline açılıyordu.
+     * İki iddia BİRLİKTE: yalnızca "3A'nınki yok" deseydik, bütün havuzu
+     * kapatan bir hata da bu testi geçerdi.
+     */
+    const gorunen = await adlar('ad_accounts', PROFAJ_BILTAS_ICINDE);
+    expect(gorunen).not.toContain('3A HAVUZU');
+    expect(gorunen).toContain('PROFAJ HAVUZU');
+  });
+
+  it('Biltaş’ın içindeyken 3A’nın bağlantıları GÖRÜNMÜYOR', async () => {
+    const gorunen = await asUser<{ account_label: string }>(
+      'SELECT account_label FROM platform_connections ORDER BY account_label',
+      PROFAJ_BILTAS_ICINDE,
+    );
+    expect(gorunen.map((r) => r.account_label)).toEqual(['Profaj BM']);
+  });
+
+  it('Biltaş’ın içindeyken 3A’nın havuz sayfası GÖRÜNMÜYOR', async () => {
+    const gorunen = await adlar('social_profiles', PROFAJ_BILTAS_ICINDE);
+    expect(gorunen).not.toContain('3A HAVUZ SAYFASI');
+    expect(gorunen).toContain('PROFAJ HAVUZ SAYFASI');
+  });
+
+  it('KRİTİK: 3A’nın hesabı Biltaş’a ATANAMIYOR — sıfır satır', async () => {
+    /*
+     * "Patlamadı" bir RLS testi için yeterli değil: politikası tutmayan bir
+     * UPDATE hata vermez, sessizce sıfır satır etkiler (CLAUDE.md). Etkilenen
+     * satır RETURNING ile SAYILIYOR.
+     */
+    const r = await asUser<{ id: string }>(
+      `UPDATE ad_accounts SET client_id = '${WS_BILTAS}', org_id = '${ORG_BILTAS}'
+        WHERE id = '${ACC_3A_HAVUZ}' RETURNING id`,
+      PROFAJ_BILTAS_ICINDE,
+    );
+    expect(r).toEqual([]);
+  });
+
+  it('KRİTİK: 3A’nın bağlantısı Biltaş’tan KOPARILAMIYOR — sıfır satır', async () => {
+    const r = await asUser<{ id: string }>(
+      `UPDATE platform_connections SET status = 'revoked'
+        WHERE id = '${CONN_3A_META}' RETURNING id`,
+      PROFAJ_BILTAS_ICINDE,
+    );
+    expect(r).toEqual([]);
+  });
+
+  it('3A’nın İÇİNDEYKEN ajans 3A’nın kendi havuzunu görüyor — kendi şirketine atayabilsin', async () => {
+    // Müşterinin kendi bağladığı hesabı ajans da yönetebiliyor, ama YALNIZCA
+    // o müşterinin içinde.
+    expect(await adlar('ad_accounts', PROFAJ_3A_ICINDE)).toContain('3A HAVUZU');
+  });
+
+  it('"TÜM ŞİRKETLER" modunda müşteri havuzu listelenmiyor — ajansınki listeleniyor', async () => {
+    /*
+     * Modda `org_kapsaminda` bütün şirketleri açıyor; havuz onu kullansaydı
+     * atama ekranı her müşterinin kendi hesabını tek listede gösterir ve
+     * hedef workspace'i de bütün şirketlerden seçtirirdi.
+     */
+    const gorunen = await adlar('ad_accounts', PROFAJ_TUM);
+    expect(gorunen).not.toContain('3A HAVUZU');
+    expect(gorunen).toContain('PROFAJ HAVUZU');
+  });
+});
+
+describe('KRİTİK: AJANS BİLİNMİYORSA HAVUZ KAPALI DÜŞÜYOR', () => {
+  it('ajans_org_id boşken Biltaş’tan ajans havuzu görünmüyor', async () => {
+    /*
+     * Açık düşmek, eksik bir veriyi sızıntıya çevirirdi. Kolon yeni ve
+     * doldurma bir sorguya dayanıyor; boş kalan bir hesapta davranış
+     * "havuz yalnızca kendi şirketinde" olmalı.
+     */
+    await h.q(`UPDATE manager_accounts SET ajans_org_id = NULL WHERE id = $1`, [UST_PROFAJ]);
+    try {
+      expect(await adlar('ad_accounts', PROFAJ_BILTAS_ICINDE)).not.toContain('PROFAJ HAVUZU');
+      // Ajansın kendi şirketinde havuzu hâlâ görüyor: kapanan yalnızca paylaşım.
+      expect(await adlar('ad_accounts', ADMIN_PROFAJ)).toContain('PROFAJ HAVUZU');
+    } finally {
+      await h.q(`UPDATE manager_accounts SET ajans_org_id = $1 WHERE id = $2`, [ORG_PROFAJ, UST_PROFAJ]);
+    }
+  });
+});
+
+describe('ajans_org_id — veritabanı kısıtları', () => {
+  it('KRİTİK: başka üst hesabın şirketi ajans olarak YAZILAMIYOR', async () => {
+    /*
+     * Basit yabancı anahtar yalnızca şirketin VAR olduğunu söylerdi. Başka
+     * bir üst hesabın şirketini buraya yazmak, onun havuzunu bu hesabın
+     * bütün şirketlerine açardı. Kompozit anahtar ikisini birlikte istiyor.
+     */
+    const YABANCI_UST = 'bbbb0000-0000-0000-0000-0000000000bb';
+    const YABANCI_ORG = '44444444-4444-4444-4444-444444444444';
+    await h.q(
+      `INSERT INTO manager_accounts (id, name, slug, status, updated_at)
+       VALUES ($1, 'Başka Ajans', 'baska', 'active', now())`,
+      [YABANCI_UST],
+    );
+    await h.q(
+      `INSERT INTO organizations (id, name, slug, status, manager_account_id, updated_at)
+       VALUES ($1, 'Başka', 'baska-org', 'active', $2, now())`,
+      [YABANCI_ORG, YABANCI_UST],
+    );
+    await expect(
+      h.q(`UPDATE manager_accounts SET ajans_org_id = $1 WHERE id = $2`, [YABANCI_ORG, UST_PROFAJ]),
+    ).rejects.toThrow(/manager_accounts_ajans_org_ayni_hesap_fkey/);
+  });
+
+  it('KRİTİK: ajans şirketi başka üst hesaba TAŞINAMIYOR', async () => {
+    // Taşınabilseydi eski hesap havuzunu sessizce kaybeder, yeni hesap ise
+    // başka birinin ajansının havuzunu görürdü.
+    const YABANCI_UST = 'bbbb0000-0000-0000-0000-0000000000bb';
+    await expect(
+      h.q(`UPDATE organizations SET manager_account_id = $1 WHERE id = $2`, [YABANCI_UST, ORG_PROFAJ]),
+    ).rejects.toThrow(/manager_accounts_ajans_org_ayni_hesap_fkey/);
   });
 });

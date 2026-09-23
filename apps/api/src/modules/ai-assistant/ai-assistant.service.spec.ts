@@ -879,6 +879,7 @@ describe('sohbetin müşterisi', () => {
       lastVerifiedAt: null,
       lastErrorCode: null,
       connectedAt: '2026-09-01T00:00:00.000Z',
+      sahip: 'ajans',
       adAccounts: [
         {
           id: 'acc-1',

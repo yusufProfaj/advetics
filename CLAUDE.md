@@ -809,6 +809,24 @@ buna göre veriliyor:
   gitmek eksik çekimden pahalı. Zamanlanmış süpürme bunu `connection.platform
   = 'meta'` ile zaten yapıyordu; atama yolundaki ikinci sorgu yapmıyordu —
   aynı süzgeci iki yerde yazmanın klasik sonucu.
+- **HAVUZUN İKİ SAHİBİ VAR — SAHİPLİK BAĞLANTIDAN GELİR, ATAMA ÖDÜNÇ
+  VERİR.** Müşteri kendi Meta'sını bağlayınca ikinci bir havuz doğdu ve
+  havuz politikası (`org_id = ANY (app.ajans_org_idleri())`) onu da bütün
+  kardeş şirketlere açıyordu: Profaj Biltaş'ın içindeyken 3A'nın kendi
+  hesabını Biltaş'a atayabiliyor, 3A'nın bağlantısını koparabiliyordu. Sıfır
+  hata. Bugün havuz yalnızca KENDİ şirketinde ve AJANS şirketinde görünüyor
+  (`app.havuz_kapsaminda`, `manager_accounts.ajans_org_id`). Ajans
+  bilinmiyorsa KAPALI düşüyor. Dört kural `hesap-sahipligi.ts` içinde ve
+  ikisi RLS'in göremediği yerde: (K1) "tüm şirketler" modunda ATANMIŞ satır
+  `org_kapsaminda` ile bütün şirketlere açık, yani bir şirketin atanmış
+  hesabı moddayken başka şirkete taşınabiliyordu; tek kapı servis. (K3)
+  keşif upsert'i atanmış satırın `connection_id`sini yeni bağlantıya
+  geçiriyordu; müşteri bağlantısını kaldırınca AJANSIN atadığı hesabın verisi
+  duruyordu. (K2) atama kalkınca satır bağlantısının şirketine dönüyor. (K4)
+  şirket admini ajansın atamasını değiştiremiyor. "Ajans" bir tahmin değil,
+  kolon: kod bir süre ajansı "en eski şirket" sayıyordu ve o artık RLS'in
+  sınırı olamazdı. `musteri-sirketi-izolasyon.spec.ts`,
+  `hesap-sahipligi.spec.ts`.
 - **`ad_accounts`, `platform_connections` ve `social_profiles` içinde
   `client_id` NULLABLE.** NULL = ajansın havuzunda, müşteriye atanmamış.
   Sahiplik `org_id`'de. Bu satırlar için senkronizasyon kuyruğa GİRMEMELİ —
@@ -1105,8 +1123,14 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   tuşlarıyla taşınıyor: yalnızca sürükleme koymak, fare kullanamayan için
   özelliği TAMAMEN kapatmak olurdu. Taşıma TAKAS DEĞİL ARAYA SOKMA — takas
   eden bir sürükleme kullanıcının bıraktığı yere koymuyor.
-- **Platform bağlantısı AJANSA ait, müşteriye değil.** Meta/Google bir kez
-  yetkilendiriliyor; erişilen bütün reklam hesapları VE sayfalar havuza düşüyor
-  ve müşteriye panelden atanıyor. Müşteri başına yeniden yetkilendirme yok —
-  platform önceki token'ı geçersiz kılıyor ve bağlantıları koparıyordu.
-  Bağlantı kurmak/kaldırmak ve atama yapmak org yöneticisi işi.
+- **AJANSIN BAĞLANTISI BİR KEZ KURULUR; ŞİRKET İSTERSE KENDİ BAĞLANTISINI
+  KURAR.** Ajansın Meta/Google kimliği bir kez yetkilendiriliyor ve havuzu
+  üst hesabın bütün şirketlerine hizmet ediyor. Ajansın AYNI kimliğini
+  şirket başına yeniden yetkilendirmek yok: platform önceki token'ı
+  geçersiz kılıyor ve bağlantıları koparıyordu. Ama bir şirket (müşteri)
+  kendi kişisiyle kendi Meta'sını bağlayabiliyor ve o hesaplar YALNIZCA o
+  şirkette kalıyor (2026-09-23, kullanıcının isteği: *"müşterimiz hesabını
+  kendisi yönetmek istediğinde meta bağlantısını kendisi yapıp reklam
+  hesaplarının sayısı kadar workspace oluşturabiliyor olması lazım"*).
+  Şirket admini kendi bağlantısını ve hesaplarını yönetiyor; ajansın
+  atadığını değiştiremiyor. Kurallar aşağıda "HAVUZUN İKİ SAHİBİ VAR".

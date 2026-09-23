@@ -104,6 +104,31 @@ export class UstHesapEkibiService {
   }
 
   /**
+   * ÜST HESABIN EV ŞİRKETİ — ajansın KENDİ şirketi, `ajans_org_id`.
+   *
+   * Tek tanım iki dalda da geçerli: yeni kullanıcı buraya AÇILIYOR, var olan
+   * kullanıcı ise burada OLMAK zorunda. İki yerde ayrı yazılsaydı ekleme
+   * kapısı ile açılan hesabın yeri ayrışırdı.
+   *
+   * "EN ESKİ ŞİRKET" ARTIK KULLANILMIYOR. Burada bir süre öyle hesaplanıyordu
+   * ve aynı kavram RLS'te havuzun sınırı olunca iki tanım yan yana durdu:
+   * politika bir şirketi ajans sayarken ekip kapısı başka birini sayabilirdi.
+   * Kolon boşsa AÇIKÇA duruyoruz — tahmin etmek yerine.
+   */
+  private async evSirketi(managerAccountId: string): Promise<{ id: string }> {
+    const hesap = await this.admin.managerAccount.findUnique({
+      where: { id: managerAccountId },
+      select: { ajansOrgId: true },
+    });
+    if (!hesap?.ajansOrgId) {
+      throw new BadRequestException(
+        'Bu üst hesabın ajans şirketi tanımlı değil, ekibe kişi eklenemiyor. Advetics yöneticisine bildir.',
+      );
+    }
+    return { id: hesap.ajansOrgId };
+  }
+
+  /**
    * Üst hesaba kişi ekler — YOKSA OLUŞTURUR, VARSA YALNIZCA ÜYELİK VERİR.
    *
    * `members.service.ts#createMember` ile aynı kural ve aynı sebep: var
@@ -111,11 +136,10 @@ export class UstHesapEkibiService {
    * masum bir işlem çalışan bir hesabın parolasını sessizce sıfırlamamalı.
    * Hangi yolun işlediği yanıtta (`created`) yazıyor.
    *
-   * YENİ KULLANICININ EV ŞİRKETİ üst hesabın İLK şirketi (en eski). Ev
-   * şirketi `TenantContextService`in varsayılan üst hesabı seçtiği yer
-   * (`user.organization.managerAccountId`): başka bir şirkete yazılsaydı
-   * kişi girişte yanlış hesapta uyanırdı. Üst hesap hiçbir zaman şirketsiz
-   * olamıyor (`ilk-sirket.ts`), yani bu seçim her zaman bir sonuç veriyor.
+   * YENİ KULLANICININ EV ŞİRKETİ üst hesabın AJANS şirketi
+   * (`ajans_org_id`). Ev şirketi `TenantContextService`in varsayılan üst
+   * hesabı seçtiği yer (`user.organization.managerAccountId`): başka bir
+   * şirkete yazılsaydı kişi girişte yanlış hesapta uyanırdı.
    *
    * VAR OLAN KULLANICI BU ÜST HESABA AİT OLMAK ZORUNDA: ev şirketi başka bir
    * üst hesabın altındaysa "bulunamadı" — 403 dönmek o kullanıcının var
@@ -124,29 +148,6 @@ export class UstHesapEkibiService {
    * açarak yapıyor; aynı e-postayı iki kiracıda paylaşmak `users.email`
    * tekilliğine çarpıyor ve bu bilinçli.
    */
-  /**
-   * ÜST HESABIN EV ŞİRKETİ — ajansın KENDİ şirketi.
-   *
-   * "En eski aktif şirket" tanımı iki dalda da aynı olmak zorundaydı: yeni
-   * kullanıcı buraya AÇILIYOR, var olan kullanıcı ise burada OLMAK zorunda.
-   * İki yerde ayrı yazılsaydı biri güncellendiğinde ekleme kapısı ile
-   * açılan hesabın yeri ayrışırdı — ve o ayrışmanın belirtisi, kişinin
-   * girişte yanlış şirkette uyanması olurdu.
-   */
-  private async evSirketi(managerAccountId: string): Promise<{ id: string }> {
-    const ev = await this.admin.organization.findFirst({
-      where: { managerAccountId, status: 'active' },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    });
-    if (!ev) {
-      // `ilk-sirket.ts` bunu imkânsız kılıyor; yine de sessizce başka bir
-      // yere yazmak yerine açıkça duruyoruz.
-      throw new BadRequestException('Üst hesabın altında şirket yok — önce şirket açılmalı');
-    }
-    return ev;
-  }
-
   async ekle(
     ctx: TenantContext,
     input: UstHesapUyesiEkleInput,
@@ -199,7 +200,7 @@ export class UstHesapEkibiService {
       const evSirketi = await this.evSirketi(managerAccountId);
       if (mevcut.orgId !== evSirketi.id) {
         throw new BadRequestException(
-          'Bu kullanıcı bir müşteri şirketinin hesabı. Üst hesap ekibine eklemek ona ' +
+          'Bu kullanıcı ajans ekibinden değil, bağlı şirketlerden birinin kendi hesabı. Üst hesap ekibine eklemek ona ' +
             'üst hesabın altındaki BÜTÜN şirketleri açar. Yetkiyi o kişinin kendi ' +
             'şirketinde ver.',
         );

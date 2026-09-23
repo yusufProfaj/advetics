@@ -166,8 +166,16 @@ describe('havuz ajans genelinde — RLS kurulumu', () => {
      * dal `current_org_id()`den `org_kapsaminda()`ya geçti. Testin düşmesi
      * doğruydu — sınır gerçekten değişti ve kararın gözden geçirilmesi
      * gerekiyordu.
+     *
+     * İKİNCİ GÜNCELLEME — HAVUZ ARTIK "AJANS GENELİ" DEĞİL, "AJANSIN HAVUZU
+     * + KENDİ ŞİRKETİNİN HAVUZU". Müşteri kendi Meta'sını bağlayınca ikinci
+     * bir havuz doğdu ve `ajans_org_idleri()` onu da kardeş şirketlere
+     * açıyordu: bir müşterinin hesabı başka bir müşteriye atanabiliyordu.
+     * Sınır `app.havuz_kapsaminda()` içinde; ayrıntı `02_rls.sql` ve
+     * `musteri-sirketi-izolasyon.spec.ts`.
      */
-    expect(RLS).toContain('THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()');
+    expect(RLS).toContain('THEN app.havuz_kapsaminda(org_id) AND app.can_manage_pool()');
+    expect(RLS).not.toContain('THEN org_id = ANY (app.ajans_org_idleri())');
     expect(RLS).toContain(
       'ELSE app.org_kapsaminda(org_id) AND app.can_access_client(client_id)',
     );

@@ -64,7 +64,12 @@ beforeAll(async () => {
 
   svc = new ConnectionsService(
     prisma,
-    null as never,
+    /*
+     * YÖNETİM İSTEMCİSİ — atama kapısı (`sahiplikUygula`) bağlantının ve
+     * ajansın şirketini onunla okuyor. Koşum ortamının bağlantısı RLS'siz
+     * çalışıyor, yani üretimdeki BYPASSRLS istemcisinin doğru taklidi.
+     */
+    h.db as never,
     null as never,
     audit,
     null as never,
@@ -1008,12 +1013,35 @@ describe('ŞİRKETLER ARASI ATAMA', () => {
    * panelde TEK BİR CÜMLE: "İlişkili kayıt geçersiz". Kullanıcı ne olduğunu
    * hiçbir yerde okuyamıyordu.
    */
+  const MGR = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
   const TUM_SIRKETLER_CTX: TenantContext = {
     ...CTX,
     // Ev şirketi — "Tüm şirketler" modunda bu DEĞİŞMİYOR.
     orgId: IDS.org,
     clientIds: [IDS.client, CLIENT_B, CLIENT_KARDES],
+    managerAccountId: MGR,
   } as TenantContext;
+
+  /*
+   * İKİ ŞİRKET GERÇEKTEN AYNI ÜST HESABIN ALTINDA ve ajans ev şirketi.
+   *
+   * Bu blok bir süre üst hesap KURMADAN çalışıyordu: "kardeş" yalnızca
+   * adında kardeşti. Havuz artık yalnızca ajansın havuzu kardeşlere açık
+   * olduğunda paylaşılıyor (`hesap-sahipligi.ts` K1), yani üst hesap ve
+   * `ajans_org_id` olmadan bu testler kapalı düşüyordu — ve düştü.
+   */
+  beforeEach(async () => {
+    await h.q(
+      `INSERT INTO manager_accounts (id, name, slug, status, updated_at)
+       VALUES ($1, 'Ajans', 'ajans', 'active', now())`,
+      [MGR],
+    );
+    await h.q(`UPDATE organizations SET manager_account_id = $1 WHERE id = ANY($2::uuid[])`, [
+      MGR,
+      [IDS.org, ORG_KARDES],
+    ]);
+    await h.q(`UPDATE manager_accounts SET ajans_org_id = $1 WHERE id = $2`, [IDS.org, MGR]);
+  });
 
   it('KRİTİK: kardeş şirketin workspace’ine hesap atanabiliyor', async () => {
     await expect(
@@ -1054,16 +1082,109 @@ describe('ŞİRKETLER ARASI ATAMA', () => {
     expect(row?.org_id).toBe(ORG_KARDES);
   });
 
-  it('atama KALKINCA satır bulunduğu şirkette kalıyor', async () => {
-    // Havuz ajansın; kaldırma satırı ev şirketine geri taşımamalı.
+  it('KRİTİK: atama KALKINCA satır SAHİBİNE — bağlantının şirketine — dönüyor', async () => {
+    /*
+     * BU İDDİA TERSİNE DÖNDÜ. Burada "bulunduğu şirkette kalıyor" yazıyordu
+     * ve tek havuz varken doğruydu: havuz ajans geneli olduğu için satırın
+     * hangi şirkette durduğu görünürlüğü değiştirmiyordu. İki havuz olunca
+     * (K1) kalmak, ajansın hesabının kardeş şirketin havuzuna düşüp bir daha
+     * hiçbir şirketten görünmemesi demek (K2).
+     */
     await svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, CLIENT_KARDES, META);
-    await svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, null, META);
+    const r = await svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, null, META);
 
     const [row] = await h.q<{ org_id: string; client_id: string | null }>(
       'SELECT org_id, client_id FROM ad_accounts WHERE id = $1',
       [POOL_ACCOUNT],
     );
     expect(row?.client_id).toBeNull();
+    expect(row?.org_id).toBe(IDS.org);
+    expect(r.poolNote).toBeNull();
+  });
+
+  it('KRİTİK: ajansın havuzunda İKİZİ varsa satır yerinde kalıyor ve bu SÖYLENİYOR', async () => {
+    // Üretimde görüldü (441ec72): ajans havuzu yenilenince atanmış hesabın
+    // ev şirketinde ikinci bir satırı açılıyor. Geri dönmek tekil anahtarı
+    // patlatırdı; kalıyor ve yanıt bunu yazıyor.
+    await svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, CLIENT_KARDES, META);
+    await h.q(
+      `INSERT INTO ad_accounts
+         (id, org_id, client_id, connection_id, platform, external_id, name, currency, timezone, updated_at)
+       SELECT gen_random_uuid(), $1, NULL, connection_id, platform, external_id, 'İkiz', currency, timezone, now()
+         FROM ad_accounts WHERE id = $2`,
+      [IDS.org, POOL_ACCOUNT],
+    );
+    const r = await svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, null, META);
+
+    const [row] = await h.q<{ org_id: string }>('SELECT org_id FROM ad_accounts WHERE id = $1', [POOL_ACCOUNT]);
     expect(row?.org_id).toBe(ORG_KARDES);
+    expect(r.poolNote).toMatch(/şirketin havuzunda kaldı/);
+  });
+
+  describe('şirketin KENDİ bağlantısı', () => {
+    const CONN_KARDES = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+    const KARDES_HESABI = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+
+    beforeEach(async () => {
+      await h.q(
+        `INSERT INTO platform_connections
+           (id, org_id, client_id, platform, status, external_user_id, account_label,
+            access_token_enc, granted_scopes, connected_by_user_id, updated_at)
+         VALUES ($1, $2, NULL, 'meta', 'active', 'kardes-fb', 'Kardeşin Meta', '\\x00', '{}', $3, now())`,
+        [CONN_KARDES, ORG_KARDES, IDS.user],
+      );
+      await h.q(
+        `INSERT INTO ad_accounts
+           (id, org_id, client_id, connection_id, platform, external_id, name, currency, timezone, updated_at)
+         VALUES ($1, $2, NULL, $3, 'meta', 'act_kardes', 'Kardeşin hesabı', 'TRY', 'Europe/Istanbul', now())`,
+        [KARDES_HESABI, ORG_KARDES, CONN_KARDES],
+      );
+    });
+
+    it('KRİTİK: şirketin kendi hesabı BAŞKA şirkete atanamıyor — ajans modundayken bile', async () => {
+      /*
+       * RLS'in atanmış dalı "tüm şirketler" modunda bunu DURDURMUYOR
+       * (`org_kapsaminda` bütün şirketler). Tek kapı servis; burada GERÇEK
+       * veritabanıyla ölçülüyor ve satırın yerinden oynamadığı sayılıyor.
+       */
+      await expect(
+        svc.assignAdAccount(TUM_SIRKETLER_CTX, KARDES_HESABI, IDS.client, META),
+      ).rejects.toThrow(/başka bir şirketin kendi bağlantısından/);
+      const [row] = await h.q<{ org_id: string; client_id: string | null }>(
+        'SELECT org_id, client_id FROM ad_accounts WHERE id = $1',
+        [KARDES_HESABI],
+      );
+      expect(row).toEqual({ org_id: ORG_KARDES, client_id: null });
+    });
+
+    it('şirketin kendi hesabı KENDİ workspace’ine atanabiliyor', async () => {
+      const MUSTERI: TenantContext = {
+        ...CTX,
+        orgId: ORG_KARDES,
+        clientIds: [CLIENT_KARDES],
+        managerAccountId: null,
+      } as TenantContext;
+      await expect(
+        svc.assignAdAccount(MUSTERI, KARDES_HESABI, CLIENT_KARDES, META),
+      ).resolves.toMatchObject({ clientId: CLIENT_KARDES });
+    });
+
+    it('KRİTİK: şirket admini AJANSIN atadığı hesabı kaldıramıyor', async () => {
+      await svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, CLIENT_KARDES, META);
+      const MUSTERI: TenantContext = {
+        ...CTX,
+        orgId: ORG_KARDES,
+        clientIds: [CLIENT_KARDES],
+        managerAccountId: null,
+      } as TenantContext;
+      await expect(svc.assignAdAccount(MUSTERI, POOL_ACCOUNT, null, META)).rejects.toThrow(
+        /yalnızca ajans/,
+      );
+      const [row] = await h.q<{ client_id: string | null }>(
+        'SELECT client_id FROM ad_accounts WHERE id = $1',
+        [POOL_ACCOUNT],
+      );
+      expect(row?.client_id).toBe(CLIENT_KARDES);
+    });
   });
 });

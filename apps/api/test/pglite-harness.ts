@@ -459,6 +459,34 @@ export async function createHarness(): Promise<Harness> {
       },
     },
 
+    /*
+     * `ilkSirketAc` İLK ŞİRKETİ ajans şirketi olarak yazıyor. Yalnızca
+     * `ajansOrgId: null` koşulunu destekliyor ve başka bir şekil gelirse
+     * FIRLATIYOR: desteklenmeyen bir süzgeci sessizce yok saymak, koşum
+     * ortamının "her şeyi güncelledi" yalanı söylemesi demekti.
+     */
+    managerAccount: {
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { id: string; ajansOrgId?: null };
+        data: { ajansOrgId: string };
+      }) => {
+        const anahtarlar = Object.keys(where).sort().join(',');
+        if (anahtarlar !== 'ajansOrgId,id' || where.ajansOrgId !== null) {
+          throw new Error(`pglite-harness: desteklenmeyen managerAccount.updateMany süzgeci (${anahtarlar})`);
+        }
+        const rows = await q<{ id: string }>(
+          `UPDATE manager_accounts SET ajans_org_id = $1
+            WHERE id = $2 AND ajans_org_id IS NULL
+            RETURNING id`,
+          [data.ajansOrgId, where.id],
+        );
+        return { count: rows.length };
+      },
+    },
+
     membership: {
       create: async ({
         data,

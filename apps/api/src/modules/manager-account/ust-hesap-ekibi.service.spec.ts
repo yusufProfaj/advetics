@@ -14,7 +14,7 @@ import { UstHesapEkibiService } from './ust-hesap-ekibi.service';
  *      ekleyebilse kendini bütün şirketlerin yöneticisi yapardı.
  *   2. Var olan kullanıcının parolasına DOKUNULMUYOR.
  *   3. Başka üst hesabın kullanıcısı "bulunamadı" — varlığı sızmıyor.
- *   4. Yeni kullanıcının ev şirketi üst hesabın İLK şirketi.
+ *   4. Yeni kullanıcının ev şirketi üst hesabın AJANS şirketi (`ajans_org_id`).
  *   5. Son Yönetici düşürülemiyor/silinemiyor; kendi yetkin değiştirilemiyor.
  */
 const MGR = 'aaaaaaaa-0000-0000-0000-00000000000f';
@@ -52,6 +52,8 @@ let mevcutKullanici: Record<string, unknown> | null;
 /** `managerMembership.findFirst({ id })` bunu döndürüyor. */
 let hedefUyelik: Record<string, unknown> | null;
 let kalanYonetici = 1;
+/** `manager_accounts.ajans_org_id` — `null` = tanımlı değil. */
+let ajansSirketi: string | null = ORG;
 
 const KULLANICI = {
   id: O,
@@ -75,6 +77,7 @@ beforeEach(() => {
   mevcutKullanici = null;
   hedefUyelik = null;
   kalanYonetici = 1;
+  ajansSirketi = ORG;
 
   const managerMembership = {
     findFirst: async ({ where }: { where: Record<string, unknown> }) => {
@@ -105,11 +108,17 @@ beforeEach(() => {
         throw new Error('user.update ÇAĞRILMAMALI — var olan kullanıcının parolasına dokunulmuyor');
       },
     },
+    /*
+     * EV ŞİRKETİ `manager_accounts.ajans_org_id`DEN — "en eski şirket"
+     * tahmini kaldırıldı. `organization.findFirst` çağrılırsa FIRLATIYOR:
+     * eski tahmine geri dönen bir kod yolu burada görünür olsun.
+     */
+    managerAccount: {
+      findUnique: async () => ({ ajansOrgId: ajansSirketi }),
+    },
     organization: {
-      findFirst: async ({ orderBy }: { orderBy: Record<string, string> }) => {
-        // İLK şirket = en eski. Sırasız bir seçim veritabanının keyfine kalır.
-        expect(orderBy).toEqual({ createdAt: 'asc' });
-        return { id: ORG };
+      findFirst: async () => {
+        throw new Error('organization.findFirst ÇAĞRILMAMALI — ev şirketi ajans_org_id');
       },
     },
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
@@ -220,7 +229,7 @@ describe('ekle — var olan kullanıcı', () => {
     };
     await expect(
       svc.ekle(ctx(), { email: KULLANICI.email, role: 'admin' }, META),
-    ).rejects.toThrow(/müşteri şirketinin hesabı/i);
+    ).rejects.toThrow(/şirketlerden birinin kendi hesabı/);
     // ÜYELİK AÇILMADIĞI DA SINANIYOR: hata fırlatan ama satırı yazan bir
     // kod yolu, testi geçerken sızıntıyı üretmeye devam ederdi.
     expect(calls.uyelikCreate).toEqual([]);
@@ -238,6 +247,26 @@ describe('ekle — var olan kullanıcı', () => {
   });
 });
 
+describe('ekle — ajans şirketi tanımlı değil', () => {
+  it('KRİTİK: yeni kullanıcı TAHMİNLE bir şirkete açılmıyor — açık hata', async () => {
+    /*
+     * Eskiden "en eski şirket" seçiliyordu. Kolon boşsa (ajans şirketi
+     * silinmiş) kişiyi rastgele bir müşteri şirketine açmak, ajans
+     * personelini müşterinin içine yerleştirmek demekti.
+     */
+    ajansSirketi = null;
+    await expect(
+      svc.ekle(
+        ctx(),
+        { email: 'yeni@x.com', fullName: 'Yeni', password: 'cokGuvenliParola9', role: 'admin' },
+        META,
+      ),
+    ).rejects.toThrow(/ajans şirketi tanımlı değil/);
+    expect(calls.userCreate).toEqual([]);
+    expect(calls.uyelikCreate).toEqual([]);
+  });
+});
+
 describe('ekle — yeni kullanıcı', () => {
   it('KRİTİK: ad ya da parola eksikse AÇIKÇA söyleniyor, sessizce açılmıyor', async () => {
     await expect(
@@ -246,7 +275,7 @@ describe('ekle — yeni kullanıcı', () => {
     expect(calls.userCreate).toEqual([]);
   });
 
-  it('KRİTİK: ev şirketi üst hesabın İLK şirketi, parola HASH, üyelik doğru rolde', async () => {
+  it('KRİTİK: ev şirketi üst hesabın AJANS şirketi, parola HASH, üyelik doğru rolde', async () => {
     const r = await svc.ekle(
       ctx(),
       { email: 'yeni@x.com', fullName: 'Yeni Kişi', password: 'cokGuvenliParola9', role: 'admin' },

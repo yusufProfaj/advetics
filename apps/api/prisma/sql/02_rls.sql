@@ -180,6 +180,53 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 /*
+ * ═══ HAVUZ KİMİN — AJANS HAVUZU İLE ŞİRKET HAVUZU AYRI ═══
+ *
+ * Havuz (`client_id IS NULL` satırlar: bağlantı, reklam hesabı, sayfa) uzun
+ * süre `app.ajans_org_idleri()` kümesiyle açılıyordu: üst hesabın BÜTÜN
+ * şirketlerine. Tek havuz vardı, ajansın havuzu, ve doğruydu.
+ *
+ * Müşteri kendi Meta'sını bağlayınca ikinci bir havuz doğuyor ve o kural
+ * onu da ajans geneline açıyordu: Profaj Biltaş'ın içindeyken 3A'nın kendi
+ * bağlantısını görüyor, 3A'nın hesabını BİLTAŞ'A ATAYABİLİYOR (atama
+ * satırın `org_id`sini hedef şirkete taşıyor) ve 3A'nın bağlantısını
+ * koparabiliyordu. Hiçbir hata düşmüyordu.
+ *
+ * Bugün iki havuz:
+ *   · KENDİ ŞİRKETİNİN havuzu — `current_org_id()`. Müşteri kendi
+ *     bağladığını burada görüyor; ajans da o şirketin İÇİNDEYKEN görüyor.
+ *   · AJANS havuzu — üst hesabın `ajans_org_id`si. Bütün şirketlerden
+ *     görünüyor, çünkü ajansın tek Meta kimliği hepsine hizmet ediyor.
+ *
+ * "TÜM ŞİRKETLER" MODUNDA BİLE BU KADAR. O modda `org_kapsaminda` bütün
+ * şirketleri açıyor ama havuz için kullanılmıyor: moddayken müşteri
+ * havuzları listelenseydi atama ekranı yazılamayan satırlar gösterirdi, ya
+ * da yazılabilselerdi bir müşterinin hesabı başka bir müşteriye giderdi.
+ *
+ * AJANS BİLİNMİYORSA KAPALI. Üst hesap üyeliği olmayan kullanıcıda
+ * (`current_manager_account_id()` NULL) ya da `ajans_org_id` boşsa ikinci
+ * karşılaştırma NULL üretiyor ve COALESCE onu `false` yapıyor: havuz
+ * yalnızca kendi şirketinde. Açık düşmek, eksik bir veriyi sızıntıya
+ * çevirirdi. `musteri-sirketi-izolasyon.spec.ts` ikisini de ölçüyor.
+ *
+ * ÖZYİNELEME YOK: `manager_accounts` politikası yalnızca
+ * `current_manager_account_id()`ye bakıyor, havuz tablolarına değil.
+ */
+CREATE OR REPLACE FUNCTION app.ajans_org_id() RETURNS uuid
+LANGUAGE sql STABLE AS $$
+  SELECT ajans_org_id FROM manager_accounts
+   WHERE id = app.current_manager_account_id();
+$$;
+
+CREATE OR REPLACE FUNCTION app.havuz_kapsaminda(satir_org uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT COALESCE(
+    satir_org = app.current_org_id() OR satir_org = app.ajans_org_id(),
+    false
+  );
+$$;
+
+/*
  * "TÜM ŞİRKETLER" MODU — üst hesabın altındaki HER şirketi tek pencerede
  * göstermek için.
  *
@@ -605,8 +652,8 @@ CREATE POLICY adv_connections_select ON platform_connections
     app.has_context()
     AND (
       CASE WHEN client_id IS NULL
-        -- AJANS BAĞLANTISI: üst hesabın bütün şirketlerine açık.
-        THEN org_id = ANY (app.ajans_org_idleri())
+        -- HAVUZ BAĞLANTISI: kendi şirketinin + ajansın (`app.havuz_kapsaminda`).
+        THEN app.havuz_kapsaminda(org_id)
         -- MÜŞTERİYE ÖZEL BAĞLANTI (müşteri kendi hesabını devretmiş):
         -- kendi şirketinde kalıyor.
         ELSE app.org_kapsaminda(org_id)
@@ -620,11 +667,10 @@ CREATE POLICY adv_connections_write ON platform_connections
     AND (
       CASE WHEN client_id IS NULL
         /*
-         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
-         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
-         * bağlantı mümkün değil.
+         * HAVUZ: kendi şirketinin havuzu + AJANS havuzu. Müşterinin kendi
+         * bağladığı hesap başka şirkete açılmıyor — `app.havuz_kapsaminda`.
          */
-        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        THEN app.havuz_kapsaminda(org_id) AND app.can_manage_pool()
         /*
          * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
          *
@@ -644,11 +690,10 @@ CREATE POLICY adv_connections_write ON platform_connections
     AND (
       CASE WHEN client_id IS NULL
         /*
-         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
-         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
-         * bağlantı mümkün değil.
+         * HAVUZ: kendi şirketinin havuzu + AJANS havuzu. Müşterinin kendi
+         * bağladığı hesap başka şirkete açılmıyor — `app.havuz_kapsaminda`.
          */
-        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        THEN app.havuz_kapsaminda(org_id) AND app.can_manage_pool()
         /*
          * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
          *
@@ -692,11 +737,10 @@ CREATE POLICY adv_ad_accounts_select ON ad_accounts
     AND (
       CASE WHEN client_id IS NULL
         /*
-         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
-         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
-         * bağlantı mümkün değil.
+         * HAVUZ: kendi şirketinin havuzu + AJANS havuzu. Müşterinin kendi
+         * bağladığı hesap başka şirkete açılmıyor — `app.havuz_kapsaminda`.
          */
-        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        THEN app.havuz_kapsaminda(org_id) AND app.can_manage_pool()
         /*
          * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
          *
@@ -745,11 +789,10 @@ CREATE POLICY adv_ad_accounts_write ON ad_accounts
     AND (
       CASE WHEN client_id IS NULL
         /*
-         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
-         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
-         * bağlantı mümkün değil.
+         * HAVUZ: kendi şirketinin havuzu + AJANS havuzu. Müşterinin kendi
+         * bağladığı hesap başka şirkete açılmıyor — `app.havuz_kapsaminda`.
          */
-        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        THEN app.havuz_kapsaminda(org_id) AND app.can_manage_pool()
         /*
          * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
          *
@@ -769,11 +812,10 @@ CREATE POLICY adv_ad_accounts_write ON ad_accounts
     AND (
       CASE WHEN client_id IS NULL
         /*
-         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
-         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
-         * bağlantı mümkün değil.
+         * HAVUZ: kendi şirketinin havuzu + AJANS havuzu. Müşterinin kendi
+         * bağladığı hesap başka şirkete açılmıyor — `app.havuz_kapsaminda`.
          */
-        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        THEN app.havuz_kapsaminda(org_id) AND app.can_manage_pool()
         /*
          * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
          *
@@ -809,11 +851,10 @@ CREATE POLICY adv_social_profiles_select ON social_profiles
     AND (
       CASE WHEN client_id IS NULL
         /*
-         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
-         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
-         * bağlantı mümkün değil.
+         * HAVUZ: kendi şirketinin havuzu + AJANS havuzu. Müşterinin kendi
+         * bağladığı hesap başka şirkete açılmıyor — `app.havuz_kapsaminda`.
          */
-        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        THEN app.havuz_kapsaminda(org_id) AND app.can_manage_pool()
         /*
          * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
          *
@@ -836,11 +877,10 @@ CREATE POLICY adv_social_profiles_write ON social_profiles
     AND (
       CASE WHEN client_id IS NULL
         /*
-         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
-         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
-         * bağlantı mümkün değil.
+         * HAVUZ: kendi şirketinin havuzu + AJANS havuzu. Müşterinin kendi
+         * bağladığı hesap başka şirkete açılmıyor — `app.havuz_kapsaminda`.
          */
-        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        THEN app.havuz_kapsaminda(org_id) AND app.can_manage_pool()
         /*
          * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
          *
@@ -860,11 +900,10 @@ CREATE POLICY adv_social_profiles_write ON social_profiles
     AND (
       CASE WHEN client_id IS NULL
         /*
-         * HAVUZ AJANS GENELİNDE — üst hesabın bütün şirketleri. Tek Meta
-         * yetkilendirmesi hepsine hizmet ediyor; şirket başına ayrı
-         * bağlantı mümkün değil.
+         * HAVUZ: kendi şirketinin havuzu + AJANS havuzu. Müşterinin kendi
+         * bağladığı hesap başka şirkete açılmıyor — `app.havuz_kapsaminda`.
          */
-        THEN org_id = ANY (app.ajans_org_idleri()) AND app.can_manage_pool()
+        THEN app.havuz_kapsaminda(org_id) AND app.can_manage_pool()
         /*
          * ATANMIŞ SATIR KENDİ ŞİRKETİNE ÇİVİLİ — `ajans_org_idleri()` DEĞİL.
          *

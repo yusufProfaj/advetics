@@ -42,5 +42,22 @@ export async function ilkSirketAc(
   await tx.membership.create({
     data: { userId: girdi.userId, orgId: org.id, clientId: null, role: 'admin' },
   });
+  /*
+   * İLK ŞİRKET = AJANS ŞİRKETİ — ve bu burada yazılıyor, çağıranlarda değil.
+   *
+   * Hesabı satın alan müşterinin ilk şirketi kendi şirketi; bağlantısını
+   * oraya kuracak ve havuzu oradan bütün şirketlerine açılacak. Yazılmasaydı
+   * `app.havuz_kapsaminda` ajansı bilemez ve havuz KAPALI düşerdi: müşteri
+   * ikinci şirketini açtığında atama ekranı orada boş görünürdü.
+   *
+   * İKİ ÇAĞIRAN VAR (kuruluş ve şirketsiz hesaba geçiş) ve ikisi de bu
+   * fonksiyondan geçiyor; yazımı çağıranlara bırakmak birinin bir gün
+   * unutması demekti. `ajansOrgId: null` koşulu, zaten ajansı olan bir
+   * hesabın ajansını SESSİZCE değiştirmesin diye.
+   */
+  await tx.managerAccount.updateMany({
+    where: { id: girdi.managerAccountId, ajansOrgId: null },
+    data: { ajansOrgId: org.id },
+  });
   return org;
 }

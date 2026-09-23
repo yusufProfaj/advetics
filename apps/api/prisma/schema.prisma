@@ -113,10 +113,37 @@ model ManagerAccount {
   /// üst hesabın sessizce sınırsız doğması demekti.
   paket ManagerAccountPaket @default(baslangic)
 
+  /// ═══ AJANS ŞİRKETİ — BU ÜST HESABI YÖNETEN TARAFIN KENDİ ŞİRKETİ ═══
+  ///
+  /// Havuzun iki türü var ve ayıran şey bu kolon:
+  ///   · AJANS HAVUZU — bağlantısı bu şirkette kurulmuş hesaplar. Üst
+  ///     hesabın bütün şirketlerine açık: ajansın tek Meta kimliği hepsine
+  ///     hizmet ediyor.
+  ///   · ŞİRKET HAVUZU — müşterinin KENDİ bağladığı hesaplar. Yalnızca o
+  ///     şirkette görünür ve yalnızca oraya atanır.
+  /// Bu ayrım yokken müşterinin kendi bağlantısı ajansın havuzuna
+  /// karışıyordu: Profaj Biltaş'ın içindeyken 3A'nın hesabını Biltaş'a
+  /// atayabiliyor, 3A'nın bağlantısını koparabiliyordu. Sıfır hata.
+  ///
+  /// NEDEN AÇIK BİR KOLON, "EN ESKİ ŞİRKET" DEĞİL: kod bir süre ajansı
+  /// üst hesabın en eski şirketi SAYIYORDU. Bu artık RLS'in sınırı; bir
+  /// tahmini politikaya bağlamak, bir gün yanlış şirketi ajans sayıp
+  /// bir müşterinin havuzunu kırk yedi şirkete açmak demekti.
+  ///
+  /// NULL olabilir: politika o durumda KAPALI düşüyor (havuz yalnızca kendi
+  /// şirketinde). Açık düşmek, eksik bir veriyi sızıntıya çevirirdi.
+  ///
+  /// Şirketin BU üst hesabın altında olduğunu veritabanı dayatıyor
+  /// (`manager_accounts_ajans_org_ayni_hesap_fkey`, migration
+  /// `20260923150000_ajans_sirketi`); Prisma kompozit anahtarı ifade
+  /// edemediği için burada basit ilişki görünüyor.
+  ajansOrgId String?       @unique @map("ajans_org_id") @db.Uuid
+  ajansOrg   Organization? @relation("AjansSirketi", fields: [ajansOrgId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organizations Organization[]
+  organizations Organization[] @relation("UstHesapSirketleri")
   memberships   ManagerMembership[]
 
   @@map("manager_accounts")
@@ -181,7 +208,9 @@ model Organization {
   /// SİLMEMELİ. Cascade olsaydı bir danışmanlık kaydını silmek, o
   /// danışmanın bütün müşterilerinin bütün verisini götürürdü.
   managerAccountId String? @map("manager_account_id") @db.Uuid
-  managerAccount   ManagerAccount? @relation(fields: [managerAccountId], references: [id], onDelete: SetNull)
+  managerAccount   ManagerAccount? @relation("UstHesapSirketleri", fields: [managerAccountId], references: [id], onDelete: SetNull)
+  /// Bu şirket bir üst hesabın AJANS şirketiyse o hesap — bkz. `ManagerAccount.ajansOrgId`.
+  ajansOlduguUstHesap ManagerAccount? @relation("AjansSirketi")
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 

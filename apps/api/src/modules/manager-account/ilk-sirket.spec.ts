@@ -41,6 +41,28 @@ describe('ilkSirketAc', () => {
     expect(uyelik).toEqual([{ role: 'admin', client_id: null }]);
   });
 
+  it('KRİTİK: İLK şirket üst hesabın AJANS şirketi oluyor', async () => {
+    /*
+     * Yazılmasaydı `app.havuz_kapsaminda` ajansı bilemez ve havuz kapalı
+     * düşerdi: müşteri ikinci şirketini açtığında atama ekranı orada boş
+     * görünürdü — kendi bağladığı hesaplar olduğu hâlde.
+     */
+    const org = await ilkSirketAc(tx(), { managerAccountId: MGR, ad: 'Yılmaz Mobilya', userId: USER });
+    const [hesap] = await h.q<{ ajans_org_id: string | null }>(
+      'SELECT ajans_org_id FROM manager_accounts WHERE id = $1', [MGR]);
+    expect(hesap?.ajans_org_id).toBe(org.id);
+  });
+
+  it('KRİTİK: ajansı OLAN hesabın ajansı ikinci şirketle DEĞİŞMİYOR', async () => {
+    // Sessizce değişseydi ajans havuzu bir anda yeni şirketin havuzu olur,
+    // eskisi bütün kardeş şirketlerden kaybolurdu.
+    const ilk = await ilkSirketAc(tx(), { managerAccountId: MGR, ad: 'Yılmaz Mobilya', userId: USER });
+    await ilkSirketAc(tx(), { managerAccountId: MGR, ad: 'İkinci', userId: USER });
+    const [hesap] = await h.q<{ ajans_org_id: string | null }>(
+      'SELECT ajans_org_id FROM manager_accounts WHERE id = $1', [MGR]);
+    expect(hesap?.ajans_org_id).toBe(ilk.id);
+  });
+
   it('KRİTİK: kısa ad çakışınca TEKİLLEŞİYOR — ikinci "Yılmaz Mobilya" düşmüyor', async () => {
     // İlk şirket üst hesabın adıyla açılıyor; aynı adlı iki müşteri
     // olabilir ve `slug` tekil. Çakışmada patlamak, kuruluşu yarım bırakırdı.

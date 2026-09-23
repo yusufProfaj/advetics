@@ -25,20 +25,40 @@ interface Cagrilar {
   hesapSahiplen: Array<Record<string, unknown>>;
   profilSahiplen: Array<Record<string, unknown>>;
   sayim: Array<Record<string, unknown>>;
+  upsertler: Array<{ update: Record<string, unknown> }>;
 }
 
-function servis(connClientId: string | null, cakisanSayisi = 0): {
+/** `findMany`in döndürdüğü, keşiften ÖNCE var olan satır. */
+interface MevcutSatir {
+  externalId: string;
+  clientId: string | null;
+  connectionId: string;
+  connection: { status: 'active' | 'needs_reauth' | 'revoked' | 'error' };
+}
+
+function servis(
+  connClientId: string | null,
+  cakisanSayisi = 0,
+  mevcutHesaplar: MevcutSatir[] = [],
+): {
   svc: ConnectionsService;
   c: Cagrilar;
 } {
-  const c: Cagrilar = { hesapSahiplen: [], profilSahiplen: [], sayim: [] };
+  const c: Cagrilar = { hesapSahiplen: [], profilSahiplen: [], sayim: [], upsertler: [] };
 
   const admin = {
     platformConnection: {
       findUniqueOrThrow: () => Promise.resolve({ orgId: ORG, clientId: connClientId }),
     },
     adAccount: {
-      upsert: () => Promise.resolve({}),
+      // Keşif var olan satırları TEK sorguda okuyor (K3,
+      // `hesap-sahipligi.ts`). Bu senaryoda önceden atanmış satır yok; boş
+      // liste "korunacak bağlantı yok" demek ve sahiplenme dalını sınıyor.
+      findMany: () => Promise.resolve(mevcutHesaplar),
+      upsert: (a: { update: Record<string, unknown> }) => {
+        c.upsertler.push(a);
+        return Promise.resolve({});
+      },
       updateMany: (a: Record<string, unknown>) => {
         c.hesapSahiplen.push(a);
         return Promise.resolve({ count: 2 });
@@ -49,6 +69,7 @@ function servis(connClientId: string | null, cakisanSayisi = 0): {
       },
     },
     socialProfile: {
+      findMany: () => Promise.resolve([]),
       upsert: () => Promise.resolve({}),
       updateMany: (a: Record<string, unknown>) => {
         c.profilSahiplen.push(a);
@@ -152,5 +173,42 @@ describe('workspace bağlantısı — sahiplenme', () => {
     expect(c.hesapSahiplen).toHaveLength(0);
     expect(c.profilSahiplen).toHaveLength(0);
     expect(c.sayim).toHaveLength(0);
+  });
+});
+
+describe('K3 — keşif ATANMIŞ hesabın bağlantısını ele geçirmiyor', () => {
+  /*
+   * Sıra üretimdeki kurulumun kendisi: Profaj `act_1`'i şirkete atadı,
+   * şirket sonra kendi Meta'sını bağladı ve aynı hesap bu bağlantıyla
+   * yeniden keşfediliyor. Upsert `connectionId` yazsaydı şirket
+   * bağlantısını kaldırınca AJANSIN atadığı hesabın verisi dururdu.
+   */
+  const PROFAJ_CONN = '44444444-4444-4444-4444-444444444444';
+
+  it('KRİTİK: canlı ajans bağlantısına atanmış satırda connectionId YAZILMIYOR', async () => {
+    const { svc, c } = servis(null, 0, [
+      { externalId: 'act_1', clientId: MIA, connectionId: PROFAJ_CONN, connection: { status: 'active' } },
+    ]);
+    await kesfet(svc);
+    expect(c.upsertler).toHaveLength(1);
+    expect(c.upsertler[0]!.update).not.toHaveProperty('connectionId');
+    // Platformdan okunan gerçek yine güncelleniyor — korunan yalnızca sahiplik.
+    expect(c.upsertler[0]!.update).toMatchObject({ name: 'Mia' });
+  });
+
+  it('eski bağlantı KALDIRILMIŞSA yeni bağlantı devralıyor', async () => {
+    const { svc, c } = servis(null, 0, [
+      { externalId: 'act_1', clientId: MIA, connectionId: PROFAJ_CONN, connection: { status: 'revoked' } },
+    ]);
+    await kesfet(svc);
+    expect(c.upsertler[0]!.update).toMatchObject({ connectionId: CONN });
+  });
+
+  it('havuzdaki (atanmamış) satırda bağlantı her zamanki gibi güncelleniyor', async () => {
+    const { svc, c } = servis(null, 0, [
+      { externalId: 'act_1', clientId: null, connectionId: PROFAJ_CONN, connection: { status: 'active' } },
+    ]);
+    await kesfet(svc);
+    expect(c.upsertler[0]!.update).toMatchObject({ connectionId: CONN });
   });
 });

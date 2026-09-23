@@ -83,6 +83,21 @@ beforeAll(async () => {
       ('${ORG_B1}', 'B1', 'b1', 'starter', 'active', '${UST_B}', now(), now()),
       ('${ORG_YALNIZ}', 'Yalnız', 'yalniz', 'starter', 'active', NULL, now(), now())
   `);
+  /*
+   * AJANS ŞİRKETİ AÇIKÇA YAZILIYOR — havuz ancak öyle ajans geneli.
+   *
+   * Ajansın bağlantısı A1'de (`CONN_A1`). Bir süre "en eski şirket" ajans
+   * sayılıyordu ve bu fixture onu yazmak zorunda değildi; bugün havuz
+   * yalnızca `manager_accounts.ajans_org_id`nin havuzu kardeş şirketlere
+   * açılıyor, bilinmeyen ajansta KAPALI düşüyor. Satır yazılmasaydı aşağıdaki
+   * "kardeş şirketten havuz görünüyor" testleri düşerdi — ve düştü.
+   */
+  await h.q(`
+    UPDATE manager_accounts SET ajans_org_id = CASE id
+      WHEN '${UST_A}' THEN '${ORG_A1}'::uuid
+      WHEN '${UST_B}' THEN '${ORG_B1}'::uuid
+    END
+  `);
   await h.q(`
     INSERT INTO users (id, org_id, email, full_name, password_hash, locale, status, created_at, updated_at)
     VALUES ('${USER}', '${ORG_A1}', 'u@x.com', 'U', 'h', 'tr', 'active', now(), now())
