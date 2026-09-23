@@ -168,3 +168,68 @@ describe('izin tavsiyesi uygulanabilir mi', () => {
     }
   });
 });
+
+/**
+ * Düğmenin METİN DÜĞÜMÜ — düz `indexOf('Yeniden yetkilendir')` KULLANILAMAZ.
+ *
+ * Dosyada durum etiketi olarak `'Yeniden yetkilendirme gerekli'` de geçiyor ve
+ * düğmeden ÖNCE duruyor: düz arama onu yakalıyor, geriye doğru `<Dugme`
+ * bulunamıyor ve dilim BOŞ çıkıyor. Boş dilimde `not.toContain` iddiaları her
+ * zaman doğru olur — yani test yeşil kalır ve hiçbir şey tutmaz.
+ *
+ * Eşleşme kapanış etiketine çapalanıyor: metin düğümü olduğu yalnızca orada
+ * kesin.
+ */
+function dugmeMetniKonumu(kaynak: string): number {
+  const m = /Yeniden yetkilendir\s*<\/Dugme>/.exec(kaynak);
+  expect(m, 'düğme metin düğümü bulunamadı — tarama boşa düştü').not.toBeNull();
+  return m!.index;
+}
+
+describe('yeniden yetkilendirme çaresi erişilebilir mi', () => {
+  /**
+   * Düğmenin RENDER KAPISI — `<Dugme` etiketinden GERİYE doğru çıkarılıyor.
+   *
+   * Sabit uzunluklu bir dilim burada komşu düğmeleri (Kaldır, Hesapları tara)
+   * içine alır ve iddia yanlış yerde tutar. Sınır, sınırlanmak istenen şeyin
+   * kendisi: düğmenin açılış etiketi ve onu saran koşul.
+   */
+  function renderKapisi(): string {
+    const kaynak = yorumsuz(KART);
+    const etiket = dugmeMetniKonumu(kaynak);
+    const dugme = kaynak.lastIndexOf('<Dugme', etiket);
+    expect(dugme, 'düğme etiketi bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+
+    const kapi = kaynak.lastIndexOf('{canManage', dugme);
+    expect(kapi, 'render kapısı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    return kaynak.slice(kapi, dugme);
+  }
+
+  it('KRİTİK: düğme eksik izin KOŞULUNA bağlı değil', () => {
+    /*
+      Çare eskiden yalnızca eksik izin görüldüğünde çıkıyordu. Sağlayıcıya yeni
+      bir izin eklendiğinde panel onu ancak yeni sürüm yayına çıktıktan sonra
+      eksik sayıyor; o ana kadar kullanıcının yeniden yetkilendirme yolu YOK ve
+      bağlantıyı KALDIRMAYA yöneliyor.
+
+      `disconnect` o bağlantıdaki her reklam hesabının ve sayfanın
+      `syncEnabled`ını kapatıyor, keşif upsert'i onu bilerek geri açmıyor:
+      atamalar duruyor, veri akmıyor, onlarca hesap elle açılmayı bekliyor.
+    */
+    const kapi = renderKapisi();
+    expect(kapi).not.toContain('missingScopes');
+    expect(kapi).not.toContain('missingOptionalScopes');
+    expect(kapi).not.toContain('needs_reauth');
+  });
+
+  it('vurgu KORUNUYOR — gerçekten eksik bir şey varken öne çıkıyor', () => {
+    // Koşul silinip düğme her zaman vurgulu bırakılırsa vurgu anlamını
+    // yitirir ve gerçek bir eksik izin diğer düğmelerden ayırt edilemez.
+    const kaynak = yorumsuz(KART);
+    const etiket = dugmeMetniKonumu(kaynak);
+    const dugme = kaynak.lastIndexOf('<Dugme', etiket);
+    const govde = kaynak.slice(dugme, etiket);
+    expect(govde).toContain('vurgulu={');
+    expect(govde).toContain('missingOptionalScopes');
+  });
+});

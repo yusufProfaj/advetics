@@ -354,19 +354,37 @@ function BaglantiSatiri({
         >
           Hesapları tara
         </Dugme>
-        {canManage &&
-          (baglanti.status === 'needs_reauth' ||
-            baglanti.missingScopes.length > 0 ||
-            baglanti.missingOptionalScopes.length > 0) && (
-            <Dugme
-              meslul={meslul}
-              calisiyor={busy === 'reauth'}
-              vurgulu
-              onClick={() => void calistir('reauth', yenidenYetkilendir)}
-            >
-              Yeniden yetkilendir
-            </Dugme>
-          )}
+        {/*
+          KOŞULSUZ GÖRÜNÜYOR — eskiden yalnızca eksik izin ya da `needs_reauth`
+          varken çıkıyordu ve bu, ÇAREYİ TAM DA GEREKTİĞİ ANDA GİZLİYORDU:
+          sağlayıcıya yeni bir izin eklendiğinde panel onu ancak yeni sürüm
+          yayına çıktıktan sonra "eksik" sayıyor, o ana kadar kullanıcının
+          yeniden yetkilendirme yolu yok.
+
+          Bedeli teoride değil üretimde görüldü: düğmeyi bulamayan kullanıcı
+          bağlantıyı KALDIRIP yeniden kurmaya yöneliyor ve `disconnect` o
+          bağlantıdaki her reklam hesabının ve sayfanın `syncEnabled`ını
+          kapatıyor. Keşif upsert'i onu bilerek geri açmadığı için atamalar
+          duruyor ama veri akmıyor — onlarca hesapta birden, elle tek tek
+          açılmayı bekleyerek.
+
+          Vurgu (`vurgulu`) yalnızca gerçekten eksik bir şey varken: her zaman
+          vurgulu bir düğme, vurgunun kendisini anlamsızlaştırır.
+        */}
+        {canManage && (
+          <Dugme
+            meslul={meslul}
+            calisiyor={busy === 'reauth'}
+            vurgulu={
+              baglanti.status === 'needs_reauth' ||
+              baglanti.missingScopes.length > 0 ||
+              baglanti.missingOptionalScopes.length > 0
+            }
+            onClick={() => void calistir('reauth', yenidenYetkilendir)}
+          >
+            Yeniden yetkilendir
+          </Dugme>
+        )}
         {canManage && (
           <Dugme
             meslul={meslul}
