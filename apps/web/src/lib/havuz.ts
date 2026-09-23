@@ -21,6 +21,22 @@ export interface HavuzOgesi {
    * kart hiç gelmez, hiçbir yerde tek kelime yazmaz.
    */
   atamaYolu: string;
+  /**
+   * SATIRIN GELDİĞİ BAĞLANTI — aynı adı taşıyan iki satırı ayıran TEK bilgi.
+   *
+   * `ad_accounts` tekil anahtarı `[platform, externalId, orgId]`, yani aynı
+   * reklam hesabı İKİ FARKLI ŞİRKET altında iki satır olabiliyor ve havuz
+   * penceresi ikisini de listeliyor. Ekranda ad ve dış kimlik AYNI görünüyor
+   * (üretimde iki "Biltaş · 3421122929" çıktı) ve kullanıcı hangisini
+   * atayacağını seçemiyor.
+   *
+   * Yanlışını atamak sessiz: hesap geçmişsiz açılıyor, sonraki senkronizasyon
+   * yeni satıra yazıyor, eski veri eski satırda kalıyor ve GEÇMİŞ İKİYE
+   * BÖLÜNÜYOR. Kaldırılmış bir bağlantıdan gelen satır bilhassa işaretleniyor:
+   * o satır token'ı olmayan bir bağlantıya bağlı, yani atansa bile veri
+   * çekmez.
+   */
+  baglanti: { etiket: string | null; durum: ConnectionSummary['status'] };
 }
 
 /**
@@ -92,37 +108,47 @@ export function havuzlariCikar(connections: ConnectionSummary[]): Havuzlar {
     youtube: [],
   };
 
-  for (const a of connections.flatMap((c) => c.adAccounts)) {
-    if (a.clientId !== null) continue;
-    map[platformKanali(a.platform)].push({
-      id: a.id,
-      name: a.name,
-      externalId: a.externalId,
-      isManager: a.isManager,
-      reklamHesabi: true,
-      atamaYolu: `/connections/ad-accounts/${a.id}/client`,
-    });
+  /*
+   * DÜZ `flatMap` KULLANILMIYOR: satırın hangi bağlantıdan geldiği kayboluyor
+   * ve kaybolan şey tam da iki aynı satırı ayıran bilgi.
+   */
+  for (const c of connections) {
+    for (const a of c.adAccounts) {
+      if (a.clientId !== null) continue;
+      map[platformKanali(a.platform)].push({
+        id: a.id,
+        name: a.name,
+        externalId: a.externalId,
+        isManager: a.isManager,
+        reklamHesabi: true,
+        atamaYolu: `/connections/ad-accounts/${a.id}/client`,
+        baglanti: { etiket: c.accountLabel, durum: c.status },
+      });
+    }
   }
 
-  for (const p of connections.flatMap((c) => c.socialProfiles)) {
-    if (p.clientId !== null) continue;
-    const k: ChannelKind | null =
-      p.profileType === 'facebook_page'
-        ? 'facebook'
-        : p.profileType === 'instagram_business'
-          ? 'instagram'
-          : p.profileType === 'youtube_channel'
-            ? 'youtube'
-            : null;
-    if (!k) continue;
-    map[k].push({
-      id: p.id,
-      name: p.name,
-      externalId: p.externalId,
-      isManager: false,
-      reklamHesabi: false,
-      atamaYolu: profilAtamaYolu(p.profileType, p.id),
-    });
+  for (const c of connections) {
+    for (const p of c.socialProfiles) {
+      if (p.clientId !== null) continue;
+      const k: ChannelKind | null =
+        p.profileType === 'facebook_page'
+          ? 'facebook'
+          : p.profileType === 'instagram_business'
+            ? 'instagram'
+            : p.profileType === 'youtube_channel'
+              ? 'youtube'
+              : null;
+      if (!k) continue;
+      map[k].push({
+        id: p.id,
+        name: p.name,
+        externalId: p.externalId,
+        isManager: false,
+        reklamHesabi: false,
+        atamaYolu: profilAtamaYolu(p.profileType, p.id),
+        baglanti: { etiket: c.accountLabel, durum: c.status },
+      });
+    }
   }
 
   return map;

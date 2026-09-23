@@ -208,6 +208,24 @@ export class ConnectionsController {
     return this.connections.verify(ctx, id);
   }
 
+  /**
+   * Bağlantı kaldırılıp yeniden kurulduğunda kapanan izlemeyi geri açar.
+   *
+   * `connection.write` yetiyor: yeni bir yetki vermiyor, ATAMANIN zaten
+   * ima ettiği durumu geri kuruyor. Atanmamış hesaplara dokunmadığı için
+   * kota etkisi de atamanın kendisiyle aynı.
+   */
+  @Post(':id/resume-sync')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('connection.write')
+  resumeSync(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthedRequest,
+  ) {
+    return this.connections.resumeSync(ctx, id, this.meta(req));
+  }
+
   @Post(':id/refresh-accounts')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('connection.write')

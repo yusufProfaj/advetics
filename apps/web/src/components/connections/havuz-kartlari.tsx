@@ -261,7 +261,25 @@ function HavuzModal({
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm text-ink">{o.name}</p>
-                    <p className="truncate text-[11px] text-ink-muted">{o.externalId}</p>
+                    <p className="truncate text-[11px] text-ink-muted">
+                      {o.externalId}
+                      {/* BAĞLANTI ETİKETİ AD VE KİMLİKTEN SONRA GELİYOR ÇÜNKÜ
+                          İKİSİ DE AYNI OLABİLİYOR: aynı reklam hesabı iki
+                          şirket altında iki satır açabiliyor (tekil anahtar
+                          `[platform, externalId, orgId]`) ve üretimde iki
+                          "Biltaş · 3421122929" yan yana çıktı. Ayıran tek şey
+                          satırın hangi bağlantıdan geldiği. */}
+                      {o.baglanti.etiket && ` · ${o.baglanti.etiket}`}
+                    </p>
+                    {/* KALDIRILMIŞ BAĞLANTININ SATIRI ATANABİLİR AMA VERİ
+                        ÇEKMEZ: token'ı silinmiş bir bağlantıya bağlı. Bunu
+                        söylememek, kullanıcıyı "atadım ama veri gelmiyor"
+                        turuna sokar. */}
+                    {o.baglanti.durum === 'revoked' && (
+                      <p className="truncate text-[11px] text-warn-strong">
+                        Bağlantısı kaldırılmış — atansa da veri çekmez
+                      </p>
+                    )}
                   </div>
                   {/* YÖNETİCİ (MCC) HESABI LİSTEDE DURUYOR ama atanamıyor —
                       reklam yayınlamıyor ve sebebi yazılı. */}

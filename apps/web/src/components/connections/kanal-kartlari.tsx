@@ -301,12 +301,33 @@ function BaglantiSatiri({
       </p>
 
       {/* ATANMIŞ AMA VERİ ÇEKMEYEN HESAP: bu üründe en sık çıkan sessiz
-          arıza. Panelde "bağlı" görünüyor, hiçbir şey getirmiyor. */}
+          arıza. Panelde "bağlı" görünüyor, hiçbir şey getirmiyor.
+
+          BURADA BİR SÜRE "kaldırıp yeniden ekle" YAZIYORDU VE O TAVSİYE
+          ARIZANIN KENDİSİNİ ÜRETİYORDU: `disconnect` bağlantıdaki her hesabın
+          `syncEnabled`ını kapatıyor, keşif upsert'i onu bilerek geri açmıyor
+          ve kullanıcı 131 hesabı tek tek açmak zorunda kalıyor. Yani çözüm
+          diye gösterilen yol, sayacı büyüten yoldu. */}
       {atanmis > izlenen && (
-        <p className="mt-1.5 rounded-lg bg-warn-soft px-2.5 py-1.5 text-[11px] text-warn-strong">
-          {atanmis - izlenen} hesap atanmış ama veri çekmiyor. Workspace&apos;in Bağlı Kanallar
-          ekranından kaldırıp yeniden ekle.
-        </p>
+        <div className="mt-1.5 rounded-lg bg-warn-soft px-2.5 py-1.5 text-[11px] text-warn-strong">
+          <p>
+            {atanmis - izlenen} hesap atanmış ama veri çekmiyor.
+          </p>
+          {canManage && (
+            <button
+              type="button"
+              disabled={meslul}
+              onClick={() =>
+                void calistir('resume', () =>
+                  apiFetch(`/connections/${baglanti.id}/resume-sync`, { method: 'POST' }),
+                )
+              }
+              className="mt-1 font-medium underline underline-offset-2 disabled:opacity-50"
+            >
+              {busy === 'resume' ? 'Açılıyor…' : 'İzlemeyi geri aç'}
+            </button>
+          )}
+        </div>
       )}
 
       {baglanti.missingScopes.length > 0 && (

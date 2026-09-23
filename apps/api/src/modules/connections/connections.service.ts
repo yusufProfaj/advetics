@@ -1990,6 +1990,98 @@ export class ConnectionsService {
    * verisiyle eşleşmeli. Reklam hesabı satırları da kalır — üzerlerindeki
    * geçmiş metrikler (Modül 3) bir müşteriye ait finansal kayıttır.
    */
+  /**
+   * ═══ İZLEMEYİ TOPLU GERİ AÇ ═══
+   *
+   * `disconnect` bu bağlantıdaki HER reklam hesabının ve sayfanın
+   * `syncEnabled`ını kapatıyor ve keşif upsert'i onu BİLEREK geri açmıyor
+   * (o karar doğru: "Hesapları tara" yapılmış atamaları sıfırlamamalı).
+   * Sonuç, bağlantı yeniden kurulduğunda atamaları duran ama tek satır veri
+   * çekmeyen bir havuz — üretimde 131 hesapta yaşandı ve tek çare hesap
+   * başına tıklamaktı.
+   *
+   * NE AÇILACAĞI TAHMİN DEĞİL: `assignAdAccount` `syncEnabled: clientId !==
+   * null` yazıyor, yani "atanmış hesap izlenir" bu üründe bir DEĞİŞMEZ. Bu
+   * metot yalnızca o değişmezi geri kuruyor; atanmamış (havuzdaki) satırlara
+   * DOKUNMUYOR, çünkü onların kapalı olması keşfin kasıtlı varsayılanı ve
+   * açmak ajansın 481 hesabını kotaya sokardı.
+   *
+   * `initial_backfill` KUYRUĞA GİRMİYOR: kaldırma metrik satırlarını silmiyor,
+   * geçmiş yerinde duruyor. Doksan günlük çekimi tekrarlamak kotayı boşa
+   * harcar. Yalnızca `structure` isteniyor — izleme kapalıyken platformda
+   * açılan kampanyalar bizde yok ve metrikler onlara bağlanacak.
+   */
+  async resumeSync(
+    ctx: TenantContext,
+    connectionId: string,
+    meta: Meta,
+  ): Promise<{ adAccounts: number; socialProfiles: number }> {
+    /*
+     * `activeClientId` KAPATILIYOR. Bağlantı ajansa ait ve altındaki hesaplar
+     * birden çok workspace'e dağılmış olabiliyor; aktif müşteri seçiliyken
+     * sorgu yalnızca onunkileri görür ve geri kalanı SESSİZCE kapalı bırakır.
+     * Belirtisi "bir müşteride düzeldi, diğerinde düzelmedi" olurdu.
+     */
+    const kapsam: TenantContext = { ...ctx, activeClientId: null };
+
+    const conn = await this.prisma.withTenant(kapsam, (tx) =>
+      tx.platformConnection.findFirst({
+        where: { id: connectionId },
+        select: { id: true, platform: true },
+      }),
+    );
+    if (!conn) throw new NotFoundException('Bağlantı bulunamadı');
+
+    const sonuc = await this.prisma.withTenant(kapsam, async (tx) => {
+      const hesaplar = await tx.adAccount.updateMany({
+        where: { connectionId, clientId: { not: null }, syncEnabled: false },
+        data: { syncEnabled: true },
+      });
+      const profiller = await tx.socialProfile.updateMany({
+        where: { connectionId, clientId: { not: null }, syncEnabled: false },
+        data: { syncEnabled: true },
+      });
+
+      await this.audit.record(tx, ctx, {
+        action: 'connection.sync_resumed',
+        targetType: 'platform_connection',
+        targetId: connectionId,
+        after: { adAccounts: hesaplar.count, socialProfiles: profiller.count },
+        ...meta,
+      });
+
+      return { adAccounts: hesaplar.count, socialProfiles: profiller.count };
+    });
+
+    /*
+     * KUYRUĞA ALMA TRANSACTION'IN DIŞINDA. `withTenant` etkileşimli bir
+     * transaction ve Prisma'nın sınırı 5 saniye; Redis yavaşladığında yüz
+     * hesaplık bir döngü transaction'ı öldürür ve AÇILAN İZLEME DE GERİ
+     * ALINIRDI — yani düzeltme, düzeltmeye çalıştığı arızayı geri getirirdi.
+     */
+    const acilanlar = await this.prisma.withTenant(kapsam, (tx) =>
+      tx.adAccount.findMany({
+        where: { connectionId, clientId: { not: null }, syncEnabled: true },
+        select: { id: true, clientId: true },
+      }),
+    );
+
+    for (const a of acilanlar) {
+      if (!a.clientId) continue;
+      await this.queue.enqueue({
+        clientId: a.clientId,
+        platform: conn.platform as Platform,
+        jobType: 'structure',
+        adAccountId: a.id,
+        // Kullanıcı ekranda bekliyor: kotaya takılıp `delayed`e düşmüş eski
+        // bir yapı taraması bu isteği sessizce yutmasın.
+        interactive: true,
+      });
+    }
+
+    return sonuc;
+  }
+
   async disconnect(ctx: TenantContext, connectionId: string, meta: Meta) {
     // Token'ı PLATFORM TARAFINDA iptal et — kendi kaydımızı silmek yetmez.
     //
