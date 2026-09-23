@@ -276,10 +276,40 @@ export class GoogleProvider implements IAdPlatformProvider {
   ): Promise<OAuthTokens> {
     const verification = await this.verifyToken(accessToken);
 
+    /*
+     * ═══ TOKEN GEÇERSİZSE SEBEP BU, GERİSİ TAHMİN ═══
+     *
+     * `verifyToken` geçersiz token'da sessizce `{ valid: false }` dönüyor ve
+     * akış devam ediyordu: sonraki çağrı da doğal olarak düşüyor, hatası
+     * yutuluyor ve kullanıcı "developer token test hesaplarını görüyor
+     * olabilir" diye bir TAHMİN okuyordu. Üç ayrı sebep tek cümleye
+     * düşüyordu ve üçünün yapılacak işi farklı.
+     */
+    if (!verification.valid) {
+      throw new PlatformApiError(
+        'google',
+        'invalid_token',
+        'Google erişim belirteci doğrulanamadı. Yetkilendirme yarıda kalmış ' +
+          'olabilir; Google hesabından çıkış yapıp yeniden bağlanmayı dene.',
+      );
+    }
+
     let externalUserId = verification.externalUserId ?? '';
     let accountLabel = 'Google Ads';
 
-    // Hangi hesaplara erişim var — etiket için ilk müşteri kimliğini kullanıyoruz.
+    /*
+     * ═══ HESAP LİSTESİNİN HATASI YUTULMUYOR ═══
+     *
+     * Burada `catch` yalnızca log'a yazıyordu ve kimlik bulunamayınca akış
+     * genel bir mesajla düşüyordu: Google'ın KENDİ cümlesi ("developer token
+     * is not approved", "PERMISSION_DENIED", "version no longer supported")
+     * yalnızca sunucu log'unda kalıyordu. Panelde bağlanamayan kullanıcının
+     * elinde hiçbir ipucu yoktu.
+     *
+     * Hata artık saklanıyor ve kimlik çözülemezse SEBEP OLARAK kullanılıyor.
+     */
+    let listeHatasi: unknown = null;
+
     try {
       const customers = await this.listAccessibleCustomerIds(accessToken);
       if (customers.length > 0) {
@@ -305,21 +335,38 @@ export class GoogleProvider implements IAdPlatformProvider {
           customers.length === 1 ? `Google Ads ${customerLabel(customers[0]!)}` : 'Google Ads';
       }
     } catch (err) {
+      listeHatasi = err;
       this.logger.warn(
         `Google hesap listesi alınamadı: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
     if (!externalUserId) {
+      /*
+       * ═══ İKİ AYRI SEBEP, İKİ AYRI CÜMLE ═══
+       *
+       * Google ÇAĞRIYI REDDETTİYSE sebep onun kendi mesajında ve o mesaj
+       * kullanıcının yapacağı işi söylüyor. BOŞ LİSTE döndüyse çağrı
+       * çalışmış demektir: bu kullanıcının erişebildiği bir Ads hesabı yok.
+       * İkisini aynı cümleye çevirmek, çalışan bir kurulumda "developer
+       * token" aratmak ya da tersi.
+       */
+      if (listeHatasi) {
+        throw new PlatformApiError(
+          'google',
+          listeHatasi instanceof PlatformApiError ? listeHatasi.kind : 'permanent',
+          `Google Ads hesap listesi alınamadı: ${googleSebebi(listeHatasi)}`,
+          listeHatasi instanceof PlatformApiError ? listeHatasi.detail : undefined,
+        );
+      }
+
       throw new PlatformApiError(
         'google',
         'permanent',
-        // SEBEP TEK DEĞİL ve tek sebep yazmak yanlış teşhis üretiyor: bu
-        // mesaj "Basic Access yok" diyordu, oysa erişim 2026-08-16'da alındı.
-        // Aynı hata artık yanlış hesapla giriş yapıldığında da çıkabiliyor.
-        'Google hesabı belirlenemedi. Bu Google kullanıcısının erişebildiği bir Ads hesabı ' +
-          'olmayabilir, ya da developer token yalnızca test hesaplarını görüyor olabilir. ' +
-          'Tanı için: pnpm --filter @advetics/api google-check',
+        'Bu Google kullanıcısının erişebildiği bir Google Ads hesabı yok. ' +
+          'Yetkilendirmeyi hesaplara erişimi olan Google kullanıcısıyla yap; ' +
+          'erişim yönetici (MCC) hesabından veriliyorsa önce o erişimin ' +
+          'tanımlandığından emin ol.',
       );
     }
 
@@ -2163,6 +2210,38 @@ function customerLabel(id: string): string {
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * ═══ GOOGLE'IN KENDİ CÜMLESİ ═══
+ *
+ * Üst seviye mesaj her şey için aynı ("Request had invalid authentication
+ * credentials", "Request contains an invalid argument"); gerçek sebep gövdenin
+ * DERİNİNDE, `details[].errors[].message` altında ve yapılacak işi söyleyen
+ * tek yer orası:
+ *
+ *   · "The developer token is not approved" → başvuru bekliyor
+ *   · "User doesn't have permission to access customer" → MCC erişimi yok
+ *   · "Version v… is no longer supported" → API sürümü kapanmış
+ *
+ * Normalize edilmiş mesaj bu ayrıntıyı kaybediyor ve kullanıcıyı sebebi kendi
+ * kurulumunda aramaya gönderiyor. Bulunamazsa üst seviye mesaja düşülüyor —
+ * genel de olsa Google'ın kendi cümlesi, bizim tahminimizden iyi.
+ */
+function googleSebebi(err: unknown): string {
+  if (!(err instanceof PlatformApiError)) return errText(err);
+
+  const raw = err.detail?.raw as
+    | {
+        error?: {
+          message?: string;
+          details?: Array<{ errors?: Array<{ message?: string }> }>;
+        };
+      }
+    | undefined;
+
+  const derin = raw?.error?.details?.[0]?.errors?.[0]?.message;
+  return derin ?? raw?.error?.message ?? err.message;
 }
 
 /**
