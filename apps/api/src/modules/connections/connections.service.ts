@@ -32,6 +32,7 @@ import {
   type FetchContext,
   type IAdPlatformProvider,
 } from './provider.types';
+import { baglantiHatasiMetni } from './baglanti-hatasi';
 import { TokenVaultService } from './token-vault.service';
 import { CryptoService } from '../../crypto/crypto.service';
 import { MetaProvider } from './providers/meta.provider';
@@ -737,10 +738,22 @@ export class ConnectionsService {
         ...meta,
       });
 
+      /*
+       * KULLANICIYA GİDEN METİN HAM DEĞİL. `err.kind` hatanın geçici mi kalıcı
+       * mı olduğunu zaten biliyor ve denetim kaydına da yazılıyor; ekrana
+       * yalnızca platformun ham cümlesini basmak o bilgiyi çöpe atıyordu.
+       * Üretimde görülen hâli "(#4) Application request limit reached" idi:
+       * doğru, ama kullanıcı ne yapacağını bilmiyor ve genelde tekrar tekrar
+       * deneyip kotayı daha da yakıyor.
+       *
+       * SINIR 200'DEN 300'E ÇIKTI: açıklama eklenince ham mesaj kırpılıyordu
+       * ve kırpılan ilk şey `fbtrace` oluyordu — Meta'ya soru sorarken istenen
+       * tek şey o.
+       */
       const q = new URLSearchParams({
         connection: 'hata',
         platform,
-        mesaj: message.slice(0, 200),
+        mesaj: baglantiHatasiMetni(err).slice(0, 300),
       });
       return { redirectPath: `${backTo}?${q.toString()}` };
     }
