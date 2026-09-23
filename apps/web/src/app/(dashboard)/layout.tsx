@@ -1,7 +1,6 @@
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { KapsamSecici, type KapsamSirketi } from '@/components/kapsam-secici';
-import { UstHesapSecici } from '@/components/ust-hesap-secici';
 import { UyariBandi } from '@/components/uyari-bandi';
 import { BildirimSaglayici } from '@/components/bildirim/bildirim-verisi';
 import { BildirimZili } from '@/components/bildirim/bildirim-zili';
@@ -152,26 +151,22 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-line bg-surface/90 px-5 backdrop-blur">
           {/*
-            İKİ SEÇİCİ SOLDAN SAĞA HİYERARŞİ: Şirket › Workspace.
-            Şirket seçici YALNIZCA üst hesabı olanlara basılıyor — bağımsız
-            bir şirkette geçilecek yer yok ve boş bir seçici, kullanıcının
-            olmayan bir özelliği aramasına yol açardı.
-          */}
-          {/*
-            ═══ İKİ SEÇİCİ, İKİ KATMAN ═══
-            SOLDA hangi DANIŞMANLIĞIN ağacına bakıldığı, sağda o ağacın
-            içinde hangi şirket/workspace. Tek elemanlıysa sol seçici hiç
-            çizilmiyor — geçilecek yer yokken açılır kutu, olmayan bir
-            özelliği aratır.
+            ═══ ÜST BARDA TEK SEÇİCİ ═══
+
+            Burada İKİ seçici vardı (solda üst hesap, sağda şirket/workspace)
+            ve gerekçesi "iki ayrı katman"dı. Katman ayrı ama SORU aynı:
+            neredeyim. Yan yana iki açılır kutu ikinci bir arama kutusu
+            demekti ve kullanıcının tarifi *"üst hesap ikinci bir search
+            barda görünüyor, bu da kafa karıştırıcı"* oldu.
+
+            Bugün tek kutu, tek arama ve ağaç olarak inen seviyeler —
+            Google Ads'in hesap seçicisiyle aynı model. Üst hesap seviyesi
+            ağacın en altında, ayrı başlık altında; tek hesabı olan kullanıcı
+            o bölümü hiç görmüyor.
           */}
           <div className="flex min-w-0 items-center gap-2">
           {/* MENÜ DÜĞMESİ YALNIZCA MOBİLDE: masaüstünde kenar çubuğu zaten açık. */}
           <MobilMenu veri={kenarVerisi} stil={themeStyle} />
-          <UstHesapSecici
-            hesaplar={session.secilebilirUstHesaplar}
-            aktifId={session.managerAccount?.id ?? null}
-            yonetimGorunur={hasPermission(session, 'org.write')}
-          />
           <KapsamSecici
             ajans={session.managerAccount?.name ?? null}
             sirketler={sirketler}
@@ -179,6 +174,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
             aktifSirketId={session.activeOrganizationId}
             aktifWorkspaceId={session.activeClientId}
             tumSirketler={session.tumSirketler}
+            ustHesaplar={session.secilebilirUstHesaplar}
+            aktifUstHesapId={session.managerAccount?.id ?? null}
           />
           </div>
           <div className="flex items-center gap-3">

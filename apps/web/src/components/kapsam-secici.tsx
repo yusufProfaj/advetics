@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { TUM_SIRKETLER } from '@advetics/shared';
+import { PAKET_SINIRLARI, TUM_SIRKETLER, type ManagerPaket } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { gecisHedefi } from '@/lib/kapsam-hedefi';
@@ -15,8 +15,36 @@ export interface KapsamSirketi {
   workspaces: Array<{ id: string; name: string }>;
 }
 
+export interface KapsamUstHesabi {
+  id: string;
+  name: string;
+  paket: ManagerPaket;
+  sirketSayisi: number;
+}
+
 /**
- * ═══ TEK SEÇİCİ — AJANS › ŞİRKET › WORKSPACE ═══
+ * ═══ TEK SEÇİCİ — ÜST HESAP › AJANS › ŞİRKET › WORKSPACE ═══
+ *
+ * ┌─ ÜST BARDA ARTIK TEK KUTU VAR ────────────────────────────────────────┐
+ * │ Solda ayrı bir `UstHesapSecici` duruyordu ve gerekçesi "ikisi ayrı     │
+ * │ katman"dı. Katman ayrı, ama kullanıcı için ikisi de AYNI SORUNUN       │
+ * │ cevabı: neredeyim. Yan yana iki açılır kutu, ikinci bir arama kutusu   │
+ * │ ve "hangisine yazayım" sorusu demekti; kullanıcının tarifi birebir     │
+ * │ *"üst hesap ikinci bir search barda görünüyor, bu da kafa karıştırıcı"*│
+ * │ idi. Referans Google Ads'in hesap seçicisi: TEK kutu, TEK arama, ağaç  │
+ * │ olarak inen seviyeler.                                                 │
+ * └───────────────────────────────────────────────────────────────────────┘
+ *
+ * ═══ DİĞER ÜST HESAPLARIN ŞİRKETLERİ BU AĞAÇTA YOK ═══
+ *
+ * Ve bu bir eksiklik değil, bir SINIR: o şirketlerin listesi aktif üst
+ * hesabın ağacında (`/manager-account`) bulunmuyor, çünkü ağaç bir seferde
+ * TEK hesabı okuyor. Başka bir hesabın satırına tıklamak o hesaba GEÇİRİYOR
+ * ve ağaç oradan dolduruyor — tek istek, yarım durum yok.
+ *
+ * Aramanın bunu SÖYLEMESİ zorunlu: arama kutusuna yazılan bir şirket adı
+ * başka bir üst hesaptaysa sonuç boş çıkar ve sessiz boş liste bu depoda
+ * yasak. Alttaki sayaç satırı aramanın hangi ağaçta yapıldığını yazıyor.
  *
  * Önce İKİ seçici vardı (şirket ve workspace) ve aralarında bir `›` işareti.
  * İkisi aynı ağacın farklı seviyeleri: ayrı kutulara koymak, kullanıcının
@@ -58,6 +86,8 @@ export function KapsamSecici({
   aktifWorkspaceId,
   tumSirketler,
   yonetimGorunur,
+  ustHesaplar,
+  aktifUstHesapId,
 }: {
   /** Üst hesap adı — yoksa `null` (bağımsız şirket). */
   ajans: string | null;
@@ -67,6 +97,13 @@ export function KapsamSecici({
   tumSirketler: boolean;
   /** "Yönetim paneli" bağlantısı — `org.write` yoksa basılmıyor. */
   yonetimGorunur: boolean;
+  /**
+   * Geçilebilecek ÜST HESAPLAR (oturumdan). Tek elemanlıysa ağacın o
+   * seviyesi hiç çizilmiyor: geçilecek yer yokken bir bölüm başlığı,
+   * kullanıcıyı olmayan bir özelliği aramaya gönderir.
+   */
+  ustHesaplar: KapsamUstHesabi[];
+  aktifUstHesapId: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -119,6 +156,21 @@ export function KapsamSecici({
   }, [sirketler, arama]);
 
   /*
+   * DİĞER ÜST HESAPLAR — aktif olan listede YOK.
+   *
+   * Aktif hesap zaten ağacın kökü: adı en üstteki "tüm şirketler" satırında
+   * ve altındaki her şirket görünüyor. Bir de aşağıda tekrar listelemek,
+   * aynı hesabı iki kez göstermek ve "bu ikisi farklı mı" sorusunu açmak
+   * olurdu.
+   */
+  const digerUstHesaplar = useMemo(() => {
+    const q = arama.trim().toLocaleLowerCase('tr');
+    const digerleri = ustHesaplar.filter((h) => h.id !== aktifUstHesapId);
+    if (!q) return digerleri;
+    return digerleri.filter((h) => h.name.toLocaleLowerCase('tr').includes(q));
+  }, [ustHesaplar, aktifUstHesapId, arama]);
+
+  /*
    * AKTİF ŞİRKET BAŞTA, GERİSİ SIRASIYLA — AMA YALNIZCA ARAMA YOKKEN.
    *
    * Arama sonucunu bölmek, eşleşmeleri iki ayrı yığına dağıtmak demek:
@@ -135,7 +187,7 @@ export function KapsamSecici({
 
   async function git(
     etiket: string,
-    yol: '/auth/switch-org' | '/auth/switch-client',
+    yol: '/auth/switch-org' | '/auth/switch-client' | '/auth/switch-manager',
     govde: Record<string, string | null>,
     tamSayfa: boolean,
   ) {
@@ -185,6 +237,17 @@ export function KapsamSecici({
   const ajansaGec = () =>
     void git('Tüm şirketler', '/auth/switch-org', { organizationId: TUM_SIRKETLER }, true);
 
+  /*
+   * ÜST HESAP DEĞİŞİMİ HER ZAMAN TAM SAYFA.
+   *
+   * Yeni hesabın altında eski şirket ve workspace kimlikleri geçersiz
+   * (sunucu ikisini de sıfırlıyor). `router.refresh()` ile yetinmek, istemci
+   * bileşenlerinin state'inde önceki ağacın kimliklerini bırakmak ve sessizce
+   * boş listeler üretmek demekti.
+   */
+  const ustHesabaGec = (h: KapsamUstHesabi) =>
+    void git(h.name, '/auth/switch-manager', { managerAccountId: h.id }, true);
+
   const sirketeGec = (s: KapsamSirketi) => {
     const buradayiz = s.id === aktifSirketId && !tumSirketler;
     if (buradayiz && !aktifWorkspaceId) {
@@ -226,11 +289,26 @@ export function KapsamSecici({
   const baslik = tumSirketler
     ? (ajans ?? 'Tüm şirketler')
     : (aktifWorkspace?.name ?? aktifSirket?.name ?? 'Kapsam');
-  const altBaslik = tumSirketler
+  const altBaslikGovdesi = tumSirketler
     ? `Tüm şirketler · ${sirketler.length} şirket`
     : aktifWorkspace
       ? (aktifSirket?.name ?? 'Workspace')
       : `${aktifSirket?.workspaces.length ?? 0} workspace · şirket geneli`;
+  /*
+   * BİRDEN ÇOK ÜST HESAPTA AJANS ADI DÜĞMEDE YAZIYOR.
+   *
+   * Ayrı seçici kaldırılınca "hangi danışmanlığın ağacındayım" sorusunun
+   * cevabı ekrandan kalkmıştı: menü kapalıyken yalnızca şirket/workspace
+   * adı görünüyordu ve iki farklı üst hesapta aynı adlı şirket olabilir.
+   * Yanlış ağaçta iş yapmak, bu seçicinin engellemesi gereken tam o hata.
+   *
+   * TEK HESAPTA BASILMIYOR: her zaman aynı değeri yazan bir önek, bir
+   * bilgi değil bir dekor.
+   */
+  const altBaslik =
+    ajans && ustHesaplar.length > 1 && !tumSirketler
+      ? `${ajans} · ${altBaslikGovdesi}`
+      : altBaslikGovdesi;
 
   const sirketDugumu = (s: KapsamSirketi) => (
     <SirketDugumu
@@ -341,7 +419,7 @@ export function KapsamSecici({
           )}
 
           <div className="max-h-[24rem] flex-1 overflow-y-auto py-1">
-            {suzulmus.length === 0 ? (
+            {suzulmus.length === 0 && digerUstHesaplar.length === 0 ? (
               // BOŞ SONUÇ SEBEBİYLE yazılıyor: sessiz boş liste "hiç yok"
               // ile "arama tutmadı" hâllerini aynı ekrana çeviriyor.
               <p className="px-3 py-4 text-center text-xs text-ink-muted">
@@ -357,6 +435,40 @@ export function KapsamSecici({
                   </>
                 )}
                 {digerleri.map(sirketDugumu)}
+
+                {/*
+                  ═══ AĞACIN EN ÜST SEVİYESİ — DİĞER ÜST HESAPLAR ═══
+
+                  EN ALTTA VE BAŞLIKLI. Şirket satırlarının arasına
+                  karışsaydı ayırt edilemezdi: ikisi de "bir isim ve bir
+                  sayı" olarak görünüyor ama biri kapsamı DARALTIYOR,
+                  diğeri bambaşka bir ağaca GEÇİRİYOR.
+                */}
+                {digerUstHesaplar.length > 0 && (
+                  <>
+                    <BolumBasligi>Diğer üst hesaplar</BolumBasligi>
+                    {digerUstHesaplar.map((h) => (
+                      <button
+                        key={h.id}
+                        type="button"
+                        role="treeitem"
+                        aria-selected={false}
+                        onClick={() => ustHesabaGec(h)}
+                        className="flex w-full items-center justify-between gap-2 py-1.5 pl-10 pr-3 text-left text-sm text-ink transition hover:bg-surface-muted"
+                      >
+                        <span className="min-w-0 truncate">{h.name}</span>
+                        {/*
+                          PAKET VE ŞİRKET SAYISI SATIRDA: kırk dokuz şirketli
+                          bir ajansla tek şirketli bir müşteriyi aynı satırda
+                          göstermek, yanlış hesaba girip fark etmemek demekti.
+                        */}
+                        <span className="shrink-0 text-[11px] text-ink-muted">
+                          {PAKET_SINIRLARI[h.paket].etiket} · {h.sirketSayisi} şirket
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                )}
               </>
             )}
           </div>
@@ -366,10 +478,27 @@ export function KapsamSecici({
             Kırk dokuz şirketin altısı listeleniyorsa bunu kaydırma çubuğunun
             uzunluğundan tahmin etmek zorunda kalmamalı.
           */}
+          {/*
+            ARAMANIN KAPSAMI DA YAZIYOR — VE BU SAYIDAN DAHA ÖNEMLİ.
+
+            Ağaç yalnızca AKTİF üst hesabın şirketlerini taşıyor. Başka bir
+            hesaptaki şirketin adını arayan kullanıcı boş sonuç görür ve
+            sebebini bilmezse o şirketin SİLİNDİĞİNİ sanar. Cümle yalnızca
+            geçilebilecek başka hesap VARKEN basılıyor: tek hesaplı
+            kullanıcıya hiçbir zaman görünmeyen bir uyarı, gürültüden başka
+            bir şey değil.
+          */}
           <p className="border-t border-line px-3 py-1.5 text-[11px] text-ink-muted">
             {aramaVar
               ? `${sirketler.length} şirketten ${suzulmus.length} tanesi gösteriliyor`
               : `${sirketler.length} şirket`}
+            {ajans && digerUstHesaplar.length > 0 && (
+              <span className="mt-0.5 block">
+                {aramaVar
+                  ? `Arama ${ajans} ağacında yapıldı. Diğer üst hesapların şirketleri için önce o hesaba geç.`
+                  : `${ustHesaplar.length} üst hesap`}
+              </span>
+            )}
           </p>
 
           {/*
@@ -392,6 +521,28 @@ export function KapsamSecici({
                 <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
               Yönetim paneli
+            </Link>
+          )}
+
+          {/*
+            "ÜST HESAP AYARLARI" YALNIZCA BİRDEN ÇOK HESAPTA.
+
+            Ayrı seçici kaldırılınca onun altındaki sabit sekme de sahipsiz
+            kaldı ve hedefi buraya taşındı. Tek hesaplı kullanıcıya
+            basılmıyor: hesaplar ARASINDA çalışan bir ekran (ad, paket, silme,
+            yeni hesap) ve geçilecek ikinci bir hesap yokken kenar çubuğundaki
+            aynı bağlantının kopyasından ibaret olurdu.
+          */}
+          {yonetimGorunur && ustHesaplar.length > 1 && (
+            <Link
+              href="/ayarlar/ust-hesaplar"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 border-t border-line bg-ink px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
+            >
+              <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0" aria-hidden>
+                <path d="M10 3v14M3 10h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              Üst hesap ayarları
             </Link>
           )}
         </div>
