@@ -692,3 +692,35 @@ describe('KRİTİK: ajansa bağlı şirketin admini "Üst hesap kur" görmüyor'
     expect(LAYOUT).toContain('ustHesapGorunur: session.platformAdmin || session.managerAccount !== null');
   });
 });
+
+describe('KRİTİK: kurulum sihirbazı da ajansa bağlı şirketin adminine üst hesap önermiyor', () => {
+  /*
+   * Aynı pürüz ikinci bir kapıda: "Yeni üst hesap" kartı açık görünüyor ve
+   * sunucu reddediyordu; "Yeni şirket" kartı "Önce bir üst hesap kurmalısın"
+   * diyerek yapamayacağı şeyi öneriyordu.
+   */
+  const KURULUM = kod('app/(dashboard)/kurulum/page.tsx');
+
+  it('BOŞA DÜŞME BEKÇİSİ', () => {
+    expect(KURULUM).toContain("tur: 'ust-hesap'");
+  });
+
+  it('ayrım ev şirketinin gerçeğinden — sunucudaki kapıyla aynı kaynak', () => {
+    expect(KURULUM).toContain(
+      'const ajansaBagli = !session.platformAdmin && ma === null && session.organization.ustHesabaBagli;',
+    );
+  });
+
+  it('iki kart da ajansa bağlıyken kapalı ve sebebi yazıyor', () => {
+    expect(KURULUM).toContain(": ajansaBagli\n          ? 'Bu şirket bir ajansın üst hesabına bağlı.'");
+    expect(KURULUM).toContain(": ajansaBagli\n          ? 'Yeni şirketi bağlı olduğun ajans açabiliyor.'");
+  });
+
+  it('KRİTİK: "Önce bir üst hesap kurmalısın" ajansa bağlı dalın ARDINDAN geliyor', () => {
+    // Sıra tersine dönerse müşteri yine "üst hesap kur" önerisini görür.
+    const bagli = KURULUM.indexOf("? 'Yeni şirketi bağlı olduğun ajans açabiliyor.'");
+    const kur = KURULUM.indexOf("? 'Önce bir üst hesap kurmalısın.'");
+    expect(bagli).toBeGreaterThan(-1);
+    expect(kur).toBeGreaterThan(bagli);
+  });
+});

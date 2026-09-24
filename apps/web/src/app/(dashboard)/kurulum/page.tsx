@@ -52,6 +52,18 @@ export default async function KurulumPage({
     session.organization.name;
 
   const sinir = ma ? PAKET_SINIRLARI[ma.paket] : null;
+  /*
+   * AJANSA BAĞLI ŞİRKETİN ADMİNİ — üst hesap üyeliği YOK, `ma` onda `null`.
+   *
+   * `ma === null` iki ayrı hâl ve bu sayfa ikisini aynı okuyordu: bağımsız
+   * şirket (kendi ajansını kurabilir) ile bir ajansın müşteri şirketi
+   * (kuramaz). İkincisine "Yeni üst hesap" açık görünüyor, sunucu "Bu şirket
+   * zaten bir üst hesaba bağlı" ile reddediyordu; "Yeni şirket" kartı ise
+   * ona "Önce bir üst hesap kurmalısın" diyerek tam da yapamayacağı şeyi
+   * öneriyordu. Ayıran `organization.ustHesabaBagli` — ev şirketinin
+   * gerçeği, sunucudaki kapıyla aynı kaynak.
+   */
+  const ajansaBagli = !session.platformAdmin && ma === null && session.organization.ustHesabaBagli;
   const kartlar: SecimKarti[] = [
     {
       tur: 'ust-hesap',
@@ -59,9 +71,11 @@ export default async function KurulumPage({
       aciklama: 'Yeni bir ajans ya da danışmanlık. İlk şirketi ve workspace’i de birlikte kurarsın.',
       engel: !orgYazar
         ? 'Bunun için yönetici yetkisi gerekiyor.'
-        : !session.platformAdmin && ma !== null
-          ? 'Zaten bir üst hesabın var. Yeni şirket ekleyebilirsin.'
-          : null,
+        : ajansaBagli
+          ? 'Bu şirket bir ajansın üst hesabına bağlı.'
+          : !session.platformAdmin && ma !== null
+            ? 'Zaten bir üst hesabın var. Yeni şirket ekleyebilirsin.'
+            : null,
     },
     {
       tur: 'sirket',
@@ -71,8 +85,10 @@ export default async function KurulumPage({
         : 'Üst hesabın altında yeni bir firma ve ilk workspace’i.',
       engel: !orgYazar || !session.isOrgAdmin
         ? 'Bunun için yönetici yetkisi gerekiyor.'
-        : ma === null || sinir === null
-          ? 'Önce bir üst hesap kurmalısın.'
+        : ajansaBagli
+          ? 'Yeni şirketi bağlı olduğun ajans açabiliyor.'
+          : ma === null || sinir === null
+            ? 'Önce bir üst hesap kurmalısın.'
           : paketAsildiMi(sinir.maxSirket, ma.organizations.length)
             ? `${sinir.etiket} paketi en fazla ${sinir.maxSirket} şirkete izin veriyor.`
             : null,
