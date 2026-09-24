@@ -34,6 +34,18 @@ export default async function UstHesaplarPage() {
   }
 
   /*
+   * ÜYELİK YOKSA EKRAN YOK — menüdeki süzgeçle AYNI koşul.
+   *
+   * Müşteri şirketinin admini `org.write` taşıyor ama üst hesaba üye değil;
+   * bu ekran ona boş bir liste gösteriyordu. "Yeni üst hesap" zaten
+   * yalnızca platform sahibinde, yani üyesi olmayan kişi burada hiçbir iş
+   * yapamıyor. Menü satırı gizli ama adresi bilen girebilirdi.
+   */
+  if (!session.platformAdmin && session.managerAccount === null) {
+    redirect('/ayarlar/ust-hesap');
+  }
+
+  /*
    * HATA YUTULMUYOR (CLAUDE.md: `.catch(() => setX([]))` yasak). "Hesabın
    * yok" ile "liste okunamadı" farklı şeyler ve ikisi aynı boş ekrana
    * çevrilirse kullanıcı var olan bir hesabın üstüne ikincisini kurmaya

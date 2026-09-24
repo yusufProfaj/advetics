@@ -55,6 +55,7 @@ export function UstHesapEkrani({
   sirket,
   sirketHatasi,
   platformAdmin,
+  ustHesapKurabilir,
   children,
 }: {
   ilkAgac: ManagerAccountTree | null;
@@ -75,6 +76,16 @@ export function UstHesapEkrani({
   sirketHatasi: string | null;
   /** Advetics'i işleten taraf mı — yeni üst hesap açabiliyor, paket seçebiliyor. */
   platformAdmin: boolean;
+  /**
+   * "ÜST HESAP KUR" KİME ÇIKIYOR.
+   *
+   * Ağaç `null` iki ayrı hâl: bağımsız şirket (kendi ajansını kurabilir) ve
+   * bir ajansın müşteri şirketi (üyeliği yok, kuramaz). İkincisine form
+   * gösteriliyordu ve sunucu "Bu şirket zaten bir üst hesaba bağlı" ile
+   * reddediyordu: müşteri üstünde bir katman olduğunu bir hata mesajından
+   * öğreniyordu. Karar sunucudaki kapıyla aynı: ev şirketi bağlı mı.
+   */
+  ustHesapKurabilir: boolean;
   /** Workspace bölümü — sunucuda üretiliyor. */
   children: React.ReactNode;
 }) {
@@ -133,8 +144,19 @@ export function UstHesapEkrani({
           <p className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong">
             Üst hesap bilgisi alınamadı: {yuklemeHatasi}
           </p>
-        ) : (
+        ) : ustHesapKurabilir ? (
           <UstHesapKur />
+        ) : (
+          /*
+           * BİLGİ, HATA DEĞİL. Kullanıcının kararı: müşteri ajansa bağlı
+           * olduğunu bilsin, ama ajansın hesabını ya da diğer şirketleri
+           * görmesin. Ajansın adı da yazmıyor: oturum ona yalnızca "bağlı"
+           * olgusunu taşıyor.
+           */
+          <p className="rounded-lg border border-line bg-surface-muted/50 px-3 py-2 text-sm text-ink-muted">
+            Bu şirket bir ajansın üst hesabına bağlı. Şirketinin workspace&apos;lerini aşağıdan
+            yönetebilirsin.
+          </p>
         )}
         {children}
       </div>

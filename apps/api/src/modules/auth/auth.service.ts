@@ -244,7 +244,7 @@ export class AuthService {
       }),
       this.admin.organization.findUniqueOrThrow({
         where: { id: identity.actor.orgId },
-        select: { id: true, name: true, slug: true, plan: true },
+        select: { id: true, name: true, slug: true, plan: true, managerAccountId: true },
       }),
     ]);
 
@@ -258,7 +258,16 @@ export class AuthService {
         locale: user.locale,
         status: user.status,
       },
-      organization: org,
+      // ÜST HESABIN KİMLİĞİ YANITA GİTMİYOR: panelin ihtiyacı olan tek şey
+      // "bağlı mı". Üyeliği olmayan bir müşteri adminine ajansın hesap
+      // kimliğini taşımak, gereksiz bir bilgi sızdırmak olurdu.
+      organization: {
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        plan: org.plan,
+        ustHesabaBagli: org.managerAccountId !== null,
+      },
       memberships: identity.memberships,
       availableClients: identity.availableClients,
       activeClientId: identity.context.activeClientId,

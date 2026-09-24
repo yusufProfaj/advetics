@@ -254,6 +254,7 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         module: 1,
         ready: true,
         perm: 'org.write',
+        ustHesapUyeligi: true,
       },
       {
         href: '/ayarlar/baglantilar',
@@ -325,9 +326,17 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
  */
 export function visibleSections(
   permissions: readonly Permission[],
+  /*
+   * ZORUNLU PARAMETRE, VARSAYILANSIZ. Varsayılanı `false` olsaydı onu
+   * geçirmeyi unutan bir çağıran ajans yöneticisinden "Üst Hesaplar"ı
+   * sessizce gizlerdi; `true` olsaydı müşteri adminine geri getirirdi.
+   * İkisi de derlemede görünmezdi.
+   */
+  baglam: { ustHesapGorunur: boolean },
 ): Array<{ title?: string; items: NavEntry[] }> {
   const izinli = new Set(permissions);
-  const gorunur = (i: NavEntry): boolean => !i.perm || izinli.has(i.perm);
+  const gorunur = (i: NavEntry): boolean =>
+    (!i.perm || izinli.has(i.perm)) && (!i.ustHesapUyeligi || baglam.ustHesapGorunur);
   return SECTIONS.map((s) => ({
     title: s.title,
     items: s.items.filter(gorunur).map((i) =>

@@ -24,10 +24,10 @@ const izinler = (rol: keyof typeof ROLE_PERMISSIONS): Permission[] => [
 ];
 
 const basliklar = (rol: keyof typeof ROLE_PERMISSIONS): Array<string | undefined> =>
-  visibleSections(izinler(rol)).map((s) => s.title);
+  visibleSections(izinler(rol), { ustHesapGorunur: true }).map((s) => s.title);
 
 const etiketler = (rol: keyof typeof ROLE_PERMISSIONS): string[] =>
-  visibleSections(izinler(rol)).flatMap((s) => s.items.map((i) => i.label));
+  visibleSections(izinler(rol), { ustHesapGorunur: true }).flatMap((s) => s.items.map((i) => i.label));
 
 describe('menü verisi gerçekten okunuyor', () => {
   it('EKRANI OLMAYAN öğe menüde YOK', () => {
@@ -340,5 +340,36 @@ describe('AJANS ROLLERİ', () => {
     expect(gorunen).toContain('Kurallar');
     expect(gorunen).toContain('Ekip & Yetkiler');
     expect(gorunen).not.toContain('Şirketler');
+  });
+});
+
+describe('KRİTİK: "Üst Hesaplar" üyelikle açılıyor, yetkiyle değil', () => {
+  /*
+   * Müşteri şirketinin admini `org.write` taşıyor ama üst hesaba üye değil.
+   * Menüde "Üst Hesaplar"ı görüyor ve içeride boş bir liste buluyordu:
+   * üstünde bir katman olduğunu öğrenip giremediği bir ekran.
+   */
+  const menu = (ustHesapGorunur: boolean): string[] =>
+    visibleSections(izinler('admin'), { ustHesapGorunur }).flatMap((s) => s.items.map((i) => i.label));
+
+  it('üyeliği olmayan admin "Üst Hesaplar"ı GÖRMÜYOR', () => {
+    expect(menu(false)).not.toContain('Üst Hesaplar');
+  });
+
+  it('KRİTİK: aynı admin "Şirketler"i GÖRÜYOR — kendi workspace’lerini orada yönetiyor', () => {
+    // İki satırı birlikte gizlemek kolaydı ve yanlıştı: workspace yönetimi
+    // Şirketler sayfasının içinde.
+    expect(menu(false)).toContain('Şirketler');
+  });
+
+  it('üyesi olan admin ikisini de görüyor', () => {
+    expect(menu(true)).toEqual(expect.arrayContaining(['Şirketler', 'Üst Hesaplar']));
+  });
+
+  it('bayrak yalnızca "Üst Hesaplar" satırında — başka hiçbir satırı saklamıyor', () => {
+    // Bayrağın yanlış satıra kopyalanması, üyeliği olmayan birinden çalışan
+    // bir ekranı sessizce gizlerdi.
+    const farki = menu(true).filter((l) => !menu(false).includes(l));
+    expect(farki).toEqual(['Üst Hesaplar']);
   });
 });

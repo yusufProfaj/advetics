@@ -44,6 +44,15 @@ export interface NavEntry {
    */
   perm?: Permission;
   /**
+   * YALNIZCA ÜST HESAP ÜYELİĞİ OLANA (ya da platform sahibine).
+   *
+   * Yetki anahtarı bunu anlatamıyor: bir ajansın müşteri şirketindeki
+   * admin `org.write` taşıyor ama üst hesaba üye değil. "Üst Hesaplar"
+   * ekranı ona boş bir liste gösteriyordu — üstünde bir katman olduğunu
+   * öğrenip içine giremediği bir ekran.
+   */
+  ustHesapUyeligi?: true;
+  /**
    * ALT ÖĞELER — aynı ekranın iki ayrı bağlamı.
    *
    * Tek kullanımı var ve gerekçesi dar: AI Asistan tek bir sayfa ama İKİ

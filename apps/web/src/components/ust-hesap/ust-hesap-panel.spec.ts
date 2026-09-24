@@ -27,6 +27,8 @@ function kod(yol: string): string {
 const LAYOUT = kod('app/(dashboard)/layout.tsx');
 const SECICI = kod('components/kapsam-secici.tsx');
 const SAYFA = kod('app/(dashboard)/ayarlar/ust-hesap/page.tsx');
+const EKRAN = kod('components/ust-hesap/ust-hesap-ekrani.tsx');
+const UST_HESAPLAR = kod('app/(dashboard)/ayarlar/ust-hesaplar/page.tsx');
 
 describe('TEK SEÇİCİ — ajans › şirket › workspace', () => {
   it('BOŞA DÜŞME BEKÇİSİ: dosyalar gerçekten okundu', () => {
@@ -659,5 +661,34 @@ function atama(kaynak: string, ad: string): string {
 }
 
 function etiketler(rol: keyof typeof ROLE_PERMISSIONS): string[] {
-  return visibleSections([...ROLE_PERMISSIONS[rol]]).flatMap((s) => s.items.map((i) => i.label));
+  return visibleSections([...ROLE_PERMISSIONS[rol]], { ustHesapGorunur: true }).flatMap((s) =>
+    s.items.map((i) => i.label),
+  );
 }
+
+describe('KRİTİK: ajansa bağlı şirketin admini "Üst hesap kur" görmüyor', () => {
+  /*
+   * Ağaç `null` iki hâl: bağımsız şirket (kurabilir) ve ajansın müşteri
+   * şirketi (kuramaz). Form ikincisine de çıkıyordu; sunucu "Bu şirket zaten
+   * bir üst hesaba bağlı" ile reddediyordu.
+   */
+  it('BOŞA DÜŞME BEKÇİSİ', () => {
+    expect(EKRAN).toContain('export function UstHesapEkrani');
+    expect(UST_HESAPLAR).toContain('export default async function');
+  });
+
+  it('form YALNIZCA kurabilecek kişiye', () => {
+    expect(EKRAN).toContain(') : ustHesapKurabilir ? (\n          <UstHesapKur');
+  });
+
+  it('karar sunucudaki kapıyla aynı: ev şirketi bağlı mı', () => {
+    expect(SAYFA).toContain(
+      'ustHesapKurabilir={session.platformAdmin || !session.organization.ustHesabaBagli}',
+    );
+  });
+
+  it('"Üst Hesaplar" sayfası üyesi olmayanı yönlendiriyor — menüdekiyle aynı koşul', () => {
+    expect(UST_HESAPLAR).toContain('if (!session.platformAdmin && session.managerAccount === null) {');
+    expect(LAYOUT).toContain('ustHesapGorunur: session.platformAdmin || session.managerAccount !== null');
+  });
+});

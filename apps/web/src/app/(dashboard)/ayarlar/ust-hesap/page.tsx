@@ -129,6 +129,7 @@ export default async function SirketlerPage() {
         sirket={sirketKapsami ? sirket : null}
         sirketHatasi={sirketKapsami ? sirketHatasi : null}
         platformAdmin={session.platformAdmin}
+        ustHesapKurabilir={session.platformAdmin || !session.organization.ustHesabaBagli}
       >
         {!sirketKapsami ? (
           /*

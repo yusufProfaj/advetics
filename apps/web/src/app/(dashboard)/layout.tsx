@@ -116,7 +116,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
     : undefined;
 
   const kenarVerisi = {
-    bolumler: visibleSections(session.permissions),
+    /*
+     * "Üst Hesaplar" üyelikle açılıyor, yetkiyle değil: müşteri şirketinin
+     * admini `org.write` taşıyor ama üst hesaba üye değil.
+     */
+    bolumler: visibleSections(session.permissions, {
+      ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
+    }),
     sirketAdi: session.organization.name,
     logoUrl: branding?.logoUrl ?? null,
     kullaniciAdi: session.user.fullName,

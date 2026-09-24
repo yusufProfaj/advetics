@@ -106,7 +106,25 @@ export interface AuthenticatedUser {
 
 export interface SessionResponse {
   user: AuthenticatedUser;
-  organization: { id: string; name: string; slug: string; plan: string };
+  organization: {
+    id: string;
+    name: string;
+    slug: string;
+    plan: string;
+    /**
+     * EV ŞİRKETİ BİR ÜST HESABA BAĞLI MI — kimliği değil, yalnızca olgu.
+     *
+     * Bir ajansın müşteri şirketindeki admin `org.write` taşıyor ama üst
+     * hesap üyeliği yok, yani `managerAccount` onda `null`. Panel bir süre
+     * bunu "üst hesabın yok" diye okuyup ona "Üst hesap kur" formu
+     * gösteriyordu; form sunucuda "Bu şirket zaten bir üst hesaba bağlı" ile
+     * reddediliyordu. Müşteri, üstünde bir katman olduğunu bir hata
+     * mesajından öğreniyordu. `managerAccount === null` iki ayrı hâli
+     * birleştiriyor: bağımsız şirket (kurabilir) ve müşteri şirketi
+     * (kuramaz). Ayıran bu alan.
+     */
+    ustHesabaBagli: boolean;
+  };
   memberships: Array<{
     id: string;
     clientId: string | null;
