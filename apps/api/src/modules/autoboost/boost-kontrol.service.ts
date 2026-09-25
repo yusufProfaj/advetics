@@ -214,12 +214,14 @@ export class BoostKontrolService {
 
     if (satir.platform !== 'meta') {
       /*
-       * GOOGLE YOLUNDA `boosts` SATIRI YOK ve kampanya zaten DURAKLATILMIŞ
-       * açılıyor (canlıda doğrulanmamış yazma yolu). Panelden duraklatma
-       * sunmak, olmayan bir kaydın durumunu değiştirmeye çalışmak olurdu.
+       * GOOGLE YOLUNDA `boosts` SATIRI YOK — kimlikler kuyruk kaydında.
+       * Panelden duraklatma bu kayıt üzerinden yazılmadı; kampanya bitiş
+       * tarihiyle kurulduğu için süre dolunca kendiliğinden duruyor, erken
+       * durdurmak şimdilik Google Ads'ten. Reddetmek, düğmeye basan birine
+       * "durdu" dememekten iyi.
        */
       throw new BadRequestException(
-        'YouTube kampanyaları Google Ads üzerinden yönetiliyor; bu kart panelden duraklatılamıyor.',
+        'YouTube kampanyaları şimdilik Google Ads üzerinden durduruluyor; bu kart panelden duraklatılamıyor.',
       );
     }
     if (!satir.boost_id || !satir.boost_status) {

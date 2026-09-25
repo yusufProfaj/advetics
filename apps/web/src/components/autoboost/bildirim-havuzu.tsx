@@ -884,15 +884,15 @@ function Kart({
         )}
 
         {/*
-          YOUTUBE KAMPANYASI DURAKLATILMIŞ AÇILIYOR ve bu kullanıcıya
-          SÖYLENİYOR. Meta yolundan farkı bilinçli: Google yazma yolu canlıda
-          hiç çalışmadı ve ilk gerçek çağrının sonucunu insan görmeden para
-          harcamamalı.
+          YOUTUBE KAMPANYASI ONAYLANINCA YAYINDA ve bu kullanıcıya SÖYLENİYOR.
+          Bir süre duraklatılmış açılıyordu; kullanıcı 2026-09-25'te yayını
+          denemeyi istedi. Erken durdurma panelde henüz yok (kimlikler
+          `boosts` tablosunda değil) — söylenmezse kullanıcı düğmeyi arar.
         */}
         {kayit.status === 'pending' && kayit.platform === 'google' && (
           <p className="text-[10px] text-ink-muted">
-            Kampanya <strong>duraklatılmış</strong> açılır; Google Ads’te gözden
-            geçirip yayına alman gerekiyor.
+            Onaylayınca kampanya Türkiye&apos;de <strong>yayına girer</strong>. Erken
+            durdurmak şimdilik Google Ads&apos;ten.
           </p>
         )}
 

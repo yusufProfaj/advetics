@@ -12,6 +12,9 @@ import {
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { butceKipi, butceyiCoz, hedeflemeyiCoz, kartPlatformu } from './kart-ozellestirme';
+import { YoutubeOtomatikService } from './youtube-otomatik.service';
+import { VARSAYILAN_KONUM } from '../connections/providers/google-demandgen';
+import { YouTubeApiService } from './youtube-api.service';
 import { AssetUploaderService } from '../assets/asset-uploader.service';
 import { BoostExecutorService } from '../boosts/boost-executor.service';
 import { BoostsService } from '../boosts/boosts.service';
@@ -69,6 +72,9 @@ export class AutoBoostLaunchService {
     private readonly providers: ProviderRegistry,
     private readonly vault: TokenVaultService,
     private readonly uploader: AssetUploaderService,
+    /** YouTube: marka, logo ve adres otomatik — en sonda, testler konumla geçiriyor. */
+    private readonly youtubeOtomatik: YoutubeOtomatikService,
+    private readonly youtube: YouTubeApiService,
   ) {}
 
   async decide(
@@ -340,8 +346,12 @@ export class AutoBoostLaunchService {
    *      üzerinden zaten senkronize ediliyor.
    *   2. BÜTÇE GÜNLÜK. Google'da toplam bütçe yok — kısıt veritabanında da
    *      var (`auto_boost_presets_google_daily_chk`).
-   *   3. KAMPANYA PAUSED KALIYOR. Google yazma yolu canlıda hiç çalışmadı;
-   *      ilk gerçek çağrının sonucunu insan görmeden para harcamamalı.
+   *   3. KAMPANYA EN SONDA YAYINA ALINIYOR ve KONUMU AÇIKÇA yazılıyor.
+   *      Bir süre duraklatılmış açılıp elle yayına alınması bekleniyordu
+   *      (yazma yolu canlıda denenmemişti); kullanıcı 2026-09-25'te bunu
+   *      kaldırıp yayını denemeyi istedi. Konumsuz Demand Gen kampanyası
+   *      BÜTÜN ÜLKELERE açıldığı için yayına almanın ön koşulu konum:
+   *      ön ayarda seçilmemişse Türkiye (`VARSAYILAN_KONUM`).
    */
   private async launchGoogle(
     ctx: TenantContext,
@@ -406,6 +416,45 @@ export class AutoBoostLaunchService {
       );
     }
 
+    /*
+     * ═══ MARKA, LOGO VE ADRES OTOMATİK — KİLİTTEN ÖNCE ═══
+     *
+     * Eksik bir değer (web sitesi yok, logo yok) burada Türkçe bir cümleyle
+     * reddediliyor ve kart `pending` kalıyor. Kilitten sonra reddetseydik
+     * kart `failed` olurdu ve kullanıcı eksiği tamamladıktan sonra aynı
+     * videoyu yayınlayamazdı.
+     */
+    const degerler = await this.youtubeOtomatik.yayinDegerleri(
+      scoped,
+      kayit.client_id,
+      kayit.social_profile_id,
+      { businessName: g.businessName, logoAssetId: g.logoAssetId, finalUrl: g.finalUrl },
+    );
+
+    /*
+     * METİNLER VİDEONUN KENDİSİNDEN. Önceden ön ayardaki sabit metin her
+     * videoda aynı gidiyordu. Açıklama yayın anında TAZE okunuyor: saklanan
+     * bir kopya, kullanıcı YouTube'da açıklamayı düzelttikten sonra eski
+     * hâliyle reklama girerdi.
+     *
+     * OKUNAMAZSA YAYIN DURMUYOR: açıklamanın yedeği var (`videoMetinleri`)
+     * ve YouTube API'sinin geçici bir hatası yüzünden reklamı engellemek,
+     * açıklamasız bir reklamdan pahalı. Sebep log'a yazılıyor.
+     */
+    const video = await this.youtube.getVideo(kayit.external_id);
+    if (video.durum !== 'bulundu') {
+      this.logger.warn(
+        `YouTube açıklaması okunamadı (${kayit.external_id}): ` +
+          (video.durum === 'hata' ? video.message : 'video bulunamadı') +
+          ' — açıklama yedeği kullanılıyor',
+      );
+    }
+    const metin = this.youtubeOtomatik.metinler(
+      kayit.title,
+      video.durum === 'bulundu' ? (video.video.description ?? null) : null,
+      degerler.businessName,
+    );
+
     // --- Kartı KİLİTLE (Meta yoluyla aynı yarış koruması)
     const kilit = await this.prisma.withTenant(scoped, (tx) =>
       tx.$executeRaw(Prisma.sql`
@@ -430,7 +479,7 @@ export class AutoBoostLaunchService {
        * yüklemek kota harcar ve hesapta mükerrer varlık üretir.
        */
       const logoResource = await this.uploader.ensureExternalRef(scoped, {
-        assetId: g.logoAssetId,
+        assetId: degerler.logoAssetId,
         adAccountId: kayit.linked_ad_account_id,
         label: `${kayit.client_name} logo`,
         fetchCtx,
@@ -449,11 +498,12 @@ export class AutoBoostLaunchService {
         videoId: kayit.external_id,
         videoTitle: kayit.title ?? kayit.external_id,
         logoAssetResource: logoResource,
-        businessName: g.businessName,
-        finalUrl: g.finalUrl,
-        headlines: g.headlines,
-        longHeadlines: g.longHeadlines,
-        descriptions: g.descriptions,
+        businessName: degerler.businessName,
+        finalUrl: degerler.finalUrl,
+        headlines: metin.headlines,
+        longHeadlines: metin.longHeadlines,
+        descriptions: metin.descriptions,
+        konumlar: g.locations.length > 0 ? g.locations : [VARSAYILAN_KONUM],
       });
 
       await this.prisma.withTenant(scoped, (tx) =>
@@ -471,9 +521,8 @@ export class AutoBoostLaunchService {
       return {
         status: 'launched',
         message:
-          'YouTube kampanyası oluşturuldu ve DURAKLATILMIŞ açıldı. Google ' +
-          'Ads’te gözden geçirip yayına al — bu yol canlıda ilk kez ' +
-          'çalışıyor ve sonucu insan görmeden para harcamamalı.',
+          `YouTube kampanyası yayında (${g.locations.length > 0 ? `${g.locations.length} konum` : 'Türkiye'}, ` +
+          `${kayit.duration_days ?? 7} gün). Erken durdurmak için Google Ads'i kullan.`,
       };
     } catch (err) {
       /*

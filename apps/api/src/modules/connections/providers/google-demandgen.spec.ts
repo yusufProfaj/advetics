@@ -3,8 +3,11 @@ import {
   demandGenAdGroupBody,
   demandGenCampaignBody,
   demandGenVideoAdBody,
+  demandGenKonumBody,
   googleImageAssetBody,
   googleVideoAssetBody,
+  kampanyayiYayinaAlBody,
+  VARSAYILAN_KONUM,
 } from './google-demandgen';
 
 /**
@@ -60,9 +63,9 @@ describe('kampanya', () => {
     expect(c.advertisingChannelSubType).toBeUndefined();
   });
 
-  it('KRİTİK: PAUSED açılıyor — Google yolu canlıda hiç çalışmadı', () => {
-    // Meta yolundan farkı bu ve bilinçli: ilk gerçek çağrının sonucunu insan
-    // görmeden para harcamamalı.
+  it('KRİTİK: PAUSED kuruluyor — yayına alma en son, ayrı adımda', () => {
+    // Konum, reklam grubu ve reklam yokken yayında olsaydı Google eksik
+    // (konumsuz = bütün ülkeler) bir kampanyayı yayınlayabilirdi.
     expect(c.status).toBe('PAUSED');
   });
 
@@ -198,10 +201,10 @@ describe('video reklamı', () => {
     expect(bilgi.callToActions).toBeUndefined();
   });
 
-  it('reklam PAUSED açılıyor', () => {
-    // Kampanya zaten duraklatılmış; reklam da duraklatılmış olsun ki ajans
-    // hangi reklamın yayına gireceğine ayrıca karar verebilsin.
-    expect(ad.status).toBe('PAUSED');
+  it('KRİTİK: reklam ENABLED açılıyor — yayın kararı kampanya seviyesinde', () => {
+    // Reklam da duraklatılmış kalsaydı kampanya yayına alındığında hiçbir şey
+    // yayınlanmazdı: hata yok, harcama yok, gösterim yok.
+    expect(ad.status).toBe('ENABLED');
   });
 
   it('KRİTİK: metinler burada KIRPILMIYOR', () => {
@@ -225,5 +228,34 @@ describe('video reklamı', () => {
     );
     const b2 = (a2.ad as Record<string, unknown>).demandGenVideoResponsiveAd as Record<string, unknown>;
     expect(b2.headlines).toEqual([{ text: uzun }]);
+  });
+});
+
+describe('konum — konumsuz kampanya BÜTÜN ÜLKELERE açılıyor', () => {
+  it('varsayılan Türkiye (2000 + ISO 792)', () => {
+    expect(VARSAYILAN_KONUM).toBe('geoTargetConstants/2792');
+  });
+
+  it('her konum ayrı bir kampanya ölçütü', () => {
+    const b = demandGenKonumBody({ campaignResource: CAMPAIGN, konumlar: [VARSAYILAN_KONUM, 'geoTargetConstants/1012782'] });
+    expect(b.partialFailure).toBe(false);
+    expect(b.operations.map((o) => o.create)).toEqual([
+      { campaign: CAMPAIGN, location: { geoTargetConstant: VARSAYILAN_KONUM } },
+      { campaign: CAMPAIGN, location: { geoTargetConstant: 'geoTargetConstants/1012782' } },
+    ]);
+  });
+
+  it('KRİTİK: boş liste İSTEĞE ÇIKMADAN reddediliyor', () => {
+    expect(() => demandGenKonumBody({ campaignResource: CAMPAIGN, konumlar: [] })).toThrow(/bütün ülkelere/);
+  });
+});
+
+describe('yayına alma', () => {
+  it('KRİTİK: yalnızca durum, maskeyle birlikte', () => {
+    const b = kampanyayiYayinaAlBody(CAMPAIGN);
+    expect(b.operations).toEqual([
+      { update: { resourceName: CAMPAIGN, status: 'ENABLED' }, updateMask: 'status' },
+    ]);
+    expect(b.partialFailure).toBe(false);
   });
 });

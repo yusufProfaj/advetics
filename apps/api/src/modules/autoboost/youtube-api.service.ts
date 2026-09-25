@@ -26,6 +26,8 @@ export interface YouTubeVideo {
   id: string;
   channelId: string;
   title: string;
+  /** Yalnızca tekil video çağrısında dolu (`getVideo`); listede yok. */
+  description?: string;
   publishedAt: Date | null;
   thumbnailUrl: string | null;
 }
@@ -186,6 +188,7 @@ export class YouTubeApiService {
         id?: string;
         snippet?: {
           title?: string;
+          description?: string;
           channelId?: string;
           publishedAt?: string;
           thumbnails?: Record<string, { url?: string } | undefined>;
@@ -222,6 +225,9 @@ export class YouTubeApiService {
         id: item.id ?? videoId,
         channelId: item.snippet.channelId,
         title: item.snippet.title ?? '',
+        // AÇIKLAMA ZATEN YANITTA — `part=snippet` onu taşıyor. YouTube
+        // reklamının açıklama metni buradan üretiliyor; ayrı bir çağrı yok.
+        description: item.snippet.description ?? '',
         publishedAt: t && !Number.isNaN(+t) ? t : null,
         // Sırayla en iyisinden düşene: kart görselini elde edebildiğimiz
         // en yüksek çözünürlükte gösteriyoruz.

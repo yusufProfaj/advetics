@@ -11,7 +11,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { z } from 'zod';
-import type { TenantContext } from '@advetics/shared';
+import type { TenantContext, YoutubeOtomatikOnizleme } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import type { AutoBoostQueueList } from '@advetics/shared';
@@ -28,6 +28,7 @@ import { AutoBoostLaunchService } from './autoboost-launch.service';
 import { AutoBoostReadService } from './autoboost-read.service';
 import { BoostKontrolService } from './boost-kontrol.service';
 import { GecmisIcerikService } from './gecmis-icerik.service';
+import { YoutubeOtomatikService } from './youtube-otomatik.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
 import { ConnectionsService } from '../connections/connections.service';
 import type { AuthedRequest } from '../../common/types/request';
@@ -107,6 +108,8 @@ export class AutoBoostController {
      * yazmak, bunların birini unutup sessizce yarım bir satır üretmekti.
      */
     private readonly connections: ConnectionsService,
+    /** YouTube ön ayarının otomatik dolan bilgileri — yayınla aynı çözümleyici. */
+    private readonly youtubeOtomatik: YoutubeOtomatikService,
   ) {}
 
   /**
@@ -131,6 +134,32 @@ export class AutoBoostController {
     @Query('clientId', ParseUUIDPipe) clientId: string,
   ): Promise<AutoBoostPresetRecord[]> {
     return this.presets.list(ctx, clientId);
+  }
+
+  /**
+   * YOUTUBE ÖN AYARININ OTOMATİK DOLAN BİLGİLERİ — marka, logo, adres ve
+   * son videodan örnek metinler.
+   *
+   * YAYINLA AYNI ÇÖZÜMLEYİCİ (`YoutubeOtomatikService`): ekranın gösterdiği
+   * ile yayının kullandığı ayrışamaz. Hiçbir şey YAZMIYOR; kanal görseli
+   * Görsel Arşivi'ne ancak ilk yayında alınıyor.
+   *
+   * `presets/` altında ve `:id` parametresi taşıyan bir GET yok; düz segment
+   * başka bir rotayla çakışmıyor.
+   */
+  @Get('presets/youtube-otomatik')
+  @RequirePermissions('boost.read')
+  async youtubeOtomatikOnizleme(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<YoutubeOtomatikOnizleme> {
+    const onAyar = (await this.presets.list(ctx, clientId)).find((p) => p.platform === 'google');
+    const g = onAyar?.settings.platform === 'google' ? onAyar.settings : null;
+    return this.youtubeOtomatik.onizleme(ctx, clientId, {
+      businessName: g?.businessName,
+      logoAssetId: g?.logoAssetId,
+      finalUrl: g?.finalUrl,
+    });
   }
 
   /**

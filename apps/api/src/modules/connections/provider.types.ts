@@ -1152,6 +1152,11 @@ export interface IAdPlatformProvider {
       headlines: string[];
       longHeadlines: string[];
       descriptions: string[];
+      /**
+       * Konum ölçütleri (`geoTargetConstants/...`). BOŞ GELEMEZ: konumsuz
+       * Demand Gen kampanyası bütün ülkelere açılıyor.
+       */
+      konumlar: string[];
     },
   ): Promise<{ campaignId: string; adGroupId: string; adId: string }>;
 

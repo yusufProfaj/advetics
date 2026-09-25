@@ -35,6 +35,9 @@ const SAYFA_ADI = 'Akıllı Boost';
 /** Artık ön ayar taşımayan eski yer — kullanıcıya görünen metinde YASAK. */
 const ESKI_YERLER = ['Bilgi Bankası', 'Bilgi Bankasi', 'Kütüphane', 'bilgi-bankasi'];
 
+/** Logonun gerçek yeri — `youtube-otomatik.service.ts`, tek sabit. */
+const MUAF_SATIR = "export const LOGO_YERI = 'Bilgi Bankası › Logo sekmesi';";
+
 /**
  * Yorumları söker.
  *
@@ -98,11 +101,25 @@ describe('boost yönlendirme metinleri', () => {
 
   it('kullanıcıya görünen metinlerde eski yer adı GEÇMİYOR', () => {
     for (const dosya of modulKaynaklari()) {
-      const govde = yorumsuz(oku(dosya));
+      /*
+       * TEK MUAFİYET: logonun yeri. Logo GERÇEKTEN Bilgi Bankası'nın Logo
+       * sekmesinde duruyor ve YouTube ön ayarı onu otomatik kullanıyor; eksik
+       * olduğunda kullanıcı oraya gönderilmek ZORUNDA. Muafiyet satırın
+       * TAMAMINA çapalı: aynı dize başka bir cümlede geçerse test yine düşer.
+       */
+      const govde = yorumsuz(oku(dosya)).replace(MUAF_SATIR, '');
       for (const eski of ESKI_YERLER) {
         expect(govde, `${dosya} hâlâ "${eski}" yazıyor`).not.toContain(eski);
       }
     }
+  });
+
+  it('muafiyet GERÇEKTEN var ve yalnızca o sabitte', () => {
+    // Satır değişirse muafiyet boşa düşer ve yukarıdaki test sebepsiz kırmızı
+    // verir; burada hem varlığı hem biricikliği kilitli.
+    const kaynak = yorumsuz(oku('youtube-otomatik.service.ts'));
+    expect(kaynak).toContain(MUAF_SATIR);
+    expect(kaynak.split('Bilgi Bankası').length - 1).toBe(1);
   });
 
   it('yönlendirme panelde DURAN düğmenin etiketini kullanıyor', () => {

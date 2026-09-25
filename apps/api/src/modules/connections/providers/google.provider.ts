@@ -5,6 +5,8 @@ import {
   demandGenVideoAdBody,
   googleImageAssetBody,
   googleVideoAssetBody,
+  demandGenKonumBody,
+  kampanyayiYayinaAlBody,
 } from './google-demandgen';
 import { gecerliGorselAdresi } from '@advetics/shared';
 import type { GeoLocationOption, Platform, SavedAudienceOption } from '@advetics/shared';
@@ -1773,17 +1775,20 @@ export class GoogleProvider implements IAdPlatformProvider {
   /**
    * YOUTUBE VİDEO REKLAMI — Demand Gen zinciri.
    *
-   * BEŞ ÇAĞRI: bütçe → kampanya → reklam grubu → video varlığı → reklam.
-   * (Logo varlığı çağıran tarafından önbellekten geliyor; her yayında yeniden
-   * yüklemek gereksiz.)
+   * YEDİ ÇAĞRI: bütçe → kampanya (duraklatılmış) → konum → reklam grubu →
+   * video varlığı → reklam → kampanyayı yayına alma. (Logo varlığı çağıran
+   * tarafından önbellekten geliyor; her yayında yeniden yüklemek gereksiz.)
    *
    * ORTADA KALIRSA GERİ ALINIYOR — `publishDraft` ve Meta `createBoost`
    * desenlerinin aynısı. Yetim bir bütçe para harcamıyor ama hesabı kirletiyor
    * ve aynı adla ikinci bütçe açılamıyor (DUPLICATE_NAME).
    *
-   * KAMPANYA PAUSED KALIYOR ve bu Meta yolundan bilinçli farkı: Google yazma
-   * yolu canlıda hiç çalışmadı; ilk gerçek çağrının sonucunu insan görmeden
-   * para harcamamalı. Ajans Google Ads'te gözden geçirip kendisi açıyor.
+   * KAMPANYA EN SONDA YAYINA ALINIYOR — Meta yolunun deseni. Bir süre
+   * duraklatılmış kalıyor ve ajansın Google Ads'te elle açması bekleniyordu;
+   * kullanıcı 2026-09-25'te yayını denemeyi istedi. Konumsuz Demand Gen
+   * kampanyası BÜTÜN ÜLKELERE açıldığı için konum yayına almadan önce ve
+   * AÇIKÇA yazılıyor. Yol canlıda ilk kez çalışıyor: ilk deneme küçük
+   * bütçeyle.
    */
   async createVideoBoost(
     ctx: FetchContext,
@@ -1799,6 +1804,8 @@ export class GoogleProvider implements IAdPlatformProvider {
       headlines: string[];
       longHeadlines: string[];
       descriptions: string[];
+      /** Konum ölçütleri — boş gelemez, bkz. `demandGenKonumBody`. */
+      konumlar: string[];
     },
   ): Promise<{ campaignId: string; adGroupId: string; adId: string }> {
     const stamp = nameStamp(new Date());
@@ -1828,6 +1835,16 @@ export class GoogleProvider implements IAdPlatformProvider {
         }),
       );
       created.push({ resource: campaign, label: 'kampanya' });
+
+      /*
+       * KONUM KAMPANYA DURAKLATILMIŞKEN. Ölçütler kampanyayla birlikte
+       * siliniyor; geri alma listesine ayrıca girmiyor.
+       */
+      await this.mutate(
+        ctx,
+        'campaignCriteria',
+        demandGenKonumBody({ campaignResource: campaign, konumlar: request.konumlar }),
+      );
 
       const adGroup = await this.mutate(
         ctx,
@@ -1861,6 +1878,15 @@ export class GoogleProvider implements IAdPlatformProvider {
           descriptions: request.descriptions,
         }),
       );
+
+      /*
+       * ═══ YAYINA ALMA EN SON ═══
+       *
+       * Bütçe, konum, reklam grubu ve reklam yerindeyken. Bu adım düşerse
+       * aşağıdaki geri alma kurulanların hepsini siliyor; yarım bir kampanya
+       * yayında kalmıyor.
+       */
+      await this.mutate(ctx, 'campaigns', kampanyayiYayinaAlBody(campaign));
 
       return { campaignId: campaign, adGroupId: adGroup, adId: ad };
     } catch (err) {

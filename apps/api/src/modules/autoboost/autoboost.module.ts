@@ -3,6 +3,7 @@ import { AssetsModule } from '../assets/assets.module';
 import { BoostsModule } from '../boosts/boosts.module';
 import { ConnectionsModule } from '../connections/connections.module';
 import { AutoBoostQueueService } from './autoboost-queue.service';
+import { YoutubeOtomatikService } from './youtube-otomatik.service';
 import { AutoBoostLaunchService } from './autoboost-launch.service';
 import { AutoBoostPresetService } from './autoboost-preset.service';
 import { AutoBoostReadService } from './autoboost-read.service';
@@ -28,6 +29,7 @@ import { YouTubeWebSubService } from './youtube-websub.service';
   imports: [AssetsModule, BoostsModule, ConnectionsModule],
   controllers: [AutoBoostController, YouTubeWebSubController],
   providers: [
+    YoutubeOtomatikService,
     AutoBoostQueueService,
     AutoBoostLaunchService,
     AutoBoostPresetService,

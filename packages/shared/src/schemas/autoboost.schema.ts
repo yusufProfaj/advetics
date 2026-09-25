@@ -136,52 +136,37 @@ export const googlePresetSettingsSchema = z.object({
     .default('maximize_clicks'),
   /** `target_cpa` / `target_cpc` seçilirse zorunlu — micros. */
   bidTargetMicros: z.string().regex(/^\d+$/).nullable().default(null),
-  /**
-   * HEDEF URL. Demand Gen reklamı bir varış noktası istiyor; video
-   * izlenmesinin kendisi hedef olamıyor (CPV yok).
+  /*
+   * ═══ MARKA, LOGO VE ADRES OTOMATİK — ön ayarda YALNIZCA GEÇERSİZ KILMA ═══
+   *
+   * Bu üç alan önceden ZORUNLUYDU ve kullanıcının tarifi *"çok büyük
+   * angarya"*: marka adı elle yazılıyor, logo Görsel Arşivi'nden seçiliyor,
+   * adres elle giriliyordu — hepsi sistemde ZATEN duran bilgiler. Artık
+   * yayın anında türetiliyor (`youtube-otomatik.ts`):
+   *
+   *   · marka adı  → workspace adı, sığmazsa kanal adı
+   *   · logo       → Bilgi Bankası logosu, yoksa YouTube kanal görseli
+   *   · hedef URL  → workspace'in web sitesi
+   *
+   * Alanlar şemada İSTEĞE BAĞLI kaldı: eski ön ayarlarda seçilmiş bir logo
+   * ya da adres varsa o kullanılıyor. Silmek, kullanıcının bilerek yaptığı
+   * seçimi sessizce atmak olurdu.
+   *
+   * Google'ın kuralları değişmedi: marka adı en fazla 25 karakter, logo
+   * zorunlu, Demand Gen bir varış adresi istiyor (CPV yok).
    */
-  finalUrl: z.string().url().max(2048),
-  /**
-   * MARKA ADI — v24'ten beri ZORUNLU.
+  finalUrl: z.string().url().max(2048).optional(),
+  businessName: z.string().min(1).max(25).optional(),
+  logoAssetId: z.string().uuid().optional(),
+  /*
+   * ═══ BAŞLIK VE AÇIKLAMA ÖN AYARDA YOK ═══
    *
-   * `DemandGenVideoResponsiveAdInfo.business_name` proto'da "Required" ve
-   * onsuz reklam oluşturulamıyor. Bu, "kullanıcı yalnızca videoyu seçip
-   * yayınlar" akışının Google'da neden mümkün olmadığının bir parçası.
+   * Önceden burada sabit metinler vardı ve HER VİDEO AYNI başlıkla
+   * gidiyordu; videonun kendi başlığı yalnızca kampanya adında
+   * kullanılıyordu. Metinler artık her videonun başlığından ve
+   * açıklamasından yayın anında üretiliyor. Eski kayıtlarda duran
+   * `headlines` alanları şema tarafından atılıyor ve KULLANILMIYOR.
    */
-  businessName: z.string().min(1).max(25),
-
-  /**
-   * LOGO — v24'ten beri ZORUNLU ve ayrı bir Asset kaydı gerektiriyor.
-   *
-   * Görsel Arşivi'ndeki bir varlığın kimliği. Yayın anında Google'a
-   * yükleniyor ve kaynak adı `asset_platform_refs` tablosuna önbellekleniyor
-   * — Meta'nın `image_hash`'i için zaten kullanılan tablo, aynı gerekçeyle:
-   * hesap başına bir kez yüklemek yeterli.
-   *
-   * MÜŞTERİ BAŞINA BİR KEZ seçiliyor ve bütün videolarda kullanılıyor; akış
-   * yine tek tıkla kalıyor, yalnızca kurulum bir adım uzuyor.
-   */
-  logoAssetId: z.string().uuid(),
-
-  /**
-   * Başlıklar ve açıklamalar. Reklam metni ön ayardan geliyor çünkü 1.0'ın
-   * vaadi "form doldurmadan yayınla" — video geldiğinde sorulacak bir şey
-   * kalmamalı.
-   *
-   * ═══ SINIRLAR DAHA SIKI OLANDAN ALINDI ═══
-   *
-   * Google'ın KENDİ dokümanları çelişiyor: bir yardım sayfası başlık için 40
-   * karakter ve "en az 3 tane" derken diğeri 30 karakter ve "1-5" diyor. API
-   * proto'su ise HİÇBİR sınır belgelemiyor ve resmî örnekler her alandan tek
-   * tane gönderiyor.
-   *
-   * Çelişkide sıkı olanı seçmek, reddedilen bir isteği ekranda önlemek demek;
-   * gevşek olanı seçmek "kabul edildi sandım, Google reddetti" demek olurdu.
-   * Gerçek sınır ilk canlı çağrıda netleşecek.
-   */
-  headlines: z.array(z.string().min(1).max(30)).min(1).max(5),
-  longHeadlines: z.array(z.string().min(1).max(90)).min(1).max(5),
-  descriptions: z.array(z.string().min(1).max(90)).min(1).max(5),
   /** Ülke/bölge anahtarları — Google'ın `geoTargetConstants` kaynak adları. */
   locations: z.array(z.string().min(1).max(64)).max(25).default([]),
   ageRanges: z
@@ -548,4 +533,41 @@ export interface AutoBoostSubscriptionHealth {
    * dayanıyor ve kullanıcı bunu bilmeli.
    */
   signatureLocked: boolean;
+}
+
+// -----------------------------------------------------------------------------
+// YouTube — otomatik doldurulan bilgiler
+// -----------------------------------------------------------------------------
+
+/**
+ * YOUTUBE ÖN AYARININ OTOMATİK DOLAN BİLGİLERİ — ekranda gösterilen ile
+ * yayında kullanılan AYNI çözümleyiciden geliyor.
+ *
+ * Ekran "logo: Bilgi Bankası logosu" derken yayın kanal görselini
+ * kullansaydı, kullanıcı gördüğüne güvenip başka bir şey yayınlamış olurdu.
+ * Her alan KAYNAĞINI taşıyor: "nereden geldi" bilinmezse değiştirmek için
+ * nereye gidileceği de bilinmez.
+ */
+export interface YoutubeOtomatikOnizleme {
+  kanal: { id: string; ad: string; gorsel: string | null } | null;
+  marka: {
+    deger: string | null;
+    kaynak: 'on-ayar' | 'workspace' | 'kanal' | 'kisaltildi' | 'yok';
+  };
+  logo: {
+    /** `profil-logosu` = Bilgi Bankası'nın Logo sekmesindeki workspace logosu. */
+    kaynak: 'on-ayar' | 'profil-logosu' | 'kanal' | 'yok';
+    /** Ekranda gösterilecek görsel adresi. */
+    onizleme: string | null;
+  };
+  url: { deger: string | null; kaynak: 'on-ayar' | 'workspace' | 'yok' };
+  /** Son videodan üretilmiş örnek metinler — yoksa henüz video gelmemiş. */
+  ornek: {
+    videoBasligi: string;
+    baslik: string;
+    uzunBaslik: string;
+    aciklama: string;
+  } | null;
+  /** Yayını engelleyen eksikler — boşsa yayınlanabilir. */
+  eksikler: string[];
 }

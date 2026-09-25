@@ -92,9 +92,11 @@ export function googleVideoAssetBody(params: {
  * "geçersiz alt tip" hatası veriyor ve kanal tipi değiştirilemediği için
  * yanlış kurulan kampanya düzeltilemiyor, silinip yeniden kuruluyor.
  *
- * PAUSED AÇILIYOR VE PAUSED KALIYOR — arama kampanyasıyla aynı gerekçe:
- * Google yazma yolu canlıda hiç çalışmadı ve ilk gerçek çağrının sonucunu
- * insan görmeden para harcamamalı. Meta yolundan farkı bu ve bilinçli.
+ * PAUSED AÇILIYOR, EN SONDA YAYINA ALINIYOR — Meta yolunun deseni.
+ * Konum, reklam grubu ve reklam kurulmadan kampanya yayında olsaydı Google
+ * eksik bir kampanyayı (konumsuz = BÜTÜN ÜLKELER) birkaç saniye bile olsa
+ * yayınlayabilirdi. Yayına alma `kampanyayiYayinaAlBody` ile ve ancak her
+ * parça yerindeyken.
  *
  * TEKLİF `MAXIMIZE_CONVERSIONS` DEĞİL. Dönüşüm takibi olmayan hesapta o
  * strateji öğrenmiyor ve sessizce kötü çalışıyor; bu üründe piksel/etiket
@@ -185,15 +187,10 @@ export function demandGenAdGroupBody(params: {
  * Asset kaynak adı taşıyor — inline metin yazılamıyor. Resmî örnek kod da
  * göndermiyor; Google kendisi seçiyor ("automated and required").
  *
- * PAUSED AÇILIYOR: kampanya zaten duraklatılmış, reklam da duraklatılmış olsun
- * ki ajans kampanyayı açtığında hangi reklamın yayına gireceğine ayrıca karar
- * verebilsin.
- *
- * > DOĞRULANMADI: başlık/açıklama adet ve karakter sınırları Google'ın kendi
- * > dokümanları arasında çelişiyor (3+ zorunlu / 40 karakter ile 1–5 / 30
- * > karakter). Resmî API örnekleri her alandan TEK tane gönderiyor. Kırpma
- * > burada YAPILMIYOR — sınır tek yerde (Zod şeması) uygulanmalı, yoksa iki
- * > kural zamanla ayrışır.
+ * REKLAM ENABLED AÇILIYOR. Kampanya henüz duraklatılmış; reklamın kendisi de
+ * duraklatılmış kalsaydı kampanya yayına alındığında hiçbir şey
+ * yayınlanmazdı — hata yok, harcama yok, gösterim yok. Yayın kararı tek
+ * yerde, kampanya seviyesinde veriliyor.
  */
 export function demandGenVideoAdBody(params: {
   adGroupResource: string;
@@ -213,7 +210,7 @@ export function demandGenVideoAdBody(params: {
     {
       create: {
         adGroup: params.adGroupResource,
-        status: 'PAUSED',
+        status: 'ENABLED',
         ad: {
           // HEDEF URL BURADA — reklam bilgisinin içinde değil.
           finalUrls: [params.finalUrl],
@@ -227,6 +224,62 @@ export function demandGenVideoAdBody(params: {
           },
         },
       },
+    },
+  ]);
+}
+
+/**
+ * VARSAYILAN KONUM — TÜRKİYE (`geoTargetConstants/2792`).
+ *
+ * Google'ın ülke ölçütü kimliği 2000 + ISO 3166 sayısal kodu; Türkiye 792.
+ * Konum HİÇ gönderilmezse Google kampanyayı BÜTÜN ÜLKELERE açıyor ve hiçbir
+ * hata vermiyor: İzmir'deki bir müşterinin videosu bütçesini Hindistan'da
+ * harcar. "Platformun varsayılanına güvenme" kuralının Google karşılığı; bu
+ * sabit, ön ayarda konum seçilmemişse gönderilen AÇIK değer.
+ */
+export const VARSAYILAN_KONUM = 'geoTargetConstants/2792';
+
+/**
+ * Kampanyanın konum ölçütleri — `campaignCriteria`.
+ *
+ * KAMPANYA SEVİYESİNDE. Google'ın Demand Gen belgesi konumun reklam grubu
+ * seviyesinde de verilebileceğini söylüyor ("you can choose to set the
+ * location and language group criteria at the ad group level"); kampanya
+ * seviyesi ise Google'ın bütün kampanya türlerinde belgelenmiş standart yolu.
+ *
+ * BOŞ LİSTE REDDEDİLİYOR — burada, isteğe çıkmadan. Boş bir ölçüt listesi
+ * gönderilemez, gönderilmezse de kampanya bütün ülkelere açılır; ikisi de
+ * sessiz. Çağıran her zaman en az bir konum vermek zorunda.
+ */
+export function demandGenKonumBody(params: {
+  campaignResource: string;
+  konumlar: string[];
+}): GoogleMutateBody {
+  if (params.konumlar.length === 0) {
+    throw new Error('Konum listesi boş: kampanya bütün ülkelere açılırdı.');
+  }
+  return body(
+    params.konumlar.map((geoTargetConstant) => ({
+      create: {
+        campaign: params.campaignResource,
+        location: { geoTargetConstant },
+      },
+    })),
+  );
+}
+
+/**
+ * KAMPANYAYI YAYINA ALIR — kurulumun SON adımı.
+ *
+ * `updateMask: 'status'` ZORUNLU: maskesiz güncelleme reddediliyor, maskede
+ * olmayan alan ise gövdede olsa bile yok sayılıyor. Yalnızca durum
+ * değişiyor; bütçe ve tarih kurulumda yazıldı.
+ */
+export function kampanyayiYayinaAlBody(campaignResource: string): GoogleMutateBody {
+  return body([
+    {
+      update: { resourceName: campaignResource, status: 'ENABLED' },
+      updateMask: 'status',
     },
   ]);
 }

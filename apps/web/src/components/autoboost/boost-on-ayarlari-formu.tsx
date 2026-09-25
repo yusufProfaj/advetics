@@ -3,11 +3,11 @@
 import { hedeflemeLokasyonu } from '@advetics/shared';
 import { useEffect, useState } from 'react';
 import type {
-  AssetListResult,
   AutoBoostPresetRecord,
   ConnectionSummary,
   GeoLocationOption,
   SavedAudienceList,
+  YoutubeOtomatikOnizleme,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 /*
@@ -341,6 +341,21 @@ function MetaForm({
   );
 }
 
+/**
+ * YOUTUBE ÖN AYARI — kullanıcı YALNIZCA bütçeyi ve süreyi giriyor.
+ *
+ * Kullanıcının tarifi: *"youtube ön ayarı çok büyük angarya ... ben sadece
+ * bütçe gireceğim"*. Önceki form yedi alan istiyordu: marka adı, logo
+ * (Görsel Arşivi'nden elle seçiliyordu), hedef URL, başlık, uzun başlık,
+ * açıklama ve bütçe. Metinler SABİTTİ, yani her video aynı başlıkla
+ * yayınlanıyordu.
+ *
+ * Artık marka adı, logo ve adres sistemden, metinler her videonun kendi
+ * başlığından geliyor. Form bunları GÖSTERİYOR ve NEREDEN geldiklerini
+ * yazıyor: görünmeyen bir otomatik değer, kullanıcının neyin yayınlandığını
+ * bilmemesi demek. Değerler yayınla aynı çözümleyiciden
+ * (`/autoboost/presets/youtube-otomatik`).
+ */
 function GoogleForm({
   clientId,
   mevcut,
@@ -357,28 +372,37 @@ function GoogleForm({
     mevcut ? String(Number(mevcut.budgetMicros) / 1_000_000) : '100',
   );
   const [gun, setGun] = useState(mevcut?.durationDays ?? 7);
-  const [businessName, setBusinessName] = useState(s?.businessName ?? '');
-  const [finalUrl, setFinalUrl] = useState(s?.finalUrl ?? '');
-  const [headline, setHeadline] = useState(s?.headlines?.[0] ?? '');
-  const [longHeadline, setLongHeadline] = useState(s?.longHeadlines?.[0] ?? '');
-  const [description, setDescription] = useState(s?.descriptions?.[0] ?? '');
-  const [logoAssetId, setLogoAssetId] = useState(s?.logoAssetId ?? '');
 
-  const [gorseller, setGorseller] = useState<AssetListResult | null>(null);
+  /*
+   * ESKİ ÖN AYARDA ELLE SEÇİLMİŞ DEĞERLER KORUNUYOR. Kullanıcı bir logoyu
+   * ya da adresi bilerek seçmiş olabilir; kaydederken sessizce atmak o
+   * seçimi yok saymak olurdu. "Otomatiğe geç" onları açıkça bırakıyor.
+   */
+  const eskiSecim = Boolean(s?.businessName || s?.logoAssetId || s?.finalUrl);
+  const [otomatigeGec, setOtomatigeGec] = useState(false);
+
+  const [otomatik, setOtomatik] = useState<YoutubeOtomatikOnizleme | null>(null);
+  const [otomatikHata, setOtomatikHata] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [sonuc, setSonuc] = useState<string | null>(null);
 
   useEffect(() => {
-    void apiFetch<AssetListResult>(`/assets?clientId=${clientId}&kind=image&limit=100`)
-      .then(setGorseller)
-      .catch(() => setGorseller(null));
-  }, [clientId]);
+    setOtomatikHata(null);
+    void apiFetch<YoutubeOtomatikOnizleme>(`/autoboost/presets/youtube-otomatik?clientId=${clientId}`)
+      .then(setOtomatik)
+      // HATA YUTULMUYOR: "otomatik bilgiler okunamadı" ile "eksik yok"
+      // aynı boş kutuya dönerse kullanıcı yayının hazır olduğunu sanır.
+      .catch((err: unknown) =>
+        setOtomatikHata(err instanceof ApiRequestError ? err.message : 'Otomatik bilgiler okunamadı.'),
+      );
+  }, [clientId, sonuc]);
 
   async function kaydet(): Promise<void> {
     setBusy(true);
     setHata(null);
     setSonuc(null);
+    const koru = eskiSecim && !otomatigeGec;
     try {
       await apiFetch('/autoboost/presets', {
         method: 'PUT',
@@ -393,18 +417,15 @@ function GoogleForm({
             platform: 'google',
             biddingStrategy: 'maximize_clicks',
             bidTargetMicros: null,
-            finalUrl,
-            businessName,
-            logoAssetId,
-            headlines: [headline],
-            longHeadlines: [longHeadline],
-            descriptions: [description],
+            ...(koru && s?.businessName ? { businessName: s.businessName } : {}),
+            ...(koru && s?.logoAssetId ? { logoAssetId: s.logoAssetId } : {}),
+            ...(koru && s?.finalUrl ? { finalUrl: s.finalUrl } : {}),
             locations: [],
             ageRanges: [],
           },
         }),
       });
-      setSonuc('Kaydedildi. Yeni videolar bu ayarlarla yayınlanacak.');
+      setSonuc('Kaydedildi. Yeni videolar bu bütçeyle, kendi başlıklarıyla yayınlanacak.');
     } catch (err) {
       setHata(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi.');
     } finally {
@@ -413,12 +434,17 @@ function GoogleForm({
   }
 
   return (
-    <div className="max-w-lg space-y-3">
+    <div className="max-w-lg space-y-4">
       <Acik enabled={enabled} setEnabled={setEnabled} />
 
       <div className="grid gap-2 sm:grid-cols-2">
         <Alan etiket="Günlük bütçe (₺)" ipucu="Google'da toplam bütçe yok.">
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} className={input} />
+          <input
+            value={amount}
+            inputMode="decimal"
+            onChange={(e) => setAmount(e.target.value)}
+            className={input}
+          />
         </Alan>
         <Alan etiket="Süre (gün)">
           <input
@@ -432,92 +458,182 @@ function GoogleForm({
         </Alan>
       </div>
 
-      <Alan
-        etiket="Marka adı"
-        ipucu="Google zorunlu kılıyor — reklamda görünür. En fazla 25 karakter."
-      >
-        <input
-          value={businessName}
-          maxLength={25}
-          onChange={(e) => setBusinessName(e.target.value)}
-          className={input}
-        />
-      </Alan>
-
-      <Alan
-        etiket="Logo"
-        ipucu="Google zorunlu kılıyor. Kare (1:1) ve en az 144×144 olmalı; Görsel Arşivi'nden seçiliyor."
-      >
-        <select
-          value={logoAssetId}
-          onChange={(e) => setLogoAssetId(e.target.value)}
-          className={input}
-        >
-          <option value="">Seç…</option>
-          {gorseller?.rows.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name} ({g.width}×{g.height})
-            </option>
-          ))}
-        </select>
-        {gorseller && gorseller.rows.length === 0 && (
-          <span className="mt-1 block text-[11px] text-danger">
-            Görsel Arşivi'nde hiç görsel yok. Önce bir logo yükle.
-          </span>
-        )}
-      </Alan>
-
-      <Alan
-        etiket="Hedef URL"
-        ipucu="Videoyu izleyen kişi buraya gidiyor. Google'da 'sadece izletme' seçeneği yok."
-      >
-        <input
-          value={finalUrl}
-          onChange={(e) => setFinalUrl(e.target.value)}
-          placeholder="https://..."
-          className={input}
-        />
-      </Alan>
-
-      <Alan etiket="Başlık" ipucu="En fazla 30 karakter.">
-        <input
-          value={headline}
-          maxLength={30}
-          onChange={(e) => setHeadline(e.target.value)}
-          className={input}
-        />
-      </Alan>
-
-      <Alan etiket="Uzun başlık" ipucu="En fazla 90 karakter.">
-        <input
-          value={longHeadline}
-          maxLength={90}
-          onChange={(e) => setLongHeadline(e.target.value)}
-          className={input}
-        />
-      </Alan>
-
-      <Alan etiket="Açıklama" ipucu="En fazla 90 karakter.">
-        <input
-          value={description}
-          maxLength={90}
-          onChange={(e) => setDescription(e.target.value)}
-          className={input}
-        />
-      </Alan>
+      <OtomatikBilgiler
+        otomatik={otomatik}
+        hata={otomatikHata}
+        eskiSecim={eskiSecim && !otomatigeGec}
+        onOtomatigeGec={() => setOtomatigeGec(true)}
+      />
 
       {/*
-        DURAKLATILMIŞ AÇILACAĞI BURADA DA YAZIYOR. Kullanıcı ön ayarı
-        kaydederken "yayına girecek" beklentisi kuruyor; kartta söylemek geç
-        kalıyor.
+        KONUM EKRANDA YAZILI. Konumsuz bir Demand Gen kampanyası bütün
+        ülkelere açılıyor; sunucu ön ayarda konum yoksa Türkiye'yi AÇIKÇA
+        gönderiyor ve kullanıcı bunu kaydetmeden önce görmeli.
       */}
       <p className="rounded-lg border border-line bg-surface-sunken px-2.5 py-2 text-[11px] text-ink-muted">
-        YouTube kampanyası <strong>duraklatılmış</strong> oluşturulur. Google
-        yazma yolu bu üründe henüz canlıda doğrulanmadı; ilk kampanyaları Google
-        Ads'te gözden geçirip elle yayına al.
+        Hedef konum: <strong className="text-ink">Türkiye</strong>. Yaş ve konum seçimi
+        bir sonraki aşamada gelecek.
+      </p>
+
+      {/*
+        KART ONAYLANINCA YAYINDA — ve yazma yolu canlıda ilk kez çalışıyor.
+        Kullanıcı bunu bilerek istedi (2026-09-25); ilk denemenin küçük
+        bütçeyle yapılması gerektiği burada söylenmeli.
+      */}
+      <p className="rounded-lg bg-warn-soft px-2.5 py-2 text-[11px] text-warn-strong ring-1 ring-inset ring-warn/30">
+        Kart onaylandığında kampanya <strong>yayına girer</strong> ve süre bitince
+        durur. YouTube yayını ilk kez canlıda deneniyor: ilk denemeyi küçük bir
+        bütçeyle yap. Erken durdurmak şimdilik Google Ads&apos;ten.
       </p>
 
       <Kaydet busy={busy} hata={hata} sonuc={sonuc} canWrite={canWrite} onKaydet={() => void kaydet()} />
+    </div>
+  );
+}
+
+const MARKA_KAYNAGI: Record<YoutubeOtomatikOnizleme['marka']['kaynak'], string> = {
+  'on-ayar': 'Ön ayarda seçilmiş',
+  workspace: 'Workspace adı',
+  kanal: 'YouTube kanal adı',
+  kisaltildi: 'Workspace adı, 25 karaktere kısaltıldı',
+  yok: 'Bulunamadı',
+};
+
+const LOGO_KAYNAGI: Record<YoutubeOtomatikOnizleme['logo']['kaynak'], string> = {
+  'on-ayar': 'Ön ayarda seçilmiş',
+  'profil-logosu': 'Bilgi Bankası logosu',
+  kanal: 'YouTube kanal görseli (ilk yayında arşive eklenir)',
+  yok: 'Bulunamadı',
+};
+
+const URL_KAYNAGI: Record<YoutubeOtomatikOnizleme['url']['kaynak'], string> = {
+  'on-ayar': 'Ön ayarda seçilmiş',
+  workspace: 'Workspace web sitesi',
+  yok: 'Bulunamadı',
+};
+
+/**
+ * OTOMATİK DOLAN BİLGİLER — her biri KAYNAĞIYLA.
+ *
+ * Eksik varsa kutu uyarı rengine dönüyor ve ne yapılacağı yazıyor; eksiksiz
+ * hâlde kart onaylandığında yayın sorulmadan çıkıyor. Örnek metinler son
+ * videodan: kullanıcı reklamın ne diyeceğini yayından ÖNCE görüyor.
+ */
+function OtomatikBilgiler({
+  otomatik,
+  hata,
+  eskiSecim,
+  onOtomatigeGec,
+}: {
+  otomatik: YoutubeOtomatikOnizleme | null;
+  hata: string | null;
+  eskiSecim: boolean;
+  onOtomatigeGec: () => void;
+}) {
+  if (hata) {
+    return (
+      <p role="alert" className="text-xs text-danger">
+        Otomatik bilgiler okunamadı: {hata}
+      </p>
+    );
+  }
+  if (!otomatik) return <p className="text-xs text-ink-muted">Otomatik bilgiler yükleniyor…</p>;
+
+  const eksikVar = otomatik.eksikler.length > 0;
+  return (
+    <section
+      className={`space-y-3 rounded-lg border px-3 py-3 ${
+        eksikVar ? 'border-warn/40 bg-warn-soft' : 'border-line bg-surface-sunken'
+      }`}
+    >
+      <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+        Otomatik doldurulanlar
+      </p>
+
+      <div className="flex items-center gap-3">
+        {otomatik.logo.onizleme ? (
+          // KANAL GÖRSELİ HARİCİ BİR ADRES: Next görsel optimizasyonu
+          // yapılandırılmamış bir ana makineyi reddederdi; düz <img> yeterli.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={otomatik.logo.onizleme}
+            alt="Reklam logosu"
+            className="size-12 shrink-0 rounded-lg border border-line bg-surface object-cover"
+          />
+        ) : (
+          <span className="grid size-12 shrink-0 place-items-center rounded-lg border border-dashed border-line text-[10px] text-ink-muted">
+            logo yok
+          </span>
+        )}
+        <dl className="min-w-0 space-y-1 text-xs">
+          <Satir
+            etiket="Marka adı"
+            deger={otomatik.marka.deger}
+            kaynak={MARKA_KAYNAGI[otomatik.marka.kaynak]}
+          />
+          <Satir etiket="Logo" deger={null} kaynak={LOGO_KAYNAGI[otomatik.logo.kaynak]} />
+          <Satir
+            etiket="Hedef adres"
+            deger={otomatik.url.deger}
+            kaynak={URL_KAYNAGI[otomatik.url.kaynak]}
+          />
+        </dl>
+      </div>
+
+      {otomatik.ornek ? (
+        <div className="rounded-md bg-surface px-2.5 py-2 text-xs">
+          <p className="text-[11px] text-ink-muted">
+            Son videodan örnek: <span className="text-ink">{otomatik.ornek.videoBasligi}</span>
+          </p>
+          <p className="mt-1 font-semibold text-ink">{otomatik.ornek.baslik}</p>
+          <p className="text-ink">{otomatik.ornek.uzunBaslik}</p>
+          <p className="text-ink-muted">{otomatik.ornek.aciklama}</p>
+          <p className="mt-1 text-[11px] text-ink-muted">
+            Metinler her videonun kendi başlığından üretilir; açıklama yayın anında
+            videonun açıklamasından alınır.
+          </p>
+        </div>
+      ) : (
+        <p className="text-[11px] text-ink-muted">
+          Henüz video gelmedi. Metinler her videonun kendi başlığından üretilecek.
+        </p>
+      )}
+
+      {eksikVar && (
+        <ul className="space-y-1">
+          {otomatik.eksikler.map((e) => (
+            <li key={e} className="text-xs font-medium text-warn-strong">
+              {e}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {eskiSecim && (
+        <p className="text-[11px] text-ink-muted">
+          Bu ön ayarda daha önce elle seçilmiş değerler var.{' '}
+          <button
+            type="button"
+            onClick={onOtomatigeGec}
+            className="font-medium text-brand-strong underline-offset-2 hover:underline"
+          >
+            Otomatiğe geç
+          </button>{' '}
+          (kaydedince uygulanır)
+        </p>
+      )}
+    </section>
+  );
+}
+
+function Satir({ etiket, deger, kaynak }: { etiket: string; deger: string | null; kaynak: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="inline text-ink-muted">{etiket}: </dt>
+      <dd className="inline">
+        {deger && <span className="break-all font-medium text-ink">{deger} </span>}
+        <span className="text-[11px] text-ink-muted">({kaynak})</span>
+      </dd>
     </div>
   );
 }

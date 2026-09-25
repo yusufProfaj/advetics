@@ -24,6 +24,15 @@
 export interface GoogleMutateOperation {
   create?: Record<string, unknown>;
   remove?: string;
+  /**
+   * GÜNCELLEME — `updateMask` ile BİRLİKTE. Maskesiz bir güncelleme Google'da
+   * reddediliyor; maskeye yazılmayan alan ise gövdede olsa bile YOK
+   * SAYILIYOR. İkisi ayrı alan olduğu için birini unutmak derlemede görünmez;
+   * bu yüzden güncelleme gövdeleri yalnızca üretici fonksiyonlardan geliyor.
+   */
+  update?: Record<string, unknown>;
+  /** Virgülle ayrılmış alan yolları — REST gövdesinde düz metin. */
+  updateMask?: string;
 }
 
 export interface GoogleMutateBody {
