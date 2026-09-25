@@ -867,7 +867,13 @@ function Kart({
           <p className="text-[11px] text-danger">{kayit.blockedReason}</p>
         )}
         {kayit.error && <p className="text-[11px] text-danger">{kayit.error}</p>}
-        {hata && (
+        {/*
+          AYNI CÜMLE İKİ KEZ BASILMIYOR. Yayın düşünce sunucu hatayı kartın
+          kaydına da yazıyor ve basışın cevabı da aynı cümle; ikisini alt alta
+          göstermek iki ayrı arıza varmış gibi okunuyordu (canlıda görüldü).
+          Farklıysa ikisi de duruyor: biri eski deneme, biri yeni.
+        */}
+        {hata && hata !== kayit.error && (
           <p role="alert" className="text-[11px] text-danger">
             {hata}
           </p>

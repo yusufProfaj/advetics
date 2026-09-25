@@ -19,6 +19,7 @@ import { VARSAYILAN_KONUM } from './google-demandgen';
 interface Cagri {
   koleksiyon: string;
   govde: { operations: Array<Record<string, unknown>> };
+  giris: string | null;
 }
 
 let cagrilar: Cagri[];
@@ -57,7 +58,8 @@ beforeEach(() => {
   globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const koleksiyon = String(url).match(/\/customers\/\d+\/(\w+):mutate/)?.[1] ?? '?';
     const govde = JSON.parse(String(init?.body ?? '{}')) as Cagri['govde'];
-    cagrilar.push({ koleksiyon, govde });
+    const basliklar = (init?.headers ?? {}) as Record<string, string>;
+    cagrilar.push({ koleksiyon, govde, giris: basliklar['login-customer-id'] ?? null });
     const yayinaAlma = koleksiyon === 'campaigns' && govde.operations[0]?.update !== undefined;
     const bu = yayinaAlma ? 'yayina-alma' : koleksiyon;
     if (patlayan === bu && govde.operations[0]?.remove === undefined) {
@@ -195,5 +197,15 @@ describe('yaş kitlesi — Demand Gen’de Audience kaydıyla', () => {
     expect(cagrilar.some((c) => c.govde.operations[0]?.update)).toBe(false);
     const silinen = cagrilar.filter((c) => c.govde.operations[0]?.remove).map((c) => c.koleksiyon);
     expect(silinen).toEqual(['adGroups', 'campaigns', 'campaignBudgets']);
+  });
+});
+
+describe('yönetici (MCC) başlığı', () => {
+  it('KRİTİK: login-customer-id kurulumun HER çağrısında gidiyor', async () => {
+    // Canlıda ilk yayın USER_PERMISSION_DENIED ile düştü: alt hesaba yapılan
+    // istek yöneticinin kimliğini bu başlıkta taşımak zorunda.
+    await provider().createVideoBoost({ ...ctx, loginCustomerId: '999' }, ISTEK);
+    expect(cagrilar.length).toBeGreaterThan(5);
+    expect(cagrilar.every((c) => c.giris === '999')).toBe(true);
   });
 });

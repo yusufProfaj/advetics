@@ -493,9 +493,17 @@ export class AutoBoostLaunchService {
     }
 
     const [hesap] = await this.prisma.withTenant(scoped, (tx) =>
-      tx.$queryRaw<Array<{ platform: string; external_id: string; connection_id: string }>>(
+      tx.$queryRaw<
+        Array<{
+          platform: string;
+          external_id: string;
+          connection_id: string;
+          manager_external_id: string | null;
+        }>
+      >(
         Prisma.sql`
-          SELECT platform::text AS platform, external_id, connection_id::text AS connection_id
+          SELECT platform::text AS platform, external_id, connection_id::text AS connection_id,
+                 manager_external_id
           FROM ad_accounts WHERE id = ${reklamHesabiId}::uuid
         `,
       ),
@@ -547,7 +555,22 @@ export class AutoBoostLaunchService {
     try {
       const provider = this.providers.get('google');
       const accessToken = await this.vault.getAccessToken(hesap.connection_id, provider);
-      const fetchCtx = { accessToken, accountExternalId: hesap.external_id };
+      /*
+       * YÖNETİCİ (MCC) KİMLİĞİ `login-customer-id` OLARAK GİDİYOR.
+       *
+       * Canlıda ilk YouTube yayını şu cevapla düştü: "User doesn't have
+       * permission to access customer. Note: If you're accessing a client
+       * customer, the manager's customer id must be set in the
+       * 'login-customer-id' header". Ajans hesaplara yönetici hesabı üzerinden
+       * erişiyor; senkronizasyon yollarının HEPSİ bu başlığı
+       * `manager_external_id`den veriyordu, bu yol vermiyordu. Aynı bağlam
+       * logo yüklemesinde de kullanılıyor.
+       */
+      const fetchCtx = {
+        accessToken,
+        accountExternalId: hesap.external_id,
+        loginCustomerId: hesap.manager_external_id ?? undefined,
+      };
 
       /*
        * LOGO ÖNBELLEKTEN. İlk yayında yükleniyor, sonrakiler kaynak adını

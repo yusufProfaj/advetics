@@ -84,3 +84,23 @@ describe('üç tüketici AYNI kararı kullanıyor', () => {
     expect(okuma).toContain('${Prisma.raw(YOUTUBE_HESAP_KOSULU)}');
   });
 });
+
+describe('KRİTİK: YouTube yayını yönetici (MCC) başlığıyla gidiyor', () => {
+  /*
+   * Canlıda ilk yayın USER_PERMISSION_DENIED ile düştü: ajans hesaplara
+   * yönetici hesabı üzerinden erişiyor ve Google, alt hesaba yapılan isteğin
+   * yöneticinin kimliğini 'login-customer-id' başlığında taşımasını istiyor.
+   * Senkronizasyon yollarının hepsi bunu veriyordu, bu yol vermiyordu.
+   */
+  const yayin = oku('autoboost-launch.service.ts');
+  const g = yayin.slice(yayin.indexOf('private async launchGoogle('));
+  const govde = g.slice(0, g.indexOf('\n  }\n'));
+
+  it('hesabın yönetici kimliği okunuyor', () => {
+    expect(govde).toMatch(/SELECT platform::text AS platform, external_id, connection_id::text AS connection_id,\s*manager_external_id/);
+  });
+
+  it('bağlam onu login-customer-id olarak taşıyor', () => {
+    expect(govde).toMatch(/const fetchCtx = \{\s*accessToken,\s*accountExternalId: hesap\.external_id,\s*loginCustomerId: hesap\.manager_external_id \?\? undefined,/);
+  });
+});
