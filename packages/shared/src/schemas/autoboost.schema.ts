@@ -495,6 +495,33 @@ export const autoBoostQueueOverrideSchema = z
         genders: z.enum(['all', 'male', 'female']),
       })
       .optional(),
+    /**
+     * YOUTUBE REKLAM METNİ — yalnızca bu kart için.
+     *
+     * Metinler normalde videonun başlığından ve açıklamasından üretiliyor;
+     * kart düzenlemesinde üretilen hâl gösteriliyor ve kullanıcı
+     * değiştirebiliyor. Sınırlar Google'ın (şemada sıkı olan seçildi: 30 /
+     * 90 / 90) ve BURADA uygulanıyor: sınırı aşan metni kabul edip Google'ın
+     * reddetmesini beklemek, kartı "yayınlanamadı" ile düşürmek demekti.
+     *
+     * YALNIZCA YOUTUBE KARTINDA. Instagram boost'u gönderinin kendi metniyle
+     * gidiyor; orada kabul edip yok saymak çalışmayan bir alan göstermek olurdu.
+     */
+    texts: z
+      .object({
+        baslik: z.string().trim().min(1, 'Başlık boş olamaz').max(30, 'Başlık en fazla 30 karakter'),
+        uzunBaslik: z
+          .string()
+          .trim()
+          .min(1, 'Uzun başlık boş olamaz')
+          .max(90, 'Uzun başlık en fazla 90 karakter'),
+        aciklama: z
+          .string()
+          .trim()
+          .min(1, 'Açıklama boş olamaz')
+          .max(90, 'Açıklama en fazla 90 karakter'),
+      })
+      .optional(),
   })
   .strict()
   .superRefine((v, ctx) => {
@@ -603,4 +630,22 @@ export interface YoutubeOtomatikOnizleme {
   } | null;
   /** Yayını engelleyen eksikler — boşsa yayınlanabilir. */
   eksikler: string[];
+}
+
+/**
+ * YOUTUBE KARTININ REKLAM METİNLERİ — yayının üreteceği hâl.
+ *
+ * Kart düzenlemesi bunu gösteriyor. Aynı üreticiden (videonun taze
+ * açıklaması dahil) geliyor: kullanıcı hiçbir şeye dokunmadan yayınlarsa
+ * gördüğü metin yayınlanıyor.
+ */
+export interface YoutubeKartMetinleri {
+  baslik: string;
+  uzunBaslik: string;
+  aciklama: string;
+  /**
+   * Açıklama nereden geldi. `yedek` = videonun açıklaması okunamadı ya da
+   * anlamlı bir satır yoktu; "<marka> kanalında yeni video" kullanılıyor.
+   */
+  aciklamaKaynagi: 'video' | 'yedek';
 }

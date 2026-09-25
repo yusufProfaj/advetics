@@ -159,6 +159,26 @@ export class YoutubeOtomatikService {
     return { businessName: marka, logoAssetId, finalUrl };
   }
 
+  /**
+   * MARKA ADI — logoya ve adrese DOKUNMADAN.
+   *
+   * Kart metin önizlemesi yalnızca marka adına ihtiyaç duyuyor (açıklama
+   * yedeği onu kullanıyor). `yayinDegerleri`ni çağırmak eksik site ya da logo
+   * yüzünden önizlemeyi reddeder, üstelik kanal görselini arşive alırdı —
+   * bir GET'ten beklenmeyecek bir yazma. Karar `yayinDegerleri` ile AYNI:
+   * ön ayardaki ad, yoksa `markaAdiSec`.
+   */
+  async markaAdi(
+    ctx: TenantContext,
+    clientId: string,
+    kanalProfilId: string,
+    gecersiz: Pick<OnAyarGecersizKilma, 'businessName'>,
+  ): Promise<string | null> {
+    if (gecersiz.businessName) return gecersiz.businessName;
+    const k = await this.kaynaklar(ctx, clientId, kanalProfilId);
+    return markaAdiSec(k.workspaceAdi, k.kanal?.ad ?? null).deger;
+  }
+
   /** Videonun metinleri — çağıran marka adını `yayinDegerleri`nden veriyor. */
   metinler(baslik: string | null, aciklama: string | null, marka: string): VideoMetinleri {
     return videoMetinleri(baslik, aciklama, marka);

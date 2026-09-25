@@ -7,12 +7,14 @@ import {
   MEDIA_TYPE_LABELS,
   type MediaType,
   type AutoBoostQueueOverride,
+  type YoutubeKartMetinleri,
   type MetaPresetSettings,
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { butceKipi, butceyiCoz, hedeflemeyiCoz, kartPlatformu } from './kart-ozellestirme';
 import { YoutubeOtomatikService } from './youtube-otomatik.service';
+import type { VideoMetinleri } from './youtube-otomatik';
 import { VARSAYILAN_KONUM } from '../connections/providers/google-demandgen';
 import { YouTubeApiService } from './youtube-api.service';
 import { AssetUploaderService } from '../assets/asset-uploader.service';
@@ -99,37 +101,7 @@ export class AutoBoostLaunchService {
      */
     const scoped: TenantContext = { ...ctx, activeClientId: null };
 
-    const kayit = await this.prisma.withTenant(scoped, async (tx) => {
-      const [row] = await tx.$queryRaw<KuyrukSatiri[]>(Prisma.sql`
-        SELECT q.id::text AS id, q.org_id::text AS org_id, q.client_id::text AS client_id,
-               q.platform::text AS platform, q.status, q.external_id,
-               q.social_profile_id::text AS social_profile_id, q.title,
-               q.media_type,
-               p.id::text AS post_id,
-               sp.linked_ad_account_id::text AS linked_ad_account_id,
-               cl.name AS client_name,
-               pr.id::text AS preset_id, pr.enabled AS preset_enabled,
-               pr.budget_mode, pr.daily_budget_micros, pr.total_budget_micros,
-               pr.duration_days, pr.settings
-        FROM auto_boost_queue_items q
-        JOIN clients cl ON cl.id = q.client_id
-        JOIN social_profiles sp ON sp.id = q.social_profile_id
-        -- GÖNDERİ KAYDI: Meta yolunda organic_post_id zorunlu ve gönderi
-        -- süpürmeden geliyor. YouTube'da karşılığı yok (LEFT JOIN).
-        -- (SQL yorumunda ters tırnak YASAK — sablonu ortasindan kapatiyor.)
-        LEFT JOIN organic_posts p
-          ON p.social_profile_id = q.social_profile_id AND p.external_id = q.external_id
-        LEFT JOIN LATERAL (
-          SELECT * FROM auto_boost_presets ap
-          WHERE ap.client_id = q.client_id AND ap.platform = q.platform
-            AND (ap.social_profile_id = q.social_profile_id OR ap.social_profile_id IS NULL)
-          ORDER BY ap.social_profile_id NULLS LAST
-          LIMIT 1
-        ) pr ON true
-        WHERE q.id = ${queueItemId}::uuid
-      `);
-      return row ?? null;
-    });
+    const kayit = await this.kartiOku(scoped, queueItemId);
 
     if (!kayit) throw new NotFoundException('Kart bulunamadı');
 
@@ -181,7 +153,18 @@ export class AutoBoostLaunchService {
       settings: kayit.settings,
     };
 
-    if (kayit.platform === 'google') return this.launchGoogle(ctx, scoped, ozellestirilmis);
+    /*
+     * METİN ÖZELLEŞTİRMESİ YALNIZCA YOUTUBE'DA. Instagram boost'u gönderinin
+     * kendi metniyle gidiyor; kabul edip yok saymak, kullanıcının düzeltmesinin
+     * hiçbir yere gitmemesi demekti.
+     */
+    if (override?.texts && kayit.platform !== 'google') {
+      throw new BadRequestException('Reklam metni düzenlemesi yalnızca YouTube kartlarında geçerli.');
+    }
+
+    if (kayit.platform === 'google') {
+      return this.launchGoogle(ctx, scoped, ozellestirilmis, override?.texts);
+    }
 
     return this.launchMeta(ctx, scoped, ozellestirilmis, override);
   }
@@ -336,6 +319,105 @@ export class AutoBoostLaunchService {
   }
 
   /**
+   * KARTI VE ÖN AYARINI OKUR — kararın ve metin önizlemesinin TEK sorgusu.
+   *
+   * Metin ucu kartı ayrı bir sorguyla okusaydı, ikisi bir gün farklı ön
+   * ayarı seçerdi (kanal ön ayarı mı workspace ön ayarı mı) ve kullanıcı
+   * düzenlerken gördüğü marka adıyla yayınlanan marka adı ayrışırdı.
+   */
+  private async kartiOku(scoped: TenantContext, queueItemId: string): Promise<KuyrukSatiri | null> {
+    return this.prisma.withTenant(scoped, async (tx) => {
+      const [row] = await tx.$queryRaw<KuyrukSatiri[]>(Prisma.sql`
+        SELECT q.id::text AS id, q.org_id::text AS org_id, q.client_id::text AS client_id,
+               q.platform::text AS platform, q.status, q.external_id,
+               q.social_profile_id::text AS social_profile_id, q.title,
+               q.media_type,
+               p.id::text AS post_id,
+               sp.linked_ad_account_id::text AS linked_ad_account_id,
+               cl.name AS client_name,
+               pr.id::text AS preset_id, pr.enabled AS preset_enabled,
+               pr.budget_mode, pr.daily_budget_micros, pr.total_budget_micros,
+               pr.duration_days, pr.settings
+        FROM auto_boost_queue_items q
+        JOIN clients cl ON cl.id = q.client_id
+        JOIN social_profiles sp ON sp.id = q.social_profile_id
+        -- GÖNDERİ KAYDI: Meta yolunda organic_post_id zorunlu ve gönderi
+        -- süpürmeden geliyor. YouTube'da karşılığı yok (LEFT JOIN).
+        -- (SQL yorumunda ters tırnak YASAK — sablonu ortasindan kapatiyor.)
+        LEFT JOIN organic_posts p
+          ON p.social_profile_id = q.social_profile_id AND p.external_id = q.external_id
+        LEFT JOIN LATERAL (
+          SELECT * FROM auto_boost_presets ap
+          WHERE ap.client_id = q.client_id AND ap.platform = q.platform
+            AND (ap.social_profile_id = q.social_profile_id OR ap.social_profile_id IS NULL)
+          ORDER BY ap.social_profile_id NULLS LAST
+          LIMIT 1
+        ) pr ON true
+        WHERE q.id = ${queueItemId}::uuid
+      `);
+      return row ?? null;
+    });
+  }
+
+  /**
+   * YOUTUBE KARTININ METİNLERİ — yayının üreteceği hâl, hiçbir şey yazmadan.
+   *
+   * Kart düzenlemesi bunu gösteriyor. Üretici yayınla AYNI (`videodanMetin`):
+   * kullanıcı alanlara dokunmadan yayınlarsa gördüğü metin gidiyor.
+   * Marka adı logoyu ARŞİVE ALMADAN çözülüyor (`markaAdi`); önizleme bir GET.
+   */
+  async youtubeMetinleri(ctx: TenantContext, queueItemId: string): Promise<YoutubeKartMetinleri> {
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+    const kayit = await this.kartiOku(scoped, queueItemId);
+    if (!kayit) throw new NotFoundException('Kart bulunamadı');
+    if (kayit.platform !== 'google') {
+      throw new BadRequestException('Reklam metni düzenlemesi yalnızca YouTube kartlarında var.');
+    }
+    const ayar = autoBoostPresetSettingsSchema.safeParse(kayit.settings);
+    const g = ayar.success && ayar.data.platform === 'google' ? ayar.data : null;
+    const marka = await this.youtubeOtomatik.markaAdi(scoped, kayit.client_id, kayit.social_profile_id, {
+      businessName: g?.businessName,
+    });
+    if (!marka) {
+      throw new BadRequestException('Marka adı üretilemedi: workspace adını kontrol et.');
+    }
+    const { metin, aciklamaKaynagi } = await this.videodanMetin(kayit, marka);
+    return {
+      baslik: metin.headlines[0]!,
+      uzunBaslik: metin.longHeadlines[0]!,
+      aciklama: metin.descriptions[0]!,
+      aciklamaKaynagi,
+    };
+  }
+
+  /**
+   * VİDEONUN METNİ — açıklama YouTube'dan TAZE okunuyor.
+   *
+   * Saklanan bir kopya, kullanıcı açıklamayı YouTube'da düzelttikten sonra
+   * eski hâliyle reklama girerdi. OKUNAMAZSA DURMUYOR: açıklamanın yedeği var
+   * ve YouTube API'sinin geçici bir hatası yüzünden reklamı engellemek,
+   * açıklamasız bir reklamdan pahalı. Sebep log'a yazılıyor ve kaynağı
+   * `yedek` olarak dönüyor — ekran bunu söylüyor.
+   */
+  private async videodanMetin(
+    kayit: KuyrukSatiri,
+    marka: string,
+  ): Promise<{ metin: VideoMetinleri; aciklamaKaynagi: 'video' | 'yedek' }> {
+    const video = await this.youtube.getVideo(kayit.external_id);
+    if (video.durum !== 'bulundu') {
+      this.logger.warn(
+        `YouTube açıklaması okunamadı (${kayit.external_id}): ` +
+          (video.durum === 'hata' ? video.message : 'video bulunamadı') +
+          ' — açıklama yedeği kullanılıyor',
+      );
+    }
+    const aciklama = video.durum === 'bulundu' ? (video.video.description ?? null) : null;
+    const metin = this.youtubeOtomatik.metinler(kayit.title, aciklama, marka);
+    const yedek = this.youtubeOtomatik.metinler(kayit.title, null, marka).descriptions[0];
+    return { metin, aciklamaKaynagi: metin.descriptions[0] === yedek ? 'yedek' : 'video' };
+  }
+
+  /**
    * YouTube kartını yayına alır — Demand Gen.
    *
    * META YOLUNDAN ÜÇ YAPISAL FARK ve üçü de platformun gerçeği:
@@ -357,6 +439,8 @@ export class AutoBoostLaunchService {
     ctx: TenantContext,
     scoped: TenantContext,
     kayit: KuyrukSatiri,
+    /** Kart düzenlemesinde yazılmış metin — varsa üretilenin yerine. */
+    metinOzel?: { baslik: string; uzunBaslik: string; aciklama: string },
   ): Promise<{ status: string; message: string }> {
     if (!kayit.preset_id || !kayit.preset_enabled) {
       // YAPILACAK İŞ DE YAZILI. Bu cümle bir süre yalnızca durumu bildiriyordu
@@ -432,28 +516,18 @@ export class AutoBoostLaunchService {
     );
 
     /*
-     * METİNLER VİDEONUN KENDİSİNDEN. Önceden ön ayardaki sabit metin her
-     * videoda aynı gidiyordu. Açıklama yayın anında TAZE okunuyor: saklanan
-     * bir kopya, kullanıcı YouTube'da açıklamayı düzelttikten sonra eski
-     * hâliyle reklama girerdi.
-     *
-     * OKUNAMAZSA YAYIN DURMUYOR: açıklamanın yedeği var (`videoMetinleri`)
-     * ve YouTube API'sinin geçici bir hatası yüzünden reklamı engellemek,
-     * açıklamasız bir reklamdan pahalı. Sebep log'a yazılıyor.
+     * METİNLER: KARTTA YAZILDIYSA O, YOKSA VİDEODAN. Önceden ön ayardaki sabit
+     * metin her videoda aynı gidiyordu. Kullanıcının kartta düzelttiği metin
+     * üretilenin yerine geçiyor ve YouTube'a hiç sorulmuyor: düzenlenmiş bir
+     * metin için açıklama çekmek boşa bir çağrı.
      */
-    const video = await this.youtube.getVideo(kayit.external_id);
-    if (video.durum !== 'bulundu') {
-      this.logger.warn(
-        `YouTube açıklaması okunamadı (${kayit.external_id}): ` +
-          (video.durum === 'hata' ? video.message : 'video bulunamadı') +
-          ' — açıklama yedeği kullanılıyor',
-      );
-    }
-    const metin = this.youtubeOtomatik.metinler(
-      kayit.title,
-      video.durum === 'bulundu' ? (video.video.description ?? null) : null,
-      degerler.businessName,
-    );
+    const metin: VideoMetinleri = metinOzel
+      ? {
+          headlines: [metinOzel.baslik],
+          longHeadlines: [metinOzel.uzunBaslik],
+          descriptions: [metinOzel.aciklama],
+        }
+      : (await this.videodanMetin(kayit, degerler.businessName)).metin;
 
     // --- Kartı KİLİTLE (Meta yoluyla aynı yarış koruması)
     const kilit = await this.prisma.withTenant(scoped, (tx) =>

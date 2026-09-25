@@ -197,7 +197,12 @@ describe('KRİTİK: yayın yolu ön ayarın SABİT metnini değil videoyu kullan
     expect(dilim).toContain('yaslar: g.ageRanges,');
   });
 
-  it('açıklama yayın anında TAZE okunuyor', () => {
-    expect(dilim).toContain('this.youtube.getVideo(kayit.external_id)');
+  it('açıklama yayın anında TAZE okunuyor — kart önizlemesiyle ORTAK metottan', () => {
+    expect(dilim).toContain('this.videodanMetin(kayit, degerler.businessName)');
+    const i2 = kaynak.indexOf('private async videodanMetin(');
+    expect(i2).toBeGreaterThan(-1);
+    expect(kaynak.slice(i2, kaynak.indexOf('\n  }\n', i2))).toContain(
+      'this.youtube.getVideo(kayit.external_id)',
+    );
   });
 });

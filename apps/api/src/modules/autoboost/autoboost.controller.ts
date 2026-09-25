@@ -11,7 +11,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { z } from 'zod';
-import type { TenantContext, YoutubeOtomatikOnizleme } from '@advetics/shared';
+import type { TenantContext, YoutubeKartMetinleri, YoutubeOtomatikOnizleme } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import type { AutoBoostQueueList } from '@advetics/shared';
@@ -134,6 +134,22 @@ export class AutoBoostController {
     @Query('clientId', ParseUUIDPipe) clientId: string,
   ): Promise<AutoBoostPresetRecord[]> {
     return this.presets.list(ctx, clientId);
+  }
+
+  /**
+   * YOUTUBE KARTININ REKLAM METİNLERİ — kart düzenlemesi bunu gösteriyor.
+   *
+   * YAYINLA AYNI ÜRETİCİ: dokunulmadan yayınlanırsa gördüğü metin gidiyor.
+   * Hiçbir şey yazmıyor; videonun açıklaması YouTube'dan taze okunuyor
+   * (tek bir API birimi).
+   */
+  @Get('queue/:id/youtube-metinleri')
+  @RequirePermissions('boost.read')
+  youtubeMetinleri(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<YoutubeKartMetinleri> {
+    return this.launch.youtubeMetinleri(ctx, id);
   }
 
   /**

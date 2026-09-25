@@ -302,13 +302,14 @@ describe('yayın yolu özelleştirmeyi uyguluyor', () => {
      * ve kullanıcının girdiği tutar SESSİZCE yok sayılırdı.
      */
     const butce = KAYNAK.indexOf('butceyiCoz(');
-    const dal = KAYNAK.indexOf("if (kayit.platform === 'google') return this.launchGoogle(");
+    const dal = KAYNAK.indexOf('return this.launchGoogle(ctx, scoped, ozellestirilmis');
     expect(butce).toBeGreaterThan(-1);
     expect(dal).toBeGreaterThan(butce);
   });
 
   it('KRİTİK: iki dal da ÖZELLEŞTİRİLMİŞ satırı alıyor', () => {
-    expect(KAYNAK).toContain('this.launchGoogle(ctx, scoped, ozellestirilmis)');
+    // Google dalına kartta düzenlenen METİN de gidiyor (aşama 3).
+    expect(KAYNAK).toContain('this.launchGoogle(ctx, scoped, ozellestirilmis, override?.texts)');
     expect(KAYNAK).toContain('this.launchMeta(ctx, scoped, ozellestirilmis, override)');
   });
 

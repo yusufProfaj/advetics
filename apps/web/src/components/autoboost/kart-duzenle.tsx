@@ -1,13 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   autoBoostQueueOverrideSchema,
   hedeflemeLokasyonu,
+  hedeflemeOzeti,
   type AutoBoostQueueItemRecord,
   type AutoBoostQueueOverride,
   type GeoLocationOption,
+  type YoutubeKartMetinleri,
 } from '@advetics/shared';
+import { ApiRequestError, apiFetch } from '@/lib/api';
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
 
 /**
@@ -60,6 +63,20 @@ export interface KartDuzenleDurumu {
   hata: string | null;
   /** Doğrulanmış override; geçersizse `null` ve `hata` doluyor. */
   topla: () => AutoBoostQueueOverride | null;
+  /** YouTube kartı mı — metin alanları yalnızca orada. */
+  youtube: boolean;
+  kayitId: string;
+  /** Ön ayarın hedefleme özeti — YouTube'da kartta düzenlenmiyor, gösteriliyor. */
+  onAyarOzeti: Array<{ etiket: string; deger: string }>;
+  /** YouTube reklam metni; `null` = henüz yüklenmedi (üretilen hâl kullanılır). */
+  ytMetin: YoutubeMetni | null;
+  setYtMetin: (v: YoutubeMetni | null) => void;
+}
+
+export interface YoutubeMetni {
+  baslik: string;
+  uzunBaslik: string;
+  aciklama: string;
 }
 
 /**
@@ -105,6 +122,7 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
     metaAyar?.genders ?? 'all',
   );
   const [hata, setHata] = useState<string | null>(null);
+  const [ytMetin, setYtMetin] = useState<YoutubeMetni | null>(null);
 
   const gunlukZorunlu = kayit.platform === 'google';
 
@@ -122,6 +140,12 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
             },
           }
         : {}),
+      /*
+       * METİN YALNIZCA YÜKLENDİYSE gidiyor. Yüklenmediyse (kullanıcı metin
+       * alanlarını hiç görmedi) sunucu videodan üretiyor — yani gösterilmemiş
+       * bir metni "düzenlenmiş" diye göndermiyoruz.
+       */
+      ...(kayit.platform === 'google' && ytMetin ? { texts: ytMetin } : {}),
     };
 
     /*
@@ -161,6 +185,11 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
     onAyarVar: preset !== null,
     hata,
     topla,
+    youtube: kayit.platform === 'google',
+    kayitId: kayit.id,
+    onAyarOzeti: preset ? hedeflemeOzeti(preset.settings) : [],
+    ytMetin,
+    setYtMetin,
   };
 }
 
@@ -179,11 +208,16 @@ export function HedeflemeAlanlari({
   clientId: string;
 }) {
   if (!d.metaAyar) {
-    /* HEDEFLEME YALNIZCA INSTAGRAM'DA — sebebi yazılı, alan gizli. */
+    /*
+     * YOUTUBE KARTINDA HEDEF KİTLE DEĞİL METİN DÜZENLENİYOR. Konum ve yaş
+     * ön ayardan geliyor ve burada GÖSTERİLİYOR; kart bazında hedefleme
+     * Google tarafında yazılmadı. Kullanıcının asıl düzeltmek istediği şey
+     * reklamın ne dediği.
+     */
+    if (d.youtube) return <YoutubeMetinAlanlari d={d} />;
     return (
       <p className="rounded-lg border border-line bg-surface-muted px-3 py-2 text-[11px] text-ink-muted">
-        Hedef kitle ve şehir seçimi Instagram kartlarında açık. YouTube tarafında
-        hedefleme kampanya seviyesinde ve bu ekrandan yönetilmiyor.
+        Bu kart için ön ayar yok; önce Boost ön ayarı tanımla.
       </p>
     );
   }
@@ -370,4 +404,143 @@ function hesaplananToplam(
   if (!Number.isFinite(n) || n <= 0 || !Number.isFinite(gun) || gun <= 0) return null;
   const toplam = kip === 'daily' ? n * gun : n;
   return toplam.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+}
+
+/** Google'ın sınırları — şemadakiyle aynı; ayrışırsa kayıt sunucuda düşer. */
+const SINIR = { baslik: 30, uzunBaslik: 90, aciklama: 90 } as const;
+
+/**
+ * ═══ YOUTUBE REKLAM METNİ — KARTTA DÜZENLENİYOR ═══
+ *
+ * Alanlar YAYININ ÜRETECEĞİ metinle açılıyor (aynı üretici, videonun taze
+ * açıklaması dahil): kullanıcı hiçbir şeye dokunmadan "Düzenlenmiş hâlini
+ * yayınla" derse gördüğü metin gidiyor.
+ *
+ * SINIR KARAKTER SAYACIYLA ve alan sınırı aşamıyor. Google'ın reddini
+ * beklemek, kartın "yayınlanamadı" ile düşmesi demekti.
+ *
+ * YÜKLEME DÖRT HÂLLİ: yükleniyor, hata (sunucunun cümlesi), dolu, yeniden
+ * üret. Hata yutulursa alanlar boş kalır ve kullanıcı boş bir reklamı
+ * yayınlayacağını sanır.
+ */
+export function YoutubeMetinAlanlari({ d }: { d: KartDuzenleDurumu }) {
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+  const [kaynak, setKaynak] = useState<YoutubeKartMetinleri['aciklamaKaynagi'] | null>(null);
+  const { kayitId, setYtMetin } = d;
+
+  async function uret(): Promise<void> {
+    setYukleniyor(true);
+    setHata(null);
+    try {
+      const r = await apiFetch<YoutubeKartMetinleri>(`/autoboost/queue/${kayitId}/youtube-metinleri`);
+      setYtMetin({ baslik: r.baslik, uzunBaslik: r.uzunBaslik, aciklama: r.aciklama });
+      setKaynak(r.aciklamaKaynagi);
+    } catch (err) {
+      setHata(err instanceof ApiRequestError ? err.message : 'Reklam metni yüklenemedi.');
+    } finally {
+      setYukleniyor(false);
+    }
+  }
+
+  useEffect(() => {
+    if (d.ytMetin === null) void uret();
+    // Yalnızca ilk açılışta: kullanıcının yazdığının üzerine yazılmamalı.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const m = d.ytMetin;
+  function alan(anahtar: keyof YoutubeMetni, deger: string): void {
+    if (!m) return;
+    setYtMetin({ ...m, [anahtar]: deger });
+  }
+
+  return (
+    <fieldset
+      aria-label="Reklam metni"
+      className="space-y-2.5 rounded-xl border border-line bg-surface-sunken/60 p-3"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-ink">Reklam metni</p>
+        <button
+          type="button"
+          onClick={() => void uret()}
+          disabled={yukleniyor}
+          className="text-[11px] font-medium text-brand-strong transition hover:underline disabled:opacity-50"
+        >
+          {yukleniyor ? 'Hazırlanıyor…' : 'Videodan yeniden üret'}
+        </button>
+      </div>
+
+      {hata && (
+        <p role="alert" className="text-[11px] text-danger">
+          {hata} Metin alanları açılamadı; yayınlarsan metin videodan üretilir.
+        </p>
+      )}
+      {!m && !hata && <p className="text-[11px] text-ink-muted">Metin hazırlanıyor…</p>}
+
+      {m && (
+        <div className="space-y-2">
+          <MetinAlani etiket="Başlık" deger={m.baslik} sinir={SINIR.baslik} onChange={(v) => alan('baslik', v)} />
+          <MetinAlani
+            etiket="Uzun başlık"
+            deger={m.uzunBaslik}
+            sinir={SINIR.uzunBaslik}
+            onChange={(v) => alan('uzunBaslik', v)}
+          />
+          <MetinAlani
+            etiket="Açıklama"
+            deger={m.aciklama}
+            sinir={SINIR.aciklama}
+            onChange={(v) => alan('aciklama', v)}
+          />
+          {kaynak === 'yedek' && (
+            <p className="text-[11px] text-warn-strong">
+              Videonun açıklamasından kullanılabilir bir satır çıkmadı; açıklamayı sen yaz.
+            </p>
+          )}
+        </div>
+      )}
+
+      {d.onAyarOzeti.length > 0 && (
+        <p className="text-[11px] text-ink-muted">
+          Hedef kitle ön ayardan:{' '}
+          {d.onAyarOzeti.map((o) => `${o.etiket} ${o.deger}`).join(' · ')}
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
+function MetinAlani({
+  etiket,
+  deger,
+  sinir,
+  onChange,
+}: {
+  etiket: string;
+  deger: string;
+  sinir: number;
+  onChange: (v: string) => void;
+}) {
+  const bos = deger.trim() === '';
+  return (
+    <label className="block">
+      <span className="flex items-baseline justify-between text-[11px]">
+        <span className="font-medium text-ink">{etiket}</span>
+        {/* SAYAÇ: sınıra yaklaştığını görmek, kırpılmış bir metinden iyi. */}
+        <span className={deger.length >= sinir ? 'text-warn-strong' : 'text-ink-muted'}>
+          {deger.length}/{sinir}
+        </span>
+      </span>
+      <input
+        value={deger}
+        maxLength={sinir}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={bos ? 'true' : undefined}
+        className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand"
+      />
+      {bos && <span className="mt-0.5 block text-[11px] text-danger">{etiket} boş olamaz.</span>}
+    </label>
+  );
 }
