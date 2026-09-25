@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AutoBoostPlatform } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
+import { YOUTUBE_HESAP_KOSULU, youtubeHesabiEngeli, youtubeHesabiSec } from './youtube-hesabi';
 import { CANLI_BOOST_SQL } from '../boosts/canli-boost';
 import {
   abonelikSagligi,
@@ -124,6 +125,9 @@ export class AutoBoostReadService {
                kendi.status AS boost_durumu,
                sp.name AS profile_name,
                sp.linked_ad_account_id::text AS linked_ad_account_id,
+               la.platform::text AS linked_platform,
+               la.client_id::text AS linked_client_id,
+               gh.idler AS google_hesaplari,
                p.id::text AS preset_id, p.enabled AS preset_enabled,
                p.budget_mode, p.daily_budget_micros, p.total_budget_micros,
                p.duration_days, p.settings,
@@ -136,6 +140,17 @@ export class AutoBoostReadService {
         -- kullanıcısı KENDİ kartlarının TAMAMINI kaybederdi — kartlar
         -- duruyor, sadece süsleme alanı görünmüyor.
         LEFT JOIN social_profiles sp ON sp.id = q.social_profile_id
+        -- KANALA BAĞLI HESABIN PLATFORMU VE SAHİBİ: YouTube kartında bağlı
+        -- hesap Meta ya da başka workspace'inse yok sayılıyor. Karar
+        -- youtubeHesabiSec içinde; burada yalnızca girdileri okunuyor.
+        LEFT JOIN ad_accounts la ON la.id = sp.linked_ad_account_id
+        -- WORKSPACE'İN GOOGLE ADS HESAPLARI — tek hesap varsa kendiliğinden
+        -- kullanılıyor. Koşul çözümleyiciyle AYNI sabitten.
+        LEFT JOIN LATERAL (
+          SELECT array_agg(aa.id::text ORDER BY aa.id) AS idler
+          FROM ad_accounts aa
+          WHERE aa.client_id = q.client_id AND ${Prisma.raw(YOUTUBE_HESAP_KOSULU)}
+        ) gh ON true
         -- ÖN AYAR AYNI ÇÖZÜMLEME SIRASIYLA: profil bazlı varsayılanı eziyor.
         -- Sıra kuyruk beslemesindekiyle AYNI olmak zorunda; ayrışırsa kartta
         -- gösterilen ayar ile yayınlanan ayar farklı olur.
@@ -472,12 +487,27 @@ export class AutoBoostReadService {
      * Google Ads hesabı". Tek bir genel cümle, kullanıcıyı yanlış ekrana
      * yönlendirirdi.
      */
+    if (r.platform !== 'meta') {
+      /*
+       * YOUTUBE: yayınla AYNI karar (`youtubeHesabiSec`). Önceden yalnızca
+       * "bağ var mı" soruluyordu; kanalda eski bir META bağı durduğunda kart
+       * "hazır" görünüyor, yayın reddediyordu ve çaresi hiçbir ekranda yoktu.
+       */
+      return youtubeHesabiEngeli(
+        youtubeHesabiSec(
+          r.linked_ad_account_id && r.linked_platform
+            ? { id: r.linked_ad_account_id, platform: r.linked_platform, clientId: r.linked_client_id }
+            : null,
+          r.client_id,
+          r.google_hesaplari ?? [],
+        ),
+      );
+    }
     if (!r.linked_ad_account_id) {
-      return r.platform === 'meta'
-        ? 'Bu sayfaya bağlı bir reklam hesabı yok. Workspace’ler ekranından ' +
-            '“Boost hesabı” seç — reklam o hesaptan faturalandırılıyor.'
-        : 'Bu kanala bağlı bir Google Ads hesabı yok. Workspace’ler ekranından ' +
-            'reklam hesabı seç — YouTube reklamı oradan yayınlanıyor.';
+      return (
+        'Bu sayfaya bağlı bir reklam hesabı yok. Workspace’ler ekranından ' +
+        '“Boost hesabı” seç — reklam o hesaptan faturalandırılıyor.'
+      );
     }
 
     return null;
@@ -521,6 +551,9 @@ interface QueueRow {
   boost_durumu: string | null;
   profile_name: string | null;
   linked_ad_account_id: string | null;
+  linked_platform: string | null;
+  linked_client_id: string | null;
+  google_hesaplari: string[] | null;
   preset_id: string | null;
   preset_enabled: boolean | null;
   budget_mode: string | null;

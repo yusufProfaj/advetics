@@ -172,6 +172,15 @@ export function ClientAssets({
     () => adAccounts.filter((a) => a.platform === 'meta'),
     [adAccounts],
   );
+  /*
+   * YOUTUBE KANALININ HESABI GOOGLE ADS. Seçici bir süre YouTube satırında
+   * hiç çizilmiyordu ve sunucu da Google hesabını reddediyordu; kart "doğru
+   * hesabı seç" diyordu ve bu ekranda seçilecek bir şey yoktu.
+   */
+  const googleAccounts = useMemo(
+    () => adAccounts.filter((a) => a.platform === 'google'),
+    [adAccounts],
+  );
 
   const watched = adAccounts.filter((a) => a.syncEnabled).length;
 
@@ -258,32 +267,57 @@ export function ClientAssets({
                 dururken listeyi kırıyordu.
               */}
               {canManage &&
-                p.profileType !== 'youtube_channel' &&
-                (metaAccounts.length === 0 ? (
-                  <span
-                    title="Bu workspace’e atanmış Meta reklam hesabı yok"
-                    className="shrink-0 text-[10px] text-warn-strong"
-                  >
-                    boost hesabı yok
-                  </span>
-                ) : (
-                  <select
-                    value={p.linkedAdAccountId ?? ''}
-                    onChange={(e) => void linkAccount(p, e.target.value || null)}
-                    disabled={busy !== null || isPending}
-                    title="Boost faturalandırma hesabı"
-                    className={`w-24 shrink-0 rounded border border-line bg-surface px-1 py-0.5 text-[10px] outline-none focus:border-brand disabled:opacity-40 ${
-                      p.linkedAdAccountId ? 'text-ink' : 'text-warn-strong'
-                    }`}
-                  >
-                    <option value="">boost yok</option>
-                    {metaAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
+                (() => {
+                  const youtube = p.profileType === 'youtube_channel';
+                  const secenekler = youtube ? googleAccounts : metaAccounts;
+                  if (secenekler.length === 0) {
+                    return (
+                      <span
+                        title={
+                          youtube
+                            ? 'Bu workspace’e atanmış Google Ads hesabı yok'
+                            : 'Bu workspace’e atanmış Meta reklam hesabı yok'
+                        }
+                        className="shrink-0 text-[10px] text-warn-strong"
+                      >
+                        {youtube ? 'Google hesabı yok' : 'boost hesabı yok'}
+                      </span>
+                    );
+                  }
+                  /*
+                   * BAĞLI HESAP BU LİSTEDE YOKSA (eski bir Meta bağı) seçim
+                   * BOŞ gösteriliyor: listede olmayan bir kimliği seçili
+                   * göstermek, tarayıcının ilk seçeneği göstermesi ve
+                   * kullanıcının doğru hesabın bağlı olduğunu sanması demekti.
+                   */
+                  const secili = secenekler.some((a) => a.id === p.linkedAdAccountId)
+                    ? (p.linkedAdAccountId ?? '')
+                    : '';
+                  return (
+                    <select
+                      value={secili}
+                      onChange={(e) => void linkAccount(p, e.target.value || null)}
+                      disabled={busy !== null || isPending}
+                      title={youtube ? 'YouTube reklamının Google Ads hesabı' : 'Boost faturalandırma hesabı'}
+                      className={`w-24 shrink-0 rounded border border-line bg-surface px-1 py-0.5 text-[10px] outline-none focus:border-brand disabled:opacity-40 ${
+                        secili ? 'text-ink' : 'text-warn-strong'
+                      }`}
+                    >
+                      <option value="">
+                        {youtube
+                          ? secenekler.length === 1
+                            ? 'otomatik'
+                            : 'hesap seç'
+                          : 'boost yok'}
                       </option>
-                    ))}
-                  </select>
-                ))}
+                      {secenekler.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                })()}
 
               {!p.syncEnabled && (
                 <span className="shrink-0 text-[10px] text-warn-strong">çekilmiyor</span>

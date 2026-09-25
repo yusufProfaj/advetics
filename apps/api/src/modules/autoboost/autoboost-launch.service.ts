@@ -14,6 +14,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { butceKipi, butceyiCoz, hedeflemeyiCoz, kartPlatformu } from './kart-ozellestirme';
 import { YoutubeOtomatikService } from './youtube-otomatik.service';
+import { youtubeHesabiEngeli } from './youtube-hesabi';
 import type { VideoMetinleri } from './youtube-otomatik';
 import { VARSAYILAN_KONUM } from '../connections/providers/google-demandgen';
 import { YouTubeApiService } from './youtube-api.service';
@@ -450,13 +451,6 @@ export class AutoBoostLaunchService {
         `Bu workspace için YouTube otomatik boost ön ayarı yok ya da kapalı. ${ON_AYAR_YERI} tanımla ya da aç.`,
       );
     }
-    if (!kayit.linked_ad_account_id) {
-      throw new BadRequestException(
-        'Bu kanala bağlı bir Google reklam hesabı yok. Workspace’ler ekranından ' +
-          'reklam hesabı seç — reklam o hesaptan faturalandırılıyor.',
-      );
-    }
-
     const ayar = autoBoostPresetSettingsSchema.safeParse(kayit.settings);
     if (!ayar.success || ayar.data.platform !== 'google') {
       throw new BadRequestException(ON_AYAR_BOZUK);
@@ -476,29 +470,37 @@ export class AutoBoostLaunchService {
     }
 
     /*
-     * REKLAM HESABI GOOGLE OLMAK ZORUNDA.
+     * ═══ HANGİ GOOGLE ADS HESABI — kart uyarısıyla AYNI karar ═══
      *
-     * `linked_ad_account_id` bir Meta hesabını gösteriyorsa istek Google'a
-     * Meta hesap kimliğiyle gider ve "hesap bulunamadı" ile döner — sebebi
-     * anlaşılmayan bir hata. Burada kontrol etmek, o hatayı okunabilir bir
-     * cümleye çeviriyor.
+     * Kanala bağlı hesap Meta'ysa ya da hiç yoksa ve workspace'te TEK Google
+     * Ads hesabı varsa o kullanılıyor ve kanala YAZILIYOR (bir sonraki
+     * yayında soru yok). Hiç yoksa ya da birden çoksa tahmin yok; cümle
+     * düzeltmenin yerini söylüyor. Önceki hâl bir Meta bağında "doğru hesabı
+     * seç" diyordu ve o seçim hiçbir ekranda yoktu.
      */
+    const karar = await this.youtubeOtomatik.reklamHesabi(
+      scoped,
+      kayit.client_id,
+      kayit.social_profile_id,
+    );
+    const engel = youtubeHesabiEngeli(karar);
+    if (engel || (karar.durum !== 'kanal' && karar.durum !== 'tek-hesap')) {
+      throw new BadRequestException(engel ?? 'Google Ads hesabı çözümlenemedi.');
+    }
+    const reklamHesabiId = karar.hesapId;
+    if (karar.durum === 'tek-hesap') {
+      await this.youtubeOtomatik.kanalaBagla(scoped, kayit.social_profile_id, reklamHesabiId);
+    }
+
     const [hesap] = await this.prisma.withTenant(scoped, (tx) =>
       tx.$queryRaw<Array<{ platform: string; external_id: string; connection_id: string }>>(
         Prisma.sql`
           SELECT platform::text AS platform, external_id, connection_id::text AS connection_id
-          FROM ad_accounts WHERE id = ${kayit.linked_ad_account_id}::uuid
+          FROM ad_accounts WHERE id = ${reklamHesabiId}::uuid
         `,
       ),
     );
     if (!hesap) throw new BadRequestException('Reklam hesabı bulunamadı.');
-    if (hesap.platform !== 'google') {
-      throw new BadRequestException(
-        'Bu kanala bağlı hesap bir Google Ads hesabı değil. YouTube reklamı ' +
-          'Google Ads hesabından yayınlanıyor; Workspace’ler ekranından doğru ' +
-          'hesabı seç.',
-      );
-    }
 
     /*
      * ═══ MARKA, LOGO VE ADRES OTOMATİK — KİLİTTEN ÖNCE ═══
@@ -554,7 +556,7 @@ export class AutoBoostLaunchService {
        */
       const logoResource = await this.uploader.ensureExternalRef(scoped, {
         assetId: degerler.logoAssetId,
-        adAccountId: kayit.linked_ad_account_id,
+        adAccountId: reklamHesabiId,
         label: `${kayit.client_name} logo`,
         fetchCtx,
         platform: 'google',

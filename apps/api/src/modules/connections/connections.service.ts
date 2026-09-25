@@ -16,6 +16,7 @@ import type {
   SavedAudienceList,
   SocialProfileSummary,
   TenantContext,
+  SocialProfileTypeValue,
 } from '@advetics/shared';
 // DEĞER import'u AYRI: `PLATFORMS` bir dizi, yukarıdaki blok `import type`
 // ve oraya değer koymak TS1361 veriyor (bu depoda bir kez düşüldü).
@@ -115,6 +116,29 @@ const BAGLANTI_ALANLARI = {
 type BaglantiSatiri = Prisma.PlatformConnectionGetPayload<{
   select: typeof BAGLANTI_ALANLARI;
 }>;
+
+/**
+ * PROFİL TÜRÜ → REKLAMIN YAYINLANDIĞI PLATFORM.
+ *
+ * `Record` BİLEREK: yeni bir profil türü eklendiğinde derleme burada kırılıyor.
+ * İki yollu bir üçlü ifade ("youtube ise google, değilse meta") üçüncü türü
+ * sessizce Meta'ya düşürürdü — LinkedIn eklenirken bu depoda tam olarak böyle
+ * kaybolan listeler bulundu.
+ */
+const PROFIL_REKLAM_PLATFORMU: Record<SocialProfileTypeValue, { platform: string; hata: string }> = {
+  facebook_page: {
+    platform: 'meta',
+    hata: 'Boost yalnızca Meta’da çalışıyor — faturalandırma hesabı bir Meta reklam hesabı olmalı.',
+  },
+  instagram_business: {
+    platform: 'meta',
+    hata: 'Boost yalnızca Meta’da çalışıyor — faturalandırma hesabı bir Meta reklam hesabı olmalı.',
+  },
+  youtube_channel: {
+    platform: 'google',
+    hata: 'YouTube reklamı Google Ads hesabından yayınlanıyor — kanala bir Google Ads hesabı bağla.',
+  },
+};
 
 /**
  * OAUTH DÖNÜŞ ADRESİ — sorgu dizesi VARSA `&` ile eklenir.
@@ -1863,10 +1887,17 @@ export class ConnectionsService {
         const account = await tx.adAccount.findUnique({ where: { id: adAccountId } });
         if (!account) throw new NotFoundException('Reklam hesabı bulunamadı');
 
-        if (account.platform !== 'meta') {
+        /*
+         * PROFİL TÜRÜ HESABIN PLATFORMUNU BELİRLİYOR. Sayfa ve Instagram
+         * boost'u Meta'dan, YouTube videosu Google Ads'ten yayınlanıyor.
+         * Kapı bir süre YALNIZCA Meta kabul ediyordu: YouTube kanalına Google
+         * hesabı hiçbir ekrandan bağlanamıyordu ve kart "doğru hesabı seç"
+         * diyordu — seçilemeyen bir şeyi.
+         */
+        const beklenen = PROFIL_REKLAM_PLATFORMU[before.profileType as SocialProfileTypeValue];
+        if (!beklenen || account.platform !== beklenen.platform) {
           throw new BadRequestException(
-            'Boost yalnızca Meta’da çalışıyor — faturalandırma hesabı bir Meta ' +
-              'reklam hesabı olmalı.',
+            beklenen?.hata ?? 'Bu profil türü bir reklam hesabına bağlanamıyor.',
           );
         }
         /**

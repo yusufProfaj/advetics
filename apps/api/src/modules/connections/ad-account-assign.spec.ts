@@ -410,6 +410,62 @@ describe('sayfa ataması', () => {
       expect(await linked()).toBe(IDS.adAccount);
     });
 
+    describe('YouTube kanalı — hesap GOOGLE ADS', () => {
+      /*
+       * Kapı bir süre yalnızca Meta kabul ediyordu: YouTube kanalına Google
+       * hesabı hiçbir ekrandan bağlanamıyordu, kart "doğru hesabı seç"
+       * diyordu ve seçilecek bir şey yoktu (canlıda görüldü).
+       */
+      const KANAL = '96969696-9696-9696-9696-969696969696';
+      const GOOGLE_HESAP = '95959595-9595-9595-9595-959595959595';
+
+      beforeEach(async () => {
+        await h.q(
+          `INSERT INTO social_profiles
+             (id, org_id, client_id, connection_id, profile_type, external_id, name,
+              sync_enabled, updated_at)
+           VALUES ($1, $2, $3, $4, 'youtube_channel', 'UC-kanal', 'Kanal', true, now())`,
+          [KANAL, IDS.org, IDS.client, IDS.connection],
+        );
+        await h.q(
+          `INSERT INTO ad_accounts
+             (id, org_id, client_id, connection_id, platform, external_id, name, currency,
+              timezone, sync_enabled, updated_at)
+           VALUES ($1, $2, $3, $4, 'google', '1234567890', 'Google hesabı', 'TRY',
+                   'Europe/Istanbul', true, now())`,
+          [GOOGLE_HESAP, IDS.org, IDS.client, IDS.connection],
+        );
+      });
+
+      async function kanalBagi(): Promise<string | null> {
+        const rows = await h.q<{ l: string | null }>(
+          'SELECT linked_ad_account_id::text AS l FROM social_profiles WHERE id = $1',
+          [KANAL],
+        );
+        return rows[0]!.l;
+      }
+
+      it('KRİTİK: YouTube kanalına Google Ads hesabı BAĞLANABİLİYOR', async () => {
+        await svc.setProfileAdAccount(CTX, KANAL, GOOGLE_HESAP, META);
+        expect(await kanalBagi()).toBe(GOOGLE_HESAP);
+      });
+
+      it('KRİTİK: YouTube kanalına Meta hesabı REDDEDİLİYOR — yerini söyleyerek', async () => {
+        await expect(svc.setProfileAdAccount(CTX, KANAL, IDS.adAccount, META)).rejects.toThrow(
+          /Google Ads hesabı bağla/,
+        );
+        expect(await kanalBagi()).toBeNull();
+      });
+
+      it('sayfaya Google hesabı hâlâ reddediliyor — boost Meta’da', async () => {
+        await svc.assignSocialProfile(CTX, POOL_PROFILE, IDS.client, META);
+        await expect(svc.setProfileAdAccount(CTX, POOL_PROFILE, GOOGLE_HESAP, META)).rejects.toThrow(
+          /Meta/,
+        );
+        expect(await linked()).toBeNull();
+      });
+    });
+
     it('eşleştirme DENETİM KAYDINA yazılıyor', async () => {
       // Faturalandırma hesabını değiştirmek para kararı; kimin ne zaman
       // değiştirdiği sorulabilmeli.

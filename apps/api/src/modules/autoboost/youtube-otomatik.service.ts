@@ -4,6 +4,13 @@ import type { TenantContext, YoutubeOtomatikOnizleme } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AssetsService } from '../assets/assets.service';
 import { gorselIndir } from '../reports/kreatif-gorseli';
+import { ConnectionsService } from '../connections/connections.service';
+import {
+  YOUTUBE_HESAP_KOSULU,
+  youtubeHesabiEngeli,
+  youtubeHesabiSec,
+  type YoutubeHesabiKarari,
+} from './youtube-hesabi';
 import { hedefUrl, markaAdiSec, videoMetinleri, type VideoMetinleri } from './youtube-otomatik';
 
 /** Ön ayarda elle seçilmiş (eski) değerler — varsa önce onlar. */
@@ -36,8 +43,6 @@ interface Kaynaklar {
   website: string | null;
   profilLogosu: string | null;
   kanal: { id: string; ad: string; gorsel: string | null } | null;
-  /** Kanalın bağlı GOOGLE reklam hesabı (başka platformdaysa null). */
-  reklamHesabiId: string | null;
 }
 
 /**
@@ -67,6 +72,7 @@ export class YoutubeOtomatikService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly assets: AssetsService,
+    private readonly connections: ConnectionsService,
   ) {}
 
   /** Ekranda gösterilen hâl — hiçbir şey yazmıyor. */
@@ -111,9 +117,17 @@ export class YoutubeOtomatikService {
     );
     const ornekMetin = son?.title && marka.deger ? videoMetinleri(son.title, null, marka.deger) : null;
 
+    /*
+     * REKLAM HESABI YAYINLA AYNI KARARDAN. Kanalın ham bağına bakmak, eski bir
+     * Meta bağı dururken konum aramasını "hesap yok" diye kapatırdı; oysa
+     * workspace'teki tek Google hesabı yayında zaten kullanılacak.
+     */
+    const hesap = await this.reklamHesabi(ctx, clientId, k.kanal?.id ?? null);
+    const hesapEngeli = youtubeHesabiEngeli(hesap);
+
     return {
       kanal: k.kanal,
-      reklamHesabiId: k.reklamHesabiId,
+      reklamHesabiId: hesap.durum === 'kanal' || hesap.durum === 'tek-hesap' ? hesap.hesapId : null,
       marka,
       logo,
       url,
@@ -126,7 +140,10 @@ export class YoutubeOtomatikService {
               aciklama: ornekMetin.descriptions[0]!,
             }
           : null,
-      eksikler: eksikler(marka.deger, logo.kaynak, url.deger, k.kanal),
+      eksikler: [
+        ...eksikler(marka.deger, logo.kaynak, url.deger, k.kanal),
+        ...(k.kanal && hesapEngeli ? [hesapEngeli] : []),
+      ],
     };
   }
 
@@ -177,6 +194,67 @@ export class YoutubeOtomatikService {
     if (gecersiz.businessName) return gecersiz.businessName;
     const k = await this.kaynaklar(ctx, clientId, kanalProfilId);
     return markaAdiSec(k.workspaceAdi, k.kanal?.ad ?? null).deger;
+  }
+
+  /**
+   * YOUTUBE REKLAMININ GOOGLE ADS HESABI — `youtubeHesabiSec` girdileri.
+   *
+   * Kanalın bağlı hesabı (platformu ve sahibiyle) ve workspace'in Google
+   * Ads hesapları okunuyor; karar saf fonksiyonda. Okuma servisi aynı
+   * girdileri kendi sorgusunda aynı koşulla (`YOUTUBE_HESAP_KOSULU`) okuyor.
+   */
+  async reklamHesabi(
+    ctx: TenantContext,
+    clientId: string,
+    kanalProfilId: string | null,
+  ): Promise<YoutubeHesabiKarari> {
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+    const [satir] = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$queryRaw<
+        Array<{
+          bagli_id: string | null;
+          bagli_platform: string | null;
+          bagli_client_id: string | null;
+          google_hesaplari: string[] | null;
+        }>
+      >(Prisma.sql`
+        SELECT la.id::text AS bagli_id, la.platform::text AS bagli_platform,
+               la.client_id::text AS bagli_client_id,
+               (SELECT array_agg(aa.id::text ORDER BY aa.id) FROM ad_accounts aa
+                 WHERE aa.client_id = ${clientId}::uuid AND ${Prisma.raw(YOUTUBE_HESAP_KOSULU)}
+               ) AS google_hesaplari
+        FROM (SELECT 1) bos
+        LEFT JOIN LATERAL (
+          SELECT linked_ad_account_id FROM social_profiles
+          WHERE client_id = ${clientId}::uuid AND profile_type = 'youtube_channel'
+            AND (${kanalProfilId}::uuid IS NULL OR id = ${kanalProfilId}::uuid)
+          ORDER BY created_at ASC
+          LIMIT 1
+        ) sp ON true
+        LEFT JOIN ad_accounts la ON la.id = sp.linked_ad_account_id
+      `),
+    );
+    return youtubeHesabiSec(
+      satir?.bagli_id && satir.bagli_platform
+        ? { id: satir.bagli_id, platform: satir.bagli_platform, clientId: satir.bagli_client_id }
+        : null,
+      clientId,
+      satir?.google_hesaplari ?? [],
+    );
+  }
+
+  /**
+   * TEK HESAP SEÇİMİNİ KANALA YAZAR — mevcut kapıdan (`setProfileAdAccount`).
+   *
+   * O yol hesabın platformunu ve aynı workspace'te olduğunu doğruluyor ve
+   * denetim kaydı yazıyor; doğrudan UPDATE bunların hepsini atlardı.
+   */
+  async kanalaBagla(ctx: TenantContext, kanalProfilId: string, adAccountId: string): Promise<void> {
+    await this.connections.setProfileAdAccount(ctx, kanalProfilId, adAccountId, {
+      ip: null,
+      userAgent: null,
+      requestId: null,
+    });
   }
 
   /** Videonun metinleri — çağıran marka adını `yayinDegerleri`nden veriyor. */
@@ -242,22 +320,19 @@ export class YoutubeOtomatikService {
           kanal_id: string | null;
           kanal_adi: string | null;
           kanal_gorseli: string | null;
-          reklam_hesabi_id: string | null;
         }>
       >(Prisma.sql`
         SELECT c.name, c.website, cp.logo_asset_id::text AS logo_asset_id,
-               sp.id::text AS kanal_id, sp.name AS kanal_adi, sp.picture_url AS kanal_gorseli,
-               aa.id::text AS reklam_hesabi_id
+               sp.id::text AS kanal_id, sp.name AS kanal_adi, sp.picture_url AS kanal_gorseli
         FROM clients c
         LEFT JOIN client_profiles cp ON cp.client_id = c.id
         LEFT JOIN LATERAL (
-          SELECT id, name, picture_url, linked_ad_account_id FROM social_profiles
+          SELECT id, name, picture_url FROM social_profiles
           WHERE client_id = c.id AND profile_type = 'youtube_channel'
             AND (${kanalProfilId}::uuid IS NULL OR id = ${kanalProfilId}::uuid)
           ORDER BY created_at ASC
           LIMIT 1
         ) sp ON true
-        LEFT JOIN ad_accounts aa ON aa.id = sp.linked_ad_account_id AND aa.platform = 'google'
         WHERE c.id = ${clientId}::uuid
       `),
     );
@@ -269,7 +344,6 @@ export class YoutubeOtomatikService {
       kanal: satir.kanal_id
         ? { id: satir.kanal_id, ad: satir.kanal_adi ?? '', gorsel: satir.kanal_gorseli }
         : null,
-      reklamHesabiId: satir.reklam_hesabi_id,
     };
   }
 }
