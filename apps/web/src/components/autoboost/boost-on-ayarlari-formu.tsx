@@ -8,6 +8,7 @@ import type {
   GeoLocationOption,
   SavedAudienceList,
   YoutubeOtomatikOnizleme,
+  GoogleYasAraligi,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 /*
@@ -16,6 +17,7 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
  * kopya doğduğu anda ayrışır ve iki ekran farklı hedefleme kurardı.
  */
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
+import { GoogleHedefleme, type GoogleKonum } from '@/components/autoboost/google-hedefleme';
 
 /**
  * OTOMATİK BOOST ÖN AYARLARI.
@@ -372,6 +374,13 @@ function GoogleForm({
     mevcut ? String(Number(mevcut.budgetMicros) / 1_000_000) : '100',
   );
   const [gun, setGun] = useState(mevcut?.durationDays ?? 7);
+  /*
+   * HEDEF KİTLE ÖN AYARDAN OKUNUYOR ve kaydedilince gerçekten gidiyor. Bir
+   * süre panel ikisini de HER ZAMAN boş gönderiyordu (şemada alan vardı,
+   * yayın yolu okumuyordu) — ekranda olmayan bir ayar ölü alandı.
+   */
+  const [konumlar, setKonumlar] = useState<GoogleKonum[]>(s?.locations ?? []);
+  const [yaslar, setYaslar] = useState<GoogleYasAraligi[]>(s?.ageRanges ?? []);
 
   /*
    * ESKİ ÖN AYARDA ELLE SEÇİLMİŞ DEĞERLER KORUNUYOR. Kullanıcı bir logoyu
@@ -420,12 +429,12 @@ function GoogleForm({
             ...(koru && s?.businessName ? { businessName: s.businessName } : {}),
             ...(koru && s?.logoAssetId ? { logoAssetId: s.logoAssetId } : {}),
             ...(koru && s?.finalUrl ? { finalUrl: s.finalUrl } : {}),
-            locations: [],
-            ageRanges: [],
+            locations: konumlar,
+            ageRanges: yaslar,
           },
         }),
       });
-      setSonuc('Kaydedildi. Yeni videolar bu bütçeyle, kendi başlıklarıyla yayınlanacak.');
+      setSonuc('Kaydedildi. Yeni videolar bu bütçe ve hedef kitleyle, kendi başlıklarıyla yayınlanacak.');
     } catch (err) {
       setHata(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi.');
     } finally {
@@ -465,15 +474,13 @@ function GoogleForm({
         onOtomatigeGec={() => setOtomatigeGec(true)}
       />
 
-      {/*
-        KONUM EKRANDA YAZILI. Konumsuz bir Demand Gen kampanyası bütün
-        ülkelere açılıyor; sunucu ön ayarda konum yoksa Türkiye'yi AÇIKÇA
-        gönderiyor ve kullanıcı bunu kaydetmeden önce görmeli.
-      */}
-      <p className="rounded-lg border border-line bg-surface-sunken px-2.5 py-2 text-[11px] text-ink-muted">
-        Hedef konum: <strong className="text-ink">Türkiye</strong>. Yaş ve konum seçimi
-        bir sonraki aşamada gelecek.
-      </p>
+      <GoogleHedefleme
+        reklamHesabiId={otomatik?.reklamHesabiId ?? null}
+        konumlar={konumlar}
+        setKonumlar={setKonumlar}
+        yaslar={yaslar}
+        setYaslar={setYaslar}
+      />
 
       {/*
         KART ONAYLANINCA YAYINDA — ve yazma yolu canlıda ilk kez çalışıyor.

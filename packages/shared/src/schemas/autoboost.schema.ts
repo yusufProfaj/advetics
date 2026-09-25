@@ -121,6 +121,17 @@ export const metaPresetSettingsSchema = z.object({
  * SONUÇ: kullanıcıya "görüntüleme başına ödeme" VAAT EDİLEMİYOR. Teklif
  * seçenekleri Demand Gen'in gerçekten desteklediklerinden ibaret.
  */
+/** Google yaş aralıkları — panel ve yayın aynı listeyi okuyor. */
+export const GOOGLE_YAS_ARALIKLARI = [
+  'AGE_RANGE_18_24',
+  'AGE_RANGE_25_34',
+  'AGE_RANGE_35_44',
+  'AGE_RANGE_45_54',
+  'AGE_RANGE_55_64',
+  'AGE_RANGE_65_UP',
+] as const;
+export type GoogleYasAraligi = (typeof GOOGLE_YAS_ARALIKLARI)[number];
+
 export const googlePresetSettingsSchema = z.object({
   platform: z.literal('google'),
   /**
@@ -167,21 +178,38 @@ export const googlePresetSettingsSchema = z.object({
    * açıklamasından yayın anında üretiliyor. Eski kayıtlarda duran
    * `headlines` alanları şema tarafından atılıyor ve KULLANILMIYOR.
    */
-  /** Ülke/bölge anahtarları — Google'ın `geoTargetConstants` kaynak adları. */
-  locations: z.array(z.string().min(1).max(64)).max(25).default([]),
-  ageRanges: z
+  /**
+   * KONUMLAR — Google'ın `geoTargetConstants/<kimlik>` kaynak adı VE ETİKETİ.
+   *
+   * ETİKET DE SAKLANIYOR. Yalnızca kimlik saklansaydı ekran kaydedilmiş bir
+   * konumu yeniden açınca "geoTargetConstants/1012782" gösterirdi ve adı
+   * çözmek için her açılışta Google'a çağrı gerekirdi. Meta tarafında aynı
+   * boşluk "Konum 3684" olarak ekrana düştü.
+   *
+   * BOŞ = TÜRKİYE, "bütün ülkeler" DEĞİL. Konumsuz Demand Gen kampanyası
+   * bütün ülkelere açılıyor; yayın yolu boş listede `VARSAYILAN_KONUM`u
+   * açıkça gönderiyor.
+   *
+   * Eski kayıtlar bu alanı her zaman `[]` yazıyordu (panel konum sormuyordu),
+   * yani biçim değişikliği var olan bir veriyi kırmıyor.
+   */
+  locations: z
     .array(
-      z.enum([
-        'AGE_RANGE_18_24',
-        'AGE_RANGE_25_34',
-        'AGE_RANGE_35_44',
-        'AGE_RANGE_45_54',
-        'AGE_RANGE_55_64',
-        'AGE_RANGE_65_UP',
-      ]),
+      z.object({
+        key: z.string().regex(/^geoTargetConstants\/\d+$/, 'Geçersiz Google konum kimliği'),
+        label: z.string().min(1).max(200),
+      }),
     )
-    .max(6)
+    .max(25)
     .default([]),
+  /**
+   * YAŞ ARALIKLARI — boş ya da altısı birden = bütün yaşlar (kısıt yok).
+   *
+   * Demand Gen'de yaş reklam grubuna doğrudan ölçüt olarak DEĞİL, yaş boyutu
+   * taşıyan bir `Audience` kaydı olarak bağlanıyor; çeviri `yasSegmentleri`
+   * içinde (`google-demandgen.ts`).
+   */
+  ageRanges: z.array(z.enum(GOOGLE_YAS_ARALIKLARI)).max(6).default([]),
 });
 
 /**
@@ -550,6 +578,11 @@ export interface AutoBoostSubscriptionHealth {
  */
 export interface YoutubeOtomatikOnizleme {
   kanal: { id: string; ad: string; gorsel: string | null } | null;
+  /**
+   * Kanala bağlı GOOGLE reklam hesabı — konum araması bu hesap üzerinden
+   * yapılıyor. `null` ise kanalın reklam hesabı yok ya da Google değil.
+   */
+  reklamHesabiId: string | null;
   marka: {
     deger: string | null;
     kaynak: 'on-ayar' | 'workspace' | 'kanal' | 'kisaltildi' | 'yok';

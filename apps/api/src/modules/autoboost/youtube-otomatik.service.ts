@@ -36,6 +36,8 @@ interface Kaynaklar {
   website: string | null;
   profilLogosu: string | null;
   kanal: { id: string; ad: string; gorsel: string | null } | null;
+  /** Kanalın bağlı GOOGLE reklam hesabı (başka platformdaysa null). */
+  reklamHesabiId: string | null;
 }
 
 /**
@@ -111,6 +113,7 @@ export class YoutubeOtomatikService {
 
     return {
       kanal: k.kanal,
+      reklamHesabiId: k.reklamHesabiId,
       marka,
       logo,
       url,
@@ -219,19 +222,22 @@ export class YoutubeOtomatikService {
           kanal_id: string | null;
           kanal_adi: string | null;
           kanal_gorseli: string | null;
+          reklam_hesabi_id: string | null;
         }>
       >(Prisma.sql`
         SELECT c.name, c.website, cp.logo_asset_id::text AS logo_asset_id,
-               sp.id::text AS kanal_id, sp.name AS kanal_adi, sp.picture_url AS kanal_gorseli
+               sp.id::text AS kanal_id, sp.name AS kanal_adi, sp.picture_url AS kanal_gorseli,
+               aa.id::text AS reklam_hesabi_id
         FROM clients c
         LEFT JOIN client_profiles cp ON cp.client_id = c.id
         LEFT JOIN LATERAL (
-          SELECT id, name, picture_url FROM social_profiles
+          SELECT id, name, picture_url, linked_ad_account_id FROM social_profiles
           WHERE client_id = c.id AND profile_type = 'youtube_channel'
             AND (${kanalProfilId}::uuid IS NULL OR id = ${kanalProfilId}::uuid)
           ORDER BY created_at ASC
           LIMIT 1
         ) sp ON true
+        LEFT JOIN ad_accounts aa ON aa.id = sp.linked_ad_account_id AND aa.platform = 'google'
         WHERE c.id = ${clientId}::uuid
       `),
     );
@@ -243,6 +249,7 @@ export class YoutubeOtomatikService {
       kanal: satir.kanal_id
         ? { id: satir.kanal_id, ad: satir.kanal_adi ?? '', gorsel: satir.kanal_gorseli }
         : null,
+      reklamHesabiId: satir.reklam_hesabi_id,
     };
   }
 }

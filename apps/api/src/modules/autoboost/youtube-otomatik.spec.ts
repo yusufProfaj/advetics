@@ -186,7 +186,15 @@ describe('KRİTİK: yayın yolu ön ayarın SABİT metnini değil videoyu kullan
 
   it('KRİTİK: konum HER ZAMAN gidiyor — ön ayarda yoksa Türkiye', () => {
     // Konumsuz Demand Gen kampanyası bütün ülkelere açılıyor.
-    expect(dilim).toContain('konumlar: g.locations.length > 0 ? g.locations : [VARSAYILAN_KONUM]');
+    expect(dilim).toContain(
+      'konumlar: g.locations.length > 0 ? g.locations.map((l) => l.key) : [VARSAYILAN_KONUM]',
+    );
+  });
+
+  it('KRİTİK: ön ayardaki yaşlar yayına gidiyor', () => {
+    // Şemada alan vardı ve hiçbir zaman okunmuyordu; bu satır düşerse panel
+    // yaş seçtirir, Google'a hiçbir şey gitmez.
+    expect(dilim).toContain('yaslar: g.ageRanges,');
   });
 
   it('açıklama yayın anında TAZE okunuyor', () => {

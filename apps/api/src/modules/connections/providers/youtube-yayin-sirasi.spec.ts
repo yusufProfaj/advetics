@@ -46,6 +46,7 @@ const ISTEK = {
   longHeadlines: ['Yeni proje'],
   descriptions: ['Mia Yapı kanalında yeni video'],
   konumlar: [VARSAYILAN_KONUM],
+  yaslar: [] as string[],
 };
 
 beforeEach(() => {
@@ -134,6 +135,64 @@ describe('createVideoBoost sırası', () => {
   it('KRİTİK: yayına alma düşerse kurulan her şey geri alınıyor', async () => {
     patlayan = 'yayina-alma';
     await expect(provider().createVideoBoost(ctx, ISTEK)).rejects.toThrow();
+    const silinen = cagrilar.filter((c) => c.govde.operations[0]?.remove).map((c) => c.koleksiyon);
+    expect(silinen).toEqual(['adGroups', 'campaigns', 'campaignBudgets']);
+  });
+});
+
+describe('yaş kitlesi — Demand Gen’de Audience kaydıyla', () => {
+  const YASLI = { ...ISTEK, yaslar: ['AGE_RANGE_25_34', 'AGE_RANGE_35_44'] };
+  const sira = (): string[] =>
+    cagrilar
+      .filter((c) => c.govde.operations[0]?.remove === undefined)
+      .map((c) => (c.koleksiyon === 'campaigns' && c.govde.operations[0]?.update ? 'yayina-alma' : c.koleksiyon));
+
+  it('KRİTİK: yaş seçiliyse kitle kuruluyor, reklam grubuna bağlanıyor, SONRA yayına alınıyor', async () => {
+    await provider().createVideoBoost(ctx, YASLI);
+    expect(sira()).toEqual([
+      'campaignBudgets',
+      'campaigns',
+      'campaignCriteria',
+      'adGroups',
+      'audiences',
+      'adGroupCriteria',
+      'assets',
+      'adGroupAds',
+      'yayina-alma',
+    ]);
+  });
+
+  it('KRİTİK: reklam grubu `useAudienceGrouped` ile kuruluyor — sonradan değiştirilemez', async () => {
+    await provider().createVideoBoost(ctx, YASLI);
+    const ag = cagrilar.find((c) => c.koleksiyon === 'adGroups')!;
+    expect(ag.govde.operations[0]!.create).toMatchObject({
+      audienceSetting: { useAudienceGrouped: true },
+    });
+  });
+
+  it('kitle bitişik aralığı TEK segment olarak taşıyor ve bilinmeyen yaş dışarıda', async () => {
+    await provider().createVideoBoost(ctx, YASLI);
+    const k = cagrilar.find((c) => c.koleksiyon === 'audiences')!;
+    expect(k.govde.operations[0]!.create).toMatchObject({
+      dimensions: [{ age: { ageRanges: [{ minAge: 25, maxAge: 44 }], includeUndetermined: false } }],
+    });
+    const bag = cagrilar.find((c) => c.koleksiyon === 'adGroupCriteria')!;
+    expect(bag.govde.operations[0]!.create).toMatchObject({
+      audience: { audience: expect.stringContaining('/audiences/') },
+    });
+  });
+
+  it('yaş seçilmediyse kitle YOK ve reklam grubu kitle kipinde değil', async () => {
+    await provider().createVideoBoost(ctx, ISTEK);
+    expect(cagrilar.some((c) => c.koleksiyon === 'audiences')).toBe(false);
+    const ag = cagrilar.find((c) => c.koleksiyon === 'adGroups')!;
+    expect(ag.govde.operations[0]!.create).not.toHaveProperty('audienceSetting');
+  });
+
+  it('KRİTİK: kitle bağlanamazsa kampanya YAYINA ALINMIYOR', async () => {
+    patlayan = 'adGroupCriteria';
+    await expect(provider().createVideoBoost(ctx, YASLI)).rejects.toThrow();
+    expect(cagrilar.some((c) => c.govde.operations[0]?.update)).toBe(false);
     const silinen = cagrilar.filter((c) => c.govde.operations[0]?.remove).map((c) => c.koleksiyon);
     expect(silinen).toEqual(['adGroups', 'campaigns', 'campaignBudgets']);
   });

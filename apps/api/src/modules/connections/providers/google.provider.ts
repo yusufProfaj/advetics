@@ -7,6 +7,9 @@ import {
   googleVideoAssetBody,
   demandGenKonumBody,
   kampanyayiYayinaAlBody,
+  demandGenKitleBaglaBody,
+  demandGenYasKitlesiBody,
+  yasSegmentleri,
 } from './google-demandgen';
 import { gecerliGorselAdresi } from '@advetics/shared';
 import type { GeoLocationOption, Platform, SavedAudienceOption } from '@advetics/shared';
@@ -1700,19 +1703,67 @@ export class GoogleProvider implements IAdPlatformProvider {
   }
 
   /**
-   * Google'da KARŞILIĞI VAR ama yazılmadı.
+   * KONUM ARAMASI — `GeoTargetConstantService.SuggestGeoTargetConstants`.
    *
-   * `GeoTargetConstantService` aynı işi yapıyor ve anahtar biçimi de farklı
-   * (kaynak adı, sayısal anahtar değil). BOŞ DİZİ DÖNMÜYOR: boş liste
-   * "aradığın yer bulunamadı" diye okunur ve kullanıcı Türkiye'yi arayıp
-   * sonuç alamayınca hatayı kendi yazımında arar.
+   * ANAHTAR KAYNAK ADI (`geoTargetConstants/1012782`), Meta'daki gibi sayısal
+   * anahtar değil; YouTube kampanyasının konum ölçütüne doğrudan bu gidiyor.
+   *
+   * `countryCode` GÖNDERİLMİYOR. Proto'ya göre o alan önerileri o ülkeye
+   * SÜZÜYOR; Türkiye'ye sabitlemek yurt dışına reklam veren bir müşterinin
+   * "Berlin" aramasını boş döndürürdü ve kullanıcı yazımını sorgulardı.
+   * `locale: 'tr'` yalnızca adların dilini seçiyor.
+   *
+   * YALNIZCA ETKİN KONUMLAR: Google eski ya da kaldırılmış konumları
+   * `REMOVAL_PLANNED` olarak dönebiliyor; onları seçtirmek, kampanyanın bir gün
+   * sessizce konumsuz kalması demekti.
+   *
+   * BOŞ SONUÇ HATA DEĞİL — gerçekten eşleşme yok. Çağrının kendisi düşerse
+   * `platformFetch` Google'ın mesajıyla fırlatıyor ve panel onu gösteriyor.
    */
-  async searchGeoLocations(): Promise<GeoLocationOption[]> {
-    throw new PlatformApiError(
-      'google',
-      'permanent',
-      'Google Ads lokasyon araması henüz yazılmadı.',
-    );
+  async searchGeoLocations(ctx: FetchContext, query: string): Promise<GeoLocationOption[]> {
+    const q = query.trim();
+    if (q.length < 2) return [];
+    const { developerToken } = this.assertConfigured();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${ctx.accessToken}`,
+      'developer-token': developerToken,
+      'Content-Type': 'application/json',
+    };
+    if (ctx.loginCustomerId) headers['login-customer-id'] = ctx.loginCustomerId;
+
+    const { data } = await platformFetch<{
+      geoTargetConstantSuggestions?: Array<{
+        geoTargetConstant?: {
+          resourceName?: string;
+          name?: string;
+          countryCode?: string;
+          targetType?: string;
+          status?: string;
+          canonicalName?: string;
+        };
+      }>;
+    }>('google', `${this.adsBase}/geoTargetConstants:suggest`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ locale: 'tr', locationNames: { names: [q] } }),
+    });
+
+    const sonuc: GeoLocationOption[] = [];
+    for (const o of data.geoTargetConstantSuggestions ?? []) {
+      const g = o.geoTargetConstant;
+      if (!g?.resourceName || !/^geoTargetConstants\/\d+$/.test(g.resourceName)) continue;
+      if (g.status && g.status !== 'ENABLED') continue;
+      sonuc.push({
+        key: g.resourceName,
+        type: (g.targetType ?? '').toLowerCase(),
+        name: g.name ?? g.resourceName,
+        // "Izmir,Izmir,Turkey" → "Izmir, Izmir, Turkey": aynı adı taşıyan
+        // iki yeri ayıran tek bilgi üst bölge ve ülke.
+        label: (g.canonicalName ?? g.name ?? g.resourceName).split(',').join(', '),
+        countryCode: g.countryCode ?? null,
+      });
+    }
+    return sonuc;
   }
 
   async listSavedAudiences(): Promise<SavedAudienceOption[]> {
@@ -1806,10 +1857,13 @@ export class GoogleProvider implements IAdPlatformProvider {
       descriptions: string[];
       /** Konum ölçütleri — boş gelemez, bkz. `demandGenKonumBody`. */
       konumlar: string[];
+      /** Yaş kovaları — boş ya da altısı = kısıt yok (`yasSegmentleri`). */
+      yaslar: string[];
     },
   ): Promise<{ campaignId: string; adGroupId: string; adId: string }> {
     const stamp = nameStamp(new Date());
     const created: Array<{ resource: string; label: string }> = [];
+    let yetimKitle: string | null = null;
 
     try {
       const budget = await this.mutate(
@@ -1846,12 +1900,36 @@ export class GoogleProvider implements IAdPlatformProvider {
         demandGenKonumBody({ campaignResource: campaign, konumlar: request.konumlar }),
       );
 
+      const segmentler = yasSegmentleri(request.yaslar);
       const adGroup = await this.mutate(
         ctx,
         'adGroups',
-        demandGenAdGroupBody({ name: request.name, campaignResource: campaign }),
+        demandGenAdGroupBody({
+          name: request.name,
+          campaignResource: campaign,
+          kitleGrubu: segmentler.length > 0,
+        }),
       );
       created.push({ resource: adGroup, label: 'reklam grubu' });
+
+      /*
+       * YAŞ KİTLESİ — yalnızca kısıt varsa. Kitle kaydı GERİ ALINAMIYOR
+       * (servis silme kabul etmiyor); geri alma listesine girmiyor, düşerse
+       * log'a yazılıyor. Bağlantı ölçütü reklam grubuyla birlikte siliniyor.
+       */
+      if (segmentler.length > 0) {
+        const kitle = await this.mutate(
+          ctx,
+          'audiences',
+          demandGenYasKitlesiBody({ name: request.name, stamp, segmentler }),
+        );
+        yetimKitle = kitle;
+        await this.mutate(
+          ctx,
+          'adGroupCriteria',
+          demandGenKitleBaglaBody({ adGroupResource: adGroup, audienceResource: kitle }),
+        );
+      }
 
       /*
        * VİDEO VARLIĞI GERİ ALMA LİSTESİNE GİRMİYOR. Varlıklar hesap
@@ -1901,6 +1979,10 @@ export class GoogleProvider implements IAdPlatformProvider {
               `${temizlikHatasi instanceof Error ? temizlikHatasi.message : String(temizlikHatasi)}`,
           );
         }
+      }
+      if (yetimKitle) {
+        // SİLİNEMİYOR (Audience servisinde silme yok) — sessiz kalmasın.
+        this.logger.warn(`Google yaş kitlesi hesapta kaldı (silinemiyor, harcama yok): ${yetimKitle}`);
       }
       throw err;
     }

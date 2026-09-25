@@ -46,9 +46,13 @@ describe('YouTube ön ayarı', () => {
     expect(FORM).toContain('const koru = eskiSecim && !otomatigeGec;');
   });
 
-  it('hedef konum ekranda yazılı — sunucunun gönderdiği Türkiye', () => {
-    expect(FORM).toContain('Hedef konum:');
-    expect(FORM).toContain('Türkiye');
+  it('KRİTİK: hedef kitle KAYDEDİLİYOR — boş sabit dizi gitmiyor', () => {
+    // Panel bir süre `locations: []` ve `ageRanges: []` gönderiyordu; alan
+    // şemada vardı ama hiçbir zaman dolmuyordu.
+    expect(FORM).toContain('locations: konumlar,');
+    expect(FORM).toContain('ageRanges: yaslar,');
+    expect(FORM).not.toContain('locations: [],');
+    expect(FORM).toContain('<GoogleHedefleme');
   });
 
   it('kartın onaylanınca YAYINA GİRDİĞİ ve küçük bütçe uyarısı yazılı', () => {

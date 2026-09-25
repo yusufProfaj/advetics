@@ -143,6 +143,13 @@ export function demandGenCampaignBody(params: {
 export function demandGenAdGroupBody(params: {
   name: string;
   campaignResource: string;
+  /**
+   * YAŞ KİTLESİ BAĞLANACAK MI. Demand Gen'de yaş `Audience` kaydıyla
+   * veriliyor ve Google bunun için reklam grubunda `useAudienceGrouped`
+   * istiyor. Alan DEĞİŞTİRİLEMEZ (proto: IMMUTABLE): kurulumda yazılmazsa
+   * sonradan kitle bağlanamaz, yani karar burada veriliyor.
+   */
+  kitleGrubu?: boolean;
 }): GoogleMutateBody {
   return body([
     {
@@ -150,6 +157,7 @@ export function demandGenAdGroupBody(params: {
         name: params.name,
         campaign: params.campaignResource,
         status: 'ENABLED',
+        ...(params.kitleGrubu ? { audienceSetting: { useAudienceGrouped: true } } : {}),
         demandGenAdGroupSettings: {
           channelControls: {
             selectedChannels: {
@@ -280,6 +288,111 @@ export function kampanyayiYayinaAlBody(campaignResource: string): GoogleMutateBo
     {
       update: { resourceName: campaignResource, status: 'ENABLED' },
       updateMask: 'status',
+    },
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// Yaş — Audience kaydı
+// ---------------------------------------------------------------------------
+
+/**
+ * Google'ın yaş kovası → yaş boyutunun sınırları.
+ *
+ * v25 `AgeSegment`: `min_age` 18/25/35/45/55/65, `max_age` 24/34/44/54/64 ve
+ * "gerekmez" (üst sınırsız). 65+ kovasının üst sınırı YOK; 64 yazmak onu
+ * 55-64'e çevirirdi.
+ */
+const YAS_SINIRI: Record<string, { min: number; max: number | null }> = {
+  AGE_RANGE_18_24: { min: 18, max: 24 },
+  AGE_RANGE_25_34: { min: 25, max: 34 },
+  AGE_RANGE_35_44: { min: 35, max: 44 },
+  AGE_RANGE_45_54: { min: 45, max: 54 },
+  AGE_RANGE_55_64: { min: 55, max: 64 },
+  AGE_RANGE_65_UP: { min: 65, max: null },
+};
+const YAS_SIRASI = Object.keys(YAS_SINIRI);
+
+export interface YasSegmenti {
+  minAge: number;
+  maxAge?: number;
+}
+
+/**
+ * Seçilen yaş kovalarını BİTİŞİK aralıklara birleştirir.
+ *
+ * `AgeSegment` "contiguous age range" — 25-34 ile 35-44 seçildiyse tek
+ * `{25, 44}` segmenti, 18-24 ile 45-54 seçildiyse iki ayrı segment.
+ *
+ * HİÇBİRİ ya da HEPSİ seçiliyse BOŞ dönüyor = yaş kısıtı YOK. Altısını
+ * birden bir kitleye çevirmek "yaşı bilinmeyenleri" dışarıda bırakırdı ve
+ * kullanıcı "hepsini seçtim" derken erişimi sessizce daralırdı.
+ */
+export function yasSegmentleri(araliklar: readonly string[]): YasSegmenti[] {
+  const secili = new Set(araliklar.filter((a) => a in YAS_SINIRI));
+  if (secili.size === 0 || secili.size === YAS_SIRASI.length) return [];
+
+  const segmentler: YasSegmenti[] = [];
+  let bas: { min: number; max: number | null } | null = null;
+  for (const kod of YAS_SIRASI) {
+    const sinir = YAS_SINIRI[kod]!;
+    if (secili.has(kod)) {
+      bas = bas ? { min: bas.min, max: sinir.max } : { ...sinir };
+    } else if (bas) {
+      segmentler.push(bas.max === null ? { minAge: bas.min } : { minAge: bas.min, maxAge: bas.max });
+      bas = null;
+    }
+  }
+  if (bas) segmentler.push(bas.max === null ? { minAge: bas.min } : { minAge: bas.min, maxAge: bas.max });
+  return segmentler;
+}
+
+/**
+ * YAŞ KİTLESİ — `audiences:mutate`.
+ *
+ * AD HESAPTA TEKİL OLMALI (proto: "unique across all audiences within the
+ * account"): zaman damgası ekleniyor, bütçe adıyla aynı gerekçe.
+ *
+ * YAŞI BİLİNMEYENLER DAHİL DEĞİL (`includeUndetermined: false`) ve açıkça
+ * yazılıyor: alan isteğe bağlı ve varsayılana bırakmak, aynı kodun Google
+ * varsayılanı değiştiğinde farklı kitleye yayın yapması demekti. Kullanıcı
+ * yaş seçtiğinde o yaşlara reklam verdiğini düşünüyor.
+ *
+ * GERİ ALINAMIYOR: Audience servisi yalnızca oluşturma ve güncelleme kabul
+ * ediyor, silme yok. Kurulum yarıda düşerse hesapta yetim bir kitle kalıyor;
+ * para harcamıyor ve log'a yazılıyor.
+ */
+export function demandGenYasKitlesiBody(params: {
+  name: string;
+  stamp: string;
+  segmentler: YasSegmenti[];
+}): GoogleMutateBody {
+  if (params.segmentler.length === 0) {
+    throw new Error('Yaş segmenti yok: kısıtsız yayında kitle oluşturulmamalı.');
+  }
+  return body([
+    {
+      create: {
+        name: `${params.name} — yaş ${params.stamp}`,
+        dimensions: [
+          { age: { ageRanges: params.segmentler, includeUndetermined: false } },
+        ],
+      },
+    },
+  ]);
+}
+
+/** Kitleyi reklam grubuna bağlar — `adGroupCriteria`, `AudienceInfo`. */
+export function demandGenKitleBaglaBody(params: {
+  adGroupResource: string;
+  audienceResource: string;
+}): GoogleMutateBody {
+  return body([
+    {
+      create: {
+        adGroup: params.adGroupResource,
+        audience: { audience: params.audienceResource },
+      },
     },
   ]);
 }

@@ -1157,6 +1157,8 @@ export interface IAdPlatformProvider {
        * Demand Gen kampanyası bütün ülkelere açılıyor.
        */
       konumlar: string[];
+      /** Google yaş kovaları; boş ya da altısı birden = yaş kısıtı yok. */
+      yaslar: string[];
     },
   ): Promise<{ campaignId: string; adGroupId: string; adId: string }>;
 

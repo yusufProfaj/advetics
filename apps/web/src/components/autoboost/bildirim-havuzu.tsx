@@ -891,8 +891,8 @@ function Kart({
         */}
         {kayit.status === 'pending' && kayit.platform === 'google' && (
           <p className="text-[10px] text-ink-muted">
-            Onaylayınca kampanya Türkiye&apos;de <strong>yayına girer</strong>. Erken
-            durdurmak şimdilik Google Ads&apos;ten.
+            Onaylayınca kampanya ön ayardaki hedef kitleyle <strong>yayına girer</strong>.
+            Erken durdurmak şimdilik Google Ads&apos;ten.
           </p>
         )}
 

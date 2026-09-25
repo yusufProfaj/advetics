@@ -40,7 +40,15 @@ export function hedeflemeOzeti(settings: AutoBoostPresetSettings): HedeflemeSati
         ? settings.ageRanges.map((a) => YAS_KOVASI[a] ?? a).join(', ')
         : 'Tüm yaşlar';
     return [
-      { etiket: 'Konum', deger: konumMetni(settings.locations.map((k) => ({ key: k }))) },
+      /*
+       * BOŞ = TÜRKİYE. Yayın yolu konumsuz ön ayarda Türkiye'yi AÇIKÇA
+       * gönderiyor; özetin "bütün ülkeler" ya da boş bir satır göstermesi
+       * yayınlanan kampanyayı yanlış anlatırdı.
+       */
+      {
+        etiket: 'Konum',
+        deger: settings.locations.length > 0 ? konumMetni(settings.locations) : 'Türkiye',
+      },
       { etiket: 'Yaş', deger: yas },
     ];
   }

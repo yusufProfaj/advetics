@@ -503,7 +503,8 @@ export class AutoBoostLaunchService {
         headlines: metin.headlines,
         longHeadlines: metin.longHeadlines,
         descriptions: metin.descriptions,
-        konumlar: g.locations.length > 0 ? g.locations : [VARSAYILAN_KONUM],
+        konumlar: g.locations.length > 0 ? g.locations.map((l) => l.key) : [VARSAYILAN_KONUM],
+        yaslar: g.ageRanges,
       });
 
       await this.prisma.withTenant(scoped, (tx) =>
@@ -521,7 +522,7 @@ export class AutoBoostLaunchService {
       return {
         status: 'launched',
         message:
-          `YouTube kampanyası yayında (${g.locations.length > 0 ? `${g.locations.length} konum` : 'Türkiye'}, ` +
+          `YouTube kampanyası yayında (${g.locations.length > 0 ? g.locations.map((l) => l.label).join(', ') : 'Türkiye'}, ` +
           `${kayit.duration_days ?? 7} gün). Erken durdurmak için Google Ads'i kullan.`,
       };
     } catch (err) {
