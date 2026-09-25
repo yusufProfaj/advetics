@@ -1061,6 +1061,30 @@ sending HTTP2 data` ile üç kez düştü; `git config http.version HTTP/1.1`
 çözdü. Ayar `.git/config`te (bütün worktree'ler paylaşıyor). Yeni bir klonda
 aynı hata görülürse sebebi budur — depo boyutu değil (6 MB).
 
+### İKİ GELİŞTİRİCİ VAR — ve ikisi de `main`e push ediyor
+
+2026-09-25'ten beri projede ikinci bir geliştirici (ve onun Claude hesabı)
+çalışıyor. Yeni makine `./scripts/ortak-kurulum.sh` ile kuruluyor. Bu dosya
+iki tarafta da otomatik yükleniyor; **hafıza (`~/.claude/.../memory`)
+YÜKLENMİYOR**, yani kalıcı bir kural yalnızca birinin hafızasındaysa diğeri
+onu bilmiyor. İki tarafı ilgilendiren kural BURAYA yazılır.
+
+- **Push'tan önce `git pull --rebase origin main`.** Force push YASAK: öbür
+  tarafın commit'ini sessizce siler ve sunucu bir sonraki deploy'da onu kaybeder.
+- **Deploy tek kişi, tek seferde.** `deploy.sh` migration uyguluyor; iki deploy
+  üst üste binerse biri yarım şemayla derler. Deploy etmeden önce öbür tarafa
+  haber ver ve sunucuda `git log --oneline HEAD..origin/main` ile NEYİ
+  çektiğine bak: `git pull` yalnızca senin commit'lerini değil, öbür tarafın
+  henüz doğrulamadığı işini de canlıya alır.
+- **Push deploy DEĞİL.** GitHub Actions doğrulama işini koşuyor ama SSH adımı
+  düşüyor; sunucu ancak elle deploy edilince güncelleniyor. "Push ettim,
+  canlıda" demek bu depoda iki kez yanlış çıktı.
+- **Migration yazmadan hemen önce pull.** İki kişi aynı gün migration açarsa
+  zaman damgası sırası ile uygulama sırası ayrışabilir; üretimde
+  `P3018` (DEPLOYMENT.md §10c).
+- **`docs/DURUM.md` ve bu dosya ORTAK.** Yeni kaydı EKLE, öbür tarafın
+  yazdığını yeniden yazma; çakışmada ikisini de tut.
+
 ## 4. Mimari — hızlı harita
 
 pnpm workspace monorepo:
