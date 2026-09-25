@@ -78,6 +78,8 @@ beforeEach(() => {
     // ŞİFRE ÇÖZÜCÜ — yalnızca `pageWhatsapp` kullanıyor; bu testlerde o
     // yol koşmuyor.
     {} as never,
+    // ÖDEME TETİĞİ — bu testlerde hesap durumu yazılmıyor.
+    { degerlendir: () => { throw new Error('ödeme tetiği bu testte beklenmiyor'); } } as never,
   );
 });
 

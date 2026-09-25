@@ -119,6 +119,12 @@ export class SyncProcessorService {
      */
     if (payload.jobType === 'account_status') return this.hesapDurumu.kontrolEt();
     /*
+     * ÖDEME NABZI da küresel ve aynı gerekçeyle hesap döngüsüne girmiyor:
+     * Google'da yönetici başına tek sorgu atılıyor; hesap başına iş
+     * dağıtmak aynı yöneticiyi hesap sayısı kadar sorgulardı.
+     */
+    if (payload.jobType === 'payment_check') return this.hesapDurumu.nabiz();
+    /*
      * ZAMANLANMIŞ RAPOR DA KÜRESEL. Zamanı gelmiş planlamalar tek sorguyla
      * bulunuyor; müşteriye bölmek, çoğu müşteride hiç planlama olmadığı için
      * boş iş üretirdi (`websub_renew` ve `boost_complete` ile aynı gerekçe).

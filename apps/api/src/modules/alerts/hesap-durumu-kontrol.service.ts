@@ -1,11 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Platform, Uyari } from '@advetics/shared';
+import type { Uyari } from '@advetics/shared';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
-import { CryptoService } from '../../crypto/crypto.service';
 import { ConnectionsService } from '../connections/connections.service';
-import { mailGonder } from '../email/mail-gonderici';
 import { anahtar, odemeMailiOlustur } from './odeme-maili';
-import { hesapUyarilari, type UyariHesabi } from './uyari-kurallari';
+import { OdemeMailiGonderici } from './odeme-maili-gonderici.service';
+import { ODEME_HESAP_SECIMI, odemeUyarisi } from './odeme-sorunlari';
 
 /**
  * ═══ GÜNDE İKİ KEZ HESAP DURUMU KONTROLÜ ═══
@@ -33,8 +32,20 @@ export class HesapDurumuKontrolService {
   constructor(
     private readonly admin: PrismaAdminService,
     private readonly connections: ConnectionsService,
-    private readonly crypto: CryptoService,
+    private readonly mail: OdemeMailiGonderici,
   ) {}
+
+  /**
+   * ÖDEME NABZI — 15 dakikada bir, yalnızca atanmış hesapların durumu.
+   *
+   * Mail BURADA atılmıyor: nabız hesap durumunu yazıyor ve yazan yol
+   * (`odemeDurumlariniTazele`) tetiği kendisi çekiyor. Nabzın işi tetiğin
+   * ne sıklıkla bir şey GÖREBİLECEĞİNİ belirlemek.
+   */
+  async nabiz(): Promise<{ rows: number; note: string }> {
+    const r = await this.connections.odemeDurumlariniTazele();
+    return { rows: r.hesap, note: r.not };
+  }
 
   async kontrolEt(): Promise<{
     rows: number;
@@ -90,61 +101,25 @@ export class HesapDurumuKontrolService {
     };
   }
 
-  /** Tazelenmiş veriden ödeme sorunu olan hesapları çıkarır. */
+  /**
+   * Tazelenmiş veriden ödeme sorunu olan hesapları çıkarır.
+   *
+   * KARAR `odemeUyarisi`nde — anlık tetiğin kullandığı fonksiyonun
+   * AYNISI. Özetin "3 hesap", anlık mailin "2 hesap" demesi ancak ikisi ayrı
+   * karar verirse olur.
+   */
   private async odemeSorunlari(): Promise<Uyari[]> {
     const simdi = new Date();
     const hesaplar = await this.admin.adAccount.findMany({
       // ATANMAMIŞ HESAP DIŞARIDA. Ajansın havuzunda 481 hesap var ve
       // çoğuyla çalışılmıyor; onların ödeme durumu ajansın işi değil.
       where: { clientId: { not: null } },
-      select: {
-        id: true,
-        name: true,
-        platform: true,
-        status: true,
-        syncEnabled: true,
-        lastInsightsSyncAt: true,
-        lastStructureSyncAt: true,
-        updatedAt: true,
-        raw: true,
-        clientId: true,
-        client: { select: { name: true, status: true } },
-        connection: { select: { status: true, tokenExpiresAt: true } },
-      },
+      select: ODEME_HESAP_SECIMI,
     });
-
-    const sorunlar: Uyari[] = [];
-    for (const h of hesaplar) {
-      // Arşivlenmiş müşterinin hesabı maile girmiyor: o müşteriyle
-      // çalışılmıyor ve ödemesi de ajansın sorunu değil.
-      if (h.client?.status !== 'active') continue;
-
-      const satir: UyariHesabi = {
-        id: h.id,
-        name: h.name,
-        platform: h.platform as Platform,
-        status: h.status,
-        syncEnabled: h.syncEnabled,
-        lastInsightsSyncAt: h.lastInsightsSyncAt,
-        lastStructureSyncAt: h.lastStructureSyncAt,
-        updatedAt: h.updatedAt,
-        raw: h.raw,
-        clientId: h.clientId,
-        clientName: h.client?.name ?? null,
-        connectionStatus: h.connection.status,
-        connectionTokenExpiresAt: h.connection.tokenExpiresAt,
-      };
-      /*
-       * KURALLAR PANELDEKİYLE AYNI FONKSİYONDAN. Mail için ikinci bir
-       * "ödeme sorunu mu" kararı yazmak, bandın gösterdiğiyle mailin
-       * söylediğinin ayrışması demekti — ve o ayrışma yalnızca müşteri
-       * "bana mail geldi ama panelde bir şey yok" dediğinde görünürdü.
-       */
-      sorunlar.push(
-        ...hesapUyarilari(satir, simdi).filter((u) => u.kod === 'hesap_odeme_sorunu'),
-      );
-    }
-    return sorunlar;
+    return hesaplar.flatMap((h) => {
+      const u = odemeUyarisi(h, simdi);
+      return u ? [u] : [];
+    });
   }
 
   /**
@@ -156,77 +131,19 @@ export class HesapDurumuKontrolService {
    * demekti. Hata nota yazılıyor ve teşhis ekranında görünüyor.
    */
   private async mailAt(sorunlar: Uyari[], yeniler: Set<string>): Promise<string> {
-    const hesap = await this.gonderenHesap();
-    if (!hesap) {
-      return 'MAİL GÖNDERİLEMEDİ: yönetici hesabında e-posta kimliği tanımlı değil';
-    }
-
     const { konu, html } = odemeMailiOlustur(
       sorunlar,
       yeniler,
       process.env.APP_URL ?? 'https://advetics.com',
     );
-
     try {
-      await mailGonder(
-        {
-          fromName: hesap.fromName,
-          fromEmail: hesap.fromEmail,
-          host: hesap.smtpHost,
-          port: hesap.smtpPort,
-          secure: hesap.smtpSecure,
-          user: hesap.smtpUser,
-          pass: this.crypto.decrypt(Buffer.from(hesap.smtpPassEnc)),
-        },
-        {
-          /*
-           * ALICI GÖNDERENİN KENDİSİ. Uyarı ajansın iç bilgisi — hangi
-           * müşterinin ödemesi alınmadığı müşteriye gönderilecek bir şey
-           * değil. Ayrı bir alıcı alanı eklemek, o alanın bir gün yanlış
-           * doldurulup müşteri listesinin dışarı gitmesi riski.
-           */
-          // TEK ALICI AMA LİSTE OLARAK: `mailGonder` sözleşmesi çoğul.
-          to: [hesap.fromEmail],
-          subject: konu,
-          html,
-        },
-      );
-      return `mail gönderildi: ${hesap.fromEmail}`;
+      const { alici } = await this.mail.gonder(konu, html);
+      return `mail gönderildi: ${alici}`;
     } catch (err) {
       const mesaj = err instanceof Error ? err.message : 'bilinmeyen hata';
       this.logger.error(`Ödeme uyarısı maili gönderilemedi: ${mesaj}`);
       return `MAİL GÖNDERİLEMEDİ: ${mesaj}`;
     }
-  }
-
-  /**
-   * Maili gönderecek e-posta kimliği.
-   *
-   * ORG YÖNETİCİSİNİN hesabı seçiliyor ve seçim DETERMİNİSTİK (en eski
-   * oluşturulan). Adres koda gömülmüyor: hangi adresin kullanılacağı ajansın
-   * kararı ve panelden değiştirilebilir olmalı; koda yazmak, adres
-   * değiştiğinde deploy gerektirirdi.
-   */
-  private async gonderenHesap() {
-    return this.admin.userEmailAccount.findFirst({
-      where: {
-        user: {
-          memberships: {
-            some: { clientId: null, role: 'admin' },
-          },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        fromName: true,
-        fromEmail: true,
-        smtpHost: true,
-        smtpPort: true,
-        smtpSecure: true,
-        smtpUser: true,
-        smtpPassEnc: true,
-      },
-    });
   }
 
   /** Son gönderimde hangi hesaplar için uyarıldığı — "YENİ" işaretinin dayanağı. */

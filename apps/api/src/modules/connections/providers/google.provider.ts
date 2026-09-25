@@ -14,6 +14,7 @@ import {
   type AuthorizeUrlParams,
   type DiscoveredAd,
   type DiscoveredAdAccount,
+  type HesapDurumuOkumasi,
   type DiscoveredAdGroup,
   type DiscoveredCampaign,
   type DiscoveredCreative,
@@ -532,6 +533,13 @@ export class GoogleProvider implements IAdPlatformProvider {
 
       // Yönetici hesap: altındaki tüm hesapları çıkar.
       //
+      // ASKIYA ALINMIŞ (SUSPENDED) HESAP DA GELİYOR. Süzgeç uzun süre
+      // yalnızca 'ENABLED' diyordu: Google bir alt hesabı ödeme yüzünden
+      // askıya aldığında hesap listeden DÜŞÜYOR, satırı veritabanında son
+      // görülen 'ENABLED' ile kalıyordu ve ödeme uyarısı HİÇ çıkmıyordu.
+      // Hata yok, yalnızca susan bir uyarı. İptal/kapalı hesaplar hâlâ dışarıda:
+      // onlarla çalışılmıyor ve havuzu şişirirler.
+      //
       // customer_client hiyerarşinin TAMAMINI döndürür (level>1 dâhil), yani
       // MCC altındaki alt-MCC'lerin hesapları da tek sorguda gelir. Ayrı ayrı
       // dolaşmak gereksiz kota harcamak olurdu.
@@ -545,7 +553,7 @@ export class GoogleProvider implements IAdPlatformProvider {
                   customer_client.currency_code, customer_client.time_zone,
                   customer_client.manager, customer_client.status, customer_client.level
            FROM customer_client
-           WHERE customer_client.status = 'ENABLED'`,
+           WHERE customer_client.status IN ('ENABLED', 'SUSPENDED')`,
           rootId,
         );
 
@@ -576,6 +584,97 @@ export class GoogleProvider implements IAdPlatformProvider {
     }
 
     return [...accounts.values()];
+  }
+
+  /**
+   * ÖDEME NABZI — yönetici hesabı başına TEK sorgu.
+   *
+   * Google'da kota geliştirici token'ı başına günlük İŞLEM sayısı; hesap
+   * başına ayrı sorgu 15 dakikada bir hesap sayısı kadar işlem demekti.
+   * Aynı yöneticinin altındaki hesaplar `customer_client` üzerinden tek
+   * sorguda okunuyor (keşfin kullandığı kaynak ve aynı `status` alanı);
+   * yöneticisi olmayan hesap kendi `customer` kaynağından.
+   *
+   * YAMA ANAHTARI `status` — keşfin `raw` içine yazdığı adla aynı. Ödeme
+   * kuralı `raw.status === 'SUSPENDED'` okuyor.
+   */
+  async hesapDurumlari(
+    accessToken: string,
+    hedefler: ReadonlyArray<{ externalId: string; managerExternalId: string | null }>,
+  ): Promise<HesapDurumuOkumasi> {
+    const sonuc: HesapDurumuOkumasi = { durumlar: [], hatalar: [] };
+
+    const yoneticiye = new Map<string, string[]>();
+    const dogrudan: string[] = [];
+    for (const h of hedefler) {
+      if (h.managerExternalId) {
+        const g = yoneticiye.get(h.managerExternalId) ?? [];
+        g.push(h.externalId);
+        yoneticiye.set(h.managerExternalId, g);
+      } else {
+        dogrudan.push(h.externalId);
+      }
+    }
+
+    for (const [yonetici, idler] of yoneticiye) {
+      try {
+        const liste = idler.map((id) => `'customers/${id}'`).join(', ');
+        const rows = await this.searchGaql<{ customerClient?: Record<string, unknown> }>(
+          accessToken,
+          yonetici,
+          `SELECT customer_client.client_customer, customer_client.status
+           FROM customer_client
+           WHERE customer_client.client_customer IN (${liste})`,
+          yonetici,
+        );
+        const gorulen = new Set<string>();
+        for (const row of rows) {
+          const c = row.customerClient;
+          const kaynak = String(c?.clientCustomer ?? '');
+          const id = kaynak.includes('/') ? kaynak.split('/')[1]! : kaynak;
+          const durum = String(c?.status ?? '');
+          if (!id || !durum) continue;
+          gorulen.add(id);
+          sonuc.durumlar.push({
+            externalId: id,
+            status: this.mapAccountStatus(durum, false),
+            rawYama: { status: durum },
+          });
+        }
+        // SESSİZ KESME YOK: yöneticinin altında artık görünmeyen hesap
+        // (bağ koparılmış) okunmadı olarak yazılıyor.
+        const eksik = idler.filter((id) => !gorulen.has(id));
+        if (eksik.length > 0) {
+          sonuc.hatalar.push(`${customerLabel(yonetici)} altında görünmeyen: ${eksik.join(', ')}`);
+        }
+      } catch (err) {
+        sonuc.hatalar.push(`${customerLabel(yonetici)}: ${errText(err)}`);
+      }
+    }
+
+    for (const id of dogrudan) {
+      try {
+        const rows = await this.searchGaql<{ customer?: Record<string, unknown> }>(
+          accessToken,
+          id,
+          'SELECT customer.status FROM customer LIMIT 1',
+          id,
+        );
+        const durum = String(rows[0]?.customer?.status ?? '');
+        if (!durum) {
+          sonuc.hatalar.push(`${customerLabel(id)}: durum dönmedi`);
+          continue;
+        }
+        sonuc.durumlar.push({
+          externalId: id,
+          status: this.mapAccountStatus(durum, false),
+          rawYama: { status: durum },
+        });
+      } catch (err) {
+        sonuc.hatalar.push(`${customerLabel(id)}: ${errText(err)}`);
+      }
+    }
+    return sonuc;
   }
 
   /** Hem `customer` hem `customer_client` satırlarını tek şekle indirger. */

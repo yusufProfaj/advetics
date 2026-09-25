@@ -117,3 +117,22 @@ export function odemeMailiOlustur(
 export function anahtar(u: Uyari): string {
   return `${u.kod}:${u.adAccountId ?? u.clientId ?? '-'}`;
 }
+
+/**
+ * ANLIK UYARI — sorun görüldüğü an giden mail.
+ *
+ * Gövde özetle AYNI (aynı tablo, aynı açıklama); iki ayrı şablon, bir gün
+ * birinin yeni bir sütun alıp diğerinin almaması demekti. Farklı olan konu:
+ * anlık mail çoğu zaman TEK hesap için gidiyor ve konuda hesabın ve
+ * workspace'in adı olmalı. "1 reklam hesabında ödeme sorunu" konusu,
+ * gelen kutusunda hangi müşterinin reklamının durduğunu söylemiyor.
+ */
+export function anlikOdemeMailiOlustur(uyarilar: Uyari[], panelUrl: string): OdemeMailIcerigi {
+  const { html } = odemeMailiOlustur(uyarilar, new Set(uyarilar.map(anahtar)), panelUrl);
+  const tek = uyarilar.length === 1 ? uyarilar[0] : undefined;
+  const konu = tek
+    ? `Advetics — Ödeme sorunu: ${tek.adAccountName ?? 'reklam hesabı'}` +
+      (tek.clientName ? ` (${tek.clientName})` : '')
+    : `Advetics — ${uyarilar.length} reklam hesabında yeni ödeme sorunu`;
+  return { konu, html };
+}

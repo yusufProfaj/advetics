@@ -26,6 +26,8 @@ interface Cagrilar {
   profilSahiplen: Array<Record<string, unknown>>;
   sayim: Array<Record<string, unknown>>;
   upsertler: Array<{ update: Record<string, unknown> }>;
+  /** Ödeme tetiğine verilen hesap kimlikleri — çağrı başına bir liste. */
+  tetik: string[][];
 }
 
 /** `findMany`in döndürdüğü, keşiften ÖNCE var olan satır. */
@@ -40,11 +42,25 @@ function servis(
   connClientId: string | null,
   cakisanSayisi = 0,
   mevcutHesaplar: MevcutSatir[] = [],
+  tetikPatlar = false,
 ): {
   svc: ConnectionsService;
   c: Cagrilar;
 } {
-  const c: Cagrilar = { hesapSahiplen: [], profilSahiplen: [], sayim: [], upsertler: [] };
+  const c: Cagrilar = {
+    hesapSahiplen: [],
+    profilSahiplen: [],
+    sayim: [],
+    upsertler: [],
+    tetik: [],
+  };
+  const tetikKaydedici = {
+    degerlendir: (idler: string[]) => {
+      c.tetik.push([...idler]);
+      if (tetikPatlar) return Promise.reject(new Error('SMTP kapalı'));
+      return Promise.resolve({ yeni: 0, cozulen: 0, not: '' });
+    },
+  };
 
   const admin = {
     platformConnection: {
@@ -57,7 +73,9 @@ function servis(
       findMany: () => Promise.resolve(mevcutHesaplar),
       upsert: (a: { update: Record<string, unknown> }) => {
         c.upsertler.push(a);
-        return Promise.resolve({});
+        // Keşif yazdığı satırın KİMLİĞİNİ ödeme tetiğine veriyor; boş
+        // nesne dönmek o zinciri hiç sınamamak olurdu.
+        return Promise.resolve({ id: `hesap-${c.upsertler.length}` });
       },
       updateMany: (a: Record<string, unknown>) => {
         c.hesapSahiplen.push(a);
@@ -106,6 +124,9 @@ function servis(
     // ŞİFRE ÇÖZÜCÜ — yalnızca `pageWhatsapp` kullanıyor; bu testlerde o
     // yol koşmuyor.
     {} as never,
+    // ÖDEME TETİĞİ — keşif her turda yazdığı hesapları veriyor; kayıtçı
+    // hangi kimliklerle çağrıldığını tutuyor.
+    tetikKaydedici as never,
   );
   return { svc, c };
 }
@@ -210,5 +231,26 @@ describe('K3 — keşif ATANMIŞ hesabın bağlantısını ele geçirmiyor', () 
     ]);
     await kesfet(svc);
     expect(c.upsertler[0]!.update).toMatchObject({ connectionId: CONN });
+  });
+});
+
+describe('ÖDEME TETİĞİ — hesap durumu yazıldığı AN', () => {
+  /*
+   * Hesabın platformdaki durumu keşifte yazılıyor (bağlantı dönüşü,
+   * "Hesapları yenile", günde iki kez tam tazeleme). Tetik bu yolda
+   * çekilmezse ödeme sorunu yalnızca 15 dakikalık nabızda görülür ve
+   * kullanıcının "yenile"ye bastığı an bile mail gitmez.
+   */
+  it('KRİTİK: keşif yazdığı hesapların kimliğiyle tetiği çekiyor', async () => {
+    const { svc, c } = servis(null);
+    await kesfet(svc);
+    expect(c.tetik).toEqual([['hesap-1']]);
+  });
+
+  it('KRİTİK: tetik düşerse keşif DÜŞMÜYOR — hesaplar zaten yazıldı', async () => {
+    const { svc, c } = servis(null, 0, [], true);
+    await expect(kesfet(svc)).resolves.toBeUndefined();
+    expect(c.upsertler).toHaveLength(1);
+    expect(c.tetik).toHaveLength(1);
   });
 });

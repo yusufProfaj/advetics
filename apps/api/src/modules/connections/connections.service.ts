@@ -35,6 +35,7 @@ import {
 } from './provider.types';
 import { baglantiHatasiMetni } from './baglanti-hatasi';
 import { TokenVaultService } from './token-vault.service';
+import { OdemeTetigiService } from '../alerts/odeme-tetigi.service';
 import { CryptoService } from '../../crypto/crypto.service';
 import { MetaProvider } from './providers/meta.provider';
 import { hesapVerisiniTasi, type TasimaSonucu } from './hesap-verisi-tasima';
@@ -150,6 +151,11 @@ export class ConnectionsService {
      * kaydırırdı.
      */
     private readonly crypto: CryptoService,
+    /**
+     * ÖDEME TETİĞİ — hesap durumu yazılan her yol sorunu o an bildiriyor.
+     * En sonda, `crypto` ile aynı gerekçe: testler konumla geçiriyor.
+     */
+    private readonly odemeTetigi: OdemeTetigiService,
   ) {}
 
   /**
@@ -1187,6 +1193,127 @@ export class ConnectionsService {
     return { baglanti: baglantilar.length, basarili, hatalar };
   }
 
+  /**
+   * ÖDEME TETİĞİ — hesap durumu yazıldıktan HEMEN sonra.
+   *
+   * HATASI KEŞFİ DÜŞÜRMÜYOR. Hesaplar zaten yazıldı; bir SMTP ya da
+   * sorgu hatası yüzünden bağlantı dönüşünü "başarısız" göstermek, çalışan
+   * bir bağlantıyı bozuk gösterirdi. Ama sessiz de değil: log'a yazılıyor
+   * ve tetik bir sonraki nabızda (en geç 15 dakika) aynı hesaplara yeniden
+   * bakıyor, çünkü damga yalnızca mail GİTTİĞİNDE kalıyor.
+   */
+  private async odemeTetiginiCek(adAccountIds: string[]): Promise<string> {
+    try {
+      const r = await this.odemeTetigi.degerlendir(adAccountIds);
+      return r.not;
+    } catch (err) {
+      const mesaj = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Ödeme tetiği çalışmadı (${adAccountIds.length} hesap): ${mesaj}`);
+      return `ÖDEME TETİĞİ ÇALIŞMADI: ${mesaj}`;
+    }
+  }
+
+  /**
+   * ═══ ÖDEME NABZI — atanmış hesapların yalnızca platform durumu ═══
+   *
+   * Tam tazeleme (`tumBaglantilariTazele`) günde iki kez koşuyor ve bir
+   * bağlantının BÜTÜN hesaplarını ve sayfalarını sayfa sayfa listeliyor
+   * (havuzda yüzlerce hesap, yüzlerce sayfa). "(#4) Application request
+   * limit reached" bu projede zaten yaşandı; o listeyi 15 dakikaya indirmek
+   * aynı duvara daha sık çarpmak demekti.
+   *
+   * Nabız yalnızca MÜŞTERİYE ATANMIŞ ve workspace'i AKTİF hesapları soruyor
+   * ve yalnızca durum alanlarını istiyor. Sağlayıcı bunu desteklemiyorsa
+   * (LinkedIn) o bağlantı atlanıyor ve notta yazıyor: o platformda ödeme
+   * sorunu hâlâ yalnızca günde iki kezlik tam tazelemede görülüyor.
+   *
+   * YAZILAN ŞEY `status` VE `raw` İÇİNDEKİ DURUM ALANLARI. `raw` birleştirilerek
+   * yazılıyor: üzerine yazmak keşfin getirdiği adı, para birimini, işletme
+   * bilgisini silerdi.
+   */
+  async odemeDurumlariniTazele(): Promise<{ hesap: number; not: string }> {
+    const hesaplar = await this.admin.adAccount.findMany({
+      where: {
+        clientId: { not: null },
+        client: { status: 'active' },
+        connection: { status: 'active', revokedAt: null },
+      },
+      select: {
+        id: true,
+        externalId: true,
+        managerExternalId: true,
+        raw: true,
+        connectionId: true,
+        platform: true,
+      },
+    });
+
+    const baglantiya = new Map<string, typeof hesaplar>();
+    for (const h of hesaplar) {
+      const g = baglantiya.get(h.connectionId) ?? [];
+      g.push(h);
+      baglantiya.set(h.connectionId, g);
+    }
+
+    let okunan = 0;
+    let degisen = 0;
+    const atlanan: string[] = [];
+    const hatalar: string[] = [];
+
+    for (const [connectionId, grup] of baglantiya) {
+      const platform = grup[0]!.platform as Platform;
+      const provider = this.provider(platform);
+      if (!provider.hesapDurumlari) {
+        atlanan.push(`${platform} (${grup.length} hesap)`);
+        continue;
+      }
+      try {
+        const token = await this.vault.getAccessToken(connectionId, provider);
+        const okuma = await provider.hesapDurumlari(
+          token,
+          grup.map((h) => ({ externalId: h.externalId, managerExternalId: h.managerExternalId })),
+        );
+        hatalar.push(...okuma.hatalar.map((m) => `${platform}: ${m}`));
+        const hedef = new Map(grup.map((h) => [h.externalId, h]));
+        for (const d of okuma.durumlar) {
+          const h = hedef.get(d.externalId);
+          if (!h) continue;
+          okunan++;
+          const eskiRaw =
+            h.raw !== null && typeof h.raw === 'object' && !Array.isArray(h.raw)
+              ? (h.raw as Record<string, unknown>)
+              : {};
+          const yeniRaw = { ...eskiRaw, ...d.rawYama };
+          const r = await this.admin.adAccount.updateMany({
+            where: { id: h.id },
+            data: { status: d.status, raw: yeniRaw as Prisma.InputJsonValue },
+          });
+          degisen += r.count;
+        }
+      } catch (err) {
+        /*
+         * BAĞLANTININ SAĞLIK SAYACINA YAZILMIYOR. Nabız günde 96 kez koşuyor;
+         * her geçici hatayı `failure_count`a yazmak bağlantı ekranını gürültüye
+         * boğardı. Tam tazeleme (günde iki kez) sağlığı zaten yazıyor.
+         */
+        hatalar.push(`${platform}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    /*
+     * TETİK OKUNAN HER HESAP İÇİN — yalnızca değişenler için değil. Damga
+     * bir sonraki kontrolde yeniden denenmek üzere geri alınmış olabilir
+     * (mail gidemedi) ve o hesapta durum DEĞİŞMEMİŞ olacak.
+     */
+    const tetik = await this.odemeTetiginiCek(hesaplar.map((h) => h.id));
+
+    const not =
+      `${okunan}/${hesaplar.length} hesabın durumu okundu · ${tetik}` +
+      (atlanan.length > 0 ? ` · nabız desteklenmiyor: ${atlanan.join(', ')}` : '') +
+      (hatalar.length > 0 ? ` · ${hatalar.length} hata: ${hatalar.join('; ')}` : '');
+    return { hesap: degisen, not: not.slice(0, 500) };
+  }
+
   private async discoverAndStore(
     connectionId: string,
     platform: Platform,
@@ -1225,6 +1352,7 @@ export class ConnectionsService {
       ).map((r) => [r.externalId, r]),
     );
 
+    const yazilanHesaplar: string[] = [];
     for (const a of accounts) {
       const mevcut = mevcutHesaplar.get(a.externalId);
       const koru =
@@ -1235,7 +1363,8 @@ export class ConnectionsService {
           mevcutBaglantiDurumu: mevcut.connection.status,
           yeniConnectionId: connectionId,
         });
-      await this.admin.adAccount.upsert({
+      const yazilan = await this.admin.adAccount.upsert({
+        select: { id: true },
         where: {
           // ORGANİZASYON BAZLI. Müşteri bazlıyken ajansın 157 hesabı her
           // müşteriye ayrı ayrı yazılıyordu ve üretimde 1.134 mükerrer satır
@@ -1280,7 +1409,10 @@ export class ConnectionsService {
           raw: a.raw as Prisma.InputJsonValue,
         },
       });
+      yazilanHesaplar.push(yazilan.id);
     }
+
+    await this.odemeTetiginiCek(yazilanHesaplar);
 
     let socialCount = 0;
     if (platform === 'meta') {

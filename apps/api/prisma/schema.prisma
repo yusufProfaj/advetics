@@ -792,6 +792,14 @@ model AdAccount {
   rateLimitState      Json?     @map("rate_limit_state") @db.JsonB
 
   raw       Json?    @db.JsonB
+  /// ÖDEME SORUNU İÇİN ANLIK MAİL GİTTİ Mİ — bu sorun dönemi için.
+  ///
+  /// Sorun görüldüğü an `UPDATE ... WHERE payment_alerted_at IS NULL` ile
+  /// KAPILIYOR ve yalnızca kapan taraf mail atıyor: aynı anda koşan iki
+  /// tazeleme (bağlantı dönüşü ve 15 dakikalık nabız) aynı sorun için iki
+  /// mail atmıyor. Sorun çözülünce NULL'a dönüyor, yani aynı hesap bir ay
+  /// sonra yine ödeme sorunu yaşarsa yeniden uyarılıyor.
+  paymentAlertedAt DateTime? @map("payment_alerted_at") @db.Timestamptz(6)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -1073,6 +1081,15 @@ enum SyncJobType {
   /// tek sorguyla bulunuyor. Müşteriye bölmek, çoğu müşteride hiç planlama
   /// olmadığı için boş iş üretirdi (`websub_renew` ile aynı gerekçe).
   report_schedule
+  /// Advetics 1.0 — ÖDEME NABZI: atanmış hesapların yalnızca platform
+  /// durumu, 15 dakikada bir.
+  ///
+  /// `account_status`tan AYRI çünkü iki farklı iş: o, günde iki kez BÜTÜN
+  /// bağlantıların hesap listesini tazeleyip ÖZET maili atıyor; bu, yalnızca
+  /// müşteriye atanmış hesapların durumunu soruyor ve yeni bir ödeme sorunu
+  /// gördüğü an tetiği çekiyor. Aynı türde toplasaydık teşhis ekranı iki
+  /// ayrı işin satırını karıştırırdı.
+  payment_check
 }
 
 enum SyncJobStatus {

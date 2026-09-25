@@ -117,6 +117,11 @@ export function layerForJob(payload: SyncJobPayload): keyof typeof JOB_PRIORITY 
       return 'rule_action';
     case 'lead_fetch':
       return 'lead_fetch';
+    case 'payment_check':
+      // ÖDEME NABZI ÖNCELİKLİ KOVADA. Uzun bir geçmiş çekimi kuyruğu
+      // doldurduğunda 15 dakikalık kontrolün arkaya düşmesi, "anında" mailin
+      // yarım saat gecikmesi demekti. İş ucuz: kuyruğu tıkamıyor.
+      return 'rule_action';
     case 'leads_reconcile':
       // Tarama bir YEDEK yol: webhook çalışıyorsa hiçbir şey bulmuyor.
       // Canlı kaydın önüne geçmemeli.

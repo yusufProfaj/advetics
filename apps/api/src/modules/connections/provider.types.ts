@@ -127,6 +127,16 @@ export type NormalizedAccountStatus =
   | 'closed'
   | 'unknown';
 
+/** `hesapDurumlari` sonucu — okunanlar ve okunamayanların sebebi. */
+export interface HesapDurumuOkumasi {
+  durumlar: Array<{
+    externalId: string;
+    status: NormalizedAccountStatus;
+    rawYama: Record<string, unknown>;
+  }>;
+  hatalar: string[];
+}
+
 export interface DiscoveredAdAccount {
   externalId: string;
   name: string;
@@ -968,6 +978,26 @@ export interface IAdPlatformProvider {
   revokeToken(tokens: { accessToken: string; refreshToken?: string }): Promise<void>;
 
   listAdAccounts(accessToken: string): Promise<DiscoveredAdAccount[]>;
+
+  /**
+   * ÖDEME NABZI — verilen hesapların YALNIZCA platform durumu.
+   *
+   * `listAdAccounts` bir bağlantının bütün hesaplarını listeliyor ve Meta'da
+   * uygulama seviyesindeki kotaya sayılıyor; 15 dakikada bir çağrılamaz.
+   * Bu metot yalnızca istenen hesapların durum alanlarını okuyor.
+   *
+   * İSTEĞE BAĞLI: yazmayan sağlayıcıda (LinkedIn) nabız o bağlantıyı
+   * atlıyor ve bunu notta söylüyor. Tek bir hesabın okunamaması diğerlerini
+   * durdurmuyor; sebebi `hatalar`a yazılıyor.
+   *
+   * `rawYama` `ad_accounts.raw` ile BİRLEŞTİRİLİYOR: kurallar ödeme kararını
+   * ham alandan veriyor (Meta `account_status`, Google `status`) ve yama
+   * keşfin yazdığı ANAHTARLARLA aynı adları taşımak zorunda.
+   */
+  hesapDurumlari?(
+    accessToken: string,
+    hedefler: ReadonlyArray<{ externalId: string; managerExternalId: string | null }>,
+  ): Promise<HesapDurumuOkumasi>;
 
   /**
    * Facebook sayfaları ve bağlı Instagram Business hesapları.

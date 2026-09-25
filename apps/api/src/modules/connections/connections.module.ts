@@ -7,6 +7,7 @@ import { GoogleProvider } from './providers/google.provider';
 import { LinkedInProvider } from './providers/linkedin.provider';
 import { MetaProvider } from './providers/meta.provider';
 import { TokenVaultService } from './token-vault.service';
+import { OdemeTetigiModule } from '../alerts/odeme-tetigi.module';
 
 /**
  * Modül 2 — Platform bağlantıları.
@@ -16,6 +17,9 @@ import { TokenVaultService } from './token-vault.service';
  * token'a ihtiyaç duyan her katman oradan geçmek zorunda.
  */
 @Module({
+  // ÖDEME TETİĞİ: hesap durumu yazılan her yol sorunu o an bildiriyor.
+  // Ayrı modül çünkü `AlertsModule` zaten bu modüle bağlı (döngü olurdu).
+  imports: [OdemeTetigiModule],
   controllers: [ConnectionsController],
   providers: [
     MetaWebhookService,

@@ -5,6 +5,7 @@ import { ConnectionsModule } from '../connections/connections.module';
 import { AlertsController } from './alerts.controller';
 import { AlertsService } from './alerts.service';
 import { HesapDurumuKontrolService } from './hesap-durumu-kontrol.service';
+import { OdemeTetigiModule } from './odeme-tetigi.module';
 
 /**
  * `forwardRef` KUYRUK YÜZÜNDEN DEĞİL, BAĞLANTILAR YÜZÜNDEN: kontrol servisi
@@ -12,7 +13,7 @@ import { HesapDurumuKontrolService } from './hesap-durumu-kontrol.service';
  * Döngü olmadığından emin olmak için ikisi de tembel çözülüyor.
  */
 @Module({
-  imports: [PrismaModule, CryptoModule, forwardRef(() => ConnectionsModule)],
+  imports: [PrismaModule, CryptoModule, OdemeTetigiModule, forwardRef(() => ConnectionsModule)],
   controllers: [AlertsController],
   providers: [AlertsService, HesapDurumuKontrolService],
   exports: [HesapDurumuKontrolService],

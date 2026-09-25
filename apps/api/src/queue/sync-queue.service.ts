@@ -365,6 +365,25 @@ export class SyncQueueService implements OnModuleDestroy {
         tz: 'Europe/Istanbul',
       },
       /*
+       * Advetics 1.0 — ÖDEME NABZI: 15 DAKİKADA BİR.
+       *
+       * Ödeme sorunu görüldüğü AN mail gidiyor (`OdemeTetigiService`) ama
+       * Meta ve Google bunu bize bildirmiyor: Meta'nın reklam hesabı
+       * webhook'larında hesap durumu alanı yok, Google Ads'in hiç webhook'u
+       * yok. Tetiğin bir şey görebilmesi için durumun SORULMASI gerekiyor ve
+       * bu satır ne sıklıkla sorulacağını belirliyor. Günde iki kezlik tam
+       * tazeleme en kötü ihtimalle ~19 saatlik bir gecikme demekti; bu
+       * satırla en fazla 15 dakika.
+       *
+       * UCUZ OLDUĞU İÇİN SIK: yalnızca workspace'e atanmış hesaplar, yalnızca
+       * durum alanları; Meta'da hesap başına bir okuma (kota o hesabın
+       * kendi kovasından), Google'da yönetici başına bir sorgu.
+       *
+       * DAKİKALAR 11/26/41/56: diğer süpürmelerin hiçbiriyle (0/15/30/45,
+       * 5, 7, 13, 17, 19, 23, 29, 32, 37, 47, 53) çakışmıyor.
+       */
+      { name: 'sweep:payment-check', pattern: '11,26,41,56 * * * *', jobType: 'payment_check' },
+      /*
        * Advetics 1.0 — ZAMANLANMIŞ RAPOR: SAATTE BİR, AJANSIN SAATİYLE.
        *
        * Planlama "her Pazartesi 09:00" gibi bir SAAT taşıyor; tarama saatte

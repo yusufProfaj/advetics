@@ -1,0 +1,12 @@
+-- ÖDEME SORUNU ANLIK MAİL DAMGASI (Advetics 1.0)
+--
+-- Ödeme sorunu görüldüğü an mail gidiyor ve bu kolon "bu sorun dönemi için
+-- mail gitti" bilgisini tutuyor. Kapılma koşullu bir UPDATE ile yapılıyor
+-- (yalnızca NULL iken yazılıyor), yani aynı anda koşan iki tazeleme aynı
+-- sorun için iki mail atmıyor. Sorun çözülünce NULL'a dönüyor.
+--
+-- VARSAYILAN NULL ve geçmiş doldurulmuyor: kural (hangi platform kodu ödeme
+-- sorunu sayılır) TypeScript'te duruyor ve burada SQL ile tekrarlamak iki
+-- kopya demekti. Bedeli: deploy sonrası ilk kontrol, O AN süren ödeme
+-- sorunları için tek bir mail atıyor.
+ALTER TABLE "ad_accounts" ADD COLUMN IF NOT EXISTS "payment_alerted_at" TIMESTAMPTZ(6);

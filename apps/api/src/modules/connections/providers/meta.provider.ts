@@ -15,6 +15,7 @@ import {
   type AuthorizeUrlParams,
   type DiscoveredAd,
   type DiscoveredAdAccount,
+  type HesapDurumuOkumasi,
   type DiscoveredAdGroup,
   type DiscoveredCampaign,
   type DiscoveredCreative,
@@ -513,6 +514,60 @@ export class MetaProvider implements IAdPlatformProvider {
     }
 
     return accounts;
+  }
+
+  /**
+   * ÖDEME NABZI — hesap başına TEK düğüm isteği, yalnızca durum alanları.
+   *
+   * KOTA HESABIN KENDİSİNİN. Meta'nın belgesi: *"All Marketing API
+   * requests ... are subject to Business Use Case (BUC) Rate Limits"* —
+   * yani `act_<id>` düğümüne yapılan okuma o reklam hesabının kovasından
+   * düşüyor, uygulamanın ortak kovasından değil. 15 dakikada bir hesap
+   * başına bir okuma o kovanın çok küçük bir payı.
+   *
+   * `?ids=` ÇOKLU SORGU KULLANILMIYOR: tek kötü kimlik (silinmiş, erişimi
+   * kalkmış hesap) isteğin tamamını düşürüyor (CLAUDE.md, kreatif adresi
+   * dersi). Düğüm yolu en kesin biçim; bir hesabın hatası yalnızca onu
+   * etkiliyor.
+   *
+   * ALAN ADLARI KEŞİFLE AYNI (`account_status`, `disable_reason`): yama
+   * `raw` ile birleştiriliyor ve ödeme kuralı `raw.account_status`
+   * okuyor. Farklı bir ad yazmak, kuralın ESKİ değeri okumaya devam etmesi
+   * demekti — hata vermeden.
+   */
+  async hesapDurumlari(
+    accessToken: string,
+    hedefler: ReadonlyArray<{ externalId: string; managerExternalId: string | null }>,
+  ): Promise<HesapDurumuOkumasi> {
+    const sonuc: HesapDurumuOkumasi = { durumlar: [], hatalar: [] };
+    for (const h of hedefler) {
+      try {
+        const url =
+          `${this.graph}/${actPath(h.externalId)}?fields=account_status,disable_reason` +
+          `&access_token=${encodeURIComponent(accessToken)}`;
+        const res = await platformFetch<Record<string, unknown>>('meta', url, {}, parseMetaRateLimit);
+        const kod = Number(res.data.account_status);
+        if (!Number.isFinite(kod)) {
+          // DEĞER YOKSA YAZILMIYOR. Boş yama `raw`daki eski değeri korur;
+          // "bilinmiyor" yazmak ise ödeme uyarısını SESSİZCE kapatırdı.
+          sonuc.hatalar.push(`${h.externalId}: account_status dönmedi`);
+          continue;
+        }
+        sonuc.durumlar.push({
+          externalId: h.externalId,
+          status: this.mapAccountStatus(kod),
+          rawYama: {
+            account_status: kod,
+            ...(res.data.disable_reason !== undefined
+              ? { disable_reason: res.data.disable_reason }
+              : {}),
+          },
+        });
+      } catch (err) {
+        sonuc.hatalar.push(`${h.externalId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    return sonuc;
   }
 
   /**

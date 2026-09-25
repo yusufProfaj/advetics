@@ -61,6 +61,8 @@ function servis(kayit: { clientId: string | null; platform: string } | null): {
     // ŞİFRE ÇÖZÜCÜ — yalnızca `pageWhatsapp` kullanıyor; bu testlerde o
     // yol koşmuyor.
     {} as never,
+    // ÖDEME TETİĞİ — bu testlerde hesap durumu yazılmıyor.
+    {} as never,
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

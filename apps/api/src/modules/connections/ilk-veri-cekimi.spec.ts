@@ -87,6 +87,8 @@ function servis(
     // ŞİFRE ÇÖZÜCÜ — yalnızca `pageWhatsapp` kullanıyor; bu testlerde o
     // yol koşmuyor.
     {} as never,
+    // ÖDEME TETİĞİ — bu testlerde hesap durumu yazılmıyor.
+    {} as never,
   );
   return { svc, c };
 }
