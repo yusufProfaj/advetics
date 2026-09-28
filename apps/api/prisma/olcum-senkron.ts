@@ -35,6 +35,8 @@ const arg = (ad: string) =>
 
 const EPOSTA = arg('eposta') ?? process.env.SEED_ADMIN_EMAIL;
 const TEKRAR = 7;
+/** Tek bir sorgunun sınırı. Uç 5 sn'de düşüyor; 30 sn çok daha kötüsünü ayırt ediyor. */
+const SORGU_SINIRI_MS = 30_000;
 
 const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_DATABASE_URL });
 const uygulama = new PrismaClient({ datasourceUrl: process.env.DATABASE_URL });
@@ -104,6 +106,16 @@ async function main() {
           ustHesap ? 'on' : 'off',
         );
 
+        /*
+         * SORGU BAŞINA SÜRE SINIRI. İlk sürümde yoktu ve canlıda araç "hesap
+         * başına son iş" parçasında hiçbir şey basmadan takılı kaldı: yavaş mı
+         * ilerliyor yoksa bir sorgu mu asılı, ekrandan anlaşılmıyordu.
+         * `SET LOCAL` yalnızca bu transaction'ı etkiliyor ve geri alınıyor.
+         * Zaman aşımına düşen sorgu transaction'ı bozduğu için her ölçüm
+         * kendi SAVEPOINT'inde koşuyor (`olc`).
+         */
+        await tx.$queryRawUnsafe(`SET LOCAL statement_timeout = '${SORGU_SINIRI_MS}ms'`);
+
         console.log('\n═══ ENVANTER (bu bağlamda GÖRÜNEN) ═══');
         const [e] = await tx.$queryRawUnsafe<Array<{ isler: number; hesap: number }>>(
           `SELECT (SELECT COUNT(*)::int FROM sync_jobs) AS isler,
@@ -114,19 +126,27 @@ async function main() {
 
         let toplamBugun = 0;
         let toplamAday = 0;
+        let eksik = false;
         for (const s of senkronSorgulari()) {
-          const bugunMs = s.bugun.length ? await parcaOrtancasi(tx, s.bugun) : 0;
-          const adayMs = s.aday ? await parcaOrtancasi(tx, s.aday) : null;
-          if (!s.anlamDegisiyor) {
+          // BAŞLIK ÖNCE: ölçüm sürerken hangi parçada olunduğu görünsün.
+          console.log(`\n═══ ${s.ad}${s.anlamDegisiyor ? ' — ANLAM DEĞİŞİYOR, yalnızca karşılaştırma' : ''} ═══`);
+          const bugunMs = s.bugun.length ? await parcaOrtancasi(tx, 'bugün', s.bugun) : 0;
+          const adayMs = s.aday ? await parcaOrtancasi(tx, 'aday ', s.aday) : undefined;
+          if (bugunMs === null || adayMs === null) eksik = true;
+          if (!s.anlamDegisiyor && bugunMs !== null) {
             toplamBugun += bugunMs;
             toplamAday += adayMs ?? bugunMs;
           }
-          console.log(`\n═══ ${s.ad}${s.anlamDegisiyor ? ' — ANLAM DEĞİŞİYOR, yalnızca karşılaştırma' : ''} ═══`);
-          if (s.bugun.length) console.log(`  bugün : ${bugunMs.toFixed(1)} ms (${s.bugun.length} sorgu)`);
-          if (adayMs !== null) {
-            console.log(`  aday  : ${adayMs.toFixed(1)} ms`);
-            if (s.bugun.length) console.log(`  fark  : ${(bugunMs - adayMs).toFixed(1)} ms`);
+          if (s.bugun.length) console.log(`  bugün : ${yaz(bugunMs)} (${s.bugun.length} sorgu, ortanca)`);
+          if (adayMs !== undefined) {
+            console.log(`  aday  : ${yaz(adayMs)} (ortanca)`);
+            if (s.bugun.length && bugunMs !== null && adayMs !== null) {
+              console.log(`  fark  : ${(bugunMs - adayMs).toFixed(1)} ms`);
+            }
           }
+        }
+        if (eksik) {
+          console.log(`\n  ! En az bir sorgu ${SORGU_SINIRI_MS / 1000} sn sınırını aştı; toplamlar EKSİK.`);
         }
 
         console.log('\n═══ SONUÇ (anlamı değişmeyen parçalar) ═══');
@@ -150,22 +170,53 @@ async function main() {
  * ORTANCASI. Süre `EXPLAIN ANALYZE`dan okunuyor, duvar saatinden değil:
  * duvar saati ağ gidiş-dönüşünü ve Prisma'nın dönüşümünü de sayıyor.
  */
-async function parcaOrtancasi(tx: Tx, sorgular: string[]): Promise<number> {
+/**
+ * `null` = zaman aşımı. Bir koşum sınırı aşarsa kalan koşumlar denenmiyor:
+ * aynı sorguyu altı kez daha 30 saniye beklemek bir şey öğretmez.
+ * HER KOŞUM ANINDA BASILIYOR — ilk sürüm yalnızca sonucu basıyordu ve takılı
+ * gibi görünüyordu.
+ */
+async function parcaOrtancasi(tx: Tx, etiket: string, sorgular: string[]): Promise<number | null> {
   const olcumler: number[] = [];
   for (let i = 0; i < TEKRAR; i++) {
     let toplam = 0;
-    for (const sql of sorgular) toplam += await olc(tx, sql);
+    for (const sql of sorgular) {
+      const ms = await olc(tx, sql);
+      if (ms === null) {
+        console.log(`    ${etiket} ${i + 1}/${TEKRAR}: ZAMAN AŞIMI (> ${SORGU_SINIRI_MS / 1000} sn)`);
+        return null;
+      }
+      toplam += ms;
+    }
     olcumler.push(toplam);
+    console.log(`    ${etiket} ${i + 1}/${TEKRAR}: ${toplam.toFixed(1)} ms`);
   }
   return [...olcumler].sort((a, b) => a - b)[Math.floor(olcumler.length / 2)] ?? 0;
 }
 
-async function olc(tx: Tx, sql: string): Promise<number> {
-  const satirlar = (
-    await tx.$queryRawUnsafe<Array<Record<string, string>>>(`EXPLAIN (ANALYZE, TIMING) ${sql}`)
-  ).map((r) => String(Object.values(r)[0]));
-  const exec = satirlar.find((l) => l.trimStart().startsWith('Execution Time:'));
-  return Number(exec?.replace(/[^0-9.]/g, '') ?? 0);
+/** Zaman aşımında `null`; SAVEPOINT sayesinde transaction kullanılabilir kalıyor. */
+async function olc(tx: Tx, sql: string): Promise<number | null> {
+  await tx.$queryRawUnsafe('SAVEPOINT olcum');
+  try {
+    const satirlar = (
+      await tx.$queryRawUnsafe<Array<Record<string, string>>>(`EXPLAIN (ANALYZE, TIMING) ${sql}`)
+    ).map((r) => String(Object.values(r)[0]));
+    await tx.$queryRawUnsafe('RELEASE SAVEPOINT olcum');
+    const exec = satirlar.find((l) => l.trimStart().startsWith('Execution Time:'));
+    return Number(exec?.replace(/[^0-9.]/g, '') ?? 0);
+  } catch (e) {
+    // 57014 = query_canceled (statement_timeout). Başka bir hata YUTULMUYOR.
+    if (String((e as { message?: string }).message ?? e).includes('57014') ||
+        String((e as { message?: string }).message ?? e).includes('statement timeout')) {
+      await tx.$queryRawUnsafe('ROLLBACK TO SAVEPOINT olcum');
+      return null;
+    }
+    throw e;
+  }
+}
+
+function yaz(ms: number | null): string {
+  return ms === null ? 'ZAMAN AŞIMI' : `${ms.toFixed(1)} ms`;
 }
 
 main()
