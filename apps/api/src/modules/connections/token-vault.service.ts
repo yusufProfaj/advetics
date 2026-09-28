@@ -4,6 +4,7 @@ import { CryptoService } from '../../crypto/crypto.service';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import type { Platform } from '@advetics/shared';
 import { PlatformApiError, type IAdPlatformProvider } from './provider.types';
+import { yetkiBitisi } from './yetki-bitisi';
 
 /**
  * Node `Buffer`'ını Prisma'nın Bytes alanına yazılabilir hâle getirir.
@@ -194,6 +195,14 @@ export class TokenVaultService {
           keyVersion: enc.keyVersion,
           ...(refreshEnc ? { refreshTokenEnc: refreshEnc.data } : {}),
           tokenExpiresAt: fresh.expiresAt ?? null,
+          // YETKİNİN bitişi ayrı: Google yanıtta refresh token göndermiyor
+          // ama eskisi duruyor, o yüzden "yenileme var mı" satırdan da
+          // okunuyor. Gerekçe `yetki-bitisi.ts`.
+          authorizationExpiresAt: yetkiBitisi({
+            yenilemeVar: Boolean(fresh.refreshToken || conn.refreshTokenEnc),
+            erisimBitisi: fresh.expiresAt,
+            yenilemeBitisi: fresh.refreshTokenExpiresAt,
+          }),
           grantedScopes: fresh.grantedScopes,
           status: 'active',
           failureCount: 0,

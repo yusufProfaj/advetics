@@ -944,7 +944,12 @@ okunup varsayılmadı — canlıda doğrulandı.
   Doküman örnekleri dakika gibi görünüyordu, değil. TTL geri sayımı İLK
   YETKİLENDİRMEDEN işliyor: yenilemeden sonra 213 saniye AZALMIŞTI. Yani
   bağlantı bir yıl sonra, hiçbir şey bozulmadan, KESİN olarak ölüyor ve üyenin
-  yeniden yetkilendirmesi gerekiyor. **Şemada o tarihi tutacak kolon YOK.**
+  yeniden yetkilendirmesi gerekiyor. **O tarih artık
+  `platform_connections.authorization_expires_at`ta** (2026-09-28; önceden
+  kolon yoktu ve uyarılar 60 günlük ERİŞİM token'ına bakıyordu). Karar
+  `connections/yetki-bitisi.ts`: yenileme yoksa erişim bitişi, varsa
+  platformun bildirdiği yenileme bitişi, bildirmiyorsa NULL = süresiz
+  (Google). `token_expires_at` yalnızca token kasasının yenileme zamanı.
 - **INTROSPECTION "active: true" DER AMA TOKEN KULLANILAMAZ OLABİLİR.**
   Refresh token'ı `introspectToken`e verdiğimizde `active: true, auth_type: 3L`
   döndü; aynı token `Authorization: Bearer` olarak 401 INVALID_ACCESS_TOKEN

@@ -765,6 +765,30 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-28 — Google bağlantısı her saat "yetki 1 gün içinde doluyor" diyordu
+
+Önceki düzeltme deploy edilince uyarılar ilk kez göründü ve biri yanlıştı:
+Google Ads bağlantısı (52 hesap) "yetki 1 gün içinde doluyor". Kaydedilen
+an son doğrulamanın TAM BİR SAAT sonrasıydı: `token_expires_at` ERİŞİM
+token'ının bitişi ve Google'da saatlik. Uyarılar onu YETKİNİN ömrü sanıyordu.
+LinkedIn'de aynı hata ters yönde: uyarı 60 günlük erişim token'ına bakıyordu,
+asıl ölüm (ilk yetkilendirmeden 365 gün) hiçbir yerde görünmüyordu.
+
+- Yeni kolon `authorization_expires_at` (migration `20260928120000_yetki_bitisi`).
+  Karar `connections/yetki-bitisi.ts`: yenileme token'ı yoksa erişim bitişi
+  (Meta), varsa platformun bildirdiği yenileme bitişi (LinkedIn), bildirmiyorsa
+  NULL = süresiz (Google; zil "otomatik" yazıyor).
+- LinkedIn `refresh_token_expires_in`i artık okuyor (atılıyordu). Token kasası
+  yenilemede, bağlantı kaydı ilk bağlanmada yazıyor. Google yeniden bağlanmada
+  refresh token göndermeyebiliyor; "yenileme var mı" satıra soruluyor, şifreli
+  token belleğe alınmadan.
+- Mevcut LinkedIn satırı `created_at + 365 gün` ile dolduruldu: ölçülmüş kural,
+  tahmin değil; yeniden yetkilendirildiyse gerçek tarih daha geç, yani ALT
+  SINIR (uyarı erken gelebilir, geç gelemez).
+- `odeme-tetigi.spec.ts` taklidi tipe bağlanmamıştı: alan adı değişince
+  TypeScript sustu, kod `undefined.getTime()` ile düştü. Artık `satisfies
+  OdemeHesapSatiri`; aynı değişiklik derlemede kırılıyor.
+
 ### 2026-09-28 — "Tüm şirketler" modunda Uyarılar ve Senkronizasyon 500 dönüyordu
 
 Deploy sonrası canlıda görüldü: ajans panelinin HER sayfasında "Uyarılar

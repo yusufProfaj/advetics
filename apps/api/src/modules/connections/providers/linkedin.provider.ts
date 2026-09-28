@@ -284,6 +284,16 @@ export class LinkedInProvider implements IAdPlatformProvider {
        * "2 months (5184000 seconds)" yazısıyla birebir.
        */
       expiresAt: data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : undefined,
+      /*
+       * YENİLEME TOKEN'ININ ÖMRÜ ATILIYORDU. Ölçüldü: SANİYE, ilk
+       * yetkilendirmede 31.535.790 (365 gün) ve yenilemede UZAMIYOR, geri
+       * sayım ilk yetkilendirmeden işliyor. Bağlantı bir yıl sonra kesin
+       * ölüyor; bu değer olmadan panel onu 60 günlük erişim token'ından
+       * okuyup her iki ayda bir yanlış tarih gösteriyordu.
+       */
+      refreshTokenExpiresAt: data.refresh_token_expires_in
+        ? new Date(Date.now() + data.refresh_token_expires_in * 1000)
+        : undefined,
       grantedScopes: data.scope ? data.scope.split(/[\s,]+/).filter(Boolean) : [],
       externalUserId: uye.id,
       accountLabel: uye.ad,

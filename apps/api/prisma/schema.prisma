@@ -719,6 +719,12 @@ model PlatformConnection {
   refreshTokenEnc Bytes?    @map("refresh_token_enc")
   keyVersion      Int       @default(1) @map("key_version")
   tokenExpiresAt  DateTime? @map("token_expires_at") @db.Timestamptz(6)
+  /// YETKİNİN gerçek bitişi — erişim token'ınınki DEĞİL. Yenileme token'ı
+  /// yoksa erişim bitişi (Meta), varsa platformun bildirdiği yenileme bitişi
+  /// (LinkedIn 365 gün), bildirmiyorsa NULL = süresiz (Google). Uyarılar
+  /// bunu okuyor; `token_expires_at` token kasasının yenileme zamanlaması.
+  /// Karar `connections/yetki-bitisi.ts`.
+  authorizationExpiresAt DateTime? @map("authorization_expires_at") @db.Timestamptz(6)
 
   grantedScopes String[] @map("granted_scopes")
 

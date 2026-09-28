@@ -592,7 +592,7 @@ export async function createHarness(): Promise<Harness> {
       findMany: async ({ where }: { where: { id: { in: string[] } } }) => {
         const rows = await q<Record<string, unknown>>(
           `SELECT id::text AS id, platform::text AS platform, status::text AS status,
-                  token_expires_at, account_label, updated_at
+                  authorization_expires_at, account_label, updated_at
              FROM platform_connections WHERE id = ANY($1::uuid[])`,
           [where.id.in],
         );
@@ -600,7 +600,7 @@ export async function createHarness(): Promise<Harness> {
           id: r.id,
           platform: r.platform,
           status: r.status,
-          tokenExpiresAt: r.token_expires_at,
+          authorizationExpiresAt: r.authorization_expires_at,
           accountLabel: r.account_label,
           updatedAt: r.updated_at,
         }));

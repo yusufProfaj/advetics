@@ -266,3 +266,17 @@ describe('sessiz hata üretmeyen dallar', () => {
     expect(govde('fetchInsights')).toContain('conversionValueMicros: 0n');
   });
 });
+
+describe('yetkinin gerçek ömrü', () => {
+  it('KRİTİK: token yanıtındaki yenileme ömrü OKUNUYOR ve SANİYE sayılıyor', () => {
+    /*
+     * Değer atılıyordu ve panel LinkedIn yetkisini 60 günlük ERİŞİM
+     * token'ından okuyordu; asıl ölüm (ilk yetkilendirmeden 365 gün) hiçbir
+     * yerde görünmüyordu. Ölçüldü: 31.535.790 = SANİYE. Dakika sanmak
+     * tarihi 60 kat ileri atardı.
+     */
+    const g = govde('tokenIste');
+    expect(g).toContain('refreshTokenExpiresAt: data.refresh_token_expires_in');
+    expect(g).toContain('data.refresh_token_expires_in * 1000');
+  });
+});

@@ -23,6 +23,7 @@ import type {
 import { PLATFORMS } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
+import { yetkiBitisi } from './yetki-bitisi';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from './provider.registry';
@@ -851,6 +852,7 @@ export class ConnectionsService {
       accessToken: string;
       refreshToken?: string;
       expiresAt?: Date;
+      refreshTokenExpiresAt?: Date;
       grantedScopes: string[];
       externalUserId: string;
       accountLabel: string;
@@ -903,6 +905,31 @@ export class ConnectionsService {
     const access = this.vault.encrypt(tokens.accessToken);
     const refresh = tokens.refreshToken ? this.vault.encrypt(tokens.refreshToken) : null;
 
+    /*
+     * YETKİNİN GERÇEK BİTİŞİ (`yetki-bitisi.ts`). Yeniden bağlanmada Google
+     * refresh token'ı her zaman GÖNDERMİYOR ve aşağıdaki `update` eskisini
+     * koruyor; yani "yenileme var mı" sorusu yanıta değil satıra da
+     * soruluyor. Şifreli token belleğe ALINMIYOR: SQL yalnızca var olup
+     * olmadığını döndürüyor.
+     */
+    const eskiYenileme =
+      !refresh && mevcut
+        ? (
+            await this.admin.$queryRaw<Array<{ var: boolean }>>(Prisma.sql`
+              SELECT refresh_token_enc IS NOT NULL AS var
+                FROM platform_connections
+               WHERE org_id = ${orgId}::uuid
+                 AND platform = ${platform}::"Platform"
+                 AND external_user_id = ${tokens.externalUserId}
+            `)
+          )[0]?.var === true
+        : false;
+    const authorizationExpiresAt = yetkiBitisi({
+      yenilemeVar: refresh !== null || eskiYenileme,
+      erisimBitisi: tokens.expiresAt,
+      yenilemeBitisi: tokens.refreshTokenExpiresAt,
+    });
+
     const saved = await this.admin.platformConnection.upsert({
       where: {
         orgId_platform_externalUserId: {
@@ -921,6 +948,7 @@ export class ConnectionsService {
         refreshTokenEnc: refresh?.data ?? null,
         keyVersion: access.keyVersion,
         tokenExpiresAt: tokens.expiresAt ?? null,
+        authorizationExpiresAt,
         grantedScopes: tokens.grantedScopes,
         status: 'active',
         lastVerifiedAt: new Date(),
@@ -934,6 +962,7 @@ export class ConnectionsService {
         ...(refresh ? { refreshTokenEnc: refresh.data } : {}),
         keyVersion: access.keyVersion,
         tokenExpiresAt: tokens.expiresAt ?? null,
+        authorizationExpiresAt,
         grantedScopes: tokens.grantedScopes,
         status: 'active',
         failureCount: 0,
@@ -2539,6 +2568,7 @@ export class ConnectionsService {
           accessTokenEnc: new Uint8Array(0),
           refreshTokenEnc: null,
           tokenExpiresAt: null,
+          authorizationExpiresAt: null,
           grantedScopes: [],
         },
       });

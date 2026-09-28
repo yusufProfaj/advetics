@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import type { OdemeMailiGonderici } from './odeme-maili-gonderici.service';
 import { OdemeTetigiService } from './odeme-tetigi.service';
+import type { OdemeHesapSatiri } from './odeme-sorunlari';
 
 /**
  * ═══ ÖDEME TETİĞİ ═══
@@ -58,12 +59,19 @@ function sahteAdmin(): PrismaAdminService {
             lastInsightsSyncAt: new Date(),
             lastStructureSyncAt: new Date(),
             updatedAt: new Date(),
-            raw: s.raw,
+            // Fixture ham JSON'u serbest nesne olarak tutuyor; satır tipi JsonValue.
+            raw: s.raw as OdemeHesapSatiri['raw'],
             clientId: s.clientId,
             paymentAlertedAt: s.paymentAlertedAt,
             client: s.clientId ? { name: `WS-${s.id}`, status: s.clientStatus } : null,
-            connection: { status: 'active', tokenExpiresAt: null },
-          })),
+            connection: { status: 'active', authorizationExpiresAt: null },
+            /*
+             * TİPE BAĞLI (`satisfies`). Bağlantı alanı `tokenExpiresAt`ten
+             * `authorizationExpiresAt`e geçtiğinde bu taklit eski adla kaldı,
+             * TypeScript susmuştu ve kod `undefined.getTime()` ile düştü.
+             * Artık bir alanın adı değişirse derleme kırılıyor.
+             */
+          }) satisfies OdemeHesapSatiri),
       updateMany: async ({
         where,
         data,

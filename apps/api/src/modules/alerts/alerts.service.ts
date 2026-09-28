@@ -110,7 +110,9 @@ export class AlertsService {
           id: c.id,
           platform: c.platform,
           status: c.status,
-          tokenExpiresAt: c.tokenExpiresAt,
+          // Alanın adı eski ama DEĞERİ yetkinin gerçek bitişi: erişim
+          // token'ını okumak Google'da her saat "doluyor" uyarısı üretiyordu.
+          tokenExpiresAt: c.authorizationExpiresAt,
           accountLabel: c.accountLabel,
           etkilenenHesap: 1,
           veriZamani: c.updatedAt,
@@ -134,7 +136,7 @@ export class AlertsService {
           clientId: h.clientId,
           clientName: h.client?.name ?? null,
           connectionStatus: gorunen.get(h.connectionId)?.status ?? null,
-          connectionTokenExpiresAt: gorunen.get(h.connectionId)?.tokenExpiresAt ?? null,
+          connectionTokenExpiresAt: gorunen.get(h.connectionId)?.authorizationExpiresAt ?? null,
         };
         uyarilar.push(...hesapUyarilari(satir, simdi));
       }

@@ -32,7 +32,9 @@ export const GORUNEN_BAGLANTI_SECIMI = {
   id: true,
   platform: true,
   status: true,
-  tokenExpiresAt: true,
+  // YETKİNİN bitişi, erişim token'ınınki değil (`yetki-bitisi.ts`). Google
+  // bağlantısı bu alan yüzünden her saat "doluyor" diye uyarılıyordu.
+  authorizationExpiresAt: true,
   accountLabel: true,
   updatedAt: true,
 } satisfies Prisma.PlatformConnectionSelect;

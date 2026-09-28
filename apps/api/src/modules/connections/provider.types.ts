@@ -99,7 +99,14 @@ export interface OAuthTokens {
   accessToken: string;
   /** Google'da zorunlu (access token 1 saatte dolar), Meta'da genelde yok. */
   refreshToken?: string;
+  /** ERİŞİM token'ının bitişi — token kasası yenileme zamanını bundan kuruyor. */
   expiresAt?: Date;
+  /**
+   * YENİLEME token'ının bitişi, platform bildiriyorsa (LinkedIn:
+   * `refresh_token_expires_in`). Google bildirmiyor: süresi yok.
+   * Yetkinin gerçek bitişi bundan türüyor (`yetki-bitisi.ts`).
+   */
+  refreshTokenExpiresAt?: Date;
   grantedScopes: string[];
   /** Platform tarafındaki kullanıcı/işletme kimliği. */
   externalUserId: string;

@@ -26,7 +26,8 @@ export const ODEME_HESAP_SECIMI = {
   clientId: true,
   paymentAlertedAt: true,
   client: { select: { name: true, status: true } },
-  connection: { select: { status: true, tokenExpiresAt: true } },
+  // YETKİNİN bitişi (`yetki-bitisi.ts`), erişim token'ınınki değil.
+  connection: { select: { status: true, authorizationExpiresAt: true } },
 } satisfies Prisma.AdAccountSelect;
 
 export type OdemeHesapSatiri = Prisma.AdAccountGetPayload<{ select: typeof ODEME_HESAP_SECIMI }>;
@@ -54,7 +55,7 @@ export function odemeUyarisi(h: OdemeHesapSatiri, simdi: Date): Uyari | null {
     clientId: h.clientId,
     clientName: h.client?.name ?? null,
     connectionStatus: h.connection.status,
-    connectionTokenExpiresAt: h.connection.tokenExpiresAt,
+    connectionTokenExpiresAt: h.connection.authorizationExpiresAt,
   };
   return hesapUyarilari(satir, simdi).find((u) => u.kod === 'hesap_odeme_sorunu') ?? null;
 }
