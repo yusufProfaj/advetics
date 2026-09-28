@@ -696,7 +696,12 @@ export interface SyncAccountStatus {
   /** `ad_accounts.status` — platformdan geldiği hâliyle. */
   status: string;
   syncEnabled: boolean;
-  connectionStatus: string;
+  /**
+   * `null` = bağlantı bu kapsamda GÖRÜNMÜYOR (başka şirketin kendi
+   * bağlantısı, "Tüm şirketler" modu). Yokluk değil bilinmezlik; sebebi
+   * `blockedReason` içinde yazıyor.
+   */
+  connectionStatus: string | null;
   lastStructureSyncAt: string | null;
   lastInsightsSyncAt: string | null;
   /**

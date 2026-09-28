@@ -765,6 +765,44 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-28 — "Tüm şirketler" modunda Uyarılar ve Senkronizasyon 500 dönüyordu
+
+Deploy sonrası canlıda görüldü: ajans panelinin HER sayfasında "Uyarılar
+alınamadı" bandı, Senkronizasyon Durumu hiç açılmıyor. `/alerts` ve
+`/sync/status` 120 ms'de 500 dönüyordu (zaman aşımı değil).
+
+**Sebep tek bir hesap.** Biltaş kendi Google'ını bağlayıp hesabını atamıştı.
+"Tüm şirketler" modunda ATANMIŞ hesap satırı kardeş şirketlere açık
+(`org_kapsaminda`), HAVUZ bağlantısı ise yalnızca kendi şirketinde ve ajansta
+görünüyor (`havuz_kapsaminda`). İki uç hesabı `connection` ZORUNLU ilişkisiyle
+çekiyordu; RLS bağlantıyı gizleyince Prisma `null`u kabul etmeyip bütün isteği
+düşürüyordu. Canlıda ölçüldü: 101 atanmış hesabın 100'ü görünen bağlantılardan
+geliyordu, biri gelmiyordu.
+
+**Aynı sebep yeni hazırlık listesinde SESSİZ hata üretiyordu:** `INNER JOIN
+platform_connections` o hesabı eliyor ve Biltaş için "hiç hesap atanmadı"
+yazıyordu.
+
+**Düzeltme okuyan tarafta, politikada değil** (müşterinin kendi bağlantısının
+kardeş şirketlere kapalı olması 2026-09-23'ün kararı):
+- Bağlantı AYRI okunuyor (`connections/gorunen-baglantilar.ts`); görünmeyen
+  bağlantı `null` ve bu yokluk değil BİLİNMEZLİK.
+- `veriAkisiEngeli` görünmeyen bağlantıda bağlantıya bakmayan sebepleri
+  (izleme kapalı…) yine söylüyor, yoksa `BAGLANTI_GORUNMUYOR` diyor.
+- Uyarılarda görünmeyen bağlantı hesabın veri uyarılarını BASTIRMIYOR
+  (bağlantı seviyesinde o hesap için uyarı üretilemiyor, susmak onu hiçbir
+  yerde söylememek olurdu).
+- Hazırlık listesi LEFT JOIN, veri akışı maddesi `bilinmiyor`.
+
+`gorunen-baglantilar-rls.spec.ts` `SET ROLE` ile gerçek politikaya karşı
+koşuyor: kök sebebi (hesap görünür, bağlantı görünmez; INNER JOIN eliyor)
+BELGELİYOR ve düzeltilmiş servisi sınıyor. Varsayılan koşum ortamında RLS
+kapalı olduğu için bu hata başka hiçbir testte görünmüyordu.
+
+**Benzer sorgu kalan var mı:** RLS altında zorunlu `connection` ilişkisi çeken
+yalnızca bu iki uç vardı. `organic-sync`, `odeme-sorunlari` ve
+`connections.service` içindeki kullanımlar BYPASSRLS (`admin`) istemcisiyle.
+
 ### 2026-09-28 — Marka Merkezi, Bölüm 1a: hazırlık listesi ve bağlantılar
 
 Kullanıcının BASE taslağı üzerine (`docs/BASE-PLANI.md`). Yeni sayfa

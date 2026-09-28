@@ -27,7 +27,13 @@ export interface UyariHesabi {
   raw: unknown;
   clientId: string | null;
   clientName: string | null;
-  connectionStatus: string;
+  /**
+   * `null` = bağlantı bu kapsamda GÖRÜNMÜYOR (başka şirketin kendi
+   * bağlantısı). O zaman bağlantı seviyesinde tek bir uyarı da üretilemiyor
+   * ve aşağıdaki "bağlantı bozuksa sus" kuralı UYGULANMIYOR: susmak, o
+   * hesabın veri sorununu hiçbir yerde söylememek olurdu.
+   */
+  connectionStatus: string | null;
   connectionTokenExpiresAt: Date | null;
 }
 
@@ -188,7 +194,7 @@ export function hesapUyarilari(h: UyariHesabi, simdi: Date): Uyari[] {
    * bir kopuk bağlantı yine onlarca satır üretirdi. Sebep bir üst seviyede
    * bir kez söyleniyor.
    */
-  if (h.connectionStatus !== 'active') return [];
+  if (h.connectionStatus !== null && h.connectionStatus !== 'active') return [];
   if (
     h.connectionTokenExpiresAt !== null &&
     (h.connectionTokenExpiresAt.getTime() - simdi.getTime()) / 86_400_000 <= TOKEN_UYARI_GUNU

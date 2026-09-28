@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { TenantContext } from '@advetics/shared';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { SyncController } from './sync.controller';
+import { BAGLANTI_GORUNMUYOR } from '../../queue/supurme-kapsami';
 
 /**
  * "VERİ NEDEN YOK" TEŞHİS UCU.
@@ -30,7 +31,7 @@ interface HesapSatiri {
   syncEnabled: boolean;
   lastStructureSyncAt: Date | null;
   lastInsightsSyncAt: Date | null;
-  connection: { status: string };
+  connection: { status: string } | null;
   client: { status: string } | null;
 }
 
@@ -137,12 +138,23 @@ function kur(
   isArgs = null;
   const sayaclar = ekstra.sayaclar ?? {};
 
+  /*
+   * BAĞLANTI AYRI SORGUDAN (`gorunenBaglantilar`). Fixture bağlantıyı
+   * hesabın içinde tutuyor; taklit onu iki sorguya bölüyor. `connection:
+   * null` verilen hesabın bağlantısı "görünmüyor" (RLS) sayılıyor.
+   */
   const tx = {
     adAccount: {
       findMany: async (args: { where?: Record<string, unknown> }) => {
         hesapArgs = args;
-        return hesaplar;
+        return hesaplar.map(({ connection: _c, ...h }) => ({ ...h, connectionId: `conn-${h.id}` }));
       },
+    },
+    platformConnection: {
+      findMany: async () =>
+        hesaplar
+          .filter((h) => h.connection !== null)
+          .map((h) => ({ id: `conn-${h.id}`, status: h.connection!.status })),
     },
     syncJob: {
       findMany: async (args: { take?: number }) => {
@@ -349,5 +361,31 @@ describe('GET /sync/status — teşhis', () => {
   it('işin hangi hesaba ait olduğu ADIYLA dönüyor — kimlikle teşhis edilemez', async () => {
     const res = await kur([SAGLAM_HESAP], [IS]).status(CTX);
     expect(res.recentJobs[0]!.adAccountName).toBe('Mirnas — Meta');
+  });
+});
+
+describe('GET /sync/status — bağlantısı GÖRÜNMEYEN hesap', () => {
+  /*
+   * "Tüm şirketler" modunda başka şirketin kendi bağlantısı RLS ile gizli
+   * (`gorunen-baglantilar-rls.spec.ts`). Zorunlu ilişki olarak çekildiğinde
+   * bütün uç 500 dönüyordu; artık hesap listede ve sebebi "bilinmiyor".
+   */
+  it('KRİTİK: uç patlamıyor, hesap listede ve sebebi yazıyor', async () => {
+    const res = await kur([{ ...SAGLAM_HESAP, connection: null }]).status(CTX);
+    const a = res.accounts[0]!;
+    expect(a.connectionStatus).toBeNull();
+    expect(a.blockedReason).toBe(BAGLANTI_GORUNMUYOR);
+    // Süpürmede olup olmadığı bilinmiyor; "evet" demek uydurmak olurdu.
+    expect(a.inScheduledSweep).toBe(false);
+  });
+
+  it('bağlantıya bakmayan sebep yine önce geliyor', async () => {
+    const res = await kur([{ ...SAGLAM_HESAP, connection: null, syncEnabled: false }]).status(CTX);
+    expect(res.accounts[0]!.blockedReason).toContain('İzleme kapalı');
+  });
+
+  it('görünmeyen bağlantı "bağlantı kapalı" sayacına girmiyor', async () => {
+    const res = await kur([{ ...SAGLAM_HESAP, connection: null }]).status(CTX);
+    expect(res.excluded.connectionInactive).toBe(0);
   });
 });

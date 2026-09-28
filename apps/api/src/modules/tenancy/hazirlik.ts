@@ -3,7 +3,11 @@ import {
   type HazirlikMaddesi,
   type Platform,
 } from '@advetics/shared';
-import { veriAkisiEngeli, type VeriAkisiAdayi } from '../../queue/supurme-kapsami';
+import {
+  BAGLANTI_GORUNMUYOR,
+  veriAkisiEngeli,
+  type VeriAkisiAdayi,
+} from '../../queue/supurme-kapsami';
 
 /**
  * ═══ HAZIRLIK KARARI — SAF ═══
@@ -81,10 +85,27 @@ export function hazirlikMaddeleri(g: HazirlikGirdisi): HazirlikMaddesi[] {
       aciklama: 'Önce bir reklam hesabı ata; veri akışı onun ardından başlar.',
     });
   } else {
-    const engelli = g.hesaplar
-      .map((h) => ({ ad: h.name, engel: veriAkisiEngeli(h) }))
-      .filter((x): x is { ad: string; engel: string } => x.engel !== null);
-    if (engelli.length === 0) {
+    const kararlar = g.hesaplar.map((h) => ({ ad: h.name, engel: veriAkisiEngeli(h) }));
+    const engelli = kararlar.filter(
+      (x): x is { ad: string; engel: string } => x.engel !== null && x.engel !== BAGLANTI_GORUNMUYOR,
+    );
+    /*
+     * GÖRÜNMEYEN BAĞLANTI "EKSİK" DEĞİL "BİLİNMİYOR". Bağlantı başka şirketin
+     * kendi bağlantısıysa bu görünümden okunamıyor; "veri gelmiyor" demek
+     * sağlam bir kurulumu bozmaya gönderen yanlış alarm olurdu.
+     */
+    const gorunmeyen = kararlar.filter((x) => x.engel === BAGLANTI_GORUNMUYOR);
+    if (engelli.length === 0 && gorunmeyen.length > 0) {
+      maddeler.push({
+        kod: 'veri_akisi',
+        zorunlu: true,
+        durum: 'bilinmiyor',
+        aciklama:
+          `${g.hesaplar.length} hesaptan ${gorunmeyen.length} tanesinin bağlantısı bu görünümden okunamıyor ` +
+          `(${gorunmeyen.map((x) => x.ad).join(', ')}). Hesap başka bir şirketin kendi bağlantısından geliyor; ` +
+          'veri durumunu görmek için o şirkete geç.',
+      });
+    } else if (engelli.length === 0) {
       maddeler.push({
         kod: 'veri_akisi',
         zorunlu: true,

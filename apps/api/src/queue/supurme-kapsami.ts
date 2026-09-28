@@ -81,13 +81,36 @@ export function supurmeDisiSebep(a: SupurmeAdayi): string | null {
  * eşlenecek kampanya satırı yok. Eşlenemeyen satır atlanıyor ve iş
  * "başarılı" kapanıyor.
  */
-export interface VeriAkisiAdayi extends SupurmeAdayi {
+export interface VeriAkisiAdayi extends Omit<SupurmeAdayi, 'connection'> {
+  /**
+   * `null` = bağlantı BU KAPSAMDA GÖRÜNMÜYOR (RLS). Yokluk değil
+   * bilinmezlik: hesabın bağlantısı başka bir şirketin kendi bağlantısı ve
+   * "Tüm şirketler" modunda gizli. Bkz. `gorunen-baglantilar.ts`.
+   */
+  connection: { status: string } | null;
   lastStructureSyncAt: Date | null;
   lastInsightsSyncAt: Date | null;
 }
 
+/**
+ * Bağlantısı görünmeyen hesabın cümlesi — sabit, çünkü okuyan taraflar
+ * (hazırlık listesi) onu "eksik" değil "bilinmiyor" diye ayırt ediyor.
+ */
+export const BAGLANTI_GORUNMUYOR =
+  'Bu hesabın platform bağlantısı başka bir şirketin kendi bağlantısı ve bu görünümden okunamıyor. Veri durumunu görmek için o şirkete geç.';
+
 export function veriAkisiEngeli(a: VeriAkisiAdayi): string | null {
-  const sweep = supurmeDisiSebep(a);
+  /*
+   * GÖRÜNMEYEN BAĞLANTI: bağlantıya bakmayan sebepler (izleme kapalı,
+   * workspace pasif, hesap durumu) yine de söylenebiliyor ve önce onlar
+   * geliyor; bağlantı adımı "bilinmiyor" cümlesine düşüyor. Bağlantıyı
+   * `active` saymak onun sağlam olduğunu uydurmak olurdu, o yüzden yalnızca
+   * DİĞER adımların sonucuna bakmak için kullanılıyor.
+   */
+  if (a.connection === null) {
+    return supurmeDisiSebep({ ...a, connection: { status: 'active' } }) ?? BAGLANTI_GORUNMUYOR;
+  }
+  const sweep = supurmeDisiSebep({ ...a, connection: a.connection });
   if (sweep !== null) return sweep;
   if (a.lastStructureSyncAt === null) {
     return 'Yapı taraması bu hesapta hiç koşmadı — kampanya satırları olmadan metrikler yazılamıyor. "Şimdi güncelle" önce yapıyı çeker.';

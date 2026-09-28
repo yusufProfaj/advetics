@@ -37,6 +37,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { buildJobId, type SyncJobPayload } from '../../queue/queues';
 import { supurmeDisiSebep, veriAkisiEngeli } from '../../queue/supurme-kapsami';
+import { gorunenBaglantilar } from '../connections/gorunen-baglantilar';
 import { AuditService } from '../audit/audit.service';
 import type { AuthedRequest } from '../../common/types/request';
 import { EN_AZ_ORNEK, ilerleme, pencereler, planla } from './toplu-tazeleme';
@@ -268,7 +269,7 @@ export class SyncController {
        * ekran ajansın yüzlerce atanmamış hesabını bu müşterinin sorunuymuş
        * gibi listelerdi.
        */
-      const rows = await tx.adAccount.findMany({
+      const hamRows = await tx.adAccount.findMany({
         where: { clientId: { not: null } },
         orderBy: [{ platform: 'asc' }, { name: 'asc' }],
         select: {
@@ -279,10 +280,25 @@ export class SyncController {
           syncEnabled: true,
           lastStructureSyncAt: true,
           lastInsightsSyncAt: true,
-          connection: { select: { status: true } },
+          connectionId: true,
           client: { select: { status: true } },
         },
       });
+      /*
+       * BAĞLANTI AYRI OKUNUYOR, İLİŞKİ OLARAK DEĞİL. Zorunlu ilişki RLS'in
+       * gizlediği tek bir bağlantıda bütün ucu 500'e düşürüyordu ("Tüm
+       * şirketler" modu, başka şirketin kendi bağlantısı). Görünmeyen
+       * bağlantı `null` ve `veriAkisiEngeli` onu bilinmezlik olarak
+       * yazıyor. Gerekçe `gorunen-baglantilar.ts`.
+       */
+      const baglantilar = await gorunenBaglantilar(
+        tx,
+        hamRows.map((r) => r.connectionId),
+      );
+      const rows = hamRows.map((r) => ({
+        ...r,
+        connection: baglantilar.get(r.connectionId) ?? null,
+      }));
 
       /*
        * İŞLER AYNI TRANSACTION İÇİNDE. Ayrı `withTenant` çağrısı ikinci bir
@@ -344,14 +360,17 @@ export class SyncController {
     };
 
     const accounts: SyncAccountStatus[] = rows.map((a) => {
-      const sweepReason = supurmeDisiSebep(a);
+      // Görünmeyen bağlantıda süpürme kararı VERİLEMİYOR; o hesap aşağıdaki
+      // `blockedReason` ile "bilinmiyor" olarak yazılıyor ve sayaçlara
+      // girmiyor, çünkü hangi sebeple elendiği bilinmiyor.
+      const sweepReason = a.connection === null ? null : supurmeDisiSebep({ ...a, connection: a.connection });
 
       // Sayaçlar sebeple AYNI SIRAYI izliyor: bir hesap birden fazla koşula
       // takılabilir ve iki kez sayılırsa toplam hesap sayısını aşar.
       if (sweepReason !== null) {
         if (!a.syncEnabled) excluded.syncDisabled++;
         else if (a.client === null || a.client.status !== 'active') excluded.clientInactive++;
-        else if (a.connection.status !== 'active') excluded.connectionInactive++;
+        else if (a.connection !== null && a.connection.status !== 'active') excluded.connectionInactive++;
         else excluded.accountStatus++;
       }
 
@@ -373,10 +392,12 @@ export class SyncController {
         platform: a.platform,
         status: a.status,
         syncEnabled: a.syncEnabled,
-        connectionStatus: a.connection.status,
+        connectionStatus: a.connection?.status ?? null,
         lastStructureSyncAt: a.lastStructureSyncAt?.toISOString() ?? null,
         lastInsightsSyncAt: a.lastInsightsSyncAt?.toISOString() ?? null,
-        inScheduledSweep: sweepReason === null,
+        // Bağlantı görünmüyorsa süpürmede olup olmadığı BİLİNMİYOR; "evet"
+        // demek sağlam olduğunu uydurmak olurdu.
+        inScheduledSweep: a.connection !== null && sweepReason === null,
         structureReady,
         blockedReason,
         lastJobs: (sonIsler.get(a.id) ?? []).map((r) => isSatiri(r, adiyle)),

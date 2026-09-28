@@ -582,7 +582,30 @@ export async function createHarness(): Promise<Harness> {
     // eşlemesi yapıyor ve bu satır olmadan `db.ad` undefined kalıyor.
     ...externalIdLookup('ad', 'ads', q),
 
-    platformConnection: { update: async () => ({}) },
+    platformConnection: {
+      update: async () => ({}),
+      /*
+       * `gorunenBaglantilar` taklidi — GERÇEK SQL, yani `SET ROLE` altında
+       * politikadan geçiyor. Taklit bir diziden dönseydi RLS testi hiçbir
+       * şeyi kanıtlamazdı. Alanlar `GORUNEN_BAGLANTI_SECIMI` ile aynı.
+       */
+      findMany: async ({ where }: { where: { id: { in: string[] } } }) => {
+        const rows = await q<Record<string, unknown>>(
+          `SELECT id::text AS id, platform::text AS platform, status::text AS status,
+                  token_expires_at, account_label, updated_at
+             FROM platform_connections WHERE id = ANY($1::uuid[])`,
+          [where.id.in],
+        );
+        return rows.map((r) => ({
+          id: r.id,
+          platform: r.platform,
+          status: r.status,
+          tokenExpiresAt: r.token_expires_at,
+          accountLabel: r.account_label,
+          updatedAt: r.updated_at,
+        }));
+      },
+    },
     syncJob: { update: async () => ({}), findUnique: async () => null },
   } as unknown as TestDb;
 

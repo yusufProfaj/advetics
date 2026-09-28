@@ -11,7 +11,8 @@ interface HesapSatiri {
   sync_enabled: boolean;
   last_structure_sync_at: Date | null;
   last_insights_sync_at: Date | null;
-  connection_status: string;
+  /** `null` = bağlantı bu kapsamda görünmüyor (RLS). Yokluk değil. */
+  connection_status: string | null;
   client_status: string;
 }
 
@@ -59,7 +60,11 @@ export class HazirlikService {
                a.sync_enabled, a.last_structure_sync_at, a.last_insights_sync_at,
                c.status::text AS connection_status, cl.status::text AS client_status
           FROM ad_accounts a
-          JOIN platform_connections c ON c.id = a.connection_id
+          -- LEFT JOIN: RLS gizlediği bağlantıda INNER JOIN hesabı SESSİZCE
+          -- eliyordu. Canlıda bir workspace'in kendi bağlantısından gelen
+          -- hesabı "Tüm şirketler" modunda "hiç hesap atanmadı" diye
+          -- görünüyordu. Görünürlüğe YALNIZCA kendi politikası karar verir.
+          LEFT JOIN platform_connections c ON c.id = a.connection_id
           JOIN clients cl ON cl.id = a.client_id
          WHERE a.client_id = ${clientId}::uuid
          ORDER BY a.platform, a.name
@@ -98,7 +103,7 @@ export class HazirlikService {
           syncEnabled: h.sync_enabled,
           lastStructureSyncAt: h.last_structure_sync_at,
           lastInsightsSyncAt: h.last_insights_sync_at,
-          connection: { status: h.connection_status },
+          connection: h.connection_status === null ? null : { status: h.connection_status },
           client: { status: h.client_status },
         })),
         sosyalKanalSayisi: sosyal?.n ?? 0,

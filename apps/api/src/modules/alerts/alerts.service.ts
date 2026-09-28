@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { BaglantiDurumu, TenantContext, Uyari, UyariYaniti } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { gorunenBaglantilar } from '../connections/gorunen-baglantilar';
 import {
   baglantiUyarilari,
   hesapUyarilari,
@@ -60,19 +61,23 @@ export class AlertsService {
           updatedAt: true,
           raw: true,
           clientId: true,
+          connectionId: true,
           client: { select: { name: true } },
-          connection: {
-            select: {
-              id: true,
-              platform: true,
-              status: true,
-              tokenExpiresAt: true,
-              accountLabel: true,
-              updatedAt: true,
-            },
-          },
         },
       });
+
+      /*
+       * BAĞLANTI AYRI OKUNUYOR, İLİŞKİ OLARAK DEĞİL. Zorunlu ilişki, RLS'in
+       * gizlediği TEK bir bağlantıda bu ucu 500'e düşürüyordu ve panelin her
+       * sayfasında "Uyarılar alınamadı" yazıyordu ("Tüm şirketler" modu,
+       * başka şirketin kendi bağlantısı). Görünmeyen bağlantı için bağlantı
+       * uyarısı üretilmiyor; hesabın kendi uyarıları üretilmeye devam ediyor.
+       * Gerekçe `gorunen-baglantilar.ts`.
+       */
+      const gorunen = await gorunenBaglantilar(
+        tx,
+        hesaplar.map((h) => h.connectionId),
+      );
 
       const uyarilar: Uyari[] = [];
 
@@ -94,19 +99,21 @@ export class AlertsService {
        */
       const baglantilar = new Map<string, UyariBaglantisi>();
       for (const h of hesaplar) {
-        const mevcut = baglantilar.get(h.connection.id);
+        const c = gorunen.get(h.connectionId);
+        if (!c) continue;
+        const mevcut = baglantilar.get(c.id);
         if (mevcut) {
           mevcut.etkilenenHesap += 1;
           continue;
         }
-        baglantilar.set(h.connection.id, {
-          id: h.connection.id,
-          platform: h.connection.platform,
-          status: h.connection.status,
-          tokenExpiresAt: h.connection.tokenExpiresAt,
-          accountLabel: h.connection.accountLabel,
+        baglantilar.set(c.id, {
+          id: c.id,
+          platform: c.platform,
+          status: c.status,
+          tokenExpiresAt: c.tokenExpiresAt,
+          accountLabel: c.accountLabel,
           etkilenenHesap: 1,
-          veriZamani: h.connection.updatedAt,
+          veriZamani: c.updatedAt,
         });
       }
       for (const b of baglantilar.values()) {
@@ -126,8 +133,8 @@ export class AlertsService {
           raw: h.raw,
           clientId: h.clientId,
           clientName: h.client?.name ?? null,
-          connectionStatus: h.connection.status,
-          connectionTokenExpiresAt: h.connection.tokenExpiresAt,
+          connectionStatus: gorunen.get(h.connectionId)?.status ?? null,
+          connectionTokenExpiresAt: gorunen.get(h.connectionId)?.tokenExpiresAt ?? null,
         };
         uyarilar.push(...hesapUyarilari(satir, simdi));
       }

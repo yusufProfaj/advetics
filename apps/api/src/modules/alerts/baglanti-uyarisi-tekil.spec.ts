@@ -47,7 +47,10 @@ describe('KRİTİK: bağlantı uyarısı BAĞLANTI BAŞINA üretiliyor', () => {
      * `Map` olmadan bunu hiçbir şey engellemezdi.
      */
     expect(GOVDE).toContain('new Map<string, UyariBaglantisi>()');
-    expect(GOVDE).toContain('baglantilar.get(h.connection.id)');
+    // Bağlantı artık AYRI okunuyor (`gorunenBaglantilar`) ve görünmeyen
+    // bağlantı atlanıyor; tekilleştirme görünen bağlantının kimliğine göre.
+    expect(GOVDE).toContain('const c = gorunen.get(h.connectionId);');
+    expect(GOVDE).toContain('baglantilar.get(c.id)');
   });
 
   it('KRİTİK: ETKİLENEN HESAP sayılıyor', () => {
@@ -65,5 +68,23 @@ describe('KRİTİK: bağlantı uyarısı BAĞLANTI BAŞINA üretiliyor', () => {
     expect(GOVDE).not.toContain('accessTokenEnc');
     expect(GOVDE).not.toContain('pageAccessTokenEnc');
     expect(GOVDE).not.toContain('connection: true');
+  });
+
+  it('KRİTİK: bağlantı alan listesi de token taşımıyor', () => {
+    /*
+     * Bağlantı seçimi `gorunen-baglantilar.ts`e taşındı. Yalnızca bu
+     * servisi taramak artık BOŞA düşerdi: token kolonu oraya eklense bile
+     * yukarıdaki iddia geçmeye devam ederdi.
+     */
+    const SECIM = readFileSync(
+      resolve(__dirname, '..', 'connections', 'gorunen-baglantilar.ts'),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    const i = SECIM.indexOf('export const GORUNEN_BAGLANTI_SECIMI = {');
+    expect(i).toBeGreaterThan(-1);
+    const liste = SECIM.slice(i, SECIM.indexOf('} satisfies', i));
+    expect(liste).toContain('status: true');
+    expect(liste).not.toMatch(/Enc|token_enc|refreshToken/);
+    expect(GOVDE).toContain('gorunenBaglantilar(');
   });
 });

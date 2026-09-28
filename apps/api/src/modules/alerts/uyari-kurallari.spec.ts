@@ -369,3 +369,16 @@ describe('bayatlık görünür', () => {
     expect(u?.veriZamani).toBe(new Date(SIMDI.getTime() - SAAT).toISOString());
   });
 });
+
+describe('bağlantısı GÖRÜNMEYEN hesap', () => {
+  it('KRİTİK: veri uyarısı BASTIRILMIYOR', () => {
+    /*
+     * Bağlantı kopuksa hesap susuyor, çünkü sebep bağlantı seviyesinde bir
+     * kez söyleniyor. Görünmeyen bağlantı için o seviyede uyarı YOK; burada
+     * da susmak, o hesabın veri sorununu hiçbir yerde söylememek olurdu.
+     */
+    expect(kodlar(hesap({ connectionStatus: null, lastInsightsSyncAt: null }))).toEqual([
+      'veri_hic_gelmedi',
+    ]);
+  });
+});
