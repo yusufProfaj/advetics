@@ -38,6 +38,7 @@ import { SyncQueueService } from '../../queue/sync-queue.service';
 import { buildJobId, type SyncJobPayload } from '../../queue/queues';
 import { supurmeDisiSebep, veriAkisiEngeli } from '../../queue/supurme-kapsami';
 import { gorunenBaglantilar } from '../connections/gorunen-baglantilar';
+import { METRIK_ISLERI } from './metrik-isleri';
 import { AuditService } from '../audit/audit.service';
 import type { AuthedRequest } from '../../common/types/request';
 import { EN_AZ_ORNEK, ilerleme, pencereler, planla } from './toplu-tazeleme';
@@ -126,20 +127,8 @@ const YAPI_ICIN_TANINAN_SURE_MS = 90_000;
 
 const RECENT_JOB_LIMIT = 25;
 
-/**
- * "Sıfır satır yazdı" hangi iş türlerinde bir ARIZA işareti.
- *
- * Organik gönderi ya da potansiyel müşteri işi sıfır satırla bitebilir ve bu
- * normaldir — o gün yeni gönderi yoktur. Metrik işinde sıfır satır ise ya
- * yapı taraması eksik ya varlık arşivlenmiş demek.
- */
-const METRIK_ISLERI = [
-  'insights_realtime',
-  'insights_daily',
-  'insights_backfill',
-  'initial_backfill',
-  // `as const` DEĞİL: Prisma `in` süzgeci mutable dizi bekliyor.
-] satisfies SyncJobType[];
+// METRIK_ISLERI ayrı dosyada — ölçüm aracı da aynı listeyi okuyor.
+
 
 /** `sonIsSorgusu` dönüşü — ham SQL snake_case veriyor. */
 interface HamIs {
