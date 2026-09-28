@@ -131,6 +131,24 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     title: 'Kütüphane',
     items: [
       /*
+       * MARKA MERKEZİ KÜTÜPHANENİN BAŞINDA. Workspace'in kurulum durumu,
+       * bağlantıları ve (sonraki bölümlerde) marka, varlık, kitle ve koruma
+       * kuralları burada toplanıyor; aşağıdaki satırlar oraya taşındıkça
+       * kalkacak (`docs/BASE-PLANI.md`).
+       *
+       * İZİN `client.write`, `client.read` DEĞİL: müşteri hesabı
+       * `client.read` taşıyor ve menüsü kullanıcının kararıyla üç ekranla
+       * sınırlı ("müşteri = sadece genel bakış, reklam keşfi ve raporlar").
+       */
+      {
+        href: '/marka-merkezi',
+        label: 'Marka Merkezi',
+        icon: 'brand',
+        module: 1,
+        ready: true,
+        perm: 'client.write',
+      },
+      /*
        * BİLGİ BANKASI KÜTÜPHANE'NİN ALTINDA — daha önce Akıllı Boost'un
        * hemen altındaydı ve içeriği o zaman boost ön ayarlarıydı (bkz.
        * `boost-on-ayarlari-formu.tsx`). Artık müşterinin GENEL profili:

@@ -38,6 +38,7 @@ export * from './schemas/rule.schema';
 export * from './schemas/special-category.schema';
 export * from './schemas/targeting-lookup.schema';
 export * from './schemas/tenant.schema';
+export * from './schemas/hazirlik.schema';
 export * from './types/context';
 export * from './tarih';
 export * from './plan-zamani';

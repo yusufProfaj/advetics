@@ -9,6 +9,7 @@ import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { ClientSetupService } from './client-setup.service';
 import { ClientChannelsService } from './client-channels.service';
+import { HazirlikService } from './hazirlik.service';
 import { MembersController } from './members.controller';
 import { MembersService } from './members.service';
 import { OrganizationsController } from './organizations.controller';
@@ -31,6 +32,7 @@ import { OrganizationsController } from './organizations.controller';
     BrandingService,
     ClientSetupService,
     ClientChannelsService,
+    HazirlikService,
     ClientProfileService,
     BilgiBankasiAiService,
   ],

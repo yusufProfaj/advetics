@@ -36,7 +36,7 @@ import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { buildJobId, type SyncJobPayload } from '../../queue/queues';
-import { supurmeDisiSebep } from '../../queue/supurme-kapsami';
+import { supurmeDisiSebep, veriAkisiEngeli } from '../../queue/supurme-kapsami';
 import { AuditService } from '../audit/audit.service';
 import type { AuthedRequest } from '../../common/types/request';
 import { EN_AZ_ORNEK, ilerleme, pencereler, planla } from './toplu-tazeleme';
@@ -363,13 +363,9 @@ export class SyncController {
        * kapanıyor.
        */
       const structureReady = a.lastStructureSyncAt !== null;
-      const blockedReason =
-        sweepReason ??
-        (!structureReady
-          ? 'Yapı taraması bu hesapta hiç koşmadı — kampanya satırları olmadan metrikler yazılamıyor. "Şimdi güncelle" önce yapıyı çeker.'
-          : a.lastInsightsSyncAt === null
-            ? 'Hesap izleniyor ve yapı taraması koştu ama metrik hiç çekilmedi. Aşağıdaki iş listesinde bu hesabın son işine bakın.'
-            : null);
+      // KARAR ORTAK FONKSİYONDA: Marka Merkezi'nin hazırlık listesi de aynı
+      // soruyu soruyor ve iki ekranın farklı cevap vermesi yasak.
+      const blockedReason = veriAkisiEngeli(a);
 
       return {
         id: a.id,

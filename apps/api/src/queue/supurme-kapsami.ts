@@ -63,3 +63,37 @@ export function supurmeDisiSebep(a: SupurmeAdayi): string | null {
   }
   return null;
 }
+
+/**
+ * ═══ BU HESAPTAN VERİ NEDEN GELMİYOR — TEK CEVAP ═══
+ *
+ * Bu karar `sync.controller.ts` içinde satır içi yazılıydı ve yalnızca
+ * Senkronizasyon Durumu ekranı onu okuyordu. Marka Merkezi'nin hazırlık
+ * listesi de aynı soruyu soruyor ("veri geliyor mu"). İkinci bir kopya,
+ * bir ekranın "veri geliyor", ötekinin "gelmiyor" demesi olurdu. Süzgeci iki
+ * yerde yazmanın bu depodaki klasik sonucu (bkz. `SUPURME_HESAP_KOSULU`).
+ *
+ * SIRA ÖNEMLİ: süpürme dışı sebep önce, çünkü izlemesi kapalı bir hesapta
+ * "yapı taraması koşmadı" demek, asıl işi (izlemeyi açmak) gizler.
+ *
+ * YAPI ENGELİ süpürme engelinden bağımsız: süpürmeye giren bir hesapta bile
+ * yapı taraması hiç koşmadıysa metrik satırları yazılamıyor, çünkü
+ * eşlenecek kampanya satırı yok. Eşlenemeyen satır atlanıyor ve iş
+ * "başarılı" kapanıyor.
+ */
+export interface VeriAkisiAdayi extends SupurmeAdayi {
+  lastStructureSyncAt: Date | null;
+  lastInsightsSyncAt: Date | null;
+}
+
+export function veriAkisiEngeli(a: VeriAkisiAdayi): string | null {
+  const sweep = supurmeDisiSebep(a);
+  if (sweep !== null) return sweep;
+  if (a.lastStructureSyncAt === null) {
+    return 'Yapı taraması bu hesapta hiç koşmadı — kampanya satırları olmadan metrikler yazılamıyor. "Şimdi güncelle" önce yapıyı çeker.';
+  }
+  if (a.lastInsightsSyncAt === null) {
+    return 'Hesap izleniyor ve yapı taraması koştu ama metrik hiç çekilmedi. Aşağıdaki iş listesinde bu hesabın son işine bakın.';
+  }
+  return null;
+}

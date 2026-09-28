@@ -9,6 +9,7 @@ import {
   type ClientSetupInput,
   type ClientSetupResult,
   type ClientChannels,
+  type WorkspaceHazirlik,
 } from '@advetics/shared';
 import { CurrentTenant, RequireOrgAdmin, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
@@ -16,6 +17,7 @@ import type { AuthedRequest } from '../../common/types/request';
 import { ClientsService } from './clients.service';
 import { ClientSetupService } from './client-setup.service';
 import { ClientChannelsService } from './client-channels.service';
+import { HazirlikService } from './hazirlik.service';
 
 @Controller('clients')
 export class ClientsController {
@@ -23,6 +25,7 @@ export class ClientsController {
     private readonly clients: ClientsService,
     private readonly setupService: ClientSetupService,
     private readonly channels: ClientChannelsService,
+    private readonly hazirlik: HazirlikService,
   ) {}
 
   private meta(req: AuthedRequest) {
@@ -95,6 +98,22 @@ export class ClientsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<ClientChannels> {
     return this.channels.list(ctx, id);
+  }
+
+  /**
+   * MARKA MERKEZİ HAZIRLIK LİSTESİ — "bu workspace reklama hazır mı".
+   *
+   * `client.read` yetiyor: liste yalnızca okuyor ve müşterinin kendi hesabı
+   * da kurulumunun neresinde olduğunu görebilmeli. Bütçe maddesi ayrıca
+   * `budget.read` istiyor; yoksa `bilinmiyor` dönüyor (`hazirlik.service.ts`).
+   */
+  @Get(':id/hazirlik')
+  @RequirePermissions('client.read')
+  hazirlikListesi(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<WorkspaceHazirlik> {
+    return this.hazirlik.get(ctx, id);
   }
 
   @Patch(':id')

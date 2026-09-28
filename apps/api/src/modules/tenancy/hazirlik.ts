@@ -1,0 +1,194 @@
+import {
+  PLATFORM_KISA_ADLARI,
+  type HazirlikMaddesi,
+  type Platform,
+} from '@advetics/shared';
+import { veriAkisiEngeli, type VeriAkisiAdayi } from '../../queue/supurme-kapsami';
+
+/**
+ * ═══ HAZIRLIK KARARI — SAF ═══
+ *
+ * Veritabanından toplanan girdiyi maddelere çeviriyor. Ayrı ve saf, çünkü
+ * asıl mantık burada ve bir sorgunun içine gömülü olsaydı yalnızca
+ * veritabanlı testle sınanabilirdi; bu depoda sessiz hatanın en çok
+ * saklandığı yer tam da bu tür "hangi hâl hangi cümleye düşüyor"
+ * kararları.
+ */
+export interface HazirlikHesabi extends VeriAkisiAdayi {
+  name: string;
+  platform: Platform;
+}
+
+export interface HazirlikGirdisi {
+  hesaplar: HazirlikHesabi[];
+  sosyalKanalSayisi: number;
+  profil: {
+    markaBilgileri: string | null;
+    hedefKitle: string | null;
+    bilgiBankasi: string | null;
+    logoAssetId: string | null;
+  } | null;
+  /**
+   * `null` = bu kişi bütçeyi OKUYAMIYOR. "Bütçe yok" ile "göremiyorum" aynı
+   * şey değil; ikincisi `bilinmiyor` olarak dönüyor.
+   */
+  buAyButceVar: boolean | null;
+}
+
+const bos = (s: string | null | undefined): boolean => !s || s.trim().length === 0;
+
+function platformOzeti(hesaplar: HazirlikHesabi[]): string {
+  const sayac = new Map<Platform, number>();
+  for (const h of hesaplar) sayac.set(h.platform, (sayac.get(h.platform) ?? 0) + 1);
+  return [...sayac.entries()].map(([p, n]) => `${n} ${PLATFORM_KISA_ADLARI[p]}`).join(', ');
+}
+
+export function hazirlikMaddeleri(g: HazirlikGirdisi): HazirlikMaddesi[] {
+  const maddeler: HazirlikMaddesi[] = [];
+
+  // ─── 1. Reklam hesabı ──────────────────────────────────────────────────
+  maddeler.push(
+    g.hesaplar.length > 0
+      ? {
+          kod: 'reklam_hesabi',
+          zorunlu: true,
+          durum: 'tamam',
+          aciklama: `${g.hesaplar.length} reklam hesabı: ${platformOzeti(g.hesaplar)}.`,
+        }
+      : {
+          kod: 'reklam_hesabi',
+          zorunlu: true,
+          durum: 'eksik',
+          aciklama:
+            'Bu workspace’e henüz reklam hesabı atanmadı. Hesap atandığı anda izleme açılır ve son 90 günün verisi çekilmeye başlar.',
+        },
+  );
+
+  // ─── 2. Veri akışı ─────────────────────────────────────────────────────
+  /*
+   * KARAR `veriAkisiEngeli`NDE — Senkronizasyon Durumu ekranıyla AYNI
+   * fonksiyon. Burada ayrı bir "veri geliyor mu" kuralı yazmak, bir ekranın
+   * "geliyor", ötekinin "gelmiyor" demesi olurdu.
+   *
+   * HESAP YOKSA madde "eksik" ama sebebi bir önceki madde: iki maddenin
+   * birden "hesap ata" demesi yerine bu, önce neyin yapılacağını söylüyor.
+   */
+  if (g.hesaplar.length === 0) {
+    maddeler.push({
+      kod: 'veri_akisi',
+      zorunlu: true,
+      durum: 'eksik',
+      aciklama: 'Önce bir reklam hesabı ata; veri akışı onun ardından başlar.',
+    });
+  } else {
+    const engelli = g.hesaplar
+      .map((h) => ({ ad: h.name, engel: veriAkisiEngeli(h) }))
+      .filter((x): x is { ad: string; engel: string } => x.engel !== null);
+    if (engelli.length === 0) {
+      maddeler.push({
+        kod: 'veri_akisi',
+        zorunlu: true,
+        durum: 'tamam',
+        aciklama:
+          g.hesaplar.length === 1
+            ? 'Hesaptan veri geliyor.'
+            : `${g.hesaplar.length} hesabın hepsinden veri geliyor.`,
+      });
+    } else {
+      /*
+       * SESSİZ KESME YOK: kaç hesapta sorun olduğu ve toplamın kaç olduğu
+       * yazıyor. İlk hesabın sebebi TAM yazılıyor, çünkü "bir sorun var" bir
+       * teşhis değil; gerisi sayıyla.
+       */
+      const [ilk] = engelli;
+      const kalan = engelli.length - 1;
+      maddeler.push({
+        kod: 'veri_akisi',
+        zorunlu: true,
+        durum: 'eksik',
+        aciklama:
+          `${g.hesaplar.length} hesaptan ${engelli.length} tanesinden veri gelmiyor. ` +
+          `${ilk!.ad}: ${ilk!.engel}` +
+          (kalan > 0 ? ` (ve ${kalan} hesap daha)` : ''),
+      });
+    }
+  }
+
+  // ─── 3. Marka bilgisi ──────────────────────────────────────────────────
+  /*
+   * AI asistan ve reklam metni servisi bu üç alanı okuyor
+   * (`musteri-baglami.ts`, `reklam-metni.service.ts`). Boş alan hata
+   * vermiyor, yalnızca AI'ın markayı tanımadan yazması demek; o yüzden
+   * zorunlu değil ama HANGİSİNİN boş olduğu yazıyor.
+   */
+  const alanlar: Array<[string, string | null | undefined]> = [
+    ['Bilgi bankası', g.profil?.bilgiBankasi],
+    ['Hedef kitle', g.profil?.hedefKitle],
+    ['Marka bilgileri', g.profil?.markaBilgileri],
+  ];
+  const bosAlanlar = alanlar.filter(([, v]) => bos(v)).map(([ad]) => ad);
+  maddeler.push(
+    bosAlanlar.length === 0
+      ? { kod: 'marka_bilgisi', zorunlu: false, durum: 'tamam', aciklama: 'Üç alan da dolu.' }
+      : {
+          kod: 'marka_bilgisi',
+          zorunlu: false,
+          durum: 'eksik',
+          aciklama:
+            `Boş: ${bosAlanlar.join(', ')}. ` +
+            'AI reklam metni yazarken ve asistan öneri verirken markayı bu alanlardan tanıyor.',
+        },
+  );
+
+  // ─── 4. Logo ───────────────────────────────────────────────────────────
+  maddeler.push(
+    g.profil?.logoAssetId
+      ? { kod: 'logo', zorunlu: false, durum: 'tamam', aciklama: 'Logo yüklü.' }
+      : {
+          kod: 'logo',
+          zorunlu: false,
+          durum: 'eksik',
+          aciklama: 'Logo yok. Google Performance Max logosuz kampanya açmıyor.',
+        },
+  );
+
+  // ─── 5. Aylık bütçe ────────────────────────────────────────────────────
+  maddeler.push(
+    g.buAyButceVar === null
+      ? {
+          kod: 'aylik_butce',
+          zorunlu: false,
+          durum: 'bilinmiyor',
+          aciklama: 'Bütçeyi görme yetkin yok, bu madde senin için değerlendirilemiyor.',
+        }
+      : g.buAyButceVar
+        ? { kod: 'aylik_butce', zorunlu: false, durum: 'tamam', aciklama: 'Bu ayın bütçesi tanımlı.' }
+        : {
+            kod: 'aylik_butce',
+            zorunlu: false,
+            durum: 'eksik',
+            aciklama:
+              'Bu ay için bütçe tanımlı değil. Harcamanın bütçeye göre hızı izlenemiyor ve bütçeye bakan kurallar çalışmıyor.',
+          },
+  );
+
+  // ─── 6. Sosyal kanal ───────────────────────────────────────────────────
+  maddeler.push(
+    g.sosyalKanalSayisi > 0
+      ? {
+          kod: 'sosyal_kanal',
+          zorunlu: false,
+          durum: 'tamam',
+          aciklama: `${g.sosyalKanalSayisi} sayfa ya da kanal bağlı.`,
+        }
+      : {
+          kod: 'sosyal_kanal',
+          zorunlu: false,
+          durum: 'eksik',
+          aciklama:
+            'Facebook sayfası, Instagram hesabı ya da YouTube kanalı bağlı değil. Akıllı Boost öne çıkaracağı gönderileri buradan alıyor.',
+        },
+  );
+
+  return maddeler;
+}

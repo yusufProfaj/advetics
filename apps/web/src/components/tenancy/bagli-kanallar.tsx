@@ -14,6 +14,7 @@ import { kanalReklamHesabiMi } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { atamaBildirimi, type AtamaYaniti } from '@/lib/atama-bildirimi';
 import { PlatformLogo } from '@/components/platform-logo';
+import { Dugme } from '@/components/ui/dugme';
 
 /**
  * BAĞLI KANALLAR — bir workspace’in kanalları, kart düzeninde.
@@ -58,8 +59,26 @@ export function BagliKanallar({ data }: { data: ClientChannels }) {
   );
 }
 
+/*
+ * HAVUZDA ARAMA. Canlıda Meta havuzunda 164 hesap vardı ve liste 256
+ * piksellik bir kutuda aramasız açılıyordu: kullanıcı doğru hesabı adıyla
+ * değil kaydırarak arıyordu. Kimlikle de aranıyor, çünkü ajans hesabı
+ * çoğu zaman Ads Manager'daki numarasıyla tanıyor.
+ */
+const ARAMA_ESIGI = 8;
+
+export function havuzdaAra(liste: ChannelItem[], ara: string): ChannelItem[] {
+  const q = ara.trim().toLocaleLowerCase('tr');
+  if (!q) return liste;
+  return liste.filter(
+    (i) => i.name.toLocaleLowerCase('tr').includes(q) || i.externalId.toLowerCase().includes(q),
+  );
+}
+
 function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }) {
   const [acik, setAcik] = useState(false);
+  const [ara, setAra] = useState('');
+  const gorunen = havuzdaAra(grup.available, ara);
   const eklenebilir = grup.available.length > 0;
 
   return (
@@ -87,14 +106,15 @@ function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }
         {/* SEÇİLECEK HESAP YOKSA DÜĞME SEBEBİYLE KAPALI — gizlenmiyor.
             Gizlemek, kullanıcının "buraya nasıl ekleniyor" diye aramasına
             yol açardı. */}
-        <button
-          type="button"
+        <Dugme
+          ton="ikincil"
+          boyut="kucuk"
           onClick={() => setAcik((v) => !v)}
           disabled={!eklenebilir}
-          className="shrink-0 whitespace-nowrap rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-40"
+          aria-expanded={acik}
         >
-          {acik ? 'Kapat' : '+ Kanal Ekle'}
-        </button>
+          {acik ? 'Kapat' : `+ Ekle (${grup.available.length})`}
+        </Dugme>
       </div>
 
       {!eklenebilir && grup.connected.length === 0 && (
@@ -120,8 +140,31 @@ function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }
           {/* SEÇİCİ DE ALT ALTA ve YÜKSEKLİĞİ SINIRLI: havuzda onlarca hesap
               olabiliyor ve sınırsız liste, kartı sayfa boyunca uzatıp
               yanındaki kanalları ekrandan atıyordu. */}
-          <ul className="mt-2 max-h-64 space-y-1.5 overflow-y-auto">
-            {grup.available.map((i) => (
+          {grup.available.length > ARAMA_ESIGI && (
+            <label className="mt-2 block">
+              <span className="sr-only">{CHANNEL_LABELS[grup.kind]} havuzunda ara</span>
+              <input
+                type="search"
+                name={`havuz-ara-${grup.kind}`}
+                autoComplete="off"
+                spellCheck={false}
+                value={ara}
+                onChange={(e) => setAra(e.target.value)}
+                placeholder="Ad ya da hesap numarası…"
+                className="h-8 w-full rounded-lg border border-line bg-surface px-2.5 text-sm focus-visible:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand/30"
+              />
+            </label>
+          )}
+          {/* SESSİZ KESME YOK: süzüldüyse kaçının göründüğü yazıyor. */}
+          {ara.trim() && (
+            <p className="mt-1.5 text-xs text-ink-muted" aria-live="polite">
+              {gorunen.length === 0
+                ? `Aramaya uyan hesap yok (havuzda ${grup.available.length} hesap var).`
+                : `${gorunen.length} / ${grup.available.length} hesap gösteriliyor.`}
+            </p>
+          )}
+          <ul className="mt-2 max-h-80 space-y-1.5 overflow-y-auto overscroll-contain">
+            {gorunen.map((i) => (
               <SecilebilirSatir key={i.id} clientId={clientId} kind={grup.kind} item={i} />
             ))}
           </ul>
@@ -194,6 +237,13 @@ function BagliKart({
   item: ChannelItem;
 }) {
   const { ata, busy, hata, bildirim } = useAtama(kind, item.id);
+  /*
+   * KALDIRMA İKİ ADIMLI. Tek tıkla çalışıyordu ve geri dönüşü pahalı:
+   * izleme kapanıyor, hesabın geçmiş verisi workspace'ten ayrılıyor ve
+   * yeniden eklemek 90 günlük çekimi baştan kuyruğa sokuyor. Şablon
+   * silmede (`sablon-yonetimi.tsx`) aynı desen zaten vardı.
+   */
+  const [onay, setOnay] = useState(false);
   void clientId;
 
   return (
@@ -201,17 +251,32 @@ function BagliKart({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-ink">{item.name}</p>
-          <p className="truncate text-[11px] text-ink-muted">{item.externalId}</p>
+          <p className="truncate text-xs text-ink-muted" translate="no">
+            {item.externalId}
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void ata(null)}
-          disabled={busy}
-          className="shrink-0 text-[11px] font-medium text-danger transition hover:underline disabled:opacity-40"
-        >
-          {busy ? '…' : 'Kaldır'}
-        </button>
+        {!onay && (
+          <Dugme ton="sade" boyut="kucuk" onClick={() => setOnay(true)} disabled={busy}>
+            Kaldır
+          </Dugme>
+        )}
       </div>
+
+      {onay && (
+        <div className="mt-2 rounded-lg border border-danger/30 bg-danger-soft p-2.5">
+          <p className="text-xs text-danger-strong">
+            Kaldırınca bu hesaptan veri gelmesi durur ve hesap havuza döner. Emin misin?
+          </p>
+          <div className="mt-2 flex gap-2">
+            <Dugme ton="tehlike" boyut="kucuk" bekliyor={busy} onClick={() => void ata(null)}>
+              Evet, kaldır
+            </Dugme>
+            <Dugme ton="ikincil" boyut="kucuk" disabled={busy} onClick={() => setOnay(false)}>
+              Vazgeç
+            </Dugme>
+          </div>
+        </div>
+      )}
 
       {/*
         İZLEME KAPALIYSA YAZILIYOR. Atama izlemeyi açıyor, ama eski
@@ -220,12 +285,20 @@ function BagliKart({
         aranmasına yol açardı.
       */}
       {!item.syncEnabled && (
-        <p className="mt-1.5 text-[11px] text-warn">
+        <p className="mt-1.5 text-xs text-warn-strong">
           İzleme kapalı — bu hesaptan veri çekilmiyor. Kaldırıp yeniden ekle.
         </p>
       )}
-      {hata && <p className="mt-1.5 text-[11px] text-danger">{hata}</p>}
-      {bildirim && <p className="mt-1.5 text-[11px] text-ink-muted">{bildirim}</p>}
+      {hata && (
+        <p role="alert" className="mt-1.5 text-xs text-danger-strong">
+          {hata}
+        </p>
+      )}
+      {bildirim && (
+        <p aria-live="polite" className="mt-1.5 text-xs text-ink-muted">
+          {bildirim}
+        </p>
+      )}
     </li>
   );
 }
@@ -246,7 +319,9 @@ function SecilebilirSatir({
       <div className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
         <div className="min-w-0">
           <p className="truncate text-sm text-ink">{item.name}</p>
-          <p className="truncate text-[11px] text-ink-muted">{item.externalId}</p>
+          <p className="truncate text-xs text-ink-muted" translate="no">
+            {item.externalId}
+          </p>
         </div>
         {/* YÖNETİCİ HESABI LİSTEDE DURUYOR ama seçilemiyor ve SEBEBİ yazılı:
             aradığı hesabı bulamayan kullanıcı senkronizasyonun bozuk
@@ -254,18 +329,21 @@ function SecilebilirSatir({
         {item.isManager ? (
           <span className="shrink-0 text-[11px] text-ink-muted">Yönetici (MCC) — atanamaz</span>
         ) : (
-          <button
-            type="button"
-            onClick={() => void ata(clientId)}
-            disabled={busy}
-            className="shrink-0 rounded-lg bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition disabled:opacity-40"
-          >
-            {busy ? 'Ekleniyor…' : 'Ekle'}
-          </button>
+          <Dugme boyut="kucuk" bekliyor={busy} onClick={() => void ata(clientId)}>
+            Ekle
+          </Dugme>
         )}
       </div>
-      {hata && <p className="mt-1 px-3 text-[11px] text-danger">{hata}</p>}
-      {bildirim && <p className="mt-1 px-3 text-[11px] text-ink-muted">{bildirim}</p>}
+      {hata && (
+        <p role="alert" className="mt-1 px-3 text-xs text-danger-strong">
+          {hata}
+        </p>
+      )}
+      {bildirim && (
+        <p aria-live="polite" className="mt-1 px-3 text-xs text-ink-muted">
+          {bildirim}
+        </p>
+      )}
     </li>
   );
 }

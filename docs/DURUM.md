@@ -89,6 +89,15 @@ Senin paylaştığın 7 parçalı mimariye göre. ✅ tamam · 🟡 kısmi · �
 | **Görsel/video varlık arşivi** | 🟡 | `/kutuphane/gorseller` — görsel + logo, mükerrer engeli, hesap başına hash önbelleği; reklam oluşturucu ve toplu oluşturucuya bağlı |
 | **Form kütüphanesi (Anlık Form)** | 🟡 | `/kutuphane/formlar` — sürümleme çalışıyor, Meta yayını doğrulanmadı |
 
+> **2026-09-28 düzeltmesi ve yeni plan.** Yukarıdaki tablo ve "yol adı
+> çakışıyor" uyarısı bayat: `/kutuphane/bilgi-bankasi` artık Auto-Boost ön
+> ayarı DEĞİL, workspace'in profili (`client_profiles`: bilgi bankası, hedef
+> kitle, marka bilgileri, logo). AI asistan (`musteri-baglami.ts`) ve reklam
+> metni servisi onu okuyor. Alanlar serbest metin, yapılandırılmamış. BASE'in
+> tamamı artık **Marka Merkezi** adıyla tek sayfada toplanıyor; plan, taslaktan
+> sapılan yerler ve bölüm sırası `docs/BASE-PLANI.md` içinde. Bölüm 1a
+> (hazırlık listesi + bağlantılar) yazıldı, aşağıdaki günlüğe bkz.
+
 **Bu bölümün büyük kısmı doldu.** Formlar kütüphanesi 12 Ağustos'ta, görsel
 varlık arşivi 13 Ağustos'ta yazıldı. Toplu oluşturucuda `image_hash` ELLE
 YAZMA derdi de bitti — satırda ham hash yerine arşiv görselinin adı yazılıyor
@@ -755,6 +764,39 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 (31 Ağustos girdisi 2 Eylül'ünkinden SONRA geliyordu) ve numaralar § 3'ün alt
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
+
+### 2026-09-28 — Marka Merkezi, Bölüm 1a: hazırlık listesi ve bağlantılar
+
+Kullanıcının BASE taslağı üzerine (`docs/BASE-PLANI.md`). Yeni sayfa
+`/marka-merkezi`: workspace'in "reklama hazır mı" listesi ve bağlantıları.
+
+- **Hazırlık listesi** (`GET /clients/:id/hazirlik`): altı madde, ikisi
+  zorunlu (hesap atandı, veri geliyor). Üç hâlli: `bilinmiyor` "eksik"
+  DEĞİL, bütçeyi okuyamayan kişiye "bütçe yok" denmiyor. Karar saf
+  fonksiyonda (`tenancy/hazirlik.ts`), veri toplama ham SQL ile
+  (`hazirlik.service.ts`) ve PGlite'a karşı sınanıyor.
+- **"Veri neden gelmiyor" kararı tek fonksiyonda** (`veriAkisiEngeli`,
+  `queue/supurme-kapsami.ts`). `sync.controller.ts` içinde satır içiydi;
+  hazırlık listesi aynı soruyu sorduğu için dışarı çıkarıldı. İki ekranın
+  farklı cevap vermesi artık fiziksel olarak mümkün değil.
+- **Test verisinin bir tuzağı:** `seedTenant` hesabı `status = unknown` ile
+  kuruyor ve o durumdaki hesap zamanlanmış güncellemeye HİÇ girmiyor.
+  Gerçek hesaplar keşifte platform durumunu alıyor (`mapAccountStatus`).
+  "Yapı taraması koşmadı" iddiası yazan bir test önce `status` yazmalı.
+- **Bağlantılar bileşeni** (`bagli-kanallar.tsx`, eski Bağlı Kanallar
+  sayfasıyla ortak): kaldırma iki adımlı oldu (tek tıkla izlemeyi kapatıp
+  veriyi ayırıyordu), havuzda ad ve hesap numarasıyla arama geldi (canlıda
+  Meta havuzu 164 hesap, liste aramasızdı).
+- **Menü:** "Marka Merkezi" Kütüphane'nin başında, `client.write` ile.
+  Müşteri hesabı `client.read` taşıyor ve menüsü üç ekranla sınırlı.
+
+**Bölüm 1b bekliyor:** müşterinin ajansın atadığı hesabı kaldırabilmesi
+(kullanıcı kararı, 2026-09-28). Kaldırılan satır ajansın şirketine dönüyor ve
+müşteri o satırı GÖREMİYOR; yani UPDATE RLS'e takılır ("new row violates
+row-level security policy"). Politika değişikliği + `SET ROLE` testi
+gerekiyor.
+
+**Canlıda görülmedi:** yerelde veritabanı yok, canlıda deploy edilmedi.
 
 ### 2026-09-08 — LinkedIn CANLIDA ÇALIŞIYOR (ve bir üretim kesintisi)
 
