@@ -765,6 +765,33 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-28 — Senkronizasyon Durumu: ÖLÇÜLDÜ, sayaçlar tek taramaya indi
+
+`/sync/status` "Tüm şirketler" modunda 3,1-3,5 sn, soğuk başlangıçta 5 sn
+transaction sınırını aşıp 500. Tahminle düzeltmek yerine üretim ölçüm aracı
+yazıldı (`prisma/olcum-senkron.ts`, `pnpm --filter @advetics/api
+olcum-senkron -- --eposta=...`) ve üretimde koşuldu (294.108 iş, 101 hesap,
+7 koşumun ortancası):
+
+| Parça | Bugün | Aday | Karar |
+|---|---|---|---|
+| Dört iş sayacı | 1.536 ms | 457 ms (tek FILTER) | UYGULANDI, anlam aynı |
+| Hesap başına son iş | 506 ms | >30 sn (LATERAL + indeks) | REDDEDİLDİ |
+| Son 25 iş | 394 ms | — | açık |
+| Atanmış hesaplar | 23 ms | — | sorun değil |
+| Sayaçlar son 7 gün | — | 137 ms | ANLAM DEĞİŞİYOR, kullanıcıya soruldu |
+
+**"İndeks okuması taramadan hızlıdır" tahmini RLS altında tutmadı:** aday
+60 kat yavaştı. Ölçülmeden uygulansaydı ucu tamamen kapatırdı. Aday ölçüm
+listesinde bırakıldı ki aynı fikir yeniden önerilirse sonucu görülsün.
+
+Ölçülen sorgu ile çalışan sorgu AYNI fonksiyondan (`isSayaclariSorgusu`);
+ayrı yazılsaydı ölçüm bir gün başka bir sorguyu ölçerdi.
+
+İlk test fixture'ı her durumdan 1 iş taşıyordu ve mutasyon testinde üç
+bozmadan ikisi yakalanmadı (1 düşen = 1 koşan). Fixture artık her durumu
+farklı sayıyla dolduruyor.
+
 ### 2026-09-28 — Google bağlantısı her saat "yetki 1 gün içinde doluyor" diyordu
 
 Önceki düzeltme deploy edilince uyarılar ilk kez göründü ve biri yanlıştı:

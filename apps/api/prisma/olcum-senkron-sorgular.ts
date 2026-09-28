@@ -17,7 +17,7 @@
  * ayrışırsa ölçüm başka bir sorgunun planını gösterir; her birinin hangi
  * çağrıdan geldiği yanında yazıyor.
  */
-import { METRIK_ISLERI } from '../src/modules/sync/metrik-isleri';
+import { METRIK_ISLERI, isSayaclariSorgusu } from '../src/modules/sync/metrik-isleri';
 
 /** `sync.controller.ts` içindeki `RECENT_JOB_LIMIT` ile AYNI olmak zorunda. */
 export const SON_IS_LIMITI = 25;
@@ -49,19 +49,20 @@ export function senkronSorgulari(): OlculenSorgu[] {
           WHERE status = 'succeeded' AND rows_upserted = 0 AND job_type IN (${METRIK})`,
         "SELECT COUNT(*)::int AS n FROM sync_jobs WHERE status IN ('running', 'queued', 'throttled')",
       ],
-      aday: [
-        `SELECT COUNT(*)::int AS toplam,
-                COUNT(*) FILTER (WHERE status = 'failed')::int AS dusen,
-                COUNT(*) FILTER (WHERE status = 'succeeded' AND rows_upserted = 0
-                                   AND job_type IN (${METRIK}))::int AS bos,
-                COUNT(*) FILTER (WHERE status IN ('running', 'queued', 'throttled'))::int AS kosan
-           FROM sync_jobs`,
-      ],
+      // ADAY = ÜRETİMDE ÇALIŞAN SORGU (2026-09-28'de uygulandı). Metin aynı
+      // fonksiyondan geliyor; ölçülen ile çalışan ayrışamaz.
+      aday: [isSayaclariSorgusu().sql],
     },
     {
       // `sonIsSorgusu` — DISTINCT ON bütün tabloyu tarıyor. Aday: hesap ve
       // iş türü başına `(ad_account_id, job_type, created_at DESC)`
       // indeksinden TEK satır.
+      //
+      // ÖLÇÜLDÜ VE REDDEDİLDİ (2026-09-28, üretim): bugünkü DISTINCT ON 506
+      // ms, bu aday 30 SANİYEYİ AŞTI ve zaman aşımına düştü. "İndeks
+      // okuması taramadan hızlıdır" tahmini RLS altında tutmadı. Aday
+      // ölçüm listesinde KALIYOR ki aynı fikir yeniden önerilirse sonucu
+      // görülsün; uygulanmadı.
       ad: 'hesap başına son iş',
       bugun: [
         `SELECT DISTINCT ON (ad_account_id, job_type)

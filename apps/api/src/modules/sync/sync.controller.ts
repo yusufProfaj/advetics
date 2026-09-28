@@ -38,7 +38,7 @@ import { SyncQueueService } from '../../queue/sync-queue.service';
 import { buildJobId, type SyncJobPayload } from '../../queue/queues';
 import { supurmeDisiSebep, veriAkisiEngeli } from '../../queue/supurme-kapsami';
 import { gorunenBaglantilar } from '../connections/gorunen-baglantilar';
-import { METRIK_ISLERI } from './metrik-isleri';
+import { isSayaclariSorgusu, type IsSayaclari } from './metrik-isleri';
 import { AuditService } from '../audit/audit.service';
 import type { AuthedRequest } from '../../common/types/request';
 import { EN_AZ_ORNEK, ilerleme, pencereler, planla } from './toplu-tazeleme';
@@ -293,7 +293,7 @@ export class SyncController {
        * İŞLER AYNI TRANSACTION İÇİNDE. Ayrı `withTenant` çağrısı ikinci bir
        * etkileşimli transaction açardı; iki kısa sorgu için bedeli yersiz.
        */
-      const [jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler] =
+      const [jobs, sayac, sonIsler] =
         await Promise.all([
         tx.syncJob.findMany({
           orderBy: { createdAt: 'desc' },
@@ -316,19 +316,17 @@ export class SyncController {
             finishedAt: true,
           },
         }),
-        tx.syncJob.count(),
         /*
          * SAYAÇLAR VERİTABANINDAN — gösterilen 25 satırdan DEĞİL.
          *
          * İlk sürüm bunları `recentJobs` dizisinden türetiyordu ve "5 düşen
          * iş" aslında "gösterilen 25 işin 5'i" anlamına geliyordu. Kesilmiş
          * bir listeden sayı üretmek, sessiz kesmenin başka bir biçimi.
+         *
+         * DÖRDÜ TEK TARAMADA: dört ayrı sayım üretimde 1.536 ms, bu 457 ms.
+         * Gerekçe ve ölçüm `metrik-isleri.ts#isSayaclariSorgusu`.
          */
-        tx.syncJob.count({ where: { status: 'failed' } }),
-        tx.syncJob.count({
-          where: { status: 'succeeded', rowsUpserted: 0, jobType: { in: METRIK_ISLERI } },
-        }),
-        tx.syncJob.count({ where: { status: { in: ['running', 'queued', 'throttled'] } } }),
+        tx.$queryRaw<IsSayaclari[]>(isSayaclariSorgusu()).then((r) => r[0]),
         /*
          * HESAP BAŞINA SON İŞ. `DISTINCT ON` Prisma'da yok; ham SQL
          * `withTenant` içinde koşuyor, yani RLS aynen uygulanıyor.
@@ -336,7 +334,20 @@ export class SyncController {
         sonIsSorgusu(tx),
       ]);
 
-      return { rows, jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler };
+      /*
+       * `?? 0` ŞART DEĞİL AMA DÜRÜST: COUNT her zaman tek satır döndürür. Satır
+       * gelmezse sıfır yazmak "düşen iş yok" demek olurdu; o yüzden atıyoruz.
+       */
+      if (!sayac) throw new Error('İş sayaçları okunamadı: sorgu satır döndürmedi.');
+      return {
+        rows,
+        jobs,
+        jobsTotal: sayac.toplam,
+        failedCount: sayac.dusen,
+        emptyCount: sayac.bos,
+        runningCount: sayac.kosan,
+        sonIsler,
+      };
     });
 
     const adiyle = new Map(rows.map((a) => [a.id, a.name]));

@@ -53,6 +53,14 @@ beforeAll(async () => {
     [ACC_2, 'insights_realtime', 'succeeded', 0, '10 days'],
     [ACC_2, 'organic_posts', 'succeeded', 0, '1 day'],
     [ACC_HAVUZ, 'structure', 'queued', 0, '1 minute'],
+    /*
+     * HER DURUMUN SAYISI FARKLI. İlk fixture'da 1 düşen ve 1 koşan iş vardı,
+     * `throttled` hiç yoktu: "düşen" sayacına yanlış durumu yazan ya da
+     * `throttled`ı unutan bir sorgu AYNI sayıyı veriyordu ve mutasyon
+     * testinde iki bozma yakalanmadı.
+     */
+    [ACC_2, 'insights_daily', 'failed', 0, '3 hours'],
+    [ACC_2, 'structure', 'throttled', 0, '2 minutes'],
   ];
   for (const [acc, tur, durum, satir, once] of isler) {
     await h.q(
@@ -74,10 +82,10 @@ const sorgu = (ad: string) => {
 };
 
 describe('tarama boşa düşmüyor', () => {
-  it('beş parça ve sekiz iş kaydı', async () => {
+  it('beş parça ve on iş kaydı', async () => {
     expect(senkronSorgulari()).toHaveLength(5);
     const [n] = await h.q<{ n: string }>('SELECT count(*) AS n FROM sync_jobs');
-    expect(Number(n?.n)).toBe(8);
+    expect(Number(n?.n)).toBe(10);
   });
 });
 
@@ -99,8 +107,9 @@ describe('KRİTİK: aday AYNI soruyu soruyor', () => {
     for (const sql of s.bugun) bugun.push((await h.q<{ n: number }>(sql))[0]!.n);
     const [a] = await h.q<{ toplam: number; dusen: number; bos: number; kosan: number }>(s.aday![0]!);
     expect([a!.toplam, a!.dusen, a!.bos, a!.kosan]).toEqual(bugun);
-    // Fixture her dalı dolduruyor: sıfır = sıfır bir karşılaştırma değil.
-    expect(bugun).toEqual([8, 1, 2, 2]);
+    // Fixture her dalı FARKLI bir sayıyla dolduruyor: sıfır = sıfır ya da
+    // bir = bir, yanlış durumu sayan bir sorguyu ayırt etmiyor.
+    expect(bugun).toEqual([10, 2, 2, 3]);
   });
 
   it('son iş: atanmış hesaplar için DISTINCT ON ile LATERAL aynı satırları veriyor', async () => {
@@ -122,7 +131,7 @@ describe('KRİTİK: aday AYNI soruyu soruyor', () => {
       .map(anahtar)
       .sort();
     expect(aday).toEqual(bugun);
-    expect(aday).toHaveLength(5);
+    expect(aday).toHaveLength(7);
   });
 
   it('son 7 gün adayı AÇIKÇA anlam değiştiren olarak işaretli', () => {
@@ -156,6 +165,20 @@ describe('KRİTİK: ölçüm üretimdeki bağlamı ve ucun sabitlerini taşıyor
     const limit = DENETLEYICI.match(/const RECENT_JOB_LIMIT = (\d+);/)?.[1];
     expect(limit, 'sabit bulunamadı — tarama boşa düştü').toBeDefined();
     expect(Number(limit)).toBe(SON_IS_LIMITI);
+  });
+
+  it('KRİTİK: uç sayaçları ÖLÇÜLEN sorguyla okuyor, dört ayrı sayımla değil', () => {
+    // Üretimde ölçüldü: dört sayım 1.536 ms, tek sorgu 457 ms.
+    // YALNIZCA durum ucunun gövdesi: aynı dosyadaki toplu tazeleme ucu
+    // kendi amacıyla `syncJob.count` kullanıyor ve dosya geneline bakan ilk
+    // yazım onu yakalayıp yanlış kırmızı veriyordu.
+    const bas = DENETLEYICI.indexOf("@Get('status')");
+    const son = DENETLEYICI.indexOf('@Get(', bas + 10);
+    expect(bas, 'durum ucu bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    expect(son).toBeGreaterThan(bas);
+    const govde = DENETLEYICI.slice(bas, son);
+    expect(govde).toContain('tx.$queryRaw<IsSayaclari[]>(isSayaclariSorgusu())');
+    expect(govde).not.toContain('tx.syncJob.count(');
   });
 
   it('metrik iş listesi uçla AYNI dosyadan', () => {

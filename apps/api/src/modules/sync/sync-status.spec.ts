@@ -174,8 +174,22 @@ function kur(
         return sayaclar.running ?? 0;
       },
     },
-    // Ham SQL: hesap + iş türü başına en son iş (DISTINCT ON).
-    $queryRaw: async () => ekstra.sonIs ?? [],
+    /*
+     * İKİ HAM SORGU: dört sayaç tek FILTER sorgusunda (`isSayaclariSorgusu`)
+     * ve hesap + iş türü başına en son iş (DISTINCT ON). Taklit metne göre
+     * ayırıyor; sayaçlar yine VERİTABANINDAN, gösterilen 25 satırdan değil.
+     */
+    $queryRaw: async (q: { sql: string }) =>
+      q.sql.includes('COUNT(*) FILTER')
+        ? [
+            {
+              toplam: isToplam,
+              dusen: sayaclar.failed ?? 0,
+              bos: sayaclar.emptySuccess ?? 0,
+              kosan: sayaclar.running ?? 0,
+            },
+          ]
+        : (ekstra.sonIs ?? []),
   };
 
   const prisma = {
