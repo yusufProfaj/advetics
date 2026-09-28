@@ -1,3 +1,5 @@
+import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
+import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import Link from 'next/link';
 import {
   ACTION_LABELS,
@@ -37,15 +39,16 @@ export default async function RulesPage({
   const session = await requireSession();
   const params = await searchParams;
 
-  const clientId =
-    first(params.musteri) ?? session.activeClientId ?? session.availableClients[0]?.id;
+  // SESSİZCE İLK WORKSPACE'E DÜŞÜLMÜYOR — gerekçe `lib/sayfa-workspace.ts`.
+  const clientId = sayfaWorkspaceId(session, first(params.musteri));
 
   if (!clientId) {
     return (
-      <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
-        <p className="mt-2 text-sm text-ink-muted">Kurallar workspace bazında tanımlanıyor.</p>
-      </div>
+      <WorkspaceGerekli
+        ekran="Kurallar"
+        neden="Kurallar workspace bazında tanımlanıyor."
+        {...workspaceSecimVerisi(session)}
+      />
     );
   }
 

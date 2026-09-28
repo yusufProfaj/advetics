@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { platformListesi } from '@/lib/platform-listesi';
 
 /**
  * Oturum ekranlarının ORTAK KABUĞU — giriş, şifremi unuttum, şifre sıfırlama.
@@ -42,7 +43,7 @@ export function AuthKabuk({
         )}
 
         <p className="mt-6 text-center text-xs text-ink-muted">
-          Advetics · Meta ve Google Ads otomasyonu
+          Advetics · {platformListesi()} otomasyonu
         </p>
       </div>
     </main>

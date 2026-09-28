@@ -1,3 +1,5 @@
+import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
+import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import {
   ASISTAN_PLATFORMLARI,
   ASISTAN_PLATFORM_ETIKETI,
@@ -70,17 +72,16 @@ export default async function AiAsistanPage({
     ? (istenen as AsistanPlatformu)
     : 'meta';
 
-  const clientId =
-    first(params.musteri) ?? session.activeClientId ?? session.availableClients[0]?.id;
+  // SESSİZCE İLK WORKSPACE'E DÜŞÜLMÜYOR — gerekçe `lib/sayfa-workspace.ts`.
+  const clientId = sayfaWorkspaceId(session, first(params.musteri));
 
   if (!clientId) {
     return (
-      <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
-        <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">
-          Asistan taslağı bir workspace’in hesabına kuruyor.
-        </p>
-      </div>
+      <WorkspaceGerekli
+        ekran="AI Asistan"
+        neden="Asistan taslağı bir workspace’in hesabına kuruyor."
+        {...workspaceSecimVerisi(session)}
+      />
     );
   }
 

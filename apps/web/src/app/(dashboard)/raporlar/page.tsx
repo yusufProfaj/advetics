@@ -1,3 +1,5 @@
+import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
+import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import {
   kapsananDonemler,
   raporSorgusu,
@@ -46,17 +48,16 @@ export default async function ReportsPage({
   const canWriteTemplate = hasPermission(session, 'report.write');
   const params = await searchParams;
 
-  const clientId =
-    first(params.musteri) ?? session.activeClientId ?? session.availableClients[0]?.id;
+  // SESSİZCE İLK WORKSPACE'E DÜŞÜLMÜYOR — gerekçe `lib/sayfa-workspace.ts`.
+  const clientId = sayfaWorkspaceId(session, first(params.musteri));
 
   if (!clientId) {
     return (
-      <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-        <h1 className="text-sm font-semibold text-ink">Önce bir workspace seç</h1>
-        <p className="mt-2 text-sm text-ink-muted">
-          Rapor workspace bazında üretiliyor. Üstteki seçiciden bir workspace seç.
-        </p>
-      </div>
+      <WorkspaceGerekli
+        ekran="Raporlar"
+        neden="Rapor workspace bazında üretiliyor."
+        {...workspaceSecimVerisi(session)}
+      />
     );
   }
 

@@ -19,6 +19,7 @@ const yorumsuz = (yol: string): string =>
 
 const SAYFA = yorumsuz(join(DIZIN, 'page.tsx'));
 const KART = yorumsuz(join(DIZIN, '..', '..', '..', 'components', 'metric-card.tsx'));
+const UYARI = yorumsuz(join(DIZIN, '..', '..', '..', 'components', 'ui', 'uyari.tsx'));
 const ROZET = yorumsuz(join(DIZIN, '..', '..', '..', 'components', 'delta-rozeti.tsx'));
 const tablo = (ad: string): string =>
   yorumsuz(join(DIZIN, '..', '..', '..', 'components', ad));
@@ -53,7 +54,9 @@ describe('uyarılar', () => {
      * gibi duyuruyordu: kullanıcı verinin alınamadığını öğrenmeden sayfada
      * gezinmeye devam ediyordu.
      */
-    expect(SAYFA).toContain("role={tone === 'error' ? 'alert' : 'status'}");
+    // Kural artık ORTAK uyarı kutusunda; sayfa yalnızca tonu seçiyor.
+    expect(SAYFA).toContain('<Uyari ton="tehlike">');
+    expect(UYARI).toContain("role={ton === 'tehlike' ? 'alert' : 'status'}");
   });
 });
 

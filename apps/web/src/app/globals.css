@@ -13,6 +13,12 @@
  * değişkenleri kullanır.
  */
 :root {
+  /*
+   * `color-scheme` BİLDİRİLİYOR: karanlık tema `prefers-color-scheme` ile
+   * açılıyordu ama tarayıcıya söylenmiyordu. Sonuç: koyu zeminde AÇIK
+   * renkli form alanları, açılır listeler ve kaydırma çubukları.
+   */
+  color-scheme: light dark;
   /* Marka — branding_profiles tablosundan gelir, buradakiler varsayılan */
   --brand-primary: #e11d2e;
   --brand-accent: #f97316;

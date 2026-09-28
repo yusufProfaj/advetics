@@ -38,6 +38,9 @@ import { DonusumDetay } from '@/components/donusum-detay';
 import { MusteriTablosu } from '@/components/musteri-tablosu';
 import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { SirketTablosu } from '@/components/sirket-tablosu';
+import { Uyari } from '@/components/ui/uyari';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
 
 export const metadata = { title: 'Genel Bakış · Advetics' };
@@ -356,43 +359,41 @@ export default async function DashboardPage({
         altına sızmıyor.
       */}
       <header className="space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-          <div className="min-w-0">
-            {/* ŞERİT BAŞLIĞIN ÜSTÜNDE: "neredeyim" sorusunun cevabı, sayfanın
-                adından önce okunmalı. */}
-            {basamaklar.length > 1 && (
-              <div className="mb-1">
-                <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} />
-              </div>
-            )}
-            <h1 className="text-xl font-semibold text-ink">Genel Bakış</h1>
-            {/*
-              TAMAMLANMAMIŞ GÜN AYNI SATIRDA. Ayrı bir satırdayken başlık
-              bloğu üç satıra çıkıyordu; uyarı kısa ve bağlamın parçası.
-              Sabah 09:00'da görülen düşük harcama "kampanya durmuş" diye
-              okunuyor, oysa gün bitmemiş.
-            */}
-            <p className="mt-0.5 text-sm text-ink-muted">
+        {/*
+          BAŞLIK ORTAK BİLEŞENDEN (`SayfaBasligi`): sayfa başlıkları dört
+          ayrı boyda çiziliyordu ve ekrandan ekrana geçerken zıplıyordu.
+          ŞERİT BAŞLIĞIN ÜSTÜNDE: "neredeyim" sorusunun cevabı, sayfanın
+          adından önce okunmalı.
+          TAMAMLANMAMIŞ GÜN AYNI SATIRDA: ayrı satırda başlık bloğu üç
+          satıra çıkıyordu. Sabah 09:00'da görülen düşük harcama "kampanya
+          durmuş" diye okunuyor, oysa gün bitmemiş.
+          TAZELİK BAŞLIKTA, SAYFANIN DİBİNDE DEĞİL: en çok bakılan
+          bilgilerden biri ve kullanıcı buna bakıp güncelle düğmesine basıyor.
+        */}
+        <SayfaBasligi
+          baslik="Genel Bakış"
+          ust={
+            basamaklar.length > 1 ? (
+              <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} />
+            ) : undefined
+          }
+          aciklama={
+            <>
               {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
               {range.incomplete && (
                 <span className="text-warn-strong"> · Gün bitmedi, rakamlar artacak</span>
               )}
-            </p>
-          </div>
-          {/*
-            TAZELİK BAŞLIKTA, SAYFANIN DİBİNDE DEĞİL. "Veriler ne zaman
-            güncellendi" en çok bakılan bilgilerden biriydi ve en az görünen
-            yerde, 12 piksellik gri bir satırda duruyordu. Güncelle düğmesinin
-            hemen yanında olması da doğru: kullanıcı buna bakıp o düğmeye
-            basıyor.
-          */}
-          {summary !== null && (
-            <p className="text-[11px] text-ink-muted">
-              {summary.accountCount} reklam hesabı · {formatRelative(summary.lastFetchedAt)}{' '}
-              güncellendi
-            </p>
-          )}
-        </div>
+            </>
+          }
+          eylemler={
+            summary !== null ? (
+              <p className="text-xs text-ink-muted">
+                {summary.accountCount} reklam hesabı · {formatRelative(summary.lastFetchedAt)}{' '}
+                güncellendi
+              </p>
+            ) : undefined
+          }
+        />
 
         <div className="flex flex-wrap items-center gap-2">
           <PlatformTabs current={platform} tasinan={tasinan} />
@@ -411,13 +412,13 @@ export default async function DashboardPage({
       </header>
 
       {summary === null ? (
-        <Notice tone="error">
+        <Uyari ton="tehlike">
           {/* TEKNİK AYRINTI EKRANDAN KALKTI: `pm2 logs` komutu müşterinin
               okuduğu bir ekranda hem anlamsız hem ürkütücü. Sunucunun kendi
               hata cümlesi duruyor, teşhis için o yeterli. */}
           <strong>Veriler alınamadı.</strong>
           {ozetHatasi && <span className="ml-1">{ozetHatasi}</span>}
-        </Notice>
+        </Uyari>
       ) : summary.accountCount === 0 ? (
         <EmptyState />
       ) : (
@@ -473,7 +474,7 @@ export default async function DashboardPage({
               `insights_daily` günlük granülerlikte. */}
           {range.days > 1 &&
             (series === null ? (
-              <Notice tone="error">Grafik verisi alınamadı.</Notice>
+              <Uyari ton="tehlike">Grafik verisi alınamadı.</Uyari>
             ) : (
               <MetricsChart
                 points={series.points}
@@ -488,18 +489,18 @@ export default async function DashboardPage({
 
           {ajansGorunumu ? (
             sirketler === null ? (
-              <Notice tone="error">Şirket dağılımı alınamadı.</Notice>
+              <Uyari ton="tehlike">Şirket dağılımı alınamadı.</Uyari>
             ) : (
               <SirketTablosu rows={sirketler} karsilastir={range.karsilastirma !== 'yok'} />
             )
           ) : mcc ? (
             musteriler === null ? (
-              <Notice tone="error">Workspace dağılımı alınamadı.</Notice>
+              <Uyari ton="tehlike">Workspace dağılımı alınamadı.</Uyari>
             ) : (
               <MusteriTablosu rows={musteriler} karsilastir={range.karsilastirma !== 'yok'} />
             )
           ) : breakdown === null ? (
-            <Notice tone="error">Dağılım verisi alınamadı.</Notice>
+            <Uyari ton="tehlike">Dağılım verisi alınamadı.</Uyari>
           ) : (
             <>
             {/*
@@ -575,23 +576,23 @@ function Cards({
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <MetricCard
-        label="Harcama"
+        terim="harcama"
         value={spendValue}
         change={changePercentMicros(summary.spendMicros, prev?.spendMicros)}
         emphasis
       />
       <MetricCard
-        label="Dönüşüm"
+        terim="donusum"
         value={formatNumber(summary.conversions)}
         change={changePercent(summary.conversions, prev?.conversions)}
       />
       <MetricCard
-        label="CPA"
+        terim="cpa"
         value={formatMoney(microsOf(summary.cpa), currency)}
         // ARTIŞ KÖTÜ: dönüşüm başına maliyet yükseliyorsa kırmızı olmalı.
         inverse
         change={summary.cpa === null ? null : changePercent(summary.cpa, prev?.cpa)}
-        hint={summary.cpa === null ? 'dönüşüm yok' : undefined}
+        hint={summary.cpa === null ? 'henüz sonuç yok' : undefined}
       />
       {/* ROAS YERİNE ERİŞİM — gelir takip edilmiyorsa.
           Lead formu ve mesajlaşma kampanyalarında gelir değeri hiç yok ve
@@ -600,7 +601,7 @@ function Cards({
           metrik. Gelir varsa ROAS geri geliyor — asıl karar metriği o. */}
       {summary.roas === null ? (
         <MetricCard
-          label={summary.reachKind === 'exact' ? 'Erişim' : 'Günlük ort. erişim'}
+          terim="erisim"
           value={formatNumber(summary.reach)}
           hint={
             summary.reach === null
@@ -608,12 +609,12 @@ function Cards({
               : summary.reachAcrossAccounts
                 ? 'hesaplar arası mükerrer olabilir'
                 : summary.reachKind === 'daily_average'
-                  ? 'tekil erişim toplanamaz'
+                  ? 'günlük ortalama, kişiler günler arasında toplanamaz'
                   : undefined
           }
         />
       ) : (
-        <MetricCard label="ROAS" value={formatRoas(summary.roas)} change={changePercent(summary.roas, prev?.roas)} />
+        <MetricCard terim="roas" value={formatRoas(summary.roas)} change={changePercent(summary.roas, prev?.roas)} />
       )}
     </div>
   );
@@ -634,22 +635,22 @@ function SecondaryStrip({
     <MetricStrip
       items={[
         {
-          label: 'Gösterim',
+          terim: 'gosterim',
           value: formatNumber(summary.impressions),
           change: changePercent(summary.impressions, prev?.impressions),
         },
         {
-          label: 'Tık',
+          terim: 'tik',
           value: formatNumber(summary.clicks),
           change: changePercent(summary.clicks, prev?.clicks),
         },
         {
-          label: 'CTR',
+          terim: 'ctr',
           value: formatPercent(summary.ctr),
           change: summary.ctr === null ? null : changePercent(summary.ctr, prev?.ctr),
         },
         {
-          label: 'CPC',
+          terim: 'cpc',
           value: formatMoney(microsOf(summary.cpc), currency),
           // Artış kötü: tık başına maliyet yükselmesi iyi haber değil.
           inverse: true,
@@ -717,7 +718,7 @@ function EmptyState() {
       </p>
       <Link
         href="/ayarlar/baglantilar"
-        className="mt-4 inline-flex rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90"
+        className={`mt-4 ${dugmeSinifi()}`}
       >
         Bağlantılara git
       </Link>
@@ -746,26 +747,6 @@ function Uyarilar({ satirlar }: { satirlar: Array<React.ReactNode | null> }) {
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-function Notice({ tone, children }: { tone: 'warn' | 'error'; children: React.ReactNode }) {
-  const cls =
-    tone === 'warn'
-      ? 'border-warn/30 bg-warn-soft text-warn-strong'
-      : 'border-danger/30 bg-danger-soft text-danger-strong';
-  return (
-    /*
-     * HATA `alert`, UYARI `status`. İkisi de `status` iken ekran okuyucu
-     * hatayı sıradan bir güncelleme gibi duyuruyordu: kullanıcı verinin
-     * alınamadığını öğrenmeden sayfada gezinmeye devam ediyordu.
-     */
-    <div
-      className={`rounded-lg border px-3.5 py-2.5 text-sm ${cls}`}
-      role={tone === 'error' ? 'alert' : 'status'}
-    >
-      {children}
     </div>
   );
 }

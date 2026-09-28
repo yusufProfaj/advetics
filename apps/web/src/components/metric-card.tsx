@@ -1,4 +1,6 @@
 import { DeltaRozeti } from '@/components/delta-rozeti';
+import { Terim } from '@/components/ui/terim';
+import type { TerimAnahtari } from '@/lib/terimler';
 
 /**
  * KPI kartı.
@@ -9,16 +11,23 @@ import { DeltaRozeti } from '@/components/delta-rozeti';
  *
  * `inverse`: bazı metriklerde ARTIŞ kötüdür. CPA yükseliyorsa kırmızı olmalı,
  * yeşil değil. Bunu çağıran tarafa bırakmak her kullanımda hata riski demek.
+ *
+ * ETİKET DÜZ METİN DEĞİL, SÖZLÜKTEN BİR TERİM. Kartın başlığı "CPA",
+ * "ROAS" gibi kısaltmalardı ve açıklaması hiçbir yerde yoktu; hedef
+ * kullanıcı reklamcılık bilmiyor (CLAUDE.md §5). Başlık artık iş dilinde
+ * ad + kısaltma + tıklanınca açılan açıklama (`lib/terimler.ts`). Düz
+ * `label` kabul edilmiyor: kabul edilseydi yeni bir kart sözlüğü atlayıp
+ * yine iki harfle eklenirdi.
  */
 export function MetricCard({
-  label,
+  terim,
   value,
   hint,
   change,
   inverse = false,
   emphasis = false,
 }: {
-  label: string;
+  terim: TerimAnahtari;
   value: string;
   hint?: string;
   change?: number | null;
@@ -41,7 +50,9 @@ export function MetricCard({
         emphasis ? 'border-brand/40' : 'border-line'
       }`}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">{label}</p>
+      <p className="text-xs font-medium text-ink-muted">
+        <Terim anahtar={terim} />
+      </p>
       <p
         className={`mt-1.5 font-semibold tabular-nums text-ink ${
           emphasis ? 'text-[28px] leading-8' : 'text-2xl'

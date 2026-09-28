@@ -1,48 +1,37 @@
-import { formatPercent } from '@/lib/format';
+import { DeltaRozeti } from '@/components/delta-rozeti';
+import { Terim } from '@/components/ui/terim';
+import type { TerimAnahtari } from '@/lib/terimler';
 
 /**
- * İkincil metrikler için tek satır şerit.
+ * İkincil metrik şeridi — kartların altında, daha sakin.
  *
- * Neden kart değil: Gösterim/Tık/CTR/CPC karar verdirmiyor, bağlam veriyor.
- * Dört ayrı karta yaymak birincil dörtlüyle (Harcama/Dönüşüm/CPA/ROAS ya da
- * Erişim) aynı görsel ağırlığı almalarına yol açıyor ve göz nereye bakacağını
- * bilemiyor. Şerit hiyerarşiyi geri veriyor.
+ * DEĞİŞİM ROZETİ ARTIK ORTAK. Bu şerit "iyi mi kötü mü" kuralını KENDİ
+ * içinde ikinci kez yazıyordu ve yönü YALNIZCA renkle söylüyordu: CPC
+ * artışını gösteren kırmızı ok, renk körlüğünde yeşil oktan ayırt
+ * edilemiyordu. Kural tek yerde (`delta-rozeti.tsx`) ve orada erişilebilir
+ * bir etiket taşıyor; ikinci kopya, bir gün birinin güncellenmemesi demekti.
+ *
+ * ETİKET BİR TERİM: CTR ve CPC reklamcılık bilmeyen biri için iki harf
+ * dizisi. Açıklaması tıklanınca açılıyor.
  */
 export function MetricStrip({
   items,
 }: {
-  items: Array<{ label: string; value: string; change?: number | null; inverse?: boolean }>;
+  items: Array<{ terim: TerimAnahtari; value: string; change?: number | null; inverse?: boolean }>;
 }) {
   return (
     <div className="flex flex-wrap divide-y divide-line rounded-xl border border-line bg-surface sm:divide-x sm:divide-y-0">
-      {items.map((item) => {
-        const good =
-          item.change === null || item.change === undefined
-            ? null
-            : item.inverse
-              ? item.change < 0
-              : item.change > 0;
-        return (
-          <div key={item.label} className="min-w-0 flex-1 basis-1/2 px-4 py-2.5 sm:basis-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
-              {item.label}
-            </p>
-            <div className="mt-0.5 flex items-baseline gap-1.5">
-              <span className="text-base font-semibold tabular-nums text-ink">{item.value}</span>
-              {item.change !== null && item.change !== undefined && (
-                <span
-                  className={`text-[11px] font-medium tabular-nums ${
-                    good ? 'text-ok-strong' : 'text-danger-strong'
-                  }`}
-                >
-                  {item.change > 0 ? '↑' : '↓'}
-                  {formatPercent(Math.abs(item.change), 1)}
-                </span>
-              )}
-            </div>
+      {items.map((item) => (
+        <div key={item.terim} className="min-w-0 flex-1 basis-1/2 px-4 py-3 sm:basis-0">
+          <p className="text-xs font-medium text-ink-muted">
+            <Terim anahtar={item.terim} />
+          </p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-base font-semibold tabular-nums text-ink">{item.value}</span>
+            <DeltaRozeti change={item.change} inverse={item.inverse} />
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
