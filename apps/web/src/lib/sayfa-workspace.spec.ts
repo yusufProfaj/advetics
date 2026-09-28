@@ -75,6 +75,19 @@ describe('seçim verisi', () => {
     ).toBe(true);
   });
 
+  it('liste Türkçe alfabeyle sıralı (Ç, C\'den sonra)', () => {
+    const v = workspaceSecimVerisi(
+      oturum({
+        availableClients: [
+          { id: '1', name: 'Çizgi Medikal', status: 'active' },
+          { id: '2', name: 'Coordinat Yapı', status: 'active' },
+          { id: '3', name: 'Biltaş', status: 'active' },
+        ],
+      }),
+    );
+    expect(v.workspaceler.map((w) => w.name)).toEqual(['Biltaş', 'Coordinat Yapı', 'Çizgi Medikal']);
+  });
+
   it('"tüm şirketler" modunda şirket adı olarak bu yazıyor', () => {
     expect(workspaceSecimVerisi(oturum({ tumSirketler: true })).sirketAdi).toBe('Tüm şirketler');
   });

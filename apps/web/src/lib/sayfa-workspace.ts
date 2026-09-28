@@ -44,9 +44,16 @@ export function workspaceSecimVerisi(session: SessionResponse): WorkspaceSecimVe
         ?.name ?? session.organization.name);
   return {
     // Arşivlenmiş workspace seçilebilir bir hedef değil.
+    /*
+     * TÜRKÇE SIRA. Liste veritabanının sırasıyla geliyordu ve canlıda
+     * "Çizgi Medikal" "Coordinat Yapı"dan önce duruyordu: 54 workspace'lik
+     * listede aranan ad beklenen yerde değildi. `localeCompare('tr')` Ç'yi
+     * C'den sonra, İ'yi I'dan sonra koyuyor.
+     */
     workspaceler: session.availableClients
       .filter((c) => c.status === 'active')
-      .map((c) => ({ id: c.id, name: c.name })),
+      .map((c) => ({ id: c.id, name: c.name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'tr')),
     sirketAdi,
     kurulumGorunur: session.permissions.includes('client.write'),
   };
