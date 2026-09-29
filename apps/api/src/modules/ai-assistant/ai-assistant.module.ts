@@ -6,6 +6,8 @@ import { DraftTreeModule } from '../draft-tree/draft-tree.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
 import { AiAssistantController } from './ai-assistant.controller';
 import { AiAssistantService } from './ai-assistant.service';
+import { KitleOnerisiController } from './kitle-onerisi.controller';
+import { KitleOnerisiService } from './kitle-onerisi.service';
 
 @Module({
   /*
@@ -15,9 +17,9 @@ import { AiAssistantService } from './ai-assistant.service';
    * bilgiyi eksik tekrarlamak olurdu.
    */
   imports: [TenancyModule, ConnectionsModule, DraftTreeModule, CampaignActionsModule, BoostsModule],
-  controllers: [AiAssistantController],
+  controllers: [AiAssistantController, KitleOnerisiController],
   // İstemci `AnthropicModule`de (global): Bilgi Bankası taslağı da aynı
   // istemciyi kullanıyor ve burada tutmak modül döngüsü üretiyordu.
-  providers: [AiAssistantService],
+  providers: [AiAssistantService, KitleOnerisiService],
 })
 export class AiAssistantModule {}

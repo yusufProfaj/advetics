@@ -593,6 +593,8 @@ model AudienceTemplate {
   ageMin          Int      @default(18) @map("age_min") @db.SmallInt
   ageMax          Int      @default(65) @map("age_max") @db.SmallInt
   genders         String   @default("all") @db.VarChar(6)
+  /// `[{ id, name }]` Meta ilgi alanları — birleşim olarak gidiyor.
+  interests       Json     @default("[]")
   createdByUserId String?  @map("created_by_user_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)

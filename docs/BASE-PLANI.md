@@ -98,8 +98,13 @@ duruyor.
 Reklam varsayılanı kendiliğinden uyguluyor. Sapma: şablon YALNIZCA META
 (konum anahtarları Meta'nın; Google uzayına çevirmek tahmin olurdu). Öncesinde
 taslak ağacındaki üçüncü hedefleme üreticisi birleştirildi (şehir + ülke =
-ülke geneli hatası). **Kalan:** 4b özel/benzer kitleleri okuma, 4c doğal
-dilden kitle; Akıllı Boost ve uzman modun şablonları okuması.
+ülke geneli hatası).
+
+**4c UYGULANDI (2026-09-30):** ilgi alanları (Meta araması, büyüklükle) ve
+doğal dilden öneri: AI yapılandırıyor, sunucu Meta'da çözüyor, kullanıcı
+onaylıyor. K16 ("panelde ilgi seçtirmiyoruz") kullanıcı isteğiyle kalktı.
+İlgi araması canlıda doğrulanmadı (`meta-ilgi-kontrol`). **Kalan:** 4b
+özel/benzer kitleleri okuma; Akıllı Boost ve uzman modun şablonları okuması.
 
 ### 4. Koruma kuralları (taslakta "Global Kurallar")
 

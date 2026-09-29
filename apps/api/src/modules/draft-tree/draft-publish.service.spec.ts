@@ -214,6 +214,7 @@ describe('KİTLE ŞABLONU (Marka Merkezi Bölüm 4)', () => {
     ageMin: 25,
     ageMax: 45,
     genders: 'female' as const,
+    interests: [] as Array<{ id: string; name: string }>,
   };
 
   it('KRİTİK: taslaktaki kitle yayına AYNEN gidiyor — ülke geneli DEĞİL', async () => {
@@ -248,6 +249,16 @@ describe('KİTLE ŞABLONU (Marka Merkezi Bölüm 4)', () => {
     expect(publishDraft).not.toHaveBeenCalled();
   });
 
+  it('ilgi alanları yayına tek grup (birleşim) olarak gidiyor', async () => {
+    const created = await tree.createFromSimple(
+      CTX,
+      input({ kitle: { ...IZMIR, interests: [{ id: '6003', name: 'Lüks araçlar' }] } }),
+    );
+    await svc.publish(CTX, created.campaigns[0]!.id);
+    const req = publishDraft.mock.calls[0]![1] as { targeting: Record<string, unknown> };
+    expect(req.targeting.flexible_spec).toEqual([{ interests: [{ id: '6003', name: 'Lüks araçlar' }] }]);
+  });
+
   it('özel kategoride yaş/cinsiyet şablondan gelse bile KALKIYOR', async () => {
     await h.q(`UPDATE clients SET special_ad_categories = '{HOUSING}' WHERE id = $1`, [IDS.client]);
     const created = await tree.createFromSimple(CTX, input({ kitle: IZMIR }));
@@ -256,6 +267,19 @@ describe('KİTLE ŞABLONU (Marka Merkezi Bölüm 4)', () => {
     expect(req.targeting.genders).toBeUndefined();
     expect(req.targeting.age_max).toBeUndefined();
     expect(req.targeting.geo_locations).toEqual({ regions: [{ key: '2622' }] });
+  });
+
+  it('özel kategoride ilgi alanları da kalkıyor ve kontrol ekranı söylüyor', async () => {
+    await h.q(`UPDATE clients SET special_ad_categories = '{HOUSING}' WHERE id = $1`, [IDS.client]);
+    const created = await tree.createFromSimple(
+      CTX,
+      input({ kitle: { ...IZMIR, interests: [{ id: '6003', name: 'Lüks araçlar' }] } }),
+    );
+    const check = await svc.check(CTX, created.campaigns[0]!.id);
+    expect(check.warnings.join(' ')).toContain('ilgi alanları');
+    await svc.publish(CTX, created.campaigns[0]!.id);
+    const req = publishDraft.mock.calls[0]![1] as { targeting: Record<string, unknown> };
+    expect(req.targeting.flexible_spec).toBeUndefined();
   });
 });
 

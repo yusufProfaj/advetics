@@ -2,7 +2,9 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import {
   KITLE_CINSIYETLERI,
+  kitleIlgiSchema,
   kitleKonumuSchema,
+  type KitleIlgi,
   type KitleKonumu,
   type KitleSablonuInput,
   type KitleSablonuListesi,
@@ -26,6 +28,7 @@ interface Satir {
   age_min: number;
   age_max: number;
   genders: string;
+  interests: unknown;
   updated_at: Date;
 }
 
@@ -52,7 +55,7 @@ export class KitleSablonuService {
   async list(ctx: TenantContext, clientId: string): Promise<KitleSablonuListesi> {
     return this.prisma.withTenant(ctx, async (tx) => {
       const satirlar = await tx.$queryRaw<Satir[]>(Prisma.sql`
-        SELECT id, client_id, name, locations, age_min, age_max, genders, updated_at
+        SELECT id, client_id, name, locations, age_min, age_max, genders, interests, updated_at
           FROM audience_templates
          WHERE client_id = ${clientId}::uuid
          ORDER BY name
@@ -71,11 +74,12 @@ export class KitleSablonuService {
       const [s] = await adCakismasi(() =>
         tx.$queryRaw<Satir[]>(Prisma.sql`
           INSERT INTO audience_templates
-            (org_id, client_id, name, locations, age_min, age_max, genders, created_by_user_id, updated_at)
+            (org_id, client_id, name, locations, age_min, age_max, genders, interests,
+             created_by_user_id, updated_at)
           VALUES (${orgId}::uuid, ${input.clientId}::uuid, ${input.name},
                   ${JSON.stringify(input.locations)}::jsonb, ${input.ageMin}, ${input.ageMax},
-                  ${input.genders}, ${ctx.userId}::uuid, now())
-          RETURNING id, client_id, name, locations, age_min, age_max, genders, updated_at
+                  ${input.genders}, ${JSON.stringify(input.interests)}::jsonb, ${ctx.userId}::uuid, now())
+          RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, updated_at
         `),
       );
       await this.audit.record(tx, ctx, {
@@ -98,7 +102,7 @@ export class KitleSablonuService {
   ): Promise<KitleSablonuRecord> {
     return this.prisma.withTenant(ctx, async (tx) => {
       const [once] = await tx.$queryRaw<Satir[]>(Prisma.sql`
-        SELECT id, client_id, name, locations, age_min, age_max, genders, updated_at
+        SELECT id, client_id, name, locations, age_min, age_max, genders, interests, updated_at
           FROM audience_templates WHERE id = ${id}::uuid AND client_id = ${input.clientId}::uuid
       `);
       if (!once) throw new NotFoundException('Kitle şablonu bulunamadı.');
@@ -107,9 +111,9 @@ export class KitleSablonuService {
           UPDATE audience_templates
              SET name = ${input.name}, locations = ${JSON.stringify(input.locations)}::jsonb,
                  age_min = ${input.ageMin}, age_max = ${input.ageMax}, genders = ${input.genders},
-                 updated_at = now()
+                 interests = ${JSON.stringify(input.interests)}::jsonb, updated_at = now()
            WHERE id = ${id}::uuid
-          RETURNING id, client_id, name, locations, age_min, age_max, genders, updated_at
+          RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, updated_at
         `),
       );
       await this.audit.record(tx, ctx, {
@@ -129,7 +133,7 @@ export class KitleSablonuService {
     await this.prisma.withTenant(ctx, async (tx) => {
       const silinen = await tx.$queryRaw<Satir[]>(Prisma.sql`
         DELETE FROM audience_templates WHERE id = ${id}::uuid AND client_id = ${clientId}::uuid
-        RETURNING id, client_id, name, locations, age_min, age_max, genders, updated_at
+        RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, updated_at
       `);
       // SIFIR SATIR = BULUNAMADI, başarı değil. Politikasız ya da yanlış
       // kiracıdaki bir DELETE hata vermeden sıfır satır etkiliyor.
@@ -205,8 +209,17 @@ async function adCakismasi<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-function denetim(k: Pick<KitleSablonuInput, 'name' | 'locations' | 'ageMin' | 'ageMax' | 'genders'>) {
-  return { name: k.name, locations: k.locations, ageMin: k.ageMin, ageMax: k.ageMax, genders: k.genders };
+function denetim(
+  k: Pick<KitleSablonuInput, 'name' | 'locations' | 'ageMin' | 'ageMax' | 'genders' | 'interests'>,
+) {
+  return {
+    name: k.name,
+    locations: k.locations,
+    ageMin: k.ageMin,
+    ageMax: k.ageMax,
+    genders: k.genders,
+    interests: k.interests,
+  };
 }
 
 /**
@@ -220,6 +233,12 @@ function kayit(s: Satir, varsayilanId: string | null): KitleSablonuRecord {
     if (r.success) locations.push(r.data);
     else logger.warn(`audience_templates(${s.id}).locations: geçersiz öğe atlandı — ${JSON.stringify(o).slice(0, 200)}`);
   }
+  const interests: KitleIlgi[] = [];
+  for (const o of Array.isArray(s.interests) ? s.interests : []) {
+    const r = kitleIlgiSchema.safeParse(o);
+    if (r.success) interests.push(r.data);
+    else logger.warn(`audience_templates(${s.id}).interests: geçersiz öğe atlandı — ${JSON.stringify(o).slice(0, 200)}`);
+  }
   const genders = (KITLE_CINSIYETLERI as readonly string[]).includes(s.genders)
     ? (s.genders as KitleSablonuRecord['genders'])
     : 'all';
@@ -231,6 +250,7 @@ function kayit(s: Satir, varsayilanId: string | null): KitleSablonuRecord {
     ageMin: Number(s.age_min),
     ageMax: Number(s.age_max),
     genders,
+    interests,
     varsayilan: varsayilanId === s.id,
     updatedAt: new Date(s.updated_at).toISOString(),
   };

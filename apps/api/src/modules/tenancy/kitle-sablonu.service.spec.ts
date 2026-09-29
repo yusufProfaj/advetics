@@ -22,6 +22,7 @@ const girdi = (patch: Record<string, unknown> = {}) => ({
   ageMin: 25,
   ageMax: 45,
   genders: 'female' as const,
+  interests: [] as Array<{ id: string; name: string }>,
   ...patch,
 });
 
@@ -53,6 +54,13 @@ describe('şablon yaşam döngüsü', () => {
 
     await svc.remove(CTX, IDS.client, s.id, {});
     expect((await svc.list(CTX, IDS.client)).items).toEqual([]);
+  });
+
+  it('ilgi alanları kaydediliyor ve geri okunuyor', async () => {
+    const s = await svc.create(CTX, girdi({ interests: [{ id: '6003', name: 'Lüks araçlar' }] }), {});
+    expect(s.interests).toEqual([{ id: '6003', name: 'Lüks araçlar' }]);
+    const g = await svc.update(CTX, s.id, girdi({ interests: [] }), {});
+    expect(g.interests).toEqual([]);
   });
 
   it('aynı adla ikinci şablon SEBEBİYLE reddediliyor', async () => {

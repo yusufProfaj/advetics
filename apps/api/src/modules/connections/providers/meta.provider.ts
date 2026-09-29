@@ -4,6 +4,7 @@ import {
   CONVERSION_BUCKETS,
   restrictTargetingFor,
   type GeoLocationOption,
+  InterestOption,
   type Platform,
   type SavedAudienceOption,
   type SpecialAdCategory,
@@ -1932,6 +1933,34 @@ export class MetaProvider implements IAdPlatformProvider {
   }
 
   /**
+   * İlgi alanı araması — `/search?type=adinterest`.
+   *
+   * `locale=tr_TR`: adlar Türkçe gelsin; kullanıcı "Luxury vehicles" değil
+   * "Lüks araçlar" görmeli. Sonuç sırası Meta'nın alaka sırası, biz
+   * değiştirmiyoruz. CANLIDA DOĞRULANMADI — `meta-ilgi-kontrol` betiği ham
+   * yanıtı basıyor.
+   */
+  async searchInterests(ctx: FetchContext, query: string): Promise<InterestOption[]> {
+    const url = new URL(`${this.graph}/search`);
+    url.searchParams.set('type', 'adinterest');
+    url.searchParams.set('q', query);
+    url.searchParams.set('limit', '25');
+    url.searchParams.set('locale', 'tr_TR');
+
+    const res = await platformFetch<GraphPage>(
+      'meta',
+      url.toString(),
+      { headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+
+    return (res.data.data ?? [])
+      .map((row) => mapInterest(row as Record<string, unknown>))
+      .filter((o): o is InterestOption => o !== null);
+  }
+
+  /**
    * Reklam hesabında kurulu kayıtlı kitleler.
    *
    * HEDEFLEME NESNESİ ÇEKİLMİYOR, yalnızca kimlik ve ad. Kitlenin içeriği
@@ -3428,6 +3457,25 @@ export function stripPagePrefix(postId: string, pageId: string): string {
  * bile birden fazla "Merkez" ilçesi) ve yanlış seçim ancak fatura geldiğinde
  * fark ediliyor.
  */
+/**
+ * `adinterest` satırı → seçenek. KİMLİKSİZ SATIR ATILIYOR: hedeflemeye giden
+ * değer kimlik ve olmadan seçilen bir ilgi Meta'da hiçbir şeye karşılık
+ * gelmez. Sayı alanları sayı değilse `null` — sıfır "kimse yok" diye okunur.
+ */
+export function mapInterest(row: Record<string, unknown>): InterestOption | null {
+  const id = typeof row.id === 'string' || typeof row.id === 'number' ? String(row.id) : null;
+  const name = typeof row.name === 'string' ? row.name : null;
+  if (!id || !/^\d+$/.test(id) || !name) return null;
+  const sayi = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  return {
+    id,
+    name,
+    path: Array.isArray(row.path) ? row.path.filter((x): x is string => typeof x === 'string') : [],
+    audienceMin: sayi(row.audience_size_lower_bound),
+    audienceMax: sayi(row.audience_size_upper_bound),
+  };
+}
+
 export function mapGeoLocation(row: Record<string, unknown>): GeoLocationOption | null {
   const key = row.key;
   const name = row.name;

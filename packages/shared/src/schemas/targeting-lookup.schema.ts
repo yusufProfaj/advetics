@@ -77,3 +77,34 @@ export const savedAudienceQuerySchema = z.object({
   adAccountId: z.string().uuid(),
 });
 export type SavedAudienceQuery = z.infer<typeof savedAudienceQuerySchema>;
+
+/**
+ * ═══ İLGİ ALANI (Meta `adinterest`) — Marka Merkezi Bölüm 4c ═══
+ *
+ * K16 bir süre "panelde ilgi/davranış seçtirmiyoruz" diyordu: hedef kullanıcı
+ * o dili bilmiyor ve yanlış kullanım erişimi sessizce öldürüyor. Kullanıcı
+ * doğal dilden kitle önerisini (BASE Bölüm 4) açıkça istedi ve karar
+ * değişti; risk iki yolla yönetiliyor: her ilgi alanının Meta'daki kitle
+ * büyüklüğü ekranda yazıyor ve ilgi alanları BİRLEŞİM olarak gidiyor
+ * (`flexible_spec` içinde tek grup = "bunlardan biri"), kesişim değil.
+ *
+ * CANLIDA DOĞRULANMADI: yanıt biçimi Graph belgesinden. `meta-ilgi-kontrol`
+ * betiği gerçek token'la tek bir arama yapıp ham alanları basıyor.
+ */
+export interface InterestOption {
+  /** Meta kimliği — hedeflemeye giden değer. Ada göre değil buna göre tanınıyor. */
+  id: string;
+  name: string;
+  /** "İlgi alanları > Araçlar > Lüks araçlar" — aynı adlı iki ilgiyi ayırt ediyor. */
+  path: string[];
+  /** Meta'nın tahmini kitle aralığı; vermezse null — sıfır DEĞİL. */
+  audienceMin: number | null;
+  audienceMax: number | null;
+}
+
+export const interestSearchQuerySchema = z.object({
+  adAccountId: z.string().uuid(),
+  q: z.string().trim().min(2).max(80),
+});
+export type InterestSearchQuery = z.infer<typeof interestSearchQuerySchema>;
+

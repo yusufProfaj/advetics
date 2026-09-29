@@ -1,4 +1,5 @@
-import type { GeoLocationOption, Platform, SavedAudienceOption } from '@advetics/shared';
+import type { GeoLocationOption,
+  InterestOption, Platform, SavedAudienceOption } from '@advetics/shared';
 
 /**
  * Platform adapter sözleşmesi.
@@ -1200,6 +1201,14 @@ export interface IAdPlatformProvider {
    * ada göre değil bu anahtara göre tanıyor.
    */
   searchGeoLocations(ctx: FetchContext, query: string): Promise<GeoLocationOption[]>;
+
+  /**
+   * İlgi alanı araması (Meta `adinterest`, Marka Merkezi Bölüm 4c).
+   *
+   * Yalnızca Meta'da var; Google ve LinkedIn AÇIK hata fırlatıyor — boş dizi
+   * "sonuç yok" gibi okunur ve kullanıcı yanlış terimi aradığını sanar.
+   */
+  searchInterests(ctx: FetchContext, query: string): Promise<InterestOption[]>;
 
   /** Reklam hesabında kurulu kayıtlı kitleler. */
   listSavedAudiences(ctx: FetchContext): Promise<SavedAudienceOption[]>;

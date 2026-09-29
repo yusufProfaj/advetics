@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { GeoLocationOption, SavedAudienceOption } from '@advetics/shared';
+import type { GeoLocationOption,
+  InterestOption, SavedAudienceOption } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
@@ -1053,6 +1054,15 @@ export class LinkedInProvider implements IAdPlatformProvider {
       'linkedin',
       'permanent',
       'LinkedIn kampanya özeti henüz yazılmadı.',
+    );
+  }
+
+  /** LinkedIn Ads'te Meta'nın ilgi alanı kavramı yok; kitle şablonu yalnızca Meta. */
+  async searchInterests(): Promise<InterestOption[]> {
+    throw new PlatformApiError(
+      'linkedin',
+      'permanent',
+      "İlgi alanı araması yalnızca Meta'da var; LinkedIn reklamında kitle şablonunun ilgi alanları kullanılmıyor.",
     );
   }
 

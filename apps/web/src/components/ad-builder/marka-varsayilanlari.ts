@@ -66,6 +66,7 @@ export function kitleHedefi(
     ageMin: k.ageMin,
     ageMax: k.ageMax,
     genders: k.genders,
+    interests: k.interests,
   };
   return { hedef, ozet: kitleOzeti(hedef), hata: null };
 }

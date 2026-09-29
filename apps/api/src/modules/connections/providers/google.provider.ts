@@ -12,7 +12,8 @@ import {
   yasSegmentleri,
 } from './google-demandgen';
 import { gecerliGorselAdresi } from '@advetics/shared';
-import type { GeoLocationOption, Platform, SavedAudienceOption } from '@advetics/shared';
+import type { GeoLocationOption,
+  InterestOption, Platform, SavedAudienceOption } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
@@ -1720,6 +1721,15 @@ export class GoogleProvider implements IAdPlatformProvider {
    * BOŞ SONUÇ HATA DEĞİL — gerçekten eşleşme yok. Çağrının kendisi düşerse
    * `platformFetch` Google'ın mesajıyla fırlatıyor ve panel onu gösteriyor.
    */
+  /** Google Ads'te Meta'nın ilgi alanı kavramı yok; kitle şablonu yalnızca Meta. */
+  async searchInterests(): Promise<InterestOption[]> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      "İlgi alanı araması yalnızca Meta'da var; Google reklamında kitle şablonunun ilgi alanları kullanılmıyor.",
+    );
+  }
+
   async searchGeoLocations(ctx: FetchContext, query: string): Promise<GeoLocationOption[]> {
     const q = query.trim();
     if (q.length < 2) return [];

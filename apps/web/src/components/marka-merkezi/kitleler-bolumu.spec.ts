@@ -35,4 +35,19 @@ describe('Kitleler bölümü', () => {
     expect(K).toContain('Silinsin mi?');
     expect(K).toContain('yalnızca Meta reklamlarında');
   });
+
+  it('Tarif et önerisi FORMA dolduruluyor, KAYDEDİLMİYOR; bulunamayan ve kurulamayan yazıyor', () => {
+    const bas = K.indexOf('async function oner(');
+    const govde = K.slice(bas, K.indexOf('return (', bas));
+    expect(govde).toContain("'/audience-templates/ai-oneri'");
+    expect(govde).toContain('uygula({');
+    expect(govde).not.toContain("'/audience-templates',");
+    expect(K).toContain('oneri.eslesmeyen.length > 0');
+    expect(K).toContain('oneri.uygulanamayan.length > 0');
+  });
+
+  it('ilgi alanları kaydedilen gövdede', () => {
+    const bas = K.indexOf('async function kaydet(');
+    expect(K.slice(bas, K.indexOf('kitleSablonuInputSchema.safeParse', bas))).toContain('interests: form.interests');
+  });
 });

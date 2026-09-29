@@ -98,6 +98,7 @@ describe('kitle şablonu (Bölüm 4)', () => {
     ageMin: 25,
     ageMax: 45,
     genders: 'female' as const,
+    interests: [{ id: '6003', name: 'Lüks araçlar' }],
     varsayilan: true,
     updatedAt: '',
   };
@@ -111,8 +112,9 @@ describe('kitle şablonu (Bölüm 4)', () => {
       ageMin: 25,
       ageMax: 45,
       genders: 'female',
+      interests: [{ id: '6003', name: 'Lüks araçlar' }],
     });
-    expect(r.ozet).toBe('İzmir, Türkiye · 25-45 yaş · Kadın');
+    expect(r.ozet).toBe('İzmir, Türkiye · 25-45 yaş · Kadın · ilgi: Lüks araçlar');
   });
 
   it('boş seçim şablonsuz: Türkiye geneli', () => {

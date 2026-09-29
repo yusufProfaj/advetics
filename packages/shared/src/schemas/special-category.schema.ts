@@ -90,12 +90,21 @@ export function restrictTargetingFor(
   }
   if (out.age_max !== undefined) removed.push('yaş üst sınırı');
   if (out.genders !== undefined) removed.push('cinsiyet');
+  /*
+   * İLGİ ALANLARI DA KALKIYOR (Bölüm 4c). Meta özel kategorilerde ayrıntılı
+   * hedeflemeyi daraltıyor ve hangi ilgilerin serbest kaldığını önceden
+   * söyleyen bir liste yok; bir ilgiyi göndermek ya reddedilmek ya da kabul
+   * edilip yok sayılmak demek. Tahmin etmek yerine alan hiç gönderilmiyor
+   * ve kontrol ekranı bunu yazıyor.
+   */
+  if (out.flexible_spec !== undefined) removed.push('ilgi alanları');
 
   // YAŞ SIFIRLANMIYOR, 18'E SABİTLENİYOR: Meta özel kategorilerde 18+
   // istiyor ve alanı hiç göndermemek "her yaş" demek olurdu.
   out.age_min = 18;
   delete out.age_max;
   delete out.genders;
+  delete out.flexible_spec;
 
   return { targeting: out, removed };
 }

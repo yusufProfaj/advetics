@@ -39,8 +39,6 @@ export function HedeflemeSecici({
    */
   kayitliKitle?: boolean;
 }) {
-  const [hesap, setHesap] = useState<{ id: string; name: string } | null>(null);
-  const [hesapHata, setHesapHata] = useState<string | null>(null);
   const [kitleler, setKitleler] = useState<SavedAudienceList | null>(null);
   const [kitleHata, setKitleHata] = useState<string | null>(null);
 
@@ -49,22 +47,7 @@ export function HedeflemeSecici({
   const [aramaDurum, setAramaDurum] = useState<'bos' | 'kisa' | 'araniyor' | 'bitti'>('bos');
   const [aramaHata, setAramaHata] = useState<string | null>(null);
 
-  /* Müşterinin İZLENEN Meta reklam hesabı — kitle ve lokasyon aramasının kaynağı. */
-  useEffect(() => {
-    void apiFetch<ConnectionSummary[]>('/connections')
-      .then((baglantilar) => {
-        const bulunan = baglantilar
-          .flatMap((b) => b.adAccounts)
-          .find((a) => a.platform === 'meta' && a.clientId === clientId && a.syncEnabled);
-        setHesap(bulunan ? { id: bulunan.id, name: bulunan.name } : null);
-        setHesapHata(null);
-      })
-      .catch((err: unknown) =>
-        setHesapHata(
-          err instanceof ApiRequestError ? err.message : 'Reklam hesabı okunamadı.',
-        ),
-      );
-  }, [clientId]);
+  const { hesap, hesapHata } = useIzlenenMetaHesabi(clientId);
 
   /* Kayıtlı kitleler — HATA YUTULMUYOR (bkz. manual-boost'taki aynı ders). */
   useEffect(() => {
@@ -123,6 +106,15 @@ export function HedeflemeSecici({
         Reklam hesabı okunamadı — {hesapHata}
       </p>
     );
+  }
+
+  /*
+   * YÜKLENİYOR AYRI HÂL. Önceden başlangıç değeri `null`dı ve hesap listesi
+   * gelene kadar ekran "Meta hesabı atanmamış" diyordu — hesabı olan
+   * kullanıcıya bir an yanlış bir arıza gösteriliyordu.
+   */
+  if (hesap === undefined) {
+    return <p className="text-[11px] text-ink-muted">Reklam hesabı aranıyor…</p>;
   }
 
   if (hesap === null) {
@@ -265,3 +257,34 @@ export function HedeflemeSecici({
     </div>
   );
 }
+
+/**
+ * Workspace'in İZLENEN Meta reklam hesabı — konum, kayıtlı kitle ve ilgi
+ * alanı aramasının kaynağı. TEK YERDE: kitle formunun ilgi araması da bunu
+ * kullanıyor; iki ayrı "hangi hesap" kararı, iki aramanın farklı hesaplara
+ * gitmesi demek olurdu.
+ *
+ * `undefined` = henüz bilinmiyor, `null` = hesap yok. İkisi aynı boşluk değil.
+ */
+export function useIzlenenMetaHesabi(clientId: string): {
+  hesap: { id: string; name: string } | null | undefined;
+  hesapHata: string | null;
+} {
+  const [hesap, setHesap] = useState<{ id: string; name: string } | null | undefined>(undefined);
+  const [hesapHata, setHesapHata] = useState<string | null>(null);
+  useEffect(() => {
+    void apiFetch<ConnectionSummary[]>('/connections')
+      .then((baglantilar) => {
+        const bulunan = baglantilar
+          .flatMap((b) => b.adAccounts)
+          .find((a) => a.platform === 'meta' && a.clientId === clientId && a.syncEnabled);
+        setHesap(bulunan ? { id: bulunan.id, name: bulunan.name } : null);
+        setHesapHata(null);
+      })
+      .catch((err: unknown) =>
+        setHesapHata(err instanceof ApiRequestError ? err.message : 'Reklam hesabı okunamadı.'),
+      );
+  }, [clientId]);
+  return { hesap, hesapHata };
+}
+

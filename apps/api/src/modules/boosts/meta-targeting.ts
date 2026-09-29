@@ -14,6 +14,11 @@ export interface MetaHedeflemeGirdisi {
   ageMin: number;
   ageMax: number;
   genders: 'all' | 'male' | 'female';
+  /**
+   * Meta ilgi alanları (Marka Merkezi kitle şablonu, Bölüm 4c). Boost ve
+   * ön ayar yolları bunu vermiyor; alan yoksa `flexible_spec` hiç gitmiyor.
+   */
+  interests?: ReadonlyArray<{ id: string; name: string }>;
 }
 
 /*
@@ -88,6 +93,19 @@ export function metaTargetingFrom(t: MetaHedeflemeGirdisi): Record<string, unkno
   // Meta: 1 = erkek, 2 = kadın.
   if (t.genders === 'male') out.genders = [1];
   if (t.genders === 'female') out.genders = [2];
+  /*
+   * İLGİ ALANLARI TEK GRUPTA — BİRLEŞİM. `flexible_spec` dizisinin her ÖĞESİ
+   * VE ile bağlanıyor, bir öğenin içindeki `interests` listesi VEYA ile.
+   * İlgileri ayrı öğelere koymak "lüks otomobil VE golf VE yatçılık" demek
+   * ve kitleyi sessizce sıfıra yaklaştırır; kullanıcının kastettiği
+   * "bunlardan biriyle ilgilenen".
+   *
+   * `name` de gidiyor: Meta yalnızca `id` ile tanıyor ama Ads Manager'da
+   * okunabilir kalıyor. BOŞ DİZİ GÖNDERİLMİYOR — "hiçbir ilgi" diye okunabilir.
+   */
+  if (t.interests && t.interests.length > 0) {
+    out.flexible_spec = [{ interests: t.interests.map((i) => ({ id: i.id, name: i.name })) }];
+  }
   return out;
 }
 

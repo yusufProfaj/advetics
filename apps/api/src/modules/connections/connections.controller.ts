@@ -20,6 +20,9 @@ import {
   PLATFORMS,
   assignToClientSchema,
   geoSearchQuerySchema,
+  interestSearchQuerySchema,
+  type InterestOption,
+  type InterestSearchQuery,
   linkBoostAccountSchema,
   savedAudienceQuerySchema,
   startOAuthSchema,
@@ -99,6 +102,16 @@ export class ConnectionsController {
     @Query(zodQuery(geoSearchQuerySchema)) query: GeoSearchQuery,
   ): Promise<GeoLocationOption[]> {
     return this.connections.searchGeoLocations(ctx, query.adAccountId, query.q);
+  }
+
+  /** İlgi alanı araması (Meta). Okuma — `connection.read` yetiyor. */
+  @Get('targeting/interests')
+  @RequirePermissions('connection.read')
+  searchInterests(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(interestSearchQuerySchema)) query: InterestSearchQuery,
+  ): Promise<InterestOption[]> {
+    return this.connections.searchInterests(ctx, query.adAccountId, query.q);
   }
 
   /** Ads Manager'da kurulu kayıtlı kitleler. Boş liste geçerli bir cevap. */

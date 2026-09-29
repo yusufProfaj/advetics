@@ -765,6 +765,38 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-30 — Marka Merkezi, Bölüm 4c: ilgi alanları ve doğal dilden kitle önerisi
+
+**K16 değişti:** "panelde ilgi/davranış seçtirmiyoruz" kararı, kullanıcının
+açık isteğiyle (doğal dilden kitle) kalktı. Risk iki yolla yönetiliyor: her
+ilgi alanının Meta'daki kitle büyüklüğü ekranda yazıyor ve ilgiler tek
+`flexible_spec` grubunda BİRLEŞİM olarak gidiyor ("bunlardan biri").
+
+- **Meta ilgi araması** (`searchInterests`, `/search?type=adinterest`,
+  `locale=tr_TR`) ve `GET /connections/targeting/interests`. Google/LinkedIn
+  açık hata fırlatıyor. **CANLIDA DOĞRULANMADI** — `meta-ilgi-kontrol`
+  betiği (salt okunur, `dist`ten) ham yanıtın alanlarını ve eşlemeyi basıyor.
+- Migration `20260930120000_kitle_ilgi_alanlari`: `audience_templates.interests`.
+- **Özel kategoride ilgi alanları GÖNDERİLMİYOR** (`restrictTargetingFor`):
+  hangi ilgilerin serbest kaldığı önceden bilinmiyor; kontrol ekranı yazıyor.
+- **Öneri iki aşamalı** (`kitle-onerisi.service.ts`): model metni
+  YAPILANDIRIYOR (yer adları, yaş, cinsiyet, ilgi ARAMA TERİMLERİ, kurulamayan
+  kısımlar ve nedeni), sunucu her terimi Meta'nın aramasıyla gerçek kimliğe
+  çözüyor. Model kimlik üretmiyor. Bulunamayan terim `eslesmeyen`, "son bir
+  ayda" gibi kurulamayan parça `uygulanamayan` — ikisi de ekranda. Öneri
+  forma doluyor, KAYDEDİLMİYOR.
+- Yapılandırılmış çıktı `output_config.format` (json_schema), zorunlu
+  `tool_choice` değil: model yapılandırmadan geliyor ve yeni modellerde
+  zorunlu araç seçimi 400. Yanıt yine Zod'dan geçiyor.
+- Meta hesabı yoksa modele HİÇ gidilmiyor (maliyet + kimliksiz öneri).
+- **Yan düzeltme:** konum seçici hesap yüklenirken "Meta hesabı atanmamış"
+  diyordu (başlangıç `null`du); yükleniyor ayrı hâl. Hesap kararı tek hook
+  (`useIzlenenMetaHesabi`), ilgi araması da onu kullanıyor.
+- Mutasyon: API yedi, panel üç; hepsi yakalandı.
+- **Doğrulanmayan:** Meta'nın `flexible_spec` + `advantage_audience: 0`
+  birleşimini kabul edip etmediği (yayın yolu `ads_management` bekliyor).
+  Yayın sonrası ad set hedeflemesi geri okunup karşılaştırılmalı.
+
 ### 2026-09-30 — Marka Merkezi, Bölüm 4a: kitle şablonları
 
 Migration `20260930090000_kitle_sablonlari`: `audience_templates` (ad, konum,

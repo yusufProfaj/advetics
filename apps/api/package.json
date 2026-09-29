@@ -22,6 +22,7 @@
     "db:set-password": "tsx prisma/set-password.ts",
     "sync": "tsx prisma/sync-cli.ts",
     "google-check": "node dist/google-check.js",
+    "meta-ilgi-kontrol": "node dist/meta-ilgi-kontrol.js",
     "worker": "node dist/worker.js",
     "worker:dev": "tsx watch src/worker.ts",
     "youtube-check": "tsx prisma/youtube-check.ts",

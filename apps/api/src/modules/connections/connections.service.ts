@@ -12,6 +12,7 @@ import type {
   AdAccountSummary,
   ConnectionSummary,
   GeoLocationOption,
+  InterestOption,
   Platform,
   ProviderAvailability,
   SavedAudienceList,
@@ -1678,6 +1679,16 @@ export class ConnectionsService {
   ): Promise<GeoLocationOption[]> {
     const { provider, fetchCtx } = await this.lookupContext(ctx, adAccountId);
     return provider.searchGeoLocations(fetchCtx, query);
+  }
+
+  /** İlgi alanı araması — konum aramasıyla aynı kapı (hesap üzerinden, RLS'li). */
+  async searchInterests(
+    ctx: TenantContext,
+    adAccountId: string,
+    query: string,
+  ): Promise<InterestOption[]> {
+    const { provider, fetchCtx } = await this.lookupContext(ctx, adAccountId);
+    return provider.searchInterests(fetchCtx, query);
   }
 
   /**
