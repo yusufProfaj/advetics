@@ -143,11 +143,14 @@ export function normalizeError(
 
   const message = parts.join(' · ');
 
+  const kota = platform === 'google' ? googleKotaAyrintisi(err) : {};
   const detail = {
     httpStatus: res.status,
     platformCode: code,
     platformSubcode: subcode,
-    retryAfterSeconds: retryAfter,
+    // Başlık önce: platform onu açıkça veriyorsa en güvenilir kaynak o.
+    retryAfterSeconds: retryAfter ?? kota.retryAfterSeconds,
+    kotaKapsami: kota.kapsam,
     raw: body,
   };
 
@@ -240,10 +243,68 @@ function googleErrorParts(err: Record<string, unknown>): string[] {
     }
   }
 
+  // KOTANIN KAPSAMI mesajda da görünsün: `sync_jobs.error_message` teşhiste
+  // okunan tek yer ve "hangi kova doldu" sorusunun cevabı burada.
+  const kota = googleKotaAyrintisi(err);
+  if (kota.kapsam) out.push(`rateScope=${kota.kapsam}`);
+  if (kota.ad) out.push(`rateName=${kota.ad.slice(0, 120)}`);
+
   // requestId EN SONA: Google desteğine yazarken gereken tek referans ama
   // mesajın başında yer kaplaması teşhisi zorlaştırırdı.
   if (requestId) out.push(`requestId=${requestId}`);
   return out;
+}
+
+/**
+ * ═══ GOOGLE KOTA HATASI: NE KADAR BEKLE, KİMİN KOVASI ═══
+ *
+ * Üretimde (2026-09-29) kota her gece doluyor ve Google'ın mesajı
+ * "Too many requests. Retry in N seconds." diyordu — ama N hiçbir yerde
+ * okunmuyordu: `Retry-After` başlığı gelmiyor, devre kesici sabit 15 dk
+ * açılıyor ve 10:00'daki günlük sıfırlamaya kadar her 15 dakikada bütün
+ * hesaplar Google'a yeniden çarpıyordu. 1.521 iş denemelerini bitirip
+ * `kuyruk_vazgecti` ile düştü; o günlerin verisi hiç gelmedi.
+ *
+ * Belgelenen biçim: `details[].errors[].details.quotaErrorDetails` içinde
+ * `rateScope` (DEVELOPER / ACCOUNT), `rateName` ve `retryDelay` ("1234s").
+ * CANLI GÖVDEDE DOĞRULANMADI — o yüzden (1) nesne ağacın HER yerinde
+ * aranıyor, sabit yola bağlı değil, (2) süre bulunamazsa mesajdaki
+ * "Retry in N seconds" okunuyor. İkisi de yoksa `undefined`: uydurulmuş bir
+ * süre, uydurulmuş bir kesinlik olurdu.
+ */
+export function googleKotaAyrintisi(err: Record<string, unknown>): {
+  retryAfterSeconds?: number;
+  kapsam?: string;
+  ad?: string;
+} {
+  let q: Record<string, unknown> | undefined;
+  const mesajlar: string[] = [];
+  const gez = (v: unknown, derinlik: number): void => {
+    if (derinlik > 8 || v === null || typeof v !== 'object') return;
+    if (Array.isArray(v)) {
+      for (const x of v) gez(x, derinlik + 1);
+      return;
+    }
+    const o = v as Record<string, unknown>;
+    if (!q && typeof o.quotaErrorDetails === 'object' && o.quotaErrorDetails !== null) {
+      q = o.quotaErrorDetails as Record<string, unknown>;
+    }
+    if (typeof o.message === 'string') mesajlar.push(o.message);
+    for (const x of Object.values(o)) gez(x, derinlik + 1);
+  };
+  gez(err, 0);
+
+  const gecikme = typeof q?.retryDelay === 'string' ? /^(\d+(?:\.\d+)?)s$/.exec(q.retryDelay) : null;
+  const mesajdan = mesajlar
+    .map((m) => /Retry in (\d+) seconds?/i.exec(m))
+    .find((m) => m !== null);
+  const saniye = gecikme ? Math.ceil(Number(gecikme[1])) : mesajdan ? Number(mesajdan[1]) : undefined;
+
+  return {
+    retryAfterSeconds: saniye !== undefined && Number.isFinite(saniye) && saniye > 0 ? saniye : undefined,
+    kapsam: typeof q?.rateScope === 'string' ? q.rateScope : undefined,
+    ad: typeof q?.rateName === 'string' ? q.rateName : undefined,
+  };
 }
 
 /**

@@ -251,3 +251,67 @@ describe('yapılacak iş ipucu', () => {
     expect(err.message).not.toContain('→');
   });
 });
+
+describe('normalizeError — Google kota ayrıntısı', () => {
+  /*
+   * Belgelenen gövde biçimi (canlı gövdede DOĞRULANMADI). Üretimde mesaj
+   * "Too many requests. Retry in N seconds." diyordu ve N hiç okunmuyordu:
+   * kesici sabit 15 dk açılıyor, 10:00'daki sıfırlamaya kadar her 15 dk'da
+   * bütün hesaplar yeniden çarpıyordu.
+   */
+  const kotaGovdesi = (errorDetails?: Record<string, unknown>, mesaj = 'Too many requests. Retry in 7200 seconds.') => ({
+    error: {
+      code: 429,
+      message: 'Resource has been exhausted (e.g. check quota).',
+      status: 'RESOURCE_EXHAUSTED',
+      details: [
+        {
+          '@type': 'type.googleapis.com/google.ads.googleads.v21.errors.GoogleAdsFailure',
+          errors: [
+            {
+              errorCode: { quotaError: 'RESOURCE_EXHAUSTED' },
+              message: mesaj,
+              ...(errorDetails ? { details: errorDetails } : {}),
+            },
+          ],
+          requestId: 'r1',
+        },
+      ],
+    },
+  });
+  const kota = (body: unknown, headers: Record<string, string> = {}) =>
+    normalizeError('google', new Response(JSON.stringify(body), { status: 429, headers }), body);
+
+  it('quotaErrorDetails: süre ve kapsam okunuyor, kapsam mesaja yazılıyor', () => {
+    const e = kota(
+      kotaGovdesi({
+        quotaErrorDetails: {
+          rateScope: 'DEVELOPER',
+          rateName: 'Number of operations for basic access',
+          retryDelay: '31400s',
+        },
+      }),
+    );
+    expect(e.kind).toBe('rate_limited');
+    expect(e.detail?.retryAfterSeconds).toBe(31400);
+    expect(e.detail?.kotaKapsami).toBe('DEVELOPER');
+    expect(e.message).toContain('rateScope=DEVELOPER');
+    expect(e.message).toContain('rateName=Number of operations for basic access');
+  });
+
+  it('ayrıntı yoksa süre MESAJDAN okunuyor, kapsam bilinmiyor kalıyor', () => {
+    const e = kota(kotaGovdesi(undefined, 'Too many requests. Retry in 77 seconds.'));
+    expect(e.detail?.retryAfterSeconds).toBe(77);
+    expect(e.detail?.kotaKapsami).toBeUndefined();
+  });
+
+  it('hiçbir ipucu yoksa süre UYDURULMUYOR', () => {
+    const e = kota(kotaGovdesi(undefined, 'Too many requests.'));
+    expect(e.detail?.retryAfterSeconds).toBeUndefined();
+  });
+
+  it('Retry-After başlığı gövdeden önce geliyor', () => {
+    const e = kota(kotaGovdesi({ quotaErrorDetails: { retryDelay: '31400s' } }), { 'retry-after': '30' });
+    expect(e.detail?.retryAfterSeconds).toBe(30);
+  });
+});

@@ -6,8 +6,8 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-29 · **Canlı:** `9782f2b` dahil evet. "Dün bir
-kez" düzeltmesi push edildi, DEPLOY BEKLİYOR.
+**Son güncelleme:** 2026-09-29 · **Canlı:** `6c24976` dahil evet ("dün bir
+kez"). Google platform kesicisi push edildi, DEPLOY BEKLİYOR.
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
@@ -34,21 +34,22 @@ gösteremez ve kayar):
   LinkedIn `insights_daily` işleri `succeeded` olmalı.
 - **Google kotası ölçüldü: sebep hacim, günlük tavan.** "Günlük" metrik işi
   hesap başına günde ~11 kez koşuyordu; artık dün bir kez çekiliyor.
-- Testler: API 3.528, panel 1.108, yeşil.
+  Kota dolunca bütün Google işleri Google'ın söylediği süre kadar bekliyor
+  (önce yalnızca çarpan hesap 15 dk duruyordu, 1.521 iş düşmüştü).
+- Testler: API 3.542, panel 1.108, yeşil.
 
 Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
 ## Sıradaki iş (sırayla)
 
-1. **Google kotası — kalan iki karar** (ölçüm ve ilk düzeltme `DURUM.md`
-   2026-09-29'da). Deploy sonrası `olcum-google-kota -- --gun=1` ile
-   doğrula: `insights_daily` hesap başına ~1/gün, kota hatası saat
-   tablosunda azalmalı. Sonra:
-   a. **Kota dolunca bütün Google işlerini 10:00'a kadar durdur** (devre
-      kesici bugün hesap başına 15 dk). 1.521 iş veri kaybına düştü. Karar
-      gerekmiyor, sıradaki kod işi.
-   b. **Gün içi metrik 30 dk'da bir** (~4.800 çağrı/gün). Sıklık bir ürün
-      kararı — **kullanıcıya sorulacak.**
+1. **Google kotası — doğrulama + bir karar.** Deploy'dan SONRAKİ ilk
+   geceden sonra `olcum-google-kota -- --gun=1`: `insights_daily` hesap
+   başına ~1/gün olmalı, `kuyruk_vazgecti` sayısı düşmeli, kota hatası
+   mesajlarında `rateScope=` görünmeli (görünmüyorsa gövde biçimi
+   belgeden farklı — `googleKotaAyrintisi`). Worker log'unda
+   "PLATFORM kotası doldu" satırı gecede bir-iki kez olmalı, yüzlerce değil.
+   Kalan karar: **gün içi metrik 30 dk'da bir** (~4.800 çağrı/gün) —
+   saatliğe inmek ürün kararı, **kullanıcıya soruldu, cevap bekleniyor.**
 2. **Bölüm 2 — Marka.** Bilgi bankasındaki üç serbest metin alanı
    yapılandırılmış alanlara dönüşüyor (sektör, web sitesi + sık sayfalar, ana
    amaç, üslup, öne çıkan vaatler); Reklam Oluştur ve AI asistan bunları

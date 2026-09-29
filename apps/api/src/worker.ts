@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { UnrecoverableError, Worker } from 'bullmq';
+import { DelayedError, UnrecoverableError, Worker } from 'bullmq';
 import Redis from 'ioredis';
 import { AppModule } from './app.module';
 import { PrismaAdminService } from './prisma/prisma-admin.service';
@@ -122,7 +122,19 @@ async function bootstrap(): Promise<void> {
         if (err instanceof QuotaThrottleError) {
           logger.warn(`${label} kota nedeniyle beklemede: ${err.message}`);
           await job.moveToDelayed(Date.now() + err.retryAfterMs, job.token);
-          return { rows: 0, note: 'throttled' };
+          /*
+           * `DelayedError` FIRLATILMALI, değer DÖNÜLMEMELİ. Dönülen değer
+           * BullMQ'ya "iş bitti" diyor ve worker, artık `delayed`de duran işi
+           * `completed`e taşımaya çalışıyor; kilit gittiği için bu çağrı
+           * düşüyor ve düşüş `failed` yoluna giriyor (BullMQ 5.81
+           * `worker.js` → `handleCompleted` / `handleFailed`; kaynaktan
+           * okundu, canlı log'da ayrıca doğrulanmadı). İş yine de
+           * bekliyordu, ama her kota reddi log'a bir hata yazıyordu. Platform
+           * geneli kesici bir anda yüzlerce işi buradan geçireceği için
+           * belgelenen yola dönüldü: `handleFailed` DelayedError'ı tanıyor,
+           * denemeyi saymıyor ve işe dokunmuyor.
+           */
+          throw new DelayedError();
         }
         if (err instanceof UnrecoverableError) {
           logger.warn(`${label} kalıcı hata (tekrar denenmeyecek): ${err.message}`);

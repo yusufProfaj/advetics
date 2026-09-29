@@ -902,6 +902,40 @@ export class SyncProcessorService {
       },
     });
 
+    /*
+     * ═══ GOOGLE'IN ORTAK KOVASI DOLDUYSA BÜTÜN GOOGLE İŞLERİ BEKLER ═══
+     *
+     * Burada, iş türünden bağımsız TEK noktada: yapı ve metrik servisleri
+     * kendi hesap kesicisini açıyordu, anahtar kelime / arama terimi /
+     * kırılım işleri hiç açmıyordu. Kova paylaşılan bir kaynak, hangi işin
+     * çarptığı önemsiz.
+     *
+     * Kapsam belirsizse de platform geneli: üretimde 54 hesabın hepsi aynı
+     * dakikalarda aynı hatayı aldı (2026-09-29 ölçümü) ve bu yalnızca ortak
+     * kovayla açıklanıyor. Hesaba özgü sınırı Google `ACCOUNT` diye AÇIKÇA
+     * söylüyor; yalnızca o durumda hesap kesicisiyle yetiniliyor. Meta'nın
+     * sınırları hesap başına (BUC), bu dal ona uygulanmıyor.
+     */
+    if (
+      platformError?.kind === 'rate_limited' &&
+      platformError.platform === 'google' &&
+      platformError.detail?.kotaKapsami !== 'ACCOUNT'
+    ) {
+      try {
+        await this.quota.tripPlatformBreaker(
+          'google',
+          platformError.detail?.retryAfterSeconds ?? 900,
+          platformError.message,
+        );
+      } catch (e) {
+        // Redis düşmüşse hata kaydı yine de yazılmış olsun (yukarıda yazıldı);
+        // kesiciyi açamamak, hatayı yutmak değil — log'da görünüyor.
+        this.logger.error(
+          `Google platform kesicisi açılamadı: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+
     // Token geçersizse bağlantıyı işaretle: aynı token'la 5 kez daha denemek
     // kotayı boşa harcıyor ve kullanıcı sorunu hiç görmüyor.
     if (platformError?.kind === 'invalid_token') {

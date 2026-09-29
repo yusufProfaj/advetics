@@ -161,6 +161,19 @@ export class QuotaGuardService implements OnModuleDestroy {
     await this.client.quit().catch(() => this.client?.disconnect());
   }
 
+  /**
+   * PLATFORM GENELİ kesici — hesaba değil KOVAYA bağlı.
+   *
+   * Google Basic Access'in günlük tavanı geliştirici token'ı başına: 54
+   * hesabın hepsi aynı kovadan içiyor. Hesap başına kesici, dolan kovayı
+   * yalnızca ÇARPAN hesap için kapatıyordu; kalan 53 hesap aynı dakikada
+   * aynı hatayı alıp kendi kesicisini açıyor, 15 dk sonra hepsi yeniden
+   * çarpıyor ve bu İstanbul 10:00'daki sıfırlamaya kadar sürüyordu.
+   */
+  private platformKey(platform: Platform): string {
+    return `${this.prefix}:state:${platform}:__platform__`;
+  }
+
   private stateKey(platform: Platform, adAccountId: string): string {
     return `${this.prefix}:state:${platform}:${adAccountId}`;
   }
@@ -193,6 +206,19 @@ export class QuotaGuardService implements OnModuleDestroy {
     layer: QuotaLayer;
   }): Promise<AcquireResult> {
     const { platform, adAccountId, layer } = params;
+
+    // 0) Platform kovası dolu mu — bütün hesaplar için tek karar.
+    const platformBlok = Number(
+      (await this.redis.hget(this.platformKey(platform), 'blockedUntil')) ?? 0,
+    );
+    if (platformBlok > Date.now()) {
+      return {
+        allowed: false,
+        retryAfterMs: platformBlok - Date.now(),
+        reason: 'platform_kotasi_dolu',
+        usagePercent: 100,
+      };
+    }
 
     // 1) Circuit breaker açık mı — platform bizi bloklamış.
     const state = await this.redis.hgetall(this.stateKey(platform, adAccountId));
@@ -363,6 +389,41 @@ export class QuotaGuardService implements OnModuleDestroy {
     this.logger.error(
       `Circuit breaker açıldı: ${platform} hesap ${adAccountId}, ${seconds}s boyunca tüm işler durdu`,
     );
+  }
+
+  /**
+   * Platformun ORTAK kovası doldu: bütün hesapların işleri `seconds` boyunca
+   * platforma gitmeden geri çevriliyor ve deneme HAKKI YAKMADAN gecikmeli
+   * kuyruğa dönüyor (`worker.ts` → `moveToDelayed`). Önceki hâlde işler
+   * denemelerini bitirip kalıcı olarak düşüyordu.
+   *
+   * Süre platformun söylediği süre. Alt sınır 60 sn: sıfıra yakın bir değer
+   * kesiciyi anlamsız kılar. Üst sınır 25 saat: günlük kova en geç bir gün
+   * içinde sıfırlanıyor; daha uzun bir değer ayrıştırma hatasıdır ve bütün
+   * platformu günlerce kilitlemesine izin verilmemeli.
+   *
+   * Var olan bloğu KISALTMAZ: aynı anda düşen iki işten biri daha kısa süre
+   * bildirirse (hız sınırı + günlük tavan) uzun olan kazanmalı.
+   */
+  async tripPlatformBreaker(platform: Platform, seconds: number, sebep: string): Promise<void> {
+    const sure = Math.min(Math.max(Math.round(seconds), 60), 25 * 3600);
+    const until = Date.now() + sure * 1000;
+    const key = this.platformKey(platform);
+    const mevcut = Number((await this.redis.hget(key, 'blockedUntil')) ?? 0);
+    if (mevcut >= until) return;
+    await this.redis.hset(key, { blockedUntil: String(until), sebep: sebep.slice(0, 200) });
+    await this.redis.expire(key, sure + 60);
+    this.logger.error(
+      `PLATFORM kotası doldu: ${platform}, ${sure}s boyunca BÜTÜN hesapların işleri bekletiliyor ` +
+        `(${new Date(until).toISOString()}). Sebep: ${sebep.slice(0, 200)}`,
+    );
+  }
+
+  /** Platform kovası şu an kapalı mı; kapalıysa ne zamana kadar. */
+  async platformBlogu(platform: Platform): Promise<{ until: number; sebep: string | null } | null> {
+    const s = await this.redis.hgetall(this.platformKey(platform));
+    const until = Number(s.blockedUntil ?? 0);
+    return until > Date.now() ? { until, sebep: s.sebep ?? null } : null;
   }
 
   /** Teşhis ve sağlık kontrolü için mevcut durum. */

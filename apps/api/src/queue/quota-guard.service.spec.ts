@@ -356,3 +356,54 @@ describe('QuotaGuardService', () => {
     });
   });
 });
+
+describe('platform geneli kesici (Google ortak kovası)', () => {
+  /*
+   * Google Basic Access'in günlük tavanı geliştirici token'ı başına. Hesap
+   * başına kesici dolan kovayı yalnızca çarpan hesap için kapatıyordu; kalan
+   * hesaplar çarpmaya devam ediyordu (2026-09-29 ölçümü).
+   *
+   * ioredis-mock veriyi instance'lar arasında paylaşıyor, platform anahtarı
+   * hesaba bağlı değil: her test kendi anahtarını temizliyor.
+   */
+  async function temiz(): Promise<QuotaGuardService> {
+    const { guard } = makeGuard();
+    await (guard as unknown as { redis: { del(k: string): Promise<number> } }).redis.del(
+      'advetics:quota:state:google:__platform__',
+    );
+    return guard;
+  }
+
+  it('açılınca HİÇ çarpmamış hesabın işi de platforma gitmiyor', async () => {
+    const guard = await temiz();
+    await guard.tripPlatformBreaker('google', 3600, 'test');
+    const r = await guard.acquire({ platform: 'google', adAccountId: acct(), layer: 'insights_daily' });
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toBe('platform_kotasi_dolu');
+    expect(r.retryAfterMs).toBeGreaterThan(3500_000);
+  });
+
+  it('başka platformu ETKİLEMİYOR', async () => {
+    const guard = await temiz();
+    await guard.tripPlatformBreaker('google', 3600, 'test');
+    const r = await guard.acquire({ platform: 'meta', adAccountId: acct(), layer: 'insights_daily' });
+    expect(r.allowed).toBe(true);
+  });
+
+  it('var olan uzun bloğu KISALTMIYOR', async () => {
+    const guard = await temiz();
+    await guard.tripPlatformBreaker('google', 7200, 'günlük tavan');
+    await guard.tripPlatformBreaker('google', 60, 'hız');
+    const b = await guard.platformBlogu('google');
+    expect(b!.until - Date.now()).toBeGreaterThan(7000_000);
+    expect(b!.sebep).toBe('günlük tavan');
+  });
+
+  it('süre 60 sn ile 25 saat arasına sıkıştırılıyor', async () => {
+    const guard = await temiz();
+    await guard.tripPlatformBreaker('google', 10 * 24 * 3600, 'bozuk ayrıştırma');
+    const b = await guard.platformBlogu('google');
+    expect(b!.until - Date.now()).toBeLessThanOrEqual(25 * 3600_000);
+  });
+});
+

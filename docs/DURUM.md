@@ -765,6 +765,31 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — Google kotası dolunca BÜTÜN Google işleri bekliyor
+
+Ölçümde kota her gece doluyor, 54 hesap 10:00'daki sıfırlamaya kadar 15
+dakikada bir yeniden çarpıyordu ve 1.521 iş `kuyruk_vazgecti` ile düştü.
+
+- **Platform geneli kesici** (`quota-guard.service.ts` → `tripPlatformBreaker`,
+  `acquire` ilk iş ona bakıyor). İş türünden bağımsız tek noktada açılıyor:
+  `recordFailure`. Önceden yalnızca yapı ve metrik servisleri HESAP kesicisi
+  açıyordu; anahtar kelime, arama terimi ve kırılım hiç açmıyordu.
+- **Süre Google'ın kendi söylediği süre.** `quotaErrorDetails.retryDelay`
+  ya da mesajdaki "Retry in N seconds" (`googleKotaAyrintisi`); önceden hiç
+  okunmuyordu ve kesici sabit 15 dk açılıyordu. 60 sn – 25 saat arasına
+  sıkıştırılıyor, var olan uzun blok kısalmıyor. Bilinmiyorsa 900 sn.
+- **Kapsam:** Google `ACCOUNT` derse yalnızca hesap kesicisi; `DEVELOPER`
+  ya da BİLİNMİYORSA platform geneli (ölçümde bütün hesaplar aynı anda
+  düştü). `rateScope` / `rateName` artık hata mesajına yazılıyor.
+  **Gövde biçimi belgeden; canlıda doğrulanmadı** — bir sonraki gecenin
+  `sync_jobs.error_message` satırlarında `rateScope=` görünmeli.
+- **Worker kota reddinde `DelayedError` fırlatıyor.** Önce `moveToDelayed`
+  sonrası değer dönüyordu; BullMQ bunu "bitti" sayıp artık gecikmeli olan
+  işi tamamlamaya çalışıyor (kaynaktan okundu). Belgelenen yol, denemeyi
+  saymadan bekletiyor.
+- Sekiz mutasyon (platform kontrolü, kısalmama, sıkıştırma, ACCOUNT ayrımı,
+  Meta'ya sızma, süre okuma, mesaj yedeği, worker), sekizi de yakalandı.
+
 ### 2026-09-29 — Google kotası: ölçüldü, sebep HACİM; "dün" artık bir kez çekiliyor
 
 `olcum-google-kota` üretimde koştu (son 7 gün, 54 izlenen Google hesabı).

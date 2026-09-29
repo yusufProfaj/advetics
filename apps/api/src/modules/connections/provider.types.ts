@@ -45,6 +45,13 @@ export class PlatformApiError extends Error {
       platformCode?: string | number;
       platformSubcode?: string | number;
       retryAfterSeconds?: number;
+      /**
+       * Google kota hatasının kapsamı (`quotaErrorDetails.rateScope`):
+       * `DEVELOPER` = geliştirici token'ının BÜTÜN hesaplar için ortak
+       * kovası, `ACCOUNT` = yalnızca o müşteri hesabı. Kesicinin neyi
+       * durduracağına bu karar veriyor (`quota-guard.service.ts`).
+       */
+      kotaKapsami?: string;
       raw?: unknown;
     },
   ) {
