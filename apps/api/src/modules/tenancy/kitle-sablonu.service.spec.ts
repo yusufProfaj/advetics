@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { kitleSablonuInputSchema, kitleOzeti, type TenantContext } from '@advetics/shared';
+import { kitleSablonuInputSchema, kitleOzeti, type KitleOzel, type TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -23,6 +23,7 @@ const girdi = (patch: Record<string, unknown> = {}) => ({
   ageMax: 45,
   genders: 'female' as const,
   interests: [] as Array<{ id: string; name: string }>,
+  ozelKitleler: [] as KitleOzel[],
   ...patch,
 });
 
@@ -61,6 +62,22 @@ describe('şablon yaşam döngüsü', () => {
     expect(s.interests).toEqual([{ id: '6003', name: 'Lüks araçlar' }]);
     const g = await svc.update(CTX, s.id, girdi({ interests: [] }), {});
     expect(g.interests).toEqual([]);
+  });
+
+  it('KRİTİK: özel kitlenin hesabı BU workspace\'in Meta hesabı olmak zorunda', async () => {
+    const ozel = (hesapId: string) => ({ id: '9', name: 'K', tip: 'ozel' as const, mod: 'dahil' as const, hesapId, hesapAdi: 'H' });
+    await h.q(`UPDATE ad_accounts SET platform = 'meta' WHERE id = $1`, [IDS.adAccount]);
+    const s = await svc.create(CTX, girdi({ ozelKitleler: [ozel(IDS.adAccount)] }), {});
+    expect(s.ozelKitleler).toHaveLength(1);
+    // Var olmayan / başka workspace'in hesabı:
+    await expect(
+      svc.create(CTX, girdi({ name: 'yabancı', ozelKitleler: [ozel('9b9b9b9b-9b9b-9b9b-9b9b-9b9b9b9b9b9b')] }), {}),
+    ).rejects.toThrow('Meta hesapları arasında yok');
+    // Aynı hesap Google olunca da reddediliyor.
+    await h.q(`UPDATE ad_accounts SET platform = 'google' WHERE id = $1`, [IDS.adAccount]);
+    await expect(svc.update(CTX, s.id, girdi({ ozelKitleler: [ozel(IDS.adAccount)] }), {})).rejects.toThrow(
+      'Meta hesapları arasında yok',
+    );
   });
 
   it('aynı adla ikinci şablon SEBEBİYLE reddediliyor', async () => {

@@ -5,6 +5,7 @@ import {
   restrictTargetingFor,
   type GeoLocationOption,
   InterestOption,
+  CustomAudienceOption,
   type Platform,
   type SavedAudienceOption,
   type SpecialAdCategory,
@@ -2021,6 +2022,43 @@ export class MetaProvider implements IAdPlatformProvider {
   }
 
   /**
+   * Özel ve benzer kitleler — `/act_X/customaudiences` (Bölüm 4b).
+   *
+   * `listSavedAudiences` ile AYNI iki canlı ders: `approximate_count` yok
+   * (v17'de alt/üst sınıra bölündü) ve sayfalama izleniyor (20 sayfa üst
+   * sınırı; `limit` tek başına sessiz bir kesme). `delivery_status` yayına
+   * hazır olup olmadığını söylüyor. CANLIDA DOĞRULANMADI — alan adları
+   * belgeden; `meta-ilgi-kontrol --ozel` ham satırı basıyor.
+   */
+  async listCustomAudiences(ctx: FetchContext): Promise<CustomAudienceOption[]> {
+    const act = actPath(ctx.accountExternalId ?? '');
+    const url = new URL(`${this.graph}/${act}/customaudiences`);
+    url.searchParams.set(
+      'fields',
+      'id,name,subtype,approximate_count_lower_bound,approximate_count_upper_bound,delivery_status',
+    );
+    url.searchParams.set('limit', '100');
+    const toplam: CustomAudienceOption[] = [];
+    let sonraki: string | null = url.toString();
+    for (let sayfa = 0; sayfa < 20 && sonraki !== null; sayfa++) {
+      const istek: string = sonraki;
+      const res = await platformFetch<GraphPage>(
+        'meta',
+        istek,
+        { headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+        parseMetaRateLimit,
+      );
+      if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+      for (const row of res.data.data ?? []) {
+        const o = mapCustomAudience(row as Record<string, unknown>);
+        if (o !== null) toplam.push(o);
+      }
+      sonraki = res.data.paging?.next ?? null;
+    }
+    return toplam;
+  }
+
+  /**
    * Kayıtlı kitlenin hedefleme nesnesi.
    *
    * CANLIDA DOĞRULANMADI. `targeting` alanının kitle nesnesinde döndüğü
@@ -3509,6 +3547,31 @@ export function mapGeoLocation(row: Record<string, unknown>): GeoLocationOption 
  * demek olurdu ve kullanıcı çalışan bir kitleyi kullanmaktan vazgeçerdi.
  * Ölçülmemiş olanı sıfır saymak bu projede raporlarda da kaçınılan hata.
  */
+/**
+ * `customaudience` satırı → seçenek. Kimliksiz satır atılıyor. Büyüklükte -1
+ * "ölçülmemiş" (pasif benzer kitle) → `null`. Teslim durumu kodu 200 değilse
+ * "hazır değil"; kod yoksa `null` = bilinmiyor, hazır SAYILMIYOR.
+ */
+export function mapCustomAudience(row: Record<string, unknown>): CustomAudienceOption | null {
+  const id = typeof row.id === 'string' || typeof row.id === 'number' ? String(row.id) : null;
+  const name = typeof row.name === 'string' ? row.name : null;
+  if (!id || !/^\d+$/.test(id) || !name) return null;
+  const gecerli = (v: unknown): number | null => (typeof v === 'number' && v >= 0 ? v : null);
+  const altTur = typeof row.subtype === 'string' ? row.subtype : null;
+  const ds = row.delivery_status as { code?: unknown; description?: unknown } | undefined;
+  const kod = typeof ds?.code === 'number' ? ds.code : null;
+  return {
+    id,
+    name,
+    tip: altTur === 'LOOKALIKE' ? 'benzer' : 'ozel',
+    altTur,
+    sizeMin: gecerli(row.approximate_count_lower_bound),
+    sizeMax: gecerli(row.approximate_count_upper_bound),
+    hazir: kod === null ? null : kod === 200,
+    durum: typeof ds?.description === 'string' ? ds.description : null,
+  };
+}
+
 export function mapSavedAudience(row: Record<string, unknown>): SavedAudienceOption | null {
   const id = row.id;
   if (typeof id !== 'string') return null;

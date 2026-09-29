@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { GeoLocationOption,
-  InterestOption, SavedAudienceOption } from '@advetics/shared';
+  InterestOption,
+  CustomAudienceOption, SavedAudienceOption } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
@@ -1058,6 +1059,15 @@ export class LinkedInProvider implements IAdPlatformProvider {
   }
 
   /** LinkedIn Ads'te Meta'nın ilgi alanı kavramı yok; kitle şablonu yalnızca Meta. */
+  /** Meta'nın özel/benzer kitle kavramı LinkedIn'da ayrı bir uzay; kitle şablonu yalnızca Meta. */
+  async listCustomAudiences(): Promise<CustomAudienceOption[]> {
+    throw new PlatformApiError(
+      'linkedin',
+      'permanent',
+      "Özel/benzer kitle okuması yalnızca Meta'da yazıldı.",
+    );
+  }
+
   async searchInterests(): Promise<InterestOption[]> {
     throw new PlatformApiError(
       'linkedin',

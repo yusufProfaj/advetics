@@ -108,3 +108,43 @@ export const interestSearchQuerySchema = z.object({
 });
 export type InterestSearchQuery = z.infer<typeof interestSearchQuerySchema>;
 
+/**
+ * ═══ ÖZEL VE BENZER KİTLE (Meta `customaudiences`) — Bölüm 4b ═══
+ *
+ * Okuma: Ads Manager'da kurulmuş kitleler (site ziyaretçisi, müşteri
+ * listesi, etkileşim, benzer). Kitle OLUŞTURMAK yazma yolu ve burada yok.
+ *
+ * REKLAM HESABINA BAĞLI. Bir hesabın kitle kimliği başka hesapta çalışmaz
+ * (Meta `image_hash` ile aynı tuzak); şablon kitlenin hesabını saklıyor.
+ *
+ * CANLIDA DOĞRULANMADI: alan adları belgeden (`meta-ilgi-kontrol --ozel`).
+ */
+export interface CustomAudienceOption {
+  id: string;
+  name: string;
+  /** `LOOKALIKE` → benzer; diğer bütün alt türler özel kitle. */
+  tip: 'ozel' | 'benzer';
+  /** Meta'nın ham alt türü: WEBSITE, CUSTOM, ENGAGEMENT, LOOKALIKE… */
+  altTur: string | null;
+  /** -1 = ölçülmemiş (pasif benzer kitle); null döner, sayı gibi gösterilmez. */
+  sizeMin: number | null;
+  sizeMax: number | null;
+  /**
+   * Yayına hazır mı: `delivery_status.code === 200`. `null` = Meta durumu
+   * bildirmedi — "hazır" sayılmıyor, bilinmiyor.
+   */
+  hazir: boolean | null;
+  /** Meta'nın kendi açıklaması ("Hedef kitle çok küçük" gibi). */
+  durum: string | null;
+}
+
+export interface CustomAudienceList {
+  items: CustomAudienceOption[];
+  total: number;
+}
+
+export const customAudienceQuerySchema = z.object({
+  adAccountId: z.string().uuid(),
+});
+export type CustomAudienceQuery = z.infer<typeof customAudienceQuerySchema>;
+

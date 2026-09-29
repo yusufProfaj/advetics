@@ -595,6 +595,8 @@ model AudienceTemplate {
   genders         String   @default("all") @db.VarChar(6)
   /// `[{ id, name }]` Meta ilgi alanları — birleşim olarak gidiyor.
   interests       Json     @default("[]")
+  /// Meta özel/benzer kitleleri — her öğe kendi reklam hesabını taşıyor.
+  ozelKitleler    Json     @default("[]") @map("ozel_kitleler")
   createdByUserId String?  @map("created_by_user_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)

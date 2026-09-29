@@ -51,6 +51,8 @@ export function baslangicSecimi(p: {
 export function kitleHedefi(
   kitleler: readonly KitleSablonuRecord[],
   secilenId: string,
+  /** Seçili Meta reklam hesabı. Özel kitle yalnızca kendi hesabında çalışır. */
+  adAccountId: string,
 ): { hedef: KitleHedefi | null; ozet: string; hata: string | null } {
   if (!secilenId) {
     return { hedef: null, ozet: 'Türkiye geneli · 18+ yaş', hata: null };
@@ -58,6 +60,20 @@ export function kitleHedefi(
   const k = kitleler.find((x) => x.id === secilenId);
   if (!k) {
     return { hedef: null, ozet: '', hata: 'Seçilen kitle artık yok; başka bir kitle seç.' };
+  }
+  /*
+   * ÖZEL KİTLE BAŞKA HESABINSA TASLAK KURULMUYOR — ekranda, tıklamadan
+   * önce. Sunucunun yayın kontrolü de aynı kuralı uyguluyor
+   * (`grupHedeflemesi`); burada söylemek, kullanıcının kurduğu taslağın
+   * yayında durmasını beklemesini önlüyor.
+   */
+  const yabanci = k.ozelKitleler.find((o) => o.hesapId !== adAccountId);
+  if (yabanci) {
+    return {
+      hedef: null,
+      ozet: '',
+      hata: `“${k.name}” kitlesindeki “${yabanci.name}” ${yabanci.hesapAdi} hesabının; seçili reklam hesabı farklı.`,
+    };
   }
   const hedef: KitleHedefi = {
     sablonId: k.id,
@@ -67,6 +83,7 @@ export function kitleHedefi(
     ageMax: k.ageMax,
     genders: k.genders,
     interests: k.interests,
+    ozelKitleler: k.ozelKitleler,
   };
   return { hedef, ozet: kitleOzeti(hedef), hata: null };
 }

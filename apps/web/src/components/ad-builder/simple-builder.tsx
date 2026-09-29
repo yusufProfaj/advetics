@@ -152,7 +152,7 @@ export function SimpleAdBuilder({
   const gonderilecekMetin = yasalUyariEkle(primaryText.trim(), yasalUyari);
   // '' = şablonsuz (Türkiye geneli, 18+). Varsayılan şablon seçili geliyor.
   const [kitleId, setKitleId] = useState(varsayilanKitleId ?? '');
-  const kitle = kitleHedefi(kitleler, kitleId);
+  const kitle = kitleHedefi(kitleler, kitleId, adAccountId);
   const [headline, setHeadline] = useState('');
   const [description, setDescription] = useState('');
   const [linkUrl, setLinkUrl] = useState(baslangic.linkUrl);

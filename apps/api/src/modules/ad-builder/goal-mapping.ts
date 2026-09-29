@@ -365,6 +365,8 @@ export function targetingFrom(t: TargetingInput): Record<string, unknown> {
 export function grupHedeflemesi(
   advanced: AdvancedSettings | null,
   settings: Record<string, unknown> | null | undefined,
+  /** Kampanyanın reklam hesabı (iç kimlik). Özel kitlenin hesabıyla aynı olmalı. */
+  adAccountId: string,
 ): { targeting: Record<string, unknown>; hata: string | null } {
   if (advanced) return { targeting: targetingFrom(advanced.targeting), hata: null };
   const ham = settings?.kitle;
@@ -377,6 +379,20 @@ export function grupHedeflemesi(
         'Taslağın kitlesi okunamadı (' +
         (r.error.issues[0]?.message ?? 'geçersiz biçim') +
         '). Reklam Türkiye geneline çıkmasın diye yayın durduruldu; taslağı yeniden kur.',
+    };
+  }
+  /*
+   * ÖZEL KİTLE BAŞKA HESABINSA YAYIN DURUYOR. Kitle kimliği reklam hesabına
+   * bağlı: başka hesabın kitlesiyle kurulan ad set ya reddedilir ya da
+   * (hariç tutmada) kitle hiç uygulanmaz ve kimse fark etmez.
+   */
+  const yabanci = r.data.ozelKitleler.find((o) => o.hesapId !== adAccountId);
+  if (yabanci) {
+    return {
+      targeting: defaultTargeting(),
+      hata:
+        `Kitledeki "${yabanci.name}" ${yabanci.hesapAdi} hesabının özel kitlesi; bu kampanya başka ` +
+        'bir hesapta. Özel kitle yalnızca kendi hesabında çalışır; kitleyi ya da hesabı değiştir.',
     };
   }
   return { targeting: metaTargetingFrom(r.data), hata: null };

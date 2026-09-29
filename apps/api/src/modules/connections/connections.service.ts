@@ -13,6 +13,7 @@ import type {
   ConnectionSummary,
   GeoLocationOption,
   InterestOption,
+  CustomAudienceList,
   Platform,
   ProviderAvailability,
   SavedAudienceList,
@@ -1679,6 +1680,13 @@ export class ConnectionsService {
   ): Promise<GeoLocationOption[]> {
     const { provider, fetchCtx } = await this.lookupContext(ctx, adAccountId);
     return provider.searchGeoLocations(fetchCtx, query);
+  }
+
+  /** Özel/benzer kitleler — aynı kapı. Boş liste geçerli bir cevap. */
+  async listCustomAudiences(ctx: TenantContext, adAccountId: string): Promise<CustomAudienceList> {
+    const { provider, fetchCtx } = await this.lookupContext(ctx, adAccountId);
+    const items = await provider.listCustomAudiences(fetchCtx);
+    return { items, total: items.length };
   }
 
   /** İlgi alanı araması — konum aramasıyla aynı kapı (hesap üzerinden, RLS'li). */

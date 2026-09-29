@@ -50,4 +50,14 @@ describe('Kitleler bölümü', () => {
     const bas = K.indexOf('async function kaydet(');
     expect(K.slice(bas, K.indexOf('kitleSablonuInputSchema.safeParse', bas))).toContain('interests: form.interests');
   });
+
+  it('özel kitle seçicisi aynı hesap hook\'unu kullanıyor, hazır olmayan kitle seçilemiyor', () => {
+    const O = readFileSync(resolve(__dirname, 'ozel-kitle-secici.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(O).toContain('useIzlenenMetaHesabi(clientId)');
+    expect(O).toContain('const kapali = o.hazir === false;');
+    expect(O).toContain('disabled={kapali || dolu}');
+    expect(O).toContain('hesapId: hesap.id, hesapAdi: hesap.name');
+    expect(O).not.toMatch(/\.catch\(\(\) => set/);
+    expect(K).toContain('ozelKitleler: form.ozelKitleler');
+  });
 });

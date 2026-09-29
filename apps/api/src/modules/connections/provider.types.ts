@@ -1,5 +1,6 @@
 import type { GeoLocationOption,
-  InterestOption, Platform, SavedAudienceOption } from '@advetics/shared';
+  InterestOption,
+  CustomAudienceOption, Platform, SavedAudienceOption } from '@advetics/shared';
 
 /**
  * Platform adapter sözleşmesi.
@@ -1209,6 +1210,12 @@ export interface IAdPlatformProvider {
    * "sonuç yok" gibi okunur ve kullanıcı yanlış terimi aradığını sanar.
    */
   searchInterests(ctx: FetchContext, query: string): Promise<InterestOption[]>;
+
+  /**
+   * Reklam hesabındaki özel ve benzer kitleler (Meta `customaudiences`,
+   * Bölüm 4b). Yalnızca OKUMA. Google/LinkedIn açık hata fırlatıyor.
+   */
+  listCustomAudiences(ctx: FetchContext): Promise<CustomAudienceOption[]>;
 
   /** Reklam hesabında kurulu kayıtlı kitleler. */
   listSavedAudiences(ctx: FetchContext): Promise<SavedAudienceOption[]>;

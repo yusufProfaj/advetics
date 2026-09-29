@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { KitleOzel } from '@advetics/shared';
 import { baslangicSecimi, kitleHedefi, varsayilanAdres } from './marka-varsayilanlari';
 
 /**
@@ -99,12 +100,13 @@ describe('kitle şablonu (Bölüm 4)', () => {
     ageMax: 45,
     genders: 'female' as const,
     interests: [{ id: '6003', name: 'Lüks araçlar' }],
+    ozelKitleler: [] as KitleOzel[],
     varsayilan: true,
     updatedAt: '',
   };
 
   it('seçilen şablon taslağa KOPYA olarak gidiyor', () => {
-    const r = kitleHedefi([K], K.id);
+    const r = kitleHedefi([K], K.id, 'acc-1');
     expect(r.hedef).toEqual({
       sablonId: K.id,
       name: 'İzmir kadın',
@@ -113,16 +115,32 @@ describe('kitle şablonu (Bölüm 4)', () => {
       ageMax: 45,
       genders: 'female',
       interests: [{ id: '6003', name: 'Lüks araçlar' }],
+      ozelKitleler: [],
     });
     expect(r.ozet).toBe('İzmir, Türkiye · 25-45 yaş · Kadın · ilgi: Lüks araçlar');
   });
 
   it('boş seçim şablonsuz: Türkiye geneli', () => {
-    expect(kitleHedefi([K], '')).toEqual({ hedef: null, ozet: 'Türkiye geneli · 18+ yaş', hata: null });
+    expect(kitleHedefi([K], '', 'acc-1')).toEqual({ hedef: null, ozet: 'Türkiye geneli · 18+ yaş', hata: null });
+  });
+
+  it('KRİTİK: özel kitle BAŞKA hesabınsa taslak kurulmuyor — kitle yalnızca kendi hesabında çalışır', () => {
+    const ozel: KitleOzel = {
+      id: '999',
+      name: 'Site ziyaretçileri',
+      tip: 'ozel',
+      mod: 'dahil',
+      hesapId: 'acc-2',
+      hesapAdi: 'Diğer hesap',
+    };
+    const r = kitleHedefi([{ ...K, ozelKitleler: [ozel] }], K.id, 'acc-1');
+    expect(r.hedef).toBeNull();
+    expect(r.hata).toContain('Diğer hesap');
+    expect(kitleHedefi([{ ...K, ozelKitleler: [ozel] }], K.id, 'acc-2').hata).toBeNull();
   });
 
   it('KRİTİK: silinmiş şablon HATA — sessizce Türkiye geneline düşmüyor', () => {
-    const r = kitleHedefi([], K.id);
+    const r = kitleHedefi([], K.id, 'acc-1');
     expect(r.hedef).toBeNull();
     expect(r.hata).toContain('artık yok');
   });
@@ -134,6 +152,7 @@ describe('kitle şablonu (Bölüm 4)', () => {
 
   it('varsayılan kitle seçili geliyor, taslağa gidiyor ve eksik listesine giriyor', () => {
     expect(SIHIRBAZ).toContain("useState(varsayilanKitleId ?? '')");
+    expect(SIHIRBAZ).toContain('kitleHedefi(kitleler, kitleId, adAccountId)');
     expect(SIHIRBAZ).toContain('kitle: kitle.hedef,');
     expect(SIHIRBAZ).toContain('if (kitle.hata) list.push(kitle.hata);');
     expect(SIHIRBAZ).toContain('bizNeSectik(goal, kitle.ozet)');

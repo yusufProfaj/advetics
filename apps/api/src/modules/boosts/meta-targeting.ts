@@ -19,6 +19,8 @@ export interface MetaHedeflemeGirdisi {
    * ön ayar yolları bunu vermiyor; alan yoksa `flexible_spec` hiç gitmiyor.
    */
   interests?: ReadonlyArray<{ id: string; name: string }>;
+  /** Meta özel/benzer kitleleri (Bölüm 4b). Hesap uyumu çağıranın kontrolü. */
+  ozelKitleler?: ReadonlyArray<{ id: string; mod: 'dahil' | 'haric' }>;
 }
 
 /*
@@ -106,6 +108,15 @@ export function metaTargetingFrom(t: MetaHedeflemeGirdisi): Record<string, unkno
   if (t.interests && t.interests.length > 0) {
     out.flexible_spec = [{ interests: t.interests.map((i) => ({ id: i.id, name: i.name })) }];
   }
+  /*
+   * ÖZEL KİTLE: dahil edilenler BİRLEŞİM (Meta `custom_audiences` listesi
+   * "bunlardan birinde olan"), hariç tutulanlar ayrı alanda. Boş dizi
+   * GÖNDERİLMİYOR.
+   */
+  const dahil = (t.ozelKitleler ?? []).filter((o) => o.mod === 'dahil');
+  const haric = (t.ozelKitleler ?? []).filter((o) => o.mod === 'haric');
+  if (dahil.length > 0) out.custom_audiences = dahil.map((o) => ({ id: o.id }));
+  if (haric.length > 0) out.excluded_custom_audiences = haric.map((o) => ({ id: o.id }));
   return out;
 }
 

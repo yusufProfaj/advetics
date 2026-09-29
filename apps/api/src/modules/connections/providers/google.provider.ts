@@ -13,7 +13,8 @@ import {
 } from './google-demandgen';
 import { gecerliGorselAdresi } from '@advetics/shared';
 import type { GeoLocationOption,
-  InterestOption, Platform, SavedAudienceOption } from '@advetics/shared';
+  InterestOption,
+  CustomAudienceOption, Platform, SavedAudienceOption } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
@@ -1722,6 +1723,15 @@ export class GoogleProvider implements IAdPlatformProvider {
    * `platformFetch` Google'ın mesajıyla fırlatıyor ve panel onu gösteriyor.
    */
   /** Google Ads'te Meta'nın ilgi alanı kavramı yok; kitle şablonu yalnızca Meta. */
+  /** Meta'nın özel/benzer kitle kavramı Google'da ayrı bir uzay; kitle şablonu yalnızca Meta. */
+  async listCustomAudiences(): Promise<CustomAudienceOption[]> {
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      "Özel/benzer kitle okuması yalnızca Meta'da yazıldı.",
+    );
+  }
+
   async searchInterests(): Promise<InterestOption[]> {
     throw new PlatformApiError(
       'google',

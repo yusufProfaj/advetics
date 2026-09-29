@@ -13,6 +13,7 @@
  *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --q "lüks otomobil"
  *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --q golf --hesap <ad_account uuid>
  *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler "lüks otomobil,otomobil,luxury car"
+ *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler golf --ozel   (özel/benzer kitleler)
  */
 import 'reflect-metadata';
 import { resolve } from 'node:path';
@@ -26,7 +27,7 @@ import { AppModule } from './app.module';
 import { PrismaAdminService } from './prisma/prisma-admin.service';
 import { ProviderRegistry } from './modules/connections/provider.registry';
 import { TokenVaultService } from './modules/connections/token-vault.service';
-import { mapInterest } from './modules/connections/providers/meta.provider';
+import { actPath, mapInterest } from './modules/connections/providers/meta.provider';
 import { CONFIG, type AppConfig } from './config/configuration';
 
 const ARGV = process.argv.slice(2).filter((a) => a !== '--');
@@ -97,6 +98,41 @@ async function main(): Promise<void> {
             (ilk ? ` · ${String(ilk.name)} · ${Object.keys(ilk).join(',')}` : '') +
             (eslenemeyen > 0 ? `  ← ${eslenemeyen} satır mapInterest'e uymuyor` : ''),
         );
+      }
+    }
+
+    /*
+     * ÖZEL/BENZER KİTLELER (Bölüm 4b, `--ozel`). `listCustomAudiences` da
+     * belgeden yazıldı: ham satırın alanları, teslim durumu ve eşleme.
+     */
+    if (ARGV.includes('--ozel')) {
+      // `act_` öneki elle eklenmiyor (CLAUDE.md): actPath.
+      const url = new URL(`https://graph.facebook.com/${surum}/${actPath(hesap.externalId)}/customaudiences`);
+      url.searchParams.set(
+        'fields',
+        'id,name,subtype,approximate_count_lower_bound,approximate_count_upper_bound,delivery_status',
+      );
+      url.searchParams.set('limit', '10');
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const govde = (await res.json()) as { data?: Array<Record<string, unknown>>; error?: unknown };
+      console.log(`\n═══ ÖZEL KİTLELER HAM (HTTP ${res.status}) ═══`);
+      if (govde.error) {
+        console.log(`  HATA: ${JSON.stringify(govde.error).slice(0, 400)}`);
+      } else {
+        const satirlar = govde.data ?? [];
+        console.log(`  ilk sayfada ${satirlar.length} kitle`);
+        for (const r of satirlar.slice(0, 5)) console.log(`  · ${JSON.stringify(r).slice(0, 300)}`);
+        const eslenen = await provider.listCustomAudiences({
+          accessToken: token,
+          accountExternalId: hesap.externalId,
+        });
+        console.log(`  listCustomAudiences: ${eslenen.length} kitle (tüm sayfalar)`);
+        for (const o of eslenen.slice(0, 5)) {
+          console.log(
+            `  · ${o.name} [${o.id}] ${o.tip}/${o.altTur ?? '?'} · ` +
+              `${o.sizeMin ?? '?'}–${o.sizeMax ?? '?'} · hazır=${String(o.hazir)} · ${o.durum ?? ''}`,
+          );
+        }
       }
     }
 

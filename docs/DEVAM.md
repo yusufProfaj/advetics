@@ -6,12 +6,11 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-30 · **Canlı:** `017897a` dahil evet (Bölüm 4a).
-Bölüm 4c push edildi, DEPLOY BEKLİYOR — MIGRATION VAR
-(`20260930120000_kitle_ilgi_alanlari`). İlgi araması canlıda ölçüldü (kısa terim eşleşiyor, `locale` etkisiz) ve
-öneri buna göre düzeltildi; düzeltme DEPLOY BEKLİYOR. Deploy sonrası panelde
-"Kitleyi tarif et" ile bir deneme: ilgi alanları gelmeli, genelleşen terimler
-"kavram → aday" diye görünmeli.
+**Son güncelleme:** 2026-09-30 · **Canlı:** `c317eb0` dahil evet (4c düzeltmesi).
+Bölüm 4b push edildi, DEPLOY BEKLİYOR — MIGRATION VAR
+(`20260930150000_kitle_ozel_kitleler`). Deploy sonrası:
+`pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler golf --ozel`
+(salt okunur; özel kitle alanlarını doğruluyor).
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
@@ -52,6 +51,8 @@ gösteremez ve kayar):
   üreticisi birleştirildi: şehir seçilince ülke de gidiyordu (= ülke geneli).
 - **Bölüm 4c:** ilgi alanları + "Kitleyi tarif et" önerisi (AI yapılandırıyor,
   Meta'da çözülüyor, kullanıcı onaylıyor). Canlıda doğrulanmadı.
+- **Bölüm 4b:** Meta özel/benzer kitleler şablonda (dahil/hariç); kitle hesaba
+  bağlı, uyuşmazlık yayını durduruyor. Canlıda doğrulanmadı.
 - Açık ayrı iş: eski tek reklam yayın yolu özel kategori kısıtını uygulamıyor
   (panel çağırmıyor, uç açık) — işaretlendi.
 - Testler: API ve panel yeşil (sayılar son commit mesajında).
@@ -68,10 +69,10 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
    "PLATFORM kotası doldu" satırı gecede bir-iki kez olmalı, yüzlerce değil.
    Kalan karar: **gün içi metrik 30 dk'da bir** (~4.800 çağrı/gün) —
    saatliğe inmek ürün kararı, **kullanıcıya soruldu, cevap bekleniyor.**
-2. **Bölüm 4 kalanı** (`BASE-PLANI.md`): 4a ve 4c bitti. Kalan: Meta
-   özel/benzer kitlelerini okuma (4b) ve şablonların Akıllı Boost ön ayarına
-   ve uzman moda bağlanması. `meta-ilgi-kontrol` çıktısı gelmeden ilgi
-   alanı yolu "doğrulandı" sayılmıyor.
+2. **Bölüm 4 kalanı:** şablonların Akıllı Boost ön ayarına ve uzman moda
+   bağlanması; çok hesaplı workspace'te kitle seçicinin hesap seçmesi. Sonra
+   Bölüm 5 (Koruma kuralları). `--ozel` çıktısı gelmeden özel kitle yolu
+   "doğrulandı" sayılmıyor.
 3. Sonrası `BASE-PLANI.md` sırasıyla: Koruma kuralları, Ölçüm.
 
 ## Kullanıcı kararı bekleyen

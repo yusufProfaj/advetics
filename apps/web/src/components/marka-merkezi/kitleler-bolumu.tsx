@@ -7,6 +7,7 @@ import {
   kitleSablonuInputSchema,
   type GeoLocationOption,
   type KitleIlgi,
+  type KitleOzel,
   type KitleKonumu,
   type KitleOnerisi,
   type KitleSablonuListesi,
@@ -17,6 +18,7 @@ import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
 import { IlgiSecici, kitleBuyuklugu } from './ilgi-secici';
+import { OzelKitleSecici } from './ozel-kitle-secici';
 
 /**
  * ═══ MARKA MERKEZİ → KİTLELER (Bölüm 4) ═══
@@ -44,6 +46,7 @@ interface Form {
   ageMax: number;
   genders: 'all' | 'male' | 'female';
   interests: KitleIlgi[];
+  ozelKitleler: KitleOzel[];
 }
 
 const BOS_FORM: Form = {
@@ -54,6 +57,7 @@ const BOS_FORM: Form = {
   ageMax: 65,
   genders: 'all',
   interests: [],
+  ozelKitleler: [],
 };
 const YASLAR = Array.from({ length: 48 }, (_, i) => 18 + i);
 const girdi =
@@ -106,6 +110,7 @@ export function KitlelerBolumu({ clientId, yazabilir }: { clientId: string; yaza
       ageMax: form.ageMax,
       genders: form.genders,
       interests: form.interests,
+      ozelKitleler: form.ozelKitleler,
     };
     // Sunucuyla AYNI şema: "Türkiye + İzmir" kaydederken reddediliyor, yayında değil.
     const k = kitleSablonuInputSchema.safeParse(govde);
@@ -211,6 +216,7 @@ function formdan(k: KitleSablonuRecord): Form {
     ageMax: k.ageMax,
     genders: k.genders,
     interests: k.interests,
+    ozelKitleler: k.ozelKitleler,
   };
 }
 
@@ -359,6 +365,12 @@ function KitleFormu(p: {
       </div>
 
       <IlgiSecici clientId={p.clientId} secili={f.interests} degis={(v) => degis({ interests: v })} />
+
+      <OzelKitleSecici
+        clientId={p.clientId}
+        secili={f.ozelKitleler}
+        degis={(v) => degis({ ozelKitleler: v })}
+      />
 
       <p className="text-xs text-ink-muted">Özet: {kitleOzeti(f)}</p>
 

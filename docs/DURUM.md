@@ -765,6 +765,33 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-30 — Marka Merkezi, Bölüm 4b: Meta özel ve benzer kitleler
+
+Ads Manager'da kurulmuş kitleler OKUNUYOR (`/act_X/customaudiences`) ve kitle
+şablonunda dahil/hariç olarak kullanılabiliyor. Kitle OLUŞTURMA yok (yazma).
+Migration `20260930150000_kitle_ozel_kitleler`: `audience_templates.ozel_kitleler`.
+
+- **Kitle kimliği reklam hesabına bağlı** (`image_hash` ile aynı tuzak). Her
+  öğe `hesapId` taşıyor; şablon tek hesabın kitlelerini taşıyabiliyor (şema);
+  kaydederken hesabın bu workspace'in META hesabı olduğu veritabanında
+  doğrulanıyor (gövdeden gelen kimliğe güvenilmiyor). Hızlı Reklam başka
+  hesapla kurulurken taslağı durduruyor, yayın kontrolü de (`grupHedeflemesi`
+  artık kampanyanın hesabını alıyor) — varsayılana düşmüyor.
+- `listSavedAudiences`in iki canlı dersi aynen: `approximate_count` yok (alt/
+  üst sınır) ve `-1` = ölçülmemiş (pasif benzer kitle) → `null`. Sayfalama
+  izleniyor (20 sayfa).
+- **Yayına hazır olmayan kitle seçilemiyor** (`delivery_status.code !== 200`)
+  ve sebebi Meta'nın cümlesi; kod yoksa "bilinmiyor", hazır sayılmıyor.
+- **Özel kategoride özel ve hariç kitleler gönderilmiyor** ve kontrol ekranı
+  söylüyor — hariç tutma kalkınca reklam mevcut müşterilere de gider.
+- Dahil edilenler `custom_audiences` (birleşim), hariçler
+  `excluded_custom_audiences`.
+- **CANLIDA DOĞRULANMADI.** `meta-ilgi-kontrol --ozel` ham satırı basıyor.
+- **Bilinen sınır:** kitle seçici workspace'in İLK izlenen Meta hesabını
+  kullanıyor (konum/ilgi aramasıyla aynı hook). Çok hesaplı workspace'te
+  diğer hesabın kitleleri seçilemiyor.
+- Mutasyon: API beş, panel bir; hepsi yakalandı.
+
 ### 2026-09-30 — Marka Merkezi, Bölüm 4c: ilgi alanları ve doğal dilden kitle önerisi
 
 **K16 değişti:** "panelde ilgi/davranış seçtirmiyoruz" kararı, kullanıcının

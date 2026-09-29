@@ -215,6 +215,14 @@ describe('KİTLE ŞABLONU (Marka Merkezi Bölüm 4)', () => {
     ageMax: 45,
     genders: 'female' as const,
     interests: [] as Array<{ id: string; name: string }>,
+    ozelKitleler: [] as Array<{
+      id: string;
+      name: string;
+      tip: 'ozel' | 'benzer';
+      mod: 'dahil' | 'haric';
+      hesapId: string;
+      hesapAdi: string;
+    }>,
   };
 
   it('KRİTİK: taslaktaki kitle yayına AYNEN gidiyor — ülke geneli DEĞİL', async () => {

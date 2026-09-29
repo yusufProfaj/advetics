@@ -21,6 +21,9 @@ import {
   assignToClientSchema,
   geoSearchQuerySchema,
   interestSearchQuerySchema,
+  customAudienceQuerySchema,
+  type CustomAudienceList,
+  type CustomAudienceQuery,
   type InterestOption,
   type InterestSearchQuery,
   linkBoostAccountSchema,
@@ -102,6 +105,16 @@ export class ConnectionsController {
     @Query(zodQuery(geoSearchQuerySchema)) query: GeoSearchQuery,
   ): Promise<GeoLocationOption[]> {
     return this.connections.searchGeoLocations(ctx, query.adAccountId, query.q);
+  }
+
+  /** Meta özel/benzer kitleler. Okuma. Boş liste geçerli bir cevap. */
+  @Get('targeting/custom-audiences')
+  @RequirePermissions('connection.read')
+  customAudiences(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(customAudienceQuerySchema)) query: CustomAudienceQuery,
+  ): Promise<CustomAudienceList> {
+    return this.connections.listCustomAudiences(ctx, query.adAccountId);
   }
 
   /** İlgi alanı araması (Meta). Okuma — `connection.read` yetiyor. */

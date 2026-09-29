@@ -13,7 +13,7 @@ import { CINSIYET, konumMetni } from '../boost-hedefleme';
  * Yayın yolunda Meta nesnesi TEK üreticiden çıkıyor (`meta-targeting.ts`);
  * bu şema yalnızca GİRDİYİ tanımlıyor.
  */
-export const KITLE_SINIRLARI = { ad: 80, konum: 25, ilgi: 25 } as const;
+export const KITLE_SINIRLARI = { ad: 80, konum: 25, ilgi: 25, ozelKitle: 10 } as const;
 
 export const kitleKonumuSchema = boostLocationSchema.extend({
   /** Ekranda gösterilen ad: "İzmir, Türkiye". Anahtar sayısal ve okunmuyor. */
@@ -36,6 +36,21 @@ export const kitleIlgiSchema = z.object({
 });
 export type KitleIlgi = z.infer<typeof kitleIlgiSchema>;
 
+/**
+ * Meta özel/benzer kitlesi (Bölüm 4b). `hesapId` ZORUNLU: kitle kimliği
+ * reklam hesabına bağlı ve başka hesapta çalışmaz. `mod` = dahil et / hariç
+ * tut ("mevcut müşterileri hariç tut" en sık kullanım).
+ */
+export const kitleOzelSchema = z.object({
+  id: z.string().regex(/^\d{1,25}$/, 'Geçersiz kitle kimliği'),
+  name: z.string().trim().min(1).max(200),
+  tip: z.enum(['ozel', 'benzer']),
+  mod: z.enum(['dahil', 'haric']),
+  hesapId: z.string().uuid(),
+  hesapAdi: z.string().trim().min(1).max(200),
+});
+export type KitleOzel = z.infer<typeof kitleOzelSchema>;
+
 export const KITLE_CINSIYETLERI = ['all', 'male', 'female'] as const;
 
 const kitleAlanlari = {
@@ -51,6 +66,10 @@ const kitleAlanlari = {
   interests: z
     .array(kitleIlgiSchema)
     .max(KITLE_SINIRLARI.ilgi, `En fazla ${KITLE_SINIRLARI.ilgi} ilgi alanı`)
+    .default([]),
+  ozelKitleler: z
+    .array(kitleOzelSchema)
+    .max(KITLE_SINIRLARI.ozelKitle, `En fazla ${KITLE_SINIRLARI.ozelKitle} özel kitle`)
     .default([]),
 };
 
@@ -91,6 +110,32 @@ function konumCakismasi(
   }
 }
 
+/**
+ * ÖZEL KİTLELER TEK HESAPTAN. Kitle kimliği reklam hesabına bağlı; iki
+ * hesabın kitlesini tek şablona koymak, hangi hesapta yayınlanırsa
+ * yayınlansın birinin çalışmaması demek. Aynı kitle hem dahil hem hariç
+ * olamaz (Meta ikisini birden kabul etmez ya da hariç tutma kazanır — ikisi
+ * de kullanıcının kastettiği değil).
+ */
+function ozelKitleKurali(ozel: KitleOzel[], zctx: z.RefinementCtx): void {
+  const hesaplar = new Set(ozel.map((o) => o.hesapId));
+  if (hesaplar.size > 1) {
+    zctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ozelKitleler'],
+      message: 'Özel kitleler tek bir reklam hesabından olmalı; bir hesabın kitlesi başka hesapta çalışmaz.',
+    });
+  }
+  const gorulen = new Set<string>();
+  for (const o of ozel) {
+    if (gorulen.has(o.id)) {
+      zctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ozelKitleler'], message: `"${o.name}" iki kez seçilmiş.` });
+      return;
+    }
+    gorulen.add(o.id);
+  }
+}
+
 export const kitleSablonuInputSchema = z
   .object({ clientId: z.string().uuid(), ...kitleAlanlari })
   .superRefine((v, zctx) => {
@@ -98,6 +143,7 @@ export const kitleSablonuInputSchema = z
       zctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ageMin'], message: 'Alt yaş üst yaştan büyük olamaz' });
     }
     konumCakismasi(v.locations, zctx);
+    ozelKitleKurali(v.ozelKitleler, zctx);
   });
 export type KitleSablonuInput = z.infer<typeof kitleSablonuInputSchema>;
 
@@ -119,6 +165,7 @@ export const kitleHedefiSchema = z
       zctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ageMin'], message: 'Alt yaş üst yaştan büyük olamaz' });
     }
     konumCakismasi(v.locations, zctx);
+    ozelKitleKurali(v.ozelKitleler, zctx);
   });
 export type KitleHedefi = z.infer<typeof kitleHedefiSchema>;
 
@@ -131,6 +178,7 @@ export interface KitleSablonuRecord {
   ageMax: number;
   genders: (typeof KITLE_CINSIYETLERI)[number];
   interests: KitleIlgi[];
+  ozelKitleler: KitleOzel[];
   varsayilan: boolean;
   updatedAt: string;
 }
@@ -142,7 +190,10 @@ export interface KitleSablonuListesi {
 
 /** "İzmir, Manisa · 25-45 yaş · Kadın" — ekran ve kontrol listesi aynı cümleyi kuruyor. */
 export function kitleOzeti(
-  k: Pick<KitleHedefi, 'locations' | 'ageMin' | 'ageMax' | 'genders'> & { interests?: KitleIlgi[] },
+  k: Pick<KitleHedefi, 'locations' | 'ageMin' | 'ageMax' | 'genders'> & {
+    interests?: KitleIlgi[];
+    ozelKitleler?: KitleOzel[];
+  },
 ): string {
   const yas = k.ageMax >= 65 ? `${k.ageMin}+ yaş` : `${k.ageMin}-${k.ageMax} yaş`;
   const parcalar = [konumMetni(k.locations), yas];
@@ -153,6 +204,11 @@ export function kitleOzeti(
     const adlar = ilgi.slice(0, 2).map((i) => i.name).join(', ');
     parcalar.push(`ilgi: ${adlar}${ilgi.length > 2 ? ` +${ilgi.length - 2}` : ''}`);
   }
+  const ozel = k.ozelKitleler ?? [];
+  const dahil = ozel.filter((o) => o.mod === 'dahil').length;
+  const haric = ozel.filter((o) => o.mod === 'haric').length;
+  if (dahil > 0) parcalar.push(`${dahil} özel kitle`);
+  if (haric > 0) parcalar.push(`${haric} kitle hariç`);
   return parcalar.join(' · ');
 }
 

@@ -130,7 +130,7 @@ export class DraftPublishService {
      */
     const advanced = advancedFrom(campaign, group);
     if (!google) {
-      const h = grupHedeflemesi(advanced, group?.settings);
+      const h = grupHedeflemesi(advanced, group?.settings, campaign.adAccountId);
       if (h.hata) blockers.push(h.hata);
     }
     if (!google && campaign.surface === 'expert' && advanced) {
@@ -316,7 +316,7 @@ export class DraftPublishService {
         .join(', ');
       const dusen = restrictTargetingFor(
         kategoriler,
-        grupHedeflemesi(advanced, group?.settings).targeting,
+        grupHedeflemesi(advanced, group?.settings, campaign.adAccountId).targeting,
       ).removed;
 
       warnings.push(
@@ -414,7 +414,7 @@ export class DraftPublishService {
     const advanced = advancedFrom(campaign, group);
     // Kontrol bunu engel olarak zaten yazıyor; yine de buraya bir yoldan
     // gelinirse sessizce Türkiye geneline yayınlanmıyor.
-    const hedefleme = grupHedeflemesi(advanced, group.settings);
+    const hedefleme = grupHedeflemesi(advanced, group.settings, campaign.adAccountId);
     if (hedefleme.hata) throw new BadRequestException(hedefleme.hata);
 
     /**

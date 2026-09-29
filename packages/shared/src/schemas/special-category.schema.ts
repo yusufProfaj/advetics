@@ -98,6 +98,15 @@ export function restrictTargetingFor(
    * ve kontrol ekranı bunu yazıyor.
    */
   if (out.flexible_spec !== undefined) removed.push('ilgi alanları');
+  /*
+   * ÖZEL VE BENZER KİTLELER DE KALKIYOR (Bölüm 4b). Meta özel kategorilerde
+   * benzer kitleyi kapatıyor ve özel kitleleri kısıtlıyor; hangisinin
+   * geçerli kalacağını önceden söyleyen bir kural yok. Hariç tutma da
+   * kalkıyor ve bu SÖYLENİYOR: "mevcut müşterileri hariç tut" kaybolunca
+   * reklam onlara da gösterilir.
+   */
+  if (out.custom_audiences !== undefined) removed.push('özel/benzer kitleler');
+  if (out.excluded_custom_audiences !== undefined) removed.push('hariç tutulan kitleler');
 
   // YAŞ SIFIRLANMIYOR, 18'E SABİTLENİYOR: Meta özel kategorilerde 18+
   // istiyor ve alanı hiç göndermemek "her yaş" demek olurdu.
@@ -105,6 +114,8 @@ export function restrictTargetingFor(
   delete out.age_max;
   delete out.genders;
   delete out.flexible_spec;
+  delete out.custom_audiences;
+  delete out.excluded_custom_audiences;
 
   return { targeting: out, removed };
 }
