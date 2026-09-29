@@ -6,8 +6,9 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-29 · **Canlı:** `798adf4`e kadar evet; LinkedIn
-kuyruk düzeltmesi push edildi, deploy bekliyor.
+**Son güncelleme:** 2026-09-29 · **Canlı:** `2682fae` dahil evet (LinkedIn
+kuyruk düzeltmesi deploy edildi). Google kota ölçüm aracı push edildi,
+ÇALIŞTIRILMADI.
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
@@ -39,7 +40,14 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 ## Sıradaki iş (sırayla)
 
 1. **Google kotası doluyor** (3A Makina, "Resource has been exhausted").
-   Önce ölç: kotayı tekrar denemeler mi, gerçekten fazla istek mi yiyor.
+   Ölçüm aracı YAZILDI, sonuç bekleniyor: sunucuda
+   `pnpm --filter @advetics/api olcum-google-kota` (salt okunur). Çıktı
+   gelmeden düzeltme yazılmıyor — iki cevabın düzeltmesi zıt. Koddan görülen
+   ama ÖLÇÜLMEMİŞ üç aday: (a) devre kesici HESAP başına, Google'ın günlük
+   tavanı geliştirici token'ı başınaysa öbür hesaplar vurmaya devam eder;
+   (b) Google sağlayıcısı `api_usage_log`a hiç yazmıyor, kota görünmüyor;
+   (c) kota hatasında BullMQ 5 sn'den başlayan üstel geri çekilmeyle
+   deniyor, Google'ın bildirdiği bekleme süresi değil.
 2. **Bölüm 2 — Marka.** Bilgi bankasındaki üç serbest metin alanı
    yapılandırılmış alanlara dönüşüyor (sektör, web sitesi + sık sayfalar, ana
    amaç, üslup, öne çıkan vaatler); Reklam Oluştur ve AI asistan bunları

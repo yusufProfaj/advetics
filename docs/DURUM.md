@@ -765,6 +765,22 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — Google kota ölçüm aracı (ÇALIŞTIRILMADI)
+
+`pnpm --filter @advetics/api olcum-google-kota [-- --gun=7]`. Salt okunur
+transaction, sorgu başına 30 sn. Soru: kotayı tekrar denemeler mi,
+gerçekten fazla istek mi yiyor. Neden ölçülerek: iki cevabın düzeltmesi zıt.
+
+- **Kör nokta açıkça yazıyor:** `api_calls_used` yalnızca başarılı işte
+  yazılıyor ve Google `api_usage_log`a hiç yazmıyor. Düşen denemelerin
+  çağrısı aynı iş türünün başarılı ortalamasıyla TAHMİN ediliyor ve çıktı
+  bunu "üst sınır" diye basıyor (`attempts` kota bekçisinin platforma hiç
+  gitmeyen reddinde de artıyor).
+- Gün × saat tablosu günlük tavanı hız sınırından ayırıyor: Google günlük
+  kotası Pasifik gece yarısı (İstanbul 10:00) sıfırlanıyor.
+- `olcum-google-kota.spec.ts` her sorguyu gerçek şemada koşuyor; üç
+  mutasyon (platform süzgeci, pencere, ek denemeler), üçü de yakalandı.
+
 ### 2026-09-29 — LinkedIn'e yapılamayacak işler artık gönderilmiyor
 
 Üretimde son 7 günde 865 işin 549'u düşmüştü ve büyük kısmı iki kesin hataydı.
