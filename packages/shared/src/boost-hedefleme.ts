@@ -17,7 +17,7 @@ export interface HedeflemeSatiri {
   deger: string;
 }
 
-const CINSIYET: Record<string, string> = {
+export const CINSIYET: Record<string, string> = {
   all: 'Tüm cinsiyetler',
   male: 'Erkek',
   female: 'Kadın',
@@ -82,7 +82,7 @@ export function hedeflemeOzeti(settings: AutoBoostPresetSettings): HedeflemeSati
  * ['TR']` gönderiyor (`meta-targeting.ts`) ve ekranın bunu söylememesi,
  * kullanıcının seçmediği bir hedeflemeyi görmemesi demek olurdu.
  */
-function konumMetni(locations: Array<{ key: string; label?: string }>): string {
+export function konumMetni(locations: Array<{ key: string; label?: string }>): string {
   if (locations.length === 0) return 'Türkiye geneli';
   const adlar = locations.map((l) => l.label ?? l.key);
   if (adlar.length <= 3) return adlar.join(', ');

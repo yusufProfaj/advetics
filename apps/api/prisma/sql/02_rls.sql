@@ -395,7 +395,9 @@ DECLARE
     -- Modül 9 — AI kampanya asistanı, sohbet geçmişi
     'ai_conversations', 'ai_messages',
     -- Bilgi Bankası — müşterinin genel profili
-    'client_profiles'
+    'client_profiles',
+    -- Marka Merkezi Bölüm 4 — kitle şablonları
+    'audience_templates'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -2204,6 +2206,28 @@ CREATE POLICY adv_client_profiles_insert ON client_profiles
 CREATE POLICY adv_client_profiles_update ON client_profiles
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
              WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- ============================================================================
+-- Kitle şablonları — audience_templates (Marka Merkezi Bölüm 4)
+-- ============================================================================
+--
+-- client_profiles İLE AYNI DESEN (client_id NULLABLE DEĞİL). Farkı DELETE:
+-- kullanıcı şablonu siliyor, yani DELETE politikası VAR — politikasız DELETE
+-- sıfır satır etkileyip "sildim" derdi.
+-- ENABLE/FORCE yukarıdaki tablo listesi döngüsünde yapılıyor.
+
+CREATE POLICY adv_audience_templates_select ON audience_templates
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+CREATE POLICY adv_audience_templates_insert ON audience_templates
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+CREATE POLICY adv_audience_templates_update ON audience_templates
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+             WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+CREATE POLICY adv_audience_templates_delete ON audience_templates
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- ============================================================================
 -- ÜST HESAP (MCC) — manager_accounts, manager_memberships

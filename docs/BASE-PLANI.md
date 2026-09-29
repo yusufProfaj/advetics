@@ -94,6 +94,13 @@ duruyor.
   OKUNUYOR (Meta okuma kodu boost için zaten var). Kitle OLUŞTURMAK bir yazma
   yolu ve canlıda gözle doğrulanmadan bitmiş sayılmıyor.
 
+**4a UYGULANDI (2026-09-30):** temel şablonlar Marka Merkezi'nde, Hızlı
+Reklam varsayılanı kendiliğinden uyguluyor. Sapma: şablon YALNIZCA META
+(konum anahtarları Meta'nın; Google uzayına çevirmek tahmin olurdu). Öncesinde
+taslak ağacındaki üçüncü hedefleme üreticisi birleştirildi (şehir + ülke =
+ülke geneli hatası). **Kalan:** 4b özel/benzer kitleleri okuma, 4c doğal
+dilden kitle; Akıllı Boost ve uzman modun şablonları okuması.
+
 ### 4. Koruma kuralları (taslakta "Global Kurallar")
 
 Bugün yok.

@@ -182,6 +182,11 @@ buna göre veriliyor:
   ekle.** Yoksa testler arası veri sızar — en yanıltıcı test hatası türü.
 - **Yeni tablo ekleyince `prisma/sql/02_rls.sql` içindeki tablo listesine ve
   politikalara ekle.** `rls-coverage.spec.ts` eksikse düşer.
+- **`client_id` taşıyan yeni tablo `workspace-tasima.ts#WORKSPACE_TABLOLARI`
+  içinde bir KARAR ister** (workspace başka şirkete taşınınca ne olacağı).
+  `workspace-tasima.spec.ts` şemayı tarayıp eksikse düşüyor — Bölüm 4'te
+  `audience_templates` için tam böyle yakalandı. TRUNCATE ve RLS listesiyle
+  birlikte üçüncü durak.
 - **Enum'a değer eklemek AYRI migration dosyası ister.** `ALTER TYPE ... ADD
   VALUE` ile eklenen değer aynı transaction içinde kullanılamıyor.
 - **ENUM'DAN DEĞER ÇIKARIRKEN O TİPE BAKAN KISITLARI ÖNCE DÜŞÜR.** Postgres'te

@@ -43,6 +43,7 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   { tablo: 'memberships', etiket: 'yetki' },
   { tablo: 'branding_profiles', etiket: 'marka profili' },
   { tablo: 'client_profiles', etiket: 'bilgi bankası' },
+  { tablo: 'audience_templates', etiket: 'kitle şablonu' },
   { tablo: 'audit_logs', etiket: 'denetim kaydı' },
   { tablo: 'oauth_states', etiket: 'yetkilendirme durumu' },
   { tablo: 'report_templates', etiket: 'rapor şablonu' },

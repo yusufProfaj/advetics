@@ -30,12 +30,11 @@ import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { AssetUploaderService } from '../assets/asset-uploader.service';
 import {
   campaignSpec,
-  defaultTargeting,
+  grupHedeflemesi,
   labelFor,
   placementsFor,
   placementsFrom,
   resolveSpec,
-  targetingFrom,
 } from '../ad-builder/goal-mapping';
 import { validateAdvanced } from '../ad-builder/objective-matrix';
 import { DraftTreeService } from './draft-tree.service';
@@ -130,6 +129,10 @@ export class DraftPublishService {
      * yapıyor.
      */
     const advanced = advancedFrom(campaign, group);
+    if (!google) {
+      const h = grupHedeflemesi(advanced, group?.settings);
+      if (h.hata) blockers.push(h.hata);
+    }
     if (!google && campaign.surface === 'expert' && advanced) {
       const adv = validateAdvanced(advanced, {
         hasLinkUrl: Boolean(group?.settings?.linkUrl),
@@ -313,7 +316,7 @@ export class DraftPublishService {
         .join(', ');
       const dusen = restrictTargetingFor(
         kategoriler,
-        advanced ? targetingFrom(advanced.targeting) : defaultTargeting(),
+        grupHedeflemesi(advanced, group?.settings).targeting,
       ).removed;
 
       warnings.push(
@@ -409,6 +412,10 @@ export class DraftPublishService {
     const group = campaign.adGroups[0]!;
     const ad = group.ads[0]!;
     const advanced = advancedFrom(campaign, group);
+    // Kontrol bunu engel olarak zaten yazıyor; yine de buraya bir yoldan
+    // gelinirse sessizce Türkiye geneline yayınlanmıyor.
+    const hedefleme = grupHedeflemesi(advanced, group.settings);
+    if (hedefleme.hata) throw new BadRequestException(hedefleme.hata);
 
     /**
      * BOOST AYRI BİR YAYIN ÇAĞRISI — `createBoost`, `publishDraft` değil.
@@ -603,10 +610,7 @@ export class DraftPublishService {
          * yok sayıyor ve kullanıcı 25-44 yaşa reklam verdiğini sanıyor.
          * Kısıtlamayı biz uyguluyoruz ve kontrol ekranı ne düştüğünü yazıyor.
          */
-        targeting: restrictTargetingFor(
-          auth.specialAdCategories,
-          advanced ? targetingFrom(advanced.targeting) : defaultTargeting(),
-        ).targeting,
+        targeting: restrictTargetingFor(auth.specialAdCategories, hedefleme.targeting).targeting,
         placements: advanced
           ? placementsFrom(advanced.placement)
           : placementsFor(images.map((i) => i.ratio)),

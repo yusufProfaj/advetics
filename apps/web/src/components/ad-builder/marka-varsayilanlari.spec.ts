@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { baslangicSecimi, varsayilanAdres } from './marka-varsayilanlari';
+import { baslangicSecimi, kitleHedefi, varsayilanAdres } from './marka-varsayilanlari';
 
 /**
  * ═══ REKLAM OLUŞTUR, MARKA MERKEZİ'NİN BİLDİĞİNİ SORMUYOR ═══
@@ -86,6 +86,61 @@ describe('yasal uyarı ve metin şablonları (Bölüm 3b)', () => {
     expect(SIHIRBAZ).toContain('metinSablonlari.map((t) => (');
     expect(SAYFA).toContain("markaSonuc.status === 'fulfilled' ? markaSonuc.value.metinSablonlari : []");
     expect(SAYFA).toContain("markaSonuc.status === 'fulfilled' ? markaSonuc.value.yasalUyari : null");
+  });
+});
+
+describe('kitle şablonu (Bölüm 4)', () => {
+  const K = {
+    id: '11111111-1111-1111-1111-111111111111',
+    clientId: 'c',
+    name: 'İzmir kadın',
+    locations: [{ key: '2622', type: 'region' as const, label: 'İzmir, Türkiye', countryCode: 'TR' }],
+    ageMin: 25,
+    ageMax: 45,
+    genders: 'female' as const,
+    varsayilan: true,
+    updatedAt: '',
+  };
+
+  it('seçilen şablon taslağa KOPYA olarak gidiyor', () => {
+    const r = kitleHedefi([K], K.id);
+    expect(r.hedef).toEqual({
+      sablonId: K.id,
+      name: 'İzmir kadın',
+      locations: K.locations,
+      ageMin: 25,
+      ageMax: 45,
+      genders: 'female',
+    });
+    expect(r.ozet).toBe('İzmir, Türkiye · 25-45 yaş · Kadın');
+  });
+
+  it('boş seçim şablonsuz: Türkiye geneli', () => {
+    expect(kitleHedefi([K], '')).toEqual({ hedef: null, ozet: 'Türkiye geneli · 18+ yaş', hata: null });
+  });
+
+  it('KRİTİK: silinmiş şablon HATA — sessizce Türkiye geneline düşmüyor', () => {
+    const r = kitleHedefi([], K.id);
+    expect(r.hedef).toBeNull();
+    expect(r.hata).toContain('artık yok');
+  });
+
+  const yorumsuz = (yol: string) =>
+    readFileSync(resolve(__dirname, yol), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const SIHIRBAZ = yorumsuz('simple-builder.tsx');
+  const SAYFA = yorumsuz('../../app/(dashboard)/reklam-olustur/basit/page.tsx');
+
+  it('varsayılan kitle seçili geliyor, taslağa gidiyor ve eksik listesine giriyor', () => {
+    expect(SIHIRBAZ).toContain("useState(varsayilanKitleId ?? '')");
+    expect(SIHIRBAZ).toContain('kitle: kitle.hedef,');
+    expect(SIHIRBAZ).toContain('if (kitle.hata) list.push(kitle.hata);');
+    expect(SIHIRBAZ).toContain('bizNeSectik(goal, kitle.ozet)');
+  });
+
+  it('sayfa kitleleri çekiyor ve düşerse SÖYLÜYOR', () => {
+    expect(SAYFA).toContain('serverApiFetch<KitleSablonuListesi>(`/audience-templates?clientId=${clientId}`)');
+    expect(SAYFA).toContain("kitleSonuc.status === 'rejected' && (");
+    expect(SAYFA).toContain("kitleSonuc.status === 'fulfilled' ? kitleSonuc.value.varsayilanId : null");
   });
 });
 

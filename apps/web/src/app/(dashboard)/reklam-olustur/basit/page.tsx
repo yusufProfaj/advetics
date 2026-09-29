@@ -1,7 +1,12 @@
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import Link from 'next/link';
-import type { AssetListResult, ClientProfileRecord, DraftGroupRecord } from '@advetics/shared';
+import type {
+  AssetListResult,
+  ClientProfileRecord,
+  DraftGroupRecord,
+  KitleSablonuListesi,
+} from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { SimpleAdBuilder } from '@/components/ad-builder/simple-builder';
@@ -54,7 +59,7 @@ export default async function SimpleAdPage({
    * bağlantı yerinde, yalnızca istek düşmüştü. Kullanıcı olmayan bir arızayı
    * düzeltmeye, Platform Bağlantıları ekranına gönderiliyordu.
    */
-  const [baglantiSonuc, arsivSonuc, videoSonuc, kampanyaSonuc, profilSonuc, markaSonuc] =
+  const [baglantiSonuc, arsivSonuc, videoSonuc, kampanyaSonuc, profilSonuc, markaSonuc, kitleSonuc] =
     await Promise.allSettled([
     serverApiFetch<
       Array<{
@@ -93,6 +98,8 @@ export default async function SimpleAdPage({
      * neden amaç seçili gelmediği yazıyor.
      */
     serverApiFetch<ClientProfileRecord>(`/client-profile?clientId=${clientId}`),
+    // KİTLELER — düşerse sihirbaz Türkiye geneliyle açılıyor AMA üstte yazıyor.
+    serverApiFetch<KitleSablonuListesi>(`/audience-templates?clientId=${clientId}`),
   ]);
 
   if (baglantiSonuc.status === 'rejected') {
@@ -163,6 +170,14 @@ export default async function SimpleAdPage({
         </p>
       )}
 
+      {kitleSonuc.status === 'rejected' && (
+        <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-strong ring-1 ring-inset ring-warn/30">
+          Kitleler okunamadı (
+          {kitleSonuc.reason instanceof ApiRequestError ? kitleSonuc.reason.message : 'sunucuya ulaşılamadı'}
+          ). Reklam Türkiye geneline gösterilir; varsayılan kitlen varsa sayfayı yenile.
+        </p>
+      )}
+
       {canWrite ? (
         <SimpleAdBuilder
           clientId={clientId}
@@ -179,6 +194,8 @@ export default async function SimpleAdPage({
           sikSayfalar={markaSonuc.status === 'fulfilled' ? markaSonuc.value.sikSayfalar : []}
           metinSablonlari={markaSonuc.status === 'fulfilled' ? markaSonuc.value.metinSablonlari : []}
           yasalUyari={markaSonuc.status === 'fulfilled' ? markaSonuc.value.yasalUyari : null}
+          kitleler={kitleSonuc.status === 'fulfilled' ? kitleSonuc.value.items : []}
+          varsayilanKitleId={kitleSonuc.status === 'fulfilled' ? kitleSonuc.value.varsayilanId : null}
         />
       ) : (
         <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">

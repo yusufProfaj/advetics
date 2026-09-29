@@ -206,6 +206,59 @@ describe('kontrol', () => {
   });
 });
 
+describe('KİTLE ŞABLONU (Marka Merkezi Bölüm 4)', () => {
+  const IZMIR = {
+    sablonId: null,
+    name: 'İzmir kadın',
+    locations: [{ key: '2622', type: 'region' as const, label: 'İzmir, Türkiye', countryCode: 'TR' }],
+    ageMin: 25,
+    ageMax: 45,
+    genders: 'female' as const,
+  };
+
+  it('KRİTİK: taslaktaki kitle yayına AYNEN gidiyor — ülke geneli DEĞİL', async () => {
+    const created = await tree.createFromSimple(CTX, input({ kitle: IZMIR }));
+    await svc.publish(CTX, created.campaigns[0]!.id);
+    const req = publishDraft.mock.calls[0]![1] as { targeting: Record<string, unknown> };
+    expect(req.targeting.geo_locations).toEqual({ regions: [{ key: '2622' }] });
+    expect(req.targeting.age_min).toBe(25);
+    expect(req.targeting.age_max).toBe(45);
+    expect(req.targeting.genders).toEqual([2]);
+  });
+
+  it('kitle yoksa eski davranış: Türkiye, 18+', async () => {
+    const created = await tree.createFromSimple(CTX, input());
+    await svc.publish(CTX, created.campaigns[0]!.id);
+    const req = publishDraft.mock.calls[0]![1] as { targeting: Record<string, unknown> };
+    expect(req.targeting.geo_locations).toEqual({ countries: ['TR'] });
+    expect(req.targeting.age_min).toBe(18);
+  });
+
+  it('KRİTİK: okunamayan kitle varsayılana DÜŞMÜYOR — kontrol engel, yayın durur', async () => {
+    const created = await tree.createFromSimple(CTX, input({ kitle: IZMIR }));
+    const id = created.campaigns[0]!.id;
+    await h.q(
+      `UPDATE draft_ad_groups SET settings = jsonb_set(settings, '{kitle}', '{"bozuk":true}'::jsonb)
+        WHERE campaign_id = $1`,
+      [id],
+    );
+    const check = await svc.check(CTX, id);
+    expect(check.blockers.join(' ')).toContain('Taslağın kitlesi okunamadı');
+    await expect(svc.publish(CTX, id)).rejects.toThrow();
+    expect(publishDraft).not.toHaveBeenCalled();
+  });
+
+  it('özel kategoride yaş/cinsiyet şablondan gelse bile KALKIYOR', async () => {
+    await h.q(`UPDATE clients SET special_ad_categories = '{HOUSING}' WHERE id = $1`, [IDS.client]);
+    const created = await tree.createFromSimple(CTX, input({ kitle: IZMIR }));
+    await svc.publish(CTX, created.campaigns[0]!.id);
+    const req = publishDraft.mock.calls[0]![1] as { targeting: Record<string, unknown> };
+    expect(req.targeting.genders).toBeUndefined();
+    expect(req.targeting.age_max).toBeUndefined();
+    expect(req.targeting.geo_locations).toEqual({ regions: [{ key: '2622' }] });
+  });
+});
+
 describe('yayın', () => {
   it('metin havuzundan Meta paketi kuruluyor', async () => {
     /**

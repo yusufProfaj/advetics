@@ -427,7 +427,12 @@ export async function createHarness(): Promise<Harness> {
 
     client: {
       findUnique: async ({ where }: { where: { id: string } }) => {
-        const rows = await q<{ id: string }>('SELECT id FROM clients WHERE id = $1', [where.id]);
+        // org_id DE: yazma yolları satırın org'unu müşteriden okuyor ("Tüm
+        // şirketler" modunda ctx.orgId ev şirketi).
+        const rows = await q<{ id: string; orgId: string }>(
+          'SELECT id, org_id AS "orgId" FROM clients WHERE id = $1',
+          [where.id],
+        );
         return rows[0] ?? null;
       },
     },
@@ -596,7 +601,7 @@ export async function createHarness(): Promise<Harness> {
     await pg.exec(`
       TRUNCATE TABLE
         ai_messages, ai_conversations,
-        client_profiles,
+        client_profiles, audience_templates,
         draft_ads, draft_ad_groups, draft_campaigns,
         ad_creative_assets, ad_creatives,
         asset_platform_refs, assets,

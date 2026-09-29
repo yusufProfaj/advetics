@@ -4,6 +4,8 @@ import { BrandingController } from './branding.controller';
 import { BrandingService } from './branding.service';
 import { ClientProfileController } from './client-profile.controller';
 import { ClientProfileService } from './client-profile.service';
+import { KitleSablonuController } from './kitle-sablonu.controller';
+import { KitleSablonuService } from './kitle-sablonu.service';
 import { BilgiBankasiAiService } from './bilgi-bankasi-ai.service';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
@@ -25,6 +27,7 @@ import { OrganizationsController } from './organizations.controller';
     MembersController,
     BrandingController,
     ClientProfileController,
+    KitleSablonuController,
   ],
   providers: [
     ClientsService,
@@ -34,8 +37,9 @@ import { OrganizationsController } from './organizations.controller';
     ClientChannelsService,
     HazirlikService,
     ClientProfileService,
+    KitleSablonuService,
     BilgiBankasiAiService,
   ],
-  exports: [ClientsService, BrandingService, ClientProfileService],
+  exports: [ClientsService, BrandingService, ClientProfileService, KitleSablonuService],
 })
 export class TenancyModule {}

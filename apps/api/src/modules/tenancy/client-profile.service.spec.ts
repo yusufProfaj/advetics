@@ -289,3 +289,13 @@ describe('yapılandırılmış marka alanları', () => {
   });
 });
 
+describe('"Tüm şirketler" modu', () => {
+  it('KRİTİK: yeni profil org_id\'yi MÜŞTERİDEN alıyor, ctx\'teki ev şirketinden değil', async () => {
+    const EV = '12121212-1212-1212-1212-121212121212';
+    await h.q(`INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Ev', 'ev-sirketi', now())`, [EV]);
+    await svc.upsert({ ...CTX, orgId: EV }, { clientId: IDS.client, sektor: 'Otel' }, {});
+    const [r] = await h.q<{ org_id: string }>('SELECT org_id FROM client_profiles WHERE client_id = $1', [IDS.client]);
+    expect(r!.org_id).toBe(IDS.org);
+  });
+});
+

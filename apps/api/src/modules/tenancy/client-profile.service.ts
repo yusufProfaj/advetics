@@ -130,7 +130,14 @@ export class ClientProfileService {
       const saved = existing
         ? await tx.clientProfile.update({ where: { id: existing.id }, data })
         : await tx.clientProfile.create({
-            data: { orgId: ctx.orgId, clientId: input.clientId, ...data },
+            /*
+             * org_id MÜŞTERİDEN, ctx'ten DEĞİL. "Tüm şirketler" modunda
+             * `ctx.orgId` ev şirketi kalıyor (tenant-context.service.ts); bir
+             * kardeş şirketin profili ev şirketinin kimliğiyle yazılırsa o
+             * şirketin KENDİ bağlamında `org_kapsaminda(org_id)` tutmuyor ve
+             * profil görünmüyor — hata yok, boş form.
+             */
+            data: { orgId: client.orgId, clientId: input.clientId, ...data },
           });
 
       await this.audit.record(tx, ctx, {

@@ -765,6 +765,37 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-30 — Marka Merkezi, Bölüm 4a: kitle şablonları
+
+Migration `20260930090000_kitle_sablonlari`: `audience_templates` (ad, konum,
+yaş, cinsiyet) ve `client_profiles.varsayilan_kitle_id` (FK, silinince NULL).
+RLS dört politika (DELETE dahil — kullanıcı siliyor); `kitle-sablonu-rls.spec.ts`
+`SET ROLE` ile etkilenen satırı sayarak sınıyor.
+
+- **Yalnızca Meta.** Konumlar Meta'nın coğrafi aramasından; Google'ın konum
+  uzayı ayrı ve çevirmek tahmin olurdu. Planda "platformdan bağımsız"
+  yazıyordu; kısıt ekranda söyleniyor.
+- **Ülke + o ülkenin ili REDDEDİLİYOR** (`kitleSablonuInputSchema`): Meta
+  kovaları birleşim, "Türkiye + İzmir" = Türkiye geneli. Farklı ülke + il
+  meşru. Konum `countryCode` taşıyor, kontrol buna dayanıyor.
+- **Hızlı Reklam varsayılan kitleyi seçili açıyor** ("Kime gösterilsin"),
+  taslağa KOPYASINI yazıyor (`settings.kitle`) — şablon sonra değişirse
+  taslak değişmiyor. Silinmiş şablon seçiliyse taslak kurulmuyor.
+- **Yayın: `grupHedeflemesi`** (goal-mapping.ts) tek karar: uzman ayarı >
+  kitle kopyası > Türkiye 18+. Okunamayan kitle varsayılana DÜŞMÜYOR: kontrol
+  engel yazıyor, yayın fırlatıyor. Özel kategori kısıtı kitleye de uygulanıyor.
+- Konum araması ikinci kez yazılmadı: `HedeflemeSecici` `kayitliKitle={false}`.
+- Workspace başka şirkete taşınınca şablonlar da taşınıyor
+  (`WORKSPACE_TABLOLARI`); kapsama testi eksikliği ilk koşuda yakaladı.
+- **Yan düzeltme:** `ClientProfileService` yeni profili `ctx.orgId` ile
+  yazıyordu; "Tüm şirketler" modunda kardeş şirketin profili ev şirketinin
+  org'uyla kaydedilip kendi bağlamında görünmez oluyordu. Artık müşteriden.
+- Mutasyon: API sekiz, panel üç; hepsi yakalandı.
+- **Kalan (4b, 4c):** Meta'daki özel/benzer kitleleri OKUMA; doğal dilden
+  kitle (AI önerisi + onay — ilgi alanı araması bugün yok). Akıllı Boost ön
+  ayarı ve uzman mod şablonları henüz okumuyor.
+- Tarayıcıda açılıp bakılmadı.
+
 ### 2026-09-29 — Bölüm 4 öncesi: Meta hedeflemesinde ÜÇÜNCÜ üretici vardı
 
 `goal-mapping.ts#targetingFrom` (taslak ağacı: Hızlı Reklam + uzman) kendi

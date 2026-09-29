@@ -251,6 +251,7 @@ model Organization {
   userEmailAccounts      UserEmailAccount[]
   aiConversations        AiConversation[]
   clientProfiles         ClientProfile[]
+  audienceTemplates      AudienceTemplate[]
 
   @@map("organizations")
 }
@@ -394,6 +395,7 @@ model Client {
   memberships  Membership[]
   branding     BrandingProfile?
   profile      ClientProfile?
+  audienceTemplates AudienceTemplate[]
 
   // Modül 2
   connections    PlatformConnection[]
@@ -559,6 +561,9 @@ model ClientProfile {
   metinSablonlari  String[] @default([]) @map("metin_sablonlari")
   /// Tanımlıysa Meta ana metninde ZORUNLU; yayın öncesi kontrol eksikse durduruyor.
   yasalUyari       String?  @map("yasal_uyari") @db.VarChar(300)
+  /// Hızlı Reklam'ın kendiliğinden uyguladığı kitle şablonu. Silinirse NULL.
+  varsayilanKitleId String?           @map("varsayilan_kitle_id") @db.Uuid
+  varsayilanKitle   AudienceTemplate? @relation("VarsayilanKitle", fields: [varsayilanKitleId], references: [id], onDelete: SetNull)
 
   /// "Logo" sekmesi — müşterinin KENDİ marka logosu.
   /// `assets.kind = 'logo'` olan bir varlığa işaret ediyor (Görsel Arşivi'nde
@@ -574,6 +579,31 @@ model ClientProfile {
 
   @@index([orgId])
   @@map("client_profiles")
+}
+
+/// Kitle şablonu (Marka Merkezi Bölüm 4). Konumlar META anahtarları; ayrıntı
+/// migration `20260930090000_kitle_sablonlari`.
+model AudienceTemplate {
+  id              String   @id @default(uuid()) @db.Uuid
+  orgId           String   @map("org_id") @db.Uuid
+  clientId        String   @map("client_id") @db.Uuid
+  name            String   @db.VarChar(80)
+  /// `[{ key, type: country|region|city, label }]` — biçim `packages/shared`.
+  locations       Json     @default("[]")
+  ageMin          Int      @default(18) @map("age_min") @db.SmallInt
+  ageMax          Int      @default(65) @map("age_max") @db.SmallInt
+  genders         String   @default("all") @db.VarChar(6)
+  createdByUserId String?  @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  varsayilanOlan ClientProfile[] @relation("VarsayilanKitle")
+
+  @@unique([clientId, name])
+  @@index([orgId])
+  @@map("audience_templates")
 }
 
 // -----------------------------------------------------------------------------

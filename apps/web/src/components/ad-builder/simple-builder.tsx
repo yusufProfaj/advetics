@@ -13,13 +13,14 @@ import {
   type CreativeRecord,
   type DraftGroupRecord,
   type PublishCheck,
+  type KitleSablonuRecord,
   type SikSayfa,
   yasalUyariEkle,
 } from '@advetics/shared';
 import { platformKisaAdi, videoMu, videoOraniUygun } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { CoveragePanel } from './coverage-panel';
-import { baslangicSecimi, varsayilanAdres } from './marka-varsayilanlari';
+import { baslangicSecimi, kitleHedefi, varsayilanAdres } from './marka-varsayilanlari';
 import { Sihirbaz, type SihirbazAdimi } from './sihirbaz';
 import { CropStudio } from './crop-studio';
 
@@ -81,6 +82,8 @@ export function SimpleAdBuilder({
   sikSayfalar,
   metinSablonlari,
   yasalUyari,
+  kitleler,
+  varsayilanKitleId,
 }: {
   clientId: string;
   accounts: Array<{ id: string; name: string; currency: string }>;
@@ -97,6 +100,9 @@ export function SimpleAdBuilder({
   metinSablonlari: string[];
   /** Tanımlıysa ana metnin sonuna ekleniyor; sunucu da yayından önce arıyor. */
   yasalUyari: string | null;
+  /** Marka Merkezi kitle şablonları; varsayılan olan seçili geliyor. */
+  kitleler: KitleSablonuRecord[];
+  varsayilanKitleId: string | null;
 }) {
   const router = useRouter();
 
@@ -144,6 +150,9 @@ export function SimpleAdBuilder({
    * özet de bu metni gösteriyor — ekranda görülen, yayına çıkanla aynı.
    */
   const gonderilecekMetin = yasalUyariEkle(primaryText.trim(), yasalUyari);
+  // '' = şablonsuz (Türkiye geneli, 18+). Varsayılan şablon seçili geliyor.
+  const [kitleId, setKitleId] = useState(varsayilanKitleId ?? '');
+  const kitle = kitleHedefi(kitleler, kitleId);
   const [headline, setHeadline] = useState('');
   const [description, setDescription] = useState('');
   const [linkUrl, setLinkUrl] = useState(baslangic.linkUrl);
@@ -195,8 +204,10 @@ export function SimpleAdBuilder({
     if (!primaryText.trim()) list.push('Reklamın ana metnini yaz.');
     if (goal === 'website' && !linkUrl.trim()) list.push('Web sitesi adresini yaz.');
     if (assetIds.length === 0) list.push('En az bir görsel seç.');
+    // Seçili kitle silinmişse taslak kurulmuyor: sessizce Türkiye geneline düşmesin.
+    if (kitle.hata) list.push(kitle.hata);
     return list;
-  }, [goal, name, primaryText, linkUrl, assetIds]);
+  }, [goal, name, primaryText, linkUrl, assetIds, kitle.hata]);
 
   /**
    * Kullanılabilir görseller — SEÇİLEMEYEN GÖRSELİN SEBEBİ YAZIYOR.
@@ -415,6 +426,7 @@ export function SimpleAdBuilder({
           creativeIds: [creative.id],
           durationDays: Number(durationDays),
           linkUrl: linkUrl.trim() || undefined,
+          kitle: kitle.hedef,
         }),
       });
 
@@ -993,7 +1005,33 @@ export function SimpleAdBuilder({
 
           {/* NE SEÇTİĞİMİZİ SÖYLÜYORUZ. "Biz hallederiz" demek yeterli
               değil: kullanıcı neyin kararını devrettiğini bilmeli. */}
-          <p className="mt-3 text-xs text-ink-muted">{bizNeSectik(goal)}</p>
+          {/*
+            KİME GÖSTERİLSİN — Marka Merkezi'nin kitleleri. Soru değil,
+            seçili gelen bir cevap: reklamcılık bilmeyen kullanıcı varsayılanı
+            olduğu gibi geçiyor.
+          */}
+          <div className="mt-3">
+            <Alan
+              label="Kime gösterilsin"
+              ipucu={
+                kitleler.length === 0
+                  ? 'Marka Merkezi’nde kayıtlı kitle yok; reklam Türkiye geneline gösterilir.'
+                  : 'Kitleler Marka Merkezi’nde tanımlanıyor.'
+              }
+            >
+              <select value={kitleId} onChange={(e) => setKitleId(e.target.value)} className={input}>
+                <option value="">Türkiye geneli, 18 yaş ve üzeri</option>
+                {kitleler.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.name}
+                    {k.id === varsayilanKitleId ? ' (varsayılan)' : ''}
+                  </option>
+                ))}
+              </select>
+            </Alan>
+            {kitle.hata && <p className="mt-1 text-xs text-danger-strong">{kitle.hata}</p>}
+          </div>
+          <p className="mt-3 text-xs text-ink-muted">{bizNeSectik(goal, kitle.ozet)}</p>
         </>
       </div>,
     },
@@ -1357,10 +1395,10 @@ function platformEtiketi(goal: CampaignGoal): string {
  * seçilmeden de kuruluyor ve bir `!` ile tipi susturmak, gerçekten null
  * olduğu bir anda çalışma zamanında patlamak demekti.
  */
-function bizNeSectik(goal: CampaignGoal | null): string {
+function bizNeSectik(goal: CampaignGoal | null, kitleOzetMetni: string): string {
   if (!goal) return '';
   const ortak =
-    'Kitle: Türkiye, 18+, daraltma yok. Yerleşim: seçtiğin görsel oranlarına göre. ' +
+    `Kitle: ${kitleOzetMetni || 'Türkiye geneli · 18+ yaş'}. Yerleşim: seçtiğin görsel oranlarına göre. ` +
     'Teklif: en düşük maliyet.';
   switch (goal) {
     case 'form':

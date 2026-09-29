@@ -1,4 +1,4 @@
-import { GOAL_SPEC } from '@advetics/shared';
+import { GOAL_SPEC, kitleHedefiSchema } from '@advetics/shared';
 import { metaTargetingFrom } from '../boosts/meta-targeting';
 import type {
   AdvancedSettings,
@@ -350,6 +350,36 @@ export function targetingFrom(t: TargetingInput): Record<string, unknown> {
   // Dil boost'ta yok; yalnızca uzman modunun alanı.
   if (t.locales.length > 0) out.locales = t.locales;
   return out;
+}
+
+/**
+ * ═══ BİR GRUBUN HEDEFLEMESİ — KONTROL VE YAYIN AYNI KARARI VERİYOR ═══
+ *
+ * Üç kaynak, sabit öncelik: uzman ayarı > Marka Merkezi kitle şablonunun
+ * kopyası (`settings.kitle`, Hızlı Reklam) > varsayılan (Türkiye, 18+).
+ *
+ * OKUNAMAYAN KİTLE VARSAYILANA DÜŞMÜYOR — `hata` dönüyor. Kullanıcı panelde
+ * "İzmir, 25-45" seçmişken reklamın Türkiye geneline çıkması bu projenin en
+ * pahalı sessiz hata türü; kontrol onu engel olarak yazıyor, yayın fırlatıyor.
+ */
+export function grupHedeflemesi(
+  advanced: AdvancedSettings | null,
+  settings: Record<string, unknown> | null | undefined,
+): { targeting: Record<string, unknown>; hata: string | null } {
+  if (advanced) return { targeting: targetingFrom(advanced.targeting), hata: null };
+  const ham = settings?.kitle;
+  if (ham === undefined || ham === null) return { targeting: defaultTargeting(), hata: null };
+  const r = kitleHedefiSchema.safeParse(ham);
+  if (!r.success) {
+    return {
+      targeting: defaultTargeting(),
+      hata:
+        'Taslağın kitlesi okunamadı (' +
+        (r.error.issues[0]?.message ?? 'geçersiz biçim') +
+        '). Reklam Türkiye geneline çıkmasın diye yayın durduruldu; taslağı yeniden kur.',
+    };
+  }
+  return { targeting: metaTargetingFrom(r.data), hata: null };
 }
 
 /**

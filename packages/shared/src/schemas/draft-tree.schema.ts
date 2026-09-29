@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Platform } from '../constants/platforms';
 import { CAMPAIGN_GOALS, type CampaignGoal } from './ad-builder.schema';
 import { GOAL_SPEC, advancedSettingsSchema } from './campaign-advanced.schema';
+import { kitleHedefiSchema } from './kitle-sablonu.schema';
 
 /**
  * Kampanya taslağı ağacı — kampanya → reklam grubu → reklam.
@@ -150,6 +151,13 @@ export const simpleDraftInputSchema = z.object({
   durationDays: z.number().int().min(0).max(90).default(7),
 
   linkUrl: z.string().trim().max(2048).optional(),
+
+  /**
+   * KİTLE — Marka Merkezi şablonunun KOPYASI (Bölüm 4). Verilmezse eski
+   * davranış: Türkiye geneli, 18+. Yalnızca Meta grubuna yazılıyor; konum
+   * anahtarları Meta'nın.
+   */
+  kitle: kitleHedefiSchema.nullable().optional(),
 });
 
 export type SimpleDraftInput = z.infer<typeof simpleDraftInputSchema>;
@@ -293,6 +301,8 @@ export function buildDraftTree(input: SimpleDraftInput, now: Date): DraftTreePla
             billingEvent: spec.billingEvent,
             ...(spec.destinationType ? { destinationType: spec.destinationType } : {}),
             ...(input.linkUrl ? { linkUrl: input.linkUrl } : {}),
+            // Kitle yalnızca Meta grubuna: anahtarlar Meta'nın coğrafi uzayı.
+            ...(input.kitle && target.platform === 'meta' ? { kitle: input.kitle } : {}),
           },
           // TEKLİ KAMPANYADA AD İSMİ SADE KALIYOR — mevcut davranışı
           // bozmamak için. Birden çok kreatifte uzman yüzeyiyle aynı

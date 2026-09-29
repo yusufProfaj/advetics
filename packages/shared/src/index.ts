@@ -21,6 +21,7 @@ export * from './schemas/budget.schema';
 export * from './schemas/bulk.schema';
 export * from './schemas/campaign-action.schema';
 export * from './schemas/client-profile.schema';
+export * from './schemas/kitle-sablonu.schema';
 export * from './schemas/connection.schema';
 export * from './schemas/campaign-advanced.schema';
 export * from './schemas/creative.schema';

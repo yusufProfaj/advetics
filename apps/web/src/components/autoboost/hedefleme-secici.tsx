@@ -24,12 +24,20 @@ export function HedeflemeSecici({
   setLokasyonlar,
   kitleId,
   setKitleId,
+  kayitliKitle = true,
 }: {
   clientId: string;
   lokasyonlar: GeoLocationOption[];
   setLokasyonlar: (v: GeoLocationOption[]) => void;
   kitleId: string | null;
   setKitleId: (v: string | null) => void;
+  /**
+   * Kayıtlı kitle seçimini göster. Marka Merkezi'nin kitle şablonu
+   * (Bölüm 4) yalnızca konum/yaş/cinsiyet taşıyor ve bu bileşeni KONUM
+   * ARAMASI için kullanıyor: ikinci bir arama yazmak, aynı Meta çağrısının
+   * iki kopyası demekti.
+   */
+  kayitliKitle?: boolean;
 }) {
   const [hesap, setHesap] = useState<{ id: string; name: string } | null>(null);
   const [hesapHata, setHesapHata] = useState<string | null>(null);
@@ -60,7 +68,7 @@ export function HedeflemeSecici({
 
   /* Kayıtlı kitleler — HATA YUTULMUYOR (bkz. manual-boost'taki aynı ders). */
   useEffect(() => {
-    if (!hesap) return;
+    if (!hesap || !kayitliKitle) return;
     setKitleHata(null);
     void apiFetch<SavedAudienceList>(
       `/connections/targeting/saved-audiences?adAccountId=${hesap.id}`,
@@ -72,7 +80,7 @@ export function HedeflemeSecici({
           err instanceof ApiRequestError ? err.message : 'Kayıtlı kitleler alınamadı.',
         );
       });
-  }, [hesap]);
+  }, [hesap, kayitliKitle]);
 
   /* Şehir araması — 350ms bekleme, en az iki harf. Her tuşa istek Meta kotasını yakar. */
   useEffect(() => {
@@ -135,6 +143,7 @@ export function HedeflemeSecici({
     <div className="space-y-3 rounded-lg border border-line p-3">
       <p className="text-xs font-medium text-ink">Hedefleme</p>
 
+      {kayitliKitle && (
       <label className="block">
         <span className="text-[11px] text-ink-muted">
           Kayıtlı kitle — <strong>{hesap.name}</strong> hesabından
@@ -154,13 +163,15 @@ export function HedeflemeSecici({
         </select>
       </label>
 
+      )}
+
       {/* ÜÇ HÂL AYRI: çağrı düştü · kitle yok · kitleler geldi. */}
-      {kitleHata !== null && (
+      {kayitliKitle && kitleHata !== null && (
         <p className="rounded-lg border border-danger/40 bg-danger/5 px-2 py-1 text-[11px] text-danger">
           Kayıtlı kitleler alınamadı — {kitleHata}
         </p>
       )}
-      {kitleHata === null && kitleler && kitleler.items.length === 0 && (
+      {kayitliKitle && kitleHata === null && kitleler && kitleler.items.length === 0 && (
         <p className="text-[11px] text-ink-muted">
           Bu hesapta kayıtlı kitle yok — aşağıdan şehir seçebilirsin.
         </p>
