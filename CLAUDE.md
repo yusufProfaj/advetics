@@ -468,9 +468,13 @@ buna göre veriliyor:
   koyuyordu (canlıda öğrenilmiş doğru biçim), diğeri DÜZ STRING; biri
   `age_max = 65`'i göndermiyordu (Meta'da 65 = "65 ve üzeri"), diğeri her
   zaman gönderiyordu. Yani ön ayarında il seçen müşterinin reklamı ya
-  reddedilecek ya da sessizce ülke geneline çıkacaktı. Bugün tek dosyada:
-  `meta-targeting.ts`, ve `meta-targeting.spec.ts` yayın yollarının kendi
-  `geo_locations` nesnesini kurmasını yasaklıyor.
+  reddedilecek ya da sessizce ülke geneline çıkacaktı. Burada bir süre
+  "bugün tek dosyada" yazıyordu ve YANLIŞTI: taslak ağacının
+  `goal-mapping.ts#targetingFrom`u üçüncü bir üreticiydi ve şehir seçilince
+  `countries`i de gönderiyordu (birleşim → ülke geneli). Panel şehir
+  göndermediği için tetiklenmedi ve bir test o hâli "doğru" diye
+  kilitlemişti. 2026-09-29'dan beri `targetingFrom` da `metaTargetingFrom`a
+  çeviriyor; `goal-mapping.spec.ts` ikinci nesne kurulmasını yasaklıyor.
 - **DENORMALİZE EDİLMİŞ SAHİPLİK KOLONU, SAHİP DEĞİŞİNCE KENDİLİĞİNDEN
   TAŞINMIYOR.** `client_id` on beş tabloda BİLEREK denormalize (RLS
   politikaları join'siz yazılabilsin diye). `assignAdAccount` yalnızca

@@ -1,4 +1,5 @@
 import { GOAL_SPEC } from '@advetics/shared';
+import { metaTargetingFrom } from '../boosts/meta-targeting';
 import type {
   AdvancedSettings,
   AssetRatio,
@@ -136,12 +137,10 @@ export function campaignSpec(goal: CampaignGoal, pageExternalId: string): MetaCa
  * vermek en pahalı sessiz hata olurdu.
  */
 export function defaultTargeting(): Record<string, unknown> {
-  return {
-    geo_locations: { countries: ['TR'] },
-    age_min: 18,
-    // ÜST YAŞ SINIRI YOK. 65+ Meta'da tek kova ve dışlamak, satın alma gücü
-    // yüksek bir kitleyi sebepsiz atmak olur.
-  };
+  // TEK ÜRETİCİDEN (`meta-targeting.ts`): lokasyonsuz girdi ülke geneli TR
+  // veriyor. ÜST YAŞ SINIRI YOK — 65+ Meta'da tek kova ve dışlamak, satın
+  // alma gücü yüksek bir kitleyi sebepsiz atmak olur.
+  return metaTargetingFrom({ locations: [], ageMin: 18, ageMax: 65, genders: 'all' });
 }
 
 /**
@@ -325,23 +324,30 @@ function ctaFor(a: AdvancedSettings): string {
 /**
  * Gelişmiş moddan Meta hedefleme nesnesi.
  *
- * `age_max = 65` GÖNDERİLMİYOR. Meta'da 65 "65 ve üzeri" demek ve alanı
- * göndermek ile göndermemek aynı sonucu veriyor; ama göndermek, Ads
- * Manager'da "18-65" yazması ve kullanıcının 66 yaşındakilerin dışlandığını
- * sanması demek.
+ * ═══ KENDİ NESNESİNİ KURMUYOR — `meta-targeting.ts`e ÇEVİRİYOR ═══
+ *
+ * Bu fonksiyon bir süre hedefleme nesnesini kendisi kuruyordu ve boost
+ * tarafındaki üreticiyle ayrışmıştı: şehir seçildiğinde `countries` VE
+ * `cities` birlikte gidiyordu. Meta kovaları BİRLEŞİM olarak uyguluyor,
+ * yani "Türkiye + İzmir" = Türkiye geneli — panelde İzmir yazarken reklam
+ * ülke geneline çıkardı, hata vermeden. Panel bugüne kadar `cityKeys`
+ * göndermediği için tetiklenmedi; kitle şablonları (BASE Bölüm 4) onu ilk
+ * gün tetiklerdi. Bir test bu hatalı hâli "doğru" diye kilitlemişti.
+ *
+ * ŞEHİR VARSA ÜLKE GÖNDERİLMİYOR: şehir zaten bir ülkenin içinde. `age_max`
+ * ve cinsiyet kuralları üreticide (65 gönderilmiyor, "hepsi" alan yok).
  */
 export function targetingFrom(t: TargetingInput): Record<string, unknown> {
-  const out: Record<string, unknown> = {
-    geo_locations:
+  const out = metaTargetingFrom({
+    locations:
       t.cityKeys.length > 0
-        ? { countries: t.countries, cities: t.cityKeys.map((key) => ({ key })) }
-        : { countries: t.countries },
-    age_min: t.ageMin,
-  };
-  if (t.ageMax < 65) out.age_max = t.ageMax;
-  // Meta: 1 = erkek, 2 = kadın. Alan hiç gönderilmezse ikisi de.
-  if (t.genders === 'male') out.genders = [1];
-  if (t.genders === 'female') out.genders = [2];
+        ? t.cityKeys.map((key) => ({ key, type: 'city' as const }))
+        : t.countries.map((key) => ({ key, type: 'country' as const })),
+    ageMin: t.ageMin,
+    ageMax: t.ageMax,
+    genders: t.genders,
+  });
+  // Dil boost'ta yok; yalnızca uzman modunun alanı.
   if (t.locales.length > 0) out.locales = t.locales;
   return out;
 }

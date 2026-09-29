@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { matchRatio, RATIO_TOLERANCE } from '@advetics/shared';
 import {
@@ -316,11 +318,23 @@ describe('gelişmiş hedefleme', () => {
     expect(targetingFrom(base).geo_locations).toEqual({ countries: ['TR'] });
   });
 
-  it('şehir seçilmişse Meta anahtar biçimine çevriliyor', () => {
+  it('KRİTİK: şehir seçilmişse ÜLKE GÖNDERİLMİYOR — kovalar birleşim, "TR + İzmir" = Türkiye geneli', () => {
+    /*
+     * Bu test bir süre TERSİNİ kilitliyordu (`countries: ['TR']` + şehir) ve
+     * yanlış davranışı doğru sanıyordu. Meta kovaları birleşim olarak
+     * uyguluyor: ülke + şehir, reklamı ülke geneline çıkarır.
+     */
     expect(targetingFrom({ ...base, cityKeys: ['12345'] }).geo_locations).toEqual({
-      countries: ['TR'],
       cities: [{ key: '12345' }],
     });
+  });
+
+  it('boost üreticisiyle AYNI nesne — ikinci üretici yok', () => {
+    const k = readFileSync(resolve(__dirname, 'goal-mapping.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const govde = k.slice(k.indexOf('export function targetingFrom('), k.indexOf('export function placementsFrom('));
+    if (!govde.includes('targetingFrom(')) throw new Error('targetingFrom bulunamadı — tarama boşa düştü.');
+    expect(govde).toContain('metaTargetingFrom({');
+    expect(govde).not.toContain('geo_locations');
   });
 });
 

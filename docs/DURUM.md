@@ -765,6 +765,20 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — Bölüm 4 öncesi: Meta hedeflemesinde ÜÇÜNCÜ üretici vardı
+
+`goal-mapping.ts#targetingFrom` (taslak ağacı: Hızlı Reklam + uzman) kendi
+hedefleme nesnesini kuruyordu ve şehir seçilince `countries: ['TR']`i de
+gönderiyordu. Meta kovaları birleşim: "TR + İzmir" = Türkiye geneli, hata
+yok. Panel `cityKeys` göndermediği için tetiklenmedi; kitle şablonları ilk
+gün tetiklerdi. `goal-mapping.spec.ts` hatalı hâli kilitliyordu. Artık
+`targetingFrom` ve `defaultTargeting` `metaTargetingFrom`a çeviriyor. CLAUDE.md
+"tek dosyada" diyordu, düzeltildi.
+
+Açık kalan (ayrı iş olarak işaretlendi): eski tek reklam yayın yolu
+(`ad-publisher.service.ts`) özel kategori kısıtını uygulamıyor. Panel o yolu
+çağırmıyor ama `POST /ad-drafts/:id/publish` açık.
+
 ### 2026-09-29 — Marka Merkezi, Bölüm 3b: metin şablonları ve zorunlu yasal uyarı
 
 Migration `20260929180000_metin_sablonlari`: `client_profiles.metin_sablonlari`
