@@ -12,7 +12,11 @@ const SECICI = readFileSync(resolve(__dirname, '../autoboost/hedefleme-secici.ts
 describe('İlgi seçici', () => {
   it('kitle büyüklüğü bilinmiyorsa AÇIKÇA söyleniyor — sıfır yazılmıyor', () => {
     expect(kitleBuyuklugu({ audienceMin: null, audienceMax: null })).toBe('büyüklük bilinmiyor');
-    expect(kitleBuyuklugu({ audienceMin: 1000, audienceMax: 2500 })).toBe('~1.000–2.500 kişi');
+    expect(kitleBuyuklugu({ audienceMin: 1000, audienceMax: 2500 })).toBe('dünya geneli ~1.000–2.500 kişi');
+  });
+
+  it('KRİTİK: sayı "dünya geneli" etiketi olmadan gösterilmiyor (Meta sayısı ülkeye göre değil)', () => {
+    expect(kitleBuyuklugu({ audienceMin: 264_000_000, audienceMax: 310_000_000 })).toMatch(/^dünya geneli /);
   });
 
   it('hesap kararı TEK yerde — konum seçicisiyle aynı hook', () => {

@@ -765,6 +765,16 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — İlgi alanı büyüklüğü "dünya geneli" diye etiketlendi
+
+Meta'nın `audience_size_lower/upper_bound` alanı ülkeye göre değil, dünya
+geneli ("Golf (spor)" ~264–310 milyon). Panel sayıyı etiketsiz gösteriyordu:
+Türkiye hedeflemesinde kitle yüz kat büyük görünüyor ve kullanıcı "yeterince
+geniş" diye yanlış karar veriyor. `kitleBuyuklugu` (ilgi seçici ve "Kitleyi
+tarif et" sonucu, tek fonksiyon) artık `dünya geneli ~X–Y kişi` yazıyor.
+Ülkeye göre sayı (`delivery_estimate`) yazılmadı: yeni okuma ve kota. Test
+mutasyonla doğrulandı (etiket silinince iki test düşüyor).
+
 ### 2026-09-30 — Marka Merkezi, Bölüm 4b: Meta özel ve benzer kitleler
 
 Ads Manager'da kurulmuş kitleler OKUNUYOR (`/act_X/customaudiences`) ve kitle

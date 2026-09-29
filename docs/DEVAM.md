@@ -6,9 +6,9 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-29 (oturum sonu) · **Canlı:** `a2aa674` dahil
-evet — Bölüm 4a/4b/4c ve ölçüm betiği deploy edildi. Özel kitle ve ilgi alanı
-OKUMA yolları canlıda doğrulandı (`meta-ilgi-kontrol`). Bekleyen deploy yok.
+**Son güncelleme:** 2026-09-29 (ikinci oturum) · **Canlı:** `a2aa674` dahil.
+Özel kitle ve ilgi alanı OKUMA yolları canlıda doğrulandı. **Bekleyen deploy:**
+ilgi alanı büyüklüğü "dünya geneli" etiketi (yalnızca panel).
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
@@ -65,10 +65,8 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
    hatası mesajlarında `rateScope=` (yoksa gövde biçimi belgeden farklı →
    `googleKotaAyrintisi`). Karar bekleyen: gün içi metrik 30 dk'da bir mi,
    saatlik mi (**kullanıcıya sorulacak, ölçümden sonra**).
-2. **İlgi alanı büyüklüğü dünya geneli** — panel "Golf ~264 milyon kişi"
-   gösteriyor, Türkiye değil. Küçük iş: ya "dünya geneli" diye etiketle ya da
-   seçili konum için `delivery_estimate` çağır (yeni okuma, kota). Önerim
-   önce etiket.
+2. ~~İlgi alanı büyüklüğü dünya geneli~~ **etiketlendi** (2026-09-29, deploy
+   bekliyor). Ülkeye göre sayı (`delivery_estimate`) istenirse ayrı iş.
 3. **Bölüm 4 kalanı:** kitle şablonlarını Akıllı Boost ön ayarına ve uzman
    moda bağlamak; çok hesaplı workspace'te kitle seçicinin hesap seçmesi.
 4. **Bölüm 5 — Koruma kuralları** (`BASE-PLANI.md`).

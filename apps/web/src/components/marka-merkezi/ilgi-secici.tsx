@@ -153,9 +153,17 @@ export function IlgiSecici({
   );
 }
 
-/** Meta aralığı; bilinmiyorsa AÇIKÇA "bilinmiyor" — sıfır yazmak "kimse yok" okunurdu. */
+/**
+ * Meta aralığı; bilinmiyorsa AÇIKÇA "bilinmiyor" — sıfır yazmak "kimse yok" okunurdu.
+ *
+ * "DÜNYA GENELİ" ETİKETİ ZORUNLU. `audience_size_*_bound` ülkeye göre değil,
+ * bütün dünya için dönüyor ("Golf (spor)" ~264–310 milyon). Etiketsiz sayı
+ * Türkiye hedeflemesinde kitleyi yüz kat büyük gösteriyor ve kullanıcı "bu
+ * kitle yeterince geniş" diye yanlış karar veriyor. Ülkeye göre sayı ayrı bir
+ * çağrı (`delivery_estimate`) istiyor; o yazılana kadar dürüst olan etiket.
+ */
 export function kitleBuyuklugu(o: { audienceMin: number | null; audienceMax: number | null }): string {
   if (o.audienceMin === null || o.audienceMax === null) return 'büyüklük bilinmiyor';
   const f = (n: number) => n.toLocaleString('tr-TR');
-  return `~${f(o.audienceMin)}–${f(o.audienceMax)} kişi`;
+  return `dünya geneli ~${f(o.audienceMin)}–${f(o.audienceMax)} kişi`;
 }
