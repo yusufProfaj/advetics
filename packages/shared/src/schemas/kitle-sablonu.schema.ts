@@ -117,19 +117,19 @@ function konumCakismasi(
  * olamaz (Meta ikisini birden kabul etmez ya da hariç tutma kazanır — ikisi
  * de kullanıcının kastettiği değil).
  */
-function ozelKitleKurali(ozel: KitleOzel[], zctx: z.RefinementCtx): void {
+export function ozelKitleKurali(ozel: KitleOzel[], zctx: z.RefinementCtx, yol: (string | number)[] = []): void {
   const hesaplar = new Set(ozel.map((o) => o.hesapId));
   if (hesaplar.size > 1) {
     zctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['ozelKitleler'],
+      path: [...yol, 'ozelKitleler'],
       message: 'Özel kitleler tek bir reklam hesabından olmalı; bir hesabın kitlesi başka hesapta çalışmaz.',
     });
   }
   const gorulen = new Set<string>();
   for (const o of ozel) {
     if (gorulen.has(o.id)) {
-      zctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ozelKitleler'], message: `"${o.name}" iki kez seçilmiş.` });
+      zctx.addIssue({ code: z.ZodIssueCode.custom, path: [...yol, 'ozelKitleler'], message: `"${o.name}" iki kez seçilmiş.` });
       return;
     }
     gorulen.add(o.id);

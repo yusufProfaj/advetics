@@ -105,9 +105,9 @@ doğal dilden öneri: AI yapılandırıyor, sunucu Meta'da çözüyor, kullanıc
 onaylıyor. K16 ("panelde ilgi seçtirmiyoruz") kullanıcı isteğiyle kalktı.
 İlgi araması canlıda doğrulanmadı (`meta-ilgi-kontrol`). **4b UYGULANDI (2026-09-30):** Meta özel/benzer kitleler okunuyor ve şablonda
 dahil/hariç kullanılıyor; kitle hesaba bağlı ve hesap uyuşmazlığı yayını
-durduruyor. Canlıda doğrulanmadı (`meta-ilgi-kontrol --ozel`). **Kalan:**
-Akıllı Boost ve uzman modun şablonları okuması; çok hesaplı workspace'te
-hesap seçimi.
+durduruyor. Canlıda doğrulanmadı (`meta-ilgi-kontrol --ozel`). **4d UYGULANDI (2026-09-29):** Akıllı Boost Meta ön ayarı şablondan
+dolduruluyor (kopya); özel kitle hesabı yayında kontrol ediliyor. **Kalan:**
+uzman modun şablonları okuması; çok hesaplı workspace'te hesap seçimi.
 
 ### 4. Koruma kuralları (taslakta "Global Kurallar")
 

@@ -4,6 +4,7 @@ import type {
   AutoBoostPlatform,
   AutoBoostPresetSettings,
   AutoBoostQueueOverride,
+  MetaPresetSettings,
 } from '@advetics/shared';
 
 /**
@@ -135,12 +136,25 @@ export function hedeflemeyiCoz(
       ...onAyar,
       savedAudienceId: t.savedAudienceId,
       locations: [],
+      /*
+       * ŞABLON ALANLARI DA SIFIRLANIYOR. Kayıtlı kitleyle birlikte yayın
+       * hedefleme nesnesini hiç yazmıyor; ilgi alanını taşımak, özette
+       * görünüp reklama gitmeyen bir alan bırakırdı. Ön ayar şeması da ikisini
+       * birlikte kabul etmiyor.
+       */
+      interests: [],
+      ozelKitleler: [],
       ageMin: onAyar.ageMin,
       ageMax: onAyar.ageMax,
       genders: onAyar.genders,
     };
   }
 
+  /*
+   * İLGİ VE ÖZEL KİTLE ÖN AYARDAN KALIYOR. Kart penceresi yalnızca konum,
+   * yaş ve cinsiyet soruyor; o üçünü değiştirmek şablondan gelen daraltmayı
+   * silmemeli. Pencere ön ayar özetini gösterdiği için kalan alan görünür.
+   */
   return {
     ...onAyar,
     savedAudienceId: null,
@@ -149,4 +163,20 @@ export function hedeflemeyiCoz(
     ageMax: t.ageMax,
     genders: t.genders,
   };
+}
+
+/**
+ * Ön ayardaki özel kitlelerden, boost'un açılacağı REKLAM HESABINA AİT
+ * OLMAYAN ilki; yoksa `null`.
+ *
+ * Kayıtlı kitle seçiliyse hedefleme nesnesi hiç yazılmıyor, yani özel kitle
+ * zaten gitmiyor ve ret sebebi olamaz. `?? []`: alan sonradan eklendi ve
+ * eski kayıtta yok.
+ */
+export function yabanciOzelKitle(
+  onAyar: Pick<MetaPresetSettings, 'savedAudienceId' | 'ozelKitleler'>,
+  adAccountId: string,
+): MetaPresetSettings['ozelKitleler'][number] | null {
+  if (onAyar.savedAudienceId) return null;
+  return (onAyar.ozelKitleler ?? []).find((o) => o.hesapId !== adAccountId) ?? null;
 }

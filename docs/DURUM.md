@@ -765,6 +765,33 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — Marka Merkezi, Bölüm 4d: Akıllı Boost ön ayarı kitle şablonunu okuyor
+
+Meta ön ayar formunda "Kitle şablonundan doldur": şablonun konumu, yaşı,
+cinsiyeti, ilgi alanları ve özel/benzer kitleleri ön ayara KOPYALANIYOR
+(taslaktaki kuralın aynısı; şablon sonradan değişirse para harcayan ön ayar
+sessizce değişmemeli). Migration yok: `settings` JSONB, yeni alanlar
+(`interests`, `ozelKitleler`, `kitleSablonuId`) varsayılanla boş, eski
+kayıtlar geçerli.
+
+- **Alan adları `MetaHedeflemeGirdisi` ile aynı**: yayın zaten
+  `metaTargetingFrom(ayar)` çağırıyor, yani ilgi ve özel kitle ek kod
+  yazılmadan istekte. Özel kategoride sağlayıcı ikisini de kaldırıyor.
+- **Özel kitle başka hesabınsa yayın duruyor** (`yabanciOzelKitle`,
+  `onAyardanBoostAc` içinde, boost satırı açılmadan). Ön ayar sayfaya özel
+  değil ve her sayfanın bağlı hesabı farklı olabiliyor. Kayıtta hesap,
+  kitle şablonuyla AYNI fonksiyonla (`ozelKitleHesabi`) veritabanında
+  doğrulanıyor.
+- **Meta kayıtlı kitlesi + şablon alanları birlikte reddediliyor** (şema).
+  Kart penceresinde kayıtlı kitle seçilince ilgi/özel kitle sıfırlanıyor;
+  konum/yaş değiştirmek onları silmiyor. Kart özeti ilgi ve hariç kitleyi
+  gösteriyor.
+- **Ayrıca bulunan sessiz hata:** form kayıtlı ön ayarı açarken konumun
+  ADINI değil anahtarını yüklüyordu; kaydet'e basınca saklanan ad anahtarla
+  eziliyordu ve kart "2343687" gösteriyordu. Düzeltildi.
+- Canlıda doğrulanmadı: şablonlu ön ayarla ilk boost Ads Manager'da ilgi
+  ve hariç kitleyle GÖZLE kontrol edilmeli.
+
 ### 2026-09-29 — İlgi alanı büyüklüğü "dünya geneli" diye etiketlendi
 
 Meta'nın `audience_size_lower/upper_bound` alanı ülkeye göre değil, dünya

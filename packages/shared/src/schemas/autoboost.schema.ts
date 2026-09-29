@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { KITLE_SINIRLARI, kitleIlgiSchema, kitleOzelSchema, ozelKitleKurali } from './kitle-sablonu.schema';
 
 /**
  * ADVETICS 1.0 — OTOMATİK BOOST (Instagram + YouTube).
@@ -100,6 +101,28 @@ export const metaPresetSettingsSchema = z.object({
   ageMin: z.number().int().min(13).max(65).default(18),
   ageMax: z.number().int().min(13).max(65).default(65),
   genders: z.enum(['all', 'male', 'female']).default('all'),
+  /**
+   * ═══ MARKA MERKEZİ KİTLE ŞABLONUNDAN GELEN ALANLAR (Bölüm 4) ═══
+   *
+   * Şablon ön ayara KOPYALANIYOR, referans verilmiyor: taslaktaki kuralın
+   * aynısı (`kitleHedefiSchema`). Şablon sonradan düzenlenirse her yeni
+   * gönderiye para harcayan bir ön ayarın kitlesi SESSİZCE değişmemeli.
+   * `kitleSablonuId` yalnızca "nereden geldi" bilgisi; yayında okunmuyor.
+   *
+   * Alan adları `MetaHedeflemeGirdisi` ile BİREBİR aynı ve bu kasıtlı:
+   * yayın `metaTargetingFrom(ayar)` çağırıyor, yani ad farklı olsaydı ilgi
+   * alanları derleme hatası vermeden istekten düşerdi.
+   *
+   * VARSAYILAN BOŞ: alanlar eklenmeden kaydedilmiş ön ayarlar geçerli kalıyor.
+   */
+  interests: z.array(kitleIlgiSchema).max(KITLE_SINIRLARI.ilgi).default([]),
+  /**
+   * Özel kitle REKLAM HESABINA BAĞLI. Ön ayar birden çok sayfaya hizmet
+   * edebiliyor (sayfaya özel değilse) ve her sayfanın bağlı hesabı farklı
+   * olabiliyor; uyum YAYIN ANINDA kontrol ediliyor (`onAyardanBoostAc`).
+   */
+  ozelKitleler: z.array(kitleOzelSchema).max(KITLE_SINIRLARI.ozelKitle).default([]),
+  kitleSablonuId: z.string().uuid().nullable().default(null),
 });
 
 /**
@@ -299,6 +322,26 @@ export const autoBoostPresetInputSchema = z
         path: ['settings', 'ageMin'],
         message: 'Alt yaş üst yaştan büyük olamaz.',
       });
+    }
+    if (v.settings.platform === 'meta') {
+      ozelKitleKurali(v.settings.ozelKitleler, ctx, ['settings']);
+      /*
+       * META KAYITLI KİTLESİ İLE ŞABLON ALANLARI BİRLİKTE OLAMAZ. Kayıtlı
+       * kitle seçiliyken yayın hedefleme nesnesini HİÇ yazmıyor; yanında
+       * duran ilgi alanları kaydedilir ama reklama gitmez. Kullanıcı ikisini
+       * birden uygulandı sanardı.
+       */
+      if (
+        v.settings.savedAudienceId &&
+        (v.settings.interests.length > 0 || v.settings.ozelKitleler.length > 0)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['settings', 'savedAudienceId'],
+          message:
+            'Meta kayıtlı kitlesi seçiliyken ilgi alanı ve özel kitle kullanılmaz. Birini seç.',
+        });
+      }
     }
   });
 export type AutoBoostPresetInput = z.infer<typeof autoBoostPresetInputSchema>;

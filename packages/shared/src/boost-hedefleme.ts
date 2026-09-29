@@ -63,11 +63,28 @@ export function hedeflemeOzeti(settings: AutoBoostPresetSettings): HedeflemeSati
     return [{ etiket: 'Kitle', deger: 'Meta’da kayıtlı kitle kullanılıyor' }];
   }
 
-  return [
+  const satirlar: HedeflemeSatiri[] = [
     { etiket: 'Konum', deger: konumMetni(settings.locations) },
     { etiket: 'Yaş', deger: `${settings.ageMin}-${settings.ageMax}` },
     { etiket: 'Cinsiyet', deger: CINSIYET[settings.genders] ?? settings.genders },
   ];
+  /*
+   * ŞABLONDAN GELEN ALANLAR DA ÖZETTE. `?? []`: alanlar sonradan eklendi ve
+   * ham JSON'dan okunan eski bir ön ayarda hiç yok. Kartta görünmeyen bir
+   * ilgi alanı, onaylanan reklamın kime gittiğini gizlemek olurdu.
+   * SESSİZ KESME YOK: kaçının gizlendiği yazıyor.
+   */
+  const ilgi = settings.interests ?? [];
+  if (ilgi.length > 0) {
+    const adlar = ilgi.slice(0, 3).map((i) => i.name).join(', ');
+    satirlar.push({ etiket: 'İlgi', deger: `${adlar}${ilgi.length > 3 ? ` +${ilgi.length - 3}` : ''}` });
+  }
+  const ozel = settings.ozelKitleler ?? [];
+  const dahil = ozel.filter((o) => o.mod === 'dahil');
+  const haric = ozel.filter((o) => o.mod === 'haric');
+  if (dahil.length > 0) satirlar.push({ etiket: 'Özel kitle', deger: dahil.map((o) => o.name).join(', ') });
+  if (haric.length > 0) satirlar.push({ etiket: 'Hariç', deger: haric.map((o) => o.name).join(', ') });
+  return satirlar;
 }
 
 /**

@@ -6,9 +6,9 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-29 (ikinci oturum) · **Canlı:** `a2aa674` dahil.
-Özel kitle ve ilgi alanı OKUMA yolları canlıda doğrulandı. **Bekleyen deploy:**
-ilgi alanı büyüklüğü "dünya geneli" etiketi (yalnızca panel).
+**Son güncelleme:** 2026-09-29 (ikinci oturum) · **Canlı:** "dünya geneli"
+etiketi dahil (kullanıcı deploy etti). **Bekleyen deploy:** Bölüm 4d (Akıllı
+Boost ön ayarı kitle şablonu). Migration yok, shared değişti.
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
@@ -67,8 +67,10 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
    saatlik mi (**kullanıcıya sorulacak, ölçümden sonra**).
 2. ~~İlgi alanı büyüklüğü dünya geneli~~ **etiketlendi** (2026-09-29, deploy
    bekliyor). Ülkeye göre sayı (`delivery_estimate`) istenirse ayrı iş.
-3. **Bölüm 4 kalanı:** kitle şablonlarını Akıllı Boost ön ayarına ve uzman
-   moda bağlamak; çok hesaplı workspace'te kitle seçicinin hesap seçmesi.
+3. **Bölüm 4 kalanı:** ~~Akıllı Boost ön ayarı~~ **bitti (4d)**. Kalan: uzman
+   modun (`/reklam-olustur` Gelişmiş) şablonları okuması; çok hesaplı
+   workspace'te kitle seçicinin hesap seçmesi. 4d deploy sonrası: şablonlu ön
+   ayarla ilk boost Ads Manager'da ilgi ve hariç kitleyle GÖZLE kontrol.
 4. **Bölüm 5 — Koruma kuralları** (`BASE-PLANI.md`).
 5. Açık ayrı iş (öneri kartı açıldı): eski tek reklam yayın yolu
    (`ad-publisher.service.ts`) özel kategori kısıtını uygulamıyor.

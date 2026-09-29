@@ -11,6 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 // TEK TANIM: kart bazında özelleştirme de aynı dönüşümü kullanıyor ve
 // ikinci bir kopya, doğduğu anda ayrışırdı.
 import { toMicros } from './kart-ozellestirme';
+import { ozelKitleHesabi } from '../tenancy/kitle-sablonu.service';
 
 /**
  * BİLGİ BANKASI — otomatik boost ön ayarları.
@@ -102,8 +103,12 @@ export class AutoBoostPresetService {
       );
     }
 
-    const [row] = await this.prisma.withTenant(scoped, (tx) =>
-      tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    const [row] = await this.prisma.withTenant(scoped, async (tx) => {
+      // Özel kitle hesabı gövdeden geliyor; kitle şablonuyla AYNI kontrol.
+      if (input.settings.platform === 'meta') {
+        await ozelKitleHesabi(tx, { clientId: input.clientId, ozelKitleler: input.settings.ozelKitleler });
+      }
+      return tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         INSERT INTO auto_boost_presets (
           id, org_id, client_id, platform, social_profile_id, enabled,
           budget_mode, daily_budget_micros, total_budget_micros, duration_days,
@@ -130,8 +135,8 @@ export class AutoBoostPresetService {
           settings = EXCLUDED.settings,
           updated_at = now()
         RETURNING id::text AS id
-      `),
-    );
+      `);
+    });
     if (!row) throw new Error('Ön ayar kaydedilemedi');
 
     const hepsi = await this.list(ctx, input.clientId);

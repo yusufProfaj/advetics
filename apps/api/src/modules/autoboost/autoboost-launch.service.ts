@@ -12,7 +12,7 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
-import { butceKipi, butceyiCoz, hedeflemeyiCoz, kartPlatformu } from './kart-ozellestirme';
+import { butceKipi, butceyiCoz, hedeflemeyiCoz, kartPlatformu, yabanciOzelKitle } from './kart-ozellestirme';
 import { YoutubeOtomatikService } from './youtube-otomatik.service';
 import { youtubeHesabiEngeli } from './youtube-hesabi';
 import type { VideoMetinleri } from './youtube-otomatik';
@@ -795,6 +795,23 @@ export class AutoBoostLaunchService {
     if (!g.budgetMode || !g.durationDays) {
       throw new BadRequestException(
         `Ön ayarın bütçesi eksik. ${ON_AYAR_YERI} bütçe ve süreyi kaydet.`,
+      );
+    }
+
+    /*
+     * ÖZEL KİTLE BAŞKA HESABINSA YAYIN DURUYOR. Kitle kimliği reklam
+     * hesabına bağlı; sayfaya özel olmayan bir ön ayar birden çok sayfaya
+     * hizmet ediyor ve her sayfanın bağlı hesabı farklı olabiliyor. Kitleyi
+     * yine göndermek Meta'nın reddi, düşürüp yayınlamak ise kullanıcının
+     * "mevcut müşterileri hariç tut" dediği kitleye sessizce harcamak olurdu.
+     * Kontrol boost satırı AÇILMADAN: açılmış bir satır kartı "yayında"
+     * gösterip bekletirdi.
+     */
+    const yabanci = yabanciOzelKitle(g.meta, g.adAccountId);
+    if (yabanci) {
+      throw new BadRequestException(
+        `Ön ayardaki “${yabanci.name}” kitlesi ${yabanci.hesapAdi} hesabının; bu sayfanın ` +
+          `reklam hesabı farklı. ${ON_AYAR_YERI} kitleyi kaldır.`,
       );
     }
 

@@ -208,8 +208,15 @@ async function musteriOrg(tx: Tx, clientId: string): Promise<string> {
  * gövdeden geliyor ve Zod yalnızca BİÇİMİ doğruluyor; kontrol olmadan başka
  * bir müşterinin hesabı ya da bir Google hesabı yazılabilirdi (logo
  * kontrolüyle aynı gerekçe, `client-profile.service.ts`).
+ *
+ * Akıllı Boost ön ayarı da bu fonksiyonu çağırıyor: şablondan kopyalanan
+ * kitle aynı gövde yolundan geliyor ve ikinci bir kontrol yazılırsa biri bir
+ * gün gevşer.
  */
-async function ozelKitleHesabi(tx: Tx, input: KitleSablonuInput): Promise<void> {
+export async function ozelKitleHesabi(
+  tx: Tx,
+  input: { clientId: string; ozelKitleler: ReadonlyArray<{ hesapId: string }> },
+): Promise<void> {
   const idler = [...new Set(input.ozelKitleler.map((o) => o.hesapId))];
   if (idler.length === 0) return;
   const bulunan = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`

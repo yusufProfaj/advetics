@@ -41,6 +41,19 @@ const META_ON_AYAR: AutoBoostPresetSettings = {
   ageMin: 25,
   ageMax: 45,
   genders: 'female',
+  interests: [],
+  ozelKitleler: [],
+  kitleSablonuId: null,
+};
+
+const HESAP_A = '11111111-1111-4111-8111-111111111111';
+const SABLONLU: AutoBoostPresetSettings = {
+  ...META_ON_AYAR,
+  interests: [{ id: '6003107902433', name: 'Golf' }],
+  ozelKitleler: [
+    { id: '120000000000001', name: 'Site ziyaretçileri', tip: 'ozel', mod: 'haric', hesapId: HESAP_A, hesapAdi: 'Hesap A' },
+  ],
+  kitleSablonuId: '22222222-2222-4222-8222-222222222222',
 };
 
 const ON_AYAR_BUTCE = {
@@ -207,6 +220,24 @@ describe('hedeflemeyiCoz', () => {
       },
     });
     expect(sonuc).toMatchObject({ savedAudienceId: 'aud-1', locations: [] });
+  });
+
+  it('KRİTİK: kart konum/yaş değiştirince şablondan gelen ilgi ve özel kitle KALIYOR', () => {
+    // Kart penceresi bu iki alanı sormuyor; silmek şablonun daraltmasını
+    // kullanıcının haberi olmadan kaldırırdı.
+    const sonuc = hedeflemeyiCoz(SABLONLU, {
+      targeting: { savedAudienceId: null, locations: [], ageMin: 20, ageMax: 30, genders: 'all' },
+    });
+    expect(sonuc).toMatchObject({ ageMin: 20, interests: SABLONLU.interests, ozelKitleler: SABLONLU.ozelKitleler });
+  });
+
+  it('KRİTİK: kartta kayıtlı kitle seçilince ilgi ve özel kitle SIFIRLANIYOR', () => {
+    // Kayıtlı kitleyle hedefleme nesnesi yazılmıyor; kalan alan özette
+    // görünüp reklama gitmezdi.
+    const sonuc = hedeflemeyiCoz(SABLONLU, {
+      targeting: { savedAudienceId: 'aud-1', locations: [], ageMin: 18, ageMax: 65, genders: 'all' },
+    });
+    expect(sonuc).toMatchObject({ savedAudienceId: 'aud-1', interests: [], ozelKitleler: [] });
   });
 
   it('KRİTİK: GOOGLE ön ayarında hedefleme özelleştirmesi REDDEDİLİYOR', () => {

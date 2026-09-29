@@ -2,8 +2,13 @@
 
 import { hedeflemeLokasyonu } from '@advetics/shared';
 import { useEffect, useState } from 'react';
+import { kitleOzeti } from '@advetics/shared';
 import type {
   AutoBoostPresetRecord,
+  KitleIlgi,
+  KitleOzel,
+  KitleSablonuListesi,
+  KitleSablonuRecord,
   ConnectionSummary,
   GeoLocationOption,
   SavedAudienceList,
@@ -190,16 +195,54 @@ function MetaForm({
    * duruyor, kullanıcıya hiç sorulmuyordu — CLAUDE.md'nin "veride duran
    * alan, kullanılmıyorsa yoktur" kalıbı.
    */
+  /*
+   * KAYITLI AD YÜKLENİYOR. Burada `name: l.key, label: l.key` yazıyordu:
+   * form açılınca şehir "2343687" görünüyor ve kaydet'e basılınca
+   * `hedeflemeLokasyonu` o anahtarı AD olarak geri yazıyordu, yani saklanan
+   * okunabilir ad her kayıtta siliniyordu ve kart da sayı göstermeye
+   * başlıyordu. Ad yoksa (eski kayıt) anahtara düşülüyor.
+   */
   const [lokasyonlar, setLokasyonlar] = useState<GeoLocationOption[]>(
     (s?.locations ?? []).map((l) => ({
       key: l.key,
       type: l.type,
-      name: l.key,
-      label: l.key,
+      name: l.label ?? l.key,
+      label: l.label ?? l.key,
       countryCode: null,
     })) as GeoLocationOption[],
   );
   const [kitleId, setKitleId] = useState<string | null>(s?.savedAudienceId ?? null);
+  // Marka Merkezi kitle şablonundan kopyalanan alanlar (Bölüm 4).
+  const [ilgiler, setIlgiler] = useState<KitleIlgi[]>(s?.interests ?? []);
+  const [ozelKitleler, setOzelKitleler] = useState<KitleOzel[]>(s?.ozelKitleler ?? []);
+  const [sablonId, setSablonId] = useState<string | null>(s?.kitleSablonuId ?? null);
+  const sablonAlaniVar = ilgiler.length > 0 || ozelKitleler.length > 0;
+
+  function sablondanDoldur(k: KitleSablonuRecord): void {
+    setLokasyonlar(
+      k.locations.map((l) => ({
+        key: l.key,
+        type: l.type,
+        name: l.label,
+        label: l.label,
+        countryCode: l.countryCode,
+      })) as GeoLocationOption[],
+    );
+    setYasMin(k.ageMin);
+    setYasMax(k.ageMax);
+    setCinsiyet(k.genders);
+    setIlgiler(k.interests);
+    setOzelKitleler(k.ozelKitleler);
+    setSablonId(k.id);
+    // Meta kayıtlı kitlesi şablonun yerini tutuyordu; ikisi birlikte olamaz.
+    setKitleId(null);
+  }
+
+  function sablonuTemizle(): void {
+    setIlgiler([]);
+    setOzelKitleler([]);
+    setSablonId(null);
+  }
 
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
@@ -240,9 +283,18 @@ function MetaForm({
             ageMin: yasMin,
             ageMax: yasMax,
             genders: cinsiyet,
+            /*
+             * KAYITLI KİTLE SEÇİLİYSE ŞABLON ALANLARI GİTMİYOR: sunucu ikisini
+             * birlikte reddediyor. Kullanıcı bunu kaydetmeden ÖNCE ekranda
+             * görüyor (aşağıdaki uyarı), sessizce düşürülmüyor.
+             */
+            interests: kitleId ? [] : ilgiler,
+            ozelKitleler: kitleId ? [] : ozelKitleler,
+            kitleSablonuId: kitleId ? null : sablonId,
           },
         }),
       });
+      if (kitleId && sablonAlaniVar) sablonuTemizle();
       setSonuc('Kaydedildi. Yeni Instagram gönderileri bu ayarlarla yayınlanacak.');
     } catch (err) {
       setHata(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi.');
@@ -296,6 +348,34 @@ function MetaForm({
         </select>
       </Alan>
 
+      <SablondanDoldur clientId={clientId} sablonId={sablonId} onSec={sablondanDoldur} />
+
+      {sablonAlaniVar && (
+        <div className="rounded-md border border-line bg-surface-muted p-2 text-xs">
+          {ilgiler.length > 0 && (
+            <p className="text-ink">İlgi: {ilgiler.map((i) => i.name).join(', ')}</p>
+          )}
+          {ozelKitleler.map((o) => (
+            <p key={o.id} className="text-ink">
+              {o.mod === 'dahil' ? 'Özel kitle' : 'Hariç'}: {o.name}
+            </p>
+          ))}
+          {ozelKitleler.length > 0 && (
+            <p className="mt-1 text-ink-muted">
+              Özel kitleler {ozelKitleler[0]!.hesapAdi} hesabının. Başka hesaba bağlı bir sayfanın gönderisi bu ön ayarla yayınlanamaz.
+            </p>
+          )}
+          {kitleId && (
+            <p className="mt-1 text-danger-strong">
+              Meta kayıtlı kitlesi seçili. İlgi alanları ve özel kitleler kaydedince kaldırılacak.
+            </p>
+          )}
+          <button type="button" onClick={sablonuTemizle} className="mt-1 text-ink-muted underline">
+            İlgi ve özel kitleleri kaldır
+          </button>
+        </div>
+      )}
+
       <div className="grid gap-2 sm:grid-cols-3">
         <Alan etiket="Yaş (alt)">
           <input
@@ -340,6 +420,75 @@ function MetaForm({
 
       <Kaydet busy={busy} hata={hata} sonuc={sonuc} canWrite={canWrite} onKaydet={() => void kaydet()} />
     </div>
+  );
+}
+
+/**
+ * MARKA MERKEZİ KİTLE ŞABLONUNDAN DOLDUR.
+ *
+ * Şablon KOPYALANIYOR: seçmek formu dolduruyor, kullanıcı düzeltip
+ * kaydediyor. Şablon sonradan değişirse ön ayar değişmiyor ve bu ekranda
+ * yazıyor; her yeni gönderiye para harcayan bir ayarın kitlesi sessizce
+ * değişmemeli.
+ *
+ * DÖRT HÂL AYRI: yükleniyor, çağrı düştü (sunucunun mesajı), şablon yok,
+ * liste. Hepsini boş bir seçiciye çevirmek "şablonum neden yok" sorusunu
+ * cevapsız bırakırdı.
+ */
+function SablondanDoldur({
+  clientId,
+  sablonId,
+  onSec,
+}: {
+  clientId: string;
+  sablonId: string | null;
+  onSec: (k: KitleSablonuRecord) => void;
+}) {
+  const [liste, setListe] = useState<KitleSablonuRecord[] | undefined>(undefined);
+  const [hata, setHata] = useState<string | null>(null);
+
+  useEffect(() => {
+    setListe(undefined);
+    setHata(null);
+    apiFetch<KitleSablonuListesi>(`/audience-templates?clientId=${clientId}`)
+      .then((r) => setListe(r.items))
+      .catch((err: unknown) =>
+        setHata(err instanceof ApiRequestError ? err.message : 'Kitle şablonları okunamadı.'),
+      );
+  }, [clientId]);
+
+  if (hata) return <p className="text-xs text-danger-strong">Kitle şablonları okunamadı: {hata}</p>;
+  if (liste === undefined) return <p className="text-xs text-ink-muted">Kitle şablonları yükleniyor…</p>;
+  if (liste.length === 0) {
+    return <p className="text-xs text-ink-muted">Marka Merkezi’nde kayıtlı kitle şablonu yok.</p>;
+  }
+
+  const kaynak = sablonId ? liste.find((k) => k.id === sablonId) : undefined;
+  return (
+    <Alan
+      etiket="Kitle şablonundan doldur"
+      ipucu={
+        sablonId && !kaynak
+          ? 'Doldurulduğu şablon silinmiş; ayarlar ön ayarda duruyor.'
+          : 'Şablon kopyalanır. Şablonu sonradan değiştirmek bu ön ayarı değiştirmez.'
+      }
+    >
+      <select
+        value=""
+        onChange={(e) => {
+          const k = liste.find((x) => x.id === e.target.value);
+          if (k) onSec(k);
+        }}
+        className={input}
+      >
+        <option value="">{kaynak ? `Son doldurulan: ${kaynak.name}` : 'Şablon seç'}</option>
+        {liste.map((k) => (
+          <option key={k.id} value={k.id}>
+            {k.name} ({kitleOzeti(k)})
+          </option>
+        ))}
+      </select>
+    </Alan>
   );
 }
 
