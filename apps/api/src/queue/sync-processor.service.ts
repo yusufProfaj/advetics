@@ -24,6 +24,7 @@ import { AutoBoostQueueService } from '../modules/autoboost/autoboost-queue.serv
 import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
 import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
 import { isYapilabilir } from './platform-isleri';
+import { cekilmisGunler, gunlukAnahtar } from './gunluk-tekrar';
 
 /**
  * Worker'ın sentetik kiracı bağlamındaki kullanıcı kimliği.
@@ -157,6 +158,30 @@ export class SyncProcessorService {
     let skipped = 0;
     let unassigned = 0;
     let desteklenmeyen = 0;
+    let dunCekilmis = 0;
+
+    /*
+     * "DÜN" BİR KEZ ÇEKİLİR (gunluk-tekrar.ts). Süpürme saatlik ve her
+     * hesabın dünü bir kez kapanıyor; bu süzgeç yokken aynı gün her saat
+     * yeniden çekiliyordu ve Google günlük kotasının üçte biri buydu.
+     * 48 saat: bir hesabın "dün"ü UTC'den en fazla bir gün sapıyor.
+     */
+    const cekilmis =
+      payload.jobType === 'insights_daily'
+        ? cekilmisGunler(
+            await this.db.syncJob.findMany({
+              where: {
+                // `(ad_account_id, job_type, created_at)` indeksine oturuyor;
+                // süzgeçsiz sorgu her saat tabloyu tarardı.
+                adAccountId: { in: accounts.map((a) => a.id) },
+                jobType: 'insights_daily',
+                status: 'succeeded',
+                createdAt: { gte: new Date(Date.now() - 48 * 3_600_000) },
+              },
+              select: { adAccountId: true, dateFrom: true },
+            }),
+          )
+        : undefined;
 
     for (const acct of accounts) {
       // Organik post işleri reklam hesabına değil sosyal profile ait.
@@ -188,6 +213,10 @@ export class SyncProcessorService {
       }
 
       const dates = this.datesForJob(payload.jobType, acct.timezone);
+      if (cekilmis && dates && cekilmis.has(gunlukAnahtar(acct.id, dates.from))) {
+        dunCekilmis++;
+        continue;
+      }
 
       const res = await this.queue.enqueue({
         clientId,
@@ -286,7 +315,8 @@ export class SyncProcessorService {
         : '') +
       (desteklenmeyen > 0
         ? `, ${desteklenmeyen} hesabın platformu bu işi desteklemiyor`
-        : '');
+        : '') +
+      (dunCekilmis > 0 ? `, ${dunCekilmis} hesabın dünü zaten çekilmiş` : '');
     this.logger.log(note);
     return { rows: 0, note };
   }

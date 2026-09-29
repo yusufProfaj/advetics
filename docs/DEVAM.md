@@ -6,9 +6,8 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-29 · **Canlı:** `2682fae` dahil evet (LinkedIn
-kuyruk düzeltmesi deploy edildi). Google kota ölçüm aracı push edildi,
-ÇALIŞTIRILMADI.
+**Son güncelleme:** 2026-09-29 · **Canlı:** `9782f2b` dahil evet. "Dün bir
+kez" düzeltmesi push edildi, DEPLOY BEKLİYOR.
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
@@ -33,21 +32,23 @@ gösteremez ve kayar):
   seviyesini atlıyor. İkincisi LinkedIn günlük metriğinin HİÇ gelmemesinin
   sebebiydi. Deploy sonrası bakılacak: son 7 günün düşen iş sayısı inmeli,
   LinkedIn `insights_daily` işleri `succeeded` olmalı.
-- Testler: API 3.510, panel 1.108, yeşil.
+- **Google kotası ölçüldü: sebep hacim, günlük tavan.** "Günlük" metrik işi
+  hesap başına günde ~11 kez koşuyordu; artık dün bir kez çekiliyor.
+- Testler: API 3.528, panel 1.108, yeşil.
 
 Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
 ## Sıradaki iş (sırayla)
 
-1. **Google kotası doluyor** (3A Makina, "Resource has been exhausted").
-   Ölçüm aracı YAZILDI, sonuç bekleniyor: sunucuda
-   `pnpm --filter @advetics/api olcum-google-kota` (salt okunur). Çıktı
-   gelmeden düzeltme yazılmıyor — iki cevabın düzeltmesi zıt. Koddan görülen
-   ama ÖLÇÜLMEMİŞ üç aday: (a) devre kesici HESAP başına, Google'ın günlük
-   tavanı geliştirici token'ı başınaysa öbür hesaplar vurmaya devam eder;
-   (b) Google sağlayıcısı `api_usage_log`a hiç yazmıyor, kota görünmüyor;
-   (c) kota hatasında BullMQ 5 sn'den başlayan üstel geri çekilmeyle
-   deniyor, Google'ın bildirdiği bekleme süresi değil.
+1. **Google kotası — kalan iki karar** (ölçüm ve ilk düzeltme `DURUM.md`
+   2026-09-29'da). Deploy sonrası `olcum-google-kota -- --gun=1` ile
+   doğrula: `insights_daily` hesap başına ~1/gün, kota hatası saat
+   tablosunda azalmalı. Sonra:
+   a. **Kota dolunca bütün Google işlerini 10:00'a kadar durdur** (devre
+      kesici bugün hesap başına 15 dk). 1.521 iş veri kaybına düştü. Karar
+      gerekmiyor, sıradaki kod işi.
+   b. **Gün içi metrik 30 dk'da bir** (~4.800 çağrı/gün). Sıklık bir ürün
+      kararı — **kullanıcıya sorulacak.**
 2. **Bölüm 2 — Marka.** Bilgi bankasındaki üç serbest metin alanı
    yapılandırılmış alanlara dönüşüyor (sektör, web sitesi + sık sayfalar, ana
    amaç, üslup, öne çıkan vaatler); Reklam Oluştur ve AI asistan bunları

@@ -765,7 +765,38 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
-### 2026-09-29 — Google kota ölçüm aracı (ÇALIŞTIRILMADI)
+### 2026-09-29 — Google kotası: ölçüldü, sebep HACİM; "dün" artık bir kez çekiliyor
+
+`olcum-google-kota` üretimde koştu (son 7 gün, 54 izlenen Google hesabı).
+
+- **Günlük tavan, hız sınırı değil.** Kota hatası her gece 01:00-04:00
+  arası başlıyor ve İstanbul 10:00'da (Pasifik gece yarısı, günlük
+  sıfırlama) kesiliyor; 10:00-24:00 arası hiç hata yok. Mesaj
+  `quotaError=RESOURCE_EXHAUSTED · Too many requests. Retry in # seconds`.
+- **Hacim: başarılı işlerin ÖLÇÜLEN çağrısı tek başına ~10.300/gün**
+  (Basic Access ≈ 15.000/gün, ARCHITECTURE.md). Tekrar denemelerin
+  "en fazla %66" payı güvenilmez çıktı: `attempts` kota bekçisinin
+  reddinde de artıyor (146 geri düzeltme işi 2.224 deneme = iş başına 15;
+  BullMQ yalnızca 5 deneme veriyor).
+- **Asıl hata `insights_daily`:** "günlük" iş hesap başına günde ~11 kez
+  koşuyordu (4.159 başarılı iş / 7 gün / 54 hesap), ~4.700 çağrı/gün.
+  `sweep:daily` saatlik ve dünün zaten çekilip çekilmediğine bakmıyordu;
+  kuyruğun mükerrer engeli de tutmuyor çünkü tamamlanan işin kimliği
+  serbest kalıyor. Artık son 48 saatte o gün için BAŞARILI iş varsa hesap
+  atlanıyor (`queue/gunluk-tekrar.ts`), düşen iş bir sonraki saatte yine
+  açılıyor. Beklenen: ~10.300 → ~6.000/gün. Bütün platformlar için geçerli.
+- Kota her hesaba eşit dağılıyor (hesap başına ~300 iş); 3A Makina'ya özgü
+  bir şey yok.
+- **Açık kalan, ölçüldü ama düzeltilmedi:** (1) `insights_realtime` 30
+  dakikada bir, ~4.800 çağrı/gün (ürün kararı); (2) devre kesici HESAP
+  başına 15 dk; tavan geliştirici token'ı başına olduğu için kota dolunca
+  bütün hesaplar 10:00'a kadar vurmaya devam ediyor ve 1.521 iş
+  `kuyruk_vazgecti` ile veri kaybına düştü; (3) Google `api_usage_log`a
+  yazmıyor.
+- `gunluk-tekrar.spec.ts` süpürmeyi ÇALIŞTIRIYOR; üç mutasyon, üçü de
+  yakalandı.
+
+### 2026-09-29 — Google kota ölçüm aracı
 
 `pnpm --filter @advetics/api olcum-google-kota [-- --gun=7]`. Salt okunur
 transaction, sorgu başına 30 sn. Soru: kotayı tekrar denemeler mi,
