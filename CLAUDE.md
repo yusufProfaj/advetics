@@ -3,6 +3,30 @@
 Bu dosya her oturumda otomatik yükleniyor. Projeye dair **durum** bilgisi burada
 değil, [`docs/DURUM.md`](docs/DURUM.md) içinde; burası **nasıl çalışılacağı**.
 
+## 0. "advetics projesine devam et" denince
+
+Hafızaya değil DEPOYA bak: iki geliştirici var ve hafıza paylaşılmıyor.
+Sırayla, başka bir şey okumadan önce:
+
+1. **Kurulum var mı?** Depo kökünde `.env` ve `node_modules` yoksa DUR ve
+   kullanıcıyı yönlendir: yerel makine için `./scripts/ortak-kurulum.sh`
+   (adımlar README § Kurulum), sunucu için `docs/DEPLOYMENT.md`. Kurulumu
+   kendin tahminle tamamlamaya çalışma.
+2. **Depo güncel mi?** `git fetch origin` → `git status -sb` →
+   `git log --oneline <DEVAM.md'deki son commit>..origin/main`. Worktree'de
+   dal geride kaldıysa `sync_with_base_branch` ile güncelle. Öbür tarafın
+   commit'leri varsa gövdelerini oku: sıradaki iş onlarla değişmiş olabilir.
+3. **[`docs/DEVAM.md`](docs/DEVAM.md) oku** — son durum ve sıradaki iş orada,
+   kısa. `DURUM.md`'yi baştan okuma (2.000 satır); yalnızca işin ilgili girdisini.
+4. Kullanıcıya **en fazla beş satır** yaz: nerede kalındı, öbür taraftan ne
+   geldi, sıradaki iş. "Onay bekliyor" işaretli bir işe onaysız başlama;
+   işaretsizse doğrudan başla.
+
+**Oturum kapanırken `DEVAM.md`yi güncelle** (son commit, biten, sıradaki,
+bekleyen karar) ve işin KENDİ commit'ine koy. Güncellenmeyen devir belgesi
+yanlış yere başlatır — eski sürüm 16 Ağustos'ta donmuş, 6 hafta geride
+kalmıştı.
+
 Advetics, Profaj ajansı için yazılan beyaz etiketli bir AdTech SaaS'ı.
 **Meta (Facebook/Instagram), Google Ads ve LinkedIn Ads** destekleniyor.
 

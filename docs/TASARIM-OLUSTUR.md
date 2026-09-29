@@ -38,7 +38,7 @@ Yani kapsam tek ekran değil: **`/reklam-olustur` + `/auto-boost` +
 doğrulama, üç ayrı hata yolu.
 
 Bunun bedeli somut: 13 Ağustos'ta canlıda öğrenilen altı hata
-([DEVAM.md §2](DEVAM.md)) yalnızca `publishDraft` yolunda düzeltildi. Örneğin
+([DEVAM.md §2](arsiv/DEVAM-2026-08.md)) yalnızca `publishDraft` yolunda düzeltildi. Örneğin
 `is_adset_budget_sharing_enabled` `createBoost`'a da eklenmiş ama form kimliği,
 teklif stratejisi ve çok görselli yol yalnızca bir yolda öğrenildi.
 `createAd` ve `createBoost` **hiç canlı yazma testi görmedi.**
@@ -261,7 +261,7 @@ Kampanya   objective · bütçe modu (CBO/ABO) · special_ad_categories · takvi
 Uzman yüzeyinin ihtiyaç duyduğu ama **bugün olmayan** iki şey:
 
 - **Kayıtlı kitle.** BASE bölümünün "kitle kütüphanesi" parçası hiç
-  yazılmadı ([DEVAM.md §4](DEVAM.md)). Uzman aynı kitleyi her kampanyada elle
+  yazılmadı ([DEVAM.md §4](arsiv/DEVAM-2026-08.md)). Uzman aynı kitleyi her kampanyada elle
   kurmak istemez. Bağımlılık burada adlandırılıyor; kapsama alınıp
   alınmayacağı K4.
 - **`special_ad_categories`.** Üç yazma yolunda da sabit `[]` gidiyor. Emlak,
@@ -459,7 +459,7 @@ Google engelliyken, yazılmamış yazma yolu zararsızdı. Artık değil: **kod
 yazıldığı anda gerçek bir müşteri hesabında gerçek para harcayabilir.**
 
 Meta'nın dersi burada birebir geçerli — ilk gerçek yazma çağrısında **altı
-hata** çıktı ve üçü sessizdi ([DEVAM.md §2](DEVAM.md)). Google'ın kendi altısı
+hata** çıktı ve üçü sessizdi ([DEVAM.md §2](arsiv/DEVAM-2026-08.md)). Google'ın kendi altısı
 olacak ve API biçimi Meta'dan daha farklı: her şey `mutate` işlemleriyle,
 kaynak adlarıyla ve — Meta'dan yapısal olarak ayrılan nokta — **bütçe ayrı bir
 kaynak** (`CampaignBudget`), kampanya ona referans veriyor. Meta'da bütçe ad
@@ -804,7 +804,7 @@ doğrulanmadı.
 **Öneri: önce (b), aynı turda (a) denenir.** Tahmin gösterip tutmaması,
 hiç göstermemekten kötü — bu ürünün müşterisi o sayıya inanır.
 (c) cazip ama 2026-07-23'ten eski veri yok
-([DEVAM.md](DEVAM.md)), yani çoğu müşteride hesaplanacak geçmiş yok.
+([DEVAM.md](arsiv/DEVAM-2026-08.md)), yani çoğu müşteride hesaplanacak geçmiş yok.
 
 **Karar:** _(açık)_
 
