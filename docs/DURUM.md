@@ -786,7 +786,10 @@ Migration `20260930150000_kitle_ozel_kitleler`: `audience_templates.ozel_kitlele
   söylüyor — hariç tutma kalkınca reklam mevcut müşterilere de gider.
 - Dahil edilenler `custom_audiences` (birleşim), hariçler
   `excluded_custom_audiences`.
-- **CANLIDA DOĞRULANMADI.** `meta-ilgi-kontrol --ozel` ham satırı basıyor.
+- **CANLIDA DOĞRULANMADI.** İlk koşu (2026-09-29, Çiftçi-2026): HTTP 200 ve
+  SIFIR kitle — uç çalışıyor ama alan biçimi boş listeden doğrulanamıyor.
+  `meta-ilgi-kontrol --ozel-tara` izlenen hesapları gezip kitlesi olan ilkini
+  basıyor.
 - **Bilinen sınır:** kitle seçici workspace'in İLK izlenen Meta hesabını
   kullanıyor (konum/ilgi aramasıyla aynı hook). Çok hesaplı workspace'te
   diğer hesabın kitleleri seçilemiyor.

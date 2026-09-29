@@ -14,6 +14,7 @@
  *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --q golf --hesap <ad_account uuid>
  *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler "lüks otomobil,otomobil,luxury car"
  *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler golf --ozel   (özel/benzer kitleler)
+ *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler golf --ozel-tara   (kitlesi olan hesabı bul)
  */
 import 'reflect-metadata';
 import { resolve } from 'node:path';
@@ -27,7 +28,7 @@ import { AppModule } from './app.module';
 import { PrismaAdminService } from './prisma/prisma-admin.service';
 import { ProviderRegistry } from './modules/connections/provider.registry';
 import { TokenVaultService } from './modules/connections/token-vault.service';
-import { actPath, mapInterest } from './modules/connections/providers/meta.provider';
+import { actPath, mapCustomAudience, mapInterest } from './modules/connections/providers/meta.provider';
 import { CONFIG, type AppConfig } from './config/configuration';
 
 const ARGV = process.argv.slice(2).filter((a) => a !== '--');
@@ -136,10 +137,57 @@ async function main(): Promise<void> {
       }
     }
 
-    // 2) SAĞLAYICININ KENDİ YOLU — panelin gördüğü sonuç.
+    /*
+     * KİTLESİ OLAN HESABI BUL (`--ozel-tara`). İlk koşuda (2026-09-29)
+     * Çiftçi-2026'da hiç özel kitle yoktu: HTTP 200 + boş liste uç çalışıyor
+     * demek ama ALAN BİÇİMİNİ doğrulamıyor. İzlenen Meta hesapları sırayla
+     * geziliyor (en fazla 30, hesap başına tek istek) ve kitlesi olan ilk
+     * hesabın ham satırları ve eşlemesi basılıyor. Yalnızca okuma.
+     */
+    if (ARGV.includes('--ozel-tara')) {
+      const hesaplar = await db.adAccount.findMany({
+        where: { platform: 'meta', syncEnabled: true, clientId: { not: null }, connection: { status: 'active' } },
+        select: { name: true, externalId: true, connectionId: true },
+        orderBy: { name: 'asc' },
+        take: 30,
+      });
+      console.log(`\n═══ ÖZEL KİTLE TARAMASI (${hesaplar.length} hesap) ═══`);
+      let bulundu = false;
+      for (const h of hesaplar) {
+        const t = await vault.getAccessToken(h.connectionId, provider);
+        const url = new URL(`https://graph.facebook.com/${surum}/${actPath(h.externalId)}/customaudiences`);
+        url.searchParams.set(
+          'fields',
+          'id,name,subtype,approximate_count_lower_bound,approximate_count_upper_bound,delivery_status',
+        );
+        url.searchParams.set('limit', '5');
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${t}` } });
+        const govde = (await res.json()) as { data?: Array<Record<string, unknown>>; error?: unknown };
+        if (govde.error) {
+          console.log(`  ${h.name}: HTTP ${res.status} HATA ${JSON.stringify(govde.error).slice(0, 200)}`);
+          continue;
+        }
+        const satirlar = govde.data ?? [];
+        console.log(`  ${h.name}: ${satirlar.length}${satirlar.length === 5 ? '+' : ''} kitle`);
+        if (satirlar.length > 0 && !bulundu) {
+          bulundu = true;
+          for (const r of satirlar.slice(0, 3)) {
+            console.log(`      ham : ${JSON.stringify(r).slice(0, 400)}`);
+            const m = mapCustomAudience(r);
+            console.log(
+              `      eşleme: ${m ? `${m.tip}/${m.altTur ?? '?'} · ${m.sizeMin ?? '?'}–${m.sizeMax ?? '?'} · hazır=${String(m.hazir)} · ${m.durum ?? ''}` : 'NULL ← mapCustomAudience uymuyor'}`,
+            );
+          }
+        }
+      }
+      if (!bulundu) console.log('  Taranan hesapların hiçbirinde özel kitle yok.');
+    }
+
+    // 2) SAĞLAYICININ KENDİ YOLU — panelin gördüğü sonuç. İlk terimle:
+    // `--terimler` verilip `--q` verilmediğinde varsayılanı aramak yanıltıcıydı.
     const sonuc = await provider.searchInterests(
       { accessToken: token, accountExternalId: hesap.externalId },
-      q,
+      terimler[0] ?? q,
     );
     console.log(`\n═══ searchInterests (${sonuc.length} sonuç) ═══`);
     for (const s of sonuc.slice(0, 10)) {

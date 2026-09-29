@@ -9,8 +9,9 @@
 **Son güncelleme:** 2026-09-30 · **Canlı:** `c317eb0` dahil evet (4c düzeltmesi).
 Bölüm 4b push edildi, DEPLOY BEKLİYOR — MIGRATION VAR
 (`20260930150000_kitle_ozel_kitleler`). Deploy sonrası:
-`pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler golf --ozel`
-(salt okunur; özel kitle alanlarını doğruluyor).
+`pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler golf --ozel-tara`
+(salt okunur; ilk koşu Çiftçi-2026'da sıfır kitle buldu, alan biçimi hâlâ
+doğrulanmadı — tarama kitlesi olan hesabı arıyor).
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
