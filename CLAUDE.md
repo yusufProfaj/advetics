@@ -926,6 +926,18 @@ okunup varsayılmadı — canlıda doğrulandı.
   başına 1-4 kısa aday (Türkçe + İngilizce) üretip sırayla deniyor ve hangi
   adayın tuttuğunu yazıyor (genelleşme kullanıcıya görünmeli).
 
+- **İLGİ ALANI BÜYÜKLÜĞÜ DÜNYA GENELİ.** `audience_size_lower/upper_bound`
+  ülkeye göre değil: "Golf (spor)" ~264–310 MİLYON. Türkiye hedeflemesinde bu
+  sayıyı göstermek kitleyi yüz kat büyük gösterir. Ülkeye göre büyüklük ayrı
+  bir çağrı (`delivery_estimate` / `reachestimate`) ister.
+- **ÖZEL KİTLE (`/act_X/customaudiences`) ALANLARI DOĞRULANDI** (2026-09-29,
+  30 hesap tarandı): `subtype` (CUSTOM, WEBSITE, LOOKALIKE…),
+  `approximate_count_lower/upper_bound`, `delivery_status {code, description}`.
+  Kod 200 = kullanıma hazır, 300 = "kampanya oluşturmada kullanılmak için çok
+  küçük" — Türkçe açıklama Meta'dan geliyor. Küçük kitlelerde büyüklük
+  **1000–1000** dönüyor: gerçek sayı değil, Meta'nın TABANI; "tam 1000 kişi"
+  diye okunmamalı.
+
 **Webhook'lar** (2026-08 araştırması, iki bağımsız sınayıcıyla)
 
 - **Instagram'da "yeni gönderi" WEBHOOK'U YOK.** Abone olunabilir alanlar

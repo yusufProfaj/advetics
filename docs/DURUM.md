@@ -786,10 +786,13 @@ Migration `20260930150000_kitle_ozel_kitleler`: `audience_templates.ozel_kitlele
   söylüyor — hariç tutma kalkınca reklam mevcut müşterilere de gider.
 - Dahil edilenler `custom_audiences` (birleşim), hariçler
   `excluded_custom_audiences`.
-- **CANLIDA DOĞRULANMADI.** İlk koşu (2026-09-29, Çiftçi-2026): HTTP 200 ve
-  SIFIR kitle — uç çalışıyor ama alan biçimi boş listeden doğrulanamıyor.
-  `meta-ilgi-kontrol --ozel-tara` izlenen hesapları gezip kitlesi olan ilkini
-  basıyor.
+- **CANLIDA DOĞRULANDI (okuma, 2026-09-29).** `--ozel-tara` 30 hesap gezdi,
+  24'ünde kitle var. Çizgi Medikal'in satırları `mapCustomAudience` ile
+  birebir eşleşti: CUSTOM kitle kod 200 → hazır, iki WEBSITE kitlesi kod 300
+  ("çok küçük") → hazır değil, panel seçtirmiyor. Küçük kitlede büyüklük
+  1000–1000 (Meta tabanı). `searchInterests` da uçtan uca doğrulandı ("golf"
+  25 sonuç, büyüklük + yol). Yayın yolu (kitleyle ad set kurmak) hâlâ
+  `ads_management` bekliyor.
 - **Bilinen sınır:** kitle seçici workspace'in İLK izlenen Meta hesabını
   kullanıyor (konum/ilgi aramasıyla aynı hook). Çok hesaplı workspace'te
   diğer hesabın kitleleri seçilemiyor.

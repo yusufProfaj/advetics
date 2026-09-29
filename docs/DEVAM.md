@@ -6,12 +6,9 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-30 · **Canlı:** `c317eb0` dahil evet (4c düzeltmesi).
-Bölüm 4b push edildi, DEPLOY BEKLİYOR — MIGRATION VAR
-(`20260930150000_kitle_ozel_kitleler`). Deploy sonrası:
-`pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler golf --ozel-tara`
-(salt okunur; ilk koşu Çiftçi-2026'da sıfır kitle buldu, alan biçimi hâlâ
-doğrulanmadı — tarama kitlesi olan hesabı arıyor).
+**Son güncelleme:** 2026-09-29 (oturum sonu) · **Canlı:** `a2aa674` dahil
+evet — Bölüm 4a/4b/4c ve ölçüm betiği deploy edildi. Özel kitle ve ilgi alanı
+OKUMA yolları canlıda doğrulandı (`meta-ilgi-kontrol`). Bekleyen deploy yok.
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
@@ -62,19 +59,25 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
 ## Sıradaki iş (sırayla)
 
-1. **Google kotası — doğrulama + bir karar.** Deploy'dan SONRAKİ ilk
-   geceden sonra `olcum-google-kota -- --gun=1`: `insights_daily` hesap
-   başına ~1/gün olmalı, `kuyruk_vazgecti` sayısı düşmeli, kota hatası
-   mesajlarında `rateScope=` görünmeli (görünmüyorsa gövde biçimi
-   belgeden farklı — `googleKotaAyrintisi`). Worker log'unda
-   "PLATFORM kotası doldu" satırı gecede bir-iki kez olmalı, yüzlerce değil.
-   Kalan karar: **gün içi metrik 30 dk'da bir** (~4.800 çağrı/gün) —
-   saatliğe inmek ürün kararı, **kullanıcıya soruldu, cevap bekleniyor.**
-2. **Bölüm 4 kalanı:** şablonların Akıllı Boost ön ayarına ve uzman moda
-   bağlanması; çok hesaplı workspace'te kitle seçicinin hesap seçmesi. Sonra
-   Bölüm 5 (Koruma kuralları). `--ozel` çıktısı gelmeden özel kitle yolu
-   "doğrulandı" sayılmıyor.
-3. Sonrası `BASE-PLANI.md` sırasıyla: Koruma kuralları, Ölçüm.
+1. **Google kota doğrulaması (yarın 11:00 sonrası):**
+   `pnpm --filter @advetics/api olcum-google-kota -- --gun=1`. Beklenen:
+   `insights_daily` hesap başına ~1/gün, `kuyruk_vazgecti` belirgin az, kota
+   hatası mesajlarında `rateScope=` (yoksa gövde biçimi belgeden farklı →
+   `googleKotaAyrintisi`). Karar bekleyen: gün içi metrik 30 dk'da bir mi,
+   saatlik mi (**kullanıcıya sorulacak, ölçümden sonra**).
+2. **İlgi alanı büyüklüğü dünya geneli** — panel "Golf ~264 milyon kişi"
+   gösteriyor, Türkiye değil. Küçük iş: ya "dünya geneli" diye etiketle ya da
+   seçili konum için `delivery_estimate` çağır (yeni okuma, kota). Önerim
+   önce etiket.
+3. **Bölüm 4 kalanı:** kitle şablonlarını Akıllı Boost ön ayarına ve uzman
+   moda bağlamak; çok hesaplı workspace'te kitle seçicinin hesap seçmesi.
+4. **Bölüm 5 — Koruma kuralları** (`BASE-PLANI.md`).
+5. Açık ayrı iş (öneri kartı açıldı): eski tek reklam yayın yolu
+   (`ad-publisher.service.ts`) özel kategori kısıtını uygulamıyor.
+
+Bölüm 2, 3, 4 ekranları **tarayıcıda açılıp bakılmadı** — bir sonraki oturumun
+başında kullanıcıya Marka sekmesi, Varlıklar, Kitleler ve "Kitleyi tarif et"
+için bir göz attırmak iyi olur.
 
 ## Kullanıcı kararı bekleyen
 
