@@ -1036,6 +1036,15 @@ okunup varsayılmadı — canlıda doğrulandı.
   edilmemişti, (2) kırpma testi kırpmanın OLDUĞUNU değil yalnızca sonucun
   şeklini kontrol ediyordu, (3) ad set adının hiç testi yoktu. Testi yazdıktan
   sonra ilgili satırı boz, düştüğünü gör, geri al.
+- **`packages/shared` KAYNAĞINA YAPILAN MUTASYON HİÇBİR ŞEYİ SINAMAZ —
+  derlemeden.** API ve panel testleri `@advetics/shared`ı derlenmiş
+  `dist`ten okuyor. Bölüm 3b'de yasal uyarı karşılaştırmasının iki
+  mutasyonu (boşluk normalizasyonu, çift eklemeye karşı koruma) yeşil
+  geçti; kod doğruydu, mutasyon `dist`e hiç ulaşmamıştı. Shared'da bir
+  satırı bozarken `npx tsc -p packages/shared/tsconfig.json` ile yeniden
+  derle, testi koş, geri al ve TEKRAR derle. Aynı dersin kardeşi:
+  mutasyon sonrası test SAYISI da okunmalı — sözdizimini bozan bir
+  mutasyon dosyayı yükletmiyor ve kalan testler "geçti" görünüyor.
 - **SABİT UZUNLUKLU DİLİM KOMŞUYU YAKALIYOR.** `indexOf('onDragOver') + 400
   karakter` diliminde `preventDefault` aramak, o çağrıyı SİLDİĞİNDE de
   geçiyordu: pencere komşu işleyicinin (`onDrop`) içindeki aynı çağrıya kadar

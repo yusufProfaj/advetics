@@ -39,6 +39,7 @@ import {
 } from '../ad-builder/goal-mapping';
 import { validateAdvanced } from '../ad-builder/objective-matrix';
 import { DraftTreeService } from './draft-tree.service';
+import { googleUyarisi, yasalUyariEngeli, yasalUyariOku } from '../tenancy/yasal-uyari';
 
 /**
  * Kampanya taslağı ağacını platformda yayınlar.
@@ -212,6 +213,13 @@ export class DraftPublishService {
      * MESAJDA VARYANT NUMARASI VAR: "ana metin boş" tek başına, beş kreatifli
      * bir kampanyada hangisini düzelteceğini söylemiyor.
      */
+    // Zorunlu yasal uyarı — tek kapı `tenancy/yasal-uyari.ts`.
+    const yasalUyari = await yasalUyariOku(this.prisma, ctx, campaign.clientId);
+    if (google) {
+      const g = googleUyarisi(yasalUyari);
+      if (g) warnings.push(g);
+    }
+
     for (const [i, ad] of ads.entries()) {
       /**
        * BOOST REKLAMININ METNİ VE GÖRSELİ BİZDE DEĞİL.
@@ -249,6 +257,10 @@ export class DraftPublishService {
         blockers.push(
           `${etiket}Ana metin boş — reklamın üstünde görünecek yazı olmadan yayınlanamaz.`,
         );
+      }
+      if (!google && packed.primaryText) {
+        const engel = yasalUyariEngeli(packed.primaryText, yasalUyari, etiket);
+        if (engel) blockers.push(engel);
       }
       if (!google && packed.headlines.length === 0) {
         warnings.push(

@@ -64,3 +64,28 @@ describe('bağlantı — saf fonksiyon GERÇEKTEN kullanılıyor', () => {
     expect(SAYFA).toContain("markaSonuc.status === 'rejected' && (");
   });
 });
+
+describe('yasal uyarı ve metin şablonları (Bölüm 3b)', () => {
+  const yorumsuz = (yol: string) =>
+    readFileSync(resolve(__dirname, yol), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const SIHIRBAZ = yorumsuz('simple-builder.tsx');
+  const SAYFA = yorumsuz('../../app/(dashboard)/reklam-olustur/basit/page.tsx');
+
+  it('KRİTİK: kreatife giden metin uyarıyı içeren metin — kutuda yazan değil', () => {
+    expect(SIHIRBAZ).toContain('const gonderilecekMetin = yasalUyariEkle(primaryText.trim(), yasalUyari);');
+    expect(SIHIRBAZ).toContain('primaryText: gonderilecekMetin,');
+    expect(SIHIRBAZ).not.toContain('primaryText: primaryText.trim(),');
+  });
+
+  it('önizleme ve özet YAYINA ÇIKACAK metni gösteriyor', () => {
+    expect(SIHIRBAZ).toMatch(/<Onizleme[\s\S]{0,120}primaryText=\{gonderilecekMetin\}/);
+    expect(SIHIRBAZ).toMatch(/gorselSayisi=\{assetIds\.length\}\s*primaryText=\{gonderilecekMetin\}/);
+  });
+
+  it('şablonlar tek tıkla ana metne ekleniyor; sayfa ikisini de profilden iletiyor', () => {
+    expect(SIHIRBAZ).toContain('metinSablonlari.map((t) => (');
+    expect(SAYFA).toContain("markaSonuc.status === 'fulfilled' ? markaSonuc.value.metinSablonlari : []");
+    expect(SAYFA).toContain("markaSonuc.status === 'fulfilled' ? markaSonuc.value.yasalUyari : null");
+  });
+});
+

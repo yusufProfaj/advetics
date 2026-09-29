@@ -22,6 +22,7 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { yasalUyariEngeli, yasalUyariOku } from '../tenancy/yasal-uyari';
 import type { TxLike } from '../rules/rules.service';
 import { AssetStorageService } from './asset-storage.service';
 import { probeImage } from './image-probe';
@@ -552,6 +553,12 @@ export class AdBuilderService {
 
     if (!draft.primaryText.trim()) {
       blockers.push('Ana metin boş — reklamın üstünde görünecek yazı olmadan yayınlanamaz.');
+    } else {
+      const engel = yasalUyariEngeli(
+        draft.primaryText,
+        await yasalUyariOku(this.prisma, ctx, draft.clientId),
+      );
+      if (engel) blockers.push(engel);
     }
 
     if (draft.goal === 'website' && !draft.linkUrl) {

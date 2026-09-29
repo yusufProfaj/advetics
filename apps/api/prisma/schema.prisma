@@ -555,6 +555,10 @@ model ClientProfile {
   anaAmac          String?  @map("ana_amac") @db.VarChar(20)
   uslup            String?  @db.VarChar(500)
   vaatler          String[] @default([])
+  /// Sık kullanılan cümleler; Reklam Oluştur tek tıkla ekliyor.
+  metinSablonlari  String[] @default([]) @map("metin_sablonlari")
+  /// Tanımlıysa Meta ana metninde ZORUNLU; yayın öncesi kontrol eksikse durduruyor.
+  yasalUyari       String?  @map("yasal_uyari") @db.VarChar(300)
 
   /// "Logo" sekmesi — müşterinin KENDİ marka logosu.
   /// `assets.kind = 'logo'` olan bir varlığa işaret ediyor (Görsel Arşivi'nde

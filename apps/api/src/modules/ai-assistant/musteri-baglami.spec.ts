@@ -24,6 +24,8 @@ const TAM: MusteriBaglami = {
   anaAmac: null,
   uslup: null,
   vaatler: [],
+  metinSablonlari: [],
+  yasalUyari: null,
   hesaplar: [{ id: 'acc-1', platform: 'meta', ad: 'Sabancı Meta', paraBirimi: 'TRY' }],
   sayfalar: [{ id: 'page-1', ad: 'Sabancı İnşaat' }],
 };
@@ -139,6 +141,18 @@ describe('baglamiMetne — yapılandırılmış marka alanları', () => {
     for (const yok of ['Sektör', 'Ana amaç', 'Üslup', 'vaatler', 'Kayıtlı sayfalar', 'kategorileri']) {
       expect(m, yok).not.toContain(yok);
     }
+  });
+
+  it('KRİTİK: yasal uyarı "aynen" talimatıyla, şablonlar öneri olarak giriyor', () => {
+    const m = baglamiMetne({
+      ...YAPILI,
+      yasalUyari: 'Koşullar için bankanıza danışın.',
+      metinSablonlari: ['Hemen arayın'],
+    });
+    expect(m).toContain('ZORUNLU yasal uyarı');
+    expect(m).toContain('kelimesi kelimesine');
+    expect(m).toContain('"Koşullar için bankanıza danışın."');
+    expect(m).toContain('· Hemen arayın');
   });
 
   it('marka adı workspace adıyla aynıysa TEKRAR yazılmıyor', () => {

@@ -83,6 +83,8 @@ describe('get', () => {
       anaAmac: null,
       uslup: null,
       vaatler: [],
+      metinSablonlari: [],
+      yasalUyari: null,
       updatedAt: '',
     });
   });
@@ -232,6 +234,8 @@ describe('yapılandırılmış marka alanları', () => {
         anaAmac: 'whatsapp',
         uslup: 'Sıcak',
         vaatler: ['Denize 5 dakika'],
+        metinSablonlari: ['Hemen arayın'],
+        yasalUyari: 'Koşullar geçerlidir.',
       },
       {},
     );
@@ -244,6 +248,8 @@ describe('yapılandırılmış marka alanları', () => {
       anaAmac: 'whatsapp',
       uslup: 'Sıcak',
       vaatler: ['Denize 5 dakika'],
+      metinSablonlari: ['Hemen arayın'],
+      yasalUyari: 'Koşullar geçerlidir.',
     });
   });
 

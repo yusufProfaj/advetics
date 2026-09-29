@@ -674,6 +674,8 @@ const PROFIL_KOLONLARI: Record<string, [string, string]> = {
   anaAmac: ['ana_amac', ''],
   uslup: ['uslup', ''],
   vaatler: ['vaatler', '::text[]'],
+  metinSablonlari: ['metin_sablonlari', '::text[]'],
+  yasalUyari: ['yasal_uyari', ''],
 };
 const PROFIL_SECIM = `id, org_id, created_at, updated_at, ${Object.values(PROFIL_KOLONLARI)
   .map(([k]) => k)

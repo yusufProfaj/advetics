@@ -765,6 +765,28 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — Marka Merkezi, Bölüm 3b: metin şablonları ve zorunlu yasal uyarı
+
+Migration `20260929180000_metin_sablonlari`: `client_profiles.metin_sablonlari`
+(TEXT[]) ve `yasal_uyari` (VARCHAR 300). İkisi de Marka sekmesinde.
+
+- **Yasal uyarı tek kapıdan denetleniyor** (`tenancy/yasal-uyari.ts`): taslak
+  ağacının yayın öncesi kontrolü (Hızlı Reklam, uzman, AI asistan) ve eski
+  tek reklam taslağı. Meta ana metninde yoksa yayın DURUYOR. Karşılaştırma
+  paylaşılan `yasalUyariVar` (boşluk/harf duyarsız, kelime duyarlı); ekran ile
+  sunucu aynı fonksiyon.
+- **Hızlı Reklam uyarıyı kutuya YAZMIYOR, gönderirken ekliyor**
+  (`yasalUyariEkle`): kutuda dursaydı kullanıcı ya da "AI ile yaz" onu
+  silebilirdi. Önizleme ve özet gönderilecek metni gösteriyor.
+- **Google'da denetlenmiyor ve bu SÖYLENİYOR:** arama reklamında ana metin
+  yok, açıklama 90 karakter; kontrol uyarı düşüyor, bir alana tahminle yazmıyor.
+- AI bağlamı: uyarı "kelimesi kelimesine sona ekle", şablonlar öneri.
+- Metin şablonları Hızlı Reklam'da ana metnin altında tek tıkla ekleniyor.
+- Mutasyon: API beş, panel bir. İkisi ilk denemede boş çıktı çünkü
+  `packages/shared` kaynağı bozulmuş ama `dist` derlenmemişti; kural
+  CLAUDE.md'ye yazıldı.
+- **Tarayıcıda açılıp bakılmadı.**
+
 ### 2026-09-29 — Marka Merkezi, Bölüm 3a: varlık ekranları menüden indi
 
 Görsel Arşivi, Kreatifler ve Formlar menüde ayrı satır değil; Marka

@@ -124,6 +124,12 @@ satırları.
   tanımlıysa Reklam Oluştur metne ekliyor ve eksikse yayından ÖNCE
   söylüyor, platformun reddinden sonra değil.
 
+**UYGULANDI (2026-09-29, Bölüm 3a + 3b).** Üç ekran Marka Merkezi'nde
+"Varlıklar" bölümünde, menüden kalktı. Metin şablonları ve yasal uyarı
+Marka sekmesinde; uyarı yayın öncesi kontrolde ENGEL (yalnızca Meta ana
+metni; Google'da uyarı olarak söyleniyor). **Marka renkleri kullanıcı
+kararıyla EKLENMEDİ:** okuyacak bir özellik yok. **Bölüm 3 tamam.**
+
 ## Bölüm sırası
 
 Sıra bağımlılığa göre: her bölüm bir öncekinin verisini kullanıyor.

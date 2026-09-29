@@ -157,6 +157,40 @@ describe('kontrol', () => {
     expect(check.blockers.join(' ')).toContain('Ana metin boş');
   });
 
+  describe('ZORUNLU YASAL UYARI (Marka Merkezi)', () => {
+    const UYARI = 'Konut kredisi kampanya koşulları için bankanıza danışın.';
+    const profil = (uyari: string) =>
+      h.q(
+        `INSERT INTO client_profiles (id, org_id, client_id, yasal_uyari, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [IDS.org, IDS.client, uyari],
+      );
+
+    it('KRİTİK: tanımlı uyarı ana metinde yoksa yayın DURUYOR — AI asistanın taslağı dahil', async () => {
+      await profil(UYARI);
+      const created = await tree.createFromSimple(CTX, input());
+      const check = await svc.check(CTX, created.campaigns[0]!.id);
+      expect(check.ok).toBe(false);
+      expect(check.blockers.join(' ')).toContain('Zorunlu yasal uyarı ana metinde yok');
+    });
+
+    it('uyarı metindeyse (boşluk ve harf farkı önemsiz) engel yok', async () => {
+      await profil(UYARI);
+      await h.q(`UPDATE ad_creatives SET texts = jsonb_set(texts, '{primaryText}', to_jsonb($2::text)) WHERE id = $1`, [
+        CREATIVE,
+        `Yaz indirimi başladı\n\nKONUT kredisi kampanya   koşulları için bankanıza danışın.`,
+      ]);
+      const created = await tree.createFromSimple(CTX, input());
+      const check = await svc.check(CTX, created.campaigns[0]!.id);
+      expect(check.blockers).toEqual([]);
+    });
+
+    it('uyarı tanımlı değilse zorunluluk yok', async () => {
+      const created = await tree.createFromSimple(CTX, input());
+      expect((await svc.check(CTX, created.campaigns[0]!.id)).blockers).toEqual([]);
+    });
+  });
+
   it('yayınlanmış kampanya tekrar yayınlanamıyor', async () => {
     const created = await tree.createFromSimple(CTX, input());
     await svc.publish(CTX, created.campaigns[0]!.id);

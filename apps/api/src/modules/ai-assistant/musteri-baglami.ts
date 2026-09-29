@@ -45,6 +45,8 @@ export interface MusteriBaglami {
   anaAmac: CampaignGoal | null;
   uslup: string | null;
   vaatler: string[];
+  metinSablonlari: string[];
+  yasalUyari: string | null;
   hesaplar: Array<{ id: string; platform: string; ad: string; paraBirimi: string }>;
   sayfalar: Array<{ id: string; ad: string }>;
 }
@@ -93,6 +95,8 @@ export async function musteriBaglamiKur(
     anaAmac: profil?.anaAmac ?? null,
     uslup: profil?.uslup ?? null,
     vaatler: profil?.vaatler ?? [],
+    metinSablonlari: profil?.metinSablonlari ?? [],
+    yasalUyari: profil?.yasalUyari ?? null,
     hesaplar: conns.flatMap((c) =>
       c.adAccounts.map((a) => ({
         id: a.id,
@@ -175,6 +179,20 @@ bul ve kimliğini tool çağrılarında kullan.`;
     for (const v of b.vaatler) satirlar.push(`    · ${v}`);
   }
   if (b.markaBilgileri) satirlar.push(`- Marka bilgileri/öncelikleri: ${b.markaBilgileri}`);
+  if (b.metinSablonlari.length > 0) {
+    satirlar.push('- Markanın sık kullandığı cümleler (uygunsa bunları kullan):');
+    for (const t of b.metinSablonlari) satirlar.push(`    · ${t}`);
+  }
+  /*
+   * YASAL UYARI ZORUNLU VE AYNEN. Yayın öncesi kontrol, Meta ana metninde
+   * bu cümle yoksa yayını DURDURUYOR; modelin onu yeniden yazması (kısaltma,
+   * eş anlamlı) kontrolü geçemez.
+   */
+  if (b.yasalUyari) {
+    satirlar.push(
+      `- ZORUNLU yasal uyarı — Meta ana metninin (primaryText) SONUNA kelimesi kelimesine ekle, değiştirme: "${b.yasalUyari}"`,
+    );
+  }
 
   return `## Seçili müşteri — BU BİLGİLER ZATEN ELİNDE, SORMA
 

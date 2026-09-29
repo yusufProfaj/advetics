@@ -16,7 +16,38 @@ export const MARKA_SINIRLARI = {
   kategori: { adet: 10, uzunluk: 80 },
   vaat: { adet: 8, uzunluk: 200 },
   sayfa: { adet: 20, ad: 60, url: 500 },
+  sablon: { adet: 15, uzunluk: 300 },
+  yasalUyari: 300,
 } as const;
+
+/**
+ * ═══ ZORUNLU YASAL UYARI — METİNDE Mİ? TEK TANIM ═══
+ *
+ * Hem Hızlı Reklam (oluşturmadan önce) hem sunucunun yayın öncesi kontrolü
+ * (bütün yollar: Hızlı Reklam, uzman, AI asistan) bu fonksiyonu çağırıyor.
+ * İki ayrı karşılaştırma olsaydı biri boşluğa duyarlı, öbürü değil olurdu:
+ * ekran "tamam" der, yayın "eksik" diye durur.
+ *
+ * BOŞLUK VE BÜYÜK/KÜÇÜK HARF DUYARSIZ: kullanıcı uyarıyı satır sonuyla ya
+ * da çift boşlukla yazmış olabilir; anlam aynı. Kelimeler DUYARLI: uyarının
+ * bir kelimesini değiştirmek artık o uyarı değil.
+ */
+function yasalNormal(m: string): string {
+  return m.replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr');
+}
+
+export function yasalUyariVar(metin: string | null | undefined, uyari: string | null | undefined): boolean {
+  const u = uyari ? yasalNormal(uyari) : '';
+  if (!u) return true; // tanımlı uyarı yoksa zorunluluk da yok
+  return yasalNormal(metin ?? '').includes(u);
+}
+
+/** Uyarı metinde yoksa AYRI bir paragraf olarak sona ekler; varsa metne dokunmaz. */
+export function yasalUyariEkle(metin: string, uyari: string | null | undefined): string {
+  if (!uyari?.trim() || yasalUyariVar(metin, uyari)) return metin;
+  const govde = metin.trimEnd();
+  return govde ? `${govde}\n\n${uyari.trim()}` : uyari.trim();
+}
 
 /**
  * Sık kullanılan sayfa. Reklam Oluştur hedef adresi bu listeden seçiyor;
@@ -104,6 +135,8 @@ export const upsertClientProfileSchema = z.object({
   anaAmac: z.enum(CAMPAIGN_GOALS).nullable().optional(),
   uslup: z.string().trim().max(MARKA_SINIRLARI.uslup).nullable().optional(),
   vaatler: kisaListe(MARKA_SINIRLARI.vaat, 'vaat').optional(),
+  metinSablonlari: kisaListe(MARKA_SINIRLARI.sablon, 'şablon').optional(),
+  yasalUyari: z.string().trim().max(MARKA_SINIRLARI.yasalUyari).nullable().optional(),
 });
 
 export type UpsertClientProfileInput = z.infer<typeof upsertClientProfileSchema>;
@@ -148,5 +181,7 @@ export interface ClientProfileRecord {
   anaAmac: CampaignGoal | null;
   uslup: string | null;
   vaatler: string[];
+  metinSablonlari: string[];
+  yasalUyari: string | null;
   updatedAt: string;
 }

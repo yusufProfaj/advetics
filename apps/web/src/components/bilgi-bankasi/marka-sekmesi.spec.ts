@@ -55,4 +55,12 @@ describe('Marka sekmesi', () => {
     expect(K).toContain('etiket="Ek notlar"');
     expect(govde('kaydet')).toContain('markaBilgileri: form.markaBilgileri.trim() || null');
   });
+
+  it('metin şablonları ve yasal uyarı kaydediliyor, sınırlar paylaşılan sabitten', () => {
+    const g = govde('kaydet');
+    expect(g).toContain('metinSablonlari: form.metinSablonlari,');
+    expect(g).toContain('yasalUyari: form.yasalUyari.trim() || null,');
+    expect(K).toContain('sinir={MARKA_SINIRLARI.sablon}');
+    expect(K).toContain('maxLength={MARKA_SINIRLARI.yasalUyari}');
+  });
 });

@@ -14,6 +14,7 @@ import {
   type DraftGroupRecord,
   type PublishCheck,
   type SikSayfa,
+  yasalUyariEkle,
 } from '@advetics/shared';
 import { platformKisaAdi, videoMu, videoOraniUygun } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
@@ -78,6 +79,8 @@ export function SimpleAdBuilder({
   clientWebsite,
   anaAmac,
   sikSayfalar,
+  metinSablonlari,
+  yasalUyari,
 }: {
   clientId: string;
   accounts: Array<{ id: string; name: string; currency: string }>;
@@ -90,6 +93,10 @@ export function SimpleAdBuilder({
   anaAmac: CampaignGoal | null;
   /** Marka Merkezi'ndeki sık kullanılan sayfalar — hedef adres buradan seçiliyor. */
   sikSayfalar: SikSayfa[];
+  /** Marka Merkezi'ndeki metin şablonları — tek tıkla ana metne ekleniyor. */
+  metinSablonlari: string[];
+  /** Tanımlıysa ana metnin sonuna ekleniyor; sunucu da yayından önce arıyor. */
+  yasalUyari: string | null;
 }) {
   const router = useRouter();
 
@@ -130,6 +137,13 @@ export function SimpleAdBuilder({
   const [adAccountId, setAdAccountId] = useState(accounts[0]?.id ?? '');
   const [pageId, setPageId] = useState(pages[0]?.id ?? '');
   const [primaryText, setPrimaryText] = useState('');
+  /*
+   * GÖNDERİLEN METİN = YAZILAN + ZORUNLU UYARI. Uyarı kutuya yazılmıyor,
+   * gönderilirken ekleniyor: kutuda dursaydı kullanıcı ya da "AI ile yaz"
+   * onu silebilirdi ve reklam yayın öncesi kontrolde dururdu. Önizleme ve
+   * özet de bu metni gösteriyor — ekranda görülen, yayına çıkanla aynı.
+   */
+  const gonderilecekMetin = yasalUyariEkle(primaryText.trim(), yasalUyari);
   const [headline, setHeadline] = useState('');
   const [description, setDescription] = useState('');
   const [linkUrl, setLinkUrl] = useState(baslangic.linkUrl);
@@ -381,7 +395,7 @@ export function SimpleAdBuilder({
           clientId,
           name: name.trim(),
           texts: {
-            primaryText: primaryText.trim(),
+            primaryText: gonderilecekMetin,
             headlines: headline.trim() ? [headline.trim()] : [],
             longHeadlines: [],
             descriptions: description.trim() ? [description.trim()] : [],
@@ -858,6 +872,30 @@ export function SimpleAdBuilder({
                 limit={125}
                 rows={4}
               />
+              {metinSablonlari.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] text-ink-muted">Şablon ekle:</span>
+                  {metinSablonlari.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() =>
+                        setPrimaryText((cur) => (cur.trim() ? `${cur.trimEnd()}\n${t}` : t))
+                      }
+                      className="max-w-full truncate rounded-full border border-line px-2.5 py-1 text-[11px] text-ink hover:bg-surface-sunken"
+                      title={t}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {yasalUyari && (
+                <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-ink-muted">
+                  Metnin sonuna eklenecek zorunlu uyarı (Marka Merkezi):{' '}
+                  <span className="text-ink">{yasalUyari}</span>
+                </p>
+              )}
               <MetinAlani
                 label="Başlık"
                 ipucu="Görselin altında kalın yazıyla görünür."
@@ -876,7 +914,7 @@ export function SimpleAdBuilder({
 
             <Onizleme
               pageName={pages.find((p) => p.id === pageId)?.name ?? 'Sayfan'}
-              primaryText={primaryText}
+              primaryText={gonderilecekMetin}
               headline={headline}
               description={description}
               goal={goal}
@@ -973,7 +1011,7 @@ export function SimpleAdBuilder({
           adAccount={accounts.find((a) => a.id === adAccountId)?.name ?? '—'}
           page={pages.find((p) => p.id === pageId)?.name ?? '—'}
           gorselSayisi={assetIds.length}
-          primaryText={primaryText}
+          primaryText={gonderilecekMetin}
           headline={headline}
           dailyBudget={dailyBudget}
           currency={currency}

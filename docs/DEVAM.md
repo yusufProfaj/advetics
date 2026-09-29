@@ -6,9 +6,9 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-29 · **Canlı:** `f7a408d` dahil evet (Google
-platform kesicisi). Bölüm 2 (2a + 2b) push edildi, DEPLOY BEKLİYOR —
-MIGRATION VAR (`20260929120000_marka_alanlari`).
+**Son güncelleme:** 2026-09-29 · **Canlı:** `e30bae0` dahil evet (Bölüm 2).
+Bölüm 3 (3a + 3b) push edildi, DEPLOY BEKLİYOR — MIGRATION VAR
+(`20260929180000_metin_sablonlari`).
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
@@ -40,7 +40,11 @@ gösteremez ve kayar):
 - **Bölüm 2 bitti:** Marka sekmesi yapılandırılmış alanlarla (sektör,
   kategoriler, sık sayfalar, ana amaç, üslup, vaatler); AI asistan, reklam
   metni ve Hızlı Reklam okuyor (amaç seçili açılıyor, adres listeden).
-- Testler: API 3.567, panel 1.121, yeşil.
+- **Bölüm 3 bitti:** Görsel Arşivi, Kreatifler, Formlar Marka Merkezi'nde
+  "Varlıklar"da (menüden kalktı). Metin şablonları ve zorunlu yasal uyarı:
+  uyarı Meta ana metninde yoksa yayın duruyor. Marka renkleri eklenmedi
+  (kullanıcı kararı: okuyan özellik yok).
+- Testler: API ve panel yeşil (sayılar son commit mesajında).
 
 Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
@@ -54,11 +58,11 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
    "PLATFORM kotası doldu" satırı gecede bir-iki kez olmalı, yüzlerce değil.
    Kalan karar: **gün içi metrik 30 dk'da bir** (~4.800 çağrı/gün) —
    saatliğe inmek ürün kararı, **kullanıcıya soruldu, cevap bekleniyor.**
-2. **Bölüm 3 — Varlıklar** (`BASE-PLANI.md`): menü birleşmesi, marka
-   renkleri, metin şablonları, yasal uyarı kontrolü. Başlamadan önce
-   deploy sonrası Marka sekmesine ve Hızlı Reklam'a tarayıcıdan bir göz
-   (ikisi de tarayıcıda açılıp bakılmadı).
-3. Sonrası `BASE-PLANI.md` sırasıyla: Kitleler, Koruma kuralları, Ölçüm.
+2. **Bölüm 4 — Kitleler** (`BASE-PLANI.md`): şablonlar, AI önerisi + onay,
+   mevcut kitleleri okuma. Bölüm 2 ve 3 ekranları tarayıcıda açılıp
+   bakılmadı — deploy sonrası Marka sekmesi, Varlıklar bölümü ve Hızlı
+   Reklam'daki yasal uyarı satırına bir göz.
+3. Sonrası `BASE-PLANI.md` sırasıyla: Koruma kuralları, Ölçüm.
 
 ## Kullanıcı kararı bekleyen
 

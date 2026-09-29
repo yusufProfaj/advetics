@@ -159,7 +159,7 @@ export default async function SimpleAdPage({
         <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-strong ring-1 ring-inset ring-warn/30">
           Marka bilgileri okunamadı (
           {markaSonuc.reason instanceof ApiRequestError ? markaSonuc.reason.message : 'sunucuya ulaşılamadı'}
-          ). Amaç ve adres Marka Merkezi’nden gelmedi; elle seç.
+          ). Amaç, adres ve yasal uyarı Marka Merkezi’nden gelmedi; elle seç. Tanımlı bir yasal uyarı varsa yayın öncesi kontrol yine arar.
         </p>
       )}
 
@@ -177,6 +177,8 @@ export default async function SimpleAdPage({
           }
           anaAmac={markaSonuc.status === 'fulfilled' ? markaSonuc.value.anaAmac : null}
           sikSayfalar={markaSonuc.status === 'fulfilled' ? markaSonuc.value.sikSayfalar : []}
+          metinSablonlari={markaSonuc.status === 'fulfilled' ? markaSonuc.value.metinSablonlari : []}
+          yasalUyari={markaSonuc.status === 'fulfilled' ? markaSonuc.value.yasalUyari : null}
         />
       ) : (
         <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">

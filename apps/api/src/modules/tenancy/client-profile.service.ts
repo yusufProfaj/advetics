@@ -58,6 +58,8 @@ export class ClientProfileService {
       anaAmac: null,
       uslup: null,
       vaatler: [],
+      metinSablonlari: [],
+      yasalUyari: null,
       updatedAt: '',
     };
   }
@@ -121,6 +123,8 @@ export class ClientProfileService {
         ...(input.anaAmac !== undefined ? { anaAmac: input.anaAmac } : {}),
         ...(input.uslup !== undefined ? { uslup: input.uslup || null } : {}),
         ...(input.vaatler !== undefined ? { vaatler: input.vaatler } : {}),
+        ...(input.metinSablonlari !== undefined ? { metinSablonlari: input.metinSablonlari } : {}),
+        ...(input.yasalUyari !== undefined ? { yasalUyari: input.yasalUyari || null } : {}),
       };
 
       const saved = existing
@@ -190,6 +194,8 @@ function toRecord(row: ClientProfile): ClientProfileRecord {
     anaAmac: amac(row.anaAmac),
     uslup: row.uslup,
     vaatler: row.vaatler,
+    metinSablonlari: row.metinSablonlari,
+    yasalUyari: row.yasalUyari,
     updatedAt: row.updatedAt.toISOString(),
   };
 }

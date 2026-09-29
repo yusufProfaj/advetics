@@ -48,6 +48,8 @@ interface Form {
   anaAmac: CampaignGoal | null;
   uslup: string;
   vaatler: string[];
+  metinSablonlari: string[];
+  yasalUyari: string;
   markaBilgileri: string;
 }
 
@@ -59,6 +61,8 @@ const BOS: Form = {
   anaAmac: null,
   uslup: '',
   vaatler: [],
+  metinSablonlari: [],
+  yasalUyari: '',
   markaBilgileri: '',
 };
 
@@ -86,6 +90,8 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
           anaAmac: p.anaAmac,
           uslup: p.uslup ?? '',
           vaatler: p.vaatler,
+          metinSablonlari: p.metinSablonlari,
+          yasalUyari: p.yasalUyari ?? '',
           markaBilgileri: p.markaBilgileri ?? '',
         });
         setDurum({ tur: 'hazir' });
@@ -121,6 +127,8 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
       anaAmac: form.anaAmac,
       uslup: form.uslup.trim() || null,
       vaatler: form.vaatler,
+      metinSablonlari: form.metinSablonlari,
+      yasalUyari: form.yasalUyari.trim() || null,
       markaBilgileri: form.markaBilgileri.trim() || null,
     };
     // Sunucuyla AYNI şema: burada geçen gövde orada reddedilmez.
@@ -236,6 +244,29 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
         kapali={kapali}
         degis={(v) => degis('vaatler', v)}
       />
+
+      <ListeAlani
+        etiket="Metin şablonları"
+        ipucu="Sık kullandığın cümleler. Reklam Oluştur’da tek tıkla metne eklenir. Örn. Hemen arayın, ücretsiz keşif."
+        degerler={form.metinSablonlari}
+        sinir={MARKA_SINIRLARI.sablon}
+        kapali={kapali}
+        degis={(v) => degis('metinSablonlari', v)}
+      />
+
+      <Alan
+        etiket="Zorunlu yasal uyarı"
+        ipucu="Doluysa her Meta reklamının ana metninin sonuna eklenir ve metinde yoksa reklam yayınlanmaz. Örn. sağlık, finans, konut sektörlerindeki zorunlu cümle."
+      >
+        <textarea
+          value={form.yasalUyari}
+          onChange={(e) => degis('yasalUyari', e.target.value)}
+          rows={2}
+          maxLength={MARKA_SINIRLARI.yasalUyari}
+          disabled={kapali}
+          className={girdi}
+        />
+      </Alan>
 
       <Alan etiket="Ek notlar" ipucu="Kaçınılacak ifadeler, dikkat edilecek şeyler.">
         <textarea
