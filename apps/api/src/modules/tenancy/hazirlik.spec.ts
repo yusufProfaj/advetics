@@ -31,7 +31,17 @@ const SAGLAM: HazirlikHesabi = {
 const TAM: HazirlikGirdisi = {
   hesaplar: [SAGLAM],
   sosyalKanalSayisi: 1,
-  profil: { markaBilgileri: 'm', hedefKitle: 'h', bilgiBankasi: 'b', logoAssetId: 'x' },
+  profil: {
+    markaBilgileri: 'm',
+    hedefKitle: 'h',
+    bilgiBankasi: 'b',
+    logoAssetId: 'x',
+    sektor: 's',
+    anaAmac: 'form',
+    kategoriSayisi: 1,
+    vaatSayisi: 1,
+    sayfaSayisi: 0,
+  },
   buAyButceVar: true,
 };
 
@@ -90,11 +100,23 @@ describe('karar', () => {
   });
 
   it('marka bilgisinde HANGİ alanın boş olduğu yazıyor', () => {
-    const g = { ...TAM, profil: { ...TAM.profil!, hedefKitle: '   ', markaBilgileri: null } };
+    const g = { ...TAM, profil: { ...TAM.profil!, hedefKitle: '   ', kategoriSayisi: 0 } };
     const m = madde(g, 'marka_bilgisi');
     expect(m.durum).toBe('eksik');
-    expect(m.aciklama).toContain('Boş: Hedef kitle, Marka bilgileri.');
-    expect(m.aciklama).not.toContain('Bilgi bankası,');
+    expect(m.aciklama).toContain('Boş: Ürün/hizmet kategorileri, Hedef kitle.');
+    expect(m.aciklama).not.toContain('Sektör');
+  });
+
+  it('serbest metin alanları ("Ek notlar") boşsa EKSİK SAYILMIYOR', () => {
+    const g = { ...TAM, profil: { ...TAM.profil!, markaBilgileri: null, bilgiBankasi: null } };
+    expect(madde(g, 'marka_bilgisi').durum).toBe('tamam');
+  });
+
+  it('ana amaç web sitesi ama sık sayfa yoksa eksik — adres yine elle yazılırdı', () => {
+    const g = { ...TAM, profil: { ...TAM.profil!, anaAmac: 'website', sayfaSayisi: 0 } };
+    expect(madde(g, 'marka_bilgisi').aciklama).toContain('Sık kullanılan sayfalar');
+    const tamam = { ...TAM, profil: { ...TAM.profil!, anaAmac: 'website', sayfaSayisi: 2 } };
+    expect(madde(tamam, 'marka_bilgisi').durum).toBe('tamam');
   });
 
   it('KRİTİK: bütçeyi göremeyen kişiye "bütçe yok" DENMİYOR', () => {
@@ -178,8 +200,9 @@ describe('servis', () => {
       [IDS.adAccount],
     );
     await h.q(
-      `INSERT INTO client_profiles (id, org_id, client_id, hedef_kitle, marka_bilgileri, bilgi_bankasi, updated_at)
-       VALUES (gen_random_uuid(), $1, $2, 'h', 'm', 'b', now())`,
+      `INSERT INTO client_profiles (id, org_id, client_id, hedef_kitle, marka_bilgileri, bilgi_bankasi,
+                                    sektor, ana_amac, urun_kategorileri, vaatler, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, 'h', 'm', 'b', 'Otel', 'form', '{Konaklama}', '{Deniz}', now())`,
       [IDS.org, IDS.client],
     );
     await h.q(

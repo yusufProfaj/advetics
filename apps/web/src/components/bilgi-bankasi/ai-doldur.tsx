@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { BilgiBankasiTaslak } from '@advetics/shared';
+import { MARKA_SINIRLARI, upsertClientProfileSchema, type BilgiBankasiTaslak } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 
 /**
@@ -60,18 +60,28 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
     setBusy(true);
     setHata(null);
     try {
-      await apiFetch('/client-profile', {
-        method: 'POST',
-        body: JSON.stringify({
-          clientId,
-          // BOŞ BÖLÜM YAZILMIYOR: model üç bölümden ikisini üretmiş olabilir
-          // ve boş dizeyi kaydetmek, kullanıcının elle yazdığı metni silmek
-          // olurdu.
-          ...(taslak.bilgiBankasi ? { bilgiBankasi: taslak.bilgiBankasi } : {}),
-          ...(taslak.hedefKitle ? { hedefKitle: taslak.hedefKitle } : {}),
-          ...(taslak.markaBilgileri ? { markaBilgileri: taslak.markaBilgileri } : {}),
-        }),
-      });
+      const govde = {
+        clientId,
+        // BOŞ BÖLÜM YAZILMIYOR: model bölümlerin bir kısmını üretmiş olabilir
+        // ve boş değeri kaydetmek, kullanıcının elle yazdığını silmek olurdu.
+        // Listeler için de aynı: boş liste "temizle" demek.
+        ...(taslak.bilgiBankasi.trim() ? { bilgiBankasi: taslak.bilgiBankasi } : {}),
+        ...(taslak.hedefKitle.trim() ? { hedefKitle: taslak.hedefKitle } : {}),
+        ...(taslak.markaBilgileri.trim() ? { markaBilgileri: taslak.markaBilgileri } : {}),
+        ...(taslak.markaAdi.trim() ? { markaAdi: taslak.markaAdi } : {}),
+        ...(taslak.sektor.trim() ? { sektor: taslak.sektor } : {}),
+        ...(taslak.uslup.trim() ? { uslup: taslak.uslup } : {}),
+        ...(taslak.urunKategorileri.length ? { urunKategorileri: taslak.urunKategorileri } : {}),
+        ...(taslak.vaatler.length ? { vaatler: taslak.vaatler } : {}),
+      };
+      // Kullanıcı öneriyi düzenledi: sunucunun kuralını burada da uygula,
+      // hata kaydederken görünsün.
+      const kontrol = upsertClientProfileSchema.safeParse(govde);
+      if (!kontrol.success) {
+        setHata(kontrol.error.issues[0]?.message ?? 'Alanlardan biri geçersiz.');
+        return;
+      }
+      await apiFetch('/client-profile', { method: 'POST', body: JSON.stringify(govde) });
       setKaydedildi(true);
       setTaslak(null);
       // Sekmeler kendi verilerini kendileri çekiyor; sayfayı tazelemek
@@ -84,8 +94,17 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
     }
   }
 
-  function alanDegistir(alan: keyof BilgiBankasiTaslak, deger: string): void {
+  function alanDegistir(
+    alan: 'bilgiBankasi' | 'hedefKitle' | 'markaBilgileri' | 'markaAdi' | 'sektor' | 'uslup',
+    deger: string,
+  ): void {
     setTaslak((t) => (t ? { ...t, [alan]: deger } : t));
+  }
+
+  /** Liste alanları satır satır düzenleniyor: bir satır = bir öğe. */
+  function listeDegistir(alan: 'urunKategorileri' | 'vaatler', metin: string): void {
+    const ogeler = metin.split('\n').map((x) => x.trim()).filter(Boolean);
+    setTaslak((t) => (t ? { ...t, [alan]: ogeler } : t));
   }
 
   return (
@@ -95,7 +114,7 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
           <h2 className="text-sm font-semibold text-ink">Yapay zekâ ile doldur</h2>
           <p className="mt-0.5 text-xs text-ink-muted">
             Workspace’in site adresini okuyup bilgi bankası, hedef kitle ve marka
-            bilgilerini reklam stratejisine göre yazar. Kaydetmeden önce
+            alanlarını reklam stratejisine göre önerir. Kaydetmeden önce
             düzenleyebilirsin.
           </p>
         </div>
@@ -134,7 +153,7 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
             [
               ['bilgiBankasi', 'Bilgi Bankası'],
               ['hedefKitle', 'Hedef Kitle'],
-              ['markaBilgileri', 'Marka Bilgileri'],
+              ['markaBilgileri', 'Marka: ek notlar'],
             ] as const
           ).map(([alan, etiket]) => (
             <label key={alan} className="block">
@@ -155,6 +174,55 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
             </label>
           ))}
 
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                ['markaAdi', 'Marka adı', MARKA_SINIRLARI.markaAdi],
+                ['sektor', 'Sektör', MARKA_SINIRLARI.sektor],
+                ['uslup', 'Üslup', MARKA_SINIRLARI.uslup],
+              ] as const
+            ).map(([alan, etiket, sinir]) => (
+              <label key={alan} className="block">
+                <span className="text-[11px] font-medium text-ink">{etiket}</span>
+                <input
+                  value={taslak[alan]}
+                  onChange={(e) => alanDegistir(alan, e.target.value)}
+                  maxLength={sinir}
+                  placeholder="Sitede bulunamadı; elle yazabilirsin."
+                  className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
+                />
+              </label>
+            ))}
+          </div>
+          {(
+            [
+              ['urunKategorileri', 'Ürün ve hizmet kategorileri', MARKA_SINIRLARI.kategori.adet],
+              ['vaatler', 'Öne çıkan vaatler', MARKA_SINIRLARI.vaat.adet],
+            ] as const
+          ).map(([alan, etiket, adet]) => (
+            <label key={alan} className="block">
+              <span className="text-[11px] font-medium text-ink">
+                {etiket} (her satır bir öğe, en fazla {adet})
+              </span>
+              {/*
+                `defaultValue` + `onBlur`: kontrollü bir textarea'da satır
+                satır ayırıp birleştirmek, boş satır yazmaya çalışan
+                kullanıcının Enter'ını yutardı.
+              */}
+              <textarea
+                defaultValue={taslak[alan].join('\n')}
+                onBlur={(e) => listeDegistir(alan, e.target.value)}
+                rows={Math.max(2, taslak[alan].length)}
+                placeholder="Sitede bulunamadı; elle yazabilirsin."
+                className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
+              />
+            </label>
+          ))}
+          <p className="text-[11px] text-ink-muted">
+            Ana amaç ve sık kullanılan sayfalar önerilmez: ilki senin kararın, ikincisi gerçek adres ister.
+            Marka sekmesinden ekle.
+          </p>
+
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -162,7 +230,7 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
               disabled={busy}
               className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
             >
-              {busy ? 'Kaydediliyor…' : 'Üçünü de kaydet'}
+              {busy ? 'Kaydediliyor…' : 'Kaydet'}
             </button>
             <button
               type="button"
@@ -173,7 +241,7 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
               Vazgeç
             </button>
             <span className="text-[11px] text-ink-muted">
-              Kaydetmek üç sekmedeki metnin üzerine yazar.
+              Dolu gelen alanlar sekmelerdeki değerin üzerine yazar; boş olanlar dokunulmaz.
             </span>
           </div>
         </div>

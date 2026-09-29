@@ -192,7 +192,9 @@ describe('YAPAY ZEKÂ İLE DOLDUR', () => {
      * gösteriliyor, düzenlenebiliyor ve kullanıcı kaydediyor.
      */
     expect(DOLDUR).toContain("'/client-profile/ai-taslak'");
-    expect(DOLDUR).toContain('Üçünü de kaydet');
+    // Kayıt YALNIZCA düğmeden: taslak gelir gelmez yazan bir yol yok.
+    expect(DOLDUR).toContain('onClick={() => void kaydet()}');
+    expect(DOLDUR.match(/void kaydet\(\)/g)?.length).toBe(1);
     expect(DOLDUR).toContain('onChange={(e) => alanDegistir(');
   });
 
@@ -205,7 +207,10 @@ describe('YAPAY ZEKÂ İLE DOLDUR', () => {
   it('KRİTİK: BOŞ BÖLÜM KAYDEDİLMİYOR', () => {
     // Model üç bölümden ikisini üretmiş olabilir; boş dizeyi kaydetmek
     // kullanıcının elle yazdığı metni silmek olurdu.
-    expect(DOLDUR).toContain('...(taslak.bilgiBankasi ? { bilgiBankasi: taslak.bilgiBankasi } : {})');
+    expect(DOLDUR).toContain('...(taslak.bilgiBankasi.trim() ? { bilgiBankasi: taslak.bilgiBankasi } : {})');
+    // Boş liste "temizle" demek: kullanıcının kendi listesi silinmemeli.
+    expect(DOLDUR).toContain('...(taslak.vaatler.length ? { vaatler: taslak.vaatler } : {})');
+    expect(DOLDUR).toContain('...(taslak.urunKategorileri.length ? { urunKategorileri: taslak.urunKategorileri } : {})');
   });
 
   it('KRİTİK: SUNUCUNUN KENDİ CÜMLESİ GÖSTERİLİYOR', () => {

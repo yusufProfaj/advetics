@@ -6,8 +6,8 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-29 · **Canlı:** `6c24976` dahil evet ("dün bir
-kez"). Google platform kesicisi push edildi, DEPLOY BEKLİYOR.
+**Son güncelleme:** 2026-09-29 · **Canlı:** `f7a408d` dahil evet (Google
+platform kesicisi). Bölüm 2a push edildi, DEPLOY BEKLİYOR (migration var).
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
@@ -36,7 +36,9 @@ gösteremez ve kayar):
   hesap başına günde ~11 kez koşuyordu; artık dün bir kez çekiliyor.
   Kota dolunca bütün Google işleri Google'ın söylediği süre kadar bekliyor
   (önce yalnızca çarpan hesap 15 dk duruyordu, 1.521 iş düşmüştü).
-- Testler: API 3.542, panel 1.108, yeşil.
+- **Bölüm 2a:** Marka sekmesi yapılandırılmış alanlarla (sektör, kategoriler,
+  sık sayfalar, ana amaç, üslup, vaatler); AI asistan ve reklam metni okuyor.
+- Testler: API 3.567, panel 1.113, yeşil.
 
 Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
@@ -50,10 +52,11 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
    "PLATFORM kotası doldu" satırı gecede bir-iki kez olmalı, yüzlerce değil.
    Kalan karar: **gün içi metrik 30 dk'da bir** (~4.800 çağrı/gün) —
    saatliğe inmek ürün kararı, **kullanıcıya soruldu, cevap bekleniyor.**
-2. **Bölüm 2 — Marka.** Bilgi bankasındaki üç serbest metin alanı
-   yapılandırılmış alanlara dönüşüyor (sektör, web sitesi + sık sayfalar, ana
-   amaç, üslup, öne çıkan vaatler); Reklam Oluştur ve AI asistan bunları
-   okuyacak. Migration var.
+2. **Bölüm 2b — Reklam Oluştur marka alanlarını okusun.** 2a bitti
+   (alanlar, Marka sekmesi, AI bağlamı; `DURUM.md` 2026-09-29). Kalan:
+   simple-builder ana amacı varsayılan seçsin, hedef adresi sık
+   sayfalardan seçtirsin (bugün `clients.website`i dolduruyor). Marka
+   sekmesi tarayıcıda açılıp bakılmadı — deploy sonrası bir göz.
 3. Sonrası `BASE-PLANI.md` sırasıyla: Varlıklar, Kitleler, Koruma kuralları, Ölçüm.
 
 ## Kullanıcı kararı bekleyen

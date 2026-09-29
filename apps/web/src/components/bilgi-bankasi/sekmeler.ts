@@ -57,7 +57,7 @@ export const SEKMELER = [
   { kod: 'bilgi-bankasi', ad: 'Bilgi Bankası', oku: 'client.read', yaz: 'client.write' },
   { kod: 'butce', ad: 'Bütçe', oku: 'budget.read', yaz: 'budget.write' },
   { kod: 'hedef-kitle', ad: 'Hedef Kitle', oku: 'client.read', yaz: 'client.write' },
-  { kod: 'marka', ad: 'Marka Bilgileri', oku: 'client.read', yaz: 'client.write' },
+  { kod: 'marka', ad: 'Marka', oku: 'client.read', yaz: 'client.write' },
   { kod: 'logo', ad: 'Logo', oku: 'bulk.read', yaz: 'bulk.write' },
 ] as const satisfies readonly SekmeTanimi[];
 

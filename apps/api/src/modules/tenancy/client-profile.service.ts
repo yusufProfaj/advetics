@@ -1,6 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import type { ClientProfileRecord, TenantContext, UpsertClientProfileInput } from '@advetics/shared';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma, type ClientProfile } from '@prisma/client';
+import {
+  CAMPAIGN_GOALS,
+  sikSayfaSchema,
+  type CampaignGoal,
+  type ClientProfileRecord,
+  type SikSayfa,
+  type TenantContext,
+  type UpsertClientProfileInput,
+} from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -43,6 +51,13 @@ export class ClientProfileService {
       markaBilgileri: null,
       bilgiBankasi: null,
       logoAssetId: null,
+      markaAdi: null,
+      sektor: null,
+      urunKategorileri: [],
+      sikSayfalar: [],
+      anaAmac: null,
+      uslup: null,
+      vaatler: [],
       updatedAt: '',
     };
   }
@@ -94,6 +109,18 @@ export class ClientProfileService {
         ...(input.markaBilgileri !== undefined ? { markaBilgileri: input.markaBilgileri } : {}),
         ...(input.bilgiBankasi !== undefined ? { bilgiBankasi: input.bilgiBankasi } : {}),
         ...(input.logoAssetId !== undefined ? { logoAssetId: input.logoAssetId } : {}),
+        // GÖNDERİLMEYEN ALAN DOKUNULMADAN KALIYOR: sekmeler profilin farklı
+        // parçalarını ayrı ayrı kaydediyor ve birinin kaydı öbürünü
+        // silmemeli. Boş dizi GÖNDERİLİRSE temizliyor — bu kasıtlı.
+        ...(input.markaAdi !== undefined ? { markaAdi: input.markaAdi || null } : {}),
+        ...(input.sektor !== undefined ? { sektor: input.sektor || null } : {}),
+        ...(input.urunKategorileri !== undefined ? { urunKategorileri: input.urunKategorileri } : {}),
+        ...(input.sikSayfalar !== undefined
+          ? { sikSayfalar: input.sikSayfalar as unknown as Prisma.InputJsonValue }
+          : {}),
+        ...(input.anaAmac !== undefined ? { anaAmac: input.anaAmac } : {}),
+        ...(input.uslup !== undefined ? { uslup: input.uslup || null } : {}),
+        ...(input.vaatler !== undefined ? { vaatler: input.vaatler } : {}),
       };
 
       const saved = existing
@@ -107,20 +134,10 @@ export class ClientProfileService {
         targetType: 'client_profile',
         targetId: saved.id,
         clientId: input.clientId,
-        before: existing
-          ? {
-              hedefKitle: existing.hedefKitle,
-              markaBilgileri: existing.markaBilgileri,
-              bilgiBankasi: existing.bilgiBankasi,
-              logoAssetId: existing.logoAssetId,
-            }
-          : null,
-        after: {
-          hedefKitle: saved.hedefKitle,
-          markaBilgileri: saved.markaBilgileri,
-          bilgiBankasi: saved.bilgiBankasi,
-          logoAssetId: saved.logoAssetId,
-        },
+        // Denetim kaydı kaydın KENDİSİNDEN türüyor: alan listesi elle
+        // yazılırsa yeni alan eklendiğinde izden sessizce düşer.
+        before: existing ? denetimAlanlari(existing) : null,
+        after: denetimAlanlari(saved),
         ...meta,
       });
 
@@ -129,15 +146,36 @@ export class ClientProfileService {
   }
 }
 
-function toRecord(row: {
-  id: string;
-  clientId: string;
-  hedefKitle: string | null;
-  markaBilgileri: string | null;
-  bilgiBankasi: string | null;
-  logoAssetId: string | null;
-  updatedAt: Date;
-}): ClientProfileRecord {
+const logger = new Logger(ClientProfileService.name);
+
+/** Denetim kaydına giren alanlar: satırın tamamı, kimlik ve zaman damgaları hariç. */
+function denetimAlanlari(r: ClientProfile): Prisma.InputJsonObject {
+  const { id: _id, orgId: _o, clientId: _c, createdAt: _cr, updatedAt: _u, ...alanlar } = r;
+  // Kalan alanların hepsi JSON'a sığıyor (metin, dizi, JSONB); tarih yok.
+  return alanlar as Prisma.InputJsonObject;
+}
+
+/**
+ * JSONB'den sayfa listesi. Veritabanı yalnızca "dizi" olduğunu garanti
+ * ediyor (CHECK), öğelerin biçimini değil. Bozuk öğe ATLANIYOR ama SESSİZ
+ * DEĞİL: log'a yazılıyor — bozuk bir öğe yüzünden profilin tamamının
+ * açılmaması, çözdüğünden büyük bir sorun olurdu.
+ */
+function sayfalar(clientId: string, ham: Prisma.JsonValue): SikSayfa[] {
+  if (!Array.isArray(ham)) return [];
+  const iyi: SikSayfa[] = [];
+  for (const o of ham) {
+    const r = sikSayfaSchema.safeParse(o);
+    if (r.success) iyi.push(r.data);
+    else logger.warn(`client_profiles(${clientId}).sik_sayfalar: geçersiz öğe atlandı — ${JSON.stringify(o).slice(0, 200)}`);
+  }
+  return iyi;
+}
+
+const amac = (v: string | null): CampaignGoal | null =>
+  v !== null && (CAMPAIGN_GOALS as readonly string[]).includes(v) ? (v as CampaignGoal) : null;
+
+function toRecord(row: ClientProfile): ClientProfileRecord {
   return {
     id: row.id,
     clientId: row.clientId,
@@ -145,6 +183,13 @@ function toRecord(row: {
     markaBilgileri: row.markaBilgileri,
     bilgiBankasi: row.bilgiBankasi,
     logoAssetId: row.logoAssetId,
+    markaAdi: row.markaAdi,
+    sektor: row.sektor,
+    urunKategorileri: row.urunKategorileri,
+    sikSayfalar: sayfalar(row.clientId, row.sikSayfalar),
+    anaAmac: amac(row.anaAmac),
+    uslup: row.uslup,
+    vaatler: row.vaatler,
     updatedAt: row.updatedAt.toISOString(),
   };
 }

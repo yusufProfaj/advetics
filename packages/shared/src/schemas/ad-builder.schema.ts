@@ -32,6 +32,18 @@ import type { AssetCoverage } from './asset-routing.schema';
 // -----------------------------------------------------------------------------
 
 export const CAMPAIGN_GOALS = ['form', 'whatsapp', 'website'] as const;
+
+/**
+ * Reklam hedef adresi biçimde geçerli mi — TEK TANIM.
+ *
+ * Marka Merkezi'nin "sık kullanılan sayfalar" listesi Reklam Oluştur'un
+ * hedef adresini besliyor. İki ayrı kural olsaydı, listede kabul edilen bir
+ * adres reklam taslağında reddedilirdi (ya da tersi) ve kullanıcı hatayı
+ * kaydettiği yerde değil yayınlarken görürdü.
+ */
+export function hedefAdresiGecerli(url: string): boolean {
+  return /^https?:\/\/.+\..+/i.test(url.trim());
+}
 export type CampaignGoal = (typeof CAMPAIGN_GOALS)[number];
 
 export const GOAL_META: Record<
@@ -253,7 +265,7 @@ export const adDraftInputSchema = z
           path: ['linkUrl'],
           message: 'Siteye trafik için web sitesi adresi gerekiyor',
         });
-      } else if (!/^https?:\/\/.+\..+/i.test(url)) {
+      } else if (!hedefAdresiGecerli(url)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['linkUrl'],

@@ -31,6 +31,11 @@ export interface HazirlikGirdisi {
     hedefKitle: string | null;
     bilgiBankasi: string | null;
     logoAssetId: string | null;
+    sektor: string | null;
+    anaAmac: string | null;
+    kategoriSayisi: number;
+    vaatSayisi: number;
+    sayfaSayisi: number;
   } | null;
   /**
    * `null` = bu kişi bütçeyi OKUYAMIYOR. "Bütçe yok" ile "göremiyorum" aynı
@@ -137,27 +142,41 @@ export function hazirlikMaddeleri(g: HazirlikGirdisi): HazirlikMaddesi[] {
 
   // ─── 3. Marka bilgisi ──────────────────────────────────────────────────
   /*
-   * AI asistan ve reklam metni servisi bu üç alanı okuyor
-   * (`musteri-baglami.ts`, `reklam-metni.service.ts`). Boş alan hata
-   * vermiyor, yalnızca AI'ın markayı tanımadan yazması demek; o yüzden
-   * zorunlu değil ama HANGİSİNİN boş olduğu yazıyor.
+   * YAPILANDIRILMIŞ ALANLARA BAKIYOR, serbest metne değil. Üç serbest metin
+   * alanı dolu olsa bile Reklam Oluştur amacı ve hedef adresi yeniden
+   * soruyordu: makinenin kullanabildiği şey bu alanlar. Serbest metin "Ek
+   * notlar" oldu ve boş olması eksik sayılmıyor.
+   *
+   * Zorunlu değil (boş alan hata vermiyor, AI markayı tanımadan yazıyor);
+   * ama HANGİSİNİN boş olduğu yazıyor.
    */
-  const alanlar: Array<[string, string | null | undefined]> = [
-    ['Bilgi bankası', g.profil?.bilgiBankasi],
-    ['Hedef kitle', g.profil?.hedefKitle],
-    ['Marka bilgileri', g.profil?.markaBilgileri],
+  const p = g.profil;
+  const alanlar: Array<[string, boolean]> = [
+    ['Sektör', !bos(p?.sektor)],
+    ['Ürün/hizmet kategorileri', (p?.kategoriSayisi ?? 0) > 0],
+    ['Ana amaç', !bos(p?.anaAmac)],
+    ['Hedef kitle', !bos(p?.hedefKitle)],
+    ['Öne çıkan vaatler', (p?.vaatSayisi ?? 0) > 0],
   ];
-  const bosAlanlar = alanlar.filter(([, v]) => bos(v)).map(([ad]) => ad);
+  const bosAlanlar = alanlar.filter(([, dolu]) => !dolu).map(([ad]) => ad);
+  /*
+   * AMAÇ "WEB SİTESİ" AMA SAYFA YOK: Reklam Oluştur hedef adresi bu
+   * listeden seçiyor. Boşsa kullanıcı adresi yine elle yazıyor — alan dolu
+   * görünür, iş yapılmamış olur.
+   */
+  if (p?.anaAmac === 'website' && p.sayfaSayisi === 0) {
+    bosAlanlar.push('Sık kullanılan sayfalar (ana amaç web sitesi)');
+  }
   maddeler.push(
     bosAlanlar.length === 0
-      ? { kod: 'marka_bilgisi', zorunlu: false, durum: 'tamam', aciklama: 'Üç alan da dolu.' }
+      ? { kod: 'marka_bilgisi', zorunlu: false, durum: 'tamam', aciklama: 'Marka alanları dolu.' }
       : {
           kod: 'marka_bilgisi',
           zorunlu: false,
           durum: 'eksik',
           aciklama:
             `Boş: ${bosAlanlar.join(', ')}. ` +
-            'AI reklam metni yazarken ve asistan öneri verirken markayı bu alanlardan tanıyor.',
+            'AI reklam metni yazarken ve Reklam Oluştur amacı seçerken markayı bu alanlardan tanıyor.',
         },
   );
 

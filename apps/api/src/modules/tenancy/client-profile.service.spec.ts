@@ -76,6 +76,13 @@ describe('get', () => {
       markaBilgileri: null,
       bilgiBankasi: null,
       logoAssetId: null,
+      markaAdi: null,
+      sektor: null,
+      urunKategorileri: [],
+      sikSayfalar: [],
+      anaAmac: null,
+      uslup: null,
+      vaatler: [],
       updatedAt: '',
     });
   });
@@ -211,3 +218,68 @@ describe('upsert — logo varlığı MÜŞTERİYE ait olmak zorunda', () => {
     expect(temiz.logoAssetId).toBeNull();
   });
 });
+
+describe('yapılandırılmış marka alanları', () => {
+  it('kaydediliyor ve aynen geri okunuyor', async () => {
+    await svc.upsert(
+      CTX,
+      {
+        clientId: IDS.client,
+        markaAdi: 'Taş Ev',
+        sektor: 'Butik otelcilik',
+        urunKategorileri: ['Konaklama', 'Kahvaltı'],
+        sikSayfalar: [{ ad: 'Rezervasyon', url: 'https://tasev.com/rezervasyon' }],
+        anaAmac: 'whatsapp',
+        uslup: 'Sıcak',
+        vaatler: ['Denize 5 dakika'],
+      },
+      {},
+    );
+    const r = await svc.get(CTX, IDS.client);
+    expect(r).toMatchObject({
+      markaAdi: 'Taş Ev',
+      sektor: 'Butik otelcilik',
+      urunKategorileri: ['Konaklama', 'Kahvaltı'],
+      sikSayfalar: [{ ad: 'Rezervasyon', url: 'https://tasev.com/rezervasyon' }],
+      anaAmac: 'whatsapp',
+      uslup: 'Sıcak',
+      vaatler: ['Denize 5 dakika'],
+    });
+  });
+
+  it('KRİTİK: bir sekmenin kaydı öbür sekmenin alanlarını SİLMİYOR', async () => {
+    await svc.upsert(CTX, { clientId: IDS.client, sektor: 'Otel', vaatler: ['A'] }, {});
+    await svc.upsert(CTX, { clientId: IDS.client, hedefKitle: 'Çiftler' }, {});
+    const r = await svc.get(CTX, IDS.client);
+    expect(r.sektor).toBe('Otel');
+    expect(r.vaatler).toEqual(['A']);
+    expect(r.hedefKitle).toBe('Çiftler');
+  });
+
+  it('veritabanı sistemin kuramadığı bir amacı REDDEDİYOR', async () => {
+    await svc.upsert(CTX, { clientId: IDS.client, sektor: 'Otel' }, {});
+    await expect(
+      h.q(`UPDATE client_profiles SET ana_amac = 'satis' WHERE client_id = $1`, [IDS.client]),
+    ).rejects.toThrow(/client_profiles_ana_amac_check/);
+  });
+
+  it('bozuk sayfa öğesi profilin tamamını düşürmüyor, yalnızca o öğe atlanıyor', async () => {
+    await svc.upsert(CTX, { clientId: IDS.client, sektor: 'Otel' }, {});
+    await h.q(
+      `UPDATE client_profiles SET sik_sayfalar = '[{"ad":"İyi","url":"https://a.com"},{"ad":"Bozuk"}]' WHERE client_id = $1`,
+      [IDS.client],
+    );
+    const r = await svc.get(CTX, IDS.client);
+    expect(r.sikSayfalar).toEqual([{ ad: 'İyi', url: 'https://a.com' }]);
+    expect(r.sektor).toBe('Otel');
+  });
+
+  it('denetim kaydı yeni alanları da taşıyor', async () => {
+    await svc.upsert(CTX, { clientId: IDS.client, sektor: 'Otel', vaatler: ['A'] }, {});
+    const [log] = await h.q<{ after: Record<string, unknown> }>(
+      `SELECT after FROM audit_logs WHERE action = 'client_profile.updated' ORDER BY id DESC LIMIT 1`,
+    );
+    expect(log!.after).toMatchObject({ sektor: 'Otel', vaatler: ['A'] });
+  });
+});
+

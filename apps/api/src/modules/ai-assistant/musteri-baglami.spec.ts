@@ -17,6 +17,13 @@ const TAM: MusteriBaglami = {
   bilgiBankasi: '20 yıllık emlak ofisi',
   hedefKitle: 'İzmir, 25-45 yaş',
   markaBilgileri: 'Premium konum, "en ucuz" deme',
+  markaAdi: null,
+  sektor: null,
+  urunKategorileri: [],
+  sikSayfalar: [],
+  anaAmac: null,
+  uslup: null,
+  vaatler: [],
   hesaplar: [{ id: 'acc-1', platform: 'meta', ad: 'Sabancı Meta', paraBirimi: 'TRY' }],
   sayfalar: [{ id: 'page-1', ad: 'Sabancı İnşaat' }],
 };
@@ -87,3 +94,55 @@ describe('baglamiMetne', () => {
     expect(m).toContain('resolve_client');
   });
 });
+
+describe('baglamiMetne — yapılandırılmış marka alanları', () => {
+  const YAPILI: MusteriBaglami = {
+    ...TAM,
+    markaAdi: 'Sabancı Konut',
+    sektor: 'Konut inşaatı',
+    urunKategorileri: ['Daire', 'Villa'],
+    sikSayfalar: [
+      { ad: 'Projeler', url: 'https://sabanci.example/projeler' },
+      { ad: 'İletişim', url: 'https://sabanci.example/iletisim' },
+    ],
+    anaAmac: 'form',
+    uslup: 'Güven veren',
+    vaatler: ['Tapu teslimde'],
+  };
+
+  it('alanların hepsi metne giriyor', () => {
+    const m = baglamiMetne(YAPILI);
+    for (const parca of ['Sabancı Konut', 'Konut inşaatı', 'Daire, Villa', 'Güven veren', 'Tapu teslimde']) {
+      expect(m).toContain(parca);
+    }
+  });
+
+  it('KRİTİK: ana amaç "SORMA" talimatıyla veriliyor — Reklam Oluştur bir daha sormasın', () => {
+    expect(baglamiMetne(YAPILI)).toMatch(/Ana amaç: form .*SORMA/);
+  });
+
+  it('KRİTİK: kayıtlı sayfalar varsa linkUrl YALNIZCA onlardan — ana sayfa yalnızca bilgi', () => {
+    const m = baglamiMetne(YAPILI);
+    expect(m).toContain('https://sabanci.example/projeler');
+    expect(m).toContain('YALNIZCA bunlardan biri');
+    // Ana sayfa artık "linkUrl olarak KULLAN" talimatı TAŞIMIYOR.
+    expect(m).not.toContain('linkUrl olarak KULLAN');
+    expect(m).toContain('Web sitesi ana sayfası: https://sabanci.example');
+  });
+
+  it('kayıtlı sayfa yoksa eski davranış: ana sayfa linkUrl', () => {
+    expect(baglamiMetne(TAM)).toContain('linkUrl olarak KULLAN');
+  });
+
+  it('boş yapılandırılmış alan hiç yazılmıyor', () => {
+    const m = baglamiMetne(TAM);
+    for (const yok of ['Sektör', 'Ana amaç', 'Üslup', 'vaatler', 'Kayıtlı sayfalar', 'kategorileri']) {
+      expect(m, yok).not.toContain(yok);
+    }
+  });
+
+  it('marka adı workspace adıyla aynıysa TEKRAR yazılmıyor', () => {
+    expect(baglamiMetne({ ...YAPILI, markaAdi: TAM.ad })).not.toContain('Marka adı');
+  });
+});
+

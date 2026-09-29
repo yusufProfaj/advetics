@@ -75,7 +75,16 @@ Sakin, güven veren bir ton.`;
      * olurdu.
      */
     const b = bolumleriAyir('Tabii, yardımcı olayım.');
-    expect(b).toEqual({ bilgiBankasi: '', hedefKitle: '', markaBilgileri: '' });
+    expect(b).toEqual({
+      bilgiBankasi: '',
+      hedefKitle: '',
+      markaBilgileri: '',
+      markaAdi: '',
+      sektor: '',
+      urunKategorileri: [],
+      uslup: '',
+      vaatler: [],
+    });
   });
 
   it('BÖLÜM SIRASI DEĞİŞSE DE ÇALIŞIYOR', () => {
@@ -123,5 +132,60 @@ describe('modül kaydı', () => {
     expect(oku('modules/ai-assistant/ai-assistant.module.ts')).not.toContain(
       'anthropicClientProvider',
     );
+  });
+});
+
+describe('bolumleriAyir — yapılandırılmış marka alanları', () => {
+  const CEVAP = `BİLGİ BANKASI:
+Urla'da butik otel. Sektör: turizm diye de anılır; bu satır BÖLMEMELİ.
+
+HEDEF KITLE:
+Hafta sonu kaçamağı arayan çiftler.
+
+MARKA BILGILERI:
+Sakin, doğal.
+
+MARKA ADI:
+Taş Ev Urla
+
+SEKTÖR:
+Butik otelcilik
+
+ÜRÜN KATEGORİLERİ:
+- Konaklama
+- Kahvaltı
+- konaklama
+- ${'x'.repeat(200)}
+
+ÜSLUP:
+Sıcak ve samimi
+
+VAATLER:
+- Denize 5 dakika
+- Ev yapımı kahvaltı`;
+
+  it('Türkçe karakterli etiketler tanınıyor ve alanlara ayrılıyor', () => {
+    const b = bolumleriAyir(CEVAP);
+    expect(b.markaAdi).toBe('Taş Ev Urla');
+    expect(b.sektor).toBe('Butik otelcilik');
+    expect(b.uslup).toBe('Sıcak ve samimi');
+    expect(b.vaatler).toEqual(['Denize 5 dakika', 'Ev yapımı kahvaltı']);
+  });
+
+  it('KRİTİK: paragrafın İÇİNDE geçen "Sektör:" bölümü kesmiyor', () => {
+    const b = bolumleriAyir(CEVAP);
+    expect(b.bilgiBankasi).toContain('bu satır BÖLMEMELİ');
+    expect(b.sektor).toBe('Butik otelcilik');
+  });
+
+  it('liste: tekrar edilen ve sınırı aşan öğe ATILIYOR, kırpılmıyor', () => {
+    expect(bolumleriAyir(CEVAP).urunKategorileri).toEqual(['Konaklama', 'Kahvaltı']);
+  });
+
+  it('boş bırakılan etiket boş kalıyor — uydurulmuş bir değer yok', () => {
+    const b = bolumleriAyir('BILGI BANKASI:\nOtel.\n\nVAATLER:\n\nUSLUP:\n');
+    expect(b.vaatler).toEqual([]);
+    expect(b.uslup).toBe('');
+    expect(b.sektor).toBe('');
   });
 });

@@ -502,74 +502,41 @@ export async function createHarness(): Promise<Harness> {
       },
     },
 
-    /** Bilgi Bankası — `ClientProfileService`in gerçekten kullandığı üç metot. */
+    /**
+     * Bilgi Bankası — `ClientProfileService`in gerçekten kullandığı üç metot.
+     *
+     * KOLON LİSTESİ TEK YERDE (`PROFIL_KOLONLARI`) ve güncelleme TEK deyim.
+     * Önceki taklit alanları elle eşliyordu: yapılandırılmış marka alanları
+     * eklenince `create` onları SESSİZCE atıyordu (bilinmeyen alan kontrolü
+     * yalnızca `update`te vardı) ve testler gerçek davranışı değil taklidin
+     * eksiğini ölçüyordu.
+     */
     clientProfile: {
       findUnique: async ({ where }: { where: { clientId: string } }) => {
         const rows = await q<Record<string, unknown>>(
-          `SELECT id, client_id, hedef_kitle, marka_bilgileri, bilgi_bankasi, logo_asset_id, updated_at
-           FROM client_profiles WHERE client_id = $1`,
+          `SELECT ${PROFIL_SECIM} FROM client_profiles WHERE client_id = $1`,
           [where.clientId],
         );
         return rows[0] ? mapClientProfile(rows[0]) : null;
       },
       create: async ({ data }: { data: Record<string, unknown> }) => {
+        const alanlar = profilAlanlari(data, 'create');
+        const kolonlar = alanlar.map(([k]) => k);
         const rows = await q<Record<string, unknown>>(
-          `INSERT INTO client_profiles
-             (id, org_id, client_id, hedef_kitle, marka_bilgileri, bilgi_bankasi,
-              logo_asset_id, updated_at)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now())
-           RETURNING id, client_id, hedef_kitle, marka_bilgileri, bilgi_bankasi,
-                     logo_asset_id, updated_at`,
-          [
-            data.orgId,
-            data.clientId,
-            data.hedefKitle ?? null,
-            data.markaBilgileri ?? null,
-            data.bilgiBankasi ?? null,
-            data.logoAssetId ?? null,
-          ],
+          `INSERT INTO client_profiles (id, ${kolonlar.join(', ')}, updated_at)
+           VALUES (gen_random_uuid(), ${alanlar.map(([, , t], i) => `$${i + 1}${t}`).join(', ')}, now())
+           RETURNING ${PROFIL_SECIM}`,
+          alanlar.map(([, v]) => v),
         );
         return mapClientProfile(rows[0]!);
       },
       update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-        // BİLİNMEYEN ALANDA HATA — `socialProfile.update` deseniyle aynı
-        // gerekçe: sessizce atlamak, güncellenmemiş bir satırı doğrulanmış
-        // gösterir.
-        const bilinen = ['hedefKitle', 'markaBilgileri', 'bilgiBankasi', 'logoAssetId'];
-        const tanimsiz = Object.keys(data).filter((k) => !bilinen.includes(k));
-        if (tanimsiz.length > 0) {
-          throw new Error(
-            `pglite-harness: clientProfile.update bu alanları tanımıyor: ${tanimsiz.join(', ')}.`,
-          );
-        }
-        if ('hedefKitle' in data) {
-          await q('UPDATE client_profiles SET hedef_kitle = $1 WHERE id = $2', [
-            data.hedefKitle ?? null,
-            where.id,
-          ]);
-        }
-        if ('markaBilgileri' in data) {
-          await q('UPDATE client_profiles SET marka_bilgileri = $1 WHERE id = $2', [
-            data.markaBilgileri ?? null,
-            where.id,
-          ]);
-        }
-        if ('bilgiBankasi' in data) {
-          await q('UPDATE client_profiles SET bilgi_bankasi = $1 WHERE id = $2', [
-            data.bilgiBankasi ?? null,
-            where.id,
-          ]);
-        }
-        if ('logoAssetId' in data) {
-          await q('UPDATE client_profiles SET logo_asset_id = $1 WHERE id = $2', [
-            data.logoAssetId ?? null,
-            where.id,
-          ]);
-        }
+        const alanlar = profilAlanlari(data, 'update');
+        const set = alanlar.map(([k, , t], i) => `${k} = $${i + 1}${t}`);
         const rows = await q<Record<string, unknown>>(
-          `SELECT id, client_id, hedef_kitle, marka_bilgileri, bilgi_bankasi, logo_asset_id, updated_at
-           FROM client_profiles WHERE id = $1`,
-          [where.id],
+          `UPDATE client_profiles SET ${[...set, 'updated_at = now()'].join(', ')}
+           WHERE id = $${alanlar.length + 1} RETURNING ${PROFIL_SECIM}`,
+          [...alanlar.map(([, v]) => v), where.id],
         );
         return mapClientProfile(rows[0]!);
       },
@@ -692,16 +659,50 @@ async function loadAdAccount(
   };
 }
 
+/** Prisma alan adı → [kolon, tür dönüşümü]. Taklidin tanıdığı alanların TAMAMI. */
+const PROFIL_KOLONLARI: Record<string, [string, string]> = {
+  orgId: ['org_id', ''],
+  clientId: ['client_id', ''],
+  hedefKitle: ['hedef_kitle', ''],
+  markaBilgileri: ['marka_bilgileri', ''],
+  bilgiBankasi: ['bilgi_bankasi', ''],
+  logoAssetId: ['logo_asset_id', ''],
+  markaAdi: ['marka_adi', ''],
+  sektor: ['sektor', ''],
+  urunKategorileri: ['urun_kategorileri', '::text[]'],
+  sikSayfalar: ['sik_sayfalar', '::jsonb'],
+  anaAmac: ['ana_amac', ''],
+  uslup: ['uslup', ''],
+  vaatler: ['vaatler', '::text[]'],
+};
+const PROFIL_SECIM = `id, org_id, created_at, updated_at, ${Object.values(PROFIL_KOLONLARI)
+  .map(([k]) => k)
+  .filter((k) => k !== 'org_id')
+  .join(', ')}`;
+
+/**
+ * BİLİNMEYEN ALANDA HATA, hem create hem update için — sessizce atlamak
+ * yazılmamış bir alanı doğrulanmış gösterir.
+ */
+function profilAlanlari(data: Record<string, unknown>, yer: string): Array<[string, unknown, string]> {
+  const tanimsiz = Object.keys(data).filter((k) => !(k in PROFIL_KOLONLARI));
+  if (tanimsiz.length > 0) {
+    throw new Error(`pglite-harness: clientProfile.${yer} bu alanları tanımıyor: ${tanimsiz.join(', ')}.`);
+  }
+  return Object.entries(data).map(([k, v]) => {
+    const [kolon, tur] = PROFIL_KOLONLARI[k]!;
+    return [kolon, tur === '::jsonb' ? JSON.stringify(v) : (v ?? null), tur];
+  });
+}
+
 function mapClientProfile(r: Record<string, unknown>): Record<string, unknown> {
-  return {
+  const out: Record<string, unknown> = {
     id: r.id,
-    clientId: r.client_id,
-    hedefKitle: r.hedef_kitle,
-    markaBilgileri: r.marka_bilgileri,
-    bilgiBankasi: r.bilgi_bankasi,
-    logoAssetId: r.logo_asset_id,
-    updatedAt: r.updated_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at instanceof Date ? r.updated_at : new Date(String(r.updated_at)),
   };
+  for (const [alan, [kolon]] of Object.entries(PROFIL_KOLONLARI)) out[alan] = r[kolon];
+  return out;
 }
 
 /** `findMany({ where: { platform, externalId: { in } } })` taklidi. */

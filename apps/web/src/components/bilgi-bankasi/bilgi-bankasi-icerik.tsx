@@ -7,6 +7,7 @@ import { Halka } from '@/components/yukleniyor';
 import { ButceSekmesi } from './butce-sekmesi';
 import { MetinSekmesi } from './metin-sekmesi';
 import { LogoSekmesi } from './logo-sekmesi';
+import { MarkaSekmesi } from './marka-sekmesi';
 import { gorunurSekmeler, type SekmeKodu } from './sekmeler';
 
 /**
@@ -139,14 +140,11 @@ export function BilgiBankasiIcerik({
         />
       )}
       {aktif === 'marka' && (
-        <MetinSekmesi
-          clientId={clientId}
-          canWrite={yazabilir('marka')}
-          alan="markaBilgileri"
-          baslik="Marka Bilgileri / Öncelikleri"
-          aciklama="Marka sesi, öne çıkarılması gereken değerler, kaçınılması gereken ifadeler."
-          placeholder="Örn. Güven veren, sade bir dil kullan. 'En ucuz' gibi ifadelerden kaçın — marka konumu premium."
-        />
+        /*
+         * YAPILANDIRILMIŞ FORM, serbest metin değil. Eski "Marka Bilgileri"
+         * metni formun sonunda "Ek notlar" olarak duruyor — aynı kolon.
+         */
+        <MarkaSekmesi clientId={clientId} canWrite={yazabilir('marka')} />
       )}
       {aktif === 'logo' && <LogoSekmesi clientId={clientId} canWrite={yazabilir('logo')} />}
     </div>

@@ -80,9 +80,18 @@ export class HazirlikService {
           hedef_kitle: string | null;
           bilgi_bankasi: string | null;
           logo_asset_id: string | null;
+          sektor: string | null;
+          ana_amac: string | null;
+          kategori_sayisi: number;
+          vaat_sayisi: number;
+          sayfa_sayisi: number;
         }>
       >(Prisma.sql`
-        SELECT marka_bilgileri, hedef_kitle, bilgi_bankasi, logo_asset_id::text AS logo_asset_id
+        SELECT marka_bilgileri, hedef_kitle, bilgi_bankasi, logo_asset_id::text AS logo_asset_id,
+               sektor, ana_amac,
+               cardinality(urun_kategorileri)::int AS kategori_sayisi,
+               cardinality(vaatler)::int AS vaat_sayisi,
+               jsonb_array_length(sik_sayfalar)::int AS sayfa_sayisi
           FROM client_profiles WHERE client_id = ${clientId}::uuid
       `);
 
@@ -113,6 +122,11 @@ export class HazirlikService {
               hedefKitle: profil.hedef_kitle,
               bilgiBankasi: profil.bilgi_bankasi,
               logoAssetId: profil.logo_asset_id,
+              sektor: profil.sektor,
+              anaAmac: profil.ana_amac,
+              kategoriSayisi: profil.kategori_sayisi,
+              vaatSayisi: profil.vaat_sayisi,
+              sayfaSayisi: profil.sayfa_sayisi,
             }
           : null,
         buAyButceVar,

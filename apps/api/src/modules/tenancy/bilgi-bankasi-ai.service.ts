@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import type { BilgiBankasiTaslak, TenantContext } from '@advetics/shared';
+import { MARKA_SINIRLARI, type BilgiBankasiTaslak, type TenantContext } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { ANTHROPIC_CLIENT } from '../ai-assistant/anthropic-client.provider';
 import type { AnthropicLike } from '../ai-assistant/ai-assistant.service';
@@ -95,6 +95,13 @@ export class BilgiBankasiAiService {
             mevcut?.markaBilgileri
               ? `Mevcut "Marka Bilgileri" metni:\n${mevcut.markaBilgileri}`
               : null,
+            mevcut?.markaAdi ? `Mevcut marka adı: ${mevcut.markaAdi}` : null,
+            mevcut?.sektor ? `Mevcut sektör: ${mevcut.sektor}` : null,
+            mevcut?.urunKategorileri.length
+              ? `Mevcut ürün/hizmet kategorileri: ${mevcut.urunKategorileri.join(', ')}`
+              : null,
+            mevcut?.uslup ? `Mevcut üslup: ${mevcut.uslup}` : null,
+            mevcut?.vaatler.length ? `Mevcut vaatler: ${mevcut.vaatler.join(' | ')}` : null,
             '',
             'Sitenin metni:',
             // METİN KIRPILIYOR: bir kurumsal sitenin ilk 20 bin karakteri "ne
@@ -115,7 +122,13 @@ export class BilgiBankasiAiService {
 
     const taslak = bolumleriAyir(metin);
 
-    if (!taslak.bilgiBankasi && !taslak.hedefKitle && !taslak.markaBilgileri) {
+    if (
+      !taslak.bilgiBankasi &&
+      !taslak.hedefKitle &&
+      !taslak.markaBilgileri &&
+      !taslak.sektor &&
+      taslak.urunKategorileri.length === 0
+    ) {
       /*
        * BOŞ TASLAK BAŞARI SAYILMIYOR. Etiketleri bulamadıysak modelin cevabı
        * beklediğimiz biçimde değil demektir; boş alanları "doldurdum" diye
@@ -152,7 +165,8 @@ KURALLAR:
   bilgiyi esas al.
 - Uzun tire kullanma.
 
-Cevabını TAM OLARAK şu üç etiketle ver, başka hiçbir şey yazma:
+Cevabını TAM OLARAK şu etiketlerle ver, başka hiçbir şey yazma. Sitede
+karşılığı olmayan etiketin altını BOŞ bırak:
 
 BILGI BANKASI:
 <işletme ne yapıyor, hangi hizmet/ürünler, nerede, ayırt edici yanı ne —
@@ -163,8 +177,26 @@ HEDEF KITLE:
 4-8 cümle>
 
 MARKA BILGILERI:
-<ton, vaat, öne çıkan mesajlar, reklamda kullanılabilecek kanıtlar —
-4-8 cümle>`;
+<reklamda dikkat edilecek noktalar, kaçınılacak ifadeler, kullanılabilecek
+kanıtlar — 2-5 cümle. Ton ve vaatleri buraya YAZMA, aşağıda ayrı etiketleri
+var>
+
+MARKA ADI:
+<sitede geçen marka adı, tek satır>
+
+SEKTOR:
+<tek satır, birkaç kelime: örneğin "Konut inşaatı", "Diş kliniği">
+
+URUN KATEGORILERI:
+- <ana ürün ya da hizmet kategorisi, birkaç kelime>
+- <en fazla ${MARKA_SINIRLARI.kategori.adet} satır>
+
+USLUP:
+<reklamda kullanılacak ton, tek cümle: örneğin "Güven veren, sade, kurumsal">
+
+VAATLER:
+- <sitede açıkça yazan, işletmeyi rakiplerinden ayıran tek bir vaat>
+- <en fazla ${MARKA_SINIRLARI.vaat.adet} satır; sitede yoksa yazma>`;
 
 /**
  * Etiketli cevabı üç alana ayırır.
@@ -173,21 +205,75 @@ MARKA BILGILERI:
  * BANKASI" yazabiliyor ve tek biçim aramak, doğru gelmiş bir cevabı
  * çözümlenemez saymak olurdu.
  */
-export function bolumleriAyir(metin: string): {
-  bilgiBankasi: string;
-  hedefKitle: string;
-  markaBilgileri: string;
-} {
-  const normal = metin.replace(/İ/g, 'I').replace(/ı/g, 'i');
+export function bolumleriAyir(metin: string): Omit<BilgiBankasiTaslak, 'kaynak'> {
+  const normal = turkceKarakterGotur(metin);
+  const al = (d: RegExp) => bolum(metin, normal, d);
 
   return {
-    bilgiBankasi: bolum(metin, normal, /BILGI BANKASI\s*:/i),
-    hedefKitle: bolum(metin, normal, /HEDEF KITLE\s*:/i),
-    markaBilgileri: bolum(metin, normal, /MARKA BILGILERI\s*:/i),
+    bilgiBankasi: al(/^[ \t]*BILGI BANKASI\s*:/im),
+    hedefKitle: al(/^[ \t]*HEDEF KITLE\s*:/im),
+    markaBilgileri: al(/^[ \t]*MARKA BILGILERI\s*:/im),
+    markaAdi: tekSatir(al(/^[ \t]*MARKA ADI\s*:/im), MARKA_SINIRLARI.markaAdi),
+    sektor: tekSatir(al(/^[ \t]*SEKTOR\s*:/im), MARKA_SINIRLARI.sektor),
+    urunKategorileri: liste(al(/^[ \t]*URUN KATEGORILERI\s*:/im), MARKA_SINIRLARI.kategori),
+    uslup: tekSatir(al(/^[ \t]*USLUP\s*:/im), MARKA_SINIRLARI.uslup),
+    vaatler: liste(al(/^[ \t]*VAATLER\s*:/im), MARKA_SINIRLARI.vaat),
   };
 }
 
-const ETIKETLER = [/BILGI BANKASI\s*:/i, /HEDEF KITLE\s*:/i, /MARKA BILGILERI\s*:/i];
+/**
+ * Etiket aramak için Türkçe karakterleri ASCII'ye indirir. UZUNLUK KORUNUYOR
+ * (her karakter tek karaktere): bulunan konum ham metinde de aynı konum, ve
+ * kullanıcıya giden metin ham metinden kesiliyor.
+ */
+function turkceKarakterGotur(m: string): string {
+  const tablo: Record<string, string> = {
+    İ: 'I', ı: 'i', Ü: 'U', ü: 'u', Ö: 'O', ö: 'o', Ş: 'S', ş: 's', Ğ: 'G', ğ: 'g', Ç: 'C', ç: 'c',
+  };
+  return m.replace(/[İıÜüÖöŞşĞğÇç]/g, (c) => tablo[c] ?? c);
+}
+
+/** Model tek satır istenen yere paragraf yazarsa ilk satır; sınırı aşan öneri ATILIYOR, kırpılmıyor. */
+function tekSatir(v: string, sinir: number): string {
+  const ilk = (v.split('\n')[0] ?? '').trim();
+  // Kırpılmış bir öneri, kullanıcının fark etmeden kaydedeceği yarım bir cümle.
+  return ilk.length <= sinir ? ilk : '';
+}
+
+/**
+ * "- öğe" satırlarından liste. Sınırı aşan öğe ATILIYOR (yarım cümle
+ * kaydedilmesin), fazlası kesiliyor, tekrar edenler bir kez.
+ */
+function liste(v: string, s: { adet: number; uzunluk: number }): string[] {
+  const gorulen = new Set<string>();
+  const out: string[] = [];
+  for (const satir of v.split('\n')) {
+    const oge = satir.replace(/^\s*[-•*]\s*/, '').trim();
+    if (!oge || oge.length > s.uzunluk) continue;
+    const k = oge.toLocaleLowerCase('tr');
+    if (gorulen.has(k)) continue;
+    gorulen.add(k);
+    out.push(oge);
+    if (out.length === s.adet) break;
+  }
+  return out;
+}
+
+/*
+ * ETİKET SATIR BAŞINDA. "Sektör: inşaat" gibi bir ifade modelin yazdığı
+ * paragrafın İÇİNDE de geçebiliyor; satır başına bağlanmamış bir etiket o
+ * paragrafı ortasından keser ve iki alanı birden bozardı.
+ */
+const ETIKETLER = [
+  /^[ \t]*BILGI BANKASI\s*:/im,
+  /^[ \t]*HEDEF KITLE\s*:/im,
+  /^[ \t]*MARKA BILGILERI\s*:/im,
+  /^[ \t]*MARKA ADI\s*:/im,
+  /^[ \t]*SEKTOR\s*:/im,
+  /^[ \t]*URUN KATEGORILERI\s*:/im,
+  /^[ \t]*USLUP\s*:/im,
+  /^[ \t]*VAATLER\s*:/im,
+];
 
 function bolum(ham: string, normal: string, desen: RegExp): string {
   const bas = desen.exec(normal);
@@ -200,7 +286,7 @@ function bolum(ham: string, normal: string, desen: RegExp): string {
    */
   let son = normal.length;
   for (const d of ETIKETLER) {
-    const m = new RegExp(d.source, 'ig');
+    const m = new RegExp(d.source, 'igm');
     m.lastIndex = govdeBas;
     const bulunan = m.exec(normal);
     if (bulunan && bulunan.index < son) son = bulunan.index;

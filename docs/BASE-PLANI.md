@@ -68,6 +68,12 @@ doldurulmuş görünür ama makine onu kullanamaz:
 dolduruyor. Doldurulan her alan kullanıcıya önerildiği gibi gösteriliyor;
 onaysız yazılmıyor.
 
+**2a UYGULANDI (2026-09-29):** alanlar, Marka sekmesi, AI bağlamı, hazırlık
+listesi, siteden doldur. Plandan iki sapma: web sitesi `clients.website`
+olarak kalıyor (ikinci kopya yok) ve ana amaç yalnızca sistemin kurabildiği
+üç hedef. Ayrıntı `DURUM.md`. **2b kaldı:** Reklam Oluştur'un ana amacı
+varsayılan açması ve hedef adresi sayfa listesinden seçtirmesi.
+
 ### 3. Kitleler (taslakta "Audience Hub")
 
 Bugün yok. Hedefleme boost ön ayarlarının içinde, ön ayar başına ayrı

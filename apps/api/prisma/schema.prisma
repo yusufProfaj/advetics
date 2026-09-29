@@ -539,6 +539,23 @@ model ClientProfile {
   /// Bilgi Bankası müşteri profilinin parçası, o yüzden burada duruyor.
   bilgiBankasi String? @map("bilgi_bankasi") @db.VarChar(2000)
 
+  /// ─── YAPILANDIRILMIŞ MARKA ALANLARI (Marka Merkezi Bölüm 2) ───
+  /// Serbest metin ekranda dolu görünür ama makine onu kullanamaz: Reklam
+  /// Oluştur hedef adresi ve amacı buradan okuyor. Web sitesi burada YOK,
+  /// `clients.website`ta — ikinci kopya iki ayrı adres demek.
+
+  /// Boşsa workspace adı kullanılıyor (workspace adı çoğu zaman proje adı:
+  /// "Kılıçoğlu İnşaat - Gaziemir").
+  markaAdi         String?  @map("marka_adi") @db.VarChar(120)
+  sektor           String?  @db.VarChar(120)
+  urunKategorileri String[] @default([]) @map("urun_kategorileri")
+  /// `[{ ad, url }]`. Biçim `packages/shared` şemasında, dizi olduğu CHECK ile.
+  sikSayfalar      Json     @default("[]") @map("sik_sayfalar")
+  /// `CAMPAIGN_GOALS`tan biri; CHECK kısıtı migration'da.
+  anaAmac          String?  @map("ana_amac") @db.VarChar(20)
+  uslup            String?  @db.VarChar(500)
+  vaatler          String[] @default([])
+
   /// "Logo" sekmesi — müşterinin KENDİ marka logosu.
   /// `assets.kind = 'logo'` olan bir varlığa işaret ediyor (Görsel Arşivi'nde
   /// zaten ayrı bir tür — Google Performance Max onsuz kampanya kurmuyor).

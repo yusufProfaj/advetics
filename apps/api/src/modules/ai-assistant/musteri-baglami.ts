@@ -1,4 +1,4 @@
-import type { TenantContext } from '@advetics/shared';
+import type { CampaignGoal, SikSayfa, TenantContext } from '@advetics/shared';
 import type { ClientsService } from '../tenancy/clients.service';
 import type { ClientProfileService } from '../tenancy/client-profile.service';
 import type { ConnectionsService } from '../connections/connections.service';
@@ -37,6 +37,14 @@ export interface MusteriBaglami {
   bilgiBankasi: string | null;
   hedefKitle: string | null;
   markaBilgileri: string | null;
+  /** Boşsa workspace adı. */
+  markaAdi: string | null;
+  sektor: string | null;
+  urunKategorileri: string[];
+  sikSayfalar: SikSayfa[];
+  anaAmac: CampaignGoal | null;
+  uslup: string | null;
+  vaatler: string[];
   hesaplar: Array<{ id: string; platform: string; ad: string; paraBirimi: string }>;
   sayfalar: Array<{ id: string; ad: string }>;
 }
@@ -78,6 +86,13 @@ export async function musteriBaglamiKur(
     bilgiBankasi: profil?.bilgiBankasi ?? null,
     hedefKitle: profil?.hedefKitle ?? null,
     markaBilgileri: profil?.markaBilgileri ?? null,
+    markaAdi: profil?.markaAdi ?? null,
+    sektor: profil?.sektor ?? null,
+    urunKategorileri: profil?.urunKategorileri ?? [],
+    sikSayfalar: profil?.sikSayfalar ?? [],
+    anaAmac: profil?.anaAmac ?? null,
+    uslup: profil?.uslup ?? null,
+    vaatler: profil?.vaatler ?? [],
     hesaplar: conns.flatMap((c) =>
       c.adAccounts.map((a) => ({
         id: a.id,
@@ -110,7 +125,28 @@ bul ve kimliğini tool çağrılarında kullan.`;
     '  Tool çağrılarında clientId GEREKMİYOR — boş bırakırsan bu müşteri kullanılıyor.',
   ];
 
-  if (b.website) satirlar.push(`- Web sitesi: ${b.website}  ← "website" hedefinde linkUrl olarak KULLAN`);
+  if (b.markaAdi && b.markaAdi !== b.ad) satirlar.push(`- Marka adı (reklamda bunu kullan): ${b.markaAdi}`);
+  if (b.sektor) satirlar.push(`- Sektör: ${b.sektor}`);
+  if (b.urunKategorileri.length > 0) {
+    satirlar.push(`- Ürün/hizmet kategorileri: ${b.urunKategorileri.join(', ')}`);
+  }
+  if (b.anaAmac) {
+    satirlar.push(
+      `- Ana amaç: ${b.anaAmac}  ← kullanıcı başka bir şey söylemedikçe kampanya hedefi (goal) BU; SORMA`,
+    );
+  }
+  /*
+   * SIK SAYFALAR SİTEDEN ÖNCE. Kayıtlı sayfa listesi kullanıcının "reklam
+   * buraya gitsin" dediği adresler; site ana sayfası yalnızca liste boşsa
+   * yedek. Sırayı ters yazmak modeli hep ana sayfaya yönlendirirdi.
+   */
+  if (b.sikSayfalar.length > 0) {
+    satirlar.push('- Kayıtlı sayfalar ("website" hedefinde linkUrl YALNIZCA bunlardan biri; uydurma adres YOK):');
+    for (const s of b.sikSayfalar) satirlar.push(`    · ${s.ad}: ${s.url}`);
+    if (b.website) satirlar.push(`- Web sitesi ana sayfası: ${b.website}`);
+  } else if (b.website) {
+    satirlar.push(`- Web sitesi: ${b.website}  ← "website" hedefinde linkUrl olarak KULLAN`);
+  }
   if (b.iletisimTelefonu) {
     satirlar.push(
       `- Kayıtlı telefon: ${b.iletisimTelefonu}  ← WhatsApp hedefinde ADAY numara; planında bunu ÖNER, kullanıcı onaylasın`,
@@ -133,6 +169,11 @@ bul ve kimliğini tool çağrılarında kullan.`;
 
   if (b.bilgiBankasi) satirlar.push(`- Bilgi Bankası: ${b.bilgiBankasi}`);
   if (b.hedefKitle) satirlar.push(`- Hedef kitle: ${b.hedefKitle}`);
+  if (b.uslup) satirlar.push(`- Üslup: ${b.uslup}`);
+  if (b.vaatler.length > 0) {
+    satirlar.push('- Öne çıkan vaatler (metinde bunlara dayan, yenisini UYDURMA):');
+    for (const v of b.vaatler) satirlar.push(`    · ${v}`);
+  }
   if (b.markaBilgileri) satirlar.push(`- Marka bilgileri/öncelikleri: ${b.markaBilgileri}`);
 
   return `## Seçili müşteri — BU BİLGİLER ZATEN ELİNDE, SORMA

@@ -765,6 +765,38 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — Marka Merkezi, Bölüm 2a: yapılandırılmış marka alanları
+
+Bilgi bankasındaki serbest metin ekranda dolu görünüyordu ama makine onu
+kullanamıyordu. Migration `20260929120000_marka_alanlari`: `client_profiles`
+tablosuna marka adı, sektör, ürün/hizmet kategorileri, sık kullanılan
+sayfalar (JSONB), ana amaç, üslup, vaatler.
+
+- **Eski üç metin alanı kalıyor**; "Marka Bilgileri" metni Marka sekmesinde
+  "Ek notlar" olarak görünüyor. Otomatik ayrıştırma yapılmadı (tahmin olurdu).
+- **Web sitesi eklenmedi:** `clients.website` zaten var; ikinci kopya iki
+  adres demek.
+- **Ana amaç yalnızca `CAMPAIGN_GOALS`** (form, WhatsApp, site). Planda
+  "satış, bilinirlik" de vardı; Reklam Oluştur onları kuramıyor. CHECK
+  kısıtı ve şema `marka-alanlari.spec.ts` ile karşılaştırılıyor.
+- **Sayfa adresi reklam hedefiyle AYNI kuraldan geçiyor**
+  (`hedefAdresiGecerli`, `packages/shared`): listede kabul edilen adres
+  reklam taslağında reddedilemez. Doğrulama giriş anında (kutudan çıkınca).
+- **AI bağlamı:** ana amaç "SORMA" talimatıyla, kayıtlı sayfalar varsa
+  `linkUrl` YALNIZCA onlardan; vaatler "yenisini uydurma" notuyla.
+- **Hazırlık listesi** artık yapılandırılmış alanlara bakıyor; serbest metin
+  boşsa eksik sayılmıyor. Ana amaç "site" ama sayfa yoksa eksik.
+- **Siteden doldur** yeni alanları da öneriyor; ana amaç ve sayfalar
+  önerilmiyor (iş kararı / gerçek adres ister). Etiketler satır başına
+  bağlı: paragraf içindeki "Sektör:" bölümü kesmiyor.
+- `pglite-harness` `clientProfile` taklidi elle eşlemeden tek kolon listesine
+  geçti: yeni alanları `create` SESSİZCE atıyordu (bilinmeyen alan kontrolü
+  yalnızca `update`te vardı).
+- Yedi mutasyon, yedisi yakalandı. İlk M7 denemesi sözdizimini bozup hiçbir
+  şey sınamamıştı ("55 test geçti" sayısı düşüşü gösterdi) — mutasyon
+  sonucunda test SAYISINA da bakılmalı.
+- **Panel ekranı tarayıcıda açılıp bakılmadı**; tip denetimi ve testler temiz.
+
 ### 2026-09-29 — Google kotası dolunca BÜTÜN Google işleri bekliyor
 
 Ölçümde kota her gece doluyor, 54 hesap 10:00'daki sıfırlamaya kadar 15
