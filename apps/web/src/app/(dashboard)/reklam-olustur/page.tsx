@@ -106,7 +106,7 @@ export default async function AdsHomePage({
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-xl font-semibold text-ink">Reklam Oluştur</h1>
+        <h1 className="sayfa-baslik">Reklam Oluştur</h1>
         <p className="mt-0.5 text-sm text-ink-muted">
           <strong className="text-ink">{client?.name ?? 'Workspace'}</strong> · ne yapmak
           istediğini seç.

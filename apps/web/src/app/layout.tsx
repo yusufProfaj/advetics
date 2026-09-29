@@ -1,5 +1,19 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import './globals.css';
+
+/*
+ * YAZI TİPİ GERÇEKTEN YÜKLENİYOR. `--brand-font` uzun süre 'Inter' diyordu
+ * ama Inter hiçbir yerde yüklenmiyordu: yüklü olmayan makinede sistem
+ * yazı tipine düşülüyor ve panel her bilgisayarda başka görünüyordu.
+ * `next/font` dosyayı DERLEMEDE indirip kendi sunucumuzdan veriyor (çalışma
+ * anında Google'a istek yok). `latin-ext` ZORUNLU: ğ, ş, ı, İ orada.
+ */
+const inter = Inter({
+  subsets: ['latin', 'latin-ext'],
+  display: 'swap',
+  variable: '--font-inter',
+});
 
 const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'advetics.com';
 const ORIGIN = ROOT_DOMAIN.startsWith('localhost')
@@ -51,7 +65,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr">
+    <html lang="tr" className={inter.variable}>
       <body>{children}</body>
     </html>
   );

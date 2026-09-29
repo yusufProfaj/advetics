@@ -170,10 +170,10 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
                 <Link
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+                  className={`nav-oge group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
                     active
                       ? 'bg-brand-soft font-semibold text-brand-strong'
-                      : 'text-ink hover:bg-surface-muted'
+                      : 'text-ink/85 hover:bg-surface-sunken/70 hover:text-ink'
                   }`}
                 >
                   <Icon name={item.icon} active={active} />
@@ -242,8 +242,8 @@ function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
         type="button"
         onClick={() => setAcik((v) => !v)}
         aria-expanded={gorunur}
-        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
-          icinde ? 'font-semibold text-brand-strong' : 'text-ink hover:bg-surface-muted'
+        className={`group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+          icinde ? 'font-semibold text-brand-strong' : 'text-ink/85 hover:bg-surface-sunken/70 hover:text-ink'
         }`}
       >
         <Icon name={item.icon} active={icinde} />
@@ -283,7 +283,7 @@ function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
                     className={`block truncate rounded-lg px-3 py-1.5 text-[13px] transition ${
                       aktif
                         ? 'bg-brand-soft font-semibold text-brand-strong'
-                        : 'text-ink-muted hover:bg-surface-muted hover:text-ink'
+                        : 'text-ink-muted hover:bg-surface-sunken/70 hover:text-ink'
                     }`}
                   >
                     {alt.label}
@@ -333,7 +333,9 @@ function Icon({ name, active }: { name: keyof typeof ICONS; active?: boolean }) 
       viewBox="0 0 20 20"
       fill="none"
       aria-hidden
-      className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-brand-strong' : 'text-ink-muted'}`}
+      className={`h-[18px] w-[18px] shrink-0 transition-[color,transform] duration-200 ${
+        active ? 'text-brand-strong' : 'text-ink-muted group-hover:translate-x-0.5 group-hover:text-ink'
+      }`}
     >
       <path
         d={ICONS[name]}

@@ -25,13 +25,13 @@ export interface KenarVerisi {
 export function KenarIcerigi({ veri, onGezinme }: { veri: KenarVerisi; onGezinme?: () => void }) {
   return (
     <>
-      <div className="flex h-16 items-center gap-2.5 px-4">
+      <div className="flex h-16 shrink-0 items-center gap-2.5 px-5">
         {veri.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={veri.logoUrl} alt="" className="h-8 max-w-[150px] object-contain" />
         ) : (
           <>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-sm font-bold text-white">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-accent text-sm font-bold text-white shadow-[0_6px_16px_-6px_var(--brand-primary),inset_0_1px_0_rgb(255_255_255/0.25)]">
               {veri.sirketAdi.slice(0, 2).toUpperCase()}
             </span>
             <span className="truncate text-[15px] font-semibold tracking-tight">
@@ -52,14 +52,15 @@ export function KenarIcerigi({ veri, onGezinme }: { veri: KenarVerisi; onGezinme
           yoksa yeni sayfa menünün arkasında açılıyor. Masaüstünde
           geçilmiyor ve hiçbir şey değişmiyor.
         */}
-        {veri.bolumler.map((section) => (
-          <NavSection key={section.title} title={section.title} items={section.items} />
+        {/* İlk bölüm başlıksız ve `key={undefined}` React'te uyarı üretiyordu. */}
+        {veri.bolumler.map((section, i) => (
+          <NavSection key={section.title ?? `bolum-${i}`} title={section.title} items={section.items} />
         ))}
       </nav>
 
-      <div className="border-t border-line p-3">
-        <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-[11px] font-semibold uppercase">
+      <div className="p-3">
+        <div className="flex items-center gap-2.5 rounded-xl border border-line/70 bg-surface-muted/70 px-2.5 py-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand/15 to-brand-accent/20 text-[11px] font-semibold uppercase text-brand-strong ring-1 ring-brand/15">
             {veri.kullaniciAdi.slice(0, 2)}
           </span>
           <span className="min-w-0 flex-1">

@@ -110,7 +110,7 @@ export function MobilMenu({
               type="button"
               aria-label="Menüyü kapat"
               onClick={() => setAcik(false)}
-              className="absolute inset-0 bg-black/40"
+              className="panel-perde absolute inset-0 bg-black/40 backdrop-blur-[2px]"
             />
             <div
               ref={panelRef}
@@ -118,7 +118,8 @@ export function MobilMenu({
               role="dialog"
               aria-modal="true"
               aria-label="Menü"
-              className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-line bg-surface shadow-pop outline-none"
+              data-cekmece
+              className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-line bg-surface shadow-acilir outline-none"
             >
               <KenarIcerigi
                 veri={veri}

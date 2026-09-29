@@ -46,22 +46,31 @@ export function MetricCard({
      * kenarlık ve daha büyük rakam kullanmak renkten bağımsız çalışıyor.
      */
     <div
-      className={`rounded-xl border bg-surface p-4 ${
+      className={`relative overflow-hidden rounded-xl border bg-surface p-4 shadow-kart ${
         emphasis ? 'border-brand/40' : 'border-line'
       }`}
     >
-      <p className="text-xs font-medium text-ink-muted">
+      {/*
+        VURGULU KART: üstte marka renginde İNCE bir şerit. Zemin YİNE
+        doldurulmuyor (aşağıdaki kural): yalnızca kenar rengiyle vurgulamak
+        açık temada neredeyse görünmüyordu, dolgu ise kırmızı markada "sorun
+        var" diye okunuyordu. Şerit ikisinin arası.
+      */}
+      {emphasis && (
+        <span aria-hidden className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-brand to-brand-accent" />
+      )}
+      <p className="relative text-xs font-medium text-ink-muted">
         <Terim anahtar={terim} />
       </p>
       <p
-        className={`mt-1.5 font-semibold tabular-nums text-ink ${
-          emphasis ? 'text-[28px] leading-8' : 'text-2xl'
+        className={`relative mt-2 font-bold tabular-nums tracking-tight text-ink ${
+          emphasis ? 'text-[30px] leading-9' : 'text-[26px] leading-8'
         }`}
       >
         {value}
       </p>
 
-      <div className="mt-1 flex min-h-[18px] items-center gap-2 text-xs">
+      <div className="relative mt-1.5 flex min-h-[18px] items-center gap-2 text-xs">
         {/*
           ROZET PAYLAŞILAN BİLEŞENDEN. `inverse` kuralı (CPA artışı KÖTÜ) üç
           yerde birden geçiyordu; üçüncü kopya yazılınca birinin

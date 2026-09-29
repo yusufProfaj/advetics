@@ -84,7 +84,7 @@ export default async function ConnectionsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Platform Bağlantıları</h1>
+        <h1 className="sayfa-baslik">Platform Bağlantıları</h1>
         {/*
           BAŞLIK METNİ ÜÇ CÜMLEDEN BİRE İNDİ. Eski hâli bağlantının neden
           ajansa kurulduğunu, token'ların neden çakıştığını ve atamanın neyi

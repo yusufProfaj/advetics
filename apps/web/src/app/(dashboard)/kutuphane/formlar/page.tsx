@@ -67,7 +67,7 @@ export default async function FormsPage({
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-xl font-semibold text-ink">Formlar</h1>
+        <h1 className="sayfa-baslik">Formlar</h1>
         <p className="mt-0.5 text-sm text-ink-muted">
           Reklama tıklayan kişi siteye gitmeden, Facebook ya da Instagram'ın içinde
           bilgilerini bırakıyor.

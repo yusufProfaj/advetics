@@ -78,7 +78,7 @@ export function WorkspaceGerekli({
 
   return (
     <div className="mx-auto max-w-3xl rounded-2xl border border-line bg-surface p-6">
-      <h1 className="text-xl font-semibold tracking-tight text-ink">{ekran}</h1>
+      <h1 className="sayfa-baslik">{ekran}</h1>
 
       {workspaceler.length === 0 ? (
         /*

@@ -65,7 +65,7 @@ export default async function WorkspaceTeamPage({
         >
           ← Şirketler
         </Link>
-        <h1 className="mt-1.5 text-2xl font-semibold">{client.name} — Ekip</h1>
+        <h1 className="sayfa-baslik mt-1.5">{client.name} — Ekip</h1>
         <p className="mt-1 text-sm text-ink-muted">
           Bu workspace’e erişimi olan kişiler. Workspace’in kendi giriş hesapları da
           burada; ajans ekibi listesinde görünmüyorlar.

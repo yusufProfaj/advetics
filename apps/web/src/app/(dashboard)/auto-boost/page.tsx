@@ -126,7 +126,7 @@ export default async function AutoBoostPage({
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Akıllı Boost</h1>
+          <h1 className="sayfa-baslik">Akıllı Boost</h1>
           {/*
             DEĞERLENDİRME SIKLIĞI BURADAN KALKTI. "günde iki kez" yalnızca
             KURAL motoru için doğru; yeni içerik kartları yayınlandığı anda

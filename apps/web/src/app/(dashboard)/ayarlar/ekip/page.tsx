@@ -126,7 +126,7 @@ export default async function TeamPage() {
       )}
 
       <div>
-        <h1 className="text-2xl font-semibold">Ekip &amp; Yetkiler</h1>
+        <h1 className="sayfa-baslik">Ekip &amp; Yetkiler</h1>
         <p className="mt-1 text-sm text-ink-muted">
           Danışmanlar AJANS seviyesinde duruyor ve şirketlere yetkilendiriliyor —
           bir şirkete yetki verilen danışman o şirketin bütün workspace’lerini

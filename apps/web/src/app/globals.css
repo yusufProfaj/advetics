@@ -22,17 +22,21 @@
   /* Marka — branding_profiles tablosundan gelir, buradakiler varsayılan */
   --brand-primary: #e11d2e;
   --brand-accent: #f97316;
-  --brand-font: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --brand-font: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
 
-  /* Yüzeyler */
+  /*
+   * Yüzeyler. Zemin ile kart arasındaki fark bilerek belirgin: eski değerlerde
+   * (#f7f8fa / #fff) kartlar zemine karışıyordu ve sayfa "düz bir kâğıt"
+   * gibi okunuyordu. Derinlik gölgeyle birlikte bu farktan geliyor.
+   */
   --surface: #ffffff;
-  --surface-muted: #f7f8fa;
-  --surface-sunken: #eef0f4;
-  --border: #e6e8ee;
+  --surface-muted: #f3f4f8;
+  --surface-sunken: #eaecf2;
+  --border: #e2e5ec;
 
   /* Metin */
-  --text: #14161c;
-  --text-muted: #6b7280;
+  --text: #0f1219;
+  --text-muted: #626a79;
 
   /* Durum renkleri — marka renginden bağımsız, anlamları sabit */
   --ok: #16a34a;
@@ -73,19 +77,29 @@
   --arama-baslik: #1a0dab;
   --arama-adres: #4d5156;
 
-  --radius: 0.75rem;
-  --shadow-card: 0 1px 2px rgb(20 22 28 / 0.04), 0 1px 3px rgb(20 22 28 / 0.06);
-  --shadow-pop: 0 4px 6px -1px rgb(20 22 28 / 0.08), 0 10px 24px -6px rgb(20 22 28 / 0.14);
+  --radius: 0.875rem;
+  /*
+   * GÖLGELER KATMANLI: yakın ve keskin bir kenar gölgesi + uzak ve yumuşak
+   * bir yayılma. Tek katmanlı gölge ya kirli bir çizgi ya da bulanık bir leke
+   * gibi duruyor; iki katman kartı zeminden "kaldırıyor".
+   */
+  --shadow-xs: 0 1px 2px rgb(16 24 40 / 0.04);
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 2px 10px -3px rgb(16 24 40 / 0.07);
+  --shadow-hover: 0 2px 4px rgb(16 24 40 / 0.04), 0 14px 32px -10px rgb(16 24 40 / 0.16);
+  --shadow-pop: 0 4px 8px -2px rgb(16 24 40 / 0.08), 0 20px 44px -12px rgb(16 24 40 / 0.22);
+
+  /* Hareket: tek eğri, her yerde aynı his. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --surface: #14161c;
-    --surface-muted: #0f1116;
-    --surface-sunken: #1b1e26;
-    --border: #2a2e38;
-    --text: #f2f4f8;
-    --text-muted: #9aa1ae;
+    --surface: #13151c;
+    --surface-muted: #0b0d12;
+    --surface-sunken: #1b1e27;
+    --border: #262a35;
+    --text: #f3f5f9;
+    --text-muted: #9ba2b0;
 
     /*
      * KARANLIKTA ZEMİN KOYU TONA, METİN AÇIK TONA DÖNÜYOR. Aynı değerleri
@@ -102,8 +116,10 @@
     /* Google'ın kendi karanlık tema karşılıkları. */
     --arama-baslik: #8ab4f8;
     --arama-adres: #bdc1c6;
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-pop: 0 10px 24px -6px rgb(0 0 0 / 0.6);
+    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.35);
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.02);
+    --shadow-hover: 0 2px 4px rgb(0 0 0 / 0.4), 0 16px 36px -10px rgb(0 0 0 / 0.7);
+    --shadow-pop: 0 10px 24px -6px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.04);
   }
 }
 
@@ -140,6 +156,14 @@
   --color-info-strong: var(--info-strong);
   --font-sans: var(--brand-font);
   --radius-xl: var(--radius);
+  /*
+   * ADLAR AYRI: `--shadow-card: var(--shadow-card)` kendine başvuran bir
+   * döngü olurdu ve tarayıcı döngülü değişkeni geçersiz sayıp gölgeyi
+   * sessizce siliyor. Yardımcılar `shadow-kart`, `shadow-kalkik`, `shadow-acilir`.
+   */
+  --shadow-kart: var(--shadow-card);
+  --shadow-kalkik: var(--shadow-hover);
+  --shadow-acilir: var(--shadow-pop);
 }
 
 /**
@@ -203,6 +227,8 @@ body {
   font-family: var(--brand-font);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Inter'in daha sakin rakam ve harf biçimleri (tek katlı a değil, düz 1). */
+  font-feature-settings: 'cv11', 'ss01';
 }
 
 /* Odak halkası — klavye kullanıcıları için görünür, fare için değil */
@@ -279,6 +305,322 @@ body {
   }
   .advetics-donus {
     animation: advetics-donus 0.7s linear infinite;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ * PANEL TASARIM KATMANI
+ * ═════════════════════════════════════════════════════════════════════════
+ *
+ * NEDEN SAYFA SAYFA DEĞİL. Panelin 35 sayfası ve 175 bileşeni aynı birkaç
+ * kalıbı elle yazıyor (kart: `rounded-xl border border-line bg-surface`
+ * ~100 yerde). Her dosyayı tek tek elden geçirmek hem yüzlerce satırlık bir
+ * fark hem de bir sonraki ekranda aynı "ucuz" görünüşün geri gelmesi
+ * demekti. Görünüş burada, KALIBIN KENDİSİNE bağlanıyor: yeni yazılan her
+ * kart da kendiliğinden aynı derinliği alıyor.
+ *
+ * KAPSAM `.panel` ALTI. Tanıtım sayfası, giriş ekranları ve müşteriye giden
+ * rapor belgesi (`/r/...`) bu kuralların DIŞINDA. Rapor belgesi PDF ile
+ * aynı görünmek zorunda (CLAUDE.md: "referans panel"), tanıtım sayfasının
+ * kendi dili var.
+ *
+ * ÇOĞU KURAL `@layer components` İÇİNDE ve bu kasıtlı: Tailwind yardımcı
+ * sınıfları bir üst katmanda (utilities), yani bir bileşen kendi gölgesini
+ * ya da zeminini AÇIKÇA yazdıysa o kazanıyor. Buradaki kurallar yalnızca
+ * boş kalan özelliği dolduruyor; hiçbir ekranın bilerek verdiği kararı
+ * ezmiyor. Katmansız (unlayered) yazılanlar yalnızca odak ve animasyon.
+ */
+
+@utility sayfa-baslik {
+  font-size: 1.625rem;
+  line-height: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  text-wrap: balance;
+}
+
+@layer components {
+  /*
+   * ZEMİN: marka renginden türeyen iki çok hafif ışık. Sabit bir renk
+   * yazılmıyor — beyaz etiketli üründe her müşterinin rengi farklı ve ışık
+   * onun tonunu alıyor. `fixed`: uzun sayfada ışık içerikle kaymıyor.
+   */
+  .panel {
+    background:
+      radial-gradient(1100px 520px at 105% -8%, color-mix(in srgb, var(--brand-primary) 7%, transparent), transparent 62%),
+      radial-gradient(900px 480px at -8% 108%, color-mix(in srgb, var(--brand-accent) 5%, transparent), transparent 60%),
+      var(--surface-muted);
+    background-attachment: fixed;
+  }
+
+  /*
+   * KARTLAR. Etiket listesi dar (div, section, article, li, form, aside):
+   * aynı sınıf dizisini taşıyan `input` ve `button`lar kart değil, onlara
+   * gölge vermek form alanlarını kabartırdı.
+   */
+  .panel :is(div, section, article, li, form, aside, details).border-line.bg-surface:is(.rounded-xl, .rounded-2xl) {
+    box-shadow: var(--shadow-card);
+    transition:
+      box-shadow 0.3s var(--ease-out),
+      transform 0.3s var(--ease-out),
+      border-color 0.3s var(--ease-out);
+  }
+  .panel :is(div, section, article, li, form, details).border-line.bg-surface.rounded-lg {
+    box-shadow: var(--shadow-xs);
+  }
+
+  /*
+   * TIKLANAN KART YÜKSELİYOR — tıklanmayan yükselmiyor. Hover'da kalkan ama
+   * hiçbir şey yapmayan bir kart, kullanıcıya olmayan bir eylem vaat eder.
+   */
+  .panel :is(a, button).border-line:is(.rounded-xl, .rounded-2xl):not(:disabled) {
+    transition:
+      box-shadow 0.3s var(--ease-out),
+      transform 0.3s var(--ease-out),
+      border-color 0.3s var(--ease-out),
+      background-color 0.2s;
+  }
+  .panel :is(a, button).border-line:is(.rounded-xl, .rounded-2xl):not(:disabled):hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--brand-primary) 28%, var(--border));
+  }
+
+  /*
+   * BİRİNCİL DÜĞME: marka renginden vurgu rengine çok hafif bir geçiş ve
+   * marka tonunda bir parıltı. Düz dolgu, "tıklanabilir" ile "renkli kutu"
+   * arasındaki farkı yalnızca renge bırakıyordu.
+   */
+  .panel :is(button, a).bg-brand {
+    background-image: linear-gradient(
+      135deg,
+      var(--brand-primary),
+      color-mix(in srgb, var(--brand-primary) 72%, var(--brand-accent))
+    );
+    box-shadow:
+      0 1px 2px rgb(16 24 40 / 0.1),
+      0 6px 16px -6px color-mix(in srgb, var(--brand-primary) 60%, transparent),
+      inset 0 1px 0 rgb(255 255 255 / 0.18);
+    transition:
+      transform 0.2s var(--ease-out),
+      box-shadow 0.25s var(--ease-out),
+      filter 0.15s;
+  }
+  .panel :is(button, a).bg-brand:not(:disabled):hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 2px 4px rgb(16 24 40 / 0.1),
+      0 10px 24px -8px color-mix(in srgb, var(--brand-primary) 70%, transparent),
+      inset 0 1px 0 rgb(255 255 255 / 0.22);
+  }
+  .panel :is(button, a).bg-brand:not(:disabled):active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  /* İKİNCİL DÜĞMELER: basıldığını hissettiren küçük bir çökme. */
+  .panel button:not(:disabled):active {
+    transform: scale(0.98);
+  }
+
+  /* TABLO SATIRLARI: satırı gözle takip etmek için yumuşak bir vurgu. */
+  .panel tbody tr {
+    transition: background-color 0.15s;
+  }
+  .panel tbody tr:hover {
+    background-color: color-mix(in srgb, var(--surface-sunken) 55%, transparent);
+  }
+  .panel thead th {
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  /* FORM ALANLARI: geçiş ve daha net bir kenar. */
+  .panel :where(input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']), select, textarea) {
+    transition:
+      border-color 0.15s,
+      box-shadow 0.2s var(--ease-out),
+      background-color 0.15s;
+  }
+  .panel :where(input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']), select, textarea):hover:not(:disabled, :focus) {
+    border-color: color-mix(in srgb, var(--text-muted) 40%, var(--border));
+  }
+  .panel :where(input[type='checkbox'], input[type='radio'], input[type='range']) {
+    accent-color: var(--brand-primary);
+  }
+}
+
+/*
+ * MENÜDE AKTİF SATIR: solda marka renginde bir işaret çubuğu. Yalnızca zemin
+ * tonuyla işaretlemek, açık temada ve soluk marka renginde neredeyse
+ * görünmüyordu. Çubuk ölçeklenerek giriyor; hareket kapalıysa doğrudan duruyor.
+ */
+.nav-oge::before {
+  content: '';
+  position: absolute;
+  /*
+   * SATIRIN İÇİNDE, dışında değil: bölümün açılıp kapanan sarmalayıcısı
+   * `overflow-hidden` taşıyor ve satırın soluna taşan bir çubuğu kırpıyordu
+   * (ilk sürümde çubuk hiç görünmedi).
+   */
+  left: 0;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(var(--brand-primary), var(--brand-accent));
+  transform: scaleY(0);
+  opacity: 0;
+  transition:
+    transform 0.3s var(--ease-out),
+    opacity 0.2s;
+}
+.nav-oge[aria-current='page']::before {
+  transform: scaleY(1);
+  opacity: 1;
+}
+
+/*
+ * ODAKTA ALAN: marka tonunda bir hale. KATMANSIZ, çünkü genel odak kuralı
+ * (yukarıda) da katmansız ve alanlara 2 piksellik bir dış çizgi çiziyor;
+ * alan için hale ondan daha okunaklı. Yalnızca form alanları.
+ */
+.panel :where(input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']), select, textarea):focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--brand-primary) 65%, var(--border));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-primary) 16%, transparent);
+}
+
+/*
+ * PENCERE PERDESİ: arkadaki sayfa hafifçe bulanıyor, pencere öne çıkıyor.
+ * Pencere perdenin içinde `fixed` DEĞİL (esnek kutunun çocuğu); süzgecin
+ * açtığı yeni kapsayıcı bu yüzden bir şey hapsetmiyor.
+ */
+.panel .fixed.inset-0[class*='bg-black'] {
+  backdrop-filter: blur(3px);
+}
+
+/*
+ * ═══ GEÇİŞLER ═══
+ *
+ * Sayfa değişince içerik aniden beliriyordu; tıklamanın bir şey yaptığı
+ * ancak sayfa dolduğunda anlaşılıyordu. `template.tsx` her gezinmede yeniden
+ * monte ediliyor ve bu sınıfı taşıyor; sayfanın ilk seviye blokları sırayla
+ * giriyor.
+ *
+ * SON KARE `transform: none` VE `filter: none` OLMAK ZORUNDA. Dönüşümü ya
+ * da süzgeci kalan bir ata, içindeki `position: fixed` öğeler (pencereler,
+ * açılır menüler) için yeni bir kapsayıcı oluyor ve onlar sayfanın değil
+ * kartın içine hapsoluyor. `both` ile tutulan son kare bu yüzden nötr.
+ *
+ * HEPSİ `prefers-reduced-motion` ALTINDA: hareket duyarlı kullanıcıda içerik
+ * doğrudan yerinde görünüyor.
+ */
+@keyframes panel-sayfa-gir {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes panel-blok-gir {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes panel-pencere-gir {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes panel-perde-gir {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes panel-cekmece-gir {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes panel-parilti {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sayfa-gecis {
+    animation: panel-sayfa-gir 0.45s var(--ease-out) both;
+  }
+  /*
+   * KENDİ ANİMASYONU OLAN ÖĞE HARİÇ. Bu kural onlardan sonra geldiği için
+   * kazanırdı: sayfanın ikinci seviyesindeki bir yükleniyor noktası ya da
+   * iskelet kutusu dönmeyi bırakıp bir kez kayıp dururdu.
+   */
+  .sayfa-gecis > * > :not([class*='animate-'], [class*='advetics-']) {
+    animation: panel-blok-gir 0.55s var(--ease-out) both;
+  }
+  .sayfa-gecis > * > :nth-child(1) { animation-delay: 40ms; }
+  .sayfa-gecis > * > :nth-child(2) { animation-delay: 90ms; }
+  .sayfa-gecis > * > :nth-child(3) { animation-delay: 140ms; }
+  .sayfa-gecis > * > :nth-child(4) { animation-delay: 190ms; }
+  .sayfa-gecis > * > :nth-child(5) { animation-delay: 240ms; }
+  .sayfa-gecis > * > :nth-child(6) { animation-delay: 290ms; }
+  .sayfa-gecis > * > :nth-child(n + 7) { animation-delay: 330ms; }
+
+  /*
+   * PENCERELER VE AÇILIR MENÜLER. Panelde ortak bir pencere bileşeni yok;
+   * hepsi aynı kalıbı yazıyor (kenarlıklı yüzey + `shadow-lg`/`shadow-xl`).
+   * Giriş animasyonu kalıba bağlanıyor, yani yeni pencere de kendiliğinden
+   * alıyor. Çekmece hariç: onun yönü yandan.
+   */
+  .panel-pencere,
+  [aria-modal='true']:not([data-cekmece]),
+  .panel .bg-surface.border-line:is(.shadow-lg, .shadow-xl) {
+    animation: panel-pencere-gir 0.28s var(--ease-out) both;
+  }
+  .panel-perde,
+  .panel .fixed.inset-0[class*='bg-black'] {
+    animation: panel-perde-gir 0.25s ease-out both;
+  }
+  [data-cekmece] {
+    animation: panel-cekmece-gir 0.32s var(--ease-out) both;
+  }
+
+  /*
+   * İSKELET: yanıp sönen gri kutu yerine soldan sağa geçen bir ışık.
+   * `animate-pulse` sınıfı yerinde kalıyor (erişilebilirlik testi ve
+   * hareket kapalıyken bile duran gösterge o).
+   */
+  .panel .animate-pulse.bg-surface-sunken {
+    animation: panel-parilti 1.6s linear infinite;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--surface) 70%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
   }
 }
 

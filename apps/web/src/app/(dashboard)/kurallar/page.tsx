@@ -83,7 +83,7 @@ export default async function RulesPage({
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Kurallar</h1>
+          <h1 className="sayfa-baslik">Kurallar</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
             {clientName} · saatte bir değerlendiriliyor
           </p>

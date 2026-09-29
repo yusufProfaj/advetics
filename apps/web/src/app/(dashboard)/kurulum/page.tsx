@@ -111,7 +111,7 @@ export default async function KurulumPage({
 
   const baslik = (
     <header>
-      <h1 className="text-2xl font-semibold text-ink">Kurulum Sihirbazı</h1>
+      <h1 className="sayfa-baslik">Kurulum Sihirbazı</h1>
       <p className="mt-1 max-w-prose text-sm text-ink-muted">
         {sihirbazAcik
           ? 'Adımları sırayla tamamla. Her adımda neyin gerektiği yazıyor.'

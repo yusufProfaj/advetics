@@ -7,8 +7,13 @@
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
 **Son güncelleme:** 2026-09-29 (ikinci oturum) · **Canlı:** "dünya geneli"
-etiketi dahil (kullanıcı deploy etti). **Bekleyen deploy:** Bölüm 4d (Akıllı
-Boost ön ayarı kitle şablonu). Migration yok, shared değişti.
+etiketi dahil. **Bekleyen deploy:** Bölüm 4d (Akıllı Boost ön ayarı kitle
+şablonu) ve panel tasarım katmanı. Migration yok. Tasarım `next/font`
+kullanıyor: sunucudaki derleme Google Fonts'a erişebilmeli.
+
+**Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
+`/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;
+kullanıcı orayı baştan düzenleyecek. Sıradaki işlerde onu atla.
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
@@ -67,10 +72,12 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
    saatlik mi (**kullanıcıya sorulacak, ölçümden sonra**).
 2. ~~İlgi alanı büyüklüğü dünya geneli~~ **etiketlendi** (2026-09-29, deploy
    bekliyor). Ülkeye göre sayı (`delivery_estimate`) istenirse ayrı iş.
-3. **Bölüm 4 kalanı:** ~~Akıllı Boost ön ayarı~~ **bitti (4d)**. Kalan: uzman
-   modun (`/reklam-olustur` Gelişmiş) şablonları okuması; çok hesaplı
-   workspace'te kitle seçicinin hesap seçmesi. 4d deploy sonrası: şablonlu ön
-   ayarla ilk boost Ads Manager'da ilgi ve hariç kitleyle GÖZLE kontrol.
+3. **Tasarım deploy sonrası:** gerçek sayfaları gez (pencereler, yoğun
+   tablolar, Genel Bakış, Raporlar, Akıllı Boost) ve kullanıcının beğenisini
+   al; sonraki tur buna göre.
+   4d deploy sonrası: şablonlu ön ayarla ilk boost Ads Manager'da ilgi ve
+   hariç kitleyle GÖZLE kontrol. Bölüm 4'ün kalanı (uzman mod, çok hesaplı
+   kitle seçici) reklam oluşturmaya ait → dondu.
 4. **Bölüm 5 — Koruma kuralları** (`BASE-PLANI.md`).
 5. Açık ayrı iş (öneri kartı açıldı): eski tek reklam yayın yolu
    (`ad-publisher.service.ts`) özel kategori kısıtını uygulamıyor.

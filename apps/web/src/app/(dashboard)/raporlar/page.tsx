@@ -169,7 +169,7 @@ export default async function ReportsPage({
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Raporlar</h1>
+          <h1 className="sayfa-baslik">Raporlar</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
             {formatDayLong(from)} - {formatDayLong(to)}
           </p>

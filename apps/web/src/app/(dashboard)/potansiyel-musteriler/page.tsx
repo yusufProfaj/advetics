@@ -79,7 +79,7 @@ export default async function LeadsPage({
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Potansiyel Müşteriler</h1>
+          <h1 className="sayfa-baslik">Potansiyel Müşteriler</h1>
           {/*
             AÇIKLAMA KAPSAMI DA SÖYLÜYOR.
 

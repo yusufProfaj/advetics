@@ -141,7 +141,7 @@ export default async function SimpleAdPage({
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-        <h1 className="text-xl font-semibold text-ink">Hızlı Reklam</h1>
+        <h1 className="sayfa-baslik">Hızlı Reklam</h1>
         {/* HANGİ MÜŞTERİ İÇİN ÇALIŞILDIĞI YAZIYOR.
             Eski sihirbazda yazmıyordu ve reklam hesabı sessizce listenin ilk
             elemanına düşüyordu; 12 müşteri arasında gezinen bir ajans için

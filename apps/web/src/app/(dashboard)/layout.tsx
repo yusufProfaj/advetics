@@ -111,7 +111,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ? ({
         '--brand-primary': branding.primaryColor,
         '--brand-accent': branding.accentColor,
-        '--brand-font': `'${branding.fontFamily}', ui-sans-serif, system-ui, sans-serif`,
+        /*
+         * YÜKLENEN INTER YEDEKTE. Markanın yazı tipi kullanıcının makinesinde
+         * yoksa sistem yazı tipine değil, panelin yüklediği yazı tipine
+         * düşülüyor; 'Inter' seçili markada da o dosya kullanılıyor.
+         */
+        '--brand-font': `'${branding.fontFamily}', var(--font-inter), ui-sans-serif, system-ui, sans-serif`,
       } as React.CSSProperties)
     : undefined;
 
@@ -131,14 +136,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   };
 
   return (
-    <div style={themeStyle} className="flex min-h-screen">
+    <div style={themeStyle} className="panel flex min-h-screen">
       {/* Kenar çubuğu */}
       {/*
         KENAR ÇUBUĞU İÇERİĞİ TEK BİLEŞENDE: aynı menü mobilde çekmece olarak
         da çiziliyor (`MobilMenu`). İki kopya, birinin güncellenmemesi ve
         telefondaki menünün masaüstünden farklı kalması demekti.
       */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface lg:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface/80 backdrop-blur-xl lg:flex">
         <KenarIcerigi veri={kenarVerisi} />
       </aside>
 
@@ -155,7 +160,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         boostGorunur={hasPermission(session, 'boost.read')}
       >
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-line bg-surface/90 px-5 backdrop-blur">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-line/70 bg-surface/75 px-5 shadow-[0_1px_0_rgb(255_255_255/0.5)_inset] backdrop-blur-xl backdrop-saturate-150">
           {/*
             ═══ ÜST BARDA TEK SEÇİCİ ═══
 
@@ -229,7 +234,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           istiyorsa kendi `max-w`ini koyuyor ve yatay dolguyu TEKRARLAMIYOR
           (iki kat dolgu, o sayfaları diğerlerinden farklı hizalıyordu).
         */}
-        <main className="mx-auto w-full max-w-[1400px] flex-1 px-5 py-6">{children}</main>
+        <main className="mx-auto w-full max-w-[1400px] flex-1 px-5 py-7 lg:px-8">{children}</main>
 
         {!branding?.hidePoweredBy && (
           <footer className="border-t border-line px-5 py-3 text-center text-xs text-ink-muted">

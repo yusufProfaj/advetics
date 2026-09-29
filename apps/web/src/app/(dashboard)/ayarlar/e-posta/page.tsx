@@ -39,7 +39,7 @@ export default async function EpostaAyarlariSayfasi() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-ink">E-posta Ayarları</h1>
+        <h1 className="sayfa-baslik">E-posta Ayarları</h1>
         <p className="mt-0.5 text-sm text-ink-muted">
           Raporlar <strong>{session.user.email}</strong> adresinden, senin imzanla
           gidecek. Ayarlar yalnızca sana görünür — yöneticiler dâhil kimse bu

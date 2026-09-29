@@ -62,7 +62,7 @@ export default async function UstHesaplarPage() {
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold text-ink">Üst Hesaplar</h1>
+        <h1 className="sayfa-baslik">Üst Hesaplar</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">
           Üst hesap, Google&apos;ın Müşteri Merkezi (MCC) karşılığı: bir danışmanlık, altındaki
           birden çok şirketi tek girişle yönetir. Burada hesabın kendisini yönetiyorsun — adı,

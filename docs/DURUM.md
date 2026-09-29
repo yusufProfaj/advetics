@@ -765,6 +765,42 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — Panel tasarımı: kalıba bağlı tasarım katmanı ve geçişler
+
+Kullanıcının tarifi: *"iç sayfaların tasarımları çok basit ve ucuz duruyor"*.
+Sayfa sayfa değil KALIP seviyesinde yapıldı: 35 sayfa ve 175 bileşen aynı
+birkaç kalıbı elle yazıyor (kart `rounded-xl border border-line bg-surface`
+~100 yerde). Görünüş `globals.css` → "PANEL TASARIM KATMANI"nda o kalıplara
+bağlandı; yeni yazılan kart da kendiliğinden alıyor.
+
+- **Kapsam `.panel`** (yalnızca `(dashboard)/layout.tsx`): tanıtım, giriş ve
+  müşteriye giden rapor (`/r/...`) etkilenmiyor.
+- **`@layer components`**: bir ekran kendi gölgesini/zeminini yazdıysa o
+  kazanıyor; katman yalnızca boş özelliği dolduruyor. Katmansız olanlar
+  yalnızca form odağı ve animasyonlar.
+- Belirteçler: zemin/kart farkı, katmanlı gölgeler (`shadow-kart`,
+  `shadow-kalkik`, `shadow-acilir`), marka tonlu arka plan ışığı, birincil
+  düğmede marka→vurgu geçişi ve parıltı, tıklanan kartta kalkma, tablo
+  satırı vurgusu, form alanında marka halesi.
+- **Inter HİÇ yüklenmiyordu** (`--brand-font: 'Inter'` yazıyordu, dosya
+  yoktu): artık `next/font/google`, `latin-ext` ile. DERLEMEDE indiriliyor,
+  yani sunucuda `next build` Google Fonts'a erişebilmeli.
+- Geçişler: `(dashboard)/template.tsx` her gezinmede sayfayı ve ilk seviye
+  blokları sırayla getiriyor; pencereler, perde ve çekmece animasyonlu;
+  iskelet parıltılı. Hepsi `prefers-reduced-motion` altında. Son kare nötr
+  (`transform: none`), yoksa `fixed` pencereler karta hapsolurdu. Kendi
+  animasyonu olan öğe (yükleniyor noktası) sıralı girişten hariç.
+- Kabuk: kenar çubuğu (logo karosu, aktif satırda işaret çubuğu, kullanıcı
+  kartı), cam üst bar, 22 sayfanın başlığı tek sınıfta (`sayfa-baslik`;
+  önceden `text-xl` ile `text-2xl` arasında gidip geliyordu).
+- Yan düzeltmeler: telefonda sayfa başlığı düğmelerin yanında dar bir
+  sütuna sıkışıyordu (`SayfaBasligi` en az genişlik); menünün başlıksız ilk
+  bölümü React `key` uyarısı üretiyordu.
+- Gözle doğrulandı: geçici önizleme sayfasıyla açık/karanlık tema ve 375 px
+  (yerel DB yok, gerçek sayfalar açılamadı). **Canlıda gerçek sayfalar
+  gezilip bakılmalı**; özellikle pencereler ve yoğun tablolar.
+  `panel-tasarim.spec.ts`, iki mutasyon düşürüldü.
+
 ### 2026-09-29 — Marka Merkezi, Bölüm 4d: Akıllı Boost ön ayarı kitle şablonunu okuyor
 
 Meta ön ayar formunda "Kitle şablonundan doldur": şablonun konumu, yaşı,

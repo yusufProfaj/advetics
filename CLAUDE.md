@@ -161,6 +161,16 @@ buna göre veriliyor:
 - **"200 döndü" doğrulama değil.** Yazma yolları platformda GÖZLE
   doğrulanmadan bitmiş sayılmıyor.
 
+### Panel görünüşü kalıba bağlı
+
+`globals.css` → "PANEL TASARIM KATMANI": kart, birincil düğme, tablo satırı,
+form alanı ve pencere görünüşü `.panel` altındaki SINIF KALIBINA bağlı
+(`@layer components`). Yeni ekranda kart için ayrı gölge/animasyon yazma,
+kalıbı kullan (`rounded-xl border border-line bg-surface`); ekrana özel bir
+karar gerekiyorsa yardımcı sınıfla yaz, katman onu ezmiyor. Sayfa başlığı
+`sayfa-baslik`. Animasyon eklersen `prefers-reduced-motion` altına koy.
+`panel-tasarim.spec.ts`.
+
 ### Tekrar eden teknik tuzaklar
 
 - **`Prisma.sql` YORUMUNUN İÇİNDE İNTERPOLASYON DA KULLANMA.** Backtick

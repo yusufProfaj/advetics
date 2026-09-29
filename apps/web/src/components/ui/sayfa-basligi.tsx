@@ -27,13 +27,18 @@ export function SayfaBasligi({
 }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-      <div className="min-w-0 flex-1">
+      {/*
+        EN AZ GENİŞLİK: `flex-1 min-w-0` tek başına başlığı sıfıra kadar
+        daraltabiliyordu; telefonda eylem düğmeleri alta inmek yerine başlığın
+        yanında kalıyor ve açıklama kelime kelime alt alta diziliyordu.
+      */}
+      <div className="min-w-[min(100%,18rem)] flex-1">
         {ust && <div className="mb-1.5">{ust}</div>}
-        <h1 className="text-xl font-semibold tracking-tight text-ink [text-wrap:balance]">
+        <h1 className="sayfa-baslik">
           {baslik}
         </h1>
         {aciklama && (
-          <div className="mt-1 max-w-3xl text-sm text-ink-muted [text-wrap:pretty]">
+          <div className="mt-1.5 max-w-3xl text-sm leading-relaxed text-ink-muted [text-wrap:pretty]">
             {aciklama}
           </div>
         )}

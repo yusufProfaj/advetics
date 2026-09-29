@@ -103,7 +103,7 @@ export default async function BulkPage({
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Toplu Oluştur</h1>
+          <h1 className="sayfa-baslik">Toplu Oluştur</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
             <strong className="text-ink">{client?.name ?? 'Workspace'}</strong> · bir kampanyadan
             varyasyonlar üret. Yazmadığın her alan kaynaktan gelir.

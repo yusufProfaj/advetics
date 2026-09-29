@@ -99,7 +99,7 @@ export default async function SirketlerPage() {
      */
     <div className="mx-auto w-full max-w-7xl space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold text-ink">Şirketler</h1>
+        <h1 className="sayfa-baslik">Şirketler</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">
           Google&apos;ın Müşteri Merkezi (MCC) karşılığı: bir danışmanlık, altındaki birden çok
           şirketi tek girişle yönetir. Her şirketin kendi workspace&apos;leri, kendi reklam

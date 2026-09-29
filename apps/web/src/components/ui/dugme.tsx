@@ -23,7 +23,8 @@ export type DugmeBoyutu = 'kucuk' | 'orta';
 
 const TON: Record<DugmeTonu, string> = {
   birincil: 'bg-brand text-white hover:brightness-95 active:brightness-90',
-  ikincil: 'border border-line bg-surface text-ink hover:bg-surface-muted active:bg-surface-sunken',
+  ikincil:
+    'border border-line bg-surface text-ink shadow-[var(--shadow-xs)] hover:border-ink-muted/30 hover:bg-surface-muted active:bg-surface-sunken',
   tehlike: 'bg-danger text-white hover:brightness-95 active:brightness-90',
   sade: 'text-ink-muted hover:bg-surface-muted hover:text-ink',
 };
@@ -41,7 +42,7 @@ export function dugmeSinifi(ton: DugmeTonu = 'birincil', boyut: DugmeBoyutu = 'o
   return [
     'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-semibold',
     // `transition: all` DEĞİL: yalnızca değişen özellikler.
-    'transition-[background-color,color,filter] duration-150',
+    'transition-[background-color,color,filter,border-color,box-shadow,transform] duration-200',
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
     'disabled:cursor-not-allowed disabled:opacity-50',
     TON[ton],

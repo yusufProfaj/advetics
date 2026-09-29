@@ -41,7 +41,7 @@ export default async function SenkronizasyonPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Senkronizasyon Durumu</h1>
+        <h1 className="sayfa-baslik">Senkronizasyon Durumu</h1>
         <p className="mt-1 text-sm text-ink-muted">
           Seçili workspace’in reklam hesapları, veri çekme işlerinin sonucu ve bir
           hesap için veri gelmiyorsa <strong>sebebi</strong>. Kenar çubuğundan

@@ -103,7 +103,9 @@ describe('vurgu kartı', () => {
      */
     expect(KART).not.toContain('bg-brand-soft');
     expect(KART).toContain("emphasis ? 'border-brand/40' : 'border-line'");
-    expect(KART).toContain("emphasis ? 'text-[28px] leading-8' : 'text-2xl'");
+    expect(KART).toContain("emphasis ? 'text-[30px] leading-9' : 'text-[26px] leading-8'");
+    // Şerit izinli, zemin ışığı değil: yarı saydam marka dolgusu da dolgu.
+    expect(KART).not.toMatch(/bg-brand\/\d/);
   });
 });
 
