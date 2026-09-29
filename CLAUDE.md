@@ -917,6 +917,15 @@ okunup varsayılmadı — canlıda doğrulandı.
   edip butonu tarayıcıya yönlendirebiliyor, yani reklam yayınlanır ve
   tıklayan kişi WhatsApp yerine bir web sayfası görür.
 
+- **İLGİ ALANI ARAMASI (`/search?type=adinterest`) KISA TERİMLE EŞLEŞİYOR.**
+  Ölçüldü (2026-09-29, `meta-ilgi-kontrol`): "lüks otomobil" 0 satır,
+  "otomobil" 5, "luxury car" 4, "luxury vehicles" 0, "golf" 5. `locale=tr_TR`
+  eşleşmeyi DEĞİŞTİRMİYOR (açık/kapalı aynı sayı); dönen adlar zaten Türkçe
+  ("Otomobiller (araçlar)"). HTTP 200 + boş dizi bir HATA DEĞİL, "eşleşme
+  yok" — ve sessizce boş bir öneri üretir. Kitle önerisi bu yüzden kavram
+  başına 1-4 kısa aday (Türkçe + İngilizce) üretip sırayla deniyor ve hangi
+  adayın tuttuğunu yazıyor (genelleşme kullanıcıya görünmeli).
+
 **Webhook'lar** (2026-08 araştırması, iki bağımsız sınayıcıyla)
 
 - **Instagram'da "yeni gönderi" WEBHOOK'U YOK.** Abone olunabilir alanlar

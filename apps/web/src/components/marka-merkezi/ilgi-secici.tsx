@@ -85,6 +85,9 @@ export function IlgiSecici({
       <p className="text-[11px] text-ink-muted">
         Birden çok ilgi “bunlardan biriyle ilgilenen” demek; kitleyi daraltmaz, genişletir. Boş
         bırakırsan ilgi daraltması yapılmaz.
+        {/* CANLI ÖLÇÜM (2026-09-29): Meta araması kısa terimlerle eşleşiyor;
+            "lüks otomobil" 0 sonuç, "otomobil" ve "luxury car" sonuç veriyor. */}
+        {' '}Tek ya da iki kelime yaz; uzun ifadeler çoğu zaman sonuç vermez.
       </p>
       {secili.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -110,7 +113,7 @@ export function IlgiSecici({
         <input
           value={arama}
           onChange={(e) => setArama(e.target.value)}
-          placeholder="Örn. lüks otomobil"
+          placeholder="Örn. otomobil"
           className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
         />
       )}
@@ -118,7 +121,10 @@ export function IlgiSecici({
       {durum === 'araniyor' && <p className="text-[11px] text-ink-muted">Aranıyor…</p>}
       {hata && <p className="text-[11px] text-danger-strong">{hata}</p>}
       {durum === 'bitti' && !hata && sonuc.length === 0 && (
-        <p className="text-[11px] text-ink-muted">Meta’da bu terimle ilgi alanı bulunamadı.</p>
+        <p className="text-[11px] text-ink-muted">
+          Meta’da bu terimle ilgi alanı bulunamadı. Daha kısa ya da İngilizce dene (örn. “otomobil”,
+          “luxury car”).
+        </p>
       )}
       {sonuc.length > 0 && (
         <ul className="max-h-48 space-y-1 overflow-y-auto">

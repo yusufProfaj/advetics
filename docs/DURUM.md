@@ -793,6 +793,12 @@ ilgi alanının Meta'daki kitle büyüklüğü ekranda yazıyor ve ilgiler tek
   diyordu (başlangıç `null`du); yükleniyor ayrı hâl. Hesap kararı tek hook
   (`useIzlenenMetaHesabi`), ilgi araması da onu kullanıyor.
 - Mutasyon: API yedi, panel üç; hepsi yakalandı.
+- **Terim × dil ölçümü ve düzeltme (aynı gün):** kısa terimler eşleşiyor,
+  çok kelimeli ifadeler çoğu zaman sıfır; `locale` etkisiz; yanıt alanları
+  `mapInterest`le uyumlu. Model artık kavram başına 1-4 kısa aday üretiyor,
+  sunucu ilk tutanı alıyor ve "lüks otomobil → otomobil" gibi genelleşmeyi
+  ekrana yazıyor. Elle aramada ipucu "tek ya da iki kelime". Kural CLAUDE.md
+  "Canlıda öğrenilen platform gerçekleri"nde. Üç mutasyon, üçü yakalandı.
 - **İlk canlı koşu (2026-09-29, Çiftçi-2026 hesabı):** `/search?type=adinterest`
   "lüks otomobil" + `locale=tr_TR` → HTTP 200, **SIFIR satır**. Uç çalışıyor ama
   Türkçe terimle eşleşmiyor olabilir; betik terim × dil tablosu basacak şekilde

@@ -40,13 +40,25 @@ import type { AnthropicLike } from './ai-assistant.service';
 const MODEL_SEMASI = {
   type: 'object',
   additionalProperties: false,
-  required: ['konumlar', 'yasMin', 'yasMax', 'cinsiyet', 'ilgiTerimleri', 'uygulanamayan'],
+  required: ['konumlar', 'yasMin', 'yasMax', 'cinsiyet', 'ilgiler', 'uygulanamayan'],
   properties: {
     konumlar: { type: 'array', items: { type: 'string' }, maxItems: 5 },
     yasMin: { type: ['integer', 'null'] },
     yasMax: { type: ['integer', 'null'] },
     cinsiyet: { type: 'string', enum: ['all', 'male', 'female'] },
-    ilgiTerimleri: { type: 'array', items: { type: 'string' }, maxItems: 6 },
+    ilgiler: {
+      type: 'array',
+      maxItems: 6,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['kavram', 'aramalar'],
+        properties: {
+          kavram: { type: 'string' },
+          aramalar: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 4 },
+        },
+      },
+    },
     uygulanamayan: {
       type: 'array',
       items: {
@@ -64,7 +76,14 @@ const modelCevabi = z.object({
   yasMin: z.number().int().nullable(),
   yasMax: z.number().int().nullable(),
   cinsiyet: z.enum(['all', 'male', 'female']),
-  ilgiTerimleri: z.array(z.string().trim().min(2).max(80)).max(6),
+  ilgiler: z
+    .array(
+      z.object({
+        kavram: z.string().trim().min(2).max(80),
+        aramalar: z.array(z.string().trim().min(2).max(40)).min(1).max(4),
+      }),
+    )
+    .max(6),
   uygulanamayan: z.array(z.object({ ifade: z.string().max(300), sebep: z.string().max(300) })).max(10),
 });
 export type ModelCevabi = z.infer<typeof modelCevabi>;
@@ -79,8 +98,13 @@ KURALLAR:
 - yasMin/yasMax: metinde yaş ya da yaşı belirten bir ifade varsa (ör. "gençler",
   "emekliler") makul aralık; yoksa null. Meta'da alt sınır 18, üst sınır 65 ("65 ve üzeri").
 - cinsiyet: metin açıkça kadın ya da erkek diyorsa female/male, yoksa all.
-- ilgiTerimleri: Meta ilgi alanı aramasında aranacak KISA Türkçe terimler (1-3
-  kelime; ör. "lüks otomobil", "golf"). Kimlik yazma, yalnızca terim. En fazla 6.
+- ilgiler: metindeki her ilgi KAVRAMI için Meta ilgi aramasında denenecek 1-4
+  aday terim ("aramalar"). Meta'nın araması KISA terimlerle eşleşiyor: çok
+  kelimeli ifadeler çoğu zaman hiç sonuç vermiyor ("lüks otomobil" 0 sonuç,
+  "otomobil" ve "luxury car" sonuç veriyor). Adayları EN ÖZELDEN en genele sırala;
+  tek ya da iki kelime; Türkçe ve İngilizce karşılık birlikte. Örnek: kavram
+  "lüks otomobil" → aramalar ["luxury car", "lüks araç", "otomobil"]. Kimlik
+  yazma, yalnızca terim. En fazla 6 kavram.
 - uygulanamayan: metinde olan ama Meta'nın konum/yaş/cinsiyet/ilgi hedeflemesiyle
   kurulamayan her parça ve NEDEN. Örnek: "son bir ayda" → Meta ilgi hedeflemesinde
   zaman aralığı yok; "arayan" (arama niyeti) → Meta'da doğrudan karşılığı yok, en
@@ -188,20 +212,36 @@ export class KitleOnerisiService {
     }
     const sonKonumlar = locations.filter((l) => !dusenUlke.includes(l));
 
+    /*
+     * ADAYLAR SIRAYLA DENENİYOR, İLK EŞLEŞEN ALINIYOR. Canlı ölçüm
+     * (2026-09-29, `meta-ilgi-kontrol`): Meta ilgi araması kısa terimlerle
+     * eşleşiyor, çok kelimeli ifadeler çoğu zaman SIFIR dönüyor ("lüks
+     * otomobil" 0, "otomobil" 5, "luxury car" 4); `locale` eşleşmeyi
+     * etkilemiyor. Hangi adayın eşleştiği `terim`e yazılıyor: "lüks
+     * otomobil" kavramı "otomobil" ile eşleştiyse kitle kavramdan GENİŞ ve
+     * kullanıcı bunu görmeli. Kavram başına en fazla 4 çağrı (kota).
+     */
     const interests: KitleOnerisi['interests'] = [];
-    for (const terim of c.ilgiTerimleri) {
-      const sonuc = await this.connections.searchInterests(ctx, hesap.id, terim);
-      const ilk = sonuc.find((o) => !interests.some((i) => i.id === o.id));
-      if (!ilk) {
-        eslesmeyen.push({ terim, tur: 'ilgi' });
+    for (const ilgi of c.ilgiler) {
+      let bulunan: { terim: string; o: Awaited<ReturnType<ConnectionsService['searchInterests']>>[number] } | null = null;
+      for (const aday of ilgi.aramalar) {
+        const sonuc = await this.connections.searchInterests(ctx, hesap.id, aday);
+        const ilk = sonuc.find((o) => !interests.some((i) => i.id === o.id));
+        if (ilk) {
+          bulunan = { terim: aday, o: ilk };
+          break;
+        }
+      }
+      if (!bulunan) {
+        eslesmeyen.push({ terim: ilgi.kavram, tur: 'ilgi' });
         continue;
       }
       interests.push({
-        id: ilk.id,
-        name: ilk.name,
-        terim,
-        audienceMin: ilk.audienceMin,
-        audienceMax: ilk.audienceMax,
+        id: bulunan.o.id,
+        name: bulunan.o.name,
+        terim: bulunan.terim === ilgi.kavram ? ilgi.kavram : `${ilgi.kavram} → ${bulunan.terim}`,
+        audienceMin: bulunan.o.audienceMin,
+        audienceMax: bulunan.o.audienceMax,
       });
     }
 

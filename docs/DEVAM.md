@@ -8,12 +8,10 @@
 
 **Son güncelleme:** 2026-09-30 · **Canlı:** `017897a` dahil evet (Bölüm 4a).
 Bölüm 4c push edildi, DEPLOY BEKLİYOR — MIGRATION VAR
-(`20260930120000_kitle_ilgi_alanlari`). Deploy sonrası İLK İŞ:
-`pnpm --filter @advetics/api meta-ilgi-kontrol -- --q "lüks otomobil"`
-(salt okunur; ilgi aramasının canlı yanıt biçimini doğruluyor). İlk koşu
-Türkçe terimle SIFIR satır döndü; şimdi terim × dil tablosu:
-`pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler "lüks otomobil,otomobil,luxury car,luxury vehicles,golf"`
-Sonuca göre model ilgi terimlerini İngilizce de üretmeli mi, karar verilecek.
+(`20260930120000_kitle_ilgi_alanlari`). İlgi araması canlıda ölçüldü (kısa terim eşleşiyor, `locale` etkisiz) ve
+öneri buna göre düzeltildi; düzeltme DEPLOY BEKLİYOR. Deploy sonrası panelde
+"Kitleyi tarif et" ile bir deneme: ilgi alanları gelmeli, genelleşen terimler
+"kavram → aday" diye görünmeli.
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
