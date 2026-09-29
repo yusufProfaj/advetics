@@ -3,6 +3,7 @@ import type { TenantContext } from '@advetics/shared';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { SyncController } from './sync.controller';
 import { BAGLANTI_GORUNMUYOR } from '../../queue/supurme-kapsami';
+import { SENKRON_SAYAC_GUNU } from '@advetics/shared';
 
 /**
  * "VERİ NEDEN YOK" TEŞHİS UCU.
@@ -80,7 +81,7 @@ const IS: IsSatiri = {
 };
 
 let hesapArgs: { where?: Record<string, unknown> } | null = null;
-let isArgs: { take?: number } | null = null;
+let isArgs: { take?: number; where?: { createdAt?: { gte?: Date } } } | null = null;
 
 /** Hesap başına son iş sorgusunun (DISTINCT ON) döndürdüğü ham satır. */
 interface HamIs {
@@ -401,5 +402,21 @@ describe('GET /sync/status — bağlantısı GÖRÜNMEYEN hesap', () => {
   it('görünmeyen bağlantı "bağlantı kapalı" sayacına girmiyor', async () => {
     const res = await kur([{ ...SAGLAM_HESAP, connection: null }]).status(CTX);
     expect(res.excluded.connectionInactive).toBe(0);
+  });
+});
+
+describe('GET /sync/status — iş listesi sayaçlarla AYNI pencerede', () => {
+  it('KRİTİK: son işler listesi son SENKRON_SAYAC_GUNU günle sınırlı', async () => {
+    /*
+     * Sayaçlar son N günü sayarken liste tüm zamanları gösterseydi ekran
+     * "25 / 12 iş gösteriliyor" gibi anlamsız bir oran yazardı.
+     */
+    const once = Date.now();
+    await kur([SAGLAM_HESAP], [IS]).status(CTX);
+    const gte = isArgs?.where?.createdAt?.gte;
+    expect(gte).toBeInstanceOf(Date);
+    const gun = (once - gte!.getTime()) / 86_400_000;
+    expect(gun).toBeGreaterThan(SENKRON_SAYAC_GUNU - 0.01);
+    expect(gun).toBeLessThan(SENKRON_SAYAC_GUNU + 0.01);
   });
 });

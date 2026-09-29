@@ -49,9 +49,17 @@ export function senkronSorgulari(): OlculenSorgu[] {
           WHERE status = 'succeeded' AND rows_upserted = 0 AND job_type IN (${METRIK})`,
         "SELECT COUNT(*)::int AS n FROM sync_jobs WHERE status IN ('running', 'queued', 'throttled')",
       ],
-      // ADAY = ÜRETİMDE ÇALIŞAN SORGU (2026-09-28'de uygulandı). Metin aynı
-      // fonksiyondan geliyor; ölçülen ile çalışan ayrışamaz.
-      aday: [isSayaclariSorgusu().sql],
+      // Tek tarama, TÜM ZAMANLAR — aynı soruyu soruyor ve eşdeğerlik testi
+      // bununla yapılıyor. 2026-09-28'de üretimde 457 ms; 2026-09-29'da
+      // uygulama son 7 güne geçti (aşağıdaki parça).
+      aday: [
+        `SELECT COUNT(*)::int AS toplam,
+                COUNT(*) FILTER (WHERE status = 'failed')::int AS dusen,
+                COUNT(*) FILTER (WHERE status = 'succeeded' AND rows_upserted = 0
+                                   AND job_type IN (${METRIK}))::int AS bos,
+                COUNT(*) FILTER (WHERE status IN ('running', 'queued', 'throttled'))::int AS kosan
+           FROM sync_jobs`,
+      ],
     },
     {
       // `sonIsSorgusu` — DISTINCT ON bütün tabloyu tarıyor. Aday: hesap ve
@@ -103,19 +111,13 @@ export function senkronSorgulari(): OlculenSorgu[] {
       aday: null,
     },
     {
-      // Sayaçlar yalnızca son 7 gün. ANLAM DEĞİŞİYOR: bugün ekrandaki
-      // "57.238 düşen iş" tüm zamanların sayısı. Uygulanmadan önce sorulur.
+      // Sayaçlar yalnızca son N gün. ANLAM DEĞİŞİYOR (tüm zamanlar → son N
+      // gün) ve kullanıcı bunu 2026-09-29'da onayladı. ADAY = ÜRETİMDE
+      // ÇALIŞAN SORGU: metin aynı fonksiyondan, ölçülen ile çalışan
+      // ayrışamaz. 2026-09-28 ölçümü: 137 ms.
       ad: 'iş sayaçları (son 7 gün)',
       bugun: [],
-      aday: [
-        `SELECT COUNT(*)::int AS toplam,
-                COUNT(*) FILTER (WHERE status = 'failed')::int AS dusen,
-                COUNT(*) FILTER (WHERE status = 'succeeded' AND rows_upserted = 0
-                                   AND job_type IN (${METRIK}))::int AS bos,
-                COUNT(*) FILTER (WHERE status IN ('running', 'queued', 'throttled'))::int AS kosan
-           FROM sync_jobs
-          WHERE created_at >= now() - interval '7 days'`,
-      ],
+      aday: [isSayaclariSorgusu().sql],
       anlamDegisiyor: true,
     },
   ];

@@ -4,7 +4,7 @@ import type {
   SyncJobStatusRow,
   SyncStatusResponse,
 } from '@advetics/shared';
-import { PLATFORM_LABELS } from '@advetics/shared';
+import { PLATFORM_LABELS, SENKRON_SAYAC_GUNU } from '@advetics/shared';
 
 /** Elenen kategorilerin Türkçe karşılığı — sayaç anlamsız kalmasın. */
 const ELENME_ETIKETLERI: Record<keyof SyncExcludedCounts, string> = {
@@ -66,7 +66,9 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
 
       <section className="rounded-lg border border-line bg-surface">
         <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3">
-          <h2 className="font-medium">Son senkronizasyon işleri</h2>
+          {/* PENCERE SABİTTEN: etiket elle yazılsaydı pencere değişince
+              ekran yanlış süreyi söylerdi. */}
+          <h2 className="font-medium">Son {SENKRON_SAYAC_GUNU} günün senkronizasyon işleri</h2>
           <p className="text-xs text-ink-muted">
             {data.recentJobs.length} / {data.recentJobsTotal} iş gösteriliyor
           </p>
@@ -74,7 +76,7 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
 
         {data.recentJobs.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-ink-muted">
-            Bu workspace için hiç senkronizasyon işi kaydedilmemiş. Hesap yeni
+            Son {SENKRON_SAYAC_GUNU} günde hiç senkronizasyon işi kaydedilmemiş. Hesap yeni
             atandıysa işler birkaç dakika içinde görünür; görünmüyorsa
             senkronizasyon worker&apos;ı çalışmıyor olabilir.
           </p>
@@ -123,7 +125,7 @@ function OzetSeridi({ data }: { data: SyncStatusResponse }) {
         vurgu={engelli > 0 ? 'warn' : undefined}
       />
       <Kutu
-        baslik="Düşen iş"
+        baslik={`Düşen iş · son ${SENKRON_SAYAC_GUNU} gün`}
         deger={String(dusen)}
         vurgu={dusen > 0 ? 'danger' : undefined}
         ipucu={koşan > 0 ? `${koşan} iş hâlâ kuyrukta ya da koşuyor.` : undefined}
@@ -135,7 +137,7 @@ function OzetSeridi({ data }: { data: SyncStatusResponse }) {
         gizlerdi.
       */}
       <Kutu
-        baslik="Başarılı ama boş iş"
+        baslik={`Başarılı ama boş iş · son ${SENKRON_SAYAC_GUNU} gün`}
         deger={String(bosBiten)}
         vurgu={bosBiten > 0 ? 'warn' : undefined}
         ipucu="İş hatasız bitti ama tek satır yazmadı — genellikle yapı taraması metriklerden sonra koştuğu için."

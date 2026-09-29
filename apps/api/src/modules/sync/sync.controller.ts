@@ -28,6 +28,7 @@ import {
   type SyncJobStatusRow,
   type SyncStatusResponse,
   type TenantContext,
+  SENKRON_SAYAC_GUNU,
 } from '@advetics/shared';
 import { Prisma, type SyncJobType } from '@prisma/client';
 import type { Platform } from '@advetics/shared';
@@ -296,6 +297,10 @@ export class SyncController {
       const [jobs, sayac, sonIsler] =
         await Promise.all([
         tx.syncJob.findMany({
+          // AYNI PENCERE: sayaçlar son N günü sayarken liste tüm zamanları
+          // gösterseydi ekran "25 / 12 iş gösteriliyor" gibi anlamsız bir
+          // oran yazardı. Gerekçe `SENKRON_SAYAC_GUNU`.
+          where: { createdAt: { gte: new Date(Date.now() - SENKRON_SAYAC_GUNU * 86_400_000) } },
           orderBy: { createdAt: 'desc' },
           take: RECENT_JOB_LIMIT,
           select: {

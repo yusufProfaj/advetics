@@ -1,4 +1,5 @@
 import { Prisma, type SyncJobType } from '@prisma/client';
+import { SENKRON_SAYAC_GUNU } from '@advetics/shared';
 
 /**
  * "Sıfır satır yazdı" hangi iş türlerinde bir ARIZA işareti.
@@ -30,9 +31,10 @@ export const METRIK_ISLERI = [
  * transaction sınırının hemen altında çalışıyordu ve soğuk başlangıçta
  * düşüyordu.
  *
- * ANLAM AYNI: dört sayı da TÜM ZAMANLARIN sayısı, eskisi gibi.
- * `olcum-senkron.spec.ts` dört eski sorguyla bunun aynı sayıları verdiğini
- * gerçek şemada kanıtlıyor.
+ * PENCERE SON `SENKRON_SAYAC_GUNU` GÜN (kullanıcı kararı, 2026-09-29).
+ * Tüm zamanlarda "57.238 düşen iş" Ağustos'tan beri birikiyordu ve sorun
+ * çözülse de düşmüyordu. Pencere ayrıca taramayı da daraltıyor: üretimde
+ * ölçüldü, tüm zamanlar tek taramada 457 ms, son 7 gün 137 ms.
  *
  * ÖLÇÜM ARACI DA BU FONKSİYONU KULLANIYOR (`prisma/olcum-senkron-sorgular.ts`):
  * ölçülen SQL ile çalışan SQL ayrı yazılsaydı bir gün ayrışır ve ölçüm başka
@@ -44,6 +46,7 @@ export const METRIK_ISLERI = [
  */
 export function isSayaclariSorgusu(): Prisma.Sql {
   const turler = Prisma.raw(METRIK_ISLERI.map((t) => `'${t}'`).join(', '));
+  const gun = Prisma.raw(String(SENKRON_SAYAC_GUNU));
   return Prisma.sql`
     SELECT COUNT(*)::int AS toplam,
            COUNT(*) FILTER (WHERE status = 'failed')::int AS dusen,
@@ -51,6 +54,7 @@ export function isSayaclariSorgusu(): Prisma.Sql {
                               AND job_type IN (${turler}))::int AS bos,
            COUNT(*) FILTER (WHERE status IN ('running', 'queued', 'throttled'))::int AS kosan
       FROM sync_jobs
+     WHERE created_at >= now() - make_interval(days => ${gun})
   `;
 }
 

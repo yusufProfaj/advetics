@@ -134,6 +134,17 @@ describe('KRİTİK: aday AYNI soruyu soruyor', () => {
     expect(aday).toHaveLength(7);
   });
 
+  it('KRİTİK: üretim sayaçları SON 7 GÜNÜ sayıyor, daha eskisini değil', async () => {
+    /*
+     * Fixture'daki 10 günlük `insights_realtime` işi (başarılı, sıfır satır)
+     * pencerenin DIŞINDA: tüm zamanlarda "boş iş" 2, son 7 günde 1. Pencere
+     * koşulu düşerse bu iddia düşüyor.
+     */
+    const s = sorgu('iş sayaçları (son 7 gün)');
+    const [a] = await h.q<{ toplam: number; dusen: number; bos: number; kosan: number }>(s.aday![0]!);
+    expect([a!.toplam, a!.dusen, a!.bos, a!.kosan]).toEqual([9, 2, 1, 3]);
+  });
+
   it('son 7 gün adayı AÇIKÇA anlam değiştiren olarak işaretli', () => {
     expect(sorgu('iş sayaçları (son 7 gün)').anlamDegisiyor).toBe(true);
     for (const s of senkronSorgulari().filter((x) => x.ad !== 'iş sayaçları (son 7 gün)')) {

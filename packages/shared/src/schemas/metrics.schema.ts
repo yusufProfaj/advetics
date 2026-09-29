@@ -790,6 +790,24 @@ export interface SyncExcludedCounts {
   accountStatus: number;
 }
 
+/**
+ * ═══ SENKRONİZASYON İŞLERİ SON N GÜNDEN SAYILIYOR ═══
+ *
+ * Sayaçlar ve "son işler" listesi tüm zamanları sayıyordu: canlıda "57.238
+ * düşen iş" yazıyordu ve Ağustos'tan beri birikiyordu. Bugün her şey düzelse
+ * de sayı yerinde kalıyordu, yani ekran hiçbir zaman "şu an sorun yok"
+ * diyemiyordu. Kullanıcının kararı (2026-09-29): son 7 gün.
+ *
+ * TEK SABİT: sorgu da (`isSayaclariSorgusu`) ekrandaki etiket de bundan
+ * okuyor. Etiket elle "son 7 gün" yazsaydı pencere değiştiğinde ekran yanlış
+ * sayıyı söylemeye başlardı (CLAUDE.md: kullanıcıya gösterilen sınır
+ * sabitten türemeli).
+ *
+ * Hesap başına "son iş" satırları bu pencereye GİRMİYOR: "yapı taraması hiç
+ * koşmadı" teşhisi tüm zamanlara bakmak zorunda.
+ */
+export const SENKRON_SAYAC_GUNU = 7;
+
 export interface SyncStatusResponse {
   accountCount: number;
   neverSyncedCount: number;
@@ -797,10 +815,14 @@ export interface SyncStatusResponse {
   accounts: SyncAccountStatus[];
   excluded: SyncExcludedCounts;
   recentJobs: SyncJobStatusRow[];
-  /** Gösterilen iş sayısı toplamı tutmuyorsa kullanıcı bunu GÖRMELİ. */
+  /**
+   * Gösterilen iş sayısı toplamı tutmuyorsa kullanıcı bunu GÖRMELİ.
+   * Son `SENKRON_SAYAC_GUNU` gündeki iş sayısı; liste de aynı pencereden.
+   */
   recentJobsTotal: number;
   /**
-   * SAYAÇLAR BÜTÜN İŞLER ÜZERİNDEN — gösterilen 25 üzerinden DEĞİL.
+   * SAYAÇLAR PENCEREDEKİ BÜTÜN İŞLER ÜZERİNDEN — gösterilen 25 üzerinden
+   * DEĞİL. Pencere `SENKRON_SAYAC_GUNU`.
    *
    * İlk sürümde bu sayılar `recentJobs` dizisinden hesaplanıyordu ve tam
    * olarak kaçınmaya çalıştığım hatayı yapıyordu: "5 düşen iş" aslında
