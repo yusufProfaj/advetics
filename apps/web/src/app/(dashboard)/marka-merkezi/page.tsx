@@ -99,7 +99,7 @@ export default async function MarkaMerkeziPage({
             {kanallar.hata}
           </Uyari>
         ) : atayabilir ? (
-          <BagliKanallar data={kanallar.v} />
+          <BagliKanallar data={kanallar.v} ajansUyesi={session.managerAccount !== null} />
         ) : (
           /*
            * YETKİSİZ KİŞİYE SALT OKUNUR LİSTE. Ekle ve Kaldır düğmeleri

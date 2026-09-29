@@ -149,5 +149,12 @@ yayınlanamıyor), tek reklam sihirbazı, rapor ve kural dilinin sadeleşmesi.
     ajansa bildirim düşüyor. İz bırakmayan bir kaldırmada ajans, hesabın
     neden veri göndermeyi bıraktığını göremez.
   - Kaldırılan hesap ajansın havuzuna dönüyor (K2 aynen geçerli).
-  - Bölüm 1'de uygulanıyor; `hesap-sahipligi.spec.ts` yeni kuralla
-    güncelleniyor.
+  - **UYGULANDI (2026-09-29, Bölüm 1b).** Karar `hesap-sahipligi.ts` (K4
+    istisnası, `iz: 'musteri_ajans_kaldirma'`), yazma dar bir BYPASSRLS
+    dalında (`connections.service.ts#musteriAjansAtamasiniKaldir`) çünkü satır
+    ajansa dönünce şirket onu göremiyor ve Postgres UPDATE'i reddediyor.
+    Denetim kaydı aynı transaction'da, ajansa mail commit'ten sonra; mail
+    gitmezse kaldırma geri alınmıyor ama başarısızlık kayda geçiyor ve
+    yanıtta (`ajansaBildirildi: false`) dönüyor. Panelde "Ajans atadı"
+    rozeti ve onayda "ajansına e-posta gider" cümlesi.
+    `musteri-ajans-kaldirma-rls.spec.ts` gerçek politikalara karşı koşuyor.

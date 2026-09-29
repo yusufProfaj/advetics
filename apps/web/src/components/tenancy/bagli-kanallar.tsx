@@ -28,7 +28,19 @@ import { Dugme } from '@/components/ui/dugme';
  * seçicide. Sunucu zaten yalnızca bu workspace’inkileri ve havuzdakileri
  * döndürüyor.
  */
-export function BagliKanallar({ data }: { data: ClientChannels }) {
+export function BagliKanallar({
+  data,
+  ajansUyesi = true,
+}: {
+  data: ClientChannels;
+  /**
+   * Bakan kişi AJANSIN üyesi mi (üst hesap üyeliği). Değilse ve kalemi ajans
+   * atadıysa, kaldırma onayı "ajansına e-posta gider" diyor: müşteri ajansın
+   * atamasını kaldırabiliyor ama iz bırakıyor (2026-09-28) ve bunu
+   * kaldırmadan ÖNCE bilmeli. Varsayılan `true`: uyarı ancak bilindiğinde.
+   */
+  ajansUyesi?: boolean;
+}) {
   return (
     <div>
       {data.emptyReason ? (
@@ -50,7 +62,7 @@ export function BagliKanallar({ data }: { data: ClientChannels }) {
         <ul className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {data.groups.map((g) => (
             <li key={g.kind}>
-              <KanalGrubu clientId={data.clientId} grup={g} />
+              <KanalGrubu clientId={data.clientId} grup={g} ajansUyesi={ajansUyesi} />
             </li>
           ))}
         </ul>
@@ -75,7 +87,15 @@ export function havuzdaAra(liste: ChannelItem[], ara: string): ChannelItem[] {
   );
 }
 
-function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }) {
+function KanalGrubu({
+  clientId,
+  grup,
+  ajansUyesi,
+}: {
+  clientId: string;
+  grup: ChannelGroup;
+  ajansUyesi: boolean;
+}) {
   const [acik, setAcik] = useState(false);
   const [ara, setAra] = useState('');
   const gorunen = havuzdaAra(grup.available, ara);
@@ -128,7 +148,13 @@ function KanalGrubu({ clientId, grup }: { clientId: string; grup: ChannelGroup }
       {grup.connected.length > 0 && (
         <ul className="mt-3 space-y-2">
           {grup.connected.map((i) => (
-            <BagliKart key={i.id} clientId={clientId} kind={grup.kind} item={i} />
+            <BagliKart
+              key={i.id}
+              clientId={clientId}
+              kind={grup.kind}
+              item={i}
+              ajansUyesi={ajansUyesi}
+            />
           ))}
         </ul>
       )}
@@ -231,10 +257,12 @@ function BagliKart({
   clientId,
   kind,
   item,
+  ajansUyesi,
 }: {
   clientId: string;
   kind: ChannelKind;
   item: ChannelItem;
+  ajansUyesi: boolean;
 }) {
   const { ata, busy, hata, bildirim } = useAtama(kind, item.id);
   /*
@@ -250,7 +278,14 @@ function BagliKart({
     <li className="rounded-lg border border-line bg-surface px-3 py-2.5">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-ink">{item.name}</p>
+          <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink">
+            <span className="truncate">{item.name}</span>
+            {item.ajansAtadi && (
+              <span className="shrink-0 rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-medium text-ink-muted">
+                Ajans atadı
+              </span>
+            )}
+          </p>
           <p className="truncate text-xs text-ink-muted" translate="no">
             {item.externalId}
           </p>
@@ -265,7 +300,7 @@ function BagliKart({
       {onay && (
         <div className="mt-2 rounded-lg border border-danger/30 bg-danger-soft p-2.5">
           <p className="text-xs text-danger-strong">
-            Kaldırınca bu hesaptan veri gelmesi durur ve hesap havuza döner. Emin misin?
+            {kaldirmaOnayMetni(item.ajansAtadi === true, ajansUyesi)}
           </p>
           <div className="mt-2 flex gap-2">
             <Dugme ton="tehlike" boyut="kucuk" bekliyor={busy} onClick={() => void ata(null)}>
@@ -346,4 +381,18 @@ function SecilebilirSatir({
       )}
     </li>
   );
+}
+
+/**
+ * Kaldırma onayının cümlesi — saf, çünkü karar test edilebilir olmalı
+ * (panelde bileşen render eden test altyapısı yok, CLAUDE.md).
+ *
+ * Ajansın atadığı kalemi ajans DIŞINDAN biri kaldırıyorsa ek cümle: kaldırma
+ * ajansa e-posta gönderiyor ve bu, tıklamadan ÖNCE söylenmeli.
+ */
+export function kaldirmaOnayMetni(ajansAtadi: boolean, ajansUyesi: boolean): string {
+  const taban = 'Kaldırınca bu hesaptan veri gelmesi durur ve hesap havuza döner.';
+  return ajansAtadi && !ajansUyesi
+    ? `${taban} Bu hesabı ajansın atadı; kaldırırsan ajansına e-posta gider. Emin misin?`
+    : `${taban} Emin misin?`;
 }

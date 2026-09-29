@@ -24,7 +24,7 @@ export default async function ClientChannelsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireSession();
+  const session = await requireSession();
 
   const data = await serverApiFetch<ClientChannels>(`/clients/${id}/channels`).catch(
     () => null,
@@ -60,7 +60,7 @@ export default async function ClientChannelsPage({
         </p>
       </div>
 
-      <BagliKanallar data={data} />
+      <BagliKanallar data={data} ajansUyesi={session.managerAccount !== null} />
 
       <p className="text-xs text-ink-muted">
         Hesaplar burada görünmüyorsa ajansın platform bağlantısı eksik olabilir —{' '}

@@ -98,3 +98,15 @@ describe('atama bildirimi', () => {
     }
   });
 });
+
+describe('şirket ajansın atamasını kaldırınca', () => {
+  it('KRİTİK: ajansa bildirim gittiyse ve gitmediyse AYRI cümle', () => {
+    // Sessizce "bildirildi" sanılmasın: gitmediyse kullanıcı ajansına
+    // ayrıca haber vermeli.
+    expect(atamaBildirimi({ ajansaBildirildi: true }, false)).toContain('haber verildi');
+    const gitmedi = atamaBildirimi({ ajansaBildirildi: false }, false)!;
+    expect(gitmedi).toContain('gönderilemedi');
+    expect(gitmedi).toContain('ayrıca bildir');
+    expect(atamaBildirimi({}, false)).toBeNull();
+  });
+});

@@ -63,6 +63,8 @@ function servis(kayit: { clientId: string | null; platform: string } | null): {
     {} as never,
     // ÖDEME TETİĞİ — bu testlerde hesap durumu yazılmıyor.
     {} as never,
+    // AJANSA MAİL — yalnızca müşteri ajans atamasını kaldırınca; bu testte o yol koşmuyor.
+    { gonder: async () => ({ alici: 'test' }) } as never,
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

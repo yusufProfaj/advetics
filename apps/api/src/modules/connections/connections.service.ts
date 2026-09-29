@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
@@ -24,7 +25,7 @@ import { PLATFORMS } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { yetkiBitisi } from './yetki-bitisi';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from './provider.registry';
 import { SyncQueueService } from '../../queue/sync-queue.service';
@@ -38,6 +39,7 @@ import {
 import { baglantiHatasiMetni } from './baglanti-hatasi';
 import { TokenVaultService } from './token-vault.service';
 import { OdemeTetigiService } from '../alerts/odeme-tetigi.service';
+import { OdemeMailiGonderici } from '../alerts/odeme-maili-gonderici.service';
 import { CryptoService } from '../../crypto/crypto.service';
 import { MetaProvider } from './providers/meta.provider';
 import { hesapVerisiniTasi, type TasimaSonucu } from './hesap-verisi-tasima';
@@ -181,6 +183,12 @@ export class ConnectionsService {
      * En sonda, `crypto` ile aynı gerekçe: testler konumla geçiriyor.
      */
     private readonly odemeTetigi: OdemeTetigiService,
+    /**
+     * AJANSA MAİL — müşteri ajansın atamasını kaldırdığında. En sonda, aynı
+     * gerekçe: testler konumla geçiriyor. `OdemeTetigiModule` bu modüle
+     * zaten bağlı ve sağlayıcıyı dışa veriyor; yeni modül kaydı yok.
+     */
+    private readonly odemeMaili: OdemeMailiGonderici,
   ) {}
 
   /**
@@ -2045,18 +2053,28 @@ export class ConnectionsService {
       hedefClientId: string | null;
       cakisanVarMi: (orgId: string) => Promise<boolean>;
     },
-  ): Promise<{ orgId: string; not: string | null }> {
+  ): Promise<{ orgId: string; not: string | null; iz?: 'musteri_ajans_kaldirma' }> {
     /*
      * TEK SORGU, HAM SQL. İki ayrı model okuması yerine tek tur; ham olması
      * test koşum ortamının onu gerçek şemaya karşı çalıştırabilmesi için
      * (`pglite-harness` model yüzeyini taklit ediyor, SQL'i taklit etmiyor).
      */
+    /*
+     * `sirket_ajans_org_id`: AKTİF ŞİRKETİN üst hesabının ajansı, üyelikten
+     * bağımsız. Müşteri admininin üyeliği yok ve `ajans_org_id` onda hep
+     * NULL; K4 istisnası "bu bağlantı benim ajansımın mı" sorusunu bununla
+     * cevaplıyor (`hesap-sahipligi.ts`).
+     */
     const [baglanti] = await this.admin.$queryRaw<
-      Array<{ org_id: string; ajans_org_id: string | null }>
+      Array<{ org_id: string; ajans_org_id: string | null; sirket_ajans_org_id: string | null }>
     >(Prisma.sql`
       SELECT c.org_id::text AS org_id,
              (SELECT m.ajans_org_id::text FROM manager_accounts m
-               WHERE m.id = ${ctx.managerAccountId}::uuid) AS ajans_org_id
+               WHERE m.id = ${ctx.managerAccountId}::uuid) AS ajans_org_id,
+             (SELECT m.ajans_org_id::text
+                FROM organizations o
+                JOIN manager_accounts m ON m.id = o.manager_account_id
+               WHERE o.id = ${ctx.orgId}::uuid) AS sirket_ajans_org_id
         FROM platform_connections c
        WHERE c.id = ${p.connectionId}::uuid
     `);
@@ -2078,6 +2096,7 @@ export class ConnectionsService {
       // (eksik kurulmuş bir bağlam) üyelik VAR sayılmasın — kapalı düşsün.
       ustHesapVar: Boolean(ctx.managerAccountId),
       ajansOrgId: baglanti.ajans_org_id,
+      sirketAjansOrgId: baglanti.sirket_ajans_org_id,
     });
     if (!karar.ok) throw new BadRequestException(karar.mesaj);
 
@@ -2090,7 +2109,115 @@ export class ConnectionsService {
         karar.yeniOrgId === p.satirOrgId ? false : await p.cakisanVarMi(karar.yeniOrgId),
     });
     if (!cakisma.ok) throw new BadRequestException(cakisma.mesaj);
-    return { orgId: cakisma.orgId, not: cakisma.not };
+    return { orgId: cakisma.orgId, not: cakisma.not, ...(karar.iz ? { iz: karar.iz } : {}) };
+  }
+
+  /**
+   * ═══ MÜŞTERİ AJANSIN ATAMASINI KALDIRIYOR — DAR BYPASSRLS DALI ═══
+   *
+   * Kullanıcının kararı (2026-09-28): müşteri ajansın atadığı hesabı ya da
+   * sayfayı KALDIRABİLİR, ama iz bırakır. Yetki kararı RLS altında ve saf
+   * fonksiyonda verildi (`sahiplikKarari`, K4 istisnası); buraya yalnızca
+   * o karar `iz` ile döndüyse geliniyor.
+   *
+   * NEDEN BYPASSRLS: satır ajansın şirketine dönüyor ve müşteri onu artık
+   * göremiyor. UPDATE sonrası yeni satır SELECT politikasından geçmek zorunda
+   * (CLAUDE.md) ve Postgres "new row violates row-level security policy" ile
+   * reddediyor. Politikayı gevşetmek ajansın havuzunu müşteriye açmak olurdu.
+   *
+   * UPDATE ESKİ ATAMAYA ÇAPALI (`client_id = önceki`): karar ile yazma arasında
+   * başka biri satırı taşıdıysa sessizce üstüne yazmak yerine duruyoruz.
+   *
+   * DENETİM KAYDI AYNI TRANSACTION'DA: ya kaldırma ve iz birlikte olur ya
+   * hiçbiri. İzsiz bir kaldırma kararın özünü bozardı.
+   */
+  private async musteriAjansAtamasiniKaldir(
+    ctx: TenantContext,
+    meta: Meta,
+    p: {
+      tur: 'ad_account' | 'social_profile';
+      id: string;
+      ad: string;
+      oncekiClientId: string;
+      yeniOrgId: string;
+    },
+  ): Promise<{ tasima: TasimaSonucu | null }> {
+    return this.admin.$transaction(async (a) => {
+      const n =
+        p.tur === 'ad_account'
+          ? await a.$executeRaw(Prisma.sql`
+              UPDATE ad_accounts
+                 SET client_id = NULL, sync_enabled = false,
+                     org_id = ${p.yeniOrgId}::uuid, updated_at = now()
+               WHERE id = ${p.id}::uuid AND client_id = ${p.oncekiClientId}::uuid
+            `)
+          : await a.$executeRaw(Prisma.sql`
+              UPDATE social_profiles
+                 SET client_id = NULL, sync_enabled = false,
+                     org_id = ${p.yeniOrgId}::uuid, updated_at = now()
+               WHERE id = ${p.id}::uuid AND client_id = ${p.oncekiClientId}::uuid
+            `);
+      if (n !== 1) {
+        throw new ConflictException(
+          `"${p.ad}" bu arada başka biri tarafından değiştirilmiş. Sayfayı yenileyip tekrar dene.`,
+        );
+      }
+      // Veri eski workspace'te kalıyor (kaldırmada taşıma yok); bu çağrı
+      // kalanı sayıyor ve artık eşleşmeyen Boost fatura bağını koparıyor.
+      const tasima = p.tur === 'ad_account' ? await hesapVerisiniTasi(a, p.id, null) : null;
+      await this.audit.record(a as unknown as TenantClient, ctx, {
+        action: p.tur === 'ad_account' ? 'ad_account.unassigned_by_client' : 'social_profile.unassigned_by_client',
+        targetType: p.tur,
+        targetId: p.id,
+        clientId: p.oncekiClientId,
+        before: { clientId: p.oncekiClientId },
+        after: { clientId: null, orgId: p.yeniOrgId },
+        ...meta,
+      });
+      return { tasima };
+    });
+  }
+
+  /**
+   * AJANSA HABER — kaldırma COMMIT edildikten SONRA.
+   *
+   * Mail başarısız olursa kaldırma GERİ ALINMIYOR (müşterinin kararı geçerli
+   * ve iz denetim kaydında zaten var), ama başarısızlık ayrı bir denetim
+   * kaydına yazılıyor ve yanıtta dönüyor: sessizce "bildirildi" sanılmasın.
+   * Alıcı ödeme uyarılarıyla aynı: ajansın kendi gönderici adresi
+   * (`OdemeMailiGonderici`); müşteriye gitmiyor.
+   */
+  private async ajansaKaldirmayiBildir(
+    ctx: TenantContext,
+    p: { tur: 'ad_account' | 'social_profile'; ad: string; clientId: string },
+  ): Promise<boolean> {
+    const [ws] = await this.admin.$queryRaw<Array<{ ad: string; sirket: string }>>(Prisma.sql`
+      SELECT c.name AS ad, o.name AS sirket
+        FROM clients c JOIN organizations o ON o.id = c.org_id
+       WHERE c.id = ${p.clientId}::uuid
+    `);
+    const turAdi = p.tur === 'ad_account' ? 'reklam hesabı' : 'sayfa';
+    const kacir = (t: string) =>
+      t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+    try {
+      await this.odemeMaili.gonder(
+        `${ws?.sirket ?? 'Bir şirket'} ajansın atadığı bir ${turAdi} kaldırdı`,
+        `<p><strong>${kacir(ws?.sirket ?? '')}</strong> şirketinden bir yönetici, ` +
+          `<strong>${kacir(ws?.ad ?? '')}</strong> workspace'ine ajansın atadığı ` +
+          `<strong>${kacir(p.ad)}</strong> ${turAdi} atamasını kaldırdı.</p>` +
+          `<p>Hesap ajans havuzuna döndü ve izleme kapandı; bu workspace'e bu hesaptan yeni veri gelmeyecek. ` +
+          `Geçmiş veri workspace'te duruyor.</p>`,
+      );
+      return true;
+    } catch (e) {
+      await this.audit.recordUnauthenticated(ctx.orgId, {
+        action: 'ajans_bildirimi_gonderilemedi',
+        targetType: p.tur,
+        clientId: p.clientId,
+        after: { sebep: e instanceof Error ? e.message : String(e) },
+      });
+      return false;
+    }
   }
 
   async assignAdAccount(
@@ -2160,6 +2287,36 @@ export class ConnectionsService {
           return ikiz.length > 0;
         },
       });
+
+      /*
+       * MÜŞTERİ AJANSIN ATAMASINI KALDIRIYOR — yazma BYPASSRLS ile, dar dal.
+       * Gerekçe `musteriAjansAtamasiniKaldir`. `before.clientId` burada
+       * dolu: kaldırılacak bir atama var (aynıysa yukarıda erken dönüldü).
+       */
+      if (sahiplik.iz === 'musteri_ajans_kaldirma' && before.clientId) {
+        const { tasima } = await this.musteriAjansAtamasiniKaldir(ctx, meta, {
+          tur: 'ad_account',
+          id: before.id,
+          ad: before.name,
+          oncekiClientId: before.clientId,
+          yeniOrgId: sahiplik.orgId,
+        });
+        return {
+          id: before.id,
+          clientId: null as string | null,
+          syncEnabled: false,
+          changed: true,
+          platform: before.platform as Platform,
+          movedRows: 0,
+          movedByTable: {} as TasimaSonucu['tasinan'],
+          leftBehind: tasima?.kalan ?? ({} as TasimaSonucu['kalan']),
+          stayingRows: tasima?.kalanVeri ?? 0,
+          clientWide: tasima?.musteriGeneli ?? ({} as TasimaSonucu['musteriGeneli']),
+          unlinkedBoostPages: tasima?.koparilanFaturaBagi ?? 0,
+          poolNote: sahiplik.not,
+          ajansBildirimi: { ad: before.name, clientId: before.clientId },
+        };
+      }
 
       /*
        * ATAMA İZLEMEYİ AÇIYOR — ayrı bir adım DEĞİL.
@@ -2304,6 +2461,21 @@ export class ConnectionsService {
       await this.hesabaGecmisiKuyrukla(sonuc.clientId, sonuc.platform, adAccountId);
     }
 
+    /*
+     * AJANSA HABER TRANSACTION'IN DIŞINDA: SMTP yavaşlarsa RLS transaction'ı
+     * açık kalmasın. `ajansaBildirildi` yanıtta dönüyor; panel "ajansa
+     * bildirildi" ya da "bildirim gönderilemedi" diye AYRI yazabilsin.
+     */
+    if ('ajansBildirimi' in sonuc && sonuc.ajansBildirimi) {
+      const { ajansBildirimi, ...geri } = sonuc;
+      return {
+        ...geri,
+        ajansaBildirildi: await this.ajansaKaldirmayiBildir(ctx, {
+          tur: 'ad_account',
+          ...ajansBildirimi,
+        }),
+      };
+    }
     return sonuc;
   }
 
@@ -2333,7 +2505,7 @@ export class ConnectionsService {
 
     const scoped: TenantContext = { ...ctx, activeClientId: null };
 
-    return this.prisma.withTenant(scoped, async (tx) => {
+    const sonuc = await this.prisma.withTenant(scoped, async (tx) => {
       const before = await tx.socialProfile.findUnique({ where: { id: socialProfileId } });
       if (!before) throw new NotFoundException('Sayfa bulunamadı');
 
@@ -2381,6 +2553,31 @@ export class ConnectionsService {
             });
 
       /*
+       * MÜŞTERİ AJANSIN ATAMASINI KALDIRIYOR — reklam hesabıyla aynı dar
+       * BYPASSRLS dalı (`musteriAjansAtamasiniKaldir`). Formlar eski
+       * workspace'te kalıyor ve sayısı yine söyleniyor.
+       */
+      if (sahiplik.iz === 'musteri_ajans_kaldirma' && before.clientId) {
+        await this.musteriAjansAtamasiniKaldir(ctx, meta, {
+          tur: 'social_profile',
+          id: before.id,
+          ad: before.name,
+          oncekiClientId: before.clientId,
+          yeniOrgId: sahiplik.orgId,
+        });
+        return {
+          id: before.id,
+          clientId: null as string | null,
+          syncEnabled: false,
+          profileType: before.profileType,
+          changed: true,
+          leftBehindForms,
+          poolNote: sahiplik.not,
+          ajansBildirimi: { ad: before.name, clientId: before.clientId },
+        };
+      }
+
+      /*
        * ATAMA İZLEMEYİ AÇIYOR — reklam hesabı atamasıyla aynı gerekçe.
        *
        * Sayfada bu ayrıca kritik: organik gönderi süpürmesi `syncEnabled`
@@ -2426,6 +2623,19 @@ export class ConnectionsService {
         poolNote: sahiplik.not,
       };
     });
+
+    // AJANSA HABER TRANSACTION'IN DIŞINDA — gerekçe `assignAdAccount`.
+    if ('ajansBildirimi' in sonuc && sonuc.ajansBildirimi) {
+      const { ajansBildirimi, ...geri } = sonuc;
+      return {
+        ...geri,
+        ajansaBildirildi: await this.ajansaKaldirmayiBildir(ctx, {
+          tur: 'social_profile',
+          ...ajansBildirimi,
+        }),
+      };
+    }
+    return sonuc;
   }
 
   /**

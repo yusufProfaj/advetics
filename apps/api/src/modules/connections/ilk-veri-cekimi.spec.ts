@@ -89,6 +89,8 @@ function servis(
     {} as never,
     // ÖDEME TETİĞİ — bu testlerde hesap durumu yazılmıyor.
     {} as never,
+    // AJANSA MAİL — yalnızca müşteri ajans atamasını kaldırınca; bu testte o yol koşmuyor.
+    { gonder: async () => ({ alici: 'test' }) } as never,
   );
   return { svc, c };
 }

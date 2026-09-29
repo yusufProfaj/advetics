@@ -127,6 +127,8 @@ function servis(
     // ÖDEME TETİĞİ — keşif her turda yazdığı hesapları veriyor; kayıtçı
     // hangi kimliklerle çağrıldığını tutuyor.
     tetikKaydedici as never,
+    // AJANSA MAİL — yalnızca müşteri ajans atamasını kaldırınca; bu testte o yol koşmuyor.
+    { gonder: async () => ({ alici: 'test' }) } as never,
   );
   return { svc, c };
 }

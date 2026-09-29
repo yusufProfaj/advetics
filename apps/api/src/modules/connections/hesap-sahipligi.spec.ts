@@ -30,15 +30,47 @@ function taban(over: Partial<SahiplikGirdisi> = {}): SahiplikGirdisi {
     aktifOrgId: UC_A,
     ustHesapVar: true,
     ajansOrgId: PROFAJ,
+    sirketAjansOrgId: PROFAJ,
     ...over,
   };
 }
 
 describe('K4 — ajansın atamasını ajans değiştirir', () => {
-  it('KRİTİK: şirket admini ajans hesabının atamasını KALDIRAMIYOR', () => {
+  /*
+   * KURAL 2026-09-28'DE BİLEREK DEĞİŞTİ. Bu test önceden "şirket admini ajans
+   * hesabının atamasını KALDIRAMIYOR" diyordu; kullanıcının kararıyla müşteri
+   * artık KALDIRABİLİYOR ama TAŞIYAMIYOR ve kaldırma iz bırakıyor. Taşıma
+   * yasağı hemen aşağıdaki testte aynen duruyor.
+   */
+  it('KRİTİK: şirket admini ajans hesabının atamasını KALDIRABİLİYOR ve bu iz dalı', () => {
     const k = sahiplikKarari(taban({ hedefOrgId: null, ustHesapVar: false }));
-    expect(k).toMatchObject({ ok: false });
+    // Satır ajansa dönüyor ve çağıran BYPASSRLS + bildirim yoluna gidiyor.
+    expect(k).toEqual({ ok: true, yeniOrgId: PROFAJ, iz: 'musteri_ajans_kaldirma' });
+  });
+
+  it('KRİTİK: şirketin ajansı bilinmiyorsa kaldırma KAPALI', () => {
+    const k = sahiplikKarari(taban({ hedefOrgId: null, ustHesapVar: false, sirketAjansOrgId: null }));
     expect(k.ok === false && k.mesaj).toMatch(/yalnızca ajans/);
+  });
+
+  it('KRİTİK: başka bir ajansın bağlantısı kaldırılamıyor', () => {
+    const k = sahiplikKarari(
+      taban({ hedefOrgId: null, ustHesapVar: false, sirketAjansOrgId: 'org-baska-ajans' }),
+    );
+    expect(k.ok === false && k.mesaj).toMatch(/yalnızca ajans/);
+  });
+
+  it('KRİTİK: satır başka şirketteyse kaldırılamıyor', () => {
+    // Müşteri admini kendi şirketinin DIŞINDAKİ bir atanmış satıra dokunamaz.
+    const k = sahiplikKarari(
+      taban({ hedefOrgId: null, ustHesapVar: false, satirOrgId: BILTAS }),
+    );
+    expect(k.ok).toBe(false);
+  });
+
+  it('ajans üyesinin kaldırması NORMAL dal, iz dalı değil', () => {
+    // Ajans satırı zaten görüyor; BYPASSRLS'e ve bildirime gerek yok.
+    expect(sahiplikKarari(taban({ hedefOrgId: null }))).toEqual({ ok: true, yeniOrgId: PROFAJ });
   });
 
   it('KRİTİK: şirket admini ajans hesabını kendi başka workspace’ine de TAŞIYAMIYOR', () => {

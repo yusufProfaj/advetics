@@ -32,7 +32,9 @@ beforeAll(async () => {
   const prisma = {
     withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
   } as unknown as PrismaService;
-  svc = new ClientChannelsService(prisma);
+  // Yönetim istemcisi: koşum ortamının bağlantısı RLS'siz, yani BYPASSRLS'in
+  // doğru taklidi. Yalnızca "ajans mı atadı" karşılaştırması için.
+  svc = new ClientChannelsService(prisma, h.db as never);
 });
 
 afterAll(async () => {

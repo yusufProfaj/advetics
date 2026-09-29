@@ -86,6 +86,8 @@ beforeAll(async () => {
     {} as never,
     // ÖDEME TETİĞİ — bu testlerde hesap durumu yazılmıyor.
     { degerlendir: () => { throw new Error('ödeme tetiği bu testte beklenmiyor'); } } as never,
+    // AJANSA MAİL — yalnızca müşteri ajans atamasını kaldırınca; bu testte o yol koşmuyor.
+    { gonder: async () => ({ alici: 'test' }) } as never,
   );
 });
 
@@ -1227,22 +1229,29 @@ describe('ŞİRKETLER ARASI ATAMA', () => {
       ).resolves.toMatchObject({ clientId: CLIENT_KARDES });
     });
 
-    it('KRİTİK: şirket admini AJANSIN atadığı hesabı kaldıramıyor', async () => {
+    /*
+     * KURAL 2026-09-28'DE BİLEREK DEĞİŞTİ. Bu test önceden "şirket admini
+     * AJANSIN atadığı hesabı kaldıramıyor" diyordu; kullanıcının kararıyla
+     * artık KALDIRABİLİYOR, hesap ajansın havuzuna dönüyor ve ajansa haber
+     * gidiyor. Taşıma yasağı ve RLS altındaki davranış
+     * `musteri-ajans-kaldirma-rls.spec.ts` içinde.
+     */
+    it('KRİTİK: şirket admini AJANSIN atadığı hesabı kaldırabiliyor, hesap ajansa dönüyor', async () => {
       await svc.assignAdAccount(TUM_SIRKETLER_CTX, POOL_ACCOUNT, CLIENT_KARDES, META);
-      const MUSTERI: TenantContext = {
+      const SIRKET_ADMINI: TenantContext = {
         ...CTX,
         orgId: ORG_KARDES,
         clientIds: [CLIENT_KARDES],
         managerAccountId: null,
       } as TenantContext;
-      await expect(svc.assignAdAccount(MUSTERI, POOL_ACCOUNT, null, META)).rejects.toThrow(
-        /yalnızca ajans/,
-      );
-      const [row] = await h.q<{ client_id: string | null }>(
-        'SELECT client_id FROM ad_accounts WHERE id = $1',
+      await expect(
+        svc.assignAdAccount(SIRKET_ADMINI, POOL_ACCOUNT, null, META),
+      ).resolves.toMatchObject({ clientId: null, ajansaBildirildi: true });
+      const [row] = await h.q<{ client_id: string | null; org_id: string }>(
+        'SELECT client_id, org_id::text FROM ad_accounts WHERE id = $1',
         [POOL_ACCOUNT],
       );
-      expect(row?.client_id).toBe(CLIENT_KARDES);
+      expect(row).toEqual({ client_id: null, org_id: IDS.org });
     });
   });
 });

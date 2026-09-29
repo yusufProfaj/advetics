@@ -609,6 +609,17 @@ export async function createHarness(): Promise<Harness> {
     syncJob: { update: async () => ({}), findUnique: async () => null },
   } as unknown as TestDb;
 
+  /*
+   * `$transaction` TEK BAĞLANTIDA SIRAYLA: PGlite'ta tek oturum var ve
+   * çağrılar zaten sırayla koşuyor. Taklit GERİ ALMAYI SAĞLAMIYOR; geri alma
+   * davranışı sınanacaksa ayrı bir test gerekir. Eksikliği, gerçek Prisma'da
+   * bulunan bir metodu kullanan kodu (şirketin ajans atamasını kaldırması)
+   * testte çağrılamaz kılıyordu.
+   */
+  (db as unknown as { $transaction: unknown }).$transaction = async (
+    fn: (tx: unknown) => Promise<unknown>,
+  ) => fn(db);
+
   /**
    * Silme sırası CASCADE'e bırakılmıyor: tablo listesini açıkça vermek,
    * ileride eklenen bir tablonun sessizce temizlenmeden kalmasını engelliyor

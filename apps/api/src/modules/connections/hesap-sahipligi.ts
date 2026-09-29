@@ -22,13 +22,30 @@ import type { ConnectionStatus } from '@prisma/client';
  *   K3  Keşif, atanmış satırın `connection_id`sini yeni bağlantıya
  *       geçiriyordu — bkz. `baglantiKorunsunMu`.
  *   K4  Müşteri admini ajansın yaptığı atamayı kaldırabiliyordu.
+ *       2026-09-28 KARARI (kullanıcı): müşteri ajansın atamasını
+ *       KALDIRABİLİR ama TAŞIYAMAZ ve kaldırma iz bırakır (denetim kaydı +
+ *       ajansa mail). Bkz. `docs/BASE-PLANI.md` "Verilen kararlar".
  *
  * SAF VE DIŞARIDA: iki atama yolu (hesap ve sayfa) aynı kararı veriyor.
  * İkisinde ayrı yazılsaydı biri bir gün diğerini tutmazdı ve fark yalnızca
  * yanlış şirkete düşen bir satır olarak görünürdü.
  */
 
-export type SahiplikKarari = { ok: true; yeniOrgId: string } | { ok: false; mesaj: string };
+export type SahiplikKarari =
+  | {
+      ok: true;
+      yeniOrgId: string;
+      /**
+       * Yalnızca MÜŞTERİNİN ajans atamasını kaldırdığı dalda dolu. Çağıran bu
+       * dalda iki şey yapmak ZORUNDA: (1) yazmayı BYPASSRLS istemcisiyle
+       * yapmak, çünkü satır ajansın şirketine dönüyor ve müşteri onu artık
+       * göremiyor (Postgres "new row violates row-level security policy"
+       * der); (2) ajansa haber vermek. İz bırakmayan bir kaldırmada ajans,
+       * hesabın neden veri göndermeyi bıraktığını göremez.
+       */
+      iz?: 'musteri_ajans_kaldirma';
+    }
+  | { ok: false; mesaj: string };
 
 export interface SahiplikGirdisi {
   /** Mesajda kullanılıyor: "reklam hesabı" / "sayfa". */
@@ -46,6 +63,14 @@ export interface SahiplikGirdisi {
   ustHesapVar: boolean;
   /** Üst hesabın `ajans_org_id`si — yoksa `null`. */
   ajansOrgId: string | null;
+  /**
+   * AKTİF ŞİRKETİN bağlı olduğu üst hesabın ajansı — kullanıcının üyeliğinden
+   * BAĞIMSIZ. `ajansOrgId` üyelikle görülüyor ve müşteri admininde (üyeliği
+   * yok) her zaman `null`; "bu bağlantı benim şirketimin ajansının mı"
+   * sorusunu yalnızca bu alan cevaplıyor. Şirket bir üst hesaba bağlı
+   * değilse `null` ve müşteri kaldırma dalı KAPALI düşüyor.
+   */
+  sirketAjansOrgId: string | null;
 }
 
 export function sahiplikKarari(p: SahiplikGirdisi): SahiplikKarari {
@@ -57,7 +82,31 @@ export function sahiplikKarari(p: SahiplikGirdisi): SahiplikKarari {
    */
   const ajans = p.ustHesapVar ? p.ajansOrgId : null;
 
-  // K4 — AJANSIN ATAMASINI AJANS DEĞİŞTİRİR.
+  /*
+   * K4 İSTİSNASI — MÜŞTERİ AJANSIN ATAMASINI KALDIRABİLİR (2026-09-28).
+   *
+   * DAR ve her koşul ayrı bir kapı:
+   *   · KALDIRMA (`hedefOrgId === null`): taşımak hâlâ yasak, bir hesabı
+   *     kendi başka workspace'ine almak ajansın kurduğu izlemeyi ve
+   *     geçmişi başka yere çekmek olurdu.
+   *   · Satır BU şirkette (`satirOrgId === aktifOrgId`): başka şirketin
+   *     atanmış satırına dokunulmuyor.
+   *   · Bağlantı şirketin KENDİ ajansının (`sirketAjansOrgId`): ajans
+   *     bilinmiyorsa kapı kapalı.
+   * Satır bağlantının şirketine (ajansa) dönüyor, K2 ile aynı.
+   */
+  if (
+    !p.ustHesapVar &&
+    p.hedefOrgId === null &&
+    p.satirOrgId === p.aktifOrgId &&
+    p.sirketAjansOrgId !== null &&
+    p.baglantiOrgId === p.sirketAjansOrgId &&
+    p.baglantiOrgId !== p.aktifOrgId
+  ) {
+    return { ok: true, yeniOrgId: p.baglantiOrgId, iz: 'musteri_ajans_kaldirma' };
+  }
+
+  // K4 — AJANSIN ATAMASINI AJANS DEĞİŞTİRİR (kaldırma yukarıda, taşıma burada).
   if (!p.ustHesapVar && p.baglantiOrgId !== p.aktifOrgId) {
     return {
       ok: false,

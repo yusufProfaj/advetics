@@ -765,6 +765,41 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — Marka Merkezi, Bölüm 1b: şirket ajansın atamasını kaldırabiliyor
+
+Kullanıcı kararı (2026-09-28): şirket admini ajansın atadığı hesabı ya da
+sayfayı KALDIRABİLİR, TAŞIYAMAZ, ve kaldırma iz bırakır.
+
+- **Neden BYPASSRLS:** kaldırılan satır ajansın şirketine dönüyor ve şirket
+  onu artık göremiyor; UPDATE sonrası yeni satır SELECT politikasından geçmek
+  zorunda ve Postgres "new row violates row-level security policy" diyor.
+  Yetki kararı RLS altında ve saf fonksiyonda (`sahiplikKarari`, K4
+  istisnası); yazma yalnızca o dar dalda admin istemcisiyle, eski atamaya
+  çapalı (`client_id = önceki`), denetim kaydıyla aynı transaction'da.
+- **Şirketin ajansı üyelikten okunamaz:** şirket admininin üst hesap
+  üyeliği yok ve `ajansOrgId` onda hep NULL. Yeni alan `sirketAjansOrgId`
+  şirketin bağlı olduğu üst hesaptan okunuyor; ajans bilinmiyorsa kapı kapalı.
+- **Ajansa mail** commit'ten sonra (`OdemeMailiGonderici`, ajansın kendi
+  adresi). Gitmezse kaldırma durmuyor, `ajans_bildirimi_gonderilemedi`
+  denetim kaydı ve yanıtta `ajansaBildirildi: false`.
+- `musteri-ajans-kaldirma-rls.spec.ts` politikaları `SET ROLE` ile gerçekten
+  uyguluyor. Tek bağlantılı PGlite'ta BYPASSRLS taklidi rolü yalnızca önceden
+  açıksa geri koymalı; ilk yazımda koşulsuz koyuyordu ve yedi test üretimle
+  ilgisiz sebeple kırmızıydı. Beş mutasyon, beşi yakalandı (en önemlisi:
+  BYPASSRLS dalı kaldırılınca kaldırma gerçekten RLS'e takılıyor).
+- `pglite-harness` taklidinde `$transaction` yoktu; eklendi (sırayla koşuyor,
+  geri almayı SAĞLAMIYOR).
+- Terminoloji taraması ajansa giden mailin konusundaki "müşteri"yi yakaladı;
+  kullanıcıya görünen metinde "şirket".
+
+### 2026-09-29 — Senkronizasyon sayaçları son 7 gün
+
+Kullanıcı kararı: sayaçlar tüm zamanlardan son 7 güne (`SENKRON_SAYAC_GUNU`).
+"57.238 düşen iş" Ağustos'tan beri birikiyordu ve sorun çözülse de
+düşmüyordu. Dört sayaç VE "son işler" listesi aynı pencerede (yoksa ekran
+"25 / 12" gibi anlamsız oran yazardı); hesap başına son iş tüm zamanlarda
+kalıyor ("yapı hiç koşmadı" teşhisi ona bağlı). Ekran etiketi sabitten.
+
 ### 2026-09-28 — Senkronizasyon Durumu: ÖLÇÜLDÜ, sayaçlar tek taramaya indi
 
 `/sync/status` "Tüm şirketler" modunda 3,1-3,5 sn, soğuk başlangıçta 5 sn

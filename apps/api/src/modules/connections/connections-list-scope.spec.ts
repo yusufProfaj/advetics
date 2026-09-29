@@ -80,6 +80,8 @@ beforeEach(() => {
     {} as never,
     // ÖDEME TETİĞİ — bu testlerde hesap durumu yazılmıyor.
     { degerlendir: () => { throw new Error('ödeme tetiği bu testte beklenmiyor'); } } as never,
+    // AJANSA MAİL — yalnızca müşteri ajans atamasını kaldırınca; bu testte o yol koşmuyor.
+    { gonder: async () => ({ alici: 'test' }) } as never,
   );
 });
 

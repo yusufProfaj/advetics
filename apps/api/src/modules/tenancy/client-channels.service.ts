@@ -9,6 +9,7 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 
 /** Kanal tipinin veritabanı karşılığı — eşleme TEK YERDE. */
 const KAYNAK: Record<ChannelKind, { tablo: 'ad_accounts' | 'social_profiles'; suzgec: Prisma.Sql }> =
@@ -48,7 +49,17 @@ interface Satir {
  */
 @Injectable()
 export class ClientChannelsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    /**
+     * YALNIZCA SAHİPLİK KARŞILAŞTIRMASI İÇİN. Müşteri ajansın bağlantısını
+     * RLS altında göremiyor ve görünmeyen satır "yok" sayılamaz (CLAUDE.md).
+     * Okunan şey kullanıcının ZATEN gördüğü kalemler için iki şirket
+     * kimliğinin karşılaştırması; dışarı satır dönmüyor.
+     * `connections.service.ts#sahiplikUygula` ile aynı gerekçe.
+     */
+    private readonly admin: PrismaAdminService,
+  ) {}
 
   async list(ctx: TenantContext, clientId: string): Promise<ClientChannels> {
     /*
@@ -110,6 +121,34 @@ export class ClientChannelsService {
           connected: rows.filter((r) => r.client_id === clientId).map(map),
           available: rows.filter((r) => r.client_id === null).map(map),
         });
+      }
+
+      /*
+       * AJANS MI ATADI — bağlantının şirketi workspace'in şirketinden farklıysa.
+       * Yalnızca BAĞLI kalemler; havuzdakiler zaten atanmamış.
+       */
+      const bagliHesap = groups.filter((g) => KAYNAK[g.kind].tablo === 'ad_accounts')
+        .flatMap((g) => g.connected.map((i) => i.id));
+      const bagliSayfa = groups.filter((g) => KAYNAK[g.kind].tablo === 'social_profiles')
+        .flatMap((g) => g.connected.map((i) => i.id));
+      const ajansAtadi = new Set<string>();
+      for (const [tablo, idler] of [
+        [Prisma.raw('ad_accounts'), bagliHesap],
+        [Prisma.raw('social_profiles'), bagliSayfa],
+      ] as const) {
+        if (idler.length === 0) continue;
+        const satirlar = await this.admin.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT x.id::text AS id
+            FROM ${tablo} x
+            JOIN platform_connections c ON c.id = x.connection_id
+            JOIN clients cl ON cl.id = x.client_id
+           WHERE x.id = ANY (${idler}::uuid[])
+             AND c.org_id <> cl.org_id
+        `);
+        for (const r of satirlar) ajansAtadi.add(r.id);
+      }
+      for (const g of groups) {
+        g.connected = g.connected.map((i) => ({ ...i, ajansAtadi: ajansAtadi.has(i.id) }));
       }
 
       /*

@@ -37,6 +37,12 @@ export type AtamaYaniti = {
   leftBehind?: Record<string, number>;
   clientWide?: Record<string, number>;
   unlinkedBoostPages?: number;
+  /**
+   * Yalnızca müşteri ajansın atamasını kaldırdığında dolu. `false` = mail
+   * GİDEMEDİ; kullanıcı ajansına ayrıca haber vermeli. Sessizce "bildirildi"
+   * sanılmasın diye iki hâl ayrı yazılıyor.
+   */
+  ajansaBildirildi?: boolean;
 };
 
 function adetler(kalan: Record<string, number>): string {
@@ -49,6 +55,10 @@ export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | nu
   const parcalar: string[] = [];
 
   if (res.note) parcalar.push(res.note);
+  if (res.ajansaBildirildi === true) parcalar.push('Ajansına e-postayla haber verildi.');
+  if (res.ajansaBildirildi === false) {
+    parcalar.push('Ajansına e-posta gönderilemedi. Kaldırdığını ajansına ayrıca bildir.');
+  }
   if (res.poolNote) parcalar.push(res.poolNote);
 
   if (atandiMi) {

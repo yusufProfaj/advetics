@@ -116,3 +116,21 @@ describe('bağlantılar', () => {
     expect(KANAL).toContain('bekliyor={busy}');
   });
 });
+
+describe('ajansın atadığı kalemi kaldırma', () => {
+  it('KRİTİK: ajans dışından kaldıran kişiye e-posta gideceği ÖNCEDEN söyleniyor', async () => {
+    const { kaldirmaOnayMetni } = await import('../tenancy/bagli-kanallar');
+    expect(kaldirmaOnayMetni(true, false)).toContain('ajansına e-posta gider');
+    // Ajans üyesi kendi atamasını kaldırıyorsa bu cümle yanlış olurdu.
+    expect(kaldirmaOnayMetni(true, true)).not.toContain('e-posta');
+    expect(kaldirmaOnayMetni(false, false)).not.toContain('e-posta');
+  });
+
+  it('onay kutusu bu metni kullanıyor ve iki sayfa da üyeliği geçiriyor', () => {
+    const govde = KANAL.slice(KANAL.indexOf('function BagliKart('), KANAL.indexOf('function SecilebilirSatir('));
+    expect(govde).toContain('kaldirmaOnayMetni(item.ajansAtadi === true, ajansUyesi)');
+    expect(SAYFA).toContain('ajansUyesi={session.managerAccount !== null}');
+    const ESKI = yorumsuz('app/(dashboard)/ayarlar/musteriler/[id]/kanallar/page.tsx');
+    expect(ESKI).toContain('ajansUyesi={session.managerAccount !== null}');
+  });
+});

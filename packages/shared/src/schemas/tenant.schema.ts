@@ -347,6 +347,16 @@ export interface ChannelItem {
    * bulamayan kullanıcı senkronizasyonun bozuk olduğunu sanıyor.
    */
   isManager: boolean;
+  /**
+   * Hesabı AJANS mı atadı (bağlantı workspace'in şirketinden değil, başka bir
+   * şirketten, yani ajanstan geliyor). Yalnızca bağlı kalemlerde anlamlı.
+   *
+   * Panel iki yerde kullanıyor: kalemin yanındaki "Ajans atadı" rozeti ve
+   * kaldırma onayındaki "ajansına e-posta gider" cümlesi. Müşteri ajansın
+   * atamasını kaldırabiliyor ama bu iz bırakıyor (2026-09-28 kararı); bunu
+   * kaldırmadan ÖNCE bilmeli.
+   */
+  ajansAtadi?: boolean;
 }
 
 /** Bir kanal tipi için workspace görünümü. */
