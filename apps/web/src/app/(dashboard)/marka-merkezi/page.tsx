@@ -7,6 +7,7 @@ import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { Uyari } from '@/components/ui/uyari';
 import { HazirlikListesi } from '@/components/marka-merkezi/hazirlik-listesi';
 import { BagliKanallar } from '@/components/tenancy/bagli-kanallar';
+import { VarliklarBolumu } from '@/components/marka-merkezi/varliklar-bolumu';
 
 export const metadata = { title: 'Marka Merkezi · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -18,9 +19,9 @@ export const dynamic = 'force-dynamic';
  * sisteme girdiğinde önce burası dolduruluyor; reklam oluşturma, AI asistan
  * ve raporlar kararlarını buradan okuyor.
  *
- * BU BÖLÜMDE İKİ PARÇA VAR: hazırlık listesi ve bağlantılar. Marka,
- * varlıklar, kitleler ve koruma kuralları sonraki bölümlerde bu sayfaya
- * giriyor. Henüz ekranı olmayan bir sekmeyi göstermek, kenar çubuğundan bir
+ * PARÇALAR: hazırlık listesi, bağlantılar ve varlıklar (Bölüm 3; menüden
+ * inen üç ekran). Marka bilgisi Bilgi Bankası'nın Marka sekmesinde; kitleler
+ * ve koruma kuralları sonraki bölümlerde bu sayfaya giriyor. Henüz ekranı olmayan bir sekmeyi göstermek, kenar çubuğundan bir
  * kez temizlenmiş "ekranı olmayan satır" hatasını geri getirirdi.
  *
  * İKİ ÇAĞRI AYRI HATA TAŞIYOR. Biri düşerse öteki çizilmeye devam ediyor ve
@@ -109,6 +110,8 @@ export default async function MarkaMerkeziPage({
           <SaltOkunurKanallar data={kanallar.v} />
         )}
       </section>
+
+      <VarliklarBolumu clientId={clientId} izinler={session.permissions} />
     </div>
   );
 }

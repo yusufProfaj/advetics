@@ -1,6 +1,7 @@
 import { ASISTAN_PLATFORM_ETIKETI, type Permission } from '@advetics/shared';
 import type { NavEntry } from '@/components/nav';
 import { SAYFA_GIRIS_IZNI } from '@/components/bilgi-bankasi/sekmeler';
+import { VARLIK_YOLLARI } from '@/components/marka-merkezi/varliklar';
 
 /**
  * Kenar çubuğu — KATLANABİLİR bölümler.
@@ -147,6 +148,9 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         module: 1,
         ready: true,
         perm: 'client.write',
+        // Varlık ekranları menüden kalkıp buraya indi (Bölüm 3); oradayken
+        // bu satır seçili görünsün.
+        ekYollar: VARLIK_YOLLARI,
       },
       /*
        * BİLGİ BANKASI KÜTÜPHANE'NİN ALTINDA — daha önce Akıllı Boost'un
@@ -185,18 +189,17 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         ready: true,
         perm: SAYFA_GIRIS_IZNI,
       },
-      // Üç ekran da `/assets`/`/forms` uçlarını `bulk.read` ile okuyor —
-      // menü aynı yetkiyi taşıyor ki görünen satır her zaman açılsın.
-      {
-        href: '/kutuphane/gorseller',
-        label: 'Görsel Arşivi',
-        icon: 'assets',
-        module: 2,
-        ready: true,
-        perm: 'bulk.read',
-      },
-      { href: '/kutuphane/kreatifler', label: 'Kreatifler', icon: 'assets', module: 4, ready: true, perm: 'bulk.read' },
-      { href: '/kutuphane/formlar', label: 'Formlar', icon: 'forms', module: 4, ready: true, perm: 'bulk.read' },
+      /*
+       * GÖRSEL ARŞİVİ, KREATİFLER VE FORMLAR BURADA DEĞİL — Marka Merkezi'nin
+       * "Varlıklar" bölümünde (BASE-PLANI Bölüm 3). Sayfalar ve adresleri
+       * aynen duruyor; yalnızca menü satırları kalktı.
+       *
+       * YETKİ KAYBI YOK: üç ekran `bulk.read` istiyor ve bu yetkiyi taşıyan
+       * her rol (`admin`, `ad_manager`) Marka Merkezi'nin `client.write`ını
+       * da taşıyor. Override ile yalnızca `bulk.read` bırakılmış biri için
+       * bağlantılar erişilebilir kalıyor ama menüden değil — kabul edilmiş
+       * bir kenar durumu (`nav-sections.spec.ts` rol matrisini kilitliyor).
+       */
     ],
   },
   {

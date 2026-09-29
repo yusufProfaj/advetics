@@ -17,6 +17,13 @@ import { useEffect, useState } from 'react';
 
 export interface NavEntry {
   href: string;
+  /**
+   * Bu satırın ALTINDA sayılan başka yollar. Görsel Arşivi, Kreatifler ve
+   * Formlar menüden kalkıp Marka Merkezi'nin altına indi; o ekranlardayken
+   * menüde hiçbir satır seçili görünmüyordu ve kullanıcı nerede olduğunu
+   * göremiyordu.
+   */
+  ekYollar?: readonly string[];
   label: string;
   icon: keyof typeof ICONS;
   /** Bu öğeyi açan modül numarası. */
@@ -91,9 +98,7 @@ function bolumAnahtari(title: string): string {
 export function NavSection({ title, items }: { title?: string; items: NavEntry[] }) {
   const pathname = usePathname();
 
-  const icinde = items.some(
-    (i) => pathname === i.href || pathname.startsWith(`${i.href}/`),
-  );
+  const icinde = items.some((i) => aktifMi(i, pathname));
 
   const [acik, setAcik] = useState(true);
   useEffect(() => {
@@ -155,7 +160,7 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
       <ul className="space-y-0.5">
         {items.map((item) => {
           const ready = item.ready ?? READY_MODULES.has(item.module);
-          const active = ready && (pathname === item.href || pathname.startsWith(`${item.href}/`));
+          const active = ready && aktifMi(item, pathname);
           if (item.children && item.children.length > 0) {
             return <AltMenu key={item.href} item={item} ready={ready} />;
           }
@@ -210,7 +215,7 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
 function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
   const pathname = usePathname();
   const params = useSearchParams();
-  const icinde = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const icinde = aktifMi(item, pathname);
   const [acik, setAcik] = useState(false);
 
   // Sayfadayken bölüm her zaman açık: kapalı bir menünün içindeki sayfada
@@ -340,3 +345,15 @@ function Icon({ name, active }: { name: keyof typeof ICONS; active?: boolean }) 
     </svg>
   );
 }
+
+/**
+ * Satır bu yolda mı — TEK TANIM. Üç yerde ayrı ayrı yazılıyordu (bölüm,
+ * satır, alt menü); `ekYollar` birine eklenip ötekine eklenmeseydi bölüm
+ * kapalı kalıp satır seçili görünürdü.
+ */
+export function aktifMi(item: Pick<NavEntry, 'href' | 'ekYollar'>, pathname: string): boolean {
+  return [item.href, ...(item.ekYollar ?? [])].some(
+    (y) => pathname === y || pathname.startsWith(`${y}/`),
+  );
+}
+

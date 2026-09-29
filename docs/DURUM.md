@@ -765,6 +765,18 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — Marka Merkezi, Bölüm 3a: varlık ekranları menüden indi
+
+Görsel Arşivi, Kreatifler ve Formlar menüde ayrı satır değil; Marka
+Merkezi'nde "Varlıklar" bölümü (`components/marka-merkezi/varliklar.ts`
+tek liste). Sayfalar ve adresleri aynen duruyor. O ekranlardayken menüde
+Marka Merkezi seçili görünüyor (`NavEntry.ekYollar`; aktiflik kararı üç
+yerde ayrı yazılıyordu, `aktifMi`de birleşti). Yetki kaybı yok: `bulk.read`
+taşıyan her rol `client.write` da taşıyor ve `varliklar.spec.ts` bunu rol
+matrisinden kilitliyor. Kullanıcı kararı: marka renkleri EKLENMEDİ —
+okuyacak bir özellik yok (rapor bilinçli olarak ajans markasını kullanıyor,
+sistem görsel üretmiyor).
+
 ### 2026-09-29 — Marka Merkezi, Bölüm 2b: Hızlı Reklam marka alanlarını okuyor
 
 - Sihirbaz Marka Merkezi'ndeki **ana amaçla açılıyor** ve bunu yazıyor
