@@ -163,7 +163,11 @@ describe('MANUEL GİRİLEN TEK ŞEY: METİN VE GÖRSEL', () => {
 
   it('KRİTİK: SİTE ADRESİ workspace kartından ÖN DOLGU', () => {
     expect(KAYNAK).toContain('clientWebsite');
-    expect(KAYNAK).toContain("setLinkUrl((cur) => cur || clientWebsite)");
+    // Adres kuralı artık `varsayilanAdres`te: kayıtlı sayfa varsa ilki, yoksa
+    // workspace sitesi (marka-varsayilanlari.spec.ts). Kullanıcının yazdığı
+    // adres yine EZİLMİYOR.
+    expect(KAYNAK).toContain('varsayilanAdres(sikSayfalar, clientWebsite)');
+    expect(KAYNAK).toContain('setLinkUrl((cur) => cur || adres)');
   });
 
   it('KRİTİK: hesap ve sayfa YALNIZCA BİRDEN FAZLAYSA soruluyor', () => {

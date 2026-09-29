@@ -13,10 +13,12 @@ import {
   type CreativeRecord,
   type DraftGroupRecord,
   type PublishCheck,
+  type SikSayfa,
 } from '@advetics/shared';
 import { platformKisaAdi, videoMu, videoOraniUygun } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { CoveragePanel } from './coverage-panel';
+import { baslangicSecimi, varsayilanAdres } from './marka-varsayilanlari';
 import { Sihirbaz, type SihirbazAdimi } from './sihirbaz';
 import { CropStudio } from './crop-studio';
 
@@ -74,6 +76,8 @@ export function SimpleAdBuilder({
   libraryAssets,
   libraryTotal,
   clientWebsite,
+  anaAmac,
+  sikSayfalar,
 }: {
   clientId: string;
   accounts: Array<{ id: string; name: string; currency: string }>;
@@ -82,10 +86,18 @@ export function SimpleAdBuilder({
   libraryTotal: number;
   /** Workspace kartındaki site adresi — web kampanyasında ön dolgu. */
   clientWebsite: string | null;
+  /** Marka Merkezi'ndeki ana amaç — sihirbaz bununla açılıyor. */
+  anaAmac: CampaignGoal | null;
+  /** Marka Merkezi'ndeki sık kullanılan sayfalar — hedef adres buradan seçiliyor. */
+  sikSayfalar: SikSayfa[];
 }) {
   const router = useRouter();
 
-  const [goal, setGoal] = useState<CampaignGoal | null>(null);
+  // İLK SEÇİM MARKA MERKEZİ'NDEN (marka-varsayilanlari.ts). Başlatıcı
+  // fonksiyon: yalnızca ilk render'da çalışıyor, kullanıcının sonraki
+  // seçimini ezmiyor.
+  const [baslangic] = useState(() => baslangicSecimi({ anaAmac, sikSayfalar, clientWebsite }));
+  const [goal, setGoal] = useState<CampaignGoal | null>(baslangic.goal);
 
   /**
    * HEDEF SEÇİLİNCE AD VE ADRES KENDİLİĞİNDEN DOLUYOR.
@@ -99,7 +111,10 @@ export function SimpleAdBuilder({
     setName(otomatikAd(secilen));
     // SİTE ADRESİ WORKSPACE KARTINDAN. Kullanıcı isterse değiştiriyor; boş bir
     // kutu bırakmak, zaten bildiğimiz bir bilgiyi ona yazdırmak olurdu.
-    if (secilen === 'website' && clientWebsite) setLinkUrl((cur) => cur || clientWebsite);
+    if (secilen === 'website') {
+      const adres = varsayilanAdres(sikSayfalar, clientWebsite);
+      if (adres) setLinkUrl((cur) => cur || adres);
+    }
   }
   /**
    * KAMPANYA ADI KENDİLİĞİNDEN YAZILIYOR.
@@ -111,13 +126,13 @@ export function SimpleAdBuilder({
    * TARİH İÇERİYOR: aynı hedefle ikinci bir kampanya kurulduğunda listede
    * birbirinden ayırt edilebilsin.
    */
-  const [name, setName] = useState('');
+  const [name, setName] = useState(() => (baslangic.goal ? otomatikAd(baslangic.goal) : ''));
   const [adAccountId, setAdAccountId] = useState(accounts[0]?.id ?? '');
   const [pageId, setPageId] = useState(pages[0]?.id ?? '');
   const [primaryText, setPrimaryText] = useState('');
   const [headline, setHeadline] = useState('');
   const [description, setDescription] = useState('');
-  const [linkUrl, setLinkUrl] = useState('');
+  const [linkUrl, setLinkUrl] = useState(baslangic.linkUrl);
   const [assetIds, setAssetIds] = useState<string[]>([]);
   const [dailyBudget, setDailyBudget] = useState<string>(BUDGET_PRESETS[1].value);
   /** Kırpma stüdyosuna girilen kaynak görsel. */
@@ -486,6 +501,14 @@ export function SimpleAdBuilder({
               </button>
             ))}
           </div>
+          {/* SEÇİMİN KAYNAĞI YAZIYOR: kullanıcı neden bir kartın seçili
+              geldiğini bilmezse onu kendi seçimi sanmaz, sistemin tahmini sanır. */}
+          {anaAmac && goal === anaAmac && (
+            <p className="text-xs text-ink-muted">
+              Marka Merkezi’nde ana amaç “{GOAL_META[anaAmac].label}” olarak kayıtlı, seçili geldi.
+              İstersen değiştir.
+            </p>
+          )}
 {(accounts.length > 1 || pages.length > 1 || goal === 'website') && (
             <Blok no={2} baslik="Ayarlar" altBaslik="Gerisini biz dolduruyoruz.">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -523,8 +546,34 @@ export function SimpleAdBuilder({
                 {goal === 'website' && (
                   <Alan
                     label="Web sitesi adresi"
-                    ipucu="Workspace kartından geldi; başka bir sayfaya göndermek istersen değiştir."
+                    ipucu={
+                      sikSayfalar.length > 0
+                        ? 'Marka Merkezi’ndeki sayfalardan seç ya da başka bir adres yaz.'
+                        : 'Workspace kartından geldi; başka bir sayfaya göndermek istersen değiştir.'
+                    }
                   >
+                    {/*
+                      KAYITLI SAYFA SEÇİMİ + SERBEST KUTU BİRLİKTE. Yalnızca
+                      liste koymak, listede olmayan tek seferlik bir kampanya
+                      sayfasını kapatırdı; yalnızca kutu koymak, yazım
+                      hatasını geri getirirdi.
+                    */}
+                    {sikSayfalar.length > 0 && (
+                      <select
+                        value={sikSayfalar.some((p) => p.url === linkUrl) ? linkUrl : ''}
+                        onChange={(e) => {
+                          if (e.target.value) setLinkUrl(e.target.value);
+                        }}
+                        className={`${input} mb-2`}
+                      >
+                        <option value="">Kayıtlı sayfa seç…</option>
+                        {sikSayfalar.map((p) => (
+                          <option key={p.url} value={p.url}>
+                            {p.ad}: {p.url}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <input
                       value={linkUrl}
                       onChange={(e) => setLinkUrl(e.target.value)}

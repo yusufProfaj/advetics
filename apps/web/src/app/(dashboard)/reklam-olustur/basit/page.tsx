@@ -1,7 +1,7 @@
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import Link from 'next/link';
-import type { AssetListResult, DraftGroupRecord } from '@advetics/shared';
+import type { AssetListResult, ClientProfileRecord, DraftGroupRecord } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { SimpleAdBuilder } from '@/components/ad-builder/simple-builder';
@@ -54,7 +54,7 @@ export default async function SimpleAdPage({
    * bağlantı yerinde, yalnızca istek düşmüştü. Kullanıcı olmayan bir arızayı
    * düzeltmeye, Platform Bağlantıları ekranına gönderiliyordu.
    */
-  const [baglantiSonuc, arsivSonuc, videoSonuc, kampanyaSonuc, profilSonuc] =
+  const [baglantiSonuc, arsivSonuc, videoSonuc, kampanyaSonuc, profilSonuc, markaSonuc] =
     await Promise.allSettled([
     serverApiFetch<
       Array<{
@@ -87,6 +87,12 @@ export default async function SimpleAdPage({
     serverApiFetch<Array<{ id: string; website: string | null }>>('/clients').catch(
       () => null,
     ),
+    /*
+     * MARKA MERKEZİ — ana amaç ve sık kullanılan sayfalar. Düşerse sihirbaz
+     * varsayılansız açılıyor (eskisi gibi) AMA SESSİZ DEĞİL: ekranın üstünde
+     * neden amaç seçili gelmediği yazıyor.
+     */
+    serverApiFetch<ClientProfileRecord>(`/client-profile?clientId=${clientId}`),
   ]);
 
   if (baglantiSonuc.status === 'rejected') {
@@ -149,6 +155,14 @@ export default async function SimpleAdPage({
         </Link>
       </header>
 
+      {markaSonuc.status === 'rejected' && (
+        <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-strong ring-1 ring-inset ring-warn/30">
+          Marka bilgileri okunamadı (
+          {markaSonuc.reason instanceof ApiRequestError ? markaSonuc.reason.message : 'sunucuya ulaşılamadı'}
+          ). Amaç ve adres Marka Merkezi’nden gelmedi; elle seç.
+        </p>
+      )}
+
       {canWrite ? (
         <SimpleAdBuilder
           clientId={clientId}
@@ -161,6 +175,8 @@ export default async function SimpleAdPage({
               ? (profilSonuc.value?.find((c) => c.id === clientId)?.website ?? null)
               : null
           }
+          anaAmac={markaSonuc.status === 'fulfilled' ? markaSonuc.value.anaAmac : null}
+          sikSayfalar={markaSonuc.status === 'fulfilled' ? markaSonuc.value.sikSayfalar : []}
         />
       ) : (
         <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">

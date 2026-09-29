@@ -765,6 +765,21 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — Marka Merkezi, Bölüm 2b: Hızlı Reklam marka alanlarını okuyor
+
+- Sihirbaz Marka Merkezi'ndeki **ana amaçla açılıyor** ve bunu yazıyor
+  ("…kayıtlı, seçili geldi"); kullanıcı değiştirebiliyor.
+- **Hedef adres:** kayıtlı sayfa varsa ilki, yoksa `clients.website`, ikisi
+  de yoksa boş. Kayıtlı sayfalar açılır listede, serbest kutu da duruyor
+  (listede olmayan tek seferlik sayfa kapanmasın). Adres yalnızca amaç
+  "site" ise dolduruluyor.
+- Karar saf fonksiyonda (`marka-varsayilanlari.ts`); sihirbaz `useState`
+  başlatıcısıyla okuyor, kullanıcının sonraki seçimini ezmiyor.
+- Profil çağrısı düşerse sihirbaz varsayılansız açılıyor AMA üstte sebebi
+  yazıyor.
+- **Uzman yüzeyi (`/reklam-olustur/uzman`) değişmedi.**
+- Dört mutasyon, dördü yakalandı. Panel 1.121 test yeşil.
+
 ### 2026-09-29 — Marka Merkezi, Bölüm 2a: yapılandırılmış marka alanları
 
 Bilgi bankasındaki serbest metin ekranda dolu görünüyordu ama makine onu

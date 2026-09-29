@@ -71,8 +71,9 @@ onaysız yazılmıyor.
 **2a UYGULANDI (2026-09-29):** alanlar, Marka sekmesi, AI bağlamı, hazırlık
 listesi, siteden doldur. Plandan iki sapma: web sitesi `clients.website`
 olarak kalıyor (ikinci kopya yok) ve ana amaç yalnızca sistemin kurabildiği
-üç hedef. Ayrıntı `DURUM.md`. **2b kaldı:** Reklam Oluştur'un ana amacı
-varsayılan açması ve hedef adresi sayfa listesinden seçtirmesi.
+üç hedef. Ayrıntı `DURUM.md`. **2b UYGULANDI (2026-09-29):** Hızlı
+Reklam ana amaçla açılıyor, hedef adres sayfa listesinden seçiliyor. Uzman
+yüzeyi değişmedi. **Bölüm 2 tamam.**
 
 ### 3. Kitleler (taslakta "Audience Hub")
 
