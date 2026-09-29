@@ -12,6 +12,7 @@
  * Kullanım (advetics kullanıcısı, depo kökünde, deploy'dan SONRA):
  *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --q "lüks otomobil"
  *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --q golf --hesap <ad_account uuid>
+ *   pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler "lüks otomobil,otomobil,luxury car"
  */
 import 'reflect-metadata';
 import { resolve } from 'node:path';
@@ -56,32 +57,48 @@ async function main(): Promise<void> {
       return;
     }
     console.log(`\n  hesap : ${hesap.name} (${hesap.externalId})`);
-    console.log(`  arama : "${q}"`);
+    console.log(`  arama : "${arg('terimler') ?? q}"`);
 
     const token = await vault.getAccessToken(hesap.connectionId, provider);
 
-    // 1) HAM YANIT — belgede yazan alanlar gerçekten geliyor mu?
-    // SAĞLAYICININ SÜRÜMÜ: sabit yazılsaydı betik başka bir API sürümünü sınardı.
+    /*
+     * 1) TERİM × DİL TABLOSU. İlk canlı koşu (2026-09-29): "lüks otomobil"
+     * HTTP 200 ama SIFIR satır. Soru: Meta ilgi araması Türkçe terimle mi
+     * eşleşmiyor, `locale` mi süzüyor, yoksa terim mi yanlış? Hepsi aynı
+     * turda deneniyor; düzeltme tahminle yazılmıyor.
+     *
+     * SAĞLAYICININ SÜRÜMÜ: sabit yazılsaydı betik başka bir API sürümünü sınardı.
+     */
     const surum = app.get<AppConfig>(CONFIG).platforms.meta.apiVersion;
-    const url = new URL(`https://graph.facebook.com/${surum}/search`);
-    url.searchParams.set('type', 'adinterest');
-    url.searchParams.set('q', q);
-    url.searchParams.set('limit', '5');
-    url.searchParams.set('locale', 'tr_TR');
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    const govde = (await res.json()) as { data?: Array<Record<string, unknown>>; error?: unknown };
-    console.log(`\n═══ HAM (HTTP ${res.status}) ═══`);
-    if (govde.error) {
-      console.log(JSON.stringify(govde.error, null, 2));
-      process.exitCode = 1;
-      return;
+    const terimler = (arg('terimler') ?? q)
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    console.log('\n═══ TERİM × DİL (satır sayısı · ilk sonuç · alanlar) ═══');
+    for (const terim of terimler) {
+      for (const locale of ['tr_TR', null] as const) {
+        const url = new URL(`https://graph.facebook.com/${surum}/search`);
+        url.searchParams.set('type', 'adinterest');
+        url.searchParams.set('q', terim);
+        url.searchParams.set('limit', '5');
+        if (locale) url.searchParams.set('locale', locale);
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        const govde = (await res.json()) as { data?: Array<Record<string, unknown>>; error?: unknown };
+        const etiket = `"${terim}" [${locale ?? 'locale yok'}]`;
+        if (govde.error) {
+          console.log(`  ${etiket} HTTP ${res.status} HATA: ${JSON.stringify(govde.error).slice(0, 300)}`);
+          continue;
+        }
+        const satirlar = govde.data ?? [];
+        const ilk = satirlar[0];
+        const eslenemeyen = satirlar.filter((r) => mapInterest(r) === null).length;
+        console.log(
+          `  ${etiket} ${satirlar.length} satır` +
+            (ilk ? ` · ${String(ilk.name)} · ${Object.keys(ilk).join(',')}` : '') +
+            (eslenemeyen > 0 ? `  ← ${eslenemeyen} satır mapInterest'e uymuyor` : ''),
+        );
+      }
     }
-    const ilk = govde.data?.[0];
-    console.log(`  satır sayısı : ${govde.data?.length ?? 0}`);
-    console.log(`  ilk satırın alanları : ${ilk ? Object.keys(ilk).join(', ') : '(yok)'}`);
-    if (ilk) console.log(`  ilk satır : ${JSON.stringify(ilk).slice(0, 600)}`);
-    const eslenemeyen = (govde.data ?? []).filter((r) => mapInterest(r) === null).length;
-    console.log(`  eşlenemeyen satır : ${eslenemeyen}${eslenemeyen > 0 ? '  ← mapInterest biçimi tutmuyor' : ''}`);
 
     // 2) SAĞLAYICININ KENDİ YOLU — panelin gördüğü sonuç.
     const sonuc = await provider.searchInterests(

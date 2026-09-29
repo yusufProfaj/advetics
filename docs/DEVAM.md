@@ -10,7 +10,10 @@
 Bölüm 4c push edildi, DEPLOY BEKLİYOR — MIGRATION VAR
 (`20260930120000_kitle_ilgi_alanlari`). Deploy sonrası İLK İŞ:
 `pnpm --filter @advetics/api meta-ilgi-kontrol -- --q "lüks otomobil"`
-(salt okunur; ilgi aramasının canlı yanıt biçimini doğruluyor).
+(salt okunur; ilgi aramasının canlı yanıt biçimini doğruluyor). İlk koşu
+Türkçe terimle SIFIR satır döndü; şimdi terim × dil tablosu:
+`pnpm --filter @advetics/api meta-ilgi-kontrol -- --terimler "lüks otomobil,otomobil,luxury car,luxury vehicles,golf"`
+Sonuca göre model ilgi terimlerini İngilizce de üretmeli mi, karar verilecek.
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini

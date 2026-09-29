@@ -793,6 +793,12 @@ ilgi alanının Meta'daki kitle büyüklüğü ekranda yazıyor ve ilgiler tek
   diyordu (başlangıç `null`du); yükleniyor ayrı hâl. Hesap kararı tek hook
   (`useIzlenenMetaHesabi`), ilgi araması da onu kullanıyor.
 - Mutasyon: API yedi, panel üç; hepsi yakalandı.
+- **İlk canlı koşu (2026-09-29, Çiftçi-2026 hesabı):** `/search?type=adinterest`
+  "lüks otomobil" + `locale=tr_TR` → HTTP 200, **SIFIR satır**. Uç çalışıyor ama
+  Türkçe terimle eşleşmiyor olabilir; betik terim × dil tablosu basacak şekilde
+  genişletildi, sonuç gelmeden düzeltme yazılmadı. Bu hâliyle "Kitleyi tarif
+  et" Türkçe terimlerde ilgi bulamayabilir — ekran bunu "Meta'da bulunamadı"
+  diye SÖYLÜYOR, sessizce boş bırakmıyor.
 - **Doğrulanmayan:** Meta'nın `flexible_spec` + `advantage_audience: 0`
   birleşimini kabul edip etmediği (yayın yolu `ads_management` bekliyor).
   Yayın sonrası ad set hedeflemesi geri okunup karşılaştırılmalı.
