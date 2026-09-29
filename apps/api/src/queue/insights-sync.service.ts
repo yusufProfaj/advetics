@@ -80,6 +80,7 @@ export { istekPencereleri } from './istek-pencereleri';
 // Yeniden export YEREL KAPSAMA getirmiyor — bu servis de kullandığı için
 // ayrıca import ediliyor.
 import { istekPencereleri } from './istek-pencereleri';
+import { platformSeviyeleri } from './platform-isleri';
 
 const LEVELS_FOR_JOB: Record<string, InsightsLevel[]> = {
   // L2 gün içi: YALNIZCA hesap ve kampanya.
@@ -127,8 +128,8 @@ export class InsightsSyncService {
     dateFrom: string;
     dateTo: string;
   }): Promise<InsightsSyncResult> {
-    const levels = LEVELS_FOR_JOB[params.jobType];
-    if (!levels) {
+    const istenenSeviyeler = LEVELS_FOR_JOB[params.jobType];
+    if (!istenenSeviyeler) {
       throw new UnrecoverableError(`${params.jobType} için metrik seviyesi tanımlı değil`);
     }
 
@@ -152,6 +153,25 @@ export class InsightsSyncService {
     // satırlar hiçbir raporda görünmez ama kota harcanmış olur — en pahalı
     // sessiz hata türü.
     const account = assertAssigned(found);
+
+    /*
+     * PLATFORMUN KARŞILAMADIĞI SEVİYE ATLANIYOR, İŞ DEĞİL.
+     *
+     * LinkedIn'de hesap seviyesi yok ve `insights_daily` listesi `account`
+     * ile başlıyor: ilk seviye kalıcı hata fırlatınca kampanya, grup ve
+     * reklam seviyeleri HİÇ çekilmiyordu (platform-isleri.ts). Atlanan
+     * seviye nota yazılıyor.
+     */
+    const { seviyeler: levels, atlanan } = platformSeviyeleri(
+      account.platform,
+      istenenSeviyeler,
+    );
+    if (levels.length === 0) {
+      throw new UnrecoverableError(
+        `${params.jobType} işinin seviyelerinden (${istenenSeviyeler.join('/')}) hiçbiri ` +
+          `${account.platform} için tanımlı değil`,
+      );
+    }
 
     /*
      * ═══ YAPI KOŞMADIYSA PLATFORMA HİÇ GİTMİYORUZ ═══
@@ -263,6 +283,7 @@ export class InsightsSyncService {
     const note = [
       `${params.dateFrom}${params.dateFrom === params.dateTo ? '' : `..${params.dateTo}`}`,
       levels.join('/'),
+      atlanan.length > 0 ? `${atlanan.join('/')} ${account.platform}'de yok` : undefined,
       `${totalRows} satır`,
       totalSkipped > 0 ? `${totalSkipped} atlandı` : undefined,
     ]

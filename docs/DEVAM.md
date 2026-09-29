@@ -6,11 +6,13 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-29 · **Son iş commit'i:** `4fedef3` · **Canlı:** evet
-(`4fedef3` dahil, kullanıcı deploy etti)
+**Son güncelleme:** 2026-09-29 · **Canlı:** `798adf4`e kadar evet; LinkedIn
+kuyruk düzeltmesi push edildi, deploy bekliyor.
 
-Bu satırdaki commit, "o günden beri ne geldi" sorusunun başlangıç noktası:
-`git log --oneline 4fedef3..origin/main`. Öbür geliştiricinin işi orada görünür.
+"O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
+SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini
+gösteremez ve kayar):
+`git log --oneline $(git log -1 --format=%h -- docs/DEVAM.md)..origin/main`.
 
 ---
 
@@ -25,23 +27,24 @@ Bu satırdaki commit, "o günden beri ne geldi" sorusunun başlangıç noktası:
 - Canlı düzeltmeler: "Tüm şirketler" modunda Uyarılar/Senkronizasyon 500'ü;
   Google için yanlış "yetki doluyor" alarmı (`authorization_expires_at`,
   migration); Senkronizasyon sayaçları 1.536 → 457 ms; sayaçlar son 7 gün.
-- Testler: API 3.501, panel 1.108, yeşil.
+- **LinkedIn'e yapılamayacak işler artık gönderilmiyor** (`queue/platform-isleri.ts`):
+  kırılım işi hiç açılmıyor; günlük/gün içi metrik işi LinkedIn'de hesap
+  seviyesini atlıyor. İkincisi LinkedIn günlük metriğinin HİÇ gelmemesinin
+  sebebiydi. Deploy sonrası bakılacak: son 7 günün düşen iş sayısı inmeli,
+  LinkedIn `insights_daily` işleri `succeeded` olmalı.
+- Testler: API 3.510, panel 1.108, yeşil.
 
 Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
 ## Sıradaki iş (sırayla)
 
-1. **LinkedIn'e yapılamayacak işler gönderiliyor.** Hesap seviyesi metrik ve
-   kırılım (yaş, cinsiyet) işleri LinkedIn'de her seferinde kalıcı hatayla
-   düşüyor; son 7 günde 865 işin 549'u düştü, büyük kısmı bu. Bu işler hiç
-   kuyruğa girmemeli. Küçük iş, **kullanıcı onayı bekliyor.**
-2. **Google kotası doluyor** (3A Makina, "Resource has been exhausted").
+1. **Google kotası doluyor** (3A Makina, "Resource has been exhausted").
    Önce ölç: kotayı tekrar denemeler mi, gerçekten fazla istek mi yiyor.
-3. **Bölüm 2 — Marka.** Bilgi bankasındaki üç serbest metin alanı
+2. **Bölüm 2 — Marka.** Bilgi bankasındaki üç serbest metin alanı
    yapılandırılmış alanlara dönüşüyor (sektör, web sitesi + sık sayfalar, ana
    amaç, üslup, öne çıkan vaatler); Reklam Oluştur ve AI asistan bunları
    okuyacak. Migration var.
-4. Sonrası `BASE-PLANI.md` sırasıyla: Varlıklar, Kitleler, Koruma kuralları, Ölçüm.
+3. Sonrası `BASE-PLANI.md` sırasıyla: Varlıklar, Kitleler, Koruma kuralları, Ölçüm.
 
 ## Kullanıcı kararı bekleyen
 

@@ -360,6 +360,32 @@ describe('InsightsSyncService', () => {
       ]);
     });
 
+    it('KRİTİK: LinkedIn günlük işi hesap seviyesini atlıyor, kalan seviyeleri ÇEKİYOR', async () => {
+      /*
+       * LinkedIn'de hesap seviyesinin karşılığı yok. Liste `account` ile
+       * başladığı için ilk istek kalıcı hata fırlatıyor ve döngü kampanya,
+       * grup, reklam seviyelerine HİÇ gelmiyordu: LinkedIn günlük metriği bu
+       * işten hiç akmadı. Sağlayıcı burada gerçek LinkedIn gibi davranıyor.
+       */
+      await h.q(`UPDATE ad_accounts SET platform = 'linkedin' WHERE id = $1`, [IDS.adAccount]);
+      const gercekFetch = provider.fetchInsights.bind(provider);
+      provider.fetchInsights = async (ctx, request) => {
+        if (request.level === 'account') {
+          throw new PlatformApiError('linkedin', 'permanent', "LinkedIn'de account seviyesinin karşılığı yok.");
+        }
+        return gercekFetch(ctx, request);
+      };
+
+      const r = await svc.syncAccount({
+        adAccountId: IDS.adAccount,
+        jobType: 'insights_daily',
+        dateFrom: '2026-08-05',
+        dateTo: '2026-08-05',
+      });
+      expect(provider.requests.map((x) => x.level)).toEqual(['campaign', 'ad_group', 'ad']);
+      expect(r.note).toContain("account linkedin'de yok");
+    });
+
     it('bilinmeyen iş türü tekrar denenmeden reddedilir', async () => {
       await expect(
         svc.syncAccount({

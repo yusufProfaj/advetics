@@ -56,7 +56,7 @@ const LINKEDIN_API = 'https://api.linkedin.com/rest';
  * İkisi ayrı yazılsaydı ve biri kaysaydı metrikler hiçbir satıra bağlanamaz,
  * iş `succeeded` + `rows = 0` dönerdi — bu depoda adı konmuş bir hata türü.
  */
-const LINKEDIN_PIVOT: Partial<Record<InsightsLevel, string>> = {
+export const LINKEDIN_PIVOT: Partial<Record<InsightsLevel, string>> = {
   campaign: 'CAMPAIGN_GROUP',
   ad_group: 'CAMPAIGN',
   ad: 'CREATIVE',

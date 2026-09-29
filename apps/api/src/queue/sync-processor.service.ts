@@ -23,6 +23,7 @@ import { YouTubeSubscribeService } from '../modules/autoboost/youtube-subscribe.
 import { AutoBoostQueueService } from '../modules/autoboost/autoboost-queue.service';
 import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
 import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
+import { isYapilabilir } from './platform-isleri';
 
 /**
  * Worker'ın sentetik kiracı bağlamındaki kullanıcı kimliği.
@@ -155,6 +156,7 @@ export class SyncProcessorService {
     let enqueued = 0;
     let skipped = 0;
     let unassigned = 0;
+    let desteklenmeyen = 0;
 
     for (const acct of accounts) {
       // Organik post işleri reklam hesabına değil sosyal profile ait.
@@ -175,6 +177,13 @@ export class SyncProcessorService {
       const clientId = acct.clientId;
       if (clientId === null) {
         unassigned++;
+        continue;
+      }
+
+      // LinkedIn'de kırılım yok: her gece kesin düşecek bir iş açmıyoruz.
+      // Sayısı nota yazılıyor, "zaten kuyrukta" sayacına karışmıyor.
+      if (!isYapilabilir(acct.platform as Platform, payload.jobType)) {
+        desteklenmeyen++;
         continue;
       }
 
@@ -274,6 +283,9 @@ export class SyncProcessorService {
       `${payload.jobType}: ${enqueued} iş açıldı, ${skipped} atlandı (zaten kuyrukta)` +
       (unassigned > 0
         ? `, ${unassigned} kayıt MÜŞTERİYE ATANMAMIŞ olduğu için çekilmedi`
+        : '') +
+      (desteklenmeyen > 0
+        ? `, ${desteklenmeyen} hesabın platformu bu işi desteklemiyor`
         : '');
     this.logger.log(note);
     return { rows: 0, note };

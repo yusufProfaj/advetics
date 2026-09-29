@@ -765,6 +765,33 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-29 — LinkedIn'e yapılamayacak işler artık gönderilmiyor
+
+Üretimde son 7 günde 865 işin 549'u düşmüştü ve büyük kısmı iki kesin hataydı.
+
+- **Kırılım (`insights_breakdowns`)**: `fetchBreakdowns` LinkedIn'de yazılmadı
+  (yaş/cinsiyet pivotu yok). İş artık hiç açılmıyor: gecelik süpürme, toplu
+  tazeleme planı ve "Şimdi güncelle" aynı fonksiyonla süzüyor
+  (`queue/platform-isleri.ts` → `isYapilabilir`), `enqueue` de son savunma
+  hattı olarak reddediyor ve `sync_jobs` satırı yazmıyor. Süpürme notu kaç
+  hesabın bu yüzden atlandığını yazıyor; "zaten kuyrukta" sayacına karışmıyor.
+- **Hesap seviyesi metrik — daha pahalısı bu çıktı.** `insights_daily` ve
+  `insights_realtime` listesi `account` ile başlıyor; LinkedIn'de karşılığı
+  yok, ilk istek kalıcı hata fırlatınca döngü kampanya/grup/reklam
+  seviyelerine HİÇ GELMİYORDU. Yani LinkedIn'in günlük ve gün içi metriği bu
+  işlerden hiç akmadı; veri yalnızca gecelik 7 günlük geri düzeltmeden
+  geliyordu. Bu işler kuyruktan çıkarılmadı, yalnızca desteklenmeyen seviye
+  atlanıyor (`platformSeviyeleri`) ve atlanan seviye iş notuna yazılıyor.
+- `PLATFORM_METRIK_SEVIYELERI.linkedin` `LINKEDIN_PIVOT` anahtarlarıyla
+  karşılaştırılıyor; liste `Record<Platform, …>`, yeni platform derlemeyi
+  kırıyor.
+- `platform-isleri.spec.ts` + `insights-sync.service.spec.ts`e LinkedIn
+  testi. Yedi mutasyon (seviye süzgeci, servisin onu çağırması, kuyruk
+  bekçisi, plan, "Şimdi güncelle", süpürme, pivotla ayrışan liste), yedisi
+  de yakalandı.
+- **Açık kalan:** LinkedIn `adAnalytics` `ACCOUNT` pivotunu belgeliyor ama
+  canlıda denenmedi; hesap seviyesi LinkedIn satırı bugün hiç yok.
+
 ### 2026-09-29 — Marka Merkezi, Bölüm 1b: şirket ajansın atamasını kaldırabiliyor
 
 Kullanıcı kararı (2026-09-28): şirket admini ajansın atadığı hesabı ya da

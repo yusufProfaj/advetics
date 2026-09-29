@@ -37,6 +37,7 @@ import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { buildJobId, type SyncJobPayload } from '../../queue/queues';
+import { isYapilabilir } from '../../queue/platform-isleri';
 import { supurmeDisiSebep, veriAkisiEngeli } from '../../queue/supurme-kapsami';
 import { gorunenBaglantilar } from '../connections/gorunen-baglantilar';
 import { isSayaclariSorgusu, type IsSayaclari } from './metrik-isleri';
@@ -557,7 +558,7 @@ export class SyncController {
        * (son 7 gün) çekiyor. Aralık yalnızca bugünü kapsıyorsa iş hiç
        * açılmıyor — boşuna kota.
        */
-      if (gecmisVar) {
+      if (gecmisVar && isYapilabilir(account.platform as Platform, 'insights_breakdowns')) {
         isler.push({ jobType: 'insights_breakdowns', dateFrom, dateTo: gecmisSonu });
       }
 

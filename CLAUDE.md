@@ -13,7 +13,8 @@ Sırayla, başka bir şey okumadan önce:
    (adımlar README § Kurulum), sunucu için `docs/DEPLOYMENT.md`. Kurulumu
    kendin tahminle tamamlamaya çalışma.
 2. **Depo güncel mi?** `git fetch origin` → `git status -sb` →
-   `git log --oneline <DEVAM.md'deki son commit>..origin/main`. Worktree'de
+   `git log --oneline $(git log -1 --format=%h -- docs/DEVAM.md)..origin/main`
+   (DEVAM.md'yi değiştiren son commit'ten bu yana gelenler). Worktree'de
    dal geride kaldıysa `sync_with_base_branch` ile güncelle. Öbür tarafın
    commit'leri varsa gövdelerini oku: sıradaki iş onlarla değişmiş olabilir.
 3. **[`docs/DEVAM.md`](docs/DEVAM.md) oku** — son durum ve sıradaki iş orada,
@@ -22,8 +23,8 @@ Sırayla, başka bir şey okumadan önce:
    geldi, sıradaki iş. "Onay bekliyor" işaretli bir işe onaysız başlama;
    işaretsizse doğrudan başla.
 
-**Oturum kapanırken `DEVAM.md`yi güncelle** (son commit, biten, sıradaki,
-bekleyen karar) ve işin KENDİ commit'ine koy. Güncellenmeyen devir belgesi
+**Oturum kapanırken `DEVAM.md`yi güncelle** (biten, sıradaki, bekleyen
+karar, deploy durumu) ve işin KENDİ commit'ine koy. Güncellenmeyen devir belgesi
 yanlış yere başlatır — eski sürüm 16 Ağustos'ta donmuş, 6 hafta geride
 kalmıştı.
 

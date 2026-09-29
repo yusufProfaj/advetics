@@ -11,6 +11,7 @@
  */
 
 import type { Platform } from '@advetics/shared';
+import { isYapilabilir } from '../../queue/platform-isleri';
 
 /**
  * Metrik işi başına en fazla kaç gün.
@@ -120,7 +121,13 @@ export function planla(girdi: PlanGirdisi): PlanlananIs[] {
       });
     }
 
-    if (girdi.kirilimlar) {
+    /*
+     * PLATFORMUN YAPAMADIĞI İŞ PLANA GİRMİYOR. Plan partinin paydası ve
+     * burada kesin düşecek bir iş (LinkedIn kırılımı) çubuğa bir kalıcı
+     * hata yazar; kuyruğun kendi süzgecine bırakmak da onu "zaten kuyrukta"
+     * sayacına karıştırırdı (queue/platform-isleri.ts).
+     */
+    if (girdi.kirilimlar && isYapilabilir(hesap.platform, 'insights_breakdowns')) {
       for (const a of araliklar) {
         isler.push({
           adAccountId: hesap.id,

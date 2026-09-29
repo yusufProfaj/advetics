@@ -5,6 +5,7 @@ import type { EntityLevel, Platform, SyncJobType } from '@prisma/client';
 import { CONFIG, type AppConfig } from '../config/configuration';
 import { PrismaAdminService } from '../prisma/prisma-admin.service';
 import { JOB_PRIORITY, SYNC_QUEUE, buildJobId, layerForJob, type SyncJobPayload } from './queues';
+import { isYapilabilir } from './platform-isleri';
 
 /**
  * Senkronizasyon işlerini kuyruğa koyar.
@@ -121,6 +122,21 @@ export class SyncQueueService implements OnModuleDestroy {
     interactive?: boolean;
     delayMs?: number;
   }): Promise<{ enqueued: boolean; syncJobId?: string; reason?: string }> {
+    /*
+     * SON SAVUNMA HATTI. Çağıranlar bu işi zaten planlamamalı (süpürme,
+     * toplu tazeleme ve "Şimdi güncelle" aynı fonksiyonla süzüyor); buraya
+     * gelen, süzgeci unutmuş YENİ bir çağıran. Platformda kesin düşecek bir
+     * işi kuyruğa koymak, `sync_jobs`a her gece bir kalıcı hata yazmak ve
+     * gerçek arızayı o kalabalıkta kaybetmek demek (platform-isleri.ts).
+     */
+    if (!isYapilabilir(params.platform, params.jobType)) {
+      this.logger.warn(
+        `${params.jobType} ${params.platform} için desteklenmiyor — kuyruğa alınmadı ` +
+          `(hesap ${params.adAccountId ?? '-'}). Çağıran süzgeci atlamış.`,
+      );
+      return { enqueued: false, reason: `${params.platform} bu işi desteklemiyor` };
+    }
+
     const jobId = buildJobId(params);
 
     /*
