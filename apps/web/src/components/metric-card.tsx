@@ -46,7 +46,7 @@ export function MetricCard({
      * kenarlık ve daha büyük rakam kullanmak renkten bağımsız çalışıyor.
      */
     <div
-      className={`relative overflow-hidden rounded-xl border bg-surface p-4 shadow-kart ${
+      className={`relative rounded-xl border bg-surface p-4 shadow-kart ${
         emphasis ? 'border-brand/40' : 'border-line'
       }`}
     >
@@ -55,9 +55,12 @@ export function MetricCard({
         doldurulmuyor (aşağıdaki kural): yalnızca kenar rengiyle vurgulamak
         açık temada neredeyse görünmüyordu, dolgu ise kırmızı markada "sorun
         var" diye okunuyordu. Şerit ikisinin arası.
+
+        `overflow-hidden` YOK ve olmamalı: terimin "?" açıklama balonu kartın
+        DIŞINA taşıyor ve kırpılırdı. Şerit bu yüzden köşelerden içeride.
       */}
       {emphasis && (
-        <span aria-hidden className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-brand to-brand-accent" />
+        <span aria-hidden className="absolute inset-x-4 top-0 h-[3px] rounded-b-full bg-gradient-to-r from-brand to-brand-accent" />
       )}
       <p className="relative text-xs font-medium text-ink-muted">
         <Terim anahtar={terim} />

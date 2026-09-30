@@ -6,10 +6,12 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-29 (ikinci oturum) · **Canlı:** "dünya geneli"
-etiketi dahil. **Bekleyen deploy:** Bölüm 4d (Akıllı Boost ön ayarı kitle
-şablonu) ve panel tasarım katmanı. Migration yok. Tasarım `next/font`
-kullanıyor: sunucudaki derleme Google Fonts'a erişebilmeli.
+**Son güncelleme:** 2026-09-30 · **Canlı:** tasarım 1. tur ve 4d dahil.
+**Bekleyen deploy:** tasarım 2. tur (açılır menü katman hatası, sade menü,
+sekmeli Ayarlar, Raporlar araç çubuğu, kurulum sadeleşmesi). Migration yok.
+Deploy sonrası: BÜTÜN açılır menüleri canlıda tek tek aç (Paylaş, şablon
+seçici, tarih seçici, workspace seçici, bildirim zili, Terim balonları,
+kart düzenleme pencereleri) ve kullanıcıyla sayfaları gez.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;

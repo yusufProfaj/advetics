@@ -154,7 +154,8 @@ describe('bileşen', () => {
     expect(son).toBeGreaterThan(i);
     const dal = BILESEN.slice(i, son);
     expect(dal).toContain('kurulumGorunur ?');
-    expect(dal).toContain('href="/kurulum"');
+    // Doğrudan workspace formu: türsüz /kurulum artık yönlendiriyor.
+    expect(dal).toContain('href="/kurulum?tur=workspace"');
     expect(dal).toContain('Yöneticinden');
   });
 

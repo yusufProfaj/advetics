@@ -211,7 +211,35 @@ export default async function ReportsPage({
         SEKMELER YALNIZCA FATURA YETKİSİ VARSA. Tek sekmelik bir sekme çubuğu
         gösterecek bir şey değil, kullanıcıya olmayan bir seçim sunmak olurdu.
       */}
-      {canShare && <RaporSekmeleri aktif={sekme} />}
+      {/*
+        SEKMELER VE BELGE İŞLEMLERİ TEK SATIRDA. İşlemler (Planla, PDF,
+        Paylaş) belgenin önünde ayrı bir kartta duruyordu; sekme satırının
+        sağı boştu. Aynı satırda olmaları "bu belgeyle ne yapabilirim"
+        sorusunu tek bakışta cevaplıyor ve belge ilk ekrana çıkıyor.
+        İşlemler yalnızca belge üretildiyse: rapor düştüğünde paylaşılacak
+        bir şey yok.
+      */}
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 border-b border-line">
+        {canShare ? <RaporSekmeleri aktif={sekme} /> : <span />}
+        {sekme === 'rapor' && report !== null && (
+          <div className="pb-2">
+            <ShareControls
+              clientId={clientId}
+              from={from}
+              to={to}
+              hasData={report.platforms.length > 0}
+              /*
+                SEÇİLİ ŞABLON ARTIK GEÇİYOR — düzeltilen hata buydu.
+                Öncesinde `templateId={null}` sabitti: ekranda Google raporunu
+                gören kullanıcı Genel raporu indiriyordu ve bunu ancak PDF'i
+                AÇINCA anlıyordu. Hiçbir hata da vermiyordu, çünkü şablonsuz
+                istek de geçerli bir istek.
+              */
+              sablon={sablon}
+            />
+          </div>
+        )}
+      </div>
 
 
 
@@ -264,31 +292,6 @@ export default async function ReportsPage({
       ) : (
         <>
           {/*
-            ÜÇ YOL, TEK YER. "PDF indir" ve "Paylaş" yan yana, paylaşım
-            panelinin sağında. Öncesinde indirme sayfanın üstünde ayrı bir
-            satırdaydı ve "Müşteriye gönder" de oradaydı: raporla ilgili bir
-            şey yapmak için kullanıcı iki ayrı yere bakıyordu.
-
-            Yan yana ama AYNI DÜĞME DEĞİL: indirmek belgeyi kendine almak,
-            paylaşmak müşteriye ulaştırmak. İkisini tek menüye koymak farklı
-            iki işi aynı başlık altında toplardı.
-          */}
-          <ShareControls
-            clientId={clientId}
-            from={from}
-            to={to}
-            hasData={report.platforms.length > 0}
-            /*
-              SEÇİLİ ŞABLON ARTIK GEÇİYOR — düzeltilen hata buydu.
-              Öncesinde `templateId={null}` sabitti: ekranda Google raporunu
-              gören kullanıcı Genel raporu indiriyordu ve bunu ancak PDF'i
-              AÇINCA anlıyordu. Hiçbir hata da vermiyordu, çünkü şablonsuz
-              istek de geçerli bir istek.
-            */
-            sablon={sablon}
-          />
-
-          {/*
             FATURA KUTUSU PAYLAŞIM PANELİNİN ALTINDA ve ekrandaki DÖNEMİ
             biliyor: hangi ayın faturasının gerektiği tarih seçicisinden
             belli, kullanıcı ayı elle yazmıyor ve yanlış aya yükleme riski
@@ -300,14 +303,14 @@ export default async function ReportsPage({
             çoklu yükleme kuralını kaybederdi.
           */}
           {canShare && (
-            <Faturalar clientId={clientId} odakDonemler={kapsananDonemler(from, to)} canWrite />
+            <Faturalar clientId={clientId} odakDonemler={kapsananDonemler(from, to)} canWrite ozet />
           )}
 
 
           {/* Önizleme müşterinin göreceğinin BİREBİR aynısı: aynı bileşen,
               aynı veri. Ayrı bir "önizleme görünümü" yazmak, gönderilen
               belgeyle ekranda görülenin zamanla ayrışması demek olurdu. */}
-          <div className="overflow-hidden rounded-xl border border-line bg-white">
+          <div className="overflow-hidden rounded-xl border border-line bg-white shadow-kart">
             <ReportDocument data={report} />
           </div>
         </>

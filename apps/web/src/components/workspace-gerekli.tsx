@@ -91,7 +91,7 @@ export function WorkspaceGerekli({
             {neden} {sirketAdi} altında henüz workspace yok.
           </p>
           {kurulumGorunur ? (
-            <Link href="/kurulum" className={`mt-5 ${dugmeSinifi()}`}>
+            <Link href="/kurulum?tur=workspace" className={`mt-5 ${dugmeSinifi()}`}>
               Workspace oluştur
             </Link>
           ) : (

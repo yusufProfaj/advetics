@@ -64,7 +64,7 @@ describe('menü verisi gerçekten okunuyor', () => {
       'Reklamlar',
       'Raporlar',
       'Kütüphane',
-      'Sistem Yönetimi',
+      'Ayarlar',
     ]);
     /*
      * YETKİYLE KAPALI ÖĞELER — ÇIPLAK SAYI YERİNE ADLARIYLA.
@@ -275,7 +275,7 @@ describe('AI ASİSTAN SATIRI', () => {
 
 describe('MÜŞTERİ HESABI (client_viewer)', () => {
   it('KRİTİK: "Çalışma Alanı" kategorisini GÖRMÜYOR', () => {
-    expect(basliklar('client_viewer')).not.toContain('Sistem Yönetimi');
+    expect(basliklar('client_viewer')).not.toContain('Ayarlar');
   });
 
   it('KRİTİK: Şirketler, Platform Bağlantıları ve Ekip & Yetkiler görünmüyor', () => {
@@ -313,8 +313,8 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
 });
 
 describe('AJANS ROLLERİ', () => {
-  it('Yönetici "Sistem Yönetimi" kategorisini ve ekranlarını görüyor', () => {
-    expect(basliklar('admin')).toContain('Sistem Yönetimi');
+  it('Yönetici "Ayarlar" bölümünü ve ekranlarını görüyor', () => {
+    expect(basliklar('admin')).toContain('Ayarlar');
     const gorunen = etiketler('admin');
     // "Workspace'ler" ARTIK BİR MENÜ SATIRI DEĞİL: workspace listesi
     // Şirketler sayfasının içinde bir bölüm.
@@ -323,7 +323,7 @@ describe('AJANS ROLLERİ', () => {
     expect(gorunen).toContain('Ekip & Yetkiler');
   });
 
-  it('Reklam Yöneticisi: Sistem Yönetimi bölümünü görüyor, Şirketler ve kişi yönetimi hariç', () => {
+  it('Reklam Yöneticisi: Ayarlar bölümünü görüyor, Şirketler ve kişi yönetimi hariç', () => {
     /*
      * Bu test bir DAVRANIŞI değil bir KARARI kilitliyor: reklam yöneticisi
      * ajans çalışanı, müşteri değil — Platform Bağlantıları'nı görmeli

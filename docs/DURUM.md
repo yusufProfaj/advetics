@@ -765,6 +765,40 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-30 — Panel tasarımı 2. tur: açılır menüler, sade menü, ayarlar sekmeli
+
+- **BÜTÜN AÇILIR MENÜLER KARTLARIN ALTINDA KALIYORDU — sebep 1. turdaki
+  giriş animasyonu.** `animation-fill-mode: both` son kareyi animasyon
+  BİTTİKTEN sonra da tutuyor; opaklık/dönüşüm animasyonu etkin öğe tarayıcı
+  için ayrı bir katman (stacking context). Her kart kendi katmanı olunca
+  sonraki kart öncekinin içindeki menünün ÜSTÜNE çiziliyordu ve `z-index`
+  hiçbir şey yapmıyordu (Raporlar → Paylaş menüsü fatura kartının altında).
+  Artık `backwards`: yalnızca gecikme süresince ilk kare, bitince iz yok.
+  Canlıda düzeltme sayfaya enjekte edilerek doğrulandı.
+  `panel-tasarim.spec.ts` sonlu her giriş animasyonunda `backwards` istiyor.
+  Aynı taramada metrik kartı ve uyarı kutusundaki `overflow-hidden`
+  kaldırıldı ("?" açıklama balonunu kırpardı).
+- **Kenar çubuğu:** "Sistem Yönetimi"nin yedi satırı en altta TEK "Ayarlar"
+  satırı oldu; ekranlar `ayarlar/layout.tsx`'te sekme. Yetkinin tek kaynağı
+  yine `SECTIONS` (rol matrisi testleri değişmedi, bölüm adı "Ayarlar"):
+  `kenarBolumleri` bölümü ayırıyor, sekmeler aynı süzülmüş listeden. Satırın
+  adresi görebildiği İLK ayar sayfası (sabit adres, Şirketler'i göremeyen
+  reklam yöneticisini 403'e gönderirdi).
+- **Kurulum Sihirbazı menüden ve seçim ekranından kalktı.** Oluşturma
+  düğmeleri zaten Şirketler / Üst Hesaplar'da ve `/kurulum?tur=` ile
+  formu açıyor; türsüz `/kurulum` seçili workspace varsa Marka Merkezi'ne
+  (hazırlık listesi), yoksa Şirketler'e yönlendiriyor. Kapalı türde sebep
+  ekranda yazıyor. `kurulum-secimi.tsx` silindi (`SecimKarti` → `kurulum-akisi.ts`).
+- **Raporlar:** paylaşım kartı araç çubuğuna indi (sekmelerle aynı satır,
+  sağda); fatura formu Rapor sekmesinde tek satırlık ÖZET (eksikse uyarı
+  ilk satırda, form "Fatura ekle"yle açılıyor) — aynı bileşen, `ozet` kipi.
+  Menüde emoji yerine çizgi ikon.
+- **Workspace seçicisi:** alt satırdaki "Üst hesap ayarları" `bg-ink
+  text-white` idi ve karanlık temada boş bir beyaz şerit görünüyordu; iki
+  bağlantı tek sade satırda.
+- `getSession` istek başına `cache()`: düzen + sayfa (+ ayarlar düzeni) aynı
+  istekte oturumu ayrı ayrı istiyordu. Yetki yine her tıklamada taze.
+
 ### 2026-09-29 — Panel tasarımı: kalıba bağlı tasarım katmanı ve geçişler
 
 Kullanıcının tarifi: *"iç sayfaların tasarımları çok basit ve ucuz duruyor"*.

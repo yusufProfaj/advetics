@@ -66,24 +66,18 @@ describe('müşteri arama', () => {
     expect(dilim.indexOf('type="search"')).toBeLessThan(ilkSatir);
   });
 
-  it('KRİTİK: "Yönetim paneli" bir EYLEM — listenin üyesi gibi görünmüyor', () => {
+  it('KRİTİK: yönetim bağlantısı bir EYLEM — listenin üyesi gibi görünmüyor', () => {
     /*
-     * Marka renginde dolu ve beyaz yazılı: bir workspace SEÇMİYOR, yeni bir
-     * pencere açıyor. Diğer satırlarla aynı görünseydi "bu da bir müşteri
-     * mi" diye okunurdu.
+     * Bir kapsam SEÇMİYOR, başka bir ekran açıyor. Eskiden marka renginde
+     * dolu bir şeritti; artık listenin DIŞINDA, üst kenarlıklı ayrı bir alt
+     * satırda ve ikonlu. Kural aynı: kapsam satırlarıyla karışmamalı.
      */
-    const i = kod(SECICI).indexOf('Yönetim paneli');
-    expect(i, 'yönetim paneli girişi bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
-    /*
-     * ARTIK BİR `<Link>` (ayrı bir ekrana gidiyor, pencere açmıyor) — ama
-     * KARAR AYNI: marka renginde dolu ve beyaz yazılı, yani bir kapsam
-     * satırı gibi görünmüyor.
-     */
-    const etiket = kod(SECICI).lastIndexOf('<Link', i);
-    expect(etiket, 'yönetim paneli bağlantısı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
-    const dugme = kod(SECICI).slice(etiket, i);
-    expect(dugme).toContain('bg-brand');
-    expect(dugme).toContain('text-white');
+    const i = kod(SECICI).indexOf('Şirketleri yönet');
+    expect(i, 'yönetim bağlantısı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const satir = kod(SECICI).lastIndexOf('<div className="flex border-t border-line', i);
+    expect(satir, 'alt satır kabı bulunamadı').toBeGreaterThan(-1);
+    // Liste (role="tree" içindeki kaydırılan bölüm) kapandıktan SONRA geliyor.
+    expect(kod(SECICI).indexOf('overflow-y-auto py-1')).toBeLessThan(satir);
   });
 
   it('KRİTİK: arama HER AÇILIŞTA sıfırlanıyor', () => {

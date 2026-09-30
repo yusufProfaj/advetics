@@ -23,6 +23,18 @@ import type { ConnectionSummary, Platform, ProviderAvailability } from '@advetic
 export const KURULUM_TURLERI = ['ust-hesap', 'sirket', 'workspace'] as const;
 export type KurulumTuru = (typeof KURULUM_TURLERI)[number];
 
+/**
+ * Bir kurulum türünün başlığı ve (varsa) açılamama sebebi. Seçim ekranı
+ * kalktı ama tür başlığı ve engel cümlesi formun kendisinde gösteriliyor.
+ */
+export interface SecimKarti {
+  tur: KurulumTuru;
+  baslik: string;
+  aciklama: string;
+  /** Doluysa tür açılamıyor ve SEBEP ekranda yazıyor. */
+  engel: string | null;
+}
+
 export type AdimKodu = 'ust-hesap' | 'sirket' | 'baglantilar' | 'workspace' | 'hesaplar' | 'bitti';
 
 /**

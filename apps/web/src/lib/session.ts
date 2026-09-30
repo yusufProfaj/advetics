@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import type { Permission, SessionResponse } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from './api';
@@ -12,7 +13,14 @@ export type { SessionResponse };
  * kullanıcının yetkisi geri alındığında token'ı süresi dolana kadar geçerli
  * kalır. Bütçeye dokunan bir üründe bu gecikmeyi kabul etmiyoruz.
  */
-export async function getSession(): Promise<SessionResponse | null> {
+/*
+ * İSTEK BAŞINA TEK SORGU (`cache`). Panel düzeni, ayarlar düzeni ve sayfa
+ * aynı istekte oturumu ayrı ayrı istiyordu: her gezinme iki-üç TAM
+ * gidiş-dönüş demekti ve hepsi aynı cevabı alıyordu. `cache` yalnızca AYNI
+ * sunucu isteği içinde paylaşıyor; bir sonraki tıklama yine taze okuyor,
+ * yani yukarıdaki "yetki geri alındığında hemen düşsün" kuralı bozulmuyor.
+ */
+export const getSession = cache(async (): Promise<SessionResponse | null> => {
   try {
     return await serverApiFetch<SessionResponse>('/auth/session');
   } catch (err) {
@@ -21,7 +29,7 @@ export async function getSession(): Promise<SessionResponse | null> {
     }
     throw err;
   }
-}
+});
 
 /** Oturum zorunlu olan sayfalar için. Yoksa /login'e yönlendirir. */
 export async function requireSession(): Promise<SessionResponse> {

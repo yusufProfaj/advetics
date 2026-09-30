@@ -36,7 +36,7 @@ export function Uyari({
   return (
     <div
       role={ton === 'tehlike' ? 'alert' : 'status'}
-      className={`relative flex flex-wrap items-start gap-x-4 gap-y-2 overflow-hidden rounded-xl border py-3 pl-5 pr-4 text-sm before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-current before:opacity-50 ${TON[ton]}`}
+      className={`relative flex flex-wrap items-start gap-x-4 gap-y-2 rounded-xl border py-3 pl-5 pr-4 text-sm before:absolute before:inset-y-2.5 before:left-1.5 before:w-[3px] before:rounded-full before:bg-current before:opacity-50 ${TON[ton]}`}
     >
       <div className="min-w-0 flex-1 space-y-0.5">
         {baslik && <p className="font-semibold">{baslik}</p>}

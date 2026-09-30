@@ -502,48 +502,44 @@ export function KapsamSecici({
           </p>
 
           {/*
-            MARKA RENGİNDE DOLU VE BEYAZ YAZILI — bir kapsam SEÇMİYOR, yeni
-            bir ekran açıyor. Diğer satırlarla aynı görünseydi "bu da bir
-            şirket mi" diye okunurdu.
+            ALT SATIR: YÖNETİM BAĞLANTILARI YAN YANA, SADE.
 
-            YETKİSİ OLMAYANA GÖSTERİLMİYOR. Sayfa `org.write` istiyor ve
-            yetkisiz kullanıcıyı `/dashboard`a yönlendiriyor: bağlantıyı
-            herkese basmak, tıklayınca sebepsizce başka bir ekrana atılan
-            bir düğme demekti.
+            İkisi ayrı tam genişlik şeritlerdi: biri marka renginde dolu,
+            diğeri `bg-ink text-white`. İkincisi KARANLIK TEMADA OKUNMUYORDU:
+            `ink` orada açık bir renge dönüyor ve açık zemine beyaz yazı
+            yalnızca boş bir beyaz şerit gibi görünüyordu. Yeni hâl yüzey
+            belirteçleriyle çiziliyor, iki temada da aynı okunuyor. Kapsam
+            SEÇMEDİKLERİ belli: ikon + ok, satır listesinin dışında.
+
+            YETKİSİ OLMAYANA GÖSTERİLMİYOR (sayfa `org.write` istiyor).
+            "Üst hesaplar" yalnızca birden çok hesapta: tek hesapta
+            geçilecek ikinci bir hesap yok.
           */}
           {yonetimGorunur && (
-            <Link
-              href="/ayarlar/ust-hesap"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2 border-t border-line bg-brand px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
-            >
-              <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0" aria-hidden>
-                <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-              Yönetim paneli
-            </Link>
-          )}
-
-          {/*
-            "ÜST HESAP AYARLARI" YALNIZCA BİRDEN ÇOK HESAPTA.
-
-            Ayrı seçici kaldırılınca onun altındaki sabit sekme de sahipsiz
-            kaldı ve hedefi buraya taşındı. Tek hesaplı kullanıcıya
-            basılmıyor: hesaplar ARASINDA çalışan bir ekran (ad, paket, silme,
-            yeni hesap) ve geçilecek ikinci bir hesap yokken kenar çubuğundaki
-            aynı bağlantının kopyasından ibaret olurdu.
-          */}
-          {yonetimGorunur && ustHesaplar.length > 1 && (
-            <Link
-              href="/ayarlar/ust-hesaplar"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2 border-t border-line bg-ink px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
-            >
-              <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0" aria-hidden>
-                <path d="M10 3v14M3 10h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-              Üst hesap ayarları
-            </Link>
+            <div className="flex border-t border-line bg-surface-muted/60 p-1.5">
+              <Link
+                href="/ayarlar/ust-hesap"
+                onClick={() => setOpen(false)}
+                className="flex flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-ink transition hover:bg-surface-sunken"
+              >
+                <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden>
+                  <path d="M4.5 16V6l4-2.5V16M4.5 16h11V9l-7-3M11 11h2M11 13.5h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Şirketleri yönet
+              </Link>
+              {ustHesaplar.length > 1 && (
+                <Link
+                  href="/ayarlar/ust-hesaplar"
+                  onClick={() => setOpen(false)}
+                  className="flex flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-ink transition hover:bg-surface-sunken"
+                >
+                  <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden>
+                    <path d="M3 7.5 10 4l7 3.5-7 3.5-7-3.5ZM3 12l7 3.5 7-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Üst hesaplar
+                </Link>
+              )}
+            </div>
           )}
         </div>
       )}

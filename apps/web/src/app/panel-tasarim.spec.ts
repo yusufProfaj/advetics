@@ -54,6 +54,20 @@ describe('panel tasarım katmanı', () => {
     expect(CSS).toContain(".sayfa-gecis > * > :not([class*='animate-'], [class*='advetics-'])");
   });
 
+  it('KRİTİK: giriş animasyonları bitince İZ BIRAKMIYOR (`backwards`, `both` değil)', () => {
+    /*
+     * `both` son kareyi tutuyor ve her kart ayrı bir katman oluyordu:
+     * Raporlar'daki "Paylaş" menüsü bir sonraki kartın ALTINDA kaldı.
+     */
+    const atamalar = [...CSS.matchAll(/animation:\s*(panel-[\w-]+)[^;]*;/g)].map((m) => m[0]);
+    expect(atamalar.length).toBeGreaterThan(4);
+    for (const a of atamalar) {
+      if (a.includes('infinite')) continue;
+      expect(a, a).toContain('backwards');
+      expect(a, a).not.toMatch(/\bboth\b|\bforwards\b/);
+    }
+  });
+
   it('KRİTİK: giriş animasyonunun son karesi nötr (fixed pencere hapsolmasın)', () => {
     for (const ad of ['panel-sayfa-gir', 'panel-blok-gir', 'panel-pencere-gir']) {
       const k = blok(`@keyframes ${ad} {`);

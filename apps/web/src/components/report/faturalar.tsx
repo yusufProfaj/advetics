@@ -44,12 +44,22 @@ export function Faturalar({
   odakDonemler,
   canWrite,
   baslikGoster = true,
+  ozet = false,
 }: {
   clientId: string;
   odakDonemler?: string[];
   canWrite: boolean;
   baslikGoster?: boolean;
+  /**
+   * RAPOR SEKMESİNDEKİ KISA HÂL: tek satır (eksikse uyarı, yüklüyse
+   * sayı) ve form ancak "Fatura ekle"ye basınca açılıyor. Bu kutu raporun
+   * ÖNÜNDE tam bir yükleme formu olarak duruyordu ve belgeyi ekranın altına
+   * itiyordu. Eksik fatura uyarısı KAPANMIYOR: rapor gönderilmeden önce
+   * görülmesi gereken bilgi o, kısa hâlde de ilk satırda.
+   */
+  ozet?: boolean;
 }) {
+  const [formAcik, setFormAcik] = useState(!ozet);
   const [liste, setListe] = useState<FaturaOzeti[] | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [yukleniyor, setYukleniyor] = useState(false);
@@ -185,9 +195,54 @@ export function Faturalar({
       ? []
       : odakDonemler.filter((d) => !liste.some((f) => f.donem === d));
 
+  if (ozet && !formAcik) {
+    const buDonem =
+      liste === null || !odakDonemler ? [] : liste.filter((f) => odakDonemler.includes(f.donem));
+    return (
+      <section className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm">
+        <span className="font-medium text-ink">Fatura eki</span>
+        <span className="min-w-0 flex-1 text-ink-muted">
+          {hata !== null ? (
+            <span className="text-danger-strong">{hata}</span>
+          ) : liste === null ? (
+            'Faturalar okunuyor…'
+          ) : eksikOdak.length > 0 ? (
+            <span className="text-warn-strong">
+              <strong>{eksikOdak.map(donemMetni).join(', ')}</strong> için fatura yüklenmemiş. Rapor
+              eksiz gider.
+            </span>
+          ) : (
+            `${buDonem.length} fatura bu dönemin mailine eklenecek.`
+          )}
+        </span>
+        {canWrite && (
+          <button
+            type="button"
+            onClick={() => setFormAcik(true)}
+            className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-muted"
+          >
+            Fatura ekle
+          </button>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section className="min-w-0 space-y-3 rounded-xl border border-line bg-surface p-4">
-      {baslikGoster && (
+      {ozet && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium text-ink">Fatura eki</p>
+          <button
+            type="button"
+            onClick={() => setFormAcik(false)}
+            className="text-xs text-ink-muted underline-offset-2 hover:text-ink hover:underline"
+          >
+            Kapat
+          </button>
+        </div>
+      )}
+      {baslikGoster && !ozet && (
         <div>
           <h2 className="text-sm font-semibold text-ink">Platform faturaları</h2>
           <p className="mt-0.5 text-xs text-ink-muted">

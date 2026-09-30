@@ -21,6 +21,22 @@ import { VARLIK_YOLLARI } from '@/components/marka-merkezi/varliklar';
  * AYARLAR bölümü yalnızca yönetim yetkisi olanlara görünüyor; süzgeç
  * `visibleSections` içinde ve bölüm boşalırsa başlığı da basılmıyor.
  */
+/** Kenar çubuğunda tek satıra inen bölümün adı. */
+export const AYARLAR_BOLUMU = 'Ayarlar';
+
+/**
+ * Ayarlar sekmelerindeki KISA ad. Menü etiketi sayfa başlığıyla aynı kalıyor
+ * (`nav-sections.spec.ts`); sekme çubuğunda "Platform Bağlantıları ·
+ * Senkronizasyon Durumu · E-posta Ayarları" yan yana sığmıyor ve "Ayarlar"
+ * sekmesinin içinde "Ayarları" demek tekrar.
+ */
+export const AYAR_KISA_AD: Record<string, string> = {
+  '/ayarlar/baglantilar': 'Bağlantılar',
+  '/ayarlar/senkronizasyon': 'Senkronizasyon',
+  '/ayarlar/e-posta': 'E-posta',
+  '/ayarlar/ekip': 'Ekip',
+};
+
 export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
   {
     // BAŞLIKSIZ — katlanamaz. Günlük iş bu iki ekranda başlıyor.
@@ -207,31 +223,20 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
      * AJANS İŞİ. `client.read` KULLANILMIYOR: client_viewer'da var (kendi
      * müşterisini okuyabilmeli), ayırt eden şey yönetim yetkisi.
      *
-     * ADI "AYARLAR" DEĞİL "SİSTEM YÖNETİMİ": içinde ayar olmayan ekranlar
-     * var (Şirketler, Ekip) ve "ayar" kelimesi onları
-     * ikinci sınıf gösteriyordu — kullanıcı şirket açmayı bir ayar sanmıyor.
+     * KENAR ÇUBUĞUNDA TEK SATIR, SAYFADA SEKME (2026-09-30). Bu bölüm
+     * yedi satırdı ve menünün yarısını kaplıyordu; kullanıcının isteği
+     * *"sidebar'ı sadeleştirebildiğin kadar sadeleştir"*. Liste YETKİNİN
+     * TEK KAYNAĞI olarak burada duruyor (rol matrisi testleri bunu
+     * kilitliyor); kenar çubuğu bölümü tek bir "Ayarlar" satırına
+     * indiriyor (`kenarBolumleri`), `ayarlar/layout.tsx` aynı süzülmüş
+     * listeyi sekme olarak çiziyor. İki ayrı liste yazmak, bir sayfanın
+     * menüde görünüp sekmede görünmemesi demekti.
+     *
+     * "Kurulum Sihirbazı" bu bölümden KALKTI: oluşturma düğmeleri zaten
+     * Şirketler ve Üst Hesaplar sayfasında ve sihirbaz oradan açılıyor.
      */
-    title: 'Sistem Yönetimi',
+    title: AYARLAR_BOLUMU,
     items: [
-      {
-        /*
-         * KURULUM SİHİRBAZI EN ÜSTTE. Yeni bir müşteriyi sisteme almak bu
-         * bölümün en sık ve en çok hata üreten işi: üst hesap, şirket,
-         * platform bağlantısı ve workspace dört ayrı ekrandaydı ve
-         * aralarındaki sıra hiçbir yerde yazmıyordu.
-         *
-         * `client.write` — en dar kurulum (workspace) bunu istiyor. Üst
-         * hesap ve şirket kartları sayfanın İÇİNDE kendi yetkileriyle
-         * kapanıyor ve sebebi yazıyor; menüyü `org.write` ile kapatmak,
-         * workspace kurabilen bir reklam yöneticisinden sihirbazı gizlerdi.
-         */
-        href: '/kurulum',
-        label: 'Kurulum Sihirbazı',
-        icon: 'setup',
-        module: 1,
-        ready: true,
-        perm: 'client.write',
-      },
       {
         /*
          * WORKSPACE'LER AYRI BİR SATIR DEĞİL — ŞİRKETLER'İN İÇİNDE.
@@ -250,6 +255,8 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
          * kendi yetkisini ayrıca kontrol ediyor.
          */
         href: '/ayarlar/ust-hesap',
+        // Workspace ekip/kanal alt sayfaları Şirketler sekmesinin altında.
+        ekYollar: ['/ayarlar/musteriler'],
         label: 'Şirketler',
         icon: 'clients',
         module: 1,
@@ -370,4 +377,20 @@ export function visibleSections(
       i.children ? { ...i, children: i.children.filter(gorunur) } : i,
     ),
   })).filter((s) => s.items.length > 0);
+}
+
+/**
+ * Kenar çubuğunun çizeceği hâl: Ayarlar bölümü AYRI dönüyor, kenar çubuğu
+ * onu en altta tek satır olarak gösteriyor. Görünür ayar sayfası yoksa
+ * (müşteri hesabı) satır hiç çizilmiyor: tıklayınca 403 veren bir kapı
+ * göstermek, rol matrisinin önlemek istediği şeyin ta kendisi.
+ */
+export function kenarBolumleri(bolumler: Array<{ title?: string; items: NavEntry[] }>): {
+  bolumler: Array<{ title?: string; items: NavEntry[] }>;
+  ayarlar: NavEntry[];
+} {
+  return {
+    bolumler: bolumler.filter((b) => b.title !== AYARLAR_BOLUMU),
+    ayarlar: bolumler.find((b) => b.title === AYARLAR_BOLUMU)?.items ?? [],
+  };
 }

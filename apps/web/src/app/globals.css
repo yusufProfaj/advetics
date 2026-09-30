@@ -508,10 +508,15 @@ body {
  * monte ediliyor ve bu sınıfı taşıyor; sayfanın ilk seviye blokları sırayla
  * giriyor.
  *
- * SON KARE `transform: none` VE `filter: none` OLMAK ZORUNDA. Dönüşümü ya
- * da süzgeci kalan bir ata, içindeki `position: fixed` öğeler (pencereler,
- * açılır menüler) için yeni bir kapsayıcı oluyor ve onlar sayfanın değil
- * kartın içine hapsoluyor. `both` ile tutulan son kare bu yüzden nötr.
+ * DOLGU KİPİ `backwards`, `both` DEĞİL — üretimde yakalandı. `both`
+ * animasyon BİTTİKTEN SONRA da son kareyi tutuyor ve opaklığı/dönüşümü
+ * etkin bir animasyon tarayıcı için AYRI BİR KATMAN (stacking context)
+ * demek. Her kart kendi katmanı olunca sonraki kart öncekinin içindeki
+ * açılır menünün ÜSTÜNE çiziliyordu: Raporlar'da "Paylaş" menüsü fatura
+ * kartının altında kalıyordu, `z-index` hiçbir şey yapmıyordu. `backwards`
+ * yalnızca gecikme süresince ilk kareyi tutuyor, bitince hiçbir iz
+ * bırakmıyor. Son kare yine de nötr (`transform: none`): animasyon SÜRERKEN
+ * açılan bir `fixed` pencere karta hapsolmasın.
  *
  * HEPSİ `prefers-reduced-motion` ALTINDA: hareket duyarlı kullanıcıda içerik
  * doğrudan yerinde görünüyor.
@@ -570,7 +575,7 @@ body {
 
 @media (prefers-reduced-motion: no-preference) {
   .sayfa-gecis {
-    animation: panel-sayfa-gir 0.45s var(--ease-out) both;
+    animation: panel-sayfa-gir 0.45s var(--ease-out) backwards;
   }
   /*
    * KENDİ ANİMASYONU OLAN ÖĞE HARİÇ. Bu kural onlardan sonra geldiği için
@@ -578,7 +583,7 @@ body {
    * iskelet kutusu dönmeyi bırakıp bir kez kayıp dururdu.
    */
   .sayfa-gecis > * > :not([class*='animate-'], [class*='advetics-']) {
-    animation: panel-blok-gir 0.55s var(--ease-out) both;
+    animation: panel-blok-gir 0.55s var(--ease-out) backwards;
   }
   .sayfa-gecis > * > :nth-child(1) { animation-delay: 40ms; }
   .sayfa-gecis > * > :nth-child(2) { animation-delay: 90ms; }
@@ -597,14 +602,14 @@ body {
   .panel-pencere,
   [aria-modal='true']:not([data-cekmece]),
   .panel .bg-surface.border-line:is(.shadow-lg, .shadow-xl) {
-    animation: panel-pencere-gir 0.28s var(--ease-out) both;
+    animation: panel-pencere-gir 0.28s var(--ease-out) backwards;
   }
   .panel-perde,
   .panel .fixed.inset-0[class*='bg-black'] {
-    animation: panel-perde-gir 0.25s ease-out both;
+    animation: panel-perde-gir 0.25s ease-out backwards;
   }
   [data-cekmece] {
-    animation: panel-cekmece-gir 0.32s var(--ease-out) both;
+    animation: panel-cekmece-gir 0.32s var(--ease-out) backwards;
   }
 
   /*

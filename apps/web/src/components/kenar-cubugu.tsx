@@ -1,5 +1,6 @@
 import type { NavEntry } from '@/components/nav';
-import { NavSection } from '@/components/nav';
+import { NavSection, AyarlarSatiri } from '@/components/nav';
+import { kenarBolumleri } from '@/lib/nav-sections';
 import { LogoutButton } from '@/components/logout-button';
 
 export interface KenarVerisi {
@@ -23,6 +24,7 @@ export interface KenarVerisi {
  * paketine giriyor; layout'tan çağrıldığında sunucuda kalıyor.
  */
 export function KenarIcerigi({ veri, onGezinme }: { veri: KenarVerisi; onGezinme?: () => void }) {
+  const { bolumler, ayarlar } = kenarBolumleri(veri.bolumler);
   return (
     <>
       <div className="flex h-16 shrink-0 items-center gap-2.5 px-5">
@@ -53,10 +55,20 @@ export function KenarIcerigi({ veri, onGezinme }: { veri: KenarVerisi; onGezinme
           geçilmiyor ve hiçbir şey değişmiyor.
         */}
         {/* İlk bölüm başlıksız ve `key={undefined}` React'te uyarı üretiyordu. */}
-        {veri.bolumler.map((section, i) => (
+        {bolumler.map((section, i) => (
           <NavSection key={section.title ?? `bolum-${i}`} title={section.title} items={section.items} />
         ))}
       </nav>
+
+      {/*
+        AYARLAR EN ALTTA, TEK SATIR. Yedi ayar ekranı menünün yarısını
+        kaplıyordu; içerideki sekmeler aynı yetki listesinden çiziliyor.
+      */}
+      {ayarlar.length > 0 && (
+        <div className="px-3 pt-2" onClick={onGezinme}>
+          <AyarlarSatiri sayfalar={ayarlar} />
+        </div>
+      )}
 
       <div className="p-3">
         <div className="flex items-center gap-2.5 rounded-xl border border-line/70 bg-surface-muted/70 px-2.5 py-2">

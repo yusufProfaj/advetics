@@ -140,15 +140,15 @@ export function ShareControls({
   }
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-ink">Workspace’le paylaş</h2>
-          <p className="mt-0.5 text-xs text-ink-muted">
-            Oturum gerektirmeyen gizli bağlantı. Tarih aralığı sabitlenir, workspace
-            sonradan açtığında aynı sayıları görür.
-          </p>
-        </div>
+    /*
+     * ARAÇ ÇUBUĞU, KART DEĞİL (2026-09-30). Bu bir başlık ve açıklama
+     * cümlesi taşıyan tam genişlikte bir karttı ve raporun ÖNÜNDE sayfanın
+     * ilk ekranını kaplıyordu; belgenin kendisi aşağıya itiliyordu. Üç
+     * düğme artık sekmelerle aynı satırda, sağda. Açıklama menünün içinde,
+     * seçeneğin yanında duruyor: kararın verildiği yerde.
+     */
+    <div className="flex min-w-0 flex-col items-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <div className="flex items-center gap-2">
           {/*
             İNDİR VE PAYLAŞ YAN YANA. Öncesinde "PDF indir" sayfanın üstünde
@@ -198,7 +198,7 @@ export function ShareControls({
           {menuAcik && (
             <div
               role="menu"
-              className="absolute right-0 z-20 mt-1.5 w-64 rounded-xl border border-line bg-surface p-1.5 shadow-lg"
+              className="absolute right-0 z-30 mt-1.5 w-72 rounded-xl border border-line bg-surface p-1.5 shadow-lg"
             >
               {/*
                 SÜRE SEÇENEKLERİN ÜSTÜNDE. Kararın verildiği yer burası;
@@ -242,13 +242,11 @@ export function ShareControls({
                 onClick={createLink}
                 className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-muted"
               >
-                <span aria-hidden="true" className="mt-0.5 text-sm">
-                  🔗
-                </span>
+                <MenuIkonu yol="M8.5 11.5a3 3 0 0 0 4.24 0l2.5-2.5a3 3 0 0 0-4.24-4.24l-.75.75M11.5 8.5a3 3 0 0 0-4.24 0l-2.5 2.5a3 3 0 0 0 4.24 4.24l.75-.75" />
                 <span>
                   <span className="block text-sm font-medium text-ink">Bağlantıyı kopyala</span>
                   <span className="block text-[11px] text-ink-muted">
-                    Oturum gerektirmeyen gizli sayfa
+                    Giriş gerektirmeyen gizli sayfa. Tarih aralığı sabit kalır.
                   </span>
                 </span>
               </button>
@@ -262,9 +260,7 @@ export function ShareControls({
                 }}
                 className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-muted"
               >
-                <span aria-hidden="true" className="mt-0.5 text-sm">
-                  ✉️
-                </span>
+                <MenuIkonu yol="M3.5 6l6.5 4.5L16.5 6M4 5h12a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5v-9A.5.5 0 0 1 4 5Z" />
                 <span>
                   <span className="block text-sm font-medium text-ink">Mail yoluyla ilet</span>
                   <span className="block text-[11px] text-ink-muted">
@@ -279,11 +275,11 @@ export function ShareControls({
       </div>
 
       {error && (
-        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong">{error}</p>
+        <p className="w-full max-w-xl rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong">{error}</p>
       )}
 
       {link && (
-        <div className="mt-3 rounded-lg border border-ok/30 bg-ok-soft p-3">
+        <div className="w-full max-w-xl rounded-lg border border-ok/30 bg-ok-soft p-3">
           <p className="text-xs font-semibold text-ok-strong">
             Bağlantı hazır. Bir daha gösterilmeyecek, şimdi kopyala.
           </p>
@@ -313,6 +309,17 @@ export function ShareControls({
         onKapat={() => setMailAcik(false)}
         sablon={sablon}
       />
-    </section>
+    </div>
+  );
+}
+
+/** Menü satırının ikonu: emoji yerine çizgi ikon, panelin geri kalanıyla aynı dil. */
+function MenuIkonu({ yol }: { yol: string }) {
+  return (
+    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-ink-muted">
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="h-4 w-4">
+        <path d={yol} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
   );
 }

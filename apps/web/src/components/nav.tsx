@@ -299,7 +299,36 @@ function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
 }
 
 /** 20×20 stroke ikonlar — dış bağımlılık eklemeden tutarlı bir set. */
+/**
+ * KENAR ÇUBUĞUNUN "AYARLAR" SATIRI. Adresi, kullanıcının GÖREBİLDİĞİ ilk
+ * ayar sayfası: sabit bir `/ayarlar/ust-hesap` yazmak, Şirketler'i
+ * göremeyen bir reklam yöneticisini 403'e gönderirdi. Ayarların herhangi
+ * bir sekmesindeyken satır seçili görünüyor.
+ */
+export function AyarlarSatiri({ sayfalar }: { sayfalar: NavEntry[] }) {
+  const pathname = usePathname();
+  const ilk = sayfalar[0];
+  if (!ilk) return null;
+  const active = sayfalar.some((s) => aktifMi(s, pathname));
+  return (
+    <Link
+      href={ilk.href}
+      aria-current={active ? 'page' : undefined}
+      className={`nav-oge group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+        active
+          ? 'bg-brand-soft font-semibold text-brand-strong'
+          : 'text-ink/85 hover:bg-surface-sunken/70 hover:text-ink'
+      }`}
+    >
+      <Icon name="settings" active={active} />
+      <span className="truncate">Ayarlar</span>
+    </Link>
+  );
+}
+
 const ICONS = {
+  settings:
+    'M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM16 10c0-.5-.05-.98-.14-1.45l1.64-1.28-1.5-2.6-1.97.8a6 6 0 0 0-2.5-1.45L11.2 2h-2.4l-.33 2.02a6 6 0 0 0-2.5 1.45l-1.97-.8-1.5 2.6 1.64 1.28a6 6 0 0 0 0 2.9L2.5 12.73l1.5 2.6 1.97-.8a6 6 0 0 0 2.5 1.45L8.8 18h2.4l.33-2.02a6 6 0 0 0 2.5-1.45l1.97.8 1.5-2.6-1.64-1.28c.09-.47.14-.95.14-1.45Z',
   overview: 'M3 10.5 10 4l7 6.5M5.5 9v7h9V9',
   explorer: 'M4 15V8m4 7V5m4 10v-4m4 4V9',
   rules: 'M4 6h12M4 10h7M4 14h9M15.5 12.5 17 14l-1.5 1.5',

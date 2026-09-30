@@ -6,12 +6,15 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { hasPermission, requireSession } from '@/lib/session';
-import { KurulumSecimi, type SecimKarti } from '@/components/kurulum/kurulum-secimi';
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { Uyari } from '@/components/ui/uyari';
+import { dugmeSinifi } from '@/components/ui/dugme';
 import { KurulumSihirbazi } from '@/components/kurulum/kurulum-sihirbazi';
 import { SirketSec } from '@/components/kurulum/sirket-sec';
-import { ADIMLAR, adimOku, turOku } from '@/components/kurulum/kurulum-akisi';
+import { ADIMLAR, adimOku, turOku, type SecimKarti } from '@/components/kurulum/kurulum-akisi';
 
-export const metadata = { title: 'Kurulum Sihirbazı · Advetics' };
+export const metadata = { title: 'Kurulum · Advetics' };
 
 function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
@@ -109,22 +112,54 @@ export default async function KurulumPage({
   const ilkAdimda = tur !== null && ilkAdim === ADIMLAR[tur][0];
   const sihirbazAcik = tur !== null && ilkAdim !== null && !(ilkAdimda && kart?.engel);
 
+  /*
+   * ═══ SEÇİM EKRANI KALKTI — OLUŞTURMA AYARLARDAN AÇILIYOR ═══
+   *
+   * Bu sayfa kenar çubuğunda "Kurulum Sihirbazı" olarak duruyordu ve önce
+   * "üst hesap mı, şirket mi, workspace mi" diye soruyordu. Aynı üç işin
+   * düğmesi Ayarlar'da (Şirketler / Üst Hesaplar) zaten vardı ve buraya
+   * `?tur=` ile yönlendiriyordu. Kullanıcının cümlesi: *"zaten ayarların
+   * içerisinden yapabiliyorum, bir de oradan yapmayım"*. Artık tek giriş
+   * Ayarlar; bu sayfa yalnızca oradan açılan formu çiziyor.
+   *
+   * TÜRSÜZ GELEN (eski yer imi, eski bağlantı) KURULUMUN YAPILDIĞI YERE
+   * gidiyor: bir workspace seçiliyse onun hazırlık listesi (Marka Merkezi),
+   * değilse workspace'lerin listelendiği Şirketler sayfası. Boş bir seçim
+   * ekranı çizmek, kaldırılan kapıyı geri açmak olurdu.
+   */
+  if (tur === null || ilkAdim === null) {
+    redirect(session.activeClientId ? '/marka-merkezi' : '/ayarlar/ust-hesap');
+  }
+
   const baslik = (
     <header>
-      <h1 className="sayfa-baslik">Kurulum Sihirbazı</h1>
-      <p className="mt-1 max-w-prose text-sm text-ink-muted">
-        {sihirbazAcik
-          ? 'Adımları sırayla tamamla. Her adımda neyin gerektiği yazıyor.'
-          : 'Ne kurmak istediğini seç. Gerisini adım adım birlikte yaparız.'}
+      <h1 className="sayfa-baslik">{kart?.baslik ?? 'Kurulum'}</h1>
+      <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
+        {kart?.aciklama} Adımları sırayla tamamla; her adımda neyin gerektiği yazıyor.
       </p>
     </header>
   );
 
-  if (!sihirbazAcik || tur === null || ilkAdim === null) {
+  /*
+   * KAPALI TÜR: sebep yazıyor ve kullanıcı geldiği yere dönebiliyor. Eski
+   * seçim ekranı sebebi kartın içinde gösteriyordu; kart gidince sebep
+   * sessizce kaybolmamalı.
+   */
+  if (!sihirbazAcik) {
     return (
-      <div className="mx-auto w-full max-w-5xl space-y-6">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
         {baslik}
-        <KurulumSecimi kartlar={kartlar} />
+        <Uyari
+          ton="uyari"
+          baslik="Bu kurulum şu an açılamıyor."
+          eylem={
+            <Link href="/ayarlar/ust-hesap" className={dugmeSinifi('ikincil', 'kucuk')}>
+              Ayarlara dön
+            </Link>
+          }
+        >
+          {kart?.engel}
+        </Uyari>
       </div>
     );
   }

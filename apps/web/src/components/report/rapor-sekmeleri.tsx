@@ -49,7 +49,7 @@ export function RaporSekmeleri({ aktif }: { aktif: RaporSekmesi }) {
   }
 
   return (
-    <div role="tablist" className="flex items-center gap-1 border-b border-line">
+    <div role="tablist" className="-mb-px flex items-center gap-1">
       {SEKMELER.map((s) => (
         <button
           key={s.kod}
