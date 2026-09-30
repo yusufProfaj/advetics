@@ -1660,11 +1660,7 @@ export class MetaProvider implements IAdPlatformProvider {
   }): Promise<DiscoveredOrganicPost[]> {
     const ig = params.profileType === 'instagram_business';
 
-    const url = new URL(
-      `${this.graph}/${params.profileExternalId}/${ig ? 'media' : 'posts'}`,
-    );
-    url.searchParams.set(
-      'fields',
+    const alanlar: string[] = (
       ig
         ? [
             'id',
@@ -1708,7 +1704,7 @@ export class MetaProvider implements IAdPlatformProvider {
              * Meta iki metriği birleştirdi ve ayrı bir video sayacı bırakmadı.
              */
             'insights.metric(impressions,reach,saved,views)',
-          ].join(',')
+          ]
         : [
             'id',
             'message',
@@ -1720,20 +1716,61 @@ export class MetaProvider implements IAdPlatformProvider {
             'likes.summary(true).limit(0)',
             'comments.summary(true).limit(0)',
             'insights.metric(post_impressions,post_impressions_unique,post_video_views)',
-          ].join(','),
+          ]
     );
-    url.searchParams.set('limit', '50');
-    if (params.since) {
-      url.searchParams.set('since', String(Math.floor(params.since.getTime() / 1000)));
-    }
 
-    const res = await platformFetch<GraphPage>(
-      'meta',
-      url.toString(),
-      { headers: { Authorization: `Bearer ${params.pageAccessToken}` } },
-      parseMetaRateLimit,
-    );
-    if (res.rateLimit) await params.onRateLimit?.(res.rateLimit);
+    /*
+     * ═══ İSTATİSTİK REDDİ GÖNDERİYİ DÜŞÜRMÜYOR ═══
+     *
+     * İstatistikler gönderiyle AYNI istekte iç içe alan olarak isteniyor ve
+     * tek bir geçersiz metrik BÜTÜN isteği düşürüyor: gönderiler de gelmiyor,
+     * Akıllı Boost o sayfa için kart üretemiyor ve iş `permanent` düşüyor.
+     * Instagram'da `video_views` → `views` ile bir kez yaşandı; Facebook
+     * sayfasında `(#100) The value must be a valid insights metric` ile
+     * tekrar yaşandı (2026-09-30, "Şimdi güncelle" düğmesi görünür yaptı).
+     *
+     * ALANLAR DİZİ, VİRGÜLLE BÖLÜNEN METİN DEĞİL: `insights.metric(a,b,c)`
+     * ve `likes.summary(true)` alanları kendi içinde virgül taşıyor; metni
+     * bölüp süzmek istatistik alanının yarısını istekte bırakırdı.
+     *
+     * Reddi görünce istek İSTATİSTİKSİZ tekrarlanıyor: gönderiler geliyor,
+     * `icgoruEksik` işaretleniyor ve Meta'nın cümlesi günlüğe yazılıyor.
+     * Doğru metrik adı TAHMİN EDİLMİYOR: yanlış bir ad kabul edilip
+     * görmezden gelinebilir; adı ölçüm betiği belirliyor
+     * (`meta-sayfa-metrik-kontrol`).
+     */
+    const iste = async (secilen: string[]) => {
+      const url = new URL(
+        `${this.graph}/${params.profileExternalId}/${ig ? 'media' : 'posts'}`,
+      );
+      url.searchParams.set('fields', secilen.join(','));
+      url.searchParams.set('limit', '50');
+      if (params.since) {
+        url.searchParams.set('since', String(Math.floor(params.since.getTime() / 1000)));
+      }
+      const r = await platformFetch<GraphPage>(
+        'meta',
+        url.toString(),
+        { headers: { Authorization: `Bearer ${params.pageAccessToken}` } },
+        parseMetaRateLimit,
+      );
+      if (r.rateLimit) await params.onRateLimit?.(r.rateLimit);
+      return r;
+    };
+
+    let icgoruEksik = false;
+    let res: Awaited<ReturnType<typeof iste>>;
+    try {
+      res = await iste(alanlar);
+    } catch (err) {
+      if (!icgoruReddiMi(err)) throw err;
+      this.logger.warn(
+        `Organik gönderi istatistiği reddedildi (${params.profileType} ${params.profileExternalId}): ` +
+          `${err instanceof Error ? err.message : String(err)} · gönderiler istatistiksiz çekiliyor`,
+      );
+      icgoruEksik = true;
+      res = await iste(alanlar.filter((a) => !a.startsWith('insights.')));
+    }
 
     const out: DiscoveredOrganicPost[] = [];
     for (const row of res.data.data ?? []) {
@@ -1752,7 +1789,7 @@ export class MetaProvider implements IAdPlatformProvider {
        */
       if (ham.media_product_type === 'AD') continue;
       const post = mapOrganicPost(ham, ig);
-      if (post) out.push(post);
+      if (post) out.push(icgoruEksik ? { ...post, icgoruEksik: true } : post);
     }
     return out;
   }
@@ -4102,6 +4139,19 @@ function mapMediaType(row: Record<string, unknown>, ig: boolean): DiscoveredOrga
   if (t === 'photo') return 'photo';
   if (t === 'link') return 'link';
   return row.message ? 'text' : 'photo';
+}
+
+/**
+ * Meta'nın "bu metrik geçerli değil" reddi mi? İki biçimi var: Facebook
+ * sayfasında `The value must be a valid insights metric`, Instagram'da
+ * `metric[3] must be one of the following values`. İkisi de kod 100 ve kod
+ * tek başına ayırt etmiyor (100 = genel "geçersiz parametre"); ayıran mesaj.
+ * Başka bir #100'ü (ör. geçersiz alan) buraya almak, gerçek bir arızayı
+ * istatistiksiz başarıya çevirirdi.
+ */
+export function icgoruReddiMi(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err);
+  return /valid insights metric|metric\[\d+\] must be one of/i.test(m);
 }
 
 /**

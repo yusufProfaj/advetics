@@ -524,6 +524,13 @@ export interface DiscoveredOrganicPost {
   saves: number;
   videoViews: number;
   raw: unknown;
+  /**
+   * İSTATİSTİK ALINAMADI: Meta istatistik alanını reddetti ve gönderi
+   * istatistiksiz yeniden istendi. `impressions`/`reach`/`saves`/`videoViews`
+   * bu durumda ÖLÇÜLMEMİŞ (0 = bilinmiyor) ve yazım katmanı eski değerin
+   * üzerine yazmıyor. Yoksa geçerli, ölçülmüş sayılar sıfırla ezilirdi.
+   */
+  icgoruEksik?: true;
 }
 
 /**

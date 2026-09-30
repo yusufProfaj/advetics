@@ -154,7 +154,7 @@ export class OrganicSyncService {
         ${p.impressions}, ${p.reach}, ${p.likes}, ${p.comments}, ${p.shares},
         ${p.saves}, ${p.videoViews},
         ${p.likes + p.comments + p.shares + p.saves},
-        ${JSON.stringify(p.raw)}::jsonb, now(), now()
+        ${JSON.stringify(p.icgoruEksik ? { ...(p.raw as object), _icgoruEksik: true } : p.raw)}::jsonb, now(), now()
       )`,
       yaz: (values) =>
         this.db.$executeRaw(Prisma.sql`
@@ -168,14 +168,21 @@ export class OrganicSyncService {
         message      = EXCLUDED.message,
         permalink    = EXCLUDED.permalink,
         thumbnail_url = EXCLUDED.thumbnail_url,
-        impressions  = EXCLUDED.impressions,
-        reach        = EXCLUDED.reach,
+        -- ISTATISTIK ALINAMADIYSA OLCULMUS SAYILAR KORUNUYOR. Meta
+        -- istatistik alanini reddedince gonderi istatistiksiz geliyor ve
+        -- gosterim, erisim, kaydetme, izlenme SIFIR gorunuyor; bu sifir
+        -- olculmus bir deger degil. Uzerine yazmak, dunku dogru sayilari
+        -- silmek olurdu. Isaret ham yanitin icinde (_icgoruEksik).
+        impressions  = CASE WHEN (EXCLUDED.raw ->> '_icgoruEksik') IS NOT NULL THEN organic_posts.impressions ELSE EXCLUDED.impressions END,
+        reach        = CASE WHEN (EXCLUDED.raw ->> '_icgoruEksik') IS NOT NULL THEN organic_posts.reach ELSE EXCLUDED.reach END,
         likes        = EXCLUDED.likes,
         comments     = EXCLUDED.comments,
         shares       = EXCLUDED.shares,
-        saves        = EXCLUDED.saves,
-        video_views  = EXCLUDED.video_views,
-        engagements  = EXCLUDED.engagements,
+        saves        = CASE WHEN (EXCLUDED.raw ->> '_icgoruEksik') IS NOT NULL THEN organic_posts.saves ELSE EXCLUDED.saves END,
+        video_views  = CASE WHEN (EXCLUDED.raw ->> '_icgoruEksik') IS NOT NULL THEN organic_posts.video_views ELSE EXCLUDED.video_views END,
+        engagements  = CASE WHEN (EXCLUDED.raw ->> '_icgoruEksik') IS NOT NULL
+                            THEN EXCLUDED.likes + EXCLUDED.comments + EXCLUDED.shares + organic_posts.saves
+                            ELSE EXCLUDED.engagements END,
         raw          = EXCLUDED.raw,
         fetched_at   = now(),
         updated_at   = now()
@@ -187,7 +194,18 @@ export class OrganicSyncService {
     const written = sonuc.yazilan;
 
     await this.touch(socialProfileId);
-    return { rows: written, note: `${profile.name}: ${posts.length} gönderi` };
+    /*
+     * İSTATİSTİK EKSİKSE NOT SÖYLÜYOR. İş başarılı (gönderiler geldi) ama
+     * erişim/gösterim yok; Akıllı Boost'un erişime bakan kuralı bu
+     * gönderileri seçemez. Sessiz bir "N gönderi" notu bunu gizlerdi.
+     */
+    const eksik = posts.filter((p) => p.icgoruEksik).length;
+    return {
+      rows: written,
+      note:
+        `${profile.name}: ${posts.length} gönderi` +
+        (eksik > 0 ? ` · ${eksik} gönderinin istatistiği alınamadı (Meta metriği reddetti)` : ''),
+    };
   }
 
   private async touch(socialProfileId: string): Promise<void> {

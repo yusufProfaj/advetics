@@ -765,6 +765,32 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-30 — Facebook sayfası gönderileri "geçersiz metrik" ile düşüyordu
+
+Yeni "Şimdi güncelle" ilerlemesi canlıda doğrulandı (Güncelleniyor 6/10 →
+8/10 → 9/10 → "Kısmen güncellendi", tazelik "5 sa önce" → "az önce") ve
+ilk turda görünmeyen bir arızayı gösterdi: organik gönderi çekimi
+`[permanent] (#100) The value must be a valid insights metric`. İstatistik
+gönderiyle aynı istekte iç içe alan olarak isteniyor; tek geçersiz metrik
+isteğin TAMAMINI düşürüyor, sayfanın gönderileri hiç gelmiyor ve Akıllı
+Boost o sayfada kart üretemiyor. Kod FB'de `post_impressions,
+post_impressions_unique,post_video_views` istiyor; hangisi reddedildi,
+mesaj söylemiyor.
+
+- **Yedek yol** (`fetchOrganicPosts`): ret `icgoruReddiMi` ile tanınınca
+  istek istatistiksiz tekrarlanıyor, gönderiler `icgoruEksik` işaretli.
+  Tanıma mesajla (kod 100 genel "geçersiz parametre"; başka bir #100 buraya
+  girerse gerçek arıza istatistiksiz başarıya dönerdi). Alanlar DİZİ:
+  `insights.metric(a,b)` ve `likes.summary(true)` virgül taşıyor, metni
+  bölüp süzmek istatistiğin yarısını istekte bırakırdı.
+- **Yazımda koruma**: işaretli gönderide gösterim/erişim/kaydetme/izlenme
+  ESKİ değerinde kalıyor (`raw._icgoruEksik`, `CASE`); beğeni/yorum/paylaşım
+  güncelleniyor. İş notu "N gönderinin istatistiği alınamadı" diyor.
+  `organik-icgoru-eksik.spec.ts` gerçek veritabanıyla; iki mutasyon düştü.
+- **Doğru metrik TAHMİN EDİLMEDİ**: `meta-sayfa-metrik-kontrol` betiği her
+  sayfanın en yeni gönderisinde adayları tek tek istiyor (salt okuma).
+  Sonucu gelince alan listesi güncellenecek.
+
 ### 2026-09-30 — "Şimdi güncelle" ilerlemeyi gösteriyor; uyarılar sakinleşti
 
 - **Bayat veri sarı şeridi kalktı** (kullanıcı: *"görüntü kirliliği"*):
