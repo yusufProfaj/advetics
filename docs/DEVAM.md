@@ -6,10 +6,11 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-30 · **Canlı:** ölçülen organik metrik adları
-dahil (canlıda doğrulandı: "Güncellendi", istatistik notu yok). **Bekleyen
-deploy:** Reklam Keşfi süzgeç araç çubuğu (yalnızca panel). Deploy sonrası
-menüleri canlıda aç, seçim yap, "Tümünü temizle"yi dene.
+**Son güncelleme:** 2026-09-30 · **Canlı:** Reklam Keşfi süzgeç araç çubuğu
+dahil (canlıda denendi). **Bekleyen deploy:** süzgeç menü sayılarının diğer
+süzgeçlere uyması (API, `ads.service.ts#facets`; migration yok). Deploy
+sonrası: Durum "Aktif" seç → Kampanya menüsündeki sayılar seçilince aynı
+sayıda reklam getirmeli.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;

@@ -457,6 +457,63 @@ describe('AdsService.explore', () => {
       expect(other.facets.campaigns).toHaveLength(0);
     });
 
+    describe('her menü, kendi boyutu HARİÇ bütün süzgeçlerle sayılıyor', () => {
+      /*
+       * Canlıda (2026-09-30) Durum "Aktif" seçiliyken Kampanya menüsü
+       * "Metropol Alsancak 8" dedi, seçilince liste "0 reklam" oldu: sayı
+       * durum süzgecini görmüyordu. Kurulum: Kampanya A'da 1 aktif + 1
+       * duraklatılmış, Kampanya B'de yalnızca 2 duraklatılmış reklam.
+       */
+      const CAMPAIGN_B = '66666666-6666-6666-6666-6666666666bb';
+      const GROUP_B = '77777777-7777-7777-7777-7777777777bb';
+      beforeEach(async () => {
+        await h.q(
+          `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, objective, status, budget_mode, updated_at)
+           VALUES ($1, $2, $3, 'meta', 'c2', 'Kampanya B', 'OUTCOME_LEADS', 'paused', 'daily', now())`,
+          [CAMPAIGN_B, IDS.adAccount, IDS.client],
+        );
+        await h.q(
+          `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, updated_at)
+           VALUES ($1, $2, $3, $4, 'meta', 'g2', 'Reklam Seti B1', 'paused', 'none', now())`,
+          [GROUP_B, CAMPAIGN_B, IDS.adAccount, IDS.client],
+        );
+        await seedAd({ id: 'aaaaaaaa-0000-0000-0000-000000000001', externalId: 'x1', name: 'A aktif' });
+        await seedAd({ id: 'aaaaaaaa-0000-0000-0000-000000000002', externalId: 'x2', name: 'A durdu', status: 'paused' });
+        for (const [n, id] of [['3', 'aaaaaaaa-0000-0000-0000-000000000003'], ['4', 'aaaaaaaa-0000-0000-0000-000000000004']]) {
+          await h.q(
+            `INSERT INTO ads (id, ad_group_id, ad_account_id, client_id, platform, external_id, name, status, raw, updated_at)
+             VALUES ($1, $2, $3, $4, 'meta', $5, $6, 'paused', '{}'::jsonb, now())`,
+            [id, GROUP_B, IDS.adAccount, IDS.client, `x${n}`, `B durdu ${n}`],
+          );
+        }
+      });
+
+      it('KRİTİK: durum "Aktif" seçiliyken kampanya sayısı yalnızca aktifleri sayıyor', async () => {
+        const res = await svc.explore(CTX, { ...QUERY_BASE, status: 'active' });
+        expect(res.total).toBe(1);
+        const say = Object.fromEntries(res.facets.campaigns.map((c) => [c.name, c.adCount]));
+        // B'de aktif reklam yok: menü onu 0 sonuca götüren bir sayıyla göstermiyor.
+        expect(say).toEqual({ 'Kampanya A': 1 });
+      });
+
+      it('KRİTİK: kampanya seçiliyken durum sayıları o kampanyaya daralıyor, kendi seçimini YOK sayıyor', async () => {
+        const res = await svc.explore(CTX, { ...QUERY_BASE, campaignId: CAMPAIGN, status: 'active' });
+        const say = Object.fromEntries(res.facets.statuses.map((x) => [x.status, x.count]));
+        // "Duraklatıldı" seçeneği 1 diyor: ona geçersem kampanya A'da 1 reklam var.
+        expect(say).toEqual({ active: 1, paused: 1 });
+      });
+
+      it('kampanya menüsü kendi seçimini YOK sayıyor (başka kampanyaya geçiş görünür)', async () => {
+        const res = await svc.explore(CTX, { ...QUERY_BASE, campaignId: CAMPAIGN });
+        expect(res.facets.campaigns.map((c) => c.name).sort()).toEqual(['Kampanya A', 'Kampanya B']);
+      });
+
+      it('arama da sayıma giriyor', async () => {
+        const res = await svc.explore(CTX, { ...QUERY_BASE, q: 'B durdu' });
+        expect(res.facets.campaigns).toEqual([{ id: CAMPAIGN_B, name: 'Kampanya B', adCount: 2 }]);
+      });
+    });
+
     it('facet sayımları TARİH ARALIĞINDAN bağımsız', async () => {
       // Süzgeç panelinde bir kampanyanın "dün harcama yoktu" diye kaybolması
       // kullanıcıyı şaşırtıyor.

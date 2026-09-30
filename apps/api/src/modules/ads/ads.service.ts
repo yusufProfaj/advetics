@@ -367,20 +367,39 @@ export class AdsService {
      * gösteriyordu. "Sorunlu (37)"ye tıklayınca 2 satır çıkıyordu. Kampanya
      * facet'i için zaten tersi karar verilmişti — ikisi ayrışmıştı.
      */
-    const hesapKapsami = query.adAccountId
-      ? Prisma.sql`AND a.ad_account_id = ${query.adAccountId}::uuid`
-      : Prisma.empty;
-
-    const base = Prisma.sql`
+    /*
+     * ═══ HER MENÜNÜN SAYISI, KENDİ BOYUTU HARİÇ BÜTÜN SÜZGEÇLERLE ═══
+     *
+     * Sayımlar yalnızca platform ve hesaba daralıyordu. Canlıda (2026-09-30)
+     * Durum "Aktif" seçiliyken Kampanya menüsü "Metropol Alsancak 8" dedi,
+     * seçilince liste "0 reklam" oldu: sayı uygulanmış durum süzgecini
+     * görmüyordu. Kullanıcıyı boş sonuca götüren bir sayı, sayı olmamasından
+     * kötü. Arama ekranlarının bilinen kuralı: bir boyutun sayısı, O BOYUT
+     * HARİÇ diğer bütün süzgeçler uygulanmış hâlde sayılır; böylece menü hem
+     * "şu an ne var" hem "buna geçersem ne olur" sorusunu doğru cevaplıyor.
+     *
+     * KOŞULLAR `whereClauses`TAN TÜRETİLİYOR, ikinci bir kopya yazılmıyor:
+     * listeyle sayımın ayrışması tam da bu hatanın kaynağıydı. Çıkarılan
+     * boyutlar arayüzün davranışını izliyor: hesap değişince kampanya
+     * sıfırlanıyor (hesap sayımı ikisini de bırakıyor), durum ve "Sorunlu"
+     * birbirini temizliyor (ikisinin sayımı ikisini de bırakıyor).
+     *
+     * TARİH ARALIĞINDAN BAĞIMSIZ KALDI (kasıtlı): bir kampanyanın "dün
+     * harcama yoktu" diye menüden kaybolması kullanıcıyı şaşırtıyor.
+     * `whereClauses` tarih taşımıyor.
+     *
+     * LIMIT KALKTI. Kampanya ve hesap listeleri sessizce 50'de kesiliyordu ve
+     * bu hiçbir yerde yazmıyordu; menüde artık arama ve kaydırma var.
+     */
+    const kaynak = (q: AdsExploreQuery) => Prisma.sql`
       FROM ads a
       JOIN ad_groups g ON g.id = a.ad_group_id
       JOIN campaigns c ON c.id = g.campaign_id
-      WHERE ${
-        query.platform ? Prisma.sql`a.platform = ${query.platform}::"Platform"` : Prisma.sql`TRUE`
-      }
-      ${hesapKapsami}
+      LEFT JOIN creatives cr ON cr.id = a.creative_id
+      WHERE ${this.whereClauses(q)}
     `;
 
+    // Hesap adı için `ad_accounts` da katılıyor; koşullar aynı üreticiden.
     const adAccounts = await tx.$queryRaw<
       Array<{ id: string; name: string; platform: string; ad_count: string }>
     >(
@@ -388,31 +407,29 @@ export class AdsService {
         SELECT acc.id, acc.name, acc.platform::text AS platform, COUNT(a.id) AS ad_count
         FROM ads a
         JOIN ad_accounts acc ON acc.id = a.ad_account_id
-        WHERE ${
-          query.platform ? Prisma.sql`a.platform = ${query.platform}::"Platform"` : Prisma.sql`TRUE`
-        }
+        JOIN ad_groups g ON g.id = a.ad_group_id
+        JOIN campaigns c ON c.id = g.campaign_id
+        LEFT JOIN creatives cr ON cr.id = a.creative_id
+        WHERE ${this.whereClauses({ ...query, adAccountId: undefined, campaignId: undefined, adGroupId: undefined })}
         GROUP BY acc.id, acc.name, acc.platform
         ORDER BY COUNT(a.id) DESC, acc.name
-        LIMIT 50
       `,
     );
 
-    // Kampanya listesi de aynı `base` üzerinden daralıyor — hesap kapsamı
-    // artık orada, ayrıca eklenmiyor.
     const campaigns = await tx.$queryRaw<Array<{ id: string; name: string; ad_count: string }>>(
       Prisma.sql`
         SELECT c.id, c.name, COUNT(a.id) AS ad_count
-        ${base}
+        ${kaynak({ ...query, campaignId: undefined, adGroupId: undefined })}
         GROUP BY c.id, c.name
         ORDER BY COUNT(a.id) DESC, c.name
-        LIMIT 50
       `,
     );
 
+    const durumKapsami = { ...query, status: undefined, onlyIssues: false };
     const statuses = await tx.$queryRaw<Array<{ status: string; count: string }>>(
       Prisma.sql`
         SELECT a.status::text AS status, COUNT(*) AS count
-        ${base}
+        ${kaynak(durumKapsami)}
         GROUP BY a.status
         ORDER BY COUNT(*) DESC
       `,
@@ -421,7 +438,7 @@ export class AdsService {
     const [issues] = await tx.$queryRaw<Array<{ count: string }>>(
       Prisma.sql`
         SELECT COUNT(*) AS count
-        ${base}
+        ${kaynak(durumKapsami)}
           AND (a.disapproval_reasons IS NOT NULL
                OR a.review_status IN ('DISAPPROVED', 'WITH_ISSUES'))
       `,

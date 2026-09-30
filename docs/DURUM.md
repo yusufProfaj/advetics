@@ -778,6 +778,15 @@ Kampanya listesi artık HİÇ kesilmiyor (kaydırılıyor); `tumkampanya`
 parametresi ve "+N kampanya daha" çipi kalktı. Menü dışarı tıklayınca/Esc
 ile kapanıyor. Geçici önizlemeyle gözle kontrol edildi.
 
+**Canlı kontrol (deploy sonrası):** menüler, seçim, adres, etiketler ve
+"Tümünü temizle" çalıştı. Bir tutarsızlık bulundu ve düzeltildi: Durum
+"Aktif" seçiliyken Kampanya menüsü "Metropol Alsancak 8" dedi, seçilince
+"0 reklam". Menü sayıları (`ads.service.ts#facets`) yalnızca platform ve
+hesaba daralıyordu. Artık her boyut KENDİSİ HARİÇ bütün süzgeçlerle
+sayılıyor ve koşullar listeyle AYNI üreticiden (`whereClauses`); tarih
+bağımsızlığı korundu. Kampanya/hesap listelerindeki sessiz `LIMIT 50`
+kalktı. `ads.service.spec.ts` gerçek veritabanıyla, mutasyon iki test düşürdü.
+
 ### 2026-09-30 — Facebook sayfası gönderileri "geçersiz metrik" ile düşüyordu
 
 Yeni "Şimdi güncelle" ilerlemesi canlıda doğrulandı (Güncelleniyor 6/10 →
