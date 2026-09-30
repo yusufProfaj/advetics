@@ -43,7 +43,7 @@ export function KenarIcerigi({ veri, onGezinme }: { veri: KenarVerisi; onGezinme
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 pb-4" onClick={onGezinme}>
+      <nav className="flex-1 overflow-y-auto px-3 pb-4 [mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]" onClick={onGezinme}>
         {/*
           MENÜ YETKİYE GÖRE SÜZÜLÜYOR ve bölüm boş kalırsa başlığı da
           basılmıyor. Liste bir süre filtresizdi: müşteri hesabı ajansın iç
@@ -63,6 +63,9 @@ export function KenarIcerigi({ veri, onGezinme }: { veri: KenarVerisi; onGezinme
       {/*
         AYARLAR EN ALTTA, TEK SATIR. Yedi ayar ekranı menünün yarısını
         kaplıyordu; içerideki sekmeler aynı yetki listesinden çiziliyor.
+        Menünün alt kenarı SOLARAK bitiyor (`mask-image`): alçak ekranda son
+        satır burada yarım kesiliyordu ve kesik bir satır hata gibi okunuyor,
+        solma ise "aşağıda devamı var" diyor.
       */}
       {ayarlar.length > 0 && (
         <div className="mx-3 border-t border-line/70 pt-2" onClick={onGezinme}>
