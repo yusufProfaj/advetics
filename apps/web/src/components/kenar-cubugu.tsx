@@ -65,7 +65,7 @@ export function KenarIcerigi({ veri, onGezinme }: { veri: KenarVerisi; onGezinme
         kaplıyordu; içerideki sekmeler aynı yetki listesinden çiziliyor.
       */}
       {ayarlar.length > 0 && (
-        <div className="px-3 pt-2" onClick={onGezinme}>
+        <div className="mx-3 border-t border-line/70 pt-2" onClick={onGezinme}>
           <AyarlarSatiri sayfalar={ayarlar} />
         </div>
       )}

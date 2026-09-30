@@ -342,8 +342,14 @@ describe('ŞİRKET RAYI — kırk şirkette de kullanılabilir', () => {
      * sayfa yenileniyor ve seçtiği şirketi ekranda göremiyor.
      */
     const ray = blok(EKRAN, 'function SirketRayi');
-    expect(ray).toContain("querySelector('[data-aktif=\"true\"]')");
-    expect(ray).toContain("scrollIntoView({ block: 'nearest' })");
+    expect(ray).toContain("querySelector<HTMLElement>('[data-aktif=\"true\"]')");
+    /*
+     * YALNIZCA KAP KAYIYOR. `scrollIntoView` pencereyi de kaydırıyordu:
+     * Ayarlar sayfası açılışta ~150 piksel aşağıda açılıyor, sekmeler ve
+     * başlık görünür alanın üstünde kalıyordu (canlıda ölçüldü).
+     */
+    expect(ray).toContain('kap.scrollTop = ust');
+    expect(ray).not.toContain('scrollIntoView(');
     // İşaret satırda gerçekten basılıyor mu — yoksa seçici hiçbir zaman
     // eşleşmez ve effect sessizce hiçbir şey yapmaz.
     expect(blok(EKRAN, 'function SirketSatiri')).toContain(

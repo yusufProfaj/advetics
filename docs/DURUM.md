@@ -765,6 +765,26 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-30 — Açılır menüler canlıda tarandı; Ayarlar sayfa düzeni
+
+Deploy sonrası her sayfada `aria-expanded`/`aria-haspopup` taşıyan her düğme
+ve her "?" balonu açılıp, kutunun köşelerinde en üstte çizilen öğe
+ölçüldü (`elementFromPoint`). Raporlar (Paylaş, şablon, tarih), üst bar
+(workspace seçici, bildirim zili), Genel Bakış (tarih + 9 terim balonu),
+Reklam Keşfi, Marka Merkezi, Ayarlar: hepsi ÜSTTE. Bulunan ve düzeltilen:
+
+- **Ayarlar açılışta ~150 px aşağıda açılıyordu**; sekmeler ve başlık
+  görünür alanın üstünde kalıyordu. Şirket rayı seçili satırı
+  `scrollIntoView` ile gösteriyordu ve o çağrı PENCEREYİ de kaydırıyor.
+  Artık yalnızca kabın `scrollTop`u.
+- **Ayar sekmelerinde boş dikey kaydırma çubuğu**: alt çizgi için verilen
+  `-mb-px` yatay kaydırılan kabı dikeyde taşırıyordu; `-mb-2` başlığı
+  sekmelere yapıştırıyordu. Çizgi artık `after:`.
+- **Terim balonu satırın en sağında ekran kenarına dayanıyordu** (sağ kenar
+  1279 / 1280): sağda yer yoksa sola açılıyor.
+- Kenar çubuğunda Ayarlar satırının üstüne ayırıcı: alçak ekranda
+  kaydırılan menü onun arkasına giriyormuş gibi görünüyordu.
+
 ### 2026-09-30 — Panel tasarımı 2. tur: açılır menüler, sade menü, ayarlar sekmeli
 
 - **BÜTÜN AÇILIR MENÜLER KARTLARIN ALTINDA KALIYORDU — sebep 1. turdaki

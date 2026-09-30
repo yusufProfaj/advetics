@@ -6,12 +6,9 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-30 · **Canlı:** tasarım 1. tur ve 4d dahil.
-**Bekleyen deploy:** tasarım 2. tur (açılır menü katman hatası, sade menü,
-sekmeli Ayarlar, Raporlar araç çubuğu, kurulum sadeleşmesi). Migration yok.
-Deploy sonrası: BÜTÜN açılır menüleri canlıda tek tek aç (Paylaş, şablon
-seçici, tarih seçici, workspace seçici, bildirim zili, Terim balonları,
-kart düzenleme pencereleri) ve kullanıcıyla sayfaları gez.
+**Son güncelleme:** 2026-09-30 · **Canlı:** tasarım 2. tur dahil; açılır
+menüler canlıda tarandı, hepsi üstte. **Bekleyen deploy:** Ayarlar sayfa
+kayması, sekme çubuğu ve terim balonu kenar düzeltmesi (yalnızca panel).
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;

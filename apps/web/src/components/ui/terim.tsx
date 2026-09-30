@@ -26,6 +26,13 @@ export function Terim({
 }) {
   const t = TERIMLER[anahtar];
   const [acik, setAcik] = useState(false);
+  /*
+   * SAĞDA YER YOKSA SOLA AÇILIYOR. Balon düğmenin solundan 16rem sağa
+   * uzanıyor; satırın en sağındaki kartta (Genel Bakış'ta "Erişim") ekranın
+   * kenarına dayanıyordu ve daha dar ekranda dışına taşardı. Karar açılış
+   * anında düğmenin konumundan veriliyor.
+   */
+  const [sagaYasli, setSagaYasli] = useState(false);
   const kutu = useRef<HTMLSpanElement>(null);
   const id = useId();
 
@@ -60,7 +67,11 @@ export function Terim({
       )}
       <button
         type="button"
-        onClick={() => setAcik((v) => !v)}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setSagaYasli(r.left + 256 > window.innerWidth - 16);
+          setAcik((v) => !v);
+        }}
         aria-expanded={acik}
         aria-describedby={id}
         aria-label={`${t.ad} nedir?`}
@@ -71,7 +82,7 @@ export function Terim({
       <span
         id={id}
         role="tooltip"
-        className={`absolute left-0 top-full z-30 mt-1.5 w-64 rounded-lg border border-line bg-surface p-3 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-ink shadow-[var(--shadow-pop)] ${
+        className={`absolute ${sagaYasli ? 'right-0' : 'left-0'} top-full z-30 mt-1.5 w-64 rounded-lg border border-line bg-surface p-3 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-ink shadow-[var(--shadow-pop)] ${
           acik ? 'block' : 'sr-only'
         }`}
       >

@@ -362,13 +362,20 @@ function SirketRayi({
    * DIŞINDA kalabiliyor: kullanıcı tıklıyor, sayfa yenileniyor ve seçtiği
    * şirketi ekranda göremiyor.
    *
-   * `block: 'nearest'` — zaten görünüyorsa hiçbir şey yapmıyor; 'center'
-   * yazmak, görünen bir satırı sebepsiz yere ortaya kaydırırdı.
+   * `scrollIntoView` KULLANILMIYOR: o yalnızca listeyi değil BÜTÜN ATA
+   * kaydırıcıları (pencerenin kendisini de) kaydırıyor. Sayfa açılışta
+   * ~150 piksel aşağı kayıyordu ve Ayarlar sekmeleri ile başlık görünür
+   * alanın ÜSTÜNDE kalıyordu. Yalnızca kabın `scrollTop`u ayarlanıyor ve
+   * satır zaten görünüyorsa hiçbir şey yapılmıyor ("nearest" davranışı).
    */
   useEffect(() => {
-    listeRef.current
-      ?.querySelector('[data-aktif="true"]')
-      ?.scrollIntoView({ block: 'nearest' });
+    const kap = listeRef.current;
+    const satir = kap?.querySelector<HTMLElement>('[data-aktif="true"]');
+    if (!kap || !satir) return;
+    const ust = satir.offsetTop - kap.offsetTop;
+    const alt = ust + satir.offsetHeight;
+    if (ust < kap.scrollTop) kap.scrollTop = ust;
+    else if (alt > kap.scrollTop + kap.clientHeight) kap.scrollTop = alt - kap.clientHeight;
   }, []);
 
   const q = kucult(arama.trim());
