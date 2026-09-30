@@ -936,6 +936,17 @@ okunup varsayılmadı — canlıda doğrulandı.
   başına 1-4 kısa aday (Türkçe + İngilizce) üretip sırayla deniyor ve hangi
   adayın tuttuğunu yazıyor (genelleşme kullanıcıya görünmeli).
 
+- **ORGANİK GÖNDERİ İSTATİSTİK ADLARI DEĞİŞTİ — ölçüldü** (2026-09-30,
+  Graph v25.0, `meta-sayfa-metrik-kontrol`, 3 FB sayfası + 3 IG hesabı).
+  Facebook'ta `post_impressions`, `post_impressions_unique` ve `_organic`
+  türevleri REDDEDİLİYOR (*"The value must be a valid insights metric"*);
+  halefleri `post_media_view` (gösterim) ve `post_total_media_view_unique`
+  (erişim), `post_video_views` geçerli. Instagram'da `impressions` v22'den
+  beri yok; `reach`, `saved`, `views` geçerli ve gösterimi `views` tutuyor.
+  İstatistik gönderiyle AYNI istekte iç içe alan olarak isteniyor: TEK
+  geçersiz ad isteğin tamamını düşürüyor ve belirti "sayfada hiç gönderi
+  yok". Ret görülürse istek istatistiksiz tekrarlanıyor (`icgoruReddiMi`);
+  yeni bir metrik eklemeden önce betikle ölç.
 - **İLGİ ALANI BÜYÜKLÜĞÜ DÜNYA GENELİ.** `audience_size_lower/upper_bound`
   ülkeye göre değil: "Golf (spor)" ~264–310 MİLYON. Türkiye hedeflemesinde bu
   sayıyı göstermek kitleyi yüz kat büyük gösterir. Ülkeye göre büyüklük ayrı

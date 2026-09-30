@@ -188,3 +188,58 @@ describe('dayanıklılık — bozuk satır senkronizasyonu düşürmemeli', () =
     expect(post!.impressions).toBe(0);
   });
 });
+
+describe('yeni metrik adları (canlı ölçüm 2026-09-30)', () => {
+  it('KRİTİK: Facebook görüntülenme metrikleri gösterim ve erişime eşleniyor', () => {
+    const post = mapOrganicPost(
+      {
+        id: 'p_fb',
+        created_time: '2026-09-29T10:00:00+0000',
+        insights: {
+          data: [
+            { name: 'post_media_view', values: [{ value: 206 }] },
+            { name: 'post_total_media_view_unique', values: [{ value: 188 }] },
+            { name: 'post_video_views', values: [{ value: 14 }] },
+          ],
+        },
+      },
+      false,
+    );
+    expect(post).toMatchObject({ impressions: 206, reach: 188, videoViews: 14 });
+  });
+
+  it('KRİTİK: Instagram gösterimi `views`tan geliyor (impressions artık yok)', () => {
+    const post = mapOrganicPost(
+      {
+        id: 'p_ig',
+        timestamp: '2026-09-29T10:00:00+0000',
+        insights: {
+          data: [
+            { name: 'reach', values: [{ value: 124 }] },
+            { name: 'saved', values: [{ value: 3 }] },
+            { name: 'views', values: [{ value: 219 }] },
+          ],
+        },
+      },
+      true,
+    );
+    expect(post).toMatchObject({ impressions: 219, reach: 124, saves: 3, videoViews: 219 });
+  });
+
+  it('eski kayıtta açık gösterim metriği varsa o kazanıyor', () => {
+    const post = mapOrganicPost(
+      {
+        id: 'p_eski',
+        timestamp: '2026-08-01T10:00:00+0000',
+        insights: {
+          data: [
+            { name: 'impressions', values: [{ value: 500 }] },
+            { name: 'views', values: [{ value: 300 }] },
+          ],
+        },
+      },
+      true,
+    );
+    expect(post!.impressions).toBe(500);
+  });
+});

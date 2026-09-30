@@ -1702,8 +1702,15 @@ export class MetaProvider implements IAdPlatformProvider {
              *
              * `views` daha geniş: yalnızca video değil tüm görüntülenmeler.
              * Meta iki metriği birleştirdi ve ayrı bir video sayacı bırakmadı.
+             *
+             * `impressions` DA ARTIK YOK — CANLIDA ÖLÇÜLDÜ (2026-09-30,
+             * `meta-sayfa-metrik-kontrol`, Graph v25.0, üç hesap): *"Starting
+             * from version v22.0 and above, the impressions metric is no
+             * longer supported for the queried media"*. `reach`, `saved`,
+             * `views` kabul edildi. Gösterimin yerini `views` tutuyor
+             * (`readInsights`).
              */
-            'insights.metric(impressions,reach,saved,views)',
+            'insights.metric(reach,saved,views)',
           ]
         : [
             'id',
@@ -1715,7 +1722,17 @@ export class MetaProvider implements IAdPlatformProvider {
             'shares',
             'likes.summary(true).limit(0)',
             'comments.summary(true).limit(0)',
-            'insights.metric(post_impressions,post_impressions_unique,post_video_views)',
+            /*
+             * `post_impressions` VE `post_impressions_unique` REDDEDİLİYOR —
+             * CANLIDA ÖLÇÜLDÜ (2026-09-30, Graph v25.0, üç sayfa): *"(#100)
+             * The value must be a valid insights metric"* ve tek geçersiz ad
+             * isteğin TAMAMINI düşürüyordu, sayfanın gönderileri hiç
+             * gelmiyordu. Aynı turda kabul edilenler: `post_media_view`
+             * (görüntülenme, gösterimin halefi), `post_total_media_view_unique`
+             * (tekil görüntüleyen, erişimin halefi), `post_video_views`.
+             * `_organic` türevleri de reddedildi.
+             */
+            'insights.metric(post_media_view,post_total_media_view_unique,post_video_views)',
           ]
     );
 
@@ -4167,6 +4184,8 @@ function readInsights(value: unknown): {
   videoViews: number;
 } {
   const out = { impressions: 0, reach: 0, saved: 0, videoViews: 0 };
+  let acikGosterim = false;
+  let igGoruntulenme: number | null = null;
   const data = readNested(value as Record<string, unknown>, ['data']);
   if (!Array.isArray(data)) return out;
 
@@ -4177,16 +4196,37 @@ function readInsights(value: unknown): {
     const values = e.values;
     const v = Array.isArray(values) && values.length > 0 ? num((values[0] as Record<string, unknown>)?.value) : 0;
 
-    if (name === 'impressions' || name === 'post_impressions') out.impressions = v;
-    else if (name === 'reach' || name === 'post_impressions_unique') out.reach = v;
-    else if (name === 'saved') out.saved = v;
-    // `views` Instagram'da `video_views`ın halefi; Facebook hâlâ
-    // `post_video_views` döndürüyor. Eski ad da okunmaya devam ediyor:
-    // veritabanındaki `raw` kayıtları ve olası sürüm farkları için zararsız.
+    /*
+     * YENİ ADLAR VE ESKİ ADLAR BİRLİKTE. Meta gösterim/erişim metriklerini
+     * "görüntülenme" altında birleştirdi (ölçüm 2026-09-30): Facebook'ta
+     * `post_media_view` gösterimin, `post_total_media_view_unique` erişimin
+     * halefi. Eski adlar okunmaya devam ediyor: veritabanındaki `raw`
+     * kayıtları onları taşıyor ve okumak zararsız.
+     */
+    if (name === 'impressions' || name === 'post_impressions' || name === 'post_media_view') {
+      out.impressions = v;
+      acikGosterim = true;
+    } else if (
+      name === 'reach' ||
+      name === 'post_impressions_unique' ||
+      name === 'post_total_media_view_unique'
+    ) {
+      out.reach = v;
+    } else if (name === 'saved') out.saved = v;
+    // `views` Instagram'da `video_views`ın halefi; Facebook `post_video_views`
+    // döndürüyor.
     else if (name === 'views' || name === 'video_views' || name === 'post_video_views') {
       out.videoViews = v;
+      if (name === 'views') igGoruntulenme = v;
     }
   }
+  /*
+   * INSTAGRAM'DA GÖSTERİMİN YERİNİ `views` TUTUYOR. `impressions` v22'den
+   * beri istenemiyor; gösterimi sıfır bırakmak, Akıllı Boost'un gösterime
+   * bakan kuralının Instagram gönderilerini HİÇ seçmemesi demekti. Açık bir
+   * gösterim metriği geldiyse (eski kayıt) o kazanıyor.
+   */
+  if (!acikGosterim && igGoruntulenme !== null) out.impressions = igGoruntulenme;
   return out;
 }
 

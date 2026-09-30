@@ -6,11 +6,11 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-30 · **Canlı:** "Şimdi güncelle" ilerlemesi ve
-sakin uyarılar dahil (canlıda doğrulandı). **Bekleyen deploy:** organik
-gönderi istatistik reddinde yedek yol + ölçüm betiği. Deploy sonrası
-sunucuda: `pnpm --filter @advetics/api meta-sayfa-metrik-kontrol` → kabul
-edilen metriklerle `fetchOrganicPosts` alan listesini güncelle.
+**Son güncelleme:** 2026-09-30 · **Canlı:** istatistik reddinde yedek yol ve
+ölçüm betiği dahil. **Bekleyen deploy:** ölçülen yeni metrik adları (FB
+`post_media_view`/`post_total_media_view_unique`, IG `impressions` kalktı).
+Deploy sonrası: bir workspace'te "Şimdi güncelle" → organik gönderi işi
+"istatistiği alınamadı" notu OLMADAN geçmeli; Senkronizasyon'da kontrol et.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;

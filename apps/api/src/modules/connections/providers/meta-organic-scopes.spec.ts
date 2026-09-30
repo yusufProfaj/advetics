@@ -55,9 +55,14 @@ describe('organik gönderi izinleri', () => {
     // `instagram_manage_insights` ile karşılanıyordu; Facebook karşılığı
     // atlanmıştı ve sonucu "hiç gönderi yok" olarak görünüyordu.
     const istek = organicFetch();
-    if (istek.includes('post_impressions')) {
-      expect(optionalScopes()).toContain("'read_insights'");
-    }
+    /*
+     * KOŞUL METRİK ADINA DEĞİL İSTEĞİN KENDİSİNE BAĞLI. Burada
+     * `includes('post_impressions')` yazıyordu; metrik adı değişince
+     * (2026-09-30, `post_media_view`) koşul hiç tutmayacak ve test hiçbir
+     * şey sınamadan yeşil kalacaktı.
+     */
+    expect(istek).toMatch(/insights\.metric\(post_/);
+    expect(optionalScopes()).toContain("'read_insights'");
   });
 
   it('Instagram medyası isteniyorsa `instagram_basic` ve içgörü izni de isteniyor', () => {
@@ -87,10 +92,35 @@ describe('organik gönderi izinleri', () => {
     // Instagram metrik dizesi TAM olarak aranıyor. "video_views geçmesin"
     // demek yetmez: Facebook dalı `post_video_views` istiyor ve o GEÇERLİ —
     // iki dalı ayırmadan yapılan bir arama yanlış yere alarm verir.
-    expect(istek).toContain('insights.metric(impressions,reach,saved,views)');
+    expect(istek).toContain("'insights.metric(reach,saved,views)'");
     expect(istek).not.toContain('insights.metric(impressions,reach,saved,video_views)');
     // Facebook dalının kendi adı duruyor; onunla karışmasın diye ayrıca
     // doğrulanıyor.
     expect(istek).toContain('post_video_views');
+  });
+
+  it('KRİTİK: canlıda REDDEDİLEN hiçbir metrik istenmiyor (ölçüm 2026-09-30, v25.0)', () => {
+    /*
+     * `meta-sayfa-metrik-kontrol` üç Facebook sayfası ve üç Instagram
+     * hesabında ölçtü. Tek geçersiz ad isteğin TAMAMINI düşürüyor; biri geri
+     * gelirse sayfanın gönderileri yine hiç gelmez (yedek yol gönderileri
+     * kurtarır ama istatistik kaybolur). Kod satırları taranıyor, yorum değil.
+     */
+    const kod = organicFetch().replace(/\/\*[\s\S]*?\*\//g, '');
+    const metrikler = [...kod.matchAll(/'insights\.metric\(([^)]*)\)'/g)].flatMap((m) => m[1]!.split(','));
+    expect(metrikler.length, 'metrik dizesi bulunamadı — tarama boşa düştü').toBeGreaterThan(4);
+    for (const red of [
+      'impressions',
+      'post_impressions',
+      'post_impressions_unique',
+      'post_impressions_organic',
+      'post_impressions_organic_unique',
+      'video_views',
+    ]) {
+      expect(metrikler, red).not.toContain(red);
+    }
+    expect(metrikler).toEqual(
+      expect.arrayContaining(['post_media_view', 'post_total_media_view_unique', 'post_video_views', 'reach', 'saved', 'views']),
+    );
   });
 });
