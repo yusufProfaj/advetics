@@ -224,9 +224,9 @@ export function TarihSecici({
         }}
         aria-expanded={acik}
         aria-haspopup="dialog"
-        className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm transition hover:bg-surface-muted"
+        className="flex items-center gap-2 whitespace-nowrap rounded-lg border border-line bg-surface px-3 py-1.5 text-sm transition hover:bg-surface-muted"
       >
-        <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 text-ink-muted" aria-hidden>
+        <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden>
           <path
             d="M4 5.5h12v11H4zM4 8.5h12M7.5 3v3M12.5 3v3"
             stroke="currentColor"

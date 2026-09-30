@@ -103,7 +103,9 @@ describe('vurgu kartı', () => {
      */
     expect(KART).not.toContain('bg-brand-soft');
     expect(KART).toContain("emphasis ? 'border-brand/40' : 'border-line'");
-    expect(KART).toContain("emphasis ? 'text-[30px] leading-9' : 'text-[26px] leading-8'");
+    // Vurgulu kartın rakamı daha büyük ve kart genişliğine göre boyutlanıyor.
+    expect(KART).toContain("'text-[clamp(1.25rem,13cqi,1.875rem)] leading-9'");
+    expect(KART).toContain('whitespace-nowrap');
     // Şerit izinli, zemin ışığı değil: yarı saydam marka dolgusu da dolgu.
     expect(KART).not.toMatch(/bg-brand\/\d/);
   });

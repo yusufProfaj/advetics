@@ -60,6 +60,13 @@ export interface NavEntry {
    */
   ustHesapUyeligi?: true;
   /**
+   * ÖNE ÇIKARILMIŞ SATIR ve rozetindeki kısa metin. Yalnızca görünüş:
+   * süzmeye, yetkiye, "bu yolda mı" kararına hiçbir etkisi yok. Birden çok
+   * satırda kullanmak vurguyu anlamsızlaştırır; bugün tek kullanımı
+   * Akıllı Boost.
+   */
+  vurgu?: string;
+  /**
    * ALT ÖĞELER — aynı ekranın iki ayrı bağlamı.
    *
    * Tek kullanımı var ve gerekçesi dar: AI Asistan tek bir sayfa ama İKİ
@@ -170,14 +177,15 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
                 <Link
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
-                  className={`nav-oge group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
-                    active
-                      ? 'bg-brand-soft font-semibold text-brand-strong'
-                      : 'text-ink/85 hover:bg-surface-sunken/70 hover:text-ink'
-                  }`}
+                  className={satirSinifi(active, Boolean(item.vurgu))}
                 >
-                  <Icon name={item.icon} active={active} />
-                  <span className="truncate">{item.label}</span>
+                  <Icon name={item.icon} active={active} vurgu={Boolean(item.vurgu)} />
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {item.vurgu && (
+                    <span className="shrink-0 rounded-full bg-gradient-to-r from-brand to-brand-accent px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-white">
+                      {item.vurgu}
+                    </span>
+                  )}
                 </Link>
               ) : (
                 <span
@@ -242,7 +250,7 @@ function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
         type="button"
         onClick={() => setAcik((v) => !v)}
         aria-expanded={gorunur}
-        className={`group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+        className={`group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition ${
           icinde ? 'font-semibold text-brand-strong' : 'text-ink/85 hover:bg-surface-sunken/70 hover:text-ink'
         }`}
       >
@@ -270,7 +278,7 @@ function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
         }`}
       >
         <div className="overflow-hidden">
-          <ul className="ml-4 space-y-0.5 border-l border-line pl-2">
+          <ul className="ml-[1.35rem] mt-0.5 space-y-0.5 border-l border-line pl-2.5">
             {item.children?.map((alt) => {
               const soru = alt.href.split('?')[1] ?? '';
               const deger = new URLSearchParams(soru).get('platform');
@@ -314,11 +322,7 @@ export function AyarlarSatiri({ sayfalar }: { sayfalar: NavEntry[] }) {
     <Link
       href={ilk.href}
       aria-current={active ? 'page' : undefined}
-      className={`nav-oge group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
-        active
-          ? 'bg-brand-soft font-semibold text-brand-strong'
-          : 'text-ink/85 hover:bg-surface-sunken/70 hover:text-ink'
-      }`}
+      className={satirSinifi(active, false)}
     >
       <Icon name="settings" active={active} />
       <span className="truncate">Ayarlar</span>
@@ -356,24 +360,45 @@ const ICONS = {
   setup: 'M4 5.5h1.5M4 10h1.5M4 14.5h1.5M8.5 5.5H16M8.5 10H16M8.5 14.5h4M14 13l1.5 1.5L18 12',
 } as const;
 
-function Icon({ name, active }: { name: keyof typeof ICONS; active?: boolean }) {
+/**
+ * MENÜ SATIRININ SINIFI — üç satır türü (düz, alt menü, Ayarlar) aynı
+ * kalıptan. Ayrı ayrı yazıldıklarında biri hover rengini, biri seçili
+ * zeminini kaybediyordu.
+ *
+ * ÖNE ÇIKARILMIŞ SATIR (Akıllı Boost) seçili değilken de marka tonlu bir
+ * zemin ve ince bir çerçeve taşıyor; seçiliyken diğerleri gibi dolu.
+ */
+function satirSinifi(active: boolean, vurgu: boolean): string {
+  const taban = 'group relative flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition';
+  if (active) return `${taban} bg-brand-soft font-semibold text-brand-strong`;
+  if (vurgu) {
+    return `${taban} bg-gradient-to-r from-brand/[0.08] to-brand-accent/[0.06] font-medium text-ink ring-1 ring-inset ring-brand/15 hover:from-brand/[0.13] hover:to-brand-accent/[0.1]`;
+  }
+  return `${taban} text-ink/85 hover:bg-surface-sunken/70 hover:text-ink`;
+}
+
+/**
+ * İKON KAROSU. Çıplak ikon satırlar arasında hizayı ve "neredeyim"
+ * bilgisini yalnızca renge bırakıyordu; karo seçili satırda marka
+ * renginde doluyor ve göz ilk ona gidiyor. Öne çıkarılmış satırın karosu
+ * her zaman dolu: satır kapalıyken de ayırt ediliyor.
+ */
+function Icon({ name, active, vurgu = false }: { name: keyof typeof ICONS; active?: boolean; vurgu?: boolean }) {
+  const karo = active || vurgu
+    ? 'bg-gradient-to-br from-brand to-brand-accent text-white shadow-[0_4px_10px_-4px_var(--brand-primary)]'
+    : 'bg-surface-sunken/70 text-ink-muted group-hover:bg-surface group-hover:text-ink group-hover:shadow-[var(--shadow-xs)]';
   return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      aria-hidden
-      className={`h-[18px] w-[18px] shrink-0 transition-[color,transform] duration-200 ${
-        active ? 'text-brand-strong' : 'text-ink-muted group-hover:translate-x-0.5 group-hover:text-ink'
-      }`}
-    >
-      <path
-        d={ICONS[name]}
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-[background-color,color,box-shadow] duration-200 ${karo}`}>
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden className="h-4 w-4">
+        <path
+          d={ICONS[name]}
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
   );
 }
 

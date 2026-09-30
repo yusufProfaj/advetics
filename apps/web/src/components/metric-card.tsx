@@ -46,7 +46,7 @@ export function MetricCard({
      * kenarlık ve daha büyük rakam kullanmak renkten bağımsız çalışıyor.
      */
     <div
-      className={`relative rounded-xl border bg-surface p-4 shadow-kart ${
+      className={`@container relative rounded-xl border bg-surface p-4 shadow-kart ${
         emphasis ? 'border-brand/40' : 'border-line'
       }`}
     >
@@ -66,8 +66,16 @@ export function MetricCard({
         <Terim anahtar={terim} />
       </p>
       <p
-        className={`relative mt-2 font-bold tabular-nums tracking-tight text-ink ${
-          emphasis ? 'text-[30px] leading-9' : 'text-[26px] leading-8'
+        /*
+         * RAKAM KARTIN GENİŞLİĞİNE GÖRE BOYUTLANIYOR (container query) ve
+         * SATIR KIRMIYOR. Sabit 30 puntoda dar kartta "17.668,28 ₺" ikiye
+         * bölünüp ₺ alt satıra düşüyordu; kırılmış bir para tutarı yanlış
+         * okunan bir sayı demek. Vurgulu kart yine daha büyük.
+         */
+        className={`relative mt-2 whitespace-nowrap font-bold tabular-nums tracking-tight text-ink ${
+          emphasis
+            ? 'text-[clamp(1.25rem,13cqi,1.875rem)] leading-9'
+            : 'text-[clamp(1.125rem,11cqi,1.625rem)] leading-8'
         }`}
       >
         {value}

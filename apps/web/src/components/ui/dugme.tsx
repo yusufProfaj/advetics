@@ -40,7 +40,7 @@ const BOY: Record<DugmeBoyutu, string> = {
 
 export function dugmeSinifi(ton: DugmeTonu = 'birincil', boyut: DugmeBoyutu = 'orta'): string {
   return [
-    'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-semibold',
+    'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-semibold',
     // `transition: all` DEĞİL: yalnızca değişen özellikler.
     'transition-[background-color,color,filter,border-color,box-shadow,transform] duration-200',
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',

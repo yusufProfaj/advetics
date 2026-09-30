@@ -93,8 +93,8 @@ export default async function BilgiBankasiPage({
   return (
     <div className="min-w-0 space-y-4">
       <header className="min-w-0">
-        <h1 className="text-base font-semibold text-ink">Bilgi Bankası</h1>
-        <p className="mt-0.5 text-xs text-ink-muted">
+        <h1 className="sayfa-baslik">Bilgi Bankası</h1>
+        <p className="mt-1.5 text-sm text-ink-muted">
           Workspace’in genel profili — reklam üretirken ve AI asistanında
           bağlam olarak kullanılıyor.
         </p>

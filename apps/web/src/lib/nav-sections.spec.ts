@@ -373,3 +373,18 @@ describe('KRİTİK: "Üst Hesaplar" üyelikle açılıyor, yetkiyle değil', () 
     expect(farki).toEqual(['Üst Hesaplar']);
   });
 });
+
+describe('AKILLI BOOST — Reklamlar bölümünün öne çıkarılmış ilk satırı', () => {
+  it('KRİTİK: Reklamlar bölümünde, en üstte ve vurgulu', () => {
+    // Kullanıcının isteği (2026-09-30): reklamların alt satırı ve
+    // diğerlerinden daha belirgin.
+    const reklamlar = SECTIONS.find((s) => s.title === 'Reklamlar');
+    expect(reklamlar?.items[0]?.label).toBe('Akıllı Boost');
+    expect(reklamlar?.items[0]?.vurgu).toBeTruthy();
+  });
+
+  it('vurgu TEK satırda — iki vurgu hiçbirini belirgin yapmaz', () => {
+    const vurgulu = SECTIONS.flatMap((s) => s.items).filter((i) => i.vurgu);
+    expect(vurgulu.map((i) => i.label)).toEqual(['Akıllı Boost']);
+  });
+});

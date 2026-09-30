@@ -39,9 +39,14 @@ export const AYAR_KISA_AD: Record<string, string> = {
 
 export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
   {
-    // BAŞLIKSIZ — katlanamaz. Günlük iş bu iki ekranda başlıyor.
+    // BAŞLIKSIZ — katlanamaz. Günlük iş burada başlıyor.
     items: [
       { href: '/dashboard', label: 'Genel Bakış', icon: 'overview', module: 1, perm: 'insights.read' },
+    ],
+  },
+  {
+    title: 'Reklamlar',
+    items: [
       /*
        * ═══ MÜŞTERİ HESABI YALNIZCA ÜÇ EKRAN GÖRÜYOR ═══
        *
@@ -52,12 +57,22 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
        * Bütçe'yi, Akıllı Boost'u menüde görürdü. `nav-sections.spec.ts`
        * müşteri hesabının gördüğü etiketleri TAM LİSTE olarak kilitliyor.
        */
-      { href: '/auto-boost', label: 'Akıllı Boost', icon: 'boost', module: 7, ready: true, perm: 'boost.read' },
-    ],
-  },
-  {
-    title: 'Reklamlar',
-    items: [
+      /*
+       * AKILLI BOOST REKLAMLARIN İLK SATIRI VE ÖNE ÇIKARILMIŞ (2026-09-30).
+       * Başlıksız bölümde Genel Bakış'ın yanındaydı; kullanıcının isteği
+       * reklamların altına alınması ve alt satırlar arasında DAHA BELİRGİN
+       * olması. İşi de bir reklam işi: gönderi reklama çevriliyor.
+       * `vurgu` yalnızca görünüş; yetki (`boost.read`) aynen duruyor.
+       */
+      {
+        href: '/auto-boost',
+        label: 'Akıllı Boost',
+        icon: 'boost',
+        module: 7,
+        ready: true,
+        perm: 'boost.read',
+        vurgu: 'Otomatik',
+      },
       { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4, perm: 'insights.read' },
       { href: '/reklam-olustur', label: 'Reklam Oluştur', icon: 'create', module: 4, ready: true, perm: 'bulk.write' },
       {

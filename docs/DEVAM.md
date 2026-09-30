@@ -6,9 +6,10 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-30 · **Canlı:** tasarım 2. tur dahil; açılır
-menüler canlıda tarandı, hepsi üstte. **Bekleyen deploy:** Ayarlar sayfa
-kayması, sekme çubuğu ve terim balonu kenar düzeltmesi (yalnızca panel).
+**Son güncelleme:** 2026-09-30 · **Canlı:** tasarım 2. tur + Ayarlar
+düzeltmeleri dahil. **Bekleyen deploy:** kenar çubuğu solması, tasarım 3.
+tur (Akıllı Boost Reklamlar'da öne çıkarılmış, boş durumlar, kırılan
+rakamlar). Yalnızca panel, migration yok.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;

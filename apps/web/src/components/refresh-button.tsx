@@ -85,7 +85,7 @@ export function RefreshButton({
         type="button"
         onClick={refresh}
         disabled={busy}
-        className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
+        className="whitespace-nowrap rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? 'Başlatılıyor…' : 'Şimdi güncelle'}
       </button>

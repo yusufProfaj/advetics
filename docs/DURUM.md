@@ -765,6 +765,27 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-30 — Panel tasarımı 3. tur: menü yeniden, boş durumlar, kırılan rakamlar
+
+- **Akıllı Boost Reklamlar bölümünün ilk satırı ve ÖNE ÇIKARILMIŞ**
+  (kullanıcı isteği): `NavEntry.vurgu` yalnızca görünüş — her zaman dolu
+  marka karosu, tonlu zemin, "Otomatik" rozeti. Tek satırda
+  (`nav-sections.spec.ts`: iki vurgu hiçbirini belirgin yapmaz).
+- Menü satırları ikon KAROSUYLA: seçili satırda karo marka renginde dolu;
+  sol işaret çubuğu (`.nav-oge`) kalktı, karo onun işini görüyor. Üç satır
+  türü (düz, alt menü, Ayarlar) tek sınıf üreticisinden (`satirSinifi`).
+- **Boş durumlar kalıba bağlandı** (~20 kutu, `border-dashed border-line
+  text-center`): ikon dairesi, noktalı zemin, öne çıkan başlık. Rapor
+  belgesi `border-line` taşımadığı için dışarıda.
+- **Kırılan rakamlar:** Genel Bakış vurgulu kartında "17.668,28 ₺" ikiye
+  bölünüp ₺ alt satıra düşüyordu → rakam container query ile kart
+  genişliğine göre boyutlanıyor ve satır kırmıyor. Bütçe tablosunda aynı
+  kırılma → `.tabular-nums`/`.text-right` hücreler `nowrap`. Tarih seçici,
+  "Şimdi güncelle" ve `Dugme` de satır kırmıyor.
+- Bilgi Bankası başlığı ortak `sayfa-baslik`a bağlandı (tek küçük başlıklı
+  sayfaydı).
+- Geçici önizlemeyle açık/karanlık temada gözle kontrol edildi.
+
 ### 2026-09-30 — Açılır menüler canlıda tarandı; Ayarlar sayfa düzeni
 
 Deploy sonrası her sayfada `aria-expanded`/`aria-haspopup` taşıyan her düğme
