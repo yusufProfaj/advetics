@@ -765,6 +765,25 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-30 — "Şimdi güncelle" ilerlemeyi gösteriyor; uyarılar sakinleşti
+
+- **Bayat veri sarı şeridi kalktı** (kullanıcı: *"görüntü kirliliği"*):
+  tazelik güncelle düğmesinin içinde — nokta (yeşil / bayatta turuncu ve
+  nabız) + "4 sa önce"; ayrıntılı cümle `title` ve ekran okuyucuda.
+- **"İş kuyruğa alındı" yerine Güncelleniyor → Güncellendi.**
+  `/sync/refresh` artık `isler` (kuyruğa girenler VE zaten kuyrukta
+  olanlar — `enqueue` o işin `syncJobId`sini de dönüyor) döndürüyor; yeni
+  `GET /sync/refresh/durum?ids=` RLS altında sayıyor (`guncelleme-durumu.ts`:
+  `throttled` bekleyen, `cancelled` düşen, tanınmayan durum bekleyen).
+  Düğme 4 sn'de bir soruyor; "Güncellendi" YALNIZCA işler bitince, 4 dk
+  sonra "hâlâ sürüyor" (bitti DEMİYOR), düşen iş sayısı ve hatası
+  Senkronizasyon bağlantısıyla, yoklama düşerse "ilerleme okunamadı"
+  (güncelleme düştü değil). Karar saf fonksiyonda (`guncelleme-hali.ts`).
+- **Uyarılar renkli zeminden çıktı:** `Uyari` (bilgi/uyarı/başarı) ve
+  Genel Bakış/Raporlar uyarı listesi (`UyariListesi`) kart yüzeyinde, ton
+  küçük ikonda. Tehlike dolgusu KALDI.
+- Mutasyon: `cancelled` sayımı ve süre dolunca "bitti dememe" düşürüldü.
+
 ### 2026-09-30 — Panel tasarımı 3. tur: menü yeniden, boş durumlar, kırılan rakamlar
 
 - **Akıllı Boost Reklamlar bölümünün ilk satırı ve ÖNE ÇIKARILMIŞ**

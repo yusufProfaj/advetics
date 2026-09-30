@@ -25,9 +25,7 @@ import {
   formatMoney,
   formatNumber,
   formatPercent,
-  formatRelative,
   formatRoas,
-  isStale,
   microsOf,
 } from '@/lib/format';
 import { MetricCard } from '@/components/metric-card';
@@ -38,7 +36,7 @@ import { DonusumDetay } from '@/components/donusum-detay';
 import { MusteriTablosu } from '@/components/musteri-tablosu';
 import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { SirketTablosu } from '@/components/sirket-tablosu';
-import { Uyari } from '@/components/ui/uyari';
+import { Uyari, UyariListesi } from '@/components/ui/uyari';
 import { dugmeSinifi } from '@/components/ui/dugme';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
@@ -387,10 +385,8 @@ export default async function DashboardPage({
           }
           eylemler={
             summary !== null ? (
-              <p className="text-xs text-ink-muted">
-                {summary.accountCount} reklam hesabı · {formatRelative(summary.lastFetchedAt)}{' '}
-                güncellendi
-              </p>
+              /* Tazelik düğmenin içinde; burada tekrar yazmak aynı bilgiyi iki kez göstermekti. */
+              <p className="text-xs text-ink-muted">{summary.accountCount} reklam hesabı</p>
             ) : undefined
           }
         />
@@ -406,7 +402,12 @@ export default async function DashboardPage({
               de ekranda seçili aralığı yeniliyor. Üçüncü bir düğme,
               kullanıcıya hangisine basacağını sorduruyordu.
             */}
-            <RefreshButton dateFrom={range.from} dateTo={range.to} rangeLabel={range.label} />
+            <RefreshButton
+              dateFrom={range.from}
+              dateTo={range.to}
+              rangeLabel={range.label}
+              sonGuncelleme={summary?.lastFetchedAt ?? null}
+            />
           </div>
         </div>
       </header>
@@ -450,9 +451,12 @@ export default async function DashboardPage({
                   açabilirsin.
                 </>
               ) : null,
-              isStale(summary.lastFetchedAt) ? (
-                <>Veriler {formatRelative(summary.lastFetchedAt)} güncellendi. Güncelleme durmuş olabilir.</>
-              ) : null,
+              /*
+               * BAYAT VERİ UYARISI BURADAN KALKTI — "Şimdi güncelle"nin
+               * tazelik noktasına taşındı (`refresh-button.tsx`). Tam genişlik
+               * sarı şerit kullanıcının tarifiyle "görüntü kirliliği"ydi ve
+               * önerdiği eylem zaten o düğmeydi.
+               */
             ]}
           />
 
@@ -733,22 +737,8 @@ function EmptyState() {
  * çerçeve, kullanıcıya okunacak bir şey varmış gibi görünüyor.
  */
 function Uyarilar({ satirlar }: { satirlar: Array<React.ReactNode | null> }) {
-  const dolu = satirlar.filter((x): x is React.ReactNode => x !== null && x !== false);
-  if (dolu.length === 0) return null;
-  return (
-    <div
-      role="status"
-      className="rounded-lg border border-warn/30 bg-warn-soft text-sm text-warn-strong"
-    >
-      <ul className="divide-y divide-warn/20">
-        {dolu.map((satir, i) => (
-          <li key={i} className="px-3.5 py-2">
-            {satir}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+  // Görünüş ortak bileşende (`UyariListesi`): renk ikonda, zeminde değil.
+  return <UyariListesi satirlar={satirlar} />;
 }
 
 /** Oranı micros string'e çevirir — `formatMoney` tek bir giriş biçimi bekliyor. */

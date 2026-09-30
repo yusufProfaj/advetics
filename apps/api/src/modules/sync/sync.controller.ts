@@ -9,6 +9,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import {
@@ -22,6 +23,8 @@ import {
   type BulkRefreshStarted,
   type BulkRefreshTani,
   type BackfillInput,
+  type GuncellemeDurumu,
+  type RefreshResult,
   type RefreshRangeInput,
   type SyncAccountStatus,
   type SyncExcludedCounts,
@@ -44,6 +47,7 @@ import { isSayaclariSorgusu, type IsSayaclari } from './metrik-isleri';
 import { AuditService } from '../audit/audit.service';
 import type { AuthedRequest } from '../../common/types/request';
 import { EN_AZ_ORNEK, ilerleme, pencereler, planla } from './toplu-tazeleme';
+import { guncellemeDurumu } from './guncelleme-durumu';
 
 /**
  * İş türü → kullanıcıya gösterilecek aşama metni.
@@ -470,7 +474,7 @@ export class SyncController {
   async refresh(
     @CurrentTenant() ctx: TenantContext,
     @Body(zodBody(refreshRangeSchema)) dto: RefreshRangeInput,
-  ) {
+  ): Promise<RefreshResult> {
     if (!ctx.activeClientId) {
       // Müşteri seçilmeden tetiklemek, TÜM portföyün kotasını tek tıkla
       // harcamak demekti. Seçim zorunlu.
@@ -490,6 +494,7 @@ export class SyncController {
 
     let queued = 0;
     let skipped = 0;
+    const izlenenIsler: string[] = [];
 
     // Yapı ÖNCE ekleniyor. `enqueue` öncelik parametresi almıyor; sıra
     // kuyruğa ekleme sırasıyla belirleniyor ve metrik işinin yapıdan sonra
@@ -627,6 +632,7 @@ export class SyncController {
         });
         if (res.enqueued) queued++;
         else skipped++;
+        if (res.syncJobId) izlenenIsler.push(res.syncJobId);
       }
     }
 
@@ -654,6 +660,7 @@ export class SyncController {
       });
       if (res.enqueued) queued++;
       else skipped++;
+      if (res.syncJobId) izlenenIsler.push(res.syncJobId);
     }
 
     return {
@@ -664,7 +671,44 @@ export class SyncController {
       profileCount: profiles.length,
       queued,
       skipped,
+      isler: izlenenIsler,
     };
+  }
+
+  /**
+   * "ŞİMDİ GÜNCELLE"NİN İLERLEMESİ.
+   *
+   * Düğme işleri kuyruğa atıp "iş kuyruğa alındı" diyordu ve bittiklerini
+   * hiç söylemiyordu; kullanıcının cümlesi *"iş atandı yazıyor, onun yerine
+   * güncelleniyor ve güncellendi gibi ibareler olması daha sağlıklı"*.
+   * Panel `refresh`in döndürdüğü kimlikleri birkaç saniyede bir soruyor.
+   *
+   * RLS ALTINDA (`withTenant`): kimlikler istemciden geliyor ve başka bir
+   * workspace'in işini sormak onun durumunu SIZDIRIRDI. Görünmeyen kimlik
+   * `bulunamayan` sayılıyor, hata vermiyor.
+   *
+   * YALNIZCA SAYIM, SIFIR PLATFORM ÇAĞRISI. 200 kimlik sınırı sorgunun
+   * sınırsız büyümesini önlüyor (bir basış hesap başına en fazla altı iş).
+   */
+  @Get('refresh/durum')
+  @RequirePermissions('sync.trigger')
+  async refreshDurum(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('ids') ham: string | undefined,
+  ): Promise<GuncellemeDurumu> {
+    const idler = [...new Set((ham ?? '').split(',').map((x) => x.trim()).filter(Boolean))];
+    if (idler.length === 0) return guncellemeDurumu([], []);
+    if (idler.length > 200 || idler.some((x) => !/^\d{1,19}$/.test(x))) {
+      throw new BadRequestException('Geçersiz iş kimliği listesi.');
+    }
+    const satirlar = await this.prisma.withTenant(ctx, (tx) =>
+      tx.$queryRaw<Array<{ id: string; status: string; error_message: string | null }>>(Prisma.sql`
+        SELECT id::text AS id, status::text AS status, error_message
+          FROM sync_jobs
+         WHERE id = ANY(${idler}::bigint[])
+      `),
+    );
+    return guncellemeDurumu(idler, satirlar);
   }
 
   /**

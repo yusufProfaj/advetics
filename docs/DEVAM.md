@@ -6,10 +6,11 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-30 · **Canlı:** tasarım 2. tur + Ayarlar
-düzeltmeleri dahil. **Bekleyen deploy:** kenar çubuğu solması, tasarım 3.
-tur (Akıllı Boost Reklamlar'da öne çıkarılmış, boş durumlar, kırılan
-rakamlar). Yalnızca panel, migration yok.
+**Son güncelleme:** 2026-09-30 · **Canlı:** tasarım 3. tur dahil (menü,
+boş durumlar, rakamlar canlıda doğrulandı). **Bekleyen deploy:** "Şimdi
+güncelle" ilerlemesi (API'de yeni salt okunur uç `GET /sync/refresh/durum`,
+migration yok) ve sakin uyarılar. Deploy sonrası: bir workspace'te "Şimdi
+güncelle"ye basıp Güncelleniyor n/m → Güncellendi akışını canlıda izle.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;

@@ -154,6 +154,37 @@ export const refreshRangeSchema = z.object({
     .optional(),
 });
 export type RefreshRangeInput = z.infer<typeof refreshRangeSchema>;
+
+/** `POST /sync/refresh` yanıtı. */
+export interface RefreshResult {
+  accountCount: number;
+  /** İzlemeye alınmış sayfa sayısı — organik gönderiler bunlardan çekiliyor. */
+  profileCount: number;
+  queued: number;
+  skipped: number;
+  /**
+   * İzlenecek `sync_jobs` kimlikleri: bu basışla kuyruğa girenler VE zaten
+   * kuyrukta olanlar. Düğme ilerlemeyi bunlardan soruyor; yalnızca yeni
+   * girenleri izlemek, koşmakta olan iş bitmeden "Güncellendi" demek olurdu.
+   */
+  isler: string[];
+}
+
+/**
+ * `GET /sync/refresh/durum` yanıtı — "Şimdi güncelle"nin ilerlemesi.
+ *
+ * `bulunamayan` AYRI: RLS'in göstermediği ya da silinmiş bir kimlik
+ * "bitti" sayılırsa düğme yalan söyler, "bekliyor" sayılırsa hiç bitmez.
+ */
+export interface GuncellemeDurumu {
+  toplam: number;
+  bekleyen: number;
+  biten: number;
+  dusen: number;
+  bulunamayan: number;
+  /** Düşen ilk işin platform/sunucu mesajı; yoksa `null`. */
+  sonHata: string | null;
+}
 import { PLATFORMS, type Platform } from '../constants/platforms';
 
 /**

@@ -1,3 +1,4 @@
+import { UyariListesi } from '@/components/ui/uyari';
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import {
@@ -355,22 +356,8 @@ function FaturaSekmesi({ clientId, clientName }: { clientId: string; clientName:
  * çerçeve, kullanıcıya okunacak bir şey varmış gibi görünüyor.
  */
 function Uyarilar({ satirlar }: { satirlar: Array<React.ReactNode | null> }) {
-  const dolu = satirlar.filter((x): x is React.ReactNode => x !== null && x !== false);
-  if (dolu.length === 0) return null;
-  return (
-    <div
-      role="status"
-      className="rounded-lg border border-warn/30 bg-warn-soft text-sm text-warn-strong"
-    >
-      <ul className="divide-y divide-warn/20">
-        {dolu.map((satir, i) => (
-          <li key={i} className="px-3.5 py-2">
-            {satir}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+  // Görünüş ortak bileşende (`UyariListesi`): renk ikonda, zeminde değil.
+  return <UyariListesi satirlar={satirlar} />;
 }
 
 function musteriAdi(

@@ -73,7 +73,10 @@ describe('uyarılar', () => {
   });
 
   it('KRİTİK: hiç uyarı yoksa boş çerçeve çizilmiyor', () => {
-    expect(SAYFA).toContain('if (dolu.length === 0) return null;');
+    expect(SAYFA).toContain('<UyariListesi satirlar={satirlar} />');
+    expect(yorumsuz(join(__dirname, '..', '..', '..', 'components', 'ui', 'uyari.tsx'))).toContain(
+      'if (dolu.length === 0) return null;',
+    );
   });
 });
 

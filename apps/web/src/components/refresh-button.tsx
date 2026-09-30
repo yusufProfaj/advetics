@@ -1,48 +1,114 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import type { GuncellemeDurumu, RefreshResult } from '@advetics/shared';
+import { ApiRequestError, apiFetch } from '@/lib/api';
+import { formatRelative, isStale } from '@/lib/format';
+import { dugmeHali, type DugmeHali } from './guncelleme-hali';
 
-interface RefreshResult {
-  accountCount: number;
-  /** İzlemeye alınmış sayfa sayısı — organik gönderiler bunlardan çekiliyor. */
-  profileCount: number;
-  queued: number;
-  skipped: number;
-}
+/** İlerleme kaç saniyede bir soruluyor. */
+const YOKLAMA_MS = 4000;
+/**
+ * Bu süreden sonra düğme beklemeyi bırakıyor ama İŞİ bitmiş saymıyor.
+ * Büyük bir hesapta yapı taraması dakikalar sürebiliyor; düğmeyi sonsuza
+ * kadar "Güncelleniyor" bırakmak, kullanıcının sayfadan hiç ayrılamaması
+ * demek olurdu.
+ */
+const EN_UZUN_BEKLEME_MS = 4 * 60 * 1000;
 
 /**
- * "Şimdi güncelle" — panelden senkronizasyon tetikler.
+ * "ŞİMDİ GÜNCELLE" — TAZELİK GÖSTERGESİ VE GÜNCELLEME TEK KONTROLDE.
  *
- * İŞ KUYRUĞA KONUYOR, BEKLENMİYOR. Senkronizasyon hesaba göre saniyeler ile
- * dakikalar arasında sürüyor; isteği açık tutup sonucu beklemek hem tarayıcı
- * zaman aşımına düşerdi hem de kullanıcıyı ekrana kilitlerdi.
+ * ═══ SARI ŞERİT KALKTI ═══
+ * Veri bayatsa Genel Bakış'ın ortasında tam genişlikte sarı bir kutu
+ * çıkıyordu ("Veriler 4 sa önce güncellendi. Güncelleme durmuş olabilir").
+ * Kullanıcının tarifi: *"görüntü kirliliği"*. Bilgi kaybolmadı, ait olduğu
+ * yere taşındı: düğmenin solunda bir nokta ve son güncelleme zamanı. Nokta
+ * taze veride yeşil, bayatta turuncu ve hafifçe nabız atıyor; ayrıntılı
+ * cümle üzerine gelince (ve ekran okuyucuda) okunuyor. Düğmeye basmak
+ * zaten uyarının istediği eylem.
  *
- * Bunun bedeli şu: düğmeye basınca veri ANINDA gelmiyor. Bu yüzden mesaj
- * "güncellendi" DEMİYOR — "kuyruğa alındı" diyor ve kaç iş olduğunu yazıyor.
- * "Güncellendi" deyip eski veriyi göstermek, kullanıcının taze sandığı bayat
- * veriye bakması demek.
+ * ═══ "İŞ KUYRUĞA ALINDI" YERİNE GÜNCELLENİYOR → GÜNCELLENDİ ═══
+ * Düğme işleri kuyruğa atıp sayılarını yazıyordu ve bittiklerini hiç
+ * söylemiyordu. Artık `refresh`in döndürdüğü kimliklerin durumunu
+ * (`/sync/refresh/durum`) birkaç saniyede bir soruyor: beklerken
+ * "Güncelleniyor 3/7", bitince "Güncellendi" ve veri o anda yenileniyor.
+ * "Güncellendi" YALNIZCA İŞLER GERÇEKTEN BİTİNCE yazıyor — eski hâlin
+ * yorumundaki kural aynen geçerli: taze sanılan bayat veri, hiç veri
+ * olmamasından kötü. Düşen iş varsa sayısı ve Senkronizasyon bağlantısı
+ * görünüyor, "Güncellendi" sessizce yeşil kalmıyor.
  */
 export function RefreshButton({
   dateFrom,
   dateTo,
   rangeLabel,
+  sonGuncelleme,
 }: {
   dateFrom: string;
   dateTo: string;
   rangeLabel: string;
+  /** Workspace'in son başarılı çekimi (ISO); hiç çekilmediyse `null`. */
+  sonGuncelleme: string | null;
 }) {
   const router = useRouter();
-  useSearchParams();
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [hal, setHal] = useState<DugmeHali>({ tur: 'bos' });
+  const zamanlayici = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function refresh() {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
+  /*
+   * "Güncellendi" birkaç saniye görünüp düğmenin normal hâline dönüyor;
+   * yeni zaman damgası o arada `router.refresh` ile geliyor. Düşen iş varsa
+   * mesaj KALIYOR: kullanıcı görmeden kaybolan bir uyarı, hiç olmamış gibi.
+   */
+  useEffect(() => {
+    if (hal.tur !== 'guncellendi' || hal.dusen > 0) return;
+    const t = setTimeout(() => setHal({ tur: 'bos' }), 6000);
+    return () => clearTimeout(t);
+  }, [hal]);
+
+  // Sayfadan çıkınca yoklama durmalı: arka planda soran bir sekme, kimse
+  // bakmazken API'yi yoruyor.
+  useEffect(
+    () => () => {
+      if (zamanlayici.current) clearTimeout(zamanlayici.current);
+    },
+    [],
+  );
+
+  function yokla(isler: string[], baslangic: number): void {
+    zamanlayici.current = setTimeout(async () => {
+      try {
+        const d = await apiFetch<GuncellemeDurumu>(
+          `/sync/refresh/durum?ids=${encodeURIComponent(isler.join(','))}`,
+        );
+        const yeni = dugmeHali(d, Date.now() - baslangic > EN_UZUN_BEKLEME_MS);
+        setHal(yeni);
+        if (yeni.tur === 'guncelleniyor') {
+          yokla(isler, baslangic);
+          return;
+        }
+        // Bitti (ya da bekleme süresi doldu): ekrandaki rakamları yenile.
+        router.refresh();
+      } catch (err) {
+        /*
+         * YOKLAMA DÜŞTÜ ≠ GÜNCELLEME DÜŞTÜ. İşler kuyrukta koşmaya devam
+         * ediyor; yalnızca ilerlemeyi göremiyoruz. İkisini aynı kırmızıya
+         * çevirmek, kullanıcıyı bir kez daha basmaya (kotayı ikinci kez
+         * harcamaya) iterdi.
+         */
+        setHal({
+          tur: 'bilinmiyor',
+          mesaj: err instanceof ApiRequestError ? err.message : 'İlerleme okunamadı.',
+        });
+        router.refresh();
+      }
+    }, YOKLAMA_MS);
+  }
+
+  async function guncelle(): Promise<void> {
+    if (zamanlayici.current) clearTimeout(zamanlayici.current);
+    setHal({ tur: 'baslatiliyor' });
     try {
       /*
        * EKRANDA SEÇİLİ ARALIK GÖNDERİLİYOR. Düğme bir süre gövdesiz
@@ -53,48 +119,117 @@ export function RefreshButton({
         method: 'POST',
         body: JSON.stringify({ dateFrom, dateTo }),
       });
-
-      // Atlanan iş SESSİZ KALMAMALI. Düğmeye ikinci kez basan biri "bir şey
-      // olmadı" diye düşünüyor; oysa iş zaten kuyrukta ve tekrar eklemek
-      // kotayı ikinci kez harcamak olurdu.
-      // SAYFA SAYISI DA YAZILIYOR. Düğme bir süre yalnızca reklam hesaplarını
-      // kapsıyordu ve organik gönderilere hiç dokunmuyordu; kullanıcı sayfayı
-      // izlemeye alıp bu düğmeye basıyor, hiçbir gönderi gelmiyordu. Sayfa
-      // sayısını yazmak, kapsamın ne olduğunu düğmenin kendisine söyletiyor.
-      // HANGİ ARALIĞIN yenilendiği yazılı: kullanıcı düğmeye bastığında
-      // neyin tazeleneceğini bilmeli, sonradan tahmin etmemeli.
-      const parts = [rangeLabel, `${res.accountCount} hesap`];
-      if (res.profileCount > 0) parts.push(`${res.profileCount} sayfa`);
-      parts.push(`${res.queued} iş kuyruğa alındı`);
-      if (res.skipped > 0) parts.push(`${res.skipped} iş zaten kuyruktaydı`);
-      setMessage(parts.join(' · '));
-
-      // Sayfayı hemen tazelemek işe yaramaz (iş henüz çalışmadı); birkaç
-      // saniye sonra tazelemek ilk sonuçları yakalıyor.
-      setTimeout(() => router.refresh(), 5000);
+      const isler = res.isler ?? [];
+      if (isler.length === 0) {
+        // Kuyruğa girecek iş yoksa (her şey desteklenmiyor) bekleyecek bir şey de yok.
+        setHal({ tur: 'guncellendi', dusen: 0, sonHata: null });
+        router.refresh();
+        return;
+      }
+      setHal({ tur: 'guncelleniyor', biten: 0, toplam: isler.length });
+      yokla(isler, Date.now());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Güncelleme başlatılamadı.');
-    } finally {
-      setBusy(false);
+      setHal({
+        tur: 'hata',
+        mesaj: err instanceof ApiRequestError ? err.message : 'Güncelleme başlatılamadı.',
+      });
     }
   }
 
+  const bayat = isStale(sonGuncelleme);
+  const calisiyor = hal.tur === 'baslatiliyor' || hal.tur === 'guncelleniyor';
+  const tazelikCumlesi = sonGuncelleme
+    ? `Veriler ${formatRelative(sonGuncelleme)} güncellendi.${bayat ? ' Güncelleme durmuş olabilir.' : ''}`
+    : 'Veri henüz hiç çekilmedi.';
+
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
-        type="button"
-        onClick={refresh}
-        disabled={busy}
-        className="whitespace-nowrap rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
+      <div
+        className="flex items-stretch overflow-hidden rounded-lg border border-line bg-surface text-xs shadow-[var(--shadow-xs)]"
+        title={calisiyor ? `${rangeLabel} güncelleniyor` : tazelikCumlesi}
       >
-        {busy ? 'Başlatılıyor…' : 'Şimdi güncelle'}
-      </button>
-      {message && <span className="text-[11px] text-ink-muted">{message}</span>}
-      {error && (
-        <span role="alert" className="max-w-xs text-right text-[11px] text-danger">
-          {error}
+        {/* TAZELİK: nokta + zaman. Rengi tek başına anlam taşımıyor, metin de yazıyor. */}
+        <span
+          className={`flex items-center gap-1.5 whitespace-nowrap border-r border-line px-2.5 ${
+            bayat && !calisiyor ? 'text-warn-strong' : 'text-ink-muted'
+          }`}
+        >
+          <span aria-hidden className="relative flex h-2 w-2">
+            {bayat && !calisiyor && (
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warn opacity-60 motion-reduce:hidden" />
+            )}
+            <span
+              className={`relative inline-flex h-2 w-2 rounded-full ${
+                calisiyor ? 'bg-info' : bayat ? 'bg-warn' : 'bg-ok'
+              }`}
+            />
+          </span>
+          <span className="sr-only">{tazelikCumlesi}</span>
+          <span aria-hidden>{sonGuncelleme ? formatRelative(sonGuncelleme) : 'hiç'}</span>
+        </span>
+
+        <button
+          type="button"
+          onClick={() => void guncelle()}
+          disabled={calisiyor}
+          aria-live="polite"
+          className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 font-medium text-ink transition-colors hover:bg-surface-muted disabled:cursor-progress"
+        >
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            aria-hidden
+            className={`h-3.5 w-3.5 ${calisiyor ? 'advetics-donus text-info' : hal.tur === 'guncellendi' && hal.dusen === 0 ? 'text-ok' : 'text-ink-muted'}`}
+          >
+            {hal.tur === 'guncellendi' && hal.dusen === 0 ? (
+              <path d="M4.5 10.5 8 14l7.5-8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            ) : (
+              <path
+                d="M15.5 8A6 6 0 0 0 4.7 6.5M4.5 12a6 6 0 0 0 10.8 1.5M15.5 3.5V8H11M4.5 16.5V12H9"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+          </svg>
+          {dugmeMetni(hal)}
+        </button>
+      </div>
+
+      {hal.tur === 'guncellendi' && hal.dusen > 0 && (
+        <span className="max-w-xs text-right text-[11px] text-warn-strong">
+          {hal.dusen} iş tamamlanamadı{hal.sonHata ? `: ${hal.sonHata}` : '.'}{' '}
+          <Link href="/ayarlar/senkronizasyon" className="underline underline-offset-2">
+            Ayrıntı
+          </Link>
+        </span>
+      )}
+      {hal.tur === 'uzun' && (
+        <span className="max-w-xs text-right text-[11px] text-ink-muted">
+          Hâlâ sürüyor. Veriler geldikçe bu ekrana yansır.
+        </span>
+      )}
+      {(hal.tur === 'hata' || hal.tur === 'bilinmiyor') && (
+        <span role="alert" className="max-w-xs text-right text-[11px] text-danger-strong">
+          {hal.tur === 'bilinmiyor' ? `Güncelleme sürüyor, ilerleme okunamadı: ${hal.mesaj}` : hal.mesaj}
         </span>
       )}
     </div>
   );
+}
+
+function dugmeMetni(hal: DugmeHali): string {
+  switch (hal.tur) {
+    case 'baslatiliyor':
+      return 'Güncelleniyor…';
+    case 'guncelleniyor':
+      return `Güncelleniyor ${hal.biten}/${hal.toplam}`;
+    case 'guncellendi':
+      return hal.dusen > 0 ? 'Kısmen güncellendi' : 'Güncellendi';
+    case 'uzun':
+      return 'Şimdi güncelle';
+    default:
+      return 'Şimdi güncelle';
+  }
 }

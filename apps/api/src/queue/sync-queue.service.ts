@@ -178,6 +178,12 @@ export class SyncQueueService implements OnModuleDestroy {
       if (!takilmis && (state === 'waiting' || state === 'active' || state === 'delayed')) {
         return {
           enqueued: false,
+          /*
+           * KUYRUKTAKİ İŞİN KAYDI DA DÖNÜYOR. "Şimdi güncelle" düğmesi
+           * ilerlemeyi bu kimliklerden izliyor; zaten koşan bir işi saymamak,
+           * düğmenin iş bitmeden "Güncellendi" demesi olurdu.
+           */
+          syncJobId: (existing.data as Partial<SyncJobPayload> | undefined)?.syncJobId || undefined,
           reason: `zaten kuyrukta (${state}, ${Math.round(yas / 60_000)} dk)`,
         };
       }

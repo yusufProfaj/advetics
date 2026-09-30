@@ -45,7 +45,9 @@ describe('uyarılar', () => {
 
   it('KRİTİK: hiç uyarı yoksa boş çerçeve çizilmiyor', () => {
     // Boş bir kutu, kullanıcıya okunacak bir şey varmış gibi görünüyor.
-    expect(SAYFA).toContain('if (dolu.length === 0) return null;');
+    // Kural ortak listede (`UyariListesi`); sayfa onu kullanıyor.
+    expect(SAYFA).toContain('<UyariListesi satirlar={satirlar} />');
+    expect(UYARI).toContain('if (dolu.length === 0) return null;');
   });
 
   it('hata kutusu `alert`, uyarı `status`', () => {
@@ -56,7 +58,8 @@ describe('uyarılar', () => {
      */
     // Kural artık ORTAK uyarı kutusunda; sayfa yalnızca tonu seçiyor.
     expect(SAYFA).toContain('<Uyari ton="tehlike">');
-    expect(UYARI).toContain("role={ton === 'tehlike' ? 'alert' : 'status'}");
+    expect(UYARI).toContain("role={tehlike ? 'alert' : 'status'}");
+    expect(UYARI).toContain("const tehlike = ton === 'tehlike';");
   });
 });
 
@@ -83,7 +86,9 @@ describe('başlık şeridi', () => {
     const bas = SAYFA.indexOf('<header');
     const son = SAYFA.indexOf('</header>');
     expect(son).toBeGreaterThan(bas);
-    expect(SAYFA.slice(bas, son)).toContain('formatRelative(summary.lastFetchedAt)');
+    // Tazelik güncelle düğmesinin İÇİNDE (nokta + zaman); sarı şerit kalktı.
+    expect(SAYFA.slice(bas, son)).toContain('sonGuncelleme={summary?.lastFetchedAt ?? null}');
+    expect(SAYFA).not.toContain('Güncelleme durmuş olabilir');
   });
 
   it('tamamlanmamış gün uyarısı hâlâ YAZILI', () => {
