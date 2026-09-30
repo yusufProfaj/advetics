@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SuzgecMenusu } from '@/components/suzgec-menusu';
 import type { AdsExploreQuery, AdsExploreResult, Platform } from '@advetics/shared';
 import { AD_SORT_FIELDS, AD_STATUSES, PLATFORMS } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
@@ -76,14 +77,6 @@ export default async function AdsExplorerPage({
    * orada.
    */
   const platform = pick(first(params.platform), PLATFORMS, undefined);
-  /*
-   * KAMPANYA ÇİPLERİ SESSİZCE KESİLİYORDU. Liste `slice(0, 6)` ile
-   * kırpılıyor ve kalanların VAR OLDUĞU hiçbir yerde yazmıyordu: elli
-   * kampanyalı bir hesapta kullanıcı kırk dördünü hiç göremiyor, süzgecin
-   * eksik olduğunu bilmiyordu. Bu depoda sessiz kesme adı konmuş bir hata
-   * türü. Sayı artık yazılı ve tek tıkla açılıyor.
-   */
-  const tumKampanyalar = first(params.tumkampanya) === '1';
   const page = Math.max(1, Number(first(params.sayfa) ?? 1) || 1);
 
   const qs = new URLSearchParams({
@@ -142,7 +135,6 @@ export default async function AdsExplorerPage({
       kampanya: campaignId,
       ara: q,
       sorunlu: onlyIssues ? '1' : undefined,
-      tumkampanya: tumKampanyalar ? '1' : undefined,
       platform,
       ...over,
     };
@@ -194,176 +186,195 @@ export default async function AdsExplorerPage({
         </div>
       </header>
 
-      {/* Arama — düz GET formu, istemci JS'i yok. */}
-      <form action="/ads-explorer" method="get" className="flex flex-wrap gap-2">
-        {/* TARİH ANAHTARLARI GİZLİ ALAN OLARAK. Form GET ile URL'i baştan
-            kurduğu için burada olmayan her parametre ARAMA YAPINCA düşüyor. */}
-        {Object.entries(rangeParams(range)).map(([k, v]) =>
-          v === undefined ? null : <input key={k} type="hidden" name={k} value={v} />,
-        )}
-        <input type="hidden" name="sirala" value={sort} />
-        <input type="hidden" name="yon" value={dir} />
-        {status && <input type="hidden" name="durum" value={status} />}
-        {adAccountId && <input type="hidden" name="hesap" value={adAccountId} />}
-        {campaignId && <input type="hidden" name="kampanya" value={campaignId} />}
-        {onlyIssues && <input type="hidden" name="sorunlu" value="1" />}
-        {platform && <input type="hidden" name="platform" value={platform} />}
-        <input
-          type="search"
-          name="ara"
-          defaultValue={q ?? ''}
-          placeholder="Reklam adı, başlık ya da metin ara…"
-          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-brand focus:outline-none"
-        />
-        <button
-          type="submit"
-          className="rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90"
-        >
-          Ara
-        </button>
-        {q && (
-          <Link
-            href={linkWith({ ara: undefined, sayfa: undefined })}
-            className="rounded-lg border border-line px-3 py-2 text-sm text-ink-muted transition hover:text-ink"
-          >
-            Temizle
-          </Link>
-        )}
-      </form>
+      {/*
+        ═══ SÜZGEÇLER TEK ARAÇ ÇUBUĞUNDA ═══
+        Arama bir satır, altında hesap/durum/kampanya/sıralama DÖRT satır çip
+        vardı; uzun hesap ve kampanya adları satırları ikiye üçe bölüyor ve
+        süzgeçler ilk ekranın yarısını kaplıyordu. Artık tek çubuk: arama +
+        her boyut için etiketli bir açılır menü (`SuzgecMenusu`) + "Sorunlu"
+        düğmesi. Seçili süzgeçler altta, tek tıkla kaldırılan etiketler.
+        Bağlantıların hepsi `linkWith` ile sunucuda kuruluyor: adres
+        süzgeci taşımaya devam ediyor.
+
+        "Sorunlu" MENÜDE DEĞİL, DÜĞME: sayısı sıfırdan büyükse dikkat
+        istiyor ve bir menünün içinde görünmez olurdu.
+      */}
+      <div className="space-y-2 rounded-xl border border-line bg-surface p-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Arama — düz GET formu, istemci JS'i yok. */}
+          <form action="/ads-explorer" method="get" className="flex min-w-[16rem] flex-1 items-center gap-2">
+            {/* TARİH ANAHTARLARI GİZLİ ALAN OLARAK. Form GET ile URL'i baştan
+                kurduğu için burada olmayan her parametre ARAMA YAPINCA düşüyor. */}
+            {Object.entries(rangeParams(range)).map(([k, v]) =>
+              v === undefined ? null : <input key={k} type="hidden" name={k} value={v} />,
+            )}
+            <input type="hidden" name="sirala" value={sort} />
+            <input type="hidden" name="yon" value={dir} />
+            {status && <input type="hidden" name="durum" value={status} />}
+            {adAccountId && <input type="hidden" name="hesap" value={adAccountId} />}
+            {campaignId && <input type="hidden" name="kampanya" value={campaignId} />}
+            {onlyIssues && <input type="hidden" name="sorunlu" value="1" />}
+            {platform && <input type="hidden" name="platform" value={platform} />}
+            <label className="relative min-w-0 flex-1">
+              <span className="sr-only">Reklam ara</span>
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted">
+                <path d="M9 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12ZM17 17l-3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              <input
+                type="search"
+                name="ara"
+                defaultValue={q ?? ''}
+                placeholder="Reklam adı, başlık ya da metin ara…"
+                className="w-full rounded-lg border border-line bg-surface py-1.5 pl-8 pr-3 text-sm text-ink placeholder:text-ink-muted"
+              />
+            </label>
+            <button type="submit" className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white">
+              Ara
+            </button>
+          </form>
+
+          {result !== null && (
+            <div className="flex flex-wrap items-center gap-2">
+              {result.facets.adAccounts.length > 1 && (
+                <SuzgecMenusu
+                  etiket="Hesap"
+                  deger={result.facets.adAccounts.find((a) => a.id === adAccountId)?.name ?? (adAccountId ? 'Seçili hesap' : 'Tümü')}
+                  secili={Boolean(adAccountId)}
+                  secenekler={[
+                    {
+                      href: linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined }),
+                      ad: 'Tümü',
+                      aktif: !adAccountId,
+                    },
+                    ...result.facets.adAccounts.map((acc) => ({
+                      // Hesap değişince kampanya seçimi geçersiz kalıyor.
+                      href: linkWith({ hesap: acc.id, kampanya: undefined, sayfa: undefined }),
+                      ad: acc.name,
+                      sayi: acc.adCount,
+                      aktif: adAccountId === acc.id,
+                    })),
+                  ]}
+                />
+              )}
+
+              <SuzgecMenusu
+                etiket="Durum"
+                deger={status ? (STATUS_LABEL[status] ?? status) : 'Tümü'}
+                secili={Boolean(status)}
+                secenekler={[
+                  { href: linkWith({ durum: undefined, sayfa: undefined }), ad: 'Tümü', aktif: !status },
+                  ...result.facets.statuses.map((st) => ({
+                    href: linkWith({ durum: st.status, sorunlu: undefined, sayfa: undefined }),
+                    ad: STATUS_LABEL[st.status] ?? st.status,
+                    sayi: st.count,
+                    aktif: status === st.status,
+                  })),
+                ]}
+              />
+
+              {result.facets.campaigns.length > 1 && (
+                <SuzgecMenusu
+                  etiket="Kampanya"
+                  deger={result.facets.campaigns.find((c) => c.id === campaignId)?.name ?? (campaignId ? 'Seçili kampanya' : 'Tümü')}
+                  secili={Boolean(campaignId)}
+                  secenekler={[
+                    { href: linkWith({ kampanya: undefined, sayfa: undefined }), ad: 'Tümü', aktif: !campaignId },
+                    ...result.facets.campaigns.map((c) => ({
+                      href: linkWith({ kampanya: c.id, sayfa: undefined }),
+                      ad: c.name,
+                      sayi: c.adCount,
+                      aktif: campaignId === c.id,
+                    })),
+                  ]}
+                />
+              )}
+
+              <SuzgecMenusu
+                etiket="Sırala"
+                deger={`${SORT_LABEL[sort]} ${dir === 'desc' ? '↓' : '↑'}`}
+                secili={false}
+                secenekler={AD_SORT_FIELDS.map((f) => {
+                  const active = sort === f;
+                  // Aynı alana tekrar tıklamak yönü çeviriyor — tablo başlığı
+                  // davranışının bilinen karşılığı.
+                  const nextDir = active && dir === 'desc' ? 'asc' : 'desc';
+                  return {
+                    href: linkWith({ sirala: f, yon: nextDir, sayfa: undefined }),
+                    ad: SORT_LABEL[f],
+                    aktif: active,
+                    ek: active ? (dir === 'desc' ? '↓ çoktan aza' : '↑ azdan çoğa') : undefined,
+                  };
+                })}
+              />
+
+              {result.facets.issueCount > 0 && (
+                <Link
+                  href={linkWith({ sorunlu: onlyIssues ? undefined : '1', durum: undefined, sayfa: undefined })}
+                  aria-current={onlyIssues ? 'true' : undefined}
+                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                    onlyIssues
+                      ? 'border-danger/40 bg-danger-soft text-danger-strong'
+                      : 'border-danger/25 text-danger-strong hover:bg-danger-soft'
+                  }`}
+                >
+                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-danger" />
+                  Sorunlu ({result.facets.issueCount})
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/*
+          SEÇİLİ SÜZGEÇLER — ne süzüldüğü tek bakışta ve her biri tek tıkla
+          kalkıyor. Menüde seçili olan düğmenin içinde de yazıyor; ama dört
+          düğmeyi tek tek okumak yerine "şu an neye bakıyorum" burada.
+        */}
+        {(() => {
+          const etiketler: Array<{ ad: string; href: string }> = [];
+          if (q) etiketler.push({ ad: `Arama: “${q}”`, href: linkWith({ ara: undefined, sayfa: undefined }) });
+          if (adAccountId)
+            etiketler.push({
+              ad: `Hesap: ${result?.facets.adAccounts.find((a) => a.id === adAccountId)?.name ?? 'seçili'}`,
+              href: linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined }),
+            });
+          if (status)
+            etiketler.push({ ad: `Durum: ${STATUS_LABEL[status] ?? status}`, href: linkWith({ durum: undefined, sayfa: undefined }) });
+          if (campaignId)
+            etiketler.push({
+              ad: `Kampanya: ${result?.facets.campaigns.find((c) => c.id === campaignId)?.name ?? 'seçili'}`,
+              href: linkWith({ kampanya: undefined, sayfa: undefined }),
+            });
+          if (onlyIssues) etiketler.push({ ad: 'Yalnızca sorunlu', href: linkWith({ sorunlu: undefined, sayfa: undefined }) });
+          if (etiketler.length === 0) return null;
+          return (
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-line pt-2 text-xs">
+              {etiketler.map((e) => (
+                <Link
+                  key={e.ad}
+                  href={e.href}
+                  title={`${e.ad} süzgecini kaldır`}
+                  className="inline-flex items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-ink transition hover:bg-danger-soft hover:text-danger-strong"
+                >
+                  <span className="max-w-[16rem] truncate">{e.ad}</span>
+                  <span aria-hidden>×</span>
+                </Link>
+              ))}
+              <Link
+                href={linkWith({ ara: undefined, hesap: undefined, durum: undefined, kampanya: undefined, sorunlu: undefined, sayfa: undefined })}
+                className="ml-1 text-ink-muted underline-offset-2 hover:text-ink hover:underline"
+              >
+                Tümünü temizle
+              </Link>
+            </div>
+          );
+        })()}
+      </div>
 
       {result === null ? (
         <Notice>Reklamlar alınamadı. {hata ?? 'Sebep bilinmiyor.'}</Notice>
       ) : (
         <>
-          {/*
-            ═══ SÜZGEÇLER TEK KUTUDA VE ETİKETLİ ═══
-            Hesap, durum, kampanya ve sıralama DÖRT AYRI satırdı; aralarında
-            hiçbir çerçeve yoktu ve hepsi aynı yuvarlak çipe benziyordu.
-            Kullanıcı hangi satırın ne süzdüğünü ancak deneyerek öğreniyordu,
-            üstelik dördü birlikte ilk ekranın tamamını kaplıyordu. Aynı
-            süzgeçler tek kapta, her boyut kendi etiketiyle.
-          */}
-          <div className="space-y-2 rounded-xl border border-line bg-surface px-4 py-3">
-            {result.facets.adAccounts.length > 1 && (
-              <SuzgecSatiri etiket="Hesap">
-                <FilterChip
-                  href={linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined })}
-                  active={!adAccountId}
-                >
-                  Tümü
-                </FilterChip>
-                {result.facets.adAccounts.map((acc) => (
-                  <FilterChip
-                    key={acc.id}
-                    href={linkWith({
-                      hesap: adAccountId === acc.id ? undefined : acc.id,
-                      // Hesap değişince kampanya seçimi geçersiz kalıyor.
-                      kampanya: undefined,
-                      sayfa: undefined,
-                    })}
-                    active={adAccountId === acc.id}
-                  >
-                    {acc.name} ({acc.adCount})
-                  </FilterChip>
-                ))}
-              </SuzgecSatiri>
-            )}
-
-            <SuzgecSatiri etiket="Durum">
-              <FilterChip
-                href={linkWith({ durum: undefined, sorunlu: undefined, sayfa: undefined })}
-                active={!status && !onlyIssues}
-              >
-                Tümü
-              </FilterChip>
-              {result.facets.issueCount > 0 && (
-                <FilterChip
-                  href={linkWith({
-                    sorunlu: onlyIssues ? undefined : '1',
-                    durum: undefined,
-                    sayfa: undefined,
-                  })}
-                  active={onlyIssues}
-                  tone="danger"
-                >
-                  Sorunlu ({result.facets.issueCount})
-                </FilterChip>
-              )}
-              {result.facets.statuses.map((st) => (
-                <FilterChip
-                  key={st.status}
-                  href={linkWith({
-                    durum: status === st.status ? undefined : st.status,
-                    sorunlu: undefined,
-                    sayfa: undefined,
-                  })}
-                  active={status === st.status}
-                >
-                  {STATUS_LABEL[st.status] ?? st.status} ({st.count})
-                </FilterChip>
-              ))}
-            </SuzgecSatiri>
-
-            {result.facets.campaigns.length > 1 && (
-              <SuzgecSatiri etiket="Kampanya">
-                {(() => {
-                  const sinir = tumKampanyalar ? result.facets.campaigns.length : 8;
-                  const gosterilen = result.facets.campaigns.slice(0, sinir);
-                  const kalan = result.facets.campaigns.length - gosterilen.length;
-                  return (
-                    <>
-                      {gosterilen.map((c) => (
-                        <FilterChip
-                          key={c.id}
-                          href={linkWith({
-                            kampanya: campaignId === c.id ? undefined : c.id,
-                            sayfa: undefined,
-                          })}
-                          active={campaignId === c.id}
-                        >
-                          {c.name} ({c.adCount})
-                        </FilterChip>
-                      ))}
-                      {/* SESSİZ KESME YOK: kaçının gizlendiği yazılı ve açılıyor. */}
-                      {kalan > 0 && (
-                        <FilterChip href={linkWith({ tumkampanya: '1' })} active={false}>
-                          +{kalan} kampanya daha
-                        </FilterChip>
-                      )}
-                      {tumKampanyalar && result.facets.campaigns.length > 8 && (
-                        <FilterChip href={linkWith({ tumkampanya: undefined })} active={false}>
-                          Listeyi kısalt
-                        </FilterChip>
-                      )}
-                    </>
-                  );
-                })()}
-              </SuzgecSatiri>
-            )}
-
-            <SuzgecSatiri etiket="Sırala">
-              {AD_SORT_FIELDS.map((f) => {
-                const active = sort === f;
-                // Aynı alana tekrar tıklamak yönü çeviriyor — tablo başlığı
-                // davranışının bilinen karşılığı.
-                const nextDir = active && dir === 'desc' ? 'asc' : 'desc';
-                return (
-                  <Link
-                    key={f}
-                    href={linkWith({ sirala: f, yon: nextDir, sayfa: undefined })}
-                    aria-current={active ? 'true' : undefined}
-                    className={`rounded-md px-2 py-1 font-medium transition ${
-                      active ? 'bg-brand-soft text-brand-strong' : 'text-ink-muted hover:text-ink'
-                    }`}
-                  >
-                    {SORT_LABEL[f]}
-                    {active && (dir === 'desc' ? ' ↓' : ' ↑')}
-                  </Link>
-                );
-              })}
-            </SuzgecSatiri>
-          </div>
-
           {/*
             SÜZGEÇ TOPLAMI — SAYFANIN değil, süzgecin tamamının.
             12 piksellik gri bir satırdı ve dipnot gibi duruyordu; oysa
@@ -453,37 +464,6 @@ function Pagination({
   );
 }
 
-function FilterChip({
-  href,
-  active,
-  tone,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  tone?: 'danger';
-  children: React.ReactNode;
-}) {
-  /*
-   * ÇİP ADI KIRPILIYOR. Kampanya adları 80 karakteri bulabiliyor ve tek bir
-   * çip satırın tamamını kaplayıp süzgeci okunmaz yapıyordu. Tam ad `title`
-   * ile duruyor: kırpmak bilgiyi GİZLEMEK değil, ertelemek.
-   */
-  const base =
-    'inline-block max-w-[16rem] truncate align-bottom rounded-full px-2.5 py-1 font-medium transition ring-1 ring-inset';
-  const cls = active
-    ? tone === 'danger'
-      ? 'bg-danger/15 text-danger ring-danger/30'
-      : 'bg-brand-soft text-brand-strong ring-brand/30'
-    : tone === 'danger'
-      ? 'text-danger ring-danger/20 hover:bg-danger/10'
-      : 'text-ink-muted ring-line hover:text-ink';
-  return (
-    <Link href={href} title={typeof children === 'string' ? children : undefined} className={`${base} ${cls}`}>
-      {children}
-    </Link>
-  );
-}
 
 function Total({ label, value }: { label: string; value: string }) {
   return (
@@ -494,20 +474,6 @@ function Total({ label, value }: { label: string; value: string }) {
   );
 }
 
-/**
- * Süzgeç satırı — solda ne süzdüğü, sağda seçenekler.
- *
- * Etiket olmadan dört satır da aynı yuvarlak çipe benziyordu ve kullanıcı
- * hangisinin ne yaptığını ancak deneyerek öğreniyordu.
- */
-function SuzgecSatiri({ etiket, children }: { etiket: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 text-xs">
-      <span className="w-16 shrink-0 text-[11px] text-ink-muted">{etiket}</span>
-      {children}
-    </div>
-  );
-}
 
 function Notice({ children }: { children: React.ReactNode }) {
   return (

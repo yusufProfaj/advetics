@@ -765,6 +765,19 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-30 — Reklam Keşfi süzgeçleri tek araç çubuğunda
+
+Arama bir satır, altında hesap/durum/kampanya/sıralama dört satır çipti;
+uzun hesap ve kampanya adları satırları bölüyor ve süzgeçler ilk ekranın
+yarısını kaplıyordu. Artık tek çubuk: arama + her boyut için etiketli açılır
+menü (`SuzgecMenusu`: "Hesap: Tümü ▾", seçenekler sayılarıyla, 10'dan
+fazlaysa içinde arama ve "3 / 43 gösteriliyor") + görünür "Sorunlu (n)"
+düğmesi. Seçili süzgeçler altta tek tıkla kalkan etiketler ve "Tümünü
+temizle". Bağlantılar yine sunucuda (`linkWith`), adres süzgeci taşıyor.
+Kampanya listesi artık HİÇ kesilmiyor (kaydırılıyor); `tumkampanya`
+parametresi ve "+N kampanya daha" çipi kalktı. Menü dışarı tıklayınca/Esc
+ile kapanıyor. Geçici önizlemeyle gözle kontrol edildi.
+
 ### 2026-09-30 — Facebook sayfası gönderileri "geçersiz metrik" ile düşüyordu
 
 Yeni "Şimdi güncelle" ilerlemesi canlıda doğrulandı (Güncelleniyor 6/10 →

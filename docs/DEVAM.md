@@ -6,11 +6,10 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-30 · **Canlı:** istatistik reddinde yedek yol ve
-ölçüm betiği dahil. **Bekleyen deploy:** ölçülen yeni metrik adları (FB
-`post_media_view`/`post_total_media_view_unique`, IG `impressions` kalktı).
-Deploy sonrası: bir workspace'te "Şimdi güncelle" → organik gönderi işi
-"istatistiği alınamadı" notu OLMADAN geçmeli; Senkronizasyon'da kontrol et.
+**Son güncelleme:** 2026-09-30 · **Canlı:** ölçülen organik metrik adları
+dahil (canlıda doğrulandı: "Güncellendi", istatistik notu yok). **Bekleyen
+deploy:** Reklam Keşfi süzgeç araç çubuğu (yalnızca panel). Deploy sonrası
+menüleri canlıda aç, seçim yap, "Tümünü temizle"yi dene.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;
