@@ -7,6 +7,7 @@ import {
   abonelikSagligi,
 } from './youtube-websub';
 import {
+  autoBoostMecrasi,
   autoBoostPresetSettingsSchema,
   type AutoBoostQueueItemRecord,
   type AutoBoostQueuePerformance,
@@ -124,6 +125,7 @@ export class AutoBoostReadService {
                aktif.biter AS aktif_boost_biter,
                kendi.status AS boost_durumu,
                sp.name AS profile_name,
+               sp.profile_type::text AS profile_type,
                sp.linked_ad_account_id::text AS linked_ad_account_id,
                la.platform::text AS linked_platform,
                la.client_id::text AS linked_client_id,
@@ -362,6 +364,7 @@ export class AutoBoostReadService {
        * "Instagram" diyor ama hangi Instagram hesabı olduğunu söylemiyor.
        */
       socialProfileName: r.profile_name,
+      mecra: autoBoostMecrasi(r.platform as AutoBoostPlatform, r.profile_type),
       status: r.status as AutoBoostQueueItemRecord['status'],
       preset,
       blockedReason: this.blockedReason(r, preset !== null, parsed),
@@ -550,6 +553,7 @@ interface QueueRow {
   aktif_boost_biter: Date | null;
   boost_durumu: string | null;
   profile_name: string | null;
+  profile_type: string | null;
   linked_ad_account_id: string | null;
   linked_platform: string | null;
   linked_client_id: string | null;

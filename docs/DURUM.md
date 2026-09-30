@@ -783,9 +783,13 @@ ortaya çıktı.
 - Migration `20260930180000_akilli_boost_facebook_kartlari_kapat`: yalnızca
   `pending` Facebook kartları `rejected` + sebep; SİLİNMİYOR, yayında/kapalı
   kartlara dokunulmuyor. Test migration dosyasını gerçekten çalıştırıyor.
-- Bilinen kalıntı: mecra süzgeci `platform = meta`yı "Instagram" diye
-  etiketliyor; eski Facebook kartları (artık Kapanan) orada Instagram
-  sayılıyor. Yeni kart üretilmediği için yalnızca geçmişi etkiliyor.
+- Canlı kontrol: Onay bekliyor 23 → 5 (hepsi tekil), 18 Facebook kartı
+  sebebiyle Reddedildi, yayındakiler ve toplam (37) aynı.
+- **Mecra etiketi düzeltildi:** panel `meta`yı "Instagram" diye sayıyordu,
+  eski Facebook kartları Instagram rozetiyle görünüyordu. Kart artık
+  `mecra` taşıyor (`autoBoostMecrasi`: profil türünden, kapalı eşleme;
+  profil RLS yüzünden görünmüyorsa tahmin yok, "Meta"). Süzgeç ve rozet
+  ondan; sekme sırası sabit.
 
 ### 2026-09-30 — Reklam Keşfi süzgeçleri tek araç çubuğunda
 

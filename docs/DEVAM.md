@@ -6,11 +6,10 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-30 · **Canlı:** Reklam Keşfi menü sayıları dahil.
-**Bekleyen deploy:** Akıllı Boost'ta Facebook sayfası kart üretmiyor +
-MIGRATION (`20260930180000`, onay bekleyen Facebook kartlarını kapatıyor).
-Deploy sonrası: Çiftçi Grup → Akıllı Boost'ta her gönderi TEK kart olmalı;
-Facebook kartları "Kapanan"da sebebiyle.
+**Son güncelleme:** 2026-09-30 · **Canlı:** Akıllı Boost Facebook ayrımı +
+migration ve Reklam Keşfi menü sayıları dahil (ikisi de canlıda doğrulandı).
+**Bekleyen deploy:** Akıllı Boost mecra etiketi (Facebook kartları artık
+"Facebook"). Migration yok.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;

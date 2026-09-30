@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  AutoBoostMecra,
   AutoBoostPlatform,
   AutoBoostQueueItemRecord,
   AutoBoostQueueList,
@@ -28,15 +29,29 @@ import { PlatformLogo } from '@/components/platform-logo';
  * ("google değilse Instagram") üçüncü bir kaynak eklendiğinde YANLIŞ ROZET
  * üretir — ve yanlış rozet, eksik rozetten kötüdür: kullanıcı sorgulamaz.
  */
-const PLATFORM_ETIKETI: Record<AutoBoostPlatform, string> = {
-  meta: 'Instagram',
-  google: 'YouTube',
+/*
+ * MECRA, PLATFORM DEĞİL. `platform = meta` hem Instagram hem Facebook
+ * sayfası demek ve burada `meta: 'Instagram'` yazıyordu: Facebook sayfası
+ * kartları "Instagram" rozetiyle görünüyor ve süzgeçte Instagram sayılıyordu
+ * (2026-09-30). Mecra sunucuda profil türünden türetiliyor
+ * (`autoBoostMecrasi`); bilinmiyorsa "Meta", tahmin edilmiyor.
+ */
+const MECRA_ETIKETI: Record<AutoBoostMecra, string> = {
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  youtube: 'YouTube',
+  meta: 'Meta',
 };
 
-const PLATFORM_KANALI: Record<AutoBoostPlatform, ChannelKind> = {
-  meta: 'instagram',
-  google: 'youtube',
+const MECRA_KANALI: Record<AutoBoostMecra, ChannelKind> = {
+  instagram: 'instagram',
+  facebook: 'facebook',
+  youtube: 'youtube',
+  meta: 'meta_ads',
 };
+
+/** Süzgeç sekmelerinin sabit sırası: sayıya göre sıralamak sekmeleri oynatırdı. */
+const MECRA_SIRASI: readonly AutoBoostMecra[] = ['instagram', 'facebook', 'youtube', 'meta'];
 
 /**
  * GÖRSEL ORANI PLATFORMA GÖRE DEĞİŞİYOR ve kart oranı DEĞİŞMİYOR.
@@ -118,7 +133,7 @@ export function BildirimHavuzu({
    * demekti — sayaçlar süzgece göre değişince "sessiz kesme yok" kuralı
    * okunamaz hâle gelirdi.
    */
-  const [suzgec, setSuzgec] = useState<AutoBoostPlatform | 'hepsi'>('hepsi');
+  const [suzgec, setSuzgec] = useState<AutoBoostMecra | 'hepsi'>('hepsi');
   const [durumSuzgeci, setDurumSuzgeci] = useState<DurumSuzgeci>('hepsi');
   /** Geçmiş çekiminin profil bazlı sonucu — boş kalırsa düğme sessiz görünür. */
   const [gecmisNotlari, setGecmisNotlari] = useState<string[] | null>(null);
@@ -222,9 +237,9 @@ export function BildirimHavuzu({
    * workspace'te süzgeç göstermek, hiçbir işe yaramayan bir seçim sunmak ve
    * ekranı gereksiz kalabalıklaştırmak olurdu.
    */
-  const sayilar = new Map<AutoBoostPlatform, number>();
-  for (const k of liste.items) sayilar.set(k.platform, (sayilar.get(k.platform) ?? 0) + 1);
-  const mecralar = [...sayilar.keys()];
+  const sayilar = new Map<AutoBoostMecra, number>();
+  for (const k of liste.items) sayilar.set(k.mecra, (sayilar.get(k.mecra) ?? 0) + 1);
+  const mecralar = MECRA_SIRASI.filter((m) => sayilar.has(m));
 
   const durumSayilari = new Map<DurumSuzgeci, number>();
   for (const d of DURUM_SUZGECLERI) {
@@ -235,7 +250,7 @@ export function BildirimHavuzu({
   }
 
   const gosterilen = liste.items.filter((k) => {
-    if (suzgec !== 'hepsi' && k.platform !== suzgec) return false;
+    if (suzgec !== 'hepsi' && k.mecra !== suzgec) return false;
     if (durumSuzgeci === 'hepsi') return true;
     const d = DURUM_SUZGECLERI.find((x) => x.anahtar === durumSuzgeci);
     return d ? (d.durumlar as readonly string[]).includes(k.status) : true;
@@ -343,8 +358,8 @@ export function BildirimHavuzu({
               {mecralar.map((m) => (
                 <SuzgecDugmesi
                   key={m}
-                  etiket={PLATFORM_ETIKETI[m]}
-                  kanal={PLATFORM_KANALI[m]}
+                  etiket={MECRA_ETIKETI[m]}
+                  kanal={MECRA_KANALI[m]}
                   adet={sayilar.get(m) ?? 0}
                   secili={suzgec === m}
                   onSec={() => setSuzgec(m)}
@@ -767,11 +782,11 @@ function Kart({
           */}
           <span className="inline-flex min-w-0 items-center gap-1 rounded-md bg-surface-sunken px-1.5 py-0.5 text-[11px] text-ink-muted">
             <PlatformLogo
-              kind={PLATFORM_KANALI[kayit.platform]}
+              kind={MECRA_KANALI[kayit.mecra]}
               className="h-3 w-3 shrink-0"
             />
             <span className="truncate">
-              {kayit.socialProfileName ?? PLATFORM_ETIKETI[kayit.platform]}
+              {kayit.socialProfileName ?? MECRA_ETIKETI[kayit.mecra]}
             </span>
           </span>
         </div>

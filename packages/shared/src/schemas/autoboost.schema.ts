@@ -400,6 +400,19 @@ export interface AutoBoostQueuePerformance {
   conversions: number;
 }
 
+export type AutoBoostMecra = 'instagram' | 'facebook' | 'youtube' | 'meta';
+
+/**
+ * Profil türünden mecra. KAPALI eşleme: tanınmayan tür platformun genel
+ * adına düşüyor, yanlış bir mecraya değil.
+ */
+export function autoBoostMecrasi(platform: AutoBoostPlatform, profileType: string | null): AutoBoostMecra {
+  if (profileType === 'instagram_business') return 'instagram';
+  if (profileType === 'facebook_page') return 'facebook';
+  if (profileType === 'youtube_channel' || platform === 'google') return 'youtube';
+  return 'meta';
+}
+
 export interface AutoBoostQueueItemRecord {
   id: string;
   clientId: string;
@@ -418,6 +431,14 @@ export interface AutoBoostQueueItemRecord {
    * "göremiyorum" ile "yok" aynı şey değil.
    */
   socialProfileName: string | null;
+  /**
+   * KARTIN MECRASI — platformdan DEĞİL profil türünden. `platform = meta`
+   * hem Instagram hem Facebook sayfası demek ve panel hepsini "Instagram"
+   * diye sayıyordu; Facebook sayfası kartları (2026-09-30'a kadar
+   * üretilenler) Instagram rozetiyle görünüyordu. Profil RLS yüzünden
+   * görünmüyorsa `meta` (bilinmiyor): tahmin edilmiyor.
+   */
+  mecra: AutoBoostMecra;
   title: string | null;
   thumbnailUrl: string | null;
   permalink: string | null;

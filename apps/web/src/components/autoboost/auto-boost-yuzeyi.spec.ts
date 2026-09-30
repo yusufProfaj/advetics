@@ -569,8 +569,9 @@ describe('İKİ MECRA TEK EKRANDA', () => {
    * kullanıcı sorgulamaz.
    */
   it('KRİTİK: mecra tabloları `Record` — koşul zinciri değil', () => {
-    expect(HAVUZ).toContain('Record<AutoBoostPlatform, string>');
-    expect(HAVUZ).toContain('Record<AutoBoostPlatform, ChannelKind>');
+    // Anahtar MECRA, platform değil: `meta` hem Instagram hem Facebook demek.
+    expect(HAVUZ).toContain('Record<AutoBoostMecra, string>');
+    expect(HAVUZ).toContain('Record<AutoBoostMecra, ChannelKind>');
     expect(HAVUZ).toContain('GORSEL_BICIMI');
   });
 
@@ -614,7 +615,12 @@ describe('İKİ MECRA TEK EKRANDA', () => {
 
   it('KRİTİK: MECRA SÜZGECİ var ve sayıları yazıyor', () => {
     expect(HAVUZ).toContain('SuzgecDugmesi');
-    expect(HAVUZ).toContain("useState<AutoBoostPlatform | 'hepsi'>('hepsi')");
+    expect(HAVUZ).toContain("useState<AutoBoostMecra | 'hepsi'>('hepsi')");
+    // KRİTİK: süzgeç ve rozet kartın MECRASINDAN okunuyor. `k.platform` ile
+    // süzmek Facebook sayfası kartlarını yine "Instagram" diye sayardı.
+    expect(HAVUZ).toContain('k.mecra !== suzgec');
+    expect(HAVUZ).not.toContain('k.platform !== suzgec');
+    expect(HAVUZ).toContain('MECRA_KANALI[kayit.mecra]');
   });
 
   it('KRİTİK: SÜZGEÇ TEK KAYNAKTA ÇİZİLMİYOR', () => {
