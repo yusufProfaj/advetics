@@ -35,6 +35,9 @@ import { yeniIcerikMailiOlustur, type YeniIcerikKarti } from './yeni-icerik-mail
  */
 export const ILK_CEKIM_ADEDI = 10;
 
+/** Akıllı Boost kartı üretilen Meta profil türleri. Kapalı liste. */
+export const AKILLI_BOOST_META_PROFILLERI = ['instagram_business'] as const;
+
 @Injectable()
 export class AutoBoostQueueService {
   private readonly logger = new Logger(AutoBoostQueueService.name);
@@ -136,6 +139,29 @@ export class AutoBoostQueueService {
      */
     if (profil.profile_type === 'youtube_channel') {
       return { created: 0, note: `${profil.name}: YouTube kendi bildirim yolundan gelir` };
+    }
+    /*
+     * ═══ FACEBOOK SAYFASI KART ÜRETMİYOR — YALNIZCA INSTAGRAM ═══
+     *
+     * Akıllı Boost "Instagram + YouTube" olarak tasarlandı ve ön ayar formu
+     * da öyle diyor. Burada yalnızca YouTube ayrılıyordu; Facebook sayfası
+     * Instagram gibi işleniyordu. Görünmüyordu, çünkü Facebook sayfa
+     * gönderileri "geçersiz metrik" reddiyle hiç çekilemiyordu. O düzeltilip
+     * sayfa izinleri verilince (2026-09-30) her Instagram gönderisinin
+     * Facebook İKİZİ de kart oldu: müşteriler paylaşımı iki platforma birden
+     * yapıyor (crosspost). Çiftçi Grup'ta Instagram'da YAYINDA olan bir
+     * gönderinin Facebook ikizi "Onay bekliyor" duruyordu; onaylanırsa aynı
+     * içerik için İKİNCİ kampanya, yani para harcayan bir tekrar.
+     *
+     * İkizleri metinden/zamandan eşleştirmek bir tahmin olurdu (kullanıcı
+     * kararı: Facebook çıkarıldı). Facebook gönderileri çekilmeye devam
+     * ediyor (elle boost ve raporlar için); yalnızca kart üretilmiyor.
+     *
+     * LİSTE KAPALI UÇLU: yeni bir profil türü eklendiğinde varsayılan
+     * DIŞARIDA kalıyor (CLAUDE.md, YouTube kanalı dersi).
+     */
+    if (!AKILLI_BOOST_META_PROFILLERI.includes(profil.profile_type as (typeof AKILLI_BOOST_META_PROFILLERI)[number])) {
+      return { created: 0, note: `${profil.name}: Akıllı Boost yalnızca Instagram gönderilerinden kart üretir` };
     }
 
     /*

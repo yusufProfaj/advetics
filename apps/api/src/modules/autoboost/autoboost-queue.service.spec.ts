@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
@@ -309,6 +311,60 @@ describe('YouTube süpürmeden BESLENMİYOR', () => {
     const r = await svc.enqueueForProfile(PROFIL2);
     expect(r.created).toBe(0);
     expect(r.note).toMatch(/kendi bildirim yolundan/);
+  });
+});
+
+describe('FACEBOOK SAYFASI kart üretmiyor — Akıllı Boost yalnızca Instagram', () => {
+  /*
+   * Canlıda (2026-09-30) Facebook sayfa gönderileri çekilmeye başlayınca her
+   * Instagram gönderisinin crosspost İKİZİ de kart oldu; Instagram'da yayında
+   * olan bir içeriğin Facebook ikizi "Onay bekliyor" duruyordu. Kullanıcı
+   * kararı: Facebook Akıllı Boost'tan çıkarıldı.
+   */
+  it('KRİTİK: Facebook sayfasının gönderisi kart OLMUYOR ve sebep yazıyor', async () => {
+    await seedProfile(PROFIL2, { type: 'facebook_page' });
+    await preset();
+    await post('fb_1', '2026-09-20T10:00:00Z', PROFIL2);
+    const r = await svc.enqueueForProfile(PROFIL2);
+    expect(r.created).toBe(0);
+    expect(r.note).toMatch(/yalnızca Instagram/);
+    expect(await kuyruk()).toEqual([]);
+  });
+
+  it('aynı kurulumda Instagram gönderisi kart oluyor (koruma yalnızca Facebook)', async () => {
+    // PROFIL (Instagram) `beforeEach`te kuruluyor.
+    await preset();
+    await post('ig_1', '2026-09-20T10:00:00Z');
+    const r = await svc.enqueueForProfile(PROFIL);
+    expect(r.created).toBe(1);
+  });
+
+  it('KRİTİK: migration yalnızca ONAY BEKLEYEN Facebook kartlarını kapatıyor, silmiyor', async () => {
+    await seedProfile(PROFIL2, { type: 'facebook_page' });
+    const kart = (profil: string, ext: string, status: string) =>
+      h.q(
+        `INSERT INTO auto_boost_queue_items (id, org_id, client_id, platform, social_profile_id, external_id, status, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, 'meta', $3, $4, $5, now())`,
+        [IDS.org, IDS.client, profil, ext, status],
+      );
+    await kart(PROFIL2, 'fb_bekleyen', 'pending');
+    await kart(PROFIL2, 'fb_yayinda', 'launched');
+    await kart(PROFIL, 'ig_bekleyen', 'pending');
+
+    const sql = readFileSync(
+      join(__dirname, '../../../prisma/migrations/20260930180000_akilli_boost_facebook_kartlari_kapat/migration.sql'),
+      'utf8',
+    );
+    await h.pg.exec(sql);
+
+    const satirlar = await h.q<{ external_id: string; status: string; error: string | null }>(
+      `SELECT external_id, status, error FROM auto_boost_queue_items ORDER BY external_id`,
+    );
+    expect(satirlar).toHaveLength(3); // hiçbiri silinmedi
+    const say = Object.fromEntries(satirlar.map((r) => [r.external_id, r.status]));
+    expect(say).toEqual({ fb_bekleyen: 'rejected', fb_yayinda: 'launched', ig_bekleyen: 'pending' });
+    // Sebep kartta yazıyor.
+    expect(satirlar.find((r) => r.external_id === 'fb_bekleyen')!.error).toMatch(/yalnızca Instagram/);
   });
 });
 

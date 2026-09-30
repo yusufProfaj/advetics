@@ -765,6 +765,28 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-09-30 — Akıllı Boost'ta aynı gönderi iki kez: Facebook crosspost ikizi
+
+Kullanıcı: *"akıllı boost sisteminde bir gönderi 2'li çekiliyor"*. Canlıda
+Çiftçi Grup'ta doğrulandı: her Instagram gönderisinin (`instagram.com/p/…`)
+Facebook sayfası ikizi (`facebook.com/…/posts/…`) ayrı kart; en riskli hâli
+Instagram'da YAYINDA olan içeriğin Facebook ikizinin "Onay bekliyor"
+durması (onay = ikinci kampanya). Sebep kod hatası değil, eksik kısıt:
+`enqueueForProfile` yalnızca YouTube'u ayırıyordu, Facebook sayfasını
+Instagram gibi işliyordu. Görünmüyordu çünkü Facebook gönderileri "geçersiz
+metrik" reddiyle hiç çekilemiyordu; o düzeltilip sayfa izinleri verilince
+ortaya çıktı.
+
+- Kullanıcı kararı: Facebook Akıllı Boost'tan çıkarıldı (ikiz eşleştirme
+  tahmin olurdu). Kapalı liste `AKILLI_BOOST_META_PROFILLERI =
+  ['instagram_business']`; Facebook gönderileri çekilmeye devam ediyor.
+- Migration `20260930180000_akilli_boost_facebook_kartlari_kapat`: yalnızca
+  `pending` Facebook kartları `rejected` + sebep; SİLİNMİYOR, yayında/kapalı
+  kartlara dokunulmuyor. Test migration dosyasını gerçekten çalıştırıyor.
+- Bilinen kalıntı: mecra süzgeci `platform = meta`yı "Instagram" diye
+  etiketliyor; eski Facebook kartları (artık Kapanan) orada Instagram
+  sayılıyor. Yeni kart üretilmediği için yalnızca geçmişi etkiliyor.
+
 ### 2026-09-30 — Reklam Keşfi süzgeçleri tek araç çubuğunda
 
 Arama bir satır, altında hesap/durum/kampanya/sıralama dört satır çipti;

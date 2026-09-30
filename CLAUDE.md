@@ -1237,6 +1237,14 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   tuşlarıyla taşınıyor: yalnızca sürükleme koymak, fare kullanamayan için
   özelliği TAMAMEN kapatmak olurdu. Taşıma TAKAS DEĞİL ARAYA SOKMA — takas
   eden bir sürükleme kullanıcının bıraktığı yere koymuyor.
+- **AKILLI BOOST YALNIZCA INSTAGRAM (+ YOUTUBE) KARTI ÜRETİR — Facebook
+  sayfası DEĞİL** (kullanıcı kararı, 2026-09-30). Müşteriler paylaşımı iki
+  platforma birden yapıyor (crosspost); Facebook sayfa gönderileri çekilmeye
+  başlayınca her Instagram gönderisinin ikizi de kart oldu ve Instagram'da
+  yayında olan bir içeriğin Facebook ikizi "Onay bekliyor" duruyordu: onay =
+  aynı içerik için ikinci kampanya. İkizleri metinden eşleştirmek tahmin
+  olurdu. Facebook gönderileri çekilmeye devam ediyor (elle boost, rapor);
+  kart üretimi `AKILLI_BOOST_META_PROFILLERI` kapalı listesinde.
 - **AJANSIN BAĞLANTISI BİR KEZ KURULUR; ŞİRKET İSTERSE KENDİ BAĞLANTISINI
   KURAR.** Ajansın Meta/Google kimliği bir kez yetkilendiriliyor ve havuzu
   üst hesabın bütün şirketlerine hizmet ediyor. Ajansın AYNI kimliğini
