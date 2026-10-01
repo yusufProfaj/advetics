@@ -25,6 +25,7 @@ import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
 import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
 import { isYapilabilir } from './platform-isleri';
 import { cekilmisGunler, gunlukAnahtar } from './gunluk-tekrar';
+import { GUN_ICI_ARALIK_DK, gunIciAtlanir, seyreltilir, sonGunIciIsler } from './gun-ici-aralik';
 
 /**
  * Worker'ın sentetik kiracı bağlamındaki kullanıcı kimliği.
@@ -159,6 +160,7 @@ export class SyncProcessorService {
     let unassigned = 0;
     let desteklenmeyen = 0;
     let dunCekilmis = 0;
+    let gunIciBekliyor = 0;
 
     /*
      * "DÜN" BİR KEZ ÇEKİLİR (gunluk-tekrar.ts). Süpürme saatlik ve her
@@ -182,6 +184,34 @@ export class SyncProcessorService {
             }),
           )
         : undefined;
+
+    /*
+     * GÜN İÇİ METRİK GOOGLE'DA SAATLİK (gun-ici-aralik.ts). Sorgu yalnızca
+     * seyreltilen platformun hesapları için ve yalnızca aralık kadar geriye
+     * gidiyor; Meta'lı bir turda hiç koşmuyor.
+     */
+    const seyrek =
+      payload.jobType === 'insights_realtime'
+        ? accounts.filter((a) => seyreltilir(a.platform as Platform))
+        : [];
+    const sonGunIci =
+      seyrek.length > 0
+        ? sonGunIciIsler(
+            await this.db.syncJob.findMany({
+              where: {
+                adAccountId: { in: seyrek.map((a) => a.id) },
+                jobType: 'insights_realtime',
+                createdAt: {
+                  gte: new Date(
+                    Date.now() - Math.max(...Object.values(GUN_ICI_ARALIK_DK)) * 60_000,
+                  ),
+                },
+              },
+              select: { adAccountId: true, createdAt: true },
+            }),
+          )
+        : undefined;
+    const simdi = new Date();
 
     for (const acct of accounts) {
       // Organik post işleri reklam hesabına değil sosyal profile ait.
@@ -209,6 +239,11 @@ export class SyncProcessorService {
       // Sayısı nota yazılıyor, "zaten kuyrukta" sayacına karışmıyor.
       if (!isYapilabilir(acct.platform as Platform, payload.jobType)) {
         desteklenmeyen++;
+        continue;
+      }
+
+      if (sonGunIci && gunIciAtlanir(acct.platform as Platform, sonGunIci.get(acct.id), simdi)) {
+        gunIciBekliyor++;
         continue;
       }
 
@@ -316,7 +351,10 @@ export class SyncProcessorService {
       (desteklenmeyen > 0
         ? `, ${desteklenmeyen} hesabın platformu bu işi desteklemiyor`
         : '') +
-      (dunCekilmis > 0 ? `, ${dunCekilmis} hesabın dünü zaten çekilmiş` : '');
+      (dunCekilmis > 0 ? `, ${dunCekilmis} hesabın dünü zaten çekilmiş` : '') +
+      (gunIciBekliyor > 0
+        ? `, ${gunIciBekliyor} hesap son bir saat içinde çekildi (Google gün içi saatlik)`
+        : '');
     this.logger.log(note);
     return { rows: 0, note };
   }

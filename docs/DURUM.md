@@ -765,6 +765,26 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-01 — Google gün içi metriği saatlik; kota doğrulaması geçti
+
+`olcum-google-kota --gun=1` (54 izlenen Google hesabı): `insights_daily`
+53 iş = hesap başına günde 1 (önceden ~11). Kota hatası 0, düşen iş 0,
+kayıtsız deneme 1. Toplam ~12.100 çağrı/gün ve %84'ü `insights_realtime`
+(2.544 iş, 10.176 çağrı — hesap başına 30 dakikada bir). Basic tavanı
+belgeye göre ~15.000: ~66 izlenen hesapta kota yeniden dolardı. `rateScope`
+gövde kontrolü yapılamadı — bakılacak kota hatası yoktu.
+
+- **Kullanıcı kararı: Google gün içi SAATLİK.** Zamanlayıcı 30 dk kaldı
+  (Meta'nın kotası hesap başına kova, tavan yok); süpürme son 45 dk içinde
+  `insights_realtime` işi açılmış Google hesabını atlıyor ve sayısını nota
+  yazıyor (`gun-ici-aralik.ts`). Son işe bakılıyor, dakikaya değil:
+  gecikmeli süpürme iki turu birden atlamasın. Elle "Şimdi güncelle" de
+  sayılıyor. Beklenen: ~7.000 çağrı/gün, ~115 hesaba kadar yer.
+- `gun-ici-aralik.spec.ts` çalıştırarak; iki mutasyon düştü (atlama
+  kapatıldı, yarım tur payı silindi).
+- Deploy sonrası bakılacak: `olcum-google-kota --gun=1` → `insights_realtime`
+  hesap başına ~24/gün.
+
 ### 2026-09-30 — Akıllı Boost'ta aynı gönderi iki kez: Facebook crosspost ikizi
 
 Kullanıcı: *"akıllı boost sisteminde bir gönderi 2'li çekiliyor"*. Canlıda

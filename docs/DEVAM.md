@@ -6,10 +6,10 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-09-30 · **Canlı:** Akıllı Boost Facebook ayrımı +
+**Son güncelleme:** 2026-10-01 · **Canlı:** Akıllı Boost Facebook ayrımı +
 migration ve Reklam Keşfi menü sayıları dahil (ikisi de canlıda doğrulandı).
-**Bekleyen deploy:** Akıllı Boost mecra etiketi (Facebook kartları artık
-"Facebook"). Migration yok.
+**Bekleyen deploy (migration yok):** Akıllı Boost mecra etiketi (Facebook
+kartları artık "Facebook") ve Google gün içi metriği saatlik.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;
@@ -64,12 +64,11 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
 ## Sıradaki iş (sırayla)
 
-1. **Google kota doğrulaması (yarın 11:00 sonrası):**
-   `pnpm --filter @advetics/api olcum-google-kota -- --gun=1`. Beklenen:
-   `insights_daily` hesap başına ~1/gün, `kuyruk_vazgecti` belirgin az, kota
-   hatası mesajlarında `rateScope=` (yoksa gövde biçimi belgeden farklı →
-   `googleKotaAyrintisi`). Karar bekleyen: gün içi metrik 30 dk'da bir mi,
-   saatlik mi (**kullanıcıya sorulacak, ölçümden sonra**).
+1. **Google kota doğrulaması GEÇTİ** (2026-10-01): günlük iş hesap başına
+   1/gün, kota hatası 0. Çağrıların %84'ü gün içi işiydi; kullanıcı kararıyla
+   Google'da **saatlik** (deploy bekliyor). Deploy'dan bir gün sonra
+   `olcum-google-kota -- --gun=1`: `insights_realtime` hesap başına ~24/gün,
+   toplam ~7.000. `rateScope` gövde kontrolü kota hatası görülünce yapılacak.
 2. ~~İlgi alanı büyüklüğü dünya geneli~~ **etiketlendi** (2026-09-29, deploy
    bekliyor). Ülkeye göre sayı (`delivery_estimate`) istenirse ayrı iş.
 3. **Tasarım deploy sonrası:** gerçek sayfaları gez (pencereler, yoğun

@@ -97,7 +97,10 @@ describe('süpürme — ÇALIŞTIRILARAK', () => {
     expect(r.note).toContain('1 hesabın dünü zaten çekilmiş');
   });
 
-  it('başka iş türlerinde süzgeç devrede DEĞİL (gün içi metrik her turda çekilir)', async () => {
+  // Meta hesabıyla: Google'ın gün içi işi artık seyreltiliyor ve kendi
+  // sorgusunu atıyor (gun-ici-aralik.spec.ts). Burada sınanan, GÜNLÜK
+  // süzgecin başka iş türüne sızmadığı.
+  it('başka iş türlerinde süzgeç devrede DEĞİL (Meta gün içi metriği her turda çekilir)', async () => {
     const { SyncProcessorService } = await import('./sync-processor.service');
     const kuyruga: string[] = [];
     let sorgulandi = false;
@@ -106,7 +109,7 @@ describe('süpürme — ÇALIŞTIRILARAK', () => {
     svc.db = {
       adAccount: {
         findMany: async () => [
-          { id: 'a', name: 'a', clientId: 'c', platform: 'google', timezone: 'UTC' },
+          { id: 'a', name: 'a', clientId: 'c', platform: 'meta', timezone: 'UTC' },
         ],
       },
       syncJob: { findMany: async () => ((sorgulandi = true), []) },

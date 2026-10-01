@@ -675,7 +675,7 @@ ilk 10 dakikada tüm müşteri hesapları bloklanır. **Bu, mimarinin en önemli
 | Katman | Ne | Sıklık | Seviye | Kapsam |
 |---|---|---|---|---|
 | **L1 — Yapı** | Kampanya/AdSet/Ad meta verisi, durum, bütçe | **6 saatte 1** + kullanıcı tetiklemesi | Tüm hiyerarşi | Delta (Google `change_status`, Meta `updated_time`) |
-| **L2 — Sıcak metrik** | Bugünün harcama/dönüşüm verisi | **30 dk** (aktif), 2 saat (düşük harcamalı) | account + campaign | Tek gün |
+| **L2 — Sıcak metrik** | Bugünün harcama/dönüşüm verisi | **30 dk** Meta/LinkedIn, **60 dk** Google (2026-10-01, kota; `gun-ici-aralik.ts`) | account + campaign | Tek gün |
 | **L3 — Günlük tam** | Tüm seviyeler, tüm metrikler | **Günde 1** — hesap TZ'sinde 02:00 | account→campaign→ad_group→ad | Dün |
 | **L4 — Geri düzeltme** | Atıf penceresi kaymaları | Günlük son 7 gün, haftalık son 28 gün | campaign + ad_group | Yeniden çekim |
 | **L5 — Kırılımlar** | Cihaz, yaş/cinsiyet, konum, yerleşim | **Günde 1**, sadece opt-in hesaplarda | campaign | Dün |

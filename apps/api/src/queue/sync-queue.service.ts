@@ -293,7 +293,9 @@ export class SyncQueueService implements OnModuleDestroy {
     }> = [
       // L1 — yapı: 6 saatte bir
       { name: 'sweep:structure', pattern: '17 */6 * * *', jobType: 'structure' },
-      // L2 — sıcak metrikler: 30 dakikada bir
+      // L2 — sıcak metrikler: 30 dakikada bir. Google'da her ikinci turda
+      // atlanıyor (saatlik) ve karar süpürmenin içinde: gun-ici-aralik.ts.
+      // Desen değişirse GUN_ICI_SUPURME_DK de değişmeli.
       { name: 'sweep:realtime', pattern: '*/30 * * * *', jobType: 'insights_realtime' },
       // L3 — dünün tam metrikleri: her saat başı kontrol, hesabın TZ'sine göre
       // gün dönümünü geçenler işlenir (tek bir UTC saatinde çalıştırmak
