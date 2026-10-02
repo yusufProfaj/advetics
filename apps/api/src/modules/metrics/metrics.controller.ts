@@ -1,10 +1,13 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import {
+  accountBreakdownQuerySchema,
   breakdownQuerySchema,
   hierarchyPathQuerySchema,
   clientBreakdownQuerySchema,
   metricsQuerySchema,
+  type AccountBreakdownQuery,
   type BreakdownQuery,
+  type MetricsAccountBreakdown,
   type ClientBreakdownQuery,
   type MetricsClientRow,
   type MetricsOrganizationRow,
@@ -86,6 +89,21 @@ export class MetricsController {
     @Query(zodQuery(clientBreakdownQuerySchema)) query: ClientBreakdownQuery,
   ): Promise<MetricsClientRow[]> {
     return this.metrics.byClient(ctx, query);
+  }
+
+  /**
+   * MECRA VE HESAP KIRILIMI — workspace seçiliyken tablonun ilk iki
+   * basamağı. `breakdown`ın bir seviyesi DEĞİL: hesap satırı atamadan
+   * geliyor (harcaması olmayan hesap da listede) ve izleme durumunu
+   * taşıyor; varlık satırında ikisi de yok.
+   */
+  @Get('hesaplar')
+  @RequirePermissions('insights.read')
+  byAccount(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(accountBreakdownQuerySchema)) query: AccountBreakdownQuery,
+  ): Promise<MetricsAccountBreakdown> {
+    return this.metrics.byAccount(ctx, query);
   }
 
   /**

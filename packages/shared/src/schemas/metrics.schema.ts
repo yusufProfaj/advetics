@@ -331,6 +331,14 @@ export type BreakdownQuery = z.infer<typeof breakdownQuerySchema>;
  * adlandırıldığında bağlantı eski adı taşımaya devam ederdi.
  */
 export interface MetricsHierarchyPath {
+  /**
+   * HESAP BASAMAĞI — mecra › hesap › kampanya hiyerarşisinin ortası.
+   *
+   * Adresten (`hesap`) ya da kampanyadan türetiliyor: kullanıcı bir kampanya
+   * bağlantısını hesapsız açtığında da şerit hangi hesabın içinde olduğunu
+   * söyleyebilmeli.
+   */
+  adAccount: { id: string; name: string; platform: (typeof PLATFORMS)[number] } | null;
   campaign: { id: string; name: string } | null;
   adGroup: { id: string; name: string } | null;
 }
@@ -372,6 +380,7 @@ export interface MetricsConversionDetail {
 }
 
 export const hierarchyPathQuerySchema = z.object({
+  adAccountId: z.string().uuid().optional(),
   campaignId: z.string().uuid().optional(),
   adGroupId: z.string().uuid().optional(),
 });
@@ -398,6 +407,17 @@ export const clientBreakdownQuerySchema = z
   .refine(orderOk, ORDER_MSG)
   .refine(spanOk, SPAN_MSG);
 export type ClientBreakdownQuery = z.infer<typeof clientBreakdownQuerySchema>;
+
+/**
+ * HESAP KIRILIMI SORGUSU — müşteri kırılımıyla AYNI şema.
+ *
+ * `level` yok (toplam tek seviyeden okunuyor, gerekçe yukarıda) ve
+ * `adAccountId` de yok: bu ekranın sorusu "hangi hesap ne harcıyor" ve tek
+ * bir hesaba daraltmak soruyu ortadan kaldırırdı. Ayrı bir ad, iki ucun
+ * şeması bir gün ayrışırsa birinin diğerini sessizce sürüklemesin diye.
+ */
+export const accountBreakdownQuerySchema = clientBreakdownQuerySchema;
+export type AccountBreakdownQuery = ClientBreakdownQuery;
 
 /**
  * Para tutarları STRING olarak taşınıyor.
@@ -635,6 +655,59 @@ export interface MetricsOrganizationRow extends MetricTotals {
 
   /** `null` = önceki dönemde HİÇ veri yok. Sıfırlı nesne "-%100" gösterirdi. */
   previous: MetricTotals | null;
+}
+
+/**
+ * ═══ MECRA VE HESAP KIRILIMI — WORKSPACE'İN İLK İKİ BASAMAĞI ═══
+ *
+ * Workspace seçildiğinde tablo doğrudan KAMPANYA listeliyordu ve Meta,
+ * Google, LinkedIn kampanyaları ile farklı reklam hesaplarının kampanyaları
+ * tek düz listede duruyordu. Kullanıcının istediği hiyerarşi:
+ * workspace › mecra › hesap › kampanya › reklam seti › reklam.
+ *
+ * İKİ BASAMAK TEK UÇTAN. Mecra satırı hesap satırlarının toplamı; ayrı bir
+ * uç, aynı süzgeci iki kez yazmak ve iki sorgunun bir gün ayrışması
+ * demekti (mecra 10.000 ₺ derken hesapların toplamı 9.000 ₺).
+ *
+ * HESAP SATIRI VERİDEN DEĞİL ATAMADAN GELİYOR. Harcaması olmayan, izlemesi
+ * kapalı hesap da listede: "hesap atandı ama veri yok" ile "hesap hiç
+ * atanmadı" ekranda AYNI görünmemeli.
+ */
+export interface MetricsAccountRow extends MetricTotals {
+  adAccountId: string;
+  externalId: string;
+  name: string;
+  platform: (typeof PLATFORMS)[number];
+  /** Karışık para birimi hâlinde `null` — müşteri satırındaki kuralın aynısı. */
+  currency: string | null;
+  currencies: string[];
+  /**
+   * İZLEME KAPALIYSA rakamlar SIFIR ve bu bir harcama bilgisi DEĞİL:
+   * `filters()` izlenmeyen hesabın metriklerini panele hiç sokmuyor. Panel
+   * bu satırda tutar yerine "İzlenmiyor" yazıyor.
+   */
+  syncEnabled: boolean;
+  /** Platformdaki hesap durumu (`AdAccountStatus`). */
+  status: string;
+  /** `null` = önceki dönemde HİÇ veri yok. Sıfırlı nesne "-%100" gösterirdi. */
+  previous: MetricTotals | null;
+}
+
+export interface MetricsPlatformRow extends MetricTotals {
+  platform: (typeof PLATFORMS)[number];
+  currency: string | null;
+  currencies: string[];
+  /** Workspace'e atanmış hesap sayısı — izlenmeyenler DAHİL. */
+  accountCount: number;
+  /** İzlemesi kapalı olanlar: rakamlara girmiyorlar ve sayıları yazılıyor. */
+  unmonitoredCount: number;
+  previous: MetricTotals | null;
+}
+
+export interface MetricsAccountBreakdown {
+  /** Yalnızca workspace'e hesap atanmış mecralar. */
+  platforms: MetricsPlatformRow[];
+  accounts: MetricsAccountRow[];
 }
 
 // -----------------------------------------------------------------------------

@@ -88,10 +88,17 @@ function nullSonda(a: number | null, z: number | null, yon: 'artan' | 'azalan'):
  * gösterebilirdi (`sort` kararlılığı girdi sırasına bağlı) ve kullanıcı
  * veriyi değişmiş sanırdı.
  */
-export function kirilimSirala(
-  rows: MetricsBreakdownRow[],
-  siralama: Siralama,
-): MetricsBreakdownRow[] {
+/**
+ * JENERİK: hesap kırılımının satırları da aynı sütunları taşıyor ve aynı
+ * sıralamayla diziliyor. İkinci bir sıralayıcı, oklar aynıyken iki tablonun
+ * farklı dizilmesi demekti.
+ */
+type SiralanabilirSatir = Pick<
+  MetricsBreakdownRow,
+  'spendMicros' | 'platform' | 'impressions' | 'clicks' | 'conversions' | 'cpa'
+>;
+
+export function kirilimSirala<T extends SiralanabilirSatir>(rows: T[], siralama: Siralama): T[] {
   /*
    * YÖN `SIRALAMA_YONU`DAN OKUNUYOR — burada TEKRAR YAZILMIYOR.
    *
@@ -108,7 +115,7 @@ export function kirilimSirala(
    *
    * Bu aynı zamanda EŞİTLİKTEKİ BELİRLEYİCİ: harcaması yüksek olan üstte.
    */
-  const harcamaFarki = (a: MetricsBreakdownRow, z: MetricsBreakdownRow): number => {
+  const harcamaFarki = (a: SiralanabilirSatir, z: SiralanabilirSatir): number => {
     const fark = mikro(z.spendMicros) - mikro(a.spendMicros);
     return fark === 0n ? 0 : fark > 0n ? 1 : -1;
   };

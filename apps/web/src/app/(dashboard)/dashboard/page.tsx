@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type {
-  MetricLevel,
+  MetricsAccountBreakdown,
   Platform,
   MetricsBreakdownRow,
   MetricsClientRow,
@@ -10,7 +10,7 @@ import type {
   MetricsSummary,
   MetricsTimeseries,
 } from '@advetics/shared';
-import { METRIC_LEVELS, PLATFORMS } from '@advetics/shared';
+import { PLATFORMS } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
@@ -32,6 +32,14 @@ import { MetricCard } from '@/components/metric-card';
 import { MetricStrip } from '@/components/metric-strip';
 import { MetricsChart } from '@/components/metrics-chart';
 import { BreakdownTable } from '@/components/breakdown-table';
+import { HesapKirilimi } from '@/components/hesap-kirilimi';
+import {
+  hesapCoz,
+  panelSeviyesiCoz,
+  platformSekmesiSorgusu,
+  varlikSeviyesi,
+  type PanelSeviyesi,
+} from '@/lib/genel-bakis-seviyesi';
 import { DonusumDetay } from '@/components/donusum-detay';
 import { MusteriTablosu } from '@/components/musteri-tablosu';
 import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
@@ -122,6 +130,11 @@ export default async function DashboardPage({
    */
   const kampanya = first(params.kampanya);
   const reklamSeti = first(params.reklamSeti);
+  /*
+   * HESAP: mecra › HESAP › kampanya basamağı. Kartlar, grafik ve tablo o
+   * hesaba daralıyor — kampanya odağıyla aynı gerekçe.
+   */
+  const hesap = hesapCoz(first(params.hesap));
 
   /*
    * ODAKLIYKEN SEVİYE BİR ALT BASAMAĞA ÇEKİLİYOR.
@@ -131,12 +144,15 @@ export default async function DashboardPage({
    * hâle düşmenin yolu yok (sekme odağı temizliyor) ama adres elle
    * yazılabiliyor ve sunucu buna bahis oynamamalı.
    */
-  const istenenSeviye = resolveLevel(first(params.seviye));
-  const level = reklamSeti
-    ? 'ad'
-    : kampanya && istenenSeviye === 'campaign'
-      ? 'ad_group'
-      : istenenSeviye;
+  const level = panelSeviyesiCoz({
+    seviye: first(params.seviye),
+    platform,
+    hesap,
+    kampanya,
+    reklamSeti,
+  });
+  /** `null` = mecra ya da hesap basamağı: tablo `/metrics/hesaplar`tan. */
+  const varlik = varlikSeviyesi(level);
 
   /*
    * BAĞLANTILARDA TAŞINAN SÜZGEÇLER — TEK YERDE.
@@ -157,6 +173,7 @@ export default async function DashboardPage({
     // ODAK DA TAŞINIYOR: platform sekmesi ya da tarih değiştiren kullanıcı
     // bulunduğu kampanyadan düşmemeli. Aynı unutkanlık `platform`ta
     // yaşanmıştı.
+    hesap,
     kampanya,
     reklamSeti,
   };
@@ -184,11 +201,23 @@ export default async function DashboardPage({
    * satırlarını listelemesi demek olurdu — platform süzgecinde aynı karar
    * aynı gerekçeyle verildi.
    */
+  if (hesap) base.set('adAccountId', hesap);
   if (kampanya) base.set('campaignId', kampanya);
   if (reklamSeti) base.set('adGroupId', reklamSeti);
   const breakdownQs = new URLSearchParams(base);
-  breakdownQs.set('level', level);
+  if (varlik) breakdownQs.set('level', varlik);
   breakdownQs.set('limit', String(KIRILIM_LIMITI));
+  /*
+   * HESAP KIRILIMI HESAP SÜZGECİ TAŞIMIYOR: soru "hangi hesap ne harcıyor"
+   * ve şema `adAccountId` kabul etmiyor. Tarih, karşılaştırma ve mecra
+   * gidiyor.
+   */
+  const hesapQs = new URLSearchParams({ from: range.from, to: range.to });
+  if (range.compareFrom && range.compareTo) {
+    hesapQs.set('compareFrom', range.compareFrom);
+    hesapQs.set('compareTo', range.compareTo);
+  }
+  if (platform) hesapQs.set('platform', platform);
 
   // Bir uç noktanın düşmesi TÜM ekranı düşürmemeli: panel açılıp "veri
   // alınamadı" demeli, 500 sayfası göstermemeli.
@@ -241,7 +270,7 @@ export default async function DashboardPage({
    *
    * Sebep artık platformun KENDİ cümlesiyle ekranda; sayfa yine açılıyor.
    */
-  const [summary, series, breakdown, musteriler, sirketler, donusum, yol] =
+  const [summary, series, breakdown, musteriler, sirketler, donusum, yol, hesaplar] =
     await Promise.all([
     serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch((e: unknown) => {
       ozetHatasi = hataMetni(e);
@@ -253,7 +282,8 @@ export default async function DashboardPage({
       : Promise.resolve<MetricsTimeseries>({ points: [], previous: null }),
     // Üst katman görünümlerinde kampanya tablosu ÇEKİLMİYOR: gösterilmeyecek
     // bir sorguyu koşmak, en ağır sorgusu boşa giden bir ekran demekti.
-    mcc || ajansGorunumu
+    // MECRA VE HESAP BASAMAĞINDA kampanya kırılımı da çekilmiyor — aynı gerekçe.
+    mcc || ajansGorunumu || varlik === null
       ? Promise.resolve(null)
       : serverApiFetch<MetricsBreakdownRow[]>(`/metrics/breakdown?${breakdownQs}`).catch(
           () => null,
@@ -288,13 +318,17 @@ export default async function DashboardPage({
       : serverApiFetch<MetricsConversionDetail>(`/metrics/donusum-detay?${base}`).catch(
           () => null,
         ),
-    kampanya || reklamSeti
+    kampanya || reklamSeti || hesap
       ? serverApiFetch<MetricsHierarchyPath>(
           `/metrics/kirilim-yolu?${new URLSearchParams({
+            ...(hesap ? { adAccountId: hesap } : {}),
             ...(kampanya ? { campaignId: kampanya } : {}),
             ...(reklamSeti ? { adGroupId: reklamSeti } : {}),
           })}`,
         ).catch(() => null)
+      : Promise.resolve(null),
+    !mcc && !ajansGorunumu && varlik === null
+      ? serverApiFetch<MetricsAccountBreakdown>(`/metrics/hesaplar?${hesapQs}`).catch(() => null)
       : Promise.resolve(null),
   ]);
 
@@ -329,12 +363,48 @@ export default async function DashboardPage({
     basamaklar.push({ ad: sirketAdi, kapsam: { tip: 'sirket' } });
   }
   if (activeClient) {
-    // WORKSPACE BASAMAĞI ODAĞI TEMİZLİYOR: kampanyanın içinden workspace'e
-    // dönmenin yolu bu.
+    // WORKSPACE BASAMAĞI ODAĞI VE MECRAYI TEMİZLİYOR: kampanyanın ya da
+    // hesabın içinden workspace'in mecralarına dönmenin yolu bu.
     basamaklar.push({
       ad: activeClient.name,
-      sorgu: { kampanya: undefined, reklamSeti: undefined, seviye: 'campaign' },
+      sorgu: {
+        platform: undefined,
+        hesap: undefined,
+        kampanya: undefined,
+        reklamSeti: undefined,
+        seviye: 'mecra',
+      },
     });
+    /*
+     * MECRA VE HESAP BASAMAKLARI. Mecra hesaptan türetiliyor: kampanya
+     * bağlantısı mecrasız açıldığında da şerit hangi mecrada olunduğunu
+     * söylemeli (`kirilim-yolu` hesabı kampanyadan buluyor).
+     */
+    const seritMecrasi = yol?.adAccount?.platform ?? platform;
+    if (seritMecrasi) {
+      basamaklar.push({
+        ad: PLATFORM_KISA_ADLARI[seritMecrasi],
+        sorgu: {
+          platform: seritMecrasi,
+          hesap: undefined,
+          kampanya: undefined,
+          reklamSeti: undefined,
+          seviye: 'hesap',
+        },
+      });
+    }
+    if (yol?.adAccount) {
+      basamaklar.push({
+        ad: yol.adAccount.name,
+        sorgu: {
+          platform: yol.adAccount.platform,
+          hesap: yol.adAccount.id,
+          kampanya: undefined,
+          reklamSeti: undefined,
+          seviye: 'campaign',
+        },
+      });
+    }
   }
   if (yol?.campaign) {
     basamaklar.push({
@@ -392,7 +462,7 @@ export default async function DashboardPage({
         />
 
         <div className="flex flex-wrap items-center gap-2">
-          <PlatformTabs current={platform} tasinan={tasinan} />
+          <PlatformTabs current={platform} hesap={hesap} seviye={level} tasinan={tasinan} />
           <div className="flex flex-1 items-center justify-end gap-2">
             <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
             {/*
@@ -503,6 +573,18 @@ export default async function DashboardPage({
             ) : (
               <MusteriTablosu rows={musteriler} karsilastir={range.karsilastirma !== 'yok'} />
             )
+          ) : varlik === null ? (
+            hesaplar === null ? (
+              <Uyari ton="tehlike">Hesap dağılımı alınamadı.</Uyari>
+            ) : (
+              <HesapKirilimi
+                veri={hesaplar}
+                seviye={level as 'mecra' | 'hesap'}
+                platform={platform}
+                tasinan={tasinan}
+                siralama={siralama}
+              />
+            )
           ) : breakdown === null ? (
             <Uyari ton="tehlike">Dağılım verisi alınamadı.</Uyari>
           ) : (
@@ -524,7 +606,7 @@ export default async function DashboardPage({
                * kullanıcı bir platformu tabloda HİÇ göremezdi.
                */
               rows={kirilimSirala(breakdown, siralama)}
-              level={level}
+              level={varlik!}
               tasinan={tasinan}
               currency={summary.currency}
               siralama={siralama}
@@ -677,9 +759,13 @@ function SecondaryStrip({
  */
 function PlatformTabs({
   current,
+  hesap,
+  seviye,
   tasinan,
 }: {
   current: Platform | null;
+  hesap: string | undefined;
+  seviye: PanelSeviyesi;
   tasinan: Record<string, string | undefined>;
 }) {
   /*
@@ -698,7 +784,13 @@ function PlatformTabs({
         return (
           <Link
             key={o.label}
-            href={baglanti('/dashboard', tasinan, { platform: o.key ?? undefined })}
+            // Mecra değişince hesap düşüyor: hesap tek mecraya ait
+            // (`platformSekmesiSorgusu`).
+            href={baglanti(
+              '/dashboard',
+              tasinan,
+              platformSekmesiSorgusu(o.key, { platform: current, hesap, seviye }),
+            )}
             aria-current={active ? 'page' : undefined}
             className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
               active ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
@@ -768,12 +860,4 @@ function resolvePlatform(raw: string | undefined): Platform | null {
    * kayboluyor" hatasının aynısı.
    */
   return PLATFORMS.find((p) => p === raw) ?? null;
-}
-
-function resolveLevel(raw: string | undefined): MetricLevel {
-  // `account` sekmesi YOK: hesap seviyesi zaten üstteki kartlar. Tabloda
-  // göstermek aynı sayıyı iki kez göstermek olurdu.
-  return METRIC_LEVELS.includes(raw as MetricLevel) && raw !== 'account'
-    ? (raw as MetricLevel)
-    : 'campaign';
 }

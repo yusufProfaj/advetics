@@ -58,14 +58,21 @@ describe('ODAK ÜÇ SORGUYA DA GİDİYOR', () => {
     expect(blok).toContain('reklamSeti,');
   });
 
-  it('KRİTİK: odaklıyken seviye bir ALT basamağa çekiliyor', () => {
+  it('KRİTİK: seviye TEK karardan — odak kuralı `panelSeviyesiCoz`da', () => {
     /*
-     * Bir kampanyanın içindeyken "kampanya" seviyesi anlamsız: kartlar tek
-     * kampanyayı gösterirken tablo bütün kampanyaları listelerdi. Arayüzde
-     * bu hâle düşmenin yolu yok ama adres elle yazılabiliyor.
+     * Bir kampanyanın içindeyken "kampanya" seviyesi anlamsız. Kural saf
+     * fonksiyona taşındı ve orada ÇALIŞTIRILARAK sınanıyor
+     * (`lib/genel-bakis-seviyesi.spec.ts`); burada sayfanın onu kullandığı
+     * ve kendi koşul zincirini yeniden yazmadığı kilitleniyor.
      */
-    expect(SAYFA).toContain("reklamSeti\n    ? 'ad'");
-    expect(SAYFA).toContain("? 'ad_group'");
+    expect(SAYFA).toContain('const level = panelSeviyesiCoz({');
+    expect(SAYFA).not.toContain("reklamSeti\n    ? 'ad'");
+  });
+
+  it('KRİTİK: hesap süzgeci sorgulara ve taşınan süzgeçlere giriyor', () => {
+    expect(SAYFA).toContain("if (hesap) base.set('adAccountId', hesap);");
+    const blok = SAYFA.slice(SAYFA.indexOf('const tasinan = {'), SAYFA.indexOf('const base ='));
+    expect(blok).toContain('hesap,');
   });
 });
 
@@ -105,10 +112,34 @@ describe('EKMEK KIRINTISI', () => {
     expect(SAYFA).toContain('<HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} />');
   });
 
-  it('KRİTİK: workspace basamağı ODAĞI TEMİZLİYOR', () => {
-    // Kampanyanın içinden workspace'e dönmenin yolu bu; odak kalsaydı
-    // "yukarı çık" hiçbir şey yapmazdı.
-    expect(SAYFA).toContain("sorgu: { kampanya: undefined, reklamSeti: undefined, seviye: 'campaign' }");
+  it('KRİTİK: workspace basamağı ODAĞI, HESABI ve MECRAYI TEMİZLİYOR', () => {
+    // Kampanyanın ya da hesabın içinden workspace'in mecralarına dönmenin
+    // yolu bu; süzgeç kalsaydı "yukarı çık" hiçbir şey yapmazdı.
+    const i = SAYFA.indexOf('ad: activeClient.name,');
+    const dilim = SAYFA.slice(i, SAYFA.indexOf('},\n    });', i));
+    expect(dilim.length, 'workspace basamağı bulunamadı').toBeGreaterThan(50);
+    for (const k of ['platform: undefined', 'hesap: undefined', 'kampanya: undefined', 'reklamSeti: undefined', "seviye: 'mecra'"]) {
+      expect(dilim).toContain(k);
+    }
+  });
+
+  it('KRİTİK: hesap basamağı kampanya odağını düşürüp hesabın kampanyalarına dönüyor', () => {
+    const i = SAYFA.indexOf('ad: yol.adAccount.name,');
+    const dilim = SAYFA.slice(i, SAYFA.indexOf('},\n      });', i));
+    expect(dilim.length, 'hesap basamağı bulunamadı').toBeGreaterThan(50);
+    expect(dilim).toContain('hesap: yol.adAccount.id');
+    expect(dilim).toContain('kampanya: undefined');
+    expect(dilim).toContain("seviye: 'campaign'");
+  });
+
+  it('KRİTİK: mecra ve hesap sekmeleri düşürdüklerini taşıyor', () => {
+    expect(TABLO).toContain("key: 'mecra',");
+    expect(TABLO).toContain(
+      "dusen: { platform: undefined, hesap: undefined, kampanya: undefined, reklamSeti: undefined },",
+    );
+    expect(TABLO).toContain(
+      "{ key: 'hesap', label: 'Hesap', dusen: { hesap: undefined, kampanya: undefined, reklamSeti: undefined } },",
+    );
   });
 
   it('KRİTİK: kampanya basamağı REKLAM SETİNİ düşürüyor', () => {
@@ -143,5 +174,33 @@ describe('EKMEK KIRINTISI', () => {
      * zaman görmeli.
      */
     expect(SAYFA).toContain('/metrics/kirilim-yolu?');
+  });
+});
+
+describe('MECRA VE HESAP TABLOSU', () => {
+  const HESAP_TABLOSU = kod('components/hesap-kirilimi.tsx');
+
+  it('KRİTİK: hesap satırı hesabın KAMPANYALARINA iniyor', () => {
+    const i = HESAP_TABLOSU.indexOf('hesap: a.adAccountId,');
+    expect(i, 'hesap satırının hedefi bulunamadı').toBeGreaterThan(0);
+    const dilim = HESAP_TABLOSU.slice(HESAP_TABLOSU.lastIndexOf('hedef: {', i), HESAP_TABLOSU.indexOf('}', i));
+    expect(dilim).toContain('platform: a.platform');
+    expect(dilim).toContain("seviye: 'campaign'");
+    expect(dilim).toContain('kampanya: undefined');
+  });
+
+  it('KRİTİK: mecra satırı o mecranın HESAPLARINA iniyor ve eski hesabı düşürüyor', () => {
+    const i = HESAP_TABLOSU.indexOf('platform: p.platform,\n            seviye: \'hesap\',');
+    expect(i, 'mecra satırının hedefi bulunamadı').toBeGreaterThan(0);
+    const dilim = HESAP_TABLOSU.slice(i, HESAP_TABLOSU.indexOf('}', i));
+    expect(dilim).toContain('hesap: undefined');
+  });
+
+  it('KRİTİK: izlenmeyen hesap BAĞLANTI DEĞİL — içi boş bir listeye götürürdü', () => {
+    expect(HESAP_TABLOSU).toContain('{r.izleniyor ? (\n                          <Link');
+  });
+
+  it('sayfa mecra/hesap basamağında hesap kırılımını çekiyor', () => {
+    expect(SAYFA).toMatch(/varlik === null\s*\n?\s*\? serverApiFetch<MetricsAccountBreakdown>\(`\/metrics\/hesaplar\?\$\{hesapQs\}`\)/);
   });
 });

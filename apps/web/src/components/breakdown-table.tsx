@@ -10,6 +10,7 @@ import { DeltaRozeti } from '@/components/delta-rozeti';
 import { PlatformLogo } from '@/components/platform-logo';
 import { SIRALAMA_YONU, type Siralama } from '@/lib/kirilim-siralama';
 import type { MetricsBreakdownRow, MetricLevel, Platform } from '@advetics/shared';
+import type { PanelSeviyesi } from '@/lib/genel-bakis-seviyesi';
 import {
   formatDecimal,
   formatMoney,
@@ -32,11 +33,27 @@ import {
  *   · Reklam seti → kampanyayı koru, reklam setini düşür
  *   · Reklam      → ikisini de koru
  */
+/*
+ * MECRA VE HESAP SEKMELERİ (2026-10-02): workspace › mecra › hesap ›
+ * kampanya. İkisi `insights_daily` seviyesi değil, kampanya toplamları
+ * (`genel-bakis-seviyesi.ts`) ve tabloları `HesapKirilimi`. Sekmeler İKİ
+ * tabloda da AYNI listeden çiziliyor: iki ayrı sekme şeridi, birine eklenen
+ * basamağın öbüründe eksik kalması demekti.
+ *
+ *   · Mecra → mecra ve hesap süzgecini de düşür (workspace'in mecraları)
+ *   · Hesap → hesabı düşür, mecrayı koru (o mecranın hesapları)
+ */
 const LEVEL_TABS: Array<{
-  key: MetricLevel;
+  key: PanelSeviyesi;
   label: string;
   dusen: Record<string, undefined>;
 }> = [
+  {
+    key: 'mecra',
+    label: 'Mecra',
+    dusen: { platform: undefined, hesap: undefined, kampanya: undefined, reklamSeti: undefined },
+  },
+  { key: 'hesap', label: 'Hesap', dusen: { hesap: undefined, kampanya: undefined, reklamSeti: undefined } },
   { key: 'campaign', label: 'Kampanya', dusen: { kampanya: undefined, reklamSeti: undefined } },
   { key: 'ad_group', label: 'Reklam seti', dusen: { reklamSeti: undefined } },
   { key: 'ad', label: 'Reklam', dusen: {} },
@@ -102,7 +119,8 @@ export function BreakdownTable({
   range,
 }: {
   rows: MetricsBreakdownRow[];
-  level: MetricLevel;
+  /** `account` bu tabloda yok: hesap basamağı `HesapKirilimi`. */
+  level: Exclude<MetricLevel, 'account'>;
   tasinan: Record<string, string | undefined>;
   currency: string | null;
   /** Ekrandaki sıra — satır KÜMESİNİ değiştirmiyor, bkz. `kirilim-siralama.ts`. */
@@ -147,28 +165,7 @@ export function BreakdownTable({
 
   return (
     <section className="rounded-xl border border-line bg-surface">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <h3 className="text-sm font-semibold text-ink">Performans dağılımı</h3>
-        <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Kırılım seviyesi">
-          {LEVEL_TABS.map((tab) => (
-            <Link
-              key={tab.key}
-              // TAŞINAN SÜZGEÇLERLE. Eskiden yalnızca `aralik` yazılıyordu ve
-              // `platform` DÜŞÜYORDU: "Meta" seçip seviye değiştiren kullanıcı
-              // sessizce bütün platformlara dönüyordu.
-              href={baglanti('/dashboard', tasinan, { seviye: tab.key, ...tab.dusen })}
-              aria-current={level === tab.key ? 'page' : undefined}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                level === tab.key
-                  ? 'bg-surface text-ink shadow-sm'
-                  : 'text-ink-muted hover:text-ink'
-              }`}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
-      </header>
+      <TabloBasligi seviye={level} tasinan={tasinan} />
 
       {rows.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-ink-muted">
@@ -398,6 +395,40 @@ export function BreakdownTable({
 }
 
 /**
+ * Tablonun başlığı ve seviye sekmeleri — `HesapKirilimi` de bunu çiziyor.
+ */
+export function TabloBasligi({
+  seviye,
+  tasinan,
+}: {
+  seviye: PanelSeviyesi;
+  tasinan: Record<string, string | undefined>;
+}) {
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+      <h3 className="text-sm font-semibold text-ink">Performans dağılımı</h3>
+      <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Kırılım seviyesi">
+        {LEVEL_TABS.map((tab) => (
+          <Link
+            key={tab.key}
+            // TAŞINAN SÜZGEÇLERLE. Eskiden yalnızca `aralik` yazılıyordu ve
+            // `platform` DÜŞÜYORDU: "Meta" seçip seviye değiştiren kullanıcı
+            // sessizce bütün platformlara dönüyordu.
+            href={baglanti('/dashboard', tasinan, { seviye: tab.key, ...tab.dusen })}
+            aria-current={seviye === tab.key ? 'page' : undefined}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+              seviye === tab.key ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
+    </header>
+  );
+}
+
+/**
  * SIRALANABİLİR SÜTUN BAŞLIĞI — LİNK, BUTON DEĞİL.
  *
  * Seçim URL'de duruyor: sayfa sunucu bileşeni kalıyor, bağlantı
@@ -409,7 +440,7 @@ export function BreakdownTable({
  * zaten doğru bir yönü var ve CPA'nınki diğerlerinin TERSİ — göstermeden
  * bırakmak, kullanıcının "en pahalı CPA" beklerken en ucuzu görmesi demekti.
  */
-function SiraliBaslik({
+export function SiraliBaslik({
   etiket,
   anahtar,
   aktif,
@@ -452,7 +483,7 @@ function SiraliBaslik({
  * ekranda platform sekmeleriyle birlikte duruyor ve oradaki işaretlerle
  * eşleşmesi gerekiyor).
  */
-function Mecra({ platform }: { platform: Platform }) {
+export function Mecra({ platform }: { platform: Platform }) {
   return (
     <span className="flex items-center gap-1.5">
       <PlatformLogo kind={platformKanali(platform)} className="h-3.5 w-3.5 shrink-0" />
@@ -480,7 +511,7 @@ function StatusPill({ status }: { status: string }) {
  * ya da sıfırsa karşılaştırma TANIMSIZ. "%0" ya da "%100" göstermek ikisi de
  * yanlış olurdu ve yeni açılmış her varlık "-%100" görünürdü.
  */
-function Delta({
+export function Delta({
   simdi,
   once,
   inverse,
@@ -506,7 +537,7 @@ function Delta({
 }
 
 /** Micros string'i sayıya — oran hesabı için; gösterimde kullanılmıyor. */
-function mikroSayi(micros: string | null | undefined): number | null {
+export function mikroSayi(micros: string | null | undefined): number | null {
   if (micros === null || micros === undefined) return null;
   try {
     return Number(BigInt(micros)) / 1_000_000;

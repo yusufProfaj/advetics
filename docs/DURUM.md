@@ -765,6 +765,32 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-02 — Genel Bakış: workspace › mecra › hesap › kampanya
+
+Kullanıcı isteği: workspace seçilince tablo doğrudan kampanya listeliyordu;
+önce mecra (Meta / Google / LinkedIn), mecraya tıklayınca o mecranın
+workspace'e atanmış hesapları, hesaba tıklayınca o hesabın kampanyaları ve
+alt kırılımlar.
+
+- **Yeni uç `GET /metrics/hesaplar`** (`byAccount`): hesap ve mecra
+  satırları tek taramadan. Seviye `TOTALS_LEVEL` (kampanya), `account`
+  DEĞİL: LinkedIn'de hesap seviyesi metrik hiç çekilmiyor, o seviyeden
+  okumak LinkedIn satırını hep boş gösterirdi. Hesap listesi ATAMADAN
+  geliyor: harcaması olmayan ve izlemesi kapalı hesap da listede (izlenmeyen
+  "İzlenmiyor" yazıyor, bağlantı değil). Havuz ve başka workspace girmiyor.
+  `hesap-kirilimi.spec.ts` gerçek veritabanıyla; üç mutasyon düştü (seviye
+  süzgeci, workspace kapsamı, ekmek kırıntısında hesabın önceliği).
+- **Adres:** `?platform=` mecra, `?hesap=<uuid>` hesap. Kartlar, grafik,
+  kampanya tablosu ve dönüşüm detayı hesaba daralıyor (`adAccountId`
+  zaten destekleniyordu, panel göndermiyordu). Seviye kararı saf
+  fonksiyonda (`lib/genel-bakis-seviyesi.ts`), çalıştırılarak sınanıyor.
+  Sekmeler: Mecra · Hesap · Kampanya · Reklam seti · Reklam; "Kampanya"
+  sekmesi hesapsız workspace'in bütün kampanyalarını göstermeye devam ediyor.
+- **Ekmek kırıntısı:** workspace › Meta › hesap adı › kampanya › set. Hesap
+  kampanyadan türetiliyor (`kirilim-yolu`), yani eski kampanya bağlantıları
+  da hesabı gösteriyor. Mecra sekmesi değişince hesap düşüyor.
+- Tarayıcıda açılıp bakılmadı (yerelde veri yok); deploy sonrası gezilmeli.
+
 ### 2026-10-01 — Google gün içi metriği saatlik; kota doğrulaması geçti
 
 `olcum-google-kota --gun=1` (54 izlenen Google hesabı): `insights_daily`

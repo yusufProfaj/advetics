@@ -81,7 +81,8 @@ describe('MCC koşulu', () => {
     //
     // AJANS GÖRÜNÜMÜ DE ATLIYOR: orada da kampanya tablosu gösterilmiyor.
     expect(SAYFA_KOD.slice(0, i)).toMatch(
-      /mcc \|\| ajansGorunumu\s*\n?\s*\? Promise\.resolve\(null\)/,
+      // MECRA/HESAP BASAMAĞI DA (`varlik === null`): orada tablo hesap kırılımı.
+      /mcc \|\| ajansGorunumu \|\| varlik === null\s*\n?\s*\? Promise\.resolve\(null\)/,
     );
   });
 

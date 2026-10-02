@@ -6,7 +6,10 @@ import type {
   HierarchyPathQuery,
   MetricsConversionDetail,
   MetricsHierarchyPath,
+  AccountBreakdownQuery,
   ClientBreakdownQuery,
+  MetricsAccountBreakdown,
+  MetricsAccountRow,
   MetricsClientRow,
   MetricsOrganizationRow,
   BreakdownQuery,
@@ -476,14 +479,32 @@ export class MetricsService {
 
       const kampanyaId = set?.campaign_id ?? query.campaignId ?? null;
       const [kampanya] = kampanyaId
-        ? await tx.$queryRaw<Array<{ id: string; name: string }>>(
+        ? await tx.$queryRaw<Array<{ id: string; name: string; ad_account_id: string }>>(
             Prisma.sql`
-              SELECT id::text AS id, name FROM campaigns WHERE id = ${kampanyaId}::uuid
+              SELECT id::text AS id, name, ad_account_id::text AS ad_account_id
+              FROM campaigns WHERE id = ${kampanyaId}::uuid
+            `,
+          )
+        : [];
+
+      /*
+       * HESAP KAMPANYADAN TÜRETİLİYOR, adres ikinci sırada. Kampanya
+       * bağlantısı hesapsız paylaşılabiliyor (eski bağlantılar böyle) ve
+       * şerit yine de hangi hesabın içinde olunduğunu söylemeli. İkisi
+       * çelişirse kampanyanın gerçek hesabı kazanıyor: adresteki eski bir
+       * hesap kimliği şeride yanlış ad yazdırmamalı.
+       */
+      const hesapId = kampanya?.ad_account_id ?? query.adAccountId ?? null;
+      const [hesap] = hesapId
+        ? await tx.$queryRaw<Array<{ id: string; name: string; platform: Platform }>>(
+            Prisma.sql`
+              SELECT id::text AS id, name, platform FROM ad_accounts WHERE id = ${hesapId}::uuid
             `,
           )
         : [];
 
       return {
+        adAccount: hesap ? { id: hesap.id, name: hesap.name, platform: hesap.platform } : null,
         campaign: kampanya ? { id: kampanya.id, name: kampanya.name } : null,
         adGroup: set ? { id: set.id, name: set.name } : null,
       };
@@ -863,6 +884,180 @@ export class MetricsService {
         ${accountFilter}
     `);
     return Number(row?.n ?? 0);
+  }
+
+  /**
+   * ═══ MECRA VE HESAP KIRILIMI — WORKSPACE'İN İLK İKİ BASAMAĞI ═══
+   *
+   * `byClient` ile aynı iskelet, BİR ALT KATMAN: metrik taraması hesap
+   * başına gruplanıyor, hesap listesi AYRI soruluyor ve ikisi JS'te
+   * birleşiyor. Join etmek harcaması olmayan hesabı ekrandan düşürürdü.
+   *
+   * SEVİYE `TOTALS_LEVEL` (kampanya), `account` DEĞİL. Hesap satırı
+   * hesap seviyesi metrikten okunsaydı LinkedIn'de hep boş çıkardı:
+   * LinkedIn'de hesap seviyesinin karşılığı yok ve o seviye hiç çekilmiyor
+   * (`platform-isleri.ts`). Google'ın hesap seviyesi de farklı davranıyor.
+   * Kampanya satırlarını hesaba göre toplamak üç mecrada da aynı sonucu
+   * veriyor ve üstteki kartlarla birebir tutuyor.
+   *
+   * MECRA SATIRI HESAP SATIRLARINDAN TÜRETİLİYOR, ayrıca sorulmuyor.
+   */
+  async byAccount(
+    ctx: TenantContext,
+    query: AccountBreakdownQuery,
+  ): Promise<MetricsAccountBreakdown> {
+    const karsilastir = query.compareFrom !== undefined && query.compareTo !== undefined;
+    const prevTo = karsilastir ? query.compareTo! : query.from;
+    const pencereBasi = karsilastir ? query.compareFrom! : query.from;
+
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx), 'i');
+      const rows = await tx.$queryRaw<
+        Array<
+          RawTotals & {
+            prev_impressions: string | number | null;
+            prev_clicks: string | number | null;
+            prev_spend_micros: string | number | bigint | null;
+            prev_conversions: string | number | null;
+            prev_conversion_value_micros: string | number | bigint | null;
+            ad_account_id: string;
+            currency: string;
+          }
+        >
+      >(
+        Prisma.sql`
+          SELECT i.ad_account_id::text AS ad_account_id, i.currency,
+                 -- TEK TARAMA, IKI PENCERE — kirilim ucuyla ayni desen.
+                 SUM(i.impressions) FILTER (WHERE i.date >= ${query.from}::date) AS impressions,
+                 SUM(i.clicks) FILTER (WHERE i.date >= ${query.from}::date) AS clicks,
+                 SUM(i.spend_micros) FILTER (WHERE i.date >= ${query.from}::date) AS spend_micros,
+                 SUM(i.conversions) FILTER (WHERE i.date >= ${query.from}::date) AS conversions,
+                 SUM(i.conversion_value_micros) FILTER (WHERE i.date >= ${query.from}::date)
+                   AS conversion_value_micros,
+                 SUM(i.impressions) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_impressions,
+                 SUM(i.clicks) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_clicks,
+                 SUM(i.spend_micros) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_spend_micros,
+                 SUM(i.conversions) FILTER (WHERE i.date <= ${prevTo}::date) AS prev_conversions,
+                 SUM(i.conversion_value_micros) FILTER (WHERE i.date <= ${prevTo}::date)
+                   AS prev_conversion_value_micros
+          FROM insights_daily i
+          WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
+            AND i.entity_level = ${TOPLAM_SEVIYESI}
+            ${filters}
+          GROUP BY i.ad_account_id, i.currency
+        `,
+      );
+
+      /*
+       * HESAP LİSTESİ ATAMADAN. Kapsam metrik süzgeciyle AYNI küme
+       * (`filters()` içindeki kural): seçili workspace, yoksa erişilen
+       * workspace'ler. `client_id IS NOT NULL` ANY ile zaten sağlanıyor —
+       * havuz satırları bu listeye giremez (CLAUDE.md "HAVUZ SATIRLARI
+       * MÜŞTERİ-KAPSAMLI SAYIMA GİRMEZ").
+       */
+      const kapsam = ctx.activeClientId ? [ctx.activeClientId] : ctx.clientIds;
+      const platformFiltresi = query.platform
+        ? Prisma.sql`AND platform = ${query.platform}::"Platform"`
+        : Prisma.empty;
+      const hesaplar = await tx.$queryRaw<
+        Array<{
+          id: string;
+          external_id: string;
+          name: string;
+          platform: Platform;
+          currency: string;
+          sync_enabled: boolean;
+          status: string;
+        }>
+      >(
+        Prisma.sql`
+          SELECT id::text AS id, external_id, name, platform, currency, sync_enabled,
+                 status::text AS status
+          FROM ad_accounts
+          WHERE client_id = ANY(${kapsam}::uuid[])
+            ${platformFiltresi}
+          ORDER BY name ASC
+        `,
+      );
+
+      const hesapSatirlari = new Map<string, typeof rows>();
+      for (const r of rows) {
+        const liste = hesapSatirlari.get(r.ad_account_id) ?? [];
+        liste.push(r);
+        hesapSatirlari.set(r.ad_account_id, liste);
+      }
+
+      const accounts: MetricsAccountRow[] = hesaplar.map((h) => {
+        const satirlar = hesapSatirlari.get(h.id) ?? [];
+        const onceki = this.topla(satirlar.map(oncekiSatir));
+        /*
+         * METRİĞİ YOKSA HESABIN KENDİ PARA BİRİMİ. Harcaması olmayan bir
+         * hesabı "para birimi bilinmiyor" diye karışık göstermek yanlış
+         * olurdu; sıfır, hesabın kendi biriminde sıfır.
+         */
+        const birimler = satirlar.length > 0 ? [...new Set(satirlar.map((r) => r.currency))].sort() : [h.currency];
+        return {
+          adAccountId: h.id,
+          externalId: h.external_id,
+          name: h.name,
+          platform: h.platform,
+          currency: birimler.length === 1 ? birimler[0]! : null,
+          currencies: birimler,
+          syncEnabled: h.sync_enabled,
+          status: h.status,
+          ...this.totals(this.topla(satirlar)),
+          previous: karsilastir && this.hasData(onceki) ? this.totals(onceki) : null,
+        };
+      });
+      accounts.sort(harcamayaGore);
+
+      type Birikim = {
+        platform: Platform;
+        hesap: number;
+        izlenmeyen: number;
+        birimler: Set<string>;
+        cari: RawTotals[];
+        onceki: RawTotals[];
+      };
+      const mecralar = new Map<Platform, Birikim>();
+      for (const h of hesaplar) {
+        const b =
+          mecralar.get(h.platform) ??
+          { platform: h.platform, hesap: 0, izlenmeyen: 0, birimler: new Set<string>(), cari: [], onceki: [] };
+        b.hesap++;
+        if (!h.sync_enabled) b.izlenmeyen++;
+        const satirlar = hesapSatirlari.get(h.id) ?? [];
+        if (satirlar.length === 0) b.birimler.add(h.currency);
+        for (const r of satirlar) {
+          b.birimler.add(r.currency);
+          b.cari.push(r);
+          b.onceki.push(oncekiSatir(r));
+        }
+        mecralar.set(h.platform, b);
+      }
+
+      const platforms = [...mecralar.values()]
+        .map((b) => {
+          const onceki = this.topla(b.onceki);
+          const birimler = [...b.birimler].sort();
+          return {
+            platform: b.platform,
+            currency: birimler.length === 1 ? birimler[0]! : null,
+            currencies: birimler,
+            accountCount: b.hesap,
+            unmonitoredCount: b.izlenmeyen,
+            ...this.totals(this.topla(b.cari)),
+            previous: karsilastir && this.hasData(onceki) ? this.totals(onceki) : null,
+          };
+        })
+        .sort((a, z) => {
+          const fark = BigInt(z.spendMicros) - BigInt(a.spendMicros);
+          if (fark !== 0n) return fark > 0n ? 1 : -1;
+          return a.platform.localeCompare(z.platform);
+        });
+
+      return { platforms, accounts };
+    }, { timeoutMs: OKUMA_SURESI_MS });
   }
 
   /**
@@ -1324,6 +1519,17 @@ export class MetricsService {
     d.setUTCDate(d.getUTCDate() + days);
     return d.toISOString().slice(0, 10);
   }
+}
+
+/**
+ * Harcamaya göre azalan, eşitlikte ada göre. Harcaması olmayan hesaplar
+ * sonda ve DÜŞMÜYOR: "atandı, harcamıyor" bu ekranın cevaplaması gereken
+ * bir hâl.
+ */
+function harcamayaGore(a: { spendMicros: string; name: string }, z: { spendMicros: string; name: string }): number {
+  const fark = BigInt(z.spendMicros) - BigInt(a.spendMicros);
+  if (fark !== 0n) return fark > 0n ? 1 : -1;
+  return a.name.localeCompare(z.name, 'tr');
 }
 
 /** Ham satırın ÖNCEKİ dönem sütunlarını `RawTotals` şekline çevirir. */
