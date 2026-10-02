@@ -765,6 +765,17 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-02 — Genel Bakış: mecra basamağı kalktı, tek "Reklam Hesapları"
+
+Kullanıcı aynı gün sadeleştirdi: ayrı mecra basamağı yok; seviye sekmelerinin
+başında **Reklam Hesapları**, her satır mecra ikonu + WORKSPACE ADI (hesabın
+platformdaki adı alt satırda — aynı mecrada iki hesap aynı workspace adını
+taşırdı). Workspace açılınca bu sekme açık geliyor, hesaba tıklayınca
+kampanyalar. Ekmek kırıntısı workspace › "Meta Ads · hesap adı" › kampanya.
+`/metrics/hesaplar` satırı `clientName` taşıyor (`clients` LEFT JOIN — süsleme
+alanı satırı süzmemeli). Eski `seviye=mecra` bağlantıları hesap listesine
+düşüyor. Uç `platforms` dizisini hâlâ dönüyor; panel okumuyor.
+
 ### 2026-10-02 — Genel Bakış: workspace › mecra › hesap › kampanya
 
 Kullanıcı isteği: workspace seçilince tablo doğrudan kampanya listeliyordu;

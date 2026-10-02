@@ -9,7 +9,7 @@
 **Son güncelleme:** 2026-10-02 · **Canlı:** Akıllı Boost Facebook ayrımı +
 migration ve Reklam Keşfi menü sayıları dahil (ikisi de canlıda doğrulandı).
 **Bekleyen deploy (migration yok):** Akıllı Boost mecra etiketi, Google gün
-içi metriği saatlik, Genel Bakış mecra › hesap kırılımı.
+içi metriği saatlik, Genel Bakış "Reklam Hesapları" basamağı.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;
@@ -64,8 +64,8 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
 ## Sıradaki iş (sırayla)
 
-0. **Genel Bakış mecra › hesap kırılımı deploy sonrası gözle:** bir
-   workspace aç → Mecra tablosu → Meta → hesap listesi → hesap → kampanya →
+0. **Genel Bakış "Reklam Hesapları" deploy sonrası gözle:** bir workspace
+   aç → Reklam Hesapları (mecra ikonu + workspace adı) → hesap → kampanya →
    set → reklam; ekmek kırıntısıyla geri çık. LinkedIn hesabı satırının
    rakamlı geldiğine, izlenmeyen hesabın "İzlenmiyor" yazdığına bak.
 1. **Google kota doğrulaması GEÇTİ** (2026-10-01): günlük iş hesap başına

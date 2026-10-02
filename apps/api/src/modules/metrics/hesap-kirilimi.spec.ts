@@ -147,6 +147,15 @@ describe('hesap satırları', () => {
     expect(adlar).toHaveLength(4);
   });
 
+  it('satır workspace adını taşıyor (ana etiket)', async () => {
+    const r = await svc.byAccount(CTX, ARALIK);
+    const ad = (await h.q(`SELECT name FROM clients WHERE id = $1`, [IDS.client])) as unknown as
+      | { rows: Array<{ name: string }> }
+      | Array<{ name: string }>;
+    const beklenen = Array.isArray(ad) ? ad[0]!.name : ad.rows[0]!.name;
+    expect(r.accounts.every((a) => a.clientName === beklenen)).toBe(true);
+  });
+
   it('harcamaya göre sıralı, harcamasızlar sonda ada göre', async () => {
     const r = await svc.byAccount(CTX, ARALIK);
     expect(r.accounts.map((a) => a.name)).toEqual([

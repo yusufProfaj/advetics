@@ -131,7 +131,7 @@ export default async function DashboardPage({
   const kampanya = first(params.kampanya);
   const reklamSeti = first(params.reklamSeti);
   /*
-   * HESAP: mecra › HESAP › kampanya basamağı. Kartlar, grafik ve tablo o
+   * HESAP: workspace › HESAP › kampanya basamağı. Kartlar, grafik ve tablo o
    * hesaba daralıyor — kampanya odağıyla aynı gerekçe.
    */
   const hesap = hesapCoz(first(params.hesap));
@@ -146,12 +146,11 @@ export default async function DashboardPage({
    */
   const level = panelSeviyesiCoz({
     seviye: first(params.seviye),
-    platform,
     hesap,
     kampanya,
     reklamSeti,
   });
-  /** `null` = mecra ya da hesap basamağı: tablo `/metrics/hesaplar`tan. */
+  /** `null` = reklam hesapları basamağı: tablo `/metrics/hesaplar`tan. */
   const varlik = varlikSeviyesi(level);
 
   /*
@@ -282,7 +281,7 @@ export default async function DashboardPage({
       : Promise.resolve<MetricsTimeseries>({ points: [], previous: null }),
     // Üst katman görünümlerinde kampanya tablosu ÇEKİLMİYOR: gösterilmeyecek
     // bir sorguyu koşmak, en ağır sorgusu boşa giden bir ekran demekti.
-    // MECRA VE HESAP BASAMAĞINDA kampanya kırılımı da çekilmiyor — aynı gerekçe.
+    // HESAP BASAMAĞINDA kampanya kırılımı da çekilmiyor — aynı gerekçe.
     mcc || ajansGorunumu || varlik === null
       ? Promise.resolve(null)
       : serverApiFetch<MetricsBreakdownRow[]>(`/metrics/breakdown?${breakdownQs}`).catch(
@@ -363,8 +362,8 @@ export default async function DashboardPage({
     basamaklar.push({ ad: sirketAdi, kapsam: { tip: 'sirket' } });
   }
   if (activeClient) {
-    // WORKSPACE BASAMAĞI ODAĞI VE MECRAYI TEMİZLİYOR: kampanyanın ya da
-    // hesabın içinden workspace'in mecralarına dönmenin yolu bu.
+    // WORKSPACE BASAMAĞI ODAĞI, HESABI VE MECRAYI TEMİZLİYOR: kampanyanın ya
+    // da hesabın içinden workspace'in bütün reklam hesaplarına dönmenin yolu.
     basamaklar.push({
       ad: activeClient.name,
       sorgu: {
@@ -372,30 +371,18 @@ export default async function DashboardPage({
         hesap: undefined,
         kampanya: undefined,
         reklamSeti: undefined,
-        seviye: 'mecra',
+        seviye: 'hesap',
       },
     });
     /*
-     * MECRA VE HESAP BASAMAKLARI. Mecra hesaptan türetiliyor: kampanya
-     * bağlantısı mecrasız açıldığında da şerit hangi mecrada olunduğunu
-     * söylemeli (`kirilim-yolu` hesabı kampanyadan buluyor).
+     * HESAP BASAMAĞI. Hesap kampanyadan türetiliyor (`kirilim-yolu`):
+     * kampanya bağlantısı hesapsız açıldığında da şerit hangi hesabın içinde
+     * olunduğunu söylemeli. Mecra adı basamağın içinde — ayrı bir mecra
+     * basamağı kullanıcı kararıyla kalktı.
      */
-    const seritMecrasi = yol?.adAccount?.platform ?? platform;
-    if (seritMecrasi) {
-      basamaklar.push({
-        ad: PLATFORM_KISA_ADLARI[seritMecrasi],
-        sorgu: {
-          platform: seritMecrasi,
-          hesap: undefined,
-          kampanya: undefined,
-          reklamSeti: undefined,
-          seviye: 'hesap',
-        },
-      });
-    }
     if (yol?.adAccount) {
       basamaklar.push({
-        ad: yol.adAccount.name,
+        ad: `${PLATFORM_KISA_ADLARI[yol.adAccount.platform]} · ${yol.adAccount.name}`,
         sorgu: {
           platform: yol.adAccount.platform,
           hesap: yol.adAccount.id,
@@ -579,7 +566,6 @@ export default async function DashboardPage({
             ) : (
               <HesapKirilimi
                 veri={hesaplar}
-                seviye={level as 'mecra' | 'hesap'}
                 platform={platform}
                 tasinan={tasinan}
                 siralama={siralama}

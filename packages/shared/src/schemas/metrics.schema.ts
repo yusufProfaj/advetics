@@ -677,6 +677,13 @@ export interface MetricsAccountRow extends MetricTotals {
   adAccountId: string;
   externalId: string;
   name: string;
+  /**
+   * Hesabın atandığı workspace. Satırın ana etiketi bu (kullanıcı kararı,
+   * 2026-10-02: "Meta ikonu - Workspace adı"); hesabın platformdaki adı
+   * alt satırda. Workspace seçili değilken liste birden çok workspace'in
+   * hesaplarını taşıyabiliyor, o yüzden ad satırdan geliyor, oturumdan değil.
+   */
+  clientName: string;
   platform: (typeof PLATFORMS)[number];
   /** Karışık para birimi hâlinde `null` — müşteri satırındaki kuralın aynısı. */
   currency: string | null;

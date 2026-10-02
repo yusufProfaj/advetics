@@ -34,14 +34,13 @@ import {
  *   · Reklam      → ikisini de koru
  */
 /*
- * MECRA VE HESAP SEKMELERİ (2026-10-02): workspace › mecra › hesap ›
- * kampanya. İkisi `insights_daily` seviyesi değil, kampanya toplamları
- * (`genel-bakis-seviyesi.ts`) ve tabloları `HesapKirilimi`. Sekmeler İKİ
+ * REKLAM HESAPLARI SEKMESİ (2026-10-02): workspace › reklam hesapları ›
+ * kampanya. `insights_daily` seviyesi değil, kampanya toplamları
+ * (`genel-bakis-seviyesi.ts`) ve tablosu `HesapKirilimi`. Sekmeler İKİ
  * tabloda da AYNI listeden çiziliyor: iki ayrı sekme şeridi, birine eklenen
  * basamağın öbüründe eksik kalması demekti.
  *
- *   · Mecra → mecra ve hesap süzgecini de düşür (workspace'in mecraları)
- *   · Hesap → hesabı düşür, mecrayı koru (o mecranın hesapları)
+ *   · Reklam Hesapları → hesabı ve altındaki odağı düşür, mecra süzgecini koru
  */
 const LEVEL_TABS: Array<{
   key: PanelSeviyesi;
@@ -49,11 +48,10 @@ const LEVEL_TABS: Array<{
   dusen: Record<string, undefined>;
 }> = [
   {
-    key: 'mecra',
-    label: 'Mecra',
-    dusen: { platform: undefined, hesap: undefined, kampanya: undefined, reklamSeti: undefined },
+    key: 'hesap',
+    label: 'Reklam Hesapları',
+    dusen: { hesap: undefined, kampanya: undefined, reklamSeti: undefined },
   },
-  { key: 'hesap', label: 'Hesap', dusen: { hesap: undefined, kampanya: undefined, reklamSeti: undefined } },
   { key: 'campaign', label: 'Kampanya', dusen: { kampanya: undefined, reklamSeti: undefined } },
   { key: 'ad_group', label: 'Reklam seti', dusen: { reklamSeti: undefined } },
   { key: 'ad', label: 'Reklam', dusen: {} },

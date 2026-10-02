@@ -1,14 +1,16 @@
 import type { MetricLevel } from '@advetics/shared';
 
 /**
- * ═══ GENEL BAKIŞ: WORKSPACE › MECRA › HESAP › KAMPANYA › REKLAM SETİ › REKLAM ═══
+ * ═══ GENEL BAKIŞ: WORKSPACE › REKLAM HESAPLARI › KAMPANYA › REKLAM SETİ › REKLAM ═══
  *
  * Workspace seçildiğinde tablo doğrudan KAMPANYA listeliyordu: Meta, Google
  * ve LinkedIn kampanyaları, farklı reklam hesaplarının kampanyaları tek düz
- * listede. Kullanıcının istediği (2026-10-02): önce mecra, mecraya tıklayınca
- * o mecranın hesapları, hesaba tıklayınca o hesabın kampanyaları.
+ * listede. Kullanıcının istediği (2026-10-02): önce reklam hesapları (her satır
+ * mecra ikonu + workspace adı), hesaba tıklayınca o hesabın kampanyaları.
+ * Arada ayrı bir "mecra" basamağı da denendi; kullanıcı aynı gün tek
+ * basamağa indirdi — mecra satırdaki ikonda ve üstteki sekmede zaten var.
  *
- * İLK İKİ BASAMAK `MetricLevel` DEĞİL. Mecra ve hesap satırları
+ * HESAP BASAMAĞI `MetricLevel` DEĞİL. Hesap satırları
  * `insights_daily`nin bir seviyesi değil, kampanya satırlarının TOPLAMI
  * (`/metrics/hesaplar`). `account` seviyesini kullanmak LinkedIn'de boş
  * tablo demekti: orada hesap seviyesi metrik hiç çekilmiyor.
@@ -18,12 +20,12 @@ import type { MetricLevel } from '@advetics/shared';
  * sınanabiliyordu (CLAUDE.md "REACT EFFECT'İNİN İÇİNDEKİ KARAR TEST
  * EDİLEMİYOR — DIŞARI ÇIKAR"). Burada çalıştırılarak sınanıyor.
  */
-export const PANEL_SEVIYELERI = ['mecra', 'hesap', 'campaign', 'ad_group', 'ad'] as const;
+export const PANEL_SEVIYELERI = ['hesap', 'campaign', 'ad_group', 'ad'] as const;
 export type PanelSeviyesi = (typeof PANEL_SEVIYELERI)[number];
 
 /** Tablonun `/metrics/breakdown`tan mı yoksa `/metrics/hesaplar`dan mı beslendiği. */
 export function varlikSeviyesi(s: PanelSeviyesi): Exclude<MetricLevel, 'account'> | null {
-  return s === 'mecra' || s === 'hesap' ? null : s;
+  return s === 'hesap' ? null : s;
 }
 
 /**
@@ -36,15 +38,13 @@ export function varlikSeviyesi(s: PanelSeviyesi): Exclude<MetricLevel, 'account'
  *   · Açıkça istenen varlık seviyesi (kampanya / set / reklam) korunuyor:
  *     "Kampanya" sekmesi workspace'in BÜTÜN kampanyalarını göstermeye devam
  *     ediyor, eski bağlantılar kırılmıyor.
- *   · Mecra ve hesap YALNIZCA anlamlıyken: hesap seçiliyken hesap listesi
- *     tek satır, mecra seçiliyken mecra listesi tek satır olurdu. O hâlde
- *     varsayılana düşülüyor.
- *   · Varsayılan basamak adresin derinliği: hesap → kampanya, mecra →
- *     hesap, hiçbiri → mecra.
+ *   · Hesap listesi YALNIZCA hesap seçili değilken: seçiliyken tek satır
+ *     olurdu. O hâlde varsayılana düşülüyor.
+ *   · Varsayılan basamak adresin derinliği: hesap → kampanya, yoksa →
+ *     reklam hesapları. Eski `seviye=mecra` bağlantıları da buraya düşüyor.
  */
 export function panelSeviyesiCoz(p: {
   seviye: string | undefined;
-  platform: string | null | undefined;
   hesap: string | undefined;
   kampanya: string | undefined;
   reklamSeti: string | undefined;
@@ -53,9 +53,7 @@ export function panelSeviyesiCoz(p: {
   const istenen = PANEL_SEVIYELERI.find((s) => s === p.seviye);
   if (p.kampanya) return istenen === 'ad' ? 'ad' : 'ad_group';
   if (istenen === 'campaign' || istenen === 'ad_group' || istenen === 'ad') return istenen;
-  if (istenen === 'mecra' && !p.platform && !p.hesap) return 'mecra';
-  if (istenen === 'hesap' && !p.hesap) return 'hesap';
-  return p.hesap ? 'campaign' : p.platform ? 'hesap' : 'mecra';
+  return p.hesap ? 'campaign' : 'hesap';
 }
 
 /**
@@ -77,7 +75,7 @@ export function hesapCoz(raw: string | undefined): string | undefined {
  * Hesap TEK bir mecraya ait: Meta hesabının içindeyken "Google"a basmak,
  * hesap süzgeci kalırsa boş ekran demekti. Mecra değişince hesap ve onun
  * altındaki odak düşüyor ve seviye varsayılana bırakılıyor — hesabın
- * içindeki "kampanya" seviyesi, yeni mecrada hesapların listesine dönüyor.
+ * içindeki "kampanya" seviyesi, yeni mecranın hesap listesine dönüyor.
  *
  * Hesap seçili değilken kampanya odağı ESKİSİ GİBİ korunuyor (önceki
  * davranış; o kararı bu iş değiştirmiyor).
@@ -87,7 +85,7 @@ export function platformSekmesiSorgusu(
   simdiki: { platform: string | null; hesap: string | undefined; seviye: PanelSeviyesi },
 ): Record<string, string | undefined> {
   const hesapDusuyor = simdiki.hesap !== undefined && hedef !== simdiki.platform;
-  const seviyeSerbest = hesapDusuyor || simdiki.seviye === 'mecra' || simdiki.seviye === 'hesap';
+  const seviyeSerbest = hesapDusuyor || simdiki.seviye === 'hesap';
   return {
     platform: hedef ?? undefined,
     ...(hesapDusuyor ? { hesap: undefined, kampanya: undefined, reklamSeti: undefined } : {}),

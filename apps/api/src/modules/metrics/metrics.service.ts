@@ -957,7 +957,7 @@ export class MetricsService {
        */
       const kapsam = ctx.activeClientId ? [ctx.activeClientId] : ctx.clientIds;
       const platformFiltresi = query.platform
-        ? Prisma.sql`AND platform = ${query.platform}::"Platform"`
+        ? Prisma.sql`AND acc.platform = ${query.platform}::"Platform"`
         : Prisma.empty;
       const hesaplar = await tx.$queryRaw<
         Array<{
@@ -968,15 +968,19 @@ export class MetricsService {
           currency: string;
           sync_enabled: boolean;
           status: string;
+          client_name: string | null;
         }>
       >(
         Prisma.sql`
-          SELECT id::text AS id, external_id, name, platform, currency, sync_enabled,
-                 status::text AS status
-          FROM ad_accounts
-          WHERE client_id = ANY(${kapsam}::uuid[])
+          SELECT acc.id::text AS id, acc.external_id, acc.name, acc.platform, acc.currency,
+                 acc.sync_enabled, acc.status::text AS status, cl.name AS client_name
+          FROM ad_accounts acc
+          -- LEFT JOIN: workspace adi bir SUSLEME alani; satirin gorunurlugune
+          -- yalnizca ad_accounts politikasi karar verir (CLAUDE.md INNER JOIN tuzagi).
+          LEFT JOIN clients cl ON cl.id = acc.client_id
+          WHERE acc.client_id = ANY(${kapsam}::uuid[])
             ${platformFiltresi}
-          ORDER BY name ASC
+          ORDER BY acc.name ASC
         `,
       );
 
@@ -1000,6 +1004,9 @@ export class MetricsService {
           adAccountId: h.id,
           externalId: h.external_id,
           name: h.name,
+          // Görünmeyen workspace (RLS) adsız kalır; hesabın adına düşmek boş
+          // bir etiketten iyi.
+          clientName: h.client_name ?? h.name,
           platform: h.platform,
           currency: birimler.length === 1 ? birimler[0]! : null,
           currencies: birimler,

@@ -11,11 +11,16 @@ import { formatDecimal, formatMoney, formatNumber, formatPercent } from '@/lib/f
 import { kirilimSirala, type Siralama } from '@/lib/kirilim-siralama';
 
 /**
- * ═══ MECRA VE HESAP TABLOSU — WORKSPACE'İN İLK İKİ BASAMAĞI ═══
+ * ═══ REKLAM HESAPLARI — WORKSPACE'İN İLK BASAMAĞI ═══
  *
  * Workspace seçilince tablo doğrudan kampanya listeliyordu; kullanıcının
- * istediği önce mecra, sonra o mecranın hesapları, sonra hesabın
- * kampanyaları (`genel-bakis-seviyesi.ts`).
+ * istediği önce reklam hesapları, hesaba tıklayınca o hesabın kampanyaları
+ * (`genel-bakis-seviyesi.ts`).
+ *
+ * SATIRIN ANA ETİKETİ MECRA İKONU + WORKSPACE ADI (kullanıcı kararı,
+ * 2026-10-02). Hesabın platformdaki adı alt satırda: bir workspace'in aynı
+ * mecrada iki hesabı olabiliyor ve ikisi de aynı workspace adını taşırdı —
+ * ayırt eden tek şey o satır.
  *
  * SATIR BİR ALT BASAMAĞA GÖTÜRÜYOR ve bağlantı TAŞINAN süzgeçlerle kuruluyor
  * (`baglanti`): tarih aralığı ve sıralama düşmüyor.
@@ -26,82 +31,62 @@ import { kirilimSirala, type Siralama } from '@/lib/kirilim-siralama';
  */
 export function HesapKirilimi({
   veri,
-  seviye,
   platform,
   tasinan,
   siralama,
 }: {
   veri: MetricsAccountBreakdown;
-  seviye: 'mecra' | 'hesap';
-  /** Seçili mecra — boş hesap listesinin cümlesi için. */
+  /** Seçili mecra — boş listenin cümlesi için. */
   platform: Platform | null;
   tasinan: Record<string, string | undefined>;
   siralama: Siralama;
 }) {
-  const satirlar =
-    seviye === 'mecra'
-      ? kirilimSirala(veri.platforms, siralama).map((p) => ({
-          anahtar: `${p.platform}-${p.currency ?? 'karisik'}`,
-          ad: PLATFORM_KISA_ADLARI[p.platform],
-          platform: p.platform,
-          alt: `${p.accountCount} hesap${p.unmonitoredCount > 0 ? ` · ${p.unmonitoredCount} izlenmiyor` : ''}`,
-          izleniyor: true,
-          hedef: {
-            platform: p.platform,
-            seviye: 'hesap',
-            hesap: undefined,
-            kampanya: undefined,
-            reklamSeti: undefined,
-          } as Record<string, string | undefined>,
-          currency: p.currency,
-          currencies: p.currencies,
-          m: p as MetricTotals & { previous: MetricTotals | null },
-        }))
-      : kirilimSirala(veri.accounts, siralama).map((a) => ({
-          anahtar: a.adAccountId,
-          ad: a.name,
-          platform: a.platform,
-          alt: a.externalId,
-          izleniyor: a.syncEnabled,
-          hedef: {
-            platform: a.platform,
-            hesap: a.adAccountId,
-            seviye: 'campaign',
-            kampanya: undefined,
-            reklamSeti: undefined,
-          } as Record<string, string | undefined>,
-          currency: a.currency,
-          currencies: a.currencies,
-          m: a as MetricTotals & { previous: MetricTotals | null },
-        }));
+  const satirlar = kirilimSirala(veri.accounts, siralama).map((a) => ({
+    anahtar: a.adAccountId,
+    ad: a.clientName,
+    platform: a.platform,
+    /*
+     * Hesap adı workspace adıyla AYNIYSA tekrar yazılmıyor, dış kimlik
+     * yazılıyor: iki satırda aynı metin bilgi taşımıyor.
+     */
+    alt: `${PLATFORM_KISA_ADLARI[a.platform]} reklam hesabı · ${
+      a.name === a.clientName ? a.externalId : a.name
+    }`,
+    izleniyor: a.syncEnabled,
+    hedef: {
+      platform: a.platform,
+      hesap: a.adAccountId,
+      seviye: 'campaign',
+      kampanya: undefined,
+      reklamSeti: undefined,
+    } as Record<string, string | undefined>,
+    currency: a.currency,
+    currencies: a.currencies,
+    m: a as MetricTotals & { previous: MetricTotals | null },
+  }));
 
   /*
-   * BOŞ LİSTE NEDENİNİ SÖYLÜYOR. Bu iki uçta tek bir sebep var — atanmış
-   * hesap yok — ama mecra seçiliyken cümle o mecrayı anmalı: "hesap yok"
-   * demek, workspace'in hiç hesabı yokmuş gibi okunurdu.
+   * BOŞ LİSTE NEDENİNİ SÖYLÜYOR. Mecra seçiliyken cümle o mecrayı anmalı:
+   * "hesap yok" demek, workspace'in hiç hesabı yokmuş gibi okunurdu.
    */
-  const bosMetni =
-    seviye === 'hesap' && platform
-      ? `Bu workspace'e atanmış ${PLATFORM_KISA_ADLARI[platform]} hesabı yok.`
-      : "Bu workspace'e atanmış reklam hesabı yok.";
+  const bosMetni = platform
+    ? `Bu workspace'e atanmış ${PLATFORM_KISA_ADLARI[platform]} hesabı yok.`
+    : "Bu workspace'e atanmış reklam hesabı yok.";
 
   return (
     <section className="rounded-xl border border-line bg-surface">
-      <TabloBasligi seviye={seviye} tasinan={tasinan} />
+      <TabloBasligi seviye="hesap" tasinan={tasinan} />
 
       {satirlar.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-ink-muted">{bosMetni}</p>
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[840px] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-muted">
-                  <th className="px-4 py-2 font-semibold">{seviye === 'mecra' ? 'Mecra' : 'Hesap'}</th>
-                  {/* Mecra basamağında mecra sütunu adın KENDİSİ; tekrar etmek gürültü. */}
-                  {seviye === 'hesap' && (
-                    <SiraliBaslik etiket="Mecra" anahtar="mecra" aktif={siralama} tasinan={tasinan} className="px-3 py-2" />
-                  )}
+                  <th className="px-4 py-2 font-semibold">Ad</th>
+                  <SiraliBaslik etiket="Mecra" anahtar="mecra" aktif={siralama} tasinan={tasinan} className="px-3 py-2" />
                   <SiraliBaslik etiket="Harcama" anahtar="harcama" aktif={siralama} tasinan={tasinan} className="px-3 py-2 text-right" />
                   <SiraliBaslik etiket="Gösterim" anahtar="gosterim" aktif={siralama} tasinan={tasinan} className="px-3 py-2 text-right" />
                   <SiraliBaslik etiket="Tık" anahtar="tik" aktif={siralama} tasinan={tasinan} className="px-3 py-2 text-right" />
@@ -113,11 +98,9 @@ export function HesapKirilimi({
               <tbody>
                 {satirlar.map((r) => (
                   <tr key={r.anahtar} className="border-b border-line/60 last:border-0">
-                    <td className="max-w-[280px] px-4 py-2.5">
+                    <td className="max-w-[300px] px-4 py-2.5">
                       <div className="flex items-center gap-2">
-                        {seviye === 'mecra' && (
-                          <PlatformLogo kind={platformKanali(r.platform)} className="h-4 w-4 shrink-0" />
-                        )}
+                        <PlatformLogo kind={platformKanali(r.platform)} className="h-4 w-4 shrink-0" />
                         {r.izleniyor ? (
                           <Link
                             href={baglanti('/dashboard', tasinan, r.hedef)}
@@ -137,13 +120,13 @@ export function HesapKirilimi({
                           </span>
                         )}
                       </div>
-                      <p className="truncate text-xs text-ink-muted">{r.alt}</p>
+                      <p className="truncate text-xs text-ink-muted" title={r.alt}>
+                        {r.alt}
+                      </p>
                     </td>
-                    {seviye === 'hesap' && (
-                      <td className="px-3 py-2.5">
-                        <Mecra platform={r.platform} />
-                      </td>
-                    )}
+                    <td className="px-3 py-2.5">
+                      <Mecra platform={r.platform} />
+                    </td>
                     {r.izleniyor ? (
                       <Metrikler m={r.m} currency={r.currency} currencies={r.currencies} />
                     ) : (
@@ -157,17 +140,12 @@ export function HesapKirilimi({
             </table>
           </div>
           <KaydirmaIpucu />
+          {/* Kesme yok, sayı yine yazılıyor: "kaç hesabım vardı" sorusunun
+              cevabı satırları saymak olmamalı. */}
+          <p className="border-t border-line px-4 py-2 text-xs text-ink-muted">
+            {veri.accounts.length} hesabın tamamı gösteriliyor.
+          </p>
         </>
-      )}
-
-      {/*
-        HER HESAP LİSTEDE — kesme yok. Sayı yine yazılıyor: "kaç hesabım
-        vardı" sorusunun cevabı satırları saymak olmamalı.
-      */}
-      {seviye === 'hesap' && veri.accounts.length > 0 && (
-        <p className="border-t border-line px-4 py-2 text-xs text-ink-muted">
-          {veri.accounts.length} hesabın tamamı gösteriliyor.
-        </p>
       )}
     </section>
   );

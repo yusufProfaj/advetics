@@ -113,18 +113,18 @@ describe('EKMEK KIRINTISI', () => {
   });
 
   it('KRİTİK: workspace basamağı ODAĞI, HESABI ve MECRAYI TEMİZLİYOR', () => {
-    // Kampanyanın ya da hesabın içinden workspace'in mecralarına dönmenin
-    // yolu bu; süzgeç kalsaydı "yukarı çık" hiçbir şey yapmazdı.
+    // Kampanyanın ya da hesabın içinden workspace'in reklam hesaplarına
+    // dönmenin yolu bu; süzgeç kalsaydı "yukarı çık" hiçbir şey yapmazdı.
     const i = SAYFA.indexOf('ad: activeClient.name,');
     const dilim = SAYFA.slice(i, SAYFA.indexOf('},\n    });', i));
     expect(dilim.length, 'workspace basamağı bulunamadı').toBeGreaterThan(50);
-    for (const k of ['platform: undefined', 'hesap: undefined', 'kampanya: undefined', 'reklamSeti: undefined', "seviye: 'mecra'"]) {
+    for (const k of ['platform: undefined', 'hesap: undefined', 'kampanya: undefined', 'reklamSeti: undefined', "seviye: 'hesap'"]) {
       expect(dilim).toContain(k);
     }
   });
 
   it('KRİTİK: hesap basamağı kampanya odağını düşürüp hesabın kampanyalarına dönüyor', () => {
-    const i = SAYFA.indexOf('ad: yol.adAccount.name,');
+    const i = SAYFA.indexOf('ad: `${PLATFORM_KISA_ADLARI[yol.adAccount.platform]} · ${yol.adAccount.name}`,');
     const dilim = SAYFA.slice(i, SAYFA.indexOf('},\n      });', i));
     expect(dilim.length, 'hesap basamağı bulunamadı').toBeGreaterThan(50);
     expect(dilim).toContain('hesap: yol.adAccount.id');
@@ -132,14 +132,14 @@ describe('EKMEK KIRINTISI', () => {
     expect(dilim).toContain("seviye: 'campaign'");
   });
 
-  it('KRİTİK: mecra ve hesap sekmeleri düşürdüklerini taşıyor', () => {
-    expect(TABLO).toContain("key: 'mecra',");
-    expect(TABLO).toContain(
-      "dusen: { platform: undefined, hesap: undefined, kampanya: undefined, reklamSeti: undefined },",
-    );
-    expect(TABLO).toContain(
-      "{ key: 'hesap', label: 'Hesap', dusen: { hesap: undefined, kampanya: undefined, reklamSeti: undefined } },",
-    );
+  it('KRİTİK: Reklam Hesapları sekmesi hesabı ve altındaki odağı düşürüyor', () => {
+    const i = TABLO.indexOf("key: 'hesap',");
+    expect(i, 'sekme bulunamadı').toBeGreaterThan(0);
+    const dilim = TABLO.slice(i, TABLO.indexOf('},', i));
+    expect(dilim).toContain("label: 'Reklam Hesapları'");
+    expect(dilim).toContain('hesap: undefined, kampanya: undefined, reklamSeti: undefined');
+    // Ayrı mecra basamağı kullanıcı kararıyla kalktı.
+    expect(TABLO).not.toContain("key: 'mecra'");
   });
 
   it('KRİTİK: kampanya basamağı REKLAM SETİNİ düşürüyor', () => {
@@ -189,11 +189,9 @@ describe('MECRA VE HESAP TABLOSU', () => {
     expect(dilim).toContain('kampanya: undefined');
   });
 
-  it('KRİTİK: mecra satırı o mecranın HESAPLARINA iniyor ve eski hesabı düşürüyor', () => {
-    const i = HESAP_TABLOSU.indexOf('platform: p.platform,\n            seviye: \'hesap\',');
-    expect(i, 'mecra satırının hedefi bulunamadı').toBeGreaterThan(0);
-    const dilim = HESAP_TABLOSU.slice(i, HESAP_TABLOSU.indexOf('}', i));
-    expect(dilim).toContain('hesap: undefined');
+  it('KRİTİK: satırın ana etiketi WORKSPACE ADI, mecra ikonuyla', () => {
+    expect(HESAP_TABLOSU).toContain('ad: a.clientName,');
+    expect(HESAP_TABLOSU).toContain('<PlatformLogo kind={platformKanali(r.platform)}');
   });
 
   it('KRİTİK: izlenmeyen hesap BAĞLANTI DEĞİL — içi boş bir listeye götürürdü', () => {
