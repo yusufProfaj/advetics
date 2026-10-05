@@ -418,6 +418,15 @@ karar gerekiyorsa yardımcı sınıfla yaz, katman onu ezmiyor. Sayfa başlığ�
   geçirmek demek, rapor başına ~100 ms SABİT. Ayıran şey desen değil
   **süzülen kolonun kaç ayrı değer aldığı**; ölçüm aracı `olcum-rapor.ts`,
   bakılacak sayı `ad_accounts` düğümündeki `loops=`.
+  **GÜNCELLEME 2026-10-05 — BU YARGI YANLIŞ ÇIKTI, raporlar da diziye geçti.**
+  Yukarıdaki ölçüm sentetik veriyle ve sorguların toplamına bakılarak
+  yapılmıştı. Üretimde sorgu sorgu ölçüldü: `Memoize` gerçekten çalışıyordu
+  (Hits 580 / Misses 2) ama `dailySeries` alt sorguyla 6.356 ms, diziyle
+  604 ms — kova CTE'sini yeniden birleştiren sorguda alt sorgu PLANIN
+  ŞEKLİNİ bozuyor, maliyet `ad_accounts` düğümünde görünmüyor. Raporlar
+  5–42 sn sürüp transaction sınırında düşüyordu. DERS: `loops=` tek başına
+  karar verdirmez; sorguyu iki biçimde de ÖLÇ ve TOPLAMA değil HER SORGUYA
+  bak.
 - **PRISMA `include` İLİŞKİNİN BÜTÜN KOLONLARINI ÇEKİYOR — `select` KULLAN.**
   `/connections` listesi `include` ile kuruluydu ve havuzda 481 reklam hesabı
   varken her satırın `raw` (tam platform yanıtı, JSONB), `rate_limit_state` ve

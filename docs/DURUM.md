@@ -765,6 +765,20 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-05 — Rapor sorguları dizi süzgecine geçti (kök düzeltme)
+
+Düzeltilmiş `olcum-rapor` üretimde (en büyük workspace, 30 gün, 2 hesap,
+~3.600 satır): platformBlocks 501→461 ms, campaignRows 535→445 ms,
+**dailySeries 6.356→604 ms**; topAds alt sorgulu hâlde dakikalarca bitmedi
+(araç orada kesildi). İzlenen hesap listesi 305–466 ms, rapor başına bir kez.
+Bütün rapor sorguları önden çekilmiş diziye geçti (`trackedAccounts(izlenen,
+alias)`, liste ZORUNLU parametre, `RaporSorgusu` tipi). Önceki "raporda
+düzeltme zarar ediyor" yargısı (sentetik veri, toplam süre) CLAUDE.md'de
+düzeltildi. İzlemesi kapalı hesabın rapora girmediğini sınayan test yoktu;
+eklendi ve süzgeç boşaltılınca düşüyor. 20 sn süre sınırı güvenlik payı
+olarak kalıyor. Deploy sonrası `olcum-rapor` yeniden: topAds'in iki
+biçimdeki süresi görülmeli.
+
 ### 2026-10-05 — Rapor önizlemesi 5 sn transaction sınırında düşüyordu
 
 Kullanıcı: "sürekli böyle hatalar alıyorum" (Raporlar, "Beklenmeyen bir hata

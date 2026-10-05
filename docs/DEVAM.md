@@ -9,7 +9,7 @@
 **Son güncelleme:** 2026-10-05 · **Canlı (539f6fb):** Google gün içi saatlik,
 Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlıda
 doğrulandı).
-**Bekleyen deploy:** konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı.
+**Bekleyen deploy:** konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;
@@ -64,10 +64,10 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
 ## Sıradaki iş (sırayla)
 
-**Rapor yavaşlığı (öncelikli):** önizleme üretimde 40 sn'ye kadar sürüyor.
-Süre sınırı 20 sn'ye çıktı (yama). Deploy sonrası
-`pnpm --filter @advetics/api olcum-rapor -- --eposta=hello@profaj.com` →
-hangi sorgu yavaş, `loops=` ne diyor; sonra kök düzeltme.
+**Rapor yavaşlığı:** kök düzeltme yazıldı (rapor sorguları dizi süzgecine
+geçti; dailySeries 6,4 sn → 0,6 sn ölçüldü). Deploy sonrası: Raporlar ekranı
+açılmalı; `olcum-rapor` arka planda (`nohup ... > /tmp/olcum-rapor.txt &`)
+yeniden koşturulup topAds'in süresine bakılmalı.
 
 **BASE brief (`Advetics-Marka-Merkezi-BASE-gelistirme-brief.pdf`, 7 aşama):
 Aşama 0 sürüyor.** Ajans yöneticisi turu yapıldı, 6 hata düzeltildi

@@ -122,12 +122,44 @@ interface RawBucketRow {
  * `olcum-rapor.spec.ts` ikisinin BİREBİR aynı satırları döndürdüğünü
  * kilitliyor.
  */
-function trackedAccounts(alias = ''): Prisma.Sql {
+/**
+ * ═══ KARAR DEĞİŞTİ (2026-10-05) — ÜRETİMDE ÖLÇÜLDÜ, SORGU SORGU ═══
+ *
+ * Yukarıdaki gerekçe sentetik veriyle ve sorguların TOPLAMINA bakılarak
+ * kurulmuştu. Üretimde `olcum-rapor` her sorguyu ayrı ölçtü (en büyük
+ * workspace, 30 gün, 2 hesap, ~3.600 satır):
+ *
+ *   platformBlocks  alt sorgu  501 ms · dizi 461 ms
+ *   campaignRows    alt sorgu  535 ms · dizi 445 ms
+ *   dailySeries     alt sorgu 6356 ms · dizi 604 ms   ← 10 kat
+ *   topAds          alt sorgu: araç dakikalarca bitmedi
+ *   izlenen hesap listesinin kendisi: 305–466 ms, rapor başına BİR KEZ
+ *
+ * `Memoize` `ad_accounts` düğümünde gerçekten çalışıyordu (Hits 580 /
+ * Misses 2) — yani yukarıdaki teşhis yanlış değildi, ama YETMİYORDU:
+ * maliyet `ad_accounts` düğümünde değil, alt sorgunun planı nasıl
+ * şekillendirdiğinde. Kova CTE'sini yeniden birleştiren sorgularda planlayıcı
+ * alt sorgulu hâlde başka bir plana düşüyor. Raporlar 5–42 sn sürüp
+ * transaction sınırında düşüyordu.
+ *
+ * Dizi hiçbir sorguda belirgin kaybettirmiyor, kazandırdığı yerde saniyeler
+ * kazandırıyor. LİSTE ZORUNLU PARAMETRE: varsayılanı olsaydı bir çağıran
+ * onu unutur, sorgu yine çalışır ve süzgeç SESSİZCE kaybolurdu
+ * (`metrics.service.ts#filters` ile aynı karar).
+ */
+function trackedAccounts(izlenen: string[], alias = ''): Prisma.Sql {
   const column = alias ? `${alias}.ad_account_id` : 'ad_account_id';
-  return Prisma.sql`AND ${Prisma.raw(column)} IN (
-    SELECT id FROM ad_accounts WHERE sync_enabled = true
-  )`;
+  return Prisma.sql`AND ${Prisma.raw(column)} = ANY(${izlenen}::uuid[])`;
 }
+
+/** Rapor sorgularının ortak parametresi. `izlenen` bir kez, `veriToplaK`ta çekiliyor. */
+type RaporSorgusu = {
+  clientId: string;
+  from: string;
+  to: string;
+  platform?: Platform;
+  izlenen: string[];
+};
 
 /**
  * Bölüm başına gösterilecek reklam sayısı — PLATFORM BAŞINA.
@@ -293,7 +325,21 @@ export class ReportsService {
        * başlıklı raporun ÖZET KARTLARINDA Meta harcaması görünürdü ve
        * tablolar toplamı tutmazdı — aynı belgede iki farklı gerçek.
        */
-      const sorgu = { ...params, platform: params.platform ?? sablonPlatformu(params.sablon) ?? undefined };
+      /*
+       * İZLENEN HESAPLAR BİR KEZ, AYNI TRANSACTION'DAN (RLS aynı bağlamla
+       * uygulanıyor). Bedeli üretimde 305–466 ms; karşılığında dailySeries
+       * tek başına ~6 sn hızlanıyor (`trackedAccounts`).
+       */
+      const izlenen = (
+        await tx.$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`SELECT id FROM ad_accounts WHERE sync_enabled = true`,
+        )
+      ).map((r) => r.id);
+      const sorgu: RaporSorgusu = {
+        ...params,
+        platform: params.platform ?? sablonPlatformu(params.sablon) ?? undefined,
+        izlenen,
+      };
 
       const [platformBlocks, campaigns, daily, topAds, topAdsMissingPlatforms] = await Promise.all([
         this.platformBlocks(tx, sorgu),
@@ -387,7 +433,7 @@ export class ReportsService {
    */
   private async searchTermRows(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: Platform },
+    params: RaporSorgusu,
   ): Promise<ReportData['searchTerms']> {
     /*
      * META ŞABLONUNDA HİÇ SORULMUYOR. İkisi de yalnızca Google'da var ve
@@ -433,7 +479,7 @@ export class ReportsService {
       FROM search_term_insights t
       WHERE t.client_id = ${params.clientId}::uuid
         AND t.date BETWEEN ${params.from}::date AND ${params.to}::date
-        ${trackedAccounts('t')}
+        ${trackedAccounts(params.izlenen, 't')}
       GROUP BY t.search_term
       HAVING SUM(t.impressions) > 0
       ORDER BY SUM(t.spend_micros) DESC
@@ -472,7 +518,7 @@ export class ReportsService {
    */
   private async breakdownBlocks(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: Platform },
+    params: RaporSorgusu,
     sections: readonly string[],
   ): Promise<ReportBreakdownBlock[]> {
     const istenen = BOYUT_BOLUMLERI.filter((b) => sections.includes(b.section));
@@ -611,7 +657,7 @@ export class ReportsService {
    */
   private async conversionDetailRows(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: Platform },
+    params: RaporSorgusu,
   ): Promise<ReportData['conversionDetail']> {
     const rows = await tx.$queryRaw<
       Array<{ platform: Platform; raw_metrics: unknown; conversions: string | number | null }>
@@ -621,7 +667,7 @@ export class ReportsService {
         -- süzgeçlerle gelmesine kapı açardı.
         SELECT i.platform, i.raw_metrics, i.conversions
         FROM insights_daily i
-        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
+        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen, 'i')}
           AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
           AND i.entity_level = ${LEVEL}
           AND i.raw_metrics IS NOT NULL
@@ -653,7 +699,7 @@ export class ReportsService {
 
   private async keywordRows(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: Platform },
+    params: RaporSorgusu,
   ): Promise<ReportData['keywords']> {
     /*
      * META ŞABLONUNDA HİÇ SORULMUYOR. İkisi de yalnızca Google'da var ve
@@ -684,7 +730,7 @@ export class ReportsService {
       FROM keyword_insights k
       WHERE k.client_id = ${params.clientId}::uuid
         AND k.date BETWEEN ${params.from}::date AND ${params.to}::date
-        ${trackedAccounts('k')}
+        ${trackedAccounts(params.izlenen, 'k')}
       -- AYNI METİNLİ kelimeler birleştiriliyor: aynı kelime birden fazla ad
       -- group'ta tanımlı olabiliyor ve müşteriye üç ayrı satır göstermek
       -- "aynı kelimeye üç kez mi para verdik" sorusunu doğurur.
@@ -824,7 +870,7 @@ export class ReportsService {
   /** Platform bazında toplam blok — referans belgenin 2. sayfası. */
   private async platformBlocks(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: Platform },
+    params: RaporSorgusu,
   ): Promise<ReportPlatformBlock[]> {
     const rows = await tx.$queryRaw<
       Array<RawMetricRow & { platform: Platform }>
@@ -842,7 +888,7 @@ export class ReportsService {
                  NULL::bigint AS day_count,
                  NULL::uuid AS entity_id
           FROM insights_daily
-          WHERE client_id = ${params.clientId}::uuid ${trackedAccounts()}
+          WHERE client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen)}
             ${platformFiltresi(params.platform)}
             AND date BETWEEN ${params.from}::date AND ${params.to}::date
             AND entity_level = ${LEVEL}
@@ -880,7 +926,7 @@ export class ReportsService {
   /** Kampanya satırları — erişim ve kova sayıları dâhil. */
   private async campaignRows(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: Platform },
+    params: RaporSorgusu,
   ): Promise<Array<{ platform: Platform; row: ReportCampaignRow }>> {
     const rows = await tx.$queryRaw<
       Array<
@@ -909,7 +955,7 @@ export class ReportsService {
                  SUM(i.reach) AS reach_sum,
                  COUNT(DISTINCT i.date) AS day_count
           FROM insights_daily i
-          WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
+          WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen, 'i')}
             ${platformFiltresi(params.platform, 'i')}
             AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
             AND i.entity_level = ${LEVEL}
@@ -957,7 +1003,7 @@ export class ReportsService {
   /** Günlük dönüşüm serisi — referans belgedeki Form/Mesaj grafiği. */
   private async dailySeries(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: Platform },
+    params: RaporSorgusu,
   ): Promise<ReportDailyPoint[]> {
     const rows = await tx.$queryRaw<
       Array<RawBucketRow & { date: Date; spend_micros: string | number | bigint | null }>
@@ -966,7 +1012,7 @@ export class ReportsService {
         WITH base AS (
           SELECT date, SUM(spend_micros) AS spend_micros
           FROM insights_daily
-          WHERE client_id = ${params.clientId}::uuid ${trackedAccounts()}
+          WHERE client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen)}
             ${platformFiltresi(params.platform)}
             AND date BETWEEN ${params.from}::date AND ${params.to}::date
             AND entity_level = ${LEVEL}
@@ -1013,13 +1059,13 @@ export class ReportsService {
    */
   private async topAdsMissingPlatforms(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: Platform },
+    params: RaporSorgusu,
   ): Promise<Array<Platform>> {
     const rows = await tx.$queryRaw<Array<{ platform: Platform }>>(
       Prisma.sql`
         SELECT platform
         FROM insights_daily i
-        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
+        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen, 'i')}
           ${platformFiltresi(params.platform, 'i')}
           AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
           AND i.spend_micros > 0
@@ -1033,7 +1079,7 @@ export class ReportsService {
     /** En çok harcayan reklamlar — platform başına, creative ile. */
   private async topAds(
     tx: TxLike,
-    params: { clientId: string; from: string; to: string; platform?: Platform },
+    params: RaporSorgusu,
   ): Promise<ReportData['topAds']> {
     const rows = await tx.$queryRaw<
       Array<{
@@ -1120,7 +1166,7 @@ export class ReportsService {
           JOIN ad_groups g ON g.id = a.ad_group_id
           JOIN campaigns c ON c.id = g.campaign_id
           LEFT JOIN creatives cr ON cr.id = a.creative_id
-          WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts('i')}
+          WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen, 'i')}
             ${platformFiltresi(params.platform, 'i')}
             AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
             AND i.entity_level = 'ad'::"EntityLevel"
@@ -1205,7 +1251,7 @@ export class ReportsService {
    * elle yazmak iki listenin zamanla ayrışması demek olurdu.
    */
   private bucketSelect(
-    params: { clientId: string; from: string; to: string; platform?: Platform },
+    params: RaporSorgusu,
     groupBy: Prisma.Sql,
   ): Prisma.Sql {
     /**
@@ -1243,7 +1289,7 @@ export class ReportsService {
                THEN i2.raw_metrics -> 'actions'
                ELSE '[]'::jsonb END
         ) AS act
-        WHERE i2.client_id = ${params.clientId}::uuid ${trackedAccounts('i2')}
+        WHERE i2.client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen, 'i2')}
           AND i2.date BETWEEN ${params.from}::date AND ${params.to}::date
           AND i2.entity_level = ${LEVEL}
         -- Gren: istenen grup + varlık + gün. Böylece öncelik her ham satırda

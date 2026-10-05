@@ -881,3 +881,38 @@ describe('ReportsService — arama terimleri', () => {
     expect((await svc.build(CTX, RANGE)).searchTerms).toEqual([]);
   });
 });
+
+describe('ReportsService — izlemesi kapalı hesap rapora girmiyor', () => {
+  /*
+   * Süzgeç 2026-10-05'te alt sorgudan önden çekilmiş diziye geçti (üretimde
+   * dailySeries 6,4 sn → 0,6 sn). Biçim değişti, ANLAM değişmemeli: izlemesi
+   * kapatılmış hesabın verisi duruyor ama rapora karışmıyor. Bu dosyada bu
+   * iddianın testi yoktu.
+   */
+  const KAPALI = 'cccccccc-0000-0000-0000-cccccccccccc';
+
+  it('KRİTİK: kapalı hesabın harcaması özete, günlük seriye ve kampanyalara girmiyor', async () => {
+    await h.q(
+      `INSERT INTO ad_accounts
+         (id, org_id, client_id, connection_id, platform, external_id, name, currency,
+          timezone, sync_enabled, updated_at)
+       VALUES ($1,$2,$3,$4,'meta','act_kapali','Kapalı','TRY','Europe/Istanbul',false,now())`,
+      [KAPALI, IDS.org, IDS.client, IDS.connection],
+    );
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01', spendMicros: '5000000' });
+    await h.q(
+      `INSERT INTO insights_daily
+         (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+          date, breakdown_key, impressions, clicks, spend_micros, conversions,
+          conversion_value_micros, currency, reach, raw_metrics)
+       VALUES ($1, $2, 'meta', 'campaign', $3, 'ext', '2026-08-01'::date, '', 1, 1, 999000000, 0, 0, 'TRY', 0, '{}'::jsonb)`,
+      [IDS.client, KAPALI, CAMP_B],
+    );
+
+    const data = await svc.build(CTX, RANGE);
+    expect(data.platforms[0]!.spendMicros).toBe('5000000');
+    expect(data.daily.map((d) => d.spendMicros)).toEqual(['5000000']);
+    expect(JSON.stringify(data.metaCampaigns)).not.toContain("999000000");
+    expect(data.metaCampaigns.map((c) => c.name)).toEqual(["Kampanya A"]);
+  });
+});
