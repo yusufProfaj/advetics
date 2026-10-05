@@ -6,10 +6,10 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-02 · **Canlı:** Akıllı Boost Facebook ayrımı +
+**Son güncelleme:** 2026-10-05 · **Canlı:** Akıllı Boost Facebook ayrımı +
 migration ve Reklam Keşfi menü sayıları dahil (ikisi de canlıda doğrulandı).
 **Bekleyen deploy (migration yok):** Akıllı Boost mecra etiketi, Google gün
-içi metriği saatlik, Genel Bakış "Reklam Hesapları" basamağı.
+içi metriği saatlik, Genel Bakış "Reklam Hesapları" basamağı, Aşama 0 düzeltmeleri.
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;
@@ -63,6 +63,15 @@ gösteremez ve kayar):
 Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
 ## Sıradaki iş (sırayla)
+
+**BASE brief (`Advetics-Marka-Merkezi-BASE-gelistirme-brief.pdf`, 7 aşama):
+Aşama 0 sürüyor.** Ajans yöneticisi turu yapıldı, 6 hata düzeltildi
+(`DURUM.md` 2026-10-05). Kalan: (a) kitle önerisi 500'ünün sebebi sunucu
+logunda doğrulanacak, deploy sonrası yeniden denenecek; (b) reklam
+yöneticisi ve müşteri rolleri — kullanıcı giriş yapınca; (c) yazma
+kontrolleri (Marka kaydet, siteden doldur, kitle şablonu, varlık yükleme,
+hesap ekle/kaldır) — test workspace'i ve onay bekliyor. Aşama 1'in test
+şartı (testing-library) depo kararıyla çelişiyor: **kullanıcı kararı bekliyor.**
 
 0. **Genel Bakış "Reklam Hesapları" deploy sonrası gözle:** bir workspace
    aç → Reklam Hesapları (mecra ikonu + workspace adı) → hesap → kampanya →

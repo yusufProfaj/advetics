@@ -28,6 +28,16 @@ const SAYFA = yorumsuz('app/(dashboard)/marka-merkezi/page.tsx');
 const KANAL = yorumsuz('components/tenancy/bagli-kanallar.tsx');
 
 describe('hazırlık listesi', () => {
+  it('KRİTİK: marka maddesi MARKA sekmesine açılıyor — boş dediği alanlar orada', () => {
+    // Sekmesiz adres serbest metin sekmesine açılıyordu (canlı tur, 2026-10-05).
+    const href = HAZIRLIK_MADDE_TANIMI.marka_bilgisi.eylem('ws-1').href;
+    expect(new URL(href, 'https://x').searchParams.get('sekme')).toBe('marka');
+  });
+
+  it('dar ekranda eylem metni sıkıştırmıyor: metnin alt genişlik sınırı var', () => {
+    expect(LISTE).toContain('<div className="min-w-[14rem] flex-1">');
+  });
+
   it('KRİTİK: sunucunun her maddesinin panelde başlığı ve bağlantısı var', () => {
     for (const kod of HAZIRLIK_KODLARI) {
       const t = HAZIRLIK_MADDE_TANIMI[kod];

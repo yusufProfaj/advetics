@@ -2,6 +2,7 @@ import { BadRequestException, HttpStatus } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { PlatformApiError } from '../../modules/connections/provider.types';
+import Anthropic from '@anthropic-ai/sdk';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
 /**
@@ -73,7 +74,7 @@ describe('AllExceptionsFilter — platform hataları', () => {
 
   it('alt kod yoksa mesaja boş parantez EKLENMİYOR', () => {
     const b = govde(new PlatformApiError('meta', 'permanent', 'Invalid parameter'));
-    expect(b.message).toBe('Meta: Invalid parameter');
+    expect(b.message).toBe('Meta Ads: Invalid parameter');
   });
 
   it('KRİTİK: HAM GÖVDE (`raw`) istemciye GİTMİYOR', () => {
@@ -117,7 +118,15 @@ describe('AllExceptionsFilter — platform hataları', () => {
 
   it('Google hatası GOOGLE diye etiketleniyor', () => {
     expect(govde(new PlatformApiError('google', 'permanent', 'x')).message).toBe(
-      'Google: x',
+      'Google Ads: x',
+    );
+  });
+
+  it('KRİTİK: LinkedIn hatası "Google" DİYE etiketlenmiyor', () => {
+    // Etiket `meta ? 'Meta' : 'Google'` ile seçiliyordu; LinkedIn'in her
+    // hatası panelde "Google: ..." görünüyordu (canlı tur, 2026-10-05).
+    expect(govde(new PlatformApiError('linkedin', 'permanent', 'x')).message).toBe(
+      'LinkedIn Ads: x',
     );
   });
 
@@ -137,5 +146,40 @@ describe('AllExceptionsFilter — platform hataları', () => {
     const b = govde(new Error('Table "users" does not exist'));
     expect(b.statusCode).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
     expect(b.message).toBe('Beklenmeyen bir hata oluştu');
+  });
+});
+
+describe('AllExceptionsFilter — yapay zekâ servisi hataları', () => {
+  /*
+   * "Kitleyi tarif et" canlıda yalnızca "Beklenmeyen bir hata oluştu" dedi:
+   * `Anthropic.APIError` bir `HttpException` değil ve son dala düşüyordu.
+   */
+  function aiHatasi(status: number, mesaj: string) {
+    return Anthropic.APIError.generate(
+      status,
+      { type: 'error', error: { type: 'invalid_request_error', message: mesaj } },
+      undefined,
+      new Headers(),
+    );
+  }
+
+  it('KRİTİK: servisin cümlesi panele ULAŞIYOR, son dala düşmüyor', () => {
+    const b = govde(aiHatasi(400, 'output_config.format.schema: maxItems is not supported'));
+    expect(b.message).toContain('maxItems is not supported');
+    expect(b.message).not.toContain('Beklenmeyen');
+    expect(b.statusCode).toBe(HttpStatus.BAD_GATEWAY);
+    expect(b.code).toBe('AI_ERROR');
+  });
+
+  it('kota 429 kalıyor — istemcinin geri çekilmesi gereken tek durum', () => {
+    const b = govde(aiHatasi(429, 'rate limited'));
+    expect(b.statusCode).toBe(HttpStatus.TOO_MANY_REQUESTS);
+    expect(b.code).toBe('AI_RATE_LIMITED');
+  });
+
+  it('bağlantı hatası da kendi dalında (gövdesiz APIError)', () => {
+    const b = govde(new Anthropic.APIConnectionError({ message: 'Connection error.' }));
+    expect(b.code).toBe('AI_ERROR');
+    expect(b.message).toContain('Connection error.');
   });
 });

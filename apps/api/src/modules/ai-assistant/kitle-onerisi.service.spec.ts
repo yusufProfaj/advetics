@@ -141,3 +141,22 @@ describe('KitleOnerisiService', () => {
   });
 });
 
+
+describe('model şeması API’nin desteklediği anahtar kelimelerle sınırlı', () => {
+  it('KRİTİK: dizi/sayı/metin kısıtı yok — yapılandırılmış çıktı bunları reddediyor', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const kaynak = readFileSync(resolve(__dirname, 'kitle-onerisi.service.ts'), 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
+    const bas = kaynak.indexOf('const MODEL_SEMASI = {');
+    const son = kaynak.indexOf('} as const;', bas);
+    expect(bas, 'şema bulunamadı — tarama boşa düştü').toBeGreaterThan(0);
+    const sema = kaynak.slice(bas, son);
+    expect(sema).toContain("konumlar: { type: 'array'");
+    for (const yasak of ['minItems', 'maxItems', 'minimum', 'maximum', 'minLength', 'maxLength']) {
+      expect(sema, yasak).not.toContain(yasak);
+    }
+  });
+});

@@ -27,7 +27,16 @@ export const HAZIRLIK_MADDE_TANIMI: Record<
   },
   marka_bilgisi: {
     baslik: 'Marka bilgileri dolu',
-    eylem: (id) => ({ etiket: 'Bilgileri doldur', href: `/kutuphane/bilgi-bankasi?musteri=${id}` }),
+    /*
+     * `sekme=marka` ŞART: sekmesiz adres Bilgi Bankası'nın serbest metin
+     * sekmesine açılıyordu, maddenin "boş" dediği alanlar (sektör, kategori,
+     * ana amaç, vaatler) ise Marka sekmesinde. Kullanıcı tıklayıp aradığı
+     * alanı bulamıyordu (canlı tur, 2026-10-05).
+     */
+    eylem: (id) => ({
+      etiket: 'Bilgileri doldur',
+      href: `/kutuphane/bilgi-bankasi?musteri=${id}&sekme=marka`,
+    }),
   },
   logo: {
     baslik: 'Logo yüklü',
@@ -106,7 +115,13 @@ export function HazirlikListesi({ veri }: { veri: WorkspaceHazirlik }) {
               >
                 {d.isaret}
               </span>
-              <div className="min-w-0 flex-1">
+              {/*
+                METİN EN AZ 14rem. Yalnızca `min-w-0 flex-1` varken dar ekranda
+                metin küçülüyor, eylem bağlantısı sağda kalıyor ve açıklama
+                satır başına iki kelimeye sıkışıyordu (390 px'te ölçüldü). Alt
+                sınırla `flex-wrap` bağlantıyı alta indiriyor.
+              */}
+              <div className="min-w-[14rem] flex-1">
                 <p className="text-sm font-medium text-ink">
                   <span className="sr-only">{d.okunus}: </span>
                   {tanim.baslik}
@@ -121,7 +136,7 @@ export function HazirlikListesi({ veri }: { veri: WorkspaceHazirlik }) {
               {m.durum === 'eksik' && (
                 <Link
                   href={eylem.href}
-                  className="shrink-0 self-center rounded-lg px-2.5 py-1.5 text-sm font-medium text-brand-strong transition-colors hover:bg-brand-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                  className="ml-10 shrink-0 self-center rounded-lg px-2.5 py-1.5 sm:ml-0 text-sm font-medium text-brand-strong transition-colors hover:bg-brand-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                 >
                   {eylem.etiket} →
                 </Link>

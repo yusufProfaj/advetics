@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { platformKisaAdi, type KreatifPerformansi } from '@advetics/shared';
-import { formatNumber } from '@/lib/format';
+import { formatNumber, formatPercent } from '@/lib/format';
 
 /**
  * ═══ GEÇMİŞTE İŞE YARAYANLAR ═══
@@ -58,7 +58,9 @@ function Kart({ kreatif }: { kreatif: KreatifPerformansi }) {
             {platformKisaAdi(kreatif.platform)}
           </span>
           <span>
-            <strong className="text-ink">%{kreatif.ctr.toFixed(2)}</strong> tıklama oranı
+            {/* `toFixed` ondalığı NOKTAYLA yazıyordu ("%22.78"); panelin geri
+                kalanı Türkçe virgül kullanıyor ("%9,41"). Ortak biçimleyici. */}
+            <strong className="text-ink">{formatPercent(kreatif.ctr)}</strong> tıklama oranı
           </span>
           <span>{formatNumber(kreatif.impressions)} gösterim</span>
         </div>

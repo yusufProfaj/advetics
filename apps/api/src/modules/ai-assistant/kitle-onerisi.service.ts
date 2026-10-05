@@ -36,26 +36,39 @@ import type { AnthropicLike } from './ai-assistant.service';
  * cevap "öneri" diye gösterilmiyor.
  */
 
-/** Modelin doldurduğu şema. Sınırlar Meta çağrı sayısını da sınırlıyor (kota). */
+/**
+ * Modelin doldurduğu şema.
+ *
+ * ═══ DİZİ KISITI (`minItems` / `maxItems`) BURADA YOK — ve olmamalı ═══
+ *
+ * Yapılandırılmış çıktı "karmaşık dizi kısıtlarını" desteklemiyor; SDK onları
+ * yalnızca `messages.parse()` yardımcısında şemadan söküyor, burada ise ham
+ * `messages.create` kullanılıyor ve şema API'ye olduğu gibi gidiyor. İlk
+ * sürüm `maxItems: 5/6/4` ve `minItems: 1` taşıyordu ve özellik canlıda ilk
+ * denemede 500 ile düştü (2026-10-05; sebep sunucu logunda doğrulanacak).
+ *
+ * SINIRLAR KALKMADI, ZOD'A TAŞINDI (`modelCevabi`): Meta çağrı sayısını
+ * (kota) onlar sınırlıyor. Sınırı aşan cevap sessizce kırpılmıyor, "tekrar
+ * dene" hatası veriyor. Sistem istemi de sayıları söylüyor.
+ */
 const MODEL_SEMASI = {
   type: 'object',
   additionalProperties: false,
   required: ['konumlar', 'yasMin', 'yasMax', 'cinsiyet', 'ilgiler', 'uygulanamayan'],
   properties: {
-    konumlar: { type: 'array', items: { type: 'string' }, maxItems: 5 },
+    konumlar: { type: 'array', items: { type: 'string' } },
     yasMin: { type: ['integer', 'null'] },
     yasMax: { type: ['integer', 'null'] },
     cinsiyet: { type: 'string', enum: ['all', 'male', 'female'] },
     ilgiler: {
       type: 'array',
-      maxItems: 6,
       items: {
         type: 'object',
         additionalProperties: false,
         required: ['kavram', 'aramalar'],
         properties: {
           kavram: { type: 'string' },
-          aramalar: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 4 },
+          aramalar: { type: 'array', items: { type: 'string' } },
         },
       },
     },

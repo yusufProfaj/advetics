@@ -7,6 +7,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import Anthropic from '@anthropic-ai/sdk';
+import { platformKisaAdi } from '@advetics/shared';
 import type { Response } from 'express';
 import { PlatformApiError } from '../../modules/connections/provider.types';
 import { maskPath } from '../mask-path';
@@ -105,7 +107,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
      */
     if (exception instanceof PlatformApiError) {
       const subcode = exception.detail?.platformSubcode;
-      const platform = exception.platform === 'meta' ? 'Meta' : 'Google';
+      /*
+       * AD LİSTEDEN. Burada `meta ? 'Meta' : 'Google'` yazıyordu: LinkedIn'in
+       * her hatası panelde "Google: ..." diye görünüyordu ve kullanıcı sebebi
+       * yanlış platformda arıyordu (canlı tur, 2026-10-05).
+       */
+      const platform = platformKisaAdi(exception.platform);
       return {
         // KOTA 429, DİĞERLERİ 502. 429 istemcinin geri çekilmesi gereken tek
         // durum; kalanlar yukarı akış hatası ve 502 tam olarak bunu söylüyor.
@@ -120,6 +127,31 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message: `${platform}: ${exception.message}${
           subcode ? ` (alt kod ${subcode})` : ''
         }`,
+        requestId,
+      };
+    }
+
+    /*
+     * ═══ YAPAY ZEKÂ SERVİSİNİN HATASI SON DALA DÜŞMÜYOR ═══
+     *
+     * `Anthropic.APIError` bir `HttpException` değil; dalı yokken "kitleyi
+     * tarif et" canlıda yalnızca "Beklenmeyen bir hata oluştu" dedi ve
+     * sebebi (şema reddi, kota, bağlantı) yalnızca sunucu logundaydı —
+     * `PlatformApiError` için bir kez yaşanmış hatanın aynısı. Servisin KENDİ
+     * cümlesi ekrana gidiyor; anahtar ya da istek gövdesi içermiyor.
+     *
+     * 429 istemcinin geri çekilmesi gereken tek durum; kalanlar yukarı akış
+     * hatası, 502.
+     */
+    if (exception instanceof Anthropic.APIError) {
+      const govde = exception.error as { error?: { message?: unknown } } | undefined;
+      const ayrinti =
+        typeof govde?.error?.message === 'string' ? govde.error.message : exception.message;
+      return {
+        statusCode:
+          exception.status === 429 ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_GATEWAY,
+        code: exception.status === 429 ? 'AI_RATE_LIMITED' : 'AI_ERROR',
+        message: `Yapay zekâ servisi isteği tamamlayamadı: ${ayrinti}`.slice(0, 500),
         requestId,
       };
     }

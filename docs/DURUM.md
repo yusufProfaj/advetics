@@ -765,6 +765,34 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-05 — BASE brief Aşama 0: canlı tur (ajans yöneticisi, Fes Spa)
+
+Brief: `Advetics-Marka-Merkezi-BASE-gelistirme-brief.pdf` (Joseph, 3 Ekim,
+#84413). Aşama 0'ın ilk rolü gezildi: hazırlık listesi, bağlantılar, Bilgi
+Bankası sekmeleri, Bütçe, Görsel Arşivi, Kreatifler, Formlar, Kitleler, 390 px.
+Yazma yapılmadı (kayıt, yükleme, hesap ekle/kaldır müşteri verisinde; onay
+ve test workspace'i bekliyor). Bulunan ve düzeltilen:
+
+1. **"Kitleyi tarif et" 500 — "Beklenmeyen bir hata oluştu".** Bölüm 4c'nin
+   ilk canlı çağrısı. Aday sebep: yapılandırılmış çıktı şeması
+   `minItems`/`maxItems` taşıyordu ve bu kısıtlar desteklenmiyor (SDK onları
+   yalnızca `parse()`ta söküyor). Şemadan çıkarıldı, sınırlar Zod'da kaldı.
+   **Sunucu loguyla doğrulanmadı** (`requestId ca10e94c-…`).
+2. **Anthropic hataları son dala düşüyordu** — bütün AI yolları için.
+   `AllExceptionsFilter`e `Anthropic.APIError` dalı: servisin cümlesi, 429 /
+   502. Mutasyonla düştü.
+3. **LinkedIn platform hataları "Google: …" diye etiketleniyordu**
+   (`meta ? 'Meta' : 'Google'`). `platformKisaAdi`.
+4. **Hazırlık "Bilgileri doldur" yanlış sekmeye açılıyordu** (serbest metin;
+   eksik alanlar Marka sekmesinde). `sekme=marka`.
+5. **390 px'te hazırlık açıklaması iki kelimelik sütuna sıkışıyordu.**
+   Metne alt genişlik, eylem alta iniyor.
+6. Kreatifler'de tıklama oranı "%22.78" (nokta) — `formatPercent`.
+
+Hata sayılmayanlar: "Reklama hazır" başlığı doğru (eksik üçü önerilen);
+bağlantıların sayfa dışına çıkması brief Aşama 2'de.
+Titrek test: `coklu-fatura.spec.ts` sıra testi (eşit `uploaded_at`), ayrı iş.
+
 ### 2026-10-02 — Genel Bakış: mecra basamağı kalktı, tek "Reklam Hesapları"
 
 Kullanıcı aynı gün sadeleştirdi: ayrı mecra basamağı yok; seviye sekmelerinin
