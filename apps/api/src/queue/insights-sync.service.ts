@@ -143,6 +143,8 @@ export class InsightsSyncService {
         externalId: true,
         managerExternalId: true,
         timezone: true,
+        // Satır para birimi taşımıyorsa yazılan değer (`writeRows`).
+        currency: true,
         // Metrik yazımının ÖN ŞARTI. Aşağıda "hiçbir satır yazılamadı"
         // durumunun tekrar denenebilir olup olmadığına bu alan karar veriyor.
         lastStructureSyncAt: true,
@@ -339,7 +341,7 @@ export class InsightsSyncService {
   // ---------------------------------------------------------------------------
 
   private async writeRows(
-    account: { id: string; clientId: string; platform: Platform; externalId: string },
+    account: { id: string; clientId: string; platform: Platform; externalId: string; currency: string },
     level: InsightsLevel,
     result: PlatformInsights,
   ): Promise<{ rows: number; skipped: number }> {
@@ -388,7 +390,7 @@ export class InsightsSyncService {
         ${r.videoViews}, ${r.engagements}, ${r.reach},
         ${r.frequency ?? null},
         ${JSON.stringify(r.raw)}::jsonb,
-        ${r.currency},
+        ${paraBirimi(r.currency, account.currency)},
         now()
       )`,
         yaz: (values) =>
@@ -532,3 +534,20 @@ export class InsightsSyncService {
     }
   }
 }
+
+/**
+ * ═══ SATIRIN PARA BİRİMİ BOŞSA HESABINKİ ═══
+ *
+ * LinkedIn `adAnalytics` yanıtı satır başına para birimi taşımıyor ve
+ * sağlayıcı alanı boş bırakıyordu. Boş birim sessizce yazılıyordu: Genel
+ * Bakış'ta "Birden fazla para birimi var (TRY, )" uyarısı ve LinkedIn
+ * satırında sembolsüz tutar (canlı tur, 2026-10-05). Kararı her sağlayıcıda
+ * ayrı vermek yerine TEK yazma noktasında veriyoruz: sonradan eklenen bir
+ * platform aynı boşluğu bırakırsa da korunuyor. Tutar hesabın kendi
+ * biriminde (`costInLocalCurrency`), yani hesabın birimi doğru değer.
+ */
+export function paraBirimi(satir: string | null | undefined, hesap: string): string {
+  const s = (satir ?? '').trim();
+  return s.length > 0 ? s.toUpperCase() : hesap;
+}
+

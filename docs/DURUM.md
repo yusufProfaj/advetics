@@ -765,6 +765,24 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-05 — Deploy sonrası: kitle önerisi çalışıyor; konum ülkesi ve LinkedIn para birimi
+
+- **Kitle önerisi canlıda çalıştı** (201, ~20 sn): sebep gerçekten şemadaki
+  `minItems`/`maxItems`ti. Yaş, cinsiyet ve üç ilgi doğru çözüldü.
+- **Konum yanlış ülkeye gidebiliyordu.** Meta'nın "Bornova" araması yalnızca
+  "Gascueña de Bornova, İspanya"yı döndürüyor ve kod ilk sonucu koşulsuz
+  alıyordu. Artık il/şehir yalnızca Türkiye'de ya da tarifte ÜLKE olarak
+  çözülen yerde kabul ediliyor (Katar workspace'i kırılmıyor); yabancı tek
+  eşleşme `uygulanamayan`a neyle eşleştiğiyle yazılıyor. İstem virgüllü konum
+  yazmamasını söylüyor ("Bornova, İzmir" Meta'da hiç bulunmuyordu).
+- **LinkedIn metrik satırları boş para birimiyle yazılıyordu** (sağlayıcı
+  `currency: ''`). Genel Bakış'taki "(TRY, )" ve LinkedIn satırındaki
+  sembolsüz tutar bundan. Yazma noktası hesabın birimine düşüyor
+  (`paraBirimi`); geçmiş satırlar migration'la düzeltildi
+  (`20261005120000_metrik_bos_para_birimi`).
+- Genel Bakış "Reklam Hesapları" canlıda doğrulandı (üç hesap, mecra ikonu +
+  workspace adı, hesap bağlantısı doğru).
+
 ### 2026-10-05 — BASE brief Aşama 0: canlı tur (ajans yöneticisi, Fes Spa)
 
 Brief: `Advetics-Marka-Merkezi-BASE-gelistirme-brief.pdf` (Joseph, 3 Ekim,

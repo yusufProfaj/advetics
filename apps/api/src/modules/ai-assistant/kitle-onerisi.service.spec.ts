@@ -160,3 +160,55 @@ describe('model şeması API’nin desteklediği anahtar kelimelerle sınırlı'
     }
   });
 });
+
+describe('konum yalnızca Türkiye’de ya da adı geçen ülkede', () => {
+  // Canlıda ölçüldü (2026-10-05): "Bornova" araması yalnızca İspanya'daki
+  // bir köyü döndürüyor.
+  const ISPANYA: GeoLocationOption = {
+    key: '1234',
+    type: 'city',
+    name: 'Gascueña de Bornova',
+    label: 'Gascueña de Bornova, Spain, Castilla-La Mancha, İspanya',
+    countryCode: 'ES',
+  };
+  const KATAR: GeoLocationOption = { key: 'QA', type: 'country', name: 'Katar', label: 'Katar', countryCode: 'QA' };
+  const DOHA: GeoLocationOption = { key: '777', type: 'city', name: 'Doha', label: 'Doha, Katar', countryCode: 'QA' };
+
+  it('KRİTİK: yalnızca yurt dışında eşleşen ilçe EKLENMİYOR ve sebebi neyle eşleştiğini söylüyor', async () => {
+    const { svc } = kur({
+      cevap: cevap({ konumlar: ['Bornova'], ilgiler: [], uygulanamayan: [] }),
+      geo: { Bornova: [ISPANYA] },
+    });
+    const r = await svc.oner(CTX, 'c', "Bornova'daki kadınlar");
+    expect(r.locations).toEqual([]);
+    expect(r.eslesmeyen).toEqual([]);
+    expect(r.uygulanamayan).toHaveLength(1);
+    expect(r.uygulanamayan[0]!.ifade).toBe('Bornova');
+    expect(r.uygulanamayan[0]!.sebep).toContain('Gascueña de Bornova');
+  });
+
+  it('Türkiye adayı yabancıdan sonra gelse bile Türkiye seçiliyor', async () => {
+    const { svc } = kur({
+      cevap: cevap({ konumlar: ['İzmir'], ilgiler: [], uygulanamayan: [] }),
+      geo: { İzmir: [ISPANYA, IZMIR] },
+    });
+    const r = await svc.oner(CTX, 'c', 'İzmir');
+    expect(r.locations.map((l) => l.key)).toEqual(['2622']);
+  });
+
+  it('tarifte ülkesi geçen yurt dışı şehri KABUL ediliyor (Katar workspace’i kırılmıyor)', async () => {
+    const { svc } = kur({
+      cevap: cevap({ konumlar: ['Doha', 'Katar'], ilgiler: [], uygulanamayan: [] }),
+      geo: { Doha: [DOHA], Katar: [KATAR] },
+    });
+    const r = await svc.oner(CTX, 'c', "Katar'da Doha");
+    // Ülke + o ülkenin şehri: ülke düşüyor (birleşim kuralı), şehir kalıyor.
+    expect(r.locations.map((l) => l.key)).toEqual(['777']);
+  });
+
+  it('istem virgüllü konum yazmamasını söylüyor — Meta araması onu bulamıyor', async () => {
+    const { svc, istekler } = kur({ cevap: cevap({ konumlar: [], ilgiler: [] }) });
+    await svc.oner(CTX, 'c', 'x');
+    expect(String(istekler[0]!.system)).toContain('virgülle il ya da ülke ekleme');
+  });
+});

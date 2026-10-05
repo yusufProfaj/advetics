@@ -929,6 +929,8 @@ export class LinkedInProvider implements IAdPlatformProvider {
           entityExternalId: this.sayisal(kimlik),
           level: request.level,
           date: tarih,
+          // BOŞ BİLEREK: yanıt satır başına birim taşımıyor; yazma noktası
+          // hesabın birimini koyuyor (insights-sync.service.ts#paraBirimi).
           currency: '',
           impressions: e.impressions ?? 0,
           clicks: e.clicks ?? 0,

@@ -107,7 +107,10 @@ terimi Meta'nın kendi aramasında aranacak.
 
 KURALLAR:
 - konumlar: metinde AÇIKÇA geçen ülke, il ya da şehir adları. Metinde konum yoksa
-  boş bırak (Türkiye geneli varsayılıyor). Konum UYDURMA.
+  boş bırak (Türkiye geneli varsayılıyor). Konum UYDURMA. Her konumu TEK BAŞINA
+  yaz, virgülle il ya da ülke ekleme ("Bornova", "Bornova, İzmir" değil); Meta'nın
+  araması virgüllü ifadeyi bulamıyor. Yurt dışındaki bir şehir için ülkesini de
+  ayrı bir konum olarak yaz ("Doha" ve "Katar").
 - yasMin/yasMax: metinde yaş ya da yaşı belirten bir ifade varsa (ör. "gençler",
   "emekliler") makul aralık; yoksa null. Meta'da alt sınır 18, üst sınır 65 ("65 ve üzeri").
 - cinsiyet: metin açıkça kadın ya da erkek diyorsa female/male, yoksa all.
@@ -193,13 +196,53 @@ export class KitleOnerisiService {
     const eslesmeyen: KitleOnerisi['eslesmeyen'] = [];
     const uygulanamayan = [...c.uygulanamayan];
 
-    const locations: KitleKonumu[] = [];
+    /*
+     * ═══ İL/ŞEHİR YALNIZCA TÜRKİYE'DE YA DA ADI GEÇEN ÜLKEDE ═══
+     *
+     * Burada Meta'nın İLK sonucu koşulsuz alınıyordu. Canlıda ölçüldü
+     * (2026-10-05): "Bornova" araması Türkiye'deki ilçeyi değil "Gascueña de
+     * Bornova, İspanya"yı döndürüyor — model "Bornova" yazsaydı reklam
+     * hiçbir hata vermeden İspanya'ya gidecekti. İlçeler Meta'da çoğu zaman
+     * ayrı bir konum değil.
+     *
+     * KABUL KÜMESİ: Türkiye + tarifte ÜLKE olarak çözülen her ülke. Yalnızca
+     * "Türkiye" demek yurt dışı hedefleyen workspace'leri (Katar, Kuveyt)
+     * kırardı; "Katar'da Doha" iki terim üretir ve Doha, Katar çözüldüğü için
+     * geçer. Yabancı tek eşleşme sessizce EKLENMİYOR ve sessizce DÜŞMÜYOR:
+     * neyle eşleştiği `uygulanamayan`a yazılıyor, kullanıcı gerçekten
+     * orasıysa elle ekliyor. Arama sayısı değişmiyor (sonuçlar saklanıyor).
+     */
+    const gecerliTur = (o: { type: string }) =>
+      o.type === 'country' || o.type === 'region' || o.type === 'city';
+    const aramalar: Array<{ terim: string; adaylar: Awaited<ReturnType<ConnectionsService['searchGeoLocations']>> }> = [];
     for (const terim of c.konumlar) {
       const sonuc = await this.connections.searchGeoLocations(ctx, hesap.id, terim);
-      // İLK SONUÇ: Meta'nın alaka sırası. Kullanıcı formda görüp değiştiriyor.
-      const ilk = sonuc.find((o) => o.type === 'country' || o.type === 'region' || o.type === 'city');
+      aramalar.push({ terim, adaylar: sonuc.filter(gecerliTur) });
+    }
+    const izinliUlkeler = new Set<string>(['TR']);
+    for (const a of aramalar) {
+      const ilk = a.adaylar[0];
+      if (ilk?.type === 'country') izinliUlkeler.add(ilk.key);
+    }
+
+    const locations: KitleKonumu[] = [];
+    for (const { terim, adaylar } of aramalar) {
+      // Kabul kümesi içinde Meta'nın alaka sırası. Kullanıcı formda görüp değiştiriyor.
+      const ilk = adaylar.find(
+        (o) => o.type === 'country' || (o.countryCode !== null && izinliUlkeler.has(o.countryCode)),
+      );
       if (!ilk) {
-        eslesmeyen.push({ terim, tur: 'konum' });
+        const yabanci = adaylar[0];
+        if (yabanci) {
+          uygulanamayan.push({
+            ifade: terim,
+            sebep:
+              `Meta'da Türkiye'de bu adla bir il ya da şehir yok; yalnızca yurt dışında eşleşti ` +
+              `(${yabanci.label}). Yanlış ülkeye gitmesin diye eklenmedi; gerçekten orasıysa elle ekle.`,
+          });
+        } else {
+          eslesmeyen.push({ terim, tur: 'konum' });
+        }
         continue;
       }
       if (locations.some((l) => l.key === ilk.key && l.type === ilk.type)) continue;
