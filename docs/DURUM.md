@@ -765,6 +765,27 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-05 — Rapor önizlemesi 5 sn transaction sınırında düşüyordu
+
+Kullanıcı: "sürekli böyle hatalar alıyorum" (Raporlar, "Beklenmeyen bir hata
+oluştu"). pm2 logu: `/reports/preview` → `Transaction already closed ...
+timeout 5000 ms, however 5233–42473 ms passed`. Aynı hata 4 Eylül'den beri
+logda. Metrik uçları bu yüzden 20 sn'ye çıkarılmıştı; rapor ucu atlanmıştı.
+
+- `veriToplaK` artık `RAPOR_OKUMA_SURESI_MS = 20_000` ile. **Yama:** 40 sn
+  süren rapor bunda da düşer; yavaş sorgu ölçülecek.
+- `P2028` (transaction süresi doldu) filtrede kendi dalında: 503,
+  "İşlem zaman sınırını aştı".
+- Panel 5xx mesajına kısa hata kodu ekliyor (`api.ts#mesajaKodEkle`, tek
+  yerde): "Beklenmeyen bir hata oluştu (hata kodu: f6b9f355)" → logda
+  `grep f6b9f355`.
+- `olcum-rapor` aracı üretimde 22P02 ile düşüyordu: hesap dizisi `olc`un
+  `...params` yayılımıyla UUID başına ayrı parametreye bölünüyordu. Spec SQL'i
+  doğru parametreyle sınıyordu, aracın kendi çağrısını sınamıyordu.
+- Envanter (en büyük workspace, 30 gün): 2 hesap, ~3.600 metrik satırı;
+  izlenen hesap listesinin kendisi 466 ms. 40 sn bu hacimle açıklanmıyor —
+  **sıradaki iş: düzeltilmiş araçla sorgu sorgu ölçüm.**
+
 ### 2026-10-05 — Deploy sonrası: kitle önerisi çalışıyor; konum ülkesi ve LinkedIn para birimi
 
 - **Kitle önerisi canlıda çalıştı** (201, ~20 sn): sebep gerçekten şemadaki

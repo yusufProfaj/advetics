@@ -257,7 +257,13 @@ async function main() {
           let altPlan: string[] = [];
           for (let i = 0; i < TEKRAR; i++) {
             const a = await olc(tx, s.sql(SUZGEC_ALT));
-            const d = await olc(tx, s.sql(SUZGEC_DIZI), hesapIdleri);
+            /*
+             * DİZİ TEK PARAMETRE OLARAK GİDİYOR: `olc` parametreleri yayarak
+             * (`...params`) geçiriyor. Diziyi doğrudan vermek her UUID'yi ayrı
+             * bir parametre yapıyordu; `$1` tek bir UUID metni aldı ve araç
+             * üretimde "malformed array literal" (22P02) ile düştü (2026-10-05).
+             */
+            const d = await olc(tx, s.sql(SUZGEC_DIZI), [hesapIdleri]);
             alt.push(a.ms);
             dizi.push(d.ms);
             altPlan = a.plan;

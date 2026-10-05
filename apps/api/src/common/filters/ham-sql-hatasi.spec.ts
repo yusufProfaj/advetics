@@ -143,3 +143,21 @@ describe('mevcut dallar bozulmadı', () => {
     expect(yanit(new TypeError('boom')).message).toBe('Beklenmeyen bir hata oluştu');
   });
 });
+
+describe('P2028 — transaction süresi doldu', () => {
+  it('KRİTİK: "Beklenmeyen bir hata" DEĞİL, zaman aşımı cümlesi ve 503', () => {
+    /*
+     * Raporlar canlıda 5 saniyelik sınırı 40 saniyeye kadar aştı ve son dala
+     * düştü (2026-10-05). Hata Prisma'nın kendi metniyle üretiliyor.
+     */
+    const e = new Prisma.PrismaClientKnownRequestError(
+      'Transaction API error: Transaction already closed: A batch query cannot be executed on an expired transaction.',
+      { code: 'P2028', clientVersion: '6.19.3' },
+    );
+    const b = yanit(e);
+    expect(b.statusCode).toBe(503);
+    expect(b.code).toBe('TIMEOUT');
+    expect(b.message).toContain('zaman sınırını aştı');
+    expect(b.message).not.toContain('Transaction');
+  });
+});

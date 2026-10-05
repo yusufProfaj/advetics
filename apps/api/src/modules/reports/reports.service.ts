@@ -175,6 +175,22 @@ const BOYUT_BOLUMLERI = [
  */
 const BREAKDOWN_LIMIT = 12;
 
+/**
+ * ═══ RAPOR TRANSACTION'I İÇİN SÜRE — VARSAYILAN 5 SANİYE YETMİYOR ═══
+ *
+ * Rapor verisi tek transaction'da toplanıyor ve Prisma'nın varsayılan sınırı
+ * 5 saniye. Üretimde ölçüldü (2026-10-05, pm2 logu): önizlemeler 5,2 ile 42
+ * saniye arasında sürüp "Transaction already closed" ile düştü ve panelde
+ * "Beklenmeyen bir hata oluştu" göründü. Genel Bakış'ın metrik uçları aynı
+ * sorun için 20 saniyeye çıkarılmıştı (`metrics.service.ts`,
+ * OKUMA_SURESI_MS); rapor ucu atlanmıştı.
+ *
+ * BU BİR YAMA. 40 saniye süren bir rapor bu sınırda da düşer; yavaş sorgu
+ * `olcum-rapor` ile bulunup düzeltilmeli. Uzun transaction bağlantı havuzunu
+ * tutuyor, o yüzden 60 değil 20.
+ */
+const RAPOR_OKUMA_SURESI_MS = 20_000;
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -344,7 +360,7 @@ export class ReportsService {
         conversionDetail,
         generatedAt: new Date().toISOString(),
       };
-    });
+    }, { timeoutMs: RAPOR_OKUMA_SURESI_MS });
   }
 
   /**

@@ -172,6 +172,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
             message: 'Kayıt bulunamadı',
             requestId,
           };
+        /*
+         * P2028 — ETKİLEŞİMLİ TRANSACTION SÜRESİ DOLDU. Raporlar canlıda 5
+         * saniyelik varsayılan sınırı 40 saniyeye kadar aşıyordu ve bu da son
+         * dala düşüp "Beklenmeyen bir hata" diyordu (2026-10-05). İstemciye
+         * ne olduğu ve ne yapılacağı söyleniyor; sebep loga yığın iziyle
+         * yazılmaya devam ediyor (503 >= 500).
+         */
+        case 'P2028':
+          return {
+            statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+            code: 'TIMEOUT',
+            message: 'İşlem zaman sınırını aştı. Biraz sonra tekrar dene; sürerse hata kodunu bize ilet.',
+            requestId,
+          };
         case 'P2003':
           return {
             statusCode: HttpStatus.BAD_REQUEST,

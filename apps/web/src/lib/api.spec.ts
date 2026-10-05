@@ -58,3 +58,30 @@ describe('apiFetch', () => {
     await expect(apiFetch('/x')).rejects.toBeInstanceOf(ApiRequestError);
   });
 });
+
+describe('mesajaKodEkle — sunucu hatası logda bulunabilsin', () => {
+  it('5xx mesajına kısa hata kodu ekleniyor', async () => {
+    const { mesajaKodEkle } = await import('./api');
+    expect(mesajaKodEkle('Beklenmeyen bir hata oluştu', 500, 'f6b9f355-d989-4c79')).toBe(
+      'Beklenmeyen bir hata oluştu (hata kodu: f6b9f355)',
+    );
+  });
+  it('4xx ve kimliksiz yanıt olduğu gibi kalıyor', async () => {
+    const { mesajaKodEkle } = await import('./api');
+    expect(mesajaKodEkle('Bu alan zorunlu', 400, 'abc12345-x')).toBe('Bu alan zorunlu');
+    expect(mesajaKodEkle('x', 500, undefined)).toBe('x');
+    expect(mesajaKodEkle('x', 500, '-')).toBe('x');
+  });
+  it('KRİTİK: hata yolu yardımcıyı GERÇEKTEN çağırıyor', async () => {
+    const asil = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ statusCode: 500, code: 'INTERNAL_ERROR', message: 'Beklenmeyen bir hata oluştu', requestId: 'f6b9f355-aaaa' }), {
+        status: 500,
+      })) as typeof fetch;
+    try {
+      await expect(apiFetch('/x')).rejects.toThrow('(hata kodu: f6b9f355)');
+    } finally {
+      globalThis.fetch = asil;
+    }
+  });
+});

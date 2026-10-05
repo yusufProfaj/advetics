@@ -75,11 +75,28 @@ async function handle<T>(res: Response): Promise<T> {
   }
 
   throw new ApiRequestError(
-    body?.message ?? `İstek başarısız (${res.status})`,
+    mesajaKodEkle(body?.message ?? `İstek başarısız (${res.status})`, res.status, body?.requestId),
     res.status,
     body?.code ?? 'UNKNOWN',
     body?.errors,
   );
+}
+
+/**
+ * ═══ SUNUCU HATASINDA KISA HATA KODU MESAJA EKLENİYOR ═══
+ *
+ * Sunucu her hatada `requestId` dönüyor ve log satırı onu taşıyor, ama panel
+ * göstermiyordu: kullanıcı yalnızca "Beklenmeyen bir hata oluştu" görüyor,
+ * sebebi bulmak için logda saate göre aramak gerekiyordu (raporlar,
+ * 2026-10-05). Kod mesaja TEK YERDE ekleniyor: mesajı gösteren her ekran
+ * kendiliğinden taşıyor, ekran ekran unutulamıyor.
+ *
+ * YALNIZCA 5xx: 4xx'in cümlesi zaten ne yapılacağını söylüyor ("bu alan
+ * zorunlu") ve kod orada gürültü. İlk 8 karakter logda aramaya yetiyor.
+ */
+export function mesajaKodEkle(mesaj: string, status: number, requestId: string | undefined): string {
+  if (status < 500 || !requestId || requestId === '-') return mesaj;
+  return `${mesaj} (hata kodu: ${requestId.slice(0, 8)})`;
 }
 
 // -----------------------------------------------------------------------------

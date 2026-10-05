@@ -240,6 +240,17 @@ describe('KRİTİK: ölçüm ÜRETİMDEKİ bağlamı taklit ediyor', () => {
     expect(gucAdlari(OLCUM)).toEqual(gucAdlari(PRISMA));
   });
 
+  it('KRİTİK: dizi süzgeci aracın kendi çağrısında TEK parametre', () => {
+    /*
+     * Yukarıdaki testler SQL'i `[izlenen]` ile doğru koşturuyordu ama aracın
+     * KENDİ çağrısı diziyi yayıyordu (`olc` parametreleri `...params` ile
+     * geçiriyor) ve araç üretimde 22P02 ile düştü (2026-10-05). İddia çağrı
+     * yerine çapalı.
+     */
+    expect(OLCUM).toContain('olc(tx, s.sql(SUZGEC_DIZI), [hesapIdleri])');
+    expect(OLCUM).not.toContain('olc(tx, s.sql(SUZGEC_DIZI), hesapIdleri)');
+  });
+
   it('plan UYGULAMANIN rolüyle alınıyor, migrator ile DEĞİL', () => {
     expect(OLCUM).toContain(
       "const uygulama = new PrismaClient({ datasourceUrl: process.env.DATABASE_URL })",
