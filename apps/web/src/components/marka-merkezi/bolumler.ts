@@ -22,6 +22,12 @@ import { baglanti } from '@/lib/baglanti';
 export const MM_BOLUMLERI = [
   { kod: 'baglantilar', ad: 'Bağlantılar', izin: 'client.write' },
   { kod: 'marka', ad: 'Marka', izin: 'client.read' },
+  /*
+   * AYLIK BÜTÇE BASE'E GELDİ (2026-10-06, kullanıcının isteği). Reklamlar
+   * altında ayrı sayfaydı; Marka bölümü onun ÖZETİNİ gösterip oraya
+   * yönlendiriyordu — aynı konu iki kapıdan. `/butce` buraya yönleniyor.
+   */
+  { kod: 'butce', ad: 'Aylık Bütçe', izin: 'budget.read' },
   { kod: 'kitleler', ad: 'Kitleler', izin: 'client.read' },
   { kod: 'varliklar', ad: 'Varlıklar', izin: 'bulk.read' },
 ] as const satisfies ReadonlyArray<{ kod: string; ad: string; izin: Permission }>;
@@ -80,12 +86,11 @@ export function mmAdresi(
  * Eski sayfalar SİLİNMİYOR, yönleniyor: kayıtlı yer imleri, ekip içinde
  * paylaşılmış bağlantılar ve mailde duran adresler kırılmamalı.
  *
- * Bütçe istisna: tek yeri Reklamlar › Aylık Bütçe. Bilgi Bankası'nın Bütçe
- * sekmesi aynı veriyi ikinci bir yerden düzenletiyordu; Marka Merkezi
- * yalnızca özetini gösterip oraya yönlendiriyor.
+ * Bilgi Bankası'nın Bütçe sekmesi Aylık Bütçe bölümüne gidiyor; bütçenin
+ * tek yeri orası.
  */
 export function bilgiBankasiYonu(clientId: string | undefined, sekme: string | undefined): string {
-  if (sekme === 'butce') return baglanti('/butce', { musteri: clientId });
+  if (sekme === 'butce') return mmAdresi(clientId, 'butce');
   const capa = sekme === 'logo' ? 'logo' : sekme === 'bilgi-bankasi' || sekme === 'hedef-kitle' ? 'bilgi' : undefined;
   return mmAdresi(clientId, 'marka', {}, capa);
 }

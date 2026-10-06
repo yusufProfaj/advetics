@@ -61,7 +61,7 @@ export const HAZIRLIK_MADDE_TANIMI: Record<
   aylik_butce: {
     baslik: 'Bu ayın bütçesi tanımlı',
     kisa: 'Bu ayın bütçesi',
-    eylem: (id) => ({ etiket: 'Bütçe tanımla', href: `/butce?musteri=${id}` }),
+    eylem: (id) => ({ etiket: 'Bütçe tanımla', href: mmAdresi(id, 'butce') }),
   },
   sosyal_kanal: {
     baslik: 'Sayfa ya da kanal bağlı',

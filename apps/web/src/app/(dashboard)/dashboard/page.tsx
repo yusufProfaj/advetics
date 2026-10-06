@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type {
   MetricsAccountBreakdown,
+  ClientPacing,
   Platform,
   MetricsBreakdownRow,
   MetricsClientRow,
@@ -33,6 +34,9 @@ import { MetricStrip } from '@/components/metric-strip';
 import { MetricsChart } from '@/components/metrics-chart';
 import { BreakdownTable } from '@/components/breakdown-table';
 import { HesapKirilimi } from '@/components/hesap-kirilimi';
+import { ButceKarti } from '@/components/budget/butce-karti';
+import { ayAnahtari } from '@/components/marka-merkezi/butce';
+import { mmAdresi } from '@/components/marka-merkezi/bolumler';
 import {
   hesapCoz,
   panelSeviyesiCoz,
@@ -269,7 +273,16 @@ export default async function DashboardPage({
    *
    * Sebep artık platformun KENDİ cümlesiyle ekranda; sayfa yine açılıyor.
    */
-  const [summary, series, breakdown, musteriler, sirketler, donusum, yol, hesaplar] =
+  /*
+   * BU AYIN BÜTÇESİ — yalnızca tek workspace seçiliyken ve bütçe okuma
+   * yetkisi varsa. Ajans ve şirket görünümünde bütçe workspace başına
+   * anlamlı; toplamını göstermek ayrı bir karar.
+   */
+  const butceGorunur =
+    !mcc && !ajansGorunumu && session.activeClientId !== null && session.permissions.includes('budget.read');
+  let butceHatasi: string | null = null;
+
+  const [summary, series, breakdown, musteriler, sirketler, donusum, yol, hesaplar, butce] =
     await Promise.all([
     serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch((e: unknown) => {
       ozetHatasi = hataMetni(e);
@@ -328,6 +341,14 @@ export default async function DashboardPage({
       : Promise.resolve(null),
     !mcc && !ajansGorunumu && varlik === null
       ? serverApiFetch<MetricsAccountBreakdown>(`/metrics/hesaplar?${hesapQs}`).catch(() => null)
+      : Promise.resolve(null),
+    butceGorunur
+      ? serverApiFetch<ClientPacing>(
+          `/budgets/pacing?${new URLSearchParams({ clientId: session.activeClientId!, month: ayAnahtari() })}`,
+        ).catch((e: unknown) => {
+          butceHatasi = hataMetni(e);
+          return null;
+        })
       : Promise.resolve(null),
   ]);
 
@@ -441,9 +462,21 @@ export default async function DashboardPage({
             </>
           }
           eylemler={
-            summary !== null ? (
-              /* Tazelik düğmenin içinde; burada tekrar yazmak aynı bilgiyi iki kez göstermekti. */
-              <p className="text-xs text-ink-muted">{summary.accountCount} reklam hesabı</p>
+            butceGorunur || summary !== null ? (
+              <div className="flex flex-wrap items-center gap-3">
+                {summary !== null && (
+                  /* Tazelik düğmenin içinde; burada tekrar yazmak aynı bilgiyi iki kez göstermekti. */
+                  <p className="text-xs text-ink-muted">{summary.accountCount} reklam hesabı</p>
+                )}
+                {butceGorunur && (
+                  <ButceKarti
+                    veri={butce}
+                    hata={butceHatasi}
+                    href={mmAdresi(session.activeClientId, 'butce')}
+                    ayAdi={buAyAdi()}
+                  />
+                )}
+              </div>
             ) : undefined
           }
         />
@@ -846,4 +879,10 @@ function resolvePlatform(raw: string | undefined): Platform | null {
    * kayboluyor" hatasının aynısı.
    */
   return PLATFORMS.find((p) => p === raw) ?? null;
+}
+
+/** "Ekim" — kartın başlığı; ay anahtarıyla aynı saat dilimi (UTC). */
+function buAyAdi(): string {
+  const ad = new Date().toLocaleDateString('tr-TR', { month: 'long', timeZone: 'UTC' });
+  return ad.charAt(0).toLocaleUpperCase('tr-TR') + ad.slice(1);
 }

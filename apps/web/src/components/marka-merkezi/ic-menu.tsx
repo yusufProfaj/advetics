@@ -20,7 +20,6 @@ export const MARKA_ALT_BASLIKLARI = [
   { capa: 'marka-bilgileri', ad: 'Marka bilgileri' },
   { capa: 'bilgi', ad: 'Bilgi bankası' },
   { capa: 'logo', ad: 'Logo' },
-  { capa: 'butce', ad: 'Bütçe özeti' },
 ] as const;
 
 const ROZET: Record<RozetTonu, string> = {

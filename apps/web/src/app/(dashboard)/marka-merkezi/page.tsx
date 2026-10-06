@@ -21,6 +21,7 @@ import {
 import { GorsellerIcerik } from '@/components/marka-merkezi/varliklar/gorseller';
 import { KreatiflerIcerik } from '@/components/marka-merkezi/varliklar/kreatifler';
 import { FormlarIcerik } from '@/components/marka-merkezi/varliklar/formlar';
+import { ButceIcerik } from '@/components/marka-merkezi/butce';
 import { AiDoldur } from '@/components/bilgi-bankasi/ai-doldur';
 import { MarkaSekmesi } from '@/components/bilgi-bankasi/marka-sekmesi';
 import { MetinSekmesi } from '@/components/bilgi-bankasi/metin-sekmesi';
@@ -224,29 +225,10 @@ export default async function MarkaMerkeziPage({
                     <LogoSekmesi clientId={clientId} canWrite={yaz('bulk.write')} />
                   </Kart>
                 )}
-                {/*
-                  BÜTÇE TEK YERDE: Aylık Bütçe. Bilgi Bankası'nın Bütçe sekmesi
-                  aynı veriyi ikinci bir yerden düzenletiyordu.
-                */}
-                <section
-                  id="butce"
-                  className="flex scroll-mt-24 flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-5 py-4"
-                >
-                  <div>
-                    <h3 className="text-sm font-semibold text-ink">Aylık bütçe</h3>
-                    <p className="mt-0.5 text-sm text-ink-muted">
-                      Bütçe hedefi Reklamlar › Aylık Bütçe’de tanımlanıyor ve izleniyor.
-                    </p>
-                  </div>
-                  <Link
-                    href={baglanti('/butce', { musteri: clientId })}
-                    className="text-sm font-semibold text-brand-strong hover:underline"
-                  >
-                    Aylık Bütçe’ye git →
-                  </Link>
-                </section>
               </section>
             )}
+
+            {bolum === 'butce' && <ButceIcerik clientId={clientId} params={params} />}
 
             {bolum === 'kitleler' && (
               <KitlelerBolumu clientId={clientId} yazabilir={yaz('client.write')} />

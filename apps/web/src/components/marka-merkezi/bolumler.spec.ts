@@ -44,8 +44,9 @@ describe('adresler', () => {
 });
 
 describe('eski adresler', () => {
-  it('KRİTİK: Bilgi Bankası bütçe sekmesi Aylık Bütçe’ye, gerisi Marka’ya', () => {
-    expect(bilgiBankasiYonu('ws-1', 'butce')).toBe('/butce?musteri=ws-1');
+  it('KRİTİK: Bilgi Bankası bütçe sekmesi Aylık Bütçe bölümüne, gerisi Marka’ya', () => {
+    // Bütçe 2026-10-06'dan beri Marka Merkezi'nin kendi bölümü.
+    expect(bilgiBankasiYonu('ws-1', 'butce')).toBe('/marka-merkezi?musteri=ws-1&bolum=butce');
     const marka = u(bilgiBankasiYonu('ws-1', 'marka'));
     expect(marka.pathname).toBe('/marka-merkezi');
     expect(marka.searchParams.get('bolum')).toBe('marka');
@@ -59,5 +60,38 @@ describe('eski adresler', () => {
     expect(g.searchParams.get('varlik')).toBe('gorseller');
     expect(g.searchParams.get('tur')).toBe('logo');
     expect(u(varlikYonu('ws-1', 'formlar', { form: 'f1' })).searchParams.get('form')).toBe('f1');
+  });
+});
+
+describe('Aylık Bütçe Base’de', () => {
+  it('KRİTİK: bütçe bölümü var ve okuma yetkisiyle açılıyor; eski adres oraya yönleniyor', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    expect(bolumCoz('butce', ROLE_PERMISSIONS.ad_manager)).toBe('butce');
+    const eski = readFileSync(resolve(__dirname, '../../app/(dashboard)/butce/page.tsx'), 'utf8');
+    expect(eski).toContain("redirect(mmAdresi(ilk(p.musteri), 'butce', { ay: ilk(p.ay) }))");
+    expect(eski).not.toContain('serverApiFetch');
+    const sayfa = readFileSync(resolve(__dirname, '../../app/(dashboard)/marka-merkezi/page.tsx'), 'utf8');
+    expect(sayfa).toContain("{bolum === 'butce' && <ButceIcerik clientId={clientId} params={params} />}");
+  });
+
+  it('KRİTİK: ay değiştirmek Marka Merkezi’nden çıkarmıyor', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const k = readFileSync(resolve(__dirname, 'butce.tsx'), 'utf8');
+    expect(k).toContain("mmAdresi(clientId, 'butce', { ay: over.ay ?? selected.key })");
+    expect(k).not.toContain('`/butce?');
+  });
+
+  it('KRİTİK: Genel Bakış bütçe kartı aynı ay üreticisini kullanıyor ve hatayı yutmuyor', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const g = readFileSync(resolve(__dirname, '../../app/(dashboard)/dashboard/page.tsx'), 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
+    expect(g).toContain('month: ayAnahtari()');
+    expect(g).toContain('butceHatasi = hataMetni(e);');
+    expect(g).toContain("href={mmAdresi(session.activeClientId, 'butce')}");
   });
 });

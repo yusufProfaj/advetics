@@ -125,7 +125,7 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
        * bilgi kendisine ait. Ama bu ekran bütçe BELİRLEME yeri; okuma
        * yetkisiyle açmak müşteriyi kaydedemeyeceği bir forma götürürdü.
        */
-      { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true, perm: 'budget.write' },
+      // AYLIK BÜTÇE BASE'E TAŞINDI (2026-10-06): Marka Merkezi › Aylık Bütçe.
     ],
   },
   {
@@ -186,7 +186,7 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         perm: 'client.write',
         // Varlık ekranları menüden kalkıp buraya indi (Bölüm 3); oradayken
         // bu satır seçili görünsün.
-        ekYollar: [...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi'],
+        ekYollar: [...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi', '/butce'],
       },
       /*
        * GÖRSEL ARŞİVİ, KREATİFLER VE FORMLAR BURADA DEĞİL — Marka Merkezi'nin

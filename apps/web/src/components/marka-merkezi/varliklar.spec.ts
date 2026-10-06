@@ -22,8 +22,10 @@ describe('menü', () => {
     if (!mm) throw new Error('Marka Merkezi satırı bulunamadı — tarama boşa düştü.');
     // Eski Bilgi Bankası adresi de (yönlendirme anında) Marka Merkezi'ni
     // seçili gösteriyor: içeriği oraya taşındı (2026-10-06).
-    expect(mm.ekYollar).toEqual([...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi']);
-    for (const y of [...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi']) {
+    // Aylık Bütçe de 2026-10-06'da Marka Merkezi'ne taşındı.
+    const eski = [...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi', '/butce'];
+    expect(mm.ekYollar).toEqual(eski);
+    for (const y of eski) {
       expect(aktifMi(mm, `${y}`), y).toBe(true);
     }
   });

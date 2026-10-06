@@ -765,6 +765,21 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-06 — Hazırlık şeridi + Aylık Bütçe Base'e + Genel Bakış bütçe kartı
+
+- **Hazırlık listesi tek satırlık şerit** (kullanıcı: "görüntü kirliliği"):
+  halka gösterge, durum cümlesi, yalnızca eksikler (bağlantı). Ayrıntı
+  `<details>` ile; zorunlu adım eksikse açık başlıyor. Maddelere kısa ad
+  eklendi ("Eksik: Logo yüklü" ters okunuyordu).
+- **Aylık Bütçe → Marka Merkezi › Aylık Bütçe** (kullanıcı isteği). Menüden
+  (Reklamlar) kalktı; `/butce` yönleniyor (`ay` taşınıyor). Gövde
+  `components/marka-merkezi/butce.tsx`. Marka bölümündeki bütçe özeti kartı
+  kalktı (konu tek kapıda).
+- **Genel Bakış başlığında bu ayın bütçesi** (tek workspace seçiliyken,
+  `budget.read`): harcanan / bütçe, hız rozeti, ilerleme; tanımsız ve
+  "alınamadı" ayrı yazılıyor; tıklanınca Aylık Bütçe bölümü. Ay anahtarı
+  bütçe bölümüyle aynı üreticiden (`ayAnahtari`).
+
 ### 2026-10-06 — Base Aşama 1: kurumsal kimlik bütün panelde + Marka Merkezi iskeleti
 
 Kullanıcı: *"nereye nereden girdiğimi unutuyorum"*. Tasarım taslağı birlikte
