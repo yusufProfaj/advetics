@@ -1,4 +1,17 @@
-# Kullanıcı kararı bekleyen sorular (25)
+# Kullanıcı kararları (25) — KAPANDI 2026-10-07
+
+> **2026-10-07, kullanıcı:** *"benden beklenen kararları sen biliyorsun zaten doğru olan
+> şeyleri seç ve ona göre ilerleyelim"*. Bu cümleyle 25 sorunun TAMAMINDA her alt
+> maddenin **önerilen (ilk sıradaki) seçeneği** kabul edildi. Tasarım belgesi zaten
+> önerilen seçeneklerle yazılmıştı; yani TASARIM.md değişmeden geçerli. Aşağıdaki
+> metin karar kaydı olarak duruyor. Bir kararı değiştirmek isteyen bu dosyaya yeni
+> bir tarihli satır ekler, eski satırı silmez.
+>
+> Dikkat edilecek iki sonuç: C-1'de sağlık turizmi niyeti yönetmeliğin kısıtlarıyla
+> AÇIK (yurt dışı, Türkçe dışı dil, ayrı Sayfa/IG, Advantage+ kitle kapalı); C-2 §3'te
+> "açılış ayı" ve "Bakanlık izinli yöntem" hukuk görüşü gelene kadar KAPALI.
+
+## (Eski başlık) Kullanıcı kararı bekleyen sorular (25)
 > Hükümlerin kullanıcıya bıraktığı iş kararları. Her birinde önerilen seçenek ilk sırada; tasarım belgesi şimdilik ÖNERİLEN seçenekle yazıldı. Ayrıntı: [hukumler.md](hukumler.md).
 
 ## C-1. Sağlık turizmi modunda Advantage+ kitle kapalı: karar 2'nin mevzuattan gelen dar istisnası

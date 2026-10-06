@@ -11,16 +11,18 @@ Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlı
 doğrulandı).
 **Bekleyen deploy:** konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
-**Reklam oluşturma (2026-10-07): BAŞTAN tasarlandı, uygulama ONAY BEKLİYOR.**
-Akıllı Boost dışındaki modül mevcut yapıya bağlı kalmadan yeniden tasarlandı:
-[`meta-reklam-brief/tasarim/TASARIM.md`](meta-reklam-brief/tasarim/TASARIM.md)
-(18 bölüm; girdi: Meta dokümantasyonunun 1.013 sayfasından brief +
-6 araştırma raporu + 52 çelişki hükmü). Kullanıcı kararları brief'in
-başında (Advantage+ kitle ve yerleşim açık, tek adımlı yayın, sohbetten yayın,
-konut kısıtı TR'de). **25 soru kullanıcı cevabı bekliyor:**
-[`tasarim/bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md).
-Cevaplar gelmeden uygulamaya ya da arayüz tasarımına başlanmaz (kullanıcı
-açıkça söyledi). Eski `/reklam-olustur` koduna kurgu eklenmez.
+**Reklam oluşturma (2026-10-07): kararlar KAPANDI, Aşama 1 BAŞLADI.**
+Kullanıcı 25 sorunun hepsinde önerilen seçeneği kabul etti
+([`bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md) başı);
+[`TASARIM.md`](meta-reklam-brief/tasarim/TASARIM.md) değişmeden geçerli.
+Acemi akışının tıklanabilir taslağı:
+[`reklam-olustur-arayuz.html`](meta-reklam-brief/tasarim/reklam-olustur-arayuz.html)
+(claude.ai/artifact/4Jp3rPrT61th6DNE1Nq8z2). Aşama 1 (saf çekirdek,
+`packages/shared/src/derleyici/`) ilk parça: niyet kataloğu, sonuç etiketleri,
+adlandırma, `adlabels` + `reklam-derleyici/niyetler.spec.ts` (mutasyonla
+sınandı). **Sıradaki:** § 06.4 manifesto + hedefleme üreticisi (varsayılansız
+`advantageAudience`) + bütçe fonksiyonları, sonra `derleMeta()`. Panel yok,
+Meta'ya yazma yok; eski `/reklam-olustur` koduna dokunulmuyor.
 **Acil, bu işten bağımsız:** Meta v26 kuralı 2026-10-27'de bütün sürümlerde
 kök `GET /?ids=` isteklerini hataya çeviriyor (rapor PDF görsel tazeleme,
 boost özeti) — ayrı oturumda düzeltiliyordu; deploy o tarihten önce.

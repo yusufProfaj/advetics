@@ -1,0 +1,209 @@
+<title>Reklam Oluştur Akışı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600&display=swap">
+<style>
+/* Düzen: solda panelin kenar çubuğu, ortada tek sütun sihirbaz, sağda canlı "Bu reklam ne yapacak?" kartı. */
+:root{
+  --zemin:#f6f5f4; --yuzey:#ffffff; --cizgi:#e4e1df; --metin:#302e2d; --soluk:#6f6a67;
+  --marka:#ff2400; --marka-acik:#fff0ec; --iyi:#1f7a4d; --iyi-acik:#e8f5ee; --uyari:#a35a00; --uyari-acik:#fff4e0;
+  --baslik:'Montserrat',system-ui,sans-serif; --govde:'Open Sans',system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --zemin:#1b1a19; --yuzey:#252322; --cizgi:#3a3735; --metin:#f1eeec; --soluk:#a9a3a0;
+  --marka:#ff5a3c; --marka-acik:#3a1f19; --iyi:#5cc490; --iyi-acik:#1c3328; --uyari:#f0a948; --uyari-acik:#3a2c17; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --zemin:#1b1a19; --yuzey:#252322; --cizgi:#3a3735; --metin:#f1eeec; --soluk:#a9a3a0;
+  --marka:#ff5a3c; --marka-acik:#3a1f19; --iyi:#5cc490; --iyi-acik:#1c3328; --uyari:#f0a948; --uyari-acik:#3a2c17; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--zemin);color:var(--metin);font-family:var(--govde);font-size:15px;line-height:1.55;padding-inline:16px;padding-block:0}
+h1,h2,h3{font-family:var(--baslik);text-wrap:balance;margin:0}
+.kabuk{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:200px minmax(0,1fr) 300px;gap:24px;padding-block:24px}
+@media (max-width:980px){.kabuk{grid-template-columns:minmax(0,1fr)}.kenar,.ozet{display:none}}
+.kenar{font-size:13px}
+.kenar .logo{font-family:var(--baslik);font-weight:800;font-size:18px;margin-bottom:18px}
+.kenar .logo b{color:var(--marka)}
+.kenar a{display:block;padding:7px 10px;border-radius:8px;color:var(--soluk);text-decoration:none}
+.kenar a.aktif{background:var(--yuzey);color:var(--metin);font-weight:600;border:1px solid var(--cizgi)}
+.kenar .grup{margin-top:14px;text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--soluk);padding:0 10px 4px}
+.serit{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px;color:var(--soluk);margin-bottom:14px}
+.cip{border:1px solid var(--cizgi);background:var(--yuzey);border-radius:999px;padding:3px 10px;color:var(--metin)}
+.anahtar{margin-left:auto;display:flex;border:1px solid var(--cizgi);border-radius:999px;overflow:hidden}
+.anahtar button{border:0;background:transparent;padding:4px 12px;font:inherit;color:var(--soluk);cursor:pointer}
+.anahtar button.secili{background:var(--metin);color:var(--zemin)}
+.sayfa-baslik{font-size:24px;font-weight:800;margin-bottom:4px}
+.alt{color:var(--soluk);margin:0 0 18px}
+.adimlar{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.adimlar button{font:600 12px var(--govde);border:1px solid var(--cizgi);background:var(--yuzey);color:var(--soluk);border-radius:999px;padding:5px 12px;cursor:pointer}
+.adimlar button.simdi{border-color:var(--marka);color:var(--marka)}
+.adimlar button.bitti{color:var(--iyi);border-color:var(--iyi)}
+.kart{background:var(--yuzey);border:1px solid var(--cizgi);border-radius:12px;padding:20px}
+.soru{font-size:19px;font-weight:700;margin-bottom:4px}
+.niyetler{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:16px}
+.niyet{text-align:left;border:1.5px solid var(--cizgi);background:var(--yuzey);border-radius:12px;padding:14px;cursor:pointer;font:inherit;color:inherit;display:flex;flex-direction:column;gap:4px}
+.niyet:hover,.niyet:focus-visible{border-color:var(--marka);outline:none}
+.niyet.secili{border-color:var(--marka);background:var(--marka-acik)}
+.niyet b{font-family:var(--baslik);font-size:15px}
+.niyet span{color:var(--soluk);font-size:13px}
+.niyet .rozet{align-self:flex-start;font-size:11px;border-radius:999px;padding:1px 8px;background:var(--zemin);color:var(--soluk)}
+.niyet.yon{border-style:dashed}
+.alan{display:flex;flex-direction:column;gap:6px;margin-top:14px}
+.alan label{font-weight:600;font-size:13px}
+.alan input,.alan textarea{font:inherit;color:inherit;background:var(--zemin);border:1px solid var(--cizgi);border-radius:8px;padding:9px 11px}
+.alan small{color:var(--soluk)}
+.kavramlar{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
+.gorsel{aspect-ratio:4/5;border-radius:10px;border:1px solid var(--cizgi);background:linear-gradient(160deg,var(--marka-acik),var(--zemin));display:flex;align-items:flex-end;padding:8px;font-size:12px;position:relative;max-width:100%}
+.gorsel .oran{position:absolute;top:8px;left:8px;display:flex;gap:4px}
+.gorsel .oran i{font-style:normal;font-size:10px;background:var(--yuzey);border-radius:4px;padding:1px 5px;border:1px solid var(--cizgi)}
+.gorsel.ekle{border-style:dashed;align-items:center;justify-content:center;color:var(--soluk);background:var(--zemin)}
+.butceler{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-top:14px}
+.butce{border:1.5px solid var(--cizgi);border-radius:12px;padding:14px;cursor:pointer;background:var(--yuzey);font:inherit;color:inherit;text-align:left}
+.butce.secili{border-color:var(--marka);background:var(--marka-acik)}
+.butce b{font-family:var(--baslik);font-size:20px;display:block;font-variant-numeric:tabular-nums}
+.butce span{font-size:13px;color:var(--soluk)}
+.not{margin-top:14px;padding:10px 12px;border-radius:8px;font-size:13px;background:var(--zemin);color:var(--soluk)}
+.not.uyari{background:var(--uyari-acik);color:var(--uyari)}
+.alt-cubuk{display:flex;justify-content:space-between;align-items:center;margin-top:18px;gap:12px;flex-wrap:wrap}
+.btn{font:600 14px var(--govde);border-radius:10px;padding:10px 18px;cursor:pointer;border:1px solid var(--cizgi);background:var(--yuzey);color:var(--metin)}
+.btn.birincil{background:var(--marka);border-color:var(--marka);color:#fff}
+.btn:focus-visible,.niyet:focus-visible,.butce:focus-visible{outline:2px solid var(--marka);outline-offset:2px}
+.ozet .kart{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
+.ozet h3{font-size:14px;margin-bottom:10px}
+.satir{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--cizgi);font-size:13px}
+.satir:first-of-type{border-top:0}
+.satir span:first-child{color:var(--soluk)}
+.satir span:last-child{text-align:right;font-weight:600}
+.eksik{margin-top:12px;font-size:13px}
+.eksik li{color:var(--uyari)}
+.bloklar{display:grid;gap:14px}
+.blok h3{font-size:15px;margin-bottom:8px;display:flex;gap:8px;align-items:center}
+.blok h3 em{font-style:normal;font-family:var(--govde);font-size:11px;color:var(--soluk);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.uc{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:640px){.uc{grid-template-columns:minmax(0,1fr)}}
+.uc div{background:var(--zemin);border-radius:8px;padding:10px;font-size:13px}
+.uc div b{display:block;font-family:var(--baslik);font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--soluk);margin-bottom:4px}
+.onizleme{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px}
+.telefon{flex:0 0 170px;border:1px solid var(--cizgi);border-radius:16px;padding:8px;background:var(--zemin);font-size:11px}
+.telefon .g{aspect-ratio:1;border-radius:8px;background:linear-gradient(160deg,var(--marka-acik),var(--cizgi));margin:6px 0}
+.telefon.dikey .g{aspect-ratio:9/16}
+.liste{margin:0;padding-left:18px;font-size:13px}
+.liste li{margin:3px 0}
+.durum{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px}
+.durum.iyi{background:var(--iyi-acik);color:var(--iyi)}
+.durum.uyari{background:var(--uyari-acik);color:var(--uyari)}
+.para{display:flex;flex-wrap:wrap;gap:18px;font-variant-numeric:tabular-nums}
+.para div span{display:block;font-size:12px;color:var(--soluk)}
+.para div b{font-family:var(--baslik);font-size:18px}
+.karar-cumlesi{font-size:13px;color:var(--soluk);max-width:60ch}
+.ilerleme{display:grid;gap:8px;margin-top:12px}
+.ilerleme div{display:flex;justify-content:space-between;font-size:13px;padding:8px 10px;border-radius:8px;background:var(--zemin)}
+@media (prefers-reduced-motion:no-preference){.niyet,.butce,.btn{transition:border-color .15s,background .15s}}
+</style>
+
+<div class="kabuk">
+  <nav class="kenar" aria-label="Panel menüsü">
+    <div class="logo">advetics<b>.</b></div>
+    <a href="#">Genel Bakış</a>
+    <a href="#" class="aktif">Reklam Oluştur</a>
+    <a href="#">Reklamlarım</a>
+    <a href="#">Akıllı Boost</a>
+    <a href="#">Raporlar</a>
+    <div class="grup">Base</div>
+    <a href="#">Marka Merkezi</a>
+  </nav>
+
+  <main style="min-width:0">
+    <div class="serit">
+      <span class="cip">Örnek Yapı</span><span class="cip">Meta · Örnek Yapı Reklam</span><span class="cip">Sayfa: Örnek Yapı</span>
+      <div class="anahtar" role="group" aria-label="Görünüm"><button class="secili" id="m-basit">Basit</button><button id="m-gelismis">Gelişmiş</button></div>
+    </div>
+    <h1 class="sayfa-baslik">Reklam Oluştur</h1>
+    <p class="alt">Beş soru, bir kontrol ekranı. Hazırlık Marka Merkezi'nde bir kez yapılır.</p>
+    <div class="adimlar" id="adimlar"></div>
+    <section class="kart" id="ekran"></section>
+  </main>
+
+  <aside class="ozet">
+    <div class="kart">
+      <h3>Bu reklam ne yapacak?</h3>
+      <div id="ozet"></div>
+      <ul class="eksik" id="eksik"></ul>
+    </div>
+  </aside>
+</div>
+
+<script>
+const ADIMLAR=['Amaç','Görsel','Metin','Bütçe','Süre','Gözden geçir'];
+const NIYETLER=[
+ {k:'FORM',ad:'Form doldursunlar',alt:'Adı ve telefonu olan form alırsın.',sonuc:'form'},
+ {k:'WHATSAPP',ad:"WhatsApp'tan yazsınlar",alt:"WhatsApp'ına mesaj gelir.",sonuc:'sohbet başlatan kişi'},
+ {k:'SITE',ad:'Siteme gelsinler',alt:'Sitene gelen ziyaretçi alırsın.',sonuc:'sayfa görüntüleme'},
+ {k:'SATIS',ad:'Sitemden satış ya da kayıt gelsin',alt:'Sitende satış ya da kayıt alırsın.',sonuc:'satın alma',rozet:'Piksel gerekli'},
+ {k:'ONE_CIKAR',ad:'Paylaşımımı öne çıkar',alt:"Instagram paylaşımlarını öne çıkarmak Akıllı Boost'ta yapılır.",yon:true}
+];
+const BUTCELER=[{g:250,ad:'Deneme',alt:'Az veri, yavaş öğrenme'},{g:500,ad:'Önerilen',alt:'Bu bölgede çoğu hesap bu düzeyde'},{g:1000,ad:'Hızlı',alt:'Öğrenme daha kısa sürer'}];
+const d={adim:0,niyet:null,kavram:2,metin:'Bornova\'da 2+1 daireler, teslim 2027. Ödeme planını öğrenmek için formu doldurun.',baslik:'Bornova Konutları',butce:500,gun:14};
+const $=s=>document.querySelector(s);
+const tl=n=>n.toLocaleString('tr-TR')+' ₺';
+
+function adimCiz(){
+ $('#adimlar').innerHTML=ADIMLAR.map((a,i)=>`<button data-i="${i}" class="${i===d.adim?'simdi':i<d.adim?'bitti':''}">${i+1}. ${a}</button>`).join('');
+ document.querySelectorAll('#adimlar button').forEach(b=>b.onclick=()=>{d.adim=+b.dataset.i;ciz()});
+}
+function alt(geri,ileri,etiket='Devam et'){
+ return `<div class="alt-cubuk">${geri?'<button class="btn" id="geri">Geri</button>':'<span></span>'}${ileri?`<button class="btn birincil" id="ileri">${etiket}</button>`:''}</div>`;
+}
+const ekranlar=[
+ ()=>`<h2 class="soru">Bu reklamdan ne istiyorsun?</h2><p class="alt" style="margin:0">Bir tane seç. Kampanya amacını, optimizasyonu ve düğmeyi buna göre biz kuruyoruz.</p>
+  <div class="niyetler">${NIYETLER.map(n=>`<button class="niyet ${n.yon?'yon':''} ${d.niyet===n.k?'secili':''}" data-k="${n.k}">${n.rozet?`<span class="rozet">${n.rozet}</span>`:''}<b>${n.ad}</b><span>${n.alt}</span>${n.yon?'<span style="color:var(--marka);font-weight:600">Akıllı Boost\'a git</span>':''}</button>`).join('')}</div>
+  <div class="not">Göremediğin seçenekler canlıda doğrulanınca açılacak. Instagram'dan mesaj, arama ve erişim sıradaki turda.</div>${alt(false,!!d.niyet)}`,
+ ()=>`<h2 class="soru">Ne göstereceksin?</h2><p class="alt" style="margin:0">Her görsel ayrı bir fikir olur. En çok 5. Kare, dikey ve yatay kesitleri biz çıkarıyoruz.</p>
+  <div class="kavramlar">${Array.from({length:d.kavram},(_,i)=>`<div class="gorsel"><div class="oran"><i>1:1</i><i>4:5</i><i>9:16</i></div>Fikir ${i+1}</div>`).join('')}${d.kavram<5?'<button class="gorsel ekle" id="kekle">+ Görsel ekle</button>':''}</div>
+  <div class="not">Yazı görselin alt %14'üne denk geliyorsa Reels'te düğmenin altında kalır. Yüklerken uyarırız.</div>${alt(true,true)}`,
+ ()=>`<h2 class="soru">Ne yazacaksın?</h2>
+  <div class="alan"><label for="baslik">Başlık</label><input id="baslik" maxlength="40" value="${d.baslik}"><small>${d.baslik.length} / 40</small></div>
+  <div class="alan"><label for="metin">Ana metin</label><textarea id="metin" rows="4">${d.metin}</textarea><small>İlk 125 karakter akışta görünür.</small></div>
+  <div class="not uyari">Konut reklamı: Meta yaş ve cinsiyet seçimini kapatıyor, konum en az 15 km yarıçap.</div>${alt(true,true)}`,
+ ()=>`<h2 class="soru">Ne kadar harcamak istiyorsun?</h2><p class="alt" style="margin:0">Günlük bütçe. İstediğin zaman değiştirebilirsin.</p>
+  <div class="butceler">${BUTCELER.map(b=>`<button class="butce ${d.butce===b.g?'secili':''}" data-g="${b.g}"><b>${tl(b.g)}</b>${b.ad}<br><span>${b.alt}</span></button>`).join('')}</div>
+  <div class="not">Bu hesabın Meta'daki en düşük günlük bütçesi 41 ₺ (12:04'te okundu).</div>${alt(true,true)}`,
+ ()=>`<h2 class="soru">Ne zamana kadar?</h2>
+  <div class="niyetler">${[7,14,30,0].map(g=>`<button class="niyet ${d.gun===g?'secili':''}" data-gun="${g}"><b>${g?g+' gün':'Ben durdurana kadar'}</b><span>${g?'Toplam en çok '+tl(g*d.butce):'Her gün '+tl(d.butce)+' harcar'}</span></button>`).join('')}</div>${alt(true,true,'Gözden geçir')}`,
+ ()=>`<h2 class="soru">Gözden geçir ve yayınla</h2><p class="alt" style="margin:0 0 14px">Meta'ya gönderilecek her şey burada. Yayın tek adımda yapılır, sonra geri okunup karşılaştırılır.</p>
+  <div class="bloklar">
+   <div class="blok"><h3><em>A</em>Meta'nın gözünden <span class="durum iyi">Prova geçti</span></h3>
+    <div class="onizleme"><div class="telefon"><b>Örnek Yapı</b> · Sponsorlu<div class="g"></div>${d.baslik}</div><div class="telefon dikey"><b>Reels</b><div class="g"></div></div><div class="telefon"><b>Instagram akış</b><div class="g"></div>${d.baslik}</div></div></div>
+   <div class="blok"><h3><em>B</em>Plan</h3><div class="uc">
+    <div><b>Kime</b>İzmir, Bornova çevresi 15 km. Meta kitleyi otomatik genişletir.</div>
+    <div><b>Nerede</b>Otomatik yerleşim: Facebook, Instagram, Reels, hikâye.</div>
+    <div><b>Ne kadar</b>${tl(d.butce)} / gün${d.gun?', '+d.gun+' gün':''}. Ödeme Meta hesabından.</div></div></div>
+   <div class="blok"><h3><em>C</em>Kapattıklarımız ve Meta'nın dayattıkları</h3><ul class="liste">
+    <li>Başka markaların reklamlarıyla yan yana gösterim: kapalı.</li><li>Yapay zekâ ile görsel ve metin değiştirme: kapalı.</li><li>Konut kategorisi: yaş ve cinsiyet seçimi Meta tarafından kapatıldı.</li></ul></div>
+   <div class="blok"><h3><em>D</em>Yayından sonra değişmez</h3><ul class="liste"><li>Amaç (${(NIYETLER.find(n=>n.k===d.niyet)||NIYETLER[0]).ad}).</li><li>Formun soruları ve onay kutuları.</li></ul></div>
+   <div class="blok"><h3><em>E</em>Uyum <span class="durum iyi">Engel yok</span></h3><ul class="liste"><li>KVKK aydınlatma adresi müşterinin kendi sayfası.</li><li>Pazarlama izni kutusu isteğe bağlı ve işaretsiz.</li></ul></div>
+   <div class="blok"><h3><em>F</em>Para</h3><div class="para"><div><span>Günlük</span><b>${tl(d.butce)}</b></div><div><span>Toplam en çok</span><b>${d.gun?tl(d.butce*d.gun):'Süresiz'}</b></div><div><span>Bu ay bu workspace</span><b>3.250 ₺ / 15.000 ₺</b></div></div></div>
+  </div>
+  <div class="alt-cubuk"><button class="btn" id="geri">Geri</button><span class="karar-cumlesi">"Yayına al" önce duraklatılmış kurar, geri okur, fark yoksa açar.</span><button class="btn birincil" id="yayinla">Yayına al</button></div>
+  <div class="ilerleme" id="ilerleme" hidden></div>`
+];
+function ozetCiz(){
+ const n=NIYETLER.find(x=>x.k===d.niyet);
+ const satirlar=[['Amaç',n?n.ad:'Seçilmedi'],['Sonuç',n&&n.sonuc?n.sonuc:'-'],['Fikir',d.kavram+' görsel'],['Bütçe',tl(d.butce)+' / gün'],['Süre',d.gun?d.gun+' gün':'Süresiz']];
+ $('#ozet').innerHTML=satirlar.map(s=>`<div class="satir"><span>${s[0]}</span><span>${s[1]}</span></div>`).join('');
+ const ek=[];if(!d.niyet)ek.push('Amaç seçilmedi');if(!d.baslik.trim())ek.push('Başlık boş');
+ $('#eksik').innerHTML=ek.length?ek.map(e=>`<li>${e}</li>`).join(''):'<li style="color:var(--iyi)">Yayına hazır</li>';
+}
+function ciz(){
+ adimCiz();$('#ekran').innerHTML=ekranlar[d.adim]();ozetCiz();
+ const g=$('#geri'),i=$('#ileri');if(g)g.onclick=()=>{d.adim--;ciz()};if(i)i.onclick=()=>{d.adim++;ciz()};
+ document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{if(b.dataset.k==='ONE_CIKAR')return;d.niyet=b.dataset.k;ciz()});
+ document.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{d.butce=+b.dataset.g;ciz()});
+ document.querySelectorAll('[data-gun]').forEach(b=>b.onclick=()=>{d.gun=+b.dataset.gun;ciz()});
+ const k=$('#kekle');if(k)k.onclick=()=>{d.kavram++;ciz()};
+ const bs=$('#baslik');if(bs)bs.oninput=e=>{d.baslik=e.target.value;bs.nextElementSibling.textContent=d.baslik.length+' / 40';ozetCiz()};
+ const y=$('#yayinla');if(y)y.onclick=()=>{const p=$('#ilerleme');p.hidden=false;y.disabled=true;
+  const adimlar=['Görseller yüklendi','Form kuruldu ve geri okundu','Kampanya duraklatılmış kuruldu','Geri okuma: fark yok','Açıldı, Meta incelemesinde'];
+  adimlar.forEach((a,j)=>setTimeout(()=>{p.innerHTML+=`<div><span>${a}</span><span class="durum iyi">Tamam</span></div>`},400*(j+1)));};
+}
+document.querySelectorAll('.anahtar button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.anahtar button').forEach(x=>x.classList.toggle('secili',x===b))});
+ciz();
+</script>
