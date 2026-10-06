@@ -1,0 +1,103 @@
+name: Doğrulama
+
+# ═══ YALNIZCA DOĞRULAMA — OTOMATİK DAĞITIM KALDIRILDI (2026-10-06) ═══
+#
+# Bu akış eskiden ikinci bir iş taşıyordu: SSH ile sunucuya bağlanıp
+# `git reset --hard origin/main` + `scripts/deploy.sh`. O iş HİÇ çalışmadı
+# (secret'lar sunucuya bağlanamıyordu) ve her push'ta "Sunucuya dağıt —
+# Failed" maili üretiyordu. Kullanıcı maili kapatmak istedi.
+#
+# SECRET'LARI SİLMEK ÇÖZÜM DEĞİLDİ: iş yine koşar ve bu kez boş adresle
+# düşerdi. Doğru çözüm işin kendisini kaldırmak, çünkü üç sebeple zaten
+# istenmiyor:
+#   · Deploy kuralı ELLE ve tek kişi (CLAUDE.md "İKİ GELİŞTİRİCİ VAR"):
+#     her push'ta otomatik dağıtım, öbür tarafın doğrulanmamış işini canlıya
+#     alır ve iki deploy'u üst üste bindirebilir.
+#   · `git reset --hard` + `git clean` sunucudaki elle yapılmış her şeyi
+#     siler.
+#   · Paylaşımlı VPS'e SSH anahtarını GitHub'da tutmak, 11+ başka siteyi
+#     barındıran makineye ikinci bir kapı demek.
+# Dağıtım: `su - advetics` → `cd ~/htdocs/advetics.com` → `git pull` →
+# `./scripts/deploy.sh` (docs/DEPLOYMENT.md).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # Tip kontrolü, testler, derleme ve RLS kapsaması. Push'tan sonra bu iş
+  # düşerse sunucuda deploy ETME: aynı derleme orada da düşer.
+  verify:
+    name: Doğrula (tip + derleme)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `with:` YOK ve olmamalı: pnpm sürümü package.json'daki
+      # `packageManager` alanından okunuyor (pnpm@9.12.0). Sürümü burada
+      # ayrıca pinlemek iki kaynak yaratıyor ve çakıştığında action düşüyor.
+      #
+      # DİKKAT — bu satırın geçmişi var: 2026-08-03'te `version: 9` kaldırıldı
+      # ama `with:` satırı geride bırakıldı. Boş `with:` YAML'da `null` demek
+      # ve GitHub Actions bunu geçersiz iş akışı sayıyor: koşum "Invalid
+      # workflow file" ile anında düşüyor, HİÇBİR job çalışmıyor. Sonuç, tam
+      # olarak hiçbir yerde hata gibi görünmeyen bir arıza — otomatik dağıtım
+      # üç ay boyunca sessizce ölü kaldı ve herkes elle deploy etmeye devam
+      # etti. Anahtar olmayan bir `with:` bırakma.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Bağımlılıkları kur
+        run: pnpm install --frozen-lockfile
+
+      - name: Paylaşılan paketi derle
+        run: pnpm --filter @advetics/shared build
+
+      - name: Prisma istemcisini üret
+        run: pnpm --filter @advetics/api exec prisma generate
+
+      - name: Tip kontrolü
+        run: pnpm typecheck
+
+      # Birim testler: veritabanı/Redis gerektirmeyen karar mantığı.
+      # Kota bekçisi burada üç kez sessiz hata verdi; bu adım onların
+      # geri dönmesini engelliyor.
+      - name: Testler
+        run: pnpm test
+
+      - name: Derle
+        run: |
+          pnpm --filter @advetics/api build
+          pnpm --filter @advetics/web build
+        env:
+          # NEXT_PUBLIC_* değerleri build anında gömülür. Burada yalnızca
+          # derlemenin geçtiğini doğruluyoruz; sunucudaki gerçek build kendi
+          # .env dosyasını kullanır.
+          NEXT_PUBLIC_API_URL: https://advetics.com/api
+          NEXT_PUBLIC_ROOT_DOMAIN: advetics.com
+
+      - name: RLS kapsama kontrolü
+        # Prisma şemasındaki her model, RLS dosyasındaki tablo listesinde
+        # olmalı. Yeni bir tablo eklenip politikası yazılmazsa dağıtım DURUR —
+        # korumasız bir tablonun üretime çıkmasındansa build'in patlaması iyidir.
+        run: |
+          set -euo pipefail
+          missing=0
+          while read -r table; do
+            if ! grep -q "'${table}'" apps/api/prisma/sql/02_rls.sql; then
+              echo "::error::Tablo '${table}' için RLS politikası tanımlı değil (apps/api/prisma/sql/02_rls.sql)"
+              missing=1
+            fi
+          done < <(grep -oE '@@map\("([a-z_]+)"\)' apps/api/prisma/schema.prisma | sed -E 's/@@map\("(.*)"\)/\1/')
+          if [ "$missing" -eq 1 ]; then
+            exit 1
+          fi
+          echo "Tüm tablolar RLS listesinde tanımlı."

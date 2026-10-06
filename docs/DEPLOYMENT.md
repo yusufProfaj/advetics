@@ -10,7 +10,7 @@ sırayla uygula.
 4. Repo klonla             ~3 dk   deploy key + git clone
 5. Uygulama kurulumu       ~5 dk   scripts/site-setup.sh     (site kullanıcısı)
 6. SSL                     ~2 dk   CloudPanel arayüzü
-7. GitHub Actions          ~5 dk   5 secret
+7. GitHub Actions          —       yalnızca doğrulama, secret GEREKMİYOR (§8)
 ```
 
 Teşhis her aşamada: `./scripts/preflight.sh advetics.com`
@@ -465,6 +465,12 @@ devam eder.
 ---
 
 ## 8. GitHub Actions
+
+> **2026-10-06'DAN BERİ OTOMATİK DAĞITIM YOK.** Akış (`dogrula.yml`) yalnızca
+> doğruluyor; SSH ile dağıtım işi kaldırıldı (hiç çalışmamıştı, her push'ta hata
+> maili üretiyordu ve iki geliştiricili düzende elle dağıtım kuralıyla
+> çelişiyordu). Aşağıdaki secret'lar artık KULLANILMIYOR ve silinmeli; bölüm
+> geçmiş kayıt olarak duruyor.
 
 Repo → **Settings → Secrets and variables → Actions**
 
