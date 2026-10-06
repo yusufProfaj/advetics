@@ -71,7 +71,7 @@ export function PacingBar({ pacing, compact = false }: { pacing: BudgetPacing; c
           <div
             className="absolute top-0 h-full w-px bg-ink/60"
             style={{ left: `${Math.min(Math.max(pacing.elapsedRatio * 100, 1), 99)}%` }}
-            title={`Ayın %${Math.round(pacing.elapsedRatio * 100)}'i geçti`}
+            title={`Ayın geçen kısmı: %${Math.round(pacing.elapsedRatio * 100)}`}
           />
         )}
       </div>
@@ -81,7 +81,10 @@ export function PacingBar({ pacing, compact = false }: { pacing: BudgetPacing; c
           <span>
             {spent === null ? '—' : `%${(spent * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} harcandı`}
           </span>
-          <span>Ayın %{Math.round(pacing.elapsedRatio * 100)}&apos;i geçti</span>
+          {/* EKSİZ YAZILIYOR: "%16'i" hem yanlış ek (doğrusu "%16'sı") hem de
+              küçük puntoda kesme işareti kayboluyor ve "%161" okunuyordu.
+              Ek sayıya göre değişiyor; ek gerektirmeyen cümle kuruldu. */}
+          <span>Ayın geçen kısmı: %{Math.round(pacing.elapsedRatio * 100)}</span>
         </div>
       )}
     </div>
