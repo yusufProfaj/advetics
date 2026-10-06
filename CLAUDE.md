@@ -1175,9 +1175,11 @@ onu bilmiyor. İki tarafı ilgilendiren kural BURAYA yazılır.
   haber ver ve sunucuda `git log --oneline HEAD..origin/main` ile NEYİ
   çektiğine bak: `git pull` yalnızca senin commit'lerini değil, öbür tarafın
   henüz doğrulamadığı işini de canlıya alır.
-- **Push deploy DEĞİL.** GitHub Actions (`dogrula.yml`) YALNIZCA doğruluyor;
-  SSH ile dağıtım işi 2026-10-06'da kaldırıldı (hiç çalışmamıştı, her push'ta
-  hata maili atıyordu). Sunucu ancak elle deploy edilince güncelleniyor. "Push ettim,
+- **Push deploy DEĞİL ve GitHub Actions YOK** (2026-10-06, kullanıcı kararı:
+  dağıtım hep elle; otomatik iş hiç çalışmamıştı ve her push'ta hata maili
+  atıyordu). Push'tan ÖNCE yerelde `typecheck` + testler koşulmalı: depoda
+  başka bir bekçi yok, derlenmeyen kod ancak sunucudaki `deploy.sh`'ta
+  yakalanır. Sunucu ancak elle deploy edilince güncelleniyor. "Push ettim,
   canlıda" demek bu depoda iki kez yanlış çıktı.
 - **Migration yazmadan hemen önce pull.** İki kişi aynı gün migration açarsa
   zaman damgası sırası ile uygulama sırası ayrışabilir; üretimde
