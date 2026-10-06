@@ -152,7 +152,7 @@ describe('işaret rengi — logodan ÖLÇÜLÜYOR', () => {
 });
 
 describe('işaretin çizimi', () => {
-  it('KRİTİK: harf METİN değil ÇİZİM', () => {
+  it('KRİTİK: işaret METİN değil ÇİZİM — veri çubukları', () => {
     /*
      * Önce `fontWeight: 700` ile metin olarak yazıldı ve üretilen ikona
      * BAKILDIĞINDA harf ince çıkıyordu: `ImageResponse`un gömülü varsayılan
@@ -161,7 +161,9 @@ describe('işaretin çizimi', () => {
      */
     const k = kod(ISARET);
     expect(k).toContain('<svg');
-    expect(k).toContain('strokeWidth');
+    // 2026-10-06'dan beri harf değil yükselen üç çubuk (kullanıcı isteği:
+    // "veri ile ilgili bir ikon"). Kenar çubuğundaki logo aynı çizimi taşıyor.
+    expect(k.match(/<rect /g)?.length).toBe(3);
     expect(k, 'font ağırlığına geri dönülmüş — satori onu yok sayıyor').not.toContain(
       'fontWeight',
     );
@@ -187,5 +189,22 @@ describe('işaretin çizimi', () => {
     const k = kod(ISARET);
     expect(k).not.toContain('--brand-primary');
     expect(k).not.toContain('var(--brand');
+  });
+});
+
+describe('kenar çubuğu logosu ile sekme ikonu AYNI işaret', () => {
+  it('KRİTİK: üç çubuğun koordinatları birebir aynı', () => {
+    /*
+     * İki ayrı dosya, iki ayrı çizim (biri satori için, biri panel için).
+     * Biri güncellenip diğeri unutulursa sekmede bir logo, menüde başka bir
+     * logo görünür ve kimse fark etmez — `marka-logosu.spec.ts`in iki dosya
+     * için verdiği kararın aynısı.
+     */
+    const cubuklar = (k: string) =>
+      [...k.matchAll(/<rect x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"/g)].map((m) => m.slice(1).join(','));
+    const ikon = cubuklar(readFileSync(join(APP, 'marka-isareti.tsx'), 'utf8'));
+    const menu = cubuklar(readFileSync(join(APP, '..', 'components', 'advetics-logo.tsx'), 'utf8'));
+    expect(ikon).toHaveLength(3);
+    expect(menu).toEqual(ikon);
   });
 });

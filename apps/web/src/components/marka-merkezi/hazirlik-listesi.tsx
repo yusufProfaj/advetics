@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { mmAdresi } from './bolumler';
 import type { HazirlikDurumu, HazirlikKodu, WorkspaceHazirlik } from '@advetics/shared';
 
 /**
@@ -19,7 +20,7 @@ export const HAZIRLIK_MADDE_TANIMI: Record<
 > = {
   reklam_hesabi: {
     baslik: 'Reklam hesabı atandı',
-    eylem: () => ({ etiket: 'Hesap ata', href: '#baglantilar' }),
+    eylem: (id) => ({ etiket: 'Hesap ata', href: mmAdresi(id, 'baglantilar') }),
   },
   veri_akisi: {
     baslik: 'Veri geliyor',
@@ -28,21 +29,21 @@ export const HAZIRLIK_MADDE_TANIMI: Record<
   marka_bilgisi: {
     baslik: 'Marka bilgileri dolu',
     /*
-     * `sekme=marka` ŞART: sekmesiz adres Bilgi Bankası'nın serbest metin
-     * sekmesine açılıyordu, maddenin "boş" dediği alanlar (sektör, kategori,
-     * ana amaç, vaatler) ise Marka sekmesinde. Kullanıcı tıklayıp aradığı
-     * alanı bulamıyordu (canlı tur, 2026-10-05).
+     * MARKA BÖLÜMÜNÜN MARKA BİLGİLERİ KARTINA. Eskiden Bilgi Bankası'nın
+     * serbest metin sekmesine açılıyordu, maddenin "boş" dediği alanlar ise
+     * başka sekmedeydi (canlı tur, 2026-10-05). 2026-10-06'dan beri hazırlık
+     * bağlantıları SAYFADAN ÇIKARMIYOR: Marka Merkezi'nin kendi bölümüne.
      */
     eylem: (id) => ({
       etiket: 'Bilgileri doldur',
-      href: `/kutuphane/bilgi-bankasi?musteri=${id}&sekme=marka`,
+      href: mmAdresi(id, 'marka', {}, 'marka-bilgileri'),
     }),
   },
   logo: {
     baslik: 'Logo yüklü',
     eylem: (id) => ({
       etiket: 'Logo yükle',
-      href: `/kutuphane/bilgi-bankasi?musteri=${id}&sekme=logo`,
+      href: mmAdresi(id, 'marka', {}, 'logo'),
     }),
   },
   aylik_butce: {
@@ -51,7 +52,7 @@ export const HAZIRLIK_MADDE_TANIMI: Record<
   },
   sosyal_kanal: {
     baslik: 'Sayfa ya da kanal bağlı',
-    eylem: () => ({ etiket: 'Kanal bağla', href: '#baglantilar' }),
+    eylem: (id) => ({ etiket: 'Kanal bağla', href: mmAdresi(id, 'baglantilar') }),
   },
 };
 

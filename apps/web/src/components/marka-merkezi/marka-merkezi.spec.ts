@@ -28,10 +28,21 @@ const SAYFA = yorumsuz('app/(dashboard)/marka-merkezi/page.tsx');
 const KANAL = yorumsuz('components/tenancy/bagli-kanallar.tsx');
 
 describe('hazırlık listesi', () => {
-  it('KRİTİK: marka maddesi MARKA sekmesine açılıyor — boş dediği alanlar orada', () => {
-    // Sekmesiz adres serbest metin sekmesine açılıyordu (canlı tur, 2026-10-05).
-    const href = HAZIRLIK_MADDE_TANIMI.marka_bilgisi.eylem('ws-1').href;
-    expect(new URL(href, 'https://x').searchParams.get('sekme')).toBe('marka');
+  it('KRİTİK: marka maddesi Marka bölümünün marka bilgileri kartına açılıyor', () => {
+    // Eskiden Bilgi Bankası'nın serbest metin sekmesine açılıyordu (canlı tur,
+    // 2026-10-05); 2026-10-06'dan beri sayfadan çıkarmıyor.
+    const u = new URL(HAZIRLIK_MADDE_TANIMI.marka_bilgisi.eylem('ws-1').href, 'https://x');
+    expect(u.pathname).toBe('/marka-merkezi');
+    expect(u.searchParams.get('bolum')).toBe('marka');
+    expect(u.hash).toBe('#marka-bilgileri');
+    expect(SAYFA).toContain('<Kart id="marka-bilgileri">');
+  });
+
+  it('KRİTİK: hazırlık bağlantıları Marka Merkezi’nden ÇIKARMIYOR (bütçe ve veri durumu hariç)', () => {
+    for (const kod of ['reklam_hesabi', 'marka_bilgisi', 'logo', 'sosyal_kanal'] as const) {
+      expect(HAZIRLIK_MADDE_TANIMI[kod].eylem('ws-1').href, kod).toMatch(/^\/marka-merkezi\?/);
+    }
+    expect(SAYFA).toContain('<Kart id="logo">');
   });
 
   it('dar ekranda eylem metni sıkıştırmıyor: metnin alt genişlik sınırı var', () => {
@@ -50,7 +61,7 @@ describe('hazırlık listesi', () => {
   it('workspace sayfalarına giden bağlantılar workspace kimliğini taşıyor', () => {
     // URL'deki workspace üst bardakinden farklı olabilir; taşınmazsa
     // bağlantı BAŞKA bir workspace'in bilgi bankasını açar.
-    for (const kod of ['marka_bilgisi', 'logo', 'aylik_butce'] as const) {
+    for (const kod of ['reklam_hesabi', 'marka_bilgisi', 'logo', 'aylik_butce', 'sosyal_kanal'] as const) {
       expect(HAZIRLIK_MADDE_TANIMI[kod].eylem('ws-1').href, kod).toContain('musteri=ws-1');
     }
   });
@@ -75,13 +86,13 @@ describe('sayfa', () => {
   });
 
   it('atama yetkisi olmayana düğmeler değil salt okunur liste', () => {
-    expect(SAYFA).toContain("hasPermission(session, 'connection.write')");
+    expect(SAYFA).toContain("yaz('connection.write')");
     expect(SAYFA).toContain('<SaltOkunurKanallar');
   });
 
-  it('bağlantılar bölümü hazırlık listesinin bağlantısıyla aynı çapa', () => {
-    expect(SAYFA).toContain('id="baglantilar"');
-    expect(HAZIRLIK_MADDE_TANIMI.reklam_hesabi.eylem('x').href).toBe('#baglantilar');
+  it('bağlantılar bölümü hazırlık listesinin bağlantısıyla aynı bölüm', () => {
+    expect(SAYFA).toContain("{bolum === 'baglantilar' && (");
+    expect(new URL(HAZIRLIK_MADDE_TANIMI.reklam_hesabi.eylem('x').href, 'https://x').searchParams.get('bolum')).toBe('baglantilar');
   });
 });
 

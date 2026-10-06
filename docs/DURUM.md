@@ -765,6 +765,36 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-06 — Base Aşama 1: kurumsal kimlik bütün panelde + Marka Merkezi iskeleti
+
+Kullanıcı: *"nereye nereden girdiğimi unutuyorum"*. Tasarım taslağı birlikte
+düzenlendi (Design tuvali: Marka Merkezi + eski→yeni harita), sonra kod.
+
+- **Kimlik (Profaj kurumsal kılavuzu):** ana başlık Montserrat, gövde Open
+  Sans (`next/font`), kırmızı `#ff2400`, gri `#302e2d`, sıcak nötrler. Küçük
+  kırmızı metin `--brand-legible` (4,8:1). Marka profili CSS'i ezdiği için
+  migration `20261006120000_kurumsal_kimlik_varsayilanlari`: YALNIZCA eski
+  varsayılanı taşıyan alan güncelleniyor (seçilmiş beyaz etiket korunuyor;
+  PGlite + mutasyon). Logo: işaret (kırmızı kare + yükselen üç çubuk —
+  "veri") + "Advetics" yazısı, i'nin noktası kırmızı. Sekme ikonu aynı
+  çizim; iki dosya testle eşit tutuluyor.
+- **Menü:** "Kütüphane" → **Base**, tek satır Marka Merkezi. Bilgi Bankası
+  satırı kalktı.
+- **Marka Merkezi:** kırıntı (Base › Marka Merkezi › bölüm) + hazırlık
+  listesi + İÇ MENÜ (Bağlantılar · Marka · Kitleler · Varlıklar, durum
+  rozetli) + yalnızca seçili bölüm (`?bolum=`, `?varlik=`). Model tek yerde:
+  `components/marka-merkezi/bolumler.ts` (çalıştırılarak sınanıyor).
+  Marka bölümü = eski Bilgi Bankası (marka formu, "Markayı anlat", "Kime
+  satıyoruz", logo) + bütçe özeti (düzenleme Aylık Bütçe'de). Varlıklar =
+  eski üç sayfanın gövdesi, sayfanın içinde.
+- **Eski adresler yönleniyor:** `/kutuphane/bilgi-bankasi` (bütçe sekmesi
+  → `/butce`), `/kutuphane/gorseller|kreatifler|formlar` (süzgeçler
+  taşınıyor). Hazırlık bağlantıları sayfadan çıkarmıyor.
+- Ölü dosyalar silindi: `bilgi-bankasi-icerik.tsx`, bilgi bankası
+  `workspace-secici.tsx`, `butce-sekmesi.tsx`, `varliklar-bolumu.tsx`.
+- Tarayıcıda görülmedi (yerelde veri yok); deploy sonrası gezilecek.
+  Bileşenlerin içi (Marka formunun gruplanması vb.) Aşama 2.
+
 ### 2026-10-06 — "Doğrulama hatası" artık hangi alan olduğunu söylüyor
 
 Rapor önizlemesi süre düzeltmesinden sonra açıldı. Ardından rapor mailinde

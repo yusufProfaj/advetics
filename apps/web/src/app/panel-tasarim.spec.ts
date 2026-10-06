@@ -41,7 +41,7 @@ describe('panel tasarım katmanı', () => {
 
   it('KRİTİK: bütün giriş animasyonları hareket azaltma tercihinin ALTINDA', () => {
     const hareket = blok('@media (prefers-reduced-motion: no-preference) {\n  .sayfa-gecis');
-    for (const s of ['.sayfa-gecis {', 'panel-blok-gir', 'panel-pencere-gir', 'panel-cekmece-gir', 'panel-parilti']) {
+    for (const s of ['.sayfa-gecis {', '.bolum-gecis {', 'panel-bolum-gir', 'panel-blok-gir', 'panel-pencere-gir', 'panel-cekmece-gir', 'panel-parilti']) {
       expect(hareket).toContain(s);
     }
     // Hareket bloğu DIŞINDA animasyon atanmıyor (keyframe tanımları hariç).
@@ -79,10 +79,14 @@ describe('panel tasarım katmanı', () => {
   it('KRİTİK: yazı tipi gerçekten yükleniyor ve Türkçe alt kümeyi taşıyor', () => {
     expect(KOK).toContain("from 'next/font/google'");
     expect(KOK).toContain("subsets: ['latin', 'latin-ext']");
-    expect(KOK).toContain('className={inter.variable}');
-    expect(CSS).toContain('--brand-font: var(--font-inter)');
+    // Kurumsal kimlik (2026-10-06): gövde Open Sans, ana başlık Montserrat.
+    expect(KOK).toContain('Open_Sans({');
+    expect(KOK).toContain('Montserrat({');
+    expect(KOK).toContain('className={`${govde.variable} ${baslik.variable}`}');
+    expect(CSS).toContain('--baslik-font: var(--font-baslik)');
+    expect(CSS).toContain('--brand-font: var(--font-govde)');
     // Markanın yazı tipi yoksa yüklenen yazı tipine düşülüyor.
-    expect(PANEL).toContain("var(--font-inter), ui-sans-serif");
+    expect(PANEL).toContain("var(--font-govde), ui-sans-serif");
   });
 
   it('şablon her gezinmede sarmalıyor ve veri çekmiyor', () => {

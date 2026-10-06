@@ -356,7 +356,7 @@ export default function HomePage() {
                   <li key={line} className="flex gap-3">
                     <span
                       aria-hidden
-                      className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#e11d2e]"
+                      className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff2400]"
                     />
                     <span className="text-sm leading-relaxed text-[#c7cbd4]">{line}</span>
                   </li>

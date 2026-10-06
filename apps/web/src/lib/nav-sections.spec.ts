@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ROLE_PERMISSIONS, type Permission } from '@advetics/shared';
-import { SAYFA_GIRIS_IZNI, SEKMELER } from '@/components/bilgi-bankasi/sekmeler';
+import { SAYFA_GIRIS_IZNI } from '@/components/bilgi-bankasi/sekmeler';
 import { SECTIONS, visibleSections } from './nav-sections';
 
 /**
@@ -63,7 +63,8 @@ describe('menü verisi gerçekten okunuyor', () => {
       undefined,
       'Reklamlar',
       'Raporlar',
-      'Kütüphane',
+      // "Kütüphane" 2026-10-06'da "Base" oldu (kullanıcı kararı).
+      'Base',
       'Ayarlar',
     ]);
     /*
@@ -92,10 +93,9 @@ describe('menü verisi gerçekten okunuyor', () => {
       '/ayarlar/baglantilar',
       '/ayarlar/senkronizasyon',
       '/ayarlar/ekip',
-      // Bilgi Bankası bu listeye SONRADAN girdi: yetkisiz olduğu dönemde
-      // ilk sekmesi ajans içi notu basıyordu. Bugün notu basmıyor ama
-      // kapının kendisi kalıcı.
-      '/kutuphane/bilgi-bankasi',
+      // Bilgi Bankası'nın içeriği Marka Merkezi'ne taşındı (2026-10-06);
+      // kapı oradan devam ediyor: yetkisiz kalırsa müşteri hesabı Base'i görür.
+      '/marka-merkezi',
     ]) {
       expect(korumali, `${zorunlu} yetkisiz kalmış`).toContain(zorunlu);
     }
@@ -103,50 +103,35 @@ describe('menü verisi gerçekten okunuyor', () => {
     expect(korumali.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('Bilgi Bankası KÜTÜPHANE bölümünde — içeriği artık workspace’in genel profili', () => {
-    // Bir süre Akıllı Boost'un altında, başlıksız bölümdeydi (o zamanki
-    // içeriği boost ön ayarlarıydı). İçerik değişince konum da değişti;
-    // bu test kararı KİLİTLİYOR — bölüm bilinçsizce geri kaymasın.
-    const bolum = SECTIONS.find((s) => s.items.some((i) => i.label === 'Bilgi Bankası'));
-    expect(bolum?.title).toBe('Kütüphane');
+  it('Base bölümünün TEK kapısı Marka Merkezi — Bilgi Bankası ayrı satır değil', () => {
+    /*
+     * Kullanıcı: "nereye nereden girdiğimi unutuyorum" (2026-10-06). Bilgi
+     * Bankası aynı workspace profilinin yarısını ayrı bir sayfada
+     * gösteriyordu; içeriği Marka Merkezi › Marka'ya taşındı ve eski adres
+     * oraya yönleniyor. Satırın geri gelmesi, iki kapılı yapının geri
+     * gelmesi demek.
+     */
+    const base = SECTIONS.find((s) => s.title === 'Base');
+    expect(base, 'Base bölümü yok — tarama boşa düştü').toBeDefined();
+    expect(base!.items.map((i) => i.label)).toEqual(['Marka Merkezi']);
+    expect(SECTIONS.flatMap((s) => s.items).some((i) => i.label === 'Bilgi Bankası')).toBe(false);
   });
 
-  it('KRİTİK: Bilgi Bankası satırı SAYFANIN KENDİ giriş yetkisini taşıyor', () => {
-    /*
-     * Bu test bir DAVRANIŞI değil bir KARARI kilitliyor.
-     *
-     * Satır uzun süre yetkisizdi ve bu bilinçli bir karar değildi: sayfa o
-     * zaman boost ön ayarlarıydı, sonra içerik müşteri profiline döndü ve
-     * ilk sekme bir süre `clients.notes`u — AJANS İÇİ notu — bastı. Sızıntı
-     * üç halkanın birleşmesiydi ve biri buydu: menü satırında `perm` yok.
-     *
-     * İDDİA SABİT BİR DİZGEYE DEĞİL, SAYFANIN KAPISINA ÇAPALI: sayfa
-     * `SAYFA_GIRIS_IZNI` ile korunuyor ve menü aynı sabiti kullanıyor. Yetki
-     * bir gün değişirse ikisi BİRLİKTE değişmek zorunda; ayrışırlarsa ya
-     * menüde görünüp açılmayan ya da gizlenip çalışan bir satır olur —
-     * `roles.ts`in "aynı matristen beslenir" kuralının tam ihlali.
-     */
-    const satir = SECTIONS.flatMap((s) => s.items).find((i) => i.label === 'Bilgi Bankası');
-    expect(satir, 'menüde Bilgi Bankası satırı yok — tarama boşa düştü').toBeDefined();
-    expect(satir!.perm).toBe(SAYFA_GIRIS_IZNI);
-    /*
-     * KAPI `client.write` — sekmelerin okuma yetkisi DEĞİL. Eskiden
-     * `SEKMELER[0].oku` (`client.read`) idi; müşteri hesabı sayfayı
-     * görüyordu. Kullanıcı müşteri hesabının sınırını üç ekranla çizdi ve
-     * bu sayfa onlardan değil. `client.write` taşıyan her rol `client.read`i
-     * de taşıyor, yani menüde görünen satır her zaman açılıyor.
-     */
+  it('KRİTİK: Marka Merkezi satırı eski Bilgi Bankası kapısını (client.write) taşıyor', () => {
+    // Müşteri hesabı (client.read) bu ekranı görmüyor; kullanıcı sınırı üç
+    // ekranla çizdi. Eski Bilgi Bankası'nın kapısı da buydu.
+    const satir = SECTIONS.flatMap((s) => s.items).find((i) => i.href === '/marka-merkezi');
+    expect(satir?.perm).toBe(SAYFA_GIRIS_IZNI);
     expect(SAYFA_GIRIS_IZNI).toBe('client.write');
-    expect(SEKMELER[0].yaz).toBe(SAYFA_GIRIS_IZNI);
   });
 
-  it('KRİTİK: Reklamlar ve Kütüphane bölümlerinin HER satırı yetki taşıyor', () => {
+  it('KRİTİK: Reklamlar ve Base bölümlerinin HER satırı yetki taşıyor', () => {
     /*
      * Süzme opt-in: yetkisiz satır herkese görünüyor. Müşteri hesabının
      * "reklam kısmını görmemesi" bu bölümlerde yetkisiz satır kalmamasına
      * bağlı — biri düşerse müşteri menüde Kurallar'ı görür.
      */
-    for (const bolum of SECTIONS.filter((s) => s.title === 'Reklamlar' || s.title === 'Kütüphane')) {
+    for (const bolum of SECTIONS.filter((s) => s.title === 'Reklamlar' || s.title === 'Base')) {
       for (const i of bolum.items) {
         expect(i.perm, `${i.href} yetkisiz`).toBeTruthy();
       }

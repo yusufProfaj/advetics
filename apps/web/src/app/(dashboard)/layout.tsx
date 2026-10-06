@@ -112,11 +112,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         '--brand-primary': branding.primaryColor,
         '--brand-accent': branding.accentColor,
         /*
-         * YÜKLENEN INTER YEDEKTE. Markanın yazı tipi kullanıcının makinesinde
+         * YÜKLENEN GÖVDE YAZI TİPİ (Open Sans) YEDEKTE. Markanın yazı tipi kullanıcının makinesinde
          * yoksa sistem yazı tipine değil, panelin yüklediği yazı tipine
          * düşülüyor; 'Inter' seçili markada da o dosya kullanılıyor.
          */
-        '--brand-font': `'${branding.fontFamily}', var(--font-inter), ui-sans-serif, system-ui, sans-serif`,
+        '--brand-font': `'${branding.fontFamily}', var(--font-govde), ui-sans-serif, system-ui, sans-serif`,
       } as React.CSSProperties)
     : undefined;
 

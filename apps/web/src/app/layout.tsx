@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Montserrat, Open_Sans } from 'next/font/google';
 import './globals.css';
 
 /*
@@ -9,10 +9,25 @@ import './globals.css';
  * `next/font` dosyayı DERLEMEDE indirip kendi sunucumuzdan veriyor (çalışma
  * anında Google'a istek yok). `latin-ext` ZORUNLU: ğ, ş, ı, İ orada.
  */
-const inter = Inter({
+/*
+ * ═══ KURUMSAL KİMLİK: ANA BAŞLIK MONTSERRAT, GÖVDE OPEN SANS ═══
+ *
+ * Profaj kurumsal kullanım kılavuzu (2026-10-06): üst başlıklar ve
+ * açıklamalar Open Sans, ana başlıklar Montserrat. Advetics'in görünüşü bu
+ * kimlikten türüyor. Inter'den geçiş; değişkenler ayrı, çünkü beyaz etiketli
+ * bir markanın kendi yazı tipi GÖVDEYİ değiştiriyor (`--brand-font`), başlık
+ * yazı tipi ise ürünün imzası olarak kalıyor.
+ */
+const govde = Open_Sans({
   subsets: ['latin', 'latin-ext'],
   display: 'swap',
-  variable: '--font-inter',
+  variable: '--font-govde',
+});
+const baslik = Montserrat({
+  subsets: ['latin', 'latin-ext'],
+  display: 'swap',
+  weight: ['600', '700', '800'],
+  variable: '--font-baslik',
 });
 
 const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'advetics.com';
@@ -65,7 +80,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr" className={inter.variable}>
+    <html lang="tr" className={`${govde.variable} ${baslik.variable}`}>
       <body>{children}</body>
     </html>
   );

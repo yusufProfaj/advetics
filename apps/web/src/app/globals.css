@@ -20,23 +20,36 @@
    */
   color-scheme: light dark;
   /* Marka — branding_profiles tablosundan gelir, buradakiler varsayılan */
-  --brand-primary: #e11d2e;
-  --brand-accent: #f97316;
-  --brand-font: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /*
+   * KURUMSAL KİMLİK (2026-10-06, Profaj kurumsal kullanım kılavuzu):
+   * kırmızı #ff2400, gri #302e2d, siyah, beyaz. Aksan, gradyanlarda
+   * kırmızının koyu tonu — kılavuzda turuncu yok; eski #f97316 gradyanları
+   * markanın dışına taşıyordu.
+   */
+  --brand-primary: #ff2400;
+  --brand-accent: #d21d00;
+  --brand-font: var(--font-govde), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Ana başlıklar: Montserrat. Beyaz etiket gövdeyi değiştirir, bunu değil. */
+  --baslik-font: var(--font-baslik), var(--brand-font);
 
   /*
    * Yüzeyler. Zemin ile kart arasındaki fark bilerek belirgin: eski değerlerde
    * (#f7f8fa / #fff) kartlar zemine karışıyordu ve sayfa "düz bir kâğıt"
    * gibi okunuyordu. Derinlik gölgeyle birlikte bu farktan geliyor.
    */
+  /*
+   * SICAK NÖTRLER. Kimliğin grisi (#302e2d) sıcak; eski mavi-gri zemin ve
+   * kenarlar onun yanında soğuk ve kopuk duruyordu. Kontrastlar ölçüldü:
+   * ikincil metin beyazda 5,2:1, zeminde 4,9:1.
+   */
   --surface: #ffffff;
-  --surface-muted: #f3f4f8;
-  --surface-sunken: #eaecf2;
-  --border: #e2e5ec;
+  --surface-muted: #f6f5f4;
+  --surface-sunken: #efedeb;
+  --border: #e7e4e2;
 
-  /* Metin */
-  --text: #0f1219;
-  --text-muted: #626a79;
+  /* Metin — kimliğin grisi */
+  --text: #302e2d;
+  --text-muted: #6f6a67;
 
   /* Durum renkleri — marka renginden bağımsız, anlamları sabit */
   --ok: #16a34a;
@@ -227,8 +240,14 @@ body {
   font-family: var(--brand-font);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  /* Inter'in daha sakin rakam ve harf biçimleri (tek katlı a değil, düz 1). */
-  font-feature-settings: 'cv11', 'ss01';
+}
+
+/*
+ * ANA BAŞLIKLAR MONTSERRAT. Yalnızca sayfa ve bölüm başlığı: kart içi küçük
+ * başlıklar gövde yazı tipinde kalıyor (kılavuz: alt başlık Open Sans).
+ */
+:where(h1, h2) {
+  font-family: var(--baslik-font);
 }
 
 /* Odak halkası — klavye kullanıcıları için görünür, fare için değil */
@@ -331,7 +350,12 @@ body {
  * ezmiyor. Katmansız (unlayered) yazılanlar yalnızca odak ve animasyon.
  */
 
+@utility font-baslik {
+  font-family: var(--baslik-font);
+}
+
 @utility sayfa-baslik {
+  font-family: var(--baslik-font);
   font-size: 1.625rem;
   line-height: 2rem;
   font-weight: 700;
@@ -571,6 +595,17 @@ body {
     opacity: 0;
   }
 }
+/* Marka Merkezi'nde bölüm değişimi: kısa ve sakin, sayfa girişinden daha az. */
+@keyframes panel-bolum-gir {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @keyframes panel-cekmece-gir {
   from {
     transform: translateX(-100%);
@@ -591,6 +626,9 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   .sayfa-gecis {
     animation: panel-sayfa-gir 0.45s var(--ease-out) backwards;
+  }
+  .bolum-gecis {
+    animation: panel-bolum-gir 0.22s var(--ease-out) backwards;
   }
   /*
    * KENDİ ANİMASYONU OLAN ÖĞE HARİÇ. Bu kural onlardan sonra geldiği için

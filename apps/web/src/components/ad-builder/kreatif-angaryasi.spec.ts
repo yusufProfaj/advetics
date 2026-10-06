@@ -22,7 +22,8 @@ const SOHBET = yorumsuz(
 const KARTLAR = yorumsuz(readFileSync(join(__dirname, 'isleyen-kreatifler.tsx'), 'utf8'));
 const SAYFA = yorumsuz(
   readFileSync(
-    join(__dirname, '..', '..', 'app', '(dashboard)', 'kutuphane', 'kreatifler', 'page.tsx'),
+    // Kreatifler sayfası Marka Merkezi › Varlıklar'a taşındı (2026-10-06).
+    join(__dirname, '..', 'marka-merkezi', 'varliklar', 'kreatifler.tsx'),
     'utf8',
   ),
 );

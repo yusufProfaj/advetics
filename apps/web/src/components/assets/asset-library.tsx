@@ -10,6 +10,7 @@ import {
   type AssetRecord,
   type AssetUploadResult,
 } from '@advetics/shared';
+import { varlikYonu } from '@/components/marka-merkezi/bolumler';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 
 /**
@@ -102,9 +103,11 @@ export function AssetLibrary({
   }
 
   function navigate(next: AssetKind | null): void {
-    const params = new URLSearchParams({ musteri: clientId });
-    if (next) params.set('tur', next);
-    startTransition(() => router.push(`/kutuphane/gorseller?${params.toString()}`));
+    // Marka Merkezi › Varlıklar içinde: eski `/kutuphane/gorseller` adresine
+    // gitmek her süzgeç tıklamasında bir yönlendirme turu demekti.
+    startTransition(() =>
+      router.push(varlikYonu(clientId, 'gorseller', { tur: next ?? undefined })),
+    );
   }
 
   return (

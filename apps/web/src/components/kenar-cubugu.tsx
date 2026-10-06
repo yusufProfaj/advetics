@@ -2,6 +2,7 @@ import type { NavEntry } from '@/components/nav';
 import { NavSection, AyarlarSatiri } from '@/components/nav';
 import { kenarBolumleri } from '@/lib/nav-sections';
 import { LogoutButton } from '@/components/logout-button';
+import { AdveticsLogo } from '@/components/advetics-logo';
 
 export interface KenarVerisi {
   bolumler: Array<{ title?: string; items: NavEntry[] }>;
@@ -32,14 +33,7 @@ export function KenarIcerigi({ veri, onGezinme }: { veri: KenarVerisi; onGezinme
           // eslint-disable-next-line @next/next/no-img-element
           <img src={veri.logoUrl} alt="" className="h-8 max-w-[150px] object-contain" />
         ) : (
-          <>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-accent text-sm font-bold text-white shadow-[0_6px_16px_-6px_var(--brand-primary),inset_0_1px_0_rgb(255_255_255/0.25)]">
-              {veri.sirketAdi.slice(0, 2).toUpperCase()}
-            </span>
-            <span className="truncate text-[15px] font-semibold tracking-tight">
-              {veri.sirketAdi}
-            </span>
-          </>
+          <AdveticsLogo />
         )}
       </div>
 

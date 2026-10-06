@@ -788,9 +788,9 @@ export class ReportsService {
     const b = rows[0];
     return {
       logoUrl: b?.logo_url ?? null,
-      primaryColor: b?.primary_color ?? '#E11D2E',
-      accentColor: b?.accent_color ?? '#F97316',
-      fontFamily: b?.font_family ?? 'Inter',
+      primaryColor: b?.primary_color ?? '#FF2400',
+      accentColor: b?.accent_color ?? '#D21D00',
+      fontFamily: b?.font_family ?? 'Open Sans',
       footerText: b?.footer_text ?? null,
       hidePoweredBy: b?.hide_powered_by ?? false,
     };

@@ -55,35 +55,20 @@ export function markaIsareti(kenar: number): ReactElement {
       }}
     >
       {/*
-        ═══ HARF YAZI DEĞİL, ÇİZİM ═══
+        ═══ İŞARET HARF DEĞİL, VERİ (2026-10-06) ═══
 
-        Önce `fontWeight: 700` ile metin olarak yazdım ve üretilen ikona
-        BAKTIĞIMDA harf İNCE çıkıyordu: `ImageResponse`un gömülü varsayılan
-        fontu kalın kesimi taşımıyor ve ağırlık sessizce yok sayılıyor.
-        Logonun ayırt edici özelliği tam da ağır, geometrik harfleri; ince bir
-        "A" yer tutucu gibi duruyordu.
+        Kullanıcının isteği: "veri ile ilgili bir ikon". Yükselen üç çubuk —
+        Advetics'in işi ölçmek ve büyütmek. Yazı logosu (`advetics-logo.png`)
+        aynı kaldı; değişen yalnızca kare işaretin içi.
 
-        Çizim ayrıca font BAĞIMLILIĞINI tamamen kaldırıyor: satori'nin
-        varsayılan fontu bir gün değişirse ikon değişmiyor.
-
-        `stroke` ile kuruldu, dolgu yolu ile değil: kalınlık tek sayı ve
-        harfin oranı okunarak ayarlanabiliyor. `viewBox` 100×100, yani
-        koordinatlar kenar uzunluğundan BAĞIMSIZ — 32 ve 180 aynı çizimi
-        veriyor.
+        ÇUBUKLAR KALIN ve ARALARI GENİŞ: 16 piksellik sekme ikonunda ince
+        çubuklar birbirine yapışıp tek bir blok gibi görünüyor. Koordinatlar
+        100×100 `viewBox`ta, kenardan bağımsız.
       */}
-      <svg width="72%" height="72%" viewBox="0 0 100 100" fill="none">
-        <path
-          d="M12 88 L50 14 L88 88"
-          stroke="#ffffff"
-          strokeWidth="15"
-          strokeLinejoin="miter"
-          strokeLinecap="butt"
-        />
-        {/*
-          ÇAPRAZ ÇİZGİ BACAKLARDAN İNCE. Logoda da öyle; eşit kalınlıkta
-          çizmek harfi tıkanık gösteriyor ve 16 pikselde iç boşluk kapanıyor.
-        */}
-        <path d="M30 63 L70 63" stroke="#ffffff" strokeWidth="13" strokeLinecap="butt" />
+      <svg width="64%" height="64%" viewBox="0 0 100 100" fill="none">
+        <rect x="6" y="56" width="22" height="38" rx="5" fill="#ffffff" />
+        <rect x="39" y="32" width="22" height="62" rx="5" fill="#ffffff" />
+        <rect x="72" y="6" width="22" height="88" rx="5" fill="#ffffff" />
       </svg>
     </div>
   );

@@ -1315,5 +1315,5 @@ function platformNames(data: ReportData): string {
  * veriyoruz, aksi hâlde varsayılana düşüyoruz.
  */
 function escapeCss(value: string): string {
-  return /^#[0-9a-fA-F]{3,8}$/.test(value) ? value : '#E11D2E';
+  return /^#[0-9a-fA-F]{3,8}$/.test(value) ? value : '#FF2400';
 }

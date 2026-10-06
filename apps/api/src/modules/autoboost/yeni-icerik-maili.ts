@@ -62,7 +62,7 @@ export function yeniIcerikMailiOlustur(
             ${kacar(platformAdi)}
           </td>
           <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;">
-            ${k.permalink ? `<a href="${kacar(k.permalink)}" style="color:#e11d2e;">gönderiyi gör</a>` : '—'}
+            ${k.permalink ? `<a href="${kacar(k.permalink)}" style="color:#d21d00;">gönderiyi gör</a>` : '—'}
           </td>
         </tr>`;
     })
@@ -79,7 +79,7 @@ export function yeniIcerikMailiOlustur(
       </p>
       <table style="width:100%;border-collapse:collapse;">${satirlar}</table>
       <p style="margin:20px 0 0;font-size:12px;color:#6b7280;">
-        <a href="${kacar(panelUrl)}" style="color:#e11d2e;">Onay kuyruğunu aç</a>
+        <a href="${kacar(panelUrl)}" style="color:#d21d00;">Onay kuyruğunu aç</a>
         · Bu mail yeni içerik tespit edildiğinde otomatik gönderildi.
       </p>
     </div>`;

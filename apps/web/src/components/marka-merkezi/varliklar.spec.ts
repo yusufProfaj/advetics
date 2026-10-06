@@ -20,9 +20,12 @@ describe('menü', () => {
   it('KRİTİK: o ekranlardayken Marka Merkezi satırı seçili görünüyor', () => {
     const mm = tumSatirlar.find((i) => i.href === '/marka-merkezi');
     if (!mm) throw new Error('Marka Merkezi satırı bulunamadı — tarama boşa düştü.');
-    expect(mm.ekYollar).toEqual(VARLIK_YOLLARI);
-    for (const y of VARLIK_YOLLARI) expect(aktifMi(mm, `${y}`), y).toBe(true);
-    expect(aktifMi(mm, '/kutuphane/bilgi-bankasi')).toBe(false);
+    // Eski Bilgi Bankası adresi de (yönlendirme anında) Marka Merkezi'ni
+    // seçili gösteriyor: içeriği oraya taşındı (2026-10-06).
+    expect(mm.ekYollar).toEqual([...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi']);
+    for (const y of [...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi']) {
+      expect(aktifMi(mm, `${y}`), y).toBe(true);
+    }
   });
 
   it('KRİTİK: varlık ekranını görebilen her rol Marka Merkezi’ni de görüyor — kimse ekranı kaybetmiyor', () => {
@@ -43,17 +46,28 @@ describe('Marka Merkezi sayfası', () => {
     }
   });
 
-  it('Varlıklar bölümü sayfada, oturum yetkileriyle çiziliyor', () => {
-    const k = readFileSync(resolve(__dirname, '../../app/(dashboard)/marka-merkezi/page.tsx'), 'utf8').replace(
-      /\/\*[\s\S]*?\*\//g,
-      '',
-    );
-    expect(k).toContain('<VarliklarBolumu clientId={clientId} izinler={session.permissions} />');
+  /*
+   * 2026-10-06'DAN BERİ VARLIKLAR SAYFANIN İÇİNDE. Eski sayfalar yönlendirme;
+   * gövdeleri `varliklar/*.tsx` bileşenleri ve Marka Merkezi onları
+   * `?bolum=varliklar&varlik=` ile çiziyor. Kartlar (dışarı atan
+   * bağlantılar) kalktı.
+   */
+  const SAYFA = readFileSync(resolve(__dirname, '../../app/(dashboard)/marka-merkezi/page.tsx'), 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+
+  it('KRİTİK: üç varlık da sayfanın içinde çiziliyor', () => {
+    expect(SAYFA).toContain("{varlik === 'gorseller' && <GorsellerIcerik clientId={clientId} params={params} />}");
+    expect(SAYFA).toContain("{varlik === 'kreatifler' && <KreatiflerIcerik clientId={clientId} params={params} />}");
+    expect(SAYFA).toContain("{varlik === 'formlar' && <FormlarIcerik clientId={clientId} params={params} />}");
   });
 
-  it('kartlar workspace seçimini TAŞIYOR ve bağlantı tek üreticiden', () => {
-    const k = readFileSync(resolve(__dirname, 'varliklar-bolumu.tsx'), 'utf8');
-    expect(k).toContain('href={baglanti(v.href, { musteri: clientId })}');
-    expect(k).toContain('VARLIKLAR.filter((v) => izinler.includes(v.izin))');
+  it('KRİTİK: eski varlık sayfaları içerik çizmiyor, yönleniyor', () => {
+    for (const ad of ['gorseller', 'kreatifler', 'formlar']) {
+      const k = readFileSync(resolve(__dirname, `../../app/(dashboard)/kutuphane/${ad}/page.tsx`), 'utf8');
+      expect(k, ad).toContain(`redirect(varlikYonu(ilk(p.musteri), '${ad}'`);
+      expect(k, ad).not.toContain('serverApiFetch');
+    }
   });
 });

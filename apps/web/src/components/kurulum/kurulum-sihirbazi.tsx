@@ -482,14 +482,14 @@ export function KurulumSihirbazi({
             <AiDoldur clientId={sonuc.clientId} canWrite={baglam.bilgiBankasiYazabilir} />
           ) : (
             <Bilgi>
-              Web sitesi girmediğin için bilgi bankası otomatik doldurulamıyor. Sonra{' '}
+              Web sitesi girmediğin için marka bilgileri otomatik doldurulamıyor. Sonra{' '}
               <Link
-                href="/kutuphane/bilgi-bankasi"
+                href="/marka-merkezi?bolum=marka"
                 className="font-medium text-brand-strong hover:underline"
               >
-                Bilgi Bankası
+                Marka Merkezi › Marka
               </Link>{' '}
-              ekranından elle doldurabilirsin.
+              bölümünden elle doldurabilirsin.
             </Bilgi>
           )}
         </div>

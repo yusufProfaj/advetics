@@ -9,7 +9,7 @@
 **Son güncelleme:** 2026-10-05 · **Canlı (539f6fb):** Google gün içi saatlik,
 Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlıda
 doğrulandı).
-**Bekleyen deploy:** konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod.
+**Bekleyen deploy:** konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
 **Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
 `/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;
@@ -63,6 +63,13 @@ gösteremez ve kayar):
 Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 
 ## Sıradaki iş (sırayla)
+
+**Base yeniden düzeni** (kullanıcıyla aşama aşama; taslak tuvali:
+claude.ai/artifact/95HsewpAuEupEZ74zoYnyC). Aşama 1 bitti (kimlik + iskelet,
+`DURUM.md` 2026-10-06). Deploy sonrası gezilip kullanıcıdan revize alınacak;
+sonra **Aşama 2: Marka bölümü** (gruplanmış kartlar, "Siteden doldur" alan
+alan, kaydedilmemiş değişiklik çubuğu), Aşama 3: Varlıklar/Kitleler, Aşama 4:
+Bağlantılar + ekip kartı, Aşama 5: Koruma kuralları.
 
 **Rapor maili "Doğrulama hatası":** deploy sonrası yeniden denenince ekran
 reddedilen alanı yazacak; ona göre kök düzeltme.

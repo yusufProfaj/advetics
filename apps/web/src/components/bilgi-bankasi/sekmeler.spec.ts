@@ -131,40 +131,19 @@ describe('SAYFA GİRİŞ YETKİSİ', () => {
  * Bu kayıt reklam metnini besliyor, yani yanlış workspace'e yazılan bir cümle
  * başka bir markanın reklamında çıkıyor.
  */
-describe('WORKSPACE SEÇİMİ', () => {
+describe('BİLGİ BANKASI ARTIK YÖNLENDİRME', () => {
+  /*
+   * İçeriği Marka Merkezi › Marka'ya taşındı (2026-10-06). Eski adres
+   * yönleniyor ve kendi başına içerik ÇİZMİYOR: ikinci bir kopya, iki
+   * kapılı yapının geri gelmesi demekti. Workspace seçimi artık Marka
+   * Merkezi'nin ortak kutusunda (`sayfa-workspace.spec.ts`).
+   */
   const SAYFA = kod('app/(dashboard)/kutuphane/bilgi-bankasi/page.tsx');
-  const SECICI = kod('components/bilgi-bankasi/workspace-secici.tsx');
 
-  it('tarama boşa düşmüyor', () => {
-    expect(SAYFA).toContain('WorkspaceSecici');
-    expect(SECICI).toContain('export function WorkspaceSecici');
-  });
-
-  it('KRİTİK: LİSTENİN İLK SATIRINA DÜŞÜLMÜYOR', () => {
-    expect(SAYFA).not.toContain('availableClients[0]');
-    expect(SAYFA).toContain('first(params.musteri) ?? session.activeClientId ?? null');
-  });
-
-  it('KRİTİK: SEÇİM YAPILMADAN İÇERİK ÇİZİLMİYOR', () => {
-    /*
-     * Boş bir sekme çubuğu göstermek, "workspace seçilmedi" ile "bu
-     * workspace'in bilgisi boş" hâllerini aynı ekrana çevirirdi.
-     */
-    expect(SAYFA).toContain('{aktifWorkspace && (');
-  });
-
-  it('KRİTİK: SEÇİLİ WORKSPACE HER ZAMAN EKRANDA', () => {
-    // Hangi kaydı düzenlediğini görmeden yazmak, bu ekranda en pahalı hata.
-    expect(SECICI).toContain('Workspace');
-    expect(SECICI).toContain('{aktif.name}');
-  });
-
-  it('KRİTİK: TEK WORKSPACE OLSA DA OTOMATİK SEÇİLMİYOR', () => {
-    /*
-     * Otomatik seçim, ikinci workspace eklendiğinde davranışı sessizce
-     * değiştirirdi: aynı ekran bir gün seçim sormaya başlar.
-     */
-    expect(SECICI).not.toContain('workspaceler.length === 1');
+  it('KRİTİK: yalnızca yönlendiriyor', () => {
+    expect(SAYFA).toContain('redirect(bilgiBankasiYonu(');
+    expect(SAYFA).not.toContain('<MarkaSekmesi');
+    expect(SAYFA).not.toContain('<AiDoldur');
   });
 });
 
@@ -177,7 +156,8 @@ describe('WORKSPACE SEÇİMİ', () => {
  * cümleler buradan reklam metnine geçiyor.
  */
 describe('YAPAY ZEKÂ İLE DOLDUR', () => {
-  const SAYFA = kod('app/(dashboard)/kutuphane/bilgi-bankasi/page.tsx');
+  // 2026-10-06'dan beri Marka Merkezi › Marka bölümünde.
+  const SAYFA = kod('app/(dashboard)/marka-merkezi/page.tsx');
   const DOLDUR = kod('components/bilgi-bankasi/ai-doldur.tsx');
 
   it('tarama boşa düşmüyor', () => {
@@ -222,11 +202,11 @@ describe('YAPAY ZEKÂ İLE DOLDUR', () => {
     expect(DOLDUR).toContain('err instanceof ApiRequestError ? err.message');
   });
 
-  it('KRİTİK: SEKMELERİN ÜSTÜNDE — birinin içinde değil', () => {
-    // Üretilen taslak ÜÇ sekmeyi birden dolduruyor; birinin içine koymak,
-    // diğer iki sekmenin oradan değiştiğini görünmez yapardı.
+  it('KRİTİK: KARTLARIN ÜSTÜNDE — birinin içinde değil', () => {
+    // Üretilen taslak birden çok kartı dolduruyor; birinin içine koymak,
+    // diğerlerinin oradan değiştiğini görünmez yapardı.
     const i = SAYFA.indexOf('<AiDoldur');
-    const j = SAYFA.indexOf('<BilgiBankasiIcerik');
+    const j = SAYFA.indexOf('<MarkaSekmesi');
     expect(i, 'düğme bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     expect(j, 'sekmeler bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     expect(i).toBeLessThan(j);
@@ -236,6 +216,6 @@ describe('YAPAY ZEKÂ İLE DOLDUR', () => {
     // Taslak üretmek dışarı HTTP isteği yapıyor ve model çağırıyor; okuma
     // yetkisiyle aynı kefeye konamaz.
     expect(DOLDUR).toContain('if (!canWrite) return null;');
-    expect(SAYFA).toContain("canWrite={hasPermission(session, 'client.write')}");
+    expect(SAYFA).toContain("<AiDoldur clientId={clientId} canWrite={yaz('client.write')} />");
   });
 });

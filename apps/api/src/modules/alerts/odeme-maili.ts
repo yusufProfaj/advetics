@@ -74,7 +74,7 @@ export function odemeMailiOlustur(
             <tr>
               <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;">
                 ${kacar(u.adAccountName ?? '—')}
-                ${yeni ? '<span style="margin-left:6px;padding:1px 6px;border-radius:9999px;background:#e11d2e;color:#fff;font-size:10px;">YENİ</span>' : ''}
+                ${yeni ? '<span style="margin-left:6px;padding:1px 6px;border-radius:9999px;background:#ff2400;color:#fff;font-size:10px;">YENİ</span>' : ''}
               </td>
               <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#6b7280;">
                 ${kacar(u.platform === null ? '—' : platformKisaAdi(u.platform))}
@@ -105,7 +105,7 @@ export function odemeMailiOlustur(
       </p>
       ${satirlar}
       <p style="margin:20px 0 0;font-size:12px;color:#6b7280;">
-        <a href="${kacar(panelUrl)}" style="color:#e11d2e;">Advetics panelini aç</a>
+        <a href="${kacar(panelUrl)}" style="color:#d21d00;">Advetics panelini aç</a>
         · Bu mail hesap durumu kontrolü sonrası otomatik gönderildi.
       </p>
     </div>`;

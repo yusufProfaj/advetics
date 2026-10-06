@@ -1,6 +1,5 @@
 import { ASISTAN_PLATFORM_ETIKETI, type Permission } from '@advetics/shared';
 import type { NavEntry } from '@/components/nav';
-import { SAYFA_GIRIS_IZNI } from '@/components/bilgi-bankasi/sekmeler';
 import { VARLIK_YOLLARI } from '@/components/marka-merkezi/varliklar';
 
 /**
@@ -51,7 +50,7 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
        * ═══ MÜŞTERİ HESABI YALNIZCA ÜÇ EKRAN GÖRÜYOR ═══
        *
        * Kullanıcının tanımı: "müşteri = sadece genel bakış, reklam keşfi ve
-       * raporlar; reklam kısmını göremez". Bu yüzden Reklamlar ve Kütüphane
+       * raporlar; reklam kısmını göremez". Bu yüzden Reklamlar ve Base
        * bölümlerinin HER satırı bir yetki taşıyor — yetkisiz satır herkese
        * görünüyor (süzme opt-in) ve müşteri hesabı Kurallar'ı, Aylık
        * Bütçe'yi, Akıllı Boost'u menüde görürdü. `nav-sections.spec.ts`
@@ -160,7 +159,13 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     ],
   },
   {
-    title: 'Kütüphane',
+    /*
+     * "KÜTÜPHANE" DEĞİL "BASE" (kullanıcı kararı, 2026-10-06). Tek kapı
+     * Marka Merkezi: Bilgi Bankası ayrı satırdı ve aynı workspace profilinin
+     * yarısını gösteriyordu; içeriği Marka Merkezi › Marka'ya taşındı ve
+     * eski adres oraya yönleniyor (`bolumler.ts`).
+     */
+    title: 'Base',
     items: [
       /*
        * MARKA MERKEZİ KÜTÜPHANENİN BAŞINDA. Workspace'in kurulum durumu,
@@ -181,44 +186,7 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         perm: 'client.write',
         // Varlık ekranları menüden kalkıp buraya indi (Bölüm 3); oradayken
         // bu satır seçili görünsün.
-        ekYollar: VARLIK_YOLLARI,
-      },
-      /*
-       * BİLGİ BANKASI KÜTÜPHANE'NİN ALTINDA — daha önce Akıllı Boost'un
-       * hemen altındaydı ve içeriği o zaman boost ön ayarlarıydı (bkz.
-       * `boost-on-ayarlari-formu.tsx`). Artık müşterinin GENEL profili:
-       * genel bilgiler, bütçe hedefi, hedef kitle, marka bilgileri, logo —
-       * Görsel Arşivi ve Kreatifler'le aynı raf, kampanyadan/boost'tan
-       * bağımsız.
-       *
-       * ═══ `perm` EKLENDİ, GERÇEKÇESİ ═══
-       *
-       * Satır uzun süre yetkisizdi ve bu bilinçli bir karar değil, eski
-       * içeriğin (boost ön ayarı) kalıntısıydı. İçerik müşteri profiline
-       * dönünce satırın ilk sekmesi bir süre `clients.notes`u — AJANS İÇİ
-       * notu — basıyordu ve yetkisiz menü satırı o sızıntının üç halkasından
-       * biriydi. Not alanı tamamen bırakıldı, ama satır artık sayfanın KENDİ
-       * giriş yetkisini taşıyor.
-       *
-       * Yetki `client.read` ve DEĞERİ ELLE YAZILMIYOR: sayfanın kapısıyla
-       * aynı sabitten (`SAYFA_GIRIS_IZNI`) geliyor. İkisini ayrı yazmak,
-       * birinin değişip diğerinin kalması demekti — menüde görünen ama
-       * açılmayan (ya da tersine, gizlenen ama çalışan) bir satır.
-       *
-       * `client.read` HİÇBİR ROLÜ DIŞARIDA BIRAKMIYOR (client_viewer dahil
-       * hepsinde var) — yani bu satır bugün kimseden gizlenmiyor ve
-       * gizlenmemeli de: Bilgi Bankası müşterinin KENDİ bilgisi. Yetki yine
-       * de yazılı, çünkü `resolvePermissions` override'ı `client.read`i tek
-       * bir kullanıcıdan alabiliyor ve o kullanıcıya boş açılan bir sayfa
-       * göstermenin anlamı yok.
-       */
-      {
-        href: '/kutuphane/bilgi-bankasi',
-        label: 'Bilgi Bankası',
-        icon: 'knowledge',
-        module: 7,
-        ready: true,
-        perm: SAYFA_GIRIS_IZNI,
+        ekYollar: [...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi'],
       },
       /*
        * GÖRSEL ARŞİVİ, KREATİFLER VE FORMLAR BURADA DEĞİL — Marka Merkezi'nin

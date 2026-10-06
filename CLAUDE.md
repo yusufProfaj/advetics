@@ -1246,6 +1246,17 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   tuşlarıyla taşınıyor: yalnızca sürükleme koymak, fare kullanamayan için
   özelliği TAMAMEN kapatmak olurdu. Taşıma TAKAS DEĞİL ARAYA SOKMA — takas
   eden bir sürükleme kullanıcının bıraktığı yere koymuyor.
+- **KURUMSAL KİMLİK VE "BASE" (kullanıcı kararı, 2026-10-06).** Görünüş
+  Profaj kurumsal kılavuzundan: ana başlık Montserrat, gövde Open Sans,
+  kırmızı `#ff2400`, gri `#302e2d`. Menü başlığı "Kütüphane" değil
+  **Base** ve tek kapısı Marka Merkezi; Marka Merkezi'nin kendi iç menüsü
+  var (Bağlantılar · Marka · Kitleler · Varlıklar) ve bölüm adreste
+  (`?bolum=`). Yeni bir workspace kurulum ekranı AYRI SAYFA olarak
+  açılmaz, bu iç menüye bölüm olarak girer (`marka-merkezi/bolumler.ts`) —
+  dağınık yapı kullanıcının "nereye nereden girdiğimi unutuyorum"
+  şikâyetinin sebebiydi. Marka profili (`branding_profiles`) CSS'i ezer:
+  renk/yazı tipi varsayılanı değişirse eski varsayılanı taşıyan satırlar
+  migration'la güncellenmeli, seçilmiş değerlere dokunulmamalı.
 - **AKILLI BOOST YALNIZCA INSTAGRAM (+ YOUTUBE) KARTI ÜRETİR — Facebook
   sayfası DEĞİL** (kullanıcı kararı, 2026-09-30). Müşteriler paylaşımı iki
   platforma birden yapıyor (crosspost); Facebook sayfa gönderileri çekilmeye
