@@ -162,9 +162,13 @@ export function BudgetForm({
           />
           {/* Alan kaydediliyor ama HENÜZ UYGULANMIYOR. Kullanıcının açık
               bıraktığı bir korumanın çalıştığını sanması, hiç olmamasından
-              kötü — o yüzden burada yazıyor. */}
+              kötü — o yüzden burada yazıyor. Bir süre "Kural motoru (Modül 5)"
+              diyordu: kural motoru çoktan var (`budget_spent_ratio` koşulu),
+              ama bu alanı OKUMUYOR. Panelde iç terim geçmez; kullanıcıyı
+              çalışan yola yönlendir. */}
           <p className="mt-1 text-[11px] text-ink-muted">
-            Kural motoru (Modül 5) yazılana kadar yalnızca kaydediliyor, kampanya durdurulmuyor.
+            Henüz yalnızca kaydediliyor, kampanyayı durdurmuyor. Durdurmak için Kurallar’da
+            bütçe kuralı kur.
           </p>
         </Field>
       </div>
