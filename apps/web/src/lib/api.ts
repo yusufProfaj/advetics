@@ -14,6 +14,17 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
 
 /**
+ * Varlık önizleme adresi. API `previewUrl`i GÖRELİ veriyor
+ * (`/assets/<id>/preview`) ve önüne `API_URL` eklenmeden kullanılınca istek
+ * panelin kendi adresine gidip 404 dönüyor. Logo sekmesi ve AI asistanın ek
+ * kutusu tam olarak bunu yapıyordu: logo yüklü ve seçili görünüyor, kutuda
+ * "Görsel yok" yazıyordu (canlı tur, 2026-10-06). Hata yok, yalnızca boş kutu.
+ */
+export function onizlemeAdresi(previewUrl: string): string {
+  return /^https?:\/\//.test(previewUrl) ? previewUrl : `${API_URL}${previewUrl}`;
+}
+
+/**
  * Sunucu tarafı çağrılar için doğrudan adres.
  *
  * Üretimde tarayıcı `https://advetics.com/api` adresini kullanır, ama Next.js

@@ -11,7 +11,7 @@ import type {
   AssetUploadResult,
   AsistanPlatformu,
 } from '@advetics/shared';
-import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
+import { API_URL, ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { Halka } from '@/components/yukleniyor';
 import { KreatifGorsel } from '@/components/kreatif-gorsel';
@@ -348,7 +348,7 @@ export function AiAsistanSohbeti({
         <div className="mt-3 flex flex-wrap gap-2">
           {ekler.map((e) => (
             <div key={e.id} className="relative h-14 w-14 overflow-hidden rounded-lg border border-line">
-              <KreatifGorsel src={e.previewUrl} alt={e.name} bosMetin="Görsel yok" />
+              <KreatifGorsel src={onizlemeAdresi(e.previewUrl)} alt={e.name} bosMetin="Görsel yok" />
               <button
                 type="button"
                 aria-label={`${e.name} ekini kaldır`}

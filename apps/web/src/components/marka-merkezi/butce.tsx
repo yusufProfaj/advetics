@@ -352,107 +352,125 @@ function AccountRows({
   month: string;
   canWrite: boolean;
 }) {
+  /*
+   * TABLO DEĞİL SATIR LİSTESİ. Sekiz sütunlu tablo `min-w-[860px]` taşıyordu
+   * ve Marka Merkezi'nin iç menüsünün yanındaki kolon ondan dar: tablo kendi
+   * içinde yatay kayıyor, satırın sonundaki "Bütçe tanımla" düğmesi ekranın
+   * DIŞINDA kalıyordu. Kullanıcının "hangi mecraya bütçe sınırı koyduğumu
+   * göremiyorum" cümlesinin yarısı buydu: sınırı koyacağı düğmeyi de
+   * göremiyordu. Satır artık kolona sığıyor ve düğme her zaman görünür.
+   *
+   * MECRAYA GÖRE GRUPLU. Hesap adları çoğu zaman workspace adıyla aynı
+   * ("Fes Spa", "Fes Spa Hamam") ve mecra yalnızca addan tahmin
+   * edilebiliyordu. Grup başlığı mecrayı ve kaç hesabında sınır olduğunu
+   * söylüyor.
+   */
   return (
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] text-sm">
-          <thead>
-            <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted">
-              <th className="px-4 py-2 font-medium">Hesap</th>
-              <th className="px-4 py-2 text-right font-medium">Bütçe</th>
-              <th className="px-4 py-2 text-right font-medium">Harcanan</th>
-              <th className="px-4 py-2 text-right font-medium">Kalan</th>
-              <th className="px-4 py-2 font-medium">Tüketim</th>
-              <th className="px-4 py-2 text-right font-medium">Sapma</th>
-              <th className="px-4 py-2 text-right font-medium">Günlük</th>
-              {canWrite && <th className="px-4 py-2" />}
-            </tr>
-          </thead>
-          {/*
-            MECRAYA GÖRE GRUPLU. Kullanıcı: "hangi mecraya bütçe sınırı
-            koyduğumu göremiyorum" (2026-10-06). Hesap adları çoğu zaman
-            workspace adıyla aynı ("Fes Spa", "Fes Spa Hamam") ve mecra
-            yalnızca addan tahmin edilebiliyordu. Her grubun başlığı mecrayı
-            ve kaç hesabında sınır olduğunu söylüyor.
-          */}
-          {PLATFORMS.filter((p) => rows.some((a) => a.platform === p)).map((platform) => {
-            const grup = rows.filter((a) => a.platform === platform);
-            const sinirli = grup.filter((a) => a.budget !== null).length;
-            return (
-          <tbody key={platform} className="border-b border-line last:border-0">
-            <tr className="bg-surface-muted">
-              <th colSpan={canWrite ? 8 : 7} scope="rowgroup" className="px-4 py-2 text-left">
-                <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
-                  <PlatformLogo kind={platformKanali(platform)} className="h-4 w-4 shrink-0" />
-                  {PLATFORM_KISA_ADLARI[platform]}
-                  <span className="text-xs font-normal text-ink-muted">
-                    {grup.length} hesap ·{' '}
-                    {sinirli === 0 ? 'hiçbirinde bütçe sınırı yok' : `${sinirli} hesapta bütçe sınırı var`}
-                  </span>
-                </span>
-              </th>
-            </tr>
-            {grup.map((a) => {
-              const cur = a.budget?.currency ?? data.currency;
-              return (
-                <tr key={a.adAccountId} className="border-t border-line/60">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-ink">{a.adAccountName}</div>
-                    <div className="mt-0.5 flex items-center gap-1.5">
-                      <StatusChip status={a.status} />
-                      {/* Bu hesabın kendi veri kapsaması — genel uyarı
-                          hangi hesabın eksik olduğunu söylemiyor. */}
-                      {a.daysElapsed > 0 && a.daysWithData < a.daysElapsed && (
-                        <span
-                          className="text-[11px] text-warn-strong"
-                          title={`${a.daysElapsed} günün ${a.daysWithData} günü senkronize`}
-                        >
-                          {a.daysWithData}/{a.daysElapsed} gün
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {a.budget ? (
-                      formatMoney(a.budget.amountMicros, cur)
-                    ) : (
-                      <span className="text-xs text-ink-muted">Sınır yok</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {formatMoney(a.spentMicros, cur)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {formatMoney(a.remainingMicros, cur)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <PacingBar pacing={a} compact />
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs tabular-nums">
-                    <PaceDelta pacing={a} />
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {formatMoney(a.suggestedDailyMicros, cur)}
-                  </td>
-                  {canWrite && (
-                    <td className="px-4 py-3 text-right">
-                      <BudgetForm
-                        clientId={data.clientId}
-                        adAccountId={a.adAccountId}
-                        adAccountName={a.adAccountName}
-                        month={month}
-                        existing={a.budget}
-                        currency={cur}
-                      />
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-            );
-          })}
-        </table>
+    <div>
+      {PLATFORMS.filter((p) => rows.some((a) => a.platform === p)).map((platform) => {
+        const grup = rows.filter((a) => a.platform === platform);
+        const sinirli = grup.filter((a) => a.budget !== null).length;
+        return (
+          <section key={platform} className="border-t border-line first:border-t-0">
+            <h4 className="flex flex-wrap items-center gap-2 bg-surface-muted px-4 py-2 text-sm font-semibold text-ink">
+              <PlatformLogo kind={platformKanali(platform)} className="h-4 w-4 shrink-0" />
+              {PLATFORM_KISA_ADLARI[platform]}
+              <span className="text-xs font-normal text-ink-muted">
+                {grup.length} hesap ·{' '}
+                {sinirli === 0 ? 'hiçbirinde bütçe sınırı yok' : `${sinirli} hesapta bütçe sınırı var`}
+              </span>
+            </h4>
+            <ul className="divide-y divide-line/60">
+              {grup.map((a) => (
+                <HesapSatiri
+                  key={a.adAccountId}
+                  a={a}
+                  data={data}
+                  month={month}
+                  canWrite={canWrite}
+                />
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function HesapSatiri({
+  a,
+  data,
+  month,
+  canWrite,
+}: {
+  a: ClientPacing['accounts'][number];
+  data: ClientPacing;
+  month: string;
+  canWrite: boolean;
+}) {
+  const cur = a.budget?.currency ?? data.currency;
+  return (
+    <li className="grid gap-x-6 gap-y-2 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto] sm:items-center">
+      <div className="min-w-0">
+        <p className="truncate font-medium text-ink">{a.adAccountName}</p>
+        <p className="mt-0.5 flex flex-wrap items-center gap-1.5">
+          {/* "Bütçe yok" çipi sınırsız hesapta gösterilmiyor: yanındaki
+              "Sınır yok" ile aynı şeyi ikinci kez söylüyordu. */}
+          {a.budget && <StatusChip status={a.status} />}
+          {/* Bu hesabın kendi veri kapsaması — genel uyarı hangi hesabın
+              eksik olduğunu söylemiyor. */}
+          {a.daysElapsed > 0 && a.daysWithData < a.daysElapsed && (
+            <span
+              className="text-[11px] text-warn-strong"
+              title={`${a.daysElapsed} günün ${a.daysWithData} günü senkronize`}
+            >
+              {a.daysWithData}/{a.daysElapsed} gün veri
+            </span>
+          )}
+        </p>
       </div>
+
+      {a.budget ? (
+        <div className="min-w-0 space-y-1.5">
+          <p className="flex flex-wrap items-baseline justify-between gap-x-3 tabular-nums">
+            <span>
+              <span className="font-semibold text-ink">{formatMoney(a.spentMicros, cur)}</span>
+              <span className="text-ink-muted"> / {formatMoney(a.budget.amountMicros, cur)}</span>
+            </span>
+            <span className="text-xs">
+              <PaceDelta pacing={a} />
+            </span>
+          </p>
+          <PacingBar pacing={a} compact />
+          <p className="text-xs text-ink-muted tabular-nums">
+            Kalan {formatMoney(a.remainingMicros, cur)} · günlük öneri{' '}
+            {formatMoney(a.suggestedDailyMicros, cur)}
+          </p>
+        </div>
+      ) : (
+        <p className="tabular-nums">
+          <span className="font-semibold text-ink">{formatMoney(a.spentMicros, cur)}</span>
+          <span className="text-ink-muted"> harcandı · </span>
+          <span className="font-medium text-ink-muted">Sınır yok</span>
+        </p>
+      )}
+
+      {/* FORM AÇILINCA SATIRIN TAMAMINA YAYILIYOR: kapalıyken düğme, açıkken
+          iki alanlı bir kart; dar üçüncü kolonda alanlar ezilirdi. */}
+      {canWrite && (
+        <div className="sm:justify-self-end has-[>div]:col-span-full has-[>div]:justify-self-stretch">
+          <BudgetForm
+            clientId={data.clientId}
+            adAccountId={a.adAccountId}
+            adAccountName={a.adAccountName}
+            month={month}
+            existing={a.budget}
+            currency={cur}
+          />
+        </div>
+      )}
+    </li>
   );
 }
 

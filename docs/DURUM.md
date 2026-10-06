@@ -765,6 +765,18 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-06 — Canlı tur: bütçe düğmesi ekran dışındaydı, logo önizlemesi 404
+
+- **Aylık Bütçe tablosu 860 px sabit genişlikteydi**, iç menünün yanındaki
+  kolon daha dar: tablo kendi içinde kayıyor ve satır sonundaki "Bütçe
+  tanımla" düğmesi GÖRÜNMÜYORDU. Satır listesine çevrildi (hesap · harcanan
+  / bütçe + çubuk · düğme); form açılınca satırın tamamına yayılıyor.
+- **Logo önizlemesi 404:** API `previewUrl`i göreli veriyor
+  (`/assets/<id>/preview`); logo sekmesi ve AI asistanın ek kutusu önüne
+  `API_URL` eklemiyordu. Logo yüklü ve seçili görünüp kutuda "Görsel yok"
+  yazıyordu. Tek üretici `onizlemeAdresi` ve bütün `.tsx`leri tarayan test.
+- Marka bölümünde kart içinde kart ve iki kez yazan açıklama kalktı.
+
 ### 2026-10-06 — Bağlantılar iki karta, bütçe mecraya göre, giriş logosu
 
 - **Bütçe:** kullanıcı "hangi mecraya bütçe sınırı koyduğumu göremiyorum"

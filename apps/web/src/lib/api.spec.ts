@@ -126,3 +126,31 @@ describe('alanHatalariniEkle — doğrulama hatası alanı söylüyor', () => {
     }
   });
 });
+
+describe('varlık önizleme adresi', () => {
+  it('göreli adresin önüne API_URL ekliyor, mutlak adrese dokunmuyor', async () => {
+    const { onizlemeAdresi, API_URL } = await import('./api');
+    expect(onizlemeAdresi('/assets/x/preview')).toBe(`${API_URL}/assets/x/preview`);
+    expect(onizlemeAdresi('https://cdn.example/x.png')).toBe('https://cdn.example/x.png');
+  });
+
+  it('KRİTİK: hiçbir bileşen göreli previewUrl’i doğrudan src’ye koymuyor', async () => {
+    // Logo sekmesi ve AI asistan bunu yapıyordu: istek panelin kendi
+    // adresine gidip 404 dönüyor, kutuda "Görsel yok" yazıyordu.
+    const { readdirSync, readFileSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const kok = join(__dirname, '..');
+    const dosyalar: string[] = [];
+    const gez = (d: string): void => {
+      for (const ad of readdirSync(d)) {
+        const y = join(d, ad);
+        if (statSync(y).isDirectory()) gez(y);
+        else if (y.endsWith('.tsx')) dosyalar.push(y);
+      }
+    };
+    gez(kok);
+    expect(dosyalar.length).toBeGreaterThan(50);
+    const ihlal = dosyalar.filter((f) => /src=\{\s*[\w.[\]]+\.previewUrl\s*\}/.test(readFileSync(f, 'utf8')));
+    expect(ihlal).toEqual([]);
+  });
+});

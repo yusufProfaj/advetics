@@ -162,12 +162,15 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
   const kapali = !canWrite || busy;
 
   return (
-    <div className="space-y-5 rounded-xl border border-line bg-surface p-4">
+    /*
+      ÇERÇEVESİZ: Marka Merkezi bu bileşeni zaten bir kartın (`Kart`) içine
+      koyuyor ve kendi çerçevesi kart içinde kart üretiyordu. Açıklama
+      cümlesi de bölüm başlığında yazılı; burada ikinci kez yazıyordu.
+    */
+    <div className="space-y-5">
       <div>
-        <h2 className="text-sm font-semibold text-ink">Marka</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          Reklam Oluştur ve AI asistan bu alanları okur. Doldurduğun bilgi bir daha sorulmaz.
-        </p>
+        <h2 className="text-sm font-semibold text-ink">Marka bilgileri</h2>
+        <p className="mt-0.5 text-xs text-ink-muted">Marka adı, amaç, üslup ve öne çıkan vaatler.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

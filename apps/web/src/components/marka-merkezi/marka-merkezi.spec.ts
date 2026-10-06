@@ -168,9 +168,18 @@ describe('Aylık Bütçe mecraya göre gruplu (2026-10-06)', () => {
 
   it('KRİTİK: her mecra kendi gövdesinde ve başlığında kaç hesapta sınır olduğu yazıyor', () => {
     expect(govde).toContain('PLATFORMS.filter((p) => rows.some((a) => a.platform === p))');
-    expect(govde).toContain('<tbody key={platform}');
+    expect(govde).toContain('<section key={platform}');
     expect(govde).toContain('PLATFORM_KISA_ADLARI[platform]');
     expect(govde).toContain("'hiçbirinde bütçe sınırı yok'");
+  });
+
+  it('KRİTİK: satır kolona sığıyor — "Bütçe tanımla" düğmesi yatay kaydırmanın dışında kalmıyor', () => {
+    // 860 piksellik tablo iç menünün yanındaki kolona sığmıyordu ve düğme
+    // ekranın dışındaydı (canlı tur, 2026-10-06).
+    expect(govde).not.toMatch(/min-w-\[\d{3,}px\]/);
+    expect(govde).not.toContain('overflow-x-auto');
+    const satir = govde.slice(govde.indexOf('function HesapSatiri('));
+    expect(satir).toContain('<BudgetForm');
   });
 
   it('sınırı olmayan hesap boş tire değil, "Sınır yok" diyor', () => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { AssetListResult, AssetRecord, AssetUploadResult, ClientProfileRecord } from '@advetics/shared';
-import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
+import { API_URL, ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { Halka } from '@/components/yukleniyor';
 import { KreatifGorsel } from '@/components/kreatif-gorsel';
 
@@ -129,7 +129,7 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
                 seciliId === a.id ? 'border-brand' : 'border-line hover:border-brand-soft'
               }`}
             >
-              <KreatifGorsel src={a.previewUrl} alt={a.name} bosMetin="Görsel yok" />
+              <KreatifGorsel src={onizlemeAdresi(a.previewUrl)} alt={a.name} bosMetin="Görsel yok" />
             </button>
           ))}
         </div>
