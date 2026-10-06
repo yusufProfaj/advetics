@@ -214,7 +214,7 @@ describe('Workspace ayarları Marka Merkezi’nde (2026-10-06)', () => {
   it('KRİTİK: menüdeki her alt başlık sayfadaki bir karta gidiyor', async () => {
     const { AYAR_ALT_BASLIKLARI } = await import('./ic-menu');
     expect(AYAR_ALT_BASLIKLARI.length).toBe(3);
-    for (const a of AYAR_ALT_BASLIKLARI) expect(AYAR, a.capa).toContain(`<Kart id="${a.capa}"`);
+    for (const a of AYAR_ALT_BASLIKLARI) expect(AYAR, a.capa).toMatch(new RegExp(`<(Kart|section) id="${a.capa}"`));
   });
 
   it('rapor alıcıları ve özel kategori aynı ekranda düzenlenebiliyor', () => {

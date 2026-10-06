@@ -90,13 +90,16 @@ export async function WorkspaceAyarlari({
             />
           </Kart>
 
-          <Kart id="kategori" baslik="Özel reklam kategorisi">
+          {/* ÇERÇEVESİZ VE BAŞLIKSIZ: seçici kendi çerçevesini, başlığını ve
+              durumunu ("beyan yok") taşıyor; kartın içine koymak kutu içinde
+              kutu ve iki kez yazan bir başlık üretiyordu. */}
+          <section id="kategori" className="scroll-mt-24 rounded-xl bg-surface">
             <SpecialCategoryPicker
               clientId={clientId}
               value={detay.v.specialAdCategories ?? []}
               canManage={yaz('client.write')}
             />
-          </Kart>
+          </section>
         </>
       )}
 
@@ -129,6 +132,7 @@ export async function WorkspaceAyarlari({
                   members={uyeler.v}
                   clients={[{ id: clientId, name: detay.v.name }]}
                   currentUserId={session.user.id}
+                  ekleKapali
                 />
               )}
             </div>

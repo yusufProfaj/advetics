@@ -86,10 +86,17 @@ export function TeamManager({
   members,
   clients,
   currentUserId,
+  ekleKapali = false,
 }: {
   members: MemberRow[];
   clients: ClientOption[];
   currentUserId: string;
+  /**
+   * Ekleme formu katlanmış ve listenin ALTINDA. Marka Merkezi'nde ekip
+   * kartı bir kurulum ekranının parçası; açık form kartın üçte ikisini
+   * kaplıyor ve asıl soru olan "kimin erişimi var" listesini aşağı itiyordu.
+   */
+  ekleKapali?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -177,6 +184,26 @@ export function TeamManager({
       {/* ---------------------------------------------------------------- */}
       {/* Kullanıcı ekle                                                   */}
       {/* ---------------------------------------------------------------- */}
+      {!ekleKapali && ekleFormu()}
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Kullanıcılar                                                     */}
+      {/* ---------------------------------------------------------------- */}
+      {uyeListesi()}
+
+      {ekleKapali && (
+        <details className="rounded-xl border border-line bg-surface">
+          <summary className="cursor-pointer px-4 py-2.5 text-sm font-medium text-brand-strong">
+            + Kullanıcı ekle
+          </summary>
+          <div className="border-t border-line p-1">{ekleFormu()}</div>
+        </details>
+      )}
+    </div>
+  );
+
+  function ekleFormu() {
+    return (
       <form onSubmit={addMember} className="rounded-xl border border-line bg-surface p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-ink">Kullanıcı ekle</h2>
         <p className="mt-1 text-xs text-ink-muted">
@@ -299,10 +326,12 @@ export function TeamManager({
           </p>
         )}
       </form>
+    );
+  }
 
-      {/* ---------------------------------------------------------------- */}
-      {/* Kullanıcılar                                                     */}
-      {/* ---------------------------------------------------------------- */}
+  function uyeListesi() {
+    return (
+      <>
       {/*
         ÜYE KARTLARI IZGARADA. Dikey yığında her kart satırın tamamını
         kaplıyordu ve içindeki bilgi (ad, e-posta, son giriş) satırın
@@ -420,8 +449,9 @@ export function TeamManager({
           );
         })}
       </ul>
-    </div>
-  );
+      </>
+    );
+  }
 }
 
 /**
