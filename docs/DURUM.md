@@ -765,6 +765,22 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-06 — "Doğrulama hatası" artık hangi alan olduğunu söylüyor
+
+Rapor önizlemesi süre düzeltmesinden sonra açıldı. Ardından rapor mailinde
+"Doğrulama hatası" göründü ve başka hiçbir şey yazmadı. Sunucu alan listesini
+(`errors`) baştan beri dönüyordu, ama ekranlar yalnızca başlığı gösteriyordu.
+
+- Panel (`api.ts#alanHatalariniEkle`, tek yerde): "Doğrulama hatası: Alıcı 2:
+  Geçerli bir e-posta adresi değil · Konu: Boş bırakılamaz". En fazla üç alan
+  gösteriliyor, fazlası sayıyla yazılıyor.
+- Zod'un hazır cümleleri Türkçe (`packages/shared/src/zod-turkce.ts`,
+  küresel `setErrorMap`). Şemaya yazılmış özel mesajlar korunuyor.
+- **Mailin asıl sebebi henüz BİLİNMİYOR:** şema bugünkü değerlerle geçiyor.
+  Deploy sonrası yeniden denenince ekran hangi alanın reddedildiğini
+  söyleyecek. En güçlü aday, workspace'in kayıtlı alıcılarından birinin
+  e-posta biçimi.
+
 ### 2026-10-05 — Rapor sorguları dizi süzgecine geçti (kök düzeltme)
 
 Düzeltilmiş `olcum-rapor` üretimde (en büyük workspace, 30 gün, 2 hesap,

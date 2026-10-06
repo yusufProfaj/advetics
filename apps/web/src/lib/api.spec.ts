@@ -85,3 +85,44 @@ describe('mesajaKodEkle — sunucu hatası logda bulunabilsin', () => {
     }
   });
 });
+
+describe('alanHatalariniEkle — doğrulama hatası alanı söylüyor', () => {
+  it('KRİTİK: alan ve sebep mesaja ekleniyor, dizi elemanı birden sayılıyor', async () => {
+    const { alanHatalariniEkle } = await import('./api');
+    expect(
+      alanHatalariniEkle('Doğrulama hatası', [
+        { field: 'to_emails.1', message: 'Geçerli bir e-posta adresi değil' },
+        { field: 'subject', message: 'Boş bırakılamaz' },
+      ]),
+    ).toBe('Doğrulama hatası: Alıcı 2: Geçerli bir e-posta adresi değil · Konu: Boş bırakılamaz');
+  });
+
+  it('tanınmayan alan ham adıyla, üçten fazlası sayıyla yazılıyor', async () => {
+    const { alanHatalariniEkle } = await import('./api');
+    const m = alanHatalariniEkle(
+      'Doğrulama hatası',
+      ['a', 'b', 'c', 'd', 'e'].map((f) => ({ field: f, message: 'x' })),
+    );
+    expect(m).toBe('Doğrulama hatası: a: x · b: x · c: x · +2 alan daha');
+    expect(alanHatalariniEkle('Hata', undefined)).toBe('Hata');
+  });
+
+  it('KRİTİK: hata yolu alanları GERÇEKTEN ekliyor', async () => {
+    const asil = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Doğrulama hatası',
+          errors: [{ field: 'subject', message: 'Boş bırakılamaz' }],
+        }),
+        { status: 400 },
+      )) as typeof fetch;
+    try {
+      await expect(apiFetch('/x')).rejects.toThrow('Doğrulama hatası: Konu: Boş bırakılamaz');
+    } finally {
+      globalThis.fetch = asil;
+    }
+  });
+});

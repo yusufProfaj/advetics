@@ -75,11 +75,63 @@ async function handle<T>(res: Response): Promise<T> {
   }
 
   throw new ApiRequestError(
-    mesajaKodEkle(body?.message ?? `İstek başarısız (${res.status})`, res.status, body?.requestId),
+    mesajaKodEkle(
+      alanHatalariniEkle(body?.message ?? `İstek başarısız (${res.status})`, body?.errors),
+      res.status,
+      body?.requestId,
+    ),
     res.status,
     body?.code ?? 'UNKNOWN',
     body?.errors,
   );
+}
+
+/**
+ * ═══ DOĞRULAMA HATASI HANGİ ALANIN NEDEN REDDEDİLDİĞİNİ SÖYLÜYOR ═══
+ *
+ * Sunucu her doğrulama hatasında alan listesini (`errors`) dönüyordu ama
+ * ekranlar yalnızca başlığı gösteriyordu: rapor maili "Doğrulama hatası"
+ * deyip kaldı ve kullanıcı alıcı mı, konu mu, tarih mi olduğunu göremedi
+ * (2026-10-06). Şemanın kendi yorumu "Zod hatası hangi elemanın bozuk
+ * olduğunu söylüyor" diyordu — söylüyordu, ekrana ulaşmıyordu.
+ *
+ * TEK YERDE: mesajı gösteren her ekran kendiliğinden taşıyor. Alanların
+ * altında ayrıca gösteren ekran (giriş formu) `fieldErrors`ı okumaya devam
+ * ediyor. Alan adı tanınmıyorsa ham hâliyle yazılıyor — hiç yazmamaktan iyi.
+ */
+const ALAN_ETIKETLERI: Record<string, string> = {
+  to_emails: 'Alıcı',
+  subject: 'Konu',
+  html: 'Mail metni',
+  from: 'Başlangıç tarihi',
+  to: 'Bitiş tarihi',
+  clientId: 'Workspace',
+  templateId: 'Şablon',
+  sablon: 'Şablon',
+  expiresInDays: 'Geçerlilik süresi',
+};
+
+function alanEtiketi(alan: string): string {
+  const [kok, sira] = alan.split('.');
+  const etiket = ALAN_ETIKETLERI[kok ?? ''] ?? alan;
+  // Dizi elemanı: "to_emails.1" → "Alıcı 2" (kullanıcı birden sayıyor).
+  return sira !== undefined && /^\d+$/.test(sira) && etiket !== alan
+    ? `${etiket} ${Number(sira) + 1}`
+    : etiket;
+}
+
+export function alanHatalariniEkle(
+  mesaj: string,
+  hatalar: Array<{ field: string; message: string }> | undefined,
+): string {
+  if (!hatalar || hatalar.length === 0) return mesaj;
+  const ayrinti = hatalar
+    .slice(0, 3)
+    .map((h) => (h.field === '_' ? h.message : `${alanEtiketi(h.field)}: ${h.message}`))
+    .join(' · ');
+  // SESSİZ KESME YOK: üçten fazlaysa kaç tane daha olduğu yazılıyor.
+  const kalan = hatalar.length > 3 ? ` · +${hatalar.length - 3} alan daha` : '';
+  return `${mesaj}: ${ayrinti}${kalan}`;
 }
 
 /**
