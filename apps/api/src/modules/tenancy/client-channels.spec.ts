@@ -176,6 +176,19 @@ describe('ayrıntılar', () => {
     expect((await grup('meta_ads')).connected[0]!.syncEnabled).toBe(true);
   });
 
+  it('KRİTİK: sosyal profilin boost hesabı dönüyor, reklam hesabında alan yok', async () => {
+    // Marka Merkezi bu alanla seçiciyi dolduruyor; gelmezse seçici her zaman
+    // "seçilmemiş" görünür ve kullanıcı bağlı hesabı tekrar tekrar seçer.
+    await hesap(uuid(1), 'meta', IDS.client);
+    await profil(uuid(4), 'instagram_business', IDS.client);
+    await profil(uuid(3), 'facebook_page', IDS.client);
+    await h.q(`UPDATE social_profiles SET linked_ad_account_id = $1 WHERE id = $2`, [uuid(1), uuid(4)]);
+
+    expect((await grup('instagram')).connected[0]!.linkedAdAccountId).toBe(uuid(1));
+    expect((await grup('facebook')).connected[0]!.linkedAdAccountId).toBeNull();
+    expect((await grup('meta_ads')).connected[0]).not.toHaveProperty('linkedAdAccountId');
+  });
+
   it('KRİTİK: hiç kanal yoksa SEBEBİ dönüyor', async () => {
     // "Havuz boş" ile "ajans henüz bağlanmadı" farklı iki iş, ikisi de boş
     // liste olarak görünüyor.

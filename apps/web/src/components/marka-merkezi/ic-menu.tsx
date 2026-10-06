@@ -22,6 +22,13 @@ export const MARKA_ALT_BASLIKLARI = [
   { capa: 'logo', ad: 'Logo' },
 ] as const;
 
+/** Workspace ayarları bölümünün kartları — `workspace-ayarlari.tsx` çapaları. */
+export const AYAR_ALT_BASLIKLARI = [
+  { capa: 'firma', ad: 'İletişim ve firma' },
+  { capa: 'kategori', ad: 'Özel reklam kategorisi' },
+  { capa: 'ekip', ad: 'Ekip' },
+] as const;
+
 const ROZET: Record<RozetTonu, string> = {
   tamam: 'bg-ok-soft text-ok-strong',
   eksik: 'bg-warn-soft text-warn-strong',
@@ -86,6 +93,20 @@ export function IcMenu({
               </Link>
               {/* ALT BAŞLIKLAR YALNIZCA SEÇİLİ BÖLÜMDE ve yalnızca geniş ekranda:
                   dar ekranda yatay şeridi ikinci bir satıra bölmek okunmazdı. */}
+              {secili && b.kod === 'ayarlar' && (
+                <ul className="mb-1 ml-3 mt-0.5 hidden border-l-2 border-line pl-2 lg:block">
+                  {AYAR_ALT_BASLIKLARI.map((a) => (
+                    <li key={a.capa}>
+                      <a
+                        href={`#${a.capa}`}
+                        className="block rounded-md px-2 py-1.5 text-sm text-ink-muted hover:text-ink"
+                      >
+                        {a.ad}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {secili && b.kod === 'marka' && (
                 <ul className="mb-1 ml-3 mt-0.5 hidden border-l-2 border-line pl-2 lg:block">
                   {MARKA_ALT_BASLIKLARI.map((a) => (

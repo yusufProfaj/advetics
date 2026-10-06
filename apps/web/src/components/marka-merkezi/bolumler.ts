@@ -30,6 +30,13 @@ export const MM_BOLUMLERI = [
   { kod: 'butce', ad: 'Aylık Bütçe', izin: 'budget.read' },
   { kod: 'kitleler', ad: 'Kitleler', izin: 'client.read' },
   { kod: 'varliklar', ad: 'Varlıklar', izin: 'bulk.read' },
+  /*
+   * WORKSPACE AYARLARI (2026-10-06, kullanıcının isteği). İletişim/firma
+   * bilgileri, özel reklam kategorisi ve ekip yalnızca Şirketler ekranındaki
+   * pencerede vardı; workspace'e geçen kullanıcı oraya Marka Merkezi'nden
+   * ulaşamıyordu. SONDA: kurulumun ilk adımları (bağlantı, marka) önce.
+   */
+  { kod: 'ayarlar', ad: 'Workspace ayarları', izin: 'client.read' },
 ] as const satisfies ReadonlyArray<{ kod: string; ad: string; izin: Permission }>;
 
 export type MmBolumKodu = (typeof MM_BOLUMLERI)[number]['kod'];

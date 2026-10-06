@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { HAZIRLIK_KODLARI } from '@advetics/shared';
+import { CHANNEL_KINDS, HAZIRLIK_KODLARI, type ChannelGroup, type ChannelItem } from '@advetics/shared';
 import { HAZIRLIK_MADDE_TANIMI } from './hazirlik-listesi';
 import { havuzdaAra } from '../tenancy/bagli-kanallar';
 import { visibleSections } from '@/lib/nav-sections';
@@ -196,5 +196,57 @@ describe('Bağlantılar düzeni (2026-10-06)', () => {
   it('KRİTİK: izleme kapalı hesap özet satırında da sayılıyor', () => {
     expect(KANAL).toContain('tum.filter((i) => !i.syncEnabled).length');
     expect(KANAL).toContain('hesapta izleme kapalı');
+  });
+});
+
+describe('Workspace ayarları Marka Merkezi’nde (2026-10-06)', () => {
+  /*
+   * Kullanıcı: "workspace'e geçiş yaptığımda doldurulması gereken her yeri
+   * Marka Merkezi kısmından halletmek istiyorum". Bu bilgiler yalnızca
+   * Şirketler ekranındaki pencerede vardı.
+   */
+  const AYAR = yorumsuz('components/marka-merkezi/workspace-ayarlari.tsx');
+
+  it('KRİTİK: sayfa bölümü çiziyor', () => {
+    expect(SAYFA).toContain("{bolum === 'ayarlar' && <WorkspaceAyarlari clientId={clientId} session={session} />}");
+  });
+
+  it('KRİTİK: menüdeki her alt başlık sayfadaki bir karta gidiyor', async () => {
+    const { AYAR_ALT_BASLIKLARI } = await import('./ic-menu');
+    expect(AYAR_ALT_BASLIKLARI.length).toBe(3);
+    for (const a of AYAR_ALT_BASLIKLARI) expect(AYAR, a.capa).toContain(`<Kart id="${a.capa}"`);
+  });
+
+  it('rapor alıcıları ve özel kategori aynı ekranda düzenlenebiliyor', () => {
+    expect(AYAR).toContain('<FirmaBilgileri');
+    expect(AYAR).toContain('<SpecialCategoryPicker');
+    expect(AYAR).toContain('<TeamManager');
+  });
+});
+
+describe('sosyal profilin boost hesabı Bağlantılar’da', () => {
+  const hesap = (id: string): ChannelItem => ({ id, name: id, externalId: id, syncEnabled: true, isManager: false });
+  const gruplar = (): ChannelGroup[] =>
+    CHANNEL_KINDS.map((kind) => ({
+      kind,
+      connected: kind === 'meta_ads' ? [hesap('m1')] : kind === 'google_ads' ? [hesap('g1')] : [],
+      available: [],
+    }));
+
+  it('KRİTİK: Instagram/Facebook Meta hesabıyla, YouTube Google hesabıyla, reklam hesabı hiç', async () => {
+    const { boostSecenekleri } = await import('../tenancy/bagli-kanallar');
+    const b = boostSecenekleri(gruplar());
+    expect(b.instagram?.map((a) => a.id)).toEqual(['m1']);
+    expect(b.facebook?.map((a) => a.id)).toEqual(['m1']);
+    expect(b.youtube?.map((a) => a.id)).toEqual(['g1']);
+    expect(b.meta_ads).toBeNull();
+    expect(b.google_ads).toBeNull();
+    expect(b.linkedin_ads).toBeNull();
+  });
+
+  it('ayarlar satırı bağlı sosyal profilde çiziliyor', () => {
+    const i = KANAL.indexOf('function BagliKart(');
+    const govde = KANAL.slice(i, KANAL.indexOf('function SecilebilirSatir(', i));
+    expect(govde).toContain('<ProfilAyarlari item={item} kind={kind} secenekler={boostSecenekleri} />');
   });
 });

@@ -765,6 +765,20 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-06 — Workspace ayarları Marka Merkezi'ne
+
+Kullanıcı: iletişim/firma bilgileri, ekip ve sayfaların boost ayarı yalnızca
+Ayarlar › Şirketler'deki workspace penceresindeydi; workspace'e geçince
+doldurulacak her yeri Marka Merkezi'nden yapmak istiyor.
+
+- Yeni bölüm **Workspace ayarları** (`?bolum=ayarlar`): İletişim ve firma
+  (rapor alıcıları dahil; boşsa "rapor kimseye gitmez" uyarısı), Meta özel
+  reklam kategorisi, Ekip (liste + danışman ata, `user.read`). Formlar
+  penceredekilerle AYNI bileşen. Arşivleme bilerek dışarıda.
+- **Bağlantılar:** Instagram/Facebook/YouTube satırında boost hesabı seçimi
+  ve gönderi izleme aç/durdur. `/clients/:id/channels` artık sosyal profilde
+  `linkedAdAccountId` döndürüyor (mutasyonla doğrulandı).
+
 ### 2026-10-06 — Canlı tur: bütçe düğmesi ekran dışındaydı, logo önizlemesi 404
 
 - **Aylık Bütçe tablosu 860 px sabit genişlikteydi**, iç menünün yanındaki

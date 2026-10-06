@@ -10,7 +10,7 @@ import {
   type ChannelKind,
   type ClientChannels,
 } from '@advetics/shared';
-import { kanalReklamHesabiMi } from '@advetics/shared';
+import { CHANNEL_KINDS, kanalReklamHesabiMi } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { atamaBildirimi, type AtamaYaniti } from '@/lib/atama-bildirimi';
 import { PlatformLogo } from '@/components/platform-logo';
@@ -65,6 +65,7 @@ export function BagliKanallar({
   const tum = data.groups.flatMap((g) => g.connected);
   const bagliKanal = data.groups.filter((g) => g.connected.length > 0).length;
   const izlemeKapali = tum.filter((i) => !i.syncEnabled).length;
+  const boost = boostSecenekleri(data.groups);
 
   return (
     <div className="space-y-4">
@@ -81,10 +82,10 @@ export function BagliKanallar({
         )}
       </p>
       {reklam.length > 0 && (
-        <KanalKarti baslik="Reklam hesapları" clientId={data.clientId} gruplar={reklam} ajansUyesi={ajansUyesi} />
+        <KanalKarti baslik="Reklam hesapları" clientId={data.clientId} gruplar={reklam} ajansUyesi={ajansUyesi} boost={boost} />
       )}
       {sosyal.length > 0 && (
-        <KanalKarti baslik="Sayfalar ve kanallar" clientId={data.clientId} gruplar={sosyal} ajansUyesi={ajansUyesi} />
+        <KanalKarti baslik="Sayfalar ve kanallar" clientId={data.clientId} gruplar={sosyal} ajansUyesi={ajansUyesi} boost={boost} />
       )}
     </div>
   );
@@ -95,11 +96,13 @@ function KanalKarti({
   clientId,
   gruplar,
   ajansUyesi,
+  boost,
 }: {
   baslik: string;
   clientId: string;
   gruplar: ChannelGroup[];
   ajansUyesi: boolean;
+  boost: BoostSecenekleri;
 }) {
   return (
     <section className="rounded-xl border border-line bg-surface">
@@ -109,7 +112,7 @@ function KanalKarti({
       <ul className="divide-y divide-line">
         {gruplar.map((g) => (
           <li key={g.kind}>
-            <KanalGrubu clientId={clientId} grup={g} ajansUyesi={ajansUyesi} />
+            <KanalGrubu clientId={clientId} grup={g} ajansUyesi={ajansUyesi} boost={boost} />
           </li>
         ))}
       </ul>
@@ -137,10 +140,12 @@ function KanalGrubu({
   clientId,
   grup,
   ajansUyesi,
+  boost,
 }: {
   clientId: string;
   grup: ChannelGroup;
   ajansUyesi: boolean;
+  boost: BoostSecenekleri;
 }) {
   const [acik, setAcik] = useState(false);
   const [ara, setAra] = useState('');
@@ -192,7 +197,14 @@ function KanalGrubu({
       {bagli && (
         <ul className="ml-12 mt-2 divide-y divide-line border-t border-line">
           {grup.connected.map((i) => (
-            <BagliKart key={i.id} clientId={clientId} kind={grup.kind} item={i} ajansUyesi={ajansUyesi} />
+            <BagliKart
+              key={i.id}
+              clientId={clientId}
+              kind={grup.kind}
+              item={i}
+              ajansUyesi={ajansUyesi}
+              boostSecenekleri={boost[grup.kind]}
+            />
           ))}
         </ul>
       )}
@@ -296,11 +308,14 @@ function BagliKart({
   kind,
   item,
   ajansUyesi,
+  boostSecenekleri,
 }: {
   clientId: string;
   kind: ChannelKind;
   item: ChannelItem;
   ajansUyesi: boolean;
+  /** Sosyal profilde boost hesabı seçenekleri; reklam hesabında `null`. */
+  boostSecenekleri: ChannelItem[] | null;
 }) {
   const { ata, busy, hata, bildirim } = useAtama(kind, item.id);
   /*
@@ -364,10 +379,14 @@ function BagliKart({
         ekranda "bağlı" yazarken. Sessiz kalması, sebebin platformda
         aranmasına yol açardı.
       */}
-      {!item.syncEnabled && (
-        <p className="mt-1.5 text-xs text-warn-strong">
-          İzleme kapalı — bu hesaptan veri çekilmiyor. Kaldırıp yeniden ekle.
-        </p>
+      {boostSecenekleri !== null ? (
+        <ProfilAyarlari item={item} kind={kind} secenekler={boostSecenekleri} />
+      ) : (
+        !item.syncEnabled && (
+          <p className="mt-1.5 text-xs text-warn-strong">
+            İzleme kapalı, bu hesaptan veri çekilmiyor. Kaldırıp yeniden ekle.
+          </p>
+        )
       )}
       {hata && (
         <p role="alert" className="mt-1.5 text-xs text-danger-strong">
@@ -440,4 +459,132 @@ export function kaldirmaOnayMetni(ajansAtadi: boolean, ajansUyesi: boolean): str
   return ajansAtadi && !ajansUyesi
     ? `${taban} Bu hesabı ajansın atadı; kaldırırsan ajansına e-posta gider. Emin misin?`
     : `${taban} Emin misin?`;
+}
+
+/**
+ * ═══ SOSYAL PROFİLİN BOOST HESABI VE GÖNDERİ İZLEMESİ ═══
+ *
+ * İkisi de yalnızca Şirketler ekranındaki workspace penceresinde vardı ve
+ * oraya Marka Merkezi'nden yol yoktu. Kullanıcı: "workspace'e geçiş
+ * yaptığımda doldurulması gereken her yeri Marka Merkezi kısmından halletmek
+ * istiyorum" (2026-10-06). İkisi de eksikse Akıllı Boost SESSİZCE çalışmıyor:
+ * izleme kapalıysa gönderi gelmiyor, boost hesabı yoksa her gönderi "bağlı
+ * reklam hesabı yok" diyor.
+ *
+ * SEÇENEKLER BU WORKSPACE'İN HESAPLARI. Facebook/Instagram yalnızca Meta
+ * hesabıyla, YouTube yalnızca Google Ads hesabıyla öne çıkarılabiliyor;
+ * öbürünü listede göstermek, sunucunun reddedeceği bir seçimi teklif etmek
+ * olurdu.
+ */
+export type BoostSecenekleri = Record<ChannelKind, ChannelItem[] | null>;
+
+export function boostSecenekleri(gruplar: ChannelGroup[]): BoostSecenekleri {
+  const bagli = (k: ChannelKind): ChannelItem[] => gruplar.find((g) => g.kind === k)?.connected ?? [];
+  const meta = bagli('meta_ads');
+  const google = bagli('google_ads');
+  const sonuc = {} as BoostSecenekleri;
+  for (const k of CHANNEL_KINDS) {
+    // REKLAM HESABININ BOOST HESABI YOK — `null` ayarlar satırını gizliyor.
+    // Kapalı liste: yeni bir sosyal kanal eklendiğinde varsayılan "seçenek
+    // yok" olmalı, yanlış platformun hesapları değil.
+    sonuc[k] = kanalReklamHesabiMi(k)
+      ? null
+      : k === 'youtube'
+        ? google
+        : k === 'facebook' || k === 'instagram'
+          ? meta
+          : [];
+  }
+  return sonuc;
+}
+
+function ProfilAyarlari({
+  item,
+  kind,
+  secenekler,
+}: {
+  item: ChannelItem;
+  kind: ChannelKind;
+  secenekler: ChannelItem[];
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+
+  async function gonder(yol: string, govde: unknown): Promise<void> {
+    setBusy(true);
+    setHata(null);
+    try {
+      await apiFetch(yol, { method: 'PATCH', body: JSON.stringify(govde) });
+      router.refresh();
+    } catch (e) {
+      setHata(e instanceof ApiRequestError ? e.message : 'İşlem başarısız oldu.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const youtube = kind === 'youtube';
+  /*
+   * BAĞLI HESAP SEÇENEKLERDE YOKSA (başka workspace'e geçmiş eski bir bağ)
+   * seçim BOŞ gösteriliyor: listede olmayan kimliği seçili göstermeye
+   * çalışmak tarayıcının ilk seçeneği göstermesi ve kullanıcının doğru
+   * hesabın bağlı olduğunu sanması demekti.
+   */
+  const secili = secenekler.some((a) => a.id === item.linkedAdAccountId) ? (item.linkedAdAccountId ?? '') : '';
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+      <label className="flex items-center gap-2">
+        <span className="text-ink-muted">{youtube ? 'Google Ads hesabı' : 'Boost hesabı'}</span>
+        {secenekler.length === 0 ? (
+          <span className="text-warn-strong">
+            Önce bu workspace’e {youtube ? 'bir Google Ads' : 'bir Meta reklam'} hesabı ekle
+          </span>
+        ) : (
+          <select
+            value={secili}
+            disabled={busy}
+            onChange={(e) =>
+              void gonder(`/connections/social-profiles/${item.id}/ad-account`, {
+                adAccountId: e.target.value || null,
+              })
+            }
+            className={`h-7 max-w-[14rem] rounded-md border border-line bg-surface px-2 text-xs outline-none focus:border-brand disabled:opacity-50 ${
+              secili ? 'text-ink' : 'text-warn-strong'
+            }`}
+          >
+            <option value="">Seçilmedi</option>
+            {secenekler.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </label>
+
+      <span className="flex items-center gap-2">
+        <span className={item.syncEnabled ? 'text-ink-muted' : 'text-warn-strong'}>
+          {item.syncEnabled ? 'Gönderiler çekiliyor' : 'Gönderiler çekilmiyor'}
+        </span>
+        <Dugme
+          ton="sade"
+          boyut="kucuk"
+          bekliyor={busy}
+          onClick={() =>
+            void gonder(`/connections/social-profiles/${item.id}/sync`, { syncEnabled: !item.syncEnabled })
+          }
+        >
+          {item.syncEnabled ? 'Durdur' : 'Başlat'}
+        </Dugme>
+      </span>
+
+      {hata && (
+        <p role="alert" className="basis-full text-danger-strong">
+          {hata}
+        </p>
+      )}
+    </div>
+  );
 }

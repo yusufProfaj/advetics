@@ -357,6 +357,12 @@ export interface ChannelItem {
    * kaldırmadan ÖNCE bilmeli.
    */
   ajansAtadi?: boolean;
+  /**
+   * YALNIZCA SOSYAL PROFİLLERDE: gönderi öne çıkarmanın faturalanacağı
+   * reklam hesabı. `null` = seçilmemiş, Akıllı Boost bu sayfanın
+   * gönderilerini öne çıkaramaz. Reklam hesaplarında alan hiç yok.
+   */
+  linkedAdAccountId?: string | null;
 }
 
 /** Bir kanal tipi için workspace görünümü. */

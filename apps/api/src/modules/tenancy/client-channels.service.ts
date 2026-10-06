@@ -31,6 +31,8 @@ interface Satir {
   external_id: string;
   sync_enabled: boolean;
   is_manager: boolean;
+  /** Yalnızca sosyal profillerde; reklam hesabı sorgusu bu kolonu seçmiyor. */
+  linked_ad_account_id?: string | null;
 }
 
 /**
@@ -102,7 +104,8 @@ export class ClientChannelsService {
             : await tx.$queryRaw<Array<Satir & { client_id: string | null }>>(Prisma.sql`
                 SELECT id::text AS id, name, external_id, sync_enabled,
                        false AS is_manager,
-                       client_id::text AS client_id
+                       client_id::text AS client_id,
+                       linked_ad_account_id::text AS linked_ad_account_id
                 FROM social_profiles
                 WHERE ${k.suzgec} AND (client_id = ${clientId}::uuid OR client_id IS NULL)
                 ORDER BY name
@@ -114,6 +117,16 @@ export class ClientChannelsService {
           externalId: r.external_id,
           syncEnabled: r.sync_enabled,
           isManager: r.is_manager === true,
+          /*
+           * BOOST HESABI MARKA MERKEZİ'NDE DE SEÇİLEBİLSİN DİYE TAŞINIYOR.
+           * Bu seçim yalnızca Şirketler ekranındaki workspace penceresinde
+           * vardı; kullanıcı workspace'i Marka Merkezi'nden kurmak istiyor
+           * ve seçim yapılmazsa Akıllı Boost her gönderide "bağlı reklam
+           * hesabı yok" diyor. Reklam hesaplarında alan hiç yazılmıyor.
+           */
+          ...(k.tablo === 'social_profiles'
+            ? { linkedAdAccountId: r.linked_ad_account_id ?? null }
+            : {}),
         });
 
         groups.push({

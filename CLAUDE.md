@@ -1250,8 +1250,13 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   Profaj kurumsal kılavuzundan: ana başlık Montserrat, gövde Open Sans,
   kırmızı `#ff2400`, gri `#302e2d`. Menü başlığı "Kütüphane" değil
   **Base** ve tek kapısı Marka Merkezi; Marka Merkezi'nin kendi iç menüsü
-  var (Bağlantılar · Marka · Kitleler · Varlıklar) ve bölüm adreste
-  (`?bolum=`). Yeni bir workspace kurulum ekranı AYRI SAYFA olarak
+  var (Bağlantılar · Marka · Aylık Bütçe · Kitleler · Varlıklar ·
+  Workspace ayarları) ve bölüm adreste (`?bolum=`). Workspace'e geçen
+  kullanıcı doldurulacak HER ŞEYİ buradan yapabilmeli (kullanıcı,
+  2026-10-06): iletişim/firma, rapor alıcıları, özel reklam kategorisi,
+  ekip, sayfaların boost hesabı ve gönderi izlemesi dahil. Şirketler
+  ekranındaki workspace penceresi kalıyor ama TEK yol olamaz. Yeni bir
+  workspace kurulum ekranı AYRI SAYFA olarak
   açılmaz, bu iç menüye bölüm olarak girer (`marka-merkezi/bolumler.ts`) —
   dağınık yapı kullanıcının "nereye nereden girdiğimi unutuyorum"
   şikâyetinin sebebiydi. Marka profili (`branding_profiles`) CSS'i ezer:
