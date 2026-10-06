@@ -6,14 +6,26 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-05 · **Canlı (539f6fb):** Google gün içi saatlik,
+**Son güncelleme:** 2026-10-07 · **Canlı (539f6fb):** Google gün içi saatlik,
 Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlıda
 doğrulandı).
 **Bekleyen deploy:** konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
-**Kullanıcı kararı (2026-09-29): reklam oluşturma sistemi DONDU.**
-`/reklam-olustur`, uzman mod, taslak ve yayın yoluna yeni kurgu eklenmiyor;
-kullanıcı orayı baştan düzenleyecek. Sıradaki işlerde onu atla.
+**Reklam oluşturma (2026-10-07): BAŞTAN tasarlandı, uygulama ONAY BEKLİYOR.**
+Akıllı Boost dışındaki modül mevcut yapıya bağlı kalmadan yeniden tasarlandı:
+[`meta-reklam-brief/tasarim/TASARIM.md`](meta-reklam-brief/tasarim/TASARIM.md)
+(18 bölüm; girdi: Meta dokümantasyonunun 1.013 sayfasından brief +
+6 araştırma raporu + 52 çelişki hükmü). Kullanıcı kararları brief'in
+başında (Advantage+ kitle ve yerleşim açık, tek adımlı yayın, sohbetten yayın,
+konut kısıtı TR'de). **25 soru kullanıcı cevabı bekliyor:**
+[`tasarim/bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md).
+Cevaplar gelmeden uygulamaya ya da arayüz tasarımına başlanmaz (kullanıcı
+açıkça söyledi). Eski `/reklam-olustur` koduna kurgu eklenmez.
+**Acil, bu işten bağımsız:** Meta v26 kuralı 2026-10-27'de bütün sürümlerde
+kök `GET /?ids=` isteklerini hataya çeviriyor (rapor PDF görsel tazeleme,
+boost özeti) — ayrı oturumda düzeltiliyordu; deploy o tarihten önce.
+App Review başvurusu 2026-10-01'den beri incelemede, BV geçiyor
+(`DURUM.md` §6'daki "yapılmadı" bayat); ekran kayıtları eksik görünüyor.
 
 "O günden beri ne geldi" sorusunun başlangıç noktası bu belgeyi DEĞİŞTİREN
 SON COMMIT — hash buraya elle yazılmıyor (yazılan hash kendi commit'ini

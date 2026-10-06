@@ -29,3 +29,7 @@ apps/api/src/generated/
 .env.yedek.*
 apps/*/.env
 apps/*/.env.yedek.*
+
+# Meta dokümantasyonunun ham sayfaları (scripts/meta-doku-indir.sh üretir).
+# Depo herkese açık ve metin Meta'nın; brief'in kendisi bolumler/ altında.
+docs/meta-reklam-brief/kaynak/
