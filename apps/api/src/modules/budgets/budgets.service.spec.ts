@@ -475,6 +475,13 @@ describe('pacing', () => {
     expect(p.overall.excludedCurrencies).toEqual([]);
     // İki platform da ayrı satır olarak görünüyor.
     expect(p.accounts.map((a) => a.adAccountName).sort()).toEqual(['Google Ads', 'Hesap']);
+    // MECRA SATIRDA TAŞINIYOR: panel tabloyu mecraya göre grupluyor.
+    // Kullanıcı "hangi mecraya bütçe sınırı koyduğumu göremiyorum" demişti;
+    // hesap adı çoğu zaman workspace adıyla aynı ve mecrayı söylemiyor.
+    expect(Object.fromEntries(p.accounts.map((a) => [a.adAccountName, a.platform]))).toEqual({
+      'Google Ads': 'google',
+      Hesap: 'meta',
+    });
   });
 
   it('GOOGLE hesabı FARKLI para birimindeyse toplama girmiyor', async () => {

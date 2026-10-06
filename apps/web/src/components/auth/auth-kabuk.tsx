@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { platformListesi } from '@/lib/platform-listesi';
+import { AdveticsLogo } from '@/components/advetics-logo';
 
 /**
  * Oturum ekranlarının ORTAK KABUĞU — giriş, şifremi unuttum, şifre sıfırlama.
@@ -25,8 +26,11 @@ export function AuthKabuk({
     <main className="flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand text-lg font-semibold text-white">
-            A
+          {/* MARKA KENAR ÇUBUĞUYLA AYNI BİLEŞENDEN. Burada elle çizilmiş bir
+              "A" kutusu duruyordu ve logo yenilendiğinde unutuldu: kullanıcı
+              panelde yeni işareti, girişte eskisini görüyordu. */}
+          <div className="mb-6 flex justify-center">
+            <AdveticsLogo />
           </div>
           <h1 className="text-xl font-semibold text-ink">{baslik}</h1>
           <p className="mt-1 text-sm text-ink-muted">{aciklama}</p>

@@ -207,4 +207,14 @@ describe('kenar çubuğu logosu ile sekme ikonu AYNI işaret', () => {
     expect(ikon).toHaveLength(3);
     expect(menu).toEqual(ikon);
   });
+
+  it('KRİTİK: giriş ekranı da aynı logo bileşenini kullanıyor', () => {
+    // Orada elle çizilmiş bir "A" kutusu vardı ve logo yenilenince unutuldu.
+    const kabuk = readFileSync(join(APP, '..', 'components', 'auth', 'auth-kabuk.tsx'), 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
+    expect(kabuk).toContain('<AdveticsLogo />');
+    expect(kabuk).not.toMatch(/>\s*A\s*</);
+  });
 });

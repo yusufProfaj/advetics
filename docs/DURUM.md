@@ -765,6 +765,20 @@ yapıyordu. Girdiler ayrıca `3.7`–`3.12` diye numaralıydı, sırasız duruyo
 bölümleri sanılıyordu. Kimlik artık TARİH: araya girdi eklemek numara
 kaydırmıyor.
 
+### 2026-10-06 — Bağlantılar iki karta, bütçe mecraya göre, giriş logosu
+
+- **Bütçe:** kullanıcı "hangi mecraya bütçe sınırı koyduğumu göremiyorum"
+  dedi; hesap adları workspace adıyla aynı olduğu için mecra addan
+  okunamıyordu. `ClientPacing.accounts[].platform` eklendi (API + shared),
+  tablo mecra başlıklı gruplara bölündü ("N hesap · K hesapta bütçe sınırı
+  var"), boş hücre "Sınır yok". Mutasyonla doğrulandı.
+- **Bağlantılar:** altı kanal ızgarada farklı boylu kartlardı, her hesap
+  kartın içinde bir kart daha. Artık iki kart (Reklam hesapları / Sayfalar
+  ve kanallar), kanal başına bir satır; hesaplar çerçevesiz, veri durumu
+  noktada; üstte "X / Y kanal bağlı · N hesapta izleme kapalı" özeti.
+- **Giriş ekranı** hâlâ elle çizilmiş "A" kutusunu gösteriyordu; ortak
+  `AdveticsLogo`ya bağlandı ve `marka-isareti.spec.ts` kilitliyor.
+
 ### 2026-10-06 — Hazırlık şeridi + Aylık Bütçe Base'e + Genel Bakış bütçe kartı
 
 - **Hazırlık listesi tek satırlık şerit** (kullanıcı: "görüntü kirliliği"):

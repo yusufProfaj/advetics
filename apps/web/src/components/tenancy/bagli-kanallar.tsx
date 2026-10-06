@@ -41,33 +41,79 @@ export function BagliKanallar({
    */
   ajansUyesi?: boolean;
 }) {
-  return (
-    <div>
-      {data.emptyReason ? (
-        <div className="rounded-xl border border-dashed border-line p-8 text-center">
-          <p className="text-sm font-medium text-ink">Bağlanabilecek kanal yok</p>
-          <p className="mx-auto mt-1.5 max-w-lg text-sm text-ink-muted">{data.emptyReason}</p>
-        </div>
-      ) : (
-        /*
-          KANALLAR YAN YANA DİKEY KARTLARDA — alt alta geniş şeritlerde DEĞİL.
-          Şerit düzeninde her kart ekranın tamamını kaplıyor ama içindeki
-          hesap satırı üçte birinde bitiyordu: sağda kalıcı bir ölü alan ve
-          beş kanalı görmek için sürekli kaydırma. Kart daralınca içerik
-          genişliğine oturuyor ve beş kanal tek ekranda görünüyor.
+  if (data.emptyReason) {
+    return (
+      <div className="rounded-xl border border-dashed border-line p-8 text-center">
+        <p className="text-sm font-medium text-ink">Bağlanabilecek kanal yok</p>
+        <p className="mx-auto mt-1.5 max-w-lg text-sm text-ink-muted">{data.emptyReason}</p>
+      </div>
+    );
+  }
 
-          `items-start`: kanalların hesap sayısı farklı ve ızgaranın hepsini
-          en uzun karta uzatması, boş kart alanı üretirdi.
-        */
-        <ul className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
-          {data.groups.map((g) => (
-            <li key={g.kind}>
-              <KanalGrubu clientId={data.clientId} grup={g} ajansUyesi={ajansUyesi} />
-            </li>
-          ))}
-        </ul>
+  /*
+   * İKİ KART: REKLAM HESAPLARI ve SOSYAL KANALLAR. Önceki düzen altı kanalı
+   * ızgarada yan yana kartlara diziyordu; kartların boyu farklıydı, her
+   * hesap kartın içinde bir kart daha taşıyordu ve boş kanallar dolu
+   * olanlar kadar yer kaplıyordu. Kullanıcının tarifi "çok kötü duruyor".
+   * Şimdi her kanal tek bir SATIR: boşsa tek satırda kalıyor, doluysa
+   * hesaplar altında çizgiyle ayrılıyor. Sıra sabit (sunucunun sırası):
+   * eklenen kanalı yukarı taşımak, kullanıcının az önce baktığı satırı
+   * gözünün önünden kaçırırdı.
+   */
+  const reklam = data.groups.filter((g) => kanalReklamHesabiMi(g.kind));
+  const sosyal = data.groups.filter((g) => !kanalReklamHesabiMi(g.kind));
+  const tum = data.groups.flatMap((g) => g.connected);
+  const bagliKanal = data.groups.filter((g) => g.connected.length > 0).length;
+  const izlemeKapali = tum.filter((i) => !i.syncEnabled).length;
+
+  return (
+    <div className="space-y-4">
+      {/* ÖZET: hangi kanalın eksik olduğunu kartları taramadan söylüyor.
+          İzleme kapalı hesap varsa burada da yazıyor; satırın içinde kalan
+          bir uyarı uzun listede gözden kaçıyordu. */}
+      <p className="text-sm text-ink-muted" aria-live="polite">
+        <span className="font-semibold text-ink">
+          {bagliKanal} / {data.groups.length}
+        </span>{' '}
+        kanal bağlı · {tum.length} hesap
+        {izlemeKapali > 0 && (
+          <span className="font-medium text-warn-strong"> · {izlemeKapali} hesapta izleme kapalı</span>
+        )}
+      </p>
+      {reklam.length > 0 && (
+        <KanalKarti baslik="Reklam hesapları" clientId={data.clientId} gruplar={reklam} ajansUyesi={ajansUyesi} />
+      )}
+      {sosyal.length > 0 && (
+        <KanalKarti baslik="Sayfalar ve kanallar" clientId={data.clientId} gruplar={sosyal} ajansUyesi={ajansUyesi} />
       )}
     </div>
+  );
+}
+
+function KanalKarti({
+  baslik,
+  clientId,
+  gruplar,
+  ajansUyesi,
+}: {
+  baslik: string;
+  clientId: string;
+  gruplar: ChannelGroup[];
+  ajansUyesi: boolean;
+}) {
+  return (
+    <section className="rounded-xl border border-line bg-surface">
+      <h3 className="border-b border-line px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+        {baslik}
+      </h3>
+      <ul className="divide-y divide-line">
+        {gruplar.map((g) => (
+          <li key={g.kind}>
+            <KanalGrubu clientId={clientId} grup={g} ajansUyesi={ajansUyesi} />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -100,32 +146,36 @@ function KanalGrubu({
   const [ara, setAra] = useState('');
   const gorunen = havuzdaAra(grup.available, ara);
   const eklenebilir = grup.available.length > 0;
+  const bagli = grup.connected.length > 0;
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-4">
-      {/* BAŞLIK SARMIYOR: dar kartta "+ Kanal Ekle" alt satıra düşüp
-          başlığın altında yalnız kalıyordu. Düğme küçüldü ve kırpılmayan
-          tek satırda kalıyor. */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5">
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {/* LOGO BEYAZ ZEMİNDE: markaların kendi renkleri var ve renkli
               bir rozetin üstünde ikisi çakışıyordu. */}
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface">
             <PlatformLogo kind={grup.kind} className="h-5 w-5" />
           </span>
-          <div>
-            <h3 className="text-sm font-semibold text-ink">{CHANNEL_LABELS[grup.kind]}</h3>
-            <p className="text-[11px] text-ink-muted">
-              {grup.connected.length > 0
-                ? `${grup.connected.length} bağlı`
-                : 'Bağlı hesap yok'}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-ink">{CHANNEL_LABELS[grup.kind]}</p>
+            <p className="flex items-center gap-1.5 text-xs text-ink-muted">
+              <span
+                aria-hidden
+                className={`h-1.5 w-1.5 rounded-full ${bagli ? 'bg-ok' : 'bg-ink-muted/40'}`}
+              />
+              {bagli
+                ? `${grup.connected.length} hesap bağlı`
+                : eklenebilir
+                  ? 'Bağlı değil'
+                  : 'Bağlı değil · havuzda boşta hesap yok'}
             </p>
           </div>
         </div>
 
         {/* SEÇİLECEK HESAP YOKSA DÜĞME SEBEBİYLE KAPALI — gizlenmiyor.
             Gizlemek, kullanıcının "buraya nasıl ekleniyor" diye aramasına
-            yol açardı. */}
+            yol açardı. Sebep yukarıdaki durum satırında yazılı. */}
         <Dugme
           ton="ikincil"
           boyut="kucuk"
@@ -137,35 +187,23 @@ function KanalGrubu({
         </Dugme>
       </div>
 
-      {!eklenebilir && grup.connected.length === 0 && (
-        <p className="mt-2 text-[11px] text-ink-muted">
-          {CHANNEL_HINTS[grup.kind]} Havuzda boşta bekleyen hesap yok.
-        </p>
-      )}
-
-      {/* KART DARALDI, HESAPLAR ALT ALTA. Kanal kartları yan yana dizildiği
-          için kart içinde ikinci bir kolon açmak adları kırpardı. */}
-      {grup.connected.length > 0 && (
-        <ul className="mt-3 space-y-2">
+      {/* HESAPLAR LOGONUN HİZASINDA, ÇERÇEVESİZ: her hesabı ayrı bir kutuya
+          koymak kartın içinde kart demekti ve gözü kutulara takıyordu. */}
+      {bagli && (
+        <ul className="ml-12 mt-2 divide-y divide-line border-t border-line">
           {grup.connected.map((i) => (
-            <BagliKart
-              key={i.id}
-              clientId={clientId}
-              kind={grup.kind}
-              item={i}
-              ajansUyesi={ajansUyesi}
-            />
+            <BagliKart key={i.id} clientId={clientId} kind={grup.kind} item={i} ajansUyesi={ajansUyesi} />
           ))}
         </ul>
       )}
 
       {acik && (
-        <div className="mt-3 rounded-lg border border-line bg-surface-sunken p-3">
-          <p className="text-[11px] font-medium text-ink">Havuzdan seç</p>
-          <p className="mt-0.5 text-[11px] text-ink-muted">{CHANNEL_HINTS[grup.kind]}</p>
-          {/* SEÇİCİ DE ALT ALTA ve YÜKSEKLİĞİ SINIRLI: havuzda onlarca hesap
-              olabiliyor ve sınırsız liste, kartı sayfa boyunca uzatıp
-              yanındaki kanalları ekrandan atıyordu. */}
+        <div className="ml-12 mt-3 rounded-lg border border-line bg-surface-sunken p-3">
+          <p className="text-xs font-medium text-ink">Havuzdan seç</p>
+          <p className="mt-0.5 text-xs text-ink-muted">{CHANNEL_HINTS[grup.kind]}</p>
+          {/* SEÇİCİNİN YÜKSEKLİĞİ SINIRLI: havuzda onlarca hesap olabiliyor
+              ve sınırsız liste, kartı sayfa boyunca uzatıp altındaki
+              kanalları ekrandan atıyordu. */}
           {grup.available.length > ARAMA_ESIGI && (
             <label className="mt-2 block">
               <span className="sr-only">{CHANNEL_LABELS[grup.kind]} havuzunda ara</span>
@@ -196,7 +234,7 @@ function KanalGrubu({
           </ul>
         </div>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -275,20 +313,27 @@ function BagliKart({
   void clientId;
 
   return (
-    <li className="rounded-lg border border-line bg-surface px-3 py-2.5">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink">
-            <span className="truncate">{item.name}</span>
-            {item.ajansAtadi && (
-              <span className="shrink-0 rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-medium text-ink-muted">
-                Ajans atadı
-              </span>
-            )}
-          </p>
-          <p className="truncate text-xs text-ink-muted" translate="no">
-            {item.externalId}
-          </p>
+    <li className="py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {/* VERİ DURUMU NOKTADA: yeşil = izleniyor, sarı = izleme kapalı. */}
+          <span
+            aria-hidden
+            className={`h-2 w-2 shrink-0 rounded-full ${item.syncEnabled ? 'bg-ok' : 'bg-warn'}`}
+          />
+          <div className="min-w-0">
+            <p className="flex min-w-0 items-center gap-2 text-sm text-ink">
+              <span className="truncate">{item.name}</span>
+              {item.ajansAtadi && (
+                <span className="shrink-0 rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-medium text-ink-muted">
+                  Ajans atadı
+                </span>
+              )}
+            </p>
+            <p className="truncate text-xs text-ink-muted" translate="no">
+              {item.externalId}
+            </p>
+          </div>
         </div>
         {!onay && (
           <Dugme ton="sade" boyut="kucuk" onClick={() => setOnay(true)} disabled={busy}>

@@ -155,3 +155,37 @@ describe('ajansın atadığı kalemi kaldırma', () => {
     expect(ESKI).toContain('ajansUyesi={session.managerAccount !== null}');
   });
 });
+
+describe('Aylık Bütçe mecraya göre gruplu (2026-10-06)', () => {
+  /*
+   * Kullanıcı: "hangi mecraya bütçe sınırı koyduğumu göremiyorum". Hesap
+   * adları çoğu zaman workspace adıyla aynı ve mecrayı söylemiyor.
+   */
+  const BUTCE = yorumsuz('components/marka-merkezi/butce.tsx');
+  const i = BUTCE.indexOf('function AccountRows(');
+  if (i < 0) throw new Error('AccountRows bulunamadı — tarama boşa düştü.');
+  const govde = BUTCE.slice(i);
+
+  it('KRİTİK: her mecra kendi gövdesinde ve başlığında kaç hesapta sınır olduğu yazıyor', () => {
+    expect(govde).toContain('PLATFORMS.filter((p) => rows.some((a) => a.platform === p))');
+    expect(govde).toContain('<tbody key={platform}');
+    expect(govde).toContain('PLATFORM_KISA_ADLARI[platform]');
+    expect(govde).toContain("'hiçbirinde bütçe sınırı yok'");
+  });
+
+  it('sınırı olmayan hesap boş tire değil, "Sınır yok" diyor', () => {
+    expect(govde).toContain('Sınır yok');
+  });
+});
+
+describe('Bağlantılar düzeni (2026-10-06)', () => {
+  it('reklam hesapları ve sosyal kanallar AYRI kartta, sınıflandırma ortak fonksiyondan', () => {
+    expect(KANAL).toContain('data.groups.filter((g) => kanalReklamHesabiMi(g.kind))');
+    expect(KANAL).toContain('data.groups.filter((g) => !kanalReklamHesabiMi(g.kind))');
+  });
+
+  it('KRİTİK: izleme kapalı hesap özet satırında da sayılıyor', () => {
+    expect(KANAL).toContain('tum.filter((i) => !i.syncEnabled).length');
+    expect(KANAL).toContain('hesapta izleme kapalı');
+  });
+});

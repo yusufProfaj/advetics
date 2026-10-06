@@ -6,6 +6,8 @@ import { formatDayLong, formatMoney } from '@/lib/format';
 import { BudgetForm } from '@/components/budget/budget-form';
 import { PaceDelta, PacingBar, StatusChip } from '@/components/budget/pacing-bar';
 import { mmAdresi } from './bolumler';
+import { PLATFORMS, PLATFORM_KISA_ADLARI, platformKanali } from '@advetics/shared';
+import { PlatformLogo } from '@/components/platform-logo';
 
 
 /**
@@ -365,11 +367,34 @@ function AccountRows({
               {canWrite && <th className="px-4 py-2" />}
             </tr>
           </thead>
-          <tbody>
-            {rows.map((a) => {
+          {/*
+            MECRAYA GÖRE GRUPLU. Kullanıcı: "hangi mecraya bütçe sınırı
+            koyduğumu göremiyorum" (2026-10-06). Hesap adları çoğu zaman
+            workspace adıyla aynı ("Fes Spa", "Fes Spa Hamam") ve mecra
+            yalnızca addan tahmin edilebiliyordu. Her grubun başlığı mecrayı
+            ve kaç hesabında sınır olduğunu söylüyor.
+          */}
+          {PLATFORMS.filter((p) => rows.some((a) => a.platform === p)).map((platform) => {
+            const grup = rows.filter((a) => a.platform === platform);
+            const sinirli = grup.filter((a) => a.budget !== null).length;
+            return (
+          <tbody key={platform} className="border-b border-line last:border-0">
+            <tr className="bg-surface-muted">
+              <th colSpan={canWrite ? 8 : 7} scope="rowgroup" className="px-4 py-2 text-left">
+                <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
+                  <PlatformLogo kind={platformKanali(platform)} className="h-4 w-4 shrink-0" />
+                  {PLATFORM_KISA_ADLARI[platform]}
+                  <span className="text-xs font-normal text-ink-muted">
+                    {grup.length} hesap ·{' '}
+                    {sinirli === 0 ? 'hiçbirinde bütçe sınırı yok' : `${sinirli} hesapta bütçe sınırı var`}
+                  </span>
+                </span>
+              </th>
+            </tr>
+            {grup.map((a) => {
               const cur = a.budget?.currency ?? data.currency;
               return (
-                <tr key={a.adAccountId} className="border-b border-line/60 last:border-0">
+                <tr key={a.adAccountId} className="border-t border-line/60">
                   <td className="px-4 py-3">
                     <div className="font-medium text-ink">{a.adAccountName}</div>
                     <div className="mt-0.5 flex items-center gap-1.5">
@@ -387,7 +412,11 @@ function AccountRows({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
-                    {a.budget ? formatMoney(a.budget.amountMicros, cur) : '—'}
+                    {a.budget ? (
+                      formatMoney(a.budget.amountMicros, cur)
+                    ) : (
+                      <span className="text-xs text-ink-muted">Sınır yok</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     {formatMoney(a.spentMicros, cur)}
@@ -420,6 +449,8 @@ function AccountRows({
               );
             })}
           </tbody>
+            );
+          })}
         </table>
       </div>
   );

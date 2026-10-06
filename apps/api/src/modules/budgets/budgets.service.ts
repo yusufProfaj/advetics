@@ -266,9 +266,9 @@ export class BudgetsService {
       // Bütçesi olmayan ama harcaması olan hesaplar da görünsün diye
       // hesap listesi bütçelerden DEĞİL, iki kaynağın birleşiminden geliyor.
       const accountNames = await tx.$queryRaw<
-        Array<{ id: string; name: string; currency: string | null }>
+        Array<{ id: string; name: string; currency: string | null; platform: Platform }>
       >(Prisma.sql`
-        SELECT id::text AS id, name, currency
+        SELECT id::text AS id, name, currency, platform
         FROM ad_accounts
         WHERE client_id = ${query.clientId}::uuid
       `);
@@ -296,7 +296,7 @@ export class BudgetsService {
     today: string;
     budgets: BudgetRecord[];
     spend: SpendRow[];
-    accounts: Array<{ id: string; name: string; currency: string | null }>;
+    accounts: Array<{ id: string; name: string; currency: string | null; platform: Platform }>;
   }): ClientPacing {
     const { clientId, month, today, budgets, spend, accounts } = input;
 
@@ -362,7 +362,7 @@ export class BudgetsService {
           today,
           daysWithData: s?.days ?? 0,
         });
-        return { ...pacing, adAccountId: acc.id, adAccountName: acc.name };
+        return { ...pacing, adAccountId: acc.id, adAccountName: acc.name, platform: acc.platform };
       })
       // Bütçesi olan hesaplar üstte, sonra harcaması yüksek olanlar.
       // Bütçesiz ve harcamasız bir hesap listenin dibinde kalıyor.

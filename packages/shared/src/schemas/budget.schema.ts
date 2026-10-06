@@ -209,5 +209,10 @@ export interface ClientPacing {
   /** `adAccountId IS NULL` satırı — müşteri geneli şemsiye bütçe. */
   overall: BudgetPacing;
   /** Hesap bazlı bütçeler. Bütçesi olmayan hesap da harcamasıyla listeleniyor. */
-  accounts: Array<BudgetPacing & { adAccountId: string; adAccountName: string }>;
+  /**
+   * `platform` SATIRDA: kullanıcı "hangi mecraya bütçe sınırı koyduğumu
+   * göremiyorum" dedi (2026-10-06). Platform yalnızca bütçe kaydında
+   * duruyordu, yani bütçesi olmayan hesabın mecrası hiç bilinmiyordu.
+   */
+  accounts: Array<BudgetPacing & { adAccountId: string; adAccountName: string; platform: Platform }>;
 }

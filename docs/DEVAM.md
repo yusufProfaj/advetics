@@ -67,7 +67,10 @@ Ayrıntı: `DURUM.md` 2026-09-28 ve 2026-09-29 girdileri.
 **Base yeniden düzeni** (kullanıcıyla aşama aşama; taslak tuvali:
 claude.ai/artifact/95HsewpAuEupEZ74zoYnyC). Aşama 1 bitti (kimlik + iskelet,
 `DURUM.md` 2026-10-06); ardından hazırlık şeridi, Aylık Bütçe Base'e ve
-Genel Bakış bütçe kartı. Deploy sonrası gezilip kullanıcıdan revize alınacak;
+Genel Bakış bütçe kartı; Bağlantılar iki karta (reklam hesapları / sayfalar)
+indi, Aylık Bütçe tablosu mecraya göre gruplu, giriş ekranı yeni logoda.
+Marka, Kitleler ve Varlıklar bölümleri tarayıcıda gezilip düzeltilecek
+(oturum kapalıydı). Deploy sonrası gezilip kullanıcıdan revize alınacak;
 sonra **Aşama 2: Marka bölümü** (gruplanmış kartlar, "Siteden doldur" alan
 alan, kaydedilmemiş değişiklik çubuğu), Aşama 3: Varlıklar/Kitleler, Aşama 4:
 Bağlantılar + ekip kartı, Aşama 5: Koruma kuralları.
