@@ -128,6 +128,9 @@ export class MetaGrafIstemcisi implements MetaYazmaPortu {
   async olustur(hesap: string, uc: string, alanlar: Record<string, unknown>): Promise<{ id: string }> {
     this.hesapDogrula(hesap);
     if ('fields' in alanlar) throw new Error('Oluşturma çağrısına fields eklenmez');
+    // Prova seçenekleri gerçek kurulumda olamaz: yanlış yere düşmüş bir
+    // prova gövdesi ya nesne açmaz ya da beklenmeyen biçimde açar.
+    if ('execution_options' in alanlar) throw new Error('Oluşturma çağrısına execution_options eklenmez');
     const form = /^(\d+)\/leadgen_forms$/.exec(uc);
     const token = form ? await this.a.sayfaTokeni(form[1]!) : this.a.kullaniciToken;
     const yol = form ? uc : `${hesap}/${uc}`;
@@ -135,6 +138,24 @@ export class MetaGrafIstemcisi implements MetaYazmaPortu {
     if (!r.id) throw new MetaBelirsizHata(`Meta ${uc} için kimlik döndürmedi`);
     if (form) this.formSayfasi.set(r.id, form[1]!);
     return { id: r.id };
+  }
+
+  /**
+   * PROVA. `validate_only` YOKSA ÇAĞRI YAPILMAZ: aynı uç validate_only'siz
+   * gerçek nesne açıyor ve "prova" diye kurulmuş bir kampanya, kimsenin
+   * izlemediği bir kampanya olurdu.
+   */
+  async dogrula(hesap: string, uc: string, alanlar: Record<string, unknown>): Promise<void> {
+    this.hesapDogrula(hesap);
+    const sec = alanlar.execution_options;
+    if (!Array.isArray(sec) || !sec.includes('validate_only')) {
+      throw new Error('Prova validate_only olmadan gönderilmez');
+    }
+    const r = await this.cagri<{ success?: boolean; id?: string }>('POST', `${hesap}/${uc}`, this.a.kullaniciToken, formGovdesi(alanlar));
+    // validate_only'de Meta kimlik DÖNDÜRMEMELİ. Dönerse nesne açılmış
+    // demektir: bunu "geçti" saymak sessizce yetim bir nesne bırakır.
+    if (r.id) throw new MetaBelirsizHata(`Prova Meta'da nesne açmış görünüyor (${r.id}); kontrol edin`);
+    if (r.success === false) throw new MetaBelirsizHata('Meta provayı onaylamadı ama hata da vermedi');
   }
 
   async oku(metaId: string, alanlar: string[]): Promise<Record<string, unknown>> {

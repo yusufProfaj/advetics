@@ -7,7 +7,9 @@ import { taslakKanonikIcerik, type TaslakAlanlari, type TenantContext } from '@a
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import { SahteMeta } from '../../../test/reklam-sahte-meta';
 import { yayinBaslat, zamanDamgasi } from './yayin-baslat';
-import { yayinIsiniIsle, type IsleyiciBagimliliklari } from './yayin-isleyici';
+import { reklamIsiniIsle, yayinIsiniIsle, type IsleyiciBagimliliklari } from './yayin-isleyici';
+import { MetaKesinHata } from './yayin-motoru';
+import { DERLEYICI_SURUMU, derleMeta, provaGovdeleri } from '@advetics/shared';
 import type { TxRunner } from './yayin-motoru';
 
 /**
@@ -100,7 +102,7 @@ function bagimlilik(meta: SahteMeta, kilitDolu = false): IsleyiciBagimliliklari 
 describe('ön kontrol (sıfır çağrı)', () => {
   it('KRİTİK: prova olmadan GERÇEK yayın yok; yalnız test kipi', async () => {
     const t = await taslak();
-    expect(kodlar(await baslat({ ...t, ozet0: t.ozet, testKipi: false }))).toEqual(['OK-17']);
+    expect(kodlar(await baslat({ ...t, ozet0: t.ozet, testKipi: false }))).toEqual(['OK-17', 'UYUM']);
   });
 
   it('sürüm ya da özet değiştiyse yayın başlamaz', async () => {
@@ -178,5 +180,88 @@ describe('uçtan uca: yayınla → işleyici → test kipi', () => {
     const [y] = await h.q<{ sebep: string; sonlanma_sebebi: string }>(`SELECT sebep, sonlanma_sebebi FROM yayin`);
     expect(y).toEqual({ sebep: 'Meta bağlantısı yeniden yetkilendirilmeli', sonlanma_sebebi: 'on_kontrol_reddi' });
     expect(meta.postSayisi).toBe(0);
+  });
+});
+
+describe('Meta provası', () => {
+  async function prova(taslakId: string, ozet: string, o: { durum?: string; bitti?: string } = {}) {
+    const [p] = await h.q<{ id: string }>(
+      `INSERT INTO prova (org_id, client_id, taslak_id, taslak_surum_no, icerik_ozeti, ad_account_id, api_surumu, derleyici_surumu, durum, bitti_at)
+       VALUES ($1, $2, $3, 1, $4, $5, 'v25.0', $6, $7, ${o.bitti ?? 'NULL'}) RETURNING id::text`,
+      [IDS.org, IDS.client, taslakId, ozet, HESAP, DERLEYICI_SURUMU, o.durum ?? 'bekliyor'],
+    );
+    return p!.id;
+  }
+
+  it('KRİTİK: prova NESNE AÇMAZ; her gövde validate_only ile soruluyor; geçince taslak hazır', async () => {
+    const t = await taslak();
+    const id = await prova(t.taslakId, t.ozet);
+    const meta = new SahteMeta();
+    expect(await reklamIsiniIsle(bagimlilik(meta), { provaId: id, adim: 'prova' }, 'p1')).toEqual({ tur: 'bitti', durum: 'gecti' });
+    expect(meta.postSayisi).toBe(0);
+    expect(meta.kayitlar.size).toBe(0);
+    expect(meta.provalar).toEqual(['campaigns', 'adsets', 'adcreatives', 'ads']);
+    const [d] = await h.q<{ durum: string }>(`SELECT durum FROM reklam_taslagi WHERE id = $1`, [t.taslakId]);
+    expect(d!.durum).toBe('hazir');
+  });
+
+  it('her gövde denenir, retler birlikte söylenir', async () => {
+    const t = await taslak();
+    const id = await prova(t.taslakId, t.ozet);
+    const meta = new SahteMeta();
+    meta.provaHatasi = (uc) => (uc === 'adsets' || uc === 'ads' ? new MetaKesinHata(`${uc} reddedildi`, 100) : null);
+    expect(await reklamIsiniIsle(bagimlilik(meta), { provaId: id, adim: 'prova' }, 'p1')).toEqual({ tur: 'bitti', durum: 'reddedildi' });
+    expect(meta.provalar).toHaveLength(4);
+    const [p] = await h.q<{ sebep: string }>(`SELECT sebep FROM prova WHERE id = $1`, [id]);
+    expect(p!.sebep).toBe('Meta 2 parçayı kabul etmedi: adsets reddedildi · ads reddedildi');
+  });
+
+  it('hesap başına 5 dk’da en çok 2 prova; aşınca ertelenir, Meta’ya gidilmez', async () => {
+    const t = await taslak();
+    await prova(t.taslakId, 'a'.repeat(64), { durum: 'gecti', bitti: "now() - interval '1 minute'" });
+    await prova(t.taslakId, 'b'.repeat(64), { durum: 'reddedildi', bitti: "now() - interval '2 minutes'" });
+    const id = await prova(t.taslakId, t.ozet);
+    const meta = new SahteMeta();
+    expect((await reklamIsiniIsle(bagimlilik(meta), { provaId: id, adim: 'prova' }, 'p1')).tur).toBe('ertele');
+    expect(meta.provalar).toHaveLength(0);
+  });
+
+  it('KRİTİK: geçen ve TAZE prova gerçek yayının OK-17 engelini kaldırır; bayat prova kaldırmaz', async () => {
+    const t = await taslak();
+    await prova(t.taslakId, t.ozet, { durum: 'gecti', bitti: "'2026-10-07T08:50:00Z'" });
+    expect(kodlar(await baslat({ ...t, ozet0: t.ozet, testKipi: false }))).toEqual(['UYUM']);
+    const t2 = await taslak();
+    await prova(t2.taslakId, t2.ozet, { durum: 'gecti', bitti: "'2026-10-07T08:00:00Z'" });
+    expect(kodlar(await baslat({ ...t2, ozet0: t2.ozet, testKipi: false }))).toEqual(['OK-17', 'UYUM']);
+  });
+
+  it('sonuçlanmış prova değişmez; aynı sürüm için ikinci bekleyen prova açılmaz', async () => {
+    const t = await taslak();
+    const id = await prova(t.taslakId, t.ozet, { durum: 'gecti', bitti: 'now()' });
+    await expect(h.q(`UPDATE prova SET durum = 'reddedildi' WHERE id = $1`, [id])).rejects.toThrow(/degismez/);
+    await prova(t.taslakId, t.ozet);
+    await expect(prova(t.taslakId, t.ozet)).rejects.toThrow(/prova_bekleyen_key|unique/);
+  });
+
+  it('prova gövdeleri: satır içi kampanya ve reklam seti, gerçek hash, her gövdede validate_only', () => {
+    const r = derleMeta({
+      apiSurumu: 'v25.0', yayinKimligi: 'p-1234', tarih: '2026-10-07', workspaceKisaAdi: 'Ö', niyet: 'SITE',
+      hesap: { platformId: 'act_1', paraBirimi: 'TRY' }, sayfaPlatformId: '111', instagramPlatformId: null,
+      hedefleme: { konumlar: [{ tur: 'country', key: 'TR', etiket: 'TR', ulkeKodu: 'TR' }], enDusukYas: 18, ipucuYas: null, ipucuCinsiyet: null },
+      kategoriler: { taban: [], ek: [] }, butce: { tip: 'gunluk', micros: 100_000_000n, seviye: 'kampanya' },
+      takvim: { baslangic: '2026-10-08T00:00:00+0300', bitis: null }, atif: 'tik7',
+      kavramlar: [{ gorselHash: `{medya:${VARLIK}}`, baslik: 'B', metin: 'M' }], hedefAdres: 'https://ornek.com.tr', formId: null, urlEtiketleri: null,
+    });
+    if (r.tur !== 'govde') throw new Error();
+    const p = provaGovdeleri(r.govdeler, new Map([[VARLIK, 'HASH']]));
+    const set = p.find((x) => x.nesne === 'reklam_seti')!.alanlar;
+    expect(set).not.toHaveProperty('campaign_id');
+    expect(set.campaign_spec).toMatchObject({ objective: 'OUTCOME_TRAFFIC', daily_budget: '10000' });
+    const reklam = p.find((x) => x.nesne === 'reklam')!.alanlar;
+    expect(reklam).not.toHaveProperty('adset_id');
+    expect(reklam.execution_options).toEqual(['validate_only', 'synchronous_ad_review']);
+    expect(JSON.stringify(p)).toContain('HASH');
+    expect(JSON.stringify(p)).not.toMatch(/\{(kampanya|reklam_seti|kreatif|medya)/);
+    for (const g of p) expect(g.alanlar.execution_options).toContain('validate_only');
   });
 });

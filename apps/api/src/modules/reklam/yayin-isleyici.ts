@@ -3,7 +3,9 @@ import type { YayinDurumu } from '@advetics/shared';
 import type { CryptoService } from '../../crypto/crypto.service';
 import { gorselOkuyucu, gorselOnbellegi, hesapErisimi, sayfaTokenOkuyucu } from './meta-erisim';
 import { MetaGrafIstemcisi, type GrafAyarlari } from './meta-graf';
-import type { YayinIsi } from './reklam-kuyrugu';
+import type { ReklamIsi, YayinIsi } from './reklam-kuyrugu';
+import { provaKos } from './prova-isleyici';
+import { metaSurumuDogrula } from './meta-graf';
 import { MetaKesinHata, YayinMotoru, yayiniSonlandir, type MetaYazmaPortu, type TxRunner } from './yayin-motoru';
 import { metaYazmaAcikMi } from './yazma-kapisi';
 
@@ -33,9 +35,51 @@ export interface IsleyiciBagimliliklari {
   portKur?: (a: GrafAyarlari) => MetaYazmaPortu;
 }
 
-export type IsSonucu = { tur: 'bitti'; durum: YayinDurumu } | { tur: 'ertele'; sebep: string };
+export type IsSonucu = { tur: 'bitti'; durum: YayinDurumu | 'gecti' | 'reddedildi' | 'dogrulanamadi' } | { tur: 'ertele'; sebep: string };
 
 export const YAZICI_KILIT_MS = 30 * 60_000;
+
+export async function reklamIsiniIsle(d: IsleyiciBagimliliklari, is: ReklamIsi, sahip: string): Promise<IsSonucu> {
+  return is.adim === 'prova' ? provaIsiniIsle(d, is.provaId, sahip) : yayinIsiniIsle(d, is, sahip);
+}
+
+/** Prova: hesap kilidi ve erişim yayınla aynı; erişim yoksa prova sebebiyle düşer. */
+async function provaIsiniIsle(d: IsleyiciBagimliliklari, provaId: string, sahip: string): Promise<IsSonucu> {
+  const [p] = await d.tx((t) =>
+    t.$queryRaw<Array<{ client_id: string; org_id: string; ad_account_id: string }>>(Prisma.sql`
+      SELECT client_id::text, org_id::text, ad_account_id::text FROM prova WHERE id = ${provaId}::uuid AND durum = 'bekliyor'`),
+  );
+  if (!p) return { tur: 'bitti', durum: 'dogrulanamadi' };
+  const anahtar = `${d.kilitOneki}:yazici:${p.ad_account_id}`;
+  if (!(await d.kilit.al(anahtar, sahip, YAZICI_KILIT_MS))) return { tur: 'ertele', sebep: 'Bu hesapta başka bir işlem sürüyor.' };
+  try {
+    let erisim;
+    try {
+      erisim = await hesapErisimi(d.tx, d.crypto, p.ad_account_id, p.client_id);
+    } catch (e) {
+      if (!(e instanceof MetaKesinHata)) throw e;
+      await d.tx((t) =>
+        t.$queryRaw(Prisma.sql`UPDATE prova SET durum = 'dogrulanamadi', sebep = ${e.message}, bitti_at = now() WHERE id = ${provaId}::uuid AND durum = 'bekliyor' RETURNING id`),
+      );
+      return { tur: 'bitti', durum: 'dogrulanamadi' };
+    }
+    const ayar: GrafAyarlari = {
+      apiSurumu: d.apiSurumu,
+      hesap: erisim.hesap,
+      kullaniciToken: erisim.kullaniciToken,
+      sayfaTokeni: sayfaTokenOkuyucu(d.tx, d.crypto, p.client_id),
+      gorselOnbellek: gorselOnbellegi(d.tx, p.org_id, p.ad_account_id),
+      gorselBaytlari: gorselOkuyucu(d.tx, d.yuklemeKoku, p.client_id),
+    };
+    const port = d.portKur ? d.portKur(ayar) : new MetaGrafIstemcisi(ayar);
+    return provaKos(d.tx, provaId, port, erisim.hesap, () => metaYazmaAcikMi(d.tx, p.client_id), {
+      apiSurumu: metaSurumuDogrula(d.apiSurumu),
+      simdi: new Date(),
+    });
+  } finally {
+    await d.kilit.birak(anahtar, sahip);
+  }
+}
 
 export async function yayinIsiniIsle(d: IsleyiciBagimliliklari, is: YayinIsi, sahip: string): Promise<IsSonucu> {
   const [y] = await d.tx((t) =>

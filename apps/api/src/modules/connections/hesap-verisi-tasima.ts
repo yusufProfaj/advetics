@@ -158,6 +158,9 @@ export const MUSTERIDE_KALAN = [
   // Kampanyanın aynası (campaigns) yeni workspace'e taşınıyor; kurulum
   // kaydı taşınmıyor ve bu bir kayıp değil, "kim kurdu" sorusunun cevabı.
   { tablo: 'yayin', etiket: 'reklam yayını' },
+  // Prova bir hesaba karşı yapılmış kontrol: hesap el değişince eski
+  // müşteride kalır; yeni hesapla yayın yeni prova ister.
+  { tablo: 'prova', etiket: 'Meta provası' },
 ] as const;
 
 export type TasimaSonucu = {

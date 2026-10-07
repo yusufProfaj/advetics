@@ -3690,3 +3690,26 @@ model GeriOkuma {
   @@index([orgId], map: "geri_okuma_org_id_idx")
   @@map("geri_okuma")
 }
+
+model Prova {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  clientId        String    @map("client_id") @db.Uuid
+  taslakId        String    @map("taslak_id") @db.Uuid
+  taslakSurumNo   Int       @map("taslak_surum_no")
+  icerikOzeti     String    @map("icerik_ozeti") @db.Char(64)
+  adAccountId     String    @map("ad_account_id") @db.Uuid
+  apiSurumu       String    @map("api_surumu") @db.VarChar(8)
+  derleyiciSurumu String    @map("derleyici_surumu") @db.VarChar(16)
+  durum           String    @default("bekliyor") @db.VarChar(16)
+  sonuclar        Json      @default("[]") @db.JsonB
+  sebep           String?   @db.VarChar(2000)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  bittiAt         DateTime? @map("bitti_at") @db.Timestamptz(6)
+
+  @@index([taslakId, createdAt(sort: Desc)], map: "prova_taslak_idx")
+  @@index([adAccountId, createdAt(sort: Desc)], map: "prova_hesap_idx")
+  @@index([clientId], map: "prova_client_idx")
+  @@index([orgId], map: "prova_org_id_idx")
+  @@map("prova")
+}

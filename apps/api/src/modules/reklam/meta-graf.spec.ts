@@ -131,6 +131,22 @@ describe('Graph istemcisi', () => {
     expect(yazilan).toEqual(['H1']);
   });
 
+  it('KRİTİK: prova validate_only olmadan Meta’ya HİÇ gitmez; gerçek kurulumda execution_options olamaz', async () => {
+    const f = sahteFetch(() => ({ durum: 200, govde: { success: true } }));
+    const g = new MetaGrafIstemcisi(ayar(f.fn));
+    await expect(g.dogrula('act_1', 'campaigns', { name: 'K' })).rejects.toThrow(/validate_only/);
+    await expect(g.dogrula('act_1', 'campaigns', { execution_options: ['include_recommendations'] })).rejects.toThrow(/validate_only/);
+    await expect(g.olustur('act_1', 'campaigns', { execution_options: ['validate_only'] })).rejects.toThrow(/execution_options/);
+    expect(f.cagrilar).toHaveLength(0);
+    await g.dogrula('act_1', 'campaigns', { execution_options: ['validate_only'] });
+    expect(f.cagrilar).toHaveLength(1);
+  });
+
+  it('prova kimlik döndürürse "geçti" sayılmaz (nesne açılmış olabilir)', async () => {
+    const g = new MetaGrafIstemcisi(ayar(sahteFetch(() => ({ durum: 200, govde: { id: '9' } })).fn));
+    await expect(g.dogrula('act_1', 'campaigns', { execution_options: ['validate_only'] })).rejects.toBeInstanceOf(MetaBelirsizHata);
+  });
+
   it('durum yazımında success:false başarı sayılmaz', async () => {
     const g = new MetaGrafIstemcisi(ayar(sahteFetch(() => ({ durum: 200, govde: { success: false } })).fn));
     await expect(g.durumYaz('5', { status: 'ACTIVE' })).rejects.toBeInstanceOf(MetaBelirsizHata);

@@ -190,7 +190,7 @@ export function YayinPaneli({
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         <p className="mr-auto max-w-prose text-xs text-ink-muted">
-          Meta provası henüz bağlı değil; reklam bu ekrandan açılmıyor.
+          Uyum denetçisi henüz bağlı değil; reklam bu ekrandan açılmıyor.
           {yonetici && ' Test kipi Meta’da duraklatılmış kurar, geri okur ve açmadan arşivler; para harcamaz.'}
         </p>
         {yonetici && (
@@ -203,7 +203,7 @@ export function YayinPaneli({
             Test kipinde dene
           </Dugme>
         )}
-        <Dugme disabled title="Meta provası henüz bağlı değil">
+        <Dugme disabled title="Uyum denetçisi henüz bağlı değil">
           Yayına al
         </Dugme>
       </div>

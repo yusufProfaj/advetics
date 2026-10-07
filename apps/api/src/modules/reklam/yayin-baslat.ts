@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import {
   DERLEYICI_SURUMU,
+  PROVA_TAZELIK_MS,
   OZEL_KATEGORILER,
   beklenenYankilar,
   derleMeta,
@@ -88,9 +89,14 @@ export async function yayinBaslat(
   );
   for (const e of taslakEksikleri(alanlar, { yasalUyari: profil?.yasal_uyari ?? null })) retler.push({ kod: e.kod, mesaj: e.metin });
 
-  // --- Prova yok: yalnız test kipi ------------------------------------------
+  // --- Gerçek yayın: taze prova + uyum; test kipi: yalnız ajans ------------
   if (!istek.testKipi) {
-    retler.push({ kod: 'OK-17', mesaj: 'Meta provası henüz yok; şimdilik yalnız test kipinde (açmadan arşivler) kurulabilir.' });
+    const p = await provaDurumu(tx, t.id, t.aktif_surum_no, s.icerik_ozeti, b.apiSurumu, b.simdi);
+    if (p.tur !== 'gecti') retler.push({ kod: 'OK-17', mesaj: p.metin });
+    // Uyum son kapısı ve değişmez uyum raporu (§ 11.2 adım 5-6) yazılmadan
+    // gerçek yayın YOK: raporu olmayan yayın, kanıtsız ama kurulmuş bir
+    // reklam bırakır ve bunu sonradan düzeltmenin yolu yok.
+    retler.push({ kod: 'UYUM', mesaj: 'Uyum denetçisi henüz bağlı değil; gerçek yayın kapalı, test kipi açık.' });
   } else {
     if (!ctx.isOrgAdmin) retler.push({ kod: 'TEST-KIPI', mesaj: 'Test kipini yalnız ajans yöneticisi kullanabilir.' });
     const [o] = await tx((x) =>
@@ -102,6 +108,70 @@ export async function yayinBaslat(
     if (!o?.ajans_mi) retler.push({ kod: 'TEST-KIPI', mesaj: 'Test kipi yalnız ajansın kendi şirketindeki hesaplarda açılır.' });
   }
 
+  const d = await taslakDerle(tx, t, alanlar, randomUUID(), b);
+  if (d.tur === 'ret') retler.push(...d.retler);
+  if (retler.length > 0 || d.tur === 'ret') return { tur: 'ret', retler };
+  const yayinId = d.kimlik;
+  const { derleme, hesapId, atif, medya } = d;
+
+  // --- Kayıt: yayın + nesneler, taslak "yayında" ---------------------------
+  await yayinKaydiOlustur(tx, {
+    id: yayinId,
+    orgId: t.org_id,
+    clientId: t.client_id,
+    taslakId: t.id,
+    taslakSurumNo: t.aktif_surum_no,
+    icerikOzeti: s.icerik_ozeti,
+    adAccountId: hesapId,
+    govdeler: derleme.govdeler,
+    yankilar: beklenenYankilar(derleme.govdeler),
+    apiSurumu: b.apiSurumu,
+    derleyiciSurumu: DERLEYICI_SURUMU,
+    atifStandardi: atif,
+    medyaVarliklari: medya,
+    kaynak: 'panel',
+    baslatanId: ctx.userId,
+    testKipi: istek.testKipi,
+  });
+  await tx((x) =>
+    x.$queryRaw(Prisma.sql`UPDATE reklam_taslagi SET durum = 'yayinda', updated_at = now() WHERE id = ${t.id}::uuid RETURNING id`),
+  );
+  return { tur: 'basladi', yayinId };
+}
+
+export interface TaslakSatiri {
+  id: string;
+  org_id: string;
+  client_id: string;
+}
+
+export type TaslakDerlemesi =
+  | {
+      tur: 'govde';
+      kimlik: string;
+      derleme: Extract<ReturnType<typeof derleMeta>, { tur: 'govde' }>;
+      hesapId: string;
+      atif: AtifStandardi;
+      medya: string[];
+    }
+  | { tur: 'ret'; retler: Array<{ kod: string; mesaj: string }> };
+
+/**
+ * Taslaktan derleyici girdisini kurar ve derler — YAYIN VE PROVA AYNI
+ * YOLDAN. İkinci bir derleme yolu, ekranda geçen prova ile Meta'ya giden
+ * gövdenin ayrışması demekti. Platform çağrısı yok.
+ *
+ * `kimlik` derleyicinin `adv-yayin-<kimlik>` etiketine giriyor: yayında yayın
+ * kimliği, provada prova kimliği.
+ */
+export async function taslakDerle(
+  tx: TxRunner,
+  t: TaslakSatiri,
+  alanlar: ReturnType<typeof taslakAlanlariSchema.parse>,
+  kimlik: string,
+  b: Baglam,
+): Promise<TaslakDerlemesi> {
+  const retler: Array<{ kod: string; mesaj: string }> = [];
   // --- OK-15 kesici ve OK-16 atıf ------------------------------------------
   const kapi = await metaYazmaAcikMi(tx, t.client_id);
   if (!kapi.acik) retler.push({ kod: 'OK-15', mesaj: kapi.sebep });
@@ -157,7 +227,7 @@ export async function yayinBaslat(
   }
 
   // --- Derleme ---------------------------------------------------------------
-  const yayinId = randomUUID();
+  const yayinId = kimlik;
   const kavramlar = alanlar.kavramlar!.deger;
   const takvim = alanlar.takvim!.deger;
   const derleme = derleMeta({
@@ -190,29 +260,14 @@ export async function yayinBaslat(
   });
   if (derleme.tur === 'ret') return { tur: 'ret', retler: derleme.retler };
 
-  // --- Kayıt: yayın + nesneler, taslak "yayında" ---------------------------
-  await yayinKaydiOlustur(tx, {
-    id: yayinId,
-    orgId: t.org_id,
-    clientId: t.client_id,
-    taslakId: t.id,
-    taslakSurumNo: t.aktif_surum_no,
-    icerikOzeti: s.icerik_ozeti,
-    adAccountId: hesapId as string,
-    govdeler: derleme.govdeler,
-    yankilar: beklenenYankilar(derleme.govdeler),
-    apiSurumu: b.apiSurumu,
-    derleyiciSurumu: DERLEYICI_SURUMU,
-    atifStandardi: a!.atif as AtifStandardi,
-    medyaVarliklari: [...new Set(kavramlar.map((k) => k.varlikId))],
-    kaynak: 'panel',
-    baslatanId: ctx.userId,
-    testKipi: istek.testKipi,
-  });
-  await tx((x) =>
-    x.$queryRaw(Prisma.sql`UPDATE reklam_taslagi SET durum = 'yayinda', updated_at = now() WHERE id = ${t.id}::uuid RETURNING id`),
-  );
-  return { tur: 'basladi', yayinId };
+  return {
+    tur: 'govde',
+    kimlik,
+    derleme,
+    hesapId: hesapId!,
+    atif: a!.atif as AtifStandardi,
+    medya: [...new Set(kavramlar.map((k) => k.varlikId))],
+  };
 }
 
 /** Hesabın saat diliminde `YYYY-MM-DD` (adlardaki tarih). */
@@ -235,4 +290,38 @@ export function zamanDamgasi(tarih: string, saat: string, saatDilimi: string): s
   const m = /GMT([+-])(\d{2}):?(\d{2})?/.exec(ad);
   const ofset = m ? `${m[1]}${m[2]}${m[3] ?? '00'}` : '+0000';
   return `${tarih}T${saat}${ofset}`;
+}
+
+export type ProvaDurumu =
+  | { tur: 'yok' | 'bekliyor' | 'reddedildi' | 'dogrulanamadi' | 'bayat'; metin: string }
+  | { tur: 'gecti'; metin: string };
+
+/**
+ * Bu sürümün prova durumu. Dört bağdan biri (sürüm, içerik özeti, API
+ * sürümü, derleyici sürümü) değişince eski prova SAYILMAZ; 30 dakikadan eski
+ * "geçti" bayat. Panelin çipi ve yayın kapısı aynı fonksiyonu okuyor.
+ */
+export async function provaDurumu(
+  tx: TxRunner,
+  taslakId: string,
+  surumNo: number,
+  ozet: string,
+  apiSurumu: string,
+  simdi: Date,
+): Promise<ProvaDurumu> {
+  const [p] = await tx((x) =>
+    x.$queryRaw<Array<{ durum: string; bitti_at: Date | null; sebep: string | null }>>(Prisma.sql`
+      SELECT durum, bitti_at, sebep FROM prova
+       WHERE taslak_id = ${taslakId}::uuid AND taslak_surum_no = ${surumNo} AND icerik_ozeti = ${ozet}
+         AND api_surumu = ${apiSurumu} AND derleyici_surumu = ${DERLEYICI_SURUMU}
+       ORDER BY created_at DESC LIMIT 1`),
+  );
+  if (!p) return { tur: 'yok', metin: 'Meta’nın ön kontrolü bu hâl için yapılmadı.' };
+  if (p.durum === 'bekliyor') return { tur: 'bekliyor', metin: 'Meta’ya soruluyor…' };
+  if (p.durum === 'reddedildi') return { tur: 'reddedildi', metin: p.sebep ?? 'Meta bir alanı kabul etmedi.' };
+  if (p.durum === 'dogrulanamadi') return { tur: 'dogrulanamadi', metin: `Meta’nın kontrolü tamamlanamadı: ${p.sebep ?? ''}`.trim() };
+  if (!p.bitti_at || simdi.getTime() - new Date(p.bitti_at).getTime() > PROVA_TAZELIK_MS) {
+    return { tur: 'bayat', metin: 'Meta’nın ön kontrolü 30 dakikadan eski; yeniden yapılacak.' };
+  }
+  return { tur: 'gecti', metin: 'Meta’nın ön kontrolü geçti, asıl inceleme yayından sonra.' };
 }

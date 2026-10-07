@@ -19,6 +19,12 @@ export interface YayinIsi {
   yayinId: string;
   adim: YayinAdimi;
 }
+/** Prova: nesne açmaz; aynı kuyrukta çünkü aynı hesap kilidini paylaşıyor. */
+export interface ProvaIsi {
+  provaId: string;
+  adim: 'prova';
+}
+export type ReklamIsi = YayinIsi | ProvaIsi;
 
 /** İş kimliği: ayırıcı `__` (BullMQ `:`'yı reddediyor). Aynı adım iki kez kuyruğa giremez. */
 export function yayinIsKimligi(yayinId: string, adim: YayinAdimi): string {
@@ -28,7 +34,7 @@ export function yayinIsKimligi(yayinId: string, adim: YayinAdimi): string {
 @Injectable()
 export class ReklamKuyrugu implements OnModuleDestroy {
   private readonly baglanti: Redis | null;
-  private readonly kuyruk: Queue<YayinIsi> | null;
+  private readonly kuyruk: Queue<ReklamIsi> | null;
 
   constructor(@Inject(CONFIG) config: AppConfig) {
     if (!config.redis.url) {
@@ -37,7 +43,7 @@ export class ReklamKuyrugu implements OnModuleDestroy {
       return;
     }
     this.baglanti = new Redis(config.redis.url, { db: config.redis.db, maxRetriesPerRequest: null });
-    this.kuyruk = new Queue<YayinIsi>(REKLAM_YAYIN_KUYRUGU, {
+    this.kuyruk = new Queue<ReklamIsi>(REKLAM_YAYIN_KUYRUGU, {
       connection: this.baglanti,
       prefix: config.redis.keyPrefix,
       defaultJobOptions: { attempts: 1, removeOnComplete: 500, removeOnFail: 1000 },
@@ -48,6 +54,11 @@ export class ReklamKuyrugu implements OnModuleDestroy {
   async ekle(yayinId: string, adim: YayinAdimi): Promise<void> {
     if (!this.kuyruk) throw new Error('Yayın kuyruğu kurulu değil (REDIS_URL yok)');
     await this.kuyruk.add(adim, { yayinId, adim }, { jobId: yayinIsKimligi(yayinId, adim) });
+  }
+
+  async ekleProva(provaId: string): Promise<void> {
+    if (!this.kuyruk) throw new Error('Yayın kuyruğu kurulu değil (REDIS_URL yok)');
+    await this.kuyruk.add('prova', { provaId, adim: 'prova' }, { jobId: `prova__${provaId}` });
   }
 
   async onModuleDestroy(): Promise<void> {

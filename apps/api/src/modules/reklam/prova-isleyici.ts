@@ -1,0 +1,114 @@
+import { Prisma } from '@prisma/client';
+import { provaGovdeleri, taslakAlanlariSchema, type MetaApiSurumu } from '@advetics/shared';
+import { MetaBelirsizHata, MetaKesinHata, YazmaDurduruldu, type MetaYazmaPortu, type TxRunner } from './yayin-motoru';
+import { taslakDerle } from './yayin-baslat';
+
+/**
+ * Meta PROVASINI koşturur (TASARIM.md § 11.10). Nesne AÇILMAZ; yalnız
+ * görsel yüklenir (para harcamaz, hesap başına önbellekte kalır) — gerçek
+ * hash olmadan kreatif doğrulanamaz.
+ *
+ * HER GÖVDE DENENİR, ilk retle durulmaz: kullanıcı "Meta 3 alanı kabul
+ * etmedi"yi tek seferde görmeli, düzeltip üç kez sormak zorunda kalmamalı.
+ * Kesin ret belirsizden güçlü: bir gövde reddedildiyse sonuç reddedildi.
+ *
+ * HESAP BAŞINA KOTA: 5 dakikada en çok 2 prova; aşınca ertelenir, sessiz
+ * değil (panel "bekletildi" der). Kota bekçisinin yapı taraması katmanını
+ * provanın tüketmemesi için (CLAUDE.md "BAĞIMLI İŞ, BAĞLI OLDUĞU İŞİN
+ * KOTASINI YİYEBİLİR").
+ */
+export const PROVA_KOTASI = { adet: 2, pencereMs: 5 * 60_000 } as const;
+
+export type ProvaSonucu = { tur: 'bitti'; durum: 'gecti' | 'reddedildi' | 'dogrulanamadi' } | { tur: 'ertele'; sebep: string };
+
+interface GovdeSonucu {
+  ad: string;
+  sonuc: 'gecti' | 'reddedildi' | 'dogrulanamadi';
+  mesaj?: string;
+  kod?: number;
+  altKod?: number;
+}
+
+export async function provaKos(
+  tx: TxRunner,
+  provaId: string,
+  port: MetaYazmaPortu,
+  hesap: string,
+  yazmaKapisi: () => Promise<{ acik: true } | { acik: false; sebep: string }>,
+  b: { apiSurumu: MetaApiSurumu; simdi: Date },
+): Promise<ProvaSonucu> {
+  const [p] = await tx((x) =>
+    x.$queryRaw<Array<{ id: string; org_id: string; client_id: string; taslak_id: string; taslak_surum_no: number; ad_account_id: string; durum: string }>>(Prisma.sql`
+      SELECT id::text, org_id::text, client_id::text, taslak_id::text, taslak_surum_no, ad_account_id::text, durum
+        FROM prova WHERE id = ${provaId}::uuid`),
+  );
+  if (!p) throw new Error(`Prova bulunamadı: ${provaId}`);
+  if (p.durum !== 'bekliyor') return { tur: 'bitti', durum: p.durum as 'gecti' };
+
+  const [say] = await tx((x) =>
+    x.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+      SELECT count(*)::int AS n FROM prova
+       WHERE ad_account_id = ${p.ad_account_id}::uuid AND durum <> 'bekliyor'
+         AND bitti_at > ${new Date(b.simdi.getTime() - PROVA_KOTASI.pencereMs)}`),
+  );
+  if ((say?.n ?? 0) >= PROVA_KOTASI.adet) return { tur: 'ertele', sebep: 'Meta kontrolü bekletildi; birkaç dakika sonra.' };
+
+  const bitir = async (durum: GovdeSonucu['sonuc'], sonuclar: GovdeSonucu[], sebep: string | null) => {
+    await tx((x) =>
+      x.$queryRaw(Prisma.sql`
+        UPDATE prova SET durum = ${durum}, sonuclar = ${JSON.stringify(sonuclar)}::jsonb, sebep = ${sebep}, bitti_at = now()
+         WHERE id = ${provaId}::uuid AND durum = 'bekliyor' RETURNING id`),
+    );
+    if (durum === 'gecti') {
+      // Taslak "hazır" ancak prova AYNI sürüme aitse ve başka eksik yoksa.
+      await tx((x) =>
+        x.$queryRaw(Prisma.sql`
+          UPDATE reklam_taslagi t SET durum = 'hazir', updated_at = now()
+            FROM taslak_surumu s
+           WHERE t.id = ${p.taslak_id}::uuid AND t.durum = 'taslak' AND t.aktif_surum_no = ${p.taslak_surum_no}
+             AND s.taslak_id = t.id AND s.surum_no = t.aktif_surum_no
+             AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(s.eksikler) e WHERE e->>'kod' <> 'OK-17')
+          RETURNING t.id`),
+      );
+    }
+    return { tur: 'bitti' as const, durum };
+  };
+
+  const [s] = await tx((x) =>
+    x.$queryRaw<Array<{ alanlar: unknown }>>(Prisma.sql`
+      SELECT alanlar FROM taslak_surumu WHERE taslak_id = ${p.taslak_id}::uuid AND surum_no = ${p.taslak_surum_no}`),
+  );
+  if (!s) return bitir('dogrulanamadi', [], 'Taslak sürümü bulunamadı');
+  const d = await taslakDerle(tx, { id: p.taslak_id, org_id: p.org_id, client_id: p.client_id }, taslakAlanlariSchema.parse(s.alanlar), provaId, b);
+  // Yerelde reddedildi: Meta'ya hiç gidilmedi.
+  if (d.tur === 'ret') return bitir('reddedildi', [], d.retler.map((r) => r.mesaj).join(' '));
+
+  const kapi = await yazmaKapisi();
+  if (!kapi.acik) return bitir('dogrulanamadi', [], kapi.sebep);
+
+  const hashler = new Map<string, string>();
+  for (const v of d.medya) {
+    try {
+      hashler.set(v, await port.gorselYukle(hesap, v));
+    } catch (e) {
+      if (e instanceof MetaKesinHata) return bitir('reddedildi', [{ ad: `medya:${v}`, sonuc: 'reddedildi', mesaj: e.message, kod: e.kod }], `Görsel kabul edilmedi: ${e.message}`);
+      return bitir('dogrulanamadi', [], `Görsel yüklenemedi: ${(e as Error).message}`);
+    }
+  }
+
+  const sonuclar: GovdeSonucu[] = [];
+  for (const g of provaGovdeleri(d.derleme.govdeler, hashler)) {
+    try {
+      await port.dogrula(hesap, g.uc, g.alanlar);
+      sonuclar.push({ ad: g.ad, sonuc: 'gecti' });
+    } catch (e) {
+      if (e instanceof YazmaDurduruldu) return bitir('dogrulanamadi', sonuclar, e.message);
+      if (e instanceof MetaKesinHata) sonuclar.push({ ad: g.ad, sonuc: 'reddedildi', mesaj: e.message, kod: e.kod, altKod: e.altKod });
+      else sonuclar.push({ ad: g.ad, sonuc: 'dogrulanamadi', mesaj: e instanceof MetaBelirsizHata ? e.message : String(e) });
+    }
+  }
+  const red = sonuclar.filter((x) => x.sonuc === 'reddedildi');
+  if (red.length > 0) return bitir('reddedildi', sonuclar, `Meta ${red.length} parçayı kabul etmedi: ${red.map((r) => r.mesaj).join(' · ')}`);
+  if (sonuclar.some((x) => x.sonuc === 'dogrulanamadi')) return bitir('dogrulanamadi', sonuclar, 'Meta’nın kontrolü bir parçada tamamlanamadı');
+  return bitir('gecti', sonuclar, null);
+}

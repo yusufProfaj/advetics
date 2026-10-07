@@ -10,3 +10,4 @@ export * from './meta/form';
 export * from './taslak';
 export * from './taslak-alanlari';
 export * from './yayin';
+export * from './meta/prova';

@@ -1,11 +1,11 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { TenantContext, YayinDurumu } from '@advetics/shared';
+import { DERLEYICI_SURUMU, type TenantContext, type YayinDurumu } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaService } from '../../prisma/prisma.service';
 import { metaSurumuDogrula } from './meta-graf';
 import { ReklamKuyrugu, type YayinAdimi } from './reklam-kuyrugu';
-import { yayinBaslat, type YayinBaslatSonucu, type YayinIstegi } from './yayin-baslat';
+import { provaDurumu, yayinBaslat, type ProvaDurumu, type YayinBaslatSonucu, type YayinIstegi } from './yayin-baslat';
 import { yayiniSonlandir, type TxRunner } from './yayin-motoru';
 
 export interface YayinGorunumu {
@@ -99,5 +99,71 @@ export class ReklamYayinService {
     );
     return r ? this.oku(ctx, r.id) : null;
   }
+
+  /**
+   * Meta provası iste. Yalnız KULLANICININ eksiği kalmamışsa (prova
+   * eksiğinin kendisi hariç): eksik taslağı Meta'ya sormak kotayı boşa
+   * harcar. Aynı sürüm için bekleyen prova varsa yenisi açılmaz (kısmi
+   * tekil indeks); panelin kendiliğinden tetiklemesi ile düğme üst üste
+   * binebilir.
+   */
+  async provaIste(ctx: TenantContext, taslakId: string): Promise<ProvaGorunumu> {
+    const tx = this.tx(ctx);
+    const [t] = await tx((x) =>
+      x.$queryRaw<Array<{ org_id: string; client_id: string; aktif_surum_no: number; ad_account_id: string | null; icerik_ozeti: string | null; eksikler: Array<{ kod: string; metin: string }> | null }>>(Prisma.sql`
+        SELECT t.org_id::text, t.client_id::text, t.aktif_surum_no, t.ad_account_id::text, s.icerik_ozeti, s.eksikler
+          FROM reklam_taslagi t
+          LEFT JOIN taslak_surumu s ON s.taslak_id = t.id AND s.surum_no = t.aktif_surum_no
+         WHERE t.id = ${taslakId}::uuid`),
+    );
+    if (!t) throw new NotFoundException('Taslak bulunamadı');
+    if (!ctx.clientIds.includes(t.client_id)) throw new ForbiddenException('Bu workspace’e erişimin yok');
+    const kalan = (t.eksikler ?? []).filter((e) => e.kod !== 'OK-17');
+    if (!t.icerik_ozeti || !t.ad_account_id || kalan.length > 0) {
+      throw new ConflictException(`Önce eksikleri tamamla: ${kalan.map((e) => e.metin).join(', ') || 'taslak boş'}`);
+    }
+    const [p] = await tx((x) =>
+      x.$queryRaw<Array<{ id: string; yeni: boolean }>>(Prisma.sql`
+        INSERT INTO prova (org_id, client_id, taslak_id, taslak_surum_no, icerik_ozeti, ad_account_id, api_surumu, derleyici_surumu)
+        VALUES (${t.org_id}::uuid, ${t.client_id}::uuid, ${taslakId}::uuid, ${t.aktif_surum_no}, ${t.icerik_ozeti},
+                ${t.ad_account_id}::uuid, ${this.apiSurumu}, ${DERLEYICI_SURUMU})
+        ON CONFLICT (taslak_id, icerik_ozeti) WHERE durum = 'bekliyor' DO NOTHING
+        RETURNING id::text, true AS yeni`),
+    );
+    if (p) {
+      try {
+        await this.kuyruk.ekleProva(p.id);
+      } catch (e) {
+        await tx((x) =>
+          x.$queryRaw(Prisma.sql`UPDATE prova SET durum = 'dogrulanamadi', sebep = ${`Kuyruğa alınamadı: ${(e as Error).message}`}, bitti_at = now() WHERE id = ${p.id}::uuid RETURNING id`),
+        );
+      }
+    }
+    return this.provaOku(ctx, taslakId);
+  }
+
+  async provaOku(ctx: TenantContext, taslakId: string): Promise<ProvaGorunumu> {
+    const tx = this.tx(ctx);
+    const [t] = await tx((x) =>
+      x.$queryRaw<Array<{ client_id: string; aktif_surum_no: number; icerik_ozeti: string | null }>>(Prisma.sql`
+        SELECT t.client_id::text, t.aktif_surum_no, s.icerik_ozeti FROM reklam_taslagi t
+          LEFT JOIN taslak_surumu s ON s.taslak_id = t.id AND s.surum_no = t.aktif_surum_no
+         WHERE t.id = ${taslakId}::uuid`),
+    );
+    if (!t) throw new NotFoundException('Taslak bulunamadı');
+    if (!ctx.clientIds.includes(t.client_id)) throw new ForbiddenException('Bu workspace’e erişimin yok');
+    if (!t.icerik_ozeti) return { durum: { tur: 'yok', metin: 'Taslak boş.' }, sonuclar: [] };
+    const durum = await provaDurumu(tx, taslakId, t.aktif_surum_no, t.icerik_ozeti, this.apiSurumu, new Date());
+    const [s] = await tx((x) =>
+      x.$queryRaw<Array<{ sonuclar: ProvaGorunumu['sonuclar'] }>>(Prisma.sql`
+        SELECT sonuclar FROM prova WHERE taslak_id = ${taslakId}::uuid AND icerik_ozeti = ${t.icerik_ozeti}
+         ORDER BY created_at DESC LIMIT 1`),
+    );
+    return { durum, sonuclar: s?.sonuclar ?? [] };
+  }
 }
 
+export interface ProvaGorunumu {
+  durum: ProvaDurumu;
+  sonuclar: Array<{ ad: string; sonuc: string; mesaj?: string }>;
+}

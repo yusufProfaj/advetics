@@ -62,6 +62,8 @@ export interface MetaYazmaPortu {
   /** `GET /act_X/{tür}bylabels` — yalnız kampanya, reklam seti, reklam. */
   etiketleAra(hesap: string, tur: 'campaigns' | 'adsets' | 'ads', etiket: string): Promise<Array<{ id: string; name: string }>>;
   durumYaz(metaId: string, alanlar: { status: 'ACTIVE' | 'ARCHIVED'; name?: string }): Promise<void>;
+  /** Prova: `execution_options` içinde validate_only ZORUNLU; nesne açılmaz. */
+  dogrula(hesap: string, uc: string, alanlar: Record<string, unknown>): Promise<void>;
 }
 
 type Tx = { $queryRaw<T = unknown>(q: Prisma.Sql): Promise<T> };

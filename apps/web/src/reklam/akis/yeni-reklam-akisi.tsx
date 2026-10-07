@@ -23,6 +23,7 @@ import {
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme, Kutu, dugmeSinifi } from '../ui';
 import { YayinPaneli } from './yayin-paneli';
+import { ProvaBlogu } from './prova-blogu';
 import {
   ADIMLAR,
   BASLIK_SINIRI,
@@ -538,7 +539,7 @@ function EksikListesi({
         </ul>
       )}
       {eksikler.some((e) => e.kod === 'OK-17') && (
-        <p className="text-ink-muted">Meta provası yayın motoruyla gelecek.</p>
+        <p className="text-ink-muted">Meta’nın ön kontrolü Gözden geçir’de.</p>
       )}
     </div>
   );
@@ -748,6 +749,8 @@ function GozdenGecir({
       <Soru baslik="Gözden geçir ve yayınla">
         Meta’ya gidecek her şey burada. Yayın önce duraklatılmış kurar, geri okur, fark yoksa açar.
       </Soru>
+
+      <ProvaBlogu taslakId={taslak.id} ozet={taslak.icerikOzeti} kullaniciEksigi={kullaniciEksigi.length} />
 
       <Blok baslik="Meta’nın gözünden">
         {gorseller.length === 0 ? (

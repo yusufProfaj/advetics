@@ -75,6 +75,7 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   { tablo: 'yayin', etiket: 'reklam yayını' },
   { tablo: 'yayin_nesnesi', etiket: 'yayın nesnesi' },
   { tablo: 'geri_okuma', etiket: 'geri okuma kaydı' },
+  { tablo: 'prova', etiket: 'Meta provası' },
 ] as const;
 
 /**

@@ -52,6 +52,14 @@ export class SahteMeta implements MetaYazmaPortu {
     k.status = a.status;
     if (a.name) k.alanlar.name = a.name;
   }
+  provaHatasi: ((uc: string) => Error | null) | null = null;
+  provalar: string[] = [];
+  async dogrula(_h: string, uc: string, alanlar: Record<string, unknown>) {
+    if (!(alanlar.execution_options as string[] | undefined)?.includes('validate_only')) throw new Error('validate_only yok');
+    this.provalar.push(uc);
+    const h = this.provaHatasi?.(uc);
+    if (h) throw h;
+  }
   sayi(uc: string) {
     return [...this.kayitlar.values()].filter((k) => k.uc === uc).length;
   }

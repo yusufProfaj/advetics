@@ -9,7 +9,7 @@
 **Son güncelleme:** 2026-10-07 · **Canlı (539f6fb):** Google gün içi saatlik,
 Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlıda
 doğrulandı).
-**Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: üç migration — taslak, yayın, yazma kesici — + `db:rls`; `META_API_VERSION` v25.0 ya da v26.0 olmalı), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
+**Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: dört migration — taslak, yayın, yazma kesici, prova — + `db:rls`; `META_API_VERSION` v25.0 ya da v26.0 olmalı), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
 **Reklam oluşturma (2026-10-07): AYRI MODÜL olarak kuruluyor.**
 Kararlar [`bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md)
@@ -67,11 +67,18 @@ yalnız ajans yöneticisi ve ajansın kendi şirketindeki hesapta: kurar, geri
 okur, AÇMADAN arşivler. Panelde Gözden geçir'in sonunda "Test kipinde
 dene" + canlı durum + fark tablosu + "Kaldığı yerden devam / Yeniden
 kontrol et / Geri al".
+**Meta provası yazıldı** (MIGRATION: `20261007180000_reklam_prova`):
+`validate_only` ile, nesne açmadan, her gövde ayrı soruluyor; reklam seti
+satır içi kampanyayla, reklam satır içi reklam seti + kreatifle. Hesap
+başına 5 dk'da 2. Geçen prova taslağı "hazır" yapıyor; gerçek yayında
+OK-17'yi taze (30 dk) prova kaldırıyor. **Gerçek yayın hâlâ kapalı:
+uyum denetçisi (bölüm 10) yok** — `yayinBaslat` "UYUM" retiyle duruyor.
+Panelde Gözden geçir'in başında prova bloğu (eksik bitince bir kez
+kendiliğinden).
 **Sıradaki:** (1) deploy sonrası CANLI TUR: ajansın kendi Meta hesabında
 SITE niyetiyle test kipi — Meta'nın gerçekte neyi farklı döndürdüğü
 normalleştirme tablosunu dolduracak (ilk denemelerin "fark" ile durması
-BEKLENEN davranış); (2) Meta provası (`validate_only`, § 11.13) → gerçek
-yayın; (3) kuyruk tarayıcısı (§ 11.12: worker ölürse `kuruluyor`da kalan
+BEKLENEN davranış); (2) uyum katmanı (bölüm 10: profil, katalog, denetçi, değişmez uyum raporu) → gerçek yayın; (3) kuyruk tarayıcısı (§ 11.12: worker ölürse `kuruluyor`da kalan
 yayın); (4) form şablonu ekranı. Boost taşıması ve rapor sonuç adları
 ondan sonra.
 **Acil, bu işten bağımsız:** Meta v26 kuralı 2026-10-27'de bütün sürümlerde

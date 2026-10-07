@@ -14,7 +14,7 @@ import type { AuthedRequest } from '../../common/types/request';
 import { ReklamHazirlikService } from './hazirlik.service';
 import { ReklamTaslakService, type AlanDegisikligi, type TaslakKaydi } from './taslak.service';
 import { AjansAyariService, type AtifDurumu } from './ajans-ayari.service';
-import { ReklamYayinService, type YayinGorunumu } from './yayin.service';
+import { ReklamYayinService, type ProvaGorunumu, type YayinGorunumu } from './yayin.service';
 import type { YayinBaslatSonucu } from './yayin-baslat';
 
 const taslakOlusturSchema = z.object({
@@ -186,5 +186,18 @@ export class ReklamController {
     const a = harita[adim as keyof typeof harita];
     if (!a) throw new BadRequestException('Bilinmeyen adım');
     return this.yayin.adim(ctx, id, a);
+  }
+
+  /** Meta provası: nesne açmaz; yalnız eksiksiz taslakta. */
+  @Post('taslaklar/:id/prova')
+  @RequirePermissions('bulk.write')
+  provaIste(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<ProvaGorunumu> {
+    return this.yayin.provaIste(ctx, id);
+  }
+
+  @Get('taslaklar/:id/prova')
+  @RequirePermissions('bulk.read')
+  provaOku(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<ProvaGorunumu> {
+    return this.yayin.provaOku(ctx, id);
   }
 }

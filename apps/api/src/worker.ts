@@ -12,8 +12,8 @@ import { QuotaThrottleError, SyncProcessorService } from './queue/sync-processor
 import { nihaiBasarisizlik } from './queue/nihai-basarisizlik';
 import { SYNC_QUEUE, type SyncJobPayload } from './queue/queues';
 import { CryptoService } from './crypto/crypto.service';
-import { REKLAM_YAYIN_KUYRUGU, type YayinIsi } from './modules/reklam/reklam-kuyrugu';
-import { redisKilidi, yayinIsiniIsle } from './modules/reklam/yayin-isleyici';
+import { REKLAM_YAYIN_KUYRUGU, type ReklamIsi } from './modules/reklam/reklam-kuyrugu';
+import { redisKilidi, reklamIsiniIsle } from './modules/reklam/yayin-isleyici';
 
 /**
  * Worker süreci — API'den AYRI çalışır.
@@ -218,10 +218,10 @@ async function bootstrap(): Promise<void> {
    * kendiliğinden tekrarı sonucu bilinmeyen bir POST'u yeniden gönderirdi.
    */
   const admin = app.get(PrismaAdminService);
-  const reklamWorker = new Worker<YayinIsi>(
+  const reklamWorker = new Worker<ReklamIsi>(
     REKLAM_YAYIN_KUYRUGU,
     async (job) => {
-      const sonuc = await yayinIsiniIsle(
+      const sonuc = await reklamIsiniIsle(
         {
           tx: (fn) => fn(admin as never),
           crypto: app.get(CryptoService),
@@ -234,8 +234,8 @@ async function bootstrap(): Promise<void> {
         `${job.id}`,
       );
       if (sonuc.tur === 'ertele') {
-        // Kilit dolu: deneme SAYILMADAN ertelenir (belgelenen yol).
-        await job.moveToDelayed(Date.now() + 30_000, job.token);
+        // Kilit dolu ya da prova kotası: deneme SAYILMADAN ertelenir.
+        await job.moveToDelayed(Date.now() + (job.data.adim === 'prova' ? 90_000 : 30_000), job.token);
         throw new DelayedError();
       }
       logger.log(`reklam-yayin ${job.id} → ${sonuc.durum}`);
@@ -247,9 +247,18 @@ async function bootstrap(): Promise<void> {
     // Nihai düşüş: yayın satırı olduğu durumda kalır (motor her adımı
     // yazmıştı); sebep kaydedilir, kuyruk tarayıcısı ve insan devralır.
     if (!job) return;
+    if (job.data.adim === 'prova') {
+      // Bekleyen prova sonsuza kadar "soruluyor" kalmasın.
+      void admin
+        .$executeRaw`UPDATE prova SET durum = 'dogrulanamadi', sebep = ${`İş durdu: ${err.message}`.slice(0, 2000)}, bitti_at = now() WHERE id = ${job.data.provaId}::uuid AND durum = 'bekliyor'`
+        .catch((e: unknown) => logger.error(`Prova ${job.data.adim} kapatılamadı: ${e instanceof Error ? e.message : String(e)}`));
+      logger.error(`reklam-yayin ${job.id} (prova) düştü: ${err.message}`);
+      return;
+    }
+    const yayinId = job.data.yayinId;
     void admin
-      .$executeRaw`UPDATE yayin SET sebep = ${`İş durdu: ${err.message}`.slice(0, 2000)} WHERE id = ${job.data.yayinId}::uuid AND sonlandi_at IS NULL`
-      .catch((e: unknown) => logger.error(`Yayın ${job.data.yayinId} sebebi yazılamadı: ${e instanceof Error ? e.message : String(e)}`));
+      .$executeRaw`UPDATE yayin SET sebep = ${`İş durdu: ${err.message}`.slice(0, 2000)} WHERE id = ${yayinId}::uuid AND sonlandi_at IS NULL`
+      .catch((e: unknown) => logger.error(`Yayın ${yayinId} sebebi yazılamadı: ${e instanceof Error ? e.message : String(e)}`));
     logger.error(`reklam-yayin ${job.id} düştü: ${err.message}`);
   });
 
