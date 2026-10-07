@@ -2,6 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  AKTARIM_IZINLERI,
+  aktarimEngeli,
+  aktarimIstemi,
   dagilimKaydetSchema,
   dagilimToplamDenetimi,
   duzenlenebilirMi,
@@ -179,5 +182,51 @@ describe('Google kelime fikirleri isteği', () => {
 
   it('KRİTİK: hacim yoksa null, sıfır değil', () => {
     expect(govde).toContain('avgMonthlySearches ?? null');
+  });
+});
+
+describe('aktarım (ikinci tur)', () => {
+  const satir = {
+    platform: 'meta' as const,
+    katman: 'soguk' as const,
+    niyet: 'FORM' as const,
+    kitleAdi: 'Beyaz yaka',
+    varlikIdleri: ['a', 'b'],
+    planlananVarlikSayisi: 2,
+    tutarMicros: 20_000_000_000n,
+    paraBirimi: 'TRY',
+    donem: '2026-11',
+    not: null,
+  };
+
+  it('aktarılabilir satırın engeli yok', () => {
+    expect(aktarimEngeli(satir)).toBeNull();
+  });
+
+  it('KRİTİK: Google satırı bugün aktarılmaz (AdvCampaign Google kapısı kapalı)', () => {
+    expect(aktarimEngeli({ ...satir, platform: 'google' })).toBe('platform_kapali');
+  });
+
+  it('KRİTİK: görsellerin bir kısmı silinmişse satır EKSİK gitmez, atlanır', () => {
+    expect(aktarimEngeli({ ...satir, varlikIdleri: ['a'] })).toBe('kaynak_silinmis');
+    expect(aktarimEngeli({ ...satir, kitleAdi: null })).toBe('kaynak_silinmis');
+  });
+
+  it('derlenmeyen niyet ve sıfır bütçe ayrı nedenle', () => {
+    expect(aktarimEngeli({ ...satir, niyet: 'WHATSAPP' })).toBe('niyet_desteklenmiyor');
+    expect(aktarimEngeli({ ...satir, tutarMicros: 0n })).toBe('butce_sifir');
+  });
+
+  it('hazır metin plandaki alanları taşır, para birimini bir kez yazar', () => {
+    const m = aktarimIstemi(satir);
+    expect(m).toContain('2026-11 medya planından');
+    expect(m).toContain('Beyaz yaka');
+    expect(m).toContain('20.000,00 TL');
+    expect(m).not.toContain('TL TRY');
+    expect(m).toContain('Ekteki 2 görseli');
+  });
+
+  it('aktarım iki izin istiyor: plan yazma VE reklam kurma', () => {
+    expect([...AKTARIM_IZINLERI].sort()).toEqual(['bulk.write', 'strategy.write']);
   });
 });

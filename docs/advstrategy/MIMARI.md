@@ -159,3 +159,51 @@ gerçek yanıtı görülmedi.
 - Yeni izinler kullanıcıların `permission_overrides` kayıtlarına dokunmuyor; mevcut roller yeni
   izinleri rol tanımından alıyor. Elle kısıtlanmış bir kullanıcı varsa yeni izinler ona da
   açılır: Ajan 4 üretimde override taşıyan kullanıcıları listelemeli.
+
+## 6. İkinci tur (2026-10-08) — aktarım, kelime gruplama, PDF
+
+Sıra kullanıcının ölçütüyle (kullanım kolaylığı + reklam verimliliği) belirlendi: aktarım en
+büyük zaman kazancı, gruplama Google arama kalitesini doğrudan belirliyor, PDF onay panele
+taşındığı için üçüncü. **Sezon/takvim üçüncü tura kaldı:** `ozel_gunler` boş ve sektör listesini
+kimin dolduracağı belli değil; boş takvim gösteren bir sekme işe yaramaz.
+
+### 6.1 Aktarım (sözleşme `strateji/aktarim.ts`)
+- **Yeni migration** `20261008140000_advstrategy_aktarim` (ilki deploy edildi, ona dokunulmaz):
+  `adv_oturum`a `hazir_istem VARCHAR(4000) NULL`, `hazir_medyalar UUID[] NOT NULL DEFAULT '{}'`,
+  `strateji_matris_id UUID NULL` + tekil kısmi indeks (`WHERE strateji_matris_id IS NOT NULL`) +
+  FK → `strateji_matrisi(id)` ON DELETE SET NULL. Var olan bir tabloya kolon ekleniyor: üretim
+  sırası testi (`advstrategy-uretim-sirasi.spec.ts` deseni) şart.
+- `aktar` eylemi: `onaylandi` + `onaylanan_surum = surum` + kullanıcı `AKTARIM_IZINLERI`nin
+  İKİSİNE de sahip. Her satır `aktarimEngeli` ile süzülür; aktarılan her satır için kısa bir
+  transaction'da oturum (başlık: niyetin ekran adı + kitle adı, en çok 120 karakter), `hazir_istem
+  = aktarimIstemi(...)`, `hazir_medyalar`. Satır zaten bir oturuma bağlıysa yeniden açılmaz
+  (tekil indeks + ön kontrol). Sonda plan `aktarildi` ve `aktarim` alanı `AktarimSonucu`.
+  HİÇBİR satır aktarılamazsa plan `onaylandi` kalır ve 400 nedenleri listeler (boş aktarım
+  "aktarıldı" sayılmaz).
+- **AdvCampaign ekranı (Ajan 3):** mesajı olmayan bir oturum açılınca giriş kutusu
+  `hazir_istem`le, ekler `hazir_medyalar`la dolu gelir; üstte "AdvStrategy planından geldi"
+  satırı. Kullanıcı gönderince normal tur. Oturum listesi ve mesajlar ucu bu iki alanı döndürür
+  (`OturumOzeti`ne ekleme Ajan 2'de; shared'daki sohbet tipine dokunmak gerekiyorsa Ajan 1'e
+  bildir).
+
+### 6.2 Kelime gruplama (Ajan 2, deterministik — yapay zekâ YOK)
+Gerekçe: grup, Google'da reklam grubu olacak; açıklanabilir ve her seferinde aynı olmalı.
+1. Metinler Türkçe karakter sadeleştirmesiyle karşılaştırılır (`kelime-tekil.ts`teki ile AYNI
+   fonksiyon).
+2. Her kelime, İÇERDİĞİ en uzun tohuma gruplanır; grup adı tohumun kendisi.
+3. Hiçbir tohumu içermeyen ve hacmi `AYRI_GRUP_HACIM_ESIGI` (1.000) ve üstü olan kelime kendi
+   adıyla ayrı grup olur; eşiğin altındakiler `Diğer`.
+4. Kullanıcının elle yazdığı grup adı yeniden gruplamada EZİLMEZ (`grup_elle BOOLEAN`, aynı
+   yeni migration).
+5. Gruplama arama sonucu yazılırken ve "Yeniden grupla" ile çalışır; sonuç `grup` kolonunda.
+
+### 6.3 PDF medya planı (Ajan 2 + Ajan 3)
+- `GET /strateji/planlar/:id/pdf` (`strategy.read`). Rapor PDF'inin altyapısı:
+  `pdf-cizim.ts#tablo`, gömülü DejaVu, Advetics logosu (`apps/api/assets/marka/`), panel referans
+  görünüm. Sayfalar: kapak (workspace, dönem, durum; onaylıysa "Müşteri hesabı onayladı" /
+  "Ajans onayladı" + tarih + onaylanan sürüm) → bütçe dağılımı (platform × katman, toplam,
+  dağıtılmamış) → kitle × kreatif matrisi (görsel adları; görsel GÖMÜLMEZ bu turda) → seçili
+  kelimeler gruplu ("yaklaşık" hacim, teklif aralığı). Sözleşmeye göre `taslak` plan da indirilir
+  ama kapakta büyük harfle "TASLAK".
+- Panel: iç menüye **Sunum** bölümü (`?bolum=sunum`): "PDF indir" ve belgenin hangi sürümü
+  taşıdığı. Sorgu dizesi tek üreticiden.

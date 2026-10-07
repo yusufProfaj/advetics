@@ -9,3 +9,4 @@ export * from './kelime';
 export * from './takvim';
 export * from './uclar';
 export * from './detay';
+export * from './aktarim';
