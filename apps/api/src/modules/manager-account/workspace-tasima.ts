@@ -76,6 +76,11 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   { tablo: 'yayin_nesnesi', etiket: 'yayın nesnesi' },
   { tablo: 'geri_okuma', etiket: 'geri okuma kaydı' },
   { tablo: 'prova', etiket: 'Meta provası' },
+  // AdvCampaign sohbeti taslakla birlikte gider: taslak yeni şirkete
+  // taşınıyorsa "bunu kim neden istedi" sorusunun cevabı da gitmeli.
+  { tablo: 'adv_oturum', etiket: 'AdvCampaign oturumu' },
+  { tablo: 'adv_mesaj', etiket: 'AdvCampaign mesajı' },
+  { tablo: 'adv_onay', etiket: 'AdvCampaign onay kartı' },
 ] as const;
 
 /**

@@ -400,7 +400,9 @@ DECLARE
     'audience_templates',
     -- Yeni reklam modülü (TASARIM.md § 16)
     'reklam_taslagi', 'taslak_surumu', 'ajans_ayari',
-    'yayin', 'yayin_nesnesi', 'geri_okuma', 'prova'
+    'yayin', 'yayin_nesnesi', 'geri_okuma', 'prova',
+    -- AdvCampaign sohbeti (docs/advcampaign/TASARIM-PLAN.md § 4.2)
+    'adv_oturum', 'adv_mesaj', 'adv_onay'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -2332,5 +2334,43 @@ CREATE POLICY adv_prova_select ON prova
 CREATE POLICY adv_prova_insert ON prova
   FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 CREATE POLICY adv_prova_update ON prova
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
+-- ADVCAMPAIGN SOHBETİ — adv_oturum, adv_mesaj, adv_onay (TASARIM-PLAN § 4.2)
+-- ============================================================================
+--
+-- adv_oturum: workspace'i gören OKUR (ekip arkadaşının oturumu "bu taslağı
+-- kim neden kurdu" sorusunun cevabı). YAZMA yalnız oturumun SAHİBİ: başka
+-- birinin sohbetine onun adına mesaj eklemek, sohbetin kanıt değerini
+-- yok ederdi. DELETE YOK.
+CREATE POLICY adv_adv_oturum_select ON adv_oturum
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_adv_oturum_insert ON adv_oturum
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+CREATE POLICY adv_adv_oturum_update ON adv_oturum
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id())
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+
+-- adv_mesaj: aynı kural; UPDATE yalnız "akista" satırda (kapanmış mesajı
+-- trigger da kilitliyor, politika ikinci kapı).
+CREATE POLICY adv_adv_mesaj_select ON adv_mesaj
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_adv_mesaj_insert ON adv_mesaj
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+CREATE POLICY adv_adv_mesaj_update ON adv_mesaj
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id() AND durum = 'akista')
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+
+-- adv_onay: workspace kapsamlı. Onaylayan kişi oturumun sahibi olmak
+-- zorunda değil (yayın yetkisi olan ekip arkadaşı onaylayabilir); yetki
+-- kapısı servis katmanında (bulk.publish).
+CREATE POLICY adv_adv_onay_select ON adv_onay
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_adv_onay_insert ON adv_onay
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_adv_onay_update ON adv_onay
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));

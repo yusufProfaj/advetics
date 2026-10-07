@@ -3713,3 +3713,68 @@ model Prova {
   @@index([orgId], map: "prova_org_id_idx")
   @@map("prova")
 }
+
+// AdvCampaign sohbeti (migration 20261008100000_advcampaign_sohbet). İlişkisiz:
+// erişim ham SQL ile, yeni reklam modülünün deseni.
+model AdvOturum {
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @map("org_id") @db.Uuid
+  clientId   String   @map("client_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  baslik     String   @db.VarChar(120)
+  taslakId   String?  @map("taslak_id") @db.Uuid
+  durum      String   @default("acik") @db.VarChar(8)
+  model      String   @db.VarChar(40)
+  sorulanlar Json     @default("[]") @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([clientId, updatedAt(sort: Desc)], map: "adv_oturum_client_idx")
+  @@index([orgId], map: "adv_oturum_org_id_idx")
+  @@index([userId], map: "adv_oturum_user_idx")
+  @@map("adv_oturum")
+}
+
+model AdvMesaj {
+  id            String   @id @default(uuid()) @db.Uuid
+  oturumId      String   @map("oturum_id") @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  clientId      String   @map("client_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  sira          Int
+  rol           String   @db.VarChar(12)
+  icerik        Json     @db.JsonB
+  olaylar       Json     @default("[]") @db.JsonB
+  durum         String   @default("tamam") @db.VarChar(8)
+  hataMetni     String?  @map("hata_metni") @db.VarChar(2000)
+  girdiToken    Int      @default(0) @map("girdi_token")
+  ciktiToken    Int      @default(0) @map("cikti_token")
+  onbellekToken Int      @default(0) @map("onbellek_token")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([oturumId, sira], map: "adv_mesaj_sira_key")
+  @@index([clientId, createdAt(sort: Desc)], map: "adv_mesaj_client_idx")
+  @@index([orgId], map: "adv_mesaj_org_id_idx")
+  @@map("adv_mesaj")
+}
+
+model AdvOnay {
+  id            String    @id @default(uuid()) @db.Uuid
+  orgId         String    @map("org_id") @db.Uuid
+  clientId      String    @map("client_id") @db.Uuid
+  oturumId      String?   @map("oturum_id") @db.Uuid
+  taslakId      String    @map("taslak_id") @db.Uuid
+  taslakSurumNo Int       @map("taslak_surum_no")
+  kart          Json      @db.JsonB
+  kartOzeti     String    @map("kart_ozeti") @db.Char(64)
+  durum         String    @default("gosterildi") @db.VarChar(14)
+  onaylayanId   String?   @map("onaylayan_id") @db.Uuid
+  onayAt        DateTime? @map("onay_at") @db.Timestamptz(6)
+  yayinId       String?   @map("yayin_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([taslakId, createdAt(sort: Desc)], map: "adv_onay_taslak_idx")
+  @@index([clientId], map: "adv_onay_client_idx")
+  @@index([orgId], map: "adv_onay_org_id_idx")
+  @@map("adv_onay")
+}
