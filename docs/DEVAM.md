@@ -48,11 +48,11 @@ override'ı taşıyan üyelikler, RLS politika sayıları, takılmış arama).
 doldurulmuş oturum: `adv_oturum.hazir_istem/hazir_medyalar`, yalnız Meta),
 deterministik kelime gruplama (`grup_elle` korunur), PDF medya planı +
 Sunum bölümü. MIGRATION VAR: `20261008140000_advstrategy_aktarim` (var
-olan `adv_oturum`a kolon). **Sıradaki:** Ajan 4 kapısı → deploy → canlı
+olan `adv_oturum`a kolon). Ajan 4 kapısı AÇIK (bulgu: hazır metin yanlış
+oturuma düşebiliyordu, deploy'dan önce düzeltildi). **Sıradaki:** deploy → canlı
 kontrol (aktarılan oturumda giriş kutusu dolu mu, gönderince görseller
 modele ulaşıyor mu). Üçüncü tur: sezon/takvim (özel gün listesini kimin
-dolduracağı belirsiz), PDF indirme denetim kaydı, panelde `grupElle`
-işareti.
+dolduracağı belirsiz), PDF indirme denetim kaydı.
 
 **ADVCAMPAIGN (2026-10-07, kullanıcı kararı):** eski Reklam Oluştur, AI
 Asistan ve Toplu Oluştur KALDIRILDI (panel + API `ai-assistant` sohbeti ve

@@ -19,7 +19,7 @@ import { API_URL, ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { Onizleme } from '../studyo/onizleme';
 import { Dugme, Kutu, dugmeSinifi } from '../ui';
 import { medyaYukle, type YuklenenMedya } from '../medya';
-import { aracIzleri, bekleyenSoru, hazirIcerik, olayUygula, olaylariAyikla, sureMetni, type EkranMesaji, type HazirOturumAlanlari } from './akis';
+import { aracIzleri, bekleyenSoru, hazirKonacakMi, olayUygula, olaylariAyikla, sureMetni, yanitGuncelMi, type EkranMesaji, type HazirOturumAlanlari } from './akis';
 
 /*
  * OTURUM ÖZETİ PANELİN KENDİ TİPİ (shared'da karşılığı yok, API'de
@@ -93,6 +93,18 @@ export function SohbetEkrani({
    * kullanıcı dokunduysa onun yazdığı kalıyor.
    */
   const [plandan, setPlandan] = useState<{ oturumId: string; metin: string } | null>(null);
+  /*
+   * İKİ REF, STATE DEĞİL: okuma yanıtı geldiğinde SEÇİLİ oturumu ve hazır
+   * içeriğin konduğu oturumları bilmek gerekiyor; `useCallback` içindeki
+   * state yakalandığı anki değerde kalır ve sırasız gelen yanıtı ayırt
+   * edemezdi. `seciliRef` her `setOturumId` ile AYNI ANDA güncelleniyor.
+   */
+  const seciliRef = useRef<string | null>(ilkOturumId);
+  const hazirKonanlar = useRef<Set<string>>(new Set());
+  const oturumuSecili = (id: string | null) => {
+    seciliRef.current = id;
+    setOturumId(id);
+  };
   const yazmaAlani = useRef<HTMLTextAreaElement>(null);
   const akisSonu = useRef<HTMLDivElement>(null);
   const oturum = oturumlar.satirlar.find((o) => o.id === oturumId) ?? null;
@@ -112,12 +124,22 @@ export function SohbetEkrani({
     async (id: string) => {
       try {
         const r = await apiFetch<{ oturum: OturumOzeti; mesajlar: EkranMesaji[] }>(`/reklam/sohbet/oturumlar/${id}/mesajlar`);
+        // Kullanıcı bu arada başka oturuma geçtiyse yanıt HİÇBİR ŞEY yazmıyor.
+        if (!yanitGuncelMi(id, seciliRef.current)) return null;
         setMesajlar(r.mesajlar);
         setMesajHali('hazir');
-        // AdvStrategy'den gelen boş oturum: kutu ve ekler hazır dolar, gönderen kullanıcı.
-        const hazir = hazirIcerik(r.oturum, r.mesajlar.length, hazirlik.gorseller.satirlar);
+        // AdvStrategy'den gelen boş oturum: kutu ve ekler hazır dolar, oturum başına bir kez.
+        const hazir = hazirKonacakMi({
+          istenenOturumId: id,
+          seciliOturumId: seciliRef.current,
+          konanlar: hazirKonanlar.current,
+          oturum: r.oturum,
+          mesajSayisi: r.mesajlar.length,
+          gorseller: hazirlik.gorseller.satirlar,
+        });
         if (hazir) {
-          // Kutu boşsa doldur: yoklama ya da yeniden okuma kullanıcının yazdığını ezmesin.
+          hazirKonanlar.current.add(id);
+          // İlk okumadan önce kullanıcı yazmaya başladıysa onun yazdığı kalır.
           setMetin((m) => (m === '' ? hazir.metin : m));
           setMedyalar((x) => (x.length === 0 ? hazir.medyalar : x));
           setPlandan({ oturumId: id, metin: hazir.metin });
@@ -126,7 +148,9 @@ export function SohbetEkrani({
         else setTaslak(null);
         return r;
       } catch (e) {
-        setMesajHali({ hata: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' });
+        if (yanitGuncelMi(id, seciliRef.current)) {
+          setMesajHali({ hata: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' });
+        }
         return null;
       }
     },
@@ -167,7 +191,7 @@ export function SohbetEkrani({
       }
       setPlandan(null);
     }
-    setOturumId(id);
+    oturumuSecili(id);
     setMesajlar([]);
     setTaslak(null);
     setMesajHali(id ? 'okunuyor' : 'yok');
@@ -205,7 +229,7 @@ export function SohbetEkrani({
         const o = await apiFetch<OturumOzeti>('/reklam/sohbet/oturumlar', { method: 'POST', body: JSON.stringify({ clientId }) });
         setOturumlar((x) => ({ satirlar: [o, ...x.satirlar], toplam: x.toplam + 1 }));
         id = o.id;
-        setOturumId(id);
+        oturumuSecili(id);
         setMesajHali('hazir');
         router.replace(`/reklam?musteri=${clientId}&oturum=${id}`, { scroll: false });
       } catch (e) {

@@ -195,7 +195,11 @@ Gerekçe: grup, Google'da reklam grubu olacak; açıklanabilir ve her seferinde 
    adıyla ayrı grup olur; eşiğin altındakiler `Diğer`.
 4. Kullanıcının elle yazdığı grup adı yeniden gruplamada EZİLMEZ (`grup_elle BOOLEAN`, aynı
    yeni migration).
-5. Gruplama arama sonucu yazılırken ve "Yeniden grupla" ile çalışır; sonuç `grup` kolonunda.
+5. Gruplama arama sonucu yazılırken çalışır; sonuç `grup` kolonunda. **"Yeniden grupla" ucu
+   KURULMADI** (2026-10-08 kararı): her arama zaten yeniden grupluyor ve elle grup korunuyor;
+   ayrı düğme yalnız gruplama kuralı değişirse değer üretir, o gün eklenir. (Bu satır bir süre
+   "Yeniden grupla ile çalışır" diyordu; Ajan 4 belgenin yapılmamış işi yapılmış gösterdiğini
+   yakaladı.)
 
 ### 6.3 PDF medya planı (Ajan 2 + Ajan 3)
 - `GET /strateji/planlar/:id/pdf` (`strategy.read`). Rapor PDF'inin altyapısı:
@@ -207,3 +211,13 @@ Gerekçe: grup, Google'da reklam grubu olacak; açıklanabilir ve her seferinde 
   ama kapakta büyük harfle "TASLAK".
 - Panel: iç menüye **Sunum** bölümü (`?bolum=sunum`): "PDF indir" ve belgenin hangi sürümü
   taşıdığı. Sorgu dizesi tek üreticiden.
+
+### 6.4 İkinci tur kapısı (Ajan 4, 2026-10-08): AÇIK
+Ciddi/orta bulgu yok. Açık kalan düşük notlar:
+- **Aktarılan oturum yalnız aktaranın.** `adv_oturum` UPDATE ve `adv_mesaj` INSERT politikaları
+  `user_id = current_user_id()` istiyor (AdvCampaign'in var olan kuralı). Planı aktaran ile reklamı
+  kuracak kişi farklıysa ikincisi oturumu görür ama yürütemez. Bugün aktaran ve kuran çoğunlukla
+  aynı ajans kişisi; sık görülürse "aktarırken sahibi seç" eklenir.
+- Elle gruplu, seçilmemiş satırlar aramalar arasında kalıyor (yalnız kullanıcının dokunduğu
+  satırlarla büyüyor; 1.000 seçili kelimeli PDF ~2,5 sn, < 5 MB).
+- PDF indirme denetim kaydı yazmıyor (rapor PDF'i `report.pdf_download` yazıyor).

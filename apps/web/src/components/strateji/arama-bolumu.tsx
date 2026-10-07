@@ -285,6 +285,17 @@ export function AramaBolumu({
                             disabled={kilit !== null}
                             onChange={(e) => guncelle(s.id, { grup: e.target.value })}
                           />
+                          {/*
+                            "ELLE" İŞARETİ: bu ad kullanıcının; yeniden gruplama onu
+                            ezmiyor (MIMARI §6.2). İşaret olmasa kullanıcı hangi
+                            grupların kuraldan, hangilerinin kendisinden geldiğini
+                            bilemez ve kuralın "değiştirmediği" adı bozuk sanabilir.
+                          */}
+                          {s.grupElle && (
+                            <span className="mt-1 inline-block rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] text-ink-muted" title="Bu grup adını elle yazdın; yeniden gruplama değiştirmez.">
+                              elle
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );

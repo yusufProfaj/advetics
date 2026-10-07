@@ -220,4 +220,8 @@ describe('ikinci tur: aktarım, sunum, gruplar', () => {
     expect(arama).toContain("ucAdresi('/strateji/planlar/:id/kelimeler', plan.id)");
     expect(arama).toContain('kelimeDegisiklikleri(kelimeler.satirlar, taslak)');
   });
+
+  it('elle yazılmış grup adı işaretli (`grupElle`)', () => {
+    expect(kod('arama-bolumu.tsx')).toMatch(/\{s\.grupElle && \(\s*<span[^>]*>\s*elle\s*<\/span>/);
+  });
 });

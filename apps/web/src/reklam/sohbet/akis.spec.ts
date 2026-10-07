@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SohbetOlayi, Soru } from '@advetics/shared';
-import { aracIzleri, bekleyenSoru, hazirIcerik, olayUygula, olaylariAyikla, sureMetni, type EkranMesaji } from './akis';
+import { aracIzleri, bekleyenSoru, hazirIcerik, hazirKonacakMi, olayUygula, olaylariAyikla, sureMetni, yanitGuncelMi, type EkranMesaji } from './akis';
 
 /** AdvCampaign akışının saf tarafı (İP-16): ayrıştırma ve ekran durumu. */
 
@@ -134,7 +134,7 @@ describe('sohbet ekranı hazır içeriği kullanıyor', () => {
     .replace(/^\s*\/\/.*$/gm, '');
 
   it('KRİTİK: mesajlar okununca hazır içerik hesaplanıyor ve kullanıcının yazdığı EZİLMİYOR', () => {
-    expect(kod).toContain('hazirIcerik(r.oturum, r.mesajlar.length, hazirlik.gorseller.satirlar)');
+    expect(kod).toContain('const hazir = hazirKonacakMi({');
     expect(kod).toContain("setMetin((m) => (m === '' ? hazir.metin : m))");
     expect(kod).toContain('setMedyalar((x) => (x.length === 0 ? hazir.medyalar : x))');
   });
@@ -143,5 +143,60 @@ describe('sohbet ekranı hazır içeriği kullanıyor', () => {
     // `gonder(` yalnız kullanıcı eylemlerinde: form, Enter, soru seçeneği.
     expect(kod).not.toMatch(/gonder\(hazir/);
     expect(kod).toContain('baslik="AdvStrategy planından geldi"');
+  });
+});
+
+describe('Ajan 4 bulgusu: hazır içerik bir kez ve yalnız seçili oturuma', () => {
+  const gorsel = { id: 'g1', ad: 'kare.jpg', onizlemeAdresi: '/assets/g1/preview', genislik: 1080, yukseklik: 1080 };
+  const oturum = { hazirIstem: 'plandan metin', hazirMedyalar: ['g1'] };
+  const temel = { oturum, mesajSayisi: 0, gorseller: [gorsel] };
+
+  it('KRİTİK (a): kullanıcı hazır metni silip kutuyu boş bıraksa da sonraki okuma GERİ KOYMUYOR', () => {
+    const konanlar = new Set<string>();
+    // İlk okuma: konuyor.
+    const ilk = hazirKonacakMi({ ...temel, istenenOturumId: 'A', seciliOturumId: 'A', konanlar });
+    expect(ilk?.metin).toBe('plandan metin');
+    konanlar.add('A'); // ekran koyduğunda işaretliyor
+    // Kullanıcı sildi; "Yeniden dene" / akış yoklaması / görsel listesi değişimi yeniden okuyor.
+    for (let i = 0; i < 3; i++) {
+      expect(hazirKonacakMi({ ...temel, istenenOturumId: 'A', seciliOturumId: 'A', konanlar })).toBeNull();
+    }
+  });
+
+  it('KRİTİK (b): A\'nın yanıtı B seçiliyken gelirse hiçbir şey yazılmıyor', () => {
+    expect(yanitGuncelMi('A', 'B')).toBe(false);
+    expect(yanitGuncelMi('A', null)).toBe(false);
+    expect(yanitGuncelMi('A', 'A')).toBe(true);
+    expect(hazirKonacakMi({ ...temel, istenenOturumId: 'A', seciliOturumId: 'B', konanlar: new Set() })).toBeNull();
+    // B'nin kendi yanıtı (B'de hazır içerik yoksa) da A'nınkini koymuyor.
+    expect(hazirKonacakMi({ ...temel, oturum: {}, istenenOturumId: 'B', seciliOturumId: 'B', konanlar: new Set() })).toBeNull();
+  });
+
+  it('başka bir oturumun "konuldu" işareti bu oturumu engellemiyor', () => {
+    expect(hazirKonacakMi({ ...temel, istenenOturumId: 'B', seciliOturumId: 'B', konanlar: new Set(['A']) })).not.toBeNull();
+  });
+
+  const kod = readFileSync(join(__dirname, 'sohbet-ekrani.tsx'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  it('KRİTİK: ekran bayat yanıtı yazmadan ÖNCE kesiyor ve konduğunu işaretliyor', () => {
+    const i = kod.indexOf('const mesajlariOku = useCallback(');
+    expect(i).toBeGreaterThan(-1);
+    const govde = kod.slice(i, kod.indexOf('[taslakOku, hazirlik.gorseller.satirlar]', i));
+    const kesme = govde.indexOf('if (!yanitGuncelMi(id, seciliRef.current)) return null;');
+    expect(kesme).toBeGreaterThan(-1);
+    expect(kesme).toBeLessThan(govde.indexOf('setMesajlar(r.mesajlar)'));
+    expect(govde).toContain('konanlar: hazirKonanlar.current');
+    expect(govde).toContain('seciliOturumId: seciliRef.current');
+    expect(govde).toContain('hazirKonanlar.current.add(id)');
+    // Hata da yalnız seçili oturumdaysa yazılıyor.
+    expect(govde).toContain('if (yanitGuncelMi(id, seciliRef.current)) {');
+  });
+
+  it('KRİTİK: oturum seçimi yalnız ref ile birlikte güncelleniyor', () => {
+    // `setOturumId` tek yerde (ref'i de güncelleyen yardımcının içinde).
+    expect(kod.match(/setOturumId\(/g)?.length).toBe(1);
+    expect(kod).toContain('seciliRef.current = id;\n    setOturumId(id);');
   });
 });

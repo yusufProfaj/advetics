@@ -137,3 +137,33 @@ export function hazirIcerik(
   });
   return { metin, medyalar };
 }
+
+/**
+ * Okuma yanıtı hâlâ ekrandaki oturuma mı ait. Yanıtlar sırasız gelebilir:
+ * kullanıcı A'yı açıp hemen B'ye geçerse A'nın yanıtı B seçiliyken gelir.
+ * O yanıtı yazmak B'nin ekranına A'nın mesajlarını ve hazır metnini koyar;
+ * kullanıcı A'nın isteğini B'de habersiz gönderebilirdi (Ajan 4 bulgusu).
+ */
+export function yanitGuncelMi(istenenOturumId: string, seciliOturumId: string | null): boolean {
+  return istenenOturumId === seciliOturumId;
+}
+
+/**
+ * HAZIR İÇERİK OTURUM BAŞINA BİR KEZ. Okuma birçok kez tekrarlanıyor
+ * ("Yeniden dene", akış kopunca yoklama, görsel listesi değişimi); her
+ * seferinde "kutu boşsa doldur" demek, hazır metni BİLEREK silip boş bırakan
+ * kullanıcıya metni geri koyuyordu (Ajan 4 bulgusu). Bir kez konduysa
+ * kullanıcı silse bile bir daha konmaz: silmek de bir karar.
+ */
+export function hazirKonacakMi(p: {
+  istenenOturumId: string;
+  seciliOturumId: string | null;
+  konanlar: ReadonlySet<string>;
+  oturum: HazirOturumAlanlari;
+  mesajSayisi: number;
+  gorseller: readonly HazirlikGorseli[];
+}): { metin: string; medyalar: YuklenenMedya[] } | null {
+  if (!yanitGuncelMi(p.istenenOturumId, p.seciliOturumId)) return null;
+  if (p.konanlar.has(p.istenenOturumId)) return null;
+  return hazirIcerik(p.oturum, p.mesajSayisi, p.gorseller);
+}
