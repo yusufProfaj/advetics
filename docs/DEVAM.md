@@ -80,6 +80,13 @@ reddedildi — Meta yalnız 7 BÜYÜK HARFLİ anahtar kabul ediyor; derleyici
 düzeltildi. "Kitle ve bütçe" provası Meta 5xx ("unexpected error") döndü;
 kreatif düzeldikten sonraki provada yeniden bakılacak (satır içi
 `campaign_spec` şekli şüpheli).
+**Reklam Stüdyosu (kullanıcı kararı 2026-10-07):** `/reklam` — görselleri
+bırak, tek cümle yaz; asistan (Opus 5.5, yapılandırılmış çıktı, görseller
+modele gidiyor) taslağı kurar, `/reklam/onizleme`de telefon çerçeveli
+önizleme + satır içi eksikler + "Onayla" (öneri → kullanıcı kararı), sonra
+prova ve test kipi. Model bütçe/süre/adres UYDURAMIYOR (sunucu cümleyle
+karşılaştırıyor), kategori sorusunu cevaplayamıyor. `ANTHROPIC_API_KEY`
+sunucuda tanımlı olmalı. Menüde değil; eski Reklam Oluştur'un üstünde kart.
 **Sıradaki:** (1) CANLI TUR devam: ajansın kendi Meta hesabında
 SITE niyetiyle test kipi — Meta'nın gerçekte neyi farklı döndürdüğü
 normalleştirme tablosunu dolduracak (ilk denemelerin "fark" ile durması

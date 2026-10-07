@@ -105,6 +105,15 @@ export default async function AdsHomePage({
 
   return (
     <div className="space-y-5">
+      {/* YENİ REKLAM STÜDYOSU (önizleme): görselleri bırak, tek cümle yaz.
+          Gerçek yayın açılınca menü doğrudan oraya gidecek. */}
+      <Link
+        href={`/reklam?musteri=${clientId}`}
+        className="block rounded-2xl border border-brand/40 bg-brand-soft px-5 py-4 hover:border-brand"
+      >
+        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-strong">Yeni · önizleme</span>
+        <span className="mt-0.5 block text-base font-semibold">Reklam Stüdyosu: görselleri bırak, ne istediğini yaz</span>
+      </Link>
       <header>
         <h1 className="sayfa-baslik">Reklam Oluştur</h1>
         <p className="mt-0.5 text-sm text-ink-muted">

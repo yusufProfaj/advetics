@@ -5,6 +5,8 @@ import { ReklamTaslakService } from './taslak.service';
 import { AjansAyariService } from './ajans-ayari.service';
 import { ReklamYayinService } from './yayin.service';
 import { ReklamKuyrugu } from './reklam-kuyrugu';
+import { ReklamAiTaslakService } from './ai-taslak.service';
+import { ReklamGorselService } from './gorsel.service';
 
 /**
  * Yeni Reklam Oluştur modülü (docs/meta-reklam-brief/tasarim/TASARIM.md).
@@ -18,7 +20,7 @@ import { ReklamKuyrugu } from './reklam-kuyrugu';
  */
 @Module({
   controllers: [ReklamController],
-  providers: [ReklamHazirlikService, ReklamTaslakService, AjansAyariService, ReklamYayinService, ReklamKuyrugu],
+  providers: [ReklamHazirlikService, ReklamTaslakService, AjansAyariService, ReklamYayinService, ReklamKuyrugu, ReklamAiTaslakService, ReklamGorselService],
   exports: [ReklamKuyrugu],
 })
 export class ReklamModule {}

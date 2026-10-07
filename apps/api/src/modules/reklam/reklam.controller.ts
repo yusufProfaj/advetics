@@ -1,4 +1,7 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { GORSEL_EN_COK_BAYT, type YuklenenGorsel } from './gorsel-yukle';
+import { ReklamGorselService } from './gorsel.service';
 import { z } from 'zod';
 import {
   ATIF_STANDARTLARI,
@@ -16,6 +19,7 @@ import { ReklamTaslakService, type AlanDegisikligi, type TaslakKaydi } from './t
 import { AjansAyariService, type AtifDurumu } from './ajans-ayari.service';
 import { ReklamYayinService, type ProvaGorunumu, type YayinGorunumu } from './yayin.service';
 import type { YayinBaslatSonucu } from './yayin-baslat';
+import { ReklamAiTaslakService, type AiTaslakSonucu } from './ai-taslak.service';
 
 const taslakOlusturSchema = z.object({
   clientId: z.string().uuid(),
@@ -36,6 +40,13 @@ const surumYazSchema = z.object({
     z.object({ deger: z.unknown(), kaynak: z.enum(['kullanici', 'marka_merkezi']) }).nullable(),
   ),
 });
+
+const aiTaslakSchema = z.object({
+  clientId: z.string().uuid(),
+  cumle: z.string().trim().min(3).max(1000),
+  varliklar: z.array(z.string().uuid()).min(1).max(10),
+});
+const onaySchema = z.object({ icerikOzeti: z.string().regex(/^[0-9a-f]{64}$/) });
 
 const yayinlaSchema = z.object({
   surumNo: z.number().int().min(1),
@@ -61,6 +72,8 @@ export class ReklamController {
     private readonly taslak: ReklamTaslakService,
     private readonly ajans: AjansAyariService,
     private readonly yayin: ReklamYayinService,
+    private readonly ai: ReklamAiTaslakService,
+    private readonly gorsel: ReklamGorselService,
   ) {}
 
   @Get('hazirlik')
@@ -199,5 +212,46 @@ export class ReklamController {
   @RequirePermissions('bulk.read')
   provaOku(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<ProvaGorunumu> {
     return this.yayin.provaOku(ctx, id);
+  }
+
+  /**
+   * "Bu görsellerle form kampanyası oluştur": asistan taslağı kurar, her
+   * alan öneri olarak işaretli. Notlar (atılan öneriler, sorular) cevapta.
+   */
+  @Post('ai-taslak')
+  @RequirePermissions('bulk.write')
+  aiTaslak(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(aiTaslakSchema)) dto: z.infer<typeof aiTaslakSchema>,
+  ): Promise<AiTaslakSonucu> {
+    return this.ai.olustur(ctx, dto.clientId, dto.cumle, dto.varliklar);
+  }
+
+  @Post('taslaklar/:id/oneriyi-onayla')
+  @RequirePermissions('bulk.write')
+  oneriyiOnayla(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(onaySchema)) dto: z.infer<typeof onaySchema>,
+  ): Promise<TaslakKaydi> {
+    return this.ai.onayla(ctx, id, dto.icerikOzeti);
+  }
+
+  /** Sürükle-bırak görsel yükleme: biçim ve boyut GİRİŞ ANINDA denetlenir. */
+  @Post('gorseller')
+  @RequirePermissions('bulk.write')
+  @UseInterceptors(FileInterceptor('dosya', { limits: { fileSize: GORSEL_EN_COK_BAYT, files: 1 } }))
+  async gorselYukle(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+    @UploadedFile() dosya: { buffer: Buffer; originalname: string } | undefined,
+  ): Promise<YuklenenGorsel> {
+    if (!dosya) throw new BadRequestException('Dosya gelmedi.');
+    if (!ctx.clientIds.includes(clientId)) throw new BadRequestException('Bu workspace’e erişimin yok.');
+    try {
+      return await this.gorsel.yukle(ctx, clientId, dosya.originalname, dosya.buffer);
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
   }
 }

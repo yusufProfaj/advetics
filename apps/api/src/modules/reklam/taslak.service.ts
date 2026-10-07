@@ -11,6 +11,7 @@ import {
   taslakAlanlariSchema,
   taslakEksikleri,
   taslakKanonikIcerik,
+  type AlanKaynagi,
   type OlusturanYuz,
   type ReklamTaslakKaydi,
   type TaslakAlanlari,
@@ -22,9 +23,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 export type TaslakKaydi = ReklamTaslakKaydi;
 
-/** Panelin yazabileceği kaynaklar; `workspace_profili` ve `derleyici` sunucunun. */
+/**
+ * Panelin yazabileceği kaynaklar uçta (zod) `kullanici` ve `marka_merkezi`
+ * ile sınırlı; `ai_onerisi` ve `workspace_profili` yalnız SUNUCU yollarından
+ * (yapay zekâ taslağı) gelir — istemci kilidi taklit edemez.
+ */
 export type AlanDegisikligi = Partial<
-  Record<keyof TaslakAlanlari, { deger: unknown; kaynak: 'kullanici' | 'marka_merkezi' } | null>
+  Record<keyof TaslakAlanlari, { deger: unknown; kaynak: AlanKaynagi } | null>
 >;
 
 /**
