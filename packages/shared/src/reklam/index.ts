@@ -9,3 +9,4 @@ export * from './meta/yanki';
 export * from './meta/form';
 export * from './taslak';
 export * from './taslak-alanlari';
+export * from './yayin';

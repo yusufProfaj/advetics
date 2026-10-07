@@ -9,7 +9,7 @@
 **Son güncelleme:** 2026-10-07 · **Canlı (539f6fb):** Google gün içi saatlik,
 Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlıda
 doğrulandı).
-**Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: taslak tabloları + `db:rls`), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
+**Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: taslak + yayın tabloları, iki migration + `db:rls`), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
 **Reklam oluşturma (2026-10-07): AYRI MODÜL olarak kuruluyor.**
 Kararlar [`bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md)
@@ -40,9 +40,19 @@ dolu, özel kategori sorusu (hiçbir şık seçili gelmez, taban kilitli),
 bütçe Türkçe tutar girişiyle, süre hesabın saat diliminde, Gözden
 geçir'de atıf standardı seçimi (yalnız yönetici). Canlıda tıklanarak
 denenmedi (worktree'de `.env` yok).
-**Sıradaki:** yayın motoru (§ 11: görseli hesaba yükleme, prova, PAUSED
-zincir, geri okuma, açma) ve form şablonu ekranı (FORM niyeti onsuz
-eksik kalıyor). Atıf standardı ajans yöneticisinin
+**Yayın motoru çekirdeği yazıldı** (`modules/reklam/yayin-motoru.ts`,
+MIGRATION VAR: `20261007140000_reklam_yayin_motoru` → `yayin`,
+`yayin_nesnesi`, `geri_okuma`): medya → form → ağaç PAUSED zincir, her
+nesne için önce niyet kaydı; kesin ret / belirsiz sonuç / kayıt düşüşü
+ayrı yollar; uzlaştırma (etiket + ad); geri okuma; tekillik kapısı; açma
+yukarıdan aşağı; geri alma = arşiv. Meta bir port arkasında; sahte Meta
+ile 19 test, mutasyonla sınandı. **Henüz bir uca bağlı DEĞİL.**
+**Sıradaki (motoru uca bağlamadan önce şart):** gerçek Graph istemcisi
+(`MetaYazmaPortu`; token erişimi modül sınırını nasıl geçecek kararı),
+ön kontrol + prova (§ 11.2), hesap başına yazıcı kilidi ve senkron
+duraklatma (§ 11.5 d), "Meta'ya yazmayı durdur" kesicisi (§ 11.10),
+`yayinBaslat` ucu (`bulk.publish`). Sonra canlı tur (Aşama 2) ajansın
+kendi hesabında test kipiyle. Form şablonu ekranı da bekliyor. Atıf standardı ajans yöneticisinin
 kararı; seçilene kadar yayın yok. Boost taşıması ve rapor sonuç adları
 yayın motorundan sonra.
 **Acil, bu işten bağımsız:** Meta v26 kuralı 2026-10-27'de bütün sürümlerde

@@ -72,6 +72,9 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   // değişimine bilerek izin veriyor; içerik kolonları kilitli.
   { tablo: 'reklam_taslagi', etiket: 'yeni reklam taslağı' },
   { tablo: 'taslak_surumu', etiket: 'taslak sürümü' },
+  { tablo: 'yayin', etiket: 'reklam yayını' },
+  { tablo: 'yayin_nesnesi', etiket: 'yayın nesnesi' },
+  { tablo: 'geri_okuma', etiket: 'geri okuma kaydı' },
 ] as const;
 
 /**

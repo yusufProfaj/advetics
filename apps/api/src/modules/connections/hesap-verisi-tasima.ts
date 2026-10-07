@@ -154,6 +154,10 @@ export const MUSTERIDE_KALAN = [
    * taslağa bağlı, ayrıca sayılmıyor.
    */
   { tablo: 'reklam_taslagi', etiket: 'yeni reklam taslağı' },
+  // Yayın birinin KARARI ve Meta'da neyin kurulduğunun kaydı: kalıyor.
+  // Kampanyanın aynası (campaigns) yeni workspace'e taşınıyor; kurulum
+  // kaydı taşınmıyor ve bu bir kayıp değil, "kim kurdu" sorusunun cevabı.
+  { tablo: 'yayin', etiket: 'reklam yayını' },
 ] as const;
 
 export type TasimaSonucu = {

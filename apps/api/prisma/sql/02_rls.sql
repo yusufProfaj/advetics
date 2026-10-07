@@ -399,7 +399,8 @@ DECLARE
     -- Marka Merkezi Bölüm 4 — kitle şablonları
     'audience_templates',
     -- Yeni reklam modülü (TASARIM.md § 16)
-    'reklam_taslagi', 'taslak_surumu', 'ajans_ayari'
+    'reklam_taslagi', 'taslak_surumu', 'ajans_ayari',
+    'yayin', 'yayin_nesnesi', 'geri_okuma'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -2300,3 +2301,26 @@ CREATE POLICY adv_ajans_ayari_insert ON ajans_ayari
 CREATE POLICY adv_ajans_ayari_update ON ajans_ayari
   FOR UPDATE USING (org_id = app.current_org_id() AND app.is_org_admin())
   WITH CHECK (org_id = app.current_org_id() AND app.is_org_admin());
+
+-- yayin, yayin_nesnesi: MÜŞTERİ KAPSAMLI; SELECT, INSERT, UPDATE (durum
+-- ilerliyor). DELETE YOK: yayın kaydı Meta'da ne kurulduğunun tek izi.
+-- Gövde kolonlarını migration'daki trigger kilitliyor.
+CREATE POLICY adv_yayin_select ON yayin
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_yayin_insert ON yayin
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_yayin_update ON yayin
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_yayin_nesnesi_select ON yayin_nesnesi
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_yayin_nesnesi_insert ON yayin_nesnesi
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_yayin_nesnesi_update ON yayin_nesnesi
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+-- geri_okuma: YALNIZ SELECT + INSERT (değişmez kanıt).
+CREATE POLICY adv_geri_okuma_select ON geri_okuma
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_geri_okuma_insert ON geri_okuma
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));

@@ -3618,3 +3618,71 @@ model AjansAyari {
 
   @@map("ajans_ayari")
 }
+
+model Yayin {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  clientId        String    @map("client_id") @db.Uuid
+  taslakId        String    @map("taslak_id") @db.Uuid
+  taslakSurumNo   Int       @map("taslak_surum_no")
+  icerikOzeti     String    @map("icerik_ozeti") @db.Char(64)
+  adAccountId     String?   @map("ad_account_id") @db.Uuid
+  durum           String    @default("on_kontrol") @db.VarChar(20)
+  oncekiDurum     String?   @map("onceki_durum") @db.VarChar(20)
+  durumAt         DateTime  @default(now()) @map("durum_at") @db.Timestamptz(6)
+  sebep           String?   @db.VarChar(2000)
+  derlenmisGovde  Json      @map("derlenmis_govde") @db.JsonB
+  beklenenYanki   Json      @map("beklenen_yanki") @db.JsonB
+  apiSurumu       String    @map("api_surumu") @db.VarChar(8)
+  derleyiciSurumu String    @map("derleyici_surumu") @db.VarChar(16)
+  atifStandardi   String    @map("atif_standardi") @db.VarChar(16)
+  kaynak          String    @db.VarChar(12)
+  testKipi        Boolean   @default(false) @map("test_kipi")
+  baslatanId      String    @map("baslatan_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  sonlandiAt      DateTime? @map("sonlandi_at") @db.Timestamptz(6)
+  sonlanmaSebebi  String?   @map("sonlanma_sebebi") @db.VarChar(24)
+
+  @@index([clientId, durum], map: "yayin_client_durum_idx")
+  @@index([orgId], map: "yayin_org_id_idx")
+  @@map("yayin")
+}
+
+model YayinNesnesi {
+  id           String   @id @default(uuid()) @db.Uuid
+  yayinId      String   @map("yayin_id") @db.Uuid
+  orgId        String   @map("org_id") @db.Uuid
+  clientId     String   @map("client_id") @db.Uuid
+  tur          String   @db.VarChar(12)
+  ad           String   @db.VarChar(64)
+  sira         Int
+  istekOzeti   String?  @map("istek_ozeti") @db.Char(64)
+  metaId       String?  @map("meta_id") @db.VarChar(64)
+  durum        String   @default("bekliyor") @db.VarChar(14)
+  sonHata      Json?    @map("son_hata") @db.JsonB
+  denemeSayisi Int      @default(0) @map("deneme_sayisi")
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([yayinId, ad], map: "yayin_nesnesi_ad_key")
+  @@index([clientId], map: "yayin_nesnesi_client_idx")
+  @@index([orgId], map: "yayin_nesnesi_org_id_idx")
+  @@map("yayin_nesnesi")
+}
+
+model GeriOkuma {
+  id        String   @id @default(uuid()) @db.Uuid
+  yayinId   String   @map("yayin_id") @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  clientId  String   @map("client_id") @db.Uuid
+  sonuc     String   @db.VarChar(16)
+  satirlar  Json     @db.JsonB
+  bilgiler  Json     @db.JsonB
+  ham       Json     @db.JsonB
+  apiSurumu String   @map("api_surumu") @db.VarChar(8)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([yayinId, createdAt], map: "geri_okuma_yayin_idx")
+  @@index([clientId], map: "geri_okuma_client_idx")
+  @@index([orgId], map: "geri_okuma_org_id_idx")
+  @@map("geri_okuma")
+}
