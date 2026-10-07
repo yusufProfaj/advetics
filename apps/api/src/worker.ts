@@ -11,6 +11,9 @@ import { SyncQueueService } from './queue/sync-queue.service';
 import { QuotaThrottleError, SyncProcessorService } from './queue/sync-processor.service';
 import { nihaiBasarisizlik } from './queue/nihai-basarisizlik';
 import { SYNC_QUEUE, type SyncJobPayload } from './queue/queues';
+import { CryptoService } from './crypto/crypto.service';
+import { REKLAM_YAYIN_KUYRUGU, type YayinIsi } from './modules/reklam/reklam-kuyrugu';
+import { redisKilidi, yayinIsiniIsle } from './modules/reklam/yayin-isleyici';
 
 /**
  * Worker süreci — API'den AYRI çalışır.
@@ -207,13 +210,57 @@ async function bootstrap(): Promise<void> {
     logger.error(`Worker hatası: ${err.message}`);
   });
 
-  logger.log('Worker hazır — kuyruk: sync, eşzamanlılık: 4');
+  /*
+   * YENİ REKLAM MODÜLÜ — kendi kuyruğu ve işleyicisi. Eşzamanlılık 2:
+   * hesap başına tek yazıcı kilidi zaten var; aynı anda iki FARKLI hesaba
+   * yayın yeterli ve senkron işlerinin Meta kotasıyla yarışmasın.
+   * Deneme 1: motor her belirsizliği kendi durumuna çeviriyor; BullMQ'nun
+   * kendiliğinden tekrarı sonucu bilinmeyen bir POST'u yeniden gönderirdi.
+   */
+  const admin = app.get(PrismaAdminService);
+  const reklamWorker = new Worker<YayinIsi>(
+    REKLAM_YAYIN_KUYRUGU,
+    async (job) => {
+      const sonuc = await yayinIsiniIsle(
+        {
+          tx: (fn) => fn(admin as never),
+          crypto: app.get(CryptoService),
+          apiSurumu: config.platforms.meta.apiVersion,
+          yuklemeKoku: config.uploads.dir,
+          kilit: redisKilidi(connection),
+          kilitOneki: config.redis.keyPrefix,
+        },
+        job.data,
+        `${job.id}`,
+      );
+      if (sonuc.tur === 'ertele') {
+        // Kilit dolu: deneme SAYILMADAN ertelenir (belgelenen yol).
+        await job.moveToDelayed(Date.now() + 30_000, job.token);
+        throw new DelayedError();
+      }
+      logger.log(`reklam-yayin ${job.id} → ${sonuc.durum}`);
+      return sonuc;
+    },
+    { connection, prefix: config.redis.keyPrefix, concurrency: 2 },
+  );
+  reklamWorker.on('failed', (job, err) => {
+    // Nihai düşüş: yayın satırı olduğu durumda kalır (motor her adımı
+    // yazmıştı); sebep kaydedilir, kuyruk tarayıcısı ve insan devralır.
+    if (!job) return;
+    void admin
+      .$executeRaw`UPDATE yayin SET sebep = ${`İş durdu: ${err.message}`.slice(0, 2000)} WHERE id = ${job.data.yayinId}::uuid AND sonlandi_at IS NULL`
+      .catch((e: unknown) => logger.error(`Yayın ${job.data.yayinId} sebebi yazılamadı: ${e instanceof Error ? e.message : String(e)}`));
+    logger.error(`reklam-yayin ${job.id} düştü: ${err.message}`);
+  });
+
+  logger.log('Worker hazır — kuyruk: sync (4), reklam-yayin (2)');
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.log(`${signal} alındı, işler tamamlanıyor…`);
     // close(): çalışan işlerin bitmesini bekler, yenisini almaz. Zorla
     // kapatmak yarım kalmış senkronizasyon bırakır.
     await worker.close();
+    await reklamWorker.close();
     await connection.quit().catch(() => connection.disconnect());
     await app.close();
     logger.log('Worker kapandı.');

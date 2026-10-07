@@ -470,7 +470,12 @@ const YAYIN_SONLANDIRMAYAN = new Set<YayinDurumu>(
  * Kaynak taraması `sonlandi_at` yazımının başka hiçbir dosyada olmadığını
  * kilitliyor.
  */
-export async function yayiniSonlandir(tx: TxRunner, yayinId: string, sebep: SonlanmaSebebi): Promise<YayinDurumu> {
+export async function yayiniSonlandir(
+  tx: TxRunner,
+  yayinId: string,
+  sebep: SonlanmaSebebi,
+  aciklama: string | null = null,
+): Promise<YayinDurumu> {
   const durum: YayinDurumu = sebep === 'kapali_kuruldu' ? 'kapali_kuruldu' : 'arsivlendi';
   // Ön kontrol reddi Meta'da hiçbir şey doğmadan kapanır; diğerleri yalnız
   // geçiş tablosunun izin verdiği durumlardan (ör. 'kuruluyor'dan arşive
@@ -481,11 +486,20 @@ export async function yayiniSonlandir(tx: TxRunner, yayinId: string, sebep: Sonl
   const r = await tx((t) =>
     t.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       UPDATE yayin SET durum = ${durum}, onceki_durum = durum, durum_at = now(),
-                       sonlandi_at = now(), sonlanma_sebebi = ${sebep}
+                       sonlandi_at = now(), sonlanma_sebebi = ${sebep},
+                       sebep = COALESCE(${aciklama}, sebep)
        WHERE id = ${yayinId}::uuid AND sonlandi_at IS NULL AND durum IN (${Prisma.join(kaynaklar)})
       RETURNING id::text`),
   );
   if (r.length !== 1) throw new Error(`Yayın ${yayinId} bu durumdan sonlandırılamaz ya da zaten sonlanmış`);
+  // Taslak yeniden düzenlenebilir: aktif yayını kalmadı. AYNI fonksiyonda,
+  // çünkü taslağın "yayında" kilidinden çıkışı da tek yerden yazılmalı.
+  await tx((t) =>
+    t.$queryRaw(Prisma.sql`
+      UPDATE reklam_taslagi SET durum = 'taslak', updated_at = now()
+       WHERE id = (SELECT taslak_id FROM yayin WHERE id = ${yayinId}::uuid) AND durum = 'yayinda'
+      RETURNING id`),
+  );
   return durum;
 }
 

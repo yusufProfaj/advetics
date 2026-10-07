@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, Req } from '@nestjs/common';
 import { z } from 'zod';
 import {
   ATIF_STANDARTLARI,
@@ -14,6 +14,8 @@ import type { AuthedRequest } from '../../common/types/request';
 import { ReklamHazirlikService } from './hazirlik.service';
 import { ReklamTaslakService, type AlanDegisikligi, type TaslakKaydi } from './taslak.service';
 import { AjansAyariService, type AtifDurumu } from './ajans-ayari.service';
+import { ReklamYayinService, type YayinGorunumu } from './yayin.service';
+import type { YayinBaslatSonucu } from './yayin-baslat';
 
 const taslakOlusturSchema = z.object({
   clientId: z.string().uuid(),
@@ -35,6 +37,12 @@ const surumYazSchema = z.object({
   ),
 });
 
+const yayinlaSchema = z.object({
+  surumNo: z.number().int().min(1),
+  icerikOzeti: z.string().regex(/^[0-9a-f]{64}$/),
+  testKipi: z.boolean(),
+});
+
 const atifSecSchema = z.object({ standart: z.enum(ATIF_STANDARTLARI) });
 const yazmaAnahtariSchema = z.object({
   durdur: z.boolean(),
@@ -52,6 +60,7 @@ export class ReklamController {
     private readonly hazirlik: ReklamHazirlikService,
     private readonly taslak: ReklamTaslakService,
     private readonly ajans: AjansAyariService,
+    private readonly yayin: ReklamYayinService,
   ) {}
 
   @Get('hazirlik')
@@ -136,5 +145,46 @@ export class ReklamController {
       userAgent: req.get('user-agent') ?? null,
       requestId: req.requestId,
     });
+  }
+
+  /**
+   * YAYINLA — tek uç, tek izin (`bulk.publish`). Panel, AI kartı, kopya ve
+   * toplu yayın hepsi buradan; ikinci bir uç yazılırsa ön kontrolün bir
+   * adımı onda eksik kalır ve bunu hiçbir ekran göstermez.
+   */
+  @Post('taslaklar/:id/yayinla')
+  @RequirePermissions('bulk.publish')
+  yayinla(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(yayinlaSchema)) dto: z.infer<typeof yayinlaSchema>,
+  ): Promise<YayinBaslatSonucu> {
+    return this.yayin.baslat(ctx, { taslakId: id, ...dto });
+  }
+
+  @Get('taslaklar/:id/yayin')
+  @RequirePermissions('bulk.read')
+  aktifYayin(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<YayinGorunumu | null> {
+    return this.yayin.aktif(ctx, id);
+  }
+
+  @Get('yayinlar/:id')
+  @RequirePermissions('bulk.read')
+  yayinOku(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<YayinGorunumu> {
+    return this.yayin.oku(ctx, id);
+  }
+
+  /** İnsan düğmeleri: kaldığı yerden devam, geri al (arşiv), yeniden kontrol et. */
+  @Post('yayinlar/:id/:adim')
+  @RequirePermissions('bulk.publish')
+  yayinAdimi(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('adim') adim: string,
+  ): Promise<YayinGorunumu> {
+    const harita = { devam: 'devam', 'geri-al': 'geri_al', 'yeniden-oku': 'yeniden_oku' } as const;
+    const a = harita[adim as keyof typeof harita];
+    if (!a) throw new BadRequestException('Bilinmeyen adım');
+    return this.yayin.adim(ctx, id, a);
   }
 }

@@ -57,12 +57,23 @@ eski panel/kod referans değil, tek kaynak tasarım belgeleri.
 `20261007160000_reklam_yazma_kesici`; tek kapı `metaYazmaAcikMi`, ajans
 şirketinin anahtarı müşteri şirketlerini de durduruyor, okunamazsa kapalı;
 motorda her yazma kapılı sarmalayıcıdan; uç `PUT /reklam/ajans-ayari/meta-yazma`).
-**Sıradaki (motoru uca bağlamadan önce şart):** ön kontrol + prova (§ 11.2), hesap başına yazıcı kilidi ve senkron
-duraklatma (§ 11.5 d), "Meta'ya yazmayı durdur" kesicisi (§ 11.10),
-`yayinBaslat` ucu (`bulk.publish`). Sonra canlı tur (Aşama 2) ajansın
-kendi hesabında test kipiyle. Form şablonu ekranı da bekliyor. Atıf standardı ajans yöneticisinin
-kararı; seçilene kadar yayın yok. Boost taşıması ve rapor sonuç adları
-yayın motorundan sonra.
+**Motor uca bağlandı — yalnız TEST KİPİYLE.** `POST /reklam/taslaklar/:id/yayinla`
+(`bulk.publish`): sıfır çağrılı ön kontrol (sürüm/özet eşleşmesi, taze
+eksikler, OK-15 anahtar, OK-16 atıf, OK-01 hesap, tanınmayan kategori
+tabanı), derleme, yayın kaydı, kendi kuyruğu `reklam-yayin` (deneme 1),
+worker'da işleyici (hesap başına Redis yazıcı kilidi, dolu ise ertele).
+Meta provası (OK-17) olmadığı için GERÇEK yayın reddediliyor; test kipi
+yalnız ajans yöneticisi ve ajansın kendi şirketindeki hesapta: kurar, geri
+okur, AÇMADAN arşivler. Panelde Gözden geçir'in sonunda "Test kipinde
+dene" + canlı durum + fark tablosu + "Kaldığı yerden devam / Yeniden
+kontrol et / Geri al".
+**Sıradaki:** (1) deploy sonrası CANLI TUR: ajansın kendi Meta hesabında
+SITE niyetiyle test kipi — Meta'nın gerçekte neyi farklı döndürdüğü
+normalleştirme tablosunu dolduracak (ilk denemelerin "fark" ile durması
+BEKLENEN davranış); (2) Meta provası (`validate_only`, § 11.13) → gerçek
+yayın; (3) kuyruk tarayıcısı (§ 11.12: worker ölürse `kuruluyor`da kalan
+yayın); (4) form şablonu ekranı. Boost taşıması ve rapor sonuç adları
+ondan sonra.
 **Acil, bu işten bağımsız:** Meta v26 kuralı 2026-10-27'de bütün sürümlerde
 kök `GET /?ids=` isteklerini hataya çeviriyor (rapor PDF görsel tazeleme,
 boost özeti) — ayrı oturumda düzeltiliyordu; deploy o tarihten önce.

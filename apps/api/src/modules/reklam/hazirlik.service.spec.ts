@@ -157,4 +157,14 @@ describe('reklam modülü sınırı', () => {
       for (const y of YASAK) expect(importlar, `${f} → ${y}`).not.toContain(y);
     }
   });
+
+  it('KRİTİK: her @Injectable sınıf modülün providers listesinde (Nest açılışta patlar, derlemede değil)', () => {
+    const modul = readFileSync(join(__dirname, 'reklam.module.ts'), 'utf8');
+    const providers = /providers:\s*\[([^\]]*)\]/.exec(modul)![1]!;
+    const servisler = dosyalar.flatMap((f) =>
+      [...readFileSync(join(__dirname, f), 'utf8').matchAll(/@Injectable\(\)\s*export class (\w+)/g)].map((m) => m[1]!),
+    );
+    expect(servisler.length).toBeGreaterThanOrEqual(5);
+    for (const s of servisler) expect(providers, s).toContain(s);
+  });
 });

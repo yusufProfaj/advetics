@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
   ATIF_SECENEKLERI,
@@ -21,6 +22,7 @@ import {
 } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme, Kutu, dugmeSinifi } from '../ui';
+import { YayinPaneli } from './yayin-paneli';
 import {
   ADIMLAR,
   BASLIK_SINIRI,
@@ -60,8 +62,8 @@ const KULLANICI = 'kullanici' as const;
  * BIRAKILINCA kaydediliyor (her tuşta değil): her tuş bir sürüm olsaydı
  * taslak başına yüzlerce satır birikirdi.
  *
- * Meta'ya hâlâ HİÇBİR ŞEY gönderilmiyor: yayın motoru yok. "Yayına al"
- * kilitli ve nedenini söylüyor.
+ * Gerçek yayın kapalı (Meta provası yok); ajans yöneticisi Gözden geçir'de
+ * TEST KİPİYLE deneyebiliyor (`yayin-paneli.tsx`).
  */
 export function YeniReklamAkisi({
   clientId,
@@ -69,13 +71,17 @@ export function YeniReklamAkisi({
   hazirlik,
   ilkTaslak,
   ilkAtif,
+  yonetici,
 }: {
   clientId: string;
   workspaceAdi: string;
   hazirlik: ReklamHazirligi;
   ilkTaslak: ReklamTaslakKaydi;
   ilkAtif: AtifDurumu | null;
+  /** Ajans yöneticisi: test kipi düğmesi yalnız ona. Sunucu ayrıca denetliyor. */
+  yonetici: boolean;
 }) {
+  const router = useRouter();
   const [taslak, setTaslak] = useState(ilkTaslak);
   const [kayit, setKayit] = useState<KayitHali>({ tur: 'sakin' });
   const [adim, setAdim] = useState<AdimNo>(0);
@@ -454,6 +460,8 @@ export function YeniReklamAkisi({
               paraBirimi={paraBirimi}
               ilkAtif={ilkAtif}
               adimaGit={setAdim}
+              yonetici={yonetici}
+              onDegisti={() => router.refresh()}
             />
           )}
 
@@ -691,6 +699,8 @@ function GozdenGecir({
   paraBirimi,
   ilkAtif,
   adimaGit,
+  yonetici,
+  onDegisti,
 }: {
   taslak: ReklamTaslakKaydi;
   hazirlik: ReklamHazirligi;
@@ -698,6 +708,8 @@ function GozdenGecir({
   paraBirimi: string;
   ilkAtif: AtifDurumu | null;
   adimaGit: (a: AdimNo) => void;
+  yonetici: boolean;
+  onDegisti: () => void;
 }) {
   const d = ekranDegerleri(taslak.alanlar);
   const niyet = d.niyet ? NIYET_KATALOGU[d.niyet] : null;
@@ -810,21 +822,15 @@ function GozdenGecir({
 
       <AtifBlogu ilk={ilkAtif} />
 
-      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line pt-4">
-        <p className="mr-auto max-w-prose text-xs text-ink-muted">
-          {kullaniciEksigi.length > 0 ? (
-            <>
-              Önce:{' '}
-              <button type="button" className="text-warn-strong underline" onClick={() => adimaGit(kullaniciEksigi[0]!.adim)}>
-                {kullaniciEksigi[0]!.metin}
-              </button>
-            </>
-          ) : (
-            'Yayın motoru henüz bağlı değil; bu ekran Meta’ya hiçbir şey göndermez.'
-          )}
+      {kullaniciEksigi.length > 0 && (
+        <p className="text-xs text-ink-muted">
+          Önce:{' '}
+          <button type="button" className="text-warn-strong underline" onClick={() => adimaGit(kullaniciEksigi[0]!.adim)}>
+            {kullaniciEksigi[0]!.metin}
+          </button>
         </p>
-        <Dugme disabled>Yayına al</Dugme>
-      </div>
+      )}
+      <YayinPaneli taslak={taslak} yonetici={yonetici} kullaniciEksigi={kullaniciEksigi.length} onDegisti={onDegisti} />
     </div>
   );
 }

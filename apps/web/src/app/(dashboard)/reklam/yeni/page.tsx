@@ -175,6 +175,7 @@ export default async function YeniReklamPage({
         hazirlik={hazirlik}
         ilkTaslak={taslak}
         ilkAtif={atifSonuc.status === 'fulfilled' ? atifSonuc.value : null}
+        yonetici={atifSonuc.status === 'fulfilled' ? atifSonuc.value.secebilir : false}
       />
     </div>
   );
