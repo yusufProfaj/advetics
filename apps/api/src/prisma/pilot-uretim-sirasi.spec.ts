@@ -53,6 +53,8 @@ beforeAll(async () => {
   const oncekiler = tum.filter((d) => d < BU_MIGRATION);
   const sonrakiler = tum.filter((d) => d > BU_MIGRATION);
   expect(oncekiler).toContain('20261008140000_advstrategy_aktarim');
+  // Gerçek yayın anahtarı migration'ı da bu dosyanın sonrakilerinde koşuyor.
+  expect(sonrakiler).toContain('20261009110000_pilot_gercek_yayin');
 
   for (const d of oncekiler) await pg.exec(readFileSync(join(MIGRATIONS, d, 'migration.sql'), 'utf8'));
   await sqlDosyalari(true);
@@ -64,6 +66,7 @@ beforeAll(async () => {
       VALUES ('${WS_KONUT}', '${ORG}', 'Konut', 'konut', ARRAY['HOUSING'], now());
     INSERT INTO monthly_budgets (id, org_id, client_id, month, amount_micros, currency, updated_at)
       VALUES ('${BUTCE}', '${ORG}', '${WS}', '2026-11-01', 1000000, 'TRY', now());
+    INSERT INTO ajans_ayari (org_id, atif_standardi, atif_secim_at) VALUES ('${ORG}', 'tik7', now());
   `);
 
   await pg.exec(readFileSync(join(MIGRATIONS, BU_MIGRATION, 'migration.sql'), 'utf8'));
@@ -135,5 +138,11 @@ describe('pilot migration üretim sırasında', () => {
     await q(`DELETE FROM monthly_budgets WHERE id = '${BUTCE}'`);
     const [b] = await q<{ aylik_butce_id: string | null }>(`SELECT aylik_butce_id FROM pilot_planlari WHERE id = '${p!.id}'`);
     expect(b!.aylik_butce_id).toBeNull();
+  });
+
+  it('KRİTİK: var olan ajans ayarı satırında gerçek yayın anahtarı KAPALI doğar; izsiz açılamaz', async () => {
+    const [a] = await q<{ acik: boolean; atif: string }>(`SELECT pilot_gercek_yayin AS acik, atif_standardi AS atif FROM ajans_ayari WHERE org_id = '${ORG}'`);
+    expect(a).toEqual({ acik: false, atif: 'tik7' });
+    await expect(q(`UPDATE ajans_ayari SET pilot_gercek_yayin = true WHERE org_id = '${ORG}'`)).rejects.toThrow(/ajans_ayari_pilot_gercek_chk/);
   });
 });
