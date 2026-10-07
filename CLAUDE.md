@@ -1112,6 +1112,17 @@ okunup varsayılmadı — canlıda doğrulandı.
   atlayıp kalanları uygular ve yanıt "başarılı" görünürdü.
 - **Google yazma yolu canlıda HİÇ denenmedi.** İstek gövdeleri bilgiden
   yazıldı. İlk gerçek çağrı en küçük bütçeyle yapılmalı.
+- **KEYWORD PLANNER ERİŞİMİ VAR — ölçüldü** (2026-10-08, v25,
+  `google-check --kelime`, Polimek hesabı). Belge Explorer'da yasak diyordu
+  ve seviyemiz bilinmiyordu; `generateKeywordIdeas` 200 döndü. Üç tuzak:
+  (1) `pageSize` gönderilmeden iki tohum **2.660 fikir** getirdi, tek
+  yanıtta: kesme çağıranda, toplam söylenerek. (2) **Yakın varyantlar
+  AYNI metriği taşıyor**: "türk kahve makinesi" ve "turk kahve makinesi"
+  ikisi de 74.000 arama, aynı teklif aralığı. İki satır toplanırsa hacim
+  İKİYE KATLANIR, hata vermeden. (3) Hacim YUVARLANMIŞ kova değeri
+  (49.500, 33.100, 90.500), kesin sayı değil; ekranda "yaklaşık". Teklif
+  alanları düşük hacimde boş gelebiliyor ("mini french press", 30 arama).
+  Harcaması olmayan hesapta hacmin daha kaba gelip gelmediği ÖLÇÜLMEDİ.
 
 ### Test
 

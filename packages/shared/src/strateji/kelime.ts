@@ -51,9 +51,18 @@ export interface KelimeSatiri {
   rekabet: 'LOW' | 'MEDIUM' | 'HIGH' | null;
   teklifAltMicros: string | null;
   teklifUstMicros: string | null;
+  /**
+   * Google'ın AYNI metrikle döndürdüğü yakın varyantlar ("türk kahve
+   * makinesi" / "turk kahve makinesi", ölçüldü 2026-10-08). Ayrı satır
+   * olsalardı hacim toplamı ikiye katlanırdı; tek satırda tutuluyorlar.
+   */
+  varyantlar: string[];
   /** Önerilen reklam grubu adı; kullanıcı değiştirebilir. */
   grup: string | null;
-  /** Plana alındı mı (kullanıcı işaretler). */
+  /**
+   * Plana alındı mı. Varsayılan FALSE: fikirler tohumun dışına geniş yayılıyor
+   * (rakip marka terimleri dahil) ve otomatik seçim planı onlarla doldururdu.
+   */
   secili: boolean;
   cekimZamani: string;
 }

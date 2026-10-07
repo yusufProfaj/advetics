@@ -111,12 +111,31 @@ politikasız da başarılı döner). Ajan 4.
 
 | # | Ne | Nasıl | Sonuç neyi açar |
 |---|---|---|---|
-| Ö-1 | Keyword Planner erişim seviyesi | `pnpm --filter @advetics/api google-check -- --account <uuid> --kelime "…"` (salt okunur) | Bileşen 2 (`olculmedi` → `var`/`yok`) |
+| Ö-1 | Keyword Planner erişim seviyesi | `pnpm --filter @advetics/api google-check -- --kelime "…"` (salt okunur) | **ÖLÇÜLDÜ 2026-10-08: ERİŞİM VAR** (bkz. §4.1). Bileşen 2 açık |
 | Ö-2 | Harcaması olmayan hesapta hacim kesin mi kaba mı | Ö-1 çıktısında aynı tohumu iki hesapta karşılaştır | Ekranda "yaklaşık" etiketi gerekip gerekmediği |
 | Ö-3 | `GenerateKeywordForecastMetrics` alanları (v24'te değişti) | Ö-1 olumluysa ayrı sonda | "Gelecek ay ~5.000 tıklama" tahmini (Faz 2) |
 | Ö-4 | Meta `reachestimate` ile ülke bazlı kitle büyüklüğü | Ayrı betik (Faz 2) | Matriste kitle büyüklüğü sütunu |
 
 Sonuçlar `CLAUDE.md` "Canlıda öğrenilen platform gerçekleri"ne tarihli satır olarak.
+
+### 4.1 Ö-1 sonucu ve Ajan 2'ye etkisi (2026-10-08)
+
+Polimek - Türkiye hesabı, v25, tohum "filtre kahve, french press", Türkçe + Türkiye:
+`generateKeywordIdeas` başarılı, **2.660 fikir tek yanıtta**. Ajan 2 için üç zorunlu kural:
+
+1. **Kesme + toplam.** `pageSize` gönderilmiyor; servis sonucu hacme göre sıralayıp ilk N'i
+   (`strateji_kelimeleri`ne) yazar, `toplam`ı `KelimeAramaSonucu`nda döndürür.
+2. **Varyant tekilleştirme.** "türk kahve makinesi" / "turk kahve makinesi" aynı 74.000 hacmi ve
+   aynı teklif aralığını taşıyor: Google yakın varyantları tek metrikte birleştiriyor. Aynı
+   (hacim, rekabet, teklif alt, teklif üst) parmak izini taşıyan ve Türkçe karakterleri
+   sadeleştirilince aynı olan kelimeler TEK satır (ilk görülen ad, diğerleri `varyantlar`).
+   Grup ya da plan toplamı hesaplanırken ikisi toplanırsa hacim ikiye katlanır.
+3. **"Yaklaşık" etiketi.** Hacimler yuvarlanmış kova değerleri (49.500, 33.100, 90.500); ekran
+   "ayda yaklaşık 49.500" der. Teklif alanları boş gelebiliyor (`null` korunuyor).
+
+Ayrıca: fikirler tohumun dışına geniş yayılıyor (marka terimleri: "philips kahve makinesi"
+165.000). Kelimeler varsayılan olarak SEÇİLİ DEĞİL; kullanıcı işaretler. Ö-2 (harcamasız hesapta
+hacmin kabalığı) hâlâ açık.
 
 ## 5. Devir notu (Ajan 1 → Ajan 2, 3, 4)
 

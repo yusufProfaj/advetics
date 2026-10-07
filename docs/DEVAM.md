@@ -30,9 +30,10 @@ DEĞİL AdvCampaign'e taslak. **Ajan 1 BİTTİ (2026-10-08):** sözleşme
 [`advstrategy/MIMARI.md`](advstrategy/MIMARI.md), yeni izinler
 `strategy.read|write|approve` (müşteri hesabı okur + onaylar), salt okunur
 `GoogleProvider.kelimeFikirleri` + `google-check --kelime` ölçüm kipi.
-**Sıradaki:** deploy sonrası Ö-1 ölçümü (sunucuda `pnpm --filter
-@advetics/api google-check -- --kelime "…"`), sonra Ajan 2 (migration +
-servis) ve Ajan 3 (`/strateji` + menü) paralel.
+**Ö-1 ÖLÇÜLDÜ (2026-10-08): Keyword Planner ERİŞİMİ VAR** (2.660 fikir,
+yakın varyantlar aynı metrik, hacim yuvarlanmış; kurallar MIMARI §4.1).
+**Sıradaki:** Ajan 2 (migration + servis) ve Ajan 3 (`/strateji` + menü)
+paralel; arama bileşeni artık kapı arkasında değil.
 
 **ADVCAMPAIGN (2026-10-07, kullanıcı kararı):** eski Reklam Oluştur, AI
 Asistan ve Toplu Oluştur KALDIRILDI (panel + API `ai-assistant` sohbeti ve
