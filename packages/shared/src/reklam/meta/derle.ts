@@ -107,7 +107,7 @@ export interface DerlemeGirdisi {
   urlEtiketleri: string | null;
 }
 
-export type NesneTuru = 'kampanya' | 'reklam_seti' | 'kreatif' | 'reklam';
+export type NesneTuru = 'form' | 'kampanya' | 'reklam_seti' | 'kreatif' | 'reklam';
 
 export interface MetaGovdesi {
   nesne: NesneTuru;
