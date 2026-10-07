@@ -6,7 +6,7 @@ import type { OneriKarti } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { BosHucre, KaynakCipi } from './kaynak-cipi';
-import { ONERI_DURUM_METNI, ONERI_TUR_ETIKETI, okumaHatasi, oneriBasligi, oneriDugmeleri, oneriEylemEtiketi, oneriSirala, para, pilotUcAdresi } from './hesap';
+import { ONERI_DURUM_METNI, ONERI_UYGULAMA_ACIK, ONERI_TUR_ETIKETI, okumaHatasi, oneriBasligi, oneriDugmeleri, oneriEylemEtiketi, oneriSirala, para, pilotUcAdresi } from './hesap';
 
 /**
  * ═══ KARAR BEKLEYEN: ÖNERİ KARTLARI ═══
@@ -114,6 +114,7 @@ export function OneriKartlari({
                 </div>
               )}
             </div>
+            {!ONERI_UYGULAMA_ACIK && k.durum === 'yeni' && <p className="mt-3 text-xs text-ink-muted">Şimdilik yalnız bilgi. Uygulama düğmesi sonraki adımda açılıyor.</p>}
             {durumMetni && <p className={`mt-3 text-sm ${k.durum === 'uygulandi' || k.durum === 'geri_alindi' ? 'text-ok-strong' : 'text-ink-muted'}`}>{durumMetni}</p>}
             {k.platformMesaji && (
               <p role="alert" className="mt-2 text-sm text-danger-strong">

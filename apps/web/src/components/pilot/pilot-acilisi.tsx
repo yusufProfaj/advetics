@@ -7,7 +7,7 @@ import { Uyari } from '@/components/ui/uyari';
 import { BosHucre } from './kaynak-cipi';
 import { KurulumKarti } from './kurulum-karti';
 import { OneriKartlari } from './oneri-kartlari';
-import { ONERI_BOS_METNI, acilisBasligi, bugunKutulari, kurulumPlanlari, okumaHatasi, pilotAdresi, pilotUcAdresi } from './hesap';
+import { ONERI_BOS_METNI, ONERI_UYGULAMA_ACIK, acilisBasligi, bugunKutulari, kurulumPlanlari, okumaHatasi, pilotAdresi, pilotUcAdresi } from './hesap';
 import type { PilotBugun, PilotKurulumYaniti, PilotOneriListesi, PilotPlanListesi } from '@advetics/shared';
 
 /**
@@ -80,7 +80,7 @@ export async function PilotAcilisi({
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
             <h2 className="font-baslik text-2xl font-bold tracking-tight text-ink">{oneriler.ok ? acilisBasligi(bekleyen) : 'Bugün'}</h2>
-            <p className="mt-1 text-sm text-ink-muted">Uygula dediğin an yapılır, geri almak tek dokunuş.</p>
+            <p className="mt-1 text-sm text-ink-muted">{ONERI_UYGULAMA_ACIK ? 'Uygula dediğin an yapılır, geri almak tek dokunuş.' : 'Öneriler şimdilik yalnız bilgi. Hiçbir şey kendiliğinden değişmez.'}</p>
           </div>
           {sonTarama && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-ink-muted/35 px-2 py-px text-[11.5px] text-ink-muted">

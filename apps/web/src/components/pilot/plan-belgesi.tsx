@@ -26,7 +26,7 @@ import {
   isaretliMi,
   kampanyaDagilimi,
   kelimeGruplari,
-  okumaHatasi,
+  yazmaHatasi,
   onayIstegi,
   onayRetMesajlari,
   para,
@@ -57,7 +57,7 @@ import type { PilotEkranEylemi, PilotPlanDetayi } from '@advetics/shared';
  * (Ç-4), kaynak çipleri bağlantı değil, yazma düğmeleri yok.
  */
 
-type Islem = { tur: 'bos' } | { tur: 'suruyor'; eylem: string } | { tur: 'hata'; mesaj: string };
+type Islem = { tur: 'bos' } | { tur: 'suruyor'; eylem: string } | { tur: 'hata'; mesaj: string; retler: string[] };
 
 export function PlanBelgesi({ clientId, detay, eskiPlanNotu }: { clientId: string; detay: PilotPlanDetayi; eskiPlanNotu: string | null }) {
   const router = useRouter();
@@ -86,7 +86,7 @@ export function PlanBelgesi({ clientId, detay, eskiPlanNotu }: { clientId: strin
       if (sonra) sonra(cevap);
       else router.refresh();
     } catch (e) {
-      setIslem({ tur: 'hata', mesaj: okumaHatasi(e) });
+      setIslem({ tur: 'hata', ...yazmaHatasi(e) });
     }
   }
 
@@ -294,8 +294,14 @@ export function PlanBelgesi({ clientId, detay, eskiPlanNotu }: { clientId: strin
       )}
 
       {islem.tur === 'hata' && (
-        <Uyari ton="tehlike" baslik="İşlem yapılamadı.">
-          {islem.mesaj}
+        <Uyari ton="tehlike" baslik={islem.mesaj}>
+          {islem.retler.length > 0 && (
+            <ul className="list-disc space-y-0.5 pl-4">
+              {islem.retler.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          )}
         </Uyari>
       )}
 

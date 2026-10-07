@@ -24,10 +24,12 @@ import {
   donemSecenekleri,
   eskiEkranMi,
   eskiPlanNotu,
+  yazmaHatasi,
   gerekceEksigi,
   kaynakEtiketi,
   kaynakHedefi,
   kelimeGruplari,
+  ONERI_UYGULAMA_ACIK,
   oneriDugmeleri,
   oneriSirala,
   onayIstegi,
@@ -41,6 +43,7 @@ import {
   seritDilimleri,
 } from './hesap';
 import type { PilotPlanDetayi, PilotPlanSatiriOzeti } from '@advetics/shared';
+import { ApiRequestError } from '@/lib/api';
 
 /**
  * ═══ PİLOT EKRANLARI — SAF KARARLAR ÇALIŞTIRILARAK ═══
@@ -268,7 +271,8 @@ describe('onay', () => {
       ],
     };
     expect(onayRetMesajlari(s, 'musteri')).toEqual(['Kontrol ediliyor.']);
-    expect(onayRetMesajlari(s, 'ajans')).toEqual(['Gerekçe zorunlu.', 'İşaretlenmemiş UYARI var.', 'Denetim bayat.']);
+    // GEREKÇE ajansa listede değil, onay kutusunun kendi alanında soruluyor.
+    expect(onayRetMesajlari(s, 'ajans')).toEqual(['İşaretlenmemiş UYARI var.', 'Denetim bayat.']);
     expect(onayRetMesajlari({ tur: 'kabul', kip: 'gercek', ajansNotu: null }, 'ajans')).toEqual([]);
   });
 
@@ -278,6 +282,23 @@ describe('onay', () => {
     expect(ajansKipNotu({ rol: 'ajans', onayKapisi: null, plan: { ...p, yayinKipi: 'test' } })).toContain('test kipinde');
     expect(ajansKipNotu({ rol: 'ajans', onayKapisi: null, plan: { ...p, yayinKipi: 'kapali' } })).toContain('platforma bir şey yazılmadı');
     expect(ajansKipNotu({ rol: 'ajans', onayKapisi: null, plan: { ...p, yayinKipi: 'gercek' } })).toBeNull();
+  });
+});
+
+describe('yazma hatası (409 retleri)', () => {
+  it('KRİTİK: retler olduğu gibi, başlıktan ayrı; tekrar eden ve başlıkla aynı cümle bir kez', () => {
+    const e = new ApiRequestError('Plan müşteriye gönderilemez.', 409, 'CONFLICT', undefined, [
+      { kod: 'UYUM_ENGEL', mesaj: 'Uyum denetçisinde ENGEL var.' },
+      { kod: 'KURULAMAYAN_SATIR', mesaj: '2 satır kurulamıyor ya da plan boş.' },
+      { kod: 'X', mesaj: 'Uyum denetçisinde ENGEL var.' },
+      { kod: 'Y', mesaj: 'Plan müşteriye gönderilemez.' },
+    ]);
+    expect(yazmaHatasi(e)).toEqual({ mesaj: 'Plan müşteriye gönderilemez.', retler: ['Uyum denetçisinde ENGEL var.', '2 satır kurulamıyor ya da plan boş.'] });
+  });
+
+  it('retsiz hata ve ağ hatası ayrı cümle', () => {
+    expect(yazmaHatasi(new ApiRequestError('Bulunamadı', 404, 'NOT_FOUND'))).toEqual({ mesaj: 'Bulunamadı', retler: [] });
+    expect(yazmaHatasi(new TypeError('fetch failed'))).toEqual({ mesaj: 'Sunucuya ulaşılamadı.', retler: [] });
   });
 });
 
@@ -374,11 +395,17 @@ describe('Pilot açılışı', () => {
     expect(s.map((k) => k.id)).toEqual(['c', 'a', 'b']);
   });
 
-  it('KRİTİK: süresi geçmiş kartta "Uygula" yok', () => {
-    expect(oneriDugmeleri(kart('a', null), '2026-10-08T00:00:00.000Z')).toEqual(['uygula', 'gec']);
-    expect(oneriDugmeleri(kart('a', null), '2026-10-08T18:00:00.000Z')).toEqual(['gec']);
-    expect(oneriDugmeleri({ ...kart('a', null), durum: 'uygulandi' }, T)).toEqual(['geri_al']);
-    expect(oneriDugmeleri({ ...kart('a', null), durum: 'sonuc_belirsiz' }, T)).toEqual([]);
+  it('KRİTİK: Tur 1\'de kartlar yalnız okunur: hiçbir düğme yok', () => {
+    expect(ONERI_UYGULAMA_ACIK).toBe(false);
+    expect(oneriDugmeleri(kart('a', null), '2026-10-08T00:00:00.000Z')).toEqual([]);
+    expect(oneriDugmeleri({ ...kart('a', null), durum: 'uygulandi' }, T)).toEqual([]);
+  });
+
+  it('KRİTİK: açılınca süresi geçmiş kartta "Uygula" yok', () => {
+    expect(oneriDugmeleri(kart('a', null), '2026-10-08T00:00:00.000Z', true)).toEqual(['uygula', 'gec']);
+    expect(oneriDugmeleri(kart('a', null), '2026-10-08T18:00:00.000Z', true)).toEqual(['gec']);
+    expect(oneriDugmeleri({ ...kart('a', null), durum: 'uygulandi' }, T, true)).toEqual(['geri_al']);
+    expect(oneriDugmeleri({ ...kart('a', null), durum: 'sonuc_belirsiz' }, T, true)).toEqual([]);
   });
 
   it('bugün kutuları: boş hücre nedenini taşıyor, ay bütçesi hız çubuğunu', () => {

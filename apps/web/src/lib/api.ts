@@ -42,6 +42,13 @@ export interface ApiError {
   message: string;
   requestId?: string;
   errors?: Array<{ field: string; message: string }>;
+  /**
+   * Kapı retleri (Pilot 409: `{ message, retler: [{ kod, mesaj }] }`). Ret
+   * birden çok nedenle olabiliyor ve hepsi bir kerede görünmeli; yalnız
+   * başlığı göstermek kullanıcıyı neden neden tek tek deneyerek bulmaya
+   * gönderirdi.
+   */
+  retler?: Array<{ kod: string; mesaj: string }>;
 }
 
 export class ApiRequestError extends Error {
@@ -50,6 +57,7 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code: string,
     readonly fieldErrors?: Array<{ field: string; message: string }>,
+    readonly retler?: Array<{ kod: string; mesaj: string }>,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -94,6 +102,7 @@ async function handle<T>(res: Response): Promise<T> {
     res.status,
     body?.code ?? 'UNKNOWN',
     body?.errors,
+    Array.isArray(body?.retler) ? body.retler.filter((r) => typeof r?.mesaj === 'string') : undefined,
   );
 }
 

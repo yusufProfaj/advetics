@@ -58,6 +58,18 @@ export function okumaHatasi(err: unknown): string {
   return err instanceof ApiRequestError ? err.message : 'Sunucuya ulaşılamadı.';
 }
 
+/**
+ * Yazma hatası: başlık + kapının retleri OLDUĞU GİBİ. Sunucu 409'da bütün
+ * retleri bir kerede yolluyor (`{ message, retler }`); yalnız başlığı
+ * göstermek ("Plan müşteriye gönderilemez.") NEDENİ saklardı. Aynı cümle iki
+ * retten gelirse bir kez yazılır.
+ */
+export function yazmaHatasi(err: unknown): { mesaj: string; retler: string[] } {
+  if (!(err instanceof ApiRequestError)) return { mesaj: 'Sunucuya ulaşılamadı.', retler: [] };
+  const retler = [...new Set((err.retler ?? []).map((r) => r.mesaj.trim()).filter((m) => m.length > 0 && m !== err.message))];
+  return { mesaj: err.message, retler };
+}
+
 // ─── Uçlar ve adresler ─────────────────────────────────────────────────────
 
 /*
@@ -503,7 +515,10 @@ function altCubukMetni(
  */
 export function onayRetMesajlari(s: OnayKapisiSonucu | null, rol: 'musteri' | 'ajans'): string[] {
   if (!s || s.tur !== 'ret') return [];
-  const m = s.retler.map((r) => (rol === 'musteri' ? r.musteriMesaji : r.ajansMesaji)).filter((x) => x.trim().length > 0);
+  // GEREKÇE retini ajansa PANEL kendi alanında soruyor ("müşteri adına
+  // onayla" kutusu); listede de görünürse ajans gerekçe yazmadan "onaylanamaz"
+  // okur ve kutuyu açmaz.
+  const m = s.retler.filter((r) => !(rol === 'ajans' && r.kod === 'GEREKCE')).map((r) => (rol === 'musteri' ? r.musteriMesaji : r.ajansMesaji)).filter((x) => x.trim().length > 0);
   return [...new Set(m)];
 }
 
@@ -645,8 +660,21 @@ export function oneriSirala(kartlar: readonly OneriKarti[]): OneriKarti[] {
   });
 }
 
+/**
+ * ÖNERİ UYGULAMA KAPALI (Tur 1). Uygula/geri al/geç uçları Tur 2'de
+ * yazılıyor; düğmeyi şimdi göstermek, basınca 404 alan ve kullanıcıya
+ * "uygulandı mı?" sorusunu bırakan bir seçenek demek (çalışmayan seçenek
+ * gösterilmez kuralı). Kartlar yalnız okunur; açılınca TEK satır değişir.
+ */
+export const ONERI_UYGULAMA_ACIK = false as boolean;
+
 /** Kartın düğmeleri durumdan. Bayat kartta "Uygula" yok: eski ölçüyle platforma yazmak güncel bir kararı ezer. */
-export function oneriDugmeleri(k: Pick<OneriKarti, 'durum' | 'gecerlilikSonu'>, simdi: string): Array<'uygula' | 'gec' | 'geri_al'> {
+export function oneriDugmeleri(
+  k: Pick<OneriKarti, 'durum' | 'gecerlilikSonu'>,
+  simdi: string,
+  acik: boolean = ONERI_UYGULAMA_ACIK,
+): Array<'uygula' | 'gec' | 'geri_al'> {
+  if (!acik) return [];
   if (k.durum === 'yeni') return simdi >= k.gecerlilikSonu ? ['gec'] : ['uygula', 'gec'];
   if (k.durum === 'uygulandi') return ['geri_al'];
   return [];

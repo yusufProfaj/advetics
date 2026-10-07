@@ -60,7 +60,9 @@ describe('sessiz hata yok', () => {
   });
 
   it('KRİTİK: her yazma hatası ekrana çıkıyor (okumaHatasi ile state)', () => {
-    expect(kod('plan-belgesi.tsx')).toContain("setIslem({ tur: 'hata', mesaj: okumaHatasi(e) })");
+    expect(kod('plan-belgesi.tsx')).toContain("setIslem({ tur: 'hata', ...yazmaHatasi(e) })");
+    // Retler başlığın altında liste olarak çiziliyor.
+    expect(kod('plan-belgesi.tsx')).toContain('islem.retler.map(');
     expect(kod('degistir-kutusu.tsx')).toContain("setHal({ tur: 'hata', mesaj: okumaHatasi(e) })");
     expect(kod('plan-hazirla.tsx')).toContain("setHal({ tur: 'hata', mesaj: okumaHatasi(e) })");
     expect(kod('oneri-kartlari.tsx')).toContain('[k.id]: okumaHatasi(e)');
