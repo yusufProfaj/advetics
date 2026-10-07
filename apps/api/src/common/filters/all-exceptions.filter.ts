@@ -20,6 +20,27 @@ interface ErrorBody {
   message: string;
   requestId: string;
   errors?: unknown;
+  retler?: Array<{ kod: string; mesaj: string }>;
+}
+
+/**
+ * KAPI RETLERİ (`retler`) — Pilot uçlarının 409 gövdesi ("plan neden
+ * onaylanamaz", "neden müşteriye gönderilemez"). Bu alan yokken panel
+ * yalnız başlığı görüyordu ve sebep sunucuda kalıyordu: "Beklenmeyen bir
+ * hata" sınıfının sessiz hâli.
+ *
+ * GENEL BİR "EK ALANLAR" DELİĞİ DEĞİL: yalnız bu ad, yalnız `{kod, mesaj}`
+ * dizgeleri ve en çok 20 öğe geçer. Gövdeyi olduğu gibi geçirmek, bir
+ * gün istisnaya konan iç bir nesnenin (sorgu, satır, token) istemciye
+ * akması demekti — Prisma dalının sadeleştirme gerekçesiyle aynı.
+ */
+export function retleriAyikla(v: unknown): Array<{ kod: string; mesaj: string }> | null {
+  if (!Array.isArray(v)) return null;
+  const r = v
+    .filter((x): x is { kod: string; mesaj: string } => !!x && typeof x === 'object' && typeof (x as { kod?: unknown }).kod === 'string' && typeof (x as { mesaj?: unknown }).mesaj === 'string')
+    .slice(0, 20)
+    .map((x) => ({ kod: x.kod.slice(0, 64), mesaj: x.mesaj.slice(0, 500) }));
+  return r.length > 0 ? r : null;
 }
 
 /**
@@ -74,6 +95,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           message: typeof r.message === 'string' ? r.message : exception.message,
           requestId,
           ...(r.errors ? { errors: r.errors } : {}),
+          ...(retleriAyikla(r.retler) ? { retler: retleriAyikla(r.retler)! } : {}),
         };
       }
 

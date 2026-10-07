@@ -5,6 +5,8 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { MetinUretici } from '../../yapay-zeka/gemini';
 import type { PilotKurulumKuyrugu } from './kurulum-kuyrugu';
 import { PilotPlanService, yapilabilirEylemler } from './plan.service';
+import type { ArgumentsHost } from '@nestjs/common';
+import { AllExceptionsFilter } from '../../common/filters/all-exceptions.filter';
 
 /**
  * ═══ PİLOT PLAN SERVİSİ — gerçek şema (PGlite), sahte Gemini ═══
@@ -204,9 +206,14 @@ describe('gönder → onayla', () => {
       await svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: m.plan.icerikOzeti }, SIMDI);
       throw new Error('onay geçmemeliydi');
     } catch (e) {
-      const yanit = JSON.stringify((e as { getResponse?: () => unknown }).getResponse?.());
-      expect(yanit).toContain('UYUM_ENGEL');
-      expect(yanit).not.toMatch(/GNL-18|sektör/i);
+      // Gerçek 409'u filtreden geçir: panele giden gövdede `retler` olmalı.
+      const json = vi.fn();
+      const host = { switchToHttp: () => ({ getResponse: () => ({ status: () => ({ json }) }), getRequest: () => ({ method: 'POST', originalUrl: '/pilot', requestId: 'r' }) }) } as unknown as ArgumentsHost;
+      new AllExceptionsFilter().catch(e, host);
+      const govde = json.mock.calls[0]![0] as { statusCode: number; retler?: Array<{ kod: string; mesaj: string }> };
+      expect(govde.statusCode).toBe(409);
+      expect(govde.retler?.map((r) => r.kod)).toContain('UYUM_ENGEL');
+      expect(JSON.stringify(govde)).not.toMatch(/GNL-18|sektör/i);
     }
   });
 

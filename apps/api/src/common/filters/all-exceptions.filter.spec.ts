@@ -1,4 +1,4 @@
-import { BadRequestException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpStatus } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { PlatformApiError } from '../../modules/connections/provider.types';
@@ -177,5 +177,24 @@ describe('AllExceptionsFilter — yapay zekâ servisi hataları', () => {
     const b = govde(new YapayZekaHatasi(null, 'Connection error.'));
     expect(b.code).toBe('AI_ERROR');
     expect(b.message).toContain('Connection error.');
+  });
+});
+
+describe('AllExceptionsFilter — kapı retleri (Pilot 409)', () => {
+  it('KRİTİK: `retler` panele ulaşıyor, yalnız {kod, mesaj} olarak', () => {
+    const b = govde(
+      new ConflictException({
+        message: 'Plan onaylanamaz.',
+        retler: [{ kod: 'UYUM_ENGEL', mesaj: 'Uyum denetçisinde ENGEL var.', ic: 'SIZMAMALI' }, { kod: 1, mesaj: 'tipi bozuk' }],
+      }),
+    ) as unknown as { statusCode: number; message: string; retler?: unknown };
+    expect(b.statusCode).toBe(409);
+    expect(b.message).toBe('Plan onaylanamaz.');
+    expect(b.retler).toEqual([{ kod: 'UYUM_ENGEL', mesaj: 'Uyum denetçisinde ENGEL var.' }]);
+  });
+
+  it('genel ek alan deliği YOK: başka alanlar ve retsiz gövdeler değişmez', () => {
+    const b = govde(new ConflictException({ message: 'x', gizli: { token: 'abc' }, retler: 'dizi değil' })) as unknown as Record<string, unknown>;
+    expect(Object.keys(b).sort()).toEqual(['code', 'message', 'requestId', 'statusCode']);
   });
 });
