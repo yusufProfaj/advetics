@@ -95,7 +95,7 @@ export function derleForm(s: FormSablonu, p: FormProfili, sayfaPlatformId: strin
   if (!p.aydinlatmaAdresi || !/^https:\/\//.test(p.aydinlatmaAdresi)) {
     retler.push({ kod: 'FRM-01', mesaj: 'Aydınlatma sayfası tanımlı değil.' });
   } else if (/advetics\./i.test(p.aydinlatmaAdresi)) {
-    retler.push({ kod: 'FRM-01', mesaj: "Aydınlatma sayfası müşterinin kendi sayfası olmalı, Advetics'inki değil." });
+    retler.push({ kod: 'FRM-01', mesaj: "Aydınlatma sayfası işletmenin kendi sayfası olmalı, Advetics'inki değil." });
   }
   const baglanti = p.aydinlatmaBaglantiMetni.trim();
   if (!baglanti || baglanti.length > FORM_BAGLANTI_METNI_SINIRI) {

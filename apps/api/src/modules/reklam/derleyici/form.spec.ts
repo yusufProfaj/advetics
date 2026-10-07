@@ -38,7 +38,7 @@ const retler = (s: Partial<FormSablonu> = {}, p: Partial<FormProfili> = {}) => {
 };
 
 describe('form derleyicisi', () => {
-  it('Türkçe, aydınlatma müşteriden, hedef dışına kapalı, sayfanın ucunda', () => {
+  it('Türkçe, aydınlatma işletmeden, hedef dışına kapalı, sayfanın ucunda', () => {
     const g = govde();
     expect(g.uc).toBe('111/leadgen_forms');
     expect(g.alanlar).toMatchObject({
