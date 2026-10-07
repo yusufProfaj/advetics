@@ -365,12 +365,24 @@ export const planDegisikligiSchema = z.discriminatedUnion('tur', [
 ]);
 export type PlanDegisikligi = z.infer<typeof planDegisikligiSchema>;
 
+/**
+ * İKİ BİÇİM (Ajan 2 eki, 2026-10-07): elle düzenleme `degisiklikler`i
+ * taşır; "değiştir" kutusu YALNIZ `cumle`yi taşır ve sunucu cümleyi yapay
+ * zekâyla `PlanDegisikligi[]`ye çevirip sayı doğrulamasından geçirir.
+ * Panelin cümleyi kendisi çevirmesi, doğrulamanın panelde kalması demekti.
+ * İkisi birden gelirse cümle değişiklikleri DOĞRULAR (sayılar cümlede
+ * geçmeli); hiçbiri yoksa ret.
+ */
 export const planDegistirSchema = z
   .object({
     surum: z.number().int().positive(),
     /** Elle düzenlemede yok; "değiştir" kutusunda kullanıcının cümlesi. */
     cumle: z.string().trim().min(1).max(500).optional(),
-    degisiklikler: z.array(planDegisikligiSchema).min(1).max(20),
+    degisiklikler: z.array(planDegisikligiSchema).min(1).max(20).optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => v.cumle !== undefined || (v.degisiklikler?.length ?? 0) > 0, {
+    message: 'Bir cümle ya da en az bir değişiklik gerekli',
+    path: ['degisiklikler'],
+  });
 export type PlanDegistirGirdisi = z.infer<typeof planDegistirSchema>;

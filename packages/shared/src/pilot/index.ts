@@ -12,3 +12,4 @@ export * from './onay';
 export * from './kurulum';
 export * from './oneri';
 export * from './uclar';
+export * from './govdeler';
