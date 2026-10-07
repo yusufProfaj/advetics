@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { resolvePermissions, type TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { StratejiService, yapilabilirEylemler, onayRolu } from './strateji.service';
+import { KUYRUK_HATASI, StratejiService, yapilabilirEylemler, onayRolu } from './strateji.service';
 import type { StratejiKelimeKuyrugu } from './kelime-kuyrugu';
 import { oneriHesapla, oneriPenceresi, kaynakBelirle } from './dagilim-oneri';
 
@@ -140,6 +140,30 @@ describe('plan açma', () => {
         [IDS.org, IDS.client],
       ),
     ).rejects.toThrow(/strateji_planlari_onay_izi_chk/);
+  });
+
+  it('KRİTİK: BIGINT’i aşan dağılım ve matris tutarı anlamlı 400', async () => {
+    const d = await planAc();
+    await expect(
+      svc.dagilimKaydet(AJANS, d.plan.id, { surum: 1, satirlar: [{ platform: 'meta', katman: 'soguk', tutar: '10.000.000.000.000' }] }),
+    ).rejects.toThrow(/Meta · Yeni kitle: tutar çok büyük/);
+    await expect(
+      svc.matrisKaydet(AJANS, d.plan.id, {
+        surum: 1,
+        satirlar: [{ platform: 'google', katman: 'soguk', niyet: 'SITE', kitleSablonuId: null, kelimeGrubu: null, varlikIdleri: [], tutar: '10.000.000.000.000' }],
+      }),
+    ).rejects.toThrow(/Matris 1. satır: tutar çok büyük/);
+  });
+
+  it('KRİTİK: çocuk satır başka workspace’in client_id’siyle plana bağlanamaz (kompozit FK)', async () => {
+    const d = await planAc();
+    await expect(
+      h.q(
+        `INSERT INTO strateji_dagilimlari (plan_id, org_id, client_id, platform, katman, tutar_micros, kaynak)
+         VALUES ($1, $2, $3, 'meta', 'soguk', 1, 'elle')`,
+        [d.plan.id, IDS.org, OTEKI],
+      ),
+    ).rejects.toThrow(/strateji_dagilimlari_plan_fkey/);
   });
 
   it('erişimi olmayan workspace reddedilir', async () => {
@@ -413,7 +437,9 @@ describe('kelimeler', () => {
     await googleHesabiEkle();
     const d = await planAc();
     const a = await svc.kelimeAra(AJANS, d.plan.id, { tohumlar: ['filtre kahve', 'filtre kahve', 'french press'] });
-    expect(kuyrukEkle).toHaveBeenCalledWith({ planId: d.plan.id, tohumlar: ['filtre kahve', 'french press'] });
+    const [p] = await h.q<{ kelime_arama_id: string }>('SELECT kelime_arama_id::text FROM strateji_planlari');
+    // İşe verilen kimlik plana yazılan kimlik: işçi yalnız bu eşleşirse yazar.
+    expect(kuyrukEkle).toHaveBeenCalledWith({ planId: d.plan.id, aramaId: p!.kelime_arama_id, tohumlar: ['filtre kahve', 'french press'] });
     expect(a.kelimeler).toMatchObject({ aramaSuruyor: true, erisim: 'var', sonHata: null });
     // Arama sürüm ARTIRMAZ (seçilmemiş fikir planın içeriği değil).
     expect(a.plan.surum).toBe(1);
@@ -427,7 +453,8 @@ describe('kelimeler', () => {
     await expect(svc.kelimeAra(AJANS, d.plan.id, { tohumlar: ['kahve'] })).rejects.toMatchObject({ status: 503 });
     const k = (await svc.detay(AJANS, d.plan.id)).kelimeler;
     expect(k.aramaSuruyor).toBe(false);
-    expect(k.sonHata).toMatch(/REDIS_URL yok/);
+    // Ham Redis metni plana (müşterinin ekranına) gitmez.
+    expect(k.sonHata).toBe(KUYRUK_HATASI);
   });
 
   it('takılmış arama sonsuz "aranıyor" değil, nedeniyle hata', async () => {

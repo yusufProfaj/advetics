@@ -3812,10 +3812,12 @@ model StratejiPlani {
   kelimeAramaZamani DateTime? @map("kelime_arama_zamani") @db.Timestamptz(6)
   kelimeSonHata     String?   @map("kelime_son_hata") @db.VarChar(2000)
   kelimeToplam      Int?      @map("kelime_toplam")
+  kelimeAramaId     String?   @map("kelime_arama_id") @db.Uuid
   createdBy         String?   @map("created_by") @db.Uuid
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
+  @@unique([id, clientId], map: "strateji_planlari_id_client_key")
   @@index([clientId, donem(sort: Desc)], map: "strateji_planlari_client_idx")
   @@index([orgId], map: "strateji_planlari_org_id_idx")
   @@map("strateji_planlari")

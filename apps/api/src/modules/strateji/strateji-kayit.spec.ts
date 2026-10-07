@@ -104,6 +104,18 @@ describe('Nest modül kaydı', () => {
     expect(govde).toMatch(/concurrency:\s*1\b/);
     expect(WORKER).toMatch(/kelimeWorker\.close\(\)/);
   });
+
+  it('KRİTİK: düşen iş plana HAM hata metni yazmaz ve yalnız KENDİ aramasını kapatır', () => {
+    const i = WORKER.indexOf("kelimeWorker.on('failed'");
+    const j = WORKER.indexOf('});', i);
+    if (i < 0 || j < 0) throw new Error('kelime işçisinin failed dinleyicisi bulunamadı');
+    const govde = WORKER.slice(i, j);
+    const guncelleme = /UPDATE strateji_planlari[^`]*`/.exec(govde)?.[0];
+    if (!guncelleme) throw new Error('failed dinleyicisinde plan UPDATE yok');
+    expect(guncelleme).toMatch(/kelime_son_hata = \$\{BEKLENMEYEN_HATA\}/);
+    expect(guncelleme).not.toMatch(/err\.message/);
+    expect(guncelleme).toMatch(/kelime_arama_id = \$\{job\.data\.aramaId\}/);
+  });
 });
 
 describe('migration ↔ sözleşme', () => {

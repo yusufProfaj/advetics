@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { niyetKoduSchema, type NiyetKodu } from '../reklam/meta/niyetler';
-import { huniKatmaniSchema, stratejiPlatformuSchema, surumSchema, type HuniKatmani, type StratejiPlatformu } from './plan';
+import { huniKatmaniSchema, stratejiPlatformuSchema, surumSchema, tutarGirdisiSchema, type HuniKatmani, type StratejiPlatformu } from './plan';
 
 /**
  * ═══ BİLEŞEN 3 — KİTLE × KREATİF MATRİSİ ═══
@@ -31,7 +31,7 @@ export const matrisSatiriGirdiSchema = z
     /** Google arama satırında: kelime grubunun adı (`strateji_kelimeleri.grup`). */
     kelimeGrubu: z.string().trim().max(80).nullable(),
     varlikIdleri: z.array(z.string().uuid()).max(MATRIS_VARLIK_SINIRI),
-    tutar: z.string().trim().min(1),
+    tutar: tutarGirdisiSchema,
     not: z.string().trim().max(500).optional(),
   })
   .refine((v) => v.platform === 'google' || v.kitleSablonuId !== null, {

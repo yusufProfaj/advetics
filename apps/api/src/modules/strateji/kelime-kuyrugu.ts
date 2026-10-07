@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
@@ -18,25 +17,25 @@ import { CONFIG, type AppConfig } from '../../config/configuration';
  * tekrarı, kotaya takılmış bir aramayı kullanıcı ekrana bakarken beş kez
  * daha denerdi.
  *
- * TAMAMLANAN İŞ SAKLANMIYOR (`removeOnComplete: true`). Kimlik istekten
- * türüyor; saklansaydı aynı tohumlarla İKİNCİ arama aynı kimliğe çarpıp
- * sessizce yutulurdu ve plan "kuyrukta" kalırdı (CLAUDE.md "mükerrer engeli
- * kalıcı kilit üretebiliyor").
+ * KİMLİK ARAMA BAŞINA (`aramaId`), tohumlardan DEĞİL. MIMARI § 3 tohum
+ * özeti öneriyordu; aynı tohumlarla ikinci arama aynı kimliğe çarpıp
+ * sessizce yutulurdu (CLAUDE.md "mükerrer engeli kalıcı kilit
+ * üretebiliyor"). `aramaId` plan satırına da yazılıyor ve işçi yalnız kendi
+ * kimliği hâlâ oradaysa sonuç yazıyor: bayat iş yeni aramayı ezemez.
+ * Tamamlanan iş yine de saklanmıyor (`removeOnComplete: true`).
  */
 export const STRATEJI_KELIME_KUYRUGU = 'strateji-kelime';
 
 export interface KelimeAramaIsi {
   planId: string;
+  /** Plan satırındaki `kelime_arama_id`; işçi yalnız bu eşleşirse yazar. */
+  aramaId: string;
   tohumlar: string[];
 }
 
-/** Ayırıcı `__` (BullMQ `:`'yı reddediyor). Aynı plan + aynı tohumlar = aynı kimlik. */
-export function kelimeIsKimligi(planId: string, tohumlar: readonly string[]): string {
-  const ozet = createHash('sha256')
-    .update([...tohumlar].map((t) => t.toLocaleLowerCase('tr')).sort().join('\n'))
-    .digest('hex')
-    .slice(0, 16);
-  return `strateji_kelime__${planId}__${ozet}`;
+/** Ayırıcı `__` (BullMQ `:`'yı reddediyor). */
+export function kelimeIsKimligi(planId: string, aramaId: string): string {
+  return `strateji_kelime__${planId}__${aramaId}`;
 }
 
 @Injectable()
@@ -61,7 +60,7 @@ export class StratejiKelimeKuyrugu implements OnModuleDestroy {
   /** Kuyruk yoksa FIRLATIR: kuyruğa girmeyen arama sonsuza kadar "kuyrukta" görünürdü. */
   async ekle(is: KelimeAramaIsi): Promise<void> {
     if (!this.kuyruk) throw new Error('Kelime kuyruğu kurulu değil (REDIS_URL yok)');
-    await this.kuyruk.add('kelime', is, { jobId: kelimeIsKimligi(is.planId, is.tohumlar) });
+    await this.kuyruk.add('kelime', is, { jobId: kelimeIsKimligi(is.planId, is.aramaId) });
   }
 
   async onModuleDestroy(): Promise<void> {

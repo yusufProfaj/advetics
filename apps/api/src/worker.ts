@@ -15,7 +15,7 @@ import { CryptoService } from './crypto/crypto.service';
 import { REKLAM_YAYIN_KUYRUGU, type ReklamIsi } from './modules/reklam/reklam-kuyrugu';
 import { redisKilidi, reklamIsiniIsle } from './modules/reklam/yayin-isleyici';
 import { STRATEJI_KELIME_KUYRUGU, type KelimeAramaIsi } from './modules/strateji/kelime-kuyrugu';
-import { kelimeIsiniIsle } from './modules/strateji/kelime-isleyici';
+import { BEKLENMEYEN_HATA, kelimeIsiniIsle } from './modules/strateji/kelime-isleyici';
 import { ProviderRegistry } from './modules/connections/provider.registry';
 import { TokenVaultService } from './modules/connections/token-vault.service';
 import type { GoogleProvider } from './modules/connections/providers/google.provider';
@@ -282,10 +282,16 @@ async function bootstrap(): Promise<void> {
     async (job) => {
       const sonuc = await kelimeIsiniIsle(
         {
-          tx: (fn) => fn(admin as never),
+          // GERÇEK TRANSACTION. İşleyicinin yazım adımı (FOR UPDATE → DELETE →
+          // INSERT → plan UPDATE) tek transaction varsayıyor; çalıştırıcı
+          // `fn(admin)` olsaydı her deyim ayrı commit olur, kilit deyim biter
+          // bitmez bırakılır ve INSERT düşerse seçilmemiş fikirler silinmiş
+          // kalırdı. Platform çağrısı iki çalıştırıcı çağrısının ARASINDA.
+          tx: (fn) => admin.$transaction((t) => fn(t as never)),
           tokenAl: (connectionId) => kasa.getAccessToken(connectionId, googleSaglayici),
           fikirler: (token, musteri, girdi, yonetici) =>
             (googleSaglayici as unknown as GoogleProvider).kelimeFikirleri(token, musteri, girdi, yonetici),
+          log: (m) => logger.error(m),
         },
         job.data,
       );
@@ -296,8 +302,11 @@ async function bootstrap(): Promise<void> {
   );
   kelimeWorker.on('failed', (job, err) => {
     if (!job) return;
+    // Ham hata metni plana YAZILMAZ (müşteri de görüyor); sabit cümle plana,
+    // ayrıntı log'a. Yalnız bu işin araması hâlâ aktifse kapatılır: daha
+    // yeni bir aramanın durumunu bayat bir işin düşüşü ezmesin.
     void admin
-      .$executeRaw`UPDATE strateji_planlari SET kelime_arama = 'hata', kelime_son_hata = ${`Arama durdu: ${err.message}`.slice(0, 2000)} WHERE id = ${job.data.planId}::uuid AND kelime_arama IN ('kuyrukta', 'calisiyor')`
+      .$executeRaw`UPDATE strateji_planlari SET kelime_arama = 'hata', kelime_son_hata = ${BEKLENMEYEN_HATA} WHERE id = ${job.data.planId}::uuid AND kelime_arama_id = ${job.data.aramaId}::uuid AND kelime_arama IN ('kuyrukta', 'calisiyor')`
       .catch((e: unknown) => logger.error(`Plan ${job.data.planId} kelime durumu kapatılamadı: ${e instanceof Error ? e.message : String(e)}`));
     logger.error(`strateji-kelime ${job.id} düştü: ${err.message}`);
   });

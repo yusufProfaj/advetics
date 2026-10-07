@@ -102,7 +102,12 @@ politikasız da başarılı döner). Ajan 4.
 
 ## 3. Kuyruk ve kota
 
-- İş türü `strateji_kelime`; kimlik `strateji_kelime__<planId>__<istekHash>` (ayırıcı `__`).
+- İş türü `strateji_kelime`; kimlik `strateji_kelime__<planId>__<aramaId>` (ayırıcı `__`).
+  `aramaId` her istekte yeni bir UUID ve plan satırında (`kelime_arama_id`) duruyor; işçi plandaki
+  kimlik kendisininki değilse HİÇBİR ŞEY yazmıyor. İlk tarif tohum özetiydi; Ajan 4 bayat bir
+  işin yeni aramanın sonucunu ezebildiğini gösterdi (2026-10-08).
+- Yazım tek gerçek transaction'da: `FOR UPDATE` → durum + arama kimliği kontrolü → DELETE →
+  INSERT → plan UPDATE. `onaya_gonder` aynı satırı kilitliyor, yani onaydaki plana sonuç yazılamaz.
 - Google kelime çağrıları kendi kota katmanında; yapı ve metrik işlerinin bütçesini yiyemez
   ("bağımlı iş, bağlı olduğu işin kotasını yiyebilir" dersi).
 - Ön koşul kontrolü çağrıdan ÖNCE: Google hesabı atanmamışsa sıfır çağrıyla ret.

@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -141,8 +143,13 @@ function planSecimi(kosul: Prisma.Sql, kilit: boolean): Prisma.Sql {
      ${kilit ? Prisma.sql`FOR UPDATE OF p` : Prisma.empty}`;
 }
 
+/** Kuyruğa alınamayan aramanın plana yazılan cümlesi (ayrıntı log'da). */
+export const KUYRUK_HATASI = 'Arama başlatılamadı. Biraz sonra yeniden deneyin.';
+
 @Injectable()
 export class StratejiService {
+  private readonly logger = new Logger('Strateji');
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly kuyruk: StratejiKelimeKuyrugu,
@@ -191,6 +198,7 @@ export class StratejiService {
         }
         const tutar = tutarAyristir(girdi.toplamButce, paraBirimi);
         if (tutar.tur === 'hata') throw new BadRequestException(`Toplam bütçe: ${tutar.mesaj}`);
+        bigintSiniri(tutar.micros, 'Toplam bütçe');
 
         const [acik] = await tx.$queryRaw<Array<{ durum: string }>>(Prisma.sql`
           SELECT durum FROM strateji_planlari
@@ -340,6 +348,9 @@ export class StratejiService {
    */
   async kelimeAra(ctx: TenantContext, id: string, girdi: KelimeAraGirdisi): Promise<PlanDetayi> {
     const tohumlar = [...new Set(girdi.tohumlar.map((t) => t.trim()).filter(Boolean))];
+    // Her arama yeni kimlik: işçi yalnız kimliği plandakiyle aynıysa yazar
+    // (bayat iş yeni aramayı ezemez, kelime-isleyici.ts).
+    const aramaId = randomUUID();
     await this.prisma.withTenant(ctx, async (tx) => {
       const p = await planOku(tx, ctx, id, true);
       if (!duzenlenebilirMi(p.durum)) throw new ConflictException(duzenlenemezMesaji(p.durum));
@@ -352,19 +363,21 @@ export class StratejiService {
       }
       await tx.$executeRaw(Prisma.sql`
         UPDATE strateji_planlari
-           SET kelime_arama = 'kuyrukta', kelime_arama_zamani = now(), kelime_son_hata = NULL
+           SET kelime_arama = 'kuyrukta', kelime_arama_zamani = now(), kelime_son_hata = NULL,
+               kelime_arama_id = ${aramaId}::uuid
          WHERE id = ${p.id}::uuid`);
     });
 
     try {
-      await this.kuyruk.ekle({ planId: id, tohumlar });
+      await this.kuyruk.ekle({ planId: id, aramaId, tohumlar });
     } catch (e) {
       // Kuyruğa girmeyen arama "kuyrukta" kalmamalı: plan nedeniyle kapanır.
-      const sebep = `Arama kuyruğa alınamadı: ${e instanceof Error ? e.message : String(e)}`;
+      // Ham hata (Redis metni) plana YAZILMAZ, müşteri de görüyor; log'a.
+      this.logger.error(`Kelime araması kuyruğa alınamadı (plan ${id}): ${e instanceof Error ? e.message : String(e)}`);
       await this.prisma.withTenant(ctx, (tx) =>
         tx.$executeRaw(Prisma.sql`
-          UPDATE strateji_planlari SET kelime_arama = 'hata', kelime_son_hata = ${sebep.slice(0, 2000)}
-           WHERE id = ${id}::uuid`),
+          UPDATE strateji_planlari SET kelime_arama = 'hata', kelime_son_hata = ${KUYRUK_HATASI}
+           WHERE id = ${id}::uuid AND kelime_arama_id = ${aramaId}::uuid`),
       );
       throw new ServiceUnavailableException('Kelime araması şu an başlatılamadı. Biraz sonra yeniden deneyin.');
     }
@@ -520,7 +533,20 @@ function tutarCoz(girdi: string, paraBirimi: string, alan: string): bigint {
   if (/^0+(,0+)?$/.test(girdi.trim())) return 0n;
   const t = tutarAyristir(girdi, paraBirimi);
   if (t.tur === 'hata') throw new BadRequestException(`${alan}: ${t.mesaj}`);
+  bigintSiniri(t.micros, alan);
   return t.micros;
+}
+
+/** Postgres BIGINT üst sınırı (2^63 - 1). */
+const BIGINT_EN_BUYUK = 9_223_372_036_854_775_807n;
+
+/**
+ * `tutarAyristir` üst sınır koymuyor; BIGINT'i aşan tutar INSERT'te 22003
+ * ("out of range") ile düşüyor ve kullanıcı anlamsız bir veritabanı hatası
+ * görüyordu. Sınır micros cinsinden: ~9,2 trilyon birim.
+ */
+function bigintSiniri(micros: bigint, alan: string): void {
+  if (micros > BIGINT_EN_BUYUK) throw new BadRequestException(`${alan}: tutar çok büyük.`);
 }
 
 function paraYaz(micros: bigint, paraBirimi: string): string {

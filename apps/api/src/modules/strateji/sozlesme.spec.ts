@@ -9,6 +9,7 @@ import {
   matrisButceDenetimi,
   matrisSatiriGirdiSchema,
   planEylemSchema,
+  planOlusturSchema,
   PLAN_DURUMLARI,
   PLAN_EYLEMLERI,
   PLAN_GECISLERI,
@@ -113,6 +114,11 @@ describe('şemalar', () => {
     expect(dagilimKaydetSchema.safeParse({ satirlar: [] }).success).toBe(false);
     expect(planEylemSchema.safeParse({ eylem: 'onaya_gonder' }).success).toBe(false);
     expect(planEylemSchema.safeParse({ eylem: 'onaya_gonder', surum: 3 }).success).toBe(true);
+  });
+
+  it('tutar girdisi girişte uzunlukla sınırlı (asıl üst sınır sunucuda)', () => {
+    expect(planOlusturSchema.safeParse({ clientId: '00000000-0000-4000-8000-000000000000', donem: '2026-11', toplamButce: '200.000' }).success).toBe(true);
+    expect(planOlusturSchema.safeParse({ clientId: '00000000-0000-4000-8000-000000000000', donem: '2026-11', toplamButce: '9'.repeat(25) }).success).toBe(false);
   });
 
   it('KRİTİK: onay eylem ucundan yapılamaz', () => {

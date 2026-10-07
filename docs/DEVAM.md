@@ -38,8 +38,12 @@ yakın varyantlar aynı metrik, hacim yuvarlanmış; kurallar MIMARI §4.1).
 Bütçe · Arama · Matris, durum düğmeleri. Bu turda YOK: PDF, sezon,
 AdvCampaign'e aktarım (ekranda da görünmüyor). Müşteri hesabının menüsü
 dörde çıktı (AdvStrategy): kullanıcı onayı bekleniyor.
-**Sıradaki:** Ajan 4 kapısı (RLS, izolasyon, üretim sırasıyla migration),
-sonra deploy; ardından ikinci tur (PDF, sezon, aktarım, kelime gruplama).
+**Ajan 4 kapısı AÇIK (2026-10-08):** iki kırmızı (kelime işçisi gerçek
+transaction açmıyordu; BIGINT taşan bütçe) ve üç düşük bulgu Ajan 2'de
+kapandı. Deploy sonrası Ajan 4'ün salt okunur SQL kontrolleri (yetki
+override'ı taşıyan üyelikler, RLS politika sayıları, takılmış arama).
+**Sıradaki:** deploy (Ajan 5), sonra ikinci tur (PDF, sezon, aktarım,
+kelime gruplama).
 
 **ADVCAMPAIGN (2026-10-07, kullanıcı kararı):** eski Reklam Oluştur, AI
 Asistan ve Toplu Oluştur KALDIRILDI (panel + API `ai-assistant` sohbeti ve

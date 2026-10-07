@@ -37,6 +37,8 @@ export interface KelimeIsleyiciBagimliliklari {
     yoneticiId?: string,
   ): Promise<HamKelimeFikri[]>;
   simdi?: () => Date;
+  /** Beklenmeyen hatanın ayrıntısı buraya (plana değil). */
+  log?: (mesaj: string) => void;
 }
 
 export type KelimeIsSonucu =
@@ -73,23 +75,47 @@ export async function kelimeHesabi(tx: Tx, clientId: string): Promise<GoogleHesa
   return h ?? null;
 }
 
-async function hataYaz(d: KelimeIsleyiciBagimliliklari, planId: string, sebep: string, erisimYok: boolean): Promise<void> {
+/**
+ * Beklenmeyen hatada plana yazılan SABİT cümle. Ham `err.message` (Prisma,
+ * veritabanı, ağ kütüphanesi metni) müşterinin de gördüğü plan ekranına
+ * çıkardı: hem anlamsız hem iç yapıyı sızdıran bir metin. Ayrıntı log'a.
+ * Yalnız `PlatformApiError` mesajı olduğu gibi gösteriliyor: o Google'ın
+ * kendi açıklaması ve kullanıcının yapacağı iş ondan anlaşılıyor.
+ */
+export const BEKLENMEYEN_HATA = 'Kelime araması beklenmeyen bir hatayla durdu. Biraz sonra yeniden deneyin.';
+
+/** Plana yazılacak hata cümlesi: platform mesajı ya da sabit cümle. */
+export function gosterilecekHata(e: unknown): string {
+  return e instanceof PlatformApiError ? e.message : BEKLENMEYEN_HATA;
+}
+
+/*
+ * Her durum yazımı AKTİF ARAMA KİMLİĞİNE bağlı (`kelime_arama_id`). Bayat
+ * bir iş (15 dakikadan uzun kuyrukta kalmış, kullanıcı o arada yeniden
+ * aramış) planın durumunu ve kelimelerini EZMEMELİ; etkilenen satır sıfır
+ * olur ve iş sessizce değil `atlandi` sonucuyla biter.
+ */
+async function hataYaz(d: KelimeIsleyiciBagimliliklari, is: KelimeAramaIsi, sebep: string, erisimYok: boolean): Promise<void> {
   await d.tx((t) =>
     t.$executeRaw(Prisma.sql`
       UPDATE strateji_planlari
          SET kelime_arama = 'hata',
              kelime_son_hata = ${sebep.slice(0, 2000)},
              kelime_erisim = CASE WHEN ${erisimYok}::boolean THEN 'yok' ELSE kelime_erisim END
-       WHERE id = ${planId}::uuid`),
+       WHERE id = ${is.planId}::uuid AND kelime_arama_id = ${is.aramaId}::uuid`),
   );
 }
+
+const BAYAT = 'Daha yeni bir arama başlatılmış; bu işin sonucu yazılmadı.';
 
 export async function kelimeIsiniIsle(d: KelimeIsleyiciBagimliliklari, is: KelimeAramaIsi): Promise<KelimeIsSonucu> {
   // ── 1. Ön koşullar (kısa transaction) ─────────────────────────────────
   const hazirlik = await d.tx(async (t) => {
-    const [p] = await t.$queryRaw<Array<{ client_id: string; org_id: string; durum: string; kelime_arama: string }>>(Prisma.sql`
-      SELECT client_id::text, org_id::text, durum, kelime_arama FROM strateji_planlari WHERE id = ${is.planId}::uuid`);
+    const [p] = await t.$queryRaw<Array<{ client_id: string; org_id: string; durum: string; kelime_arama_id: string | null }>>(Prisma.sql`
+      SELECT client_id::text, org_id::text, durum, kelime_arama_id::text
+        FROM strateji_planlari WHERE id = ${is.planId}::uuid FOR UPDATE`);
     if (!p) return { tur: 'yok' as const };
+    if (p.kelime_arama_id !== is.aramaId) return { tur: 'bayat' as const };
     // Kuyrukta beklerken plan onaya gönderilmiş olabilir: onaydaki plan
     // değişmez, sonuç yazılmaz ve bunun nedeni plana yazılır.
     if (p.durum !== 'taslak') return { tur: 'taslak_degil' as const };
@@ -100,15 +126,16 @@ export async function kelimeIsiniIsle(d: KelimeIsleyiciBagimliliklari, is: Kelim
     return { tur: 'tamam' as const, plan: p, hesap };
   });
   if (hazirlik.tur === 'yok') return { durum: 'atlandi', sebep: 'Plan bulunamadı' };
+  if (hazirlik.tur === 'bayat') return { durum: 'atlandi', sebep: BAYAT };
   if (hazirlik.tur === 'taslak_degil') {
     const sebep = 'Plan arama sürerken taslaktan çıktı; sonuçlar yazılmadı.';
-    await hataYaz(d, is.planId, sebep, false);
+    await hataYaz(d, is, sebep, false);
     return { durum: 'hata', sebep };
   }
   if (hazirlik.tur === 'hesap_yok') {
     // API ön koşulu kontrol etmişti; arada hesap kaldırılmış.
     const sebep = 'Bu workspace’e atanmış Google Ads hesabı kalmadı; arama yapılmadı.';
-    await hataYaz(d, is.planId, sebep, false);
+    await hataYaz(d, is, sebep, false);
     return { durum: 'hata', sebep };
   }
   const { plan, hesap } = hazirlik;
@@ -124,13 +151,14 @@ export async function kelimeIsiniIsle(d: KelimeIsleyiciBagimliliklari, is: Kelim
       hesap.manager_external_id ?? undefined,
     );
   } catch (e) {
-    const sebep = e instanceof Error ? e.message : String(e);
+    const sebep = gosterilecekHata(e);
+    if (!(e instanceof PlatformApiError)) d.log?.(`strateji-kelime ${is.planId}: ${e instanceof Error ? e.stack ?? e.message : String(e)}`);
     // YETKİ REDDİ = erişim yok. Ö-1 erişimi ölçtü (VAR) ama geliştirici
     // token'ının seviyesi değişebilir; o gün ekran "yok" demeli, uydurma bir
     // "sonuç yok" değil. Token geçersizliği (`invalid_token`) erişim
     // sorunu DEĞİL, bağlantı sorunu: erişim durumu değişmez.
     const erisimYok = e instanceof PlatformApiError && e.kind === 'permission_denied';
-    await hataYaz(d, is.planId, sebep, erisimYok);
+    await hataYaz(d, is, sebep, erisimYok);
     return { durum: 'hata', sebep };
   }
 
@@ -141,7 +169,7 @@ export async function kelimeIsiniIsle(d: KelimeIsleyiciBagimliliklari, is: Kelim
       t.$executeRaw(Prisma.sql`
         UPDATE strateji_planlari
            SET kelime_arama = 'hata', kelime_son_hata = ${sebep}, kelime_erisim = 'var', kelime_toplam = 0
-         WHERE id = ${is.planId}::uuid`),
+         WHERE id = ${is.planId}::uuid AND kelime_arama_id = ${is.aramaId}::uuid`),
     );
     return { durum: 'hata', sebep };
   }
@@ -154,10 +182,21 @@ export async function kelimeIsiniIsle(d: KelimeIsleyiciBagimliliklari, is: Kelim
     konumlar: KELIME_VARSAYILAN_HEDEF.konumKaynaklari,
     hesap: hesap.external_id,
   });
-  const yazildi = await d.tx(async (t) => {
-    const [guncel] = await t.$queryRaw<Array<{ durum: string }>>(Prisma.sql`
-      SELECT durum FROM strateji_planlari WHERE id = ${is.planId}::uuid FOR UPDATE`);
-    if (guncel?.durum !== 'taslak') return false;
+  /*
+   * KİLİT VE KONTROL AYNI TRANSACTION'DA. Durum ve arama kimliği `FOR
+   * UPDATE` ile okunuyor ve DELETE + INSERT + plan UPDATE aynı transaction
+   * içinde: (a) plan arada onaya gönderilemez (onaya gönderme aynı satırı
+   * kilitlemek zorunda), yani onaydaki planın SEÇİLİ kelimelerinin hacmi
+   * sessizce değişmez; (b) INSERT düşerse DELETE de geri alınır ve
+   * seçilmemiş fikirler silinmiş, yenileri yazılmamış hâlde kalmaz. Bu ancak
+   * çalıştırıcı GERÇEK bir transaction açıyorsa doğru (worker.ts
+   * `$transaction`; strateji-guvenlik.spec kilitliyor).
+   */
+  const yazim = await d.tx(async (t) => {
+    const [guncel] = await t.$queryRaw<Array<{ durum: string; kelime_arama_id: string | null }>>(Prisma.sql`
+      SELECT durum, kelime_arama_id::text FROM strateji_planlari WHERE id = ${is.planId}::uuid FOR UPDATE`);
+    if (guncel?.kelime_arama_id !== is.aramaId) return 'bayat' as const;
+    if (guncel.durum !== 'taslak') return 'taslak_degil' as const;
     /*
      * SEÇİLİ SATIRLAR KALIR. Kullanıcının plana aldığı kelime ve verdiği
      * grup adı onun kararı: yeni arama yalnızca SEÇİLMEMİŞ fikirleri
@@ -198,12 +237,13 @@ export async function kelimeIsiniIsle(d: KelimeIsleyiciBagimliliklari, is: Kelim
       UPDATE strateji_planlari
          SET kelime_arama = 'bitti', kelime_son_hata = NULL, kelime_erisim = 'var',
              kelime_toplam = ${toplam + (kalan?.n ?? 0)}
-       WHERE id = ${is.planId}::uuid`);
-    return true;
+       WHERE id = ${is.planId}::uuid AND kelime_arama_id = ${is.aramaId}::uuid`);
+    return 'yazildi' as const;
   });
-  if (!yazildi) {
+  if (yazim === 'bayat') return { durum: 'atlandi', sebep: BAYAT };
+  if (yazim === 'taslak_degil') {
     const sebep = 'Plan arama sürerken taslaktan çıktı; sonuçlar yazılmadı.';
-    await hataYaz(d, is.planId, sebep, false);
+    await hataYaz(d, is, sebep, false);
     return { durum: 'hata', sebep };
   }
   return { durum: 'bitti', yazilan: satirlar.length, toplam };

@@ -47,11 +47,18 @@ CREATE TABLE "strateji_planlari" (
   -- Google'ın döndürdüğü TEKİL fikir sayısı (kesmeden önce). Ekran
   -- "300 / 2.660" yazar; sessiz kesme yok.
   "kelime_toplam"        INTEGER,
+  -- AKTİF ARAMANIN KİMLİĞİ. Her arama isteği yeni bir kimlik basar ve işçi
+  -- yalnız KENDİ kimliği hâlâ buradaysa sonuç yazar. Yoksa 15 dakikadan uzun
+  -- kuyrukta kalmış ESKİ bir iş, kullanıcının o arada başlattığı YENİ aramanın
+  -- sonucunu ve durumunu sessizce ezerdi.
+  "kelime_arama_id"      UUID,
   "created_by"           UUID,
   "created_at"           TIMESTAMPTZ(6) NOT NULL DEFAULT now(),
   "updated_at"           TIMESTAMPTZ(6) NOT NULL DEFAULT now(),
 
   CONSTRAINT "strateji_planlari_pkey" PRIMARY KEY ("id"),
+  -- Çocuk tabloların (plan_id, client_id) kompozit anahtarının hedefi.
+  CONSTRAINT "strateji_planlari_id_client_key" UNIQUE ("id", "client_id"),
   CONSTRAINT "strateji_planlari_donem_chk" CHECK ("donem" ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
   CONSTRAINT "strateji_planlari_durum_chk" CHECK ("durum" IN ('taslak', 'onayda', 'onaylandi', 'aktarildi', 'iptal')),
   CONSTRAINT "strateji_planlari_surum_chk" CHECK ("surum" >= 1),
@@ -85,6 +92,11 @@ ALTER TABLE "strateji_planlari" ADD CONSTRAINT "strateji_planlari_created_by_fke
   FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- ── Dağılım ─────────────────────────────────────────────────────────────
+-- PLAN ANAHTARI KOMPOZİT: (plan_id, client_id) → planın (id, client_id).
+-- Denormalize client_id, satırın bağlı olduğu planın workspace'inden AYRI
+-- olamaz; A'nın planına B'nin client_id'siyle yazılmış bir satır, RLS'te B'ye
+-- görünür ve A'nın planında "olmayan" bir satır olurdu. Servis bunu zaten
+-- plandan okuyor; kısıt savunma derinliği (matris ve kelimeler aynı).
 -- client_id/org_id DENORMALİZE: RLS politikası join'siz yazılabilsin diye
 -- (projenin genel deseni) ve workspace taşınınca satır planla birlikte
 -- gidebilsin diye. Yazma tek seferde (DELETE + INSERT, aynı transaction).
@@ -110,7 +122,7 @@ CREATE UNIQUE INDEX "strateji_dagilimlari_hucre_key" ON "strateji_dagilimlari" (
 CREATE INDEX "strateji_dagilimlari_client_idx" ON "strateji_dagilimlari" ("client_id");
 CREATE INDEX "strateji_dagilimlari_org_id_idx" ON "strateji_dagilimlari" ("org_id");
 ALTER TABLE "strateji_dagilimlari" ADD CONSTRAINT "strateji_dagilimlari_plan_fkey"
-  FOREIGN KEY ("plan_id") REFERENCES "strateji_planlari"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("plan_id", "client_id") REFERENCES "strateji_planlari"("id", "client_id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "strateji_dagilimlari" ADD CONSTRAINT "strateji_dagilimlari_client_org_fkey"
   FOREIGN KEY ("client_id", "org_id") REFERENCES "clients"("id", "org_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -151,7 +163,7 @@ CREATE INDEX "strateji_matrisi_client_idx" ON "strateji_matrisi" ("client_id");
 CREATE INDEX "strateji_matrisi_org_id_idx" ON "strateji_matrisi" ("org_id");
 CREATE INDEX "strateji_matrisi_kitle_idx" ON "strateji_matrisi" ("kitle_sablonu_id");
 ALTER TABLE "strateji_matrisi" ADD CONSTRAINT "strateji_matrisi_plan_fkey"
-  FOREIGN KEY ("plan_id") REFERENCES "strateji_planlari"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("plan_id", "client_id") REFERENCES "strateji_planlari"("id", "client_id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "strateji_matrisi" ADD CONSTRAINT "strateji_matrisi_client_org_fkey"
   FOREIGN KEY ("client_id", "org_id") REFERENCES "clients"("id", "org_id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "strateji_matrisi" ADD CONSTRAINT "strateji_matrisi_kitle_fkey"
@@ -187,7 +199,7 @@ CREATE UNIQUE INDEX "strateji_kelimeleri_kelime_key" ON "strateji_kelimeleri" ("
 CREATE INDEX "strateji_kelimeleri_client_idx" ON "strateji_kelimeleri" ("client_id");
 CREATE INDEX "strateji_kelimeleri_org_id_idx" ON "strateji_kelimeleri" ("org_id");
 ALTER TABLE "strateji_kelimeleri" ADD CONSTRAINT "strateji_kelimeleri_plan_fkey"
-  FOREIGN KEY ("plan_id") REFERENCES "strateji_planlari"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("plan_id", "client_id") REFERENCES "strateji_planlari"("id", "client_id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "strateji_kelimeleri" ADD CONSTRAINT "strateji_kelimeleri_client_org_fkey"
   FOREIGN KEY ("client_id", "org_id") REFERENCES "clients"("id", "org_id") ON DELETE CASCADE ON UPDATE CASCADE;
 

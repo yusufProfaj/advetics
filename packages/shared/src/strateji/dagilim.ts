@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { huniKatmaniSchema, stratejiPlatformuSchema, surumSchema, type HuniKatmani, type StratejiPlatformu } from './plan';
+import { huniKatmaniSchema, stratejiPlatformuSchema, surumSchema, tutarGirdisiSchema, type HuniKatmani, type StratejiPlatformu } from './plan';
 
 /**
  * ═══ BİLEŞEN 1 — BÜTÇE VE PLATFORM DAĞILIMI ═══
@@ -18,7 +18,7 @@ export const dagilimSatiriGirdiSchema = z.object({
   platform: stratejiPlatformuSchema,
   katman: huniKatmaniSchema,
   /** Kullanıcının yazdığı tutar; sunucu plan para birimiyle çözer. */
-  tutar: z.string().trim().min(1),
+  tutar: tutarGirdisiSchema,
 });
 
 /**

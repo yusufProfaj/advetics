@@ -93,12 +93,28 @@ export const HUNI_ETIKETLERI: Record<HuniKatmani, string> = {
  */
 export const microsSchema = z.string().regex(/^\d{1,18}$/, 'Tutar micros olarak tam sayı olmalı');
 
+/**
+ * KULLANICININ YAZDIĞI TUTAR — uzunluk sınırı GİRİŞTE.
+ *
+ * Sınır yokken "10.000.000.000.000" sunucuya ulaşıyor, micros'a çevrilince
+ * BIGINT'i taşırıyor ve kullanıcı "kod 22003" görüyordu (Ajan 4 bulgusu).
+ * 24 karakter: binlik ayraçlarıyla 15 haneli tam kısım + ondalık sığar; o
+ * da BIGINT micros sınırının (~9,2 trilyon birim) çok altında değil, yani
+ * asıl üst sınır denetimi sunucuda (Ajan 2). Bu sınır yalnızca anlamsız
+ * uzunluktaki girdiyi hiç işlemeden geri çeviriyor.
+ */
+export const tutarGirdisiSchema = z
+  .string()
+  .trim()
+  .min(1, 'Tutar gerekli')
+  .max(24, 'Tutar çok uzun');
+
 export const planOlusturSchema = z.object({
   clientId: z.string().uuid(),
   /** Planın ayı. `YYYY-MM` STRING; Date'e çevirmek saat dilimi kayması üretir. */
   donem: monthSchema,
   /** Kullanıcının yazdığı tutar ("200000" / "200.000,50"); sunucu çözer. */
-  toplamButce: z.string().trim().min(1, 'Toplam bütçe gerekli'),
+  toplamButce: tutarGirdisiSchema,
   /**
    * Para birimi. Verilmezse workspace'in hesaplarından ÇÖZÜLÜR; hesaplar
    * karışık birim taşıyorsa sunucu reddeder ve bunu söyler (kur çevrimi yok).
