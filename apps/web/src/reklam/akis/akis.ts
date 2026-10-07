@@ -55,8 +55,14 @@ export function kavramlarKur(
   gorseller: string[],
   baslik: string,
   metin: string,
-): Array<{ varlikId: string; baslik: string; metin: string }> {
-  return gorseller.map((varlikId) => ({ varlikId, baslik, metin }));
+  onceki: ReadonlyArray<{ varlikId: string; kapakVarlikId?: string }> = [],
+): Array<{ varlikId: string; kapakVarlikId?: string; baslik: string; metin: string }> {
+  // Video fikrinin KAPAĞI korunur: listeyi görsel sırasından yeniden kurmak
+  // kapağı düşürür ve video kapaksız (yayında reddedilen) bir fikre döner.
+  return gorseller.map((varlikId) => {
+    const kapak = onceki.find((k) => k.varlikId === varlikId)?.kapakVarlikId;
+    return kapak ? { varlikId, kapakVarlikId: kapak, baslik, metin } : { varlikId, baslik, metin };
+  });
 }
 
 /** Taslaktan ekranın okuduğu düz değerler. Yok olan alan boş döner. */

@@ -62,6 +62,9 @@ const KABUL_EDILEMEZ: ReadonlyArray<[string, string]> = [
   ['promoted_object', 'Facebook sayfası'],
   ['object_story_spec.link_data.call_to_action', 'Düğme ve hedef'],
   ['object_story_spec.link_data.image_hash', 'Görsel'],
+  ['object_story_spec.video_data.call_to_action', 'Düğme ve hedef'],
+  ['object_story_spec.video_data.video_id', 'Video'],
+  ['object_story_spec.video_data.image_hash', 'Video kapağı'],
   // Form KVKK (M-38..M-41): rıza kanıtının kendisi.
   ['privacy_policy', 'Aydınlatma bağlantısı'],
   ['custom_disclaimer', 'İzin kutusu'],
@@ -103,6 +106,7 @@ const BUTUN_ALANLAR = new Set([
   'targeting.age_range',
   'targeting.genders',
   'object_story_spec.link_data.call_to_action',
+  'object_story_spec.video_data.call_to_action',
   'promoted_object',
   'creative',
   'questions',

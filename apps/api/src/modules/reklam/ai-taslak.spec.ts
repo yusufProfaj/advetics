@@ -8,7 +8,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { AppConfig } from '../../config/configuration';
 import { aiCiktisiniDogrula, type AiBaglami, type AiCikti } from './ai-taslak';
 import { ReklamAiTaslakService } from './ai-taslak.service';
-import { gorselBilgisi, gorselKaydet } from './gorsel-yukle';
+import { gorselBilgisi, gorselKaydet, videoBilgisi } from './gorsel-yukle';
 import { ReklamHazirlikService } from './hazirlik.service';
 import { ReklamTaslakService } from './taslak.service';
 
@@ -16,7 +16,7 @@ const V1 = '66666666-0000-4000-8000-000000000001';
 const V2 = '66666666-0000-4000-8000-000000000002';
 const baglam: AiBaglami = {
   cumle: 'Bu görsellerle form kampanyası kur, günlük 500 TL, 14 gün',
-  varliklar: [V1, V2],
+  varliklar: [{ varlikId: V1 }, { varlikId: V2 }],
   sikSayfalar: [{ ad: 'Kampanya', adres: 'https://ornek.com.tr/kampanya' }],
   markaKitlesi: [{ tur: 'region', key: '2347', etiket: 'İzmir', ulkeKodu: 'TR' }],
   yasalUyari: null,
@@ -116,6 +116,30 @@ describe('görsel başlığı', () => {
   });
 });
 
+describe('video başlığı', () => {
+  // Asgari MP4: ftyp kutusu + 92 baytlık tkhd kutusu (genişlik/yükseklik 16.16, son 8 bayt).
+  const mp4 = (marka: string, en: number, boy: number) => {
+    const ftyp = Buffer.alloc(16);
+    ftyp.writeUInt32BE(16, 0);
+    ftyp.write('ftyp', 4, 'latin1');
+    ftyp.write(marka, 8, 'latin1');
+    const tkhd = Buffer.alloc(92);
+    tkhd.writeUInt32BE(92, 0);
+    tkhd.write('tkhd', 4, 'latin1');
+    tkhd.writeUInt32BE(en * 65536, 84);
+    tkhd.writeUInt32BE(boy * 65536, 88);
+    return Buffer.concat([ftyp, tkhd]);
+  };
+  it('MP4 ve MOV boyutları kutudan', () => {
+    expect(videoBilgisi(mp4('isom', 1080, 1920))).toEqual({ tur: 'tamam', mime: 'video/mp4', en: 1080, boy: 1920 });
+    expect(videoBilgisi(mp4('qt  ', 1920, 1080))).toEqual({ tur: 'tamam', mime: 'video/quicktime', en: 1920, boy: 1080 });
+  });
+  it('küçük ya da başka biçim reddedilir', () => {
+    expect(videoBilgisi(mp4('isom', 320, 240))).toMatchObject({ tur: 'hata' });
+    expect(videoBilgisi(Buffer.from('RIFF....AVI LIST'))).toEqual({ tur: 'hata', mesaj: 'Yalnız MP4 ve MOV videolar kullanılabilir.' });
+  });
+});
+
 describe('uçtan uca: cümle + görsel → öneri taslağı → onay', () => {
   let h: Harness;
   let svc: ReklamAiTaslakService;
@@ -151,7 +175,7 @@ describe('uçtan uca: cümle + görsel → öneri taslağı → onay', () => {
   });
 
   it('taslak "ai" yüzüyle açılır, alanlar öneri, görseller modele gider; onay öneriyi kullanıcıya çevirir', async () => {
-    const r = await svc.olustur(CTX, IDS.client, baglam.cumle, [V1, V2]);
+    const r = await svc.olustur(CTX, IDS.client, baglam.cumle, [{ varlikId: V1 }, { varlikId: V2 }]);
     expect(r.taslak.olusturanYuz).toBe('ai');
     expect(r.taslak.alanlar.niyet?.kaynak).toBe('ai_onerisi');
     expect(r.taslak.eksikler.map((e) => e.kod)).toContain('KAYNAK');
@@ -165,9 +189,9 @@ describe('uçtan uca: cümle + görsel → öneri taslağı → onay', () => {
   });
 
   it('başka workspace’in görseli kullanılamaz; model reddederse taslak açılmaz', async () => {
-    await expect(svc.olustur(CTX, IDS.client, 'form kur', ['77777777-0000-4000-8000-000000000001'])).rejects.toThrow(/arşivinde değil/);
+    await expect(svc.olustur(CTX, IDS.client, 'form kur', [{ varlikId: '77777777-0000-4000-8000-000000000001' }])).rejects.toThrow(/arşivinde değil/);
     svc.modelCagir = async () => ({ tur: 'ret', mesaj: 'Asistan bu isteği yapamadı; taslağı panelden kurabilirsin.' });
-    await expect(svc.olustur(CTX, IDS.client, 'form kur', [V1])).rejects.toThrow(/yapamadı/);
+    await expect(svc.olustur(CTX, IDS.client, 'form kur', [{ varlikId: V1 }])).rejects.toThrow(/yapamadı/);
     const [n] = await h.q<{ n: number }>('SELECT count(*)::int AS n FROM reklam_taslagi');
     expect(n!.n).toBe(0);
   });

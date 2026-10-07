@@ -82,30 +82,39 @@ export class ReklamAiTaslakService {
     return { tur: 'tamam', cikti: r.parsed_output };
   }
 
-  async olustur(ctx: TenantContext, clientId: string, cumle: string, varliklar: string[]): Promise<AiTaslakSonucu> {
+  async olustur(ctx: TenantContext, clientId: string, cumle: string, medyalar: Array<{ varlikId: string; kapakVarlikId?: string }>): Promise<AiTaslakSonucu> {
     if (!ctx.clientIds.includes(clientId)) throw new ForbiddenException('Bu workspace’e erişimin yok');
     const temiz = cumle.normalize('NFC').trim();
     if (!temiz) throw new BadRequestException('Ne istediğini bir cümleyle yaz.');
-    if (varliklar.length < 1 || varliklar.length > 10) throw new BadRequestException('1 ile 10 arasında görsel seç.');
+    if (medyalar.length < 1 || medyalar.length > 10) throw new BadRequestException('1 ile 10 arasında görsel ya da video seç.');
+    // Modele giden GÖRSEL: görselin kendisi ya da videonun kapak karesi.
+    const varliklar = medyalar.map((m) => m.kapakVarlikId ?? m.varlikId);
+    const tumKimlikler = [...new Set(medyalar.flatMap((m) => (m.kapakVarlikId ? [m.varlikId, m.kapakVarlikId] : [m.varlikId])))];
 
     const h = await this.hazirlik.oku(ctx, clientId);
     const [profil, gorseller] = await this.prisma.withTenant(ctx, async (tx) => {
       const [p] = await tx.$queryRaw<Array<{ marka_adi: string | null; sektor: string | null; uslup: string | null; vaatler: string[]; sik_sayfalar: unknown; ana_amac: string | null }>>(Prisma.sql`
         SELECT marka_adi, sektor, uslup, vaatler, sik_sayfalar, ana_amac FROM client_profiles WHERE client_id = ${clientId}::uuid`);
-      const g = await tx.$queryRaw<Array<{ id: string; storage_key: string; mime_type: string; byte_size: number }>>(Prisma.sql`
-        SELECT id::text, storage_key, mime_type, byte_size FROM assets
-         WHERE client_id = ${clientId}::uuid AND kind = 'image' AND id = ANY(${varliklar}::uuid[])`);
+      const g = await tx.$queryRaw<Array<{ id: string; storage_key: string; mime_type: string; byte_size: number; kind: string }>>(Prisma.sql`
+        SELECT id::text, storage_key, mime_type, byte_size, kind FROM assets
+         WHERE client_id = ${clientId}::uuid AND id = ANY(${tumKimlikler}::uuid[])`);
       return [p ?? null, g] as const;
     });
     // Başka workspace'in ya da olmayan görsel sessizce atlanmaz.
-    if (gorseller.length !== new Set(varliklar).size) throw new BadRequestException('Seçilen görsellerin bir kısmı bu workspace’in arşivinde değil.');
+    if (gorseller.length !== tumKimlikler.length) throw new BadRequestException('Seçilen görsellerin bir kısmı bu workspace’in arşivinde değil.');
+    for (const m of medyalar) {
+      const tur = gorseller.find((x) => x.id === m.varlikId)!.kind;
+      if (m.kapakVarlikId ? tur !== 'video' || gorseller.find((x) => x.id === m.kapakVarlikId)!.kind !== 'image' : tur !== 'image') {
+        throw new BadRequestException('Video bir kapak karesiyle, görsel tek başına gelmeli.');
+      }
+    }
 
     const notlar: string[] = [];
     const icerik: Anthropic.Beta.BetaContentBlockParam[] = [];
     for (const [i, id] of varliklar.entries()) {
       const g = gorseller.find((x) => x.id === id)!;
       if (g.byte_size > GORSEL_SINIRI || (g.mime_type !== 'image/jpeg' && g.mime_type !== 'image/png')) {
-        icerik.push({ type: 'text', text: `Görsel ${i + 1}: asistana gösterilemedi; genel bir metin yaz.` });
+        icerik.push({ type: 'text', text: `Medya ${i + 1}: asistana gösterilemedi; genel bir metin yaz.` });
         notlar.push(`Görsel ${i + 1} asistana gösterilemedi (5 MB üstü ya da desteklenmeyen biçim); metnini kontrol et.`);
         continue;
       }
@@ -113,7 +122,7 @@ export class ReklamAiTaslakService {
       if (!yol.startsWith(this.yuklemeKoku.endsWith(sep) ? this.yuklemeKoku : this.yuklemeKoku + sep)) {
         throw new Error(`Geçersiz depolama anahtarı: ${g.storage_key}`);
       }
-      icerik.push({ type: 'text', text: `Görsel ${i + 1}:` });
+      icerik.push({ type: 'text', text: medyalar[i]!.kapakVarlikId ? `Görsel ${i + 1} (bir VİDEONUN kapak karesi):` : `Görsel ${i + 1}:` });
       icerik.push({
         type: 'image',
         source: { type: 'base64', media_type: g.mime_type as 'image/jpeg' | 'image/png', data: (await readFile(yol)).toString('base64') },
@@ -145,7 +154,7 @@ export class ReklamAiTaslakService {
     const hesap = h.hesaplar.length === 1 ? h.hesaplar[0]! : null;
     const dogru = aiCiktisiniDogrula(sonuc.cikti, {
       cumle: temiz,
-      varliklar,
+      varliklar: medyalar,
       sikSayfalar,
       markaKitlesi: h.varsayilanKitle?.konumlar ?? null,
       yasalUyari: h.marka.yasalUyari,

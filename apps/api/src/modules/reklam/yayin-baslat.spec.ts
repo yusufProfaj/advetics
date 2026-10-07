@@ -183,6 +183,13 @@ describe('uçtan uca: yayınla → işleyici → test kipi', () => {
   });
 });
 
+describe('video türü denetimi', () => {
+  it('kapak verilmiş ama medya video değilse reddedilir', async () => {
+    const t = await taslak({ ...DOLU, kavramlar: k([{ varlikId: VARLIK, kapakVarlikId: VARLIK, baslik: 'B', metin: 'M' }]) });
+    expect(kodlar(await baslat({ ...t, ozet0: t.ozet }))).toContain('KRT-VIDEO');
+  });
+});
+
 describe('Meta provası', () => {
   async function prova(taslakId: string, ozet: string, o: { durum?: string; bitti?: string } = {}) {
     const [p] = await h.q<{ id: string }>(

@@ -66,8 +66,14 @@ const ATIF_SPEC: Record<AtifStandardi, Array<{ event_type: string; window_days: 
 };
 
 export interface Kavram {
-  /** Bu reklam hesabındaki `image_hash` (hesap başına; başka hesabınki çalışmaz). */
+  /**
+   * Bu reklam hesabındaki `image_hash` (hesap başına; başka hesabınki
+   * çalışmaz). Video fikrinde bu KAPAK görselinin hash'i: Meta video
+   * reklamında kapak istiyor ve vermemek kapağı Meta'nın seçimine bırakır.
+   */
   gorselHash: string;
+  /** Video fikri: hesaba yüklenmiş video kimliği (ya da yer tutucusu). */
+  videoId?: string;
   baslik: string;
   metin: string;
   aciklama?: string;
@@ -239,17 +245,33 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
       g.niyet === 'FORM'
         ? { type: m.cta, value: { lead_gen_form_id: g.formId } }
         : { type: m.cta, value: { link: g.hedefAdres } };
-    const linkData: Record<string, unknown> = {
-      image_hash: k.gorselHash,
-      name: k.baslik,
-      message: k.metin,
-      call_to_action: cta,
-      // FORM'da bağlantı yine zorunlu ama tıklama formu açıyor; Meta'nın
-      // belgelediği sabit bağlantı.
-      link: g.niyet === 'FORM' ? 'http://fb.me/' : g.hedefAdres,
-    };
-    if (k.aciklama) linkData.description = k.aciklama;
-    const oss: Record<string, unknown> = { page_id: g.sayfaPlatformId, link_data: linkData };
+    const oss: Record<string, unknown> = { page_id: g.sayfaPlatformId };
+    if (k.videoId) {
+      // VİDEO: `video_data` — başlık `title`, kapak `image_hash`, CTA aynı
+      // biçim. `link_data` ile video karıştırılmaz: link_data'ya video
+      // koymak Meta'da görsel reklam açar.
+      const videoData: Record<string, unknown> = {
+        video_id: k.videoId,
+        image_hash: k.gorselHash,
+        title: k.baslik,
+        message: k.metin,
+        call_to_action: g.niyet === 'FORM' ? { ...cta, value: { lead_gen_form_id: g.formId, link: 'http://fb.me/' } } : cta,
+      };
+      if (k.aciklama) videoData.link_description = k.aciklama;
+      oss.video_data = videoData;
+    } else {
+      const linkData: Record<string, unknown> = {
+        image_hash: k.gorselHash,
+        name: k.baslik,
+        message: k.metin,
+        call_to_action: cta,
+        // FORM'da bağlantı yine zorunlu ama tıklama formu açıyor; Meta'nın
+        // belgelediği sabit bağlantı.
+        link: g.niyet === 'FORM' ? 'http://fb.me/' : g.hedefAdres,
+      };
+      if (k.aciklama) linkData.description = k.aciklama;
+      oss.link_data = linkData;
+    }
     // IG seçiliyse daima: yoksa Instagram'da HİÇ yayın olmaz, hata da yok.
     if (g.instagramPlatformId) oss.instagram_user_id = g.instagramPlatformId;
 
@@ -317,7 +339,8 @@ function alanYollari(nesne: string, o: Record<string, unknown>, onek = ''): stri
  * Gönderilmeyen alan kararı hesabın varsayılanına bırakır ve aynı kod iki
  * müşteride farklı davranır, hata dönmeden.
  */
-export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: string; kosul?: 'kategori' | 'instagram' }> = [
+/** `yol` dizi ise alternatiflerden BİRİ yazılmış olmalı (görsel ya da video kreatifi). */
+export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: string | readonly string[]; kosul?: 'kategori' | 'instagram' }> = [
   { kod: 'M-01', nesne: 'kampanya', yol: 'status' },
   { kod: 'M-01', nesne: 'reklam_seti', yol: 'status' },
   { kod: 'M-01', nesne: 'reklam', yol: 'status' },
@@ -335,7 +358,7 @@ export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: stri
   { kod: 'M-18', nesne: 'reklam_seti', yol: 'targeting.geo_locations' },
   { kod: 'M-21', nesne: 'reklam_seti', yol: 'attribution_spec' },
   { kod: 'M-24', nesne: 'kreatif', yol: 'object_story_spec.instagram_user_id', kosul: 'instagram' },
-  { kod: 'M-25', nesne: 'kreatif', yol: 'object_story_spec.link_data.call_to_action' },
+  { kod: 'M-25', nesne: 'kreatif', yol: ['object_story_spec.link_data.call_to_action', 'object_story_spec.video_data.call_to_action'] },
   // M-26/M-27: belgedeki adapt_to_placement ve pac_relaxation canlıda
   // reddedildi (yukarıdaki not); manifesto ölçülen kümeden iki satır taşıyor,
   // derle.spec bütün kümeyi ayrıca tarıyor.
@@ -362,7 +385,8 @@ function manifestoDogrula(govdeler: MetaGovdesi[], d: { kategoriVar: boolean; in
     if (satir.kosul === 'kategori' && !d.kategoriVar) continue;
     if (satir.kosul === 'instagram' && !d.instagram) continue;
     for (const gv of govdeler.filter((x) => x.nesne === satir.nesne)) {
-      const v = deger(gv.alanlar, satir.yol);
+      const yollar = typeof satir.yol === 'string' ? [satir.yol] : satir.yol;
+      const v = yollar.map((y) => deger(gv.alanlar, y)).find((x) => x !== undefined && x !== null);
       if (v === undefined || v === null) {
         throw new Error(`Manifesto ${satir.kod}: ${gv.ad} içinde ${satir.yol} yazılmadı`);
       }

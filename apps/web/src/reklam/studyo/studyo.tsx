@@ -6,7 +6,49 @@ import type { HazirlikGorseli, ReklamHazirligi, ReklamTaslakKaydi } from '@advet
 import { API_URL, ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { Dugme, Kutu } from '../ui';
 
-type Gorsel = Pick<HazirlikGorseli, 'id' | 'ad' | 'onizlemeAdresi'>;
+type Gorsel = Pick<HazirlikGorseli, 'id' | 'ad' | 'onizlemeAdresi'> & {
+  /** Video: `id` videonun, `kapakId` tarayıcıda alınan karenin kimliği. */
+  kapakId?: string;
+};
+type Yuklenen = Gorsel & { tur?: 'gorsel' | 'video'; message?: string };
+
+/**
+ * Videodan KAPAK KARESİ — tarayıcıda (sunucuda video işleme programı
+ * yok ve paylaşımlı sunucuya kurulmuyor). Yaklaşık 1. saniye ya da kısa
+ * videoda %10'u; tam çözünürlükte JPEG. Kare hem asistanın gördüğü görsel
+ * hem Meta'nın kapak görseli.
+ */
+async function kapakKaresi(d: File): Promise<Blob> {
+  const adres = URL.createObjectURL(d);
+  try {
+    const v = document.createElement('video');
+    v.muted = true;
+    v.preload = 'auto';
+    v.src = adres;
+    await new Promise<void>((ok, hata) => {
+      v.onloadeddata = () => ok();
+      v.onerror = () => hata(new Error('Video tarayıcıda açılamadı'));
+    });
+    v.currentTime = Math.min(1, (v.duration || 1) * 0.1);
+    await new Promise<void>((ok) => (v.onseeked = () => ok()));
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
+    c.getContext('2d')!.drawImage(v, 0, 0);
+    return await new Promise<Blob>((ok, hata) => c.toBlob((b) => (b ? ok(b) : hata(new Error('Kapak karesi alınamadı'))), 'image/jpeg', 0.9));
+  } finally {
+    URL.revokeObjectURL(adres);
+  }
+}
+
+async function dosyaYukle(clientId: string, d: Blob, ad: string): Promise<Yuklenen> {
+  const form = new FormData();
+  form.append('dosya', d, ad);
+  const res = await fetch(`${API_URL}/reklam/gorseller?clientId=${clientId}`, { method: 'POST', body: form, credentials: 'include' });
+  const govde = (await res.json().catch(() => null)) as Yuklenen | null;
+  if (!res.ok || !govde) throw new Error(govde?.message ?? `Yükleme düştü (HTTP ${res.status})`);
+  return govde;
+}
 type YuklemeHali = { ad: string; tur: 'yukleniyor' } | { ad: string; tur: 'hata'; mesaj: string };
 
 const ORNEKLER = [
@@ -38,13 +80,16 @@ export function ReklamStudyosu({ clientId, hazirlik }: { clientId: string; hazir
   async function yukle(dosyalar: FileList | File[]) {
     for (const d of Array.from(dosyalar).slice(0, 10)) {
       setYuklemeler((y) => [...y.filter((x) => x.ad !== d.name), { ad: d.name, tur: 'yukleniyor' }]);
-      const form = new FormData();
-      form.append('dosya', d);
       try {
-        const res = await fetch(`${API_URL}/reklam/gorseller?clientId=${clientId}`, { method: 'POST', body: form, credentials: 'include' });
-        const govde = (await res.json().catch(() => null)) as { message?: string } & Gorsel | null;
-        if (!res.ok || !govde) throw new Error(govde?.message ?? `Yükleme düştü (HTTP ${res.status})`);
-        ekle(govde);
+        if (d.type.startsWith('video/')) {
+          // Kare ÖNCE alınır: tarayıcı videoyu açamıyorsa 200 MB'ı boşuna yüklemeyelim.
+          const kare = await kapakKaresi(d);
+          const video = await dosyaYukle(clientId, d, d.name);
+          const kapak = await dosyaYukle(clientId, kare, `${d.name}-kapak.jpg`);
+          ekle({ id: video.id, ad: video.ad, onizlemeAdresi: kapak.onizlemeAdresi, kapakId: kapak.id });
+        } else {
+          ekle(await dosyaYukle(clientId, d, d.name));
+        }
         setYuklemeler((y) => y.filter((x) => x.ad !== d.name));
       } catch (e) {
         setYuklemeler((y) => y.map((x) => (x.ad === d.name ? { ad: d.name, tur: 'hata', mesaj: (e as Error).message } : x)));
@@ -58,7 +103,11 @@ export function ReklamStudyosu({ clientId, hazirlik }: { clientId: string; hazir
     try {
       const r = await apiFetch<{ taslak: ReklamTaslakKaydi; notlar: string[] }>('/reklam/ai-taslak', {
         method: 'POST',
-        body: JSON.stringify({ clientId, cumle, varliklar: secili.map((g) => g.id) }),
+        body: JSON.stringify({
+          clientId,
+          cumle,
+          medyalar: secili.map((g) => (g.kapakId ? { varlikId: g.id, kapakVarlikId: g.kapakId } : { varlikId: g.id })),
+        }),
       });
       // Notlar yalnız bu oturumda: sayfa yenilenince eksik listesi zaten aynı şeyi söylüyor.
       try {
@@ -91,7 +140,7 @@ export function ReklamStudyosu({ clientId, hazirlik }: { clientId: string; hazir
         <div className="relative space-y-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-strong">Reklam Stüdyosu</p>
-            <h2 className="mt-1 text-2xl font-bold sm:text-3xl">Görselleri bırak, ne istediğini yaz.</h2>
+            <h2 className="mt-1 text-2xl font-bold sm:text-3xl">Görselleri ya da videoları bırak, ne istediğini yaz.</h2>
             <p className="mt-1 text-sm text-ink-muted">Taslağı biz kuruyoruz; sen yalnızca önizlemeye bakıp onaylıyorsun.</p>
           </div>
 
@@ -114,12 +163,12 @@ export function ReklamStudyosu({ clientId, hazirlik }: { clientId: string; hazir
               surukleniyor ? 'border-brand bg-brand-soft' : 'border-line hover:border-brand/60'
             }`}
           >
-            <span className="text-sm font-semibold">Görselleri buraya bırak ya da tıkla</span>
-            <span className="text-xs text-ink-muted">JPEG ya da PNG, kısa kenar en az 600 piksel, en çok 10 görsel</span>
+            <span className="text-sm font-semibold">Görselleri ya da videoları buraya bırak ya da tıkla</span>
+            <span className="text-xs text-ink-muted">JPEG, PNG, MP4 ya da MOV · kısa kenar en az 600 piksel · video en çok 200 MB · en çok 10 dosya</span>
             <input
               ref={dosyaGirdisi}
               type="file"
-              accept="image/jpeg,image/png"
+              accept="image/jpeg,image/png,video/mp4,video/quicktime"
               multiple
               hidden
               onChange={(e) => e.target.files && void yukle(e.target.files)}
@@ -143,6 +192,7 @@ export function ReklamStudyosu({ clientId, hazirlik }: { clientId: string; hazir
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={onizlemeAdresi(g.onizlemeAdresi)} alt={g.ad} className="aspect-square w-24 rounded-lg object-cover" />
                   <span className="absolute left-1 top-1 rounded-full bg-brand px-1.5 text-[10px] font-semibold text-white">{i + 1}</span>
+                  {g.kapakId && <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 text-[10px] text-white">▶ video</span>}
                   <button
                     type="button"
                     aria-label={`${g.ad} çıkar`}

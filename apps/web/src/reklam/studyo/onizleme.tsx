@@ -155,11 +155,13 @@ export function Onizleme({
         </section>
 
         {kavramlar.map((k, i) => {
-          const g = hazirlik.gorseller.satirlar.find((x) => x.id === k.varlikId);
-          const src = g ? onizlemeAdresi(g.onizlemeAdresi) : `${onizlemeAdresi(`/assets/${k.varlikId}/preview`)}`;
+          // Video fikrinde KAPAK gösterilir (videonun kendisi tarayıcıda oynatılmıyor).
+          const gorselId = k.kapakVarlikId ?? k.varlikId;
+          const g = hazirlik.gorseller.satirlar.find((x) => x.id === gorselId);
+          const src = g ? onizlemeAdresi(g.onizlemeAdresi) : onizlemeAdresi(`/assets/${gorselId}/preview`);
           return (
             <section key={`${k.varlikId}-${i}`} className="rounded-2xl border border-line bg-surface p-5">
-              <h3 className="mb-3 text-sm font-semibold">Fikir {i + 1}</h3>
+              <h3 className="mb-3 text-sm font-semibold">Fikir {i + 1}{k.kapakVarlikId ? ' · video' : ''}</h3>
               <div className="flex gap-3 overflow-x-auto pb-2">
                 {BICIMLER.map((b) => (
                   <figure key={b.ad} className="w-44 shrink-0 rounded-[1.4rem] border border-line bg-surface-muted p-2 text-[11px] shadow-[var(--shadow-xs)]">
@@ -171,6 +173,9 @@ export function Onizleme({
                     <div className={`relative ${b.oran} w-full overflow-hidden rounded-xl bg-surface-sunken`}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={src} alt="" className="h-full w-full object-cover" />
+                      {k.kapakVarlikId && (
+                        <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">▶ Video</span>
+                      )}
                       {b.ad !== 'Akış' && (
                         <span className="absolute inset-x-2 bottom-2 rounded-lg bg-white/90 py-1 text-center font-semibold text-black">
                           {CTA[d.niyet ?? ''] ?? 'Daha fazla bilgi'}

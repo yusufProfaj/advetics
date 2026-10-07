@@ -18,6 +18,8 @@ import { taslakDerle } from './yayin-baslat';
  * KOTASINI YİYEBİLİR").
  */
 export const PROVA_KOTASI = { adet: 2, pencereMs: 5 * 60_000 } as const;
+/** Provada video işlenmesi için en çok 18 × 10 sn = 3 dk; prova bir kuyruk işi ve uzun beklememeli. */
+const PROVA_VIDEO_DENEME = 18;
 
 export type ProvaSonucu = { tur: 'bitti'; durum: 'gecti' | 'reddedildi' | 'dogrulanamadi' } | { tur: 'ertele'; sebep: string };
 
@@ -36,6 +38,7 @@ export async function provaKos(
   hesap: string,
   yazmaKapisi: () => Promise<{ acik: true } | { acik: false; sebep: string }>,
   b: { apiSurumu: MetaApiSurumu; simdi: Date },
+  bekle: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
 ): Promise<ProvaSonucu> {
   const [p] = await tx((x) =>
     x.$queryRaw<Array<{ id: string; org_id: string; client_id: string; taslak_id: string; taslak_surum_no: number; ad_account_id: string; durum: string }>>(Prisma.sql`
@@ -93,6 +96,24 @@ export async function provaKos(
     } catch (e) {
       if (e instanceof MetaKesinHata) return bitir('reddedildi', [{ ad: `medya:${v}`, sonuc: 'reddedildi', mesaj: e.message, kod: e.kod }], `Görsel kabul edilmedi: ${e.message}`);
       return bitir('dogrulanamadi', [], `Görsel yüklenemedi: ${(e as Error).message}`);
+    }
+  }
+
+  // Video: yükle ve Meta işlesin; işlenmemiş videoyla prova anlamsız.
+  for (const v of d.videolar) {
+    try {
+      const id = await port.videoYukle(hesap, v);
+      for (let i = 0; ; i++) {
+        const durum = await port.videoDurumu(id);
+        if (durum === 'hazir') break;
+        if (durum === 'hata') return bitir('reddedildi', [{ ad: `video:${v}`, sonuc: 'reddedildi', mesaj: 'Meta videoyu işleyemedi' }], 'Meta videoyu işleyemedi; başka bir video dene.');
+        if (i >= PROVA_VIDEO_DENEME) return bitir('dogrulanamadi', [], 'Meta videoyu henüz işlemedi; birkaç dakika sonra yeniden kontrol et.');
+        await bekle(10_000);
+      }
+      hashler.set(`video:${v}`, id);
+    } catch (e) {
+      if (e instanceof MetaKesinHata) return bitir('reddedildi', [{ ad: `video:${v}`, sonuc: 'reddedildi', mesaj: e.message, kod: e.kod }], `Video kabul edilmedi: ${e.message}`);
+      return bitir('dogrulanamadi', [], `Video yüklenemedi: ${(e as Error).message}`);
     }
   }
 

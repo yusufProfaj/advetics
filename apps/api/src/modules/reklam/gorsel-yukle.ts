@@ -57,6 +57,44 @@ function kenarDenetle(mime: 'image/jpeg' | 'image/png', en: number, boy: number)
   return { tur: 'tamam', mime, en, boy };
 }
 
+/**
+ * VİDEO: paylaşımlı sunucuda bellek sınırı — yükleme bellekte tutuluyor,
+ * 200 MB üstü reddediliyor (Meta 4 GB'a izin veriyor; reklam videoları
+ * genelde çok daha küçük). Biçim `ftyp` kutusundan, boyutlar ilk görüntü
+ * izinin `tkhd` kutusundan (16.16 sabit noktalı genişlik/yükseklik).
+ */
+export const VIDEO_EN_COK_BAYT = 200 * 1024 * 1024;
+
+export type VideoBilgisi =
+  | { tur: 'tamam'; mime: 'video/mp4' | 'video/quicktime'; en: number; boy: number }
+  | { tur: 'hata'; mesaj: string };
+
+export function videoBilgisi(b: Buffer): VideoBilgisi {
+  if (b.length > VIDEO_EN_COK_BAYT) return { tur: 'hata', mesaj: 'Video 200 MB’tan büyük.' };
+  if (b.length < 12 || b.toString('latin1', 4, 8) !== 'ftyp') {
+    return { tur: 'hata', mesaj: 'Yalnız MP4 ve MOV videolar kullanılabilir.' };
+  }
+  const mime = b.toString('latin1', 8, 12) === 'qt  ' ? 'video/quicktime' : 'video/mp4';
+  // Her `tkhd` kutusu bir iz; sesin genişliği 0, ilk sıfır olmayan görüntü izi.
+  let i = b.indexOf('tkhd', 0, 'latin1');
+  while (i > 4) {
+    const boyut = b.readUInt32BE(i - 4);
+    const son = i - 4 + boyut;
+    if (boyut > 0 && son <= b.length) {
+      const en = Math.round(b.readUInt32BE(son - 8) / 65536);
+      const boy = Math.round(b.readUInt32BE(son - 4) / 65536);
+      if (en > 0 && boy > 0) {
+        if (Math.min(en, boy) < GORSEL_EN_AZ_KENAR) {
+          return { tur: 'hata', mesaj: `Video çok küçük (${en}×${boy}); kısa kenar en az ${GORSEL_EN_AZ_KENAR} piksel olmalı.` };
+        }
+        return { tur: 'tamam', mime, en, boy };
+      }
+    }
+    i = b.indexOf('tkhd', i + 4, 'latin1');
+  }
+  return { tur: 'hata', mesaj: 'Videonun boyutları okunamadı.' };
+}
+
 export interface YuklenenGorsel {
   id: string;
   ad: string;
@@ -64,25 +102,33 @@ export interface YuklenenGorsel {
   genislik: number;
   yukseklik: number;
   zatenVardi: boolean;
+  tur: 'gorsel' | 'video';
 }
 
 export async function gorselKaydet(
   tx: TxRunner,
   g: { orgId: string; clientId: string; kullaniciId: string; ad: string; bayt: Buffer; yuklemeKoku: string },
 ): Promise<YuklenenGorsel> {
-  const bilgi = gorselBilgisi(g.bayt);
+  // Tür BAYTLARDAN: önce video kutusu, değilse görsel başlığı.
+  const video = g.bayt.length >= 12 && g.bayt.toString('latin1', 4, 8) === 'ftyp';
+  const bilgi = video ? videoBilgisi(g.bayt) : gorselBilgisi(g.bayt);
   if (bilgi.tur === 'hata') throw new Error(bilgi.mesaj);
+  const kind = video ? 'video' : 'image';
+  const uzanti = { 'image/png': 'png', 'image/jpeg': 'jpg', 'video/mp4': 'mp4', 'video/quicktime': 'mov' }[bilgi.mime];
   const ozet = createHash('sha256').update(g.bayt).digest('hex');
-  const ad = g.ad.normalize('NFC').trim().slice(0, 200) || 'görsel';
+  const ad = g.ad.normalize('NFC').trim().slice(0, 200) || (video ? 'video' : 'görsel');
   const [var_] = await tx((t) =>
-    t.$queryRaw<Array<{ id: string; name: string; width: number; height: number }>>(Prisma.sql`
-      SELECT id::text, name, width, height FROM assets WHERE client_id = ${g.clientId}::uuid AND content_hash = ${ozet}`),
+    t.$queryRaw<Array<{ id: string; name: string; width: number; height: number; kind: string }>>(Prisma.sql`
+      SELECT id::text, name, width, height, kind FROM assets WHERE client_id = ${g.clientId}::uuid AND content_hash = ${ozet}`),
   );
   if (var_) {
-    return { id: var_.id, ad: var_.name, onizlemeAdresi: `/assets/${var_.id}/preview`, genislik: var_.width, yukseklik: var_.height, zatenVardi: true };
+    return {
+      id: var_.id, ad: var_.name, onizlemeAdresi: `/assets/${var_.id}/preview`, genislik: var_.width, yukseklik: var_.height,
+      zatenVardi: true, tur: var_.kind === 'video' ? 'video' : 'gorsel',
+    };
   }
   const kok = isAbsolute(g.yuklemeKoku) ? g.yuklemeKoku : resolve(process.cwd(), g.yuklemeKoku);
-  const anahtar = `${g.orgId}/reklam/${randomUUID()}.${bilgi.mime === 'image/png' ? 'png' : 'jpg'}`;
+  const anahtar = `${g.orgId}/reklam/${randomUUID()}.${uzanti}`;
   const yol = resolve(kok, anahtar);
   if (!yol.startsWith(kok.endsWith(sep) ? kok : kok + sep)) throw new Error('Geçersiz depolama yolu');
   await mkdir(dirname(yol), { recursive: true });
@@ -91,9 +137,12 @@ export async function gorselKaydet(
     t.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       INSERT INTO assets (id, org_id, client_id, kind, name, file_name, mime_type, byte_size, width, height,
                           storage_key, content_hash, created_by, updated_at)
-      VALUES (gen_random_uuid(), ${g.orgId}::uuid, ${g.clientId}::uuid, 'image', ${ad}, ${ad}, ${bilgi.mime},
+      VALUES (gen_random_uuid(), ${g.orgId}::uuid, ${g.clientId}::uuid, ${kind}, ${ad}, ${ad}, ${bilgi.mime},
               ${g.bayt.length}, ${bilgi.en}, ${bilgi.boy}, ${anahtar}, ${ozet}, ${g.kullaniciId}::uuid, now())
       RETURNING id::text`),
   );
-  return { id: r!.id, ad, onizlemeAdresi: `/assets/${r!.id}/preview`, genislik: bilgi.en, yukseklik: bilgi.boy, zatenVardi: false };
+  return {
+    id: r!.id, ad, onizlemeAdresi: `/assets/${r!.id}/preview`, genislik: bilgi.en, yukseklik: bilgi.boy,
+    zatenVardi: false, tur: video ? 'video' : 'gorsel',
+  };
 }

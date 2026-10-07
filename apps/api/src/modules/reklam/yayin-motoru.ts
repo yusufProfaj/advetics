@@ -62,6 +62,10 @@ export interface MetaYazmaPortu {
   /** `GET /act_X/{tür}bylabels` — yalnız kampanya, reklam seti, reklam. */
   etiketleAra(hesap: string, tur: 'campaigns' | 'adsets' | 'ads', etiket: string): Promise<Array<{ id: string; name: string }>>;
   durumYaz(metaId: string, alanlar: { status: 'ACTIVE' | 'ARCHIVED'; name?: string }): Promise<void>;
+  /** Videoyu reklam hesabına yükler, video kimliği döner (önbellekli). */
+  videoYukle(hesap: string, varlikId: string): Promise<string>;
+  /** Meta videoyu işledi mi: `status.video_status`. */
+  videoDurumu(videoId: string): Promise<'hazir' | 'isleniyor' | 'hata'>;
   /** Prova: `execution_options` içinde validate_only ZORUNLU; nesne açılmaz. */
   dogrula(hesap: string, uc: string, alanlar: Record<string, unknown>): Promise<void>;
 }
@@ -94,6 +98,7 @@ interface NesneSatiri {
 export type SonlanmaSebebi = 'on_kontrol_reddi' | 'geri_alindi' | 'yeniden_kurulacak' | 'kapali_kuruldu';
 
 const YER_TUTUCU = /^\{([a-z_]+(?::[0-9a-z-]+)?)\}$/;
+const VIDEO_BEKLEME_MS = 15 * 60_000;
 const ETIKET_UCU: Partial<Record<NesneTuru, 'campaigns' | 'adsets' | 'ads'>> = {
   kampanya: 'campaigns',
   reklam_seti: 'adsets',
@@ -112,7 +117,33 @@ export class YayinMotoru {
      * değil). Varsayılanı YOK: kapısız bir motor kurulamasın.
      */
     private readonly yazmaKapisi: () => Promise<{ acik: true } | { acik: false; sebep: string }>,
+    /** Video işlenmesini beklerken uyku; testte anlık. */
+    private readonly bekle: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   ) {}
+
+  /**
+   * VİDEO İŞLENMESİ (TASARIM § 11.6): Meta "ready" diyene kadar 5 sn'den
+   * başlayıp katlanan aralıklarla, toplam en çok 15 dakika. İşlenmemiş video
+   * ile kurulan kreatif ya reddedilir ya da kapaksız/boş görünür. Süre
+   * dolarsa yayın kurulamadı; "kaldığı yerden devam" bekler, yeniden yüklemez.
+   */
+  private async videolarHazir(yayinId: string): Promise<string | null> {
+    const videolar = (await this.nesneler(yayinId)).filter((n) => n.ad.startsWith('video:') && n.meta_id);
+    for (const v of videolar) {
+      let aralik = 5_000;
+      let toplam = 0;
+      for (;;) {
+        const d = await this.meta.videoDurumu(v.meta_id!).catch(() => 'isleniyor' as const);
+        if (d === 'hazir') break;
+        if (d === 'hata') return 'Meta videoyu işleyemedi; başka bir video dene.';
+        if (toplam >= VIDEO_BEKLEME_MS) return 'Meta videoyu 15 dakikada işlemedi; birazdan "kaldığı yerden devam" de.';
+        await this.bekle(aralik);
+        toplam += aralik;
+        aralik = Math.min(aralik * 2, 60_000);
+      }
+    }
+    return null;
+  }
 
   // ---------------------------------------------------------------------------
   // YAZMA SARMALAYICILARI — Meta'ya yazan üç port çağrısı YALNIZ bunlardan
@@ -122,6 +153,10 @@ export class YayinMotoru {
   private async kapi(): Promise<void> {
     const k = await this.yazmaKapisi();
     if (!k.acik) throw new YazmaDurduruldu(k.sebep);
+  }
+  private async yazVideo(varlikId: string): Promise<string> {
+    await this.kapi();
+    return this.meta.videoYukle(this.hesap, varlikId);
   }
   private async yazGorsel(varlikId: string): Promise<string> {
     await this.kapi();
@@ -169,7 +204,11 @@ export class YayinMotoru {
 
     for (const n of nesneler) {
       if (n.durum === 'kuruldu' || n.durum === 'acildi') continue;
-      if (n.tur !== 'medya' && y.durum === 'medya') y = await this.gecis(y, 'kuruluyor', null);
+      if (n.tur !== 'medya' && y.durum === 'medya') {
+        const v = await this.videolarHazir(yayinId);
+        if (v) return (await this.gecis(y, 'kurulamadi', v)).durum;
+        y = await this.gecis(y, 'kuruluyor', null);
+      }
       if (n.durum !== 'bekliyor') {
         // Gönderilmiş ama sonucu yazılmamış ya da belirsiz halka: ASLA
         // kendiliğinden yeniden POST edilmez.
@@ -187,7 +226,9 @@ export class YayinMotoru {
       let metaId: string;
       try {
         if (n.tur === 'medya') {
-          metaId = await this.yazGorsel(n.ad.slice('medya:'.length));
+          metaId = n.ad.startsWith('video:')
+            ? await this.yazVideo(n.ad.slice('video:'.length))
+            : await this.yazGorsel(n.ad.slice('medya:'.length));
         } else {
           const govde = govdeBul(y, n.ad);
           const kimlikler = await this.kimlikHaritasi(y.id);
@@ -565,6 +606,8 @@ export interface YayinKaydiGirdisi {
   atifStandardi: string;
   /** Kreatiflerin `{medya:<varlık>}` yer tutucularıyla aynı kimlikler. */
   medyaVarliklari: string[];
+  /** Video fikirlerinin `{video:<varlık>}` kimlikleri. */
+  videoVarliklari?: string[];
   kaynak: 'panel' | 'ai_kart' | 'kopya' | 'toplu';
   baslatanId: string;
   testKipi: boolean;
@@ -579,6 +622,7 @@ export interface YayinKaydiGirdisi {
 export async function yayinKaydiOlustur(tx: TxRunner, g: YayinKaydiGirdisi): Promise<string> {
   const sira: Array<{ tur: NesneTuru; ad: string }> = [
     ...g.medyaVarliklari.map((v) => ({ tur: 'medya' as const, ad: `medya:${v}` })),
+    ...(g.videoVarliklari ?? []).map((v) => ({ tur: 'medya' as const, ad: `video:${v}` })),
     ...g.govdeler.map((x) => ({ tur: x.nesne as NesneTuru, ad: x.ad })),
   ];
   return tx(async (t) => {

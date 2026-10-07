@@ -53,8 +53,8 @@ export type AiCikti = z.infer<typeof aiCiktiSchema>;
 
 export interface AiBaglami {
   cumle: string;
-  /** Kullanıcının yüklediği/seçtiği görseller, sırasıyla. */
-  varliklar: string[];
+  /** Kullanıcının yüklediği/seçtiği medya, sırasıyla; video için kapak karesi. */
+  varliklar: Array<{ varlikId: string; kapakVarlikId?: string }>;
   sikSayfalar: Array<{ ad: string; adres: string }>;
   markaKitlesi: HedefKonum[] | null;
   yasalUyari: string | null;
@@ -106,7 +106,7 @@ export function aiCiktisiniDogrula(c: AiCikti, b: AiBaglami): AiSonucu {
 
   // KAVRAMLAR: her görsel bir fikir; sıra dışı ya da tekrar eden atılır ve söylenir.
   const kullanilan = new Set<number>();
-  const kavramlar: Array<{ varlikId: string; baslik: string; metin: string }> = [];
+  const kavramlar: Array<{ varlikId: string; kapakVarlikId?: string; baslik: string; metin: string }> = [];
   for (const k of c.kavramlar) {
     const varlik = b.varliklar[k.gorselSirasi - 1];
     if (!varlik || kullanilan.has(k.gorselSirasi)) continue;
@@ -122,7 +122,7 @@ export function aiCiktisiniDogrula(c: AiCikti, b: AiBaglami): AiSonucu {
       metin = `${metin}\n\n${b.yasalUyari}`;
       notlar.push(`Fikir ${kavramlar.length + 1}: zorunlu yasal uyarı metne eklendi.`);
     }
-    kavramlar.push({ varlikId: varlik, baslik, metin });
+    kavramlar.push({ ...varlik, baslik, metin });
   }
   const eksikGorsel = b.varliklar.length - kavramlar.length;
   if (eksikGorsel > 0) notlar.push(`${eksikGorsel} görsel için fikir üretilmedi; önizlemede ekleyebilirsin.`);
@@ -170,7 +170,7 @@ export const AI_SISTEM_ISTEMI = `Bir reklam ajansının paneline gömülü rekla
 
 Kurallar:
 - Amaç yalnız şu dördünden biri olabilir: FORM (form doldursunlar, ad ve telefon toplanır), WHATSAPP (WhatsApp'tan yazsınlar), SITE (siteye gelsinler), SATIS (sitede satış ya da kayıt). Kullanıcı açıkça söylemediyse cümleden en uygun olanı seç ve gerekçesini kısa yaz.
-- Her görsel için bir fikir yaz: başlık en çok 40 karakter, ana metin Türkçe, samimi ve net; en önemli bilgi ilk 125 karakterde. Görselde gördüğünü metinde kullan; görselde olmayan bir şeyi (fiyat, indirim, garanti, tarih) uydurma.
+- Her görsel ya da video için bir fikir yaz (video verildiyse görselde onun kapak karesini görürsün; metni videoya göre yaz): başlık en çok 40 karakter, ana metin Türkçe, samimi ve net; en önemli bilgi ilk 125 karakterde. Görselde gördüğünü metinde kullan; görselde olmayan bir şeyi (fiyat, indirim, garanti, tarih) uydurma.
 - Marka bilgileri verildiyse üsluba ve vaatlere uy. Zorunlu yasal uyarı verildiyse her ana metnin sonuna aynen ekle.
 - Bütçe ve süreyi yalnız kullanıcı cümlede rakamla yazdıysa doldur; yazmadıysa null bırak. Tahmin etme.
 - Site adresini yalnız verilen sayfalardan seç ya da kullanıcının yazdığı adresi aynen kullan; adres uydurma.

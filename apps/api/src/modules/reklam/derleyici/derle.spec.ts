@@ -99,6 +99,28 @@ describe('derleMeta — yapı', () => {
   });
 });
 
+describe('video fikri', () => {
+  it('KRİTİK: video_data kuruluyor (link_data DEĞİL); kapak hash’i, başlık ve aynı CTA', () => {
+    const r = govde({ kavramlar: [{ gorselHash: 'KAPAK', videoId: 'VID', baslik: 'B', metin: 'M' }] });
+    const oss = bul(r.govdeler, 'kreatif:1').object_story_spec;
+    expect(oss).not.toHaveProperty('link_data');
+    expect(oss.video_data).toEqual({
+      video_id: 'VID',
+      image_hash: 'KAPAK',
+      title: 'B',
+      message: 'M',
+      call_to_action: { type: 'LEARN_MORE', value: { link: 'https://ornek.com.tr/kampanya' } },
+    });
+  });
+
+  it('FORM videosunda CTA form kimliğini taşıyor', () => {
+    const r = govde({ niyet: 'FORM', formId: '{form}', hedefAdres: null, kavramlar: [{ gorselHash: 'K', videoId: 'V', baslik: 'B', metin: 'M' }] });
+    expect(bul(r.govdeler, 'kreatif:1').object_story_spec.video_data.call_to_action).toEqual({
+      type: 'SIGN_UP', value: { lead_gen_form_id: '{form}', link: 'http://fb.me/' },
+    });
+  });
+});
+
 describe('manifesto', () => {
   const dallar: Array<[string, Partial<DerlemeGirdisi>]> = [
     ['SITE', {}],
@@ -114,7 +136,8 @@ describe('manifesto', () => {
       for (const s of MANIFESTO) {
         if (s.kosul === 'kategori' && !kategori) continue;
         for (const gv of r.govdeler.filter((x) => x.nesne === s.nesne)) {
-          expect(r.acikcaYazilanAlanlar, `${s.kod} ${gv.ad}`).toContain(`${s.nesne}:${s.yol}`);
+          const yollar = typeof s.yol === 'string' ? [s.yol] : s.yol;
+          expect(yollar.some((y) => r.acikcaYazilanAlanlar.includes(`${s.nesne}:${y}`)), `${s.kod} ${gv.ad}`).toBe(true);
         }
       }
     });

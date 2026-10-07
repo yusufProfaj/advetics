@@ -41,6 +41,12 @@ export const kavramGirdisiSchema = z.object({
   baslik: z.string().max(255),
   metin: z.string().max(5000),
   aciklama: z.string().max(255).optional(),
+  /**
+   * VİDEO FİKRİ: `varlikId` videoyu, bu alan KAPAK görselini gösterir.
+   * İsteğe bağlı ve varsayılansız: varsayılan değerli bir alan, kayıtlı
+   * taslakların içerik özetini değiştirir ve yayında "sürüm bozuk" üretirdi.
+   */
+  kapakVarlikId: z.string().uuid().optional(),
 });
 
 /**

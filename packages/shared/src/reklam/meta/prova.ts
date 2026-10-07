@@ -40,15 +40,16 @@ export interface ProvaGovdesi {
   alanlar: Record<string, unknown>;
 }
 
-const YER_TUTUCU = /^\{medya:([0-9a-f-]+)\}$/;
+const YER_TUTUCU = /^\{(?:medya|video):([0-9a-f-]+)\}$/;
 
 /** Yalnız `{medya:<varlık>}` çözülür; başka yer tutucu provada kalamaz. */
 function medyaYerlestir(v: unknown, hashler: ReadonlyMap<string, string>): unknown {
   if (typeof v === 'string') {
     const m = YER_TUTUCU.exec(v);
     if (m) {
-      const h = hashler.get(m[1]!);
-      if (!h) throw new Error(`Görsel hash'i yok: ${m[1]}`);
+      const anahtar = v.startsWith('{video:') ? `video:${m[1]}` : m[1]!;
+      const h = hashler.get(anahtar);
+      if (!h) throw new Error(`Medya kimliği yok: ${v}`);
       return h;
     }
     if (/^\{[a-z_]+(?::[0-9a-z-]+)?\}$/.test(v)) throw new Error(`Provada çözülemeyen yer tutucu: ${v}`);

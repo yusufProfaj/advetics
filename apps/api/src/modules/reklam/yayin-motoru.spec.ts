@@ -40,6 +40,7 @@ let tx: TxRunner;
 let kayitDusur = false;
 const VARLIK = '66666666-0000-4000-8000-000000000001';
 const HESAP = '44444444-0000-4000-8000-000000000001';
+const VIDEO = '77777777-0000-4000-8000-000000000001';
 
 beforeAll(async () => {
   h = await createHarness();
@@ -73,7 +74,7 @@ beforeEach(async () => {
   );
 });
 
-async function hazirla(o: { testKipi?: boolean; kavram?: number } = {}) {
+async function hazirla(o: { testKipi?: boolean; kavram?: number; video?: boolean } = {}) {
   const [t] = await h.q<{ id: string }>(
     `INSERT INTO reklam_taslagi (org_id, client_id, platform, olusturan_yuz, olusturan_id)
      VALUES ($1, $2, 'meta', 'acemi', $3) RETURNING id::text`,
@@ -94,7 +95,9 @@ async function hazirla(o: { testKipi?: boolean; kavram?: number } = {}) {
     butce: { tip: 'gunluk', micros: 500_000_000n, seviye: 'kampanya' },
     takvim: { baslangic: '2026-10-08T00:00:00+0300', bitis: null },
     atif: 'tik7_gor1',
-    kavramlar: Array.from({ length: o.kavram ?? 1 }, (_, i) => ({ gorselHash: `{medya:${VARLIK}}`, baslik: `B${i}`, metin: 'M' })),
+    kavramlar: Array.from({ length: o.kavram ?? 1 }, (_, i) =>
+      o.video ? { gorselHash: `{medya:${VARLIK}}`, videoId: `{video:${VIDEO}}`, baslik: `B${i}`, metin: 'M' } : { gorselHash: `{medya:${VARLIK}}`, baslik: `B${i}`, metin: 'M' },
+    ),
     hedefAdres: 'https://ornek.com.tr',
     formId: null,
     urlEtiketleri: null,
@@ -115,6 +118,7 @@ async function hazirla(o: { testKipi?: boolean; kavram?: number } = {}) {
     derleyiciSurumu: r.derleyiciSurumu,
     atifStandardi: 'tik7_gor1',
     medyaVarliklari: [VARLIK],
+    videoVarliklari: o.video ? [VIDEO] : [],
     kaynak: 'panel',
     baslatanId: IDS.user,
     testKipi: o.testKipi ?? false,
@@ -152,6 +156,39 @@ describe('mutlu yol', () => {
     expect([...meta.kayitlar.values()].find((k) => k.uc === 'campaigns')!.status).toBe('ARCHIVED');
     const [y] = await h.q<{ sonlandi_at: Date | null }>('SELECT sonlandi_at FROM yayin WHERE id = $1', [yayinId]);
     expect(y!.sonlandi_at).not.toBeNull();
+  });
+});
+
+describe('video', () => {
+  const ANLIK = async () => undefined;
+  it('KRİTİK: video yüklenir, Meta İŞLEYENE kadar beklenir, kreatif video kimliğini ve kapağı taşır', async () => {
+    const meta = new SahteMeta();
+    meta.videoDurumlari = ['isleniyor', 'isleniyor', 'hazir'];
+    const { yayinId } = await hazirla({ video: true });
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK, ANLIK).kur(yayinId)).toBe('iletildi');
+    expect(meta.videoDurumlari).toEqual([]);
+    const k = [...meta.kayitlar.values()].find((x) => x.uc === 'adcreatives')!;
+    expect((k.alanlar.object_story_spec as { video_data: Record<string, unknown> }).video_data).toMatchObject({
+      video_id: `vid-${VIDEO.slice(0, 8)}`,
+      image_hash: `hash-${VARLIK.slice(0, 8)}`,
+    });
+  });
+
+  it('Meta videoyu işleyemezse kurulamadı; ağaç KURULMAZ', async () => {
+    const meta = new SahteMeta();
+    meta.videoDurumlari = ['hata'];
+    const { yayinId } = await hazirla({ video: true });
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK, ANLIK).kur(yayinId)).toBe('kurulamadi');
+    expect(meta.sayi('campaigns')).toBe(0);
+    expect((await durum(yayinId)).sebep).toMatch(/işleyemedi/);
+  });
+
+  it('15 dakikada işlenmezse kurulamadı ve "kaldığı yerden devam" önerilir', async () => {
+    const meta = new SahteMeta();
+    meta.videoDurumlari = Array(50).fill('isleniyor');
+    const { yayinId } = await hazirla({ video: true });
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK, ANLIK).kur(yayinId)).toBe('kurulamadi');
+    expect((await durum(yayinId)).sebep).toMatch(/15 dakikada/);
   });
 });
 

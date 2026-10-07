@@ -135,7 +135,7 @@ export function YeniReklamAkisi({
   }, []);
 
   const kavramKaydet = (gorseller: string[], b = baslik, m = metin) =>
-    kaydet({ kavramlar: gorseller.length ? { deger: kavramlarKur(gorseller, b, m), kaynak: KULLANICI } : null });
+    kaydet({ kavramlar: gorseller.length ? { deger: kavramlarKur(gorseller, b, m, taslak.alanlar.kavramlar?.deger), kaynak: KULLANICI } : null });
 
   const niyet = d.niyet ? NIYET_KATALOGU[d.niyet] : null;
   const eksikAdim = (a: number) => taslak.eksikler.some((e) => e.adim === a && e.kod !== 'OK-17');

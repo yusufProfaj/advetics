@@ -87,6 +87,12 @@ modele gidiyor) taslağı kurar, `/reklam/onizleme`de telefon çerçeveli
 prova ve test kipi. Model bütçe/süre/adres UYDURAMIYOR (sunucu cümleyle
 karşılaştırıyor), kategori sorusunu cevaplayamıyor. `ANTHROPIC_API_KEY`
 sunucuda tanımlı olmalı. Menüde değil; eski Reklam Oluştur'un üstünde kart.
+**Video (2026-10-07):** Stüdyo MP4/MOV kabul ediyor (en çok 200 MB).
+Kapak karesi TARAYICIDA alınıyor (sunucuya video programı kurulmuyor) ve
+ayrı görsel olarak yükleniyor; asistan kapağı görüyor. Derleyici video
+fikrini `video_data` ile kuruyor (kapak `image_hash`); motor videoyu
+yükleyip Meta "hazır" diyene kadar bekliyor (15 dk sınır), prova da öyle.
+Migration YOK. Google için sürüm kararı: **v25**.
 **Sıradaki:** (1) CANLI TUR devam: ajansın kendi Meta hesabında
 SITE niyetiyle test kipi — Meta'nın gerçekte neyi farklı döndürdüğü
 normalleştirme tablosunu dolduracak (ilk denemelerin "fark" ile durması

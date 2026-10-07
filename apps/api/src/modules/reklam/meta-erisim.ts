@@ -138,3 +138,21 @@ export function gorselOkuyucu(tx: TxRunner, yuklemeKoku: string, clientId: strin
     return readFile(yol);
   };
 }
+
+/** Video baytları: yalnız mp4 ve mov, yalnız bu workspace'in arşivinden. */
+export function videoOkuyucu(tx: TxRunner, yuklemeKoku: string, clientId: string): NonNullable<GrafAyarlari['videoBaytlari']> {
+  const kok = isAbsolute(yuklemeKoku) ? yuklemeKoku : resolve(process.cwd(), yuklemeKoku);
+  const kokSep = kok.endsWith(sep) ? kok : kok + sep;
+  return async (varlikId) => {
+    const [v] = await tx((t) =>
+      t.$queryRaw<Array<{ anahtar: string; tur: string }>>(Prisma.sql`
+        SELECT storage_key AS anahtar, mime_type AS tur FROM assets
+         WHERE id = ${varlikId}::uuid AND client_id = ${clientId}::uuid AND kind = 'video'`),
+    );
+    if (!v) throw new MetaKesinHata('Video bu workspace’in arşivinde değil');
+    if (v.tur !== 'video/mp4' && v.tur !== 'video/quicktime') throw new MetaKesinHata(`Video biçimi desteklenmiyor: ${v.tur}`);
+    const yol = resolve(kok, v.anahtar);
+    if (!yol.startsWith(kokSep)) throw new Error(`Geçersiz depolama anahtarı: ${v.anahtar}`);
+    return { bayt: await readFile(yol), mime: v.tur };
+  };
+}

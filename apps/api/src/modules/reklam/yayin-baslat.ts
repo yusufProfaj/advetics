@@ -112,7 +112,7 @@ export async function yayinBaslat(
   if (d.tur === 'ret') retler.push(...d.retler);
   if (retler.length > 0 || d.tur === 'ret') return { tur: 'ret', retler };
   const yayinId = d.kimlik;
-  const { derleme, hesapId, atif, medya } = d;
+  const { derleme, hesapId, atif, medya, videolar } = d;
 
   // --- Kayıt: yayın + nesneler, taslak "yayında" ---------------------------
   await yayinKaydiOlustur(tx, {
@@ -129,6 +129,7 @@ export async function yayinBaslat(
     derleyiciSurumu: DERLEYICI_SURUMU,
     atifStandardi: atif,
     medyaVarliklari: medya,
+    videoVarliklari: videolar,
     kaynak: 'panel',
     baslatanId: ctx.userId,
     testKipi: istek.testKipi,
@@ -153,6 +154,7 @@ export type TaslakDerlemesi =
       hesapId: string;
       atif: AtifStandardi;
       medya: string[];
+      videolar: string[];
     }
   | { tur: 'ret'; retler: Array<{ kod: string; mesaj: string }> };
 
@@ -229,6 +231,25 @@ export async function taslakDerle(
   // --- Derleme ---------------------------------------------------------------
   const yayinId = kimlik;
   const kavramlar = alanlar.kavramlar!.deger;
+  // VARLIK TÜRLERİ veritabanından: görsel yerine video ya da kapak yerine
+  // video gelirse Meta ya reddeder ya da kapaksız reklam kurar.
+  const kimlikler = [...new Set(kavramlar.flatMap((k) => (k.kapakVarlikId ? [k.varlikId, k.kapakVarlikId] : [k.varlikId])))];
+  const turler = new Map(
+    (
+      await tx((x) =>
+        x.$queryRaw<Array<{ id: string; kind: string }>>(Prisma.sql`
+          SELECT id::text, kind FROM assets WHERE client_id = ${t.client_id}::uuid AND id = ANY(${kimlikler}::uuid[])`),
+      )
+    ).map((r) => [r.id, r.kind]),
+  );
+  for (const [i, k] of kavramlar.entries()) {
+    const tur = turler.get(k.varlikId);
+    if (!tur) retler.push({ kod: 'KRT-GORSEL', mesaj: `Fikir ${i + 1}: medya bu workspace’in arşivinde değil.` });
+    else if (k.kapakVarlikId && tur !== 'video') retler.push({ kod: 'KRT-VIDEO', mesaj: `Fikir ${i + 1}: kapak verilmiş ama medya video değil.` });
+    else if (!k.kapakVarlikId && tur === 'video') retler.push({ kod: 'KRT-VIDEO', mesaj: `Fikir ${i + 1}: video için kapak görseli gerekli.` });
+    if (k.kapakVarlikId && turler.get(k.kapakVarlikId) !== 'image') retler.push({ kod: 'KRT-VIDEO', mesaj: `Fikir ${i + 1}: kapak bir görsel olmalı.` });
+  }
+  if (retler.length > 0) return { tur: 'ret', retler };
   const takvim = alanlar.takvim!.deger;
   const derleme = derleMeta({
     apiSurumu: b.apiSurumu,
@@ -253,7 +274,11 @@ export async function taslakDerle(
     },
     atif: a!.atif,
     // Görsel hash'i yayın sırasında yüklenip yerine konur.
-    kavramlar: kavramlar.map((k) => ({ gorselHash: `{medya:${k.varlikId}}`, baslik: k.baslik, metin: k.metin, aciklama: k.aciklama })),
+    kavramlar: kavramlar.map((k) =>
+      k.kapakVarlikId
+        ? { gorselHash: `{medya:${k.kapakVarlikId}}`, videoId: `{video:${k.varlikId}}`, baslik: k.baslik, metin: k.metin, aciklama: k.aciklama }
+        : { gorselHash: `{medya:${k.varlikId}}`, baslik: k.baslik, metin: k.metin, aciklama: k.aciklama },
+    ),
     hedefAdres: alanlar.hedefAdres?.deger ?? null,
     formId: null,
     urlEtiketleri: null,
@@ -266,7 +291,8 @@ export async function taslakDerle(
     derleme,
     hesapId: hesapId!,
     atif: a!.atif as AtifStandardi,
-    medya: [...new Set(kavramlar.map((k) => k.varlikId))],
+    medya: [...new Set(kavramlar.map((k) => k.kapakVarlikId ?? k.varlikId))],
+    videolar: [...new Set(kavramlar.filter((k) => k.kapakVarlikId).map((k) => k.varlikId))],
   };
 }
 

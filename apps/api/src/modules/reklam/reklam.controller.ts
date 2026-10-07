@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { GORSEL_EN_COK_BAYT, type YuklenenGorsel } from './gorsel-yukle';
+import { VIDEO_EN_COK_BAYT, type YuklenenGorsel } from './gorsel-yukle';
 import { ReklamGorselService } from './gorsel.service';
 import { z } from 'zod';
 import {
@@ -44,7 +44,10 @@ const surumYazSchema = z.object({
 const aiTaslakSchema = z.object({
   clientId: z.string().uuid(),
   cumle: z.string().trim().min(3).max(1000),
-  varliklar: z.array(z.string().uuid()).min(1).max(10),
+  medyalar: z
+    .array(z.object({ varlikId: z.string().uuid(), kapakVarlikId: z.string().uuid().optional() }))
+    .min(1)
+    .max(10),
 });
 const onaySchema = z.object({ icerikOzeti: z.string().regex(/^[0-9a-f]{64}$/) });
 
@@ -224,7 +227,7 @@ export class ReklamController {
     @CurrentTenant() ctx: TenantContext,
     @Body(zodBody(aiTaslakSchema)) dto: z.infer<typeof aiTaslakSchema>,
   ): Promise<AiTaslakSonucu> {
-    return this.ai.olustur(ctx, dto.clientId, dto.cumle, dto.varliklar);
+    return this.ai.olustur(ctx, dto.clientId, dto.cumle, dto.medyalar);
   }
 
   @Post('taslaklar/:id/oneriyi-onayla')
@@ -240,7 +243,8 @@ export class ReklamController {
   /** Sürükle-bırak görsel yükleme: biçim ve boyut GİRİŞ ANINDA denetlenir. */
   @Post('gorseller')
   @RequirePermissions('bulk.write')
-  @UseInterceptors(FileInterceptor('dosya', { limits: { fileSize: GORSEL_EN_COK_BAYT, files: 1 } }))
+  // Sınır VİDEOnunki (büyük olan); görselin 30 MB sınırı servis içinde.
+  @UseInterceptors(FileInterceptor('dosya', { limits: { fileSize: VIDEO_EN_COK_BAYT, files: 1 } }))
   async gorselYukle(
     @CurrentTenant() ctx: TenantContext,
     @Query('clientId', ParseUUIDPipe) clientId: string,

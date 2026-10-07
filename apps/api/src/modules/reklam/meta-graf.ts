@@ -28,6 +28,8 @@ export interface GrafAyarlari {
   /** Hesap başına image_hash önbelleği (`asset_platform_refs`). */
   gorselOnbellek: { oku(varlikId: string): Promise<string | null>; yaz(varlikId: string, hash: string): Promise<void> };
   gorselBaytlari: (varlikId: string) => Promise<Buffer>;
+  /** Video baytları ve biçimi (yalnız mp4/mov). */
+  videoBaytlari?: (varlikId: string) => Promise<{ bayt: Buffer; mime: string }>;
   /** Testte sahte; üretimde global fetch. */
   fetchFn?: typeof fetch;
 }
@@ -50,6 +52,8 @@ export function metaSurumuDogrula(surum: string): MetaApiSurumu {
 const BELIRSIZ_KODLAR = new Set([1, 2]);
 const VARSAYILAN_SURE_MS = 30_000;
 const GORSEL_SURE_MS = 120_000;
+/** Büyük video yüklemesi dakikalar sürebilir. */
+const VIDEO_SURE_MS = 10 * 60_000;
 
 interface GrafHatasi {
   message?: string;
@@ -123,6 +127,32 @@ export class MetaGrafIstemcisi implements MetaYazmaPortu {
     if (!hash) throw new MetaBelirsizHata('Görsel yüklendi ama Meta hash döndürmedi');
     await this.a.gorselOnbellek.yaz(varlikId, hash);
     return hash;
+  }
+
+  /**
+   * VİDEO: `POST /act/advideos`, çok parçalı gövde, alan adı `source`.
+   * Sınır `FormData` ile kuruluyor (elle yazılan sınır tek baytta "geçersiz
+   * istek" veriyor ve hangi bayt olduğunu söylemiyor). Kimlik hesap başına
+   * önbellekte; aynı video aynı hesaba ikinci kez yüklenmiyor.
+   */
+  async videoYukle(hesap: string, varlikId: string): Promise<string> {
+    this.hesapDogrula(hesap);
+    const onbellek = await this.a.gorselOnbellek.oku(varlikId);
+    if (onbellek) return onbellek;
+    if (!this.a.videoBaytlari) throw new MetaKesinHata('Video okuyucusu kurulmamış');
+    const v = await this.a.videoBaytlari(varlikId);
+    const form = new FormData();
+    form.append('source', new Blob([new Uint8Array(v.bayt)], { type: v.mime }), v.mime === 'video/quicktime' ? 'video.mov' : 'video.mp4');
+    const r = await this.istek<{ id?: string }>('POST', `${this.kok}/${hesap}/advideos`, this.a.kullaniciToken, form, VIDEO_SURE_MS);
+    if (!r.id) throw new MetaBelirsizHata('Video yüklendi ama Meta kimlik döndürmedi');
+    await this.a.gorselOnbellek.yaz(varlikId, r.id);
+    return r.id;
+  }
+
+  async videoDurumu(videoId: string): Promise<'hazir' | 'isleniyor' | 'hata'> {
+    const r = await this.cagri<{ status?: { video_status?: string } }>('GET', `${videoId}?fields=status`, this.a.kullaniciToken);
+    const s = r.status?.video_status;
+    return s === 'ready' ? 'hazir' : s === 'error' ? 'hata' : 'isleniyor';
   }
 
   async olustur(hesap: string, uc: string, alanlar: Record<string, unknown>): Promise<{ id: string }> {
@@ -201,11 +231,11 @@ export class MetaGrafIstemcisi implements MetaYazmaPortu {
     return sonuc;
   }
 
-  private cagri<T>(yontem: 'GET' | 'POST', yol: string, token: string, govde?: URLSearchParams, sure?: number): Promise<T> {
+  private cagri<T>(yontem: 'GET' | 'POST', yol: string, token: string, govde?: URLSearchParams | FormData, sure?: number): Promise<T> {
     return this.istek<T>(yontem, `${this.kok}/${yol}`, token, govde, sure);
   }
 
-  private async istek<T>(yontem: 'GET' | 'POST', adres: string, token: string, govde?: URLSearchParams, sure = VARSAYILAN_SURE_MS): Promise<T> {
+  private async istek<T>(yontem: 'GET' | 'POST', adres: string, token: string, govde?: URLSearchParams | FormData, sure = VARSAYILAN_SURE_MS): Promise<T> {
     // `paging.next` Meta'dan gelen bir adres: yalnız graph.facebook.com'a
     // gidilir. Token'ı başka bir ana makineye taşımak, yanıtı değiştiren
     // herkese token vermek olurdu.
@@ -216,9 +246,10 @@ export class MetaGrafIstemcisi implements MetaYazmaPortu {
         method: yontem,
         headers: {
           Authorization: `Bearer ${token}`,
-          ...(govde ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
+          // FormData'da Content-Type'ı fetch KENDİSİ yazar (sınırla birlikte).
+          ...(govde instanceof URLSearchParams ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
         },
-        body: govde?.toString(),
+        body: govde instanceof FormData ? govde : govde?.toString(),
         redirect: 'manual',
         signal: AbortSignal.timeout(sure),
       });

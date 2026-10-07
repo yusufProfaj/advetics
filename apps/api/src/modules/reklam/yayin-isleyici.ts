@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { YayinDurumu } from '@advetics/shared';
 import type { CryptoService } from '../../crypto/crypto.service';
-import { gorselOkuyucu, gorselOnbellegi, hesapErisimi, sayfaTokenOkuyucu } from './meta-erisim';
+import { gorselOkuyucu, gorselOnbellegi, hesapErisimi, sayfaTokenOkuyucu, videoOkuyucu } from './meta-erisim';
 import { MetaGrafIstemcisi, type GrafAyarlari } from './meta-graf';
 import type { ReklamIsi, YayinIsi } from './reklam-kuyrugu';
 import { provaKos } from './prova-isleyici';
@@ -70,6 +70,7 @@ async function provaIsiniIsle(d: IsleyiciBagimliliklari, provaId: string, sahip:
       sayfaTokeni: sayfaTokenOkuyucu(d.tx, d.crypto, p.client_id),
       gorselOnbellek: gorselOnbellegi(d.tx, p.org_id, p.ad_account_id),
       gorselBaytlari: gorselOkuyucu(d.tx, d.yuklemeKoku, p.client_id),
+      videoBaytlari: videoOkuyucu(d.tx, d.yuklemeKoku, p.client_id),
     };
     const port = d.portKur ? d.portKur(ayar) : new MetaGrafIstemcisi(ayar);
     return provaKos(d.tx, provaId, port, erisim.hesap, () => metaYazmaAcikMi(d.tx, p.client_id), {
@@ -119,6 +120,7 @@ export async function yayinIsiniIsle(d: IsleyiciBagimliliklari, is: YayinIsi, sa
       sayfaTokeni: sayfaTokenOkuyucu(d.tx, d.crypto, y.client_id),
       gorselOnbellek: gorselOnbellegi(d.tx, y.org_id, y.ad_account_id),
       gorselBaytlari: gorselOkuyucu(d.tx, d.yuklemeKoku, y.client_id),
+      videoBaytlari: videoOkuyucu(d.tx, d.yuklemeKoku, y.client_id),
     };
     const port = d.portKur ? d.portKur(ayar) : new MetaGrafIstemcisi(ayar);
     const motor = new YayinMotoru(d.tx, port, erisim.hesap, () => metaYazmaAcikMi(d.tx, y.client_id));
