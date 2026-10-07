@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import type { HedefKonum, NiyetKodu, TaslakAlanlari } from '@advetics/shared';
+import { DERLENEN_NIYETLER, NIYET_KATALOGU, type HedefKonum, type TaslakAlanlari } from '@advetics/shared';
 
 /**
  * YAPAY ZEKÂ İLE TASLAK — "bu görsellerle form kampanyası oluştur"
@@ -20,8 +20,15 @@ import type { HedefKonum, NiyetKodu, TaslakAlanlari } from '@advetics/shared';
  * Model çağrısı `ai-taslak.service.ts`te.
  */
 
-/** Modelin seçebileceği amaçlar: ilk tur (Acemi) — yönlendirme kartı hariç. */
-export const AI_NIYETLERI = ['FORM', 'WHATSAPP', 'SITE', 'SATIS'] as const satisfies readonly NiyetKodu[];
+/**
+ * Modelin seçebileceği amaçlar DERLEYİCİDEN TÜRÜYOR (SENTEZ S-30). Elle
+ * yazılan liste WHATSAPP ve SATIS'ı da içeriyordu: model onları seçince
+ * taslak kuruluyor, kullanıcı önizlemeyi onaylıyor ve derleyici ancak o
+ * zaman "bu amaç henüz kurulamıyor" diyordu. Yeni bir amaç derleyiciye
+ * girdiği gün buraya kendiliğinden girer.
+ */
+export const AI_NIYETLERI = DERLENEN_NIYETLER;
+const AI_NIYET_ACIKLAMASI = AI_NIYETLERI.map((n) => `${n} (${NIYET_KATALOGU[n].ekranAdi})`).join(', ');
 
 export const aiCiktiSchema = z.object({
   niyet: z.enum(AI_NIYETLERI).describe('Kullanıcının istediği sonuç; kapalı liste.'),
@@ -93,7 +100,7 @@ export function aiCiktisiniDogrula(c: AiCikti, b: AiBaglami): AiSonucu {
   d.niyet = ai(c.niyet);
 
   // ADRES: uydurulmuş adres reklamı yanlış sayfaya gönderir; yalnız bilinen.
-  if (c.niyet === 'SITE' || c.niyet === 'SATIS') {
+  if (c.niyet === 'SITE') {
     const bilinen = b.sikSayfalar.map((s) => s.adres);
     const cumlede = c.hedefAdres !== null && b.cumle.includes(c.hedefAdres);
     if (c.hedefAdres && (bilinen.includes(c.hedefAdres) || cumlede) && /^https:\/\//.test(c.hedefAdres)) {
@@ -169,7 +176,7 @@ export function aiCiktisiniDogrula(c: AiCikti, b: AiBaglami): AiSonucu {
 export const AI_SISTEM_ISTEMI = `Bir reklam ajansının paneline gömülü reklam asistanısın. Kullanıcı reklam bilmeyen bir işletme sahibi ya da ajans çalışanı olabilir. Görevin, verilen görsellerden ve kullanıcının tek cümlesinden bir Meta (Facebook/Instagram) reklam taslağı önermek. Önerin bir taslaktır: kullanıcı önizlemede görüp onaylayacak.
 
 Kurallar:
-- Amaç yalnız şu dördünden biri olabilir: FORM (form doldursunlar, ad ve telefon toplanır), WHATSAPP (WhatsApp'tan yazsınlar), SITE (siteye gelsinler), SATIS (sitede satış ya da kayıt). Kullanıcı açıkça söylemediyse cümleden en uygun olanı seç ve gerekçesini kısa yaz.
+- Amaç yalnız şu listeden biri olabilir: ${AI_NIYET_ACIKLAMASI}. Kullanıcı listede olmayan bir şey istediyse (WhatsApp, satış, arama gibi) en yakın amacı seç ve bunu sorular listesinde açıkça söyle; kullanıcı açıkça söylemediyse cümleden en uygun olanı seç ve gerekçesini kısa yaz.
 - Her görsel ya da video için bir fikir yaz (video verildiyse görselde onun kapak karesini görürsün; metni videoya göre yaz): başlık en çok 40 karakter, ana metin Türkçe, samimi ve net; en önemli bilgi ilk 125 karakterde. Görselde gördüğünü metinde kullan; görselde olmayan bir şeyi (fiyat, indirim, garanti, tarih) uydurma.
 - Marka bilgileri verildiyse üsluba ve vaatlere uy. Zorunlu yasal uyarı verildiyse her ana metnin sonuna aynen ekle.
 - Bütçe ve süreyi yalnız kullanıcı cümlede rakamla yazdıysa doldur; yazmadıysa null bırak. Tahmin etme.

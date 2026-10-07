@@ -156,10 +156,22 @@ describe('manifesto', () => {
     }
   });
 
-  it('atıf spec ajans standardından', () => {
-    expect(bul(govde({ atif: 'tik7' }).govdeler, 'reklam_seti').attribution_spec).toEqual([
+  it('KRİTİK: atıf NİYET BAŞINA — form ajans standardı, site ziyareti 1 gün tıklama (S-07)', () => {
+    expect(bul(govde({ atif: 'tik7', niyet: 'FORM', formId: '{form}', hedefAdres: null }).govdeler, 'reklam_seti').attribution_spec).toEqual([
       { event_type: 'CLICK_THROUGH', window_days: 7 },
     ]);
+    // Site ziyaretinde ajans standardı Meta'da geçerli değil: yazılsa ya
+    // reddedilir ya sessizce değişirdi.
+    expect(bul(govde({ atif: 'tik7_gor1', niyet: 'SITE' }).govdeler, 'reklam_seti').attribution_spec).toEqual([
+      { event_type: 'CLICK_THROUGH', window_days: 1 },
+    ]);
+  });
+
+  it('KRİTİK: ekran yalnız gerçekten kapattığımızı "kapalı" diyor; kapatamadıklarımız ayrı listede', () => {
+    const d = derleMeta(temel);
+    if (d.tur !== 'govde') throw new Error('gövde bekleniyordu');
+    expect(d.kapattiklarimiz.join(' ')).not.toMatch(/metni değiştirmesi kapalı/);
+    expect(d.metaOtomatikYapabilir).toContain('metnin farklı varyasyonlarını gösterebilir');
   });
 });
 

@@ -23,7 +23,7 @@ export const NIYET_KODLARI = [
   'SATIS',
   'ONE_CIKAR',
   'IG_MESAJ',
-  'ARAMA',
+  'TELEFON',
   'ERISIM',
   'MESSENGER',
   'COK_KANAL_MESAJ',
@@ -166,9 +166,11 @@ export const NIYET_KATALOGU: Record<NiyetKodu, NiyetSatiri> = {
       appDestination: 'INSTAGRAM_DIRECT',
     },
   },
-  ARAMA: {
-    kod: 'ARAMA',
-    ekranAdi: 'Beni arasınlar',
+  // Eski adı ARAMA'ydı: Google'ın "Arama kampanyası" (Search) ile aynı panelde
+  // karışıyordu (SENTEZ S-08). Tablolar deploy edilmeden değişti, veri yok.
+  TELEFON: {
+    kod: 'TELEFON',
+    ekranAdi: 'Beni telefonla arasınlar',
     neAlacaksin: 'Telefonun çalar.',
     tur: 2,
     kanit: 'belge',

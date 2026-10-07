@@ -14,7 +14,7 @@
  * riskli fark da durdurur; tablo canlı turla genişler.
  */
 import type { MetaGovdesi, NesneTuru } from './derle';
-import { TANINAN_OZELLIK_ANAHTARLARI } from './derle';
+import { BILINEN_KAPATILAMAYAN_OZELLIKLER, YASAL_UYARIDA_DURDURAN_OZELLIK, ozellikSinifi } from './derle';
 
 export type KarsilastirmaTuru = 'esit' | 'esit_kume' | 'normallestir' | 'alt_kume' | 'meta_turetir';
 export type AltKumeYonu = 'donen_icinde_gonderilen' | 'gonderilen_icinde_donen';
@@ -183,7 +183,7 @@ export function okumaAlanlari(yankilar: BeklenenYanki[], govde: string): string[
   return [...set].sort();
 }
 
-export type FarkTuru = 'fark' | 'donmedi' | 'normallesti' | 'tanimsiz_ozellik';
+export type FarkTuru = 'fark' | 'donmedi' | 'normallesti' | 'tanimsiz_ozellik' | 'meta_otomatik';
 
 export interface FarkSatiri {
   govde: string;
@@ -251,6 +251,7 @@ function kapsar(dis: unknown, ic: unknown): boolean {
 export function geriOkumaKarsilastir(
   yankilar: BeklenenYanki[],
   okunan: Record<string, Record<string, unknown> | undefined>,
+  secenek: { yasalUyariVar: boolean },
 ): GeriOkumaSonucu {
   const satirlar: FarkSatiri[] = [];
   const bilgiler: FarkSatiri[] = [];
@@ -297,24 +298,42 @@ export function geriOkumaKarsilastir(
     satirlar.push(satir('fark'));
   }
 
-  // Tanınmayan kreatif özelliği: VAR olması durdurmaz, OPT_IN dönmesi durdurur.
+  // Kreatif özellikleri ÜÇ SINIFLA (derle.ts `ozellikSinifi`): kapattığımız
+  // anahtarlar zaten beklenen yankıda; bilinen kapatılamayan bir uyarlama açık
+  // dönerse DURMAZ, bilgi olarak yazılır; üretken ya da tanımsız olan durdurur.
   for (const [ad, nesne] of Object.entries(okunan)) {
     if (!ad.startsWith('kreatif:') || !nesne) continue;
     const spec = al(nesne, 'degrees_of_freedom_spec.creative_features_spec');
     if (!spec || typeof spec !== 'object') continue;
     for (const [anahtar, deger] of Object.entries(spec as Record<string, unknown>)) {
-      if ((TANINAN_OZELLIK_ANAHTARLARI as readonly string[]).includes(anahtar)) continue;
-      if (al(deger, 'enroll_status') === 'OPT_IN') {
-        satirlar.push({
+      const sinif = ozellikSinifi(anahtar);
+      if (sinif === 'kapatildi' || al(deger, 'enroll_status') !== 'OPT_IN') continue;
+      const durdurur =
+        sinif === 'uretken_ya_da_tanimsiz' || (secenek.yasalUyariVar && anahtar.toLowerCase() === YASAL_UYARIDA_DURDURAN_OZELLIK);
+      if (!durdurur) {
+        bilgiler.push({
           govde: ad,
           alanYolu: `degrees_of_freedom_spec.creative_features_spec.${anahtar}`,
-          ekranEtiketi: `Meta tanımadığımız bir özelliği açtı: ${anahtar}`,
-          tur: 'tanimsiz_ozellik',
+          ekranEtiketi: `Meta ${BILINEN_KAPATILAMAYAN_OZELLIKLER[anahtar.toLowerCase()]}`,
+          tur: 'meta_otomatik',
           gonderilen: undefined,
           donen: deger,
-          kabulEdilemez: true,
+          kabulEdilemez: false,
         });
+        continue;
       }
+      satirlar.push({
+        govde: ad,
+        alanYolu: `degrees_of_freedom_spec.creative_features_spec.${anahtar}`,
+        ekranEtiketi:
+          sinif === 'bilinen_kapatilamayan'
+            ? `Meta metnin varyasyonlarını gösterebilir; bu workspace'te zorunlu yasal uyarı var ve düşebilir`
+            : `Meta tanımadığımız bir özelliği açtı: ${anahtar}`,
+        tur: 'tanimsiz_ozellik',
+        gonderilen: undefined,
+        donen: deger,
+        kabulEdilemez: true,
+      });
     }
   }
 

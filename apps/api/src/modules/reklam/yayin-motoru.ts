@@ -65,7 +65,7 @@ export interface MetaYazmaPortu {
   /** Videoyu reklam hesabına yükler, video kimliği döner (önbellekli). */
   videoYukle(hesap: string, varlikId: string): Promise<string>;
   /** Meta videoyu işledi mi: `status.video_status`. */
-  videoDurumu(videoId: string): Promise<'hazir' | 'isleniyor' | 'hata'>;
+  videoDurumu(videoId: string): Promise<'hazir' | 'isleniyor' | 'hata' | 'suresi_doldu'>;
   /** Prova: `execution_options` içinde validate_only ZORUNLU; nesne açılmaz. */
   dogrula(hesap: string, uc: string, alanlar: Record<string, unknown>): Promise<void>;
 }
@@ -136,6 +136,7 @@ export class YayinMotoru {
         const d = await this.meta.videoDurumu(v.meta_id!).catch(() => 'isleniyor' as const);
         if (d === 'hazir') break;
         if (d === 'hata') return 'Meta videoyu işleyemedi; başka bir video dene.';
+        if (d === 'suresi_doldu') return 'Videonun Meta’daki kopyasının süresi doldu; yayını geri alıp yeniden başlat (video yeniden yüklenir).';
         if (toplam >= VIDEO_BEKLEME_MS) return 'Meta videoyu 15 dakikada işlemedi; birazdan "kaldığı yerden devam" de.';
         await this.bekle(aralik);
         toplam += aralik;
@@ -433,7 +434,13 @@ export class YayinMotoru {
         okunan[n.ad] = undefined;
       }
     }
-    const r = geriOkumaKarsilastir(yankilar, okunan);
+    // Zorunlu yasal uyarı TAZE okunuyor: Meta'nın metin varyasyonu açık
+    // döndüyse uyarılı workspace'te yayın durmalı (SENTEZ S-42).
+    const [profil] = await this.tx((tx) =>
+      tx.$queryRaw<Array<{ yasal_uyari: string | null }>>(Prisma.sql`
+        SELECT yasal_uyari FROM client_profiles WHERE client_id = ${y.client_id}::uuid`),
+    );
+    const r = geriOkumaKarsilastir(yankilar, okunan, { yasalUyariVar: !!profil?.yasal_uyari?.trim() });
     await this.tx((tx) =>
       tx.$queryRaw(Prisma.sql`
         INSERT INTO geri_okuma (yayin_id, org_id, client_id, sonuc, satirlar, bilgiler, ham, api_surumu)

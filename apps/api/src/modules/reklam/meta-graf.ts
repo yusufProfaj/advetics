@@ -97,6 +97,8 @@ export function formGovdesi(alanlar: Record<string, unknown>): URLSearchParams {
   return p;
 }
 
+export type VideoDurumu = 'hazir' | 'isleniyor' | 'hata' | 'suresi_doldu';
+
 export class MetaGrafIstemcisi implements MetaYazmaPortu {
   private readonly kok: string;
   private readonly fetchFn: typeof fetch;
@@ -138,7 +140,9 @@ export class MetaGrafIstemcisi implements MetaYazmaPortu {
   async videoYukle(hesap: string, varlikId: string): Promise<string> {
     this.hesapDogrula(hesap);
     const onbellek = await this.a.gorselOnbellek.oku(varlikId);
-    if (onbellek) return onbellek;
+    // Önbellekteki video Meta'da SÜRESİ DOLMUŞ olabilir (A3 Ç-10): o kimlikle
+    // kurulan kreatif düşer. Dolmuşsa yeniden yüklenir, önbellek yenilenir.
+    if (onbellek && (await this.videoDurumu(onbellek).catch(() => 'isleniyor' as const)) !== 'suresi_doldu') return onbellek;
     if (!this.a.videoBaytlari) throw new MetaKesinHata('Video okuyucusu kurulmamış');
     const v = await this.a.videoBaytlari(varlikId);
     const form = new FormData();
@@ -149,10 +153,15 @@ export class MetaGrafIstemcisi implements MetaYazmaPortu {
     return r.id;
   }
 
-  async videoDurumu(videoId: string): Promise<'hazir' | 'isleniyor' | 'hata'> {
+  /**
+   * `expired` AYRI bir hâl: eskiden "işleniyor" sayılıyordu ve motor 15
+   * dakika boşuna bekleyip yanlış teşhis ("Meta işlemedi") yazıyordu.
+   * Bilinmeyen bir durum da işleniyor sayılır, ama süre sınırı onu keser.
+   */
+  async videoDurumu(videoId: string): Promise<VideoDurumu> {
     const r = await this.cagri<{ status?: { video_status?: string } }>('GET', `${videoId}?fields=status`, this.a.kullaniciToken);
     const s = r.status?.video_status;
-    return s === 'ready' ? 'hazir' : s === 'error' ? 'hata' : 'isleniyor';
+    return s === 'ready' ? 'hazir' : s === 'error' ? 'hata' : s === 'expired' ? 'suresi_doldu' : 'isleniyor';
   }
 
   async olustur(hesap: string, uc: string, alanlar: Record<string, unknown>): Promise<{ id: string }> {

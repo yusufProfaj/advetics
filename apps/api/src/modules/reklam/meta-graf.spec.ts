@@ -55,6 +55,29 @@ describe('hata sınıflandırma — şüphede BELİRSİZ', () => {
 });
 
 describe('Graph istemcisi', () => {
+  it('KRİTİK: video expired AYRI hâl — eskiden "işleniyor" sayılıp 15 dk boşuna bekleniyordu', async () => {
+    const durum = (v: string) => new MetaGrafIstemcisi(ayar(sahteFetch(() => ({ durum: 200, govde: { status: { video_status: v } } })).fn)).videoDurumu('9');
+    expect(await durum('expired')).toBe('suresi_doldu');
+    expect(await durum('ready')).toBe('hazir');
+    expect(await durum('error')).toBe('hata');
+    expect(await durum('processing')).toBe('isleniyor');
+  });
+
+  it('KRİTİK: önbellekteki video süresi dolmuşsa YENİDEN yüklenir, önbellek yenilenir', async () => {
+    const yazilan: string[] = [];
+    const f = sahteFetch((c) =>
+      c.yontem === 'GET' ? { durum: 200, govde: { status: { video_status: 'expired' } } } : { durum: 200, govde: { id: 'YENI' } },
+    );
+    const g = new MetaGrafIstemcisi(
+      ayar(f.fn, {
+        gorselOnbellek: { oku: async () => 'ESKI', yaz: async (_v, h) => void yazilan.push(h) },
+        videoBaytlari: async () => ({ bayt: Buffer.from('v'), mime: 'video/mp4' }),
+      }),
+    );
+    expect(await g.videoYukle('act_1', 'varlik')).toBe('YENI');
+    expect(yazilan).toEqual(['YENI']);
+  });
+
   it('desteklenmeyen sürümle KURULMAZ', () => {
     expect(() => metaSurumuDogrula('v24.0')).toThrow(/desteklenmiyor/);
     expect(() => new MetaGrafIstemcisi(ayar(fetch, { apiSurumu: 'v23.0' }))).toThrow();

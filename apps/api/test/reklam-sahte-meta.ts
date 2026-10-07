@@ -20,8 +20,8 @@ export class SahteMeta implements MetaYazmaPortu {
     this.videoYuklemeleri++;
     return `vid-${varlik.slice(0, 8)}`;
   }
-  async videoDurumu(_id: string): Promise<'hazir' | 'isleniyor' | 'hata'> {
-    return (this.videoDurumlari.shift() as 'hazir' | 'isleniyor' | 'hata' | undefined) ?? 'hazir';
+  async videoDurumu(_id: string): Promise<'hazir' | 'isleniyor' | 'hata' | 'suresi_doldu'> {
+    return (this.videoDurumlari.shift() as 'hazir' | 'isleniyor' | 'hata' | 'suresi_doldu' | undefined) ?? 'hazir';
   }
   async gorselYukle(_h: string, varlik: string) {
     return `hash-${varlik.slice(0, 8)}`;

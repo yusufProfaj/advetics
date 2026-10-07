@@ -9,6 +9,10 @@ import {
   type FormSablonu,
 } from '@advetics/shared';
 
+/** Yasal uyarısız workspace; uyarılı hâl ayrı testte. */
+const karsilastir = (y: Parameters<typeof geriOkumaKarsilastir>[0], o: Parameters<typeof geriOkumaKarsilastir>[1]) =>
+  geriOkumaKarsilastir(y, o, { yasalUyariVar: false });
+
 const sablon: FormSablonu = {
   surum: 3,
   sorular: [
@@ -115,25 +119,25 @@ describe('form geri okuması', () => {
   const ayna = () => ({ form: structuredClone(g.alanlar) as Record<string, any> });
 
   it('aynı dönerse temiz', () => {
-    expect(geriOkumaKarsilastir(yankilar, ayna()).sonuc).toBe('temiz');
+    expect(karsilastir(yankilar, ayna()).sonuc).toBe('temiz');
   });
 
   it('KRİTİK: Meta kutuyu zorunlu yaparsa ya da kutuyu düşürürse durur, kabul edilemez', () => {
     const o = ayna();
     o.form.custom_disclaimer.checkboxes[0].is_required = true;
-    const r = geriOkumaKarsilastir(yankilar, o);
+    const r = karsilastir(yankilar, o);
     expect(r.sonuc).toBe('fark');
     if (r.sonuc === 'fark') expect(r.satirlar[0]).toMatchObject({ ekranEtiketi: 'İzin kutusu', kabulEdilemez: true });
 
     const d = ayna();
     delete d.form.custom_disclaimer;
-    expect(geriOkumaKarsilastir(yankilar, d).sonuc).toBe('dogrulanamadi');
+    expect(karsilastir(yankilar, d).sonuc).toBe('dogrulanamadi');
   });
 
   it('aydınlatma adresi değişirse kabul edilemez fark', () => {
     const o = ayna();
     o.form.privacy_policy.url = 'https://ornek.com.tr/';
-    const r = geriOkumaKarsilastir(yankilar, o);
+    const r = karsilastir(yankilar, o);
     expect(r.sonuc === 'fark' && r.satirlar[0]!.ekranEtiketi).toBe('Aydınlatma bağlantısı');
   });
 });

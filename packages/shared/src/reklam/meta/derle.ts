@@ -50,6 +50,57 @@ export const TANINAN_OZELLIK_ANAHTARLARI = [
 ] as const;
 
 /**
+ * KREATİF ÖZELLİKLERİNİN ÜÇ SINIFI (SENTEZ S-42, A3 Ç-1/Ç-2).
+ *
+ * Meta belgesi bazı uyarlamaları (`adapt_to_placement`, `text_optimizations`
+ * …) VARSAYILAN AÇIK sayıyor ve canlıda onları kapatan anahtarı gönderemiyoruz
+ * (yalnız yukarıdaki yedi anahtar kabul ediliyor). Bugüne kadar iki hata vardı:
+ * ekran "görseli ve metni değiştirmesi kapalı" diyordu (kanıtsız söz) ve geri
+ * okuma tanımadığı HER açık özellikte yayını durduruyordu (Meta bu
+ * varsayılanları döndürürse her yayın kilitlenirdi).
+ *
+ * - `kapatildi`: gönderip kapattıklarımız; geri okumada açık dönerse FARK.
+ * - `bilinen_kapatilamayan`: üretken OLMAYAN uyarlama; açık dönerse yayın
+ *   durmaz, onay kartında "Meta'nın otomatik yaptıkları" altında yazılır.
+ * - listede olmayan her şey üretken ya da tanımsız sayılır: açık dönerse durur.
+ *
+ * Anahtarlar küçük harfe çevrilerek eşleşiyor: Meta aynı özelliği belgede
+ * küçük, kabul kümesinde büyük harfle yazıyor.
+ */
+export const KAPATILAN_OZELLIK_ADLARI: Record<(typeof TANINAN_OZELLIK_ANAHTARLARI)[number], string> = {
+  IG_VIDEO_NATIVE_SUBTITLE: 'Instagram videosuna otomatik altyazı',
+  IMAGE_ANIMATION: 'görseli hareketlendirme',
+  PRODUCT_BROWSING: 'ürün göz atma kartları',
+  PRODUCT_METADATA_AUTOMATION: 'ürün bilgisini otomatik ekleme',
+  PROFILE_CARD: 'profil kartı',
+  STANDARD_ENHANCEMENTS_CATALOG: 'katalog iyileştirmeleri',
+  TEXT_OVERLAY_TRANSLATION: 'görseldeki metni çevirme',
+};
+
+export const BILINEN_KAPATILAMAYAN_OZELLIKLER: Record<string, string> = {
+  adapt_to_placement: 'görseli yerleşime göre kırpabilir',
+  image_touchups: 'parlaklık ve kontrast düzeltmesi yapabilir',
+  video_auto_crop: 'videoyu yerleşime göre kırpabilir',
+  inline_comment: 'reklamın altında öne çıkan bir yorumu gösterebilir',
+  text_optimizations: 'metnin farklı varyasyonlarını gösterebilir',
+};
+
+/**
+ * Bu anahtar workspace'te zorunlu yasal uyarı varken DURDURUR: Meta'nın metin
+ * varyasyonu uyarıyı düşürebilir ve bunu ilk gören müşteri olur.
+ */
+export const YASAL_UYARIDA_DURDURAN_OZELLIK = 'text_optimizations';
+
+export type OzellikSinifi = 'kapatildi' | 'bilinen_kapatilamayan' | 'uretken_ya_da_tanimsiz';
+
+export function ozellikSinifi(anahtar: string): OzellikSinifi {
+  const k = anahtar.toLowerCase();
+  if (TANINAN_OZELLIK_ANAHTARLARI.some((t) => t.toLowerCase() === k)) return 'kapatildi';
+  if (k in BILINEN_KAPATILAMAYAN_OZELLIKLER) return 'bilinen_kapatilamayan';
+  return 'uretken_ya_da_tanimsiz';
+}
+
+/**
  * Ajans geneli atıf standardı (ATF-02). Seçilmeden yayın YOK: onaysız
  * uygulanan bir değer de bir karardır ve kararın sahibi kullanıcı.
  * Etkileşim penceresi belgede `attribution_spec` karşılığı olmadığı için
@@ -64,6 +115,20 @@ const ATIF_SPEC: Record<AtifStandardi, Array<{ event_type: string; window_days: 
   ],
   tik7: [{ event_type: 'CLICK_THROUGH', window_days: 7 }],
 };
+
+/**
+ * ATIF NİYET BAŞINA (SENTEZ S-07, A3 §2.3). Meta'nın referans tablosu ajans
+ * standardını (7 gün tıklama ± 1 gün görüntüleme) yalnız dönüşüm ve form
+ * optimizasyonunda tanıyor; site ziyareti, sohbet, arama ve erişimde yalnız
+ * 1 gün tıklama geçerli. Her niyete aynı pencereyi yazmak ya reddedilir ya da
+ * Meta onu SESSİZCE değiştirir ve raporun "7 gün" dediği sayı yalan olur.
+ * 1 gün tıklama ajansın seçebileceği bir standart değil, kuralın sonucu.
+ */
+export const AJANS_STANDARDI_HEDEFLERI: readonly string[] = ['LEAD_GENERATION', 'OFFSITE_CONVERSIONS'];
+
+export function atifSpec(optimizationGoal: string, standart: AtifStandardi): Array<{ event_type: string; window_days: number }> {
+  return AJANS_STANDARDI_HEDEFLERI.includes(optimizationGoal) ? ATIF_SPEC[standart] : [{ event_type: 'CLICK_THROUGH', window_days: 1 }];
+}
 
 export interface Kavram {
   /**
@@ -124,6 +189,8 @@ export type DerlemeSonucu =
       tur: 'govde';
       govdeler: MetaGovdesi[];
       kapattiklarimiz: string[];
+      /** Kapatamadığımız uyarlamalar: Meta bunları yapabilir (onay kartında yazılır). */
+      metaOtomatikYapabilir: string[];
       acikcaYazilanAlanlar: string[];
       apiSurumu: MetaApiSurumu;
       derleyiciSurumu: string;
@@ -131,7 +198,7 @@ export type DerlemeSonucu =
   | { tur: 'ret'; retler: SifirCagriRet[] };
 
 /** Bu turda derlenen niyetler. Diğerleri tahmin yerine retle duruyor. */
-const DERLENEN_NIYETLER: readonly NiyetKodu[] = ['FORM', 'SITE'];
+export const DERLENEN_NIYETLER = ['FORM', 'SITE'] as const satisfies readonly NiyetKodu[];
 
 export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   const retler: SifirCagriRet[] = [];
@@ -143,7 +210,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   if (!niyet.meta) {
     return { tur: 'ret', retler: [{ kod: 'NYT-YONLENDIRME', mesaj: `${niyet.ekranAdi} Akıllı Boost'ta yapılır.` }] };
   }
-  if (!DERLENEN_NIYETLER.includes(g.niyet)) {
+  if (!(DERLENEN_NIYETLER as readonly NiyetKodu[]).includes(g.niyet)) {
     retler.push({
       kod: 'NYT-OLCULMEDI',
       mesaj: `"${niyet.ekranAdi}" henüz yayınlanamıyor: Meta'daki kurulumu canlıda doğrulanmadı.`,
@@ -226,7 +293,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     optimization_goal: m.optimizationGoal,
     promoted_object: { page_id: g.sayfaPlatformId },
     targeting: hedef.targeting,
-    attribution_spec: ATIF_SPEC[g.atif!],
+    attribution_spec: atifSpec(m.optimizationGoal, g.atif!),
     start_time: g.takvim.baslangic,
     adlabels: etiketler,
   };
@@ -309,11 +376,14 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   return {
     tur: 'govde',
     govdeler,
+    // YALNIZ gerçekten gönderdiklerimiz. Kapatamadıklarımız ayrı listede ve
+    // "yapabilir" diye yazılıyor; geri okumada açık dönerse onay kartı söyler.
     kapattiklarimiz: [
       ...hedef.kapatilanlar,
       'Başka markaların reklamlarıyla yan yana gösterim kapalı.',
-      "Meta'nın yapay zekâyla görseli ve metni değiştirmesi kapalı.",
+      `Kapattığımız otomatik özellikler: ${Object.values(KAPATILAN_OZELLIK_ADLARI).join(', ')}.`,
     ],
+    metaOtomatikYapabilir: Object.values(BILINEN_KAPATILAMAYAN_OZELLIKLER),
     acikcaYazilanAlanlar,
     apiSurumu: g.apiSurumu,
     derleyiciSurumu: DERLEYICI_SURUMU,

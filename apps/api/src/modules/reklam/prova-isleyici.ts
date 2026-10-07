@@ -129,6 +129,7 @@ export async function provaKos(
       for (let i = 0; ; i++) {
         const durum = await port.videoDurumu(id);
         if (durum === 'hazir') break;
+        if (durum === 'suresi_doldu') return bitir('dogrulanamadi', [], 'Videonun Meta’daki kopyasının süresi doldu; yeniden kontrol et (video yeniden yüklenir).');
         if (durum === 'hata') return bitir('reddedildi', [{ ad: `video:${v}`, sonuc: 'reddedildi', mesaj: 'Meta videoyu işleyemedi' }], 'Meta videoyu işleyemedi; başka bir video dene.');
         if (i >= PROVA_VIDEO_DENEME) return bitir('dogrulanamadi', [], 'Meta videoyu henüz işlemedi; birkaç dakika sonra yeniden kontrol et.');
         await bekle(10_000);
