@@ -29,7 +29,7 @@ import {
 import { ApiRequestError } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { mmAdresi, type MmBolumKodu } from '@/components/marka-merkezi/bolumler';
-import type { OzelKategori, PilotGercekYayinDurumu, PilotWorkspaceBeyani, OneriBosNedeni, PilotBugun, PilotEkranEylemi, PilotPlanDetayi, PilotPlanSatiriOzeti } from '@advetics/shared';
+import type { OzelKategori, PilotGercekYayinDurumu, PilotWorkspaceBeyani, UyumSektoru, OneriBosNedeni, PilotBugun, PilotEkranEylemi, PilotPlanDetayi, PilotPlanSatiriOzeti } from '@advetics/shared';
 
 /**
  * ═══ PİLOT EKRANLARININ SAF KARARLARI ═══
@@ -281,7 +281,7 @@ export const BOS_NEDENI_METNI: Record<BosNedeni, { ne: string; neYapmali: string
   sayfa_yok: { ne: 'Facebook sayfası bağlı değil.', neYapmali: 'Bağlantılardan sayfayı bağla.', hedef: 'baglantilar' },
   adres_yok: { ne: 'Site adresi yok.', neYapmali: 'Marka bölümüne site adresini yaz.', hedef: 'marka' },
   form_yok: { ne: 'Form yok.', neYapmali: 'Varlıklar bölümünde bir form oluştur.', hedef: 'varliklar' },
-  ozel_kategori_sorulmadi: { ne: 'Özel reklam kategorisi cevaplanmadı.', neYapmali: 'Workspace ayarlarında bir kez cevapla.', hedef: 'ayarlar' },
+  ozel_kategori_sorulmadi: { ne: 'Özel reklam kategorisi cevaplanmadı.', neYapmali: 'Reklam beyanında bir kez cevapla.', hedef: 'beyan' },
   donem_gecti: { ne: 'Bu dönem bitti.', neYapmali: 'Gelecek ay için yeni plan hazırla.', hedef: null },
   yz_yazmadi: { ne: 'Gerekçe yazılamadı.', neYapmali: 'Rakamlar etkilenmedi; istersen planı yeniden hazırla.', hedef: 'yeniden_hazirla' },
   kullanici_cikardi: { ne: 'Satır plandan çıkarıldı.', neYapmali: 'Tutarı dağıtılmamış kaldı.', hedef: null },
@@ -845,3 +845,27 @@ export const BEYAN_KURALLARI: readonly string[] = ['GNL-13', 'GNL-18', 'GNL-20',
 export function beyanGerekiyorMu(bulgular: ReadonlyArray<{ kuralKimligi: string }>): boolean {
   return bulgular.some((b) => BEYAN_KURALLARI.includes(b.kuralKimligi));
 }
+
+/**
+ * Denetçinin sektörü nasıl okuduğu, ekranda. Ajans serbest metin yazıyor;
+ * denetçi onu kapalı sözlüğe çeviriyor (`sektorCoz`). Çeviriyi göstermek,
+ * "diş kliniği" yazıp sağlık kurallarının hiç koşmadığını fark etmemenin
+ * önüne geçiyor. `Record`: sözlüğe yeni sektör eklenip adı yazılmazsa
+ * derleme kırılır.
+ */
+export const SEKTOR_ETIKETI: Record<UyumSektoru, string> = {
+  KONUT_GELISTIRICI: 'Konut geliştirici',
+  EMLAK_ARACI: 'Emlak aracısı',
+  SAGLIK_KURULUSU: 'Sağlık kuruluşu',
+  SAGLIK_MESLEK_MENSUBU: 'Sağlık meslek mensubu',
+  SAGLIK_TURIZMI: 'Sağlık turizmi',
+  OTEL_KONAKLAMA: 'Otel, konaklama',
+  KISA_SURELI_KIRALIK: 'Kısa süreli kiralık',
+  SEYAHAT_ACENTASI: 'Seyahat acentası',
+  ETICARET: 'E-ticaret',
+  B2B_URETICI: 'Üretici (B2B)',
+  YEREL_HIZMET: 'Yerel hizmet',
+  EGITIM_MEB: 'Eğitim (MEB)',
+  EGITIM_DIGER: 'Eğitim (diğer)',
+  DIGER: 'Diğer',
+};

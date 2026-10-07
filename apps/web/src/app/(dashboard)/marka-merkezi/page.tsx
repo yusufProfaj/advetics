@@ -23,6 +23,7 @@ import { KreatiflerIcerik } from '@/components/marka-merkezi/varliklar/kreatifle
 import { FormlarIcerik } from '@/components/marka-merkezi/varliklar/formlar';
 import { ButceIcerik } from '@/components/marka-merkezi/butce';
 import { WorkspaceAyarlari } from '@/components/marka-merkezi/workspace-ayarlari';
+import { BeyanBolumu } from '@/components/pilot/beyan-bolumu';
 import { AiDoldur } from '@/components/bilgi-bankasi/ai-doldur';
 import { MarkaSekmesi } from '@/components/bilgi-bankasi/marka-sekmesi';
 import { MetinSekmesi } from '@/components/bilgi-bankasi/metin-sekmesi';
@@ -230,6 +231,17 @@ export default async function MarkaMerkeziPage({
             )}
 
             {bolum === 'butce' && <ButceIcerik clientId={clientId} params={params} />}
+
+            {bolum === 'beyan' && (
+              <section aria-labelledby="beyan-baslik" className="space-y-4">
+                <BolumBasligi
+                  id="beyan-baslik"
+                  baslik="Reklam beyanı"
+                  aciklama="Özel reklam kategorisi ve sektör. Bir kez cevaplanır, her plana ve reklama buradan gider."
+                />
+                <BeyanBolumu clientId={clientId} />
+              </section>
+            )}
 
             {bolum === 'ayarlar' && <WorkspaceAyarlari clientId={clientId} session={session} />}
 

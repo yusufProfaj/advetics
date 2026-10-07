@@ -38,6 +38,7 @@ describe('tarama boşa düşmüyor', () => {
   it('bütün pilot dosyaları okundu', () => {
     expect(Object.keys(KOD).sort()).toEqual(
       [
+        'beyan-bolumu.tsx',
         'butce-seridi.tsx',
         'degistir-kutusu.tsx',
         'gercek-yayin-satiri.tsx',
@@ -173,6 +174,28 @@ describe('gerçek yayın anahtarı', () => {
     expect(g).toContain("if (istek.tur === 'hata') return");
     expect(g).toContain("{g.eylem === 'ac' && <p");
     expect(g).toContain('GERCEK_YAYIN_ACMA_UYARISI');
+  });
+});
+
+describe('workspace beyanı', () => {
+  const MM = yorumsuz(join(__dirname, '..', '..', 'app', '(dashboard)', 'marka-merkezi', 'page.tsx'));
+
+  it('KRİTİK: form sunucunun hâlinden başlıyor, önceden seçili seçenek yok', () => {
+    const b = kod('beyan-bolumu.tsx');
+    expect(b).toContain('useState<BeyanSecimi>(beyanBaslangici(beyan))');
+    expect(b).toContain('const istek = beyanIstegi(clientId, secim, sektor)');
+    expect(b).toContain('Bunu senin yerine cevaplayamam, yasal bir beyan.');
+    expect(b).toContain("setOku({ tur: 'hata', mesaj: okumaHatasi(e) })");
+  });
+
+  it('KRİTİK: Marka Merkezi bölümü olarak çiziliyor, ayrı sayfa değil', () => {
+    expect(MM).toContain("{bolum === 'beyan' && (");
+    expect(MM).toContain('<BeyanBolumu clientId={clientId} />');
+  });
+
+  it('plan belgesi beyanla çözülen bulguda ajansı beyana gönderiyor', () => {
+    expect(kod('plan-belgesi.tsx')).toContain("{beyanGerekiyorMu(bulgular) && (");
+    expect(kod('plan-belgesi.tsx')).toContain("href={mmAdresi(clientId, 'beyan')}");
   });
 });
 

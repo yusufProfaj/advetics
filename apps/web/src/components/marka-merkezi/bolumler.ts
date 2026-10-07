@@ -31,6 +31,15 @@ export const MM_BOLUMLERI = [
   { kod: 'kitleler', ad: 'Kitleler', izin: 'client.read' },
   { kod: 'varliklar', ad: 'Varlıklar', izin: 'bulk.read' },
   /*
+   * REKLAM BEYANI (2026-10-07, Pilot Tur 1). Özel reklam kategorisi ve sektör
+   * workspace başına BİR KEZ soruluyor (Ç-2) ve uyum kontrolü onu okuyor.
+   * Yeni bir kurulum ekranı ayrı sayfa olmaz, buraya bölüm olarak girer.
+   * İzin, beyanı OKUYAN ucun izni (`/pilot/workspace-beyani` GET); elle
+   * yazıldı çünkü pilot modülünü buradan içe aktarmak döngü kurardı.
+   * `beyan-bolumu.spec` ikisinin aynı kaldığını sözleşmeden sınıyor.
+   */
+  { kod: 'beyan', ad: 'Reklam beyanı', izin: 'strategy.write' },
+  /*
    * WORKSPACE AYARLARI (2026-10-06, kullanıcının isteği). İletişim/firma
    * bilgileri, özel reklam kategorisi ve ekip yalnızca Şirketler ekranındaki
    * pencerede vardı; workspace'e geçen kullanıcı oraya Marka Merkezi'nden

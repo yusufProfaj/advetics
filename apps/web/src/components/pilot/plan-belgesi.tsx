@@ -7,6 +7,7 @@ import { NIYET_KATALOGU, bulgulariSirala, type PlanOnerisi } from '@advetics/sha
 import { API_URL, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { mmAdresi } from '@/components/marka-merkezi/bolumler';
 import { ButceSeridi } from './butce-seridi';
 import { BosHucre, HucreDegeri, KaynakCipi } from './kaynak-cipi';
 import { DegistirKutusu } from './degistir-kutusu';
@@ -19,6 +20,7 @@ import {
   ajansKipNotu,
   altCubuk,
   ayAdi,
+  beyanGerekiyorMu,
   butceAltSatiri,
   donemEtiketi,
   eylemIstegi,
@@ -179,7 +181,7 @@ export function PlanBelgesi({ clientId, detay, eskiPlanNotu }: { clientId: strin
         </Uyari>
       )}
 
-      {!musteri && <AjansNotlari detay={detay} izinli={izinli.has('uyum_isaret')} yaz={yaz} suruyor={suruyor} />}
+      {!musteri && <AjansNotlari clientId={clientId} detay={detay} izinli={izinli.has('uyum_isaret')} yaz={yaz} suruyor={suruyor} />}
 
       {/* ─── Özet ─── */}
       {musteri && detay.musteriOzeti ? (
@@ -543,11 +545,13 @@ function KelimeBolumu({ plan, clientId, musteri }: { plan: PlanOnerisi; clientId
 const UYUM_TON_SINIFI = { bilgi: 'text-ink', uyari: 'text-warn-strong', tehlike: 'text-danger-strong', basari: 'text-ok-strong' } as const;
 
 function AjansNotlari({
+  clientId,
   detay,
   izinli,
   yaz,
   suruyor,
 }: {
+  clientId: string;
   detay: PilotPlanDetayi;
   izinli: boolean;
   yaz: (eylem: string, yol: string, govde: unknown) => Promise<void>;
@@ -573,6 +577,12 @@ function AjansNotlari({
       {uyum && (
         <section className="space-y-2.5 rounded-xl border border-line bg-surface p-5">
           <p className={`text-sm font-semibold ${UYUM_TON_SINIFI[UYUM_DURUM_METNI[uyum.durum].ton]}`}>{UYUM_DURUM_METNI[uyum.durum].metin}</p>
+          {/* Beyanla çözülen bir kural duruyorsa yol tek tıklık: Marka Merkezi'nin beyan bölümü. */}
+          {beyanGerekiyorMu(bulgular) && (
+            <Link href={mmAdresi(clientId, 'beyan')} className="inline-block text-sm font-semibold text-brand-strong underline underline-offset-2">
+              Reklam beyanını doldur
+            </Link>
+          )}
           {bulgular.length > 0 && (
             <ul className="divide-y divide-line">
               {bulgular.map((b) => {

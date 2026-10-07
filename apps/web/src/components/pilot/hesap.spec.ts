@@ -4,6 +4,8 @@ import {
   KAYNAK_TURLERI,
   KURULUM_SATIR_DURUMLARI,
   MUSTERI_ADINA_GEREKCE_EN_AZ,
+  UYUM_KATALOGU,
+  UYUM_SEKTORLERI,
   degisiklikUygula,
   musteriOzeti,
   planUret,
@@ -29,6 +31,11 @@ import {
   gercekYayinGorunumu,
   gercekYayinIstegi,
   ucIzni,
+  BEYAN_KURALLARI,
+  SEKTOR_ETIKETI,
+  beyanBaslangici,
+  beyanGerekiyorMu,
+  beyanIstegi,
   gerekceEksigi,
   kaynakEtiketi,
   kaynakHedefi,
@@ -46,8 +53,9 @@ import {
   satirCikarIstegi,
   seritDilimleri,
 } from './hesap';
-import type { PilotPlanDetayi, PilotPlanSatiriOzeti } from '@advetics/shared';
+import type { PilotPlanDetayi, PilotPlanSatiriOzeti, PilotWorkspaceBeyani } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
+import { MM_BOLUMLERI } from '@/components/marka-merkezi/bolumler';
 
 /**
  * ═══ PİLOT EKRANLARI — SAF KARARLAR ÇALIŞTIRILARAK ═══
@@ -463,5 +471,42 @@ describe('gerçek yayın anahtarı', () => {
     expect(ucIzni('GET', '/pilot/gercek-yayin')).toBe('strategy.write');
     expect(ucIzni('PUT', '/pilot/gercek-yayin')).toBe('org.write');
     expect(() => ucIzni('PUT', '/pilot/bugun')).toThrow();
+  });
+});
+
+describe('workspace beyanı', () => {
+  const b = (ozelKategoriler: PilotWorkspaceBeyani['ozelKategoriler'], taninmayanKategoriler: string[] = []) => ({ ozelKategoriler, taninmayanKategoriler });
+
+  it('KRİTİK: cevaplanmamış beyan SEÇİMSİZ açılıyor; "hiçbiri" ayrı hâl', () => {
+    expect(beyanBaslangici(b(null))).toBeNull();
+    expect(beyanBaslangici(b([]))).toBe('hicbiri');
+    expect(beyanBaslangici(b(['HOUSING']))).toEqual(['HOUSING']);
+  });
+
+  it('KRİTİK: tanınmayan kategori taşıyan kayıt yeniden beyan ister (seçim açık)', () => {
+    expect(beyanBaslangici(b(['HOUSING'], ['ESKI_KATEGORI']))).toBeNull();
+  });
+
+  it('KRİTİK: cevapsız ya da boş "evet" gönderilmiyor; "Hayır" boş liste olarak gidiyor', () => {
+    expect(beyanIstegi(U(1), null, 'Konut satışı').tur).toBe('hata');
+    expect(beyanIstegi(U(1), [], 'Konut satışı')).toEqual({ tur: 'hata', mesaj: 'En az bir kategori seç ya da "Hayır" de.' });
+    expect(beyanIstegi(U(1), 'hicbiri', ' Diş kliniği ')).toEqual({ tur: 'tamam', govde: { clientId: U(1), ozelKategoriler: [], sektor: 'Diş kliniği' } });
+    expect(beyanIstegi(U(1), ['HOUSING'], 'x').tur).toBe('hata');
+  });
+
+  it('KRİTİK: beyan kuralları katalogda gerçekten var (kimlik değişirse bağlantı sessizce kaybolmasın)', () => {
+    const kimlikler = UYUM_KATALOGU.map((k) => k.kimlik);
+    for (const k of BEYAN_KURALLARI) expect(kimlikler, k).toContain(k);
+    expect(beyanGerekiyorMu([{ kuralKimligi: 'GNL-20' }])).toBe(true);
+    expect(beyanGerekiyorMu([{ kuralKimligi: 'GNL-14' }])).toBe(false);
+  });
+
+  it('KRİTİK: bölümün izni beyanı okuyan ucun izniyle aynı; boş neden oraya gönderiyor', () => {
+    expect(MM_BOLUMLERI.find((x) => x.kod === 'beyan')?.izin).toBe(ucIzni('GET', '/pilot/workspace-beyani'));
+    expect(bosNedeniBaglantisi('ozel_kategori_sorulmadi', U(1))).toContain('bolum=beyan');
+  });
+
+  it('her sektörün ekran adı var', () => {
+    expect(Object.keys(SEKTOR_ETIKETI).sort()).toEqual([...UYUM_SEKTORLERI].sort());
   });
 });
