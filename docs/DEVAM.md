@@ -21,10 +21,17 @@ Modülün yeri: `packages/shared/src/reklam/` (niyet kataloğu, adlandırma,
 hazırlık tipi), `apps/api/src/modules/reklam/` (`GET /reklam/hazirlik`),
 `apps/web/src/reklam/` + `/reklam/yeni` (Acemi akışı önizlemesi, menüde
 YOK, Meta'ya yazmıyor). Eski modüllerden içe aktarma iki tarafta testle
-yasak. **Sıradaki:** § 06.4 manifesto + hedefleme üreticisi (varsayılansız
-`advantageAudience`) + bütçe fonksiyonları → `derleMeta()`; sonra taslak
-tablosu (sürüm, `AlanKaynagi`). Boost taşıması ve rapor sonuç adları
-derleyiciden sonra. Canlıda görsel kontrol yapılmadı (worktree'de `.env` yok).
+yasak. **Derleyici çekirdeği yazıldı** (`packages/shared/src/reklam/`):
+para zinciri (`tutarAyristir`, `microsToMinor` kırpmadan hata), bütçe
+(`enCokHarcama` tasarımdaki 12.250 TL örneğiyle sınandı), tek hedefleme
+üreticisi (`hedeflemeUret`, varsayılansız `advantageAudience`, konut kısıt
+haritası, ülke kümesi), `derleMeta()` + manifesto (FORM ve SITE; WHATSAPP
+ve diğerleri canlı ölçüm olmadan retle duruyor). Hepsi mutasyonla sınandı.
+**Sıradaki:** beklenen yankı ve geri okuma karşılaştırıcısı (§ 06.5),
+form derleyicisi (§ 06.4 M-37..M-43), taslak tablosu (sürüm, `AlanKaynagi`,
+`eksikler()`); sonra yayın motoru. Atıf standardı (OK-16) ajans
+yöneticisinin kararı: seçilene kadar derleyici yayın vermiyor. Boost
+taşıması ve rapor sonuç adları derleyici bittikten sonra.
 **Acil, bu işten bağımsız:** Meta v26 kuralı 2026-10-27'de bütün sürümlerde
 kök `GET /?ids=` isteklerini hataya çeviriyor (rapor PDF görsel tazeleme,
 boost özeti) — ayrı oturumda düzeltiliyordu; deploy o tarihten önce.
