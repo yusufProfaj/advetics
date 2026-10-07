@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { OZEL_KATEGORILER } from '../reklam/meta/hedefleme';
 
 /**
  * ═══ PİLOT UÇ GÖVDELERİ (Ajan 2 eki, 2026-10-07) ═══
@@ -39,3 +40,27 @@ export const planOnaylaSchema = z
   })
   .strict();
 export type PlanOnaylaGirdisi = z.infer<typeof planOnaylaSchema>;
+
+/**
+ * Gerçek yayın anahtarı. Sebep HER İKİ yönde zorunlu: "neden açıldı" kadar
+ * "neden kapandı" da sabah gelen ekibin sorusu (yazma kesici dersi).
+ */
+export const gercekYayinSchema = z
+  .object({ acik: z.boolean(), sebep: z.string().trim().min(10, 'Sebep en az 10 karakter').max(500) })
+  .strict();
+export type GercekYayinGirdisi = z.infer<typeof gercekYayinSchema>;
+
+/**
+ * Özel kategori + sektör beyanı. `ozelKategoriler: []` = "Hayır, hiçbiri"
+ * beyanı (sorulmadı ile aynı şey DEĞİL). Sektör serbest metin
+ * (`client_profiles.sektor`, GNL-18 bunu `sektorCoz` ile okuyor).
+ */
+export const workspaceBeyaniSchema = z
+  .object({
+    clientId: z.string().uuid(),
+    ozelKategoriler: z.array(z.enum(OZEL_KATEGORILER)).max(OZEL_KATEGORILER.length),
+    sektor: z.string().trim().min(2, 'Sektör en az 2 karakter').max(120),
+  })
+  .strict()
+  .refine((v) => new Set(v.ozelKategoriler).size === v.ozelKategoriler.length, { message: 'Aynı kategori iki kez seçilemez', path: ['ozelKategoriler'] });
+export type WorkspaceBeyaniGirdisi = z.infer<typeof workspaceBeyaniSchema>;

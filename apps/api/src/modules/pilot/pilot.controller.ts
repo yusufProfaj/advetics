@@ -1,7 +1,13 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, Req, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import {
   degisiklikIsteSchema,
+  gercekYayinSchema,
+  workspaceBeyaniSchema,
+  type GercekYayinGirdisi,
+  type PilotGercekYayinDurumu,
+  type PilotWorkspaceBeyani,
+  type WorkspaceBeyaniGirdisi,
   planDegistirSchema,
   planEylemiSchema,
   planHazirlaSchema,
@@ -27,6 +33,9 @@ import {
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
+import type { AuthedRequest } from '../../common/types/request';
+import { PilotGercekYayinService } from './gercek-yayin';
+import { PilotBeyanService } from './beyan.service';
 import { PilotPlanService } from './plan.service';
 import { PilotService } from './pilot.service';
 
@@ -47,7 +56,41 @@ export class PilotController {
   constructor(
     private readonly plan: PilotPlanService,
     private readonly pilot: PilotService,
+    private readonly gercekYayin: PilotGercekYayinService,
+    private readonly beyan: PilotBeyanService,
   ) {}
+
+  @Get('gercek-yayin')
+  @RequirePermissions('strategy.write')
+  gercekYayinDurumu(@CurrentTenant() ctx: TenantContext): Promise<PilotGercekYayinDurumu> {
+    return this.gercekYayin.durum(ctx);
+  }
+
+  @Put('gercek-yayin')
+  @RequirePermissions('org.write')
+  gercekYayinDegistir(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(gercekYayinSchema)) dto: GercekYayinGirdisi,
+    @Req() req: AuthedRequest,
+  ): Promise<PilotGercekYayinDurumu> {
+    return this.gercekYayin.degistir(ctx, dto, { ip: req.ip ?? null, userAgent: req.get('user-agent') ?? null, requestId: req.requestId });
+  }
+
+  @Get('workspace-beyani')
+  @RequirePermissions('strategy.write')
+  workspaceBeyani(@CurrentTenant() ctx: TenantContext, @Query('clientId', ParseUUIDPipe) clientId: string): Promise<PilotWorkspaceBeyani> {
+    return this.beyan.oku(ctx, clientId);
+  }
+
+  @Put('workspace-beyani')
+  @RequirePermissions('client.write')
+  workspaceBeyaniYaz(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(workspaceBeyaniSchema)) dto: WorkspaceBeyaniGirdisi,
+    @Req() req: AuthedRequest,
+  ): Promise<PilotWorkspaceBeyani> {
+    return this.beyan.yaz(ctx, dto, { ip: req.ip ?? null, userAgent: req.get('user-agent') ?? null, requestId: req.requestId });
+  }
 
   @Get('planlar')
   @RequirePermissions('strategy.read')

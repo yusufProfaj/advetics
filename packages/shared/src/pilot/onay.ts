@@ -100,20 +100,36 @@ export function musteriOzeti(p: PlanOnerisi): MusteriOzeti | null {
 
 /**
  * Yayın kipi: onay anında sunucu hesaplar ve `pilot_planlari.yayin_kipi`
- * kolonuna yazar (onaydan sonra değişmez).
- *   · `gercek` — uyum geçti; kurulum gerçek ve satırlar açılır.
- *   · `test`   — uyum bağlı değil; yalnız AJANSIN KENDİ şirketinde: kurar,
- *                geri okur, AÇMAZ (eski test kipi kuralı, `yayin-baslat.ts`).
- *   · `kapali` — uyum bağlı değil ve müşteri şirketi: platforma HİÇ
- *                yazılmaz. Test kipinde müşteri hesabında duraklatılmış
- *                kampanya bırakmak, müşterinin Ads Manager'ında açıklanamaz
- *                nesneler demek.
+ * kolonuna yazar (onaydan sonra yalnız gerçeğe doğru değişir, S-6).
+ *   · `gercek` — uyum geçti VE ajansın "Pilot gerçek yayın" anahtarı açık;
+ *                kurulum gerçek ve satırlar açılır.
+ *   · `test`   — kurar, geri okur, AÇMADAN arşivler. İki yoldan:
+ *                (a) uyum geçti ama anahtar KAPALI (kullanıcı kararı
+ *                2026-10-07: yeni motor Meta'da hiç denenmedi, ilk canlı
+ *                tur test kipinde — müşteri şirketinde de);
+ *                (b) uyum bağlı değil ve ajansın KENDİ şirketi.
+ *   · `kapali` — uyum bağlı değil ve müşteri şirketi: platforma HİÇ yazılmaz.
+ *
+ * TEK KAPI: anahtarın değeri sunucuda `gercekYayinAcikMi`dan okunur ve
+ * buraya verilir; okunamazsa KAPALI. Varsayılanı YOK (parametre zorunlu):
+ * unutulan bir çağrı derlemede kırılsın, sessizce gerçeğe düşmesin.
  */
 export type YayinKipi = 'gercek' | 'test' | 'kapali';
 
-export function yayinKipi(uyum: UyumDurumu, ajansinKendiSirketi: boolean): YayinKipi {
-  if (uyum === 'gecti') return 'gercek';
+export function yayinKipi(uyum: UyumDurumu, ajansinKendiSirketi: boolean, gercekYayinAcik: boolean): YayinKipi {
+  if (uyum === 'gecti') return gercekYayinAcik ? 'gercek' : 'test';
   return ajansinKendiSirketi ? 'test' : 'kapali';
+}
+
+/** Ajans görünümündeki kip cümlesi (müşteriye yazılmaz). */
+export function kipNotu(kip: YayinKipi, uyum: UyumDurumu): string | null {
+  if (kip === 'gercek') return null;
+  if (kip === 'test' && uyum === 'gecti') {
+    return 'Pilot gerçek yayın anahtarı kapalı: kampanyalar test kipinde kurulur, geri okunur ve açılmadan arşivlenir.';
+  }
+  return kip === 'test'
+    ? 'Uyum denetçisi bağlı değil: kampanyalar test kipinde kurulur, geri okunur ve AÇILMAZ.'
+    : 'Uyum denetçisi bağlı değil: onay kaydedildi, platforma hiçbir şey yazılmadı.';
 }
 
 export interface OnayKapisiGirdisi {
@@ -129,6 +145,8 @@ export interface OnayKapisiGirdisi {
   aylikButceMicros: bigint | null;
   uyum: UyumDurumu;
   ajansinKendiSirketi: boolean;
+  /** Ajansın "Pilot gerçek yayın" anahtarı (TAZE okunur; okunamazsa false). */
+  gercekYayinAcik: boolean;
 }
 
 export type OnayRetKodu =
@@ -186,12 +204,7 @@ export function onayKapisi(g: OnayKapisiGirdisi): OnayKapisiSonucu {
   if (g.uyum === 'bayat') ret('UYUM_BAYAT', 'Plan yeniden kontrol ediliyor; ajansın bilgilendirildi.', 'Uyum denetimi bu sürüm için koşmadı.');
 
   if (retler.length > 0) return { tur: 'ret', retler };
-  const kip = yayinKipi(g.uyum, g.ajansinKendiSirketi);
-  const ajansNotu =
-    kip === 'gercek'
-      ? null
-      : kip === 'test'
-        ? 'Uyum denetçisi bağlı değil: kampanyalar test kipinde kurulur, geri okunur ve AÇILMAZ.'
-        : 'Uyum denetçisi bağlı değil: onay kaydedildi, platforma hiçbir şey yazılmadı.';
+  const kip = yayinKipi(g.uyum, g.ajansinKendiSirketi, g.gercekYayinAcik);
+  const ajansNotu = kipNotu(kip, g.uyum);
   return { tur: 'kabul', kip, ajansNotu };
 }

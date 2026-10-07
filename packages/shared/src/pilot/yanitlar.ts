@@ -4,6 +4,8 @@ import type { MusteriOzeti, OnayKapisiSonucu, YayinKipi } from './onay';
 import type { OneriKarti } from './oneri';
 import type { PilotPlanDurumu, PilotPlanEylemi, PlanOnerisi } from './plan';
 import type { UyumBulgusu, UyumDurumu, UyumIsareti } from './uyum';
+import type { OzelKategori } from '../reklam/meta/hedefleme';
+import type { UyumSektoru } from '../uyum/tipler';
 
 /**
  * ═══ PİLOT UÇLARININ YANIT ZARFI (Ajan 2 eki, 2026-10-07) ═══
@@ -112,3 +114,32 @@ export interface PilotOneriListesi {
   taramaMesaji: string | null;
 }
 
+/** ═══ EK ZARFLAR (Ajan 2, 2026-10-07) — panel kopyasında henüz yok; karşılaştırma bu başlıkta durur ═══ */
+
+/** `GET|PUT /pilot/gercek-yayin`. Müşteri hesabı bu ucu hiç görmez. */
+export interface PilotGercekYayinDurumu {
+  /** Ajans şirketinin anahtarı; okunamazsa `false` (KAPALI) ve `okunamadi` dolu. */
+  acik: boolean;
+  /** Anahtarı son değiştiren (ad; kullanıcı silindiyse null), zamanı ve sebebi. */
+  degistiren: string | null;
+  zaman: string | null;
+  sebep: string | null;
+  /** Okuyan kişi anahtarı değiştirebilir mi (ajans şirketinin yöneticisi). */
+  degistirebilir: boolean;
+  /** Okuma düştüyse sebebi; o durumda kip TEST kabul edilir. */
+  okunamadi: string | null;
+}
+
+/** `GET|PUT /pilot/workspace-beyani`. */
+export interface PilotWorkspaceBeyani {
+  clientId: string;
+  /** `null` = soru hiç cevaplanmadı; `[]` = "hiçbiri" beyanı. */
+  ozelKategoriler: OzelKategori[] | null;
+  /** Kaydı tanınmayan bir kategori taşıyorsa (eski veri) burada; beyan yeniden yapılmalı. */
+  taninmayanKategoriler: string[];
+  beyan: { kim: string | null; zaman: string } | null;
+  sektor: string | null;
+  /** Denetçinin sektörü nasıl okuduğu (`sektorCoz`); null = beyan yok. */
+  sektorEslesmesi: UyumSektoru[] | null;
+  duzenleyebilir: boolean;
+}

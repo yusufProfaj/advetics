@@ -25,6 +25,7 @@ import {
   planUyumGirdisi,
   uyumDenetle,
   uyumDurumu,
+  yayinKipi,
   type DegisiklikIsteGirdisi,
   type KurulumSatiri,
   type KurulumSatirDurumu,
@@ -60,6 +61,7 @@ import { cumleyiCevir, gerekceEkle } from './plan-metni';
 import { uyumProfiliOku } from './uyum-profili';
 import { PilotKurulumKuyrugu } from './kurulum-kuyrugu';
 import { planPdf } from './plan-pdf';
+import { gercekYayinAcikMi } from './gercek-yayin';
 
 /**
  * ═══ PİLOT PLAN SERVİSİ (MIMARI § 3, uçların plan yarısı) ═══
@@ -174,6 +176,8 @@ interface KapiOkumasi {
   isaretler: UyumIsareti[];
   aylikButceMicros: bigint | null;
   ajansinKendiSirketi: boolean;
+  /** TEK KAPI (`gercekYayinAcikMi`): okunamazsa false. */
+  gercekYayinAcik: boolean;
 }
 
 @Injectable()
@@ -397,10 +401,13 @@ export class PilotPlanService {
         }
         const k = await kapiOku(tx, p, simdi);
         const d = await denetimKaydet(tx, p, k);
-        // Uyum sonradan geçtiyse kip GERÇEĞE güncellenir (onaydan sonra
-        // değişen tek alan; trigger yalnız bu yöne izin veriyor) ve denetim
-        // kaydı plana bağlanır.
-        if (uyumDurumu(k.denetim, k.isaretler, p.icerik_ozeti) === 'gecti' && p.yayin_kipi !== 'gercek') {
+        // Uyum sonradan geçtiyse VE gerçek yayın anahtarı açıksa kip GERÇEĞE
+        // güncellenir (onaydan sonra değişen tek alan; trigger yalnız bu yöne
+        // izin veriyor) ve denetim kaydı plana bağlanır. Karar onay kapısıyla
+        // AYNI fonksiyondan (`yayinKipi`): ikinci bir kural yazılırsa anahtar
+        // kapalıyken "Şimdi kur" gerçeğe geçirebilirdi.
+        const kip = yayinKipi(uyumDurumu(k.denetim, k.isaretler, p.icerik_ozeti), k.ajansinKendiSirketi, k.gercekYayinAcik);
+        if (kip === 'gercek' && p.yayin_kipi !== 'gercek') {
           await tx.$executeRaw(Prisma.sql`UPDATE pilot_planlari SET yayin_kipi = 'gercek', onay_denetim_id = ${d}::uuid WHERE id = ${p.id}::uuid`);
         }
         kuyrugaAl = true;
@@ -670,7 +677,8 @@ async function kapiOku(tx: Tx, p: PlanSatiri, simdi: Date): Promise<KapiOkumasi>
     SELECT (ma.ajans_org_id IS NULL OR ma.ajans_org_id = o.id) AS ajans_mi
       FROM organizations o LEFT JOIN manager_accounts ma ON ma.id = o.manager_account_id
      WHERE o.id = ${p.org_id}::uuid`);
-  return { plan, profil, denetim, isaretler, aylikButceMicros: b ? BigInt(b.micros) : null, ajansinKendiSirketi: o?.ajans_mi === true };
+  const gy = await gercekYayinAcikMi(tx, p.org_id);
+  return { plan, profil, denetim, isaretler, aylikButceMicros: b ? BigInt(b.micros) : null, ajansinKendiSirketi: o?.ajans_mi === true, gercekYayinAcik: gy.acik };
 }
 
 function kapiKos(
@@ -689,5 +697,6 @@ function kapiKos(
     aylikButceMicros: k.aylikButceMicros,
     uyum: uyumDurumu(k.denetim, k.isaretler, p.icerik_ozeti),
     ajansinKendiSirketi: k.ajansinKendiSirketi,
+    gercekYayinAcik: k.gercekYayinAcik,
   });
 }

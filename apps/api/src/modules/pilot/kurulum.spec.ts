@@ -106,7 +106,7 @@ beforeEach(async () => {
      VALUES ($1, $2, $3, $4, 'facebook_page', 'p1', 'Sayfa', $5, now())`,
     [SAYFA, IDS.org, IDS.client, IDS.connection, IDS.adAccount],
   );
-  await h.q(`INSERT INTO ajans_ayari (org_id, atif_standardi, atif_secim_at) VALUES ($1, 'tik7', now())`, [IDS.org]);
+  await h.q(`INSERT INTO ajans_ayari (org_id, atif_standardi, atif_secim_at, pilot_gercek_yayin, pilot_gercek_yayin_at, pilot_gercek_yayin_sebebi) VALUES ($1, 'tik7', now(), true, now(), 'canlı tur')`, [IDS.org]);
 });
 
 /** Planı gerçek akışla onaylatır; `kip` verilirse onay izi doğrudan yazılır (test/kapalı kipi). */
@@ -217,6 +217,15 @@ describe('gerçek kip', () => {
 });
 
 describe('test ve kapalı kip', () => {
+  it('KRİTİK: anahtar kapalıyken onaylanan plan uçtan uca TEST kipinde kurulur ve açılmaz', async () => {
+    await h.q(`UPDATE ajans_ayari SET pilot_gercek_yayin = false`);
+    const id = await onayliPlan();
+    expect((await h.q<{ yayin_kipi: string }>('SELECT yayin_kipi FROM pilot_planlari WHERE id = $1', [id]))[0]!.yayin_kipi).toBe('test');
+    await kos(id);
+    expect((await satirlar(id))[0]!.durum).toBe('test_kipinde_kuruldu');
+    expect(meta.acmaSirasi).toEqual([]);
+  });
+
   it('KRİTİK: test kipi kurar, geri okur, AÇMAZ ve arşivler', async () => {
     const id = await onayliPlan('test');
     await kos(id);

@@ -55,6 +55,8 @@ beforeEach(async () => {
   await h.reset();
   await seedTenant(h);
   await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'Öteki', 'oteki', now())`, [OTEKI, IDS.org]);
+  // Gerçek yayın anahtarı AÇIK (varsayılan kapalı; kapalı hâli ayrı testte).
+  await h.q(`INSERT INTO ajans_ayari (org_id, pilot_gercek_yayin, pilot_gercek_yayin_at, pilot_gercek_yayin_sebebi) VALUES ($1, true, now(), 'test kurulumu')`, [IDS.org]);
   // Özel kategori sorusu CEVAPLANDI ("Hayır"); sektör beyanlı.
   await h.q(`UPDATE clients SET ozel_kategori_beyan_zamani = now() WHERE id = $1`, [IDS.client]);
   await h.q(`INSERT INTO monthly_budgets (id, org_id, client_id, month, amount_micros, currency, updated_at) VALUES (gen_random_uuid(), $1, $2, '2026-11-01', 120000000000, 'TRY', now())`, [IDS.org, IDS.client]);
@@ -214,6 +216,40 @@ describe('gönder → onayla', () => {
     await expect(svc.degisiklikIste(AJANS, id, { surum: 1, not: 'x' }, SIMDI)).rejects.toThrow(/müşteri hesabından/);
     const d = await svc.degisiklikIste(MUSTERI, id, { surum: 1, not: 'Google’a daha az ayıralım' }, SIMDI);
     expect(d.plan).toMatchObject({ durum: 'taslak', musteriNotu: 'Google’a daha az ayıralım' });
+  });
+});
+
+describe('gerçek yayın anahtarı', () => {
+  const onayaKadar = async () => {
+    const { id } = await hazirla();
+    await svc.eylem(AJANS, id, { eylem: 'musteriye_gonder', surum: 1 }, SIMDI);
+    const m = await svc.detay(MUSTERI, id, SIMDI);
+    return { id, oz: m.plan.icerikOzeti };
+  };
+
+  it('KRİTİK: anahtar kapalıyken uyum geçse bile kip TEST; ajansa söylenir, müşteriye söylenmez', async () => {
+    await h.q(`UPDATE ajans_ayari SET pilot_gercek_yayin = false`);
+    const { id, oz } = await onayaKadar();
+    const a = await svc.detay(AJANS, id, SIMDI);
+    expect(a.onayKapisi).toMatchObject({ tur: 'kabul', kip: 'test' });
+    expect(a.onayKapisi?.tur === 'kabul' && a.onayKapisi.ajansNotu).toContain('anahtarı kapalı');
+    const o = await svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: oz }, SIMDI);
+    expect(o.plan.yayinKipi).toBe('test');
+    expect(JSON.stringify(o.musteriOzeti)).not.toContain('anahtar');
+  });
+
+  it('KRİTİK: anahtar sonradan açılırsa "Şimdi kur" planı gerçeğe geçirir; kapalıyken geçiremez', async () => {
+    await h.q(`UPDATE ajans_ayari SET pilot_gercek_yayin = false`);
+    const { id, oz } = await onayaKadar();
+    await svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: oz }, SIMDI);
+    await h.q(`UPDATE pilot_planlari SET durum = 'kismen_kuruldu' WHERE id = $1`, [id]);
+    await svc.eylem(AJANS, id, { eylem: 'yeniden_dene', surum: 1 }, SIMDI);
+    expect((await svc.detay(AJANS, id, SIMDI)).plan.yayinKipi).toBe('test');
+    await h.q(`UPDATE pilot_planlari SET durum = 'kismen_kuruldu' WHERE id = $1`, [id]);
+    await h.q(`UPDATE ajans_ayari SET pilot_gercek_yayin = true`);
+    await svc.eylem(AJANS, id, { eylem: 'yeniden_dene', surum: 1 }, SIMDI);
+    expect((await svc.detay(AJANS, id, SIMDI)).plan.yayinKipi).toBe('gercek');
+    expect(kuyruk.planEkle).toHaveBeenLastCalledWith(id, expect.stringMatching(/^yd/), true);
   });
 });
 

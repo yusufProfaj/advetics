@@ -39,6 +39,15 @@ export const PILOT_UCLARI = [
   { yontem: 'POST', yol: '/pilot/planlar/:id/onayla', izin: 'strategy.publish', ne: 'ONAY = YAYIN: sürüm + içerik özeti; ajans rolünde gerekçe zorunlu' },
   { yontem: 'GET', yol: '/pilot/planlar/:id/kurulum', izin: 'strategy.read', ne: 'Kurulum satırları ve özeti' },
   { yontem: 'GET', yol: '/pilot/planlar/:id/pdf', izin: 'strategy.read', ne: 'Plan PDF (rapor altyapısı, Advetics logosu)' },
+  // ─── Ajans ayarı ve Veri adımı (Ajan 2 eki, 2026-10-07) ───
+  // Gerçek yayın anahtarı: OKUMA ajans personeli (müşteri görmez, `strategy.write`
+  // müşteride yok); YAZMA yalnız ajans şirketinin yöneticisi (`org.write`).
+  { yontem: 'GET', yol: '/pilot/gercek-yayin', izin: 'strategy.write', ne: 'Pilot gerçek yayın anahtarının durumu (ajans görür)' },
+  { yontem: 'PUT', yol: '/pilot/gercek-yayin', izin: 'org.write', ne: 'Anahtarı aç/kapat; yalnız ajans şirketinin yöneticisi, sebep zorunlu, denetim kaydı' },
+  // Özel kategori + sektör beyanı: workspace başına BİR KEZ, YASAL BEYAN —
+  // yapay zekâ dolduramaz; yazan ajans personeli (`client.write`).
+  { yontem: 'GET', yol: '/pilot/workspace-beyani', izin: 'strategy.write', ne: 'Workspace’in özel kategori ve sektör beyanı' },
+  { yontem: 'PUT', yol: '/pilot/workspace-beyani', izin: 'client.write', ne: 'Beyanı yaz (boş liste = "hiçbiri"); kim/ne zaman kaydedilir' },
   // ─── Pilot (AdvCampaign ekranı) ───
   { yontem: 'GET', yol: '/pilot/bugun', izin: 'bulk.write', ne: 'Açılış: dünkü harcama/sonuç, ay bütçesi, son tarama özeti' },
   { yontem: 'GET', yol: '/pilot/oneriler', izin: 'bulk.write', ne: 'Öneri kartları (durum süzgeci, gösterilen/toplam)' },

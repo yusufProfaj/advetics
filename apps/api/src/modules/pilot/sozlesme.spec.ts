@@ -381,6 +381,7 @@ describe('onay = yayın kapısı', () => {
     aylikButceMicros: 120_000n * M,
     uyum: 'gecti' as const,
     ajansinKendiSirketi: false,
+    gercekYayinAcik: true,
   };
 
   it('uyum geçtiyse gerçek yayın', () => {
@@ -400,6 +401,14 @@ describe('onay = yayın kapısı', () => {
     expect(a.tur === 'kabul' && a.kip).toBe('test');
     expect(b.tur === 'kabul' && b.kip).toBe('kapali');
     expect(b.tur === 'kabul' && b.ajansNotu).toContain('Uyum');
+  });
+
+  it('KRİTİK: gerçek yayın anahtarı kapalıyken uyum geçse bile TEST kipi (müşteri şirketinde de); ajansa söylenir', () => {
+    const r = onayKapisi({ ...temel, gercekYayinAcik: false });
+    expect(r).toMatchObject({ tur: 'kabul', kip: 'test' });
+    expect(r.tur === 'kabul' && r.ajansNotu).toContain('gerçek yayın anahtarı kapalı');
+    // Anahtar uyum bağlı değilken gerçeği AÇAMAZ.
+    expect(onayKapisi({ ...temel, uyum: 'bagli_degil', gercekYayinAcik: true })).toMatchObject({ kip: 'kapali' });
   });
 
   it('ENGEL, işaretsiz UYARI ve bayat denetim onayı kapatır', () => {

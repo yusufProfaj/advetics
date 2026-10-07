@@ -3,18 +3,20 @@ import { PilotController } from './pilot.controller';
 import { PilotPlanService } from './plan.service';
 import { PilotService } from './pilot.service';
 import { PilotKurulumKuyrugu } from './kurulum-kuyrugu';
+import { PilotGercekYayinService } from './gercek-yayin';
+import { PilotBeyanService } from './beyan.service';
 
 /**
  * Pilot — yapay zekâ ile hesap yönetimi (docs/advcampaign/MIMARI.md).
  *
- * BAŞKA BİR İŞ MODÜLÜNÜ İÇE AKTARMIYOR. PrismaService, CONFIG ve
- * YAPAY_ZEKA global modüllerden geliyor. Platform çağrıları API sürecinde
+ * BAŞKA BİR İŞ MODÜLÜNÜ İÇE AKTARMIYOR. PrismaService, CONFIG,
+ * YAPAY_ZEKA ve AuditService global modüllerden geliyor. Platform çağrıları API sürecinde
  * DEĞİL, worker'da (`worker.ts` → `kurulum-isleyici.ts`); Nest grafiğine
  * yeni bir kenar eklenmiyor (CLAUDE.md "NEST MODÜL KAYDI DERLEMEDE DEĞİL
  * AÇILIŞTA PATLIYOR"; `pilot-kayit.spec.ts` kilitliyor).
  */
 @Module({
   controllers: [PilotController],
-  providers: [PilotPlanService, PilotService, PilotKurulumKuyrugu],
+  providers: [PilotPlanService, PilotService, PilotKurulumKuyrugu, PilotGercekYayinService, PilotBeyanService],
 })
 export class PilotModule {}
