@@ -1,11 +1,13 @@
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import Link from 'next/link';
-import type { AtifDurumu, ReklamHazirligi } from '@advetics/shared';
+import { PLAN_SAYFA_IZNI, type AtifDurumu, type ReklamHazirligi } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { Baslik, Kutu } from '@/reklam/ui';
 import { SohbetEkrani } from '@/reklam/sohbet/sohbet-ekrani';
+import { PilotAcilisi } from '@/components/pilot/pilot-acilisi';
+import { eskiEkranMi } from '@/components/pilot/hesap';
 
 export const metadata = { title: 'AdvCampaign · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -32,6 +34,22 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
     return <WorkspaceGerekli ekran="AdvCampaign" neden="Reklam bir workspace’in reklam hesabında kuruluyor." {...workspaceSecimVerisi(session)} />;
   }
   if (!hasPermission(session, 'bulk.write')) return <Kutu ton="uyari" baslik="Reklam oluşturma yetkin yok">Workspace yöneticine danış.</Kutu>;
+  /*
+   * AÇILIŞ PİLOT, SOHBET `?eski=1` ARKASINDA. Sohbet ana yol olmaktan çıktı
+   * (AJAN-PLANI §3) ama yeni ekran canlıdan geçene kadar SİLİNMİYOR (Ç-7).
+   * `?oturum=` taşıyan bağlantı (eski AdvStrategy aktarımı, yer imleri) eski
+   * sohbete gider: onu yeni ekrana çevirmek o bağlantıları sessizce kırardı.
+   */
+  if (!eskiEkranMi({ eski: first(params.eski), oturum: first(params.oturum) })) {
+    return (
+      <PilotAcilisi
+        clientId={clientId}
+        workspaceAdi={session.availableClients.find((c) => c.id === clientId)?.name ?? null}
+        planOkuyabilir={hasPermission(session, PLAN_SAYFA_IZNI)}
+        uygulayabilir={hasPermission(session, 'bulk.publish')}
+      />
+    );
+  }
   const [h, o, a] = await Promise.allSettled([
     serverApiFetch<ReklamHazirligi>(`/reklam/hazirlik?clientId=${clientId}`),
     serverApiFetch<Oturumlar>(`/reklam/sohbet/oturumlar?clientId=${clientId}`),

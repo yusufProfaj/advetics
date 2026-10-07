@@ -89,7 +89,8 @@ export interface PilotHazirlaYaniti {
 
 /** `GET /pilot/planlar/:id/kurulum`. */
 export interface PilotKurulumYaniti {
-  plan: { id: string; donem: string; durum: PilotPlanDurumu; yayinKipi: YayinKipi | null };
+  /** `surum`: "Şimdi kur" eylemi plan sayfasıyla aynı gövdeyi taşısın diye. */
+  plan: { id: string; donem: string; durum: PilotPlanDurumu; surum: number; yayinKipi: YayinKipi | null };
   ozet: KurulumOzeti;
   satirlar: KurulumSatiri[];
   yapilabilir: PilotEkranEylemi[];
