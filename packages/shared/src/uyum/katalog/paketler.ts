@@ -45,7 +45,7 @@ export const FORM_KVKK_KURALLARI: readonly UyumKurali[] = [
   kural('FORM_KVKK', {
     kimlik: 'FRM-01',
     seviye: 'ENGEL',
-    mesaj: 'Form reklamı için müşterinin HTML aydınlatma sayfası tanımlı değil.',
+    mesaj: 'Form reklamı için workspace’in HTML aydınlatma sayfası tanımlı değil.',
     neYapmali: 'Marka Merkezi’nde KVKK aydınlatma sayfasının https adresini gir (PDF ya da indirme bağlantısı olmaz).',
     kimCozer: 'ajans',
     dayanak: { metin: 'KVKK md. 10; Aydınlatma Yükümlülüğü Tebliği', madde: 'C-10 §3, R3-O-18', tarih: '2018-03-10' },
