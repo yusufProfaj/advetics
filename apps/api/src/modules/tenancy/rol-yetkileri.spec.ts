@@ -128,17 +128,35 @@ describe('Müşteri hesabı (client_viewer)', () => {
      * tarihleri değiştirip verilerini görebilir, güncelleyebilir; reklam
      * yayınlayamaz, reklam kısmını göremez". Liste `toEqual` ile kilitli:
      * fazladan bir okuma yetkisi bile "reklam kısmı"nı menüde açabilir.
+     *
+     * TARİHLİ İSTİSNA (2026-10-08, AdvStrategy Ç-5): kullanıcı medya planı
+     * onayının "PDF + panel içi" alınmasını seçti; seçeneğin tarifi
+     * "müşteri panelde onaylar". `strategy.read` + `strategy.approve`
+     * bunun için. `strategy.write` YOK: müşteri planı yazamaz.
      */
     expect([...y].sort()).toEqual(
-      ['budget.read', 'client.read', 'insights.read', 'report.read', 'sync.trigger'].sort(),
+      [
+        'budget.read',
+        'client.read',
+        'insights.read',
+        'report.read',
+        'sync.trigger',
+        'strategy.read',
+        'strategy.approve',
+      ].sort(),
     );
   });
 
-  it('KRİTİK: hiçbir yazma yetkisi yok — sync.trigger dışında', () => {
+  it('KRİTİK: hiçbir yazma yetkisi yok — sync.trigger ve plan onayı dışında', () => {
     // `sync.trigger` "verilerini güncelleyebilir" cümlesinin ta kendisi ve
     // veri YAZMIYOR, platformdan çekiyor; kota bekçisi zaten sınırlıyor.
-    const yazma = [...y].filter((p) => !p.endsWith('.read') && p !== 'sync.trigger');
+    // `strategy.approve` (2026-10-08): planı onaylar, reklama dokunmaz;
+    // onaylı plan platforma değil AdvCampaign'e taslak olarak gider ve
+    // yayın orada AJANSIN onayıyla.
+    const istisna = new Set(['sync.trigger', 'strategy.approve']);
+    const yazma = [...y].filter((p) => !p.endsWith('.read') && !istisna.has(p));
     expect(yazma).toEqual([]);
+    expect(y.has('strategy.write')).toBe(false);
   });
 
   it('KRİTİK: reklam kısmını GÖRMÜYOR — kural ve boost okuma yetkisi bile yok', () => {

@@ -34,7 +34,7 @@ export const ROL_ACIKLAMASI: Record<Role, string> = {
   ad_manager:
     'Yetkilendirildiği şirketlerin workspace’lerini yönetir: reklam yayınlar, kural ve bütçe yazar, reklam hesabı atar, veriyi günceller. Kişi ekleyemez, şirket açamaz.',
   client_viewer:
-    'Workspace’in kendi giriş hesabı. Yalnızca Genel Bakış, Reklam Keşfi ve Raporlar; tarih aralığını değiştirir, verisini görür ve günceller. Reklam ekranlarını görmez.',
+    'Workspace’in kendi giriş hesabı. Yalnızca Genel Bakış, Reklam Keşfi ve Raporlar; tarih aralığını değiştirir, verisini görür ve günceller. Aylık medya planını görür ve onaylar. Reklam ekranlarını görmez.',
 };
 
 export const SAHIP_ACIKLAMASI =
@@ -81,6 +81,7 @@ export const YETKI_GRUPLARI: readonly YetkiGrubu[] = [
       { baslik: 'Raporları görüntüleme', izin: 'report.read' },
       { baslik: 'Verileri güncelleme (“Şimdi güncelle”)', izin: 'sync.trigger' },
       { baslik: 'Bütçe tüketimini görme', izin: 'budget.read' },
+      { baslik: 'Aylık medya planını görme ve onaylama', izin: 'strategy.approve' },
     ],
   },
   {
@@ -90,6 +91,7 @@ export const YETKI_GRUPLARI: readonly YetkiGrubu[] = [
       { baslik: 'Akıllı Boost — gönderi öne çıkarma', izin: 'boost.write' },
       { baslik: 'Kural yazma ve canlıya alma', izin: 'rule.activate' },
       { baslik: 'Aylık bütçe belirleme', izin: 'budget.write' },
+      { baslik: 'Aylık medya planı hazırlama (AdvStrategy)', izin: 'strategy.write' },
       { baslik: 'Rapor hazırlama ve gönderme', izin: 'report.share' },
       { baslik: 'Potansiyel müşteri listesini işleme', izin: 'lead.write' },
       { baslik: 'Potansiyel müşteri listesini dışa aktarma', izin: 'lead.export' },

@@ -66,6 +66,20 @@ import {
 } from './google-write';
 
 /**
+ * Anahtar kelime fikri — Google'ın döndürdüğü ham sayılar STRING kalıyor.
+ * Hacim int64 ve teklif micros; `Number`a çevirmek çağıranın kararı. `null`
+ * = Google değer vermedi (sıfır DEĞİL).
+ */
+export interface GoogleKelimeFikri {
+  kelime: string;
+  aylikArama: string | null;
+  /** `LOW` | `MEDIUM` | `HIGH` | `UNSPECIFIED`. */
+  rekabet: string | null;
+  teklifAltMicros: string | null;
+  teklifUstMicros: string | null;
+}
+
+/**
  * Google Ads adapter'ı.
  *
  * Meta'dan üç önemli farkı var ve bu farklar tasarımı belirliyor:
@@ -491,6 +505,84 @@ export class GoogleProvider implements IAdPlatformProvider {
       { method: 'POST', headers, body: JSON.stringify({ query: query.trim() }) },
     );
     return data.results ?? [];
+  }
+
+  /**
+   * ANAHTAR KELİME FİKİRLERİ — `KeywordPlanIdeaService.GenerateKeywordIdeas`.
+   *
+   * SALT OKUNUR: hesapta hiçbir şey oluşturmuyor, para harcamıyor. AdvStrategy
+   * arama kurgusunun kaynağı ve ilk kullanımı bir ÖLÇÜM (`google-check --kelime`).
+   *
+   * ERİŞİM SEVİYESİNE BAĞLI: belgeye göre Explorer erişiminde YASAK, Basic
+   * istiyor (A1 §4.5) ve projenin gerçek seviyesi hiç ölçülmedi. Hata
+   * YUTULMUYOR, `PlatformApiError` olarak yükseliyor: "erişim yok" ile "sonuç
+   * yok" ayrı şeyler ve ikisini aynı boş listeye çevirmek, ekranda uydurma bir
+   * "bu kelime aranmıyor" cümlesi demek olurdu.
+   *
+   * Kota 1 QPS (`GenerateKeywordIdeas`, `...HistoricalMetrics`,
+   * `...ForecastMetrics` için ortak). Bu metot sınır KOYMUYOR; çağıran
+   * kuyruk koyacak (AdvStrategy Ajan 2).
+   *
+   * Hedefleme AÇIKÇA gönderiliyor (dil + ülke). Boş bırakmak "her yer, her
+   * dil" demek ve Türk müşterinin planına dünya geneli hacim yazılırdı —
+   * hata vermeden.
+   */
+  async kelimeFikirleri(
+    accessToken: string,
+    customerId: string,
+    girdi: {
+      tohumlar: readonly string[];
+      /** `languageConstants/1037` = Türkçe. */
+      dilKaynagi: string;
+      /** `geoTargetConstants/2792` = Türkiye. En çok 10. */
+      konumKaynaklari: readonly string[];
+    },
+    loginCustomerId?: string,
+  ): Promise<GoogleKelimeFikri[]> {
+    const { developerToken } = this.assertConfigured();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      'developer-token': developerToken,
+      'Content-Type': 'application/json',
+    };
+    if (loginCustomerId) headers['login-customer-id'] = loginCustomerId;
+
+    const { data } = await platformFetch<{
+      results?: Array<{
+        text?: string;
+        keywordIdeaMetrics?: {
+          avgMonthlySearches?: string;
+          competition?: string;
+          lowTopOfPageBidMicros?: string;
+          highTopOfPageBidMicros?: string;
+        };
+      }>;
+    }>('google', `${this.adsBase}/customers/${customerId}:generateKeywordIdeas`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        language: girdi.dilKaynagi,
+        geoTargetConstants: girdi.konumKaynaklari,
+        keywordPlanNetwork: 'GOOGLE_SEARCH',
+        includeAdultKeywords: false,
+        keywordSeed: { keywords: girdi.tohumlar },
+        // SAYFA BOYUTU GÖNDERİLMİYOR. `googleAds:search` bu alanı
+        // PAGE_SIZE_NOT_SUPPORTED ile reddetti ve ilk canlı turda üç sorguyu
+        // düşürdü; bu uçta kabul edildiği belgede yazıyor ama canlıda
+        // görülmedi. Kesme çağıranda yapılıyor ve TOPLAM söyleniyor
+        // (`KelimeAramaSonucu.gosterilen/toplam`), yani bir şey kaybolmuyor.
+      }),
+    });
+
+    return (data.results ?? []).map((r) => ({
+      kelime: r.text ?? '',
+      // `null` = Google DEĞER VERMEDİ; sıfır demek değil. Hacmi bilinmeyen
+      // kelimeyi "0 arama" diye göstermek onu plandan haksız yere eler.
+      aylikArama: r.keywordIdeaMetrics?.avgMonthlySearches ?? null,
+      rekabet: r.keywordIdeaMetrics?.competition ?? null,
+      teklifAltMicros: r.keywordIdeaMetrics?.lowTopOfPageBidMicros ?? null,
+      teklifUstMicros: r.keywordIdeaMetrics?.highTopOfPageBidMicros ?? null,
+    }));
   }
 
   /**

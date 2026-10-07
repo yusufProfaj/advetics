@@ -25,8 +25,14 @@ Google arama kurgusu, kitle × kreatif matrisi, sezon, PDF + AdvCampaign'e
 aktarım), yalnız Meta + Google. Plan beş ajana bölündü:
 [`advstrategy/AJAN-PLANI.md`](advstrategy/AJAN-PLANI.md). Kararlar: PDF'te
 Advetics logosu, onay PDF + panel içi (dış link yok), aktarım platforma
-DEĞİL AdvCampaign'e taslak. **Sıradaki:** Ajan 1 (sözleşme + veri modeli)
-ve Keyword Planner erişim ölçümü. Henüz kod yok.
+DEĞİL AdvCampaign'e taslak. **Ajan 1 BİTTİ (2026-10-08):** sözleşme
+`packages/shared/src/strateji/`, veri modeli ve devir notu
+[`advstrategy/MIMARI.md`](advstrategy/MIMARI.md), yeni izinler
+`strategy.read|write|approve` (müşteri hesabı okur + onaylar), salt okunur
+`GoogleProvider.kelimeFikirleri` + `google-check --kelime` ölçüm kipi.
+**Sıradaki:** deploy sonrası Ö-1 ölçümü (sunucuda `pnpm --filter
+@advetics/api google-check -- --kelime "…"`), sonra Ajan 2 (migration +
+servis) ve Ajan 3 (`/strateji` + menü) paralel.
 
 **ADVCAMPAIGN (2026-10-07, kullanıcı kararı):** eski Reklam Oluştur, AI
 Asistan ve Toplu Oluştur KALDIRILDI (panel + API `ai-assistant` sohbeti ve

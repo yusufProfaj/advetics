@@ -278,7 +278,19 @@ describe('raporEkleri — mail ekleri', () => {
      * raporun iki gönderimi ekleri farklı sırayla taşır ve karşılaştıran kişi
      * bunu veri farkı sanar.
      */
-    for (const i of ['1', '2', '3', '4']) await yukle({ icerik: i });
+    /*
+     * YÜKLEMELER ARASI 3 ms. PGlite'ın `now()`u MİLİSANİYE çözünürlüğünde
+     * (ölçüldü 2026-10-08: art arda beş sorgu aynı `.858000`); gerçek
+     * Postgres mikrosaniye. Aynı milisaniyeye düşen iki yükleme
+     * `uploaded_at` eşitliğinde rastgele `id`ye göre sıralanıyor ve test,
+     * tam paket yükü altında ara sıra düşüyordu. Üretimde iki insan
+     * yüklemesi aynı mikrosaniyeye düşmez; kural (yükleme sırası) doğru,
+     * kararsız olan test ortamının saati.
+     */
+    for (const i of ['1', '2', '3', '4']) {
+      await yukle({ icerik: i });
+      await new Promise((r) => setTimeout(r, 3));
+    }
 
     const bir = await svc.raporEkleri(IDS.client, '2026-08-01', '2026-08-31');
     const iki = await svc.raporEkleri(IDS.client, '2026-08-01', '2026-08-31');

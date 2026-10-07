@@ -45,6 +45,10 @@
  * GAQL alanlarını sınamak (virgülle birden fazla, her biri ayrı sorgu):
  *   google-check -- --field campaign.start_date,campaign.end_date
  *
+ * Anahtar Kelime Planlayıcı erişimini ölçmek (salt okunur, AdvStrategy):
+ *   google-check -- --kelime "filtre kahve,french press"   (ilk atanmış Google hesabı)
+ *   google-check -- --account <ad_accounts.id> --kelime "filtre kahve"
+ *
  * Hesap keşfini atlayıp doğrudan sınamak (çok daha hızlı):
  *   google-check -- --customer 9608136521 --login 4074080956 \
  *                   --field campaign.start_date,campaign.end_date
@@ -62,6 +66,7 @@ import { ProviderRegistry } from './modules/connections/provider.registry';
 import { TokenVaultService } from './modules/connections/token-vault.service';
 import { CONFIG, type AppConfig } from './config/configuration';
 import { PlatformApiError } from './modules/connections/provider.types';
+import type { GoogleProvider } from './modules/connections/providers/google.provider';
 
 const ARGV = process.argv.slice(2).filter((a) => a !== '--');
 function arg(name: string): string | undefined {
@@ -280,6 +285,68 @@ async function main(): Promise<void> {
       account.managerExternalId ?? undefined,
       probeFields,
     );
+    await app.close();
+    process.exit(failed > 0 ? 1 : 0);
+  }
+
+  /**
+   * ANAHTAR KELİME PLANLAYICI ERİŞİM ÖLÇÜMÜ — `--kelime <tohum,tohum>`.
+   *
+   * AdvStrategy'nin arama kurgusu bu servise bağlı ve servis Explorer
+   * erişiminde YASAK (A1 §4.5). Belge seviyeyi söylemiyor, yalnızca bir
+   * çağrı söylüyor. SALT OKUNUR: hesapta hiçbir şey oluşmuyor. Hedefleme
+   * Türkçe + Türkiye (planın gerçek kullanımı); `--dil`, `--konum` ile
+   * değiştirilebilir. Ham hata gövdesi basılıyor: `DEVELOPER_TOKEN_NOT_
+   * APPROVED` gibi bir kod "erişim yok" demek ve tam aradığımız cevap.
+   */
+  const kelimeTohumlari = arg('kelime');
+  if (kelimeTohumlari) {
+    // `--account` yoksa izlemedeki İLK atanmış Google hesabı: ölçümün sorusu
+    // hesaba değil geliştirici token'ının SEVİYESİNE ait, hangi hesapla
+    // sorulduğu cevabı değiştirmiyor. Seçilen hesap ekrana basılıyor.
+    const sec = { name: true, externalId: true, managerExternalId: true, platform: true } as const;
+    const account = accountUuid
+      ? await db.adAccount.findUnique({ where: { id: accountUuid }, select: sec })
+      : await db.adAccount.findFirst({
+          where: { platform: 'google', syncEnabled: true, clientId: { not: null } },
+          orderBy: { createdAt: 'asc' },
+          select: sec,
+        });
+    if (!account || account.platform !== 'google') {
+      console.log(`\n  ✗ Google reklam hesabı bulunamadı: ${accountUuid ?? 'izlemede atanmış Google hesabı yok'}\n`);
+      await app.close();
+      process.exit(1);
+    }
+    const tohumlar = kelimeTohumlari.split(',').map((t) => t.trim()).filter(Boolean);
+    head(`Anahtar kelime fikirleri — ${account.name} (${account.externalId})`);
+    try {
+      const fikirler = await (provider as unknown as {
+        kelimeFikirleri: GoogleProvider['kelimeFikirleri'];
+      }).kelimeFikirleri(
+        accessToken,
+        account.externalId,
+        {
+          tohumlar,
+          dilKaynagi: arg('dil') ?? 'languageConstants/1037',
+          konumKaynaklari: [arg('konum') ?? 'geoTargetConstants/2792'],
+        },
+        account.managerExternalId ?? undefined,
+      );
+      ok('ERİŞİM VAR', `${fikirler.length} fikir döndü, ilk 20 gösteriliyor (tohum: ${tohumlar.join(', ')})`);
+      // Hacim KESİN mi ARALIK mı: harcaması olmayan hesapta Google kaba
+      // değer döndürebiliyor. Ham değerler basılıyor ki gözle görülsün.
+      for (const f of fikirler.slice(0, 20)) {
+        console.log(
+          `      · ${f.kelime} — aylık ${f.aylikArama ?? 'yok'} · rekabet ${f.rekabet ?? 'yok'}` +
+            ` · teklif ${f.teklifAltMicros ?? '?'}–${f.teklifUstMicros ?? '?'} micros`,
+        );
+      }
+      if (fikirler.length === 0) {
+        console.log('      (HTTP başarılı ama SIFIR fikir: erişim var, tohum eşleşmedi; başka tohum dene)');
+      }
+    } catch (err) {
+      bad('anahtar kelime fikirleri', err);
+    }
     await app.close();
     process.exit(failed > 0 ? 1 : 0);
   }

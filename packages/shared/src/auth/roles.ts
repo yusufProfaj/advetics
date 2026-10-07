@@ -179,6 +179,15 @@ export const PERMISSIONS = [
   'bulk.write',
   'bulk.publish',
 
+  // AdvStrategy — aylık medya planı (2026-10-08)
+  //
+  // `strategy.approve` AYRI: planı yazmak ile müşteri adına "evet, bu
+  // bütçeyle gidelim" demek farklı kararlar. Müşteri (client_viewer) planı
+  // yazamaz ama ONAYLAYABİLİR (Ç-5: onay panel içinden).
+  'strategy.read',
+  'strategy.write',
+  'strategy.approve',
+
   // Potansiyel müşteriler (Lead CRM)
   'lead.read',
   'lead.write',
@@ -240,6 +249,9 @@ const AD_MANAGER_PERMS: readonly Permission[] = [
   'lead.read',
   'lead.write',
   'lead.export',
+  'strategy.read',
+  'strategy.write',
+  'strategy.approve',
 ];
 
 /**
@@ -267,6 +279,9 @@ const CLIENT_VIEWER_PERMS: readonly Permission[] = [
   'sync.trigger',
   'budget.read',
   'report.read',
+  // Medya planını görür ve onaylar; yazamaz (Ç-5, 2026-10-08).
+  'strategy.read',
+  'strategy.approve',
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
