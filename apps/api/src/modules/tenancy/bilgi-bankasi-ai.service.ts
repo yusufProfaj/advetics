@@ -1,8 +1,8 @@
 import { BadRequestException, Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { MARKA_SINIRLARI, type BilgiBankasiTaslak, type TenantContext } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
-import { ANTHROPIC_CLIENT } from '../ai-assistant/anthropic-client.provider';
-import type { AnthropicLike } from '../ai-assistant/anthropic-client.provider';
+import { metinIste, type MetinUretici } from '../../yapay-zeka/gemini';
+import { YAPAY_ZEKA } from '../../yapay-zeka/yapay-zeka.module';
 import { ClientsService } from './clients.service';
 import { ClientProfileService } from './client-profile.service';
 import { siteOku } from './site-oku';
@@ -41,19 +41,17 @@ export class BilgiBankasiAiService {
   private readonly model: string;
 
   constructor(
-    @Inject(ANTHROPIC_CLIENT) private readonly anthropic: AnthropicLike | null,
+    @Inject(YAPAY_ZEKA) private readonly yz: MetinUretici | null,
     @Inject(CONFIG) config: AppConfig,
     private readonly clients: ClientsService,
     private readonly profile: ClientProfileService,
   ) {
-    this.model = config.aiAssistant.model;
+    this.model = config.yapayZeka.model;
   }
 
   async taslak(ctx: TenantContext, clientId: string): Promise<BilgiBankasiTaslak> {
-    if (!this.anthropic) {
-      throw new ServiceUnavailableException(
-        'AI asistanı yapılandırılmamış — ANTHROPIC_API_KEY eksik.',
-      );
+    if (!this.yz) {
+      throw new ServiceUnavailableException('Yapay zekâ bağlı değil (GEMINI_API_KEY tanımlı değil).');
     }
 
     const hepsi = await this.clients.list(ctx);
@@ -79,14 +77,10 @@ export class BilgiBankasiAiService {
      */
     const mevcut = await this.profile.get(ctx, clientId).catch(() => null);
 
-    const response = await this.anthropic.messages.create({
-      model: this.model,
-      max_tokens: 2000,
-      system: SISTEM,
-      messages: [
-        {
-          role: 'user',
-          content: [
+    const r0 = await metinIste(this.yz, {
+      sistem: SISTEM,
+      enCokCikti: 2000,
+      metin: [
             `Workspace adı: ${client.name}`,
             `Site: ${site.adres}`,
             client.contactPhone ? `Kayıtlı telefon: ${client.contactPhone}` : null,
@@ -111,14 +105,11 @@ export class BilgiBankasiAiService {
           ]
             .filter(Boolean)
             .join('\n'),
-        },
-      ],
     });
-
-    const metin = response.content
-      .filter((b): b is { type: 'text'; text: string; citations: never } => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n');
+    // Ret, kesilme ve boş cevap AYRI cümleyle; "taslak çıkarılamadı"ya
+    // düşürmek kullanıcıyı sebebi kendi sitesinde aramaya gönderirdi.
+    if (r0.tur !== 'tamam') throw new BadRequestException(r0.mesaj);
+    const metin = r0.metin;
 
     const taslak = bolumleriAyir(metin);
 

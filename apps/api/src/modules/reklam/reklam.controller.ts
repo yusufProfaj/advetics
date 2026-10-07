@@ -19,7 +19,7 @@ import { ReklamTaslakService, type AlanDegisikligi, type TaslakKaydi } from './t
 import { AjansAyariService, type AtifDurumu } from './ajans-ayari.service';
 import { ReklamYayinService, type ProvaGorunumu, type YayinGorunumu } from './yayin.service';
 import type { YayinBaslatSonucu } from './yayin-baslat';
-import { ReklamAiTaslakService, type AiTaslakSonucu } from './ai-taslak.service';
+import { ReklamAiTaslakService } from './ai-taslak.service';
 
 const taslakOlusturSchema = z.object({
   clientId: z.string().uuid(),
@@ -41,14 +41,6 @@ const surumYazSchema = z.object({
   ),
 });
 
-const aiTaslakSchema = z.object({
-  clientId: z.string().uuid(),
-  cumle: z.string().trim().min(3).max(1000),
-  medyalar: z
-    .array(z.object({ varlikId: z.string().uuid(), kapakVarlikId: z.string().uuid().optional() }))
-    .min(1)
-    .max(10),
-});
 const onaySchema = z.object({ icerikOzeti: z.string().regex(/^[0-9a-f]{64}$/) });
 
 const yayinlaSchema = z.object({
@@ -215,19 +207,6 @@ export class ReklamController {
   @RequirePermissions('bulk.read')
   provaOku(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<ProvaGorunumu> {
     return this.yayin.provaOku(ctx, id);
-  }
-
-  /**
-   * "Bu görsellerle form kampanyası oluştur": asistan taslağı kurar, her
-   * alan öneri olarak işaretli. Notlar (atılan öneriler, sorular) cevapta.
-   */
-  @Post('ai-taslak')
-  @RequirePermissions('bulk.write')
-  aiTaslak(
-    @CurrentTenant() ctx: TenantContext,
-    @Body(zodBody(aiTaslakSchema)) dto: z.infer<typeof aiTaslakSchema>,
-  ): Promise<AiTaslakSonucu> {
-    return this.ai.olustur(ctx, dto.clientId, dto.cumle, dto.medyalar);
   }
 
   @Post('taslaklar/:id/oneriyi-onayla')

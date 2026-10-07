@@ -1,13 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, resolve, sep } from 'node:path';
-import Anthropic from '@anthropic-ai/sdk';
 import { ForbiddenException, Inject, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { MesajDurumu, SohbetOlayi, TenantContext } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import { CryptoService } from '../../../crypto/crypto.service';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { REKLAM_AI_MODELI } from '../ai-taslak.service';
 import { ReklamHazirlikService } from '../hazirlik.service';
 import { hesapErisimi } from '../meta-erisim';
 import { metaSurumuDogrula } from '../meta-graf';
@@ -17,7 +15,9 @@ import type { TxRunner } from '../yayin-motoru';
 import { AracCalistirici, type MarkaProfili } from './araclar';
 import { SohbetDongusu, type ModelAdimi, type TurGirdisi } from './dongu';
 import { metaKonumAra } from './meta-konum';
-import { claudeAdimi } from './model';
+import { geminiAdimi } from './model';
+import { YAPAY_ZEKA } from '../../../yapay-zeka/yapay-zeka.module';
+import type { GeminiIstemcisi } from '../../../yapay-zeka/gemini';
 import { AdvOnayService } from './onay.service';
 
 /**
@@ -25,10 +25,9 @@ import { AdvOnayService } from './onay.service';
  * (araç kapıları) ve `packages/shared/src/reklam/sohbet` (soru, hâl, kota)
  * içinde; burası yalnız gerçek bağımlılıkları bağlıyor.
  *
- * Anthropic istemcisi burada kuruluyor, eski asistan modülünden alınmıyor:
- * yeni reklam modülü başka bir iş modülünü içe aktarmıyor (sınır testle
- * kilitli). Anahtar yoksa sohbet açılmıyor ve bu SÖYLENİYOR; panel
- * (taslak paneli) çalışmaya devam ediyor.
+ * Yapay zekâ Gemini (global `YapayZekaModule`; iş modülü değil, sınır
+ * testinin yasak listesinde yok). Anahtar yoksa sohbet açılmıyor ve bu
+ * SÖYLENİYOR; panel (taslak paneli) çalışmaya devam ediyor.
  */
 const MODELE_GORSEL_SINIRI = 5 * 1024 * 1024;
 
@@ -52,7 +51,7 @@ export interface EkranMesaji {
 
 @Injectable()
 export class AdvSohbetService {
-  private readonly istemci: Anthropic | null;
+  private readonly modelAdi: string;
   private readonly yuklemeKoku: string;
   private readonly apiSurumu: string;
   /** Testte sahte model koyulabilsin diye alan. */
@@ -66,9 +65,10 @@ export class AdvSohbetService {
     private readonly onay: AdvOnayService,
     private readonly crypto: CryptoService,
     @Inject(CONFIG) config: AppConfig,
+    @Inject(YAPAY_ZEKA) yz: GeminiIstemcisi | null,
   ) {
-    this.istemci = config.aiAssistant.apiKey ? new Anthropic({ apiKey: config.aiAssistant.apiKey }) : null;
-    this.model = this.istemci ? claudeAdimi(this.istemci) : null;
+    this.model = yz ? geminiAdimi(yz) : null;
+    this.modelAdi = config.yapayZeka.model;
     const dir = config.uploads.dir;
     this.yuklemeKoku = isAbsolute(dir) ? dir : resolve(process.cwd(), dir);
     this.apiSurumu = metaSurumuDogrula(config.platforms.meta.apiVersion);
@@ -83,7 +83,7 @@ export class AdvSohbetService {
     const [o] = await this.tx(ctx)((t) =>
       t.$queryRaw<Array<{ id: string; updated_at: Date }>>(Prisma.sql`
         INSERT INTO adv_oturum (org_id, client_id, user_id, baslik, model)
-        SELECT org_id, id, ${ctx.userId}::uuid, 'Yeni reklam', ${REKLAM_AI_MODELI} FROM clients WHERE id = ${clientId}::uuid
+        SELECT org_id, id, ${ctx.userId}::uuid, 'Yeni reklam', ${this.modelAdi} FROM clients WHERE id = ${clientId}::uuid
         RETURNING id::text, updated_at`),
     );
     if (!o) throw new NotFoundException('Workspace bulunamadı');
@@ -138,7 +138,7 @@ export class AdvSohbetService {
   }
 
   tur(ctx: TenantContext, oturumId: string, g: TurGirdisi): AsyncGenerator<SohbetOlayi> {
-    if (!this.model) throw new ServiceUnavailableException('Reklam asistanı bağlı değil (ANTHROPIC_API_KEY tanımlı değil). Taslağı panelden kurabilirsin.');
+    if (!this.model) throw new ServiceUnavailableException('Reklam asistanı bağlı değil (GEMINI_API_KEY tanımlı değil). Taslağı panelden kurabilirsin.');
     return this.dongu(ctx).tur(ctx, oturumId, g);
   }
 
@@ -203,14 +203,15 @@ export class AdvSohbetService {
 
 function ekranMetni(rol: string, icerik: unknown): string {
   if (rol === 'kullanici') {
-    return (icerik as Array<{ type: string; text?: string }>)
-      .filter((b) => b.type === 'text')
+    return (icerik as Array<{ text?: string }>)
+      .filter((b) => typeof b.text === 'string')
       .map((b) => (b.text ?? '').replace(/\n\n\[Bırakılan medya:[^\]]*\]$/, ''))
       .join('\n');
   }
-  // Asistan turu: yalnız metin blokları (düşünme ve araç blokları ekranda yok).
-  return (icerik as Array<{ role: string; content: Array<{ type: string; text?: string }> }>)
-    .filter((m) => m.role === 'assistant')
-    .flatMap((m) => m.content.filter((b) => b.type === 'text').map((b) => b.text ?? ''))
+  // Asistan turu: yalnız görünür metin (düşünce ve araç parçaları ekranda yok).
+  return (icerik as Array<{ role: string; parts: Array<{ text?: string; thought?: boolean }> }>)
+    .filter((m) => m.role === 'model')
+    .map((m) => m.parts.filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join(''))
+    .filter((t) => t.trim())
     .join('\n\n');
 }

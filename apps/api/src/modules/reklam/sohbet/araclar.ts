@@ -133,11 +133,14 @@ const ACIKLAMA = {
   onay_karti_goster: 'Kontrol geçtiyse kullanıcıya onay kartını gösterir. Kartın metnini sen yazmazsın; kullanıcı kartta onaylar.',
 } as const satisfies Record<AracAdi, string>;
 
-/** Anthropic araç tanımları. Sıra sabit (önbellek önekinin bir parçası). */
-export function aracTanimlari(): Array<{ name: AracAdi; description: string; input_schema: Record<string, unknown> }> {
+/**
+ * Gemini araç tanımları (`parametersJsonSchema`: tam JSON Şeması). Sıra
+ * sabit: değişen bir tanım listesi her turda önbelleği kırar.
+ */
+export function aracTanimlari(): Array<{ name: AracAdi; description: string; parametersJsonSchema: Record<string, unknown> }> {
   return ARACLAR.map((name) => {
-    const { $schema: _s, ...input_schema } = z.toJSONSchema(ARAC_SEMALARI[name]) as Record<string, unknown>;
-    return { name, description: ACIKLAMA[name], input_schema };
+    const { $schema: _s, ...parametersJsonSchema } = z.toJSONSchema(ARAC_SEMALARI[name]) as Record<string, unknown>;
+    return { name, description: ACIKLAMA[name], parametersJsonSchema };
   });
 }
 

@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { AppConfig } from '../../config/configuration';
 import type { TenantContext } from '@advetics/shared';
-import { ReklamMetniService, type AnthropicLike } from './reklam-metni.service';
+import { ReklamMetniService } from './reklam-metni.service';
+import type { GeminiSonucu, MetinUretici } from '../../yapay-zeka/gemini';
 
 /**
  * ═══ REKLAM METNİNİ YAPAY ZEKÂ YAZIYOR ═══
@@ -18,7 +19,9 @@ import { ReklamMetniService, type AnthropicLike } from './reklam-metni.service';
  */
 const CTX = { orgId: 'o', userId: 'u', clientIds: ['c'] } as unknown as TenantContext;
 
-const config = { aiAssistant: { model: 'test-model' } } as unknown as AppConfig;
+const config = { yapayZeka: { model: 'test-model' } } as unknown as AppConfig;
+
+const cevapla = (metin: string): GeminiSonucu => ({ parcalar: [{ text: metin }], sebep: 'bitti', aciklama: null, girdiToken: 1, ciktiToken: 1, onbellekToken: 0 });
 
 /**
  * Bağlam kurucusu ağ/DB istiyor; burada sınanan şey ÇÖZÜMLEME.
@@ -34,17 +37,8 @@ const connections = { list: async () => [] } as never;
 const assets = { bytes: async () => ({ buffer: Buffer.from('x'), mimeType: 'image/png' }) } as never;
 
 function servis(metin: string | null): ReklamMetniService {
-  const anthropic: AnthropicLike | null =
-    metin === null
-      ? null
-      : {
-          messages: {
-            create: vi.fn(async () => ({
-              content: [{ type: 'text', text: metin }],
-            })) as never,
-          },
-        };
-  return new ReklamMetniService(config, anthropic, clients, clientProfile, connections, assets);
+  const yz: MetinUretici | null = metin === null ? null : { model: 'm', uret: vi.fn(async () => cevapla(metin)) };
+  return new ReklamMetniService(config, yz, clients, clientProfile, connections, assets);
 }
 
 const GIRDI = { clientId: 'c', goal: 'whatsapp' as const };
@@ -125,14 +119,10 @@ describe('modele giden istek', () => {
      * terminolojisinden doğru çağrıyı çıkarmasına bel bağlamak olurdu;
      * metnin ne yapması gerektiği teknik bir ayar değil.
      */
-    const anthropic = {
-      messages: {
-        create: vi.fn(async () => ({ content: [{ type: 'text', text: 'ANA METIN: x' }] })),
-      },
-    } as unknown as AnthropicLike;
+    const yz = { model: 'm', uret: vi.fn(async () => cevapla('ANA METIN: x')) } satisfies MetinUretici;
     const svc = new ReklamMetniService(
       config,
-      anthropic,
+      yz,
       clients,
       clientProfile,
       connections,
@@ -141,11 +131,8 @@ describe('modele giden istek', () => {
 
     await svc.yaz(CTX, { clientId: 'c', goal: 'form' });
 
-    const cagri = (anthropic.messages.create as unknown as { mock: { calls: unknown[][] } })
-      .mock.calls[0]![0] as {
-      messages: Array<{ content: Array<{ type: string; text?: string }> }>;
-    };
-    const metin = cagri.messages[0]!.content.map((b) => b.text ?? '').join(' ');
+    const cagri = (yz.uret.mock.calls[0] as unknown[])[0] as { mesajlar: Array<{ parts: Array<{ text?: string }> }> };
+    const metin = cagri.mesajlar[0]!.parts.map((b) => b.text ?? '').join(' ');
     expect(metin).toContain('Anlık form');
     expect(metin).not.toContain('OUTCOME_LEADS');
   });

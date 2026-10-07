@@ -174,7 +174,7 @@ describe('tanımlar ve sınır', () => {
   it('her araç tanımı bir JSON şeması taşıyor; yasaklı ad yok', () => {
     const t = aracTanimlari();
     for (const a of t) {
-      expect(a.input_schema.type).toBe('object');
+      expect(a.parametersJsonSchema.type).toBe('object');
       expect(YASAKLI_ARACLAR as readonly string[]).not.toContain(a.name);
     }
   });

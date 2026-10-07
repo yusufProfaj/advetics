@@ -1,8 +1,8 @@
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
-import type Anthropic from '@anthropic-ai/sdk';
 import type { CampaignGoal, TenantContext } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
-import { ANTHROPIC_CLIENT } from '../ai-assistant/anthropic-client.provider';
+import { gorunurMetin, type GeminiParcasi, type MetinUretici } from '../../yapay-zeka/gemini';
+import { YAPAY_ZEKA } from '../../yapay-zeka/yapay-zeka.module';
 import {
   baglamiMetne,
   musteriBaglamiKur,
@@ -12,12 +12,6 @@ import { ClientsService } from '../tenancy/clients.service';
 import { ClientProfileService } from '../tenancy/client-profile.service';
 import { ConnectionsService } from '../connections/connections.service';
 import { AssetsService } from '../assets/assets.service';
-
-export interface AnthropicLike {
-  messages: {
-    create(params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message>;
-  };
-}
 
 /**
  * MODELİN KABUL ETTİĞİ GÖRSEL TÜRLERİ. Başka bir tür göndermek isteğin
@@ -80,7 +74,7 @@ export class ReklamMetniService {
 
   constructor(
     @Inject(CONFIG) private readonly config: AppConfig,
-    @Inject(ANTHROPIC_CLIENT) private readonly anthropic: AnthropicLike | null,
+    @Inject(YAPAY_ZEKA) private readonly yz: MetinUretici | null,
     private readonly clients: ClientsService,
     private readonly clientProfile: ClientProfileService,
     private readonly connections: ConnectionsService,
@@ -97,7 +91,7 @@ export class ReklamMetniService {
       assetIds?: string[];
     },
   ): Promise<ReklamMetni> {
-    if (!this.anthropic) {
+    if (!this.yz) {
       throw new BadRequestException(
         'Yapay zekâ metin yazımı kapalı: sunucuda AI anahtarı tanımlı değil.',
       );
@@ -112,14 +106,14 @@ export class ReklamMetniService {
 
     const gorseller = await this.gorselBloklari(ctx, input.assetIds ?? []);
 
-    const response = await this.anthropic.messages.create({
-      model: this.config.aiAssistant.model,
-      max_tokens: 1024,
-      system: SISTEM,
-      messages: [
+    const response = await this.yz.uret({
+      sistem: SISTEM,
+      enCokCikti: 1024,
+      dusunme: 'low',
+      mesajlar: [
         {
           role: 'user',
-          content: [
+          parts: [
             /*
              * GÖRSELLER METİNDEN ÖNCE.
              *
@@ -129,7 +123,6 @@ export class ReklamMetniService {
              */
             ...gorseller,
             {
-              type: 'text' as const,
               text:
                 `${baglamiMetne(baglam)}\n\n` +
                 `Kampanya tipi: ${HEDEF_ACIKLAMASI[input.goal]}\n` +
@@ -146,7 +139,9 @@ export class ReklamMetniService {
       ],
     });
 
-    return this.coz(response);
+    if (response.sebep === 'ret') throw new BadRequestException(response.aciklama ?? 'Yapay zekâ bu isteği işlemedi.');
+    if (response.sebep === 'kesildi') throw new BadRequestException('Yapay zekânın cevabı yarıda kesildi. Tekrar dene.');
+    return this.coz(gorunurMetin(response.parcalar));
   }
 
   /**
@@ -167,11 +162,8 @@ export class ReklamMetniService {
   private async gorselBloklari(
     ctx: TenantContext,
     assetIds: string[],
-  ): Promise<Array<{ type: 'image'; source: { type: 'base64'; media_type: DesteklenenTur; data: string } }>> {
-    const bloklar: Array<{
-      type: 'image';
-      source: { type: 'base64'; media_type: DesteklenenTur; data: string };
-    }> = [];
+  ): Promise<GeminiParcasi[]> {
+    const bloklar: GeminiParcasi[] = [];
 
     for (const id of assetIds.slice(0, GORSEL_SINIRI)) {
       try {
@@ -184,10 +176,7 @@ export class ReklamMetniService {
           this.logger.warn(`Metin yazımında atlanan görsel (${id}): ${buffer.length} bayt`);
           continue;
         }
-        bloklar.push({
-          type: 'image',
-          source: { type: 'base64', media_type: mimeType as DesteklenenTur, data: buffer.toString('base64') },
-        });
+        bloklar.push({ inlineData: { mimeType: mimeType as DesteklenenTur, data: buffer.toString('base64') } });
       } catch (err) {
         this.logger.warn(
           `Metin yazımında görsel okunamadı (${id}): ${err instanceof Error ? err.message : String(err)}`,
@@ -212,12 +201,7 @@ export class ReklamMetniService {
    * metin olmadan yayınlanamıyor; sessizce boş üç kutu bırakmak, düğmenin
    * çalışmadığı izlenimi verirdi.
    */
-  private coz(response: Anthropic.Message): ReklamMetni {
-    const metin = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n');
-
+  private coz(metin: string): ReklamMetni {
     const al = (etiket: string): string => {
       const m = new RegExp(`^${etiket}:\\s*(.+)$`, 'im').exec(metin);
       return (m?.[1] ?? '').trim();

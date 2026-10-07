@@ -230,9 +230,12 @@ const envSchema = z.object({
    * `.min(1)` YOK: `.env.example` boş dizgeyle gönderiyor, boş dizge zaten
    * falsy ve okuyan kod "yok" sayıyor.
    */
-  ANTHROPIC_API_KEY: z.string().optional(),
-  /** Model kimliği elle yönetiliyor — takvimden türetilemez (LinkedIn sürümüyle aynı ders). */
-  ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
+  // YAPAY ZEKÂ: Gemini (kullanıcı kararı 2026-10-08, Anthropic kullanılmıyor).
+  // Anahtar sunucuda `scripts/gemini-anahtari.sh` ile giriliyor.
+  GEMINI_API_KEY: z.string().optional(),
+  // Fiyat/performans: Gemini 3.8 Flash (kararlı, en yeni Flash). Elle
+  // yönetiliyor; "en yenisi" gibi otomatik yükseltme YOK.
+  GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -323,7 +326,7 @@ export interface AppConfig {
     };
   };
   /** AI kampanya asistanı — anahtar yoksa özellik devre dışı, uygulama yine açılır. */
-  aiAssistant: {
+  yapayZeka: {
     apiKey?: string;
     model: string;
   };
@@ -410,9 +413,9 @@ export function loadConfig(): AppConfig {
         apiKey: env.YOUTUBE_API_KEY,
       },
     },
-    aiAssistant: {
-      apiKey: env.ANTHROPIC_API_KEY,
-      model: env.ANTHROPIC_MODEL,
+    yapayZeka: {
+      apiKey: env.GEMINI_API_KEY,
+      model: env.GEMINI_MODEL,
     },
   };
 }

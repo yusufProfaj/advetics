@@ -11,6 +11,15 @@ Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlı
 doğrulandı).
 **Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: dört migration — taslak, yayın, yazma kesici, prova — + `db:rls`; `META_API_VERSION` v25.0 ya da v26.0 olmalı), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
+**YAPAY ZEKÂ GEMINI (2026-10-08, kullanıcı kararı):** Anthropic tamamen
+kaldırıldı (SDK dahil). Tek istemci `apps/api/src/yapay-zeka/gemini.ts`
+(düz REST, anahtar `x-goog-api-key` başlığında), model
+`GEMINI_MODEL="gemini-3.8-flash"` (fiyat/performans; giriş fiyatı
+31 Aralık 2026'ya kadar, sonra iki katı). Anahtar sunucuda
+`./scripts/gemini-anahtari.sh` ile giriliyor (gizli sorar, Gemini'ye sorup
+doğrular, .env yedeği alır, yalnız Advetics süreçlerini yeniden başlatır).
+Sohbet kaydı Gemini'nin kendi biçiminde: düşünce imzaları aynen geri gidiyor.
+
 **ADVCAMPAIGN (2026-10-07, kullanıcı kararı):** eski Reklam Oluştur, AI
 Asistan ve Toplu Oluştur KALDIRILDI (panel + API `ai-assistant` sohbeti ve
 `bulk` modülü); menüde tek satır **AdvCampaign → `/reklam`**. Hedef:
@@ -28,8 +37,7 @@ MIGRATION `20261008100000_advcampaign_sohbet`), İP-12…15 (araçlar, döngü,
 SSE ucu, tek kullanımlık onay), İP-16…18 (ekran: oturumlar · sohbet ·
 canlı taslak paneli, mobilde sekmeli). `/reklam` artık sohbet ekranı; eski
 tek atışlık stüdyo silindi (`POST /reklam/ai-taslak` ucu duruyor, ekran
-çağırmıyor). Canlıda HİÇ denenmedi: `ANTHROPIC_API_KEY` sunucuda tanımlı
-olmalı. Bilinen açıklar: (a) FORM niyeti form şablonu olmadığı için
+çağırmıyor; 2026-10-08'de kaldırıldı). Canlıda HİÇ denenmedi. Bilinen açıklar: (a) FORM niyeti form şablonu olmadığı için
 tamamlanamıyor; (b) onay anında öneriler kullanıcı kararına çevrilirken yeni
 sürüm doğuyor ve prova o sürüme ait sayılmıyor; gerçek yayın açılırken
 prova eşleşmesi kaynaktan bağımsız özetle yapılmalı; (c) akış (SSE) vekil
@@ -111,7 +119,7 @@ bırak, tek cümle yaz; asistan (Opus 5.5, yapılandırılmış çıktı, görse
 modele gidiyor) taslağı kurar, `/reklam/onizleme`de telefon çerçeveli
 önizleme + satır içi eksikler + "Onayla" (öneri → kullanıcı kararı), sonra
 prova ve test kipi. Model bütçe/süre/adres UYDURAMIYOR (sunucu cümleyle
-karşılaştırıyor), kategori sorusunu cevaplayamıyor. `ANTHROPIC_API_KEY`
+karşılaştırıyor), kategori sorusunu cevaplayamıyor. `GEMINI_API_KEY`
 sunucuda tanımlı olmalı. Menüde değil; eski Reklam Oluştur'un üstünde kart.
 **Video (2026-10-07):** Stüdyo MP4/MOV kabul ediyor (en çok 200 MB).
 Kapak karesi TARAYICIDA alınıyor (sunucuya video programı kurulmuyor) ve

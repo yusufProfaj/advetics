@@ -14,6 +14,7 @@ import {
   type SorulabilirAlan,
   type TenantContext,
 } from '@advetics/shared';
+import { gorunurMetin, type GeminiAraci, type GeminiMesaji, type GeminiParcasi, type GeminiSonucu } from '../../../yapay-zeka/gemini';
 import type { TxRunner } from '../yayin-motoru';
 import type { AracCalistirici, OturumDurumu } from './araclar';
 import { aracTanimlari } from './araclar';
@@ -38,20 +39,18 @@ import { SOHBET_SISTEM_ISTEMI } from './istem';
  * bir satır, ekranda sonsuza kadar "yazıyor" demekti.
  */
 
-export type AnthropicMesaji = { role: 'user' | 'assistant'; content: Array<Record<string, unknown>> };
-
-export interface ModelAdimSonucu {
-  content: Array<Record<string, unknown>>;
-  stop_reason: string | null;
-  girdiToken: number;
-  ciktiToken: number;
-  onbellekToken: number;
-}
+/**
+ * Kayıt ve model mesajları GEMINI'NİN KENDİ BİÇİMİNDE: modelin döndürdüğü
+ * parçalar (düşünce imzaları dahil) satıra olduğu gibi yazılıyor ve bir
+ * sonraki adımda aynen geri gidiyor. Ara bir biçime çevirip geri dönüştürmek
+ * imzayı sessizce düşürürdü ve araç döngüsü ikinci adımda bozulurdu.
+ */
+export type ModelAdimSonucu = GeminiSonucu;
 
 export type ModelAdimi = (g: {
   sistem: string;
-  araclar: ReturnType<typeof aracTanimlari>;
-  mesajlar: AnthropicMesaji[];
+  araclar: GeminiAraci[];
+  mesajlar: GeminiMesaji[];
   enCokCikti: number;
   metinParcasi: (p: string) => void;
 }) => Promise<ModelAdimSonucu>;
@@ -136,7 +135,7 @@ export class SohbetDongusu {
     const medyaSatiri = g.medyalar.length
       ? `\n\n[Bırakılan medya: ${g.medyalar.map((m, i) => `${i + 1}. ${m.kapakVarlikId ? 'video' : 'görsel'}`).join(', ')}]`
       : '';
-    await this.yaz(o, sira, 'kullanici', [{ type: 'text', text: (metin || '(yalnız medya bıraktı)') + medyaSatiri }], [
+    await this.yaz(o, sira, 'kullanici', [{ text: (metin || '(yalnız medya bıraktı)') + medyaSatiri }], [
       { tur: 'medya', medyalar: g.medyalar } as unknown as SohbetOlayi,
     ], 'tamam');
     const asistanId = await this.yaz(o, sira + 1, 'asistan', [], [], 'akista');
@@ -157,21 +156,21 @@ export class SohbetDongusu {
     };
 
     // --- Model mesajları ----------------------------------------------------
-    const mesajlar = anthropicGecmisi(gecmis);
-    const yeniIcerik: Array<Record<string, unknown>> = [{ type: 'text', text: (metin || '(yalnız medya bıraktı)') + medyaSatiri }];
+    const mesajlar = modelGecmisi(gecmis);
+    const yeniIcerik: GeminiParcasi[] = [{ text: (metin || '(yalnız medya bıraktı)') + medyaSatiri }];
     // Görsel YALNIZ ilk göründüğü turda modele gider (uzun oturum görselleri
     // yeniden faturalamasın); sonraki turlarda yerinde kısa metin var.
     for (const [i, m] of g.medyalar.entries()) {
       const gorsel = await this.d.medyaGorseli(o.client_id, m.kapakVarlikId ?? m.varlikId);
       if (!gorsel) {
-        yeniIcerik.push({ type: 'text', text: `Medya ${medyalar.length - g.medyalar.length + i + 1}: asistana gösterilemedi (5 MB üstü ya da biçim).` });
+        yeniIcerik.push({ text: `Medya ${medyalar.length - g.medyalar.length + i + 1}: asistana gösterilemedi (5 MB üstü ya da biçim).` });
         continue;
       }
-      yeniIcerik.push({ type: 'text', text: `Medya ${medyalar.length - g.medyalar.length + i + 1}${m.kapakVarlikId ? ' (videonun kapak karesi)' : ''}:` });
-      yeniIcerik.push({ type: 'image', source: { type: 'base64', media_type: gorsel.mime, data: gorsel.base64 } });
+      yeniIcerik.push({ text: `Medya ${medyalar.length - g.medyalar.length + i + 1}${m.kapakVarlikId ? ' (videonun kapak karesi)' : ''}:` });
+      yeniIcerik.push({ inlineData: { mimeType: gorsel.mime, data: gorsel.base64 } });
     }
-    mesajlar.push({ role: 'user', content: yeniIcerik });
-    const turMesajlari: AnthropicMesaji[] = [];
+    mesajlar.push({ role: 'user', parts: yeniIcerik });
+    const turMesajlari: GeminiMesaji[] = [];
 
     const olaylar: SohbetOlayi[] = [];
     const ver = (e: SohbetOlayi) => {
@@ -209,31 +208,39 @@ export class SohbetDongusu {
         girdiToken += r.girdiToken;
         ciktiToken += r.ciktiToken;
         onbellekToken += r.onbellekToken;
-        turMesajlari.push({ role: 'assistant', content: r.content });
-        const metinBloklari = r.content.filter((b) => b.type === 'text').map((b) => String(b.text ?? ''));
-        if (metinBloklari.length) sonMetin = metinBloklari.join('\n');
+        // Parçalar DEĞİŞTİRİLMEDEN (imzalar burada).
+        if (r.parcalar.length) turMesajlari.push({ role: 'model', parts: r.parcalar });
+        const gorunen = gorunurMetin(r.parcalar);
+        if (gorunen.trim()) sonMetin = gorunen;
 
-        if (r.stop_reason === 'refusal') {
+        if (r.sebep === 'ret') {
           sonDurum = 'ret';
-          yield ver({ tur: 'hata', hata: 'ret', mesaj: 'Asistan bu isteği yapamadı. Taslağı panelden kurabilirsin.' });
+          yield ver({ tur: 'hata', hata: 'ret', mesaj: `Asistan bu isteği yapamadı. Taslağı panelden kurabilirsin. ${r.aciklama ?? ''}`.trim() });
           break;
         }
-        if (r.stop_reason === 'max_tokens' || ciktiToken >= ADV_SOHBET_SINIRLARI.ciktiToken) {
+        if (r.sebep === 'kesildi' || ciktiToken >= ADV_SOHBET_SINIRLARI.ciktiToken) {
           sonDurum = 'kesildi';
           yield ver({ tur: 'hata', hata: 'kesildi', mesaj: 'Cevap yarıda kesildi.' });
           break;
         }
-        if (r.stop_reason !== 'tool_use') break;
+        if (r.sebep === 'bos') {
+          // Boş cevap "tamam" sayılmaz: ekran sessizce boş bir balon gösterirdi.
+          sonDurum = 'hata';
+          hataMetni = r.aciklama;
+          yield ver({ tur: 'hata', hata: 'ulasilamadi', mesaj: r.aciklama ?? 'Asistan boş cevap döndü.' });
+          break;
+        }
+        if (r.sebep !== 'arac') break;
 
-        const sonuclar: Array<Record<string, unknown>> = [];
-        for (const b of r.content.filter((x) => x.type === 'tool_use')) {
+        const sonuclar: GeminiParcasi[] = [];
+        for (const b of r.parcalar.filter((x) => x.functionCall).map((x) => x.functionCall!)) {
           adim++;
-          const ad = String(b.name) as AracAdi;
+          const ad = b.name as AracAdi;
           if (adim > ADV_SOHBET_SINIRLARI.aracAdimi) {
             sonuclar.push(aracSonucuBlogu(b, { hal: 'reddedildi', neden: 'Bu turda adım sınırı doldu.' }));
             continue;
           }
-          const anahtar = `${ad}:${kanonik(b.input)}`;
+          const anahtar = `${ad}:${kanonik(b.args ?? {})}`;
           if (gorulenCagrilar.has(anahtar)) {
             // TEKRAR: model aynı çağrıyı yeniden istedi; çalıştırılmıyor.
             sonuclar.push(aracSonucuBlogu(b, { hal: 'reddedildi', neden: 'TEKRAR: bu çağrı bu turda zaten yapıldı; sonucunu kullan.' }));
@@ -242,7 +249,7 @@ export class SohbetDongusu {
           gorulenCagrilar.add(anahtar);
           yield ver({ tur: 'arac_basladi', arac: ad, adim });
           const bas = Date.now();
-          const c = await this.d.calistirici.calistir(ctx, durum, ad, b.input);
+          const c = await this.d.calistirici.calistir(ctx, durum, ad, b.args ?? {});
           if (c.taslakId && c.taslakId !== durum.taslakId) {
             durum.taslakId = c.taslakId;
             await this.taslakBagla(o, c.taslakId);
@@ -253,7 +260,7 @@ export class SohbetDongusu {
           if (ad === 'onay_karti_goster' && c.sonuc.hal === 'tamam') yield ver({ tur: 'kart', kart: c.sonuc.veri });
           sonuclar.push(aracSonucuBlogu(b, c.sonuc));
         }
-        turMesajlari.push({ role: 'user', content: sonuclar });
+        turMesajlari.push({ role: 'user', parts: sonuclar });
         if (adim > ADV_SOHBET_SINIRLARI.aracAdimi) {
           sonDurum = 'kesildi';
           yield ver({ tur: 'hata', hata: 'kesildi', mesaj: 'Asistan bu turda çok adım attı; durdurdum. "Devam et" diyebilirsin.' });
@@ -352,7 +359,7 @@ export class SohbetDongusu {
 
   private async kapat(
     id: string,
-    turMesajlari: AnthropicMesaji[],
+    turMesajlari: GeminiMesaji[],
     olaylar: SohbetOlayi[],
     durum: MesajDurumu,
     hata: string | null,
@@ -399,37 +406,38 @@ export class SohbetDongusu {
 // ---------------------------------------------------------------------------
 
 /**
- * Kayıtlı satırlardan Anthropic mesaj listesi. Yarıda kalmış bir turun son
- * asistan mesajı cevapsız bir araç çağrısıyla bitiyorsa ATILIR: API cevapsız
- * `tool_use` taşıyan geçmişi reddediyor ve oturum bir daha konuşamazdı.
+ * Kayıtlı satırlardan model mesaj listesi. Yarıda kalmış bir turun son
+ * model mesajı cevapsız bir araç çağrısıyla bitiyorsa ATILIR: API cevapsız
+ * `functionCall` taşıyan geçmişi reddediyor ve oturum bir daha konuşamazdı.
  * Aynı rolden ardışık mesajlar birleştirilir (kesilmiş tur araç sonucuyla
- * bitebilir, ardından kullanıcı mesajı gelir).
+ * bitebilir, ardından kullanıcı mesajı gelir). Parçaların KENDİSİNE
+ * dokunulmaz.
  */
-export function anthropicGecmisi(satirlar: ReadonlyArray<Pick<MesajSatiri, 'rol' | 'icerik'>>): AnthropicMesaji[] {
-  const ham: AnthropicMesaji[] = [];
+export function modelGecmisi(satirlar: ReadonlyArray<Pick<MesajSatiri, 'rol' | 'icerik'>>): GeminiMesaji[] {
+  const ham: GeminiMesaji[] = [];
   for (const s of satirlar) {
-    if (s.rol === 'kullanici') ham.push({ role: 'user', content: s.icerik as AnthropicMesaji['content'] });
+    if (s.rol === 'kullanici') ham.push({ role: 'user', parts: s.icerik as GeminiParcasi[] });
     else if (s.rol === 'asistan') {
-      const tur = [...(s.icerik as AnthropicMesaji[])];
+      const tur = [...(s.icerik as GeminiMesaji[])];
       const son = tur.at(-1);
-      if (son?.role === 'assistant' && son.content.some((b) => b.type === 'tool_use')) tur.pop();
+      if (son?.role === 'model' && son.parts.some((p) => p.functionCall)) tur.pop();
       ham.push(...tur);
     }
   }
-  const sonuc: AnthropicMesaji[] = [];
+  const sonuc: GeminiMesaji[] = [];
   for (const m of ham) {
-    if (m.content.length === 0) continue;
+    if (m.parts.length === 0) continue;
     const onceki = sonuc.at(-1);
-    if (onceki && onceki.role === m.role) onceki.content = [...onceki.content, ...m.content];
-    else sonuc.push({ role: m.role, content: [...m.content] });
+    if (onceki && onceki.role === m.role) onceki.parts = [...onceki.parts, ...m.parts];
+    else sonuc.push({ role: m.role, parts: [...m.parts] });
   }
   return sonuc;
 }
 
 function metniAl(m: Pick<MesajSatiri, 'icerik'>): string {
-  return (m.icerik as Array<{ type: string; text?: string }>)
-    .filter((b) => b.type === 'text')
-    .map((b) => (b.text ?? '').replace(/\n\n\[Bırakılan medya:[^\]]*\]$/, ''))
+  return (m.icerik as GeminiParcasi[])
+    .filter((p) => typeof p.text === 'string')
+    .map((p) => p.text!.replace(/\n\n\[Bırakılan medya:[^\]]*\]$/, ''))
     .join('\n');
 }
 
@@ -444,26 +452,22 @@ export function konumAdaylariAl(satirlar: ReadonlyArray<Pick<MesajSatiri, 'rol' 
   const sonuc: HedefKonum[] = [];
   for (const s of satirlar) {
     if (s.rol !== 'asistan') continue;
-    const tur = s.icerik as AnthropicMesaji[];
-    const konumCagrilari = new Set(
-      tur.flatMap((m) => m.content).filter((b) => b.type === 'tool_use' && b.name === 'konum_ara').map((b) => String(b.id)),
-    );
-    for (const b of tur.flatMap((m) => m.content)) {
-      if (b.type !== 'tool_result' || !konumCagrilari.has(String(b.tool_use_id))) continue;
-      try {
-        const r = JSON.parse(String((b.content as Array<{ text: string }>)[0]?.text ?? '{}')) as { hal: string; veri?: HedefKonum[] };
-        if (r.hal === 'tamam' && Array.isArray(r.veri)) sonuc.push(...r.veri);
-      } catch {
-        // Bozuk sonuç aday üretmez; model yeniden arar.
-      }
+    for (const p of (s.icerik as GeminiMesaji[]).flatMap((m) => m.parts)) {
+      const r = p.functionResponse;
+      if (!r || r.name !== 'konum_ara') continue;
+      const v = r.response as { hal?: string; veri?: unknown };
+      if (v.hal === 'tamam' && Array.isArray(v.veri)) sonuc.push(...(v.veri as HedefKonum[]));
     }
   }
   return sonuc;
 }
 
-function aracSonucuBlogu(b: Record<string, unknown>, sonuc: unknown): Record<string, unknown> {
-  const hata = typeof sonuc === 'object' && sonuc !== null && ['dustu', 'reddedildi'].includes(String((sonuc as { hal: string }).hal));
-  return { type: 'tool_result', tool_use_id: b.id, content: [{ type: 'text', text: JSON.stringify(sonuc) }], ...(hata && { is_error: true }) };
+/**
+ * Araç sonucu Gemini'ye `functionResponse` olarak; çağrının kimliği varsa
+ * aynen geri gider (aynı adımda aynı araç iki kez çağrılabilir).
+ */
+function aracSonucuBlogu(b: NonNullable<GeminiParcasi['functionCall']>, sonuc: unknown): GeminiParcasi {
+  return { functionResponse: { ...(b.id && { id: b.id }), name: b.name, response: sonuc as Record<string, unknown> } };
 }
 
 function kanonik(v: unknown): string {

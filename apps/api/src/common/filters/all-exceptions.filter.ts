@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
+import { YapayZekaHatasi } from '../../yapay-zeka/gemini';
 import { platformKisaAdi } from '@advetics/shared';
 import type { Response } from 'express';
 import { PlatformApiError } from '../../modules/connections/provider.types';
@@ -134,7 +134,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     /*
      * ═══ YAPAY ZEKÂ SERVİSİNİN HATASI SON DALA DÜŞMÜYOR ═══
      *
-     * `Anthropic.APIError` bir `HttpException` değil; dalı yokken "kitleyi
+     * Yapay zekâ hatası (`YapayZekaHatasi`, Gemini) bir `HttpException` değil; dalı yokken "kitleyi
      * tarif et" canlıda yalnızca "Beklenmeyen bir hata oluştu" dedi ve
      * sebebi (şema reddi, kota, bağlantı) yalnızca sunucu logundaydı —
      * `PlatformApiError` için bir kez yaşanmış hatanın aynısı. Servisin KENDİ
@@ -143,15 +143,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
      * 429 istemcinin geri çekilmesi gereken tek durum; kalanlar yukarı akış
      * hatası, 502.
      */
-    if (exception instanceof Anthropic.APIError) {
-      const govde = exception.error as { error?: { message?: unknown } } | undefined;
-      const ayrinti =
-        typeof govde?.error?.message === 'string' ? govde.error.message : exception.message;
+    if (exception instanceof YapayZekaHatasi) {
       return {
-        statusCode:
-          exception.status === 429 ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_GATEWAY,
-        code: exception.status === 429 ? 'AI_RATE_LIMITED' : 'AI_ERROR',
-        message: `Yapay zekâ servisi isteği tamamlayamadı: ${ayrinti}`.slice(0, 500),
+        statusCode: exception.durum === 429 ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_GATEWAY,
+        code: exception.durum === 429 ? 'AI_RATE_LIMITED' : 'AI_ERROR',
+        message: `Yapay zekâ servisi isteği tamamlayamadı: ${exception.message}`.slice(0, 500),
         requestId,
       };
     }

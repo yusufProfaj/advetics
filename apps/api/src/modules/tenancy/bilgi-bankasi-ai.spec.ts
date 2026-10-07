@@ -105,7 +105,7 @@ Sakin, güven veren bir ton.`;
  * Burada iki şey birden kilitleniyor:
  *
  *   · Yeni servis sağlayıcı listesinde — yoksa uç 500 döner.
- *   · Anthropic istemcisi AYRI bir global modülde. `AiAssistantModule` zaten
+ *   · Yapay zekâ istemcisi (Gemini) AYRI bir global modülde. `AiAssistantModule` zaten
  *     `TenancyModule`i import ediyor; istemci orada kalsaydı Bilgi Bankası
  *     onu kullanmak için o modülü import etmek zorunda kalır ve
  *     `TenancyModule → AiAssistantModule → TenancyModule` DÖNGÜSÜ doğardı.
@@ -124,14 +124,12 @@ describe('modül kaydı', () => {
     expect(modul).not.toContain('AiAssistantModule');
   });
 
-  it('KRİTİK: Anthropic istemcisi GLOBAL modülde ve uygulamaya kayıtlı', () => {
-    expect(oku('modules/ai-assistant/anthropic.module.ts')).toContain('@Global()');
-    expect(oku('app.module.ts')).toContain('AnthropicModule');
+  it('KRİTİK: yapay zekâ istemcisi GLOBAL modülde ve uygulamaya kayıtlı', () => {
+    expect(oku('yapay-zeka/yapay-zeka.module.ts')).toContain('@Global()');
+    expect(oku('app.module.ts')).toContain('YapayZekaModule');
     // İkinci bir kayıt, iki ayrı istemci ve iki ayrı model yapılandırması
     // demek olurdu.
-    expect(oku('modules/ai-assistant/ai-assistant.module.ts')).not.toContain(
-      'anthropicClientProvider',
-    );
+    expect(oku('modules/ai-assistant/ai-assistant.module.ts')).not.toContain('YAPAY_ZEKA');
   });
 });
 

@@ -19,7 +19,7 @@ import { FormsModule } from './modules/forms/forms.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { DraftTreeModule } from './modules/draft-tree/draft-tree.module';
 import { CampaignActionsModule } from './modules/campaign-actions/campaign-actions.module';
-import { AnthropicModule } from './modules/ai-assistant/anthropic.module';
+import { YapayZekaModule } from './yapay-zeka/yapay-zeka.module';
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module';
 import { StorageModule } from './storage/storage.module';
 import { LeadsModule } from './modules/leads/leads.module';
@@ -67,7 +67,7 @@ import { ReklamModule } from './modules/reklam/reklam.module';
     AssetsModule,
     DraftTreeModule,
     CampaignActionsModule,
-    AnthropicModule,
+    YapayZekaModule,
     AiAssistantModule,
     BoostsModule,
     AutoBoostModule,

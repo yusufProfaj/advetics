@@ -11,8 +11,8 @@ import type { KitleKonumu, KitleOnerisi, TenantContext } from '@advetics/shared'
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConnectionsService } from '../connections/connections.service';
-import { ANTHROPIC_CLIENT } from './anthropic-client.provider';
-import type { AnthropicLike } from './anthropic-client.provider';
+import { metinIste, type MetinUretici } from '../../yapay-zeka/gemini';
+import { YAPAY_ZEKA } from '../../yapay-zeka/yapay-zeka.module';
 
 /**
  * ═══ DOĞAL DİLDEN KİTLE ÖNERİSİ (Marka Merkezi Bölüm 4c) ═══
@@ -133,17 +133,17 @@ export class KitleOnerisiService {
   private readonly model: string;
 
   constructor(
-    @Inject(ANTHROPIC_CLIENT) private readonly anthropic: AnthropicLike | null,
+    @Inject(YAPAY_ZEKA) private readonly yz: MetinUretici | null,
     @Inject(CONFIG) config: AppConfig,
     private readonly prisma: PrismaService,
     private readonly connections: ConnectionsService,
   ) {
-    this.model = config.aiAssistant.model;
+    this.model = config.yapayZeka.model;
   }
 
   async oner(ctx: TenantContext, clientId: string, metin: string): Promise<KitleOnerisi> {
-    if (!this.anthropic) {
-      throw new ServiceUnavailableException('AI asistanı yapılandırılmamış — ANTHROPIC_API_KEY eksik.');
+    if (!this.yz) {
+      throw new ServiceUnavailableException('Yapay zekâ bağlı değil (GEMINI_API_KEY tanımlı değil).');
     }
 
     // ÖNCE HESAP: Meta hesabı yoksa modele gitmeden reddediliyor. Çözümleme
@@ -157,21 +157,12 @@ export class KitleOnerisiService {
 
   /** 1. aşama: metin → yapılandırılmış terimler. */
   private async yapilandir(metin: string): Promise<ModelCevabi> {
-    const response = await this.anthropic!.messages.create({
-      model: this.model,
-      max_tokens: 2000,
-      system: SISTEM,
-      messages: [{ role: 'user', content: metin }],
-      output_config: { format: { type: 'json_schema', schema: MODEL_SEMASI } },
-    });
-
-    if (response.stop_reason === 'refusal') {
+    const r0 = await metinIste(this.yz!, { sistem: SISTEM, metin, enCokCikti: 2000, jsonSemasi: MODEL_SEMASI });
+    if (r0.tur === 'ret') {
       throw new BadRequestException('Yapay zekâ bu tarifi işlemeyi reddetti; kitleyi farklı sözcüklerle anlat.');
     }
-    const ham = response.content
-      .filter((b): b is Extract<(typeof response.content)[number], { type: 'text' }> => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
+    if (r0.tur !== 'tamam') throw new BadRequestException(`${r0.mesaj} Tekrar dene; sürerse kitleyi elle kur.`);
+    const ham = r0.metin;
     let json: unknown;
     try {
       json = JSON.parse(ham);

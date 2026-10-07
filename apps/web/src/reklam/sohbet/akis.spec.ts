@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { SohbetOlayi } from '@advetics/shared';
+import type { SohbetOlayi, Soru } from '@advetics/shared';
 import { aracIzleri, bekleyenSoru, olayUygula, olaylariAyikla, sureMetni, type EkranMesaji } from './akis';
 
 /** AdvCampaign akışının saf tarafı (İP-16): ayrıştırma ve ekran durumu. */
@@ -66,7 +66,7 @@ describe('olayUygula', () => {
   });
 
   it('bekleyen soru yalnız SON ve TAMAMLANMIŞ asistan mesajında', () => {
-    const soru = { alan: 'butce', metin: 'Ne kadar?', secenekler: [], serbest: true, sira: 1 } as const;
+    const soru: Soru = { alan: 'butce', metin: 'Ne kadar?', secenekler: [], serbest: true, sira: 1 };
     const m = uygula([{ tur: 'mesaj_basladi', mesajId: 'a', sira: 2 }, { tur: 'soru', soru }, { tur: 'bitti', durum: 'tamam', girdiToken: 0, ciktiToken: 0 }]);
     expect(bekleyenSoru(m)).toEqual(soru);
     // Akış sürerken soru çipleri gösterilmez: model hâlâ yazıyor olabilir.

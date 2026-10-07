@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { AssetsModule } from '../assets/assets.module';
 import { ConnectionsModule } from '../connections/connections.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
-import { anthropicClientProvider } from '../ai-assistant/anthropic-client.provider';
 import { CreativeService } from './creative.service';
 import { ReklamMetniService } from './reklam-metni.service';
 import { DraftPublishService } from './draft-publish.service';
@@ -18,15 +17,8 @@ import { DraftTreeService } from './draft-tree.service';
  * değiştirmek olurdu.
  */
 @Module({
-  /*
-   * ANTHROPIC SAĞLAYICISI BURADA DA KAYITLI — `AiAssistantModule` İMPORT
-   * EDİLMİYOR.
-   *
-   * O modül `DraftTreeModule`u import ediyor (asistan taslak kampanya
-   * kurabiliyor); ters yönde import etmek döngüsel bağımlılık demekti ve
-   * Nest bunu DERLEMEDE değil AÇILIŞTA patlatıyor. Sağlayıcı yalnızca
-   * `CONFIG`e bakan bir fabrika, yani ikinci kez kaydetmenin bedeli yok.
-   */
+  // Yapay zekâ istemcisi global `YapayZekaModule`den geliyor; burada ikinci
+  // bir kayıt yok (iki istemci, iki ayrı model yapılandırması demekti).
   imports: [ConnectionsModule, AssetsModule, TenancyModule],
   controllers: [DraftTreeController, CreativeController],
   providers: [
@@ -34,7 +26,6 @@ import { DraftTreeService } from './draft-tree.service';
     DraftPublishService,
     CreativeService,
     ReklamMetniService,
-    anthropicClientProvider,
   ],
   exports: [DraftTreeService, CreativeService],
 })

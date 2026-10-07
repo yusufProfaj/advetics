@@ -2,7 +2,7 @@ import { BadRequestException, HttpStatus } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { PlatformApiError } from '../../modules/connections/provider.types';
-import Anthropic from '@anthropic-ai/sdk';
+import { YapayZekaHatasi } from '../../yapay-zeka/gemini';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
 /**
@@ -152,15 +152,11 @@ describe('AllExceptionsFilter — platform hataları', () => {
 describe('AllExceptionsFilter — yapay zekâ servisi hataları', () => {
   /*
    * "Kitleyi tarif et" canlıda yalnızca "Beklenmeyen bir hata oluştu" dedi:
-   * `Anthropic.APIError` bir `HttpException` değil ve son dala düşüyordu.
+   * yapay zekâ hatası bir `HttpException` değil ve son dala düşüyordu.
+   * Yapay zekâ 2026-10-08'de Gemini'ye taşındı; hata türü `YapayZekaHatasi`.
    */
   function aiHatasi(status: number, mesaj: string) {
-    return Anthropic.APIError.generate(
-      status,
-      { type: 'error', error: { type: 'invalid_request_error', message: mesaj } },
-      undefined,
-      new Headers(),
-    );
+    return new YapayZekaHatasi(status, `Gemini ${status}: ${mesaj}`);
   }
 
   it('KRİTİK: servisin cümlesi panele ULAŞIYOR, son dala düşmüyor', () => {
@@ -177,8 +173,8 @@ describe('AllExceptionsFilter — yapay zekâ servisi hataları', () => {
     expect(b.code).toBe('AI_RATE_LIMITED');
   });
 
-  it('bağlantı hatası da kendi dalında (gövdesiz APIError)', () => {
-    const b = govde(new Anthropic.APIConnectionError({ message: 'Connection error.' }));
+  it('bağlantı hatası da kendi dalında (durumsuz hata)', () => {
+    const b = govde(new YapayZekaHatasi(null, 'Connection error.'));
     expect(b.code).toBe('AI_ERROR');
     expect(b.message).toContain('Connection error.');
   });

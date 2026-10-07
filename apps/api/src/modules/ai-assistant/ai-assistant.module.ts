@@ -11,7 +11,7 @@ import { KitleOnerisiService } from './kitle-onerisi.service';
    */
   imports: [ConnectionsModule],
   controllers: [KitleOnerisiController],
-  // İstemci `AnthropicModule`de (global): Bilgi Bankası taslağı da aynı
+  // İstemci `YapayZekaModule`de (global): Bilgi Bankası taslağı da aynı
   // istemciyi kullanıyor ve burada tutmak modül döngüsü üretiyordu.
   providers: [KitleOnerisiService],
 })

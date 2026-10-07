@@ -143,19 +143,15 @@ describe('video başlığı', () => {
 describe('uçtan uca: cümle + görsel → öneri taslağı → onay', () => {
   let h: Harness;
   let svc: ReklamAiTaslakService;
+  let taslaklar: ReklamTaslakService;
   const kok = mkdtempSync(join(tmpdir(), 'ai-'));
   const CTX = { orgId: IDS.org, userId: IDS.user, clientIds: [IDS.client], activeClientId: IDS.client, isOrgAdmin: true } as TenantContext;
-  let son: { icerik: unknown[] } | null = null;
 
   beforeAll(async () => {
     h = await createHarness();
     const prisma = { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
-    const config = { aiAssistant: { apiKey: undefined }, uploads: { dir: kok } } as unknown as AppConfig;
-    svc = new ReklamAiTaslakService(prisma, new ReklamHazirlikService(prisma), new ReklamTaslakService(prisma), config);
-    svc.modelCagir = async (g) => {
-      son = { icerik: g.icerik };
-      return { tur: 'tamam', cikti };
-    };
+    taslaklar = new ReklamTaslakService(prisma);
+    svc = new ReklamAiTaslakService(taslaklar);
   });
   afterAll(async () => {
     await h.close();
@@ -174,26 +170,14 @@ describe('uçtan uca: cümle + görsel → öneri taslağı → onay', () => {
     }
   });
 
-  it('taslak "ai" yüzüyle açılır, alanlar öneri, görseller modele gider; onay öneriyi kullanıcıya çevirir', async () => {
-    const r = await svc.olustur(CTX, IDS.client, baglam.cumle, [{ varlikId: V1 }, { varlikId: V2 }]);
-    expect(r.taslak.olusturanYuz).toBe('ai');
-    expect(r.taslak.alanlar.niyet?.kaynak).toBe('ai_onerisi');
-    expect(r.taslak.eksikler.map((e) => e.kod)).toContain('KAYNAK');
-    expect(JSON.stringify(son!.icerik)).toContain('"type":"image"');
-    expect(r.notlar).toContain('Bu reklam konut, iş ilanı, kredi ya da finans ya da siyasi bir konu içeriyor mu? Önizlemede cevapla.');
-
-    await expect(svc.onayla(CTX, r.taslak.id, 'f'.repeat(64))).rejects.toThrow(/değişti/);
-    const o = await svc.onayla(CTX, r.taslak.id, r.taslak.icerikOzeti!);
+  it('KRİTİK: onay öneriyi kullanıcı kararına çevirir; başka bir hâli onaylamak reddedilir', async () => {
+    const t0 = await taslaklar.olustur(CTX, IDS.client, 'ai', 'form kur');
+    const t = await taslaklar.surumYaz(CTX, t0.id, { niyet: { deger: 'SITE', kaynak: 'ai_onerisi' } });
+    expect(t.eksikler.map((e) => e.kod)).toContain('KAYNAK');
+    await expect(svc.onayla(CTX, t.id, 'f'.repeat(64))).rejects.toThrow(/değişti/);
+    const o = await svc.onayla(CTX, t.id, t.icerikOzeti!);
     expect(o.alanlar.niyet).toMatchObject({ kaynak: 'kullanici', kim: IDS.user });
     expect(o.eksikler.map((e) => e.kod)).not.toContain('KAYNAK');
-  });
-
-  it('başka workspace’in görseli kullanılamaz; model reddederse taslak açılmaz', async () => {
-    await expect(svc.olustur(CTX, IDS.client, 'form kur', [{ varlikId: '77777777-0000-4000-8000-000000000001' }])).rejects.toThrow(/arşivinde değil/);
-    svc.modelCagir = async () => ({ tur: 'ret', mesaj: 'Asistan bu isteği yapamadı; taslağı panelden kurabilirsin.' });
-    await expect(svc.olustur(CTX, IDS.client, 'form kur', [{ varlikId: V1 }])).rejects.toThrow(/yapamadı/);
-    const [n] = await h.q<{ n: number }>('SELECT count(*)::int AS n FROM reklam_taslagi');
-    expect(n!.n).toBe(0);
   });
 
   it('görsel kaydı: aynı dosya ikinci kez yeni satır açmaz ve söylenir', async () => {

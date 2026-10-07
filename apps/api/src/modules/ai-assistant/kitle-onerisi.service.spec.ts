@@ -3,7 +3,7 @@ import type { GeoLocationOption, InterestOption, TenantContext } from '@advetics
 import type { AppConfig } from '../../config/configuration';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ConnectionsService } from '../connections/connections.service';
-import type { AnthropicLike } from './anthropic-client.provider';
+import type { GeminiIstegi, MetinUretici } from '../../yapay-zeka/gemini';
 import { KitleOnerisiService } from './kitle-onerisi.service';
 
 /**
@@ -26,15 +26,21 @@ function kur(p: {
   geo?: Record<string, GeoLocationOption[]>;
   ilgi?: Record<string, InterestOption[]>;
 }) {
-  const istekler: Array<Record<string, unknown>> = [];
-  const anthropic = {
-    messages: {
-      create: async (params: Record<string, unknown>) => {
-        istekler.push(params);
-        return { stop_reason: p.stop ?? 'end_turn', content: [{ type: 'text', text: p.cevap ?? '' }] };
-      },
+  const istekler: GeminiIstegi[] = [];
+  const yz: MetinUretici = {
+    model: 'm',
+    uret: async (g) => {
+      istekler.push(g);
+      return {
+        parcalar: [{ text: p.cevap ?? '' }],
+        sebep: p.stop === 'refusal' ? 'ret' : 'bitti',
+        aciklama: p.stop === 'refusal' ? 'Gemini cevabı engelledi (SAFETY).' : null,
+        girdiToken: 1,
+        ciktiToken: 1,
+        onbellekToken: 0,
+      };
     },
-  } as unknown as AnthropicLike;
+  };
   const prisma = {
     withTenant: async (_c: unknown, fn: (tx: unknown) => Promise<unknown>) =>
       fn({ $queryRaw: async () => (p.hesap === false ? [] : [{ id: 'acc', name: 'Meta Hesap' }]) }),
@@ -43,7 +49,7 @@ function kur(p: {
     searchGeoLocations: async (_c: unknown, _a: string, q: string) => p.geo?.[q] ?? [],
     searchInterests: async (_c: unknown, _a: string, q: string) => p.ilgi?.[q] ?? [],
   } as unknown as ConnectionsService;
-  const svc = new KitleOnerisiService(anthropic, { aiAssistant: { model: 'm' } } as AppConfig, prisma, connections);
+  const svc = new KitleOnerisiService(yz, { yapayZeka: { model: 'm' } } as AppConfig, prisma, connections);
   return { svc, istekler };
 }
 
@@ -73,11 +79,11 @@ describe('KitleOnerisiService', () => {
     expect(r).toMatchObject({ genders: 'male', ageMin: 18, ageMax: 65, hesapAdi: 'Meta Hesap' });
   });
 
-  it('yapılandırılmış çıktı output_config ile — zorunlu tool_choice YOK (yeni modellerde 400)', async () => {
+  it('yapılandırılmış çıktı JSON şemasıyla; araç zorlaması yok', async () => {
     const { svc, istekler } = kur({ cevap: cevap({ konumlar: [], ilgiler: [] }) });
     await svc.oner(CTX, 'c', 'herkes için geniş bir kitle');
-    expect((istekler[0]!.output_config as { format: { type: string } }).format.type).toBe('json_schema');
-    expect(istekler[0]!.tool_choice).toBeUndefined();
+    expect(istekler[0]!.jsonSemasi).toMatchObject({ type: 'object' });
+    expect(istekler[0]!.araclar).toBeUndefined();
   });
 
   it('KRİTİK: ülke + o ülkenin ili gelirse ülke ÇIKARILIYOR ve sebebi yazıyor', async () => {
@@ -209,6 +215,6 @@ describe('konum yalnızca Türkiye’de ya da adı geçen ülkede', () => {
   it('istem virgüllü konum yazmamasını söylüyor — Meta araması onu bulamıyor', async () => {
     const { svc, istekler } = kur({ cevap: cevap({ konumlar: [], ilgiler: [] }) });
     await svc.oner(CTX, 'c', 'x');
-    expect(String(istekler[0]!.system)).toContain('virgülle il ya da ülke ekleme');
+    expect(String(istekler[0]!.sistem)).toContain('virgülle il ya da ülke ekleme');
   });
 });

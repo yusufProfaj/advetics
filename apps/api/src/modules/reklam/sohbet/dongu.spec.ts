@@ -3,7 +3,7 @@ import { ADV_SOHBET_SINIRLARI, type SohbetOlayi, type TenantContext } from '@adv
 import { createHarness, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
 import type { TxRunner } from '../yayin-motoru';
 import type { AracCalistirici, AracCiktisi } from './araclar';
-import { SohbetDongusu, anthropicGecmisi, konumAdaylariAl, type ModelAdimSonucu, type ModelAdimi } from './dongu';
+import { SohbetDongusu, modelGecmisi, konumAdaylariAl, type ModelAdimSonucu, type ModelAdimi } from './dongu';
 
 /**
  * Sohbet döngüsü (İP-13): sahte model, gerçek veritabanı. İddialar
@@ -50,16 +50,18 @@ function sahteModel(cevaplar: Array<ModelAdimSonucu | Error | ((n: number) => Mo
     s.cagri++;
     if (c instanceof Error) throw c;
     const r = typeof c === 'function' ? c(s.cagri) : c;
-    for (const b of r.content) if (b.type === 'text') g.metinParcasi(String(b.text));
+    for (const p of r.parcalar) if (typeof p.text === 'string' && !p.thought) g.metinParcasi(p.text);
     return r;
   };
   return { fn, s };
 }
 
-const metin = (t: string): ModelAdimSonucu => ({ content: [{ type: 'text', text: t }], stop_reason: 'end_turn', girdiToken: 10, ciktiToken: 5, onbellekToken: 0 });
-const arac = (ad: string, girdi: unknown, id = `t${Math.random()}`): ModelAdimSonucu => ({
-  content: [{ type: 'tool_use', id, name: ad, input: girdi }],
-  stop_reason: 'tool_use',
+const metin = (t: string): ModelAdimSonucu => ({ parcalar: [{ text: t }], sebep: 'bitti', aciklama: null, girdiToken: 10, ciktiToken: 5, onbellekToken: 0 });
+/** Gemini araç çağrısı; imza ilk çağrı parçasında (gerçek API'deki gibi). */
+const arac = (ad: string, girdi: Record<string, unknown>, id = `t${Math.random()}`): ModelAdimSonucu => ({
+  parcalar: [{ functionCall: { id, name: ad, args: girdi }, thoughtSignature: `imza-${id}` }],
+  sebep: 'arac',
+  aciklama: null,
   girdiToken: 10,
   ciktiToken: 5,
   onbellekToken: 0,
@@ -143,10 +145,13 @@ describe('tur', () => {
   });
 
   it('ret ve kesilme ayrı hâller', async () => {
-    const ret = await topla(dongu(sahteModel([{ ...metin(''), stop_reason: 'refusal' }]).fn).tur(CTX, oturumId, { metin: 'a', medyalar: [] }));
+    const ret = await topla(dongu(sahteModel([{ ...metin(''), sebep: 'ret', aciklama: 'Gemini cevabı engelledi (SAFETY).' }]).fn).tur(CTX, oturumId, { metin: 'a', medyalar: [] }));
     expect(ret.at(-1)).toMatchObject({ durum: 'ret' });
-    const kes = await topla(dongu(sahteModel([{ ...metin('yarım'), stop_reason: 'max_tokens' }]).fn).tur(CTX, oturumId, { metin: 'b', medyalar: [] }));
+    const kes = await topla(dongu(sahteModel([{ ...metin('yarım'), sebep: 'kesildi' }]).fn).tur(CTX, oturumId, { metin: 'b', medyalar: [] }));
     expect(kes.at(-1)).toMatchObject({ durum: 'kesildi' });
+    // Boş cevap "tamam" sayılmaz.
+    const bos = await topla(dongu(sahteModel([{ ...metin(''), sebep: 'bos', aciklama: 'Gemini boş cevap döndü.' }]).fn).tur(CTX, oturumId, { metin: 'c', medyalar: [] }));
+    expect(bos.at(-1)).toMatchObject({ durum: 'hata' });
   });
 
   it('KRİTİK: başkasının oturumuna yazılamaz', async () => {
@@ -186,12 +191,25 @@ describe('tur', () => {
 
 describe('geçmiş', () => {
   it('KRİTİK: cevapsız araç çağrısıyla biten yarım tur geçmişten ATILIR (API reddederdi)', () => {
-    const g = anthropicGecmisi([
-      { rol: 'kullanici', icerik: [{ type: 'text', text: 'a' }] },
-      { rol: 'asistan', icerik: [{ role: 'assistant', content: [{ type: 'tool_use', id: 'x', name: 'hazirlik_oku', input: {} }] }] },
-      { rol: 'kullanici', icerik: [{ type: 'text', text: 'b' }] },
+    const g = modelGecmisi([
+      { rol: 'kullanici', icerik: [{ text: 'a' }] },
+      { rol: 'asistan', icerik: [{ role: 'model', parts: [{ functionCall: { id: 'x', name: 'hazirlik_oku', args: {} } }] }] },
+      { rol: 'kullanici', icerik: [{ text: 'b' }] },
     ]);
-    expect(g).toEqual([{ role: 'user', content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }] }]);
+    expect(g).toEqual([{ role: 'user', parts: [{ text: 'a' }, { text: 'b' }] }]);
+  });
+
+  it('KRİTİK: düşünce imzası geçmişte AYNEN geri gidiyor (parçalar dönüştürülmüyor)', async () => {
+    const m = sahteModel([arac('konum_ara', { metin: 'İzmir' }, 'c1'), metin('tamam')]);
+    await topla(dongu(m.fn).tur(CTX, oturumId, { metin: 'İzmir', medyalar: [] }));
+    // İkinci adıma giden mesajlarda ilk adımın imzası ve araç sonucu var.
+    const ikinci = JSON.stringify(m.s.son);
+    expect(ikinci).toContain('"thoughtSignature":"imza-c1"');
+    expect(ikinci).toContain('"functionResponse":{"id":"c1","name":"konum_ara"');
+    // Bir sonraki TURDA da kayıttan aynen kuruluyor.
+    const m2 = sahteModel([metin('ok')]);
+    await topla(dongu(m2.fn).tur(CTX, oturumId, { metin: 'devam', medyalar: [] }));
+    expect(JSON.stringify(m2.s.son)).toContain('"thoughtSignature":"imza-c1"');
   });
 
   it('konum adayları yalnız konum_ara sonuçlarından', () => {
@@ -200,12 +218,12 @@ describe('geçmiş', () => {
       {
         rol: 'asistan',
         icerik: [
-          { role: 'assistant', content: [{ type: 'tool_use', id: 'k1', name: 'konum_ara', input: {} }, { type: 'tool_use', id: 'h1', name: 'hazirlik_oku', input: {} }] },
+          { role: 'model', parts: [{ functionCall: { id: 'k1', name: 'konum_ara', args: {} } }, { functionCall: { id: 'h1', name: 'hazirlik_oku', args: {} } }] },
           {
             role: 'user',
-            content: [
-              { type: 'tool_result', tool_use_id: 'k1', content: [{ type: 'text', text: JSON.stringify({ hal: 'tamam', veri: [k] }) }] },
-              { type: 'tool_result', tool_use_id: 'h1', content: [{ type: 'text', text: JSON.stringify({ hal: 'tamam', veri: [{ key: 'SAHTE' }] }) }] },
+            parts: [
+              { functionResponse: { id: 'k1', name: 'konum_ara', response: { hal: 'tamam', veri: [k] } } },
+              { functionResponse: { id: 'h1', name: 'hazirlik_oku', response: { hal: 'tamam', veri: [{ key: 'SAHTE' }] } } },
             ],
           },
         ],
