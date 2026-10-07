@@ -11,6 +11,32 @@
 > AÇIK (yurt dışı, Türkçe dışı dil, ayrı Sayfa/IG, Advantage+ kitle kapalı); C-2 §3'te
 > "açılış ayı" ve "Bakanlık izinli yöntem" hukuk görüşü gelene kadar KAPALI.
 
+## 2026-10-07 (ikinci tur) — kapsam kararları, kullanıcı
+
+Kullanıcı: *"kendi bileşenleriyle değil yeni bir yapı oluşturacaksın bu
+tarafta ve akıllı boost rapor kısımlarını da düzenleyeceğiz bu araştırmayı
+baz alarak ilerlememiz lazım"*. Üç soru soruldu, cevaplar:
+
+1. **Yapı: tamamen ayrı modül.** API `apps/api/src/modules/reklam/`, panel
+   `apps/web/src/reklam/` + `app/(dashboard)/reklam/`, saf çekirdek
+   `packages/shared/src/reklam/`. Eski Reklam Oluştur, Hızlı Reklam,
+   ad-builder, draft-tree, bulk ve panelin `components/ui` katmanından
+   HİÇBİR ŞEY içe aktarılmaz (iki tarafta kaynak taramasıyla kilitli).
+   Ortak kalanlar: oturum, workspace seçimi, API istemcisi, Prisma, tema
+   belirteçleri.
+2. **Akıllı Boost: yeni motora taşınır, KURALLARI korunur.** Bu, TASARIM
+   § 00.8'deki "karar 5 / kapsam dışı" sınırını DEĞİŞTİRİR: boost artık
+   yeni derleyici + yayın motorundan geçecek (PAUSED kur → geri oku → fark
+   yoksa aç, manifesto). Kart üretimi yalnız Instagram ve
+   `advantage_audience: 0` korunuyor; Advantage+ kitle/yerleşim boost'a
+   GEÇMİYOR (kullanıcı "kurallarını da değiştir"i seçmedi). § 00.8 madde
+   1-3 ve 5 bu satırla geçersiz; madde 4 (varsayılansız parametre), 6
+   (yönlendirme kartı, taşıma bitene kadar), 7, 8 geçerli.
+3. **Rapor: sonuç adları ve atıf.** Raporda "sonuç" yerine
+   `optimization_goal`'dan türeyen ad (`sonucEtiketi`), atıf penceresi her
+   hesapta açıkça aynı (C-22, M-21). Panel/PDF baştan tasarımı ve yeni
+   modülün ayrı rapor bölümü bu turun kapsamında DEĞİL.
+
 ## (Eski başlık) Kullanıcı kararı bekleyen sorular (25)
 > Hükümlerin kullanıcıya bıraktığı iş kararları. Her birinde önerilen seçenek ilk sırada; tasarım belgesi şimdilik ÖNERİLEN seçenekle yazıldı. Ayrıntı: [hukumler.md](hukumler.md).
 

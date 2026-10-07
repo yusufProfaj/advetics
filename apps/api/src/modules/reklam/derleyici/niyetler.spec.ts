@@ -80,7 +80,7 @@ describe('sonuç etiketi', () => {
 
   it('"potansiyel müşteri" sözlükte HİÇ geçmiyor', () => {
     const kaynak = readFileSync(
-      resolve(__dirname, '../../../../../packages/shared/src/derleyici/meta/niyetler.ts'),
+      resolve(__dirname, '../../../../../../packages/shared/src/reklam/meta/niyetler.ts'),
       'utf8',
     ).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     expect(kaynak.length).toBeGreaterThan(1000); // dilim gerçekten okundu

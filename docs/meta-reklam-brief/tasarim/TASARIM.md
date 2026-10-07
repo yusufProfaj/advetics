@@ -264,6 +264,11 @@ yok; hazırlıkta yoksa her taslakta sorulur) ve her taslakta tek satırlık öz
 
 ### 00.8. Akıllı Boost sınırı (T-3, tam metin)
 
+> **2026-10-07 GÜNCELLEME (kullanıcı kararı):** Akıllı Boost yeni motora
+> TAŞINIYOR, kuralları (yalnız Instagram kartı, otomatik kitle kapalı)
+> korunarak. Aşağıdaki madde 1-3 ve 5 bu kararla geçersiz; ayrıntı
+> [bekleyen-kararlar.md](bekleyen-kararlar.md) "ikinci tur".
+
 Akıllı Boost karar 5 gereği bu tasarımın DIŞINDADIR. Sınır yazılıdır ve kaynak taramasıyla
 kilitlenir; yazılı olmayan bir sınır, ilk "küçük düzeltmede" boost'u sessizce değiştirir.
 

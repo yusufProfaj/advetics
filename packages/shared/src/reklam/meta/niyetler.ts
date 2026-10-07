@@ -284,7 +284,7 @@ export const KAPALI_NIYETLER: ReadonlyArray<{ ad: string; sebep: string }> = [
   { ad: 'Dinamik kreatif', sebep: 'Kavram modeliyle çakışıyor; yazma kodu yok.' },
   { ad: 'Partnership', sebep: 'Yazma kodu ve canlı doğrulama yok.' },
   { ad: 'Omnichannel', sebep: 'Yazma kodu ve canlı doğrulama yok.' },
-  { ad: 'Uygulama içi olay', sebep: 'Ajansın müşterilerinde uygulama yok.' },
+  { ad: 'Uygulama içi olay', sebep: 'Workspace’lerde mobil uygulama yok.' },
 ];
 
 /**

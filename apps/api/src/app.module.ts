@@ -35,6 +35,7 @@ import { TenancyModule } from './modules/tenancy/tenancy.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
 import { SyncModule } from './modules/sync/sync.module';
+import { ReklamModule } from './modules/reklam/reklam.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { SyncModule } from './modules/sync/sync.module';
     BoostsModule,
     AutoBoostModule,
     BulkModule,
+    ReklamModule,
   ],
   controllers: [HealthController],
   providers: [

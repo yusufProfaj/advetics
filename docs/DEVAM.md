@@ -11,18 +11,20 @@ Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlı
 doğrulandı).
 **Bekleyen deploy:** konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
-**Reklam oluşturma (2026-10-07): kararlar KAPANDI, Aşama 1 BAŞLADI.**
-Kullanıcı 25 sorunun hepsinde önerilen seçeneği kabul etti
-([`bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md) başı);
-[`TASARIM.md`](meta-reklam-brief/tasarim/TASARIM.md) değişmeden geçerli.
-Acemi akışının tıklanabilir taslağı:
-[`reklam-olustur-arayuz.html`](meta-reklam-brief/tasarim/reklam-olustur-arayuz.html)
-(claude.ai/artifact/4Jp3rPrT61th6DNE1Nq8z2). Aşama 1 (saf çekirdek,
-`packages/shared/src/derleyici/`) ilk parça: niyet kataloğu, sonuç etiketleri,
-adlandırma, `adlabels` + `reklam-derleyici/niyetler.spec.ts` (mutasyonla
-sınandı). **Sıradaki:** § 06.4 manifesto + hedefleme üreticisi (varsayılansız
-`advantageAudience`) + bütçe fonksiyonları, sonra `derleMeta()`. Panel yok,
-Meta'ya yazma yok; eski `/reklam-olustur` koduna dokunulmuyor.
+**Reklam oluşturma (2026-10-07): AYRI MODÜL olarak kuruluyor.**
+Kararlar [`bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md)
+başında: 25 sorunun hepsinde önerilen seçenek + ikinci tur kapsam kararları
+(tamamen ayrı modül; Akıllı Boost yeni motora taşınır ama kuralları korunur;
+raporda sonuç adları ve atıf). Arayüz taslağı:
+[`reklam-olustur-arayuz.html`](meta-reklam-brief/tasarim/reklam-olustur-arayuz.html).
+Modülün yeri: `packages/shared/src/reklam/` (niyet kataloğu, adlandırma,
+hazırlık tipi), `apps/api/src/modules/reklam/` (`GET /reklam/hazirlik`),
+`apps/web/src/reklam/` + `/reklam/yeni` (Acemi akışı önizlemesi, menüde
+YOK, Meta'ya yazmıyor). Eski modüllerden içe aktarma iki tarafta testle
+yasak. **Sıradaki:** § 06.4 manifesto + hedefleme üreticisi (varsayılansız
+`advantageAudience`) + bütçe fonksiyonları → `derleMeta()`; sonra taslak
+tablosu (sürüm, `AlanKaynagi`). Boost taşıması ve rapor sonuç adları
+derleyiciden sonra. Canlıda görsel kontrol yapılmadı (worktree'de `.env` yok).
 **Acil, bu işten bağımsız:** Meta v26 kuralı 2026-10-27'de bütün sürümlerde
 kök `GET /?ids=` isteklerini hataya çeviriyor (rapor PDF görsel tazeleme,
 boost özeti) — ayrı oturumda düzeltiliyordu; deploy o tarihten önce.
