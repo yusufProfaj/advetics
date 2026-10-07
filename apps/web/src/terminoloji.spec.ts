@@ -99,6 +99,18 @@ const IZINLI: Array<{ neden: string; desen: RegExp }> = [
   },
 ];
 
+/**
+ * PİLOT MODÜLÜ BÜTÜNÜYLE "KİŞİ" GRUBUNDA (2026-10-07). Pilot'ta (AdvStrategy
+ * planı + AdvCampaign kurulumu) "müşteri" HER YERDE planı onaylayan
+ * insandır: `client_viewer` rolüyle giren kişi ("Müşteriye gönder", "müşteri
+ * adına onayla", "müşteri özeti", `onay_rolu = 'musteri'`). Workspace'i
+ * anlatan bir "müşteri" bu modülde yok; olsaydı plan "workspace'e gönderilir"
+ * derdi ve ürün dili bozulurdu. Satır satır desen yazmak bu modülde onlarca
+ * cümle kalıbı demekti ve her yeni ekran metni testi kırardı; kapsam DİZİN
+ * olarak dar tutuldu (yalnız `/pilot/` dizinleri).
+ */
+const KISI_DIZINLERI = ['/pilot/'];
+
 describe('terminoloji: workspace ↔ müşteri', () => {
   it('BOŞA DÜŞME BEKÇİSİ: tarama gerçekten dosya okudu', () => {
     // Dizin adı ya da uzantı deseni değişirse liste boşalır ve aşağıdaki
@@ -111,6 +123,7 @@ describe('terminoloji: workspace ↔ müşteri', () => {
     let toplamKalan = 0;
 
     for (const dosya of TARANAN) {
+      if (KISI_DIZINLERI.some((d) => dosya.includes(d))) continue;
       for (const satir of yorumsuz(readFileSync(dosya, 'utf8')).split('\n')) {
         if (!satir.includes('üşteri')) continue;
         toplamKalan++;

@@ -23,6 +23,7 @@ import {
   degistirCumlesi,
   donemSecenekleri,
   eskiEkranMi,
+  eskiPlanNotu,
   gerekceEksigi,
   kaynakEtiketi,
   kaynakHedefi,
@@ -329,6 +330,14 @@ describe('adresler', () => {
     expect(eskiEkranMi({})).toBe(false);
     expect(eskiEkranMi({ eski: '0' })).toBe(false);
     expect(planAdresi(U(1), { eski: true })).toBe(`/strateji?musteri=${U(1)}&eski=1`);
+  });
+});
+
+describe('geçiş dönemi (S-4)', () => {
+  it('KRİTİK: aynı ayın AÇIK eski planı söyleniyor; aktarılmış ya da iptal edilmiş söylenmiyor', () => {
+    expect(eskiPlanNotu([{ donem: '2026-11', durum: 'onaylandi' }], '2026-11')).toContain('Kasım 2026');
+    expect(eskiPlanNotu([{ donem: '2026-11', durum: 'aktarildi' }, { donem: '2026-11', durum: 'iptal' }], '2026-11')).toBeNull();
+    expect(eskiPlanNotu([{ donem: '2026-10', durum: 'taslak' }], '2026-11')).toBeNull();
   });
 });
 

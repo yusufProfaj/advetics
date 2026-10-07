@@ -10,6 +10,8 @@ import { Uyari } from '@/components/ui/uyari';
 import { PlanListesi } from '@/components/strateji/plan-listesi';
 import { PlanEkrani } from '@/components/strateji/plan-ekrani';
 import { bolumCoz, donemEtiketi, gelecekAy, okumaHatasi, planSec, ucAdresi } from '@/components/strateji/hesap';
+import { PilotPlanSayfasi } from '@/components/pilot/plan-sayfasi';
+import { eskiEkranMi } from '@/components/pilot/hesap';
 
 export const metadata = { title: 'AdvStrategy · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -70,6 +72,31 @@ export default async function StratejiPage({
       Gelecek ayın bütçesi, arama kelimeleri ve kim hangi reklamı görecek. Onaylanan plan AdvCampaign’e aktarılır.
     </>
   );
+
+  /*
+   * ═══ YENİ PLAN BELGESİ VARSAYILAN, ESKİ EKRAN `?eski=1` ARKASINDA ═══
+   *
+   * Yeni ekran (Pilot planı, `components/pilot/`) menünün AYNI satırından
+   * açılıyor: menü adı değişmedi ve müşteri hesabının dört ekranı aynı
+   * kaldı (`nav-sections.spec.ts`). Eski ekran yeni ekran canlıdan geçene
+   * kadar SİLİNMİYOR (Ç-7); geri dönüş yolu adres parametresi. Ayrı bir
+   * rota açmak menüde ikinci bir satır ya da menüde olmayan bir sayfa
+   * demekti; ikisi de bu depoda hata üretti.
+   */
+  if (!eskiEkranMi({ eski: first(params.eski) })) {
+    return (
+      <div className="space-y-5">
+        {baslik(
+          <>
+            {workspaceAdi && <strong className="font-medium text-ink">{workspaceAdi}</strong>}
+            {workspaceAdi && ' · '}
+            Aylık plan. Onaylanınca kampanyalar kendiliğinden kurulur.
+          </>,
+        )}
+        <PilotPlanSayfasi clientId={clientId} planParam={first(params.plan)} yazabilir={yazabilir} />
+      </div>
+    );
+  }
 
   /*
    * DÖRT HÂL AYRI. Liste okunamazsa sunucunun cümlesi ekranda; boş liste

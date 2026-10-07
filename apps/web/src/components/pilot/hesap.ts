@@ -20,6 +20,9 @@ import {
   type PilotPlanDurumu,
   type PilotPlatformu,
   type PlanOnerisi,
+  type UyumBulgusu,
+  type UyumDurumu,
+  type UyumIsareti,
 } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
@@ -141,6 +144,17 @@ export function planSec(
   if (bulunan) return { plan: bulunan, adrestekiYok: false };
   const acik = planlar.find((p) => !PILOT_PLAN_SON_DURUMLARI.includes(p.durum));
   return { plan: acik ?? planlar[0] ?? null, adrestekiYok: Boolean(raw) };
+}
+
+/**
+ * GEÇİŞ DÖNEMİ (S-4): aynı ay için eski AdvStrategy'de AÇIK bir plan
+ * varsa yeni plan ekranı bunu SÖYLER; eski plan kendiliğinden iptal
+ * edilmez. Söylenmezse ajans aynı ay için iki plan yürütüp iki kez
+ * kampanya kurabilir: para harcayan mükerrerlik.
+ */
+export function eskiPlanNotu(eskiPlanlar: ReadonlyArray<{ donem: string; durum: string }>, donem: string): string | null {
+  const acik = eskiPlanlar.some((p) => p.donem === donem && ['taslak', 'onayda', 'onaylandi'].includes(p.durum));
+  return acik ? `${donemEtiketi(donem)} için eski AdvStrategy ekranında açık bir plan da var. Eski plan kendiliğinden iptal edilmez.` : null;
 }
 
 // ─── Para ──────────────────────────────────────────────────────────────────
@@ -336,6 +350,9 @@ export interface KelimeGrubuSatiri {
   sayi: number;
   satir: PlanOnerisi['satirlar'][number];
 }
+
+/** Kelime bölümünün üst notu; eşik sözleşmenin sabitinden (elle yazılan sayı sabitle ayrışır). */
+export const ARAMA_ESIGI_METNI = `ayda ${ARAMA_HACMI_ESIGI.toLocaleString('tr-TR')} aramanın üstü seçili`;
 
 /** Google satırlarının kelime grupları; ilk iki kelime örnek, kalanı sayı ("+17"). */
 export function kelimeGruplari(p: PlanOnerisi): KelimeGrubuSatiri[] {
@@ -681,4 +698,28 @@ export function kurulumPlanlari(planlar: readonly PilotPlanSatiriOzeti[]): Pilot
 /** Açılış başlığı: "Bugün 3 karar bekliyor" / "Bugün karar bekleyen yok". */
 export function acilisBasligi(bekleyen: number): string {
   return bekleyen > 0 ? `Bugün ${bekleyen} karar bekliyor` : 'Bugün karar bekleyen yok';
+}
+
+// ─── Uyum (yalnız ajans görünümü) ──────────────────────────────────────────
+
+/**
+ * Uyum durumunun ajansa cümlesi. `bagli_degil` "geçti" DEĞİL ve öyle
+ * okunmamalı (uyum.ts: boş bulgu listesi denetlenmedi de demek olabilir).
+ */
+export const UYUM_DURUM_METNI: Record<UyumDurumu, { metin: string; ton: 'bilgi' | 'uyari' | 'tehlike' | 'basari' }> = {
+  bagli_degil: { metin: 'Uyum kontrolü bağlı değil. Onaylansa da kampanyalar gerçek yayına çıkmaz.', ton: 'uyari' },
+  gecti: { metin: 'Uyum kontrolünden geçti.', ton: 'basari' },
+  uyari_isaret_bekliyor: { metin: 'Okunması gereken uyarı var. Okuyup işaretlemeden müşteriye gidemez.', ton: 'uyari' },
+  engel: { metin: 'Uyum kontrolünde engel var. Plan bu hâliyle gönderilemez.', ton: 'tehlike' },
+  bayat: { metin: 'Plan değişti; uyum kontrolü bu sürüm için yeniden koşacak.', ton: 'bilgi' },
+};
+
+/** İşaret MESAJIYLA eşleşir: kural metni değişince eski işaret düşer (uyum.ts, TASARIM §10.2). */
+export function isaretliMi(b: Pick<UyumBulgusu, 'kuralKimligi' | 'mesaj'>, isaretler: readonly UyumIsareti[]): boolean {
+  return isaretler.some((i) => i.kuralKimligi === b.kuralKimligi && i.mesaj === b.mesaj);
+}
+
+/** PDF dosya adı: sürüm adda, iki indirme karışmasın. */
+export function pdfDosyaAdi(donem: string, surum: number): string {
+  return `plan-${donem}-s${surum}.pdf`;
 }
