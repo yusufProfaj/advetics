@@ -75,7 +75,12 @@ OK-17'yi taze (30 dk) prova kaldırıyor. **Gerçek yayın hâlâ kapalı:
 uyum denetçisi (bölüm 10) yok** — `yayinBaslat` "UYUM" retiyle duruyor.
 Panelde Gözden geçir'in başında prova bloğu (eksik bitince bir kez
 kendiliğinden).
-**Sıradaki:** (1) deploy sonrası CANLI TUR: ajansın kendi Meta hesabında
+**Canlı tur 1 (2026-10-07, v25.0, prova):** kreatif özellik anahtarları
+reddedildi — Meta yalnız 7 BÜYÜK HARFLİ anahtar kabul ediyor; derleyici
+düzeltildi. "Kitle ve bütçe" provası Meta 5xx ("unexpected error") döndü;
+kreatif düzeldikten sonraki provada yeniden bakılacak (satır içi
+`campaign_spec` şekli şüpheli).
+**Sıradaki:** (1) CANLI TUR devam: ajansın kendi Meta hesabında
 SITE niyetiyle test kipi — Meta'nın gerçekte neyi farklı döndürdüğü
 normalleştirme tablosunu dolduracak (ilk denemelerin "fark" ile durması
 BEKLENEN davranış); (2) uyum katmanı (bölüm 10: profil, katalog, denetçi, değişmez uyum raporu) → gerçek yayın; (3) kuyruk tarayıcısı (§ 11.12: worker ölürse `kuruluyor`da kalan

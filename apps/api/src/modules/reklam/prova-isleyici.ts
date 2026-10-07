@@ -108,7 +108,10 @@ export async function provaKos(
     }
   }
   const red = sonuclar.filter((x) => x.sonuc === 'reddedildi');
-  if (red.length > 0) return bitir('reddedildi', sonuclar, `Meta ${red.length} parçayı kabul etmedi: ${red.map((r) => r.mesaj).join(' · ')}`);
+  // Aynı mesaj her kavramda tekrar ediyor (bir kreatif hatası bütün
+  // fikirlerde aynı): özet satırında bir kez yazılır, parça listesi ayrıntıyı taşır.
+  const mesajlar = [...new Set(red.map((r) => r.mesaj))];
+  if (red.length > 0) return bitir('reddedildi', sonuclar, `Meta ${red.length} parçayı kabul etmedi: ${mesajlar.join(' · ')}`);
   if (sonuclar.some((x) => x.sonuc === 'dogrulanamadi')) return bitir('dogrulanamadi', sonuclar, 'Meta’nın kontrolü bir parçada tamamlanamadı');
   return bitir('gecti', sonuclar, null);
 }

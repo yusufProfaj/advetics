@@ -30,34 +30,23 @@ export type MetaApiSurumu = (typeof DESTEKLENEN_META_SURUMLERI)[number];
  * Advantage+ creative anahtarları — HER BİRİ OPT_OUT. Karar 2 kitleyi ve
  * yerleşimi kapsıyor, kreatifi DEĞİL: Meta'nın kırpması ya da metni yeniden
  * yazması güvenli banda konan zorunlu uyarıyı görünmez kılabilir.
- * `adapt_to_placement` varsayılan opt-in. Liste belgeden (R6, bölüm 05);
- * canlı turda ölçülür ve tanınmayan bir anahtar isteği düşürürse buradan
- * çıkar. `standard_enhancements` bilerek YOK: kullanımdan kalktı.
+ *
+ * LİSTE CANLIDA ÖLÇÜLDÜ (2026-10-07, v25.0, ilk canlı tur, prova): belgeden
+ * yazılmış 23 küçük harfli anahtarın ilki (`music`) "(#100) Param key ...
+ * must be one of {...}" ile reddedildi ve Meta kabul ettiği kümeyi kendisi
+ * söyledi — aşağıdaki yedi BÜYÜK HARFLİ anahtar. Belgedeki `adapt_to_placement`
+ * ve `pac_relaxation` bu yolda KABUL EDİLMİYOR; gönderilemeyen bir anahtarın
+ * varsayılanı geri okumada izleniyor (tanınmayan anahtar OPT_IN dönerse
+ * açma durur). Yeni bir anahtar ancak canlıda ölçülüp buraya girer.
  */
 export const TANINAN_OZELLIK_ANAHTARLARI = [
-  'adapt_to_placement',
-  'add_text_overlay',
-  'description_automation',
-  'enhance_cta',
-  'image_animation',
-  'image_background_gen',
-  'image_brightness_and_contrast',
-  'image_templates',
-  'image_touchups',
-  'image_uncrop',
-  'inline_comment',
-  'media_type_automation',
-  'music',
-  'pac_relaxation',
-  'product_extensions',
-  'reveal_details_over_time',
-  'site_extensions',
-  'text_generation',
-  'text_optimizations',
-  'text_translation',
-  'video_auto_crop',
-  'video_filtering',
-  'video_uncrop',
+  'IG_VIDEO_NATIVE_SUBTITLE',
+  'IMAGE_ANIMATION',
+  'PRODUCT_BROWSING',
+  'PRODUCT_METADATA_AUTOMATION',
+  'PROFILE_CARD',
+  'STANDARD_ENHANCEMENTS_CATALOG',
+  'TEXT_OVERLAY_TRANSLATION',
 ] as const;
 
 /**
@@ -347,8 +336,11 @@ export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: stri
   { kod: 'M-21', nesne: 'reklam_seti', yol: 'attribution_spec' },
   { kod: 'M-24', nesne: 'kreatif', yol: 'object_story_spec.instagram_user_id', kosul: 'instagram' },
   { kod: 'M-25', nesne: 'kreatif', yol: 'object_story_spec.link_data.call_to_action' },
-  { kod: 'M-26', nesne: 'kreatif', yol: 'degrees_of_freedom_spec.creative_features_spec.adapt_to_placement' },
-  { kod: 'M-27', nesne: 'kreatif', yol: 'degrees_of_freedom_spec.creative_features_spec.pac_relaxation' },
+  // M-26/M-27: belgedeki adapt_to_placement ve pac_relaxation canlıda
+  // reddedildi (yukarıdaki not); manifesto ölçülen kümeden iki satır taşıyor,
+  // derle.spec bütün kümeyi ayrıca tarıyor.
+  { kod: 'M-26', nesne: 'kreatif', yol: 'degrees_of_freedom_spec.creative_features_spec.IMAGE_ANIMATION' },
+  { kod: 'M-27', nesne: 'kreatif', yol: 'degrees_of_freedom_spec.creative_features_spec.TEXT_OVERLAY_TRANSLATION' },
   { kod: 'M-28', nesne: 'kreatif', yol: 'contextual_multi_ads.enroll_status' },
   { kod: 'M-35', nesne: 'reklam', yol: 'creative.creative_id' },
   { kod: 'M-35', nesne: 'reklam', yol: 'adset_id' },

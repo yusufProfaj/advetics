@@ -925,6 +925,17 @@ okunup varsayılmadı — canlıda doğrulandı.
   (`/{creative-id}`) geçiliyor — `ids` bir kolaylık, düğüm yolu Graph'in en
   kesin biçimi ve yarılama en sonunda hep bilinen yola düşmeli.
 
+- **KREATİF ÖZELLİK ANAHTARLARI BÜYÜK HARF VE YEDİ TANE — belgeden değil
+  Meta'dan.** Ölçüldü (2026-10-07, v25.0, yeni reklam modülünün ilk canlı
+  provası): `degrees_of_freedom_spec.creative_features_spec` içinde
+  belgedeki küçük harfli anahtarlar (`music`, `adapt_to_placement`,
+  `pac_relaxation`...) `(#100) Param key ... must be one of {...}` ile
+  reddediliyor ve tek bir yanlış anahtar BÜTÜN kreatifi düşürüyor. Kabul
+  edilen küme: `IG_VIDEO_NATIVE_SUBTITLE, IMAGE_ANIMATION, PRODUCT_BROWSING,
+  PRODUCT_METADATA_AUTOMATION, PROFILE_CARD, STANDARD_ENHANCEMENTS_CATALOG,
+  TEXT_OVERLAY_TRANSLATION`. Hata mesajı kümeyi kendisi veriyor; yeni anahtar
+  eklemeden önce prova ile ölç (`TANINAN_OZELLIK_ANAHTARLARI`).
+
 - **CLICK-TO-WHATSAPP'TA NUMARA SORULMAZ — META ONU SAYFADAN ALIYOR.**
   Doğru kurulum: ad set'te `destination_type: WHATSAPP` + `promoted_object.
   page_id`, kreatifte SABİT bağlantı `https://api.whatsapp.com/send` ve CTA

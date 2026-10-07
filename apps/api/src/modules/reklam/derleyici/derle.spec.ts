@@ -83,6 +83,13 @@ describe('derleMeta — yapı', () => {
     expect(bul(gs, 'reklam_seti').destination_type).toBe('ON_AD');
   });
 
+  it('KRİTİK: kreatif özellik anahtarları CANLIDA ÖLÇÜLEN küme (2026-10-07, v25.0) — belgeden anahtar eklenmez', () => {
+    expect([...TANINAN_OZELLIK_ANAHTARLARI]).toEqual([
+      'IG_VIDEO_NATIVE_SUBTITLE', 'IMAGE_ANIMATION', 'PRODUCT_BROWSING', 'PRODUCT_METADATA_AUTOMATION',
+      'PROFILE_CARD', 'STANDARD_ENHANCEMENTS_CATALOG', 'TEXT_OVERLAY_TRANSLATION',
+    ]);
+  });
+
   it('her tanınan Advantage+ creative anahtarı OPT_OUT; yan yana reklam OPT_OUT', () => {
     const k = bul(govde().govdeler, 'kreatif:1');
     for (const a of TANINAN_OZELLIK_ANAHTARLARI) {

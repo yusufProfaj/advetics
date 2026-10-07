@@ -216,6 +216,16 @@ describe('Meta provası', () => {
     expect(p!.sebep).toBe('Meta 2 parçayı kabul etmedi: adsets reddedildi · ads reddedildi');
   });
 
+  it('aynı ret mesajı her fikirde tekrar ediyorsa özet satırında BİR KEZ', async () => {
+    const t = await taslak();
+    const id = await prova(t.taslakId, t.ozet);
+    const meta = new SahteMeta();
+    meta.provaHatasi = (uc) => (uc === 'adcreatives' || uc === 'ads' ? new MetaKesinHata('anahtar reddedildi', 100) : null);
+    await reklamIsiniIsle(bagimlilik(meta), { provaId: id, adim: 'prova' }, 'p1');
+    const [p] = await h.q<{ sebep: string }>(`SELECT sebep FROM prova WHERE id = $1`, [id]);
+    expect(p!.sebep).toBe('Meta 2 parçayı kabul etmedi: anahtar reddedildi');
+  });
+
   it('hesap başına 5 dk’da en çok 2 prova; aşınca ertelenir, Meta’ya gidilmez', async () => {
     const t = await taslak();
     await prova(t.taslakId, 'a'.repeat(64), { durum: 'gecti', bitti: "now() - interval '1 minute'" });

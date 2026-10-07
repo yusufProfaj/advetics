@@ -162,7 +162,7 @@ describe('geri okuma', () => {
 
   it('kreatif özelliği: tanınan OPT_IN fark; tanınmayan VAR olması sorun değil, OPT_IN dönmesi durdurur', () => {
     const o = kopya(aynaOkuma(gs));
-    o['kreatif:1']!.degrees_of_freedom_spec.creative_features_spec.image_touchups = { enroll_status: 'OPT_IN' };
+    o['kreatif:1']!.degrees_of_freedom_spec.creative_features_spec.IMAGE_ANIMATION = { enroll_status: 'OPT_IN' };
     expect(geriOkumaKarsilastir(yankilar, o).sonuc).toBe('fark');
 
     const t = kopya(aynaOkuma(gs));
