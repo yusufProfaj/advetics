@@ -34,7 +34,7 @@ export const ROL_ACIKLAMASI: Record<Role, string> = {
   ad_manager:
     'Yetkilendirildiği şirketlerin workspace’lerini yönetir: reklam yayınlar, kural ve bütçe yazar, reklam hesabı atar, veriyi günceller. Kişi ekleyemez, şirket açamaz.',
   client_viewer:
-    'Workspace’in kendi giriş hesabı. Yalnızca Genel Bakış, Reklam Keşfi ve Raporlar; tarih aralığını değiştirir, verisini görür ve günceller. Aylık medya planını görür ve onaylar. Reklam ekranlarını görmez.',
+    'Workspace’in kendi giriş hesabı. Yalnızca Genel Bakış, Reklam Keşfi ve Raporlar; tarih aralığını değiştirir, verisini görür ve günceller. Aylık medya planını görür ve onaylar; onayı kampanyaları başlatır. Reklam ekranlarını görmez.',
 };
 
 export const SAHIP_ACIKLAMASI =
@@ -82,6 +82,7 @@ export const YETKI_GRUPLARI: readonly YetkiGrubu[] = [
       { baslik: 'Verileri güncelleme (“Şimdi güncelle”)', izin: 'sync.trigger' },
       { baslik: 'Bütçe tüketimini görme', izin: 'budget.read' },
       { baslik: 'Aylık medya planını görme ve onaylama', izin: 'strategy.approve' },
+      { baslik: 'Planı onaylayıp kampanyaları başlatma', izin: 'strategy.publish' },
     ],
   },
   {

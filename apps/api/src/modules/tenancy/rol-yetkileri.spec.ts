@@ -143,6 +143,9 @@ describe('Müşteri hesabı (client_viewer)', () => {
         'sync.trigger',
         'strategy.read',
         'strategy.approve',
+        // TARİHLİ İSTİSNA (2026-10-07, Pilot Ç-6): müşterinin onayı
+        // kampanyaları başlatıyor. Ayrı anahtar; sınırları `onayKapisi`.
+        'strategy.publish',
       ].sort(),
     );
   });
@@ -153,7 +156,9 @@ describe('Müşteri hesabı (client_viewer)', () => {
     // `strategy.approve` (2026-10-08): planı onaylar, reklama dokunmaz;
     // onaylı plan platforma değil AdvCampaign'e taslak olarak gider ve
     // yayın orada AJANSIN onayıyla.
-    const istisna = new Set(['sync.trigger', 'strategy.approve']);
+    // `strategy.publish` (2026-10-07, Ç-6): onay = yayın. Plan YAZMAZ;
+    // ekranda okuduğu sürümü onaylar, kurulumu worker başlatır.
+    const istisna = new Set(['sync.trigger', 'strategy.approve', 'strategy.publish']);
     const yazma = [...y].filter((p) => !p.endsWith('.read') && !istisna.has(p));
     expect(yazma).toEqual([]);
     expect(y.has('strategy.write')).toBe(false);

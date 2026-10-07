@@ -187,6 +187,17 @@ export const PERMISSIONS = [
   'strategy.read',
   'strategy.write',
   'strategy.approve',
+  /**
+   * ONAY = YAYIN (Pilot, 2026-10-07, Ç-6). Müşteri planı onaylayınca
+   * kampanyalar KENDİLİĞİNDEN kurulur ve açılır: bu tıklama para harcıyor.
+   * `strategy.approve`tan AYRI çünkü o anahtar "planı kabul ediyorum"
+   * demekti ve para harcamıyordu; aynı anahtarı yeniden anlamlandırmak,
+   * onu `permission_overrides` ile almış birine sessizce harcama yetkisi
+   * vermek olurdu. Sınırları (`pilot/onay.ts#onayKapisi`): yalnız
+   * `musteride` plan, sürüm + içerik özeti eşleşmesi, Aylık Bütçe'yi aşmayan
+   * toplam, uyum geçmeden gerçek yayın yok; ajans rolünde gerekçe zorunlu.
+   */
+  'strategy.publish',
 
   // Potansiyel müşteriler (Lead CRM)
   'lead.read',
@@ -252,6 +263,9 @@ const AD_MANAGER_PERMS: readonly Permission[] = [
   'strategy.read',
   'strategy.write',
   'strategy.approve',
+  // Müşteri adına onay (gerekçeli): panele girmeyen müşterinin planı
+  // `musteride`de kalıcı beklemesin. [AÇIK SORU S-1]
+  'strategy.publish',
 ];
 
 /**
@@ -282,6 +296,9 @@ const CLIENT_VIEWER_PERMS: readonly Permission[] = [
   // Medya planını görür ve onaylar; yazamaz (Ç-5, 2026-10-08).
   'strategy.read',
   'strategy.approve',
+  // Müşteri adına onay (gerekçeli): panele girmeyen müşterinin planı
+  // `musteride`de kalıcı beklemesin. [AÇIK SORU S-1]
+  'strategy.publish',
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
