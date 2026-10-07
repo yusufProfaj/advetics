@@ -47,9 +47,13 @@ nesne için önce niyet kaydı; kesin ret / belirsiz sonuç / kayıt düşüşü
 ayrı yollar; uzlaştırma (etiket + ad); geri okuma; tekillik kapısı; açma
 yukarıdan aşağı; geri alma = arşiv. Meta bir port arkasında; sahte Meta
 ile 19 test, mutasyonla sınandı. **Henüz bir uca bağlı DEĞİL.**
-**Sıradaki (motoru uca bağlamadan önce şart):** gerçek Graph istemcisi
-(`MetaYazmaPortu`; token erişimi modül sınırını nasıl geçecek kararı),
-ön kontrol + prova (§ 11.2), hesap başına yazıcı kilidi ve senkron
+Gerçek Graph istemcisi yazıldı (`meta-graf.ts`: kesin/belirsiz hata
+ayrımı, oluşturmada `fields` yok, form sayfa token'ıyla, etiket kimliği →
+bylabels, token yalnız graph.facebook.com'a) ve erişim katmanı
+(`meta-erisim.ts`: token, sayfa token'ı, görsel baytı, hash önbelleği;
+eski servisler kullanılmıyor, token YENİLENMİYOR). Kullanıcı kararı:
+eski panel/kod referans değil, tek kaynak tasarım belgeleri.
+**Sıradaki (motoru uca bağlamadan önce şart):** ön kontrol + prova (§ 11.2), hesap başına yazıcı kilidi ve senkron
 duraklatma (§ 11.5 d), "Meta'ya yazmayı durdur" kesicisi (§ 11.10),
 `yayinBaslat` ucu (`bulk.publish`). Sonra canlı tur (Aşama 2) ajansın
 kendi hesabında test kipiyle. Form şablonu ekranı da bekliyor. Atıf standardı ajans yöneticisinin

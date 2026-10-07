@@ -37,6 +37,16 @@ baz alarak ilerlememiz lazım"*. Üç soru soruldu, cevaplar:
    hesapta açıkça aynı (C-22, M-21). Panel/PDF baştan tasarımı ve yeni
    modülün ayrı rapor bölümü bu turun kapsamında DEĞİL.
 
+## 2026-10-07 (üçüncü tur) — eski panel referans DEĞİL, kullanıcı
+
+*"advetics'in sen yeni panele kuruluma başlamadan önceki paneli hem
+kullanışsız hem de hatalıydı yani incelemeni gerektirecek bir durum yok sen
+kendi dökümanlarınla bunları oluşturabilirsin"*. Yeni modül eski reklam
+kodunu (ad-builder, draft-tree, bulk, meta.provider yazma yolları, eski
+panel ekranları) kalıp ya da doğruluk kaynağı olarak OKUMAZ; tek kaynak
+bu klasördeki tasarım belgeleri ve araştırma. Ortak kalan yalnız veritabanı
+şeması (tablolar ve kolonlar) ve altyapı (oturum, şifreleme, Prisma).
+
 ## (Eski başlık) Kullanıcı kararı bekleyen sorular (25)
 > Hükümlerin kullanıcıya bıraktığı iş kararları. Her birinde önerilen seçenek ilk sırada; tasarım belgesi şimdilik ÖNERİLEN seçenekle yazıldı. Ayrıntı: [hukumler.md](hukumler.md).
 
