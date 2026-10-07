@@ -11,6 +11,14 @@ Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlı
 doğrulandı).
 **Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: dört migration — taslak, yayın, yazma kesici, prova — + `db:rls`; `META_API_VERSION` v25.0 ya da v26.0 olmalı), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
+**ADVCAMPAIGN (2026-10-07, kullanıcı kararı):** eski Reklam Oluştur, AI
+Asistan ve Toplu Oluştur KALDIRILDI (panel + API `ai-assistant` sohbeti ve
+`bulk` modülü); menüde tek satır **AdvCampaign → `/reklam`**. Hedef:
+teknik bilgisi olmayan kullanıcıyı sohbetle yönlendiren, Meta ve Google'da
+en optimize kampanyayı kuran yapay zekâ odaklı akış. Araştırma ve tasarım
+`docs/advcampaign/` altında (A1 Google, A2 tek panel, A3 Meta, sentez,
+tasarım/plan). DB'deki eski AI sohbet tabloları silinmedi (veri).
+
 **Reklam oluşturma (2026-10-07): AYRI MODÜL olarak kuruluyor.**
 Kararlar [`bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md)
 başında: 25 sorunun hepsinde önerilen seçenek + ikinci tur kapsam kararları

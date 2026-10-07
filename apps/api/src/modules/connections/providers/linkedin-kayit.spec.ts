@@ -210,9 +210,6 @@ describe('iki yollu platform dallanması', () => {
    * Sessizce geçen bir istisna, istisna olmaktan çıkar.
    */
   const YAZMA_YOLU_ISTISNALARI = [
-    'apps/web/src/components/ad-builder/expert-builder.tsx',
-    'apps/web/src/components/ad-builder/duplicate-panel.tsx',
-    'apps/web/src/components/ad-builder/draft-group-list.tsx',
     // Auto-Boost bildirim maili: dallanma platform ETİKETİ değil, sosyal
     // profil türü (YouTube / Instagram). LinkedIn'de karşılığı yok.
     'apps/api/src/modules/autoboost/yeni-icerik-maili.ts',

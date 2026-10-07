@@ -7,22 +7,21 @@ import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { Baslik, Kutu, dugmeSinifi } from '@/reklam/ui';
 import { ReklamStudyosu } from '@/reklam/studyo/studyo';
 
-export const metadata = { title: 'Reklam Stüdyosu (önizleme) · Advetics' };
+export const metadata = { title: 'AdvCampaign · Advetics' };
 export const dynamic = 'force-dynamic';
 
 /**
- * REKLAM STÜDYOSU — görselleri bırak, tek cümle yaz; asistan taslağı kurar
- * (kullanıcı kararı 2026-10-07). Yeni reklam modülü: eski ekranlardan
- * bileşen almıyor. Menüde henüz YOK: gerçek yayın uyum katmanı bağlanınca
- * "Reklam Oluştur" buraya taşınacak; o güne kadar menüden gelen kullanıcının
- * reklam kurabildiği yol kapanmasın.
+ * ADVCAMPAIGN — reklam kurmanın tek yolu (kullanıcı kararı 2026-10-07):
+ * görselleri bırak, ne istediğini yaz; asistan taslağı kurar, önizleme
+ * onaya kalır. Eski Reklam Oluştur / AI Asistan / Toplu Oluştur kaldırıldı.
+ * Gerçek yayın uyum katmanı bağlanana kadar yalnız prova ve test kipi.
  */
 export default async function ReklamStudyosuPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await requireSession();
   const params = await searchParams;
   const clientId = sayfaWorkspaceId(session, first(params.musteri));
   if (!clientId) {
-    return <WorkspaceGerekli ekran="Reklam Stüdyosu" neden="Reklam bir workspace’in reklam hesabında kuruluyor." {...workspaceSecimVerisi(session)} />;
+    return <WorkspaceGerekli ekran="AdvCampaign" neden="Reklam bir workspace’in reklam hesabında kuruluyor." {...workspaceSecimVerisi(session)} />;
   }
   if (!hasPermission(session, 'bulk.write')) return <Kutu ton="uyari" baslik="Reklam oluşturma yetkin yok">Workspace yöneticine danış.</Kutu>;
   let hazirlik: ReklamHazirligi;
@@ -35,7 +34,7 @@ export default async function ReklamStudyosuPage({ searchParams }: { searchParam
   return (
     <div className="space-y-5">
       <Baslik
-        baslik="Reklam Stüdyosu"
+        baslik="AdvCampaign"
         aciklama={<><strong className="text-ink">{client?.name ?? 'Workspace'}</strong> · önizleme sürümü</>}
         ust={<Link href={`/reklam/yeni?musteri=${clientId}`} className="text-xs text-ink-muted hover:text-ink">Taslaklar →</Link>}
       />

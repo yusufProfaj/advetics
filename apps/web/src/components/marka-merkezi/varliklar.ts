@@ -23,7 +23,7 @@ export const VARLIKLAR: readonly Varlik[] = [
   {
     href: '/kutuphane/gorseller',
     ad: 'Görsel Arşivi',
-    aciklama: 'Görseller, videolar ve logo. Reklam Oluştur buradan seçer.',
+    aciklama: 'Görseller, videolar ve logo. AdvCampaign buradan seçer.',
     izin: 'bulk.read',
   },
   {

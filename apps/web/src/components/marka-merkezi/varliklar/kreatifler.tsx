@@ -5,8 +5,8 @@ import type {
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
-import { CreativeLibrary } from '@/components/ad-builder/creative-library';
-import { IsleyenKreatifler } from '@/components/ad-builder/isleyen-kreatifler';
+import { CreativeLibrary } from './creative-library';
+import { IsleyenKreatifler } from './isleyen-kreatifler';
 
 
 /**

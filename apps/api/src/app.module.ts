@@ -25,7 +25,6 @@ import { StorageModule } from './storage/storage.module';
 import { LeadsModule } from './modules/leads/leads.module';
 import { AutoBoostModule } from './modules/autoboost/autoboost.module';
 import { BoostsModule } from './modules/boosts/boosts.module';
-import { BulkModule } from './modules/bulk/bulk.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { ManagerAccountModule } from './modules/manager-account/manager-account.module';
@@ -72,7 +71,6 @@ import { ReklamModule } from './modules/reklam/reklam.module';
     AiAssistantModule,
     BoostsModule,
     AutoBoostModule,
-    BulkModule,
     ReklamModule,
   ],
   controllers: [HealthController],

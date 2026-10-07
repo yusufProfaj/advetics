@@ -93,8 +93,10 @@ describe('kenar çubuğu rotaları', () => {
     // SAYININ KENDİSİ İDDİA DEĞİL, yalnızca "tarama bir şey yakaladı"
     // güvencesi — o yüzden alt sınır gevşek. "Workspace'ler" satırı
     // Şirketler'in içine taşınınca liste bir azaldı ve sınır 15'ti;
-    // sıkı bir sayı, taşınan her satırda testi sebepsiz kırıyor.
-    expect(ENTRIES.length).toBeGreaterThanOrEqual(12);
+    // sıkı bir sayı, taşınan her satırda testi sebepsiz kırıyor. Reklam
+    // Oluştur + AI Asistan (iki alt öğesiyle) AdvCampaign'e inince 10.
+    expect(ENTRIES.length).toBeGreaterThanOrEqual(9);
+    expect(ENTRIES.map((e) => e.href)).toContain('/reklam');
     expect(READY.size).toBeGreaterThan(0);
     expect(ENTRIES.map((e) => e.href)).toContain('/dashboard');
   });

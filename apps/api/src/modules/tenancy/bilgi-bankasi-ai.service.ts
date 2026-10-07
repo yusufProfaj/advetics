@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, Logger, ServiceUnavailableExce
 import { MARKA_SINIRLARI, type BilgiBankasiTaslak, type TenantContext } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { ANTHROPIC_CLIENT } from '../ai-assistant/anthropic-client.provider';
-import type { AnthropicLike } from '../ai-assistant/ai-assistant.service';
+import type { AnthropicLike } from '../ai-assistant/anthropic-client.provider';
 import { ClientsService } from './clients.service';
 import { ClientProfileService } from './client-profile.service';
 import { siteOku } from './site-oku';

@@ -30,7 +30,7 @@ export default async function OnizlemePage({ searchParams }: { searchParams: Pro
   const client = session.availableClients.find((c) => c.id === clientId);
   return (
     <div className="space-y-5">
-      <Baslik baslik="Reklam Önizlemesi" ust={<Link href={`/reklam?musteri=${clientId}`} className="text-xs text-ink-muted hover:text-ink">← Reklam Stüdyosu</Link>} />
+      <Baslik baslik="Reklam Önizlemesi" ust={<Link href={`/reklam?musteri=${clientId}`} className="text-xs text-ink-muted hover:text-ink">← AdvCampaign</Link>} />
       <Onizleme
         key={t.value.id}
         ilkTaslak={t.value}

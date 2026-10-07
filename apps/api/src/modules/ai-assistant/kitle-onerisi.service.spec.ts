@@ -3,7 +3,7 @@ import type { GeoLocationOption, InterestOption, TenantContext } from '@advetics
 import type { AppConfig } from '../../config/configuration';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ConnectionsService } from '../connections/connections.service';
-import type { AnthropicLike } from './ai-assistant.service';
+import type { AnthropicLike } from './anthropic-client.provider';
 import { KitleOnerisiService } from './kitle-onerisi.service';
 
 /**

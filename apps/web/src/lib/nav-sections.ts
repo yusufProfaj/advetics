@@ -1,4 +1,4 @@
-import { ASISTAN_PLATFORM_ETIKETI, type Permission } from '@advetics/shared';
+import type { Permission } from '@advetics/shared';
 import type { NavEntry } from '@/components/nav';
 import { VARLIK_YOLLARI } from '@/components/marka-merkezi/varliklar';
 
@@ -73,50 +73,20 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         vurgu: 'Otomatik',
       },
       { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4, perm: 'insights.read' },
-      { href: '/reklam-olustur', label: 'Reklam Oluştur', icon: 'create', module: 4, ready: true, perm: 'bulk.write' },
+      /*
+       * ADVCAMPAIGN — reklam kurmanın TEK yolu (kullanıcı kararı
+       * 2026-10-07). Eski Reklam Oluştur, AI Asistan ve Toplu Oluştur
+       * kaldırıldı; eski adresler buraya yönlendiriyor. `bulk.write`:
+       * sayfanın kendi kapısıyla aynı anahtar, ayrışırsa menüde görünüp
+       * açılmayan bir satır olur.
+       */
       {
-        /*
-         * ═══ AI ASİSTAN: TEK EKRAN, İKİ ASİSTAN ═══
-         *
-         * `Reklam Oluştur`un ALTINDA ve bilerek: kampanya kurmanın bir
-         * başka yolu, ayrı bir iş değil.
-         *
-         * İKİ ALT SATIR, ÇÜNKÜ İKİ AYRI ASİSTAN. Meta ve Google aynı
-         * promptla yönetilemiyor: hedef sözlüğü, bütçe modeli (Google'da
-         * bütçe AYRI BİR KAYNAK) ve yazma kısıtları farklı. Tek satır
-         * gösterip seçimi sayfanın içine bırakmak, kullanıcıyı menüden
-         * sonra ikinci bir seçim yapmaya zorlardı.
-         *
-         * `bulk.write` — `bulk.read` DEĞİL. Asistan taslak YAZIYOR ve
-         * (Faz 2'den sonra) yayın onayı sunacak; müşteri hesabı
-         * (`client_viewer`) reklam yayınlayamıyor, dolayısıyla bu satırı da
-         * görmüyor. Sayfanın kendi kapısı da aynı anahtarı kullanıyor —
-         * ikisi ayrışırsa menüde görünen ama açılmayan bir satır olur.
-         */
-        href: '/reklam-olustur/ai-asistan',
-        label: 'AI Asistan',
-        icon: 'ai',
+        href: '/reklam',
+        label: 'AdvCampaign',
+        icon: 'create',
         module: 4,
         ready: true,
         perm: 'bulk.write',
-        children: [
-          {
-            href: '/reklam-olustur/ai-asistan?platform=meta',
-            // ETİKET TEK KAYNAKTAN. Menüde ve sayfa başlığında elle yazmak,
-            // bir gün birinin değişip diğerinin kalması demekti.
-            label: ASISTAN_PLATFORM_ETIKETI.meta,
-            icon: 'ai',
-            module: 4,
-            ready: true,
-          },
-          {
-            href: '/reklam-olustur/ai-asistan?platform=google',
-            label: ASISTAN_PLATFORM_ETIKETI.google,
-            icon: 'ai',
-            module: 4,
-            ready: true,
-          },
-        ],
       },
       { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true, perm: 'rule.read' },
       /*

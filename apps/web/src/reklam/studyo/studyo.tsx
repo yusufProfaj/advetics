@@ -139,7 +139,7 @@ export function ReklamStudyosu({ clientId, hazirlik }: { clientId: string; hazir
 
         <div className="relative space-y-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-strong">Reklam Stüdyosu</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-strong">AdvCampaign</p>
             <h2 className="mt-1 text-2xl font-bold sm:text-3xl">Görselleri ya da videoları bırak, ne istediğini yaz.</h2>
             <p className="mt-1 text-sm text-ink-muted">Taslağı biz kuruyoruz; sen yalnızca önizlemeye bakıp onaylıyorsun.</p>
           </div>

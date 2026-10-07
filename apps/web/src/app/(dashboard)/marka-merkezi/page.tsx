@@ -189,7 +189,7 @@ export default async function MarkaMerkeziPage({
                 <BolumBasligi
                   id="marka-baslik"
                   baslik="Marka"
-                  aciklama="Reklam Oluştur ve AI asistan bu alanları okur. Doldurduğun bilgi bir daha sorulmaz."
+                  aciklama="AdvCampaign bu alanları okur. Doldurduğun bilgi bir daha sorulmaz."
                 />
                 {/* DOLDUR KARTLARIN ÜSTÜNDE: taslak dört kartı birden dolduruyor. */}
                 <AiDoldur clientId={clientId} canWrite={yaz('client.write')} />

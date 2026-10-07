@@ -12,7 +12,7 @@ import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConnectionsService } from '../connections/connections.service';
 import { ANTHROPIC_CLIENT } from './anthropic-client.provider';
-import type { AnthropicLike } from './ai-assistant.service';
+import type { AnthropicLike } from './anthropic-client.provider';
 
 /**
  * ═══ DOĞAL DİLDEN KİTLE ÖNERİSİ (Marka Merkezi Bölüm 4c) ═══

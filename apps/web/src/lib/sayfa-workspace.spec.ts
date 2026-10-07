@@ -97,9 +97,11 @@ describe('sayfalar', () => {
   it('tarama boşa düşmüyor', () => {
     // On üç sayfa bu kutuya geçmişti; Görseller, Kreatifler ve Formlar
     // 2026-10-06'da Marka Merkezi'nin içine taşındı (kutuyu artık o veriyor),
-    // yani on. Sayı daha da düşerse tarama bir yolu kaçırıyor.
+    // yani on. 2026-10-07'de Reklam Oluştur (üç sayfa) ve Toplu Oluştur
+    // kaldırıldı, AdvCampaign'in üç sayfası listeye girdi. Sayı daha da
+    // düşerse tarama bir yolu kaçırıyor.
     expect(PANEL.length).toBeGreaterThan(20);
-    expect(KULLANAN.length).toBeGreaterThanOrEqual(10);
+    expect(KULLANAN.length).toBeGreaterThanOrEqual(8);
   });
 
   it('KRİTİK: hiçbir panel sayfası listenin ilk workspace\'ine düşmüyor', () => {

@@ -50,10 +50,10 @@ export default async function YeniReklamPage({
 
   const ust = (
     <Link
-      href={taslakId ? `/reklam/yeni?musteri=${clientId}` : `/reklam-olustur?musteri=${clientId}`}
+      href={taslakId ? `/reklam/yeni?musteri=${clientId}` : `/reklam?musteri=${clientId}`}
       className="text-xs text-ink-muted hover:text-ink"
     >
-      ← {taslakId ? 'Taslaklar' : 'Reklam Oluştur'}
+      ← {taslakId ? 'Taslaklar' : 'AdvCampaign'}
     </Link>
   );
   const onizleme = (

@@ -1228,8 +1228,13 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   *"amacım reklam ile ilgili bilgisi olmayan birisinin bile platformu
   kullanabilmesi"*. Hedef, optimizasyon, yerleşim, teklif stratejisi
   sorulmuyor — hepsi `goal-mapping.ts` içinde karara bağlanıyor.
-- **Uzman için ikinci mod var**, ayrı sayfa değil: `/reklam-olustur` üzerinde
-  "Gelişmiş" modu. Aynı taslak, aynı görseller, aynı yayın yolu.
+- **REKLAM KURMANIN TEK YOLU ADVCAMPAIGN (`/reklam`)** (kullanıcı kararı,
+  2026-10-07). Eski Reklam Oluştur (Hızlı/Uzman), AI Asistan sohbeti ve Toplu
+  Oluştur panelden ve API'den kaldırıldı; eski adresler `/reklam`a
+  yönlendiriyor. AdvCampaign sohbetle yönetilen, yapay zekâ odaklı bir akış:
+  kullanıcıyı yönlendiriyor, en optimize kurulumu kendisi seçiyor, önizleme
+  onaya kalıyor. Eski backend'in Akıllı Boost, varlıklar ve raporların
+  kullandığı parçaları (`draft-tree`, `ad-builder`) duruyor.
 - **Arayüz Türkçe ve iş dilinde.** "CENTRAL", "OPTIMISE" gibi mimari terimler
   panelde geçmiyor.
 - Bir müşteri = bir **şirket**; şirketin birden çok projesi/reklam hesabı

@@ -218,43 +218,28 @@ describe('MENÜDEKİ AD İLE SAYFANIN ADI AYNI', () => {
   });
 });
 
-describe('AI ASİSTAN SATIRI', () => {
-  const ai = SECTIONS.flatMap((b) => b.items).find((i) => i.label === 'AI Asistan');
+describe('ADVCAMPAIGN SATIRI', () => {
+  /*
+   * Reklam Oluştur, AI Asistan ve Toplu Oluştur kaldırıldı (kullanıcı kararı
+   * 2026-10-07); reklam kurmanın tek yolu AdvCampaign. Eski satırların bir
+   * gün geri dönmesi, kullanıcıyı ikinci (eski, hatalı) bir yayın yoluna
+   * götürmek olurdu.
+   */
+  const satirlar = SECTIONS.flatMap((s) => s.items);
 
-  it('tarama gerçekten satırı buldu', () => {
-    expect(ai, 'AI Asistan satırı yok').toBeDefined();
+  it('KRİTİK: /reklam\'a gidiyor ve bulk.write istiyor — müşteri hesabı GÖRMÜYOR', () => {
+    const adv = satirlar.find((i) => i.label === 'AdvCampaign');
+    expect(adv?.href).toBe('/reklam');
+    expect(adv?.perm).toBe('bulk.write');
+    expect(etiketler('client_viewer')).not.toContain('AdvCampaign');
   });
 
-  it('KRİTİK: iki alt öğe — Meta ve Google AYRI asistanlar', () => {
-    /*
-     * Tek satır gösterip seçimi sayfanın içine bırakmak, kullanıcıyı
-     * menüden sonra ikinci bir seçim yapmaya zorlardı. İki ayrı ÜST satır
-     * ise aynı ekranı menüde iki kez göstermek olurdu.
-     */
-    expect(ai!.children?.map((c) => c.label)).toEqual(['Meta AI', 'Google Ads AI']);
-    expect(ai!.children?.map((c) => c.href)).toEqual([
-      '/reklam-olustur/ai-asistan?platform=meta',
-      '/reklam-olustur/ai-asistan?platform=google',
-    ]);
-  });
-
-  it('KRİTİK: `bulk.write` istiyor — müşteri hesabı GÖRMÜYOR', () => {
-    // Asistan taslak yazıyor ve yayın onayı sunacak; müşteri rolü tanımı
-    // gereği reklam yayınlamıyor.
-    expect(ai!.perm).toBe('bulk.write');
-    expect(etiketler('client_viewer')).not.toContain('AI Asistan');
-  });
-
-  it('KRİTİK: `Reklam Oluştur`un hemen ALTINDA', () => {
-    // Kampanya kurmanın bir başka yolu, ayrı bir iş değil.
-    const reklamlar = SECTIONS.find((b) => b.title === 'Reklamlar')!.items.map((i) => i.label);
-    expect(reklamlar.indexOf('AI Asistan')).toBe(reklamlar.indexOf('Reklam Oluştur') + 1);
-  });
-
-  it('alt öğe yetkisi ÜSTÜNKİNİ devralıyor', () => {
-    // Alt öğeye ayrı bir anahtar yazmak, üstü gören ama altında 403 alan
-    // bir kullanıcı üretme riskini iki katına çıkarırdı.
-    for (const c of ai!.children ?? []) expect(c.perm).toBeUndefined();
+  it('KRİTİK: eski reklam oluşturma satırları menüde YOK', () => {
+    const tumu = satirlar.flatMap((i) => [i, ...(i.children ?? [])]);
+    for (const i of tumu) {
+      expect(i.href).not.toMatch(/^\/(reklam-olustur|toplu-olustur)/);
+      expect(i.label).not.toMatch(/Reklam Oluştur|AI Asistan|Toplu/);
+    }
   });
 });
 
@@ -321,7 +306,7 @@ describe('AJANS ROLLERİ', () => {
     // Üst Hesaplar da `org.write` ile kapalı: hesabın kendisini yönetmek
     // Yönetici işi.
     expect(gorunen).not.toContain('Üst Hesaplar');
-    expect(gorunen).toContain('Reklam Oluştur');
+    expect(gorunen).toContain('AdvCampaign');
     expect(gorunen).toContain('Kurallar');
     expect(gorunen).toContain('Ekip & Yetkiler');
     expect(gorunen).not.toContain('Şirketler');

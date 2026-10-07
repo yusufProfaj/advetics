@@ -194,7 +194,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
         </Alan>
       </div>
 
-      <Alan etiket="Ana amaç" ipucu="Reklam Oluştur bu amaçla açılır; istersen orada değiştirirsin.">
+      <Alan etiket="Ana amaç" ipucu="AdvCampaign bu amaçla açılır; istersen orada değiştirirsin.">
         <div className="grid gap-2 sm:grid-cols-3">
           {CAMPAIGN_GOALS.map((g) => (
             <button
@@ -250,7 +250,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
 
       <ListeAlani
         etiket="Metin şablonları"
-        ipucu="Sık kullandığın cümleler. Reklam Oluştur’da tek tıkla metne eklenir. Örn. Hemen arayın, ücretsiz keşif."
+        ipucu="Sık kullandığın cümleler. AdvCampaign’de tek tıkla metne eklenir. Örn. Hemen arayın, ücretsiz keşif."
         degerler={form.metinSablonlari}
         sinir={MARKA_SINIRLARI.sablon}
         kapali={kapali}
@@ -451,7 +451,7 @@ function SayfaListesi({
   return (
     <Alan
       etiket={`Sık kullanılan sayfalar (${sayfalar.length}/${s.adet})`}
-      ipucu="Reklamın gideceği sayfalar. Reklam Oluştur hedef adresi bu listeden seçer."
+      ipucu="Reklamın gideceği sayfalar. AdvCampaign hedef adresi bu listeden seçer."
     >
       {sayfalar.length > 0 && (
         <ul className="divide-y divide-line rounded-lg border border-line">
