@@ -39,6 +39,11 @@ export interface YayinIstegi {
   surumNo: number;
   icerikOzeti: string;
   testKipi: boolean;
+  /**
+   * Yayının nereden geldiği: panel düğmesi ya da AdvCampaign onay kartı.
+   * "Bu kampanyayı kim nereden kurdu" sorusunun cevabı; verilmezse panel.
+   */
+  kaynak?: 'panel' | 'ai_kart';
 }
 
 export type YayinBaslatSonucu =
@@ -130,7 +135,7 @@ export async function yayinBaslat(
     atifStandardi: atif,
     medyaVarliklari: medya,
     videoVarliklari: videolar,
-    kaynak: 'panel',
+    kaynak: istek.kaynak ?? 'panel',
     baslatanId: ctx.userId,
     testKipi: istek.testKipi,
   });

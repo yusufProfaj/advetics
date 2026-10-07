@@ -141,10 +141,24 @@ describe('reklam hazırlığı', () => {
  */
 describe('reklam modülü sınırı', () => {
   const YASAK = ['ad-builder', 'draft-tree', '/bulk/', 'campaign-actions', 'ai-assistant', '/connections/', '/assets/'];
-  const dosyalar = readdirSync(__dirname).filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts'));
+  // ALT KLASÖRLER DAHİL: ilk sürüm yalnız üst klasörü okuyordu ve sohbet/
+  // altındaki servisler hem içe aktarma yasağının hem providers kontrolünün
+  // tamamen dışındaydı.
+  const dosyalar = (readdirSync(__dirname, { recursive: true }) as string[])
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts'));
 
-  it('modül dosyaları gerçekten okundu', () => {
-    expect(dosyalar).toEqual(expect.arrayContaining(['reklam.module.ts', 'hazirlik.service.ts']));
+  it('modül dosyaları gerçekten okundu (alt klasörler dahil)', () => {
+    expect(dosyalar).toEqual(expect.arrayContaining(['reklam.module.ts', 'hazirlik.service.ts', join('sohbet', 'sohbet.service.ts')]));
+  });
+
+  it('KRİTİK: her @Controller modülün controllers listesinde', () => {
+    const modul = readFileSync(join(__dirname, 'reklam.module.ts'), 'utf8');
+    const kayitli = /controllers:\s*\[([^\]]*)\]/.exec(modul)![1]!;
+    const denetleyiciler = dosyalar.flatMap((f) =>
+      [...readFileSync(join(__dirname, f), 'utf8').matchAll(/@Controller\([^)]*\)\s*export class (\w+)/g)].map((m) => m[1]!),
+    );
+    expect(denetleyiciler.length).toBeGreaterThanOrEqual(2);
+    for (const c of denetleyiciler) expect(kayitli, c).toContain(c);
   });
 
   it('hiçbir dosya eski reklam modüllerini içe aktarmıyor', () => {

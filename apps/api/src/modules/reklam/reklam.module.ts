@@ -7,6 +7,9 @@ import { ReklamYayinService } from './yayin.service';
 import { ReklamKuyrugu } from './reklam-kuyrugu';
 import { ReklamAiTaslakService } from './ai-taslak.service';
 import { ReklamGorselService } from './gorsel.service';
+import { AdvSohbetController } from './sohbet/sohbet.controller';
+import { AdvSohbetService } from './sohbet/sohbet.service';
+import { AdvOnayService } from './sohbet/onay.service';
 
 /**
  * Yeni Reklam Oluştur modülü (docs/meta-reklam-brief/tasarim/TASARIM.md).
@@ -19,8 +22,8 @@ import { ReklamGorselService } from './gorsel.service';
  * kaynak taramasıyla kilitliyor.
  */
 @Module({
-  controllers: [ReklamController],
-  providers: [ReklamHazirlikService, ReklamTaslakService, AjansAyariService, ReklamYayinService, ReklamKuyrugu, ReklamAiTaslakService, ReklamGorselService],
+  controllers: [ReklamController, AdvSohbetController],
+  providers: [ReklamHazirlikService, ReklamTaslakService, AjansAyariService, ReklamYayinService, ReklamKuyrugu, ReklamAiTaslakService, ReklamGorselService, AdvSohbetService, AdvOnayService],
   exports: [ReklamKuyrugu],
 })
 export class ReklamModule {}
