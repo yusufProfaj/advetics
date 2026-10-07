@@ -54,3 +54,4 @@ export * from './schemas/rapor-plani.schema';
 export * from './zod-turkce';
 export * from './reklam';
 export * from './pilot';
+export * from './uyum';
