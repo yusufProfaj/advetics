@@ -73,6 +73,7 @@ function girdi(over: Partial<PlanUretGirdisi> = {}): PlanUretGirdisi {
     bugun: '2026-10-07',
     simdi: T,
     aylikButce: { id: U(2), micros: 120_000n * M, paraBirimi: 'TRY', guncellendi: T },
+    ayHarcanan: { deger: 0n, kaynak: { tur: 'gecmis_veri', kimlik: 'insights_daily', zaman: T, aciklama: 'Gelecek ay: harcama yok' } },
     hesaplar: [
       { id: U(3), platform: 'meta', paraBirimi: 'TRY' },
       { id: U(4), platform: 'google', paraBirimi: 'TRY' },
@@ -193,12 +194,30 @@ describe('planUret', () => {
     expect(planUret(girdi({ bugun: '2026-11-30' })).engeller).toEqual(['donem_gecti']);
   });
 
-  it('KRİTİK: kısmi ayda toplam kalan güne düşen pay; başlangıç yarın', () => {
-    const p = planUret(girdi({ donem: '2026-10', bugun: '2026-10-21' }));
+  const harcandi = (micros: bigint) => ({ deger: micros, kaynak: { tur: 'gecmis_veri' as const, kimlik: 'insights_daily', zaman: T, pencere: { from: '2026-10-01', to: '2026-10-20' } } });
+
+  it('KRİTİK: kısmi ayda toplam = aylık bütçe − bu ay harcanan; başlangıç yarın (S-7)', () => {
+    const p = planUret(girdi({ donem: '2026-10', bugun: '2026-10-21', ayHarcanan: harcandi(81_500_500_000n) }));
     expect(p.takvim).toEqual({ baslangic: '2026-10-22', bitis: '2026-10-31' });
-    // 120.000 × 10 / 31 = 38.709,67 → tam birime aşağı 38.709
-    expect(p.toplam.dolu && p.toplam.deger).toBe((38_709n * M).toString());
-    expect(toplamSatir(p)).toBe(38_709n * M);
+    // 120.000 − 81.500,50 = 38.499,50 → tam birime aşağı 38.499
+    expect(p.toplam.dolu && p.toplam.deger).toBe((38_499n * M).toString());
+    expect(p.toplam.dolu && p.toplam.kaynak.aciklama).toContain('harcanan');
+    expect(toplamSatir(p)).toBe(38_499n * M);
+  });
+
+  it('KRİTİK: harcanan bilinmiyorsa toplam BOŞ + neden; gün oranına düşülmez', () => {
+    const p = planUret(girdi({ donem: '2026-10', bugun: '2026-10-21', ayHarcanan: null }));
+    expect(p.toplam).toEqual({ dolu: false, emptyReason: 'harcanan_bilinmiyor' });
+    expect(p.engeller).toEqual(['harcanan_bilinmiyor']);
+    expect(p.satirlar).toEqual([]);
+  });
+
+  it('KRİTİK: harcanan bütçeye ulaştıysa toplam 0 DEĞİL boş + "bütçe bitti"', () => {
+    for (const h of [120_000n * M, 130_000n * M]) {
+      const p = planUret(girdi({ donem: '2026-10', bugun: '2026-10-21', ayHarcanan: harcandi(h) }));
+      expect(p.toplam).toEqual({ dolu: false, emptyReason: 'ay_butcesi_bitti' });
+      expect(p.satirlar).toEqual([]);
+    }
   });
 
   it('Google eşik altı kelimeleri almaz; hiç kelime yoksa Google dışarıda + neden', () => {

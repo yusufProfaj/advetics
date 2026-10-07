@@ -129,18 +129,23 @@ export function planUret(g: PlanUretGirdisi): PlanOnerisi {
   const baslangic = g.bugun < ilk ? ilk : noTarih(gunNo(g.bugun) + 1);
   const kalanGun = gunNo(son) - gunNo(baslangic) + 1;
 
-  // KISMİ AY: ayın ortasında hazırlanan plan aylık bütçenin tamamını kalan
-  // günlere sıkıştırmaz; kalan güne düşen payı alır. Aksi hâlde "ayda
-  // 120.000" kararı 10 günde 120.000 harcamaya dönüşürdü.
+  // AYIN HARCANMAMIŞ KALANI (S-7, kullanıcı kararı 2026-10-07). Plan, aylık
+  // bütçeden o ay ZATEN harcanmış olanı düşer: ay ortasında hazırlanan plan
+  // bütçenin tamamını yeniden dağıtsaydı ay toplamı bütçeyi aşardı. Harcanan
+  // bilinmiyorsa toplam BOŞ — gün oranıyla "tahmini kalan" üretmek, kaynağı
+  // olmayan bir sayı olurdu. Harcanan ≥ bütçe ise toplam 0 DEĞİL boş + neden:
+  // sıfır tutarlı bir plan "dağıtıldı" gibi görünür, oysa iş bütçeyi artırmak.
+  if (!g.ayHarcanan) return bosPlan(g, ['harcanan_bilinmiyor'], para);
+  const harcanan = g.ayHarcanan.deger;
+  if (harcanan >= g.aylikButce.micros) return bosPlan(g, ['ay_butcesi_bitti'], para);
   const butceKaynagi: Kaynak = { tur: 'aylik_butce', kimlik: g.aylikButce.id, zaman: g.aylikButce.guncellendi };
-  const toplamMicros =
-    kalanGun === ayGun ? g.aylikButce.micros : tamBirim((g.aylikButce.micros * BigInt(kalanGun)) / BigInt(ayGun));
+  const toplamMicros = tamBirim(g.aylikButce.micros - harcanan);
   const toplam: Kaynakli<string> = {
     deger: toplamMicros.toString(),
     kaynak:
-      kalanGun === ayGun
+      harcanan === 0n
         ? butceKaynagi
-        : { ...butceKaynagi, aciklama: `Aylık bütçenin kalan ${kalanGun} güne düşen payı (${ayGun} günden)` },
+        : { ...butceKaynagi, aciklama: `Aylık bütçe eksi bu ay harcanan (${(harcanan / BIRIM).toString()}, ${g.ayHarcanan.kaynak.tur})` },
   };
 
   // --- Hangi platformlar plana girebilir --------------------------------

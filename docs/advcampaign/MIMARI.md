@@ -1,7 +1,7 @@
 # Pilot — yapay zekâ ile hesap yönetimi · Mimari (Ajan 1 çıktısı)
 
 > **Tarih:** 2026-10-07 · **Plan:** [`AJAN-PLANI.md`](AJAN-PLANI.md) · **Sözleşme (kod):**
-> `packages/shared/src/pilot/` · **Sözleşme testi:** `apps/api/src/modules/pilot/sozlesme.spec.ts` (60 test)
+> `packages/shared/src/pilot/` · **Sözleşme testi:** `apps/api/src/modules/pilot/sozlesme.spec.ts` (62 test)
 > · **Kabul listesi:** [`KABUL-LISTESI.md`](KABUL-LISTESI.md) (174 madde) · **Arayüz:** [`pilot-arayuz.html`](pilot-arayuz.html)
 >
 > Ajan 2 ve Ajan 3 bu belge ile sözleşmeden okur, tip TANIMLAMAZ. Sözleşme değişirse önce burası ve
@@ -25,17 +25,20 @@
 
 ## 1. Temel kararlar (Ajan 1)
 
-- **M-1 · "Baştan" neyi kapsıyor.** Servisler, uçlar, tablolar, kuyruk işleri ve ekranlar YENİ.
+- **M-1 · "Baştan" neyi kapsıyor** (S-2 kararıyla KESİN). Servisler, uçlar, tablolar, kuyruk işleri ve ekranlar YENİ.
   `packages/shared/src/reklam/` altındaki SAF kurallar (para zinciri, `enCokHarcama`, niyet kataloğu,
   `hedeflemeUret`, `derleMeta` + manifesto, yankı/geri okuma, prova gövdesi, form) yeni motorda İÇE
   AKTARILIR, ikinci kopyası yazılmaz. Gerekçe CLAUDE.md "aynı şeyi üreten ikinci fonksiyon doğduğu anda
   ayrışır" + Ç-7'nin "canlıda öğrenilenler yeniden ödenmeyecek" kuralı: o fonksiyonlar kabul listesinin
-  71 maddesinin bugünkü, mutasyonla sınanmış hâli. **[AÇIK SORU S-2]** Kullanıcı "derleyici de baştan"
-  derse bu 71 madde YENİDEN KULLANILIR'dan AJAN 4'e geçer.
+  71 maddesinin bugünkü, mutasyonla sınanmış hâli.
 - **M-2 · Meta bütçesi dönem toplamı (lifetime).** Müşteri onay ekranındaki "en çok" sözü tam tutar
   olsun diye (`META_DONEM_BUTCE_TIPI`). Google günlük (`GOOGLE_DONEM_BUTCE_TIPI`, satır tutarı ÷ kalan
   gün); Google'ın günlük 2 kat esnekliği müşteri özetinde ayrı cümleyle yazılır.
-- **M-3 · Kısmi ay.** Ay ortasında hazırlanan plan aylık bütçenin kalan güne düşen payını alır.
+- **M-3 · Plan toplamı = ayın harcanmamış kalanı** (S-7, kullanıcı kararı 2026-10-07): aylık bütçe −
+  o ay şimdiye kadar harcanan (`PlanUretGirdisi.ayHarcanan: Kaynakli<bigint> | null`). Harcanan
+  bilinmiyorsa (veri yok / senkron eski) toplam BOŞ + `harcanan_bilinmiyor`, gün oranına düşülmez;
+  harcanan ≥ bütçe ise toplam 0 değil BOŞ + `ay_butcesi_bitti`. "Senkron eski" eşiğini Ajan 2 belirler
+  (öneri: hesabın son metrik işi dünden eski ise `null`). İlk sürümdeki gün oranı kaldırıldı.
 - **M-4 · Yuvarlama.** Her pay tam para birimine aşağı; artık en büyük paya; satır toplamı plan
   toplamına TAM eşit (testte, mutasyonla).
 - **M-5 · Dönüşümsüz platform.** Başka platform dönüşüm getirirken sıfır dönüşümlü platform plana
@@ -91,7 +94,7 @@ kalır ve sayısı söylenir. Ajan 2 iki listeye de karar satırı ekler.
 
 - `strateji_*` ve `reklam_taslagi`/`yayin*`/`adv_*` tabloları DOKUNULMADAN durur, veri silinmez.
   Yeni plan eski plana bağlanmaz; aynı ay için hem eski hem yeni plan olabilir (iki ekran da açıkken).
-  **[AÇIK SORU S-4]** Geçiş süresince bir ay için iki plan → hangisi geçerli? Öneri: yeni plan açılırken
+  **S-4 KARARI:** geçiş süresince bir ay için iki plan olabilir; yeni plan açılırken
   aynı ayın açık eski planı varsa ekran bunu söyler; eski plan kendiliğinden iptal EDİLMEZ.
 - Okunan eski tablolar: `monthly_budgets` (workspace geneli satır), `insights_daily` (hesap seviyesi,
   90 gün), `client_profiles`, `audience_templates`, `assets` + reklam seviyesi metrikler,
@@ -136,10 +139,9 @@ Tek kaynak `PILOT_UCLARI` (`packages/shared/src/pilot/uclar.ts`, 16 uç). Hepsi 
   saklananla aynı olmalı; plan toplamı o ayın TAZE okunan Aylık Bütçe'sini aşamaz; kurulamayan satır
   yok; uyum ENGEL/işaretsiz UYARI/bayat denetim yok; aynı sürüm ikinci kez onaylanamaz; plan yazamaz.
   Müşteri ekranı toplam, gün, EN ÇOK tutarı kendi dilinde görür (`musteriOzeti`).
-- **Müşteri adına onay** (ajans rolü): gerekçe ≥ 20 karakter, `onay_rolu = 'ajans'`, ekranda ve PDF'te
-  ayrı cümle. **[AÇIK SORU S-1]** Ç-6 "ajansın yayın düğmesi yok" diyor; bu bir ikinci "evet" değil,
-  müşterinin yerine geçen tek evet. Kapatılırsa panele girmeyen müşterinin planı `musteride`de bekler
-  (kilit değil: `geri_cek`/`iptal` çıkışları var).
+- **Müşteri adına onay** (ajans rolü, S-1 KARARI): gerekçe ≥ 20 karakter, `onay_rolu = 'ajans'`, ekranda,
+  PDF'te ve müşterinin plan görünümünde "Ajans müşteri adına onayladı" + gerekçe + zaman AYRI görünür;
+  müşteri sonradan görür. Bu ikinci bir "evet" değil, müşterinin yerine geçen tek evet.
 - Pilot okuma `bulk.write` (AdvCampaign menü izniyle aynı), uygulama `bulk.publish`. Yeni izin açılmadı.
 - `permission_overrides` taşıyan kullanıcılar yeni izni rol tanımından alır (strateji'deki not aynen):
   Ajan 4 üretimde override'lı kullanıcıları listelemeli.
@@ -161,9 +163,8 @@ Tek kaynak `PILOT_UCLARI` (`packages/shared/src/pilot/uclar.ts`, 16 uç). Hepsi 
 
 Sözleşme `pilot/uyum.ts`: `UyumBulgusu`, `UyumDenetimi`, `UyumIsareti`, `uyumDurumu`, `bulgulariSirala`.
 Kural kataloğu ve `uyumDenetle` saf fonksiyonu `packages/shared/src/uyum/` altında (TASARIM.md §10.1.3
-tarifi; ikinci denetçi yazılmaz). **[AÇIK SORU S-5]** Katalog shared'da olmak zorunda (panel ve API aynı
-denetçi) ama Ajan 2'nin alanı `apps/api`. Öneri: Ajan 2 kataloğu VERİ olarak yazar; tipler bu sözleşmede
-sabit, Ajan 1 inceler. Katalog yokken `uyumDurumu(null) = 'bagli_degil'` ve gerçek yayın kapalı kalır —
+tarifi; ikinci denetçi yazılmaz). **S-5 KARARI:** katalog shared'da (panel ve API aynı denetçi); Ajan 2 kataloğu VERİ olarak yazar,
+tipler bu sözleşmede sabit, Ajan 1 inceler. Katalog yokken `uyumDurumu(null) = 'bagli_degil'` ve gerçek yayın kapalı kalır —
 boş bulgu listesi "geçti" sayılmaz (mutasyonla kilitli).
 
 ## 6. Ajan 2 iş listesi (sırayla)
@@ -211,19 +212,24 @@ Kapı: typecheck, `nav-sections`, `panel-tasarim`, mobilde yatay kaydırma yok, 
 | Ö-P4 | Bütçe hızı (%20, 3 gün) | `monthly_budgets` × `insights_daily` | `BUTCE_HIZI` |
 | Ö-4 | Tıklama sayımı: plan + kurulum (hedef 3 + müşteri 1) | panelde gerçek akış | AJAN-PLANI §2 hedefi |
 
-## 9. Açık sorular (kullanıcıya)
+## 9. KARARLAR (2026-10-07; eski "açık sorular")
 
-- **S-1** Ajans "müşteri adına" onaylayabilsin mi (gerekçeli, ayrı kayıt)? Varsayılan: evet.
-- **S-2** "Her şey baştan" derleyiciyi de kapsıyor mu? Varsayılan: hayır, saf kurallar içe aktarılır (M-1).
-- **S-3** `GECMISSIZ_PLATFORM_PAYI_YUZ` (Meta 60 / Google 40) ve `META_KATMAN_PAYI_YUZ` (60/25/15)
-  değerleri. Varsayılan: bu değerler, ekranda "ajans kuralı" kaynağıyla.
-- **S-4** Geçişte aynı ay için eski ve yeni plan birlikte var olabilir mi? Varsayılan: evet, ekran söyler.
-- **S-5** Uyum kataloğunu kim yazar (shared'da veri)? Varsayılan: Ajan 2, Ajan 1 incelemesiyle.
-- **S-6** Uyum bağlı değilken müşteri şirketinde onay `kapali` kipte kaydedilir; uyum sonra bağlanınca
-  aynı onaylı sürüm kendiliğinden mi kurulur, yoksa yeniden onay mı? Varsayılan: ajans `yeniden_dene`
-  ile başlatır (tıklama ajansın, ama para kararı müşterinin onayladığı sürüm).
-- **S-7** Kısmi ayda aylık bütçe zaten başka kampanyalarca harcanmış olabilir; plan toplamı "kalan
-  bütçe" mi olsun? Varsayılan: hayır (bugün yalnız gün oranı), Ajan 2 ekranda o ayın harcanmışını gösterir.
+| # | Karar | Kim | Sözleşmede |
+|---|---|---|---|
+| S-1 | **Evet:** ajans müşteri adına onaylayabilir; gerekçe zorunlu, kayıtta "ajans onayladı" ayrı görünür, müşteri sonradan görür | kullanıcı | `onayKapisi` GEREKCE, `PILOT_PLAN_GECISLERI.onayla.yazan`, `onay_rolu` |
+| S-2 | **Hayır:** derleyici ve saf kurallar içe aktarılır (M-1 aynen) | kullanıcı | §1 M-1; kabul listesinde 71 "YENİDEN KULLANILIR" |
+| S-3 | Varsayılan değerler kalır (60/40, 60/25/15), ekranda "ajans kuralı" kaynağıyla | koordinatör | `GECMISSIZ_PLATFORM_PAYI_YUZ`, `META_KATMAN_PAYI_YUZ` |
+| S-4 | Geçişte aynı ay için eski + yeni plan olabilir; ekran söyler, eski plan kendiliğinden iptal edilmez | koordinatör | Ajan 2/3 |
+| S-5 | Uyum kataloğunu Ajan 2 yazar (`packages/shared/src/uyum/katalog/`, veri), Ajan 1 inceler | koordinatör | `uyum.ts` tipleri sabit |
+| S-6 | Uyum sonradan bağlanırsa ajans **"Şimdi kur"** (`yeniden_dene`) ile başlatır; müşteriye yeniden sorulmaz. Plan sürümü ve içerik özeti aynı kaldığı sürece onay geçerli | kullanıcı | `PILOT_PLAN_GECISLERI.yeniden_dene` (ajans); Ajan 2: `yeniden_dene` öncesi `onaylanan_ozet = icerik_ozeti` kontrolü + TAZE `uyumDurumu = 'gecti'` ise `yayin_kipi` `gercek`e güncellenir (onaydan sonra değişen TEK alan, denetim kaydıyla) |
+| S-7 | **Değişti:** plan toplamı = ayın harcanmamış kalanı (aylık bütçe − o ay harcanan); bilinmiyorsa boş + neden, bitmişse boş + "bütçe bitti" | kullanıcı | §1 M-3, `ayHarcanan`, `harcanan_bilinmiyor`, `ay_butcesi_bitti` (3 test, 4 mutasyon) |
+| M-2 | Meta dönem toplamı bütçe | koordinatör (kabul) | `META_DONEM_BUTCE_TIPI` |
+| M-5 | Dönüşümsüz platform plana girmez, nedeni yazılır | koordinatör (kabul) | `disaridaKalanlar` |
+
+**Ajan 2 notu (S-7 × onay):** `onayKapisi` plan toplamını Aylık Bütçe ile karşılaştırıyor (aşamaz).
+Onaya kadar geçen sürede o ay harcama sürerse "toplam + taze harcanan > bütçe" olabilir; bu bugün RET
+DEĞİL (her cari ay planı birkaç saatte bayatlardı). Ekran onay anında taze kalanı gösterir; fark
+plan toplamının %5'ini aşarsa ajans görünümünde "yeniden hazırla" önerisi.
 
 ## 10. DEVİR NOTU (Ajan 1 → Ajan 2, 3, 4)
 
@@ -247,5 +253,8 @@ Kapı: typecheck, `nav-sections`, `panel-tasarim`, mobilde yatay kaydırma yok, 
 - API test paketinin tamamı koşulmadı; yalnız ilgili spec'ler (pilot 60, rol-yetkileri + strateji 64,
   web nav 29).
 
-**Açık kalan**: §9'daki yedi soru; uyum kataloğu (S-5); migration/servis/işçi (Ajan 2); ekranlar (Ajan 3);
+**Güncelleme (2026-10-07, ikinci commit):** §9 kararları işlendi; S-7 için `planUret` girdisine
+`ayHarcanan` eklendi, gün oranı kaldırıldı; 62 sözleşme testi, S-7 dört mutasyonu da testi düşürüyor.
+
+**Açık kalan**: uyum kataloğu (S-5, Ajan 2); migration/servis/işçi (Ajan 2); ekranlar (Ajan 3);
 kabul listesindeki 67 "AJAN 4" maddesi ve yeni tabloların RLS testleri (Ajan 4).

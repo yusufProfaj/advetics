@@ -264,7 +264,7 @@ const AD_MANAGER_PERMS: readonly Permission[] = [
   'strategy.write',
   'strategy.approve',
   // Müşteri adına onay (gerekçeli): panele girmeyen müşterinin planı
-  // `musteride`de kalıcı beklemesin. [AÇIK SORU S-1]
+  // `musteride`de kalıcı beklemesin. Ekranda "ajans onayladı" ayrı görünür (S-1 kararı, 2026-10-07).
   'strategy.publish',
 ];
 
@@ -296,8 +296,8 @@ const CLIENT_VIEWER_PERMS: readonly Permission[] = [
   // Medya planını görür ve onaylar; yazamaz (Ç-5, 2026-10-08).
   'strategy.read',
   'strategy.approve',
-  // Müşteri adına onay (gerekçeli): panele girmeyen müşterinin planı
-  // `musteride`de kalıcı beklemesin. [AÇIK SORU S-1]
+  // ONAY = YAYIN (Ç-6, 2026-10-07): müşterinin onayı kurulumu başlatır.
+  // Planı yazamaz; yalnız ekranda okuduğu sürümü onaylar (`onayKapisi`).
   'strategy.publish',
 ];
 

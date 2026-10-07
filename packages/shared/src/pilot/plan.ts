@@ -28,7 +28,7 @@ export type PilotPlatformu = StratejiPlatformu;
  * GEÇMİŞ YOKKEN PLATFORM PAYI. Yeni müşteride 90 günlük veri yok ve plan
  * üretilmeseydi ajans her yeni müşteride elle başlardı. Değer bir AJANS
  * KARARI olarak ekranda kaynağıyla görünür ("Ajans kuralı: geçmiş yok").
- * [AÇIK SORU S-3: değeri kullanıcı onaylamadı; MIMARI.md §9.]
+ * Değerler S-3 kararıyla (2026-10-07) kalıcı; ekranda "ajans kuralı" kaynağıyla (MIMARI.md §9).
  */
 export const GECMISSIZ_PLATFORM_PAYI_YUZ: Readonly<Record<PilotPlatformu, number>> = { meta: 60, google: 40 };
 
@@ -89,6 +89,15 @@ export interface PlanUretGirdisi {
   simdi: string;
   /** Workspace geneli aylık bütçe (`ad_account_id IS NULL`); yoksa `null`. */
   aylikButce: { id: string; micros: bigint; paraBirimi: string; guncellendi: string } | null;
+  /**
+   * O AY ŞİMDİYE KADAR HARCANAN (workspace'e atanmış hesapların hesap seviyesi
+   * `insights_daily` toplamı, dönemin ilk gününden dünü dahil). Plan toplamı
+   * = aylık bütçe − bu (S-7, kullanıcı kararı 2026-10-07). Gelecek ay için
+   * çağıran `0n`'ı KAYNAĞIYLA verir. Bilinmiyorsa (veri yok, senkron eski)
+   * `null`: toplam BOŞ kalır; gün oranına sessizce düşülmez — tahmini kalan,
+   * zaten harcanmış parayı ikinci kez dağıtmak olabilir.
+   */
+  ayHarcanan: Kaynakli<bigint> | null;
   /** Workspace'e ATANMIŞ hesaplar (havuz satırları girmez, CLAUDE.md). */
   hesaplar: ReadonlyArray<{ id: string; platform: PilotPlatformu; paraBirimi: string }>;
   /**
@@ -310,7 +319,7 @@ export const PILOT_PLAN_GECISLERI = {
   degisiklik_iste: { kaynak: ['musteride'], hedef: 'taslak', yazan: ['musteri'] },
   // `ajans` da yazabilir: MÜŞTERİ ADINA onay (gerekçe zorunlu, ekranda ayrı
   // yazılır). Panele hiç girmeyen müşterinin planı `musteride`de kalıcı
-  // beklemesin diye. [AÇIK SORU S-1, MIMARI.md §9.]
+  // beklemesin diye. S-1 kararı (2026-10-07): gerekçe zorunlu, müşteri sonradan görür.
   onayla: { kaynak: ['musteride'], hedef: 'onaylandi', yazan: ['musteri', 'ajans'] },
   kurulum_basla: { kaynak: ['onaylandi'], hedef: 'kuruluyor', yazan: ['worker'] },
   kurulum_bitti: { kaynak: ['kuruluyor'], hedef: 'kuruldu', yazan: ['worker'] },

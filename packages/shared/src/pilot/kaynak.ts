@@ -109,6 +109,10 @@ export const BOS_NEDENLERI = [
   'yz_yazmadi',
   /** Kullanıcı satırı plandan çıkardı; tutarı "dağıtılmamış"a döndü. */
   'kullanici_cikardi',
+  /** O ay harcanan okunamadı ya da senkron eski: kalan bütçe hesaplanamaz. */
+  'harcanan_bilinmiyor',
+  /** O ay harcanan aylık bütçeye ulaşmış: dağıtılacak para yok. */
+  'ay_butcesi_bitti',
 ] as const;
 export type BosNedeni = (typeof BOS_NEDENLERI)[number];
 
