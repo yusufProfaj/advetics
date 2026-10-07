@@ -36,6 +36,7 @@ import { QueueModule } from './queue/queue.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { ReklamModule } from './modules/reklam/reklam.module';
 import { StratejiModule } from './modules/strateji/strateji.module';
+import { PilotModule } from './modules/pilot/pilot.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { StratejiModule } from './modules/strateji/strateji.module';
     AutoBoostModule,
     ReklamModule,
     StratejiModule,
+    PilotModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -13,3 +13,4 @@ export * from './kurulum';
 export * from './oneri';
 export * from './uclar';
 export * from './govdeler';
+export * from './yanitlar';
