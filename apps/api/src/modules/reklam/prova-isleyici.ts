@@ -29,6 +29,29 @@ interface GovdeSonucu {
   mesaj?: string;
   kod?: number;
   altKod?: number;
+  /** Geçti ama nasıl geçtiği kullanıcıya söylenmeli (kapsama kuralı). */
+  not?: string;
+}
+
+/**
+ * KAPSAMA KURALI — canlıda görüldü (2026-10-07, v25.0): reklam seti
+ * provası satır içi `campaign_spec` ile `/adsets`e sorulunca Meta her
+ * seferinde 5xx ("An unexpected error has occurred") döndürüyor; AYNI
+ * reklam seti gövdesi reklam provasının `adset_spec`i içinde sorulunca
+ * geçiyor. Yani kitle ve bütçe Meta'da zaten doğrulanmış, düşen yalnız o
+ * ucun satır içi kampanyayı işleyişi. Kural DAR: yalnız BELİRSİZ sonuç
+ * (kesin ret asla çevrilmez) ve yalnız bütün reklam provaları geçtiyse;
+ * çevrilen sonuç `not` ile ekranda söylenir, sessizce yeşile dönmez.
+ */
+export function kapsamaUygula(sonuclar: GovdeSonucu[]): GovdeSonucu[] {
+  const set = sonuclar.find((x) => x.ad === 'reklam_seti');
+  const reklamlar = sonuclar.filter((x) => x.ad.startsWith('reklam:'));
+  if (!set || set.sonuc !== 'dogrulanamadi' || reklamlar.length === 0 || !reklamlar.every((r) => r.sonuc === 'gecti')) return sonuclar;
+  return sonuclar.map((x) =>
+    x === set
+      ? { ad: x.ad, sonuc: 'gecti' as const, not: `Meta bu parçayı tek başına kontrol edemedi (${x.mesaj ?? 'sebep yok'}); aynı kitle ve bütçe her reklamın içinde kontrol edildi ve geçti.` }
+      : x,
+  );
 }
 
 export async function provaKos(
@@ -117,7 +140,7 @@ export async function provaKos(
     }
   }
 
-  const sonuclar: GovdeSonucu[] = [];
+  let sonuclar: GovdeSonucu[] = [];
   for (const g of provaGovdeleri(d.derleme.govdeler, hashler)) {
     try {
       await port.dogrula(hesap, g.uc, g.alanlar);
@@ -128,6 +151,7 @@ export async function provaKos(
       else sonuclar.push({ ad: g.ad, sonuc: 'dogrulanamadi', mesaj: e instanceof MetaBelirsizHata ? e.message : String(e) });
     }
   }
+  sonuclar = kapsamaUygula(sonuclar);
   const red = sonuclar.filter((x) => x.sonuc === 'reddedildi');
   // Aynı mesaj her kavramda tekrar ediyor (bir kreatif hatası bütün
   // fikirlerde aynı): özet satırında bir kez yazılır, parça listesi ayrıntıyı taşır.

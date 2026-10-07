@@ -93,6 +93,10 @@ ayrı görsel olarak yükleniyor; asistan kapağı görüyor. Derleyici video
 fikrini `video_data` ile kuruyor (kapak `image_hash`); motor videoyu
 yükleyip Meta "hazır" diyene kadar bekliyor (15 dk sınır), prova da öyle.
 Migration YOK. Google için sürüm kararı: **v25**.
+**Canlı tur 2:** "Kitle ve bütçe" provası satır içi kampanyayla `/adsets`e
+sorulunca Meta her seferinde 5xx veriyor; aynı reklam seti reklam
+provasının içinde geçiyor. Kapsama kuralı (`kapsamaUygula`): yalnız
+belirsiz sonuç ve bütün reklamlar geçtiyse "geçti" + ekranda not.
 **Sıradaki:** (1) CANLI TUR devam: ajansın kendi Meta hesabında
 SITE niyetiyle test kipi — Meta'nın gerçekte neyi farklı döndürdüğü
 normalleştirme tablosunu dolduracak (ilk denemelerin "fark" ile durması

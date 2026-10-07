@@ -8,7 +8,7 @@ import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pgli
 import { SahteMeta } from '../../../test/reklam-sahte-meta';
 import { yayinBaslat, zamanDamgasi } from './yayin-baslat';
 import { reklamIsiniIsle, yayinIsiniIsle, type IsleyiciBagimliliklari } from './yayin-isleyici';
-import { MetaKesinHata } from './yayin-motoru';
+import { MetaBelirsizHata, MetaKesinHata } from './yayin-motoru';
 import { DERLEYICI_SURUMU, derleMeta, provaGovdeleri } from '@advetics/shared';
 import type { TxRunner } from './yayin-motoru';
 
@@ -221,6 +221,37 @@ describe('Meta provası', () => {
     expect(meta.provalar).toHaveLength(4);
     const [p] = await h.q<{ sebep: string }>(`SELECT sebep FROM prova WHERE id = $1`, [id]);
     expect(p!.sebep).toBe('Meta 2 parçayı kabul etmedi: adsets reddedildi · ads reddedildi');
+  });
+
+  it('KAPSAMA: reklam seti 5xx ama reklamlar (aynı adset_spec ile) geçtiyse geçer ve NOTLA söylenir', async () => {
+    const t = await taslak();
+    const id = await prova(t.taslakId, t.ozet);
+    const meta = new SahteMeta();
+    meta.provaHatasi = (uc) => (uc === 'adsets' ? new MetaBelirsizHata('Meta sunucu hatası: An unexpected error has occurred.') : null);
+    expect(await reklamIsiniIsle(bagimlilik(meta), { provaId: id, adim: 'prova' }, 'p1')).toEqual({ tur: 'bitti', durum: 'gecti' });
+    const [p] = await h.q<{ sonuclar: Array<{ ad: string; sonuc: string; not?: string }> }>(`SELECT sonuclar FROM prova WHERE id = $1`, [id]);
+    const set = p!.sonuclar.find((s) => s.ad === 'reklam_seti')!;
+    expect(set.sonuc).toBe('gecti');
+    expect(set.not).toContain('unexpected error');
+  });
+
+  it('KAPSAMA DAR: reklam da belirsizse ya da reklam seti KESİN retse çevrilmez', async () => {
+    for (const [hata, beklenen] of [
+      [(uc: string) => (uc === 'adsets' || uc === 'ads' ? new MetaBelirsizHata('5xx') : null), 'dogrulanamadi'],
+      [(uc: string) => (uc === 'adsets' ? new MetaKesinHata('hedefleme reddedildi', 100) : null), 'reddedildi'],
+    ] as const) {
+      const t = await taslak();
+      const id = await prova(t.taslakId, t.ozet);
+      const meta = new SahteMeta();
+      meta.provaHatasi = hata;
+      expect(await reklamIsiniIsle(bagimlilik(meta), { provaId: id, adim: 'prova' }, 'p1')).toEqual({ tur: 'bitti', durum: beklenen });
+      // Parçanın KENDİSİ çevrilmemiş olmalı; genel sonuç başka parçadan da gelebilir.
+      const [p] = await h.q<{ sonuclar: Array<{ ad: string; sonuc: string; not?: string }> }>(`SELECT sonuclar FROM prova WHERE id = $1`, [id]);
+      const set = p!.sonuclar.find((s) => s.ad === 'reklam_seti')!;
+      expect(set.sonuc).toBe(beklenen);
+      expect(set.not).toBeUndefined();
+      await h.q(`DELETE FROM prova`);
+    }
   });
 
   it('aynı ret mesajı her fikirde tekrar ediyorsa özet satırında BİR KEZ', async () => {

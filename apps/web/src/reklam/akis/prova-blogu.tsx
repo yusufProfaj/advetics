@@ -6,7 +6,7 @@ import { Dugme } from '../ui';
 
 interface ProvaGorunumu {
   durum: { tur: 'yok' | 'bekliyor' | 'reddedildi' | 'dogrulanamadi' | 'bayat' | 'gecti'; metin: string };
-  sonuclar: Array<{ ad: string; sonuc: string; mesaj?: string }>;
+  sonuclar: Array<{ ad: string; sonuc: string; mesaj?: string; not?: string }>;
 }
 
 /** Gövde adının ekrandaki karşılığı; kod adı ekrana basılmaz. */
@@ -89,13 +89,13 @@ export function ProvaBlogu({ taslakId, ozet, kullaniciEksigi }: { taslakId: stri
       ) : (
         <>
           <p className={renk}>{p.durum.metin}</p>
-          {p.sonuclar.some((s) => s.sonuc !== 'gecti') && (
+          {p.sonuclar.some((s) => s.sonuc !== 'gecti' || s.not) && (
             <ul className="mt-2 space-y-1 text-xs">
               {p.sonuclar
-                .filter((s) => s.sonuc !== 'gecti')
+                .filter((s) => s.sonuc !== 'gecti' || s.not)
                 .map((s, i) => (
-                  <li key={i}>
-                    <b>{parcaAdi(s.ad)}:</b> {s.mesaj ?? 'kontrol tamamlanamadı'}
+                  <li key={i} className={s.sonuc === 'gecti' ? 'text-ink-muted' : undefined}>
+                    <b>{parcaAdi(s.ad)}:</b> {s.sonuc === 'gecti' ? s.not : (s.mesaj ?? 'kontrol tamamlanamadı')}
                   </li>
                 ))}
             </ul>
