@@ -15,7 +15,7 @@ import { PilotPlanService, yapilabilirEylemler } from './plan.service';
  */
 let h: Harness;
 let svc: PilotPlanService;
-const kuyruk = { planEkle: vi.fn<(id: string, tetik: string) => Promise<void>>() };
+const kuyruk = { planEkle: vi.fn<(id: string, tetik: string, yeniden?: boolean) => Promise<void>>() };
 let yzCevabi: string | null = null;
 const yz: MetinUretici = {
   model: 'sahte-gemini',
@@ -165,7 +165,7 @@ describe('gönder → onayla', () => {
     await expect(svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: 'f'.repeat(64) }, SIMDI)).rejects.toThrow(/onaylanamıyor/);
     const o = await svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: m.plan.icerikOzeti }, SIMDI);
     expect(o.plan).toMatchObject({ durum: 'onaylandi', yayinKipi: 'gercek', onay: { rol: 'musteri' } });
-    expect(kuyruk.planEkle).toHaveBeenCalledWith(id, 'onay');
+    expect(kuyruk.planEkle).toHaveBeenCalledWith(id, 'onay', false);
     const [p] = await h.q<{ onaylanan_ozet: string; onay_denetim_id: string | null }>('SELECT onaylanan_ozet, onay_denetim_id::text FROM pilot_planlari WHERE id = $1', [id]);
     expect(p!.onaylanan_ozet).toBe(m.plan.icerikOzeti);
     expect(p!.onay_denetim_id).not.toBeNull();

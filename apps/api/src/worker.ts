@@ -19,6 +19,11 @@ import { BEKLENMEYEN_HATA, kelimeIsiniIsle } from './modules/strateji/kelime-isl
 import { ProviderRegistry } from './modules/connections/provider.registry';
 import { TokenVaultService } from './modules/connections/token-vault.service';
 import type { GoogleProvider } from './modules/connections/providers/google.provider';
+import { PILOT_KURULUM_KUYRUGU, PilotKurulumKuyrugu, type PilotKurulumIsi } from './modules/pilot/kurulum-kuyrugu';
+import { pilotIsiniIsle } from './modules/pilot/kurulum-isleyici';
+import { pilotSupurmesi } from './modules/pilot/kurulum-supurme';
+import { YAPAY_ZEKA } from './yapay-zeka/yapay-zeka.module';
+import type { MetinUretici } from './yapay-zeka/gemini';
 
 /**
  * Worker süreci — API'den AYRI çalışır.
@@ -311,7 +316,62 @@ async function bootstrap(): Promise<void> {
     logger.error(`strateji-kelime ${job.id} düştü: ${err.message}`);
   });
 
-  logger.log('Worker hazır — kuyruk: sync (4), reklam-yayin (2), strateji-kelime (1, 1 QPS)');
+  /*
+   * PİLOT KURULUMU — plan ve satır işleri. Eşzamanlılık 2: hesap başına
+   * yazıcı kilidi aynı hesaba ikinci yazıcıyı zaten erteliyor. Deneme 1:
+   * motor her belirsizliği kendi durumuna çeviriyor; BullMQ'nun tekrarı
+   * sonucu bilinmeyen bir POST'u yeniden gönderirdi.
+   */
+  const pilotKuyruk = app.get(PilotKurulumKuyrugu);
+  const pilotWorker = new Worker<PilotKurulumIsi>(
+    PILOT_KURULUM_KUYRUGU,
+    async (job) => {
+      const sonuc = await pilotIsiniIsle(
+        {
+          tx: (fn) => fn(admin as never),
+          crypto: app.get(CryptoService),
+          apiSurumu: config.platforms.meta.apiVersion,
+          yuklemeKoku: config.uploads.dir,
+          kilit: redisKilidi(connection),
+          kilitOneki: config.redis.keyPrefix,
+          yz: app.get<MetinUretici | null>(YAPAY_ZEKA),
+          kuyruk: { satirEkle: (id, tetik, ms) => pilotKuyruk.satirEkle(id, tetik, ms) },
+        },
+        job.data,
+        `${job.id}`,
+      );
+      if (sonuc.tur === 'ertele') {
+        // Kilit dolu ya da prova kotası: deneme SAYILMADAN ertelenir.
+        await job.moveToDelayed(Date.now() + sonuc.ms, job.token);
+        throw new DelayedError();
+      }
+      logger.log(`pilot-kurulum ${job.id} → ${sonuc.durum}`);
+      return sonuc;
+    },
+    { connection, prefix: config.redis.keyPrefix, concurrency: 2 },
+  );
+  pilotWorker.on('failed', (job, err) => {
+    // Nihai düşüş: işleyici yazamadan öldüyse satır 'taslak'ta kalır ve
+    // plan sonsuza kadar "kuruluyor" derdi. Yalnız HİÇ başlamamış satır
+    // kapatılıyor; ara durumdaki satıra dokunulmuyor (Meta'ya gitmiş olabilir).
+    if (!job || job.data.tur !== 'satir') {
+      logger.error(`pilot-kurulum ${job?.id ?? '?'} düştü: ${err.message}`);
+      return;
+    }
+    void admin
+      .$executeRaw`UPDATE pilot_kurulum_satirlari SET durum = 'dustu', platform_mesaji = ${`İş durdu: ${err.message}`.slice(0, 2000)}, updated_at = now() WHERE id = ${job.data.satirId}::uuid AND durum = 'taslak'`
+      .catch((e: unknown) => logger.error(`Pilot satırı ${job.data.tur === 'satir' ? job.data.satirId : ''} kapatılamadı: ${e instanceof Error ? e.message : String(e)}`));
+    logger.error(`pilot-kurulum ${job.id} (satır) düştü: ${err.message}`);
+  });
+  // Onaylanıp kuyruğa giremeyen planlar ve kuyruktan düşmüş satırlar için
+  // süpürme (CLAUDE.md "sync_jobs satırı bir niyet kaydı, kuyruk ise gerçek").
+  const pilotSupurmeZamanlayici = setInterval(() => {
+    void pilotSupurmesi({ tx: (fn) => fn(admin as never), planEkle: (id, tetik) => pilotKuyruk.planEkle(id, tetik) })
+      .then((n) => n > 0 && logger.log(`pilot süpürmesi: ${n} plan yeniden kuyrukta`))
+      .catch((e: unknown) => logger.error(`pilot süpürmesi düştü: ${e instanceof Error ? e.message : String(e)}`));
+  }, 10 * 60_000);
+
+  logger.log('Worker hazır — kuyruk: sync (4), reklam-yayin (2), strateji-kelime (1, 1 QPS), pilot-kurulum (2)');
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.log(`${signal} alındı, işler tamamlanıyor…`);
@@ -320,6 +380,8 @@ async function bootstrap(): Promise<void> {
     await worker.close();
     await reklamWorker.close();
     await kelimeWorker.close();
+    clearInterval(pilotSupurmeZamanlayici);
+    await pilotWorker.close();
     await connection.quit().catch(() => connection.disconnect());
     await app.close();
     logger.log('Worker kapandı.');

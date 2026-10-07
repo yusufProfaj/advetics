@@ -409,7 +409,7 @@ export class PilotPlanService {
         UPDATE pilot_planlari SET durum = ${hedef}, updated_at = now() WHERE id = ${p.id}::uuid AND durum = ${p.durum}`);
       if (n !== 1) throw new ConflictException(SURUM_MESAJI);
     });
-    if (kuyrugaAl) await this.kurulumuKuyrugaAl(id, `yd${simdi.getTime()}`);
+    if (kuyrugaAl) await this.kurulumuKuyrugaAl(id, `yd${simdi.getTime()}`, true);
     return this.detay(ctx, id, simdi);
   }
 
@@ -464,9 +464,9 @@ export class PilotPlanService {
    * dakika içinde kendisi kuyruğa alıyor (`pilotSupurme`). Sessiz değil:
    * log'da ve plan "onaylandı, kurulum başlamadı" olarak görünür.
    */
-  private async kurulumuKuyrugaAl(planId: string, tetik: string): Promise<void> {
+  private async kurulumuKuyrugaAl(planId: string, tetik: string, yeniden = false): Promise<void> {
     try {
-      await this.kuyruk.planEkle(planId, tetik);
+      await this.kuyruk.planEkle(planId, tetik, yeniden);
     } catch (e) {
       logger.error(`Pilot planı ${planId} kuyruğa alınamadı (${tetik}): ${(e as Error).message}`);
     }

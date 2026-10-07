@@ -17,7 +17,12 @@ import { CONFIG, type AppConfig } from '../../config/configuration';
  */
 export const PILOT_KURULUM_KUYRUGU = 'pilot-kurulum';
 
-export type PilotKurulumIsi = { tur: 'plan'; planId: string } | { tur: 'satir'; satirId: string };
+/**
+ * `yeniden`: "Şimdi kur" (yeniden_dene). Plan işi düşmüş satırları YALNIZ
+ * bu bayrakla yeniden çalıştırır; işçinin yeniden teslimi ya da süpürmesi
+ * düşmüş satırı kendiliğinden tekrar denemez (para harcayan bir karar insanın).
+ */
+export type PilotKurulumIsi = { tur: 'plan'; planId: string; yeniden: boolean } | { tur: 'satir'; satirId: string };
 
 /**
  * İş kimliği: ayırıcı `__` (BullMQ `:`'yı reddediyor). `tetik` aynı planın
@@ -48,10 +53,16 @@ export class PilotKurulumKuyrugu implements OnModuleDestroy {
   }
 
   /** Kuyruk yoksa FIRLATIR: sessizce kuyruğa girmeyen onay sonsuza kadar "onaylandı" kalırdı. */
-  async planEkle(planId: string, tetik: string): Promise<void> {
+  async planEkle(planId: string, tetik: string, yeniden = false): Promise<void> {
     if (!this.kuyruk) throw new Error('Pilot kurulum kuyruğu kurulu değil (REDIS_URL yok)');
-    const is: PilotKurulumIsi = { tur: 'plan', planId };
+    const is: PilotKurulumIsi = { tur: 'plan', planId, yeniden };
     await this.kuyruk.add('plan', is, { jobId: pilotIsKimligi(is, tetik) });
+  }
+
+  async satirEkle(satirId: string, tetik: string, gecikmeMs = 0): Promise<void> {
+    if (!this.kuyruk) throw new Error('Pilot kurulum kuyruğu kurulu değil (REDIS_URL yok)');
+    const is: PilotKurulumIsi = { tur: 'satir', satirId };
+    await this.kuyruk.add('satir', is, { jobId: pilotIsKimligi(is, tetik), delay: gecikmeMs });
   }
 
   async onModuleDestroy(): Promise<void> {
