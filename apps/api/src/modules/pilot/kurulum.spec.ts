@@ -217,7 +217,23 @@ describe('gerçek kip', () => {
 });
 
 describe('test ve kapalı kip', () => {
-  it('KRİTİK: anahtar kapalıyken onaylanan plan uçtan uca TEST kipinde kurulur ve açılmaz', async () => {
+  it('KRİTİK: anahtar kapalı + MÜŞTERİ şirketi → kip kapalı, Meta’ya SIFIR çağrı', async () => {
+    await h.q(`UPDATE ajans_ayari SET pilot_gercek_yayin = false`);
+    // Workspace'in şirketi bir üst hesabın müşteri şirketi; ajans başka şirket.
+    const ma = '12121212-1212-4121-8121-121212121212';
+    const ajansOrg = '13131313-1313-4131-8131-131313131313';
+    await h.q(`INSERT INTO manager_accounts (id, name, slug, updated_at) VALUES ($1, 'MA', 'ma', now())`, [ma]);
+    await h.q(`INSERT INTO organizations (id, name, slug, manager_account_id, updated_at) VALUES ($1, 'Ajans', 'ajans', $2, now())`, [ajansOrg, ma]);
+    await h.q(`UPDATE organizations SET manager_account_id = $1 WHERE id = $2`, [ma, IDS.org]);
+    await h.q(`UPDATE manager_accounts SET ajans_org_id = $2 WHERE id = $1`, [ma, ajansOrg]);
+    const id = await onayliPlan();
+    expect((await h.q<{ yayin_kipi: string }>('SELECT yayin_kipi FROM pilot_planlari WHERE id = $1', [id]))[0]!.yayin_kipi).toBe('kapali');
+    await kos(id);
+    expect((await satirlar(id))[0]!.durum).toBe('kurulmadi_kapali');
+    expect(meta.postSayisi + meta.provalar.length + meta.acmaSirasi.length).toBe(0);
+  });
+
+  it('KRİTİK: anahtar kapalı + AJANSIN KENDİ şirketi → uçtan uca TEST kipi, açılmaz', async () => {
     await h.q(`UPDATE ajans_ayari SET pilot_gercek_yayin = false`);
     const id = await onayliPlan();
     expect((await h.q<{ yayin_kipi: string }>('SELECT yayin_kipi FROM pilot_planlari WHERE id = $1', [id]))[0]!.yayin_kipi).toBe('test');

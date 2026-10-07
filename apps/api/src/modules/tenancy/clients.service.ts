@@ -277,7 +277,18 @@ export class ClientsService {
            * sorulacak ilk şey.
            */
           ...(input.specialAdCategories !== undefined
-            ? { specialAdCategories: input.specialAdCategories }
+            ? {
+                specialAdCategories: input.specialAdCategories,
+                /*
+                 * BEYAN İZİ AYNI YAZIMDA (Pilot Ç-2): bir kişinin kaydettiği
+                 * kategori listesi — boş dahil — bir beyandır. İz yazılmazsa
+                 * Pilot bu workspace'i "sorulmadı" sayar ve her Meta satırı
+                 * OZK-SORU ile durur; tersi daha kötü: eski beyan zamanı
+                 * yeni listeye ait görünür. `ozel-kategori-yazicilari.spec`.
+                 */
+                ozelKategoriBeyanZamani: new Date(),
+                ozelKategoriBeyanEden: ctx.userId,
+              }
             : {}),
           /*
            * ═══ İLETİŞİM ALANLARI SESSİZCE DÜŞÜYORDU ═══

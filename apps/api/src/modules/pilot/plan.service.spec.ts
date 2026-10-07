@@ -227,7 +227,7 @@ describe('gerçek yayın anahtarı', () => {
     return { id, oz: m.plan.icerikOzeti };
   };
 
-  it('KRİTİK: anahtar kapalıyken uyum geçse bile kip TEST; ajansa söylenir, müşteriye söylenmez', async () => {
+  it('KRİTİK: anahtar kapalı + ajansın kendi şirketi → kip TEST; ajansa söylenir, müşteriye söylenmez', async () => {
     await h.q(`UPDATE ajans_ayari SET pilot_gercek_yayin = false`);
     const { id, oz } = await onayaKadar();
     const a = await svc.detay(AJANS, id, SIMDI);

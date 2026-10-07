@@ -61,7 +61,7 @@ import { cumleyiCevir, gerekceEkle } from './plan-metni';
 import { uyumProfiliOku } from './uyum-profili';
 import { PilotKurulumKuyrugu } from './kurulum-kuyrugu';
 import { planPdf } from './plan-pdf';
-import { gercekYayinAcikMi } from './gercek-yayin';
+import { ajansOrgu, gercekYayinAcikMi } from './gercek-yayin';
 
 /**
  * ═══ PİLOT PLAN SERVİSİ (MIMARI § 3, uçların plan yarısı) ═══
@@ -673,12 +673,11 @@ async function kapiOku(tx: Tx, p: PlanSatiri, simdi: Date): Promise<KapiOkumasi>
   const [b] = await tx.$queryRaw<Array<{ micros: string }>>(Prisma.sql`
     SELECT amount_micros::text AS micros FROM monthly_budgets
      WHERE client_id = ${p.client_id}::uuid AND ad_account_id IS NULL AND month = ${`${p.donem}-01`}::date`);
-  const [o] = await tx.$queryRaw<Array<{ ajans_mi: boolean }>>(Prisma.sql`
-    SELECT (ma.ajans_org_id IS NULL OR ma.ajans_org_id = o.id) AS ajans_mi
-      FROM organizations o LEFT JOIN manager_accounts ma ON ma.id = o.manager_account_id
-     WHERE o.id = ${p.org_id}::uuid`);
+  // "Ajansın kendi şirketi" anahtarla AYNI tanımdan (`ajansOrgu`): ajansı
+  // belirsiz şirket ajans SAYILMAZ, yani test kipi müşteri hesabına düşmez.
+  const ajansinKendiSirketi = (await ajansOrgu(tx, p.org_id).catch(() => null)) === p.org_id;
   const gy = await gercekYayinAcikMi(tx, p.org_id);
-  return { plan, profil, denetim, isaretler, aylikButceMicros: b ? BigInt(b.micros) : null, ajansinKendiSirketi: o?.ajans_mi === true, gercekYayinAcik: gy.acik };
+  return { plan, profil, denetim, isaretler, aylikButceMicros: b ? BigInt(b.micros) : null, ajansinKendiSirketi, gercekYayinAcik: gy.acik };
 }
 
 function kapiKos(

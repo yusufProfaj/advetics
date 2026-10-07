@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -20,7 +20,10 @@ const govde = (yol: string) => {
 };
 
 describe('pilot yanıt zarfı', () => {
-  it('KRİTİK: shared ve panel kopyası birebir aynı', () => {
-    expect(govde('../../../../../packages/shared/src/pilot/yanitlar.ts')).toBe(govde('../../../../web/src/components/pilot/yanitlar.ts'));
+  it('KRİTİK: panel kopyası VARSA shared ile birebir aynı (silindiyse tek kaynak shared)', () => {
+    const shared = govde('../../../../../packages/shared/src/pilot/yanitlar.ts');
+    // Panel içe aktarmayı shared'a çevirip kopyasını sildiğinde karşılaştırılacak ikinci metin yok.
+    if (!existsSync(join(__dirname, '../../../../web/src/components/pilot/yanitlar.ts'))) return;
+    expect(shared).toBe(govde('../../../../web/src/components/pilot/yanitlar.ts'));
   });
 });

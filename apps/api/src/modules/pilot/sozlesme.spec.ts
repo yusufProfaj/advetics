@@ -403,10 +403,12 @@ describe('onay = yayın kapısı', () => {
     expect(b.tur === 'kabul' && b.ajansNotu).toContain('Uyum');
   });
 
-  it('KRİTİK: gerçek yayın anahtarı kapalıyken uyum geçse bile TEST kipi (müşteri şirketinde de); ajansa söylenir', () => {
-    const r = onayKapisi({ ...temel, gercekYayinAcik: false });
-    expect(r).toMatchObject({ tur: 'kabul', kip: 'test' });
-    expect(r.tur === 'kabul' && r.ajansNotu).toContain('gerçek yayın anahtarı kapalı');
+  it('KRİTİK: anahtar kapalıyken uyum geçse bile gerçek YOK — ajans şirketinde test, müşteri şirketinde KAPALI; ajansa söylenir', () => {
+    const m = onayKapisi({ ...temel, gercekYayinAcik: false });
+    expect(m).toMatchObject({ tur: 'kabul', kip: 'kapali' });
+    expect(m.tur === 'kabul' && m.ajansNotu).toContain('anahtarı kapalı');
+    const a = onayKapisi({ ...temel, gercekYayinAcik: false, ajansinKendiSirketi: true });
+    expect(a).toMatchObject({ tur: 'kabul', kip: 'test' });
     // Anahtar uyum bağlı değilken gerçeği AÇAMAZ.
     expect(onayKapisi({ ...temel, uyum: 'bagli_degil', gercekYayinAcik: true })).toMatchObject({ kip: 'kapali' });
   });

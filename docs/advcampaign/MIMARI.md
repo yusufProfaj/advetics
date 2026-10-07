@@ -258,3 +258,22 @@ plan toplamının %5'ini aşarsa ajans görünümünde "yeniden hazırla" öneri
 
 **Açık kalan**: uyum kataloğu (S-5, Ajan 2); migration/servis/işçi (Ajan 2); ekranlar (Ajan 3);
 kabul listesindeki 67 "AJAN 4" maddesi ve yeni tabloların RLS testleri (Ajan 4).
+
+## 11. Ajan 2 notları (2026-10-07, ek iş)
+
+- **Pilot gerçek yayın anahtarı** (`ajans_ayari.pilot_gercek_yayin`, varsayılan KAPALI, ajans şirketinin
+  satırı müşteri şirketlerini bağlar, okunamazsa ya da ajans belirsizse KAPALI). Tek kapı `yayinKipi`:
+  anahtar açık + uyum geçti → `gercek`; aksi hâlde ajansın kendi şirketi → `test` (kur, geri oku, açmadan
+  arşivle), müşteri şirketi → `kapali` (platforma hiç yazılmaz). Kullanıcı kararı: müşterinin Meta hesabında
+  test kampanyası istenmedi; Profaj'ın kendi hesabında bir tur temiz geçince anahtarı ajans açar, bekleyen
+  planlar "Şimdi kur" (S-6) ile gerçeğe geçer.
+- **Özel kategori beyanı** `PUT /pilot/workspace-beyani` ile; kolon `clients.special_ad_categories`, iz
+  `clients.ozel_kategori_beyan_*`. Eski Şirketler penceresinin güncellemesi de kolona yazıyor ve artık izi
+  aynı yazımda basıyor; başka yazıcı doğarsa `ozel-kategori-yazicilari.spec.ts` düşer.
+- **Veritabanı CHECK'i (`clients_special_categories_chk`, 01_constraints.sql) eski adları tutuyor:**
+  `HOUSING, EMPLOYMENT, CREDIT, ISSUES_ELECTIONS_POLITICS, ONLINE_GAMBLING_AND_GAMING`.
+  `FINANCIAL_PRODUCTS_SERVICES` CREDIT olarak yazılıyor, okuyucu çeviriyor. **`ONLINE_GAMBLING_AND_GAMING`
+  sözleşmede (`OZEL_KATEGORILER`) YOK:** bu kategoriyi taşıyan bir workspace'te okuyucu beyanı `null`
+  (sorulmadı) sayar, uyum GNL-20 ile ENGEL verir ve `taninmayanKategoriler` alanında görünür. Kategori
+  Advetics'ten kurulmayacaksa beyan yeniden yapılmalı; kurulacaksa sözleşme, hedefleme ve uyum paketine
+  eklenmesi ayrı bir karar.
