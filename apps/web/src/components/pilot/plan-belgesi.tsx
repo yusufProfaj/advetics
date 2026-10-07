@@ -35,7 +35,7 @@ import {
   planAdresi,
   satirCikarIstegi,
 } from './hesap';
-import type { PilotEkranEylemi, PilotPlanDetayi } from './yanitlar';
+import type { PilotEkranEylemi, PilotPlanDetayi } from '@advetics/shared';
 
 /**
  * ═══ ADVSTRATEGY: TEK SAYFA PLAN BELGESİ ═══

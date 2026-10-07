@@ -8,7 +8,7 @@ import { BosHucre } from './kaynak-cipi';
 import { KurulumKarti } from './kurulum-karti';
 import { OneriKartlari } from './oneri-kartlari';
 import { ONERI_BOS_METNI, acilisBasligi, bugunKutulari, kurulumPlanlari, okumaHatasi, pilotAdresi, pilotUcAdresi } from './hesap';
-import type { PilotBugun, PilotKurulumYaniti, PilotOneriListesi, PilotPlanListesi } from './yanitlar';
+import type { PilotBugun, PilotKurulumYaniti, PilotOneriListesi, PilotPlanListesi } from '@advetics/shared';
 
 /**
  * ═══ ADVCAMPAIGN AÇILIŞI: PİLOT ═══

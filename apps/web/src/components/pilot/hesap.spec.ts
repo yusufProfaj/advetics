@@ -40,7 +40,7 @@ import {
   satirCikarIstegi,
   seritDilimleri,
 } from './hesap';
-import type { PilotPlanDetayi, PilotPlanSatiriOzeti } from './yanitlar';
+import type { PilotPlanDetayi, PilotPlanSatiriOzeti } from '@advetics/shared';
 
 /**
  * ═══ PİLOT EKRANLARI — SAF KARARLAR ÇALIŞTIRILARAK ═══

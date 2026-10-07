@@ -48,7 +48,6 @@ describe('tarama boşa düşmüyor', () => {
         'plan-belgesi.tsx',
         'plan-hazirla.tsx',
         'plan-sayfasi.tsx',
-        'yanitlar.ts',
       ].sort(),
     );
     for (const [f, k] of Object.entries(KOD)) expect(k.length, f).toBeGreaterThan(500);
@@ -90,7 +89,6 @@ describe('sessiz hata yok', () => {
 describe('uç ve adres sözleşmeden', () => {
   it('KRİTİK: hiçbir dosya `/pilot/...` yolunu elle kurmuyor', () => {
     for (const [f, k] of Object.entries(KOD)) {
-      if (f === 'yanitlar.ts') continue;
       expect(k, f).not.toMatch(/(?<!pilotUcAdresi\()['`]\/pilot\//);
     }
     // Ve gerçekten kullanılıyor (aksi hâlde yukarıdaki iddia boşa geçer).

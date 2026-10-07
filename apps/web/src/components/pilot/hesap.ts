@@ -27,7 +27,7 @@ import {
 import { ApiRequestError } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { mmAdresi, type MmBolumKodu } from '@/components/marka-merkezi/bolumler';
-import type { OneriBosNedeni, PilotBugun, PilotEkranEylemi, PilotPlanDetayi, PilotPlanSatiriOzeti } from './yanitlar';
+import type { OneriBosNedeni, PilotBugun, PilotEkranEylemi, PilotPlanDetayi, PilotPlanSatiriOzeti } from '@advetics/shared';
 
 /**
  * ═══ PİLOT EKRANLARININ SAF KARARLARI ═══

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { donemEtiketi, donemSecenekleri, okumaHatasi, pilotUcAdresi, planAdresi } from './hesap';
-import type { PilotHazirlaYaniti } from './yanitlar';
+import type { PilotHazirlaYaniti } from '@advetics/shared';
 
 /**
  * ═══ "PLANI HAZIRLA" — İSTENMEDİ HÂLİ ═══

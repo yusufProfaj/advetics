@@ -6,7 +6,7 @@ import { Uyari } from '@/components/ui/uyari';
 import { PlanBelgesi } from './plan-belgesi';
 import { PlanHazirla } from './plan-hazirla';
 import { DURUM_ETIKETI, donemEtiketi, eskiPlanNotu, okumaHatasi, pilotUcAdresi, planAdresi, planSec } from './hesap';
-import type { PilotPlanDetayi, PilotPlanListesi } from './yanitlar';
+import type { PilotPlanDetayi, PilotPlanListesi } from '@advetics/shared';
 
 /**
  * ═══ ADVSTRATEGY AÇILIŞI (YENİ) ═══

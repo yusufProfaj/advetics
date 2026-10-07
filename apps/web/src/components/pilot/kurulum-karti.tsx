@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { KURULUM_DURUM_METNI, ayAdi, eylemIstegi, okumaHatasi, planAdresi, type KurulumTonu } from './hesap';
-import type { PilotKurulumYaniti } from './yanitlar';
+import type { PilotKurulumYaniti } from '@advetics/shared';
 
 /**
  * ═══ KURULUM KARTI (Pilot açılışı) ═══
