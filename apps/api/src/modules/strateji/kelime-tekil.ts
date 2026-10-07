@@ -170,3 +170,41 @@ export function kelimeSonucunuHazirla(
   const tekil = tekillestir(fikirler).sort(hacimKarsilastir);
   return { satirlar: tekil.slice(0, sinir), toplam: tekil.length };
 }
+
+/** Hiçbir tohumu içermeyen ve eşiğin altındaki kelimelerin grubu. */
+export const DIGER_GRUBU = 'Diğer';
+
+/**
+ * ═══ KELİME GRUPLAMA (MIMARI § 6.2) — DETERMİNİSTİK, YAPAY ZEKÂ YOK ═══
+ *
+ * Grup Google'da bir REKLAM GRUBU olacak: aynı kelime listesi her seferinde
+ * aynı gruplara düşmeli ve kullanıcı nedenini görebilmeli. Kural:
+ *   1. Karşılaştırma Türkçe sadeleştirmeyle (`sadelestir`, tekilleştirmeyle
+ *      AYNI fonksiyon: ikinci bir sadeleştirici doğarsa "türk kahve" bir
+ *      ekranda tek satır, diğerinde iki grup olur).
+ *   2. Kelime İÇERDİĞİ EN UZUN tohuma gider; grup adı tohumun kendisi. En
+ *      uzun, çünkü "kahve makinesi" ile "kahve" tohumlarından ikisini de
+ *      içeren "türk kahve makinesi" daha DAR olan gruba ait.
+ *   3. Tohum içermeyen kelime: ayda `AYRI_GRUP_HACIM_ESIGI` ve üstü arama
+ *      alıyorsa kendi adıyla ayrı grup, değilse `Diğer`. Hacmi bilinmeyen
+ *      (`null`) kelime eşiği GEÇMİŞ sayılmaz: kendi grubunu hak ettiğine
+ *      dair kanıt yok.
+ */
+export function kelimeGrubu(
+  kelime: string,
+  aylikArama: bigint | null,
+  tohumlar: readonly string[],
+  esik: number,
+): string {
+  const sade = sadelestir(kelime);
+  let enIyi: { tohum: string; uzunluk: number } | null = null;
+  for (const t of tohumlar) {
+    const st = sadelestir(t);
+    if (st === '' || !sade.includes(st)) continue;
+    // Eşit uzunlukta ilk yazılan tohum kazanır: kararlı çıktı.
+    if (!enIyi || st.length > enIyi.uzunluk) enIyi = { tohum: t.replace(/\s+/g, ' ').trim(), uzunluk: st.length };
+  }
+  if (enIyi) return enIyi.tohum;
+  if (aylikArama !== null && aylikArama >= BigInt(esik)) return kelime;
+  return DIGER_GRUBU;
+}

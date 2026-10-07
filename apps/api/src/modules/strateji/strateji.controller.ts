@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   dagilimKaydetSchema,
   kelimeAraSchema,
@@ -27,8 +28,8 @@ import { StratejiService } from './strateji.service';
  * TEK KAYNAK. Her (yöntem, yol, izin) üçlüsü o listeyle birebir aynı;
  * `strateji-uclari.spec.ts` kaynak taramasıyla kilitliyor.
  *
- * BU TURDA YOK: `GET .../sezon` ve `GET .../pdf` (sonraki tur). Listede
- * duruyorlar, testte açıkça adı geçen istisna olarak.
+ * BU TURDA YOK: `GET .../sezon` (üçüncü tur). Listede duruyor, testte
+ * açıkça adı geçen istisna olarak.
  *
  * Gövde şemaları sözleşmeden; bu dosyada şema tanımı yok.
  */
@@ -58,6 +59,20 @@ export class StratejiController {
   @RequirePermissions('strategy.read')
   plan(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<PlanDetayi> {
     return this.strateji.detay(ctx, id);
+  }
+
+  /**
+   * Medya planı PDF'i. `@Res` ile ham bayt: Nest'in JSON serileştiricisi
+   * Buffer'ı nesneye çevirirdi. Taslak da indirilir; kapakta "TASLAK" yazar.
+   */
+  @Get('planlar/:id/pdf')
+  @RequirePermissions('strategy.read')
+  async pdf(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string, @Res() res: Response): Promise<void> {
+    const { bayt, dosyaAdi } = await this.strateji.pdf(ctx, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${dosyaAdi}"`);
+    res.setHeader('Content-Length', String(bayt.byteLength));
+    res.send(bayt);
   }
 
   @Put('planlar/:id/dagilim')

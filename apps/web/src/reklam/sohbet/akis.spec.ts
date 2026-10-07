@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SohbetOlayi, Soru } from '@advetics/shared';
-import { aracIzleri, bekleyenSoru, olayUygula, olaylariAyikla, sureMetni, type EkranMesaji } from './akis';
+import { aracIzleri, bekleyenSoru, hazirIcerik, olayUygula, olaylariAyikla, sureMetni, type EkranMesaji } from './akis';
 
 /** AdvCampaign akışının saf tarafı (İP-16): ayrıştırma ve ekran durumu. */
 
@@ -96,5 +96,52 @@ describe('ekran kaynağı', () => {
   it('listeler "N / toplam" yazıyor (sessiz kesme yok)', () => {
     expect(KAYNAK).toContain('{oturumlar.satirlar.length} / {oturumlar.toplam}');
     expect(KAYNAK).toContain('{hazirlik.gorseller.satirlar.length} / {hazirlik.gorseller.toplam}');
+  });
+});
+
+describe('AdvStrategy\'den gelen hazır içerik', () => {
+  const gorsel = { id: 'g1', ad: 'kare.jpg', onizlemeAdresi: '/assets/g1/preview', genislik: 1080, yukseklik: 1080 };
+
+  it('KRİTİK: mesajı olmayan oturumda metin ve görseller hazır', () => {
+    expect(hazirIcerik({ hazirIstem: ' 2026-11 medya planından ', hazirMedyalar: ['g1'] }, 0, [gorsel])).toEqual({
+      metin: '2026-11 medya planından',
+      medyalar: [{ id: 'g1', ad: 'kare.jpg', onizlemeAdresi: '/assets/g1/preview', oran: '1080×1080', uyari: null }],
+    });
+  });
+
+  it('KRİTİK: mesajı olan oturumda HİÇBİR ŞEY doldurulmuyor', () => {
+    // Hazır metin gönderilmiş ya da kullanıcı bilerek değiştirmiş; yeniden
+    // doldurmak aynı isteği ikinci kez gönderttirirdi.
+    expect(hazirIcerik({ hazirIstem: 'x', hazirMedyalar: ['g1'] }, 1, [gorsel])).toBeNull();
+  });
+
+  it('aktarımla açılmamış oturum (alan yok ya da boş) dokunulmadan kalıyor', () => {
+    expect(hazirIcerik({}, 0, [gorsel])).toBeNull();
+    expect(hazirIcerik({ hazirIstem: '   ', hazirMedyalar: [] }, 0, [gorsel])).toBeNull();
+    expect(hazirIcerik({ hazirIstem: null, hazirMedyalar: null }, 0, [])).toBeNull();
+  });
+
+  it('KRİTİK: listede olmayan görsel DÜŞMÜYOR, API\'nin önizleme adresiyle ekleniyor', () => {
+    const r = hazirIcerik({ hazirIstem: 'x', hazirMedyalar: ['g1', 'g9', 'g9'] }, 0, [gorsel]);
+    expect(r?.medyalar.map((m) => m.id)).toEqual(['g1', 'g9']);
+    expect(r?.medyalar[1]).toMatchObject({ onizlemeAdresi: '/assets/g9/preview' });
+  });
+});
+
+describe('sohbet ekranı hazır içeriği kullanıyor', () => {
+  const kod = readFileSync(join(__dirname, 'sohbet-ekrani.tsx'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  it('KRİTİK: mesajlar okununca hazır içerik hesaplanıyor ve kullanıcının yazdığı EZİLMİYOR', () => {
+    expect(kod).toContain('hazirIcerik(r.oturum, r.mesajlar.length, hazirlik.gorseller.satirlar)');
+    expect(kod).toContain("setMetin((m) => (m === '' ? hazir.metin : m))");
+    expect(kod).toContain('setMedyalar((x) => (x.length === 0 ? hazir.medyalar : x))');
+  });
+
+  it('hazır içerik MESAJ OLARAK gönderilmiyor; üstte kaynağı yazıyor', () => {
+    // `gonder(` yalnız kullanıcı eylemlerinde: form, Enter, soru seçeneği.
+    expect(kod).not.toMatch(/gonder\(hazir/);
+    expect(kod).toContain('baslik="AdvStrategy planından geldi"');
   });
 });

@@ -166,6 +166,15 @@ describe('plan açma', () => {
     ).rejects.toThrow(/strateji_dagilimlari_plan_fkey/);
   });
 
+  it('PDF: plan ve workspace adıyla üretilir; erişilmeyen workspace’in planı 404', async () => {
+    const d = await planAc();
+    const r = await svc.pdf(AJANS, d.plan.id);
+    expect(r.bayt.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    expect(r.dosyaAdi).toBe('medya-plani-musteri-2026-11-s1-taslak.pdf');
+    const dar = { ...AJANS, clientIds: [OTEKI] } as TenantContext;
+    await expect(svc.pdf(dar, d.plan.id)).rejects.toMatchObject({ status: 404 });
+  });
+
   it('erişimi olmayan workspace reddedilir', async () => {
     const dar = { ...AJANS, clientIds: [IDS.client] } as TenantContext;
     await expect(svc.olustur(dar, { clientId: OTEKI, donem: '2026-11', toplamButce: '1', paraBirimi: 'TRY' })).rejects.toMatchObject({ status: 403 });
@@ -203,10 +212,10 @@ describe('durum makinesi ve sürüm koruması', () => {
     expect(g.plan).toMatchObject({ durum: 'taslak', surum: 2 });
   });
 
-  it('geçiş tablosu dışı eylem 409; aktarım bu turda açık mesajla 400', async () => {
+  it('geçiş tablosu dışı eylem 409 (taslak plan aktarılamaz)', async () => {
     const d = await planAc();
     await expect(svc.eylem(AJANS, d.plan.id, { eylem: 'geri_cek', surum: 1 })).rejects.toMatchObject({ status: 409 });
-    await expect(svc.eylem(AJANS, d.plan.id, { eylem: 'aktar', surum: 1 })).rejects.toThrow('Aktarım henüz kurulmadı.');
+    await expect(svc.eylem(AJANS, d.plan.id, { eylem: 'aktar', surum: 1 })).rejects.toMatchObject({ status: 409 });
   });
 
   it('KRİTİK: onay rolü kaydedilir (client_viewer → musteri) ve onaylanan sürüm basılır', async () => {
@@ -223,11 +232,13 @@ describe('durum makinesi ve sürüm koruması', () => {
     expect(onayRolu({ role: 'ad_manager' })).toBe('ajans');
   });
 
-  it('yapilabilir = durum × izin; aktarım hiç listelenmez; müşteri hesabı yalnız onaylar', () => {
+  it('yapilabilir = durum × izin; aktarım İKİ izin ister; müşteri hesabı yalnız onaylar', () => {
     const yaz = [...resolvePermissions('admin')];
     expect(yapilabilirEylemler('taslak', yaz)).toEqual(['onaya_gonder', 'iptal']);
     expect(yapilabilirEylemler('onayda', yaz)).toEqual(['geri_cek', 'onayla', 'iptal']);
-    expect(yapilabilirEylemler('onaylandi', yaz)).toEqual(['iptal']);
+    expect(yapilabilirEylemler('onaylandi', yaz)).toEqual(['aktar', 'iptal']);
+    // Reklam kurma izni yoksa aktarım düğmesi YOK (açamayacağı oturum üretmesin).
+    expect(yapilabilirEylemler('onaylandi', yaz.filter((i) => i !== 'bulk.write'))).toEqual(['iptal']);
     expect(yapilabilirEylemler('onayda', [...resolvePermissions('client_viewer')])).toEqual(['onayla']);
     expect(yapilabilirEylemler('aktarildi', yaz)).toEqual([]);
   });
@@ -481,8 +492,15 @@ describe('kelimeler', () => {
     expect(a.kelimeler.satirlar[0]).toMatchObject({ secili: true, grup: 'Kahve', aylikArama: 49500 });
     const b = await svc.kelimeGuncelle(AJANS, d.plan.id, { surum: 2, satirlar: [{ id: k!.id, grup: null }] });
     expect(b.kelimeler.satirlar[0]).toMatchObject({ secili: true, grup: null });
+    const elle = async () => (await h.q<{ grup_elle: boolean }>('SELECT grup_elle FROM strateji_kelimeleri WHERE id = $1', [k!.id]))[0]!.grup_elle;
+    // Temizlenen grup otomatiğe bırakılır; yazılan grup ELLE sayılır ve aramada ezilmez.
+    expect(await elle()).toBe(false);
+    await svc.kelimeGuncelle(AJANS, d.plan.id, { surum: 3, satirlar: [{ id: k!.id, grup: 'Benim grubum' }] });
+    expect(await elle()).toBe(true);
+    await svc.kelimeGuncelle(AJANS, d.plan.id, { surum: 4, satirlar: [{ id: k!.id, secili: false }] });
+    expect(await elle()).toBe(true);
     await expect(
-      svc.kelimeGuncelle(AJANS, d.plan.id, { surum: 3, satirlar: [{ id: '99999999-0000-4000-8000-000000000000', secili: true }] }),
+      svc.kelimeGuncelle(AJANS, d.plan.id, { surum: 5, satirlar: [{ id: '99999999-0000-4000-8000-000000000000', secili: true }] }),
     ).rejects.toThrow(/bu planda yok/);
   });
 });

@@ -26,8 +26,8 @@ const APP = oku('../../app.module.ts');
 const WORKER = oku('../../worker.ts');
 const MIGRATION = readFileSync(join(__dirname, '../../../prisma/migrations/20261008120000_advstrategy/migration.sql'), 'utf8');
 
-/** Bu turda kurulmayan uçlar — listede duruyorlar, controller'da YOK. Bilinçli ve adıyla. */
-const BEKLEYEN = new Set(['GET /strateji/planlar/:id/sezon', 'GET /strateji/planlar/:id/pdf']);
+/** Kurulmayan uç — listede duruyor, controller'da YOK. Bilinçli ve adıyla (sezon üçüncü tura kaldı). */
+const BEKLEYEN = new Set(['GET /strateji/planlar/:id/sezon']);
 
 function controllerUclari(): Array<{ anahtar: string; izin: string }> {
   const onek = /@Controller\('([^']+)'\)/.exec(CONTROLLER)?.[1];
@@ -56,7 +56,7 @@ describe('controller ↔ STRATEJI_UCLARI', () => {
     }
   });
 
-  it('KRİTİK: listedeki her uç controller’da var — bekleyen ikisi hariç, ADIYLA', () => {
+  it('KRİTİK: listedeki her uç controller’da var — bekleyen sezon hariç, ADIYLA', () => {
     const var_ = new Set(controllerUclari().map((u) => u.anahtar));
     const eksik = STRATEJI_UCLARI.map((u) => `${u.yontem} ${u.yol}`).filter((a) => !var_.has(a));
     expect(eksik.sort()).toEqual([...BEKLEYEN].sort());
@@ -83,10 +83,17 @@ describe('Nest modül kaydı', () => {
     expect(controllers).toMatch(/\bStratejiController\b/);
     expect(providers).toMatch(/\bStratejiService\b/);
     const servis = oku('strateji.service.ts');
-    const kurucu = /constructor\(([\s\S]*?)\)\s*\{\}/.exec(servis)?.[1];
-    if (!kurucu) throw new Error('StratejiService kurucusu bulunamadı');
+    // Dilim gerçek sınırla: `constructor(` ile parametre listesini kapatan `) {`.
+    const bas = servis.indexOf('constructor(');
+    const son = servis.indexOf('\n  ) {', bas);
+    if (bas < 0 || son < 0) throw new Error('StratejiService kurucusu bulunamadı');
+    const kurucu = servis.slice(bas, son);
     const bagimliliklar = [...kurucu.matchAll(/:\s*(\w+)/g)].map((m) => m[1]!);
-    expect(bagimliliklar).toEqual(['PrismaService', 'StratejiKelimeKuyrugu']);
+    expect(bagimliliklar).toEqual(['PrismaService', 'StratejiKelimeKuyrugu', 'AppConfig']);
+    // AppConfig global CONFIG belirteciyle geliyor; `@Optional` OLMAMALI, yoksa
+    // eksik kayıt açılışta değil oturum açarken sessizce 'test' modeli yazar.
+    expect(kurucu).toMatch(/@Inject\(CONFIG\) config\?: AppConfig/);
+    expect(kurucu).not.toMatch(/@Optional/);
     // PrismaService global modülden; kuyruk BU modülün sağlayıcısı olmalı.
     expect(providers).toMatch(/\bStratejiKelimeKuyrugu\b/);
     // Başka bir iş modülüne bağımlılık yok (açılışta grafik kırılmasın).

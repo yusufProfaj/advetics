@@ -1,4 +1,5 @@
-import type { MesajDurumu, SohbetOlayi } from '@advetics/shared';
+import type { HazirlikGorseli, MesajDurumu, SohbetOlayi } from '@advetics/shared';
+import type { YuklenenMedya } from '../medya';
 
 /**
  * AdvCampaign akışının SAF tarafı: SSE ayrıştırma ve olayların ekran
@@ -92,4 +93,47 @@ export function bekleyenSoru(mesajlar: EkranMesaji[]) {
 /** "1,2 sn" — Türkçe ondalık. */
 export function sureMetni(ms: number): string {
   return `${(ms / 1000).toFixed(1).replace('.', ',')} sn`;
+}
+
+/**
+ * ═══ ADVSTRATEGY'DEN GELEN OTURUMUN HAZIR İÇERİĞİ ═══
+ *
+ * Plan aktarılınca oturum `hazirIstem` (giriş kutusu metni) ve
+ * `hazirMedyalar` (Base varlık kimlikleri) ile açılıyor (MIMARI §6.1).
+ * Ekran bunları MESAJ OLARAK GÖNDERMİYOR, kutuya koyuyor: kullanıcı ne
+ * gönderdiğini görüp düzeltebilmeli ve sohbet döngüsü cevapsız bir tur
+ * görmemeli.
+ *
+ * YALNIZ MESAJI OLMAYAN OTURUMDA. Mesajı olan oturumda hazır metin zaten
+ * gönderilmiş ya da bilerek değiştirilmiş demek; yeniden doldurmak
+ * kullanıcının yazdığını ezer ya da aynı isteği ikinci kez gönderttirirdi.
+ *
+ * GÖRSELLER AYNI YOLDAN. Medya kutusu `YuklenenMedya` taşıyor; arşivden
+ * seçilen görsel de aynı biçime çevriliyor. Hazırlık listesi görselleri
+ * kesik getirebiliyor (`satirlar / toplam`); listede olmayan kimlik için
+ * önizleme adresi API'nin kendi biçiminden (`/assets/<id>/preview`) kuruluyor,
+ * görsel DÜŞÜRÜLMÜYOR: düşürmek müşterinin onayladığı kreatifi sessizce
+ * eksiltirdi.
+ */
+export interface HazirOturumAlanlari {
+  hazirIstem?: string | null;
+  hazirMedyalar?: readonly string[] | null;
+}
+
+export function hazirIcerik(
+  oturum: HazirOturumAlanlari,
+  mesajSayisi: number,
+  gorseller: readonly HazirlikGorseli[],
+): { metin: string; medyalar: YuklenenMedya[] } | null {
+  if (mesajSayisi > 0) return null;
+  const metin = oturum.hazirIstem?.trim() ?? '';
+  const kimlikler = [...new Set(oturum.hazirMedyalar ?? [])];
+  if (metin === '' && kimlikler.length === 0) return null;
+  const medyalar = kimlikler.map((id): YuklenenMedya => {
+    const g = gorseller.find((x) => x.id === id);
+    return g
+      ? { id, ad: g.ad, onizlemeAdresi: g.onizlemeAdresi, oran: `${g.genislik}×${g.yukseklik}`, uyari: null }
+      : { id, ad: 'Plan görseli', onizlemeAdresi: `/assets/${id}/preview`, oran: '', uyari: null };
+  });
+  return { metin, medyalar };
 }

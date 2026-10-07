@@ -1,17 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PlanDetayi } from '@advetics/shared';
 import { formatMoney } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
 import {
   REKABET_ETIKETI,
+  DIGER_GRUBU,
   aylikAramaMetni,
+  grupSecimHali,
+  kelimeGruplari,
   kelimeDegisiklikleri,
   tohumlariAyir,
   ucAdresi,
   zamanMetni,
+  type KelimeGrubu,
 } from './hesap';
 import { BolumBasligi, GIRDI_SINIFI, KilitNotu, TabloKabi, planaYaz } from './ortak';
 
@@ -59,6 +63,8 @@ export function AramaBolumu({
   const degisiklik = useMemo(() => kelimeDegisiklikleri(kelimeler.satirlar, taslak), [kelimeler.satirlar, taslak]);
   const seciliSayisi = Object.values(taslak).filter((t) => t.secili).length;
   const sonCekim = kelimeler.satirlar.reduce<string | null>((son, s) => (son === null || s.cekimZamani > son ? s.cekimZamani : son), null);
+  const gruplu = useMemo(() => kelimeGruplari(kelimeler.satirlar, taslak), [kelimeler.satirlar, taslak]);
+  const seciliArama = gruplu.reduce((t, g) => t + g.seciliArama, 0);
   const gruplar = useMemo(
     () => [...new Set(Object.values(taslak).map((t) => t.grup.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
     [taslak],
@@ -109,6 +115,26 @@ export function AramaBolumu({
     } else {
       setKayitMesaji({ ton: r.tur === 'cakisma' ? 'uyari' : 'tehlike', metin: r.mesaj });
     }
+  }
+
+  /** Gruptaki bütün satırlara aynı değişiklik: toplu seçim ya da grubun adı. */
+  function grupGuncelle(g: KelimeGrubu, deger: Partial<{ secili: boolean; grup: string }>) {
+    setTaslak((t) => {
+      const yeni = { ...t };
+      for (const s of g.satirlar) {
+        const eski = yeni[s.id];
+        if (eski) yeni[s.id] = { ...eski, ...deger };
+      }
+      return yeni;
+    });
+    setKirli(true);
+    setKayitMesaji(null);
+  }
+
+  /** Başlıktaki ad: satırların taslak adı ortaksa o, değilse kayıtlı ad. */
+  function grupAdi(g: KelimeGrubu): string {
+    const adlar = new Set(g.satirlar.map((s) => taslak[s.id]?.grup ?? s.grup ?? ''));
+    return adlar.size === 1 ? [...adlar][0]! : g.anahtar;
   }
 
   function guncelle(id: string, deger: Partial<{ secili: boolean; grup: string }>) {
@@ -193,6 +219,7 @@ export function AramaBolumu({
               {/* SESSİZ KESME YOK: Google binlerce fikir döndürüyor, plan ilk N'i taşıyor. */}
               {kelimeler.gosterilen.toLocaleString('tr-TR')} / {kelimeler.toplam.toLocaleString('tr-TR')} kelime gösteriliyor ·{' '}
               {seciliSayisi} seçili
+              {seciliSayisi > 0 && ` · seçililer ayda yaklaşık ${seciliArama.toLocaleString('tr-TR')} arama`}
             </span>
             {sonCekim && <span>Google’dan çekildi: {zamanMetni(sonCekim)}</span>}
           </div>
@@ -208,47 +235,62 @@ export function AramaBolumu({
                   <th className="px-3 py-2 font-semibold">Reklam grubu</th>
                 </tr>
               </thead>
-              <tbody>
-                {kelimeler.satirlar.map((s) => {
-                  const t = taslak[s.id] ?? { secili: s.secili, grup: s.grup ?? '' };
-                  return (
-                    <tr key={s.id} className="border-t border-line align-top">
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-brand"
-                          aria-label={`${s.kelime} plana alınsın`}
-                          checked={t.secili}
-                          disabled={kilit !== null}
-                          onChange={(e) => guncelle(s.id, { secili: e.target.checked })}
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-ink">
-                        {s.kelime}
-                        {s.varyantlar.length > 0 && (
-                          <span className="mt-0.5 block text-xs text-ink-muted">Aynı sayılan: {s.varyantlar.join(', ')}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{aylikAramaMetni(s.aylikArama)}</td>
-                      <td className="px-3 py-2">{s.rekabet ? REKABET_ETIKETI[s.rekabet] : 'veri yok'}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        <TeklifAraligi alt={s.teklifAltMicros} ust={s.teklifUstMicros} para={plan.paraBirimi} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          aria-label={`${s.kelime} reklam grubu`}
-                          list="kelime-gruplari"
-                          maxLength={80}
-                          className={`${GIRDI_SINIFI} min-w-[10rem]`}
-                          value={t.grup}
-                          disabled={kilit !== null}
-                          onChange={(e) => guncelle(s.id, { grup: e.target.value })}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+              {/*
+                GRUPLU GÖRÜNÜM: grup Google'da bir reklam grubu olacak, karar
+                da grup grup veriliyor. Her grubun başlığında toplu seçim, ad
+                değiştirme ve toplam hacim; tek bir kelimeyi başka gruba
+                taşımak için satırdaki kutu duruyor.
+              */}
+              {gruplu.map((g) => (
+                <tbody key={g.anahtar || '(grupsuz)'}>
+                  <GrupBasligi
+                    grup={g}
+                    ad={grupAdi(g)}
+                    kilitli={kilit !== null}
+                    secimDegistir={(secili) => grupGuncelle(g, { secili })}
+                    adDegistir={(ad) => grupGuncelle(g, { grup: ad })}
+                  />
+                  {g.satirlar.map((s) => {
+                    const t = taslak[s.id] ?? { secili: s.secili, grup: s.grup ?? '' };
+                    return (
+                      <tr key={s.id} className="border-t border-line align-top">
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-brand"
+                            aria-label={`${s.kelime} plana alınsın`}
+                            checked={t.secili}
+                            disabled={kilit !== null}
+                            onChange={(e) => guncelle(s.id, { secili: e.target.checked })}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-ink">
+                          {s.kelime}
+                          {s.varyantlar.length > 0 && (
+                            <span className="mt-0.5 block text-xs text-ink-muted">Aynı sayılan: {s.varyantlar.join(', ')}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{aylikAramaMetni(s.aylikArama)}</td>
+                        <td className="px-3 py-2">{s.rekabet ? REKABET_ETIKETI[s.rekabet] : 'veri yok'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          <TeklifAraligi alt={s.teklifAltMicros} ust={s.teklifUstMicros} para={plan.paraBirimi} />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            aria-label={`${s.kelime} reklam grubu`}
+                            list="kelime-gruplari"
+                            maxLength={80}
+                            className={`${GIRDI_SINIFI} min-w-[10rem]`}
+                            value={t.grup}
+                            disabled={kilit !== null}
+                            onChange={(e) => guncelle(s.id, { grup: e.target.value })}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              ))}
             </table>
           </TabloKabi>
           <datalist id="kelime-gruplari">
@@ -327,5 +369,69 @@ function TeklifAraligi({ alt, ust, para }: { alt: string | null; ust: string | n
     <>
       {formatMoney(alt, para)} - {formatMoney(ust, para)}
     </>
+  );
+}
+
+/**
+ * Grup başlığı. Toplu seçim kutusu ÜÇ HÂLLİ (hepsi / hiçbiri / bazısı):
+ * iki hâlli bir kutu "bazısı seçili" grubu ya seçili ya seçilmemiş gösterir
+ * ve kullanıcı grubun yarısının plana girdiğini göremezdi.
+ *
+ * TOPLAM "yaklaşık" ve hacmi bilinmeyen kelimeler SAYILIYOR: toplam onlar
+ * olmadan hesaplanıyor ve bunu söylemezse küçük görünür.
+ */
+function GrupBasligi({
+  grup,
+  ad,
+  kilitli,
+  secimDegistir,
+  adDegistir,
+}: {
+  grup: KelimeGrubu;
+  ad: string;
+  kilitli: boolean;
+  secimDegistir: (secili: boolean) => void;
+  adDegistir: (ad: string) => void;
+}) {
+  const kutu = useRef<HTMLInputElement>(null);
+  const hal = grupSecimHali(grup);
+  useEffect(() => {
+    if (kutu.current) kutu.current.indeterminate = hal === 'bazisi';
+  }, [hal]);
+  const baslik = grup.anahtar === '' ? 'Grupsuz' : grup.anahtar;
+  return (
+    <tr className="border-t-2 border-line bg-surface-muted">
+      <td className="px-3 py-2">
+        <input
+          ref={kutu}
+          type="checkbox"
+          className="h-4 w-4 accent-brand"
+          aria-label={`${baslik} grubundaki bütün kelimeler plana alınsın`}
+          checked={hal === 'hepsi'}
+          disabled={kilitli}
+          onChange={() => secimDegistir(hal !== 'hepsi')}
+        />
+      </td>
+      <td colSpan={5} className="px-3 py-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          {kilitli || grup.anahtar === '' ? (
+            <span className="font-semibold text-ink">{baslik}</span>
+          ) : (
+            <input
+              aria-label={`${baslik} grubunun adı`}
+              maxLength={80}
+              className={`${GIRDI_SINIFI} max-w-[16rem] font-semibold`}
+              value={ad}
+              onChange={(e) => adDegistir(e.target.value)}
+            />
+          )}
+          <span className="text-xs text-ink-muted">
+            {grup.satirlar.length} kelime · {grup.secili} seçili · ayda yaklaşık {grup.toplamArama.toLocaleString('tr-TR')} arama
+            {grup.veriYok > 0 && ` (${grup.veriYok} kelimede veri yok)`}
+            {grup.anahtar === DIGER_GRUBU && ' · tohumların dışında kalan küçük kelimeler'}
+          </span>
+        </div>
+      </td>
+    </tr>
   );
 }

@@ -235,8 +235,9 @@ describe('uç başına yetki (PermissionsGuard ile aynı çekirdek)', () => {
     }
   };
 
-  it('BOŞA DÜŞME BEKÇİSİ: yansımadan on uç okundu', () => {
-    expect(uclar).toHaveLength(10);
+  it('BOŞA DÜŞME BEKÇİSİ: yansımadan on bir uç okundu', () => {
+    // İkinci tur: GET .../pdf eklendi (Ajan 2, MIMARI § 6.3).
+    expect(uclar).toHaveLength(11);
   });
 
   it('KRİTİK: HER uçta izin dekoratörü var (eksik dekoratör = guard true döner = açık uç)', () => {

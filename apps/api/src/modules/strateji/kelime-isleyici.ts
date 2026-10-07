@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
-import { KELIME_VARSAYILAN_HEDEF } from '@advetics/shared';
+import { AYRI_GRUP_HACIM_ESIGI, KELIME_VARSAYILAN_HEDEF } from '@advetics/shared';
 import { PlatformApiError } from '../connections/provider.types';
-import { kelimeSonucunuHazirla, type HamKelimeFikri } from './kelime-tekil';
+import { kelimeGrubu, kelimeSonucunuHazirla, type HamKelimeFikri } from './kelime-tekil';
 import type { KelimeAramaIsi } from './kelime-kuyrugu';
 
 /**
@@ -198,22 +198,26 @@ export async function kelimeIsiniIsle(d: KelimeIsleyiciBagimliliklari, is: Kelim
     if (guncel?.kelime_arama_id !== is.aramaId) return 'bayat' as const;
     if (guncel.durum !== 'taslak') return 'taslak_degil' as const;
     /*
-     * SEÇİLİ SATIRLAR KALIR. Kullanıcının plana aldığı kelime ve verdiği
-     * grup adı onun kararı: yeni arama yalnızca SEÇİLMEMİŞ fikirleri
-     * değiştiriyor. Aynı kelime yeniden gelirse metrikleri tazeleniyor,
-     * seçimi ve grubu korunuyor.
+     * SEÇİLİ ya da GRUBU ELLE YAZILMIŞ SATIRLAR KALIR. İkisi de kullanıcının
+     * kararı: yeni arama yalnızca kullanıcının dokunmadığı fikirleri
+     * değiştiriyor (elle grup verilmiş bir fikri silmek, o emeği aramayla
+     * sessizce yok etmek olurdu). Aynı kelime
+     * yeniden gelirse metrikleri tazeleniyor, seçimi korunuyor; grubu bu
+     * aramanın tohumlarıyla yeniden hesaplanıyor, ELLE YAZILMIŞSA
+     * (`grup_elle`) dokunulmuyor (MIMARI § 6.2).
      */
     await t.$executeRaw(Prisma.sql`
-      DELETE FROM strateji_kelimeleri WHERE plan_id = ${is.planId}::uuid AND secili = false`);
+      DELETE FROM strateji_kelimeleri WHERE plan_id = ${is.planId}::uuid AND secili = false AND grup_elle = false`);
     const degerler = satirlar.map(
       (s) => Prisma.sql`(${is.planId}::uuid, ${plan.org_id}::uuid, ${plan.client_id}::uuid, ${s.kelime},
         ${s.varyantlar}::text[], ${s.aylikArama}::bigint, ${s.rekabet}, ${s.teklifAltMicros}::bigint,
-        ${s.teklifUstMicros}::bigint, ${cekim}::timestamptz, ${kaynakIstek}::jsonb)`,
+        ${s.teklifUstMicros}::bigint, ${cekim}::timestamptz, ${kaynakIstek}::jsonb,
+        ${kelimeGrubu(s.kelime, s.aylikArama, is.tohumlar, AYRI_GRUP_HACIM_ESIGI)})`,
     );
     await t.$executeRaw(Prisma.sql`
       INSERT INTO strateji_kelimeleri
         (plan_id, org_id, client_id, kelime, varyantlar, aylik_arama, rekabet,
-         teklif_alt_micros, teklif_ust_micros, cekim_zamani, kaynak_istek)
+         teklif_alt_micros, teklif_ust_micros, cekim_zamani, kaynak_istek, grup)
       VALUES ${Prisma.join(degerler)}
       ON CONFLICT (plan_id, lower(kelime)) DO UPDATE SET
         varyantlar = EXCLUDED.varyantlar,
@@ -222,7 +226,8 @@ export async function kelimeIsiniIsle(d: KelimeIsleyiciBagimliliklari, is: Kelim
         teklif_alt_micros = EXCLUDED.teklif_alt_micros,
         teklif_ust_micros = EXCLUDED.teklif_ust_micros,
         cekim_zamani = EXCLUDED.cekim_zamani,
-        kaynak_istek = EXCLUDED.kaynak_istek`);
+        kaynak_istek = EXCLUDED.kaynak_istek,
+        grup = CASE WHEN strateji_kelimeleri.grup_elle THEN strateji_kelimeleri.grup ELSE EXCLUDED.grup END`);
     /*
      * TOPLAM, ÖNCEKİ ARAMADAN KALAN SEÇİLİ SATIRLARI DA SAYAR. Bu aramada
      * gelmeyen ama kullanıcının seçtiği eski kelimeler tabloda duruyor;

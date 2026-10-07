@@ -57,9 +57,9 @@ function blok(metin: string, ac: number): string {
 }
 
 describe('tarama boşa düşmüyor', () => {
-  it('sayfa ve yedi bileşen dosyası okundu', () => {
+  it('sayfa ve sekiz bileşen dosyası okundu', () => {
     expect(Object.keys(KOD).sort()).toEqual(
-      ['arama-bolumu.tsx', 'butce-bolumu.tsx', 'hesap.ts', 'matris-bolumu.tsx', 'ortak.tsx', 'page', 'plan-ekrani.tsx', 'plan-listesi.tsx'].sort(),
+      ['arama-bolumu.tsx', 'butce-bolumu.tsx', 'hesap.ts', 'matris-bolumu.tsx', 'ortak.tsx', 'page', 'plan-ekrani.tsx', 'plan-listesi.tsx', 'sunum-bolumu.tsx'].sort(),
     );
     for (const k of Object.values(KOD)) expect(k.length).toBeGreaterThan(500);
   });
@@ -172,5 +172,52 @@ describe('adres ve sürüm', () => {
     const govde = blok(ekran, ekran.indexOf('(', effect));
     expect(govde).toContain('aramaSuruyor');
     expect(govde).toMatch(/return \(\) => window\.clearTimeout\(t\)/);
+  });
+});
+
+describe('ikinci tur: aktarım, sunum, gruplar', () => {
+  it('KRİTİK: aktarım önizlemesi sözleşmenin `aktarimEngeli` kararıyla', () => {
+    const hesap = kod('hesap.ts');
+    expect(hesap).toMatch(/import \{[^}]*\baktarimEngeli\b[^}]*\} from '@advetics\/shared'/);
+    expect(hesap).toContain('aktarimEngeli({');
+    expect(hesap).not.toMatch(/function aktarimEngeli/);
+    // Panelde ikinci bir platform listesi yok: hangi platformun aktarıldığını sözleşme söylüyor.
+    for (const [ad, k] of Object.entries(KOD)) expect(k, ad).not.toContain('AKTARILABILIR_PLATFORMLAR');
+  });
+
+  it('KRİTİK: aktar düğmesi önce önizlemeyi açıyor, eylemi önizlemedeki onay yapıyor', () => {
+    const ekran = kod('plan-ekrani.tsx');
+    expect(ekran).toContain("onClick={() => setOnayBekleyen(d.eylem as 'iptal' | 'aktar')}");
+    expect(ekran).toContain('onizleme={aktarimOnizlemesi(detay)}');
+    expect(ekran).toContain("onayla={() => void eylemYap('aktar')}");
+    // Hiç satır gitmeyecekse onay kapalı.
+    expect(ekran).toContain('disabled={gidecek.length === 0}');
+  });
+
+  it('KRİTİK: PDF adresi TEK üreticiden — başka hiçbir dosya `/pdf` kurmuyor', () => {
+    for (const [ad, k] of Object.entries(KOD)) {
+      if (ad === 'hesap.ts') continue;
+      expect(k, ad).not.toMatch(/\/pdf/);
+    }
+    expect(kod('sunum-bolumu.tsx')).toContain('fetch(pdfAdresi(plan.id)');
+  });
+
+  it('sunum bölümü sürümü ve taslak uyarısını gösteriyor, sürüm istek anında sabitleniyor', () => {
+    const sunum = kod('sunum-bolumu.tsx');
+    expect(sunum).toContain('sunumNotu(plan.durum)');
+    expect(sunum).toContain('Sürüm {plan.surum}');
+    expect(sunum).toContain('const surum = plan.surum;');
+    expect(sunum).toContain("setHal({ tur: 'hata', mesaj })");
+    expect(kod('plan-ekrani.tsx')).toContain('<SunumBolumu plan={plan} kaydedilmemis={kaydedilmemis} />');
+  });
+
+  it('KRİTİK: kelime tablosu `kelimeGruplari`ndan gruplu çiziliyor, grup adı mevcut PATCH ile', () => {
+    const arama = kod('arama-bolumu.tsx');
+    expect(arama).toContain('kelimeGruplari(kelimeler.satirlar, taslak)');
+    expect(arama).toContain('gruplu.map((g) => (');
+    expect(arama).toContain('adDegistir={(ad) => grupGuncelle(g, { grup: ad })}');
+    // Kayıt yolu değişmedi: yalnız değişen satırlar, tek PATCH.
+    expect(arama).toContain("ucAdresi('/strateji/planlar/:id/kelimeler', plan.id)");
+    expect(arama).toContain('kelimeDegisiklikleri(kelimeler.satirlar, taslak)');
   });
 });

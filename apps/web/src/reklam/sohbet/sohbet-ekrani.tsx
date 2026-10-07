@@ -19,9 +19,16 @@ import { API_URL, ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { Onizleme } from '../studyo/onizleme';
 import { Dugme, Kutu, dugmeSinifi } from '../ui';
 import { medyaYukle, type YuklenenMedya } from '../medya';
-import { aracIzleri, bekleyenSoru, olayUygula, olaylariAyikla, sureMetni, type EkranMesaji } from './akis';
+import { aracIzleri, bekleyenSoru, hazirIcerik, olayUygula, olaylariAyikla, sureMetni, type EkranMesaji, type HazirOturumAlanlari } from './akis';
 
-interface OturumOzeti {
+/*
+ * OTURUM ÖZETİ PANELİN KENDİ TİPİ (shared'da karşılığı yok, API'de
+ * `sohbet.service.ts#OturumOzeti`). `HazirOturumAlanlari` AdvStrategy
+ * aktarımının iki alanı (MIMARI §6.1); isteğe bağlı, çünkü eski oturumlar
+ * ve aktarımla açılmamış oturumlar taşımıyor. Tip shared'a taşınınca bu
+ * arayüz kalkmalı (devir notu).
+ */
+interface OturumOzeti extends HazirOturumAlanlari {
   id: string;
   baslik: string;
   taslakId: string | null;
@@ -80,6 +87,12 @@ export function SohbetEkrani({
   const [arsivAcik, setArsivAcik] = useState(false);
   const [mobilSekme, setMobilSekme] = useState<'sohbet' | 'taslak'>('sohbet');
   const [taslakYeni, setTaslakYeni] = useState(false);
+  /*
+   * Hazır içeriği hangi oturum için koyduğumuz. Oturum değişince kutuda
+   * hâlâ AYNEN o içerik duruyorsa kaldırılıyor (başka oturuma taşınmasın);
+   * kullanıcı dokunduysa onun yazdığı kalıyor.
+   */
+  const [plandan, setPlandan] = useState<{ oturumId: string; metin: string } | null>(null);
   const yazmaAlani = useRef<HTMLTextAreaElement>(null);
   const akisSonu = useRef<HTMLDivElement>(null);
   const oturum = oturumlar.satirlar.find((o) => o.id === oturumId) ?? null;
@@ -101,6 +114,14 @@ export function SohbetEkrani({
         const r = await apiFetch<{ oturum: OturumOzeti; mesajlar: EkranMesaji[] }>(`/reklam/sohbet/oturumlar/${id}/mesajlar`);
         setMesajlar(r.mesajlar);
         setMesajHali('hazir');
+        // AdvStrategy'den gelen boş oturum: kutu ve ekler hazır dolar, gönderen kullanıcı.
+        const hazir = hazirIcerik(r.oturum, r.mesajlar.length, hazirlik.gorseller.satirlar);
+        if (hazir) {
+          // Kutu boşsa doldur: yoklama ya da yeniden okuma kullanıcının yazdığını ezmesin.
+          setMetin((m) => (m === '' ? hazir.metin : m));
+          setMedyalar((x) => (x.length === 0 ? hazir.medyalar : x));
+          setPlandan({ oturumId: id, metin: hazir.metin });
+        }
         if (r.oturum.taslakId) void taslakOku(r.oturum.taslakId);
         else setTaslak(null);
         return r;
@@ -109,7 +130,7 @@ export function SohbetEkrani({
         return null;
       }
     },
-    [taslakOku],
+    [taslakOku, hazirlik.gorseller.satirlar],
   );
 
   useEffect(() => {
@@ -139,6 +160,13 @@ export function SohbetEkrani({
   }, [akis, oturumId, mesajlariOku]);
 
   function oturumSec(id: string | null) {
+    if (plandan && plandan.oturumId !== id) {
+      if (metin === plandan.metin) {
+        setMetin('');
+        setMedyalar([]);
+      }
+      setPlandan(null);
+    }
     setOturumId(id);
     setMesajlar([]);
     setTaslak(null);
@@ -200,6 +228,7 @@ export function SohbetEkrani({
     ]);
     setMetin('');
     setMedyalar([]);
+    setPlandan(null);
     setAkis('bagli');
     let res: Response;
     try {
@@ -271,7 +300,12 @@ export function SohbetEkrani({
             {mesajHali.hata}
           </Kutu>
         )}
-        {(mesajHali === 'yok' || (mesajHali === 'hazir' && mesajlar.length === 0)) && (
+        {plandan && plandan.oturumId === oturumId && mesajlar.length === 0 && (
+          <Kutu ton="bilgi" baslik="AdvStrategy planından geldi">
+            Mesaj ve görseller plandan hazır. Göz at, istersen düzelt, sonra gönder.
+          </Kutu>
+        )}
+        {(mesajHali === 'yok' || (mesajHali === 'hazir' && mesajlar.length === 0 && !plandan)) && (
           <div className="mx-auto max-w-lg py-10 text-center">
             <span className="adv-yorunge mb-3">
               <i />

@@ -107,7 +107,8 @@ describe('kelime araması işleyicisi', () => {
   it('KRİTİK: yeni arama SEÇİLİ satırı ve grubunu korur, seçilmemişleri değiştirir; toplam kalanı sayar', async () => {
     fikirler.mockResolvedValueOnce([f('filtre kahve', '49500'), f('eski kelime', '100'), f('secili eski', '50')]);
     await kelimeIsiniIsle(bag(), { planId, aramaId: ARAMA, tohumlar: ['a b'] });
-    await h.q(`UPDATE strateji_kelimeleri SET secili = true, grup = 'Kahve' WHERE kelime IN ('filtre kahve', 'secili eski')`);
+    // Grup ELLE yazılmış (grup_elle): yeni aramanın otomatik gruplaması ezmemeli.
+    await h.q(`UPDATE strateji_kelimeleri SET secili = true, grup = 'Kahve', grup_elle = true WHERE kelime IN ('filtre kahve', 'secili eski')`);
     fikirler.mockResolvedValueOnce([f('Filtre Kahve', '60500'), f('yeni kelime', '200')]);
     await h.q(`UPDATE strateji_planlari SET kelime_arama = 'kuyrukta'`);
     await kelimeIsiniIsle(bag(), { planId, aramaId: ARAMA, tohumlar: ['c d'] });
@@ -118,7 +119,7 @@ describe('kelime araması işleyicisi', () => {
       // Metrik tazelendi, seçim ve grup korundu; ad ilk yazılan kalıyor.
       { kelime: 'filtre kahve', secili: true, grup: 'Kahve', aylik_arama: '60500' },
       { kelime: 'secili eski', secili: true, grup: 'Kahve', aylik_arama: '50' },
-      { kelime: 'yeni kelime', secili: false, grup: null, aylik_arama: '200' },
+      { kelime: 'yeni kelime', secili: false, grup: 'Diğer', aylik_arama: '200' },
     ]);
     expect((await plan()).kelime_toplam).toBe(3);
   });
@@ -177,5 +178,32 @@ describe('kelime araması işleyicisi', () => {
     });
     await kelimeIsiniIsle(bag(), { planId, aramaId: ARAMA, tohumlar: ['a b'] });
     expect(await plan()).toMatchObject({ kelime_arama: 'kuyrukta', kelime_son_hata: null, kelime_erisim: null });
+  });
+
+  it('KRİTİK: arama sonucu tohuma göre GRUPLANIR; elle grup ezilmez, otomatik grup yeniden hesaplanır', async () => {
+    fikirler.mockResolvedValueOnce([f('türk kahve makinesi', '74000'), f('philips espresso', '165000'), f('az aranan', '10')]);
+    await kelimeIsiniIsle(bag(), { planId, aramaId: ARAMA, tohumlar: ['kahve', 'kahve makinesi'] });
+    const g = async () =>
+      Object.fromEntries(
+        (await h.q<{ kelime: string; grup: string }>('SELECT kelime, grup FROM strateji_kelimeleri')).map((r) => [r.kelime, r.grup]),
+      );
+    expect(await g()).toEqual({ 'türk kahve makinesi': 'kahve makinesi', 'philips espresso': 'philips espresso', 'az aranan': 'Diğer' });
+
+    await h.q(`UPDATE strateji_kelimeleri SET grup = 'Elle', grup_elle = true WHERE kelime = 'philips espresso'`);
+    await h.q(`UPDATE strateji_planlari SET kelime_arama = 'kuyrukta'`);
+    fikirler.mockResolvedValueOnce([f('türk kahve makinesi', '74000'), f('philips espresso', '165000')]);
+    await kelimeIsiniIsle(bag(), { planId, aramaId: ARAMA, tohumlar: ['türk'] });
+    expect(await g()).toEqual({ 'türk kahve makinesi': 'türk', 'philips espresso': 'Elle' });
+  });
+
+  it('KRİTİK: grubu elle YAZILMAMIŞ ama SEÇİLİ satır da yeni aramada silinmez', async () => {
+    fikirler.mockResolvedValueOnce([f('secili otomatik', '100'), f('secilmemis', '100')]);
+    await kelimeIsiniIsle(bag(), { planId, aramaId: ARAMA, tohumlar: ['a b'] });
+    await h.q(`UPDATE strateji_kelimeleri SET secili = true WHERE kelime = 'secili otomatik'`);
+    await h.q(`UPDATE strateji_planlari SET kelime_arama = 'kuyrukta'`);
+    fikirler.mockResolvedValueOnce([f('yeni', '100')]);
+    await kelimeIsiniIsle(bag(), { planId, aramaId: ARAMA, tohumlar: ['c d'] });
+    const r = await h.q<{ kelime: string }>('SELECT kelime FROM strateji_kelimeleri ORDER BY kelime');
+    expect(r.map((x) => x.kelime)).toEqual(['secili otomatik', 'yeni']);
   });
 });

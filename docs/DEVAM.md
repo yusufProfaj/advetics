@@ -42,8 +42,17 @@ dörde çıktı (AdvStrategy): kullanıcı onayı bekleniyor.
 transaction açmıyordu; BIGINT taşan bütçe) ve üç düşük bulgu Ajan 2'de
 kapandı. Deploy sonrası Ajan 4'ün salt okunur SQL kontrolleri (yetki
 override'ı taşıyan üyelikler, RLS politika sayıları, takılmış arama).
-**Sıradaki:** deploy (Ajan 5), sonra ikinci tur (PDF, sezon, aktarım,
-kelime gruplama).
+**Birinci tur CANLIDA (2026-10-08).** Müşteri hesabı dört ekran görür
+(kullanıcı kararı, CLAUDE.md §5).
+**İkinci tur yazıldı, DEPLOY EDİLMEDİ:** AdvCampaign'e aktarım (hazır
+doldurulmuş oturum: `adv_oturum.hazir_istem/hazir_medyalar`, yalnız Meta),
+deterministik kelime gruplama (`grup_elle` korunur), PDF medya planı +
+Sunum bölümü. MIGRATION VAR: `20261008140000_advstrategy_aktarim` (var
+olan `adv_oturum`a kolon). **Sıradaki:** Ajan 4 kapısı → deploy → canlı
+kontrol (aktarılan oturumda giriş kutusu dolu mu, gönderince görseller
+modele ulaşıyor mu). Üçüncü tur: sezon/takvim (özel gün listesini kimin
+dolduracağı belirsiz), PDF indirme denetim kaydı, panelde `grupElle`
+işareti.
 
 **ADVCAMPAIGN (2026-10-07, kullanıcı kararı):** eski Reklam Oluştur, AI
 Asistan ve Toplu Oluştur KALDIRILDI (panel + API `ai-assistant` sohbeti ve

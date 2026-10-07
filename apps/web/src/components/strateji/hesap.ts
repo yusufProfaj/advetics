@@ -1,5 +1,7 @@
 import {
   AKTARIM_ATLAMA_NEDENLERI,
+  NIYET_KATALOGU,
+  aktarimEngeli,
   HUNI_KATMANLARI,
   STRATEJI_PLATFORMLARI,
   STRATEJI_UCLARI,
@@ -18,13 +20,14 @@ import {
   type HuniKatmani,
   type KelimeSatiri,
   type MatrisSatiri,
+  type PlanDetayi,
   type NiyetKodu,
   type PlanDurumu,
   type PlanEylemi,
   type PlanOzeti,
   type StratejiPlatformu,
 } from '@advetics/shared';
-import { ApiRequestError } from '@/lib/api';
+import { API_URL, ApiRequestError } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 
 /**
@@ -41,21 +44,24 @@ import { baglanti } from '@/lib/baglanti';
 // ─── Bölüm ve adres ─────────────────────────────────────────────────────────
 
 /*
- * YALNIZ ÜÇ BÖLÜM. Planın `sunum` ve `takvim` bölümleri de var ama bu turda
- * yazılmadı; menüde görünüp tıklanınca boş açılan bir sekme, "menüde ekranı
+ * DÖRT BÖLÜM. `takvim` (sezon) üçüncü tura kaldı (MIMARI §6: `ozel_gunler`
+ * boş); menüde görünüp tıklanınca boş açılan bir sekme, "menüde ekranı
  * olmayan satır" hatasının sayfa içi kopyası olurdu. Çalışmayan seçenek
  * gösterilmez; gelince bu listeye girer.
+ *
+ * SUNUM SONDA: planın iş sırası bütçe → kelime → matris → müşteriye sunum.
  */
 export const STRATEJI_BOLUMLERI = [
   { kod: 'butce', ad: 'Bütçe dağılımı' },
   { kod: 'arama', ad: 'Google arama' },
   { kod: 'matris', ad: 'Kitle ve kreatif' },
+  { kod: 'sunum', ad: 'Sunum' },
 ] as const;
 export type StratejiBolumu = (typeof STRATEJI_BOLUMLERI)[number]['kod'];
 
 /**
- * Adresteki bölüm. Tanınmayan değer (eski bir `?bolum=sunum` bağlantısı
- * dahil) ilk bölüme düşer: paylaşılmış bir bağlantı boş sayfa açmamalı.
+ * Adresteki bölüm. Tanınmayan değer (ör. henüz olmayan `?bolum=takvim`)
+ * ilk bölüme düşer: paylaşılmış bir bağlantı boş sayfa açmamalı.
  */
 export function bolumCoz(raw: string | undefined): StratejiBolumu {
   return STRATEJI_BOLUMLERI.find((b) => b.kod === raw)?.kod ?? 'butce';
@@ -229,7 +235,7 @@ export function gelecekAy(simdi: Date): string {
 
 export const AKTARIM_NEDEN_METNI: Record<AktarimAtlamaNedeni, string> = {
   niyet_desteklenmiyor: 'AdvCampaign bu reklam amacını henüz kuramıyor',
-  platform_kapali: 'Google’da reklam kurma henüz açık değil',
+  platform_kapali: 'AdvCampaign Google’da henüz açık değil',
   kaynak_silinmis: 'kitle ya da görsel plan onaylandıktan sonra silinmiş',
   butce_sifir: 'bütçesi sıfır',
 };
@@ -241,12 +247,8 @@ export function aktarimOzeti(a: AktarimSonucu): { baslik: string; nedenler: stri
     a.atlanan.length === 0
       ? `${toplam} satırın hepsi AdvCampaign’e aktarıldı.`
       : `${toplam} satırdan ${a.aktarilan.length} tanesi aktarıldı, ${a.atlanan.length} tanesi atlandı.`;
-  const say = new Map<AktarimAtlamaNedeni, number>();
-  for (const x of a.atlanan) say.set(x.neden, (say.get(x.neden) ?? 0) + 1);
-  const nedenler = AKTARIM_ATLAMA_NEDENLERI.filter((n) => say.has(n)).map(
-    (n) => `${say.get(n)} satır: ${AKTARIM_NEDEN_METNI[n]}`,
-  );
-  return { baslik, nedenler };
+  // Önizleme ile AYNI özet: önce gösterilen neden ile sonra yazılan ayrışmasın.
+  return { baslik, nedenler: nedenOzeti(a.atlanan.map((x) => x.neden)) };
 }
 
 // ─── Yazma hatası ve sürüm çakışması ─────────────────────────────────────────
@@ -579,4 +581,146 @@ export function kitleMetni(
   // Platform başına tablo, ikili dallanma değil: üçüncü platform derlemede yakalanır.
   if (kitle === null) return BOS_KITLE_ANLAMI[platform];
   return kitle.ad ?? 'Silinmiş kitle';
+}
+
+// ─── Aktarım önizlemesi ─────────────────────────────────────────────────────
+
+export interface AktarimOnizlemesi {
+  gidecek: Array<{ id: string; baslik: string; tutarMicros: string }>;
+  atlanacak: Array<{ id: string; baslik: string; neden: AktarimAtlamaNedeni }>;
+  /** "2 satır: neden" — aktarım sonucundaki özetle AYNI metin tablosu. */
+  nedenler: string[];
+}
+
+/**
+ * Düğmeye basmadan ÖNCE "N satır gidecek, M atlanacak". Karar sözleşmenin
+ * `aktarimEngeli` fonksiyonundan, servisin aktarımda koştuğu fonksiyonun
+ * AYNISI: ekran ikinci bir kural yazsaydı önizleme "9 gidecek" deyip
+ * aktarım 7 açabilirdi ve fark yalnız AdvCampaign'de fark edilirdi.
+ *
+ * Silinmiş görsel ADI `null` gelen görsel (sözleşme: "silinmişse null").
+ * Var olanlar ile plandaki sayı ayrı veriliyor ki eksik kreatif seti
+ * `kaynak_silinmis` sayılsın.
+ */
+export function aktarimOnizlemesi(detay: PlanDetayi): AktarimOnizlemesi {
+  const gidecek: AktarimOnizlemesi['gidecek'] = [];
+  const atlanacak: AktarimOnizlemesi['atlanacak'] = [];
+  for (const s of detay.matris) {
+    const kitleAdi = s.kitle?.ad ?? null;
+    const baslik = `${NIYET_KATALOGU[s.niyet].ekranAdi} · ${kitleMetni(s.platform, s.kitle)}`;
+    const neden = aktarimEngeli({
+      platform: s.platform,
+      katman: s.katman,
+      niyet: s.niyet,
+      kitleAdi,
+      varlikIdleri: s.varliklar.filter((v) => v.ad !== null).map((v) => v.id),
+      planlananVarlikSayisi: s.varliklar.length,
+      tutarMicros: BigInt(s.tutarMicros),
+      paraBirimi: detay.plan.paraBirimi,
+      donem: detay.plan.donem,
+      not: s.not,
+    });
+    if (neden === null) gidecek.push({ id: s.id, baslik, tutarMicros: s.tutarMicros });
+    else atlanacak.push({ id: s.id, baslik, neden });
+  }
+  return { gidecek, atlanacak, nedenler: nedenOzeti(atlanacak.map((a) => a.neden)) };
+}
+
+function nedenOzeti(nedenler: readonly AktarimAtlamaNedeni[]): string[] {
+  const say = new Map<AktarimAtlamaNedeni, number>();
+  for (const n of nedenler) say.set(n, (say.get(n) ?? 0) + 1);
+  return AKTARIM_ATLAMA_NEDENLERI.filter((n) => say.has(n)).map((n) => `${say.get(n)} satır: ${AKTARIM_NEDEN_METNI[n]}`);
+}
+
+// ─── Sunum (PDF) ────────────────────────────────────────────────────────────
+
+/**
+ * PDF ADRESİ TEK ÜRETİCİDEN. Rapor ekranında üç tüketici sorguyu ayrı ayrı
+ * kuruyordu ve biri şablonu düşürüyordu (CLAUDE.md "AYNI BELGEYİ İSTEYEN HER
+ * YOL AYNI SORGUYU KURMALI"). Bugün tek tüketici var; ikincisi (mail eki,
+ * önizleme) geldiğinde de buradan almalı. `strateji-sayfasi.spec.ts`
+ * `/pdf` dizgesinin başka dosyada geçmediğini kilitliyor.
+ */
+export function pdfAdresi(planId: string): string {
+  return `${API_URL}${ucAdresi('/strateji/planlar/:id/pdf', planId)}`;
+}
+
+/** İndirilen dosyanın adı: "medya-plani-2026-11-s3.pdf". Sürüm adda: iki indirme karışmasın. */
+export function pdfDosyaAdi(donem: string, surum: number): string {
+  return `medya-plani-${donem}-s${surum}.pdf`;
+}
+
+/**
+ * Belgenin taşıyacağı hâl. Taslak da iniyor (sözleşme) ama kapakta "TASLAK"
+ * yazıyor; kullanıcı müşteriye göndermeden önce bunu bilmeli.
+ */
+export function sunumNotu(durum: PlanDurumu): { ton: 'uyari' | 'bilgi'; metin: string } {
+  switch (durum) {
+    case 'taslak':
+      return { ton: 'uyari', metin: 'Plan taslak. PDF taslak olarak inecek ve kapağında TASLAK yazacak.' };
+    case 'onayda':
+      return { ton: 'bilgi', metin: 'Plan onay bekliyor. PDF onaya gönderilen sürümü taşır.' };
+    case 'onaylandi':
+      return { ton: 'bilgi', metin: 'PDF onaylanan sürümü ve onay bilgisini taşır.' };
+    case 'aktarildi':
+      return { ton: 'bilgi', metin: 'PDF onaylanıp AdvCampaign’e aktarılan sürümü taşır.' };
+    case 'iptal':
+      return { ton: 'uyari', metin: 'Plan iptal edildi. PDF yalnızca kayıt için.' };
+  }
+}
+
+// ─── Kelime grupları ────────────────────────────────────────────────────────
+
+export interface KelimeGrubu {
+  /** Gruplama anahtarı: KAYITLI grup adı (`''` = grupsuz). Yazarken satırlar zıplamasın. */
+  anahtar: string;
+  satirlar: KelimeSatiri[];
+  /** Hacmi bilinen satırların toplamı. Varyantlar zaten satırın içinde: toplama ikinci kez GİRMEZ. */
+  toplamArama: number;
+  seciliArama: number;
+  /** Hacmi `null` olan satır sayısı: toplamın eksik olduğunu söylemek için. */
+  veriYok: number;
+  secili: number;
+}
+
+/** Grubu olmayan ya da kural gruplamasının "Diğer"i en sonda. */
+export const DIGER_GRUBU = 'Diğer';
+
+/**
+ * Tablo grup grup. Grup SUNUCUDAN geliyor (deterministik kural, MIMARI
+ * §6.2); ekran yeniden gruplamaz, yalnız gösterir ve toplar. Sıra toplam
+ * hacme göre azalan: reklam bütçesi en çok aranana önce gider.
+ *
+ * VARYANTLAR TOPLANMAZ: "türk kahve makinesi" / "turk kahve makinesi"
+ * Google'da AYNI metrik (ölçüldü 2026-10-08) ve tek satırda tutuluyor;
+ * ikisini ayrı saymak grubun hacmini ikiye katlardı.
+ */
+export function kelimeGruplari(
+  satirlar: readonly KelimeSatiri[],
+  secim: Readonly<Record<string, { secili: boolean }>>,
+): KelimeGrubu[] {
+  const harita = new Map<string, KelimeGrubu>();
+  for (const s of satirlar) {
+    const anahtar = s.grup?.trim() ?? '';
+    const g = harita.get(anahtar) ?? { anahtar, satirlar: [], toplamArama: 0, seciliArama: 0, veriYok: 0, secili: 0 };
+    const secili = secim[s.id]?.secili ?? s.secili;
+    g.satirlar.push(s);
+    if (s.aylikArama === null) g.veriYok++;
+    else {
+      g.toplamArama += s.aylikArama;
+      if (secili) g.seciliArama += s.aylikArama;
+    }
+    if (secili) g.secili++;
+    harita.set(anahtar, g);
+  }
+  const sonda = (a: string) => (a === '' ? 2 : a === DIGER_GRUBU ? 1 : 0);
+  return [...harita.values()].sort(
+    (a, b) => sonda(a.anahtar) - sonda(b.anahtar) || b.toplamArama - a.toplamArama || a.anahtar.localeCompare(b.anahtar, 'tr'),
+  );
+}
+
+/** Grup başlığındaki toplu seçim kutusunun hâli. */
+export function grupSecimHali(g: Pick<KelimeGrubu, 'secili' | 'satirlar'>): 'hepsi' | 'hicbiri' | 'bazisi' {
+  if (g.secili === 0) return 'hicbiri';
+  return g.secili === g.satirlar.length ? 'hepsi' : 'bazisi';
 }

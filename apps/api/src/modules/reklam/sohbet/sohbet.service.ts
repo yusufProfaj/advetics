@@ -38,6 +38,14 @@ export interface OturumOzeti {
   durum: string;
   sahibiBenMiyim: boolean;
   updatedAt: string;
+  /**
+   * AdvStrategy aktarımından gelen hazır açılış (MIMARI § 6.1): mesajı
+   * olmayan oturumda giriş kutusu bu metinle, ekler bu varlıklarla dolu
+   * gelir. Elle açılan oturumda `null` / boş. Mesaj olarak YAZILMIYOR:
+   * kullanıcı gönderene kadar yalnız bir öneri.
+   */
+  hazirIstem: string | null;
+  hazirMedyalar: string[];
 }
 
 export interface EkranMesaji {
@@ -87,15 +95,16 @@ export class AdvSohbetService {
         RETURNING id::text, updated_at`),
     );
     if (!o) throw new NotFoundException('Workspace bulunamadı');
-    return { id: o.id, baslik: 'Yeni reklam', taslakId: null, durum: 'acik', sahibiBenMiyim: true, updatedAt: new Date(o.updated_at).toISOString() };
+    return { id: o.id, baslik: 'Yeni reklam', taslakId: null, durum: 'acik', sahibiBenMiyim: true, updatedAt: new Date(o.updated_at).toISOString(), hazirIstem: null, hazirMedyalar: [] };
   }
 
   /** Son 30 oturum ve TOPLAM (sessiz kesme yok). */
   async oturumlar(ctx: TenantContext, clientId: string): Promise<{ satirlar: OturumOzeti[]; toplam: number; asistanBagli: boolean }> {
     if (!ctx.clientIds.includes(clientId)) throw new ForbiddenException('Bu workspace’e erişimin yok');
     return this.tx(ctx)(async (t) => {
-      const satirlar = await t.$queryRaw<Array<{ id: string; baslik: string; taslak_id: string | null; durum: string; user_id: string; updated_at: Date }>>(Prisma.sql`
-        SELECT id::text, baslik, taslak_id::text, durum, user_id::text, updated_at FROM adv_oturum
+      const satirlar = await t.$queryRaw<Array<{ id: string; baslik: string; taslak_id: string | null; durum: string; user_id: string; updated_at: Date; hazir_istem: string | null; hazir_medyalar: string[] }>>(Prisma.sql`
+        SELECT id::text, baslik, taslak_id::text, durum, user_id::text, updated_at,
+               hazir_istem, hazir_medyalar::text[] AS hazir_medyalar FROM adv_oturum
          WHERE client_id = ${clientId}::uuid ORDER BY updated_at DESC LIMIT 30`);
       const [n] = await t.$queryRaw<Array<{ n: number }>>(Prisma.sql`SELECT count(*)::int AS n FROM adv_oturum WHERE client_id = ${clientId}::uuid`);
       return {
@@ -106,6 +115,8 @@ export class AdvSohbetService {
           durum: s.durum,
           sahibiBenMiyim: s.user_id === ctx.userId,
           updatedAt: new Date(s.updated_at).toISOString(),
+          hazirIstem: s.hazir_istem,
+          hazirMedyalar: s.hazir_medyalar ?? [],
         })),
         toplam: n?.n ?? 0,
         // Ekran "anahtar yok" hâlini tahmin etmesin, sunucudan öğrensin.
@@ -117,14 +128,25 @@ export class AdvSohbetService {
   /** Ekrana mesajlar: ham model içeriği değil, metin + olaylar. `sonra` ile yalnız yeniler. */
   async mesajlar(ctx: TenantContext, oturumId: string, sonra = 0): Promise<{ oturum: OturumOzeti; mesajlar: EkranMesaji[] }> {
     return this.tx(ctx)(async (t) => {
-      const [o] = await t.$queryRaw<Array<{ id: string; baslik: string; taslak_id: string | null; durum: string; user_id: string; client_id: string; updated_at: Date }>>(Prisma.sql`
-        SELECT id::text, baslik, taslak_id::text, durum, user_id::text, client_id::text, updated_at FROM adv_oturum WHERE id = ${oturumId}::uuid`);
+      const [o] = await t.$queryRaw<Array<{ id: string; baslik: string; taslak_id: string | null; durum: string; user_id: string; client_id: string; updated_at: Date; hazir_istem: string | null; hazir_medyalar: string[] }>>(Prisma.sql`
+        SELECT id::text, baslik, taslak_id::text, durum, user_id::text, client_id::text, updated_at,
+               hazir_istem, hazir_medyalar::text[] AS hazir_medyalar
+          FROM adv_oturum WHERE id = ${oturumId}::uuid`);
       if (!o || !ctx.clientIds.includes(o.client_id)) throw new NotFoundException('Oturum bulunamadı');
       const satirlar = await t.$queryRaw<Array<{ id: string; sira: number; rol: string; icerik: unknown; olaylar: SohbetOlayi[]; durum: MesajDurumu }>>(Prisma.sql`
         SELECT id::text, sira, rol, icerik, olaylar, durum FROM adv_mesaj
          WHERE oturum_id = ${oturumId}::uuid AND sira > ${sonra} AND rol IN ('kullanici', 'asistan') ORDER BY sira`);
       return {
-        oturum: { id: o.id, baslik: o.baslik, taslakId: o.taslak_id, durum: o.durum, sahibiBenMiyim: o.user_id === ctx.userId, updatedAt: new Date(o.updated_at).toISOString() },
+        oturum: {
+          id: o.id,
+          baslik: o.baslik,
+          taslakId: o.taslak_id,
+          durum: o.durum,
+          sahibiBenMiyim: o.user_id === ctx.userId,
+          updatedAt: new Date(o.updated_at).toISOString(),
+          hazirIstem: o.hazir_istem,
+          hazirMedyalar: o.hazir_medyalar ?? [],
+        },
         mesajlar: satirlar.map((s) => ({
           id: s.id,
           sira: s.sira,

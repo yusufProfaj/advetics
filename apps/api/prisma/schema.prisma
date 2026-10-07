@@ -3726,6 +3726,11 @@ model AdvOturum {
   durum      String   @default("acik") @db.VarChar(8)
   model      String   @db.VarChar(40)
   sorulanlar Json     @default("[]") @db.JsonB
+  /// AdvStrategy aktarımı: giriş kutusuna konacak metin ve ekler (MIMARI § 6.1).
+  hazirIstem       String?  @map("hazir_istem") @db.VarChar(4000)
+  hazirMedyalar    String[] @default([]) @map("hazir_medyalar") @db.Uuid
+  /// Tekil KISMİ indeks `adv_oturum_strateji_matris_key` (IS NOT NULL) yalnız migration'da.
+  stratejiMatrisId String?  @map("strateji_matris_id") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
@@ -3878,6 +3883,7 @@ model StratejiKelimesi {
   teklifAltMicros BigInt?  @map("teklif_alt_micros")
   teklifUstMicros BigInt?  @map("teklif_ust_micros")
   grup            String?  @db.VarChar(80)
+  grupElle        Boolean  @default(false) @map("grup_elle")
   secili          Boolean  @default(false)
   cekimZamani     DateTime @map("cekim_zamani") @db.Timestamptz(6)
   kaynakIstek     Json     @map("kaynak_istek") @db.JsonB

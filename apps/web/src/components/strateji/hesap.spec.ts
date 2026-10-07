@@ -9,7 +9,7 @@ import {
   type KelimeSatiri,
   type PlanOzeti,
 } from '@advetics/shared';
-import { ApiRequestError } from '@/lib/api';
+import { API_URL, ApiRequestError } from '@/lib/api';
 import {
   AKTARIM_NEDEN_METNI,
   CAKISMA_METNI,
@@ -42,6 +42,16 @@ import {
   yenidenOkunmali,
   type MatrisTaslakSatiri,
 } from './hesap';
+import {
+  DIGER_GRUBU,
+  aktarimOnizlemesi,
+  grupSecimHali,
+  kelimeGruplari,
+  pdfAdresi,
+  pdfDosyaAdi,
+  sunumNotu,
+} from './hesap';
+import type { MatrisSatiri, PlanDetayi } from '@advetics/shared';
 
 /**
  * AdvStrategy ekranının SAF kararları — çalıştırılarak sınanıyor.
@@ -52,15 +62,15 @@ import {
 const UUID = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 describe('bölüm ve adres', () => {
-  it('KRİTİK: yalnız üç bölüm var — sunum ve takvim bu turda GÖSTERİLMİYOR', () => {
+  it('KRİTİK: dört bölüm var — takvim (sezon) bu turda GÖSTERİLMİYOR', () => {
     // Çalışmayan sekme, menüde ekranı olmayan satırın sayfa içi kopyası.
-    expect(STRATEJI_BOLUMLERI.map((b) => b.kod)).toEqual(['butce', 'arama', 'matris']);
+    expect(STRATEJI_BOLUMLERI.map((b) => b.kod)).toEqual(['butce', 'arama', 'matris', 'sunum']);
   });
 
-  it('tanınan bölüm aynen, tanınmayan (eski sunum bağlantısı dahil) ilk bölüme düşüyor', () => {
+  it('tanınan bölüm aynen, tanınmayan (henüz olmayan takvim dahil) ilk bölüme düşüyor', () => {
     expect(bolumCoz('arama')).toBe('arama');
     expect(bolumCoz('matris')).toBe('matris');
-    expect(bolumCoz('sunum')).toBe('butce');
+    expect(bolumCoz('sunum')).toBe('sunum');
     expect(bolumCoz('takvim')).toBe('butce');
     expect(bolumCoz(undefined)).toBe('butce');
   });
@@ -377,5 +387,105 @@ describe('kitleMetni', () => {
     expect(kitleMetni('meta', null)).toBe('Silinmiş kitle');
     expect(kitleMetni('google', null)).toBe('Kitle yok');
     expect(kitleMetni('meta', { id: 'x', ad: 'Beyaz yaka' })).toBe('Beyaz yaka');
+  });
+});
+
+describe('aktarım önizlemesi (ikinci tur)', () => {
+  const satir = (p: Partial<MatrisSatiri> & { id: string }): MatrisSatiri => ({
+    platform: 'meta',
+    katman: 'soguk',
+    niyet: 'FORM',
+    kitle: { id: UUID(1), ad: 'İzmir 25-45' },
+    kelimeGrubu: null,
+    varliklar: [{ id: UUID(2), ad: 'kare.jpg', kucukResimAdresi: null }],
+    tutarMicros: '5000000000',
+    not: null,
+    ...p,
+  });
+  const detay = (matris: MatrisSatiri[]) =>
+    ({ plan: { paraBirimi: 'TRY', donem: '2026-11' }, matris }) as unknown as PlanDetayi;
+
+  it('KRİTİK: gidecek ve atlanacak satırlar sözleşmenin kararıyla, nedenleriyle', () => {
+    const o = aktarimOnizlemesi(
+      detay([
+        satir({ id: 'a' }),
+        satir({ id: 'g', platform: 'google', kitle: null, kelimeGrubu: 'kahve' }),
+        satir({ id: 'n', niyet: 'WHATSAPP' }),
+        satir({ id: 'k', kitle: null }),
+        satir({ id: 'v', varliklar: [{ id: UUID(3), ad: null, kucukResimAdresi: null }] }),
+        satir({ id: 's', tutarMicros: '0' }),
+      ]),
+    );
+    expect(o.gidecek.map((g) => g.id)).toEqual(['a']);
+    expect(o.gidecek[0]?.baslik).toBe('Form doldursunlar · İzmir 25-45');
+    expect(Object.fromEntries(o.atlanacak.map((a) => [a.id, a.neden]))).toEqual({
+      g: 'platform_kapali',
+      n: 'niyet_desteklenmiyor',
+      k: 'kaynak_silinmis',
+      v: 'kaynak_silinmis',
+      s: 'butce_sifir',
+    });
+    expect(o.nedenler).toEqual([
+      `1 satır: ${AKTARIM_NEDEN_METNI.niyet_desteklenmiyor}`,
+      `1 satır: ${AKTARIM_NEDEN_METNI.platform_kapali}`,
+      `2 satır: ${AKTARIM_NEDEN_METNI.kaynak_silinmis}`,
+      `1 satır: ${AKTARIM_NEDEN_METNI.butce_sifir}`,
+    ]);
+  });
+
+  it('Google satırının nedeni kullanıcının diliyle', () => {
+    expect(AKTARIM_NEDEN_METNI.platform_kapali).toBe('AdvCampaign Google’da henüz açık değil');
+  });
+
+  it('boş matris: hiçbir şey gitmiyor, uydurma satır yok', () => {
+    expect(aktarimOnizlemesi(detay([]))).toEqual({ gidecek: [], atlanacak: [], nedenler: [] });
+  });
+});
+
+describe('sunum (ikinci tur)', () => {
+  it('KRİTİK: PDF adresi sözleşmenin ucundan, API kökünde', () => {
+    expect(pdfAdresi('p 1')).toBe(`${API_URL}/strateji/planlar/p%201/pdf`);
+    expect(STRATEJI_UCLARI.some((u) => u.yontem === 'GET' && u.yol === '/strateji/planlar/:id/pdf')).toBe(true);
+    expect(pdfDosyaAdi('2026-11', 3)).toBe('medya-plani-2026-11-s3.pdf');
+  });
+
+  it('KRİTİK: taslak PDF "taslak olarak inecek" uyarısı taşıyor; her durumun notu var', () => {
+    expect(sunumNotu('taslak')).toEqual({ ton: 'uyari', metin: expect.stringContaining('taslak olarak inecek') });
+    for (const d of PLAN_DURUMLARI) expect(sunumNotu(d).metin.length).toBeGreaterThan(10);
+  });
+});
+
+describe('kelime grupları (ikinci tur)', () => {
+  const k = (id: string, grup: string | null, aylikArama: number | null, secili = false, varyantlar: string[] = []) =>
+    ({ id, kelime: id, grup, aylikArama, secili, varyantlar }) as unknown as KelimeSatiri;
+
+  it('KRİTİK: toplam hacim satırlardan; varyantlar toplama GİRMİYOR', () => {
+    const g = kelimeGruplari([k('a', 'kahve makinesi', 74_000, false, ['turk kahve makinesi']), k('b', 'kahve makinesi', 1_000)], {});
+    expect(g).toHaveLength(1);
+    expect(g[0]).toMatchObject({ anahtar: 'kahve makinesi', toplamArama: 75_000, veriYok: 0 });
+  });
+
+  it('hacmi bilinmeyen kelime toplamı şişirmiyor ama SAYILIYOR', () => {
+    const [g] = kelimeGruplari([k('a', 'x', null), k('b', 'x', 500)], {});
+    expect(g).toMatchObject({ toplamArama: 500, veriYok: 1 });
+  });
+
+  it('seçim taslaktan okunuyor; seçili hacim ayrı', () => {
+    const [g] = kelimeGruplari([k('a', 'x', 100, false), k('b', 'x', 200, true)], { a: { secili: true }, b: { secili: false } });
+    expect(g).toMatchObject({ secili: 1, seciliArama: 100 });
+    expect(grupSecimHali(g!)).toBe('bazisi');
+  });
+
+  it('KRİTİK: sıra hacme göre azalan; "Diğer" ve grupsuz en sonda', () => {
+    const g = kelimeGruplari(
+      [k('a', DIGER_GRUBU, 90_000), k('b', null, 80_000), k('c', 'kucuk', 10), k('d', 'buyuk', 5_000)],
+      {},
+    );
+    expect(g.map((x) => x.anahtar)).toEqual(['buyuk', 'kucuk', DIGER_GRUBU, '']);
+  });
+
+  it('toplu seçim kutusu üç hâlli', () => {
+    expect(grupSecimHali({ secili: 0, satirlar: [k('a', 'x', 1)] })).toBe('hicbiri');
+    expect(grupSecimHali({ secili: 1, satirlar: [k('a', 'x', 1)] })).toBe('hepsi');
   });
 });

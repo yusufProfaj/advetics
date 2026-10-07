@@ -60,6 +60,12 @@ export interface KelimeSatiri {
   /** Önerilen reklam grubu adı; kullanıcı değiştirebilir. */
   grup: string | null;
   /**
+   * Grup adını kullanıcı mı yazdı. `true` ise yeniden gruplama onu EZMEZ
+   * (MIMARI §6.2) ve ekran bunu gösterir; göstermezse kullanıcı hangi
+   * grupların kendisine ait olduğunu bilemez.
+   */
+  grupElle: boolean;
+  /**
    * Plana alındı mı. Varsayılan FALSE: fikirler tohumun dışına geniş yayılıyor
    * (rakip marka terimleri dahil) ve otomatik seçim planı onlarla doldururdu.
    */

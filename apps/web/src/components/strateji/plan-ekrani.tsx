@@ -12,9 +12,11 @@ import { Uyari } from '@/components/ui/uyari';
 import { AramaBolumu } from './arama-bolumu';
 import { ButceBolumu } from './butce-bolumu';
 import { MatrisBolumu } from './matris-bolumu';
+import { SunumBolumu } from './sunum-bolumu';
 import {
   STRATEJI_BOLUMLERI,
   YOKLAMA_MS,
+  aktarimOnizlemesi,
   aktarimOzeti,
   donemEtiketi,
   duzenlemeKilidi,
@@ -25,6 +27,7 @@ import {
   stratejiAdresi,
   ucAdresi,
   zamanMetni,
+  type AktarimOnizlemesi,
   type StratejiBolumu,
 } from './hesap';
 import { DurumRozeti, planaYaz } from './ortak';
@@ -62,10 +65,17 @@ export function PlanEkrani({
   const router = useRouter();
   const [detay, setDetay] = useState(ilkDetay);
   const [yenileHatasi, setYenileHatasi] = useState<string | null>(null);
-  const [kirli, setKirli] = useState<Record<StratejiBolumu, boolean>>({ butce: false, arama: false, matris: false });
+  const [kirli, setKirli] = useState<Record<StratejiBolumu, boolean>>({ butce: false, arama: false, matris: false, sunum: false });
   const [eylemSuruyor, setEylemSuruyor] = useState<PlanEylemi | null>(null);
   const [eylemMesaji, setEylemMesaji] = useState<{ ton: 'basari' | 'uyari' | 'tehlike'; metin: string } | null>(null);
-  const [iptalOnayi, setIptalOnayi] = useState(false);
+  /*
+   * İKİ ADIMLI EYLEMLER: iptal geri alınamıyor, aktarım AdvCampaign'de
+   * oturum açıyor. İkisinde de ilk tıklama SONUCU gösteriyor (iptal: uyarı,
+   * aktarım: kaç satırın gideceği ve neden atlanacağı), ikinci tıklama
+   * yapıyor. Aktarımda önizleme olmadan kullanıcı "12 satır onayladım"
+   * düşünüp 7 oturumla karşılaşırdı.
+   */
+  const [onayBekleyen, setOnayBekleyen] = useState<'iptal' | 'aktar' | null>(null);
   const planId = ilkDetay.plan.id;
 
   // Sunucu sayfayı yeniden çizdiğinde (bölüm değişimi, router.refresh) taze veri gelir.
@@ -112,7 +122,7 @@ export function PlanEkrani({
     setEylemMesaji(null);
     const r = await planaYaz(yol, 'POST', govde, yenile, plan.surum);
     setEylemSuruyor(null);
-    setIptalOnayi(false);
+    setOnayBekleyen(null);
     if (r.tur === 'tamam') {
       setEylemMesaji({ ton: 'basari', metin: EYLEM_SONUCU[eylem] });
       // Plan listesindeki durum rozeti de değişti; sunucu sayfayı yeniden çizsin.
@@ -142,11 +152,16 @@ export function PlanEkrani({
           {dugmeler.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               {dugmeler.map((d) =>
-                d.eylem === 'iptal' && !iptalOnayi ? (
-                  <Dugme key={d.eylem} ton="sade" onClick={() => setIptalOnayi(true)} disabled={eylemSuruyor !== null}>
+                (d.eylem === 'iptal' || d.eylem === 'aktar') && onayBekleyen !== d.eylem ? (
+                  <Dugme
+                    key={d.eylem}
+                    ton={d.eylem === 'iptal' ? 'sade' : d.ton}
+                    onClick={() => setOnayBekleyen(d.eylem as 'iptal' | 'aktar')}
+                    disabled={eylemSuruyor !== null}
+                  >
                     {d.etiket}
                   </Dugme>
-                ) : (
+                ) : d.eylem === 'aktar' ? null : (
                   <Dugme
                     key={d.eylem}
                     ton={d.ton}
@@ -160,8 +175,8 @@ export function PlanEkrani({
                   </Dugme>
                 ),
               )}
-              {iptalOnayi && (
-                <Dugme ton="sade" onClick={() => setIptalOnayi(false)}>
+              {onayBekleyen === 'iptal' && (
+                <Dugme ton="sade" onClick={() => setOnayBekleyen(null)}>
                   Vazgeç
                 </Dugme>
               )}
@@ -169,7 +184,16 @@ export function PlanEkrani({
           )}
         </div>
 
-        {iptalOnayi && (
+        {onayBekleyen === 'aktar' && (
+          <AktarimOnizlemeKutusu
+            onizleme={aktarimOnizlemesi(detay)}
+            para={plan.paraBirimi}
+            bekliyor={eylemSuruyor === 'aktar'}
+            onayla={() => void eylemYap('aktar')}
+            vazgec={() => setOnayBekleyen(null)}
+          />
+        )}
+        {onayBekleyen === 'iptal' && (
           <p className="text-sm text-danger-strong">İptal edilen plan geri açılamaz. Bu ay için yeni plan oluşturulabilir.</p>
         )}
         {kaydedilmemis && dugmeler.some((d) => d.eylem === 'onaya_gonder') && (
@@ -229,6 +253,9 @@ export function PlanEkrani({
       <div hidden={bolum !== 'matris'}>
         <MatrisBolumu clientId={clientId} detay={detay} kilit={kilit} yenile={yenile} onKirli={kirliMatris} />
       </div>
+      <div hidden={bolum !== 'sunum'}>
+        <SunumBolumu plan={plan} kaydedilmemis={kaydedilmemis} />
+      </div>
     </div>
   );
 }
@@ -260,6 +287,63 @@ function AktarimKutusu({ clientId, detay }: { clientId: string; detay: PlanDetay
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * Aktarım önizlemesi: kararı sözleşmenin `aktarimEngeli` veriyor (servisin
+ * aynısı). Hiç satır gitmeyecekse onay düğmesi kapalı ve nedeni yazılı:
+ * sunucu boş aktarımı zaten reddediyor, ekranın onu denemeye izin vermesi
+ * kullanıcıya bir ret daha göstermekten başka bir şey yapmazdı.
+ */
+function AktarimOnizlemeKutusu({
+  onizleme,
+  para,
+  bekliyor,
+  onayla,
+  vazgec,
+}: {
+  onizleme: AktarimOnizlemesi;
+  para: string;
+  bekliyor: boolean;
+  onayla: () => void;
+  vazgec: () => void;
+}) {
+  const { gidecek, atlanacak, nedenler } = onizleme;
+  return (
+    <div className="space-y-2 rounded-lg border border-line bg-surface-muted p-3 text-sm" role="region" aria-label="Aktarım önizlemesi">
+      <p className="font-semibold text-ink">
+        {gidecek.length} satır AdvCampaign’e gidecek{atlanacak.length > 0 ? `, ${atlanacak.length} satır atlanacak` : ''}.
+      </p>
+      {gidecek.length > 0 && (
+        <ul className="space-y-0.5 text-ink">
+          {gidecek.map((g) => (
+            <li key={g.id}>
+              {g.baslik} · <span className="tabular-nums">{formatMoney(g.tutarMicros, para)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {nedenler.length > 0 && (
+        <ul className="list-disc space-y-0.5 pl-5 text-ink-muted">
+          {nedenler.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs text-ink-muted">
+        Her satır AdvCampaign’de ayrı bir oturum olarak açılır; metin ve görseller hazır gelir, yayın orada senin onayınla.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Dugme onClick={onayla} bekliyor={bekliyor} disabled={gidecek.length === 0}>
+          Aktarımı onayla
+        </Dugme>
+        <Dugme ton="sade" onClick={vazgec}>
+          Vazgeç
+        </Dugme>
+      </div>
+      {gidecek.length === 0 && <p className="text-sm text-warn-strong">Aktarılabilecek satır yok. Nedenler yukarıda.</p>}
     </div>
   );
 }

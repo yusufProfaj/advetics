@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,6 +11,12 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  AKTARIM_IZINLERI,
+  aktarimEngeli,
+  aktarimIstemi,
+  NIYET_KATALOGU,
+  type AktarimAtlamaNedeni,
+  type AktarimSatiriGirdisi,
   dagilimToplamDenetimi,
   duzenlenebilirMi,
   gecisMumkunMu,
@@ -43,8 +50,10 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CONFIG, type AppConfig } from '../../config/configuration';
 import { dayanakSatirlari, kaynakBelirle, oneriHesapla, oneriPenceresi, type PlatformDayanagi } from './dagilim-oneri';
 import { kelimeHesabi } from './kelime-isleyici';
+import { medyaPlaniPdf } from './medya-plani-pdf';
 import { StratejiKelimeKuyrugu } from './kelime-kuyrugu';
 import { seviyeLiterali } from '../metrics/seviye-literali';
 
@@ -79,15 +88,27 @@ export const KELIME_ARAMA_ZAMAN_ASIMI_DK = 15;
 /** Liste ucu en çok bu kadar plan döndürür; toplam ayrıca söylenir (sessiz kesme yok). */
 export const PLAN_LISTE_SINIRI = 100;
 
-/** Bu turda kurulmayan eylem. `yapilabilir`e girmez, uca gelirse açıkça reddedilir. */
-const KURULMAMIS_EYLEMLER: readonly PlanEylemi[] = ['aktar'];
+/**
+ * Eylem başına GEREKEN izinlerin TAMAMI. Aktarım iki anahtar istiyor
+ * (`AKTARIM_IZINLERI`: planı aktarmak + AdvCampaign'de reklam kurmak); uç
+ * yalnız `strategy.write` ile korunuyor, ikinci anahtar serviste. Liste
+ * sözleşmeden: buraya elle yazılsaydı panelin "aktar" düğmesi ile sunucunun
+ * kabulü ayrışırdı.
+ */
+const EYLEM_IZINLERI: Record<PlanEylemi, readonly Permission[]> = {
+  onaya_gonder: ['strategy.write'],
+  geri_cek: ['strategy.write'],
+  onayla: ['strategy.approve'],
+  aktar: AKTARIM_IZINLERI,
+  iptal: ['strategy.write'],
+};
 
-const EYLEM_IZNI: Record<PlanEylemi, Permission> = {
-  onaya_gonder: 'strategy.write',
-  geri_cek: 'strategy.write',
-  onayla: 'strategy.approve',
-  aktar: 'strategy.write',
-  iptal: 'strategy.write',
+/** Aktarılamayan satırın kullanıcıya söylenen nedeni (400 mesajı). */
+const ATLAMA_METNI: Record<AktarimAtlamaNedeni, string> = {
+  niyet_desteklenmiyor: 'amacı AdvCampaign henüz kurmuyor',
+  platform_kapali: 'platformu AdvCampaign’de henüz açık değil',
+  kaynak_silinmis: 'kitlesi ya da görseli silinmiş',
+  butce_sifir: 'bütçesi sıfır',
 };
 
 /** Toplam seviyesi: metrik servisindeki `TOTALS_LEVEL` ile aynı (gerekçe aşağıda, `dagilimOner`). */
@@ -150,10 +171,138 @@ export const KUYRUK_HATASI = 'Arama başlatılamadı. Biraz sonra yeniden deneyi
 export class StratejiService {
   private readonly logger = new Logger('Strateji');
 
+  /** Aktarımda açılan oturumun `model` kolonu: AdvCampaign'in kendi açılışıyla aynı değer. */
+  private readonly modelAdi: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly kuyruk: StratejiKelimeKuyrugu,
-  ) {}
+    // İsteğe bağlı YALNIZ TypeScript'te (testler iki argümanla kuruyor);
+    // `@Optional` YOK, yani Nest CONFIG'i bulamazsa açılışta patlar.
+    @Inject(CONFIG) config?: AppConfig,
+  ) {
+    this.modelAdi = config?.yapayZeka.model ?? 'test';
+  }
+
+  // ── Aktarım (MIMARI § 6.1) ───────────────────────────────────────────
+
+  /**
+   * Onaylı plan → AdvCampaign. Platforma YAZMAZ (Ç-2): her aktarılabilir
+   * matris satırı için hazır doldurulmuş bir oturum açar.
+   *
+   * KISA TRANSACTION'LAR. Okuma bir transaction, her oturum kendi
+   * transaction'ı, son durum yazımı bir transaction. Yarıda düşerse plan
+   * `onaylandi` kalır ve açılmış oturumlar YENİDEN AÇILMAZ (tekil kısmi
+   * indeks + ON CONFLICT: var olan oturum aktarılmış sayılır). Tekrar deneme
+   * yalnız eksikleri tamamlar.
+   *
+   * HİÇBİR SATIR AKTARILAMAZSA plan `onaylandi` kalır ve 400 nedenleri
+   * sayar: boş bir aktarımı "aktarıldı" saymak, müşterinin onayladığı planın
+   * hiçbir yere gitmediğini gizlerdi.
+   */
+  async aktar(ctx: TenantContext, id: string, surum: number): Promise<PlanDetayi> {
+    if (!AKTARIM_IZINLERI.every((i) => ctx.permissions.includes(i))) {
+      throw new ForbiddenException('Planı aktarmak için reklam kurma yetkisi de gerekiyor.');
+    }
+    const okuma = await this.prisma.withTenant(ctx, async (tx) => {
+      const p = await planOku(tx, ctx, id, true);
+      if (!gecisMumkunMu(p.durum, 'aktar')) throw new ConflictException(gecisMesaji(p.durum, 'aktar'));
+      if (p.surum !== surum) throw new ConflictException(SURUM_MESAJI);
+      // Aktarım ONAYLANAN sürümü taşır. Onaydan sonra düzenleme yolu yok,
+      // ama bu kontrol o kuralın bir gün gevşemesine karşı son kapı.
+      if (p.onaylanan_surum !== p.surum) throw new ConflictException('Plan onaylandıktan sonra değişmiş; yeniden onaylanmalı.');
+      // org_id HEDEF WORKSPACE'TEN ("tüm şirketler" modunda ctx.orgId ev şirketi).
+      const [c] = await tx.$queryRaw<Array<{ org_id: string }>>(Prisma.sql`
+        SELECT org_id::text FROM clients WHERE id = ${p.client_id}::uuid`);
+      const satirlar = await tx.$queryRaw<Array<{
+        id: string;
+        platform: StratejiPlatformu;
+        katman: HuniKatmani;
+        niyet: NiyetKodu;
+        tutar_micros: string;
+        notu: string | null;
+        varlik_idleri: string[];
+        mevcut_varliklar: string[] | null;
+        kitle_adi: string | null;
+      }>>(Prisma.sql`
+        SELECT m.id::text, m.platform, m.katman, m.niyet, m.tutar_micros::text, m.notu,
+               m.varlik_idleri::text[] AS varlik_idleri,
+               (SELECT array_agg(a.id::text) FROM assets a
+                 WHERE a.id = ANY(m.varlik_idleri) AND a.client_id = m.client_id) AS mevcut_varliklar,
+               t.name AS kitle_adi
+          FROM strateji_matrisi m
+          LEFT JOIN audience_templates t ON t.id = m.kitle_sablonu_id AND t.client_id = m.client_id
+         WHERE m.plan_id = ${p.id}::uuid
+         ORDER BY m.sira`);
+      return { p, orgId: c!.org_id, satirlar };
+    });
+    const { p, orgId } = okuma;
+
+    const sonuc: AktarimSonucu = { zaman: '', aktarilan: [], atlanan: [] };
+    for (const m of okuma.satirlar) {
+      const mevcut = new Set(m.mevcut_varliklar ?? []);
+      // Sıra plandaki sıra: kullanıcı görselleri o sırayla seçti.
+      const varliklar = m.varlik_idleri.filter((v) => mevcut.has(v));
+      const girdi: AktarimSatiriGirdisi = {
+        platform: m.platform,
+        katman: m.katman,
+        niyet: m.niyet,
+        kitleAdi: m.kitle_adi,
+        varlikIdleri: varliklar,
+        planlananVarlikSayisi: m.varlik_idleri.length,
+        tutarMicros: BigInt(m.tutar_micros),
+        paraBirimi: p.para_birimi,
+        donem: p.donem,
+        not: m.notu,
+      };
+      const engel = aktarimEngeli(girdi);
+      if (engel) {
+        sonuc.atlanan.push({ matrisSatiriId: m.id, neden: engel });
+        continue;
+      }
+      const baslik = `${NIYET_KATALOGU[m.niyet].ekranAdi} · ${m.kitle_adi}`.slice(0, 120);
+      const oturumId = await this.prisma.withTenant(ctx, async (tx) => {
+        const [o] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          INSERT INTO adv_oturum (org_id, client_id, user_id, baslik, model, hazir_istem, hazir_medyalar, strateji_matris_id)
+          VALUES (${orgId}::uuid, ${p.client_id}::uuid, ${ctx.userId}::uuid, ${baslik}, ${this.modelAdi},
+                  ${aktarimIstemi(girdi)}, ${varliklar}::uuid[], ${m.id}::uuid)
+          ON CONFLICT (strateji_matris_id) WHERE strateji_matris_id IS NOT NULL DO NOTHING
+          RETURNING id::text`);
+        if (o) return o.id;
+        // Satırın oturumu önceki (yarıda düşen) bir denemede açılmış: AYNI
+        // oturum aktarılmış sayılır, ikincisi açılmaz. Ayrı bir ön kontrol
+        // yerine tek kapı tekil indeks: ön kontrol yarışta iki isteği birden
+        // geçirirdi, ON CONFLICT geçirmez.
+        const [var_] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT id::text FROM adv_oturum WHERE strateji_matris_id = ${m.id}::uuid`);
+        return var_!.id;
+      });
+      sonuc.aktarilan.push({ matrisSatiriId: m.id, oturumId });
+    }
+
+    if (sonuc.aktarilan.length === 0) {
+      const sayac = new Map<AktarimAtlamaNedeni, number>();
+      for (const a of sonuc.atlanan) sayac.set(a.neden, (sayac.get(a.neden) ?? 0) + 1);
+      const nedenler = [...sayac].map(([n, k]) => `${k} satırın ${ATLAMA_METNI[n]}`).join(', ');
+      throw new BadRequestException(
+        okuma.satirlar.length === 0
+          ? 'Matriste satır yok; aktarılacak bir şey bulunmadı.'
+          : `Aktarılabilecek satır yok: ${nedenler}.`,
+      );
+    }
+
+    return this.prisma.withTenant(ctx, async (tx) => {
+      sonuc.zaman = new Date().toISOString();
+      const n = await tx.$executeRaw(Prisma.sql`
+        UPDATE strateji_planlari
+           SET durum = ${PLAN_GECISLERI.aktar.hedef}, aktarim = ${JSON.stringify(sonuc)}::jsonb, updated_at = now()
+         WHERE id = ${p.id}::uuid AND durum = 'onaylandi' AND surum = ${surum}`);
+      // Arada başka bir istek planı aktardı ya da iptal etti. Açılan oturumlar
+      // tekil indeks sayesinde mükerrer değil; durum ötekinin yazdığı kalır.
+      if (n === 0) throw new ConflictException(SURUM_MESAJI);
+      return detayKur(tx, ctx, await planOku(tx, ctx, p.id, false));
+    });
+  }
 
   // ── Okuma ────────────────────────────────────────────────────────────
 
@@ -172,6 +321,23 @@ export class StratejiService {
 
   async detay(ctx: TenantContext, id: string): Promise<PlanDetayi> {
     return this.prisma.withTenant(ctx, async (tx) => detayKur(tx, ctx, await planOku(tx, ctx, id, false)));
+  }
+
+  /**
+   * Medya planı PDF'i (MIMARI § 6.3). Veri transaction İÇİNDE okunuyor, PDF
+   * transaction DIŞINDA üretiliyor: üretim saniyeler sürebilir ve
+   * `withTenant`in 5 saniyelik sınırı içinde yapılırsa büyük bir planda
+   * transaction ölür (rapor PDF'iyle aynı karar, reports.controller.ts).
+   */
+  async pdf(ctx: TenantContext, id: string): Promise<{ bayt: Buffer; dosyaAdi: string }> {
+    const veri = await this.prisma.withTenant(ctx, async (tx) => {
+      const p = await planOku(tx, ctx, id, false);
+      const [c] = await tx.$queryRaw<Array<{ name: string; slug: string }>>(Prisma.sql`
+        SELECT name, slug FROM clients WHERE id = ${p.client_id}::uuid`);
+      return { detay: await detayKur(tx, ctx, p), workspace: c?.name ?? '', slug: c?.slug ?? 'workspace' };
+    });
+    const bayt = await medyaPlaniPdf({ workspace: veri.workspace, detay: veri.detay });
+    return { bayt, dosyaAdi: medyaPlaniDosyaAdi(veri.slug, veri.detay.plan.donem, veri.detay.plan.surum, veri.detay.plan.durum) };
   }
 
   // ── Plan aç ──────────────────────────────────────────────────────────
@@ -393,12 +559,17 @@ export class StratejiService {
       for (const s of girdi.satirlar) {
         // `undefined` = dokunma, `null` grup = temizle. İkisini ayırmak için
         // ayrı bayrak: COALESCE null'ı "dokunma" sayar ve grubu silmeyi
-        // imkânsız yapardı.
+        // imkânsız yapardı. Yazılan grup ELLE sayılır (`grup_elle`) ve
+        // otomatik gruplama onu bir daha ezmez; temizlenen grup otomatiğe
+        // geri bırakılır (boş grup bir karar değil, "sen seç" demek).
+        // KelimeGuncelleGirdisi string | null | undefined taşıyor; `!= null`
+        // bilerek gevşek: ikisini de "yazılmadı" sayar.
         const grupVar = s.grup !== undefined;
         const n = await tx.$executeRaw(Prisma.sql`
           UPDATE strateji_kelimeleri
              SET secili = COALESCE(${s.secili ?? null}::boolean, secili),
-                 grup = CASE WHEN ${grupVar}::boolean THEN ${s.grup ?? null} ELSE grup END
+                 grup = CASE WHEN ${grupVar}::boolean THEN ${s.grup ?? null} ELSE grup END,
+                 grup_elle = CASE WHEN ${grupVar}::boolean THEN ${s.grup != null}::boolean ELSE grup_elle END
            WHERE id = ${s.id}::uuid AND plan_id = ${p.id}::uuid`);
         guncellenen += n;
       }
@@ -414,9 +585,7 @@ export class StratejiService {
   // ── Durum makinesi ───────────────────────────────────────────────────
 
   async eylem(ctx: TenantContext, id: string, girdi: PlanEylemGirdisi): Promise<PlanDetayi> {
-    if (KURULMAMIS_EYLEMLER.includes(girdi.eylem)) {
-      throw new BadRequestException('Aktarım henüz kurulmadı.');
-    }
+    if (girdi.eylem === 'aktar') return this.aktar(ctx, id, girdi.surum);
     return this.prisma.withTenant(ctx, async (tx) => {
       const p = await planOku(tx, ctx, id, true);
       if (!gecisMumkunMu(p.durum, girdi.eylem)) throw new ConflictException(gecisMesaji(p.durum, girdi.eylem));
@@ -467,13 +636,21 @@ export function onayRolu(ctx: Pick<TenantContext, 'role'>): 'musteri' | 'ajans' 
 /**
  * Bu kullanıcının bu planda yapabileceği eylemler: durum × izin. Panel
  * düğmeleri BUNDAN çiziliyor; düğmenin görünürlüğü ile sunucunun kabulü
- * ayrışırsa kullanıcı tıklayıp ret alır. Kurulmamış eylem (aktarım) hiç
- * listelenmez.
+ * ayrışırsa kullanıcı tıklayıp ret alır.
  */
 export function yapilabilirEylemler(durum: PlanDurumu, izinler: readonly Permission[]): PlanEylemi[] {
-  return PLAN_EYLEMLERI.filter(
-    (e) => !KURULMAMIS_EYLEMLER.includes(e) && gecisMumkunMu(durum, e) && izinler.includes(EYLEM_IZNI[e]),
-  );
+  return PLAN_EYLEMLERI.filter((e) => gecisMumkunMu(durum, e) && EYLEM_IZINLERI[e].every((i) => izinler.includes(i)));
+}
+
+/**
+ * PDF dosya adı: ASCII, başlık enjeksiyonuna kapalı. `slug` veritabanından
+ * gelse de yalnız [a-z0-9-] bırakılıyor: `Content-Disposition` başlığına
+ * tırnak ya da satır sonu sızarsa başlık bölünür. Sürüm adın içinde:
+ * aynı ayın iki PDF'i karıştırılmasın. Taslak adında da yazıyor.
+ */
+export function medyaPlaniDosyaAdi(slug: string, donem: string, surum: number, durum: PlanDurumu): string {
+  const temiz = slug.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'workspace';
+  return `medya-plani-${temiz}-${donem}-s${surum}${durum === 'taslak' ? '-taslak' : ''}.pdf`;
 }
 
 function erisim(ctx: TenantContext, clientId: string): void {
@@ -758,11 +935,12 @@ async function detayKur(tx: Tx, ctx: TenantContext, p: PlanSatiri): Promise<Plan
     teklif_ust_micros: string | null;
     varyantlar: string[];
     grup: string | null;
+    grup_elle: boolean;
     secili: boolean;
     cekim_zamani: Date;
   }>>(Prisma.sql`
     SELECT id::text, kelime, aylik_arama::text, rekabet, teklif_alt_micros::text, teklif_ust_micros::text,
-           varyantlar, grup, secili, cekim_zamani
+           varyantlar, grup, grup_elle, secili, cekim_zamani
       FROM strateji_kelimeleri WHERE plan_id = ${p.id}::uuid
      ORDER BY secili DESC, aylik_arama DESC NULLS LAST, kelime`);
   const kelimeler: KelimeSatiri[] = kr.map((k) => ({
@@ -774,6 +952,7 @@ async function detayKur(tx: Tx, ctx: TenantContext, p: PlanSatiri): Promise<Plan
     teklifUstMicros: k.teklif_ust_micros,
     varyantlar: k.varyantlar ?? [],
     grup: k.grup,
+    grupElle: k.grup_elle,
     secili: k.secili,
     cekimZamani: new Date(k.cekim_zamani).toISOString(),
   }));

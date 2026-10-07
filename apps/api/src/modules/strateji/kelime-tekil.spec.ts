@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kelimeSonucunuHazirla, sadelestir, tekillestir, KELIME_YAZMA_SINIRI, type HamKelimeFikri } from './kelime-tekil';
+import { DIGER_GRUBU, kelimeGrubu, kelimeSonucunuHazirla, sadelestir, tekillestir, KELIME_YAZMA_SINIRI, type HamKelimeFikri } from './kelime-tekil';
 
 /**
  * Varyant tekilleştirme — ÇALIŞTIRILARAK. Örnek değerler Ö-1 ölçümünden
@@ -67,5 +67,33 @@ describe('sırala ve kes', () => {
     expect(r.toplam).toBe(400);
     expect(KELIME_YAZMA_SINIRI).toBeLessThanOrEqual(500);
     expect(r.satirlar[0]!.kelime).toBe('kelime 399');
+  });
+});
+
+describe('kelime gruplama (MIMARI § 6.2)', () => {
+  const T = ['kahve makinesi', 'kahve', 'French Press'];
+  it('KRİTİK: kelime İÇERDİĞİ EN UZUN tohuma gider; grup adı tohumun kendisi', () => {
+    expect(kelimeGrubu('türk kahve makinesi', 100n, T, 1000)).toBe('kahve makinesi');
+    expect(kelimeGrubu('filtre kahve', 100n, T, 1000)).toBe('kahve');
+    // Sıra bağımsız: kısa tohum önce yazılsa da daha DAR (uzun) olan kazanır.
+    expect(kelimeGrubu('türk kahve makinesi', 100n, ['kahve', 'kahve makinesi'], 1000)).toBe('kahve makinesi');
+  });
+
+  it('KRİTİK: karşılaştırma Türkçe sadeleştirmeyle (büyük harf ve ç/ş farkı grup ayırmaz)', () => {
+    expect(kelimeGrubu('french press fiyat', 10n, T, 1000)).toBe('French Press');
+    expect(kelimeGrubu('KAHVE MAKİNESİ', 10n, T, 1000)).toBe('kahve makinesi');
+    expect(kelimeGrubu('cay', 10n, ['çay'], 1000)).toBe('çay');
+  });
+
+  it('KRİTİK: tohum içermeyen kelime eşik ve üstüyse kendi grubu, altındaysa Diğer; hacmi bilinmeyen Diğer', () => {
+    expect(kelimeGrubu('philips espresso', 165000n, T, 1000)).toBe('philips espresso');
+    expect(kelimeGrubu('philips espresso', 1000n, T, 1000)).toBe('philips espresso');
+    expect(kelimeGrubu('philips espresso', 999n, T, 1000)).toBe(DIGER_GRUBU);
+    expect(kelimeGrubu('philips espresso', null, T, 1000)).toBe(DIGER_GRUBU);
+  });
+
+  it('eşit uzunlukta ilk yazılan tohum kazanır (kararlı çıktı)', () => {
+    expect(kelimeGrubu('abc xyz', 1n, ['abc', 'xyz'], 1000)).toBe('abc');
+    expect(kelimeGrubu('abc xyz', 1n, ['xyz', 'abc'], 1000)).toBe('xyz');
   });
 });
