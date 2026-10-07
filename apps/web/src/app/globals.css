@@ -90,6 +90,15 @@
   --arama-baslik: #1a0dab;
   --arama-adres: #4d5156;
 
+  /*
+   * PLATFORM RENGİ — yalnız Pilot bütçe şeridi ve lejantı. Şerit "bütçe
+   * hangi platforma gidiyor" sorusunu renkle cevaplıyor; ham `bg-blue-600`
+   * yazmak karanlık temada dönmezdi (tema-belirtecleri.spec). Marka rengi
+   * BİLEREK kullanılmıyor: kırmızı bu panelde "dikkat" ve birincil eylem.
+   */
+  --platform-meta: #2f5bea;
+  --platform-google: #0f9d58;
+
   --radius: 0.875rem;
   /*
    * GÖLGELER KATMANLI: yakın ve keskin bir kenar gölgesi + uzak ve yumuşak
@@ -129,6 +138,8 @@
     /* Google'ın kendi karanlık tema karşılıkları. */
     --arama-baslik: #8ab4f8;
     --arama-adres: #bdc1c6;
+    --platform-meta: #7c9bff;
+    --platform-google: #4cc38a;
     --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.35);
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.02);
     --shadow-hover: 0 2px 4px rgb(0 0 0 / 0.4), 0 16px 36px -10px rgb(0 0 0 / 0.7);
@@ -167,6 +178,8 @@
   --color-arama-adres: var(--arama-adres);
   --color-info-soft: var(--info-soft);
   --color-info-strong: var(--info-strong);
+  --color-meta: var(--platform-meta);
+  --color-google: var(--platform-google);
   --font-sans: var(--brand-font);
   --radius-xl: var(--radius);
   /*
