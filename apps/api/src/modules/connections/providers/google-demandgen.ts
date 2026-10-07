@@ -1,4 +1,4 @@
-import type { GoogleMutateBody } from './google-write';
+import { AB_SIYASI_BEYAN, kampanyaTarihleri, type GoogleMutateBody } from './google-write';
 
 /**
  * DEMAND GEN — YouTube video reklamının API'den kurulabilen TEK yolu.
@@ -117,9 +117,9 @@ export function demandGenCampaignBody(params: {
     // Tıklamayı azamileştir. Alan adı stratejinin kendisi; ayrı bir
     // `biddingStrategyType` gönderilmiyor (o salt okunur ve buradan türüyor).
     targetSpend: {},
+    containsEuPoliticalAdvertising: AB_SIYASI_BEYAN,
   };
-  if (params.startDate) create.startDate = params.startDate;
-  if (params.endDate) create.endDate = params.endDate;
+  Object.assign(create, kampanyaTarihleri(params.startDate, params.endDate));
   return body([{ create }]);
 }
 

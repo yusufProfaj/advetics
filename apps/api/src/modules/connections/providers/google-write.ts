@@ -114,6 +114,11 @@ export function campaignBody(params: {
     advertisingChannelType: 'SEARCH',
     campaignBudget: params.budgetResource,
     manualCpc: { enhancedCpcEnabled: false },
+    containsEuPoliticalAdvertising: AB_SIYASI_BEYAN,
+    // AI Max açıkça KAPALI: açıkken anahtar kelimesiz eşleme ve geniş eşleme
+    // devreye giriyor ve bütçe kullanıcının seçmediği sorgulara gidiyor
+    // (SENTEZ S-19). Göndermemek kararı Google'a bırakmak olurdu.
+    aiMaxSetting: { enableAiMax: false },
     networkSettings: {
       targetGoogleSearch: true,
       targetSearchNetwork: false,
@@ -121,8 +126,7 @@ export function campaignBody(params: {
       targetPartnerSearchNetwork: false,
     },
   };
-  if (params.startDate) create.startDate = params.startDate;
-  if (params.endDate) create.endDate = params.endDate;
+  Object.assign(create, kampanyaTarihleri(params.startDate, params.endDate));
   return body([{ create }]);
 }
 
@@ -242,6 +246,29 @@ export function nameStamp(now: Date): string {
  * Date'e çevirip geri almak saat dilimi kayması üretiyor; bu projede tarihler
  * zaten string olarak taşınıyor.
  */
+/**
+ * KAMPANYA TARİHİ ve AB SİYASİ BEYANI — iki kampanya gövdesinin ortak alanları
+ * (A1 §7.1-7.2, SENTEZ D-G1/D-G2).
+ *
+ * `startDate/endDate` v23'te KALDIRILDI; v25 `startDateTime/endDateTime`
+ * istiyor ("yyyy-MM-dd HH:mm:ss", hesabın saat diliminde). Eski adla giden
+ * gövde reddediliyor: YouTube boost'u her çağrıda bitiş tarihi gönderdiği
+ * için o yol HER SEFERİNDE düşüyordu.
+ *
+ * `containsEuPoliticalAdvertising` oluşturmada ZORUNLU. Göndermemek
+ * `FieldError.REQUIRED`; üstelik hesapta beyansız tek kampanya kalırsa Google
+ * o hesaptaki kampanya yazmalarını kilitliyor. Ürün AB siyasi reklamı
+ * yayınlamıyor, değer sabit.
+ */
+export const AB_SIYASI_BEYAN = 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING';
+
+export function kampanyaTarihleri(startDate?: string, endDate?: string): Record<string, string> {
+  const t: Record<string, string> = {};
+  if (startDate) t.startDateTime = `${startDate} 00:00:00`;
+  if (endDate) t.endDateTime = `${endDate} 23:59:59`;
+  return t;
+}
+
 export function googleDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }

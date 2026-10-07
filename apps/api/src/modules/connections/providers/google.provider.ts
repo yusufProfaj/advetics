@@ -2030,6 +2030,31 @@ export class GoogleProvider implements IAdPlatformProvider {
     ctx: FetchContext,
     req: PublishDraftRequest,
   ): Promise<PublishDraftResult> {
+    /*
+     * ESKİ YOL KAPALI (SENTEZ D-G3, 2026-10-07). Bu yol arama kampanyasını
+     * KONUM ve DİL ölçütü olmadan kuruyordu: reklam bütün dünyada, bütün
+     * dillerde yayınlanırdı ve Google hiçbir hata vermezdi. Ayrıca bütçe,
+     * kampanya, grup ve reklamı sıralı çağrıyla kurup hatada elle geri
+     * alıyordu; geri alma da düşerse yarım kampanya kalıyordu. Ekranı
+     * kaldırıldı (eski Reklam Oluştur); Google kurulumu AdvCampaign'de tek
+     * atomik mutate ile ve prova ile yeniden yazılıyor. Kod silinmedi çünkü
+     * gövde üreticileri o yolun temeli; ama çağrılırsa para harcayan yanlış
+     * bir kampanya açmak yerine açıkça reddediyor.
+     */
+    void ctx;
+    void req;
+    throw new PlatformApiError(
+      'google',
+      'permanent',
+      'Bu Google kurulum yolu kapatıldı; Google kampanyaları AdvCampaign üzerinden kurulacak.',
+    );
+  }
+
+  /** Eski gövde (kapalı); yeni yol yazılınca silinecek. Bkz. publishDraft. */
+  private async eskiPublishDraft(
+    ctx: FetchContext,
+    req: PublishDraftRequest,
+  ): Promise<PublishDraftResult> {
     if (!req.linkUrl) {
       throw new PlatformApiError(
         'google',

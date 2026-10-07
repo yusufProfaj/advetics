@@ -84,11 +84,18 @@ describe('kampanya', () => {
   });
 
   it('tarih verilmezse alan HİÇ gönderilmiyor', () => {
-    expect(create.startDate).toBeUndefined();
-    expect(create.endDate).toBeUndefined();
+    expect(create.startDateTime).toBeUndefined();
+    expect(create.endDateTime).toBeUndefined();
   });
 
-  it('tarihler YYYY-MM-DD', () => {
+  it('KRİTİK: AB siyasi beyanı ve AI Max kapalı AÇIKÇA yazılıyor (A1 §7.2, S-19)', () => {
+    // Beyansız oluşturma FieldError.REQUIRED; hesapta beyansız kampanya
+    // kalırsa Google o hesabın kampanya yazmalarını kilitliyor.
+    expect(create.containsEuPoliticalAdvertising).toBe('DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING');
+    expect(create.aiMaxSetting).toEqual({ enableAiMax: false });
+  });
+
+  it('KRİTİK: tarihler v25 alan adlarıyla — startDate/endDate v23\'te KALDIRILDI', () => {
     const withDates = campaignBody({
       name: 'Yaz',
       budgetResource: 'r',
@@ -96,7 +103,11 @@ describe('kampanya', () => {
       startDate: '2026-08-16',
       endDate: '2026-08-23',
     });
-    expect(withDates.operations[0]!.create!.startDate).toBe('2026-08-16');
+    const c = withDates.operations[0]!.create!;
+    expect(c.startDateTime).toBe('2026-08-16 00:00:00');
+    expect(c.endDateTime).toBe('2026-08-23 23:59:59');
+    expect(c).not.toHaveProperty('startDate');
+    expect(c).not.toHaveProperty('endDate');
   });
 });
 

@@ -48,6 +48,13 @@ describe('kısmi başarı', () => {
 describe('kampanya', () => {
   const c = op(demandGenCampaignBody({ name: 'Boost', budgetResource: 'b/1', stamp: '2026-08-18' }));
 
+  it('KRİTİK: AB beyanı açıkça; tarih v25 alan adıyla (startDate KALDIRILDI)', () => {
+    expect(c.containsEuPoliticalAdvertising).toBe('DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING');
+    const t = op(demandGenCampaignBody({ name: 'B', budgetResource: 'b/1', stamp: 's', endDate: '2026-08-25' }));
+    expect(t.endDateTime).toBe('2026-08-25 23:59:59');
+    expect(t).not.toHaveProperty('endDate');
+  });
+
   it('KRİTİK: kanal tipi DEMAND_GEN', () => {
     // VIDEO kampanya API'den oluşturulamıyor; enum'da değerin durması
     // oluşturulabilir olduğunu göstermiyor.
