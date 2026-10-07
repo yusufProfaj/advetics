@@ -34,7 +34,6 @@ import {
   pilotUcAdresi,
   planAdresi,
   satirCikarIstegi,
-  type EylemDugmesi,
 } from './hesap';
 import type { PilotEkranEylemi, PilotPlanDetayi } from './yanitlar';
 
@@ -300,14 +299,49 @@ export function PlanBelgesi({ clientId, detay, eskiPlanNotu }: { clientId: strin
         </Uyari>
       )}
 
-      {/* ─── Alt çubuk: tek birincil eylem ─── */}
-      <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-ink py-3 pl-5 pr-3 text-surface shadow-acilir">
-        <span className="min-w-0 flex-1 basis-56 text-sm [text-wrap:pretty]">{cubuk.metin}</span>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <PdfDugmesi planId={plan.id} donem={plan.donem} surum={plan.surum} />
+      {/*
+        İKİNCİL EYLEMLER ÇUBUĞUN DIŞINDA. Telefonda yapışkan çubuğa beş düğme
+        sığmıyor, üç satıra kırılıp belgenin üçte birini örtüyordu (375
+        pikselde gözle görüldü). Çubukta yalnız cümle, PDF ve tek birincil
+        eylem; geri çek, iptal, yeniden hazırla belgenin sonunda, çubuğun
+        hemen üstünde. MÜŞTERİDE İSTİSNA: onun tek ikincil eylemi "Değişiklik
+        iste" ve "Onayla"nın yanında durmalı; itiraz etmek için belgenin
+        sonunu aramak, itirazı onaydan zor yapardı.
+      */}
+      {!musteri && cubuk.ikincil.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-1.5">
           {cubuk.ikincil.map((d) => (
-            <CubukDugmesi key={d.eylem} d={d} suruyor={islem.tur === 'suruyor' && islem.eylem === d.eylem} kilitli={suruyor} tikla={() => eylemYap(d.eylem)} />
+            <Dugme
+              key={d.eylem}
+              ton={d.eylem === 'degisiklik_iste' || d.eylem === 'onayla' ? 'ikincil' : 'sade'}
+              bekliyor={islem.tur === 'suruyor' && islem.eylem === d.eylem}
+              disabled={suruyor}
+              onClick={() => eylemYap(d.eylem)}
+            >
+              {d.etiket}
+            </Dugme>
           ))}
+        </div>
+      )}
+
+      {/* ─── Alt çubuk: tek birincil eylem ─── */}
+      <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl bg-ink py-2.5 pl-4 pr-2.5 text-surface shadow-acilir sm:bottom-4 sm:pl-5">
+        <span className="min-w-0 flex-1 basis-52 text-[13px] leading-snug sm:text-sm [text-wrap:pretty]">{cubuk.metin}</span>
+        <div className="flex items-center gap-1.5">
+          <PdfDugmesi planId={plan.id} donem={plan.donem} surum={plan.surum} />
+          {musteri &&
+            cubuk.ikincil.map((d) => (
+              <button
+                key={d.eylem}
+                type="button"
+                className={CUBUK_IKINCIL}
+                disabled={suruyor}
+                aria-busy={(islem.tur === 'suruyor' && islem.eylem === d.eylem) || undefined}
+                onClick={() => eylemYap(d.eylem)}
+              >
+                {d.etiket}
+              </button>
+            ))}
           {cubuk.birincil && (
             <Dugme
               bekliyor={islem.tur === 'suruyor' && islem.eylem === cubuk.birincil.eylem}
@@ -385,15 +419,6 @@ function BolumBasligi({ baslik, not }: { baslik: string; not?: string }) {
  */
 const CUBUK_IKINCIL =
   'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-semibold text-surface/85 transition-colors hover:bg-surface/10 hover:text-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50';
-
-function CubukDugmesi({ d, suruyor, kilitli, tikla }: { d: EylemDugmesi; suruyor: boolean; kilitli: boolean; tikla: () => void }) {
-  return (
-    <button type="button" className={CUBUK_IKINCIL} disabled={kilitli} aria-busy={suruyor || undefined} onClick={tikla}>
-      {suruyor && <span aria-hidden className="advetics-donus h-3.5 w-3.5 rounded-full border-2 border-current border-r-transparent" />}
-      {d.etiket}
-    </button>
-  );
-}
 
 // ─── Kampanya listesi ──────────────────────────────────────────────────────
 
@@ -508,6 +533,9 @@ function KelimeBolumu({ plan, clientId, musteri }: { plan: PlanOnerisi; clientId
 
 // ─── Ajans notları: yayın kipi + uyum ──────────────────────────────────────
 
+/* Uyum durumu kartın İÇİNDE düz cümle: `Uyari` kutusu kartın içinde ikinci bir kart çiziyordu. */
+const UYUM_TON_SINIFI = { bilgi: 'text-ink', uyari: 'text-warn-strong', tehlike: 'text-danger-strong', basari: 'text-ok-strong' } as const;
+
 function AjansNotlari({
   detay,
   izinli,
@@ -538,7 +566,7 @@ function AjansNotlari({
       )}
       {uyum && (
         <section className="space-y-2.5 rounded-xl border border-line bg-surface p-5">
-          <Uyari ton={UYUM_DURUM_METNI[uyum.durum].ton} baslik={UYUM_DURUM_METNI[uyum.durum].metin} />
+          <p className={`text-sm font-semibold ${UYUM_TON_SINIFI[UYUM_DURUM_METNI[uyum.durum].ton]}`}>{UYUM_DURUM_METNI[uyum.durum].metin}</p>
           {bulgular.length > 0 && (
             <ul className="divide-y divide-line">
               {bulgular.map((b) => {
