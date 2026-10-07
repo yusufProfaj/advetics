@@ -20,6 +20,14 @@ kaldırıldı (SDK dahil). Tek istemci `apps/api/src/yapay-zeka/gemini.ts`
 doğrular, .env yedeği alır, yalnız Advetics süreçlerini yeniden başlatır).
 Sohbet kaydı Gemini'nin kendi biçiminde: düşünce imzaları aynen geri gidiyor.
 
+**ADVSTRATEGY (2026-10-08, yeni modül):** aylık medya planı (bütçe dağılımı,
+Google arama kurgusu, kitle × kreatif matrisi, sezon, PDF + AdvCampaign'e
+aktarım), yalnız Meta + Google. Plan beş ajana bölündü:
+[`advstrategy/AJAN-PLANI.md`](advstrategy/AJAN-PLANI.md). Kararlar: PDF'te
+Advetics logosu, onay PDF + panel içi (dış link yok), aktarım platforma
+DEĞİL AdvCampaign'e taslak. **Sıradaki:** Ajan 1 (sözleşme + veri modeli)
+ve Keyword Planner erişim ölçümü. Henüz kod yok.
+
 **ADVCAMPAIGN (2026-10-07, kullanıcı kararı):** eski Reklam Oluştur, AI
 Asistan ve Toplu Oluştur KALDIRILDI (panel + API `ai-assistant` sohbeti ve
 `bulk` modülü); menüde tek satır **AdvCampaign → `/reklam`**. Hedef:
