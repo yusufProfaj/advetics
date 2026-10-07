@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ReklamController } from './reklam.controller';
 import { ReklamHazirlikService } from './hazirlik.service';
+import { ReklamTaslakService } from './taslak.service';
+import { AjansAyariService } from './ajans-ayari.service';
 
 /**
  * Yeni Reklam Oluştur modülü (docs/meta-reklam-brief/tasarim/TASARIM.md).
@@ -14,6 +16,6 @@ import { ReklamHazirlikService } from './hazirlik.service';
  */
 @Module({
   controllers: [ReklamController],
-  providers: [ReklamHazirlikService],
+  providers: [ReklamHazirlikService, ReklamTaslakService, AjansAyariService],
 })
 export class ReklamModule {}

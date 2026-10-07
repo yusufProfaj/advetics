@@ -67,6 +67,11 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   { tablo: 'auto_boost_subscriptions', etiket: 'boost aboneliği' },
   { tablo: 'fatura_belgeleri', etiket: 'fatura' },
   { tablo: 'ai_conversations', etiket: 'asistan sohbeti' },
+  // Yeni reklam modülü: taslak ve DEĞİŞMEZ sürümleri workspace'in bütün
+  // geçmişiyle gidiyor. Sürüm tablosunun trigger'ı client_id/org_id
+  // değişimine bilerek izin veriyor; içerik kolonları kilitli.
+  { tablo: 'reklam_taslagi', etiket: 'yeni reklam taslağı' },
+  { tablo: 'taslak_surumu', etiket: 'taslak sürümü' },
 ] as const;
 
 /**
@@ -116,7 +121,16 @@ export const COCUK_TABLOLAR: ReadonlyArray<{
  * Alt satırları (`sync_jobs`) `org_id` taşımıyor, dolayısıyla onlar da
  * kendiliğinden tutarlı kalıyor.
  */
-export const KAYNAKTA_KALANLAR = ['sync_batches'] as const;
+export const KAYNAKTA_KALANLAR = [
+  'sync_batches',
+  /*
+   * AJANS GENELİ ayar (atıf standardı): bir workspace'in değil şirketin
+   * kaydı ve `client_id` taşımıyor. Workspace başka şirkete geçince yeni
+   * şirketin (ya da onun ajansının) ayarı geçerli olur — taşınacak bir şey
+   * yok.
+   */
+  'ajans_ayari',
+] as const;
 
 export const CASCADE_ILE_TASINANLAR = [
   'ad_accounts',

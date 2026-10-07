@@ -147,6 +147,13 @@ export const MUSTERIDE_KALAN = [
    */
   { tablo: 'draft_campaigns', etiket: 'taslak kampanya' },
   { tablo: 'bulk_batches', etiket: 'toplu işlem' },
+  /*
+   * Yeni reklam taslağı birinin KARARI: kalıyor. Hesap gidince taslak
+   * ölmüyor, eksik listesi "bu reklam hesabı artık bu workspace'e atanmış
+   * değil" diyor ve başka hesap seçilebiliyor (TASARIM § 02.3). Sürümleri
+   * taslağa bağlı, ayrıca sayılmıyor.
+   */
+  { tablo: 'reklam_taslagi', etiket: 'yeni reklam taslağı' },
 ] as const;
 
 export type TasimaSonucu = {

@@ -3554,3 +3554,67 @@ model AiMessage {
   @@index([conversationId, createdAt])
   @@map("ai_messages")
 }
+
+// =============================================================================
+// YENİ REKLAM MODÜLÜ (docs/meta-reklam-brief/tasarim/TASARIM.md § 16)
+//
+// İLİŞKİ ALANI BİLEREK YOK: yabancı anahtarlar migration'da (client_id,
+// org_id) KOMPOZİT kuruluyor ve modül ham SQL kullanıyor. Burada ilişki
+// bildirmek Client/User/Organization modellerine geri alan eklemeyi
+// gerektirirdi; eski modüllerin dosyalarına dokunmadan kalmak modül
+// sınırının parçası. Kolonlar ve CHECK'ler migration'da yazılı.
+// =============================================================================
+
+model ReklamTaslagi {
+  id             String    @id @default(uuid()) @db.Uuid
+  orgId          String    @map("org_id") @db.Uuid
+  clientId       String    @map("client_id") @db.Uuid
+  platform       Platform
+  adAccountId    String?   @map("ad_account_id") @db.Uuid
+  niyetKodu      String?   @map("niyet_kodu") @db.VarChar(32)
+  butceSeviyesi  String    @default("kampanya") @map("butce_seviyesi") @db.VarChar(12)
+  durum          String    @default("taslak") @db.VarChar(16)
+  onayTuru       String?   @map("onay_turu") @db.VarChar(20)
+  aktifSurumNo   Int       @default(0) @map("aktif_surum_no")
+  olusturanYuz   String    @map("olusturan_yuz") @db.VarChar(12)
+  kaynakTaslakId String?   @map("kaynak_taslak_id") @db.Uuid
+  asilCumle      String?   @map("asil_cumle") @db.VarChar(2000)
+  olusturanId    String    @map("olusturan_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  arsivlendiAt   DateTime? @map("arsivlendi_at") @db.Timestamptz(6)
+
+  @@index([clientId, durum, updatedAt(sort: Desc)], map: "reklam_taslagi_client_durum_idx")
+  @@index([orgId], map: "reklam_taslagi_org_id_idx")
+  @@index([adAccountId], map: "reklam_taslagi_hesap_idx")
+  @@map("reklam_taslagi")
+}
+
+model TaslakSurumu {
+  id           String   @id @default(uuid()) @db.Uuid
+  taslakId     String   @map("taslak_id") @db.Uuid
+  orgId        String   @map("org_id") @db.Uuid
+  clientId     String   @map("client_id") @db.Uuid
+  surumNo      Int      @map("surum_no")
+  alanlar      Json     @db.JsonB
+  icerikOzeti  String   @map("icerik_ozeti") @db.Char(64)
+  profilSurumu Int?     @map("profil_surumu")
+  eksikler     Json     @default("[]") @db.JsonB
+  olusturanId  String   @map("olusturan_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([taslakId, surumNo], map: "taslak_surumu_taslak_no_key")
+  @@index([clientId], map: "taslak_surumu_client_idx")
+  @@index([orgId], map: "taslak_surumu_org_id_idx")
+  @@map("taslak_surumu")
+}
+
+model AjansAyari {
+  orgId         String    @id @map("org_id") @db.Uuid
+  atifStandardi String?   @map("atif_standardi") @db.VarChar(16)
+  atifSecenId   String?   @map("atif_secen_id") @db.Uuid
+  atifSecimAt   DateTime? @map("atif_secim_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("ajans_ayari")
+}

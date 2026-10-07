@@ -7,3 +7,5 @@ export * from './meta/hedefleme';
 export * from './meta/derle';
 export * from './meta/yanki';
 export * from './meta/form';
+export * from './taslak';
+export * from './taslak-alanlari';

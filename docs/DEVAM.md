@@ -9,7 +9,7 @@
 **Son güncelleme:** 2026-10-07 · **Canlı (539f6fb):** Google gün içi saatlik,
 Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlıda
 doğrulandı).
-**Bekleyen deploy:** konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
+**Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: taslak tabloları + `db:rls`), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
 **Reklam oluşturma (2026-10-07): AYRI MODÜL olarak kuruluyor.**
 Kararlar [`bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md)
@@ -27,11 +27,18 @@ para zinciri (`tutarAyristir`, `microsToMinor` kırpmadan hata), bütçe
 üreticisi (`hedeflemeUret`, varsayılansız `advantageAudience`, konut kısıt
 haritası, ülke kümesi), `derleMeta()` + manifesto (FORM ve SITE; WHATSAPP
 ve diğerleri canlı ölçüm olmadan retle duruyor). Hepsi mutasyonla sınandı.
-**Sıradaki:** beklenen yankı ve geri okuma karşılaştırıcısı (§ 06.5),
-form derleyicisi (§ 06.4 M-37..M-43), taslak tablosu (sürüm, `AlanKaynagi`,
-`eksikler()`); sonra yayın motoru. Atıf standardı (OK-16) ajans
-yöneticisinin kararı: seçilene kadar derleyici yayın vermiyor. Boost
-taşıması ve rapor sonuç adları derleyici bittikten sonra.
+Ayrıca: geri okuma karşılaştırıcısı (`beklenenYankilar`,
+`geriOkumaKarsilastir`), form derleyicisi (KVKK kutuları açıkça false,
+yasak soru sözlüğü), taslak tabloları (**MIGRATION VAR**:
+`20261007120000_reklam_taslak_cekirdegi` → `reklam_taslagi`,
+`taslak_surumu` [değişmez, trigger], `ajans_ayari`) ve uçlar
+(`/reklam/taslaklar`, `/reklam/ajans-ayari/atif`). Prova yazılmadığı için
+taslak hiçbir zaman `hazir` olmuyor (OK-17 eksiği bilerek).
+**Sıradaki:** paneli taslağa bağlamak (şu an `/reklam/yeni` durum
+tutmuyor), atıf standardı seçim ekranı, sonra yayın motoru (§ 11: prova,
+PAUSED zincir, geri okuma, açma). Atıf standardı ajans yöneticisinin
+kararı; seçilene kadar yayın yok. Boost taşıması ve rapor sonuç adları
+yayın motorundan sonra.
 **Acil, bu işten bağımsız:** Meta v26 kuralı 2026-10-27'de bütün sürümlerde
 kök `GET /?ids=` isteklerini hataya çeviriyor (rapor PDF görsel tazeleme,
 boost özeti) — ayrı oturumda düzeltiliyordu; deploy o tarihten önce.

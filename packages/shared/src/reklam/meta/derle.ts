@@ -20,6 +20,7 @@ import { etkinKategoriler, hedeflemeUret, type HedeflemeGirdisi, type OzelKatego
 import { NIYET_KATALOGU, type NiyetKodu } from './niyetler';
 import { microsToMinor } from '../para';
 import type { Butce } from '../butce';
+import { ATIF_STANDARTLARI } from '../taslak';
 
 export const DERLEYICI_SURUMU = '1.0.0';
 export const DESTEKLENEN_META_SURUMLERI = ['v25.0', 'v26.0'] as const;
@@ -65,7 +66,7 @@ export const TANINAN_OZELLIK_ANAHTARLARI = [
  * Etkileşim penceresi belgede `attribution_spec` karşılığı olmadığı için
  * listede yok (canlıda ölçülecek).
  */
-export type AtifStandardi = 'tik7_gor1' | 'tik7';
+export type AtifStandardi = (typeof ATIF_STANDARTLARI)[number];
 
 const ATIF_SPEC: Record<AtifStandardi, Array<{ event_type: string; window_days: number }>> = {
   tik7_gor1: [

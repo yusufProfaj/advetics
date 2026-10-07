@@ -397,7 +397,9 @@ DECLARE
     -- Bilgi Bankası — müşterinin genel profili
     'client_profiles',
     -- Marka Merkezi Bölüm 4 — kitle şablonları
-    'audience_templates'
+    'audience_templates',
+    -- Yeni reklam modülü (TASARIM.md § 16)
+    'reklam_taslagi', 'taslak_surumu', 'ajans_ayari'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -2259,3 +2261,42 @@ CREATE POLICY adv_manager_memberships_select ON manager_memberships
     app.has_context() AND manager_account_id = app.current_manager_account_id()
   );
 
+
+
+-- ============================================================================
+-- YENİ REKLAM MODÜLÜ — reklam_taslagi, taslak_surumu, ajans_ayari
+-- (docs/meta-reklam-brief/tasarim/TASARIM.md § 16.2)
+-- ============================================================================
+--
+-- reklam_taslagi: MÜŞTERİ KAPSAMLI; SELECT, INSERT, UPDATE. DELETE YOK:
+-- taslak silinmez arşivlenir (onay ve yayın kayıtları ona bağlanıyor).
+-- Workspace silinince CASCADE sahibin yetkisiyle işliyor, politikaya
+-- ihtiyaç duymuyor.
+CREATE POLICY adv_reklam_taslagi_select ON reklam_taslagi
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_reklam_taslagi_insert ON reklam_taslagi
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_reklam_taslagi_update ON reklam_taslagi
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- taslak_surumu: YALNIZ SELECT + INSERT. UPDATE politikası BİLEREK YOK:
+-- değişmez kayıt. Politikası olmayan UPDATE hata vermeden SIFIR satır
+-- etkiliyor (CLAUDE.md) ve burada İSTENEN davranış bu; BYPASSRLS rolünü
+-- migration'daki trigger durduruyor.
+CREATE POLICY adv_taslak_surumu_select ON taslak_surumu
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_taslak_surumu_insert ON taslak_surumu
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- ajans_ayari: OKUMA kendi şirketi + AJANS şirketi (`havuz_kapsaminda`):
+-- müşteri şirketinin kullanıcısı da yayınının NEDEN durduğunu (atıf
+-- standardı seçilmedi) görebilmeli. YAZMA yalnız o şirketin yöneticisi ve
+-- yalnız kendi şirketinde; "ajans şirketi mi" sorusu servis katmanında.
+CREATE POLICY adv_ajans_ayari_select ON ajans_ayari
+  FOR SELECT USING (app.has_context() AND app.havuz_kapsaminda(org_id));
+CREATE POLICY adv_ajans_ayari_insert ON ajans_ayari
+  FOR INSERT WITH CHECK (org_id = app.current_org_id() AND app.is_org_admin());
+CREATE POLICY adv_ajans_ayari_update ON ajans_ayari
+  FOR UPDATE USING (org_id = app.current_org_id() AND app.is_org_admin())
+  WITH CHECK (org_id = app.current_org_id() AND app.is_org_admin());
