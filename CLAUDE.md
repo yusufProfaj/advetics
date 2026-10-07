@@ -85,8 +85,9 @@ ve modüller SIRAYLA ilerler (biri canlıya alınmadan diğerine geçilmez).
 - **Her modül planı başta bir "çelişki tablosu" taşır:** brief'in bu depoyla
   çeliştiği yerler, ajanlar başlamadan kullanıcıyla kapatılır.
 - **Görseldeki genel araçlar bu depoya uyarlanır:** Docker/Kubernetes YOK
-  (paylaşımlı VPS, sistem geneli kurulum yasak, §1), GitHub Actions YOK
-  (2026-10-06 kararı), Java/Go YOK. Ajan 5 = elle `deploy.sh`.
+  (paylaşımlı VPS, sistem geneli kurulum yasak, §1), Java/Go YOK. GitHub
+  Actions YALNIZCA doğrulama (`dogrula.yml`, Ajan 4'ün push sonrası bekçisi);
+  dağıtım yok. Ajan 5 = iş yeşilse elle `deploy.sh`.
 
 ---
 
@@ -1209,11 +1210,14 @@ onu bilmiyor. İki tarafı ilgilendiren kural BURAYA yazılır.
   haber ver ve sunucuda `git log --oneline HEAD..origin/main` ile NEYİ
   çektiğine bak: `git pull` yalnızca senin commit'lerini değil, öbür tarafın
   henüz doğrulamadığı işini de canlıya alır.
-- **Push deploy DEĞİL ve GitHub Actions YOK** (2026-10-06, kullanıcı kararı:
-  dağıtım hep elle; otomatik iş hiç çalışmamıştı ve her push'ta hata maili
-  atıyordu). Push'tan ÖNCE yerelde `typecheck` + testler koşulmalı: depoda
-  başka bir bekçi yok, derlenmeyen kod ancak sunucudaki `deploy.sh`'ta
-  yakalanır. Sunucu ancak elle deploy edilince güncelleniyor. "Push ettim,
+- **Push deploy DEĞİL.** GitHub Actions (`dogrula.yml`) YALNIZCA doğruluyor:
+  tip, panel testleri, API testleri (ayrı adımda, tek başına), derleme, RLS
+  kapsaması. Secret kullanmıyor, sunucuya dokunmuyor. Geçmişi: 2026-10-06'da
+  tamamen kaldırıldı (hata maillerinin kaynağı hiç çalışmamış SSH dağıtım
+  işiydi), 2026-10-08'de yalnız doğrulama olarak geri kuruldu (kullanıcı
+  kararı). Dağıtım işi geri GELMEZ: paylaşımlı VPS'in SSH anahtarı GitHub'da
+  durmamalı. İş kırmızıysa sunucuda deploy ETME. Push'tan önce yerelde de
+  koş: kırmızı iş öbür tarafa da mail atıyor. Sunucu ancak elle deploy edilince güncelleniyor. "Push ettim,
   canlıda" demek bu depoda iki kez yanlış çıktı.
 - **Migration yazmadan hemen önce pull.** İki kişi aynı gün migration açarsa
   zaman damgası sırası ile uygulama sırası ayrışabilir; üretimde

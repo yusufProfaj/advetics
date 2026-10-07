@@ -259,10 +259,10 @@ cd ~/htdocs/advetics.com && git pull && ./scripts/deploy.sh
 pm2 reload → sağlık kontrolü. Üç pm2 süreci var: **`advetics-api`**, **`advetics-web`**
 ve **`advetics-worker`** ([`ecosystem.config.js`](ecosystem.config.js)).
 
-**GitHub Actions YOK** (2026-10-06, kullanıcı kararı). Otomatik dağıtım işi hiç
-çalışmamıştı ve her push'ta hata maili üretiyordu; akış tamamen kaldırıldı. Dağıtım
-bilinçli olarak elle ve tek kişi yapılıyor. Push'tan ÖNCE yerelde tip kontrolü ve
-testler koşulmalı — derlenmeyen kodu artık sunucudaki `deploy.sh` yakalar.
+[`.github/workflows/dogrula.yml`](.github/workflows/dogrula.yml) her push'ta YALNIZCA
+doğruluyor (tip, testler, derleme, RLS kapsaması); secret kullanmıyor, sunucuya
+dokunmuyor. 2026-10-06'da kaldırılıp 2026-10-08'de yalnız doğrulama olarak geri
+kuruldu. Dağıtım bilinçli olarak elle ve tek kişi yapılıyor; iş kırmızıysa deploy etme.
 
 | Script | Kim çalıştırır | Ne yapar |
 |---|---|---|

@@ -1,0 +1,102 @@
+name: Doğrulama
+
+# ═══ YALNIZCA DOĞRULAMA — DAĞITIM YOK ═══
+#
+# 2026-10-08'de geri kuruldu (kullanıcı kararı). 2026-10-06'da Actions
+# tamamen kaldırılmıştı: hata maillerinin kaynağı, hiç çalışmamış SSH dağıtım
+# işiydi. Doğrulama onunla birlikte gitti ve depoda bekçi kalmadı; iki
+# geliştirici main'e push ederken derlenmeyen kod ancak sunucudaki
+# deploy.sh'ın ortasında görünüyordu.
+#
+# BU İŞ SUNUCUYA DOKUNMAZ ve SECRET KULLANMAZ. Dağıtım hâlâ elle:
+# `su - advetics` → `cd ~/htdocs/advetics.com` → `git pull` →
+# `./scripts/deploy.sh`. Paylaşımlı VPS'in SSH anahtarını GitHub'da tutmak
+# 11+ siteyi barındıran makineye ikinci bir kapı olurdu — o yüzden dağıtım
+# işi geri GELMİYOR. Bu iş düşerse sunucuda deploy ETME: aynı derleme orada
+# da düşer.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Aynı daldaki eski koşum yenisi gelince iptal: art arda push'larda her biri
+# için ayrı mail ve dakikalar harcanmasın, yalnız son durum önemli.
+concurrency:
+  group: dogrula-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  verify:
+    name: Doğrula (tip + test + derleme + RLS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # `with:` YOK ve olmamalı: pnpm sürümü package.json'daki
+      # `packageManager` alanından okunuyor. Boş bir `with:` YAML'da `null`
+      # ve GitHub Actions bunu geçersiz iş akışı sayıyor: koşum "Invalid
+      # workflow file" ile anında düşüyor, HİÇBİR job çalışmıyor. 2026-08'de
+      # otomatik dağıtım bu yüzden üç ay sessizce ölü kaldı.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Bağımlılıkları kur
+        run: pnpm install --frozen-lockfile
+
+      # Shared ÖNCE ve çıktısı YUTULMADAN: api ve web onu derlenmiş
+      # `dist`ten okuyor. Kaynakta bir tip hatası varsa sonraki adımlar bayat
+      # `dist`le yeşil geçerdi (CLAUDE.md "apps/* typecheck'i temiz olması...").
+      - name: Paylaşılan paketi derle
+        run: pnpm --filter @advetics/shared build
+
+      - name: Prisma istemcisini üret
+        run: pnpm --filter @advetics/api exec prisma generate
+
+      - name: Tip kontrolü
+        run: pnpm typecheck
+
+      # API TESTLERİ AYRI ADIMDA VE TEK BAŞINA. Kök `pnpm test` paketleri
+      # paralel koşuyor; PGlite'lı API paketi panel testleriyle aynı anda
+      # koşunca işçi RPC zaman aşımı SAHTE bir exit 1 üretiyor. Kırmızı bir
+      # iş "yine o sahte hata" diye okunmaya başlarsa bekçi değeri biter.
+      - name: Panel testleri
+        run: pnpm --filter @advetics/web test
+
+      - name: API testleri (PGlite, tek başına)
+        run: pnpm --filter @advetics/api test
+
+      - name: Derle
+        run: |
+          pnpm --filter @advetics/api build
+          pnpm --filter @advetics/web build
+        env:
+          # NEXT_PUBLIC_* build anında gömülür; burada yalnız derlemenin
+          # geçtiğini doğruluyoruz. Sunucudaki build kendi .env'ini kullanır.
+          NEXT_PUBLIC_API_URL: https://advetics.com/api
+          NEXT_PUBLIC_ROOT_DOMAIN: advetics.com
+
+      - name: RLS kapsama kontrolü
+        # Şemadaki her tablo RLS listesinde olmalı. Politikası yazılmamış bir
+        # tablonun üretime çıkmasındansa bu adımın kırmızı olması iyidir.
+        run: |
+          set -euo pipefail
+          missing=0
+          while read -r table; do
+            if ! grep -q "'${table}'" apps/api/prisma/sql/02_rls.sql; then
+              echo "::error::Tablo '${table}' için RLS politikası tanımlı değil (apps/api/prisma/sql/02_rls.sql)"
+              missing=1
+            fi
+          done < <(grep -oE '@@map\("([a-z_]+)"\)' apps/api/prisma/schema.prisma | sed -E 's/@@map\("(.*)"\)/\1/')
+          if [ "$missing" -eq 1 ]; then
+            exit 1
+          fi
+          echo "Tüm tablolar RLS listesinde tanımlı."
