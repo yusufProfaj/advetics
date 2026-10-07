@@ -161,6 +161,20 @@ export const MUSTERIDE_KALAN = [
   // Prova bir hesaba karşı yapılmış kontrol: hesap el değişince eski
   // müşteride kalır; yeni hesapla yayın yeni prova ister.
   { tablo: 'prova', etiket: 'Meta provası' },
+  /*
+   * PİLOT KALIYOR — MIMARI § 2 kurulum satırını "platformun aynası" sayıp
+   * taşınır demişti; uygulanamaz ve doğru da değil. Uygulanamaz: kurulum
+   * satırı (plan_id, client_id) kompozit anahtarıyla PLANA bağlı ve plan
+   * workspace'in kararı olarak eski müşteride kalıyor — satırın client_id'si
+   * değişirse anahtar kırılır ve taşıma ortasında patlar. Doğru değil:
+   * kurulum kaydı `yayin` gibi "kim kurdu" sorusunun cevabı; kampanyanın
+   * aynası (`campaigns`) zaten taşınıyor. Öneri ve tarama da birinin
+   * değerlendirmesi: eski müşterinin verisiyle üretilmiş bir kart yeni
+   * müşteride "Uygula" düğmesi taşımamalı. Sayıları söyleniyor.
+   */
+  { tablo: 'pilot_kurulum_satirlari', etiket: 'pilot kurulum satırı' },
+  { tablo: 'pilot_taramalari', etiket: 'pilot taraması' },
+  { tablo: 'pilot_onerileri', etiket: 'pilot önerisi' },
 ] as const;
 
 export type TasimaSonucu = {

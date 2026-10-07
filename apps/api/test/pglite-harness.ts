@@ -601,6 +601,8 @@ export async function createHarness(): Promise<Harness> {
     await pg.exec(`
       TRUNCATE TABLE
         ai_messages, ai_conversations,
+        pilot_onerileri, pilot_taramalari, pilot_nesneleri, pilot_kurulum_satirlari,
+        pilot_uyum_isaretleri, pilot_plan_surumleri, pilot_uyum_denetimleri, pilot_planlari,
         strateji_kelimeleri, strateji_matrisi, strateji_dagilimlari, strateji_planlari, ozel_gunler,
         adv_onay, adv_mesaj, adv_oturum, prova, geri_okuma, yayin_nesnesi, yayin, taslak_surumu, reklam_taslagi, ajans_ayari,
         client_profiles, audience_templates,

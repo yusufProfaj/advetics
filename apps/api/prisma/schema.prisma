@@ -354,6 +354,11 @@ model Client {
   /// ihlali ve cezası HESAP seviyesinde — yani ajansın o hesaptaki bütün
   /// kampanyalarını riske atıyor.
   specialAdCategories String[] @default([]) @map("special_ad_categories")
+  /// Özel kategori sorusunun CEVAPLANDIĞI an. NULL = hiç sorulmadı; boş
+  /// dizi tek başına "Hayır" ile "sorulmadı"yı ayırt edemiyor (Pilot Ç-2,
+  /// kabul listesi B-13). İlişki alanı bilerek yok (FK migration'da).
+  ozelKategoriBeyanZamani DateTime? @map("ozel_kategori_beyan_zamani") @db.Timestamptz(6)
+  ozelKategoriBeyanEden   String?   @map("ozel_kategori_beyan_eden") @db.Uuid
 
   /// İLETİŞİM VE FATURA BİLGİSİ — hepsi opsiyonel.
   ///
@@ -3906,4 +3911,205 @@ model OzelGun {
 
   @@index([baslangic, bitis], map: "ozel_gunler_tarih_idx")
   @@map("ozel_gunler")
+}
+
+// -----------------------------------------------------------------------------
+// Pilot — yapay zekâ ile hesap yönetimi (docs/advcampaign/MIMARI.md § 2)
+// -----------------------------------------------------------------------------
+//
+// İLİŞKİ ALANI YOK, bilerek: AdvStrategy/AdvCampaign tablolarıyla aynı desen.
+// Servis ham SQL yazıyor; yabancı anahtarlar, CHECK'ler, KISMİ TEKİL
+// indeksler ve değişmezlik trigger'ları yalnız migration'da
+// (20261009100000_pilot):
+//   pilot_planlari_acik_donem_key = (client_id, donem) WHERE durum NOT IN ('kuruldu','kapatildi','iptal')
+//   pilot_onerileri_acik_key      = (hedef_nesne_id, tur) WHERE durum IN (açık durumlar)
+
+model PilotPlani {
+  id                  String    @id @default(uuid()) @db.Uuid
+  orgId               String    @map("org_id") @db.Uuid
+  clientId            String    @map("client_id") @db.Uuid
+  donem               String    @db.Char(7)
+  durum               String    @default("taslak") @db.VarChar(16)
+  surum               Int       @default(1)
+  icerikOzeti         String    @map("icerik_ozeti") @db.Char(64)
+  paraBirimi          String?   @map("para_birimi") @db.Char(3)
+  toplamMicros        BigInt?   @map("toplam_micros")
+  aylikButceId        String?   @map("aylik_butce_id") @db.Uuid
+  onaylananSurum      Int?      @map("onaylanan_surum")
+  onaylananOzet       String?   @map("onaylanan_ozet") @db.Char(64)
+  onayRolu            String?   @map("onay_rolu") @db.VarChar(7)
+  onaylayanUserId     String?   @map("onaylayan_user_id") @db.Uuid
+  onayZamani          DateTime? @map("onay_zamani") @db.Timestamptz(6)
+  musteriAdinaGerekce String?   @map("musteri_adina_gerekce") @db.VarChar(1000)
+  onayDenetimId       String?   @map("onay_denetim_id") @db.Uuid
+  yayinKipi           String?   @map("yayin_kipi") @db.VarChar(6)
+  musteriNotu         String?   @map("musteri_notu") @db.VarChar(1000)
+  elleDegisti         Boolean   @default(false) @map("elle_degisti")
+  createdBy           String?   @map("created_by") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([id, clientId], map: "pilot_planlari_id_client_key")
+  @@index([clientId, donem(sort: Desc)], map: "pilot_planlari_client_idx")
+  @@index([orgId], map: "pilot_planlari_org_id_idx")
+  @@map("pilot_planlari")
+}
+
+model PilotPlanSurumu {
+  id          String   @id @default(uuid()) @db.Uuid
+  planId      String   @map("plan_id") @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  surum       Int
+  icerik      Json     @db.JsonB
+  icerikOzeti String   @map("icerik_ozeti") @db.Char(64)
+  kaynak      String   @db.VarChar(16)
+  cumle       String?  @db.VarChar(500)
+  yazan       String?  @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([planId, surum], map: "pilot_plan_surumleri_surum_key")
+  @@index([clientId], map: "pilot_plan_surumleri_client_idx")
+  @@index([orgId], map: "pilot_plan_surumleri_org_id_idx")
+  @@map("pilot_plan_surumleri")
+}
+
+model PilotUyumDenetimi {
+  id            String   @id @default(uuid()) @db.Uuid
+  planId        String   @map("plan_id") @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  clientId      String   @map("client_id") @db.Uuid
+  surum         Int
+  icerikOzeti   String   @map("icerik_ozeti") @db.Char(64)
+  katalogSurumu String   @map("katalog_surumu") @db.VarChar(16)
+  an            String   @db.VarChar(8)
+  satirAnahtari String?  @map("satir_anahtari") @db.VarChar(200)
+  bulgular      Json     @db.JsonB
+  profil        Json     @db.JsonB
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([planId, surum, createdAt(sort: Desc)], map: "pilot_uyum_denetimleri_plan_idx")
+  @@index([clientId], map: "pilot_uyum_denetimleri_client_idx")
+  @@index([orgId], map: "pilot_uyum_denetimleri_org_id_idx")
+  @@map("pilot_uyum_denetimleri")
+}
+
+model PilotUyumIsareti {
+  id           String   @id @default(uuid()) @db.Uuid
+  planId       String   @map("plan_id") @db.Uuid
+  orgId        String   @map("org_id") @db.Uuid
+  clientId     String   @map("client_id") @db.Uuid
+  surum        Int
+  kuralKimligi String   @map("kural_kimligi") @db.VarChar(16)
+  mesaj        String   @db.VarChar(600)
+  userId       String?  @map("user_id") @db.Uuid
+  zaman        DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([planId, surum, kuralKimligi], map: "pilot_uyum_isaretleri_kural_key")
+  @@index([clientId], map: "pilot_uyum_isaretleri_client_idx")
+  @@index([orgId], map: "pilot_uyum_isaretleri_org_id_idx")
+  @@map("pilot_uyum_isaretleri")
+}
+
+model PilotKurulumSatiri {
+  id             String    @id @default(uuid()) @db.Uuid
+  planId         String    @map("plan_id") @db.Uuid
+  orgId          String    @map("org_id") @db.Uuid
+  clientId       String    @map("client_id") @db.Uuid
+  onaylananSurum Int       @map("onaylanan_surum")
+  satirAnahtari  String    @map("satir_anahtari") @db.VarChar(200)
+  platform       String    @db.VarChar(6)
+  ad             String    @db.VarChar(200)
+  durum          String    @default("taslak") @db.VarChar(24)
+  kurulumKimligi String    @default(uuid()) @map("kurulum_kimligi") @db.Uuid
+  taslak         Json?     @db.JsonB
+  taslakOzeti    String?   @map("taslak_ozeti") @db.Char(64)
+  eksikler       Json      @default("[]") @db.JsonB
+  prova          Json?     @db.JsonB
+  provaZamani    DateTime? @map("prova_zamani") @db.Timestamptz(6)
+  platformMesaji String?   @map("platform_mesaji") @db.VarChar(2000)
+  farklar        Json      @default("[]") @db.JsonB
+  deneme         Int       @default(0)
+  adAccountId    String?   @map("ad_account_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([id, clientId], map: "pilot_kurulum_satirlari_id_client_key")
+  @@unique([planId, onaylananSurum, satirAnahtari], map: "pilot_kurulum_satirlari_satir_key")
+  @@index([adAccountId], map: "pilot_kurulum_satirlari_hesap_idx")
+  @@index([clientId], map: "pilot_kurulum_satirlari_client_idx")
+  @@index([orgId], map: "pilot_kurulum_satirlari_org_id_idx")
+  @@map("pilot_kurulum_satirlari")
+}
+
+model PilotNesnesi {
+  id              String   @id @default(uuid()) @db.Uuid
+  kurulumSatirId  String   @map("kurulum_satir_id") @db.Uuid
+  orgId           String   @map("org_id") @db.Uuid
+  clientId        String   @map("client_id") @db.Uuid
+  tur             String   @db.VarChar(12)
+  ad              String   @db.VarChar(64)
+  sira            Int
+  platformKimligi String?  @map("platform_kimligi") @db.VarChar(64)
+  durum           String   @default("bekliyor") @db.VarChar(14)
+  derlenmisGovde  Json?    @map("derlenmis_govde") @db.JsonB
+  beklenenYanki   Json     @default("[]") @map("beklenen_yanki") @db.JsonB
+  sonHata         Json?    @map("son_hata") @db.JsonB
+  deneme          Int      @default(0)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([kurulumSatirId, ad], map: "pilot_nesneleri_ad_key")
+  @@index([clientId], map: "pilot_nesneleri_client_idx")
+  @@index([orgId], map: "pilot_nesneleri_org_id_idx")
+  @@map("pilot_nesneleri")
+}
+
+model PilotTaramasi {
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
+  clientId    String    @map("client_id") @db.Uuid
+  adAccountId String?   @map("ad_account_id") @db.Uuid
+  durum       String    @default("calisiyor") @db.VarChar(10)
+  baslangic   DateTime  @default(now()) @db.Timestamptz(6)
+  bitis       DateTime? @db.Timestamptz(6)
+  taranan     Json      @default("{}") @db.JsonB
+  kartSayisi  Int       @default(0) @map("kart_sayisi")
+  notu        String?   @db.VarChar(1000)
+
+  @@unique([id, clientId], map: "pilot_taramalari_id_client_key")
+  @@index([clientId, baslangic(sort: Desc)], map: "pilot_taramalari_client_idx")
+  @@index([orgId], map: "pilot_taramalari_org_id_idx")
+  @@index([adAccountId], map: "pilot_taramalari_hesap_idx")
+  @@map("pilot_taramalari")
+}
+
+model PilotOnerisi {
+  id             String    @id @default(uuid()) @db.Uuid
+  taramaId       String    @map("tarama_id") @db.Uuid
+  orgId          String    @map("org_id") @db.Uuid
+  clientId       String    @map("client_id") @db.Uuid
+  adAccountId    String?   @map("ad_account_id") @db.Uuid
+  tur            String    @db.VarChar(24)
+  hedefSeviye    String    @map("hedef_seviye") @db.VarChar(14)
+  hedefNesneId   String    @map("hedef_nesne_id") @db.Uuid
+  hedef          Json      @db.JsonB
+  neden          String    @db.VarChar(600)
+  olculer        Json      @db.JsonB
+  beklenenEtki   Json      @map("beklenen_etki") @db.JsonB
+  eylem          Json      @db.JsonB
+  geriAlma       Json      @map("geri_alma") @db.JsonB
+  durum          String    @default("yeni") @db.VarChar(16)
+  gecerlilikSonu DateTime  @map("gecerlilik_sonu") @db.Timestamptz(6)
+  platformMesaji String?   @map("platform_mesaji") @db.VarChar(2000)
+  uygulayan      String?   @db.Uuid
+  uygulamaZamani DateTime? @map("uygulama_zamani") @db.Timestamptz(6)
+  geriAlan       String?   @map("geri_alan") @db.Uuid
+  geriAlmaZamani DateTime? @map("geri_alma_zamani") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([clientId, durum, createdAt(sort: Desc)], map: "pilot_onerileri_client_idx")
+  @@index([orgId], map: "pilot_onerileri_org_id_idx")
+  @@index([adAccountId], map: "pilot_onerileri_hesap_idx")
+  @@map("pilot_onerileri")
 }

@@ -90,6 +90,20 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   { tablo: 'strateji_dagilimlari', etiket: 'medya planı dağılımı' },
   { tablo: 'strateji_matrisi', etiket: 'medya planı matrisi' },
   { tablo: 'strateji_kelimeleri', etiket: 'medya planı kelimesi' },
+  // Pilot (MIMARI § 2 "üç durak"): plan workspace'in KARARI; kurulum,
+  // nesneler ve öneriler o kararın platformdaki ayakizi. Geride
+  // kalsalar RLS onları kimseye göstermez ve satırlar sessizce
+  // erişilemez olur. Çocuklar (plan_id, client_id) kompozit anahtarıyla
+  // plana bağlı ve aynı turda client_id'yi DEĞİL org_id'yi değiştiriyor;
+  // anahtar bozulmuyor.
+  { tablo: 'pilot_planlari', etiket: 'pilot planı' },
+  { tablo: 'pilot_plan_surumleri', etiket: 'pilot plan sürümü' },
+  { tablo: 'pilot_uyum_denetimleri', etiket: 'uyum denetimi' },
+  { tablo: 'pilot_uyum_isaretleri', etiket: 'uyum işareti' },
+  { tablo: 'pilot_kurulum_satirlari', etiket: 'pilot kurulum satırı' },
+  { tablo: 'pilot_nesneleri', etiket: 'pilot platform nesnesi' },
+  { tablo: 'pilot_taramalari', etiket: 'pilot taraması' },
+  { tablo: 'pilot_onerileri', etiket: 'pilot önerisi' },
 ] as const;
 
 /**

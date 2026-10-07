@@ -2438,3 +2438,87 @@ CREATE POLICY adv_strateji_kelimeleri_delete ON strateji_kelimeleri
 -- (Faz 3) politika o gün, kimin yazacağı kararıyla birlikte eklenir.
 CREATE POLICY adv_ozel_gunler_select ON ozel_gunler
   FOR SELECT USING (app.has_context());
+
+
+-- ============================================================================
+-- PİLOT — pilot_planlari, pilot_plan_surumleri, pilot_uyum_denetimleri,
+-- pilot_uyum_isaretleri, pilot_kurulum_satirlari, pilot_nesneleri,
+-- pilot_taramalari, pilot_onerileri (docs/advcampaign/MIMARI.md § 2)
+-- ============================================================================
+--
+-- Hepsi MÜŞTERİ KAPSAMLI ve DELETE politikası YOK: plan silinmez, iptal
+-- edilir; sürüm, denetim ve kurulum kaydı "kim neye evet dedi, Meta'da ne
+-- kuruldu" sorusunun tek izi. Kimin yazabileceği (strategy.write,
+-- strategy.publish, ajans/müşteri rolü) servis katmanında; RLS workspace
+-- sınırını tutuyor.
+--
+-- KENDİ ENABLE/FORCE BLOĞU, dosyanın SONUNDA. Yukarıdaki ortak diziye
+-- eklenseydi "önceki deploy'un 02_rls.sql'i" (bu tablolar yokken) hiçbir
+-- üretim sırası testinde kurulamazdı: dizi var olmayan tabloya ALTER yapar.
+-- Bölüm sonda ve tek parça: önceki hâl bu başlıktan KESİLEREK türetiliyor
+-- (pilot-uretim-sirasi.spec.ts, advstrategy-*-uretim-sirasi.spec.ts).
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'pilot_planlari', 'pilot_plan_surumleri', 'pilot_uyum_denetimleri', 'pilot_uyum_isaretleri',
+    'pilot_kurulum_satirlari', 'pilot_nesneleri', 'pilot_taramalari', 'pilot_onerileri'
+  ] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+  END LOOP;
+END
+$$;
+--
+-- pilot_planlari: SELECT, INSERT, UPDATE (durum ilerliyor).
+CREATE POLICY adv_pilot_planlari_select ON pilot_planlari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_pilot_planlari_insert ON pilot_planlari
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_pilot_planlari_update ON pilot_planlari
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- Sürümler ve uyum denetimleri DEĞİŞMEZ: yalnız SELECT + INSERT. İçerik
+-- kolonlarını trigger da kilitliyor (worker BYPASSRLS ile koşuyor).
+CREATE POLICY adv_pilot_plan_surumleri_select ON pilot_plan_surumleri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_pilot_plan_surumleri_insert ON pilot_plan_surumleri
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_pilot_uyum_denetimleri_select ON pilot_uyum_denetimleri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_pilot_uyum_denetimleri_insert ON pilot_uyum_denetimleri
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- İşaretler: SELECT + INSERT + UPDATE. UPDATE ŞART: aynı sürümde katalog
+-- mesajı değişirse işaret yeniden verilir (ON CONFLICT DO UPDATE) ve
+-- politikası olmayan UPDATE hata vermeden sıfır satır etkilerdi — eski
+-- mesaja verilmiş işaret kalır, uyum sonsuza kadar "işaret bekliyor" derdi.
+-- "Yalnız ajans" kuralı servis katmanında (müşteri rolü UYARI işaretleyemez).
+CREATE POLICY adv_pilot_uyum_isaretleri_select ON pilot_uyum_isaretleri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_pilot_uyum_isaretleri_insert ON pilot_uyum_isaretleri
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+CREATE POLICY adv_pilot_uyum_isaretleri_update ON pilot_uyum_isaretleri
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+
+-- Kurulum, nesneler ve taramalar: panel YALNIZ OKUR (müşteri dahil);
+-- yazan worker (BYPASSRLS). Yazma politikası olmaması bilinçli: panelden
+-- bir kurulum satırını "acildi" yapmak, Meta'da açılmamış bir kampanyayı
+-- açılmış göstermek olurdu.
+CREATE POLICY adv_pilot_kurulum_satirlari_select ON pilot_kurulum_satirlari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_pilot_nesneleri_select ON pilot_nesneleri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_pilot_taramalari_select ON pilot_taramalari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- Öneriler: SELECT + UPDATE ("Geç" panelden; uygula/geri al kuyruğa).
+-- INSERT worker'da.
+CREATE POLICY adv_pilot_onerileri_select ON pilot_onerileri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_pilot_onerileri_update ON pilot_onerileri
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));

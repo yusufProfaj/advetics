@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
+import { bolumdenOnce, PILOT_RLS_BASLIGI } from '../../test/rls-onceki';
 
 /**
  * ═══ ADVSTRATEGY AKTARIM MIGRATION'I ÜRETİM SIRASINDA ═══
@@ -30,10 +31,17 @@ const ESKI_OTURUM = '40000000-0000-4000-8000-000000000001';
 
 let pg: PGlite;
 
-async function sqlDosyalari(): Promise<void> {
+/*
+ * Önceki deploy'un 02_rls.sql'i Pilot bölümünü BİLMİYORDU (Pilot bu
+ * migration'dan sonra geliyor); o bölüm kesilerek koşuluyor.
+ */
+async function sqlDosyalari(onceki = false): Promise<void> {
   const dosyalar = readdirSync(SQL_DIR).filter((f) => f.endsWith('.sql')).sort();
   expect(dosyalar).toContain('02_rls.sql');
-  for (const f of dosyalar) await pg.exec(readFileSync(join(SQL_DIR, f), 'utf8'));
+  for (const f of dosyalar) {
+    const sql = readFileSync(join(SQL_DIR, f), 'utf8');
+    await pg.exec(onceki && f === '02_rls.sql' ? bolumdenOnce(sql, PILOT_RLS_BASLIGI) : sql);
+  }
 }
 
 beforeAll(async () => {
@@ -45,7 +53,7 @@ beforeAll(async () => {
   expect(oncekiler).toContain('20261008120000_advstrategy');
 
   for (const d of oncekiler) await pg.exec(readFileSync(join(MIGRATIONS, d, 'migration.sql'), 'utf8'));
-  await sqlDosyalari();
+  await sqlDosyalari(true);
 
   // ESKİ VERİ — migration'dan önce üretimde duran satırlar.
   await pg.exec(`
