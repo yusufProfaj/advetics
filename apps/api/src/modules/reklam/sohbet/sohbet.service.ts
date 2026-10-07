@@ -91,7 +91,7 @@ export class AdvSohbetService {
   }
 
   /** Son 30 oturum ve TOPLAM (sessiz kesme yok). */
-  async oturumlar(ctx: TenantContext, clientId: string): Promise<{ satirlar: OturumOzeti[]; toplam: number }> {
+  async oturumlar(ctx: TenantContext, clientId: string): Promise<{ satirlar: OturumOzeti[]; toplam: number; asistanBagli: boolean }> {
     if (!ctx.clientIds.includes(clientId)) throw new ForbiddenException('Bu workspace’e erişimin yok');
     return this.tx(ctx)(async (t) => {
       const satirlar = await t.$queryRaw<Array<{ id: string; baslik: string; taslak_id: string | null; durum: string; user_id: string; updated_at: Date }>>(Prisma.sql`
@@ -108,6 +108,8 @@ export class AdvSohbetService {
           updatedAt: new Date(s.updated_at).toISOString(),
         })),
         toplam: n?.n ?? 0,
+        // Ekran "anahtar yok" hâlini tahmin etmesin, sunucudan öğrensin.
+        asistanBagli: this.model !== null,
       };
     });
   }

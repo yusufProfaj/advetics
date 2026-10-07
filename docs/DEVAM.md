@@ -22,7 +22,20 @@ Plan: [`TASARIM-PLAN.md`](advcampaign/TASARIM-PLAN.md) (31 iş paketi,
 İP-01…31; ilk çalışan Meta sohbetine giden yol İP-09 → 10 → 12 → 13 → 14 →
 15 → 16 → 17). Kullanıcı kararları K-01…K-08 varsayılanla kapatıldı (§0).
 Arayüz taslağı: `advcampaign/advcampaign-arayuz.html`. P0 bitti: İP-01…04
-(Meta) ve İP-06 + eski Google arama yolu kapatıldı. **Sıradaki: İP-09.**
+(Meta) ve İP-06 + eski Google arama yolu kapatıldı.
+**Sohbet MVP'si yazıldı (2026-10-08):** İP-09 (sözleşme), İP-10 (tablolar,
+MIGRATION `20261008100000_advcampaign_sohbet`), İP-12…15 (araçlar, döngü,
+SSE ucu, tek kullanımlık onay), İP-16…18 (ekran: oturumlar · sohbet ·
+canlı taslak paneli, mobilde sekmeli). `/reklam` artık sohbet ekranı; eski
+tek atışlık stüdyo silindi (`POST /reklam/ai-taslak` ucu duruyor, ekran
+çağırmıyor). Canlıda HİÇ denenmedi: `ANTHROPIC_API_KEY` sunucuda tanımlı
+olmalı. Bilinen açıklar: (a) FORM niyeti form şablonu olmadığı için
+tamamlanamıyor; (b) onay anında öneriler kullanıcı kararına çevrilirken yeni
+sürüm doğuyor ve prova o sürüme ait sayılmıyor; gerçek yayın açılırken
+prova eşleşmesi kaynaktan bağımsız özetle yapılmalı; (c) akış (SSE) vekil
+sunucuda tamponlanırsa ekran 3 sn'lik yoklamaya düşer.
+**Sıradaki:** canlı tur (sohbetle SITE taslağı → prova → test kipi), sonra
+Kontrol Merkezi (İP-27…30), form şablonu, Google kapıları (İP-05, 07, 08).
 
 **Reklam oluşturma (2026-10-07): AYRI MODÜL olarak kuruluyor.**
 Kararlar [`bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md)

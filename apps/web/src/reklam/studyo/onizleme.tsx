@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import {
+  DERLENEN_NIYETLER,
   NIYET_KATALOGU,
   OZEL_KATEGORI_ETIKETLERI,
   sonucEtiketi,
@@ -51,14 +52,23 @@ export function Onizleme({
   ilkAtif,
   yonetici,
   workspaceAdi,
+  dar = false,
 }: {
   ilkTaslak: ReklamTaslakKaydi;
   hazirlik: ReklamHazirligi;
   ilkAtif: AtifDurumu | null;
   yonetici: boolean;
   workspaceAdi: string;
+  /** AdvCampaign'in sağ paneli: tek sütun. */
+  dar?: boolean;
 }) {
   const [taslak, setTaslak] = useState(ilkTaslak);
+  // DIŞARIDAN GELEN SÜRÜM: sohbet taslağı güncellediğinde panel yenilenir.
+  // Yalnız daha YENİ sürüm alınır; kullanıcının panelden kaydettiği sürüm
+  // (aynı ya da daha yeni) sohbetin eski kopyasıyla ezilmez.
+  useEffect(() => {
+    setTaslak((t) => (ilkTaslak.id !== t.id || ilkTaslak.aktifSurumNo > t.aktifSurumNo ? ilkTaslak : t));
+  }, [ilkTaslak]);
   const [hata, setHata] = useState<string | null>(null);
   const [notlar, setNotlar] = useState<string[]>([]);
   const [bekliyor, setBekliyor] = useState(false);
@@ -119,7 +129,7 @@ export function Onizleme({
   };
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+    <div className={dar ? 'grid gap-4' : 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]'}>
       <div className="min-w-0 space-y-5">
         <section className="relative overflow-hidden rounded-2xl border border-line bg-surface p-5">
           <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-brand/10 blur-3xl" />
@@ -139,7 +149,9 @@ export function Onizleme({
           </div>
           {taslak.alanlar.niyet && (
             <div className="relative mt-3 flex flex-wrap gap-1.5">
-              {(['FORM', 'WHATSAPP', 'SITE', 'SATIS'] as const).map((k) => (
+              {/* Yalnız derleyicinin KURABİLDİĞİ amaçlar: kurulamayanı seçtirip
+                  onaydan sonra "kurulamıyor" demek, kullanıcıyı yanıltırdı. */}
+              {DERLENEN_NIYETLER.map((k) => (
                 <button
                   key={k}
                   type="button"
@@ -160,7 +172,7 @@ export function Onizleme({
           const g = hazirlik.gorseller.satirlar.find((x) => x.id === gorselId);
           const src = g ? onizlemeAdresi(g.onizlemeAdresi) : onizlemeAdresi(`/assets/${gorselId}/preview`);
           return (
-            <section key={`${k.varlikId}-${i}`} className="rounded-2xl border border-line bg-surface p-5">
+            <section key={`${k.varlikId}-${i}-${taslak.aktifSurumNo}`} className="rounded-2xl border border-line bg-surface p-5">
               <h3 className="mb-3 text-sm font-semibold">Fikir {i + 1}{k.kapakVarlikId ? ' · video' : ''}</h3>
               <div className="flex gap-3 overflow-x-auto pb-2">
                 {BICIMLER.map((b) => (
@@ -213,7 +225,7 @@ export function Onizleme({
         {kavramlar.length === 0 && <Kutu ton="uyari" baslik="Fikir yok">Görsel ekleyip yeniden dene.</Kutu>}
       </div>
 
-      <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+      <aside className={dar ? 'space-y-4' : 'space-y-4 xl:sticky xl:top-4 xl:self-start'}>
         <section className="space-y-4 rounded-2xl border border-line bg-surface p-4 text-sm">
           <h3 className="font-semibold">Plan</h3>
           <dl className="space-y-1.5 text-xs">

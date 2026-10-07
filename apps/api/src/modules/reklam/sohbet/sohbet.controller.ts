@@ -55,7 +55,7 @@ export class AdvSohbetController {
 
   @Get('sohbet/oturumlar')
   @RequirePermissions('bulk.read')
-  oturumlar(@CurrentTenant() ctx: TenantContext, @Query('clientId', ParseUUIDPipe) clientId: string): Promise<{ satirlar: OturumOzeti[]; toplam: number }> {
+  oturumlar(@CurrentTenant() ctx: TenantContext, @Query('clientId', ParseUUIDPipe) clientId: string): Promise<{ satirlar: OturumOzeti[]; toplam: number; asistanBagli: boolean }> {
     return this.sohbet.oturumlar(ctx, clientId);
   }
 
