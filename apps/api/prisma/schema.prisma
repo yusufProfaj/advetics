@@ -3778,3 +3778,124 @@ model AdvOnay {
   @@index([orgId], map: "adv_onay_org_id_idx")
   @@map("adv_onay")
 }
+
+// -----------------------------------------------------------------------------
+// AdvStrategy — aylık medya planı (docs/advstrategy/MIMARI.md § 1)
+// -----------------------------------------------------------------------------
+//
+// İLİŞKİ ALANI YOK, bilerek: AdvCampaign tablolarıyla aynı desen. Servis ham
+// SQL yazıyor; yabancı anahtarlar migration'da duruyor. CHECK kısıtları ve
+// KISMİ TEKİL İNDEKS de yalnız migration'da:
+//   strateji_planlari_acik_donem_key = (client_id, donem)
+//     WHERE durum IN ('taslak', 'onayda', 'onaylandi')
+// Prisma kısmi indeksi bildiremiyor; buraya yazmak şemayı veritabanından
+// ayırırdı.
+
+model StratejiPlani {
+  id                String    @id @default(uuid()) @db.Uuid
+  orgId             String    @map("org_id") @db.Uuid
+  clientId          String    @map("client_id") @db.Uuid
+  donem             String    @db.Char(7)
+  durum             String    @default("taslak") @db.VarChar(10)
+  surum             Int       @default(1)
+  toplamButceMicros BigInt    @map("toplam_butce_micros")
+  paraBirimi        String    @map("para_birimi") @db.Char(3)
+  onaylayanUserId   String?   @map("onaylayan_user_id") @db.Uuid
+  onayRolu          String?   @map("onay_rolu") @db.VarChar(7)
+  onayZamani        DateTime? @map("onay_zamani") @db.Timestamptz(6)
+  onaylananSurum    Int?      @map("onaylanan_surum")
+  aktarim           Json?     @db.JsonB
+  notu              String?   @db.VarChar(1000)
+  sonOneri          Json?     @map("son_oneri") @db.JsonB
+  kelimeErisim      String?   @map("kelime_erisim") @db.VarChar(9)
+  kelimeArama       String    @default("bos") @map("kelime_arama") @db.VarChar(10)
+  kelimeAramaZamani DateTime? @map("kelime_arama_zamani") @db.Timestamptz(6)
+  kelimeSonHata     String?   @map("kelime_son_hata") @db.VarChar(2000)
+  kelimeToplam      Int?      @map("kelime_toplam")
+  createdBy         String?   @map("created_by") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([clientId, donem(sort: Desc)], map: "strateji_planlari_client_idx")
+  @@index([orgId], map: "strateji_planlari_org_id_idx")
+  @@map("strateji_planlari")
+}
+
+model StratejiDagilimi {
+  id          String   @id @default(uuid()) @db.Uuid
+  planId      String   @map("plan_id") @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  platform    String   @db.VarChar(6)
+  katman      String   @db.VarChar(18)
+  tutarMicros BigInt   @map("tutar_micros")
+  kaynak      String   @db.VarChar(11)
+  gerekce     String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([planId, platform, katman], map: "strateji_dagilimlari_hucre_key")
+  @@index([clientId], map: "strateji_dagilimlari_client_idx")
+  @@index([orgId], map: "strateji_dagilimlari_org_id_idx")
+  @@map("strateji_dagilimlari")
+}
+
+model StratejiMatrisi {
+  id             String   @id @default(uuid()) @db.Uuid
+  planId         String   @map("plan_id") @db.Uuid
+  orgId          String   @map("org_id") @db.Uuid
+  clientId       String   @map("client_id") @db.Uuid
+  sira           Int
+  platform       String   @db.VarChar(6)
+  katman         String   @db.VarChar(18)
+  niyet          String   @db.VarChar(24)
+  kitleSablonuId String?  @map("kitle_sablonu_id") @db.Uuid
+  kelimeGrubu    String?  @map("kelime_grubu") @db.VarChar(80)
+  varlikIdleri   String[] @default([]) @map("varlik_idleri") @db.Uuid
+  tutarMicros    BigInt   @map("tutar_micros")
+  notu           String?  @db.VarChar(500)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([planId, sira], map: "strateji_matrisi_sira_key")
+  @@index([clientId], map: "strateji_matrisi_client_idx")
+  @@index([orgId], map: "strateji_matrisi_org_id_idx")
+  @@index([kitleSablonuId], map: "strateji_matrisi_kitle_idx")
+  @@map("strateji_matrisi")
+}
+
+/// Tekil `(plan_id, lower(kelime))` İFADE indeksi yalnız migration'da
+/// (`strateji_kelimeleri_kelime_key`); Prisma ifade indeksini bildiremiyor.
+model StratejiKelimesi {
+  id              String   @id @default(uuid()) @db.Uuid
+  planId          String   @map("plan_id") @db.Uuid
+  orgId           String   @map("org_id") @db.Uuid
+  clientId        String   @map("client_id") @db.Uuid
+  kelime          String   @db.VarChar(80)
+  varyantlar      String[] @default([])
+  aylikArama      BigInt?  @map("aylik_arama")
+  rekabet         String?  @db.VarChar(8)
+  teklifAltMicros BigInt?  @map("teklif_alt_micros")
+  teklifUstMicros BigInt?  @map("teklif_ust_micros")
+  grup            String?  @db.VarChar(80)
+  secili          Boolean  @default(false)
+  cekimZamani     DateTime @map("cekim_zamani") @db.Timestamptz(6)
+  kaynakIstek     Json     @map("kaynak_istek") @db.JsonB
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([clientId], map: "strateji_kelimeleri_client_idx")
+  @@index([orgId], map: "strateji_kelimeleri_org_id_idx")
+  @@map("strateji_kelimeleri")
+}
+
+/// Müşteriye bağlı DEĞİL; elle tutulan takvim. Seed yok (Ç-4).
+model OzelGun {
+  id        String   @id @default(uuid()) @db.Uuid
+  sektor    String   @db.VarChar(120)
+  ad        String   @db.VarChar(120)
+  baslangic DateTime @db.Date
+  bitis     DateTime @db.Date
+  kaynak    String   @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([baslangic, bitis], map: "ozel_gunler_tarih_idx")
+  @@map("ozel_gunler")
+}

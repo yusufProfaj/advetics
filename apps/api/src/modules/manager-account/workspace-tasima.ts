@@ -81,6 +81,15 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   { tablo: 'adv_oturum', etiket: 'AdvCampaign oturumu' },
   { tablo: 'adv_mesaj', etiket: 'AdvCampaign mesajı' },
   { tablo: 'adv_onay', etiket: 'AdvCampaign onay kartı' },
+  // AdvStrategy planı workspace'in KENDİ kararı ve dayandığı kitle şablonları
+  // ile varlıklar zaten taşınıyor; planı geride bırakmak, yeni şirkette
+  // kitlesi olup planı olmayan bir workspace ve eski şirkette sahipsiz bir
+  // onay izi demekti (MIMARI § 1). Çocuk tablolar `client_id` taşıyor,
+  // planla aynı turda gidiyor.
+  { tablo: 'strateji_planlari', etiket: 'medya planı' },
+  { tablo: 'strateji_dagilimlari', etiket: 'medya planı dağılımı' },
+  { tablo: 'strateji_matrisi', etiket: 'medya planı matrisi' },
+  { tablo: 'strateji_kelimeleri', etiket: 'medya planı kelimesi' },
 ] as const;
 
 /**

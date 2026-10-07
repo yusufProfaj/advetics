@@ -55,9 +55,12 @@ export interface MatrisSatiri {
   katman: HuniKatmani;
   niyet: NiyetKodu;
   /**
-   * Kitle ve varlık ADLARI satırda taşınıyor ama `null` olabilir: şablon
-   * plan yazıldıktan sonra silinmişse. Ekran "silinmiş kitle" yazar; boş
-   * hücre "kitle seçilmemiş" diye okunurdu.
+   * `null` İKİ ŞEY DEMEK ve ayrım PLATFORMDAN: şablon silinince
+   * `ON DELETE SET NULL` kimliği de siliyor, yani silinmiş kitle de `null`
+   * geliyor. Meta satırında kitle zorunlu, orada `null` = silinmiş; Google
+   * satırında `null` = kelimeyle hedefleme. Panel `kitleMetni` ile çözer.
+   * (İlk yazımda silinmiş kitle `{ id, ad: null }` diye tarif edilmişti;
+   * kimlik kalmadığı için kurulamıyor, Ajan 2 devir notu Boşluk 4.)
    */
   kitle: { id: string; ad: string | null } | null;
   kelimeGrubu: string | null;

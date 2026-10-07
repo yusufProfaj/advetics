@@ -14,6 +14,11 @@ import { SYNC_QUEUE, type SyncJobPayload } from './queue/queues';
 import { CryptoService } from './crypto/crypto.service';
 import { REKLAM_YAYIN_KUYRUGU, type ReklamIsi } from './modules/reklam/reklam-kuyrugu';
 import { redisKilidi, reklamIsiniIsle } from './modules/reklam/yayin-isleyici';
+import { STRATEJI_KELIME_KUYRUGU, type KelimeAramaIsi } from './modules/strateji/kelime-kuyrugu';
+import { kelimeIsiniIsle } from './modules/strateji/kelime-isleyici';
+import { ProviderRegistry } from './modules/connections/provider.registry';
+import { TokenVaultService } from './modules/connections/token-vault.service';
+import type { GoogleProvider } from './modules/connections/providers/google.provider';
 
 /**
  * Worker süreci — API'den AYRI çalışır.
@@ -262,7 +267,42 @@ async function bootstrap(): Promise<void> {
     logger.error(`reklam-yayin ${job.id} düştü: ${err.message}`);
   });
 
-  logger.log('Worker hazır — kuyruk: sync (4), reklam-yayin (2)');
+  /*
+   * ADVSTRATEGY KELİME ARAMASI — Google `GenerateKeywordIdeas` 1 QPS.
+   * Sınır KUYRUK düzeyinde (`limiter`): kaç API süreci iş eklerse eklesin
+   * Google'a saniyede en çok bir istek gider. Eşzamanlılık 1. İşleyici her
+   * sonucu plan satırına yazıyor; `failed` dinleyicisi yalnız işleyicinin
+   * HİÇ yazamadığı düşüşü (beklenmeyen hata, işçi kapanırken atılan iş)
+   * kapatıyor, yoksa plan sonsuza kadar "aranıyor" derdi.
+   */
+  const googleSaglayici = app.get(ProviderRegistry).get('google');
+  const kasa = app.get(TokenVaultService);
+  const kelimeWorker = new Worker<KelimeAramaIsi>(
+    STRATEJI_KELIME_KUYRUGU,
+    async (job) => {
+      const sonuc = await kelimeIsiniIsle(
+        {
+          tx: (fn) => fn(admin as never),
+          tokenAl: (connectionId) => kasa.getAccessToken(connectionId, googleSaglayici),
+          fikirler: (token, musteri, girdi, yonetici) =>
+            (googleSaglayici as unknown as GoogleProvider).kelimeFikirleri(token, musteri, girdi, yonetici),
+        },
+        job.data,
+      );
+      logger.log(`strateji-kelime ${job.id} → ${sonuc.durum}`);
+      return sonuc;
+    },
+    { connection, prefix: config.redis.keyPrefix, concurrency: 1, limiter: { max: 1, duration: 1000 } },
+  );
+  kelimeWorker.on('failed', (job, err) => {
+    if (!job) return;
+    void admin
+      .$executeRaw`UPDATE strateji_planlari SET kelime_arama = 'hata', kelime_son_hata = ${`Arama durdu: ${err.message}`.slice(0, 2000)} WHERE id = ${job.data.planId}::uuid AND kelime_arama IN ('kuyrukta', 'calisiyor')`
+      .catch((e: unknown) => logger.error(`Plan ${job.data.planId} kelime durumu kapatılamadı: ${e instanceof Error ? e.message : String(e)}`));
+    logger.error(`strateji-kelime ${job.id} düştü: ${err.message}`);
+  });
+
+  logger.log('Worker hazır — kuyruk: sync (4), reklam-yayin (2), strateji-kelime (1, 1 QPS)');
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.log(`${signal} alındı, işler tamamlanıyor…`);
@@ -270,6 +310,7 @@ async function bootstrap(): Promise<void> {
     // kapatmak yarım kalmış senkronizasyon bırakır.
     await worker.close();
     await reklamWorker.close();
+    await kelimeWorker.close();
     await connection.quit().catch(() => connection.disconnect());
     await app.close();
     logger.log('Worker kapandı.');

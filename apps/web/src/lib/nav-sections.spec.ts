@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ROLE_PERMISSIONS, type Permission } from '@advetics/shared';
+import { ROLE_PERMISSIONS, STRATEJI_SAYFA_IZNI, type Permission } from '@advetics/shared';
 import { SAYFA_GIRIS_IZNI } from '@/components/bilgi-bankasi/sekmeler';
 import { SECTIONS, visibleSections } from './nav-sections';
 
@@ -243,6 +243,49 @@ describe('ADVCAMPAIGN SATIRI', () => {
   });
 });
 
+describe('ADVSTRATEGY SATIRI', () => {
+  const satirlar = SECTIONS.flatMap((s) => s.items);
+
+  it('KRİTİK: /strateji\'ye gidiyor ve izni sözleşmenin sayfa izninden alıyor', () => {
+    const satir = satirlar.find((i) => i.label === 'AdvStrategy');
+    expect(satir?.href).toBe('/strateji');
+    expect(satir?.perm).toBe(STRATEJI_SAYFA_IZNI);
+    expect(STRATEJI_SAYFA_IZNI).toBe('strategy.read');
+  });
+
+  it('KRİTİK: menü satırı izni ELLE yazılmamış — sabit içe aktarılıyor', () => {
+    /*
+     * Değer aynı olsa bile elle yazılmış 'strategy.read' sözleşme değişince
+     * menüyü ve sayfa kapısını ayrıştırırdı. Yorumsuz kaynakta sabitin adı
+     * geçmeli, dizgenin kendisi geçmemeli.
+     */
+    const kod = readFileSync(join(__dirname, 'nav-sections.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(kod).toContain('perm: STRATEJI_SAYFA_IZNI');
+    expect(kod).not.toContain("'strategy.read'");
+  });
+
+  it('KRİTİK: sayfa kapısı da AYNI sabiti okuyor', () => {
+    const kod = readFileSync(join(__dirname, '..', 'app', '(dashboard)', 'strateji', 'page.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(kod).toContain('hasPermission(session, STRATEJI_SAYFA_IZNI)');
+  });
+
+  it('AdvCampaign\'in hemen altında, aynı bölümde', () => {
+    const reklamlar = SECTIONS.find((s) => s.title === 'Reklamlar');
+    const adlar = reklamlar?.items.map((i) => i.label) ?? [];
+    expect(adlar.indexOf('AdvStrategy')).toBe(adlar.indexOf('AdvCampaign') + 1);
+    expect(adlar.indexOf('AdvCampaign')).toBeGreaterThan(-1);
+  });
+
+  it('ajans rolleri görüyor', () => {
+    expect(etiketler('admin')).toContain('AdvStrategy');
+    expect(etiketler('ad_manager')).toContain('AdvStrategy');
+  });
+});
+
 describe('MÜŞTERİ HESABI (client_viewer)', () => {
   it('KRİTİK: "Çalışma Alanı" kategorisini GÖRMÜYOR', () => {
     expect(basliklar('client_viewer')).not.toContain('Ayarlar');
@@ -257,15 +300,20 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
     expect(gorunen).not.toContain('Ekip & Yetkiler');
   });
 
-  it('KRİTİK: TAM OLARAK üç ekran görüyor — Genel Bakış, Reklam Keşfi, Raporlar', () => {
+  it('KRİTİK: TAM OLARAK dört ekran görüyor — Genel Bakış, Reklam Keşfi, AdvStrategy, Raporlar', () => {
     /*
-     * Kullanıcının tanımı birebir: "müşteri = sadece genel bakış, reklam
-     * keşfi ve raporlar kısmını görebilir". `toEqual`: fazladan bir satır
-     * (Akıllı Boost, Kurallar, Bilgi Bankası) da eksik bir satır da düşürür.
-     * Ters yöndeki hata da gerçek: her şeyi gizleyen bir süzgeç "görmüyor"
-     * testlerini geçerdi.
+     * Kullanıcının tanımı: "müşteri = sadece genel bakış, reklam keşfi ve
+     * raporlar kısmını görebilir". AdvStrategy SONRADAN eklendi ve kararı
+     * ayrı: medya planı müşteriye PANEL İÇİNDEN onaylatılıyor (Ç-5,
+     * 2026-10-08) ve rol `strategy.read` + `strategy.approve` taşıyor.
+     * Yazma (`strategy.write`) yok; yani bu satır "reklam kısmı" değil,
+     * müşterinin kendi kararını verdiği yer.
+     *
+     * `toEqual`: fazladan bir satır (Akıllı Boost, Kurallar, AdvCampaign) da
+     * eksik bir satır da düşürür. Ters yöndeki hata da gerçek: her şeyi
+     * gizleyen bir süzgeç "görmüyor" testlerini geçerdi.
      */
-    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'Reklam Keşfi', 'Raporlar']);
+    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'Reklam Keşfi', 'AdvStrategy', 'Raporlar']);
   });
 
   it('Bilgi Bankası GÖRÜNMÜYOR — karar değişti', () => {

@@ -35,6 +35,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { ReklamModule } from './modules/reklam/reklam.module';
+import { StratejiModule } from './modules/strateji/strateji.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { ReklamModule } from './modules/reklam/reklam.module';
     BoostsModule,
     AutoBoostModule,
     ReklamModule,
+    StratejiModule,
   ],
   controllers: [HealthController],
   providers: [

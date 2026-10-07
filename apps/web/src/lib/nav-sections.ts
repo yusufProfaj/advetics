@@ -1,4 +1,4 @@
-import type { Permission } from '@advetics/shared';
+import { STRATEJI_SAYFA_IZNI, type Permission } from '@advetics/shared';
 import type { NavEntry } from '@/components/nav';
 import { VARLIK_YOLLARI } from '@/components/marka-merkezi/varliklar';
 
@@ -47,7 +47,7 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     title: 'Reklamlar',
     items: [
       /*
-       * ═══ MÜŞTERİ HESABI YALNIZCA ÜÇ EKRAN GÖRÜYOR ═══
+       * ═══ MÜŞTERİ HESABI YALNIZCA ÜÇ EKRAN GÖRÜYOR (+ AdvStrategy) ═══
        *
        * Kullanıcının tanımı: "müşteri = sadece genel bakış, reklam keşfi ve
        * raporlar; reklam kısmını göremez". Bu yüzden Reklamlar ve Base
@@ -55,6 +55,7 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
        * görünüyor (süzme opt-in) ve müşteri hesabı Kurallar'ı, Aylık
        * Bütçe'yi, Akıllı Boost'u menüde görürdü. `nav-sections.spec.ts`
        * müşteri hesabının gördüğü etiketleri TAM LİSTE olarak kilitliyor.
+       * Dördüncü satır AdvStrategy: planı onaylamak için (aşağıda gerekçe).
        */
       /*
        * AKILLI BOOST REKLAMLARIN İLK SATIRI VE ÖNE ÇIKARILMIŞ (2026-09-30).
@@ -87,6 +88,29 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         module: 4,
         ready: true,
         perm: 'bulk.write',
+      },
+      /*
+       * ADVSTRATEGY — aylık medya planı (2026-10-08). AdvCampaign'in hemen
+       * altında: onaylanan plan oraya aktarılıyor, iki ekran aynı işin iki
+       * adımı. İZİN SÖZLEŞMEDEN (`STRATEJI_SAYFA_IZNI`), elle yazılmıyor:
+       * sayfa kapısı aynı sabiti okuyor ve ikisi ayrışırsa menüde görünüp
+       * açılmayan bir satır doğar.
+       *
+       * MÜŞTERİ HESABI BU SATIRI GÖRÜYOR ve bu KASITLI (Ç-5, 2026-10-08):
+       * plan müşteriye panel içinden onaylatılıyor ve `client_viewer`
+       * `strategy.read` + `strategy.approve` taşıyor. Satır gizlenseydi
+       * onay yalnız bir bağlantıyla bulunabilirdi. Bölüm ona zaten açıktı
+       * (Reklam Keşfi burada); yeni bir başlık görünmüyor, yalnız bir satır.
+       * Satır PLANI YAZDIRMIYOR: yazma `strategy.write` ve müşteri hesabında
+       * yok. `nav-sections.spec.ts` dört ekranlık listeyi kilitliyor.
+       */
+      {
+        href: '/strateji',
+        label: 'AdvStrategy',
+        icon: 'plan',
+        module: 4,
+        ready: true,
+        perm: STRATEJI_SAYFA_IZNI,
       },
       { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true, perm: 'rule.read' },
       /*

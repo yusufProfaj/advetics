@@ -32,8 +32,14 @@ DEĞİL AdvCampaign'e taslak. **Ajan 1 BİTTİ (2026-10-08):** sözleşme
 `GoogleProvider.kelimeFikirleri` + `google-check --kelime` ölçüm kipi.
 **Ö-1 ÖLÇÜLDÜ (2026-10-08): Keyword Planner ERİŞİMİ VAR** (2.660 fikir,
 yakın varyantlar aynı metrik, hacim yuvarlanmış; kurallar MIMARI §4.1).
-**Sıradaki:** Ajan 2 (migration + servis) ve Ajan 3 (`/strateji` + menü)
-paralel; arama bileşeni artık kapı arkasında değil.
+**Ajan 2 + 3 BİRLEŞTİ (2026-10-08), DEPLOY EDİLMEDİ:** MIGRATION VAR
+(`20261008120000_advstrategy`, beş yeni tablo) + `db:rls` + worker'da yeni
+`strateji-kelime` kuyruğu (1 istek/sn). Ekran `/strateji`: plan listesi,
+Bütçe · Arama · Matris, durum düğmeleri. Bu turda YOK: PDF, sezon,
+AdvCampaign'e aktarım (ekranda da görünmüyor). Müşteri hesabının menüsü
+dörde çıktı (AdvStrategy): kullanıcı onayı bekleniyor.
+**Sıradaki:** Ajan 4 kapısı (RLS, izolasyon, üretim sırasıyla migration),
+sonra deploy; ardından ikinci tur (PDF, sezon, aktarım, kelime gruplama).
 
 **ADVCAMPAIGN (2026-10-07, kullanıcı kararı):** eski Reklam Oluştur, AI
 Asistan ve Toplu Oluştur KALDIRILDI (panel + API `ai-assistant` sohbeti ve

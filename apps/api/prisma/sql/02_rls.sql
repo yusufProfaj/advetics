@@ -402,7 +402,10 @@ DECLARE
     'reklam_taslagi', 'taslak_surumu', 'ajans_ayari',
     'yayin', 'yayin_nesnesi', 'geri_okuma', 'prova',
     -- AdvCampaign sohbeti (docs/advcampaign/TASARIM-PLAN.md § 4.2)
-    'adv_oturum', 'adv_mesaj', 'adv_onay'
+    'adv_oturum', 'adv_mesaj', 'adv_onay',
+    -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
+    'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
+    'ozel_gunler'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -2374,3 +2377,64 @@ CREATE POLICY adv_adv_onay_insert ON adv_onay
 CREATE POLICY adv_adv_onay_update ON adv_onay
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
+-- ADVSTRATEGY — strateji_planlari, strateji_dagilimlari, strateji_matrisi,
+-- strateji_kelimeleri, ozel_gunler (docs/advstrategy/MIMARI.md § 1)
+-- ============================================================================
+--
+-- strateji_planlari: MÜŞTERİ KAPSAMLI; SELECT, INSERT, UPDATE. DELETE YOK:
+-- plan silinmez, iptal edilir (son durum). Silinen plan, müşterinin neye
+-- onay verdiğinin izini götürürdü. Kimin yazabileceği (strategy.write) ve
+-- onaylayabileceği (strategy.approve) servis katmanında; RLS workspace
+-- sınırını tutuyor.
+CREATE POLICY adv_strateji_planlari_select ON strateji_planlari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_planlari_insert ON strateji_planlari
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_planlari_update ON strateji_planlari
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- Dağılım, matris, kelimeler: aynı sınır + DELETE. Üçü de "tek seferde yaz"
+-- deseniyle (DELETE + INSERT aynı transaction'da) güncelleniyor; DELETE
+-- politikası olmasaydı silme SIFIR satır etkileyip hata vermeden geçer ve
+-- INSERT tekil anahtara çarpardı (ya da eski satırlar yenilerin yanında
+-- kalırdı).
+CREATE POLICY adv_strateji_dagilimlari_select ON strateji_dagilimlari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_dagilimlari_insert ON strateji_dagilimlari
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_dagilimlari_update ON strateji_dagilimlari
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_dagilimlari_delete ON strateji_dagilimlari
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+CREATE POLICY adv_strateji_matrisi_select ON strateji_matrisi
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_matrisi_insert ON strateji_matrisi
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_matrisi_update ON strateji_matrisi
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_matrisi_delete ON strateji_matrisi
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+CREATE POLICY adv_strateji_kelimeleri_select ON strateji_kelimeleri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_kelimeleri_insert ON strateji_kelimeleri
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_kelimeleri_update ON strateji_kelimeleri
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_kelimeleri_delete ON strateji_kelimeleri
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- ozel_gunler: müşteriye bağlı DEĞİL, fx_rates gibi ortak referans veri.
+-- Okuma oturumu olan herkese; YAZMA POLİTİKASI YOK: satırlar migration ya da
+-- yönetim bağlantısıyla (BYPASSRLS) giriyor. Panelden yazma yolu açılırsa
+-- (Faz 3) politika o gün, kimin yazacağı kararıyla birlikte eklenir.
+CREATE POLICY adv_ozel_gunler_select ON ozel_gunler
+  FOR SELECT USING (app.has_context());

@@ -338,6 +338,8 @@ const ICONS = {
   rules: 'M4 6h12M4 10h7M4 14h9M15.5 12.5 17 14l-1.5 1.5',
   budget: 'M3 16V9m4 7V5m4 11v-5m4 5V7M2.5 16h15',
   create: 'M10 4v12M4 10h12',
+  // Takvim yaprağı: aylık medya planı (AdvStrategy).
+  plan: 'M4 5.5h12v10.5H4zM4 8.5h12M7.5 3.5v3M12.5 3.5v3M7 11.5h2M11 11.5h2M7 13.5h2',
   health: 'M3 11h3l2-5 3 9 2-4h4',
   fatigue: 'M4 15c2-6 5-9 12-10M4 15h4M4 15v-4',
   abtest: 'M6 4v12M14 4v12M4 8h4M12 12h4',
