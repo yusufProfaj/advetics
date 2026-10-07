@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { huniKatmaniSchema, stratejiPlatformuSchema, type HuniKatmani, type StratejiPlatformu } from './plan';
+import { huniKatmaniSchema, stratejiPlatformuSchema, surumSchema, type HuniKatmani, type StratejiPlatformu } from './plan';
 
 /**
  * ═══ BİLEŞEN 1 — BÜTÇE VE PLATFORM DAĞILIMI ═══
@@ -29,7 +29,7 @@ export const DAGILIM_SATIR_SINIRI = 6;
 
 /** Bütün dağılım tek seferde yazılır; satır satır PATCH, toplam denetimini parçalardı. */
 export const dagilimKaydetSchema = z
-  .object({ satirlar: z.array(dagilimSatiriGirdiSchema).max(DAGILIM_SATIR_SINIRI) })
+  .object({ surum: surumSchema, satirlar: z.array(dagilimSatiriGirdiSchema).max(DAGILIM_SATIR_SINIRI) })
   .refine(
     (v) => new Set(v.satirlar.map((s) => `${s.platform}:${s.katman}`)).size === v.satirlar.length,
     'Aynı platform ve kitle katmanı iki kez yazılamaz',

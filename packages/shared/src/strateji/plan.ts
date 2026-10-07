@@ -113,6 +113,13 @@ export const planOlusturSchema = z.object({
 });
 export type PlanOlusturGirdisi = z.infer<typeof planOlusturSchema>;
 
+/**
+ * Bütün düzenleme uçları (dağılım, matris, kelimeler) bu sürümü gövdede
+ * taşır; uyuşmazsa 409. İki kişi aynı planı açıp kaydederse ikincinin
+ * yazdığı, birincinin hiç görmediği bir planı EZERDİ.
+ */
+export const surumSchema = z.number().int().positive();
+
 export interface PlanOzeti {
   id: string;
   clientId: string;

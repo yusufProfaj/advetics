@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { niyetKoduSchema, type NiyetKodu } from '../reklam/meta/niyetler';
-import { huniKatmaniSchema, stratejiPlatformuSchema, type HuniKatmani, type StratejiPlatformu } from './plan';
+import { huniKatmaniSchema, stratejiPlatformuSchema, surumSchema, type HuniKatmani, type StratejiPlatformu } from './plan';
 
 /**
  * ═══ BİLEŞEN 3 — KİTLE × KREATİF MATRİSİ ═══
@@ -44,6 +44,7 @@ export const matrisSatiriGirdiSchema = z
   });
 
 export const matrisKaydetSchema = z.object({
+  surum: surumSchema,
   satirlar: z.array(matrisSatiriGirdiSchema).max(MATRIS_SATIR_SINIRI),
 });
 export type MatrisKaydetGirdisi = z.infer<typeof matrisKaydetSchema>;

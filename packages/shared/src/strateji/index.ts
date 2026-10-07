@@ -8,3 +8,4 @@ export * from './matris';
 export * from './kelime';
 export * from './takvim';
 export * from './uclar';
+export * from './detay';

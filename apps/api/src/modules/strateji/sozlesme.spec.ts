@@ -8,6 +8,7 @@ import {
   gecisMumkunMu,
   matrisButceDenetimi,
   matrisSatiriGirdiSchema,
+  planEylemSchema,
   PLAN_DURUMLARI,
   PLAN_EYLEMLERI,
   PLAN_GECISLERI,
@@ -99,13 +100,23 @@ describe('şemalar', () => {
   });
 
   it('aynı (platform, katman) dağılımda iki kez yazılamaz', () => {
-    const r = dagilimKaydetSchema.safeParse({
-      satirlar: [
-        { platform: 'meta', katman: 'soguk', tutar: '1' },
-        { platform: 'meta', katman: 'soguk', tutar: '2' },
-      ],
-    });
+    const tek = [{ platform: 'meta', katman: 'soguk', tutar: '1' }];
+    // Önce GEÇERLİ hâl geçiyor: ret başka bir sebepten (ör. eksik sürüm)
+    // gelseydi aşağıdaki iddia boşa düşerdi.
+    expect(dagilimKaydetSchema.safeParse({ surum: 1, satirlar: tek }).success).toBe(true);
+    const r = dagilimKaydetSchema.safeParse({ surum: 1, satirlar: [...tek, { ...tek[0], tutar: '2' }] });
     expect(r.success).toBe(false);
+    expect(JSON.stringify(r.error?.issues)).toContain('iki kez');
+  });
+
+  it('düzenleme gövdesi sürüm taşımak zorunda (eşzamanlı düzenleme ezilmesin)', () => {
+    expect(dagilimKaydetSchema.safeParse({ satirlar: [] }).success).toBe(false);
+    expect(planEylemSchema.safeParse({ eylem: 'onaya_gonder' }).success).toBe(false);
+    expect(planEylemSchema.safeParse({ eylem: 'onaya_gonder', surum: 3 }).success).toBe(true);
+  });
+
+  it('KRİTİK: onay eylem ucundan yapılamaz', () => {
+    expect(planEylemSchema.safeParse({ eylem: 'onayla', surum: 1 }).success).toBe(false);
   });
 
   it('KRİTİK: platform listesi kasıtlı olarak dar, LinkedIn yok', () => {
