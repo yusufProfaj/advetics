@@ -691,6 +691,43 @@ describe('MetricsService', () => {
       expect(rows[0]!.currency).toBe('TRY');
     });
 
+    it('KRİTİK: kampanya tipi ad set hedefinden çözülür ve harcamayı katlamaz', async () => {
+      // "Form" amaçtan değil ad set'in optimizasyon hedefinden çıkıyor.
+      // İkinci bir ad set eklemek, hedefler ana sorguya join edilseydi
+      // harcamayı ikiye katlardı.
+      await h.q(`UPDATE campaigns SET objective = 'OUTCOME_LEADS' WHERE id = $1`, [CAMPAIGN_ID]);
+      await h.q(`UPDATE ad_groups SET optimization_goal = 'LEAD_GENERATION' WHERE id = $1`, [GROUP_ID]);
+      await h.q(
+        `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, optimization_goal, updated_at)
+         VALUES ('77777777-7777-7777-7777-777777777778', $1, $2, $3, 'meta', 'g2', 'Reklam Seti A2', 'active', 'none', 'QUALITY_LEAD', now())`,
+        [CAMPAIGN_ID, IDS.adAccount, IDS.client],
+      );
+      await seedMetrics({
+        date: '2026-08-05',
+        spendMicros: '1000000',
+        impressions: 100,
+        clicks: 5,
+        conversions: 1,
+      });
+      const [kampanya] = await svc.breakdown(CTX, {
+        from: '2026-08-05',
+        to: '2026-08-05',
+        level: 'campaign',
+        limit: 50,
+      });
+      expect(kampanya!.campaignType).toBe('Form');
+      expect(kampanya!.spendMicros).toBe('1000000');
+
+      // Alt seviyelerde tip yok: üst kampanyanın özelliği, her satıra basılmıyor.
+      const [set] = await svc.breakdown(CTX, {
+        from: '2026-08-05',
+        to: '2026-08-05',
+        level: 'ad_group',
+        limit: 50,
+      });
+      expect(set!.campaignType).toBeNull();
+    });
+
     it('reklam seviyesinde ÜST ad set adı da döner', async () => {
       // Reklam adları ad set'ler arasında tekrar ediyor; üst varlık olmadan
       // tabloda hangi satırın hangisi olduğu ayırt edilemiyor.

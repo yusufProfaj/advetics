@@ -93,7 +93,10 @@ describe('KRİTİK: sayfalar çağrıyı KOŞULA bağlıyor', () => {
   });
 
   it('genel bakış: coverage KOŞULLU', () => {
-    expect(DASHBOARD).toContain('enEskiGunGerekli(first(params.aralik))');
+    // Genel Bakış'ın kendi varsayılanı (`bu_ay`) koşula da giriyor; ham
+    // parametreyle sorulsaydı adreste aralık yokken ortak varsayılana bakardı.
+    expect(DASHBOARD).toContain('const aralik = first(params.aralik) ?? GENEL_BAKIS_ARALIGI;');
+    expect(DASHBOARD).toContain('enEskiGunGerekli(aralik)');
     // Koşulsuz `await serverApiFetch(.../coverage` deseni geri gelmemeli.
     expect(DASHBOARD).not.toContain('const kapsam = await serverApiFetch');
   });

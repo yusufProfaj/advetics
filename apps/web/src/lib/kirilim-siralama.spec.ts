@@ -34,6 +34,7 @@ function satir(p: {
     entityExternalId: p.ad,
     name: p.ad,
     parentName: null,
+    campaignType: null,
     platform: p.platform,
     status: 'active',
     currency: 'TRY',

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { seviyeLiterali } from './seviye-literali';
-import { deriveRoas, donusumToplami } from '@advetics/shared';
+import { deriveRoas, donusumToplami, kampanyaTipi } from '@advetics/shared';
 import type {
   HierarchyPathQuery,
   MetricsConversionDetail,
@@ -568,6 +568,7 @@ export class MetricsService {
             name: string | null;
             parent_name: string | null;
             status: string | null;
+            objective: string | null;
           }
         >
       >(
@@ -600,7 +601,8 @@ export class MetricsService {
                    AS prev_conversion_value_micros,
                  COALESCE(c.name, g.name, a.name, acc.name) AS name,
                  COALESCE(gc.name, ag.name) AS parent_name,
-                 COALESCE(c.status::text, g.status::text, a.status::text, acc.status::text) AS status
+                 COALESCE(c.status::text, g.status::text, a.status::text, acc.status::text) AS status,
+                 c.objective
           FROM insights_daily i
           LEFT JOIN campaigns   c   ON i.entity_level = 'campaign' AND c.id = i.entity_id
           LEFT JOIN ad_groups   g   ON i.entity_level = 'ad_group' AND g.id = i.entity_id
@@ -616,7 +618,7 @@ export class MetricsService {
             ${filters}
           GROUP BY i.entity_id, i.entity_external_id, i.platform, i.currency,
                    c.name, g.name, a.name, acc.name, gc.name, ag.name,
-                   c.status, g.status, a.status, acc.status
+                   c.status, g.status, a.status, acc.status, c.objective
           -- SIRALAMA CARİ DÖNEME BAĞLI ve bu ŞART: aksi hâlde yalnızca
           -- ÖNCEKİ dönemde harcama yapmış varlıklar LIMIT'in içine girip
           -- listeyi kaydırır ve "bu kampanya neden burada, hiç harcaması
@@ -625,6 +627,30 @@ export class MetricsService {
           LIMIT ${query.limit}
         `,
       );
+
+      /*
+       * AD SET HEDEFLERİ AYRI SORGUDA. Meta'da "Form" kampanya amacından
+       * değil ad set'in optimizasyon hedefinden çıkıyor (`kampanya-tipi.ts`).
+       * Ana sorguya join eklemek satırı ad set sayısı kadar çoğaltır ve
+       * harcamayı katlardı; burada yalnızca listedeki kampanyalar soruluyor.
+       */
+      const hedefler = new Map<string, string[]>();
+      const metaKampanyalari = query.level === 'campaign'
+        ? rows.filter((r) => r.platform === 'meta').map((r) => r.entity_id)
+        : [];
+      if (metaKampanyalari.length > 0) {
+        const hs = await tx.$queryRaw<Array<{ campaign_id: string; goals: string[] }>>(
+          Prisma.sql`
+            SELECT campaign_id, array_agg(optimization_goal) AS goals
+            FROM ad_groups
+            WHERE campaign_id = ANY(${metaKampanyalari}::uuid[])
+              AND deleted_at IS NULL
+              AND optimization_goal IS NOT NULL
+            GROUP BY campaign_id
+          `,
+        );
+        for (const h of hs) hedefler.set(h.campaign_id, h.goals);
+      }
 
       return rows.map((r) => ({
         entityId: r.entity_id,
@@ -644,6 +670,10 @@ export class MetricsService {
         platform: r.platform,
         status: r.status ?? 'unknown',
         currency: r.currency,
+        campaignType:
+          query.level === 'campaign'
+            ? kampanyaTipi(r.platform, r.objective, hedefler.get(r.entity_id))
+            : null,
         ...this.totals(r),
         /*
          * `null` = önceki dönemde HİÇ veri yok. Sıfırlı bir nesne döndürmek

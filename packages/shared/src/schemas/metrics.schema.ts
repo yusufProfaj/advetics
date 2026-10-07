@@ -545,6 +545,12 @@ export interface MetricsBreakdownRow extends MetricTotals {
   status: string;
   currency: string;
   /**
+   * Kampanya tipi ("Form", "YouTube"...) — `kampanyaTipi()` ile çözülmüş.
+   * YALNIZCA kampanya seviyesinde dolu; diğer seviyelerde ve platform tip
+   * bildirmiyorsa `null`.
+   */
+  campaignType: string | null;
+  /**
    * Önceki dönem — yüzde değişim için.
    *
    * `null` = o varlığın önceki dönemde HİÇ verisi yok. Sıfırlı bir nesne

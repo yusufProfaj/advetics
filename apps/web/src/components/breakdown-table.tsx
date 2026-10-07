@@ -142,6 +142,7 @@ export function BreakdownTable({
   //
   // Tek satırda bile gelir varsa kolon kalıyor — o zaman karşılaştırma anlamlı.
   const showRoas = rows.some((r) => r.roas !== null);
+  const tipGoster = level === 'campaign';
   const altBasamak = ALT_BASAMAK[level];
 
   /**
@@ -173,7 +174,7 @@ export function BreakdownTable({
         <>
           {/* Yatay kaydırma KENDİ kabında: sayfanın gövdesi yatay kaymamalı. */}
           <div className="overflow-x-auto">
-          <table className={`w-full text-sm ${showRoas ? 'min-w-[920px]' : 'min-w-[840px]'}`}>
+          <table className={`w-full text-sm ${showRoas ? (tipGoster ? 'min-w-[1000px]' : 'min-w-[920px]') : tipGoster ? 'min-w-[920px]' : 'min-w-[840px]'}`}>
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-muted">
                 <th className="px-4 py-2 font-semibold">Ad</th>
@@ -192,6 +193,13 @@ export function BreakdownTable({
                   tasinan={tasinan}
                   className="px-3 py-2"
                 />
+                {/*
+                  KAMPANYA TİPİ MECRANIN YANINDA, YALNIZCA KAMPANYA SEVİYESİNDE.
+                  "Meta · Form", "Google · YouTube" birlikte okunuyor. Reklam
+                  seti ve reklam satırlarında tip üst kampanyanın özelliği;
+                  orada tekrar etmek her satıra aynı kelimeyi basmak olurdu.
+                */}
+                {tipGoster && <th className="px-3 py-2 font-semibold">Tip</th>}
                 <SiraliBaslik
                   etiket="Harcama"
                   anahtar="harcama"
@@ -301,6 +309,13 @@ export function BreakdownTable({
                   <td className="px-3 py-2.5">
                     <Mecra platform={r.platform} />
                   </td>
+                  {tipGoster && (
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-ink-muted">
+                      {r.campaignType ?? (
+                        <span title="Platform bu seviyede kampanya tipi bildirmiyor">—</span>
+                      )}
+                    </td>
+                  )}
                   {/*
                     DELTA HÜCRENİN ALTINDA, YENİ SÜTUN DEĞİL.
                     Tablo zaten sabit genişlikte (min-w-[820px]); altı metrik

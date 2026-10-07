@@ -4,6 +4,7 @@ export * from './constants/platforms';
 export * from './linkedin-para';
 export * from './kitle-bolumu';
 export * from './donusum-detaylari';
+export * from './kampanya-tipi';
 export * from './boost-hedefleme';
 export * from './linkedin-saklama';
 export * from './constants/boost-naming';

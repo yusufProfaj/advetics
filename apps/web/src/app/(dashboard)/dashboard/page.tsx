@@ -81,6 +81,9 @@ export const dynamic = 'force-dynamic';
  */
 const KIRILIM_LIMITI = 25;
 
+/** Genel Bakış'ın açılış aralığı. Adreste `aralik` yoksa bu kullanılıyor. */
+const GENEL_BAKIS_ARALIGI = 'bu_ay';
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -107,14 +110,23 @@ export default async function DashboardPage({
    * Hata YUTULMUYOR ama aralığı da düşürmüyor: kapsam alınamazsa "Tüm
    * zamanlar" 90 güne düşüyor ve bu `date-range.ts` içinde yazılı.
    */
-  const kapsam = enEskiGunGerekli(first(params.aralik))
+  /*
+   * GENEL BAKIŞ "BU AY" İLE AÇILIR (kullanıcı kararı, 2026-10-07).
+   * Ortak varsayılan (`DEFAULT_RANGE`, son 30 gün) raporlar ve reklam
+   * gezgini için kalıyor; onu değiştirmek o ekranları da habersiz kaydırırdı.
+   * Seçim adreste yoksa burada dolduruluyor: takvim seçili ön ayarı
+   * çözülen aralıktan okuduğu için "Bu ay" işaretli geliyor, ve sekme
+   * bağlantıları `rangeParams` ile `aralik=bu_ay` taşıyor.
+   */
+  const aralik = first(params.aralik) ?? GENEL_BAKIS_ARALIGI;
+  const kapsam = enEskiGunGerekli(aralik)
     ? await serverApiFetch<{ earliestDate: string | null }>(
         `/metrics/coverage?from=${first(params.baslangic) ?? '2026-01-01'}&to=${first(params.bitis) ?? '2026-01-01'}`,
       ).catch(() => null)
     : null;
 
   const range = resolveRange({
-    aralik: first(params.aralik),
+    aralik,
     baslangic: first(params.baslangic),
     bitis: first(params.bitis),
     karsilastir: first(params.karsilastir),
