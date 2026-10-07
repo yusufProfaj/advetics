@@ -13,12 +13,14 @@ import {
   type DerlemeGirdisi,
 } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
+import { metaYazmaAcikMi } from './yazma-kapisi';
 import {
   MetaBelirsizHata,
   MetaKesinHata,
   YayinMotoru,
   yayinKaydiOlustur,
   yayiniSonlandir,
+  YazmaDurduruldu,
   type MetaYazmaPortu,
   type TxRunner,
 } from './yayin-motoru';
@@ -84,6 +86,7 @@ class SahteMeta implements MetaYazmaPortu {
   }
 }
 
+const ACIK = async () => ({ acik: true as const });
 let h: Harness;
 let tx: TxRunner;
 let kayitDusur = false;
@@ -178,7 +181,7 @@ describe('mutlu yol', () => {
   it('KRİTİK: PAUSED kurar, geri okur, fark yoksa YUKARIDAN AŞAĞI açar, öneki kaldırır', async () => {
     const meta = new SahteMeta();
     const { yayinId } = await hazirla();
-    const sonuc = await new YayinMotoru(tx, meta, 'act_1').kur(yayinId);
+    const sonuc = await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId);
     expect(sonuc).toBe('iletildi');
     expect((await nesneler(yayinId)).map((n) => n.durum)).toEqual(['kuruldu', 'acildi', 'acildi', 'kuruldu', 'acildi']);
     expect(meta.acmaSirasi).toEqual(['campaigns', 'adsets', 'ads']);
@@ -196,7 +199,7 @@ describe('mutlu yol', () => {
   it('test kipi: tekillik kapısından sonra AÇMAZ, arşivler ve yayını sonlandırır', async () => {
     const meta = new SahteMeta();
     const { yayinId } = await hazirla({ testKipi: true });
-    expect(await new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).toBe('arsivlendi');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('arsivlendi');
     expect([...meta.kayitlar.values()].filter((k) => k.status === 'ACTIVE')).toHaveLength(0);
     expect([...meta.kayitlar.values()].find((k) => k.uc === 'campaigns')!.status).toBe('ARCHIVED');
     const [y] = await h.q<{ sonlandi_at: Date | null }>('SELECT sonlandi_at FROM yayin WHERE id = $1', [yayinId]);
@@ -209,7 +212,7 @@ describe('kurulum hataları', () => {
     const meta = new SahteMeta();
     meta.olusturHatasi = (uc) => (uc === 'adsets' ? { hata: new MetaKesinHata('Geçersiz hedefleme', 100, 1815946) } : null);
     const { yayinId } = await hazirla();
-    expect(await new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).toBe('kurulamadi');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('kurulamadi');
     expect((await durum(yayinId)).sebep).toContain('Geçersiz hedefleme');
     expect((await nesneler(yayinId)).map((n) => n.durum)).toEqual(['kuruldu', 'kuruldu', 'reddedildi', 'bekliyor', 'bekliyor']);
     expect(meta.sayi('adcreatives')).toBe(0);
@@ -220,7 +223,7 @@ describe('kurulum hataları', () => {
     let ilk = true;
     meta.olusturHatasi = (uc) => (uc === 'campaigns' && ilk ? ((ilk = false), { hata: new MetaBelirsizHata('zaman aşımı'), yineDeOlustur: 1 }) : null);
     const { yayinId } = await hazirla();
-    expect(await new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).toBe('iletildi');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('iletildi');
     expect(meta.sayi('campaigns')).toBe(1);
   });
 
@@ -228,7 +231,7 @@ describe('kurulum hataları', () => {
     const meta = new SahteMeta();
     meta.olusturHatasi = (uc) => (uc === 'campaigns' ? { hata: new MetaBelirsizHata('5xx') } : null);
     const { yayinId } = await hazirla();
-    expect(await new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).toBe('sonuc_belirsiz');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('sonuc_belirsiz');
     expect(meta.postSayisi).toBe(1);
   });
 
@@ -236,7 +239,7 @@ describe('kurulum hataları', () => {
     const meta = new SahteMeta();
     meta.olusturHatasi = (uc) => (uc === 'campaigns' ? { hata: new MetaBelirsizHata('kopma'), yineDeOlustur: 2 } : null);
     const { yayinId } = await hazirla();
-    expect(await new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).toBe('sonuc_belirsiz');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('sonuc_belirsiz');
     expect((await durum(yayinId)).sebep).toMatch(/2 kopya/);
   });
 
@@ -250,10 +253,10 @@ describe('kurulum hataları', () => {
       if (uc === 'campaigns' && gecti++ === 0) kayitDusur = true;
       return eski(hs, uc, a);
     };
-    expect(await new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).toBe('kayit_belirsiz');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('kayit_belirsiz');
     const k = (await nesneler(yayinId)).find((n) => n.ad === 'kampanya')!;
     expect(k.durum).toBe('gonderiliyor');
-    await expect(new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).rejects.toThrow();
+    await expect(new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).rejects.toThrow();
     expect(meta.sayi('campaigns')).toBe(1);
   });
 });
@@ -263,7 +266,7 @@ describe('geri okuma ve açma', () => {
     const meta = new SahteMeta();
     meta.okumaBozucu = (_id, o) => ('daily_budget' in o ? { ...o, daily_budget: '5000000' } : o);
     const { yayinId } = await hazirla();
-    expect(await new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).toBe('fark_var');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('fark_var');
     expect([...meta.kayitlar.values()].filter((k) => k.status === 'ACTIVE')).toHaveLength(0);
   });
 
@@ -275,7 +278,7 @@ describe('geri okuma ve açma', () => {
       return eski(id, a);
     };
     const { yayinId } = await hazirla();
-    expect(await new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).toBe('dogrulanamadi');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('dogrulanamadi');
     expect([...meta.kayitlar.values()].filter((k) => k.status === 'ACTIVE')).toHaveLength(0);
   });
 
@@ -284,7 +287,7 @@ describe('geri okuma ve açma', () => {
     const { yayinId } = await hazirla();
     // Önceki bir "yeniden dene"den gecikmeyle görünür olmuş kopya.
     meta.kayitlar.set('9999', { uc: 'campaigns', alanlar: { name: 'ikiz', adlabels: [{ name: `adv-yayin-${yayinId}` }] }, status: 'PAUSED' });
-    expect(await new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).toBe('fark_var');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('fark_var');
     expect((await durum(yayinId)).sebep).toContain('9999');
     expect([...meta.kayitlar.values()].filter((k) => k.status === 'ACTIVE')).toHaveLength(0);
   });
@@ -293,7 +296,7 @@ describe('geri okuma ve açma', () => {
     const meta = new SahteMeta();
     meta.durumHatasi = (id) => meta.kayitlar.get(id)?.uc === 'adsets';
     const { yayinId } = await hazirla();
-    expect(await new YayinMotoru(tx, meta, 'act_1').kur(yayinId)).toBe('kismen_acik');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('kismen_acik');
 
     const meta2 = new SahteMeta();
     meta2.durumHatasi = (id) => {
@@ -305,7 +308,73 @@ describe('geri okuma ve açma', () => {
       return false;
     };
     const b = await hazirla();
-    expect(await new YayinMotoru(tx, meta2, 'act_1').kur(b.yayinId)).toBe('iletildi');
+    expect(await new YayinMotoru(tx, meta2, 'act_1', ACIK).kur(b.yayinId)).toBe('iletildi');
+  });
+});
+
+describe('"Meta’ya yazmayı durdur"', () => {
+  it('KRİTİK: anahtar kurulumun ortasında basılırsa bir sonraki POST’tan ÖNCE durur; devam yalnız elle', async () => {
+    const meta = new SahteMeta();
+    let acik = true;
+    const kapi = async () => (acik ? { acik: true as const } : { acik: false as const, sebep: 'olay' });
+    const eski = meta.olustur.bind(meta);
+    meta.olustur = async (hs, uc, a) => {
+      const r = await eski(hs, uc, a);
+      if (uc === 'campaigns') acik = false; // kampanyadan hemen sonra basıldı
+      return r;
+    };
+    const { yayinId } = await hazirla();
+    const motor = new YayinMotoru(tx, meta, 'act_1', kapi);
+    expect(await motor.kur(yayinId)).toBe('bekletildi');
+    expect(meta.sayi('adsets')).toBe(0);
+    expect((await nesneler(yayinId)).find((n) => n.ad === 'reklam_seti')!.durum).toBe('bekliyor');
+    expect((await durum(yayinId)).sebep).toBe('olay');
+    // Anahtar kapalı kalırken devam da durur.
+    await expect(motor.devam(yayinId)).resolves.toBe('bekletildi');
+    acik = true;
+    expect(await motor.devam(yayinId)).toBe('iletildi');
+    expect(meta.sayi('campaigns')).toBe(1);
+  });
+
+  it('açma sırasında basılırsa açmadan önce durur; geri alma da yazmadığı için sebep yazılır', async () => {
+    const meta = new SahteMeta();
+    let acik = true;
+    const kapi = async () => (acik ? { acik: true as const } : { acik: false as const, sebep: 'olay' });
+    meta.okumaBozucu = (_id, o) => {
+      acik = false; // geri okuma sırasında basıldı
+      return o;
+    };
+    const { yayinId } = await hazirla();
+    expect(await new YayinMotoru(tx, meta, 'act_1', kapi).kur(yayinId)).toBe('bekletildi');
+    expect([...meta.kayitlar.values()].filter((k) => k.status === 'ACTIVE')).toHaveLength(0);
+  });
+
+  it('tek kapı: ajansın durdurması müşteri şirketinde de geçerli; okunamazsa KAPALI', async () => {
+    const [{ id: ma }] = (await h.q<{ id: string }>(
+      `INSERT INTO manager_accounts (id, name, slug, status, updated_at) VALUES (gen_random_uuid(), 'Üst', 'ust', 'active', now()) RETURNING id::text`,
+    )) as [{ id: string }];
+    const [{ id: ajans }] = (await h.q<{ id: string }>(
+      `INSERT INTO organizations (id, name, slug, manager_account_id, updated_at) VALUES (gen_random_uuid(), 'Ajans', 'ajans-x', $1, now()) RETURNING id::text`,
+      [ma],
+    )) as [{ id: string }];
+    await h.q(`UPDATE manager_accounts SET ajans_org_id = $1 WHERE id = $2`, [ajans, ma]);
+    await h.q(`UPDATE organizations SET manager_account_id = $1 WHERE id = $2`, [ma, IDS.org]);
+    expect(await metaYazmaAcikMi(tx, IDS.client)).toEqual({ acik: true });
+    await h.q(
+      `INSERT INTO ajans_ayari (org_id, meta_yazma_durduruldu, durdurma_at, durdurma_sebebi) VALUES ($1, true, now(), 'v26 sorunu')`,
+      [ajans],
+    );
+    expect(await metaYazmaAcikMi(tx, IDS.client)).toEqual({ acik: false, sebep: "Meta'ya yazma ajans tarafından durduruldu: v26 sorunu" });
+    const bozuk: TxRunner = () => Promise.reject(new Error('db yok'));
+    expect((await metaYazmaAcikMi(bozuk, IDS.client)).acik).toBe(false);
+  });
+
+  it('sebepsiz durdurma veritabanında reddedilir', async () => {
+    await expect(h.q(`INSERT INTO ajans_ayari (org_id, meta_yazma_durduruldu) VALUES ($1, true)`, [IDS.org])).rejects.toThrow(/durdurma_chk/);
+  });
+
+  it('YazmaDurduruldu dışarı sızmıyor (motorun kendi durumuna çevriliyor)', () => {
+    expect(new YazmaDurduruldu('x')).toBeInstanceOf(Error);
   });
 });
 
@@ -370,6 +439,16 @@ describe('kaynak taraması', () => {
         const fn = k.slice(k.indexOf('export async function yayiniSonlandir'));
         expect(fn).toMatch(/sonlandi_at\s*=\s*now\(\)/);
       }
+    }
+  });
+
+  it('KRİTİK: Meta’ya yazan port çağrıları YALNIZ kapılı sarmalayıcılarda', () => {
+    const k = kaynak('yayin-motoru.ts');
+    const cagrilar = [...k.matchAll(/this\.meta\.(olustur|gorselYukle|durumYaz)\(/g)];
+    expect(cagrilar).toHaveLength(3);
+    for (const c of cagrilar) {
+      const once = k.slice(Math.max(0, c.index! - 200), c.index!);
+      expect(once, c[0]).toMatch(/await this\.kapi\(\);\s*return $/);
     }
   });
 

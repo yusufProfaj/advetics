@@ -63,4 +63,43 @@ export class AjansAyariService {
       return { standart, secimAt: new Date(s.atif_secim_at).toISOString(), secebilir: true };
     });
   }
+
+  /**
+   * "Meta'ya yazmayı durdur" (§ 11.10). Yalnız ajans yöneticisi, sebep
+   * ZORUNLU. Süren yayınlar bir sonraki adım sınırında bekletilir; anahtar
+   * kapanınca kendiliğinden devam ETMEZLER.
+   */
+  async yazmaAnahtari(
+    ctx: TenantContext,
+    durdur: boolean,
+    sebep: string | null,
+    meta: { ip: string | null; userAgent: string | null; requestId?: string },
+  ): Promise<{ durduruldu: boolean; sebep: string | null }> {
+    if (!ctx.isOrgAdmin) throw new ForbiddenException('Meta’ya yazmayı yalnız ajans yöneticisi durdurabilir.');
+    const temiz = sebep?.trim() || null;
+    if (durdur && !temiz) throw new ForbiddenException('Durdurma sebebi yazılmalı.');
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const [s] = await tx.$queryRaw<Array<{ ok: number }>>(Prisma.sql`
+        INSERT INTO ajans_ayari (org_id, meta_yazma_durduruldu, durduran_id, durdurma_at, durdurma_sebebi, updated_at)
+        VALUES (${ctx.orgId}::uuid, ${durdur}, ${durdur ? ctx.userId : null}::uuid,
+                ${durdur ? new Date() : null}, ${durdur ? temiz : null}, now())
+        ON CONFLICT (org_id) DO UPDATE
+          SET meta_yazma_durduruldu = EXCLUDED.meta_yazma_durduruldu,
+              durduran_id = EXCLUDED.durduran_id,
+              durdurma_at = EXCLUDED.durdurma_at,
+              durdurma_sebebi = EXCLUDED.durdurma_sebebi,
+              updated_at = now()
+        RETURNING 1 AS ok`);
+      if (!s) throw new ForbiddenException('Anahtar kaydedilemedi.');
+      await this.audit.record(tx, ctx, {
+        action: durdur ? 'ajans_ayari.meta_yazma_durduruldu' : 'ajans_ayari.meta_yazma_acildi',
+        targetType: 'ajans_ayari',
+        targetId: ctx.orgId,
+        clientId: null,
+        after: { durduruldu: durdur, sebep: temiz },
+        ...meta,
+      });
+      return { durduruldu: durdur, sebep: durdur ? temiz : null };
+    });
+  }
 }

@@ -3615,6 +3615,10 @@ model AjansAyari {
   atifSecenId   String?   @map("atif_secen_id") @db.Uuid
   atifSecimAt   DateTime? @map("atif_secim_at") @db.Timestamptz(6)
   updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  metaYazmaDurduruldu Boolean   @default(false) @map("meta_yazma_durduruldu")
+  durduranId          String?   @map("durduran_id") @db.Uuid
+  durdurmaAt          DateTime? @map("durdurma_at") @db.Timestamptz(6)
+  durdurmaSebebi      String?   @map("durdurma_sebebi") @db.VarChar(500)
 
   @@map("ajans_ayari")
 }

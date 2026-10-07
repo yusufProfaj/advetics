@@ -32,6 +32,9 @@ const logger = new Logger('YayinMotoru');
  * Motor bunlar yazılmadan bir uca bağlanmıyor.
  */
 
+/** Durdurma anahtarı açık: çağrı YAPILMADI. */
+export class YazmaDurduruldu extends Error {}
+
 /** Meta doğrulama koduyla KESİN reddetti: nesne doğmadı. */
 export class MetaKesinHata extends Error {
   constructor(
@@ -102,7 +105,57 @@ export class YayinMotoru {
     private readonly tx: TxRunner,
     private readonly meta: MetaYazmaPortu,
     private readonly hesap: string,
+    /**
+     * "Meta'ya yazmayı durdur" kapısı; HER yazmadan önce sorulur (okumadan
+     * değil). Varsayılanı YOK: kapısız bir motor kurulamasın.
+     */
+    private readonly yazmaKapisi: () => Promise<{ acik: true } | { acik: false; sebep: string }>,
   ) {}
+
+  // ---------------------------------------------------------------------------
+  // YAZMA SARMALAYICILARI — Meta'ya yazan üç port çağrısı YALNIZ bunlardan
+  // geçer (kaynak taramasıyla kilitli). Uçuştaki çağrı kesilmez; kapı
+  // yalnız çağrıdan ÖNCE bakar (yarıda kesmek sonucu belirsiz yapardı).
+  // ---------------------------------------------------------------------------
+  private async kapi(): Promise<void> {
+    const k = await this.yazmaKapisi();
+    if (!k.acik) throw new YazmaDurduruldu(k.sebep);
+  }
+  private async yazGorsel(varlikId: string): Promise<string> {
+    await this.kapi();
+    return this.meta.gorselYukle(this.hesap, varlikId);
+  }
+  private async yazOlustur(uc: string, alanlar: Record<string, unknown>): Promise<{ id: string }> {
+    await this.kapi();
+    return this.meta.olustur(this.hesap, uc, alanlar);
+  }
+  private async yazDurum(metaId: string, alanlar: { status: 'ACTIVE' | 'ARCHIVED'; name?: string }): Promise<void> {
+    await this.kapi();
+    return this.meta.durumYaz(metaId, alanlar);
+  }
+
+  /**
+   * Bekletilen yayını KALDIĞI YERDEN sürdürür — yalnız insan çağırır.
+   * Anahtar kapanınca bekletilenler kendiliğinden devam etmez: anahtar bir
+   * olay yüzünden basıldı ve olaydan önce başlamış yayının hâlâ doğru olduğu
+   * bilinmiyor.
+   */
+  async devam(yayinId: string): Promise<YayinDurumu> {
+    const y = await this.yayin(yayinId);
+    if (y.durum !== 'bekletildi') throw new Error(`Yayın bekletilmiyor (${y.durum})`);
+    const [o] = await this.tx((tx) =>
+      tx.$queryRaw<Array<{ onceki: YayinDurumu | null }>>(Prisma.sql`SELECT onceki_durum AS onceki FROM yayin WHERE id = ${yayinId}::uuid`),
+    );
+    const onceki = o?.onceki;
+    if (onceki !== 'medya' && onceki !== 'kuruluyor' && onceki !== 'aciliyor') throw new Error(`Bekletmeden önceki durum sürdürülemez: ${onceki}`);
+    await this.gecis(y, onceki, 'Kaldığı yerden devam');
+    return onceki === 'aciliyor' ? this.ac(yayinId) : this.kur(yayinId);
+  }
+
+  /** Durdurma anahtarı: geçişi yazar, motor burada durur. */
+  private async beklet(y: YayinSatiri, e: YazmaDurduruldu): Promise<YayinDurumu> {
+    return (await this.gecis(y, 'bekletildi', e.message)).durum;
+  }
 
   // ---------------------------------------------------------------------------
   // KURULUM — medya → form → kampanya → reklam seti → kreatif → reklam
@@ -132,13 +185,18 @@ export class YayinMotoru {
       let metaId: string;
       try {
         if (n.tur === 'medya') {
-          metaId = await this.meta.gorselYukle(this.hesap, n.ad.slice('medya:'.length));
+          metaId = await this.yazGorsel(n.ad.slice('medya:'.length));
         } else {
           const govde = govdeBul(y, n.ad);
           const kimlikler = await this.kimlikHaritasi(y.id);
-          metaId = (await this.meta.olustur(this.hesap, govde.uc, yerlestir(govde.alanlar, kimlikler) as Record<string, unknown>)).id;
+          metaId = (await this.yazOlustur(govde.uc, yerlestir(govde.alanlar, kimlikler) as Record<string, unknown>)).id;
         }
       } catch (e) {
+        if (e instanceof YazmaDurduruldu) {
+          // Çağrı YAPILMADI: niyet geri alınır, nesne yeniden 'bekliyor'.
+          await this.nesneYaz(n.id, 'bekliyor', null, null);
+          return this.beklet(y, e);
+        }
         if (e instanceof MetaKesinHata) {
           await this.nesneYaz(n.id, 'reddedildi', null, hataKaydi(e));
           await this.gecis(y, 'kurulamadi', `${n.ad}: ${e.message}`);
@@ -170,7 +228,7 @@ export class YayinMotoru {
       if (n.tur === 'form') {
         const s = await this.geriOkuVeYaz(y, ['form']);
         if (s !== 'temiz') {
-          if (s === 'fark') await this.meta.durumYaz(metaId, { status: 'ARCHIVED' }).catch(() => undefined);
+          if (s === 'fark') await this.yazDurum(metaId, { status: 'ARCHIVED' }).catch(() => undefined);
           await this.gecis(y, s === 'fark' ? 'fark_var' : 'dogrulanamadi', 'Form Meta’da farklı kaydedildi');
           return s === 'fark' ? 'fark_var' : 'dogrulanamadi';
         }
@@ -268,8 +326,9 @@ export class YayinMotoru {
         try {
           // Önek AYNI çağrıda kalkıyor: ayrı bir ad yazması, açılmış ama adı
           // "açılmadı" diyen bir nesne bırakabilirdi.
-          await this.meta.durumYaz(n.meta_id!, { status: 'ACTIVE', name: onekKaldir(ad) });
-        } catch {
+          await this.yazDurum(n.meta_id!, { status: 'ACTIVE', name: onekKaldir(ad) });
+        } catch (e) {
+          if (e instanceof YazmaDurduruldu) return this.beklet(y, e);
           // Açma tekrarlanabilir ama önce DURUM okunur.
           const okunan = await this.meta.oku(n.meta_id!, ['configured_status']).catch(() => null);
           if (okunan?.configured_status !== 'ACTIVE') {
@@ -293,7 +352,7 @@ export class YayinMotoru {
     const kalan: string[] = [];
     for (const n of nesneler.filter((x) => (x.tur === 'kampanya' || x.tur === 'form') && x.meta_id)) {
       try {
-        await this.meta.durumYaz(n.meta_id!, { status: 'ARCHIVED' });
+        await this.yazDurum(n.meta_id!, { status: 'ARCHIVED' });
         await this.nesneYaz(n.id, 'arsivlendi', n.meta_id, null, null);
       } catch (e) {
         kalan.push(`${n.ad} (${n.meta_id}): ${(e as Error).message}`);

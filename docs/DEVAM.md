@@ -9,7 +9,7 @@
 **Son güncelleme:** 2026-10-07 · **Canlı (539f6fb):** Google gün içi saatlik,
 Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlıda
 doğrulandı).
-**Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: taslak + yayın tabloları, iki migration + `db:rls`), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
+**Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: üç migration — taslak, yayın, yazma kesici — + `db:rls`; `META_API_VERSION` v25.0 ya da v26.0 olmalı), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
 **Reklam oluşturma (2026-10-07): AYRI MODÜL olarak kuruluyor.**
 Kararlar [`bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md)
@@ -53,6 +53,10 @@ bylabels, token yalnız graph.facebook.com'a) ve erişim katmanı
 (`meta-erisim.ts`: token, sayfa token'ı, görsel baytı, hash önbelleği;
 eski servisler kullanılmıyor, token YENİLENMİYOR). Kullanıcı kararı:
 eski panel/kod referans değil, tek kaynak tasarım belgeleri.
+"Meta'ya yazmayı durdur" anahtarı da kuruldu (MIGRATION:
+`20261007160000_reklam_yazma_kesici`; tek kapı `metaYazmaAcikMi`, ajans
+şirketinin anahtarı müşteri şirketlerini de durduruyor, okunamazsa kapalı;
+motorda her yazma kapılı sarmalayıcıdan; uç `PUT /reklam/ajans-ayari/meta-yazma`).
 **Sıradaki (motoru uca bağlamadan önce şart):** ön kontrol + prova (§ 11.2), hesap başına yazıcı kilidi ve senkron
 duraklatma (§ 11.5 d), "Meta'ya yazmayı durdur" kesicisi (§ 11.10),
 `yayinBaslat` ucu (`bulk.publish`). Sonra canlı tur (Aşama 2) ajansın

@@ -36,6 +36,10 @@ const surumYazSchema = z.object({
 });
 
 const atifSecSchema = z.object({ standart: z.enum(ATIF_STANDARTLARI) });
+const yazmaAnahtariSchema = z.object({
+  durdur: z.boolean(),
+  sebep: z.string().trim().max(500).nullable().default(null),
+});
 
 /**
  * Yeni reklam modülünün uçları. Önek `reklam`: eski `ad-builder`,
@@ -113,6 +117,21 @@ export class ReklamController {
     @Req() req: AuthedRequest,
   ): Promise<AtifDurumu> {
     return this.ajans.atifSec(ctx, dto.standart, {
+      ip: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+      requestId: req.requestId,
+    });
+  }
+
+  /** "Meta'ya yazmayı durdur" — ajans yöneticisi, sebep zorunlu. */
+  @Put('ajans-ayari/meta-yazma')
+  @RequirePermissions('org.write')
+  yazmaAnahtari(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(yazmaAnahtariSchema)) dto: z.infer<typeof yazmaAnahtariSchema>,
+    @Req() req: AuthedRequest,
+  ): Promise<{ durduruldu: boolean; sebep: string | null }> {
+    return this.ajans.yazmaAnahtari(ctx, dto.durdur, dto.sebep, {
       ip: req.ip ?? null,
       userAgent: req.get('user-agent') ?? null,
       requestId: req.requestId,
