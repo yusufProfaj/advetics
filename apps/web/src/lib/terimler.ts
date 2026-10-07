@@ -24,7 +24,8 @@ export type TerimAnahtari =
   | 'gosterim'
   | 'tik'
   | 'ctr'
-  | 'cpc';
+  | 'cpc'
+  | 'cpm';
 
 export interface Terim {
   /** Ekranda görünen ad — iş dilinde. */
@@ -92,6 +93,13 @@ export const TERIMLER: Record<TerimAnahtari, Terim> = {
     ad: 'Tıklama başı maliyet',
     kisaltma: 'CPC',
     aciklama: 'Bir tıklama için ortalama ne ödediğin.',
+    iyiYon: 'dusuk',
+  },
+  cpm: {
+    ad: 'Bin gösterim başı maliyet',
+    kisaltma: 'CPM',
+    aciklama:
+      'Reklamın 1.000 kez gösterilmesi için ortalama ne ödediğin. Kitleye ulaşmanın ne kadar pahalı olduğunu gösterir.',
     iyiYon: 'dusuk',
   },
 };

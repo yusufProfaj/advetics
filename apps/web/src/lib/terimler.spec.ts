@@ -33,6 +33,7 @@ describe('sözlük', () => {
     // Maliyetin artışını gösteren kırmızı ok, bu cümle olmadan anlaşılmıyor.
     expect(TERIMLER.cpa.iyiYon).toBe('dusuk');
     expect(TERIMLER.cpc.iyiYon).toBe('dusuk');
+    expect(TERIMLER.cpm.iyiYon).toBe('dusuk');
     expect(yonCumlesi(TERIMLER.cpa)).toBe('Düşük olması iyi.');
     expect(yonCumlesi(TERIMLER.harcama)).toBeNull();
   });
@@ -60,7 +61,20 @@ describe('kartlar sözlüğü kullanıyor', () => {
 
   it('KRİTİK: Genel Bakış kartlarında kısaltma etiketi kalmadı', () => {
     expect(SAYFA).not.toMatch(/label=["{]\s*['"]?(CPA|ROAS|CTR|CPC)/);
-    for (const t of ['"cpa"', '"roas"', "'ctr'", "'cpc'"]) expect(SAYFA).toContain(t);
+    for (const t of ['"cpa"', '"roas"', "'ctr'", "'cpc'", "'cpm'"]) expect(SAYFA).toContain(t);
+  });
+
+  it('KRİTİK: çok günlü erişimde "günlük ortalama" ipucu mükerrer uyarısına ezilmiyor', () => {
+    /*
+     * Çok hesaplı + çok günlü aralıkta ipucu yalnızca "mükerrer olabilir"
+     * diyordu ve kart bir günün ortalamasını dönemin tekil kişi sayısı gibi
+     * gösteriyordu.
+     */
+    expect(SAYFA).toContain("'günlük ortalama, hesaplar arası mükerrer olabilir'");
+    const i = SAYFA.indexOf("terim=\"erisim\"");
+    expect(i).toBeGreaterThan(-1);
+    const dilim = SAYFA.slice(i, SAYFA.indexOf('/>', i));
+    expect(dilim.indexOf("reachKind === 'daily_average'")).toBeLessThan(dilim.indexOf('summary.reachAcrossAccounts'));
   });
 
   it('KRİTİK: şerit iyi/kötü kuralını kendisi yazmıyor, ortak rozeti kullanıyor', () => {

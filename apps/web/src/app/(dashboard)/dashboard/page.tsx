@@ -708,13 +708,19 @@ function Cards({
         <MetricCard
           terim="erisim"
           value={formatNumber(summary.reach)}
+          /* GÜNLÜK ORTALAMA ÖNCE SÖYLENİR. Çok hesaplı ve çok günlü
+             aralıkta ipucu yalnızca "mükerrer olabilir" diyordu; sayı bir
+             GÜNÜN ortalamasıyken dönemin tekil kişi sayısı gibi okunuyordu.
+             Sayının NE olduğu, nasıl şiştiğinden önemli. */
           hint={
             summary.reach === null
               ? 'platform bildirmiyor'
-              : summary.reachAcrossAccounts
-                ? 'hesaplar arası mükerrer olabilir'
-                : summary.reachKind === 'daily_average'
-                  ? 'günlük ortalama, kişiler günler arasında toplanamaz'
+              : summary.reachKind === 'daily_average'
+                ? summary.reachAcrossAccounts
+                  ? 'günlük ortalama, hesaplar arası mükerrer olabilir'
+                  : 'günlük ortalama, kişiler günler arasında toplanamaz'
+                : summary.reachAcrossAccounts
+                  ? 'hesaplar arası mükerrer olabilir'
                   : undefined
           }
         />
@@ -760,6 +766,16 @@ function SecondaryStrip({
           // Artış kötü: tık başına maliyet yükselmesi iyi haber değil.
           inverse: true,
           change: summary.cpc === null ? null : changePercent(summary.cpc, prev?.cpc),
+        },
+        {
+          /* BGBM — sunucu zaten hesaplıyordu (`totals().cpm`), ekranda
+             yoktu. Teslimat pahalılaştığında CPC ile CTR'ı ayrı ayrı okuyup
+             tahmin yürütmek yerine kitleye ulaşmanın fiyatını doğrudan
+             gösteriyor. */
+          terim: 'cpm',
+          value: formatMoney(microsOf(summary.cpm), currency),
+          inverse: true,
+          change: summary.cpm === null ? null : changePercent(summary.cpm, prev?.cpm),
         },
       ]}
     />
