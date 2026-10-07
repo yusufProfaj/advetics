@@ -1262,6 +1262,19 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 
 ## 5. Ürün kararları
 
+- **ÜRÜN KARARLARINDA ÖLÇÜT: KULLANIM KOLAYLIĞI VE REKLAM VERİMLİLİĞİ**
+  (kullanıcı, 2026-10-08: *"ekran kaç tane olması gerekiyorsa sen karar
+  verebilirsin benim amacım kullanım kolaylığı ve reklam verimliliği
+  maksimum seviyede olması"*). Ekran sayısı, menü yeri, adım sayısı gibi
+  arayüz kararlarında sorma; bu iki ölçütle karar ver ve gerekçesini yaz.
+  Para harcayan, geri alınamayan ya da başka bir kullanıcı kararını
+  bozan şeyler yine sorulur.
+- **MÜŞTERİ HESABI DÖRT EKRAN GÖRÜR** (2026-10-08): Genel Bakış, Reklam
+  Keşfi, **AdvStrategy**, Raporlar. AdvStrategy'de planı görür ve
+  ONAYLAR, yazamaz. Gerekçe: onay panelde alınınca ajans PDF gönderip
+  cevap bekleyip elle işlemiyor; plan onaylanır onaylanmaz AdvCampaign'e
+  geçebiliyor. `nav-sections.spec.ts` dört ekranı kilitliyor.
+
 - **Hedef kullanıcı reklamcılık bilmiyor.** Kullanıcının verbatim ifadesi:
   *"amacım reklam ile ilgili bilgisi olmayan birisinin bile platformu
   kullanabilmesi"*. Hedef, optimizasyon, yerleşim, teklif stratejisi
