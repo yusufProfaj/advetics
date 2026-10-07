@@ -13,6 +13,7 @@ const dolu: TaslakAlanlari = {
   hedefAdres: k('https://ornek.com.tr'),
   butce: k({ tip: 'gunluk' as const, micros: '500000000' }),
   takvim: k({ baslangic: '2026-10-08', bitis: null }),
+  ekKategoriler: k([]),
 };
 
 describe('taslakEksikleri', () => {
@@ -37,6 +38,26 @@ describe('taslakEksikleri', () => {
   it('niyete özel: SITE adres, FORM form ister', () => {
     expect(taslakEksikleri({ ...dolu, hedefAdres: k('http://x.com') }).map((x) => x.kod)).toEqual(['SITE-ADRES']);
     expect(taslakEksikleri({ ...dolu, niyet: k('FORM' as const) }).map((x) => x.kod)).toEqual(['FORM-YOK']);
+  });
+});
+
+describe('özel kategori sorusu', () => {
+  it('KRİTİK: sorulmadıysa eksik; "Hayır" (boş dizi) cevaptır', () => {
+    const { ekKategoriler: _, ...sorulmamis } = dolu;
+    expect(taslakEksikleri(sorulmamis).map((x) => x.kod)).toEqual(['OZK-SORU']);
+    expect(taslakEksikleri(dolu)).toEqual([]);
+  });
+});
+
+describe('yasal uyarı', () => {
+  it('her fikrin metninde geçmeli; boşluk ve büyük harf farkı sorun değil', () => {
+    const uyari = 'Yatırım tavsiyesi değildir.';
+    expect(taslakEksikleri(dolu, { yasalUyari: uyari }).map((x) => x.kod)).toEqual(['YASAL-UYARI']);
+    const iki = { ...dolu, kavramlar: k([
+      { varlikId: '66666666-0000-4000-8000-000000000001', baslik: 'B', metin: 'M\n\nYATIRIM  tavsiyesi değildir.' },
+      { varlikId: '66666666-0000-4000-8000-000000000002', baslik: 'B', metin: 'Uyarısız' },
+    ]) };
+    expect(taslakEksikleri(iki, { yasalUyari: uyari }).map((x) => x.metin)).toEqual(['Fikir 2: zorunlu yasal uyarı metinde yok']);
   });
 });
 

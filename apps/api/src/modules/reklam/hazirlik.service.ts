@@ -4,6 +4,8 @@ import {
   KITLE_CINSIYETLERI,
   kitleKonumuSchema,
   kitleOzeti,
+  OZEL_KATEGORILER,
+  type OzelKategori,
   type KitleKonumu,
   type ReklamHazirligi,
   type TenantContext,
@@ -50,7 +52,7 @@ export class ReklamHazirlikService {
        * gerçek şemaya karşı koşan bir test, typed istemciyle yazılmış bir
        * sorgunun taklidinden değerlidir.
        */
-      const [hesaplar, profiller, gorseller, [sayim], [profilSatiri]] = await Promise.all([
+      const [hesaplar, profiller, gorseller, [sayim], [musteri], [profilSatiri]] = await Promise.all([
         tx.$queryRaw<Array<{ id: string; name: string; currency: string; timezone: string }>>(Prisma.sql`
           SELECT id::text, name, currency, timezone
             FROM ad_accounts
@@ -71,6 +73,8 @@ export class ReklamHazirlikService {
            LIMIT ${HAZIRLIK_GORSEL_SINIRI}`),
         tx.$queryRaw<Array<{ n: number }>>(Prisma.sql`
           SELECT count(*)::int AS n FROM assets WHERE client_id = ${clientId}::uuid AND kind = 'image'`),
+        tx.$queryRaw<Array<{ kategoriler: string[] }>>(Prisma.sql`
+          SELECT special_ad_categories AS kategoriler FROM clients WHERE id = ${clientId}::uuid`),
         tx.$queryRaw<ProfilSatiri[]>(Prisma.sql`
           SELECT p.yasal_uyari, p.metin_sablonlari,
                  k.id::text AS k_id, k.name AS k_ad, k.locations AS k_konum,
@@ -80,6 +84,16 @@ export class ReklamHazirlikService {
            WHERE p.client_id = ${clientId}::uuid`),
       ]);
       const profil = profilSatiri ?? null;
+      const konumListesi = profil?.k_id ? konumlar(profil.k_id, profil.k_konum) : [];
+      const tabanHam = musteri?.kategoriler ?? [];
+      const taban = new Set<OzelKategori>();
+      const taninmayan: string[] = [];
+      for (const k of tabanHam) {
+        // Meta CREDIT'i 2025-01-14'te FINANCIAL_PRODUCTS_SERVICES ile değiştirdi.
+        const c = k === 'CREDIT' ? 'FINANCIAL_PRODUCTS_SERVICES' : k;
+        if ((OZEL_KATEGORILER as readonly string[]).includes(c)) taban.add(c as OzelKategori);
+        else taninmayan.push(k);
+      }
 
       return {
         hesaplar: hesaplar.map((h) => ({ id: h.id, ad: h.name, paraBirimi: h.currency, saatDilimi: h.timezone })),
@@ -109,15 +123,23 @@ export class ReklamHazirlikService {
               id: profil.k_id,
               ad: profil.k_ad ?? '',
               ozet: kitleOzeti({
-                locations: konumlar(profil.k_id, profil.k_konum),
+                locations: konumListesi,
                 ageMin: profil.k_min ?? 18,
                 ageMax: profil.k_max ?? 65,
                 genders: (KITLE_CINSIYETLERI as readonly string[]).includes(profil.k_cins ?? '')
                   ? (profil.k_cins as (typeof KITLE_CINSIYETLERI)[number])
                   : 'all',
               }),
+              konumlar: konumListesi.map((l) => ({
+                tur: l.type,
+                key: l.key,
+                etiket: l.label,
+                ulkeKodu: l.countryCode,
+              })),
             }
           : null,
+        ozelKategoriTabani: OZEL_KATEGORILER.filter((k) => taban.has(k)),
+        taninmayanKategoriler: taninmayan,
       };
     });
   }

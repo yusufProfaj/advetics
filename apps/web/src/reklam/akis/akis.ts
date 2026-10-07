@@ -1,16 +1,22 @@
 /**
- * Yeni Reklam Oluştur — Acemi akışının SAF kararları (TASARIM.md § 03, § 02.6).
+ * Yeni Reklam Oluştur — Acemi akışının SAF kararları (TASARIM.md § 03).
  *
  * Bileşenden ayrı duruyor çünkü panelde bileşen render eden test altyapısı
- * yok (`vitest.config.ts` bilinçli reddediyor) ve effect/handler içine
- * gömülen bir karar yalnızca kaynak taramasıyla sınanabiliyordu — o tarama
- * yanlış şeyi kilitleyebildi (CLAUDE.md "REACT EFFECT'İNİN İÇİNDEKİ KARAR").
+ * yok (`vitest.config.ts` bilinçli reddediyor); handler içine gömülen bir
+ * karar yalnızca kaynak taramasıyla sınanabilir ve o tarama yanlış şeyi
+ * kilitleyebilir (CLAUDE.md "REACT EFFECT'İNİN İÇİNDEKİ KARAR").
  *
- * "Yayına ne kaldı" sorusunun TEK cevabı `eksikler()`: sağdaki özet kartı,
- * adım düğmeleri ve Gözden geçir aynı listeyi okuyor. İkinci bir liste
- * yazılırsa biri "hazır" derken öbürü düğmeyi kilitli tutar.
+ * "Yayına ne kaldı" burada HESAPLANMIYOR: tek cevap sunucunun döndürdüğü
+ * `eksikler` (paylaşılan `taslakEksikleri`). Bu dosyada eksik listesi
+ * yazılırsa panel ile yayın kapısı ayrışır.
  */
-import { NIYET_KATALOGU, NIYET_KODLARI, type NiyetKodu, type NiyetSatiri } from '@advetics/shared';
+import {
+  NIYET_KATALOGU,
+  NIYET_KODLARI,
+  type HedefKonum,
+  type NiyetSatiri,
+  type TaslakAlanlari,
+} from '@advetics/shared';
 
 export const ADIMLAR = ['Amaç', 'Görsel', 'Metin', 'Bütçe', 'Süre', 'Gözden geçir'] as const;
 export type AdimNo = 0 | 1 | 2 | 3 | 4 | 5;
@@ -22,42 +28,10 @@ export const BASLIK_SINIRI = 40;
 /** Akışta "devamını gör"den önce görünen ana metin. Uyarı, engel değil. */
 export const GORUNEN_METIN = 125;
 
-export const SURE_SECENEKLERI = [7, 14, 30, null] as const;
-export type Sure = (typeof SURE_SECENEKLERI)[number];
-
-export interface YeniReklamTaslagi {
-  niyet: NiyetKodu | null;
-  reklamHesabiId: string | null;
-  sayfaId: string | null;
-  /** Görsel arşivinden seçilen varlık kimlikleri; sıra = fikir sırası. */
-  gorseller: string[];
-  baslik: string;
-  metin: string;
-  /** Hesabın para biriminde, TAM BİRİM (micros değil — ekran değeri). */
-  gunlukButce: number | null;
-  sureGun: Sure;
-}
-
-export const BOS_TASLAK: YeniReklamTaslagi = {
-  niyet: null,
-  reklamHesabiId: null,
-  sayfaId: null,
-  gorseller: [],
-  baslik: '',
-  metin: '',
-  gunlukButce: null,
-  sureGun: 14,
-};
-
-export interface Eksik {
-  adim: AdimNo;
-  metin: string;
-}
-
 /**
- * Akışta gösterilecek niyetler. Bu ekran bir ÖNİZLEME ve Meta'ya yazmıyor;
- * belgeden yazılmış satırlar da görünüyor ama `kanit` rozetiyle. Gerçek
- * Acemi listesi `acemiNiyetleri()` — yayın motoru gelince ona geçilir.
+ * Akışta gösterilecek niyetler: ilk tur + yönlendirme. Belgeden yazılmış
+ * satırlar rozetle görünüyor; yayın motoru bağlanınca `acemiNiyetleri()`ne
+ * geçilecek ve canlıda doğrulanmamış satır HİÇ görünmeyecek.
  */
 export function onizlemeNiyetleri(): NiyetSatiri[] {
   return NIYET_KODLARI.map((k) => NIYET_KATALOGU[k]).filter(
@@ -65,39 +39,72 @@ export function onizlemeNiyetleri(): NiyetSatiri[] {
   );
 }
 
-export function eksikler(t: YeniReklamTaslagi, yasalUyari: string | null): Eksik[] {
-  const e: Eksik[] = [];
-  if (!t.niyet) e.push({ adim: 0, metin: 'Amaç seçilmedi' });
-  if (!t.reklamHesabiId) e.push({ adim: 0, metin: 'Reklam hesabı seçilmedi' });
-  if (!t.sayfaId) e.push({ adim: 0, metin: 'Facebook sayfası seçilmedi' });
-  if (t.gorseller.length === 0) e.push({ adim: 1, metin: 'En az bir görsel seç' });
-  if (!t.baslik.trim()) e.push({ adim: 2, metin: 'Başlık boş' });
-  if (t.baslik.length > BASLIK_SINIRI) e.push({ adim: 2, metin: `Başlık ${BASLIK_SINIRI} karakteri aşıyor` });
-  if (!t.metin.trim()) e.push({ adim: 2, metin: 'Ana metin boş' });
-  // Marka Merkezi'ndeki zorunlu uyarı metinde yoksa yayın duruyor (Bölüm 3
-  // kuralı). Giriş anında söylenmeli, yayın düğmesinde değil.
-  if (yasalUyari && !metinUyariIceriyor(t.metin, yasalUyari)) {
-    e.push({ adim: 2, metin: 'Zorunlu yasal uyarı metinde yok' });
-  }
-  if (t.gunlukButce === null || !(t.gunlukButce > 0)) e.push({ adim: 3, metin: 'Günlük bütçe seçilmedi' });
-  return e;
-}
-
-/** Boşluk farkı uyarıyı "yok" saydırmasın: kopyala-yapıştır satır sonu taşıyor. */
-export function metinUyariIceriyor(metin: string, uyari: string): boolean {
-  const n = (s: string) => s.replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr-TR');
-  return n(metin).includes(n(uyari));
-}
-
-/** Toplam üst sınır; süresizde `null` (ekranda "her gün" cümlesi kurulur). */
-export function toplamUstSinir(gunluk: number | null, sure: Sure): number | null {
-  if (gunluk === null || sure === null) return null;
-  return gunluk * sure;
-}
-
 /** Fikir ekleme/çıkarma: sıra korunur, beşi geçmez, aynı görsel iki kez girmez. */
 export function gorselDegistir(secili: string[], id: string): string[] {
   if (secili.includes(id)) return secili.filter((x) => x !== id);
   if (secili.length >= EN_COK_FIKIR) return secili;
   return [...secili, id];
+}
+
+/**
+ * Bütün fikirlerde aynı başlık ve metin (Acemi). Kavram listesi görsel
+ * sırasından KURULUYOR: metin değişince görsel sırası, görsel değişince metin
+ * kaybolmasın.
+ */
+export function kavramlarKur(
+  gorseller: string[],
+  baslik: string,
+  metin: string,
+): Array<{ varlikId: string; baslik: string; metin: string }> {
+  return gorseller.map((varlikId) => ({ varlikId, baslik, metin }));
+}
+
+/** Taslaktan ekranın okuduğu düz değerler. Yok olan alan boş döner. */
+export function ekranDegerleri(a: TaslakAlanlari) {
+  const kavramlar = a.kavramlar?.deger ?? [];
+  return {
+    niyet: a.niyet?.deger ?? null,
+    hesap: a.reklamHesabiId?.deger ?? null,
+    sayfa: a.sayfaId?.deger ?? null,
+    konumlar: a.konumlar?.deger ?? [],
+    konumKaynagi: a.konumlar?.kaynak ?? null,
+    ekKategoriler: a.ekKategoriler?.deger ?? null,
+    gorseller: kavramlar.map((k) => k.varlikId),
+    baslik: kavramlar[0]?.baslik ?? '',
+    metin: kavramlar[0]?.metin ?? '',
+    hedefAdres: a.hedefAdres?.deger ?? '',
+    butce: a.butce?.deger ?? null,
+    takvim: a.takvim?.deger ?? null,
+  };
+}
+
+export const BUTUN_TURKIYE: HedefKonum = { tur: 'country', key: 'TR', etiket: 'Bütün Türkiye', ulkeKodu: 'TR' };
+
+/**
+ * Hesabın saat diliminde bugün, `YYYY-MM-DD`. Tarayıcının saat dilimi
+ * KULLANILMIYOR: İstanbul'daki ajans ABD saatli bir hesaba reklam kurarsa
+ * "bugün" Meta'da dün olabilir.
+ */
+export function bugun(saatDilimi: string, simdi: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: saatDilimi,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(simdi);
+}
+
+/** Gün ekleme UTC öğlesi üzerinden: yaz saati geçişinde tarih kaymasın. */
+export function gunEkle(tarih: string, gun: number): string {
+  const [y, a, g] = tarih.split('-').map(Number) as [number, number, number];
+  const d = new Date(Date.UTC(y, a - 1, g, 12) + gun * 86_400_000);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "3 Kasım 2026" — ekranda tarih Türkçe ve saat diliminden bağımsız. */
+export function tarihGoster(tarih: string): string {
+  const [y, a, g] = tarih.split('-').map(Number) as [number, number, number];
+  return new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
+    new Date(Date.UTC(y, a - 1, g, 12)),
+  );
 }

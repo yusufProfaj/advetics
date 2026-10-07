@@ -47,3 +47,42 @@ export interface AlanDegeri<T = unknown> {
 }
 
 export const BUTCE_SEVIYELERI = ['kampanya', 'ad_set'] as const;
+
+/**
+ * API'nin taslak cevabı. Panel ve API aynı tipi okuyor; ayrı yazılsaydı
+ * bir alan eklenip öbür tarafta unutulduğunda TypeScript susardı.
+ */
+export interface ReklamTaslakKaydi {
+  id: string;
+  clientId: string;
+  durum: TaslakDurumu;
+  niyetKodu: string | null;
+  adAccountId: string | null;
+  aktifSurumNo: number;
+  olusturanYuz: OlusturanYuz;
+  updatedAt: string;
+  alanlar: import('./taslak-alanlari').TaslakAlanlari;
+  eksikler: import('./taslak-alanlari').TaslakEksigi[];
+  icerikOzeti: string | null;
+}
+
+export interface AtifDurumu {
+  standart: (typeof ATIF_STANDARTLARI)[number] | null;
+  secimAt: string | null;
+  /** Ekranda seçim düğmesi mi, "kim çözer: ajans yöneticisi" mi. */
+  secebilir: boolean;
+}
+
+/** Seçim ekranındaki metinler (TASARIM § 7.7.2); hiçbiri seçili gelmez. */
+export const ATIF_SECENEKLERI: ReadonlyArray<{ kod: (typeof ATIF_STANDARTLARI)[number]; baslik: string; aciklama: string }> = [
+  {
+    kod: 'tik7_gor1',
+    baslik: 'Tıklayıp 7 gün içinde ya da görüp 1 gün içinde dönüşenler',
+    aciklama: "Önerilen. Ads Manager'ın varsayılanına en yakın; raporlar Meta'da görünen rakamlarla tutar.",
+  },
+  {
+    kod: 'tik7',
+    baslik: 'Yalnız tıklayıp 7 gün içinde dönüşenler',
+    aciklama: "En temkinli. Görüntüleme sayılmaz, Meta'nın öğrenmesi yavaşlayabilir.",
+  },
+];

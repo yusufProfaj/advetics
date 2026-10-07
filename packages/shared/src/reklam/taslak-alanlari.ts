@@ -98,7 +98,23 @@ const ALAN_ADIMI: Record<keyof TaslakAlanlari, TaslakEksigi['adim']> = {
   butce: 3, takvim: 4,
 };
 
-export function taslakEksikleri(a: TaslakAlanlari): TaslakEksigi[] {
+/**
+ * Taslağın DIŞINDAN gelen ama yayına engel olan bilgiler. Sunucu yayın
+ * kapısında taze okur; panel hazırlık okumasından verir — ikisi AYNI
+ * fonksiyondan geçer.
+ */
+export interface EksikBaglami {
+  /** Marka Merkezi'ndeki zorunlu yasal uyarı; her fikrin metninde geçmeli. */
+  yasalUyari?: string | null;
+}
+
+/** Boşluk ve harf farkı uyarıyı "yok" saydırmasın: kopyala-yapıştır satır sonu taşıyor. */
+export function metinUyariIceriyor(metin: string, uyari: string): boolean {
+  const n = (s: string) => s.normalize('NFC').replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr-TR');
+  return n(metin).includes(n(uyari));
+}
+
+export function taslakEksikleri(a: TaslakAlanlari, baglam: EksikBaglami = {}): TaslakEksigi[] {
   const e: TaslakEksigi[] = [];
   const ekle = (alanAdi: keyof TaslakAlanlari, kod: string, metin: string) =>
     e.push({ adim: ALAN_ADIMI[alanAdi], alan: alanAdi, kod, metin });
@@ -121,6 +137,10 @@ export function taslakEksikleri(a: TaslakAlanlari): TaslakEksigi[] {
   if (ipucu && (ipucu.min < 18 || ipucu.max > 65 || ipucu.min > ipucu.max)) {
     ekle('ipucuYas', 'KTL-02', 'Yaş aralığı 18 ile 65 arasında olmalı');
   }
+  // Soru HER taslakta ve hiçbir şık seçili gelmeden (T-16): Meta Türkiye'de
+  // beyanı zorunlu tutmuyor, sorulmayan soru beyansız ve hatasız yayınlanan
+  // bir konut reklamı üretir. "Hayır" = boş dizi, sorulmadı = alan yok.
+  if (!a.ekKategoriler) ekle('ekKategoriler', 'OZK-SORU', 'Özel reklam kategorisi sorusu cevaplanmadı');
   if (a.ekKategoriler?.deger.includes('ISSUES_ELECTIONS_POLITICS')) {
     ekle('ekKategoriler', 'OZK-SIYASI', "Siyasi ve toplumsal konulu reklamlar Advetics'ten yayınlanamıyor");
   }
@@ -130,6 +150,9 @@ export function taslakEksikleri(a: TaslakAlanlari): TaslakEksigi[] {
   kavramlar.forEach((k, i) => {
     if (!k.baslik.trim()) e.push({ adim: 2, alan: 'kavramlar', kod: 'KRT-METIN', metin: `Fikir ${i + 1}: başlık boş` });
     if (!k.metin.trim()) e.push({ adim: 2, alan: 'kavramlar', kod: 'KRT-METIN', metin: `Fikir ${i + 1}: ana metin boş` });
+    else if (baglam.yasalUyari && !metinUyariIceriyor(k.metin, baglam.yasalUyari)) {
+      e.push({ adim: 2, alan: 'kavramlar', kod: 'YASAL-UYARI', metin: `Fikir ${i + 1}: zorunlu yasal uyarı metinde yok` });
+    }
   });
 
   const niyet = a.niyet?.deger;

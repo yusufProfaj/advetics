@@ -118,6 +118,15 @@ describe('reklam hazırlığı', () => {
     expect(r.marka).toEqual({ yasalUyari: 'Yatırım tavsiyesi değildir.', metinSablonlari: ['Merhaba'], profilVar: true });
     expect(r.varsayilanKitle?.ozet).toContain('25-45 yaş');
     expect(r.varsayilanKitle?.ozet).toContain('İzmir');
+    expect(r.varsayilanKitle?.konumlar).toEqual([{ tur: 'region', key: '2347', etiket: 'İzmir, Türkiye', ulkeKodu: 'TR' }]);
+  });
+
+  it('özel kategori tabanı: CREDIT halefine çevrilir, tanınmayan DÜŞÜRÜLMEZ ayrı söylenir', async () => {
+    await h.q(`ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_special_categories_chk`);
+    await h.q(`UPDATE clients SET special_ad_categories = ARRAY['HOUSING', 'CREDIT', 'GARIP'] WHERE id = $1`, [IDS.client]);
+    const r = await svc.oku(CTX, IDS.client);
+    expect(r.ozelKategoriTabani).toEqual(['HOUSING', 'FINANCIAL_PRODUCTS_SERVICES']);
+    expect(r.taninmayanKategoriler).toEqual(['GARIP']);
   });
 
   it('erişimi olmayan workspace REDDEDİLİR (boş cevap değil)', async () => {

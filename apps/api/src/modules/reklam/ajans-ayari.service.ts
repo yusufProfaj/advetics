@@ -1,15 +1,10 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { AtifStandardi, TenantContext } from '@advetics/shared';
+import type { AtifDurumu, AtifStandardi, TenantContext } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
-export interface AtifDurumu {
-  standart: AtifStandardi | null;
-  secimAt: string | null;
-  /** Kullanıcı bu şirkette seçebilir mi (ekranda düğme mi, "kim çözer" mi). */
-  secebilir: boolean;
-}
+export type { AtifDurumu };
 
 /**
  * Ajans geneli atıf standardı (TASARIM.md § 7.7.2, OK-16).

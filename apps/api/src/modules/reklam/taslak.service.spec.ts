@@ -107,9 +107,20 @@ describe('taslak yaşam döngüsü', () => {
       hedefAdres: k('https://ornek.com.tr'),
       butce: k({ tip: 'gunluk', micros: '500000000' }),
       takvim: k({ baslangic: '2026-10-08', bitis: null }),
+      ekKategoriler: k([]),
     });
     expect(s.eksikler.map((e) => e.kod)).toEqual(['OK-17']);
     expect(s.durum).toBe('taslak');
+  });
+
+  it('yasal uyarı profilden TAZE okunuyor ve eksik listesine giriyor', async () => {
+    await h.q(`INSERT INTO client_profiles (id, org_id, client_id, yasal_uyari, updated_at)
+               VALUES (gen_random_uuid(), $1, $2, 'Yatırım tavsiyesi değildir.', now())`, [IDS.org, IDS.client]);
+    const t = await svc.olustur(CTX, IDS.client, 'acemi', null);
+    const s = await svc.surumYaz(CTX, t.id, {
+      kavramlar: k([{ varlikId: '66666666-0000-4000-8000-000000000001', baslik: 'B', metin: 'Uyarısız metin' }]),
+    });
+    expect(s.eksikler.map((e) => e.kod)).toContain('YASAL-UYARI');
   });
 
   it('şemaya uymayan değer reddedilir ve sürüm yazılmaz', async () => {

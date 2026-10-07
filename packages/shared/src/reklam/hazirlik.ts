@@ -10,6 +10,8 @@
  * Her parça kendi `hata` alanını taşıyor: "okunamadı" ile "tanımlı değil"
  * farklı iş (CLAUDE.md, `.catch(() => [])` yasağı).
  */
+import type { HedefKonum, OzelKategori } from './meta/hedefleme';
+
 export interface HazirlikHesabi {
   id: string;
   ad: string;
@@ -43,8 +45,20 @@ export interface ReklamHazirligi {
     /** Marka Merkezi profili hiç kurulmamışsa `false`. */
     profilVar: boolean;
   };
-  /** Varsayılan kitle şablonunun ekran özeti; tanımlı değilse `null`. */
-  varsayilanKitle: { id: string; ad: string; ozet: string } | null;
+  /**
+   * Varsayılan kitle şablonu; tanımlı değilse `null`. `konumlar` taslağa
+   * KOPYA yazılır ("Marka Merkezi'nden"), referans değil: şablon sonradan
+   * değişirse açık taslak sessizce değişmez.
+   */
+  varsayilanKitle: { id: string; ad: string; ozet: string; konumlar: HedefKonum[] } | null;
+  /**
+   * Müşteri kartındaki özel kategori TABANI. Taslakta düşürülemez; ekranda
+   * kilitli çip olarak görünür. Eski `CREDIT` değeri Meta'nın halefi
+   * `FINANCIAL_PRODUCTS_SERVICES` olarak okunuyor (Aşama 0b veriyi kalıcı
+   * çevirecek); tanınmayan değer DÜŞÜRÜLMEZ, `tanınmayanKategoriler`de durur.
+   */
+  ozelKategoriTabani: OzelKategori[];
+  taninmayanKategoriler: string[];
 }
 
 /** Görsel listesi bu sayıda kesiliyor ve `toplam` ayrıca yazılıyor. */

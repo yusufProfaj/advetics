@@ -34,9 +34,15 @@ yasak soru sözlüğü), taslak tabloları (**MIGRATION VAR**:
 `taslak_surumu` [değişmez, trigger], `ajans_ayari`) ve uçlar
 (`/reklam/taslaklar`, `/reklam/ajans-ayari/atif`). Prova yazılmadığı için
 taslak hiçbir zaman `hazir` olmuyor (OK-17 eksiği bilerek).
-**Sıradaki:** paneli taslağa bağlamak (şu an `/reklam/yeni` durum
-tutmuyor), atıf standardı seçim ekranı, sonra yayın motoru (§ 11: prova,
-PAUSED zincir, geri okuma, açma). Atıf standardı ajans yöneticisinin
+Panel `/reklam/yeni` artık taslağa bağlı: açık taslak listesi, her seçim
+yeni sürüm, eksikler sunucudan, konum Marka Merkezi kitlesinden önden
+dolu, özel kategori sorusu (hiçbir şık seçili gelmez, taban kilitli),
+bütçe Türkçe tutar girişiyle, süre hesabın saat diliminde, Gözden
+geçir'de atıf standardı seçimi (yalnız yönetici). Canlıda tıklanarak
+denenmedi (worktree'de `.env` yok).
+**Sıradaki:** yayın motoru (§ 11: görseli hesaba yükleme, prova, PAUSED
+zincir, geri okuma, açma) ve form şablonu ekranı (FORM niyeti onsuz
+eksik kalıyor). Atıf standardı ajans yöneticisinin
 kararı; seçilene kadar yayın yok. Boost taşıması ve rapor sonuç adları
 yayın motorundan sonra.
 **Acil, bu işten bağımsız:** Meta v26 kuralı 2026-10-27'de bütün sürümlerde

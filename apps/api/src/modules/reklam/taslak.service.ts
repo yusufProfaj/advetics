@@ -12,6 +12,7 @@ import {
   taslakEksikleri,
   taslakKanonikIcerik,
   type OlusturanYuz,
+  type ReklamTaslakKaydi,
   type TaslakAlanlari,
   type TaslakDurumu,
   type TaslakEksigi,
@@ -19,19 +20,7 @@ import {
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 
-export interface TaslakKaydi {
-  id: string;
-  clientId: string;
-  durum: TaslakDurumu;
-  niyetKodu: string | null;
-  adAccountId: string | null;
-  aktifSurumNo: number;
-  olusturanYuz: OlusturanYuz;
-  updatedAt: string;
-  alanlar: TaslakAlanlari;
-  eksikler: TaslakEksigi[];
-  icerikOzeti: string | null;
-}
+export type TaslakKaydi = ReklamTaslakKaydi;
 
 /** Panelin yazabileceği kaynaklar; `workspace_profili` ve `derleyici` sunucunun. */
 export type AlanDegisikligi = Partial<
@@ -166,7 +155,11 @@ export class ReklamTaslakService {
       const ozet = createHash('sha256').update(taslakKanonikIcerik(alanlar)).digest('hex');
       if (onceki && onceki.icerik_ozeti === ozet) return kayit(t, onceki);
 
-      const eksikler = [...taslakEksikleri(alanlar), PROVA_EKSIGI];
+      // Yasal uyarı profilden TAZE okunuyor; panelin gönderdiği değere
+      // güvenilmiyor.
+      const [profil] = await tx.$queryRaw<Array<{ yasal_uyari: string | null }>>(Prisma.sql`
+        SELECT yasal_uyari FROM client_profiles WHERE client_id = ${t.client_id}::uuid`);
+      const eksikler = [...taslakEksikleri(alanlar, { yasalUyari: profil?.yasal_uyari ?? null }), PROVA_EKSIGI];
       const yeniNo = t.aktif_surum_no + 1;
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO taslak_surumu (taslak_id, org_id, client_id, surum_no, alanlar, icerik_ozeti, eksikler, olusturan_id)
