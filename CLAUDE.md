@@ -65,6 +65,29 @@ kendiliğinden eklenmiyor: aşağıdaki liste bir kez ödendi ve bir sonrakinde 
 ve LinkedIn'de yazma kodu yok — genişletmek, çalışmayan bir seçeneği arayüzde
 göstermek olurdu.
 
+### Geliştirme düzeni: BEŞ AJAN, MODÜL MODÜL (kullanıcı kararı, 2026-10-08)
+
+Yeni bir modül ya da bir modülün büyük bir parçası **beş ajanla** yürütülür
+ve modüller SIRAYLA ilerler (biri canlıya alınmadan diğerine geçilmez).
+İlk uygulaması ve şablonu: [`docs/advstrategy/AJAN-PLANI.md`](docs/advstrategy/AJAN-PLANI.md).
+
+| Ajan | Kilit çıktı | Kapı |
+|---|---|---|
+| 1 · Mimar | `packages/shared/src/<modül>/` sözleşmesi + `docs/<modül>/MIMARI.md` (veri modeli, uçlar, yetki, durum makinesi, ölçüm listesi) | Shared derlemesi ÇIKTISIYLA temiz; brief'in depoyla çelişen yerleri kullanıcıyla kapanmış |
+| 2 · Arka Plan | `apps/api/src/modules/<modül>/` + migration'lar | API typecheck temiz, sözleşmeyle aynı şema |
+| 3 · Ön Yüz | Panel sayfası + menü satırı | Panel typecheck temiz, `nav-sections`/`panel-tasarim` yeşil |
+| 4 · Test & Güvenlik | RLS (`SET ROLE` + `RETURNING`), izolasyon, sessiz hata taraması, mutasyon | **Kapıyı bu ajan açar**; bulgu kapıyı kapatır, düzeltmeyi bulguyu üreten ajan yapar |
+| 5 · Canlıya Alma | Migration sırası, canlı ölçümler, devir notu (`DEVAM.md`), deploy komutu | Deploy elle, `advetics` kullanıcısıyla (§1) |
+
+- **Sıra:** 1 → (2 ‖ 3, aynı sözleşmeden paralel) → 4 → 5. Ajan 2 ve 3 tip
+  TANIMLAMAZ, sözleşmeden okur.
+- **Her ajan teslimde devir notu yazar:** ne yaptı, neyi ÖLÇMEDİ, ne açık kaldı.
+- **Her modül planı başta bir "çelişki tablosu" taşır:** brief'in bu depoyla
+  çeliştiği yerler, ajanlar başlamadan kullanıcıyla kapatılır.
+- **Görseldeki genel araçlar bu depoya uyarlanır:** Docker/Kubernetes YOK
+  (paylaşımlı VPS, sistem geneli kurulum yasak, §1), GitHub Actions YOK
+  (2026-10-06 kararı), Java/Go YOK. Ajan 5 = elle `deploy.sh`.
+
 ---
 
 ## 1. Sunucu: ASLA ihlal edilmeyecek kurallar
