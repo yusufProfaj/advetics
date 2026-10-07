@@ -18,6 +18,11 @@ teknik bilgisi olmayan kullanıcıyı sohbetle yönlendiren, Meta ve Google'da
 en optimize kampanyayı kuran yapay zekâ odaklı akış. Araştırma ve tasarım
 `docs/advcampaign/` altında (A1 Google, A2 tek panel, A3 Meta, sentez,
 tasarım/plan). DB'deki eski AI sohbet tabloları silinmedi (veri).
+Plan: [`TASARIM-PLAN.md`](advcampaign/TASARIM-PLAN.md) (31 iş paketi,
+İP-01…31; ilk çalışan Meta sohbetine giden yol İP-09 → 10 → 12 → 13 → 14 →
+15 → 16 → 17). Kullanıcı kararları K-01…K-08 varsayılanla kapatıldı (§0).
+Arayüz taslağı: `advcampaign/advcampaign-arayuz.html`. P0 bitti: İP-01…04
+(Meta) ve İP-06 + eski Google arama yolu kapatıldı. **Sıradaki: İP-09.**
 
 **Reklam oluşturma (2026-10-07): AYRI MODÜL olarak kuruluyor.**
 Kararlar [`bekleyen-kararlar.md`](meta-reklam-brief/tasarim/bekleyen-kararlar.md)
