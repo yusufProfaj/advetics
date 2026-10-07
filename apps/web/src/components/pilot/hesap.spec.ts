@@ -25,6 +25,10 @@ import {
   eskiEkranMi,
   eskiPlanNotu,
   yazmaHatasi,
+  GERCEK_YAYIN_KAPALI_NOTU,
+  gercekYayinGorunumu,
+  gercekYayinIstegi,
+  ucIzni,
   gerekceEksigi,
   kaynakEtiketi,
   kaynakHedefi,
@@ -424,5 +428,40 @@ describe('Pilot açılışı', () => {
     expect(Object.keys(KURULUM_DURUM_METNI).sort()).toEqual([...KURULUM_SATIR_DURUMLARI].sort());
     // "kayıt belirsiz" yeniden kurulmaz; ekran bunu söylemeli, "düştü" gibi okunmamalı.
     expect(KURULUM_DURUM_METNI.kayit_belirsiz.metin).toContain('tekrar kurulmaz');
+  });
+});
+
+describe('gerçek yayın anahtarı', () => {
+  const d = (o: Partial<Parameters<typeof gercekYayinGorunumu>[0]> = {}) => ({ acik: false, degistiren: 'Ayşe', zaman: T, sebep: 'Uyum doğrulandı', degistirebilir: true, okunamadi: null, ...o });
+
+  it('KRİTİK: okunamayan anahtar kapalı ve DÜĞMESİZ', () => {
+    const g = gercekYayinGorunumu(d({ acik: true, okunamadi: 'zaman aşımı' }));
+    expect(g.acik).toBe(false);
+    expect(g.eylem).toBeNull();
+    expect(g.baslik).toContain('okunamadı, kapalı sayılıyor');
+  });
+
+  it('KRİTİK: kapalıyken ajans notu; yalnız değiştirebilen "aç" görür', () => {
+    expect(gercekYayinGorunumu(d()).baslik).toBe(GERCEK_YAYIN_KAPALI_NOTU);
+    expect(gercekYayinGorunumu(d()).eylem).toBe('ac');
+    expect(gercekYayinGorunumu(d({ degistirebilir: false })).eylem).toBeNull();
+    expect(gercekYayinGorunumu(d({ acik: true })).eylem).toBe('kapat');
+  });
+
+  it('son değişikliğin izi kim · ne zaman · neden', () => {
+    expect(gercekYayinGorunumu(d()).iz).toMatch(/^Ayşe · .+ · “Uyum doğrulandı”$/);
+    expect(gercekYayinGorunumu(d({ zaman: null })).iz).toBeNull();
+  });
+
+  it('KRİTİK: sebep iki yönde de zorunlu (sözleşmenin şeması)', () => {
+    expect(gercekYayinIstegi(true, 'kısa').tur).toBe('hata');
+    expect(gercekYayinIstegi(false, '   ').tur).toBe('hata');
+    expect(gercekYayinIstegi(true, ' Uyum canlıda doğrulandı ')).toEqual({ tur: 'tamam', govde: { acik: true, sebep: 'Uyum canlıda doğrulandı' } });
+  });
+
+  it('uç izni sözleşmeden; olmayan uç patlıyor', () => {
+    expect(ucIzni('GET', '/pilot/gercek-yayin')).toBe('strategy.write');
+    expect(ucIzni('PUT', '/pilot/gercek-yayin')).toBe('org.write');
+    expect(() => ucIzni('PUT', '/pilot/bugun')).toThrow();
   });
 });

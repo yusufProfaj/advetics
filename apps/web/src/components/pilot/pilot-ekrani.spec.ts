@@ -40,6 +40,7 @@ describe('tarama boşa düşmüyor', () => {
       [
         'butce-seridi.tsx',
         'degistir-kutusu.tsx',
+        'gercek-yayin-satiri.tsx',
         'hesap.ts',
         'kaynak-cipi.tsx',
         'kurulum-karti.tsx',
@@ -156,6 +157,22 @@ describe('sayfalar: yeni ekran varsayılan, eski ekran geri dönüş yolu', () =
     expect(i).toBeGreaterThan(-1);
     expect(reklam.indexOf("hasPermission(session, 'bulk.write')")).toBeLessThan(i);
     expect(reklam.slice(i, i + 400)).toContain('<PilotAcilisi');
+  });
+});
+
+describe('gerçek yayın anahtarı', () => {
+  it('KRİTİK: anahtar yalnız ucu okuyabilene okunuyor; izin sözleşmeden', () => {
+    const a = kod('pilot-acilisi.tsx');
+    expect(a).toContain("gercekYayinOkuyabilir ? oku(serverApiFetch<PilotGercekYayinDurumu>(pilotUcAdresi('/pilot/gercek-yayin')))");
+    expect(yorumsuz(REKLAM)).toContain("gercekYayinOkuyabilir={hasPermission(session, ucIzni('GET', '/pilot/gercek-yayin'))}");
+  });
+
+  it('KRİTİK: açma isteği sözleşmenin şemasından geçiyor, açarken uyarı cümlesi çiziliyor', () => {
+    const g = kod('gercek-yayin-satiri.tsx');
+    expect(g).toContain('const istek = gercekYayinIstegi(!g.acik, sebep)');
+    expect(g).toContain("if (istek.tur === 'hata') return");
+    expect(g).toContain("{g.eylem === 'ac' && <p");
+    expect(g).toContain('GERCEK_YAYIN_ACMA_UYARISI');
   });
 });
 

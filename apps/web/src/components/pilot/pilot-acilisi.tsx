@@ -5,10 +5,11 @@ import { baglanti } from '@/lib/baglanti';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { Uyari } from '@/components/ui/uyari';
 import { BosHucre } from './kaynak-cipi';
+import { GercekYayinSatiri } from './gercek-yayin-satiri';
 import { KurulumKarti } from './kurulum-karti';
 import { OneriKartlari } from './oneri-kartlari';
 import { ONERI_BOS_METNI, ONERI_UYGULAMA_ACIK, acilisBasligi, bugunKutulari, kurulumPlanlari, okumaHatasi, pilotAdresi, pilotUcAdresi } from './hesap';
-import type { PilotBugun, PilotKurulumYaniti, PilotOneriListesi, PilotPlanListesi } from '@advetics/shared';
+import type { PilotGercekYayinDurumu, PilotBugun, PilotKurulumYaniti, PilotOneriListesi, PilotPlanListesi } from '@advetics/shared';
 
 /**
  * ═══ ADVCAMPAIGN AÇILIŞI: PİLOT ═══
@@ -39,6 +40,7 @@ export async function PilotAcilisi({
   workspaceAdi,
   planOkuyabilir,
   uygulayabilir,
+  gercekYayinOkuyabilir,
 }: {
   clientId: string;
   workspaceAdi: string | null;
@@ -46,12 +48,18 @@ export async function PilotAcilisi({
   planOkuyabilir: boolean;
   /** `bulk.publish`. */
   uygulayabilir: boolean;
+  /**
+   * Gerçek yayın ucunu okuyabilir mi (`ucIzni`). Müşteri hesabında `false`:
+   * anahtarın ne durumda olduğu ve "test kipi" notu müşteriye ASLA yazılmaz.
+   */
+  gercekYayinOkuyabilir: boolean;
 }) {
   const simdi = new Date().toISOString();
-  const [bugun, oneriler, planlar] = await Promise.all([
+  const [bugun, oneriler, planlar, gercekYayin] = await Promise.all([
     oku(serverApiFetch<PilotBugun>(baglanti(pilotUcAdresi('/pilot/bugun'), { clientId }))),
     oku(serverApiFetch<PilotOneriListesi>(baglanti(pilotUcAdresi('/pilot/oneriler'), { clientId }))),
     planOkuyabilir ? oku(serverApiFetch<PilotPlanListesi>(baglanti(pilotUcAdresi('/pilot/planlar'), { clientId }))) : null,
+    gercekYayinOkuyabilir ? oku(serverApiFetch<PilotGercekYayinDurumu>(pilotUcAdresi('/pilot/gercek-yayin'))) : null,
   ]);
 
   const kurulacaklar = planlar?.ok ? kurulumPlanlari(planlar.v.planlar) : [];
@@ -89,6 +97,16 @@ export async function PilotAcilisi({
             </span>
           )}
         </header>
+
+        {/* Anahtar okunamadıysa sunucu da kapalı sayıyor; ekran aynısını söylüyor. */}
+        {gercekYayin &&
+          (gercekYayin.ok ? (
+            <GercekYayinSatiri durum={gercekYayin.v} />
+          ) : (
+            <Uyari ton="tehlike" baslik="Gerçek yayın durumu alınamadı, kapalı sayılıyor.">
+              {gercekYayin.hata}
+            </Uyari>
+          ))}
 
         {/* ─── Bugün ─── */}
         {bugun.ok ? (

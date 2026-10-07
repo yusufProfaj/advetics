@@ -5,7 +5,9 @@ import {
   PILOT_PLAN_SON_DURUMLARI,
   PILOT_UCLARI,
   eylemArtirirMi,
+  gercekYayinSchema,
   planDegistirSchema,
+  workspaceBeyaniSchema,
   tutarGoster,
   type BosNedeni,
   type HuniKatmani,
@@ -27,7 +29,7 @@ import {
 import { ApiRequestError } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { mmAdresi, type MmBolumKodu } from '@/components/marka-merkezi/bolumler';
-import type { OneriBosNedeni, PilotBugun, PilotEkranEylemi, PilotPlanDetayi, PilotPlanSatiriOzeti } from '@advetics/shared';
+import type { OzelKategori, PilotGercekYayinDurumu, PilotWorkspaceBeyani, OneriBosNedeni, PilotBugun, PilotEkranEylemi, PilotPlanDetayi, PilotPlanSatiriOzeti } from '@advetics/shared';
 
 /**
  * ═══ PİLOT EKRANLARININ SAF KARARLARI ═══
@@ -85,6 +87,17 @@ export function pilotUcAdresi(yol: PilotYolu, id?: string): string {
     return yol.replace(':id', encodeURIComponent(id));
   }
   return yol;
+}
+
+/**
+ * Bir ucun izni sözleşmeden. Panel "bu kişi bu ucu okuyabilir mi" diye
+ * sorarken izni ELLE yazarsa sözleşme değişince ekran 403 alan bir okuma
+ * yapar ya da okuyabileceği bir şeyi hiç sormaz.
+ */
+export function ucIzni(yontem: 'GET' | 'POST' | 'PUT', yol: PilotYolu): (typeof PILOT_UCLARI)[number]['izin'] {
+  const u = PILOT_UCLARI.find((x) => x.yontem === yontem && x.yol === yol);
+  if (!u) throw new Error(`${yontem} ${yol} sözleşmede yok`);
+  return u.izin;
 }
 
 /**
@@ -750,4 +763,85 @@ export function isaretliMi(b: Pick<UyumBulgusu, 'kuralKimligi' | 'mesaj'>, isare
 /** PDF dosya adı: sürüm adda, iki indirme karışmasın. */
 export function pdfDosyaAdi(donem: string, surum: number): string {
   return `plan-${donem}-s${surum}.pdf`;
+}
+
+// ─── Gerçek yayın anahtarı (ajans geneli) ──────────────────────────────────
+
+/** Anahtar kapalıyken AJANSA yazılan not; müşteri bu ucu hiç okumuyor. */
+export const GERCEK_YAYIN_KAPALI_NOTU =
+  'Gerçek yayın kapalı: onaylanan planlar müşteri hesabına yazılmaz, ajansın kendi hesabında test kipinde kurulur.';
+/** Açmadan önceki TEK cümle. Açmak para harcatır; uzun bir metin okunmaz. */
+export const GERCEK_YAYIN_ACMA_UYARISI = 'Açarsan müşterinin onayladığı planlar müşteri hesabında gerçek bütçeyle yayına çıkar.';
+
+export interface GercekYayinGorunumu {
+  acik: boolean;
+  ton: 'uyari' | 'tehlike' | 'basari';
+  baslik: string;
+  /** Son değişikliğin izi: kim, ne zaman, neden. */
+  iz: string | null;
+  eylem: 'ac' | 'kapat' | null;
+}
+
+/**
+ * OKUNAMAYAN ANAHTAR KAPALIDIR ve düğmesi yoktur: durumu bilinmeyen bir
+ * anahtarı "aç" demek, belki zaten açık olanı ikinci kez açmak ya da açık
+ * olanı kapalı sanıp yanlış karar vermek olurdu. Sunucu da o hâlde test
+ * kipine düşüyor; ekran aynısını söylüyor.
+ */
+export function gercekYayinGorunumu(d: PilotGercekYayinDurumu): GercekYayinGorunumu {
+  if (d.okunamadi) return { acik: false, ton: 'tehlike', baslik: `Gerçek yayın anahtarı okunamadı, kapalı sayılıyor: ${d.okunamadi}`, iz: null, eylem: null };
+  const iz = d.zaman ? [d.degistiren ?? 'Bilinmeyen kişi', zamanMetni(d.zaman), d.sebep ? `“${d.sebep}”` : null].filter(Boolean).join(' · ') : null;
+  if (!d.acik) return { acik: false, ton: 'uyari', baslik: GERCEK_YAYIN_KAPALI_NOTU, iz, eylem: d.degistirebilir ? 'ac' : null };
+  return { acik: true, ton: 'basari', baslik: 'Gerçek yayın açık: onaylanan planlar müşteri hesabında yayına çıkar.', iz, eylem: d.degistirebilir ? 'kapat' : null };
+}
+
+function zamanMetni(iso: string): string {
+  const t = new Date(iso);
+  return Number.isNaN(t.getTime()) ? iso : t.toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' });
+}
+
+/** Gövde sözleşmenin şemasından; sebep iki yönde de zorunlu (10–500). Geçmezse istek gitmez. */
+export function gercekYayinIstegi(acik: boolean, sebep: string): { tur: 'tamam'; govde: { acik: boolean; sebep: string } } | { tur: 'hata'; mesaj: string } {
+  const r = gercekYayinSchema.safeParse({ acik, sebep });
+  return r.success ? { tur: 'tamam', govde: r.data } : { tur: 'hata', mesaj: r.error.issues[0]?.message ?? 'Sebep geçersiz.' };
+}
+
+// ─── Workspace beyanı (özel kategori + sektör) ─────────────────────────────
+
+/**
+ * Seçim hâli. `null` = henüz HİÇBİR seçenek seçilmedi (soru açık); `'hicbiri'`
+ * = "Hayır" beyanı; dizi = seçilen kategoriler. Sunucunun `null`ı (hiç
+ * cevaplanmadı) ile `[]`ı (hiçbiri) ekranda da ayrı kalmalı: ikisini aynı
+ * boş seçime çevirmek "Hayır" demeyen birini "Hayır" demiş saymaktır.
+ */
+export type BeyanSecimi = null | 'hicbiri' | OzelKategori[];
+
+export function beyanBaslangici(b: Pick<PilotWorkspaceBeyani, 'ozelKategoriler' | 'taninmayanKategoriler'>): BeyanSecimi {
+  // Tanınmayan kategori taşıyan kayıt GÜVENİLMEZ: yeniden beyan edilene kadar soru açık sayılır.
+  if (b.taninmayanKategoriler.length > 0) return null;
+  if (b.ozelKategoriler === null) return null;
+  return b.ozelKategoriler.length === 0 ? 'hicbiri' : [...b.ozelKategoriler];
+}
+
+export function beyanIstegi(
+  clientId: string,
+  secim: BeyanSecimi,
+  sektor: string,
+): { tur: 'tamam'; govde: { clientId: string; ozelKategoriler: OzelKategori[]; sektor: string } } | { tur: 'hata'; mesaj: string } {
+  if (secim === null) return { tur: 'hata', mesaj: 'Özel kategori sorusunu cevapla.' };
+  if (Array.isArray(secim) && secim.length === 0) return { tur: 'hata', mesaj: 'En az bir kategori seç ya da "Hayır" de.' };
+  const r = workspaceBeyaniSchema.safeParse({ clientId, ozelKategoriler: secim === 'hicbiri' ? [] : secim, sektor });
+  return r.success ? { tur: 'tamam', govde: r.data } : { tur: 'hata', mesaj: r.error.issues[0]?.message ?? 'Beyan geçersiz.' };
+}
+
+/**
+ * Bu beyanla çözülen uyum kuralları. Plan belgesinde bu kurallardan biri
+ * duruyorsa ajansa beyan bölümüne giden bağlantı çizilir. Kimlikler
+ * katalogda var mı testte sınanıyor: kural kimliği değişirse bağlantı
+ * sessizce kaybolmasın.
+ */
+export const BEYAN_KURALLARI: readonly string[] = ['GNL-13', 'GNL-18', 'GNL-20', 'OZK-SYS'];
+
+export function beyanGerekiyorMu(bulgular: ReadonlyArray<{ kuralKimligi: string }>): boolean {
+  return bulgular.some((b) => BEYAN_KURALLARI.includes(b.kuralKimligi));
 }

@@ -7,7 +7,7 @@ import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { Baslik, Kutu } from '@/reklam/ui';
 import { SohbetEkrani } from '@/reklam/sohbet/sohbet-ekrani';
 import { PilotAcilisi } from '@/components/pilot/pilot-acilisi';
-import { eskiEkranMi } from '@/components/pilot/hesap';
+import { eskiEkranMi, ucIzni } from '@/components/pilot/hesap';
 
 export const metadata = { title: 'AdvCampaign · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -47,6 +47,7 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
         workspaceAdi={session.availableClients.find((c) => c.id === clientId)?.name ?? null}
         planOkuyabilir={hasPermission(session, PLAN_SAYFA_IZNI)}
         uygulayabilir={hasPermission(session, 'bulk.publish')}
+        gercekYayinOkuyabilir={hasPermission(session, ucIzni('GET', '/pilot/gercek-yayin'))}
       />
     );
   }
