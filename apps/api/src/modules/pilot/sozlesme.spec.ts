@@ -1,6 +1,25 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  KURULUM_ARA_DURUMLARI,
+  kuruluyorPlanKarari,
+  METIN_BOS_NEDENLERI,
+  metinKorunurMu,
+  metinleriTasi,
+  metinYazilacakSatirlar,
+  planMetinEksikleri,
+  planUyumGirdisi,
+  PLAN_BICIMI,
+  reklamMetinleriniYerlestir,
+  reklamMetniEksikleri,
+  saklananPlanOku,
+  TAKILAN_SATIR_EN_COK_DENEME,
+  TAKILAN_SATIR_HEDEFI,
+  TAKILMA_ESIGI_DK,
+  takilanSatirKarari,
+  type ReklamMetniYazimi,
   BUTCE_HIZI,
   butceHiziSapmasi,
   degisiklikCumleyleUyumluMu,
@@ -53,6 +72,8 @@ import {
   type SatirdanTaslakBaglami,
   type UyumDenetimi,
 } from '@advetics/shared';
+import { metinliPlan } from '../../../test/pilot-fixture';
+import { YAZICI_KILIT_MS } from './kurulum-isleyici';
 
 /**
  * ═══ PİLOT SÖZLEŞMESİ (Ajan 1) ═══
@@ -369,7 +390,8 @@ describe('plan durum makinesi', () => {
 });
 
 describe('onay = yayın kapısı', () => {
-  const plan = planUret(girdi());
+  // Metinli: karar (a) sonrası metinsiz Meta satırı onaya gelemez (aşağıda ayrı test).
+  const plan = metinliPlan(planUret(girdi()));
   const ozet = 'a'.repeat(64);
   const temel = {
     durum: 'musteride' as const,
@@ -382,6 +404,7 @@ describe('onay = yayın kapısı', () => {
     uyum: 'gecti' as const,
     ajansinKendiSirketi: false,
     gercekYayinAcik: true,
+    yasalUyari: null,
   };
 
   it('uyum geçtiyse gerçek yayın', () => {
@@ -426,6 +449,20 @@ describe('onay = yayın kapısı', () => {
     expect(r.tur === 'ret' && r.retler.map((x) => x.kod)).toEqual(['BUTCE_ASIMI']);
     const y = onayKapisi({ ...temel, aylikButceMicros: null });
     expect(y.tur === 'ret' && y.retler.map((x) => x.kod)).toEqual(['BUTCE_YOK']);
+  });
+
+  it('KRİTİK: bütçe SATIR toplamıyla (B-3) — beyan boşken de; satırlar beyanı aşarsa bütçe içinde olsa da ret', () => {
+    const sisir = (p: PlanOnerisi, ek: bigint): PlanOnerisi => ({
+      ...p,
+      satirlar: p.satirlar.map((s, i) => (i === 0 ? { ...s, tutar: { ...s.tutar, deger: (BigInt(s.tutar.deger) + ek).toString() } } : s)),
+    });
+    // Beyan edilen toplam BOŞ, satırlar bütçeyi aşıyor: beyana bakan kapı bunu göremezdi.
+    const bos = { ...sisir(plan, 50_000n * M), toplam: { dolu: false as const, emptyReason: 'aylik_butce_yok' as const } };
+    const b = onayKapisi({ ...temel, plan: bos });
+    expect(b.tur === 'ret' && b.retler.map((x) => x.kod)).toContain('BUTCE_ASIMI');
+    // Satırlar beyanı 10.000 aşıyor ama bütçe 200.000: müşterinin okuduğu toplam harcanacak olandan küçük.
+    const r = onayKapisi({ ...temel, plan: sisir(plan, 10_000n * M), aylikButceMicros: 200_000n * M });
+    expect(r.tur === 'ret' && r.retler.map((x) => x.kod)).toEqual(['BUTCE_ASIMI']);
   });
 
   it('ajans müşteri adına gerekçesiz onaylayamaz', () => {
@@ -541,8 +578,11 @@ describe('satirdanTaslak', () => {
   it('metin yazılana kadar taslak eksik; yasal uyarı her metinde aranır', () => {
     const t = satirdanTaslak(metaSatir, baglam);
     expect(pilotTaslakEksikleri(t).map((e) => e.kod)).toEqual(['KRT-METIN']);
-    const y = { ...t, metinler: { dolu: true as const, deger: [{ varlikId: null, baslik: 'B', metin: 'Kahve' }], kaynak: { tur: 'yz_metin' as const, kimlik: 'gemini', zaman: T } } };
+    const gorsel = t.varliklar?.dolu ? t.varliklar.deger[0]! : null;
+    const y = { ...t, metinler: { dolu: true as const, deger: [{ varlikId: gorsel, baslik: 'B', metin: 'Kahve' }], kaynak: { tur: 'yz_metin' as const, kimlik: 'gemini', zaman: T } } };
     expect(pilotTaslakEksikleri(y)).toEqual([]);
+    // Görsele bağlı olmayan metin reklam olmaz (işçi görsel başına kuruyor): onay anıyla AYNI denetleyici.
+    expect(pilotTaslakEksikleri({ ...y, metinler: { ...y.metinler, deger: [{ varlikId: null, baslik: 'B', metin: 'Kahve' }] } }).map((e) => e.kod)).toEqual(['KRT-VARLIK']);
     expect(pilotTaslakEksikleri(y, { yasalUyari: 'Kampanya stoklarla sınırlıdır.' }).map((e) => e.kod)).toEqual(['YASAL-UYARI']);
   });
 
@@ -653,5 +693,237 @@ describe('uçlar ve yetki', () => {
     expect(PILOT_SAYFA_IZNI).toBe('bulk.write');
     expect(PILOT_UCLARI.find((u) => u.yol.endsWith('/uygula'))!.izin).toBe('bulk.publish');
     expect(resolvePermissions('ad_manager').has('strategy.publish')).toBe(true);
+  });
+});
+
+// ─── Reklam metni planın parçası (kullanıcı kararı (a), 2026-10-08) ─────────
+
+describe('reklam metni — plan hazırlanırken yazılır, onay özeti onu kapsar', () => {
+  const ham = planUret(girdi());
+  const metinli = metinliPlan(ham);
+  const meta = (p: PlanOnerisi) => p.satirlar.filter((s) => s.platform === 'meta');
+  const kapi = (p: PlanOnerisi, yasalUyari: string | null = null) =>
+    onayKapisi({ durum: 'musteride', surum: 1, icerikOzeti: 'a', istek: { surum: 1, icerikOzeti: 'a' }, rol: 'musteri', plan: p, aylikButceMicros: 120_000n * M, uyum: 'gecti', ajansinKendiSirketi: false, gercekYayinAcik: true, yasalUyari });
+  const kodlar = (r: ReturnType<typeof kapi>) => (r.tur === 'ret' ? r.retler.map((x) => x.kod) : []);
+  const kim: Kaynak = { tur: 'kullanici', kimlik: U(99), zaman: T };
+
+  it('KRİTİK: planUret Meta satırını "metin bekliyor" ENGELİYLE üretir; Google satırında metin hücresi yok; şema iki biçimi de dayatır', () => {
+    expect(ham.bicim).toBe(PLAN_BICIMI);
+    for (const s of meta(ham)) {
+      expect(s.metinler).toEqual({ dolu: false, emptyReason: 'metin_bekliyor' });
+      expect(s.engeller).toContain('metin_bekliyor');
+    }
+    for (const s of ham.satirlar.filter((x) => x.platform === 'google')) expect(s.metinler).toBeNull();
+    expect(planOnerisiSchema.safeParse(JSON.parse(JSON.stringify(metinli))).success).toBe(true);
+    // Meta satırında `null` ve Google satırında hücre: ikisi de şemadan geçmez.
+    const bozuk1 = { ...metinli, satirlar: metinli.satirlar.map((s) => (s.platform === 'meta' ? { ...s, metinler: null } : s)) };
+    const bozuk2 = { ...metinli, satirlar: metinli.satirlar.map((s) => (s.platform === 'google' ? { ...s, metinler: { dolu: false, emptyReason: 'metin_bekliyor' } } : s)) };
+    expect(planOnerisiSchema.safeParse(JSON.parse(JSON.stringify(bozuk1))).success).toBe(false);
+    expect(planOnerisiSchema.safeParse(JSON.parse(JSON.stringify(bozuk2))).success).toBe(false);
+  });
+
+  it('KRİTİK: içerik özeti METNİ KAPSAR — tek kelime değişince özet değişir; aynı metin aynı özet', () => {
+    expect(planKanonikIcerik(metinliPlan(ham))).toBe(planKanonikIcerik(metinli));
+    const s0 = meta(metinli)[0]!;
+    const degisik: PlanOnerisi = {
+      ...metinli,
+      satirlar: metinli.satirlar.map((s) =>
+        s.anahtar === s0.anahtar && s.metinler?.dolu ? { ...s, metinler: { ...s.metinler, deger: [{ ...s.metinler.deger[0]!, metin: 'Kahve makinesinde YENİ sezon.' }] } } : s,
+      ),
+    };
+    expect(planKanonikIcerik(degisik)).not.toBe(planKanonikIcerik(metinli));
+    expect(planKanonikIcerik(metinli)).not.toBe(planKanonikIcerik(ham));
+  });
+
+  it('KRİTİK: metinsiz Meta satırı onay kapısında KURULAMAYAN_SATIR; metinli plan kabul', () => {
+    expect(kodlar(kapi(ham))).toEqual(['KURULAMAYAN_SATIR']);
+    expect(kapi(metinli).tur).toBe('kabul');
+    // Engeli silinmiş ama metni boş satır da kapıdan geçemez: kapı satır engeline GÜVENMİYOR, metni kendisi denetliyor.
+    const engelsiz = { ...ham, satirlar: ham.satirlar.map((s) => ({ ...s, engeller: [] })) };
+    const r = kapi(engelsiz);
+    expect(kodlar(r)).toEqual(['KURULAMAYAN_SATIR']);
+    expect(r.tur === 'ret' && r.retler[0]!.ajansMesaji).toContain('Reklam metni');
+  });
+
+  it('KRİTİK: yasal uyarı plan hazırlandıktan SONRA eklendiyse eski metin kapıda düşer (TAZE uyarı)', () => {
+    const UYARI = 'Kampanya stoklarla sınırlıdır.';
+    expect(kodlar(kapi(metinli, UYARI))).toEqual(['KURULAMAYAN_SATIR']);
+    expect(planMetinEksikleri(metinli, { yasalUyari: UYARI }).every((x) => x.kod === 'YASAL-UYARI')).toBe(true);
+    expect(kapi(metinliPlan(ham, UYARI), UYARI).tur).toBe('kabul');
+  });
+
+  it('KRİTİK: metin kaynağı yalnız model ya da kişi — sayısal/plan kaynaklı metin geçmez', () => {
+    const s = meta(metinli)[0]!;
+    if (!s.metinler?.dolu) throw new Error('fixture metinsiz');
+    const ids = s.varliklar?.dolu ? s.varliklar.deger.map((v) => v.deger.id) : [];
+    expect(reklamMetniEksikleri(s.metinler, { varlikIdleri: ids })).toEqual([]);
+    expect(reklamMetniEksikleri({ ...s.metinler, kaynak: { ...s.metinler.kaynak, tur: 'onayli_plan' } }, { varlikIdleri: ids }).map((x) => x.kod)).toEqual(['METIN-KAYNAK']);
+  });
+
+  it('yerleştirme: model düştü / kapalı / denetimden geçmedi ayrı nedenlerle; geçmeyen metin DOLU bırakılmaz; plan dışı satır patlar', () => {
+    const [a, b, c] = meta(ham);
+    const y = new Map<string, ReklamMetniYazimi>([
+      [a!.anahtar, { tur: 'yazilamadi', neden: 'metin_yazilamadi', mesaj: 'Yapay zekâya ulaşılamadı: zaman aşımı' }],
+      [b!.anahtar, { tur: 'yazilamadi', neden: 'yz_kapali', mesaj: 'Yapay zekâ bağlı değil' }],
+      // Satırın görsellerinde olmayan bir görsele bağlı metin.
+      [c!.anahtar, { tur: 'tamam', metinler: [{ varlikId: U(77), baslik: 'B', metin: 'M' }], kaynak: { tur: 'yz_metin', kimlik: 'm', zaman: T }, notlar: [] }],
+    ]);
+    const p = reklamMetinleriniYerlestir(ham, y, { yasalUyari: null });
+    const bul = (k: string) => p.satirlar.find((s) => s.anahtar === k)!;
+    expect(bul(a!.anahtar).metinler).toEqual({ dolu: false, emptyReason: 'metin_yazilamadi' });
+    expect(bul(a!.anahtar).engeller).toEqual(['metin_yazilamadi']);
+    expect(bul(a!.anahtar).notlar.some((n) => n.includes('zaman aşımı'))).toBe(true);
+    expect(bul(b!.anahtar).metinler).toEqual({ dolu: false, emptyReason: 'yz_kapali' });
+    expect(bul(c!.anahtar).metinler).toEqual({ dolu: false, emptyReason: 'metin_denetimden_gecmedi' });
+    expect(() => reklamMetinleriniYerlestir(ham, new Map([['meta:yok:x', y.get(a!.anahtar)!]]), { yasalUyari: null })).toThrow(/plan dışı/);
+    const g = ham.satirlar.find((s) => s.platform === 'google')!;
+    expect(() => reklamMetinleriniYerlestir(ham, new Map([[g.anahtar, y.get(a!.anahtar)!]]), { yasalUyari: null })).toThrow(/Meta dışı/);
+    // Engeller yeniden hesaplanırken YALNIZ metin nedenleri silinir.
+    expect(METIN_BOS_NEDENLERI).not.toContain('varlik_yok');
+  });
+
+  it('KRİTİK: değiştir — yalnız TUTAR değişince metin korunur; GÖRSEL çıkınca metin yeniden yazılacak ve satır kurulamaz', () => {
+    const s = meta(metinli)[0]!;
+    const t = degisiklikUygula(metinli, [{ tur: 'satir_tutari_fark', anahtar: s.anahtar, farkMicros: (1_000n * M).toString(), yon: 'azalt' }], kim);
+    if (t.tur !== 'tamam') throw new Error(t.mesaj);
+    expect(t.plan.satirlar.find((x) => x.anahtar === s.anahtar)!.metinler).toEqual(s.metinler);
+    expect(metinYazilacakSatirlar(t.plan)).toEqual([]);
+    const gorsel = s.varliklar?.dolu ? s.varliklar.deger[1]!.deger.id : '';
+    const v = degisiklikUygula(metinli, [{ tur: 'varlik_cikar', anahtar: s.anahtar, varlikId: gorsel }], kim);
+    if (v.tur !== 'tamam') throw new Error(v.mesaj);
+    const yeni = v.plan.satirlar.find((x) => x.anahtar === s.anahtar)!;
+    expect(yeni.metinler).toEqual({ dolu: false, emptyReason: 'metin_bekliyor' });
+    expect(yeni.engeller).toContain('metin_bekliyor');
+    expect(metinYazilacakSatirlar(v.plan).map((x) => x.anahtar)).toEqual([s.anahtar]);
+    // Dokunulmayan satırların metni yerinde.
+    expect(v.plan.satirlar.filter((x) => x.platform === 'meta' && x.anahtar !== s.anahtar).every((x) => x.metinler?.dolu)).toBe(true);
+    expect(planOnerisiSchema.safeParse(JSON.parse(JSON.stringify(v.plan))).success).toBe(true);
+  });
+
+  it('KRİTİK: yeniden hazırla — aynı kitle+görsel+amaç metni taşır; kitle/amaç değişince ya da yasal uyarı tutmayınca yeniden yazılır', () => {
+    const yeniUretim = planUret(girdi());
+    const t = metinleriTasi(metinli, yeniUretim);
+    expect(metinYazilacakSatirlar(t)).toEqual([]);
+    expect(meta(t).every((s) => !s.engeller.includes('metin_bekliyor'))).toBe(true);
+    // Amaç değişti (form → site): her Meta satırı yeniden.
+    const amac = metinleriTasi(metinli, planUret(girdi({ marka: { profilId: U(5), guncellendi: T, anaAmac: 'website' } })));
+    expect(metinYazilacakSatirlar(amac).length).toBe(meta(amac).length);
+    // Yasal uyarı eklendi: eski metin onu taşımıyor.
+    expect(metinYazilacakSatirlar(metinleriTasi(metinli, yeniUretim, { yasalUyari: 'Kampanya stoklarla sınırlıdır.' })).length).toBe(meta(t).length);
+    // Saf kural: kitle farklı → korunmaz; tutar farklı → korunur.
+    const s = meta(metinli)[0]!;
+    expect(metinKorunurMu(s, { ...s, tutar: { ...s.tutar, deger: '1000000' } })).toBe(true);
+    expect(metinKorunurMu(s, { ...s, kitle: { dolu: true, deger: { id: U(11), ad: 'x' }, kaynak: { tur: 'kitle_sablonu', kimlik: U(11), zaman: T } } })).toBe(false);
+  });
+
+  it('KRİTİK: eski biçim (1) SESSİZCE GEÇMEZ — okunur, Meta satırı "eski biçim" engeli alır, kapı reddeder; bilinmeyen biçim patlar', () => {
+    const v1 = JSON.parse(JSON.stringify({ ...ham, bicim: 1, satirlar: ham.satirlar.map(({ metinler: _m, ...r }) => ({ ...r, engeller: r.engeller.filter((e) => e !== 'metin_bekliyor') })) }));
+    // Yazma şeması eski biçimi KABUL ETMEZ (yeni sürüm hep yeni biçimle yazılır).
+    expect(planOnerisiSchema.safeParse(v1).success).toBe(false);
+    const okunan = saklananPlanOku(v1);
+    expect(okunan.bicim).toBe(PLAN_BICIMI);
+    for (const s of meta(okunan)) {
+      expect(s.metinler).toEqual({ dolu: false, emptyReason: 'plan_eski_bicim' });
+      expect(s.engeller).toContain('plan_eski_bicim');
+    }
+    expect(kodlar(kapi(okunan))).toEqual(['KURULAMAYAN_SATIR']);
+    expect(() => saklananPlanOku({ ...v1, bicim: 9 })).toThrow();
+    expect(saklananPlanOku(JSON.parse(JSON.stringify(metinli)))).toEqual(JSON.parse(JSON.stringify(metinli)));
+  });
+
+  it('taslak metni ONAYLI SATIRDAN kaynağıyla kopyalar (işçi modeli çağırmaz); uyum plan anında metni görür', () => {
+    const s = meta(metinli)[0]!;
+    const onay: Kaynak = { tur: 'onayli_plan', kimlik: `${U(50)}@1`, zaman: T };
+    const t = satirdanTaslak(s, {
+      planId: U(50), planSurum: 1, onayKaynagi: onay, takvim: metinli.takvim!, hesap: null, sayfa: null, instagram: null,
+      kitleKonumlari: new Map(), ozelKategoriler: null, hedefAdres: null, formSablonuId: null, tabanNegatifler: null, zaman: T,
+    });
+    expect(t.metinler).toEqual(s.metinler);
+    expect(t.metinler.dolu && t.metinler.kaynak.tur).toBe('yz_metin');
+    const g = planUyumGirdisi(metinli, 'x', '2026-10-08', new Map());
+    const satir = g.satirlar.find((x) => x.yer === s.anahtar)!;
+    expect(satir.metinler.filter((m) => m.alan === 'metin').map((m) => m.uretici)).toEqual(['ai']);
+  });
+
+  it('müşteri özeti metnin onayın parçası olduğunu söyler (yalnız metin varken)', () => {
+    expect(musteriOzeti(metinli)!.cumleler.join(' ')).toContain('reklam metinleri de onayın parçası');
+    expect(musteriOzeti(ham)!.cumleler.join(' ')).not.toContain('reklam metinleri');
+    expect(musteriOzeti(metinli)!.cumleler.join(' ')).not.toMatch(/—/);
+  });
+});
+
+// ─── `kuruluyor`dan çıkış (Ajan 4 B-4'ün sözleşme yarısı, 2026-10-08) ──────
+
+describe('kuruluyor çıkışı — takılan satır ve plan', () => {
+  const simdi = '2026-10-08T12:00:00.000Z';
+  const once = (dk: number) => new Date(Date.parse(simdi) - dk * 60_000).toISOString();
+
+  it('KRİTİK: takılma eşiği işçinin hesap kilidinden UZUN (canlı işin altından satır çekilmez)', () => {
+    expect(TAKILMA_ESIGI_DK * 60_000).toBeGreaterThan(YAZICI_KILIT_MS);
+  });
+
+  it('KRİTİK: her ara durumun takılma hedefi izinli bir geçiş, SON durum, başarısız ve ajans çıkışlı', () => {
+    expect([...KURULUM_ARA_DURUMLARI].sort()).toEqual(KURULUM_SATIR_DURUMLARI.filter((d) => !KURULUM_SINIFI[d].son).sort());
+    for (const d of KURULUM_ARA_DURUMLARI) {
+      const h = TAKILAN_SATIR_HEDEFI[d];
+      expect(KURULUM_GECISLERI[d], d).toContain(h);
+      expect(KURULUM_SINIFI[h].son, d).toBe(true);
+      expect(KURULUM_SINIFI[h].basarili, d).toBe(false);
+      expect(KURULUM_SINIFI[h].cikisYazani, d).toContain('ajans');
+    }
+  });
+
+  it('KRİTİK: satır kararı — genç bekler, yaşlı önce yeniden kuyruğa, hak bitince son duruma iner; son durumdakine dokunulmaz', () => {
+    expect(takilanSatirKarari({ durum: 'prova', guncellendi: once(TAKILMA_ESIGI_DK - 1), supurmeDenemesi: 0 }, simdi)).toEqual({ tur: 'bekle' });
+    expect(takilanSatirKarari({ durum: 'prova', guncellendi: once(TAKILMA_ESIGI_DK), supurmeDenemesi: 0 }, simdi)).toEqual({ tur: 'yeniden_kuyruk' });
+    expect(takilanSatirKarari({ durum: 'prova', guncellendi: once(TAKILMA_ESIGI_DK), supurmeDenemesi: TAKILAN_SATIR_EN_COK_DENEME }, simdi)).toMatchObject({ tur: 'dusur', hedef: 'prova_dustu' });
+    expect(takilanSatirKarari({ durum: 'aciliyor', guncellendi: once(600), supurmeDenemesi: 9 }, simdi)).toMatchObject({ tur: 'dusur', hedef: 'dustu' });
+    expect(takilanSatirKarari({ durum: 'dustu', guncellendi: once(600), supurmeDenemesi: 0 }, simdi)).toEqual({ tur: 'dokunma' });
+    expect(takilanSatirKarari({ durum: 'kayit_belirsiz', guncellendi: once(600), supurmeDenemesi: 9 }, simdi)).toEqual({ tur: 'dokunma' });
+  });
+
+  it('KRİTİK: plan kararı — canlı iş sürüyor, hepsi yaşlıysa takıldı, satırsızsa satır yok, hepsi son ise sayım', () => {
+    const k = (satirlar: Array<{ durum: (typeof KURULUM_SATIR_DURUMLARI)[number]; guncellendi: string }>, plan = once(600)) =>
+      kuruluyorPlanKarari({ planGuncellendi: plan, satirlar, simdi });
+    expect(k([{ durum: 'kuruluyor', guncellendi: once(600) }, { durum: 'prova', guncellendi: once(5) }])).toEqual({ tur: 'suruyor' });
+    expect(k([{ durum: 'kuruluyor', guncellendi: once(600) }, { durum: 'acildi', guncellendi: once(1) }])).toEqual({ tur: 'takildi' });
+    expect(k([])).toEqual({ tur: 'satir_yok' });
+    expect(k([], once(5))).toEqual({ tur: 'suruyor' });
+    expect(k([{ durum: 'acildi', guncellendi: once(1) }])).toEqual({ tur: 'sayimi_yenile', hedef: 'kuruldu' });
+    expect(k([{ durum: 'acildi', guncellendi: once(1) }, { durum: 'dustu', guncellendi: once(1) }])).toEqual({ tur: 'sayimi_yenile', hedef: 'kismen_kuruldu' });
+  });
+
+  it('KRİTİK: kuruluyor planının ajans çıkışı var ve kismen_kuruldu üzerinden "Şimdi kur"/"Vazgeç"e açılıyor; müşteri ve doğrudan kapat/iptal yok', () => {
+    expect(pilotGecisMumkunMu('kuruluyor', 'takilan_kurulumu_durdur', 'ajans')).toBe(true);
+    expect(pilotGecisMumkunMu('kuruluyor', 'takilan_kurulumu_durdur', 'sistem')).toBe(true);
+    expect(pilotGecisMumkunMu('kuruluyor', 'takilan_kurulumu_durdur', 'musteri')).toBe(false);
+    expect(pilotGecisMumkunMu('kismen_kuruldu', 'yeniden_dene', 'ajans')).toBe(true);
+    expect(pilotGecisMumkunMu('kismen_kuruldu', 'kapat', 'ajans')).toBe(true);
+    expect(pilotGecisMumkunMu('kuruluyor', 'kapat', 'ajans')).toBe(false);
+    expect(pilotGecisMumkunMu('kuruluyor', 'iptal', 'ajans')).toBe(false);
+  });
+});
+
+// ─── Ajan 2'ye devir kilitleri (it.fails: Ajan 2 düzeltince `it`e çevirir) ───
+
+describe('DEVİR — karar (a) uygulaması (Ajan 2)', () => {
+  const yorumsuz = (ad: string) =>
+    readFileSync(join(__dirname, ad), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+  it('kardeş: taranan dosyalar gerçekten okunuyor (boş dilim değil)', () => {
+    expect(yorumsuz('kurulum-isleyici.ts')).toContain('async function taslakKur(');
+    expect(yorumsuz('plan.service.ts')).toContain('async hazirla(');
+  });
+
+  it.fails('DEVİR A2-1: işçi reklam metnini YAZMIYOR — taslak metni onaylı satırdan okunur, model çağrısı yok', () => {
+    expect(yorumsuz('kurulum-isleyici.ts')).not.toMatch(/reklamMetniYaz\(/);
+  });
+
+  it.fails('DEVİR A2-2: plan servisi metni hazırlarken yazar ve değişiklikte taşır', () => {
+    const s = yorumsuz('plan.service.ts');
+    expect(s).toContain('reklamMetinleriniYerlestir(');
+    expect(s).toContain('metinleriTasi(');
   });
 });

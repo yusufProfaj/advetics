@@ -2,6 +2,7 @@ import { DERLENEN_NIYETLER } from '../reklam/meta/derle';
 import type { NiyetKodu } from '../reklam/meta/niyetler';
 import { kanonikJson } from '../reklam/taslak-alanlari';
 import { HUNI_ETIKETLERI, HUNI_KATMANLARI, type HuniKatmani } from '../strateji/plan';
+import { ilkMetinHucresi, metinleriTasi } from './metin';
 import { bos, dolu, metindekiSayilar, yzMetniDenetle, type BosNedeni, type Hucre, type Kaynak, type Kaynakli } from './kaynak';
 import {
   ARAMA_HACMI_ESIGI,
@@ -12,6 +13,7 @@ import {
   META_DONEM_BUTCE_TIPI,
   META_KATMAN_PAYI_YUZ,
   PILOT_PLATFORMLARI,
+  PLAN_BICIMI,
   SATIR_BASI_VARLIK,
   type PilotPlatformu,
   type PlanDegisikligi,
@@ -98,7 +100,7 @@ const AMAC_NIYETI: Record<'form' | 'whatsapp' | 'website', NiyetKodu> = {
 
 function bosPlan(g: PlanUretGirdisi, engeller: BosNedeni[], paraBirimi: string | null = null): PlanOnerisi {
   return {
-    bicim: 1,
+    bicim: PLAN_BICIMI,
     clientId: g.clientId,
     donem: g.donem,
     paraBirimi,
@@ -262,6 +264,12 @@ export function planUret(g: PlanUretGirdisi): PlanOnerisi {
         const engeller: BosNedeni[] = [];
         if (n.engel) engeller.push(n.engel);
         if (secilenVarliklar.length === 0) engeller.push('varlik_yok');
+        // Metin üretici bu fonksiyonun İÇİNDE YOK (saf, deterministik): satır
+        // "henüz yazılmadı" ile doğar ve bu bir ENGEL. Ajan 2 "Planı hazırla"
+        // içinde `metinYazilacakSatirlar` → model → `reklamMetinleriniYerlestir`
+        // ile doldurur; doldurulamazsa satır nedeniyle kurulamaz kalır.
+        const metinler = ilkMetinHucresi('meta');
+        if (metinler && !metinler.dolu) engeller.push(metinler.emptyReason);
         const notlar = [`${HUNI_ETIKETLERI[k]} payı ajans kuralıyla ${yuzde(Number(katmanPayi.get(k)!) * 100)}.`];
         if (k === hedef && eklenen.length > 0) {
           notlar.push(`Kitlesi olmayan katmanların payı buraya eklendi: ${eklenen.map((x) => HUNI_ETIKETLERI[x]).join(', ')}.`);
@@ -279,6 +287,7 @@ export function planUret(g: PlanUretGirdisi): PlanOnerisi {
           kitle: dolu({ id: kitle.id, ad: kitle.ad }, { tur: 'kitle_sablonu', kimlik: kitle.id, zaman: kitle.guncellendi }),
           kelimeGrubu: null,
           varliklar: secilenVarliklar.length > 0 ? dolu(secilenVarliklar, { tur: 'sabit_kural', kimlik: 'SATIR_BASI_VARLIK', zaman: g.simdi, aciklama: `En iyi ${SATIR_BASI_VARLIK} varlık` }) : bos('varlik_yok'),
+          metinler,
           tutar: { deger: t.toString(), kaynak: tutarKaynagi },
           butce: {
             deger: { tip: META_DONEM_BUTCE_TIPI, micros: t.toString() },
@@ -316,6 +325,7 @@ export function planUret(g: PlanUretGirdisi): PlanOnerisi {
             aylikArama: { deger: v.hacim, kaynak: kelimeKaynagi },
           },
           varliklar: null,
+          metinler: ilkMetinHucresi('google'),
           tutar: { deger: t.toString(), kaynak: { ...butceKaynagi, aciklama: `Google payı ${yuzde(bazlar[i]!)} × grubun arama payı` } },
           butce: {
             // Günlük = satır tutarı ÷ kalan gün, tam birime aşağı. "En çok"
@@ -356,7 +366,7 @@ export function planUret(g: PlanUretGirdisi): PlanOnerisi {
 
   const dagitilan = satirlar.reduce((a, s) => a + BigInt(s.tutar.deger), 0n);
   return {
-    bicim: 1,
+    bicim: PLAN_BICIMI,
     clientId: g.clientId,
     donem: g.donem,
     paraBirimi: para,
@@ -409,6 +419,12 @@ function varlikSirasi(g: PlanUretGirdisi): Array<Kaynakli<{ id: string; ad: stri
  * Onaylanan şeyin kanonik metni. SHA-256'sı API'de alınır (`node:crypto`;
  * shared tarayıcıda da koşuyor). Anahtar sırası bağımsız: aynı plan aynı
  * özeti vermeli, yoksa her kayıt onayı sebepsiz bayatlatır.
+ *
+ * PLANIN TAMAMI, REKLAM METNİ DAHİL (karar (a), 2026-10-08). Bir alanı
+ * özetten DIŞARIDA bırakan "akıllı" bir süzgeç YAZILMAMALI: müşterinin
+ * okuduğu ama özetin kapsamadığı her alan, onaydan sonra sessizce
+ * değiştirilebilecek bir alandır. `sozlesme.spec.ts` metin değişince özetin
+ * değiştiğini kilitliyor.
  */
 export function planKanonikIcerik(p: PlanOnerisi): string {
   return kanonikJson(p);
@@ -482,6 +498,11 @@ export function degisiklikCumleyleUyumluMu(cumle: string, degisiklikler: readonl
  * onaylattığımızdan fazlasını vaat eden plan). Değişen satırın kaynağı
  * `kim` olur; yapay zekâ paragrafı DÜŞER (artık eski sayıları anlatıyor
  * olabilir) ve yeniden yazılmalıdır.
+ *
+ * REKLAM METNİ (karar (a)): `metinleriTasi` ile. Yalnız tutar değişen
+ * satırın metni KORUNUR; görseli değişen satırın metni `metin_bekliyor`a
+ * düşer ve Ajan 2 kaydetmeden önce yeniden yazdırır. Çıkarılan satırın
+ * metni satırla birlikte gider.
  */
 export function degisiklikUygula(p: PlanOnerisi, degisiklikler: readonly PlanDegisikligi[], kim: Kaynak): DegisiklikSonucu {
   if (!p.toplam.dolu || !p.takvim) return { tur: 'ret', mesaj: 'Plan üretilemediği için değiştirilemez.' };
@@ -550,7 +571,7 @@ export function degisiklikUygula(p: PlanOnerisi, degisiklikler: readonly PlanDeg
   if (cikarilan) nedenler.add('kullanici_cikardi');
   return {
     tur: 'tamam',
-    plan: {
+    plan: metinleriTasi(p, {
       ...p,
       satirlar,
       platformlar,
@@ -559,6 +580,6 @@ export function degisiklikUygula(p: PlanOnerisi, degisiklikler: readonly PlanDeg
         ? dolu(platformlar.reduce((a, x) => a + (x.beklenenSonuc.dolu ? x.beklenenSonuc.deger : 0), 0), p.beklenenSonuc.dolu ? p.beklenenSonuc.kaynak : kim)
         : p.beklenenSonuc,
       ozetMetni: bos('yz_yazmadi'),
-    },
+    }),
   };
 }

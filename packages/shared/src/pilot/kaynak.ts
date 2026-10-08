@@ -113,6 +113,25 @@ export const BOS_NEDENLERI = [
   'harcanan_bilinmiyor',
   /** O ay harcanan aylık bütçeye ulaşmış: dağıtılacak para yok. */
   'ay_butcesi_bitti',
+  /*
+   * ── Reklam metni (kullanıcı kararı (a), 2026-10-08) ──
+   * Metin artık PLAN HAZIRLANIRKEN yazılıyor ve onayın parçası. Hâller
+   * ayrı, çünkü her birinin yapılacak işi farklı: "henüz yazılmadı"
+   * yeniden yazdırılır, "model düştü" tekrar denenir, "yapay zekâ bağlı
+   * değil" ajansın ayarıdır, "denetimden geçmedi" metnin İÇERİĞİDİR.
+   * `yz_yazmadi` GEREKÇE paragrafının nedeni olarak kalıyor; metin için
+   * kullanılmaz (ekrandaki cümlesi "Gerekçe yazılamadı").
+   */
+  /** Metin henüz yazılmadı: plan yeni üretildi ya da satırın kitlesi/görseli/amacı değişti. */
+  'metin_bekliyor',
+  /** Model çağrısı düştü, boş ya da okunamayan cevap döndü. */
+  'metin_yazilamadi',
+  /** Yapay zekâ bağlı değil (anahtar yok); metin yazılamaz. */
+  'yz_kapali',
+  /** Metin yazıldı ama denetimden geçmedi (uydurulan sayı, boş alan, yasal uyarı, görsel eşleşmesi). */
+  'metin_denetimden_gecmedi',
+  /** Metin taşımayan eski biçim plan (`bicim: 1`): onaylanamaz, yeniden hazırlanmalı. */
+  'plan_eski_bicim',
 ] as const;
 export type BosNedeni = (typeof BOS_NEDENLERI)[number];
 

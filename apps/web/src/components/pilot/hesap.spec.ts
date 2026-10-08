@@ -9,6 +9,7 @@ import {
   degisiklikUygula,
   musteriOzeti,
   planUret,
+  reklamMetinleriniYerlestir,
   type OneriKarti,
   type PlanOnerisi,
   type PlanUretGirdisi,
@@ -111,7 +112,29 @@ function girdi(over: Partial<PlanUretGirdisi> = {}): PlanUretGirdisi {
   };
 }
 
-const PLAN = planUret(girdi());
+/*
+ * Metni yazılmış plan (karar (a), 2026-10-08): `planUret` Meta satırlarını
+ * "metin bekliyor" engeliyle üretir; ekran fixture'ı sunucunun gönderdiği
+ * hâli (metin yazılmış) taklit etmeli, yoksa her Meta satırı kurulamaz görünür.
+ */
+const HAM_PLAN = planUret(girdi());
+const PLAN = reklamMetinleriniYerlestir(
+  HAM_PLAN,
+  new Map(
+    HAM_PLAN.satirlar
+      .filter((s) => s.platform === 'meta')
+      .map((s) => [
+        s.anahtar,
+        {
+          tur: 'tamam' as const,
+          metinler: [{ varlikId: s.varliklar?.dolu ? s.varliklar.deger[0]!.deger.id : null, baslik: 'Taze kahve', metin: 'Kahve makinesinde yeni sezon.' }],
+          kaynak: { tur: 'yz_metin' as const, kimlik: 'test-modeli', zaman: '2026-10-07T06:00:00.000Z' },
+          notlar: [],
+        },
+      ]),
+  ),
+  { yasalUyari: null },
+);
 
 function detay(over: Partial<PilotPlanDetayi> & { durum?: PilotPlanDetayi['plan']['durum'] } = {}): PilotPlanDetayi {
   const { durum, ...kalan } = over;

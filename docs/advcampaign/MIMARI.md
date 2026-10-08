@@ -1,6 +1,6 @@
 # Pilot — yapay zekâ ile hesap yönetimi · Mimari (Ajan 1 çıktısı)
 
-> **Tarih:** 2026-10-07 · **Plan:** [`AJAN-PLANI.md`](AJAN-PLANI.md) · **Sözleşme (kod):**
+> **Tarih:** 2026-10-07 (güncelleme 2026-10-08: reklam metni planın parçası, §12) · **Plan:** [`AJAN-PLANI.md`](AJAN-PLANI.md) · **Sözleşme (kod):**
 > `packages/shared/src/pilot/` · **Sözleşme testi:** `apps/api/src/modules/pilot/sozlesme.spec.ts` (62 test)
 > · **Kabul listesi:** [`KABUL-LISTESI.md`](KABUL-LISTESI.md) (174 madde) · **Arayüz:** [`pilot-arayuz.html`](pilot-arayuz.html)
 >
@@ -22,6 +22,7 @@
 | Ç-6 | Müşteri onayı yayını başlatır; ajansın yayın düğmesi yok | yeni izin `strategy.publish`, `PILOT_PLAN_GECISLERI.kurulum_basla.yazan = ['worker']`, `onayKapisi` |
 | Ç-7 | Her şey baştan; canlı dersleri yeniden ödenmez; eski modül silinmez | `KABUL-LISTESI.md`, karar M-1 (§1) |
 | Ç-8 | Taslak yönü onaylı | Ajan 3 (§7) |
+| K-a | **(2026-10-08)** Reklam metni plan hazırlanırken yazılır, plan belgesinde görünür, onay özeti metni kapsar; worker modeli çağırmaz | `PlanSatiri.metinler`, `metin.ts`, `PLAN_BICIMI = 2`, `saklananPlanOku`, `onayKapisi.yasalUyari` (§12) |
 
 ## 1. Temel kararlar (Ajan 1)
 
@@ -48,10 +49,12 @@
   en yeniden; harcayıp sonuç getirmemiş varlık HİÇ seçilmez.
 - **M-8 · Yapay zekâ.** Gemini (`apps/api/src/yapay-zeka/gemini.ts`), Anthropic SDK yok. Üç yerde:
   (a) plan gerekçe paragrafı (`yzMetniEkle`, plandaki sayılar dışında sayı getiremez), (b) "değiştir"
-  cümlesini `PlanDegisikligi[]`ye çevirme (sayılar cümlede geçmeli), (c) reklam metni (`PilotTaslak.metinler`,
-  yasal uyarı kontrolüyle). Model çağrısı düşerse plan yine üretilir; gerekçe `yz_yazmadi`.
+  cümlesini `PlanDegisikligi[]`ye çevirme (sayılar cümlede geçmeli), (c) reklam metni — **2026-10-08'den beri
+  PLAN HAZIRLANIRKEN** (`PlanSatiri.metinler`, §12; eskiden onaydan sonra worker'da `PilotTaslak.metinler`).
+  Model çağrısı düşerse plan yine üretilir; gerekçe `yz_yazmadi`, metin `metin_yazilamadi` (satır kurulamaz).
 - **M-9 · Hash.** `planKanonikIcerik` / `pilotTaslakKanonikIcerik` shared'da, SHA-256 API'de
-  (`node:crypto`). Taslak özetine kaynak ZAMANI girmez, kaynak türü ve kimliği girer.
+  (`node:crypto`). Taslak özetine kaynak ZAMANI girmez, kaynak türü ve kimliği girer. Plan özeti planın
+  TAMAMINI, reklam metni dahil, kapsar (K-a); özetten alan dışlayan bir süzgeç yazılmaz.
 
 ## 2. Veri modeli (Ajan 2 migration'ları)
 
@@ -152,9 +155,13 @@ Tek kaynak `PILOT_UCLARI` (`packages/shared/src/pilot/uclar.ts`, 16 uç). Hepsi 
   onaylandi →(worker) kuruluyor →(worker) kuruldu | kismen_kuruldu`; `kismen_kuruldu →(ajans) kuruluyor |
   kapatildi`; `musteride →(ajans geri_cek | müşteri degisiklik_iste) taslak`; `taslak|musteride|onaylandi
   →(ajans|sistem) iptal`. Son: `kuruldu`, `kapatildi`, `iptal`. Sistem iptali: dönem geçti, onaylanmadı.
+  **2026-10-08 (B-4):** `kuruluyor →(ajans|sistem) takilan_kurulumu_durdur → kismen_kuruldu`, YALNIZ
+  `kuruluyorPlanKarari` `takildi`/`satir_yok` derken (§12.3). `kuruluyor`dan doğrudan `kapat`/`iptal` YOK.
 - **Kurulum satırı** (`KURULUM_GECISLERI`, `KURULUM_SINIFI satisfies Record`): prova → kuruluyor (PAUSED) →
   geri okuma → açma / duraklatılmış / test kipi / kapalı. `kayit_belirsiz` yeniden kurulmaz. Kapalı kipte
   kurulmayan satır başarı SAYILMAZ (plan `kismen_kuruldu`, uyum bağlanınca `yeniden_dene`).
+  **2026-10-08 (B-4):** her ara durumun takılma hedefi var (`TAKILAN_SATIR_HEDEFI`, `satisfies
+  Record<KurulumAraDurumu, …>`); yeni geçiş `geri_okundu_ayni → dustu`. Karar `takilanSatirKarari` (§12.3).
 - **Öneri** (`ONERI_GECISLERI`): `yeni → uygulaniyor → uygulandi → geri_aliniyor → geri_alindi`;
   `yeni → gecildi | bayat`; `uygulaniyor → sonuc_belirsiz → (worker uzlaştırma)`. Son: `gecildi`, `bayat`,
   `geri_alindi`.
@@ -225,6 +232,7 @@ Kapı: typecheck, `nav-sections`, `panel-tasarim`, mobilde yatay kaydırma yok, 
 | S-7 | **Değişti:** plan toplamı = ayın harcanmamış kalanı (aylık bütçe − o ay harcanan); bilinmiyorsa boş + neden, bitmişse boş + "bütçe bitti" | kullanıcı | §1 M-3, `ayHarcanan`, `harcanan_bilinmiyor`, `ay_butcesi_bitti` (3 test, 4 mutasyon) |
 | M-2 | Meta dönem toplamı bütçe | koordinatör (kabul) | `META_DONEM_BUTCE_TIPI` |
 | M-5 | Dönüşümsüz platform plana girmez, nedeni yazılır | koordinatör (kabul) | `disaridaKalanlar` |
+| K-a | **(2026-10-08, kullanıcı kararı (a))** Reklam metni plan hazırlanırken yazılır, plan belgesinde her Meta kampanyasının altında görünür, onay özeti metni kapsar. Gerekçe: gerçek kipte metin kimse görmeden yayına çıkıyordu ve onay özeti metni kapsamıyordu (site metni üzerinden prompt injection yolu). Tıklama sayısı değişmez. Alternatif (b) (onaydan sonra yaz + ajansa "metinleri onayla", +1 tıklama) reddedildi | kullanıcı | §12 |
 
 **Ajan 2 notu (S-7 × onay):** `onayKapisi` plan toplamını Aylık Bütçe ile karşılaştırıyor (aşamaz).
 Onaya kadar geçen sürede o ay harcama sürerse "toplam + taze harcanan > bütçe" olabilir; bu bugün RET
@@ -277,3 +285,97 @@ kabul listesindeki 67 "AJAN 4" maddesi ve yeni tabloların RLS testleri (Ajan 4)
   (sorulmadı) sayar, uyum GNL-20 ile ENGEL verir ve `taninmayanKategoriler` alanında görünür. Kategori
   Advetics'ten kurulmayacaksa beyan yeniden yapılmalı; kurulacaksa sözleşme, hedefleme ve uyum paketine
   eklenmesi ayrı bir karar.
+
+## 12. Reklam metni planın parçası + `kuruluyor` çıkışı (Ajan 1, 2026-10-08)
+
+> Karar: kullanıcı, seçenek **(a)** (PILOT-DEVIR "bekleyen karar"). Sözleşme:
+> `packages/shared/src/pilot/metin.ts` (yeni), `plan.ts`, `plan-uret.ts`, `taslak.ts`, `onay.ts`, `kurulum.ts`,
+> `uyum/denetle.ts#planUyumGirdisi`. Testler: `sozlesme.spec.ts` "reklam metni …", "kuruluyor çıkışı …",
+> "DEVİR …" blokları (19 mutasyon, hepsi testi düşürüyor).
+
+### 12.1 Sözleşme
+
+| Ne | Nerede | Kural |
+|---|---|---|
+| Satırın metin hücresi | `PlanSatiri.metinler: Hucre<PlanReklamMetni[]> \| null` | Meta satırında HER ZAMAN hücre; Google satırında `null` (şema `refine` ile dayatır). `PlanReklamMetni = { varlikId: uuid\|null; baslik ≤ 40; metin ≤ 1500 }` (`REKLAM_BASLIGI_EN_COK`, `REKLAM_METNI_EN_COK`) |
+| Kaynak | `METIN_KAYNAKLARI = ['yz_metin','kullanici']` | Taslak metni plandan KAYNAĞIYLA kopyalar (`onayli_plan`a çevrilmez: uyum modele özgü kuralı kaynağa bakarak uyguluyor) |
+| Boş nedenleri | `METIN_BOS_NEDENLERI` | `metin_bekliyor` (henüz yazılmadı / kitle-görsel-amaç değişti), `metin_yazilamadi` (model düştü), `yz_kapali` (anahtar yok), `metin_denetimden_gecmedi`, `plan_eski_bicim`. Her biri satırın `engeller`ine de yazılır; `yz_yazmadi` yalnız GEREKÇE için kalır |
+| Tek denetleyici | `reklamMetniEksikleri(hucre, { yasalUyari, varlikIdleri })` | Kodlar `KRT-METIN`, `METIN-KAYNAK`, `YASAL-UYARI`, `KRT-VARLIK` (metin satırın görseline bağlı olmalı; en az biri). `pilotTaslakEksikleri` ve `planMetinEksikleri` (→ `onayKapisi`) AYNI fonksiyonu çağırır |
+| Onay özeti | `planKanonikIcerik` | Planın tamamı, metin dahil (test: tek kelime değişince özet değişir) |
+| Şema sürümü | `PLAN_BICIMI = 2`, `planOnerisiSchema` (yalnız 2'yi yazar), `saklananPlanOku` (1'i de okur) | **Eski biçim kararı:** `bicim: 1` OKUNUR ama Meta satırları `plan_eski_bicim` boş hücre + engel alır → onaylanamaz, ekran "planı yeniden hazırla" der. Bellekte yükseltilir; saklanan JSON ve `icerik_ozeti` değişmez. Bilinmeyen biçim PATLAR |
+| Onay kapısı | `OnayKapisiGirdisi.yasalUyari: string \| null` (ZORUNLU, varsayılansız) | TAZE profilden. Metin eksiği olan Meta satırı `KURULAMAYAN_SATIR` (satır bir kez sayılır; ajans mesajında ilk üç metin eksiği). Kapı satırın `engeller`ine GÜVENMEZ, metni kendisi denetler |
+| B-3 | `onayKapisi` | Bütçe SATIR TOPLAMIYLA: satır toplamı > Aylık Bütçe → `BUTCE_ASIMI`; satır toplamı > beyan edilen toplam → `BUTCE_ASIMI` (müşterinin okuduğu toplam harcanacaktan küçük olamaz) |
+| Müşteri cümlesi | `musteriOzeti.cumleler` | Metinli satır varsa: "Planda gördüğün reklam metinleri de onayın parçası; kampanyalar bu metinlerle yayınlanır." |
+| Uyum | `planUyumGirdisi` | Metin artık PLAN anında denetlenir (`baslik`/`metin`, kaynak `yz_metin` → `ai`); ENGEL/UYARI müşteriye gitmeden ajansın önüne düşer |
+
+### 12.2 Hangi değişiklik metni geçersiz kılar
+
+`metinAnahtari(satır)` = platform + katman + niyet + kitle kimliği + görsel kimlikleri (sıralı). `metinKorunurMu(eski, yeni)`
+aynı anahtar + aynı `metinAnahtari`. **Tutar metne girmez** (model sayı yazamıyor): yalnız tutar değişince metin korunur.
+Görsel çıkarmada da yeniden yazılır (görsel başına metinler birlikte yazıldı; süzüp tutmak modelin bütünlüğünü böler).
+`metinleriTasi(eski, yeni, { yasalUyari })`: korunanı taşır, korunmayanı `metin_bekliyor` yapar; `yasalUyari` verildiyse
+korunan metin onu taşımıyorsa o da yeniden yazılır. `degisiklikUygula` bunu kendi içinde çağırır (yasal uyarısız: onu kapı
+TAZE denetliyor). `metinYazilacakSatirlar(plan)` = dolu metni olmayan her Meta satırı.
+
+### 12.3 `kuruluyor` çıkışı (B-4'ün sözleşme yarısı)
+
+| Ne | Değer / fonksiyon | Gerekçe |
+|---|---|---|
+| Takılma eşiği | `TAKILMA_ESIGI_DK = 45` | `YAZICI_KILIT_MS` (30 dk) üstünde: kilidi tutan canlı iş takılmış sayılmaz (testte karşılaştırılıyor) |
+| Süpürme hakkı | `TAKILAN_SATIR_EN_COK_DENEME = 2`, sayaç `pilot_kurulum_satirlari.deneme` | Her seferinde aynı sebeple ölen satır sonsuz yeniden kuyruk üretmesin |
+| Satır kararı | `takilanSatirKarari({ durum, guncellendi, supurmeDenemesi }, simdi)` → `dokunma` / `bekle` / `yeniden_kuyruk` / `dusur{hedef,mesaj}` | Son durumdakine dokunulmaz (para harcayan yeniden deneme insanın) |
+| Takılma hedefi | `TAKILAN_SATIR_HEDEFI`: `taslak→dustu`, `prova→prova_dustu`, `kuruluyor→dustu`, `geri_okundu_ayni→dustu` (YENİ geçiş), `aciliyor→dustu` | Hepsi son + başarısız + ajans çıkışlı. "Şimdi kur" işçinin `yolSec`inden geçer: gönderilmiş/belirsiz nesne varsa `kilit` (yeniden POST yok), kurulmuş nesne varsa `devam` |
+| Plan kararı | `kuruluyorPlanKarari({ planGuncellendi, satirlar, simdi })` → `suruyor` / `sayimi_yenile{hedef}` / `satir_yok` / `takildi` | Süpürme ve ajans ucu AYNI kararı okur |
+| Plan geçişi | `takilan_kurulumu_durdur`: `kuruluyor → kismen_kuruldu`, yazan `ajans`/`sistem` | Oradan "Şimdi kur" (`yeniden_dene`) ve "Vazgeç" (`kapat`) var. Kısmi tekil indeks `kapatildi` ile serbest kalır |
+
+**Bilerek YAPILMADI:** `takilan_kurulumu_durdur` `PILOT_EYLEM_UCU_EYLEMLERI`ye EKLENMEDİ. Eklenseydi bugünkü genel
+`eylem()` yolu onu ön koşulsuz uygular, satırları ara durumda bırakıp planı kaydırırdı. Ajan 2 ön koşul ve satır düşürmeyle
+birlikte ekler. CHECK listeleri değişmedi (yeni DURUM yok, yalnız yeni eylem ve yeni satır geçişi).
+
+### 12.4 DEVİR — Ajan 2 ne yapacak
+
+1. **Plan hazırlarken metin yaz** (`plan.service.ts` `hazirla`, `yenidenHazirla`, `degistir`; transaction DIŞINDA, gerekçe
+   paragrafıyla aynı desen — CLAUDE.md "Platform çağrısı transaction'ın İÇİNDE olamaz"):
+   `planUret` → (yeniden hazırla: `metinleriTasi(guncelSurum, yeni, { yasalUyari })`; değiştir: `degisiklikUygula` zaten
+   taşıyor) → `metinYazilacakSatirlar` → her satır için `reklamMetniYaz` (bağlam okuması kısa transaction'da:
+   `taslakBaglamiOku`daki marka/yasal uyarı okuması + satırın görselleri) → sonucu `ReklamMetniYazimi`ne çevir
+   (`!u` → `yz_kapali`; düşen/okunamayan → `metin_yazilamadi`; uydurulan sayı → `metin_denetimden_gecmedi`; tamam → kaynak
+   `{ tur: 'yz_metin', kimlik: model, zaman }`, `notlar`) → `reklamMetinleriniYerlestir(plan, yazimlar, { yasalUyari })` →
+   `gerekceEkle` → yazım transaction'ı (sürüm yeniden kontrol). `taslak-baglami.ts#BASLIK_EN_COK` yerine
+   `REKLAM_BASLIGI_EN_COK` (iki sayı ayrışırsa şema kırpılmış başlığı reddeder).
+2. **Worker metni OKUR, modeli ÇAĞIRMAZ:** `kurulum-isleyici.ts#taslakKur` içindeki `reklamMetniYaz` çağrısını sil;
+   `satirdanTaslak` metni onaylı satırdan zaten kopyalıyor. Metin boşsa (eski biçim) `pilotTaslakEksikleri` `KRT-METIN`
+   verir ve satır düşer — mesaj "planı yeniden hazırlayıp onaylatın". `kurulum-isleyici` artık `yz`ye ihtiyaç duymuyorsa
+   bağımlılıktan da çıkar. "Şimdi kur metni yeniden yazar" cümleleri (taslak uyum reddi) artık YANLIŞ: düzelt.
+3. Kilitleri çevir: `sozlesme.spec.ts` `DEVİR A2-1`, `DEVİR A2-2` (`it.fails` → `it`).
+4. **Testler kırmızı (25, tek kök neden):** `plan.service.spec.ts` (7), `kurulum.spec.ts` (12), `ajan4-kapi.spec.ts` (6)
+   "Plan müşteriye gönderilemez" ile düşüyor: metinsiz plan artık gönderilemez. Bu specler `yz = null` ile kuruluyor; sahte
+   bir `MetinUretici` (sabit JSON metin döndüren) verilmeli. `test/pilot-fixture.ts#metinliPlan` saf testler için hazır.
+5. **B-4 uygulaması:** `pilotSupurmesi` `kuruluyor` planlar için `kuruluyorPlanKarari` + satır başına
+   `takilanSatirKarari` (yeniden kuyrukta `deneme + 1`; `dusur`da `gecis` ile hedefe ve `TAKILAN_SATIR_MESAJI`);
+   `satir_yok` → planı yeniden kuyruğa; `sayimi_yenile` → `planDurumuGuncelle`. Worker `failed` dinleyicisi NİHAİ düşüşte
+   ara satırı süpürmeyi beklemeden `TAKILAN_SATIR_HEDEFI`ne çeker. `eylem()` ucuna `takilan_kurulumu_durdur`: ön koşul
+   `kuruluyorPlanKarari` (`takildi`/`satir_yok`), aynı transaction'da son olmayan satırları hedefe çek, sonra plan
+   `kismen_kuruldu`; eylemi `PILOT_EYLEM_UCU_EYLEMLERI`ne o zaman ekle. `ajan4-kapi.spec.ts` B-4 kilidi bugün
+   `kapat`/`iptal`a bakıyor; Ajan 4 yeni eylemi de saymalı.
+6. PDF (`plan-pdf.ts`): Meta satırının altına metin (başlık + ana metin) ya da boş nedeni; müşteri PDF'i de onaylanan
+   belgenin kopyası.
+
+### 12.5 DEVİR — Ajan 3 ne yapacak
+
+1. Plan belgesinde (`plan-belgesi.tsx`) her Meta satırının altında **metin önizlemesi**: görsel küçük resmi + başlık + ana
+   metin (`s.metinler.deger`, `varlikId` → satırın görseli). Boşsa `BosHucre` (`BOS_NEDENI_METNI`; Ajan 1 beş cümleyi
+   yalnız derleme kırılmasın diye ekledi, metni gözden geçir). Müşteri görünümünde de AYNI önizleme (onayladığı şey).
+2. Satır notlarındaki `METIN_NOTU_ONEKI` ("Reklam metni: …") notları ajans görünümünde metnin yanında.
+3. `musteriOzeti.cumleler` yeni cümleyi zaten taşıyor; ayrı bir metin yazma.
+4. `kuruluyor` planında `yapilabilir` `takilan_kurulumu_durdur` içerdiğinde "Kurulumu durdur" düğmesi (Ajan 2 ucu ekleyince);
+   `PilotEkranEylemi` birleşimine ekle.
+5. Tıklama sayımı değişmemeli (3 + 1): metin "Planı hazırla"nın içinde yazılıyor, yeni onay adımı YOK.
+
+### 12.6 Ölçülmedi
+
+- Gemini'nin plan anında üç satır için metin yazma süresi (bugün satır başına bir çağrı; `hazirla` süresi uzar).
+- `REKLAM_METNI_EN_COK = 1500` Meta'nın sınırı değil (canlıda ölçülmedi); saklama tavanı.
+- Eski biçim (`bicim: 1`) okuma yolu yalnız testte koştu; dal deploy edilmediği için üretimde v1 sürüm yok (Ajan 5
+  `SELECT count(*) FROM pilot_plan_surumleri WHERE icerik->>'bicim' = '1'` ile doğrulamalı).
+- Takılma eşiği (45 dk) ve 2 deneme hakkı ilk tahmin; büyük hesapta `motor.kur` süresi ölçülmedi.

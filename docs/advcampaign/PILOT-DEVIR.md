@@ -53,7 +53,7 @@ testlerden sonra **tam API paketi hiç sonuna kadar koşmadı** (makine yükü).
 | B-4 | kırmızı | Satır işi ara durumda (`prova/kuruluyor/...`) beklenmedik hatayla düşerse plan sonsuza dek "kuruluyor"da kalır, kısmi tekil indeks o ayın yeni planını kilitler. `worker.ts` failed dinleyicisi ve `kurulum-supurme.ts` yalnız `taslak`ı kapatıyor; `kuruluyor`dan ajans çıkışı yok | Ajan 2 (+ durum makinesi Ajan 1) |
 | B-1 | kırmızı (güvenli yöne) | `gercek-yayin.ts` `ajansOrgu` müşteri (`client_viewer`) bağlamında RLS yüzünden ajansı bulamıyor → anahtar açıkken bile müşteri onayı `kapali`ya düşüyor; Ç-6 fiilen çalışmıyor | Ajan 2 |
 | B-2 | sarı | `plan.service.ts` `detayKur` müşteri yanıtına `ajansNotu`, `ajansMesaji`, `yayinKipi` koyuyor (panel çizmiyor ama API sızdırıyor) | Ajan 2 |
-| B-3 | sarı | `shared/pilot/onay.ts` bütçe kontrolü beyan edilen `plan.toplam` ile; harcanacak olan satır toplamı | Ajan 1 |
+| B-3 | sarı | `shared/pilot/onay.ts` bütçe kontrolü beyan edilen `plan.toplam` ile; harcanacak olan satır toplamı | Ajan 1 — **KAPANDI 2026-10-08** (satır toplamı; test `it`) |
 | B-5 | düşük | `kurulum-isleyici.ts` `derle` kitle şablonunu `client_id` süzgeçsiz okuyor | Ajan 2 |
 
 Testle kilitlenmemiş gözlemler: `permission_overrides`'ta `strategy.approve:false` olan üyelik
@@ -61,7 +61,12 @@ Testle kilitlenmemiş gözlemler: `permission_overrides`'ta `strategy.approve:fa
 çağrılarında kota yok (H-09); atıf standardı onayda değil worker'da kontrol ediliyor (C-16);
 "değiştir" kutusunda yön/hedef satır doğrulanmıyor.
 
-## Bekleyen kullanıcı kararı (soruldu, cevap kaydedilmeden oturum kapandı)
+## Reklam metni kararı — KAPANDI 2026-10-08: seçenek (a)
+
+Metin plan hazırlanırken yazılır, planda görünür, onay özeti metni kapsar. Sözleşme Ajan 1'de bitti
+(MIMARI §12); uygulama Ajan 2 (§12.4) ve Ajan 3 (§12.5). Aşağıdaki metin kararın soruluş hâli.
+
+### (eski) Bekleyen kullanıcı kararı
 
 **Reklam metni ne zaman yazılsın?** Bugün Gemini metni müşteri onayından SONRA worker'da yazıyor;
 gerçek kipte metin kimse görmeden yayına çıkar ve onay özeti metni kapsamıyor (site metni üzerinden

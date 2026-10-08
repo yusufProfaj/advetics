@@ -56,10 +56,11 @@ export interface UyumSatiri {
 }
 
 /**
- * Denetçinin girdisi. İki an var: `plan` (onay öncesi; reklam metni henüz
- * yok) ve `taslak` (kurulum öncesi; metin yazılmış). Aynı kurallar ikisinde
- * de koşar; metne bakan kural planda metin bulamadığı için sessiz kalır ve
- * taslak anında yeniden koşar (TASARIM §10.2 "üç an").
+ * Denetçinin girdisi. İki an var: `plan` (onay öncesi) ve `taslak`
+ * (kurulum öncesi). Aynı kurallar ikisinde de koşar (TASARIM §10.2 "üç an").
+ * 2026-10-08'den (karar (a)) beri reklam metni PLANDA yazılıyor, yani metne
+ * bakan kurallar plan anında da metni görür; taslak anı aynı metni (onaylı
+ * satırdan kopya) bir kez daha denetler.
  */
 export interface UyumGirdisi {
   an: 'plan' | 'taslak';

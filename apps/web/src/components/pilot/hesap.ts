@@ -287,6 +287,13 @@ export const BOS_NEDENI_METNI: Record<BosNedeni, { ne: string; neYapmali: string
   kullanici_cikardi: { ne: 'Satır plandan çıkarıldı.', neYapmali: 'Tutarı dağıtılmamış kaldı.', hedef: null },
   harcanan_bilinmiyor: { ne: 'Bu ay harcanan okunamadı.', neYapmali: 'Senkronizasyon tamamlanınca planı yeniden hazırla.', hedef: 'yeniden_hazirla' },
   ay_butcesi_bitti: { ne: 'Bu ayın bütçesi harcandı.', neYapmali: 'Aylık Bütçe’yi artır ya da gelecek ay için hazırla.', hedef: 'butce' },
+  // Reklam metni planın parçası (karar (a), 2026-10-08). Ajan 1 yalnız cümleleri
+  // ekledi (derleme kırılmasın); metin önizlemesi Ajan 3'te.
+  metin_bekliyor: { ne: 'Reklam metni henüz yazılmadı.', neYapmali: 'Planı yeniden hazırla; metin yazılır.', hedef: 'yeniden_hazirla' },
+  metin_yazilamadi: { ne: 'Reklam metni yazılamadı.', neYapmali: 'Biraz sonra planı yeniden hazırla.', hedef: 'yeniden_hazirla' },
+  yz_kapali: { ne: 'Yapay zekâ bağlı değil.', neYapmali: 'Ajans ayarlarından yapay zekâ bağlanmalı.', hedef: null },
+  metin_denetimden_gecmedi: { ne: 'Reklam metni kontrolden geçmedi.', neYapmali: 'Marka bilgilerini kontrol et, sonra planı yeniden hazırla.', hedef: 'marka' },
+  plan_eski_bicim: { ne: 'Bu plan reklam metni taşımıyor.', neYapmali: 'Planı yeniden hazırla.', hedef: 'yeniden_hazirla' },
 };
 
 export function bosNedeniBaglantisi(neden: BosNedeni, clientId: string): string | null {

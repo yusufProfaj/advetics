@@ -1,4 +1,5 @@
 import { tutarGoster } from '../reklam/para';
+import { metinliSatirSayisi, planMetinEksikleri } from './metin';
 import type { PlanOnerisi } from './plan';
 import type { PilotPlanDurumu } from './plan';
 import type { UyumDurumu } from './uyum';
@@ -20,6 +21,11 @@ import type { UyumDurumu } from './uyum';
  *      SÖYLEMEZ (müşteriye "onaylandı" der), ajansa söyler (`ajansNotu`).
  *   4. Plan toplamı o ayın Aylık Bütçe'sini aşamaz; kurulamayan satır
  *      taşıyan plan onaya hiç gelmez.
+ *   5. REKLAM METNİ ONAYIN PARÇASI (karar (a), 2026-10-08): metni olmayan,
+ *      denetimden geçmeyen ya da TAZE yasal uyarıyı taşımayan Meta satırı
+ *      "kurulamayan satır" sayılır. Müşteriye onaylattığımız özet metni de
+ *      kapsıyor; metinsiz bir onay, kimsenin okumadığı bir reklamı yayına
+ *      sokardı.
  */
 
 /** Google günlük bütçeyi bazı günler 2 katına kadar aşabiliyor; ay sınırı 30,4 × günlük. [Canlıda doğrulanmadı.] */
@@ -83,6 +89,9 @@ export function musteriOzeti(p: PlanOnerisi): MusteriOzeti | null {
     enCok > toplam
       ? `Google bazı günler günlük bütçesinin iki katına kadar harcayabilir; en çok ${tutarGoster(enCok, para)} harcanabilir.`
       : `En çok ${tutarGoster(enCok, para)} harcanır; bu tutar aşılmaz.`,
+    // Müşteri metnin de onaylandığını BİLMELİ: aksi hâlde onayı "bütçeye
+    // evet" sanıp metni okumadan geçer ve kararın amacı boşa düşer.
+    ...(metinliSatirSayisi(p) > 0 ? ['Planda gördüğün reklam metinleri de onayın parçası; kampanyalar bu metinlerle yayınlanır.'] : []),
     'Onaylarsan kampanyalar kurulur ve başlangıç tarihinde açılır.',
   ];
   return {
@@ -147,6 +156,13 @@ export interface OnayKapisiGirdisi {
   ajansinKendiSirketi: boolean;
   /** Ajansın "Pilot gerçek yayın" anahtarı (TAZE okunur; okunamazsa false). */
   gercekYayinAcik: boolean;
+  /**
+   * Marka Merkezi'nin zorunlu yasal uyarısı (TAZE okunur; yoksa `null`).
+   * Varsayılanı YOK: unutulan bir çağrı derlemede kırılsın. Plan
+   * hazırlandıktan sonra uyarı eklenmiş/değişmişse eski metin onu taşımaz
+   * ve satır kurulamaz sayılır.
+   */
+  yasalUyari: string | null;
 }
 
 export type OnayRetKodu =
@@ -190,14 +206,28 @@ export function onayKapisi(g: OnayKapisiGirdisi): OnayKapisiSonucu {
       ret('GEREKCE', '', `Müşteri adına onayda gerekçe zorunlu (en az ${MUSTERI_ADINA_GEREKCE_EN_AZ} karakter).`);
     }
   }
+  // HARCANACAK OLAN SATIRLARIN TOPLAMI (Ajan 4 B-3). Beyan edilen
+  // `plan.toplam` platforma gitmiyor; giden satır tutarları. Bugün yalnız
+  // `degisiklikUygula` "satırlar ≤ toplam"ı tutuyor; toplamı tutarlı ama
+  // satırları şişmiş bir sürüm (elle yazım, ileride ikinci bir yazıcı)
+  // beyana bakan bir kapıdan geçerdi. Satır toplamı beyanı AŞIYORSA da ret:
+  // müşteri ekranında okunan toplam harcanacak olandan küçük olurdu.
+  const satirToplami = g.plan.satirlar.reduce((a, s) => a + BigInt(s.tutar.deger), 0n);
   if (g.aylikButceMicros === null) {
     ret('BUTCE_YOK', 'Bu ay için bütçe tanımlı değil; ajansın bilgilendirildi.', 'Dönemin Aylık Bütçe satırı yok ya da silinmiş.');
-  } else if (g.plan.toplam.dolu && BigInt(g.plan.toplam.deger) > g.aylikButceMicros) {
-    ret('BUTCE_ASIMI', 'Plan bu ayın bütçesini aşıyor; ajansın bilgilendirildi.', 'Plan toplamı Aylık Bütçe\'yi aşıyor (bütçe plan hazırlandıktan sonra düşürülmüş olabilir).');
+  } else if (satirToplami > g.aylikButceMicros) {
+    ret('BUTCE_ASIMI', 'Plan bu ayın bütçesini aşıyor; ajansın bilgilendirildi.', 'Kampanyaların toplamı Aylık Bütçe\'yi aşıyor (bütçe plan hazırlandıktan sonra düşürülmüş olabilir).');
+  } else if (g.plan.toplam.dolu && satirToplami > BigInt(g.plan.toplam.deger)) {
+    ret('BUTCE_ASIMI', 'Plan henüz hazır değil; ajansın bilgilendirildi.', 'Kampanyaların toplamı planın toplamından büyük; planı yeniden hazırla.');
   }
-  const kurulamayan = g.plan.satirlar.filter((s) => s.engeller.length > 0).length;
-  if (kurulamayan > 0 || g.plan.satirlar.length === 0) {
-    ret('KURULAMAYAN_SATIR', 'Plan henüz hazır değil; ajansın bilgilendirildi.', `${kurulamayan} satır kurulamıyor ya da plan boş.`);
+  // Metin eksikleri TEK DENETLEYİCİDEN (`metin.ts`), TAZE yasal uyarıyla.
+  // Satır engeli (`engeller`) ile metin eksiği aynı satırda olabilir; satır
+  // BİR KEZ sayılır.
+  const metinEksik = planMetinEksikleri(g.plan, { yasalUyari: g.yasalUyari });
+  const kurulamayanlar = new Set([...g.plan.satirlar.filter((s) => s.engeller.length > 0).map((s) => s.anahtar), ...metinEksik.map((x) => x.anahtar)]);
+  if (kurulamayanlar.size > 0 || g.plan.satirlar.length === 0) {
+    const metinNotu = metinEksik.length > 0 ? ` Reklam metni: ${[...new Set(metinEksik.map((x) => x.metin))].slice(0, 3).join(' · ')}.` : '';
+    ret('KURULAMAYAN_SATIR', 'Plan henüz hazır değil; ajansın bilgilendirildi.', `${kurulamayanlar.size} satır kurulamıyor ya da plan boş.${metinNotu}`);
   }
   if (g.uyum === 'engel') ret('UYUM_ENGEL', 'Plan yeniden kontrol ediliyor; ajansın bilgilendirildi.', 'Uyum denetçisinde ENGEL var.');
   if (g.uyum === 'uyari_isaret_bekliyor') ret('UYUM_UYARI', 'Plan yeniden kontrol ediliyor; ajansın bilgilendirildi.', 'İşaretlenmemiş UYARI var; ajans "Okudum" demeli.');

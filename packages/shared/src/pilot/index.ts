@@ -6,6 +6,7 @@
 export * from './kaynak';
 export * from './plan';
 export * from './plan-uret';
+export * from './metin';
 export * from './taslak';
 export * from './uyum';
 export * from './onay';

@@ -13,7 +13,7 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pglite-harness';
-import { planGirdisi, M, T } from '../../../test/pilot-fixture';
+import { metinliPlan, planGirdisi, M, T } from '../../../test/pilot-fixture';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { AuditService } from '../audit/audit.service';
 import type { MetinUretici } from '../../yapay-zeka/gemini';
@@ -484,21 +484,20 @@ describe('para zinciri', () => {
   });
 
   it('KARDEŞ: satır toplamı bütçeyi aşmayan plan BUTCE_ASIMI almaz', () => {
-    const p = planUret(planGirdisi());
-    const r = onayKapisi({ durum: 'musteride', surum: 1, icerikOzeti: 'a', istek: { surum: 1, icerikOzeti: 'a' }, rol: 'musteri', plan: p, aylikButceMicros: 120_000n * M, uyum: 'gecti', ajansinKendiSirketi: false, gercekYayinAcik: true });
+    // Metinli: karar (a) (2026-10-08) sonrası metinsiz Meta satırı kurulamaz sayılıyor.
+    const p = metinliPlan(planUret(planGirdisi()));
+    const r = onayKapisi({ durum: 'musteride', surum: 1, icerikOzeti: 'a', istek: { surum: 1, icerikOzeti: 'a' }, rol: 'musteri', plan: p, aylikButceMicros: 120_000n * M, uyum: 'gecti', ajansinKendiSirketi: false, gercekYayinAcik: true, yasalUyari: null });
     expect(r.tur).toBe('kabul');
   });
 
-  // BULGU B-3 (Ajan 1): `onayKapisi` bütçeyi BEYAN EDİLEN `plan.toplam` ile
-  // karşılaştırıyor; harcanacak olan SATIRLARIN toplamı. Bugün yalnız
-  // `degisiklikUygula` "satırlar ≤ toplam"ı tutuyor ve saklanan sürüm
-  // şeması bunu doğrulamıyor. Toplamı tutarlı, satırları şişmiş bir sürüm
-  // (elle yazım, ileride ikinci bir yazıcı) PARA HARCAYAN kapıdan geçer.
-  it.fails('BULGU B-3: satır toplamı Aylık Bütçe’yi aşan plan, beyan edilen toplam küçük olsa da BUTCE_ASIMI', () => {
-    const p = planUret(planGirdisi());
+  // BULGU B-3 (Ajan 1) — KAPANDI 2026-10-08: `onayKapisi` bütçeyi artık
+  // SATIRLARIN toplamıyla karşılaştırıyor (harcanacak olan o); satır
+  // toplamı beyan edilen toplamı aşarsa da ret. `it.fails` → `it`.
+  it('BULGU B-3: satır toplamı Aylık Bütçe’yi aşan plan, beyan edilen toplam küçük olsa da BUTCE_ASIMI', () => {
+    const p = metinliPlan(planUret(planGirdisi()));
     const sisik: PlanOnerisi = { ...p, satirlar: p.satirlar.map((s, i) => (i === 0 ? { ...s, tutar: { ...s.tutar, deger: (BigInt(s.tutar.deger) + 500_000n * M).toString() } } : s)) };
     expect(toplamSatir(sisik)).toBeGreaterThan(120_000n * M);
-    const r = onayKapisi({ durum: 'musteride', surum: 1, icerikOzeti: 'a', istek: { surum: 1, icerikOzeti: 'a' }, rol: 'musteri', plan: sisik, aylikButceMicros: 120_000n * M, uyum: 'gecti', ajansinKendiSirketi: false, gercekYayinAcik: true });
+    const r = onayKapisi({ durum: 'musteride', surum: 1, icerikOzeti: 'a', istek: { surum: 1, icerikOzeti: 'a' }, rol: 'musteri', plan: sisik, aylikButceMicros: 120_000n * M, uyum: 'gecti', ajansinKendiSirketi: false, gercekYayinAcik: true, yasalUyari: null });
     expect(r.tur === 'ret' && r.retler.map((x) => x.kod)).toContain('BUTCE_ASIMI');
   });
 });

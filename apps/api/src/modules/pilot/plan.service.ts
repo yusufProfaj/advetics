@@ -23,6 +23,7 @@ import {
   planOnerisiSchema,
   planUret,
   planUyumGirdisi,
+  saklananPlanOku,
   uyumDenetle,
   uyumDurumu,
   yayinKipi,
@@ -558,12 +559,16 @@ async function acikPlan(tx: Tx, clientId: string, donem: string): Promise<string
   return r?.id ?? null;
 }
 
-/** Saklanan sürüm ŞEMAYLA okunur: kaynaksız hücre ya da bozuk JSON burada patlar, ekranda değil. */
+/**
+ * Saklanan sürüm ŞEMAYLA okunur: kaynaksız hücre ya da bozuk JSON burada
+ * patlar, ekranda değil. `saklananPlanOku` eski biçimi (metinsiz) okur ve
+ * Meta satırlarını `plan_eski_bicim` engeliyle işaretler (onaylanamaz).
+ */
 export async function surumOku(tx: OkumaTx, planId: string, surum: number): Promise<PlanOnerisi> {
   const [s] = await tx.$queryRaw<Array<{ icerik: unknown }>>(Prisma.sql`
     SELECT icerik FROM pilot_plan_surumleri WHERE plan_id = ${planId}::uuid AND surum = ${surum}`);
   if (!s) throw new NotFoundException('Plan sürümü bulunamadı');
-  return planOnerisiSchema.parse(s.icerik) as PlanOnerisi;
+  return saklananPlanOku(s.icerik);
 }
 
 async function surumYaz(
@@ -697,5 +702,8 @@ function kapiKos(
     uyum: uyumDurumu(k.denetim, k.isaretler, p.icerik_ozeti),
     ajansinKendiSirketi: k.ajansinKendiSirketi,
     gercekYayinAcik: k.gercekYayinAcik,
+    // TAZE profilden (`kapiOku` her çağrıda okuyor): uyarı plan
+    // hazırlandıktan sonra değiştiyse eski metin kapıda düşer.
+    yasalUyari: k.profil.yasalUyari,
   });
 }

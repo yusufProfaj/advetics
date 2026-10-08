@@ -100,6 +100,15 @@ export function planUyumGirdisi(
     const metinler: UyumMetni[] = [{ alan: 'ad', metin: s.ad, uretici: SISTEM }];
     if (s.kitle?.dolu) metinler.push({ alan: 'kitle', metin: s.kitle.deger.ad, uretici: SISTEM });
     if (s.kelimeGrubu) for (const k of s.kelimeGrubu.kelimeler.deger) metinler.push({ alan: 'kelime', metin: k, uretici: SISTEM });
+    // REKLAM METNİ PLANDA (karar (a), 2026-10-08): metin artık onaydan önce
+    // var, yani metne bakan kurallar PLAN anında da koşar ve ENGEL/UYARI
+    // müşteriye gitmeden ajansın önüne düşer. Önceden bu kurallar ilk kez
+    // onaydan SONRA, işçide koşuyordu: onaylı plan uyumdan düşüyor ve
+    // müşteri "onayladım, kurulmadı" görüyordu.
+    if (s.metinler?.dolu) {
+      const uretici: UyumMetni['uretici'] = s.metinler.kaynak.tur === 'yz_metin' ? 'ai' : 'kullanici';
+      for (const m of s.metinler.deger) metinler.push({ alan: 'baslik', metin: m.baslik, uretici }, { alan: 'metin', metin: m.metin, uretici });
+    }
     return {
       yer: s.anahtar,
       platform: s.platform,

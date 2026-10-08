@@ -1,7 +1,8 @@
 import type { HedefKonum, OzelKategori } from '../reklam/meta/hedefleme';
 import type { NiyetKodu } from '../reklam/meta/niyetler';
-import { kanonikJson, metinUyariIceriyor } from '../reklam/taslak-alanlari';
+import { kanonikJson } from '../reklam/taslak-alanlari';
 import { bos, dolu, SAYI_URETEMEYEN_KAYNAKLAR, type Hucre, type Kaynak, type KaynakTuru, type Kaynakli } from './kaynak';
+import { reklamMetniEksikleri, type PlanReklamMetni } from './metin';
 import type { PilotPlatformu, PlanSatiri } from './plan';
 
 /**
@@ -12,7 +13,14 @@ import type { PilotPlatformu, PlanSatiri } from './plan';
  * müşterinin onayladığı "Meta yeni kitle 24.000 TL" bilgisi bir kez yazıya,
  * bir kez de modelin yorumuna giriyordu: iki kayıp noktası. Yeni yol VERİ:
  * onaylı plan satırı doğrudan taslak alanlarına kopyalanır, her alan
- * kaynağını taşır ve modelin yazdığı TEK şey reklam metnidir.
+ * kaynağını taşır.
+ *
+ * REKLAM METNİ DE PLANDAN (karar (a), 2026-10-08): metin plan hazırlanırken
+ * yazıldı, müşteri onu planda okudu ve onay özeti onu kapsıyor. Taslak
+ * metni ONAYLI SATIRDAN KOPYALAR; işçi modeli ÇAĞIRMAZ. İşçinin yeniden
+ * yazması, müşterinin görmediği bir metni onaylı kampanyaya koymak olurdu
+ * (kararın kapattığı yol). Kaynak (`yz_metin` + model) aynen taşınır: uyum
+ * denetçisi modele özgü kuralları kaynağa bakarak uyguluyor.
  *
  * Bütçe ve takvim `onayli_plan` kaynaklıdır (Ç-1: onaylı plan satırı
  * "kullanıcı kararı" sayılır). Konum kitle şablonundan, sayfa ve hesap
@@ -37,8 +45,8 @@ export interface PilotTaslak {
   butce: Kaynakli<{ tip: 'toplam' | 'gunluk'; micros: string }>;
   takvim: Kaynakli<{ baslangic: string; bitis: string }>;
   varliklar: Hucre<string[]> | null;
-  /** Varlık başına metin; yapay zekâ yazabilir (`yz_metin`), sayı alanı değil. */
-  metinler: Hucre<Array<{ varlikId: string | null; baslik: string; metin: string }>>;
+  /** Varlık başına metin; ONAYLI PLAN SATIRINDAN kopya (kaynağıyla). Sayı alanı değil. */
+  metinler: Hucre<PlanReklamMetni[]>;
   hedefAdres: Hucre<string>;
   formSablonuId: Hucre<string> | null;
   kelimeler: Kaynakli<string[]> | null;
@@ -90,8 +98,9 @@ export function satirdanTaslak(s: PlanSatiri, b: SatirdanTaslakBaglami): PilotTa
     butce: { deger: { ...s.butce.deger }, kaynak: onay },
     takvim: { deger: { ...b.takvim }, kaynak: onay },
     varliklar: s.varliklar === null ? null : s.varliklar.dolu ? dolu(s.varliklar.deger.map((v) => v.deger.id), onay) : bos('varlik_yok'),
-    // Metin henüz yok: yapay zekâ taslak açıldıktan sonra yazar.
-    metinler: bos('yz_yazmadi'),
+    // Onaylı satırın metni, KAYNAĞIYLA. Google satırı (Tur 3) metin
+    // taşımıyor: hücre "henüz yazılmadı" ile boş ve eksikler listesinde görünür.
+    metinler: s.metinler ? (s.metinler.dolu ? dolu(s.metinler.deger.map((m) => ({ ...m })), s.metinler.kaynak) : bos(s.metinler.emptyReason)) : bos('metin_bekliyor'),
     hedefAdres: k(b.hedefAdres, 'adres_yok'),
     formSablonuId: niyet === 'FORM' ? k(b.formSablonuId, 'form_yok') : null,
     kelimeler: s.kelimeGrubu ? { deger: [...s.kelimeGrubu.kelimeler.deger], kaynak: onay } : null,
@@ -162,16 +171,11 @@ export function pilotTaslakEksikleri(t: PilotTaslak, baglam: { yasalUyari?: stri
     if (!(t.hedefAdres.dolu && /^https:\/\/[^\s/]+\.[^\s]+/.test(t.hedefAdres.deger))) ekle('hedefAdres', 'SITE-ADRES', 'Site adresi https:// ile başlamalı');
   }
 
-  if (!t.metinler.dolu || t.metinler.deger.length === 0) ekle('metinler', 'KRT-METIN', 'Reklam metni yazılmadı');
-  else {
-    t.metinler.deger.forEach((m, i) => {
-      if (!m.baslik.trim()) ekle('metinler', 'KRT-METIN', `Metin ${i + 1}: başlık boş`);
-      if (!m.metin.trim()) ekle('metinler', 'KRT-METIN', `Metin ${i + 1}: ana metin boş`);
-      else if (baglam.yasalUyari && !metinUyariIceriyor(m.metin, baglam.yasalUyari)) {
-        ekle('metinler', 'YASAL-UYARI', `Metin ${i + 1}: zorunlu yasal uyarı metinde yok`);
-      }
-    });
-  }
+  // TEK DENETLEYİCİ (`metin.ts`): onay kapısı aynı fonksiyonu çağırıyor.
+  // Meta'da metinler satırın görselleriyle eşleştirilir; Google'da (metin
+  // reklamı, Tur 3) görsel eşleşmesi aranmaz.
+  const varlikIdleri = t.platform === 'meta' ? (t.varliklar?.dolu ? t.varliklar.deger : []) : null;
+  for (const x of reklamMetniEksikleri(t.metinler, { yasalUyari: baglam.yasalUyari, varlikIdleri })) ekle('metinler', x.kod, x.metin);
   return e;
 }
 

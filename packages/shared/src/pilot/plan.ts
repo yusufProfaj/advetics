@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { NIYET_KODLARI, type NiyetKodu } from '../reklam/meta/niyetler';
 import { HUNI_KATMANLARI, STRATEJI_PLATFORMLARI, type HuniKatmani, type StratejiPlatformu } from '../strateji/plan';
 import { AYRI_GRUP_HACIM_ESIGI } from '../strateji/kelime';
-import { BOS_NEDENLERI, hucreSchema, kaynakliSchema, pilotMicrosSchema, sayisalKaynakliSchema, type BosNedeni, type Hucre, type Kaynakli } from './kaynak';
+import { BOS_NEDENLERI, bos, hucreSchema, kaynakliSchema, pilotMicrosSchema, sayisalKaynakliSchema, type BosNedeni, type Hucre, type Kaynakli } from './kaynak';
+import { reklamMetniSchema, type PlanReklamMetni } from './metin';
 
 /**
  * ═══ PİLOT — AYLIK PLAN (yapay zekâ ile hesap yönetimi, Tur 1) ═══
@@ -155,6 +156,15 @@ export interface PlanSatiri {
   kelimeGrubu: { grup: string; kelimeler: Kaynakli<string[]>; aylikArama: Kaynakli<number> } | null;
   /** Meta satırında varlıklar; Google arama satırında `null` (metin reklamı). */
   varliklar: Hucre<Array<Kaynakli<{ id: string; ad: string }>>> | null;
+  /**
+   * REKLAM METNİ — ONAYIN PARÇASI (kullanıcı kararı (a), 2026-10-08).
+   * Meta satırında HER ZAMAN bir hücre: dolu (kaynak `yz_metin` ya da
+   * `kullanici`) ya da boş + `METIN_BOS_NEDENLERI`nden biri. Google arama
+   * satırında `null`: Tur 1'de Google kurulmuyor ve metni Tur 3'te ayrı bir
+   * biçim (RSA başlıkları) taşıyacak. Planın içerik özeti bu alanı da
+   * kapsar; metin değişirse onay düşer (`metin.ts`).
+   */
+  metinler: Hucre<PlanReklamMetni[]> | null;
   /** Satırın ay içindeki payı (micros, dizge). */
   tutar: Kaynakli<string>;
   /** Platforma gidecek bütçe biçimi (`META_DONEM_BUTCE_TIPI` / `GOOGLE_DONEM_BUTCE_TIPI`). */
@@ -176,8 +186,8 @@ export interface PlatformPayi {
 }
 
 export interface PlanOnerisi {
-  /** Şema sürümü: saklanan JSON'un hangi biçimde olduğu (okurken göç kararı). */
-  bicim: 1;
+  /** Şema sürümü (`PLAN_BICIMI`): saklanan JSON'un hangi biçimde olduğu; eskisi `saklananPlanOku` ile okunur. */
+  bicim: 2;
   clientId: string;
   donem: string;
   paraBirimi: string | null;
@@ -201,57 +211,116 @@ export interface PlanOnerisi {
 
 const kimlikAd = z.object({ id: z.string().uuid(), ad: z.string().min(1).max(200) }).strict();
 
+/**
+ * Saklanan JSON'un biçimi. 1 → 2 (2026-10-08): satıra `metinler` eklendi.
+ * Yeni sürüm HER ZAMAN `PLAN_BICIMI` ile yazılır; eski biçim yalnız
+ * OKUNUR (`saklananPlanOku`) ve onaylanamaz.
+ */
+export const PLAN_BICIMI = 2 as const;
+
+const planSatiriAlanlari = {
+  anahtar: z.string().min(3).max(200),
+  platform: z.enum(PILOT_PLATFORMLARI),
+  katman: z.enum(HUNI_KATMANLARI),
+  ad: z.string().min(1).max(200),
+  niyet: hucreSchema(z.enum(NIYET_KODLARI), { sayisal: false }),
+  kitle: hucreSchema(kimlikAd, { sayisal: false }).nullable(),
+  kelimeGrubu: z
+    .object({
+      grup: z.string().min(1).max(80),
+      kelimeler: kaynakliSchema(z.array(z.string().min(1).max(80)).min(1)),
+      aylikArama: sayisalKaynakliSchema(z.number().int().nonnegative()),
+    })
+    .strict()
+    .nullable(),
+  varliklar: hucreSchema(z.array(kaynakliSchema(kimlikAd)).max(SATIR_BASI_VARLIK), { sayisal: false }).nullable(),
+  tutar: sayisalKaynakliSchema(pilotMicrosSchema),
+  butce: sayisalKaynakliSchema(z.object({ tip: z.enum(['toplam', 'gunluk']), micros: pilotMicrosSchema }).strict()),
+  engeller: z.array(z.enum(BOS_NEDENLERI)),
+  notlar: z.array(z.string().max(300)),
+};
+
+/**
+ * Meta satırı metin hücresi TAŞIR, Google satırı taşımaz. "Meta satırında
+ * `null`" geçseydi, metni hiç yazılmamış bir satır kapıya "metin alanı yok"
+ * olarak gelirdi ve hangi kuralın bakacağı belirsiz kalırdı.
+ */
 export const planSatiriSchema = z
   .object({
-    anahtar: z.string().min(3).max(200),
-    platform: z.enum(PILOT_PLATFORMLARI),
-    katman: z.enum(HUNI_KATMANLARI),
-    ad: z.string().min(1).max(200),
-    niyet: hucreSchema(z.enum(NIYET_KODLARI), { sayisal: false }),
-    kitle: hucreSchema(kimlikAd, { sayisal: false }).nullable(),
-    kelimeGrubu: z
-      .object({
-        grup: z.string().min(1).max(80),
-        kelimeler: kaynakliSchema(z.array(z.string().min(1).max(80)).min(1)),
-        aylikArama: sayisalKaynakliSchema(z.number().int().nonnegative()),
-      })
-      .strict()
-      .nullable(),
-    varliklar: hucreSchema(z.array(kaynakliSchema(kimlikAd)).max(SATIR_BASI_VARLIK), { sayisal: false }).nullable(),
-    tutar: sayisalKaynakliSchema(pilotMicrosSchema),
-    butce: sayisalKaynakliSchema(z.object({ tip: z.enum(['toplam', 'gunluk']), micros: pilotMicrosSchema }).strict()),
-    engeller: z.array(z.enum(BOS_NEDENLERI)),
-    notlar: z.array(z.string().max(300)),
+    ...planSatiriAlanlari,
+    metinler: hucreSchema(z.array(reklamMetniSchema).min(1).max(SATIR_BASI_VARLIK), { sayisal: false }).nullable(),
   })
+  .strict()
+  .refine((s) => (s.platform === 'meta') === (s.metinler !== null), {
+    message: 'Meta satırı reklam metni hücresi taşır; Google satırı taşımaz',
+    path: ['metinler'],
+  });
+
+const planOnerisiAlanlari = {
+  clientId: z.string().uuid(),
+  donem: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  paraBirimi: z.string().regex(/^[A-Z]{3}$/).nullable(),
+  takvim: z.object({ baslangic: z.string(), bitis: z.string() }).strict().nullable(),
+  toplam: hucreSchema(pilotMicrosSchema, { sayisal: true }),
+  platformlar: z.array(
+    z
+      .object({
+        platform: z.enum(PILOT_PLATFORMLARI),
+        payBaz: sayisalKaynakliSchema(z.number().int().min(0).max(10_000)),
+        tutar: sayisalKaynakliSchema(pilotMicrosSchema),
+        beklenenSonuc: hucreSchema(z.number().int().nonnegative(), { sayisal: true }),
+        gerekce: z.string().max(300),
+      })
+      .strict(),
+  ),
+  disaridaKalanlar: z.array(z.object({ platform: z.enum(PILOT_PLATFORMLARI), neden: z.enum(BOS_NEDENLERI) }).strict()),
+  dagitilmamis: z.object({ micros: pilotMicrosSchema, nedenler: z.array(z.enum(BOS_NEDENLERI)) }).strict(),
+  beklenenSonuc: hucreSchema(z.number().int().nonnegative(), { sayisal: true }),
+  engeller: z.array(z.enum(BOS_NEDENLERI)),
+  ozetMetni: hucreSchema(z.string().max(1200), { sayisal: false }),
+};
+
+/** YAZILAN biçim (ve güncel okuma). Yeni sürüm yalnız bundan geçerek saklanır. */
+export const planOnerisiSchema = z
+  .object({ ...planOnerisiAlanlari, bicim: z.literal(PLAN_BICIMI), satirlar: z.array(planSatiriSchema).max(30) })
   .strict();
 
-export const planOnerisiSchema = z
-  .object({
-    bicim: z.literal(1),
-    clientId: z.string().uuid(),
-    donem: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
-    paraBirimi: z.string().regex(/^[A-Z]{3}$/).nullable(),
-    takvim: z.object({ baslangic: z.string(), bitis: z.string() }).strict().nullable(),
-    toplam: hucreSchema(pilotMicrosSchema, { sayisal: true }),
-    platformlar: z.array(
-      z
-        .object({
-          platform: z.enum(PILOT_PLATFORMLARI),
-          payBaz: sayisalKaynakliSchema(z.number().int().min(0).max(10_000)),
-          tutar: sayisalKaynakliSchema(pilotMicrosSchema),
-          beklenenSonuc: hucreSchema(z.number().int().nonnegative(), { sayisal: true }),
-          gerekce: z.string().max(300),
-        })
-        .strict(),
-    ),
-    disaridaKalanlar: z.array(z.object({ platform: z.enum(PILOT_PLATFORMLARI), neden: z.enum(BOS_NEDENLERI) }).strict()),
-    satirlar: z.array(planSatiriSchema).max(30),
-    dagitilmamis: z.object({ micros: pilotMicrosSchema, nedenler: z.array(z.enum(BOS_NEDENLERI)) }).strict(),
-    beklenenSonuc: hucreSchema(z.number().int().nonnegative(), { sayisal: true }),
-    engeller: z.array(z.enum(BOS_NEDENLERI)),
-    ozetMetni: hucreSchema(z.string().max(1200), { sayisal: false }),
-  })
+/** Eski biçim (metinsiz). YALNIZ okuma; `saklananPlanOku` dışında kullanılmaz. */
+const planOnerisiV1Schema = z
+  .object({ ...planOnerisiAlanlari, bicim: z.literal(1), satirlar: z.array(z.object(planSatiriAlanlari).strict()).max(30) })
   .strict();
+
+/**
+ * Saklanan sürümü OKUR. `pilot_plan_surumleri.icerik` için TEK kapı; API'nin
+ * `surumOku`su bunu çağırır, `planOnerisiSchema.parse`ı doğrudan değil.
+ *
+ * ESKİ BİÇİM (1) SESSİZCE GEÇMEZ: metin taşımayan bir plan okunurken Meta
+ * satırları `plan_eski_bicim` nedeniyle BOŞ metin hücresi ve aynı adlı
+ * engel alır. Onay kapısı onu "kurulamayan satır" sayar, ekran "planı
+ * yeniden hazırla" der. Eski planı metinsiz onaylatmak, kararın (a) kapattığı
+ * yolu (kimsenin görmediği metin) geri açmak olurdu. Okunan nesne
+ * BELLEKTE yükseltilir; saklanan JSON ve `icerik_ozeti` değişmez (özet
+ * saklanan içerikten alınmıştı ve onay onunla karşılaştırılıyor).
+ *
+ * Bilinmeyen biçim PATLAR (Zod): sessizce en yakın biçime düşmek, şemanın
+ * yakalamak için orada olduğu bozulmayı gizlerdi.
+ */
+export function saklananPlanOku(icerik: unknown): PlanOnerisi {
+  const bicim = (icerik as { bicim?: unknown } | null)?.bicim;
+  if (bicim === 1) {
+    const v1 = planOnerisiV1Schema.parse(icerik);
+    return {
+      ...(v1 as unknown as Omit<PlanOnerisi, 'bicim' | 'satirlar'>),
+      bicim: PLAN_BICIMI,
+      satirlar: (v1.satirlar as unknown as Array<Omit<PlanSatiri, 'metinler'>>).map((s) =>
+        s.platform === 'meta'
+          ? { ...s, metinler: bos('plan_eski_bicim'), engeller: s.engeller.includes('plan_eski_bicim') ? s.engeller : [...s.engeller, 'plan_eski_bicim'] }
+          : { ...s, metinler: null },
+      ),
+    };
+  }
+  return planOnerisiSchema.parse(icerik) as PlanOnerisi;
+}
 
 // ─── Plan durum makinesi ───────────────────────────────────────────────────
 
@@ -268,6 +337,7 @@ export const planOnerisiSchema = z
  *                                           │
  *                                        kapat(ajans) ──► kapatildi (SON)
  *   taslak | musteride | onaylandi ──iptal(ajans | sistem: dönem geçti)──► iptal (SON)
+ *   kuruluyor ──takilan_kurulumu_durdur(ajans | sistem; YALNIZ takıldıysa)──► kismen_kuruldu
  *
  * ONAYLANAN ŞEY SÜRÜMÜN ÖZETİ (hash). `onayla` isteği sürüm numarasını ve
  * `planKanonikIcerik` özetini taşır; sunucu ikisini de saklanan sürümle
@@ -282,6 +352,21 @@ export const planOnerisiSchema = z
  * son olmayan bütün durumları kapsar. Her birinin çıkışı var ve testte
  * kilitli (`kismen_kuruldu` → `kapat`); çıkışı olmayan bir ara durum o ay
  * için kalıcı kilit olurdu (boost `active` dersi).
+ *
+ * `kuruluyor`un ÇIKIŞI (Ajan 4 B-4, 2026-10-08): önceden yalnız worker'ın
+ * sayımı (`kurulum_bitti`/`kurulum_kismen`) çıkarıyordu. Bir satır işi ara
+ * durumda (`prova`, `kuruluyor`, `geri_okundu_ayni`, `aciliyor`) beklenmedik
+ * bir hatayla ölürse sayım hiç "bitti" demiyor ve plan sonsuza dek
+ * `kuruluyor`da kalıp o ayı kilitliyordu. İki katman:
+ *   1. SATIR: süpürme yaşlı ara satırı önce yeniden kuyruğa alır, deneme
+ *      bitince son bir duruma çeker (`takilanSatirKarari`, kurulum.ts).
+ *   2. PLAN: `takilan_kurulumu_durdur` — ajans (ya da süpürme) planı
+ *      `kismen_kuruldu`ya alır; oradan bilinen iki çıkış var: "Şimdi kur"
+ *      (`yeniden_dene`) ve "Vazgeç" (`kapat`). YALNIZ `kuruluyorPlanKarari`
+ *      `takildi`/`satir_yok` dediğinde: canlı bir işin altından planı çekmek,
+ *      platformda açılan kampanyayı kapatılmış bir plana bağlı bırakırdı.
+ *   `kuruluyor`dan doğrudan `kapat`/`iptal` YOK: arada canlı bir işçi
+ *   olabilir ve önce satırların son duruma inmesi gerekiyor.
  */
 export const PILOT_PLAN_DURUMLARI = [
   'taslak',
@@ -310,6 +395,7 @@ export const PILOT_PLAN_EYLEMLERI = [
   'yeniden_dene',
   'kapat',
   'iptal',
+  'takilan_kurulumu_durdur',
 ] as const;
 export type PilotPlanEylemi = (typeof PILOT_PLAN_EYLEMLERI)[number];
 
@@ -329,6 +415,10 @@ export const PILOT_PLAN_GECISLERI = {
   // `onaylandi`dan iptal YALNIZ kurulum başlamadan: kurulan bir satırı iptal
   // etmek platformda duran kampanyayı sahipsiz bırakır.
   iptal: { kaynak: ['taslak', 'musteride', 'onaylandi'], hedef: 'iptal', yazan: ['ajans', 'sistem'] },
+  // Sunucu ön koşulu: `kuruluyorPlanKarari(...).tur` `takildi` ya da
+  // `satir_yok`; aynı istekte son olmayan satırlar `TAKILAN_SATIR_HEDEFI`ne
+  // çekilir. Ön koşulsuz uygulanırsa canlı işin altından plan kayar.
+  takilan_kurulumu_durdur: { kaynak: ['kuruluyor'], hedef: 'kismen_kuruldu', yazan: ['ajans', 'sistem'] },
 } as const satisfies Record<
   PilotPlanEylemi,
   { kaynak: readonly PilotPlanDurumu[]; hedef: PilotPlanDurumu; yazan: readonly GecisYazani[] }

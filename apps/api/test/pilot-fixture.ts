@@ -1,4 +1,4 @@
-import type { PlanUretGirdisi, UyumProfili } from '@advetics/shared';
+import { reklamMetinleriniYerlestir, type PlanOnerisi, type PlanUretGirdisi, type ReklamMetniYazimi, type UyumProfili } from '@advetics/shared';
 
 /**
  * Pilot testlerinin ortak girdisi: sözleşme testindeki örnek workspace'in
@@ -60,4 +60,27 @@ export function temizProfil(over: Partial<UyumProfili> = {}): UyumProfili {
     cerezRizasiBeyani: null,
     ...over,
   };
+}
+
+/**
+ * Metni yazılmış plan (karar (a), 2026-10-08): `planUret` Meta satırlarını
+ * "metin bekliyor" engeliyle üretir ve böyle bir plan onaya gelemez. Onay
+ * kapısını sınayan testler modelin yerine bu yerleştirmeyi kullanır; metin
+ * satırın İLK görseline bağlı ve (verildiyse) yasal uyarıyı taşır. Gerçek
+ * yerleştirme fonksiyonundan geçer, yani denetimden geçmeyen bir fixture
+ * metni de testte boş hücre olarak görünür.
+ */
+export function metinliPlan(p: PlanOnerisi, yasalUyari: string | null = null): PlanOnerisi {
+  const y = new Map<string, ReklamMetniYazimi>();
+  for (const s of p.satirlar) {
+    if (s.platform !== 'meta') continue;
+    const varlik = s.varliklar?.dolu ? s.varliklar.deger[0]!.deger.id : null;
+    y.set(s.anahtar, {
+      tur: 'tamam',
+      metinler: [{ varlikId: varlik, baslik: 'Taze kahve', metin: `${yasalUyari ? `${yasalUyari} ` : ''}Kahve makinesinde yeni sezon.` }],
+      kaynak: { tur: 'yz_metin', kimlik: 'test-modeli', zaman: T },
+      notlar: [],
+    });
+  }
+  return reklamMetinleriniYerlestir(p, y, { yasalUyari });
 }
