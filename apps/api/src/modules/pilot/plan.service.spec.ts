@@ -1,12 +1,15 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resolvePermissions, type TenantContext } from '@advetics/shared';
+import { planKanonikIcerik, ROLES, resolvePermissions, type TenantContext } from '@advetics/shared';
 import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { MetinUretici } from '../../yapay-zeka/gemini';
 import type { PilotKurulumKuyrugu } from './kurulum-kuyrugu';
-import { PilotPlanService, yapilabilirEylemler } from './plan.service';
+import { ATIF_YOK_MESAJI, onayYetkisiVar, PilotPlanService, yapilabilirEylemler } from './plan.service';
+import { PilotVarlikService } from './plan-varlik';
+import { metinSatirlari, planPdf } from './plan-pdf';
 import type { ArgumentsHost } from '@nestjs/common';
 import { AllExceptionsFilter } from '../../common/filters/all-exceptions.filter';
+import { AuditService } from '../audit/audit.service';
 
 /**
  * ═══ PİLOT PLAN SERVİSİ — gerçek şema (PGlite), sahte Gemini ═══
@@ -19,9 +22,19 @@ let h: Harness;
 let svc: PilotPlanService;
 const kuyruk = { planEkle: vi.fn<(id: string, tetik: string, yeniden?: boolean) => Promise<void>>() };
 let yzCevabi: string | null = null;
+/**
+ * Reklam metni (karar (a)) plan anında yazılıyor: metin isteği SABİT bir
+ * JSON metinle cevaplanır (testlerin sınadığı şey gerekçe/çeviri kararı,
+ * metin değil). `metinCevabi = null` metin çağrısını düşürür.
+ */
+let metinCevabi: string | null = JSON.stringify({ metinler: [{ baslik: 'Taze kahve', metin: 'Sabahların yeni tadı.' }] });
 const yz: MetinUretici = {
   model: 'sahte-gemini',
-  uret: vi.fn(async () => {
+  uret: vi.fn(async (g: { sistem: string }) => {
+    if (g.sistem.includes('reklam metni yazıyorsun')) {
+      if (metinCevabi === null) throw new Error('model düştü');
+      return { parcalar: [{ text: metinCevabi }], sebep: 'bitti' as const, aciklama: null, girdiToken: 1, ciktiToken: 1, onbellekToken: 0 };
+    }
     if (yzCevabi === null) throw new Error('model düştü');
     return { parcalar: [{ text: yzCevabi }], sebep: 'bitti' as const, aciklama: null, girdiToken: 1, ciktiToken: 1, onbellekToken: 0 };
   }),
@@ -46,7 +59,7 @@ const MUSTERI = { ...AJANS, orgId: IDS.org, isOrgAdmin: false, role: 'client_vie
 beforeAll(async () => {
   h = await createHarness();
   const prisma = { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
-  svc = new PilotPlanService(prisma, kuyruk as unknown as PilotKurulumKuyrugu, yz);
+  svc = new PilotPlanService(prisma, kuyruk as unknown as PilotKurulumKuyrugu, yz, new AuditService(null as never));
 }, 60_000);
 afterAll(async () => h?.close());
 
@@ -54,11 +67,15 @@ beforeEach(async () => {
   kuyruk.planEkle.mockReset();
   kuyruk.planEkle.mockResolvedValue(undefined);
   yzCevabi = null;
+  metinCevabi = JSON.stringify({ metinler: [{ baslik: 'Taze kahve', metin: 'Sabahların yeni tadı.' }] });
   await h.reset();
   await seedTenant(h);
+  // "Tüm şirketler" ev şirketi gerçek bir satır (denetim kaydı ctx.orgId'ye yazılıyor).
+  await h.q(`INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Ev', 'ev', now())`, [AJANS.orgId]);
   await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'Öteki', 'oteki', now())`, [OTEKI, IDS.org]);
   // Gerçek yayın anahtarı AÇIK (varsayılan kapalı; kapalı hâli ayrı testte).
-  await h.q(`INSERT INTO ajans_ayari (org_id, pilot_gercek_yayin, pilot_gercek_yayin_at, pilot_gercek_yayin_sebebi) VALUES ($1, true, now(), 'test kurulumu')`, [IDS.org]);
+  // Atıf standardı seçili: C-16'dan beri onay kapısı ona bakıyor (ayrı testte yok hâli).
+  await h.q(`INSERT INTO ajans_ayari (org_id, atif_standardi, atif_secim_at, pilot_gercek_yayin, pilot_gercek_yayin_at, pilot_gercek_yayin_sebebi) VALUES ($1, 'tik7', now(), true, now(), 'test kurulumu')`, [IDS.org]);
   // Özel kategori sorusu CEVAPLANDI ("Hayır"); sektör beyanlı.
   await h.q(`UPDATE clients SET ozel_kategori_beyan_zamani = now() WHERE id = $1`, [IDS.client]);
   await h.q(`INSERT INTO monthly_budgets (id, org_id, client_id, month, amount_micros, currency, updated_at) VALUES (gen_random_uuid(), $1, $2, '2026-11-01', 120000000000, 'TRY', now())`, [IDS.org, IDS.client]);
@@ -168,7 +185,9 @@ describe('gönder → onayla', () => {
     expect(m.yapilabilir.sort()).toEqual(['degisiklik_iste', 'onayla']);
     await expect(svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: 'f'.repeat(64) }, SIMDI)).rejects.toThrow(/onaylanamıyor/);
     const o = await svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: m.plan.icerikOzeti }, SIMDI);
-    expect(o.plan).toMatchObject({ durum: 'onaylandi', yayinKipi: 'gercek', onay: { rol: 'musteri' } });
+    // Kip yazıldı ama MÜŞTERİ yanıtında yok (B-2); ajans görünümünde var.
+    expect(o.plan).toMatchObject({ durum: 'onaylandi', yayinKipi: null, onay: { rol: 'musteri' } });
+    expect((await svc.detay(AJANS, id, SIMDI)).plan.yayinKipi).toBe('gercek');
     expect(kuyruk.planEkle).toHaveBeenCalledWith(id, 'onay', false);
     const [p] = await h.q<{ onaylanan_ozet: string; onay_denetim_id: string | null }>('SELECT onaylanan_ozet, onay_denetim_id::text FROM pilot_planlari WHERE id = $1', [id]);
     expect(p!.onaylanan_ozet).toBe(m.plan.icerikOzeti);
@@ -241,7 +260,8 @@ describe('gerçek yayın anahtarı', () => {
     expect(a.onayKapisi).toMatchObject({ tur: 'kabul', kip: 'test' });
     expect(a.onayKapisi?.tur === 'kabul' && a.onayKapisi.ajansNotu).toContain('anahtarı kapalı');
     const o = await svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: oz }, SIMDI);
-    expect(o.plan.yayinKipi).toBe('test');
+    expect(o.plan.yayinKipi).toBeNull();
+    expect((await svc.detay(AJANS, id, SIMDI)).plan.yayinKipi).toBe('test');
     expect(JSON.stringify(o.musteriOzeti)).not.toContain('anahtar');
   });
 
@@ -284,5 +304,197 @@ describe('yapılabilir eylemler', () => {
   });
   it('kısmen kurulmuş planda ajans yeniden dener ya da kapatır', () => {
     expect(yapilabilirEylemler({ durum: 'kismen_kuruldu', rol: 'ajans', izinler: izin, gonderilebilir: false, isaretBekleyen: false, onaylanabilir: false }).sort()).toEqual(['kapat', 'yeniden_dene']);
+  });
+});
+
+// ─── Ajan 2, 2026-10-08: karar (a) ve Ajan 4 gözlemleri ─────────────────────
+
+const metinIstekleri = () => (yz.uret as ReturnType<typeof vi.fn>).mock.calls.filter((c) => (c[0] as { sistem: string }).sistem.includes('reklam metni yazıyorsun')).length;
+const gonderVeOnayaKadar = async () => {
+  const { id } = await hazirla();
+  await svc.eylem(AJANS, id, { eylem: 'musteriye_gonder', surum: 1 }, SIMDI);
+  return { id, oz: (await svc.detay(MUSTERI, id, SIMDI)).plan.icerikOzeti };
+};
+
+describe('reklam metni plan anında (karar (a))', () => {
+  it('KRİTİK: "Planı hazırla" Meta satırının metnini yazar, görsele bağlar, kaynağıyla; müşteri de görür', async () => {
+    const { id } = await hazirla();
+    const a = await svc.detay(AJANS, id, SIMDI);
+    const meta = a.icerik.satirlar.filter((s) => s.platform === 'meta');
+    expect(meta.length).toBeGreaterThan(0);
+    for (const s of meta) {
+      expect(s.metinler).toMatchObject({ dolu: true, kaynak: { tur: 'yz_metin', kimlik: 'sahte-gemini' } });
+      expect(s.metinler?.dolu && s.metinler.deger[0]).toEqual({ varlikId: VARLIK, baslik: 'Taze kahve', metin: 'Sabahların yeni tadı.' });
+      expect(s.engeller).toEqual([]);
+    }
+    // Müşterinin onayladığı belge metni taşıyor ve özet onu kapsıyor.
+    const m = await svc.detay(MUSTERI, id, SIMDI);
+    expect(m.icerik.satirlar.filter((s) => s.platform === 'meta').every((s) => s.metinler?.dolu)).toBe(true);
+    expect(planKanonikIcerik(m.icerik)).toContain('Sabahların yeni tadı.');
+  });
+
+  it('KRİTİK: metin YALNIZ görsele bağlanır — video (Tur 1 kurmuyor) satırda olsa da metin ona bağlanmaz', async () => {
+    const VIDEO = '88888888-0000-4000-8000-000000000002';
+    await h.q(
+      `INSERT INTO assets (id, org_id, client_id, kind, name, file_name, mime_type, byte_size, width, height, storage_key, content_hash, created_at, updated_at)
+       VALUES ($1, $2, $3, 'video', 'Video', 'v.mp4', 'video/mp4', 1, 1080, 1080, 'k/v', 'aaaaaaaaaaaaaaaa2', now() + interval '1 day', now())`,
+      [VIDEO, IDS.org, IDS.client],
+    );
+    const { id } = await hazirla();
+    const meta = (await svc.detay(AJANS, id, SIMDI)).icerik.satirlar.filter((s) => s.platform === 'meta');
+    // Kardeş: video gerçekten satırda (yoksa iddia boşa düşerdi).
+    expect(meta.some((s) => s.varliklar?.dolu && s.varliklar.deger.some((v) => v.deger.id === VIDEO))).toBe(true);
+    for (const s of meta) {
+      expect(s.metinler?.dolu).toBe(true);
+      expect(s.metinler?.dolu && s.metinler.deger.map((m) => m.varlikId)).not.toContain(VIDEO);
+    }
+  });
+
+  it('KRİTİK: model metni yazamazsa plan yine üretilir ama satır NEDENİYLE boş ve plan müşteriye GÖNDERİLEMEZ', async () => {
+    metinCevabi = null;
+    const { id } = await hazirla();
+    const a = await svc.detay(AJANS, id, SIMDI);
+    const s = a.icerik.satirlar.find((x) => x.platform === 'meta')!;
+    expect(s.metinler).toEqual({ dolu: false, emptyReason: 'metin_yazilamadi' });
+    expect(s.engeller).toContain('metin_yazilamadi');
+    expect(s.notlar.some((n) => n.includes('model düştü'))).toBe(true);
+    expect(a.yapilabilir).not.toContain('musteriye_gonder');
+    await expect(svc.eylem(AJANS, id, { eylem: 'musteriye_gonder', surum: 1 }, SIMDI)).rejects.toThrow(/gönderilemez/);
+  });
+
+  it('KRİTİK: modelin uydurduğu sayı metni YAZDIRMAZ (metin_denetimden_gecmedi); yapay zekâ yoksa yz_kapali', async () => {
+    metinCevabi = JSON.stringify({ metinler: [{ baslik: 'Kahve', metin: 'Bu hafta %40 indirim' }] });
+    const { id } = await hazirla();
+    expect((await svc.detay(AJANS, id, SIMDI)).icerik.satirlar.find((x) => x.platform === 'meta')!.metinler).toEqual({ dolu: false, emptyReason: 'metin_denetimden_gecmedi' });
+    await h.q(`UPDATE pilot_planlari SET durum = 'iptal'`);
+    const prisma = { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
+    const yzsiz = new PilotPlanService(prisma, kuyruk as unknown as PilotKurulumKuyrugu, null, new AuditService(null as never));
+    const b = await yzsiz.hazirla(AJANS, { clientId: IDS.client, donem: '2026-11' }, SIMDI);
+    expect((await yzsiz.detay(AJANS, b.id, SIMDI)).icerik.satirlar.find((x) => x.platform === 'meta')!.metinler).toEqual({ dolu: false, emptyReason: 'yz_kapali' });
+  });
+
+  it('KRİTİK: yalnız tutar değişince metin KORUNUR ve model çağrılmaz; yeniden hazırla da korur; yasal uyarı sonradan eklenirse YENİDEN yazılır', async () => {
+    const { id } = await hazirla();
+    const anahtar = (await svc.detay(AJANS, id, SIMDI)).icerik.satirlar.find((x) => x.platform === 'meta')!.anahtar;
+    const once = metinIstekleri();
+    const d2 = await svc.degistir(AJANS, id, { surum: 1, degisiklikler: [{ tur: 'satir_tutari_fark', anahtar, farkMicros: '1000000', yon: 'azalt' }] }, SIMDI);
+    expect(metinIstekleri()).toBe(once);
+    expect(d2.icerik.satirlar.find((x) => x.anahtar === anahtar)!.metinler).toMatchObject({ dolu: true });
+    const d3 = await svc.yenidenHazirla(AJANS, id, { surum: 2, onay: true }, SIMDI);
+    expect(metinIstekleri()).toBe(once);
+    expect(d3.icerik.satirlar.find((x) => x.anahtar === anahtar)!.metinler).toMatchObject({ dolu: true });
+    // Marka Merkezi'ne yasal uyarı eklendi: eski metin onu taşımıyor → yeniden yazılır (sunucu başa ekler).
+    await h.q(`UPDATE client_profiles SET yasal_uyari = 'Yatırım tavsiyesi değildir.' WHERE client_id = $1`, [IDS.client]);
+    const d4 = await svc.yenidenHazirla(AJANS, id, { surum: 3, onay: true }, SIMDI);
+    expect(metinIstekleri()).toBeGreaterThan(once);
+    const m = d4.icerik.satirlar.find((x) => x.anahtar === anahtar)!.metinler;
+    expect(m?.dolu && m.deger[0]!.metin.startsWith('Yatırım tavsiyesi değildir.')).toBe(true);
+  });
+
+  it('PDF metni taşıyor: her Meta kampanyası başlık + ana metinle, boşsa nedeniyle; belge üretiliyor', async () => {
+    const { id } = await hazirla();
+    const d = await svc.detay(AJANS, id, SIMDI);
+    const ss = metinSatirlari(d);
+    expect(ss).toContainEqual({ tur: 'baslik', metin: 'Başlık: Taze kahve' });
+    expect(ss).toContainEqual({ tur: 'metin', metin: 'Sabahların yeni tadı.' });
+    expect(ss.filter((x) => x.tur === 'kampanya')).toHaveLength(d.icerik.satirlar.filter((x) => x.platform === 'meta').length);
+    const bos = { ...d, icerik: { ...d.icerik, satirlar: d.icerik.satirlar.map((s) => (s.platform === 'meta' ? { ...s, metinler: { dolu: false as const, emptyReason: 'metin_yazilamadi' as const } } : s)) } };
+    expect(metinSatirlari(bos).filter((x) => x.tur === 'bos').map((x) => x.metin)[0]).toMatch(/yazılamadı/);
+    const pdf = await planPdf({ workspace: 'Test', detay: d });
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+  });
+});
+
+describe('onay yetkisi, denetim kaydı, atıf (Ajan 4 gözlemleri)', () => {
+  it('KRİTİK: publish taşıyan her rol approve’u da ROLDEN taşıyor (override kuralının ön kabulü)', () => {
+    for (const r of ROLES) {
+      const p = resolvePermissions(r);
+      if (p.has('strategy.publish')) expect(p.has('strategy.approve'), r).toBe(true);
+    }
+  });
+
+  it('KRİTİK: override ile strategy.approve kapatılmış üyelik onaylayamaz ve düğmeyi görmez (publish rolden gelse de)', async () => {
+    const { id, oz } = await gonderVeOnayaKadar();
+    const kapali = { ...MUSTERI, permissions: [...resolvePermissions('client_viewer', { 'strategy.approve': false })] } as unknown as TenantContext;
+    expect(kapali.permissions).toContain('strategy.publish');
+    expect(onayYetkisiVar(kapali.permissions)).toBe(false);
+    expect((await svc.detay(kapali, id, SIMDI)).yapilabilir).not.toContain('onayla');
+    await expect(svc.onayla(kapali, id, { surum: 1, icerikOzeti: oz }, SIMDI)).rejects.toThrow(/yetkisi kapatılmış/);
+    expect((await h.q<{ durum: string }>('SELECT durum FROM pilot_planlari WHERE id = $1', [id]))[0]!.durum).toBe('musteride');
+    expect(kuyruk.planEkle).not.toHaveBeenCalled();
+  });
+
+  it('KRİTİK: ajans müşteri adına onaylayınca audit_logs’a gerekçe, sürüm ve özetle yazılır; müşteri onayı ayrıca yazılmaz', async () => {
+    const { id, oz } = await gonderVeOnayaKadar();
+    await svc.onayla(AJANS, id, { surum: 1, icerikOzeti: oz, musteriAdinaGerekce: 'Müşteri telefonda onay verdi, 7 Ekim 10:30' }, SIMDI, { ip: '10.0.0.1', userAgent: 'test', requestId: 'r1' });
+    const r = await h.q<{ action: string; target_id: string; client_id: string; after: { gerekce: string; surum: number; icerikOzeti: string }; ip: string }>(
+      `SELECT action, target_id, client_id::text, after, host(ip) AS ip FROM audit_logs WHERE target_id = $1`,
+      [id],
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ action: 'pilot_plan.musteri_adina_onaylandi', client_id: IDS.client, ip: '10.0.0.1' });
+    expect(r[0]!.after).toMatchObject({ gerekce: 'Müşteri telefonda onay verdi, 7 Ekim 10:30', surum: 1, icerikOzeti: oz });
+    // Müşteri onayı: plan satırı yeter, denetim kaydı yok (bu uçta ajans adına onay izleniyor).
+    await h.q(`UPDATE pilot_planlari SET durum = 'iptal'`);
+    const b = await gonderVeOnayaKadar();
+    await svc.onayla(MUSTERI, b.id, { surum: 1, icerikOzeti: b.oz }, SIMDI);
+    expect(await h.q('SELECT 1 FROM audit_logs WHERE target_id = $1', [b.id])).toHaveLength(0);
+  });
+
+  it('KRİTİK (C-16): atıf standardı seçilmemişse onay ANINDA reddedilir (gönderim de); kapalı kipte platforma gidilmeyeceği için engel değil', async () => {
+    const { id, oz } = await gonderVeOnayaKadar();
+    await h.q(`UPDATE ajans_ayari SET atif_standardi = NULL, atif_secim_at = NULL`);
+    const m = await svc.detay(MUSTERI, id, SIMDI);
+    expect(m.yapilabilir).not.toContain('onayla');
+    const a = await svc.detay(AJANS, id, SIMDI);
+    expect(a.onayKapisi?.tur === 'ret' && a.onayKapisi.retler.map((x) => x.ajansMesaji)).toContain(ATIF_YOK_MESAJI);
+    await expect(svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: oz }, SIMDI)).rejects.toThrow(/onaylanamıyor/);
+    // Müşteri mesajında atıf ayrıntısı yok.
+    expect(JSON.stringify(m)).not.toContain('Atıf');
+    // Kapalı kip: müşteri şirketi + anahtar kapalı → platforma hiç gidilmez, atıf aranmaz.
+    const ma = '12121212-1212-4121-8121-121212121212';
+    const ajansOrg = '13131313-1313-4131-8131-131313131313';
+    await h.q(`INSERT INTO manager_accounts (id, name, slug, updated_at) VALUES ($1, 'MA', 'ma', now())`, [ma]);
+    await h.q(`INSERT INTO organizations (id, name, slug, manager_account_id, updated_at) VALUES ($1, 'Ajans', 'ajans', $2, now())`, [ajansOrg, ma]);
+    await h.q(`UPDATE organizations SET manager_account_id = $1 WHERE id = $2`, [ma, IDS.org]);
+    await h.q(`UPDATE manager_accounts SET ajans_org_id = $2 WHERE id = $1`, [ma, ajansOrg]);
+    const o = await svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: oz }, SIMDI);
+    expect(o.plan.durum).toBe('onaylandi');
+    expect((await h.q<{ k: string }>('SELECT yayin_kipi AS k FROM pilot_planlari WHERE id = $1', [id]))[0]!.k).toBe('kapali');
+  });
+
+  it('B-2: kurulum yanıtında da müşteriye yayın kipi gitmez', async () => {
+    const { id, oz } = await gonderVeOnayaKadar();
+    await svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: oz }, SIMDI);
+    expect((await svc.kurulum(MUSTERI, id)).plan.yayinKipi).toBeNull();
+    expect((await svc.kurulum(AJANS, id)).plan.yayinKipi).toBe('gercek');
+  });
+});
+
+describe('plan kapsamlı görsel (L1)', () => {
+  const depo = { read: vi.fn(async (k: string) => Buffer.from(`bayt:${k}`)) };
+  const varlik = () =>
+    new PilotVarlikService({ withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService, depo as never);
+
+  it('KRİTİK: planda geçen görsel müşteriye de döner; planda olmayan, başka workspace’in ve başkasının planı AYNI 404 (J-05)', async () => {
+    const { id } = await hazirla();
+    depo.read.mockClear();
+    expect(await varlik().gorsel(MUSTERI, id, VARLIK)).toEqual({ buffer: Buffer.from('bayt:k/a'), mimeType: 'image/jpeg' });
+    // Workspace'te var ama planda yok.
+    const DISARIDA = '88888888-0000-4000-8000-000000000009';
+    await h.q(
+      `INSERT INTO assets (id, org_id, client_id, name, file_name, mime_type, byte_size, width, height, storage_key, content_hash, updated_at)
+       VALUES ($1, $2, $3, 'Gizli', 'g.jpg', 'image/jpeg', 1, 1080, 1080, 'k/gizli', 'aaaaaaaaaaaaaaaa9', now())`,
+      [DISARIDA, IDS.org, IDS.client],
+    );
+    await expect(varlik().gorsel(MUSTERI, id, DISARIDA)).rejects.toThrow(/Görsel bulunamadı/);
+    // Başka workspace'in kişisi, planın içindeki görsel için bile.
+    await expect(varlik().gorsel({ ...MUSTERI, clientIds: [OTEKI], activeClientId: OTEKI } as TenantContext, id, VARLIK)).rejects.toThrow(/Görsel bulunamadı/);
+    // Var olmayan plan.
+    await expect(varlik().gorsel(MUSTERI, OTEKI, VARLIK)).rejects.toThrow(/Görsel bulunamadı/);
+    // Plan satırındaki kimlik başka workspace'in varlığına taşınmış olsa: client_id süzgeci.
+    await h.q(`UPDATE assets SET client_id = $2 WHERE id = $1`, [VARLIK, OTEKI]);
+    await expect(varlik().gorsel(MUSTERI, id, VARLIK)).rejects.toThrow(/Görsel bulunamadı/);
+    expect(depo.read).toHaveBeenCalledTimes(1);
   });
 });

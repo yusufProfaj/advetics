@@ -20,10 +20,8 @@ import { ProviderRegistry } from './modules/connections/provider.registry';
 import { TokenVaultService } from './modules/connections/token-vault.service';
 import type { GoogleProvider } from './modules/connections/providers/google.provider';
 import { PILOT_KURULUM_KUYRUGU, PilotKurulumKuyrugu, type PilotKurulumIsi } from './modules/pilot/kurulum-kuyrugu';
-import { pilotIsiniIsle } from './modules/pilot/kurulum-isleyici';
-import { pilotSupurmesi } from './modules/pilot/kurulum-supurme';
-import { YAPAY_ZEKA } from './yapay-zeka/yapay-zeka.module';
-import type { MetinUretici } from './yapay-zeka/gemini';
+import { pilotIsiniIsle, SatirBaskaSurecte } from './modules/pilot/kurulum-isleyici';
+import { pilotSupurmesi, takilanSatiriKapat } from './modules/pilot/kurulum-supurme';
 
 /**
  * Worker süreci — API'den AYRI çalışır.
@@ -334,7 +332,7 @@ async function bootstrap(): Promise<void> {
           yuklemeKoku: config.uploads.dir,
           kilit: redisKilidi(connection),
           kilitOneki: config.redis.keyPrefix,
-          yz: app.get<MetinUretici | null>(YAPAY_ZEKA),
+          // Model YOK: reklam metni plan anında yazılıp onaylandı (karar (a)).
           kuyruk: { satirEkle: (id, tetik, ms) => pilotKuyruk.satirEkle(id, tetik, ms) },
         },
         job.data,
@@ -351,22 +349,32 @@ async function bootstrap(): Promise<void> {
     { connection, prefix: config.redis.keyPrefix, concurrency: 2 },
   );
   pilotWorker.on('failed', (job, err) => {
-    // Nihai düşüş: işleyici yazamadan öldüyse satır 'taslak'ta kalır ve
-    // plan sonsuza kadar "kuruluyor" derdi. Yalnız HİÇ başlamamış satır
-    // kapatılıyor; ara durumdaki satıra dokunulmuyor (Meta'ya gitmiş olabilir).
+    // NİHAİ düşüş (attempts: 1; `attemptsMade` yine de kontrol ediliyor ki
+    // bir gün deneme artırılırsa ara denemede satır düşürülmesin). İşleyici
+    // yazamadan öldüyse satır HANGİ ara durumdaysa orada kalır ve plan
+    // sonsuza kadar "kuruluyor" derdi (B-4). Satır başarısız son duruma
+    // (`TAKILAN_SATIR_HEDEFI`) iner; Meta'ya gitmiş nesneler varsa "Şimdi
+    // kur" işçinin `yolSec`inden geçer ve yeniden POST etmez (kilit/devam).
+    // İyimser kilit kaybıysa satır BAŞKA bir sürecin: dokunulmaz.
     if (!job || job.data.tur !== 'satir') {
       logger.error(`pilot-kurulum ${job?.id ?? '?'} düştü: ${err.message}`);
       return;
     }
-    void admin
-      .$executeRaw`UPDATE pilot_kurulum_satirlari SET durum = 'dustu', platform_mesaji = ${`İş durdu: ${err.message}`.slice(0, 2000)}, updated_at = now() WHERE id = ${job.data.satirId}::uuid AND durum = 'taslak'`
-      .catch((e: unknown) => logger.error(`Pilot satırı ${job.data.tur === 'satir' ? job.data.satirId : ''} kapatılamadı: ${e instanceof Error ? e.message : String(e)}`));
+    const satirId = job.data.satirId;
     logger.error(`pilot-kurulum ${job.id} (satır) düştü: ${err.message}`);
+    if (err instanceof SatirBaskaSurecte || job.attemptsMade < (job.opts.attempts ?? 1)) return;
+    void takilanSatiriKapat({ tx: (fn) => fn(admin as never) }, satirId, err.message).catch((e: unknown) =>
+      logger.error(`Pilot satırı ${satirId} kapatılamadı: ${e instanceof Error ? e.message : String(e)}`),
+    );
   });
   // Onaylanıp kuyruğa giremeyen planlar ve kuyruktan düşmüş satırlar için
   // süpürme (CLAUDE.md "sync_jobs satırı bir niyet kaydı, kuyruk ise gerçek").
   const pilotSupurmeZamanlayici = setInterval(() => {
-    void pilotSupurmesi({ tx: (fn) => fn(admin as never), planEkle: (id, tetik) => pilotKuyruk.planEkle(id, tetik) })
+    void pilotSupurmesi({
+      tx: (fn) => fn(admin as never),
+      planEkle: (id, tetik) => pilotKuyruk.planEkle(id, tetik),
+      satirEkle: (id, tetik) => pilotKuyruk.satirEkle(id, tetik),
+    })
       .then((n) => n > 0 && logger.log(`pilot süpürmesi: ${n} plan yeniden kuyrukta`))
       .catch((e: unknown) => logger.error(`pilot süpürmesi düştü: ${e instanceof Error ? e.message : String(e)}`));
   }, 10 * 60_000);

@@ -1,6 +1,6 @@
 import { PDFDocument, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
-import { HUNI_ETIKETLERI, tutarGoster, type BosNedeni, type PilotPlanDetayi, type PilotPlanDurumu, type PlanSatiri } from '@advetics/shared';
+import { HUNI_ETIKETLERI, tutarGoster, type BosNedeni, type MetinBosNedeni, type PilotPlanDetayi, type PilotPlanDurumu, type PlanSatiri } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from '../reports/pdf-yazi-tipi';
 import { kisalt, SLATE, tablo, type TabloSutunu } from '../reports/pdf-cizim';
 import { donemAdi } from '../strateji/medya-plani-pdf';
@@ -16,6 +16,12 @@ import { donemAdi } from '../strateji/medya-plani-pdf';
  * Taslak büyük harfle TASLAK: elden ele geçen belge onaylı plan sanılmasın.
  * Uyum ayrıntısı PDF'e GİRMEZ: belge müşteriye gidebiliyor ve uyum ajansın işi.
  * Tablo SAYFALARA BÖLÜNÜR; uzun plan sessizce kesilmez.
+ *
+ * REKLAM METNİ BELGEDE (karar (a), 2026-10-08): onay özeti metni kapsıyor,
+ * yani müşterinin onayladığı belge metni de GÖSTERMELİ. Her Meta
+ * kampanyasının metni (başlık + ana metin) ya da metnin neden olmadığı
+ * kampanya tablosunun ardından, kampanya adıyla yazılır; metin KISALTILMAZ
+ * (satırlara bölünür): kırpılmış bir reklam metni onaylanan metin değildir.
  */
 const EN = 595.28;
 const BOY = 841.89;
@@ -70,6 +76,7 @@ export async function planPdf(v: { workspace: string; detay: PilotPlanDetayi }):
   const ctx: Ctx = { doc, normal, kalin, logo, birim: v.detay.icerik.paraBirimi ?? 'TRY' };
   kapak(ctx, v);
   satirBolumu(ctx, v.detay);
+  metinBolumu(ctx, v.detay);
   return Buffer.from(await doc.save());
 }
 
@@ -153,5 +160,69 @@ function satirBolumu(ctx: Ctx, d: PilotPlanDetayi): void {
   if (BigInt(p.dagitilmamis.micros) > 0n && y > ALT_SINIR) {
     // Dağıtılmamış kısım SÖYLENİR: görünmezse bütçenin tamamı harcanacak sanılır.
     yazi(ctx, s, `Dağıtılmamış: ${para(p.dagitilmamis.micros)}`, y, 9.5, SLATE.s600);
+  }
+}
+
+/** Metin hücresi boşken PDF'te yazılan neden (panelle aynı anlam, belge dili). */
+const METIN_BOS_METNI: Record<MetinBosNedeni, string> = {
+  metin_bekliyor: 'Reklam metni henüz yazılmadı.',
+  metin_yazilamadi: 'Reklam metni yazılamadı; plan yeniden hazırlanmalı.',
+  yz_kapali: 'Yapay zekâ bağlı olmadığı için reklam metni yazılmadı.',
+  metin_denetimden_gecmedi: 'Yazılan reklam metni denetimden geçmedi; plan yeniden hazırlanmalı.',
+  plan_eski_bicim: 'Plan eski biçimde; reklam metni için yeniden hazırlanmalı.',
+};
+
+/**
+ * Belgeye çizilecek metin satırları (SAF; testte doğrudan). Her Meta
+ * kampanyası için başlık satırı ve ya metinler ya da boş nedeni. Google
+ * satırı metin taşımaz (Tur 3) ve listeye girmez.
+ */
+export function metinSatirlari(d: Pick<PilotPlanDetayi, 'icerik'>): Array<{ tur: 'kampanya' | 'baslik' | 'metin' | 'bos'; metin: string }> {
+  const r: Array<{ tur: 'kampanya' | 'baslik' | 'metin' | 'bos'; metin: string }> = [];
+  for (const s of d.icerik.satirlar) {
+    if (s.platform !== 'meta') continue;
+    r.push({ tur: 'kampanya', metin: s.ad });
+    const h = s.metinler;
+    if (!h || !h.dolu) {
+      const neden = h && !h.dolu ? h.emptyReason : 'metin_bekliyor';
+      r.push({ tur: 'bos', metin: METIN_BOS_METNI[neden as MetinBosNedeni] ?? `Reklam metni yok (${neden}).` });
+      continue;
+    }
+    h.deger.forEach((m, i) => {
+      r.push({ tur: 'baslik', metin: `${h.deger.length > 1 ? `${i + 1}. ` : ''}Başlık: ${m.baslik}` });
+      r.push({ tur: 'metin', metin: m.metin });
+    });
+  }
+  return r;
+}
+
+function metinBolumu(ctx: Ctx, d: PilotPlanDetayi): void {
+  const satirlar = metinSatirlari(d);
+  if (satirlar.length === 0) return;
+  let s = ctx.doc.addPage([EN, BOY]);
+  let y = BOY - KENAR;
+  s.drawText('Reklam metinleri', { x: KENAR, y, size: 14, font: ctx.kalin, color: SLATE.s900 });
+  y -= 26;
+  const yer = (gerek: number) => {
+    if (y - gerek < ALT_SINIR) {
+      s = ctx.doc.addPage([EN, BOY]);
+      y = BOY - KENAR;
+    }
+  };
+  for (const x of satirlar) {
+    if (x.tur === 'kampanya') {
+      yer(40);
+      y -= 6;
+      s.drawText(kisalt(x.metin, ctx.kalin, 11, EN - 2 * KENAR), { x: KENAR, y, size: 11, font: ctx.kalin, color: SLATE.s900 });
+      y -= 18;
+      continue;
+    }
+    const boyut = x.tur === 'baslik' ? 10 : 9.5;
+    const renk = x.tur === 'bos' ? SLATE.s500 : x.tur === 'baslik' ? SLATE.s700 : SLATE.s600;
+    // Metin satırlara BÖLÜNÜR, kesilmez (onaylanan metin tam görünmeli).
+    for (const parca of x.metin.split(/\n+/).flatMap((p) => satirlaraBol(ctx, p, boyut))) {
+      yer(boyut + 7);
+      y = yazi(ctx, s, parca, y, boyut, renk);
+    }
   }
 }

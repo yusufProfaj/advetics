@@ -30,6 +30,7 @@ import {
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import { AssetsService } from './assets.service';
+import { onizlemeGonder } from '../../storage/onizleme';
 
 /**
  * Varlık arşivi uç noktaları.
@@ -65,12 +66,7 @@ export class AssetsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Res() res: Response,
   ): Promise<void> {
-    const { buffer, mimeType } = await this.assets.bytes(ctx, id);
-    res.setHeader('Content-Type', mimeType);
-    // Değişmez içerik: aynı kimlik her zaman aynı baytları veriyor (yeni
-    // yükleme yeni kayıt açıyor). Uzun önbellek güvenli.
-    res.setHeader('Cache-Control', 'private, max-age=86400');
-    res.send(buffer);
+    onizlemeGonder(res, await this.assets.bytes(ctx, id));
   }
 
   @Post()

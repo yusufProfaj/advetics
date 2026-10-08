@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resolvePermissions, type TenantContext } from '@advetics/shared';
+import { KURULUM_ARA_DURUMLARI, resolvePermissions, TAKILAN_SATIR_HEDEFI, type TenantContext } from '@advetics/shared';
 import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pglite-harness';
 import { SahteMeta } from '../../../test/reklam-sahte-meta';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -7,7 +9,9 @@ import type { MetinUretici } from '../../yapay-zeka/gemini';
 import { MetaBelirsizHata, MetaKesinHata, type TxRunner } from '../reklam/yayin-motoru';
 import type { PilotKurulumKuyrugu } from './kurulum-kuyrugu';
 import { pilotIsiniIsle, type PilotIsleyiciBagimliliklari } from './kurulum-isleyici';
+import { takilanSatiriKapat } from './kurulum-supurme';
 import { PilotPlanService } from './plan.service';
+import { AuditService } from '../audit/audit.service';
 
 /**
  * ═══ PİLOT KURULUM İŞÇİSİ — gerçek şema + SAHTE META ═══
@@ -27,9 +31,12 @@ const KITLE = '77777777-0000-4000-8000-000000000001';
 const VARLIK = '88888888-0000-4000-8000-000000000001';
 const SIMDI = new Date('2026-10-07T06:00:00Z');
 
+/** `false` yapılırsa reklam metni isteği düşer (metinsiz plan). */
+let metinYaz = true;
 const yz: MetinUretici = {
   model: 'sahte',
   uret: vi.fn(async (g: { sistem: string }) => {
+    if (!metinYaz && g.sistem.includes('reklam metni')) throw new Error('model düştü');
     const metin = g.sistem.includes('reklam metni')
       ? JSON.stringify({ metinler: [{ baslik: 'Taze kahve', metin: 'Sabahların yeni tadı.' }] })
       : 'Plan geçmiş veriye dayanıyor.';
@@ -65,7 +72,6 @@ function bag(): PilotIsleyiciBagimliliklari {
       },
     },
     kilitOneki: 'test',
-    yz,
     kuyruk: { satirEkle: async (id: string) => void kuyruktaki.push(id) },
     portKur: () => meta,
     simdi: () => SIMDI,
@@ -75,11 +81,12 @@ function bag(): PilotIsleyiciBagimliliklari {
 beforeAll(async () => {
   h = await createHarness();
   const prisma = { withTenant: <T>(_c: TenantContext, fn: (t: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
-  svc = new PilotPlanService(prisma, { planEkle: async () => undefined } as unknown as PilotKurulumKuyrugu, yz);
+  svc = new PilotPlanService(prisma, { planEkle: async () => undefined } as unknown as PilotKurulumKuyrugu, yz, new AuditService(null as never));
 }, 60_000);
 afterAll(async () => h?.close());
 
 beforeEach(async () => {
+  metinYaz = true;
   meta = new SahteMeta();
   kuyruktaki = [];
   kilitler.clear();
@@ -266,15 +273,66 @@ describe('süpürme', () => {
     const id = await onayliPlan();
     const ekle = vi.fn(async () => undefined);
     // Henüz 5 dakika olmadı: dokunulmaz.
-    expect(await pilotSupurmesi({ tx, planEkle: ekle }, new Date())).toBe(0);
+    expect(await pilotSupurmesi({ tx, planEkle: ekle, satirEkle: async () => undefined }, new Date())).toBe(0);
     await h.q(`UPDATE pilot_planlari SET updated_at = now() - interval '10 minutes' WHERE id = $1`, [id]);
-    expect(await pilotSupurmesi({ tx, planEkle: ekle }, new Date())).toBe(1);
+    expect(await pilotSupurmesi({ tx, planEkle: ekle, satirEkle: async () => undefined }, new Date())).toBe(1);
     expect(ekle).toHaveBeenCalledWith(id, expect.stringMatching(/^sup\d+$/));
     // Kurulup düşmüş satırlı plan süpürmeye girmez.
     meta.olusturHatasi = () => ({ hata: new MetaKesinHata('ret', 100) });
     await kos(id);
     await h.q(`UPDATE pilot_planlari SET updated_at = now() - interval '10 minutes'`);
     ekle.mockClear();
-    expect(await pilotSupurmesi({ tx, planEkle: ekle }, new Date())).toBe(0);
+    expect(await pilotSupurmesi({ tx, planEkle: ekle, satirEkle: async () => undefined }, new Date())).toBe(0);
+  });
+});
+
+describe('metin onaylı sürümden (karar (a)) ve takılan satır (B-4)', () => {
+  it('KRİTİK: işçi modeli ÇAĞIRMAZ; kurulan metin onaylanan plandaki metin', async () => {
+    const id = await onayliPlan();
+    const once = (yz.uret as ReturnType<typeof vi.fn>).mock.calls.length;
+    await kos(id);
+    expect((yz.uret as ReturnType<typeof vi.fn>).mock.calls.length).toBe(once);
+    expect(JSON.stringify([...meta.kayitlar.values()].map((k) => k.alanlar))).toContain('Sabahların yeni tadı.');
+  });
+
+  it('KRİTİK: onaylı sürümde metin yoksa satır AÇIK nedenle düşer, Meta’ya sıfır çağrı (işçi metni kendisi yazmaz)', async () => {
+    metinYaz = false;
+    const { id } = await svc.hazirla(AJANS, { clientId: IDS.client, donem: '2026-11' }, SIMDI);
+    // Metinsiz plan gönderilemez; işçinin emniyetini sınamak için onay izi doğrudan.
+    await h.q(
+      `UPDATE pilot_planlari SET durum = 'onaylandi', onaylanan_surum = 1, onaylanan_ozet = icerik_ozeti, onay_rolu = 'musteri', onay_zamani = now(), yayin_kipi = 'gercek' WHERE id = $1`,
+      [id],
+    );
+    const once = (yz.uret as ReturnType<typeof vi.fn>).mock.calls.length;
+    await kos(id);
+    const [s] = await satirlar(id);
+    expect(s!.durum).toBe('dustu');
+    expect(s!.platform_mesaji).toMatch(/reklam metni yok.*yeniden onaylatın/);
+    expect(meta.postSayisi + meta.provalar.length).toBe(0);
+    expect((yz.uret as ReturnType<typeof vi.fn>).mock.calls.length).toBe(once);
+  });
+
+  it('KRİTİK: worker’ın nihai düşüşü ara durumdaki satırı başarısız son duruma çeker ve planı sayar; son durumdaki satıra dokunmaz', async () => {
+    const id = await onayliPlan('test');
+    await pilotIsiniIsle(bag(), { tur: 'plan', planId: id, yeniden: false }, 'is1');
+    const satirId = kuyruktaki[0]!;
+    await h.q(`UPDATE pilot_kurulum_satirlari SET durum = 'prova' WHERE id = $1`, [satirId]);
+    expect(await takilanSatiriKapat({ tx }, satirId, 'bağlantı koptu')).toBe(true);
+    const [s] = await satirlar(id);
+    expect(s!.durum).toBe('prova_dustu');
+    expect(s!.platform_mesaji).toMatch(/İş durdu: bağlantı koptu/);
+    expect(await planDurumu(id)).toBe('kismen_kuruldu');
+    expect(await takilanSatiriKapat({ tx }, satirId, 'ikinci')).toBe(false);
+    expect((await satirlar(id))[0]!.platform_mesaji).toMatch(/bağlantı koptu/);
+  });
+
+  it('KRİTİK: RLS "durdur" politikasındaki durum listeleri sözleşmeyle AYNI (ara durumlar ve takılma hedefleri)', () => {
+    const sql = readFileSync(join(__dirname, '../../../prisma/sql/02_rls.sql'), 'utf8');
+    const p = sql.slice(sql.indexOf('CREATE POLICY adv_pilot_kurulum_satirlari_durdur'));
+    const govde = p.slice(0, p.indexOf(');\n', p.indexOf('WITH CHECK')) + 2);
+    if (!govde.includes('WITH CHECK')) throw new Error('politika bulunamadı — tarama boşa düşerdi');
+    const liste = (bas: number) => [...govde.slice(bas).match(/durum IN \(([^)]*)\)/)![1]!.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+    expect(liste(govde.indexOf('USING'))).toEqual([...KURULUM_ARA_DURUMLARI].sort());
+    expect(liste(govde.indexOf('WITH CHECK'))).toEqual([...new Set(Object.values(TAKILAN_SATIR_HEDEFI))].sort());
   });
 });

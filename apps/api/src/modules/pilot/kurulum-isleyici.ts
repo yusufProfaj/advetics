@@ -12,7 +12,6 @@ import {
   satirdanTaslak,
   taslakUyumGirdisi,
   uyumDenetle,
-  dolu,
   type AtifStandardi,
   type KurulumSatirDurumu,
   type MetaApiSurumu,
@@ -22,7 +21,6 @@ import {
   type YayinKipi,
 } from '@advetics/shared';
 import type { CryptoService } from '../../crypto/crypto.service';
-import type { MetinUretici } from '../../yapay-zeka/gemini';
 // İZİNLİ İÇE AKTARIM (pilot-kayit.spec.ts listesi): Meta erişimi, Graph
 // istemcisi, yazma kesici ve iki saf yardımcı. Eski modülün servisleri,
 // tabloları ve Nest modülü içe aktarılmıyor; kabul listesi bu dosyaları
@@ -37,7 +35,7 @@ import { PilotKurulumMotoru, taslakOzeti } from './kurulum-motoru';
 import type { PilotKurulumIsi } from './kurulum-kuyrugu';
 import { yerelGun } from './plan-girdisi';
 import { surumOku } from './plan.service';
-import { reklamMetniYaz, taslakBaglamiOku } from './taslak-baglami';
+import { taslakBaglamiOku } from './taslak-baglami';
 import { uyumProfiliOku } from './uyum-profili';
 
 const logger = new Logger('PilotKurulum');
@@ -48,7 +46,7 @@ const logger = new Logger('PilotKurulum');
  * Worker'da koşar (BYPASSRLS). Plan işi satırları açar ve her satır için
  * ayrı iş kuyruğa koyar; satır işi tek bir yol izler:
  *
- *   taslak (plan satırı + bağlam + yapay zekâ metni)
+ *   taslak (onaylı plan satırı — reklam metni DAHİL — + bağlam; model ÇAĞRILMAZ)
  *   → kip kontrolü (kapalı kipte platforma HİÇ gidilmez)
  *   → eksikler (varsa prova çağrısı YOK: kota boşa gitmez, E-14)
  *   → taslak uyum denetimi (ENGEL gerçek yayını kapatır)
@@ -69,7 +67,10 @@ export interface PilotIsleyiciBagimliliklari {
   yuklemeKoku: string;
   kilit: { al(anahtar: string, sahip: string, ms: number): Promise<boolean>; birak(anahtar: string, sahip: string): Promise<void> };
   kilitOneki: string;
-  yz: MetinUretici | null;
+  // `yz` YOK (karar (a), 2026-10-08): reklam metni plan hazırlanırken
+  // yazılıyor ve müşterinin onayladığı özete giriyor. İşçi modeli çağırsaydı
+  // kurulan metin onaylanan metin olmazdı (site metninden gelen bir prompt
+  // injection'ın onay kapısını atlayıp yayına çıktığı yol buydu).
   kuyruk: { satirEkle(satirId: string, tetik: string, gecikmeMs?: number): Promise<void> };
   /** Testte sahte Meta; üretimde Graph istemcisi. */
   portKur?: (a: GrafAyarlari) => MetaYazmaPortu;
@@ -169,6 +170,14 @@ export async function planDurumuGuncelle(d: Pick<PilotIsleyiciBagimliliklari, 't
   await d.tx((t) => t.$queryRaw(Prisma.sql`UPDATE pilot_planlari SET durum = ${o.planHedefi}, updated_at = now() WHERE id = ${planId}::uuid AND durum = 'kuruluyor' RETURNING id`));
 }
 
+/**
+ * İyimser kilit kaybedildi: satırı BAŞKA bir süreç (yeniden kuyruğa alınmış
+ * iş, süpürme, ajansın "Kurulumu durdur"u) ilerletti. Worker'ın `failed`
+ * dinleyicisi bu hatada satıra DOKUNMAZ: satır artık o sürecin; onu
+ * "takıldı" diye düşürmek canlı bir işin altından satırı çekmek olurdu.
+ */
+export class SatirBaskaSurecte extends Error {}
+
 /** İzinli geçiş + iyimser kilit. Mesaj ve ek alanlar aynı UPDATE'te. */
 async function gecis(
   d: PilotIsleyiciBagimliliklari,
@@ -189,7 +198,7 @@ async function gecis(
        WHERE id = ${s.id}::uuid AND durum = ${s.durum}
       RETURNING id::text`),
   );
-  if (r.length !== 1) throw new Error(`Kurulum satırı ${s.id} başka bir süreçte ilerlemiş (${s.durum})`);
+  if (r.length !== 1) throw new SatirBaskaSurecte(`Kurulum satırı ${s.id} başka bir süreçte ilerlemiş (${s.durum})`);
   return { ...s, durum: yeni, ad_account_id: ek.hesap ?? s.ad_account_id };
 }
 
@@ -202,7 +211,8 @@ async function bitir(d: PilotIsleyiciBagimliliklari, s: SatirKaydi, sonuc: strin
 /**
  * Satırın bu işte hangi yoldan gideceği:
  *   · `yeni`  — ilk kurulum ya da platforma HİÇ gidilmemiş bir düşüşün
- *               yeniden denenmesi: taslak baştan kurulur (metin yeniden yazılır).
+ *               yeniden denenmesi: taslak onaylı satırdan baştan kurulur
+ *               (metin onaylı sürümdeki metin; YENİDEN YAZILMAZ).
  *   · `devam` — yazma kesicisiyle yarıda durmuş kurulum: kurulmuş nesneler
  *               kuruldu, kalanlar bekliyor; SAKLI taslak ve SAKLI gövdelerle
  *               kaldığı yerden (taslak yeniden yazılsaydı kurulan nesneler ile
@@ -390,9 +400,9 @@ async function satirIsle(d: PilotIsleyiciBagimliliklari, satirId: string, sahip:
 }
 
 /**
- * Taslak: plan satırı + bağlam + yapay zekâ metni; eksikler ve taslak
- * anında uyum. Platform çağrısı YOK: eksik ya da uyum engeli varsa prova
- * kotası harcanmaz (E-14).
+ * Taslak: onaylı plan satırı (reklam metni DAHİL) + bağlam; eksikler ve
+ * taslak anında uyum. Platform ve model çağrısı YOK: eksik ya da uyum
+ * engeli varsa prova kotası harcanmaz (E-14).
  */
 async function taslakKur(
   d: PilotIsleyiciBagimliliklari,
@@ -404,6 +414,12 @@ async function taslakKur(
   const plan = await d.tx((t) => surumOku(t, p.id, p.onaylanan_surum!));
   const satir = plan.satirlar.find((x) => x.anahtar === s.satir_anahtari);
   if (!satir || !plan.takvim) return { tur: 'ret', mesaj: 'Plan satırı onaylanan sürümde bulunamadı.' };
+  // METİN ONAYLI SÜRÜMDEN. Yoksa (eski biçim plan, model düşmüştü) işçi onu
+  // YAZMAZ: yazsaydı müşterinin görmediği bir metin yayına çıkardı. Açık ret,
+  // ajansın yapacağı işle birlikte.
+  if (!satir.metinler?.dolu) {
+    return { tur: 'ret', mesaj: 'Onaylanan planda bu kampanyanın reklam metni yok. Planı yeniden hazırlayıp müşteriye yeniden onaylatın; kurulum metni kendisi yazmaz.' };
+  }
   const okuma = await d.tx((t) =>
     taslakBaglamiOku(t, {
       planId: p.id,
@@ -415,20 +431,7 @@ async function taslakKur(
       simdi,
     }),
   );
-  let taslak = satirdanTaslak(satir, okuma.baglam);
-  const idler = taslak.varliklar?.dolu ? taslak.varliklar.deger : [];
-  const varliklar = await d.tx((t) =>
-    t.$queryRaw<Array<{ id: string; ad: string; tur: string }>>(Prisma.sql`
-      SELECT id::text, name AS ad, kind AS tur FROM assets WHERE client_id = ${s.client_id}::uuid AND id = ANY(${idler}::uuid[])`),
-  );
-  // Tur 1 YALNIZ GÖRSEL kuruyor: video fikri kapak görseli istiyor ve planda kapak yok (C-14).
-  const gorseller = idler.map((id) => varliklar.find((v) => v.id === id)).filter((v): v is { id: string; ad: string; tur: string } => !!v && v.tur === 'image');
-  if (idler.length > gorseller.length) notlar.push(`${idler.length - gorseller.length} video ya da silinmiş varlık bu sürümde kullanılmadı.`);
-  const m = await reklamMetniYaz(d.yz, taslak, okuma, gorseller);
-  if (m.tur === 'tamam') {
-    taslak = { ...taslak, metinler: dolu(m.metinler, { tur: 'yz_metin', kimlik: d.yz?.model ?? 'yok', zaman: simdi.toISOString() }) };
-    notlar.push(...m.notlar);
-  } else notlar.push(m.mesaj);
+  const taslak = satirdanTaslak(satir, okuma.baglam);
   const eksikler = pilotTaslakEksikleri(taslak, { yasalUyari: okuma.yasalUyari });
   const icerik = pilotTaslakKanonikIcerik(taslak);
   await d.tx((t) =>
@@ -439,8 +442,9 @@ async function taslakKur(
   );
   if (eksikler.length > 0) return { tur: 'ret', mesaj: `Kurulum için eksik: ${eksikler.map((e) => e.metin).join(' · ')}${notlar.length ? ` (${notlar.join(' ')})` : ''}` };
 
-  // Taslak anında uyum: gerçek kipte ENGEL ve UYARI kapatır (taslak
-  // bulgusunu işaretleyecek bir ekran yok; "Şimdi kur" metni yeniden yazar).
+  // Taslak anında uyum: gerçek kipte ENGEL ve UYARI kapatır. Metin onaylı
+  // plandan geliyor ve "Şimdi kur" AYNI metni yeniden dener (yeniden
+  // yazmaz); metni değiştirmenin yolu planı yeniden hazırlayıp onaylatmak.
   const profil = await d.tx((t) => uyumProfiliOku(t, s.client_id));
   const kitle = await kitleBilgisi(d, s.client_id, taslak);
   const [tz] = await d.tx((t) => t.$queryRaw<Array<{ tz: string }>>(Prisma.sql`SELECT timezone AS tz FROM clients WHERE id = ${s.client_id}::uuid`));
@@ -454,7 +458,10 @@ async function taslakKur(
   );
   const engel = denetim.bulgular.filter((b) => b.seviye === 'ENGEL' || b.seviye === 'UYARI');
   if (p.yayin_kipi === 'gercek' && engel.length > 0) {
-    return { tur: 'ret', mesaj: `Reklam metni uyum denetiminden geçmedi: ${engel.map((b) => `${b.kuralKimligi} ${b.mesaj}`).join(' · ')}. "Şimdi kur" metni yeniden yazar.` };
+    return {
+      tur: 'ret',
+      mesaj: `Kampanya kurulum anında uyum denetiminden geçmedi: ${engel.map((b) => `${b.kuralKimligi} ${b.mesaj}`).join(' · ')}. Metin onaylı plandan geliyor; değiştirmek için planı yeniden hazırlayıp müşteriye yeniden onaylatın.`,
+    };
   }
   return { tur: 'tamam', taslak, yasalUyari: okuma.yasalUyari };
 }
@@ -510,7 +517,9 @@ async function derle(
     : [];
   const kitleId = t.kitleSablonuId?.dolu ? t.kitleSablonuId.deger : null;
   const [k] = kitleId
-    ? await d.tx((x) => x.$queryRaw<Array<{ yas_min: number; yas_max: number; cinsiyet: string }>>(Prisma.sql`SELECT age_min AS yas_min, age_max AS yas_max, genders AS cinsiyet FROM audience_templates WHERE id = ${kitleId}::uuid`))
+    ? // B-5: worker BYPASSRLS; kimlik plandan gelse de süzgeç workspace'e
+      // bağlı (`kitleBilgisi` ile aynı süzgeç, iki yerde ayrışmasın).
+      await d.tx((x) => x.$queryRaw<Array<{ yas_min: number; yas_max: number; cinsiyet: string }>>(Prisma.sql`SELECT age_min AS yas_min, age_max AS yas_max, genders AS cinsiyet FROM audience_templates WHERE id = ${kitleId}::uuid AND client_id = ${s.client_id}::uuid`))
     : [];
   const [c] = await d.tx((x) => x.$queryRaw<Array<{ ad: string }>>(Prisma.sql`SELECT name AS ad FROM clients WHERE id = ${s.client_id}::uuid`));
   const metinler = t.metinler.dolu ? t.metinler.deger.filter((m) => m.varlikId) : [];

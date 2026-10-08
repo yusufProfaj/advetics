@@ -96,7 +96,8 @@ describe('pilot migration üretim sırasında', () => {
       SELECT tablename, string_agg(cmd, ',' ORDER BY cmd) AS komutlar FROM pg_policies
        WHERE tablename LIKE 'pilot\\_%' GROUP BY tablename ORDER BY tablename`);
     expect(r).toEqual([
-      { tablename: 'pilot_kurulum_satirlari', komutlar: 'SELECT' },
+      // UPDATE: yalnız "Kurulumu durdur" (ara → dustu/prova_dustu, 2026-10-08, B-4).
+      { tablename: 'pilot_kurulum_satirlari', komutlar: 'SELECT,UPDATE' },
       { tablename: 'pilot_nesneleri', komutlar: 'SELECT' },
       { tablename: 'pilot_onerileri', komutlar: 'SELECT,UPDATE' },
       { tablename: 'pilot_plan_surumleri', komutlar: 'INSERT,SELECT' },

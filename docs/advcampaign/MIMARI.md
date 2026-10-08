@@ -379,3 +379,23 @@ birlikte ekler. CHECK listeleri değişmedi (yeni DURUM yok, yalnız yeni eylem 
 - Eski biçim (`bicim: 1`) okuma yolu yalnız testte koştu; dal deploy edilmediği için üretimde v1 sürüm yok (Ajan 5
   `SELECT count(*) FROM pilot_plan_surumleri WHERE icerik->>'bicim' = '1'` ile doğrulamalı).
 - Takılma eşiği (45 dk) ve 2 deneme hakkı ilk tahmin; büyük hesapta `motor.kur` süresi ölçülmedi.
+
+## 13. Ajan 2 uygulaması (2026-10-08, §12.4 + kapı bulguları)
+
+- **Metin plan anında:** `plan-reklam-metni.ts` (`metinBaglamiOku` kısa okumada; `reklamMetinleriniYaz` transaction
+  DIŞINDA, en çok 3 eşzamanlı çağrı, çağrı başına 40 sn, istek başına en çok 12 satır, kalanı nedeniyle "bekliyor").
+  Yerleştirme `plan.service.ts#metinli` → `reklamMetinleriniYerlestir`. Yalnız GÖRSEL varlığa bağlanır (video Tur 1'de
+  kurulmuyor). `degistir`de `degisiklikUygula`dan sonra TAZE yasal uyarıyla `metinleriTasi` ikinci kez koşar.
+- **İşçi modeli çağırmıyor:** `PilotIsleyiciBagimliliklari.yz` kalktı; onaylı satırda metin yoksa açık ret.
+- **B-1:** `app.pilot_ajans_ayari(o_id)` (02_rls.sql, PL/pgSQL, SECURITY DEFINER, yalnız `org_kapsaminda` şirket):
+  ajans kimliği + anahtar + atıf. Satır dönmezse çağıranın yetkisiyle doğrudan okuma (`gercek-yayin.ts#dogrudanOku`).
+- **B-4:** süpürme `kuruluyorPlanKarari` + `takilanSatirKarari`; worker `failed` → `takilanSatiriKapat`
+  (iyimser kilit kaybı `SatirBaskaSurecte` hariç). Ajans ucu: `POST .../eylem` `{ eylem: 'takilan_kurulumu_durdur' }`
+  (controller'da yerel birleşim şema); satır yazımı için dar RLS politikası `adv_pilot_kurulum_satirlari_durdur`
+  (ara → `dustu`/`prova_dustu`).
+- **C-16:** atıf standardı onay kapısında (`kapiKos`, kip `kapali` değilse); işçideki kontrol emniyet olarak duruyor.
+- **Override:** onay `strategy.publish` VE `strategy.approve` ister (`onayYetkisiVar`).
+- **Plan kapsamlı görsel:** `GET /pilot/planlar/:id/varliklar/:varlikId` (`strategy.read`, `plan-varlik.ts`).
+- **Sözleşmeye eklenecekler (Ajan 1):** `PILOT_EYLEM_UCU_EYLEMLERI` + `PilotEkranEylemi`'ne `takilan_kurulumu_durdur`;
+  `PILOT_UCLARI`'na görsel ucu (sonra `pilot-kayit.spec.ts#SOZLESMEYE_EKLENECEK` silinir); müşteri yanıtında
+  `onayKapisi.kip`in müşteri varyantı (bugün süzülemiyor, tip zorunlu).

@@ -26,6 +26,14 @@ const WORKER = oku('../../worker.ts');
 /** Listede duran ama bu turda AÇILMAYAN uçlar — adıyla (Tur 2: platforma yazan öneri işleri). */
 const BEKLEYEN = new Set(['POST /pilot/oneriler/:id/uygula', 'POST /pilot/oneriler/:id/geri-al']);
 
+/**
+ * Controller'da olup sözleşmede (`PILOT_UCLARI`, shared) HENÜZ olmayan uçlar
+ * — ADIYLA ve İZNİYLE. Ajan 2 shared'a dokunamıyor (2026-10-08 devri); uç
+ * sözleşmeye eklendiğinde buradan silinmeli. Silinmezse aşağıdaki "sözleşmede
+ * de var" testi düşer: istisna sessizce kalıcı olamaz.
+ */
+const SOZLESMEYE_EKLENECEK = new Map([['GET /pilot/planlar/:id/varliklar/:varlikId', 'strategy.read']]);
+
 function controllerUclari(): Array<{ anahtar: string; izin: string }> {
   const onek = /@Controller\('([^']+)'\)/.exec(CONTROLLER)?.[1];
   if (!onek) throw new Error('@Controller öneki bulunamadı — tarama boşa düşerdi');
@@ -41,10 +49,19 @@ describe('controller ↔ PILOT_UCLARI', () => {
   });
 
   it('KRİTİK: her uç (yöntem, yol, izin) listeyle BİREBİR aynı', () => {
-    const liste = new Map(PILOT_UCLARI.map((u) => [`${u.yontem} ${u.yol}`, u.izin as string]));
+    const liste = new Map<string, string>([...PILOT_UCLARI.map((u) => [`${u.yontem} ${u.yol}`, u.izin as string] as const), ...SOZLESMEYE_EKLENECEK]);
     for (const u of controllerUclari()) {
       expect(liste.has(u.anahtar), `listede olmayan uç: ${u.anahtar}`).toBe(true);
       expect(u.izin, u.anahtar).toBe(liste.get(u.anahtar));
+    }
+  });
+
+  it('sözleşmeye eklenecek uçlar controller’da var ve sözleşmede HENÜZ yok (eklenince istisna silinsin)', () => {
+    const var_ = new Map(controllerUclari().map((u) => [u.anahtar, u.izin]));
+    const sozlesme = new Set(PILOT_UCLARI.map((u) => `${u.yontem} ${u.yol}`));
+    for (const [a, izin] of SOZLESMEYE_EKLENECEK) {
+      expect(var_.get(a), a).toBe(izin);
+      expect(sozlesme.has(a), `${a} sözleşmeye eklendi: istisnayı sil`).toBe(false);
     }
   });
 
@@ -134,7 +151,7 @@ describe('transaction içinde dış çağrı yok (F-20)', () => {
     const govdeler = cagriGovdeleri(oku('plan.service.ts'), 'this.tx(');
     expect(govdeler.length).toBeGreaterThan(8);
     for (const g of govdeler) {
-      for (const yasak of ['gerekceEkle(', 'cumleyiCevir(', 'metinIste(', 'this.yz']) expect(g, yasak).not.toContain(yasak);
+      for (const yasak of ['gerekceEkle(', 'cumleyiCevir(', 'metinIste(', 'this.yz', 'this.metinli(', 'reklamMetinleriniYaz(', 'reklamMetniYaz(']) expect(g, yasak).not.toContain(yasak);
     }
   });
 });

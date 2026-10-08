@@ -14,7 +14,11 @@ import {
   degisiklikCumleyleUyumluMu,
   degisiklikUygula,
   KATALOG_SURUMU,
+  kuruluyorPlanKarari,
+  kurulumGecisiIzinliMi,
   kurulumOzeti,
+  KURULUM_SINIFI,
+  metinleriTasi,
   musteriOzeti,
   onayKapisi,
   pilotGecisMumkunMu,
@@ -23,12 +27,17 @@ import {
   planOnerisiSchema,
   planUret,
   planUyumGirdisi,
+  reklamMetinleriniYerlestir,
   saklananPlanOku,
+  satirVarlikIdleri,
+  TAKILAN_SATIR_HEDEFI,
+  TAKILAN_SATIR_MESAJI,
   uyumDenetle,
   uyumDurumu,
   yayinKipi,
   type DegisiklikIsteGirdisi,
   type KurulumSatiri,
+  type KurulumAraDurumu,
   type KurulumSatirDurumu,
   type OnayKapisiSonucu,
   type OnayRetKodu,
@@ -54,7 +63,8 @@ import {
   type UyumProfili,
   type YayinKipi,
 } from '@advetics/shared';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { YAPAY_ZEKA } from '../../yapay-zeka/yapay-zeka.module';
 import type { MetinUretici } from '../../yapay-zeka/gemini';
 import { planGirdisiOku, yerelGun, type OkumaTx } from './plan-girdisi';
@@ -62,7 +72,8 @@ import { cumleyiCevir, gerekceEkle } from './plan-metni';
 import { uyumProfiliOku } from './uyum-profili';
 import { PilotKurulumKuyrugu } from './kurulum-kuyrugu';
 import { planPdf } from './plan-pdf';
-import { ajansOrgu, gercekYayinAcikMi } from './gercek-yayin';
+import { ajansAyari } from './gercek-yayin';
+import { metinBaglamiOku, reklamMetinleriniYaz, type MetinBaglami } from './plan-reklam-metni';
 
 /**
  * ═══ PİLOT PLAN SERVİSİ (MIMARI § 3, uçların plan yarısı) ═══
@@ -132,6 +143,29 @@ function planSecimi(kosul: Prisma.Sql, kilit: boolean): Prisma.Sql {
      ${kilit ? Prisma.sql`FOR UPDATE OF p` : Prisma.empty}`;
 }
 
+/**
+ * "Kurulumu durdur" (B-4). Shared'daki `PILOT_EYLEM_UCU_EYLEMLERI` ve
+ * `PilotEkranEylemi` bu eylemi henüz taşımıyor (sözleşme Ajan 1'in; ön
+ * koşulsuz genel yola girmesin diye bilerek eklenmedi, MIMARI §12.3). Ön
+ * koşul burada yazıldı; sözleşmeye eklendiğinde bu ek tip ve aşağıdaki iki
+ * dönüşüm kalkar, davranış değişmez.
+ */
+export const TAKILAN_DURDUR = 'takilan_kurulumu_durdur' as const;
+export type PlanEylemiIstegi = PlanEylemiGirdisi | { eylem: typeof TAKILAN_DURDUR; surum: number };
+
+/**
+ * ONAY = YAYIN İÇİN İKİ ANAHTAR (Ajan 4 gözlemi, 2026-10-08). `strategy.publish`
+ * override'sız başlıyor ve bugün onu taşıyan her rol `strategy.approve`u da
+ * ROLDEN taşıyor (`onayYetkisiTutarli` testi kilitliyor). Yani çözümlenmiş
+ * izinlerde approve YOKSA bu, yöneticinin `permission_overrides` ile onu
+ * BİLEREK kapattığı anlamına geliyor: "bu kişi planı onaylamasın". Yalnız
+ * publish'e bakmak o kararı sessizce delip aynı kişiye para harcatan onayı
+ * açık bırakırdı. Güvenli yön: ikisi birden gerekir.
+ */
+export function onayYetkisiVar(izinler: readonly Permission[]): boolean {
+  return izinler.includes('strategy.publish') && izinler.includes('strategy.approve');
+}
+
 /** `client_viewer` müşterinin kendi hesabı; diğer her rol ajans personeli. */
 export function pilotRolu(ctx: Pick<TenantContext, 'role'>): 'musteri' | 'ajans' {
   return ctx.role === 'client_viewer' ? 'musteri' : 'ajans';
@@ -154,16 +188,23 @@ export function yapilabilirEylemler(g: {
   gonderilebilir: boolean;
   isaretBekleyen: boolean;
   onaylanabilir: boolean;
+  /** `kuruluyorPlanKarari` `takildi`/`satir_yok` dedi mi (yalnız `kuruluyor` planda anlamlı). */
+  takildi?: boolean;
 }): PilotEkranEylemi[] {
   const e: PilotEkranEylemi[] = [];
   const yaz = g.izinler.includes('strategy.write');
-  const yayin = g.izinler.includes('strategy.publish');
+  const yayin = onayYetkisiVar(g.izinler);
   const gecis = (eylem: keyof typeof PILOT_PLAN_GECISLERI) => pilotGecisMumkunMu(g.durum, eylem, g.rol);
   if (g.rol === 'ajans' && yaz) {
     if (g.durum === 'taslak') e.push('degistir', 'yeniden_hazirla');
     if (g.isaretBekleyen && (g.durum === 'taslak' || g.durum === 'musteride')) e.push('uyum_isaret');
     if (gecis('musteriye_gonder') && g.gonderilebilir) e.push('musteriye_gonder');
     for (const x of ['geri_cek', 'yeniden_dene', 'kapat', 'iptal'] as const) if (gecis(x)) e.push(x);
+    // Düğme YALNIZ takıldığında: canlı bir işin altından planı çekmek, açılan
+    // kampanyayı kapatılmış bir plana bağlı bırakırdı. Sunucu aynı kararı
+    // yeniden koşuyor (`eylem`), düğme ile kabul ayrışmasın diye ikisi de
+    // `kuruluyorPlanKarari`ndan.
+    if (g.takildi && gecis(TAKILAN_DURDUR)) e.push(TAKILAN_DURDUR as unknown as PilotEkranEylemi);
   }
   if (g.rol === 'musteri' && gecis('degisiklik_iste') && g.izinler.includes('strategy.read')) e.push('degisiklik_iste');
   if (yayin && gecis('onayla') && g.onaylanabilir) e.push('onayla');
@@ -177,8 +218,10 @@ interface KapiOkumasi {
   isaretler: UyumIsareti[];
   aylikButceMicros: bigint | null;
   ajansinKendiSirketi: boolean;
-  /** TEK KAPI (`gercekYayinAcikMi`): okunamazsa false. */
+  /** TEK KAPI (`ajansAyari`): okunamazsa false. */
   gercekYayinAcik: boolean;
+  /** Şirketin (yoksa ajansın) atıf standardı; seçilmediyse `null` (C-16). */
+  atif: string | null;
 }
 
 @Injectable()
@@ -187,10 +230,23 @@ export class PilotPlanService {
     private readonly prisma: PrismaService,
     private readonly kuyruk: PilotKurulumKuyrugu,
     @Inject(YAPAY_ZEKA) private readonly yz: MetinUretici | null,
+    private readonly audit: AuditService,
   ) {}
 
   private tx<T>(ctx: TenantContext, fn: (tx: Tx) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(ctx, (t) => fn(t as unknown as Tx));
+  }
+
+  /**
+   * Plan anında reklam metni (MIMARI §12.4): model çağrıları TRANSACTION
+   * DIŞINDA (`plan-reklam-metni.ts`, paralellik/süre kararı orada), sonuç
+   * TEK DENETLEYİCİDEN geçip plana yerleşir. Yasal uyarı çağıranın kısa
+   * okumasından (TAZE). Yalnız transaction'ların ARASINDA çağrılır
+   * (`pilot-kayit.spec.ts` tarıyor).
+   */
+  private async metinli(plan: PlanOnerisi, b: MetinBaglami, zaman: string): Promise<PlanOnerisi> {
+    const yazimlar = await reklamMetinleriniYaz(this.yz, plan, b, zaman);
+    return yazimlar.size === 0 ? plan : reklamMetinleriniYerlestir(plan, yazimlar, { yasalUyari: b.yasalUyari });
   }
 
   // ── Okuma ────────────────────────────────────────────────────────────
@@ -229,6 +285,7 @@ export class PilotPlanService {
     const durumU = uyumDurumu(k.denetim, k.isaretler, p.icerik_ozeti);
     const kapi = kapiKos(p, k, rol, { surum: p.surum, icerikOzeti: p.icerik_ozeti, musteriAdinaGerekce: rol === 'ajans' ? 'x'.repeat(20) : null });
     const gonder = kapiKos({ ...p, durum: 'musteride' }, k, 'musteri', { surum: p.surum, icerikOzeti: p.icerik_ozeti });
+    const takildi = p.durum === 'kuruluyor' && rol === 'ajans' ? takilmaKarari(await kurulumSatirlari(tx, p), p, simdi) : false;
     return {
       plan: {
         id: p.id,
@@ -237,7 +294,10 @@ export class PilotPlanService {
         durum: p.durum,
         surum: p.surum,
         icerikOzeti: p.icerik_ozeti,
-        yayinKipi: p.yayin_kipi,
+        // B-2: yayın kipi (test/kapalı) ajansın iç kararı; müşteriye
+        // "kampanyaların kurulmayacak" demek onun çözemeyeceği bir sorunu
+        // onun ekranına koymak (onay.ts "müşteriye SÖYLEMEZ").
+        yayinKipi: rol === 'ajans' ? p.yayin_kipi : null,
         onay:
           p.onay_rolu && p.onay_zamani
             ? { rol: p.onay_rolu, zaman: new Date(p.onay_zamani).toISOString(), kim: p.onaylayan_ad, gerekce: p.musteri_adina_gerekce }
@@ -256,10 +316,12 @@ export class PilotPlanService {
         isaretBekleyen: durumU === 'uyari_isaret_bekliyor',
         // Ajansın gerekçesi henüz yazılmadı: kapı GEREKCE dışındaki retlere bakar.
         onaylanabilir: kapi.tur === 'kabul' || kapi.retler.every((r) => r.kod === 'GEREKCE'),
+        takildi,
       }),
       // Ajans görünümünde gerekçe yer tutucusuyla koşuldu; ret listesinde
-      // GEREKCE çıkmaz, panel gerekçeyi kendi alanında ister.
-      onayKapisi: kapi,
+      // GEREKCE çıkmaz, panel gerekçeyi kendi alanında ister. Müşteriye
+      // giden kopya SÜZÜLÜR (B-2): ajans notu ve ajans mesajı yok.
+      onayKapisi: rol === 'ajans' ? kapi : musteriKapisi(kapi),
       uyum: rol === 'ajans' ? { durum: durumU, bulgular: k.denetim.bulgular, isaretler: k.isaretler } : null,
     };
   }
@@ -272,9 +334,14 @@ export class PilotPlanService {
     const okuma = await this.tx(ctx, async (tx) => {
       const acik = await acikPlan(tx, g.clientId, g.donem);
       if (acik) throw new ConflictException(`${g.donem} için açık bir plan zaten var. Yeni plan için önce onu iptal et.`);
-      return planGirdisiOku(tx, g.clientId, g.donem, simdi);
+      return { ...(await planGirdisiOku(tx, g.clientId, g.donem, simdi)), metinBaglami: await metinBaglamiOku(tx, g.clientId) };
     });
-    const plan = await gerekceEkle(this.yz, planUret(okuma.girdi), simdi.toISOString());
+    // Model çağrıları İKİ transaction'ın ARASINDA: önce reklam metinleri
+    // (karar (a): metin planın parçası, onay özeti onu da bağlar), sonra
+    // gerekçe paragrafı. Sıra önemli değil ama tek yerde: gerekçe metni
+    // anlatmıyor, metin gerekçeyi okumuyor.
+    const metinli = await this.metinli(planUret(okuma.girdi), okuma.metinBaglami, simdi.toISOString());
+    const plan = await gerekceEkle(this.yz, metinli, simdi.toISOString());
     try {
       return await this.tx(ctx, async (tx) => {
         // org_id HEDEF MÜŞTERİDEN: "tüm şirketler" modunda ctx.orgId ev şirketi.
@@ -309,9 +376,20 @@ export class PilotPlanService {
       if (p.elle_degisti && g.onay !== true) {
         throw new ConflictException('Bu planda elle yapılmış değişiklikler var; yeniden hazırlamak onları siler. Onaylıyorsan yeniden dene.');
       }
-      return { p, okuma: await planGirdisiOku(tx, p.client_id, p.donem, simdi) };
+      return {
+        p,
+        okuma: await planGirdisiOku(tx, p.client_id, p.donem, simdi),
+        guncel: await surumOku(tx, p.id, p.surum),
+        metinBaglami: await metinBaglamiOku(tx, p.client_id),
+      };
     });
-    const plan = await gerekceEkle(this.yz, planUret(okuma.okuma.girdi), simdi.toISOString());
+    // Taze sayılarla yeniden üretilen planda kitle/görsel/amaç değişmeyen
+    // satırın metni TAŞINIR (müşteri aynı metni ikinci kez okumasın, model
+    // boşa çağrılmasın); değişen satır ve TAZE yasal uyarıyı taşımayan metin
+    // yeniden yazılır (`metinleriTasi`).
+    const tasinan = metinleriTasi(okuma.guncel, planUret(okuma.okuma.girdi), { yasalUyari: okuma.metinBaglami.yasalUyari });
+    const metinli = await this.metinli(tasinan, okuma.metinBaglami, simdi.toISOString());
+    const plan = await gerekceEkle(this.yz, metinli, simdi.toISOString());
     return this.tx(ctx, async (tx) => {
       const p = await duzenlemeKapisi(tx, ctx, id, g.surum);
       await yeniSurum(tx, p, plan, 'yeniden_hazirla', null, ctx.userId, false, okuma.okuma.kitleUyum, simdi, okuma.okuma.saatDilimi);
@@ -328,7 +406,7 @@ export class PilotPlanService {
     ajans(ctx);
     const once = await this.tx(ctx, async (tx) => {
       const p = await duzenlemeKapisi(tx, ctx, id, g.surum);
-      return { plan: await surumOku(tx, p.id, p.surum) };
+      return { plan: await surumOku(tx, p.id, p.surum), metinBaglami: await metinBaglamiOku(tx, p.client_id) };
     });
     let degisiklikler: PlanDegisikligi[];
     if (g.degisiklikler && g.degisiklikler.length > 0) degisiklikler = g.degisiklikler;
@@ -350,9 +428,16 @@ export class PilotPlanService {
       aciklama: g.cumle ? `"${g.cumle.slice(0, 120)}"` : 'Elle düzenleme',
     });
     if (s.tur === 'ret') throw new BadRequestException(s.mesaj);
+    // `degisiklikUygula` metinleri yasal uyarısız taşıdı (profili bilmiyor);
+    // burada TAZE uyarıyla bir kez daha süzülür: uyarı plan yazıldıktan sonra
+    // Marka Merkezi'nde değiştiyse korunan metin onu taşımaz ve onay anında
+    // düşerdi. Taşınamayan satırlar yeniden yazılır; yalnız tutar
+    // değiştiyse hiçbir model çağrısı yapılmaz.
+    const tasinan = metinleriTasi(once.plan, s.plan, { yasalUyari: once.metinBaglami.yasalUyari });
+    const metinli = await this.metinli(tasinan, once.metinBaglami, simdi.toISOString());
     // Eski paragraf eski sayıları anlatıyor olabilir; degisiklikUygula onu
     // düşürdü. Yenisi en iyi çabayla yazılır; yazılamazsa boş kalır.
-    const yeni = await gerekceEkle(this.yz, s.plan, simdi.toISOString());
+    const yeni = await gerekceEkle(this.yz, metinli, simdi.toISOString());
     return this.tx(ctx, async (tx) => {
       const p = await duzenlemeKapisi(tx, ctx, id, g.surum);
       const ku = await kitleUyumOku(tx, p.client_id);
@@ -381,7 +466,7 @@ export class PilotPlanService {
 
   // ── Durum makinesi ───────────────────────────────────────────────────
 
-  async eylem(ctx: TenantContext, id: string, g: PlanEylemiGirdisi, simdi = new Date()): Promise<PilotPlanDetayi> {
+  async eylem(ctx: TenantContext, id: string, g: PlanEylemiIstegi, simdi = new Date()): Promise<PilotPlanDetayi> {
     ajans(ctx);
     let kuyrugaAl = false;
     await this.tx(ctx, async (tx) => {
@@ -389,6 +474,7 @@ export class PilotPlanService {
       if (!pilotGecisMumkunMu(p.durum, g.eylem, 'ajans')) throw new ConflictException(gecisMesaji(p.durum));
       if (p.surum !== g.surum) throw new ConflictException(SURUM_MESAJI);
       const hedef = PILOT_PLAN_GECISLERI[g.eylem].hedef;
+      if (g.eylem === TAKILAN_DURDUR) await takilanSatirlariDusur(tx, p, simdi);
       if (g.eylem === 'musteriye_gonder') {
         const k = await kapiOku(tx, p, simdi);
         const r = kapiKos({ ...p, durum: 'musteride' }, k, 'musteri', { surum: p.surum, icerikOzeti: p.icerik_ozeti });
@@ -416,6 +502,16 @@ export class PilotPlanService {
       const n = await tx.$executeRaw(Prisma.sql`
         UPDATE pilot_planlari SET durum = ${hedef}, updated_at = now() WHERE id = ${p.id}::uuid AND durum = ${p.durum}`);
       if (n !== 1) throw new ConflictException(SURUM_MESAJI);
+      if (g.eylem === TAKILAN_DURDUR) {
+        await this.audit.record(tx as unknown as TenantClient, ctx, {
+          action: 'pilot_plan.takilan_kurulum_durduruldu',
+          targetType: 'pilot_planlari',
+          targetId: p.id,
+          clientId: p.client_id,
+          before: { durum: p.durum },
+          after: { durum: hedef },
+        });
+      }
     });
     if (kuyrugaAl) await this.kurulumuKuyrugaAl(id, `yd${simdi.getTime()}`, true);
     return this.detay(ctx, id, simdi);
@@ -440,8 +536,18 @@ export class PilotPlanService {
    * dilinde mesajlar döner (müşteriye uyum ayrıntısı gitmez). Kabulde yayın
    * kipi yazılır ve kurulum işi kuyruğa girer.
    */
-  async onayla(ctx: TenantContext, id: string, g: PlanOnaylaGirdisi, simdi = new Date()): Promise<PilotPlanDetayi> {
+  async onayla(
+    ctx: TenantContext,
+    id: string,
+    g: PlanOnaylaGirdisi,
+    simdi = new Date(),
+    istek: { ip: string | null; userAgent: string | null; requestId?: string } = { ip: null, userAgent: null },
+  ): Promise<PilotPlanDetayi> {
     const rol = pilotRolu(ctx);
+    // Uç dekoratörü yalnız `strategy.publish`e bakıyor; override ile onayı
+    // kapatılmış üyelik burada durur (`onayYetkisiVar`). Plan okunmadan:
+    // ret, planın varlığı hakkında bilgi vermesin.
+    if (!onayYetkisiVar(ctx.permissions)) throw new ForbiddenException('Bu hesabın plan onaylama yetkisi kapatılmış.');
     await this.tx(ctx, async (tx) => {
       const p = await planOku(tx, ctx, id, true);
       const k = await kapiOku(tx, p, simdi);
@@ -461,6 +567,24 @@ export class PilotPlanService {
                yayin_kipi = ${r.kip}, onay_denetim_id = ${denetimId}::uuid, updated_at = now()
          WHERE id = ${p.id}::uuid AND durum = 'musteride' AND surum = ${g.surum}`);
       if (n !== 1) throw new ConflictException(SURUM_MESAJI);
+      // MÜŞTERİ ADINA ONAY DENETİM KAYDINA DA (Ajan 4 gözlemi): plan satırı
+      // "ajans onayladı + gerekçe"yi taşıyor ama o satır bir sonraki "Şimdi
+      // kur"da güncelleniyor ve kimin hangi IP'den, hangi sürümü, hangi
+      // gerekçeyle onayladığı yalnız append-only denetim tablosunda
+      // değişmez kalır. Aynı transaction'da: onay geri alınırsa kayıt da.
+      if (rol === 'ajans') {
+        await this.audit.record(tx as unknown as TenantClient, ctx, {
+          action: 'pilot_plan.musteri_adina_onaylandi',
+          targetType: 'pilot_planlari',
+          targetId: p.id,
+          clientId: p.client_id,
+          before: { durum: p.durum },
+          after: { durum: 'onaylandi', surum: g.surum, icerikOzeti: g.icerikOzeti, gerekce: g.musteriAdinaGerekce!.trim(), yayinKipi: r.kip },
+          ip: istek.ip,
+          userAgent: istek.userAgent,
+          requestId: istek.requestId ?? null,
+        });
+      }
     });
     await this.kurulumuKuyrugaAl(id, 'onay');
     return this.detay(ctx, id, simdi);
@@ -490,8 +614,10 @@ export class PilotPlanService {
           FROM pilot_kurulum_satirlari WHERE plan_id = ${p.id}::uuid
          ORDER BY onaylanan_surum DESC, satir_anahtari`);
       const rol = pilotRolu(ctx);
+      const takildi = p.durum === 'kuruluyor' && rol === 'ajans' ? takilmaKarari(satirlar.map((x) => ({ durum: x.durum, guncellendi: x.updated_at })), p, new Date()) : false;
       return {
-        plan: { id: p.id, donem: p.donem, durum: p.durum, surum: p.surum, yayinKipi: p.yayin_kipi },
+        // B-2: kip müşteriye gitmez (detayKur ile aynı karar).
+        plan: { id: p.id, donem: p.donem, durum: p.durum, surum: p.surum, yayinKipi: rol === 'ajans' ? p.yayin_kipi : null },
         ozet: kurulumOzeti(satirlar),
         satirlar: satirlar.map((s) => ({
           anahtar: s.satir_anahtari,
@@ -502,8 +628,8 @@ export class PilotPlanService {
           farklar: Array.isArray(s.farklar) ? s.farklar : [],
           guncellendi: new Date(s.updated_at).toISOString(),
         })),
-        yapilabilir: yapilabilirEylemler({ durum: p.durum, rol, izinler: ctx.permissions, gonderilebilir: false, isaretBekleyen: false, onaylanabilir: false }).filter(
-          (e) => e === 'yeniden_dene' || e === 'kapat',
+        yapilabilir: yapilabilirEylemler({ durum: p.durum, rol, izinler: ctx.permissions, gonderilebilir: false, isaretBekleyen: false, onaylanabilir: false, takildi }).filter(
+          (e) => e === 'yeniden_dene' || e === 'kapat' || (e as string) === TAKILAN_DURDUR,
         ),
       };
     });
@@ -537,7 +663,7 @@ function gecisMesaji(durum: PilotPlanDurumu): string {
   return `Plan şu an bu işleme uygun değil (durum: ${durum}). Sayfayı yenile.`;
 }
 
-async function planOku(tx: Tx, ctx: TenantContext, id: string, kilit: boolean): Promise<PlanSatiri> {
+export async function planOku(tx: Tx, ctx: TenantContext, id: string, kilit: boolean): Promise<PlanSatiri> {
   const [p] = await tx.$queryRaw<PlanSatiri[]>(planSecimi(Prisma.sql`p.id = ${id}::uuid`, kilit));
   // RLS süzüyor; bağlam listesi ikinci kapı ("tüm şirketler" modunda RLS
   // kardeş şirketleri de gösteriyor, bağlamın listesi kullanıcınınki).
@@ -678,12 +804,24 @@ async function kapiOku(tx: Tx, p: PlanSatiri, simdi: Date): Promise<KapiOkumasi>
   const [b] = await tx.$queryRaw<Array<{ micros: string }>>(Prisma.sql`
     SELECT amount_micros::text AS micros FROM monthly_budgets
      WHERE client_id = ${p.client_id}::uuid AND ad_account_id IS NULL AND month = ${`${p.donem}-01`}::date`);
-  // "Ajansın kendi şirketi" anahtarla AYNI tanımdan (`ajansOrgu`): ajansı
-  // belirsiz şirket ajans SAYILMAZ, yani test kipi müşteri hesabına düşmez.
-  const ajansinKendiSirketi = (await ajansOrgu(tx, p.org_id).catch(() => null)) === p.org_id;
-  const gy = await gercekYayinAcikMi(tx, p.org_id);
-  return { plan, profil, denetim, isaretler, aylikButceMicros: b ? BigInt(b.micros) : null, ajansinKendiSirketi, gercekYayinAcik: gy.acik };
+  // "Ajansın kendi şirketi", anahtar ve atıf TEK okumadan (`ajansAyari`,
+  // RLS'e tabi olmayan dar yol; B-1): ajansı belirsiz şirket ajans SAYILMAZ
+  // (test kipi müşteri hesabına düşmez) ve anahtarı KAPALI sayılır.
+  const aa = await ajansAyari(tx, p.org_id).catch(() => null);
+  return {
+    plan,
+    profil,
+    denetim,
+    isaretler,
+    aylikButceMicros: b ? BigInt(b.micros) : null,
+    ajansinKendiSirketi: !!aa?.ajans && aa.ajans === p.org_id,
+    gercekYayinAcik: !!aa?.ajans && aa.gercekYayin,
+    atif: aa?.atif ?? null,
+  };
 }
+
+/** C-16: işçinin `derle` adımıyla aynı cümle; onay anında söylenir, kurulumda değil. */
+export const ATIF_YOK_MESAJI = 'Atıf standardı henüz seçilmedi. Ajans yöneticisi seçene kadar kampanya kurulamaz; plan onaylanırsa kurulum düşerdi.';
 
 function kapiKos(
   p: Pick<PlanSatiri, 'durum' | 'surum' | 'icerik_ozeti'>,
@@ -691,7 +829,7 @@ function kapiKos(
   rol: 'musteri' | 'ajans',
   istek: { surum: number; icerikOzeti: string; musteriAdinaGerekce?: string | null },
 ): OnayKapisiSonucu {
-  return onayKapisi({
+  const r = onayKapisi({
     durum: p.durum,
     surum: p.surum,
     icerikOzeti: p.icerik_ozeti,
@@ -706,4 +844,76 @@ function kapiKos(
     // hazırlandıktan sonra değiştiyse eski metin kapıda düşer.
     yasalUyari: k.profil.yasalUyari,
   });
+  // C-16: ATIF STANDARDI ONAY ANINDA. Önceden yalnız işçi bakıyordu: müşteri
+  // onaylıyor, plan "onaylandı" oluyor ve kurulum ilk satırda "atıf
+  // seçilmedi" ile düşüyordu; müşteri onayladığı planın kurulmadığını
+  // bilmiyordu. Platforma hiç gidilmeyecek kipte (`kapali`) atıf gerekmez,
+  // ret yalnız kurulumun gerçekten platforma yazacağı kipte. İşçideki kontrol
+  // EMNİYET olarak kalıyor (onaydan sonra seçim silinebilir).
+  const kip = yayinKipi(uyumDurumu(k.denetim, k.isaretler, p.icerik_ozeti), k.ajansinKendiSirketi, k.gercekYayinAcik);
+  if (kip === 'kapali' || k.atif) return r;
+  const atifRet = { kod: 'KURULAMAYAN_SATIR' as const, musteriMesaji: 'Plan henüz hazır değil; ajansın bilgilendirildi.', ajansMesaji: ATIF_YOK_MESAJI };
+  return { tur: 'ret', retler: [...(r.tur === 'ret' ? r.retler : []), atifRet] };
+}
+
+/**
+ * B-2: müşteriye giden kapı kopyası. Ajans notu ("anahtar kapalı",
+ * "platforma hiçbir şey yazılmadı") ve ajans mesajı (uyum kuralının adı)
+ * ÇIKAR; müşteri yalnız kendi dilindeki cümleyi görür. Panel bunları
+ * çizmiyordu ama API yanıtı onları taşıyordu.
+ */
+function musteriKapisi(k: OnayKapisiSonucu): OnayKapisiSonucu {
+  if (k.tur === 'kabul') return { ...k, ajansNotu: null };
+  return { tur: 'ret', retler: k.retler.filter((x) => x.musteriMesaji).map((x) => ({ ...x, ajansMesaji: x.musteriMesaji })) };
+}
+
+async function kurulumSatirlari(tx: Tx, p: Pick<PlanSatiri, 'id' | 'onaylanan_surum'>): Promise<Array<{ id: string; durum: KurulumSatirDurumu; guncellendi: Date }>> {
+  if (p.onaylanan_surum === null) return [];
+  return tx.$queryRaw<Array<{ id: string; durum: KurulumSatirDurumu; guncellendi: Date }>>(Prisma.sql`
+    SELECT id::text, durum, updated_at AS guncellendi FROM pilot_kurulum_satirlari
+     WHERE plan_id = ${p.id}::uuid AND onaylanan_surum = ${p.onaylanan_surum}`);
+}
+
+/** Düğme ve uç AYNI karardan (`kuruluyorPlanKarari`): `takildi` ya da `satir_yok`. */
+function takilmaKarari(satirlar: ReadonlyArray<{ durum: KurulumSatirDurumu; guncellendi: Date }>, p: Pick<PlanSatiri, 'updated_at'>, simdi: Date): boolean {
+  const k = kuruluyorPlanKarari({
+    planGuncellendi: new Date(p.updated_at).toISOString(),
+    satirlar: satirlar.map((x) => ({ durum: x.durum, guncellendi: new Date(x.guncellendi).toISOString() })),
+    simdi: simdi.toISOString(),
+  });
+  return k.tur === 'takildi' || k.tur === 'satir_yok';
+}
+
+/**
+ * "Kurulumu durdur"un satır yarısı (B-4), plan geçişiyle AYNI transaction'da.
+ * Ön koşul `kuruluyorPlanKarari`: canlı bir iş sürerken (genç bir ara satır)
+ * reddedilir. Son olmayan her satır `TAKILAN_SATIR_HEDEFI`ne iner (hepsi
+ * başarısız ve "Şimdi kur" çıkışlı) ve ETKİLENEN SATIR SAYILIR: politikası
+ * olmayan bir UPDATE hata vermeden sıfır satır etkilerdi ve plan, satırları
+ * hâlâ "kuruluyor" derken `kismen_kuruldu`ya kayardı.
+ */
+async function takilanSatirlariDusur(tx: Tx, p: PlanSatiri, simdi: Date): Promise<void> {
+  const satirlar = await kurulumSatirlari(tx, p);
+  if (!takilmaKarari(satirlar, p, simdi)) {
+    const k = kuruluyorPlanKarari({
+      planGuncellendi: new Date(p.updated_at).toISOString(),
+      satirlar: satirlar.map((x) => ({ durum: x.durum, guncellendi: new Date(x.guncellendi).toISOString() })),
+      simdi: simdi.toISOString(),
+    });
+    throw new ConflictException(
+      k.tur === 'suruyor'
+        ? 'Kurulum hâlâ sürüyor; bir satır son dakikalarda ilerledi. Takılırsa (45 dakika hareketsiz) durdurabilirsin.'
+        : 'Bütün satırlar zaten bitmiş; sayfayı yenile.',
+    );
+  }
+  for (const s of satirlar) {
+    if (KURULUM_SINIFI[s.durum].son) continue;
+    const hedef = TAKILAN_SATIR_HEDEFI[s.durum as KurulumAraDurumu];
+    if (!kurulumGecisiIzinliMi(s.durum, hedef)) throw new Error(`İzinsiz kurulum geçişi: ${s.durum} → ${hedef}`);
+    const r = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      UPDATE pilot_kurulum_satirlari SET durum = ${hedef}, platform_mesaji = ${TAKILAN_SATIR_MESAJI}, updated_at = now()
+       WHERE id = ${s.id}::uuid AND durum = ${s.durum}
+      RETURNING id::text`);
+    if (r.length !== 1) throw new ConflictException(SURUM_MESAJI);
+  }
 }

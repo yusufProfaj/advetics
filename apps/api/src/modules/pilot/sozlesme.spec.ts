@@ -917,11 +917,11 @@ describe('DEVİR — karar (a) uygulaması (Ajan 2)', () => {
     expect(yorumsuz('plan.service.ts')).toContain('async hazirla(');
   });
 
-  it.fails('DEVİR A2-1: işçi reklam metnini YAZMIYOR — taslak metni onaylı satırdan okunur, model çağrısı yok', () => {
+  it('DEVİR A2-1: işçi reklam metnini YAZMIYOR — taslak metni onaylı satırdan okunur, model çağrısı yok', () => {
     expect(yorumsuz('kurulum-isleyici.ts')).not.toMatch(/reklamMetniYaz\(/);
   });
 
-  it.fails('DEVİR A2-2: plan servisi metni hazırlarken yazar ve değişiklikte taşır', () => {
+  it('DEVİR A2-2: plan servisi metni hazırlarken yazar ve değişiklikte taşır', () => {
     const s = yorumsuz('plan.service.ts');
     expect(s).toContain('reklamMetinleriniYerlestir(');
     expect(s).toContain('metinleriTasi(');

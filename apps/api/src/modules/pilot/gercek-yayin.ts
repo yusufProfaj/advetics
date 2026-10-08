@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { GercekYayinGirdisi, PilotGercekYayinDurumu, TenantContext } from '@advetics/shared';
+import type { AtifStandardi, GercekYayinGirdisi, PilotGercekYayinDurumu, TenantContext } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import type { OkumaTx } from './plan-girdisi';
@@ -23,21 +23,53 @@ import type { OkumaTx } from './plan-girdisi';
  * anda para harcatmak olabilir.
  */
 export async function ajansOrgu(tx: OkumaTx, orgId: string): Promise<string | null> {
+  return (await ajansAyari(tx, orgId))?.ajans ?? null;
+}
+
+/**
+ * Şirketin ajansı + ajansın anahtarı + atıf standardı, TEK okumada ve RLS'e
+ * TABİ OLMAYAN dar yoldan (`app.pilot_ajans_ayari`, 02_rls.sql). Doğrudan
+ * tablo okuması müşteri hesabının bağlamında `manager_accounts` ve ajansın
+ * `ajans_ayari` satırını göremiyordu: ajans "bilinmiyor" sayılıyor ve
+ * anahtar AÇIKKEN müşteri onayı `kapali`ya düşüyordu (Ajan 4 B-1). Fonksiyon
+ * yalnız çağıranın kapsamındaki şirkete cevap verir; kapsam dışı ya da
+ * bilinmeyen şirket `null`.
+ */
+export async function ajansAyari(tx: OkumaTx, orgId: string): Promise<{ ajans: string | null; gercekYayin: boolean; atif: AtifStandardi | null } | null> {
+  const [r] = await tx.$queryRaw<Array<{ ajans: string | null; acik: boolean; atif: string | null }>>(Prisma.sql`
+    SELECT ajans_org_id::text AS ajans, gercek_yayin AS acik, atif_standardi AS atif FROM app.pilot_ajans_ayari(${orgId}::uuid)`);
+  if (r) return { ajans: r.ajans, gercekYayin: r.acik === true, atif: (r.atif as AtifStandardi | null) ?? null };
+  return dogrudanOku(tx, orgId);
+}
+
+/**
+ * Fonksiyon satır döndürmediyse (şirket çağıranın kapsamında değil ya da
+ * bağlam yok: worker/test) ÇAĞIRANIN kendi yetkisiyle doğrudan okuma. RLS'li
+ * bağlamda bu yol fonksiyonun göremediğini GÖREMEZ (aynı kapsam, daha dar
+ * politika), yani hiçbir şeyi genişletmiyor; bağlamsız BYPASSRLS bağlantıda
+ * (işçi, testler) tabloyu olduğu gibi okur. Kural fonksiyonla AYNI: üst
+ * hesapsız şirket kendi ajansı; atıf önce şirketin kendi satırı.
+ */
+async function dogrudanOku(tx: OkumaTx, orgId: string): Promise<{ ajans: string | null; gercekYayin: boolean; atif: AtifStandardi | null } | null> {
   const [o] = await tx.$queryRaw<Array<{ mid: string | null; ajans: string | null }>>(Prisma.sql`
     SELECT o.manager_account_id::text AS mid, ma.ajans_org_id::text AS ajans
       FROM organizations o LEFT JOIN manager_accounts ma ON ma.id = o.manager_account_id
      WHERE o.id = ${orgId}::uuid`);
   if (!o) return null;
-  return o.mid === null ? orgId : o.ajans;
+  const ajans = o.mid === null ? orgId : o.ajans;
+  const satirlar = await tx.$queryRaw<Array<{ org: string; acik: boolean; atif: string | null }>>(Prisma.sql`
+    SELECT org_id::text AS org, pilot_gercek_yayin AS acik, atif_standardi AS atif FROM ajans_ayari
+     WHERE org_id = ${orgId}::uuid OR org_id = ${ajans}::uuid`);
+  const kendi = satirlar.find((x) => x.org === orgId);
+  const aj = ajans ? satirlar.find((x) => x.org === ajans) : undefined;
+  return { ajans, gercekYayin: aj?.acik === true, atif: ((kendi?.atif ?? aj?.atif ?? null) as AtifStandardi | null) };
 }
 
 export async function gercekYayinAcikMi(tx: OkumaTx, orgId: string): Promise<{ acik: boolean; okunamadi: string | null }> {
   try {
-    const ajans = await ajansOrgu(tx, orgId);
-    if (!ajans) return { acik: false, okunamadi: 'Şirketin ajansı belirlenemedi; gerçek yayın kapalı sayılıyor.' };
-    const [a] = await tx.$queryRaw<Array<{ acik: boolean }>>(Prisma.sql`
-      SELECT pilot_gercek_yayin AS acik FROM ajans_ayari WHERE org_id = ${ajans}::uuid`);
-    return { acik: a?.acik === true, okunamadi: null };
+    const a = await ajansAyari(tx, orgId);
+    if (!a?.ajans) return { acik: false, okunamadi: 'Şirketin ajansı belirlenemedi; gerçek yayın kapalı sayılıyor.' };
+    return { acik: a.gercekYayin, okunamadi: null };
   } catch (e) {
     return { acik: false, okunamadi: `Anahtar okunamadı: ${(e as Error).message}` };
   }

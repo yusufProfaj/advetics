@@ -48,7 +48,19 @@ let pilot: PilotService;
 let beyan: PilotBeyanService;
 const kuyruk = { planEkle: vi.fn<(id: string, tetik: string, yeniden?: boolean) => Promise<void>>() };
 const audit = { record: vi.fn() };
-const yz = null as MetinUretici | null;
+/**
+ * Reklam metni plan anında yazılıyor (karar (a), 2026-10-08): metinsiz plan
+ * müşteriye gönderilemez. Sahte model reklam metni isteğine SABİT bir metin
+ * döndürür, gerekçe isteğini düşürür (plan gerekçesiz üretilir). Bu
+ * dosyanın sınadığı şey kapılar, metnin kendisi değil.
+ */
+const yz: MetinUretici = {
+  model: 'sahte',
+  uret: vi.fn(async (g: { sistem: string }) => {
+    if (!g.sistem.includes('reklam metni yazıyorsun')) throw new Error('model düştü');
+    return { parcalar: [{ text: JSON.stringify({ metinler: [{ baslik: 'Taze kahve', metin: 'Sabahların yeni tadı.' }] }) }], sebep: 'bitti', aciklama: null, girdiToken: 0, ciktiToken: 0, onbellekToken: 0 };
+  }),
+} as unknown as MetinUretici;
 
 const OTEKI = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const BASKA_ORG = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -86,7 +98,7 @@ const YABANCI_MUSTERI = { ...MUSTERI, clientIds: [OTEKI], activeClientId: OTEKI 
 beforeAll(async () => {
   h = await createHarness();
   const prisma = { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
-  plan = new PilotPlanService(prisma, kuyruk as unknown as PilotKurulumKuyrugu, yz);
+  plan = new PilotPlanService(prisma, kuyruk as unknown as PilotKurulumKuyrugu, yz, audit as unknown as AuditService);
   pilot = new PilotService(prisma);
   beyan = new PilotBeyanService(prisma, audit as unknown as AuditService);
   await h.q(`DO $$ BEGIN CREATE ROLE ${ROL} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$`);
@@ -103,7 +115,7 @@ beforeEach(async () => {
   await h.reset();
   await seedTenant(h);
   await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'Öteki', 'oteki', now())`, [OTEKI, IDS.org]);
-  await h.q(`INSERT INTO ajans_ayari (org_id, pilot_gercek_yayin, pilot_gercek_yayin_at, pilot_gercek_yayin_sebebi) VALUES ($1, true, now(), 'test kurulumu')`, [IDS.org]);
+  await h.q(`INSERT INTO ajans_ayari (org_id, atif_standardi, atif_secim_at, pilot_gercek_yayin, pilot_gercek_yayin_at, pilot_gercek_yayin_sebebi) VALUES ($1, 'tik7', now(), true, now(), 'test kurulumu')`, [IDS.org]);
   await h.q(`UPDATE clients SET ozel_kategori_beyan_zamani = now() WHERE id = $1`, [IDS.client]);
   await h.q(`INSERT INTO monthly_budgets (id, org_id, client_id, month, amount_micros, currency, updated_at) VALUES (gen_random_uuid(), $1, $2, '2026-11-01', 120000000000, 'TRY', now())`, [IDS.org, IDS.client]);
   await h.q(`INSERT INTO audience_templates (id, org_id, client_id, name, updated_at) VALUES ($1, $2, $3, 'Genel', now())`, [KITLE, IDS.org, IDS.client]);
@@ -290,8 +302,29 @@ describe('gerçek yayın anahtarı — müşteri bağlamında RLS altında okunu
   // 4 tıklama, Ç-6 "müşteri onayı yeter" kararı fiilen çalışmıyor). Güvenli
   // yöne düşüyor (para harcamıyor) ama sessiz: testler RLS kapalı koştuğu
   // için plan.service.spec müşteri onayında `gercek` görüyor.
-  it.fails('BULGU B-1: müşteri hesabı bağlamında da ajansın AÇIK anahtarı açık okunmalı', async () => {
+  // KAPANDI 2026-10-08 (Ajan 2): `app.pilot_ajans_ayari` (SECURITY DEFINER,
+  // yalnız çağıranın kapsamındaki şirket için üç değer) — `it.fails` → `it`.
+  it('BULGU B-1: müşteri hesabı bağlamında da ajansın AÇIK anahtarı açık okunmalı', async () => {
     expect(await anahtarOku({ org: MUSTERI_ORG, manager: '', admin: false })).toEqual({ acik: true, okunamadi: null });
+  });
+
+  it('KRİTİK: dar yol bir kâhin değil — kapsam dışındaki şirketi sorunca boş döner (müşteri ajansın kendisini soramaz)', async () => {
+    // Müşteri bağlamı, ajans şirketinin kimliğini doğrudan soruyor: fonksiyon
+    // satır döndürmez, RLS'li geri dönüş yolu da göremez → KAPALI.
+    await h.q(`
+      SELECT set_config('app.current_org_id', '${MUSTERI_ORG}', false), set_config('app.current_user_id', '${IDS.user}', false),
+             set_config('app.current_client_ids', '', false), set_config('app.is_org_admin', 'off', false),
+             set_config('app.current_active_client_id', '', false), set_config('app.current_manager_account_id', '', false),
+             set_config('app.tum_sirketler', 'off', false)`);
+    for (const t of ANAHTAR_TABLOLARI) await h.q(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`);
+    await h.q(`SET ROLE ${ROL}`);
+    try {
+      expect(await h.q('SELECT * FROM app.pilot_ajans_ayari($1::uuid)', [IDS.org])).toHaveLength(0);
+      expect((await gercekYayinAcikMi(h.db, IDS.org)).acik).toBe(false);
+    } finally {
+      await h.q('RESET ROLE');
+      for (const t of ANAHTAR_TABLOLARI) await h.q(`ALTER TABLE ${t} DISABLE ROW LEVEL SECURITY`);
+    }
   });
 });
 
@@ -433,7 +466,8 @@ describe('rol: müşteri plan yazamaz, onay yalnız musteride', () => {
   // `plan.yayinKipi` da müşteriye gidiyor. Panel çizmiyor (pilot-ekrani.spec
   // "uyum ve yayın kipi notu müşteriye çizilmiyor") ama API yanıtı Ç-6 ve
   // onay.ts'in "müşteriye SÖYLEMEZ" sözünü tutmuyor.
-  it.fails('BULGU B-2: müşteri yanıtında ajans notu / yayın kipi / anahtar cümlesi YOK', async () => {
+  // KAPANDI 2026-10-08 (Ajan 2): `detayKur`/`kurulum` müşteri kopyasını süzüyor.
+  it('BULGU B-2: müşteri yanıtında ajans notu / yayın kipi / anahtar cümlesi YOK', async () => {
     await h.q(`UPDATE ajans_ayari SET pilot_gercek_yayin = false`);
     const { id } = await musteride();
     const d = await plan.detay(MUSTERI, id, SIMDI);
@@ -516,9 +550,10 @@ describe('kurulum işçisi — ara durumda takılan satır', () => {
     );
     return id;
   }
+  const satirEkle = vi.fn(async (_id: string, _t: string) => undefined);
   const supur = async () => {
     const ekle = vi.fn(async () => undefined);
-    const n = await pilotSupurmesi({ tx: (fn) => fn(h.db as never), planEkle: ekle }, new Date());
+    const n = await pilotSupurmesi({ tx: (fn) => fn(h.db as never), planEkle: ekle, satirEkle }, new Date());
     return n;
   };
 
@@ -527,20 +562,70 @@ describe('kurulum işçisi — ara durumda takılan satır', () => {
     expect(await supur()).toBe(1);
   });
 
-  // BULGU B-4 (Ajan 2): satır işi `prova`/`kuruluyor`/`geri_okundu_ayni`/
-  // `aciliyor`dayken beklenmeyen bir hatayla düşerse (attempts: 1; `gecis`
-  // iyimser kilidi, DB hatası, ya da BullMQ stalled sınırı) `failed`
-  // dinleyicisi YALNIZ `taslak`ı kapatıyor, süpürme YALNIZ `taslak`a
-  // bakıyor ve ajansın `kuruluyor`dan çıkışı yok (`iptal`/`kapat` kaynak
-  // listesinde değil). Plan kalıcı `kuruluyor`, kısmi tekil indeks o ayı
-  // KİLİTLİYOR (yeni plan açılamaz) ve ekran "Kampanyalar kuruluyor" diyor.
-  // CLAUDE.md "kısmi tekil indeks + son durumu olmayan durum makinesi".
-  it.fails('BULGU B-4: ara durumda takılmış satırın bir ÇIKIŞI var (süpürme ya da ajans eylemi)', async () => {
+  // BULGU B-4 (Ajan 2) — KAPANDI 2026-10-08. Önceden ara durumda ölen satır
+  // işi planı kalıcı `kuruluyor`da bırakıyor, kısmi tekil indeks o ayı
+  // kilitliyordu. Bugün iki çıkış var ve İKİSİ DE sayılıyor: süpürme
+  // (yeniden kuyruk → hak bitince başarısız son durum → sayım) ve ajansın
+  // `takilan_kurulumu_durdur`u (ön koşul `kuruluyorPlanKarari`). İkisinin
+  // sonunda `kapat` ile ay SERBEST kalır.
+  it('BULGU B-4: ara durumda takılmış satırın bir ÇIKIŞI var (süpürme ya da ajans eylemi)', async () => {
     const id = await kuruluyorPlan('prova');
-    const supurmeAldi = (await supur()) > 0;
-    const ajansCikabilir = pilotGecisMumkunMu('kuruluyor', 'kapat', 'ajans') || pilotGecisMumkunMu('kuruluyor', 'iptal', 'ajans');
-    expect(supurmeAldi || ajansCikabilir).toBe(true);
-    void id;
+    satirEkle.mockClear();
+    // 1. Süpürme: önce yeniden kuyruk (deneme hakkı), satır işi kuyruğa girer.
+    expect(await supur()).toBeGreaterThan(0);
+    expect(satirEkle).toHaveBeenCalledTimes(1);
+    const [s1] = await h.q<{ durum: string; deneme: number }>('SELECT durum, deneme FROM pilot_kurulum_satirlari WHERE plan_id = $1', [id]);
+    expect(s1).toEqual({ durum: 'prova', deneme: 1 });
+    // 2. Hak biter (iş yine takıldı): satır başarısız son duruma, plan sayımla kismen_kuruldu.
+    await h.q(`UPDATE pilot_kurulum_satirlari SET deneme = 2, updated_at = now() - interval '2 hours' WHERE plan_id = $1`, [id]);
+    await supur();
+    const [s2] = await h.q<{ durum: string; platform_mesaji: string }>('SELECT durum, platform_mesaji FROM pilot_kurulum_satirlari WHERE plan_id = $1', [id]);
+    expect(s2!.durum).toBe('prova_dustu');
+    expect(s2!.platform_mesaji).toMatch(/yarıda kaldı/);
+    expect((await planSatiri(id))[0]!.durum).toBe('kismen_kuruldu');
+    // 3. Vazgeç → ay serbest: aynı dönem için yeni plan açılabiliyor.
+    await plan.eylem(AJANS, id, { eylem: 'kapat', surum: 1 }, SIMDI);
+    await expect(hazirla()).resolves.toMatchObject({ id: expect.any(String) });
+  });
+
+  it('BULGU B-4 (ajans çıkışı): takılmış planda "Kurulumu durdur" yapılabilir listesinde, satırları düşürür, plan kismen_kuruldu; canlı işte REDDEDİLİR', async () => {
+    const id = await kuruluyorPlan('kuruluyor');
+    const simdi = new Date();
+    expect(pilotGecisMumkunMu('kuruluyor', 'takilan_kurulumu_durdur', 'ajans')).toBe(true);
+    expect((await plan.detay(AJANS, id, simdi)).yapilabilir as string[]).toContain('takilan_kurulumu_durdur');
+    // Müşteri düğmeyi görmez ve uç ona kapalı.
+    expect((await plan.detay(MUSTERI, id, simdi)).yapilabilir as string[]).not.toContain('takilan_kurulumu_durdur');
+    // Canlı iş: genç bir ara satır varken ret, satırlar dokunulmadan.
+    await h.q(
+      `INSERT INTO pilot_kurulum_satirlari (plan_id, org_id, client_id, onaylanan_surum, satir_anahtari, platform, ad, durum) VALUES ($1, $2, $3, 1, 'meta:sicak:y', 'meta', 'B', 'prova')`,
+      [id, IDS.org, IDS.client],
+    );
+    expect((await plan.detay(AJANS, id, simdi)).yapilabilir as string[]).not.toContain('takilan_kurulumu_durdur');
+    await expect(plan.eylem(AJANS, id, { eylem: 'takilan_kurulumu_durdur', surum: 1 }, simdi)).rejects.toThrow(/hâlâ sürüyor/);
+    expect((await planSatiri(id))[0]!.durum).toBe('kuruluyor');
+    // İkinci satır da yaşlanınca: durdur kabul, iki satır başarısız son durumda.
+    await h.q(`UPDATE pilot_kurulum_satirlari SET updated_at = now() - interval '2 hours' WHERE plan_id = $1`, [id]);
+    const d = await plan.eylem(AJANS, id, { eylem: 'takilan_kurulumu_durdur', surum: 1 }, simdi);
+    expect(d.plan.durum).toBe('kismen_kuruldu');
+    expect((await h.q<{ durum: string }>('SELECT durum FROM pilot_kurulum_satirlari WHERE plan_id = $1 ORDER BY satir_anahtari', [id])).map((x) => x.durum)).toEqual([
+      'prova_dustu',
+      'dustu',
+    ]);
+    expect(audit.record).toHaveBeenCalledWith(expect.anything(), AJANS, expect.objectContaining({ action: 'pilot_plan.takilan_kurulum_durduruldu' }));
+  });
+
+  it('KRİTİK: "Kurulumu durdur" RLS altında yalnız ara satırı başarısız son duruma çekebiliyor (SET ROLE + RETURNING)', async () => {
+    const id = await kuruluyorPlan('kuruluyor');
+    const ctx = { org: IDS.org, clients: IDS.client };
+    const T = ['pilot_kurulum_satirlari'];
+    expect(await rolOlarak(ctx, T, `UPDATE pilot_kurulum_satirlari SET durum = 'dustu' WHERE plan_id = $1 AND durum = 'kuruluyor' RETURNING id`, [id])).toHaveLength(1);
+    // Başarılı son duruma ya da son durumdan bir yere: politika reddeder / görmez.
+    await h.q(`UPDATE pilot_kurulum_satirlari SET durum = 'kuruluyor' WHERE plan_id = $1`, [id]);
+    await expect(rolOlarak(ctx, T, `UPDATE pilot_kurulum_satirlari SET durum = 'acildi' WHERE plan_id = $1 RETURNING id`, [id])).rejects.toThrow(/row-level security/);
+    await h.q(`UPDATE pilot_kurulum_satirlari SET durum = 'dustu' WHERE plan_id = $1`, [id]);
+    expect(await rolOlarak(ctx, T, `UPDATE pilot_kurulum_satirlari SET durum = 'prova_dustu' WHERE plan_id = $1 RETURNING id`, [id])).toHaveLength(0);
+    // Başka workspace bağlamı ara satırı da göremez.
+    expect(await rolOlarak({ org: IDS.org, clients: OTEKI }, T, `UPDATE pilot_kurulum_satirlari SET durum = 'dustu' WHERE plan_id = $1 RETURNING id`, [id])).toHaveLength(0);
   });
 });
 
@@ -592,7 +677,8 @@ describe('kaynak taramaları', () => {
   // `client_id` süzgeci OLMADAN okuyor (worker BYPASSRLS); aynı dosyanın
   // `kitleBilgisi`si süzüyor. Kimlik plandan geliyor ve planı ajans yazıyor;
   // bugün sızıntı yolu yok ama "aynı süzgeci iki yerde yazma" dersi.
-  it.fails('BULGU B-5: işçideki her audience_templates sorgusu client_id ile süzülüyor', () => {
+  // KAPANDI 2026-10-08 (Ajan 2).
+  it('BULGU B-5: işçideki her audience_templates sorgusu client_id ile süzülüyor', () => {
     const k = yorumsuz('kurulum-isleyici.ts');
     const sorgular = k.split('FROM audience_templates').slice(1).map((x) => x.slice(0, 120));
     expect(sorgular.length).toBeGreaterThan(1);

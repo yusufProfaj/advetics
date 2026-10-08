@@ -24,19 +24,32 @@ import {
   type PilotPlanDetayi,
   type PilotPlanListesi,
   type PlanDegistirGirdisi,
-  type PlanEylemiGirdisi,
   type PlanHazirlaGirdisi,
   type PlanOnaylaGirdisi,
   type PlanYenidenHazirlaGirdisi,
   type TenantContext,
   type UyumIsaretGirdisi,
 } from '@advetics/shared';
+import { z } from 'zod';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import type { AuthedRequest } from '../../common/types/request';
 import { PilotGercekYayinService } from './gercek-yayin';
 import { PilotBeyanService } from './beyan.service';
-import { PilotPlanService } from './plan.service';
+import { PilotPlanService, TAKILAN_DURDUR, type PlanEylemiIstegi } from './plan.service';
+import { PilotVarlikService } from './plan-varlik';
+import { onizlemeGonder } from '../../storage/onizleme';
+
+/**
+ * Eylem gövdesi: sözleşmedeki şema + "Kurulumu durdur". İkincisi shared'daki
+ * `PILOT_EYLEM_UCU_EYLEMLERI`ne eklenene kadar burada (ön koşulu serviste,
+ * `takilanSatirlariDusur`). Eklendiğinde bu birleşim sözleşme şemasına iner.
+ * `.strict()`: bilinmeyen alan sessizce atılmaz (H-06).
+ */
+const eylemGovdesi = z.union([
+  planEylemiSchema,
+  z.object({ eylem: z.literal(TAKILAN_DURDUR), surum: z.number().int().positive() }).strict(),
+]);
 import { PilotService } from './pilot.service';
 
 /**
@@ -58,6 +71,7 @@ export class PilotController {
     private readonly pilot: PilotService,
     private readonly gercekYayin: PilotGercekYayinService,
     private readonly beyan: PilotBeyanService,
+    private readonly varlik: PilotVarlikService,
   ) {}
 
   @Get('gercek-yayin')
@@ -145,7 +159,7 @@ export class PilotController {
   eylem(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(zodBody(planEylemiSchema)) dto: PlanEylemiGirdisi,
+    @Body(zodBody(eylemGovdesi)) dto: PlanEylemiIstegi,
   ): Promise<PilotPlanDetayi> {
     return this.plan.eylem(ctx, id, dto);
   }
@@ -166,8 +180,10 @@ export class PilotController {
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
     @Body(zodBody(planOnaylaSchema)) dto: PlanOnaylaGirdisi,
+    @Req() req: AuthedRequest,
   ): Promise<PilotPlanDetayi> {
-    return this.plan.onayla(ctx, id, dto);
+    // İstek izi denetim kaydına (müşteri adına onay, audit_logs).
+    return this.plan.onayla(ctx, id, dto, new Date(), { ip: req.ip ?? null, userAgent: req.get('user-agent') ?? null, requestId: req.requestId });
   }
 
   @Get('planlar/:id/kurulum')
@@ -185,6 +201,21 @@ export class PilotController {
     res.setHeader('Content-Disposition', `attachment; filename="${dosyaAdi}"`);
     res.setHeader('Content-Length', String(bayt.byteLength));
     res.send(bayt);
+  }
+
+  /**
+   * Plan belgesindeki görsel (müşteri dahil): yalnız o planın gösterdiği
+   * görsel, workspace'in arşivi değil (`plan-varlik.ts`).
+   */
+  @Get('planlar/:id/varliklar/:varlikId')
+  @RequirePermissions('strategy.read')
+  async varlikGorseli(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('varlikId', ParseUUIDPipe) varlikId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    onizlemeGonder(res, await this.varlik.gorsel(ctx, id, varlikId));
   }
 
   @Get('bugun')

@@ -262,6 +262,65 @@ LANGUAGE sql STABLE AS $$
   END;
 $$;
 
+/*
+ * ═══ PİLOT: ŞİRKETİN AJANSI VE AJANSIN İKİ AYARI — DAR, RLS'İ ATLAYAN OKUMA ═══
+ *
+ * Müşteri hesabının (client_viewer) bağlamında üst hesap üyeliği YOK:
+ * `current_manager_account_id()` boş, `manager_accounts` satırı gizli,
+ * `ajans_org_id()` NULL ve ajansın `ajans_ayari` satırı da gizli. Sonuç
+ * (Ajan 4 B-1): müşteri onayladığında "ajans bilinmiyor" sayılıyor ve
+ * gerçek yayın anahtarı AÇIKKEN bile plan `kapali` kipte onaylanıyordu;
+ * aynı sebeple atıf standardı (C-16) müşteri bağlamında okunamazdı.
+ *
+ * NEDEN POLİTİKAYI GENİŞLETMEK DEĞİL: `manager_accounts` satırı paket ve
+ * durum taşıyor (satılan abonelik) ve `ajans_org_id()`yi müşteriye açmak
+ * ajansın HAVUZUNU müşteri şirketlerine açardı (`havuz_kapsaminda`,
+ * `musteri-sirketi-izolasyon.spec.ts`). Müşterinin ihtiyacı üç değer:
+ * ajansın kimliği, anahtar, atıf standardı. Fonksiyon YALNIZ bunları
+ * döndürür.
+ *
+ * SINIR FONKSİYONUN İÇİNDE: yalnız çağıranın kapsamındaki bir şirket için
+ * (`org_kapsaminda`) satır döner; bağlamsız çağrı ya da başka bir şirket
+ * boş döner. Fonksiyon bir kâhin değil.
+ *
+ * SECURITY DEFINER: sahibi `advetics_migrator` (BYPASSRLS, yukarıdaki not).
+ * Sahip bir gün BYPASSRLS'siz bir role geçerse FORCE RLS altında satırlar
+ * yine gizlenir ve sonuç "ajans bilinmiyor" olur: KAPALIYA düşer, açığa
+ * değil. `search_path` sabit: tanımlayanın yetkisiyle koşan fonksiyonda
+ * çağıranın şemasından tablo çözmek klasik bir yetki yükseltme yolu.
+ *
+ * Ajans kuralı `gercek-yayin.ts#ajansOrgu` ile aynı: üst hesabı olmayan
+ * şirket kendi ajansıdır; üst hesabı olup `ajans_org_id`si boş olan
+ * şirketin ajansı BİLİNMİYOR (NULL). Atıf: önce şirketin kendi satırı,
+ * sonra ajansınki (işçideki `derle` sorgusuyla aynı sıra).
+ */
+--
+-- PL/pgSQL, SQL DEĞİL: SQL fonksiyonunun gövdesi OLUŞTURMA anında
+-- çözümleniyor ve bu dosya üretim sırası testlerinde (`*-uretim-sirasi.spec`)
+-- kolonun henüz olmadığı eski bir şemaya da uygulanıyor; `pilot_gercek_yayin`
+-- kolonu sonraki bir migration'da geliyor. PL/pgSQL gövdesi çağrı anında
+-- çözülür.
+CREATE OR REPLACE FUNCTION app.pilot_ajans_ayari(o_id uuid)
+RETURNS TABLE (ajans_org_id uuid, gercek_yayin boolean, atif_standardi text)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+BEGIN
+  RETURN QUERY
+  WITH o AS (
+    SELECT org.id,
+           CASE WHEN org.manager_account_id IS NULL THEN org.id ELSE ma.ajans_org_id END AS ajans
+      FROM organizations org
+      LEFT JOIN manager_accounts ma ON ma.id = org.manager_account_id
+     WHERE org.id = o_id AND app.has_context() AND app.org_kapsaminda(o_id)
+  )
+  SELECT o.ajans,
+         COALESCE((SELECT a.pilot_gercek_yayin FROM ajans_ayari a WHERE a.org_id = o.ajans), false),
+         (SELECT a.atif_standardi::text FROM ajans_ayari a
+           WHERE a.atif_standardi IS NOT NULL AND (a.org_id = o.id OR a.org_id = o.ajans)
+           ORDER BY (a.org_id = o.id) DESC LIMIT 1)
+    FROM o;
+END
+$$;
+
 CREATE OR REPLACE FUNCTION app.current_active_client_id() RETURNS uuid
 LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('app.current_active_client_id', true), '')::uuid;
@@ -2510,6 +2569,24 @@ CREATE POLICY adv_pilot_uyum_isaretleri_update ON pilot_uyum_isaretleri
 -- açılmış göstermek olurdu.
 CREATE POLICY adv_pilot_kurulum_satirlari_select ON pilot_kurulum_satirlari
   FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+-- TEK İSTİSNA: "Kurulumu durdur" (`takilan_kurulumu_durdur`, Ajan 4 B-4).
+-- Ajans takılmış planı durdururken son olmayan satırları AYNI transaction'da
+-- başarısız bir son duruma çekmek zorunda; politika olmasaydı UPDATE hata
+-- vermeden SIFIR satır etkiler ve plan, satırları hâlâ "kuruluyor" derken
+-- `kismen_kuruldu`ya kayardı. Politika YALNIZ ara durumdan YALNIZ iki
+-- başarısız son duruma izin veriyor: panelden bir satırı `acildi` ya da
+-- `kuruldu` yapmak (Meta'da açılmamış kampanyayı açılmış göstermek) yine
+-- imkânsız. Servis ayrıca rolü (ajans) ve ön koşulu (`kuruluyorPlanKarari`)
+-- kontrol ediyor ve etkilenen satırı RETURNING ile sayıyor.
+CREATE POLICY adv_pilot_kurulum_satirlari_durdur ON pilot_kurulum_satirlari
+  FOR UPDATE USING (
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
+    AND durum IN ('taslak', 'prova', 'kuruluyor', 'geri_okundu_ayni', 'aciliyor')
+  )
+  WITH CHECK (
+    app.org_kapsaminda(org_id) AND app.can_access_client(client_id)
+    AND durum IN ('dustu', 'prova_dustu')
+  );
 CREATE POLICY adv_pilot_nesneleri_select ON pilot_nesneleri
   FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 CREATE POLICY adv_pilot_taramalari_select ON pilot_taramalari

@@ -3,11 +3,12 @@ import { Prisma } from '@prisma/client';
 import {
   kitleKonumuSchema,
   metinUyariIceriyor,
+  REKLAM_BASLIGI_EN_COK,
   yzMetniDenetle,
   type HedefKonum,
   type Kaynak,
   type Kaynakli,
-  type PilotTaslak,
+  type MetinBosNedeni,
   type SatirdanTaslakBaglami,
 } from '@advetics/shared';
 import { metinIste, type MetinUretici } from '../../yapay-zeka/gemini';
@@ -49,10 +50,8 @@ export async function taslakBaglamiOku(
     SELECT name AS ad, website AS site, special_ad_categories AS kategoriler, ozel_kategori_beyan_zamani AS beyan
       FROM clients WHERE id = ${g.clientId}::uuid`);
   if (!c) throw new Error(`Workspace bulunamadı: ${g.clientId}`);
-  const [m] = await tx.$queryRaw<Array<{ id: string; guncellendi: Date; yasal: string | null; marka: string | null; uslup: string | null; vaatler: string[] | null; bilgi: string | null; hedef: string | null; sablonlar: string[] | null }>>(Prisma.sql`
-    SELECT id::text, updated_at AS guncellendi, yasal_uyari AS yasal, marka_adi AS marka, uslup, vaatler,
-           marka_bilgileri AS bilgi, hedef_kitle AS hedef, metin_sablonlari AS sablonlar
-      FROM client_profiles WHERE client_id = ${g.clientId}::uuid`);
+  const mo = await markaOku(tx, g.clientId, c.ad);
+  const m = mo.profil;
 
   const hesaplar = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT id::text FROM ad_accounts
@@ -112,9 +111,31 @@ export async function taslakBaglamiOku(
       tabanNegatifler: null,
       zaman,
     },
+    yasalUyari: mo.yasalUyari,
+    marka: mo.marka,
+  };
+}
+
+/**
+ * Marka Merkezi'nin metin girdisi ve zorunlu yasal uyarı — TEK OKUYUCU.
+ * Plan servisi (metni plan anında yazarken) ve işçi (taslak bağlamı) aynı
+ * fonksiyonu okur: iki okuyucu olsaydı plan bir yasal uyarıyla yazar,
+ * işçi başka bir alanı okuyup "uyarı eksik" diye düşebilirdi.
+ */
+export async function markaOku(
+  tx: OkumaTx,
+  clientId: string,
+  workspaceAdi: string,
+): Promise<{ profil: { id: string; guncellendi: Date } | null; yasalUyari: string | null; marka: TaslakBaglamiOkumasi['marka'] }> {
+  const [m] = await tx.$queryRaw<Array<{ id: string; guncellendi: Date; yasal: string | null; marka: string | null; uslup: string | null; vaatler: string[] | null; bilgi: string | null; hedef: string | null; sablonlar: string[] | null }>>(Prisma.sql`
+    SELECT id::text, updated_at AS guncellendi, yasal_uyari AS yasal, marka_adi AS marka, uslup, vaatler,
+           marka_bilgileri AS bilgi, hedef_kitle AS hedef, metin_sablonlari AS sablonlar
+      FROM client_profiles WHERE client_id = ${clientId}::uuid`);
+  return {
+    profil: m ? { id: m.id, guncellendi: m.guncellendi } : null,
     yasalUyari: m?.yasal?.trim() || null,
     marka: {
-      ad: m?.marka?.trim() || c.ad,
+      ad: m?.marka?.trim() || workspaceAdi,
       uslup: m?.uslup ?? null,
       vaatler: m?.vaatler ?? [],
       bilgi: m?.bilgi ?? null,
@@ -162,8 +183,12 @@ export function secim(
 }
 
 // ─── Reklam metni (M-8 c) ──────────────────────────────────────────────────
-
-export const BASLIK_EN_COK = 40;
+//
+// 2026-10-08'den (karar (a)) beri PLAN HAZIRLANIRKEN çağrılıyor
+// (`plan-reklam-metni.ts`), işçi çağırmıyor. Başlık sınırı sözleşmeden
+// (`REKLAM_BASLIGI_EN_COK`): burada ayrı bir sayı dursaydı ve sözleşmeninki
+// küçülseydi, buradaki kırpma şemanın reddettiği bir başlık üretir ve satır
+// "denetimden geçmedi" ile boş kalırdı.
 
 const METIN_SEMASI = {
   type: 'object',
@@ -187,7 +212,15 @@ const METIN_SISTEMI = [
   'Uzun tire kullanma. Yasal uyarıyı SEN ekleme; sistem ekliyor.',
 ].join(' ');
 
-export type MetinSonucu = { tur: 'tamam'; metinler: Array<{ varlikId: string | null; baslik: string; metin: string }>; notlar: string[] } | { tur: 'ret'; mesaj: string };
+/**
+ * `ret.neden` plan hücresinin boş nedenine birebir gider: "model bağlı
+ * değil", "model düştü/cevabı okunamadı" ve "model sayı uydurdu" üç ayrı iş
+ * (anahtarı bağla / yeniden hazırla / marka bilgisini düzelt). Üçünü tek
+ * "yazılamadı"ya çevirmek, ajansı yanlış düzeltmeye gönderir.
+ */
+export type MetinSonucu =
+  | { tur: 'tamam'; metinler: Array<{ varlikId: string | null; baslik: string; metin: string }>; notlar: string[] }
+  | { tur: 'ret'; neden: Exclude<MetinBosNedeni, 'metin_bekliyor' | 'plan_eski_bicim'>; mesaj: string };
 
 /**
  * MODEL YAZAR, SUNUCU SÜZER:
@@ -196,16 +229,16 @@ export type MetinSonucu = { tur: 'tamam'; metinler: Array<{ varlikId: string | n
  *   · başlık 40 karakteri aşarsa kelime sınırından kısaltılır ve SÖYLENİR,
  *   · zorunlu yasal uyarı model yazmadıysa ana metnin BAŞINA eklenir ve
  *     söylenir (H-12; ibare ilk 125 karakterde olmalı, GNL-14).
- * Model düşerse `ret`: taslak "metin yazılmadı" eksikiyle durur, prova
- * kotası harcanmaz.
+ * Model düşerse `ret`: plan satırı nedeniyle boş kalır ve satır onaya
+ * gidemez (onay kapısı metni kendisi denetliyor).
  */
 export async function reklamMetniYaz(
   u: MetinUretici | null,
-  t: PilotTaslak,
+  t: { ad: string },
   o: Pick<TaslakBaglamiOkumasi, 'marka' | 'yasalUyari'>,
   varliklar: Array<{ id: string; ad: string }>,
 ): Promise<MetinSonucu> {
-  if (!u) return { tur: 'ret', mesaj: 'Yapay zekâ bağlı değil; reklam metni yazılamadı.' };
+  if (!u) return { tur: 'ret', neden: 'yz_kapali', mesaj: 'Yapay zekâ bağlı değil; reklam metni yazılamadı.' };
   const adet = Math.max(1, varliklar.length);
   const marka = [
     `Marka: ${o.marka.ad}`,
@@ -224,17 +257,17 @@ export async function reklamMetniYaz(
       jsonSemasi: METIN_SEMASI as unknown as Record<string, unknown>,
     });
   } catch (e) {
-    return { tur: 'ret', mesaj: `Yapay zekâya ulaşılamadı: ${(e as Error).message}` };
+    return { tur: 'ret', neden: 'metin_yazilamadi', mesaj: `Yapay zekâya ulaşılamadı: ${(e as Error).message}` };
   }
-  if (r.tur !== 'tamam') return { tur: 'ret', mesaj: r.mesaj };
+  if (r.tur !== 'tamam') return { tur: 'ret', neden: 'metin_yazilamadi', mesaj: r.mesaj };
   let ham: { metinler?: Array<{ baslik?: unknown; metin?: unknown }> };
   try {
     ham = JSON.parse(r.metin);
   } catch {
-    return { tur: 'ret', mesaj: 'Yapay zekânın cevabı okunamadı.' };
+    return { tur: 'ret', neden: 'metin_yazilamadi', mesaj: 'Yapay zekânın cevabı okunamadı.' };
   }
   const liste = (ham.metinler ?? []).filter((x) => typeof x.baslik === 'string' && typeof x.metin === 'string').slice(0, adet);
-  if (liste.length === 0) return { tur: 'ret', mesaj: 'Yapay zekâ metin döndürmedi.' };
+  if (liste.length === 0) return { tur: 'ret', neden: 'metin_yazilamadi', mesaj: 'Yapay zekâ metin döndürmedi.' };
   const izinli = [...marka, o.yasalUyari ?? '', t.ad];
   const notlar: string[] = [];
   const metinler: Array<{ varlikId: string | null; baslik: string; metin: string }> = [];
@@ -242,11 +275,11 @@ export async function reklamMetniYaz(
     let baslik = String(x.baslik).trim();
     let metin = String(x.metin).trim();
     const uydurulan = yzMetniDenetle(`${baslik} ${metin}`, izinli);
-    if (uydurulan.length > 0) return { tur: 'ret', mesaj: `Yapay zekâ marka bilgisinde olmayan sayı yazdı (${uydurulan.join(', ')}); metin kullanılmadı.` };
-    if (baslik.length > BASLIK_EN_COK) {
-      const kes = baslik.slice(0, BASLIK_EN_COK + 1);
-      baslik = (kes.lastIndexOf(' ') > 10 ? kes.slice(0, kes.lastIndexOf(' ')) : kes.slice(0, BASLIK_EN_COK)).trim();
-      notlar.push(`Metin ${i + 1}: başlık ${BASLIK_EN_COK} karaktere kısaltıldı.`);
+    if (uydurulan.length > 0) return { tur: 'ret', neden: 'metin_denetimden_gecmedi', mesaj: `Yapay zekâ marka bilgisinde olmayan sayı yazdı (${uydurulan.join(', ')}); metin kullanılmadı.` };
+    if (baslik.length > REKLAM_BASLIGI_EN_COK) {
+      const kes = baslik.slice(0, REKLAM_BASLIGI_EN_COK + 1);
+      baslik = (kes.lastIndexOf(' ') > 10 ? kes.slice(0, kes.lastIndexOf(' ')) : kes.slice(0, REKLAM_BASLIGI_EN_COK)).trim();
+      notlar.push(`Metin ${i + 1}: başlık ${REKLAM_BASLIGI_EN_COK} karaktere kısaltıldı.`);
     }
     if (o.yasalUyari && !metinUyariIceriyor(metin, o.yasalUyari)) {
       metin = `${o.yasalUyari} ${metin}`;

@@ -117,7 +117,9 @@ describe('değişmez ve worker tabloları', () => {
   it('KRİTİK: kurulum satırı panelden OKUNUR ama YAZILAMAZ (insert reddi, update 0 satır)', async () => {
     const g = await kullaniciOlarak<{ id: string }>('SELECT id::text FROM pilot_kurulum_satirlari');
     expect(g.map((x) => x.id)).toEqual([id[IDS.client]!.satir]);
-    expect(await kullaniciOlarak(`UPDATE pilot_kurulum_satirlari SET durum = 'acildi' WHERE id = $1 RETURNING id`, [id[IDS.client]!.satir])).toHaveLength(0);
+    // Tek UPDATE politikası "Kurulumu durdur"un (ara → dustu/prova_dustu,
+    // 2026-10-08): panelden bir satırı BAŞARILI bir duruma çekmek RLS reddi.
+    await expect(kullaniciOlarak(`UPDATE pilot_kurulum_satirlari SET durum = 'acildi' WHERE id = $1 RETURNING id`, [id[IDS.client]!.satir])).rejects.toThrow(/row-level security/);
     await expect(
       kullaniciOlarak(
         `INSERT INTO pilot_kurulum_satirlari (plan_id, org_id, client_id, onaylanan_surum, satir_anahtari, platform, ad) VALUES ($1, $2, $3, 1, 'meta:sicak:y', 'meta', 'B') RETURNING id`,
