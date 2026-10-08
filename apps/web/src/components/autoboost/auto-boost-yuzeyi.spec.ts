@@ -439,16 +439,24 @@ describe('TEKRAR BOOSTLA', () => {
      * kullanıcı sebebi kendi kurulumunda arar. İki dosyadaki liste birebir
      * karşılaştırılıyor — biri güncellenip diğeri unutulursa test düşüyor.
      */
-    const api = readFileSync(
-      join(WEB_SRC, '../../../apps/api/src/modules/autoboost/autoboost-launch.service.ts'),
-      'utf8',
-    );
-    const desen = /const TEKRAR_ACIK_DURUMLAR = new Set\((\[[^\]]*\])\)/;
-    const panelde = desen.exec(HAVUZ)?.[1];
-    const sunucuda = desen.exec(api)?.[1];
-    expect(panelde, 'panelde liste bulunamadı — tarama boşa düştü').toBeTruthy();
-    expect(sunucuda, 'sunucuda liste bulunamadı — tarama boşa düştü').toBeTruthy();
-    expect(panelde).toBe(sunucuda);
+    /*
+     * LİSTE ARTIK TEK YERDE (`AUTOBOOST_TEKRAR_ACIK_DURUMLAR`, shared). Bu
+     * test önce iki elle yazılmış diziyi karşılaştırıyordu; üçüncü kopya
+     * (okuma katmanı) hiç kapsanmıyordu. Şimdi ÜÇÜ de sabiti okumak zorunda:
+     * biri yeniden elle yazılırsa düşüyor.
+     */
+    const oku = (y: string) =>
+      readFileSync(join(WEB_SRC, '../../../apps/api/src/modules/autoboost', y), 'utf8');
+    const desen = /const TEKRAR_ACIK_DURUMLAR = new Set(?:<string>)?\(([^)]*)\)/;
+    for (const [ad, kaynak] of [
+      ['panel', HAVUZ],
+      ['yayın servisi', oku('autoboost-launch.service.ts')],
+      ['okuma servisi', oku('autoboost-read.service.ts')],
+    ] as const) {
+      const ifade = desen.exec(kaynak)?.[1];
+      expect(ifade, `${ad}: liste bulunamadı — tarama boşa düştü`).toBeTruthy();
+      expect(ifade, ad).toBe('AUTOBOOST_TEKRAR_ACIK_DURUMLAR');
+    }
   });
 });
 

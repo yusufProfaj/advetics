@@ -155,6 +155,21 @@ export class ReklamController {
     });
   }
 
+  /** "Google'a yazmayı durdur" — Meta anahtarının karşılığı, ayrı kolonlarda. */
+  @Put('ajans-ayari/google-yazma')
+  @RequirePermissions('org.write')
+  googleYazmaAnahtari(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(yazmaAnahtariSchema)) dto: z.infer<typeof yazmaAnahtariSchema>,
+    @Req() req: AuthedRequest,
+  ): Promise<{ durduruldu: boolean; sebep: string | null }> {
+    return this.ajans.googleYazmaAnahtari(ctx, dto.durdur, dto.sebep, {
+      ip: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+      requestId: req.requestId,
+    });
+  }
+
   /**
    * YAYINLA — tek uç, tek izin (`bulk.publish`). Panel, AI kartı, kopya ve
    * toplu yayın hepsi buradan; ikinci bir uç yazılırsa ön kontrolün bir

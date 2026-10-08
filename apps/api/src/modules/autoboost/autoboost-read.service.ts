@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { AutoBoostPlatform } from '@advetics/shared';
+import { AUTOBOOST_TEKRAR_ACIK_DURUMLAR, type AutoBoostPlatform } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
 import { YOUTUBE_HESAP_KOSULU, youtubeHesabiEngeli, youtubeHesabiSec } from './youtube-hesabi';
 import { CANLI_BOOST_SQL } from '../boosts/canli-boost';
+import { YOUTUBE_CANLI_BITER_SQL } from './youtube-yayin-durumu';
 import {
   abonelikSagligi,
 } from './youtube-websub';
@@ -122,7 +123,10 @@ export class AutoBoostReadService {
                q.signature_state,
                kmp.id::text AS kampanya_id,
                perf.gun, perf.spend_micros, perf.impressions, perf.clicks, perf.conversions,
-               aktif.biter AS aktif_boost_biter,
+               -- YOUTUBE KARTI BOOSTS SATIRI YAZMIYOR: yayın bitişi kartın
+               -- kendi kaydından (youtube-yayin-durumu.ts). Olmasa yayındaki
+               -- YouTube kartında tekrar yayınla açık gelirdi.
+               COALESCE(aktif.biter, ${YOUTUBE_CANLI_BITER_SQL}) AS aktif_boost_biter,
                kendi.status AS boost_durumu,
                sp.name AS profile_name,
                sp.profile_type::text AS profile_type,
@@ -224,7 +228,8 @@ export class AutoBoostReadService {
           --
           -- Bu yüzden LİMİTİ bekleyenler kazanıyor, SIRAYI tarih: dıştaki
           -- sorgu aynı satırları gönderi tarihine göre yeniden diziyor.
-          CASE WHEN q.status = 'pending' THEN 0 ELSE 1 END,
+          -- KONTROL GEREKLİ de yapılacak iş: limitin altında kalmamalı.
+          CASE WHEN q.status IN ('pending', 'kontrol') THEN 0 ELSE 1 END,
           q.published_at DESC NULLS LAST,
           q.created_at DESC
         LIMIT 50
@@ -525,7 +530,7 @@ export class AutoBoostReadService {
  * kampanyayı kayıtsız bırakırdı. Yeni bir durum eklendiğinde varsayılan
  * DIŞARIDA kalıyor — açık listenin sebebi bu.
  */
-const TEKRAR_ACIK_DURUMLAR = new Set(['launched', 'rejected', 'failed']);
+const TEKRAR_ACIK_DURUMLAR = new Set<string>(AUTOBOOST_TEKRAR_ACIK_DURUMLAR);
 
 interface QueueRow {
   id: string;

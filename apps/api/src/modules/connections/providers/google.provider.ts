@@ -10,6 +10,7 @@ import {
   demandGenKitleBaglaBody,
   demandGenYasKitlesiBody,
   yasSegmentleri,
+  YarimKurulumHatasi,
 } from './google-demandgen';
 import { gecerliGorselAdresi } from '@advetics/shared';
 import type { GeoLocationOption,
@@ -2082,10 +2083,12 @@ export class GoogleProvider implements IAdPlatformProvider {
     } catch (err) {
       // TERS SIRADA GERİ AL ve ASIL hatayı fırlat: kullanıcının görmesi
       // gereken, kampanyanın neden kurulamadığı.
+      const kalanlar: string[] = [];
       for (const varlik of [...created].reverse()) {
         try {
           await this.mutate(ctx, resourceCollection(varlik.resource), removeBody(varlik.resource));
         } catch (temizlikHatasi) {
+          kalanlar.push(`${varlik.label} ${varlik.resource}`);
           this.logger.error(
             `Google ${varlik.label} geri alınamadı (${varlik.resource}): ` +
               `${temizlikHatasi instanceof Error ? temizlikHatasi.message : String(temizlikHatasi)}`,
@@ -2094,8 +2097,18 @@ export class GoogleProvider implements IAdPlatformProvider {
       }
       if (yetimKitle) {
         // SİLİNEMİYOR (Audience servisinde silme yok) — sessiz kalmasın.
+        // Kalanlar listesine GİRMİYOR: harcama yapamaz ve her başarısız
+        // yaş kısıtlı yayında oluşur; kartı her seferinde "kontrol gerekli"
+        // yapmak uyarıyı okunmaz hâle getirirdi.
         this.logger.warn(`Google yaş kitlesi hesapta kaldı (silinemiyor, harcama yok): ${yetimKitle}`);
       }
+      /*
+       * GERİ ALMA EKSİKSE ASIL HATA SARILIYOR. Kalan bir kampanya yayında
+       * olmayabilir (PAUSED kuruluyor) ama açma çağrısı zaman aşımına
+       * düşüp aslında başarmışsa YAYINDADIR. Ayırt etmenin yolu hesaba
+       * bakmak; yayın yolu kartı `kontrol` yapıp bunu kullanıcıya bırakıyor.
+       */
+      if (kalanlar.length > 0) throw new YarimKurulumHatasi(err, kalanlar);
       throw err;
     }
   }

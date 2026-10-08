@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleProvider } from './google.provider';
-import { VARSAYILAN_KONUM } from './google-demandgen';
+import { VARSAYILAN_KONUM, YarimKurulumHatasi } from './google-demandgen';
 
 /**
  * ═══ YOUTUBE YAYINI: SIRA PARA DEMEK ═══
@@ -24,6 +24,8 @@ interface Cagri {
 
 let cagrilar: Cagri[];
 let patlayan: string | null;
+/** Geri alma (remove) çağrıları da düşsün mü — kota zincirin ortasında bitti. */
+let silmeDussun: boolean;
 let orijinal: typeof fetch;
 
 function provider(): GoogleProvider {
@@ -53,6 +55,7 @@ const ISTEK = {
 beforeEach(() => {
   cagrilar = [];
   patlayan = null;
+  silmeDussun = false;
   orijinal = globalThis.fetch;
   let n = 0;
   globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
@@ -62,7 +65,8 @@ beforeEach(() => {
     cagrilar.push({ koleksiyon, govde, giris: basliklar['login-customer-id'] ?? null });
     const yayinaAlma = koleksiyon === 'campaigns' && govde.operations[0]?.update !== undefined;
     const bu = yayinaAlma ? 'yayina-alma' : koleksiyon;
-    if (patlayan === bu && govde.operations[0]?.remove === undefined) {
+    const silme = govde.operations[0]?.remove !== undefined;
+    if ((patlayan === bu && !silme) || (silmeDussun && silme)) {
       return {
         ok: false,
         status: 400,
@@ -207,5 +211,32 @@ describe('yönetici (MCC) başlığı', () => {
     await provider().createVideoBoost({ ...ctx, loginCustomerId: '999' }, ISTEK);
     expect(cagrilar.length).toBeGreaterThan(5);
     expect(cagrilar.every((c) => c.giris === '999')).toBe(true);
+  });
+});
+
+describe('KRİTİK: geri alma eksik kalınca hata bunu SÖYLÜYOR', () => {
+  /*
+   * Kota zincirin ortasında bitince silme de aynı kotayla düşüyor. Eskiden
+   * bu yalnızca log'a yazılıyordu; yayın yolu kartı `failed` yapıyor ve
+   * "tekrar yayınla" yarım kalan kampanyanın YANINA ikincisini kuruyordu.
+   * Hata artık `YarimKurulumHatasi`: asıl mesajı ve hesapta kalanları
+   * taşıyor, yayın yolu kartı `kontrol` yapıyor.
+   */
+  it('yayına alma düşer ve silmeler de düşerse kalanlar adıyla sayılıyor', async () => {
+    patlayan = 'yayina-alma';
+    silmeDussun = true;
+    const hata = await provider().createVideoBoost(ctx, ISTEK).catch((e: unknown) => e);
+    expect(hata).toBeInstanceOf(YarimKurulumHatasi);
+    const y = hata as YarimKurulumHatasi;
+    expect(y.message).toContain('yayina-alma reddedildi');
+    expect(y.kalanlar.some((k) => k.startsWith('kampanya customers/123/campaigns/'))).toBe(true);
+    expect(y.kalanlar.some((k) => k.startsWith('bütçe '))).toBe(true);
+  });
+
+  it('silme başarılıysa düz hata — kart failed olabilir', async () => {
+    patlayan = 'yayina-alma';
+    const hata = await provider().createVideoBoost(ctx, ISTEK).catch((e: unknown) => e);
+    expect(hata).not.toBeInstanceOf(YarimKurulumHatasi);
+    expect((hata as Error).message).toContain('yayina-alma reddedildi');
   });
 });

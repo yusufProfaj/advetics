@@ -396,3 +396,41 @@ export function demandGenKitleBaglaBody(params: {
     },
   ]);
 }
+
+/**
+ * ═══ YARIM KURULUM — GERİ ALMA EKSİK KALDI ═══
+ *
+ * Zincir ortada düştüğünde kurulanlar ters sırayla siliniyor; silme de
+ * düşebiliyor (en tipik sebep: kota zincirin ortasında bitti ve silme de
+ * aynı kotayı kullanıyor). Eskiden bu yalnızca log'a yazılıyordu ve kart
+ * `failed` oluyordu: kullanıcı "tekrar yayınla" diyor, hesapta yarım kalan
+ * kampanyanın YANINA ikincisi kuruluyordu.
+ *
+ * Bu hata asıl hatayı TAŞIYOR (mesajı aynen), ve hesapta kalanları
+ * adlarıyla sayıyor. Yayın yolu bunu görünce kartı `kontrol` yapıyor:
+ * platformda ne kaldığına insan bakmadan tekrar yayın yok.
+ */
+export class YarimKurulumHatasi extends Error {
+  constructor(
+    readonly asil: unknown,
+    readonly kalanlar: readonly string[],
+  ) {
+    const asilMesaj = asil instanceof Error ? asil.message : String(asil);
+    super(`${asilMesaj} · Geri alınamayıp Google Ads hesabında kalanlar: ${kalanlar.join(', ')}`);
+    this.name = 'YarimKurulumHatasi';
+  }
+}
+
+/**
+ * Google kaynak adından YALIN kimlik: `customers/1/campaigns/2` → `2`,
+ * `customers/1/adGroupAds/3~4` → `4` (reklam kimliği dalganın sağı).
+ *
+ * Yapı taraması `campaigns.external_id`, `ad_groups.external_id` ve
+ * `ads.external_id` kolonlarına yalın sayıyı yazıyor; yayın yolu kaynak
+ * adını yazdığında kart kampanyasıyla hiç eşleşmiyor ve harcama kartta
+ * HİÇ görünmüyordu — hata yok, yalnızca "henüz senkronize edilmedi".
+ */
+export function googleYalinKimlik(kaynak: string): string {
+  const son = kaynak.slice(kaynak.lastIndexOf('/') + 1);
+  return son.slice(son.lastIndexOf('~') + 1);
+}

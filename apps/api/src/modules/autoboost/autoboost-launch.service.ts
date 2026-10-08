@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import { CANLI_BOOST_SQL } from '../boosts/canli-boost';
 import {
+  AUTOBOOST_TAKILMA_ESIGI_DAKIKA,
+  AUTOBOOST_TEKRAR_ACIK_DURUMLAR,
   autoBoostPresetSettingsSchema,
   boostNameBase,
   MEDIA_TYPE_LABELS,
@@ -16,7 +18,14 @@ import { butceKipi, butceyiCoz, hedeflemeyiCoz, kartPlatformu, yabanciOzelKitle 
 import { YoutubeOtomatikService } from './youtube-otomatik.service';
 import { youtubeHesabiEngeli } from './youtube-hesabi';
 import type { VideoMetinleri } from './youtube-otomatik';
-import { VARSAYILAN_KONUM } from '../connections/providers/google-demandgen';
+import {
+  VARSAYILAN_KONUM,
+  YarimKurulumHatasi,
+  googleYalinKimlik,
+} from '../connections/providers/google-demandgen';
+import { googleYazmaAcikMi } from '../reklam/yazma-kapisi';
+import { QuotaGuardService } from '../../queue/quota-guard.service';
+import { youtubeUygulananAyar, YOUTUBE_CANLI_BITER_SQL } from './youtube-yayin-durumu';
 import { YouTubeApiService } from './youtube-api.service';
 import { AssetUploaderService } from '../assets/asset-uploader.service';
 import { BoostExecutorService } from '../boosts/boost-executor.service';
@@ -78,6 +87,8 @@ export class AutoBoostLaunchService {
     /** YouTube: marka, logo ve adres otomatik — en sonda, testler konumla geçiriyor. */
     private readonly youtubeOtomatik: YoutubeOtomatikService,
     private readonly youtube: YouTubeApiService,
+    /** Google yayınından önce kota: zincirin ORTASINDA bitmesin (P4). */
+    private readonly quota: QuotaGuardService,
   ) {}
 
   async decide(
@@ -511,6 +522,42 @@ export class AutoBoostLaunchService {
     if (!hesap) throw new BadRequestException('Reklam hesabı bulunamadı.');
 
     /*
+     * ═══ GOOGLE YAZMA KESİCİSİ — KİLİTTEN ÖNCE ═══
+     *
+     * Ajans "Google'a yazmayı durdur" dediyse kart `pending` kalıyor ve
+     * sebep yazıyor. Kilitten sonra reddetmek kartı `failed` yapardı.
+     * Durum okunamıyorsa da KAPALI (`googleYazmaAcikMi`).
+     */
+    const kapi = await googleYazmaAcikMi((fn) => this.prisma.withTenant(scoped, fn), kayit.client_id);
+    if (!kapi.acik) throw new BadRequestException(kapi.sebep);
+
+    /*
+     * ═══ KOTA — ZİNCİRİN ORTASINDA BİTMESİN ═══
+     *
+     * Kurulum sekiz ayrı çağrı ve Google kotası her gece doluyor
+     * (2026-09-29). Kota zincirin ortasında biterse geri alma da aynı
+     * kotayı kullandığı için düşüyor ve hesapta yarım kampanya kalıyordu.
+     * Bekçi reddederse kart kilitlenmeden, ne zaman deneneceği yazılarak
+     * dönülüyor. Redis yoksa bekçi kapalı (senkronizasyon da kapalı demek);
+     * yayını engellemiyoruz ama log'a yazıyoruz.
+     */
+    if (this.quota.isEnabled) {
+      const gate = await this.quota.acquire({
+        platform: 'google',
+        adAccountId: reklamHesabiId,
+        layer: 'interactive',
+      });
+      if (!gate.allowed) {
+        const dakika = Math.max(1, Math.ceil((gate.retryAfterMs ?? 60_000) / 60_000));
+        throw new BadRequestException(
+          `Google Ads kotası şu an dolu (${gate.reason ?? 'kota'}). Yaklaşık ${dakika} dakika sonra tekrar dene.`,
+        );
+      }
+    } else {
+      this.logger.warn('Kota bekçisi kapalı (REDIS_URL yok); YouTube yayını kota kontrolsüz gidiyor.');
+    }
+
+    /*
      * ═══ MARKA, LOGO VE ADRES OTOMATİK — KİLİTTEN ÖNCE ═══
      *
      * Eksik bir değer (web sitesi yok, logo yok) burada Türkçe bir cümleyle
@@ -539,12 +586,28 @@ export class AutoBoostLaunchService {
         }
       : (await this.videodanMetin(kayit, degerler.businessName)).metin;
 
+    /*
+     * UYGULANAN AYAR KİLİTLE BİRLİKTE yazılıyor (G5). İki işi var: kart,
+     * ön ayar sonradan değişse de kampanyanın NEYLE kurulduğunu gösteriyor;
+     * ve tekrar kilidi kampanyanın bitişini bu süreden hesaplıyor
+     * (`YOUTUBE_CANLI_BITER_SQL`). Kilitte yazmak, süreç yarıda ölse bile
+     * kaydın kalması demek.
+     */
+    const uygulanan = youtubeUygulananAyar({
+      dailyBudgetMicros: BigInt(kayit.daily_budget_micros),
+      durationDays: kayit.duration_days ?? 7,
+      konumlar: g.locations,
+      yaslar: g.ageRanges,
+    });
+
     // --- Kartı KİLİTLE (Meta yoluyla aynı yarış koruması)
     const kilit = await this.prisma.withTenant(scoped, (tx) =>
       tx.$executeRaw(Prisma.sql`
         UPDATE auto_boost_queue_items
         SET status = 'launching', approved_by = ${ctx.userId}::uuid,
-            approved_at = now(), updated_at = now()
+            approved_at = now(), updated_at = now(),
+            applied_preset_id = ${kayit.preset_id}::uuid,
+            applied_settings = ${JSON.stringify(uygulanan)}::jsonb
         WHERE id = ${kayit.id}::uuid AND status = 'pending'
       `),
     );
@@ -552,6 +615,11 @@ export class AutoBoostLaunchService {
       throw new BadRequestException('Bu kart az önce işlendi. Sayfayı yenile.');
     }
 
+    /*
+     * Google'ın döndürdüğü kaynaklar — catch dalı bunlara bakarak "kampanya
+     * kuruldu mu" sorusunu cevaplıyor. Kurulduysa kart ASLA `failed` olmaz.
+     */
+    let kurulan: { campaignId: string; adGroupId: string; adId: string } | null = null;
     try {
       const provider = this.providers.get('google');
       const accessToken = await this.vault.getAccessToken(hesap.connection_id, provider);
@@ -585,7 +653,7 @@ export class AutoBoostLaunchService {
         platform: 'google',
       });
 
-      const sonuc = await provider.createVideoBoost(fetchCtx, {
+      kurulan = await provider.createVideoBoost(fetchCtx, {
         name: boostNameBase({
           clientName: kayit.client_name,
           postMessage: kayit.title,
@@ -606,13 +674,18 @@ export class AutoBoostLaunchService {
         yaslar: g.ageRanges,
       });
 
+      /*
+       * YALIN KİMLİK (G1). Kaynak adı (`customers/1/campaigns/2`) yazılırsa
+       * kart yapı taramasının yazdığı kampanya satırıyla hiç eşleşmiyor ve
+       * harcama kartta HİÇ görünmüyor.
+       */
       await this.prisma.withTenant(scoped, (tx) =>
         tx.$executeRaw(Prisma.sql`
           UPDATE auto_boost_queue_items
           SET status = 'launched', launched_at = now(), error = NULL,
-              external_campaign_id = ${sonuc.campaignId},
-              external_ad_group_id = ${sonuc.adGroupId},
-              external_ad_id = ${sonuc.adId},
+              external_campaign_id = ${googleYalinKimlik(kurulan!.campaignId)},
+              external_ad_group_id = ${googleYalinKimlik(kurulan!.adGroupId)},
+              external_ad_id = ${googleYalinKimlik(kurulan!.adId)},
               updated_at = now()
           WHERE id = ${kayit.id}::uuid
         `),
@@ -631,6 +704,39 @@ export class AutoBoostLaunchService {
        * olarak o.
        */
       const mesaj = err instanceof Error ? err.message : String(err);
+
+      /*
+       * ═══ KAMPANYA KURULDUYSA KART "BAŞARISIZ" OLAMAZ (P2) ═══
+       *
+       * Google başarılı döndü ama kaydı yazamadık: kampanya YAYINDA ve
+       * para harcıyor. Eskiden kart `failed` oluyor, kimlikler kayboluyor ve
+       * "tekrar yayınla" aynı video için ikinci kampanyayı açıyordu. Kart
+       * `kontrol` oluyor ve kimlikler hata metninde taşınıyor; bu yazma da
+       * düşerse kart `launching`te kalıyor ve takılma süpürmesi onu
+       * `kontrol` yapıyor (`takilanlariIsaretle`).
+       */
+      if (kurulan) {
+        const kimlikler = `kampanya ${googleYalinKimlik(kurulan.campaignId)}, reklam ${googleYalinKimlik(kurulan.adId)}`;
+        this.logger.error(`YouTube kampanyası KURULDU ama kayıt yazılamadı (kart ${kayit.id}, ${kimlikler}): ${mesaj}`);
+        await this.kontrolGerekli(
+          scoped,
+          kayit.id,
+          `Kampanya Google Ads'te kuruldu (${kimlikler}) ama kayıt yazılamadı: ${mesaj}`,
+        ).catch((e: unknown) => this.logger.error(`Kart kontrol olarak da işaretlenemedi: ${String(e)}`));
+        return { status: 'kontrol', message: `Kampanya kuruldu ama kayıt yazılamadı. Google Ads'te kontrol et (${kimlikler}).` };
+      }
+
+      /*
+       * YARIM KURULUM: geri alma eksik kaldı, hesapta kampanya kalmış
+       * olabilir (açma çağrısı zaman aşımına düşüp başarmışsa YAYINDA).
+       * `failed` yapmak tekrar yayına açardı; `kontrol` insan bakmadan açmaz.
+       */
+      if (err instanceof YarimKurulumHatasi) {
+        this.logger.error(`YouTube yayını yarım kaldı (kart ${kayit.id}): ${mesaj}`);
+        await this.kontrolGerekli(scoped, kayit.id, mesaj);
+        return { status: 'kontrol', message: mesaj };
+      }
+
       this.logger.error(`YouTube yayını başarısız (kart ${kayit.id}): ${mesaj}`);
       await this.geriAl(scoped, kayit.id, mesaj);
       return { status: 'failed', message: mesaj };
@@ -877,6 +983,8 @@ export class AutoBoostLaunchService {
   async tekrarBoostla(
     ctx: TenantContext,
     queueItemId: string,
+    /** `kontrol` durumundaki kartta ZORUNLU: kullanıcı platformda baktı. */
+    kontrolEdildi = false,
   ): Promise<{ status: string; message: string }> {
     // Karar yolundaki gerekçenin aynısı: daraltma açıkken UPDATE sonrası satır
     // kendi görüş alanının dışına düşebiliyor.
@@ -884,7 +992,7 @@ export class AutoBoostLaunchService {
 
     const [kayit] = await this.prisma.withTenant(scoped, (tx) =>
       tx.$queryRaw<Array<{ status: string; aktif_biter: Date | null }>>(Prisma.sql`
-        SELECT q.status, aktif.biter AS aktif_biter
+        SELECT q.status, COALESCE(aktif.biter, ${YOUTUBE_CANLI_BITER_SQL}) AS aktif_biter
         FROM auto_boost_queue_items q
         -- AKTİF BOOST ENGELİ: boosts_active_post_uniq aynı gönderi için
         -- ikinci bir aktif boost'a izin vermiyor. Kartı karara açıp onayda
@@ -920,6 +1028,19 @@ export class AutoBoostLaunchService {
     }
 
     /*
+     * KONTROL GEREKLİ KART YALNIZCA ONAYLA AÇILIYOR. Platformda bu içerik
+     * için kampanya olup olmadığını bilen tek taraf hesaba bakan insan;
+     * onaysız açmak, bu durumun var oluş sebebini (ikinci kampanya) geri
+     * getirirdi.
+     */
+    if (kayit.status === 'kontrol' && !kontrolEdildi) {
+      throw new BadRequestException(
+        'Bu kartın kampanyası platformda kurulmuş olabilir. Önce Google Ads / Meta ' +
+          'hesabında bu içerik için yayında bir kampanya olmadığını kontrol et, sonra onaylayarak tekrar yayınla.',
+      );
+    }
+
+    /*
      * DURUM KOŞULU UPDATE'İN İÇİNDE DE VAR. Yukarıdaki okumayla bu yazma
      * arasında başka bir oturum kartı onaylamış olabilir; koşulsuz bir UPDATE
      * yayına alınmakta olan kartı geri açardı.
@@ -929,7 +1050,7 @@ export class AutoBoostLaunchService {
         UPDATE auto_boost_queue_items
         SET status = 'pending', error = NULL, updated_at = now()
         WHERE id = ${queueItemId}::uuid
-          AND status IN ('launched', 'rejected', 'failed')
+          AND status IN ('launched', 'rejected', 'failed', 'kontrol')
       `),
     );
 
@@ -962,7 +1083,7 @@ export class AutoBoostLaunchService {
         SET status = 'rejected', approved_by = ${ctx.userId}::uuid,
             approved_at = now(), updated_at = now()
         WHERE id = ${queueItemId}::uuid
-          AND status IN ('pending', 'launched', 'failed')
+          AND status IN ('pending', 'launched', 'failed', 'kontrol')
       `),
     );
 
@@ -976,6 +1097,48 @@ export class AutoBoostLaunchService {
     }
 
     return { status: 'rejected', message: 'Kart kapatıldı.' };
+  }
+
+  /**
+   * ═══ TAKILAN KARTLAR — `launching`TE KALANLAR `kontrol` OLUYOR (P6) ═══
+   *
+   * Süreç yayının ortasında ölürse (deploy, bellek, zaman aşımı) kart
+   * `launching`te kalıyordu ve hiçbir yol onu oradan çıkarmıyordu: ne
+   * tekrar yayınlanabiliyor ne kapatılabiliyordu. `pending` ya da `failed`
+   * yapmak YANLIŞ olurdu: platformda kampanya kurulmuş olabilir.
+   *
+   * ZAMANLANMIŞ İŞ DEĞİL, LİSTE OKUNURKEN çalışıyor ve bu bilinçli: kart
+   * yalnızca bu ekranda görülüyor, yani ekran açıldığında doğru durumu
+   * göstermesi yeterli. Ayrı bir kuyruk işi, kuyruk/zamanlayıcı listesine
+   * (`sweep-dates.spec.ts`) yeni bir tür ve bir hata yüzeyi daha demekti.
+   * Koşul idempotent; aynı anda iki istek çalışsa da sonuç aynı.
+   */
+  async takilanlariIsaretle(ctx: TenantContext, clientId: string): Promise<number> {
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+    const sebep =
+      `Yayın ${AUTOBOOST_TAKILMA_ESIGI_DAKIKA} dakikadan uzun süre tamamlanmadı; ` +
+      'kampanya platformda kurulmuş olabilir. Hesapta kontrol et.';
+    return this.prisma.withTenant(scoped, (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE auto_boost_queue_items
+        SET status = 'kontrol',
+            error = ${sebep},
+            updated_at = now()
+        WHERE client_id = ${clientId}::uuid
+          AND status = 'launching'
+          AND updated_at < now() - make_interval(mins => ${AUTOBOOST_TAKILMA_ESIGI_DAKIKA})
+      `),
+    );
+  }
+
+  private async kontrolGerekli(ctx: TenantContext, id: string, mesaj: string): Promise<void> {
+    await this.prisma.withTenant(ctx, (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE auto_boost_queue_items
+        SET status = 'kontrol', error = ${mesaj.slice(0, 1000)}, updated_at = now()
+        WHERE id = ${id}::uuid
+      `),
+    );
   }
 
   private async geriAl(ctx: TenantContext, id: string, mesaj: string): Promise<void> {
@@ -997,7 +1160,7 @@ export class AutoBoostLaunchService {
  * düğme gösterip sunucu reddeder ve kullanıcı sebebi kendi kurulumunda arar.
  * `autoboost-tekrar-boost.spec.ts` iki listeyi karşılaştırıyor.
  */
-const TEKRAR_ACIK_DURUMLAR = new Set(['launched', 'rejected', 'failed']);
+const TEKRAR_ACIK_DURUMLAR = new Set<string>(AUTOBOOST_TEKRAR_ACIK_DURUMLAR);
 
 /** Gönderi yolunda okunan ön ayar satırı. */
 interface OnAyarSatiri {

@@ -11,6 +11,18 @@ Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlı
 doğrulandı).
 **Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: dört migration — taslak, yayın, yazma kesici, prova — + `db:rls`; `META_API_VERSION` v25.0 ya da v26.0 olmalı), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
+**AKILLI BOOST · YOUTUBE CANLIYA (2026-10-08, kullanıcı kararı):** yeni
+format yok, var olan YouTube → Demand Gen yolu canlıya oturtuluyor. Plan ve
+bulgular: [`akilli-boost/YOUTUBE-CANLI-PLAN.md`](akilli-boost/YOUTUBE-CANLI-PLAN.md).
+**Aşama 0 (para güvenliği) yazıldı, DEPLOY EDİLMEDİ.** MIGRATION VAR:
+`20261008170000_google_yazma_kesici`. Bulunan iki gerçek hata kapandı:
+yayındaki YouTube kartı tekrar onaylanıp İKİNCİ kampanya açabiliyordu;
+kart kampanya kimliğini kaynak adı olarak yazdığı için harcama kartta HİÇ
+görünmüyordu. **Sıradaki: Aşama 1**, tek atomik `googleAds:mutate` +
+`validateOnly` provası. İlk canlı deneme **Ege Birlik Yapı** kanalıyla
+(K1); bütçe/süre (K2), duraklatılmış ilk yayın (K3) ve geliştirici token
+seviyesi (K4) Aşama 3'ten önce kullanıcıya sorulacak.
+
 **OKUMA API / MCP (2026-10-08, kullanıcı isteği), DEPLOY EDİLMEDİ:**
 platform sahibi (`hello@profaj.com`) için salt okunur yapay zekâ kapısı.
 Panel: Ayarlar › Okuma API (menü + sayfa yalnız `platformAdmin`), anahtar

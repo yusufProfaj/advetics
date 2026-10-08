@@ -11,7 +11,13 @@ import {
   Req,
 } from '@nestjs/common';
 import { z } from 'zod';
-import type { TenantContext, YoutubeKartMetinleri, YoutubeOtomatikOnizleme } from '@advetics/shared';
+import {
+  tekrarBoostSchema,
+  type TekrarBoost,
+  type TenantContext,
+  type YoutubeKartMetinleri,
+  type YoutubeOtomatikOnizleme,
+} from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
 import type { AutoBoostQueueList } from '@advetics/shared';
@@ -284,8 +290,9 @@ export class AutoBoostController {
   tekrar(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(tekrarBoostSchema)) body: TekrarBoost,
   ): Promise<{ status: string; message: string }> {
-    return this.launch.tekrarBoostla(ctx, id);
+    return this.launch.tekrarBoostla(ctx, id, body.kontrolEdildi === true);
   }
 
   /**
@@ -334,10 +341,16 @@ export class AutoBoostController {
    */
   @Get('queue')
   @RequirePermissions('boost.read')
-  queue(
+  async queue(
     @CurrentTenant() ctx: TenantContext,
     @Query('clientId', ParseUUIDPipe) clientId: string,
   ): Promise<AutoBoostQueueList> {
+    /*
+     * TAKILAN KARTLAR LİSTEDEN ÖNCE işaretleniyor: `launching`te ölen bir
+     * yayın, kullanıcı ekranı açtığında "Kontrol gerekli" olarak görünmeli,
+     * sonsuz "Yayına alınıyor…" olarak değil (`takilanlariIsaretle`).
+     */
+    await this.launch.takilanlariIsaretle(ctx, clientId);
     return this.read.listQueue(ctx, clientId);
   }
 

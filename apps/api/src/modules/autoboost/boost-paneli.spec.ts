@@ -58,7 +58,8 @@ beforeAll(async () => {
     null as never,
     null as never,
     null as never,
-    // YouTube çözümleyicisi ve API — bu testler Meta yolunu sınıyor.
+    // YouTube çözümleyicisi, API ve kota bekçisi — bu testler Meta yolunu sınıyor.
+    null as never,
     null as never,
     null as never,
   );

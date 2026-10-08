@@ -12,7 +12,7 @@ import type {
   ChannelKind,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { hedeflemeOzeti } from '@advetics/shared';
+import { AUTOBOOST_TEKRAR_ACIK_DURUMLAR, PLATFORM_LABELS, hedeflemeOzeti } from '@advetics/shared';
 import { formatMoney, formatNumber, formatPercent, formatTarih } from '@/lib/format';
 import {
   ButceAlanlari,
@@ -78,7 +78,7 @@ const GORSEL_BICIMI: Record<AutoBoostPlatform, { oturtma: string; bulanikZemin: 
  * sebebi kendi kurulumunda arar. `autoboost-tekrar-boost.spec.ts` iki listeyi
  * karşılaştırıyor.
  */
-const TEKRAR_ACIK_DURUMLAR = new Set(['launched', 'rejected', 'failed']);
+const TEKRAR_ACIK_DURUMLAR = new Set<string>(AUTOBOOST_TEKRAR_ACIK_DURUMLAR);
 
 /**
  * ═══ DURUM SÜZGECİ ═══
@@ -90,7 +90,12 @@ const TEKRAR_ACIK_DURUMLAR = new Set(['launched', 'rejected', 'failed']);
  * zaman yazılı.
  */
 const DURUM_SUZGECLERI = [
-  { anahtar: 'bekleyen', etiket: 'Onay bekliyor', durumlar: ['pending'] },
+  /*
+   * KONTROL GEREKLİ DE BURADA: kullanıcının yapacak bir işi var (hesaba
+   * bakıp onaylamak). "Kapanan"a koymak, yayında olabilecek bir kampanyayı
+   * bitmiş gibi göstermek olurdu.
+   */
+  { anahtar: 'bekleyen', etiket: 'Onay bekliyor', durumlar: ['pending', 'kontrol'] },
   { anahtar: 'yayinda', etiket: 'Yayında', durumlar: ['launched', 'launching', 'approved'] },
   { anahtar: 'kapali', etiket: 'Kapanan', durumlar: ['rejected', 'failed'] },
 ] as const;
@@ -644,12 +649,26 @@ function Kart({
    * bu arada değişmiş olabilir ve kullanıcı onları kararı verirken görüyor.
    */
   async function tekrarBoostla(): Promise<void> {
+    /*
+     * KONTROL GEREKLİ KARTTA ONAY ŞART. Kampanya platformda kurulmuş
+     * olabilir; kullanıcı hesaba bakmadan tekrar yayınlarsa aynı içerik için
+     * ikinci kampanya açılır. Sunucu da onaysız isteği reddediyor.
+     */
+    const kontrolEdildi = kayit.status === 'kontrol';
+    if (
+      kontrolEdildi &&
+      !window.confirm(
+        `Bu içerik için ${PLATFORM_LABELS[kayit.platform]} hesabında yayında bir kampanya olmadığını kontrol ettin mi? Varsa önce onu durdur; yoksa aynı içerik için ikinci kampanya açılır.`,
+      )
+    ) {
+      return;
+    }
     setBusy('tekrar');
     setHata(null);
     try {
       await apiFetch<{ status: string; message: string }>(
         `/autoboost/queue/${kayit.id}/tekrar`,
-        { method: 'POST' },
+        { method: 'POST', body: JSON.stringify(kontrolEdildi ? { kontrolEdildi: true } : {}) },
       );
       onDegisti();
     } catch (err) {
@@ -1315,6 +1334,7 @@ const DURUM_TONU: Record<string, string> = {
   paused: 'bg-warn-soft text-warn-strong ring-warn/30',
   rejected: 'bg-surface-sunken text-ink-muted ring-line',
   failed: 'bg-danger-soft text-danger-strong ring-danger/30',
+  kontrol: 'bg-danger-soft text-danger-strong ring-danger/30',
 };
 
 const DURUM_ETIKETI: Record<string, string> = {
@@ -1334,4 +1354,5 @@ const DURUM_ETIKETI: Record<string, string> = {
   launching: 'Yayına alınıyor',
   launched: 'Yayında',
   failed: 'Başarısız',
+  kontrol: 'Kontrol gerekli',
 };

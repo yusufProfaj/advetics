@@ -379,8 +379,50 @@ export const autoBoostQueueStatusSchema = z.enum([
   'launching',
   'launched',
   'failed',
+  /*
+   * ═══ KONTROL GEREKLİ — PLATFORMDA NE OLDUĞU BİLİNMİYOR ═══
+   *
+   * `failed` "kampanya yok" demek ve tekrar yayınlamaya açık; `launched`
+   * "kampanya var" demek. Arada üçüncü bir hâl vardı ve ikisinden birine
+   * zorlanıyordu: süreç `launching`te öldü, Google başarılı döndü ama kayıt
+   * yazılamadı, ya da yarım kalan kurulumun geri alınması düştü. Bu hâli
+   * `failed` saymak, YAYINDAKİ bir kampanyanın yanına tek tıkla ikincisini
+   * açtırıyordu — aynı video için iki kez para.
+   *
+   * Bu durumdaki kart ancak kullanıcı platformda baktığını ONAYLARSA tekrar
+   * açılıyor (`tekrarBoostSchema.kontrolEdildi`). Sürtünme kasıtlı.
+   */
+  'kontrol',
 ]);
 export type AutoBoostQueueStatus = z.infer<typeof autoBoostQueueStatusSchema>;
+
+/**
+ * TEKRAR YAYINLAMAYA AÇIK DURUMLAR — sunucu, okuma katmanı ve panel AYNI
+ * listeyi okuyor. Üç ayrı kopyaydı; biri güncellenip diğeri unutulursa
+ * panel açık düğme gösterip sunucu reddeder.
+ */
+export const AUTOBOOST_TEKRAR_ACIK_DURUMLAR = ['launched', 'rejected', 'failed', 'kontrol'] as const;
+
+/**
+ * `launching`te bu kadar dakikadan uzun kalan kart `kontrol` sayılıyor.
+ * Yayın zinciri en kötü hâlde (sekiz çağrı × 30 sn zaman aşımı) dört
+ * dakikada bitiyor; 15 dakika, hâlâ koşan bir yayını yanlışlıkla
+ * işaretlemeyecek kadar geniş.
+ */
+export const AUTOBOOST_TAKILMA_ESIGI_DAKIKA = 15;
+
+/**
+ * "Tekrar yayınla" gövdesi. `kontrolEdildi` yalnızca `kontrol` durumundaki
+ * kartta zorunlu: kullanıcı platformda bu içerik için kampanya OLMADIĞINI
+ * (ya da durdurulduğunu) gördüğünü onaylıyor.
+ */
+export const tekrarBoostSchema = z
+  .object({ kontrolEdildi: z.boolean().optional() })
+  .strict()
+  // Gövdesiz istek (eski panel, curl) `{}` sayılıyor: düğmenin önceki
+  // davranışı korunuyor, yalnızca `kontrol` kartı onay istiyor.
+  .default({});
+export type TekrarBoost = z.infer<typeof tekrarBoostSchema>;
 
 /**
  * ═══ YAYINDAKİ BOOSTUN ÖLÇÜLEN PERFORMANSI ═══

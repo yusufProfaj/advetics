@@ -102,4 +102,44 @@ export class AjansAyariService {
       return { durduruldu: durdur, sebep: durdur ? temiz : null };
     });
   }
+
+  /**
+   * "Google'a yazmayı durdur" — Meta anahtarıyla aynı kurallar (yalnız
+   * ajans yöneticisi, sebep zorunlu), AYRI kolonlarda. YouTube Akıllı
+   * Boost ve ileride Google yazma yollarının hepsi yayından önce okuyor.
+   */
+  async googleYazmaAnahtari(
+    ctx: TenantContext,
+    durdur: boolean,
+    sebep: string | null,
+    meta: { ip: string | null; userAgent: string | null; requestId?: string },
+  ): Promise<{ durduruldu: boolean; sebep: string | null }> {
+    if (!ctx.isOrgAdmin) throw new ForbiddenException('Google’a yazmayı yalnız ajans yöneticisi durdurabilir.');
+    const temiz = sebep?.trim() || null;
+    if (durdur && !temiz) throw new ForbiddenException('Durdurma sebebi yazılmalı.');
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const [s] = await tx.$queryRaw<Array<{ ok: number }>>(Prisma.sql`
+        INSERT INTO ajans_ayari (org_id, google_yazma_durduruldu, google_durduran_id,
+                                 google_durdurma_at, google_durdurma_sebebi, updated_at)
+        VALUES (${ctx.orgId}::uuid, ${durdur}, ${durdur ? ctx.userId : null}::uuid,
+                ${durdur ? new Date() : null}, ${durdur ? temiz : null}, now())
+        ON CONFLICT (org_id) DO UPDATE
+          SET google_yazma_durduruldu = EXCLUDED.google_yazma_durduruldu,
+              google_durduran_id = EXCLUDED.google_durduran_id,
+              google_durdurma_at = EXCLUDED.google_durdurma_at,
+              google_durdurma_sebebi = EXCLUDED.google_durdurma_sebebi,
+              updated_at = now()
+        RETURNING 1 AS ok`);
+      if (!s) throw new ForbiddenException('Anahtar kaydedilemedi.');
+      await this.audit.record(tx, ctx, {
+        action: durdur ? 'ajans_ayari.google_yazma_durduruldu' : 'ajans_ayari.google_yazma_acildi',
+        targetType: 'ajans_ayari',
+        targetId: ctx.orgId,
+        clientId: null,
+        after: { durduruldu: durdur, sebep: temiz },
+        ...meta,
+      });
+      return { durduruldu: durdur, sebep: durdur ? temiz : null };
+    });
+  }
 }
