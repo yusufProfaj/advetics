@@ -1,32 +1,42 @@
 # Pilot işine devam promptu
 
-Yeni bir Claude Code oturumuna aşağıdaki metni olduğu gibi yapıştır.
+Yeni bir Claude Code oturumuna aşağıdaki metni olduğu gibi yapıştır. Oturumu
+`.claude/worktrees/advcampaign-agents-strategy-1d8a19` worktree'sinde aç.
 
 ---
 
-Advetics'te "Pilot" işine (AdvStrategy + AdvCampaign'in yapay zekâ odaklı yeniden kurgusu) devam
-ediyoruz. Kaldığımız yer `docs/advcampaign/PILOT-DEVIR.md` içinde; önce onu ve `CLAUDE.md`'yi oku.
-İş `claude/advcampaign-agents-strategy-1d8a19` dalında, main'e birleştirilmedi, deploy edilmedi.
+Advetics'te "Pilot" işine devam ediyoruz. Pilot, AdvStrategy ile AdvCampaign'in yapay zekâ odaklı
+yeniden kurgusu. Kaldığımız yer `docs/advcampaign/PILOT-DEVIR.md` içinde; önce onu, `CLAUDE.md`yi ve
+`docs/advcampaign/MIMARI.md` §12–§14'ü oku. İş `claude/advcampaign-agents-strategy-1d8a19` dalında.
+Dal main'e birleştirilmedi, push ve deploy edilmedi.
+
+Durum (2026-10-08 sonu):
+- Reklam metni kararı (a) olarak kapandı: metin plan anında yazılıyor, planda görünüyor, onay özeti metni kapsıyor.
+- Ajan 1, 2 ve 3'ün ikinci turu bitti. B-1…B-5, override, ajans onayı denetim kaydı ve C-16 düzeltildi.
+- Ajan 4'ün kapı turu YARIDA kesildi; kapı kararı yok.
 
 Kurallar:
-- Beş ajan düzeni (CLAUDE.md "BEŞ AJAN, MODÜL MODÜL"). Ajan 4 kapısı şu an KAPALI; kapı açılmadan
-  main'e birleştirme ve deploy yok.
-- `docs/advcampaign/MIMARI.md` §9 KARARLAR ve PILOT-DEVIR.md'deki kullanıcı kararları kapandı,
-  yeniden sorma.
-- `pnpm` PATH'te yok, `npx -y pnpm@9 ...` kullan. Tam API test paketini tek başına ve ön planda koş.
-- Push'tan önce `git pull --rebase`; force push yok.
+- Beş ajan düzeni geçerli (CLAUDE.md "BEŞ AJAN, MODÜL MODÜL"). Kapı açılmadan main'e birleştirme ve deploy yok.
+- MIMARI.md §9 ve PILOT-DEVIR.md'deki kullanıcı kararları kapandı; yeniden sorma.
+- `pnpm` PATH'te yok, `npx -y pnpm@9 ...` kullan.
+- Tam API test paketini TEK BAŞINA, ön planda ve yüksek timeout'la koş.
+- Push'tan önce `git pull --rebase` yap; force push yok.
 
 Sırayla:
-1. Bana tek soruyu sor: reklam metni (a) plan hazırlanırken yazılıp plan belgesinde önizlemeyle
-   görünsün ve müşteri onayı metni de kapsasın (önerilen), ya da (b) onaydan sonra yazılsın ve
-   yayından önce ajansa "metinleri onayla" adımı gelsin.
-2. Cevaba göre düzeltmeleri ajanlara dağıt: Ajan 1 → B-3, `kuruluyor` durumundan çıkış, (a ise)
-   onay özetine metin; Ajan 2 → B-4, B-1, B-2, B-5, override'lı üyeliklerin `strategy.publish`
-   alması, ajans adına onayın denetim kaydı, atıf standardının onayda kontrolü (C-16); Ajan 3 →
-   (a ise) plan belgesinde metin önizlemesi.
-3. Ajan 4'ü yeniden koştur: `ajan4-kapi.spec.ts` içindeki `it.fails` testlerini `it`e çevir,
-   tam API paketini sonuna kadar koş, kapı kararını ver.
-4. Kapı açıksa Ajan 5: PILOT-DEVIR.md'deki salt okunur SQL'leri bana ver, migration sırasını
-   kontrol et, `docs/DEVAM.md`yi güncelle, deploy komutunu ver (deploy'u kendin yapma).
+1. Ajan 4 kapı turunu baştan koştur. Görev listesi PILOT-DEVIR.md "Sıradaki iş" 1. maddede:
+   - tam API paketi sonuna kadar;
+   - shared derlemesi + typecheck + web testleri;
+   - kalan `it.fails` sayımı;
+   - yeni yüzeylere düşmanca bakış: SECURITY DEFINER fonksiyon, durdur politikası, görsel ucu IDOR, onaydan sonra metin değişimi, worker yarışı, `PilotKurulumYaniti.plan.yayinKipi`, plan anında Gemini;
+   - en az 8 mutasyon;
+   - Ajan 5 SQL listesi.
+
+   Ajan 4 kod düzeltmez; bulguyu `it.fails` ile kilitler.
+2. Bulgu varsa düzeltmeyi üreten ajana ver, sonra kapıyı yeniden koştur.
+3. Kapı açıksa Ajan 5:
+   - PILOT-DEVIR.md'deki salt okunur SQL'leri bana ver;
+   - migration sırasını kontrol et;
+   - `docs/DEVAM.md`yi güncelle;
+   - deploy komutunu ver (deploy'u kendin yapma).
 
 Her adımın sonunda bana en fazla beş satırla ne olduğunu yaz.
