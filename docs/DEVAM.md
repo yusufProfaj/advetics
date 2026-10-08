@@ -11,6 +11,16 @@ Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlı
 doğrulandı).
 **Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: dört migration — taslak, yayın, yazma kesici, prova — + `db:rls`; `META_API_VERSION` v25.0 ya da v26.0 olmalı), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
+**YOUTUBE KANALINI BUL (2026-10-08, kullanıcı isteği), DEPLOY EDİLMEDİ:**
+adres yapıştırmadan kanal ekleme. Marka Merkezi › Bağlantılar › YouTube ›
+"Kanalı bul": workspace sitesindeki kanal bağlantısı / gömülü video ve
+Google Ads hesabında reklamı yapılmış videolardan kanıtlı öneri, isimle
+YouTube araması (100 kota birimi; 24 saat önbellek, kişi başı saatte 20).
+"Bu kanal" havuza ekleyip mevcut atama ucundan bu workspace'e bağlıyor;
+başka workspace'teki kanal eklenemiyor. Havuz ekranında (Platform
+Bağlantıları) yalnızca isimle arama → havuz. Migration YOK. Canlıda
+ölçülmedi: Google Ads `asset.youtube_video_asset` sorgusu.
+
 **AKILLI BOOST · YOUTUBE CANLIYA (2026-10-08, kullanıcı kararı):** yeni
 format yok, var olan YouTube → Demand Gen yolu canlıya oturtuluyor. Plan ve
 bulgular: [`akilli-boost/YOUTUBE-CANLI-PLAN.md`](akilli-boost/YOUTUBE-CANLI-PLAN.md).

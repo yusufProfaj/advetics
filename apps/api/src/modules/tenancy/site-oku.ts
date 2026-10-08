@@ -242,3 +242,85 @@ export function ozelAdres(ip: string): boolean {
   if (a >= 224) return true; // çoklu gönderim ve ayrılmış
   return false;
 }
+
+/**
+ * ═══ SAYFANIN HAM HTML'İ — YÖNLENDİRMEYİ HER ADIMDA YENİDEN DOĞRULAYARAK ═══
+ *
+ * "YouTube kanalını bul" sitenin bağlantılarına bakıyor; metne çevrilmiş
+ * hâl (`siteOku`) bağlantıları attığı için ham gövde gerekiyor.
+ *
+ * YÖNLENDİRME İZLENİYOR ama `siteOku`nun "izlenirse ilk adresin doğrulanmış
+ * olması hiçbir şey ifade etmiyor" itirazı burada geçerli değil: her adım
+ * İLK İSTEKLE AYNI kontrolden geçiyor (https, IP literali yok, çözülen her
+ * adres iç ağ dışında). Kurumsal sitelerin çoğu `site.com`dan
+ * `www.site.com`a yönlendiriyor ve izlememek, bağlantı aramasını
+ * müşterilerin çoğunda "site yönlendirdi" ile bitirirdi. `siteOku`
+ * değişmiyor: o yolun kendi gerekçesi ve testleri var.
+ */
+export type HtmlSonucu = { ok: true; html: string; adres: string } | { ok: false; sebep: string };
+
+export async function sayfaHtmlGetir(rawUrl: string, maxYonlendirme = 3): Promise<HtmlSonucu> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl.trim());
+  } catch {
+    return { ok: false, sebep: 'Site adresi geçerli bir URL değil.' };
+  }
+
+  for (let adim = 0; adim <= maxYonlendirme; adim++) {
+    const engel = await adresEngeli(url);
+    if (engel) return { ok: false, sebep: engel };
+
+    const kontrol = new AbortController();
+    const zamanlayici = setTimeout(() => kontrol.abort(), ZAMAN_ASIMI_MS);
+    try {
+      const res = await fetch(url.toString(), {
+        redirect: 'manual',
+        signal: kontrol.signal,
+        headers: {
+          'User-Agent': 'Advetics/1.0 (+youtube-kanal-bul)',
+          Accept: 'text/html,application/xhtml+xml',
+        },
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const konum = res.headers.get('location');
+        if (!konum) return { ok: false, sebep: `Site ${res.status} döndürdü ama hedef adres yok.` };
+        url = new URL(konum, url);
+        continue;
+      }
+      if (!res.ok) return { ok: false, sebep: `Site ${res.status} döndürdü.` };
+      const tur = res.headers.get('content-type') ?? '';
+      if (!tur.includes('html') && !tur.includes('text')) {
+        return { ok: false, sebep: `Site HTML döndürmedi (${tur || 'tür bilinmiyor'}).` };
+      }
+      return { ok: true, html: await govdeyiOku(res), adres: url.toString() };
+    } catch (err) {
+      const abort = err instanceof Error && err.name === 'AbortError';
+      return {
+        ok: false,
+        sebep: abort
+          ? 'Site zamanında yanıt vermedi.'
+          : `Site okunamadı: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    } finally {
+      clearTimeout(zamanlayici);
+    }
+  }
+  return { ok: false, sebep: `Site ${maxYonlendirme} kereden fazla yönlendirdi; okunmadı.` };
+}
+
+/** Bir adımın güvenlik kontrolü — `siteOku`yla AYNI kurallar. Engel yoksa null. */
+async function adresEngeli(url: URL): Promise<string | null> {
+  if (url.protocol !== 'https:') return 'Site adresi https ile başlamalı.';
+  if (ipLiterali(url.hostname)) return 'Site adresi alan adı olmalı, IP değil.';
+  let adresler: Array<{ address: string; family: number }>;
+  try {
+    adresler = await lookup(url.hostname, { all: true });
+  } catch {
+    return `Site adresi çözülemedi: ${url.hostname}`;
+  }
+  if (adresler.length === 0 || adresler.some((a) => ozelAdres(a.address))) {
+    return 'Site adresi iç ağa işaret ediyor; okunmadı.';
+  }
+  return null;
+}

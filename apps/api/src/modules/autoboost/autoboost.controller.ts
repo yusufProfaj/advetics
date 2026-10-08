@@ -17,9 +17,12 @@ import {
   type TenantContext,
   type YoutubeKartMetinleri,
   type YoutubeOtomatikOnizleme,
+  youtubeKanalAraSchema,
+  type YoutubeKanalAra,
+  type YoutubeKanalOnerileri,
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
-import { zodBody } from '../../common/pipes/zod-validation.pipe';
+import { zodBody, zodQuery } from '../../common/pipes/zod-validation.pipe';
 import type { AutoBoostQueueList } from '@advetics/shared';
 import {
   autoBoostDecisionSchema,
@@ -36,6 +39,7 @@ import { BoostKontrolService } from './boost-kontrol.service';
 import { GecmisIcerikService } from './gecmis-icerik.service';
 import { YoutubeOtomatikService } from './youtube-otomatik.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
+import { YoutubeKanalBulService } from './youtube-kanal-bul.service';
 import { ConnectionsService } from '../connections/connections.service';
 import type { AuthedRequest } from '../../common/types/request';
 
@@ -114,6 +118,8 @@ export class AutoBoostController {
      * yazmak, bunların birini unutup sessizce yarım bir satır üretmekti.
      */
     private readonly connections: ConnectionsService,
+    /** "YouTube kanalını bul" — öneri ve arama; hiçbir şey yazmıyor. */
+    private readonly kanalBul: YoutubeKanalBulService,
     /** YouTube ön ayarının otomatik dolan bilgileri — yayınla aynı çözümleyici. */
     private readonly youtubeOtomatik: YoutubeOtomatikService,
   ) {}
@@ -374,6 +380,31 @@ export class AutoBoostController {
     @Body(zodBody(gecmisIcerikSchema)) body: { clientId: string },
   ): Promise<{ kartlar: number; notlar: string[] }> {
     return this.gecmis.cek(ctx, body.clientId);
+  }
+
+  /**
+   * ═══ YOUTUBE KANALINI BUL — kanıtlı öneriler (site + Google Ads) ═══
+   *
+   * `connection.write`: ekleme ile aynı yetki. Öneri yazmıyor ama YouTube ve
+   * Google Ads kotası harcıyor ve sonucu yalnızca ekleyebilen kişi kullanıyor.
+   */
+  @Get('youtube/kanal-onerileri')
+  @RequirePermissions('connection.write')
+  kanalOnerileri(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<YoutubeKanalOnerileri> {
+    return this.kanalBul.oneriler(ctx, clientId);
+  }
+
+  /** İsimle YouTube araması — 100 kota birimi; önbellekli ve kişi başına sınırlı. */
+  @Get('youtube/kanal-ara')
+  @RequirePermissions('connection.write')
+  kanalAra(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(youtubeKanalAraSchema)) q: YoutubeKanalAra,
+  ): Promise<YoutubeKanalOnerileri> {
+    return this.kanalBul.ara(ctx, q.q, q.clientId ?? null);
   }
 
   /**

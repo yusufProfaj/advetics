@@ -64,6 +64,17 @@ export interface YouTubeKanal {
   thumbnailUrl: string | null;
 }
 
+export interface YouTubeKanalDetayi {
+  channelId: string;
+  title: string;
+  handle: string | null;
+  thumbnailUrl: string | null;
+  aboneSayisi: number | null;
+  videoSayisi: number | null;
+}
+
+const ANAHTAR_YOK = 'YOUTUBE_API_KEY tanımlı değil; YouTube sorgulanamıyor. Adımlar: docs/DEPLOYMENT.md §5c';
+
 export type YouTubeKanalSonucu =
   | { durum: 'bulundu'; kanal: YouTubeKanal }
   | { durum: 'bulunamadi' }
@@ -346,6 +357,135 @@ export class YouTubeApiService {
     }
 
     return { durum: 'bulundu', videolar };
+  }
+
+  /**
+   * ═══ KANAL AYRINTISI — KARTIN AYIRT EDİCİ İŞARETLERİ ═══
+   *
+   * "YouTube kanalını bul" önerilerinin kartında abone ve video sayısı
+   * yazıyor: isim benzerliği tek başına kanıt değil ve aynı adlı hayran
+   * kanalını firmanın kanalından ayıran şey bu sayılar. Tek istekte 50
+   * kanala kadar, 1 kota birimi.
+   *
+   * Gizlenmiş abone sayısı `null` — "0 abone" yazmak yanlış bilgi olurdu.
+   */
+  async kanalDetaylari(ids: readonly string[]): Promise<
+    | { durum: 'bulundu'; kanallar: YouTubeKanalDetayi[] }
+    | { durum: 'hata'; message: string }
+  > {
+    if (ids.length === 0) return { durum: 'bulundu', kanallar: [] };
+    const key = this.config.platforms.youtube.apiKey;
+    if (!key) return { durum: 'hata', message: ANAHTAR_YOK };
+    const url = new URL('https://www.googleapis.com/youtube/v3/channels');
+    url.searchParams.set('part', 'snippet,statistics');
+    url.searchParams.set('id', [...new Set(ids)].slice(0, 50).join(','));
+    url.searchParams.set('maxResults', '50');
+    url.searchParams.set('key', key);
+    const r = await this.iste<{
+      items?: Array<{
+        id?: string;
+        snippet?: {
+          title?: string;
+          customUrl?: string;
+          thumbnails?: Record<string, { url?: string } | undefined>;
+        };
+        statistics?: { subscriberCount?: string; hiddenSubscriberCount?: boolean; videoCount?: string };
+      }>;
+    }>(url);
+    if (r.durum === 'hata') return r;
+    return {
+      durum: 'bulundu',
+      kanallar: (r.govde.items ?? [])
+        .filter((i): i is typeof i & { id: string } => Boolean(i.id))
+        .map((i) => ({
+          channelId: i.id,
+          title: i.snippet?.title ?? i.id,
+          handle: i.snippet?.customUrl
+            ? i.snippet.customUrl.startsWith('@')
+              ? i.snippet.customUrl
+              : `@${i.snippet.customUrl}`
+            : null,
+          thumbnailUrl:
+            i.snippet?.thumbnails?.medium?.url ?? i.snippet?.thumbnails?.default?.url ?? null,
+          aboneSayisi:
+            i.statistics?.hiddenSubscriberCount || i.statistics?.subscriberCount === undefined
+              ? null
+              : Number(i.statistics.subscriberCount),
+          videoSayisi: i.statistics?.videoCount === undefined ? null : Number(i.statistics.videoCount),
+        })),
+    };
+  }
+
+  /**
+   * ═══ İSİMLE KANAL ARAMA — PAHALI ═══
+   *
+   * `search.list` tek istekte 100 kota birimi; günlük varsayılan kota
+   * 10.000, yani günde yaklaşık 100 arama ve aynı kota WebSub bildirimlerinin
+   * video doğrulamasını da besliyor. Bu yüzden çağıran önbellek ve sınır
+   * koyuyor (`YoutubeKanalBulService`); burada yalnızca kimlikler dönüyor,
+   * ayrıntı ucuz `kanalDetaylari`ndan.
+   *
+   * Türkiye ve Türkçe öncelikli (`regionCode`, `relevanceLanguage`): yoksa
+   * "Ege Birlik" araması dünya genelinde ilgisiz kanalları öne alıyor.
+   */
+  async kanalAra(q: string): Promise<{ durum: 'bulundu'; ids: string[] } | { durum: 'hata'; message: string }> {
+    const key = this.config.platforms.youtube.apiKey;
+    if (!key) return { durum: 'hata', message: ANAHTAR_YOK };
+    const url = new URL('https://www.googleapis.com/youtube/v3/search');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('type', 'channel');
+    url.searchParams.set('q', q);
+    url.searchParams.set('maxResults', '10');
+    url.searchParams.set('regionCode', 'TR');
+    url.searchParams.set('relevanceLanguage', 'tr');
+    url.searchParams.set('key', key);
+    const r = await this.iste<{ items?: Array<{ id?: { channelId?: string }; snippet?: { channelId?: string } }> }>(url);
+    if (r.durum === 'hata') return r;
+    const ids = (r.govde.items ?? [])
+      .map((i) => i.id?.channelId ?? i.snippet?.channelId ?? null)
+      .filter((x): x is string => Boolean(x));
+    return { durum: 'bulundu', ids: [...new Set(ids)] };
+  }
+
+  /**
+   * Videoların KANALI — site gömülü videoları ve Google Ads'teki reklam
+   * videoları için. 50 video tek istek, 1 birim. Bulunamayan (silinmiş,
+   * gizli) video sonuçta yok; çağıran bunu sayıp söylüyor.
+   */
+  async videoKanallari(
+    videoIds: readonly string[],
+  ): Promise<{ durum: 'bulundu'; kanallar: Map<string, string> } | { durum: 'hata'; message: string }> {
+    const kanallar = new Map<string, string>();
+    const tekil = [...new Set(videoIds)];
+    if (tekil.length === 0) return { durum: 'bulundu', kanallar };
+    const key = this.config.platforms.youtube.apiKey;
+    if (!key) return { durum: 'hata', message: ANAHTAR_YOK };
+    for (let i = 0; i < tekil.length; i += 50) {
+      const url = new URL('https://www.googleapis.com/youtube/v3/videos');
+      url.searchParams.set('part', 'snippet');
+      url.searchParams.set('id', tekil.slice(i, i + 50).join(','));
+      url.searchParams.set('key', key);
+      const r = await this.iste<{ items?: Array<{ id?: string; snippet?: { channelId?: string } }> }>(url);
+      if (r.durum === 'hata') return r;
+      for (const it of r.govde.items ?? []) {
+        if (it.id && it.snippet?.channelId) kanallar.set(it.id, it.snippet.channelId);
+      }
+    }
+    return { durum: 'bulundu', kanallar };
+  }
+
+  /** Eski `/user/AD` bağlantısı — `forUsername` ile çözülüyor (1 birim). */
+  async kanalKullaniciAdiyla(ad: string): Promise<{ durum: 'bulundu'; channelId: string } | { durum: 'bulunamadi' } | { durum: 'hata'; message: string }> {
+    const key = this.config.platforms.youtube.apiKey;
+    if (!key) return { durum: 'hata', message: ANAHTAR_YOK };
+    const url = new URL('https://www.googleapis.com/youtube/v3/channels');
+    url.searchParams.set('part', 'id');
+    url.searchParams.set('forUsername', ad);
+    url.searchParams.set('key', key);
+    const r = await this.iste<{ items?: Array<{ id?: string }> }>(url);
+    if (r.durum === 'hata') return r;
+    const id = r.govde.items?.[0]?.id;
+    return id ? { durum: 'bulundu', channelId: id } : { durum: 'bulunamadi' };
   }
 
   /**

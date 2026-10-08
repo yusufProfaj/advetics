@@ -509,6 +509,43 @@ export class GoogleProvider implements IAdPlatformProvider {
   }
 
   /**
+   * ═══ HESAPTA REKLAMI YAPILMIŞ YOUTUBE VİDEOLARI ═══
+   *
+   * "YouTube kanalını bul"un ikinci kaynağı: bir Google Ads hesabında
+   * reklamı yapılmış videolar kimin kanalındaysa, o kanal büyük ihtimalle
+   * bu müşterinindir. SALT OKUNUR, tek sorgu.
+   *
+   * `asset` kaynağı: hesaba eklenmiş YOUTUBE_VIDEO varlıkları. Kampanya
+   * türünden bağımsız (Demand Gen, Video, Performance Max hepsi varlık
+   * üzerinden). Kanal kimliği burada YOK; çağıran YouTube'a soruyor.
+   * 200 ile sınırlı: amaç saymak değil kanalı bulmak.
+   *
+   * CANLIDA ÖLÇÜLMEDİ (2026-10-08): alan adı belgeden. Hata yutulmuyor,
+   * çağıran notu ekrana yazıyor.
+   */
+  async reklamVideoKimlikleri(
+    accessToken: string,
+    customerId: string,
+    loginCustomerId?: string,
+  ): Promise<string[]> {
+    const satirlar = await this.searchGaql<{
+      asset?: { youtubeVideoAsset?: { youtubeVideoId?: string } };
+    }>(
+      accessToken,
+      customerId,
+      `SELECT asset.youtube_video_asset.youtube_video_id
+       FROM asset
+       WHERE asset.type = 'YOUTUBE_VIDEO'
+       LIMIT 200`,
+      loginCustomerId,
+    );
+    const ids = satirlar
+      .map((r) => r.asset?.youtubeVideoAsset?.youtubeVideoId ?? null)
+      .filter((x): x is string => Boolean(x));
+    return [...new Set(ids)];
+  }
+
+  /**
    * ANAHTAR KELİME FİKİRLERİ — `KeywordPlanIdeaService.GenerateKeywordIdeas`.
    *
    * SALT OKUNUR: hesapta hiçbir şey oluşturmuyor, para harcamıyor. AdvStrategy

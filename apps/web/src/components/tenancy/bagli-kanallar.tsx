@@ -15,6 +15,7 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { atamaBildirimi, type AtamaYaniti } from '@/lib/atama-bildirimi';
 import { PlatformLogo } from '@/components/platform-logo';
 import { Dugme } from '@/components/ui/dugme';
+import { YouTubeKanalBul } from '@/components/connections/youtube-kanal-bul';
 
 /**
  * BAĞLI KANALLAR — bir workspace’in kanalları, kart düzeninde.
@@ -85,7 +86,14 @@ export function BagliKanallar({
         <KanalKarti baslik="Reklam hesapları" clientId={data.clientId} gruplar={reklam} ajansUyesi={ajansUyesi} boost={boost} />
       )}
       {sosyal.length > 0 && (
-        <KanalKarti baslik="Sayfalar ve kanallar" clientId={data.clientId} gruplar={sosyal} ajansUyesi={ajansUyesi} boost={boost} />
+        <KanalKarti
+          baslik="Sayfalar ve kanallar"
+          clientId={data.clientId}
+          workspaceAdi={data.clientName}
+          gruplar={sosyal}
+          ajansUyesi={ajansUyesi}
+          boost={boost}
+        />
       )}
     </div>
   );
@@ -94,12 +102,15 @@ export function BagliKanallar({
 function KanalKarti({
   baslik,
   clientId,
+  workspaceAdi = null,
   gruplar,
   ajansUyesi,
   boost,
 }: {
   baslik: string;
   clientId: string;
+  /** YouTube "Kanalı bul" arama kutusunun ilk değeri. */
+  workspaceAdi?: string | null;
   gruplar: ChannelGroup[];
   ajansUyesi: boolean;
   boost: BoostSecenekleri;
@@ -112,7 +123,13 @@ function KanalKarti({
       <ul className="divide-y divide-line">
         {gruplar.map((g) => (
           <li key={g.kind}>
-            <KanalGrubu clientId={clientId} grup={g} ajansUyesi={ajansUyesi} boost={boost} />
+            <KanalGrubu
+              clientId={clientId}
+              workspaceAdi={workspaceAdi}
+              grup={g}
+              ajansUyesi={ajansUyesi}
+              boost={boost}
+            />
           </li>
         ))}
       </ul>
@@ -138,16 +155,27 @@ export function havuzdaAra(liste: ChannelItem[], ara: string): ChannelItem[] {
 
 function KanalGrubu({
   clientId,
+  workspaceAdi,
   grup,
   ajansUyesi,
   boost,
 }: {
   clientId: string;
+  workspaceAdi: string | null;
   grup: ChannelGroup;
   ajansUyesi: boolean;
   boost: BoostSecenekleri;
 }) {
   const [acik, setAcik] = useState(false);
+  /*
+   * YOUTUBE KANALI HAVUZDA OLMAK ZORUNDA DEĞİL: "Kanalı bul" siteden,
+   * Google Ads geçmişinden ve isimle aramadan kanalı bulup tek adımda bu
+   * workspace'e bağlıyor. Havuz boşken de açık — eskiden "havuzda boşta
+   * hesap yok" yazıp kullanıcıyı Bağlantılar ekranına adres yapıştırmaya
+   * gönderiyordu.
+   */
+  const [bulAcik, setBulAcik] = useState(false);
+  const youtube = grup.kind === 'youtube';
   const [ara, setAra] = useState('');
   const gorunen = havuzdaAra(grup.available, ara);
   const eklenebilir = grup.available.length > 0;
@@ -181,16 +209,43 @@ function KanalGrubu({
         {/* SEÇİLECEK HESAP YOKSA DÜĞME SEBEBİYLE KAPALI — gizlenmiyor.
             Gizlemek, kullanıcının "buraya nasıl ekleniyor" diye aramasına
             yol açardı. Sebep yukarıdaki durum satırında yazılı. */}
-        <Dugme
-          ton="ikincil"
-          boyut="kucuk"
-          onClick={() => setAcik((v) => !v)}
-          disabled={!eklenebilir}
-          aria-expanded={acik}
-        >
-          {acik ? 'Kapat' : `+ Ekle (${grup.available.length})`}
-        </Dugme>
+        <div className="flex shrink-0 items-center gap-2">
+          {youtube && (
+            <Dugme
+              ton="ikincil"
+              boyut="kucuk"
+              onClick={() => {
+                setBulAcik((v) => !v);
+                setAcik(false);
+              }}
+              aria-expanded={bulAcik}
+            >
+              {bulAcik ? 'Kapat' : 'Kanalı bul'}
+            </Dugme>
+          )}
+          <Dugme
+            ton="ikincil"
+            boyut="kucuk"
+            onClick={() => {
+              setAcik((v) => !v);
+              setBulAcik(false);
+            }}
+            disabled={!eklenebilir}
+            aria-expanded={acik}
+          >
+            {acik ? 'Kapat' : `+ Ekle (${grup.available.length})`}
+          </Dugme>
+        </div>
       </div>
+
+      {bulAcik && (
+        <div className="ml-12 mt-3 rounded-lg border border-line bg-surface-sunken p-3">
+          <p className="text-xs font-medium text-ink">YouTube kanalını bul</p>
+          <div className="mt-2">
+            <YouTubeKanalBul clientId={clientId} workspaceAdi={workspaceAdi} />
+          </div>
+        </div>
+      )}
 
       {/* HESAPLAR LOGONUN HİZASINDA, ÇERÇEVESİZ: her hesabı ayrı bir kutuya
           koymak kartın içinde kart demekti ve gözü kutulara takıyordu. */}

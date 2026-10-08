@@ -5,6 +5,7 @@ import { TopluTazeleme } from '@/components/connections/toplu-tazeleme';
 import { KanalKartlari } from '@/components/connections/kanal-kartlari';
 import { HavuzKartlari } from '@/components/connections/havuz-kartlari';
 import { YouTubeKanalEkle } from '@/components/connections/youtube-kanal-ekle';
+import { YouTubeKanalBul } from '@/components/connections/youtube-kanal-bul';
 import { IzlenenHesaplar } from '@/components/connections/izlenen-hesaplar';
 import { CallbackBanner } from '@/components/callback-banner';
 
@@ -147,6 +148,19 @@ export default async function ConnectionsPage() {
               yetkisinin yanına koyuyordu.
             */}
             <YouTubeKanalEkle canManage={canManage} />
+            {/*
+              ADRES BİLİNMİYORSA İSİMLE ARA. Workspace burada seçili değil,
+              kanal yalnızca havuza giriyor; workspace'e tek adımda bağlamak
+              için Marka Merkezi › Bağlantılar › YouTube › "Kanalı bul".
+            */}
+            {canManage && (
+              <div className="rounded-xl border border-line bg-surface p-4">
+                <p className="text-sm font-semibold text-ink">Adresi bilmiyor musun? İsimle ara</p>
+                <div className="mt-2">
+                  <YouTubeKanalBul clientId={null} workspaceAdi={null} />
+                </div>
+              </div>
+            )}
           </section>
 
           {/* 3. ATANANLAR: hangi workspace neyi kullanıyor. */}

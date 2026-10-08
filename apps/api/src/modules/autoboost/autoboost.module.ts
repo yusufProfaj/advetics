@@ -14,6 +14,7 @@ import { YouTubeSubscribeService } from './youtube-subscribe.service';
 import { AutoBoostController } from './autoboost.controller';
 import { YouTubeWebSubController } from './youtube-websub.controller';
 import { YouTubeWebSubService } from './youtube-websub.service';
+import { YoutubeKanalBulService } from './youtube-kanal-bul.service';
 
 /**
  * Advetics 1.0 — otomatik boost.
@@ -39,6 +40,7 @@ import { YouTubeWebSubService } from './youtube-websub.service';
     YouTubeApiService,
     YouTubeSubscribeService,
     YouTubeWebSubService,
+    YoutubeKanalBulService,
   ],
   exports: [AutoBoostQueueService, YouTubeApiService, YouTubeSubscribeService],
 })
