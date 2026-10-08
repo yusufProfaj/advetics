@@ -41,9 +41,8 @@ import {
   pilotUcAdresi,
   planAdresi,
   satirCikarIstegi,
-  type PanelEylemi,
 } from './hesap';
-import type { PilotPlanDetayi } from '@advetics/shared';
+import type { PilotEkranEylemi, PilotPlanDetayi } from '@advetics/shared';
 
 /**
  * ═══ ADVSTRATEGY: TEK SAYFA PLAN BELGESİ ═══
@@ -71,7 +70,7 @@ export function PlanBelgesi({ clientId, detay, eskiPlanNotu }: { clientId: strin
   const router = useRouter();
   const { plan, icerik, rol } = detay;
   const musteri = rol === 'musteri';
-  const izinli = new Set<PanelEylemi>(detay.yapilabilir);
+  const izinli = new Set<PilotEkranEylemi>(detay.yapilabilir);
   const [islem, setIslem] = useState<Islem>({ tur: 'bos' });
   const [acikKutu, setAcikKutu] = useState<null | 'adina_onay' | 'degisiklik_iste' | 'iptal' | 'kapat' | 'yeniden_hazirla'>(null);
   const cubuk = altCubuk(detay);
@@ -98,7 +97,7 @@ export function PlanBelgesi({ clientId, detay, eskiPlanNotu }: { clientId: strin
     }
   }
 
-  function eylemYap(e: PanelEylemi) {
+  function eylemYap(e: PilotEkranEylemi) {
     switch (e) {
       case 'musteriye_gonder':
       case 'geri_cek':
@@ -247,6 +246,7 @@ export function PlanBelgesi({ clientId, detay, eskiPlanNotu }: { clientId: strin
         <section className="space-y-3.5">
           <BolumBasligi baslik="Kampanyalar" not={`${icerik.satirlar.length} kampanya`} />
           <KampanyaListesi
+            planId={plan.id}
             plan={icerik}
             clientId={clientId}
             musteri={musteri}
@@ -441,12 +441,15 @@ const CUBUK_IKINCIL =
 // ─── Kampanya listesi ──────────────────────────────────────────────────────
 
 function KampanyaListesi({
+  planId,
   plan,
   clientId,
   musteri,
   cikarabilir,
   cikar,
 }: {
+  /** Görsel adresi plan kapsamlı uçtan (müşteri ve ajans aynı adres). */
+  planId: string;
   plan: PlanOnerisi;
   clientId: string;
   musteri: boolean;
@@ -514,7 +517,7 @@ function KampanyaListesi({
                 </button>
               )}
             </div>
-            <MetinOnizlemesi satir={s} clientId={clientId} musteri={musteri} metinNotlari={notlar.metin} />
+            <MetinOnizlemesi planId={planId} satir={s} clientId={clientId} musteri={musteri} metinNotlari={notlar.metin} />
           </li>
         );
       })}
@@ -540,7 +543,7 @@ function KampanyaListesi({
  * altına iterdi. Metin satır başına bir kart, tam genişlik: reklam metni
  * okunacak bir şey, yan yana dar kolonlarda kırpılmış okunmaz.
  */
-function MetinOnizlemesi({ satir, clientId, musteri, metinNotlari }: { satir: Pick<PlanSatiri, 'metinler' | 'varliklar'>; clientId: string; musteri: boolean; metinNotlari: string[] }) {
+function MetinOnizlemesi({ planId, satir, clientId, musteri, metinNotlari }: { planId: string; satir: Pick<PlanSatiri, 'metinler' | 'varliklar'>; clientId: string; musteri: boolean; metinNotlari: string[] }) {
   const o = metinOnizlemesi(satir);
   if (o.tur === 'yok') return null;
   const notlar = !musteri && metinNotlari.length > 0 && (
@@ -564,7 +567,7 @@ function MetinOnizlemesi({ satir, clientId, musteri, metinNotlari }: { satir: Pi
               <li key={`${k.gorsel?.id ?? 'gorselsiz'}:${i}`} className="flex min-w-0 gap-3 rounded-lg border border-line p-2.5">
                 <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-surface-sunken [overflow-wrap:anywhere]">
                   {k.gorsel ? (
-                    <KreatifGorsel src={varlikOnizlemeAdresi(k.gorsel.id)} alt={k.gorsel.ad} bosMetin={k.gorsel.ad} />
+                    <KreatifGorsel src={varlikOnizlemeAdresi(planId, k.gorsel.id)} alt={k.gorsel.ad} bosMetin={k.gorsel.ad} />
                   ) : (
                     <span className="flex h-full items-center justify-center px-1 text-center text-[11px] text-ink-muted">Görselsiz</span>
                   )}

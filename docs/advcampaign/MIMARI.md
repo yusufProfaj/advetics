@@ -396,6 +396,22 @@ birlikte ekler. CHECK listeleri değişmedi (yeni DURUM yok, yalnız yeni eylem 
 - **C-16:** atıf standardı onay kapısında (`kapiKos`, kip `kapali` değilse); işçideki kontrol emniyet olarak duruyor.
 - **Override:** onay `strategy.publish` VE `strategy.approve` ister (`onayYetkisiVar`).
 - **Plan kapsamlı görsel:** `GET /pilot/planlar/:id/varliklar/:varlikId` (`strategy.read`, `plan-varlik.ts`).
-- **Sözleşmeye eklenecekler (Ajan 1):** `PILOT_EYLEM_UCU_EYLEMLERI` + `PilotEkranEylemi`'ne `takilan_kurulumu_durdur`;
+- **Sözleşmeye eklenecekler (Ajan 1) — HEPSİ EKLENDİ, §14:** `PILOT_EYLEM_UCU_EYLEMLERI` + `PilotEkranEylemi`'ne `takilan_kurulumu_durdur`;
   `PILOT_UCLARI`'na görsel ucu (sonra `pilot-kayit.spec.ts#SOZLESMEYE_EKLENECEK` silinir); müşteri yanıtında
   `onayKapisi.kip`in müşteri varyantı (bugün süzülemiyor, tip zorunlu).
+
+## 14. Kapanış turu — geçici yamalar sözleşmeye indi (Ajan 1, 2026-10-08)
+
+| Ne | Sözleşmede | Kalkan geçici yama |
+|---|---|---|
+| "Kurulumu durdur" eylemi | `PILOT_EYLEM_UCU_EYLEMLERI` ve `PilotEkranEylemi`ye `takilan_kurulumu_durdur` (ön koşul serviste hazır olduktan sonra) | Controller'daki yerel `eylemGovdesi` birleşimi; `PlanEylemiIstegi` tipi; `as unknown as PilotEkranEylemi` dönüşümü; web `PanelEylemi` |
+| Plan görseli ucu | `PILOT_UCLARI`: `GET /pilot/planlar/:id/varliklar/:varlikId`, `strategy.read` | `pilot-kayit.spec.ts#SOZLESMEYE_EKLENECEK`. Web `varlikOnizlemeAdresi(planId, varlikId)` bu uca döndü: müşteri ve ajans AYNI adres (arşivin `bulk.read` ucu müşteride reddediliyordu) |
+| Müşteri onay kapısı | `MusteriOnayKapisi` (`{ tur: 'kabul' }` / retlerde yalnız `kod` + `musteriMesaji`) ve tek süzgeç `musteriOnayKapisi` (alanları AÇIKÇA seçer, spread yok). `PilotPlanDetayi` artık `rol` ile ayrılan iki varyant | API'deki `musteriKapisi` (aynı tipi süzüp `ajansNotu: null` yazıyordu; `kip` tipte zorunlu olduğu için `kapali`/`test` müşteriye gidiyordu) |
+
+`pilotUcAdresi` ek yol parametresi alıyor (`{ varlikId }`); doldurulmamış `:ad` kalırsa PATLAR (yol parçası olduğu
+gibi gitse istek 404 alır ve görsel sessizce yer tutucuya düşerdi). `terminoloji.spec.ts` dizin süzgecini köke göre
+uyguluyor: depo `/.../pilot/` adlı bir dizinde durunca her dosya süzgece takılıyor ve tarama boşa düşüyordu
+(bu turun worktree'sinde tam olarak bu oldu).
+
+**Ölçülmedi:** görsel ucunun gerçek bir müşteri oturumunda tarayıcıda açıldığı (worktree'de `.env` yok, panel gerçek
+uçlarla açılmadı); tam API paketi (yalnız `src/modules/pilot`, `src/storage`, `src/modules/assets`).

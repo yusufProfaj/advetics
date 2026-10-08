@@ -16,6 +16,7 @@ import {
   type Kaynak,
   type KaynakTuru,
   type KurulumSatirDurumu,
+  type MusteriOnayKapisi,
   type OnayKapisiSonucu,
   type OneriDurumu,
   type OneriEylemi,
@@ -32,7 +33,7 @@ import {
 import { ApiRequestError, onizlemeAdresi } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { mmAdresi, type MmBolumKodu } from '@/components/marka-merkezi/bolumler';
-import type { OzelKategori, PilotGercekYayinDurumu, PilotWorkspaceBeyani, UyumSektoru, OneriBosNedeni, PilotBugun, PilotEkranEylemi, PilotPlanDetayi, PilotPlanSatiriOzeti } from '@advetics/shared';
+import type { OzelKategori, PilotGercekYayinDurumu, PilotWorkspaceBeyani, UyumSektoru, OneriBosNedeni, PilotBugun, PilotEkranEylemi, PilotPlanDetayi, PilotPlanSatiriOzeti, PlanEylemiGirdisi } from '@advetics/shared';
 
 /**
  * ═══ PİLOT EKRANLARININ SAF KARARLARI ═══
@@ -84,12 +85,21 @@ export function yazmaHatasi(err: unknown): { mesaj: string; retler: string[] } {
  */
 export type PilotYolu = (typeof PILOT_UCLARI)[number]['yol'];
 
-export function pilotUcAdresi(yol: PilotYolu, id?: string): string {
-  if (yol.includes(':id')) {
+/**
+ * `:id` ve (görsel ucu gibi) ek parametreler. Doldurulmamış bir `:ad`
+ * kalırsa PATLAR: yol parçası olduğu gibi giderse istek 404 alır ve görsel
+ * sessizce yer tutucuya düşerdi.
+ */
+export function pilotUcAdresi(yol: PilotYolu, id?: string, ek: Readonly<Record<string, string>> = {}): string {
+  let adres: string = yol;
+  if (adres.includes(':id')) {
     if (!id) throw new Error(`${yol} bir kimlik istiyor`);
-    return yol.replace(':id', encodeURIComponent(id));
+    adres = adres.replace(':id', encodeURIComponent(id));
   }
-  return yol;
+  for (const [ad, deger] of Object.entries(ek)) adres = adres.replace(`:${ad}`, encodeURIComponent(deger));
+  const kalan = /:[A-Za-z]+/.exec(adres);
+  if (kalan) throw new Error(`${yol} için ${kalan[0]} verilmedi`);
+  return adres;
 }
 
 /**
@@ -439,14 +449,14 @@ export function metinDisiEngeller(engeller: readonly BosNedeni[]): BosNedeni[] {
 }
 
 /**
- * Görselin küçük resmi. TEK ADRES ÜRETİCİSİ: bugün varlık arşivinin önizleme
- * ucu (`bulk.read` istiyor). MÜŞTERİ HESABINDA `bulk.read` YOK, yani müşteri
- * için istek reddedilir ve kart görselin ADINI gösterir (`KreatifGorsel`
- * yer tutucusu). Plan kapsamlı, `strategy.read` ile açılan bir görsel ucu
- * sözleşmeye eklenince yalnız bu fonksiyon değişir (devir notu).
+ * Plan satırındaki görselin küçük resmi. TEK ADRES ÜRETİCİSİ ve müşteri ile
+ * ajans AYNI adresi kullanır: plan kapsamlı uç (`strategy.read`). Önceden
+ * varlık arşivinin önizleme ucuydu (`bulk.read`); müşteride o izin yok ve
+ * onayladığı reklamın görselini değil yalnız ADINI görüyordu. Uç yalnız o
+ * planın satırlarında duran görseli verir, arşivi değil (`plan-varlik.ts`).
  */
-export function varlikOnizlemeAdresi(varlikId: string): string {
-  return onizlemeAdresi(`/assets/${encodeURIComponent(varlikId)}/preview`);
+export function varlikOnizlemeAdresi(planId: string, varlikId: string): string {
+  return onizlemeAdresi(pilotUcAdresi('/pilot/planlar/:id/varliklar/:varlikId', planId, { varlikId }));
 }
 
 // ─── Kelimeler ─────────────────────────────────────────────────────────────
@@ -509,18 +519,8 @@ export function adimHalleri(durum: PilotPlanDurumu): AdimHali[] | null {
 
 // ─── Eylemler ve alt çubuk ──────────────────────────────────────────────────
 
-/**
- * Panelin çizdiği eylemler: sözleşmenin `PilotEkranEylemi` birleşimi +
- * `takilan_kurulumu_durdur` (B-4, MIMARI §12.3). Sözleşmenin birleşimi
- * `packages/shared/src/pilot/yanitlar.ts`te ve bu tur ona dokunulmadı
- * (Ajan 3 yalnız `apps/web`); oraya eklenince bu tip `PilotEkranEylemi`ye
- * indirgenir. Ayrı ad bilerek: sunucunun `yapilabilir` listesi bugün bu
- * eylemi TAŞIYAMAZ, düğme ancak Ajan 2 ucu ve listeyi açınca görünür.
- */
-export type PanelEylemi = PilotEkranEylemi | 'takilan_kurulumu_durdur';
-
 export interface EylemDugmesi {
-  eylem: PanelEylemi;
+  eylem: PilotEkranEylemi;
   etiket: string;
 }
 
@@ -538,10 +538,10 @@ export interface EylemDugmesi {
  * yapılacak tek iş o. İkincil olsaydı "Kampanyalar kuruluyor." yazan çubuğun
  * üstünde küçük bir düğme olarak kalır ve plan saatlerce takılı dururdu.
  */
-const BIRINCIL_SIRA: readonly PanelEylemi[] = ['musteriye_gonder', 'onayla', 'yeniden_dene', 'takilan_kurulumu_durdur'];
-const IKINCIL_SIRA: readonly PanelEylemi[] = ['degisiklik_iste', 'geri_cek', 'onayla', 'yeniden_hazirla', 'kapat', 'iptal'];
+const BIRINCIL_SIRA: readonly PilotEkranEylemi[] = ['musteriye_gonder', 'onayla', 'yeniden_dene', 'takilan_kurulumu_durdur'];
+const IKINCIL_SIRA: readonly PilotEkranEylemi[] = ['degisiklik_iste', 'geri_cek', 'onayla', 'yeniden_hazirla', 'kapat', 'iptal'];
 
-export function eylemEtiketi(e: PanelEylemi, rol: 'musteri' | 'ajans'): string {
+export function eylemEtiketi(e: PilotEkranEylemi, rol: 'musteri' | 'ajans'): string {
   switch (e) {
     case 'musteriye_gonder':
       return 'Müşteriye gönder';
@@ -581,7 +581,7 @@ export interface AltCubuk {
  * çizilseydi kısa yol asıl yol olurdu.
  */
 export function altCubuk(d: Pick<PilotPlanDetayi, 'rol' | 'yapilabilir' | 'musteriOzeti' | 'plan' | 'onayKapisi'> & { icerik: Pick<PlanOnerisi, 'satirlar' | 'takvim'> }): AltCubuk {
-  const izinli = new Set<PanelEylemi>(d.yapilabilir);
+  const izinli = new Set<PilotEkranEylemi>(d.yapilabilir);
   const birincilEylem = BIRINCIL_SIRA.find((e) => izinli.has(e) && !(e === 'onayla' && d.rol === 'ajans')) ?? null;
   const birincil = birincilEylem ? { eylem: birincilEylem, etiket: eylemEtiketi(birincilEylem, d.rol) } : null;
   const ikincil = IKINCIL_SIRA.filter((e) => izinli.has(e) && e !== birincilEylem).map((e) => ({ eylem: e, etiket: eylemEtiketi(e, d.rol) }));
@@ -590,7 +590,7 @@ export function altCubuk(d: Pick<PilotPlanDetayi, 'rol' | 'yapilabilir' | 'muste
 
 function altCubukMetni(
   d: Pick<PilotPlanDetayi, 'rol' | 'musteriOzeti' | 'plan' | 'onayKapisi'> & { icerik: Pick<PlanOnerisi, 'satirlar' | 'takvim'> },
-  birincil: PanelEylemi | null,
+  birincil: PilotEkranEylemi | null,
 ): string {
   const acilis = d.icerik.takvim ? gunEtiketi(d.icerik.takvim.baslangic) : null;
   const kurulamayan = d.icerik.satirlar.filter((s) => s.engeller.length > 0).length;
@@ -628,12 +628,18 @@ function altCubukMetni(
  * müşteriye uyum kuralının adını yazmak onun çözemeyeceği bir sorunu onun
  * ekranına koymak. Boş mesaj (ör. GEREKCE yalnız ajansa) çizilmez.
  */
-export function onayRetMesajlari(s: OnayKapisiSonucu | null, rol: 'musteri' | 'ajans'): string[] {
+export function onayRetMesajlari(s: OnayKapisiSonucu | MusteriOnayKapisi | null, rol: 'musteri' | 'ajans'): string[] {
   if (!s || s.tur !== 'ret') return [];
   // GEREKÇE retini ajansa PANEL kendi alanında soruyor ("müşteri adına
   // onayla" kutusu); listede de görünürse ajans gerekçe yazmadan "onaylanamaz"
-  // okur ve kutuyu açmaz.
-  const m = s.retler.filter((r) => !(rol === 'ajans' && r.kod === 'GEREKCE')).map((r) => (rol === 'musteri' ? r.musteriMesaji : r.ajansMesaji)).filter((x) => x.trim().length > 0);
+  // okur ve kutuyu açmaz. Müşteri varyantı (`MusteriOnayKapisi`) ajans
+  // mesajını HİÇ taşımaz; ajans rolünde bile o varyant gelirse müşteri
+  // cümlesine düşülür, uydurulmaz.
+  const retler: ReadonlyArray<{ kod: string; musteriMesaji: string; ajansMesaji?: string }> = s.retler;
+  const m = retler
+    .filter((r) => !(rol === 'ajans' && r.kod === 'GEREKCE'))
+    .map((r) => (rol === 'ajans' && r.ajansMesaji !== undefined ? r.ajansMesaji : r.musteriMesaji))
+    .filter((x) => x.trim().length > 0);
   return [...new Set(m)];
 }
 
@@ -641,7 +647,10 @@ export function onayRetMesajlari(s: OnayKapisiSonucu | null, rol: 'musteri' | 'a
  * Ajansa yazılan yayın kipi notu. Test ve kapalı kip MÜŞTERİYE YAZILMAZ
  * (Ç-4): müşteri "onaylandı" okur, ajans ne olacağını.
  */
-export function ajansKipNotu(d: Pick<PilotPlanDetayi, 'rol' | 'onayKapisi' | 'plan'>): string | null {
+/** Rol ayrımı tipte kalsın diye varyant başına Pick (birleşimin Pick'i ayrımı kaybeder). */
+type KipGirdisi = { [R in PilotPlanDetayi['rol']]: Pick<Extract<PilotPlanDetayi, { rol: R }>, 'rol' | 'onayKapisi' | 'plan'> }[PilotPlanDetayi['rol']];
+
+export function ajansKipNotu(d: KipGirdisi): string | null {
   if (d.rol !== 'ajans') return null;
   if (d.plan.yayinKipi === 'test') return 'Uyum kontrolü bağlı değil: kampanyalar test kipinde kurulur ve açılmaz.';
   if (d.plan.yayinKipi === 'kapali') return 'Uyum kontrolü bağlı değil: onay kaydedildi, platforma bir şey yazılmadı.';
@@ -675,7 +684,7 @@ export function gerekceEksigi(gerekce: string): number {
  * bir uç doğarsa bu gövde 400 alır ve hata ekranda sunucunun cümlesiyle
  * görünür (sessiz değil).
  */
-export function eylemIstegi(planId: string, eylem: 'musteriye_gonder' | 'geri_cek' | 'yeniden_dene' | 'kapat' | 'iptal' | 'takilan_kurulumu_durdur', surum: number) {
+export function eylemIstegi(planId: string, eylem: PlanEylemiGirdisi['eylem'], surum: number) {
   return { yol: pilotUcAdresi('/pilot/planlar/:id/eylem', planId), govde: { eylem, surum } };
 }
 

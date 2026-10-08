@@ -257,6 +257,7 @@ describe('gerçek yayın anahtarı', () => {
     await h.q(`UPDATE ajans_ayari SET pilot_gercek_yayin = false`);
     const { id, oz } = await onayaKadar();
     const a = await svc.detay(AJANS, id, SIMDI);
+    if (a.rol !== 'ajans') throw new Error('ajans varyantı bekleniyordu');
     expect(a.onayKapisi).toMatchObject({ tur: 'kabul', kip: 'test' });
     expect(a.onayKapisi?.tur === 'kabul' && a.onayKapisi.ajansNotu).toContain('anahtarı kapalı');
     const o = await svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: oz }, SIMDI);
@@ -447,6 +448,7 @@ describe('onay yetkisi, denetim kaydı, atıf (Ajan 4 gözlemleri)', () => {
     const m = await svc.detay(MUSTERI, id, SIMDI);
     expect(m.yapilabilir).not.toContain('onayla');
     const a = await svc.detay(AJANS, id, SIMDI);
+    if (a.rol !== 'ajans') throw new Error('ajans varyantı bekleniyordu');
     expect(a.onayKapisi?.tur === 'ret' && a.onayKapisi.retler.map((x) => x.ajansMesaji)).toContain(ATIF_YOK_MESAJI);
     await expect(svc.onayla(MUSTERI, id, { surum: 1, icerikOzeti: oz }, SIMDI)).rejects.toThrow(/onaylanamıyor/);
     // Müşteri mesajında atıf ayrıntısı yok.

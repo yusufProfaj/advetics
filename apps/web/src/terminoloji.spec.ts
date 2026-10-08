@@ -123,7 +123,9 @@ describe('terminoloji: workspace ↔ müşteri', () => {
     let toplamKalan = 0;
 
     for (const dosya of TARANAN) {
-      if (KISI_DIZINLERI.some((d) => dosya.includes(d))) continue;
+      // Dizin KÖKE GÖRE aranır: depo `/.../pilot/` adlı bir dizine klonlanırsa
+      // mutlak yolda her dosya `/pilot/` içerir ve tarama boşa düşerdi.
+      if (KISI_DIZINLERI.some((d) => dosya.slice(KOK.length).includes(d))) continue;
       for (const satir of yorumsuz(readFileSync(dosya, 'utf8')).split('\n')) {
         if (!satir.includes('üşteri')) continue;
         toplamKalan++;

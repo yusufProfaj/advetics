@@ -21,6 +21,7 @@ import {
   metinleriTasi,
   musteriOzeti,
   onayKapisi,
+  musteriOnayKapisi,
   pilotGecisMumkunMu,
   PILOT_PLAN_GECISLERI,
   planKanonikIcerik,
@@ -144,14 +145,11 @@ function planSecimi(kosul: Prisma.Sql, kilit: boolean): Prisma.Sql {
 }
 
 /**
- * "Kurulumu durdur" (B-4). Shared'daki `PILOT_EYLEM_UCU_EYLEMLERI` ve
- * `PilotEkranEylemi` bu eylemi henüz taşımıyor (sözleşme Ajan 1'in; ön
- * koşulsuz genel yola girmesin diye bilerek eklenmedi, MIMARI §12.3). Ön
- * koşul burada yazıldı; sözleşmeye eklendiğinde bu ek tip ve aşağıdaki iki
- * dönüşüm kalkar, davranış değişmez.
+ * "Kurulumu durdur" (B-4). Sözleşmede (`PILOT_EYLEM_UCU_EYLEMLERI`,
+ * `PilotEkranEylemi`) 2026-10-08'den beri; ön koşul `eylem()` içinde
+ * (`takilanSatirlariDusur`). Ad sabiti karşılaştırmalar için duruyor.
  */
-export const TAKILAN_DURDUR = 'takilan_kurulumu_durdur' as const;
-export type PlanEylemiIstegi = PlanEylemiGirdisi | { eylem: typeof TAKILAN_DURDUR; surum: number };
+export const TAKILAN_DURDUR = 'takilan_kurulumu_durdur' as const satisfies PlanEylemiGirdisi['eylem'];
 
 /**
  * ONAY = YAYIN İÇİN İKİ ANAHTAR (Ajan 4 gözlemi, 2026-10-08). `strategy.publish`
@@ -204,7 +202,7 @@ export function yapilabilirEylemler(g: {
     // kampanyayı kapatılmış bir plana bağlı bırakırdı. Sunucu aynı kararı
     // yeniden koşuyor (`eylem`), düğme ile kabul ayrışmasın diye ikisi de
     // `kuruluyorPlanKarari`ndan.
-    if (g.takildi && gecis(TAKILAN_DURDUR)) e.push(TAKILAN_DURDUR as unknown as PilotEkranEylemi);
+    if (g.takildi && gecis(TAKILAN_DURDUR)) e.push(TAKILAN_DURDUR);
   }
   if (g.rol === 'musteri' && gecis('degisiklik_iste') && g.izinler.includes('strategy.read')) e.push('degisiklik_iste');
   if (yayin && gecis('onayla') && g.onaylanabilir) e.push('onayla');
@@ -286,7 +284,7 @@ export class PilotPlanService {
     const kapi = kapiKos(p, k, rol, { surum: p.surum, icerikOzeti: p.icerik_ozeti, musteriAdinaGerekce: rol === 'ajans' ? 'x'.repeat(20) : null });
     const gonder = kapiKos({ ...p, durum: 'musteride' }, k, 'musteri', { surum: p.surum, icerikOzeti: p.icerik_ozeti });
     const takildi = p.durum === 'kuruluyor' && rol === 'ajans' ? takilmaKarari(await kurulumSatirlari(tx, p), p, simdi) : false;
-    return {
+    const ortak = {
       plan: {
         id: p.id,
         clientId: p.client_id,
@@ -307,7 +305,6 @@ export class PilotPlanService {
       },
       icerik: k.plan,
       musteriOzeti: musteriOzeti(k.plan),
-      rol,
       yapilabilir: yapilabilirEylemler({
         durum: p.durum,
         rol,
@@ -318,12 +315,13 @@ export class PilotPlanService {
         onaylanabilir: kapi.tur === 'kabul' || kapi.retler.every((r) => r.kod === 'GEREKCE'),
         takildi,
       }),
-      // Ajans görünümünde gerekçe yer tutucusuyla koşuldu; ret listesinde
-      // GEREKCE çıkmaz, panel gerekçeyi kendi alanında ister. Müşteriye
-      // giden kopya SÜZÜLÜR (B-2): ajans notu ve ajans mesajı yok.
-      onayKapisi: rol === 'ajans' ? kapi : musteriKapisi(kapi),
       uyum: rol === 'ajans' ? { durum: durumU, bulgular: k.denetim.bulgular, isaretler: k.isaretler } : null,
     };
+    // Ajans görünümünde gerekçe yer tutucusuyla koşuldu; ret listesinde
+    // GEREKCE çıkmaz, panel gerekçeyi kendi alanında ister. Müşteri
+    // varyantı AYRI TİP (B-2): `musteriOnayKapisi` kip/ajans notu/ajans
+    // mesajı alanlarını hiç taşımaz.
+    return rol === 'ajans' ? { ...ortak, rol, onayKapisi: kapi } : { ...ortak, rol, onayKapisi: musteriOnayKapisi(kapi) };
   }
 
   // ── Planı hazırla ────────────────────────────────────────────────────
@@ -466,7 +464,7 @@ export class PilotPlanService {
 
   // ── Durum makinesi ───────────────────────────────────────────────────
 
-  async eylem(ctx: TenantContext, id: string, g: PlanEylemiIstegi, simdi = new Date()): Promise<PilotPlanDetayi> {
+  async eylem(ctx: TenantContext, id: string, g: PlanEylemiGirdisi, simdi = new Date()): Promise<PilotPlanDetayi> {
     ajans(ctx);
     let kuyrugaAl = false;
     await this.tx(ctx, async (tx) => {
@@ -629,7 +627,7 @@ export class PilotPlanService {
           guncellendi: new Date(s.updated_at).toISOString(),
         })),
         yapilabilir: yapilabilirEylemler({ durum: p.durum, rol, izinler: ctx.permissions, gonderilebilir: false, isaretBekleyen: false, onaylanabilir: false, takildi }).filter(
-          (e) => e === 'yeniden_dene' || e === 'kapat' || (e as string) === TAKILAN_DURDUR,
+          (e) => e === 'yeniden_dene' || e === 'kapat' || e === TAKILAN_DURDUR,
         ),
       };
     });
@@ -854,17 +852,6 @@ function kapiKos(
   if (kip === 'kapali' || k.atif) return r;
   const atifRet = { kod: 'KURULAMAYAN_SATIR' as const, musteriMesaji: 'Plan henüz hazır değil; ajansın bilgilendirildi.', ajansMesaji: ATIF_YOK_MESAJI };
   return { tur: 'ret', retler: [...(r.tur === 'ret' ? r.retler : []), atifRet] };
-}
-
-/**
- * B-2: müşteriye giden kapı kopyası. Ajans notu ("anahtar kapalı",
- * "platforma hiçbir şey yazılmadı") ve ajans mesajı (uyum kuralının adı)
- * ÇIKAR; müşteri yalnız kendi dilindeki cümleyi görür. Panel bunları
- * çizmiyordu ama API yanıtı onları taşıyordu.
- */
-function musteriKapisi(k: OnayKapisiSonucu): OnayKapisiSonucu {
-  if (k.tur === 'kabul') return { ...k, ajansNotu: null };
-  return { tur: 'ret', retler: k.retler.filter((x) => x.musteriMesaji).map((x) => ({ ...x, ajansMesaji: x.musteriMesaji })) };
 }
 
 async function kurulumSatirlari(tx: Tx, p: Pick<PlanSatiri, 'id' | 'onaylanan_surum'>): Promise<Array<{ id: string; durum: KurulumSatirDurumu; guncellendi: Date }>> {

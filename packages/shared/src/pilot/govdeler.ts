@@ -19,7 +19,13 @@ export type PlanHazirlaGirdisi = z.infer<typeof planHazirlaSchema>;
 export const planYenidenHazirlaSchema = z.object({ surum, onay: z.boolean().optional() }).strict();
 export type PlanYenidenHazirlaGirdisi = z.infer<typeof planYenidenHazirlaSchema>;
 
-export const PILOT_EYLEM_UCU_EYLEMLERI = ['musteriye_gonder', 'geri_cek', 'yeniden_dene', 'kapat', 'iptal'] as const;
+/**
+ * `takilan_kurulumu_durdur` (B-4) 2026-10-08'de eklendi: ön koşulu
+ * (`kuruluyorPlanKarari` `takildi`/`satir_yok`) ve satırları son duruma
+ * çekmesi serviste (`takilanSatirlariDusur`) hazır olduktan SONRA. Önce
+ * eklenseydi genel `eylem()` yolu onu ön koşulsuz uygulardı.
+ */
+export const PILOT_EYLEM_UCU_EYLEMLERI = ['musteriye_gonder', 'geri_cek', 'yeniden_dene', 'kapat', 'iptal', 'takilan_kurulumu_durdur'] as const;
 export const planEylemiSchema = z.object({ eylem: z.enum(PILOT_EYLEM_UCU_EYLEMLERI), surum }).strict();
 export type PlanEylemiGirdisi = z.infer<typeof planEylemiSchema>;
 

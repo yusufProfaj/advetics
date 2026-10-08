@@ -35,6 +35,8 @@ import {
   KURULUM_SINIFI,
   kurulumOzeti,
   musteriOzeti,
+  musteriOnayKapisi,
+  planEylemiSchema,
   negatifAdayMi,
   ONERI_ACIK_DURUMLARI,
   ONERI_DURUMLARI,
@@ -686,7 +688,8 @@ describe('uçlar ve yetki', () => {
     const m = resolvePermissions('client_viewer');
     expect(m.has('strategy.publish')).toBe(true);
     const acabildigi = PILOT_UCLARI.filter((u) => m.has(u.izin)).map((u) => u.yol);
-    for (const yol of acabildigi) expect(['/pilot/planlar', '/pilot/planlar/:id', '/pilot/planlar/:id/degisiklik-iste', '/pilot/planlar/:id/onayla', '/pilot/planlar/:id/kurulum', '/pilot/planlar/:id/pdf']).toContain(yol);
+    // Görsel ucu (2026-10-08) OKUMA: müşteri onayladığı reklamın görselini görmeli.
+    for (const yol of acabildigi) expect(['/pilot/planlar', '/pilot/planlar/:id', '/pilot/planlar/:id/degisiklik-iste', '/pilot/planlar/:id/onayla', '/pilot/planlar/:id/kurulum', '/pilot/planlar/:id/pdf', '/pilot/planlar/:id/varliklar/:varlikId']).toContain(yol);
   });
 
   it('Pilot sayfası AdvCampaign menü izniyle aynı; öneri uygulamak yayın izni', () => {
@@ -925,5 +928,36 @@ describe('DEVİR — karar (a) uygulaması (Ajan 2)', () => {
     const s = yorumsuz('plan.service.ts');
     expect(s).toContain('reklamMetinleriniYerlestir(');
     expect(s).toContain('metinleriTasi(');
+  });
+});
+
+// ─── Kapanış turu (2026-10-08): eylem, görsel ucu, müşteri kapısı ──────────
+
+describe('kapanış — sözleşmeye inen geçici yamalar', () => {
+  it('KRİTİK: "Kurulumu durdur" eylem ucunun şemasından geçer; bilinmeyen eylem geçmez', () => {
+    expect(planEylemiSchema.safeParse({ eylem: 'takilan_kurulumu_durdur', surum: 3 }).success).toBe(true);
+    expect(planEylemiSchema.safeParse({ eylem: 'kurulum_basla', surum: 3 }).success).toBe(false);
+  });
+
+  it('KRİTİK: plan görseli ucu müşterinin de açabildiği izinle (strategy.read), arşivin izniyle değil', () => {
+    const u = PILOT_UCLARI.find((x) => x.yontem === 'GET' && x.yol === '/pilot/planlar/:id/varliklar/:varlikId');
+    expect(u?.izin).toBe('strategy.read');
+    const musteri = new Set(resolvePermissions('client_viewer'));
+    expect(musteri.has('strategy.read')).toBe(true);
+    // Kardeş: arşivin önizleme izni müşteride YOK; plan ucu bu yüzden ayrı.
+    expect(musteri.has('bulk.read')).toBe(false);
+  });
+
+  it('KRİTİK: müşteri kapısı kip, ajans notu ve ajans mesajı ANAHTARLARINI taşımaz; boş müşteri mesajlı ret düşer', () => {
+    expect(musteriOnayKapisi({ tur: 'kabul', kip: 'kapali', ajansNotu: 'Pilot gerçek yayın anahtarı kapalı' })).toEqual({ tur: 'kabul' });
+    const r = musteriOnayKapisi({
+      tur: 'ret',
+      retler: [
+        { kod: 'GEREKCE', musteriMesaji: '', ajansMesaji: 'gerekçe zorunlu' },
+        { kod: 'UYUM_ENGEL', musteriMesaji: 'Plan yeniden kontrol ediliyor.', ajansMesaji: 'GNL-20 ENGEL' },
+      ],
+    });
+    expect(r).toEqual({ tur: 'ret', retler: [{ kod: 'UYUM_ENGEL', musteriMesaji: 'Plan yeniden kontrol ediliyor.' }] });
+    expect(JSON.stringify(r)).not.toMatch(/kip|ajans/);
   });
 });

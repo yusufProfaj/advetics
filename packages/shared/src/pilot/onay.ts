@@ -180,6 +180,28 @@ export type OnayKapisiSonucu =
   | { tur: 'kabul'; kip: YayinKipi; ajansNotu: string | null }
   | { tur: 'ret'; retler: Array<{ kod: OnayRetKodu; musteriMesaji: string; ajansMesaji: string }> };
 
+/**
+ * MÜŞTERİYE GİDEN KAPI (B-2, 2026-10-08). Yayın kipi (`kapali`/`test`),
+ * ajans notu ve ajans mesajı müşterinin çözemeyeceği iç kararlar; müşteri
+ * "onaylandı" ya da kendi dilindeki ret cümlesini okur (Ç-4). Önceki çözüm
+ * aynı tipi süzüp `ajansNotu: null` yazıyordu ama `kip` tipte zorunluydu ve
+ * yanıtta kaldı. Bu tip o alanları HİÇ taşımaz; boş müşteri mesajlı ret
+ * (yalnız ajansa anlamlı, ör. GEREKCE) müşteriye gitmez.
+ */
+export type MusteriOnayKapisi =
+  | { tur: 'kabul' }
+  | { tur: 'ret'; retler: Array<{ kod: OnayRetKodu; musteriMesaji: string }> };
+
+/**
+ * TEK süzgeç: API müşteri yanıtını bununla kurar. Alanları AÇIKÇA seçer
+ * (spread yok): `OnayKapisiSonucu`na yarın eklenen bir ajans alanı spread
+ * ile sessizce müşteriye sızardı.
+ */
+export function musteriOnayKapisi(k: OnayKapisiSonucu): MusteriOnayKapisi {
+  if (k.tur === 'kabul') return { tur: 'kabul' };
+  return { tur: 'ret', retler: k.retler.filter((x) => x.musteriMesaji.trim().length > 0).map((x) => ({ kod: x.kod, musteriMesaji: x.musteriMesaji })) };
+}
+
 /** Ajansın müşteri adına onayında gerekçe en az bu kadar karakter (tek kelimelik "ok" gerekçe değil). */
 export const MUSTERI_ADINA_GEREKCE_EN_AZ = 20;
 

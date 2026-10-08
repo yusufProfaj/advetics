@@ -34,11 +34,15 @@ export const PILOT_UCLARI = [
   { yontem: 'POST', yol: '/pilot/planlar/:id/yeniden-hazirla', izin: 'strategy.write', ne: 'Taze veriyle yeniden üret (yeni sürüm; elle değişiklikler korunmaz, uyarılır)' },
   { yontem: 'POST', yol: '/pilot/planlar/:id/degistir', izin: 'strategy.write', ne: '"Değiştir" kutusu ve elle düzenleme: PlanDegisikligi[] → yeni sürüm' },
   { yontem: 'POST', yol: '/pilot/planlar/:id/uyum-isaret', izin: 'strategy.write', ne: 'UYARI işareti ("Okudum, sorumluluk bende"); yalnız ajans rolü' },
-  { yontem: 'POST', yol: '/pilot/planlar/:id/eylem', izin: 'strategy.write', ne: 'musteriye_gonder | geri_cek | yeniden_dene | kapat | iptal' },
+  { yontem: 'POST', yol: '/pilot/planlar/:id/eylem', izin: 'strategy.write', ne: 'musteriye_gonder | geri_cek | yeniden_dene | kapat | iptal | takilan_kurulumu_durdur' },
   { yontem: 'POST', yol: '/pilot/planlar/:id/degisiklik-iste', izin: 'strategy.read', ne: 'Müşteri itirazı (not ile) → taslak; yalnız müşteri rolü' },
   { yontem: 'POST', yol: '/pilot/planlar/:id/onayla', izin: 'strategy.publish', ne: 'ONAY = YAYIN: sürüm + içerik özeti; ajans rolünde gerekçe zorunlu' },
   { yontem: 'GET', yol: '/pilot/planlar/:id/kurulum', izin: 'strategy.read', ne: 'Kurulum satırları ve özeti' },
   { yontem: 'GET', yol: '/pilot/planlar/:id/pdf', izin: 'strategy.read', ne: 'Plan PDF (rapor altyapısı, Advetics logosu)' },
+  // Plan belgesindeki görsel (2026-10-08). `strategy.read`: müşteri onayladığı
+  // reklamın görselini görmeli ve onda `bulk.read` YOK. Plan kapsamlı: yalnız
+  // o planın satırlarında duran görsel, workspace arşivi değil (`plan-varlik.ts`).
+  { yontem: 'GET', yol: '/pilot/planlar/:id/varliklar/:varlikId', izin: 'strategy.read', ne: 'Plan satırındaki görselin önizlemesi (müşteri dahil)' },
   // ─── Ajans ayarı ve Veri adımı (Ajan 2 eki, 2026-10-07) ───
   // Gerçek yayın anahtarı: OKUMA ajans personeli (müşteri görmez, `strategy.write`
   // müşteride yok); YAZMA yalnız ajans şirketinin yöneticisi (`org.write`).

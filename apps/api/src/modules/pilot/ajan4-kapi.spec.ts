@@ -467,14 +467,36 @@ describe('rol: müşteri plan yazamaz, onay yalnız musteride', () => {
   // "uyum ve yayın kipi notu müşteriye çizilmiyor") ama API yanıtı Ç-6 ve
   // onay.ts'in "müşteriye SÖYLEMEZ" sözünü tutmuyor.
   // KAPANDI 2026-10-08 (Ajan 2): `detayKur`/`kurulum` müşteri kopyasını süzüyor.
-  it('BULGU B-2: müşteri yanıtında ajans notu / yayın kipi / anahtar cümlesi YOK', async () => {
+  // Kalanı (Ajan 1, aynı gün): `onayKapisi.kip` müşteriye `kapali`/`test`
+  // olarak gidiyordu; müşteri varyantı (`MusteriOnayKapisi`) alanı HİÇ
+  // taşımıyor. İddia DEĞERE değil ANAHTARA bakıyor: `kip: null` da sızıntı.
+  it('BULGU B-2: müşteri yanıtında ajans notu / yayın kipi / anahtar cümlesi YOK; onay kapısında kip ANAHTARI bile yok', async () => {
     await h.q(`UPDATE ajans_ayari SET pilot_gercek_yayin = false`);
     const { id } = await musteride();
     const d = await plan.detay(MUSTERI, id, SIMDI);
     // Kardeş koşul: kurulum doğru, plan gerçekten anahtar kapalıyken onaylanabilir.
     expect(d.yapilabilir).toContain('onayla');
+    expect(d.rol).toBe('musteri');
     expect(JSON.stringify(d)).not.toMatch(/anahtarı kapalı|test kipinde|platforma hiçbir şey|Uyum denetçisinde/);
-    expect(d.onayKapisi?.tur === 'kabul' ? d.onayKapisi.ajansNotu : null).toBeNull();
+    expect(d.onayKapisi).toEqual({ tur: 'kabul' });
+    expect(Object.keys(d.onayKapisi ?? {})).not.toContain('kip');
+    expect(Object.keys(d.onayKapisi ?? {})).not.toContain('ajansNotu');
+    // Kardeş: AJANS aynı planda kipi görüyor (iddia yanlış sebepten geçmiyor).
+    // Bu fixture'da workspace ajansın KENDİ şirketinde, anahtar kapalı → test.
+    const a = await plan.detay(AJANS, id, SIMDI);
+    expect(a.onayKapisi).toMatchObject({ tur: 'kabul', kip: 'test' });
+  });
+
+  it('BULGU B-2 (ret dalı): müşteri retlerinde ajans mesajı ANAHTARI yok, boş müşteri mesajlı ret hiç yok', async () => {
+    const { id } = await musteride();
+    await h.q(`UPDATE monthly_budgets SET amount_micros = 1000000 WHERE client_id = $1`, [IDS.client]);
+    const d = await plan.detay(MUSTERI, id, SIMDI);
+    expect(d.onayKapisi?.tur).toBe('ret');
+    if (d.onayKapisi?.tur !== 'ret') return;
+    for (const r of d.onayKapisi.retler) {
+      expect(Object.keys(r).sort()).toEqual(['kod', 'musteriMesaji']);
+      expect(r.musteriMesaji.trim().length).toBeGreaterThan(0);
+    }
   });
 });
 

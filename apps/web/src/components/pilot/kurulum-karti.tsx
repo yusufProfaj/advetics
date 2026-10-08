@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
-import { KURULUM_DURUM_METNI, ayAdi, eylemIstegi, okumaHatasi, planAdresi, type KurulumTonu, type PanelEylemi } from './hesap';
+import type { PilotEkranEylemi } from '@advetics/shared';
+import { KURULUM_DURUM_METNI, ayAdi, eylemIstegi, okumaHatasi, planAdresi, type KurulumTonu } from './hesap';
 import type { PilotKurulumYaniti } from '@advetics/shared';
 
 /**
@@ -32,7 +33,7 @@ const TON_SINIFI: Record<KurulumTonu, string> = {
 export function KurulumKarti({ clientId, k }: { clientId: string; k: PilotKurulumYaniti }) {
   const router = useRouter();
   const [hal, setHal] = useState<{ tur: 'bos' } | { tur: 'suruyor' } | { tur: 'hata'; mesaj: string }>({ tur: 'bos' });
-  const izinli = new Set<PanelEylemi>(k.yapilabilir);
+  const izinli = new Set<PilotEkranEylemi>(k.yapilabilir);
   const kurabilir = izinli.has('yeniden_dene');
   const durdurabilir = izinli.has('takilan_kurulumu_durdur');
   const ay = ayAdi(k.plan.donem);

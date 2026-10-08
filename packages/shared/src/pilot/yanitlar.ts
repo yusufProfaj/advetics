@@ -1,6 +1,6 @@
 import type { Hucre } from './kaynak';
 import type { KurulumOzeti, KurulumSatiri } from './kurulum';
-import type { MusteriOzeti, OnayKapisiSonucu, YayinKipi } from './onay';
+import type { MusteriOnayKapisi, MusteriOzeti, OnayKapisiSonucu, YayinKipi } from './onay';
 import type { OneriKarti } from './oneri';
 import type { PilotPlanDurumu, PilotPlanEylemi, PlanOnerisi } from './plan';
 import type { UyumBulgusu, UyumDurumu, UyumIsareti } from './uyum';
@@ -22,7 +22,10 @@ export type PilotEkranEylemi =
   | Extract<PilotPlanEylemi, 'musteriye_gonder' | 'geri_cek' | 'yeniden_dene' | 'kapat' | 'iptal' | 'onayla' | 'degisiklik_iste'>
   | 'degistir'
   | 'yeniden_hazirla'
-  | 'uyum_isaret';
+  | 'uyum_isaret'
+  // B-4 (2026-10-08): sunucu YALNIZ `kuruluyorPlanKarari` `takildi`/`satir_yok`
+  // derken listeler; ön koşul serviste (`takilanSatirlariDusur`).
+  | 'takilan_kurulumu_durdur';
 
 export interface PilotPlanSatiriOzeti {
   id: string;
@@ -41,8 +44,14 @@ export interface PilotPlanListesi {
   toplam: number;
 }
 
-/** `GET /pilot/planlar/:id`. */
-export interface PilotPlanDetayi {
+/**
+ * `GET /pilot/planlar/:id` — İKİ VARYANT, `rol` ayırıyor (2026-10-08).
+ * Müşteri varyantının `onayKapisi`ı `MusteriOnayKapisi`: yayın kipi, ajans
+ * notu ve ajans mesajı ALANI YOK. Tek tipte bu alanlar "süzülüp `null`
+ * yapılıyordu" ama `kip` zorunluydu ve müşteriye `kapali`/`test` gidiyordu
+ * (B-2'nin kalanı). Alan tipte olmayınca sunucu onu yazamaz, panel okuyamaz.
+ */
+interface PilotPlanDetayiOrtak {
   plan: {
     id: string;
     clientId: string;
@@ -59,15 +68,24 @@ export interface PilotPlanDetayi {
   };
   icerik: PlanOnerisi;
   musteriOzeti: MusteriOzeti | null;
-  /** İsteği yapan kişinin bu plandaki rolü (sunucu söyler, panel tahmin etmez). */
-  rol: 'musteri' | 'ajans';
   /** Durum × yetki kararı SUNUCUDA; panel düğmeleri yalnız buradan çizer. */
   yapilabilir: PilotEkranEylemi[];
-  /** Onay kapısının şu anki cevabı (sunucu koşar); müşteriye `musteriMesaji`, ajansa `ajansMesaji`. */
-  onayKapisi: OnayKapisiSonucu | null;
   /** Yalnız ajans rolünde dolu; müşteriye uyum ayrıntısı gitmez. */
   uyum: { durum: UyumDurumu; bulgular: UyumBulgusu[]; isaretler: UyumIsareti[] } | null;
 }
+
+/** İsteği yapan kişinin rolü sunucudan gelir (panel tahmin etmez) ve onay kapısının biçimini belirler. */
+export type PilotPlanDetayi =
+  | (PilotPlanDetayiOrtak & {
+      rol: 'ajans';
+      /** Tam kapı: kip, ajans notu, ajans mesajı. */
+      onayKapisi: OnayKapisiSonucu | null;
+    })
+  | (PilotPlanDetayiOrtak & {
+      rol: 'musteri';
+      /** `musteriOnayKapisi` çıktısı: yalnız müşteri cümlesi. */
+      onayKapisi: MusteriOnayKapisi | null;
+    });
 
 /** `POST /pilot/planlar/hazirla` cevabı. */
 export interface PilotHazirlaYaniti {

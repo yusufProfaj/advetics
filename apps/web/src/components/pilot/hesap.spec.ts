@@ -8,9 +8,12 @@ import {
   UYUM_SEKTORLERI,
   degisiklikUygula,
   musteriOzeti,
+  musteriOnayKapisi,
   planUret,
   reklamMetinleriniYerlestir,
   METIN_NOTU_ONEKI,
+  type MusteriOnayKapisi,
+  type OnayKapisiSonucu,
   type OneriKarti,
   type PlanOnerisi,
   type PlanUretGirdisi,
@@ -59,7 +62,6 @@ import {
   metinOnizlemesi,
   satirNotlari,
   varlikOnizlemeAdresi,
-  type PanelEylemi,
 } from './hesap';
 import type { PilotPlanDetayi, PilotPlanSatiriOzeti, PilotWorkspaceBeyani } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
@@ -143,18 +145,36 @@ const PLAN = reklamMetinleriniYerlestir(
   { yasalUyari: null },
 );
 
-function detay(over: Partial<PilotPlanDetayi> & { durum?: PilotPlanDetayi['plan']['durum'] } = {}): PilotPlanDetayi {
-  const { durum, ...kalan } = over;
-  return {
+/** Tam (ajans) kapı mı: kabulde `kip`, retlerde `ajansMesaji` taşır. */
+function ajansKapisiMi(k: OnayKapisiSonucu | MusteriOnayKapisi): k is OnayKapisiSonucu {
+  return k.tur === 'kabul' ? 'kip' in k : k.retler.every((r) => 'ajansMesaji' in r);
+}
+
+/*
+ * Yanıt iki varyantlı (`rol`). Müşteri fixture'ına tam kapı verilirse
+ * SUNUCUNUN süzgecinden (`musteriOnayKapisi`) geçirilir: testler müşterinin
+ * gerçekten aldığı biçimi görür. Ajans fixture'ına müşteri kapısı verilmesi
+ * yanlış kurulumdur ve patlar.
+ */
+function detay(
+  over: Partial<Omit<PilotPlanDetayi, 'rol' | 'onayKapisi'>> & {
+    durum?: PilotPlanDetayi['plan']['durum'];
+    rol?: PilotPlanDetayi['rol'];
+    onayKapisi?: OnayKapisiSonucu | MusteriOnayKapisi | null;
+  } = {},
+): PilotPlanDetayi {
+  const { durum, rol = 'ajans', onayKapisi = null, ...kalan } = over;
+  const ortak = {
     plan: { id: U(90), clientId: U(1), donem: '2026-11', durum: durum ?? 'taslak', surum: 3, icerikOzeti: 'a'.repeat(64), yayinKipi: null, onay: null, musteriNotu: null, guncellendi: T },
     icerik: PLAN,
     musteriOzeti: musteriOzeti(PLAN),
-    rol: 'ajans',
     yapilabilir: [],
-    onayKapisi: null,
     uyum: null,
     ...kalan,
   };
+  if (rol === 'musteri') return { ...ortak, rol, onayKapisi: onayKapisi && ajansKapisiMi(onayKapisi) ? musteriOnayKapisi(onayKapisi) : onayKapisi };
+  if (onayKapisi && !ajansKapisiMi(onayKapisi)) throw new Error('ajans fixture’ı müşteri kapısı taşıyamaz');
+  return { ...ortak, rol, onayKapisi };
 }
 
 describe('örnek plan gerçekten üretildi', () => {
@@ -597,8 +617,13 @@ describe('reklam metni önizlemesi (karar (a))', () => {
     });
   });
 
-  it('küçük resim adresi varlık önizleme ucu (tek üretici)', () => {
-    expect(varlikOnizlemeAdresi(U(20))).toMatch(new RegExp(`/assets/${U(20)}/preview$`));
+  it('KRİTİK: küçük resim adresi PLAN KAPSAMLI uçtan (müşteri ve ajans aynı adres); arşiv ucu değil', () => {
+    const a = varlikOnizlemeAdresi(U(90), U(20));
+    expect(a).toMatch(new RegExp(`/pilot/planlar/${U(90)}/varliklar/${U(20)}$`));
+    expect(a).not.toContain('/assets/');
+    // Kimlik kodlanıyor; doldurulmamış yol parametresi sessizce gitmiyor.
+    expect(varlikOnizlemeAdresi(U(90), 'a/b')).toContain('/varliklar/a%2Fb');
+    expect(() => pilotUcAdresi('/pilot/planlar/:id/varliklar/:varlikId', U(90))).toThrow(/:varlikId/);
   });
 
   it('metin nedenlerinin cümleleri panel dilinde (uzun tire yok, olmayan ayar ekranı yok)', () => {
@@ -611,12 +636,9 @@ describe('reklam metni önizlemesi (karar (a))', () => {
 });
 
 describe('takılan kurulum (B-4)', () => {
-  // Sunucunun `yapilabilir` tipi bugün bu eylemi taşımıyor (sözleşme
-  // `PilotEkranEylemi`); Ajan 2 ucu açınca gelecek listeyi taklit ediyor.
-  const ileride = (e: PanelEylemi[]) => e as PilotPlanDetayi['yapilabilir'];
 
   it('KRİTİK: sunucu verdiğinde "Kurulumu durdur" BİRİNCİL ve çubuk nedenini söylüyor', () => {
-    const a = altCubuk(detay({ durum: 'kuruluyor', yapilabilir: ileride(['takilan_kurulumu_durdur']) }));
+    const a = altCubuk(detay({ durum: 'kuruluyor', yapilabilir: ['takilan_kurulumu_durdur'] }));
     expect(a.birincil).toEqual({ eylem: 'takilan_kurulumu_durdur', etiket: 'Kurulumu durdur' });
     expect(a.metin).toBe('Kurulum ilerlemiyor. Durdurursan kurulmayanları yeniden kurabilirsin.');
   });

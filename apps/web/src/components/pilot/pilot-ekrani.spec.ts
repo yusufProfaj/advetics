@@ -155,7 +155,7 @@ describe('düğmeler ve onay', () => {
 
   it('"Şimdi kur" ve "Kurulumu durdur" sunucunun listesinden', () => {
     const k = kod('kurulum-karti.tsx');
-    expect(k).toContain('const izinli = new Set<PanelEylemi>(k.yapilabilir)');
+    expect(k).toContain('const izinli = new Set<PilotEkranEylemi>(k.yapilabilir)');
     expect(k).toContain("const kurabilir = izinli.has('yeniden_dene')");
     expect(k).toContain("const durdurabilir = izinli.has('takilan_kurulumu_durdur')");
     expect(k).toContain("{durdurabilir && (");
@@ -164,7 +164,7 @@ describe('düğmeler ve onay', () => {
 
   it('KRİTİK: plan belgesinde "Kurulumu durdur" araya kutu koymadan isteği gönderiyor', () => {
     const b = kod('plan-belgesi.tsx');
-    expect(b).toContain('const izinli = new Set<PanelEylemi>(detay.yapilabilir)');
+    expect(b).toContain('const izinli = new Set<PilotEkranEylemi>(detay.yapilabilir)');
     const e = govde(b, 'function eylemYap(');
     const dal = e.slice(e.indexOf("case 'musteriye_gonder'"), e.indexOf("case 'onayla'"));
     expect(dal).toContain("case 'takilan_kurulumu_durdur'");
@@ -258,7 +258,7 @@ describe('reklam metni önizlemesi (karar (a): müşteri onayladığı metni gö
   const onizleme = govde(b, 'function MetinOnizlemesi(', '{', '}', '}) {');
 
   it('KRİTİK: her satırda önizleme çiziliyor ve AJANSA ÖZEL bloğun DIŞINDA (müşteri de görüyor)', () => {
-    const cagri = '<MetinOnizlemesi satir={s} clientId={clientId} musteri={musteri} metinNotlari={notlar.metin} />';
+    const cagri = '<MetinOnizlemesi planId={planId} satir={s} clientId={clientId} musteri={musteri} metinNotlari={notlar.metin} />';
     const i = liste.indexOf(cagri);
     expect(i).toBeGreaterThan(-1);
     // Ajansa özel HER bloğu (paranteziyle) ve `musteri &&` taşıyan her satırı
@@ -281,7 +281,7 @@ describe('reklam metni önizlemesi (karar (a): müşteri onayladığı metni gö
     expect(onizleme).toContain('o.kartlar.map(');
     expect(onizleme).toContain('{k.baslik}');
     expect(onizleme).toContain('{k.metin}');
-    expect(onizleme).toContain('<KreatifGorsel src={varlikOnizlemeAdresi(k.gorsel.id)}');
+    expect(onizleme).toContain('<KreatifGorsel src={varlikOnizlemeAdresi(planId, k.gorsel.id)}');
     expect(onizleme).toContain('<KaynakCipi kaynak={o.kaynak}');
   });
 
