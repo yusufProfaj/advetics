@@ -332,15 +332,21 @@ describe('yayın yolu özelleştirmeyi uyguluyor', () => {
      * tutmaması demekti: Google dalı bütçeyi ön ayardan okumaya devam eder
      * ve kullanıcının girdiği tutar SESSİZCE yok sayılırdı.
      */
-    const butce = KAYNAK.indexOf('butceyiCoz(');
+    // Çözüm tek yardımcıda (`ozellestir`) — prova da onu kullanıyor.
+    const cagri = KAYNAK.indexOf('const ozellestirilmis = this.ozellestir(kayit, override);');
     const dal = KAYNAK.indexOf('return this.launchGoogle(ctx, scoped, ozellestirilmis');
-    expect(butce).toBeGreaterThan(-1);
-    expect(dal).toBeGreaterThan(butce);
+    expect(cagri).toBeGreaterThan(-1);
+    expect(dal).toBeGreaterThan(cagri);
+    const yardimci = KAYNAK.slice(KAYNAK.indexOf('private ozellestir('), KAYNAK.indexOf('private async kartiOku('));
+    expect(yardimci).toContain('butceyiCoz(');
   });
 
   it('KRİTİK: iki dal da ÖZELLEŞTİRİLMİŞ satırı alıyor', () => {
     // Google dalına kartta düzenlenen METİN de gidiyor (aşama 3).
-    expect(KAYNAK).toContain('this.launchGoogle(ctx, scoped, ozellestirilmis, override?.texts)');
+    expect(KAYNAK).toContain('this.launchGoogle(ctx, scoped, ozellestirilmis, override?.texts,');
+    // PROVA AYNI ÖZELLEŞTİRMEDEN: kullanıcı yayınlayacağını sınamalı.
+    const prova = KAYNAK.slice(KAYNAK.indexOf('async provaGoogle('), KAYNAK.indexOf('private async googleHazirla('));
+    expect(prova).toContain('const ozellestirilmis = this.ozellestir(kayit, override);');
     expect(KAYNAK).toContain('this.launchMeta(ctx, scoped, ozellestirilmis, override)');
   });
 

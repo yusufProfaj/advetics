@@ -1,89 +1,72 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleProvider } from './google.provider';
-import { VARSAYILAN_KONUM, YarimKurulumHatasi } from './google-demandgen';
+import { PlatformApiError, type VideoBoostIstegi } from '../provider.types';
+import { VARSAYILAN_KONUM, googleAlanHatalari } from './google-demandgen';
 
 /**
- * ═══ YOUTUBE YAYINI: SIRA PARA DEMEK ═══
+ * ═══ YOUTUBE YAYINI: TEK ATOMİK İSTEK ═══
  *
- * Kampanya duraklatılmış kuruluyor ve ANCAK konum, reklam grubu ve reklam
- * yerindeyken yayına alınıyor. Sıra bozulursa Google eksik bir kampanyayı
- * yayınlar: konumsuz Demand Gen kampanyası BÜTÜN ÜLKELERE açılıyor ve hiçbir
- * hata vermiyor. Ara adım düşerse kurulan her şey geri alınmalı; yarım bir
- * kampanya yayında kalmamalı.
+ * Eskiden yedi ayrı çağrı ve hata hâlinde elle geri alma vardı; geri alma
+ * da düşebiliyordu ve hesapta yarım kampanya kalıyordu (plan P3/P4). Artık
+ * hepsi TEK `googleAds:mutate` isteği: Google ya hepsini kuruyor ya
+ * hiçbirini. Bu dosya Google'a GİDEN isteği kilitliyor: tek istek, işlem
+ * sırası, geçici kimliklerin birbirine bağlanması, konum, yaş, logo ve
+ * prova bayrağı.
  *
- * `fetch` global olarak yamanıyor ve her çağrının koleksiyonu ile gövdesi
- * kaydediliyor: sınanan şey gerçek `createVideoBoost`un Google'a gönderdiği
- * istek DİZİSİ.
+ * `fetch` global olarak yamanıyor ve her çağrı kaydediliyor.
  */
-
 interface Cagri {
-  koleksiyon: string;
-  govde: { operations: Array<Record<string, unknown>> };
+  url: string;
+  govde: { mutateOperations: Array<Record<string, { create?: Record<string, unknown> }>>; partialFailure: boolean; validateOnly: boolean };
   giris: string | null;
 }
 
 let cagrilar: Cagri[];
-let patlayan: string | null;
-/** Geri alma (remove) çağrıları da düşsün mü — kota zincirin ortasında bitti. */
-let silmeDussun: boolean;
+let yanit: { ok: boolean; status: number; body: unknown };
 let orijinal: typeof fetch;
 
 function provider(): GoogleProvider {
   return new GoogleProvider({
-    platforms: {
-      google: { clientId: 'c', clientSecret: 's', developerToken: 'd', apiVersion: 'v20' },
-    },
+    platforms: { google: { clientId: 'c', clientSecret: 's', developerToken: 'd', apiVersion: 'v25' } },
   } as never);
 }
 
-const ISTEK = {
-  name: 'Mia — Video',
-  dailyBudgetMicros: 50_000_000n,
+const ISTEK: VideoBoostIstegi = {
+  name: 'Ege Birlik — Video',
+  dailyBudgetMicros: 100_000_000n,
   durationDays: 3,
   videoId: 'abcdefghijk',
   videoTitle: 'Yeni proje',
-  logoAssetResource: 'customers/123/assets/9',
-  businessName: 'Mia Yapı',
-  finalUrl: 'https://miayapi.com/',
+  logo: { resource: 'customers/123/assets/9' },
+  businessName: 'Ege Birlik',
+  finalUrl: 'https://egebirlik.com/',
   headlines: ['Yeni proje'],
-  longHeadlines: ['Yeni proje'],
-  descriptions: ['Mia Yapı kanalında yeni video'],
+  longHeadlines: ['Yeni proje videosu'],
+  descriptions: ['Ege Birlik kanalında yeni video'],
   konumlar: [VARSAYILAN_KONUM],
-  yaslar: [] as string[],
+  yaslar: [],
 };
+
+/** Gerçek Google yanıtının biçimi: işlem sırasıyla tek anahtarlı sonuçlar. */
+function basariliYanit(n: number): unknown {
+  const tur = ['campaignBudgetResult', 'campaignResult'];
+  return {
+    mutateOperationResponses: Array.from({ length: n }, (_, i) => ({
+      [tur[i] ?? `sonuc${i}`]: { resourceName: `customers/123/x/${i}` },
+    })),
+  };
+}
 
 beforeEach(() => {
   cagrilar = [];
-  patlayan = null;
-  silmeDussun = false;
+  yanit = { ok: true, status: 200, body: null };
   orijinal = globalThis.fetch;
-  let n = 0;
   globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-    const koleksiyon = String(url).match(/\/customers\/\d+\/(\w+):mutate/)?.[1] ?? '?';
     const govde = JSON.parse(String(init?.body ?? '{}')) as Cagri['govde'];
     const basliklar = (init?.headers ?? {}) as Record<string, string>;
-    cagrilar.push({ koleksiyon, govde, giris: basliklar['login-customer-id'] ?? null });
-    const yayinaAlma = koleksiyon === 'campaigns' && govde.operations[0]?.update !== undefined;
-    const bu = yayinaAlma ? 'yayina-alma' : koleksiyon;
-    const silme = govde.operations[0]?.remove !== undefined;
-    if ((patlayan === bu && !silme) || (silmeDussun && silme)) {
-      return {
-        ok: false,
-        status: 400,
-        headers: new Headers(),
-        json: async () => ({ error: { message: `${bu} reddedildi`, status: 'INVALID_ARGUMENT' } }),
-        text: async () => JSON.stringify({ error: { message: `${bu} reddedildi` } }),
-      } as unknown as Response;
-    }
-    n++;
-    const yanit = { results: [{ resourceName: `customers/123/${koleksiyon}/${n}` }] };
-    return {
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: async () => yanit,
-      text: async () => JSON.stringify(yanit),
-    } as unknown as Response;
+    cagrilar.push({ url: String(url), govde, giris: basliklar['login-customer-id'] ?? null });
+    const body = yanit.body ?? basariliYanit(govde.mutateOperations.length);
+    return new Response(JSON.stringify(body), { status: yanit.status });
   }) as unknown as typeof fetch;
 });
 
@@ -93,150 +76,190 @@ afterEach(() => {
 });
 
 const ctx = { accessToken: 'T', accountExternalId: '123' };
+const turler = (c: Cagri) => c.govde.mutateOperations.map((o) => Object.keys(o)[0]);
+const op = (c: Cagri, tur: string, kacinci = 0) =>
+  c.govde.mutateOperations.filter((o) => Object.keys(o)[0] === tur)[kacinci]?.[tur]?.create as Record<string, unknown>;
 
-describe('createVideoBoost sırası', () => {
-  it('KRİTİK: yayına alma EN SON — konum, reklam grubu ve reklamdan sonra', async () => {
+describe('KRİTİK: tek atomik istek', () => {
+  it('KRİTİK: TEK çağrı, googleAds:mutate, kısmi başarı KAPALI', async () => {
     await provider().createVideoBoost(ctx, ISTEK);
-    const sira = cagrilar.map((c) =>
-      c.koleksiyon === 'campaigns' && c.govde.operations[0]?.update ? 'yayina-alma' : c.koleksiyon,
-    );
-    expect(sira).toEqual([
-      'campaignBudgets',
-      'campaigns',
-      'campaignCriteria',
-      'adGroups',
-      'assets',
-      'adGroupAds',
-      'yayina-alma',
+    expect(cagrilar).toHaveLength(1);
+    expect(cagrilar[0]!.url).toMatch(/\/v25\/customers\/123\/googleAds:mutate$/);
+    expect(cagrilar[0]!.govde.partialFailure).toBe(false);
+    expect(cagrilar[0]!.govde.validateOnly).toBe(false);
+  });
+
+  it('işlem sırası: bütçe → kampanya → konum → grup → video → reklam', async () => {
+    await provider().createVideoBoost(ctx, ISTEK);
+    expect(turler(cagrilar[0]!)).toEqual([
+      'campaignBudgetOperation',
+      'campaignOperation',
+      'campaignCriterionOperation',
+      'adGroupOperation',
+      'assetOperation',
+      'adGroupAdOperation',
     ]);
   });
 
-  it('KRİTİK: kampanya DURAKLATILMIŞ kuruluyor, yayına alma yalnızca durumu değiştiriyor', async () => {
+  it('KRİTİK: geçici kimlikler birbirine bağlı (bütçe→kampanya→konum/grup→reklam, video→reklam)', async () => {
     await provider().createVideoBoost(ctx, ISTEK);
-    const kur = cagrilar.find((c) => c.koleksiyon === 'campaigns' && c.govde.operations[0]?.create);
-    expect((kur!.govde.operations[0]!.create as Record<string, unknown>).status).toBe('PAUSED');
-    const al = cagrilar.at(-1)!;
-    expect(al.govde.operations[0]).toMatchObject({
-      update: { status: 'ENABLED' },
-      updateMask: 'status',
-    });
+    const c = cagrilar[0]!;
+    const butce = op(c, 'campaignBudgetOperation');
+    const kampanya = op(c, 'campaignOperation');
+    const konum = op(c, 'campaignCriterionOperation');
+    const grup = op(c, 'adGroupOperation');
+    const video = op(c, 'assetOperation');
+    const reklam = op(c, 'adGroupAdOperation');
+    expect(butce.resourceName).toBe('customers/123/campaignBudgets/-1');
+    expect(kampanya.campaignBudget).toBe(butce.resourceName);
+    expect(konum.campaign).toBe(kampanya.resourceName);
+    expect(grup.campaign).toBe(kampanya.resourceName);
+    expect(reklam.adGroup).toBe(grup.resourceName);
+    const dg = (reklam.ad as { demandGenVideoResponsiveAd: { videos: Array<{ asset: string }>; logoImages: Array<{ asset: string }> } })
+      .demandGenVideoResponsiveAd;
+    expect(dg.videos[0]!.asset).toBe(video.resourceName);
+    expect(dg.logoImages[0]!.asset).toBe('customers/123/assets/9');
   });
 
-  it('KRİTİK: konum kampanyaya Türkiye olarak gidiyor', async () => {
+  it('kampanya varsayılan AÇIK; istenirse DURAKLATILMIŞ (ilk canlı deneme)', async () => {
     await provider().createVideoBoost(ctx, ISTEK);
-    const k = cagrilar.find((c) => c.koleksiyon === 'campaignCriteria')!;
-    expect(k.govde.operations[0]!.create).toMatchObject({
-      location: { geoTargetConstant: 'geoTargetConstants/2792' },
-    });
+    expect(op(cagrilar[0]!, 'campaignOperation').status).toBe('ENABLED');
+    await provider().createVideoBoost(ctx, ISTEK, { acilis: 'PAUSED' });
+    expect(op(cagrilar[1]!, 'campaignOperation').status).toBe('PAUSED');
   });
 
-  it('KRİTİK: konum reddedilirse kampanya YAYINA ALINMIYOR ve geri alınıyor', async () => {
-    patlayan = 'campaignCriteria';
-    await expect(provider().createVideoBoost(ctx, ISTEK)).rejects.toThrow();
-    expect(cagrilar.some((c) => c.govde.operations[0]?.update)).toBe(false);
-    const silinen = cagrilar.filter((c) => c.govde.operations[0]?.remove).map((c) => c.koleksiyon);
-    expect(silinen).toEqual(['campaigns', 'campaignBudgets']);
-  });
-
-  it('KRİTİK: yayına alma düşerse kurulan her şey geri alınıyor', async () => {
-    patlayan = 'yayina-alma';
-    await expect(provider().createVideoBoost(ctx, ISTEK)).rejects.toThrow();
-    const silinen = cagrilar.filter((c) => c.govde.operations[0]?.remove).map((c) => c.koleksiyon);
-    expect(silinen).toEqual(['adGroups', 'campaigns', 'campaignBudgets']);
-  });
-});
-
-describe('yaş kitlesi — Demand Gen’de Audience kaydıyla', () => {
-  const YASLI = { ...ISTEK, yaslar: ['AGE_RANGE_25_34', 'AGE_RANGE_35_44'] };
-  const sira = (): string[] =>
-    cagrilar
-      .filter((c) => c.govde.operations[0]?.remove === undefined)
-      .map((c) => (c.koleksiyon === 'campaigns' && c.govde.operations[0]?.update ? 'yayina-alma' : c.koleksiyon));
-
-  it('KRİTİK: yaş seçiliyse kitle kuruluyor, reklam grubuna bağlanıyor, SONRA yayına alınıyor', async () => {
-    await provider().createVideoBoost(ctx, YASLI);
-    expect(sira()).toEqual([
-      'campaignBudgets',
-      'campaigns',
-      'campaignCriteria',
-      'adGroups',
-      'audiences',
-      'adGroupCriteria',
-      'assets',
-      'adGroupAds',
-      'yayina-alma',
-    ]);
-  });
-
-  it('KRİTİK: reklam grubu `useAudienceGrouped` ile kuruluyor — sonradan değiştirilemez', async () => {
-    await provider().createVideoBoost(ctx, YASLI);
-    const ag = cagrilar.find((c) => c.koleksiyon === 'adGroups')!;
-    expect(ag.govde.operations[0]!.create).toMatchObject({
-      audienceSetting: { useAudienceGrouped: true },
-    });
-  });
-
-  it('kitle bitişik aralığı TEK segment olarak taşıyor ve bilinmeyen yaş dışarıda', async () => {
-    await provider().createVideoBoost(ctx, YASLI);
-    const k = cagrilar.find((c) => c.koleksiyon === 'audiences')!;
-    expect(k.govde.operations[0]!.create).toMatchObject({
-      dimensions: [{ age: { ageRanges: [{ minAge: 25, maxAge: 44 }], includeUndetermined: false } }],
-    });
-    const bag = cagrilar.find((c) => c.koleksiyon === 'adGroupCriteria')!;
-    expect(bag.govde.operations[0]!.create).toMatchObject({
-      audience: { audience: expect.stringContaining('/audiences/') },
-    });
-  });
-
-  it('yaş seçilmediyse kitle YOK ve reklam grubu kitle kipinde değil', async () => {
+  it('KRİTİK: konum AÇIKÇA gidiyor — boş liste isteği hiç kurmuyor', async () => {
     await provider().createVideoBoost(ctx, ISTEK);
-    expect(cagrilar.some((c) => c.koleksiyon === 'audiences')).toBe(false);
-    const ag = cagrilar.find((c) => c.koleksiyon === 'adGroups')!;
-    expect(ag.govde.operations[0]!.create).not.toHaveProperty('audienceSetting');
+    expect(op(cagrilar[0]!, 'campaignCriterionOperation').location).toEqual({ geoTargetConstant: VARSAYILAN_KONUM });
+    await expect(provider().createVideoBoost(ctx, { ...ISTEK, konumlar: [] })).rejects.toThrow(/bütün ülkelere/);
+    expect(cagrilar).toHaveLength(1);
   });
 
-  it('KRİTİK: kitle bağlanamazsa kampanya YAYINA ALINMIYOR', async () => {
-    patlayan = 'adGroupCriteria';
-    await expect(provider().createVideoBoost(ctx, YASLI)).rejects.toThrow();
-    expect(cagrilar.some((c) => c.govde.operations[0]?.update)).toBe(false);
-    const silinen = cagrilar.filter((c) => c.govde.operations[0]?.remove).map((c) => c.koleksiyon);
-    expect(silinen).toEqual(['adGroups', 'campaigns', 'campaignBudgets']);
+  it('yaş kısıtı: kitle oluşturulup gruba bağlanıyor, grup kitle gruplamalı', async () => {
+    await provider().createVideoBoost(ctx, { ...ISTEK, yaslar: ['AGE_RANGE_25_34', 'AGE_RANGE_35_44'] });
+    const c = cagrilar[0]!;
+    expect(turler(c)).toContain('audienceOperation');
+    const kitle = op(c, 'audienceOperation');
+    const bag = op(c, 'adGroupCriterionOperation');
+    expect(bag.audience).toEqual({ audience: kitle.resourceName });
+    expect(bag.adGroup).toBe(op(c, 'adGroupOperation').resourceName);
+    expect(op(c, 'adGroupOperation').audienceSetting).toEqual({ useAudienceGrouped: true });
+    expect(kitle.dimensions).toEqual([{ age: { ageRanges: [{ minAge: 25, maxAge: 44 }], includeUndetermined: false } }]);
   });
-});
 
-describe('yönetici (MCC) başlığı', () => {
-  it('KRİTİK: login-customer-id kurulumun HER çağrısında gidiyor', async () => {
-    // Canlıda ilk yayın USER_PERMISSION_DENIED ile düştü: alt hesaba yapılan
-    // istek yöneticinin kimliğini bu başlıkta taşımak zorunda.
+  it('yaş kısıtı yoksa kitle de yok', async () => {
+    await provider().createVideoBoost(ctx, ISTEK);
+    expect(turler(cagrilar[0]!)).not.toContain('audienceOperation');
+  });
+
+  it('KRİTİK: yönetici kimliği login-customer-id olarak gidiyor', async () => {
     await provider().createVideoBoost({ ...ctx, loginCustomerId: '999' }, ISTEK);
-    expect(cagrilar.length).toBeGreaterThan(5);
-    expect(cagrilar.every((c) => c.giris === '999')).toBe(true);
+    expect(cagrilar[0]!.giris).toBe('999');
+  });
+
+  it('video varlığının adı zaman damgalı (ikinci boost DUPLICATE_ASSET_NAME almasın)', async () => {
+    await provider().createVideoBoost(ctx, ISTEK);
+    expect(String(op(cagrilar[0]!, 'assetOperation').name)).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   });
 });
 
-describe('KRİTİK: geri alma eksik kalınca hata bunu SÖYLÜYOR', () => {
-  /*
-   * Kota zincirin ortasında bitince silme de aynı kotayla düşüyor. Eskiden
-   * bu yalnızca log'a yazılıyordu; yayın yolu kartı `failed` yapıyor ve
-   * "tekrar yayınla" yarım kalan kampanyanın YANINA ikincisini kuruyordu.
-   * Hata artık `YarimKurulumHatasi`: asıl mesajı ve hesapta kalanları
-   * taşıyor, yayın yolu kartı `kontrol` yapıyor.
-   */
-  it('yayına alma düşer ve silmeler de düşerse kalanlar adıyla sayılıyor', async () => {
-    patlayan = 'yayina-alma';
-    silmeDussun = true;
-    const hata = await provider().createVideoBoost(ctx, ISTEK).catch((e: unknown) => e);
-    expect(hata).toBeInstanceOf(YarimKurulumHatasi);
-    const y = hata as YarimKurulumHatasi;
-    expect(y.message).toContain('yayina-alma reddedildi');
-    expect(y.kalanlar.some((k) => k.startsWith('kampanya customers/123/campaigns/'))).toBe(true);
-    expect(y.kalanlar.some((k) => k.startsWith('bütçe '))).toBe(true);
+describe('logo: kayıtlı ya da aynı istekte yeni', () => {
+  it('yeni logo AYNI istekte oluşturuluyor ve reklam ona bağlanıyor; kaynak adı dönüyor', async () => {
+    const r = await provider().createVideoBoost(ctx, {
+      ...ISTEK,
+      logo: { yeniGorsel: { name: 'Ege logo', bytes: Buffer.from('png') } },
+    });
+    const c = cagrilar[0]!;
+    const logo = op(c, 'assetOperation', 1);
+    expect(logo).toMatchObject({ type: 'IMAGE', imageAsset: { data: Buffer.from('png').toString('base64') } });
+    const dg = (op(c, 'adGroupAdOperation').ad as { demandGenVideoResponsiveAd: { logoImages: Array<{ asset: string }> } })
+      .demandGenVideoResponsiveAd;
+    expect(dg.logoImages[0]!.asset).toBe(logo.resourceName);
+    // Yanıt işlem sırasıyla; logonun sonucu kendi sırasından okunuyor.
+    expect(r.logoAssetResource).toBe(`customers/123/x/${turler(c).lastIndexOf('assetOperation')}`);
   });
 
-  it('silme başarılıysa düz hata — kart failed olabilir', async () => {
-    patlayan = 'yayina-alma';
+  it('kayıtlı logoda yeni varlık yok ve dönen logo null', async () => {
+    const r = await provider().createVideoBoost(ctx, ISTEK);
+    expect(turler(cagrilar[0]!).filter((t) => t === 'assetOperation')).toHaveLength(1);
+    expect(r.logoAssetResource).toBeNull();
+  });
+});
+
+describe('yanıt', () => {
+  it('kaynak adları işlem sırasından okunuyor', async () => {
+    const r = await provider().createVideoBoost(ctx, ISTEK);
+    expect(r).toEqual({
+      campaignId: 'customers/123/x/1',
+      adGroupId: 'customers/123/x/3',
+      adId: 'customers/123/x/5',
+      logoAssetResource: null,
+    });
+  });
+
+  it('KRİTİK: 200 ama sonuç eksikse başarı DEĞİL ve hata "belirsiz" (transient) — kart kontrol olur', async () => {
+    yanit.body = { mutateOperationResponses: [] };
     const hata = await provider().createVideoBoost(ctx, ISTEK).catch((e: unknown) => e);
-    expect(hata).not.toBeInstanceOf(YarimKurulumHatasi);
-    expect((hata as Error).message).toContain('yayina-alma reddedildi');
+    expect(hata).toBeInstanceOf(PlatformApiError);
+    expect((hata as PlatformApiError).kind).toBe('transient');
+  });
+
+  it('KRİTİK: ret hâlinde geri alma çağrısı YOK — tek istek, hiçbir şey kurulmadı', async () => {
+    yanit = { ok: false, status: 400, body: { error: { message: 'Request contains an invalid argument.', status: 'INVALID_ARGUMENT' } } };
+    await expect(provider().createVideoBoost(ctx, ISTEK)).rejects.toBeInstanceOf(PlatformApiError);
+    expect(cagrilar).toHaveLength(1);
+  });
+});
+
+describe('KRİTİK: prova — aynı gövde, validateOnly', () => {
+  it('prova ile yayın gövdesi validateOnly DIŞINDA aynı', async () => {
+    await provider().createVideoBoost(ctx, ISTEK);
+    yanit.body = {};
+    await provider().videoBoostProva(ctx, ISTEK);
+    const [yayin, prova] = cagrilar;
+    expect(prova!.govde.validateOnly).toBe(true);
+    const temizle = (c: Cagri) =>
+      JSON.stringify({ ...c.govde, validateOnly: null }).replace(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/g, 'T');
+    expect(temizle(prova!)).toBe(temizle(yayin!));
+  });
+
+  it('prova boş yanıtı başarı sayıyor ve işlem sayısını dönüyor', async () => {
+    yanit.body = {};
+    await expect(provider().videoBoostProva(ctx, ISTEK)).resolves.toEqual({ islemSayisi: 6 });
+  });
+
+  it('Google ret gövdesinden BÜTÜN hatalar alan yoluyla okunuyor', () => {
+    const raw = {
+      error: {
+        details: [
+          {
+            errors: [
+              {
+                errorCode: { stringLengthError: 'TOO_LONG' },
+                message: 'Too long.',
+                location: {
+                  fieldPathElements: [
+                    { fieldName: 'mutate_operations', index: 5 },
+                    { fieldName: 'ad_group_ad_operation' },
+                    { fieldName: 'create' },
+                    { fieldName: 'headlines', index: 0 },
+                  ],
+                },
+              },
+              { errorCode: { campaignError: 'INVALID_DATE' }, message: 'Bad date.' },
+            ],
+          },
+        ],
+      },
+    };
+    expect(googleAlanHatalari(raw)).toEqual([
+      {
+        kod: 'stringLengthError=TOO_LONG',
+        mesaj: 'Too long.',
+        alan: 'mutate_operations[5].ad_group_ad_operation.create.headlines[0]',
+        islemSirasi: 5,
+      },
+      { kod: 'campaignError=INVALID_DATE', mesaj: 'Bad date.', alan: null, islemSirasi: null },
+    ]);
   });
 });

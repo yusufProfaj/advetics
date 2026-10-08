@@ -20,6 +20,8 @@ import {
   youtubeKanalAraSchema,
   type YoutubeKanalAra,
   type YoutubeKanalOnerileri,
+  type YoutubeProvaSonucu,
+  autoBoostQueueOverrideSchema,
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody, zodQuery } from '../../common/pipes/zod-validation.pipe';
@@ -81,6 +83,9 @@ const kanalAtaSchema = z.object({
   /** NULL = workspace'ten çıkar, havuza geri koy. */
   clientId: z.string().uuid().nullable(),
 });
+
+/** Prova gövdesi: yayınla aynı "sadece bu kart için" özelleştirme, isteğe bağlı. */
+const youtubeProvaSchema = z.object({ override: autoBoostQueueOverrideSchema.optional() }).strict().default({});
 
 const kanalEkleSchema = z.object({
   /**
@@ -227,6 +232,27 @@ export class AutoBoostController {
      * gönderilerin sessizce etkilenmesi, istediğinin tam tersi olurdu.
      */
     return this.launch.decide(ctx, id, body.approve, body.override);
+  }
+
+  /**
+   * ═══ YOUTUBE YAYIN PROVASI — PARA HARCAMAZ ═══
+   *
+   * Kartın yayınlanacağı hâlini Google'a "yalnızca doğrula" bayrağıyla
+   * gönderiyor (`validateOnly`). Hiçbir şey kurulmuyor, kartın durumu
+   * değişmiyor. Gövde yayınla AYNI özelleştirmeyi taşıyabiliyor: kullanıcı
+   * kartta düzenlediği bütçe/metinle prova yapmalı, ön ayarla değil.
+   *
+   * `boost.approve`: provayı yapan kişi yayını da yapacak kişi ve prova
+   * Google kotası harcıyor.
+   */
+  @Post('queue/:id/prova')
+  @RequirePermissions('boost.approve')
+  prova(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(youtubeProvaSchema)) body: z.infer<typeof youtubeProvaSchema>,
+  ): Promise<YoutubeProvaSonucu> {
+    return this.launch.provaGoogle(ctx, id, body.override);
   }
 
   /**

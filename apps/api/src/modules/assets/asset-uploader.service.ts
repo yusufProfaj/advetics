@@ -114,6 +114,58 @@ export class AssetUploaderService {
   }
 
   /**
+   * ═══ GOOGLE LOGOSU: KAYITLI MI, YOKSA İSTEKTE Mİ OLUŞTURULACAK ═══
+   *
+   * YouTube boost'u tek atomik istekte kuruluyor ve logo, hesapta yoksa AYNI
+   * istekte oluşturuluyor (`demandGenAtomikIstek`). Önceden ayrı yükleniyordu
+   * (`ensureExternalRef`): kötü bir logo (oran, boyut) yalnızca reklam
+   * adımında patlıyordu ve önbelleğe girmiş olduğu için sonraki her yayını
+   * düşürüyordu. Şimdi prova logoyu da sınıyor ve yayın başarılı olunca
+   * kaynak adı `refKaydet` ile önbelleğe yazılıyor.
+   *
+   * SALT OKUMA: hiçbir şey yüklemiyor.
+   */
+  async googleLogoGirdisi(
+    ctx: TenantContext,
+    params: { assetId: string; adAccountId: string; label: string },
+  ): Promise<{ resource: string } | { yeniGorsel: { name: string; bytes: Buffer } }> {
+    const [kayitli] = await this.prisma.withTenant(ctx, (tx) =>
+      tx.$queryRaw<Array<{ external_ref: string }>>(Prisma.sql`
+        SELECT external_ref FROM asset_platform_refs
+        WHERE asset_id = ${params.assetId}::uuid
+          AND ad_account_id = ${params.adAccountId}::uuid
+      `),
+    );
+    if (kayitli) return { resource: kayitli.external_ref };
+    const [asset] = await this.prisma.withTenant(ctx, (tx) =>
+      tx.$queryRaw<Array<{ storage_key: string }>>(Prisma.sql`
+        SELECT storage_key FROM assets
+        WHERE id = ${params.assetId}::uuid AND org_id = ${ctx.orgId}::uuid
+      `),
+    );
+    if (!asset) throw new Error(`Varlık bulunamadı: ${params.assetId}`);
+    return { yeniGorsel: { name: params.label, bytes: await this.storage.read(asset.storage_key) } };
+  }
+
+  /** Platformda oluşmuş varlığın kaynak adını önbelleğe yazar (yarışta ilk yazan kalır). */
+  async refKaydet(
+    ctx: TenantContext,
+    params: { assetId: string; adAccountId: string; platform: Platform; ref: string },
+  ): Promise<void> {
+    await this.prisma.withTenant(ctx, (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        INSERT INTO asset_platform_refs (
+          id, org_id, asset_id, platform, ad_account_id, external_ref
+        ) VALUES (
+          gen_random_uuid(), ${ctx.orgId}::uuid, ${params.assetId}::uuid,
+          ${params.platform}::"Platform", ${params.adAccountId}::uuid, ${params.ref}
+        )
+        ON CONFLICT (asset_id, ad_account_id) DO NOTHING
+      `),
+    );
+  }
+
+  /**
    * Bir taslağın görselini kütüphaneye bağlar.
    *
    * TASLAĞA BIRAKILAN GÖRSEL DE ARŞİVE GİRİYOR. Aksi hâlde arşiv yalnızca

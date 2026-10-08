@@ -4,7 +4,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { YarimKurulumHatasi, googleYalinKimlik } from '../connections/providers/google-demandgen';
+import { googleYalinKimlik } from '../connections/providers/google-demandgen';
+import { PlatformApiError } from '../connections/provider.types';
 import { AutoBoostLaunchService } from './autoboost-launch.service';
 import { AutoBoostReadService } from './autoboost-read.service';
 
@@ -51,10 +52,17 @@ const KURULAN = {
   campaignId: 'customers/1234567890/campaigns/456',
   adGroupId: 'customers/1234567890/adGroups/111',
   adId: 'customers/1234567890/adGroupAds/111~789',
+  logoAssetResource: null as string | null,
 };
 
 let createVideoBoost: ReturnType<typeof vi.fn>;
+let videoBoostProva: ReturnType<typeof vi.fn>;
 let quotaAcquire: ReturnType<typeof vi.fn>;
+let kanalaBagla: ReturnType<typeof vi.fn>;
+let refKaydet: ReturnType<typeof vi.fn>;
+/** Logo hesapta kayıtlı mı (kaynak adı) yoksa yayında yeni mi oluşturulacak. */
+let logoGirdisi: { resource: string } | { yeniGorsel: { name: string; bytes: Buffer } };
+let hesapKarari: { durum: string; hesapId: string };
 /** Bu dizgeyi içeren UPDATE düşsün — "Google başarılı, kayıt yazılamadı" hâli. */
 let dusecekYazma: string | null;
 
@@ -77,17 +85,20 @@ beforeAll(async () => {
     withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(db),
   } as unknown as PrismaService;
   createVideoBoost = vi.fn();
+  videoBoostProva = vi.fn();
   quotaAcquire = vi.fn();
+  kanalaBagla = vi.fn();
+  refKaydet = vi.fn();
   svc = new AutoBoostLaunchService(
     prisma,
     null as never,
     null as never,
-    { get: () => ({ createVideoBoost }) } as never,
+    { get: () => ({ createVideoBoost, videoBoostProva }) } as never,
     { getAccessToken: async () => 'tok' } as never,
-    { ensureExternalRef: async () => 'customers/1234567890/assets/9' } as never,
+    { googleLogoGirdisi: async () => logoGirdisi, refKaydet } as never,
     {
-      reklamHesabi: async () => ({ durum: 'kanal', hesapId: IDS.adAccount }),
-      kanalaBagla: async () => undefined,
+      reklamHesabi: async () => hesapKarari,
+      kanalaBagla,
       yayinDegerleri: async () => ({ businessName: 'Ege Birlik', logoAssetId: LOGO, finalUrl: 'https://ege.com' }),
     } as never,
     null as never,
@@ -103,7 +114,12 @@ afterAll(async () => {
 beforeEach(async () => {
   dusecekYazma = null;
   createVideoBoost.mockReset().mockResolvedValue(KURULAN);
+  videoBoostProva.mockReset().mockResolvedValue({ islemSayisi: 6 });
   quotaAcquire.mockReset().mockResolvedValue({ allowed: true });
+  kanalaBagla.mockReset();
+  refKaydet.mockReset().mockResolvedValue(undefined);
+  logoGirdisi = { resource: 'customers/1234567890/assets/9' };
+  hesapKarari = { durum: 'kanal', hesapId: IDS.adAccount };
   await h.reset();
   await seedTenant(h, { platform: 'google', externalId: '1234567890' });
   await h.q(
@@ -275,19 +291,25 @@ describe('KRİTİK P2: Google başarılı, kayıt düştü → kart kontrol', ()
   });
 });
 
-describe('P4: geri alma eksik → kontrol; tam geri alındıysa failed', () => {
-  it('KRİTİK: yarım kurulum kartı kontrol yapıyor', async () => {
-    createVideoBoost.mockRejectedValue(
-      new YarimKurulumHatasi(new Error('RESOURCE_EXHAUSTED'), ['kampanya customers/1/campaigns/9']),
-    );
+describe('P4: cevap belirsizse kontrol; kesin retse failed', () => {
+  it('KRİTİK: zaman aşımı / 5xx / eksik yanıt (transient) kartı kontrol yapıyor — kampanya kurulmuş olabilir', async () => {
+    createVideoBoost.mockRejectedValue(new PlatformApiError('google', 'transient', 'İstek 30000ms içinde tamamlanmadı'));
     const r = await yayinla();
     expect(r.status).toBe('kontrol');
     const d = await durum();
     expect(d.status).toBe('kontrol');
-    expect(d.error).toContain('customers/1/campaigns/9');
+    expect(d.error).toMatch(/kurulmuş olabilir.*30000ms/);
   });
 
-  it('düz hata kartı failed yapıyor ve tekrar yayına açık', async () => {
+  it('kesin ret (permanent) kartı failed yapıyor ve tekrar yayına açık', async () => {
+    createVideoBoost.mockRejectedValue(new PlatformApiError('google', 'permanent', 'INVALID_ARGUMENT'));
+    const r = await yayinla();
+    expect(r.status).toBe('failed');
+    expect((await durum()).status).toBe('failed');
+    await expect(svc.tekrarBoostla(CTX, KART)).resolves.toMatchObject({ status: 'pending' });
+  });
+
+  it('platform dışı hata da failed', async () => {
     createVideoBoost.mockRejectedValue(new Error('INVALID_ARGUMENT'));
     const r = await yayinla();
     expect(r.status).toBe('failed');
@@ -396,7 +418,7 @@ describe('kaynak kilitleri', () => {
     /\/\*[\s\S]*?\*\//g,
     '',
   );
-  const google = kaynak.slice(kaynak.indexOf('private async launchGoogle('), kaynak.indexOf('async tekrarBoostla('));
+  const google = kaynak.slice(kaynak.indexOf('private async launchGoogle('), kaynak.indexOf('async provaGoogle('));
 
   it('dilim gerçekten yakalandı', () => {
     expect(google.length).toBeGreaterThan(2000);
@@ -407,13 +429,156 @@ describe('kaynak kilitleri', () => {
     expect(kilit).toBeGreaterThan(0);
     expect(google.indexOf('googleYazmaAcikMi(')).toBeGreaterThan(0);
     expect(google.indexOf('googleYazmaAcikMi(')).toBeLessThan(kilit);
-    expect(google.indexOf('this.quota.acquire(')).toBeGreaterThan(0);
-    expect(google.indexOf('this.quota.acquire(')).toBeLessThan(kilit);
+    expect(google.indexOf('this.kotaKapisi(')).toBeGreaterThan(0);
+    expect(google.indexOf('this.kotaKapisi(')).toBeLessThan(kilit);
   });
 
   it('NEST: kota bekçisi global kuyruk modülünden geliyor', () => {
     const kuyruk = readFileSync(join(__dirname, '../../queue/queue.module.ts'), 'utf8');
     expect(kuyruk).toMatch(/@Global\(\)/);
     expect(kuyruk).toMatch(/exports:\s*\[[^\]]*QuotaGuardService/);
+  });
+});
+
+describe('logo: yayında oluşturulursa önbelleğe yazılıyor', () => {
+  it('yeni logo → yayın sonrası kaynak adı önbelleğe', async () => {
+    logoGirdisi = { yeniGorsel: { name: 'Ege logo', bytes: Buffer.from('png') } };
+    createVideoBoost.mockResolvedValue({ ...KURULAN, logoAssetResource: 'customers/1234567890/assets/77' });
+    await yayinla();
+    expect(createVideoBoost.mock.calls[0]?.[1]).toMatchObject({ logo: logoGirdisi });
+    expect(refKaydet).toHaveBeenCalledWith(expect.anything(), {
+      assetId: LOGO,
+      adAccountId: IDS.adAccount,
+      platform: 'google',
+      ref: 'customers/1234567890/assets/77',
+    });
+  });
+
+  it('kayıtlı logoda önbelleğe yazma yok', async () => {
+    await yayinla();
+    expect(refKaydet).not.toHaveBeenCalled();
+  });
+});
+
+describe('K3: duraklatılmış kur', () => {
+  it('istenirse kampanya PAUSED kuruluyor ve mesaj bunu söylüyor', async () => {
+    const r = await svc.decide(CTX, KART, true, { texts: METIN, duraklatilmis: true });
+    expect(createVideoBoost.mock.calls[0]?.[2]).toEqual({ acilis: 'PAUSED' });
+    expect(r.message).toMatch(/DURAKLATILMIŞ/);
+    expect((await durum()).applied_settings).toMatchObject({ duraklatilmis: true });
+  });
+
+  it('varsayılan açık', async () => {
+    await yayinla();
+    expect(createVideoBoost.mock.calls[0]?.[2]).toEqual({ acilis: 'ENABLED' });
+  });
+});
+
+describe('KRİTİK: PROVA — Google yalnızca doğruluyor, hiçbir şey değişmiyor', () => {
+  it('KRİTİK: kabul → özet, kart pending kalıyor, yayın çağrısı YOK', async () => {
+    const r = await svc.provaGoogle(CTX, KART, { texts: METIN });
+    expect(r.ok).toBe(true);
+    expect(r.hatalar).toEqual([]);
+    expect(r.ozet).toMatchObject({
+      gunlukButceMicros: '100000000',
+      sureGun: 3,
+      konumlar: ['Türkiye'],
+      yaslar: [],
+      isletmeAdi: 'Ege Birlik',
+      adres: 'https://ege.com',
+      baslik: 'Yeni proje',
+      logo: 'kayitli',
+      acilis: 'ENABLED',
+      islemSayisi: 6,
+    });
+    expect((await durum()).status).toBe('pending');
+    expect((await durum()).applied_settings).toBeNull();
+    expect(createVideoBoost).not.toHaveBeenCalled();
+  });
+
+  it('KRİTİK: prova ile yayın Google’a AYNI isteği veriyor', async () => {
+    await svc.provaGoogle(CTX, KART, { texts: METIN });
+    await yayinla();
+    const [provaIstek, provaSecenek] = videoBoostProva.mock.calls[0]!.slice(1);
+    const [yayinIstek, yayinSecenek] = createVideoBoost.mock.calls[0]!.slice(1);
+    const adsiz = (x: { name: string }) => ({ ...x, name: x.name.replace(/\d{1,2}[./]\d{1,2}[./]?\d{0,4}/g, '') });
+    expect(adsiz(provaIstek)).toEqual(adsiz(yayinIstek));
+    expect(provaSecenek).toEqual(yayinSecenek);
+  });
+
+  it('kartta düzenlenen bütçe ve duraklatma provaya gidiyor', async () => {
+    const r = await svc.provaGoogle(CTX, KART, {
+      budget: { mode: 'daily', amount: '250', durationDays: 5 },
+      texts: METIN,
+      duraklatilmis: true,
+    });
+    expect(r.ozet.gunlukButceMicros).toBe('250000000');
+    expect(r.ozet.sureGun).toBe(5);
+    expect(videoBoostProva.mock.calls[0]?.[2]).toEqual({ acilis: 'PAUSED' });
+  });
+
+  it('KRİTİK: Google reddederse alan alan, Türkçe yerle', async () => {
+    videoBoostProva.mockRejectedValue(
+      new PlatformApiError('google', 'permanent', 'Request contains an invalid argument.', {
+        raw: {
+          error: {
+            details: [
+              {
+                errors: [
+                  {
+                    errorCode: { stringLengthError: 'TOO_LONG' },
+                    message: 'Too long.',
+                    location: {
+                      fieldPathElements: [
+                        { fieldName: 'mutate_operations', index: 5 },
+                        { fieldName: 'ad_group_ad_operation' },
+                        { fieldName: 'create' },
+                        { fieldName: 'ad' },
+                        { fieldName: 'demand_gen_video_responsive_ad' },
+                        { fieldName: 'headlines', index: 0 },
+                        { fieldName: 'text' },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const r = await svc.provaGoogle(CTX, KART, { texts: METIN });
+    expect(r.ok).toBe(false);
+    expect(r.hatalar).toEqual([{ kod: 'stringLengthError=TOO_LONG', mesaj: 'Too long.', nerede: 'Reklam › başlık' }]);
+    expect((await durum()).status).toBe('pending');
+  });
+
+  it('alan ayrıntısı yoksa genel mesaj — boş hata listesi yok', async () => {
+    videoBoostProva.mockRejectedValue(new PlatformApiError('google', 'permission_denied', 'USER_PERMISSION_DENIED'));
+    const r = await svc.provaGoogle(CTX, KART, { texts: METIN });
+    expect(r.hatalar).toEqual([{ kod: 'permission_denied', mesaj: 'USER_PERMISSION_DENIED', nerede: null }]);
+  });
+
+  it('Google yazma kesicisi kapalıyken de prova yapılabiliyor (teşhis için)', async () => {
+    await h.q(
+      `INSERT INTO ajans_ayari (org_id, google_yazma_durduruldu, google_durdurma_at, google_durdurma_sebebi, updated_at)
+       VALUES ($1, true, now(), 'inceleme', now())`,
+      [IDS.org],
+    );
+    await expect(svc.provaGoogle(CTX, KART, { texts: METIN })).resolves.toMatchObject({ ok: true });
+  });
+
+  it('prova kanala hesap YAZMIYOR; yayın yazıyor (tek hesap hâli)', async () => {
+    hesapKarari = { durum: 'tek-hesap', hesapId: IDS.adAccount };
+    await svc.provaGoogle(CTX, KART, { texts: METIN });
+    expect(kanalaBagla).not.toHaveBeenCalled();
+    await yayinla();
+    expect(kanalaBagla).toHaveBeenCalledTimes(1);
+  });
+
+  it('kota doluysa prova da Google’a gitmiyor', async () => {
+    quotaAcquire.mockResolvedValue({ allowed: false, reason: 'platform_kotasi_dolu', retryAfterMs: 60_000 });
+    await expect(svc.provaGoogle(CTX, KART, { texts: METIN })).rejects.toThrow(/kotası şu an dolu/);
+    expect(videoBoostProva).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 # Akıllı Boost · YouTube'u canlıya oturtma planı
 
-**Tarih:** 2026-10-08 · **Durum:** Aşama 0 bitti (aşağıda); sıradaki Aşama 1
+**Tarih:** 2026-10-08 · **Durum:** Aşama 0 ve 1 bitti (aşağıda); sıradaki Aşama 2 (kartta ön kontrol), sonra canlı prova
 
 **Kullanıcı kararı:** yeni bir YouTube reklam türü eklenmeyecek. Var olan yol
 (YouTube videosu → kart → Google Ads Demand Gen) gerçek bir videoyla uçtan uca
@@ -84,7 +84,22 @@ işaretleniyor (gerekçe `takilanlariIsaretle`).
 5. **Kota bekçisi (P4).** Yayından önce hesabın kota durumu okunacak. Kota
    doluysa kart kilitlenmeden "Google kotası dolu, X'ten sonra dene" yazılacak.
 
-### Aşama 1 · Atomik istek ve kuru prova (kod, para harcamaz)
+### Aşama 1 · Atomik istek ve kuru prova (kod, para harcamaz) ✅ 2026-10-08
+
+Yapılan: kurulum tek `googleAds:mutate` isteği (`demandGenAtomikIstek`,
+geçici kimlikler -1…-6, `partialFailure: false`); elle geri alma ve
+`YarimKurulumHatasi` kalktı. Kampanya doğrudan AÇIK kuruluyor (yarım hâl
+yok), istenirse DURAKLATILMIŞ (K3 için kartta "Duraklatılmış kur").
+Logo hesapta yoksa AYNI istekte oluşuyor ve yayın sonrası önbelleğe
+yazılıyor; prova logoyu da sınıyor. Belirsiz cevap (zaman aşımı, 5xx,
+eksik yanıt) kartı `kontrol` yapıyor. Prova: `POST
+/autoboost/queue/:id/prova` ve kartta "Prova et"; yayınla AYNI hazırlık
+(`googleHazirla`) ve AYNI gövde, yalnızca `validateOnly`. Google reddi
+alan alan Türkçe ("Reklam › başlık"). Sunucu betiği (`google-check
+--demandgen-prova`) YAZILMADI: kart düğmesi aynı işi görüyor.
+**Canlıda ölçülmedi:** `audienceOperation`ın atomik istekte kabulü,
+`validateOnly`ın varlık oluşturmayı kapsaması, v25 alan adları. İlk iş:
+Ege Birlik Yapı kartında "Prova et".
 
 6. **Tek atomik istek (P3, P4, R4).** Sekiz ayrı çağrı tek bir
    `googleAds:mutate` isteğine iniyor. Ya hepsi kurulur ya hiçbiri:

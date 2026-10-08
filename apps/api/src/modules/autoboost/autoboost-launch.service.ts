@@ -11,7 +11,9 @@ import {
   type AutoBoostQueueOverride,
   type YoutubeKartMetinleri,
   type MetaPresetSettings,
+  type GooglePresetSettings,
   type TenantContext,
+  type YoutubeProvaSonucu,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { butceKipi, butceyiCoz, hedeflemeyiCoz, kartPlatformu, yabanciOzelKitle } from './kart-ozellestirme';
@@ -20,9 +22,11 @@ import { youtubeHesabiEngeli } from './youtube-hesabi';
 import type { VideoMetinleri } from './youtube-otomatik';
 import {
   VARSAYILAN_KONUM,
-  YarimKurulumHatasi,
+  googleAlanHatalari,
   googleYalinKimlik,
 } from '../connections/providers/google-demandgen';
+import { googleAlanEtiketi } from './youtube-prova';
+import { PlatformApiError, type VideoBoostIstegi } from '../connections/provider.types';
 import { googleYazmaAcikMi } from '../reklam/yazma-kapisi';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { youtubeUygulananAyar, YOUTUBE_CANLI_BITER_SQL } from './youtube-yayin-durumu';
@@ -146,24 +150,7 @@ export class AutoBoostLaunchService {
      * tutmaması demekti: Google dalı bütçeyi ön ayardan okumaya devam
      * eder ve kullanıcının girdiği tutar SESSİZCE yok sayılırdı.
      */
-    const butce = butceyiCoz(
-      {
-        budgetMode: butceKipi(kayit.budget_mode),
-        dailyBudgetMicros: kayit.daily_budget_micros,
-        totalBudgetMicros: kayit.total_budget_micros,
-        durationDays: kayit.duration_days,
-      },
-      kartPlatformu(kayit.platform),
-      override,
-    );
-    const ozellestirilmis: KuyrukSatiri = {
-      ...kayit,
-      budget_mode: butce.budgetMode,
-      daily_budget_micros: butce.dailyBudgetMicros,
-      total_budget_micros: butce.totalBudgetMicros,
-      duration_days: butce.durationDays,
-      settings: kayit.settings,
-    };
+    const ozellestirilmis = this.ozellestir(kayit, override);
 
     /*
      * METİN ÖZELLEŞTİRMESİ YALNIZCA YOUTUBE'DA. Instagram boost'u gönderinin
@@ -173,9 +160,13 @@ export class AutoBoostLaunchService {
     if (override?.texts && kayit.platform !== 'google') {
       throw new BadRequestException('Reklam metni düzenlemesi yalnızca YouTube kartlarında geçerli.');
     }
+    // Aynı gerekçe: kabul edip yok saymak, çalışmayan bir seçenek göstermek olurdu.
+    if (override?.duraklatilmis !== undefined && kayit.platform !== 'google') {
+      throw new BadRequestException('"Duraklatılmış kur" yalnızca YouTube kartlarında geçerli.');
+    }
 
     if (kayit.platform === 'google') {
-      return this.launchGoogle(ctx, scoped, ozellestirilmis, override?.texts);
+      return this.launchGoogle(ctx, scoped, ozellestirilmis, override?.texts, override?.duraklatilmis === true);
     }
 
     return this.launchMeta(ctx, scoped, ozellestirilmis, override);
@@ -337,6 +328,31 @@ export class AutoBoostLaunchService {
    * ayarı seçerdi (kanal ön ayarı mı workspace ön ayarı mı) ve kullanıcı
    * düzenlerken gördüğü marka adıyla yayınlanan marka adı ayrışırdı.
    */
+  /**
+   * SADECE BU KART İÇİN bütçe/süre — yayın ve prova AYNI çözümden geçiyor.
+   * Ayrı yazılsaydı prova, kullanıcının girdiği tutarı değil ön ayarı sınardı.
+   */
+  private ozellestir(kayit: KuyrukSatiri, override?: AutoBoostQueueOverride): KuyrukSatiri {
+    const butce = butceyiCoz(
+      {
+        budgetMode: butceKipi(kayit.budget_mode),
+        dailyBudgetMicros: kayit.daily_budget_micros,
+        totalBudgetMicros: kayit.total_budget_micros,
+        durationDays: kayit.duration_days,
+      },
+      kartPlatformu(kayit.platform),
+      override,
+    );
+    return {
+      ...kayit,
+      budget_mode: butce.budgetMode,
+      daily_budget_micros: butce.dailyBudgetMicros,
+      total_budget_micros: butce.totalBudgetMicros,
+      duration_days: butce.durationDays,
+      settings: kayit.settings,
+    };
+  }
+
   private async kartiOku(scoped: TenantContext, queueItemId: string): Promise<KuyrukSatiri | null> {
     return this.prisma.withTenant(scoped, async (tx) => {
       const [row] = await tx.$queryRaw<KuyrukSatiri[]>(Prisma.sql`
@@ -453,154 +469,40 @@ export class AutoBoostLaunchService {
     kayit: KuyrukSatiri,
     /** Kart düzenlemesinde yazılmış metin — varsa üretilenin yerine. */
     metinOzel?: { baslik: string; uzunBaslik: string; aciklama: string },
+    /** Kampanyayı kur ama açma (plan K3, ilk canlı deneme). */
+    duraklatilmis = false,
   ): Promise<{ status: string; message: string }> {
-    if (!kayit.preset_id || !kayit.preset_enabled) {
-      // YAPILACAK İŞ DE YAZILI. Bu cümle bir süre yalnızca durumu bildiriyordu
-      // ("yok ya da kapalı") ve kullanıcıyı ayarın nerede olduğunu aramaya
-      // itiyordu — kardeş Meta cümleleri yönlendirmeyi zaten taşıyordu.
-      throw new BadRequestException(
-        `Bu workspace için YouTube otomatik boost ön ayarı yok ya da kapalı. ${ON_AYAR_YERI} tanımla ya da aç.`,
-      );
-    }
-    const ayar = autoBoostPresetSettingsSchema.safeParse(kayit.settings);
-    if (!ayar.success || ayar.data.platform !== 'google') {
-      throw new BadRequestException(ON_AYAR_BOZUK);
-    }
-    const g = ayar.data;
-
-    if (kayit.budget_mode !== 'daily' || !kayit.daily_budget_micros) {
-      /*
-       * GOOGLE'DA TOPLAM BÜTÇE YOK. Kısıt veritabanında da var ama burada
-       * tekrar kontrol ediliyor: kayıt kısıt eklenmeden önce yazılmış
-       * olabilir ve toplam bütçeyi günlüğe bölmek panelde yazan tutarla
-       * hesaptan çıkanı ayrıştırırdı.
-       */
-      throw new BadRequestException(
-        'YouTube kampanyası günlük bütçe gerektiriyor; ön ayarda toplam bütçe seçili.',
-      );
-    }
-
-    /*
-     * ═══ HANGİ GOOGLE ADS HESABI — kart uyarısıyla AYNI karar ═══
-     *
-     * Kanala bağlı hesap Meta'ysa ya da hiç yoksa ve workspace'te TEK Google
-     * Ads hesabı varsa o kullanılıyor ve kanala YAZILIYOR (bir sonraki
-     * yayında soru yok). Hiç yoksa ya da birden çoksa tahmin yok; cümle
-     * düzeltmenin yerini söylüyor. Önceki hâl bir Meta bağında "doğru hesabı
-     * seç" diyordu ve o seçim hiçbir ekranda yoktu.
-     */
-    const karar = await this.youtubeOtomatik.reklamHesabi(
-      scoped,
-      kayit.client_id,
-      kayit.social_profile_id,
-    );
-    const engel = youtubeHesabiEngeli(karar);
-    if (engel || (karar.durum !== 'kanal' && karar.durum !== 'tek-hesap')) {
-      throw new BadRequestException(engel ?? 'Google Ads hesabı çözümlenemedi.');
-    }
-    const reklamHesabiId = karar.hesapId;
-    if (karar.durum === 'tek-hesap') {
-      await this.youtubeOtomatik.kanalaBagla(scoped, kayit.social_profile_id, reklamHesabiId);
-    }
-
-    const [hesap] = await this.prisma.withTenant(scoped, (tx) =>
-      tx.$queryRaw<
-        Array<{
-          platform: string;
-          external_id: string;
-          connection_id: string;
-          manager_external_id: string | null;
-        }>
-      >(
-        Prisma.sql`
-          SELECT platform::text AS platform, external_id, connection_id::text AS connection_id,
-                 manager_external_id
-          FROM ad_accounts WHERE id = ${reklamHesabiId}::uuid
-        `,
-      ),
-    );
-    if (!hesap) throw new BadRequestException('Reklam hesabı bulunamadı.');
+    const h = await this.googleHazirla(scoped, kayit, metinOzel, { kanalaYaz: true });
 
     /*
      * ═══ GOOGLE YAZMA KESİCİSİ — KİLİTTEN ÖNCE ═══
      *
      * Ajans "Google'a yazmayı durdur" dediyse kart `pending` kalıyor ve
      * sebep yazıyor. Kilitten sonra reddetmek kartı `failed` yapardı.
-     * Durum okunamıyorsa da KAPALI (`googleYazmaAcikMi`).
+     * Durum okunamıyorsa da KAPALI (`googleYazmaAcikMi`). Prova bu
+     * kontrolden GEÇMİYOR: hiçbir şey yazmıyor ve kesici kapalıyken
+     * teşhis yapabilmek tam olarak istenen şey.
      */
     const kapi = await googleYazmaAcikMi((fn) => this.prisma.withTenant(scoped, fn), kayit.client_id);
     if (!kapi.acik) throw new BadRequestException(kapi.sebep);
 
-    /*
-     * ═══ KOTA — ZİNCİRİN ORTASINDA BİTMESİN ═══
-     *
-     * Kurulum sekiz ayrı çağrı ve Google kotası her gece doluyor
-     * (2026-09-29). Kota zincirin ortasında biterse geri alma da aynı
-     * kotayı kullandığı için düşüyor ve hesapta yarım kampanya kalıyordu.
-     * Bekçi reddederse kart kilitlenmeden, ne zaman deneneceği yazılarak
-     * dönülüyor. Redis yoksa bekçi kapalı (senkronizasyon da kapalı demek);
-     * yayını engellemiyoruz ama log'a yazıyoruz.
-     */
-    if (this.quota.isEnabled) {
-      const gate = await this.quota.acquire({
-        platform: 'google',
-        adAccountId: reklamHesabiId,
-        layer: 'interactive',
-      });
-      if (!gate.allowed) {
-        const dakika = Math.max(1, Math.ceil((gate.retryAfterMs ?? 60_000) / 60_000));
-        throw new BadRequestException(
-          `Google Ads kotası şu an dolu (${gate.reason ?? 'kota'}). Yaklaşık ${dakika} dakika sonra tekrar dene.`,
-        );
-      }
-    } else {
-      this.logger.warn('Kota bekçisi kapalı (REDIS_URL yok); YouTube yayını kota kontrolsüz gidiyor.');
-    }
+    await this.kotaKapisi(h.reklamHesabiId);
+
+    const uygulanan = {
+      ...youtubeUygulananAyar({
+        dailyBudgetMicros: h.istek.dailyBudgetMicros,
+        durationDays: h.istek.durationDays,
+        konumlar: h.g.locations,
+        yaslar: h.g.ageRanges,
+      }),
+      duraklatilmis,
+    };
 
     /*
-     * ═══ MARKA, LOGO VE ADRES OTOMATİK — KİLİTTEN ÖNCE ═══
-     *
-     * Eksik bir değer (web sitesi yok, logo yok) burada Türkçe bir cümleyle
-     * reddediliyor ve kart `pending` kalıyor. Kilitten sonra reddetseydik
-     * kart `failed` olurdu ve kullanıcı eksiği tamamladıktan sonra aynı
-     * videoyu yayınlayamazdı.
+     * UYGULANAN AYAR KİLİTLE BİRLİKTE yazılıyor (G5): kart kampanyanın
+     * NEYLE kurulduğunu gösteriyor ve tekrar kilidi süreyi buradan okuyor
+     * (`YOUTUBE_CANLI_BITER_SQL`). Süreç yarıda ölse de kayıt kalıyor.
      */
-    const degerler = await this.youtubeOtomatik.yayinDegerleri(
-      scoped,
-      kayit.client_id,
-      kayit.social_profile_id,
-      { businessName: g.businessName, logoAssetId: g.logoAssetId, finalUrl: g.finalUrl },
-    );
-
-    /*
-     * METİNLER: KARTTA YAZILDIYSA O, YOKSA VİDEODAN. Önceden ön ayardaki sabit
-     * metin her videoda aynı gidiyordu. Kullanıcının kartta düzelttiği metin
-     * üretilenin yerine geçiyor ve YouTube'a hiç sorulmuyor: düzenlenmiş bir
-     * metin için açıklama çekmek boşa bir çağrı.
-     */
-    const metin: VideoMetinleri = metinOzel
-      ? {
-          headlines: [metinOzel.baslik],
-          longHeadlines: [metinOzel.uzunBaslik],
-          descriptions: [metinOzel.aciklama],
-        }
-      : (await this.videodanMetin(kayit, degerler.businessName)).metin;
-
-    /*
-     * UYGULANAN AYAR KİLİTLE BİRLİKTE yazılıyor (G5). İki işi var: kart,
-     * ön ayar sonradan değişse de kampanyanın NEYLE kurulduğunu gösteriyor;
-     * ve tekrar kilidi kampanyanın bitişini bu süreden hesaplıyor
-     * (`YOUTUBE_CANLI_BITER_SQL`). Kilitte yazmak, süreç yarıda ölse bile
-     * kaydın kalması demek.
-     */
-    const uygulanan = youtubeUygulananAyar({
-      dailyBudgetMicros: BigInt(kayit.daily_budget_micros),
-      durationDays: kayit.duration_days ?? 7,
-      konumlar: g.locations,
-      yaslar: g.ageRanges,
-    });
-
-    // --- Kartı KİLİTLE (Meta yoluyla aynı yarış koruması)
     const kilit = await this.prisma.withTenant(scoped, (tx) =>
       tx.$executeRaw(Prisma.sql`
         UPDATE auto_boost_queue_items
@@ -619,60 +521,15 @@ export class AutoBoostLaunchService {
      * Google'ın döndürdüğü kaynaklar — catch dalı bunlara bakarak "kampanya
      * kuruldu mu" sorusunu cevaplıyor. Kurulduysa kart ASLA `failed` olmaz.
      */
-    let kurulan: { campaignId: string; adGroupId: string; adId: string } | null = null;
+    let kurulan: { campaignId: string; adGroupId: string; adId: string; logoAssetResource: string | null } | null = null;
     try {
-      const provider = this.providers.get('google');
-      const accessToken = await this.vault.getAccessToken(hesap.connection_id, provider);
-      /*
-       * YÖNETİCİ (MCC) KİMLİĞİ `login-customer-id` OLARAK GİDİYOR.
-       *
-       * Canlıda ilk YouTube yayını şu cevapla düştü: "User doesn't have
-       * permission to access customer. Note: If you're accessing a client
-       * customer, the manager's customer id must be set in the
-       * 'login-customer-id' header". Ajans hesaplara yönetici hesabı üzerinden
-       * erişiyor; senkronizasyon yollarının HEPSİ bu başlığı
-       * `manager_external_id`den veriyordu, bu yol vermiyordu. Aynı bağlam
-       * logo yüklemesinde de kullanılıyor.
-       */
-      const fetchCtx = {
-        accessToken,
-        accountExternalId: hesap.external_id,
-        loginCustomerId: hesap.manager_external_id ?? undefined,
-      };
-
-      /*
-       * LOGO ÖNBELLEKTEN. İlk yayında yükleniyor, sonrakiler kaynak adını
-       * `asset_platform_refs`ten okuyor — aynı görseli her videoda yeniden
-       * yüklemek kota harcar ve hesapta mükerrer varlık üretir.
-       */
-      const logoResource = await this.uploader.ensureExternalRef(scoped, {
-        assetId: degerler.logoAssetId,
-        adAccountId: reklamHesabiId,
+      const { provider, fetchCtx } = await this.googleBaglami(h.hesap);
+      const logo = await this.uploader.googleLogoGirdisi(scoped, {
+        assetId: h.logoAssetId,
+        adAccountId: h.reklamHesabiId,
         label: `${kayit.client_name} logo`,
-        fetchCtx,
-        platform: 'google',
       });
-
-      kurulan = await provider.createVideoBoost(fetchCtx, {
-        name: boostNameBase({
-          clientName: kayit.client_name,
-          postMessage: kayit.title,
-          mediaLabel: 'Video',
-          date: new Date(),
-        }),
-        dailyBudgetMicros: BigInt(kayit.daily_budget_micros),
-        durationDays: kayit.duration_days ?? 7,
-        videoId: kayit.external_id,
-        videoTitle: kayit.title ?? kayit.external_id,
-        logoAssetResource: logoResource,
-        businessName: degerler.businessName,
-        finalUrl: degerler.finalUrl,
-        headlines: metin.headlines,
-        longHeadlines: metin.longHeadlines,
-        descriptions: metin.descriptions,
-        konumlar: g.locations.length > 0 ? g.locations.map((l) => l.key) : [VARSAYILAN_KONUM],
-        yaslar: g.ageRanges,
-      });
+      kurulan = await provider.createVideoBoost(fetchCtx, { ...h.istek, logo }, { acilis: duraklatilmis ? 'PAUSED' : 'ENABLED' });
 
       /*
        * YALIN KİMLİK (G1). Kaynak adı (`customers/1/campaigns/2`) yazılırsa
@@ -691,29 +548,40 @@ export class AutoBoostLaunchService {
         `),
       );
 
+      // YENİ LOGO ÖNBELLEĞE: sonraki yayınlar aynı görseli tekrar yüklemesin.
+      // Düşerse yayın başarılı kalıyor; bir sonraki yayın logoyu yeniden yükler.
+      if (kurulan.logoAssetResource) {
+        await this.uploader
+          .refKaydet(scoped, {
+            assetId: h.logoAssetId,
+            adAccountId: h.reklamHesabiId,
+            platform: 'google',
+            ref: kurulan.logoAssetResource,
+          })
+          .catch((e: unknown) => this.logger.warn(`Logo kaynak adı önbelleğe yazılamadı: ${String(e)}`));
+      }
+
+      const yer = h.g.locations.length > 0 ? h.g.locations.map((l) => l.label).join(', ') : 'Türkiye';
       return {
         status: 'launched',
-        message:
-          `YouTube kampanyası yayında (${g.locations.length > 0 ? g.locations.map((l) => l.label).join(', ') : 'Türkiye'}, ` +
-          `${kayit.duration_days ?? 7} gün). Erken durdurmak için Google Ads'i kullan.`,
+        message: duraklatilmis
+          ? `YouTube kampanyası Google Ads'te DURAKLATILMIŞ kuruldu (${yer}, ${h.istek.durationDays} gün). Hesapta kontrol edip oradan başlat.`
+          : `YouTube kampanyası yayında (${yer}, ${h.istek.durationDays} gün). Erken durdurmak için Google Ads'i kullan.`,
       };
     } catch (err) {
       /*
        * PLATFORMUN KENDİ MESAJI TAŞINIYOR. Kendi cümlemizi yazmak, Google'ın
-       * söylediğini kaybetmek olurdu — bu projede en pahalı hata tipi tam
-       * olarak o.
+       * söylediğini kaybetmek olurdu.
        */
       const mesaj = err instanceof Error ? err.message : String(err);
 
       /*
        * ═══ KAMPANYA KURULDUYSA KART "BAŞARISIZ" OLAMAZ (P2) ═══
        *
-       * Google başarılı döndü ama kaydı yazamadık: kampanya YAYINDA ve
-       * para harcıyor. Eskiden kart `failed` oluyor, kimlikler kayboluyor ve
-       * "tekrar yayınla" aynı video için ikinci kampanyayı açıyordu. Kart
+       * Google başarılı döndü ama kaydı yazamadık: kampanya kurulu. Kart
        * `kontrol` oluyor ve kimlikler hata metninde taşınıyor; bu yazma da
-       * düşerse kart `launching`te kalıyor ve takılma süpürmesi onu
-       * `kontrol` yapıyor (`takilanlariIsaretle`).
+       * düşerse kart `launching`te kalıyor ve `takilanlariIsaretle` onu
+       * `kontrol` yapıyor.
        */
       if (kurulan) {
         const kimlikler = `kampanya ${googleYalinKimlik(kurulan.campaignId)}, reklam ${googleYalinKimlik(kurulan.adId)}`;
@@ -727,19 +595,242 @@ export class AutoBoostLaunchService {
       }
 
       /*
-       * YARIM KURULUM: geri alma eksik kaldı, hesapta kampanya kalmış
-       * olabilir (açma çağrısı zaman aşımına düşüp başarmışsa YAYINDA).
-       * `failed` yapmak tekrar yayına açardı; `kontrol` insan bakmadan açmaz.
+       * ═══ CEVAP BELİRSİZSE KART "KONTROL" ═══
+       *
+       * Atomik istekte "yarım kurulum" yok, ama "isteğin akıbeti bilinmiyor"
+       * var: zaman aşımı, 5xx ya da 200 ama eksik yanıt. Google isteği
+       * uygulamış olabilir; `failed` yapmak tekrar yayına açardı ve kampanya
+       * kuruluysa İKİNCİSİ açılırdı. Kalıcı ret (`permanent`, kota,
+       * yetki) kesin olarak hiçbir şey kurmadı: `failed`.
        */
-      if (err instanceof YarimKurulumHatasi) {
-        this.logger.error(`YouTube yayını yarım kaldı (kart ${kayit.id}): ${mesaj}`);
-        await this.kontrolGerekli(scoped, kayit.id, mesaj);
-        return { status: 'kontrol', message: mesaj };
+      if (err instanceof PlatformApiError && err.kind === 'transient') {
+        this.logger.error(`YouTube yayınının akıbeti belirsiz (kart ${kayit.id}): ${mesaj}`);
+        await this.kontrolGerekli(
+          scoped,
+          kayit.id,
+          `Google'dan kesin cevap alınamadı; kampanya kurulmuş olabilir. Google Ads'te kontrol et. (${mesaj})`,
+        );
+        return { status: 'kontrol', message: `Google'dan kesin cevap alınamadı; kampanya kurulmuş olabilir. ${mesaj}` };
       }
 
       this.logger.error(`YouTube yayını başarısız (kart ${kayit.id}): ${mesaj}`);
       await this.geriAl(scoped, kayit.id, mesaj);
       return { status: 'failed', message: mesaj };
+    }
+  }
+
+  /**
+   * ═══ YAYIN PROVASI — AYNI İSTEK, GOOGLE YALNIZCA DOĞRULUYOR ═══
+   *
+   * Kartın yayınlanacağı hâli (bütçe, süre, konum, yaş, metin, logo, video)
+   * yayın yoluyla AYNI hazırlıktan geçiriyor ve Google'a `validateOnly` ile
+   * gönderiyor. Hiçbir şey kurulmuyor, para harcanmıyor, kartın durumu
+   * değişmiyor. Canlıda hiç denenmemiş alanların (tarih biçimi, teklif
+   * stratejisi, konum seviyesi, metin sayıları, logo kuralları) cevabı burada.
+   *
+   * Hazırlık hatası (ön ayar yok, site yok…) 400 olarak yükseliyor; Google'ın
+   * reddi ise SONUÇ: hangi alanın neden reddedildiği Türkçe yazılıyor.
+   */
+  async provaGoogle(
+    ctx: TenantContext,
+    queueItemId: string,
+    override?: AutoBoostQueueOverride,
+  ): Promise<YoutubeProvaSonucu> {
+    const scoped: TenantContext = { ...ctx, activeClientId: null };
+    const kayit = await this.kartiOku(scoped, queueItemId);
+    if (!kayit) throw new NotFoundException('Kart bulunamadı');
+    if (kayit.platform !== 'google') {
+      throw new BadRequestException('Prova yalnızca YouTube kartlarında var.');
+    }
+    const ozellestirilmis = this.ozellestir(kayit, override);
+    const h = await this.googleHazirla(scoped, ozellestirilmis, override?.texts, { kanalaYaz: false });
+    await this.kotaKapisi(h.reklamHesabiId);
+
+    const acilis = override?.duraklatilmis ? 'PAUSED' : 'ENABLED';
+    const { provider, fetchCtx } = await this.googleBaglami(h.hesap);
+    const logo = await this.uploader.googleLogoGirdisi(scoped, {
+      assetId: h.logoAssetId,
+      adAccountId: h.reklamHesabiId,
+      label: `${kayit.client_name} logo`,
+    });
+    const ozet: YoutubeProvaSonucu['ozet'] = {
+      kampanyaAdi: h.istek.name,
+      gunlukButceMicros: h.istek.dailyBudgetMicros.toString(),
+      sureGun: h.istek.durationDays,
+      bitis: new Date(Date.now() + h.istek.durationDays * 86_400_000).toISOString().slice(0, 10),
+      konumlar: h.g.locations.length > 0 ? h.g.locations.map((l) => l.label) : ['Türkiye'],
+      yaslar: h.g.ageRanges,
+      kanallar: ['YouTube In-Stream', 'YouTube In-Feed', 'YouTube Shorts'],
+      isletmeAdi: h.istek.businessName,
+      adres: h.istek.finalUrl,
+      videoId: h.istek.videoId,
+      baslik: h.istek.headlines[0] ?? '',
+      uzunBaslik: h.istek.longHeadlines[0] ?? '',
+      aciklama: h.istek.descriptions[0] ?? '',
+      logo: 'resource' in logo ? 'kayitli' : 'yeni',
+      acilis,
+      islemSayisi: 0,
+    };
+    try {
+      const r = await provider.videoBoostProva(fetchCtx, { ...h.istek, logo }, { acilis });
+      return { ok: true, ozet: { ...ozet, islemSayisi: r.islemSayisi }, hatalar: [] };
+    } catch (err) {
+      if (!(err instanceof PlatformApiError)) throw err;
+      const alanlar = googleAlanHatalari(err.detail?.raw);
+      return {
+        ok: false,
+        ozet,
+        hatalar:
+          alanlar.length > 0
+            ? alanlar.map((a) => ({ kod: a.kod, mesaj: a.mesaj, nerede: googleAlanEtiketi(a.alan) }))
+            : // ALAN AYRINTISI YOKSA genel mesaj — boş liste "ret var ama sebep yok" olurdu.
+              [{ kod: err.kind, mesaj: err.message, nerede: null }],
+      };
+    }
+  }
+
+  /**
+   * YAYIN VE PROVANIN ORTAK HAZIRLIĞI — ikisi aynı isteği kurmak zorunda.
+   * Ayrı yazılsaydı prova, yayının göndermediği bir şeyi sınardı.
+   *
+   * `kanalaYaz`: tek Google hesabı varsa yayın onu kanala YAZIYOR (bir
+   * sonraki yayında soru olmasın). Prova yazmıyor.
+   */
+  private async googleHazirla(
+    scoped: TenantContext,
+    kayit: KuyrukSatiri,
+    metinOzel: { baslik: string; uzunBaslik: string; aciklama: string } | undefined,
+    secenek: { kanalaYaz: boolean },
+  ): Promise<{
+    g: GooglePresetSettings;
+    reklamHesabiId: string;
+    hesap: { external_id: string; connection_id: string; manager_external_id: string | null };
+    logoAssetId: string;
+    istek: Omit<VideoBoostIstegi, 'logo'>;
+  }> {
+    if (!kayit.preset_id || !kayit.preset_enabled) {
+      // YAPILACAK İŞ DE YAZILI: kullanıcı ayarın nerede olduğunu aramasın.
+      throw new BadRequestException(
+        `Bu workspace için YouTube otomatik boost ön ayarı yok ya da kapalı. ${ON_AYAR_YERI} tanımla ya da aç.`,
+      );
+    }
+    const ayar = autoBoostPresetSettingsSchema.safeParse(kayit.settings);
+    if (!ayar.success || ayar.data.platform !== 'google') {
+      throw new BadRequestException(ON_AYAR_BOZUK);
+    }
+    const g = ayar.data;
+
+    if (kayit.budget_mode !== 'daily' || !kayit.daily_budget_micros) {
+      /*
+       * GOOGLE'DA TOPLAM BÜTÇE YOK. Toplam bütçeyi günlüğe bölmek panelde
+       * yazan tutarla hesaptan çıkanı ayrıştırırdı.
+       */
+      throw new BadRequestException(
+        'YouTube kampanyası günlük bütçe gerektiriyor; ön ayarda toplam bütçe seçili.',
+      );
+    }
+
+    /*
+     * HANGİ GOOGLE ADS HESABI — kart uyarısıyla AYNI karar. Hiç yoksa ya da
+     * birden çoksa tahmin yok; cümle düzeltmenin yerini söylüyor.
+     */
+    const karar = await this.youtubeOtomatik.reklamHesabi(scoped, kayit.client_id, kayit.social_profile_id);
+    const engel = youtubeHesabiEngeli(karar);
+    if (engel || (karar.durum !== 'kanal' && karar.durum !== 'tek-hesap')) {
+      throw new BadRequestException(engel ?? 'Google Ads hesabı çözümlenemedi.');
+    }
+    const reklamHesabiId = karar.hesapId;
+    if (karar.durum === 'tek-hesap' && secenek.kanalaYaz) {
+      await this.youtubeOtomatik.kanalaBagla(scoped, kayit.social_profile_id, reklamHesabiId);
+    }
+
+    const [hesap] = await this.prisma.withTenant(scoped, (tx) =>
+      tx.$queryRaw<Array<{ external_id: string; connection_id: string; manager_external_id: string | null }>>(
+        Prisma.sql`
+          SELECT external_id, connection_id::text AS connection_id, manager_external_id
+          FROM ad_accounts WHERE id = ${reklamHesabiId}::uuid
+        `,
+      ),
+    );
+    if (!hesap) throw new BadRequestException('Reklam hesabı bulunamadı.');
+
+    /*
+     * MARKA, LOGO VE ADRES OTOMATİK — KİLİTTEN ÖNCE. Eksik bir değer burada
+     * Türkçe bir cümleyle reddediliyor ve kart `pending` kalıyor.
+     */
+    const degerler = await this.youtubeOtomatik.yayinDegerleri(scoped, kayit.client_id, kayit.social_profile_id, {
+      businessName: g.businessName,
+      logoAssetId: g.logoAssetId,
+      finalUrl: g.finalUrl,
+    });
+
+    /*
+     * METİNLER: KARTTA YAZILDIYSA O, YOKSA VİDEODAN (açıklama yayın anında
+     * taze okunuyor).
+     */
+    const metin: VideoMetinleri = metinOzel
+      ? { headlines: [metinOzel.baslik], longHeadlines: [metinOzel.uzunBaslik], descriptions: [metinOzel.aciklama] }
+      : (await this.videodanMetin(kayit, degerler.businessName)).metin;
+
+    return {
+      g,
+      reklamHesabiId,
+      hesap,
+      logoAssetId: degerler.logoAssetId,
+      istek: {
+        name: boostNameBase({ clientName: kayit.client_name, postMessage: kayit.title, mediaLabel: 'Video', date: new Date() }),
+        dailyBudgetMicros: BigInt(kayit.daily_budget_micros),
+        durationDays: kayit.duration_days ?? 7,
+        videoId: kayit.external_id,
+        videoTitle: kayit.title ?? kayit.external_id,
+        businessName: degerler.businessName,
+        finalUrl: degerler.finalUrl,
+        headlines: metin.headlines,
+        longHeadlines: metin.longHeadlines,
+        descriptions: metin.descriptions,
+        konumlar: g.locations.length > 0 ? g.locations.map((l) => l.key) : [VARSAYILAN_KONUM],
+        yaslar: g.ageRanges,
+      },
+    };
+  }
+
+  /**
+   * YÖNETİCİ (MCC) KİMLİĞİ `login-customer-id` OLARAK GİDİYOR. Canlıda ilk
+   * YouTube yayını bu başlık olmadan "User doesn't have permission to access
+   * customer" ile düştü (7489428).
+   */
+  private async googleBaglami(hesap: { external_id: string; connection_id: string; manager_external_id: string | null }) {
+    const provider = this.providers.get('google');
+    const accessToken = await this.vault.getAccessToken(hesap.connection_id, provider);
+    return {
+      provider,
+      fetchCtx: {
+        accessToken,
+        accountExternalId: hesap.external_id,
+        loginCustomerId: hesap.manager_external_id ?? undefined,
+      },
+    };
+  }
+
+  /**
+   * ═══ KOTA — İSTEK GOOGLE'A GİTMEDEN ═══
+   *
+   * Google kotası her gece doluyor (2026-09-29). Bekçi reddederse kart
+   * kilitlenmeden, ne zaman deneneceği yazılarak dönülüyor. Redis yoksa
+   * bekçi kapalı (senkronizasyon da kapalı demek); engellemiyoruz ama
+   * log'a yazıyoruz.
+   */
+  private async kotaKapisi(reklamHesabiId: string): Promise<void> {
+    if (!this.quota.isEnabled) {
+      this.logger.warn('Kota bekçisi kapalı (REDIS_URL yok); YouTube isteği kota kontrolsüz gidiyor.');
+      return;
+    }
+    const gate = await this.quota.acquire({ platform: 'google', adAccountId: reklamHesabiId, layer: 'interactive' });
+    if (!gate.allowed) {
+      const dakika = Math.max(1, Math.ceil((gate.retryAfterMs ?? 60_000) / 60_000));
+      throw new BadRequestException(
+        `Google Ads kotası şu an dolu (${gate.reason ?? 'kota'}). Yaklaşık ${dakika} dakika sonra tekrar dene.`,
+      );
     }
   }
 

@@ -251,6 +251,7 @@ export type AutoBoostPresetSettings = z.infer<typeof autoBoostPresetSettingsSche
 
 /** Ayrık birleşimin Meta dalı — yayın yolu bunu tek başına taşıyor. */
 export type MetaPresetSettings = Extract<AutoBoostPresetSettings, { platform: 'meta' }>;
+export type GooglePresetSettings = Extract<AutoBoostPresetSettings, { platform: 'google' }>;
 
 // -----------------------------------------------------------------------------
 // Ön ayarın kendisi
@@ -628,6 +629,15 @@ export const autoBoostQueueOverrideSchema = z
           .max(90, 'Açıklama en fazla 90 karakter'),
       })
       .optional(),
+    /**
+     * YOUTUBE: KAMPANYAYI DURAKLATILMIŞ KUR (plan K3).
+     *
+     * İlk canlı denemede kampanya Google Ads'te kurulup AÇILMIYOR; ajans
+     * hesapta gözle kontrol edip oradan başlatıyor. Yazma yolu canlıda hiç
+     * denenmediği için ilk kampanyanın para harcamadan önce bir insan
+     * gözünden geçmesi isteniyor. Yalnızca YouTube kartında geçerli.
+     */
+    duraklatilmis: z.boolean().optional(),
   })
   .strict()
   .superRefine((v, ctx) => {
@@ -754,4 +764,40 @@ export interface YoutubeKartMetinleri {
    * anlamlı bir satır yoktu; "<marka> kanalında yeni video" kullanılıyor.
    */
   aciklamaKaynagi: 'video' | 'yedek';
+}
+
+/**
+ * ═══ YOUTUBE YAYIN PROVASI — SONUÇ ═══
+ *
+ * Prova yayının AYNISINI Google'a "yalnızca doğrula" bayrağıyla gönderiyor:
+ * hiçbir şey kurulmuyor, para harcanmıyor. Sonuç iki parça: Google'a NE
+ * gönderildiği (özet: kullanıcı kurulacak kampanyayı yayından önce görüyor)
+ * ve Google'ın cevabı (kabul ya da alan alan hatalar).
+ */
+export interface YoutubeProvaSonucu {
+  ok: boolean;
+  ozet: {
+    kampanyaAdi: string;
+    gunlukButceMicros: string;
+    sureGun: number;
+    /** Kampanyanın Google'a yazılan bitiş günü (YYYY-MM-DD). */
+    bitis: string;
+    konumlar: string[];
+    /** Boş = yaş kısıtı yok. */
+    yaslar: string[];
+    kanallar: string[];
+    isletmeAdi: string;
+    adres: string;
+    videoId: string;
+    baslik: string;
+    uzunBaslik: string;
+    aciklama: string;
+    /** `kayitli`: hesapta zaten var; `yeni`: yayında yüklenecek (prova logoyu da sınıyor). */
+    logo: 'kayitli' | 'yeni';
+    acilis: 'ENABLED' | 'PAUSED';
+    /** Google'a giden tek istekteki işlem sayısı. */
+    islemSayisi: number;
+  };
+  /** Google'ın reddettiği her alan — hangi kaynakta olduğu Türkçe. */
+  hatalar: Array<{ kod: string; mesaj: string; nerede: string | null }>;
 }

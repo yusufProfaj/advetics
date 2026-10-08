@@ -1,16 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
-  demandGenAdGroupBody,
-  demandGenCampaignBody,
-  demandGenVideoAdBody,
   googleImageAssetBody,
   googleVideoAssetBody,
-  demandGenKonumBody,
-  kampanyayiYayinaAlBody,
-  demandGenKitleBaglaBody,
-  demandGenYasKitlesiBody,
-  yasSegmentleri,
-  YarimKurulumHatasi,
+  demandGenAtomikIstek,
+  type AtomikGovde,
+  type KampanyaAcilisi,
 } from './google-demandgen';
 import { gecerliGorselAdresi } from '@advetics/shared';
 import type { GeoLocationOption,
@@ -19,6 +13,7 @@ import type { GeoLocationOption,
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
   PlatformApiError,
+  type VideoBoostIstegi,
   type AuthorizeUrlParams,
   type DiscoveredAd,
   type DiscoveredAdAccount,
@@ -1974,180 +1969,125 @@ export class GoogleProvider implements IAdPlatformProvider {
   }
 
   /**
-   * YOUTUBE VİDEO REKLAMI — Demand Gen zinciri.
+   * ═══ YOUTUBE VİDEO REKLAMI — TEK ATOMİK İSTEK ═══
    *
-   * YEDİ ÇAĞRI: bütçe → kampanya (duraklatılmış) → konum → reklam grubu →
-   * video varlığı → reklam → kampanyayı yayına alma. (Logo varlığı çağıran
-   * tarafından önbellekten geliyor; her yayında yeniden yüklemek gereksiz.)
+   * Eskiden yedi ayrı çağrı (bütçe → kampanya → konum → grup → video →
+   * reklam → yayına alma) ve hata hâlinde elle geri alma vardı; geri alma
+   * da düşebiliyordu ve hesapta yarım kampanya kalıyordu. Artık hepsi tek
+   * `googleAds:mutate` isteğinde, geçici kimliklerle (`demandGenAtomikIstek`).
+   * Google ya hepsini kuruyor ya hiçbirini; geri alacak bir şey yok.
    *
-   * ORTADA KALIRSA GERİ ALINIYOR — `publishDraft` ve Meta `createBoost`
-   * desenlerinin aynısı. Yetim bir bütçe para harcamıyor ama hesabı kirletiyor
-   * ve aynı adla ikinci bütçe açılamıyor (DUPLICATE_NAME).
+   * KAMPANYA DOĞRUDAN AÇIK KURULUYOR (ya da istenirse duraklatılmış): "önce
+   * duraklatılmış kur, en sonda aç" sırası yarım kalan zincire karşı bir
+   * önlemdi; atomik istekte yarım hâl olmadığı için o sıranın sebebi kalmadı.
+   * Konum yine AÇIKÇA yazılıyor: konumsuz Demand Gen kampanyası bütün
+   * ülkelere açılıyor.
    *
-   * KAMPANYA EN SONDA YAYINA ALINIYOR — Meta yolunun deseni. Bir süre
-   * duraklatılmış kalıyor ve ajansın Google Ads'te elle açması bekleniyordu;
-   * kullanıcı 2026-09-25'te yayını denemeyi istedi. Konumsuz Demand Gen
-   * kampanyası BÜTÜN ÜLKELERE açıldığı için konum yayına almadan önce ve
-   * AÇIKÇA yazılıyor. Yol canlıda ilk kez çalışıyor: ilk deneme küçük
-   * bütçeyle.
+   * LOGO: hesapta kayıtlı kaynak adı varsa o; yoksa görsel AYNI istekte
+   * oluşturuluyor ve kaynak adı dönüyor (çağıran önbelleğe yazıyor).
+   * Prova da aynı gövdeyi gönderdiği için logo kuralları (boyut, oran)
+   * prova anında sınanıyor.
    */
   async createVideoBoost(
     ctx: FetchContext,
-    request: {
-      name: string;
-      dailyBudgetMicros: bigint;
-      durationDays: number;
-      videoId: string;
-      videoTitle: string;
-      logoAssetResource: string;
-      businessName: string;
-      finalUrl: string;
-      headlines: string[];
-      longHeadlines: string[];
-      descriptions: string[];
-      /** Konum ölçütleri — boş gelemez, bkz. `demandGenKonumBody`. */
-      konumlar: string[];
-      /** Yaş kovaları — boş ya da altısı = kısıt yok (`yasSegmentleri`). */
-      yaslar: string[];
-    },
-  ): Promise<{ campaignId: string; adGroupId: string; adId: string }> {
-    const stamp = nameStamp(new Date());
-    const created: Array<{ resource: string; label: string }> = [];
-    let yetimKitle: string | null = null;
-
-    try {
-      const budget = await this.mutate(
-        ctx,
-        'campaignBudgets',
-        campaignBudgetBody({
-          name: request.name,
-          amountMicros: request.dailyBudgetMicros.toString(),
-          stamp,
-        }),
-      );
-      created.push({ resource: budget, label: 'bütçe' });
-
-      const bitis = new Date(Date.now() + request.durationDays * 86_400_000);
-      const campaign = await this.mutate(
-        ctx,
-        'campaigns',
-        demandGenCampaignBody({
-          name: request.name,
-          budgetResource: budget,
-          stamp,
-          endDate: googleDate(bitis),
-        }),
-      );
-      created.push({ resource: campaign, label: 'kampanya' });
-
+    request: VideoBoostIstegi,
+    secenek: { acilis?: KampanyaAcilisi } = {},
+  ): Promise<{ campaignId: string; adGroupId: string; adId: string; logoAssetResource: string | null }> {
+    const { govde, sira } = this.videoBoostGovdesi(ctx, request, secenek.acilis ?? 'ENABLED', false);
+    const yanit = await this.mutateAtomik(ctx, govde);
+    const kaynak = (i: number | null): string | null => {
+      if (i === null) return null;
+      const r = yanit[i];
+      const ad = r ? Object.values(r)[0]?.resourceName : undefined;
+      return ad ?? null;
+    };
+    const campaignId = kaynak(sira.kampanya);
+    const adGroupId = kaynak(sira.reklamGrubu);
+    const adId = kaynak(sira.reklam);
+    if (!campaignId || !adGroupId || !adId) {
       /*
-       * KONUM KAMPANYA DURAKLATILMIŞKEN. Ölçütler kampanyayla birlikte
-       * siliniyor; geri alma listesine ayrıca girmiyor.
+       * 200 AMA KAYNAK ADI YOK: başarı sayılmıyor. Atomik istek başarılıysa
+       * her işlemin sonucu dönmeli; dönmüyorsa ne kurulduğunu bilmiyoruz ve
+       * bu `transient` (çağıran kartı `kontrol` yapıyor), `permanent` değil.
        */
-      await this.mutate(
-        ctx,
-        'campaignCriteria',
-        demandGenKonumBody({ campaignResource: campaign, konumlar: request.konumlar }),
+      throw new PlatformApiError(
+        'google',
+        'transient',
+        `Google kurulum yanıtında kaynak adları eksik (${yanit.length} sonuç, ${govde.mutateOperations.length} işlem).`,
       );
-
-      const segmentler = yasSegmentleri(request.yaslar);
-      const adGroup = await this.mutate(
-        ctx,
-        'adGroups',
-        demandGenAdGroupBody({
-          name: request.name,
-          campaignResource: campaign,
-          kitleGrubu: segmentler.length > 0,
-        }),
-      );
-      created.push({ resource: adGroup, label: 'reklam grubu' });
-
-      /*
-       * YAŞ KİTLESİ — yalnızca kısıt varsa. Kitle kaydı GERİ ALINAMIYOR
-       * (servis silme kabul etmiyor); geri alma listesine girmiyor, düşerse
-       * log'a yazılıyor. Bağlantı ölçütü reklam grubuyla birlikte siliniyor.
-       */
-      if (segmentler.length > 0) {
-        const kitle = await this.mutate(
-          ctx,
-          'audiences',
-          demandGenYasKitlesiBody({ name: request.name, stamp, segmentler }),
-        );
-        yetimKitle = kitle;
-        await this.mutate(
-          ctx,
-          'adGroupCriteria',
-          demandGenKitleBaglaBody({ adGroupResource: adGroup, audienceResource: kitle }),
-        );
-      }
-
-      /*
-       * VİDEO VARLIĞI GERİ ALMA LİSTESİNE GİRMİYOR. Varlıklar hesap
-       * seviyesinde ve yeniden kullanılabiliyor; silmek, aynı videoyu ikinci
-       * kez tanıtmak istendiğinde yeniden yüklemek demek olurdu. Yetim varlık
-       * para harcamıyor ve Ads Manager'da kampanya listesini de kirletmiyor.
-       */
-      const videoAsset = await this.createYouTubeVideoAsset(ctx, {
-        videoId: request.videoId,
-        title: request.videoTitle,
-      });
-
-      const ad = await this.mutate(
-        ctx,
-        'adGroupAds',
-        demandGenVideoAdBody({
-          adGroupResource: adGroup,
-          finalUrl: request.finalUrl,
-          businessName: request.businessName,
-          videoAssetResource: videoAsset,
-          logoAssetResource: request.logoAssetResource,
-          headlines: request.headlines,
-          longHeadlines: request.longHeadlines,
-          descriptions: request.descriptions,
-        }),
-      );
-
-      /*
-       * ═══ YAYINA ALMA EN SON ═══
-       *
-       * Bütçe, konum, reklam grubu ve reklam yerindeyken. Bu adım düşerse
-       * aşağıdaki geri alma kurulanların hepsini siliyor; yarım bir kampanya
-       * yayında kalmıyor.
-       */
-      await this.mutate(ctx, 'campaigns', kampanyayiYayinaAlBody(campaign));
-
-      return { campaignId: campaign, adGroupId: adGroup, adId: ad };
-    } catch (err) {
-      // TERS SIRADA GERİ AL ve ASIL hatayı fırlat: kullanıcının görmesi
-      // gereken, kampanyanın neden kurulamadığı.
-      const kalanlar: string[] = [];
-      for (const varlik of [...created].reverse()) {
-        try {
-          await this.mutate(ctx, resourceCollection(varlik.resource), removeBody(varlik.resource));
-        } catch (temizlikHatasi) {
-          kalanlar.push(`${varlik.label} ${varlik.resource}`);
-          this.logger.error(
-            `Google ${varlik.label} geri alınamadı (${varlik.resource}): ` +
-              `${temizlikHatasi instanceof Error ? temizlikHatasi.message : String(temizlikHatasi)}`,
-          );
-        }
-      }
-      if (yetimKitle) {
-        // SİLİNEMİYOR (Audience servisinde silme yok) — sessiz kalmasın.
-        // Kalanlar listesine GİRMİYOR: harcama yapamaz ve her başarısız
-        // yaş kısıtlı yayında oluşur; kartı her seferinde "kontrol gerekli"
-        // yapmak uyarıyı okunmaz hâle getirirdi.
-        this.logger.warn(`Google yaş kitlesi hesapta kaldı (silinemiyor, harcama yok): ${yetimKitle}`);
-      }
-      /*
-       * GERİ ALMA EKSİKSE ASIL HATA SARILIYOR. Kalan bir kampanya yayında
-       * olmayabilir (PAUSED kuruluyor) ama açma çağrısı zaman aşımına
-       * düşüp aslında başarmışsa YAYINDADIR. Ayırt etmenin yolu hesaba
-       * bakmak; yayın yolu kartı `kontrol` yapıp bunu kullanıcıya bırakıyor.
-       */
-      if (kalanlar.length > 0) throw new YarimKurulumHatasi(err, kalanlar);
-      throw err;
     }
+    return { campaignId, adGroupId, adId, logoAssetResource: kaynak(sira.logo) };
+  }
+
+  /**
+   * ═══ PROVA — AYNI İSTEK, `validateOnly: true` ═══
+   *
+   * Google her işlemi gerçek kurallarla doğruluyor, HİÇBİR ŞEY kurmuyor ve
+   * para harcamıyor. Hata `PlatformApiError` olarak yükseliyor; alan
+   * yollarıyla bütün hatalar `googleAlanHatalari(err.detail.raw)` ile
+   * okunuyor. Kota harcıyor (bir istek).
+   */
+  async videoBoostProva(
+    ctx: FetchContext,
+    request: VideoBoostIstegi,
+    secenek: { acilis?: KampanyaAcilisi } = {},
+  ): Promise<{ islemSayisi: number }> {
+    const { govde } = this.videoBoostGovdesi(ctx, request, secenek.acilis ?? 'ENABLED', true);
+    await this.mutateAtomik(ctx, govde);
+    return { islemSayisi: govde.mutateOperations.length };
+  }
+
+  private videoBoostGovdesi(
+    ctx: FetchContext,
+    r: VideoBoostIstegi,
+    acilis: KampanyaAcilisi,
+    validateOnly: boolean,
+  ): ReturnType<typeof demandGenAtomikIstek> {
+    return demandGenAtomikIstek({
+      customerId: ctx.accountExternalId,
+      name: r.name,
+      stamp: nameStamp(new Date()),
+      dailyBudgetMicros: r.dailyBudgetMicros,
+      endDate: googleDate(new Date(Date.now() + r.durationDays * 86_400_000)),
+      acilis,
+      konumlar: r.konumlar,
+      yaslar: r.yaslar,
+      videoId: r.videoId,
+      videoTitle: r.videoTitle,
+      logo: r.logo,
+      businessName: r.businessName,
+      finalUrl: r.finalUrl,
+      headlines: r.headlines,
+      longHeadlines: r.longHeadlines,
+      descriptions: r.descriptions,
+      validateOnly,
+    });
+  }
+
+  /**
+   * `GoogleAdsService.Mutate` — bütün işlemler tek istekte. Yanıt işlem
+   * sırasıyla `mutateOperationResponses` (`{campaignResult: {...}}` gibi tek
+   * anahtarlı nesneler). `validateOnly` yanıtı boş geliyor.
+   */
+  private async mutateAtomik(
+    ctx: FetchContext,
+    govde: AtomikGovde,
+  ): Promise<Array<Record<string, { resourceName?: string }>>> {
+    const { developerToken } = this.assertConfigured();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${ctx.accessToken}`,
+      'developer-token': developerToken,
+      'Content-Type': 'application/json',
+    };
+    if (ctx.loginCustomerId) headers['login-customer-id'] = ctx.loginCustomerId;
+    const { data } = await platformFetch<{
+      mutateOperationResponses?: Array<Record<string, { resourceName?: string }>>;
+    }>('google', `${this.adsBase}/customers/${ctx.accountExternalId}/googleAds:mutate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(govde),
+    });
+    return data?.mutateOperationResponses ?? [];
   }
 
   /**

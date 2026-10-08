@@ -1,4 +1,4 @@
-import { AB_SIYASI_BEYAN, kampanyaTarihleri, type GoogleMutateBody } from './google-write';
+import { AB_SIYASI_BEYAN, campaignBudgetBody, kampanyaTarihleri, type GoogleMutateBody } from './google-write';
 
 /**
  * DEMAND GEN — YouTube video reklamının API'den kurulabilen TEK yolu.
@@ -398,27 +398,210 @@ export function demandGenKitleBaglaBody(params: {
 }
 
 /**
- * ═══ YARIM KURULUM — GERİ ALMA EKSİK KALDI ═══
+ * ═══ TEK ATOMİK İSTEK — HEPSİ YA DA HİÇBİRİ ═══
  *
- * Zincir ortada düştüğünde kurulanlar ters sırayla siliniyor; silme de
- * düşebiliyor (en tipik sebep: kota zincirin ortasında bitti ve silme de
- * aynı kotayı kullanıyor). Eskiden bu yalnızca log'a yazılıyordu ve kart
- * `failed` oluyordu: kullanıcı "tekrar yayınla" diyor, hesapta yarım kalan
- * kampanyanın YANINA ikincisi kuruluyordu.
+ * YouTube boost'u sekiz ayrı `:mutate` çağrısıyla kuruluyordu ve zincir
+ * ortada düşerse kurulanlar elle geri alınıyordu. Geri alma da aynı kotayı
+ * kullandığı için kota bitince o da düşüyor ve hesapta yarım kampanya
+ * kalıyordu (plan P3/P4). Google'ın kendi çözümü `GoogleAdsService.Mutate`:
+ * bütün işlemler tek istekte, kaynaklar birbirine GEÇİCİ (eksi sayılı)
+ * kimliklerle bağlanıyor ve `partialFailure: false` ile ya hepsi uygulanıyor
+ * ya hiçbiri. Elle geri alma kodu ortadan kalkıyor.
  *
- * Bu hata asıl hatayı TAŞIYOR (mesajı aynen), ve hesapta kalanları
- * adlarıyla sayıyor. Yayın yolu bunu görünce kartı `kontrol` yapıyor:
- * platformda ne kaldığına insan bakmadan tekrar yayın yok.
+ * AYNI GÖVDE PROVA: `validateOnly: true` ile Google her işlemi gerçek
+ * kurallarla doğruluyor ama HİÇBİR ŞEY kurmuyor. Prova ile yayın arasındaki
+ * tek fark bu bayrak; ayrı bir gövde yazmak, provanın yayının sınamadığı
+ * bir şeyi sınaması demek olurdu.
+ *
+ * Gövdeler TEK TEK üreticilerden geliyor (sınanmış alan adları ve kurallar);
+ * burada yalnızca geçici kimlikler ve işlem türü ekleniyor.
+ *
+ * ÖLÇÜLMEDİ (2026-10-08): `audienceOperation`ın atomik istekte kabul
+ * edildiği ve `validateOnly`ın varlık (asset) oluşturmayı kapsadığı belgeden.
+ * Prova tam olarak bunları cevaplıyor.
  */
-export class YarimKurulumHatasi extends Error {
-  constructor(
-    readonly asil: unknown,
-    readonly kalanlar: readonly string[],
-  ) {
-    const asilMesaj = asil instanceof Error ? asil.message : String(asil);
-    super(`${asilMesaj} · Geri alınamayıp Google Ads hesabında kalanlar: ${kalanlar.join(', ')}`);
-    this.name = 'YarimKurulumHatasi';
+export type KampanyaAcilisi = 'ENABLED' | 'PAUSED';
+
+export interface AtomikVideoIstegi {
+  customerId: string;
+  name: string;
+  stamp: string;
+  dailyBudgetMicros: bigint;
+  endDate: string;
+  /** Kampanya açık mı kurulsun. İlk canlı deneme duraklatılmış (plan K3). */
+  acilis: KampanyaAcilisi;
+  konumlar: string[];
+  yaslar: readonly string[];
+  videoId: string;
+  videoTitle: string;
+  /** Hesapta kayıtlı logo ya da bu istekte oluşturulacak yeni görsel. */
+  logo: { resource: string } | { yeniGorsel: { name: string; bytes: Buffer } };
+  businessName: string;
+  finalUrl: string;
+  headlines: string[];
+  longHeadlines: string[];
+  descriptions: string[];
+  validateOnly: boolean;
+}
+
+export interface AtomikGovde {
+  mutateOperations: Array<Record<string, unknown>>;
+  partialFailure: false;
+  validateOnly: boolean;
+}
+
+/** Yanıtta hangi sıradaki işlemin neyi kurduğu — sonuç bu sırayla okunuyor. */
+export interface AtomikSira {
+  kampanya: number;
+  reklamGrubu: number;
+  reklam: number;
+  /** Bu istekte yeni logo oluşturulduysa sırası, yoksa null. */
+  logo: number | null;
+}
+
+function ilkCreate(b: GoogleMutateBody): Record<string, unknown> {
+  const c = b.operations[0]?.create;
+  if (!c) throw new Error('Gövde üreticisi create işlemi döndürmedi.');
+  return c;
+}
+
+export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde; sira: AtomikSira } {
+  const kok = `customers/${p.customerId}`;
+  const BUTCE = `${kok}/campaignBudgets/-1`;
+  const KAMPANYA = `${kok}/campaigns/-2`;
+  const GRUP = `${kok}/adGroups/-3`;
+  const KITLE = `${kok}/audiences/-4`;
+  const VIDEO = `${kok}/assets/-5`;
+  const LOGO_YENI = `${kok}/assets/-6`;
+
+  const ops: Array<Record<string, unknown>> = [];
+  const ekle = (op: Record<string, unknown>): number => ops.push(op) - 1;
+
+  ekle({
+    campaignBudgetOperation: {
+      create: {
+        ...ilkCreate(campaignBudgetBody({ name: p.name, amountMicros: p.dailyBudgetMicros.toString(), stamp: p.stamp })),
+        resourceName: BUTCE,
+      },
+    },
+  });
+  const kampanyaGovdesi = ilkCreate(
+    demandGenCampaignBody({ name: p.name, budgetResource: BUTCE, stamp: p.stamp, endDate: p.endDate }),
+  );
+  const kampanya = ekle({
+    campaignOperation: { create: { ...kampanyaGovdesi, status: p.acilis, resourceName: KAMPANYA } },
+  });
+  for (const o of demandGenKonumBody({ campaignResource: KAMPANYA, konumlar: p.konumlar }).operations) {
+    ekle({ campaignCriterionOperation: { create: o.create } });
   }
+  const segmentler = yasSegmentleri(p.yaslar);
+  const reklamGrubu = ekle({
+    adGroupOperation: {
+      create: {
+        ...ilkCreate(demandGenAdGroupBody({ name: p.name, campaignResource: KAMPANYA, kitleGrubu: segmentler.length > 0 })),
+        resourceName: GRUP,
+      },
+    },
+  });
+  if (segmentler.length > 0) {
+    ekle({
+      audienceOperation: {
+        create: { ...ilkCreate(demandGenYasKitlesiBody({ name: p.name, stamp: p.stamp, segmentler })), resourceName: KITLE },
+      },
+    });
+    ekle({
+      adGroupCriterionOperation: {
+        create: ilkCreate(demandGenKitleBaglaBody({ adGroupResource: GRUP, audienceResource: KITLE })),
+      },
+    });
+  }
+  /*
+   * VİDEO VARLIĞININ ADI ZAMAN DAMGALI. Aynı video ikinci kez boostlanınca
+   * aynı adla ikinci varlık oluşturmak `DUPLICATE_ASSET_NAME` riskiydi ve
+   * bu istekte tek bir ret bütün kampanyayı düşürüyor.
+   */
+  const video = ilkCreate(googleVideoAssetBody({ videoId: p.videoId, title: p.videoTitle }));
+  ekle({
+    assetOperation: {
+      create: { ...video, name: `${String(video.name).slice(0, 80)} ${p.stamp}`, resourceName: VIDEO },
+    },
+  });
+  let logoSira: number | null = null;
+  let logoKaynagi: string;
+  if ('resource' in p.logo) {
+    logoKaynagi = p.logo.resource;
+  } else {
+    logoKaynagi = LOGO_YENI;
+    logoSira = ekle({
+      assetOperation: {
+        create: { ...ilkCreate(googleImageAssetBody(p.logo.yeniGorsel)), resourceName: LOGO_YENI },
+      },
+    });
+  }
+  const reklam = ekle({
+    adGroupAdOperation: {
+      create: ilkCreate(
+        demandGenVideoAdBody({
+          adGroupResource: GRUP,
+          finalUrl: p.finalUrl,
+          businessName: p.businessName,
+          videoAssetResource: VIDEO,
+          logoAssetResource: logoKaynagi,
+          headlines: p.headlines,
+          longHeadlines: p.longHeadlines,
+          descriptions: p.descriptions,
+        }),
+      ),
+    },
+  });
+
+  return {
+    govde: { mutateOperations: ops, partialFailure: false, validateOnly: p.validateOnly },
+    sira: { kampanya, reklamGrubu, reklam, logo: logoSira },
+  };
+}
+
+/**
+ * ═══ GOOGLE HATALARININ TAMAMI — ALAN YOLUYLA ═══
+ *
+ * Genel hata metni (`http.ts`) ilk iki hatayı taşıyor; prova ise BÜTÜN
+ * hataları ve hangi alanda olduklarını göstermeli: "metin çok uzun" tek
+ * başına işe yaramıyor, hangi başlık olduğu gerekiyor. Ham gövde
+ * `PlatformApiError.detail.raw` içinde.
+ */
+export interface GoogleAlanHatasi {
+  kod: string;
+  mesaj: string;
+  /** `operations[3].create.name` biçiminde; yoksa null. */
+  alan: string | null;
+  /** Atomik istekte kaçıncı işlem — hangi kaynakta olduğunu söylüyor. */
+  islemSirasi: number | null;
+}
+
+export function googleAlanHatalari(raw: unknown): GoogleAlanHatasi[] {
+  const err = (raw as { error?: { details?: unknown[] } } | null)?.error;
+  const out: GoogleAlanHatasi[] = [];
+  for (const d of err?.details ?? []) {
+    const hatalar = (d as { errors?: unknown[] }).errors;
+    if (!Array.isArray(hatalar)) continue;
+    for (const h of hatalar) {
+      const e = h as {
+        errorCode?: Record<string, unknown>;
+        message?: string;
+        location?: { fieldPathElements?: Array<{ fieldName?: string; index?: number }> };
+      };
+      const [kat, deger] = Object.entries(e.errorCode ?? {})[0] ?? [];
+      const yol = e.location?.fieldPathElements ?? [];
+      const islem = yol[0]?.fieldName === 'mutate_operations' || yol[0]?.fieldName === 'operations' ? yol[0]?.index ?? null : null;
+      out.push({
+        kod: kat ? `${kat}=${String(deger)}` : 'bilinmiyor',
+        mesaj: e.message ?? '',
+        alan: yol.length > 0 ? yol.map((x) => (x.index === undefined ? x.fieldName : `${x.fieldName}[${x.index}]`)).join('.') : null,
+        islemSirasi: islem,
+      });
+    }
+  }
+  return out;
 }
 
 /**

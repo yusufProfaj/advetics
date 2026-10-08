@@ -37,6 +37,32 @@ export type PlatformErrorKind =
   /** Kalıcı hata (silinmiş varlık, geçersiz alan). Retry edilmez → DLQ. */
   | 'permanent';
 
+/** YouTube video reklamı isteği (Demand Gen) — yayın ve prova aynı biçimi taşıyor. */
+export interface VideoBoostIstegi {
+  name: string;
+  dailyBudgetMicros: bigint;
+  durationDays: number;
+  /** YouTube video kimliği — adres çubuğundaki 11 karakterlik değer. */
+  videoId: string;
+  videoTitle: string;
+  /**
+   * Logo: hesapta kayıtlı kaynak adı ya da bu istekte oluşturulacak görsel.
+   * İkincisi, logonun kurallarının (boyut, oran) prova anında sınanmasını
+   * sağlıyor; önceden ayrı yükleniyordu ve kötü logo yalnızca reklam
+   * adımında patlıyordu.
+   */
+  logo: { resource: string } | { yeniGorsel: { name: string; bytes: Buffer } };
+  businessName: string;
+  finalUrl: string;
+  headlines: string[];
+  longHeadlines: string[];
+  descriptions: string[];
+  /** Konum ölçütleri (`geoTargetConstants/...`). BOŞ GELEMEZ: konumsuz kampanya bütün ülkelere açılır. */
+  konumlar: string[];
+  /** Google yaş kovaları; boş ya da altısı birden = yaş kısıtı yok. */
+  yaslar: string[];
+}
+
 export class PlatformApiError extends Error {
   constructor(
     readonly platform: Platform,
@@ -1161,29 +1187,27 @@ export interface IAdPlatformProvider {
    */
   createVideoBoost(
     ctx: FetchContext,
-    request: {
-      name: string;
-      dailyBudgetMicros: bigint;
-      durationDays: number;
-      /** YouTube video kimliği — adres çubuğundaki 11 karakterlik değer. */
-      videoId: string;
-      videoTitle: string;
-      /** Yüklenmiş logo varlığının kaynak adı. */
-      logoAssetResource: string;
-      businessName: string;
-      finalUrl: string;
-      headlines: string[];
-      longHeadlines: string[];
-      descriptions: string[];
-      /**
-       * Konum ölçütleri (`geoTargetConstants/...`). BOŞ GELEMEZ: konumsuz
-       * Demand Gen kampanyası bütün ülkelere açılıyor.
-       */
-      konumlar: string[];
-      /** Google yaş kovaları; boş ya da altısı birden = yaş kısıtı yok. */
-      yaslar: string[];
-    },
-  ): Promise<{ campaignId: string; adGroupId: string; adId: string }>;
+    request: VideoBoostIstegi,
+    /** `PAUSED` = kur ama açma (ilk canlı deneme, plan K3). Varsayılan açık. */
+    secenek?: { acilis?: 'ENABLED' | 'PAUSED' },
+  ): Promise<{
+    campaignId: string;
+    adGroupId: string;
+    adId: string;
+    /** Logo bu istekte oluşturulduysa kaynak adı (çağıran önbelleğe yazar), yoksa null. */
+    logoAssetResource: string | null;
+  }>;
+
+  /**
+   * YAYININ PROVASI — aynı istek, platform yalnızca doğruluyor (Google
+   * `validateOnly`). Hiçbir şey kurmuyor, para harcamıyor. Ret platform
+   * hatası olarak yükseliyor.
+   */
+  videoBoostProva(
+    ctx: FetchContext,
+    request: VideoBoostIstegi,
+    secenek?: { acilis?: 'ENABLED' | 'PAUSED' },
+  ): Promise<{ islemSayisi: number }>;
 
   /**
    * Verilen kampanyaların PLATFORMDAKİ güncel adı ve durumu (K21).

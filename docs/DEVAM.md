@@ -28,8 +28,10 @@ bulgular: [`akilli-boost/YOUTUBE-CANLI-PLAN.md`](akilli-boost/YOUTUBE-CANLI-PLAN
 `20261008170000_google_yazma_kesici`. Bulunan iki gerçek hata kapandı:
 yayındaki YouTube kartı tekrar onaylanıp İKİNCİ kampanya açabiliyordu;
 kart kampanya kimliğini kaynak adı olarak yazdığı için harcama kartta HİÇ
-görünmüyordu. **Sıradaki: Aşama 1**, tek atomik `googleAds:mutate` +
-`validateOnly` provası. İlk canlı deneme **Ege Birlik Yapı** kanalıyla
+görünmüyordu. **Aşama 1 de yazıldı (2026-10-08), DEPLOY EDİLMEDİ, migration yok:**
+kurulum tek atomik istek, kartta "Prova et" (para harcamaz) ve
+"Duraklatılmış kur". **Sıradaki:** deploy → Ege Birlik Yapı kartında
+prova (canlıda ölçülmemiş alanların cevabı) → Aşama 2 (kartta ön kontrol). İlk canlı deneme **Ege Birlik Yapı** kanalıyla
 (K1); bütçe/süre (K2), duraklatılmış ilk yayın (K3) ve geliştirici token
 seviyesi (K4) Aşama 3'ten önce kullanıcıya sorulacak.
 

@@ -162,31 +162,36 @@ describe('KRİTİK: yayın yolu ön ayarın SABİT metnini değil videoyu kullan
   );
   const i = kaynak.indexOf('private async launchGoogle(');
   const dilim = kaynak.slice(i, kaynak.indexOf('\n  }\n', i));
+  // Ortak hazırlık: istek gövdesi burada kuruluyor, yayın ve prova bunu gönderiyor.
+  const ih = kaynak.indexOf('private async googleHazirla(');
+  const hazirla = kaynak.slice(ih, kaynak.indexOf('\n  }\n', ih));
 
   it('tarama boşa düşmüyor', () => {
     expect(i).toBeGreaterThan(-1);
+    expect(ih).toBeGreaterThan(-1);
     expect(dilim).toContain('createVideoBoost(');
+    expect(dilim).toContain('{ ...h.istek, logo }');
   });
 
   it('metinler videodan, marka/logo/adres çözümleyiciden', () => {
-    expect(dilim).toContain('headlines: metin.headlines');
-    expect(dilim).toContain('descriptions: metin.descriptions');
-    expect(dilim).toContain('businessName: degerler.businessName');
-    expect(dilim).toContain('finalUrl: degerler.finalUrl');
-    expect(dilim).toContain('assetId: degerler.logoAssetId');
-    expect(dilim).not.toContain('g.headlines');
+    expect(hazirla).toContain('headlines: metin.headlines');
+    expect(hazirla).toContain('descriptions: metin.descriptions');
+    expect(hazirla).toContain('businessName: degerler.businessName');
+    expect(hazirla).toContain('finalUrl: degerler.finalUrl');
+    expect(hazirla).toContain('logoAssetId: degerler.logoAssetId');
+    expect(dilim).toContain('assetId: h.logoAssetId');
+    expect(hazirla).not.toContain('g.headlines');
   });
 
   it('KRİTİK: eksikler KİLİTTEN ÖNCE — kart failed olmuyor', () => {
-    expect(dilim.indexOf('this.youtubeOtomatik.yayinDegerleri(')).toBeGreaterThan(-1);
-    expect(dilim.indexOf('this.youtubeOtomatik.yayinDegerleri(')).toBeLessThan(
-      dilim.indexOf("SET status = 'launching'"),
-    );
+    expect(hazirla).toContain('this.youtubeOtomatik.yayinDegerleri(');
+    expect(dilim.indexOf('this.googleHazirla(')).toBeGreaterThan(-1);
+    expect(dilim.indexOf('this.googleHazirla(')).toBeLessThan(dilim.indexOf("SET status = 'launching'"));
   });
 
   it('KRİTİK: konum HER ZAMAN gidiyor — ön ayarda yoksa Türkiye', () => {
     // Konumsuz Demand Gen kampanyası bütün ülkelere açılıyor.
-    expect(dilim).toContain(
+    expect(hazirla).toContain(
       'konumlar: g.locations.length > 0 ? g.locations.map((l) => l.key) : [VARSAYILAN_KONUM]',
     );
   });
@@ -194,11 +199,11 @@ describe('KRİTİK: yayın yolu ön ayarın SABİT metnini değil videoyu kullan
   it('KRİTİK: ön ayardaki yaşlar yayına gidiyor', () => {
     // Şemada alan vardı ve hiçbir zaman okunmuyordu; bu satır düşerse panel
     // yaş seçtirir, Google'a hiçbir şey gitmez.
-    expect(dilim).toContain('yaslar: g.ageRanges,');
+    expect(hazirla).toContain('yaslar: g.ageRanges,');
   });
 
   it('açıklama yayın anında TAZE okunuyor — kart önizlemesiyle ORTAK metottan', () => {
-    expect(dilim).toContain('this.videodanMetin(kayit, degerler.businessName)');
+    expect(hazirla).toContain('this.videodanMetin(kayit, degerler.businessName)');
     const i2 = kaynak.indexOf('private async videodanMetin(');
     expect(i2).toBeGreaterThan(-1);
     expect(kaynak.slice(i2, kaynak.indexOf('\n  }\n', i2))).toContain(

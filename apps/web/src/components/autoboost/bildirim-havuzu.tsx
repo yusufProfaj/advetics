@@ -10,6 +10,7 @@ import type {
   AutoBoostQueueOverride,
   AutoBoostSubscriptionHealth,
   ChannelKind,
+  YoutubeProvaSonucu,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { AUTOBOOST_TEKRAR_ACIK_DURUMLAR, PLATFORM_LABELS, hedeflemeOzeti } from '@advetics/shared';
@@ -20,6 +21,7 @@ import {
   useKartDuzenle,
 } from '@/components/autoboost/kart-duzenle';
 import { PlatformLogo } from '@/components/platform-logo';
+import { YoutubeProvaSonucuKutusu, type ProvaDurumu } from './youtube-prova-sonucu';
 
 /**
  * ═══ PLATFORM TABLOLARI — HEPSİ `Record`, HİÇBİRİ KOŞUL ZİNCİRİ ═══
@@ -522,6 +524,14 @@ function Kart({
    */
   const [duzenleAcik, setDuzenleAcik] = useState(false);
   const duzenle = useKartDuzenle(kayit);
+  /*
+   * YOUTUBE: DURAKLATILMIŞ KUR ve PROVA (plan K3, Aşama 1). İkisi de yalnızca
+   * bekleyen YouTube kartında. Seçim hem provaya hem yayına gidiyor: prova
+   * yayının AYNISINI sınamalı.
+   */
+  const youtubeBekliyor = kayit.status === 'pending' && kayit.platform === 'google';
+  const [duraklatilmisKur, setDuraklatilmisKur] = useState(false);
+  const [prova, setProva] = useState<ProvaDurumu | null>(null);
   /** Sunucunun kendi cümlesi — "sürdürüldü ama üst seviyede duraklatılmış" gibi. */
   const [not, setNot] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -570,7 +580,32 @@ function Kart({
     await karar(true, override).catch(() => undefined);
   }
 
+  /**
+   * PROVA — kartın yayınlanacağı hâli Google'a "yalnızca doğrula" diye
+   * soruyor. Düzenleme açıksa alanlardaki değerlerle: kullanıcının sınadığı
+   * şey yayınlayacağı şey olmalı.
+   */
+  async function provaEt(): Promise<void> {
+    const duzenlenen = duzenleAcik ? duzenle.topla() : undefined;
+    if (duzenleAcik && !duzenlenen) return;
+    const override = { ...(duzenlenen ?? {}), ...(duraklatilmisKur ? { duraklatilmis: true } : {}) };
+    setProva({ tur: 'yukleniyor' });
+    try {
+      const veri = await apiFetch<YoutubeProvaSonucu>(`/autoboost/queue/${kayit.id}/prova`, {
+        method: 'POST',
+        body: JSON.stringify(Object.keys(override).length > 0 ? { override } : {}),
+      });
+      setProva({ tur: 'sonuc', veri });
+    } catch (err) {
+      setProva({ tur: 'hata', mesaj: err instanceof ApiRequestError ? err.message : 'Prova yapılamadı.' });
+    }
+  }
+
   async function karar(approve: boolean, override?: AutoBoostQueueOverride): Promise<void> {
+    // DURAKLATILMIŞ KUR seçiliyse yayına da gidiyor (yalnızca YouTube).
+    if (approve && youtubeBekliyor && duraklatilmisKur) {
+      override = { ...(override ?? {}), duraklatilmis: true };
+    }
     setBusy(approve ? 'onay' : 'ret');
     setHata(null);
     try {
@@ -591,7 +626,8 @@ function Kart({
        * platformun kendi cümlesini taşıyor; onu göstermeden yenilemek,
        * kullanıcıya "bir şey oldu ama ne bilmiyorum" bırakırdı.
        */
-      if (r.status === 'failed') setHata(r.message);
+      // KONTROL GEREKLİ de bir sonuç: kampanya kurulmuş olabilir, kullanıcı bilmeli.
+      if (r.status === 'failed' || r.status === 'kontrol') setHata(r.message);
       setDuzenleAcik(false);
       onDegisti();
     } catch (err) {
@@ -929,11 +965,35 @@ function Kart({
           denemeyi istedi. Erken durdurma panelde henüz yok (kimlikler
           `boosts` tablosunda değil) — söylenmezse kullanıcı düğmeyi arar.
         */}
-        {kayit.status === 'pending' && kayit.platform === 'google' && (
-          <p className="text-[10px] text-ink-muted">
-            Onaylayınca kampanya ön ayardaki hedef kitleyle <strong>yayına girer</strong>.
-            Erken durdurmak şimdilik Google Ads&apos;ten.
-          </p>
+        {youtubeBekliyor && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] text-ink-muted">
+              {duraklatilmisKur ? (
+                <>
+                  Onaylayınca kampanya Google Ads&apos;te <strong>duraklatılmış</strong> kurulur; kontrol
+                  edip oradan başlatırsın.
+                </>
+              ) : (
+                <>
+                  Onaylayınca kampanya ön ayardaki hedef kitleyle <strong>yayına girer</strong>. Erken
+                  durdurmak şimdilik Google Ads&apos;ten.
+                </>
+              )}
+            </p>
+            <label className="flex items-center gap-1.5 text-[11px] text-ink">
+              <input
+                type="checkbox"
+                checked={duraklatilmisKur}
+                onChange={(e) => {
+                  setDuraklatilmisKur(e.target.checked);
+                  setProva(null);
+                }}
+                disabled={busy !== null}
+              />
+              Duraklatılmış kur
+            </label>
+            {prova && <YoutubeProvaSonucuKutusu durum={prova} />}
+          </div>
         )}
 
         {/*
@@ -968,6 +1028,16 @@ function Kart({
               >
                 {busy === 'onay' ? 'Yayınlanıyor…' : 'Bu ayarlarla yayınla'}
               </button>
+              {youtubeBekliyor && (
+                <button
+                  type="button"
+                  onClick={() => void provaEt()}
+                  disabled={busy !== null || prova?.tur === 'yukleniyor' || !duzenle.onAyarVar}
+                  className={IKINCIL_DUGME}
+                >
+                  {prova?.tur === 'yukleniyor' ? 'Prova…' : 'Prova et'}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setDuzenleAcik(false)}
@@ -1005,6 +1075,21 @@ function Kart({
               >
                 {busy === 'onay' ? 'Yayınlanıyor…' : 'Yayınla'}
               </button>
+              {/*
+                PROVA PARA HARCAMIYOR: aynı istek Google'a "yalnızca doğrula"
+                diye gidiyor. Engel varsa (ön ayar yok, hesap yok) sunucu
+                sebebini söylüyor; düğme o yüzden yalnızca işlem sürerken kapalı.
+              */}
+              {youtubeBekliyor && (
+                <button
+                  type="button"
+                  onClick={() => void provaEt()}
+                  disabled={busy !== null || prova?.tur === 'yukleniyor'}
+                  className={IKINCIL_DUGME}
+                >
+                  {prova?.tur === 'yukleniyor' ? 'Prova…' : 'Prova et'}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setDuzenleAcik(true)}

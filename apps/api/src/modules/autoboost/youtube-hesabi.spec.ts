@@ -56,7 +56,8 @@ const oku = (d: string): string =>
 
 describe('üç tüketici AYNI kararı kullanıyor', () => {
   const yayin = oku('autoboost-launch.service.ts');
-  const g = yayin.slice(yayin.indexOf('private async launchGoogle('));
+  // Yayın, prova ve ortak hazırlık (`googleHazirla`) — kota kapısına kadar.
+  const g = yayin.slice(yayin.indexOf('private async launchGoogle('), yayin.indexOf('private async kotaKapisi('));
   const okuma = oku('autoboost-read.service.ts');
 
   it('KRİTİK: yayın kararı kullanıyor ve eski Meta reddini taşımıyor', () => {
@@ -66,15 +67,16 @@ describe('üç tüketici AYNI kararı kullanıyor', () => {
   });
 
   it('KRİTİK: tek hesap seçimi kanala YAZILIYOR — mevcut kapıdan', () => {
-    expect(g).toMatch(/if \(karar\.durum === 'tek-hesap'\) \{\s*await this\.youtubeOtomatik\.kanalaBagla\(/);
+    // Yalnızca YAYIN yazıyor; prova (`kanalaYaz: false`) hiçbir şey yazmıyor.
+    expect(g).toMatch(/if \(karar\.durum === 'tek-hesap' && secenek\.kanalaYaz\) \{\s*await this\.youtubeOtomatik\.kanalaBagla\(/);
     expect(oku('youtube-otomatik.service.ts')).toContain('this.connections.setProfileAdAccount(');
   });
 
   it('yayın ÇÖZÜLEN hesabı kullanıyor — kanaldaki ham bağı değil', () => {
-    const son = g.indexOf('\n  }\n');
-    const govde = g.slice(0, son);
+    const govde = g;
+    expect(govde.length).toBeGreaterThan(3000);
     expect(govde).toContain('WHERE id = ${reklamHesabiId}::uuid');
-    expect(govde).toContain('adAccountId: reklamHesabiId,');
+    expect(govde).toContain('adAccountId: h.reklamHesabiId,');
     expect(govde).not.toContain('kayit.linked_ad_account_id');
   });
 
@@ -93,14 +95,20 @@ describe('KRİTİK: YouTube yayını yönetici (MCC) başlığıyla gidiyor', ()
    * Senkronizasyon yollarının hepsi bunu veriyordu, bu yol vermiyordu.
    */
   const yayin = oku('autoboost-launch.service.ts');
-  const g = yayin.slice(yayin.indexOf('private async launchGoogle('));
-  const govde = g.slice(0, g.indexOf('\n  }\n'));
+  const govde = yayin.slice(yayin.indexOf('private async launchGoogle('), yayin.indexOf('private async kotaKapisi('));
 
   it('hesabın yönetici kimliği okunuyor', () => {
-    expect(govde).toMatch(/SELECT platform::text AS platform, external_id, connection_id::text AS connection_id,\s*manager_external_id/);
+    expect(govde).toMatch(/SELECT external_id, connection_id::text AS connection_id, manager_external_id/);
   });
 
   it('bağlam onu login-customer-id olarak taşıyor', () => {
-    expect(govde).toMatch(/const fetchCtx = \{\s*accessToken,\s*accountExternalId: hesap\.external_id,\s*loginCustomerId: hesap\.manager_external_id \?\? undefined,/);
+    expect(govde).toMatch(/fetchCtx: \{\s*accessToken,\s*accountExternalId: hesap\.external_id,\s*loginCustomerId: hesap\.manager_external_id \?\? undefined,/);
+  });
+
+  it('KRİTİK: yayın da prova da bağlamı AYNI yardımcıdan alıyor', () => {
+    const yayinGovde = govde.slice(0, govde.indexOf('async provaGoogle('));
+    const provaGovde = govde.slice(govde.indexOf('async provaGoogle('), govde.indexOf('private async googleHazirla('));
+    expect(yayinGovde).toContain('await this.googleBaglami(h.hesap)');
+    expect(provaGovde).toContain('await this.googleBaglami(h.hesap)');
   });
 });

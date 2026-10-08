@@ -2305,6 +2305,15 @@ export class MetaProvider implements IAdPlatformProvider {
    * kullanıcı bir şey YAYINLAMAYA çalışıyor ve sessizce yutmak, oluşturulduğu
    * sanılan bir kampanya bırakırdı.
    */
+  async videoBoostProva(): Promise<never> {
+    // Yalnızca Google'da var; sessiz bir "geçti" yerine açık hata.
+    throw new PlatformApiError(
+      'meta',
+      'permanent',
+      'YouTube video reklamı provası yalnızca Google Ads’te var.',
+    );
+  }
+
   async createVideoBoost(): Promise<never> {
     throw new PlatformApiError(
       'meta',

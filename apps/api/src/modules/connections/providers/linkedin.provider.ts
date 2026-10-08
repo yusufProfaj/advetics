@@ -1034,6 +1034,15 @@ export class LinkedInProvider implements IAdPlatformProvider {
     throw new PlatformApiError('linkedin', 'permanent', 'LinkedIn boost henüz yazılmadı.');
   }
 
+  async videoBoostProva(): Promise<never> {
+    // Yalnızca Google'da var; sessiz bir "geçti" yerine açık hata.
+    throw new PlatformApiError(
+      'linkedin',
+      'permanent',
+      'YouTube video reklamı provası yalnızca Google Ads’te var.',
+    );
+  }
+
   async createVideoBoost(): Promise<never> {
     /*
      * YouTube video boost'unun LinkedIn'de karşılığı YOK — bu metot arayüzde

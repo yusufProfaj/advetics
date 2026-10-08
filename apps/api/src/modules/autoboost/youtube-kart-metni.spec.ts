@@ -49,7 +49,9 @@ function metot(bas: string): string {
 
 describe('yayın yolu', () => {
   it('KRİTİK: kartta yazılan metin üretilenin YERİNE geçiyor', () => {
-    const g = metot('private async launchGoogle(');
+    // Metin ortak hazırlıkta (`googleHazirla`): yayın ve prova AYNI metni gönderiyor.
+    expect(metot('private async launchGoogle(')).toContain('this.googleHazirla(scoped, kayit, metinOzel,');
+    const g = metot('private async googleHazirla(');
     expect(g).toContain('const metin: VideoMetinleri = metinOzel');
     expect(g).toContain('headlines: [metinOzel.baslik]');
     expect(g).toContain('descriptions: [metinOzel.aciklama]');
@@ -57,7 +59,7 @@ describe('yayın yolu', () => {
   });
 
   it('KRİTİK: karar yolu metni Google dalına GEÇİRİYOR', () => {
-    expect(metot('async decide(')).toContain('this.launchGoogle(ctx, scoped, ozellestirilmis, override?.texts)');
+    expect(metot('async decide(')).toContain('this.launchGoogle(ctx, scoped, ozellestirilmis, override?.texts,');
   });
 
   it('KRİTİK: Instagram kartına metin REDDEDİLİYOR — yok sayılmıyor', () => {
