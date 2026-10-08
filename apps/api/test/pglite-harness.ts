@@ -600,6 +600,7 @@ export async function createHarness(): Promise<Harness> {
   const reset = async (): Promise<void> => {
     await pg.exec(`
       TRUNCATE TABLE
+        okuma_api_anahtarlari,
         ai_messages, ai_conversations,
         strateji_kelimeleri, strateji_matrisi, strateji_dagilimlari, strateji_planlari, ozel_gunler,
         adv_onay, adv_mesaj, adv_oturum, prova, geri_okuma, yayin_nesnesi, yayin, taslak_surumu, reklam_taslagi, ajans_ayari,

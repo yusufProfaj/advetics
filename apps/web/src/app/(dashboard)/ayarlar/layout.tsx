@@ -19,6 +19,7 @@ export default async function AyarlarDuzeni({ children }: { children: React.Reac
   const { ayarlar } = kenarBolumleri(
     visibleSections(session.permissions, {
       ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
+      platformSahibi: session.platformAdmin,
     }),
   );
   const sekmeler = ayarlar.map((a) => ({

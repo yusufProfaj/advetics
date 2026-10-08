@@ -60,6 +60,14 @@ export interface NavEntry {
    */
   ustHesapUyeligi?: true;
   /**
+   * YALNIZCA PLATFORM SAHİBİNE (`users.platform_admin`).
+   *
+   * Yetki anahtarı bunu da anlatamıyor: Sahip bir rol değil, bir bayrak
+   * (`roles.ts`). Bir şirketin admini bütün izinleri taşıyabilir ama
+   * Advetics'i işleten taraf değildir. Bugün tek kullanımı Okuma API.
+   */
+  platformSahibi?: true;
+  /**
    * ÖNE ÇIKARILMIŞ SATIR ve rozetindeki kısa metin. Yalnızca görünüş:
    * süzmeye, yetkiye, "bu yolda mı" kararına hiçbir etkisi yok. Birden çok
    * satırda kullanmak vurguyu anlamsızlaştırır; bugün tek kullanımı

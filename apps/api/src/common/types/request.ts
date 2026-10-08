@@ -18,4 +18,9 @@ export interface AuthedRequest extends Request {
   requestId: string;
   tenant?: TenantContext;
   actor?: RequestActor;
+  /**
+   * İstek bir OKUMA ANAHTARIYLA geldiyse anahtarın kimliği (JWT ile gelince
+   * tanımsız). Okuma uçları buna bakarak çerezli oturumu reddediyor.
+   */
+  okumaAnahtariId?: string;
 }

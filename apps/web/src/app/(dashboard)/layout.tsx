@@ -127,6 +127,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
      */
     bolumler: visibleSections(session.permissions, {
       ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
+      platformSahibi: session.platformAdmin,
     }),
     sirketAdi: session.organization.name,
     logoUrl: branding?.logoUrl ?? null,

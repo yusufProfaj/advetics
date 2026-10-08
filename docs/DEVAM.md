@@ -6,10 +6,25 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-07 · **Canlı (539f6fb):** Google gün içi saatlik,
+**Son güncelleme:** 2026-10-08 · **Canlı (539f6fb):** Google gün içi saatlik,
 Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlıda
 doğrulandı).
 **Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: dört migration — taslak, yayın, yazma kesici, prova — + `db:rls`; `META_API_VERSION` v25.0 ya da v26.0 olmalı), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
+
+**OKUMA API / MCP (2026-10-08, kullanıcı isteği), DEPLOY EDİLMEDİ:**
+platform sahibi (`hello@profaj.com`) için salt okunur yapay zekâ kapısı.
+Panel: Ayarlar › Okuma API (menü + sayfa yalnız `platformAdmin`), anahtar
+oluştur / bir kez göster / iptal. API: `POST /api/mcp` (durumsuz MCP,
+Streamable HTTP, SDK yok) + aynı araçlar REST `GET /api/okuma/araclar/:ad`;
+dokuz araç `MetricsService`in okuma yollarını çağırıyor, yeni SQL yok.
+Anahtar YALNIZ `@OkumaAnahtariyla()` uçlarında geçiyor, o uçlar YALNIZ
+anahtarla (çerez reddediliyor). MIGRATION VAR: `20261008160000_okuma_api`
+(yeni tablo `okuma_api_anahtarlari`) + `db:rls`. Bağlantı belgesi ve hazır
+istemler: [`okuma-api/MCP-BAGLANTI.md`](okuma-api/MCP-BAGLANTI.md).
+**Deploy sonrası:** `db:platform-admin -- --liste` ile yalnız hello'nun sahip
+olduğunu doğrula (ekranı her platform sahibi görür), anahtar oluştur, curl
+ile `tools/list` dene, Claude Code'dan `metrik_ozeti` çağır. Canlıda HİÇ
+denenmedi; Claude Desktop (`mcp-remote`) yolu ölçülmedi.
 
 **YAPAY ZEKÂ GEMINI (2026-10-08, kullanıcı kararı):** Anthropic tamamen
 kaldırıldı (SDK dahil). Tek istemci `apps/api/src/yapay-zeka/gemini.ts`

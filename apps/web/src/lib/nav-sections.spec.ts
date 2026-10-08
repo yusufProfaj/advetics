@@ -24,10 +24,10 @@ const izinler = (rol: keyof typeof ROLE_PERMISSIONS): Permission[] => [
 ];
 
 const basliklar = (rol: keyof typeof ROLE_PERMISSIONS): Array<string | undefined> =>
-  visibleSections(izinler(rol), { ustHesapGorunur: true }).map((s) => s.title);
+  visibleSections(izinler(rol), { ustHesapGorunur: true, platformSahibi: false }).map((s) => s.title);
 
 const etiketler = (rol: keyof typeof ROLE_PERMISSIONS): string[] =>
-  visibleSections(izinler(rol), { ustHesapGorunur: true }).flatMap((s) => s.items.map((i) => i.label));
+  visibleSections(izinler(rol), { ustHesapGorunur: true, platformSahibi: false }).flatMap((s) => s.items.map((i) => i.label));
 
 describe('menü verisi gerçekten okunuyor', () => {
   it('EKRANI OLMAYAN öğe menüde YOK', () => {
@@ -368,7 +368,7 @@ describe('KRİTİK: "Üst Hesaplar" üyelikle açılıyor, yetkiyle değil', () 
    * üstünde bir katman olduğunu öğrenip giremediği bir ekran.
    */
   const menu = (ustHesapGorunur: boolean): string[] =>
-    visibleSections(izinler('admin'), { ustHesapGorunur }).flatMap((s) => s.items.map((i) => i.label));
+    visibleSections(izinler('admin'), { ustHesapGorunur, platformSahibi: false }).flatMap((s) => s.items.map((i) => i.label));
 
   it('üyeliği olmayan admin "Üst Hesaplar"ı GÖRMÜYOR', () => {
     expect(menu(false)).not.toContain('Üst Hesaplar');
@@ -404,5 +404,41 @@ describe('AKILLI BOOST — Reklamlar bölümünün öne çıkarılmış ilk sat�
   it('vurgu TEK satırda — iki vurgu hiçbirini belirgin yapmaz', () => {
     const vurgulu = SECTIONS.flatMap((s) => s.items).filter((i) => i.vurgu);
     expect(vurgulu.map((i) => i.label)).toEqual(['Akıllı Boost']);
+  });
+});
+
+describe('KRİTİK: "Okuma API" yalnızca platform sahibine', () => {
+  /*
+   * Kullanıcının isteği: "sadece bu hesapla (platform sahibi) giriş
+   * yaptığımda ayarlarda API kontrol paneli olsun". Yetki anahtarı bunu
+   * anlatamıyor: admin bütün izinleri taşıyabilir ama Sahip değil.
+   */
+  const menu = (platformSahibi: boolean): string[] =>
+    visibleSections(izinler('admin'), { ustHesapGorunur: true, platformSahibi }).flatMap((s) =>
+      s.items.map((i) => i.label),
+    );
+
+  it('KRİTİK: bütün izinleri taşıyan admin GÖRMÜYOR', () => {
+    expect(menu(false)).not.toContain('Okuma API');
+  });
+
+  it('platform sahibi Ayarlar altında görüyor', () => {
+    expect(menu(true)).toContain('Okuma API');
+    const ayar = SECTIONS.find((s) => s.title === 'Ayarlar')!.items.map((i) => i.href);
+    expect(ayar).toContain('/ayarlar/okuma-api');
+  });
+
+  it('bayrak yalnızca o satırda — başka hiçbir satırı saklamıyor', () => {
+    expect(menu(true).filter((l) => !menu(false).includes(l))).toEqual(['Okuma API']);
+  });
+
+  it('KRİTİK: sayfa da bayrağı okuyor — adresi bilen 404 alıyor', () => {
+    const kod = readFileSync(
+      join(__dirname, '..', 'app', '(dashboard)', 'ayarlar', 'okuma-api', 'page.tsx'),
+      'utf8',
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(kod).toContain('if (!session.platformAdmin) notFound();');
   });
 });

@@ -1,6 +1,12 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY } from '../../../common/decorators';
+import { IS_PUBLIC_KEY, OKUMA_ANAHTARI_KEY } from '../../../common/decorators';
 import type { AuthedRequest } from '../../../common/types/request';
 import {
   ACCESS_COOKIE,
@@ -8,6 +14,8 @@ import {
   ACTIVE_MANAGER_COOKIE,
   ACTIVE_ORG_COOKIE,
 } from '../cookies';
+import { okumaAnahtariMi } from '../okuma-anahtari';
+import { OkumaAnahtariDogrulayici } from '../okuma-anahtari-dogrulayici.service';
 import { TenantContextService } from '../tenant-context.service';
 import { TokenService } from '../token.service';
 
@@ -27,6 +35,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly tokens: TokenService,
     private readonly tenantContext: TenantContextService,
+    private readonly okumaAnahtari: OkumaAnahtariDogrulayici,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -37,6 +46,37 @@ export class JwtAuthGuard implements CanActivate {
     if (isPublic) return true;
 
     const req = context.switchToHttp().getRequest<AuthedRequest>();
+
+    /*
+     * ═══ OKUMA ANAHTARI — İKİ YÖNLÜ AYRIM ═══
+     *
+     * Anahtar YALNIZCA işaretli uçlarda geçer, işaretli uçlar YALNIZCA
+     * anahtarla çağrılır. İlk yön anahtarı okuma dışına taşımıyor (yazan
+     * bir uca ulaşamıyor); ikinci yön MCP ucunu çerezli oturumdan
+     * ayırıyor (tarayıcıdan sahte istek, oturum çerezini taşıyarak ona
+     * ulaşamıyor). Anahtar yalnızca `Authorization` başlığından okunuyor;
+     * çerezden okumak ikinci yönü delerdi.
+     */
+    const okumaUcu =
+      this.reflector.getAllAndOverride<boolean | undefined>(OKUMA_ANAHTARI_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) === true;
+    const bearer = this.bearer(req);
+    if (bearer !== null && okumaAnahtariMi(bearer)) {
+      if (!okumaUcu) {
+        throw new ForbiddenException(
+          'Okuma anahtarı yalnızca okuma API uçlarında (MCP) kullanılabilir',
+        );
+      }
+      return this.okumaAnahtariyla(req, bearer);
+    }
+    if (okumaUcu) {
+      throw new UnauthorizedException(
+        'Bu uç yalnızca okuma anahtarıyla çağrılır (Authorization: Bearer adv_ro_…)',
+      );
+    }
+
     const token = this.extractToken(req);
 
     if (!token) {
@@ -94,6 +134,34 @@ export class JwtAuthGuard implements CanActivate {
     req.actor = identity.actor;
     req.tenant = identity.context;
     return true;
+  }
+
+  /**
+   * Okuma anahtarıyla gelen istek. Bağlam EV bağlamı (seçim yok): MCP
+   * araçları kapsamı her çağrıda kendi parametresinden yeniden çözüyor
+   * (`okuma-araclari.service.ts`), yani burada çerez/başlık seçimi okumak
+   * gereksiz ve istemcinin elindeki ikinci bir kapsam kanalı olurdu.
+   */
+  private async okumaAnahtariyla(req: AuthedRequest, anahtar: string): Promise<boolean> {
+    const { userId, anahtarId } = await this.okumaAnahtari.dogrula(anahtar, req.ip ?? null);
+    const identity = await this.tenantContext.resolve(userId, null, null, null);
+    // Doğrulayıcı bayrağı zaten okudu; bağlam ayrı bir sorgudan geliyor ve
+    // ikisinin arasında bayrak geri alınmış olabilir. İkinci kapı ucuz.
+    if (!identity.context.platformAdmin) {
+      throw new UnauthorizedException('Okuma anahtarının sahibi artık platform sahibi değil');
+    }
+    req.actor = identity.actor;
+    req.tenant = identity.context;
+    req.okumaAnahtariId = anahtarId;
+    return true;
+  }
+
+  private bearer(req: AuthedRequest): string | null {
+    const authHeader = req.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      return authHeader.slice(7).trim() || null;
+    }
+    return null;
   }
 
   private extractToken(req: AuthedRequest): string | null {

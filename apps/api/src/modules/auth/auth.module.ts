@@ -4,6 +4,7 @@ import { AuditModule } from '../audit/audit.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { OkumaAnahtariDogrulayici } from './okuma-anahtari-dogrulayici.service';
 import { TenantContextService } from './tenant-context.service';
 import { TokenService } from './token.service';
 
@@ -15,7 +16,7 @@ import { TokenService } from './token.service';
 @Module({
   imports: [JwtModule.register({}), AuditModule],
   controllers: [AuthController],
-  providers: [AuthService, TokenService, TenantContextService, JwtAuthGuard],
-  exports: [AuthService, TokenService, TenantContextService, JwtAuthGuard],
+  providers: [AuthService, TokenService, TenantContextService, JwtAuthGuard, OkumaAnahtariDogrulayici],
+  exports: [AuthService, TokenService, TenantContextService, JwtAuthGuard, OkumaAnahtariDogrulayici],
 })
 export class AuthModule {}

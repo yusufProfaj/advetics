@@ -34,6 +34,7 @@ export const AYAR_KISA_AD: Record<string, string> = {
   '/ayarlar/senkronizasyon': 'Senkronizasyon',
   '/ayarlar/e-posta': 'E-posta',
   '/ayarlar/ekip': 'Ekip',
+  '/ayarlar/okuma-api': 'Okuma API',
 };
 
 export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
@@ -315,6 +316,22 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         ready: true,
         perm: 'user.read',
       },
+      {
+        /*
+         * OKUMA API — YALNIZCA PLATFORM SAHİBİ (kullanıcı isteği,
+         * 2026-10-08: "sadece bu hesapla giriş yaptığımda ayarlarda API
+         * kontrol paneli olsun"). Bir YETKİ ANAHTARI DEĞİL bayrak: Sahip
+         * bir rol değil ve bütün izinleri taşıyan bir şirket admini bile bu
+         * satırı görmemeli. Sayfa kapısı ve API aynı bayrağı ayrıca okuyor;
+         * menüden gizlemek tek başına koruma değil.
+         */
+        href: '/ayarlar/okuma-api',
+        label: 'Okuma API',
+        icon: 'ai',
+        module: 1,
+        ready: true,
+        platformSahibi: true,
+      },
     ],
   },
 ];
@@ -337,11 +354,13 @@ export function visibleSections(
    * sessizce gizlerdi; `true` olsaydı müşteri adminine geri getirirdi.
    * İkisi de derlemede görünmezdi.
    */
-  baglam: { ustHesapGorunur: boolean },
+  baglam: { ustHesapGorunur: boolean; platformSahibi: boolean },
 ): Array<{ title?: string; items: NavEntry[] }> {
   const izinli = new Set(permissions);
   const gorunur = (i: NavEntry): boolean =>
-    (!i.perm || izinli.has(i.perm)) && (!i.ustHesapUyeligi || baglam.ustHesapGorunur);
+    (!i.perm || izinli.has(i.perm)) &&
+    (!i.ustHesapUyeligi || baglam.ustHesapGorunur) &&
+    (!i.platformSahibi || baglam.platformSahibi);
   return SECTIONS.map((s) => ({
     title: s.title,
     items: s.items.filter(gorunur).map((i) =>

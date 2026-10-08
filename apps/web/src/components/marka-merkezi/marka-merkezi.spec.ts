@@ -99,10 +99,10 @@ describe('sayfa', () => {
 describe('menü', () => {
   it('KRİTİK: müşteri hesabı Marka Merkezi satırını görmüyor', () => {
     // Kullanıcının kararı: müşterinin menüsü üç ekran.
-    const musteri = visibleSections(ROLE_PERMISSIONS.client_viewer, { ustHesapGorunur: false })
+    const musteri = visibleSections(ROLE_PERMISSIONS.client_viewer, { ustHesapGorunur: false, platformSahibi: false })
       .flatMap((b) => b.items.map((i) => i.label));
     expect(musteri).not.toContain('Marka Merkezi');
-    const yonetici = visibleSections(ROLE_PERMISSIONS.admin, { ustHesapGorunur: false })
+    const yonetici = visibleSections(ROLE_PERMISSIONS.admin, { ustHesapGorunur: false, platformSahibi: false })
       .flatMap((b) => b.items.map((i) => i.label));
     expect(yonetici).toContain('Marka Merkezi');
   });

@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
+import { sonrakiTablolar, tablolarsizRls } from '../../test/sonraki-tablolar';
 
 /**
  * ═══ ADVSTRATEGY AKTARIM MIGRATION'I ÜRETİM SIRASINDA ═══
@@ -30,10 +31,24 @@ const ESKI_OTURUM = '40000000-0000-4000-8000-000000000001';
 
 let pg: PGlite;
 
-async function sqlDosyalari(): Promise<void> {
+/**
+ * `onceki`: önceki deploy'un db:rls'i — bu migration'dan SONRA eklenen
+ * tablolar ondan çıkarılıyor (`test/sonraki-tablolar.ts`).
+ */
+async function sqlDosyalari(onceki = false): Promise<void> {
   const dosyalar = readdirSync(SQL_DIR).filter((f) => f.endsWith('.sql')).sort();
   expect(dosyalar).toContain('02_rls.sql');
-  for (const f of dosyalar) await pg.exec(readFileSync(join(SQL_DIR, f), 'utf8'));
+  const tum = readdirSync(MIGRATIONS).filter((d) => /^\d/.test(d)).sort();
+  const sonraki = sonrakiTablolar(MIGRATIONS, tum.filter((d) => d > BU_MIGRATION));
+  for (const f of dosyalar) {
+    let sql = readFileSync(join(SQL_DIR, f), 'utf8');
+    if (onceki && f === '02_rls.sql') {
+      const temiz = tablolarsizRls(sql, sonraki);
+      expect(temiz.bulunamayan, 'sonraki tablolar RLS dizisinde bulunamadı').toEqual([]);
+      sql = temiz.sql;
+    }
+    await pg.exec(sql);
+  }
 }
 
 beforeAll(async () => {
@@ -45,7 +60,7 @@ beforeAll(async () => {
   expect(oncekiler).toContain('20261008120000_advstrategy');
 
   for (const d of oncekiler) await pg.exec(readFileSync(join(MIGRATIONS, d, 'migration.sql'), 'utf8'));
-  await sqlDosyalari();
+  await sqlDosyalari(true);
 
   // ESKİ VERİ — migration'dan önce üretimde duran satırlar.
   await pg.exec(`

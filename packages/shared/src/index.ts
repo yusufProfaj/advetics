@@ -53,3 +53,4 @@ export * from './rapor-sorgusu';
 export * from './schemas/rapor-plani.schema';
 export * from './zod-turkce';
 export * from './reklam';
+export * from './okuma-api';

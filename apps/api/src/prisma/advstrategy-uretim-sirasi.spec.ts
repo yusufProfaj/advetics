@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
+import { sonrakiTablolar, tablolarsizRls } from '../../test/sonraki-tablolar';
 
 /**
  * ═══ ADVSTRATEGY MIGRATION'I ÜRETİM SIRASINDA ═══
@@ -35,7 +36,11 @@ let pg: PGlite;
  * bulunamazsa test patlıyor (tarama boşa düşmesin).
  */
 function oncekiRls(): string {
-  const bugun = readFileSync(join(SQL_DIR, '02_rls.sql'), 'utf8');
+  const tum = readdirSync(MIGRATIONS).filter((d) => /^\d/.test(d)).sort();
+  const sonraki = sonrakiTablolar(MIGRATIONS, tum.filter((d) => d > BU_MIGRATION));
+  const temiz = tablolarsizRls(readFileSync(join(SQL_DIR, '02_rls.sql'), 'utf8'), sonraki);
+  expect(temiz.bulunamayan, 'sonraki tablolar RLS dizisinde bulunamadı').toEqual([]);
+  const bugun = temiz.sql;
   const dizi = /\n\s*-- AdvStrategy aylık medya planı[^\n]*\n\s*'strateji_planlari'[^\n]*\n\s*'ozel_gunler'\n/;
   expect(bugun, 'RLS dizisindeki AdvStrategy satırları bulunamadı').toMatch(dizi);
   let s = bugun.replace(dizi, '\n').replace(/'adv_onay',\s*\n/, "'adv_onay'\n");

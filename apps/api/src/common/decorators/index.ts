@@ -19,6 +19,19 @@ export const RequirePermissions = (
 ): MethodDecorator & ClassDecorator => SetMetadata(PERMISSIONS_KEY, permissions);
 
 /** Yalnızca org geneli yetkili roller (owner/admin) erişebilir. */
+/**
+ * OKUMA ANAHTARIYLA ÇAĞRILABİLEN UÇ — opt-in, varsayılan KAPALI.
+ *
+ * Okuma anahtarı (`adv_ro_…`) yalnızca bu işaretli uçlarda geçiyor ve bu
+ * uçlar YALNIZCA anahtarla çağrılıyor (çerezli oturum reddediliyor). "Her
+ * GET'e izin ver" denseydi yan etkisi olan bugünkü GET'ler ve yarın
+ * eklenecek her uç sessizce anahtara açılırdı; çerezi kabul etmek ise
+ * MCP ucunu tarayıcıdan gelen istek sahteciliğine açardı.
+ */
+export const OKUMA_ANAHTARI_KEY = 'okumaAnahtariyla';
+export const OkumaAnahtariyla = (): MethodDecorator & ClassDecorator =>
+  SetMetadata(OKUMA_ANAHTARI_KEY, true);
+
 export const ORG_ADMIN_KEY = 'requiresOrgAdmin';
 export const RequireOrgAdmin = (): MethodDecorator & ClassDecorator =>
   SetMetadata(ORG_ADMIN_KEY, true);

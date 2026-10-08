@@ -368,6 +368,9 @@ DECLARE
     -- Danışman başına e-posta kimliği. Politikası DİĞERLERİNDEN FARKLI:
     -- satır yalnızca SAHİBİNE görünüyor, org yöneticisine bile değil.
     'user_email_accounts',
+    -- Okuma API anahtarları (packages/shared/src/okuma-api): aynı kural,
+    -- satır yalnızca sahibine.
+    'okuma_api_anahtarlari',
     -- Modül 5
     'monthly_budgets', 'rules', 'rule_runs', 'rule_action_logs',
     -- Modül 7
@@ -2438,3 +2441,27 @@ CREATE POLICY adv_strateji_kelimeleri_delete ON strateji_kelimeleri
 -- (Faz 3) politika o gün, kimin yazacağı kararıyla birlikte eklenir.
 CREATE POLICY adv_ozel_gunler_select ON ozel_gunler
   FOR SELECT USING (app.has_context());
+
+-- ============================================================================
+-- okuma_api_anahtarlari — PLATFORM SAHİBİNİN OKUMA (MCP) ANAHTARLARI
+-- ============================================================================
+--
+-- SATIR YALNIZCA SAHİBİNE GÖRÜNÜYOR, user_email_accounts ile aynı kural ve
+-- aynı gerekçe: satır başkasının adına veri okumaya yarayan bir kimliğin
+-- özetini taşıyor. Org yüklemi YOK (tabloda org kolonu yok): platform
+-- sahibi üst hesaplar arasında geziyor ve org'a bağlı bir politika satırı
+-- başka şirketteyken ondan gizlerdi (eposta-kimligi-rls.spec.ts).
+--
+-- Doğrulama bekçisi bu politikadan GEÇMİYOR: bağlam kurulmadan önce
+-- BYPASSRLS istemciyle tek satırı özetle arıyor. Bu politika panelin
+-- listele / oluştur / iptal yollarını koruyor.
+CREATE POLICY adv_okuma_anahtari_select ON okuma_api_anahtarlari
+  FOR SELECT USING (user_id = app.current_user_id());
+CREATE POLICY adv_okuma_anahtari_insert ON okuma_api_anahtarlari
+  FOR INSERT WITH CHECK (user_id = app.current_user_id());
+CREATE POLICY adv_okuma_anahtari_update ON okuma_api_anahtarlari
+  FOR UPDATE USING (user_id = app.current_user_id())
+  WITH CHECK (user_id = app.current_user_id());
+-- DELETE POLİTİKASI YOK: iptal bir UPDATE (iptal damgası). Satır kalıyor ki
+-- "bu anahtar ne zaman, son kez nereden kullanıldı" sorusu iptalden sonra da
+-- cevaplanabilsin. Silme gerekirse kullanıcı silinince CASCADE.

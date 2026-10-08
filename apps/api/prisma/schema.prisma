@@ -143,7 +143,7 @@ model ManagerAccount {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organizations Organization[] @relation("UstHesapSirketleri")
+  organizations Organization[]      @relation("UstHesapSirketleri")
   memberships   ManagerMembership[]
 
   @@map("manager_accounts")
@@ -191,11 +191,11 @@ model ManagerMembership {
 }
 
 model Organization {
-  id        String    @id @default(uuid()) @db.Uuid
-  name      String    @db.VarChar(120)
-  slug      String    @unique @db.VarChar(60)
-  plan      OrgPlan   @default(starter)
-  status    OrgStatus @default(active)
+  id     String    @id @default(uuid()) @db.Uuid
+  name   String    @db.VarChar(120)
+  slug   String    @unique @db.VarChar(60)
+  plan   OrgPlan   @default(starter)
+  status OrgStatus @default(active)
 
   /// ÜST HESAP (Google MCC karşılığı). null = bağımsız şirket.
   ///
@@ -207,12 +207,12 @@ model Organization {
   /// `onDelete: SetNull` — üst hesabın silinmesi ALTINDAKİ ŞİRKETLERİ
   /// SİLMEMELİ. Cascade olsaydı bir danışmanlık kaydını silmek, o
   /// danışmanın bütün müşterilerinin bütün verisini götürürdü.
-  managerAccountId String? @map("manager_account_id") @db.Uuid
-  managerAccount   ManagerAccount? @relation("UstHesapSirketleri", fields: [managerAccountId], references: [id], onDelete: SetNull)
+  managerAccountId    String?         @map("manager_account_id") @db.Uuid
+  managerAccount      ManagerAccount? @relation("UstHesapSirketleri", fields: [managerAccountId], references: [id], onDelete: SetNull)
   /// Bu şirket bir üst hesabın AJANS şirketiyse o hesap — bkz. `ManagerAccount.ajansOrgId`.
   ajansOlduguUstHesap ManagerAccount? @relation("AjansSirketi")
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   users           User[]
   clients         Client[]
@@ -257,18 +257,18 @@ model Organization {
 }
 
 model User {
-  id                 String     @id @default(uuid()) @db.Uuid
-  orgId              String     @map("org_id") @db.Uuid
+  id           String  @id @default(uuid()) @db.Uuid
+  orgId        String  @map("org_id") @db.Uuid
   /// Daima küçük harfe normalize edilerek saklanır (Zod `toLowerCase`).
-  email              String     @db.VarChar(255)
+  email        String  @db.VarChar(255)
   /// argon2id hash. SSO ile gelen kullanıcılarda null.
-  passwordHash       String?    @map("password_hash") @db.Text
-  fullName           String     @map("full_name") @db.VarChar(120)
-  avatarUrl          String?    @map("avatar_url") @db.VarChar(1024)
-  locale             String     @default("tr") @db.VarChar(10)
+  passwordHash String? @map("password_hash") @db.Text
+  fullName     String  @map("full_name") @db.VarChar(120)
+  avatarUrl    String? @map("avatar_url") @db.VarChar(1024)
+  locale       String  @default("tr") @db.VarChar(10)
   /// TOTP secret — AES-256-GCM ile şifreli. (MFA Modül 1.5'te aktifleşir.)
-  mfaSecretEnc       Bytes?     @map("mfa_secret_enc")
-  mfaEnabled         Boolean    @default(false) @map("mfa_enabled")
+  mfaSecretEnc Bytes?  @map("mfa_secret_enc")
+  mfaEnabled   Boolean @default(false) @map("mfa_enabled")
 
   /// ═══ PLATFORM SAHİBİ — ADVETICS'İ İŞLETEN TARAF ═══
   ///
@@ -328,6 +328,7 @@ model User {
   emailAccount       UserEmailAccount?
   reportSchedules    ReportSchedule[]
   faturaBelgeleri    FaturaBelgesi[]
+  okumaAnahtarlari   OkumaAnahtari[]
 
   @@unique([orgId, email])
   @@index([orgId, status])
@@ -365,7 +366,7 @@ model Client {
   /// Zorunlu DEĞİL: müşteri açmanın ilk amacı hesapları bağlamak. Zorunlu alan
   /// eklemek, elinde fatura bilgisi olmayan birinin müşteriyi hiç açamaması
   /// demekti.
-  contactName  String? @map("contact_name") @db.VarChar(120)
+  contactName String? @map("contact_name") @db.VarChar(120)
 
   /// RAPOR ALICILARI — tekil `contact_email` DEĞİL.
   ///
@@ -380,21 +381,21 @@ model Client {
   /// bu alan "rapor kime gidecek". İkisi farklı soru.
   contactEmails String[] @map("contact_emails")
   contactPhone  String?  @map("contact_phone") @db.VarChar(40)
-  website      String? @db.VarChar(255)
-  address      String? @db.VarChar(500)
-  taxOffice    String? @map("tax_office") @db.VarChar(120)
-  taxNumber    String? @map("tax_number") @db.VarChar(40)
-  iban         String? @db.VarChar(34)
-  notes        String? @db.VarChar(2000)
+  website       String?  @db.VarChar(255)
+  address       String?  @db.VarChar(500)
+  taxOffice     String?  @map("tax_office") @db.VarChar(120)
+  taxNumber     String?  @map("tax_number") @db.VarChar(40)
+  iban          String?  @db.VarChar(34)
+  notes         String?  @db.VarChar(2000)
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
 
-  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  memberships  Membership[]
-  branding     BrandingProfile?
-  profile      ClientProfile?
+  organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  memberships       Membership[]
+  branding          BrandingProfile?
+  profile           ClientProfile?
   audienceTemplates AudienceTemplate[]
 
   // Modül 2
@@ -548,19 +549,19 @@ model ClientProfile {
 
   /// Boşsa workspace adı kullanılıyor (workspace adı çoğu zaman proje adı:
   /// "Kılıçoğlu İnşaat - Gaziemir").
-  markaAdi         String?  @map("marka_adi") @db.VarChar(120)
-  sektor           String?  @db.VarChar(120)
-  urunKategorileri String[] @default([]) @map("urun_kategorileri")
+  markaAdi          String?           @map("marka_adi") @db.VarChar(120)
+  sektor            String?           @db.VarChar(120)
+  urunKategorileri  String[]          @default([]) @map("urun_kategorileri")
   /// `[{ ad, url }]`. Biçim `packages/shared` şemasında, dizi olduğu CHECK ile.
-  sikSayfalar      Json     @default("[]") @map("sik_sayfalar")
+  sikSayfalar       Json              @default("[]") @map("sik_sayfalar")
   /// `CAMPAIGN_GOALS`tan biri; CHECK kısıtı migration'da.
-  anaAmac          String?  @map("ana_amac") @db.VarChar(20)
-  uslup            String?  @db.VarChar(500)
-  vaatler          String[] @default([])
+  anaAmac           String?           @map("ana_amac") @db.VarChar(20)
+  uslup             String?           @db.VarChar(500)
+  vaatler           String[]          @default([])
   /// Sık kullanılan cümleler; Reklam Oluştur tek tıkla ekliyor.
-  metinSablonlari  String[] @default([]) @map("metin_sablonlari")
+  metinSablonlari   String[]          @default([]) @map("metin_sablonlari")
   /// Tanımlıysa Meta ana metninde ZORUNLU; yayın öncesi kontrol eksikse durduruyor.
-  yasalUyari       String?  @map("yasal_uyari") @db.VarChar(300)
+  yasalUyari        String?           @map("yasal_uyari") @db.VarChar(300)
   /// Hızlı Reklam'ın kendiliğinden uyguladığı kitle şablonu. Silinirse NULL.
   varsayilanKitleId String?           @map("varsayilan_kitle_id") @db.Uuid
   varsayilanKitle   AudienceTemplate? @relation("VarsayilanKitle", fields: [varsayilanKitleId], references: [id], onDelete: SetNull)
@@ -768,12 +769,12 @@ model PlatformConnection {
   /// UI'da gösterilen ad — "Advetics Business Manager" gibi.
   accountLabel   String @map("account_label") @db.VarChar(200)
 
-  accessTokenEnc  Bytes     @map("access_token_enc")
+  accessTokenEnc         Bytes     @map("access_token_enc")
   /// Google için zorunlu (access token 1 saatte dolar). Meta long-lived
   /// token'da null olabilir.
-  refreshTokenEnc Bytes?    @map("refresh_token_enc")
-  keyVersion      Int       @default(1) @map("key_version")
-  tokenExpiresAt  DateTime? @map("token_expires_at") @db.Timestamptz(6)
+  refreshTokenEnc        Bytes?    @map("refresh_token_enc")
+  keyVersion             Int       @default(1) @map("key_version")
+  tokenExpiresAt         DateTime? @map("token_expires_at") @db.Timestamptz(6)
   /// YETKİNİN gerçek bitişi — erişim token'ınınki DEĞİL. Yenileme token'ı
   /// yoksa erişim bitişi (Meta), varsa platformun bildirdiği yenileme bitişi
   /// (LinkedIn 365 gün), bildirmiyorsa NULL = süresiz (Google). Uyarılar
@@ -852,7 +853,7 @@ model AdAccount {
   /// Modül 3'teki adaptif hız sınırlayıcı bunu kullanır.
   rateLimitState      Json?     @map("rate_limit_state") @db.JsonB
 
-  raw       Json?    @db.JsonB
+  raw              Json?     @db.JsonB
   /// ÖDEME SORUNU İÇİN ANLIK MAİL GİTTİ Mİ — bu sorun dönemi için.
   ///
   /// Sorun görüldüğü an `UPDATE ... WHERE payment_alerted_at IS NULL` ile
@@ -861,8 +862,8 @@ model AdAccount {
   /// mail atmıyor. Sorun çözülünce NULL'a dönüyor, yani aynı hesap bir ay
   /// sonra yine ödeme sorunu yaşarsa yeniden uyarılıyor.
   paymentAlertedAt DateTime? @map("payment_alerted_at") @db.Timestamptz(6)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization       Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   /// SetNull, Cascade DEĞİL: müşteri silinince hesap ajansın havuzuna GERİ
@@ -1463,6 +1464,35 @@ model UserEmailAccount {
 
   @@index([orgId])
   @@map("user_email_accounts")
+}
+
+/// ═══ OKUMA API ANAHTARI — PLATFORM SAHİBİNİN YAPAY ZEKÂ KAPISI ═══
+///
+/// Sözleşme `packages/shared/src/okuma-api`. Satır KİŞİYE ait (e-posta
+/// kimliği gibi): politika yalnızca sahibine gösteriyor, org yöneticisine
+/// bile değil. `org_id` TAŞIMIYOR ve bu kasıtlı: anahtar şirkete değil
+/// platform sahibine bağlı ve kapsamı her çağrıda bağlam çözümünden geliyor;
+/// org kolonu, kullanıcı başka şirkete geçtiğinde satırı sahibinden gizleyen
+/// `eposta-kimligi-rls.spec.ts` hatasını yeniden üretirdi.
+///
+/// DÜZ ANAHTAR YOK — `anahtar_ozeti` SHA-256 (hex). Doğrulama bekçisi bağlam
+/// kurulmadan ÖNCE çalıştığı için satırı BYPASSRLS istemciyle okuyor.
+model OkumaAnahtari {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  ad            String    @db.VarChar(80)
+  gorunenOnek   String    @map("gorunen_onek") @db.VarChar(20)
+  anahtarOzeti  String    @unique @map("anahtar_ozeti") @db.Char(64)
+  bitis         DateTime? @map("bitis") @db.Timestamptz(6)
+  sonKullanim   DateTime? @map("son_kullanim") @db.Timestamptz(6)
+  sonKullanimIp String?   @map("son_kullanim_ip") @db.VarChar(64)
+  iptal         DateTime? @map("iptal") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("okuma_api_anahtarlari")
 }
 
 model ReportTemplate {
@@ -2718,12 +2748,12 @@ model Asset {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy String?  @map("created_by") @db.Uuid
 
-  organization  Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  client        Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  platformRefs  AssetPlatformRef[]
-  draftAssets   AdDraftAsset[]
-  bulkItems     BulkItem[]
-  creativeLinks AdCreativeAsset[]
+  organization       Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  client             Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  platformRefs       AssetPlatformRef[]
+  draftAssets        AdDraftAsset[]
+  bulkItems          BulkItem[]
+  creativeLinks      AdCreativeAsset[]
   clientProfileLogos ClientProfile[]
 
   @@unique([clientId, contentHash], map: "assets_client_hash_uniq")
@@ -3339,8 +3369,8 @@ model ReportSchedule {
   /// anlatıyor ve iki hâli ayırt etmeyi unutan bir sorgu sessizce yanlış
   /// davranırdı.
   toEmails  String[] @map("to_emails")
-  attachPdf Boolean @default(true) @map("attach_pdf")
-  enabled   Boolean @default(true)
+  attachPdf Boolean  @default(true) @map("attach_pdf")
+  enabled   Boolean  @default(true)
 
   /// SIRADAKİ ÇALIŞMA — mükerrer engelinin dayanağı.
   ///
@@ -3409,7 +3439,7 @@ model FaturaBelgesi {
   /// başlangıç/bitiş tutmak hiç kullanılmayacak bir ayrım üretirdi.
   donem String @db.VarChar(7)
 
-  fileName   String @map("file_name") @db.VarChar(255)
+  fileName String @map("file_name") @db.VarChar(255)
 
   /// `application/pdf` ya da `application/zip`.
   ///
@@ -3610,11 +3640,11 @@ model TaslakSurumu {
 }
 
 model AjansAyari {
-  orgId         String    @id @map("org_id") @db.Uuid
-  atifStandardi String?   @map("atif_standardi") @db.VarChar(16)
-  atifSecenId   String?   @map("atif_secen_id") @db.Uuid
-  atifSecimAt   DateTime? @map("atif_secim_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  orgId               String    @id @map("org_id") @db.Uuid
+  atifStandardi       String?   @map("atif_standardi") @db.VarChar(16)
+  atifSecenId         String?   @map("atif_secen_id") @db.Uuid
+  atifSecimAt         DateTime? @map("atif_secim_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
   metaYazmaDurduruldu Boolean   @default(false) @map("meta_yazma_durduruldu")
   durduranId          String?   @map("durduran_id") @db.Uuid
   durdurmaAt          DateTime? @map("durdurma_at") @db.Timestamptz(6)
@@ -3717,22 +3747,22 @@ model Prova {
 // AdvCampaign sohbeti (migration 20261008100000_advcampaign_sohbet). İlişkisiz:
 // erişim ham SQL ile, yeni reklam modülünün deseni.
 model AdvOturum {
-  id         String   @id @default(uuid()) @db.Uuid
-  orgId      String   @map("org_id") @db.Uuid
-  clientId   String   @map("client_id") @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  baslik     String   @db.VarChar(120)
-  taslakId   String?  @map("taslak_id") @db.Uuid
-  durum      String   @default("acik") @db.VarChar(8)
-  model      String   @db.VarChar(40)
-  sorulanlar Json     @default("[]") @db.JsonB
+  id               String   @id @default(uuid()) @db.Uuid
+  orgId            String   @map("org_id") @db.Uuid
+  clientId         String   @map("client_id") @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  baslik           String   @db.VarChar(120)
+  taslakId         String?  @map("taslak_id") @db.Uuid
+  durum            String   @default("acik") @db.VarChar(8)
+  model            String   @db.VarChar(40)
+  sorulanlar       Json     @default("[]") @db.JsonB
   /// AdvStrategy aktarımı: giriş kutusuna konacak metin ve ekler (MIMARI § 6.1).
   hazirIstem       String?  @map("hazir_istem") @db.VarChar(4000)
   hazirMedyalar    String[] @default([]) @map("hazir_medyalar") @db.Uuid
   /// Tekil KISMİ indeks `adv_oturum_strateji_matris_key` (IS NOT NULL) yalnız migration'da.
   stratejiMatrisId String?  @map("strateji_matris_id") @db.Uuid
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   @@index([clientId, updatedAt(sort: Desc)], map: "adv_oturum_client_idx")
   @@index([orgId], map: "adv_oturum_org_id_idx")

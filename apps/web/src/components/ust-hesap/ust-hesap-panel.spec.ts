@@ -667,7 +667,7 @@ function atama(kaynak: string, ad: string): string {
 }
 
 function etiketler(rol: keyof typeof ROLE_PERMISSIONS): string[] {
-  return visibleSections([...ROLE_PERMISSIONS[rol]], { ustHesapGorunur: true }).flatMap((s) =>
+  return visibleSections([...ROLE_PERMISSIONS[rol]], { ustHesapGorunur: true, platformSahibi: false }).flatMap((s) =>
     s.items.map((i) => i.label),
   );
 }
