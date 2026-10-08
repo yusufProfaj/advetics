@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
-import { KURULUM_DURUM_METNI, ayAdi, eylemIstegi, okumaHatasi, planAdresi, type KurulumTonu } from './hesap';
+import { KURULUM_DURUM_METNI, ayAdi, eylemIstegi, okumaHatasi, planAdresi, type KurulumTonu, type PanelEylemi } from './hesap';
 import type { PilotKurulumYaniti } from '@advetics/shared';
 
 /**
@@ -15,7 +15,9 @@ import type { PilotKurulumYaniti } from '@advetics/shared';
  * kurulumu müşterinin onayı başlatır. Tek ajans düğmesi "Şimdi kur"
  * (`yeniden_dene`, S-6): kısmen kurulmuş ya da uyum sonradan bağlanmış bir
  * planı müşteriye yeniden sormadan kurar. Görünürlüğü sunucunun
- * `yapilabilir` listesinden.
+ * `yapilabilir` listesinden. Kurulum takılırsa (B-4) aynı yerde "Kurulumu
+ * durdur": takılı plan en çok bu kartta görülüyor, plan sayfasına gitmeden
+ * çözülebilmeli.
  *
  * DÜŞEN SATIR PLATFORMUN KENDİ MESAJIYLA. "Beklenmeyen bir hata" bu
  * projede bir turu kaybettirdi (CLAUDE.md `PlatformApiError`).
@@ -30,7 +32,9 @@ const TON_SINIFI: Record<KurulumTonu, string> = {
 export function KurulumKarti({ clientId, k }: { clientId: string; k: PilotKurulumYaniti }) {
   const router = useRouter();
   const [hal, setHal] = useState<{ tur: 'bos' } | { tur: 'suruyor' } | { tur: 'hata'; mesaj: string }>({ tur: 'bos' });
-  const kurabilir = k.yapilabilir.includes('yeniden_dene');
+  const izinli = new Set<PanelEylemi>(k.yapilabilir);
+  const kurabilir = izinli.has('yeniden_dene');
+  const durdurabilir = izinli.has('takilan_kurulumu_durdur');
   const ay = ayAdi(k.plan.donem);
   const baslik =
     k.ozet.suruyor > 0
@@ -39,12 +43,12 @@ export function KurulumKarti({ clientId, k }: { clientId: string; k: PilotKurulu
         ? `${ay} planının ${k.ozet.basarisiz} kampanyası kurulmadı`
         : `${ay} planının ${k.ozet.basarili} kampanyası kuruldu`;
 
-  async function kur() {
+  async function calistir(eylem: 'yeniden_dene' | 'takilan_kurulumu_durdur') {
     setHal({ tur: 'suruyor' });
     try {
       // Plan sayfasıyla AYNI gövde (`eylemIstegi`): iki yerden iki farklı
       // gövde kurulsaydı biri sunucuda reddedilir, ekran başka şey söylerdi.
-      const { yol, govde } = eylemIstegi(k.plan.id, 'yeniden_dene', k.plan.surum);
+      const { yol, govde } = eylemIstegi(k.plan.id, eylem, k.plan.surum);
       await apiFetch(yol, { method: 'POST', body: JSON.stringify(govde) });
       setHal({ tur: 'bos' });
       router.refresh();
@@ -59,6 +63,7 @@ export function KurulumKarti({ clientId, k }: { clientId: string; k: PilotKurulu
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-muted">Kurulum</p>
           <h3 className="mt-1 font-baslik text-base font-bold text-ink">{baslik}</h3>
+          {durdurabilir && <p className="mt-1 text-sm text-warn-strong">Kurulum ilerlemiyor. Durdurursan kurulmayanları yeniden kurabilirsin.</p>}
           {k.plan.yayinKipi === 'test' && <p className="mt-1 text-sm text-warn-strong">Test kipinde kuruldu, açılmadı.</p>}
           {k.plan.yayinKipi === 'kapali' && <p className="mt-1 text-sm text-warn-strong">Uyum kontrolü bağlı değil; platforma bir şey yazılmadı.</p>}
         </div>
@@ -67,8 +72,13 @@ export function KurulumKarti({ clientId, k }: { clientId: string; k: PilotKurulu
             Planı gör
           </Link>
           {kurabilir && (
-            <Dugme onClick={() => void kur()} bekliyor={hal.tur === 'suruyor'}>
+            <Dugme onClick={() => void calistir('yeniden_dene')} bekliyor={hal.tur === 'suruyor'}>
               Şimdi kur
+            </Dugme>
+          )}
+          {durdurabilir && (
+            <Dugme onClick={() => void calistir('takilan_kurulumu_durdur')} bekliyor={hal.tur === 'suruyor'}>
+              Kurulumu durdur
             </Dugme>
           )}
         </div>

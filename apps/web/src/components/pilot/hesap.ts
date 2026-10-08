@@ -1,6 +1,8 @@
 import {
   ARAMA_HACMI_ESIGI,
   HUNI_ETIKETLERI,
+  METIN_BOS_NEDENLERI,
+  METIN_NOTU_ONEKI,
   MUSTERI_ADINA_GEREKCE_EN_AZ,
   PILOT_PLAN_SON_DURUMLARI,
   PILOT_UCLARI,
@@ -22,11 +24,12 @@ import {
   type PilotPlanDurumu,
   type PilotPlatformu,
   type PlanOnerisi,
+  type PlanSatiri,
   type UyumBulgusu,
   type UyumDurumu,
   type UyumIsareti,
 } from '@advetics/shared';
-import { ApiRequestError } from '@/lib/api';
+import { ApiRequestError, onizlemeAdresi } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { mmAdresi, type MmBolumKodu } from '@/components/marka-merkezi/bolumler';
 import type { OzelKategori, PilotGercekYayinDurumu, PilotWorkspaceBeyani, UyumSektoru, OneriBosNedeni, PilotBugun, PilotEkranEylemi, PilotPlanDetayi, PilotPlanSatiriOzeti } from '@advetics/shared';
@@ -287,13 +290,15 @@ export const BOS_NEDENI_METNI: Record<BosNedeni, { ne: string; neYapmali: string
   kullanici_cikardi: { ne: 'Satır plandan çıkarıldı.', neYapmali: 'Tutarı dağıtılmamış kaldı.', hedef: null },
   harcanan_bilinmiyor: { ne: 'Bu ay harcanan okunamadı.', neYapmali: 'Senkronizasyon tamamlanınca planı yeniden hazırla.', hedef: 'yeniden_hazirla' },
   ay_butcesi_bitti: { ne: 'Bu ayın bütçesi harcandı.', neYapmali: 'Aylık Bütçe’yi artır ya da gelecek ay için hazırla.', hedef: 'butce' },
-  // Reklam metni planın parçası (karar (a), 2026-10-08). Ajan 1 yalnız cümleleri
-  // ekledi (derleme kırılmasın); metin önizlemesi Ajan 3'te.
-  metin_bekliyor: { ne: 'Reklam metni henüz yazılmadı.', neYapmali: 'Planı yeniden hazırla; metin yazılır.', hedef: 'yeniden_hazirla' },
+  // Reklam metni planın parçası (karar (a), 2026-10-08). Metin satırın altında
+  // önizlemeyle çiziliyor; boşsa bu cümleler orada. `yz_kapali` için "ajans
+  // ayarları" denmiyor: anahtar sunucu ortamında, panelde açılacak bir ayar
+  // yok ve olmayan bir ekrana göndermek kullanıcıyı boşa aratırdı.
+  metin_bekliyor: { ne: 'Reklam metni henüz yazılmadı.', neYapmali: 'Planı yeniden hazırla, metin de yazılır.', hedef: 'yeniden_hazirla' },
   metin_yazilamadi: { ne: 'Reklam metni yazılamadı.', neYapmali: 'Biraz sonra planı yeniden hazırla.', hedef: 'yeniden_hazirla' },
-  yz_kapali: { ne: 'Yapay zekâ bağlı değil.', neYapmali: 'Ajans ayarlarından yapay zekâ bağlanmalı.', hedef: null },
+  yz_kapali: { ne: 'Yapay zekâ bağlı değil, metin yazılamadı.', neYapmali: 'Sistem yöneticisine haber ver.', hedef: null },
   metin_denetimden_gecmedi: { ne: 'Reklam metni kontrolden geçmedi.', neYapmali: 'Marka bilgilerini kontrol et, sonra planı yeniden hazırla.', hedef: 'marka' },
-  plan_eski_bicim: { ne: 'Bu plan reklam metni taşımıyor.', neYapmali: 'Planı yeniden hazırla.', hedef: 'yeniden_hazirla' },
+  plan_eski_bicim: { ne: 'Bu plan eski biçimde, reklam metni yok.', neYapmali: 'Planı yeniden hazırla.', hedef: 'yeniden_hazirla' },
 };
 
 export function bosNedeniBaglantisi(neden: BosNedeni, clientId: string): string | null {
@@ -372,6 +377,78 @@ export function platformAdi(p: PilotPlatformu): string {
   return PLATFORM_ADI[p];
 }
 
+// ─── Reklam metni önizlemesi (karar (a), 2026-10-08) ───────────────────────
+
+export interface MetinKarti {
+  /** Metnin bağlı olduğu görsel; satırda yoksa `null` (kart "görselsiz" çizilir, uydurulmaz). */
+  gorsel: { id: string; ad: string } | null;
+  baslik: string;
+  metin: string;
+}
+
+/**
+ * Satırın altındaki metin önizlemesi. ÜÇ HÂL ve üçü ayrı çizilir:
+ *   · `yok`  : Google satırı. Metin hücresi hiç yok (`null`); arama
+ *              reklamının metni Tur 3'te ayrı biçimde gelecek. Boş bir kutu
+ *              çizmek "burada metin olacaktı" izlenimi verirdi.
+ *   · `bos`  : Meta satırı, metin yazılmamış. Neden `BOS_NEDENI_METNI`nden.
+ *   · `dolu` : metin başına bir kart, görseliyle.
+ *
+ * GÖRSEL EŞLEŞMESİ `varlikId` İLE, SIRAYLA DEĞİL. Model metni görsel başına
+ * yazıyor; "birinci metin birinci görselin" demek, sıra değiştiğinde müşteriye
+ * başka bir görselin altında başka bir metni onaylatırdı.
+ */
+export type MetinOnizlemesi =
+  | { tur: 'yok' }
+  | { tur: 'bos'; neden: BosNedeni }
+  | { tur: 'dolu'; kartlar: MetinKarti[]; kaynak: Kaynak };
+
+export function metinOnizlemesi(s: Pick<PlanSatiri, 'metinler' | 'varliklar'>): MetinOnizlemesi {
+  if (s.metinler === null) return { tur: 'yok' };
+  if (!s.metinler.dolu) return { tur: 'bos', neden: s.metinler.emptyReason };
+  const gorseller = new Map((s.varliklar?.dolu ? s.varliklar.deger : []).map((v) => [v.deger.id, v.deger]));
+  return {
+    tur: 'dolu',
+    kaynak: s.metinler.kaynak,
+    kartlar: s.metinler.deger.map((m) => ({ gorsel: (m.varlikId && gorseller.get(m.varlikId)) || null, baslik: m.baslik, metin: m.metin })),
+  };
+}
+
+/**
+ * Satır notlarını ikiye ayırır: `METIN_NOTU_ONEKI` ile başlayanlar metnin
+ * YANINDA (önek atılmış), kalanı satırın genel notları. Ayrılmasa "metin
+ * kontrolden geçmedi" cümlesi metnin altında, NEDENİ ise satırın en
+ * altındaki not listesinde dururdu ve ikisinin bağı okunmazdı.
+ */
+export function satirNotlari(notlar: readonly string[]): { metin: string[]; diger: string[] } {
+  const metin: string[] = [];
+  const diger: string[] = [];
+  for (const n of notlar) {
+    if (n.startsWith(METIN_NOTU_ONEKI)) metin.push(n.slice(METIN_NOTU_ONEKI.length));
+    else diger.push(n);
+  }
+  return { metin, diger };
+}
+
+/**
+ * Satır engelleri, metin nedenleri HARİÇ: onlar metin önizlemesinin içinde
+ * yazılıyor. İki yerde birden yazılırsa aynı cümle satırda iki kez okunur.
+ */
+export function metinDisiEngeller(engeller: readonly BosNedeni[]): BosNedeni[] {
+  return engeller.filter((n) => !(METIN_BOS_NEDENLERI as readonly string[]).includes(n));
+}
+
+/**
+ * Görselin küçük resmi. TEK ADRES ÜRETİCİSİ: bugün varlık arşivinin önizleme
+ * ucu (`bulk.read` istiyor). MÜŞTERİ HESABINDA `bulk.read` YOK, yani müşteri
+ * için istek reddedilir ve kart görselin ADINI gösterir (`KreatifGorsel`
+ * yer tutucusu). Plan kapsamlı, `strategy.read` ile açılan bir görsel ucu
+ * sözleşmeye eklenince yalnız bu fonksiyon değişir (devir notu).
+ */
+export function varlikOnizlemeAdresi(varlikId: string): string {
+  return onizlemeAdresi(`/assets/${encodeURIComponent(varlikId)}/preview`);
+}
+
 // ─── Kelimeler ─────────────────────────────────────────────────────────────
 
 export interface KelimeGrubuSatiri {
@@ -432,8 +509,18 @@ export function adimHalleri(durum: PilotPlanDurumu): AdimHali[] | null {
 
 // ─── Eylemler ve alt çubuk ──────────────────────────────────────────────────
 
+/**
+ * Panelin çizdiği eylemler: sözleşmenin `PilotEkranEylemi` birleşimi +
+ * `takilan_kurulumu_durdur` (B-4, MIMARI §12.3). Sözleşmenin birleşimi
+ * `packages/shared/src/pilot/yanitlar.ts`te ve bu tur ona dokunulmadı
+ * (Ajan 3 yalnız `apps/web`); oraya eklenince bu tip `PilotEkranEylemi`ye
+ * indirgenir. Ayrı ad bilerek: sunucunun `yapilabilir` listesi bugün bu
+ * eylemi TAŞIYAMAZ, düğme ancak Ajan 2 ucu ve listeyi açınca görünür.
+ */
+export type PanelEylemi = PilotEkranEylemi | 'takilan_kurulumu_durdur';
+
 export interface EylemDugmesi {
-  eylem: PilotEkranEylemi;
+  eylem: PanelEylemi;
   etiket: string;
 }
 
@@ -445,10 +532,16 @@ export interface EylemDugmesi {
  * TEK BİRİNCİL EYLEM. Koyu alt çubukta bir tane kırmızı düğme var; ikinci
  * birincil, "asıl iş hangisi" sorusunu kullanıcıya bırakırdı.
  */
-const BIRINCIL_SIRA: readonly PilotEkranEylemi[] = ['musteriye_gonder', 'onayla', 'yeniden_dene'];
-const IKINCIL_SIRA: readonly PilotEkranEylemi[] = ['degisiklik_iste', 'geri_cek', 'onayla', 'yeniden_hazirla', 'kapat', 'iptal'];
+/*
+ * "Kurulumu durdur" BİRİNCİL: sunucu onu yalnız kurulum takıldığında
+ * (`kuruluyorPlanKarari` → `takildi`/`satir_yok`) listeye koyuyor ve o anda
+ * yapılacak tek iş o. İkincil olsaydı "Kampanyalar kuruluyor." yazan çubuğun
+ * üstünde küçük bir düğme olarak kalır ve plan saatlerce takılı dururdu.
+ */
+const BIRINCIL_SIRA: readonly PanelEylemi[] = ['musteriye_gonder', 'onayla', 'yeniden_dene', 'takilan_kurulumu_durdur'];
+const IKINCIL_SIRA: readonly PanelEylemi[] = ['degisiklik_iste', 'geri_cek', 'onayla', 'yeniden_hazirla', 'kapat', 'iptal'];
 
-export function eylemEtiketi(e: PilotEkranEylemi, rol: 'musteri' | 'ajans'): string {
+export function eylemEtiketi(e: PanelEylemi, rol: 'musteri' | 'ajans'): string {
   switch (e) {
     case 'musteriye_gonder':
       return 'Müşteriye gönder';
@@ -470,6 +563,8 @@ export function eylemEtiketi(e: PilotEkranEylemi, rol: 'musteri' | 'ajans'): str
       return 'Uygula';
     case 'uyum_isaret':
       return 'Okudum';
+    case 'takilan_kurulumu_durdur':
+      return 'Kurulumu durdur';
   }
 }
 
@@ -486,7 +581,7 @@ export interface AltCubuk {
  * çizilseydi kısa yol asıl yol olurdu.
  */
 export function altCubuk(d: Pick<PilotPlanDetayi, 'rol' | 'yapilabilir' | 'musteriOzeti' | 'plan' | 'onayKapisi'> & { icerik: Pick<PlanOnerisi, 'satirlar' | 'takvim'> }): AltCubuk {
-  const izinli = new Set(d.yapilabilir);
+  const izinli = new Set<PanelEylemi>(d.yapilabilir);
   const birincilEylem = BIRINCIL_SIRA.find((e) => izinli.has(e) && !(e === 'onayla' && d.rol === 'ajans')) ?? null;
   const birincil = birincilEylem ? { eylem: birincilEylem, etiket: eylemEtiketi(birincilEylem, d.rol) } : null;
   const ikincil = IKINCIL_SIRA.filter((e) => izinli.has(e) && e !== birincilEylem).map((e) => ({ eylem: e, etiket: eylemEtiketi(e, d.rol) }));
@@ -495,7 +590,7 @@ export function altCubuk(d: Pick<PilotPlanDetayi, 'rol' | 'yapilabilir' | 'muste
 
 function altCubukMetni(
   d: Pick<PilotPlanDetayi, 'rol' | 'musteriOzeti' | 'plan' | 'onayKapisi'> & { icerik: Pick<PlanOnerisi, 'satirlar' | 'takvim'> },
-  birincil: PilotEkranEylemi | null,
+  birincil: PanelEylemi | null,
 ): string {
   const acilis = d.icerik.takvim ? gunEtiketi(d.icerik.takvim.baslangic) : null;
   const kurulamayan = d.icerik.satirlar.filter((s) => s.engeller.length > 0).length;
@@ -516,7 +611,7 @@ function altCubukMetni(
     case 'onaylandi':
       return 'Onaylandı. Kurulum sırada.';
     case 'kuruluyor':
-      return 'Kampanyalar kuruluyor.';
+      return birincil === 'takilan_kurulumu_durdur' ? 'Kurulum ilerlemiyor. Durdurursan kurulmayanları yeniden kurabilirsin.' : 'Kampanyalar kuruluyor.';
     case 'kismen_kuruldu':
       return birincil === 'yeniden_dene' ? 'Bazı kampanyalar kurulmadı. Şimdi kurabilirsin.' : 'Bazı kampanyalar kurulmadı.';
     case 'kuruldu':
@@ -574,7 +669,13 @@ export function gerekceEksigi(gerekce: string): number {
   return Math.max(0, MUSTERI_ADINA_GEREKCE_EN_AZ - gerekce.trim().length);
 }
 
-export function eylemIstegi(planId: string, eylem: 'musteriye_gonder' | 'geri_cek' | 'yeniden_dene' | 'kapat' | 'iptal', surum: number) {
+/*
+ * `takilan_kurulumu_durdur` aynı `eylem` ucundan gidiyor: MIMARI §12.4.5
+ * Ajan 2'nin onu `PILOT_EYLEM_UCU_EYLEMLERI`ne ekleyeceğini yazıyor. Ayrı
+ * bir uç doğarsa bu gövde 400 alır ve hata ekranda sunucunun cümlesiyle
+ * görünür (sessiz değil).
+ */
+export function eylemIstegi(planId: string, eylem: 'musteriye_gonder' | 'geri_cek' | 'yeniden_dene' | 'kapat' | 'iptal' | 'takilan_kurulumu_durdur', surum: number) {
   return { yol: pilotUcAdresi('/pilot/planlar/:id/eylem', planId), govde: { eylem, surum } };
 }
 

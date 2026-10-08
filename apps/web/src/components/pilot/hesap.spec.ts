@@ -10,6 +10,7 @@ import {
   musteriOzeti,
   planUret,
   reklamMetinleriniYerlestir,
+  METIN_NOTU_ONEKI,
   type OneriKarti,
   type PlanOnerisi,
   type PlanUretGirdisi,
@@ -53,6 +54,12 @@ import {
   planSec,
   satirCikarIstegi,
   seritDilimleri,
+  eylemIstegi,
+  metinDisiEngeller,
+  metinOnizlemesi,
+  satirNotlari,
+  varlikOnizlemeAdresi,
+  type PanelEylemi,
 } from './hesap';
 import type { PilotPlanDetayi, PilotPlanSatiriOzeti, PilotWorkspaceBeyani } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
@@ -531,5 +538,96 @@ describe('workspace beyanı', () => {
 
   it('her sektörün ekran adı var', () => {
     expect(Object.keys(SEKTOR_ETIKETI).sort()).toEqual([...UYUM_SEKTORLERI].sort());
+  });
+});
+
+describe('reklam metni önizlemesi (karar (a))', () => {
+  const meta = PLAN.satirlar.find((s) => s.platform === 'meta')!;
+  const google = PLAN.satirlar.find((s) => s.platform === 'google')!;
+
+  it('KRİTİK: Google satırında önizleme YOK (boş kutu çizilmiyor)', () => {
+    expect(google.metinler).toBeNull();
+    expect(metinOnizlemesi(google)).toEqual({ tur: 'yok' });
+  });
+
+  it('KRİTİK: Meta satırında metin, başlık ve görsel kartta; kaynak modelin', () => {
+    const o = metinOnizlemesi(meta);
+    expect(o.tur).toBe('dolu');
+    if (o.tur !== 'dolu') return;
+    expect(o.kartlar).toEqual([{ gorsel: { id: U(20), ad: 'ucuz' }, baslik: 'Taze kahve', metin: 'Kahve makinesinde yeni sezon.' }]);
+    expect(o.kaynak.tur).toBe('yz_metin');
+  });
+
+  it('KRİTİK: metin görseline SIRAYLA değil kimlikle bağlanıyor', () => {
+    const satir = {
+      varliklar: {
+        dolu: true as const,
+        deger: [
+          { deger: { id: U(21), ad: 'kare' }, kaynak: { tur: 'sabit_kural' as const, kimlik: 'x', zaman: T } },
+          { deger: { id: U(22), ad: 'dikey' }, kaynak: { tur: 'sabit_kural' as const, kimlik: 'x', zaman: T } },
+        ],
+        kaynak: { tur: 'sabit_kural' as const, kimlik: 'x', zaman: T },
+      },
+      metinler: {
+        dolu: true as const,
+        deger: [
+          { varlikId: U(22), baslik: 'Dikey', metin: 'Dikey metni' },
+          { varlikId: null, baslik: 'Boş', metin: 'Görselsiz metin' },
+        ],
+        kaynak: { tur: 'yz_metin' as const, kimlik: 'm', zaman: T },
+      },
+    };
+    const o = metinOnizlemesi(satir);
+    expect(o.tur === 'dolu' && o.kartlar.map((k) => k.gorsel?.ad ?? null)).toEqual(['dikey', null]);
+  });
+
+  it('KRİTİK: metin yazılmamış Meta satırı nedeniyle boş', () => {
+    const ham = HAM_PLAN.satirlar.find((s) => s.platform === 'meta')!;
+    expect(metinOnizlemesi(ham)).toEqual({ tur: 'bos', neden: 'metin_bekliyor' });
+  });
+
+  it('KRİTİK: metin nedenleri satır engellerinden ayrılıyor (iki kez yazılmıyor), diğerleri kalıyor', () => {
+    expect(metinDisiEngeller(['metin_bekliyor', 'sayfa_yok', 'plan_eski_bicim', 'yz_kapali'])).toEqual(['sayfa_yok']);
+  });
+
+  it('KRİTİK: metin notları öneksiz ayrılıyor, diğer notlar yerinde', () => {
+    expect(satirNotlari([`${METIN_NOTU_ONEKI}Başlık kısaltıldı`, 'Meta payı %62', `${METIN_NOTU_ONEKI}İkinci`])).toEqual({
+      metin: ['Başlık kısaltıldı', 'İkinci'],
+      diger: ['Meta payı %62'],
+    });
+  });
+
+  it('küçük resim adresi varlık önizleme ucu (tek üretici)', () => {
+    expect(varlikOnizlemeAdresi(U(20))).toMatch(new RegExp(`/assets/${U(20)}/preview$`));
+  });
+
+  it('metin nedenlerinin cümleleri panel dilinde (uzun tire yok, olmayan ayar ekranı yok)', () => {
+    for (const n of ['metin_bekliyor', 'metin_yazilamadi', 'yz_kapali', 'metin_denetimden_gecmedi', 'plan_eski_bicim'] as const) {
+      const m = BOS_NEDENI_METNI[n];
+      expect(`${m.ne} ${m.neYapmali}`, n).not.toMatch(/[—–]/);
+    }
+    expect(BOS_NEDENI_METNI.yz_kapali.neYapmali).not.toContain('ayar');
+  });
+});
+
+describe('takılan kurulum (B-4)', () => {
+  // Sunucunun `yapilabilir` tipi bugün bu eylemi taşımıyor (sözleşme
+  // `PilotEkranEylemi`); Ajan 2 ucu açınca gelecek listeyi taklit ediyor.
+  const ileride = (e: PanelEylemi[]) => e as PilotPlanDetayi['yapilabilir'];
+
+  it('KRİTİK: sunucu verdiğinde "Kurulumu durdur" BİRİNCİL ve çubuk nedenini söylüyor', () => {
+    const a = altCubuk(detay({ durum: 'kuruluyor', yapilabilir: ileride(['takilan_kurulumu_durdur']) }));
+    expect(a.birincil).toEqual({ eylem: 'takilan_kurulumu_durdur', etiket: 'Kurulumu durdur' });
+    expect(a.metin).toBe('Kurulum ilerlemiyor. Durdurursan kurulmayanları yeniden kurabilirsin.');
+  });
+
+  it('KRİTİK: sunucu vermezse düğme yok, çubuk "kuruluyor" diyor', () => {
+    const a = altCubuk(detay({ durum: 'kuruluyor', yapilabilir: [] }));
+    expect(a.birincil).toBeNull();
+    expect(a.metin).toBe('Kampanyalar kuruluyor.');
+  });
+
+  it('istek eylem ucundan, sürümle', () => {
+    expect(eylemIstegi(U(90), 'takilan_kurulumu_durdur', 4)).toEqual({ yol: `/pilot/planlar/${U(90)}/eylem`, govde: { eylem: 'takilan_kurulumu_durdur', surum: 4 } });
   });
 });

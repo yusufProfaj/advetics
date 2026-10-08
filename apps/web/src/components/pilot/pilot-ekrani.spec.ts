@@ -34,6 +34,21 @@ const kod = (ad: string): string => {
 };
 const TSX = Object.entries(KOD).filter(([f]) => f.endsWith('.tsx'));
 
+/** Bir gövdeyi açılış karakterinden eşi kapanana kadar keser; bulunamazsa PATLAR (tarama boşa düşmesin). */
+function govde(kaynak: string, baslangic: string, ac = '{', kapa = '}', bas = baslangic): string {
+  const i = kaynak.indexOf(baslangic);
+  if (i < 0) throw new Error(`Tarama boşa düştü: ${baslangic}`);
+  const b = kaynak.indexOf(bas, i);
+  if (b < 0) throw new Error(`Tarama boşa düştü: ${baslangic} → ${bas}`);
+  const a = kaynak.indexOf(ac, b + (bas === baslangic ? 0 : bas.length - 1));
+  let d = 0;
+  for (let j = a; j < kaynak.length; j++) {
+    if (kaynak[j] === ac) d++;
+    else if (kaynak[j] === kapa && --d === 0) return kaynak.slice(i, j + 1);
+  }
+  throw new Error(`Gövde kapanmadı: ${baslangic}`);
+}
+
 describe('tarama boşa düşmüyor', () => {
   it('bütün pilot dosyaları okundu', () => {
     expect(Object.keys(KOD).sort()).toEqual(
@@ -134,11 +149,28 @@ describe('düğmeler ve onay', () => {
 
   it('eylem gövdeleri `eylemIstegi`nden (plan sayfası ve kurulum kartı aynı)', () => {
     expect(kod('plan-belgesi.tsx')).toContain('eylemIstegi(plan.id, e, plan.surum)');
-    expect(kod('kurulum-karti.tsx')).toContain("eylemIstegi(k.plan.id, 'yeniden_dene', k.plan.surum)");
+    expect(kod('kurulum-karti.tsx')).toContain('eylemIstegi(k.plan.id, eylem, k.plan.surum)');
+    expect(kod('kurulum-karti.tsx')).toContain("onClick={() => void calistir('yeniden_dene')}");
   });
 
-  it('"Şimdi kur" sunucunun listesinden', () => {
-    expect(kod('kurulum-karti.tsx')).toContain("const kurabilir = k.yapilabilir.includes('yeniden_dene')");
+  it('"Şimdi kur" ve "Kurulumu durdur" sunucunun listesinden', () => {
+    const k = kod('kurulum-karti.tsx');
+    expect(k).toContain('const izinli = new Set<PanelEylemi>(k.yapilabilir)');
+    expect(k).toContain("const kurabilir = izinli.has('yeniden_dene')");
+    expect(k).toContain("const durdurabilir = izinli.has('takilan_kurulumu_durdur')");
+    expect(k).toContain("{durdurabilir && (");
+    expect(k).toContain("onClick={() => void calistir('takilan_kurulumu_durdur')}");
+  });
+
+  it('KRİTİK: plan belgesinde "Kurulumu durdur" araya kutu koymadan isteği gönderiyor', () => {
+    const b = kod('plan-belgesi.tsx');
+    expect(b).toContain('const izinli = new Set<PanelEylemi>(detay.yapilabilir)');
+    const e = govde(b, 'function eylemYap(');
+    const dal = e.slice(e.indexOf("case 'musteriye_gonder'"), e.indexOf("case 'onayla'"));
+    expect(dal).toContain("case 'takilan_kurulumu_durdur'");
+    expect(dal).toContain('eylemIstegi(plan.id, e, plan.surum)');
+    expect(dal).toContain('void yaz(');
+    expect(dal).not.toContain('setAcikKutu');
   });
 });
 
@@ -216,5 +248,58 @@ describe('panel kalıbı ve dar ekran', () => {
       for (const m of k.matchAll(/(?<![\w:])min-w-\[(\d+(?:\.\d+)?)rem\]/g)) expect(Number(m[1]), f).toBeLessThanOrEqual(10);
       expect(k, f).not.toMatch(/(?<![\w:-])w-\[\d{2,}rem\]/);
     }
+  });
+});
+
+describe('reklam metni önizlemesi (karar (a): müşteri onayladığı metni görür)', () => {
+  const b = kod('plan-belgesi.tsx');
+  // Parametre listesi de süslü parantezle açılıyor; gövde imzanın `}) {` kapanışından sonra.
+  const liste = govde(b, 'function KampanyaListesi(', '{', '}', '}) {');
+  const onizleme = govde(b, 'function MetinOnizlemesi(', '{', '}', '}) {');
+
+  it('KRİTİK: her satırda önizleme çiziliyor ve AJANSA ÖZEL bloğun DIŞINDA (müşteri de görüyor)', () => {
+    const cagri = '<MetinOnizlemesi satir={s} clientId={clientId} musteri={musteri} metinNotlari={notlar.metin} />';
+    const i = liste.indexOf(cagri);
+    expect(i).toBeGreaterThan(-1);
+    // Ajansa özel HER bloğu (paranteziyle) ve `musteri &&` taşıyan her satırı
+    // at: çağrı yine duruyorsa müşteri de görüyor. Yalnız ilk bloğa bakmak,
+    // önizlemeyi ikinci bir `!musteri &&` ile sarmayı yakalamıyordu.
+    let disari = liste;
+    for (let j = disari.indexOf('!musteri && ('); j >= 0; j = disari.indexOf('!musteri && (')) {
+      disari = disari.replace(govde(disari, '!musteri && (', '(', ')'), '');
+    }
+    disari = disari.split('\n').filter((l) => !/musteri\s*&&/.test(l)).join('\n');
+    expect(disari).toContain(cagri);
+    // Satırın içinde (aynı `<li>`), tutardan SONRA: ızgara yerleşimi tutarı itmesin.
+    expect(i).toBeGreaterThan(liste.indexOf('Plandan çıkar'));
+    expect(i).toBeLessThan(liste.lastIndexOf('</li>'));
+  });
+
+  it('KRİTİK: önizleme sözleşmenin metninden: başlık, ana metin ve görselin küçük resmi', () => {
+    expect(onizleme).toContain('const o = metinOnizlemesi(satir)');
+    expect(onizleme).toContain("if (o.tur === 'yok') return null");
+    expect(onizleme).toContain('o.kartlar.map(');
+    expect(onizleme).toContain('{k.baslik}');
+    expect(onizleme).toContain('{k.metin}');
+    expect(onizleme).toContain('<KreatifGorsel src={varlikOnizlemeAdresi(k.gorsel.id)}');
+    expect(onizleme).toContain('<KaynakCipi kaynak={o.kaynak}');
+  });
+
+  it('KRİTİK: boş metin nedeniyle (BosHucre), müşteride kısa', () => {
+    expect(onizleme).toContain('<BosHucre neden={o.neden} clientId={clientId} kisa={musteri} />');
+  });
+
+  it('KRİTİK: metin notları yalnız ajansa, metnin yanında', () => {
+    expect(onizleme).toContain('const notlar = !musteri && metinNotlari.length > 0 && (');
+    expect(onizleme.match(/\{notlar\}/g)?.length).toBe(2);
+    expect(liste).toContain('const notlar = satirNotlari(s.notlar)');
+    expect(liste).toContain('notlar.diger.map(');
+    expect(liste).not.toContain('s.notlar.map(');
+  });
+
+  it('KRİTİK: satır engel listesinde metin nedenleri tekrar yazılmıyor', () => {
+    expect(liste).toContain('const engeller = metinDisiEngeller(s.engeller)');
+    expect(liste).toContain('engeller.map((n) =>');
+    expect(liste).not.toContain('s.engeller.map(');
   });
 });

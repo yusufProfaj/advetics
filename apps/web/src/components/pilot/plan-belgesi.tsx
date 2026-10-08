@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
-import { NIYET_KATALOGU, bulgulariSirala, type PlanOnerisi } from '@advetics/shared';
+import { NIYET_KATALOGU, bulgulariSirala, type PlanOnerisi, type PlanSatiri } from '@advetics/shared';
 import { API_URL, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { KreatifGorsel } from '@/components/kreatif-gorsel';
 import { mmAdresi } from '@/components/marka-merkezi/bolumler';
 import { ButceSeridi } from './butce-seridi';
 import { BosHucre, HucreDegeri, KaynakCipi } from './kaynak-cipi';
@@ -28,6 +29,10 @@ import {
   isaretliMi,
   kampanyaDagilimi,
   kelimeGruplari,
+  metinDisiEngeller,
+  metinOnizlemesi,
+  satirNotlari,
+  varlikOnizlemeAdresi,
   yazmaHatasi,
   onayIstegi,
   onayRetMesajlari,
@@ -36,8 +41,9 @@ import {
   pilotUcAdresi,
   planAdresi,
   satirCikarIstegi,
+  type PanelEylemi,
 } from './hesap';
-import type { PilotEkranEylemi, PilotPlanDetayi } from '@advetics/shared';
+import type { PilotPlanDetayi } from '@advetics/shared';
 
 /**
  * ═══ ADVSTRATEGY: TEK SAYFA PLAN BELGESİ ═══
@@ -65,7 +71,7 @@ export function PlanBelgesi({ clientId, detay, eskiPlanNotu }: { clientId: strin
   const router = useRouter();
   const { plan, icerik, rol } = detay;
   const musteri = rol === 'musteri';
-  const izinli = new Set(detay.yapilabilir);
+  const izinli = new Set<PanelEylemi>(detay.yapilabilir);
   const [islem, setIslem] = useState<Islem>({ tur: 'bos' });
   const [acikKutu, setAcikKutu] = useState<null | 'adina_onay' | 'degisiklik_iste' | 'iptal' | 'kapat' | 'yeniden_hazirla'>(null);
   const cubuk = altCubuk(detay);
@@ -92,11 +98,15 @@ export function PlanBelgesi({ clientId, detay, eskiPlanNotu }: { clientId: strin
     }
   }
 
-  function eylemYap(e: PilotEkranEylemi) {
+  function eylemYap(e: PanelEylemi) {
     switch (e) {
       case 'musteriye_gonder':
       case 'geri_cek':
-      case 'yeniden_dene': {
+      case 'yeniden_dene':
+      // Durdurmak geri alınabilir ("Şimdi kur" ya da "Planı kapat" ile devam
+      // eder) ve sunucu düğmeyi yalnız kurulum takıldığında veriyor: araya
+      // onay kutusu koymak takılı planı bir tıklama daha bekletirdi.
+      case 'takilan_kurulumu_durdur': {
         const { yol, govde } = eylemIstegi(plan.id, e, plan.surum);
         return void yaz(e, yol, govde);
       }
@@ -451,6 +461,8 @@ function KampanyaListesi({
         const ozet = [niyet, s.kitle?.dolu ? s.kitle.deger.ad : null, s.kelimeGrubu ? `${s.kelimeGrubu.kelimeler.deger.length} kelime` : null, varlikSayisi > 0 ? `${varlikSayisi} görsel` : null]
           .filter(Boolean)
           .join(' · ');
+        const engeller = metinDisiEngeller(s.engeller);
+        const notlar = satirNotlari(s.notlar);
         return (
           <li key={s.anahtar} className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-start gap-x-4 gap-y-2 px-4 py-3.5 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:px-5">
             <span
@@ -474,18 +486,18 @@ function KampanyaListesi({
                   {s.kitle && !s.kitle.dolu && <BosHucre neden={s.kitle.emptyReason} clientId={clientId} />}
                   {s.varliklar && !s.varliklar.dolu && <BosHucre neden={s.varliklar.emptyReason} clientId={clientId} />}
                   {!s.niyet.dolu && <BosHucre neden={s.niyet.emptyReason} clientId={clientId} />}
-                  {s.engeller.length > 0 && (
+                  {engeller.length > 0 && (
                     <ul className="space-y-1.5 rounded-lg bg-surface-sunken px-3 py-2">
-                      {s.engeller.map((n) => (
+                      {engeller.map((n) => (
                         <li key={n}>
                           <BosHucre neden={n} clientId={clientId} />
                         </li>
                       ))}
                     </ul>
                   )}
-                  {s.notlar.length > 0 && (
+                  {notlar.diger.length > 0 && (
                     <ul className="space-y-0.5 text-xs text-ink-muted">
-                      {s.notlar.map((n) => (
+                      {notlar.diger.map((n) => (
                         <li key={n}>{n}</li>
                       ))}
                     </ul>
@@ -502,10 +514,75 @@ function KampanyaListesi({
                 </button>
               )}
             </div>
+            <MetinOnizlemesi satir={s} clientId={clientId} musteri={musteri} metinNotlari={notlar.metin} />
           </li>
         );
       })}
     </ul>
+  );
+}
+
+// ─── Reklam metni önizlemesi ───────────────────────────────────────────────
+
+/**
+ * META SATIRININ ALTINDA REKLAMIN KENDİSİ (karar (a), 2026-10-08). Müşterinin
+ * onayı metni de bağlıyor (`planKanonikIcerik`); onaylanan şeyi görmeden
+ * onaylamak, eski akışta "120.000 TL, üç kampanya"ya evet deyip reklamın ne
+ * dediğini hiç görmemek demekti.
+ *
+ * MÜŞTERİ VE AJANS AYNI ÇİZİMİ GÖRÜR. İki ayrı önizleme ilk değişiklikte
+ * ayrışır ve müşteri ajansın gördüğünden başka bir şeyi onaylardı. Farklar
+ * yalnız şunlar: metin notları (modelin/denetimin cümlesi) ve boş metnin "ne
+ * yapmalı" satırı ajansa; müşteri boşta yalnız nedeni okur.
+ *
+ * Satır ızgarasında tutarın ALTINDA, ikinci kolondan sona kadar: DOM'da
+ * tutardan sonra geliyor, yoksa ızgaranın yerleştirmesi tutarı önizlemenin
+ * altına iterdi. Metin satır başına bir kart, tam genişlik: reklam metni
+ * okunacak bir şey, yan yana dar kolonlarda kırpılmış okunmaz.
+ */
+function MetinOnizlemesi({ satir, clientId, musteri, metinNotlari }: { satir: Pick<PlanSatiri, 'metinler' | 'varliklar'>; clientId: string; musteri: boolean; metinNotlari: string[] }) {
+  const o = metinOnizlemesi(satir);
+  if (o.tur === 'yok') return null;
+  const notlar = !musteri && metinNotlari.length > 0 && (
+    <ul className="space-y-0.5 text-xs text-ink-muted">
+      {metinNotlari.map((n) => (
+        <li key={n}>{n}</li>
+      ))}
+    </ul>
+  );
+  return (
+    <div aria-label="Reklam metni" className="col-start-2 space-y-2 sm:col-span-2">
+      {o.tur === 'bos' ? (
+        <div className="space-y-1.5 rounded-lg bg-surface-sunken px-3 py-2">
+          <BosHucre neden={o.neden} clientId={clientId} kisa={musteri} />
+          {notlar}
+        </div>
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {o.kartlar.map((k, i) => (
+              <li key={`${k.gorsel?.id ?? 'gorselsiz'}:${i}`} className="flex min-w-0 gap-3 rounded-lg border border-line p-2.5">
+                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-surface-sunken [overflow-wrap:anywhere]">
+                  {k.gorsel ? (
+                    <KreatifGorsel src={varlikOnizlemeAdresi(k.gorsel.id)} alt={k.gorsel.ad} bosMetin={k.gorsel.ad} />
+                  ) : (
+                    <span className="flex h-full items-center justify-center px-1 text-center text-[11px] text-ink-muted">Görselsiz</span>
+                  )}
+                </div>
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-sm font-semibold text-ink [overflow-wrap:anywhere]">{k.baslik}</p>
+                  <p className="whitespace-pre-line text-[13px] text-ink-muted [overflow-wrap:anywhere]">{k.metin}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
+            <KaynakCipi kaynak={o.kaynak} clientId={clientId} baglantisiz={musteri} />
+            {notlar}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
