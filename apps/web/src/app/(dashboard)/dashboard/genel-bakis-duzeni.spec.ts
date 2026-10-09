@@ -24,7 +24,6 @@ const SAYFA = yorumsuz(join(__dirname, 'page.tsx'));
 const PARCA = yorumsuz(join(WEB, 'components', 'taslak', 'genel-bakis-parcalari.tsx'));
 const KART = yorumsuz(join(WEB, 'components', 'taslak', 'genel-bakis-kartlari.tsx'));
 const CSS = readFileSync(join(WEB, 'components', 'taslak', 'taslak.module.css'), 'utf8');
-const ROZET = yorumsuz(join(WEB, 'components', 'delta-rozeti.tsx'));
 const tablo = (ad: string): string => yorumsuz(join(WEB, 'components', ad));
 
 describe('tarama boşa düşmüyor', () => {
@@ -106,12 +105,40 @@ describe('Performans kartı', () => {
   it('KRİTİK: maliyet metriklerinde düşüş İYİ', () => {
     const i = SAYFA.indexOf("anahtar: 'dbm'");
     expect(SAYFA.slice(i, SAYFA.indexOf('},', i))).toContain('ters: true');
-    expect(PARCA).toContain('const iyi = sabit ? null : yuk !== Boolean(ters);');
+    // Karar ortak fonksiyonda (`lib/degisim.spec.ts` çalıştırarak sınıyor).
+    expect(PARCA).toContain('const h = degisimHali(d, ters);');
+    const h = SAYFA.indexOf("anahtar: 'harcama'");
+    expect(SAYFA.slice(h, SAYFA.indexOf('},', h))).not.toContain('ters');
   });
 
   it('KRİTİK: çizgi animasyonu hareket azaltılmışsa oynamıyor', () => {
     expect(PARCA).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches");
     expect(CSS).toContain('@media (prefers-reduced-motion: reduce)');
+  });
+
+  /*
+   * Aşağıdaki üçü eski `metrics-chart.tsx`ten taşındı (2026-10-09): grafik
+   * yenilendi, karşılaştırma kuralları değişmedi.
+   */
+  it('KRİTİK: önceki dönem GÜN SIRASINA göre hizalanıyor ve taşan gün çizilmiyor', () => {
+    // Karşılaştırma penceresinin tarihleri farklı; tarihle çizmek onu grafiğin
+    // dışına atardı. Uzun pencerenin fazla günü olmayan bir tarihe düşerdi.
+    expect(PARCA).toContain('onceki.slice(0, n).map((p) => gunlukDeger(p, k))');
+  });
+
+  it('KRİTİK: ölçek iki dönemi BİRDEN kapsıyor', () => {
+    // Ayrı ölçek, yarıya düşen bir harcamayı "aynı kalmış" gibi gösterirdi.
+    expect(PARCA).toContain('const sayilar = [...v, ...vo].filter(');
+  });
+
+  it('KRİTİK: boş grafik, önceki dönemde veri VARSA bunu söylüyor', () => {
+    // "Hiç koşmamış hesap" ile "bu dönemde tamamen durmuş hesap" aynı boş
+    // kutu olmamalı; ikincisi acil.
+    const i = PARCA.indexOf('noktalar.length === 0 ? (');
+    expect(i, 'boş grafik dalı bulunamadı').toBeGreaterThan(-1);
+    const dilim = PARCA.slice(i, PARCA.indexOf('</p>', i));
+    expect(dilim).toContain('onceki !== null && onceki.length > 0');
+    expect(dilim).toContain('Kampanyalar durmuş olabilir');
   });
 
   it('tek günlük aralıkta grafik yerine açıklama', () => {
@@ -151,13 +178,6 @@ describe('iniş Reklam Yöneticisi’nde', () => {
     expect(k).toContain('!satirlar ? (');
     expect(k).toContain('gosterilen.length === 0 ? (');
     expect(k).toContain("e instanceof ApiRequestError ? e.message : 'Liste alınamadı.'");
-  });
-});
-
-describe('değişim rozeti (eski bileşenler)', () => {
-  it('KRİTİK: yön yalnızca RENKTEN okunmuyor', () => {
-    expect(ROZET).toContain('aria-label={etiket}');
-    expect(ROZET).toContain("good ? 'iyi' : 'kötü'");
   });
 });
 

@@ -12,8 +12,8 @@
  *
  * `iyiYon` AÇIKLAMANIN PARÇASI: "düşük olması iyi" cümlesi olmadan bir
  * maliyet metriğinin kırmızı oku (artış) kullanıcıya bir şey anlatmıyor.
- * Değişim rozetinin rengine karar veren `inverse` bayrağı AYRI kalıyor
- * (`delta-rozeti.tsx`); buradaki alan yalnızca okunacak cümle.
+ * Değişimin rengine karar veren `ters` bayrağı AYRI kalıyor
+ * (`lib/degisim.ts`); buradaki alan yalnızca okunacak cümle.
  */
 export type TerimAnahtari =
   | 'harcama'

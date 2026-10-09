@@ -46,19 +46,15 @@ describe('sözlük', () => {
   });
 });
 
-describe('kartlar sözlüğü kullanıyor', () => {
-  const KART = yorumsuz('components/metric-card.tsx');
-  const SERIT = yorumsuz('components/metric-strip.tsx');
+/*
+ * 2026-10-09: sözlük anahtarı isteyen eski kartlar (`metric-card`,
+ * `metric-strip`) onaylanan taslakla kalktı; yeni kutular düz ad alıyor.
+ * Kısaltma yasağı artık iki sayfanın kendi etiketlerinde kilitli, iyi/kötü
+ * kararı `lib/degisim.spec.ts`te.
+ */
+describe('kartlar iş dilinde', () => {
   // Genel Bakış kutularının etiketleri sayfada (onaylanan taslak, 2026-10-09).
   const SAYFA = yorumsuz('app/(dashboard)/dashboard/page.tsx');
-
-  it('KRİTİK: kart ve şerit düz etiket kabul etmiyor', () => {
-    // Düz `label` kabul edilseydi yeni bir kart sözlüğü atlayıp iki harfle eklenirdi.
-    expect(KART).toContain('terim: TerimAnahtari;');
-    expect(KART).not.toMatch(/\blabel: string/);
-    expect(SERIT).toContain('terim: TerimAnahtari;');
-    expect(SERIT).not.toMatch(/\blabel: string/);
-  });
 
   it('KRİTİK: Genel Bakış kartlarında kısaltma etiketi kalmadı', () => {
     // Hedef kullanıcı reklamcılık bilmiyor: kısaltma değil iş dilinde ad.
@@ -66,6 +62,14 @@ describe('kartlar sözlüğü kullanıyor', () => {
     for (const t of ["ad: 'Dönüşüm başı maliyet'", "ad: 'Reklam getirisi'", "ad: 'Tıklama oranı'", "ad: 'Tıklama başı maliyet'", "ad: 'Bin gösterim maliyeti'"]) {
       expect(SAYFA).toContain(t);
     }
+  });
+
+  it('KRİTİK: Reklam Yöneticisi kutularında da kısaltma yok', () => {
+    const YM = yorumsuz('app/(dashboard)/ads-explorer/page.tsx');
+    const m = YM.slice(YM.indexOf('function ymMetrikleri'), YM.indexOf('function duzeySekmeleri'));
+    expect(m.length, 'ymMetrikleri bulunamadı').toBeGreaterThan(100);
+    expect(m).not.toMatch(/ad: '(CPA|ROAS|CTR|CPC|CPM|TO)'/);
+    expect(m).toContain("ad: 'Dönüşüm başı maliyet'");
   });
 
   it('KRİTİK: çok günlü erişimde "günlük ortalama" ipucu mükerrer uyarısına ezilmiyor', () => {
@@ -79,16 +83,6 @@ describe('kartlar sözlüğü kullanıyor', () => {
     expect(i).toBeGreaterThan(-1);
     const dilim = SAYFA.slice(i, SAYFA.indexOf('}\n      : {', i));
     expect(dilim.indexOf("reachKind === 'daily_average'")).toBeLessThan(dilim.indexOf('summary.reachAcrossAccounts'));
-  });
-
-  it('KRİTİK: şerit iyi/kötü kuralını kendisi yazmıyor, ortak rozeti kullanıyor', () => {
-    /*
-     * Şerit bu kuralı ikinci kez yazıyordu ve yönü yalnızca renkle
-     * söylüyordu. `delta-rozeti.spec.ts` kart ve tabloyu tarıyordu, şeridi
-     * değil.
-     */
-    expect(SERIT).toContain('<DeltaRozeti');
-    expect(SERIT).not.toMatch(/inverse\s*\?\s*item\.change/);
   });
 
   it('terim açıklaması title içinde değil, erişilebilir bir düğmede', () => {

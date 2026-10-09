@@ -14,8 +14,9 @@ import type { MetricsBreakdownRow } from '@advetics/shared';
  * olarak bunun tersi. Küme sabit kalınca sıralama güvenli bir GÖSTERİM
  * kararı oluyor.
  *
- * Kesmenin kendisi ekranda YAZILI (`BreakdownTable`) — aksi hâlde "mecraya
- * göre sıraladım ama Google kampanyalarımın çoğu yok" hâli sessiz kalırdı.
+ * Kesmenin kendisi ekranda YAZILI (Reklam Yöneticisi tablosunun sayacı,
+ * `kesmeNotu`) — aksi hâlde "mecraya göre sıraladım ama Google
+ * kampanyalarımın çoğu yok" hâli sessiz kalırdı.
  */
 export const SIRALAMALAR = ['harcama', 'mecra', 'gosterim', 'tik', 'donusum', 'cpa'] as const;
 export type Siralama = (typeof SIRALAMALAR)[number];

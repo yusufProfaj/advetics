@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { BudgetPacing, BudgetRecord } from '@advetics/shared';
-import { sayiEki, tempoCumleleri } from './butce-temposu';
+import { asimYuzdesi, sayiEki, tempoCumleleri } from './butce-temposu';
 
 /**
  * AYIN TEMPOSU — cümleler ÇALIŞTIRILARAK sınanıyor. Kart bu dizinin
@@ -131,18 +131,55 @@ describe('tempo cümleleri', () => {
   });
 });
 
-describe('kart cümleleri gerçekten çiziyor', () => {
-  const KART = readFileSync(join(__dirname, 'butce-karti.tsx'), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
-
-  it('BOŞA DÜŞME BEKÇİSİ: kart kaynağı okundu', () => {
-    expect(KART).toContain('export function ButceKarti');
+describe('asimYuzdesi', () => {
+  it('KRİTİK: aşım YUKARI yuvarlanıyor — 30 kuruşluk aşım "%0" değil', () => {
+    expect(asimYuzdesi(BigInt(tl(10_000)) + 300_000n, BigInt(tl(10_000)))).toBe(1n);
+    expect(asimYuzdesi(BigInt(tl(15_000)), BigInt(tl(10_000)))).toBe(50n);
   });
 
-  it('KRİTİK: tempo kartın para birimiyle hesaplanıp çiziliyor', () => {
-    expect(KART).toContain('tempoCumleleri(o, birim)');
-    expect(KART).toContain('tempo.map(');
-    expect(KART).toContain("c.uyari ? 'font-medium text-warn-strong'");
+  it('aşmıyorsa ya da bütçe sıfırsa null', () => {
+    expect(asimYuzdesi(BigInt(tl(10_000)), BigInt(tl(10_000)))).toBeNull();
+    expect(asimYuzdesi(BigInt(tl(5_000)), BigInt(tl(10_000)))).toBeNull();
+    expect(asimYuzdesi(BigInt(tl(5_000)), 0n)).toBeNull();
+  });
+});
+
+/*
+ * 2026-10-09: eski `butce-karti.tsx` kalktı; Genel Bakış'ın bütçe kartı
+ * onaylanan taslaktan (`taslak/genel-bakis-kartlari.tsx#ButceKarti`) ve
+ * tempo satırlarını kendi düzeninde çiziyor. Eski kartın cümle kuralları
+ * oraya taşındı.
+ */
+describe('Genel Bakış bütçe kartı tempo kurallarını taşıyor', () => {
+  const KAYNAK = readFileSync(join(__dirname, '..', 'taslak', 'genel-bakis-kartlari.tsx'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  const KART = KAYNAK.slice(KAYNAK.indexOf('export function ButceKarti'), KAYNAK.indexOf('export function DonusumKarti'));
+
+  it('BOŞA DÜŞME BEKÇİSİ: kart kaynağı okundu', () => {
+    expect(KART.length).toBeGreaterThan(1000);
+  });
+
+  it('KRİTİK: aşım ORTAK fonksiyondan — yuvarlama iki yerde ayrışmasın', () => {
+    expect(KART).toContain('asimYuzdesi(tahmin, BigInt(o.budget.amountMicros))');
+    expect(KART).not.toContain('butce - 1n');
+  });
+
+  it('KRİTİK: ayın ilk günü tahmin yerine nedeni yazılıyor', () => {
+    // Pacing dünde duruyor; 1'inde tahmin boş ya da anlamsız.
+    expect(KART).toContain('const yeniBasladi = o.daysElapsed === 0;');
+    expect(KART).toContain('Ay yeni başladı, tempo yarın hesaplanır');
+    expect(KART).toContain('{!yeniBasladi && birim && tahmin !== null && (');
+  });
+
+  it('KRİTİK: dolan bütçede "0 ₺ / gün" yazılmıyor', () => {
+    // Sunucu öneriyi 0 gönderiyor; satır düşüyor, durum hapı "Doldu" diyor.
+    expect(KART).toContain('o.daysRemaining > 0 && o.suggestedDailyMicros !== null && BigInt(o.suggestedDailyMicros) > 0n');
+    expect(KART).toContain('{!yeniBasladi && birim && gunlukVar && (');
+  });
+
+  it('karışık para biriminde tutar yazılmıyor', () => {
+    expect(KART).toContain('Hesaplarda farklı para birimi var; toplam gösterilemiyor.');
   });
 });

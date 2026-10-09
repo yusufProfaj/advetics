@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { onizlemeAcikMi } from './breakdown-table';
+import { onizlemeAcikMi } from '@/lib/onizleme-durumu';
 
 /**
  * ═══ REKLAM ÖNİZLEMESİ — HİYERARŞİNİN SON BASAMAĞI ═══
@@ -27,12 +27,17 @@ function kod(yol: string): string {
 }
 
 const ONIZLEME = kod('reklam-onizleme.tsx');
-const TABLO = kod('breakdown-table.tsx');
+/*
+ * 2026-10-09: önizleme Reklam Yöneticisi'nin tek tablosunda (onaylanan
+ * taslak); eski `breakdown-table.tsx` kalktı, kurallar buraya taşındı.
+ */
+const TABLO = kod('taslak/reklam-yoneticisi-tablosu.tsx');
+const CSS = readFileSync(join(DIR, 'taslak', 'taslak.module.css'), 'utf8');
 
 describe('tarama boşa düşmüyor', () => {
   it('iki kaynak da okundu', () => {
     expect(ONIZLEME).toContain('ReklamOnizleme');
-    expect(TABLO).toContain('BreakdownTable');
+    expect(TABLO).toContain('export function ReklamYoneticisiTablosu');
   });
 });
 
@@ -69,29 +74,38 @@ describe('açılır önizleme', () => {
   it('KRİTİK: anahtar ve satır açma yalnızca REKLAM seviyesinde', () => {
     // Kampanya ve reklam setinde satır bir ALT LİSTEYE gidiyor; orada
     // açılır kutu, iki farklı tıklama anlamı demekti.
-    expect(TABLO).toContain(": level === 'ad' ? (");
-    expect(TABLO).toContain("{level === 'ad' && rows.length > 0 && (");
+    expect(TABLO).toContain("const reklamda = duzey === 'ad';");
+    expect(TABLO).toContain('const acik = reklamda && acikMi(r.id);');
+    expect(TABLO).toContain('{reklamda && (acilmis.has(r.id) || acik) && (');
+    const g = TABLO.slice(TABLO.indexOf('function hepsiniDegistir()'));
+    expect(g.slice(0, 80)).toContain('if (!reklamda) return;');
   });
 
   it('KRİTİK: durum ERİŞİLEBİLİR olarak duyuruluyor', () => {
-    expect(TABLO).toContain('aria-expanded={acikMi(r.entityId)}');
+    expect(TABLO).toContain('aria-expanded={acik}');
     expect(TABLO).toContain('role="switch"');
-    expect(TABLO).toContain('aria-checked={hepsiAcik}');
+    expect(TABLO).toContain('aria-checked={reklamda && hepsiAcik}');
   });
 
   it("KRİTİK: animasyon hatasız — açılmış önizleme DOM'da kalıyor, kapalıyken inert", () => {
-    expect(TABLO).toContain('{(acilmis.has(r.entityId) || acikMi(r.entityId)) && (');
-    expect(TABLO).toContain('inert={!acikMi(r.entityId)}');
-    expect(TABLO).toContain('transition-[grid-template-rows]');
+    expect(TABLO).toContain('(acilmis.has(r.id) || acik) && (');
+    expect(TABLO).toContain('<div inert={!acik}>');
+    expect(CSS).toMatch(/\.kap \{[^}]*transition: grid-template-rows/);
     expect(TABLO).toContain('requestAnimationFrame(() => requestAnimationFrame(ac));');
   });
 
-  it('KRİTİK: önizleme KENDİ SATIRINDA, colSpan ile', () => {
+  it('KRİTİK: önizleme KENDİ SATIRINDA, colSpan başlık sayısıyla AYNI', () => {
     /*
      * Hücrenin içine koymak tabloyu bozuyor: kart sütun genişliğine sıkışıp
      * okunmaz hâle geliyor ve komşu hücrelerin yüksekliğini şişiriyor.
+     * Sayı başlıktan SAYILIYOR: elle yazılan 8, bir sütun eklenince önizlemeyi
+     * sessizce bir sütun dar bırakırdı.
      */
-    expect(TABLO).toContain('colSpan={showRoas ? 9 : 8}');
+    const thead = TABLO.slice(TABLO.indexOf('<thead>'), TABLO.indexOf('</thead>'));
+    const sutun = (thead.match(/<th>|<Baslik /g) ?? []).length;
+    expect(sutun).toBeGreaterThan(5);
+    const satir = TABLO.slice(TABLO.indexOf('className={`${s.onizlemeSatir}'));
+    expect(satir.slice(0, 200)).toContain(`<td colSpan={${sutun}}>`);
   });
 });
 

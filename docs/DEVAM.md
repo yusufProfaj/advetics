@@ -29,9 +29,17 @@ bileşenlerle yaklaşık kurmuştu. İkinci sürüm taslağın KENDİ CSS'i
 işler kartı boştu (istemci dosyasından sabit aktarımı; `istemci-siniri.
 spec.ts`), kapsam geçişinde yükleme katmanı takılıyordu, büyük tutar
 kırpılıyordu, çift sayaç, sağ sütunda boşluk. ÖLÇÜLMEDİ: telefon
-genişliği (Chrome penceresi küçülmedi). Eski bileşenler (SirketTablosu,
-BreakdownTable, MetricCard…) artık kullanılmıyor, testleri hâlâ onları
-kilitliyor: temizlenecek.
+genişliği (Chrome penceresi küçülmedi). **Eski bileşenler SİLİNDİ
+(2026-10-09 gece, DEPLOY EDİLMEDİ, migration yok):** SirketTablosu,
+MusteriTablosu, HesapKirilimi, BreakdownTable, MetricsChart, MetricCard,
+MetricStrip, DonusumDetay, DeltaRozeti, budget/ButceKarti. Kuralları yeni
+bileşenlere taşındı ve mutasyonla doğrulandı; yeni kartlarda kaybolmuş beş
+kural geri kondu (iyi/kötü tek fonksiyonda `lib/degisim.ts`, "kampanyalar
+durmuş olabilir", dönüşümde adlandırılmış/toplam + Meta notu, bütçede ayın
+ilk günü ve dolan bütçede "0 ₺/gün" yok). **Açık:** Reklam Yöneticisi
+sıralaması istemcide ve adresteki `sirala`yı ezip yok sayıyor (mecraya göre
+sıralama da kalktı); terim sözlüğü (`lib/terimler.ts`, `ui/terim.tsx`) ve
+`tempoCumleleri` hiçbir ekranda kullanılmıyor.
 Sonra: satır içi durdur/başlat/bütçe (Aşama 3'ün kalanı), grafikte metrik
 seçimi (taslakta vardı, kodda yok: grafik hâlâ harcama + dönüşüm).
 

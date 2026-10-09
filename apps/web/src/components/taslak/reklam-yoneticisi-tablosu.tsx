@@ -8,7 +8,8 @@ import { PLATFORM_KISA_ADLARI, TUM_SIRKETLER } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatMoney, formatNumber, formatPercent } from '@/lib/format';
 import { ReklamOnizleme } from '@/components/reklam-onizleme';
-import { onizlemeAcikMi } from '@/components/breakdown-table';
+import { onizlemeAcikMi } from '@/lib/onizleme-durumu';
+import { degisimHali } from '@/lib/degisim';
 import { TamEkranYukleniyor } from '@/components/yukleniyor';
 import { basHarfler } from './genel-bakis-parcalari';
 import s from './taslak.module.css';
@@ -105,13 +106,13 @@ const deger = (r: YmSatir, k: Siralama): number | null => {
   }
 };
 
+/** İyi/kötü kararı `degisimHali`nde: Genel Bakış'la tek kural. */
 function Degisim({ d, ters }: { d: number | null; ters?: boolean }) {
-  if (d === null || !Number.isFinite(d)) return null;
-  const sabit = Math.abs(d) < 0.05;
-  const iyi = sabit ? null : d > 0 !== Boolean(ters);
+  const h = degisimHali(d, ters);
+  if (!h) return null;
   return (
-    <div className={`${s.metrikFark} ${iyi === null ? '' : iyi ? s.iyi : s.kotu}`}>
-      {sabit ? '→' : d > 0 ? '↑' : '↓'} %{Math.abs(d).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} önceki döneme göre
+    <div className={`${s.metrikFark} ${h.iyi === null ? '' : h.iyi ? s.iyi : s.kotu}`} title={h.etiket}>
+      {h.metin} önceki döneme göre<span className="sr-only">, {h.etiket}</span>
     </div>
   );
 }

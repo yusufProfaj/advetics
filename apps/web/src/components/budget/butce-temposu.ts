@@ -57,6 +57,18 @@ function dunu(gun: string): string {
 }
 
 /**
+ * Ay sonu tahmininin bütçeyi yüzde kaç aştığı; aşmıyorsa `null`.
+ *
+ * YUKARI YUVARLANIYOR: bütçeyi 30 kuruş aşan tahmin "%0 aşar" demesin, aşım
+ * varsa sayı en az 1. Genel Bakış'ın bütçe kartı da bunu kullanıyor: iki
+ * yerde ayrı yazılan yuvarlama ilk değişiklikte ayrışır.
+ */
+export function asimYuzdesi(tahmin: bigint, butce: bigint): bigint | null {
+  if (butce <= 0n || tahmin <= butce) return null;
+  return ((tahmin - butce) * 100n + butce - 1n) / butce;
+}
+
+/**
  * @param birim Kartın para birimi (`ClientPacing.currency`). `null` =
  *   hesaplarda farklı para birimi var: tutar cümleleri YAZILMIYOR, kart
  *   bunu zaten söylüyor. Karışık birimde tek tutar yazmak yanlış sayı olurdu.
@@ -105,7 +117,7 @@ export function tempoCumleleri(
        * YUKARI YUVARLANIYOR: bütçeyi 30 kuruş aşan tahmin "%0 aşar" demesin.
        * Aşım varsa sayı en az 1.
        */
-      const asim = ((tahmin - butce) * 100n + butce - 1n) / butce;
+      const asim = asimYuzdesi(tahmin, butce);
       cumleler.push({ metin: `Bu hızla ay sonu: ${tutar} · bütçeyi %${asim} aşar`, uyari: true });
     } else {
       cumleler.push({ metin: `Bu hızla ay sonu: ${tutar}`, uyari: false });

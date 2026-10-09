@@ -6,7 +6,8 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from 'reac
 import type { MetricsBreakdownRow, MetricsTimeseriesPoint, Platform } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { formatMoney, formatNumber } from '@/lib/format';
+import { formatMoney, formatNumber, microsOf } from '@/lib/format';
+import { degisimHali } from '@/lib/degisim';
 import { TamEkranYukleniyor } from '@/components/yukleniyor';
 import s from './taslak.module.css';
 
@@ -102,22 +103,27 @@ export interface IkincilMetrik {
   ters?: boolean;
 }
 
-/** Değişim satırı: "↑ %12 önceki döneme göre"; yön ile iyi/kötü AYRI şeyler. */
+/**
+ * Değişim satırı: "↑ %12 önceki döneme göre"; yön ile iyi/kötü AYRI şeyler.
+ * İyi/kötü kararı `degisimHali`nde (Reklam Yöneticisi de onu kullanıyor).
+ */
 function Degisim({ d, ters, uzun }: { d: number | null; ters?: boolean; uzun?: boolean }) {
-  if (d === null || !Number.isFinite(d)) return null;
-  const yuk = d > 0;
-  const sabit = Math.abs(d) < 0.05;
-  const iyi = sabit ? null : yuk !== Boolean(ters);
-  const metin = `${sabit ? '→' : yuk ? '↑' : '↓'} %${Math.abs(d).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`;
-  const sinif = iyi === null ? '' : iyi ? s.iyi : s.kotu;
+  const h = degisimHali(d, ters);
+  if (!h) return null;
+  const sinif = h.iyi === null ? '' : h.iyi ? s.iyi : s.kotu;
   if (uzun) {
     return (
-      <div className={`${s.metrikFark} ${sinif}`} title={iyi === null ? 'Değişmedi' : iyi ? 'İyi yönde' : 'Kötü yönde'}>
-        {metin} önceki döneme göre
+      <div className={`${s.metrikFark} ${sinif}`} title={h.etiket}>
+        {h.metin} önceki döneme göre<span className="sr-only">, {h.etiket}</span>
       </div>
     );
   }
-  return <em className={sinif}>{metin}</em>;
+  return (
+    <em className={sinif} title={h.etiket}>
+      {h.metin}
+      <span className="sr-only">, {h.etiket}</span>
+    </em>
+  );
 }
 
 /** Günlük seriden bir metriğin değerleri; seri yoksa (`erisim`) `null`. */
@@ -219,7 +225,16 @@ export function PerformansKarti({
           Grafik verisi alınamadı.
         </p>
       ) : noktalar.length === 0 ? (
-        <p className={s.bosMetin}>Bu aralıkta veri yok.</p>
+        /*
+         * "Hiç reklam koşmamış hesap" ile "önceki dönemde koşup bu dönemde
+         * tamamen durmuş hesap" aynı boş kutu olmamalı: ikincisi acil ve
+         * karşılaştırmanın göstermesi gereken şeyin ta kendisi.
+         */
+        <p className={s.bosMetin}>
+          {onceki !== null && onceki.length > 0
+            ? 'Bu aralıkta veri yok, önceki dönemde vardı. Kampanyalar durmuş olabilir.'
+            : 'Bu aralıkta veri yok.'}
+        </p>
       ) : (
         <>
           <Grafik noktalar={noktalar} onceki={onceki} secili={secili} adlar={efsane} />
@@ -802,7 +817,7 @@ export function EnCokHarcayanlarKarti({
                     <td className={s.num}>{formatMoney(r.spendMicros, birim)}</td>
                     <td className={s.num}>{formatNumber(r.conversions)}</td>
                     <td className={s.num}>
-                      {r.cpa === null ? '—' : formatMoney(String(Math.round(r.cpa * 1_000_000)), birim)}
+                      {r.cpa === null ? '—' : formatMoney(microsOf(r.cpa), birim)}
                     </td>
                   </tr>
                 );

@@ -27,13 +27,26 @@ function kod(yol: string): string {
 }
 
 const SAYFA = kod('app/(dashboard)/ads-explorer/page.tsx');
-const TABLO = kod('components/breakdown-table.tsx');
+/*
+ * 2026-10-09: eski kırılım tablosu (`breakdown-table.tsx`) ve hesap tablosu
+ * (`hesap-kirilimi.tsx`) kalktı. Sekme ve satır hedefleri artık SAYFADA
+ * (`duzeySekmeleri`, `hesapSatiri`, `varlikSatiri`), tablo yalnızca çiziyor.
+ */
+const TABLO = kod('components/taslak/reklam-yoneticisi-tablosu.tsx');
+
+/** `function ad(` ile bir sonraki üst düzey `function` arası; bulunamazsa FIRLATIR. */
+function fonksiyon(ad: string): string {
+  const i = SAYFA.indexOf(`function ${ad}(`);
+  if (i < 0) throw new Error(`fonksiyon bulunamadı: ${ad}`);
+  const j = SAYFA.indexOf('\nfunction ', i + 1);
+  return SAYFA.slice(i, j < 0 ? undefined : j);
+}
 const SERIT = kod('components/hiyerarsi-yolu.tsx');
 
 describe('tarama boşa düşmüyor', () => {
   it('üç kaynak da okundu', () => {
     expect(SAYFA).toContain('DashboardPage');
-    expect(TABLO).toContain('BreakdownTable');
+    expect(TABLO).toContain('ReklamYoneticisiTablosu');
     expect(SERIT).toContain('HiyerarsiYolu');
   });
 });
@@ -77,33 +90,40 @@ describe('ODAK ÜÇ SORGUYA DA GİDİYOR', () => {
 });
 
 describe('SEKMELER ODAĞI YÖNETİYOR', () => {
-  it('KRİTİK: her sekme hangi odağı düşüreceğini KENDİSİ taşıyor', () => {
-    expect(TABLO).toContain("{ key: 'campaign', label: 'Kampanya', dusen: { kampanya: undefined, reklamSeti: undefined } }");
-    expect(TABLO).toContain("{ key: 'ad_group', label: 'Reklam seti', dusen: { reklamSeti: undefined } }");
+  const SEKME = () => fonksiyon('duzeySekmeleri');
+
+  it('KRİTİK: her alt düzey hangi odağı düşüreceğini KENDİSİ taşıyor', () => {
+    const s = SEKME();
+    expect(s).toContain('hesap: { hesap: undefined, kampanya: undefined, reklamSeti: undefined },');
+    expect(s).toContain('campaign: { kampanya: undefined, reklamSeti: undefined },');
+    expect(s).toContain('ad_group: { reklamSeti: undefined },');
   });
 
   it('KRİTİK: sekme bağlantısı düşen odağı UYGULUYOR', () => {
-    // Tabloda durup bağlantıya yazılmazsa hiçbir işe yaramaz.
-    expect(TABLO).toContain("{ seviye: tab.key, ...tab.dusen }");
+    // Listede durup bağlantıya yazılmazsa hiçbir işe yaramaz.
+    expect(SEKME()).toContain('baglanti(REKLAM_YONETICISI, v.tasinan, { seviye: d, ...dusen[d] })');
+  });
+
+  it('ayrı mecra basamağı YOK (kullanıcı kararı)', () => {
+    expect(SEKME()).toContain("const sira: YmDuzey[] = ['sirket', 'workspace', 'hesap', 'campaign', 'ad_group', 'ad'];");
   });
 });
 
 describe('SATIRDAN BİR ALT BASAMAĞA', () => {
-  it('KRİTİK: alt basamak `Record` ile seçiliyor', () => {
-    // Koşul zinciri, yeni bir seviye eklendiğinde sessizce yanlış yere
-    // giderdi; `Record` derlemeyi kırıyor.
-    expect(TABLO).toContain('const ALT_BASAMAK: Record<MetricLevel,');
-    expect(TABLO).toContain("campaign: (id) => ({ seviye: 'ad_group', kampanya: id })");
-    expect(TABLO).toContain("ad_group: (id) => ({ seviye: 'ad', reklamSeti: id })");
+  it('KRİTİK: kampanya → reklam seti, reklam seti → reklam', () => {
+    const v = fonksiyon('varlikSatiri');
+    expect(v).toContain("baglanti(REKLAM_YONETICISI, tasinan, { seviye: 'ad_group', kampanya: b.entityId })");
+    expect(v).toContain("baglanti(REKLAM_YONETICISI, tasinan, { seviye: 'ad', reklamSeti: b.entityId })");
   });
 
-  it('KRİTİK: REKLAM SEVİYESİNDE bağlantı YOK', () => {
+  it('KRİTİK: REKLAM SEVİYESİNDE bağlantı YOK — satır önizleme açıyor', () => {
     /*
      * Reklam en derin basamak. Tıklanabilir görünüp hiçbir şey yapmayan bir
      * bağlantı, bozuk bir ekrandan ayırt edilemez.
      */
-    expect(TABLO).toContain('ad: null,');
-    expect(TABLO).toContain('{altBasamak ? (');
+    const v = fonksiyon('varlikSatiri');
+    expect(v).toContain(": null;");
+    expect(v).toContain("eylem: href ? { tur: 'link', href } : { tur: 'onizle' },");
   });
 });
 
@@ -130,16 +150,6 @@ describe('EKMEK KIRINTISI', () => {
     expect(dilim).toContain('hesap: yol.adAccount.id');
     expect(dilim).toContain('kampanya: undefined');
     expect(dilim).toContain("seviye: 'campaign'");
-  });
-
-  it('KRİTİK: Reklam Hesapları sekmesi hesabı ve altındaki odağı düşürüyor', () => {
-    const i = TABLO.indexOf("key: 'hesap',");
-    expect(i, 'sekme bulunamadı').toBeGreaterThan(0);
-    const dilim = TABLO.slice(i, TABLO.indexOf('},', i));
-    expect(dilim).toContain("label: 'Reklam Hesapları'");
-    expect(dilim).toContain('hesap: undefined, kampanya: undefined, reklamSeti: undefined');
-    // Ayrı mecra basamağı kullanıcı kararıyla kalktı.
-    expect(TABLO).not.toContain("key: 'mecra'");
   });
 
   it('KRİTİK: kampanya basamağı REKLAM SETİNİ düşürüyor', () => {
@@ -179,28 +189,25 @@ describe('EKMEK KIRINTISI', () => {
   });
 });
 
-describe('MECRA VE HESAP TABLOSU', () => {
-  const HESAP_TABLOSU = kod('components/hesap-kirilimi.tsx');
-
+describe('HESAP SATIRI', () => {
   it('KRİTİK: hesap satırı hesabın KAMPANYALARINA iniyor', () => {
-    const i = HESAP_TABLOSU.indexOf('hesap: a.adAccountId,');
+    const h = fonksiyon('hesapSatiri');
+    const i = h.indexOf('hesap: a.adAccountId,');
     expect(i, 'hesap satırının hedefi bulunamadı').toBeGreaterThan(0);
-    const dilim = HESAP_TABLOSU.slice(HESAP_TABLOSU.lastIndexOf('hedef: {', i), HESAP_TABLOSU.indexOf('}', i));
+    const dilim = h.slice(h.lastIndexOf('baglanti(', i), h.indexOf('})', i));
     expect(dilim).toContain('platform: a.platform');
     expect(dilim).toContain("seviye: 'campaign'");
     expect(dilim).toContain('kampanya: undefined');
   });
 
-  it('KRİTİK: satırın ana etiketi WORKSPACE ADI, mecra ikonuyla', () => {
-    expect(HESAP_TABLOSU).toContain('ad: a.clientName,');
-    expect(HESAP_TABLOSU).toContain('<PlatformLogo kind={platformKanali(r.platform)}');
+  it('KRİTİK: satırda workspace adı ve mecra var', () => {
+    // Onaylanan taslakta ana etiket hesap adı; workspace adı alt satırda.
+    const h = fonksiyon('hesapSatiri');
+    expect(h).toContain('`${a.clientName} · ${a.externalId}`');
+    expect(h).toContain('mecralar: [a.platform],');
   });
 
-  it('KRİTİK: izlenmeyen hesap BAĞLANTI DEĞİL — içi boş bir listeye götürürdü', () => {
-    expect(HESAP_TABLOSU).toContain('{r.izleniyor ? (\n                          <Link');
-  });
-
-  it('sayfa mecra/hesap basamağında hesap kırılımını çekiyor', () => {
+  it('sayfa hesap basamağında hesap kırılımını çekiyor', () => {
     expect(SAYFA).toMatch(/varlik === null\s*\n?\s*\? serverApiFetch<MetricsAccountBreakdown>\(`\/metrics\/hesaplar\?\$\{hesapQs\}`\)/);
   });
 });

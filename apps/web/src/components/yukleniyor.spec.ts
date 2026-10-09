@@ -19,7 +19,12 @@ import { describe, expect, it } from 'vitest';
 const YUK = readFileSync(join(__dirname, 'yukleniyor.tsx'), 'utf8');
 /* Üst bardaki seçici: iki ayrı seçici tek `kapsam-secici`de birleşti. */
 const SECICI = readFileSync(join(__dirname, 'kapsam-secici.tsx'), 'utf8');
-const TABLO = readFileSync(join(__dirname, 'musteri-tablosu.tsx'), 'utf8');
+/*
+ * Kapsam değiştiren iki tablo (onaylanan taslak, 2026-10-09): Genel Bakış'ın
+ * özet listesi ve Reklam Yöneticisi. Eski `musteri-tablosu.tsx` kalktı.
+ */
+const OZET = readFileSync(join(__dirname, 'taslak', 'genel-bakis-parcalari.tsx'), 'utf8');
+const YONETICI = readFileSync(join(__dirname, 'taslak', 'reklam-yoneticisi-tablosu.tsx'), 'utf8');
 const SIHIRBAZ = readFileSync(
   join(__dirname, 'kurulum', 'kurulum-sihirbazi.tsx'),
   'utf8',
@@ -38,7 +43,8 @@ function kod(src: string): string {
 }
 
 const SECICI_KOD = kod(SECICI);
-const TABLO_KOD = kod(TABLO);
+const OZET_KOD = kod(OZET);
+const YONETICI_KOD = kod(YONETICI);
 const SIHIRBAZ_KOD = kod(SIHIRBAZ);
 
 describe('tarama gerçekten bir şey yakaladı', () => {
@@ -82,9 +88,20 @@ describe('KRİTİK: bekleme penceresi tazelemeyi kapsıyor', () => {
     expect(SIHIRBAZ_KOD).toContain('const meslul = bekleyen !== null || yenileniyor;');
   });
 
-  it('workspace tablosu: geçiş sırasında örtü var', () => {
-    expect(TABLO_KOD).toContain('{(gecilen !== null || isPending) && (');
-    expect(TABLO_KOD).toContain('TamEkranYukleniyor');
+  it('kapsam tabloları: örtü İSTEK + YENİLEME boyunca açık', () => {
+    /*
+     * İki aşama: istek sürerken bekleyen ad, sonra `router.refresh()`
+     * startTransition içinde sürerken `yenileniyor`. Örtü ancak geçiş
+     * bitince (`isPending` düşünce) kalkıyor; aksi hâlde asıl beklemenin
+     * BAŞINDA sönüyordu.
+     */
+    expect(OZET_KOD).toContain('{(bekleyen ?? yenileniyor) && (');
+    expect(YONETICI_KOD).toContain('{(gecilen ?? yenileniyor) && (');
+    for (const k of [OZET_KOD, YONETICI_KOD]) {
+      expect(k).toContain('TamEkranYukleniyor');
+      expect(k).toContain('if (!isPending) setYenileniyor(null);');
+      expect(k).toMatch(/startTransition\(\(\) => \{\s*router\.replace\(yol\);\s*router\.refresh\(\);/);
+    }
   });
 });
 
@@ -113,7 +130,8 @@ describe('göstergenin kendisi', () => {
      */
     expect(kod(YUK)).toContain('{ mesaj }');
     expect(SECICI_KOD).toContain('görünümüne geçiliyor…');
-    expect(TABLO_KOD).toContain('görünümüne geçiliyor…');
+    expect(OZET_KOD).toContain('görünümüne geçiliyor…');
+    expect(YONETICI_KOD).toContain('görünümüne geçiliyor…');
   });
 
   it('marka rengini kullanıyor — genel bir spinner değil', () => {

@@ -226,54 +226,41 @@ describe('kirilimSirala — sözleşme', () => {
 const oku = (p: string): string =>
   readFileSync(resolve(__dirname, '..', p), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
-describe('kırılım tablosu — mecra sütunu', () => {
-  const KAYNAK = oku('components/breakdown-table.tsx');
+/*
+ * 2026-10-09: eski kırılım tablosu (`breakdown-table.tsx`) kalktı; satırlar
+ * Reklam Yöneticisi'nin tek tablosunda (`taslak/reklam-yoneticisi-tablosu.tsx`).
+ */
+describe('Reklam Yöneticisi tablosu — mecra ve kesme', () => {
+  const TABLO = oku('components/taslak/reklam-yoneticisi-tablosu.tsx');
+  const SAYFA = oku('app/(dashboard)/ads-explorer/page.tsx');
+
+  it('tarama boşa düşmüyor', () => {
+    expect(TABLO).toContain('export function ReklamYoneticisiTablosu');
+  });
 
   it('satır başına PLATFORM basılıyor', () => {
     // Kullanıcının istediği şey buydu: aynı listede Meta ve Google
     // kampanyaları yan yana duruyor ve hangi harcamanın hangi mecraya
     // gittiği yalnızca kampanya adından tahmin edilebiliyordu.
-    expect(KAYNAK).toContain('<Mecra platform={r.platform} />');
-    expect(KAYNAK).toContain('PLATFORM_KISA_ADLARI[platform]');
-    expect(KAYNAK).toContain('platformKanali(platform)');
+    expect(TABLO).toContain('<span key={m}>{PLATFORM_KISA_ADLARI[m]}</span>');
+    expect(SAYFA).toContain('mecralar: [b.platform],');
   });
 
-  it('KESME EKRANDA YAZILI — "ilk N satır" notu var', () => {
+  it('KESME EKRANDA YAZILI — "ilk N satır" notu sayaçta', () => {
     /*
      * Tablo harcamaya göre ilk N satırı gösteriyor. Bu yazılmazsa "mecraya
      * göre sıraladım ama Google kampanyalarımın çoğu listede yok" hâli
      * hiçbir yerde açıklanmaz. CLAUDE.md: "Sessiz kesme yok."
      */
-    expect(KAYNAK).toContain('rows.length >= limit');
-    expect(KAYNAK).toContain('Harcamaya göre ilk {limit} satır');
+    expect(SAYFA).toContain('breakdown.length >= KIRILIM_LIMITI');
+    expect(TABLO).toContain("{kesmeNotu ? ` · ${kesmeNotu}` : ''}");
   });
 
-  it('KRİTİK: SÜZGEÇLER LİNK — istemci state\'ine kaçmıyor', () => {
-    /*
-     * Sıralama ve seviye seçimi URL'de duruyor: paylaşılabiliyor, yeni
-     * sekmede açılıyor ve sunucuda render ediliyor. Buton yazmak üçünü de
-     * kaybettirirdi.
-     *
-     * İDDİA BİR SÜRE "`use client` HİÇ YOK" DİYORDU ve bu, kuralı değil
-     * onun o günkü SONUCUNU kilitliyordu. Reklam önizlemesi (hiyerarşinin
-     * son basamağı) gerçek istemci state'i istiyor: açılıp kapanan bir kutu
-     * için adresi değiştirmek, `force-dynamic` sayfada özet + grafik +
-     * kırılım sorgularının TAMAMINI yeniden koşturuyordu.
-     *
-     * Korunması gereken kural şu: süzgeçler bağlantı KALSIN ve istemci
-     * state'i YALNIZCA önizleme için var olsun. Sayıyla kilitleniyor:
-     * 2026-10-09'da "Önizlemeler" anahtarı dört state getirdi (anahtar, tek
-     * açık, tek tek kapatılan, bir kez açılmış); beşinci bir `useState`
-     * eklendiği gün bu test soruyu yeniden sordurur.
-     */
-    expect(KAYNAK).toContain("baglanti(REKLAM_YONETICISI, tasinan, { sirala: anahtar })");
-    expect(KAYNAK).toContain("{ seviye: tab.key, ...tab.dusen }");
-    // İMPORT SAYILMIYOR: yalnızca GERÇEK state kurulumları.
-    const state = (KAYNAK.match(/\]\s*=\s*useState/g) ?? []).length;
-    expect(state, 'tabloda beklenenden fazla istemci state\'i var').toBe(4);
-    for (const ad of ['hepsiAcik', 'tekAcik', 'kapatilan', 'acilmis']) {
-      expect(KAYNAK).toContain(`const [${ad}, set`);
-    }
+  it('KRİTİK: platform ve düzey süzgeçleri BAĞLANTI — paylaşılabiliyor', () => {
+    // Platform ve düzey adreste: paylaşılabiliyor, yeni sekmede açılıyor ve
+    // sunucuda render ediliyor. Buton + state bunları kaybettirirdi.
+    expect(TABLO).toContain('<Link key={p.ad} href={p.href}');
+    expect(TABLO).toContain('<Link key={t.anahtar} role="tab"');
   });
 });
 

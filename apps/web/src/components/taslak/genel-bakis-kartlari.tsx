@@ -12,6 +12,7 @@ import {
   type BekleyenIslerSonucu,
 } from '@/lib/bekleyen-isler';
 import { formatMoney, formatNumber } from '@/lib/format';
+import { asimYuzdesi } from '@/components/budget/butce-temposu';
 import { IslerKap } from './genel-bakis-parcalari';
 import s from './taslak.module.css';
 
@@ -204,8 +205,18 @@ export function ButceKarti({
   const birim = veri.currency;
   const doluluk = Math.min(1, o.spentRatio ?? 0);
   const tahmin = o.projectedMicros !== null ? BigInt(o.projectedMicros) : null;
-  const butce = BigInt(o.budget.amountMicros);
-  const asar = tahmin !== null && butce > 0n && tahmin > butce;
+  const asim = tahmin === null ? null : asimYuzdesi(tahmin, BigInt(o.budget.amountMicros));
+  /*
+   * AYIN İLK GÜNÜ HİÇ TAMAMLANMIŞ GÜN YOK: pacing dünde duruyor ve tahmin
+   * boş ya da anlamsız. Tempo satırları yerine nedeni yazılıyor.
+   */
+  const yeniBasladi = o.daysElapsed === 0;
+  /*
+   * Bütçe dolduysa sunucu öneriyi 0 gönderiyor: "0 ₺ / gün" yazmak yerine
+   * satır düşüyor; durum hapı "Doldu" diyor, aşım uyarısı tonla söylüyor.
+   */
+  const gunlukVar =
+    o.daysRemaining > 0 && o.suggestedDailyMicros !== null && BigInt(o.suggestedDailyMicros) > 0n;
 
   return (
     <section className={`${s.kart} ${s.gir}`}>
@@ -240,23 +251,26 @@ export function ButceKarti({
             <span>Ayın geçen kısmı</span>
             <b className={s.num}>{yuzde(o.elapsedRatio)}</b>
           </li>
-          {birim && tahmin !== null && (
+          {yeniBasladi && (
+            <li>
+              <span>Ay yeni başladı, tempo yarın hesaplanır</span>
+            </li>
+          )}
+          {!yeniBasladi && birim && tahmin !== null && (
             <li>
               <span>Bu tempoyla ay sonu</span>
               <b className={s.num}>≈ {formatMoney(o.projectedMicros, birim, { decimals: 0 })}</b>
             </li>
           )}
-          {birim && o.suggestedDailyMicros !== null && (
+          {!yeniBasladi && birim && gunlukVar && (
             <li>
               <span>Kalan günlük bütçe</span>
               <b className={s.num}>{formatMoney(o.suggestedDailyMicros, birim, { decimals: 0 })} / gün</b>
             </li>
           )}
         </ul>
-        {asar && (
-          <p className={s.tempoUyari}>
-            Bu hızla bütçe %{(((tahmin! - butce) * 100n + butce - 1n) / butce).toString()} aşılır.
-          </p>
+        {!yeniBasladi && asim !== null && (
+          <p className={s.tempoUyari}>Bu hızla bütçe %{asim.toString()} aşılır.</p>
         )}
       </div>
       {alt('Bütçeyi düzenle')}
@@ -323,8 +337,27 @@ export function DonusumKarti({ detay }: { detay: MetricsConversionDetail }) {
           </table>
         </div>
       )}
+      {/*
+        META SATIRLARININ NEDEN KOVA OLDUĞU YAZILI: kullanıcı Google'da kendi
+        verdiği adları görüp Meta'da "Form/Mesaj" görünce "benim adlarım
+        nerede" diye arar; cevap ekranın kendisinde olmalı.
+      */}
+      {detay.satirlar.some((r) => r.platform === 'meta') && (
+        <p className={s.notKucuk} style={{ padding: '0 16px 10px', margin: 0 }}>
+          Meta satırları gruplanmış olarak gelir: platform özel dönüşümün adını vermiyor.
+        </p>
+      )}
+      {/*
+        SAYAÇ İKİ SAYIYI DA YAZIYOR: adlandırılmış eylemlerin toplamı ile
+        kapsamdaki bütün dönüşümler ayrışabiliyor (detayı olmayan dönüşüm).
+        Yalnız birini yazmak, kampanya tablosuyla çelişen bir sayı demekti.
+      */}
       <div className={s.kartAlt}>
-        <span className={s.num}>Toplam {formatNumber(detay.toplamDonusum)} dönüşüm</span>
+        <span className={s.num}>
+          {toplam === detay.toplamDonusum
+            ? `Toplam ${formatNumber(detay.toplamDonusum)} dönüşüm`
+            : `Adlandırılmış ${formatNumber(toplam)} / toplam ${formatNumber(detay.toplamDonusum)} dönüşüm`}
+        </span>
       </div>
     </section>
   );
