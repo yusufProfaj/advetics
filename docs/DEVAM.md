@@ -12,7 +12,7 @@ sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
 temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
 RLS politikası var, platform sahibi yalnız hello@profaj.com.
-**Bekleyen deploy:** yok (canlı `6b51390`, 2026-10-09 11:43).
+**Bekleyen deploy:** yok (canlı `6e18a40`, 2026-10-09 12:47).
 
 **ÜRÜN YAPISI PLANI (2026-10-09, kullanıcı isteği):** panel yedi bölüme
 geçiyor: Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar ·
@@ -54,15 +54,16 @@ tanıtım sitesi.
 3. **AdvStrategy aktarımı: ÇALIŞIYOR** (kutu dolu, görsel modele ulaşıyor).
 4. **Okuma API:** kullanıcı anahtar oluşturacak.
 
-**AŞAMA 1 — MENÜ (2026-10-09), YAZILDI, DEPLOY BEKLİYOR, migration yok.**
+**AŞAMA 1 — MENÜ (2026-10-09), CANLIDA (`6e18a40`, 12:47, 104 sn).**
 Yedi bölüm: Genel Bakış · Planla (AdvStrategy, Aylık Bütçe) · Oluştur
 (Akıllı Boost, AdvCampaign) · Yönet (Reklam Keşfi, Potansiyel Müşteriler) ·
 İyileştir (Kurallar) · Raporlar · Base (Marka Merkezi) + Ayarlar. Aylık
 Bütçe Marka Merkezi'nden `/butce` sayfasına döndü (eski adres yönleniyor).
 İkon rayı yapılmadı, Ekip Base'e taşınmadı — gerekçeler
 [`URUN-YAPISI-PLANI.md`](URUN-YAPISI-PLANI.md) Aşama 1. Müşteri hesabı yine
-dört ekran. Deploy sonrası: menüyü ve `/butce`yi canlıda gözle kontrol.
-Sıradaki: Aşama 2 (Genel Bakış karar ekranı).
+dört ekran. Canlıda kontrol edildi: menü yedi bölüm, `/butce` açılıyor,
+`/marka-merkezi?bolum=butce&ay=…` ayı taşıyarak yönleniyor.
+**Sıradaki: Aşama 2 (Genel Bakış karar ekranı).**
 
 **Karar bekleyen kullanım sorunu:** asistan kullanıcının AÇIKÇA söylediği
 alanları da "öneri" diye yazıyor ve onay kartında yeniden onaylatıyor.
