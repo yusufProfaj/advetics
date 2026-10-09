@@ -98,26 +98,6 @@ export class AsistanService {
       metrics: this.metrics,
       pacing: (c, q) => this.budgets.pacing(c, q),
       oneriler: (c, id) => this.iyilestir.liste(c, id),
-      advcampaignOturumu: (c, id, istem) => this.advcampaignOturumu(c, id, istem),
     };
-  }
-
-  /**
-   * AdvCampaign'e devir: AdvStrategy aktarımının deseni (`strateji.service.ts`
-   * `aktar`). Oturum `hazir_istem` ile açılıyor ve MESAJ OLARAK YAZILMIYOR:
-   * kullanıcı göndere basana kadar yalnız bir öneri; reklam kurma kararı
-   * asistanın değil kullanıcının.
-   */
-  private async advcampaignOturumu(ctx: TenantContext, clientId: string, istem: string): Promise<string> {
-    const baslik = `AI Asistan: ${istem}`.replace(/\s+/g, ' ').slice(0, 120);
-    const [o] = await this.tx(ctx)((t) =>
-      t.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        INSERT INTO adv_oturum (org_id, client_id, user_id, baslik, model, hazir_istem)
-        SELECT org_id, id, ${ctx.userId}::uuid, ${baslik}, ${this.modelAdi}, ${istem.slice(0, 4000)}
-          FROM clients WHERE id = ${clientId}::uuid
-        RETURNING id::text`),
-    );
-    if (!o) throw new NotFoundException('Workspace bulunamadı');
-    return o.id;
   }
 }

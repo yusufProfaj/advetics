@@ -494,10 +494,11 @@ export function aracIziMetni(p: Extract<AsistanParcasi, { tur: 'arac' }>): strin
 }
 
 /**
- * ADVCAMPAIGN'E DEVİR ADRESİ. AdvCampaign oturumu `?oturum=` ile açıyor ve
- * workspace'i `?musteri=` ile alıyor (`reklam/page.tsx`); workspace'i
- * taşımamak, üst barda başka bir workspace seçiliyken devredilen oturumu
- * listede bulunamaz yapar ve sayfa boş bir sohbetle açılır.
+ * ADVCAMPAIGN'E DEVİR ADRESİ. Workspace `?musteri=` ile taşınıyor; taşınmazsa
+ * üst barda başka bir workspace seçiliyken rehber yanlış workspace'te açılır.
+ * `?oturum=` 2026-10-10'a kadar sohbet oturumunu açıyordu; sohbet kalktı ve
+ * `reklam/page.tsx` bu parametreyi görünce isteğin rehberde yeniden
+ * kurulacağını söylüyor (sessizce listeye düşmüyor).
  */
 export function devretAdresi(clientId: string, oturumId: string): string {
   return `/reklam?${new URLSearchParams({ musteri: clientId, oturum: oturumId })}`;

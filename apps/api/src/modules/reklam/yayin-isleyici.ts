@@ -8,6 +8,7 @@ import { provaKos } from './prova-isleyici';
 import { metaSurumuDogrula } from './meta-graf';
 import { MetaKesinHata, YayinMotoru, yayiniSonlandir, type MetaYazmaPortu, type TxRunner } from './yayin-motoru';
 import { metaYazmaAcikMi } from './yazma-kapisi';
+import { googleYayinIsle, type GoogleYayinPortu } from './google/google-yayin';
 
 /**
  * Worker'da bir yayın işini koşturur (TASARIM.md § 11.5 d, § 11.12).
@@ -33,6 +34,12 @@ export interface IsleyiciBagimliliklari {
   kilitOneki: string;
   /** Testte sahte Meta; üretimde Graph istemcisi kurulur. */
   portKur?: (a: GrafAyarlari) => MetaYazmaPortu;
+  /**
+   * Google yayınının erişimi (AdvCampaign rehberi). Yoksa Google işi
+   * FIRLATIR: kurulmamış bir bağımlılıkla sessizce "bitti" demek, yayını
+   * sonsuza kadar on_kontrol'de bırakırdı.
+   */
+  google?: GoogleYayinPortu;
 }
 
 export type IsSonucu = { tur: 'bitti'; durum: YayinDurumu | 'gecti' | 'reddedildi' | 'dogrulanamadi' } | { tur: 'ertele'; sebep: string };
@@ -40,7 +47,12 @@ export type IsSonucu = { tur: 'bitti'; durum: YayinDurumu | 'gecti' | 'reddedild
 export const YAZICI_KILIT_MS = 30 * 60_000;
 
 export async function reklamIsiniIsle(d: IsleyiciBagimliliklari, is: ReklamIsi, sahip: string): Promise<IsSonucu> {
-  return is.adim === 'prova' ? provaIsiniIsle(d, is.provaId, sahip) : yayinIsiniIsle(d, is, sahip);
+  if (is.adim === 'prova') return provaIsiniIsle(d, is.provaId, sahip);
+  if (is.adim === 'google_kur') {
+    if (!d.google) throw new Error('Google yayın erişimi worker’da kurulu değil');
+    return googleYayinIsle({ tx: d.tx, google: d.google, kilit: d.kilit, kilitOneki: d.kilitOneki }, is.yayinId, sahip);
+  }
+  return yayinIsiniIsle(d, is, sahip);
 }
 
 /** Prova: hesap kilidi ve erişim yayınla aynı; erişim yoksa prova sebebiyle düşer. */

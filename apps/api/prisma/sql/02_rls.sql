@@ -412,6 +412,8 @@ DECLARE
     'yayin', 'yayin_nesnesi', 'geri_okuma', 'prova',
     -- AdvCampaign sohbeti (docs/advcampaign/TASARIM-PLAN.md § 4.2)
     'adv_oturum', 'adv_mesaj', 'adv_onay',
+    -- AdvCampaign rehberi (docs/advcampaign/MIMARI-REHBER.md § 2)
+    'reklam_rehberi',
     -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
     'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
     'ozel_gunler'
@@ -2346,6 +2348,23 @@ CREATE POLICY adv_prova_select ON prova
 CREATE POLICY adv_prova_insert ON prova
   FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 CREATE POLICY adv_prova_update ON prova
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
+-- ADVCAMPAIGN REHBERİ — reklam_rehberi (docs/advcampaign/MIMARI-REHBER.md § 2)
+-- ============================================================================
+--
+-- MÜŞTERİ KAPSAMLI; SELECT, INSERT, UPDATE — reklam_taslagi ile aynı desen.
+-- DELETE YOK: rehber silinmez arşivlenir (türetilmiş taslaklar ve onların
+-- yayın kayıtları ona bakıyor). Workspace silinince CASCADE sahibin
+-- yetkisiyle işliyor.
+CREATE POLICY adv_reklam_rehberi_select ON reklam_rehberi
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_reklam_rehberi_insert ON reklam_rehberi
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_reklam_rehberi_update ON reklam_rehberi
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 

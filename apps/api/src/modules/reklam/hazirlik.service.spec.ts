@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
@@ -141,14 +141,24 @@ describe('reklam hazırlığı', () => {
  */
 describe('reklam modülü sınırı', () => {
   const YASAK = ['ad-builder', 'draft-tree', '/bulk/', 'campaign-actions', 'ai-assistant', '/connections/', '/assets/'];
-  // ALT KLASÖRLER DAHİL: ilk sürüm yalnız üst klasörü okuyordu ve sohbet/
-  // altındaki servisler hem içe aktarma yasağının hem providers kontrolünün
-  // tamamen dışındaydı.
+  /*
+   * BAĞLANTI MODÜLÜNDEN İZİNLİ ÜÇ DOSYA (AdvCampaign rehberi, 2026-10-10):
+   * Google gövde KURUCULARI (`google-write`, `google-demandgen`) saf
+   * fonksiyon ve MIMARI-REHBER § 4 "yeni kurucu yazma, bunları kullan"
+   * diyor; `provider.types` hata sınıfı ve tipler. Üçü de Nest sağlayıcısı
+   * değil: içe aktarmak modül grafiğine hiçbir şey eklemiyor. Bağlantı
+   * SERVİSLERİ (kasa, kayıt) yasak kalıyor; onlara ihtiyaç duyan rehber AYRI
+   * modül (`rehber/`) ve kendi sınır testi var (`rehber-modulu.spec.ts`).
+   */
+  const IZINLI = ['connections/providers/google-write', 'connections/providers/google-demandgen', 'connections/provider.types'];
+  // ALT KLASÖRLER DAHİL: ilk sürüm yalnız üst klasörü okuyordu ve alt
+  // klasördeki servisler hem içe aktarma yasağının hem providers kontrolünün
+  // tamamen dışındaydı. `rehber/` AYRI bir Nest modülü: kendi testinde.
   const dosyalar = (readdirSync(__dirname, { recursive: true }) as string[])
-    .filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts'));
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts') && !f.startsWith(`rehber${sep}`));
 
   it('modül dosyaları gerçekten okundu (alt klasörler dahil)', () => {
-    expect(dosyalar).toEqual(expect.arrayContaining(['reklam.module.ts', 'hazirlik.service.ts', join('sohbet', 'sohbet.service.ts')]));
+    expect(dosyalar).toEqual(expect.arrayContaining(['reklam.module.ts', 'hazirlik.service.ts', join('google', 'google-yayin.ts')]));
   });
 
   it('KRİTİK: her @Controller modülün controllers listesinde', () => {
@@ -157,7 +167,7 @@ describe('reklam modülü sınırı', () => {
     const denetleyiciler = dosyalar.flatMap((f) =>
       [...readFileSync(join(__dirname, f), 'utf8').matchAll(/@Controller\([^)]*\)\s*export class (\w+)/g)].map((m) => m[1]!),
     );
-    expect(denetleyiciler.length).toBeGreaterThanOrEqual(2);
+    expect(denetleyiciler.length).toBeGreaterThanOrEqual(1);
     for (const c of denetleyiciler) expect(kayitli, c).toContain(c);
   });
 
@@ -167,6 +177,7 @@ describe('reklam modülü sınırı', () => {
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .split('\n')
         .filter((l) => /^\s*import\b|from\s+'/.test(l))
+        .filter((l) => !IZINLI.some((i) => l.includes(`${i}'`)))
         .join('\n');
       for (const y of YASAK) expect(importlar, `${f} → ${y}`).not.toContain(y);
     }

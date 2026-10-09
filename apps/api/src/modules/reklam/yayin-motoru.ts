@@ -85,6 +85,7 @@ interface YayinSatiri {
   beklenen_yanki: BeklenenYanki[];
   api_surumu: string;
   test_kipi: boolean;
+  kapali_kalacak: boolean;
 }
 interface NesneSatiri {
   id: string;
@@ -357,6 +358,7 @@ export class YayinMotoru {
       // Canlı tur: açmak yerine hemen arşiv.
       return this.geriAl(y.id);
     }
+    if (y.kapali_kalacak) return kapaliBirak(this.tx, y.id, y.durum);
     await this.gecis(y, 'aciliyor', null);
     return this.ac(y.id);
   }
@@ -455,7 +457,7 @@ export class YayinMotoru {
   private async yayin(id: string): Promise<YayinSatiri> {
     const [y] = await this.tx((tx) =>
       tx.$queryRaw<YayinSatiri[]>(Prisma.sql`
-        SELECT id::text, org_id::text, client_id::text, durum, derlenmis_govde, beklenen_yanki, api_surumu, test_kipi
+        SELECT id::text, org_id::text, client_id::text, durum, derlenmis_govde, beklenen_yanki, api_surumu, test_kipi, kapali_kalacak
           FROM yayin WHERE id = ${id}::uuid`),
     );
     if (!y) throw new Error(`Yayın bulunamadı: ${id}`);
@@ -553,6 +555,25 @@ export async function yayiniSonlandir(
   return durum;
 }
 
+/**
+ * AÇILIŞ `deneme`: kurulum geri okundu ve tekil, ama AÇILMIYOR — nesneler
+ * platformda DURAKLATILMIŞ kalıyor ve kullanıcı Reklam Yöneticisi'nden
+ * Başlat ile açıyor (MIMARI-REHBER § 5). Meta motoru ve Google işleyicisi
+ * AYNI fonksiyonu çağırıyor: "açılmayacak yayın" kararı tek yerde.
+ *
+ * GEÇİŞ TABLOSUNDA YOKSA SESSİZ DEĞİL: `kapali_kuruldu`ya izinli bir geçiş
+ * yoksa (`yayin.ts#YAYIN_GECISLERI`, sözleşme) yayın OLDUĞU YERDE kalır,
+ * sebep yazılır ve platformda hiçbir şey açılmaz. Açmak yerine durmak:
+ * para harcamayan tek güvenli davranış.
+ */
+export async function kapaliBirak(tx: TxRunner, yayinId: string, durum: YayinDurumu): Promise<YayinDurumu> {
+  if (gecisIzinliMi(durum, 'kapali_kuruldu')) return yayiniSonlandir(tx, yayinId, 'kapali_kuruldu', 'Duraklatılmış kuruldu; Reklam Yöneticisi’nden Başlat ile açılır.');
+  const sebep = `Duraklatılmış kuruldu ve AÇILMADI; kayıt kapatılamadı (durum makinesinde ${durum} → kapali_kuruldu geçişi yok).`;
+  logger.warn(`yayin=${yayinId}: ${sebep}`);
+  await tx((t) => t.$queryRaw(Prisma.sql`UPDATE yayin SET sebep = ${sebep} WHERE id = ${yayinId}::uuid AND sonlandi_at IS NULL RETURNING id`));
+  return durum;
+}
+
 function govdeBul(y: YayinSatiri, ad: string): MetaGovdesi {
   const g = y.derlenmis_govde.find((x) => x.ad === ad);
   if (!g) throw new Error(`Gövde bulunamadı: ${ad}`);
@@ -618,6 +639,10 @@ export interface YayinKaydiGirdisi {
   kaynak: 'panel' | 'ai_kart' | 'kopya' | 'toplu';
   baslatanId: string;
   testKipi: boolean;
+  /** Rehber `deneme` açılışı: kur, geri oku, açma (`kapaliBirak`). */
+  kapaliKalacak?: boolean;
+  /** Uyum denetçisinin kararı; yalnız rehber yolunda dolu, değişmez. */
+  uyum?: { surum: string; tur: string } | null;
 }
 
 /**
@@ -636,10 +661,11 @@ export async function yayinKaydiOlustur(tx: TxRunner, g: YayinKaydiGirdisi): Pro
     const [y] = await t.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       INSERT INTO yayin (id, org_id, client_id, taslak_id, taslak_surum_no, icerik_ozeti, ad_account_id,
                          derlenmis_govde, beklenen_yanki, api_surumu, derleyici_surumu, atif_standardi,
-                         kaynak, test_kipi, baslatan_id)
+                         kaynak, test_kipi, baslatan_id, kapali_kalacak, uyum_surumu, uyum_sonucu)
       VALUES (${g.id}::uuid, ${g.orgId}::uuid, ${g.clientId}::uuid, ${g.taslakId}::uuid, ${g.taslakSurumNo}, ${g.icerikOzeti},
               ${g.adAccountId}::uuid, ${JSON.stringify(g.govdeler)}::jsonb, ${JSON.stringify(g.yankilar)}::jsonb,
-              ${g.apiSurumu}, ${g.derleyiciSurumu}, ${g.atifStandardi}, ${g.kaynak}, ${g.testKipi}, ${g.baslatanId}::uuid)
+              ${g.apiSurumu}, ${g.derleyiciSurumu}, ${g.atifStandardi}, ${g.kaynak}, ${g.testKipi}, ${g.baslatanId}::uuid,
+              ${g.kapaliKalacak ?? false}, ${g.uyum?.surum ?? null}, ${g.uyum ? JSON.stringify(g.uyum) : null}::jsonb)
       RETURNING id::text`);
     for (const [i, n] of sira.entries()) {
       const govde = g.govdeler.find((x) => x.ad === n.ad);

@@ -7,9 +7,6 @@ import { ReklamYayinService } from './yayin.service';
 import { ReklamKuyrugu } from './reklam-kuyrugu';
 import { ReklamAiTaslakService } from './ai-taslak.service';
 import { ReklamGorselService } from './gorsel.service';
-import { AdvSohbetController } from './sohbet/sohbet.controller';
-import { AdvSohbetService } from './sohbet/sohbet.service';
-import { AdvOnayService } from './sohbet/onay.service';
 
 /**
  * Yeni Reklam Oluştur modülü (docs/meta-reklam-brief/tasarim/TASARIM.md).
@@ -21,9 +18,17 @@ import { AdvOnayService } from './sohbet/onay.service';
  * PrismaService global modülden geliyor. `reklam-modulu.spec.ts` bu sınırı
  * kaynak taramasıyla kilitliyor.
  */
+/*
+ * AdvCampaign SOHBETİ 2026-10-10'da API'den kaldırıldı (karar K-2: yapay
+ * zekâ yalnız düğme arkasında; rehber `rehber/rehber.module.ts`). Tabloları
+ * (`adv_oturum`, `adv_mesaj`, `adv_onay`) SİLİNMEDİ: veri.
+ *
+ * EXPORTS: rehber modülü taslak, hazırlık, yayın ve kuyruk servislerini
+ * kullanıyor (ikinci bir taslak/yayın yolu yazmadan).
+ */
 @Module({
-  controllers: [ReklamController, AdvSohbetController],
-  providers: [ReklamHazirlikService, ReklamTaslakService, AjansAyariService, ReklamYayinService, ReklamKuyrugu, ReklamAiTaslakService, ReklamGorselService, AdvSohbetService, AdvOnayService],
-  exports: [ReklamKuyrugu],
+  controllers: [ReklamController],
+  providers: [ReklamHazirlikService, ReklamTaslakService, AjansAyariService, ReklamYayinService, ReklamKuyrugu, ReklamAiTaslakService, ReklamGorselService],
+  exports: [ReklamKuyrugu, ReklamHazirlikService, ReklamTaslakService, ReklamYayinService],
 })
 export class ReklamModule {}

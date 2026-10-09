@@ -88,7 +88,11 @@ export const YAYIN_GECISLERI: Readonly<Record<YayinDurumu, readonly YayinDurumu[
   geri_okuma: ['tekillik_kapisi', 'fark_var', 'dogrulanamadi'],
   fark_var: ['arsivlendi'],
   dogrulanamadi: ['geri_okuma', 'arsivlendi'],
-  tekillik_kapisi: ['aciliyor', 'fark_var', 'dogrulanamadi', 'arsivlendi'],
+  // `kapali_kuruldu`: rehberin `deneme` açılışı (REHBER_ACILIS) kurar, geri
+  // okur ve AÇMADAN bırakır. Geçiş yokken yayın tekillik kapısında "açılmadı"
+  // sebebiyle asılı kalıyordu (Ajan 2 bulgusu): para harcamıyordu ama durum
+  // makinesine göre hâlâ "motor ilerleyecek" sayılıyordu.
+  tekillik_kapisi: ['aciliyor', 'fark_var', 'dogrulanamadi', 'arsivlendi', 'kapali_kuruldu'],
   aciliyor: ['iletildi', 'kismen_acik', 'bekletildi'],
   kismen_acik: ['aciliyor', 'arsivlendi'],
   iletildi: ['incelemede', 'ogreniyor', 'yayinda', 'sorunlu', 'durduruldu', 'arsivlendi'],

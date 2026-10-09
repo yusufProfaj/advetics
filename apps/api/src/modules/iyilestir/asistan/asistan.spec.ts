@@ -44,12 +44,13 @@ describe('araç listesi', () => {
     expect(await ASISTAN_ARAC_TANIMLARI.uygula_karti.calistir({ anahtar: 'b' }, ortam)).toMatchObject({ hal: 'reddedildi', neden: 'paylaşılıyor' });
   });
 
-  it('devir yetkisi (bulk.write) yoksa AdvCampaign oturumu AÇILMIYOR', async () => {
-    const ac = vi.fn();
-    const ortam = { ctx: { permissions: [] }, clientId: 'c', advcampaignOturumu: ac } as unknown as AsistanOrtami;
-    const r = await ASISTAN_ARAC_TANIMLARI.advcampaign_devret.calistir({ istem: 'Yeni ürün için reklam kur' }, ortam);
-    expect(r.hal).toBe('reddedildi');
-    expect(ac).not.toHaveBeenCalled();
+  it('devir aracı HİÇBİR ŞEY YAZMAZ: yalnız /reklam yönlendirmesi; yetki yoksa ret', async () => {
+    const yetkisiz = { ctx: { permissions: [] }, clientId: 'c' } as unknown as AsistanOrtami;
+    expect((await ASISTAN_ARAC_TANIMLARI.advcampaign_devret.calistir({ istem: 'Yeni ürün için reklam kur' }, yetkisiz)).hal).toBe('reddedildi');
+    const yetkili = { ctx: { permissions: ['bulk.write'] }, clientId: 'c' } as unknown as AsistanOrtami;
+    const r = await ASISTAN_ARAC_TANIMLARI.advcampaign_devret.calistir({ istem: 'Yeni ürün için reklam kur' }, yetkili);
+    expect(r).toMatchObject({ hal: 'tamam', veri: { adres: '/reklam' } });
+    expect('devret' in r).toBe(false);
   });
 
   it('tanınmayan argüman sessizce yok sayılmıyor', async () => {

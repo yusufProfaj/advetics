@@ -4,6 +4,7 @@ import {
   googleVideoAssetBody,
   demandGenAtomikIstek,
   googleAlanHatalari,
+  kampanyayiYayinaAlBody,
   type AtomikGovde,
   type KampanyaAcilisi,
 } from './google-demandgen';
@@ -2236,6 +2237,42 @@ export class GoogleProvider implements IAdPlatformProvider {
       body: JSON.stringify(govde),
     });
     return data?.mutateOperationResponses ?? [];
+  }
+
+  // ---------------------------------------------------------------------------
+  // ADVCAMPAIGN REHBERİ — TAŞIMA KATMANI (gövde üretmez)
+  //
+  // Gövdeyi `modules/reklam/google/derle-google.ts` üreticilerden kuruyor
+  // (`aramaAtomikIstek`, `demandGenAtomikIstek`). Buradaki üç metot yalnız
+  // isteği taşıyor: ikinci bir gövde kurucusu doğduğu anda prova ile yayının
+  // gövdesi ayrışırdı. Hepsi CANLIDA DENENMEDİ (MIMARI-REHBER § 8).
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Tek atomik `googleAds:mutate`. Hata ayrıntısı (`details`/`trigger`)
+   * mesaja katılıyor: ilk Demand Gen provasında bu ikisi atıldığı için iki
+   * hata teşhis edilemedi. `validateOnly` yanıtı BOŞ — çağıran onu başarı
+   * sayar, gerçek yazmada kaynak adlarını kendisi denetler.
+   */
+  async rehberMutate(
+    ctx: FetchContext,
+    govde: { mutateOperations: Array<Record<string, unknown>>; partialFailure: false; validateOnly: boolean },
+  ): Promise<Array<Record<string, { resourceName?: string }>>> {
+    try {
+      return await this.mutateAtomik(ctx, govde as AtomikGovde);
+    } catch (e) {
+      throw googleHatasiniZenginlestir(e);
+    }
+  }
+
+  /** Geri okuma ve tekillik araması: tek sayfalı GAQL (salt okunur). */
+  async rehberAra<T>(ctx: FetchContext, sorgu: string): Promise<T[]> {
+    return this.searchGaql<T>(ctx.accessToken, ctx.accountExternalId, sorgu, ctx.loginCustomerId);
+  }
+
+  /** Geri okuması temiz kurulumu açar: YALNIZ kampanya durumu (`updateMask: status`). */
+  async rehberKampanyaAc(ctx: FetchContext, kampanyaKaynagi: string): Promise<void> {
+    await this.guncelle(ctx, 'campaigns', kampanyayiYayinaAlBody(kampanyaKaynagi));
   }
 
   /**

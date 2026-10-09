@@ -81,6 +81,10 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   { tablo: 'adv_oturum', etiket: 'AdvCampaign oturumu' },
   { tablo: 'adv_mesaj', etiket: 'AdvCampaign mesajı' },
   { tablo: 'adv_onay', etiket: 'AdvCampaign onay kartı' },
+  // AdvCampaign rehberi workspace'in YARIM İŞİ ve türettiği taslaklar
+  // (reklam_taslagi) zaten taşınıyor; rehberi geride bırakmak, yeni şirkette
+  // ebeveynsiz taslaklar, eskide hiçbir hesaba bağlanamayan bir rehber demekti.
+  { tablo: 'reklam_rehberi', etiket: 'AdvCampaign rehberi' },
   // AdvStrategy planı workspace'in KENDİ kararı ve dayandığı kitle şablonları
   // ile varlıklar zaten taşınıyor; planı geride bırakmak, yeni şirkette
   // kitlesi olup planı olmayan bir workspace ve eski şirkette sahipsiz bir

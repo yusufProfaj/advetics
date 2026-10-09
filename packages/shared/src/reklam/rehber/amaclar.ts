@@ -114,7 +114,10 @@ export type AcilisDurumu = 'acik' | 'deneme' | 'kapali';
  */
 export const REHBER_ACILIS: Record<RehberAmacKodu, Record<RehberPlatformu, AcilisDurumu>> = {
   SITE: { meta: 'deneme', google: 'deneme' },
-  FORM: { meta: 'deneme', google: 'kapali' },
+  // FORM Dalga 2'ye kaydı (Ajan 2 bulgusu, 2026-10-10): mevcut Meta zinciri
+  // form kimliğini boş geçiyor ve gizlilik adresinin Marka Merkezi'nde alanı
+  // yok; açık bırakmak "her seferinde engelde duran" bir kart göstermek olurdu.
+  FORM: { meta: 'kapali', google: 'kapali' },
   WHATSAPP: { meta: 'kapali', google: 'kapali' },
   TELEFON: { meta: 'kapali', google: 'kapali' },
   VIDEO: { meta: 'kapali', google: 'deneme' },

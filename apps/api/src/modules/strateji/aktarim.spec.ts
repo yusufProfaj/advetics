@@ -5,17 +5,17 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { AppConfig } from '../../config/configuration';
 import { StratejiService } from './strateji.service';
 import type { StratejiKelimeKuyrugu } from './kelime-kuyrugu';
-import { AdvSohbetService } from '../reklam/sohbet/sohbet.service';
 
 /**
  * AKTARIM — onaylı plan → AdvCampaign oturumları (MIMARI § 6.1). Gerçek şema
- * (PGlite); oturumlar `adv_oturum`a gerçekten yazılıyor ve AdvCampaign'in
- * kendi servisi onları okuyor (iki modülün aynı satırı aynı şekilde
- * anladığı burada sınanıyor, ayrı ayrı değil).
+ * (PGlite); oturumlar `adv_oturum`a gerçekten yazılıyor.
+ *
+ * AdvCampaign SOHBET servisi 2026-10-10'da API'den kaldırıldı: bu oturumları
+ * okuyan uç artık YOK ve onu sınayan test silindi. Aktarımın rehbere
+ * (reklam_rehberi) taşınması açık iş (docs/advcampaign/devir/ajan2.md).
  */
 let h: Harness;
 let svc: StratejiService;
-let sohbet: AdvSohbetService;
 
 const KARDES_ORG = 'cccccccc-0000-4000-8000-00000000000c';
 const KARDES_WS = 'cccccccc-0000-4000-8000-0000000000c1';
@@ -45,8 +45,6 @@ beforeAll(async () => {
   h = await createHarness();
   const prisma = { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
   svc = new StratejiService(prisma, { ekle: async () => undefined } as unknown as StratejiKelimeKuyrugu, CONFIG);
-  const bos = {} as never;
-  sohbet = new AdvSohbetService(prisma, bos, bos, bos, bos, bos, CONFIG, null);
 }, 60_000);
 afterAll(async () => h?.close());
 beforeEach(async () => {
@@ -212,20 +210,5 @@ describe('aktarım', () => {
     await svc.eylem(tum, id, { eylem: 'aktar', surum: 3 });
     const [o] = await oturumlar();
     expect(o).toMatchObject({ org_id: KARDES_ORG, client_id: KARDES_WS });
-  });
-
-  it('KRİTİK: AdvCampaign oturum listesi ve mesajlar ucu hazır metni ve ekleri döndürür', async () => {
-    const id = await onayliPlan([satir()]);
-    const a = await svc.eylem(AJANS, id, { eylem: 'aktar', surum: 3 });
-    const oturumId = a.plan.aktarim!.aktarilan[0]!.oturumId;
-    const liste = await sohbet.oturumlar(AJANS, IDS.client);
-    expect(liste.satirlar[0]).toMatchObject({ id: oturumId, hazirMedyalar: [V1, V2] });
-    expect(liste.satirlar[0]!.hazirIstem).toMatch(/^2026-11 medya planından: Form doldursunlar\./);
-    const m = await sohbet.mesajlar(AJANS, oturumId);
-    expect(m.oturum).toMatchObject({ hazirMedyalar: [V1, V2] });
-    expect(m.oturum.hazirIstem).toBe(liste.satirlar[0]!.hazirIstem);
-    // Elle açılan oturumda hazır alanlar boş.
-    const yeni = await sohbet.oturumAc(AJANS, IDS.client);
-    expect(yeni).toMatchObject({ hazirIstem: null, hazirMedyalar: [] });
   });
 });

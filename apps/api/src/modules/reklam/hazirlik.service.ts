@@ -7,8 +7,10 @@ import {
   OZEL_KATEGORILER,
   type OzelKategori,
   type KitleKonumu,
+  type RehberHazirligi,
   type ReklamHazirligi,
   type TenantContext,
+  type UcHal,
 } from '@advetics/shared';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -25,6 +27,28 @@ interface ProfilSatiri {
   k_max: number | null;
   k_cins: string | null;
 }
+
+/**
+ * Rehber hazırlığının PLATFORM okumaları. Bu modül eski bağlantı servislerine
+ * bağlanmıyor (modül sınırı); okuyucuyu rehber servisi veriyor. Her okuma
+ * ayrı ve TRANSACTION DIŞINDA çağrılıyor.
+ */
+export interface RehberPlatformOkuyucu {
+  /** Meta günlük asgari bütçesi, micros dizge (`GET /act_X/minimum_budgets`). */
+  metaAsgariGunluk(adAccountId: string, clientId: string): Promise<string | null>;
+  /** Sayfada Lead Ads koşulları kabul edilmiş mi (`leadgen_tos_accepted`). */
+  metaFormKosullari(sayfaId: string, clientId: string): Promise<boolean | null>;
+  /** Google Ads'te etkin birincil dönüşüm işlemi var mı. */
+  googleDonusumEtkin(adAccountId: string): Promise<boolean | null>;
+}
+
+/**
+ * Google Talep Yaratma günlük asgarisi — YALNIZ TRY ve ÖLÇÜLMÜŞ değer
+ * (2026-10-09 provası: 50 ₺ reddedildi, 250 ₺ geçti; Google'ın "5 USD
+ * karşılığı" kuralı). Başka para biriminde kur bilmiyoruz ve sayı UYDURMUYORUZ:
+ * `null` = kontrol yok, prova söyler.
+ */
+export const GOOGLE_TY_ASGARI_TRY_MICROS = 250_000_000n;
 
 /**
  * Reklam modülünün hazırlık okuması — TEK transaction, platform çağrısı YOK.
@@ -53,8 +77,8 @@ export class ReklamHazirlikService {
        * sorgunun taklidinden değerlidir.
        */
       const [hesaplar, profiller, gorseller, [sayim], [musteri], [profilSatiri]] = await Promise.all([
-        tx.$queryRaw<Array<{ id: string; name: string; currency: string; timezone: string }>>(Prisma.sql`
-          SELECT id::text, name, currency, timezone
+        tx.$queryRaw<Array<{ id: string; name: string; external_id: string; currency: string; timezone: string }>>(Prisma.sql`
+          SELECT id::text, name, external_id, currency, timezone
             FROM ad_accounts
            WHERE client_id = ${clientId}::uuid AND platform = 'meta'
            ORDER BY name`),
@@ -96,7 +120,7 @@ export class ReklamHazirlikService {
       }
 
       return {
-        hesaplar: hesaplar.map((h) => ({ id: h.id, ad: h.name, paraBirimi: h.currency, saatDilimi: h.timezone })),
+        hesaplar: hesaplar.map((h) => ({ id: h.id, ad: h.name, disKimlik: h.external_id, paraBirimi: h.currency, saatDilimi: h.timezone })),
         sayfalar: profiller
           .filter((p) => p.profile_type === 'facebook_page')
           .map((p) => ({ id: p.id, ad: p.name, ustSayfaPlatformId: null })),
@@ -142,6 +166,125 @@ export class ReklamHazirlikService {
         taninmayanKategoriler: taninmayan,
       };
     });
+  }
+
+  /**
+   * REHBER HAZIRLIĞI — `oku`nun üstüne Google hesapları, YouTube kanalları,
+   * ön koşullar ve asgari bütçe (shared `RehberHazirligi`).
+   *
+   * VERİTABANI KISMI TEK TRANSACTION, PLATFORM KISMI TRANSACTION DIŞINDA:
+   * Meta/Google çağrısı 5 saniyelik transaction sınırını aşabilir ve
+   * transaction ölünce hata bile kaydedilemez (CLAUDE.md).
+   *
+   * Ön koşullar hesap/sayfa başına: hazırlık okunurken kullanıcı henüz
+   * seçmedi, panel ilk hesabı/sayfayı önden seçiyor ve okuma ONA yapılıyor.
+   * Birden çok hesap varsa öbürlerinin değeri farklı olabilir (devir notu).
+   *
+   * Okunmayan ön koşullar (WhatsApp hattı, satış ölçümü) Dalga 2-3'ün;
+   * bugün `null` = "kontrol etmedik". Eksik listesi `null`ı UYARI gösteriyor
+   * ve o amaçlar açılış tablosunda zaten kapalı.
+   */
+  async rehberOku(ctx: TenantContext, clientId: string, okuyucu: RehberPlatformOkuyucu | null): Promise<RehberHazirligi> {
+    const temel = await this.oku(ctx, clientId);
+    const ek = await this.prisma.withTenant(ctx, async (tx) => {
+      const [googleHesaplari, kanallar, [musteri], [ajans]] = await Promise.all([
+        tx.$queryRaw<Array<{ id: string; name: string; external_id: string; currency: string; timezone: string }>>(Prisma.sql`
+          SELECT id::text, name, external_id, currency, timezone
+            FROM ad_accounts
+           WHERE client_id = ${clientId}::uuid AND platform = 'google'
+           ORDER BY name`),
+        tx.$queryRaw<Array<{ id: string; name: string }>>(Prisma.sql`
+          SELECT id::text, name FROM social_profiles
+           WHERE client_id = ${clientId}::uuid AND profile_type = 'youtube_channel'
+           ORDER BY name`),
+        tx.$queryRaw<Array<{ telefon: string | null; site: string | null; logo: string | null; marka: string | null; ad: string }>>(Prisma.sql`
+          SELECT c.contact_phone AS telefon, c.website AS site, p.logo_asset_id::text AS logo,
+                 p.marka_adi AS marka, c.name AS ad
+            FROM clients c LEFT JOIN client_profiles p ON p.client_id = c.id
+           WHERE c.id = ${clientId}::uuid`),
+        // "Ajans yöneticisi" = yönetici VE ev şirketi ajansın kendisi.
+        // `deneme` açılışlı amaçlar canlı tur içindir ve müşteri şirketinin
+        // yöneticisi onları görmemeli.
+        tx.$queryRaw<Array<{ ajans_mi: boolean }>>(Prisma.sql`
+          SELECT (ma.ajans_org_id IS NULL OR ma.ajans_org_id = o.id) AS ajans_mi
+            FROM organizations o LEFT JOIN manager_accounts ma ON ma.id = o.manager_account_id
+           WHERE o.id = ${ctx.orgId}::uuid`),
+      ]);
+      /*
+       * FORM ŞABLONLARI: ilk sayfanın kayıtlı anlık formları (`lead_forms`,
+       * Potansiyel Müşteriler modülünün tablosu; servisine bağlanılmıyor,
+       * modül sınırı). Her formun YALNIZ son sürümü. Sayfa yoksa boş liste.
+       */
+      const sayfaId = temel.sayfalar[0]?.id ?? null;
+      const formlar = sayfaId
+        ? await tx.$queryRaw<Array<{ id: string; ad: string }>>(Prisma.sql`
+            SELECT id::text, name AS ad FROM lead_forms
+             WHERE client_id = ${clientId}::uuid AND social_profile_id = ${sayfaId}::uuid AND superseded_by_id IS NULL
+             ORDER BY updated_at DESC, id`)
+        : [];
+      return { googleHesaplari, kanallar, musteri, ajans, formlar };
+    });
+
+    const metaHesap = temel.hesaplar[0] ?? null;
+    const sayfa = temel.sayfalar[0] ?? null;
+    const googleHesap = ek.googleHesaplari[0] ?? null;
+    const [metaAsgari, metaForm, googleDonusum] = await Promise.all([
+      uc('Meta asgari bütçe', metaHesap && okuyucu ? () => okuyucu.metaAsgariGunluk(metaHesap.id, clientId) : null),
+      uc('Meta form koşulları', sayfa && okuyucu ? () => okuyucu.metaFormKosullari(sayfa.id, clientId) : null),
+      uc('Google dönüşüm işlemi', googleHesap && okuyucu ? () => okuyucu.googleDonusumEtkin(googleHesap.id) : null),
+    ]);
+    const yok: UcHal = null;
+
+    return {
+      ...temel,
+      googleHesaplari: ek.googleHesaplari.map((g) => ({
+        id: g.id,
+        ad: g.name,
+        musteriNo: musteriNo(g.external_id),
+        paraBirimi: g.currency,
+        saatDilimi: g.timezone,
+      })),
+      youtubeKanallari: ek.kanallar.map((k) => ({ id: k.id, ad: k.name })),
+      onKosullar: {
+        metaFormKosullari: metaForm,
+        metaWhatsapp: yok,
+        metaSatisOlcumu: yok,
+        googleSatisOlcumu: yok,
+        googleDonusumEtkin: googleDonusum,
+        // İşletme adı her zaman var (yoksa workspace adı); belirleyici logo.
+        googleLogoVeAd: !!ek.musteri?.logo,
+        // Marka Merkezi'nde aydınlatma/gizlilik adresi alanı YOK (devir notu,
+        // "Ajan 1'e"). Var saymak form reklamını yayında patlatırdı.
+        gizlilikAdresi: false,
+      },
+      asgariGunluk: {
+        meta: metaAsgari,
+        googleTalepYaratma: googleHesap?.currency === 'TRY' ? GOOGLE_TY_ASGARI_TRY_MICROS.toString() : null,
+      },
+      iletisim: { telefon: ek.musteri?.telefon ?? null, siteAdresi: ek.musteri?.site ?? null },
+      formSablonlari: ek.formlar,
+      ajansYoneticisi: ctx.isOrgAdmin && ek.ajans?.ajans_mi === true,
+    };
+  }
+}
+
+/** `1234567890` → `123-456-7890` (ekranda gösterilen biçim). */
+function musteriNo(id: string): string {
+  const d = id.replace(/-/g, '');
+  return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : id;
+}
+
+/**
+ * Bir platform okuması: düşerse `null` + LOG, ASLA `false`. Bilinmeyeni
+ * "yok" saymak sağlam bir kurulumu kilitler (RehberOnKosullari yorumu).
+ */
+async function uc<T>(ad: string, fn: (() => Promise<T | null>) | null): Promise<T | null> {
+  if (!fn) return null;
+  try {
+    return await fn();
+  } catch (e) {
+    logger.warn(`Rehber hazırlığı: ${ad} okunamadı: ${(e as Error).message}`);
+    return null;
   }
 }
 

@@ -120,6 +120,14 @@ export function demandGenCampaignBody(params: {
   stamp: string;
   startDate?: string;
   endDate?: string;
+  /**
+   * KONUM "BULUNANLAR" (PRESENCE) — yalnız rehber yolu açıkça istiyor.
+   * Rehberin karar tablosu "İlgilenenler kapalı" diyor ve bu söz gövdede
+   * tutulmalı. Akıllı Boost'un CANLIDA doğrulanmış gövdesine dokunulmasın
+   * diye isteğe bağlı: Demand Gen'in bu alanı kabul ettiği ÖLÇÜLMEDİ
+   * (2026-10-10), reddederse validateOnly provası YÜKSEK SESLE söyler.
+   */
+  yalnizBulunanlar?: boolean;
 }): GoogleMutateBody {
   const create: Record<string, unknown> = {
     name: `${params.name} — ${params.stamp}`,
@@ -131,6 +139,9 @@ export function demandGenCampaignBody(params: {
     targetSpend: {},
     containsEuPoliticalAdvertising: AB_SIYASI_BEYAN,
     demandGenCampaignSettings: { upgradedTargeting: true },
+    ...(params.yalnizBulunanlar
+      ? { geoTargetTypeSetting: { positiveGeoTargetType: 'PRESENCE', negativeGeoTargetType: 'PRESENCE' } }
+      : {}),
   };
   Object.assign(create, kampanyaTarihleri(params.startDate, params.endDate));
   return body([{ create }]);
@@ -450,7 +461,15 @@ export interface AtomikVideoIstegi {
   name: string;
   stamp: string;
   dailyBudgetMicros: bigint;
-  endDate: string;
+  /**
+   * `null` = bitişsiz (rehberde günlük bütçe + bitiş tarihi yok). Akıllı
+   * Boost her zaman süreli; o yol dizge vermeye devam ediyor.
+   */
+  endDate: string | null;
+  /** Verilmezse kampanya hemen başlar (Akıllı Boost'un davranışı). */
+  startDate?: string;
+  /** Rehber yolu: konum PRESENCE (`demandGenCampaignBody` yorumu). */
+  yalnizBulunanlar?: boolean;
   /** Kampanya açık mı kurulsun. İlk canlı deneme duraklatılmış (plan K3). */
   acilis: KampanyaAcilisi;
   konumlar: string[];
@@ -509,7 +528,14 @@ export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde
     },
   });
   const kampanyaGovdesi = ilkCreate(
-    demandGenCampaignBody({ name: p.name, budgetResource: BUTCE, stamp: p.stamp, endDate: p.endDate }),
+    demandGenCampaignBody({
+      name: p.name,
+      budgetResource: BUTCE,
+      stamp: p.stamp,
+      ...(p.startDate ? { startDate: p.startDate } : {}),
+      ...(p.endDate ? { endDate: p.endDate } : {}),
+      ...(p.yalnizBulunanlar ? { yalnizBulunanlar: true } : {}),
+    }),
   );
   const kampanya = ekle({
     campaignOperation: { create: { ...kampanyaGovdesi, status: p.acilis, resourceName: KAMPANYA } },

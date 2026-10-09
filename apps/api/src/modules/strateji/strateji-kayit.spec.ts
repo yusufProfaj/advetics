@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NIYET_KODLARI, STRATEJI_UCLARI } from '@advetics/shared';
@@ -127,7 +127,16 @@ describe('Nest modül kaydı', () => {
 
 describe('migration ↔ sözleşme', () => {
   it('KRİTİK: matris niyet CHECK’i NIYET_KODLARI ile aynı küme', () => {
-    const blok = /strateji_matrisi_niyet_chk" CHECK \("niyet" IN \(([\s\S]*?)\)\)/.exec(MIGRATION)?.[1];
+    // Kısıt sonradan genişletildi (20261010130000): GEÇERLİ tanım, onu en son
+    // kuran migration'dakidir. İlk migration'a bakmak yeni niyeti hiç görmezdi.
+    const MIG_KOK = join(__dirname, '../../../prisma/migrations');
+    const sonTanim = readdirSync(MIG_KOK)
+      .filter((d) => /^\d{14}_/.test(d))
+      .sort()
+      .map((d) => readFileSync(join(MIG_KOK, d, 'migration.sql'), 'utf8'))
+      .filter((sql) => sql.includes('strateji_matrisi_niyet_chk" CHECK'))
+      .pop() ?? MIGRATION;
+    const blok = /strateji_matrisi_niyet_chk" CHECK \("niyet" IN \(([\s\S]*?)\)\)/.exec(sonTanim)?.[1];
     if (!blok) throw new Error('niyet CHECK’i bulunamadı');
     const kume = [...blok.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]).sort();
     expect(kume).toEqual([...NIYET_KODLARI].sort());

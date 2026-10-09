@@ -62,7 +62,13 @@ export function kararTablosu(amac: RehberAmacKodu, acik: Record<RehberPlatformu,
       kod: 'OTOMATIK_METIN',
       konu: 'Otomatik metin',
       meta: m ? hucre("Meta'nın kapatılabilen kreatif özellikleri kapalı", 'Kapatılamayanlar onay penceresinde yazılı') : null,
-      google: g ? hucre('AI Max ve otomatik metin kapalı', 'Yazdığın metin değişmeden çıkar') : null,
+      // Talep Yaratma'da otomatik metni kapatan alan API'de DOĞRULANMADI
+      // (Ajan 2 bulgusu); doğrulanmamış bir "kapalı" sözü vermiyoruz.
+      google: g
+        ? ty
+          ? hucre('Google başlık ve açıklamaları farklı sıralarda dener', 'Talep Yaratma bunu kapatmaya izin vermiyor olabilir')
+          : hucre('AI Max ve otomatik metin kapalı', 'Yazdığın metin değişmeden çıkar')
+        : null,
     },
     { kod: 'SAYFA', konu: 'Sayfa', meta: m ? hucre('Seçtiğin Facebook sayfası, açıkça') : null, google: null },
     {

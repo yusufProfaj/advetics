@@ -106,6 +106,24 @@ export function campaignBudgetBody(params: {
  * üründe yok; takipsiz açmak, kampanyanın hiç öğrenmemesi demek. Elle CPC
  * öngörülebilir ve reklam grubunda tavanı belli.
  */
+export type AramaTeklifi = 'manualCpc' | 'targetSpend' | 'maximizeConversions';
+
+/**
+ * Teklif stratejisinin gövdedeki alanı. Strateji ALANIN ADIYLA seçiliyor;
+ * `biddingStrategyType` salt okunur ve buradan türüyor. Üçünden yalnız biri
+ * gönderilmeli: ikisi birden "birden çok strateji" ile reddedilir.
+ *
+ * - `manualCpc`: eski yol (tavan reklam grubunda, `cpcBidMicros`).
+ * - `targetSpend`: Maksimum tıklama — rehberde dönüşüm ölçülmüyorsa.
+ * - `maximizeConversions`: yalnız birincil dönüşüm işlemi ETKİNSE; ölçümsüz
+ *   hesapta öğrenmiyor ve harcamayı rastgele dağıtıyor (A4 § 4.1).
+ */
+function teklifAlani(t: AramaTeklifi): Record<string, unknown> {
+  if (t === 'targetSpend') return { targetSpend: {} };
+  if (t === 'maximizeConversions') return { maximizeConversions: {} };
+  return { manualCpc: { enhancedCpcEnabled: false } };
+}
+
 export function campaignBody(params: {
   name: string;
   budgetResource: string;
@@ -113,18 +131,39 @@ export function campaignBody(params: {
   /** `YYYY-MM-DD` — Date'e çevirmek saat dilimi kayması üretiyor. */
   startDate?: string;
   endDate?: string;
+  /** Verilmezse `manualCpc` (eski yolun davranışı değişmesin). */
+  teklif?: AramaTeklifi;
 }): GoogleMutateBody {
   const create: Record<string, unknown> = {
     name: `${params.name} — ${params.stamp}`,
     status: 'PAUSED',
     advertisingChannelType: 'SEARCH',
     campaignBudget: params.budgetResource,
-    manualCpc: { enhancedCpcEnabled: false },
+    ...teklifAlani(params.teklif ?? 'manualCpc'),
     containsEuPoliticalAdvertising: AB_SIYASI_BEYAN,
     // AI Max açıkça KAPALI: açıkken anahtar kelimesiz eşleme ve geniş eşleme
     // devreye giriyor ve bütçe kullanıcının seçmediği sorgulara gidiyor
     // (SENTEZ S-19). Göndermemek kararı Google'a bırakmak olurdu.
     aiMaxSetting: { enableAiMax: false },
+    /*
+     * METİN ÖZELLEŞTİRME ve URL GENİŞLETME de AÇIKÇA KAPALI. Panel turunda
+     * (A4 § 4.1) ikisi de açık geliyordu: biri yazdığımız metni Google'ın
+     * ürettiğiyle değiştiriyor (yasal uyarılı sektörde onaysız metin), öbürü
+     * trafiği bizim seçmediğimiz bir sayfaya gönderiyor. Alan adları v25
+     * referansından (`Campaign.asset_automation_settings`); CANLIDA
+     * ÖLÇÜLMEDİ — tanınmayan değer validateOnly provasında YÜKSEK SESLE
+     * reddedilir, sessiz değil.
+     */
+    assetAutomationSettings: [
+      { assetAutomationType: 'TEXT_ASSET_AUTOMATION', assetAutomationStatus: 'OPTED_OUT' },
+      { assetAutomationType: 'FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION', assetAutomationStatus: 'OPTED_OUT' },
+    ],
+    /*
+     * KONUM "BULUNANLAR" (PRESENCE). Google'ın varsayılanı "bulunan VEYA
+     * ilgilenen": İzmir hedefli reklam İzmir'i arayan Berlin'deki kişiye de
+     * çıkar ve bütçe başka ülkeye akar — hata vermeden.
+     */
+    geoTargetTypeSetting: { positiveGeoTargetType: 'PRESENCE', negativeGeoTargetType: 'PRESENCE' },
     networkSettings: {
       targetGoogleSearch: true,
       targetSearchNetwork: false,
@@ -146,7 +185,12 @@ export function campaignBody(params: {
 export function adGroupBody(params: {
   name: string;
   campaignResource: string;
-  cpcBidMicros: string;
+  /**
+   * `null` YALNIZ otomatik teklifte (`targetSpend`, `maximizeConversions`):
+   * orada tavanı Google koyuyor ve grup teklifi yok sayılıyor. Elle CPC'de
+   * dizge zorunlu (yukarıdaki gerekçe).
+   */
+  cpcBidMicros: string | null;
 }): GoogleMutateBody {
   return body([
     {
@@ -155,7 +199,7 @@ export function adGroupBody(params: {
         campaign: params.campaignResource,
         status: 'ENABLED',
         type: 'SEARCH_STANDARD',
-        cpcBidMicros: params.cpcBidMicros,
+        ...(params.cpcBidMicros !== null ? { cpcBidMicros: params.cpcBidMicros } : {}),
       },
     },
   ]);
@@ -205,12 +249,18 @@ export function responsiveSearchAdBody(params: {
   finalUrl: string;
   headlines: string[];
   descriptions: string[];
+  /**
+   * Rehber yolunda `ENABLED`: yayın kararı TEK yerde, kampanya seviyesinde.
+   * Reklam da duraklatılmış kalsaydı kampanya açıldığında hiçbir şey
+   * yayınlanmazdı — hata yok, gösterim yok (Demand Gen dersiyle aynı).
+   */
+  durum?: 'ENABLED' | 'PAUSED';
 }): GoogleMutateBody {
   return body([
     {
       create: {
         adGroup: params.adGroupResource,
-        status: 'PAUSED',
+        status: params.durum ?? 'PAUSED',
         ad: {
           finalUrls: [params.finalUrl],
           responsiveSearchAd: {
@@ -291,6 +341,181 @@ export function resourceCollection(resourceName: string): string {
   const parts = resourceName.split('/');
   // customers / <id> / <collection> / <id>
   return parts[2] ?? '';
+}
+
+// ---------------------------------------------------------------------------
+// ARAMA KAMPANYASI ÖLÇÜTLERİ — konum, dil, negatif (AdvCampaign rehberi)
+// ---------------------------------------------------------------------------
+
+/**
+ * Kampanya konumları — `CampaignCriterion.location`.
+ *
+ * BOŞ LİSTE BURADA REDDEDİLİYOR: konumsuz arama kampanyası BÜTÜN ÜLKELERE
+ * açılıyor ve Google hata vermiyor (panel turunda varsayılan "Tüm ülkeler ve
+ * bölgeler"di, A4 § 4.1). Demand Gen'den farkı: Arama'da konum KAMPANYA
+ * seviyesinde (Demand Gen'deki ret `upgradedTargeting`e özgü).
+ */
+export function kampanyaKonumlariBody(params: { campaignResource: string; konumlar: string[] }): GoogleMutateBody {
+  if (params.konumlar.length === 0) throw new Error('Konum listesi boş: kampanya bütün ülkelere açılırdı.');
+  return body(
+    params.konumlar.map((geoTargetConstant) => ({
+      create: { campaign: params.campaignResource, location: { geoTargetConstant } },
+    })),
+  );
+}
+
+/**
+ * Kampanya dili — `CampaignCriterion.language`. Dil ölçütü hiç yoksa Google
+ * "bütün diller" sayıyor; Türkçe metinli reklam başka dilde arama yapanlara
+ * da çıkar ve tıklanmadan gösterim harcar.
+ */
+export function kampanyaDiliBody(params: { campaignResource: string; dil: string }): GoogleMutateBody {
+  if (!/^languageConstants\/\d+$/.test(params.dil)) throw new Error(`Geçersiz dil kaynağı: ${params.dil}`);
+  return body([{ create: { campaign: params.campaignResource, language: { languageConstant: params.dil } } }]);
+}
+
+/**
+ * Kampanya düzeyi NEGATİF anahtar kelimeler (`TABAN_NEGATIFLER`).
+ *
+ * EŞLEME `BROAD`: negatif geniş eşleme, kelimelerin HEPSİNİ (sırası ne olursa
+ * olsun) içeren aramayı dışarıda bırakır. "iş ilanı" negatifi "ilanı iş
+ * arıyorum"u da kapatmalı; öbek eşleme yalnız aynı sırayı kapatırdı. Tek
+ * kelimelik negatiflerde ikisi aynı.
+ */
+export function kampanyaNegatifleriBody(params: { campaignResource: string; kelimeler: readonly string[] }): GoogleMutateBody {
+  return body(
+    params.kelimeler.map((text) => ({
+      create: { campaign: params.campaignResource, negative: true, keyword: { text: text.trim(), matchType: 'BROAD' } },
+    })),
+  );
+}
+
+/**
+ * ═══ ARAMA KAMPANYASI — TEK ATOMİK İSTEK (AdvCampaign rehberi) ═══
+ *
+ * `demandGenAtomikIstek`in Arama karşılığı: bütün işlemler tek
+ * `googleAds:mutate` isteğinde, geçici (eksi) kimliklerle bağlı ve
+ * `partialFailure: false`. Ya hepsi kurulur ya hiçbiri; ortada kalan yetim
+ * bütçe ve elle geri alma kodu yok. Prova AYNI gövde, yalnız `validateOnly`.
+ *
+ * Gövdeler tek tek yukarıdaki üreticilerden geliyor (alan adları ve kurallar
+ * orada, testli); burada yalnız geçici kimlik ve işlem türü ekleniyor.
+ *
+ * SIRA ÖNEMLİ: geçici kimlik ancak onu kuran işlem sırada önce geliyorsa
+ * çözülüyor (bütçe → kampanya → kampanya ölçütleri → grup → kelimeler → reklam).
+ *
+ * CANLIDA HİÇ KOŞMADI (2026-10-10). İlk gerçek çağrı validateOnly provası
+ * (MIMARI-REHBER § 8, Ö-1).
+ */
+export interface AtomikAramaIstegi {
+  customerId: string;
+  name: string;
+  stamp: string;
+  gunlukButceMicros: bigint;
+  /** Verilmezse kampanya açıldığı anda başlar (bugün başlayan rehber). */
+  startDate?: string;
+  endDate: string | null;
+  teklif: AramaTeklifi;
+  konumlar: string[];
+  dil: string;
+  negatifler: readonly string[];
+  anahtarKelimeler: string[];
+  finalUrl: string;
+  basliklar: string[];
+  aciklamalar: string[];
+  validateOnly: boolean;
+}
+
+export interface AtomikAramaGovdesi {
+  mutateOperations: Array<Record<string, unknown>>;
+  partialFailure: false;
+  validateOnly: boolean;
+}
+
+export interface AtomikAramaSirasi {
+  kampanya: number;
+  reklamGrubu: number;
+  reklam: number;
+}
+
+function ilkOlustur(b: GoogleMutateBody): Record<string, unknown> {
+  const c = b.operations[0]?.create;
+  if (!c) throw new Error('Gövde üreticisi create işlemi döndürmedi.');
+  return c;
+}
+
+export function aramaAtomikIstek(p: AtomikAramaIstegi): { govde: AtomikAramaGovdesi; sira: AtomikAramaSirasi } {
+  if (p.anahtarKelimeler.length === 0) {
+    // Anahtar kelimesiz arama kampanyası hiç harcamaz ve hata vermez.
+    throw new Error('Anahtar kelime yok: arama kampanyası hiç gösterilmezdi.');
+  }
+  if (p.teklif === 'manualCpc') {
+    // Rehber elle CPC kurmuyor: grup tavanını bilmeden yazmak, hesabın
+    // varsayılan teklifine güvenmek olurdu.
+    throw new Error('Atomik arama isteği yalnız otomatik teklifle kurulur.');
+  }
+  const kok = `customers/${p.customerId}`;
+  const BUTCE = `${kok}/campaignBudgets/-1`;
+  const KAMPANYA = `${kok}/campaigns/-2`;
+  const GRUP = `${kok}/adGroups/-3`;
+
+  const ops: Array<Record<string, unknown>> = [];
+  const ekle = (op: Record<string, unknown>): number => ops.push(op) - 1;
+
+  ekle({
+    campaignBudgetOperation: {
+      create: {
+        ...ilkOlustur(campaignBudgetBody({ name: p.name, amountMicros: p.gunlukButceMicros.toString(), stamp: p.stamp })),
+        resourceName: BUTCE,
+      },
+    },
+  });
+  const kampanya = ekle({
+    campaignOperation: {
+      create: {
+        ...ilkOlustur(
+          campaignBody({
+            name: p.name,
+            budgetResource: BUTCE,
+            stamp: p.stamp,
+            ...(p.startDate ? { startDate: p.startDate } : {}),
+            ...(p.endDate ? { endDate: p.endDate } : {}),
+            teklif: p.teklif,
+          }),
+        ),
+        resourceName: KAMPANYA,
+      },
+    },
+  });
+  for (const o of [
+    ...kampanyaKonumlariBody({ campaignResource: KAMPANYA, konumlar: p.konumlar }).operations,
+    ...kampanyaDiliBody({ campaignResource: KAMPANYA, dil: p.dil }).operations,
+    ...kampanyaNegatifleriBody({ campaignResource: KAMPANYA, kelimeler: p.negatifler }).operations,
+  ]) {
+    ekle({ campaignCriterionOperation: { create: o.create } });
+  }
+  const reklamGrubu = ekle({
+    adGroupOperation: {
+      create: { ...ilkOlustur(adGroupBody({ name: `${p.name} — grup`, campaignResource: KAMPANYA, cpcBidMicros: null })), resourceName: GRUP },
+    },
+  });
+  for (const o of keywordsBody({ adGroupResource: GRUP, keywords: p.anahtarKelimeler }).operations) {
+    ekle({ adGroupCriterionOperation: { create: o.create } });
+  }
+  const reklam = ekle({
+    adGroupAdOperation: {
+      create: ilkOlustur(
+        responsiveSearchAdBody({
+          adGroupResource: GRUP,
+          finalUrl: p.finalUrl,
+          headlines: p.basliklar,
+          descriptions: p.aciklamalar,
+          durum: 'ENABLED',
+        }),
+      ),
+    },
+  });
+  return { govde: { mutateOperations: ops, partialFailure: false, validateOnly: p.validateOnly }, sira: { kampanya, reklamGrubu, reklam } };
 }
 
 // ---------------------------------------------------------------------------

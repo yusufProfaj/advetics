@@ -5,14 +5,16 @@
  *
  * Uçlar (docs/advcampaign/MIMARI-REHBER.md § 3):
  *   GET  /reklam/rehber/hazirlik?clientId=       → RehberHazirligi     bulk.read
- *   GET  /reklam/rehberler?clientId=              → RehberOzeti[]       bulk.read
+ *   GET  /reklam/rehber/youtube-videolari?clientId=&kanalId= → YoutubeVideoListesi bulk.read
+ *   GET  /reklam/rehberler?clientId=              → RehberListesi       bulk.read
  *   POST /reklam/rehberler {clientId}             → RehberKaydi         bulk.write
  *   GET  /reklam/rehberler/:id                    → RehberKaydi         bulk.read
  *   PUT  /reklam/rehberler/:id                    → RehberKaydi         bulk.write (409 = sürüm eski)
  *   POST /reklam/rehberler/:id/konum-esle         → RehberKaydi         bulk.write (Google karşılığı)
  *   POST /reklam/rehberler/:id/anahtar-kelime-oner → AnahtarKelimeOnerisi bulk.write
- *   POST /reklam/rehberler/:id/metin-oner         → MetinOnerisi        bulk.write
+ *   POST /reklam/rehberler/:id/metin-oner         → MetinOnerisi        bulk.write (KAYDA YAZMAZ, sürüm artmaz)
  *   POST /reklam/rehberler/:id/prova              → RehberProvaSonucu   bulk.write
+ *   GET  /reklam/rehberler/:id/prova              → RehberProvaSonucu | null bulk.read (son prova; sayfa yenilenince kaybolmasın)
  *   POST /reklam/rehberler/:id/yayinla {ozet}     → RehberYayinDurumu   bulk.publish
  *   GET  /reklam/rehberler/:id/yayin              → RehberYayinDurumu   bulk.read
  *   POST /reklam/rehberler/:id/arsivle            → RehberKaydi         bulk.write
@@ -60,6 +62,12 @@ export interface RehberOzeti {
   updatedAt: string;
 }
 
+/** Liste kesilirse ekranda "N / toplam" yazılabilsin (sessiz kesme yok). */
+export interface RehberListesi {
+  satirlar: RehberOzeti[];
+  toplam: number;
+}
+
 export interface AnahtarKelimeOnerisi {
   satirlar: Array<{ metin: string; aylikArama: number | null; rekabet: 'dusuk' | 'orta' | 'yuksek' | null }>;
   /** Google'ın önerdiği toplam fikir sayısı (sessiz kesme yok: "5 / 214"). */
@@ -79,6 +87,8 @@ export interface MetinOnerisi {
 
 export type PlatformProvaSonucu =
   | { tur: 'gecti'; zaman: string; not: string | null }
+  /** Meta provası kuyrukta: panel `GET /prova` ile yoklar. "Yapılmadı" demek yanlış bilgi olurdu. */
+  | { tur: 'bekliyor'; zaman: string }
   | { tur: 'reddetti'; zaman: string; mesajlar: string[] }
   | { tur: 'yapilmadi'; sebep: string };
 

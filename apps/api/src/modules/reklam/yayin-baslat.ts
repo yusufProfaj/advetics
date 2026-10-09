@@ -13,6 +13,7 @@ import {
   type MetaApiSurumu,
   type OzelKategori,
   type TenantContext,
+  type UyumSonucu,
 } from '@advetics/shared';
 import type { TxRunner } from './yayin-motoru';
 import { yayinKaydiOlustur } from './yayin-motoru';
@@ -44,6 +45,16 @@ export interface YayinIstegi {
    * "Bu kampanyayı kim nereden kurdu" sorusunun cevabı; verilmezse panel.
    */
   kaynak?: 'panel' | 'ai_kart';
+  /**
+   * AdvCampaign REHBERİNDEN gelen yayın (MIMARI-REHBER § 5). Yalnız rehber
+   * servisi doldurur; panelin eski ucu bu alanı TAŞIMAZ (zod şeması onu
+   * tanımıyor), yani eski yollarda UYUM reti değişmeden kalır.
+   *
+   * - `uyum`: denetçinin bu içeriğe verdiği karar. `gecti` ise UYUM reti
+   *   kalkar ve karar yayın kaydına DEĞİŞMEZ olarak yazılır.
+   * - `kapaliKalacak`: açılış `deneme` — kur, geri oku, AÇMA.
+   */
+  rehber?: { uyum: UyumSonucu; kapaliKalacak: boolean };
 }
 
 export type YayinBaslatSonucu =
@@ -98,10 +109,16 @@ export async function yayinBaslat(
   if (!istek.testKipi) {
     const p = await provaDurumu(tx, t.id, t.aktif_surum_no, s.icerik_ozeti, b.apiSurumu, b.simdi);
     if (p.tur !== 'gecti') retler.push({ kod: 'OK-17', mesaj: p.metin });
-    // Uyum son kapısı ve değişmez uyum raporu (§ 11.2 adım 5-6) yazılmadan
+    // Uyum son kapısı ve değişmez uyum raporu (§ 11.2 adım 5-6) olmadan
     // gerçek yayın YOK: raporu olmayan yayın, kanıtsız ama kurulmuş bir
-    // reklam bırakır ve bunu sonradan düzeltmenin yolu yok.
-    retler.push({ kod: 'UYUM', mesaj: 'Uyum denetçisi henüz bağlı değil; gerçek yayın kapalı, test kipi açık.' });
+    // reklam bırakır ve bunu sonradan düzeltmenin yolu yok. Rapor bugün
+    // YALNIZ rehber yolunda üretiliyor; eski yollarda ret değişmedi.
+    const uyum = istek.rehber?.uyum;
+    if (!uyum) {
+      retler.push({ kod: 'UYUM', mesaj: 'Uyum denetçisi bu yolda bağlı değil; gerçek yayın kapalı, test kipi açık.' });
+    } else if (uyum.tur !== 'gecti') {
+      for (const u of uyum.bulgular) retler.push({ kod: 'UYUM', mesaj: u.metin });
+    }
   } else {
     if (!ctx.isOrgAdmin) retler.push({ kod: 'TEST-KIPI', mesaj: 'Test kipini yalnız ajans yöneticisi kullanabilir.' });
     const [o] = await tx((x) =>
@@ -138,6 +155,8 @@ export async function yayinBaslat(
     kaynak: istek.kaynak ?? 'panel',
     baslatanId: ctx.userId,
     testKipi: istek.testKipi,
+    kapaliKalacak: istek.rehber?.kapaliKalacak ?? false,
+    uyum: istek.rehber?.uyum ?? null,
   });
   await tx((x) =>
     x.$queryRaw(Prisma.sql`UPDATE reklam_taslagi SET durum = 'yayinda', updated_at = now() WHERE id = ${t.id}::uuid RETURNING id`),

@@ -29,8 +29,9 @@ import { gunEkle } from '../oneri-hesap';
  * YAZMA YOK: `uygula_karti` bir öneriyi KART olarak döndürür; uygulama
  * kullanıcının karttaki düğmesiyle, öneri uygulamasıyla AYNI uçtan
  * (`POST /iyilestir/oneriler/:anahtar/uygula`) yapılır. `advcampaign_devret`
- * reklam kurmaz: AdvCampaign'de hazır istekli bir oturum açar, gönder
- * düğmesine kullanıcı basar. `asistan-araclari.spec.ts` bu dosyanın yazan
+ * reklam kurmaz ve 2026-10-10'dan beri HİÇBİR ŞEY YAZMAZ: AdvCampaign
+ * sohbeti kaldırıldı (rehber), araç yalnız "/reklam adresinde rehberi aç"
+ * yönlendirmesi döndürür. `asistan-araclari.spec.ts` bu dosyanın yazan
  * bir servise (`CampaignActionsService`, `applyAction`, `uygula(`) hiç
  * dokunmadığını kaynak taramasıyla kilitliyor.
  */
@@ -49,13 +50,11 @@ export interface AsistanOrtami {
   };
   pacing(ctx: TenantContext, q: { clientId: string; month?: string }): Promise<ClientPacing>;
   oneriler(ctx: TenantContext, clientId: string): Promise<OneriListesi>;
-  /** AdvCampaign'de `hazir_istem`li oturum açar; oturum kimliğini döndürür. */
-  advcampaignOturumu(ctx: TenantContext, clientId: string, istem: string): Promise<string>;
 }
 
 /** Modele dönen sonuç; ekrana giden iz `ozet` alanında. */
 export type AracSonucu =
-  | { hal: 'tamam'; veri: unknown; ozet: string; kart?: Oneri; devret?: { istem: string; oturumId: string } }
+  | { hal: 'tamam'; veri: unknown; ozet: string; kart?: Oneri }
   | { hal: 'hata' | 'reddedildi'; neden: string; ozet: string };
 
 export class AracArgumanHatasi extends Error {}
@@ -205,17 +204,25 @@ export const ASISTAN_ARAC_TANIMLARI: Record<AsistanAraci, AracTanimi> = {
     },
   },
   advcampaign_devret: {
+    /*
+     * YÖNLENDİRME, OTURUM DEĞİL. Araç sözleşmede duruyor (`ASISTAN_ARACLARI`,
+     * shared) ama AdvCampaign sohbeti kaldırıldı: açılan bir `adv_oturum`
+     * satırını artık hiçbir ekran okumuyor ve kullanıcı "hazırlandı" denen
+     * şeyi hiçbir yerde bulamazdı. Reklam rehberden, tıklayarak kuruluyor.
+     */
     aciklama:
-      'Kullanıcı yeni reklam / kampanya kurmak isterse AdvCampaign\'de hazır istekli bir oturum açar. Reklam KURMAZ; kullanıcı AdvCampaign\'de gönder düğmesine basar. istem: kullanıcının isteğini AdvCampaign\'e anlatan kısa, açık bir metin.',
-    girdi: nesne({ istem: { type: 'string', description: 'AdvCampaign giriş kutusuna konacak metin (en çok 1500 karakter).' } }, ['istem']),
+      'Kullanıcı yeni reklam / kampanya kurmak isterse çağır. Reklam KURMAZ ve hiçbir şey kaydetmez: kullanıcıyı AdvCampaign rehberine (/reklam) yönlendirir. istem: kullanıcının isteğinin kısa özeti.',
+    girdi: nesne({ istem: { type: 'string', description: 'Kullanıcının isteğinin kısa özeti (en çok 1500 karakter).' } }, ['istem']),
     async calistir(args, o) {
-      const a = suz({ istem: z.string().trim().min(10).max(1500) }, args);
-      // Reklam kurma yetkisi yoksa açılan oturum kullanılamaz; açmıyoruz.
+      suz({ istem: z.string().trim().min(10).max(1500) }, args);
       if (!o.ctx.permissions?.includes('bulk.write')) {
         return { hal: 'reddedildi', neden: 'Bu kullanıcının reklam kurma yetkisi yok (AdvCampaign).', ozet: 'Devir yetkisi yok' };
       }
-      const oturumId = await o.advcampaignOturumu(o.ctx, o.clientId, a.istem);
-      return { hal: 'tamam', veri: { oturumId }, devret: { istem: a.istem, oturumId }, ozet: 'AdvCampaign oturumu hazırlandı' };
+      return {
+        hal: 'tamam',
+        veri: { adres: '/reklam', yapilacak: 'Kullanıcı AdvCampaign rehberini /reklam adresinden açıp "Yeni reklam" ile adım adım kurar.' },
+        ozet: 'AdvCampaign rehberine yönlendirildi',
+      };
     },
   },
 };

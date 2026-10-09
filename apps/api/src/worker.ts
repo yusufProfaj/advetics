@@ -223,6 +223,9 @@ async function bootstrap(): Promise<void> {
    * kendiliğinden tekrarı sonucu bilinmeyen bir POST'u yeniden gönderirdi.
    */
   const admin = app.get(PrismaAdminService);
+  const googleSaglayici = app.get(ProviderRegistry).get('google');
+  const kasa = app.get(TokenVaultService);
+  const googleGp = googleSaglayici as unknown as GoogleProvider;
   const reklamWorker = new Worker<ReklamIsi>(
     REKLAM_YAYIN_KUYRUGU,
     async (job) => {
@@ -234,6 +237,14 @@ async function bootstrap(): Promise<void> {
           yuklemeKoku: config.uploads.dir,
           kilit: redisKilidi(connection),
           kilitOneki: config.redis.keyPrefix,
+          // AdvCampaign rehberinin Google yayını: taşıma GoogleProvider'da,
+          // gövde derleyicide (yayın kaydında hazır). Token kasadan.
+          google: {
+            tokenAl: (connectionId) => kasa.getAccessToken(connectionId, googleSaglayici),
+            mutate: (ctx, govde) => googleGp.rehberMutate(ctx, govde),
+            ara: (ctx, sorgu) => googleGp.rehberAra(ctx, sorgu),
+            kampanyaAc: (ctx, kaynak) => googleGp.rehberKampanyaAc(ctx, kaynak),
+          },
         },
         job.data,
         `${job.id}`,
@@ -275,8 +286,6 @@ async function bootstrap(): Promise<void> {
    * HİÇ yazamadığı düşüşü (beklenmeyen hata, işçi kapanırken atılan iş)
    * kapatıyor, yoksa plan sonsuza kadar "aranıyor" derdi.
    */
-  const googleSaglayici = app.get(ProviderRegistry).get('google');
-  const kasa = app.get(TokenVaultService);
   const kelimeWorker = new Worker<KelimeAramaIsi>(
     STRATEJI_KELIME_KUYRUGU,
     async (job) => {

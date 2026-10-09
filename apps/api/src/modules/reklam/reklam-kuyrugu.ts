@@ -24,7 +24,17 @@ export interface ProvaIsi {
   provaId: string;
   adim: 'prova';
 }
-export type ReklamIsi = YayinIsi | ProvaIsi;
+/**
+ * Google yayını (AdvCampaign rehberi): kur → geri oku → aç. Meta adımlarından
+ * AYRI bir tür, çünkü işleyicisi ayrı (`google/google-yayin.ts`) ve Meta
+ * motorunun insan düğmeleri (devam, geri al) bu yayına uygulanmıyor.
+ * Aynı kuyruk: hesap başına yazıcı kilidi ve deneme kuralı (1) aynı.
+ */
+export interface GoogleYayinIsi {
+  yayinId: string;
+  adim: 'google_kur';
+}
+export type ReklamIsi = YayinIsi | ProvaIsi | GoogleYayinIsi;
 
 /** İş kimliği: ayırıcı `__` (BullMQ `:`'yı reddediyor). Aynı adım iki kez kuyruğa giremez. */
 export function yayinIsKimligi(yayinId: string, adim: YayinAdimi): string {
@@ -54,6 +64,11 @@ export class ReklamKuyrugu implements OnModuleDestroy {
   async ekle(yayinId: string, adim: YayinAdimi): Promise<void> {
     if (!this.kuyruk) throw new Error('Yayın kuyruğu kurulu değil (REDIS_URL yok)');
     await this.kuyruk.add(adim, { yayinId, adim }, { jobId: yayinIsKimligi(yayinId, adim) });
+  }
+
+  async ekleGoogle(yayinId: string): Promise<void> {
+    if (!this.kuyruk) throw new Error('Yayın kuyruğu kurulu değil (REDIS_URL yok)');
+    await this.kuyruk.add('google_kur', { yayinId, adim: 'google_kur' }, { jobId: `yayin__${yayinId}__google_kur` });
   }
 
   async ekleProva(provaId: string): Promise<void> {

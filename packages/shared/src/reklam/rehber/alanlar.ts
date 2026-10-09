@@ -144,8 +144,10 @@ export const VARSAYILAN_META_PAYI = 50;
  * Güncelleme gövdesi: istemci yalnız DEĞİŞEN alanları gönderir ve her birinin
  * kaynağını söyler (hazırlıktan dolan konum `marka_merkezi`, rehberin önerisi
  * `derleyici`). `kim` ve `zaman`ı SUNUCU basar: istemcinin saati sürüme
- * yazılmaz. `deger: null` alanı siler (platform kapatılınca hesabı
- * boşaltmak); boş bırakılan alanla silinen alan böylece ayrışıyor.
+ * yazılmaz. Alanı SİLMEK `sil: true` ile (platform kapatılınca hesabı
+ * boşaltmak). `deger: null` silmek DEĞİL, değerin kendisi: Instagram'sız
+ * sayfa ve "yaş aralığı yok" null DEĞER taşıyor ve önceki sürümde ikisi
+ * "silindi" ile karışıyordu (Ajan 3 bulgusu).
  *
  * `surum` iyimser kilit: iki sekme aynı rehberi yazarsa ikincisi 409 alır ve
  * sessizce ezilmez. Sunucu birleşik sonucu `rehberAlanlariSchema` ile
@@ -159,6 +161,7 @@ export const rehberGuncelleSchema = z.object({
         alan: z.string().max(40),
         deger: z.unknown(),
         kaynak: z.enum(ALAN_KAYNAKLARI),
+        sil: z.boolean().optional(),
       }),
     )
     .min(1)

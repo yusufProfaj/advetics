@@ -35,6 +35,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { ReklamModule } from './modules/reklam/reklam.module';
+import { RehberModule } from './modules/reklam/rehber/rehber.module';
 import { StratejiModule } from './modules/strateji/strateji.module';
 import { OkumaApiModule } from './modules/okuma-api/okuma-api.module';
 import { IyilestirModule } from './modules/iyilestir/iyilestir.module';
@@ -76,6 +77,7 @@ import { GenelBakisModule } from './modules/genel-bakis/genel-bakis.module';
     BoostsModule,
     AutoBoostModule,
     ReklamModule,
+    RehberModule,
     StratejiModule,
     OkumaApiModule,
     IyilestirModule,

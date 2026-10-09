@@ -31,6 +31,20 @@ export interface RehberYoutubeKanali {
   ad: string;
 }
 
+/**
+ * Bağlı YouTube kanalının videoları (`GET /reklam/rehber/youtube-videolari`).
+ * Google video reklamı YouTube'daki bir videoyu istiyor; kullanıcıya bağlantı
+ * yapıştırtmak yerine kanaldan seçtirilir. Sessiz kesme yok: `toplam`.
+ */
+export interface YoutubeVideoListesi {
+  satirlar: Array<{ videoId: string; baslik: string; kucukResim: string | null; yayinTarihi: string | null }>;
+  /** DÖNEN video sayısı (YouTube tek sayfada en çok 50 veriyor). */
+  toplam: number;
+  /** 50 döndüyse kanalda daha fazlası olabilir: ekranda "son 50 video" yazılır. */
+  dahaFazlaVar: boolean;
+  bosNeden: string | null;
+}
+
 export interface RehberOnKosullari {
   /** Seçili sayfada Lead Ads koşulları kabul edilmiş mi (Meta `leadgen_tos_accepted`). */
   metaFormKosullari: UcHal;
@@ -65,6 +79,12 @@ export interface RehberHazirligi extends ReklamHazirligi {
   };
   /** Marka Merkezi'ndeki telefon ve site adresi (adım 4 önden dolar). */
   iletisim: { telefon: string | null; siteAdresi: string | null };
+  /**
+   * Seçili sayfanın kayıtlı anlık form şablonları (FORM amacı). Boş liste ile
+   * okunamayan liste ayrı: `null` = okunamadı. Ajan 3 bulgusu: liste olmadan
+   * FORM amacı panelden tamamlanamıyordu.
+   */
+  formSablonlari: Array<{ id: string; ad: string }> | null;
   /** Kullanıcı ajans yöneticisi mi: `deneme` açılışlı amaçları yalnız o görür. */
   ajansYoneticisi: boolean;
 }

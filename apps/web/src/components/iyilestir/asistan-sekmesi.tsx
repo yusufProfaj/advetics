@@ -413,7 +413,7 @@ function AsistanParcalari({
               <div className={i.ust2}>
                 <span className={`${i.tur} ${i.turButce}`}>AdvCampaign’e devret</span>
               </div>
-              <p>“{p.istem}” isteği AdvCampaign’e hazır olarak aktarıldı. Gönderme düğmesine sen basarsın.</p>
+              <p>“{p.istem}” için AdvCampaign’de yeni bir reklam aç; rehber amaçtan bütçeye adım adım kurar.</p>
               <div className={i.alt2}>
                 <Link className={i.birincil} href={devretAdresi(clientId, p.oturumId)}>
                   AdvCampaign’de aç

@@ -3620,6 +3620,30 @@ model ReklamTaslagi {
   @@map("reklam_taslagi")
 }
 
+/// AdvCampaign rehberi — iki platformun ortak girdisi (docs/advcampaign/MIMARI-REHBER.md § 2).
+model ReklamRehberi {
+  id             String    @id @default(uuid()) @db.Uuid
+  orgId          String    @map("org_id") @db.Uuid
+  clientId       String    @map("client_id") @db.Uuid
+  durum          String    @default("taslak") @db.VarChar(12)
+  surum          Int       @default(0)
+  alanlar        Json      @default("{}") @db.JsonB
+  metaTaslakId   String?   @map("meta_taslak_id") @db.Uuid
+  googleTaslakId String?   @map("google_taslak_id") @db.Uuid
+  provaOzeti     String?   @map("prova_ozeti") @db.Char(64)
+  provaAt        DateTime? @map("prova_at") @db.Timestamptz(6)
+  olusturanId    String    @map("olusturan_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  arsivlendiAt   DateTime? @map("arsivlendi_at") @db.Timestamptz(6)
+
+  @@index([clientId, durum, updatedAt(sort: Desc)], map: "reklam_rehberi_client_durum_idx")
+  @@index([orgId], map: "reklam_rehberi_org_id_idx")
+  @@index([metaTaslakId], map: "reklam_rehberi_meta_taslak_idx")
+  @@index([googleTaslakId], map: "reklam_rehberi_google_taslak_idx")
+  @@map("reklam_rehberi")
+}
+
 model TaslakSurumu {
   id           String   @id @default(uuid()) @db.Uuid
   taslakId     String   @map("taslak_id") @db.Uuid
@@ -3677,6 +3701,9 @@ model Yayin {
   atifStandardi   String    @map("atif_standardi") @db.VarChar(16)
   kaynak          String    @db.VarChar(12)
   testKipi        Boolean   @default(false) @map("test_kipi")
+  kapaliKalacak   Boolean   @default(false) @map("kapali_kalacak")
+  uyumSurumu      String?   @map("uyum_surumu") @db.VarChar(16)
+  uyumSonucu      Json?     @map("uyum_sonucu") @db.JsonB
   baslatanId      String    @map("baslatan_id") @db.Uuid
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   sonlandiAt      DateTime? @map("sonlandi_at") @db.Timestamptz(6)

@@ -1,28 +1,24 @@
-import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
+import type { RehberHazirligi, RehberKaydi, RehberListesi } from '@advetics/shared';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
-import Link from 'next/link';
-import type { AtifDurumu, ReklamHazirligi } from '@advetics/shared';
-import { hasPermission, requireSession } from '@/lib/session';
+import { RehberEkrani } from '@/components/rehber/rehber-ekrani';
+import { RehberGirisi, RehberMesaji } from '@/components/rehber/rehber-girisi';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
-import { Baslik, Kutu } from '@/reklam/ui';
-import { SohbetEkrani } from '@/reklam/sohbet/sohbet-ekrani';
+import { baglanti } from '@/lib/baglanti';
+import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
+import { hasPermission, requireSession } from '@/lib/session';
 
 export const metadata = { title: 'AdvCampaign · Advetics' };
 export const dynamic = 'force-dynamic';
 
-type Oturumlar = {
-  satirlar: Array<{ id: string; baslik: string; taslakId: string | null; durum: string; sahibiBenMiyim: boolean; updatedAt: string }>;
-  toplam: number;
-  asistanBagli: boolean;
-};
-
 /**
- * ADVCAMPAIGN — reklam kurmanın tek yolu (kullanıcı kararı 2026-10-07):
- * sohbetle yönetilen, yapay zekâ odaklı akış. Asistan soruları tek tek
- * sorar, taslağı kurar, Meta'nın kontrolüne gönderir ve onay kartını
- * gösterir; yayın kullanıcının kartta onaylamasıyla. Eski Reklam Oluştur /
- * AI Asistan / Toplu Oluştur kaldırıldı. Gerçek yayın uyum kontrolü
- * bağlanana kadar yalnız prova ve test kipi.
+ * ADVCAMPAIGN — reklam kurmanın tek yolu. 2026-10-10'dan beri sohbet değil
+ * altı adımlı REHBER (kullanıcı onayladı: `docs/advcampaign/rehber-taslak.html`,
+ * mimari `docs/advcampaign/MIMARI-REHBER.md`). Yapay zekâ yalnız düğme
+ * arkasında ("Metin öner", "Anahtar kelime öner").
+ *
+ * İki hâl, tek adres: `?rehber=` yoksa giriş (açık rehberler + "Yeni
+ * reklam"), varsa rehberin kendisi odaklı kipte. Rehber kimliği adreste:
+ * yenileyen ya da bağlantıyı paylaşan kişi aynı rehbere döner.
  */
 export default async function AdvCampaignPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await requireSession();
@@ -31,38 +27,74 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
   if (!clientId) {
     return <WorkspaceGerekli ekran="AdvCampaign" neden="Reklam bir workspace’in reklam hesabında kuruluyor." {...workspaceSecimVerisi(session)} />;
   }
-  if (!hasPermission(session, 'bulk.write')) return <Kutu ton="uyari" baslik="Reklam oluşturma yetkin yok">Workspace yöneticine danış.</Kutu>;
-  const [h, o, a] = await Promise.allSettled([
-    serverApiFetch<ReklamHazirligi>(`/reklam/hazirlik?clientId=${clientId}`),
-    serverApiFetch<Oturumlar>(`/reklam/sohbet/oturumlar?clientId=${clientId}`),
-    serverApiFetch<AtifDurumu>('/reklam/ajans-ayari/atif'),
+  if (!hasPermission(session, 'bulk.write')) {
+    return <RehberMesaji baslik="Reklam oluşturma yetkin yok">Workspace yöneticine danış.</RehberMesaji>;
+  }
+  const workspaceAdi = session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
+  const listeAdresi = baglanti('/reklam', { musteri: clientId });
+  const rehberId = first(params.rehber);
+
+  if (!rehberId) {
+    /*
+     * İYİLEŞTİR ASİSTANININ DEVRİ (`devretAdresi`, `?oturum=`) sohbet
+     * oturumunu açıyordu; sohbet kalktı. Oturum kimliği rehber kimliği
+     * DEĞİL ve yok sayılmıyor: giriş, isteğin rehberde yeniden kurulacağını
+     * söylüyor. Sessizce listeye düşmek, kartın "aktarıldı" sözünü yalan
+     * bırakırdı.
+     */
+    const devredildi = first(params.oturum) !== undefined;
+    let liste: RehberListesi | null = null;
+    let listeHatasi: string | null = null;
+    try {
+      liste = await serverApiFetch<RehberListesi>(`/reklam/rehberler?clientId=${encodeURIComponent(clientId)}`);
+    } catch (e) {
+      listeHatasi = hata(e);
+    }
+    return <RehberGirisi clientId={clientId} workspaceAdi={workspaceAdi} liste={liste} listeHatasi={listeHatasi} devredildi={devredildi} />;
+  }
+
+  const [r, h] = await Promise.allSettled([
+    serverApiFetch<RehberKaydi>(`/reklam/rehberler/${encodeURIComponent(rehberId)}`),
+    serverApiFetch<RehberHazirligi>(`/reklam/rehber/hazirlik?clientId=${encodeURIComponent(clientId)}`),
   ]);
-  const hata = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
-  // Okuma hataları AYRI cümleyle: hazırlık olmadan hiçbir şey kurulamaz,
-  // oturum listesi olmadan yeni oturumla devam edilemez gibi görünmesin.
-  if (h.status === 'rejected') return <Kutu ton="tehlike" baslik="Reklam hazırlığı okunamadı">{hata(h.reason)}</Kutu>;
-  if (o.status === 'rejected') return <Kutu ton="tehlike" baslik="Sohbet oturumları okunamadı">{hata(o.reason)}</Kutu>;
-  const client = session.availableClients.find((c) => c.id === clientId);
-  const oturum = first(params.oturum);
+  // Okuma hataları AYRI cümleyle: rehber olmadan devam edilemez, hazırlık
+  // olmadan hiçbir hesap ya da sayfa seçilemez.
+  if (r.status === 'rejected') {
+    return (
+      <RehberMesaji baslik="Reklam taslağı okunamadı" geri={listeAdresi}>
+        {hata(r.reason)}
+      </RehberMesaji>
+    );
+  }
+  if (h.status === 'rejected') {
+    return (
+      <RehberMesaji baslik="Reklam hazırlığı okunamadı" geri={listeAdresi}>
+        {hata(h.reason)} Sayfayı yenilemeyi dene.
+      </RehberMesaji>
+    );
+  }
+  // Adresteki workspace ile rehberinki ayrışırsa YANLIŞ workspace'in
+  // hesapları seçenek olarak gelirdi.
+  if (r.value.clientId !== clientId) {
+    return (
+      <RehberMesaji baslik="Bu reklam başka bir workspace’e ait" geri={listeAdresi}>
+        Listeye dönüp yeniden aç.
+      </RehberMesaji>
+    );
+  }
   return (
-    <div className="space-y-4">
-      <Baslik
-        baslik="AdvCampaign"
-        aciklama={<><strong className="text-ink">{client?.name ?? 'Workspace'}</strong> · görselini bırak, ne istediğini yaz; gerisini birlikte kuralım</>}
-        ust={<Link href={`/reklam/yeni?musteri=${clientId}`} className="text-xs text-ink-muted hover:text-ink">Taslaklar →</Link>}
-      />
-      <SohbetEkrani
-        clientId={clientId}
-        hazirlik={h.value}
-        workspaceAdi={client?.name ?? 'Workspace'}
-        yonetici={a.status === 'fulfilled' ? a.value.secebilir : false}
-        atif={a.status === 'fulfilled' ? a.value : null}
-        ilkOturumlar={o.value}
-        ilkOturumId={oturum && o.value.satirlar.some((x) => x.id === oturum) ? oturum : null}
-        asistanBagli={o.value.asistanBagli}
-      />
-    </div>
+    <RehberEkrani
+      key={r.value.id}
+      ilkKayit={r.value}
+      hazirlik={h.value}
+      sirketAdi={workspaceSecimVerisi(session).sirketAdi}
+      workspaceAdi={workspaceAdi}
+    />
   );
+}
+
+function hata(e: unknown): string {
+  return e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.';
 }
 
 function first(v: string | string[] | undefined): string | undefined {

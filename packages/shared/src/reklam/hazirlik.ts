@@ -15,6 +15,8 @@ import type { HedefKonum, OzelKategori } from './meta/hedefleme';
 export interface HazirlikHesabi {
   id: string;
   ad: string;
+  /** Platformdaki hesap numarası (seçicide addan ayırt etmek için); eski okumada yok. */
+  disKimlik?: string;
   paraBirimi: string;
   saatDilimi: string;
 }

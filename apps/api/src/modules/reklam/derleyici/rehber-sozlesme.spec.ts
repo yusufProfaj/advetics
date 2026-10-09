@@ -205,11 +205,18 @@ describe('rehberEksikleri — tek "yayından önce" listesi', () => {
   });
 
   it('ön koşul false ENGEL, null (kontrol edilemedi) UYARI', () => {
-    const a = { ...tamSite(), amac: al('FORM' as const), formSablonuId: al(U(20)) };
-    const yok = rehberEksikleri(a, { ...B, onKosullar: { ...B.onKosullar!, metaFormKosullari: false } });
-    expect(yok.find((x) => x.kod === 'M-FORM-KOSUL')?.seviye).toBe('engel');
-    const bilinmiyor = rehberEksikleri(a, { ...B, onKosullar: { ...B.onKosullar!, metaFormKosullari: null } });
-    expect(bilinmiyor.find((x) => x.kod === 'M-FORM-KOSUL-BILINMIYOR')?.seviye).toBe('uyari');
+    // FORM Dalga 2'de kapalı; kuralı sınamak için açılış bu testte geçici açılır.
+    const eski = REHBER_ACILIS.FORM.meta;
+    (REHBER_ACILIS.FORM as Record<string, string>).meta = 'deneme';
+    try {
+      const a = { ...tamSite(), amac: al('FORM' as const), formSablonuId: al(U(20)) };
+      const yok = rehberEksikleri(a, { ...B, onKosullar: { ...B.onKosullar!, metaFormKosullari: false } });
+      expect(yok.find((x) => x.kod === 'M-FORM-KOSUL')?.seviye).toBe('engel');
+      const bilinmiyor = rehberEksikleri(a, { ...B, onKosullar: { ...B.onKosullar!, metaFormKosullari: null } });
+      expect(bilinmiyor.find((x) => x.kod === 'M-FORM-KOSUL-BILINMIYOR')?.seviye).toBe('uyari');
+    } finally {
+      (REHBER_ACILIS.FORM as Record<string, string>).meta = eski;
+    }
   });
 
   it('yasal uyarı: Meta ana metinde, Google en az bir açıklamada', () => {
@@ -262,7 +269,7 @@ describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
 describe('rehberdenGoogle — derleme girdisi', () => {
   const GB = { musteriId: '612-448-2093', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul', donusumEtkin: false, isletmeAdi: 'Garden Villas', logoVarlikId: null, kategoriTabani: [] };
 
-  it('SITE → ARAMA/site, kalan pay, tiresiz müşteri kimliği, taban negatifler', () => {
+  it('SITE → ARAMA/site, kalan pay, tiresiz Google hesap numarası, taban negatifler', () => {
     const r = rehberdenGoogle(tamSite(), GB);
     expect(r.tur).toBe('tamam');
     if (r.tur !== 'tamam') return;

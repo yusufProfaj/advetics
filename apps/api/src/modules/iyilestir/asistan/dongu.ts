@@ -15,7 +15,7 @@ import {
   type GeminiParcasi,
   type GeminiSonucu,
 } from '../../../yapay-zeka/gemini';
-import { modelGecmisi } from '../../reklam/sohbet/dongu';
+import { modelGecmisi } from '../../../yapay-zeka/model-gecmisi';
 import type { TxRunner } from '../../reklam/yayin-motoru';
 import { aracCalistir, geminiAraclari, type AsistanOrtami } from './araclar';
 import { ASISTAN_SISTEM_ISTEMI } from './istem';
@@ -26,7 +26,7 @@ import { ASISTAN_SISTEM_ISTEMI } from './istem';
  * Bir kullanıcı mesajı = bir TUR: model araç ister, sunucu çalıştırır,
  * sonucu verir; model bitirene ya da sınır dolana kadar.
  *
- * AdvCampaign döngüsünden (`reklam/sohbet/dongu.ts`) KOPYALANMADI: oradaki
+ * AdvCampaign döngüsünden (`reklam/sohbet/dongu.ts`, 2026-10-10 kaldırıldı) KOPYALANMADI: oradaki
  * tur taslak, soru, medya ve onay kartı taşıyor ve bunların hiçbiri burada
  * yok. ORTAK PARÇA ÇAĞRILIYOR: model geçmişinin kayıttan kurulması
  * (`modelGecmisi`, cevapsız araç çağrısını atıyor, ardışık rolleri
@@ -201,7 +201,6 @@ export class AsistanDongusu {
               : { tur: 'hata', mesaj: `Asistan tanımsız bir araç istedi (${b.name.slice(0, 40)}).` },
           );
           if (c.hal === 'tamam' && c.kart) yield parcaVer({ tur: 'uygula_karti', oneri: c.kart });
-          if (c.hal === 'tamam' && c.devret) yield parcaVer({ tur: 'devret', istem: c.devret.istem, oturumId: c.devret.oturumId });
           sonuclar.push(
             sonucBlogu(b, c.hal === 'tamam' ? { hal: 'tamam', veri: c.veri } : { hal: c.hal, neden: c.neden }),
           );
