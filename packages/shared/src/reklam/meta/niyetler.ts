@@ -25,6 +25,8 @@ export const NIYET_KODLARI = [
   'IG_MESAJ',
   'TELEFON',
   'ERISIM',
+  // AdvCampaign rehberi (2026-10-10): "Videom izlensin" Meta dalı.
+  'VIDEO_IZLENME',
   'MESSENGER',
   'COK_KANAL_MESAJ',
   // Yalnız Gelişmiş'te açılanlar.
@@ -41,7 +43,8 @@ export type MetaOptimizasyonHedefi =
   | 'LANDING_PAGE_VIEWS'
   | 'OFFSITE_CONVERSIONS'
   | 'QUALITY_CALL'
-  | 'REACH';
+  | 'REACH'
+  | 'THRUPLAY';
 
 /**
  * `tur`: 1 = ilk tur (Acemi), 2-3 = sonraki turlar, `gelismis` = yalnız
@@ -197,6 +200,25 @@ export const NIYET_KATALOGU: Record<NiyetKodu, NiyetSatiri> = {
       cta: 'LEARN_MORE',
     },
   },
+  // Panel turu (A4, 2026-10-10): Meta video izlenmeyi iki yerde sunuyor
+  // (Etkileşim › Reklamınızda › Video görüntüleme ve Bilinirlik › ThruPlay).
+  // Etkileşim seçildi: Bilinirlik'te sıklık sınırı ve erişim odaklı teslim
+  // devreye giriyor, "izlensin" isteyen kullanıcı izlenme sayısı bekliyor.
+  VIDEO_IZLENME: {
+    kod: 'VIDEO_IZLENME',
+    ekranAdi: 'Videom izlensin',
+    neAlacaksin: 'Videonu sonuna kadar izleyen kişiler.',
+    tur: 2,
+    kanit: 'belge',
+    meta: {
+      objective: 'OUTCOME_ENGAGEMENT',
+      optimizationGoal: 'THRUPLAY',
+      destinationType: 'ON_VIDEO',
+      promotedObject: 'page_id',
+      cta: 'LEARN_MORE',
+    },
+    canliOlculecek: ['destination_type (ON_VIDEO)', 'objective (ENGAGEMENT ↔ AWARENESS)'],
+  },
   MESSENGER: {
     kod: 'MESSENGER',
     ekranAdi: "Messenger'dan yazsınlar",
@@ -314,6 +336,7 @@ export const SONUC_ETIKETLERI: Record<MetaOptimizasyonHedefi, string> = {
   OFFSITE_CONVERSIONS: 'dönüşüm',
   REACH: 'erişilen kişi',
   QUALITY_CALL: 'arama',
+  THRUPLAY: 'video izlenmesi',
 };
 
 /** OFFSITE_CONVERSIONS'ta etiket olaydan gelir; sözlük kapalı. */

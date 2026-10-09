@@ -12,3 +12,4 @@ export * from './taslak-alanlari';
 export * from './yayin';
 export * from './meta/prova';
 export * from './sohbet';
+export * from './rehber';
