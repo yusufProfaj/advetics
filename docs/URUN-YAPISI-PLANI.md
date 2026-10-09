@@ -152,6 +152,23 @@ yapılmış.
 
 ### Aşama 3 — Yönet: Reklam Yöneticisi
 
+**Kullanıcının tarifi (2026-10-09), bu aşamanın çerçevesi:**
+
+- Genel Bakış'ın ALTINDAKİ şirket listesi (`SirketTablosu` /
+  `MusteriTablosu`) buraya taşınıyor; Genel Bakış'tan kalkıyor.
+- "Reklam Keşfi" adı **Reklam Yöneticisi** oluyor (menü + sayfa başlığı
+  aynı commit'te, `nav-sections.spec.ts` ikisini kilitliyor).
+- Ekran reklamları değil ŞİRKETLERİ listeliyor ve iniş sırası:
+  **genel → şirket → workspace → hesap → mecra → kampanya → reklam seti →
+  reklam → reklam önizlemesi.** Tasarım kullanıcı tarafından bize bırakıldı.
+- Filtre alanında, önizlemelerin üstünde bir **anahtar**: açınca bütün
+  önizlemeler açık, kapatınca hepsi kapalı; her önizleme tek tek elle de
+  açılıp kapanabiliyor.
+- Müşteri hesabı bu ekranı görmeye devam ediyor (dört ekrandan biri);
+  yalnız kendi workspace'ini görür (RLS + ctx).
+
+Aşağıdaki maddeler bu çerçevenin içinde:
+
 - Google Ads tarzı tablo, üç seviye (kampanya → reklam grubu → reklam),
   platform ve hesap süzgeci HER ZAMAN (CLAUDE.md §5).
 - Satır içi: durdur / başlat / bütçe / kopyala — `campaign-actions`
