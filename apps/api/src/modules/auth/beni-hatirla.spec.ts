@@ -115,7 +115,10 @@ function tokenServisi(mevcut?: SahteSatir) {
         return { id: 'yeni-satir' };
       },
       update: async () => ({}),
-      updateMany: async () => ({ count: 0 }),
+      // Rotasyonun iptali artık KOŞULLU `updateMany`: sıfır dönerse yarışı
+      // kaybetmiş sayılıp tekrar kullanım yoluna düşüyor.
+      updateMany: async () => ({ count: 1 }),
+      count: async () => 0,
       findUnique: async () => mevcut ?? null,
     },
   } as unknown as PrismaAdminService;

@@ -40,6 +40,18 @@ import { API_URL } from '@/lib/api';
  * hatanın daha kötüsünü üretirdi. `navigator.locks` origin genelinde gerçek
  * bir mutex veriyor; kilidin İÇİNDE zaman damgası da kontrol ediliyor, çünkü
  * kilidi sırayla alan iki sekmeden ikincisinin yeniden yenilemesi gereksiz.
+ *
+ * ─── KİLİT TEK BAŞINA YETMEDİ (2026-10-09) ───
+ *
+ * Üretimde çok sekmeli bir kullanıcı yine "olası hırsızlık" ile düştü. Kilit
+ * ve `localStorage` ORIGIN başına, çerez ise ALAN ADI genelinde
+ * (`AUTH_COOKIE_DOMAIN`): `advetics.com` ile `www.advetics.com` sekmeleri
+ * aynı token'ı taşıyıp birbirinin kilidini görmüyor. Yanıtı yolda kaybolan
+ * istek de (sekme kapanırken sunucu döndürmüş, çerez yazılmamış) kilidin
+ * dışında. Bu yüzden asıl düzeltme sunucuda: yeni döndürülmüş token'ın aynı
+ * tarayıcıdan 30 saniye içindeki tekrarı yeni çift alıyor
+ * (`token.service.ts#yenidenKullanimToleransli`). Kilit yine de kalıyor:
+ * gereksiz rotasyonu ve tolerans yoluna düşmeyi en baştan önlüyor.
  */
 
 /** Yenileme aralığı — access TTL 15 dakika, 5 dakika pay bırakıyoruz. */

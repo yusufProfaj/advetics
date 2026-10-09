@@ -16,6 +16,18 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**OTURUM DÜŞMESİ — REFRESH YARIŞI (2026-10-10, DEPLOY EDİLMEDİ).**
+Üretimde 2026-10-09 20:44 çok sekmeli kullanıcı "olası hırsızlık" ile
+düştü. `token.service.ts`: rotasyon iptali koşullu (`revokedAt: null`),
+yeni döndürülmüş token'ın 30 sn içinde AYNI User-Agent'tan tekrarı yeni
+çift alıyor; pencere dışı / başka tarayıcı / kapatılmış aile (çıkış,
+şifre değişimi) / pasif kullanıcı hâlâ aileyi iptal ediyor.
+`refresh-yarisi.spec.ts` (PGlite) eski kodda arızayı üretiyor, altı
+mutasyon düşüyor. Migration yok. Kök sebep ÖLÇÜLMEDİ: aday iki yol
+(`advetics.com`/`www` sekmeleri çerezi paylaşıp kilidi paylaşmıyor;
+yanıtı kaybolan istek). Canlıda log'da "tolerans içinde tekrar sunuldu"
+uyarısı görülürse bu yol çalışıyor demek.
+
 **AŞAMA 4 — İYİLEŞTİR v1 + AI ASİSTAN v1 (2026-10-09).** Plan, çelişki
 tablosu, mimari: `docs/iyilestir/`. `/iyilestir` üç sekme (Öneriler, AI
 Asistan, Kurallar; `/kurallar` yönleniyor). Uygula Meta VE Google'da

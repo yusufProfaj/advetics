@@ -47,6 +47,40 @@ export function parseTtl(ttl: string): number {
 }
 
 /**
+ * Döndürülmüş bir token'ın tekrar sunulmasının "aynı tarayıcıdan eşzamanlı
+ * istek" sayıldığı süre.
+ *
+ * KISA OLMAK ZORUNDA: bu pencere içinde çalıntı bir token da yeni bir çift
+ * alabilir. 30 saniye, yarışan iki isteğin (ve yanıtı kaybolup hemen yeniden
+ * denenen isteğin) arasındaki gerçek mesafeden çok büyük; pencere dışında
+ * davranış eskisiyle aynı — bütün aile iptal.
+ */
+export const YENIDEN_KULLANIM_TOLERANSI_MS = 30_000;
+
+/**
+ * Tolerans kararı — saf fonksiyon, üç koşulun ÜÇÜ de şart:
+ *
+ *  1. İptal sebebi `rotated`. Çıkışla, şifre değişimiyle ya da hırsızlık
+ *     tespitiyle kapatılmış bir token'a tolerans yok.
+ *  2. Döndürme `YENIDEN_KULLANIM_TOLERANSI_MS` içinde.
+ *  3. İstek, token'ı ALAN tarayıcıyla aynı User-Agent'ı taşıyor. Taklit
+ *     edilebilir, ama çalıntı token'ı başka bir makineden deneyen
+ *     saldırganın işini en azından tahmine bırakıyor. Tarayıcı sürüm
+ *     güncellemesiyle UA değişirse tolerans uygulanmıyor ve davranış
+ *     eskisine düşüyor — yanlış yönde değil, güvenli yönde hata.
+ */
+export function yenidenKullanimToleransli(
+  satir: { revokedAt: Date; revokedReason: string | null; userAgent: string | null },
+  istekUserAgent: string | null,
+  simdi: number,
+): boolean {
+  if (satir.revokedReason !== 'rotated') return false;
+  const gecen = simdi - satir.revokedAt.getTime();
+  if (gecen < 0 || gecen > YENIDEN_KULLANIM_TOLERANSI_MS) return false;
+  return (satir.userAgent ?? null) === (istekUserAgent?.slice(0, 512) ?? null);
+}
+
+/**
  * Token üretimi, doğrulaması ve rotasyonu.
  *
  * Tasarım:
@@ -55,7 +89,8 @@ export function parseTtl(ttl: string): number {
  *     hash'i tutulur. DB sızsa bile token'lar kullanılamaz.
  *   - Her refresh kullanımı token'ı DÖNDÜRÜR (rotation) ve eskisini iptal eder.
  *   - Kullanılmış bir token tekrar sunulursa (reuse) bu bir hırsızlık sinyalidir:
- *     tüm token AİLESİ iptal edilir, kullanıcı her yerden düşer.
+ *     tüm token AİLESİ iptal edilir, kullanıcı her yerden düşer — yeni
+ *     döndürülmüş token'ın kısa tolerans içindeki tekrarı hariç (`rotate`).
  *
  * Bu servis PrismaAdminService kullanır çünkü token doğrulaması kimlik
  * doğrulamadan ÖNCE gerçekleşir — henüz RLS bağlamı yoktur.
@@ -159,6 +194,17 @@ export class TokenService {
    * Reuse detection: sunulan token daha önce iptal edilmişse, aynı aileye ait
    * TÜM token'lar iptal edilir. Meşru kullanıcı bir kez yeniden giriş yapar;
    * saldırganın çaldığı token ise kalıcı olarak ölür.
+   *
+   * İSTİSNA: YENİ DÖNDÜRÜLMÜŞ TOKEN'IN TEKRARI (`yenidenKullanimToleransli`).
+   * 2026-10-09'da üretimde birden çok sekmeyle çalışan kullanıcı "olası
+   * hırsızlık" kaydıyla her yerden düştü. Aynı tarayıcının iki isteği aynı
+   * çerezi taşıyor; biri döndürünce diğeri artık iptal olmuş token'ı sunuyor.
+   * Panel kilidi (`oturum-tazeleyici.tsx`) bunu tek origin içinde önlüyor ama
+   * kilidin göremediği yollar var: yanıtı yolda kaybolan istek (sekme
+   * kapanırken/yenilenirken sunucu döndürmüş, çerez hiç yazılmamış), farklı
+   * origin'den açılmış sekme (çerez alan adında ortak, kilit ve
+   * `localStorage` origin başına), Web Locks'suz tarayıcı. Hepsinde sonuç
+   * aynıydı: meşru kullanıcının bütün oturumları kapatılıyordu.
    */
   async rotate(presentedToken: string, meta: TokenMeta = {}): Promise<IssuedTokens> {
     const tokenHash = this.hash(presentedToken);
@@ -173,28 +219,37 @@ export class TokenService {
     }
 
     if (existing.revokedAt) {
-      this.logger.error(
-        `Refresh token yeniden kullanıldı (olası hırsızlık). userId=${existing.userId} family=${existing.familyId}`,
-      );
-      await this.revokeFamily(existing.familyId, 'reuse_detected');
-      throw new UnauthorizedException(
-        'Güvenlik nedeniyle tüm oturumlar sonlandırıldı. Lütfen tekrar giriş yapın.',
-      );
+      return this.iptalliTokenSunuldu({ ...existing, revokedAt: existing.revokedAt }, meta);
     }
 
-    if (existing.expiresAt.getTime() <= Date.now()) {
-      throw new UnauthorizedException('Oturum süresi doldu, lütfen tekrar giriş yapın');
-    }
-
+    this.gecerlilikKontrol(existing);
     if (existing.user.status !== 'active') {
       await this.revokeAllForUser(existing.userId, 'user_disabled');
       throw new UnauthorizedException('Hesabınız devre dışı bırakılmış');
     }
 
-    await this.db.refreshToken.update({
-      where: { id: existing.id },
+    /*
+     * İPTAL KOŞULLU VE ATOMİK. Eskiden okuma ile iptal ayrı adımdı ve
+     * `update` koşulsuzdu: aynı anda gelen iki istek ikisi de "iptal
+     * edilmemiş" görüp ikisi de döndürüyordu — aile ÇATALLANIYORDU ve
+     * ikinci iptal birincinin damgasını eziyordu. `revokedAt: null` koşulu
+     * yarışı veritabanına bırakıyor: yalnızca biri satırı etkiler, diğeri
+     * sıfır satır görür ve tekrar kullanım yoluna düşer.
+     */
+    const { count } = await this.db.refreshToken.updateMany({
+      where: { id: existing.id, revokedAt: null },
       data: { revokedAt: new Date(), revokedReason: 'rotated' },
     });
+    if (count === 0) {
+      const guncel = await this.db.refreshToken.findUnique({
+        where: { id: existing.id },
+        select: { revokedAt: true, revokedReason: true },
+      });
+      return this.iptalliTokenSunuldu(
+        { ...existing, revokedAt: guncel?.revokedAt ?? new Date(0), revokedReason: guncel?.revokedReason ?? null },
+        meta,
+      );
+    }
 
     return this.issueTokens(
       existing.user.id,
@@ -210,6 +265,85 @@ export class TokenService {
       existing.persistent,
       existing.id,
     );
+  }
+
+  private gecerlilikKontrol(satir: { expiresAt: Date }): void {
+    if (satir.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException('Oturum süresi doldu, lütfen tekrar giriş yapın');
+    }
+  }
+
+  /**
+   * İptal edilmiş bir token sunuldu: ya aynı tarayıcının yarışan ikinci
+   * isteği ya da gerçek bir yeniden kullanım.
+   *
+   * Tolerans içindeyse aynı aileden YENİ bir token veriliyor — eski çifti
+   * tekrar vermek mümkün değil, veritabanında yalnızca hash duruyor. Kazanan
+   * isteğin ürettiği token İPTAL EDİLMİYOR: iki yanıt aynı çerez kavanozuna
+   * yazıyor ve hangisinin son kalacağı belli değil; kazananınkini iptal
+   * etmek, kavanozda o kalırsa bir sonraki yenilemede aileyi öldürürdü.
+   */
+  private async iptalliTokenSunuldu(
+    existing: {
+      id: string;
+      userId: string;
+      familyId: string;
+      persistent: boolean;
+      expiresAt: Date;
+      revokedAt: Date;
+      revokedReason: string | null;
+      userAgent: string | null;
+      user: { id: string; orgId: string; status: string };
+    },
+    meta: TokenMeta,
+  ): Promise<IssuedTokens> {
+    const aileOlduMu = await this.aileOlduMu(existing.familyId);
+    if (
+      !aileOlduMu &&
+      existing.user.status === 'active' &&
+      existing.expiresAt.getTime() > Date.now() &&
+      yenidenKullanimToleransli(existing, meta.userAgent ?? null, Date.now())
+    ) {
+      this.logger.warn(
+        `Yeni döndürülmüş refresh token tolerans içinde tekrar sunuldu (eşzamanlı istek). userId=${existing.userId} family=${existing.familyId}`,
+      );
+      return this.issueTokens(
+        existing.user.id,
+        existing.user.orgId,
+        existing.familyId,
+        meta,
+        existing.persistent,
+      );
+    }
+
+    this.logger.error(
+      `Refresh token yeniden kullanıldı (olası hırsızlık). userId=${existing.userId} family=${existing.familyId}`,
+    );
+    await this.revokeFamily(existing.familyId, 'reuse_detected');
+    throw new UnauthorizedException(
+      'Güvenlik nedeniyle tüm oturumlar sonlandırıldı. Lütfen tekrar giriş yapın.',
+    );
+  }
+
+  /**
+   * Aile BİLEREK kapatılmış mı: çıkış, tüm cihazlardan çıkış, şifre
+   * değişimi, hesap kapatma ya da daha önce yakalanmış bir hırsızlık.
+   *
+   * Bu kontrol olmadan tolerans bir arka kapı olurdu: kullanıcı şifresini
+   * değiştirdikten sonraki 30 saniye içinde, ondan hemen önce döndürülmüş
+   * çalıntı token yeni bir oturum açabilirdi. Ölçüt "döndürme DIŞINDA bir
+   * sebeple iptal edilmiş satır var mı" — canlı satır saymak yetmiyor, çünkü
+   * yarışın kazananı yeni satırı henüz yazmamış olabilir.
+   */
+  private async aileOlduMu(familyId: string): Promise<boolean> {
+    const n = await this.db.refreshToken.count({
+      where: {
+        familyId,
+        revokedAt: { not: null },
+        NOT: { revokedReason: 'rotated' },
+      },
+    });
+    return n > 0;
   }
 
   async revokeByToken(presentedToken: string): Promise<void> {
