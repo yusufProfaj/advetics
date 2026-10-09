@@ -12,7 +12,7 @@ sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
 temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
 RLS politikası var, platform sahibi yalnız hello@profaj.com.
-**Bekleyen deploy:** bütçe "tüm şirketler" düzeltmesi, migration yok (canlı `68ca513`, 2026-10-09 13:48).
+**Bekleyen deploy:** yok (canlı `5860460`, 2026-10-09 14:12, 80 sn, migration yok).
 
 **ÜRÜN YAPISI PLANI (2026-10-09, kullanıcı isteği):** panel yedi bölüme
 geçiyor: Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar ·
@@ -69,12 +69,12 @@ dört ekran. Canlıda kontrol edildi: menü yedi bölüm, `/butce` açılıyor,
 aktarılmamış plan, bütçesiz harcama) + ay temposu cümleleri + hızlı
 erişim. Mimari ve ajan notları [`genel-bakis/MIMARI.md`](genel-bakis/MIMARI.md).
 Ajan 4: RLS SET ROLE testi (15), mutasyonlar; Aşama 2'de bulgu yok.
-Önceden var olan bütçe bulgusu DÜZELTİLDİ (2026-10-09, DEPLOY BEKLİYOR,
-migration yok): bütçe servisi "tüm şirketler" kipinde `ctx.orgId` ile
+Önceden var olan bütçe bulgusu DÜZELTİLDİ ve CANLIDA (`5860460`): bütçe servisi "tüm şirketler" kipinde `ctx.orgId` ile
 okuyup yazıyordu; okuma artık `ctx.clientIds` + RLS, yazma `org_id`yi
 hedef workspace'ten okuyor ve ON CONFLICT org'u da düzeltiyor. **Açık:**
-üretimde yanlış org'lu eski satır var mı ÖLÇÜLMEDİ (SSH yolu bu oturumda
-izinli değildi). Varsa o satır kardeş şirketin İÇİNDEN güncellenemiyor
+üretimde `monthly_budgets`te TEK satır var (`pg_stat_user_tables`), ama
+org'u doğru mu ÖLÇÜLMEDİ: `advetics_app` RLS'e tabi ve bağlamsız sorgu onu
+göremiyor (0 satır döndü, anlamı yok). BYPASSRLS bir rolle bakılmalı. Varsa o satır kardeş şirketin İÇİNDEN güncellenemiyor
 (RLS reddi, testte ölçüldü); veri düzeltmesi önerildi, onay bekliyor:
 `UPDATE monthly_budgets b SET org_id = c.org_id FROM clients c
 WHERE c.id = b.client_id AND b.org_id <> c.org_id`.
