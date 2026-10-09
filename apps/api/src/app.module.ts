@@ -37,6 +37,7 @@ import { SyncModule } from './modules/sync/sync.module';
 import { ReklamModule } from './modules/reklam/reklam.module';
 import { StratejiModule } from './modules/strateji/strateji.module';
 import { OkumaApiModule } from './modules/okuma-api/okuma-api.module';
+import { GenelBakisModule } from './modules/genel-bakis/genel-bakis.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { OkumaApiModule } from './modules/okuma-api/okuma-api.module';
     ReklamModule,
     StratejiModule,
     OkumaApiModule,
+    GenelBakisModule,
   ],
   controllers: [HealthController],
   providers: [
