@@ -17,7 +17,7 @@ import {
 import { gorunurMetin, type GeminiAraci, type GeminiMesaji, type GeminiParcasi, type GeminiSonucu } from '../../../yapay-zeka/gemini';
 import type { TxRunner } from '../yayin-motoru';
 import type { AracCalistirici, OturumDurumu } from './araclar';
-import { aracTanimlari } from './araclar';
+import { aracTanimlari, soruBaglami } from './araclar';
 import { SOHBET_SISTEM_ISTEMI } from './istem';
 
 /**
@@ -135,7 +135,7 @@ export class SohbetDongusu {
     const medyaSatiri = g.medyalar.length
       ? `\n\n[Bırakılan medya: ${g.medyalar.map((m, i) => `${i + 1}. ${m.kapakVarlikId ? 'video' : 'görsel'}`).join(', ')}]`
       : '';
-    await this.yaz(o, sira, 'kullanici', [{ text: (metin || '(yalnız medya bıraktı)') + medyaSatiri }], [
+    await this.yaz(o, sira, 'kullanici', [{ text: (metin || YALNIZ_MEDYA) + medyaSatiri }], [
       { tur: 'medya', medyalar: g.medyalar } as unknown as SohbetOlayi,
     ], 'tamam');
     const asistanId = await this.yaz(o, sira + 1, 'asistan', [], [], 'akista');
@@ -157,7 +157,7 @@ export class SohbetDongusu {
 
     // --- Model mesajları ----------------------------------------------------
     const mesajlar = modelGecmisi(gecmis);
-    const yeniIcerik: GeminiParcasi[] = [{ text: (metin || '(yalnız medya bıraktı)') + medyaSatiri }];
+    const yeniIcerik: GeminiParcasi[] = [{ text: (metin || YALNIZ_MEDYA) + medyaSatiri }];
     // Görsel YALNIZ ilk göründüğü turda modele gider (uzun oturum görselleri
     // yeniden faturalamasın); sonraki turlarda yerinde kısa metin var.
     for (const [i, m] of g.medyalar.entries()) {
@@ -397,10 +397,13 @@ export class SohbetDongusu {
     );
     void ctx;
     if (!s) return null;
-    return siradakiSoru(s.eksikler as never, durum.sorulanlar);
+    return siradakiSoru(s.eksikler as never, durum.sorulanlar, soruBaglami());
   }
 }
 
+
+/** Kullanıcı metin yazmadan yalnız medya bıraktığında MODELE giden metin. Ekranda gösterilmez. */
+export const YALNIZ_MEDYA = '(yalnız medya bıraktı)';
 // ---------------------------------------------------------------------------
 // Saf yardımcılar (dışa açık: testleri var)
 // ---------------------------------------------------------------------------

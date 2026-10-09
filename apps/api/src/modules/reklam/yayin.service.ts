@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { DERLEYICI_SURUMU, type TenantContext, type YayinDurumu } from '@advetics/shared';
+import { DERLEYICI_SURUMU, kullaniciEksigiMi, type TenantContext, type YayinDurumu } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaService } from '../../prisma/prisma.service';
 import { metaSurumuDogrula } from './meta-graf';
@@ -121,7 +121,7 @@ export class ReklamYayinService {
     // Öneri kilidi (KAYNAK) provayı DURDURMAZ: prova nesne açmıyor ve para
     // harcamıyor; AdvCampaign'de kullanıcı önerileri onay kartında, provanın
     // sonucunu GÖRDÜKTEN sonra onaylıyor. Kilit yayın kapısında duruyor.
-    const kalan = (t.eksikler ?? []).filter((e) => e.kod !== 'OK-17' && e.kod !== 'KAYNAK');
+    const kalan = (t.eksikler ?? []).filter(kullaniciEksigiMi);
     if (!t.icerik_ozeti || !t.ad_account_id || kalan.length > 0) {
       throw new ConflictException(`Önce eksikleri tamamla: ${kalan.map((e) => e.metin).join(', ') || 'taslak boş'}`);
     }

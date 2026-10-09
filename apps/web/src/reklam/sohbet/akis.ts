@@ -20,6 +20,28 @@ export interface EkranMesaji {
 }
 
 /**
+ * KULLANICININ BIRAKTIĞI MEDYA, SAYFA YENİLENİNCE DE BALONDA.
+ *
+ * `medya` alanı yalnız o an gönderilen mesajda doluyor; sunucudan okunan
+ * mesajda yok. Kayıtta ise `{ tur: 'medya', medyalar: [{ varlikId,
+ * kapakVarlikId? }] }` olayı duruyor. İlk canlı turda (2026-10-09) yenilenen
+ * sayfada balon görsel yerine modele yazılmış "(yalnız medya bıraktı)"
+ * yer tutucusunu gösteriyordu. Video için KAPAK gösteriliyor: videonun
+ * kendisinin önizleme görseli yok.
+ *
+ * Adres `/assets/:id/preview` (API kökü çağıranın `onizlemeAdresi`nde).
+ */
+export function kayitliMedya(m: Pick<EkranMesaji, 'medya' | 'olaylar'>): Array<{ yol: string; video: boolean }> | null {
+  if (m.medya && m.medya.length > 0) return null; // yerel önizleme zaten var
+  const olay = (m.olaylar as unknown as Array<{ tur: string; medyalar?: Array<{ varlikId?: string; kapakVarlikId?: string }> }>).find(
+    (o) => o.tur === 'medya',
+  );
+  const liste = (olay?.medyalar ?? []).filter((x) => x.varlikId || x.kapakVarlikId);
+  if (liste.length === 0) return null;
+  return liste.map((x) => ({ yol: `/assets/${x.kapakVarlikId ?? x.varlikId}/preview`, video: !!x.kapakVarlikId }));
+}
+
+/**
  * Parça parça gelen SSE metninden tam olayları çıkarır; yarım kalan son
  * olay `kalan`da bir sonraki parçayı bekler. Bozuk JSON SESSİZCE atılmaz:
  * `bozuk` sayılır ve ekran "bağlantı sorunu" der.
@@ -136,6 +158,34 @@ export function hazirIcerik(
       : { id, ad: 'Plan görseli', onizlemeAdresi: `/assets/${id}/preview`, oran: '', uyari: null };
   });
   return { metin, medyalar };
+}
+
+/**
+ * ═══ SESSİZ AKIŞ BEKÇİSİ ═══
+ *
+ * İlk canlı turda (2026-10-09) sunucu turu bitirdi ve yanıtı kapattı
+ * (`res.end()`, kayıtta `tamam`), ama tarayıcıya son parçalar (metin, soru,
+ * bitti) HİÇ ulaşmadı: ekran dakikalarca "Düşünüyor…" dedi. Bağlantı
+ * kopmadığı için "koptu" yoklaması da hiç devreye girmedi. Sebep aradaki
+ * vekil sunucu olabilir ve paylaşımlı sunucuda onun ayarına dokunulmuyor
+ * (CLAUDE.md § 1); çare istemcide.
+ *
+ * Akış `AKIS_SESSIZLIK_MS` boyunca tek bayt getirmezse ekran turun durumunu
+ * SUNUCUYA sorar. Kapatma kararı yalnız sunucunun cevabına bağlı: model
+ * uzun düşünürken de akış sessiz kalıyor ve süre tek başına "bitti"
+ * demek değil. Sunucu son mesajı `akista` dışında gösteriyorsa akış
+ * bırakılır ve ekran kayıtlı hâli okur.
+ */
+export const AKIS_SESSIZLIK_MS = 15_000;
+
+export function sessizAkisSorulmali(sonVeriMs: number, simdiMs: number): boolean {
+  return simdiMs - sonVeriMs >= AKIS_SESSIZLIK_MS;
+}
+
+export function sunucuTuruBitirdi(mesajlar: ReadonlyArray<Pick<EkranMesaji, 'rol' | 'durum'>>): boolean {
+  const son = mesajlar.at(-1);
+  // Son satır asistanın değilse tur henüz yazılmamış demek: bitmiş SAYILMAZ.
+  return !!son && son.rol === 'asistan' && son.durum !== 'akista';
 }
 
 /**

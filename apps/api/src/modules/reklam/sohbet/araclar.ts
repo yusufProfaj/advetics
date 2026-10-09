@@ -15,6 +15,8 @@ import {
   type SorulabilirAlan,
   type TaslakAlanlari,
   type TenantContext,
+  kullaniciEksigiMi,
+  type SoruBaglami,
 } from '@advetics/shared';
 import { AI_NIYETLERI, aiCiktisiniDogrula, aiCiktiSchema } from '../ai-taslak';
 import type { AlanDegisikligi } from '../taslak.service';
@@ -192,7 +194,7 @@ export class AracCalistirici {
       case 'prova_baslat': {
         if (!o.taslakId) return { sonuc: { hal: 'reddedildi', neden: 'Önce taslak kurulmalı.' } };
         const t = await this.d.taslakOku(ctx, o.taslakId);
-        const kalan = t.eksikler.filter((e) => e.kod !== 'OK-17' && e.kod !== 'KAYNAK');
+        const kalan = t.eksikler.filter(kullaniciEksigiMi);
         if (kalan.length > 0) {
           return { sonuc: { hal: 'reddedildi', neden: `Önce eksikler: ${kalan.map((e) => e.metin).join(', ')}` }, soru: this.soru(t, o) };
         }
@@ -333,10 +335,19 @@ export class AracCalistirici {
   }
 
   private soru(t: ReklamTaslakKaydi, o: OturumDurumu): Soru | null {
-    return siradakiSoru(t.eksikler, o.sorulanlar, {
-      niyetler: AI_NIYETLERI.map((k) => ({ kod: k, ekranAdi: NIYET_KATALOGU[k].ekranAdi })),
-    });
+    return siradakiSoru(t.eksikler, o.sorulanlar, soruBaglami());
   }
+}
+
+/**
+ * SORUNUN ÇİPLERİ TEK YERDEN. Soru iki yerde üretiliyor: araç sonucunda
+ * (modele) ve turun sonunda (ekrana, `dongu.ts`). İkincisi bağlamsız
+ * çağrılıyordu ve ilk canlı turda (2026-10-09) ekrandaki "SORU 1 / 5"
+ * kartı SEÇENEKSİZ geldi: amaç sorusunda çip yoktu, yalnız "ya da
+ * cevabını yaz". İki çağrı aynı bağlamı buradan alıyor.
+ */
+export function soruBaglami(): SoruBaglami {
+  return { niyetler: AI_NIYETLERI.map((k) => ({ kod: k, ekranAdi: NIYET_KATALOGU[k].ekranAdi })) };
 }
 
 function reddet(neden: string): AracCiktisi {
@@ -344,7 +355,7 @@ function reddet(neden: string): AracCiktisi {
 }
 
 function kullaniciEksikleri(t: ReklamTaslakKaydi): string[] {
-  return t.eksikler.filter((e) => e.kod !== 'OK-17' && e.kod !== 'KAYNAK').map((e) => e.metin);
+  return t.eksikler.filter(kullaniciEksigiMi).map((e) => e.metin);
 }
 
 /** "1.500 TL" → 1500; "10 gün" → 10. Model rakamı uydurduysa metinde yok. */

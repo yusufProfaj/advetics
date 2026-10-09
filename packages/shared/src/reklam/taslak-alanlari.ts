@@ -97,6 +97,23 @@ export interface TaslakEksigi {
   metin: string;
 }
 
+/**
+ * KULLANICININ CEVABIYLA KAPANMAYAN EKSİKLER: `OK-17` (Meta provası) ve
+ * `KAYNAK` (asistan önerisini onayla). İkisi de eksik listesinde bir ALANA
+ * bağlı duruyor (prova `niyet`e) ama hiçbir soru onları kapatamaz.
+ *
+ * Bu süzgeç beş yerde ELLE yazılmıştı ve soruyu seçen `siradakiSoru` onu
+ * hiç kullanmıyordu: ilk canlı turda (2026-10-09) kullanıcı "web sitemizi
+ * ziyaret etsinler" dedi, niyet SITE yazıldı, ama prova eksiği `niyet`e
+ * bağlı olduğu için sistem "Bu reklamdan ne olmasını istiyorsun?" diye
+ * AYNI şeyi yeniden sordu — ve cevap onu asla kapatamazdı.
+ */
+export const SISTEM_EKSIK_KODLARI: readonly string[] = ['OK-17', 'KAYNAK'];
+
+export function kullaniciEksigiMi(e: Pick<TaslakEksigi, 'kod'>): boolean {
+  return !SISTEM_EKSIK_KODLARI.includes(e.kod);
+}
+
 const ALAN_ADIMI: Record<keyof TaslakAlanlari, TaslakEksigi['adim']> = {
   niyet: 0, reklamHesabiId: 0, sayfaId: 0, instagramId: 0, konumlar: 0,
   enDusukYas: 0, ipucuYas: 0, ipucuCinsiyet: 0, ekKategoriler: 0,

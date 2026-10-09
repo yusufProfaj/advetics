@@ -21,7 +21,7 @@
  *  - KAYNAK kilidi (asistanın önerisini onayla) soru değil; onay kartında
  *    toplu onaylanır. Onu soru saymak beş hakkı onaylarla tüketirdi.
  */
-import type { TaslakAlanlari, TaslakEksigi } from '../taslak-alanlari';
+import { kullaniciEksigiMi, type TaslakAlanlari, type TaslakEksigi } from '../taslak-alanlari';
 
 export const EN_COK_SORU = 5;
 
@@ -95,8 +95,8 @@ export function siradakiSoru(
   b: SoruBaglami = {},
 ): Soru | null {
   if (sorulanlar.length >= EN_COK_SORU) return null;
-  // KAYNAK kilidi soru değil (bkz. dosya başı).
-  const eksikAlanlar = new Set(eksikler.filter((e) => e.kod !== 'KAYNAK').map((e) => e.alan));
+  // KAYNAK kilidi ve prova (OK-17) soru değil — `kullaniciEksigiMi`.
+  const eksikAlanlar = new Set(eksikler.filter(kullaniciEksigiMi).map((e) => e.alan));
   const alan = SORU_SIRASI.find((a) => eksikAlanlar.has(a));
   if (!alan) return null;
   return { alan, metin: METIN[alan], ...secenekler(alan, b), sira: sorulanlar.length + 1 };

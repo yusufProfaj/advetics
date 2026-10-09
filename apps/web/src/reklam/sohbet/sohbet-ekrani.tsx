@@ -19,7 +19,7 @@ import { API_URL, ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { Onizleme } from '../studyo/onizleme';
 import { Dugme, Kutu, dugmeSinifi } from '../ui';
 import { medyaYukle, type YuklenenMedya } from '../medya';
-import { aracIzleri, bekleyenSoru, hazirKonacakMi, olayUygula, olaylariAyikla, sureMetni, yanitGuncelMi, type EkranMesaji, type HazirOturumAlanlari } from './akis';
+import { aracIzleri, bekleyenSoru, hazirKonacakMi, kayitliMedya, olayUygula, olaylariAyikla, sessizAkisSorulmali, sunucuTuruBitirdi, sureMetni, yanitGuncelMi, type EkranMesaji, type HazirOturumAlanlari } from './akis';
 
 /*
  * OTURUM ÖZETİ PANELİN KENDİ TİPİ (shared'da karşılığı yok, API'de
@@ -276,10 +276,27 @@ export function SohbetEkrani({
     const okuyucu = res.body.getReader();
     const cozucu = new TextDecoder();
     let tampon = '';
+    // SESSİZ AKIŞ BEKÇİSİ — gerekçe `akis.ts#AKIS_SESSIZLIK_MS`.
+    let sonVeri = Date.now();
+    let sunucuBitirdi = false;
+    const bekci = setInterval(async () => {
+      if (!sessizAkisSorulmali(sonVeri, Date.now())) return;
+      sonVeri = Date.now(); // sorarken tekrar tetiklenmesin
+      // EKRANA YAZMADAN sor: tur sürüyorsa sunucudaki satır yarım ve onu
+      // yazmak, akıştan gelmiş metni ekrandan siler. Ekran yalnız tur
+      // bittiyse kayıtlı hâlle yenilenir.
+      const r = await apiFetch<{ mesajlar: EkranMesaji[] }>(`/reklam/sohbet/oturumlar/${id}/mesajlar`).catch(() => null);
+      if (r && sunucuTuruBitirdi(r.mesajlar)) {
+        sunucuBitirdi = true;
+        void okuyucu.cancel();
+        void mesajlariOku(id);
+      }
+    }, 5_000);
     try {
       for (;;) {
         const { done, value } = await okuyucu.read();
         if (done) break;
+        sonVeri = Date.now();
         tampon += cozucu.decode(value, { stream: true });
         const r = olaylariAyikla(tampon);
         tampon = r.kalan;
@@ -291,8 +308,11 @@ export function SohbetEkrani({
       }
       setAkis('yok');
     } catch {
-      // Sunucu turu bitiriyor; ekran durumu sorar (yukarıdaki etki).
-      setAkis('koptu');
+      // Bekçi akışı bıraktıysa kayıtlı hâl zaten okundu; "koptu" deme.
+      // Değilse sunucu turu bitiriyor; ekran durumu sorar (yukarıdaki etki).
+      setAkis(sunucuBitirdi ? 'yok' : 'koptu');
+    } finally {
+      clearInterval(bekci);
     }
   }
 
@@ -545,11 +565,13 @@ export function SohbetEkrani({
 }
 
 function KullaniciBalonu({ m }: { m: EkranMesaji }) {
+  const kayitli = kayitliMedya(m);
+  const medya = kayitli ? kayitli.map((x) => ({ adres: onizlemeAdresi(x.yol), video: x.video })) : m.medya;
   return (
     <div className="ml-auto max-w-[85%] space-y-1">
-      {m.medya && m.medya.length > 0 && (
+      {medya && medya.length > 0 && (
         <div className="flex flex-wrap justify-end gap-1">
-          {m.medya.map((x, i) => (
+          {medya.map((x, i) => (
             <span key={i} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={x.adres} alt="" className="h-16 w-16 rounded-lg border border-line object-cover" />

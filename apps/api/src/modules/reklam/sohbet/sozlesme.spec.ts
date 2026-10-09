@@ -43,6 +43,13 @@ describe('siradakiSoru — S-48', () => {
     expect(siradakiSoru([eksik('konumlar')], [...sorulan, 'konumlar'])).toBeNull();
   });
 
+  it('KRİTİK: prova eksiği (OK-17) soru sayılmıyor — alanı niyet olsa da', () => {
+    // Canlı tur 2026-10-09: niyet yazılmıştı, prova eksiği niyete bağlıydı
+    // ve sistem amacı yeniden sordu; cevap o eksiği asla kapatamazdı.
+    expect(siradakiSoru([eksik('niyet', 'OK-17')], [])).toBeNull();
+    expect(siradakiSoru([eksik('niyet', 'OK-17'), eksik('hedefAdres')], [])?.alan).toBe('hedefAdres');
+  });
+
   it('KAYNAK kilidi soru sayılmıyor (onay kartında toplu onaylanır)', () => {
     expect(siradakiSoru([eksik('butce', 'KAYNAK')], [])).toBeNull();
     expect(siradakiSoru([eksik('butce', 'KAYNAK'), eksik('takvim')], [])?.alan).toBe('takvim');

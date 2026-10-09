@@ -2,11 +2,44 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SohbetOlayi, Soru } from '@advetics/shared';
-import { aracIzleri, bekleyenSoru, hazirIcerik, hazirKonacakMi, olayUygula, olaylariAyikla, sureMetni, yanitGuncelMi, type EkranMesaji } from './akis';
+import { aracIzleri, bekleyenSoru, hazirIcerik, hazirKonacakMi, kayitliMedya, olayUygula, olaylariAyikla, AKIS_SESSIZLIK_MS, sessizAkisSorulmali, sunucuTuruBitirdi, sureMetni, yanitGuncelMi, type EkranMesaji } from './akis';
 
 /** AdvCampaign akışının saf tarafı (İP-16): ayrıştırma ve ekran durumu. */
 
 const sse = (e: SohbetOlayi) => `event: ${e.tur}\ndata: ${JSON.stringify(e)}\n\n`;
+
+describe('sessiz akış bekçisi (canlı tur 2026-10-09: ekran "Düşünüyor…"da kaldı)', () => {
+  it('eşikten önce sormuyor, eşikte soruyor', () => {
+    expect(sessizAkisSorulmali(1_000, 1_000 + AKIS_SESSIZLIK_MS - 1)).toBe(false);
+    expect(sessizAkisSorulmali(1_000, 1_000 + AKIS_SESSIZLIK_MS)).toBe(true);
+  });
+
+  it('KRİTİK: yalnız sunucu turu bitirdiyse kapatılıyor — süre tek başına "bitti" değil', () => {
+    expect(sunucuTuruBitirdi([{ rol: 'kullanici', durum: 'tamam' }, { rol: 'asistan', durum: 'akista' }])).toBe(false);
+    expect(sunucuTuruBitirdi([{ rol: 'kullanici', durum: 'tamam' }, { rol: 'asistan', durum: 'tamam' }])).toBe(true);
+    expect(sunucuTuruBitirdi([{ rol: 'asistan', durum: 'hata' }])).toBe(true);
+    // Asistan satırı henüz yazılmadıysa bitmiş SAYILMAZ.
+    expect(sunucuTuruBitirdi([{ rol: 'kullanici', durum: 'tamam' }])).toBe(false);
+    expect(sunucuTuruBitirdi([])).toBe(false);
+  });
+});
+
+describe('kayitliMedya — yenilenen sayfada kullanıcının görseli', () => {
+  const olay = (medyalar: unknown[]) => [{ tur: 'medya', medyalar }] as unknown as SohbetOlayi[];
+
+  it('KRİTİK: kayıtlı medya olayı balona görsel olarak dönüyor (canlı tur 2026-10-09)', () => {
+    expect(kayitliMedya({ olaylar: olay([{ varlikId: 'g1' }]) })).toEqual([{ yol: '/assets/g1/preview', video: false }]);
+  });
+
+  it('video için KAPAK gösteriliyor', () => {
+    expect(kayitliMedya({ olaylar: olay([{ varlikId: 'v1', kapakVarlikId: 'k1' }]) })).toEqual([{ yol: '/assets/k1/preview', video: true }]);
+  });
+
+  it('yerel önizleme varsa ona dokunulmuyor; medya yoksa null', () => {
+    expect(kayitliMedya({ medya: [{ adres: 'x', video: false }], olaylar: olay([{ varlikId: 'g1' }]) })).toBeNull();
+    expect(kayitliMedya({ olaylar: [] })).toBeNull();
+  });
+});
 
 describe('olaylariAyikla', () => {
   it('KRİTİK: parçalanmış olay bir sonraki parçayı bekler, kaybolmaz', () => {
@@ -91,6 +124,21 @@ describe('ekran kaynağı', () => {
     const i = KAYNAK.indexOf("if (akis !== 'koptu' || !oturumId) return;");
     expect(i).toBeGreaterThan(0);
     expect(KAYNAK.slice(i, KAYNAK.indexOf('}, [akis', i))).toContain('mesajlariOku(oturumId)');
+  });
+
+  it('KRİTİK: sessiz akış bekçisi gönderme döngüsüne BAĞLI ve sonunda temizleniyor', () => {
+    // Dilim gönderme fonksiyonunun kendisi: bekçi orada kurulmazsa saf
+    // fonksiyonların testi geçer ama ekran yine "Düşünüyor…"da kalır.
+    const bas = KAYNAK.indexOf('async function gonder(');
+    const son = KAYNAK.indexOf('// --- Hâl', bas);
+    expect(bas).toBeGreaterThan(0);
+    expect(son).toBeGreaterThan(bas);
+    const govde = KAYNAK.slice(bas, son);
+    expect(govde).toMatch(/setInterval\(async \(\) => \{\s*if \(!sessizAkisSorulmali\(/);
+    expect(govde).toContain('if (r && sunucuTuruBitirdi(r.mesajlar))');
+    expect(govde).toContain('void okuyucu.cancel();');
+    expect(govde).toContain('sonVeri = Date.now();\n        tampon +=');
+    expect(govde).toContain('clearInterval(bekci);');
   });
 
   it('listeler "N / toplam" yazıyor (sessiz kesme yok)', () => {

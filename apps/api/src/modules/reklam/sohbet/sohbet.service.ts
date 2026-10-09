@@ -13,7 +13,7 @@ import { ReklamTaslakService } from '../taslak.service';
 import { ReklamYayinService } from '../yayin.service';
 import type { TxRunner } from '../yayin-motoru';
 import { AracCalistirici, type MarkaProfili } from './araclar';
-import { SohbetDongusu, type ModelAdimi, type TurGirdisi } from './dongu';
+import { SohbetDongusu, YALNIZ_MEDYA, type ModelAdimi, type TurGirdisi } from './dongu';
 import { metaKonumAra } from './meta-konum';
 import { geminiAdimi } from './model';
 import { YAPAY_ZEKA } from '../../../yapay-zeka/yapay-zeka.module';
@@ -223,11 +223,15 @@ export class AdvSohbetService {
   }
 }
 
-function ekranMetni(rol: string, icerik: unknown): string {
+export function ekranMetni(rol: string, icerik: unknown): string {
   if (rol === 'kullanici') {
     return (icerik as Array<{ text?: string }>)
       .filter((b) => typeof b.text === 'string')
       .map((b) => (b.text ?? '').replace(/\n\n\[Bırakılan medya:[^\]]*\]$/, ''))
+      // YER TUTUCU MODEL İÇİN, EKRAN İÇİN DEĞİL: kullanıcı yalnız görsel
+      // bıraktıysa balonda görsel görünüyor (`kayitliMedya`); "(yalnız medya
+      // bıraktı)" yazısı kullanıcının hiç yazmadığı bir cümleydi.
+      .map((t) => (t === YALNIZ_MEDYA ? '' : t))
       .join('\n');
   }
   // Asistan turu: yalnız görünür metin (düşünce ve araç parçaları ekranda yok).

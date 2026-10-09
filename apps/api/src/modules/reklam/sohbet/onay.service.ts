@@ -9,6 +9,7 @@ import {
   type OnayKarti,
   type TaslakAlanlari,
   type TenantContext,
+  kullaniciEksigiMi,
 } from '@advetics/shared';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AjansAyariService } from '../ajans-ayari.service';
@@ -85,7 +86,7 @@ export class AdvOnayService {
       kart: onayKartiUret({
         alanlar: a,
         surumNo: t.aktifSurumNo,
-        kalanEksikler: t.eksikler.filter((e) => e.kod !== 'OK-17' && e.kod !== 'KAYNAK').map((e) => e.metin),
+        kalanEksikler: t.eksikler.filter(kullaniciEksigiMi).map((e) => e.metin),
         prova: prova.durum,
         hesap: hesap ? { ad: hesap.ad, paraBirimi: hesap.paraBirimi } : null,
         sayfaAdi: sayfa?.ad ?? null,

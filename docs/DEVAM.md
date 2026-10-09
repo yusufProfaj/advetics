@@ -12,7 +12,7 @@ sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
 temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
 RLS politikası var, platform sahibi yalnız hello@profaj.com.
-**Bekleyen deploy:** YouTube prova düzeltmeleri (2026-10-09, migration yok).
+**Bekleyen deploy:** YouTube prova düzeltmeleri + AdvCampaign sohbet düzeltmeleri (2026-10-09, migration yok).
 
 **ÜRÜN YAPISI PLANI (2026-10-09, kullanıcı isteği):** panel yedi bölüme
 geçiyor: Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar ·
@@ -21,7 +21,17 @@ kurmuyor. Orphex'ten farkımız "söyler değil, yapar". Plan ve aşamalar
 [`URUN-YAPISI-PLANI.md`](URUN-YAPISI-PLANI.md). Kod yazılmadı.
 Ç-3 kapandı: bütçe Planla'da. **Açık kararlar:** Ç-4 Hesap Oluştur, Ç-5
 tanıtım sitesi. **Aşama 0:** deploy BİTTİ (316be15); kalan canlı turlar,
-hepsi panelde oturum ister: (1) AdvCampaign SITE taslağı → prova,
+hepsi panelde oturum ister: (1) AdvCampaign SITE taslağı → prova — İLK YARISI YAPILDI 2026-10-09:
+sohbet taslağı doğru kurdu (SITE, 300 ₺/gün, 9–15 Eki, İzmir + Aydın) ve
+dört hata çıktı, dördü de yazıldı, DEPLOY BEKLİYOR: (a) prova eksiği
+`niyet`e bağlı olduğu için amaç YENİDEN soruluyordu, (b) turun sonundaki
+soru kartı SEÇENEKSİZ geliyordu, (c) ekran sunucu bitirdiği hâlde
+"Düşünüyor…"da kalıyordu (sessiz akış bekçisi eklendi), (d) yenilenen
+sayfada kullanıcının görseli yerine "(yalnız medya bıraktı)" görünüyordu.
+Prova yapılmadı: taslakta site adresi eksik. Deploy sonrası aynı oturumda
+(Ege Birlik, 14:20) devam. Açık kullanım sorunu (karar bekliyor): asistan
+kullanıcının AÇIKÇA söylediği alanları da "öneri" yazıyor ve onay
+kartında yeniden onaylatıyor,
 (2) AdvStrategy aktarımı (giriş kutusu dolu mu, görseller modele ulaşıyor
 mu), (3) ~~Ege Birlik Yapı YouTube kartında "Prova et"~~ YAPILDI
 2026-10-09: üç ret (asgari bütçe 5 USD, konum seviyesi, reklam adı),

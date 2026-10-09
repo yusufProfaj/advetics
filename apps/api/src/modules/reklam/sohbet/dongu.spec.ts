@@ -3,6 +3,7 @@ import { ADV_SOHBET_SINIRLARI, type SohbetOlayi, type TenantContext } from '@adv
 import { createHarness, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
 import type { TxRunner } from '../yayin-motoru';
 import type { AracCalistirici, AracCiktisi } from './araclar';
+import { soruBaglami } from './araclar';
 import { SohbetDongusu, modelGecmisi, konumAdaylariAl, type ModelAdimSonucu, type ModelAdimi } from './dongu';
 
 /**
@@ -180,6 +181,48 @@ describe('tur', () => {
     expect(o).toContainEqual(expect.objectContaining({ tur: 'soru', soru: expect.objectContaining({ alan: 'butce', sira: 1 }) }));
     const [s] = await h.q<{ sorulanlar: string[]; taslak_id: string }>(`SELECT sorulanlar, taslak_id::text FROM adv_oturum`);
     expect(s).toEqual({ sorulanlar: ['butce'], taslak_id: t!.id });
+  });
+
+  it('KRİTİK: prova eksiği (OK-17, alanı niyet) amaç sorusu ÜRETMİYOR; ekrandaki soru ÇİPLİ', async () => {
+    // İlk canlı tur (2026-10-09): kullanıcı amacı söyledi, niyet yazıldı,
+    // ama prova eksiği `niyet`e bağlı olduğu için ekran "Bu reklamdan ne
+    // olmasını istiyorsun?" diye yeniden sordu ve kart SEÇENEKSİZ geldi.
+    const [t] = await h.q<{ id: string }>(
+      `INSERT INTO reklam_taslagi (org_id, client_id, platform, olusturan_yuz, olusturan_id, aktif_surum_no) VALUES ($1, $2, 'meta', 'ai', $3, 1) RETURNING id::text`,
+      [IDS.org, IDS.client, IDS.user],
+    );
+    const eksikler = [
+      { adim: 0, alan: 'niyet', kod: 'KAYNAK', metin: 'Asistanın önerisini onayla' },
+      { adim: 4, alan: 'niyet', kod: 'OK-17', metin: 'Meta provası henüz yapılmadı' },
+      { adim: 0, alan: 'hedefAdres', kod: 'SITE-ADRES', metin: 'Site adresi https:// ile başlamalı' },
+    ];
+    await h.q(
+      `INSERT INTO taslak_surumu (taslak_id, org_id, client_id, surum_no, alanlar, icerik_ozeti, eksikler, olusturan_id)
+       VALUES ($1, $2, $3, 1, '{}', $4, $5, $6)`,
+      [t!.id, IDS.org, IDS.client, 'b'.repeat(64), JSON.stringify(eksikler), IDS.user],
+    );
+    const c = sahteCalistirici(() => ({ sonuc: { hal: 'tamam', veri: {} }, taslakId: t!.id, taslakSurumu: 1 }));
+    const o = await topla(dongu(sahteModel([arac('taslak_olustur', {}), metin('Hangi sayfaya gitsin?')]).fn, c.c).tur(CTX, oturumId, { metin: 'site', medyalar: [] }));
+    const sorular = o.flatMap((x) => (x.tur === 'soru' ? [x.soru.alan] : []));
+    expect(sorular).toEqual(['hedefAdres']);
+  });
+
+  it('KRİTİK: turun sonundaki amaç sorusu araçtaki ile AYNI çipleri taşıyor', async () => {
+    const [t] = await h.q<{ id: string }>(
+      `INSERT INTO reklam_taslagi (org_id, client_id, platform, olusturan_yuz, olusturan_id, aktif_surum_no) VALUES ($1, $2, 'meta', 'ai', $3, 1) RETURNING id::text`,
+      [IDS.org, IDS.client, IDS.user],
+    );
+    await h.q(
+      `INSERT INTO taslak_surumu (taslak_id, org_id, client_id, surum_no, alanlar, icerik_ozeti, eksikler, olusturan_id)
+       VALUES ($1, $2, $3, 1, '{}', $4, $5, $6)`,
+      [t!.id, IDS.org, IDS.client, 'c'.repeat(64), JSON.stringify([{ adim: 0, alan: 'niyet', kod: 'NYT-01', metin: 'Amaç' }]), IDS.user],
+    );
+    const c = sahteCalistirici(() => ({ sonuc: { hal: 'tamam', veri: {} }, taslakId: t!.id, taslakSurumu: 1 }));
+    const o = await topla(dongu(sahteModel([arac('taslak_olustur', {}), metin('Ne istersin?')]).fn, c.c).tur(CTX, oturumId, { metin: 'x', medyalar: [] }));
+    const soru = o.find((x) => (x as { tur: string }).tur === 'soru') as { soru: { alan: string; secenekler: Array<{ deger: string }> } };
+    expect(soru.soru.alan).toBe('niyet');
+    expect(soru.soru.secenekler.map((s) => s.deger)).toEqual(soruBaglami().niyetler!.map((n) => n.kod));
+    expect(soru.soru.secenekler.length).toBeGreaterThan(0);
   });
 
   it('başka workspace’in medyası reddedilir', async () => {
