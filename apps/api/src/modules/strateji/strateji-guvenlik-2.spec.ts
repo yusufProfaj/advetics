@@ -208,9 +208,18 @@ describe('PDF', () => {
     const bas = Date.now();
     const p = await svc.pdf(AJANS, d.plan.id);
     const sure = Date.now() - bas;
-    expect(sure).toBeLessThan(15_000);
+    /*
+     * EŞİK DUVAR SAATİ VE PAYLAŞIMLI MAKİNEDE ÖLÇÜLÜYOR. Yerelde ~2,4 sn;
+     * GitHub doğrulamasında bütün paket paralel koşarken 15,19 sn ölçüldü
+     * (0b2ad76, 2026-10-09) ve 15 sn eşiği PDF koduna dokunmayan bir commit'i
+     * kırmızıya boyayıp deploy'u kilitledi. Testin işi PATOLOJİK yavaşlığı
+     * (satır başına yeniden ölçüm, ikinci dereceden döngü) yakalamak; o
+     * dakikalar sürer, 45 sn onu hâlâ yakalıyor ve makine gürültüsünden
+     * etkilenmiyor.
+     */
+    expect(sure).toBeLessThan(45_000);
     expect(p.bayt.byteLength).toBeLessThan(5 * 1024 * 1024);
-  }, 30_000);
+  }, 90_000);
 });
 
 describe('gruplama', () => {
