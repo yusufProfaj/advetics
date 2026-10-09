@@ -78,8 +78,9 @@ ve modüller SIRAYLA ilerler (biri canlıya alınmadan diğerine geçilmez).
 | 3 · Ön Yüz | Panel sayfası + menü satırı | Panel typecheck temiz, `nav-sections`/`panel-tasarim` yeşil |
 | 4 · Test & Güvenlik | RLS (`SET ROLE` + `RETURNING`), izolasyon, sessiz hata taraması, mutasyon | **Kapıyı bu ajan açar**; bulgu kapıyı kapatır, düzeltmeyi bulguyu üreten ajan yapar |
 | 5 · Canlıya Alma | Migration sırası, canlı ölçümler, devir notu (`DEVAM.md`), deploy komutu | Deploy elle, `advetics` kullanıcısıyla (§1) |
+| 6 · Tasarım Denetimi | Canlı ekranın masaüstü + mobil ekran görüntüsü, kılavuz ve Google Ads kontrol listesi (§3 "Tasarım"), kullanıcıya gösterilen önce/sonra | **Kullanıcı görmeden iş bitmiş sayılmaz**; revize gelirse aynı modülde döngü |
 
-- **Sıra:** 1 → (2 ‖ 3, aynı sözleşmeden paralel) → 4 → 5. Ajan 2 ve 3 tip
+- **Sıra:** 1 → (2 ‖ 3, aynı sözleşmeden paralel) → 4 → 5 → 6. Ajan 2 ve 3 tip
   TANIMLAMAZ, sözleşmeden okur.
 - **Her ajan teslimde devir notu yazar:** ne yaptı, neyi ÖLÇMEDİ, ne açık kaldı.
 - **Her modül planı başta bir "çelişki tablosu" taşır:** brief'in bu depoyla
@@ -184,6 +185,29 @@ buna göre veriliyor:
   işi farklı (`emptyReason` deseni).
 - **"200 döndü" doğrulama değil.** Yazma yolları platformda GÖZLE
   doğrulanmadan bitmiş sayılmıyor.
+
+### Tasarım: kılavuz + Google Ads mantığı, HER İŞİN SONUNDA DENETİM
+
+Kullanıcı kararı (2026-10-09), sebebiyle: *"ui/ux'e hiç bakmıyorsun …
+çok saçma tasarım yapıyorsun"*. Ekranlar doğrudan koda yazılıyor,
+kullanıcının gözünden hiç geçmiyordu ve kimliğin yalnız dört değeri
+(iki yazı tipi, iki renk) kullanılıyordu.
+
+- **İki kaynağın dışına çıkılmaz.** Görsel kimlik:
+  [`docs/marka/profaj-kurumsal-kilavuz.jpg`](docs/marka/profaj-kurumsal-kilavuz.jpg)
+  — renkler YALNIZ beyaz `#ffffff`, siyah `#000000`, gri `#302e2d`,
+  kırmızı `#ff2400`; ana başlık Montserrat, üst başlık ve gövde Open Sans;
+  logo kılavuzdaki üç zeminde. Gradyan, pastel ton, buğu, kılavuzda
+  olmayan renk YOK. Ekran mantığı: **Google Ads**, sadeleştirilmiş ve
+  reklam bilmeyen kullanıcıya uyarlanmış ("Google yıllardır test ediyor;
+  mantığını ve basitliğini tut", kullanıcı). Ayrıntılı kurallar
+  `docs/marka/TASARIM-DILI.md` (yazıldıkça).
+- **Önce görsel, sonra kod.** Yeni ekran ya da büyük değişiklikte önce
+  tarayıcıda açılan taslak; kullanıcı seçmeden koda geçilmez.
+- **Her modülün / güncellemenin SON adımı tasarım denetimi** (beş ajan
+  tablosunda 6): canlı ekranın masaüstü ve mobil görüntüsü alınır, kılavuz
+  ve Google Ads mantığına göre kontrol edilir, kullanıcıya gösterilir.
+  Testler yeşil ve deploy başarılı diye iş bitmiş sayılmaz.
 
 ### Panel görünüşü kalıba bağlı
 
