@@ -134,8 +134,19 @@ görünüyor. Prova isteği Google'dan doğrulama cevabı aldı, yani geliştiri
 token'ı bu hesapta en az doğrulama yapabiliyor (K4'ün seviyesi hâlâ
 okunmadı).
 
-**Sıradaki:** deploy → aynı kartta yeniden "Prova et" → asgari TL tutarı ve
-konumun yeni hâli. Bütçe K2 kapanmadan prova geçmez.
+#### Canlı prova 2 — 2026-10-09, deploy `6b51390` sonrası: **GEÇTİ**
+
+Aynı kart, ön ayar bütçesi **250 ₺/gün** (K2, kullanıcı kararı). Google
+kabul etti: 8 işlem, hata yok. Yani `ad.name`, reklam grubu seviyesinde
+konum ve `demandGenCampaignSettings.upgradedTargeting: true` canlıda
+DOĞRULANDI; 250 ₺ asgarinin üstünde. Hiçbir şey kurulmadı.
+
+Dikkat: kartın hedef adresi workspace sitesinden geliyor
+(`egebirlikseasight.com`) ama video Garden Villas'a ait. Yayından önce
+doğru sayfa mı kontrol edilmeli.
+
+**Sıradaki:** Aşama 3 (ilk gerçek yayın, para harcar): K3 (duraklatılmış
+kur) ve K4 (token seviyesi) kullanıcıya sorulacak.
 
 ### Aşama 2 · Kartta ön kontrol (kod)
 
@@ -193,7 +204,7 @@ konumun yeni hâli. Bütçe K2 kapanmadan prova geçmez.
 | # | Soru | Önerim |
 |---|---|---|
 | K1 | İlk canlı denemede hangi workspace ve hangi video kullanılsın? | **Kapandı: Ege Birlik Yapı** (kanal bağlı). Video Aşama 3'te seçilecek |
-| K2 | İlk deneme için günlük bütçe ve süre ne olsun? | ~~100 ₺/gün~~ — Google'ın asgarisi günde 5 USD karşılığı (prova 1). Asgari TL tutarı yeni provada görünecek; önerim asgarinin biraz üstü, 3 gün |
+| K2 | İlk deneme için günlük bütçe ve süre ne olsun? | **Kapandı (2026-10-09): 250 ₺/gün** (ön ayar). Google'ın asgarisi 5 USD karşılığı; prova 2 geçti |
 | K3 | İlk yayın duraklatılmış kurulup Google Ads'te gözle kontrol edildikten sonra mı açılsın? | Evet, yalnız ilk yayında |
 | K4 | Google Ads API Center'daki geliştirici token erişim seviyesi nedir (Explorer / Basic / Standard)? | Ekrandan okuyup bana söyle. Explorer ise günlük işlem kotası 2.880 ve gece senkronuyla çakışır |
 

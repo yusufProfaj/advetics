@@ -6,13 +6,13 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-09 · **Canlı (316be15, 2026-10-09 10:30, 87 sn):**
+**Son güncelleme:** 2026-10-09 · **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
 aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
 sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
 temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
 RLS politikası var, platform sahibi yalnız hello@profaj.com.
-**Bekleyen deploy:** YouTube prova düzeltmeleri + AdvCampaign sohbet düzeltmeleri (2026-10-09, migration yok).
+**Bekleyen deploy:** yok (canlı `6b51390`, 2026-10-09 11:43).
 
 **ÜRÜN YAPISI PLANI (2026-10-09, kullanıcı isteği):** panel yedi bölüme
 geçiyor: Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar ·
@@ -22,28 +22,19 @@ kurmuyor. Orphex'ten farkımız "söyler değil, yapar". Plan ve aşamalar
 Ç-3 kapandı: bütçe Planla'da. **Açık kararlar:** Ç-4 Hesap Oluştur, Ç-5
 tanıtım sitesi.
 
-**AŞAMA 0 — CANLI TURLAR (2026-10-09).** Deploy bitmişti (316be15). Turlar
-yeni hatalar buldu; düzeltmeler yazıldı, push edildi (`6995168`,
-`ffb5f45`), **DEPLOY BEKLİYOR, migration yok.**
+**AŞAMA 0 — CANLI TURLAR (2026-10-09).** Düzeltmeler CANLIDA
+(`6b51390`, 11:43 deploy, 81 sn, migration yok).
 
-1. **AdvCampaign site taslağı:** taslak doğru kuruldu (SITE, 300 ₺/gün,
-   9–15 Eki, İzmir + Aydın). Dört hata: (a) prova eksiği `niyet`e bağlı
-   olduğu için amaç YENİDEN soruluyordu, (b) turun sonundaki soru kartı
-   seçeneksiz geliyordu, (c) sunucu bitirdiği hâlde ekran "Düşünüyor…"da
-   kalıyordu, (d) yenilenen sayfada görsel yerine "(yalnız medya bıraktı)"
-   görünüyordu. Prova henüz YAPILMADI (taslakta site adresi eksik).
-   Deploy sonrası aynı oturumda (Ege Birlik, 9 Eki 14:20) devam.
-2. **AdvStrategy aktarımı: ÇALIŞIYOR.** Kutu plan metniyle dolu geliyor,
-   plan görseli ekli, görsel modele ulaşıyor, niyet FORM yazılıyor. Aynı
-   turda (a) hatası tekrarlandı. Plandaki "bu ay için bütçe" bütçeye
-   yazılmıyor ve soruluyor (aylık tutarın günlük mü toplam mı olduğu
-   belirsiz, sormak doğru).
-3. **YouTube "Prova et":** üç ret (asgari bütçe 5 USD karşılığı, konum
-   seviyesi, reklam adı). Ayrıntı:
-   [`YOUTUBE-CANLI-PLAN.md`](akilli-boost/YOUTUBE-CANLI-PLAN.md) "Canlı
-   prova 1". Deploy sonrası yeniden prova; bütçe kararı (K2) kullanıcıda.
-4. **Okuma API:** yapılmadı. Anahtar oluşturmak kimlik bilgisi üretmek
-   demek, kullanıcı yapacak.
+1. **YouTube "Prova et": GEÇTİ** (250 ₺/gün, kullanıcı kararı). Üç ret
+   düzeltildi ve Google'da doğrulandı (CLAUDE.md "Demand Gen — prova").
+   Sıradaki: Aşama 3, ilk gerçek yayın — K3/K4 sorulacak; kartın hedef
+   adresi (`egebirlikseasight.com`, video Garden Villas'a ait) kontrol.
+2. **AdvCampaign site taslağı:** dört ekran hatası düzeltildi ve canlıda
+   doğrulandı (amaç tekrar sorulmuyor, ekran takılmıyor, görsel balonda).
+   Prova HENÜZ YOK: oturum (Ege Birlik, 9 Eki 14:20) özel reklam kategorisi
+   beyanını bekliyor. Konut projesi; beyan kullanıcının kararı.
+3. **AdvStrategy aktarımı: ÇALIŞIYOR** (kutu dolu, görsel modele ulaşıyor).
+4. **Okuma API:** kullanıcı anahtar oluşturacak.
 
 **Karar bekleyen kullanım sorunu:** asistan kullanıcının AÇIKÇA söylediği
 alanları da "öneri" diye yazıyor ve onay kartında yeniden onaylatıyor.

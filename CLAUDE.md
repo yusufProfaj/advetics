@@ -1119,6 +1119,19 @@ okunup varsayılmadı — canlıda doğrulandı.
   atlayıp kalanları uygular ve yanıt "başarılı" görünürdü.
 - **Google yazma yolu canlıda HİÇ denenmedi.** İstek gövdeleri bilgiden
   yazıldı. İlk gerçek çağrı en küçük bütçeyle yapılmalı.
+- **DEMAND GEN — `validateOnly` PROVASIYLA ÖLÇÜLDÜ (2026-10-09, v25).**
+  İlk prova üç ret verdi, düzeltilince ikinci prova geçti:
+  (1) **`Ad.name` ZORUNLU** — belge yalnız `businessName`/`videos`/
+  `logoImages` için "zorunlu" diyor; ret `fieldError=REQUIRED`.
+  (2) **Konum KAMPANYA seviyesinde REDDEDİLİYOR**, hem de v25'in tanımadığı
+  bir kodla (`requestError=UNKNOWN` · "The error code is not in this
+  version"). Kabul edilen: kampanyada `demandGenCampaignSettings:
+  { upgradedTargeting: true }` AÇIKÇA + konum `adGroupCriterion` olarak.
+  (3) **Asgari günlük bütçe 5 USD karşılığı** (Google 2026-04-01'den beri,
+  sürümsüz kural; `BUDGET_BELOW_PER_DAY_MINIMUM`); 50 ₺ reddedildi, 250 ₺
+  geçti. Tutar yalnız hatanın `details` alanında geliyor — ayrıştırıcı onu
+  ATIYORDU ve hata ekrandan teşhis edilemedi; hatanın `details`/`trigger`
+  alanlarını asla atma (`googleHataAyrintisi`).
 - **KEYWORD PLANNER ERİŞİMİ VAR — ölçüldü** (2026-10-08, v25,
   `google-check --kelime`, Polimek hesabı). Belge Explorer'da yasak diyordu
   ve seviyemiz bilinmiyordu; `generateKeywordIdeas` 200 döndü. Üç tuzak:
