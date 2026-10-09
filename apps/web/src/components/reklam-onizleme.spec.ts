@@ -101,11 +101,16 @@ describe('açılır önizleme', () => {
      * Sayı başlıktan SAYILIYOR: elle yazılan 8, bir sütun eklenince önizlemeyi
      * sessizce bir sütun dar bırakırdı.
      */
+    // 2026-10-10: "Eylem" sütunu KOŞULLU (yalnız yazabilen kullanıcıda).
+    // Sabit sütunlar sayılıyor, koşullu olan +1; colSpan ikisini de taşımalı.
     const thead = TABLO.slice(TABLO.indexOf('<thead>'), TABLO.indexOf('</thead>'));
-    const sutun = (thead.match(/<th>|<Baslik /g) ?? []).length;
+    const kosullu = (thead.match(/\{eylemSutunu && <th>/g) ?? []).length;
+    const sutun = (thead.match(/<th>|<Baslik /g) ?? []).length - kosullu;
     expect(sutun).toBeGreaterThan(5);
+    expect(kosullu).toBe(1);
+    expect(TABLO).toContain(`const sutunSayisi = eylemSutunu ? ${sutun + 1} : ${sutun};`);
     const satir = TABLO.slice(TABLO.indexOf('className={`${s.onizlemeSatir}'));
-    expect(satir.slice(0, 200)).toContain(`<td colSpan={${sutun}}>`);
+    expect(satir.slice(0, 200)).toContain('<td colSpan={sutunSayisi}>');
   });
 });
 

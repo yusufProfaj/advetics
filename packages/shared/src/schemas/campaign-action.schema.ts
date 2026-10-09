@@ -112,3 +112,30 @@ export interface CanliKampanyaListesi {
   /** TOPLAM kampanya sayısı — sessiz kesme yok. */
   toplam: number;
 }
+
+// ─── Reklam Yöneticisi satır içi durdur / başlat (2026-10-10) ───────────────
+
+/**
+ * SATIR İÇİ EYLEM: kampanya, reklam seti ya da reklam düzeyinde durdur ve
+ * başlat. Bütçe burada YOK: bütçe değişikliği İyileştir önerisinden geçiyor
+ * (%20 sınırı, aylık bütçe kontrolü); tablodan serbest bütçe yazdırmak o
+ * kuralları atlatırdı.
+ */
+export const VARLIK_EYLEM_SEVIYELERI = ['campaign', 'ad_group', 'ad'] as const;
+export type VarlikEylemSeviyesi = (typeof VARLIK_EYLEM_SEVIYELERI)[number];
+
+export const varlikEylemiSchema = z.object({
+  type: z.enum(['pause', 'resume']),
+});
+export type VarlikEylemiGirdisi = z.infer<typeof varlikEylemiSchema>;
+
+/**
+ * Sonuç PLATFORMDAN GERİ OKUNAN değerle ("200 döndü" doğrulama değil):
+ * `uyusmadi` = platform kabul etti ama okunan durum istenen değil ya da
+ * okunamadı; ekranda platformun söylediği yazılır.
+ */
+export interface VarlikEylemSonucu {
+  dogrulama: 'dogrulandi' | 'uyusmadi';
+  platformDegeri: string;
+  varlikAdi: string;
+}

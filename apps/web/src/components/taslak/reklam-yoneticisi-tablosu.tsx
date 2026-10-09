@@ -12,6 +12,8 @@ import { onizlemeAcikMi } from '@/lib/onizleme-durumu';
 import { degisimHali } from '@/lib/degisim';
 import { TamEkranYukleniyor } from '@/components/yukleniyor';
 import { basHarfler } from './genel-bakis-parcalari';
+import { VarlikEylemPenceresi } from './varlik-eylem-penceresi';
+import type { VarlikEylemHedefi } from '@/lib/varlik-eylemi';
 import s from './taslak.module.css';
 
 /*
@@ -48,6 +50,8 @@ export interface YmSatir {
     | { tur: 'link'; href: string }
     | { tur: 'onizle' }
     | null;
+  /** Satır içi durdur/başlat; `null` = düğme yok (platform yazamıyor ya da durum belirsiz). */
+  eylemHedefi: VarlikEylemHedefi | null;
 }
 
 export interface YmSekme {
@@ -126,6 +130,7 @@ export function ReklamYoneticisiTablosu({
   kesmeNotu,
   aralik,
   galeriHref,
+  yazabilir,
 }: {
   duzey: YmDuzey;
   sekmeler: YmSekme[];
@@ -136,6 +141,8 @@ export function ReklamYoneticisiTablosu({
   kesmeNotu: string | null;
   aralik: { from: string; to: string };
   galeriHref: string;
+  /** `budget.write`: satır içi durdur/başlat (İyileştir'in Uygula'sıyla aynı yetki). */
+  yazabilir: boolean;
 }) {
   const router = useRouter();
   const yol = usePathname() ?? '/ads-explorer';
@@ -247,6 +254,14 @@ export function ReklamYoneticisiTablosu({
   }
 
   const durumVar = satirlar.some((r) => r.durum !== null);
+  /*
+   * EYLEM SÜTUNU yalnız yazabilen kullanıcıda ve en az bir satır eyleme
+   * uygunsa: müşteri hesabında ya da şirket/hesap düzeyinde boş bir sütun
+   * "burada bir şey yapılabilirdi" izlenimi bırakırdı.
+   */
+  const eylemSutunu = yazabilir && satirlar.some((r) => r.eylemHedefi !== null);
+  const sutunSayisi = eylemSutunu ? 9 : 8;
+  const [eylemHedefi, setEylemHedefi] = useState<VarlikEylemHedefi | null>(null);
   const gorunen = useMemo(() => {
     const q = ara.trim().toLocaleLowerCase('tr-TR');
     const suz = satirlar.filter(
@@ -446,12 +461,13 @@ export function ReklamYoneticisiTablosu({
                 <Baslik k="to" ad="Tıklama oranı" />
                 <Baslik k="donusum" ad="Dönüşüm" />
                 <Baslik k="dbm" ad="Dönüşüm başı maliyet" />
+                {eylemSutunu && <th>Eylem</th>}
               </tr>
             </thead>
             <tbody key={`${duzey}-${satirlar.length}`} className={s.yenilenen}>
               {gorunen.length === 0 && (
                 <tr>
-                  <td colSpan={8} className={s.bosMetin} style={{ textAlign: 'center' }}>
+                  <td colSpan={sutunSayisi} className={s.bosMetin} style={{ textAlign: 'center' }}>
                     Süzgece uyan satır yok.
                   </td>
                 </tr>
@@ -527,10 +543,24 @@ export function ReklamYoneticisiTablosu({
                       <td className={s.num}>{r.impressions > 0 ? formatPercent((r.clicks / r.impressions) * 100) : '—'}</td>
                       <td className={s.num}>{formatNumber(r.conversions)}</td>
                       <td className={s.num}>{dbm(BigInt(r.spendMicros), r.conversions, r.paraBirimi)}</td>
+                      {eylemSutunu && (
+                        <td>
+                          {r.eylemHedefi && (
+                            <button
+                              type="button"
+                              className={s.cip}
+                              onClick={() => setEylemHedefi(r.eylemHedefi)}
+                              aria-label={`${r.ad}: ${r.eylemHedefi.yayinda ? 'durdur' : 'başlat'}`}
+                            >
+                              {r.eylemHedefi.yayinda ? 'Durdur' : 'Başlat'}
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                     {reklamda && (acilmis.has(r.id) || acik) && (
                       <tr className={`${s.onizlemeSatir} ${acik ? s.onizlemeAcik : ''}`}>
-                        <td colSpan={8}>
+                        <td colSpan={sutunSayisi}>
                           <div className={`${s.kap} ${acik ? s.kapAcik : ''}`}>
                             <div inert={!acik}>
                               <div className={s.onz}>
@@ -561,12 +591,15 @@ export function ReklamYoneticisiTablosu({
                   <td className={s.num}>{T.g > 0 ? formatPercent((T.t / T.g) * 100) : '—'}</td>
                   <td className={s.num}>{formatNumber(T.d)}</td>
                   <td className={s.num}>{dbm(T.h, T.d, tekBirim)}</td>
+                  {eylemSutunu && <td />}
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
       )}
+
+      <VarlikEylemPenceresi hedef={eylemHedefi} onKapat={() => setEylemHedefi(null)} />
 
       <div className={s.altBilgi}>
         <Link href={galeriHref}>Reklam Galerisi (arama, sorunlu reklamlar) →</Link>

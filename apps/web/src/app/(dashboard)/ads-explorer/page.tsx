@@ -34,6 +34,7 @@ import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
 import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
+import { eylemHedefiCoz } from '@/lib/varlik-eylemi';
 
 export const metadata = { title: 'Reklam Yöneticisi · Advetics' };
 
@@ -535,6 +536,7 @@ export default async function DashboardPage({
           }
           aralik={{ from: range.from, to: range.to }}
           galeriHref={`${REKLAM_YONETICISI}/galeri`}
+          yazabilir={session.permissions.includes('budget.write')}
         />
       )}
 
@@ -636,6 +638,7 @@ function sirketSatiri(r: MetricsOrganizationRow): YmSatir {
     conversions: r.conversions,
     paraBirimi: r.currency,
     eylem: { tur: 'org', id: r.organizationId },
+    eylemHedefi: null,
   };
 }
 
@@ -653,6 +656,7 @@ function workspaceSatiri(r: MetricsClientRow): YmSatir {
     conversions: r.conversions,
     paraBirimi: r.currency,
     eylem: { tur: 'client', id: r.clientId },
+    eylemHedefi: null,
   };
 }
 
@@ -683,6 +687,8 @@ function hesapSatiri(a: MetricsAccountRow, tasinan: Record<string, string | unde
           }),
         }
       : null,
+    // Hesap düzeyinde durdur/başlat yok: hesap platformda duraklatılmaz.
+    eylemHedefi: null,
   };
 }
 
@@ -724,5 +730,6 @@ function varlikSatiri(
     conversions: b.conversions,
     paraBirimi: b.currency,
     eylem: href ? { tur: 'link', href } : { tur: 'onizle' },
+    eylemHedefi: eylemHedefiCoz({ seviye: varlik, id: b.entityId, ad: b.name, platform: b.platform, durum: b.status }),
   };
 }

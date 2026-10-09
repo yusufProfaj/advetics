@@ -1,6 +1,11 @@
-import { Controller, Get, Param, ParseUUIDPipe, Post, Body, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, ParseUUIDPipe, Post, Body, Query } from '@nestjs/common';
 import {
   campaignActionInputSchema,
+  varlikEylemiSchema,
+  VARLIK_EYLEM_SEVIYELERI,
+  type VarlikEylemiGirdisi,
+  type VarlikEylemSeviyesi,
+  type VarlikEylemSonucu,
   type CampaignActionInput,
   type CanliKampanyaListesi,
   type TenantContext,
@@ -59,5 +64,28 @@ export class CampaignActionsController {
       });
     }
     return this.actions.applyAction(ctx, campaignId, { type: input.type });
+  }
+
+  /**
+   * REKLAM YÖNETİCİSİ SATIR İÇİ DURDUR / BAŞLAT (2026-10-10, kullanıcı isteği:
+   * "son açılan reklamı durduralım"). İyileştir'in Uygula'sıyla AYNI yazma
+   * yolu (`uygula`): ajans şalteri, kota, platform çağrısı transaction
+   * dışında, platformdan geri okuma, denetim kaydı ve aynanın geri okunan
+   * değerle güncellenmesi. Ayrı bir yazma yolu yazmak bu kuralların birini
+   * bir gün atlardı.
+   */
+  @Post('varliklar/:seviye/:id/eylem')
+  @RequirePermissions('budget.write')
+  async varlikEylemi(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('seviye') seviye: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(varlikEylemiSchema)) input: VarlikEylemiGirdisi,
+  ): Promise<VarlikEylemSonucu> {
+    if (!(VARLIK_EYLEM_SEVIYELERI as readonly string[]).includes(seviye)) {
+      throw new BadRequestException(`Geçersiz düzey: ${seviye}`);
+    }
+    const s = await this.actions.uygula(ctx, { seviye: seviye as VarlikEylemSeviyesi, id }, { type: input.type });
+    return { dogrulama: s.dogrulama ?? 'uyusmadi', platformDegeri: s.platformDegeri, varlikAdi: s.varlikAdi };
   }
 }
