@@ -6,6 +6,7 @@ export * from './kitle-bolumu';
 export * from './donusum-detaylari';
 export * from './kampanya-tipi';
 export * from './strateji';
+export * from './genel-bakis';
 export * from './boost-hedefleme';
 export * from './linkedin-saklama';
 export * from './constants/boost-naming';
