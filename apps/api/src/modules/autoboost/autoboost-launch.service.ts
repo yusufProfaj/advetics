@@ -1206,6 +1206,13 @@ export class AutoBoostLaunchService {
    */
   async takilanlariIsaretle(ctx: TenantContext, clientId: string): Promise<number> {
     const scoped: TenantContext = { ...ctx, activeClientId: null };
+    /*
+     * `::int` ŞART. Prisma JS sayısını bağlı parametre olarak `bigint`
+     * gönderiyor ve Postgres'te `make_interval(mins => bigint)` YOK: üretimde
+     * "42883 function does not exist" ile Akıllı Boost listesinin TAMAMI
+     * açılmadı (2026-10-09). PGlite parametre tipini kendisi çıkardığı için
+     * testler yeşildi. `fonksiyon-parametre-tipi.spec.ts` bunu tarıyor.
+     */
     const sebep =
       `Yayın ${AUTOBOOST_TAKILMA_ESIGI_DAKIKA} dakikadan uzun süre tamamlanmadı; ` +
       'kampanya platformda kurulmuş olabilir. Hesapta kontrol et.';
@@ -1217,7 +1224,7 @@ export class AutoBoostLaunchService {
             updated_at = now()
         WHERE client_id = ${clientId}::uuid
           AND status = 'launching'
-          AND updated_at < now() - make_interval(mins => ${AUTOBOOST_TAKILMA_ESIGI_DAKIKA})
+          AND updated_at < now() - make_interval(mins => ${AUTOBOOST_TAKILMA_ESIGI_DAKIKA}::int)
       `),
     );
   }

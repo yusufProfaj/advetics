@@ -212,6 +212,13 @@ karar gerekiyorsa yardımcı sınıfla yaz, katman onu ezmiyor. Sayfa başlığ�
   ikinci bir dedektör taşıyor (`erkenKapananSablonlar`): bir `Prisma.sql`
   şablonu kapandıktan sonra gelen ilk anlamlı karakter SQL gibi görünüyorsa
   şablon ortasından kapanmış demektir.
+- **BAĞLI SAYI PARAMETRESİ POSTGRES FONKSİYONUNA TİPSİZ GİTMEZ.** `$queryRaw`
+  içinde `${sayi}` bağlı parametre ve Prisma onu `bigint` gönderiyor;
+  `make_interval(mins => bigint)` diye bir aşırı yükleme YOK. Üretimde
+  "42883 function does not exist" ile Akıllı Boost listesinin tamamı açılmadı
+  (2026-10-09). **PGlite bunu YAKALAYAMIYOR**: parametre tipini sorgudan
+  kendisi çıkarıyor, test yeşil. `${x}::int` yaz ya da sabitse `Prisma.raw`
+  (`metrik-isleri.ts`). `fonksiyon-parametre-tipi.spec.ts` tarıyor.
 - **Yeni tablo ekleyince `test/pglite-harness.ts` içindeki `TRUNCATE` listesine
   ekle.** Yoksa testler arası veri sızar — en yanıltıcı test hatası türü.
 - **Yeni tablo ekleyince `prisma/sql/02_rls.sql` içindeki tablo listesine ve
