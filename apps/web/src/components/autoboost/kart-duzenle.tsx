@@ -71,6 +71,9 @@ export interface KartDuzenleDurumu {
   /** YouTube reklam metni; `null` = henüz yüklenmedi (üretilen hâl kullanılır). */
   ytMetin: YoutubeMetni | null;
   setYtMetin: (v: YoutubeMetni | null) => void;
+  /** YouTube: bu kartın hedef adresi; boş = ön ayar / workspace sitesi. */
+  hedefAdres: string;
+  setHedefAdres: (v: string) => void;
 }
 
 export interface YoutubeMetni {
@@ -123,6 +126,7 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
   );
   const [hata, setHata] = useState<string | null>(null);
   const [ytMetin, setYtMetin] = useState<YoutubeMetni | null>(null);
+  const [hedefAdres, setHedefAdres] = useState('');
 
   const gunlukZorunlu = kayit.platform === 'google';
 
@@ -146,6 +150,8 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
        * bir metni "düzenlenmiş" diye göndermiyoruz.
        */
       ...(kayit.platform === 'google' && ytMetin ? { texts: ytMetin } : {}),
+      // BOŞSA HİÇ GİTMİYOR: sunucu ön ayarın/workspace'in adresini kullanır.
+      ...(kayit.platform === 'google' && hedefAdres.trim() ? { hedefAdres: hedefAdres.trim() } : {}),
     };
 
     /*
@@ -190,6 +196,8 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
     onAyarOzeti: preset ? hedeflemeOzeti(preset.settings) : [],
     ytMetin,
     setYtMetin,
+    hedefAdres,
+    setHedefAdres,
   };
 }
 
@@ -478,6 +486,22 @@ export function YoutubeMetinAlanlari({ d }: { d: KartDuzenleDurumu }) {
         </p>
       )}
       {!m && !hata && <p className="text-[11px] text-ink-muted">Metin hazırlanıyor…</p>}
+
+      {/* HEDEF ADRES VİDEOYA AİT: bir workspace'te birden çok proje olabiliyor
+          ve tek site adresi yanlış projeye trafik gönderiyordu. Boş bırakılırsa
+          ön ayardaki ya da workspace'teki adres kullanılıyor; hangisi
+          gideceğini "Prova et" özeti gösteriyor. */}
+      <label className="block space-y-1">
+        <span className="text-[11px] font-medium text-ink">Hedef adres</span>
+        <input
+          type="url"
+          inputMode="url"
+          value={d.hedefAdres}
+          onChange={(e) => d.setHedefAdres(e.target.value)}
+          placeholder="Boş bırakırsan ön ayardaki adres"
+          className="h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-xs"
+        />
+      </label>
 
       {m && (
         <div className="space-y-2">

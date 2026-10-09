@@ -99,7 +99,12 @@ beforeAll(async () => {
     {
       reklamHesabi: async () => hesapKarari,
       kanalaBagla,
-      yayinDegerleri: async () => ({ businessName: 'Ege Birlik', logoAssetId: LOGO, finalUrl: 'https://ege.com' }),
+      // Gerçek servis gibi: ön ayar/kart adresi verilmişse o, yoksa workspace.
+      yayinDegerleri: async (_c: unknown, _k: unknown, _p: unknown, g: { finalUrl?: string }) => ({
+        businessName: 'Ege Birlik',
+        logoAssetId: LOGO,
+        finalUrl: g.finalUrl ?? 'https://ege.com',
+      }),
     } as never,
     null as never,
     { isEnabled: true, acquire: quotaAcquire } as never,
@@ -494,6 +499,15 @@ describe('KRİTİK: PROVA — Google yalnızca doğruluyor, hiçbir şey değiş
     expect((await durum()).status).toBe('pending');
     expect((await durum()).applied_settings).toBeNull();
     expect(createVideoBoost).not.toHaveBeenCalled();
+  });
+
+  it('KRİTİK: kartın hedef adresi provaya VE yayına gidiyor (iki projeli workspace, 2026-10-09)', async () => {
+    const adres = 'https://gardenvillaskusadasi.com/';
+    const r = await svc.provaGoogle(CTX, KART, { texts: METIN, hedefAdres: adres });
+    expect(r.ozet.adres).toBe(adres);
+    expect(videoBoostProva.mock.calls[0]![1]).toMatchObject({ finalUrl: adres });
+    await svc.decide(CTX, KART, true, { texts: METIN, hedefAdres: adres });
+    expect(createVideoBoost.mock.calls[0]![1]).toMatchObject({ finalUrl: adres });
   });
 
   it('KRİTİK: prova ile yayın Google’a AYNI isteği veriyor', async () => {

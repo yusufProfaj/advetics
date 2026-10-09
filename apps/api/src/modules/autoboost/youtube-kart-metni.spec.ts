@@ -12,6 +12,19 @@ import { autoBoostDecisionSchema, autoBoostQueueOverrideSchema } from '@advetics
  *   · önizleme ucunun bir GET'te logoyu Görsel Arşivi'ne yazması.
  */
 
+describe('şema — kartın hedef adresi', () => {
+  it('KRİTİK: yalnız https ve tam alan adı; boşluk kırpılıyor', () => {
+    const ok = (v: string) => autoBoostQueueOverrideSchema.safeParse({ hedefAdres: v }).success;
+    expect(ok('https://gardenvillaskusadasi.com/')).toBe(true);
+    expect(ok('https://gardenvillaskusadasi.com/villa?utm=x')).toBe(true);
+    expect(autoBoostQueueOverrideSchema.parse({ hedefAdres: '  https://a.com/  ' }).hedefAdres).toBe('https://a.com/');
+    expect(ok('http://gardenvillaskusadasi.com/')).toBe(false);
+    expect(ok('gardenvillaskusadasi.com')).toBe(false);
+    expect(ok('https://localhost/')).toBe(false);
+    expect(ok('https://a.com/ bosluk')).toBe(false);
+  });
+});
+
 describe('şema — Google sınırları girişte', () => {
   const tamam = { baslik: 'Yeni proje', uzunBaslik: 'Yalıkavak villaları', aciklama: 'Deniz manzaralı' };
 
@@ -65,6 +78,12 @@ describe('yayın yolu', () => {
   it('KRİTİK: Instagram kartına metin REDDEDİLİYOR — yok sayılmıyor', () => {
     expect(metot('async decide(')).toMatch(
       /if \(override\?\.texts && kayit\.platform !== 'google'\) \{\s*throw new BadRequestException/,
+    );
+  });
+
+  it('KRİTİK: Instagram kartına hedef adres REDDEDİLİYOR — yok sayılmıyor', () => {
+    expect(metot('async decide(')).toMatch(
+      /if \(override\?\.hedefAdres !== undefined && kayit\.platform !== 'google'\) \{\s*(\/\/[^\n]*\n\s*)*throw new BadRequestException/,
     );
   });
 });

@@ -638,6 +638,22 @@ export const autoBoostQueueOverrideSchema = z
      * gözünden geçmesi isteniyor. Yalnızca YouTube kartında geçerli.
      */
     duraklatilmis: z.boolean().optional(),
+    /**
+     * YOUTUBE: BU KARTIN HEDEF ADRESİ (2026-10-09).
+     *
+     * Adres ön ayardan, o da yoksa workspace sitesinden geliyordu. Ege
+     * Birlik'te iki proje var (Seasight, Garden Villas) ve tek workspace
+     * sitesi; Garden Villas videosu Seasight sitesine gidiyordu. Ön ayarı
+     * değiştirmek öbür projenin videolarını yanlış siteye gönderirdi, adres
+     * VİDEOYA ait. Yalnız `https://` — Google http hedefini kabul etse de
+     * reklam tıklaması güvensiz sayfaya düşerdi. Boş = ön ayar/workspace.
+     */
+    hedefAdres: z
+      .string()
+      .trim()
+      .max(2048, 'Hedef adres çok uzun')
+      .regex(/^https:\/\/[^\s/]+\.[^\s/]+(\/\S*)?$/i, 'Hedef adres https:// ile başlayan tam bir adres olmalı')
+      .optional(),
   })
   .strict()
   .superRefine((v, ctx) => {

@@ -27,10 +27,11 @@ tanıtım sitesi.
 
 1. **YouTube "Prova et": GEÇTİ** (250 ₺/gün, kullanıcı kararı). Üç ret
    düzeltildi ve Google'da doğrulandı (CLAUDE.md "Demand Gen — prova").
-   K3 KAPANDI: ilk yayın DURAKLATILMIŞ kurulacak (kullanıcı). Kartın
-   hedef adresi yanlış (`egebirlikseasight.com`); kullanıcının verdiği
-   `egebirlikgardenvillas.com` DNS'te ÇÖZÜLMÜYOR (2026-10-09) — doğru adres
-   gelmeden kurulmadı. K4 (token seviyesi) hâlâ açık.
+   K3 KAPANDI: ilk yayın DURAKLATILMIŞ kurulacak (kullanıcı). Doğru adres
+   `https://gardenvillaskusadasi.com/` (çift l; sayfa başlığı "EGE BİRLİK
+   YAPI – GARDEN VİLLAS"). Adres ön ayardan/workspace'ten geliyordu ve
+   workspace'te iki proje var: kart düzenlemesine **Hedef adres** alanı
+   eklendi, prova ve yayın aynı alanı kullanıyor. K4 (token seviyesi) açık.
 2. **AdvCampaign site taslağı:** dört ekran hatası düzeltildi ve canlıda
    doğrulandı (amaç tekrar sorulmuyor, ekran takılmıyor, görsel balonda).
    Konut beyanı yapıldı (kullanıcı), öneriler onaylandı, **Meta provası

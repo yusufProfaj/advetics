@@ -161,12 +161,17 @@ export class AutoBoostLaunchService {
       throw new BadRequestException('Reklam metni düzenlemesi yalnızca YouTube kartlarında geçerli.');
     }
     // Aynı gerekçe: kabul edip yok saymak, çalışmayan bir seçenek göstermek olurdu.
+    if (override?.hedefAdres !== undefined && kayit.platform !== 'google') {
+      // Instagram boost'u gönderinin kendisine gidiyor; adres kabul edip
+      // yok saymak çalışmayan bir alan göstermek olurdu.
+      throw new BadRequestException('Hedef adres yalnızca YouTube kartında değiştirilebilir.');
+    }
     if (override?.duraklatilmis !== undefined && kayit.platform !== 'google') {
       throw new BadRequestException('"Duraklatılmış kur" yalnızca YouTube kartlarında geçerli.');
     }
 
     if (kayit.platform === 'google') {
-      return this.launchGoogle(ctx, scoped, ozellestirilmis, override?.texts, override?.duraklatilmis === true);
+      return this.launchGoogle(ctx, scoped, ozellestirilmis, override?.texts, override?.duraklatilmis === true, override?.hedefAdres);
     }
 
     return this.launchMeta(ctx, scoped, ozellestirilmis, override);
@@ -471,8 +476,10 @@ export class AutoBoostLaunchService {
     metinOzel?: { baslik: string; uzunBaslik: string; aciklama: string },
     /** Kampanyayı kur ama açma (plan K3, ilk canlı deneme). */
     duraklatilmis = false,
+    /** Kartta yazılmış hedef adres — varsa ön ayarın/workspace'in yerine. */
+    hedefAdres?: string,
   ): Promise<{ status: string; message: string }> {
-    const h = await this.googleHazirla(scoped, kayit, metinOzel, { kanalaYaz: true });
+    const h = await this.googleHazirla(scoped, kayit, metinOzel, { kanalaYaz: true, hedefAdres });
 
     /*
      * ═══ GOOGLE YAZMA KESİCİSİ — KİLİTTEN ÖNCE ═══
@@ -643,7 +650,7 @@ export class AutoBoostLaunchService {
       throw new BadRequestException('Prova yalnızca YouTube kartlarında var.');
     }
     const ozellestirilmis = this.ozellestir(kayit, override);
-    const h = await this.googleHazirla(scoped, ozellestirilmis, override?.texts, { kanalaYaz: false });
+    const h = await this.googleHazirla(scoped, ozellestirilmis, override?.texts, { kanalaYaz: false, hedefAdres: override?.hedefAdres });
     await this.kotaKapisi(h.reklamHesabiId);
 
     const acilis = override?.duraklatilmis ? 'PAUSED' : 'ENABLED';
@@ -706,7 +713,7 @@ export class AutoBoostLaunchService {
     scoped: TenantContext,
     kayit: KuyrukSatiri,
     metinOzel: { baslik: string; uzunBaslik: string; aciklama: string } | undefined,
-    secenek: { kanalaYaz: boolean },
+    secenek: { kanalaYaz: boolean; hedefAdres?: string },
   ): Promise<{
     g: GooglePresetSettings;
     reklamHesabiId: string;
@@ -767,7 +774,8 @@ export class AutoBoostLaunchService {
     const degerler = await this.youtubeOtomatik.yayinDegerleri(scoped, kayit.client_id, kayit.social_profile_id, {
       businessName: g.businessName,
       logoAssetId: g.logoAssetId,
-      finalUrl: g.finalUrl,
+      // KARTIN ADRESİ ÖNCE: adres videoya ait (iki projeli workspace).
+      finalUrl: secenek.hedefAdres ?? g.finalUrl,
     });
 
     /*
