@@ -19,6 +19,14 @@ loadEnv({ path: resolve(__dirname, '../../.env') });
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
+  // DERLEME CANLININ OKUDUĞU KLASÖRE YAZILMIYOR. `deploy.sh` paneli
+  // `NEXT_DIST_DIR=.next-derleme` ile derleyip ancak her şey bittiğinde
+  // `.next` ile yer değiştiriyor. Yerinde derleme 40 dakika süren bir
+  // deploy'da canlı panelin altındaki dosyaları değiştiriyordu; yarıda
+  // kesilirse panel bir sonraki başarılı deploy'a kadar hata veriyordu.
+  // Çalışma anında değişken yok, `next start` her zaman `.next`i okur.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+
   // Monorepo'daki paylaşılan paket derlenmiş CJS olarak gelir; Next'in
   // kendi derleyicisinden geçmesi kaynak haritalarını doğru tutar.
   transpilePackages: ['@advetics/shared'],

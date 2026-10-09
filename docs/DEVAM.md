@@ -11,6 +11,16 @@ Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlı
 doğrulandı).
 **Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: dört migration — taslak, yayın, yazma kesici, prova — + `db:rls`; `META_API_VERSION` v25.0 ya da v26.0 olmalı), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
 
+**YARIM KALAN DEPLOY (2026-10-09):** sunucu `703b2a2`ye çekildi, deploy
+migration'dan sonra durdu. `20261008170000_google_yazma_kesici` UYGULANDI
+(06:56), `db:rls` ve pm2 adımı koşmadı: API/worker eski kod (`143c2b8`),
+panel yeni derleme. RLS dosyası bu aralıkta değişmediği için politika eksiği
+yok. **Sıradaki: deploy'u tamamla** (yeni `deploy.sh` ile). Deploy'un 40 dk
+sürmesinin sebebi bizim yükümüz değil: `vmstat` steal time (`st`) %83–90,
+yani Hostinger'ın fiziksel makinesi CPU vermiyor. `st` 20'nin altına inince
+deploy et. `deploy.sh` artık kilit tutuyor, derlemeyi düşük öncelikte
+koşuyor ve paneli `.next-derleme`ye derleyip en sonda yer değiştiriyor.
+
 **YOUTUBE KANALINI BUL (2026-10-08, kullanıcı isteği), DEPLOY EDİLMEDİ:**
 adres yapıştırmadan kanal ekleme. Marka Merkezi › Bağlantılar › YouTube ›
 "Kanalı bul": workspace sitesindeki kanal bağlantısı / gömülü video ve

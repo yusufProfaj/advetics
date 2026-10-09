@@ -51,10 +51,59 @@ API_PORT="${API_PORT:-3599}"
 WEB_PORT="${WEB_PORT:-3598}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-60}"
 
-log()  { printf '\n\033[1;34m▸ %s\033[0m\n' "$*"; }
+# ADIM SÜRELERİ LOG'A YAZILIYOR. 40 dakika süren bir deploy'da hangi adımın
+# uzadığı bilinmiyordu; `log` yeni adımı açarken bir öncekinin süresini basıyor.
+DEPLOY_BAS=$SECONDS
+ADIM_ADI=""
+ADIM_BAS=$SECONDS
+adim_kapat() {
+  [[ -n "$ADIM_ADI" ]] && printf '  \033[2m⏱ %s: %ss\033[0m\n' "$ADIM_ADI" "$((SECONDS - ADIM_BAS))"
+  return 0
+}
+log()  { adim_kapat; ADIM_ADI="$*"; ADIM_BAS=$SECONDS; printf '\n\033[1;34m▸ %s\033[0m\n' "$*"; }
 ok()   { printf '  \033[0;32m✓\033[0m %s\n' "$*"; }
 warn() { printf '  \033[0;33m!\033[0m %s\n' "$*"; }
 die()  { printf '\n\033[0;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
+
+# ─── AYNI ANDA İKİ DEPLOY YOK ───────────────────────────────────────────────
+#
+# İki geliştirici var ve ikisi de deploy edebiliyor. İki deploy üst üste
+# binince yük iki katına çıkıyor, ikisi aynı `.next`e yazıyor ve migration
+# yarım şemayla derlenen bir sürüme denk gelebiliyor. Kilit /home/advetics
+# altında, yani yalnızca bizim kullanıcımızı ilgilendiriyor. `flock` çekirdek
+# kilidi: süreç ölünce kendiliğinden bırakılıyor, elle silinecek bayat dosya
+# yok. Dosya tanıtıcısı alt süreçlere de geçiyor; deploy öldürülüp `next build`
+# yetim kaldıysa o da bitene kadar kilit tutuluyor ve bu doğru: derleme
+# hâlâ makineyi yoruyor.
+KILIT="$HOME/.advetics-deploy.lock"
+if command -v flock >/dev/null; then
+  exec 9>"$KILIT"
+  if ! flock -n 9; then
+    printf '\n\033[0;31m✗ Başka bir deploy zaten çalışıyor.\033[0m\n' >&2
+    printf '  Görmek için:  ps -u %s -o pid,etime,cmd | grep -E "deploy|next build" | grep -v grep\n' "$(id -un)" >&2
+    exit 1
+  fi
+else
+  printf '  \033[0;33m!\033[0m flock yok, eşzamanlı deploy kilidi devre dışı\n'
+fi
+
+# ─── DERLEME DÜŞÜK ÖNCELİKLE ────────────────────────────────────────────────
+#
+# Sunucu paylaşımlı. Next.js derlemesi bütün çekirdekleri dakikalarca
+# dolduruyor ve diğer sitelerin istekleri onun arkasında bekliyordu.
+# Yalnızca DERLEME ve KURULUM komutları sarılıyor; pm2 ve migration değil.
+# Bütün script'i `renice` etmek pm2 daemon'ı (çalışmıyorsa bu script
+# başlatıyor) ve dolayısıyla CANLI süreçleri de düşük öncelikte bırakırdı.
+# ionice sınıf 3 (idle) kullanılmıyor: meşgul bir diskte derlemeyi hiç
+# bitirmeyebilir, sınıf 2 en düşük seviye yeterli.
+DUSUK=(nice -n 10)
+command -v ionice >/dev/null && DUSUK+=(ionice -c2 -n7)
+dusuk() {
+  local ad="$1" bas=$SECONDS
+  shift
+  "${DUSUK[@]}" "$@"
+  printf '  \033[2m⏱ %s: %ss\033[0m\n' "$ad" "$((SECONDS - bas))"
+}
 
 PREVIOUS_SHA="$(cat .last-deployed-sha 2>/dev/null || echo '')"
 CURRENT_SHA="$(git rev-parse HEAD)"
@@ -63,6 +112,7 @@ trap 'on_failure' ERR
 
 on_failure() {
   local code=$?
+  adim_kapat
   printf '\n\033[0;31m✗ Dağıtım başarısız (çıkış kodu %s)\033[0m\n' "$code" >&2
 
   if [[ -n "$PREVIOUS_SHA" && "$PREVIOUS_SHA" != "$CURRENT_SHA" ]]; then
@@ -132,6 +182,24 @@ fi
 command -v pm2 >/dev/null || die "pm2 bulunamadı (npm install -g pm2)"
 
 ok "node $(node -v) · pnpm $(pnpm -v) · pm2 $(pm2 -v)"
+
+# BELLEK UYARISI. Derleme belleğe sığmayınca swap'a düşüyor ve dakikalar
+# saatlere dönüyor; dışarıdan bakınca "CPU %65, hâlâ çalışıyor" gibi
+# görünüyor. Durdurmuyor (bellek dalgalanıyor), ama log'da sebebi baştan
+# yazıyor.
+if [[ -r /proc/meminfo ]]; then
+  BOS_MB=$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo)
+  SWAP_TOPLAM=$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)
+  SWAP_BOS=$(awk '/^SwapFree:/ {print $2}' /proc/meminfo)
+  ok "kullanılabilir bellek: ${BOS_MB} MB"
+  if (( BOS_MB < 1500 )); then
+    warn "Kullanılabilir bellek ${BOS_MB} MB. Panel derlemesi swap'a düşüp çok uzayabilir."
+    warn "Yük düşükken çalıştırmayı düşün:  free -m && cat /proc/loadavg"
+  fi
+  if (( SWAP_TOPLAM > 0 && SWAP_BOS * 2 < SWAP_TOPLAM )); then
+    warn "Swap yarıdan fazla dolu ($(( (SWAP_TOPLAM - SWAP_BOS) / 1024 )) / $(( SWAP_TOPLAM / 1024 )) MB)."
+  fi
+fi
 ok "commit $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s | head -c 60)"
 
 # -----------------------------------------------------------------------------
@@ -158,7 +226,7 @@ log "Bağımlılıklar"
 #
 # Bayrak kararı ortamdan alıp BURAYA taşıyor: ne kurulacağı dağıtımın kendi
 # bilgisi, kabuğun değil.
-pnpm install --frozen-lockfile --prod=false
+dusuk "pnpm install" pnpm install --frozen-lockfile --prod=false
 ok "kuruldu (devDependencies dâhil — derleme sunucuda yapılıyor)"
 
 # -----------------------------------------------------------------------------
@@ -173,12 +241,27 @@ set -a
 set +a
 
 # Sıra önemli: shared paketi diğer ikisinin tip kaynağı.
-pnpm --filter @advetics/shared build
-pnpm --filter @advetics/api exec prisma generate
-pnpm --filter @advetics/api build
+dusuk "shared" pnpm --filter @advetics/shared build
+dusuk "prisma generate" pnpm --filter @advetics/api exec prisma generate
+dusuk "api" pnpm --filter @advetics/api build
+
 # Next.js NEXT_PUBLIC_* değerlerini bu adımda koda gömer — .env doğru olmalı.
-pnpm --filter @advetics/web build
-ok "api + web derlendi"
+#
+# PANEL AYRI KLASÖRE DERLENİYOR (`next.config.ts` → `distDir`). Canlı süreç
+# `.next`i okumaya devam ediyor; yer değiştirme süreçler yeniden başlamadan
+# HEMEN ÖNCE yapılıyor. Derleme ya da migration düşerse canlı panele
+# dokunulmamış oluyor. Önceki yarım bir derlemenin artığı önce siliniyor:
+# Next eski dosyaların üstüne yazar ama silinmiş sayfaların çıktısını bırakır.
+WEB_DIR="apps/web"
+rm -rf "$WEB_DIR/.next-derleme"
+NEXT_DIST_DIR=.next-derleme dusuk "web" pnpm --filter @advetics/web build
+# Next derleme sırasında `tsconfig.json`a ve `next-env.d.ts`e KENDİ klasör
+# adını yazıyor (`.next-derleme/types`). İkisi de depoda izleniyor: geri
+# alınmazsa sunucudaki çalışma ağacı kirli kalıyor ve bir sonraki `git pull`
+# "local changes would be overwritten" ile düşüyor. Yerelde ölçüldü.
+git checkout -- "$WEB_DIR/tsconfig.json" "$WEB_DIR/next-env.d.ts"
+[[ -f "$WEB_DIR/.next-derleme/BUILD_ID" ]] || die "panel derlemesi BUILD_ID üretmedi ($WEB_DIR/.next-derleme)"
+ok "api + web derlendi (panel $WEB_DIR/.next-derleme içinde bekliyor)"
 
 # -----------------------------------------------------------------------------
 log "Veritabanı"
@@ -199,6 +282,15 @@ log "Süreçler yeniden başlatılıyor"
 # -----------------------------------------------------------------------------
 # startOrReload: süreç yoksa başlatır, varsa sıfır kesintiyle yeniler.
 # --update-env: .env'deki değişikliklerin görülmesi için gerekli.
+# Panelin yeni derlemesi şimdi devreye giriyor. Önceki `.next` bir deploy
+# boyunca `.next-eski` olarak duruyor (elle geri dönüş için), sonrakinde
+# siliniyor. İki `mv` arasındaki pencere milisaniye; pm2 zaten hemen ardından
+# süreci yeniden başlatıyor.
+rm -rf "$WEB_DIR/.next-eski"
+[[ -d "$WEB_DIR/.next" ]] && mv "$WEB_DIR/.next" "$WEB_DIR/.next-eski"
+mv "$WEB_DIR/.next-derleme" "$WEB_DIR/.next"
+ok "panel derlemesi devreye alındı ($(cat "$WEB_DIR/.next/BUILD_ID"))"
+
 pm2 startOrReload ecosystem.config.js --update-env
 pm2 save --force >/dev/null
 ok "advetics-api · advetics-web · advetics-worker"
@@ -254,4 +346,5 @@ fi
 echo "$CURRENT_SHA" > .last-deployed-sha
 trap - ERR
 
-printf '\n\033[0;32m✓ Dağıtım tamamlandı\033[0m — %s\n\n' "$(git rev-parse --short HEAD)"
+adim_kapat
+printf '\n\033[0;32m✓ Dağıtım tamamlandı\033[0m — %s · toplam %ss\n\n' "$(git rev-parse --short HEAD)" "$((SECONDS - DEPLOY_BAS))"
