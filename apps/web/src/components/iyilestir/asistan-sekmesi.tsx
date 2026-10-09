@@ -201,6 +201,18 @@ export function AsistanSekmesi({
   }
 
   const yaziyor = yaziyorMu(akis, mesajlar);
+  /*
+   * UZUN BEKLEME SÖYLENİYOR: model bazen yavaşlıyor (canlıda bir istek 180
+   * sn zaman aşımına kadar sürdü, aynı dakikada AdvCampaign 47 sn). Üç
+   * nokta üç dakika boyunca açıklamasız dönerse kullanıcı ekranın donduğunu
+   * sanar. 20 saniyeden sonra ne olduğu ve en fazla ne kadar süreceği yazıyor.
+   */
+  const [uzunSuruyor, setUzunSuruyor] = useState(false);
+  useEffect(() => {
+    if (!yaziyor) return setUzunSuruyor(false);
+    const t = window.setTimeout(() => setUzunSuruyor(true), 20_000);
+    return () => window.clearTimeout(t);
+  }, [yaziyor]);
 
   return (
     <div className={i.asistan}>
@@ -261,6 +273,11 @@ export function AsistanSekmesi({
                 <span />
                 <span />
               </span>
+              {uzunSuruyor && (
+                <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: 'var(--t-ink-muted)' }}>
+                  Model bu sefer yavaş cevap veriyor; en fazla 3 dakika bekleniyor.
+                </span>
+              )}
             </div>
           )}
           {akisSorunu && (
@@ -467,7 +484,7 @@ function BicimliMetin({ metin }: { metin: string }) {
     <>
       {metinBloklari(metin).map((b, n) =>
         b.tur === 'liste' ? (
-          <ul key={n} style={{ margin: '4px 0 8px', paddingLeft: 18 }}>
+          <ul key={n} style={{ margin: '4px 0 8px', paddingLeft: 18, listStyle: 'disc' }}>
             {b.ogeler.map((o, k) => (
               <li key={k}>{satir(o, k)}</li>
             ))}
