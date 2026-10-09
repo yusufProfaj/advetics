@@ -730,6 +730,13 @@ function varlikSatiri(
     conversions: b.conversions,
     paraBirimi: b.currency,
     eylem: href ? { tur: 'link', href } : { tur: 'onizle' },
-    eylemHedefi: eylemHedefiCoz({ seviye: varlik, id: b.entityId, ad: b.name, platform: b.platform, durum: b.status }),
+    eylemHedefi: eylemHedefiCoz({
+      seviye: varlik,
+      id: b.entityId,
+      ad: b.name,
+      platform: b.platform,
+      durum: b.status,
+      kampanyaKanali: b.kampanyaKanali,
+    }),
   };
 }

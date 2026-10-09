@@ -569,6 +569,7 @@ export class MetricsService {
             parent_name: string | null;
             status: string | null;
             objective: string | null;
+            kampanya_kanali: string | null;
           }
         >
       >(
@@ -602,7 +603,8 @@ export class MetricsService {
                  COALESCE(c.name, g.name, a.name, acc.name) AS name,
                  COALESCE(gc.name, ag.name) AS parent_name,
                  COALESCE(c.status::text, g.status::text, a.status::text, acc.status::text) AS status,
-                 c.objective
+                 c.objective,
+                 COALESCE(c.objective, gc.objective, agc.objective) AS kampanya_kanali
           FROM insights_daily i
           LEFT JOIN campaigns   c   ON i.entity_level = 'campaign' AND c.id = i.entity_id
           LEFT JOIN ad_groups   g   ON i.entity_level = 'ad_group' AND g.id = i.entity_id
@@ -611,6 +613,7 @@ export class MetricsService {
           -- Üst varlık: ad set'in kampanyası, reklamın ad set'i.
           LEFT JOIN campaigns   gc  ON i.entity_level = 'ad_group' AND gc.id = g.campaign_id
           LEFT JOIN ad_groups   ag  ON i.entity_level = 'ad'       AND ag.id = a.ad_group_id
+          LEFT JOIN campaigns   agc ON i.entity_level = 'ad'       AND agc.id = ag.campaign_id
           WHERE i.date BETWEEN ${pencereBasi}::date AND ${query.to}::date
             AND i.entity_level = ${query.level}::"EntityLevel"
             ${kampanyaFiltresi}
@@ -618,7 +621,7 @@ export class MetricsService {
             ${filters}
           GROUP BY i.entity_id, i.entity_external_id, i.platform, i.currency,
                    c.name, g.name, a.name, acc.name, gc.name, ag.name,
-                   c.status, g.status, a.status, acc.status, c.objective
+                   c.status, g.status, a.status, acc.status, c.objective, gc.objective, agc.objective
           -- SIRALAMA CARİ DÖNEME BAĞLI ve bu ŞART: aksi hâlde yalnızca
           -- ÖNCEKİ dönemde harcama yapmış varlıklar LIMIT'in içine girip
           -- listeyi kaydırır ve "bu kampanya neden burada, hiç harcaması
@@ -674,6 +677,7 @@ export class MetricsService {
           query.level === 'campaign'
             ? kampanyaTipi(r.platform, r.objective, hedefler.get(r.entity_id))
             : null,
+        kampanyaKanali: r.kampanya_kanali,
         ...this.totals(r),
         /*
          * `null` = önceki dönemde HİÇ veri yok. Sıfırlı bir nesne döndürmek

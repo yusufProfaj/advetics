@@ -1,4 +1,5 @@
 import type { Platform, VarlikEylemSeviyesi } from '@advetics/shared';
+import { googleYazilamazMi } from '@advetics/shared';
 
 /**
  * Reklam Yöneticisi satırındaki durdur/başlat hedefi. Sunucuda üretiliyor
@@ -34,8 +35,13 @@ export function eylemHedefiCoz(v: {
   ad: string;
   platform: Platform;
   durum: string;
+  /** Varlığın kampanyasının kanalı; Google Video'da API yazmıyor. */
+  kampanyaKanali?: string | null;
 }): VarlikEylemHedefi | null {
   if (!SATIR_ICI_YAZILABILIR.includes(v.platform)) return null;
+  // Canlıda bir kullanıcı Google Video kampanyasına bastı ve Google
+  // reddetti (2026-10-10): çalışmayacak düğme gösterilmiyor.
+  if (googleYazilamazMi(v.platform, v.kampanyaKanali)) return null;
   if (v.durum !== 'active' && v.durum !== 'paused') return null;
   return { seviye: v.seviye, id: v.id, ad: v.ad, platform: v.platform, yayinda: v.durum === 'active' };
 }

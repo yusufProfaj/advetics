@@ -37,6 +37,16 @@ describe('acil yazma şalteri', () => {
     });
   }
 
+  it('KRİTİK: Google Video kampanyası platforma GİTMEDEN reddediliyor (MUTATE_NOT_ALLOWED, canlıda 2026-10-10)', () => {
+    const g = govde('uygula');
+    const ret = g.indexOf('if (googleYazilamazMi(row.platform, row.kampanyaKanali)) {');
+    expect(ret, 'Video koruması yok').toBeGreaterThan(-1);
+    expect(ret).toBeLessThan(g.indexOf('this.quota.acquire('));
+    expect(ret).toBeLessThan(g.indexOf('provider.applyAction('));
+    // Kanal varlığın KAMPANYASINDAN okunuyor (set ve reklam için de).
+    expect(KOD).toContain('(SELECT k.objective FROM campaigns k WHERE k.id = g.campaign_id)');
+  });
+
   it('KRİTİK: Meta ve Google kendi şalterini okuyor', () => {
     expect(KOD).toContain("if (platform === 'meta') return metaYazmaAcikMi(tx, clientId);");
     expect(KOD).toContain("if (platform === 'google') return googleYazmaAcikMi(tx, clientId);");

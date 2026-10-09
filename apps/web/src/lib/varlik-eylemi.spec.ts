@@ -15,6 +15,14 @@ describe('Reklam Yöneticisi satır içi durdur/başlat (2026-10-10)', () => {
     }
   });
 
+  it('KRİTİK: Google Video kampanyasında düğme YOK (Google API reddediyor, canlıda 2026-10-10)', () => {
+    expect(eylemHedefiCoz({ ...taban, platform: 'google', durum: 'active', kampanyaKanali: 'VIDEO' })).toBeNull();
+    expect(eylemHedefiCoz({ ...taban, platform: 'google', durum: 'active', kampanyaKanali: 'video' })).toBeNull();
+    expect(eylemHedefiCoz({ ...taban, platform: 'google', durum: 'active', kampanyaKanali: 'SEARCH' })).not.toBeNull();
+    // Meta'da "VIDEO_VIEWS" amacı bir Google kanalı değil: düğme kalıyor.
+    expect(eylemHedefiCoz({ ...taban, platform: 'meta', durum: 'active', kampanyaKanali: 'VIDEO' })).not.toBeNull();
+  });
+
   it('KRİTİK: set/kampanya durdurmanın altındakileri de durdurduğu SÖYLENİYOR', () => {
     const h = (seviye: 'campaign' | 'ad_group' | 'ad') => varlikEylemMetni({ ...taban, seviye, platform: 'meta', yayinda: true });
     expect(h('campaign').aciklama).toContain('bütün reklam setleri ve reklamlar da yayın yapmaz');

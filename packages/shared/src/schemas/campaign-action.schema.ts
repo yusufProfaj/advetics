@@ -124,6 +124,18 @@ export interface CanliKampanyaListesi {
 export const VARLIK_EYLEM_SEVIYELERI = ['campaign', 'ad_group', 'ad'] as const;
 export type VarlikEylemSeviyesi = (typeof VARLIK_EYLEM_SEVIYELERI)[number];
 
+/**
+ * GOOGLE'IN API'DEN DEĞİŞTİRİLMESİNE İZİN VERMEDİĞİ KAMPANYA KANALLARI.
+ * Video (YouTube) kampanyaları API'de yalnız okunuyor: durum değiştirme
+ * isteği `MUTATE_NOT_ALLOWED · reddedilen değer=VIDEO` ile düşüyor (canlıda
+ * ölçüldü, 2026-10-10). Kampanya, set ve reklam düzeyinde aynı kural.
+ */
+export const GOOGLE_YAZILAMAYAN_KANALLAR: readonly string[] = ['VIDEO'];
+
+export function googleYazilamazMi(platform: string, kampanyaKanali: string | null | undefined): boolean {
+  return platform === 'google' && !!kampanyaKanali && GOOGLE_YAZILAMAYAN_KANALLAR.includes(kampanyaKanali.toUpperCase());
+}
+
 export const varlikEylemiSchema = z.object({
   type: z.enum(['pause', 'resume']),
 });

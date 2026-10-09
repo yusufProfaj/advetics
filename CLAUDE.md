@@ -1135,6 +1135,15 @@ okunup varsayılmadı — canlıda doğrulandı.
   yeniden yaptırır. Arama reklamlarının görseli yok ve olmayacak; onlar metin
   önizlemesiyle geliyor ve o DOĞRU davranış. `gorselAdresleri()` süzgeci
   kaynak adını eliyor, böylece yanlış dalı ve yalancı sayacı üretmiyor.
+- **VIDEO KAMPANYASI API'DEN DEĞİŞTİRİLEMİYOR DA — ölçüldü (2026-10-10).**
+  Reklam Yöneticisi'nin satır içi "Durdur"u bir YouTube kampanyasına
+  (`objective = VIDEO`) gitti ve Google `MUTATE_NOT_ALLOWED · Mutates are
+  not allowed for the requested resource · reddedilen değer=VIDEO` ile
+  reddetti. Yalnız oluşturma değil durum değişikliği de kapalı; set ve
+  reklam düzeyi de bu kampanyaya bağlı. Kural tek yerde
+  (`googleYazilamazMi`, shared): düğme o satırlarda çıkmıyor, sunucu
+  platforma gitmeden Türkçe sebeple reddediyor. Akıllı Boost'un eski
+  YouTube kampanyaları bu tipte; yenileri Demand Gen.
 - **`advertising_channel_type = VIDEO` kampanya API'DEN OLUŞTURULAMIYOR.**
   Google Ads API video kampanyalarında yalnızca okuma ve raporlama yapıyor.
   Enum'da `VIDEO_ACTION` gibi değerlerin durması oluşturulabilir olduğunu

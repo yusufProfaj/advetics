@@ -551,6 +551,13 @@ export interface MetricsBreakdownRow extends MetricTotals {
    */
   campaignType: string | null;
   /**
+   * Varlığın KAMPANYASININ ham hedef/kanal kodu (Google'da kanal: `VIDEO`,
+   * `SEARCH`...; Meta'da amaç) — HER seviyede dolu. Satır içi durdur/başlat
+   * buna bakıyor: Google Video kampanyasına API yazmıyor (MUTATE_NOT_ALLOWED,
+   * canlıda 2026-10-10) ve düğme o satırlarda hiç çıkmamalı.
+   */
+  kampanyaKanali: string | null;
+  /**
    * Önceki dönem — yüzde değişim için.
    *
    * `null` = o varlığın önceki dönemde HİÇ verisi yok. Sıfırlı bir nesne

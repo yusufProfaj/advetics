@@ -10,6 +10,7 @@ import {
 import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { googleYazmaAcikMi, metaYazmaAcikMi } from '../reklam/yazma-kapisi';
+import { googleYazilamazMi } from '@advetics/shared';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from '../connections/provider.registry';
@@ -425,6 +426,17 @@ export class CampaignActionsService {
         `Platform bağlantısı etkin değil (${row.connectionStatus}) — yeniden bağlanmak gerekiyor.`,
       );
     }
+    /*
+     * GOOGLE VIDEO KAMPANYASI PLATFORMA GİTMEDEN REDDEDİLİYOR: Google bu
+     * kanalda API'den durum değişikliğine izin vermiyor (canlıda
+     * `MUTATE_NOT_ALLOWED`, 2026-10-10). İsteği göndermek kota harcar ve
+     * kullanıcıya İngilizce bir platform hatası gösterirdi.
+     */
+    if (googleYazilamazMi(row.platform, row.kampanyaKanali)) {
+      throw new BadRequestException(
+        'Google, YouTube (Video) kampanyalarında API üzerinden değişikliğe izin vermiyor. Bu kampanyayı, setini ya da reklamını Google Ads\'ten duraklatman gerekiyor.',
+      );
+    }
     const provider = this.providers.get(row.platform);
     const can = provider.canWrite(row.grantedScopes);
     if (!can.ok) {
@@ -526,6 +538,14 @@ export class CampaignActionsService {
         ? Prisma.sql`'none' AS budget_mode, NULL::text AS budget_amount_micros, g.external_id AS ust_external_id`
         : Prisma.sql`v.budget_mode::text AS budget_mode, v.budget_amount_micros::text AS budget_amount_micros, NULL::text AS ust_external_id`;
     const ust = seviye === 'ad' ? Prisma.sql`LEFT JOIN ad_groups g ON g.id = v.ad_group_id` : Prisma.empty;
+    // Varlığın KAMPANYASININ kanalı (Google'da VIDEO yazılamıyor): kampanyada
+    // kendisi, sette ve reklamda bağlı olduğu kampanya.
+    const kanal =
+      seviye === 'campaign'
+        ? Prisma.sql`v.objective`
+        : seviye === 'ad_group'
+          ? Prisma.sql`(SELECT k.objective FROM campaigns k WHERE k.id = v.campaign_id)`
+          : Prisma.sql`(SELECT k.objective FROM campaigns k WHERE k.id = g.campaign_id)`;
     const rows = await tx.$queryRaw<
       Array<{
         id: string;
@@ -544,6 +564,7 @@ export class CampaignActionsService {
         connection_id: string;
         connection_status: string;
         granted_scopes: string[];
+        kampanya_kanali: string | null;
       }>
     >(Prisma.sql`
       SELECT v.id::text AS id, v.client_id::text AS client_id, v.name,
@@ -552,7 +573,7 @@ export class CampaignActionsService {
              a.id::text AS ad_account_id, a.external_id AS account_external_id,
              a.manager_external_id, a.currency,
              conn.id::text AS connection_id, conn.status::text AS connection_status,
-             conn.granted_scopes
+             conn.granted_scopes, ${kanal} AS kampanya_kanali
         FROM ${tablo} v
         ${ust}
         JOIN ad_accounts a ON a.id = v.ad_account_id
@@ -577,6 +598,7 @@ export class CampaignActionsService {
       connectionId: r.connection_id,
       connectionStatus: r.connection_status,
       grantedScopes: r.granted_scopes ?? [],
+      kampanyaKanali: r.kampanya_kanali,
     };
   }
 
@@ -693,6 +715,7 @@ interface CozulmusVarlik {
   connectionId: string;
   connectionStatus: string;
   grantedScopes: string[];
+  kampanyaKanali: string | null;
 }
 
 /**
