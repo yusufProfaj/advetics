@@ -31,7 +31,14 @@ tanıtım sitesi.
    `https://gardenvillaskusadasi.com/` (çift l; sayfa başlığı "EGE BİRLİK
    YAPI – GARDEN VİLLAS"). Adres ön ayardan/workspace'ten geliyordu ve
    workspace'te iki proje var: kart düzenlemesine **Hedef adres** alanı
-   eklendi, prova ve yayın aynı alanı kullanıyor. K4 (token seviyesi) açık.
+   eklendi, prova ve yayın aynı alanı kullanıyor (canlı `dd21dc2`).
+   **İLK GERÇEK GOOGLE YAZMASI YAPILDI (2026-10-09 12:17):** Garden Villas
+   kartı DURAKLATILMIŞ kuruldu, Google kampanya kimliği `24336100271`, kart
+   `launched`, ikinci kurulum engeli devrede. Durumun Google'da PAUSED
+   olduğu panelden GERİ OKUNAMADI (canlı liste yalnız yayındakileri, Reklam
+   Keşfi reklam seviyesini gösteriyor) — kullanıcı Google Ads'te gözle
+   kontrol edip oradan başlatacak. Küçük not: kartın "tekrar boost" engeli
+   "hâlâ yayında" diyor, kampanya duraklatılmış. K4 (token seviyesi) açık.
 2. **AdvCampaign site taslağı:** dört ekran hatası düzeltildi ve canlıda
    doğrulandı (amaç tekrar sorulmuyor, ekran takılmıyor, görsel balonda).
    Konut beyanı yapıldı (kullanıcı), öneriler onaylandı, **Meta provası

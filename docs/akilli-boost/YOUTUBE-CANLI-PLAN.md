@@ -148,6 +148,15 @@ doğru sayfa mı kontrol edilmeli.
 **Sıradaki:** Aşama 3 (ilk gerçek yayın, para harcar): K3 (duraklatılmış
 kur) ve K4 (token seviyesi) kullanıcıya sorulacak.
 
+#### İlk gerçek kurulum — 2026-10-09 12:17 (`dd21dc2`)
+
+Prova 3 geçti (kartın kendi adresi `https://gardenvillaskusadasi.com/`,
+açılış PAUSED), ardından "Bu ayarlarla yayınla" + duraklatılmış: Google
+tek atomik istekle kurdu, kampanya `24336100271`. Kartta yalın kimlik
+yazıldı (harcama eşlenebilir). Google tarafındaki durum panelden geri
+okunamadı; gözle kontrol kullanıcıda. Sıradaki: kullanıcı Google Ads'te
+açınca ilk harcama ve kartta görünmesi (Aşama 4).
+
 ### Aşama 2 · Kartta ön kontrol (kod)
 
 8. **Video uygunluğu (R1).** `part=status,contentDetails` okunacak. Gizli,
