@@ -12,7 +12,7 @@ sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
 temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
 RLS politikası var, platform sahibi yalnız hello@profaj.com.
-**Bekleyen deploy:** yok (canlı `6e18a40`, 2026-10-09 12:47).
+**Bekleyen deploy:** yok (canlı `68ca513`, 2026-10-09 13:48).
 
 **ÜRÜN YAPISI PLANI (2026-10-09, kullanıcı isteği):** panel yedi bölüme
 geçiyor: Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar ·
@@ -65,16 +65,18 @@ dört ekran. Canlıda kontrol edildi: menü yedi bölüm, `/butce` açılıyor,
 `/marka-merkezi?bolum=butce&ay=…` ayı taşıyarak yönleniyor.
 **Sıradaki: Aşama 2 (Genel Bakış karar ekranı).**
 
-**AŞAMA 2 — GENEL BAKIŞ (2026-10-09), YAZILDI, KAPI AÇIK, DEPLOY BEKLİYOR,
-migration yok.** Bekleyen işler kutusu (Boost onayı, strateji onayı,
+**AŞAMA 2 — GENEL BAKIŞ (2026-10-09), CANLIDA (`68ca513`, 13:48, 79 sn).** Bekleyen işler kutusu (Boost onayı, strateji onayı,
 aktarılmamış plan, bütçesiz harcama) + ay temposu cümleleri + hızlı
 erişim. Mimari ve ajan notları [`genel-bakis/MIMARI.md`](genel-bakis/MIMARI.md).
 Ajan 4: RLS SET ROLE testi (15), mutasyonlar; Aşama 2'de bulgu yok.
 ÖNCEDEN VAR OLAN bulgu ayrı iş: bütçe modülü "tüm şirketler" kipinde
 `ctx.orgId` ile okuyup yazıyor (kardeş şirketin bütçesi görünmüyor,
 oradan kurulan bütçe yanlış şirkete yazılıyor) — `it.fails` testi
-`genel-bakis-bekleyenler-rls.spec.ts`te. Deploy sonrası ölçüm: Ege
-Birlik'te kutudaki Boost sayısı = ekranın rozeti; tüm workspace'lerde süre.
+`genel-bakis-bekleyenler-rls.spec.ts`te; ayrı oturumda düzeltiliyor.
+CANLIDA ÖLÇÜLDÜ: Ege Birlik kutu 14 Boost = ekranda 14 `pending` (0
+`kontrol`); uç 88 ms (tüm) / 83 ms (tek). Ekranda kutu, tempo cümleleri ve
+kısayollar gözle görüldü. Ölçülmedi: 52 workspace'li "tüm şirketler"
+kipinde süre (oturum tek workspace'li şirketteydi).
 **Sonra: Aşama 3 (Reklam Yöneticisi, kullanıcının tarifi planda).**
 
 **Karar bekleyen kullanım sorunu:** asistan kullanıcının AÇIKÇA söylediği
