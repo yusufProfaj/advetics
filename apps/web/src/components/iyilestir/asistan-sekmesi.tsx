@@ -5,7 +5,18 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AsistanMesaji, AsistanOturumu, AsistanParcasi, Oneri, UygulamaSonucu } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
-import { aracIziMetni, devretAdresi, eylemMetni, parcaEkle, parcalariAyikla, sonucMetni, turuBitir, yaziyorMu } from '@/lib/iyilestir';
+import {
+  aracIziMetni,
+  devretAdresi,
+  eylemMetni,
+  metinBloklari,
+  parcaEkle,
+  parcalariAyikla,
+  sonucMetni,
+  turuBitir,
+  yaziyorMu,
+  type MetinParcasi,
+} from '@/lib/iyilestir';
 import { OnayPenceresi } from './onay-penceresi';
 import i from '@/components/taslak/iyilestir.module.css';
 import s from '@/components/taslak/taslak.module.css';
@@ -339,6 +350,10 @@ function AsistanParcalari({
   // Ardışık araç parçalarını tek iz satırında topla.
   const gruplar: Array<{ tur: 'iz'; izler: string[] } | { tur: 'parca'; parca: AsistanParcasi }> = [];
   for (const p of mesaj.parcalar) {
+    // BOŞ METİN PARÇASI ÇİZİLMİYOR: model araç çağırmadan önce boş metin
+    // gönderiyor ve her biri boş bir balon oluyordu; ayrıca araç izlerini
+    // bölüp aynı satırda toplanmalarını engelliyordu (canlı denetim).
+    if (p.tur === 'metin' && p.metin.trim() === '') continue;
     const son = gruplar.at(-1);
     if (p.tur === 'arac') {
       if (son?.tur === 'iz') son.izler.push(aracIziMetni(p));
@@ -364,7 +379,7 @@ function AsistanParcalari({
         if (p.tur === 'metin') {
           return (
             <div key={n} className={`${i.balon} ${i.o}`}>
-              {p.metin}
+              <BicimliMetin metin={p.metin} />
             </div>
           );
         }
@@ -437,6 +452,37 @@ function AsistanParcalari({
           </div>
         );
       })}
+    </>
+  );
+}
+
+/** `metinBloklari`nın çizimi: yalnız React düğümleri, HTML enjeksiyonu yok. */
+function BicimliMetin({ metin }: { metin: string }) {
+  const satir = (parcalar: MetinParcasi[], k: number) => (
+    <span key={k}>
+      {parcalar.map((p, j) => (p.kalin ? <strong key={j}>{p.metin}</strong> : <span key={j}>{p.metin}</span>))}
+    </span>
+  );
+  return (
+    <>
+      {metinBloklari(metin).map((b, n) =>
+        b.tur === 'liste' ? (
+          <ul key={n} style={{ margin: '4px 0 8px', paddingLeft: 18 }}>
+            {b.ogeler.map((o, k) => (
+              <li key={k}>{satir(o, k)}</li>
+            ))}
+          </ul>
+        ) : (
+          <p key={n} style={{ margin: '0 0 8px' }}>
+            {b.satirlar.map((s, k) => (
+              <span key={k}>
+                {k > 0 && <br />}
+                {satir(s, k)}
+              </span>
+            ))}
+          </p>
+        ),
+      )}
     </>
   );
 }

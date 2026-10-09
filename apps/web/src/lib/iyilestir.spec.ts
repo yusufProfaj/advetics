@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AsistanMesaji, Oneri } from '@advetics/shared';
 import {
+  metinBloklari,
   adimHalleri,
   adimMetinleri,
   devretAdresi,
@@ -449,5 +450,28 @@ describe('KAYNAK: sayfa ve hareket', () => {
     const disari = (css.slice(0, bas) + css.slice(son + 1)).replace(/@keyframes[\s\S]*?\n}\n/g, '');
     expect(disari).not.toMatch(/animation:(?!\s*none)/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*transition: none !important/);
+  });
+});
+
+describe('asistan metni biçimi (canlı denetim, 2026-10-09)', () => {
+  it('kalın, madde ve başlık tanınıyor; gerisi düz metin', () => {
+    const b = metinBloklari('**1. Trafik**\n* **Harcama:** 2.193 TL\n* Tıklama: 2.768\n\nDüz <b>html</b> değil');
+    expect(b[0]).toEqual({ tur: 'paragraf', satirlar: [[{ kalin: true, metin: '1. Trafik' }]] });
+    expect(b[1]).toEqual({
+      tur: 'liste',
+      ogeler: [
+        [{ kalin: true, metin: 'Harcama:' }, { kalin: false, metin: ' 2.193 TL' }],
+        [{ kalin: false, metin: 'Tıklama: 2.768' }],
+      ],
+    });
+    // HTML çözülmüyor, düz metin olarak kalıyor (enjeksiyon yok).
+    expect(b[2]).toEqual({ tur: 'paragraf', satirlar: [[{ kalin: false, metin: 'Düz <b>html</b> değil' }]] });
+  });
+
+  it('KRİTİK: asistan metni dangerouslySetInnerHTML ile basılmıyor; boş metin parçası atlanıyor', () => {
+    const k = readFileSync(join(__dirname, '..', 'components', 'iyilestir', 'asistan-sekmesi.tsx'), 'utf8');
+    expect(k).not.toContain('dangerouslySetInnerHTML');
+    expect(k).toContain("if (p.tur === 'metin' && p.metin.trim() === '') continue;");
+    expect(k).toContain('<BicimliMetin metin={p.metin} />');
   });
 });

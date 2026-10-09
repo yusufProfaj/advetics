@@ -45,6 +45,12 @@ describe('çözüm sırası', () => {
 
   it('KRİTİK: seçim yoksa NULL, listenin ilk satırı değil', () => {
     expect(sayfaWorkspaceId({ activeClientId: null }, undefined)).toBeNull();
+    // Tek etkin workspace varsa belirsizlik yok: o seçiliyor.
+    const tek = [{ id: 'w1', status: 'active' }, { id: 'w2', status: 'archived' }];
+    expect(sayfaWorkspaceId({ activeClientId: null, availableClients: tek }, undefined)).toBe('w1');
+    // Birden çok etkin workspace varsa YİNE seçim istenir (ilk satıra düşmek yok).
+    const iki = [{ id: 'w1', status: 'active' }, { id: 'w2', status: 'active' }];
+    expect(sayfaWorkspaceId({ activeClientId: null, availableClients: iki }, undefined)).toBeNull();
   });
 });
 

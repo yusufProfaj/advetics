@@ -49,7 +49,8 @@ export function OneriKarti({
         <span className={i.zaman}>{seviyeAdi(oneri.platform, oneri.varlik.seviye)}</span>
       </div>
       <h3>{oneri.baslik}</h3>
-      <p className={i.kim}>{yol}</p>
+      {/* Üst varlık yoksa alt satır başlığın adını tekrar ederdi (canlı denetim). */}
+      {oneri.varlik.ustAd && <p className={i.kim}>{yol}</p>}
 
       <div className={i.kanit}>
         <ul>

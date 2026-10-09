@@ -19,10 +19,21 @@ import type { SessionResponse } from '@advetics/shared';
  * (`WorkspaceGerekli`).
  */
 export function sayfaWorkspaceId(
-  session: Pick<SessionResponse, 'activeClientId'>,
+  session: Pick<SessionResponse, 'activeClientId'> & {
+    availableClients?: ReadonlyArray<{ id: string; status: string }>;
+  },
   musteriParam: string | undefined,
 ): string | null {
-  return musteriParam ?? session.activeClientId ?? null;
+  if (musteriParam ?? session.activeClientId) return musteriParam ?? session.activeClientId;
+  /*
+   * TEK WORKSPACE VARSA SEÇİM YOK, CEVAP VAR (canlı denetim, 2026-10-09):
+   * Ege Birlik Yapı'nın tek workspace'i varken İyileştir "hangi workspace?"
+   * diye soruyordu; Genel Bakış aynı hâlde workspace'i doğrudan gösteriyor.
+   * Bu "listenin ilk satırına düşmek" DEĞİL: belirsizlik yalnız birden çok
+   * etkin workspace varken var ve o zaman yine seçim istenir.
+   */
+  const etkin = (session.availableClients ?? []).filter((c) => c.status === 'active');
+  return etkin.length === 1 ? etkin[0]!.id : null;
 }
 
 /** Seçim ekranının ihtiyaç duyduğu her şey — oturumdan tek yerde türetilir. */

@@ -528,3 +528,55 @@ export function iyilestirKurallarAdresi(params: Record<string, string | string[]
   }
   return `/iyilestir?${p}`;
 }
+
+// ─── Asistan metni: küçük, GÜVENLİ biçim çözümleyici ────────────────────────
+
+/** Bir satır içi parça: kalın ya da düz. */
+export interface MetinParcasi {
+  kalin: boolean;
+  metin: string;
+}
+export type MetinBlogu =
+  | { tur: 'paragraf'; satirlar: MetinParcasi[][] }
+  | { tur: 'liste'; ogeler: MetinParcasi[][] };
+
+/**
+ * MODELİN MARKDOWN'I ÇİĞ GÖRÜNÜYORDU: "**Harcama:**", "* madde" (canlı
+ * denetim, 2026-10-09). HTML'e çevirip `dangerouslySetInnerHTML` ile basmak
+ * modelin ürettiği her şeyi sayfaya enjekte etmek olurdu; bu çözümleyici
+ * yalnız ÜÇ şeyi tanıyor (kalın, madde, başlık satırı) ve düz veri döndürüyor,
+ * çizim React'te. Tanımadığı her şey düz metin kalır.
+ */
+export function metinBloklari(md: string): MetinBlogu[] {
+  const bloklar: MetinBlogu[] = [];
+  const satirCoz = (s: string): MetinParcasi[] => {
+    const out: MetinParcasi[] = [];
+    const re = /\*\*(.+?)\*\*/g;
+    let son = 0;
+    for (const m of s.matchAll(re)) {
+      if (m.index! > son) out.push({ kalin: false, metin: s.slice(son, m.index) });
+      out.push({ kalin: true, metin: m[1]! });
+      son = m.index! + m[0].length;
+    }
+    if (son < s.length) out.push({ kalin: false, metin: s.slice(son) });
+    return out;
+  };
+  for (const ham of md.replace(/\r/g, '').split('\n')) {
+    const satir = ham.trimEnd();
+    const madde = /^\s*[*•-]\s+(.*)$/.exec(satir);
+    const baslik = /^\s*#{1,6}\s+(.*)$/.exec(satir);
+    const son = bloklar.at(-1);
+    if (madde) {
+      const parca = satirCoz(madde[1]!);
+      if (son?.tur === 'liste') son.ogeler.push(parca);
+      else bloklar.push({ tur: 'liste', ogeler: [parca] });
+    } else if (satir.trim() === '') {
+      bloklar.push({ tur: 'paragraf', satirlar: [] });
+    } else {
+      const parca = baslik ? [{ kalin: true, metin: baslik[1]!.replace(/\*\*/g, '') }] : satirCoz(satir);
+      if (son?.tur === 'paragraf') son.satirlar.push(parca);
+      else bloklar.push({ tur: 'paragraf', satirlar: [parca] });
+    }
+  }
+  return bloklar.filter((b) => (b.tur === 'paragraf' ? b.satirlar.length > 0 : b.ogeler.length > 0));
+}

@@ -39,14 +39,20 @@
   color: var(--t-ink);
   font-size: 14px;
 }
-.kok :where(button) {
+/*
+ * SIFIRLAMA SIFIR ÖZGÜLLÜKTE (`:where` dışta): `.kok :where(button)` bir
+ * sınıf kadar ağırdı ve yükleme sırasına göre `.birincil`in kırmızısını
+ * eziyordu; İyileştir'de "Bütçeyi artır" düğmesi beyaz çıktı (canlı
+ * denetim, 2026-10-09). Sıfırlama her sınıfa yenilmeli.
+ */
+:where(.kok button) {
   font: inherit;
   color: inherit;
   background: none;
   border: 0;
   cursor: pointer;
 }
-.kok :where(a) {
+:where(.kok a) {
   color: inherit;
   text-decoration: none;
 }

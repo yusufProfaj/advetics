@@ -1,16 +1,15 @@
 import Link from 'next/link';
+import { YORGUNLUK } from '@advetics/shared';
 import type { AsistanOturumu, OneriListesi, RuleRecord } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { first, hataMetni } from '@/lib/sayfa-yardimcilari';
-import { resolveRange } from '@/lib/date-range';
 import { formatDayLong } from '@/lib/format';
 import { baglanti } from '@/lib/baglanti';
 import { SEKMELER, SEKME_ETIKETI, ozetSayilari, sekmeCoz } from '@/lib/iyilestir';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { Uyari } from '@/components/ui/uyari';
-import { TarihSecici } from '@/components/tarih-secici';
 import { OnerilerSekmesi, type OneriSonucu } from '@/components/iyilestir/oneriler-sekmesi';
 import { AsistanSekmesi, type OturumSonucu } from '@/components/iyilestir/asistan-sekmesi';
 import { KurallarIcerik, type KurallarSonucu } from '@/components/rules/kurallar-icerik';
@@ -20,8 +19,21 @@ import i from '@/components/taslak/iyilestir.module.css';
 export const metadata = { title: 'İyileştir · Advetics' };
 export const dynamic = 'force-dynamic';
 
-/** Öneri ekranının açılış aralığı (taslak: "Son 14 gün"). */
-const IYILESTIR_ARALIGI = '14g';
+/**
+ * ÖNERİ PENCERESİ SABİT: son 7 gün, bugün hariç (sunucu `YORGUNLUK.pencereGun`
+ * ile hesaplıyor ve `from/to` okumuyor). Burada bir tarih seçicisi vardı
+ * ("Son 14 gün") ve hiçbir şeyi değiştirmiyordu: çalışmayan seçici olmayan
+ * bir süzgeç vaat ediyordu (canlı denetim, 2026-10-09). Ekran pencereyi
+ * yalnız YAZIYOR.
+ */
+function oneriPenceresi(): { from: string; to: string } {
+  const gun = (fark: number) => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - fark);
+    return d.toISOString().slice(0, 10);
+  };
+  return { from: gun(YORGUNLUK.pencereGun), to: gun(1) };
+}
 
 /**
  * ═══ İYİLEŞTİR — ONAYLANAN TASLAĞIN BİREBİR HÂLİ (Aşama 4, 2026-10-09) ═══
@@ -76,12 +88,7 @@ export default async function IyilestirPage({
   const clientAdi = session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
   const yazabilir = hasPermission(session, 'budget.write');
 
-  const range = resolveRange({
-    aralik: first(params.aralik) ?? IYILESTIR_ARALIGI,
-    baslangic: first(params.baslangic),
-    bitis: first(params.bitis),
-    enEskiGun: null,
-  });
+  const range = oneriPenceresi();
 
   /*
    * TAŞINAN PARAMETRELER: workspace (adresle geldiyse) ve tarih. Sekme
@@ -90,15 +97,12 @@ export default async function IyilestirPage({
    */
   const tasinan = {
     musteri: first(params.musteri),
-    aralik: first(params.aralik),
-    baslangic: first(params.baslangic),
-    bitis: first(params.bitis),
   };
 
   const oturumParam = first(params.oturum);
   const [oneriSonucu, kuralSonucu, oturumSonucu] = await Promise.all([
     serverApiFetch<OneriListesi>(
-      `/iyilestir/oneriler?${new URLSearchParams({ clientId, from: range.from, to: range.to })}`,
+      `/iyilestir/oneriler?${new URLSearchParams({ clientId })}`,
     ).then(
       (liste): OneriSonucu => ({ durum: 'tamam', liste }),
       (e: unknown): OneriSonucu => ({ durum: 'hata', mesaj: hataMetni(e) }),
@@ -128,7 +132,7 @@ export default async function IyilestirPage({
 
   const altSatir =
     sekme === 'oneriler'
-      ? `${clientAdi} · ${range.label} · ${formatDayLong(range.from)} - ${formatDayLong(range.to)}`
+      ? `${clientAdi} · Son 7 gün · ${formatDayLong(range.from)} - ${formatDayLong(range.to)}`
       : sekme === 'kurallar'
         ? `${clientAdi} · otomatik kurallar saatte bir değerlendiriliyor`
         : `${clientAdi} · okur, önerir, onayınla uygular`;
@@ -140,13 +144,6 @@ export default async function IyilestirPage({
           <h1>İyileştir</h1>
           <div className={s.altSatir}>{altSatir}</div>
         </div>
-        {/* TARİH YALNIZ ÖNERİLERDE: asistan ve kurallar onu okumuyor ve
-            çalışmayan bir seçici, olmayan bir süzgeç vaat ederdi. */}
-        {sekme === 'oneriler' && (
-          <div className={s.kontroller}>
-            <TarihSecici aralik={range} enEskiGun={null} karsilastirmaVar={false} />
-          </div>
-        )}
       </header>
 
       <div>
