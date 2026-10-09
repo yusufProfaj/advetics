@@ -20,24 +20,35 @@ Base. Bu adlar Türkçe, AI Asistan İyileştir altında geri geliyor ve reklam
 kurmuyor. Orphex'ten farkımız "söyler değil, yapar". Plan ve aşamalar
 [`URUN-YAPISI-PLANI.md`](URUN-YAPISI-PLANI.md). Kod yazılmadı.
 Ç-3 kapandı: bütçe Planla'da. **Açık kararlar:** Ç-4 Hesap Oluştur, Ç-5
-tanıtım sitesi. **Aşama 0:** deploy BİTTİ (316be15); kalan canlı turlar,
-hepsi panelde oturum ister: (1) AdvCampaign SITE taslağı → prova — İLK YARISI YAPILDI 2026-10-09:
-sohbet taslağı doğru kurdu (SITE, 300 ₺/gün, 9–15 Eki, İzmir + Aydın) ve
-dört hata çıktı, dördü de yazıldı, DEPLOY BEKLİYOR: (a) prova eksiği
-`niyet`e bağlı olduğu için amaç YENİDEN soruluyordu, (b) turun sonundaki
-soru kartı SEÇENEKSİZ geliyordu, (c) ekran sunucu bitirdiği hâlde
-"Düşünüyor…"da kalıyordu (sessiz akış bekçisi eklendi), (d) yenilenen
-sayfada kullanıcının görseli yerine "(yalnız medya bıraktı)" görünüyordu.
-Prova yapılmadı: taslakta site adresi eksik. Deploy sonrası aynı oturumda
-(Ege Birlik, 14:20) devam. Açık kullanım sorunu (karar bekliyor): asistan
-kullanıcının AÇIKÇA söylediği alanları da "öneri" yazıyor ve onay
-kartında yeniden onaylatıyor,
-(2) AdvStrategy aktarımı (giriş kutusu dolu mu, görseller modele ulaşıyor
-mu), (3) ~~Ege Birlik Yapı YouTube kartında "Prova et"~~ YAPILDI
-2026-10-09: üç ret (asgari bütçe 5 USD, konum seviyesi, reklam adı),
-düzeltmeler yazıldı, DEPLOY BEKLİYOR (migration yok), ayrıntı
-[`YOUTUBE-CANLI-PLAN.md`](akilli-boost/YOUTUBE-CANLI-PLAN.md) "Canlı prova
-1"; (4) Okuma API anahtarı + `tools/list`. Ardından Aşama 1 (menü ve görsel düzen).
+tanıtım sitesi.
+
+**AŞAMA 0 — CANLI TURLAR (2026-10-09).** Deploy bitmişti (316be15). Turlar
+yeni hatalar buldu; düzeltmeler yazıldı, push edildi (`6995168`,
+`ffb5f45`), **DEPLOY BEKLİYOR, migration yok.**
+
+1. **AdvCampaign site taslağı:** taslak doğru kuruldu (SITE, 300 ₺/gün,
+   9–15 Eki, İzmir + Aydın). Dört hata: (a) prova eksiği `niyet`e bağlı
+   olduğu için amaç YENİDEN soruluyordu, (b) turun sonundaki soru kartı
+   seçeneksiz geliyordu, (c) sunucu bitirdiği hâlde ekran "Düşünüyor…"da
+   kalıyordu, (d) yenilenen sayfada görsel yerine "(yalnız medya bıraktı)"
+   görünüyordu. Prova henüz YAPILMADI (taslakta site adresi eksik).
+   Deploy sonrası aynı oturumda (Ege Birlik, 9 Eki 14:20) devam.
+2. **AdvStrategy aktarımı: ÇALIŞIYOR.** Kutu plan metniyle dolu geliyor,
+   plan görseli ekli, görsel modele ulaşıyor, niyet FORM yazılıyor. Aynı
+   turda (a) hatası tekrarlandı. Plandaki "bu ay için bütçe" bütçeye
+   yazılmıyor ve soruluyor (aylık tutarın günlük mü toplam mı olduğu
+   belirsiz, sormak doğru).
+3. **YouTube "Prova et":** üç ret (asgari bütçe 5 USD karşılığı, konum
+   seviyesi, reklam adı). Ayrıntı:
+   [`YOUTUBE-CANLI-PLAN.md`](akilli-boost/YOUTUBE-CANLI-PLAN.md) "Canlı
+   prova 1". Deploy sonrası yeniden prova; bütçe kararı (K2) kullanıcıda.
+4. **Okuma API:** yapılmadı. Anahtar oluşturmak kimlik bilgisi üretmek
+   demek, kullanıcı yapacak.
+
+**Karar bekleyen kullanım sorunu:** asistan kullanıcının AÇIKÇA söylediği
+alanları da "öneri" diye yazıyor ve onay kartında yeniden onaylatıyor.
+
+Ardından Aşama 1 (menü ve görsel düzen).
 
 **SUNUCU 2026-10-09 (Hostinger yeniden başlattı) — TARİHÇE, 10:30 deploy'u
 bunu kapattı:** yarım kalan deploy API'yi
