@@ -1,7 +1,7 @@
 # Aşama 4 — İyileştir v1 + AI Asistan v1
 
-**Tarih:** 2026-10-09 · **Durum:** taslak kullanıcıya gösterildi, onay bekliyor
-(kod yazılmadı). Çerçeve: [`URUN-YAPISI-PLANI.md`](../URUN-YAPISI-PLANI.md) §2
+**Tarih:** 2026-10-09 · **Durum:** taslak onaylandı (Google'da da Uygula); Ajan 1 bitti
+([`MIMARI.md`](MIMARI.md)), sıradaki Ajan 2 ‖ 3. Çerçeve: [`URUN-YAPISI-PLANI.md`](../URUN-YAPISI-PLANI.md) §2
 "AI Asistan geri geliyor" ve Aşama 4. Düzen CLAUDE.md "Beş ajan, modül modül"
 (+ 6 · Tasarım Denetimi).
 
@@ -26,7 +26,7 @@ Menü İyileştir → tek sayfa `/iyilestir`, üç sekme:
 
 | # | Brief / plan | Depoda gerçek | Karar |
 |---|---|---|---|
-| İ-1 | "Uygulayan `campaign-actions`" | Yalnız **Meta** yazıyor; Google `applyAction` "henüz yazılmadı", LinkedIn `canWrite=false` | v1'de Uygula yalnız Meta. Google/LinkedIn önerisi **bilgi kartı**: kısıt yazılı, "Google Ads'te aç" (tahmin etmektense kısıtla) |
+| İ-1 | "Uygulayan `campaign-actions`" | Yalnız **Meta** yazıyor; Google `applyAction` "henüz yazılmadı", LinkedIn `canWrite=false` | **KAPANDI (kullanıcı, 2026-10-09): Meta VE Google'da Uygula.** Google yazma yolu yazılacak (MIMARI §3); ilk çağrı `validateOnly` prova + en küçük değişiklik. LinkedIn bilgi kartı |
 | İ-2 | "200 döndü doğrulama değil" (CLAUDE.md) | `campaign-actions` yazdıktan sonra platformdan OKUMUYOR; `after` gönderilen değer | Ajan 2: yazmadan sonra Meta'dan geri oku, eşleşmezse "uygulanamadı" + platformun değeri |
 | İ-3 | Yorgun kreatifi durdur | `campaign-actions` yalnız `level: 'campaign'` gönderiyor; sağlayıcı tipi `ad_group`/`ad` alıyor | Ajan 2: reklam (ve reklam seti) seviyesine genişlet |
 | İ-4 | Kreatif yorgunluğu sinyali | Sıklık/erişim reklam seviyesinde yalnız **Meta**'da (Google/LinkedIn erişim 0); `breakdown` sıklık döndürmüyor | v1 yorgunluk yalnız Meta, ekranda söyleniyor. Yeni okuyucu (Ajan 1 sözleşme, Ajan 2 SQL). **Eşikler canlı veriyle ÖLÇÜLECEK** (Ajan 1), tahmin edilmeyecek |
