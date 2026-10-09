@@ -13,6 +13,7 @@ import {
   type SohbetOlayi,
   type SorulabilirAlan,
   type TenantContext,
+  aracSonucNedeni,
 } from '@advetics/shared';
 import { gorunurMetin, type GeminiAraci, type GeminiMesaji, type GeminiParcasi, type GeminiSonucu } from '../../../yapay-zeka/gemini';
 import type { TxRunner } from '../yayin-motoru';
@@ -255,7 +256,8 @@ export class SohbetDongusu {
             await this.taslakBagla(o, c.taslakId);
           }
           if (c.konumAdaylari) durum.konumAdaylari = [...durum.konumAdaylari, ...c.konumAdaylari];
-          yield ver({ tur: 'arac_bitti', arac: ad, adim, hal: c.sonuc.hal, sureMs: Date.now() - bas });
+          const neden = aracSonucNedeni(c.sonuc);
+          yield ver({ tur: 'arac_bitti', arac: ad, adim, hal: c.sonuc.hal, sureMs: Date.now() - bas, ...(neden ? { neden } : {}) });
           if (c.taslakId && c.taslakSurumu !== undefined) yield ver({ tur: 'taslak_degisti', taslakId: c.taslakId, surum: c.taslakSurumu });
           if (ad === 'onay_karti_goster' && c.sonuc.hal === 'tamam') yield ver({ tur: 'kart', kart: c.sonuc.veri });
           sonuclar.push(aracSonucuBlogu(b, c.sonuc));

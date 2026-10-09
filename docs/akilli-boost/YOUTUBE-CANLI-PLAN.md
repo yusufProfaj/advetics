@@ -205,7 +205,7 @@ kur) ve K4 (token seviyesi) kullanıcıya sorulacak.
 |---|---|---|
 | K1 | İlk canlı denemede hangi workspace ve hangi video kullanılsın? | **Kapandı: Ege Birlik Yapı** (kanal bağlı). Video Aşama 3'te seçilecek |
 | K2 | İlk deneme için günlük bütçe ve süre ne olsun? | **Kapandı (2026-10-09): 250 ₺/gün** (ön ayar). Google'ın asgarisi 5 USD karşılığı; prova 2 geçti |
-| K3 | İlk yayın duraklatılmış kurulup Google Ads'te gözle kontrol edildikten sonra mı açılsın? | Evet, yalnız ilk yayında |
+| K3 | İlk yayın duraklatılmış kurulup Google Ads'te gözle kontrol edildikten sonra mı açılsın? | **Kapandı (2026-10-09): evet, duraklatılmış.** Hedef adres düzeltilmeden kurulmuyor |
 | K4 | Google Ads API Center'daki geliştirici token erişim seviyesi nedir (Explorer / Basic / Standard)? | Ekrandan okuyup bana söyle. Explorer ise günlük işlem kotası 2.880 ve gece senkronuyla çakışır |
 
 ## 4. Sıra ve tahmin

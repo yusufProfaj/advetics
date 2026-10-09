@@ -225,6 +225,12 @@ describe('tur', () => {
     expect(soru.soru.secenekler.length).toBeGreaterThan(0);
   });
 
+  it('KRİTİK: araç reddedilince SEBEBİ ekran olayında da var (yalnız modele değil)', async () => {
+    const c = sahteCalistirici(() => ({ sonuc: { hal: 'reddedildi', neden: 'Bu alan taslakta yok' } }));
+    const o = await topla(dongu(sahteModel([arac('taslak_alan_yaz', {}), metin('Olmadı.')]).fn, c.c).tur(CTX, oturumId, { metin: 'x', medyalar: [] }));
+    expect(o).toContainEqual(expect.objectContaining({ tur: 'arac_bitti', hal: 'reddedildi', neden: 'Bu alan taslakta yok' }));
+  });
+
   it('başka workspace’in medyası reddedilir', async () => {
     await expect(
       topla(dongu(sahteModel([metin('x')]).fn).tur(CTX, oturumId, { metin: 'a', medyalar: [{ varlikId: '77777777-7777-7777-7777-777777777777' }] })),

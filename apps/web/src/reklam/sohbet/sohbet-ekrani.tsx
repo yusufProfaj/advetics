@@ -603,6 +603,8 @@ function AsistanBalonu({ m, clientId, taslakId, yeniden }: { m: EkranMesaji; cli
               <li key={z.adim} className={z.hal === 'dustu' || z.hal === 'reddedildi' ? 'text-warn-strong' : ''}>
                 {aracIziMetni(z.arac as AracAdi, z.hal as 'suruyor' | AracSonucu['hal'])}
                 {z.sureMs !== null && <span className="ml-1 opacity-70">{sureMetni(z.sureMs)}</span>}
+                {/* SEBEP DE YAZILIYOR: "yapılamadı" tek başına teşhis edilemiyor. */}
+                {z.neden && z.hal !== 'tamam' && <span className="block text-ink-muted">{z.neden}</span>}
               </li>
             ))}
           </ol>

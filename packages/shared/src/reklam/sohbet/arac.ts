@@ -80,6 +80,12 @@ export const ARAC_IZI = {
   onay_karti_goster: { suruyor: 'Onay kartını hazırlıyorum', bitti: 'Onay kartını hazırladım' },
 } as const satisfies Record<AracAdi, { suruyor: string; bitti: string }>;
 
+/** Sonucun kullanıcıya gösterilecek sebebi; `tamam`da yok. */
+export function aracSonucNedeni(s: AracSonucu): string | undefined {
+  if (s.hal === 'tamam') return undefined;
+  return s.hal === 'dustu' ? s.platformMesaji : s.neden;
+}
+
 export function aracIziMetni(arac: AracAdi, hal: 'suruyor' | AracSonucu['hal']): string {
   const m = ARAC_IZI[arac];
   if (hal === 'suruyor') return m.suruyor;
@@ -94,7 +100,13 @@ export function aracIziMetni(arac: AracAdi, hal: 'suruyor' | AracSonucu['hal']):
 export type SohbetOlayi =
   | { tur: 'mesaj_basladi'; mesajId: string; sira: number }
   | { tur: 'arac_basladi'; arac: AracAdi; adim: number }
-  | { tur: 'arac_bitti'; arac: AracAdi; adim: number; hal: AracSonucu['hal']; sureMs: number }
+  /**
+   * `neden`: ret / sonuç yok / bekliyor hâlinde sunucunun SEBEBİ, düşüşte
+   * platformun mesajı. Önceden yalnız modele gidiyordu ve ekran "yapılamadı"
+   * yazıyordu: ilk canlı turda (2026-10-09) beş ret oldu ve hiçbirinin
+   * sebebi ne ekranda ne kayıtta okunabildi.
+   */
+  | { tur: 'arac_bitti'; arac: AracAdi; adim: number; hal: AracSonucu['hal']; sureMs: number; neden?: string }
   | { tur: 'metin'; parca: string }
   | { tur: 'taslak_degisti'; taslakId: string; surum: number }
   | { tur: 'soru'; soru: import('./soru').Soru }

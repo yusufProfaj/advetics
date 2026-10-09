@@ -27,12 +27,22 @@ tanıtım sitesi.
 
 1. **YouTube "Prova et": GEÇTİ** (250 ₺/gün, kullanıcı kararı). Üç ret
    düzeltildi ve Google'da doğrulandı (CLAUDE.md "Demand Gen — prova").
-   Sıradaki: Aşama 3, ilk gerçek yayın — K3/K4 sorulacak; kartın hedef
-   adresi (`egebirlikseasight.com`, video Garden Villas'a ait) kontrol.
+   K3 KAPANDI: ilk yayın DURAKLATILMIŞ kurulacak (kullanıcı). Kartın
+   hedef adresi yanlış (`egebirlikseasight.com`); kullanıcının verdiği
+   `egebirlikgardenvillas.com` DNS'te ÇÖZÜLMÜYOR (2026-10-09) — doğru adres
+   gelmeden kurulmadı. K4 (token seviyesi) hâlâ açık.
 2. **AdvCampaign site taslağı:** dört ekran hatası düzeltildi ve canlıda
    doğrulandı (amaç tekrar sorulmuyor, ekran takılmıyor, görsel balonda).
-   Prova HENÜZ YOK: oturum (Ege Birlik, 9 Eki 14:20) özel reklam kategorisi
-   beyanını bekliyor. Konut projesi; beyan kullanıcının kararı.
+   Konut beyanı yapıldı (kullanıcı), öneriler onaylandı, **Meta provası
+   REDDETTİ**: kampanya ve kreatif geçti; reklam seti ve reklam
+   `special_ad_categories[0] ... got "2"` ile düştü. Gönderilen değer
+   `["HOUSING"]`; kampanya tek başına geçiyor, satır içi `campaign_spec`
+   içinde Meta değeri kendi iç sayısına çevirip reddediyor gibi. Gerçek
+   kurulum `campaign_id` ile ve bu yoldan geçmiyor ama prova bunu
+   kanıtlayamıyor. ÇÖZÜM ÖLÇÜLMELİ (kategoriyi provadan atmak konut
+   kısıtlarının denetimini de susturur — yalancı prova). Ayrıca:
+   araç retlerinin SEBEBİ artık ekranda (önceden yalnız modele gidiyordu);
+   özel kategori sorusu yalnız Taslak sekmesinde, dar ekranda görünmüyor.
 3. **AdvStrategy aktarımı: ÇALIŞIYOR** (kutu dolu, görsel modele ulaşıyor).
 4. **Okuma API:** kullanıcı anahtar oluşturacak.
 

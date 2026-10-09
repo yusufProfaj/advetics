@@ -98,6 +98,14 @@ describe('olayUygula', () => {
     expect(sureMetni(1200)).toBe('1,2 sn');
   });
 
+  it('KRİTİK: ret SEBEBİ izde taşınıyor (canlı tur 2026-10-09: beş "yapılamadı", sıfır sebep)', () => {
+    const z = aracIzleri([
+      { tur: 'arac_basladi', arac: 'taslak_alan_yaz', adim: 1 },
+      { tur: 'arac_bitti', arac: 'taslak_alan_yaz', adim: 1, hal: 'reddedildi', sureMs: 5, neden: 'Bütçe tutarı okunamadı' },
+    ]);
+    expect(z[0]).toMatchObject({ hal: 'reddedildi', neden: 'Bütçe tutarı okunamadı' });
+  });
+
   it('bekleyen soru yalnız SON ve TAMAMLANMIŞ asistan mesajında', () => {
     const soru: Soru = { alan: 'butce', metin: 'Ne kadar?', secenekler: [], serbest: true, sira: 1 };
     const m = uygula([{ tur: 'mesaj_basladi', mesajId: 'a', sira: 2 }, { tur: 'soru', soru }, { tur: 'bitti', durum: 'tamam', girdiToken: 0, ciktiToken: 0 }]);

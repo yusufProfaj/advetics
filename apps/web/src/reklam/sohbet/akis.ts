@@ -92,13 +92,13 @@ export function olayUygula(mesajlar: EkranMesaji[], e: SohbetOlayi): EkranMesaji
 }
 
 /** Ekranda araç izi satırları: başladı + bitti eşleşir; bitmeyen "sürüyor". */
-export function aracIzleri(olaylar: SohbetOlayi[]): Array<{ arac: string; adim: number; hal: string | 'suruyor'; sureMs: number | null }> {
-  const izler: Array<{ arac: string; adim: number; hal: string; sureMs: number | null }> = [];
+export function aracIzleri(olaylar: SohbetOlayi[]): Array<{ arac: string; adim: number; hal: string | 'suruyor'; sureMs: number | null; neden?: string }> {
+  const izler: Array<{ arac: string; adim: number; hal: string; sureMs: number | null; neden?: string }> = [];
   for (const e of olaylar) {
     if (e.tur === 'arac_basladi') izler.push({ arac: e.arac, adim: e.adim, hal: 'suruyor', sureMs: null });
     if (e.tur === 'arac_bitti') {
       const i = izler.findIndex((x) => x.adim === e.adim);
-      if (i >= 0) izler[i] = { arac: e.arac, adim: e.adim, hal: e.hal, sureMs: e.sureMs };
+      if (i >= 0) izler[i] = { arac: e.arac, adim: e.adim, hal: e.hal, sureMs: e.sureMs, ...(e.neden ? { neden: e.neden } : {}) };
     }
   }
   return izler;
