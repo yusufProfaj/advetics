@@ -7,6 +7,7 @@ import { KaydirmaIpucu } from '@/components/kaydirma-ipucu';
 import { PlatformLogo } from '@/components/platform-logo';
 import { Delta, Mecra, SiraliBaslik, TabloBasligi, mikroSayi } from '@/components/breakdown-table';
 import { baglanti } from '@/lib/baglanti';
+import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 import { formatDecimal, formatMoney, formatNumber, formatPercent } from '@/lib/format';
 import { kirilimSirala, type Siralama } from '@/lib/kirilim-siralama';
 
@@ -103,7 +104,7 @@ export function HesapKirilimi({
                         <PlatformLogo kind={platformKanali(r.platform)} className="h-4 w-4 shrink-0" />
                         {r.izleniyor ? (
                           <Link
-                            href={baglanti('/dashboard', tasinan, r.hedef)}
+                            href={baglanti(REKLAM_YONETICISI, tasinan, r.hedef)}
                             className="truncate font-medium text-ink transition hover:text-brand-strong hover:underline"
                             title={`${r.ad} — içine gir`}
                           >

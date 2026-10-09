@@ -37,7 +37,10 @@ describe('KRİTİK: özet hatası ekranda yazıyor', () => {
   });
 
   it('platformun KENDİ cümlesi kullanılıyor', () => {
-    expect(KAYNAK).toContain('e instanceof ApiRequestError ? e.message');
+    // Yardımcı iki sayfanın ortak dosyasında; sayfa onu kullanıyor.
+    expect(KAYNAK).toContain("import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';");
+    const YARDIMCI = readFileSync(join(__dirname, '..', '..', '..', 'lib', 'sayfa-yardimcilari.ts'), 'utf8');
+    expect(YARDIMCI).toContain('e instanceof ApiRequestError ? e.message');
   });
 });
 

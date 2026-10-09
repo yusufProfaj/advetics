@@ -1,8 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { platformKanali } from '@advetics/shared';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import type { MetricsClientRow } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { PlatformLogo } from '@/components/platform-logo';
@@ -31,11 +32,21 @@ import { KaydirmaIpucu } from '@/components/kaydirma-ipucu';
 export function MusteriTablosu({
   rows,
   karsilastir,
+  limit,
+  tumuHref,
 }: {
   rows: MetricsClientRow[];
   karsilastir: boolean;
+  /**
+   * Genel Bakış ilk birkaç satırı gösteriyor, tam liste Reklam
+   * Yöneticisi'nde. Kesme SESSİZ DEĞİL: başlıkta "5 / 12" ve altta tam
+   * listeye bağlantı. Toplam satırı yine BÜTÜN satırların toplamı.
+   */
+  limit?: number;
+  tumuHref?: string;
 }) {
   const router = useRouter();
+  const yol = usePathname() ?? '/dashboard';
   const [isPending, startTransition] = useTransition();
   const [gecilen, setGecilen] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
@@ -49,7 +60,10 @@ export function MusteriTablosu({
         body: JSON.stringify({ clientId }),
       });
       startTransition(() => {
-        router.replace('/dashboard');
+        // AYNI SAYFADA KALIYOR (Genel Bakış ya da Reklam Yöneticisi):
+        // kapsam değişti diye kullanıcıyı başka ekrana atmak, hangi
+        // ekranda olduğunu kaybettiriyordu. Sorgu yine temizleniyor.
+        router.replace(yol);
         router.refresh();
       });
     } catch (e) {
@@ -67,6 +81,7 @@ export function MusteriTablosu({
 
   const toplamHarcama = rows.reduce((a, r) => a + BigInt(r.spendMicros), 0n);
   const harcayan = rows.filter((r) => r.spendMicros !== '0').length;
+  const gosterilen = limit === undefined ? rows : rows.slice(0, limit);
 
   const bekleyenAd = rows.find((r) => r.clientId === gecilen)?.name ?? null;
 
@@ -90,7 +105,7 @@ export function MusteriTablosu({
             arasındaki fark, bu ekranda sorulan sorunun kendisi.
           */}
           <p className="mt-0.5 text-xs text-ink-muted">
-            {rows.length} workspace · {harcayan} tanesinin bu dönemde harcaması var
+            {gosterilen.length < rows.length ? `${gosterilen.length} / ${rows.length}` : rows.length} workspace · {harcayan} tanesinin bu dönemde harcaması var
           </p>
         </div>
         <p className="text-xs text-ink-muted">Satıra tıklayınca o workspace’e geçilir</p>
@@ -123,7 +138,7 @@ export function MusteriTablosu({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {gosterilen.map((r) => (
                 <tr
                   key={r.clientId}
                   onClick={() => void gec(r.clientId)}
@@ -255,6 +270,13 @@ export function MusteriTablosu({
           </table>
           </div>
           <KaydirmaIpucu />
+          {tumuHref && (
+            <div className="flex justify-end border-t border-line px-4 py-2 text-xs">
+              <Link href={tumuHref} className="font-semibold text-brand-strong hover:underline">
+                Tümü Reklam Yöneticisi’nde →
+              </Link>
+            </div>
+          )}
         </>
       )}
     </section>

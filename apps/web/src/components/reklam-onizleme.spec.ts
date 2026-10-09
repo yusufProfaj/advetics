@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { onizlemeAcikMi } from './breakdown-table';
 
 /**
  * ═══ REKLAM ÖNİZLEMESİ — HİYERARŞİNİN SON BASAMAĞI ═══
@@ -36,27 +37,53 @@ describe('tarama boşa düşmüyor', () => {
 });
 
 describe('açılır önizleme', () => {
-  it('KRİTİK: AYNI ANDA TEK ÖNİZLEME AÇIK', () => {
-    /*
-     * Kullanıcının istediği davranış bu. Tek bir kimlik tutmak onu
-     * kendiliğinden sağlıyor; açık KÜMESİ tutup "yalnızca biri" kuralını
-     * elle uygulamak, kuralın bir dalda unutulduğu yer olurdu.
-     */
-    expect(TABLO).toContain('const [acikReklam, setAcikReklam] = useState<string | null>(null)');
-    expect(TABLO).toContain("setAcikReklam((a) => (a === r.entityId ? null : r.entityId))");
+  /*
+   * 2026-10-09: anahtar eklendi ("açınca hepsi açık, kapatınca hepsi kapalı,
+   * tek tek elle de açılmalı"). Eski "aynı anda tek önizleme" isteği anahtar
+   * KAPALIYKEN hâlâ geçerli. Karar saf fonksiyonda ve ÇALIŞTIRILARAK
+   * sınanıyor: kaynak taraması kuralı değil yalnızca yazımı kilitlerdi.
+   */
+  const bos = new Set<string>();
+  it('KRİTİK: anahtar KAPALIYKEN aynı anda tek önizleme açık', () => {
+    const d = { hepsiAcik: false, tekAcik: 'a', kapatilan: bos };
+    expect(onizlemeAcikMi(d, 'a')).toBe(true);
+    expect(onizlemeAcikMi(d, 'b')).toBe(false);
+    // Başka satıra tıklamak tek kimliği DEĞİŞTİRİYOR, kümeye eklemiyor.
+    expect(TABLO).toContain('kurVeAc([id], () => setTekAcik(id));');
   });
 
-  it('KRİTİK: yalnızca REKLAM seviyesinde açılıyor', () => {
+  it('KRİTİK: anahtar AÇIKKEN hepsi açık, tek tek kapatılan kapalı', () => {
+    const d = { hepsiAcik: true, tekAcik: null, kapatilan: new Set(['b']) };
+    expect(onizlemeAcikMi(d, 'a')).toBe(true);
+    expect(onizlemeAcikMi(d, 'b')).toBe(false);
+  });
+
+  it('KRİTİK: anahtar değişince tek tek seçimler sıfırlanıyor', () => {
+    // Yoksa "hepsini kapat" deyip bir satırı açık bulmak mümkün olurdu.
+    const g = TABLO.slice(TABLO.indexOf('function hepsiniDegistir()'));
+    expect(g.length).toBeGreaterThan(50);
+    expect(g.slice(0, 200)).toContain('setKapatilan(new Set());');
+    expect(g.slice(0, 200)).toContain('setTekAcik(null);');
+  });
+
+  it('KRİTİK: anahtar ve satır açma yalnızca REKLAM seviyesinde', () => {
     // Kampanya ve reklam setinde satır bir ALT LİSTEYE gidiyor; orada
     // açılır kutu, iki farklı tıklama anlamı demekti.
     expect(TABLO).toContain(": level === 'ad' ? (");
-    expect(TABLO).toContain('{acikReklam === r.entityId && (');
+    expect(TABLO).toContain("{level === 'ad' && rows.length > 0 && (");
   });
 
   it('KRİTİK: durum ERİŞİLEBİLİR olarak duyuruluyor', () => {
-    // Açılıp kapanan bir düğme klavye ve ekran okuyucu için de bir durum
-    // taşıyor; yalnızca oku döndürmek onu yalnızca göze anlatırdı.
-    expect(TABLO).toContain('aria-expanded={acikReklam === r.entityId}');
+    expect(TABLO).toContain('aria-expanded={acikMi(r.entityId)}');
+    expect(TABLO).toContain('role="switch"');
+    expect(TABLO).toContain('aria-checked={hepsiAcik}');
+  });
+
+  it("KRİTİK: animasyon hatasız — açılmış önizleme DOM'da kalıyor, kapalıyken inert", () => {
+    expect(TABLO).toContain('{(acilmis.has(r.entityId) || acikMi(r.entityId)) && (');
+    expect(TABLO).toContain('inert={!acikMi(r.entityId)}');
+    expect(TABLO).toContain('transition-[grid-template-rows]');
+    expect(TABLO).toContain('requestAnimationFrame(() => requestAnimationFrame(ac));');
   });
 
   it('KRİTİK: önizleme KENDİ SATIRINDA, colSpan ile', () => {

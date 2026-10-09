@@ -100,10 +100,14 @@ describe('yerleşim', () => {
     expect(SAYFA).toContain("onayYetkisi={session.permissions.includes('strategy.approve')}");
   });
 
-  it('kutu başlığın hemen altında, kontrollerin üstünde', () => {
+  it('kutu sağ sütunda, Performans ile aynı ızgarada (2026-10-09 düzeni)', () => {
+    // Kullanıcı: "daraltıp ayrı bir kart yap". Tam genişlik liste metrikleri
+    // ekranın altına itiyordu; Google Ads'te teşhis kartı da yan sütunda.
+    const izgara = SAYFA.indexOf('lg:grid-cols-3');
     const kutu = SAYFA.indexOf('<BekleyenIslerKutusu');
-    expect(kutu).toBeGreaterThan(SAYFA.indexOf('<SayfaBasligi'));
-    expect(kutu).toBeLessThan(SAYFA.indexOf('<PlatformTabs'));
+    expect(izgara).toBeGreaterThan(SAYFA.indexOf('<SayfaBasligi'));
+    expect(kutu).toBeGreaterThan(izgara);
+    expect(kutu).toBeGreaterThan(SAYFA.indexOf('<PerformansKutulari'));
   });
 
   it('KRİTİK: Boost rozeti kutuyla AYNI sözden', () => {

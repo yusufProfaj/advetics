@@ -152,6 +152,10 @@ yapılmış.
 
 ### Aşama 3 — Yönet: Reklam Yöneticisi
 
+**İLK PARÇA YAZILDI 2026-10-09:** iniş tablosu taşındı, ad değişti,
+önizleme anahtarı geldi, Genel Bakış özet düzenine geçti. Kalan: satır
+içi durdur/başlat/bütçe ve son eşitleme sütunu.
+
 **Kullanıcının tarifi (2026-10-09), bu aşamanın çerçevesi:**
 
 - Genel Bakış'ın ALTINDAKİ şirket listesi (`SirketTablosu` /

@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { TUM_SIRKETLER } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
+import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 
 /**
  * ═══ EKMEK KIRINTISI — ŞİRKET › WORKSPACE › KAMPANYA › REKLAM SETİ ═══
@@ -48,6 +49,7 @@ export function HiyerarsiYolu({
   tasinan: Record<string, string | undefined>;
 }) {
   const router = useRouter();
+  const yol = usePathname() ?? '/dashboard';
   const [isPending, startTransition] = useTransition();
   const [bekleyen, setBekleyen] = useState<number | null>(null);
   const [hata, setHata] = useState<string | null>(null);
@@ -82,7 +84,10 @@ export function HiyerarsiYolu({
          * EZİYOR: `?musteri=` ya da `?kampanya=` kalırsa üst bar yeni
          * kapsamı yazarken gövde eskisini gösterir.
          */
-        router.replace('/dashboard');
+        // AYNI SAYFADA KALIYOR (Genel Bakış ya da Reklam Yöneticisi):
+        // kapsam değişti diye kullanıcıyı başka ekrana atmak, hangi
+        // ekranda olduğunu kaybettiriyordu. Sorgu yine temizleniyor.
+        router.replace(yol);
         router.refresh();
       });
     } catch (e) {
@@ -120,7 +125,7 @@ export function HiyerarsiYolu({
                 </button>
               ) : (
                 <Link
-                  href={baglanti('/dashboard', tasinan, b.sorgu ?? {})}
+                  href={baglanti(REKLAM_YONETICISI, tasinan, b.sorgu ?? {})}
                   className="rounded px-1 py-0.5 text-ink-muted transition hover:text-brand-strong"
                 >
                   {b.ad}

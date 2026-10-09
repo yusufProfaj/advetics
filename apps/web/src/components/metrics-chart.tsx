@@ -25,6 +25,7 @@ export function MetricsChart({
   compareFrom,
   compareTo,
   currency,
+  cerceve = true,
 }: {
   points: MetricsTimeseriesPoint[];
   /** Karşılaştırma dönemi. `null` = karşılaştırma kapalı (boş dizi DEĞİL). */
@@ -34,6 +35,12 @@ export function MetricsChart({
   compareFrom?: string | null;
   compareTo?: string | null;
   currency: string | null;
+  /**
+   * `false`: grafik Performans kartının İÇİNDE çiziliyor, kendi çerçevesi
+   * yok. Kart içinde kart, Genel Bakış'ın "her şey ayrı kutu" görünümünün
+   * sebebiydi.
+   */
+  cerceve?: boolean;
 }) {
   if (points.length === 0) {
     /*
@@ -47,7 +54,11 @@ export function MetricsChart({
      */
     const oncekindeVardi = previous !== null && previous !== undefined && previous.length > 0;
     return (
-      <div className="flex h-56 flex-col items-center justify-center gap-1 rounded-xl border border-line bg-surface px-4 text-center">
+      <div
+        className={`flex h-56 flex-col items-center justify-center gap-1 px-4 text-center ${
+          cerceve ? 'rounded-xl border border-line bg-surface' : ''
+        }`}
+      >
         <p className="text-sm text-ink-muted">Bu aralıkta veri yok.</p>
         {oncekindeVardi && (
           <p className="text-xs text-warn">
@@ -123,7 +134,7 @@ export function MetricsChart({
   const labelEvery = Math.max(1, Math.ceil(points.length / 6));
 
   return (
-    <figure className="rounded-xl border border-line bg-surface p-4">
+    <figure className={cerceve ? 'rounded-xl border border-line bg-surface p-4' : 'px-4 pb-3 pt-4'}>
       <figcaption className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-ink">Günlük harcama ve dönüşüm</h3>
         <div className="flex items-center gap-3 text-xs text-ink-muted">

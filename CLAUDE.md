@@ -1322,11 +1322,19 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   bozan şeyler yine sorulur.
 - **MENÜ YEDİ BÖLÜM, TÜRKÇE** (kullanıcı kararı, 2026-10-09): Genel Bakış ·
   Planla (AdvStrategy, Aylık Bütçe) · Oluştur (Akıllı Boost, AdvCampaign) ·
-  Yönet (Reklam Keşfi, Potansiyel Müşteriler) · İyileştir (Kurallar) ·
+  Yönet (Reklam Yöneticisi, Potansiyel Müşteriler) · İyileştir (Kurallar) ·
   Raporlar · Base (Marka Merkezi) + Ayarlar. Yalnızca ekranı olan satır
   menüye girer. Yol haritası `docs/URUN-YAPISI-PLANI.md`.
+- **GENEL BAKIŞ ÖZET, İNİŞ REKLAM YÖNETİCİSİ'NDE** (2026-10-09, kullanıcı
+  kararı). Şirket → workspace → mecra/hesap → kampanya → reklam seti →
+  reklam iniş tablosu Genel Bakış'tan `/ads-explorer`a (Reklam Yöneticisi)
+  taşındı; bağlantılar `lib/reklam-yoneticisi.ts`ten. Genel Bakış ilk beşi
+  gösterip oraya bağlanıyor ve eski `?kampanya=`/`?hesap=` adreslerini
+  oraya yönlendiriyor. Eski reklam kartları ekranı (arama, "Sorunlu")
+  `/ads-explorer/galeri` (Reklam Galerisi). Özet kutuları iki sayfada ortak
+  (`components/genel-bakis/ozet-parcalari.tsx`).
 - **MÜŞTERİ HESABI DÖRT EKRAN GÖRÜR** (2026-10-08): Genel Bakış, Reklam
-  Keşfi, **AdvStrategy**, Raporlar. AdvStrategy'de planı görür ve
+  Yöneticisi (eski adı Reklam Keşfi), **AdvStrategy**, Raporlar. AdvStrategy'de planı görür ve
   ONAYLAR, yazamaz. Gerekçe: onay panelde alınınca ajans PDF gönderip
   cevap bekleyip elle işlemiyor; plan onaylanır onaylanmaz AdvCampaign'e
   geçebiliyor. `nav-sections.spec.ts` dört ekranı kilitliyor.

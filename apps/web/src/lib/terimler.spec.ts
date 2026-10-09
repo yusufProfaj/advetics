@@ -49,7 +49,8 @@ describe('sözlük', () => {
 describe('kartlar sözlüğü kullanıyor', () => {
   const KART = yorumsuz('components/metric-card.tsx');
   const SERIT = yorumsuz('components/metric-strip.tsx');
-  const SAYFA = yorumsuz('app/(dashboard)/dashboard/page.tsx');
+  // Kutular 2026-10-09'dan beri ortak modülde: Genel Bakış ve Reklam Yöneticisi aynısını çiziyor.
+  const SAYFA = yorumsuz('components/genel-bakis/ozet-parcalari.tsx');
 
   it('KRİTİK: kart ve şerit düz etiket kabul etmiyor', () => {
     // Düz `label` kabul edilseydi yeni bir kart sözlüğü atlayıp iki harfle eklenirdi.

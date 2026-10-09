@@ -54,11 +54,13 @@ describe('genel bakışta', () => {
     // o katmanda anlamsız ve sorgu ham JSONB gövdelerini tarıyor.
     // İDDİA UÇLA BİRLİKTE OKUNUYOR: koşul tek başına başka bir sorgunun da
     // koşulu olabilir; aranan şey DÖNÜŞÜM ucunun o dalın altında olması.
-    const i = SAYFA.indexOf('/metrics/donusum-detay');
-    expect(i).toBeGreaterThan(-1);
-    const oncesi = SAYFA.slice(Math.max(0, i - 200), i);
-    expect(oncesi).toContain('mcc || ajansGorunumu');
-    expect(oncesi).toContain('Promise.resolve(null)');
+    // 2026-10-09: Genel Bakış'ta koşul tek bayrakta (`workspaceGorunumu` =
+    // ne ajans ne şirket kapsamı). İddia UÇLA BİRLİKTE: bayrağın hemen
+    // ardından bu çağrı gelmeli.
+    expect(SAYFA).toContain('const workspaceGorunumu = !ajansGorunumu && !mcc;');
+    expect(SAYFA).toMatch(
+      /workspaceGorunumu\s*\n\s*\? serverApiFetch<MetricsConversionDetail>\(`\/metrics\/donusum-detay\?\$\{base\}`\)/,
+    );
   });
 
   it('KRİTİK: BOŞ LİSTENİN SEBEBİ ORTAK ÜRETİCİDEN', () => {

@@ -12,7 +12,21 @@ sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
 temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
 RLS politikası var, platform sahibi yalnız hello@profaj.com.
-**Bekleyen deploy:** yok (canlı `5860460`, 2026-10-09 14:12, 80 sn, migration yok).
+**Bekleyen deploy:** bu commit (Genel Bakış yeni düzen + Reklam Yöneticisi +
+bekleyen işler dar kart + ray tıklaması + animasyon). Migration YOK, API
+değişmedi, yalnız panel.
+
+**AŞAMA 3 — REKLAM YÖNETİCİSİ + GENEL BAKIŞ DÜZENİ (2026-10-09).** Kullanıcı
+iki HTML taslağını onayladı ("mükemmel olmuş"). İniş tablosu Genel
+Bakış'tan Reklam Yöneticisi'ne (`/ads-explorer`) taşındı, menü adı
+değişti, eski kart ekranı Reklam Galerisi (`/ads-explorer/galeri`).
+Reklam düzeyinde "Önizlemeler" anahtarı: açıkken hepsi açık, kapalıyken
+eski kural (tek önizleme). Genel Bakış: solda Performans tek kart (kutular +
+grafik + ikincil şerit) ve şirket/workspace/hesap + en çok harcayan 5
+kampanya; sağda bekleyen işler, bütçe, dönüşümler. VERİ EKSİLMEDİ.
+ÖLÇÜLMEDİ: canlı ekran görüntüsü (deploy sonrası tasarım denetimi).
+Sonra: satır içi durdur/başlat/bütçe (Aşama 3'ün kalanı), grafikte metrik
+seçimi (taslakta vardı, kodda yok: grafik hâlâ harcama + dönüşüm).
 
 **ÜRÜN YAPISI PLANI (2026-10-09, kullanıcı isteği):** panel yedi bölüme
 geçiyor: Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar ·

@@ -157,3 +157,42 @@ describe('tablolarda kaydırma', () => {
     }
   });
 });
+
+/*
+ * ═══ 2026-10-09 DÜZENİ: GENEL BAKIŞ ÖZET, İNİŞ REKLAM YÖNETİCİSİ'NDE ═══
+ */
+describe('iniş Reklam Yöneticisi’ne taşındı', () => {
+  it('KRİTİK: eski iniş adresi oraya YÖNLENİYOR — süzgeç sessizce düşmüyor', () => {
+    // Paylaşılmış `/dashboard?kampanya=…` burada açılsaydı kampanya süzgeci
+    // düşer ve workspace geneli o kampanyanınki sanılırdı.
+    for (const k of ["'hesap'", "'kampanya'", "'reklamSeti'", "'seviye'"]) {
+      expect(SAYFA.slice(SAYFA.indexOf('const INIS_PARAMETRELERI'), SAYFA.indexOf('as const'))).toContain(k);
+    }
+    expect(SAYFA).toContain('redirect(`${REKLAM_YONETICISI}?${tasi}`);');
+  });
+
+  it('KRİTİK: şirket ve workspace listesi KESİLİYOR ama söyleniyor', () => {
+    expect(SAYFA).toContain('limit={OZET_SATIR}');
+    expect(SAYFA).toContain('tumuHref={REKLAM_YONETICISI}');
+    for (const t of ['sirket-tablosu.tsx', 'musteri-tablosu.tsx']) {
+      const kod = tablo(t);
+      expect(kod).toContain('gosterilen.length < rows.length ? `${gosterilen.length} / ${rows.length}`');
+      expect(kod).toContain('{gosterilen.map((r) => (');
+    }
+  });
+});
+
+describe('Performans tek kart', () => {
+  it('KRİTİK: kutular, grafik ve ikincil şerit AYNI çerçevede', () => {
+    const bas = SAYFA.indexOf('aria-label="Performans"');
+    const son = SAYFA.indexOf('</section>', bas);
+    const kart = SAYFA.slice(bas, son);
+    expect(kart).toContain('<PerformansKutulari');
+    expect(kart).toContain('cerceve={false}');
+    expect(kart).toContain('<IkincilSerit');
+  });
+
+  it('bitişik kutu kendi çerçevesini çizmiyor', () => {
+    expect(KART).toContain("? '@container relative min-w-0 bg-surface p-4'");
+  });
+});

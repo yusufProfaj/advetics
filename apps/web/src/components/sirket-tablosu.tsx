@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { platformKanali } from '@advetics/shared';
 import type { MetricsOrganizationRow } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
@@ -31,11 +32,21 @@ import { KaydirmaIpucu } from '@/components/kaydirma-ipucu';
 export function SirketTablosu({
   rows,
   karsilastir,
+  limit,
+  tumuHref,
 }: {
   rows: MetricsOrganizationRow[];
   karsilastir: boolean;
+  /**
+   * Genel Bakış ilk birkaç satırı gösteriyor, tam liste Reklam
+   * Yöneticisi'nde. Kesme SESSİZ DEĞİL: başlıkta "5 / 12" ve altta tam
+   * listeye bağlantı. Toplam satırı yine BÜTÜN satırların toplamı.
+   */
+  limit?: number;
+  tumuHref?: string;
 }) {
   const router = useRouter();
+  const yol = usePathname() ?? '/dashboard';
   const [isPending, startTransition] = useTransition();
   const [gecilen, setGecilen] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
@@ -55,7 +66,10 @@ export function SirketTablosu({
          * yani URL parametresi COOKIE'Yİ EZİYOR: temizlenmezse üst bar yeni
          * şirketi yazarken gövde eskisinin verisini gösterir.
          */
-        router.replace('/dashboard');
+        // AYNI SAYFADA KALIYOR (Genel Bakış ya da Reklam Yöneticisi):
+        // kapsam değişti diye kullanıcıyı başka ekrana atmak, hangi
+        // ekranda olduğunu kaybettiriyordu. Sorgu yine temizleniyor.
+        router.replace(yol);
         router.refresh();
       });
     } catch (e) {
@@ -68,6 +82,7 @@ export function SirketTablosu({
 
   const toplamHarcama = rows.reduce((a, r) => a + BigInt(r.spendMicros), 0n);
   const harcayan = rows.filter((r) => r.spendMicros !== '0').length;
+  const gosterilen = limit === undefined ? rows : rows.slice(0, limit);
   const bekleyenAd = rows.find((r) => r.organizationId === gecilen)?.name ?? null;
 
   return (
@@ -82,7 +97,7 @@ export function SirketTablosu({
           {/* SESSİZ KESME YOK: kaç şirket listelendiği ve kaçının bu dönemde
               harcaması olduğu ayrı ayrı yazılı. */}
           <p className="mt-0.5 text-xs text-ink-muted">
-            {rows.length} şirket · {harcayan} tanesinin bu dönemde harcaması var
+            {gosterilen.length < rows.length ? `${gosterilen.length} / ${rows.length}` : rows.length} şirket · {harcayan} tanesinin bu dönemde harcaması var
           </p>
         </div>
         <p className="text-xs text-ink-muted">Satıra tıklayınca o şirkete geçilir</p>
@@ -115,7 +130,7 @@ export function SirketTablosu({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {gosterilen.map((r) => (
                 <tr
                   key={r.organizationId}
                   onClick={() => void gec(r.organizationId)}
@@ -244,6 +259,13 @@ export function SirketTablosu({
           </table>
           </div>
           <KaydirmaIpucu />
+          {tumuHref && (
+            <div className="flex justify-end border-t border-line px-4 py-2 text-xs">
+              <Link href={tumuHref} className="font-semibold text-brand-strong hover:underline">
+                Tümü Reklam Yöneticisi’nde →
+              </Link>
+            </div>
+          )}
         </>
       )}
     </section>

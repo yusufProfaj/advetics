@@ -26,6 +26,7 @@ export function MetricCard({
   change,
   inverse = false,
   emphasis = false,
+  bitisik = false,
 }: {
   terim: TerimAnahtari;
   value: string;
@@ -33,6 +34,13 @@ export function MetricCard({
   change?: number | null;
   inverse?: boolean;
   emphasis?: boolean;
+  /**
+   * BİTİŞİK: kutu tek bir "Performans" kartının İÇİNDE, komşularıyla ince
+   * çizgiyle ayrılıyor (Google Ads'in metrik kutuları). Ayrı kart olarak
+   * dört gölge ve dört çerçeve, özeti dört ayrı düşünce gibi gösteriyordu.
+   * Çizgiyi kap çiziyor (`gap-px bg-line`), kutu yalnızca zemin.
+   */
+  bitisik?: boolean;
 }) {
 
   return (
@@ -46,9 +54,13 @@ export function MetricCard({
      * kenarlık ve daha büyük rakam kullanmak renkten bağımsız çalışıyor.
      */
     <div
-      className={`@container relative rounded-xl border bg-surface p-4 shadow-kart ${
-        emphasis ? 'border-brand/40' : 'border-line'
-      }`}
+      className={
+        bitisik
+          ? '@container relative min-w-0 bg-surface p-4'
+          : `@container relative rounded-xl border bg-surface p-4 shadow-kart ${
+              emphasis ? 'border-brand/40' : 'border-line'
+            }`
+      }
     >
       {/*
         VURGULU KART: üstte marka renginde İNCE bir şerit. Zemin YİNE

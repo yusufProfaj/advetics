@@ -14,6 +14,11 @@ const SAYFA = readFileSync(
   join(__dirname, '..', 'app', '(dashboard)', 'dashboard', 'page.tsx'),
   'utf8',
 );
+/** Reklam Yöneticisi: iniş tablosunun yeni evi (2026-10-09). Aynı kural orada da geçerli. */
+const YONETICI = readFileSync(
+  join(__dirname, '..', 'app', '(dashboard)', 'ads-explorer', 'page.tsx'),
+  'utf8',
+);
 
 /**
  * Yorum satırlarını atar.
@@ -74,14 +79,17 @@ describe('MCC koşulu', () => {
      * Gösterilmeyecek bir sorguyu koşmak, ekranın en ağır sorgusunun boşa
      * gitmesi demek. `breakdown` çağrısı `mcc` koşuluna bağlı.
      */
-    const i = SAYFA_KOD.indexOf('/metrics/breakdown');
+    // GENEL BAKIŞ: kampanya listesi yalnızca workspace kapsamında ve bayrak
+    // ÇAĞRININ HEMEN ÖNÜNDE (dosyanın başka yerindeki bir geçişe takılmasın).
+    expect(SAYFA_KOD).toContain('const workspaceGorunumu = !ajansGorunumu && !mcc;');
+    expect(SAYFA_KOD).toMatch(
+      /workspaceGorunumu\s*\n?\s*\? serverApiFetch<MetricsBreakdownRow\[\]>\(`\/metrics\/breakdown\?/,
+    );
+    // REKLAM YÖNETİCİSİ: ajans, MCC ve mecra/hesap basamağında atlanıyor.
+    const yk = kod(YONETICI);
+    const i = yk.indexOf('/metrics/breakdown');
     expect(i).toBeGreaterThan(-1);
-    // Koşul ÇAĞRIDAN GERİYE aranıyor: dosyanın başka bir yerindeki `mcc`
-    // geçişine takılan bir iddia hiçbir zaman düşmez.
-    //
-    // AJANS GÖRÜNÜMÜ DE ATLIYOR: orada da kampanya tablosu gösterilmiyor.
-    expect(SAYFA_KOD.slice(0, i)).toMatch(
-      // MECRA/HESAP BASAMAĞI DA (`varlik === null`): orada tablo hesap kırılımı.
+    expect(yk.slice(0, i)).toMatch(
       /mcc \|\| ajansGorunumu \|\| varlik === null\s*\n?\s*\? Promise\.resolve\(null\)/,
     );
   });
@@ -112,7 +120,10 @@ describe('satıra tıklayınca workspace değişiyor', () => {
      * üst bar yeni müşteriyi yazarken gövde eskisinin verisini gösterir —
      * sızıntıdan ayırt edilemeyecek kadar kötü bir hâl.
      */
-    expect(TABLO_KOD).toContain("router.replace('/dashboard')");
+    // Adres temizleniyor ama kullanıcı BULUNDUĞU sayfada kalıyor (Genel
+    // Bakış ya da Reklam Yöneticisi): yol, sorgusuz hâliyle `usePathname`.
+    expect(TABLO_KOD).toContain("const yol = usePathname() ?? '/dashboard';");
+    expect(TABLO_KOD).toContain('router.replace(yol);');
   });
 
   it('KRİTİK: geçiş hatası YUTULMUYOR', () => {

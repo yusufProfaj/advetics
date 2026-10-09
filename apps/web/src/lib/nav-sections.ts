@@ -52,7 +52,7 @@ export const AYAR_KISA_AD: Record<string, string> = {
  * "ölü satır yok" diye kilitliyor).
  *
  * MÜŞTERİ HESABI HÂLÂ DÖRT EKRAN görüyor: Genel Bakış, AdvStrategy
- * (Planla), Reklam Keşfi (Yönet), Raporlar. Değişen yalnızca başlıklar;
+ * (Planla), Reklam Yöneticisi (Yönet), Raporlar. Değişen yalnızca başlıklar;
  * Oluştur, İyileştir ve Base'in her satırı müşteride olmayan bir yetki
  * taşıyor (süzme opt-in: yetkisiz satır herkese görünür).
  */
@@ -132,13 +132,14 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
   },
   {
     /*
-     * YÖNET — yayındakini izleme ve gelen sonuçla çalışma. Reklam Keşfi
-     * bugün salt okunur; Aşama 3'te satır içi durdur/başlat/bütçe ile
-     * Reklam Yöneticisi olacak. MÜŞTERİ HESABI Reklam Keşfi'ni görüyor.
+     * YÖNET — yayındakini izleme ve gelen sonuçla çalışma. Reklam
+     * Yöneticisi (2026-10-09, eski adı Reklam Keşfi) şirketten reklama inen
+     * tablo; satır içi durdur/başlat/bütçe sonraki adım. MÜŞTERİ HESABI
+     * Reklam Yöneticisi'ni görüyor (yalnız kendi workspace'i).
      */
     title: 'Yönet',
     items: [
-      { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4, perm: 'insights.read' },
+      { href: '/ads-explorer', label: 'Reklam Yöneticisi', icon: 'explorer', module: 4, perm: 'insights.read' },
       /*
        * POTANSİYEL MÜŞTERİLER RAPORLAR'DAN GELDİ: form reklamından düşen
        * kişiler bir rapor değil, aranacak bir iş listesi.

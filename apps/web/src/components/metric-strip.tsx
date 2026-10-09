@@ -16,11 +16,18 @@ import type { TerimAnahtari } from '@/lib/terimler';
  */
 export function MetricStrip({
   items,
+  bitisik = false,
 }: {
+  /** Kartın içinde, üstündeki kutularla aynı yüzeyde: kendi çerçevesi yok. */
+  bitisik?: boolean;
   items: Array<{ terim: TerimAnahtari; value: string; change?: number | null; inverse?: boolean }>;
 }) {
   return (
-    <div className="flex flex-wrap divide-y divide-line rounded-xl border border-line bg-surface sm:divide-x sm:divide-y-0">
+    <div
+      className={`flex flex-wrap divide-y divide-line sm:divide-x sm:divide-y-0 ${
+        bitisik ? 'border-t border-line bg-surface-muted' : 'rounded-xl border border-line bg-surface'
+      }`}
+    >
       {items.map((item) => (
         <div key={item.terim} className="min-w-0 flex-1 basis-1/2 px-4 py-3 sm:basis-0">
           <p className="text-xs font-medium text-ink-muted">

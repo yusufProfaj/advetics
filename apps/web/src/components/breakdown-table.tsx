@@ -6,6 +6,7 @@ import { ReklamOnizleme } from '@/components/reklam-onizleme';
 import Link from 'next/link';
 import { platformKanali, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { baglanti } from '@/lib/baglanti';
+import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 import { DeltaRozeti } from '@/components/delta-rozeti';
 import { PlatformLogo } from '@/components/platform-logo';
 import { SIRALAMA_YONU, type Siralama } from '@/lib/kirilim-siralama';
@@ -146,25 +147,100 @@ export function BreakdownTable({
   const altBasamak = ALT_BASAMAK[level];
 
   /**
-   * ═══ TEK BİR ÖNİZLEME AÇIK ═══
+   * ═══ ÖNİZLEMELER: TEK TEK YA DA HEPSİ BİRDEN ═══
    *
-   * Kullanıcının isteği birebir: "farklı reklamın önizlemesini görmek
-   * istediğimde diğerinin kapanıp tıkladığım reklamın açılması gerekiyor".
-   * Tek bir kimlik tutmak bunu kendiliğinden sağlıyor — açık kümesi tutup
-   * "yalnızca biri" kuralını elle uygulamak, kuralın bir dalda unutulduğu
-   * yer olurdu.
+   * İki kullanıcı isteği birlikte:
+   *   1. "farklı reklamın önizlemesini görmek istediğimde diğerinin kapanıp
+   *      tıkladığım reklamın açılması gerekiyor" → anahtar KAPALIYKEN tek
+   *      kimlik tutuluyor (`tekAcik`), biri açılınca öbürü kapanıyor.
+   *   2. (2026-10-09) "filtre kısmında bir switch: açınca hepsi açık,
+   *      kapatınca hepsi kapalı, tek tek elle de açılmalı" → anahtar
+   *      AÇIKKEN hepsi açık ve tek tek KAPATILANLAR tutuluyor (`kapatilan`).
+   * Kural tek fonksiyonda (`onizlemeAcikMi`); iki ayrı koşul zinciri
+   * yazmak, birinin bir dalda unutulması olurdu.
    *
-   * SEÇİM URL'DE DEĞİL. Bu sayfada her seçim adreste duruyor ve sebebi iyi
-   * (paylaşılabilir, JS'siz çalışıyor); önizleme ise İSTİSNA: sayfa
-   * `force-dynamic` ve adres değişimi özet, grafik ve kırılım sorgularının
-   * TAMAMINI yeniden koşturuyordu. Bir kutuyu açıp kapatmanın bedeli
-   * olamaz.
+   * ANİMASYON HATASIZ: önizleme bir kez açıldıktan sonra DOM'dan çıkmıyor
+   * (`acilmis`), kapanış `grid-template-rows` geçişiyle. İlk açılışta satır
+   * KAPALI doğuyor ve iki kare sonra açılıyor; açık doğan öğe geçiş
+   * oynatmaz, bir karede belirirdi. Henüz açılmamış önizleme hiç
+   * kurulmuyor: 25 reklamın önizlemesini sayfa açılırken çekmek boşa yük.
+   *
+   * SEÇİM URL'DE DEĞİL: sayfa `force-dynamic` ve adres değişimi bütün
+   * sorguları yeniden koşturuyordu; bir kutuyu açmanın bedeli olamaz.
    */
-  const [acikReklam, setAcikReklam] = useState<string | null>(null);
+  const [hepsiAcik, setHepsiAcik] = useState(false);
+  const [tekAcik, setTekAcik] = useState<string | null>(null);
+  const [kapatilan, setKapatilan] = useState<ReadonlySet<string>>(new Set());
+  const [acilmis, setAcilmis] = useState<ReadonlySet<string>>(new Set());
+  const durum = { hepsiAcik, tekAcik, kapatilan };
+  const acikMi = (id: string) => onizlemeAcikMi(durum, id);
+
+  /** Önce DOM'a kapalı koy, iki kare sonra aç: geçiş görünür oynasın. */
+  function kurVeAc(idler: string[], ac: () => void) {
+    const yeni = idler.filter((id) => !acilmis.has(id));
+    if (yeni.length === 0) return ac();
+    setAcilmis((m) => new Set([...m, ...yeni]));
+    requestAnimationFrame(() => requestAnimationFrame(ac));
+  }
+
+  function satiriDegistir(id: string) {
+    if (hepsiAcik) {
+      setKapatilan((k) => {
+        const y = new Set(k);
+        if (y.has(id)) y.delete(id);
+        else y.add(id);
+        return y;
+      });
+      return;
+    }
+    if (tekAcik === id) return setTekAcik(null);
+    kurVeAc([id], () => setTekAcik(id));
+  }
+
+  function hepsiniDegistir() {
+    setKapatilan(new Set());
+    setTekAcik(null);
+    if (hepsiAcik) return setHepsiAcik(false);
+    kurVeAc(
+      rows.map((r) => r.entityId),
+      () => setHepsiAcik(true),
+    );
+  }
 
   return (
     <section className="rounded-xl border border-line bg-surface">
       <TabloBasligi seviye={level} tasinan={tasinan} />
+
+      {/*
+        ÖNİZLEME ANAHTARI YALNIZCA REKLAM SEVİYESİNDE: kampanya ve reklam
+        setinin önizlemesi yok, orada soluk bir anahtar çalışmayan bir
+        seçenek olurdu.
+      */}
+      {level === 'ad' && rows.length > 0 && (
+        <div className="flex items-center justify-end gap-2 border-b border-line px-4 py-2">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={hepsiAcik}
+            onClick={hepsiniDegistir}
+            className="group inline-flex items-center gap-2 rounded-full px-1 py-0.5 text-xs font-semibold text-ink"
+          >
+            <span
+              aria-hidden
+              className={`relative h-5 w-9 rounded-full transition-colors duration-300 ease-[var(--ease-out)] motion-reduce:transition-none ${
+                hepsiAcik ? 'bg-brand' : 'bg-surface-sunken ring-1 ring-inset ring-line'
+              }`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-300 ease-[var(--ease-out)] motion-reduce:transition-none ${
+                  hepsiAcik ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </span>
+            Önizlemeler
+          </button>
+        </div>
+      )}
 
       {rows.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-ink-muted">
@@ -256,7 +332,7 @@ export function BreakdownTable({
                       */}
                       {altBasamak ? (
                         <Link
-                          href={baglanti('/dashboard', tasinan, altBasamak(r.entityId))}
+                          href={baglanti(REKLAM_YONETICISI, tasinan, altBasamak(r.entityId))}
                           className="truncate font-medium text-ink transition hover:text-brand-strong hover:underline"
                           title={`${r.name} — içine gir`}
                         >
@@ -272,21 +348,17 @@ export function BreakdownTable({
                         */
                         <button
                           type="button"
-                          onClick={() =>
-                            setAcikReklam((a) => (a === r.entityId ? null : r.entityId))
-                          }
-                          aria-expanded={acikReklam === r.entityId}
-                          title={`${r.name} — önizlemeyi ${
-                            acikReklam === r.entityId ? 'kapat' : 'aç'
-                          }`}
+                          onClick={() => satiriDegistir(r.entityId)}
+                          aria-expanded={acikMi(r.entityId)}
+                          title={`${r.name}: önizlemeyi ${acikMi(r.entityId) ? 'kapat' : 'aç'}`}
                           className="flex min-w-0 items-center gap-1 text-left font-medium text-ink transition hover:text-brand-strong"
                         >
                           {/* OK YÖNÜ DURUMU SÖYLÜYOR: açılabilir olduğu
                               tıklamadan ÖNCE anlaşılmalı. */}
                           <span
                             aria-hidden="true"
-                            className={`shrink-0 text-[10px] text-ink-muted transition-transform ${
-                              acikReklam === r.entityId ? 'rotate-90' : ''
+                            className={`shrink-0 text-[10px] text-ink-muted transition-transform duration-300 ease-[var(--ease-out)] motion-reduce:transition-none ${
+                              acikMi(r.entityId) ? 'rotate-90' : ''
                             }`}
                           >
                             ▶
@@ -368,15 +440,25 @@ export function BreakdownTable({
                   genişliğine sıkışıp okunmaz hâle geliyor ve komşu
                   hücrelerin yüksekliğini şişiriyor.
                 */}
-                {acikReklam === r.entityId && (
-                  <tr className="border-b border-line/60 bg-surface-sunken/40">
+                {(acilmis.has(r.entityId) || acikMi(r.entityId)) && (
+                  <tr>
                     <td colSpan={showRoas ? 9 : 8} className="p-0">
-                      <ReklamOnizleme
-                        adId={r.entityId}
-                        from={range.from}
-                        to={range.to}
-                        currency={currency ?? r.currency}
-                      />
+                      <div
+                        className={`grid transition-[grid-template-rows] duration-[420ms] ease-[var(--ease-out)] motion-reduce:transition-none ${
+                          acikMi(r.entityId) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                        }`}
+                      >
+                        <div className="overflow-hidden" inert={!acikMi(r.entityId)}>
+                          <div className="border-b border-line/60 bg-surface-sunken/40">
+                            <ReklamOnizleme
+                              adId={r.entityId}
+                              from={range.from}
+                              to={range.to}
+                              currency={currency ?? r.currency}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -427,7 +509,7 @@ export function TabloBasligi({
             // TAŞINAN SÜZGEÇLERLE. Eskiden yalnızca `aralik` yazılıyordu ve
             // `platform` DÜŞÜYORDU: "Meta" seçip seviye değiştiren kullanıcı
             // sessizce bütün platformlara dönüyordu.
-            href={baglanti('/dashboard', tasinan, { seviye: tab.key, ...tab.dusen })}
+            href={baglanti(REKLAM_YONETICISI, tasinan, { seviye: tab.key, ...tab.dusen })}
             aria-current={seviye === tab.key ? 'page' : undefined}
             className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
               seviye === tab.key ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
@@ -474,7 +556,7 @@ export function SiraliBaslik({
       aria-sort={secili ? (yon === 'artan' ? 'ascending' : 'descending') : 'none'}
     >
       <Link
-        href={baglanti('/dashboard', tasinan, { sirala: anahtar })}
+        href={baglanti(REKLAM_YONETICISI, tasinan, { sirala: anahtar })}
         className={`inline-flex items-center gap-1 transition hover:text-ink ${
           secili ? 'text-ink' : ''
         }`}
@@ -557,4 +639,16 @@ export function mikroSayi(micros: string | null | undefined): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Önizleme açık mı — anahtarın ve tek tek seçimin TEK kararı (yukarıya bkz.).
+ * Saf fonksiyon: panelde bileşen render eden test altyapısı yok, kural
+ * ancak böyle çalıştırılarak sınanabiliyor.
+ */
+export function onizlemeAcikMi(
+  d: { hepsiAcik: boolean; tekAcik: string | null; kapatilan: ReadonlySet<string> },
+  id: string,
+): boolean {
+  return d.hepsiAcik ? !d.kapatilan.has(id) : d.tekAcik === id;
 }

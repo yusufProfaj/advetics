@@ -16,18 +16,18 @@ const yorumsuz = (yol: string): string =>
     .join('\n');
 
 const SAYFA = yorumsuz(join(__dirname, 'page.tsx'));
-const KART = yorumsuz(join(__dirname, '..', '..', '..', 'components', 'ad-card.tsx'));
-const ETIKET = yorumsuz(join(__dirname, '..', '..', '..', 'lib', 'reklam-etiketleri.ts'));
+const KART = yorumsuz(join(__dirname, '..', '..', '..', '..', 'components', 'ad-card.tsx'));
+const ETIKET = yorumsuz(join(__dirname, '..', '..', '..', '..', 'lib', 'reklam-etiketleri.ts'));
 
 describe('tarama boşa düşmüyor', () => {
   it('kaynaklar okundu', () => {
-    expect(SAYFA).toContain('Reklam Keşfi');
+    expect(SAYFA).toContain('Reklam Galerisi');
     expect(KART).toContain('export function AdCard');
     expect(ETIKET).toContain('export function ctaEtiketi');
   });
 });
 
-const MENU = yorumsuz(join(__dirname, '..', '..', '..', 'components', 'suzgec-menusu.tsx'));
+const MENU = yorumsuz(join(__dirname, '..', '..', '..', '..', 'components', 'suzgec-menusu.tsx'));
 
 describe('süzgeçler', () => {
   it('KRİTİK: hepsi TEK araç çubuğunda ve her boyut ETİKETLİ', () => {

@@ -320,7 +320,7 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
     expect(gorunen).not.toContain('Ekip & Yetkiler');
   });
 
-  it('KRİTİK: TAM OLARAK dört ekran görüyor — Genel Bakış, Reklam Keşfi, AdvStrategy, Raporlar', () => {
+  it('KRİTİK: TAM OLARAK dört ekran görüyor — Genel Bakış, Reklam Yöneticisi, AdvStrategy, Raporlar', () => {
     /*
      * Kullanıcının tanımı: "müşteri = sadece genel bakış, reklam keşfi ve
      * raporlar kısmını görebilir". AdvStrategy SONRADAN eklendi ve kararı
@@ -334,7 +334,7 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
      * gizleyen bir süzgeç "görmüyor" testlerini geçerdi.
      */
     // Sıra 2026-10-09'dan beri bölüm sırasından: Planla, Yönet'ten önce.
-    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'AdvStrategy', 'Reklam Keşfi', 'Raporlar']);
+    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'AdvStrategy', 'Reklam Yöneticisi', 'Raporlar']);
     expect(basliklar('client_viewer')).toEqual([undefined, 'Planla', 'Yönet', 'Raporlar']);
   });
 

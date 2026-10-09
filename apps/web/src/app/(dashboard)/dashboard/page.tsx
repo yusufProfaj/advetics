@@ -1,59 +1,34 @@
-import Link from 'next/link';
 import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 import type {
   BekleyenIslerYaniti,
-  MetricsAccountBreakdown,
   ClientPacing,
-  Platform,
+  MetricsAccountBreakdown,
   MetricsBreakdownRow,
   MetricsClientRow,
   MetricsConversionDetail,
-  MetricsHierarchyPath,
   MetricsOrganizationRow,
   MetricsSummary,
   MetricsTimeseries,
 } from '@advetics/shared';
-import { PLATFORMS } from '@advetics/shared';
-import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
-import { ApiRequestError, serverApiFetch } from '@/lib/api';
+import { serverApiFetch } from '@/lib/api';
 import { enEskiGunGerekli, rangeParams, resolveRange } from '@/lib/date-range';
-import { baglanti } from '@/lib/baglanti';
 import { TarihSecici } from '@/components/tarih-secici';
 import { RefreshButton } from '@/components/refresh-button';
-import {
-  changePercent,
-  changePercentMicros,
-  formatDayLong,
-  formatMoney,
-  formatNumber,
-  formatPercent,
-  formatRoas,
-  microsOf,
-} from '@/lib/format';
-import { MetricCard } from '@/components/metric-card';
-import { MetricStrip } from '@/components/metric-strip';
+import { formatDayLong } from '@/lib/format';
 import { MetricsChart } from '@/components/metrics-chart';
-import { BreakdownTable } from '@/components/breakdown-table';
 import { HesapKirilimi } from '@/components/hesap-kirilimi';
 import { ButceKarti } from '@/components/budget/butce-karti';
 import { ayAnahtari } from '@/components/butce/butce-icerik';
 import { butceAdresi } from '@/lib/butce-adresi';
-import {
-  hesapCoz,
-  panelSeviyesiCoz,
-  platformSekmesiSorgusu,
-  varlikSeviyesi,
-  type PanelSeviyesi,
-} from '@/lib/genel-bakis-seviyesi';
 import { DonusumDetay } from '@/components/donusum-detay';
 import { MusteriTablosu } from '@/components/musteri-tablosu';
 import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { SirketTablosu } from '@/components/sirket-tablosu';
 import { Uyari, UyariListesi } from '@/components/ui/uyari';
-import { dugmeSinifi } from '@/components/ui/dugme';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
-import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
+import { siralamaCoz } from '@/lib/kirilim-siralama';
 import { bekleyenIslerYolu, type BekleyenIslerSonucu } from '@/lib/bekleyen-isler';
 import { hizliErisim } from '@/lib/hizli-erisim';
 import { visibleSections } from '@/lib/nav-sections';
@@ -63,37 +38,51 @@ import {
   BoostRozeti,
   HizliErisim,
 } from '@/components/genel-bakis/bekleyen-isler-kutusu';
+import {
+  IkincilSerit,
+  PerformansKutulari,
+  PlatformSekmeleri,
+  VeriYokDurumu,
+} from '@/components/genel-bakis/ozet-parcalari';
+import { EnCokHarcayanlar, OZET_KAMPANYA_SAYISI } from '@/components/genel-bakis/en-cok-harcayanlar';
+import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
+import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 
 export const metadata = { title: 'Genel Bakış · Advetics' };
 
 /**
- * Unified Dashboard.
+ * ═══ GENEL BAKIŞ (2026-10-09 düzeni) ═══
  *
- * Üç uç nokta PARALEL çekiliyor. Sırayla beklemek toplam gecikmeyi üçe
- * katlardı; hiçbiri diğerinin sonucuna ihtiyaç duymuyor.
+ * Google Ads'in hesap genel bakışı mantığıyla, Advetics görünüşüyle: solda
+ * geniş sütunda Performans (metrik kutuları + günlük grafik + ikincil
+ * metrikler) ve paranın nereye gittiği; sağda dar sütunda "bugün ne
+ * yapmalıyım" (bekleyen işler), bu ayın bütçesi ve dönüşümlerin ne olduğu.
  *
- * Sunucu bileşeni: veri sunucuda çekiliyor, tarayıcıya JS inmeden ekran hazır
- * geliyor. Aralık ve seviye seçimi URL'de olduğu için etkileşim için de JS
- * gerekmiyor — seçiciler birer link.
+ * VERİ EKSİLTİLMEDİ (kullanıcı: "veri eksiltme, sadece görünümünü benzet").
+ * Eski ekrandaki her parça burada ya da bir tık ötede:
+ *   · Şirket / workspace listesi → ilk beşi burada, tamamı Reklam Yöneticisi.
+ *   · Kampanya → reklam seti → reklam kırılımı ve önizleme → Reklam
+ *     Yöneticisi (kullanıcı kararı: iniş orada). Eski adresler oraya
+ *     yönleniyor, aşağıya bkz.
  *
- * `force-dynamic`: metrikler her istekte tazeleniyor. Next.js'in varsayılan
- * önbelleği burada yanlış olurdu — kullanıcı "yenile"ye bastığında bayat sayı
- * görmesi, panelin güvenilirliğini bitirir.
+ * Sunucu bileşeni, `force-dynamic`: metrikler her istekte tazeleniyor.
+ * Bütün okumalar PARALEL; bekleyen işler kendi Suspense sınırında.
  */
 export const dynamic = 'force-dynamic';
 
-/**
- * Kırılım tablosunun satır sınırı.
- *
- * SABİT BİR YERDE çünkü iki tüketicisi var: sorgu (`limit=`) ve tablo
- * (kesmeyi ekranda YAZAN not). İkisini ayrı yazmak, biri değişince notun
- * yanlış sayıyı söylemesi demekti — panelde "Üst sınır 10 MB" elle yazılıyken
- * tam olarak bu oldu.
- */
-const KIRILIM_LIMITI = 25;
-
 /** Genel Bakış'ın açılış aralığı. Adreste `aralik` yoksa bu kullanılıyor. */
 const GENEL_BAKIS_ARALIGI = 'bu_ay';
+
+/** Genel Bakış'taki şirket/workspace listesinin satır sayısı. */
+const OZET_SATIR = 5;
+
+/**
+ * İNİŞ PARAMETRELERİ Reklam Yöneticisi'ne ait. Paylaşılmış eski bir Genel
+ * Bakış bağlantısı (`?kampanya=...`) burada AÇILIRSA kampanya süzgeci
+ * sessizce düşer ve kullanıcı bütün workspace'in rakamlarını o kampanyanınki
+ * sanır. O yüzden adres olduğu gibi oraya taşınıyor.
+ */
+const INIS_PARAMETRELERI = ['hesap', 'kampanya', 'reklamSeti', 'seviye', 'sirala'] as const;
 
 export default async function DashboardPage({
   searchParams,
@@ -103,20 +92,21 @@ export default async function DashboardPage({
   const session = await requireSession();
   const params = await searchParams;
 
+  if (INIS_PARAMETRELERI.some((k) => first(params[k]) !== undefined)) {
+    const tasi = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      const deger = first(v);
+      if (deger !== undefined) tasi.set(k, deger);
+    }
+    redirect(`${REKLAM_YONETICISI}?${tasi}`);
+  }
+
   /*
-   * ═══ BEKLEYEN İŞLER EN BAŞTA BAŞLIYOR, BEKLENMİYOR ═══
-   *
-   * Söz burada açılıyor ve `await` EDİLMİYOR: aşağıdaki kapsam çağrısı
-   * (seri, üretimde 17 sn ölçüldü) ve metrik okumalarıyla PARALEL koşuyor.
-   * Kutu ve Akıllı Boost rozeti onu kendi Suspense sınırlarında bekliyor;
-   * iki tüketici AYNI sözü okuyor, yani aynı sayıyı söylüyorlar.
-   *
-   * HATA YUTULMUYOR, NESNEYE ÇEVRİLİYOR: `.catch(() => null)` "bekleyen iş
-   * yok" ile "çağrı düştü"yü aynı boş kutuya çevirirdi. Söz hiç reddedilmiyor
-   * (sahipsiz ret de yok); sebep sunucunun kendi cümlesiyle kutuya gidiyor.
-   *
-   * Tek workspace seçiliyse `clientId` gidiyor; "Tüm workspace'ler" ve ajans
-   * kipinde gitmiyor (`bekleyenIslerYolu`).
+   * BEKLEYEN İŞLER EN BAŞTA BAŞLIYOR, BEKLENMİYOR: söz `await` edilmiyor,
+   * metrik okumalarıyla paralel koşuyor; kutu ve Akıllı Boost rozeti onu
+   * kendi Suspense sınırlarında bekliyor. HATA NESNEYE ÇEVRİLİYOR:
+   * `.catch(() => null)` "iş yok" ile "çağrı düştü"yü aynı boş kutuya
+   * çevirirdi.
    */
   const bekleyenler: Promise<BekleyenIslerSonucu> = serverApiFetch<BekleyenIslerYaniti>(
     bekleyenIslerYolu(session.activeClientId),
@@ -124,10 +114,7 @@ export default async function DashboardPage({
     (yanit) => ({ durum: 'tamam', yanit }),
     (e: unknown) => ({ durum: 'hata', mesaj: hataMetni(e) }),
   );
-  /*
-   * HIZLI ERİŞİM MENÜNÜN SÜZGECİNDEN: menüde görünmeyen kısayol olmaz.
-   * Bağlam layout'takiyle aynı ifade; ikinci bir yetki listesi yok.
-   */
+  /* HIZLI ERİŞİM MENÜNÜN SÜZGECİNDEN: menüde görünmeyen kısayol olmaz. */
   const kisayollar = hizliErisim(
     visibleSections(session.permissions, {
       ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
@@ -136,30 +123,8 @@ export default async function DashboardPage({
   );
 
   /*
-   * ═══ KAPSAM YALNIZCA GEREKİYORSA OKUNUYOR ═══
-   *
-   * "Tüm zamanlar" ön ayarı elimizdeki en eski veri gününe dayanıyor. Sabit
-   * bir alt sınır hem yüzlerce boş günü tarar hem de 400 günlük sunucu
-   * sınırına takılıp hata sayfası üretirdi.
-   *
-   * AMA BU ÇAĞRI PAHALI VE SERİ. `/metrics/coverage` metrik tablosundaki
-   * TARİH SINIRI OLMAYAN tek sorgu (`MIN(date)`/`MAX(date)`): bütün
-   * partition'ları tarıyor ve üretimde ÖLÇÜLDÜ — 17.364 ms. Diğer beş
-   * isteğin toplamı 12,5 saniyeydi ve onlar paralel; bu ise `await` ile
-   * hepsinden ÖNCE bekliyordu. Yani ajans genel bakışında kullanıcının
-   * beklediği sürenin en büyük parçası, o yüklemede HİÇ KULLANILMAYAN bir
-   * değer içindi.
-   *
-   * Hata YUTULMUYOR ama aralığı da düşürmüyor: kapsam alınamazsa "Tüm
-   * zamanlar" 90 güne düşüyor ve bu `date-range.ts` içinde yazılı.
-   */
-  /*
-   * GENEL BAKIŞ "BU AY" İLE AÇILIR (kullanıcı kararı, 2026-10-07).
-   * Ortak varsayılan (`DEFAULT_RANGE`, son 30 gün) raporlar ve reklam
-   * gezgini için kalıyor; onu değiştirmek o ekranları da habersiz kaydırırdı.
-   * Seçim adreste yoksa burada dolduruluyor: takvim seçili ön ayarı
-   * çözülen aralıktan okuduğu için "Bu ay" işaretli geliyor, ve sekme
-   * bağlantıları `rangeParams` ile `aralik=bu_ay` taşıyor.
+   * KAPSAM YALNIZCA "Tüm zamanlar" İÇİN OKUNUYOR (en eski gün). Hata
+   * aralığı düşürmüyor: alınamazsa pencere varsayılan başlangıçtan açılıyor.
    */
   const aralik = first(params.aralik) ?? GENEL_BAKIS_ARALIGI;
   const kapsam = enEskiGunGerekli(aralik)
@@ -176,256 +141,101 @@ export default async function DashboardPage({
     enEskiGun: kapsam?.earliestDate ?? null,
   });
   const platform = resolvePlatform(first(params.platform));
-  const siralama = siralamaCoz(first(params.sirala));
+  const siralama = siralamaCoz(undefined);
 
   /*
-   * ═══ ODAK: HİYERARŞİDE İNİLEN VARLIK ═══
-   *
-   * Kullanıcının isteği Google Ads'teki kampanya hiyerarşisi: şirket ›
-   * workspace › kampanya › reklam seti › reklam, her basamak tıklanabilir.
-   * Kampanyaya tıklandığında ekranın TAMAMI ona daralıyor — kartlar, grafik
-   * ve tablo. Yalnızca tabloyu daraltmak, aynı ekranda iki farklı gerçek
-   * göstermek olurdu.
-   */
-  const kampanya = first(params.kampanya);
-  const reklamSeti = first(params.reklamSeti);
-  /*
-   * HESAP: workspace › HESAP › kampanya basamağı. Kartlar, grafik ve tablo o
-   * hesaba daralıyor — kampanya odağıyla aynı gerekçe.
-   */
-  const hesap = hesapCoz(first(params.hesap));
-
-  /*
-   * ODAKLIYKEN SEVİYE BİR ALT BASAMAĞA ÇEKİLİYOR.
-   *
-   * Bir kampanyanın içindeyken "kampanya" seviyesi anlamsız: kartlar tek
-   * kampanyayı gösterirken tablo bütün kampanyaları listelerdi. Arayüzde bu
-   * hâle düşmenin yolu yok (sekme odağı temizliyor) ama adres elle
-   * yazılabiliyor ve sunucu buna bahis oynamamalı.
-   */
-  const level = panelSeviyesiCoz({
-    seviye: first(params.seviye),
-    hesap,
-    kampanya,
-    reklamSeti,
-  });
-  /** `null` = reklam hesapları basamağı: tablo `/metrics/hesaplar`tan. */
-  const varlik = varlikSeviyesi(level);
-
-  /*
-   * BAĞLANTILARDA TAŞINAN SÜZGEÇLER — TEK YERDE.
-   *
-   * Platform sekmesi ve kırılım sekmesi bağlantılarını elle birleştiriyordu
-   * ve kırılım sekmesi `platform`ı DÜŞÜRÜYORDU: kullanıcı "Meta" seçip
-   * "Reklam seti"ne basınca süzgeç sessizce sıfırlanıyordu. Özel tarih
-   * aralığı gelince taşınacak anahtar sayısı üçten beşe çıktı ve elle
-   * birleştirme sürdürülemez hâle geldi.
+   * TAŞINAN SÜZGEÇLER: tarih ve platform. Buradan Reklam Yöneticisi'ne
+   * giden her bağlantı (kampanya satırı, hesap satırı) aynı dönemi ve
+   * platformu taşıyor; yoksa tıklayan kullanıcı başka bir dönemin
+   * rakamlarına düşerdi.
    */
   const tasinan = {
     ...rangeParams(range),
     platform: platform ?? undefined,
-    seviye: level,
-    // Sıralama da TAŞINIYOR: seviye ya da platform değiştiren kullanıcının
-    // seçtiği sütun düşerse süzgeç kaybolması hatasının aynısı olurdu.
-    sirala: siralama,
-    // ODAK DA TAŞINIYOR: platform sekmesi ya da tarih değiştiren kullanıcı
-    // bulunduğu kampanyadan düşmemeli. Aynı unutkanlık `platform`ta
-    // yaşanmıştı.
-    hesap,
-    kampanya,
-    reklamSeti,
   };
 
   const base = new URLSearchParams({ from: range.from, to: range.to });
-  /*
-   * KARŞILAŞTIRMA PENCERESİ AÇIKÇA GİDİYOR. Sunucu eskiden bunu koşulsuz
-   * kendisi hesaplıyordu; kullanıcı ne kapatabiliyor ne "önceki yıl"
-   * seçebiliyordu. Pencereyi panel hesaplayıp EKRANDA YAZDIĞI için (seçicide
-   * "1–31 Tem ile karşılaştırılacak") sorguya da o gitmeli — iki taraf ayrı
-   * hesaplarsa yazan dönem ile karşılaştırılan dönem ayrışır.
-   */
   if (range.compareFrom && range.compareTo) {
     base.set('compareFrom', range.compareFrom);
     base.set('compareTo', range.compareTo);
   }
-  // PLATFORM FİLTRESİ ÜÇ SORGUYA DA gidiyor: özet, grafik ve dağılım aynı
-  // kapsamı göstermeli. Yalnızca tabloya uygulamak, üstteki kartların
-  // "toplam" gösterirken tablonun tek platformu listelemesi demek olurdu —
-  // aynı ekranda iki farklı gerçek.
   if (platform) base.set('platform', platform);
-  /*
-   * ODAK ÜÇ SORGUYA DA gidiyor. Yalnızca tabloya uygulamak, üstteki
-   * kartların workspace toplamını gösterirken tablonun tek bir kampanyanın
-   * satırlarını listelemesi demek olurdu — platform süzgecinde aynı karar
-   * aynı gerekçeyle verildi.
-   */
-  if (hesap) base.set('adAccountId', hesap);
-  if (kampanya) base.set('campaignId', kampanya);
-  if (reklamSeti) base.set('adGroupId', reklamSeti);
-  const breakdownQs = new URLSearchParams(base);
-  if (varlik) breakdownQs.set('level', varlik);
-  breakdownQs.set('limit', String(KIRILIM_LIMITI));
-  /*
-   * HESAP KIRILIMI HESAP SÜZGECİ TAŞIMIYOR: soru "hangi hesap ne harcıyor"
-   * ve şema `adAccountId` kabul etmiyor. Tarih, karşılaştırma ve mecra
-   * gidiyor.
-   */
-  const hesapQs = new URLSearchParams({ from: range.from, to: range.to });
-  if (range.compareFrom && range.compareTo) {
-    hesapQs.set('compareFrom', range.compareFrom);
-    hesapQs.set('compareTo', range.compareTo);
-  }
-  if (platform) hesapQs.set('platform', platform);
+  const kampanyaQs = new URLSearchParams(base);
+  kampanyaQs.set('level', 'campaign');
+  // Pay sütunu GELEN bütün satırların toplamından hesaplanıyor; beş satır
+  // istemek payı yanlış gösterirdi. Sınır yine var: kesmeyi ekran yazıyor.
+  const KAMPANYA_SINIRI = 50;
+  kampanyaQs.set('limit', String(KAMPANYA_SINIRI));
 
-  // Bir uç noktanın düşmesi TÜM ekranı düşürmemeli: panel açılıp "veri
-  // alınamadı" demeli, 500 sayfası göstermemeli.
-  /*
-   * ═══ EKRANIN ÜÇ KATMANI: AJANS › ŞİRKET › WORKSPACE ═══
-   *
-   * Genel Bakış artık hiyerarşiyi izliyor ve her katmanda BİR ALT KATMANI
-   * listeliyor:
-   *
-   *   · Ajans kapsamında ("Tüm şirketler")  → ŞİRKET tablosu
-   *   · Şirket kapsamında, workspace seçili değilse → WORKSPACE tablosu
-   *   · Workspace seçiliyse → kampanya/reklam kırılımı
-   *
-   * ÖNCEDEN AJANS KATMANI YOKTU: "Tüm şirketler" seçildiğinde bütün
-   * şirketlerin workspace'leri tek düz tabloda listeleniyordu ve hangi
-   * satırın hangi şirkete ait olduğu HİÇBİR YERDE yazmıyordu — "Tüm
-   * müşteriler"de kampanya listelenirken düzeltilen hatanın bir üst
-   * katmandaki tekrarı.
-   *
-   * SIRA ÖNEMLİ: ajans kontrolü ÖNCE geliyor. `tumSirketler` modunda
-   * `activeClientId` daima null ve `availableClients` bütün şirketlerin
-   * workspace'lerini taşıyor, yani `mcc` koşulu da doğru olurdu ve ekran
-   * yine düz workspace listesi gösterirdi.
-   *
-   * WORKSPACE KATMANININ KOŞULU AKTİF SEÇİM, kullanıcının rolü DEĞİL: tek
-   * workspace'i olan bir şirkette de `activeClientId` null olabiliyor ve
-   * orada tek satırlık bir workspace tablosu, kampanya listesinden daha az
-   * şey söylerdi — o yüzden `> 1` koşulu duruyor.
-   */
-  /*
-   * Hata mesajı `Promise.all` içinden YAZILIYOR: `allSettled`a çevirmek beş
-   * dalın hepsinin sonucunu açmayı gerektirirdi ve buradaki soru tek —
-   * "özet neden gelmedi".
-   */
   let ozetHatasi: string | null = null;
 
+  /*
+   * ÜÇ KATMAN, ÜÇ AYRI ALT KART:
+   *   · Ajans kapsamında ("Tüm şirketler")  → ŞİRKETLER (ilk beşi)
+   *   · Şirket kapsamında, workspace seçili değilse → WORKSPACE'LER (ilk beşi)
+   *   · Workspace seçiliyse → hesaplar + en çok harcayan kampanyalar
+   * Ajans kontrolü MCC'den ÖNCE: ajans kipinde `activeClientId` boş ve MCC
+   * koşulu da tutuyor.
+   */
   const ajansGorunumu = session.tumSirketler;
   const mcc =
     !ajansGorunumu && session.activeClientId === null && session.availableClients.length > 1;
+  const workspaceGorunumu = !ajansGorunumu && !mcc;
 
-  /*
-   * ═══ HATA YUTULMUYOR — "Metrikler alınamadı" TEK BAŞINA BİR ŞEY SÖYLEMİYOR
-   * ═══
-   *
-   * Bu çağrı `.catch(() => null)` ile susturuluyordu ve ekranda tek bir
-   * cümle kalıyordu: "Metrikler alınamadı. API çalışıyor mu?" Kullanıcı
-   * ajans görünümünde bu ekranı gördü, şirket görünümünde görmedi ve
-   * SEBEBİ HİÇBİR YERDE YAZMIYORDU — teşhis için sunucu loguna bakmak
-   * gerekiyordu. Bu depoda adı konmuş yasağın ta kendisi.
-   *
-   * Sebep artık platformun KENDİ cümlesiyle ekranda; sayfa yine açılıyor.
-   */
-  /*
-   * BU AYIN BÜTÇESİ — yalnızca tek workspace seçiliyken ve bütçe okuma
-   * yetkisi varsa. Ajans ve şirket görünümünde bütçe workspace başına
-   * anlamlı; toplamını göstermek ayrı bir karar.
-   */
+  /* BU AYIN BÜTÇESİ — yalnızca tek workspace seçiliyken ve okuma yetkisi varsa. */
   const butceGorunur =
     !mcc && !ajansGorunumu && session.activeClientId !== null && session.permissions.includes('budget.read');
   let butceHatasi: string | null = null;
 
-  const [summary, series, breakdown, musteriler, sirketler, donusum, yol, hesaplar, butce] =
+  const [summary, series, musteriler, sirketler, kampanyalar, hesaplar, donusum, butce] =
     await Promise.all([
-    serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch((e: unknown) => {
-      ozetHatasi = hataMetni(e);
-      return null;
-    }),
-    // Tek günlük aralıkta grafik çizilmiyor; sorguyu da atlıyoruz.
-    range.days > 1
-      ? serverApiFetch<MetricsTimeseries>(`/metrics/timeseries?${base}`).catch(() => null)
-      : Promise.resolve<MetricsTimeseries>({ points: [], previous: null }),
-    // Üst katman görünümlerinde kampanya tablosu ÇEKİLMİYOR: gösterilmeyecek
-    // bir sorguyu koşmak, en ağır sorgusu boşa giden bir ekran demekti.
-    // HESAP BASAMAĞINDA kampanya kırılımı da çekilmiyor — aynı gerekçe.
-    mcc || ajansGorunumu || varlik === null
-      ? Promise.resolve(null)
-      : serverApiFetch<MetricsBreakdownRow[]>(`/metrics/breakdown?${breakdownQs}`).catch(
-          () => null,
-        ),
-    mcc
-      ? serverApiFetch<MetricsClientRow[]>(`/metrics/clients?${base}`).catch(() => null)
-      : Promise.resolve(null),
-    ajansGorunumu
-      ? serverApiFetch<MetricsOrganizationRow[]>(`/metrics/organizations?${base}`).catch(
-          () => null,
-        )
-      : Promise.resolve(null),
-    /*
-     * EKMEK KIRINTISININ İSİMLERİ — yalnızca odaklıyken çekiliyor.
-     *
-     * Ad kırılım satırlarında da duruyor (`parentName`) ama liste BOŞ
-     * olabiliyor: seçili aralıkta o kampanyanın hiç reklam seti verisi
-     * yoksa tablo boş döner ve şerit adsız kalırdı. Ad VERİDEN değil
-     * YAPIDAN okunmalı.
-     */
-    /*
-     * DÖNÜŞÜM DETAYI — üst katman görünümlerinde ÇEKİLMİYOR.
-     *
-     * Ajans ve şirket kapsamında ekran şirket/workspace listeliyor; dönüşüm
-     * eylemleri o katmanda anlamsız (hangi workspace'in WhatsApp tıklaması
-     * olduğu yazmıyor) ve sorgu ham JSONB gövdelerini çekiyor — gösterilmeyen
-     * bir listeyi doldurmak, en pahalı sorgulardan birini boşa koşturmak
-     * olurdu.
-     */
-    mcc || ajansGorunumu
-      ? Promise.resolve(null)
-      : serverApiFetch<MetricsConversionDetail>(`/metrics/donusum-detay?${base}`).catch(
-          () => null,
-        ),
-    kampanya || reklamSeti || hesap
-      ? serverApiFetch<MetricsHierarchyPath>(
-          `/metrics/kirilim-yolu?${new URLSearchParams({
-            ...(hesap ? { adAccountId: hesap } : {}),
-            ...(kampanya ? { campaignId: kampanya } : {}),
-            ...(reklamSeti ? { adGroupId: reklamSeti } : {}),
-          })}`,
-        ).catch(() => null)
-      : Promise.resolve(null),
-    !mcc && !ajansGorunumu && varlik === null
-      ? serverApiFetch<MetricsAccountBreakdown>(`/metrics/hesaplar?${hesapQs}`).catch(() => null)
-      : Promise.resolve(null),
-    butceGorunur
-      ? serverApiFetch<ClientPacing>(
-          `/budgets/pacing?${new URLSearchParams({ clientId: session.activeClientId!, month: ayAnahtari() })}`,
-        ).catch((e: unknown) => {
-          butceHatasi = hataMetni(e);
-          return null;
-        })
-      : Promise.resolve(null),
-  ]);
+      serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch((e: unknown) => {
+        ozetHatasi = hataMetni(e);
+        return null;
+      }),
+      // Tek günlük aralıkta grafik çizilmiyor; sorguyu da atlıyoruz.
+      range.days > 1
+        ? serverApiFetch<MetricsTimeseries>(`/metrics/timeseries?${base}`).catch(() => null)
+        : Promise.resolve<MetricsTimeseries>({ points: [], previous: null }),
+      mcc
+        ? serverApiFetch<MetricsClientRow[]>(`/metrics/clients?${base}`).catch(() => null)
+        : Promise.resolve(null),
+      ajansGorunumu
+        ? serverApiFetch<MetricsOrganizationRow[]>(`/metrics/organizations?${base}`).catch(
+            () => null,
+          )
+        : Promise.resolve(null),
+      workspaceGorunumu
+        ? serverApiFetch<MetricsBreakdownRow[]>(`/metrics/breakdown?${kampanyaQs}`).catch(() => null)
+        : Promise.resolve(null),
+      workspaceGorunumu
+        ? serverApiFetch<MetricsAccountBreakdown>(`/metrics/hesaplar?${base}`).catch(() => null)
+        : Promise.resolve(null),
+      /* Dönüşüm eylemleri üst katmanlarda anlamsız ve sorgu pahalı. */
+      workspaceGorunumu
+        ? serverApiFetch<MetricsConversionDetail>(`/metrics/donusum-detay?${base}`).catch(
+            () => null,
+          )
+        : Promise.resolve(null),
+      butceGorunur
+        ? serverApiFetch<ClientPacing>(
+            `/budgets/pacing?${new URLSearchParams({ clientId: session.activeClientId!, month: ayAnahtari() })}`,
+          ).catch((e: unknown) => {
+            butceHatasi = hataMetni(e);
+            return null;
+          })
+        : Promise.resolve(null),
+    ]);
 
   const activeClient = session.availableClients.find((c) => c.id === session.activeClientId);
-  /*
-   * BAŞLIK GÖVDEYLE AYNI ŞEYİ SÖYLEMEK ZORUNDA. Ajans kapsamında "Tüm
-   * workspace'ler" yazmak, tablo ŞİRKET listelerken başlığın başka bir
-   * katmandan bahsetmesi olurdu; bu depoda başlık≠gövde ayrışması bir kez
-   * "veri sızıntısı" sanıldı.
-   */
   const scopeLabel = ajansGorunumu
     ? 'Tüm şirketler'
     : (activeClient?.name ?? 'Tüm workspace’ler');
 
   /*
-   * ═══ ŞERİDİN BASAMAKLARI — VAR OLANLAR ═══
-   *
-   * Basamak sayısı kullanıcının kurulumuna göre değişiyor ve eksik olanı
-   * boş çizmek yerine HİÇ çizmiyoruz: üst hesabı olmayan bir kullanıcıya
-   * "Tüm şirketler" göstermek, gidemeyeceği bir yere kapı açmak olurdu.
-   *
-   * SON BASAMAK BULUNDUĞUN YER ve bileşen onu bağlantı yapmıyor.
+   * KAPSAM ŞERİDİ: ajans › şirket › workspace. Kampanya basamakları yok;
+   * onlar Reklam Yöneticisi'nin. Üst basamağa tıklamak kapsamı değiştiriyor
+   * ve kullanıcı Genel Bakış'ta kalıyor.
    */
   const basamaklar: YolBasamagi[] = [];
   if (session.managerAccount) {
@@ -437,77 +247,23 @@ export default async function DashboardPage({
         ?.name ?? session.organization.name;
     basamaklar.push({ ad: sirketAdi, kapsam: { tip: 'sirket' } });
   }
-  if (activeClient) {
-    // WORKSPACE BASAMAĞI ODAĞI, HESABI VE MECRAYI TEMİZLİYOR: kampanyanın ya
-    // da hesabın içinden workspace'in bütün reklam hesaplarına dönmenin yolu.
-    basamaklar.push({
-      ad: activeClient.name,
-      sorgu: {
-        platform: undefined,
-        hesap: undefined,
-        kampanya: undefined,
-        reklamSeti: undefined,
-        seviye: 'hesap',
-      },
-    });
-    /*
-     * HESAP BASAMAĞI. Hesap kampanyadan türetiliyor (`kirilim-yolu`):
-     * kampanya bağlantısı hesapsız açıldığında da şerit hangi hesabın içinde
-     * olunduğunu söylemeli. Mecra adı basamağın içinde — ayrı bir mecra
-     * basamağı kullanıcı kararıyla kalktı.
-     */
-    if (yol?.adAccount) {
-      basamaklar.push({
-        ad: `${PLATFORM_KISA_ADLARI[yol.adAccount.platform]} · ${yol.adAccount.name}`,
-        sorgu: {
-          platform: yol.adAccount.platform,
-          hesap: yol.adAccount.id,
-          kampanya: undefined,
-          reklamSeti: undefined,
-          seviye: 'campaign',
-        },
-      });
-    }
-  }
-  if (yol?.campaign) {
-    basamaklar.push({
-      ad: yol.campaign.name,
-      sorgu: { kampanya: yol.campaign.id, reklamSeti: undefined, seviye: 'ad_group' },
-    });
-  }
-  if (yol?.adGroup) {
-    basamaklar.push({ ad: yol.adGroup.name, sorgu: { reklamSeti: yol.adGroup.id, seviye: 'ad' } });
-  }
+  if (activeClient) basamaklar.push({ ad: activeClient.name });
+
+  const karsilastir = range.karsilastirma !== 'yok';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/*
         ═══ BAŞLIK İKİ SIRA: BAĞLAM ÜSTTE, KONTROLLER ALTTA ═══
-        Üçü (platform sekmeleri, tarih seçici, güncelle) başlıkla AYNI satırda
-        duruyordu ve `flex-wrap` ile sığmayınca alt satıra tek tek düşüp
-        başlığın altını parçalıyordu. Tablette en kötü hâlindeydi. Kontroller
-        artık kendi sırasında: dar ekranda ikiye bölünüyor, asla başlığın
-        altına sızmıyor.
+        Tarih ve güncelle başlığın sağında; platform sekmeleri ve kısayollar
+        kendi sırasında. Hepsi tek satırda dururken `flex-wrap` sığmayanı
+        tek tek alt satıra düşürüp başlığın altını parçalıyordu.
+        TAZELİK güncelle düğmesinin içinde: en çok bakılan bilgilerden biri.
       */}
       <header className="space-y-3">
-        {/*
-          BAŞLIK ORTAK BİLEŞENDEN (`SayfaBasligi`): sayfa başlıkları dört
-          ayrı boyda çiziliyordu ve ekrandan ekrana geçerken zıplıyordu.
-          ŞERİT BAŞLIĞIN ÜSTÜNDE: "neredeyim" sorusunun cevabı, sayfanın
-          adından önce okunmalı.
-          TAMAMLANMAMIŞ GÜN AYNI SATIRDA: ayrı satırda başlık bloğu üç
-          satıra çıkıyordu. Sabah 09:00'da görülen düşük harcama "kampanya
-          durmuş" diye okunuyor, oysa gün bitmemiş.
-          TAZELİK BAŞLIKTA, SAYFANIN DİBİNDE DEĞİL: en çok bakılan
-          bilgilerden biri ve kullanıcı buna bakıp güncelle düğmesine basıyor.
-        */}
         <SayfaBasligi
           baslik="Genel Bakış"
-          ust={
-            basamaklar.length > 1 ? (
-              <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} />
-            ) : undefined
-          }
+          ust={basamaklar.length > 1 ? <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} /> : undefined}
           aciklama={
             <>
               {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
@@ -517,70 +273,37 @@ export default async function DashboardPage({
             </>
           }
           eylemler={
-            kisayollar.length > 0 || butceGorunur || summary !== null ? (
-              /*
-                HIZLI ERİŞİM ÜSTTE, BÜTÇE ALTTA: kısayollar küçük düğmeler,
-                bütçe kartı ise kendi başına bir blok. Yan yana dururken
-                kart düğmeleri satırın ortasına itiyordu.
-              */
-              <div className="flex flex-col items-start gap-2 sm:items-end">
-                <HizliErisim
-                  ogeler={kisayollar}
-                  rozet={
-                    <Suspense fallback={null}>
-                      <BoostRozeti sonuc={bekleyenler} />
-                    </Suspense>
-                  }
-                />
-                {(butceGorunur || summary !== null) && (
-                  <div className="flex flex-wrap items-center gap-3">
-                    {summary !== null && (
-                      /* Tazelik düğmenin içinde; burada tekrar yazmak aynı bilgiyi iki kez göstermekti. */
-                      <p className="text-xs text-ink-muted">{summary.accountCount} reklam hesabı</p>
-                    )}
-                    {butceGorunur && (
-                      <ButceKarti
-                        veri={butce}
-                        hata={butceHatasi}
-                        href={butceAdresi(session.activeClientId)}
-                        ayAdi={buAyAdi()}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : undefined
+            <div className="flex flex-wrap items-center gap-2">
+              <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
+              <RefreshButton
+                dateFrom={range.from}
+                dateTo={range.to}
+                rangeLabel={range.label}
+                sonGuncelleme={summary?.lastFetchedAt ?? null}
+              />
+            </div>
           }
         />
 
-        {/*
-          BEKLEYEN İŞLER BAŞLIĞIN HEMEN ALTINDA, KONTROLLERİN ÜSTÜNDE: ekranın
-          ilk cevabı "bugün ne yapmalıyım". Özet düşse de çiziliyor; kendi
-          kaynağı var ve metrik hatası onu gizlememeli.
-        */}
-        <Suspense fallback={<BekleyenIslerIskeleti />}>
-          <BekleyenIslerKutusu
-            sonuc={bekleyenler}
-            onayYetkisi={session.permissions.includes('strategy.approve')}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <PlatformSekmeleri
+            yol="/dashboard"
+            current={platform}
+            hesap={undefined}
+            seviye="hesap"
+            tasinan={tasinan}
           />
-        </Suspense>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <PlatformTabs current={platform} hesap={hesap} seviye={level} tasinan={tasinan} />
-          <div className="flex flex-1 items-center justify-end gap-2">
-            <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
-            {/*
-              "GEÇMİŞ VERİYİ ÇEK" DÜĞMESİ KALDIRILDI: işi iki yere dağıldı ve
-              ikisi de kendiliğinden çalışıyor. Hesap bir workspace'e
-              atandığında 90 günlük geçmiş kuyruğa giriyor; "Şimdi güncelle"
-              de ekranda seçili aralığı yeniliyor. Üçüncü bir düğme,
-              kullanıcıya hangisine basacağını sorduruyordu.
-            */}
-            <RefreshButton
-              dateFrom={range.from}
-              dateTo={range.to}
-              rangeLabel={range.label}
-              sonGuncelleme={summary?.lastFetchedAt ?? null}
+          {summary !== null && (
+            <span className="text-xs text-ink-muted">{summary.accountCount} reklam hesabı</span>
+          )}
+          <div className="ml-auto">
+            <HizliErisim
+              ogeler={kisayollar}
+              rozet={
+                <Suspense fallback={null}>
+                  <BoostRozeti sonuc={bekleyenler} />
+                </Suspense>
+              }
             />
           </div>
         </div>
@@ -588,355 +311,145 @@ export default async function DashboardPage({
 
       {summary === null ? (
         <Uyari ton="tehlike">
-          {/* TEKNİK AYRINTI EKRANDAN KALKTI: `pm2 logs` komutu müşterinin
-              okuduğu bir ekranda hem anlamsız hem ürkütücü. Sunucunun kendi
-              hata cümlesi duruyor, teşhis için o yeterli. */}
+          {/* Sunucunun kendi hata cümlesi; teknik ayrıntı (pm2 logs) müşteri ekranında değil. */}
           <strong>Veriler alınamadı.</strong>
           {ozetHatasi && <span className="ml-1">{ozetHatasi}</span>}
         </Uyari>
       ) : summary.accountCount === 0 ? (
-        <EmptyState />
+        <VeriYokDurumu />
       ) : (
-        <>
-          {/*
-            ═══ UYARILAR TEK KUTUDA ═══
-            Üçü ayrı ayrı tam genişlikte sarı kutulardı ve aynı anda
-            çıkabiliyorlardı: kötü bir günde kullanıcı tek bir rakam görmeden
-            üç katlı bir uyarı duvarına bakıyordu. Aynı bilgi, tek kutuda alt
-            alta satırlar olarak duruyor ve sayfanın ağırlık merkezi
-            rakamlarda kalıyor.
-          */}
-          <Uyarilar
-            satirlar={[
-              summary.currency === null && summary.byCurrency.length > 1 ? (
-                <>
-                  <strong>Birden fazla para birimi var</strong> (
-                  {summary.byCurrency.map((c) => c.currency).join(', ')}). Tutarlar ayrı
-                  gösteriliyor.
-                </>
-              ) : null,
-              /* İZLENMEYEN HESAPLAR SESSİZCE DÜŞMÜYOR. Kapatılan bir hesabın
-                 harcaması toplamdan çıkıyor ve sebebini görmeyen kullanıcı
-                 "harcama neden azaldı" diye sorar. */
-              summary.hiddenAccounts > 0 ? (
-                <>
-                  <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara
-                  dâhil değil. Verileri duruyor; Platform Bağlantıları sayfasından yeniden
-                  açabilirsin.
-                </>
-              ) : null,
-              /*
-               * BAYAT VERİ UYARISI BURADAN KALKTI — "Şimdi güncelle"nin
-               * tazelik noktasına taşındı (`refresh-button.tsx`). Tam genişlik
-               * sarı şerit kullanıcının tarifiyle "görüntü kirliliği"ydi ve
-               * önerdiği eylem zaten o düğmeydi.
-               */
-            ]}
-          />
+        <Uyarilar
+          satirlar={[
+            summary.currency === null && summary.byCurrency.length > 1 ? (
+              <>
+                <strong>Birden fazla para birimi var</strong> (
+                {summary.byCurrency.map((c) => c.currency).join(', ')}). Tutarlar ayrı
+                gösteriliyor.
+              </>
+            ) : null,
+            /* İzlenmeyen hesabın harcaması toplamdan çıkıyor; söylenmezse "neden azaldı" sorulur. */
+            summary.hiddenAccounts > 0 ? (
+              <>
+                <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara
+                dâhil değil. Verileri duruyor; Platform Bağlantıları sayfasından yeniden
+                açabilirsin.
+              </>
+            ) : null,
+          ]}
+        />
+      )}
 
-          {/*
-            ÖZET TEK BLOK: kartlar ve şerit aynı soruyu cevaplıyor, aralarına
-            bölümler arası boşluk koymak ikisini ayrı düşünce birimi gibi
-            gösteriyordu. Dışarıdaki `space-y-6` bölümleri ayırıyor, buradaki
-            `space-y-3` özeti birbirine bağlıyor.
-          */}
-          <div className="space-y-3">
-            <Cards summary={summary} karsilastir={range.karsilastirma !== 'yok'} />
-            <SecondaryStrip summary={summary} karsilastir={range.karsilastirma !== 'yok'} />
-          </div>
-
-          {/* TEK GÜNLÜK ARALIKTA GRAFİK YOK.
-              Bir gün için zaman serisi tek bir bar demek: kocaman boş bir
-              kutuda hiçbir eğilim göstermeyen tek çubuk. Kartlar aynı bilgiyi
-              daha okunur veriyor. Saat bazlı kırılım olsa anlamlı olurdu ama
-              `insights_daily` günlük granülerlikte. */}
-          {range.days > 1 &&
-            (series === null ? (
-              <Uyari ton="tehlike">Grafik verisi alınamadı.</Uyari>
-            ) : (
-              <MetricsChart
-                points={series.points}
-                previous={series.previous}
-                from={range.from}
-                to={range.to}
-                compareFrom={range.compareFrom}
-                compareTo={range.compareTo}
-                currency={summary.currency}
-              />
-            ))}
-
-          {ajansGorunumu ? (
-            sirketler === null ? (
-              <Uyari ton="tehlike">Şirket dağılımı alınamadı.</Uyari>
-            ) : (
-              <SirketTablosu rows={sirketler} karsilastir={range.karsilastirma !== 'yok'} />
-            )
-          ) : mcc ? (
-            musteriler === null ? (
-              <Uyari ton="tehlike">Workspace dağılımı alınamadı.</Uyari>
-            ) : (
-              <MusteriTablosu rows={musteriler} karsilastir={range.karsilastirma !== 'yok'} />
-            )
-          ) : varlik === null ? (
-            hesaplar === null ? (
-              <Uyari ton="tehlike">Hesap dağılımı alınamadı.</Uyari>
-            ) : (
-              <HesapKirilimi
-                veri={hesaplar}
-                platform={platform}
-                tasinan={tasinan}
-                siralama={siralama}
-              />
-            )
-          ) : breakdown === null ? (
-            <Uyari ton="tehlike">Dağılım verisi alınamadı.</Uyari>
-          ) : (
-            <>
-            {/*
-              DÖNÜŞÜM DETAYI TABLONUN ÜSTÜNDE.
-              Kırılım tablosu "hangi kampanya ne harcadı" sorusunu, bu tablo
-              "o dönüşümler NEYDİ" sorusunu cevaplıyor. İkincisi sayılara
-              ANLAM veriyor; altına koymak, kullanıcının 25 satırı geçip
-              bulmasını beklemek olurdu.
-            */}
-            {donusum !== null && <DonusumDetay detay={donusum} currency={summary.currency} />}
-
-            <BreakdownTable
-              /*
-               * SIRALAMA BURADA UYGULANIYOR, SORGUDA DEĞİL. Satır kümesi her
-               * zaman "harcamaya göre ilk N"; `ORDER BY`ı SQL'e taşımak
-               * kümeyi de değiştirirdi ve "mecraya göre sırala" diyen
-               * kullanıcı bir platformu tabloda HİÇ göremezdi.
-               */
-              rows={kirilimSirala(breakdown, siralama)}
-              level={varlik!}
-              tasinan={tasinan}
-              currency={summary.currency}
-              siralama={siralama}
-              limit={KIRILIM_LIMITI}
-              /* ÇÖZÜLMÜŞ TARİHLER: `tasinan` ön ayar kodu taşıyor ("son30"),
-                 önizleme ucu gerçek tarih istiyor. İkinci kez çözmek, aynı
-                 aralığı iki yerde hesaplamak olurdu. */
-              range={{ from: range.from, to: range.to }}
-            />
-            </>
+      {/*
+        ═══ İKİ SÜTUN: SOLDA RAKAMLAR, SAĞDA YAPILACAKLAR ═══
+        Geniş ekranda 2/3 + 1/3; dar ekranda tek sütun ve SIRA önemli:
+        Performans önce, bekleyen işler hemen ardından. Bekleyen işler özet
+        düşse de çiziliyor: kendi kaynağı var.
+      */}
+      <div className="grid items-start gap-4 lg:grid-cols-3">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
+          {summary !== null && summary.accountCount > 0 && (
+            <section
+              aria-label="Performans"
+              className="overflow-hidden rounded-xl border border-line bg-surface shadow-kart"
+            >
+              <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+                <h2 className="text-sm font-semibold text-ink">Performans</h2>
+              </div>
+              <PerformansKutulari summary={summary} karsilastir={karsilastir} />
+              {/* TEK GÜNLÜK ARALIKTA GRAFİK YOK: tek çubuk hiçbir eğilim göstermiyor. */}
+              {range.days > 1 &&
+                (series === null ? (
+                  <p role="alert" className="border-t border-line px-4 py-3 text-sm text-danger-strong">
+                    Grafik verisi alınamadı.
+                  </p>
+                ) : (
+                  <div className="border-t border-line">
+                    <MetricsChart
+                      cerceve={false}
+                      points={series.points}
+                      previous={series.previous}
+                      from={range.from}
+                      to={range.to}
+                      compareFrom={range.compareFrom}
+                      compareTo={range.compareTo}
+                      currency={summary.currency}
+                    />
+                  </div>
+                ))}
+              <IkincilSerit summary={summary} karsilastir={karsilastir} />
+            </section>
           )}
 
-          {/*
-            HESAP SAYISI VE TAZELİK BAŞLIĞA TAŞINDI. Burada kalan tek şey
-            aralığın sınırı ve o da YALNIZCA bugün dâhil değilken yazılıyor:
-            dâhilken başlıktaki uyarı zaten aynı şeyi söylüyor ve iki yerde
-            tekrar etmek, ekranın kendi kendine açıklama yapması demek.
-          */}
-          {!range.incomplete && <p className="text-xs text-ink-muted">Bugün dâhil değil</p>}
-        </>
-      )}
-    </div>
-  );
-}
+          {summary !== null && summary.accountCount > 0 && (
+            ajansGorunumu ? (
+              sirketler === null ? (
+                <Uyari ton="tehlike">Şirket dağılımı alınamadı.</Uyari>
+              ) : (
+                <SirketTablosu
+                  rows={sirketler}
+                  karsilastir={karsilastir}
+                  limit={OZET_SATIR}
+                  tumuHref={REKLAM_YONETICISI}
+                />
+              )
+            ) : mcc ? (
+              musteriler === null ? (
+                <Uyari ton="tehlike">Workspace dağılımı alınamadı.</Uyari>
+              ) : (
+                <MusteriTablosu
+                  rows={musteriler}
+                  karsilastir={karsilastir}
+                  limit={OZET_SATIR}
+                  tumuHref={REKLAM_YONETICISI}
+                />
+              )
+            ) : (
+              <>
+                {hesaplar === null ? (
+                  <Uyari ton="tehlike">Hesap dağılımı alınamadı.</Uyari>
+                ) : (
+                  <HesapKirilimi veri={hesaplar} platform={platform} tasinan={tasinan} siralama={siralama} />
+                )}
+                {kampanyalar === null ? (
+                  <Uyari ton="tehlike">Kampanya listesi alınamadı.</Uyari>
+                ) : (
+                  <EnCokHarcayanlar
+                    rows={kampanyalar}
+                    toplamBilinmiyor={kampanyalar.length >= KAMPANYA_SINIRI}
+                    currency={summary.currency}
+                    tasinan={tasinan}
+                  />
+                )}
+              </>
+            )
+          )}
+        </div>
 
-function Cards({
-  summary,
-  karsilastir,
-}: {
-  summary: MetricsSummary;
-  karsilastir: boolean;
-}) {
-  /*
-   * KARŞILAŞTIRMA KAPALIYSA DELTA DA YOK.
-   *
-   * Sunucu geriye dönük uyum için önceki dönemi yine döndürüyor (rapor bu
-   * ucu parametresiz çağırıyor). Onu ekranda göstermek, seçicide "Karşılaştır
-   * kapalı" yazarken kartlarda yüzde değişim basmak demek olurdu — düğme
-   * yaptığını söylemeyen bir düğme olurdu.
-   */
-  const prev = karsilastir ? summary.previous : null;
-  const currency = summary.currency;
+        <div className="min-w-0 space-y-4">
+          <Suspense fallback={<BekleyenIslerIskeleti />}>
+            <BekleyenIslerKutusu
+              sonuc={bekleyenler}
+              onayYetkisi={session.permissions.includes('strategy.approve')}
+            />
+          </Suspense>
 
-  // Karışık para biriminde tek bir harcama toplamı göstermek yanlış olurdu;
-  // tutarları para birimi başına yan yana veriyoruz.
-  const spendValue =
-    currency === null && summary.byCurrency.length > 1
-      ? summary.byCurrency
-          .map((c) => formatMoney(c.spendMicros, c.currency, { compact: true }))
-          .join(' + ')
-      : formatMoney(summary.spendMicros, currency);
+          {butceGorunur && (
+            <ButceKarti
+              veri={butce}
+              hata={butceHatasi}
+              href={butceAdresi(session.activeClientId)}
+              ayAdi={buAyAdi()}
+            />
+          )}
 
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <MetricCard
-        terim="harcama"
-        value={spendValue}
-        change={changePercentMicros(summary.spendMicros, prev?.spendMicros)}
-        emphasis
-      />
-      <MetricCard
-        terim="donusum"
-        value={formatNumber(summary.conversions)}
-        change={changePercent(summary.conversions, prev?.conversions)}
-      />
-      <MetricCard
-        terim="cpa"
-        value={formatMoney(microsOf(summary.cpa), currency)}
-        // ARTIŞ KÖTÜ: dönüşüm başına maliyet yükseliyorsa kırmızı olmalı.
-        inverse
-        change={summary.cpa === null ? null : changePercent(summary.cpa, prev?.cpa)}
-        hint={summary.cpa === null ? 'henüz sonuç yok' : undefined}
-      />
-      {/* ROAS YERİNE ERİŞİM — gelir takip edilmiyorsa.
-          Lead formu ve mesajlaşma kampanyalarında gelir değeri hiç yok ve
-          ROAS kartı sürekli "—" gösteriyor: bir kart boyunca yer kaplayıp
-          hiçbir şey söylemiyor. Erişim o hesaplarda anlamlı bir dördüncü
-          metrik. Gelir varsa ROAS geri geliyor — asıl karar metriği o. */}
-      {summary.roas === null ? (
-        <MetricCard
-          terim="erisim"
-          value={formatNumber(summary.reach)}
-          /* GÜNLÜK ORTALAMA ÖNCE SÖYLENİR. Çok hesaplı ve çok günlü
-             aralıkta ipucu yalnızca "mükerrer olabilir" diyordu; sayı bir
-             GÜNÜN ortalamasıyken dönemin tekil kişi sayısı gibi okunuyordu.
-             Sayının NE olduğu, nasıl şiştiğinden önemli. */
-          hint={
-            summary.reach === null
-              ? 'platform bildirmiyor'
-              : summary.reachKind === 'daily_average'
-                ? summary.reachAcrossAccounts
-                  ? 'günlük ortalama, hesaplar arası mükerrer olabilir'
-                  : 'günlük ortalama, kişiler günler arasında toplanamaz'
-                : summary.reachAcrossAccounts
-                  ? 'hesaplar arası mükerrer olabilir'
-                  : undefined
-          }
-        />
-      ) : (
-        <MetricCard terim="roas" value={formatRoas(summary.roas)} change={changePercent(summary.roas, prev?.roas)} />
-      )}
-    </div>
-  );
-}
+          {donusum !== null && summary !== null && (
+            <DonusumDetay detay={donusum} currency={summary.currency} />
+          )}
+        </div>
+      </div>
 
-/** İkincil metrikler — bağlam veriyor, karar verdirmiyor. */
-function SecondaryStrip({
-  summary,
-  karsilastir,
-}: {
-  summary: MetricsSummary;
-  karsilastir: boolean;
-}) {
-  const prev = karsilastir ? summary.previous : null;
-  const currency = summary.currency;
-
-  return (
-    <MetricStrip
-      items={[
-        {
-          terim: 'gosterim',
-          value: formatNumber(summary.impressions),
-          change: changePercent(summary.impressions, prev?.impressions),
-        },
-        {
-          terim: 'tik',
-          value: formatNumber(summary.clicks),
-          change: changePercent(summary.clicks, prev?.clicks),
-        },
-        {
-          terim: 'ctr',
-          value: formatPercent(summary.ctr),
-          change: summary.ctr === null ? null : changePercent(summary.ctr, prev?.ctr),
-        },
-        {
-          terim: 'cpc',
-          value: formatMoney(microsOf(summary.cpc), currency),
-          // Artış kötü: tık başına maliyet yükselmesi iyi haber değil.
-          inverse: true,
-          change: summary.cpc === null ? null : changePercent(summary.cpc, prev?.cpc),
-        },
-        {
-          /* BGBM — sunucu zaten hesaplıyordu (`totals().cpm`), ekranda
-             yoktu. Teslimat pahalılaştığında CPC ile CTR'ı ayrı ayrı okuyup
-             tahmin yürütmek yerine kitleye ulaşmanın fiyatını doğrudan
-             gösteriyor. */
-          terim: 'cpm',
-          value: formatMoney(microsOf(summary.cpm), currency),
-          inverse: true,
-          change: summary.cpm === null ? null : changePercent(summary.cpm, prev?.cpm),
-        },
-      ]}
-    />
-  );
-}
-
-/**
- * Platform sekmeleri.
- *
- * "Tümü" varsayılan çünkü bu ürünün ana vaadi iki platformu TEK ekranda
- * toplamak. Sekmeler o vaadi bozmuyor, derinleşme yolu açıyor: bir platformun
- * kampanyalarına odaklanmak istediğinde diğerinin gürültüsü kalkıyor.
- *
- * Seçim URL'de taşınıyor — sayfa sunucu bileşeni ve seçim için JS inmiyor;
- * ayrıca bağlantı paylaşılabilir oluyor.
- */
-function PlatformTabs({
-  current,
-  hesap,
-  seviye,
-  tasinan,
-}: {
-  current: Platform | null;
-  hesap: string | undefined;
-  seviye: PanelSeviyesi;
-  tasinan: Record<string, string | undefined>;
-}) {
-  /*
-   * SEKMELER `PLATFORMS`TAN. Elle yazılıydı ve tuhaf bir hâl üretiyordu:
-   * `resolvePlatform` LinkedIn'i URL'den ÇÖZÜYOR ama tıklanacak sekme YOK —
-   * yani özellik var, girişi yok.
-   */
-  const options: Array<{ key: Platform | null; label: string }> = [
-    { key: null, label: 'Tümü' },
-    ...PLATFORMS.map((p) => ({ key: p as Platform | null, label: PLATFORM_KISA_ADLARI[p] })),
-  ];
-  return (
-    <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Platform">
-      {options.map((o) => {
-        const active = current === o.key;
-        return (
-          <Link
-            key={o.label}
-            // Mecra değişince hesap düşüyor: hesap tek mecraya ait
-            // (`platformSekmesiSorgusu`).
-            href={baglanti(
-              '/dashboard',
-              tasinan,
-              platformSekmesiSorgusu(o.key, { platform: current, hesap, seviye }),
-            )}
-            aria-current={active ? 'page' : undefined}
-            className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-              active ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
-            }`}
-          >
-            {o.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-      <h2 className="text-sm font-semibold text-ink">Henüz veri yok</h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
-        Bir platform bağlayıp reklam hesabını bir workspace&apos;e ata. Veriler kısa süre içinde
-        burada görünür.
-      </p>
-      <Link
-        href="/ayarlar/baglantilar"
-        className={`mt-4 ${dugmeSinifi()}`}
-      >
-        Bağlantılara git
-      </Link>
+      {/* Aralığın sınırı YALNIZCA bugün dâhil değilken; dâhilken başlık zaten söylüyor. */}
+      {!range.incomplete && <p className="text-xs text-ink-muted">Bugün dâhil değil</p>}
     </div>
   );
 }
@@ -948,40 +461,10 @@ function EmptyState() {
  * çerçeve, kullanıcıya okunacak bir şey varmış gibi görünüyor.
  */
 function Uyarilar({ satirlar }: { satirlar: Array<React.ReactNode | null> }) {
-  // Görünüş ortak bileşende (`UyariListesi`): renk ikonda, zeminde değil.
   return <UyariListesi satirlar={satirlar} />;
 }
 
-/** Oranı micros string'e çevirir — `formatMoney` tek bir giriş biçimi bekliyor. */
-/** Hata mesajını çıkarır — platformun kendi cümlesi ekranda görünmeli. */
-function hataMetni(e: unknown): string {
-  return e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı.';
-}
-
-function first(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-/**
- * Platform parametresi.
- *
- * Bilinmeyen değer "tümü"ye düşüyor, hata vermiyor: URL elle düzenlenmiş
- * olabilir ve bir yazım hatası yüzünden panelin açılmaması abartı olurdu.
- */
-function resolvePlatform(raw: string | undefined): Platform | null {
-  /*
-   * LİSTEDEN ÇÖZÜLÜYOR, ELLE DALLANMIYOR.
-   *
-   * Burada `raw === 'meta' || raw === 'google'` yazıyordu ve üçüncü platform
-   * eklenince en can sıkıcı hâli üretecekti: LinkedIn süzgecini seçen
-   * kullanıcı bilinmeyen değer sayılıp SESSİZCE "tümü"ye dönerdi. Hata yok,
-   * uyarı yok — sadece yanlış rakamlar. CLAUDE.md'deki "süzgeç bazen
-   * kayboluyor" hatasının aynısı.
-   */
-  return PLATFORMS.find((p) => p === raw) ?? null;
-}
-
-/** "Ekim" — kartın başlığı; ay anahtarıyla aynı saat dilimi (UTC). */
+/** "Ekim" — bütçe kartının başlığı; ay anahtarıyla aynı saat dilimi (UTC). */
 function buAyAdi(): string {
   const ad = new Date().toLocaleDateString('tr-TR', { month: 'long', timeZone: 'UTC' });
   return ad.charAt(0).toLocaleUpperCase('tr-TR') + ad.slice(1);

@@ -261,20 +261,38 @@ describe('kırılım tablosu — mecra sütunu', () => {
      * kırılım sorgularının TAMAMINI yeniden koşturuyordu.
      *
      * Korunması gereken kural şu: süzgeçler bağlantı KALSIN ve istemci
-     * state'i TEK BİR şey için var olsun. İkincisi sayıyla kilitleniyor —
-     * ikinci bir `useState` eklendiği gün bu test soruyu yeniden sordurur.
+     * state'i YALNIZCA önizleme için var olsun. Sayıyla kilitleniyor:
+     * 2026-10-09'da "Önizlemeler" anahtarı dört state getirdi (anahtar, tek
+     * açık, tek tek kapatılan, bir kez açılmış); beşinci bir `useState`
+     * eklendiği gün bu test soruyu yeniden sordurur.
      */
-    expect(KAYNAK).toContain("baglanti('/dashboard', tasinan, { sirala: anahtar })");
+    expect(KAYNAK).toContain("baglanti(REKLAM_YONETICISI, tasinan, { sirala: anahtar })");
     expect(KAYNAK).toContain("{ seviye: tab.key, ...tab.dusen }");
     // İMPORT SAYILMIYOR: yalnızca GERÇEK state kurulumları.
     const state = (KAYNAK.match(/\]\s*=\s*useState/g) ?? []).length;
-    expect(state, 'tabloda beklenenden fazla istemci state\'i var').toBe(1);
-    expect(KAYNAK).toContain('const [acikReklam, setAcikReklam]');
+    expect(state, 'tabloda beklenenden fazla istemci state\'i var').toBe(4);
+    for (const ad of ['hepsiAcik', 'tekAcik', 'kapatilan', 'acilmis']) {
+      expect(KAYNAK).toContain(`const [${ad}, set`);
+    }
   });
 });
 
-describe('Genel Bakış — katman sırası', () => {
-  const KAYNAK = oku('app/(dashboard)/dashboard/page.tsx');
+/*
+ * 2026-10-09: iniş tablosu Reklam Yöneticisi'ne taşındı; katman kuralları
+ * orada. Genel Bakış aynı ajans → MCC sırasını kendi özet kartları için
+ * ayrıca kuruyor, o da aşağıda kilitli.
+ */
+describe('Genel Bakış — ajans kontrolü MCC\'den önce', () => {
+  const GB = oku('app/(dashboard)/dashboard/page.tsx');
+  it('sıra korunuyor ve ilk beş şirket gösteriliyor', () => {
+    expect(GB.indexOf('const mcc =')).toBeGreaterThan(GB.indexOf('const ajansGorunumu'));
+    expect(GB).toContain('!ajansGorunumu && session.activeClientId === null');
+    expect(GB).toContain('limit={OZET_SATIR}');
+  });
+});
+
+describe('Reklam Yöneticisi — katman sırası', () => {
+  const KAYNAK = oku('app/(dashboard)/ads-explorer/page.tsx');
 
   it('AJANS kontrolü MCC kontrolünden ÖNCE geliyor', () => {
     /*

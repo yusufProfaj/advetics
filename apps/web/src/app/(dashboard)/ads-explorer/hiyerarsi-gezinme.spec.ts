@@ -26,7 +26,7 @@ function kod(yol: string): string {
     .replace(/^\s*\/\/.*$/gm, '');
 }
 
-const SAYFA = kod('app/(dashboard)/dashboard/page.tsx');
+const SAYFA = kod('app/(dashboard)/ads-explorer/page.tsx');
 const TABLO = kod('components/breakdown-table.tsx');
 const SERIT = kod('components/hiyerarsi-yolu.tsx');
 
@@ -159,7 +159,9 @@ describe('EKMEK KIRINTISI', () => {
      * URL parametresi cookie'yi EZİYOR: `?kampanya=` kalırsa üst bar yeni
      * kapsamı yazarken gövde eskisini gösterir.
      */
-    expect(SERIT).toContain("router.replace('/dashboard')");
+    // Kullanıcı bulunduğu sayfada kalıyor; sorgu yine temizleniyor.
+    expect(SERIT).toContain("const yol = usePathname() ?? '/dashboard';");
+    expect(SERIT).toContain('router.replace(yol);');
   });
 
   it('KRİTİK: kapsam hatası YUTULMUYOR', () => {

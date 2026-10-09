@@ -33,7 +33,7 @@ export type RayOgesi =
  * - Başlıksız bölümün (Genel Bakış) her öğesi kendi satırı.
  * - TEK sayfalı bölüm DOĞRUDAN o sayfaya gider; tek satırlık bir panel her
  *   gidişe boşa bir tık ekler. Müşteri hesabında Planla (yalnız AdvStrategy)
- *   ve Yönet (yalnız Reklam Keşfi) böyle; menü ona göre kendiliğinden
+ *   ve Yönet (yalnız Reklam Yöneticisi) böyle; menü ona göre kendiliğinden
  *   sadeleşiyor.
  * - Çok sayfalı bölüm panel açar.
  * - "Oluştur" rayda ayrı bir satır DEĞİL: Google Ads'teki gibi en üstteki

@@ -860,3 +860,21 @@ body {
   max-width: 100%;
   height: auto;
 }
+
+/*
+ * PAY ÇUBUĞU (Genel Bakış › en çok harcayan kampanyalar): sayfa açılınca
+ * soldan doluyor. `transform` ile, genişlikle değil: genişlik animasyonu
+ * her karede yerleşimi yeniden hesaplatır. Hareket azaltılmışsa çubuk
+ * doğrudan son hâlinde.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .pay-cubugu {
+    transform-origin: left;
+    animation: pay-cubugu-dol 0.8s var(--ease-out) 0.15s backwards;
+  }
+}
+@keyframes pay-cubugu-dol {
+  from {
+    transform: scaleX(0);
+  }
+}
