@@ -72,6 +72,16 @@ export class BudgetsService {
 
   // ---------------------------------------------------------------------------
   // CRUD
+  //
+  // KAPSAM `ctx.orgId` İLE DEĞİL, `ctx.clientIds` İLE. "Tüm şirketler"
+  // kipinde `ctx.orgId` EV şirketinde kalıyor (`tenant-context.service.ts`
+  // bunu bilerek yapıyor), `ctx.clientIds` ise kardeş şirketlerin
+  // workspace'lerini de taşıyor. Burada `b.org_id = ctx.orgId` yazılıyken bu
+  // kipte kardeş workspace'in bütçesi ekranda HİÇ görünmüyordu ve Genel
+  // Bakış'ın "Bekleyen işler" kutusu (politikayla süzüyor) aynı satırı VAR
+  // sayıyordu: kutu "bütçe tamam" diyor, tıklanan ekran boş. Workspace
+  // listesi uygulama tarafının kapsamı; şirket sınırını RLS
+  // (`org_kapsaminda`) çiziyor ve kip neyse onu doğru çiziyor.
   // ---------------------------------------------------------------------------
 
   async list(ctx: TenantContext, query: BudgetQuery): Promise<BudgetRecord[]> {
@@ -88,7 +98,7 @@ export class BudgetsService {
                b.alert_threshold_pct, b.auto_pause_at_pct, b.note, b.updated_at
         FROM monthly_budgets b
         LEFT JOIN ad_accounts a ON a.id = b.ad_account_id
-        WHERE b.org_id = ${ctx.orgId}::uuid ${filters}
+        WHERE b.client_id = ANY(${ctx.clientIds}::uuid[]) ${filters}
         ORDER BY b.month DESC, b.ad_account_id NULLS FIRST
       `);
       return rows.map((r) => this.toRecord(r));
@@ -123,8 +133,15 @@ export class BudgetsService {
       // satır gelmiyorsa müşteri yok YA DA erişim yok — ikisini ayırt
       // etmiyoruz, çünkü ayırt etmek başka kiracının müşteri id'lerini
       // doğrulanabilir kılardı.
-      const [client] = await tx.$queryRaw<Array<{ reporting_currency: string }>>(Prisma.sql`
-        SELECT reporting_currency FROM clients WHERE id = ${input.clientId}::uuid
+      //
+      // `org_id` DE BURADAN okunuyor, `ctx.orgId`ten değil. "Tüm şirketler"
+      // kipinde `ctx.orgId` ev şirketi: kardeş şirketin workspace'ine kurulan
+      // bütçe ev şirketinin org'uyla yazılıyordu ve o satırı kardeş şirketin
+      // İÇİNDEN kimse göremiyordu (`org_kapsaminda` yalnız o şirketi açıyor).
+      // Bu tabloda `(client_id, org_id)` kompozit yabancı anahtarı yok, yani
+      // yanlış çift HATA VERMEDEN yazılıyordu. Bkz. `musteriOrgId`.
+      const [client] = await tx.$queryRaw<Array<{ reporting_currency: string; org_id: string }>>(Prisma.sql`
+        SELECT reporting_currency, org_id::text AS org_id FROM clients WHERE id = ${input.clientId}::uuid
       `);
       if (!client) throw new NotFoundException('Workspace bulunamadı');
 
@@ -159,13 +176,18 @@ export class BudgetsService {
             amount_micros, currency, daily_cap_micros,
             alert_threshold_pct, auto_pause_at_pct, note, created_by, updated_at
           ) VALUES (
-            gen_random_uuid(), ${ctx.orgId}::uuid, ${input.clientId}::uuid,
+            gen_random_uuid(), ${client.org_id}::uuid, ${input.clientId}::uuid,
             ${input.adAccountId ?? null}::uuid, ${month}::date,
             ${amountMicros}::bigint, ${currency}, ${dailyCapMicros}::bigint,
             ${input.alertThresholdPct}, ${input.autoPauseAtPct ?? null}::int,
             ${input.note ?? null}, ${ctx.userId}::uuid, now()
           )
           ON CONFLICT ${conflict} DO UPDATE SET
+            -- ORG DA GÜNCELLENİYOR: eski kodun yanlış org'la yazdığı bir
+            -- satır, görülebildiği ilk kayıtta (tüm şirketler kipinde)
+            -- kendiliğinden doğru şirkete geçsin. Yazılmasaydı satır yarım
+            -- kalırdı ve kardeş şirketin içinden görünmemeye devam ederdi.
+            org_id              = EXCLUDED.org_id,
             amount_micros       = EXCLUDED.amount_micros,
             currency            = EXCLUDED.currency,
             daily_cap_micros    = EXCLUDED.daily_cap_micros,
@@ -194,7 +216,8 @@ export class BudgetsService {
   async remove(ctx: TenantContext, id: string): Promise<void> {
     await this.prisma.withTenant(ctx, async (tx) => {
       const deleted = await tx.$executeRaw(Prisma.sql`
-        DELETE FROM monthly_budgets WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
+        DELETE FROM monthly_budgets
+         WHERE id = ${id}::uuid AND client_id = ANY(${ctx.clientIds}::uuid[])
       `);
       if (deleted === 0) throw new NotFoundException('Bütçe bulunamadı');
     });
@@ -225,8 +248,8 @@ export class BudgetsService {
                b.alert_threshold_pct, b.auto_pause_at_pct, b.note, b.updated_at
         FROM monthly_budgets b
         LEFT JOIN ad_accounts a ON a.id = b.ad_account_id
-        WHERE b.org_id = ${ctx.orgId}::uuid
-          AND b.client_id = ${query.clientId}::uuid
+        WHERE b.client_id = ${query.clientId}::uuid
+          AND b.client_id = ANY(${ctx.clientIds}::uuid[])
           AND b.month = ${start}::date
       `);
 

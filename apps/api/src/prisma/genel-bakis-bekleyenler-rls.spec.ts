@@ -85,6 +85,15 @@ beforeAll(async () => {
       sorgular.push(sql.sql);
       return h.db.$queryRaw(sql);
     },
+    // Bütçe silme `$executeRaw` kullanıyor; aynı yoldan, aynı rolle.
+    $executeRaw: (ilk: unknown, ...degerler: unknown[]) => {
+      const sql =
+        Array.isArray(ilk) && 'raw' in (ilk as object)
+          ? Prisma.sql(ilk as unknown as readonly string[], ...degerler)
+          : (ilk as Prisma.Sql);
+      sorgular.push(sql.sql);
+      return h.db.$executeRaw(sql);
+    },
   };
   const sahte = {
     $transaction: <T>(fn: (t: unknown) => Promise<T>): Promise<T> => {
@@ -400,7 +409,7 @@ describe('kontrolcü kapısı', () => {
   });
 });
 
-describe('BULGU (Ajan 4): kutu ile bütçe ekranı "tüm şirketler" kipinde ayrışıyor', () => {
+describe('DÜZELTİLDİ (Ajan 4 bulgusu): kutu ile bütçe ekranı "tüm şirketler" kipinde ayrışıyordu', () => {
   /*
    * Kutu bütçe satırını POLİTİKAYLA süzüyor (`org_kapsaminda` — bu kipte
    * ajansın bütün şirketleri). `budgets.service#pacing` ise ayrıca
@@ -415,11 +424,11 @@ describe('BULGU (Ajan 4): kutu ile bütçe ekranı "tüm şirketler" kipinde ayr
    * pacing'i bu kipte çağırıyor. Hata pacing'de (ve aynı süzgeci taşıyan
    * list/create/delete'te); kutu doğru.
    *
-   * `it.fails`: DOĞRU davranışı iddia ediyor ve bugün düşüyor. Bütçe
-   * modülü düzeltildiğinde bu test "beklenmedik geçti" ile kırmızıya döner;
-   * o zaman `.fails` kaldırılır.
+   * Bu test `it.fails` olarak doğdu (bulgunun kanıtı); bütçe servisi kapsamı
+   * `ctx.clientIds` ve hedef workspace'in org'uyla kurunca normal teste döndü.
+   * Yazma/silme/eski satır için ayrıntı aşağıdaki blokta.
    */
-  it.fails('pacing tüm şirketler kipinde kardeş workspace’in bütçesini görmeli (kutu görüyor)', async () => {
+  it('KRİTİK: pacing tüm şirketler kipinde kardeş workspace’in bütçesini görmeli (kutu görüyor)', async () => {
     await h.q(
       `INSERT INTO monthly_budgets (id, org_id, client_id, month, amount_micros, currency, updated_at)
        VALUES (gen_random_uuid(), $1, $2, '2026-10-01', 1000000, 'TRY', now())`,
@@ -444,5 +453,78 @@ describe('BULGU (Ajan 4): kutu ile bütçe ekranı "tüm şirketler" kipinde ayr
     expect(y.isler.filter((i) => i.tur === 'butce_yok')).toEqual([]);
     const p = await butceSvc.pacing(ctx, { clientId: WS_KARDES, month: '2026-10' }, SIMDI);
     expect(p.overall.budget).not.toBeNull();
+  });
+});
+
+describe('bütçe servisi "tüm şirketler" kipinde — gerçek politikalar', () => {
+  /*
+   * `ctx.orgId` bu kipte EV şirketi. Bütçe servisi okumada `org_id`
+   * süzgecini bırakıp `ctx.clientIds` + RLS'e, yazmada `org_id`yi HEDEF
+   * workspace'ten okumaya geçti. Bu blok dört yolu da politikalar açıkken
+   * ölçüyor; yazılan satırın kardeş şirketin İÇİNDEN görünmesi asıl iddia.
+   */
+  const KARDES_IC = { ...KARDES, activeClientId: WS_KARDES } as TenantContext;
+  const girdi = {
+    clientId: WS_KARDES,
+    month: '2026-10',
+    amount: '45000',
+    alertThresholdPct: 80,
+  } as Parameters<BudgetsService['upsert']>[1];
+
+  const orgOku = async () =>
+    (await h.q<{ org_id: string }>(`SELECT org_id::text AS org_id FROM monthly_budgets WHERE client_id = $1`, [
+      WS_KARDES,
+    ])).map((r) => r.org_id);
+
+  it('KRİTİK: tüm şirketler kipinde kurulan bütçe KARDEŞ şirketin org’uyla yazılıyor ve içeriden görünüyor', async () => {
+    const kayit = await butceSvc.upsert(TUM, girdi);
+    expect(kayit.clientId).toBe(WS_KARDES);
+    expect(await orgOku()).toEqual([ORG_KARDES]);
+    const p = await butceSvc.pacing(KARDES_IC, { clientId: WS_KARDES, month: '2026-10' }, SIMDI);
+    expect(p.overall.budget?.id).toBe(kayit.id);
+  });
+
+  it('KRİTİK: list tüm şirketler kipinde kardeş bütçesini getiriyor, yabancıyı getirmiyor', async () => {
+    await h.q(
+      `INSERT INTO monthly_budgets (id, org_id, client_id, month, amount_micros, currency, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, '2026-10-01', 1000000, 'TRY', now()),
+              (gen_random_uuid(), $3, $4, '2026-10-01', 1000000, 'TRY', now())`,
+      [ORG_KARDES, WS_KARDES, ORG_YABANCI, WS_YABANCI],
+    );
+    const l = await butceSvc.list(TUM, {} as Parameters<BudgetsService['list']>[1]);
+    expect(l.map((b) => b.clientId)).toEqual([WS_KARDES]);
+    // Normal kipte (ev şirketi) kardeşin bütçesi görünmüyor: şirket sınırı RLS'te.
+    expect(await butceSvc.list(EV, {} as Parameters<BudgetsService['list']>[1])).toEqual([]);
+  });
+
+  it('KRİTİK: remove tüm şirketler kipinde kardeş bütçesini siliyor; normal kipte bulamıyor', async () => {
+    const kayit = await butceSvc.upsert(TUM, girdi);
+    await expect(butceSvc.remove(EV, kayit.id)).rejects.toThrow('Bütçe bulunamadı');
+    await butceSvc.remove(TUM, kayit.id);
+    expect(await orgOku()).toEqual([]);
+  });
+
+  it('KRİTİK: eski kodun yanlış org’la yazdığı satır tüm şirketler kipinde güncellenince doğru şirkete geçiyor', async () => {
+    // Düzeltmeden önceki hâl: kardeş workspace, EV org'u.
+    await h.q(
+      `INSERT INTO monthly_budgets (id, org_id, client_id, month, amount_micros, currency, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, '2026-10-01', 1000000, 'TRY', now())`,
+      [ORG_EV, WS_KARDES],
+    );
+    const kayit = await butceSvc.upsert(TUM, girdi);
+    expect(kayit.amountMicros).toBe('45000000000');
+    expect(await orgOku()).toEqual([ORG_KARDES]);
+  });
+
+  it('ÖLÇÜM: aynı eski satır kardeş şirketin İÇİNDEN yeniden kurulamıyor (RLS reddi) — veri düzeltmesi gerekçesi', async () => {
+    await h.q(
+      `INSERT INTO monthly_budgets (id, org_id, client_id, month, amount_micros, currency, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, '2026-10-01', 1000000, 'TRY', now())`,
+      [ORG_EV, WS_KARDES],
+    );
+    // İçeriden görünmüyor ve ON CONFLICT ona çarpıp politikada düşüyor.
+    const p = await butceSvc.pacing(KARDES_IC, { clientId: WS_KARDES, month: '2026-10' }, SIMDI);
+    expect(p.overall.budget).toBeNull();
+    await expect(butceSvc.upsert(KARDES_IC, girdi)).rejects.toThrow(/row-level security/);
   });
 });

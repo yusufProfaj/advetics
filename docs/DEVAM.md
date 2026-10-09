@@ -12,7 +12,7 @@ sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
 temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
 RLS politikası var, platform sahibi yalnız hello@profaj.com.
-**Bekleyen deploy:** yok (canlı `68ca513`, 2026-10-09 13:48).
+**Bekleyen deploy:** bütçe "tüm şirketler" düzeltmesi, migration yok (canlı `68ca513`, 2026-10-09 13:48).
 
 **ÜRÜN YAPISI PLANI (2026-10-09, kullanıcı isteği):** panel yedi bölüme
 geçiyor: Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar ·
@@ -69,10 +69,15 @@ dört ekran. Canlıda kontrol edildi: menü yedi bölüm, `/butce` açılıyor,
 aktarılmamış plan, bütçesiz harcama) + ay temposu cümleleri + hızlı
 erişim. Mimari ve ajan notları [`genel-bakis/MIMARI.md`](genel-bakis/MIMARI.md).
 Ajan 4: RLS SET ROLE testi (15), mutasyonlar; Aşama 2'de bulgu yok.
-ÖNCEDEN VAR OLAN bulgu ayrı iş: bütçe modülü "tüm şirketler" kipinde
-`ctx.orgId` ile okuyup yazıyor (kardeş şirketin bütçesi görünmüyor,
-oradan kurulan bütçe yanlış şirkete yazılıyor) — `it.fails` testi
-`genel-bakis-bekleyenler-rls.spec.ts`te; ayrı oturumda düzeltiliyor.
+Önceden var olan bütçe bulgusu DÜZELTİLDİ (2026-10-09, DEPLOY BEKLİYOR,
+migration yok): bütçe servisi "tüm şirketler" kipinde `ctx.orgId` ile
+okuyup yazıyordu; okuma artık `ctx.clientIds` + RLS, yazma `org_id`yi
+hedef workspace'ten okuyor ve ON CONFLICT org'u da düzeltiyor. **Açık:**
+üretimde yanlış org'lu eski satır var mı ÖLÇÜLMEDİ (SSH yolu bu oturumda
+izinli değildi). Varsa o satır kardeş şirketin İÇİNDEN güncellenemiyor
+(RLS reddi, testte ölçüldü); veri düzeltmesi önerildi, onay bekliyor:
+`UPDATE monthly_budgets b SET org_id = c.org_id FROM clients c
+WHERE c.id = b.client_id AND b.org_id <> c.org_id`.
 CANLIDA ÖLÇÜLDÜ: Ege Birlik kutu 14 Boost = ekranda 14 `pending` (0
 `kontrol`); uç 88 ms (tüm) / 83 ms (tek). Ekranda kutu, tempo cümleleri ve
 kısayollar gözle görüldü. Ölçülmedi: 52 workspace'li "tüm şirketler"
