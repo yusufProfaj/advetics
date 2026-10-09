@@ -13,6 +13,7 @@ import {
   type BekleyenIslerSonucu,
 } from '@/lib/bekleyen-isler';
 import type { HizliErisimOgesi } from '@/lib/hizli-erisim';
+import { AcilirListe, ILK_SATIR } from './acilir-liste';
 
 /**
  * ═══ GENEL BAKIŞ › BEKLEYEN İŞLER ═══
@@ -50,6 +51,27 @@ export async function BekleyenIslerKutusu({
 
   const { yanit } = s;
   const kesme = kesmeMetni(yanit);
+  const satir = (is: (typeof yanit.isler)[number]) => {
+    const yas = bekleyenIsYasi(is.enEski);
+    return (
+      <li key={`${is.tur}:${is.clientId}`}>
+        <Link
+          href={bekleyenIsAdresi(is)}
+          className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-4 py-2 text-sm transition-colors hover:bg-surface-muted"
+        >
+          <span className="font-semibold text-ink">{is.clientAdi}</span>
+          <span className="text-ink-muted" aria-hidden>
+            ·
+          </span>
+          <span className="min-w-0 flex-1 text-ink">{bekleyenIsCumlesi(is, onayYetkisi)}</span>
+          {yas && <span className="text-xs tabular-nums text-ink-muted">{yas}</span>}
+          <span className="text-xs font-semibold text-brand-strong" aria-hidden>
+            →
+          </span>
+        </Link>
+      </li>
+    );
+  };
 
   return (
     <section aria-labelledby="bekleyen-isler-baslik" className="rounded-xl border border-line bg-surface">
@@ -60,29 +82,14 @@ export async function BekleyenIslerKutusu({
       {hal === 'bos' && <p className="px-4 pb-3 pt-1 text-sm text-ink-muted">Bekleyen iş yok</p>}
 
       {hal === 'dolu' && (
-        <ul className="mt-2 divide-y divide-line border-t border-line">
-          {yanit.isler.map((is) => {
-            const yas = bekleyenIsYasi(is.enEski);
-            return (
-              <li key={`${is.tur}:${is.clientId}`}>
-                <Link
-                  href={bekleyenIsAdresi(is)}
-                  className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-4 py-2 text-sm transition-colors hover:bg-surface-muted"
-                >
-                  <span className="font-semibold text-ink">{is.clientAdi}</span>
-                  <span className="text-ink-muted" aria-hidden>
-                    ·
-                  </span>
-                  <span className="min-w-0 flex-1 text-ink">{bekleyenIsCumlesi(is, onayYetkisi)}</span>
-                  {yas && <span className="text-xs tabular-nums text-ink-muted">{yas}</span>}
-                  <span className="text-xs font-semibold text-brand-strong" aria-hidden>
-                    →
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="mt-2 border-t border-line">
+          {/* İlk satırlar her zaman görünür, kalanı "Tümünü göster" ile (`AcilirListe`). */}
+          <AcilirListe
+            toplam={yanit.isler.length}
+            ilk={<ul className="divide-y divide-line">{yanit.isler.slice(0, ILK_SATIR).map(satir)}</ul>}
+            kalan={<ul className="divide-y divide-line border-t border-line">{yanit.isler.slice(ILK_SATIR).map(satir)}</ul>}
+          />
+        </div>
       )}
 
       {/*
