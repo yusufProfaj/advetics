@@ -122,7 +122,9 @@ curl -fsSL https://raw.githubusercontent.com/KULLANICI/advetics/main/scripts/vps
 - **Veritabanı + üç rol** — şifreler otomatik üretilir
 - **Redis 7** — `appendonly yes`
 - **UFW** — yalnızca 22/80/443 açık
-- **pm2 systemd birimi** — sunucu yeniden başlayınca süreçler kalkar
+- **pm2 systemd birimi** — script bunu kuruyor, ama **üretimde açılışta
+  süreçleri KALDIRMADI** (2026-10-09). Geçerli yol `advetics` kullanıcısının
+  crontab'ındaki `@reboot` satırı: §10e.
 
 Idempotenttir; tekrar çalıştırmak zarar vermez.
 
@@ -567,10 +569,11 @@ Elle son kontrol:
 | Belirti | Sebep | Çözüm |
 |---|---|---|
 | `502 Bad Gateway` | pm2 süreci ölü | `pm2 logs advetics-web --lines 50` |
+| `502` ve `pm2 list` BOŞ | Sunucu yeniden başlatıldı, pm2 açılışta kalkmadı | §10e |
 | Panel açılıyor, `/api/health` 404 | Next.js yönlendirmesi yok **ve** Nginx bloğu yok | `.env`'de `INTERNAL_API_URL` var mı → `pnpm --filter @advetics/web build` |
 | Actions: `node: command not found` | nvm ile kurulmuş Node | root: `bash scripts/vps-setup.sh --site-user advetics` |
 | `Can't reach database server` | PostgreSQL kapalı / şifre yanlış | `systemctl status postgresql` · `/root/advetics-db-credentials.txt` |
-| Giriş yapılıyor, hemen çıkıyor | `AUTH_COOKIE_DOMAIN` veya `AUTH_COOKIE_SECURE` yanlış | `.env` → `advetics.com` / `true` → `pm2 restart all` |
+| Giriş yapılıyor, hemen çıkıyor | `AUTH_COOKIE_DOMAIN` veya `AUTH_COOKIE_SECURE` yanlış | `.env` → `advetics.com` / `true` → `pm2 startOrReload ecosystem.config.js --update-env` |
 | RLS kartı **sarı** | `db:rls` çalışmamış | `pnpm --filter @advetics/api db:rls` |
 | Panel eski API adresine gidiyor | `NEXT_PUBLIC_API_URL` build'e gömülü | `.env` düzelt → `pnpm --filter @advetics/web build` → `pm2 restart advetics-web` |
 | `ERR_PNPM_OUTDATED_LOCKFILE` | `package.json` değişti, lockfile commit edilmedi | Yerelde `pnpm install` → `pnpm-lock.yaml` commit |
@@ -584,6 +587,36 @@ pm2 logs
 ```bash
 pm2 monit
 ```
+
+### 10e. Sunucu yeniden başlayınca site kalkmıyor
+
+2026-10-09'da Hostinger sunucuyu 07:32'de yeniden başlattı ve site 08:03'e
+kadar `502` verdi. `advetics` kullanıcısının pm2'si açılışta HİÇ başlamadı;
+ilk `pm2 list` komutu boş bir daemon açtı ve eski süreçlerin izi `pm2 logs`ta
+bile yoktu (yeni daemon onları tanımıyor). Teşhis: `uptime -s` ile
+`~/.pm2/pm2.log` içindeki "New PM2 Daemon started" zamanını karşılaştır.
+
+Çözüm sistem servisine dokunmuyor (§1 Kurallar): `advetics` kullanıcısının
+KENDİ crontab'ında bir `@reboot` satırı. `pm2 resurrect` son `pm2 save` ile
+kaydedilen listeyi geri getiriyor; `deploy.sh` her deploy'un sonunda
+kaydettiği için liste güncel kalıyor.
+
+```bash
+( crontab -l 2>/dev/null | grep -v 'pm2 resurrect'; echo '@reboot sleep 30 && /bin/bash -c ". $HOME/.nvm/nvm.sh && pm2 resurrect" >> $HOME/.pm2/reboot.log 2>&1' ) | crontab - && crontab -l
+```
+
+- `sleep 30`: PostgreSQL ve Redis'in kalkması bekleniyor. Worker Redis'siz
+  bilerek ölüyor ve pm2 on denemeden sonra vazgeçiyor.
+- nvm açıkça yükleniyor: cron etkileşimsiz kabuk açıyor ve `pm2` PATH'te yok.
+- **CloudPanel'in cron ekranından kayıt yapılırsa** crontab yeniden yazılıp
+  bu satır silinebilir. Cron'a dokunulduktan sonra `crontab -l` ile bak.
+- Bir sonraki yeniden başlatmanın sonucu `~/.pm2/reboot.log`ta.
+
+**`advetics` kullanıcısının pm2'sinde Advetics dışı bir süreç daha var** ve
+aynı crontab'da onun işleri duruyor. `deploy.sh` yalnızca
+`ecosystem.config.js`teki üç süreci yeniden başlatıyor, o süreç etkilenmiyor.
+Bu yüzden **`pm2 restart all`, `pm2 delete all`, `pm2 kill` KULLANMA** ve
+crontab'ı satır ekleyerek değiştir, üzerine yazarak değil.
 
 ### 9a. Platform sahibi (üst hesap satışı)
 
