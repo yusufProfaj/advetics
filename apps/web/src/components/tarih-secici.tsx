@@ -224,25 +224,24 @@ export function TarihSecici({
         }}
         aria-expanded={acik}
         aria-haspopup="dialog"
-        className="flex items-center gap-2 whitespace-nowrap rounded-lg border border-line bg-surface px-3 py-1.5 text-sm transition hover:bg-surface-muted"
+        className="flex items-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-surface px-3 py-[7px] text-[13px] shadow-kart transition-colors duration-200 hover:bg-surface-muted"
       >
-        <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden>
-          <path
-            d="M4 5.5h12v11H4zM4 8.5h12M7.5 3v3M12.5 3v3"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-          />
-        </svg>
-        <span className="font-medium">{aralik.label}</span>
-        <span className="text-xs text-ink-muted">
-          {gunAdi(aralik.from)} – {gunAdi(aralik.to)}
-        </span>
+        {/*
+          ONAYLANAN TASLAĞIN DÜZENİ (2026-10-09): ön ayar adı küçük ve soluk,
+          tarih aralığı kalın, sonda açılır işareti. Karşılaştırma açıksa
+          bu da yazıyor; kapalıyken rakamların yanında değişim yok ve
+          sebebi burada görünmeli.
+        */}
+        <small className="text-xs text-ink-muted">{aralik.label}</small>
+        <b className="font-semibold">
+          {gunAdi(aralik.from)} - {gunAdi(aralik.to)}
+        </b>
         {aralik.karsilastirma !== 'yok' && (
-          <span className="rounded bg-brand-soft px-1.5 py-0.5 text-[10px] font-medium text-brand-strong">
-            karşılaştırmalı
-          </span>
+          <small className="text-[11px] text-ink-muted">· karşılaştırmalı</small>
         )}
+        <span aria-hidden className="text-xs text-ink-muted">
+          ▾
+        </span>
       </button>
 
       {acik && (

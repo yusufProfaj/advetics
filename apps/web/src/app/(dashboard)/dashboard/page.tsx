@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import type {
@@ -10,71 +11,83 @@ import type {
   MetricsOrganizationRow,
   MetricsSummary,
   MetricsTimeseries,
+  Platform,
 } from '@advetics/shared';
+import { PLATFORMS, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { enEskiGunGerekli, rangeParams, resolveRange } from '@/lib/date-range';
+import { baglanti } from '@/lib/baglanti';
 import { TarihSecici } from '@/components/tarih-secici';
 import { RefreshButton } from '@/components/refresh-button';
-import { formatDayLong } from '@/lib/format';
-import { MetricsChart } from '@/components/metrics-chart';
-import { HesapKirilimi } from '@/components/hesap-kirilimi';
-import { ButceKarti } from '@/components/budget/butce-karti';
+import {
+  changePercent,
+  changePercentMicros,
+  formatDayLong,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  formatRoas,
+  microsOf,
+} from '@/lib/format';
 import { ayAnahtari } from '@/components/butce/butce-icerik';
 import { butceAdresi } from '@/lib/butce-adresi';
-import { DonusumDetay } from '@/components/donusum-detay';
-import { MusteriTablosu } from '@/components/musteri-tablosu';
 import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
-import { SirketTablosu } from '@/components/sirket-tablosu';
-import { Uyari, UyariListesi } from '@/components/ui/uyari';
-import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
-import { siralamaCoz } from '@/lib/kirilim-siralama';
-import { bekleyenIslerYolu, type BekleyenIslerSonucu } from '@/lib/bekleyen-isler';
+import { bekleyenIslerYolu, boostRozeti, type BekleyenIslerSonucu } from '@/lib/bekleyen-isler';
 import { hizliErisim } from '@/lib/hizli-erisim';
 import { visibleSections } from '@/lib/nav-sections';
 import {
-  BekleyenIslerIskeleti,
-  BekleyenIslerKutusu,
-  BoostRozeti,
-  HizliErisim,
-} from '@/components/genel-bakis/bekleyen-isler-kutusu';
+  BildirimSeridi,
+  EnCokHarcayanlarKarti,
+  MecraDagilimi,
+  OzetListeKarti,
+  PerformansKarti,
+  type Bildirim,
+  type IkincilMetrik,
+  type OzetSatiri,
+  type PerformansMetrigi,
+} from '@/components/taslak/genel-bakis-parcalari';
 import {
-  IkincilSerit,
-  PerformansKutulari,
-  PlatformSekmeleri,
-  VeriYokDurumu,
-} from '@/components/genel-bakis/ozet-parcalari';
-import { EnCokHarcayanlar, OZET_KAMPANYA_SAYISI } from '@/components/genel-bakis/en-cok-harcayanlar';
+  BekleyenIskelet,
+  BekleyenIslerKarti,
+  ButceKarti,
+  DonusumKarti,
+  KapsamOzeti,
+} from '@/components/taslak/genel-bakis-kartlari';
+import s from '@/components/taslak/taslak.module.css';
 import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 
 export const metadata = { title: 'Genel Bakış · Advetics' };
 
 /**
- * ═══ GENEL BAKIŞ (2026-10-09 düzeni) ═══
+ * ═══ GENEL BAKIŞ — ONAYLANAN TASLAĞIN BİREBİR HÂLİ (2026-10-09) ═══
  *
- * Google Ads'in hesap genel bakışı mantığıyla, Advetics görünüşüyle: solda
- * geniş sütunda Performans (metrik kutuları + günlük grafik + ikincil
- * metrikler) ve paranın nereye gittiği; sağda dar sütunda "bugün ne
- * yapmalıyım" (bekleyen işler), bu ayın bütçesi ve dönüşümlerin ne olduğu.
+ * Kullanıcı taslağı onayladı ("mükemmel olmuş"), ilk kod sürümünü reddetti
+ * ("taslağın aynısını istiyorum, en ufak bir hata istemiyorum"): ilk sürüm
+ * taslağı eski bileşenlerle YAKLAŞIK kurmuştu. Bu sayfa taslağın kendi
+ * yapısı ve CSS'i (`components/taslak/`) ile çiziliyor; veri kuralları
+ * eskisiyle aynı.
  *
- * VERİ EKSİLTİLMEDİ (kullanıcı: "veri eksiltme, sadece görünümünü benzet").
- * Eski ekrandaki her parça burada ya da bir tık ötede:
- *   · Şirket / workspace listesi → ilk beşi burada, tamamı Reklam Yöneticisi.
- *   · Kampanya → reklam seti → reklam kırılımı ve önizleme → Reklam
- *     Yöneticisi (kullanıcı kararı: iniş orada). Eski adresler oraya
- *     yönleniyor, aşağıya bkz.
+ * Düzen: üstte başlık, tarih, güncelle; platform sekmeleri ve kısayollar;
+ * uyarı şeridi. Solda Performans (seçilebilir kutular + çizgi grafik +
+ * ikincil şerit) ve paranın nereye gittiği; sağda bekleyen işler, bütçe,
+ * mecra dağılımı, dönüşümler. AJANS GÖRÜNÜMÜNDE sağ sütun boş kalmıyor
+ * (kullanıcı: "boşlukları doldur"): mecra dağılımı ve kapsam özeti.
  *
- * Sunucu bileşeni, `force-dynamic`: metrikler her istekte tazeleniyor.
- * Bütün okumalar PARALEL; bekleyen işler kendi Suspense sınırında.
+ * VERİ EKSİLTİLMEDİ: iniş tablosu (kampanya → reklam seti → reklam,
+ * önizleme) Reklam Yöneticisi'nde; eski iniş adresleri oraya yönleniyor.
  */
 export const dynamic = 'force-dynamic';
 
 /** Genel Bakış'ın açılış aralığı. Adreste `aralik` yoksa bu kullanılıyor. */
 const GENEL_BAKIS_ARALIGI = 'bu_ay';
 
-/** Genel Bakış'taki şirket/workspace listesinin satır sayısı. */
+/** Şirket/workspace/hesap listesinde kaç satır görünür; tamamı Reklam Yöneticisi'nde. */
 const OZET_SATIR = 5;
+
+/** Kampanya kartının sunucudan istediği satır: pay ve "en az N" bunun üstünden. */
+const KAMPANYA_SINIRI = 50;
 
 /**
  * İNİŞ PARAMETRELERİ Reklam Yöneticisi'ne ait. Paylaşılmış eski bir Genel
@@ -103,9 +116,9 @@ export default async function DashboardPage({
 
   /*
    * BEKLEYEN İŞLER EN BAŞTA BAŞLIYOR, BEKLENMİYOR: söz `await` edilmiyor,
-   * metrik okumalarıyla paralel koşuyor; kutu ve Akıllı Boost rozeti onu
+   * metrik okumalarıyla paralel koşuyor; kart ve Akıllı Boost rozeti onu
    * kendi Suspense sınırlarında bekliyor. HATA NESNEYE ÇEVRİLİYOR:
-   * `.catch(() => null)` "iş yok" ile "çağrı düştü"yü aynı boş kutuya
+   * `.catch(() => null)` "iş yok" ile "çağrı düştü"yü aynı boş karta
    * çevirirdi.
    */
   const bekleyenler: Promise<BekleyenIslerSonucu> = serverApiFetch<BekleyenIslerYaniti>(
@@ -122,10 +135,7 @@ export default async function DashboardPage({
     }),
   );
 
-  /*
-   * KAPSAM YALNIZCA "Tüm zamanlar" İÇİN OKUNUYOR (en eski gün). Hata
-   * aralığı düşürmüyor: alınamazsa pencere varsayılan başlangıçtan açılıyor.
-   */
+  /* KAPSAM YALNIZCA "Tüm zamanlar" İÇİN OKUNUYOR (en eski gün). */
   const aralik = first(params.aralik) ?? GENEL_BAKIS_ARALIGI;
   const kapsam = enEskiGunGerekli(aralik)
     ? await serverApiFetch<{ earliestDate: string | null }>(
@@ -141,18 +151,20 @@ export default async function DashboardPage({
     enEskiGun: kapsam?.earliestDate ?? null,
   });
   const platform = resolvePlatform(first(params.platform));
-  const siralama = siralamaCoz(undefined);
 
   /*
    * TAŞINAN SÜZGEÇLER: tarih ve platform. Buradan Reklam Yöneticisi'ne
-   * giden her bağlantı (kampanya satırı, hesap satırı) aynı dönemi ve
-   * platformu taşıyor; yoksa tıklayan kullanıcı başka bir dönemin
-   * rakamlarına düşerdi.
+   * giden her bağlantı aynı dönemi ve platformu taşıyor; yoksa tıklayan
+   * kullanıcı başka bir dönemin rakamlarına düşerdi.
    */
   const tasinan = {
     ...rangeParams(range),
     platform: platform ?? undefined,
   };
+  const tasinanSorgu = new URLSearchParams();
+  for (const [k, v] of Object.entries(tasinan) as Array<[string, string | undefined]>) {
+    if (v !== undefined) tasinanSorgu.set(k, v);
+  }
 
   const base = new URLSearchParams({ from: range.from, to: range.to });
   if (range.compareFrom && range.compareTo) {
@@ -162,18 +174,13 @@ export default async function DashboardPage({
   if (platform) base.set('platform', platform);
   const kampanyaQs = new URLSearchParams(base);
   kampanyaQs.set('level', 'campaign');
-  // Pay sütunu GELEN bütün satırların toplamından hesaplanıyor; beş satır
-  // istemek payı yanlış gösterirdi. Sınır yine var: kesmeyi ekran yazıyor.
-  const KAMPANYA_SINIRI = 50;
   kampanyaQs.set('limit', String(KAMPANYA_SINIRI));
 
   let ozetHatasi: string | null = null;
 
   /*
-   * ÜÇ KATMAN, ÜÇ AYRI ALT KART:
-   *   · Ajans kapsamında ("Tüm şirketler")  → ŞİRKETLER (ilk beşi)
-   *   · Şirket kapsamında, workspace seçili değilse → WORKSPACE'LER (ilk beşi)
-   *   · Workspace seçiliyse → hesaplar + en çok harcayan kampanyalar
+   * ÜÇ KATMAN: ajans ("Tüm şirketler") → şirketler; şirket (workspace
+   * seçili değil) → workspace'ler; workspace → hesaplar + kampanyalar.
    * Ajans kontrolü MCC'den ÖNCE: ajans kipinde `activeClientId` boş ve MCC
    * koşulu da tutuyor.
    */
@@ -193,7 +200,6 @@ export default async function DashboardPage({
         ozetHatasi = hataMetni(e);
         return null;
       }),
-      // Tek günlük aralıkta grafik çizilmiyor; sorguyu da atlıyoruz.
       range.days > 1
         ? serverApiFetch<MetricsTimeseries>(`/metrics/timeseries?${base}`).catch(() => null)
         : Promise.resolve<MetricsTimeseries>({ points: [], previous: null }),
@@ -232,11 +238,7 @@ export default async function DashboardPage({
     ? 'Tüm şirketler'
     : (activeClient?.name ?? 'Tüm workspace’ler');
 
-  /*
-   * KAPSAM ŞERİDİ: ajans › şirket › workspace. Kampanya basamakları yok;
-   * onlar Reklam Yöneticisi'nin. Üst basamağa tıklamak kapsamı değiştiriyor
-   * ve kullanıcı Genel Bakış'ta kalıyor.
-   */
+  /* KAPSAM ŞERİDİ: ajans › şirket › workspace; üst basamak kapsamı değiştiriyor. */
   const basamaklar: YolBasamagi[] = [];
   if (session.managerAccount) {
     basamaklar.push({ ad: session.managerAccount.name, kapsam: { tip: 'ajans' } });
@@ -250,184 +252,171 @@ export default async function DashboardPage({
   if (activeClient) basamaklar.push({ ad: activeClient.name });
 
   const karsilastir = range.karsilastirma !== 'yok';
+  const veriVar = summary !== null && summary.accountCount > 0;
+
+  const yeniReklam = kisayollar.find((k) => k.href === '/reklam');
+  const digerKisayollar = kisayollar.filter((k) => k.href !== '/reklam');
 
   return (
-    <div className="space-y-4">
+    <div className={s.kok}>
       {/*
-        ═══ BAŞLIK İKİ SIRA: BAĞLAM ÜSTTE, KONTROLLER ALTTA ═══
-        Tarih ve güncelle başlığın sağında; platform sekmeleri ve kısayollar
-        kendi sırasında. Hepsi tek satırda dururken `flex-wrap` sığmayanı
-        tek tek alt satıra düşürüp başlığın altını parçalıyordu.
+        BAŞLIK: kırıntı, ad, kapsam ve dönem solda; tarih ve güncelle sağda.
         TAZELİK güncelle düğmesinin içinde: en çok bakılan bilgilerden biri.
       */}
-      <header className="space-y-3">
-        <SayfaBasligi
-          baslik="Genel Bakış"
-          ust={basamaklar.length > 1 ? <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} /> : undefined}
-          aciklama={
-            <>
-              {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
-              {range.incomplete && (
-                <span className="text-warn-strong"> · Gün bitmedi, rakamlar artacak</span>
-              )}
-            </>
-          }
-          eylemler={
-            <div className="flex flex-wrap items-center gap-2">
-              <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
-              <RefreshButton
-                dateFrom={range.from}
-                dateTo={range.to}
-                rangeLabel={range.label}
-                sonGuncelleme={summary?.lastFetchedAt ?? null}
-              />
-            </div>
-          }
-        />
-
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <PlatformSekmeleri
-            yol="/dashboard"
-            current={platform}
-            hesap={undefined}
-            seviye="hesap"
-            tasinan={tasinan}
-          />
-          {summary !== null && (
-            <span className="text-xs text-ink-muted">{summary.accountCount} reklam hesabı</span>
+      <header className={s.ust}>
+        <div>
+          {basamaklar.length > 1 && (
+            <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} gorunum="kirinti" />
           )}
-          <div className="ml-auto">
-            <HizliErisim
-              ogeler={kisayollar}
-              rozet={
-                <Suspense fallback={null}>
-                  <BoostRozeti sonuc={bekleyenler} />
-                </Suspense>
-              }
-            />
+          <h1>Genel Bakış</h1>
+          <div className={s.altSatir}>
+            {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
+            {range.incomplete && <span className={s.uyarMetin}> · Gün bitmedi, rakamlar artacak</span>}
           </div>
+        </div>
+        <div className={s.kontroller}>
+          <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
+          <RefreshButton
+            dateFrom={range.from}
+            dateTo={range.to}
+            rangeLabel={range.label}
+            sonGuncelleme={summary?.lastFetchedAt ?? null}
+          />
         </div>
       </header>
 
+      <div className={s.serit2}>
+        <nav className={s.seg} aria-label="Platform">
+          {[null, ...PLATFORMS].map((p) => (
+            <Link
+              key={p ?? 'tumu'}
+              href={baglanti('/dashboard', tasinan, { platform: p ?? undefined })}
+              aria-current={platform === p ? 'page' : undefined}
+            >
+              {p ? PLATFORM_KISA_ADLARI[p] : 'Tümü'}
+            </Link>
+          ))}
+        </nav>
+        {summary !== null && <span className={s.notKucuk}>{summary.accountCount} reklam hesabı</span>}
+        {(digerKisayollar.length > 0 || yeniReklam) && (
+          <nav className={s.hizli} aria-label="Hızlı erişim">
+            {digerKisayollar.map((k) => (
+              <Link key={k.href} className={s.hap} href={k.href}>
+                {k.etiket}
+                {k.boostRozeti && (
+                  <Suspense fallback={null}>
+                    <BoostSayisi sonuc={bekleyenler} />
+                  </Suspense>
+                )}
+              </Link>
+            ))}
+            {yeniReklam && (
+              <Link className={s.birincil} href={yeniReklam.href}>
+                ＋ Reklam oluştur
+              </Link>
+            )}
+          </nav>
+        )}
+      </div>
+
       {summary === null ? (
-        <Uyari ton="tehlike">
-          {/* Sunucunun kendi hata cümlesi; teknik ayrıntı (pm2 logs) müşteri ekranında değil. */}
-          <strong>Veriler alınamadı.</strong>
-          {ozetHatasi && <span className="ml-1">{ozetHatasi}</span>}
-        </Uyari>
+        <div className={`${s.bildirim} ${s.tehlike}`} role="alert">
+          <span className={s.bildirimIkon} aria-hidden>
+            !
+          </span>
+          <span className={s.bildirimMetin}>
+            <strong>Veriler alınamadı.</strong>
+            {ozetHatasi && <span> {ozetHatasi}</span>}
+          </span>
+        </div>
       ) : summary.accountCount === 0 ? (
-        <VeriYokDurumu />
+        <div className={s.bildirim} role="status">
+          <span className={s.bildirimIkon} aria-hidden>
+            !
+          </span>
+          <span className={s.bildirimMetin}>
+            <strong>Henüz veri yok.</strong> Bir platform bağlayıp reklam hesabını bir workspace&apos;e ata.
+          </span>
+          <Link className={s.cozum} href="/ayarlar/baglantilar">
+            Bağlantılara git →
+          </Link>
+        </div>
       ) : (
-        <Uyarilar
-          satirlar={[
-            summary.currency === null && summary.byCurrency.length > 1 ? (
-              <>
-                <strong>Birden fazla para birimi var</strong> (
-                {summary.byCurrency.map((c) => c.currency).join(', ')}). Tutarlar ayrı
-                gösteriliyor.
-              </>
-            ) : null,
-            /* İzlenmeyen hesabın harcaması toplamdan çıkıyor; söylenmezse "neden azaldı" sorulur. */
-            summary.hiddenAccounts > 0 ? (
-              <>
-                <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara
-                dâhil değil. Verileri duruyor; Platform Bağlantıları sayfasından yeniden
-                açabilirsin.
-              </>
-            ) : null,
-          ]}
-        />
+        <BildirimSeridi bildirimler={bildirimler(summary)} />
       )}
 
-      {/*
-        ═══ İKİ SÜTUN: SOLDA RAKAMLAR, SAĞDA YAPILACAKLAR ═══
-        Geniş ekranda 2/3 + 1/3; dar ekranda tek sütun ve SIRA önemli:
-        Performans önce, bekleyen işler hemen ardından. Bekleyen işler özet
-        düşse de çiziliyor: kendi kaynağı var.
-      */}
-      <div className="grid items-start gap-4 lg:grid-cols-3">
-        <div className="min-w-0 space-y-4 lg:col-span-2">
-          {summary !== null && summary.accountCount > 0 && (
-            <section
-              aria-label="Performans"
-              className="overflow-hidden rounded-xl border border-line bg-surface shadow-kart"
-            >
-              <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-                <h2 className="text-sm font-semibold text-ink">Performans</h2>
-              </div>
-              <PerformansKutulari summary={summary} karsilastir={karsilastir} />
-              {/* TEK GÜNLÜK ARALIKTA GRAFİK YOK: tek çubuk hiçbir eğilim göstermiyor. */}
-              {range.days > 1 &&
-                (series === null ? (
-                  <p role="alert" className="border-t border-line px-4 py-3 text-sm text-danger-strong">
-                    Grafik verisi alınamadı.
-                  </p>
-                ) : (
-                  <div className="border-t border-line">
-                    <MetricsChart
-                      cerceve={false}
-                      points={series.points}
-                      previous={series.previous}
-                      from={range.from}
-                      to={range.to}
-                      compareFrom={range.compareFrom}
-                      compareTo={range.compareTo}
-                      currency={summary.currency}
-                    />
-                  </div>
-                ))}
-              <IkincilSerit summary={summary} karsilastir={karsilastir} />
-            </section>
+      <div className={s.izgara}>
+        <div className={s.sutun}>
+          {veriVar && (
+            <PerformansKarti
+              metrikler={performansMetrikleri(summary!, karsilastir)}
+              ikincil={ikincilMetrikler(summary!, karsilastir)}
+              noktalar={series?.points ?? []}
+              onceki={karsilastir ? (series?.previous ?? null) : null}
+              tekGun={range.days <= 1}
+              seriHatasi={series === null}
+            />
           )}
 
-          {summary !== null && summary.accountCount > 0 && (
-            ajansGorunumu ? (
+          {veriVar &&
+            (ajansGorunumu ? (
               sirketler === null ? (
-                <Uyari ton="tehlike">Şirket dağılımı alınamadı.</Uyari>
+                <HataKarti metin="Şirket dağılımı alınamadı." />
               ) : (
-                <SirketTablosu
-                  rows={sirketler}
-                  karsilastir={karsilastir}
-                  limit={OZET_SATIR}
+                <OzetListeKarti
+                  baslik="Şirketler"
+                  sutunAdi="Şirket"
+                  satirlar={sirketSatirlari(sirketler)}
+                  toplam={sirketler.length}
                   tumuHref={REKLAM_YONETICISI}
+                  tumuEtiket="şirket"
+                  altNot={`${sirketler.filter((r) => r.spendMicros !== '0').length} tanesi bu dönemde harcadı`}
                 />
               )
             ) : mcc ? (
               musteriler === null ? (
-                <Uyari ton="tehlike">Workspace dağılımı alınamadı.</Uyari>
+                <HataKarti metin="Workspace dağılımı alınamadı." />
               ) : (
-                <MusteriTablosu
-                  rows={musteriler}
-                  karsilastir={karsilastir}
-                  limit={OZET_SATIR}
+                <OzetListeKarti
+                  baslik="Workspace’ler"
+                  sutunAdi="Workspace"
+                  satirlar={workspaceSatirlari(musteriler)}
+                  toplam={musteriler.length}
                   tumuHref={REKLAM_YONETICISI}
+                  tumuEtiket="workspace"
+                  altNot={`${musteriler.filter((r) => r.spendMicros !== '0').length} tanesi bu dönemde harcadı`}
                 />
               )
             ) : (
               <>
                 {hesaplar === null ? (
-                  <Uyari ton="tehlike">Hesap dağılımı alınamadı.</Uyari>
+                  <HataKarti metin="Hesap dağılımı alınamadı." />
                 ) : (
-                  <HesapKirilimi veri={hesaplar} platform={platform} tasinan={tasinan} siralama={siralama} />
-                )}
-                {kampanyalar === null ? (
-                  <Uyari ton="tehlike">Kampanya listesi alınamadı.</Uyari>
-                ) : (
-                  <EnCokHarcayanlar
-                    rows={kampanyalar}
-                    toplamBilinmiyor={kampanyalar.length >= KAMPANYA_SINIRI}
-                    currency={summary.currency}
-                    tasinan={tasinan}
+                  <OzetListeKarti
+                    baslik="Hesaplar"
+                    sutunAdi="Hesap"
+                    satirlar={hesapSatirlari(hesaplar, tasinan)}
+                    toplam={hesaplar.accounts.length}
+                    tumuHref={baglanti(REKLAM_YONETICISI, tasinan, {})}
+                    tumuEtiket="hesap"
+                    altNot={izlenmeyenNotu(hesaplar)}
                   />
                 )}
+                <EnCokHarcayanlarKarti
+                  ilk={kampanyalar}
+                  sorgu={base.toString()}
+                  sinir={KAMPANYA_SINIRI}
+                  paraBirimi={summary!.currency}
+                  reklamYoneticisi={REKLAM_YONETICISI}
+                  tasinanSorgu={tasinanSorgu.toString()}
+                />
               </>
-            )
-          )}
+            ))}
         </div>
 
-        <div className="min-w-0 space-y-4">
-          <Suspense fallback={<BekleyenIslerIskeleti />}>
-            <BekleyenIslerKutusu
+        <div className={s.sutun}>
+          <Suspense fallback={<BekleyenIskelet />}>
+            <BekleyenIslerKarti
               sonuc={bekleyenler}
               onayYetkisi={session.permissions.includes('strategy.approve')}
             />
@@ -442,26 +431,282 @@ export default async function DashboardPage({
             />
           )}
 
-          {donusum !== null && summary !== null && (
-            <DonusumDetay detay={donusum} currency={summary.currency} />
+          {veriVar && (
+            <MecraDagilimi
+              dilimler={mecraDilimleri({ sirketler, musteriler, hesaplar })}
+              paraBirimi={summary!.currency}
+            />
           )}
+
+          {veriVar && (ajansGorunumu || mcc) && (
+            <KapsamOzeti satirlar={kapsamSatirlari({ summary: summary!, sirketler, musteriler })} />
+          )}
+
+          {donusum !== null && <DonusumKarti detay={donusum} />}
         </div>
       </div>
 
       {/* Aralığın sınırı YALNIZCA bugün dâhil değilken; dâhilken başlık zaten söylüyor. */}
-      {!range.incomplete && <p className="text-xs text-ink-muted">Bugün dâhil değil</p>}
+      {!range.incomplete && <p className={s.notKucuk}>Bugün dâhil değil.</p>}
     </div>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+
+function HataKarti({ metin }: { metin: string }) {
+  return (
+    <section className={s.kart}>
+      <p role="alert" className={s.hataMetin}>
+        {metin}
+      </p>
+    </section>
+  );
+}
+
+/** Akıllı Boost kısayolundaki bekleyen sayısı; sıfırsa rozet yok. */
+async function BoostSayisi({ sonuc }: { sonuc: Promise<BekleyenIslerSonucu> }) {
+  const r = boostRozeti(await sonuc);
+  if (!r) return null;
+  return (
+    <span className={`${s.rozet} ${s.num}`} title={r.baslik} aria-label={r.baslik}>
+      {r.metin}
+    </span>
+  );
+}
+
 /**
- * Uyarı listesi — hepsi TEK kutuda.
- *
- * `null` satırlar eleniyor ve hiç satır kalmazsa kutu da çizilmiyor: boş bir
- * çerçeve, kullanıcıya okunacak bir şey varmış gibi görünüyor.
+ * Uyarılar TEK şeritte. Para birimi karışıksa tutarlar toplanmıyor;
+ * izlenmeyen hesabın harcaması toplamdan çıkıyor ve söylenmezse "harcama
+ * neden azaldı" sorulur.
  */
-function Uyarilar({ satirlar }: { satirlar: Array<React.ReactNode | null> }) {
-  return <UyariListesi satirlar={satirlar} />;
+function bildirimler(summary: MetricsSummary): Bildirim[] {
+  const out: Bildirim[] = [];
+  if (summary.hiddenAccounts > 0) {
+    out.push({
+      icerik: (
+        <>
+          <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara dâhil değil. Verileri
+          duruyor.
+        </>
+      ),
+      eylem: { etiket: 'Bağlantılarda aç', href: '/ayarlar/baglantilar' },
+    });
+  }
+  if (summary.currency === null && summary.byCurrency.length > 1) {
+    out.push({
+      icerik: (
+        <>
+          <strong>Birden fazla para birimi var</strong> ({summary.byCurrency.map((c) => c.currency).join(', ')}).
+          Tutarlar ayrı gösteriliyor.
+        </>
+      ),
+    });
+  }
+  return out;
+}
+
+/**
+ * Dört kutu. Dördüncüsü gelir takip ediliyorsa ROAS, edilmiyorsa ERİŞİM:
+ * form ve mesaj kampanyalarında gelir yok ve ROAS kutusu hep "—" olurdu.
+ * Erişim çok günlü aralıkta GÜNLÜK ORTALAMA ve bu yazılıyor; dönemin tekil
+ * kişi sayısı gibi okunmamalı.
+ */
+function performansMetrikleri(summary: MetricsSummary, karsilastir: boolean): PerformansMetrigi[] {
+  const prev = karsilastir ? summary.previous : null;
+  const currency = summary.currency;
+  const harcama =
+    currency === null && summary.byCurrency.length > 1
+      ? summary.byCurrency.map((c) => formatMoney(c.spendMicros, c.currency, { compact: true })).join(' + ')
+      : formatMoney(summary.spendMicros, currency);
+  const dorduncu: PerformansMetrigi =
+    summary.roas === null
+      ? {
+          anahtar: 'erisim',
+          ad: 'Erişim',
+          deger: formatNumber(summary.reach),
+          degisim: null,
+          ipucu:
+            summary.reach === null
+              ? 'platform bildirmiyor'
+              : summary.reachKind === 'daily_average'
+                ? summary.reachAcrossAccounts
+                  ? 'günlük ortalama, hesaplar arası mükerrer olabilir'
+                  : 'günlük ortalama'
+                : summary.reachAcrossAccounts
+                  ? 'hesaplar arası mükerrer olabilir'
+                  : undefined,
+        }
+      : {
+          anahtar: 'roas',
+          ad: 'Reklam getirisi',
+          deger: formatRoas(summary.roas),
+          degisim: changePercent(summary.roas, prev?.roas),
+        };
+  return [
+    {
+      anahtar: 'harcama',
+      ad: 'Harcama',
+      deger: harcama,
+      degisim: prev ? changePercentMicros(summary.spendMicros, prev.spendMicros) : null,
+    },
+    {
+      anahtar: 'donusum',
+      ad: 'Dönüşüm',
+      deger: formatNumber(summary.conversions),
+      degisim: prev ? changePercent(summary.conversions, prev.conversions) : null,
+    },
+    {
+      anahtar: 'dbm',
+      ad: 'Dönüşüm başı maliyet',
+      deger: formatMoney(microsOf(summary.cpa), currency),
+      degisim: summary.cpa === null || !prev ? null : changePercent(summary.cpa, prev.cpa),
+      ters: true,
+      ipucu: summary.cpa === null ? 'henüz sonuç yok' : undefined,
+    },
+    dorduncu,
+  ];
+}
+
+function ikincilMetrikler(summary: MetricsSummary, karsilastir: boolean): IkincilMetrik[] {
+  const prev = karsilastir ? summary.previous : null;
+  const c = summary.currency;
+  const d = (a: number | null, b: number | null | undefined) =>
+    a === null || !prev ? null : changePercent(a, b);
+  return [
+    { ad: 'Gösterim', deger: formatNumber(summary.impressions), degisim: d(summary.impressions, prev?.impressions) },
+    { ad: 'Tıklama', deger: formatNumber(summary.clicks), degisim: d(summary.clicks, prev?.clicks) },
+    { ad: 'Tıklama oranı', deger: formatPercent(summary.ctr), degisim: d(summary.ctr, prev?.ctr) },
+    { ad: 'Tıklama başı maliyet', deger: formatMoney(microsOf(summary.cpc), c), degisim: d(summary.cpc, prev?.cpc), ters: true },
+    { ad: 'Bin gösterim başı maliyet', deger: formatMoney(microsOf(summary.cpm), c), degisim: d(summary.cpm, prev?.cpm), ters: true },
+  ];
+}
+
+/** Pay: satırın harcamasının GELEN BÜTÜN satırların toplamına oranı (%). */
+function paylar<T extends { spendMicros: string }>(rows: T[]): Array<T & { pay: number }> {
+  const toplam = rows.reduce((a, r) => a + BigInt(r.spendMicros), 0n);
+  return [...rows]
+    .sort((a, b) => (BigInt(b.spendMicros) > BigInt(a.spendMicros) ? 1 : BigInt(b.spendMicros) < BigInt(a.spendMicros) ? -1 : 0))
+    .map((r) => ({ ...r, pay: toplam === 0n ? 0 : Number((BigInt(r.spendMicros) * 1000n) / toplam) / 10 }));
+}
+
+function sirketSatirlari(rows: MetricsOrganizationRow[]): OzetSatiri[] {
+  return paylar(rows)
+    .slice(0, OZET_SATIR)
+    .map((r) => ({
+      id: r.organizationId,
+      ad: r.name,
+      alt:
+        r.clientCount === 0
+          ? 'workspace yok'
+          : `${r.clientCount} workspace · ${r.adAccountCount === 0 ? 'izlemede hesap yok' : `${r.adAccountCount} hesap`}`,
+      gosterge: 'karo',
+      spendMicros: r.spendMicros,
+      pay: r.pay,
+      donusum: r.conversions,
+      dbmMicros: microsOf(r.cpa),
+      paraBirimi: r.currency,
+      eylem: { tur: 'org', id: r.organizationId },
+    }));
+}
+
+function workspaceSatirlari(rows: MetricsClientRow[]): OzetSatiri[] {
+  return paylar(rows)
+    .slice(0, OZET_SATIR)
+    .map((r) => ({
+      id: r.clientId,
+      ad: r.name,
+      alt: r.adAccountCount === 0 ? 'izlemede hesap yok' : `${r.adAccountCount} hesap`,
+      gosterge: 'karo',
+      spendMicros: r.spendMicros,
+      pay: r.pay,
+      donusum: r.conversions,
+      dbmMicros: microsOf(r.cpa),
+      paraBirimi: r.currency,
+      eylem: { tur: 'client', id: r.clientId },
+    }));
+}
+
+function hesapSatirlari(
+  veri: MetricsAccountBreakdown,
+  tasinan: Record<string, string | undefined>,
+): OzetSatiri[] {
+  return paylar(veri.accounts)
+    .slice(0, OZET_SATIR)
+    .map((a) => ({
+      id: a.adAccountId,
+      ad: a.name,
+      alt: `${PLATFORM_KISA_ADLARI[a.platform]} · ${a.externalId}${a.syncEnabled ? '' : ' · izlenmiyor'}`,
+      gosterge: a.syncEnabled ? 'yayinda' : 'durdu',
+      spendMicros: a.spendMicros,
+      pay: a.pay,
+      donusum: a.conversions,
+      dbmMicros: microsOf(a.cpa),
+      paraBirimi: a.currency,
+      // İZLENMEYEN HESAP BAĞLANTI DEĞİL: içi boş bir kampanya listesine götürürdü.
+      eylem: a.syncEnabled
+        ? {
+            tur: 'link',
+            href: baglanti(REKLAM_YONETICISI, tasinan, {
+              platform: a.platform,
+              hesap: a.adAccountId,
+              seviye: 'campaign',
+            }),
+          }
+        : null,
+    }));
+}
+
+function izlenmeyenNotu(veri: MetricsAccountBreakdown): string | undefined {
+  const n = veri.accounts.filter((a) => !a.syncEnabled).length;
+  return n > 0 ? `${n} hesap izlenmiyor` : undefined;
+}
+
+/** Mecra dağılımı: hangi katmandaysak onun satırlarının platform kırılımı toplanıyor. */
+function mecraDilimleri(v: {
+  sirketler: MetricsOrganizationRow[] | null;
+  musteriler: MetricsClientRow[] | null;
+  hesaplar: MetricsAccountBreakdown | null;
+}): Array<{ platform: Platform; spendMicros: string }> {
+  const toplam = new Map<Platform, bigint>();
+  const ekle = (p: Platform, m: string) => toplam.set(p, (toplam.get(p) ?? 0n) + BigInt(m));
+  if (v.sirketler) v.sirketler.forEach((r) => r.byPlatform.forEach((p) => ekle(p.platform, p.spendMicros)));
+  else if (v.musteriler) v.musteriler.forEach((r) => r.byPlatform.forEach((p) => ekle(p.platform, p.spendMicros)));
+  else if (v.hesaplar) v.hesaplar.platforms.forEach((p) => ekle(p.platform, p.spendMicros));
+  return PLATFORMS.filter((p) => toplam.has(p)).map((p) => ({ platform: p, spendMicros: toplam.get(p)!.toString() }));
+}
+
+function kapsamSatirlari(v: {
+  summary: MetricsSummary;
+  sirketler: MetricsOrganizationRow[] | null;
+  musteriler: MetricsClientRow[] | null;
+}): Array<{ etiket: string; deger: string; uyari?: boolean; href?: string }> {
+  const out: Array<{ etiket: string; deger: string; uyari?: boolean; href?: string }> = [];
+  if (v.sirketler) {
+    out.push({ etiket: 'Şirket', deger: formatNumber(v.sirketler.length) });
+    out.push({
+      etiket: 'Bu dönemde harcayan şirket',
+      deger: formatNumber(v.sirketler.filter((r) => r.spendMicros !== '0').length),
+    });
+    out.push({ etiket: 'Workspace', deger: formatNumber(v.sirketler.reduce((a, r) => a + r.clientCount, 0)) });
+  }
+  if (v.musteriler) {
+    out.push({ etiket: 'Workspace', deger: formatNumber(v.musteriler.length) });
+    out.push({
+      etiket: 'Bu dönemde harcayan workspace',
+      deger: formatNumber(v.musteriler.filter((r) => r.spendMicros !== '0').length),
+    });
+  }
+  out.push({ etiket: 'İzlenen reklam hesabı', deger: formatNumber(v.summary.accountCount) });
+  if (v.summary.hiddenAccounts > 0) {
+    out.push({
+      etiket: 'İzlenmeyen hesap',
+      deger: formatNumber(v.summary.hiddenAccounts),
+      uyari: true,
+      href: '/ayarlar/baglantilar',
+    });
+  }
+  return out;
 }
 
 /** "Ekim" — bütçe kartının başlığı; ay anahtarıyla aynı saat dilimi (UTC). */

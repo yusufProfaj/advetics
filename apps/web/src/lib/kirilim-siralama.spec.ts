@@ -287,7 +287,7 @@ describe('Genel Bakış — ajans kontrolü MCC\'den önce', () => {
   it('sıra korunuyor ve ilk beş şirket gösteriliyor', () => {
     expect(GB.indexOf('const mcc =')).toBeGreaterThan(GB.indexOf('const ajansGorunumu'));
     expect(GB).toContain('!ajansGorunumu && session.activeClientId === null');
-    expect(GB).toContain('limit={OZET_SATIR}');
+    expect(GB).toContain('.slice(0, OZET_SATIR)');
   });
 });
 
@@ -309,7 +309,7 @@ describe('Reklam Yöneticisi — katman sırası', () => {
   });
 
   it('ajans kapsamında ŞİRKET tablosu render ediliyor', () => {
-    expect(KAYNAK).toContain('<SirketTablosu rows={sirketler}');
+    expect(KAYNAK).toContain('sirketler.map(sirketSatiri)');
     expect(KAYNAK).toContain("serverApiFetch<MetricsOrganizationRow[]>(`/metrics/organizations?");
   });
 
@@ -321,7 +321,7 @@ describe('Reklam Yöneticisi — katman sırası', () => {
 
   it('LİMİT TEK SABİTTEN okunuyor — sorgu ve ekrandaki not ayrışmasın', () => {
     expect(KAYNAK).toContain("breakdownQs.set('limit', String(KIRILIM_LIMITI))");
-    expect(KAYNAK).toContain('limit={KIRILIM_LIMITI}');
+    expect(KAYNAK).toContain('breakdown.length >= KIRILIM_LIMITI');
   });
 
   it('SIRALAMA SORGUYA DEĞİL, GELEN SATIRLARA uygulanıyor', () => {
@@ -330,7 +330,7 @@ describe('Reklam Yöneticisi — katman sırası', () => {
      * alfabetik olarak öne düşen platformun 25 kampanyası gelir, diğeri
      * tabloda HİÇ görünmezdi — üstelik hiçbir hata vermeden.
      */
-    expect(KAYNAK).toContain('rows={kirilimSirala(breakdown, siralama)}');
+    expect(KAYNAK).toContain('kirilimSirala(breakdown, siralama).map(');
     expect(KAYNAK).not.toContain("breakdownQs.set('sirala'");
   });
 });

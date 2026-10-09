@@ -144,42 +144,26 @@ export function RefreshButton({
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <div
-        className="flex items-stretch overflow-hidden rounded-lg border border-line bg-surface text-xs shadow-[var(--shadow-xs)]"
-        title={calisiyor ? `${rangeLabel} güncelleniyor` : tazelikCumlesi}
-      >
-        {/* TAZELİK: nokta + zaman. Rengi tek başına anlam taşımıyor, metin de yazıyor. */}
-        <span
-          className={`flex items-center gap-1.5 whitespace-nowrap border-r border-line px-2.5 ${
-            bayat && !calisiyor ? 'text-warn-strong' : 'text-ink-muted'
-          }`}
-        >
-          <span aria-hidden className="relative flex h-2 w-2">
-            {bayat && !calisiyor && (
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warn opacity-60 motion-reduce:hidden" />
-            )}
-            <span
-              className={`relative inline-flex h-2 w-2 rounded-full ${
-                calisiyor ? 'bg-info' : bayat ? 'bg-warn' : 'bg-ok'
-              }`}
-            />
-          </span>
-          <span className="sr-only">{tazelikCumlesi}</span>
-          <span aria-hidden>{sonGuncelleme ? formatRelative(sonGuncelleme) : 'hiç'}</span>
-        </span>
-
+      {/*
+        ONAYLANAN TASLAĞIN DÜZENİ (2026-10-09): tek düğme; simge, eylem ve
+        sonda küçük harfle tazelik ("12 dk önce"). Veri bayatsa zaman uyarı
+        renginde ve ekran okuyucu tam cümleyi duyuyor; renk tek başına anlam
+        taşımıyor, `title` da söylüyor.
+      */}
+      <div title={calisiyor ? `${rangeLabel} güncelleniyor` : tazelikCumlesi}>
         <button
           type="button"
           onClick={() => void guncelle()}
           disabled={calisiyor}
           aria-live="polite"
-          className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 font-medium text-ink transition-colors hover:bg-surface-muted disabled:cursor-progress"
+          className="group flex items-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-surface px-3 py-[7px] text-[12.5px] font-medium text-ink shadow-kart transition-colors duration-200 hover:bg-surface-muted disabled:cursor-progress"
         >
+          <span className="sr-only">{tazelikCumlesi}</span>
           <svg
             viewBox="0 0 20 20"
             fill="none"
             aria-hidden
-            className={`h-3.5 w-3.5 ${calisiyor ? 'advetics-donus text-info' : hal.tur === 'guncellendi' && hal.dusen === 0 ? 'text-ok' : 'text-ink-muted'}`}
+            className={`h-3.5 w-3.5 transition-transform duration-[600ms] ease-[var(--ease-out)] motion-reduce:transition-none ${calisiyor ? 'advetics-donus text-info' : hal.tur === 'guncellendi' && hal.dusen === 0 ? 'text-ok' : 'text-ink-muted group-hover:rotate-180'}`}
           >
             {hal.tur === 'guncellendi' && hal.dusen === 0 ? (
               <path d="M4.5 10.5 8 14l7.5-8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -194,6 +178,11 @@ export function RefreshButton({
             )}
           </svg>
           {dugmeMetni(hal)}
+          {!calisiyor && (
+            <small aria-hidden className={`text-[11.5px] font-normal ${bayat ? 'text-warn-strong' : 'text-ink-muted'}`}>
+              {sonGuncelleme ? formatRelative(sonGuncelleme) : 'hiç güncellenmedi'}
+            </small>
+          )}
         </button>
       </div>
 
@@ -228,8 +217,8 @@ function dugmeMetni(hal: DugmeHali): string {
     case 'guncellendi':
       return hal.dusen > 0 ? 'Kısmen güncellendi' : 'Güncellendi';
     case 'uzun':
-      return 'Şimdi güncelle';
+      return 'Güncelle';
     default:
-      return 'Şimdi güncelle';
+      return 'Güncelle';
   }
 }

@@ -30,7 +30,9 @@ export function MetricStrip({
     >
       {items.map((item) => (
         <div key={item.terim} className="min-w-0 flex-1 basis-1/2 px-4 py-3 sm:basis-0">
-          <p className="text-xs font-medium text-ink-muted">
+          {/* `flex min-w-0`: uzun terim ("Bin gösterim başı maliyet") komşu
+              sütuna taşmak yerine kırpılsın; tam adı "?" balonunda. */}
+          <p className="flex min-w-0 text-xs font-medium text-ink-muted">
             <Terim anahtar={item.terim} />
           </p>
           <div className="mt-1 flex items-baseline gap-2">

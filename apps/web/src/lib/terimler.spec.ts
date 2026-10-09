@@ -49,8 +49,8 @@ describe('sözlük', () => {
 describe('kartlar sözlüğü kullanıyor', () => {
   const KART = yorumsuz('components/metric-card.tsx');
   const SERIT = yorumsuz('components/metric-strip.tsx');
-  // Kutular 2026-10-09'dan beri ortak modülde: Genel Bakış ve Reklam Yöneticisi aynısını çiziyor.
-  const SAYFA = yorumsuz('components/genel-bakis/ozet-parcalari.tsx');
+  // Genel Bakış kutularının etiketleri sayfada (onaylanan taslak, 2026-10-09).
+  const SAYFA = yorumsuz('app/(dashboard)/dashboard/page.tsx');
 
   it('KRİTİK: kart ve şerit düz etiket kabul etmiyor', () => {
     // Düz `label` kabul edilseydi yeni bir kart sözlüğü atlayıp iki harfle eklenirdi.
@@ -61,8 +61,11 @@ describe('kartlar sözlüğü kullanıyor', () => {
   });
 
   it('KRİTİK: Genel Bakış kartlarında kısaltma etiketi kalmadı', () => {
-    expect(SAYFA).not.toMatch(/label=["{]\s*['"]?(CPA|ROAS|CTR|CPC)/);
-    for (const t of ['"cpa"', '"roas"', "'ctr'", "'cpc'", "'cpm'"]) expect(SAYFA).toContain(t);
+    // Hedef kullanıcı reklamcılık bilmiyor: kısaltma değil iş dilinde ad.
+    expect(SAYFA).not.toMatch(/ad: '(CPA|ROAS|CTR|CPC|CPM|TO)'/);
+    for (const t of ["ad: 'Dönüşüm başı maliyet'", "ad: 'Reklam getirisi'", "ad: 'Tıklama oranı'", "ad: 'Tıklama başı maliyet'", "ad: 'Bin gösterim başı maliyet'"]) {
+      expect(SAYFA).toContain(t);
+    }
   });
 
   it('KRİTİK: çok günlü erişimde "günlük ortalama" ipucu mükerrer uyarısına ezilmiyor', () => {
@@ -72,9 +75,9 @@ describe('kartlar sözlüğü kullanıyor', () => {
      * gösteriyordu.
      */
     expect(SAYFA).toContain("'günlük ortalama, hesaplar arası mükerrer olabilir'");
-    const i = SAYFA.indexOf("terim=\"erisim\"");
+    const i = SAYFA.indexOf("anahtar: 'erisim'");
     expect(i).toBeGreaterThan(-1);
-    const dilim = SAYFA.slice(i, SAYFA.indexOf('/>', i));
+    const dilim = SAYFA.slice(i, SAYFA.indexOf('}\n      : {', i));
     expect(dilim.indexOf("reachKind === 'daily_average'")).toBeLessThan(dilim.indexOf('summary.reachAcrossAccounts'));
   });
 

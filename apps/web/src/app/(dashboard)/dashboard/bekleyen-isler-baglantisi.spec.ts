@@ -21,7 +21,7 @@ const yorumsuz = (yol: string): string =>
 
 const SAYFA = yorumsuz(join(__dirname, 'page.tsx'));
 const KUTU = yorumsuz(
-  join(__dirname, '..', '..', '..', 'components', 'genel-bakis', 'bekleyen-isler-kutusu.tsx'),
+  join(__dirname, '..', '..', '..', 'components', 'taslak', 'genel-bakis-kartlari.tsx'),
 );
 
 /**
@@ -58,7 +58,7 @@ function fonksiyon(kaynak: string, ad: string): string {
 
 const CAGRI = deyim(SAYFA, 'const bekleyenler');
 const KISAYOL = deyim(SAYFA, 'const kisayollar');
-const KUTU_GOVDE = fonksiyon(KUTU, 'BekleyenIslerKutusu');
+const KUTU_GOVDE = fonksiyon(KUTU, 'BekleyenIslerKarti');
 
 describe('tarama boşa düşmüyor', () => {
   it('KRİTİK: dilimler gerçekten yakalandı', () => {
@@ -90,9 +90,9 @@ describe('çağrı', () => {
 });
 
 describe('yerleşim', () => {
-  it('KRİTİK: kutu kendi Suspense sınırında, yedeği "yükleniyor" iskeleti', () => {
+  it('KRİTİK: kart kendi Suspense sınırında, yedeği "yükleniyor" iskeleti', () => {
     expect(SAYFA).toMatch(
-      /<Suspense fallback=\{<BekleyenIslerIskeleti \/>\}>\s*<BekleyenIslerKutusu\s+sonuc=\{bekleyenler\}/,
+      /<Suspense fallback=\{<BekleyenIskelet \/>\}>\s*<BekleyenIslerKarti\s+sonuc=\{bekleyenler\}/,
     );
   });
 
@@ -100,40 +100,37 @@ describe('yerleşim', () => {
     expect(SAYFA).toContain("onayYetkisi={session.permissions.includes('strategy.approve')}");
   });
 
-  it('kutu sağ sütunda, Performans ile aynı ızgarada (2026-10-09 düzeni)', () => {
-    // Kullanıcı: "daraltıp ayrı bir kart yap". Tam genişlik liste metrikleri
-    // ekranın altına itiyordu; Google Ads'te teşhis kartı da yan sütunda.
-    const izgara = SAYFA.indexOf('lg:grid-cols-3');
-    const kutu = SAYFA.indexOf('<BekleyenIslerKutusu');
-    expect(izgara).toBeGreaterThan(SAYFA.indexOf('<SayfaBasligi'));
-    expect(kutu).toBeGreaterThan(izgara);
-    expect(kutu).toBeGreaterThan(SAYFA.indexOf('<PerformansKutulari'));
+  it('kart sağ sütunda, Performans ile aynı ızgarada (onaylanan taslak)', () => {
+    const izgara = SAYFA.indexOf('<div className={s.izgara}>');
+    const kutu = SAYFA.indexOf('<BekleyenIslerKarti');
+    expect(izgara).toBeGreaterThan(SAYFA.indexOf('<header'));
+    expect(kutu).toBeGreaterThan(SAYFA.indexOf('<PerformansKarti'));
   });
 
-  it('KRİTİK: Boost rozeti kutuyla AYNI sözden', () => {
-    expect(SAYFA).toContain('<BoostRozeti sonuc={bekleyenler} />');
+  it('KRİTİK: Boost rozeti kartla AYNI sözden', () => {
+    expect(SAYFA).toContain('<BoostSayisi sonuc={bekleyenler} />');
   });
 
   it('KRİTİK: kısayollar menünün süzgecinden, layout ile aynı bağlam', () => {
     expect(KISAYOL).toContain('visibleSections(session.permissions, {');
     expect(KISAYOL).toContain('ustHesapGorunur: session.platformAdmin || session.managerAccount !== null');
     expect(KISAYOL).toContain('platformSahibi: session.platformAdmin');
-    expect(SAYFA).toContain('<HizliErisim');
-    expect(SAYFA).toContain('ogeler={kisayollar}');
+    expect(SAYFA).toContain("kisayollar.find((k) => k.href === '/reklam')");
   });
 
-  it('şirket/workspace tabloları ve uyarı kutusu yerinde (sonraki aşamada taşınacak)', () => {
-    expect(SAYFA).toContain('<SirketTablosu');
-    expect(SAYFA).toContain('<MusteriTablosu');
-    expect(SAYFA).toContain('<Uyarilar');
+  it('şirket/workspace/hesap özetleri ve uyarı şeridi yerinde', () => {
+    expect(SAYFA).toContain('satirlar={sirketSatirlari(sirketler)}');
+    expect(SAYFA).toContain('satirlar={workspaceSatirlari(musteriler)}');
+    expect(SAYFA).toContain('satirlar={hesapSatirlari(hesaplar, tasinan)}');
+    expect(SAYFA).toContain('<BildirimSeridi');
   });
 });
 
 describe('kutunun dört hâli', () => {
   it('KRİTİK: hâl saf fonksiyondan ve her hâl ayrı çiziliyor', () => {
-    expect(KUTU_GOVDE).toContain('bekleyenKutuHali(s)');
-    expect(KUTU_GOVDE).toContain("s.durum === 'hata'");
-    expect(KUTU_GOVDE).toContain('{s.mesaj}');
+    expect(KUTU_GOVDE).toContain('bekleyenKutuHali(r)');
+    expect(KUTU_GOVDE).toContain("r.durum === 'hata'");
+    expect(KUTU_GOVDE).toContain('{r.mesaj}');
     expect(KUTU_GOVDE).toContain("hal === 'bos' &&");
     expect(KUTU_GOVDE).toContain('Bekleyen iş yok');
     expect(KUTU_GOVDE).toContain("hal === 'dolu' &&");
@@ -146,13 +143,20 @@ describe('kutunun dört hâli', () => {
   });
 
   it('satır cümlesi, yaşı ve adresi saf fonksiyonlardan', () => {
-    expect(KUTU_GOVDE).toContain('bekleyenIsCumlesi(is, onayYetkisi)');
-    expect(KUTU_GOVDE).toContain('bekleyenIsYasi(is.enEski)');
-    expect(KUTU_GOVDE).toContain('href={bekleyenIsAdresi(is)}');
+    expect(KUTU).toContain('bekleyenIsCumlesi(is, onayYetkisi)');
+    expect(KUTU).toContain('bekleyenIsYasi(is.enEski)');
+    expect(KUTU).toContain('href={bekleyenIsAdresi(is)}');
   });
 
-  it('kart kalıbı: yeni gölge/animasyon yok', () => {
-    expect(KUTU).toContain('rounded-xl border border-line bg-surface');
+  it('görünüş taslak modülünden: kart kendi gölgesini yazmıyor', () => {
+    expect(KUTU).toContain('className={`${s.kart} ${s.gir}`}');
     expect(KUTU).not.toMatch(/shadow-|animate-/);
+  });
+
+  it('KRİTİK: ilk satırlar sunucuda gerçek SAYIYLA kesiliyor (istemci referansı değil)', () => {
+    // Canlıda (2026-10-09) sabit istemci dosyasından geldi ve kart boş kaldı.
+    expect(KUTU).toContain("BEKLEYEN_ILK_SATIR,\n");
+    expect(KUTU).toContain('isler.slice(0, BEKLEYEN_ILK_SATIR)');
+    expect(KUTU).toContain('isler.slice(BEKLEYEN_ILK_SATIR)');
   });
 });

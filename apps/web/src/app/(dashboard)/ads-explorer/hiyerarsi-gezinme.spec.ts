@@ -109,7 +109,7 @@ describe('SATIRDAN BİR ALT BASAMAĞA', () => {
 
 describe('EKMEK KIRINTISI', () => {
   it('KRİTİK: sayfa şeridi çiziyor', () => {
-    expect(SAYFA).toContain('<HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} />');
+    expect(SAYFA).toContain('<HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} gorunum="hap" />');
   });
 
   it('KRİTİK: workspace basamağı ODAĞI, HESABI ve MECRAYI TEMİZLİYOR', () => {

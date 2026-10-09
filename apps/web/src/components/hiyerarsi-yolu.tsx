@@ -7,6 +7,7 @@ import { TUM_SIRKETLER } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
+import t from '@/components/taslak/taslak.module.css';
 
 /**
  * ═══ EKMEK KIRINTISI — ŞİRKET › WORKSPACE › KAMPANYA › REKLAM SETİ ═══
@@ -39,14 +40,23 @@ export interface YolBasamagi {
   kapsam?: { tip: 'ajans' } | { tip: 'sirket' };
   /** URL süzgeci — bağlantı. */
   sorgu?: Record<string, string | undefined>;
+  /** Hap görünümünde adın önündeki küçük düzey adı ("Şirket", "Kampanya"). */
+  duzey?: string;
 }
 
 export function HiyerarsiYolu({
   basamaklar,
   tasinan,
+  gorunum = 'duz',
 }: {
   basamaklar: YolBasamagi[];
   tasinan: Record<string, string | undefined>;
+  /**
+   * `kirinti`: Genel Bakış taslağındaki küçük metin satırı. `hap`: Reklam
+   * Yöneticisi taslağındaki haplar (düzey adıyla). `duz`: eski görünüş,
+   * başka ekranlar için. Davranış (kapsam geçişi, bağlantılar) üçünde AYNI.
+   */
+  gorunum?: 'duz' | 'kirinti' | 'hap';
 }) {
   const router = useRouter();
   const yol = usePathname() ?? '/dashboard';
@@ -96,6 +106,56 @@ export function HiyerarsiYolu({
       setHata(e instanceof ApiRequestError ? e.message : 'Kapsam değiştirilemedi.');
       setBekleyen(null);
     }
+  }
+
+  if (gorunum !== 'duz') {
+    const hap = gorunum === 'hap';
+    return (
+      <div>
+        <nav aria-label="Konum" className={hap ? t.yol : t.kirinti}>
+          {basamaklar.map((b, i) => {
+            const sonuncu = i === basamaklar.length - 1;
+            const etiket = (
+              <>
+                {hap && b.duzey && <small>{b.duzey}</small>}
+                {bekleyen === i ? '…' : b.ad}
+              </>
+            );
+            return (
+              <span key={`${b.ad}-${i}`} style={{ display: 'contents' }}>
+                {i > 0 && (
+                  <span aria-hidden="true" className={hap ? t.yolAyrac : undefined}>
+                    ›
+                  </span>
+                )}
+                {sonuncu ? (
+                  hap ? (
+                    <span aria-current="page">{etiket}</span>
+                  ) : (
+                    <b aria-current="page">{b.ad}</b>
+                  )
+                ) : b.kapsam ? (
+                  <button
+                    type="button"
+                    onClick={() => void kapsamaGec(i, b.kapsam!)}
+                    disabled={bekleyen !== null || isPending}
+                  >
+                    {etiket}
+                  </button>
+                ) : (
+                  <Link href={baglanti(REKLAM_YONETICISI, tasinan, b.sorgu ?? {})}>{etiket}</Link>
+                )}
+              </span>
+            );
+          })}
+        </nav>
+        {hata && (
+          <p role="alert" className="mt-1 text-[11px] text-danger">
+            {hata}
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (

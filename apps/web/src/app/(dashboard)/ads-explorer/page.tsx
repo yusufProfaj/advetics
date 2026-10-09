@@ -3,37 +3,35 @@ import type {
   MetricsAccountBreakdown,
   MetricsBreakdownRow,
   MetricsClientRow,
-  MetricsConversionDetail,
   MetricsHierarchyPath,
   MetricsOrganizationRow,
+  MetricsAccountRow,
   MetricsSummary,
 } from '@advetics/shared';
-import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
+import { PLATFORMS, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { enEskiGunGerekli, rangeParams, resolveRange } from '@/lib/date-range';
 import { TarihSecici } from '@/components/tarih-secici';
 import { RefreshButton } from '@/components/refresh-button';
-import { formatDayLong } from '@/lib/format';
-import { BreakdownTable } from '@/components/breakdown-table';
-import { HesapKirilimi } from '@/components/hesap-kirilimi';
+import { changePercent, changePercentMicros, formatDayLong, formatMoney, formatNumber, microsOf } from '@/lib/format';
 import {
   hesapCoz,
   panelSeviyesiCoz,
+  platformSekmesiSorgusu,
   varlikSeviyesi,
 } from '@/lib/genel-bakis-seviyesi';
-import { DonusumDetay } from '@/components/donusum-detay';
-import { MusteriTablosu } from '@/components/musteri-tablosu';
-import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
-import { SirketTablosu } from '@/components/sirket-tablosu';
-import { Uyari, UyariListesi } from '@/components/ui/uyari';
-import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
-import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
+import { baglanti } from '@/lib/baglanti';
 import {
-  PerformansKutulari,
-  PlatformSekmeleri,
-  VeriYokDurumu,
-} from '@/components/genel-bakis/ozet-parcalari';
+  ReklamYoneticisiTablosu,
+  type YmDuzey,
+  type YmMetrik,
+  type YmSatir,
+  type YmSekme,
+} from '@/components/taslak/reklam-yoneticisi-tablosu';
+import s from '@/components/taslak/taslak.module.css';
+import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
+import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
 import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 
@@ -294,7 +292,7 @@ export default async function DashboardPage({
    * Sebep artık platformun KENDİ cümlesiyle ekranda; sayfa yine açılıyor.
    */
 
-  const [summary, breakdown, musteriler, sirketler, donusum, yol, hesaplar] =
+  const [summary, breakdown, musteriler, sirketler, yol, hesaplar] =
     await Promise.all([
     serverApiFetch<MetricsSummary>(`/metrics/summary?${base}`).catch((e: unknown) => {
       ozetHatasi = hataMetni(e);
@@ -324,22 +322,6 @@ export default async function DashboardPage({
      * yoksa tablo boş döner ve şerit adsız kalırdı. Ad VERİDEN değil
      * YAPIDAN okunmalı.
      */
-    /*
-     * DÖNÜŞÜM DETAYI — üst katman görünümlerinde ÇEKİLMİYOR.
-     *
-     * Ajans ve şirket kapsamında ekran şirket/workspace listeliyor; dönüşüm
-     * eylemleri o katmanda anlamsız (hangi workspace'in WhatsApp tıklaması
-     * olduğu yazmıyor) ve sorgu ham JSONB gövdelerini çekiyor — gösterilmeyen
-     * bir listeyi doldurmak, en pahalı sorgulardan birini boşa koşturmak
-     * olurdu.
-     */
-    // REKLAM YÖNETİCİSİNDE yalnızca bir varlık seviyesindeyken: workspace
-    // genelindeki dönüşüm listesi Genel Bakış'ta duruyor.
-    mcc || ajansGorunumu || varlik === null
-      ? Promise.resolve(null)
-      : serverApiFetch<MetricsConversionDetail>(`/metrics/donusum-detay?${base}`).catch(
-          () => null,
-        ),
     kampanya || reklamSeti || hesap
       ? serverApiFetch<MetricsHierarchyPath>(
           `/metrics/kirilim-yolu?${new URLSearchParams({
@@ -376,19 +358,20 @@ export default async function DashboardPage({
    */
   const basamaklar: YolBasamagi[] = [];
   if (session.managerAccount) {
-    basamaklar.push({ ad: session.managerAccount.name, kapsam: { tip: 'ajans' } });
+    basamaklar.push({ ad: 'Tüm şirketler', kapsam: { tip: 'ajans' } });
   }
   if (!ajansGorunumu) {
     const sirketAdi =
       session.managerAccount?.organizations.find((o) => o.id === session.activeOrganizationId)
         ?.name ?? session.organization.name;
-    basamaklar.push({ ad: sirketAdi, kapsam: { tip: 'sirket' } });
+    basamaklar.push({ ad: sirketAdi, kapsam: { tip: 'sirket' }, duzey: 'Şirket' });
   }
   if (activeClient) {
     // WORKSPACE BASAMAĞI ODAĞI, HESABI VE MECRAYI TEMİZLİYOR: kampanyanın ya
     // da hesabın içinden workspace'in bütün reklam hesaplarına dönmenin yolu.
     basamaklar.push({
       ad: activeClient.name,
+      duzey: 'Workspace',
       sorgu: {
         platform: undefined,
         hesap: undefined,
@@ -406,6 +389,7 @@ export default async function DashboardPage({
     if (yol?.adAccount) {
       basamaklar.push({
         ad: `${PLATFORM_KISA_ADLARI[yol.adAccount.platform]} · ${yol.adAccount.name}`,
+        duzey: 'Hesap',
         sorgu: {
           platform: yol.adAccount.platform,
           hesap: yol.adAccount.id,
@@ -419,135 +403,326 @@ export default async function DashboardPage({
   if (yol?.campaign) {
     basamaklar.push({
       ad: yol.campaign.name,
+      duzey: 'Kampanya',
       sorgu: { kampanya: yol.campaign.id, reklamSeti: undefined, seviye: 'ad_group' },
     });
   }
   if (yol?.adGroup) {
-    basamaklar.push({ ad: yol.adGroup.name, sorgu: { reklamSeti: yol.adGroup.id, seviye: 'ad' } });
+    basamaklar.push({ ad: yol.adGroup.name, duzey: 'Reklam seti', sorgu: { reklamSeti: yol.adGroup.id, seviye: 'ad' } });
   }
 
-  return (
-    <div className="space-y-4">
-      <SayfaBasligi
-        baslik="Reklam Yöneticisi"
-        ust={<HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} />}
-        aciklama={
-          <>
-            {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
-            {range.incomplete && <span className="text-warn-strong"> · Gün bitmedi</span>}
-          </>
-        }
-        eylemler={
-          <div className="flex flex-wrap items-center gap-2">
-            <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
-            <RefreshButton
-              dateFrom={range.from}
-              dateTo={range.to}
-              rangeLabel={range.label}
-              sonGuncelleme={summary?.lastFetchedAt ?? null}
-            />
-          </div>
-        }
-      />
+  /*
+   * ═══ TEK TABLO: HER DÜZEY AYNI BİÇİME ÇEVRİLİYOR ═══
+   * Onaylanan taslakta tek kart ve tek tablo var; düzey değişince yalnız
+   * satırlar değişiyor. Eski ekranda dört ayrı bileşen (şirket, workspace,
+   * hesap, kırılım tablosu) dört ayrı görünüş çiziyordu.
+   */
+  const duzey: YmDuzey = ajansGorunumu ? 'sirket' : mcc ? 'workspace' : varlik === null ? 'hesap' : varlik;
+  const satirlar: YmSatir[] | null = ajansGorunumu
+    ? sirketler && sirketler.map(sirketSatiri)
+    : mcc
+      ? musteriler && musteriler.map(workspaceSatiri)
+      : varlik === null
+        ? hesaplar && hesaplar.accounts.map((a) => hesapSatiri(a, tasinan))
+        : breakdown && kirilimSirala(breakdown, siralama).map((b) => varlikSatiri(b, varlik, tasinan));
+  const yuklenemedi = ajansGorunumu
+    ? 'Şirket dağılımı alınamadı.'
+    : mcc
+      ? 'Workspace dağılımı alınamadı.'
+      : varlik === null
+        ? 'Hesap dağılımı alınamadı.'
+        : 'Dağılım verisi alınamadı.';
 
-      <div className="flex flex-wrap items-center gap-2">
-        <PlatformSekmeleri
-          yol={REKLAM_YONETICISI}
-          current={platform}
-          hesap={hesap}
-          seviye={level}
-          tasinan={tasinan}
-        />
-        {summary !== null && (
-          <span className="text-xs text-ink-muted">{summary.accountCount} reklam hesabı</span>
-        )}
-        {/*
-          REKLAM GALERİSİ: metinle arama ve "Sorunlu" süzgeci orada. Tablonun
-          üstünde durması, reddedilen reklamı arayan kullanıcının o ekranın
-          varlığını bilmesi için.
-        */}
-        <Link
-          href={`${REKLAM_YONETICISI}/galeri`}
-          className="ml-auto text-xs font-semibold text-brand-strong hover:underline"
-        >
-          Reklam Galerisi (arama, sorunlu reklamlar) →
-        </Link>
-      </div>
+  const sekmeler = duzeySekmeleri({
+    duzey,
+    sayi: satirlar?.length ?? null,
+    ajansVar: session.managerAccount !== null,
+    workspaceSecili: !ajansGorunumu && !mcc,
+    cokluWorkspace: session.availableClients.length > 1,
+    tasinan,
+  });
+
+  return (
+    <div className={s.kok}>
+      <header className={s.ust}>
+        <div>
+          <h1>Reklam Yöneticisi</h1>
+          <div className={s.altSatir}>
+            {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
+            {range.incomplete && <span className={s.uyarMetin}> · Gün bitmedi</span>}
+          </div>
+        </div>
+        <div className={s.kontroller}>
+          <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
+          <RefreshButton
+            dateFrom={range.from}
+            dateTo={range.to}
+            rangeLabel={range.label}
+            sonGuncelleme={summary?.lastFetchedAt ?? null}
+          />
+          {session.permissions.includes('bulk.write') && (
+            <Link className={s.birincil} href="/reklam">
+              ＋ Reklam oluştur
+            </Link>
+          )}
+        </div>
+      </header>
+
+      <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} gorunum="hap" />
 
       {summary === null ? (
-        <Uyari ton="tehlike">
-          <strong>Veriler alınamadı.</strong>
-          {ozetHatasi && <span className="ml-1">{ozetHatasi}</span>}
-        </Uyari>
-      ) : summary.accountCount === 0 ? (
-        <VeriYokDurumu />
+        <div className={`${s.bildirim} ${s.tehlike}`} role="alert">
+          <span className={s.bildirimIkon} aria-hidden>
+            !
+          </span>
+          <span className={s.bildirimMetin}>
+            <strong>Veriler alınamadı.</strong>
+            {ozetHatasi && <span className="ml-1">{ozetHatasi}</span>}
+          </span>
+        </div>
+      ) : summary.hiddenAccounts > 0 ? (
+        /* İzlenmeyen hesap bu rakamlara girmiyor: söylenmezse "harcama neden az" sorulur. */
+        <div className={s.bildirim} role="status">
+          <span className={s.bildirimIkon} aria-hidden>
+            !
+          </span>
+          <span className={s.bildirimMetin}>
+            <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara dâhil değil.
+          </span>
+          <Link className={s.cozum} href="/ayarlar/baglantilar">
+            Bağlantılarda aç →
+          </Link>
+        </div>
+      ) : null}
+
+      {summary !== null && summary.accountCount === 0 ? (
+        <div className={s.bildirim} role="status">
+          <span className={s.bildirimIkon} aria-hidden>
+            !
+          </span>
+          <span className={s.bildirimMetin}>
+            <strong>Henüz veri yok.</strong> Bir platform bağlayıp reklam hesabını bir workspace&apos;e ata.
+          </span>
+          <Link className={s.cozum} href="/ayarlar/baglantilar">
+            Bağlantılara git →
+          </Link>
+        </div>
+      ) : satirlar === null ? (
+        <section className={s.kart}>
+          <p role="alert" className={s.hataMetin}>
+            {yuklenemedi}
+          </p>
+        </section>
       ) : (
-        <>
-          {/* İzlenmeyen hesap bu rakamlara girmiyor: söylenmezse "harcama neden az" sorulur. */}
-          <UyariListesi
-            satirlar={[
-              summary.hiddenAccounts > 0 ? (
-                <>
-                  <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara dâhil
-                  değil.
-                </>
-              ) : null,
-            ]}
-          />
-
-          {/*
-            ÖZET VE TABLO TEK AKIŞTA: kutular tablonun kapsamını (şirket,
-            workspace, hesap, kampanya) özetliyor. Google Ads'te de metrik
-            kutuları tablonun hemen üstünde ve aynı süzgeçle.
-          */}
-          <section className="overflow-hidden rounded-xl border border-line bg-surface shadow-kart">
-            <PerformansKutulari summary={summary} karsilastir={range.karsilastirma !== 'yok'} />
-          </section>
-
-          {ajansGorunumu ? (
-            sirketler === null ? (
-              <Uyari ton="tehlike">Şirket dağılımı alınamadı.</Uyari>
-            ) : (
-              <SirketTablosu rows={sirketler} karsilastir={range.karsilastirma !== 'yok'} />
-            )
-          ) : mcc ? (
-            musteriler === null ? (
-              <Uyari ton="tehlike">Workspace dağılımı alınamadı.</Uyari>
-            ) : (
-              <MusteriTablosu rows={musteriler} karsilastir={range.karsilastirma !== 'yok'} />
-            )
-          ) : varlik === null ? (
-            hesaplar === null ? (
-              <Uyari ton="tehlike">Hesap dağılımı alınamadı.</Uyari>
-            ) : (
-              <HesapKirilimi
-                veri={hesaplar}
-                platform={platform}
-                tasinan={tasinan}
-                siralama={siralama}
-              />
-            )
-          ) : breakdown === null ? (
-            <Uyari ton="tehlike">Dağılım verisi alınamadı.</Uyari>
-          ) : (
-            <>
-              <BreakdownTable
-                rows={kirilimSirala(breakdown, siralama)}
-                level={varlik!}
-                tasinan={tasinan}
-                currency={summary.currency}
-                siralama={siralama}
-                limit={KIRILIM_LIMITI}
-                range={{ from: range.from, to: range.to }}
-              />
-              {/* Seçili kampanyanın/setin dönüşümleri NEYDİ: tablonun altında, aynı odakta. */}
-              {donusum !== null && <DonusumDetay detay={donusum} currency={summary.currency} />}
-            </>
-          )}
-
-          {!range.incomplete && <p className="text-xs text-ink-muted">Bugün dâhil değil</p>}
-        </>
+        <ReklamYoneticisiTablosu
+          duzey={duzey}
+          sekmeler={sekmeler}
+          metrikler={summary === null ? null : ymMetrikleri(summary, range.karsilastirma !== 'yok')}
+          satirlar={satirlar}
+          platformSecenekleri={[null, ...PLATFORMS].map((p) => ({
+            ad: p ? PLATFORM_KISA_ADLARI[p] : 'Tümü',
+            href: baglanti(
+              REKLAM_YONETICISI,
+              tasinan,
+              platformSekmesiSorgusu(p, { platform, hesap, seviye: level }),
+            ),
+            secili: platform === p,
+          }))}
+          kesmeNotu={
+            varlik !== null && breakdown !== null && breakdown.length >= KIRILIM_LIMITI
+              ? `harcamaya göre ilk ${KIRILIM_LIMITI} satır`
+              : null
+          }
+          aralik={{ from: range.from, to: range.to }}
+          galeriHref={`${REKLAM_YONETICISI}/galeri`}
+        />
       )}
+
+      {!range.incomplete && <p className={s.notKucuk}>Bugün dâhil değil.</p>}
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ymMetrikleri(summary: MetricsSummary, karsilastir: boolean): YmMetrik[] {
+  const prev = karsilastir ? summary.previous : null;
+  const c = summary.currency;
+  const harcama =
+    c === null && summary.byCurrency.length > 1
+      ? summary.byCurrency.map((x) => formatMoney(x.spendMicros, x.currency, { compact: true })).join(' + ')
+      : formatMoney(summary.spendMicros, c);
+  return [
+    { ad: 'Harcama', deger: harcama, degisim: prev ? changePercentMicros(summary.spendMicros, prev.spendMicros) : null },
+    { ad: 'Dönüşüm', deger: formatNumber(summary.conversions), degisim: prev ? changePercent(summary.conversions, prev.conversions) : null },
+    {
+      ad: 'Dönüşüm başı maliyet',
+      deger: formatMoney(microsOf(summary.cpa), c),
+      degisim: summary.cpa === null || !prev ? null : changePercent(summary.cpa, prev.cpa),
+      ters: true,
+    },
+    { ad: 'Tıklama', deger: formatNumber(summary.clicks), degisim: prev ? changePercent(summary.clicks, prev.clicks) : null },
+  ];
+}
+
+/**
+ * DÜZEY SEKMELERİ. Üst düzeyler kapsam değiştiriyor (oturumda), alt düzeyler
+ * adresteki seviyeyi. Gidilemeyen düzey SOLUK ve NEDENİNİ söylüyor: ajans
+ * kapsamında "Kampanyalar"a basmak hangi workspace'in kampanyaları
+ * olduğunu bilmeden boş bir liste açardı.
+ */
+function duzeySekmeleri(v: {
+  duzey: YmDuzey;
+  sayi: number | null;
+  ajansVar: boolean;
+  workspaceSecili: boolean;
+  cokluWorkspace: boolean;
+  tasinan: Record<string, string | undefined>;
+}): YmSekme[] {
+  const sira: YmDuzey[] = ['sirket', 'workspace', 'hesap', 'campaign', 'ad_group', 'ad'];
+  const ad: Record<YmDuzey, string> = {
+    sirket: 'Şirketler',
+    workspace: 'Workspace’ler',
+    hesap: 'Hesaplar',
+    campaign: 'Kampanyalar',
+    ad_group: 'Reklam setleri',
+    ad: 'Reklamlar',
+  };
+  // Her alt düzey hangi odağı düşürüyor: kırılım tablosundaki kuralın aynısı.
+  const dusen: Record<'hesap' | 'campaign' | 'ad_group' | 'ad', Record<string, string | undefined>> = {
+    hesap: { hesap: undefined, kampanya: undefined, reklamSeti: undefined },
+    campaign: { kampanya: undefined, reklamSeti: undefined },
+    ad_group: { reklamSeti: undefined },
+    ad: {},
+  };
+  return sira
+    .filter((d) => d !== 'sirket' || v.ajansVar)
+    .map((d): YmSekme => {
+      const aktif = d === v.duzey;
+      const sayi = aktif ? v.sayi : null;
+      if (aktif) return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'aktif' } };
+      if (d === 'sirket') return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'org' } };
+      if (d === 'workspace') {
+        if (v.duzey === 'sirket') return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'kapali', neden: 'Bu düzey için bir şirket seç' } };
+        if (!v.cokluWorkspace) return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'kapali', neden: 'Bu şirkette tek workspace var' } };
+        return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'client' } };
+      }
+      if (!v.workspaceSecili) {
+        return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'kapali', neden: 'Bu düzey için bir workspace seç' } };
+      }
+      return {
+        anahtar: d,
+        ad: ad[d],
+        sayi,
+        hedef: { tur: 'link', href: baglanti(REKLAM_YONETICISI, v.tasinan, { seviye: d, ...dusen[d] }) },
+      };
+    });
+}
+
+function sirketSatiri(r: MetricsOrganizationRow): YmSatir {
+  return {
+    id: r.organizationId,
+    ad: r.name,
+    alt:
+      r.clientCount === 0
+        ? 'workspace yok'
+        : `${r.clientCount} workspace · ${r.adAccountCount === 0 ? 'izlemede hesap yok' : `${r.adAccountCount} hesap izlemede`}`,
+    durum: null,
+    karo: true,
+    mecralar: r.byPlatform.map((p) => p.platform),
+    spendMicros: r.spendMicros,
+    impressions: r.impressions,
+    clicks: r.clicks,
+    conversions: r.conversions,
+    paraBirimi: r.currency,
+    eylem: { tur: 'org', id: r.organizationId },
+  };
+}
+
+function workspaceSatiri(r: MetricsClientRow): YmSatir {
+  return {
+    id: r.clientId,
+    ad: r.name,
+    alt: r.adAccountCount === 0 ? 'izlemede hesap yok' : `${r.adAccountCount} hesap izlemede`,
+    durum: null,
+    karo: true,
+    mecralar: r.byPlatform.map((p) => p.platform),
+    spendMicros: r.spendMicros,
+    impressions: r.impressions,
+    clicks: r.clicks,
+    conversions: r.conversions,
+    paraBirimi: r.currency,
+    eylem: { tur: 'client', id: r.clientId },
+  };
+}
+
+function hesapSatiri(a: MetricsAccountRow, tasinan: Record<string, string | undefined>): YmSatir {
+  return {
+    id: a.adAccountId,
+    ad: a.name,
+    alt: a.syncEnabled ? `${a.clientName} · ${a.externalId}` : `${a.externalId} · izlenmiyor`,
+    altTon: a.syncEnabled ? undefined : 'uyari',
+    durum: a.syncEnabled ? { tur: 'yayinda', ad: 'İzleniyor' } : { tur: 'durdu', ad: 'İzlenmiyor' },
+    karo: false,
+    mecralar: [a.platform],
+    spendMicros: a.spendMicros,
+    impressions: a.impressions,
+    clicks: a.clicks,
+    conversions: a.conversions,
+    paraBirimi: a.currency,
+    // İZLENMEYEN HESAP BAĞLANTI DEĞİL: içi boş bir kampanya listesine götürürdü.
+    eylem: a.syncEnabled
+      ? {
+          tur: 'link',
+          href: baglanti(REKLAM_YONETICISI, tasinan, {
+            platform: a.platform,
+            hesap: a.adAccountId,
+            kampanya: undefined,
+            reklamSeti: undefined,
+            seviye: 'campaign',
+          }),
+        }
+      : null,
+  };
+}
+
+const DURUM_ADI: Record<string, string> = {
+  active: 'Yayında',
+  paused: 'Duraklatıldı',
+  deleted: 'Silindi',
+  pending_review: 'İncelemede',
+  ended: 'Bitti',
+  unknown: 'Durumu bilinmiyor',
+};
+
+function varlikSatiri(
+  b: MetricsBreakdownRow,
+  varlik: 'campaign' | 'ad_group' | 'ad',
+  tasinan: Record<string, string | undefined>,
+): YmSatir {
+  const href =
+    varlik === 'campaign'
+      ? baglanti(REKLAM_YONETICISI, tasinan, { seviye: 'ad_group', kampanya: b.entityId })
+      : varlik === 'ad_group'
+        ? baglanti(REKLAM_YONETICISI, tasinan, { seviye: 'ad', reklamSeti: b.entityId })
+        : null;
+  return {
+    id: b.entityId,
+    ad: b.name,
+    // Üst varlığın adı ZORUNLU: reklam adları setler arasında tekrar ediyor
+    // ve üst ad olmadan hangi satırın hangisi olduğu ayırt edilemiyor.
+    alt: [b.campaignType, b.parentName].filter(Boolean).join(' · ') || null,
+    durum: {
+      tur: b.status === 'active' ? 'yayinda' : 'durdu',
+      ad: DURUM_ADI[b.status] ?? DURUM_ADI.unknown!,
+    },
+    karo: false,
+    mecralar: [b.platform],
+    spendMicros: b.spendMicros,
+    impressions: b.impressions,
+    clicks: b.clicks,
+    conversions: b.conversions,
+    paraBirimi: b.currency,
+    eylem: href ? { tur: 'link', href } : { tur: 'onizle' },
+  };
 }

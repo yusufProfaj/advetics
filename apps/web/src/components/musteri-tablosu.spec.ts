@@ -45,7 +45,7 @@ describe('tarama gerçekten bir şey yakaladı', () => {
     // Dilim boşalırsa aşağıdaki "içeriyor" iddiaları BOŞ METİNDE hep yanlış,
     // "içermiyor" iddiaları ise hep DOĞRU olurdu — ikincisi sessiz.
     expect(TABLO_KOD.length).toBeGreaterThan(1500);
-    expect(SAYFA_KOD).toContain('MusteriTablosu');
+    expect(SAYFA_KOD).toContain('workspaceSatirlari(musteriler)');
   });
 });
 

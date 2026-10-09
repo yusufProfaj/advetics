@@ -72,7 +72,12 @@ export function MetricCard({
         DIŞINA taşıyor ve kırpılırdı. Şerit bu yüzden köşelerden içeride.
       */}
       {emphasis && (
-        <span aria-hidden className="absolute inset-x-4 top-0 h-[3px] rounded-b-full bg-gradient-to-r from-brand to-brand-accent" />
+        <span
+          aria-hidden
+          className={`absolute top-0 h-[3px] bg-gradient-to-r from-brand to-brand-accent ${
+            bitisik ? 'inset-x-0' : 'inset-x-4 rounded-b-full'
+          }`}
+        />
       )}
       <p className="relative text-xs font-medium text-ink-muted">
         <Terim anahtar={terim} />

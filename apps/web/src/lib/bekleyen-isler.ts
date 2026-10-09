@@ -33,6 +33,18 @@ export type BekleyenIslerSonucu =
  * kullanıcının erişebildiği bütün workspace'leri tarıyor. Ajans kipinde
  * `activeClientId` zaten her zaman null.
  */
+/**
+ * Bekleyen işler kartında kapalıyken görünen satır sayısı.
+ *
+ * BU SABİT BURADA, `acilir-liste.tsx`TE DEĞİL — ve orada OLAMAZ. O dosya
+ * `'use client'`; sunucu bileşeni oradan bir DEĞER aktarınca Next.js sayı
+ * değil bir istemci referansı veriyor. `slice(0, ILK_SATIR)` boş, `slice(
+ * ILK_SATIR)` bütün listeyi döndü: canlıda (2026-10-09) kart "3 / 50
+ * gösteriliyor" yazıp TEK SATIR göstermedi, 50 iş gizli kısımdaydı. Vitest
+ * bu sınırı tanımadığı için testler yeşildi. `istemci-siniri.spec.ts`.
+ */
+export const BEKLEYEN_ILK_SATIR = 3;
+
 export function bekleyenIslerYolu(activeClientId: string | null): string {
   return baglanti('/genel-bakis/bekleyenler', { clientId: activeClientId ?? undefined });
 }
