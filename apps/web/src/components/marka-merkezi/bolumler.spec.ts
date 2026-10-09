@@ -1,6 +1,7 @@
+import { butceAdresi } from '@/lib/butce-adresi';
 import { describe, expect, it } from 'vitest';
 import { ROLE_PERMISSIONS } from '@advetics/shared';
-import { bilgiBankasiYonu, bolumCoz, mmAdresi, varlikCoz, varlikYonu } from './bolumler';
+import { MM_BOLUMLERI, bilgiBankasiYonu, bolumCoz, mmAdresi, varlikCoz, varlikYonu } from './bolumler';
 
 /**
  * ═══ MARKA MERKEZİ BÖLÜM MODELİ — ÇALIŞTIRILARAK ═══
@@ -45,8 +46,8 @@ describe('adresler', () => {
 
 describe('eski adresler', () => {
   it('KRİTİK: Bilgi Bankası bütçe sekmesi Aylık Bütçe bölümüne, gerisi Marka’ya', () => {
-    // Bütçe 2026-10-06'dan beri Marka Merkezi'nin kendi bölümü.
-    expect(bilgiBankasiYonu('ws-1', 'butce')).toBe('/marka-merkezi?musteri=ws-1&bolum=butce');
+    // Bütçe 2026-10-09'dan beri Planla'da kendi sayfası (önce Base'teydi).
+    expect(bilgiBankasiYonu('ws-1', 'butce')).toBe('/butce?musteri=ws-1');
     const marka = u(bilgiBankasiYonu('ws-1', 'marka'));
     expect(marka.pathname).toBe('/marka-merkezi');
     expect(marka.searchParams.get('bolum')).toBe('marka');
@@ -63,35 +64,48 @@ describe('eski adresler', () => {
   });
 });
 
-describe('Aylık Bütçe Base’de', () => {
-  it('KRİTİK: bütçe bölümü var ve okuma yetkisiyle açılıyor; eski adres oraya yönleniyor', async () => {
+describe('Aylık Bütçe Planla’da (2026-10-09)', () => {
+  const oku = async (yol: string) => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
-    expect(bolumCoz('butce', ROLE_PERMISSIONS.ad_manager)).toBe('butce');
-    const eski = readFileSync(resolve(__dirname, '../../app/(dashboard)/butce/page.tsx'), 'utf8');
-    expect(eski).toContain("redirect(mmAdresi(ilk(p.musteri), 'butce', { ay: ilk(p.ay) }))");
-    expect(eski).not.toContain('serverApiFetch');
-    const sayfa = readFileSync(resolve(__dirname, '../../app/(dashboard)/marka-merkezi/page.tsx'), 'utf8');
-    expect(sayfa).toContain("{bolum === 'butce' && <ButceIcerik clientId={clientId} params={params} />}");
+    return readFileSync(resolve(__dirname, yol), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  };
+
+  it('KRİTİK: Marka Merkezi bölümü DEĞİL — aynı ayarın iki kapısı olmasın', () => {
+    expect(MM_BOLUMLERI.map((b) => b.kod)).not.toContain('butce');
+    // Bilinmeyen bölüm gibi ilk görünür bölüme düşüyor; ama sayfa ondan
+    // ÖNCE yönlendiriyor (aşağıda).
+    expect(bolumCoz('butce', ROLE_PERMISSIONS.ad_manager)).toBe('baglantilar');
   });
 
-  it('KRİTİK: ay değiştirmek Marka Merkezi’nden çıkarmıyor', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { resolve } = await import('node:path');
-    const k = readFileSync(resolve(__dirname, 'butce.tsx'), 'utf8');
-    expect(k).toContain("mmAdresi(clientId, 'butce', { ay: over.ay ?? selected.key })");
-    expect(k).not.toContain('`/butce?');
+  it('KRİTİK: eski ?bolum=butce adresi /butce’ye yönleniyor, ay taşınıyor; /butce gerçek sayfa', async () => {
+    const mm = await oku('../../app/(dashboard)/marka-merkezi/page.tsx');
+    expect(mm).toContain("if (first(params.bolum) === 'butce') redirect(butceAdresi(first(params.musteri), { ay: first(params.ay) }));");
+    // Yönlendirme workspace kapısından ÖNCE: kapı "workspace seç" derse
+    // eski bağlantı bütçeye hiç ulaşmaz.
+    expect(mm.indexOf("=== 'butce') redirect(")).toBeLessThan(mm.indexOf('sayfaWorkspaceId(session'));
+    expect(mm).not.toContain('ButceIcerik');
+    const sayfa = await oku('../../app/(dashboard)/butce/page.tsx');
+    expect(sayfa).toContain('<ButceIcerik clientId={clientId} params={params} />');
+    expect(sayfa).not.toContain('redirect(');
+    expect(u(butceAdresi('ws-1', { ay: '2026-11' })).searchParams.get('ay')).toBe('2026-11');
   });
 
-  it('KRİTİK: Genel Bakış bütçe kartı aynı ay üreticisini kullanıyor ve hatayı yutmuyor', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { resolve } = await import('node:path');
-    const g = readFileSync(resolve(__dirname, '../../app/(dashboard)/dashboard/page.tsx'), 'utf8').replace(
-      /\/\*[\s\S]*?\*\//g,
-      '',
-    );
+  it('KRİTİK: ay değiştirmek bütçe sayfasından çıkarmıyor; hata sunucunun cümlesiyle', async () => {
+    const k = await oku('../butce/butce-icerik.tsx');
+    expect(k).toContain('butceAdresi(clientId, { ay: over.ay ?? selected.key })');
+    expect(k).not.toContain('mmAdresi');
+    expect(k).not.toMatch(/\.catch\(\(\)\s*=>\s*null\)/);
+    expect(k).not.toContain('pm2 logs');
+  });
+
+  it('KRİTİK: Genel Bakış ve kurulum listesi bütçeye aynı üreticiyle gidiyor', async () => {
+    const g = await oku('../../app/(dashboard)/dashboard/page.tsx');
     expect(g).toContain('month: ayAnahtari()');
     expect(g).toContain('butceHatasi = hataMetni(e);');
-    expect(g).toContain("href={mmAdresi(session.activeClientId, 'butce')}");
+    expect(g).toContain('href={butceAdresi(session.activeClientId)}');
+    const h = await oku('hazirlik-listesi.tsx');
+    expect(h).toContain("href: butceAdresi(id)");
+    expect(h).not.toContain("'butce'");
   });
 });

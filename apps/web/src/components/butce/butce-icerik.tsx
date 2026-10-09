@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import type { BudgetPacing, ClientPacing } from '@advetics/shared';
 import { requireSession, hasPermission } from '@/lib/session';
-import { serverApiFetch } from '@/lib/api';
+import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { formatDayLong, formatMoney } from '@/lib/format';
 import { BudgetForm } from '@/components/budget/budget-form';
 import { PaceDelta, PacingBar, StatusChip } from '@/components/budget/pacing-bar';
-import { mmAdresi } from './bolumler';
+import { butceAdresi } from '@/lib/butce-adresi';
 import { PLATFORMS, PLATFORM_KISA_ADLARI, platformKanali } from '@advetics/shared';
 import { PlatformLogo } from '@/components/platform-logo';
 
@@ -25,10 +25,11 @@ import { PlatformLogo } from '@/components/platform-logo';
  * ajans hem toplamı hem kırılımı izliyor.
  */
 /**
- * MARKA MERKEZİ › AYLIK BÜTÇE İÇİNDE ÇİZİLİYOR (2026-10-06, kullanıcının
- * isteği: "aylık bütçeyi de Base'e al"). Eskiden Reklamlar altında ayrı
- * `/butce` sayfasıydı; o adres artık buraya yönleniyor. Workspace kapısı
- * Marka Merkezi'nde.
+ * PLANLA › AYLIK BÜTÇE (2026-10-09, kullanıcı: "bütçe Planla'da olsun").
+ * 2026-10-06'dan beri Marka Merkezi'nin bir bölümüydü; bütçe bir PLAN
+ * kararı ve AdvStrategy ile aynı bölümde durması, ikisinin aynı ayın
+ * parasını konuştuğunu menüde de gösteriyor. Eski `?bolum=butce` adresi
+ * buraya yönleniyor. Workspace kapısı sayfada (`/butce`).
  */
 export async function ButceIcerik({
   clientId,
@@ -45,11 +46,18 @@ export async function ButceIcerik({
 
   const canWrite = hasPermission(session, 'budget.write');
   const qs = new URLSearchParams({ clientId, month: selected.key });
-  const data = await serverApiFetch<ClientPacing>(`/budgets/pacing?${qs}`).catch(() => null);
+  /*
+   * HATA METNİ SUNUCUDAN. Burada `.catch(() => null)` vardı ve her düşüş
+   * "API çalışıyor mu? pm2 logs…" cümlesine çevriliyordu: müşteriye sunucu
+   * komutu gösteriyor, asıl sebebi (yetki, workspace, sunucu) gizliyordu.
+   */
+  const okuma = await serverApiFetch<ClientPacing>(`/budgets/pacing?${qs}`).then(
+    (v) => ({ ok: true as const, v }),
+    (e: unknown) => ({ ok: false as const, hata: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' }),
+  );
+  const data = okuma.ok ? okuma.v : null;
 
-  // Marka Merkezi içinde kalıyor: ay değiştirmek sayfadan çıkarmamalı.
-  const linkWith = (over: { ay?: string }): string =>
-    mmAdresi(clientId, 'butce', { ay: over.ay ?? selected.key });
+  const linkWith = (over: { ay?: string }): string => butceAdresi(clientId, { ay: over.ay ?? selected.key });
 
   const clientName =
     session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
@@ -57,12 +65,10 @@ export async function ButceIcerik({
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-baslik text-lg font-semibold text-ink">Aylık Bütçe</h2>
-          <p className="mt-0.5 text-sm text-ink-muted">
-            {clientName} · {selected.label}
-          </p>
-        </div>
+        {/* Sayfa başlığı ("Aylık Bütçe") sayfada; burada hangi ay olduğu. */}
+        <p className="text-sm text-ink-muted">
+          <strong className="font-medium text-ink">{clientName}</strong> · {selected.label}
+        </p>
 
         <div className="flex flex-wrap gap-1.5">
           {months.map((m) => (
@@ -84,11 +90,7 @@ export async function ButceIcerik({
 
 
       {data === null ? (
-        <Notice tone="error">
-          Bütçe verisi alınamadı. API çalışıyor mu? Sorun sürerse{' '}
-          <code className="rounded bg-surface-sunken px-1">pm2 logs advetics-api</code> çıktısına
-          bakın.
-        </Notice>
+        <Notice tone="error">Bütçe verisi alınamadı: {okuma.ok ? '' : okuma.hata}</Notice>
       ) : (
         <>
           <Warnings pacing={data} />

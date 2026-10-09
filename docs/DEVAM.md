@@ -34,10 +34,10 @@ tanıtım sitesi.
    eklendi, prova ve yayın aynı alanı kullanıyor (canlı `dd21dc2`).
    **İLK GERÇEK GOOGLE YAZMASI YAPILDI (2026-10-09 12:17):** Garden Villas
    kartı DURAKLATILMIŞ kuruldu, Google kampanya kimliği `24336100271`, kart
-   `launched`, ikinci kurulum engeli devrede. Durumun Google'da PAUSED
-   olduğu panelden GERİ OKUNAMADI (canlı liste yalnız yayındakileri, Reklam
-   Keşfi reklam seviyesini gösteriyor) — kullanıcı Google Ads'te gözle
-   kontrol edip oradan başlatacak. Küçük not: kartın "tekrar boost" engeli
+   `launched`, ikinci kurulum engeli devrede. Google'da PAUSED olduğunu
+   KULLANICI GÖZLE DOĞRULADI (2026-10-09); panel duraklatılmış kampanyayı
+   okuyamıyor (canlı liste yalnız yayındakileri gösteriyor). Başlatmak
+   kullanıcıda, Google Ads'ten. Küçük not: kartın "tekrar boost" engeli
    "hâlâ yayında" diyor, kampanya duraklatılmış. K4 (token seviyesi) açık.
 2. **AdvCampaign site taslağı:** dört ekran hatası düzeltildi ve canlıda
    doğrulandı (amaç tekrar sorulmuyor, ekran takılmıyor, görsel balonda).
@@ -53,6 +53,16 @@ tanıtım sitesi.
    özel kategori sorusu yalnız Taslak sekmesinde, dar ekranda görünmüyor.
 3. **AdvStrategy aktarımı: ÇALIŞIYOR** (kutu dolu, görsel modele ulaşıyor).
 4. **Okuma API:** kullanıcı anahtar oluşturacak.
+
+**AŞAMA 1 — MENÜ (2026-10-09), YAZILDI, DEPLOY BEKLİYOR, migration yok.**
+Yedi bölüm: Genel Bakış · Planla (AdvStrategy, Aylık Bütçe) · Oluştur
+(Akıllı Boost, AdvCampaign) · Yönet (Reklam Keşfi, Potansiyel Müşteriler) ·
+İyileştir (Kurallar) · Raporlar · Base (Marka Merkezi) + Ayarlar. Aylık
+Bütçe Marka Merkezi'nden `/butce` sayfasına döndü (eski adres yönleniyor).
+İkon rayı yapılmadı, Ekip Base'e taşınmadı — gerekçeler
+[`URUN-YAPISI-PLANI.md`](URUN-YAPISI-PLANI.md) Aşama 1. Müşteri hesabı yine
+dört ekran. Deploy sonrası: menüyü ve `/butce`yi canlıda gözle kontrol.
+Sıradaki: Aşama 2 (Genel Bakış karar ekranı).
 
 **Karar bekleyen kullanım sorunu:** asistan kullanıcının AÇIKÇA söylediği
 alanları da "öneri" diye yazıyor ve onay kartında yeniden onaylatıyor.

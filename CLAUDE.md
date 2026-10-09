@@ -1289,6 +1289,11 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   arayüz kararlarında sorma; bu iki ölçütle karar ver ve gerekçesini yaz.
   Para harcayan, geri alınamayan ya da başka bir kullanıcı kararını
   bozan şeyler yine sorulur.
+- **MENÜ YEDİ BÖLÜM, TÜRKÇE** (kullanıcı kararı, 2026-10-09): Genel Bakış ·
+  Planla (AdvStrategy, Aylık Bütçe) · Oluştur (Akıllı Boost, AdvCampaign) ·
+  Yönet (Reklam Keşfi, Potansiyel Müşteriler) · İyileştir (Kurallar) ·
+  Raporlar · Base (Marka Merkezi) + Ayarlar. Yalnızca ekranı olan satır
+  menüye girer. Yol haritası `docs/URUN-YAPISI-PLANI.md`.
 - **MÜŞTERİ HESABI DÖRT EKRAN GÖRÜR** (2026-10-08): Genel Bakış, Reklam
   Keşfi, **AdvStrategy**, Raporlar. AdvStrategy'de planı görür ve
   ONAYLAR, yazamaz. Gerekçe: onay panelde alınınca ajans PDF gönderip
@@ -1340,8 +1345,10 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   Profaj kurumsal kılavuzundan: ana başlık Montserrat, gövde Open Sans,
   kırmızı `#ff2400`, gri `#302e2d`. Menü başlığı "Kütüphane" değil
   **Base** ve tek kapısı Marka Merkezi; Marka Merkezi'nin kendi iç menüsü
-  var (Bağlantılar · Marka · Aylık Bütçe · Kitleler · Varlıklar ·
-  Workspace ayarları) ve bölüm adreste (`?bolum=`). Workspace'e geçen
+  var (Bağlantılar · Marka · Kitleler · Varlıklar · Workspace ayarları)
+  ve bölüm adreste (`?bolum=`). **Aylık Bütçe burada DEĞİL** — 2026-10-09'dan
+  beri Planla › Aylık Bütçe (`/butce`, kullanıcı kararı); eski
+  `?bolum=butce` oraya yönleniyor ve bağlantılar `lib/butce-adresi.ts`ten. Workspace'e geçen
   kullanıcı doldurulacak HER ŞEYİ buradan yapabilmeli (kullanıcı,
   2026-10-06): iletişim/firma, rapor alıcıları, özel reklam kategorisi,
   ekip, sayfaların boost hesabı ve gönderi izlemesi dahil. Şirketler

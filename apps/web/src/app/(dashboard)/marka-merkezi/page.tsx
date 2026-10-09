@@ -1,9 +1,11 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import type { ClientChannels, WorkspaceHazirlik } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { hasPermission, requireSession } from '@/lib/session';
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { baglanti } from '@/lib/baglanti';
+import { butceAdresi } from '@/lib/butce-adresi';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { Uyari } from '@/components/ui/uyari';
@@ -21,7 +23,6 @@ import {
 import { GorsellerIcerik } from '@/components/marka-merkezi/varliklar/gorseller';
 import { KreatiflerIcerik } from '@/components/marka-merkezi/varliklar/kreatifler';
 import { FormlarIcerik } from '@/components/marka-merkezi/varliklar/formlar';
-import { ButceIcerik } from '@/components/marka-merkezi/butce';
 import { WorkspaceAyarlari } from '@/components/marka-merkezi/workspace-ayarlari';
 import { AiDoldur } from '@/components/bilgi-bankasi/ai-doldur';
 import { MarkaSekmesi } from '@/components/bilgi-bankasi/marka-sekmesi';
@@ -56,6 +57,10 @@ export default async function MarkaMerkeziPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+
+  // AYLIK BÜTÇE PLANLA'YA TAŞINDI (2026-10-09): eski bölüm adresi yer
+  // imlerinde ve bildirimlerde duruyor, kırılmasın diye yönleniyor.
+  if (first(params.bolum) === 'butce') redirect(butceAdresi(first(params.musteri), { ay: first(params.ay) }));
 
   const clientId = sayfaWorkspaceId(session, first(params.musteri));
   if (!clientId) {
@@ -229,7 +234,6 @@ export default async function MarkaMerkeziPage({
               </section>
             )}
 
-            {bolum === 'butce' && <ButceIcerik clientId={clientId} params={params} />}
 
             {bolum === 'ayarlar' && <WorkspaceAyarlari clientId={clientId} session={session} />}
 

@@ -59,9 +59,14 @@ describe('menü verisi gerçekten okunuyor', () => {
     // karardı; altıncı bir bölüm eklenirse burası düşer ve karar gözden
     // geçirilir. Son bölümün adı "Ayarlar"dı; içinde ayar OLMAYAN ekranlar
     // (Şirketler, Ekip) o adı yanlış yapıyordu.
+    // YEDİ BÖLÜM + AYARLAR (2026-10-09, kullanıcı kararı): bir reklamın
+    // hayatının sırası. Adlar Türkçe; "Base" onaylanmış istisna.
     expect(SECTIONS.map((s) => s.title)).toEqual([
       undefined,
-      'Reklamlar',
+      'Planla',
+      'Oluştur',
+      'Yönet',
+      'İyileştir',
       'Raporlar',
       // "Kütüphane" 2026-10-06'da "Base" oldu (kullanıcı kararı).
       'Base',
@@ -125,13 +130,16 @@ describe('menü verisi gerçekten okunuyor', () => {
     expect(SAYFA_GIRIS_IZNI).toBe('client.write');
   });
 
-  it('KRİTİK: Reklamlar ve Base bölümlerinin HER satırı yetki taşıyor', () => {
+  it('KRİTİK: iş bölümlerinin HER satırı yetki taşıyor', () => {
     /*
      * Süzme opt-in: yetkisiz satır herkese görünüyor. Müşteri hesabının
      * "reklam kısmını görmemesi" bu bölümlerde yetkisiz satır kalmamasına
      * bağlı — biri düşerse müşteri menüde Kurallar'ı görür.
      */
-    for (const bolum of SECTIONS.filter((s) => s.title === 'Reklamlar' || s.title === 'Base')) {
+    const isBolumleri = ['Planla', 'Oluştur', 'Yönet', 'İyileştir', 'Base'];
+    // Tarama boşa düşmesin: beşi de gerçekten var.
+    expect(SECTIONS.filter((s) => isBolumleri.includes(s.title ?? '')).length).toBe(isBolumleri.length);
+    for (const bolum of SECTIONS.filter((s) => isBolumleri.includes(s.title ?? ''))) {
       for (const i of bolum.items) {
         expect(i.perm, `${i.href} yetkisiz`).toBeTruthy();
       }
@@ -273,11 +281,23 @@ describe('ADVSTRATEGY SATIRI', () => {
     expect(kod).toContain('hasPermission(session, STRATEJI_SAYFA_IZNI)');
   });
 
-  it('AdvCampaign\'in hemen altında, aynı bölümde', () => {
-    const reklamlar = SECTIONS.find((s) => s.title === 'Reklamlar');
-    const adlar = reklamlar?.items.map((i) => i.label) ?? [];
-    expect(adlar.indexOf('AdvStrategy')).toBe(adlar.indexOf('AdvCampaign') + 1);
-    expect(adlar.indexOf('AdvCampaign')).toBeGreaterThan(-1);
+  it('Planla’da ve Planla, AdvCampaign’in bulunduğu Oluştur’dan HEMEN önce', () => {
+    // Onaylanan plan AdvCampaign'e aktarılıyor: iki ekran aynı işin ardışık
+    // adımları. Eskiden aynı bölümde alt altaydı; 2026-10-09'dan beri
+    // ardışık iki bölümde.
+    const basliklar = SECTIONS.map((s) => s.title);
+    const planla = SECTIONS.find((s) => s.title === 'Planla');
+    const olustur = SECTIONS.find((s) => s.title === 'Oluştur');
+    expect(planla?.items.map((i) => i.label)).toContain('AdvStrategy');
+    expect(olustur?.items.map((i) => i.label)).toContain('AdvCampaign');
+    expect(basliklar.indexOf('Oluştur')).toBe(basliklar.indexOf('Planla') + 1);
+  });
+
+  it('KRİTİK: Aylık Bütçe Planla’da ve menüde yazma yetkisiyle (client_viewer forma gitmesin)', () => {
+    const satir = SECTIONS.find((s) => s.title === 'Planla')?.items.find((i) => i.href === '/butce');
+    expect(satir?.label).toBe('Aylık Bütçe');
+    expect(satir?.perm).toBe('budget.write');
+    expect(ROLE_PERMISSIONS.client_viewer).not.toContain('budget.write');
   });
 
   it('ajans rolleri görüyor', () => {
@@ -313,7 +333,9 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
      * eksik bir satır da düşürür. Ters yöndeki hata da gerçek: her şeyi
      * gizleyen bir süzgeç "görmüyor" testlerini geçerdi.
      */
-    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'Reklam Keşfi', 'AdvStrategy', 'Raporlar']);
+    // Sıra 2026-10-09'dan beri bölüm sırasından: Planla, Yönet'ten önce.
+    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'AdvStrategy', 'Reklam Keşfi', 'Raporlar']);
+    expect(basliklar('client_viewer')).toEqual([undefined, 'Planla', 'Yönet', 'Raporlar']);
   });
 
   it('Bilgi Bankası GÖRÜNMÜYOR — karar değişti', () => {
@@ -392,13 +414,13 @@ describe('KRİTİK: "Üst Hesaplar" üyelikle açılıyor, yetkiyle değil', () 
   });
 });
 
-describe('AKILLI BOOST — Reklamlar bölümünün öne çıkarılmış ilk satırı', () => {
-  it('KRİTİK: Reklamlar bölümünde, en üstte ve vurgulu', () => {
+describe('AKILLI BOOST — Oluştur bölümünün öne çıkarılmış ilk satırı', () => {
+  it('KRİTİK: Oluştur bölümünde, en üstte ve vurgulu', () => {
     // Kullanıcının isteği (2026-09-30): reklamların alt satırı ve
-    // diğerlerinden daha belirgin.
-    const reklamlar = SECTIONS.find((s) => s.title === 'Reklamlar');
-    expect(reklamlar?.items[0]?.label).toBe('Akıllı Boost');
-    expect(reklamlar?.items[0]?.vurgu).toBeTruthy();
+    // diğerlerinden daha belirgin. 2026-10-09'dan beri bölüm Oluştur.
+    const olustur = SECTIONS.find((s) => s.title === 'Oluştur');
+    expect(olustur?.items[0]?.label).toBe('Akıllı Boost');
+    expect(olustur?.items[0]?.vurgu).toBeTruthy();
   });
 
   it('vurgu TEK satırda — iki vurgu hiçbirini belirgin yapmaz', () => {

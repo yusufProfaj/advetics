@@ -112,11 +112,26 @@ yapılmış.
 
 ### Aşama 1 — Menü ve görsel düzen
 
-- `nav-sections.ts` yedi bölüme; sol ikon rayı + bölüm başlıkları.
-- Ekip Base'e (`/ayarlar/ekip` → Marka Merkezi bölümü, eski adres
-  yönlenir — `bolumler.ts` deseni).
-- Aylık Bütçe Base'ten Planla'ya (Ç-3); Marka Merkezi iç menüsünden
-  kalkar, eski adres yönlenir.
+**YAZILDI 2026-10-09** (deploy bekliyor). Kararlar:
+
+- `nav-sections.ts` yedi bölüm: Genel Bakış · Planla (AdvStrategy, Aylık
+  Bütçe) · Oluştur (Akıllı Boost, AdvCampaign) · Yönet (Reklam Keşfi,
+  Potansiyel Müşteriler) · İyileştir (Kurallar) · Raporlar · Base (Marka
+  Merkezi) + Ayarlar. Potansiyel Müşteriler Raporlar'dan Yönet'e geçti:
+  aranacak bir iş listesi, rapor değil.
+- **Sol ikon rayı YAPILMADI** (ürün kararı, ölçüt kullanım kolaylığı):
+  bölümlerin çoğu bir-iki satır; Google Ads tarzı iki katmanlı ray her
+  ekrana bir tık ve bir panel ekler. Tek kenar çubuğu, başlıklı bölümler.
+- **Ekip Base'e TAŞINMADI** (çelişki, plan yazılırken görülmedi): workspace
+  ekibi zaten Marka Merkezi › Workspace ayarları'nda. Ayarlar'daki "Ekip &
+  Yetkiler" bütün ŞİRKETİN kullanıcı ve yetkilerini değiştiriyor; workspace
+  ekranında durması kapsamı yanlış anlatırdı.
+- Aylık Bütçe Base'ten Planla'ya (Ç-3) kendi sayfası olarak; Marka
+  Merkezi iç menüsünden kalktı, eski adres yönleniyor, bütün bağlantılar
+  tek üreticiden (`lib/butce-adresi.ts`). Bu, 2026-10-06'daki "aylık
+  bütçeyi Base'e al" kararını GERİ ÇEVİRİYOR; CLAUDE.md güncellendi.
+  Taşırken bütçe ekranındaki `.catch(() => null)` kaldırıldı (müşteriye
+  "pm2 logs" diyordu; artık sunucunun cümlesi).
 - Var olan ekranlar yeni bölümlere taşınır, **yeni ekran yazılmaz**.
   Henüz ekranı olmayan alt başlık menüye KONMAZ (2026-09'da 7 ölü satır
   "tıklanamaz soluk satır" olarak temizlendi; geri getirilmez).

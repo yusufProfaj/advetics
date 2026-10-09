@@ -1,5 +1,6 @@
 import type { Permission } from '@advetics/shared';
 import { baglanti } from '@/lib/baglanti';
+import { butceAdresi } from '@/lib/butce-adresi';
 
 /**
  * ═══ MARKA MERKEZİ'NİN BÖLÜMLERİ — TEK TANIM ═══
@@ -23,11 +24,12 @@ export const MM_BOLUMLERI = [
   { kod: 'baglantilar', ad: 'Bağlantılar', izin: 'client.write' },
   { kod: 'marka', ad: 'Marka', izin: 'client.read' },
   /*
-   * AYLIK BÜTÇE BASE'E GELDİ (2026-10-06, kullanıcının isteği). Reklamlar
-   * altında ayrı sayfaydı; Marka bölümü onun ÖZETİNİ gösterip oraya
-   * yönlendiriyordu — aynı konu iki kapıdan. `/butce` buraya yönleniyor.
+   * AYLIK BÜTÇE BURADA DEĞİL — PLANLA'DA (2026-10-09, kullanıcı kararı).
+   * 2026-10-06'dan beri bu listedeydi; bütçe bir plan kararı ve AdvStrategy
+   * ile aynı bölümde duruyor (`/butce`, `lib/butce-adresi.ts`). Eski
+   * `?bolum=butce` adresi sayfada oraya yönleniyor. Buraya geri eklemek,
+   * aynı ayarın iki kapısı demek.
    */
-  { kod: 'butce', ad: 'Aylık Bütçe', izin: 'budget.read' },
   { kod: 'kitleler', ad: 'Kitleler', izin: 'client.read' },
   { kod: 'varliklar', ad: 'Varlıklar', izin: 'bulk.read' },
   /*
@@ -97,7 +99,7 @@ export function mmAdresi(
  * tek yeri orası.
  */
 export function bilgiBankasiYonu(clientId: string | undefined, sekme: string | undefined): string {
-  if (sekme === 'butce') return mmAdresi(clientId, 'butce');
+  if (sekme === 'butce') return butceAdresi(clientId);
   const capa = sekme === 'logo' ? 'logo' : sekme === 'bilgi-bankasi' || sekme === 'hedef-kitle' ? 'bilgi' : undefined;
   return mmAdresi(clientId, 'marka', {}, capa);
 }

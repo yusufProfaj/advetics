@@ -161,7 +161,8 @@ describe('Aylık Bütçe mecraya göre gruplu (2026-10-06)', () => {
    * Kullanıcı: "hangi mecraya bütçe sınırı koyduğumu göremiyorum". Hesap
    * adları çoğu zaman workspace adıyla aynı ve mecrayı söylemiyor.
    */
-  const BUTCE = yorumsuz('components/marka-merkezi/butce.tsx');
+  // 2026-10-09'dan beri Planla › Aylık Bütçe sayfasının bileşeni.
+  const BUTCE = yorumsuz('components/butce/butce-icerik.tsx');
   const i = BUTCE.indexOf('function AccountRows(');
   if (i < 0) throw new Error('AccountRows bulunamadı — tarama boşa düştü.');
   const govde = BUTCE.slice(i);

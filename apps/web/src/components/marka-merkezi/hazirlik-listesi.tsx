@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { mmAdresi } from './bolumler';
+import { butceAdresi } from '@/lib/butce-adresi';
 import type { HazirlikDurumu, HazirlikKodu, WorkspaceHazirlik } from '@advetics/shared';
 
 /**
@@ -61,7 +62,7 @@ export const HAZIRLIK_MADDE_TANIMI: Record<
   aylik_butce: {
     baslik: 'Bu ayın bütçesi tanımlı',
     kisa: 'Bu ayın bütçesi',
-    eylem: (id) => ({ etiket: 'Bütçe tanımla', href: mmAdresi(id, 'butce') }),
+    eylem: (id) => ({ etiket: 'Bütçe tanımla', href: butceAdresi(id) }),
   },
   sosyal_kanal: {
     baslik: 'Sayfa ya da kanal bağlı',

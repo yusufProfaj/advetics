@@ -35,8 +35,8 @@ import { MetricsChart } from '@/components/metrics-chart';
 import { BreakdownTable } from '@/components/breakdown-table';
 import { HesapKirilimi } from '@/components/hesap-kirilimi';
 import { ButceKarti } from '@/components/budget/butce-karti';
-import { ayAnahtari } from '@/components/marka-merkezi/butce';
-import { mmAdresi } from '@/components/marka-merkezi/bolumler';
+import { ayAnahtari } from '@/components/butce/butce-icerik';
+import { butceAdresi } from '@/lib/butce-adresi';
 import {
   hesapCoz,
   panelSeviyesiCoz,
@@ -484,7 +484,7 @@ export default async function DashboardPage({
                   <ButceKarti
                     veri={butce}
                     hata={butceHatasi}
-                    href={mmAdresi(session.activeClientId, 'butce')}
+                    href={butceAdresi(session.activeClientId)}
                     ayAdi={buAyAdi()}
                   />
                 )}

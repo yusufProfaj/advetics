@@ -37,6 +37,25 @@ export const AYAR_KISA_AD: Record<string, string> = {
   '/ayarlar/okuma-api': 'Okuma API',
 };
 
+/**
+ * ═══ YEDİ BÖLÜM, İŞİN SIRASIYLA (2026-10-09, kullanıcı kararı) ═══
+ *
+ * Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar · Base
+ * (+ en altta Ayarlar). Plan: `docs/URUN-YAPISI-PLANI.md`. Adlar TÜRKÇE
+ * (CLAUDE.md: "OPTIMISE gibi terimler panelde geçmiyor"); "Base" onaylanmış
+ * istisna. Bölümler bir reklamın hayatını sırayla izliyor: önce planla,
+ * sonra kur, sonra yönet, sonra iyileştir, sonra raporla.
+ *
+ * YALNIZCA EKRANI OLAN SATIR. Planın saydığı A/B testi, kreatif yorgunluğu,
+ * AI Asistan gibi ekranlar yazılınca gelecek; ekranı olmayan soluk satır
+ * 2026-09'da yedi tane birikmişti ve temizlendi (`nav-sections.spec.ts`
+ * "ölü satır yok" diye kilitliyor).
+ *
+ * MÜŞTERİ HESABI HÂLÂ DÖRT EKRAN görüyor: Genel Bakış, AdvStrategy
+ * (Planla), Reklam Keşfi (Yönet), Raporlar. Değişen yalnızca başlıklar;
+ * Oluştur, İyileştir ve Base'in her satırı müşteride olmayan bir yetki
+ * taşıyor (süzme opt-in: yetkisiz satır herkese görünür).
+ */
 export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
   {
     // BAŞLIKSIZ — katlanamaz. Günlük iş burada başlıyor.
@@ -45,25 +64,47 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     ],
   },
   {
-    title: 'Reklamlar',
+    /*
+     * PLANLA — OLUŞTUR'DAN HEMEN ÖNCE. AdvStrategy'de onaylanan plan
+     * AdvCampaign'e aktarılıyor; iki ekran aynı işin ardışık adımları ve
+     * menüde de art arda duruyorlar (eskiden aynı bölümde alt alta).
+     */
+    title: 'Planla',
     items: [
       /*
-       * ═══ MÜŞTERİ HESABI YALNIZCA ÜÇ EKRAN GÖRÜYOR (+ AdvStrategy) ═══
-       *
-       * Kullanıcının tanımı: "müşteri = sadece genel bakış, reklam keşfi ve
-       * raporlar; reklam kısmını göremez". Bu yüzden Reklamlar ve Base
-       * bölümlerinin HER satırı bir yetki taşıyor — yetkisiz satır herkese
-       * görünüyor (süzme opt-in) ve müşteri hesabı Kurallar'ı, Aylık
-       * Bütçe'yi, Akıllı Boost'u menüde görürdü. `nav-sections.spec.ts`
-       * müşteri hesabının gördüğü etiketleri TAM LİSTE olarak kilitliyor.
-       * Dördüncü satır AdvStrategy: planı onaylamak için (aşağıda gerekçe).
+       * İZİN SÖZLEŞMEDEN (`STRATEJI_SAYFA_IZNI`), elle yazılmıyor: sayfa
+       * kapısı aynı sabiti okuyor ve ikisi ayrışırsa menüde görünüp
+       * açılmayan bir satır doğar. MÜŞTERİ HESABI BU SATIRI GÖRÜYOR (Ç-5,
+       * 2026-10-08): planı panelin içinde ONAYLIYOR, yazamıyor.
        */
+      {
+        href: '/strateji',
+        label: 'AdvStrategy',
+        icon: 'plan',
+        module: 4,
+        ready: true,
+        perm: STRATEJI_SAYFA_IZNI,
+      },
       /*
-       * AKILLI BOOST REKLAMLARIN İLK SATIRI VE ÖNE ÇIKARILMIŞ (2026-09-30).
-       * Başlıksız bölümde Genel Bakış'ın yanındaydı; kullanıcının isteği
-       * reklamların altına alınması ve alt satırlar arasında DAHA BELİRGİN
-       * olması. İşi de bir reklam işi: gönderi reklama çevriliyor.
-       * `vurgu` yalnızca görünüş; yetki (`boost.read`) aynen duruyor.
+       * AYLIK BÜTÇE PLANLA'DA (2026-10-09, kullanıcı: "bütçe Planla'da
+       * olsun"). 2026-10-06'dan beri Marka Merkezi'nin bir bölümüydü; eski
+       * `?bolum=butce` adresi buraya yönleniyor.
+       *
+       * `budget.write`, `budget.read` DEĞİL: müşteri hesabı `budget.read`
+       * taşıyor (Genel Bakış'taki bütçe tüketimi onunla okunuyor), ama bu
+       * ekran bütçe BELİRLEME yeri; okuma yetkisiyle menüden açmak müşteriyi
+       * kaydedemeyeceği bir forma götürürdü.
+       */
+      { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true, perm: 'budget.write' },
+    ],
+  },
+  {
+    title: 'Oluştur',
+    items: [
+      /*
+       * AKILLI BOOST OLUŞTUR'UN İLK SATIRI VE ÖNE ÇIKARILMIŞ (2026-09-30'dan
+       * beri reklam bölümünün vurgulu satırı; kullanıcının listesinde
+       * "Ad Boost" Oluştur'un içinde). `vurgu` yalnızca görünüş.
        */
       {
         href: '/auto-boost',
@@ -74,13 +115,10 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         perm: 'boost.read',
         vurgu: 'Otomatik',
       },
-      { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4, perm: 'insights.read' },
       /*
        * ADVCAMPAIGN — reklam kurmanın TEK yolu (kullanıcı kararı
-       * 2026-10-07). Eski Reklam Oluştur, AI Asistan ve Toplu Oluştur
-       * kaldırıldı; eski adresler buraya yönlendiriyor. `bulk.write`:
-       * sayfanın kendi kapısıyla aynı anahtar, ayrışırsa menüde görünüp
-       * açılmayan bir satır olur.
+       * 2026-10-07). `bulk.write`: sayfanın kendi kapısıyla aynı anahtar,
+       * ayrışırsa menüde görünüp açılmayan bir satır olur.
        */
       {
         href: '/reklam',
@@ -90,59 +128,21 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         ready: true,
         perm: 'bulk.write',
       },
-      /*
-       * ADVSTRATEGY — aylık medya planı (2026-10-08). AdvCampaign'in hemen
-       * altında: onaylanan plan oraya aktarılıyor, iki ekran aynı işin iki
-       * adımı. İZİN SÖZLEŞMEDEN (`STRATEJI_SAYFA_IZNI`), elle yazılmıyor:
-       * sayfa kapısı aynı sabiti okuyor ve ikisi ayrışırsa menüde görünüp
-       * açılmayan bir satır doğar.
-       *
-       * MÜŞTERİ HESABI BU SATIRI GÖRÜYOR ve bu KASITLI (Ç-5, 2026-10-08):
-       * plan müşteriye panel içinden onaylatılıyor ve `client_viewer`
-       * `strategy.read` + `strategy.approve` taşıyor. Satır gizlenseydi
-       * onay yalnız bir bağlantıyla bulunabilirdi. Bölüm ona zaten açıktı
-       * (Reklam Keşfi burada); yeni bir başlık görünmüyor, yalnız bir satır.
-       * Satır PLANI YAZDIRMIYOR: yazma `strategy.write` ve müşteri hesabında
-       * yok. `nav-sections.spec.ts` dört ekranlık listeyi kilitliyor.
-       */
-      {
-        href: '/strateji',
-        label: 'AdvStrategy',
-        icon: 'plan',
-        module: 4,
-        ready: true,
-        perm: STRATEJI_SAYFA_IZNI,
-      },
-      { href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true, perm: 'rule.read' },
-      /*
-       * `budget.write`, `budget.read` DEĞİL. Müşteri hesabı `budget.read`
-       * taşıyor — Genel Bakış'taki bütçe tüketimi o yetkiyle okunuyor ve o
-       * bilgi kendisine ait. Ama bu ekran bütçe BELİRLEME yeri; okuma
-       * yetkisiyle açmak müşteriyi kaydedemeyeceği bir forma götürürdü.
-       */
-      // AYLIK BÜTÇE BASE'E TAŞINDI (2026-10-06): Marka Merkezi › Aylık Bütçe.
     ],
   },
   {
-    title: 'Raporlar',
+    /*
+     * YÖNET — yayındakini izleme ve gelen sonuçla çalışma. Reklam Keşfi
+     * bugün salt okunur; Aşama 3'te satır içi durdur/başlat/bütçe ile
+     * Reklam Yöneticisi olacak. MÜŞTERİ HESABI Reklam Keşfi'ni görüyor.
+     */
+    title: 'Yönet',
     items: [
+      { href: '/ads-explorer', label: 'Reklam Keşfi', icon: 'explorer', module: 4, perm: 'insights.read' },
       /*
-       * ═══ RAPORLARIN TEK GİRİŞİ ═══
-       *
-       * Burada üç bağlantı vardı: Raporlar, Rapor Şablonları, Faturalar.
-       * Üçü de AYNI belgenin parçasıydı ve ayrı sayfalara bölünmeleri gerçek
-       * bir hata üretiyordu: kullanıcı şablonunu ayrı sayfada düzenleyip
-       * rapora dönüyor, seçiciden bir ön ayar seçiyor ve düzenlemesi
-       * kayboluyordu (seçici yalnızca ön ayarları tanıyordu, kayıtlı
-       * şablonları değil). Fatura da rapor mailinin EKİ — tek tüketicisi
-       * rapor ekranı.
-       *
-       * Üçü artık `/raporlar` içinde: şablon seçicide hem ön ayarlar hem
-       * kayıtlı şablonlar, faturalar da sekme olarak. Yetki süzgeci
-       * kaybolmadı, sayfanın İÇİNE taşındı — `report.write` şablon
-       * düzenlemeyi, `report.share` fatura sekmesini açıyor.
+       * POTANSİYEL MÜŞTERİLER RAPORLAR'DAN GELDİ: form reklamından düşen
+       * kişiler bir rapor değil, aranacak bir iş listesi.
        */
-      { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6, perm: 'report.read' },
       {
         href: '/potansiyel-musteriler',
         label: 'Potansiyel Müşteriler',
@@ -155,23 +155,42 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
   },
   {
     /*
+     * İYİLEŞTİR — bugün yalnız Kurallar. Kreatif yorgunluğu, öneri kartları
+     * ve AI Asistan (Aşama 4) buraya gelecek.
+     */
+    title: 'İyileştir',
+    items: [{ href: '/kurallar', label: 'Kurallar', icon: 'rules', module: 5, ready: true, perm: 'rule.read' }],
+  },
+  {
+    title: 'Raporlar',
+    items: [
+      /*
+       * ═══ RAPORLARIN TEK GİRİŞİ ═══
+       *
+       * Rapor, şablon ve faturalar AYNI belgenin parçası; ayrı sayfalara
+       * bölünmeleri gerçek bir hata üretiyordu (şablon düzenlemesi seçicide
+       * kayboluyordu). Üçü `/raporlar` içinde; yetki süzgeci sayfanın İÇİNDE
+       * (`report.write` şablon, `report.share` fatura).
+       */
+      { href: '/raporlar', label: 'Raporlar', icon: 'reports', module: 6, perm: 'report.read' },
+    ],
+  },
+  {
+    /*
      * "KÜTÜPHANE" DEĞİL "BASE" (kullanıcı kararı, 2026-10-06). Tek kapı
-     * Marka Merkezi: Bilgi Bankası ayrı satırdı ve aynı workspace profilinin
-     * yarısını gösteriyordu; içeriği Marka Merkezi › Marka'ya taşındı ve
-     * eski adres oraya yönleniyor (`bolumler.ts`).
+     * Marka Merkezi: marka, bağlantılar, kitleler, varlıklar ve workspace
+     * ayarları (workspace ekibi dahil) onun iç menüsünde (`bolumler.ts`).
+     *
+     * ŞİRKET GENELİNDEKİ "Ekip & Yetkiler" BURAYA GELMEDİ (2026-10-09):
+     * workspace ekibi zaten Marka Merkezi › Workspace ayarları'nda; Ayarlar'daki
+     * ekran bütün şirketin kullanıcı ve yetkilerini değiştiriyor ve bir
+     * workspace'e bakan ekranda durması kapsamı yanlış anlatırdı.
+     *
+     * İZİN `client.write`, `client.read` DEĞİL: müşteri hesabı `client.read`
+     * taşıyor ve menüsü dört ekranla sınırlı.
      */
     title: 'Base',
     items: [
-      /*
-       * MARKA MERKEZİ KÜTÜPHANENİN BAŞINDA. Workspace'in kurulum durumu,
-       * bağlantıları ve (sonraki bölümlerde) marka, varlık, kitle ve koruma
-       * kuralları burada toplanıyor; aşağıdaki satırlar oraya taşındıkça
-       * kalkacak (`docs/BASE-PLANI.md`).
-       *
-       * İZİN `client.write`, `client.read` DEĞİL: müşteri hesabı
-       * `client.read` taşıyor ve menüsü kullanıcının kararıyla üç ekranla
-       * sınırlı ("müşteri = sadece genel bakış, reklam keşfi ve raporlar").
-       */
       {
         href: '/marka-merkezi',
         label: 'Marka Merkezi',
@@ -181,19 +200,8 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
         perm: 'client.write',
         // Varlık ekranları menüden kalkıp buraya indi (Bölüm 3); oradayken
         // bu satır seçili görünsün.
-        ekYollar: [...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi', '/butce'],
+        ekYollar: [...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi'],
       },
-      /*
-       * GÖRSEL ARŞİVİ, KREATİFLER VE FORMLAR BURADA DEĞİL — Marka Merkezi'nin
-       * "Varlıklar" bölümünde (BASE-PLANI Bölüm 3). Sayfalar ve adresleri
-       * aynen duruyor; yalnızca menü satırları kalktı.
-       *
-       * YETKİ KAYBI YOK: üç ekran `bulk.read` istiyor ve bu yetkiyi taşıyan
-       * her rol (`admin`, `ad_manager`) Marka Merkezi'nin `client.write`ını
-       * da taşıyor. Override ile yalnızca `bulk.read` bırakılmış biri için
-       * bağlantılar erişilebilir kalıyor ama menüden değil — kabul edilmiş
-       * bir kenar durumu (`nav-sections.spec.ts` rol matrisini kilitliyor).
-       */
     ],
   },
   {
