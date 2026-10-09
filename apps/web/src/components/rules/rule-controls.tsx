@@ -193,9 +193,14 @@ export function RuleControls({
 export function NewRuleButton({
   clientId,
   accounts,
+  className,
+  etiket = 'Yeni kural',
 }: {
   clientId: string;
   accounts: Array<{ id: string; name: string }>;
+  /** İyileştir › Kurallar taslağın birincil düğmesini kullanıyor; verilmezse eski görünüş. */
+  className?: string;
+  etiket?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -204,9 +209,9 @@ export function NewRuleButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white"
+        className={className ?? 'rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white'}
       >
-        Yeni kural
+        {etiket}
       </button>
     );
   }

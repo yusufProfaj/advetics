@@ -4,7 +4,7 @@ import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pgli
 import type { PrismaService } from '../../prisma/prisma.service';
 import { PlatformApiError } from '../connections/provider.types';
 import { RulesService } from './rules.service';
-import { RuleExecutorService } from './rule-executor.service';
+import { GOOGLE_KURAL_KAPALI, RuleExecutorService } from './rule-executor.service';
 
 /**
  * Kural uygulayıcı.
@@ -360,5 +360,27 @@ describe('notify aksiyonu', () => {
 
     expect(applyAction).not.toHaveBeenCalled();
     expect((await logs())[0]?.outcome).toBe('simulated');
+  });
+});
+
+describe('Google — kural aksiyonu kapalı (İyileştir v1)', () => {
+  it('KRİTİK: Google hesabında canlı kural platforma GİTMİYOR, sebebiyle failed', async () => {
+    /*
+     * Google yazma yolu İyileştir'in onaylı kartları için açıldı; otomatik
+     * motora açmak kimsenin onaylamadığı bütçe değişikliği demek. Bu satır
+     * silinirse kural Google'a yazar ve burası düşer.
+     */
+    await seedMatchingCampaign();
+    await h.q(`UPDATE platform_connections SET platform = 'google'`);
+    await h.q(`UPDATE ad_accounts SET platform = 'google'`);
+    await h.q(`UPDATE campaigns SET platform = 'google'`);
+    await h.q(`UPDATE insights_daily SET platform = 'google'`);
+    const rule = await rules.create(CTX, ruleInput());
+    const live = await rules.setMode(CTX, rule.id, false);
+    await executor.execute(h.db, CTX, live, NOW);
+    expect(applyAction).not.toHaveBeenCalled();
+    const rows = await logs();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ outcome: 'failed', error: GOOGLE_KURAL_KAPALI });
   });
 });

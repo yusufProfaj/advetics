@@ -371,6 +371,12 @@ DECLARE
     -- Okuma API anahtarları (packages/shared/src/okuma-api): aynı kural,
     -- satır yalnızca sahibine.
     'okuma_api_anahtarlari',
+    -- İyileştir v1 + AI Asistan v1 (docs/iyilestir/MIMARI.md § 4). Her tablo
+    -- KENDİ satırında: üretim sırası testleri sonraki tabloları satır satır
+    -- çıkarıyor (test/sonraki-tablolar.ts).
+    'iyilestir_oneri_karar',
+    'iyilestir_asistan_oturum',
+    'iyilestir_asistan_mesaj',
     -- Modül 5
     'monthly_budgets', 'rules', 'rule_runs', 'rule_action_logs',
     -- Modül 7
@@ -2465,3 +2471,44 @@ CREATE POLICY adv_okuma_anahtari_update ON okuma_api_anahtarlari
 -- DELETE POLİTİKASI YOK: iptal bir UPDATE (iptal damgası). Satır kalıyor ki
 -- "bu anahtar ne zaman, son kez nereden kullanıldı" sorusu iptalden sonra da
 -- cevaplanabilsin. Silme gerekirse kullanıcı silinince CASCADE.
+
+
+-- ============================================================================
+-- İYİLEŞTİR — iyilestir_oneri_karar, iyilestir_asistan_oturum,
+-- iyilestir_asistan_mesaj (docs/iyilestir/MIMARI.md § 4)
+-- ============================================================================
+--
+-- iyilestir_oneri_karar: workspace kapsamlı; SELECT + INSERT. UPDATE
+-- politikası YALNIZ taşıma için (sahiplik kolonları) ve trigger içeriği
+-- kilitliyor. DELETE YOK: karar, platformda yapılan değişikliğin kanıtı.
+-- Kimin karar verebileceği (budget.write) servis katmanında; INSERT'te
+-- user_id oturumun kendisi olmak ZORUNDA (başkası adına karar yazılmaz).
+CREATE POLICY adv_iyilestir_karar_select ON iyilestir_oneri_karar
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_iyilestir_karar_insert ON iyilestir_oneri_karar
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+CREATE POLICY adv_iyilestir_karar_update ON iyilestir_oneri_karar
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- iyilestir_asistan_oturum: adv_oturum ile aynı kural. Workspace'i gören
+-- OKUR; yazma yalnız SAHİBİ (başkasının sohbetine onun adına mesaj
+-- eklemek sohbetin kanıt değerini yok ederdi). DELETE YOK.
+CREATE POLICY adv_iyilestir_oturum_select ON iyilestir_asistan_oturum
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_iyilestir_oturum_insert ON iyilestir_asistan_oturum
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+CREATE POLICY adv_iyilestir_oturum_update ON iyilestir_asistan_oturum
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id())
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+
+-- iyilestir_asistan_mesaj: aynı kural. Mesaj tur bitince TEK seferde
+-- yazılıyor ve sonra değişmiyor; UPDATE politikası yalnız sahibine ve
+-- yalnız taşıma içindir.
+CREATE POLICY adv_iyilestir_mesaj_select ON iyilestir_asistan_mesaj
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_iyilestir_mesaj_insert ON iyilestir_asistan_mesaj
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+CREATE POLICY adv_iyilestir_mesaj_update ON iyilestir_asistan_mesaj
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id())
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());

@@ -3,6 +3,7 @@ import {
   googleImageAssetBody,
   googleVideoAssetBody,
   demandGenAtomikIstek,
+  googleAlanHatalari,
   type AtomikGovde,
   type KampanyaAcilisi,
 } from './google-demandgen';
@@ -33,6 +34,8 @@ import {
   type DiscoveredKeywordRow,
   type DiscoveredSearchTermRow,
   type PlatformActionRequest,
+  type DurumOkumaIstegi,
+  type PlatformVarlikDurumu,
   type PublishDraftRequest,
   type PublishDraftResult,
   type PlatformActionResult,
@@ -58,6 +61,9 @@ import {
   removeBody,
   responsiveSearchAdBody,
   resourceCollection,
+  butceTutariBody,
+  durumGuncelleBody,
+  googleKaynakAdi,
   type GoogleMutateBody,
 } from './google-write';
 
@@ -1725,14 +1731,12 @@ export class GoogleProvider implements IAdPlatformProvider {
   }
 
   // ---------------------------------------------------------------------------
-  // YAZMA — HENÜZ UYGULANMADI
+  // YAZMA — İyileştir: durum ve bütçe (kampanya / reklam grubu / reklam)
   // ---------------------------------------------------------------------------
 
   /**
    * Google tek scope kullanıyor (`adwords`) ve o scope okuma+yazmayı birlikte
    * veriyor. Yani izin açısından yazma her zaman "mümkün" görünüyor.
-   *
-   * `applyAction` yine de reddediyor — sebep aşağıda.
    */
   canWrite(grantedScopes: readonly string[]): { ok: boolean; missing: string[] } {
     const missing = this.requiredScopes.filter((s) => !grantedScopes.includes(s));
@@ -1740,36 +1744,180 @@ export class GoogleProvider implements IAdPlatformProvider {
   }
 
   /**
-   * HENÜZ YAZILMADI — engel erişim değil, kod.
+   * ═══ GOOGLE YAZMA YOLU (İyileştir v1, kullanıcı kararı 2026-10-09) ═══
    *
-   * 2026-08-16'da Google erişimi alındı, hesaplar bağlandı ve okuma tarafı
-   * canlıda doğrulandı (127 reklam hesabı keşfedildi, metrikler akıyor).
-   * Yani eski gerekçe —"Basic Access bekleniyor"— artık geçerli değil;
-   * geriye yalnızca yazma kodunun yazılmamış olması kaldı.
+   * Üç işlem: `campaigns:mutate` / `adGroups:mutate` / `adGroupAds:mutate`
+   * ile durum (ENABLED/PAUSED) ve `campaignBudgets:mutate` ile günlük bütçe
+   * tutarı. Gövdeler `google-write.ts` saf üreticilerinden; `partialFailure`
+   * her zaman `false`.
    *
-   * MESAJDA ERİŞİMDEN BAHSETMİYORUZ ve bu bilinçli: kullanıcıyı çözülmüş bir
-   * sorunu çözmeye göndermek, `preflight.sh`'ın veritabanını "kapalı"
-   * göstermesiyle aynı sınıf yanlış teşhis. Mesaj ne eksikse onu söylemeli.
+   * CANLIDA HİÇ DENENMEDİ. İlk gerçek çağrı `validateOnly` provasıyla, sonra
+   * en küçük değişiklikle (bir reklamı duraklat) ve Google Ads arayüzünde
+   * GÖZLE doğrulanarak yapılmalı (MIMARI § 3).
    *
-   * Sessizce başarılı dönmek ya da hiç metot tanımlamamak daha kötü olurdu:
-   * kural motoru Google varlıklarını da eşleştiriyor ve aksiyonun
-   * uygulanmadığını bilmeden "uygulandı" kaydı yazardı. Açık bir `permanent`
-   * hata, kural kaydına sebebiyle birlikte düşüyor ve arayüzde görünüyor.
+   * PAYLAŞIMLI BÜTÇEYE YAZILMIYOR. Paylaşımlı bir bütçenin tutarını
+   * değiştirmek, öneride adı geçmeyen BAŞKA kampanyaların da bütçesini
+   * değiştirmek demek ve hiçbir hata vermez. Bütçe kaynağı ve paylaşım
+   * bayrağı yazmadan HEMEN ÖNCE ayrı bir sorguyla okunuyor; yapı
+   * taramasının verisi buna yetmiyor (bayrağı seçmiyor).
    *
-   * Yazılınca `CampaignService.mutate` / `AdGroupService.mutate` kullanılacak.
+   * Kopyalama Google'da YOK: Meta'nın `/copies` ucunun karşılığı tek çağrı
+   * değil ve bu yol için istenmedi.
    */
   async applyAction(
-    _ctx: FetchContext,
+    ctx: FetchContext,
     action: PlatformActionRequest,
+    secenek: { validateOnly?: boolean } = {},
   ): Promise<PlatformActionResult> {
-    throw new PlatformApiError(
-      'google',
-      'permanent',
-      `Google Ads yazma işlemleri henüz yazılmadı (${action.type}). ` +
-        'Bağlantı ve okuma tarafı çalışıyor; eksik olan yazma kodu.',
-    );
+    const validateOnly = secenek.validateOnly === true;
+    if (action.type === 'copy') {
+      throw new PlatformApiError('google', 'permanent', 'Google Ads’te kampanya kopyalama bu yoldan yapılamıyor.');
+    }
+    gaqlKimligi(action.externalId);
+
+    if (action.type !== 'set_budget') {
+      let hedef: ReturnType<typeof googleKaynakAdi>;
+      try {
+        hedef = googleKaynakAdi(ctx.accountExternalId, action.level, action.externalId, action.ustExternalId);
+      } catch (e) {
+        throw new PlatformApiError('google', 'permanent', (e as Error).message);
+      }
+      const status = action.type === 'pause' ? 'PAUSED' : 'ENABLED';
+      await this.guncelle(ctx, hedef.koleksiyon, durumGuncelleBody({ resourceName: hedef.kaynak, status, validateOnly }));
+      return { afterState: { status: action.type === 'pause' ? 'paused' : 'active', ...(validateOnly ? { prova: true } : {}) } };
+    }
+
+    // set_budget
+    if (action.level !== 'campaign') {
+      // Google'da reklam grubunun kendi bütçesi YOK; bütçe kampanyanın
+      // bağlı olduğu CampaignBudget kaynağında.
+      throw new PlatformApiError('google', 'permanent', 'Google’da bütçe yalnız kampanya seviyesinde değiştirilebilir.');
+    }
+    if (action.budgetMode !== 'daily') {
+      throw new PlatformApiError('google', 'permanent', 'Google’da yalnız günlük bütçe değiştirilebilir (toplam bütçe bu yolda yok).');
+    }
+    const butce = await this.kampanyaButcesi(ctx, action.externalId);
+    if (butce.paylasimli) {
+      throw new PlatformApiError(
+        'google',
+        'permanent',
+        'Bu kampanyanın bütçesi başka kampanyalarla PAYLAŞILIYOR; değiştirmek onları da etkiler. Google Ads’te elle değiştir.',
+      );
+    }
+    let govde: GoogleMutateBody;
+    try {
+      govde = butceTutariBody({ budgetResourceName: butce.kaynak, amountMicros: action.amountMicros, validateOnly });
+    } catch (e) {
+      throw new PlatformApiError('google', 'permanent', (e as Error).message);
+    }
+    await this.guncelle(ctx, 'campaignBudgets', govde);
+    return {
+      afterState: {
+        budgetAmountMicros: action.amountMicros.toString(),
+        budgetMode: 'daily',
+        ...(validateOnly ? { prova: true } : {}),
+      },
+    };
   }
 
+  /**
+   * Kampanyanın bütçe kaynağı ve paylaşım bayrağı — yazmadan hemen önce.
+   * Kaynak bulunamazsa YAZILMIYOR: bütçesiz bir kampanyaya tutar yazmanın
+   * anlamı yok ve kaynak adını tahmin etmek yanlış bütçeyi değiştirebilir.
+   */
+  private async kampanyaButcesi(
+    ctx: FetchContext,
+    campaignId: string,
+  ): Promise<{ kaynak: string; paylasimli: boolean }> {
+    const satirlar = await this.searchGaql<{
+      campaign?: { campaignBudget?: string };
+      campaignBudget?: { explicitlyShared?: boolean; resourceName?: string };
+    }>(
+      ctx.accessToken,
+      ctx.accountExternalId,
+      `SELECT campaign.campaign_budget, campaign_budget.explicitly_shared
+         FROM campaign WHERE campaign.id = ${gaqlKimligi(campaignId)}`,
+      ctx.loginCustomerId,
+    );
+    const r = satirlar[0];
+    const kaynak = r?.campaign?.campaignBudget ?? r?.campaignBudget?.resourceName;
+    if (!kaynak) {
+      throw new PlatformApiError('google', 'permanent', `Google kampanyasının (${campaignId}) bütçe kaynağı okunamadı.`);
+    }
+    // Alan GELMEDİYSE paylaşımlı SAYILIYOR: bilinmeyen durumda yazmamak,
+    // başka kampanyaların bütçesini sessizce değiştirmekten ucuz.
+    const bayrak = r?.campaignBudget?.explicitlyShared;
+    return { kaynak, paylasimli: bayrak !== false };
+  }
+
+  /**
+   * Tek işlemlik güncelleme. `mutate`ten AYRI çünkü prova (`validateOnly`)
+   * yanıtı BOŞ geliyor ve `mutate` boş yanıtı haklı olarak hata sayıyor.
+   * Gerçek yazmada kaynak adı yoksa yine başarı sayılmıyor.
+   *
+   * HATA AYRINTISI ATILMIYOR: Google'ın asıl bilgisi (asgari bütçe tutarı,
+   * reddedilen değer) yalnız hatanın `details`/`trigger` alanlarında ve
+   * `http.ts` bunları mesaja katmıyor. İlk Demand Gen provasında bu yüzden
+   * iki hata teşhis edilemedi; burada `googleAlanHatalari` ile ekleniyor.
+   */
+  private async guncelle(ctx: FetchContext, koleksiyon: string, govde: GoogleMutateBody): Promise<void> {
+    const { developerToken } = this.assertConfigured();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${ctx.accessToken}`,
+      'developer-token': developerToken,
+      'Content-Type': 'application/json',
+    };
+    if (ctx.loginCustomerId) headers['login-customer-id'] = ctx.loginCustomerId;
+    let data: { results?: Array<{ resourceName?: string }> } | null;
+    try {
+      ({ data } = await platformFetch<{ results?: Array<{ resourceName?: string }> }>(
+        'google',
+        `${this.adsBase}/customers/${ctx.accountExternalId}/${koleksiyon}:mutate`,
+        { method: 'POST', headers, body: JSON.stringify(govde) },
+      ));
+    } catch (e) {
+      throw googleHatasiniZenginlestir(e);
+    }
+    if (govde.validateOnly) return;
+    if (!data?.results?.[0]?.resourceName) {
+      throw new PlatformApiError('google', 'permanent', `Google ${koleksiyon} güncelleme yanıtında kaynak adı yok; değişiklik doğrulanamadı.`);
+    }
+  }
+
+  /**
+   * ═══ GERİ OKUMA — GAQL ═══
+   *
+   * Kampanyada durum ve bağlı bütçenin tutarı; reklam grubunda ve reklamda
+   * yalnız durum. Reklam seviyesinde sorgu reklam grubu kimliğiyle de
+   * daraltılıyor: aynı reklam kimliği birden çok gruba bağlı olabilir.
+   */
+  async durumOku(ctx: FetchContext, istek: DurumOkumaIstegi): Promise<PlatformVarlikDurumu> {
+    const id = gaqlKimligi(istek.externalId);
+    let sorgu: string;
+    if (istek.level === 'campaign') {
+      sorgu = `SELECT campaign.status, campaign_budget.amount_micros, campaign_budget.period
+                 FROM campaign WHERE campaign.id = ${id}`;
+    } else if (istek.level === 'ad_group') {
+      sorgu = `SELECT ad_group.status FROM ad_group WHERE ad_group.id = ${id}`;
+    } else {
+      const grup = istek.ustExternalId ? ` AND ad_group.id = ${gaqlKimligi(istek.ustExternalId)}` : '';
+      sorgu = `SELECT ad_group_ad.status FROM ad_group_ad WHERE ad_group_ad.ad.id = ${id}${grup}`;
+    }
+    const satirlar = await this.searchGaql<{
+      campaign?: { status?: string };
+      adGroup?: { status?: string };
+      adGroupAd?: { status?: string };
+      campaignBudget?: { amountMicros?: string; period?: string };
+    }>(ctx.accessToken, ctx.accountExternalId, sorgu, ctx.loginCustomerId);
+    const r = satirlar[0];
+    if (!r) {
+      throw new PlatformApiError('google', 'permanent', `Google’da varlık bulunamadı (${istek.level} ${istek.externalId}).`);
+    }
+    const ham = String(r.campaign?.status ?? r.adGroup?.status ?? r.adGroupAd?.status ?? '');
+    const tutar = r.campaignBudget?.amountMicros;
+    const gunluk = typeof tutar === 'string' && /^\d+$/.test(tutar) && (r.campaignBudget?.period ?? 'DAILY') === 'DAILY' ? BigInt(tutar) : null;
+    return { status: this.mapEntityStatus(ham), hamDurum: ham, dailyBudgetMicros: gunluk, lifetimeBudgetMicros: null };
+  }
 
   // ---------------------------------------------------------------------------
   // MODÜL 7 — Auto-Boost: Google'da KARŞILIĞI YOK
@@ -2632,3 +2780,28 @@ export function varlikKimligi(kaynakAdi: string): string | null {
  * bekçisinin kendi ürettiği trafiği görmemesi demek.
  */
 export const KAYNAK_ADI_PARCASI = 500;
+
+/**
+ * GAQL'e yazılan kimlik YALNIZ RAKAM. Sorgu dizeyle kuruluyor (GAQL'de bağlı
+ * parametre yok); kimlik veritabanından geliyor ama "veritabanından geldi"
+ * güvenli demek değil — bir gün başka bir şey taşırsa sorgunun içine
+ * yazılırdı.
+ */
+export function gaqlKimligi(id: string): string {
+  if (!/^\d+$/.test(id)) throw new PlatformApiError('google', 'permanent', `Geçersiz Google kimliği: ${id.slice(0, 40)}`);
+  return id;
+}
+
+/**
+ * Google hatasına `details`/`trigger` ayrıntısını ekler (`googleHataAyrintisi`).
+ * Tür ve ham gövde KORUNUYOR: kota/token sınıflandırması `http.ts`te yapıldı
+ * ve yeniden yapmak onu bozabilirdi.
+ */
+export function googleHatasiniZenginlestir(e: unknown): unknown {
+  if (!(e instanceof PlatformApiError) || e.platform !== 'google') return e;
+  const ayrintilar = googleAlanHatalari(e.detail?.raw)
+    .map((h) => [h.alan ? `alan=${h.alan}` : null, h.ayrinti].filter(Boolean).join(' '))
+    .filter((x) => x.length > 0 && !e.message.includes(x));
+  if (ayrintilar.length === 0) return e;
+  return new PlatformApiError('google', e.kind, `${e.message} · ${ayrintilar.join(' · ')}`, e.detail);
+}

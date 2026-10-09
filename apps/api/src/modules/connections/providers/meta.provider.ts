@@ -35,6 +35,8 @@ import {
   type DiscoveredKeywordRow,
   type DiscoveredOrganicPost,
   type PlatformActionRequest,
+  type DurumOkumaIstegi,
+  type PlatformVarlikDurumu,
   type CreateLeadFormRequest,
   type DiscoveredLead,
   type DiscoveredLeadForm,
@@ -1419,7 +1421,17 @@ export class MetaProvider implements IAdPlatformProvider {
   async applyAction(
     ctx: FetchContext,
     action: PlatformActionRequest,
+    secenek: { validateOnly?: boolean } = {},
   ): Promise<PlatformActionResult> {
+    /*
+     * PROVA BAYRAĞI META'DA REDDEDİLİYOR. Graph'in `execution_options=
+     * validate_only` seçeneği bu yolda hiç denenmedi; bayrağı sessizce yok
+     * sayıp GERÇEK yazmayı yapmak, "prova" diye basılan düğmenin canlı
+     * kampanyayı değiştirmesi demek olurdu.
+     */
+    if (secenek.validateOnly) {
+      throw new PlatformApiError('meta', 'permanent', 'Meta yazma yolunda prova (validateOnly) desteklenmiyor.');
+    }
     /*
      * ═══ KOPYALAMA AYRI BİR UÇ — ERKEN DÖNÜYOR ═══
      *
@@ -1482,6 +1494,43 @@ export class MetaProvider implements IAdPlatformProvider {
     if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
 
     return { afterState };
+  }
+
+  /**
+   * ═══ GERİ OKUMA — `GET /{id}?fields=...` ═══
+   *
+   * ALAN LİSTESİ SEVİYEYE GÖRE. Reklam düğümünde `daily_budget` YOK ve Graph
+   * olmayan alanı istenince isteğin TAMAMINI `(#100) nonexisting field` ile
+   * düşürüyor; reklam seviyesinde yalnız durum soruluyor.
+   *
+   * `status` OKUNUYOR, `effective_status` DEĞİL: yazdığımız alan `status`
+   * ve karşılaştırma BENZERİ BENZERLE yapılmalı (CLAUDE.md, Instagram
+   * kreatif dersi). Üst seviyesi duraklatılmış bir reklam seti ACTIVE
+   * yazılır ve `effective_status` CAMPAIGN_PAUSED kalır; bu yazma hatası
+   * değil, hiyerarşi kuralı.
+   */
+  async durumOku(ctx: FetchContext, istek: DurumOkumaIstegi): Promise<PlatformVarlikDurumu> {
+    const alanlar = istek.level === 'ad' ? 'status' : 'status,daily_budget,lifetime_budget';
+    const res = await platformFetch<{ status?: string; daily_budget?: string; lifetime_budget?: string }>(
+      'meta',
+      `${this.graph}/${istek.externalId}?fields=${alanlar}`,
+      { method: 'GET', headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+    const ham = String(res.data?.status ?? '');
+    const butce = (v: unknown): bigint | null => {
+      // Meta bütçesi olmayan seviyede "0" döndürebiliyor; sıfır bütçe
+      // "bütçe burada değil" demek, sıfır liralık bütçe değil.
+      if (typeof v !== 'string' || !/^\d+$/.test(v) || v === '0') return null;
+      return fromMinorUnits(BigInt(v), istek.currency);
+    };
+    return {
+      status: ham === 'ACTIVE' ? 'active' : ham === 'PAUSED' ? 'paused' : ham === 'DELETED' || ham === 'ARCHIVED' ? 'deleted' : 'unknown',
+      hamDurum: ham,
+      dailyBudgetMicros: butce(res.data?.daily_budget),
+      lifetimeBudgetMicros: butce(res.data?.lifetime_budget),
+    };
   }
 
   /**
@@ -4438,6 +4487,13 @@ export function toMinorUnits(micros: bigint, currency: string): bigint {
   const digits = ZERO_DECIMAL.has(code) ? 0 : THREE_DECIMAL.has(code) ? 3 : 2;
   const divisor = 10n ** BigInt(6 - digits);
   return micros / divisor;
+}
+
+/** `toMinorUnits`in tersi — geri okunan bütçe micros'a çevriliyor. AYNI tablo. */
+export function fromMinorUnits(minor: bigint, currency: string): bigint {
+  const code = currency.toUpperCase();
+  const digits = ZERO_DECIMAL.has(code) ? 0 : THREE_DECIMAL.has(code) ? 3 : 2;
+  return minor * 10n ** BigInt(6 - digits);
 }
 
 const ZERO_DECIMAL = new Set([

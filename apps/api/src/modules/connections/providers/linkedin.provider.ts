@@ -29,6 +29,7 @@ import {
   type OAuthTokens,
   type PlatformActionRequest,
   type PlatformActionResult,
+  type PlatformVarlikDurumu,
   type PlatformBreakdowns,
   type PlatformInsights,
   type PlatformStructure,
@@ -1009,6 +1010,11 @@ export class LinkedInProvider implements IAdPlatformProvider {
       'permanent',
       `LinkedIn yazma işlemleri henüz yazılmadı (${action.type}).`,
     );
+  }
+
+  /** Yazma kodu olmadığı için geri okunacak bir yazma da yok; açık hata. */
+  async durumOku(): Promise<PlatformVarlikDurumu> {
+    throw new PlatformApiError('linkedin', 'permanent', 'LinkedIn geri okuma yazılmadı (LinkedIn yazma yolu yok).');
   }
 
   canWrite(_grantedScopes: readonly string[]): { ok: boolean; missing: string[] } {

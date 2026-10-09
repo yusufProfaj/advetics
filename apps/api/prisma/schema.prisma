@@ -3942,3 +3942,60 @@ model OzelGun {
   @@index([baslangic, bitis], map: "ozel_gunler_tarih_idx")
   @@map("ozel_gunler")
 }
+
+// ═══ İYİLEŞTİR v1 + AI ASİSTAN v1 (docs/iyilestir/MIMARI.md § 4) ═══
+// Kısıtlar, değişmezlik trigger'ı ve RLS migration'da / 02_rls.sql'de.
+
+/// Önerinin KARARI (öneri saklanmaz, her istekte hesaplanır).
+/// Tekil `(client_id, anahtar)`; satır DEĞİŞMEZ (trigger).
+model IyilestirOneriKarar {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  clientId  String   @map("client_id") @db.Uuid
+  anahtar   String   @db.VarChar(200)
+  tur       String   @db.VarChar(40)
+  platform  Platform
+  durum     String   @db.VarChar(12)
+  eylem     Json     @db.JsonB
+  sonuc     Json?    @db.JsonB
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([clientId, anahtar], map: "iyilestir_oneri_karar_anahtar_key")
+  @@index([clientId, createdAt(sort: Desc)], map: "iyilestir_oneri_karar_ay_idx")
+  @@index([orgId], map: "iyilestir_oneri_karar_org_id_idx")
+  @@map("iyilestir_oneri_karar")
+}
+
+model IyilestirAsistanOturum {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  clientId  String   @map("client_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([clientId, createdAt(sort: Desc)], map: "iyilestir_asistan_oturum_client_idx")
+  @@index([orgId], map: "iyilestir_asistan_oturum_org_id_idx")
+  @@index([userId], map: "iyilestir_asistan_oturum_user_idx")
+  @@map("iyilestir_asistan_oturum")
+}
+
+/// Kullanıcı kotası için KISMİ indeks `iyilestir_asistan_mesaj_kullanici_idx` yalnız migration'da.
+model IyilestirAsistanMesaj {
+  id          String   @id @default(uuid()) @db.Uuid
+  oturumId    String   @map("oturum_id") @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  rol         String   @db.VarChar(10)
+  parcalar    Json     @db.JsonB
+  modelIcerik Json     @default("[]") @map("model_icerik") @db.JsonB
+  girisToken  Int      @default(0) @map("giris_token")
+  cikisToken  Int      @default(0) @map("cikis_token")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([oturumId, createdAt], map: "iyilestir_asistan_mesaj_oturum_idx")
+  @@index([clientId, createdAt(sort: Desc)], map: "iyilestir_asistan_mesaj_client_idx")
+  @@index([orgId], map: "iyilestir_asistan_mesaj_org_id_idx")
+  @@map("iyilestir_asistan_mesaj")
+}

@@ -12,8 +12,21 @@ sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
 temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
 RLS politikası var, platform sahibi yalnız hello@profaj.com.
-**Bekleyen deploy:** yok (canlı: Genel Bakış + Reklam Yöneticisi taslak
-sürümü ve denetim düzeltmeleri, 2026-10-09 akşam). Migration YOK.
+**Bekleyen deploy:** yok hedefleniyor — Aşama 4 (İyileştir + AI Asistan)
+bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
+yeni tablo) + `db:rls`.
+
+**AŞAMA 4 — İYİLEŞTİR v1 + AI ASİSTAN v1 (2026-10-09).** Plan, çelişki
+tablosu, mimari: `docs/iyilestir/`. `/iyilestir` üç sekme (Öneriler, AI
+Asistan, Kurallar; `/kurallar` yönleniyor). Uygula Meta VE Google'da
+(kullanıcı kararı), yazdıktan sonra platformdan geri okuma, özet
+uyuşmazlığında ret, ajans acil şalteri iki yazma yolunda da (Ajan 4
+bulgusu). **GOOGLE YAZMA YOLU CANLIDA HİÇ DENENMEDİ:** ilk adım
+`?prova=true` (validateOnly) ile, sonra kullanıcının seçtiği en küçük
+değişiklik + Google Ads'te gözle doğrulama. Ölçülmedi: Google
+`explicitly_shared` alanı geliyor mu (gelmezse her bütçe paylaşımlı
+sayılıp reddedilir), asistanın gerçek Gemini akışı. Kural motoru artık
+Google'a yazmıyor (kasıtlı; eskiden "henüz yazılmadı" ile düşüyordu).
 
 **AŞAMA 3 — REKLAM YÖNETİCİSİ + GENEL BAKIŞ DÜZENİ (2026-10-09).** Kullanıcı
 iki HTML taslağını onayladı ("mükemmel olmuş"). İniş tablosu Genel

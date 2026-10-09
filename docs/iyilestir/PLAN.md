@@ -1,7 +1,7 @@
 # Aşama 4 — İyileştir v1 + AI Asistan v1
 
-**Tarih:** 2026-10-09 · **Durum:** taslak onaylandı (Google'da da Uygula); Ajan 1 bitti
-([`MIMARI.md`](MIMARI.md)), sıradaki Ajan 2 ‖ 3. Çerçeve: [`URUN-YAPISI-PLANI.md`](../URUN-YAPISI-PLANI.md) §2
+**Tarih:** 2026-10-09 · **Durum:** taslak onaylandı (Google'da da Uygula); Ajan 1–4 bitti
+([`MIMARI.md`](MIMARI.md)); Ajan 5 deploy + Google provası, Ajan 6 denetim. Çerçeve: [`URUN-YAPISI-PLANI.md`](../URUN-YAPISI-PLANI.md) §2
 "AI Asistan geri geliyor" ve Aşama 4. Düzen CLAUDE.md "Beş ajan, modül modül"
 (+ 6 · Tasarım Denetimi).
 

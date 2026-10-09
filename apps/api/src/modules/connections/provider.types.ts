@@ -495,8 +495,19 @@ export type PlatformActionRequest =
       /** Reklam setleri ve reklamlar da kopyalansın mı (`deep_copy`). */
       deepCopy: boolean;
     }
-  | { type: 'pause'; level: 'campaign' | 'ad_group' | 'ad'; externalId: string }
-  | { type: 'resume'; level: 'campaign' | 'ad_group' | 'ad'; externalId: string }
+  | {
+      type: 'pause' | 'resume';
+      level: 'campaign' | 'ad_group' | 'ad';
+      externalId: string;
+      /**
+       * ÜST VARLIĞIN platform kimliği — yalnız Google REKLAM seviyesinde
+       * gerekli. Google'da reklamın kaynak adı reklam grubuyla birlikte
+       * kuruluyor (`adGroupAds/{grup}~{reklam}`); yalnız reklam kimliğiyle
+       * yazılacak bir yol YOK. Meta görmezden geliyor: orada her varlığın
+       * kendi düğümü var.
+       */
+      ustExternalId?: string;
+    }
   | {
       type: 'set_budget';
       level: 'campaign' | 'ad_group';
@@ -514,6 +525,24 @@ export type PlatformActionRequest =
        */
       currency: string;
     };
+
+export interface DurumOkumaIstegi {
+  level: 'campaign' | 'ad_group' | 'ad';
+  externalId: string;
+  /** Google reklam seviyesinde reklam grubu kimliği (bkz. `PlatformActionRequest`). */
+  ustExternalId?: string;
+  /** Hesabın para birimi — Meta bütçeyi en küçük birimde döndürüyor. */
+  currency: string;
+}
+
+export interface PlatformVarlikDurumu {
+  /** Normalize durum; platformun ham değeri `hamDurum`da. */
+  status: NormalizedEntityStatus;
+  hamDurum: string;
+  /** Günlük bütçe (micros); varlığın günlük bütçesi yoksa null. */
+  dailyBudgetMicros: bigint | null;
+  lifetimeBudgetMicros: bigint | null;
+}
 
 export interface PlatformActionResult {
   /** Platformun onayladığı yeni durum — kayda `afterState` olarak yazılıyor. */
@@ -1137,7 +1166,29 @@ export interface IAdPlatformProvider {
    * `writeScopes` boş değilse bu yetenek İZİN BEKLİYOR demektir; çağıran
    * önce `canWrite()` sormalı.
    */
-  applyAction(ctx: FetchContext, action: PlatformActionRequest): Promise<PlatformActionResult>;
+  applyAction(
+    ctx: FetchContext,
+    action: PlatformActionRequest,
+    /**
+     * `validateOnly`: PROVA — platform isteği gerçek kurallarla doğruluyor,
+     * hiçbir şey değiştirmiyor. Yalnız Google'da var; Meta ve LinkedIn
+     * bayrağı görünce REDDEDİYOR (sessizce gerçek yazma yapmak, "prova"
+     * diye basılan düğmenin para harcaması demek olurdu).
+     */
+    secenek?: { validateOnly?: boolean },
+  ): Promise<PlatformActionResult>;
+
+  /**
+   * ═══ YAZMADAN SONRA GERİ OKUMA ═══
+   *
+   * "200 döndü" doğrulama değil (CLAUDE.md). Meta güncellemede yalnız
+   * `{"success": true}` dönüyor; Google kaynak adını dönüyor. İkisi de
+   * istenen DEĞERİN yazıldığını söylemiyor: Meta bütçeyi yuvarlayabilir,
+   * üst seviye duraklatılmış bir varlık ACTIVE yazılsa da yayına çıkmaz.
+   * Bu metot varlığın platformdaki ŞU ANKİ durumunu ve bütçesini okur;
+   * karşılaştırmayı çağıran yapar (`campaign-actions.service.ts#uygula`).
+   */
+  durumOku(ctx: FetchContext, istek: DurumOkumaIstegi): Promise<PlatformVarlikDurumu>;
 
   /**
    * Bu bağlantı yazma yapabilir mi.

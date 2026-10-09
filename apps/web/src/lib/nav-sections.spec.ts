@@ -251,6 +251,36 @@ describe('ADVCAMPAIGN SATIRI', () => {
   });
 });
 
+describe('İYİLEŞTİR SATIRI (Aşama 4)', () => {
+  /*
+   * Öneriler, AI Asistan ve Kurallar TEK sayfanın sekmeleri. Kurallar
+   * satırının menüye geri dönmesi aynı ekrana iki kapı demek ve kullanıcının
+   * "nereye nereden girdiğimi unutuyorum" şikâyetinin sebebi tam buydu.
+   */
+  const bolum = SECTIONS.find((s) => s.title === 'İyileştir');
+
+  it('KRİTİK: tek satır, /iyilestir, sayfa kapısıyla aynı yetki (rule.read)', () => {
+    expect(bolum, 'İyileştir bölümü yok — tarama boşa düştü').toBeDefined();
+    expect(bolum!.items.map((i) => [i.href, i.label, i.perm])).toEqual([['/iyilestir', 'İyileştir', 'rule.read']]);
+    const sayfa = readFileSync(join(__dirname, '..', 'app', '(dashboard)', 'iyilestir', 'page.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(sayfa).toContain(`hasPermission(session, '${bolum!.items[0]!.perm}')`);
+  });
+
+  it('KRİTİK: müşteri hesabı GÖRMÜYOR, ajans rolleri görüyor', () => {
+    expect(ROLE_PERMISSIONS.client_viewer).not.toContain('rule.read');
+    expect(etiketler('client_viewer')).not.toContain('İyileştir');
+    expect(etiketler('ad_manager')).toContain('İyileştir');
+    expect(etiketler('admin')).toContain('İyileştir');
+  });
+
+  it('eski /kurallar satırı menüde YOK', () => {
+    const tumu = SECTIONS.flatMap((s) => s.items);
+    expect(tumu.some((i) => i.href === '/kurallar' || i.label === 'Kurallar')).toBe(false);
+  });
+});
+
 describe('ADVSTRATEGY SATIRI', () => {
   const satirlar = SECTIONS.flatMap((s) => s.items);
 
@@ -377,7 +407,8 @@ describe('AJANS ROLLERİ', () => {
     // Yönetici işi.
     expect(gorunen).not.toContain('Üst Hesaplar');
     expect(gorunen).toContain('AdvCampaign');
-    expect(gorunen).toContain('Kurallar');
+    // Kurallar 2026-10-09'dan beri İyileştir sayfasının sekmesi.
+    expect(gorunen).toContain('İyileştir');
     expect(gorunen).toContain('Ekip & Yetkiler');
     expect(gorunen).not.toContain('Şirketler');
   });

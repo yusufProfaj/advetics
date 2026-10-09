@@ -146,6 +146,23 @@ export class RuleExecutorService {
       return 'failed';
     }
 
+    /*
+     * ═══ GOOGLE'DA KURAL AKSİYONU KAPALI (İyileştir v1, 2026-10-09) ═══
+     *
+     * Google `applyAction` bugüne kadar "henüz yazılmadı" diye reddediyordu
+     * ve kural motoru Google varlıklarında hep `failed` yazıyordu. Yazma
+     * yolu İyileştir için açıldı (kullanıcının TEK TEK onayladığı kartlar);
+     * kurallar kapsam DIŞI (PLAN İ-8) ve canlıda hiç denenmemiş bir yazma
+     * yolunu OTOMATİK bir motora açmak, kimsenin onaylamadığı bütçe
+     * değişikliği demek. Platform çağrısından ÖNCE, sıfır maliyetle ret ve
+     * sebebi kayıtta. Açmak ayrı bir karar: ilk Google yazması canlıda
+     * gözle doğrulandıktan sonra (MIMARI § 3).
+     */
+    if (entry.platform === 'google') {
+      await this.writeLog(tx, ctx, rule, runId, action, 'failed', null, GOOGLE_KURAL_KAPALI);
+      return 'failed';
+    }
+
     const provider = this.providers.get(entry.platform);
 
     // KOTA — `rule_action` katmanı öncelikli kovadan harcıyor.
@@ -359,3 +376,7 @@ export class RuleExecutorService {
     `);
   }
 }
+
+/** Kural kaydına düşen ret cümlesi (`rule-executor-google.spec.ts`). */
+export const GOOGLE_KURAL_KAPALI =
+  'Google’da kural aksiyonu kapalı: Google yazma yolu yalnız İyileştir’in onaylı kartlarında açık ve canlıda henüz doğrulanmadı.';

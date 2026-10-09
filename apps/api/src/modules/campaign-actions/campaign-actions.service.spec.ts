@@ -175,15 +175,21 @@ describe('applyAction — mutlu yol', () => {
 
   it('İKİ AYRI transaction — platform çağrısı ikisinin ARASINDA', async () => {
     // Tek bir withTenant çağrısına sarılsaydı, Meta/Google çağrısı 5 saniyelik
-    // transaction penceresini aşabilirdi (CLAUDE.md). Burada withTenant TAM
-    // İKİ KEZ çağrılmalı: biri okuma, biri denetim kaydı.
+    // transaction penceresini aşabilirdi (CLAUDE.md). withTenant ÜÇ KEZ ve
+    // hepsi KISA: okuma, ajans şalteri (2026-10-09'dan beri), denetim kaydı.
+    // Asıl kural sırayla ölçülüyor: platform çağrısı ikinci transaction
+    // BİTTİKTEN sonra, üçüncüsü BAŞLAMADAN önce.
     const withTenantSpy = realWithTenant();
     const { svc, applyAction } = makeService(withTenantSpy);
     applyAction.mockResolvedValue({ afterState: { status: 'PAUSED' } });
 
     await svc.applyAction(CTX, CAMPAIGN, { type: 'pause' });
 
-    expect(withTenantSpy).toHaveBeenCalledTimes(2);
+    expect(withTenantSpy).toHaveBeenCalledTimes(3);
+    const sira = withTenantSpy.mock.invocationCallOrder;
+    const platform = applyAction.mock.invocationCallOrder[0]!;
+    expect(platform).toBeGreaterThan(sira[1]!);
+    expect(platform).toBeLessThan(sira[2]!);
   });
 
   it('set_budget: doğru micros/mod/para birimiyle platforma gidiyor', async () => {

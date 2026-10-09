@@ -46,6 +46,12 @@ export interface GoogleMutateBody {
    * klasik sessiz hatası. Hepsi ya da hiçbiri.
    */
   partialFailure: false;
+  /**
+   * PROVA: Google her işlemi gerçek kurallarla doğruluyor, HİÇBİR ŞEY
+   * değiştirmiyor. Yalnız açıkça istenince gönderiliyor; alanın hiç
+   * olmaması "gerçek yazma" demek.
+   */
+  validateOnly?: boolean;
 }
 
 function body(operations: GoogleMutateOperation[]): GoogleMutateBody {
@@ -285,4 +291,71 @@ export function resourceCollection(resourceName: string): string {
   const parts = resourceName.split('/');
   // customers / <id> / <collection> / <id>
   return parts[2] ?? '';
+}
+
+// ---------------------------------------------------------------------------
+// İYİLEŞTİR — var olan varlıkta DURUM ve BÜTÇE güncellemesi
+// ---------------------------------------------------------------------------
+
+/**
+ * Durum güncellemesi: kampanya, reklam grubu ya da reklam (ad_group_ad).
+ *
+ * `updateMask: 'status'` TEK ALAN. Maskeye başka bir alan yazmak, gövdede
+ * olmayan o alanı Google'ın VARSAYILANA çekmesi demek; maskesiz güncelleme
+ * ise reddediliyor (`GoogleMutateOperation.update` yorumu).
+ *
+ * Değerler `ENABLED`/`PAUSED` — `REMOVED` bu yoldan ASLA gönderilmiyor:
+ * kaldırma geri alınamaz ve İyileştir'in eylemleri durdur/sürdür/bütçe.
+ */
+export function durumGuncelleBody(params: {
+  resourceName: string;
+  status: 'ENABLED' | 'PAUSED';
+  validateOnly: boolean;
+}): GoogleMutateBody {
+  return {
+    ...body([{ update: { resourceName: params.resourceName, status: params.status }, updateMask: 'status' }]),
+    ...(params.validateOnly ? { validateOnly: true } : {}),
+  };
+}
+
+/**
+ * Bütçe tutarı güncellemesi — `CampaignBudget.amount_micros`.
+ *
+ * TUTAR STRING: int64 alanları REST gövdesinde string taşınıyor ve
+ * `Number`a çevirmek büyük tutarda hassasiyet kaybı demek. Sıfır ve eksi
+ * burada reddediliyor: Google'ın kendi hatası yerine sebebi söyleyen bir
+ * mesaj, teşhisi kısaltıyor.
+ */
+export function butceTutariBody(params: {
+  budgetResourceName: string;
+  amountMicros: bigint;
+  validateOnly: boolean;
+}): GoogleMutateBody {
+  if (params.amountMicros <= 0n) throw new Error('Bütçe sıfır ya da eksi olamaz');
+  return {
+    ...body([
+      {
+        update: { resourceName: params.budgetResourceName, amountMicros: params.amountMicros.toString() },
+        updateMask: 'amount_micros',
+      },
+    ]),
+    ...(params.validateOnly ? { validateOnly: true } : {}),
+  };
+}
+
+/**
+ * Seviye → koleksiyon ve kaynak adı. Reklamın kaynak adı reklam grubuyla
+ * birlikte kuruluyor (`adGroupAds/{grup}~{reklam}`); grup kimliği yoksa
+ * yazılacak bir yol YOK ve tahmin edilmiyor.
+ */
+export function googleKaynakAdi(
+  customerId: string,
+  level: 'campaign' | 'ad_group' | 'ad',
+  externalId: string,
+  ustExternalId?: string,
+): { koleksiyon: 'campaigns' | 'adGroups' | 'adGroupAds'; kaynak: string } {
+  if (level === 'campaign') return { koleksiyon: 'campaigns', kaynak: `customers/${customerId}/campaigns/${externalId}` };
+  if (level === 'ad_group') return { koleksiyon: 'adGroups', kaynak: `customers/${customerId}/adGroups/${externalId}` };
+  if (!ustExternalId) throw new Error('Google reklamına yazmak için reklam grubu kimliği gerekli');
+  return { koleksiyon: 'adGroupAds', kaynak: `customers/${customerId}/adGroupAds/${ustExternalId}~${externalId}` };
 }

@@ -90,6 +90,14 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   { tablo: 'strateji_dagilimlari', etiket: 'medya planı dağılımı' },
   { tablo: 'strateji_matrisi', etiket: 'medya planı matrisi' },
   { tablo: 'strateji_kelimeleri', etiket: 'medya planı kelimesi' },
+  // İyileştir: karar, workspace'in reklamlarına verilmiş bir cevap ve
+  // reklamlar (hesap atamasıyla) workspace'le gidiyor; kararı geride
+  // bırakmak, yeni şirkette aynı haftanın önerisini yeniden "açık"
+  // gösterir ve ikinci kez uygulatırdı. Asistan sohbeti de AdvCampaign
+  // sohbetiyle aynı gerekçeyle taşınıyor (MIMARI § 4).
+  { tablo: 'iyilestir_oneri_karar', etiket: 'İyileştir kararı' },
+  { tablo: 'iyilestir_asistan_oturum', etiket: 'asistan oturumu' },
+  { tablo: 'iyilestir_asistan_mesaj', etiket: 'asistan mesajı' },
 ] as const;
 
 /**

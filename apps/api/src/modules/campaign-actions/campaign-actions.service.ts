@@ -1,17 +1,19 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type {
-  CanliKampanyaListesi,
-  CanliKampanyaOzeti,
-  Platform,
-  TenantContext,
+import {
+  formatMoney,
+  type CanliKampanyaListesi,
+  type CanliKampanyaOzeti,
+  type Platform,
+  type TenantContext,
 } from '@advetics/shared';
 import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
+import { googleYazmaAcikMi, metaYazmaAcikMi } from '../reklam/yazma-kapisi';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from '../connections/provider.registry';
-import type { PlatformActionRequest } from '../connections/provider.types';
+import type { PlatformActionRequest, PlatformVarlikDurumu, RateLimitSnapshot } from '../connections/provider.types';
 import { TokenVaultService } from '../connections/token-vault.service';
 
 /**
@@ -125,6 +127,14 @@ export class CampaignActionsService {
     private readonly audit: AuditService,
     private readonly queue: SyncQueueService,
   ) {}
+
+  /** Platformun ajans şalteri; şalteri olmayan platform (LinkedIn) zaten `canWrite` ile kapalı. */
+  private yazmaKapisi(ctx: TenantContext, platform: string, clientId: string) {
+    const tx = <T>(fn: (t: Prisma.TransactionClient) => Promise<T>) => this.prisma.withTenant(ctx, fn);
+    if (platform === 'meta') return metaYazmaAcikMi(tx, clientId);
+    if (platform === 'google') return googleYazmaAcikMi(tx, clientId);
+    return Promise.resolve({ acik: true as const });
+  }
 
   /**
    * Yayınlanmış kampanyaları listeler — "hangi kampanya" sorusunu çözmek için.
@@ -288,6 +298,12 @@ export class CampaignActionsService {
     // değiştirmek elle mi kuraldan mı geldiğine göre değil, İŞİN TÜRÜNE göre
     // önceliklendiriliyor: kota daraldığında veri güncellenememesi, bütçe
     // artırılamamasından ucuz.
+    // AJANSIN ACİL ŞALTERİ ÖNCE: "Meta'ya / Google'a yazmayı durdur"
+    // açıkken bu yol da yazmamalı. İyileştir'in Uygula'sı ve asistan kartı
+    // buradan geçiyor ve şaltere bakmıyordu (Ajan 4 bulgusu, 2026-10-09):
+    // ajans bir arızada yazmayı durdurduğunda tek bir düğme yine yazardı.
+    const kapi = await this.yazmaKapisi(ctx, row.platform, row.clientId);
+    if (!kapi.acik) throw new BadRequestException(kapi.sebep);
     const gate = await this.quota.acquire({
       platform: row.platform,
       adAccountId: row.adAccountId,
@@ -371,6 +387,199 @@ export class CampaignActionsService {
     };
   }
 
+  /**
+   * ═══ SEVİYELİ UYGULAMA + GERİ OKUMA (İyileştir v1, MIMARI § 3) ═══
+   *
+   * `applyAction`tan farkları:
+   *   · seviye `campaign | ad_group | ad` (yorgun KREATİF reklam
+   *     seviyesinde durduruluyor; bütçe Meta ABO'da reklam setinde),
+   *   · yazdıktan sonra platformdan GERİ OKUYUP karşılaştırıyor: "200
+   *     döndü" doğrulama değil (CLAUDE.md),
+   *   · Google'da `validateOnly` provası.
+   *
+   * `applyAction` DEĞİŞMEDİ: panelin kampanya düğmeleri ve kopyalama onu
+   * kullanıyor ve geri okuma her çağrıda bir istek daha harcıyor; o yolun
+   * kararını bu iş vermiyor.
+   *
+   * GERİ OKUMA DÜŞERSE YAZMA GERİ ALINMIYOR VE BAŞARI DA SAYILMIYOR:
+   * platform değişikliği kabul etti ama biz göremedik. Sonuç `uyusmadi`
+   * ve sebebi `platformDegeri`nde; "doğrulandı" demek yalan olurdu, hata
+   * fırlatmak ise yapılmış bir değişikliği kayıtsız bırakırdı.
+   *
+   * Platform çağrıları transaction DIŞINDA (okuma ve kayıt ayrı, kısa
+   * transaction'lar), `applyAction` ile aynı kural.
+   */
+  async uygula(
+    ctx: TenantContext,
+    hedef: { seviye: VarlikSeviyesi; id: string },
+    eylem: UygulamaEylemi,
+    secenek: { validateOnly?: boolean } = {},
+  ): Promise<SeviyeliUygulamaSonucu> {
+    if (eylem.type === 'set_budget' && hedef.seviye === 'ad') {
+      throw new BadRequestException('Reklamın kendi bütçesi yok; bütçe kampanya ya da reklam seti seviyesinde.');
+    }
+    const row = await this.prisma.withTenant(ctx, (tx) => this.varlikCoz(tx, hedef.seviye, hedef.id));
+
+    if (row.connectionStatus !== 'active') {
+      throw new BadRequestException(
+        `Platform bağlantısı etkin değil (${row.connectionStatus}) — yeniden bağlanmak gerekiyor.`,
+      );
+    }
+    const provider = this.providers.get(row.platform);
+    const can = provider.canWrite(row.grantedScopes);
+    if (!can.ok) {
+      throw new BadRequestException(`Yazma izni yok: ${can.missing.join(', ')}.`);
+    }
+    // AJANSIN ACİL ŞALTERİ ÖNCE: "Meta'ya / Google'a yazmayı durdur"
+    // açıkken bu yol da yazmamalı. İyileştir'in Uygula'sı ve asistan kartı
+    // buradan geçiyor ve şaltere bakmıyordu (Ajan 4 bulgusu, 2026-10-09):
+    // ajans bir arızada yazmayı durdurduğunda tek bir düğme yine yazardı.
+    const kapi = await this.yazmaKapisi(ctx, row.platform, row.clientId);
+    if (!kapi.acik) throw new BadRequestException(kapi.sebep);
+    // Kota ÖNCE: maliyeti sıfır bir ret (CLAUDE.md "önce kontrol, sonra çağrı").
+    const gate = await this.quota.acquire({ platform: row.platform, adAccountId: row.adAccountId, layer: 'rule_action' });
+    if (!gate.allowed) throw new BadRequestException(`Kota engeli: ${gate.reason}`);
+
+    const accessToken = await this.vault.getAccessToken(row.connectionId, provider);
+    const fctx = {
+      accessToken,
+      accountExternalId: row.accountExternalId,
+      loginCustomerId: row.managerExternalId ?? undefined,
+      onRateLimit: (snapshot: RateLimitSnapshot) =>
+        this.quota.record({
+          platform: row.platform,
+          adAccountId: row.adAccountId,
+          endpoint: `iyilestir:${hedef.seviye}:${eylem.type}`,
+          snapshot,
+        }),
+    };
+    const istek: PlatformActionRequest =
+      eylem.type === 'set_budget'
+        ? {
+            type: 'set_budget',
+            level: hedef.seviye as 'campaign' | 'ad_group',
+            externalId: row.externalId,
+            amountMicros: eylem.amountMicros,
+            budgetMode: eylem.budgetMode,
+            currency: row.currency,
+          }
+        : { type: eylem.type, level: hedef.seviye, externalId: row.externalId, ustExternalId: row.ustExternalId ?? undefined };
+
+    const once = { status: row.status, budgetMode: row.budgetMode, budgetAmountMicros: row.budgetAmountMicros };
+    await provider.applyAction(fctx, istek, secenek.validateOnly ? { validateOnly: true } : undefined);
+
+    if (secenek.validateOnly) {
+      // PROVA hiçbir şeyi değiştirmedi: geri okunacak, kaydedilecek bir şey yok.
+      return { platform: row.platform, seviye: hedef.seviye, varlikId: hedef.id, varlikAdi: row.name, once, prova: true, dogrulama: null, okunan: null, platformDegeri: 'Prova geçti; hiçbir şey değişmedi.', currency: row.currency };
+    }
+
+    let okunan: PlatformVarlikDurumu | null = null;
+    let okumaHatasi: string | null = null;
+    try {
+      okunan = await provider.durumOku(fctx, {
+        level: hedef.seviye,
+        externalId: row.externalId,
+        ustExternalId: row.ustExternalId ?? undefined,
+        currency: row.currency,
+      });
+    } catch (e) {
+      okumaHatasi = e instanceof Error ? e.message : String(e);
+    }
+    const dogrulama = okunan ? karsilastir(eylem, okunan) : 'uyusmadi';
+    const platformDegeri = okunan
+      ? platformDegeriMetni(eylem, okunan, row.currency)
+      : `Platformdan geri okunamadı: ${okumaHatasi}`;
+
+    await this.prisma.withTenant(ctx, async (tx) => {
+      await this.audit.record(tx, ctx, {
+        action: `${hedef.seviye}.${eylem.type}`,
+        targetType: hedef.seviye,
+        targetId: hedef.id,
+        clientId: row.clientId,
+        before: once,
+        after: {
+          istenen: eylem.type === 'set_budget' ? { amountMicros: eylem.amountMicros.toString(), budgetMode: eylem.budgetMode } : { type: eylem.type },
+          dogrulama,
+          platformDegeri,
+        },
+      });
+      /*
+       * AYNA GÜNCELLENİYOR — yalnız GERİ OKUNAN değerle. Yapı taraması altı
+       * saatte bir koşuyor; o arada öneri üretici eski bütçeyi okuyup aynı
+       * öneriyi tekrar çıkarırdı. Gönderilen değeri değil platformun
+       * söylediğini yazmak, aynanın yalan söylememesini sağlıyor.
+       */
+      if (okunan) await aynayiGuncelle(tx, hedef.seviye, hedef.id, eylem, okunan);
+    });
+
+    return { platform: row.platform, seviye: hedef.seviye, varlikId: hedef.id, varlikAdi: row.name, once, prova: false, dogrulama, okunan, platformDegeri, currency: row.currency };
+  }
+
+  /**
+   * Seviyeye göre varlık + hesap + bağlantı. Reklam seviyesinde reklam
+   * grubunun platform kimliği de geliyor (Google'ın kaynak adı onu istiyor).
+   */
+  private async varlikCoz(tx: TenantClient, seviye: VarlikSeviyesi, id: string): Promise<CozulmusVarlik> {
+    const tablo = Prisma.raw(seviye === 'campaign' ? 'campaigns' : seviye === 'ad_group' ? 'ad_groups' : 'ads');
+    const butce =
+      seviye === 'ad'
+        ? Prisma.sql`'none' AS budget_mode, NULL::text AS budget_amount_micros, g.external_id AS ust_external_id`
+        : Prisma.sql`v.budget_mode::text AS budget_mode, v.budget_amount_micros::text AS budget_amount_micros, NULL::text AS ust_external_id`;
+    const ust = seviye === 'ad' ? Prisma.sql`LEFT JOIN ad_groups g ON g.id = v.ad_group_id` : Prisma.empty;
+    const rows = await tx.$queryRaw<
+      Array<{
+        id: string;
+        client_id: string;
+        name: string;
+        platform: Platform;
+        external_id: string;
+        status: string;
+        budget_mode: string;
+        budget_amount_micros: string | null;
+        ust_external_id: string | null;
+        ad_account_id: string;
+        account_external_id: string;
+        manager_external_id: string | null;
+        currency: string;
+        connection_id: string;
+        connection_status: string;
+        granted_scopes: string[];
+      }>
+    >(Prisma.sql`
+      SELECT v.id::text AS id, v.client_id::text AS client_id, v.name,
+             v.platform::text AS platform, v.external_id, v.status::text AS status,
+             ${butce},
+             a.id::text AS ad_account_id, a.external_id AS account_external_id,
+             a.manager_external_id, a.currency,
+             conn.id::text AS connection_id, conn.status::text AS connection_status,
+             conn.granted_scopes
+        FROM ${tablo} v
+        ${ust}
+        JOIN ad_accounts a ON a.id = v.ad_account_id
+        JOIN platform_connections conn ON conn.id = a.connection_id
+       WHERE v.id = ${id}::uuid AND v.deleted_at IS NULL
+    `);
+    const r = rows[0];
+    if (!r) throw new NotFoundException('Varlık bulunamadı');
+    return {
+      clientId: r.client_id,
+      name: r.name,
+      platform: r.platform,
+      externalId: r.external_id,
+      status: r.status,
+      budgetMode: r.budget_mode,
+      budgetAmountMicros: r.budget_amount_micros,
+      ustExternalId: r.ust_external_id,
+      adAccountId: r.ad_account_id,
+      accountExternalId: r.account_external_id,
+      managerExternalId: r.manager_external_id,
+      currency: r.currency,
+      connectionId: r.connection_id,
+      connectionStatus: r.connection_status,
+      grantedScopes: r.granted_scopes ?? [],
+    };
+  }
+
   private toPlatformRequest(row: ResolvedCampaign, action: CampaignAction): PlatformActionRequest {
     if (action.type === 'copy') {
       return {
@@ -445,6 +654,92 @@ export class CampaignActionsService {
       grantedScopes: r.granted_scopes ?? [],
     };
   }
+}
+
+export type VarlikSeviyesi = 'campaign' | 'ad_group' | 'ad';
+
+export type UygulamaEylemi =
+  | { type: 'pause' }
+  | { type: 'resume' }
+  | { type: 'set_budget'; amountMicros: bigint; budgetMode: 'daily' | 'lifetime' };
+
+export interface SeviyeliUygulamaSonucu {
+  platform: Platform;
+  seviye: VarlikSeviyesi;
+  varlikId: string;
+  varlikAdi: string;
+  once: { status: string; budgetMode: string; budgetAmountMicros: string | null };
+  prova: boolean;
+  /** Prova'da null: hiçbir şey değişmedi, doğrulanacak bir şey yok. */
+  dogrulama: 'dogrulandi' | 'uyusmadi' | null;
+  okunan: PlatformVarlikDurumu | null;
+  platformDegeri: string;
+  currency: string;
+}
+
+interface CozulmusVarlik {
+  clientId: string;
+  name: string;
+  platform: Platform;
+  externalId: string;
+  status: string;
+  budgetMode: string;
+  budgetAmountMicros: string | null;
+  ustExternalId: string | null;
+  adAccountId: string;
+  accountExternalId: string;
+  managerExternalId: string | null;
+  currency: string;
+  connectionId: string;
+  connectionStatus: string;
+  grantedScopes: string[];
+}
+
+/**
+ * İstenen ile okunan — BENZERİ BENZERLE. Durum eyleminde yalnız `status`,
+ * bütçe eyleminde yalnız yazılan bütçe alanı karşılaştırılıyor: üst seviyesi
+ * duraklatılmış bir varlığın yayında olmaması ya da bütçeyi yazdığımız
+ * varlığın durumu bu yazmanın sonucu değil.
+ */
+export function karsilastir(eylem: UygulamaEylemi, okunan: PlatformVarlikDurumu): 'dogrulandi' | 'uyusmadi' {
+  if (eylem.type === 'pause') return okunan.status === 'paused' ? 'dogrulandi' : 'uyusmadi';
+  if (eylem.type === 'resume') return okunan.status === 'active' ? 'dogrulandi' : 'uyusmadi';
+  const deger = eylem.budgetMode === 'daily' ? okunan.dailyBudgetMicros : okunan.lifetimeBudgetMicros;
+  return deger === eylem.amountMicros ? 'dogrulandi' : 'uyusmadi';
+}
+
+const DURUM_METNI: Record<string, string> = {
+  active: 'Yayında',
+  paused: 'Duraklatıldı',
+  deleted: 'Silinmiş',
+};
+
+/** Ekranda iki değer de yazılsın diye platformun söylediği, biçimlenmiş. */
+export function platformDegeriMetni(eylem: UygulamaEylemi, okunan: PlatformVarlikDurumu, currency: string): string {
+  if (eylem.type !== 'set_budget') return DURUM_METNI[okunan.status] ?? `Bilinmeyen durum (${okunan.hamDurum || 'boş'})`;
+  const deger = eylem.budgetMode === 'daily' ? okunan.dailyBudgetMicros : okunan.lifetimeBudgetMicros;
+  if (deger === null) return 'Bütçe okunamadı (bu seviyede bütçe yok)';
+  return `${formatMoney(deger.toString(), currency)}${eylem.budgetMode === 'daily' ? ' / gün' : ' toplam'}`;
+}
+
+async function aynayiGuncelle(
+  tx: TenantClient,
+  seviye: VarlikSeviyesi,
+  id: string,
+  eylem: UygulamaEylemi,
+  okunan: PlatformVarlikDurumu,
+): Promise<void> {
+  const tablo = Prisma.raw(seviye === 'campaign' ? 'campaigns' : seviye === 'ad_group' ? 'ad_groups' : 'ads');
+  if (eylem.type !== 'set_budget') {
+    if (okunan.status !== 'active' && okunan.status !== 'paused') return;
+    await tx.$executeRaw(Prisma.sql`
+      UPDATE ${tablo} SET status = ${okunan.status}::"EntityStatus" WHERE id = ${id}::uuid`);
+    return;
+  }
+  const deger = eylem.budgetMode === 'daily' ? okunan.dailyBudgetMicros : okunan.lifetimeBudgetMicros;
+  if (deger === null || seviye === 'ad') return;
+  await tx.$executeRaw(Prisma.sql`
+    UPDATE ${tablo} SET budget_amount_micros = ${deger} WHERE id = ${id}::uuid`);
 }
 
 /**
