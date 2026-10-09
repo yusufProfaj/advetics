@@ -549,14 +549,26 @@ describe('KRİTİK: PROVA — Google yalnızca doğruluyor, hiçbir şey değiş
     );
     const r = await svc.provaGoogle(CTX, KART, { texts: METIN });
     expect(r.ok).toBe(false);
-    expect(r.hatalar).toEqual([{ kod: 'stringLengthError=TOO_LONG', mesaj: 'Too long.', nerede: 'Reklam › başlık' }]);
+    expect(r.hatalar).toEqual([
+      {
+        kod: 'stringLengthError=TOO_LONG',
+        mesaj: 'Too long.',
+        nerede: 'Reklam › başlık',
+        // HAM YOL DA TAŞINIYOR: ilk canlı provada yalnız etiket vardı ve
+        // "Reklam › ad" hangi alanın eksik olduğunu söylemedi.
+        alan: 'mutate_operations[5].ad_group_ad_operation.create.ad.demand_gen_video_responsive_ad.headlines[0].text',
+        ayrinti: null,
+      },
+    ]);
     expect((await durum()).status).toBe('pending');
   });
 
   it('alan ayrıntısı yoksa genel mesaj — boş hata listesi yok', async () => {
     videoBoostProva.mockRejectedValue(new PlatformApiError('google', 'permission_denied', 'USER_PERMISSION_DENIED'));
     const r = await svc.provaGoogle(CTX, KART, { texts: METIN });
-    expect(r.hatalar).toEqual([{ kod: 'permission_denied', mesaj: 'USER_PERMISSION_DENIED', nerede: null }]);
+    expect(r.hatalar).toEqual([
+      { kod: 'permission_denied', mesaj: 'USER_PERMISSION_DENIED', nerede: null, alan: null, ayrinti: null },
+    ]);
   });
 
   it('Google yazma kesicisi kapalıyken de prova yapılabiliyor (teşhis için)', async () => {

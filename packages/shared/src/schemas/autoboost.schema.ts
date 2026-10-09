@@ -798,6 +798,13 @@ export interface YoutubeProvaSonucu {
     /** Google'a giden tek istekteki işlem sayısı. */
     islemSayisi: number;
   };
-  /** Google'ın reddettiği her alan — hangi kaynakta olduğu Türkçe. */
-  hatalar: Array<{ kod: string; mesaj: string; nerede: string | null }>;
+  /**
+   * Google'ın reddettiği her alan — hangi kaynakta olduğu Türkçe.
+   *
+   * `alan` HAM YOL ve `ayrinti` (asgari tutar, reddedilen değer) da
+   * taşınıyor: ilk canlı provada (2026-10-09) yalnız Türkçe etiket vardı ve
+   * "Reklam › ad", "Konum: error code is not in this version" teşhis
+   * edilemedi. Etiket okumak için, ham yol düzeltmek için.
+   */
+  hatalar: Array<{ kod: string; mesaj: string; nerede: string | null; alan: string | null; ayrinti: string | null }>;
 }

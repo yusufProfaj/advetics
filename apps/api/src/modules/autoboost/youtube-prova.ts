@@ -13,7 +13,9 @@ const ISLEM: Record<string, string> = {
   campaign_criterion_operation: 'Konum',
   ad_group_operation: 'Reklam grubu',
   audience_operation: 'Yaş kitlesi',
-  ad_group_criterion_operation: 'Kitle bağlantısı',
+  // Konum da (2026-10-09'dan beri) ve yaş kitlesi bağlantısı da burada;
+  // hangisi olduğunu alan etiketi söylüyor (`geo_target_constant` → konum).
+  ad_group_criterion_operation: 'Reklam grubu hedeflemesi',
   asset_operation: 'Varlık (video ya da logo)',
   ad_group_ad_operation: 'Reklam',
 };

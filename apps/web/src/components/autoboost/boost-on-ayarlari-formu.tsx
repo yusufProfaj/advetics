@@ -596,7 +596,12 @@ function GoogleForm({
       <Acik enabled={enabled} setEnabled={setEnabled} />
 
       <div className="grid gap-2 sm:grid-cols-2">
-        <Alan etiket="Günlük bütçe (₺)" ipucu="Google'da toplam bütçe yok.">
+        {/* ASGARİ BÜTÇE GİRİŞTE SÖYLENİYOR: Google 2026-04'ten beri Demand
+            Gen'de günde en az 5 USD karşılığı istiyor ve 50 ₺'lik ön ayar
+            ilk canlı provada (2026-10-09) tam bununla reddedildi. TL tutarı
+            YAZILMIYOR: kura bağlı ve Google'ın kendi rakamı provanın
+            ayrıntısında görünüyor; sabit bir TL burada bir gün yalan olur. */}
+        <Alan etiket="Günlük bütçe (₺)" ipucu="Google'da toplam bütçe yok. Google günde en az 5 USD karşılığı istiyor, altı reddedilir.">
           <input
             value={amount}
             inputMode="decimal"

@@ -98,6 +98,18 @@ export function googleVideoAssetBody(params: {
  * yayınlayabilirdi. Yayına alma `kampanyayiYayinaAlBody` ile ve ancak her
  * parça yerindeyken.
  *
+ * HEDEFLEME REKLAM GRUBU SEVİYESİNDE — `upgradedTargeting: true` AÇIKÇA.
+ * İlk canlı prova (2026-10-09, v25) kampanya seviyesindeki konum ölçütünü
+ * v25'in tanımadığı bir kodla reddetti (`requestError=UNKNOWN`, "The error
+ * code is not in this version"). Google'ın konum belgesi Demand Gen'de
+ * reklam grubu seviyesini "upgraded_targeting açık kampanyalar" için
+ * anıyor; destek cevabına göre bu ayar açıkken kampanya seviyesindeki
+ * konum reddediliyor ve ayar sonradan DEĞİŞTİRİLEMİYOR. Yeni kampanyada
+ * varsayılanının açık olduğu ÖLÇÜLMEDİ — bu yüzden açıkça yazılıyor:
+ * varsayılana bırakmak, konumun bir gün sessizce yok sayılıp kampanyanın
+ * bütün ülkelere açılması demek. Alan adı yanlışsa prova YÜKSEK SESLE
+ * reddeder (bilinmeyen alan), sessiz değil.
+ *
  * TEKLİF `MAXIMIZE_CONVERSIONS` DEĞİL. Dönüşüm takibi olmayan hesapta o
  * strateji öğrenmiyor ve sessizce kötü çalışıyor; bu üründe piksel/etiket
  * hikâyesi henüz yok. `TARGET_SPEND` (maximize clicks) öngörülebilir.
@@ -118,6 +130,7 @@ export function demandGenCampaignBody(params: {
     // `biddingStrategyType` gönderilmiyor (o salt okunur ve buradan türüyor).
     targetSpend: {},
     containsEuPoliticalAdvertising: AB_SIYASI_BEYAN,
+    demandGenCampaignSettings: { upgradedTargeting: true },
   };
   Object.assign(create, kampanyaTarihleri(params.startDate, params.endDate));
   return body([{ create }]);
@@ -195,6 +208,14 @@ export function demandGenAdGroupBody(params: {
  * Asset kaynak adı taşıyor — inline metin yazılamıyor. Resmî örnek kod da
  * göndermiyor; Google kendisi seçiyor ("automated and required").
  *
+ * REKLAMIN ADI (`Ad.name`) ZORUNLU — belgede değil, CANLIDA öğrenildi. İlk
+ * prova (2026-10-09, v25) `fieldError=REQUIRED` ile reddetti ve ekrandaki
+ * etiket "Reklam › ad" idi: etiket tablosu yalnızca `name` alanını "ad"
+ * diye çeviriyor, yani eksik alan reklam işleminin içindeki `name`. Resmî
+ * belge yalnızca `businessName`, `videos`, `logoImages` için "zorunlu"
+ * diyor; örnek kodların hepsi ad veriyor ama zorunlu olduğunu söylemiyor.
+ * Ad zaman damgalı: aynı videonun ikinci boost'unda ad çakışmasın.
+ *
  * REKLAM ENABLED AÇILIYOR. Kampanya henüz duraklatılmış; reklamın kendisi de
  * duraklatılmış kalsaydı kampanya yayına alındığında hiçbir şey
  * yayınlanmazdı — hata yok, harcama yok, gösterim yok. Yayın kararı tek
@@ -202,6 +223,8 @@ export function demandGenAdGroupBody(params: {
  */
 export function demandGenVideoAdBody(params: {
   adGroupResource: string;
+  /** Reklamın adı — Google'da zorunlu (yukarıya bkz.). */
+  name: string;
   finalUrl: string;
   businessName: string;
   /** Asset kaynak adı — `googleVideoAssetBody` ile oluşturulmuş. */
@@ -220,6 +243,7 @@ export function demandGenVideoAdBody(params: {
         adGroup: params.adGroupResource,
         status: 'ENABLED',
         ad: {
+          name: params.name.slice(0, 255),
           // HEDEF URL BURADA — reklam bilgisinin içinde değil.
           finalUrls: [params.finalUrl],
           demandGenVideoResponsiveAd: {
@@ -248,19 +272,18 @@ export function demandGenVideoAdBody(params: {
 export const VARSAYILAN_KONUM = 'geoTargetConstants/2792';
 
 /**
- * Kampanyanın konum ölçütleri — `campaignCriteria`.
+ * Reklam grubunun konum ölçütleri — `adGroupCriteria`.
  *
- * KAMPANYA SEVİYESİNDE. Google'ın Demand Gen belgesi konumun reklam grubu
- * seviyesinde de verilebileceğini söylüyor ("you can choose to set the
- * location and language group criteria at the ad group level"); kampanya
- * seviyesi ise Google'ın bütün kampanya türlerinde belgelenmiş standart yolu.
+ * REKLAM GRUBU SEVİYESİNDE (2026-10-09'a kadar kampanya seviyesindeydi).
+ * Gerekçe "standart yol"du ve ilk canlı provada reddedildi; ayrıntı
+ * `demandGenCampaignBody` üstünde (`upgradedTargeting`).
  *
  * BOŞ LİSTE REDDEDİLİYOR — burada, isteğe çıkmadan. Boş bir ölçüt listesi
  * gönderilemez, gönderilmezse de kampanya bütün ülkelere açılır; ikisi de
  * sessiz. Çağıran her zaman en az bir konum vermek zorunda.
  */
 export function demandGenKonumBody(params: {
-  campaignResource: string;
+  adGroupResource: string;
   konumlar: string[];
 }): GoogleMutateBody {
   if (params.konumlar.length === 0) {
@@ -269,7 +292,7 @@ export function demandGenKonumBody(params: {
   return body(
     params.konumlar.map((geoTargetConstant) => ({
       create: {
-        campaign: params.campaignResource,
+        adGroup: params.adGroupResource,
         location: { geoTargetConstant },
       },
     })),
@@ -491,9 +514,6 @@ export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde
   const kampanya = ekle({
     campaignOperation: { create: { ...kampanyaGovdesi, status: p.acilis, resourceName: KAMPANYA } },
   });
-  for (const o of demandGenKonumBody({ campaignResource: KAMPANYA, konumlar: p.konumlar }).operations) {
-    ekle({ campaignCriterionOperation: { create: o.create } });
-  }
   const segmentler = yasSegmentleri(p.yaslar);
   const reklamGrubu = ekle({
     adGroupOperation: {
@@ -503,6 +523,11 @@ export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde
       },
     },
   });
+  // KONUM GRUPTAN HEMEN SONRA: geçici kimlik (-3) ancak grup işlemi
+  // sırada önce geliyorsa çözülüyor.
+  for (const o of demandGenKonumBody({ adGroupResource: GRUP, konumlar: p.konumlar }).operations) {
+    ekle({ adGroupCriterionOperation: { create: o.create } });
+  }
   if (segmentler.length > 0) {
     ekle({
       audienceOperation: {
@@ -543,6 +568,7 @@ export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde
       create: ilkCreate(
         demandGenVideoAdBody({
           adGroupResource: GRUP,
+          name: `${p.name} — reklam ${p.stamp}`,
           finalUrl: p.finalUrl,
           businessName: p.businessName,
           videoAssetResource: VIDEO,
@@ -576,6 +602,61 @@ export interface GoogleAlanHatasi {
   alan: string | null;
   /** Atomik istekte kaçıncı işlem — hangi kaynakta olduğunu söylüyor. */
   islemSirasi: number | null;
+  /**
+   * Hatanın EK BİLGİSİ: Google'ın `details` (ör. asgari bütçe tutarı) ve
+   * `trigger` (reddedilen değer) alanları, okunur tek satır. Yoksa null.
+   *
+   * İLK CANLI PROVADA (2026-10-09) bu ikisi atılıyordu ve üç hatanın ikisi
+   * teşhis edilemedi: bütçe reddi "asgari tutarın altında" diyor ama tutarı
+   * YALNIZCA `details` taşıyor; konum reddi v25'in tanımadığı bir kodla
+   * geliyor (`requestError=UNKNOWN`) ve geriye ipucu olarak yalnızca bunlar
+   * kalıyor.
+   */
+  ayrinti: string | null;
+}
+
+/**
+ * `details` nesnesini TAHMİN ETMEDEN tek satıra çeviriyor. Alt alan adları
+ * (`budgetPerDayMinimumErrorDetails` içindekiler gibi) belgede net değil ve
+ * canlıda ölçülmedi; o yüzden adla değil BİÇİMLE okunuyor: `...Micros`
+ * ile biten sayı, yanındaki `currencyCode` ile para tutarı olarak
+ * yazılıyor, gerisi `ad=değer` olarak ham kalıyor. Bilinmeyen alanı atmak
+ * yerine ham göstermek, bir sonraki provada cevabı ekranda bırakıyor.
+ */
+export function googleHataAyrintisi(details: unknown, trigger: unknown): string | null {
+  const parcalar: string[] = [];
+  const gez = (n: unknown, yol: string): void => {
+    if (n === null || n === undefined) return;
+    if (typeof n !== 'object') {
+      parcalar.push(`${yol}=${String(n)}`);
+      return;
+    }
+    if (Array.isArray(n)) {
+      n.forEach((x, i) => gez(x, `${yol}[${i}]`));
+      return;
+    }
+    const o = n as Record<string, unknown>;
+    const birim = typeof o.currencyCode === 'string' ? o.currencyCode : null;
+    for (const [k, v] of Object.entries(o)) {
+      if (k === 'currencyCode' && birim) continue;
+      const alt = yol ? `${yol}.${k}` : k;
+      if (/Micros$/.test(k) && (typeof v === 'string' || typeof v === 'number') && /^-?\d+$/.test(String(v))) {
+        // 1e6'ya bölmek kayan nokta değil: micros tam sayı, kuruşa iki
+        // basamak yetiyor. Birim yoksa "birim yok" yazılıyor, uydurulmuyor.
+        const m = BigInt(String(v));
+        const tam = m / 1_000_000n;
+        const kurus = ((m % 1_000_000n) / 10_000n).toString().padStart(2, '0');
+        parcalar.push(`${alt}=${tam}.${kurus} ${birim ?? '(birim yok)'}`);
+        continue;
+      }
+      gez(v, alt);
+    }
+  };
+  gez(details, '');
+  const t = trigger as { stringValue?: unknown; int64Value?: unknown } | null | undefined;
+  const tetik = t?.stringValue ?? t?.int64Value;
+  if (tetik !== undefined && tetik !== null) parcalar.push(`reddedilen değer=${String(tetik)}`);
+  return parcalar.length > 0 ? parcalar.join(' · ') : null;
 }
 
 export function googleAlanHatalari(raw: unknown): GoogleAlanHatasi[] {
@@ -589,6 +670,8 @@ export function googleAlanHatalari(raw: unknown): GoogleAlanHatasi[] {
         errorCode?: Record<string, unknown>;
         message?: string;
         location?: { fieldPathElements?: Array<{ fieldName?: string; index?: number }> };
+        details?: unknown;
+        trigger?: unknown;
       };
       const [kat, deger] = Object.entries(e.errorCode ?? {})[0] ?? [];
       const yol = e.location?.fieldPathElements ?? [];
@@ -598,6 +681,7 @@ export function googleAlanHatalari(raw: unknown): GoogleAlanHatasi[] {
         mesaj: e.message ?? '',
         alan: yol.length > 0 ? yol.map((x) => (x.index === undefined ? x.fieldName : `${x.fieldName}[${x.index}]`)).join('.') : null,
         islemSirasi: islem,
+        ayrinti: googleHataAyrintisi(e.details, e.trigger),
       });
     }
   }

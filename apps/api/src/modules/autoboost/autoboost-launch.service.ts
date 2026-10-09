@@ -682,9 +682,15 @@ export class AutoBoostLaunchService {
         ozet,
         hatalar:
           alanlar.length > 0
-            ? alanlar.map((a) => ({ kod: a.kod, mesaj: a.mesaj, nerede: googleAlanEtiketi(a.alan) }))
+            ? alanlar.map((a) => ({
+                kod: a.kod,
+                mesaj: a.mesaj,
+                nerede: googleAlanEtiketi(a.alan),
+                alan: a.alan,
+                ayrinti: a.ayrinti,
+              }))
             : // ALAN AYRINTISI YOKSA genel mesaj — boş liste "ret var ama sebep yok" olurdu.
-              [{ kod: err.kind, mesaj: err.message, nerede: null }],
+              [{ kod: err.kind, mesaj: err.message, nerede: null, alan: null, ayrinti: null }],
       };
     }
   }

@@ -12,7 +12,7 @@ sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
 temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
 RLS politikası var, platform sahibi yalnız hello@profaj.com.
-**Bekleyen deploy:** yok (canlıdan sonra yalnız belge commit'leri).
+**Bekleyen deploy:** YouTube prova düzeltmeleri (2026-10-09, migration yok).
 
 **ÜRÜN YAPISI PLANI (2026-10-09, kullanıcı isteği):** panel yedi bölüme
 geçiyor: Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar ·
@@ -23,8 +23,11 @@ kurmuyor. Orphex'ten farkımız "söyler değil, yapar". Plan ve aşamalar
 tanıtım sitesi. **Aşama 0:** deploy BİTTİ (316be15); kalan canlı turlar,
 hepsi panelde oturum ister: (1) AdvCampaign SITE taslağı → prova,
 (2) AdvStrategy aktarımı (giriş kutusu dolu mu, görseller modele ulaşıyor
-mu), (3) Ege Birlik Yapı YouTube kartında "Prova et", (4) Okuma API
-anahtarı + `tools/list`. Ardından Aşama 1 (menü ve görsel düzen).
+mu), (3) ~~Ege Birlik Yapı YouTube kartında "Prova et"~~ YAPILDI
+2026-10-09: üç ret (asgari bütçe 5 USD, konum seviyesi, reklam adı),
+düzeltmeler yazıldı, DEPLOY BEKLİYOR (migration yok), ayrıntı
+[`YOUTUBE-CANLI-PLAN.md`](akilli-boost/YOUTUBE-CANLI-PLAN.md) "Canlı prova
+1"; (4) Okuma API anahtarı + `tools/list`. Ardından Aşama 1 (menü ve görsel düzen).
 
 **SUNUCU 2026-10-09 (Hostinger yeniden başlattı) — TARİHÇE, 10:30 deploy'u
 bunu kapattı:** yarım kalan deploy API'yi

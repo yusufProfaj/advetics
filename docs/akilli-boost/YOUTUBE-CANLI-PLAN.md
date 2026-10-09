@@ -117,6 +117,26 @@ Ege Birlik Yapı kartında "Prova et".
    - R4'teki bilinmeyenler bununla para harcamadan cevaplanacak. Sonuç
      CLAUDE.md "Google Ads" bölümüne yazılacak.
 
+#### Canlı prova 1 — 2026-10-09 (Ege Birlik Yapı, "Garden Villas" kartı, v25)
+
+İlk kez canlıda koştu, `validateOnly`, hiçbir şey kurulmadı. Google
+**üç** hata döndürdü:
+
+| Hata | Teşhis | Düzeltme (bu commit, DEPLOY BEKLİYOR) |
+|---|---|---|
+| `campaignBudgetError=BUDGET_BELOW_PER_DAY_MINIMUM` | Google 2026-04-01'den beri Demand Gen'de **günde en az 5 USD karşılığı** istiyor (sürümsüz kural). Ön ayar 50 ₺. Dünkü gerçek yayın denemesi (kart `1feff0fe`, 08.10 18:24) de bununla düşmüş; atomik istek olduğu için hiçbir şey kurulmamış. | Ön ayar formunda ipucu. **TL karşılığı bilinmiyor:** prova artık `details` alanını gösteriyor, asgari tutar bir sonraki provada ekranda. K2 buna göre güncellenmeli. |
+| `requestError=UNKNOWN` · "The error code is not in this version" (konum ölçütü) | Kampanya seviyesindeki konum reddedildi. Google belgesi Demand Gen'de reklam grubu seviyesini `upgraded_targeting` için anıyor; destek cevabına göre o ayar açıkken kampanya seviyesi reddediliyor ve ayar değiştirilemiyor. | Konum reklam grubuna (`adGroupCriterion`) taşındı, kampanyada `demandGenCampaignSettings.upgradedTargeting: true` AÇIKÇA. **Ölçülmedi** — alan adı yanlışsa prova yüksek sesle reddeder. |
+| `fieldError=REQUIRED` · "Reklam › ad" | Etiket tablosu yalnız `name`i "ad" diye çeviriyor: eksik alan `ad.name`. Belge zorunlu demiyor. | Reklama zaman damgalı ad. |
+
+Ayrıca: prova hataları `details`/`trigger` ve ham alan yolunu ATIYORDU,
+bu yüzden iki hata ekrandan teşhis edilemedi. Artık ikisi de kartta
+görünüyor. Prova isteği Google'dan doğrulama cevabı aldı, yani geliştirici
+token'ı bu hesapta en az doğrulama yapabiliyor (K4'ün seviyesi hâlâ
+okunmadı).
+
+**Sıradaki:** deploy → aynı kartta yeniden "Prova et" → asgari TL tutarı ve
+konumun yeni hâli. Bütçe K2 kapanmadan prova geçmez.
+
 ### Aşama 2 · Kartta ön kontrol (kod)
 
 8. **Video uygunluğu (R1).** `part=status,contentDetails` okunacak. Gizli,
@@ -173,7 +193,7 @@ Ege Birlik Yapı kartında "Prova et".
 | # | Soru | Önerim |
 |---|---|---|
 | K1 | İlk canlı denemede hangi workspace ve hangi video kullanılsın? | **Kapandı: Ege Birlik Yapı** (kanal bağlı). Video Aşama 3'te seçilecek |
-| K2 | İlk deneme için günlük bütçe ve süre ne olsun? | 100 ₺/gün, 3 gün |
+| K2 | İlk deneme için günlük bütçe ve süre ne olsun? | ~~100 ₺/gün~~ — Google'ın asgarisi günde 5 USD karşılığı (prova 1). Asgari TL tutarı yeni provada görünecek; önerim asgarinin biraz üstü, 3 gün |
 | K3 | İlk yayın duraklatılmış kurulup Google Ads'te gözle kontrol edildikten sonra mı açılsın? | Evet, yalnız ilk yayında |
 | K4 | Google Ads API Center'daki geliştirici token erişim seviyesi nedir (Explorer / Basic / Standard)? | Ekrandan okuyup bana söyle. Explorer ise günlük işlem kotası 2.880 ve gece senkronuyla çakışır |
 

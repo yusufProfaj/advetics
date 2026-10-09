@@ -61,6 +61,12 @@ describe('kampanya', () => {
     expect(c.advertisingChannelType).toBe('DEMAND_GEN');
   });
 
+  it('KRİTİK: hedefleme reklam grubunda — upgradedTargeting AÇIKÇA true', () => {
+    // İlk canlı prova (2026-10-09) kampanya seviyesindeki konumu reddetti.
+    // Varsayılana bırakmak = konumun bir gün sessizce yok sayılması.
+    expect(c.demandGenCampaignSettings).toEqual({ upgradedTargeting: true });
+  });
+
   it('KRİTİK: ALT TİP HİÇ GÖNDERİLMİYOR', () => {
     /*
      * Doküman birebir: "No AdvertisingChannelSubType should be set." Bir
@@ -160,6 +166,7 @@ describe('video reklamı', () => {
   const ad = op(
     demandGenVideoAdBody({
       adGroupResource: ADGROUP,
+      name: 'Ege Birlik — reklam 20261009',
       finalUrl: 'https://egebirlik.com',
       businessName: 'Ege Birlik Yapı',
       videoAssetResource: VIDEO_ASSET,
@@ -170,6 +177,12 @@ describe('video reklamı', () => {
     }),
   );
   const bilgi = (ad.ad as Record<string, unknown>).demandGenVideoResponsiveAd as Record<string, unknown>;
+
+  it('KRİTİK: reklamın ADI gönderiliyor (canlı prova fieldError=REQUIRED, 2026-10-09)', () => {
+    // Belge yalnız businessName/videos/logoImages'ı zorunlu sayıyor; ilk
+    // canlı prova `ad.name` olmadan reddetti. Ad, Ad nesnesinin İÇİNDE.
+    expect((ad.ad as Record<string, unknown>).name).toBe('Ege Birlik — reklam 20261009');
+  });
 
   it('KRİTİK: alan adı `demandGenVideoResponsiveAd`', () => {
     // API'den oluşturulabilen TEK YouTube video reklamı bu. VideoAdInfo ve
@@ -224,6 +237,7 @@ describe('video reklamı', () => {
     const a2 = op(
       demandGenVideoAdBody({
         adGroupResource: ADGROUP,
+        name: 'r',
         finalUrl: 'https://x.com',
         businessName: 'B',
         videoAssetResource: VIDEO_ASSET,
@@ -243,17 +257,17 @@ describe('konum — konumsuz kampanya BÜTÜN ÜLKELERE açılıyor', () => {
     expect(VARSAYILAN_KONUM).toBe('geoTargetConstants/2792');
   });
 
-  it('her konum ayrı bir kampanya ölçütü', () => {
-    const b = demandGenKonumBody({ campaignResource: CAMPAIGN, konumlar: [VARSAYILAN_KONUM, 'geoTargetConstants/1012782'] });
+  it('her konum ayrı bir REKLAM GRUBU ölçütü', () => {
+    const b = demandGenKonumBody({ adGroupResource: ADGROUP, konumlar: [VARSAYILAN_KONUM, 'geoTargetConstants/1012782'] });
     expect(b.partialFailure).toBe(false);
     expect(b.operations.map((o) => o.create)).toEqual([
-      { campaign: CAMPAIGN, location: { geoTargetConstant: VARSAYILAN_KONUM } },
-      { campaign: CAMPAIGN, location: { geoTargetConstant: 'geoTargetConstants/1012782' } },
+      { adGroup: ADGROUP, location: { geoTargetConstant: VARSAYILAN_KONUM } },
+      { adGroup: ADGROUP, location: { geoTargetConstant: 'geoTargetConstants/1012782' } },
     ]);
   });
 
   it('KRİTİK: boş liste İSTEĞE ÇIKMADAN reddediliyor', () => {
-    expect(() => demandGenKonumBody({ campaignResource: CAMPAIGN, konumlar: [] })).toThrow(/bütün ülkelere/);
+    expect(() => demandGenKonumBody({ adGroupResource: ADGROUP, konumlar: [] })).toThrow(/bütün ülkelere/);
   });
 });
 

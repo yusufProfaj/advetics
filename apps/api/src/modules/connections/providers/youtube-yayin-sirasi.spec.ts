@@ -89,13 +89,13 @@ describe('KRİTİK: tek atomik istek', () => {
     expect(cagrilar[0]!.govde.validateOnly).toBe(false);
   });
 
-  it('işlem sırası: bütçe → kampanya → konum → grup → video → reklam', async () => {
+  it('işlem sırası: bütçe → kampanya → grup → konum → video → reklam', async () => {
     await provider().createVideoBoost(ctx, ISTEK);
     expect(turler(cagrilar[0]!)).toEqual([
       'campaignBudgetOperation',
       'campaignOperation',
-      'campaignCriterionOperation',
       'adGroupOperation',
+      'adGroupCriterionOperation',
       'assetOperation',
       'adGroupAdOperation',
     ]);
@@ -106,13 +106,15 @@ describe('KRİTİK: tek atomik istek', () => {
     const c = cagrilar[0]!;
     const butce = op(c, 'campaignBudgetOperation');
     const kampanya = op(c, 'campaignOperation');
-    const konum = op(c, 'campaignCriterionOperation');
+    const konum = op(c, 'adGroupCriterionOperation');
     const grup = op(c, 'adGroupOperation');
     const video = op(c, 'assetOperation');
     const reklam = op(c, 'adGroupAdOperation');
     expect(butce.resourceName).toBe('customers/123/campaignBudgets/-1');
     expect(kampanya.campaignBudget).toBe(butce.resourceName);
-    expect(konum.campaign).toBe(kampanya.resourceName);
+    // KONUM GRUBA BAĞLI (ilk canlı prova kampanya seviyesini reddetti).
+    expect(konum.adGroup).toBe(grup.resourceName);
+    expect(konum.campaign).toBeUndefined();
     expect(grup.campaign).toBe(kampanya.resourceName);
     expect(reklam.adGroup).toBe(grup.resourceName);
     const dg = (reklam.ad as { demandGenVideoResponsiveAd: { videos: Array<{ asset: string }>; logoImages: Array<{ asset: string }> } })
@@ -130,7 +132,10 @@ describe('KRİTİK: tek atomik istek', () => {
 
   it('KRİTİK: konum AÇIKÇA gidiyor — boş liste isteği hiç kurmuyor', async () => {
     await provider().createVideoBoost(ctx, ISTEK);
-    expect(op(cagrilar[0]!, 'campaignCriterionOperation').location).toEqual({ geoTargetConstant: VARSAYILAN_KONUM });
+    expect(op(cagrilar[0]!, 'adGroupCriterionOperation').location).toEqual({ geoTargetConstant: VARSAYILAN_KONUM });
+    // Kampanya seviyesinde konum ÖLÇÜTÜ KALMADI — ikisi birden gitseydi
+    // istek yine reddedilirdi.
+    expect(turler(cagrilar[0]!)).not.toContain('campaignCriterionOperation');
     await expect(provider().createVideoBoost(ctx, { ...ISTEK, konumlar: [] })).rejects.toThrow(/bütün ülkelere/);
     expect(cagrilar).toHaveLength(1);
   });
@@ -140,7 +145,9 @@ describe('KRİTİK: tek atomik istek', () => {
     const c = cagrilar[0]!;
     expect(turler(c)).toContain('audienceOperation');
     const kitle = op(c, 'audienceOperation');
-    const bag = op(c, 'adGroupCriterionOperation');
+    // Gruptaki İLK ölçüt konum (2026-10-09'dan beri), kitle bağı İKİNCİ.
+    expect(op(c, 'adGroupCriterionOperation', 0).location).toEqual({ geoTargetConstant: VARSAYILAN_KONUM });
+    const bag = op(c, 'adGroupCriterionOperation', 1);
     expect(bag.audience).toEqual({ audience: kitle.resourceName });
     expect(bag.adGroup).toBe(op(c, 'adGroupOperation').resourceName);
     expect(op(c, 'adGroupOperation').audienceSetting).toEqual({ useAudienceGrouped: true });
@@ -191,7 +198,8 @@ describe('yanıt', () => {
     const r = await provider().createVideoBoost(ctx, ISTEK);
     expect(r).toEqual({
       campaignId: 'customers/123/x/1',
-      adGroupId: 'customers/123/x/3',
+      // Grup artık üçüncü işlem (konum gruptan SONRA geliyor).
+      adGroupId: 'customers/123/x/2',
       adId: 'customers/123/x/5',
       logoAssetResource: null,
     });
@@ -258,8 +266,42 @@ describe('KRİTİK: prova — aynı gövde, validateOnly', () => {
         mesaj: 'Too long.',
         alan: 'mutate_operations[5].ad_group_ad_operation.create.headlines[0]',
         islemSirasi: 5,
+        ayrinti: null,
       },
-      { kod: 'campaignError=INVALID_DATE', mesaj: 'Bad date.', alan: null, islemSirasi: null },
+      { kod: 'campaignError=INVALID_DATE', mesaj: 'Bad date.', alan: null, islemSirasi: null, ayrinti: null },
     ]);
+  });
+
+  it('KRİTİK: hatanın `details` ve `trigger` alanları ATILMIYOR (asgari bütçe tutarı orada)', () => {
+    // İlk canlı prova (2026-10-09) "asgari tutarın altında" dedi ve tutarı
+    // yalnız `details` taşıyordu; ayrıştırıcı onu atıyordu. Alt alan adları
+    // belgede net değil — biçimle okunuyor (`...Micros` + `currencyCode`).
+    const raw = {
+      error: {
+        details: [
+          {
+            errors: [
+              {
+                errorCode: { campaignBudgetError: 'BUDGET_BELOW_PER_DAY_MINIMUM' },
+                message: 'Budget amount or total amount must be above the per-day minimum.',
+                details: {
+                  budgetPerDayMinimumErrorDetails: {
+                    currencyCode: 'TRY',
+                    budgetPerDayMinimumMicros: '212500000',
+                    budgetAmountMicros: '50000000',
+                  },
+                },
+              },
+              { errorCode: { requestError: 'UNKNOWN' }, message: 'x', trigger: { stringValue: 'geoTargetConstants/2792' } },
+            ],
+          },
+        ],
+      },
+    };
+    const [butce, konum] = googleAlanHatalari(raw);
+    expect(butce?.ayrinti).toBe(
+      'budgetPerDayMinimumErrorDetails.budgetPerDayMinimumMicros=212.50 TRY · budgetPerDayMinimumErrorDetails.budgetAmountMicros=50.00 TRY',
+    );
+    expect(konum?.ayrinti).toBe('reddedilen değer=geoTargetConstants/2792');
   });
 });

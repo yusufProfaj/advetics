@@ -51,6 +51,10 @@ export function YoutubeProvaSonucuKutusu({ durum }: { durum: ProvaDurumu }) {
               {h.nerede && <span className="font-medium">{h.nerede}: </span>}
               {h.mesaj || h.kod}
               <span className="ml-1 text-[10px] text-ink-muted">({h.kod})</span>
+              {/* AYRINTI VE HAM YOL: etiket okumak için, bunlar düzeltmek
+                  için. Asgari bütçe tutarı yalnız ayrıntıda geliyor. */}
+              {h.ayrinti && <span className="block text-[11px] text-ink">{h.ayrinti}</span>}
+              {h.alan && <span className="block break-all font-mono text-[10px] text-ink-muted">{h.alan}</span>}
             </li>
           ))}
         </ul>
