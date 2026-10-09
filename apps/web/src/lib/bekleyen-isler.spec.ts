@@ -139,7 +139,8 @@ describe('kesme ve kısmi hata', () => {
     expect(kesmeMetni(yanit({ isler: [is('butce_yok')], toplam: 1 }))).toBeNull();
   });
   it('kaynak hatası sunucunun cümlesiyle', () => {
-    expect(kaynakHataMetni({ tur: 'boost_onay', mesaj: 'zaman aşımı' })).toBe('Boost kuyruğu okunamadı: zaman aşımı');
+    // Cümle sunucunun; panel önüne ikinci bir ad eklemiyor (tekrar üretiyordu).
+    expect(kaynakHataMetni({ tur: 'boost_onay', mesaj: 'Akıllı Boost kuyruğu okunamadı' })).toBe('Akıllı Boost kuyruğu okunamadı');
   });
 });
 

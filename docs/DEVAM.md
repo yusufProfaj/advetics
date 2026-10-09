@@ -65,6 +65,18 @@ dört ekran. Canlıda kontrol edildi: menü yedi bölüm, `/butce` açılıyor,
 `/marka-merkezi?bolum=butce&ay=…` ayı taşıyarak yönleniyor.
 **Sıradaki: Aşama 2 (Genel Bakış karar ekranı).**
 
+**AŞAMA 2 — GENEL BAKIŞ (2026-10-09), YAZILDI, KAPI AÇIK, DEPLOY BEKLİYOR,
+migration yok.** Bekleyen işler kutusu (Boost onayı, strateji onayı,
+aktarılmamış plan, bütçesiz harcama) + ay temposu cümleleri + hızlı
+erişim. Mimari ve ajan notları [`genel-bakis/MIMARI.md`](genel-bakis/MIMARI.md).
+Ajan 4: RLS SET ROLE testi (15), mutasyonlar; Aşama 2'de bulgu yok.
+ÖNCEDEN VAR OLAN bulgu ayrı iş: bütçe modülü "tüm şirketler" kipinde
+`ctx.orgId` ile okuyup yazıyor (kardeş şirketin bütçesi görünmüyor,
+oradan kurulan bütçe yanlış şirkete yazılıyor) — `it.fails` testi
+`genel-bakis-bekleyenler-rls.spec.ts`te. Deploy sonrası ölçüm: Ege
+Birlik'te kutudaki Boost sayısı = ekranın rozeti; tüm workspace'lerde süre.
+**Sonra: Aşama 3 (Reklam Yöneticisi, kullanıcının tarifi planda).**
+
 **Karar bekleyen kullanım sorunu:** asistan kullanıcının AÇIKÇA söylediği
 alanları da "öneri" diye yazıyor ve onay kartında yeniden onaylatıyor.
 

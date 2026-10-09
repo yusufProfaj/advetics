@@ -1,7 +1,6 @@
 import type {
   BekleyenIs,
   BekleyenIsKaynakHatasi,
-  BekleyenIsTuru,
   BekleyenIslerYaniti,
 } from '@advetics/shared';
 import { baglanti } from '@/lib/baglanti';
@@ -124,19 +123,14 @@ export function bekleyenIsAdresi(is: BekleyenIs): string {
 }
 
 /**
- * Kaynak adları — `Record` ile: sözleşmeye yeni bir tür eklenince burası
- * DERLENMİYOR ve hata satırı adsız kalmıyor.
+ * Kısmi hata satırı: SUNUCUNUN CÜMLESİ, olduğu gibi. Sunucu kaynak başına
+ * tam bir cümle kuruyor ("Akıllı Boost kuyruğu okunamadı"); panel önüne
+ * bir kaynak adı daha ekleyince ekranda "Boost kuyruğu okunamadı: Akıllı
+ * Boost kuyruğu okunamadı" çıkıyordu (Ajan 4, 2026-10-09). Cümlenin tek
+ * sahibi sunucu (`genel-bakis.service.ts#KAYNAK_HATASI`).
  */
-const KAYNAK_ADI: Record<BekleyenIsTuru, string> = {
-  boost_onay: 'Boost kuyruğu',
-  strateji_onay: 'Onaydaki planlar',
-  strateji_aktar: 'Onaylanan planlar',
-  butce_yok: 'Bütçe kontrolü',
-};
-
-/** Kısmi hata satırı: "Boost kuyruğu okunamadı: …" — sunucunun cümlesiyle. */
 export function kaynakHataMetni(h: BekleyenIsKaynakHatasi): string {
-  return `${KAYNAK_ADI[h.tur]} okunamadı: ${h.mesaj}`;
+  return h.mesaj;
 }
 
 /** Sessiz kesme yok: sunucu satırı kestiyse ekranda "50 / 73 gösteriliyor". */
