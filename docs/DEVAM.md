@@ -6,21 +6,28 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-09 · **Canlı (539f6fb):** Google gün içi saatlik,
-Genel Bakış "Reklam Hesapları", Aşama 0 düzeltmeleri (kitle önerisi canlıda
-doğrulandı).
-**Bekleyen deploy:** yeni reklam modülü (MIGRATION VAR: dört migration — taslak, yayın, yazma kesici, prova — + `db:rls`; `META_API_VERSION` v25.0 ya da v26.0 olmalı), konum ülkesi kuralı, LinkedIn para birimi (MIGRATION VAR: boş birimli metrik satırları), rapor süre sınırı + hata kodu + ölçüm aracı + rapor sorguları dizi süzgeci, doğrulama alanları + Türkçe Zod, Base Aşama 1 (MIGRATION VAR: marka profili varsayılanları).
+**Son güncelleme:** 2026-10-09 · **Canlı (316be15, 2026-10-09 10:30, 87 sn):**
+aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
+sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
+API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
+temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
+RLS politikası var, platform sahibi yalnız hello@profaj.com.
+**Bekleyen deploy:** yok (canlıdan sonra yalnız belge commit'leri).
 
 **ÜRÜN YAPISI PLANI (2026-10-09, kullanıcı isteği):** panel yedi bölüme
 geçiyor: Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar ·
 Base. Bu adlar Türkçe, AI Asistan İyileştir altında geri geliyor ve reklam
 kurmuyor. Orphex'ten farkımız "söyler değil, yapar". Plan ve aşamalar
 [`URUN-YAPISI-PLANI.md`](URUN-YAPISI-PLANI.md). Kod yazılmadı.
-**Açık kararlar:** Ç-3 bütçenin yeri (Aşama 1'den önce), Ç-4 Hesap
-Oluştur, Ç-5 tanıtım sitesi. **Sıradaki:** Aşama 0, yani bekleyen deploy
-ve canlı turlar. Ardından Aşama 1 (menü ve görsel düzen).
+Ç-3 kapandı: bütçe Planla'da. **Açık kararlar:** Ç-4 Hesap Oluştur, Ç-5
+tanıtım sitesi. **Aşama 0:** deploy BİTTİ (316be15); kalan canlı turlar,
+hepsi panelde oturum ister: (1) AdvCampaign SITE taslağı → prova,
+(2) AdvStrategy aktarımı (giriş kutusu dolu mu, görseller modele ulaşıyor
+mu), (3) Ege Birlik Yapı YouTube kartında "Prova et", (4) Okuma API
+anahtarı + `tools/list`. Ardından Aşama 1 (menü ve görsel düzen).
 
-**SUNUCU 2026-10-09 (Hostinger yeniden başlattı):** yarım kalan deploy API'yi
+**SUNUCU 2026-10-09 (Hostinger yeniden başlattı) — TARİHÇE, 10:30 deploy'u
+bunu kapattı:** yarım kalan deploy API'yi
 ve paneli `703b2a2` ile derleyip `20261008170000_google_yazma_kesici`
 migration'ını uyguladı, sonra durdu. 07:32'de sunucu yeniden başlatıldı ve
 pm2 açılışta kalkmadı; site 08:03'e kadar `502` verdi. Süreçler elle

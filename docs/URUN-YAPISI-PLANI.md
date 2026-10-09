@@ -45,7 +45,7 @@ Open Sans, CLAUDE.md §5 "Kurumsal kimlik").
 | **Yönet** | Reklam Yöneticisi (kampanya → grup → reklam), Potansiyel Müşteriler | Reklam Keşfi (salt okuma), `campaign-actions` API, `/potansiyel-musteriler` | **Reklam Yöneticisi ekranı yok** |
 | **İyileştir** | A/B testi, kreatif yorgunluğu, otomatik teklif, dönüşüm iyileştirici, Kurallar, **AI Asistan** | `/kurallar` | Diğerlerinin hepsi |
 | **Raporlar** | Standart ve özelleştirilebilir raporlar, faturalar | `/raporlar` (güçlü) | Yalnızca yeni görsel düzene uyum |
-| **Base** | Marka, logo, kreatif örnekleri, workspace bilgileri, kullanıcılar (ekip) | Marka Merkezi (Bağlantılar · Marka · Aylık Bütçe · Kitleler · Varlıklar · Workspace) | Ekip bugün Ayarlar'da |
+| **Base** | Marka, logo, kreatif örnekleri, workspace bilgileri, kullanıcılar (ekip) | Marka Merkezi (Bağlantılar · Marka · Aylık Bütçe · Kitleler · Varlıklar · Workspace) | Ekip bugün Ayarlar'da; Aylık Bütçe Planla'ya gidiyor (Ç-3) |
 
 "Base" Türkçe kuralının onaylanmış istisnası olarak kalıyor (2026-10-06).
 
@@ -115,6 +115,8 @@ yapılmış.
 - `nav-sections.ts` yedi bölüme; sol ikon rayı + bölüm başlıkları.
 - Ekip Base'e (`/ayarlar/ekip` → Marka Merkezi bölümü, eski adres
   yönlenir — `bolumler.ts` deseni).
+- Aylık Bütçe Base'ten Planla'ya (Ç-3); Marka Merkezi iç menüsünden
+  kalkar, eski adres yönlenir.
 - Var olan ekranlar yeni bölümlere taşınır, **yeni ekran yazılmaz**.
   Henüz ekranı olmayan alt başlık menüye KONMAZ (2026-09'da 7 ölü satır
   "tıklanamaz soluk satır" olarak temizlendi; geri getirilmez).
@@ -184,7 +186,7 @@ yapılmış.
 |---|---|---|
 | Ç-1 | Menü adları İngilizce mi Türkçe mi | **KAPANDI (2026-10-09): Türkçe.** Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar · Base |
 | Ç-2 | AI Asistan 2026-10-07'de kaldırıldı | **KAPANDI (2026-10-09): geri geliyor**, İyileştir altında, reklam kurmaz (§2) |
-| Ç-3 | Bütçe hem Planla'da hem Base'te listelenmiş | **AÇIK — Aşama 1'den önce kapanmalı.** Öneri: bütçe belirleme Planla'da, Base'te yok. İki yerden yazılan aynı ayar ayrışır |
+| Ç-3 | Bütçe hem Planla'da hem Base'te listelenmiş | **KAPANDI (2026-10-09): Planla'da.** Aylık Bütçe Marka Merkezi'nden Planla'ya taşınır (Aşama 1), Base'te bütçe yok; eski `?bolum=butce` adresi yönlenir. İki yerden yazılan aynı ayar ayrışır |
 | Ç-4 | "Hesap Oluştur" | **AÇIK — Aşama 5'ten önce.** Google'da MCC altında alt hesap API'den açılabiliyor; Meta'da reklam hesabı açmak ciddi kısıtlı. İkisi de canlıda ölçülmedi |
 | Ç-5 | Orphex gibi bir tanıtım sitesi (ana sayfa, fiyat, demo) kapsamda mı | **AÇIK.** Bu plan yalnızca paneli kapsıyor |
 | Ç-6 | Müşteri hesabı bölüm başlıklarını görüyor | Varsayılan: dört ekran korunur, yalnız başlıklar değişir (§3) |
