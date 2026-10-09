@@ -1,0 +1,822 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AdvCampaign Rehberi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Değerler onaylı İyileştir taslağından (docs/iyilestir/taslak.html) birebir. */
+:root{
+  --brand:#ff2400; --brand-accent:#d21d00; --brand-soft:rgba(255,36,0,.08); --brand-strong:#c41c00;
+  --surface:#ffffff; --muted:#f6f5f4; --sunken:#efedeb; --line:#e7e4e2;
+  --ink:#302e2d; --ink-muted:#6f6a67; --ok:#16a34a; --warn:#d97706; --warn-soft:#fffbeb; --warn-strong:#b45309; --danger:#dc2626;
+  --shadow-card:0 1px 2px rgb(16 24 40 / .04),0 2px 10px -3px rgb(16 24 40 / .07);
+  --shadow-pop:0 4px 8px -2px rgb(16 24 40 / .08),0 20px 44px -12px rgb(16 24 40 / .22);
+  --ease:cubic-bezier(.16,1,.3,1);
+  --baslik:"Montserrat",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --govde:"Open Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--surface:#13151c;--muted:#0b0d12;--sunken:#1b1e27;--line:#262a35;--ink:#ece9e7;--ink-muted:#a39d99;--brand-soft:rgba(255,36,0,.16);--brand-strong:#ff6a4d;--warn-soft:#2b2008;--warn-strong:#fbbf24;color-scheme:dark}}
+:root[data-theme="dark"]{--surface:#13151c;--muted:#0b0d12;--sunken:#1b1e27;--line:#262a35;--ink:#ece9e7;--ink-muted:#a39d99;--brand-soft:rgba(255,36,0,.16);--brand-strong:#ff6a4d;--warn-soft:#2b2008;--warn-strong:#fbbf24;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--muted);color:var(--ink);font-family:var(--govde);font-size:14px}
+button,input,select{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+.birincil{display:inline-flex;align-items:center;gap:6px;color:#fff;font-weight:600;font-size:13px;padding:9px 18px;border-radius:999px;background-image:linear-gradient(135deg,var(--brand),color-mix(in srgb,var(--brand) 72%,var(--brand-accent)));box-shadow:0 1px 2px rgb(16 24 40/.1),0 4px 14px -4px rgba(255,36,0,.45);transition:transform .2s var(--ease),opacity .2s}
+.birincil:hover{transform:translateY(-1px)}
+.birincil[disabled]{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+.ikincil{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 15px;font-size:13px;font-weight:600;transition:border-color .2s var(--ease)}
+.ikincil:hover{border-color:var(--ink-muted)}
+.metinDugme{font-size:12.5px;font-weight:600;color:var(--brand-strong)}
+.metinDugme:hover{text-decoration:underline}
+.kart{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-card);min-width:0}
+.not{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-muted);line-height:1.55;margin:12px 16px 0}
+.not b{color:var(--ink)}
+
+/* ── Odaklı kip kabuğu (Google Ads oluşturma: ray yok, sol üstte kapat) ── */
+.kabuk{display:grid;grid-template-rows:auto auto 1fr;min-height:100%}
+.ustCubuk{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:10px 16px;background:color-mix(in srgb,var(--surface) 86%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.kapat{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--ink-muted);transition:background .2s var(--ease)}
+.kapat:hover{background:var(--sunken)}
+.ustCubuk h1{margin:0;font-family:var(--baslik);font-weight:700;font-size:17px}
+.kirinti{font-size:12.5px;color:var(--ink-muted);display:flex;align-items:center;gap:6px;min-width:0}
+.kirinti b{color:var(--ink);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kayit{margin-left:auto;font-size:12px;color:var(--ink-muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.kayit i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+
+.govde{display:grid;grid-template-columns:232px minmax(0,1fr) 300px;gap:20px;max-width:1360px;width:100%;margin:0 auto;padding:20px 16px 48px;align-items:start}
+
+/* Sol adım rayı */
+.ray{position:sticky;top:76px;display:flex;flex-direction:column;gap:2px}
+.adim{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;text-align:left;font-size:13.5px;color:var(--ink-muted);transition:background .2s var(--ease),color .2s var(--ease)}
+.adim:hover{background:var(--sunken)}
+.adim .no{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--line);font-size:11.5px;font-weight:700;flex:none;transition:all .3s var(--ease);background:var(--surface)}
+.adim[aria-current="step"]{color:var(--ink);font-weight:700;background:var(--surface);box-shadow:var(--shadow-card)}
+.adim[aria-current="step"] .no{border-color:var(--brand);color:var(--brand-strong)}
+.adim.bitti .no{border-color:var(--ok);background:var(--ok);color:#fff}
+.adim .alt{display:block;font-size:11.5px;font-weight:400;color:var(--ink-muted);margin-top:1px}
+.ray .cizgi{width:2px;height:10px;background:var(--line);margin-left:21px}
+
+/* Orta alan */
+.orta{min-width:0}
+.ekran{display:none}
+.ekran.acik{display:flex;flex-direction:column;gap:16px;animation:gir .4s var(--ease)}
+@keyframes gir{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.soru h2{margin:0;font-family:var(--baslik);font-weight:700;font-size:22px;letter-spacing:-.01em;text-wrap:balance}
+.soru p{margin:6px 0 0;color:var(--ink-muted);font-size:13.5px;line-height:1.5}
+.blok{padding:16px}
+.blok+.blok{border-top:1px solid var(--line)}
+.blokBaslik{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:14px;font-weight:700}
+.blokBaslik .ops{font-weight:400;font-size:12px;color:var(--ink-muted)}
+.onerilen{font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px;background:var(--brand-soft);color:var(--brand-strong)}
+.ipucu{font-size:12.5px;color:var(--ink-muted);line-height:1.5;margin:6px 0 0}
+.altCubuk{display:flex;align-items:center;gap:10px;padding-top:4px}
+.altCubuk .bosluk{flex:1}
+
+/* İkon karosu: Advetics degradesi */
+.karo{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;color:#fff;flex:none;background-image:linear-gradient(135deg,var(--brand),color-mix(in srgb,var(--brand) 60%,#302e2d));box-shadow:0 4px 12px -4px rgba(255,36,0,.5)}
+.karo.gri{background-image:linear-gradient(135deg,#302e2d,#000);box-shadow:0 4px 12px -4px rgba(0,0,0,.4)}
+.karo svg{width:20px;height:20px}
+
+/* Adım 1: amaç kartları */
+.amaclar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:1240px){.amaclar{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.amaclar{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.amac{padding:12px;gap:8px}.amac .karo{width:34px;height:34px}.amac h3{font-size:13.5px}.amac p{font-size:12px}}
+.amac{position:relative;display:flex;flex-direction:column;gap:10px;text-align:left;padding:16px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);box-shadow:var(--shadow-card);transition:border-color .25s var(--ease),transform .25s var(--ease),box-shadow .25s var(--ease)}
+.amac:hover{transform:translateY(-2px);box-shadow:var(--shadow-pop)}
+.amac[aria-pressed="true"]{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft),var(--shadow-card)}
+.amac .tik{position:absolute;top:12px;right:12px;width:20px;height:20px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;opacity:0;transform:scale(.6);transition:all .25s var(--ease)}
+.amac[aria-pressed="true"] .tik{opacity:1;transform:none}
+.amac h3{margin:0;font-size:14.5px;font-weight:700}
+.amac p{margin:0;font-size:12.5px;color:var(--ink-muted);line-height:1.45}
+.platformlar{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}
+.plt{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px;background:var(--sunken)}
+.plt i{width:6px;height:6px;border-radius:50%;background:var(--ink)}
+.plt.yok{color:var(--ink-muted);text-decoration:line-through;background:transparent;border:1px dashed var(--line)}
+.plt.yok i{background:var(--line)}
+
+/* Adım 2: platform kartları */
+.pltKartlar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pltKart{display:flex;flex-direction:column;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);box-shadow:var(--shadow-card);transition:border-color .25s var(--ease),opacity .25s var(--ease)}
+.pltKart.secili{border-color:var(--brand)}
+.pltKart.kapali{opacity:.6}
+.pltUst{display:flex;align-items:center;gap:10px;padding:14px 16px}
+.pltUst h3{margin:0;font-size:15px;font-weight:700}
+.pltUst small{display:block;font-size:12px;color:var(--ink-muted);margin-top:1px}
+.anahtar{margin-left:auto;width:40px;height:22px;border-radius:999px;background:var(--line);position:relative;transition:background .25s var(--ease);flex:none}
+.anahtar::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgb(0 0 0/.25);transition:transform .25s var(--ease)}
+.anahtar[aria-checked="true"]{background:var(--brand)}
+.anahtar[aria-checked="true"]::after{transform:translateX(18px)}
+.anahtar[disabled]{cursor:not-allowed}
+.kurulacak{margin:0 16px;padding:10px 12px;border-radius:10px;background:var(--muted);font-size:12.5px;line-height:1.55}
+.kurulacak b{font-weight:700}
+.kontrol{list-style:none;margin:10px 16px 14px;padding:0;display:flex;flex-direction:column;gap:7px;font-size:12.5px}
+.kontrol li{display:flex;align-items:flex-start;gap:8px}
+.kontrol li svg{width:16px;height:16px;flex:none;margin-top:1px}
+.kontrol .tamam svg{color:var(--ok)}
+.kontrol .eksik{color:var(--warn-strong)}
+.kontrol .eksik svg{color:var(--warn)}
+.kontrol a{font-weight:600;color:var(--brand-strong);margin-left:auto;white-space:nowrap;text-decoration:none}
+.sebep{margin:0 16px 14px;padding:10px 12px;border-radius:10px;border:1px dashed var(--line);font-size:12.5px;color:var(--ink-muted)}
+.neden{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;background:var(--surface);border:1px solid var(--line);font-size:13px;line-height:1.5}
+.neden svg{width:18px;height:18px;color:var(--brand);flex:none;margin-top:1px}
+
+/* Form alanları */
+.alanlar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.alan{display:flex;flex-direction:column;gap:5px;min-width:0}
+.alan label{font-size:12.5px;font-weight:600}
+.girdi{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:var(--surface);transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
+.girdi:focus-within{border-color:var(--ink-muted);box-shadow:0 0 0 3px var(--brand-soft)}
+.girdi input,.girdi select{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:13.5px}
+.girdi .sayac{font-size:11.5px;color:var(--ink-muted);white-space:nowrap}
+.girdi .sayac.asim{color:var(--danger);font-weight:700}
+.on{font-size:13px;color:var(--ink-muted)}
+.cipler{display:flex;flex-wrap:wrap;gap:8px}
+.cip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;background:var(--surface);transition:border-color .2s var(--ease),background .2s var(--ease),color .2s var(--ease)}
+.cip[aria-pressed="true"]{border-color:var(--brand);color:var(--brand-strong);background:var(--brand-soft)}
+.cip .x{opacity:.6}
+.cip small{font-weight:400;color:var(--ink-muted)}
+.secim{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.secim button{padding:10px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);text-align:left;font-size:13px;font-weight:600;transition:border-color .2s var(--ease),background .2s var(--ease)}
+.secim button small{display:block;font-weight:400;font-size:11.5px;color:var(--ink-muted);margin-top:2px}
+.secim button[aria-pressed="true"]{border-color:var(--brand);background:var(--brand-soft)}
+.uyari{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--warn-soft);color:var(--warn-strong);font-size:12.5px;line-height:1.5}
+.uyari svg{width:16px;height:16px;flex:none;margin-top:1px}
+
+/* Adım 4: medya */
+.birak{border:1.5px dashed var(--line);border-radius:12px;padding:18px;display:flex;align-items:center;gap:14px;transition:border-color .2s var(--ease),background .2s var(--ease)}
+.birak:hover{border-color:var(--ink-muted);background:var(--muted)}
+.birak b{display:block;font-size:13.5px}
+.birak span{font-size:12px;color:var(--ink-muted)}
+.dosyalar{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.dosya{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.kucuk{width:48px;height:48px;border-radius:8px;background:linear-gradient(135deg,#d9d4cf,#a39d99);position:relative;overflow:hidden}
+.kucuk.dikey{width:32px;justify-self:center}
+.dosya b{font-size:12.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dosya small{font-size:11.5px;color:var(--ink-muted)}
+.uygun{display:flex;gap:6px;flex-wrap:wrap}
+.uygun span{font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;background:var(--sunken)}
+.uygun span.e{color:var(--ok)}
+.uygun span.h{color:var(--warn-strong);background:var(--warn-soft)}
+.metinler{display:flex;flex-direction:column;gap:10px}
+.guc{display:flex;align-items:center;gap:10px;font-size:12.5px}
+.gucCubuk{flex:1;height:6px;border-radius:999px;background:var(--sunken);overflow:hidden;max-width:220px}
+.gucCubuk i{display:block;height:100%;width:0;border-radius:999px;background:var(--brand);transition:width .5s var(--ease)}
+.kelimeler{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.kelime{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;font-size:13px;border-top:1px solid var(--line);text-align:left;transition:background .2s var(--ease)}
+.kelime:first-child{border-top:0}
+.kelime:hover{background:var(--muted)}
+.kelime .kutu{width:16px;height:16px;border-radius:4px;border:2px solid var(--line);display:grid;place-items:center;transition:all .2s var(--ease)}
+.kelime[aria-pressed="true"] .kutu{background:var(--brand);border-color:var(--brand)}
+.kelime[aria-pressed="true"] .kutu::after{content:"";width:8px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.kelime small{font-size:12px;color:var(--ink-muted);white-space:nowrap}
+.kelimeAlt{padding:8px 12px;font-size:12px;color:var(--ink-muted);background:var(--muted);border-top:1px solid var(--line)}
+.yalniz{display:none}
+body[data-amac="SITE"] .y-SITE,body[data-amac="FORM"] .y-FORM,body[data-amac="WHATSAPP"] .y-WHATSAPP,body[data-amac="TELEFON"] .y-TELEFON,body[data-amac="VIDEO"] .y-VIDEO,body[data-amac="ERISIM"] .y-ERISIM,body[data-amac="SATIS"] .y-SATIS{display:block}
+body:not([data-google="1"]) .g-yalniz{display:none!important}
+body:not([data-meta="1"]) .m-yalniz{display:none!important}
+
+/* Adım 5: bütçe */
+.pay{display:flex;flex-direction:column;gap:10px}
+.payCubuk{display:flex;height:34px;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+.payCubuk div{display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;transition:flex-basis .4s var(--ease);white-space:nowrap;overflow:hidden}
+.payCubuk .m{background:var(--ink);color:var(--surface)}
+.payCubuk .g{background:var(--brand);color:#fff}
+input[type=range]{width:100%;accent-color:var(--brand)}
+.payAlt{display:flex;justify-content:space-between;font-size:12.5px}
+.payAlt b{font-family:var(--baslik)}
+
+/* Adım 6: kontrol */
+.onizlemeler{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.onKart{display:flex;flex-direction:column}
+.onKart header{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);font-size:13px;font-weight:700}
+.onKart header .seg{margin-left:auto}
+.seg{display:inline-flex;background:var(--sunken);border-radius:999px;padding:3px;gap:2px}
+.seg button{padding:4px 10px;border-radius:999px;font-size:11.5px;font-weight:600;color:var(--ink-muted);transition:background .25s var(--ease),color .25s var(--ease)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-card)}
+.telefon{margin:14px auto;width:220px;border-radius:22px;border:6px solid var(--ink);background:var(--surface);overflow:hidden;font-size:11px}
+.akisUst{display:flex;align-items:center;gap:6px;padding:8px}
+.akisUst i{width:20px;height:20px;border-radius:50%;background:var(--brand)}
+.akisUst b{font-size:11px}
+.akisUst small{display:block;font-size:9.5px;color:var(--ink-muted)}
+.akisMetin{padding:0 8px 6px;line-height:1.4}
+.akisGorsel{aspect-ratio:4/5;background:linear-gradient(160deg,#d9d4cf,#8f8984)}
+.akisCta{display:flex;align-items:center;justify-content:space-between;padding:7px 8px;background:var(--muted)}
+.akisCta b{font-size:10.5px}
+.akisCta span{font-size:10px;font-weight:700;border-radius:6px;padding:3px 8px;background:var(--sunken)}
+.arama{margin:14px;padding:14px;border:1px solid var(--line);border-radius:12px;font-size:13px;line-height:1.45}
+.arama .rk{font-size:11.5px}
+.arama .rk b{font-weight:700}
+.arama h4{margin:4px 0 2px;font-size:17px;font-weight:600;color:var(--ink)}
+.arama p{margin:0;color:var(--ink-muted)}
+.kararlar{width:100%;border-collapse:collapse;font-size:12.5px}
+.kararlar th{text-align:left;font-weight:600;color:var(--ink-muted);padding:8px 16px;border-bottom:1px solid var(--line);font-size:11.5px}
+.kararlar td{padding:9px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+.kararlar tr:last-child td{border-bottom:0}
+.kararlar td:first-child{font-weight:600;white-space:nowrap}
+.kararlar td small{display:block;color:var(--ink-muted);margin-top:2px}
+.tabloKap{overflow-x:auto}
+details.ac summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:12px 16px;font-size:13.5px;font-weight:700}
+details.ac summary::-webkit-details-marker{display:none}
+details.ac summary .ok{margin-left:auto;transition:transform .25s var(--ease);color:var(--ink-muted)}
+details.ac[open] summary .ok{transform:rotate(180deg)}
+details.ac[open] summary{border-bottom:1px solid var(--line)}
+.prova{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+.prova>div{padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:13px}
+.prova>div+div{border-left:1px solid var(--line)}
+.durumNokta{width:10px;height:10px;border-radius:50%;background:var(--line);flex:none;transition:background .3s}
+.durumNokta.ok{background:var(--ok)}
+.durumNokta.donuyor{border:2px solid var(--brand);border-top-color:transparent;background:transparent;animation:don .8s linear infinite}
+@keyframes don{to{transform:rotate(360deg)}}
+
+/* Sağ özet */
+.ozet{position:sticky;top:76px;display:flex;flex-direction:column;gap:12px}
+.ozetKart h3{margin:0;padding:12px 16px;font-size:13.5px;font-weight:700;border-bottom:1px solid var(--line)}
+.ozetSatir{display:flex;justify-content:space-between;gap:12px;padding:9px 16px;font-size:12.5px;border-bottom:1px solid var(--line)}
+.ozetSatir:last-child{border-bottom:0}
+.ozetSatir span{color:var(--ink-muted)}
+.ozetSatir b{text-align:right;font-weight:600;min-width:0}
+.eksikler{list-style:none;margin:0;padding:6px 0}
+.eksikler li button{width:100%;display:flex;align-items:center;gap:8px;padding:7px 16px;font-size:12.5px;text-align:left;transition:background .2s var(--ease)}
+.eksikler li button:hover{background:var(--muted)}
+.eksikler li i{width:7px;height:7px;border-radius:50%;background:var(--warn);flex:none}
+.eksikler li.tamam i{background:var(--ok)}
+.eksikler li.tamam{color:var(--ink-muted)}
+.eksikler li small{margin-left:auto;color:var(--ink-muted)}
+
+/* Onay penceresi (İyileştir'deki desen) */
+.perde{position:fixed;inset:0;background:rgb(16 24 40/.35);display:grid;place-items:center;padding:16px;opacity:0;visibility:hidden;transition:opacity .25s var(--ease),visibility .25s;z-index:50}
+.perde.acik{opacity:1;visibility:visible}
+.pencere{width:min(560px,100%);background:var(--surface);border-radius:14px;box-shadow:var(--shadow-pop);transform:translateY(10px) scale(.98);transition:transform .35s var(--ease);max-height:calc(100vh - 32px);overflow:auto}
+.perde.acik .pencere{transform:none}
+.pencere h3{margin:0;padding:16px 18px 4px;font-size:16px}
+.pencere>p{margin:0 18px;font-size:13px;color:var(--ink-muted);line-height:1.5}
+.pltAdim{margin:12px 18px 0;border:1px solid var(--line);border-radius:10px}
+.pltAdim h4{margin:0;padding:9px 12px;font-size:12.5px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center}
+.adimlar{list-style:none;margin:0;padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.adimlar li{display:flex;gap:8px;align-items:center;color:var(--ink-muted);transition:color .3s}
+.adimlar li i{width:16px;height:16px;border-radius:50%;border:2px solid var(--line);flex:none;transition:all .3s var(--ease)}
+.adimlar li.bitti{color:var(--ink)}
+.adimlar li.bitti i{border-color:var(--ok);background:var(--ok)}
+.adimlar li.suruyor i{border-color:var(--brand);border-top-color:transparent;animation:don .8s linear infinite}
+.pencereAlt{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;margin-top:14px;border-top:1px solid var(--line)}
+
+/* Son ekran */
+.kuruldu{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:28px 16px 8px}
+.kuruldu .buyuk{width:56px;height:56px;border-radius:50%;background:var(--ok);color:#fff;display:grid;place-items:center}
+.kuruldu h2{margin:4px 0 0;font-family:var(--baslik);font-size:22px}
+.kuruldu p{margin:0;color:var(--ink-muted);font-size:13.5px}
+.sonucSatir{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);font-size:13px}
+.sonucSatir small{display:block;color:var(--ink-muted);font-size:12px}
+.yayinda{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ok)}
+.yayinda i{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.yapilacak{list-style:none;margin:0;padding:0}
+.yapilacak li{display:flex;gap:10px;align-items:center;padding:10px 16px;border-top:1px solid var(--line);font-size:13px}
+.yapilacak li a{margin-left:auto;font-weight:600;color:var(--brand-strong);text-decoration:none;white-space:nowrap}
+
+/* Mobil: ray üstte ilerleme, özet altta */
+.mobilIlerleme{display:none}
+@media (max-width:1100px){
+  .govde{grid-template-columns:200px minmax(0,1fr)}
+  .ozet{grid-column:1/-1;position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:760px){
+  .govde{grid-template-columns:minmax(0,1fr);padding-top:12px;gap:14px}
+  .ray{display:none}
+  .mobilIlerleme{display:flex;flex-direction:column;gap:8px}
+  .mobilIlerleme .ust{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-muted)}
+  .mobilIlerleme .ust b{color:var(--ink)}
+  .mobilIlerleme .cubuk{height:4px;border-radius:999px;background:var(--line);overflow:hidden}
+  .mobilIlerleme .cubuk i{display:block;height:100%;background:var(--brand);transition:width .4s var(--ease)}
+  .ozet{grid-template-columns:minmax(0,1fr)}
+  .pltKartlar,.alanlar,.onizlemeler,.prova{grid-template-columns:minmax(0,1fr)}
+  .prova>div+div{border-left:0;border-top:1px solid var(--line)}
+  .soru h2{font-size:19px}
+  .kirinti{display:none}
+  .altCubuk{position:sticky;bottom:0;background:var(--muted);padding:10px 0;margin:0 -16px;padding-inline:16px;border-top:1px solid var(--line)}
+}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+
+<div class="kabuk">
+  <header class="ustCubuk">
+    <button class="kapat" aria-label="Rehberi kapat" title="Kapat (taslak kayıtlı kalır)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <h1>AdvCampaign</h1>
+    <div class="kirinti">Ege Birlik Yapı › <b>Garden Villas Kuşadası</b></div>
+    <div class="kayit"><i></i><span id="kayitMetni">Taslak kaydedildi</span></div>
+  </header>
+
+  <p class="not"><b>Taslak (tıklanabilir).</b> Altı adım + son ekran. Rakamlar örnek; gerçek ekranda arama hacmi Keyword Planner'dan, asgari bütçe hesaptan okunur. Pencereyi daraltınca mobil düzen.</p>
+
+  <main class="govde">
+    <!-- SOL ADIM RAYI -->
+    <nav class="ray" aria-label="Adımlar" id="ray"></nav>
+
+    <!-- ORTA -->
+    <section class="orta">
+      <div class="mobilIlerleme" aria-hidden="true">
+        <div class="ust"><span>Adım <b id="mAdim">1</b> / 6</span><b id="mAd">Amaç</b></div>
+        <div class="cubuk"><i id="mCubuk" style="width:16%"></i></div>
+      </div>
+
+      <!-- 1 AMAÇ -->
+      <div class="ekran acik" data-ekran="1">
+        <div class="soru">
+          <h2>Bu reklamdan ne bekliyorsun?</h2>
+          <p>Birini seç. Meta ve Google'da en uygun kurulumu biz seçeriz ve sana gösteririz.</p>
+        </div>
+        <div class="amaclar" id="amaclar"></div>
+        <div class="altCubuk"><span class="bosluk"></span><button class="birincil" data-ileri>Devam</button></div>
+      </div>
+
+      <!-- 2 NEREDE -->
+      <div class="ekran" data-ekran="2">
+        <div class="soru">
+          <h2>Reklam nerede çıksın?</h2>
+          <p>İkisi de hazırsa ikisinde birden açıyoruz. Kapatmak istediğini kapatabilirsin.</p>
+        </div>
+        <div class="neden" id="pltNeden">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+          <span></span>
+        </div>
+        <div class="pltKartlar">
+          <div class="pltKart" id="kartMeta">
+            <div class="pltUst">
+              <div class="karo gri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.5"/><path d="M17 7h.01"/></svg></div>
+              <div><h3>Meta</h3><small>Instagram ve Facebook</small></div>
+              <button class="anahtar" role="switch" aria-checked="true" aria-label="Meta'da aç" data-plt="meta"></button>
+            </div>
+            <div class="kurulacak" id="kurMeta"></div>
+            <ul class="kontrol" id="konMeta"></ul>
+          </div>
+          <div class="pltKart" id="kartGoogle">
+            <div class="pltUst">
+              <div class="karo gri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></div>
+              <div><h3>Google</h3><small id="gAlt">Google Arama</small></div>
+              <button class="anahtar" role="switch" aria-checked="true" aria-label="Google'da aç" data-plt="google"></button>
+            </div>
+            <div class="kurulacak" id="kurGoogle"></div>
+            <ul class="kontrol" id="konGoogle"></ul>
+          </div>
+        </div>
+        <div class="kart blok">
+          <div class="blokBaslik">Reklam hesapları <span class="ops">Bu workspace'e atanmış olanlar</span></div>
+          <div class="alanlar">
+            <div class="alan m-yalniz"><label>Meta reklam hesabı</label><div class="girdi"><select><option>Garden Villas · 1043 2219 8871</option></select></div></div>
+            <div class="alan g-yalniz"><label>Google Ads hesabı</label><div class="girdi"><select><option>Ege Birlik Yapı · 612-448-2093</option></select></div></div>
+          </div>
+        </div>
+        <div class="altCubuk"><button class="ikincil" data-geri>Geri</button><span class="bosluk"></span><button class="birincil" data-ileri>Devam</button></div>
+      </div>
+
+      <!-- 3 KİME -->
+      <div class="ekran" data-ekran="3">
+        <div class="soru">
+          <h2>Kimler görsün?</h2>
+          <p>Konum Marka Merkezi'ndeki kitleden geldi. Gerisini platformların kendi sistemi bulur; ilgi alanı seçmen gerekmiyor.</p>
+        </div>
+        <div class="kart">
+          <div class="blok">
+            <div class="blokBaslik">Konum <span class="onerilen">Marka Merkezi'nden</span></div>
+            <div class="cipler" id="konumlar">
+              <span class="cip" aria-pressed="true">İzmir <small>+ 40 km</small> <span class="x">✕</span></span>
+              <span class="cip" aria-pressed="true">İstanbul <span class="x">✕</span></span>
+              <span class="cip" aria-pressed="true">Ankara <span class="x">✕</span></span>
+              <button class="cip">+ Konum ekle</button>
+            </div>
+            <p class="ipucu">Yalnız bu bölgelerde <b>bulunan</b> kişilere gösterilir. Google'ın "bu bölgeyle ilgilenenler" seçeneğini kapalı tutuyoruz: o seçenek reklamı yurt dışına da taşıyabiliyor.</p>
+          </div>
+          <div class="blok">
+            <div class="blokBaslik">Yaş <span class="ops">İsteğe bağlı</span></div>
+            <div class="secim" id="yas">
+              <button aria-pressed="true">18 yaş ve üzeri<small>Önerilen · en geniş</small></button>
+              <button>25 ile 54 arası</button>
+              <button>35 yaş ve üzeri</button>
+              <button>Kendim seçeyim</button>
+            </div>
+          </div>
+          <div class="blok">
+            <div class="blokBaslik">Reklam şunlardan biriyle ilgili mi? <span class="ops">Zorunlu · yasal kural</span></div>
+            <div class="secim" id="kategori" style="grid-template-columns:repeat(auto-fit,minmax(118px,1fr))">
+              <button>Hayır, hiçbiri</button>
+              <button>Konut<small>Satılık, kiralık ev</small></button>
+              <button>İş ilanı</button>
+              <button>Kredi, finans</button>
+              <button>Siyaset, seçim</button>
+            </div>
+            <div class="uyari" id="konutUyari" style="margin-top:10px;display:none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
+              <span>Konut reklamında iki platform da yaş ve konumu daraltmaya izin vermiyor. Yaş 18+ ve konum en az 25 km yarıçapa çekildi; bunu biz ayarladık, sen bir şey yapmana gerek yok.</span>
+            </div>
+          </div>
+        </div>
+        <div class="altCubuk"><button class="ikincil" data-geri>Geri</button><span class="bosluk"></span><button class="birincil" data-ileri>Devam</button></div>
+      </div>
+
+      <!-- 4 REKLAM -->
+      <div class="ekran" data-ekran="4">
+        <div class="soru">
+          <h2>Reklamda ne görünsün?</h2>
+          <p>Görselleri ve metni bir kez ver; iki platformun kalıbına biz bölüyoruz.</p>
+        </div>
+        <div class="kart">
+          <div class="blok yalniz y-SITE y-SATIS y-TELEFON y-FORM y-ERISIM y-VIDEO y-WHATSAPP">
+            <div class="blokBaslik"><span class="yalniz y-SITE y-SATIS">Gidecekleri sayfa</span><span class="yalniz y-FORM">Form</span><span class="yalniz y-TELEFON">Aranacak numara</span><span class="yalniz y-WHATSAPP">WhatsApp hattı</span><span class="yalniz y-VIDEO y-ERISIM">Gidecekleri sayfa</span></div>
+            <div class="yalniz y-SITE y-SATIS y-VIDEO y-ERISIM">
+              <div class="girdi"><span class="on">https://</span><input value="gardenvillaskusadasi.com/" aria-label="Site adresi"></div>
+              <p class="ipucu">Adres açılıyor ve güvenli (https). Marka Merkezi'ndeki iki projeden bu workspace'inki seçildi.</p>
+            </div>
+            <div class="yalniz y-FORM">
+              <div class="secim"><button aria-pressed="true">Yeni form: ad, telefon, e-posta<small>Önerilen</small></button><button>Sayfadaki bir formu kullan</button></div>
+              <p class="ipucu">Formlar <b>Garden Villas</b> Facebook sayfasına gelir (Meta'nın kendi seçtiği sayfa değil). KVKK metni Marka Merkezi'nden eklenir.</p>
+            </div>
+            <div class="yalniz y-TELEFON"><div class="girdi"><span class="on">+90</span><input value="232 555 01 23" aria-label="Telefon"></div><p class="ipucu">Numara Marka Merkezi'nden geldi.</p></div>
+            <div class="yalniz y-WHATSAPP"><p class="ipucu" style="margin:0">Numara sorulmaz: Meta onu Facebook sayfana bağlı WhatsApp Business hattından alır. <b>+90 507 868 35 36</b> bağlı.</p></div>
+          </div>
+
+          <div class="blok">
+            <div class="blokBaslik"><span class="yalniz y-VIDEO">Video</span><span class="yalniz y-SITE y-FORM y-WHATSAPP y-TELEFON y-ERISIM y-SATIS">Görseller ve videolar</span> <span class="ops">En az 1 · en çok 10</span></div>
+            <div class="birak" role="button" tabindex="0">
+              <div class="karo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg></div>
+              <div><b>Sürükle bırak ya da seç</b><span>Bıraktığın anda iki platformun kuralına göre kontrol edilir. Marka Merkezi'ndeki varlıklardan da seçebilirsin.</span></div>
+            </div>
+            <div class="dosyalar">
+              <div class="dosya"><div class="kucuk"></div><div><b>villa-havuz-kare.jpg</b><small>1080 × 1080 · 1:1</small></div><div class="uygun"><span class="e">Meta ✓</span><span class="e g-yalniz">Google ✓</span></div></div>
+              <div class="dosya"><div class="kucuk dikey"></div><div><b>villa-dikey.jpg</b><small>1080 × 1920 · 9:16</small></div><div class="uygun"><span class="e">Meta ✓ Hikâye</span><span class="h g-yalniz">Google ✕ oran</span></div></div>
+            </div>
+            <p class="ipucu g-yalniz yalniz y-ERISIM y-VIDEO">Google'ın görsel reklamı yatay (1.91:1) bir görsel de istiyor. Eklemezsen yalnız kare görselle kurulur ve bunu sana söyleriz.</p>
+          </div>
+
+          <div class="blok">
+            <div class="blokBaslik">Metin <button class="metinDugme" style="margin-left:auto" id="metinOner">✦ Metin öner</button></div>
+            <div class="metinler">
+              <div class="alan"><label>Ana metin <span class="ops" style="font-weight:400;color:var(--ink-muted)">Meta'da görselin üstünde</span></label><div class="girdi"><input data-sinir="125" value="Kuşadası'nda denize 5 dakika, özel havuzlu villalar. Yerinde görün." aria-label="Ana metin"><span class="sayac"></span></div></div>
+              <div class="alan"><label>Başlıklar <span class="ops" style="font-weight:400;color:var(--ink-muted)">3 ile 15 arası · Google hepsini dener, Meta ilk 5'i</span></label>
+                <div class="girdi"><input data-sinir="30" value="Özel Havuzlu Villalar" aria-label="Başlık 1"><span class="sayac"></span></div>
+                <div class="girdi"><input data-sinir="30" value="Kuşadası Garden Villas" aria-label="Başlık 2"><span class="sayac"></span></div>
+                <div class="girdi"><input data-sinir="30" value="Denize 5 Dakika Yürüme" aria-label="Başlık 3"><span class="sayac"></span></div>
+                <button class="metinDugme" style="align-self:flex-start">+ Başlık ekle</button>
+              </div>
+              <div class="alan"><label>Açıklama <span class="ops" style="font-weight:400;color:var(--ink-muted)">En az 2</span></label>
+                <div class="girdi"><input data-sinir="90" value="3+1 bahçeli villalar, site içinde havuz ve otopark. Randevu alın, gezdirelim." aria-label="Açıklama 1"><span class="sayac"></span></div>
+                <div class="girdi"><input data-sinir="90" value="Taksit seçenekleriyle teslime hazır villalar. Hemen bilgi alın." aria-label="Açıklama 2"><span class="sayac"></span></div>
+              </div>
+              <div class="guc"><span>Reklam gücü</span><div class="gucCubuk"><i id="guc" style="width:55%"></i></div><b id="gucMetin">Orta</b><span style="color:var(--ink-muted)" id="gucIpucu">2 başlık daha ekle</span></div>
+            </div>
+          </div>
+
+          <div class="blok g-yalniz yalniz y-SITE y-FORM y-TELEFON y-SATIS">
+            <div class="blokBaslik">Google'da hangi aramalarda çıksın? <button class="metinDugme" style="margin-left:auto">✦ Anahtar kelime öner</button></div>
+            <div class="kelimeler" id="kelimeler">
+              <button class="kelime" aria-pressed="true"><span class="kutu"></span><span>kuşadası satılık villa</span><small class="num">ayda ~2.900 arama</small></button>
+              <button class="kelime" aria-pressed="true"><span class="kutu"></span><span>havuzlu villa kuşadası</span><small class="num">ayda ~880</small></button>
+              <button class="kelime" aria-pressed="true"><span class="kutu"></span><span>kuşadası villa projeleri</span><small class="num">ayda ~590</small></button>
+              <button class="kelime" aria-pressed="true"><span class="kutu"></span><span>denize yakın villa</span><small class="num">ayda ~1.600</small></button>
+              <button class="kelime"><span class="kutu"></span><span>kiralık villa</span><small class="num">ayda ~22.200</small></button>
+              <div class="kelimeAlt">Gösterilen 5 / Google'ın önerdiği 214. Seçili 4 kelime. "Bedava, ücretsiz, iş ilanı, ikinci el" gibi 9 arama otomatik dışarıda.</div>
+            </div>
+          </div>
+        </div>
+        <div class="altCubuk"><button class="ikincil" data-geri>Geri</button><span class="bosluk"></span><button class="birincil" data-ileri>Devam</button></div>
+      </div>
+
+      <!-- 5 BÜTÇE -->
+      <div class="ekran" data-ekran="5">
+        <div class="soru">
+          <h2>Ne kadar harcayalım, ne zamana kadar?</h2>
+          <p>Toplam tutarı yaz; iki platform arasında nasıl bölüneceğini öneriyoruz.</p>
+        </div>
+        <div class="kart">
+          <div class="blok">
+            <div class="alanlar">
+              <div class="alan"><label>Bütçe türü</label><div class="seg" id="butceTuru" style="align-self:flex-start"><button aria-pressed="true" data-tur="gunluk">Günlük</button><button data-tur="toplam">Toplam</button></div></div>
+              <div class="alan"><label id="tutarEtiket">Günlük tutar</label><div class="girdi"><input id="tutar" class="num" value="500" inputmode="decimal" aria-label="Tutar"><span class="on">₺</span></div></div>
+              <div class="alan"><label>Başlangıç</label><div class="girdi"><input value="Bugün, onaydan hemen sonra" aria-label="Başlangıç"></div></div>
+              <div class="alan"><label>Bitiş</label><div class="secim" style="grid-template-columns:repeat(3,minmax(0,1fr))"><button>7 gün</button><button aria-pressed="true">30 gün</button><button>Bitiş yok</button></div></div>
+            </div>
+            <p class="ipucu" id="butceIpucu">Google bazı günler günlük tutarın iki katına kadar harcayabilir; ay toplamı yine de günlük × 30,4'ü geçmez. Bütçe türü kampanya başladıktan sonra değiştirilemiyor.</p>
+          </div>
+          <div class="blok m-yalniz g-yalniz" id="payBlok">
+            <div class="blokBaslik">İki platforma paylaşım <span class="onerilen">Önerilen</span></div>
+            <div class="pay">
+              <div class="payCubuk"><div class="m" id="payM" style="flex-basis:50%">Meta %50</div><div class="g" id="payG" style="flex-basis:50%">Google %50</div></div>
+              <input type="range" id="payKaydir" min="10" max="90" step="5" value="50" aria-label="Meta payı">
+              <div class="payAlt num"><span>Meta <b id="payMt">250 ₺</b> / gün</span><span>Google <b id="payGt">250 ₺</b> / gün</span></div>
+              <p class="ipucu" id="payNeden">İlk iki hafta eşit başlıyoruz. Sonuçlar gelince İyileştir, parayı daha ucuza sonuç veren tarafa kaydırmayı önerir.</p>
+              <div class="uyari" id="payUyari" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><span></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="altCubuk"><button class="ikincil" data-geri>Geri</button><span class="bosluk"></span><button class="birincil" data-ileri>Devam</button></div>
+      </div>
+
+      <!-- 6 KONTROL -->
+      <div class="ekran" data-ekran="6">
+        <div class="soru">
+          <h2>Son kontrol</h2>
+          <p>Reklamın iki platformda böyle görünecek. Önce prova ediyoruz: platformlar kurulumu para harcamadan kontrol ediyor.</p>
+        </div>
+        <div class="onizlemeler">
+          <div class="kart onKart m-yalniz">
+            <header>Meta önizleme <div class="seg"><button aria-pressed="true">Akış</button><button>Hikâye</button></div></header>
+            <div class="telefon">
+              <div class="akisUst"><i></i><div><b>gardenvillas</b><small>Sponsorlu</small></div></div>
+              <div class="akisMetin" id="onAna">Kuşadası'nda denize 5 dakika, özel havuzlu villalar. Yerinde görün.</div>
+              <div class="akisGorsel"></div>
+              <div class="akisCta"><b id="onBaslikM">Özel Havuzlu Villalar</b><span id="onCta">Daha fazla bilgi al</span></div>
+            </div>
+          </div>
+          <div class="kart onKart g-yalniz">
+            <header>Google önizleme <div class="seg"><button aria-pressed="true">Arama</button><button>Mobil</button></div></header>
+            <div class="arama">
+              <div class="rk"><b>Sponsorlu</b> · gardenvillaskusadasi.com</div>
+              <h4 id="onBaslikG">Özel Havuzlu Villalar | Kuşadası Garden Villas</h4>
+              <p id="onAciklama">3+1 bahçeli villalar, site içinde havuz ve otopark. Randevu alın, gezdirelim.</p>
+            </div>
+            <p class="ipucu" style="margin:0 14px 14px">Google başlık ve açıklamaları farklı sıralarda dener; bu bir örnek.</p>
+          </div>
+        </div>
+
+        <div class="kart">
+          <details class="ac">
+            <summary>Senin yerine verdiğimiz kararlar <span class="ops" style="font-weight:400;font-size:12px;color:var(--ink-muted)">platformun kendi seçimine bırakmadık</span><svg class="ok" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+            <div class="tabloKap"><table class="kararlar" id="kararlar"></table></div>
+          </details>
+        </div>
+
+        <div class="kart">
+          <div class="prova">
+            <div class="m-yalniz"><span class="durumNokta" id="pvM"></span><div><b>Meta provası</b><br><small style="color:var(--ink-muted)" id="pvMt">Henüz yapılmadı</small></div></div>
+            <div class="g-yalniz"><span class="durumNokta" id="pvG"></span><div><b>Google provası</b><br><small style="color:var(--ink-muted)" id="pvGt">Henüz yapılmadı</small></div></div>
+          </div>
+        </div>
+
+        <div class="altCubuk"><button class="ikincil" data-geri>Geri</button><span class="bosluk"></span><button class="ikincil" id="provaEt">Prova et</button><button class="birincil" id="yayinla" disabled>Yayınla</button></div>
+      </div>
+
+      <!-- SON EKRAN -->
+      <div class="ekran" data-ekran="7">
+        <div class="kart">
+          <div class="kuruldu">
+            <div class="buyuk"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg></div>
+            <h2>Reklamın yayında</h2>
+            <p>İki platformda da kuruldu, geri okunup kontrol edildi ve açıldı.</p>
+          </div>
+          <div class="sonucSatir m-yalniz"><div class="karo gri" style="width:34px;height:34px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.5"/></svg></div><div><b>Meta</b> · Trafik kampanyası, 1 reklam seti, 2 reklam<small>Kampanya 120214551908770 · günlük 250 ₺</small></div><span class="yayinda"><i></i>Yayında</span></div>
+          <div class="sonucSatir g-yalniz"><div class="karo gri" style="width:34px;height:34px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></div><div><b>Google</b> · Arama kampanyası, 1 reklam grubu, 4 anahtar kelime<small>Kampanya 24361902215 · günlük 250 ₺</small></div><span class="yayinda"><i></i>Yayında</span></div>
+          <div style="display:flex;gap:8px;justify-content:center;padding:14px 16px;border-top:1px solid var(--line);flex-wrap:wrap"><button class="birincil">Reklam Yöneticisi'nde gör</button><button class="ikincil" data-basa>Yeni reklam</button></div>
+        </div>
+        <div class="kart">
+          <h3 style="margin:0;padding:12px 16px;font-size:13.5px">Sonuçları iyileştirmek için</h3>
+          <ul class="yapilacak">
+            <li>Sitende ziyaretçi ölçümü (Meta pikseli) kurulu değil. Kurulursa "siteye gelen" yerine "form dolduran" kişiye optimize edebiliriz.<a href="#">Nasıl kurulur</a></li>
+            <li>Google Ads'te dönüşüm işlemi etkin değil.<a href="#">Kur</a></li>
+            <li>İlk sonuçlar 3 ile 7 gün içinde gelir. İyileştir sekmesi öneri yazdığında haber veririz.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SAĞ ÖZET -->
+    <aside class="ozet">
+      <div class="kart ozetKart">
+        <h3>Özet</h3>
+        <div class="ozetSatir"><span>Amaç</span><b id="oAmac">Siteme gelsinler</b></div>
+        <div class="ozetSatir"><span>Nerede</span><b id="oPlt">Meta + Google</b></div>
+        <div class="ozetSatir"><span>Konum</span><b>İzmir, İstanbul, Ankara</b></div>
+        <div class="ozetSatir"><span>Bütçe</span><b class="num" id="oButce">500 ₺ / gün</b></div>
+        <div class="ozetSatir"><span>Süre</span><b>30 gün</b></div>
+      </div>
+      <div class="kart ozetKart">
+        <h3>Yayından önce</h3>
+        <ul class="eksikler" id="eksikler"></ul>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<!-- Onay penceresi -->
+<div class="perde" id="perde" aria-hidden="true">
+  <div class="pencere" role="dialog" aria-modal="true" aria-labelledby="onayBaslik">
+    <h3 id="onayBaslik">Yayınla: onay</h3>
+    <p>Onaylarsan harcama bugün başlar: <b id="onayTutar">günlük 500 ₺</b>. Her platformda önce duraklatılmış kuruyoruz, sonra okuyup karşılaştırıyoruz, en son açıyoruz. Biri düşerse diğeri etkilenmez.</p>
+    <div class="pltAdim m-yalniz"><h4>Meta</h4><ul class="adimlar" data-plt="m"><li><i></i>Duraklatılmış kur (kampanya, set, reklam)</li><li><i></i>Meta'dan geri oku ve karşılaştır</li><li><i></i>Yayına al</li></ul></div>
+    <div class="pltAdim g-yalniz"><h4>Google</h4><ul class="adimlar" data-plt="g"><li><i></i>Duraklatılmış kur (kampanya, grup, reklam, kelimeler)</li><li><i></i>Google'dan geri oku ve karşılaştır</li><li><i></i>Yayına al</li></ul></div>
+    <div class="pencereAlt"><button class="ikincil" id="vazgec">Vazgeç</button><button class="birincil" id="onayla">Onayla ve yayınla</button></div>
+  </div>
+</div>
+
+<script>
+const AMACLAR = [
+  {kod:'SITE', ad:'Siteme gelsinler', ne:'Sitene gelen kişi sayısı artar.', meta:'Trafik kampanyası · sayfa görüntüleme', google:'Arama kampanyası · aramalarda metin reklam', gAlt:'Google Arama', ikon:'<path d="M4 12h12M12 6l6 6-6 6"/>'},
+  {kod:'FORM', ad:'Form doldursunlar', ne:'Adını ve telefonunu bırakan kişiler.', meta:'Potansiyel müşteri · anlık form', google:'Arama kampanyası · form uzantısı', gAlt:'Google Arama', ikon:'<rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 9h6M9 13h6M9 17h3"/>'},
+  {kod:'WHATSAPP', ad:"WhatsApp'tan yazsınlar", ne:'Sana WhatsApp\'tan mesaj atanlar.', meta:'Potansiyel müşteri · WhatsApp sohbeti', google:null, gYok:"Google'da WhatsApp reklamı yok", ikon:'<path d="M5 19l1.5-4A7 7 0 1112 19a7 7 0 01-3.5-.9z"/>'},
+  {kod:'TELEFON', ad:'Beni arasınlar', ne:'Reklamdan doğrudan seni arayanlar.', meta:'Trafik · arama düğmesi', google:'Arama kampanyası · arama uzantısı', gAlt:'Google Arama', ikon:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a1 1 0 01-1 1A16 16 0 014 5a1 1 0 011-1z"/>'},
+  {kod:'VIDEO', ad:'Videom izlensin', ne:'Videonu sonuna kadar izleyenler.', meta:'Etkileşim · video izlenme (Reels, akış)', google:'Talep Yaratma · YouTube ve Shorts', gAlt:'YouTube', ikon:'<rect x="3" y="6" width="18" height="12" rx="3"/><path d="M10 9.5v5l4-2.5z"/>'},
+  {kod:'ERISIM', ad:'Bölgemde çok kişi görsün', ne:'Bölgendeki en çok kişiye ulaşır.', meta:'Bilinirlik · erişim, haftada en çok 2 kez', google:'Talep Yaratma · YouTube, Gmail, Keşfet', gAlt:'YouTube, Gmail, Keşfet', ikon:'<circle cx="12" cy="11" r="3"/><path d="M12 21s-7-6-7-11a7 7 0 0114 0c0 5-7 11-7 11z"/>'},
+  {kod:'SATIS', ad:'Sitemden satış gelsin', ne:'Sitende alışveriş yapanlar.', meta:'Satış · satın alma', google:'Maks. Performans · bütün Google', gAlt:'Bütün Google', ikon:'<path d="M5 7h14l-1.5 9h-11z"/><circle cx="9" cy="20" r="1"/><circle cx="16" cy="20" r="1"/><path d="M8 7l1-3h6l1 3"/>'},
+];
+const ADIMLAR = [
+  {ad:'Amaç', alt:'Ne bekliyorsun'},{ad:'Nerede', alt:'Meta, Google'},{ad:'Kime', alt:'Konum, yaş'},
+  {ad:'Reklam', alt:'Görsel, metin'},{ad:'Bütçe', alt:'Tutar, süre'},{ad:'Kontrol', alt:'Önizleme, prova'}
+];
+const KONTROL = {
+  meta:{
+    SITE:[['tamam','Facebook sayfası: Garden Villas'],['tamam','Instagram: @gardenvillas']],
+    FORM:[['tamam','Facebook sayfası: Garden Villas'],['eksik','Sayfada potansiyel müşteri koşulları kabul edilmemiş','Kabul et']],
+    WHATSAPP:[['tamam','Sayfaya bağlı WhatsApp Business hattı var']],
+    TELEFON:[['tamam','Telefon Marka Merkezi\'nde kayıtlı']],
+    VIDEO:[['tamam','Facebook sayfası ve Instagram bağlı']],
+    ERISIM:[['tamam','Facebook sayfası ve Instagram bağlı']],
+    SATIS:[['eksik','Sitende Meta pikseli satış saymıyor','Nasıl kurulur']],
+  },
+  google:{
+    SITE:[['tamam','Google Ads hesabı bu workspace\'e atanmış']],
+    FORM:[['tamam','Google Ads hesabı atanmış'],['tamam','Gizlilik sayfası adresi Marka Merkezi\'nde']],
+    TELEFON:[['tamam','Google Ads hesabı atanmış']],
+    VIDEO:[['tamam','YouTube kanalı bağlı: Ege Birlik Yapı'],['tamam','Logo Marka Merkezi\'nde']],
+    ERISIM:[['tamam','Logo ve işletme adı Marka Merkezi\'nde']],
+    SATIS:[['eksik','Google Ads\'te satın alma dönüşümü etkin değil','Kur']],
+  }
+};
+const ASGARI = {meta:50, googleTY:250}; // Meta: hesaptan okunur (turda 49,34 ₺). Google Talep Yaratma: 5 USD karşılığı.
+
+const st = {adim:1, amac:'SITE', meta:true, google:true, tur:'gunluk', tutar:500, pay:50, kategori:null, prova:false};
+const $ = s=>document.querySelector(s), $$ = s=>[...document.querySelectorAll(s)];
+const tl = n=>new Intl.NumberFormat('tr-TR').format(Math.round(n))+' ₺';
+const svg = (d,cls='')=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}">${d}</svg>`;
+const amacBul = ()=>AMACLAR.find(a=>a.kod===st.amac);
+
+function rayCiz(){
+  $('#ray').innerHTML = ADIMLAR.map((a,i)=>{
+    const n=i+1, durum = n<st.adim||st.adim===7?'bitti':'';
+    return (i?'<span class="cizgi"></span>':'')+`<button class="adim ${durum}" ${n===st.adim?'aria-current="step"':''} data-git="${n}"><span class="no">${durum?'✓':n}</span><span>${a.ad}<span class="alt">${a.alt}</span></span></button>`;
+  }).join('');
+  const n=Math.min(st.adim,6);
+  $('#mAdim').textContent=n; $('#mAd').textContent=ADIMLAR[n-1].ad; $('#mCubuk').style.width=(n/6*100)+'%';
+}
+function amaclarCiz(){
+  $('#amaclar').innerHTML = AMACLAR.map(a=>`<button class="amac" data-amac="${a.kod}" aria-pressed="${a.kod===st.amac}">
+    <span class="tik">${svg('<path d="M5 12l5 5L20 7"/>')}</span>
+    <span class="karo">${svg(a.ikon)}</span><h3>${a.ad}</h3><p>${a.ne}</p>
+    <span class="platformlar"><span class="plt"><i></i>Meta</span><span class="plt ${a.google?'':'yok'}" title="${a.gYok||''}"><i></i>Google</span></span></button>`).join('');
+}
+function googleVarMi(){ return !!amacBul().google; }
+function pltCiz(){
+  const a=amacBul(), gVar=googleVarMi();
+  if(!gVar) st.google=false;
+  $('#kurMeta').innerHTML=`<b>Kurulacak:</b> ${a.meta}.`;
+  $('#kurGoogle').innerHTML= gVar?`<b>Kurulacak:</b> ${a.google}.`:'';
+  $('#gAlt').textContent = a.gAlt||'Kurulamıyor';
+  const kon=(p)=> (KONTROL[p][st.amac]||[]).map(([d,t,l])=>`<li class="${d}">${d==='tamam'?svg('<path d="M5 12l5 5L20 7"/>'):svg('<circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/>')}<span>${t}</span>${l?`<a href="#">${l}</a>`:''}</li>`).join('');
+  $('#konMeta').innerHTML=kon('meta');
+  $('#konGoogle').innerHTML= gVar? kon('google') : `<li class="eksik">${svg('<circle cx="12" cy="12" r="9"/><path d="M8 8l8 8"/>')}<span>${a.gYok}. Bu amaç yalnız Meta'da açılır.</span></li>`;
+  $('#kurGoogle').style.display = gVar?'':'none';
+  const mS=$('#kartMeta .anahtar'), gS=$('#kartGoogle .anahtar');
+  mS.setAttribute('aria-checked',st.meta); gS.setAttribute('aria-checked',st.google); gS.disabled=!gVar;
+  $('#kartMeta').classList.toggle('secili',st.meta); $('#kartGoogle').classList.toggle('secili',st.google);
+  $('#kartGoogle').classList.toggle('kapali',!gVar);
+  const neden = !gVar ? `${a.gYok}; reklam yalnız Instagram ve Facebook'ta açılacak.`
+    : st.amac==='SITE' ? 'İkisini birden öneriyoruz: Google, seni zaten arayan kişiyi yakalar (bu konuda ayda yaklaşık 6.000 arama var); Meta, henüz aramayan ama ilgilenebilecek kişiye gösterir.'
+    : st.amac==='VIDEO' ? 'İkisini birden öneriyoruz: aynı video Reels ve YouTube Shorts\'ta farklı kişilere ulaşır.'
+    : 'İkisi de bu workspace için hazır; ikisinde birden açıyoruz.';
+  $('#pltNeden span').textContent=neden;
+}
+function bayraklar(){
+  document.body.dataset.amac=st.amac;
+  document.body.dataset.meta=st.meta?'1':'0';
+  document.body.dataset.google=st.google?'1':'0';
+}
+function butceCiz(){
+  const ikisi=st.meta&&st.google, a=amacBul();
+  const mT = ikisi? st.tutar*st.pay/100 : (st.meta?st.tutar:0);
+  const gT = ikisi? st.tutar-mT : (st.google?st.tutar:0);
+  const birim = st.tur==='gunluk'?' / gün':' toplam';
+  $('#payM').style.flexBasis=st.pay+'%'; $('#payG').style.flexBasis=(100-st.pay)+'%';
+  $('#payM').textContent='Meta %'+st.pay; $('#payG').textContent='Google %'+(100-st.pay);
+  $('#payMt').textContent=tl(mT); $('#payGt').textContent=tl(gT);
+  $$('.payAlt span').forEach(s=>s.lastChild.textContent=birim);
+  $('#payBlok').style.display = ikisi?'':'none';
+  $('#tutarEtiket').textContent = st.tur==='gunluk'?'Günlük tutar':'Toplam tutar (30 gün)';
+  // Asgari: giriş anında, rakam sabitten
+  const gunluk = v=> st.tur==='gunluk'? v : v/30;
+  const sorun=[];
+  if(st.meta && gunluk(mT)<ASGARI.meta) sorun.push(`Meta'ya düşen günlük ${tl(gunluk(mT))}; bu hesapta en az ${tl(ASGARI.meta)} gerekiyor.`);
+  if(st.google && (st.amac==='VIDEO'||st.amac==='ERISIM') && gunluk(gT)<ASGARI.googleTY) sorun.push(`YouTube reklamı için Google günlük en az ${tl(ASGARI.googleTY)} istiyor; Google'a düşen ${tl(gunluk(gT))}.`);
+  const u=$('#payUyari');
+  if(sorun.length){u.style.display='flex'; u.querySelector('span').textContent=sorun.join(' ')+(ikisi?' Tutarı artır ya da tek platformla başla.':' Tutarı artır.');}
+  else u.style.display='none';
+  $('#oButce').textContent = tl(st.tutar)+birim;
+  $('#onayTutar').textContent = (st.tur==='gunluk'?'günlük ':'toplam ')+tl(st.tutar);
+  return sorun.length===0;
+}
+function kararlarCiz(){
+  const a=amacBul();
+  const satir=(n,m,g)=>`<tr><td>${n}</td>${st.meta?`<td>${m}</td>`:''}${st.google?`<td>${g}</td>`:''}</tr>`;
+  const bas=`<tr><th>Karar</th>${st.meta?'<th>Meta</th>':''}${st.google?'<th>Google</th>':''}</tr>`;
+  const goog = st.amac==='VIDEO'||st.amac==='ERISIM';
+  $('#kararlar').innerHTML = bas
+    + satir('Kampanya türü', a.meta, a.google||'')
+    + satir('Teklif', 'En çok sonuç<small>Sonuç başına ücret hedefi yok</small>', goog?'Tıklamayı en üst düzeye çıkar':'En çok tıklama<small>Dönüşüm ölçümü kurulunca değiştirmeyi öneririz</small>')
+    + satir('Nerede gösterilir', 'Instagram ve Facebook, otomatik yerleşim<small>Çok reklamverenli birim kapalı</small>', goog?'YouTube, Gmail, Keşfet':'Yalnız Google Arama<small>Arama ortakları ve Görüntülü Reklam Ağı kapalı</small>')
+    + satir('Konum', 'Yalnız bu bölgede bulunanlar', 'Yalnız bu bölgede bulunanlar<small>"İlgilenenler" kapalı; Google kendiliğinden tüm ülkeleri açıyordu</small>')
+    + satir('Otomatik metin', 'Meta\'nın metin varyasyonu kapalı', 'AI Max ve otomatik metin kapalı<small>Yazdığın metin değişmeden çıkar</small>')
+    + satir('Sayfa', 'Garden Villas sayfası, açıkça', '—')
+    + satir('Ölçüm', 'Meta\'nın saydığı · 1 gün tıklama', 'Google\'ın saydığı');
+}
+function eksiklerCiz(){
+  const gV = st.google;
+  const liste=[
+    {t:'Amaç seçildi', ok:!!st.amac, a:1},
+    {t:'En az bir platform açık', ok:st.meta||st.google, a:2},
+    ...(st.amac==='FORM'&&st.meta?[{t:'Potansiyel müşteri koşulları',ok:false,a:2}]:[]),
+    ...(st.amac==='SATIS'?[{t:'Satış ölçümü kurulu değil',ok:false,a:2}]:[]),
+    {t:'Reklam kategorisi soruldu', ok:!!st.kategori, a:3},
+    {t:'Görsel ve metin', ok:true, a:4},
+    ...(gV&&['SITE','FORM','TELEFON','SATIS'].includes(st.amac)?[{t:'Anahtar kelime (4 seçili)',ok:true,a:4}]:[]),
+    {t:'Bütçe platform asgarisinin üstünde', ok:butceCiz(), a:5},
+    {t:'Prova geçti', ok:st.prova, a:6},
+  ];
+  const kalan=liste.filter(x=>!x.ok).length;
+  $('#eksikler').innerHTML = liste.map(x=>`<li class="${x.ok?'tamam':''}"><button data-git="${x.a}"><i></i>${x.t}<small>${ADIMLAR[x.a-1].ad}</small></button></li>`).join('');
+  $('#yayinla').disabled = kalan>0;
+  $('#yayinla').title = kalan? kalan+' eksik var' : '';
+}
+function sayaclar(){
+  $$('input[data-sinir]').forEach(i=>{
+    const s=+i.dataset.sinir, n=[...i.value].length, sp=i.parentElement.querySelector('.sayac');
+    sp.textContent=n+' / '+s; sp.classList.toggle('asim',n>s);
+  });
+  const b=$$('input[aria-label^="Başlık"]').length;
+  const g=Math.min(100, 25+b*10); $('#guc').style.width=g+'%';
+  $('#gucMetin').textContent = g>=75?'İyi':g>=50?'Orta':'Zayıf';
+  $('#gucIpucu').textContent = b<5? (5-b)+' başlık daha ekle':'Benzersiz başlıklar, iyi';
+  $('#onAna').textContent=$('input[aria-label="Ana metin"]').value;
+  $('#onBaslikM').textContent=$('input[aria-label="Başlık 1"]').value;
+  $('#onBaslikG').textContent=$('input[aria-label="Başlık 1"]').value+' | '+$('input[aria-label="Başlık 2"]').value;
+  $('#onAciklama').textContent=$('input[aria-label="Açıklama 1"]').value;
+}
+function hepsi(){
+  bayraklar(); rayCiz(); pltCiz(); bayraklar(); kararlarCiz(); eksiklerCiz(); sayaclar();
+  const a=amacBul();
+  $('#oAmac').textContent=a.ad;
+  $('#oPlt').textContent = [st.meta&&'Meta',st.google&&'Google'].filter(Boolean).join(' + ')||'Seçilmedi';
+  $('#onCta').textContent = {SITE:'Daha fazla bilgi al',FORM:'Kaydol',WHATSAPP:'WhatsApp\'tan yaz',TELEFON:'Hemen ara',VIDEO:'Daha fazla bilgi al',ERISIM:'Daha fazla bilgi al',SATIS:'Satın al'}[st.amac];
+}
+function git(n){
+  st.adim=n;
+  // Son ekranda "yayından önce" listesinin işi bitti; durması "hâlâ eksik var mı" sorusu doğurur.
+  $('#eksikler').closest('.kart').style.display = n===7?'none':'';
+  $$('.ekran').forEach(e=>e.classList.toggle('acik',+e.dataset.ekran===n));
+  hepsi(); window.scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  kaydedildi();
+}
+let kz; function kaydedildi(){ $('#kayitMetni').textContent='Kaydediliyor…'; clearTimeout(kz); kz=setTimeout(()=>$('#kayitMetni').textContent='Taslak kaydedildi',600); }
+
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button,[data-git]'); if(!t) return;
+  if(t.dataset.git) return git(+t.dataset.git);
+  if(t.hasAttribute('data-ileri')) return git(Math.min(6,st.adim+1));
+  if(t.hasAttribute('data-geri')) return git(Math.max(1,st.adim-1));
+  if(t.hasAttribute('data-basa')){ st.prova=false; return git(1); }
+  if(t.dataset.amac){ st.amac=t.dataset.amac; st.google=googleVarMi(); st.meta=true; st.prova=false; amaclarCiz(); hepsi(); kaydedildi(); return; }
+  if(t.classList.contains('anahtar') && !t.disabled){ st[t.dataset.plt]=!st[t.dataset.plt]; st.prova=false; hepsi(); kaydedildi(); return; }
+  if(t.closest('#kategori')){ $$('#kategori button').forEach(b=>b.setAttribute('aria-pressed',b===t)); st.kategori=t.textContent; $('#konutUyari').style.display=t.textContent.startsWith('Konut')?'flex':'none'; hepsi(); return; }
+  if(t.closest('#yas')||t.closest('.secim')){ t.parentElement.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b===t)); return; }
+  if(t.closest('#butceTuru')){ st.tur=t.dataset.tur; $$('#butceTuru button').forEach(b=>b.setAttribute('aria-pressed',b===t)); if(st.tur==='toplam'&&st.tutar<1000) {st.tutar*=30; $('#tutar').value=st.tutar;} if(st.tur==='gunluk'&&st.tutar>=1000){st.tutar=Math.round(st.tutar/30); $('#tutar').value=st.tutar;} hepsi(); return; }
+  if(t.closest('.seg')){ t.parentElement.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b===t)); return; }
+  if(t.classList.contains('kelime')){ t.setAttribute('aria-pressed', t.getAttribute('aria-pressed')!=='true'); return; }
+  if(t.id==='provaEt'){ prova(); return; }
+  if(t.id==='yayinla'){ $('#perde').classList.add('acik'); $('#perde').setAttribute('aria-hidden','false'); $('#onayla').focus(); return; }
+  if(t.id==='vazgec'){ kapat(); return; }
+  if(t.id==='onayla'){ yayinla(); return; }
+});
+document.addEventListener('input',e=>{
+  if(e.target.id==='tutar'){ st.tutar=+e.target.value.replace(/\./g,'').replace(',','.')||0; st.prova=false; hepsi(); }
+  if(e.target.id==='payKaydir'){ st.pay=+e.target.value; hepsi(); }
+  if(e.target.dataset.sinir){ sayaclar(); }
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') kapat(); });
+function kapat(){ $('#perde').classList.remove('acik'); $('#perde').setAttribute('aria-hidden','true'); }
+function prova(){
+  const ns=[st.meta&&['#pvM','#pvMt','Meta'],st.google&&['#pvG','#pvGt','Google']].filter(Boolean);
+  ns.forEach(([d,t])=>{ $(d).className='durumNokta donuyor'; $(t).textContent='Platforma soruluyor…'; });
+  $('#provaEt').disabled=true;
+  setTimeout(()=>{ ns.forEach(([d,t,p])=>{ $(d).className='durumNokta ok'; $(t).textContent='Geçti · para harcanmadı'; }); st.prova=true; $('#provaEt').disabled=false; eksiklerCiz(); }, 1400);
+}
+function yayinla(){
+  $('#onayla').disabled=true; $('#vazgec').disabled=true;
+  const listeler=$$('.perde .adimlar').filter(u=>u.closest('.pltAdim').offsetParent!==null);
+  let i=0; const adim=()=>{
+    listeler.forEach(u=>{ const li=u.children; [...li].forEach((l,k)=>{ l.className = k<i?'bitti':k===i?'suruyor':''; }); });
+    if(i<3){ i++; setTimeout(adim,700); } else { setTimeout(()=>{ kapat(); $('#onayla').disabled=false; $('#vazgec').disabled=false; listeler.forEach(u=>[...u.children].forEach(l=>l.className='')); git(7); },500); }
+  }; adim();
+}
+amaclarCiz(); hepsi();
+</script>
