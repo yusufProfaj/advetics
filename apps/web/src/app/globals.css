@@ -688,6 +688,19 @@ body {
     transform: none;
   }
 }
+/* İkon rayı paneli içeriği (2026-10-09): açılışta ve bölüm değişiminde
+   içerik yandan süzülerek gelir; bir anda değişen içerik "animasyon yok"
+   diye okunuyordu (kullanıcı: "animasyon çok keskin, belli olmuyor"). */
+@keyframes ray-icerik-gir {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @keyframes panel-parilti {
   from {
     background-position: 200% 0;
@@ -703,6 +716,9 @@ body {
   }
   .bolum-gecis {
     animation: panel-bolum-gir 0.22s var(--ease-out) backwards;
+  }
+  .ray-icerik {
+    animation: ray-icerik-gir 0.34s var(--ease-out) 40ms backwards;
   }
   /*
    * KENDİ ANİMASYONU OLAN ÖĞE HARİÇ. Bu kural onlardan sonra geldiği için

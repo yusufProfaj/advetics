@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ROLE_PERMISSIONS } from '@advetics/shared';
 import { kenarBolumleri, visibleSections } from './nav-sections';
-import { KAPALI, olusturOgeleri, panelDurumu, rayOgeleri, type PanelDurumu } from './ikon-rayi';
+import { KAPALI, olusturOgeleri, panelDurumu, rayOgeleri, tiklamaHedefi, type PanelDurumu } from './ikon-rayi';
+import { aktifMi } from '@/components/nav';
 
 /** İkon rayı (2026-10-09): Google Ads kullanım mantığı, Advetics görünüşü. */
 
@@ -66,6 +67,18 @@ describe('panelDurumu', () => {
   });
 });
 
+describe('tiklamaHedefi — bölüme tık ilk sayfaya götürür', () => {
+  const planla = [{ href: '/strateji' }, { href: '/butce' }];
+  it('KRİTİK: bölüm dışındayken ilk sayfa (Planla → AdvStrategy)', () => {
+    expect(tiklamaHedefi(planla, (o) => aktifMi(o, '/dashboard'))).toBe('/strateji');
+  });
+  it('KRİTİK: zaten bölümün bir sayfasındaysa gidilmez (Aylık Bütçe\'den atılmasın)', () => {
+    expect(tiklamaHedefi(planla, (o) => aktifMi(o, '/butce'))).toBeNull();
+    expect(tiklamaHedefi(planla, (o) => aktifMi(o, '/strateji'))).toBeNull();
+  });
+  it('boş bölüm', () => expect(tiklamaHedefi([], () => false)).toBeNull());
+});
+
 describe('bileşen kaynağı', () => {
   const KAYNAK = readFileSync(join(__dirname, '..', 'components', 'ikon-rayi.tsx'), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -81,7 +94,10 @@ describe('bileşen kaynağı', () => {
     // yarım panel bırakır.
     expect(KAYNAK).not.toMatch(/\{acik\s*&&\s*\(\s*<div[^>]*id="ray-paneli"/);
     expect(KAYNAK).toContain('transition-[opacity,transform,visibility]');
-    expect(KAYNAK).toContain("acik ? 'visible translate-x-0 opacity-100' : 'invisible -translate-x-2 opacity-0'");
+    expect(KAYNAK).toContain("'visible translate-x-0 opacity-100 duration-[340ms] ease-[var(--ease-out)]'");
+    expect(KAYNAK).toContain("'invisible -translate-x-4 opacity-0 duration-200 ease-in'");
+    // İçerik bölüm başına yeniden bağlanıyor: geçişte animasyon oynuyor.
+    expect(KAYNAK).toContain("<div key={gosterilen ?? 'bos'} className=\"ray-icerik");
     expect(KAYNAK).toContain('inert={!acik}');
     expect(KAYNAK).toContain('motion-reduce:transition-none');
   });
@@ -95,7 +111,7 @@ describe('bileşen kaynağı', () => {
   });
 
   it('KRİTİK: kapanış yolları — sayfa değişimi, dışarı tıklama, Esc (odağı geri verir), bağlantı', () => {
-    expect(KAYNAK).toMatch(/useEffect\(\(\) => \{\s*temizle\(\);\s*gonder\(\{ tur: 'kapat' \}\);\s*\}, \[pathname, temizle\]\)/);
+    expect(KAYNAK).toMatch(/temizle\(\);\s*gonder\(\{ tur: 'kapat' \}\);\s*\}, \[pathname, temizle\]\)/);
     expect(KAYNAK).toContain("document.addEventListener('mousedown', disari)");
     expect(KAYNAK).toContain('aciciRef.current?.focus()');
     expect(KAYNAK).toContain(".closest('a')) gonder({ tur: 'kapat' })");
@@ -104,6 +120,11 @@ describe('bileşen kaynağı', () => {
   it('KRİTİK: üzerine gelmeyle açma yalnız gerçek farede (dokunuş aç-kapa yapmasın)', () => {
     expect(KAYNAK).toContain("'(hover: hover) and (pointer: fine)'");
     expect(KAYNAK).toMatch(/function uzerine\(anahtar: string\) \{\s*if \(!uzerineAcilir\) return;/);
+  });
+
+  it('KRİTİK: raydan başlatılan geçiş paneli KAPATMIYOR (tık sabitler + gider)', () => {
+    expect(KAYNAK).toMatch(/if \(raydanGecis\.current\) \{\s*raydanGecis\.current = false;\s*return;\s*\}/);
+    expect(KAYNAK).toMatch(/if \(hedef && !kapaniyor\) \{\s*raydanGecis\.current = true;\s*router\.push\(hedef\);/);
   });
 
   it('zamanlayıcı söküldüğünde temizleniyor', () => {

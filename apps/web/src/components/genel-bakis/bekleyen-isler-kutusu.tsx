@@ -55,17 +55,23 @@ export async function BekleyenIslerKutusu({
     const yas = bekleyenIsYasi(is.enEski);
     return (
       <li key={`${is.tur}:${is.clientId}`}>
+        {/*
+          TEK SATIR: ad, cümle ve yaş aynı satırda, taşan cümle kırpılıyor
+          ve tamamı `title`da. Satırın iki satıra kırılması kartı yeniden
+          uzatıyordu.
+        */}
         <Link
           href={bekleyenIsAdresi(is)}
-          className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-4 py-2 text-sm transition-colors hover:bg-surface-muted"
+          title={`${is.clientAdi} · ${bekleyenIsCumlesi(is, onayYetkisi)}`}
+          className="group flex items-center gap-2 px-4 py-1.5 text-[13px] transition-colors duration-200 hover:bg-surface-muted"
         >
-          <span className="font-semibold text-ink">{is.clientAdi}</span>
-          <span className="text-ink-muted" aria-hidden>
-            ·
-          </span>
-          <span className="min-w-0 flex-1 text-ink">{bekleyenIsCumlesi(is, onayYetkisi)}</span>
-          {yas && <span className="text-xs tabular-nums text-ink-muted">{yas}</span>}
-          <span className="text-xs font-semibold text-brand-strong" aria-hidden>
+          <span className="max-w-[40%] shrink-0 truncate font-semibold text-ink">{is.clientAdi}</span>
+          <span className="min-w-0 flex-1 truncate text-ink-muted">{bekleyenIsCumlesi(is, onayYetkisi)}</span>
+          {yas && <span className="shrink-0 text-[11px] tabular-nums text-ink-muted">{yas}</span>}
+          <span
+            className="shrink-0 text-xs font-semibold text-brand-strong transition-transform duration-200 ease-[var(--ease-out)] group-hover:translate-x-0.5 motion-reduce:transition-none"
+            aria-hidden
+          >
             →
           </span>
         </Link>
@@ -74,15 +80,28 @@ export async function BekleyenIslerKutusu({
   };
 
   return (
-    <section aria-labelledby="bekleyen-isler-baslik" className="rounded-xl border border-line bg-surface">
-      <h2 id="bekleyen-isler-baslik" className="px-4 pt-3 text-sm font-semibold text-ink">
+    /*
+      AYRI, DAR KART (kullanıcı, 2026-10-09): tam genişlik bir liste sayfanın
+      ortasında bir tablo gibi duruyordu. Genişlik `max-w-xl`, satırlar tek
+      satır; Google Ads'in hesap teşhisi kartı da sayfanın bir köşesinde.
+    */
+    <section
+      aria-labelledby="bekleyen-isler-baslik"
+      className="w-full max-w-xl overflow-hidden rounded-xl border border-line bg-surface"
+    >
+      <h2 id="bekleyen-isler-baslik" className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-ink">
         Bekleyen işler
+        {hal === 'dolu' && (
+          <span className="rounded-full bg-brand-soft px-1.5 text-[11px] font-semibold tabular-nums text-brand-strong">
+            {yanit.isler.length}
+          </span>
+        )}
       </h2>
 
-      {hal === 'bos' && <p className="px-4 pb-3 pt-1 text-sm text-ink-muted">Bekleyen iş yok</p>}
+      {hal === 'bos' && <p className="-mt-1 px-4 pb-2.5 text-sm text-ink-muted">Bekleyen iş yok</p>}
 
       {hal === 'dolu' && (
-        <div className="mt-2 border-t border-line">
+        <div className="border-t border-line">
           {/* İlk satırlar her zaman görünür, kalanı "Tümünü göster" ile (`AcilirListe`). */}
           <AcilirListe
             toplam={yanit.isler.length}
@@ -114,9 +133,9 @@ export async function BekleyenIslerKutusu({
 /** Yükleniyor hâli — kutunun Suspense yedeği. Boş bir alan "iş yok" gibi okunurdu. */
 export function BekleyenIslerIskeleti() {
   return (
-    <section aria-busy="true" className="rounded-xl border border-line bg-surface px-4 py-3">
+    <section aria-busy="true" className="w-full max-w-xl rounded-xl border border-line bg-surface px-4 py-2.5">
       <h2 className="text-sm font-semibold text-ink">Bekleyen işler</h2>
-      <p className="mt-1 text-sm text-ink-muted">Yükleniyor…</p>
+      <p className="text-sm text-ink-muted">Yükleniyor…</p>
     </section>
   );
 }

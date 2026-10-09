@@ -104,6 +104,24 @@ export function panelDurumu(d: PanelDurumu, o: PanelOlayi): PanelDurumu {
   }
 }
 
+/**
+ * BÖLÜME TIKLAMAK İLK SAYFAYA GİDER (kullanıcı, 2026-10-09: "Planla'ya
+ * tıklarsam hem sabitlensin hem de AdvStrategy sayfasına gitsin"). Google
+ * Ads'te de raydaki bölüm kendi ana sayfasını açıyor.
+ *
+ * Kullanıcı ZATEN o bölümün bir sayfasındaysa gidilmez (`null`): Aylık
+ * Bütçe'deyken Planla'ya basmak onu AdvStrategy'ye atardı, oysa niyeti
+ * paneli açmak.
+ */
+export function tiklamaHedefi(
+  ogeler: ReadonlyArray<Pick<NavEntry, 'href' | 'ekYollar'>>,
+  icindeMi: (oge: Pick<NavEntry, 'href' | 'ekYollar'>) => boolean,
+): string | null {
+  const ilk = ogeler[0];
+  if (!ilk || ogeler.some(icindeMi)) return null;
+  return ilk.href;
+}
+
 /** Fare bir satırın üstünde bu kadar durmadan panel açılmaz (geçip giden fare paneli titretmesin). */
 export const UZERINE_GECIKME_MS = 140;
 /** Fare raydan/panelden ayrılınca bu kadar beklenir: ray ile panel arasındaki boşlukta kapanmasın. */

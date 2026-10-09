@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Icon, NavSection, aktifMi, type NavEntry } from '@/components/nav';
 import { AdveticsLogo } from '@/components/advetics-logo';
@@ -15,6 +15,7 @@ import {
   olusturOgeleri,
   panelDurumu,
   rayOgeleri,
+  tiklamaHedefi,
 } from '@/lib/ikon-rayi';
 
 /** Panel anahtarları: ray bölümleri + iki özel panel. */
@@ -47,6 +48,7 @@ const AYARLAR = 'Ayarlar';
  */
 export function IkonRayi({ veri }: { veri: KenarVerisi }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { bolumler, ayarlar } = kenarBolumleri(veri.bolumler);
   const ogeler = rayOgeleri(bolumler);
   const olustur = olusturOgeleri(bolumler);
@@ -58,6 +60,8 @@ export function IkonRayi({ veri }: { veri: KenarVerisi }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const aciciRef = useRef<HTMLButtonElement | null>(null);
   const zamanlayici = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Geçiş raydaki bölüm tıklamasından mı geldi: o zaman panel açık kalır. */
+  const raydanGecis = useRef(false);
 
   const temizle = useCallback(() => {
     if (zamanlayici.current) clearTimeout(zamanlayici.current);
@@ -80,7 +84,13 @@ export function IkonRayi({ veri }: { veri: KenarVerisi }) {
   }, []);
 
   // Sayfa değişince panel kapanır: yeni sayfa panelin arkasında açılmasın.
+  // İSTİSNA: geçişi raydaki bölüm tıklaması başlattıysa panel sabit kalır
+  // (tık hem sabitliyor hem bölümün ilk sayfasına götürüyor).
   useEffect(() => {
+    if (raydanGecis.current) {
+      raydanGecis.current = false;
+      return;
+    }
     temizle();
     gonder({ tur: 'kapat' });
   }, [pathname, temizle]);
@@ -129,9 +139,18 @@ export function IkonRayi({ veri }: { veri: KenarVerisi }) {
     zamanlayici.current = setTimeout(() => gonder({ tur: 'ayril' }), AYRILMA_GECIKME_MS);
   }
 
-  function tik(anahtar: string, e: React.MouseEvent<HTMLButtonElement>) {
+  function tik(anahtar: string, e: React.MouseEvent<HTMLButtonElement>, gidilecek: NavEntry[] = []) {
     temizle();
     aciciRef.current = e.currentTarget;
+    const hedef = tiklamaHedefi(gidilecek, (o) => aktifMi(o, pathname));
+    // Panel kapanacaksa (aynı bölüme ikinci tık) sayfaya gidilmez.
+    const kapaniyor = durum.acik === anahtar && durum.acilis === 'tik';
+    if (hedef && !kapaniyor) {
+      raydanGecis.current = true;
+      router.push(hedef);
+    }
+    // Tek olay her durumu karşılıyor (`panelDurumu`): kapalıysa açıp
+    // sabitler, üzerine gelmeyle açıksa sabitler, sabitse kapatır.
     gonder({ tur: 'tik', anahtar });
   }
 
@@ -144,11 +163,11 @@ export function IkonRayi({ veri }: { veri: KenarVerisi }) {
   const panelBasligi = gosterilen === OLUSTUR ? 'Oluştur' : gosterilen === HESAP ? veri.kullaniciAdi : gosterilen;
   const acik = durum.acik !== null;
 
-  const rayDugmesi = (anahtar: string, etiket: string, ikon: NavEntry['icon'], aktif: boolean) => (
+  const rayDugmesi = (anahtar: string, etiket: string, ikon: NavEntry['icon'], aktif: boolean, sayfalar: NavEntry[]) => (
     <button
       key={anahtar}
       type="button"
-      onClick={(e) => tik(anahtar, e)}
+      onClick={(e) => tik(anahtar, e, sayfalar)}
       onMouseEnter={() => uzerine(anahtar)}
       aria-expanded={durum.acik === anahtar}
       aria-controls="ray-paneli"
@@ -199,7 +218,7 @@ export function IkonRayi({ veri }: { veri: KenarVerisi }) {
         <nav className="flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-1.5 pb-2">
           {ogeler.map((o) => {
             if (o.tur === 'panel') {
-              return rayDugmesi(o.anahtar, o.etiket, o.ikon, o.ogeler.some((x) => aktifMi(x, pathname)));
+              return rayDugmesi(o.anahtar, o.etiket, o.ikon, o.ogeler.some((x) => aktifMi(x, pathname)), o.ogeler);
             }
             const aktif = aktifMi(o.oge, pathname);
             return (
@@ -226,7 +245,8 @@ export function IkonRayi({ veri }: { veri: KenarVerisi }) {
         </nav>
 
         <div className="flex w-full flex-col items-center gap-0.5 border-t border-line/70 px-1.5 pb-3 pt-2">
-          {ayarlar.length > 0 && rayDugmesi(AYARLAR, 'Ayarlar', 'settings', ayarlar.some((x) => aktifMi(x, pathname)))}
+          {ayarlar.length > 0 &&
+            rayDugmesi(AYARLAR, 'Ayarlar', 'settings', ayarlar.some((x) => aktifMi(x, pathname)), ayarlar)}
           <button
             type="button"
             onClick={(e) => tik(HESAP, e)}
@@ -256,10 +276,18 @@ export function IkonRayi({ veri }: { veri: KenarVerisi }) {
         inert={!acik}
         role="region"
         aria-label={panelBasligi ?? undefined}
-        className={`fixed bottom-0 left-[88px] top-16 z-30 hidden w-64 flex-col border-r border-line bg-surface/95 shadow-[8px_0_24px_-12px_rgb(0_0_0/0.18)] backdrop-blur-xl transition-[opacity,transform,visibility] duration-150 ease-out motion-reduce:transition-none lg:flex ${
-          acik ? 'visible translate-x-0 opacity-100' : 'invisible -translate-x-2 opacity-0'
+        className={`fixed bottom-0 left-[88px] top-16 z-30 hidden w-64 flex-col border-r border-line bg-surface/95 shadow-[8px_0_24px_-12px_rgb(0_0_0/0.18)] backdrop-blur-xl transition-[opacity,transform,visibility] motion-reduce:transition-none lg:flex ${
+          acik
+            ? 'visible translate-x-0 opacity-100 duration-[340ms] ease-[var(--ease-out)]'
+            : 'invisible -translate-x-4 opacity-0 duration-200 ease-in'
         }`}
       >
+        {/*
+          İÇERİK BÖLÜM BAŞINA YENİDEN BAĞLANIYOR (`key`): açılışta ve bölümler
+          arası geçişte `ray-icerik` animasyonu yeniden oynuyor. Kapanırken
+          anahtar değişmiyor, içerik yerinde kalıp panelle birlikte soluyor.
+        */}
+        <div key={gosterilen ?? 'bos'} className="ray-icerik flex min-h-0 flex-1 flex-col">
         <p className="px-5 pb-1 pt-5 font-baslik text-sm font-bold text-ink">{panelBasligi}</p>
         {gosterilen === HESAP ? (
           <div className="flex flex-col gap-3 px-5 pt-1">
@@ -271,6 +299,7 @@ export function IkonRayi({ veri }: { veri: KenarVerisi }) {
             <NavSection items={panelOgeleri(gosterilen)} />
           </div>
         )}
+        </div>
       </div>
     </>
   );
@@ -279,7 +308,7 @@ export function IkonRayi({ veri }: { veri: KenarVerisi }) {
 /** Ray satırı: ikon karosu + altında ad. Seçili ya da paneli açık olan vurgulu. */
 function raySatiri(aktif: boolean, acik: boolean): string {
   const taban =
-    'group flex w-full flex-col items-center gap-1 rounded-xl py-2 text-[11px] leading-tight transition-colors duration-150';
+    'group flex w-full flex-col items-center gap-1 rounded-xl py-2 text-[11px] leading-tight transition-colors duration-300 ease-[var(--ease-out)]';
   if (aktif) return `${taban} font-semibold text-brand-strong`;
   if (acik) return `${taban} bg-surface-sunken/70 font-medium text-ink`;
   return `${taban} font-medium text-ink-muted hover:bg-surface-sunken/60 hover:text-ink`;

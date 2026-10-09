@@ -13,7 +13,16 @@ const LISTE = yorumsuz('acilir-liste.tsx');
 const KUTU = yorumsuz('bekleyen-isler-kutusu.tsx');
 
 describe('AcilirListe', () => {
-  it('ilk beş satır', () => expect(ILK_SATIR).toBe(5));
+  it('ilk üç satır', () => expect(ILK_SATIR).toBe(3));
+
+  it('KRİTİK: açık hâlde kart büyümüyor — kalan satırlar kartın içinde kayıyor', () => {
+    expect(LISTE).toMatch(/<div className="overflow-hidden" inert=\{!acik\}>\s*<div className="max-h-60 overflow-y-auto/);
+  });
+
+  it('KRİTİK: kart dar ve satırlar tek satır', () => {
+    expect(KUTU).toContain('w-full max-w-xl');
+    expect(KUTU).toContain('min-w-0 flex-1 truncate');
+  });
 
   it('KRİTİK: sessiz kesme yok — kapalıyken "N / toplam gösteriliyor"', () => {
     expect(LISTE).toContain('`${ILK_SATIR} / ${toplam} gösteriliyor`');

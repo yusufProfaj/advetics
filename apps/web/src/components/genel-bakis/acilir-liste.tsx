@@ -2,8 +2,13 @@
 
 import { useState, type ReactNode } from 'react';
 
-/** Kapalıyken bu kadar satır görünür; Google Ads'in teşhis kartı da kısa açılıyor. */
-export const ILK_SATIR = 5;
+/**
+ * Kapalıyken bu kadar satır görünür; Google Ads'in teşhis kartı da kısa
+ * açılıyor. Beşten üçe indi (kullanıcı, 2026-10-09: "daraltıp ayrı bir kart
+ * yapıp küçült"): kart metriklerin üstünde duruyor ve her satır metrikleri
+ * aşağı itiyordu.
+ */
+export const ILK_SATIR = 3;
 
 /**
  * ═══ AÇILIR LİSTE: İLK SATIRLAR + "TÜMÜNÜ GÖSTER" ═══
@@ -13,6 +18,11 @@ export const ILK_SATIR = 5;
  * kartı kısa açılıp gerisini istenince gösteriyor; burada da öyle.
  *
  * SESSİZ KESME YOK: kapalıyken "5 / 24 gösteriliyor" yazıyor.
+ *
+ * AÇIK HÂLDE KART BÜYÜMÜYOR: kalan satırlar kartın İÇİNDE kayıyor
+ * (`max-h-60`). 24 satırı açmak sayfayı uzatıp metrikleri ekranın dışına
+ * itiyordu; kaydırma kabı animasyonlu kabın İÇİNDE ki geçiş sırasında
+ * kaydırma çubuğu belirip kaybolmasın.
  *
  * ANİMASYON: menünün kullandığı `grid-template-rows` 0fr → 1fr geçişi
  * (`nav.tsx`); `max-height` tahmini içeriği kırpar ya da kapanışta
@@ -29,15 +39,15 @@ export function AcilirListe({ ilk, kalan, toplam }: { ilk: ReactNode; kalan: Rea
       {gizli > 0 && (
         <>
           <div
-            className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${
+            className={`grid transition-[grid-template-rows] duration-[420ms] ease-[var(--ease-out)] motion-reduce:transition-none ${
               acik ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
             }`}
           >
             <div className="overflow-hidden" inert={!acik}>
-              {kalan}
+              <div className="max-h-60 overflow-y-auto overscroll-contain">{kalan}</div>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2 text-xs">
+          <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-1.5 text-xs">
             <span className="tabular-nums text-ink-muted">
               {acik ? `${toplam} iş` : `${ILK_SATIR} / ${toplam} gösteriliyor`}
             </span>
