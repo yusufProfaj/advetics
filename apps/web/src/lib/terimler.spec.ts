@@ -63,7 +63,7 @@ describe('kartlar sözlüğü kullanıyor', () => {
   it('KRİTİK: Genel Bakış kartlarında kısaltma etiketi kalmadı', () => {
     // Hedef kullanıcı reklamcılık bilmiyor: kısaltma değil iş dilinde ad.
     expect(SAYFA).not.toMatch(/ad: '(CPA|ROAS|CTR|CPC|CPM|TO)'/);
-    for (const t of ["ad: 'Dönüşüm başı maliyet'", "ad: 'Reklam getirisi'", "ad: 'Tıklama oranı'", "ad: 'Tıklama başı maliyet'", "ad: 'Bin gösterim başı maliyet'"]) {
+    for (const t of ["ad: 'Dönüşüm başı maliyet'", "ad: 'Reklam getirisi'", "ad: 'Tıklama oranı'", "ad: 'Tıklama başı maliyet'", "ad: 'Bin gösterim maliyeti'"]) {
       expect(SAYFA).toContain(t);
     }
   });

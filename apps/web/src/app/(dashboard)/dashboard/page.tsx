@@ -438,8 +438,11 @@ export default async function DashboardPage({
             />
           )}
 
-          {veriVar && (ajansGorunumu || mcc) && (
-            <KapsamOzeti satirlar={kapsamSatirlari({ summary: summary!, sirketler, musteriler })} />
+          {/* Her görünümde: sağ sütun soldan kısa kalıp boşluk bırakmasın (kullanıcı: "boşlukları doldur"). */}
+          {veriVar && (
+            <KapsamOzeti
+              satirlar={kapsamSatirlari({ summary: summary!, sirketler, musteriler, kampanyalar, donusum })}
+            />
           )}
 
           {donusum !== null && <DonusumKarti detay={donusum} />}
@@ -578,7 +581,7 @@ function ikincilMetrikler(summary: MetricsSummary, karsilastir: boolean): Ikinci
     { ad: 'Tıklama', deger: formatNumber(summary.clicks), degisim: d(summary.clicks, prev?.clicks) },
     { ad: 'Tıklama oranı', deger: formatPercent(summary.ctr), degisim: d(summary.ctr, prev?.ctr) },
     { ad: 'Tıklama başı maliyet', deger: formatMoney(microsOf(summary.cpc), c), degisim: d(summary.cpc, prev?.cpc), ters: true },
-    { ad: 'Bin gösterim başı maliyet', deger: formatMoney(microsOf(summary.cpm), c), degisim: d(summary.cpm, prev?.cpm), ters: true },
+    { ad: 'Bin gösterim maliyeti', deger: formatMoney(microsOf(summary.cpm), c), degisim: d(summary.cpm, prev?.cpm), ters: true },
   ];
 }
 
@@ -680,6 +683,8 @@ function kapsamSatirlari(v: {
   summary: MetricsSummary;
   sirketler: MetricsOrganizationRow[] | null;
   musteriler: MetricsClientRow[] | null;
+  kampanyalar: MetricsBreakdownRow[] | null;
+  donusum: MetricsConversionDetail | null;
 }): Array<{ etiket: string; deger: string; uyari?: boolean; href?: string }> {
   const out: Array<{ etiket: string; deger: string; uyari?: boolean; href?: string }> = [];
   if (v.sirketler) {
@@ -698,6 +703,21 @@ function kapsamSatirlari(v: {
     });
   }
   out.push({ etiket: 'İzlenen reklam hesabı', deger: formatNumber(v.summary.accountCount) });
+  if (v.kampanyalar) {
+    // Sınıra ulaştıysa sayı "en az": kesilen liste toplam gibi okunmasın.
+    const n = v.kampanyalar.filter((r) => r.spendMicros !== '0').length;
+    out.push({
+      etiket: 'Bu dönemde harcayan kampanya',
+      deger: v.kampanyalar.length >= KAMPANYA_SINIRI ? `en az ${formatNumber(n)}` : formatNumber(n),
+    });
+    out.push({
+      etiket: 'Yayında olan kampanya',
+      deger: formatNumber(v.kampanyalar.filter((r) => r.status === 'active').length),
+    });
+  }
+  if (v.donusum && v.donusum.satirlar.length > 0) {
+    out.push({ etiket: 'Dönüşüm eylemi', deger: formatNumber(v.donusum.satirlar.length) });
+  }
   if (v.summary.hiddenAccounts > 0) {
     out.push({
       etiket: 'İzlenmeyen hesap',

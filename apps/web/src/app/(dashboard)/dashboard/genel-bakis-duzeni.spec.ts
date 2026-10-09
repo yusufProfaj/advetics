@@ -55,7 +55,6 @@ describe('taslağın düzeni', () => {
   it('KRİTİK: ajans görünümünde sağ sütun boş kalmıyor — mecra dağılımı ve kapsam', () => {
     // Kullanıcı: "ajans görünümündeyken boşlukları doldur".
     expect(SAYFA).toContain('<MecraDagilimi');
-    expect(SAYFA).toContain('(ajansGorunumu || mcc) && (');
     expect(SAYFA).toContain('<KapsamOzeti');
   });
 

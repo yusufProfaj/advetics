@@ -516,7 +516,17 @@ export function OzetListeKarti({
   const yol = usePathname() ?? '/dashboard';
   const [bekleyen, setBekleyen] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  // Katman istek + yenileme boyunca; ikisi bitince kalkıyor (bkz. Reklam Yöneticisi tablosu).
+  const [isPending, startTransition] = useTransition();
+  const [yenileniyor, setYenileniyor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isPending) setYenileniyor(null);
+  }, [isPending]);
+  // Yeni kapsamın satırları geldiyse geçiş bitmiştir: geçiş durumu hiç
+  // değişmeden (anında yenileme) tamamlansa bile katman kalmasın.
+  useEffect(() => {
+    setYenileniyor(null);
+  }, [satirlar]);
 
   async function tikla(r: OzetSatiri) {
     if (!r.eylem) return;
@@ -529,6 +539,8 @@ export function OzetListeKarti({
         body: JSON.stringify(r.eylem.tur === 'org' ? { organizationId: r.eylem.id } : { clientId: r.eylem.id }),
       });
       // Adres temizleniyor: URL süzgeci oturumu ezer ve gövde eski kapsamı gösterirdi.
+      setYenileniyor(r.ad);
+      setBekleyen(null);
       startTransition(() => {
         router.replace(yol);
         router.refresh();
@@ -541,7 +553,9 @@ export function OzetListeKarti({
 
   return (
     <section className={`${s.kart} ${s.gir}`}>
-      {bekleyen && <TamEkranYukleniyor mesaj={`${bekleyen} görünümüne geçiliyor…`} />}
+      {(bekleyen ?? yenileniyor) && (
+        <TamEkranYukleniyor mesaj={`${bekleyen ?? yenileniyor} görünümüne geçiliyor…`} />
+      )}
       <div className={s.kartUst}>
         <h2>{baslik}</h2>
         <span className={s.ipucu}>harcamaya göre</span>
@@ -822,15 +836,27 @@ export function EnCokHarcayanlarKarti({
  */
 export function IslerKap({
   ilkSayisi,
+  gelen,
   toplam,
   kalan,
 }: {
   ilkSayisi: number;
+  /** Sunucunun döndürdüğü iş sayısı (üst sınırlı). */
+  gelen: number;
+  /** Gerçek toplam; sunucu sınıra ulaştıysa `gelen`den büyük. */
   toplam: number;
   kalan: ReactNode;
 }) {
   const [acik, setAcik] = useState(false);
-  if (toplam <= ilkSayisi) return null;
+  if (gelen <= ilkSayisi) return null;
+  // TEK SAYAÇ: "3 / 50" ve altında ayrıca "50 / 69" iki ayrı satırdı ve
+  // hangisinin neyi saydığı anlaşılmıyordu (canlı denetim, 2026-10-09).
+  // Gerçek toplam her zaman paydada; sunucu sınırı açıkken de söyleniyor.
+  const sayac = acik
+    ? gelen < toplam
+      ? `${gelen} / ${toplam} gösteriliyor · en eski ${gelen} iş`
+      : `${toplam} iş`
+    : `${ilkSayisi} / ${toplam} gösteriliyor`;
   return (
     <>
       <div className={`${s.kap} ${acik ? s.kapAcik : ''}`}>
@@ -839,9 +865,9 @@ export function IslerKap({
         </div>
       </div>
       <div className={s.kartAlt}>
-        <span className={s.num}>{acik ? `${toplam} iş` : `${ilkSayisi} / ${toplam} gösteriliyor`}</span>
+        <span className={s.num}>{sayac}</span>
         <button type="button" aria-expanded={acik} onClick={() => setAcik((v) => !v)}>
-          {acik ? 'Daha az göster' : `Tümünü göster (${toplam})`}
+          {acik ? 'Daha az göster' : gelen < toplam ? `${gelen} işi göster` : `Tümünü göster (${toplam})`}
         </button>
       </div>
     </>

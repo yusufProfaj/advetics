@@ -138,8 +138,25 @@ export function ReklamYoneticisiTablosu({
 }) {
   const router = useRouter();
   const yol = usePathname() ?? '/ads-explorer';
-  const [, startTransition] = useTransition();
+  /*
+   * YÜKLEME KATMANI İKİ AŞAMALI: kapsam isteği sürerken `gecilen`, sonra
+   * sayfa yenilenirken `isPending`. Katman ikisi de bitince kalkıyor.
+   * Eskiden yalnız `gecilen` vardı ve hiç sıfırlanmıyordu: her düzey
+   * ayrı bileşenken sayfa bileşeni değiştirip katmanı da götürüyordu; tek
+   * tabloya geçince katman geçiş bittikten sonra ekranda KALDI (canlı
+   * denetim, 2026-10-09).
+   */
+  const [isPending, startTransition] = useTransition();
   const [gecilen, setGecilen] = useState<string | null>(null);
+  const [yenileniyor, setYenileniyor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isPending) setYenileniyor(null);
+  }, [isPending]);
+  // Yeni kapsamın satırları geldiyse geçiş bitmiştir: geçiş durumu hiç
+  // değişmeden (anında yenileme) tamamlansa bile katman kalmasın.
+  useEffect(() => {
+    setYenileniyor(null);
+  }, [satirlar]);
   const [hata, setHata] = useState<string | null>(null);
 
   const [ara, setAra] = useState('');
@@ -216,6 +233,8 @@ export function ReklamYoneticisiTablosu({
         body: JSON.stringify(tur === 'org' ? { organizationId: id } : { clientId: id }),
       });
       // Adres temizleniyor: URL süzgeci oturumu ezer, gövde eski kapsamı gösterirdi.
+      setYenileniyor(ad);
+      setGecilen(null);
       startTransition(() => {
         router.replace(yol);
         router.refresh();
@@ -279,7 +298,9 @@ export function ReklamYoneticisiTablosu({
 
   return (
     <section className={`${s.kart} ${s.gir}`}>
-      {gecilen && <TamEkranYukleniyor mesaj={`${gecilen} görünümüne geçiliyor…`} />}
+      {(gecilen ?? yenileniyor) && (
+        <TamEkranYukleniyor mesaj={`${gecilen ?? yenileniyor} görünümüne geçiliyor…`} />
+      )}
 
       <div className={s.duzeyler} role="tablist" aria-label="Düzey">
         {sekmeler.map((t) => {

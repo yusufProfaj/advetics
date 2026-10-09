@@ -12,9 +12,8 @@ sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
 temiz, 2026-10-07…09 arasındaki dokuz migration uygulanmış, yeni tablolarda
 RLS politikası var, platform sahibi yalnız hello@profaj.com.
-**Bekleyen deploy:** bu commit (Genel Bakış yeni düzen + Reklam Yöneticisi +
-bekleyen işler dar kart + ray tıklaması + animasyon). Migration YOK, API
-değişmedi, yalnız panel.
+**Bekleyen deploy:** yok (canlı: Genel Bakış + Reklam Yöneticisi taslak
+sürümü ve denetim düzeltmeleri, 2026-10-09 akşam). Migration YOK.
 
 **AŞAMA 3 — REKLAM YÖNETİCİSİ + GENEL BAKIŞ DÜZENİ (2026-10-09).** Kullanıcı
 iki HTML taslağını onayladı ("mükemmel olmuş"). İniş tablosu Genel
@@ -24,7 +23,15 @@ Reklam düzeyinde "Önizlemeler" anahtarı: açıkken hepsi açık, kapalıyken
 eski kural (tek önizleme). Genel Bakış: solda Performans tek kart (kutular +
 grafik + ikincil şerit) ve şirket/workspace/hesap + en çok harcayan 5
 kampanya; sağda bekleyen işler, bütçe, dönüşümler. VERİ EKSİLMEDİ.
-ÖLÇÜLMEDİ: canlı ekran görüntüsü (deploy sonrası tasarım denetimi).
+İLK SÜRÜM REDDEDİLDİ ("taslağın aynısını istiyorum"): taslağı eski
+bileşenlerle yaklaşık kurmuştu. İkinci sürüm taslağın KENDİ CSS'i
+(`components/taslak/`). Canlı denetimde bulunanlar düzeltildi: bekleyen
+işler kartı boştu (istemci dosyasından sabit aktarımı; `istemci-siniri.
+spec.ts`), kapsam geçişinde yükleme katmanı takılıyordu, büyük tutar
+kırpılıyordu, çift sayaç, sağ sütunda boşluk. ÖLÇÜLMEDİ: telefon
+genişliği (Chrome penceresi küçülmedi). Eski bileşenler (SirketTablosu,
+BreakdownTable, MetricCard…) artık kullanılmıyor, testleri hâlâ onları
+kilitliyor: temizlenecek.
 Sonra: satır içi durdur/başlat/bütçe (Aşama 3'ün kalanı), grafikte metrik
 seçimi (taslakta vardı, kodda yok: grafik hâlâ harcama + dönüşüm).
 

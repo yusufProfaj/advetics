@@ -100,7 +100,8 @@ export async function BekleyenIslerKarti({
           </div>
           <IslerKap
             ilkSayisi={BEKLEYEN_ILK_SATIR}
-            toplam={isler.length}
+            gelen={isler.length}
+            toplam={yanit.toplam}
             kalan={isler.slice(BEKLEYEN_ILK_SATIR).map((is) => (
               <IsSatiri key={`${is.tur}:${is.clientId}`} is={is} onayYetkisi={onayYetkisi} />
             ))}
@@ -112,7 +113,8 @@ export async function BekleyenIslerKarti({
           {kaynakHataMetni(h)}
         </p>
       ))}
-      {kesme && <div className={s.kartAlt}>{kesme}</div>}
+      {/* Dolu kartta kesme sayacın içinde (IslerKap); ayrı satır iki sayaç demekti. */}
+      {kesme && hal !== 'dolu' && <div className={s.kartAlt}>{kesme}</div>}
     </section>
   );
 }

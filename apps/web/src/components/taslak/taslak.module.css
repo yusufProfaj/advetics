@@ -338,6 +338,7 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .metrik {
+  container-type: inline-size;
   position: relative;
   text-align: left;
   padding: 14px 16px 16px;
@@ -371,7 +372,10 @@
 .metrikDeger {
   font-family: var(--t-baslik);
   font-weight: 700;
-  font-size: 23px;
+  /* KUTUYA GÖRE KÜÇÜLÜYOR: ajans görünümünde "1.473.494,23 ₺" sabit 23
+     pikselde sığmıyor ve kırpılıyordu (canlı denetim). Kırpılmış para
+     tutarı yanlış sayı göstermekle aynı şey. */
+  font-size: min(23px, 10.5cqi);
   margin-top: 3px;
   white-space: nowrap;
   overflow: hidden;
