@@ -6,7 +6,7 @@ import { BildirimSaglayici } from '@/components/bildirim/bildirim-verisi';
 import { BildirimZili } from '@/components/bildirim/bildirim-zili';
 import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
 import { visibleSections } from '@/lib/nav-sections';
-import { KenarIcerigi } from '@/components/kenar-cubugu';
+import { IkonRayi } from '@/components/ikon-rayi';
 import { MobilMenu } from '@/components/mobil-menu';
 
 import { ROL_ETIKETI, SAHIP_ETIKETI, type ManagerAccountTree } from '@advetics/shared';
@@ -144,9 +144,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
         da çiziliyor (`MobilMenu`). İki kopya, birinin güncellenmemesi ve
         telefondaki menünün masaüstünden farklı kalması demekti.
       */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface/80 backdrop-blur-xl lg:flex">
-        <KenarIcerigi veri={kenarVerisi} />
-      </aside>
+      {/*
+        MASAÜSTÜ: İKON RAYI (2026-10-09). Google Ads'in kullanım mantığı,
+        Advetics'in görünüşü: dar ray + bölüm paneli. Telefonda tam liste
+        çekmecede (`MobilMenu` → `KenarIcerigi`); ikisi de `kenarVerisi`nden.
+      */}
+      <IkonRayi veri={kenarVerisi} />
 
       {/* İçerik */}
       {/*

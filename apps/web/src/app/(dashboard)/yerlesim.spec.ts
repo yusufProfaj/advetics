@@ -18,6 +18,7 @@ const KENAR = readFileSync(
   join(DIZIN, '..', '..', 'components', 'kenar-cubugu.tsx'),
   'utf8',
 );
+const RAY = readFileSync(join(DIZIN, '..', '..', 'components', 'ikon-rayi.tsx'), 'utf8');
 
 describe('mobil gezinme', () => {
   it('BOŞA DÜŞME BEKÇİSİ: kaynaklar okundu', () => {
@@ -42,9 +43,15 @@ describe('mobil gezinme', () => {
      * menü masaüstündekinden farklı kalırdı ve bunu yalnızca telefonla
      * giren kullanıcı görürdü.
      */
+    // 2026-10-09'dan beri masaüstü ikon rayı: aynı `kenarVerisi`, aynı
+    // bölme fonksiyonu (`kenarBolumleri`). Ray listeyi ikonlara indiriyor,
+    // içeriği kendisi yazmıyor.
     expect(KENAR).toContain('export function KenarIcerigi');
-    expect(LAYOUT).toContain('<KenarIcerigi veri={kenarVerisi} />');
+    expect(LAYOUT).toContain('<IkonRayi veri={kenarVerisi} />');
+    expect(LAYOUT).toContain('<MobilMenu veri={kenarVerisi}');
     expect(MOBIL).toContain('<KenarIcerigi');
+    expect(RAY).toContain('kenarBolumleri(veri.bolumler)');
+    expect(KENAR).toContain('kenarBolumleri(veri.bolumler)');
   });
 
   it('KRİTİK: sayfa değişince çekmece kapanıyor', () => {

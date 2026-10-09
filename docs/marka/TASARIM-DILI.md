@@ -10,9 +10,21 @@ hâlini yapıyoruz. Bu sistemin dışına çıkma. Google yıllardır test etmi�
 mantığını ve basitliğini tut. Kendi marka kimliğimizde ona benzetmek için her
 değişikliği yapabilirsin."*
 
-İki kaynak, iki ayrı iş: **görünüş kılavuzdan, düzen ve davranış Google
-Ads'ten.** Google'ın renkleri, yazı tipi ve logosu ALINMAZ; iskeleti, akışı
-ve sadeliği alınır.
+İki kaynak, iki ayrı iş: **görünüş ADVETICS'İN KENDİ DİLİ, kullanım mantığı
+Google Ads'ten.** Kullanıcı (2026-10-09): *"Advetics'in tasarım dilini bırakma,
+sadece kullanım açısındaki mantığı istiyorum. Görüntüler, şemalar, tablolar
+Advetics dilinde, Google Ads paneline benzer şekilde. Animasyonları bırakma,
+en ufak animasyon hatası da istemiyorum."* Yani `globals.css` tasarım
+katmanı (kılavuz renkleri, degrade ikon karoları, buzlu cam üst çubuk, kart
+kalıbı, geçişler) aynen kalır; Google'dan iskelet, akış ve sadelik alınır.
+Google'ın renkleri, yazı tipi ve logosu ALINMAZ.
+
+**Yeşil:** yalnız DURUM göstergesi için onaylandı (kullanıcı, 2026-10-09):
+yayında = yeşil. Başka hiçbir yerde kullanılmaz.
+
+**Animasyon:** her geçiş `prefers-reduced-motion` altında kapanır; açılıp
+kapanan öğe DOM'dan çıkmaz, görünürlüğü geçişle değişir (yarım kalan ya da
+bir karede yok olan animasyon yok). Örnek: `components/ikon-rayi.tsx`.
 
 ---
 
@@ -22,7 +34,7 @@ ve sadeliği alınır.
 |---|---|
 | Renk | YALNIZ dört renk: beyaz `#ffffff`, siyah `#000000`, gri `#302e2d`, kırmızı `#ff2400` |
 | Nötr tonlar | Zemin ve çizgi için gerekiyorsa YALNIZ kurumsal grinin saydam tonları (`#302e2d` %4 zemin, %12 çizgi, %60 ikincil metin). Yeni bir ton (mavi-gri, pembe, pastel) YOK |
-| Gradyan, buğu, pastel | YOK. Mevcut paneldeki pembe gradyan buğu kılavuz dışı ve kalkacak |
+| Gradyan, buğu | Advetics'in mevcut dili (marka → aksan degradesi, buzlu cam) KALIR; yeni bir pastel ton eklenmez |
 | Ana başlık | Montserrat (kalın). Sayfa başlığı, büyük sayılar, kart içi ana sayı |
 | Üst başlık, alt başlık, gövde | Open Sans |
 | Kırmızının rolü | Vurgu: birincil eylem, seçili durum, önemli sayı. Kılavuz örneğinde ("Bu İşte / **Beraberiz!**") kırmızı tek vurgu, gerisi siyah. Ekranda kırmızı az ve anlamlı |
@@ -115,10 +127,10 @@ Etiket | değer satırları, tıklanınca satır açılıyor; ayrı form sayfas�
 |---|---|
 | Mavi vurgu (seçili ray öğesi, birincil düğme, bağlantı) | **Kırmızı** `#ff2400`: seçili ray hapı, birincil düğme. Tablo içi bağlantılar **siyah**, üzerine gelince kırmızı ve altı çizili (her satırı kırmızı yapmak vurguyu öldürür) |
 | Dört renkli metrik kutuları | En çok iki seçili seri: 1. seri **kırmızı**, 2. seri **siyah**. Seçili olmayan kutu beyaz |
-| Yeşil "etkin" noktası | **Açık karar (K-1):** kılavuzda yeşil yok. Öneri: durum renkle değil **şekille** + metinle: Yayında = siyah dolu nokta, Duraklatıldı = gri duraklat ikonu, Hata = kırmızı x. Google da şekil kullanıyor; renk tek başına anlam taşımıyor |
+| Yeşil "etkin" noktası | **Kapandı (K-1):** yeşil yalnız durum için serbest. Yayında = yeşil nokta, Duraklatıldı = gri duraklat ikonu, Hata = kırmızı x; şekil + metin her zaman yanında |
 | Google Sans / Roboto | Montserrat (başlık, büyük sayı) + Open Sans (gövde, etiket, tablo) |
 | Açık gri zemin `#f8f9fa`, beyaz kart | Zemin `#302e2d` %4, kart beyaz, çizgi `#302e2d` %12 |
-| Ray: Kampanyalar, Hedefler, Araçlar… | Ray: **+ Oluştur**, Genel Bakış, Planla, Yönet, İyileştir, Raporlar, Base; altta Ayarlar. Her ikonun altında ad. Flyout'ta bölümün sayfaları |
+| Ray: Kampanyalar, Hedefler, Araçlar… | **UYGULANDI** (`components/ikon-rayi.tsx`): + Oluştur, Genel Bakış, Planla, Yönet, İyileştir, Raporlar, Base; altta Ayarlar ve hesap. Tek sayfalı bölüm doğrudan açılır, çok sayfalı panel açar; panel üzerine gelince (yalnız farede) ya da tıklayınca. Telefonda tam liste çekmecede |
 | Hesap kırıntısı + kimlik | `Şirket › Workspace ▾` (workspace seçici burada) |
 | Hesap teşhisi + "Sorunu çöz" | Genel Bakış › **Bekleyen işler** (satır içi eylem düğmesi) |
 | Öneriler + "Tümünü uygula" | İyileştir (Aşama 4), Orphex'ten farkımızın ekranı |

@@ -193,6 +193,13 @@ Kullanıcı kararı (2026-10-09), sebebiyle: *"ui/ux'e hiç bakmıyorsun …
 kullanıcının gözünden hiç geçmiyordu ve kimliğin yalnız dört değeri
 (iki yazı tipi, iki renk) kullanılıyordu.
 
+- **GÖRÜNÜŞ ADVETICS'İN, KULLANIM MANTIĞI GOOGLE ADS'İN** (kullanıcı,
+  2026-10-09): görüntü, şema ve tablolar Advetics'in kendi dilinde
+  (`globals.css` katmanı, degrade ikon karoları, animasyonlar), düzen ve
+  akış Google Ads'e benzer. Yeni modül de bu dilde. Yeşil yalnız durum
+  göstergesi için serbest. Animasyon kalır ama HATASIZ: açılıp kapanan öğe
+  DOM'dan çıkmaz, görünürlük geçişle değişir, `prefers-reduced-motion`
+  altında kapanır (`components/ikon-rayi.tsx`).
 - **İki kaynağın dışına çıkılmaz.** Görsel kimlik:
   [`docs/marka/profaj-kurumsal-kilavuz.jpg`](docs/marka/profaj-kurumsal-kilavuz.jpg)
   — renkler YALNIZ beyaz `#ffffff`, siyah `#000000`, gri `#302e2d`,

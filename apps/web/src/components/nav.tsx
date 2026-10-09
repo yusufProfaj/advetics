@@ -393,13 +393,32 @@ function satirSinifi(active: boolean, vurgu: boolean): string {
  * renginde doluyor ve göz ilk ona gidiyor. Öne çıkarılmış satırın karosu
  * her zaman dolu: satır kapalıyken de ayırt ediliyor.
  */
-function Icon({ name, active, vurgu = false }: { name: keyof typeof ICONS; active?: boolean; vurgu?: boolean }) {
+/**
+ * İkon karosu. `buyuk` ikon rayında (2026-10-09): Google Ads'in rayı gibi
+ * ikon + altında ad, karo aynı Advetics degradesiyle. İki ayrı karo
+ * bileşeni yazmak, menü ile rayın bir gün farklı görünmesi demekti.
+ */
+export function Icon({
+  name,
+  active,
+  vurgu = false,
+  buyuk = false,
+}: {
+  name: keyof typeof ICONS;
+  active?: boolean;
+  vurgu?: boolean;
+  buyuk?: boolean;
+}) {
   const karo = active || vurgu
     ? 'bg-gradient-to-br from-brand to-brand-accent text-white shadow-[0_4px_10px_-4px_var(--brand-primary)]'
     : 'bg-surface-sunken/70 text-ink-muted group-hover:bg-surface group-hover:text-ink group-hover:shadow-[var(--shadow-xs)]';
   return (
-    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-[background-color,color,box-shadow] duration-200 ${karo}`}>
-      <svg viewBox="0 0 20 20" fill="none" aria-hidden className="h-4 w-4">
+    <span
+      className={`flex shrink-0 items-center justify-center transition-[background-color,color,box-shadow] duration-200 ${
+        buyuk ? 'h-9 w-9 rounded-xl' : 'h-7 w-7 rounded-lg'
+      } ${karo}`}
+    >
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden className={buyuk ? 'h-[1.15rem] w-[1.15rem]' : 'h-4 w-4'}>
         <path
           d={ICONS[name]}
           stroke="currentColor"
