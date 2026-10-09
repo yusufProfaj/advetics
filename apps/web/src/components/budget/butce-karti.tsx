@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ClientPacing } from '@advetics/shared';
 import { formatMoney } from '@/lib/format';
 import { PacingBar, StatusChip } from '@/components/budget/pacing-bar';
+import { tempoCumleleri } from '@/components/budget/butce-temposu';
 
 /**
  * ═══ GENEL BAKIŞ'IN ÜSTÜNDE BU AYIN BÜTÇESİ ═══
@@ -56,6 +57,12 @@ export function ButceKarti({
    * yazmak yanlış sayı göstermek olurdu (bütçe ekranındaki kuralın aynısı).
    */
   const birim = veri.currency;
+  /*
+   * AYIN TEMPOSU (MIMARI § 2): çubuğun söylediğini cümleye döküyor, "ay
+   * sonunda nereye varırız" ve "günde ne kadar harcanabilir" sorularıyla.
+   * Karar saf fonksiyonda (`butce-temposu.ts`), burada yalnızca çizim.
+   */
+  const tempo = tempoCumleleri(o, birim);
   return (
     <Link href={href} className={kap}>
       <span className="flex items-center justify-between gap-2">
@@ -71,6 +78,15 @@ export function ButceKarti({
         <span className="text-sm text-warn-strong">Hesaplarda farklı para birimi var</span>
       )}
       <PacingBar pacing={o} compact />
+      {tempo.length > 0 && (
+        <ul className="space-y-0.5 text-xs leading-snug">
+          {tempo.map((c) => (
+            <li key={c.metin} className={c.uyari ? 'font-medium text-warn-strong' : 'text-ink-muted'}>
+              {c.metin}
+            </li>
+          ))}
+        </ul>
+      )}
     </Link>
   );
 }

@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import type {
+  BekleyenIslerYaniti,
   MetricsAccountBreakdown,
   ClientPacing,
   Platform,
@@ -52,6 +54,15 @@ import { Uyari, UyariListesi } from '@/components/ui/uyari';
 import { dugmeSinifi } from '@/components/ui/dugme';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
+import { bekleyenIslerYolu, type BekleyenIslerSonucu } from '@/lib/bekleyen-isler';
+import { hizliErisim } from '@/lib/hizli-erisim';
+import { visibleSections } from '@/lib/nav-sections';
+import {
+  BekleyenIslerIskeleti,
+  BekleyenIslerKutusu,
+  BoostRozeti,
+  HizliErisim,
+} from '@/components/genel-bakis/bekleyen-isler-kutusu';
 
 export const metadata = { title: 'Genel Bakış · Advetics' };
 
@@ -91,6 +102,38 @@ export default async function DashboardPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+
+  /*
+   * ═══ BEKLEYEN İŞLER EN BAŞTA BAŞLIYOR, BEKLENMİYOR ═══
+   *
+   * Söz burada açılıyor ve `await` EDİLMİYOR: aşağıdaki kapsam çağrısı
+   * (seri, üretimde 17 sn ölçüldü) ve metrik okumalarıyla PARALEL koşuyor.
+   * Kutu ve Akıllı Boost rozeti onu kendi Suspense sınırlarında bekliyor;
+   * iki tüketici AYNI sözü okuyor, yani aynı sayıyı söylüyorlar.
+   *
+   * HATA YUTULMUYOR, NESNEYE ÇEVRİLİYOR: `.catch(() => null)` "bekleyen iş
+   * yok" ile "çağrı düştü"yü aynı boş kutuya çevirirdi. Söz hiç reddedilmiyor
+   * (sahipsiz ret de yok); sebep sunucunun kendi cümlesiyle kutuya gidiyor.
+   *
+   * Tek workspace seçiliyse `clientId` gidiyor; "Tüm workspace'ler" ve ajans
+   * kipinde gitmiyor (`bekleyenIslerYolu`).
+   */
+  const bekleyenler: Promise<BekleyenIslerSonucu> = serverApiFetch<BekleyenIslerYaniti>(
+    bekleyenIslerYolu(session.activeClientId),
+  ).then(
+    (yanit) => ({ durum: 'tamam', yanit }),
+    (e: unknown) => ({ durum: 'hata', mesaj: hataMetni(e) }),
+  );
+  /*
+   * HIZLI ERİŞİM MENÜNÜN SÜZGECİNDEN: menüde görünmeyen kısayol olmaz.
+   * Bağlam layout'takiyle aynı ifade; ikinci bir yetki listesi yok.
+   */
+  const kisayollar = hizliErisim(
+    visibleSections(session.permissions, {
+      ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
+      platformSahibi: session.platformAdmin,
+    }),
+  );
 
   /*
    * ═══ KAPSAM YALNIZCA GEREKİYORSA OKUNUYOR ═══
@@ -474,24 +517,53 @@ export default async function DashboardPage({
             </>
           }
           eylemler={
-            butceGorunur || summary !== null ? (
-              <div className="flex flex-wrap items-center gap-3">
-                {summary !== null && (
-                  /* Tazelik düğmenin içinde; burada tekrar yazmak aynı bilgiyi iki kez göstermekti. */
-                  <p className="text-xs text-ink-muted">{summary.accountCount} reklam hesabı</p>
-                )}
-                {butceGorunur && (
-                  <ButceKarti
-                    veri={butce}
-                    hata={butceHatasi}
-                    href={butceAdresi(session.activeClientId)}
-                    ayAdi={buAyAdi()}
-                  />
+            kisayollar.length > 0 || butceGorunur || summary !== null ? (
+              /*
+                HIZLI ERİŞİM ÜSTTE, BÜTÇE ALTTA: kısayollar küçük düğmeler,
+                bütçe kartı ise kendi başına bir blok. Yan yana dururken
+                kart düğmeleri satırın ortasına itiyordu.
+              */
+              <div className="flex flex-col items-start gap-2 sm:items-end">
+                <HizliErisim
+                  ogeler={kisayollar}
+                  rozet={
+                    <Suspense fallback={null}>
+                      <BoostRozeti sonuc={bekleyenler} />
+                    </Suspense>
+                  }
+                />
+                {(butceGorunur || summary !== null) && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    {summary !== null && (
+                      /* Tazelik düğmenin içinde; burada tekrar yazmak aynı bilgiyi iki kez göstermekti. */
+                      <p className="text-xs text-ink-muted">{summary.accountCount} reklam hesabı</p>
+                    )}
+                    {butceGorunur && (
+                      <ButceKarti
+                        veri={butce}
+                        hata={butceHatasi}
+                        href={butceAdresi(session.activeClientId)}
+                        ayAdi={buAyAdi()}
+                      />
+                    )}
+                  </div>
                 )}
               </div>
             ) : undefined
           }
         />
+
+        {/*
+          BEKLEYEN İŞLER BAŞLIĞIN HEMEN ALTINDA, KONTROLLERİN ÜSTÜNDE: ekranın
+          ilk cevabı "bugün ne yapmalıyım". Özet düşse de çiziliyor; kendi
+          kaynağı var ve metrik hatası onu gizlememeli.
+        */}
+        <Suspense fallback={<BekleyenIslerIskeleti />}>
+          <BekleyenIslerKutusu
+            sonuc={bekleyenler}
+            onayYetkisi={session.permissions.includes('strategy.approve')}
+          />
+        </Suspense>
 
         <div className="flex flex-wrap items-center gap-2">
           <PlatformTabs current={platform} hesap={hesap} seviye={level} tasinan={tasinan} />
