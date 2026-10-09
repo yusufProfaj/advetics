@@ -710,10 +710,6 @@ function kapsamSatirlari(v: {
       etiket: 'Bu dönemde harcayan kampanya',
       deger: v.kampanyalar.length >= KAMPANYA_SINIRI ? `en az ${formatNumber(n)}` : formatNumber(n),
     });
-    out.push({
-      etiket: 'Yayında olan kampanya',
-      deger: formatNumber(v.kampanyalar.filter((r) => r.status === 'active').length),
-    });
   }
   if (v.donusum && v.donusum.satirlar.length > 0) {
     out.push({ etiket: 'Dönüşüm eylemi', deger: formatNumber(v.donusum.satirlar.length) });

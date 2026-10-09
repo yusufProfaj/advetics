@@ -42,6 +42,12 @@ describe('düzeyler ve satırlar', () => {
     expect(TABLO).toContain('aria-disabled={kapali || undefined}');
   });
 
+  it('KRİTİK: "Şirketler" sekmesi ajans kapsamına ÖZEL DEĞERLE geçiyor', () => {
+    // `null` sunucuda hata vermeden hiçbir şey değiştirmiyordu: sekme ölüydü.
+    expect(TABLO).toContain("void kapsamaGec('org', TUM_SIRKETLER, 'Tüm şirketler')");
+    expect(TABLO).not.toContain("kapsamaGec('org', null");
+  });
+
   it('KRİTİK: izlenmeyen hesap bağlantı DEĞİL — boş listeye götürürdü', () => {
     const h = SAYFA.slice(SAYFA.indexOf('function hesapSatiri'), SAYFA.indexOf('const DURUM_ADI'));
     expect(h).toContain('eylem: a.syncEnabled');

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import type { Platform } from '@advetics/shared';
-import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
+import { PLATFORM_KISA_ADLARI, TUM_SIRKETLER } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatMoney, formatNumber, formatPercent } from '@/lib/format';
 import { ReklamOnizleme } from '@/components/reklam-onizleme';
@@ -329,7 +329,10 @@ export function ReklamYoneticisiTablosu({
               title={kapali && t.hedef.tur === 'kapali' ? t.hedef.neden : undefined}
               className={s.duzey}
               onClick={() => {
-                if (t.hedef.tur === 'org') void kapsamaGec('org', null, 'Tüm şirketler');
+                // AJANS KAPSAMI ÖZEL DEĞERLE (`TUM_SIRKETLER`), `null` ile DEĞİL:
+                // `null` hata vermeden kabul edilip hiçbir şey değiştirmiyordu ve
+                // sekme tıklanınca sessizce olduğu yerde kalıyordu (canlı denetim).
+                if (t.hedef.tur === 'org') void kapsamaGec('org', TUM_SIRKETLER, 'Tüm şirketler');
                 else if (t.hedef.tur === 'client') void kapsamaGec('client', null, 'Tüm workspace’ler');
               }}
             >
