@@ -165,9 +165,22 @@ async function main(): Promise<void> {
       },
     ];
 
+    /*
+     * İLK KOŞUDA KONTROL DE DÜŞTÜ ("Satın Alma Türü eksik", 1815223): betik
+     * `synchronous_ad_review`ı çıkarıyordu, gerçek prova onu gönderiyor ve
+     * aynı gövde orada geçiyor. (a) gerçek provanın seçenekleri, (b) aynısı +
+     * satır içi kampanyada `buying_type: AUCTION` — hangisinin düzeneği
+     * kurduğunu kontrol satırı söyler.
+     */
+    const aciklik = (g: Record<string, unknown>) => {
+      const set = g.adset_spec as Record<string, unknown>;
+      return { ...g, adset_spec: { ...set, campaign_spec: { ...(set.campaign_spec as Record<string, unknown>), buying_type: 'AUCTION' } } };
+    };
     console.log('\n═══ YERLEŞİME GÖRE GÖRSEL · /ads validate_only (satır içi set + kreatif) ═══');
     for (const d2 of DENEMELER) {
-      console.log(`\n  ${d2.ad}\n    ${await sor({ ...d2.govde, execution_options: ['validate_only'] })}`);
+      console.log(`\n  ${d2.ad}`);
+      console.log(`    (a) prova seçenekleri : ${await sor(d2.govde)}`);
+      console.log(`    (b) + buying_type     : ${await sor(aciklik(d2.govde))}`);
     }
     console.log('\n  Okuma: Y0 GEÇMELİ (düzenek çalışıyor). Y5 geçerse Meta kapsamayan kuralı denetlemiyor demektir.\n');
   } finally {
