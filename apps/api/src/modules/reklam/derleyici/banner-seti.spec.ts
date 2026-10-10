@@ -213,7 +213,11 @@ describe('geri okuma — yerleşime göre görsel (N-13) ve elle yerleşim', () 
     t.facebook_positions = [...t.facebook_positions].reverse();
     const afs = o['kreatif:1']!.asset_feed_spec;
     afs.images = afs.images.map((i: any) => ({ ...i, adlabels: i.adlabels.map((l: any) => ({ id: '77', ...l })) })).reverse();
-    afs.asset_customization_rules = [...afs.asset_customization_rules].reverse().map((r: any) => ({ ...r, image_label: { id: '5', ...r.image_label } }));
+    // Meta her kurala 13–65 yaşı ekliyor ve adı damgalıyor (N-14, N-15; canlı kurulum 3efebf54).
+    afs.asset_customization_rules = [...afs.asset_customization_rules]
+      .reverse()
+      .map((r: any) => ({ ...r, image_label: { id: '5', ...r.image_label }, customization_spec: { age_max: 65, age_min: 13, ...r.customization_spec } }));
+    o['kreatif:1']!.name = `${o['kreatif:1']!.name} 2026-10-10-e86a70db2137ac86666cc59e45200ee1`;
     return o;
   };
   const karsilastir = (o: Record<string, Record<string, unknown>>) => geriOkumaKarsilastir(yankilar, o, { yasalUyariVar: false });
@@ -221,6 +225,16 @@ describe('geri okuma — yerleşime göre görsel (N-13) ve elle yerleşim', () 
   it('KRİTİK: kimlik eklenmiş, sırası değişmiş ama anlamca aynı dönüş TEMİZ', () => {
     const r = karsilastir(meta());
     expect(r.sonuc === 'temiz' ? [] : r.satirlar.map((s) => `${s.govde}|${s.alanYolu}`)).toEqual([]);
+  });
+  it('N-14: kuralda DAR bir yaş dönerse DURUR', () => {
+    const o = meta();
+    o['kreatif:1']!.asset_feed_spec.asset_customization_rules[0].customization_spec.age_min = 25;
+    expect(karsilastir(o).sonuc).toBe('fark');
+  });
+  it('N-15: damga dışında ad değişirse DURUR', () => {
+    const o = meta();
+    o['kreatif:1']!.name = `Başka ad 2026-10-10-e86a70db2137ac86666cc59e45200ee1`;
+    expect(karsilastir(o).sonuc).toBe('fark');
   });
   it('görsel hash farklı dönerse DURUR', () => {
     const o = meta();

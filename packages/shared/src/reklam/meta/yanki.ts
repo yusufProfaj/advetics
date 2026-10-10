@@ -403,15 +403,36 @@ function varlikAkisiAyni(gonderilen: unknown, donen: unknown): boolean {
   }
   const kural = (r: unknown) => {
     const o = (r ?? {}) as Record<string, unknown>;
-    const spec = Object.fromEntries(
-      Object.entries((o.customization_spec ?? {}) as Record<string, unknown>).map(([k, v]) => [k, Array.isArray(v) ? [...v].map(String).sort() : v]),
-    );
+    const ham = { ...((o.customization_spec ?? {}) as Record<string, unknown>) };
+    /*
+     * N-14 — ölçüldü (2026-10-10, v25.0, banner seti duraklatılmış kurulum):
+     * Meta HER kurala `age_min: 13, age_max: 65` ekliyor; biz yaş
+     * göndermiyoruz. Bu Meta'nın en geniş aralığı, kitleyi daraltmıyor (yaş
+     * sınırı reklam setinde). DAR: yalnız bu iki değer düşer; daha dar bir yaş
+     * dönerse o yerleşimde başka bir kitle demek ve fark kalır.
+     */
+    if (ham.age_min === 13) delete ham.age_min;
+    if (ham.age_max === 65) delete ham.age_max;
+    const spec = Object.fromEntries(Object.entries(ham).map(([k, v]) => [k, Array.isArray(v) ? [...v].map(String).sort() : v]));
     const etiketAlanlari = ['image_label', 'body_label', 'title_label', 'link_url_label', 'description_label'].filter((k) => k in o);
     return kanonik({ spec, ...Object.fromEntries(etiketAlanlari.map((k) => [k, ad(o[k])])) });
   };
   const sirali = (v: unknown) =>
     (Array.isArray(v) ? [...v] : []).sort((a, b) => Number((a as { priority?: number }).priority ?? 0) - Number((b as { priority?: number }).priority ?? 0)).map(kural);
   return ayniKume(sirali(g.asset_customization_rules), sirali(d.asset_customization_rules));
+}
+
+/**
+ * N-15 — ölçüldü (2026-10-10, iki kurulumda): Meta kreatif adının sonuna
+ * ` YYYY-MM-DD-<32 onaltılık>` ekliyor (ikinci denemede yeniden kullanılan
+ * kreatifte de vardı). DAR: yalnız kreatifte ve gönderilen ad AYNEN önde
+ * durmalı; başka her ad değişikliği fark.
+ */
+const AD_DAMGASI = / \d{4}-\d{2}-\d{2}-[0-9a-f]{32}$/;
+function kreatifAdDamgasi(govde: string, gonderilen: unknown, donen: unknown): boolean {
+  if (!govde.startsWith('kreatif:') || typeof gonderilen !== 'string' || typeof donen !== 'string') return false;
+  const m = AD_DAMGASI.exec(donen);
+  return !!m && donen.slice(0, m.index) === gonderilen;
 }
 
 /** `ic`in her öğesi `dis`ta var mı (kovalar ve öğeler kanonik). */
@@ -506,6 +527,10 @@ export function geriOkumaKarsilastir(
     if (ayni) continue;
     if (y.karsilastirma === 'normallestir' && y.normallestirme?.kabul.some((k) => kanonik(k) === kanonik(donen))) {
       bilgiler.push(satir('normallesti', y.normallestirme.bilgi));
+      continue;
+    }
+    if (y.alanYolu === 'name' && kreatifAdDamgasi(y.govde, y.gonderilen, donen)) {
+      bilgiler.push(satir('normallesti', 'Meta kreatif adının sonuna kendi tarih damgasını ekledi.'));
       continue;
     }
     if ((y.alanYolu === 'name' || y.alanYolu === 'adlabels') && baskaYayinKreatifi(yankilar, y.govde, nesne)) {

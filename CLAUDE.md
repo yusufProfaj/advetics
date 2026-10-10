@@ -1036,7 +1036,11 @@ okunup varsayılmadı — canlıda doğrulandı.
   ikisinde de aynı: `asset_feed_spec.optimization_type: 'PLACEMENT'` yoktu ve
   Meta kuralları HEDEFLEME (segment) kuralı sayıyordu. Hata mesajı çözümü
   değil yanlış yolu tarif ediyordu. Ders: bir biçimi ölçerken yayında
-  kullanılacak HER uca sor.
+  kullanılacak HER uca sor. **Dördüncü denemede KURULDU** (yayın 3efebf54,
+  duraklatılmış, 1 kampanya/1 set/1 kreatif/1 reklam) ve geri okumada iki
+  şey daha görüldü: Meta her yerleşim kuralına `age_min: 13, age_max: 65`
+  ekliyor (N-14) ve kreatif adının sonuna ` YYYY-MM-DD-<32 hex>` damgası
+  koyuyor (N-15; tur 2'deki "yeniden kullanılan kreatif" adında da bu vardı).
 
 - **GERİ OKUMADA İKİ ŞEY DAHA — ölçüldü** (2026-10-10, canlı tur 2,
   konutlu duraklatılmış ağaç): (1) `adlabels` `{id, name}` ve TERS sırada
