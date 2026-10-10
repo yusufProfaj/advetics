@@ -1014,6 +1014,17 @@ okunup varsayılmadı — canlıda doğrulandı.
   Aynı turda gözle: sayfa doğru (panel turunda Meta başka müşterinin
   sayfasını seçmişti), "çok reklamverenli reklamlar" işaretsiz.
 
+- **ÖZEL KATEGORİ SATIR İÇİ `campaign_spec`TE SINANAMIYOR — ölçüldü**
+  (2026-10-10, v25.0, `meta-kategori-prova`, Ege Birlik Yapı). Konutlu
+  provada kampanya kendi ucunda GEÇTİ; reklam seti ve reklamlar (satır içi
+  kampanyayla) `special_ad_categories[0] must be one of {...} - got "2"` ile
+  düştü. `["HOUSING"]`, ülkeyle birlikte ve düz dize: üçü de aynı ret — Meta
+  değeri iç sıra numarasına çevirip kendi listesinde bulamıyor. Gerçek
+  kurulum `campaign_id` ile gittiği için etkilenmiyor. Prova kategoriyi
+  YALNIZ satır içi kampanyadan çıkarıyor ve geçen parçada bunu söylüyor;
+  provanın tamamından atmak yalancı prova olurdu. Ayrıca `/adsets` ucu satır
+  içi kampanyayla kategorisiz bile 5xx veriyor (bilinen, `kapsamaUygula`).
+
 - **CLICK-TO-WHATSAPP'TA NUMARA SORULMAZ — META ONU SAYFADAN ALIYOR.**
   Doğru kurulum: ad set'te `destination_type: WHATSAPP` + `promoted_object.
   page_id`, kreatifte SABİT bağlantı `https://api.whatsapp.com/send` ve CTA

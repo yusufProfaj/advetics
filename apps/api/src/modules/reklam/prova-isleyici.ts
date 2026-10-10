@@ -145,7 +145,9 @@ export async function provaKos(
   for (const g of provaGovdeleri(d.derleme.govdeler, hashler)) {
     try {
       await port.dogrula(hesap, g.uc, g.alanlar);
-      sonuclar.push({ ad: g.ad, sonuc: 'gecti' });
+      // Gövdenin kapsama notu (özel kategori) geçen parçaya iliştirilir:
+      // "geçti" Meta'nın neyi sınayamadığını söylemeden gösterilmemeli.
+      sonuclar.push({ ad: g.ad, sonuc: 'gecti', ...(g.not ? { not: g.not } : {}) });
     } catch (e) {
       if (e instanceof YazmaDurduruldu) return bitir('dogrulanamadi', sonuclar, e.message);
       if (e instanceof MetaKesinHata) sonuclar.push({ ad: g.ad, sonuc: 'reddedildi', mesaj: e.message, kod: e.kod, altKod: e.altKod });

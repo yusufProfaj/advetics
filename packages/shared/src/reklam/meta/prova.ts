@@ -38,6 +38,42 @@ export interface ProvaGovdesi {
   ad: string;
   uc: string;
   alanlar: Record<string, unknown>;
+  /** Geçerse ekranda söylenecek kapsama sınırı (sessizce yeşile dönmesin). */
+  not?: string;
+}
+
+/**
+ * ÖZEL KATEGORİ SATIR İÇİ KAMPANYADA SINANAMIYOR — ölçüldü (2026-10-10,
+ * v25.0, `meta-kategori-prova`, Ege Birlik Yapı). `campaign_spec` içinde
+ * `special_ad_categories` hangi biçimde giderse gitsin (`["HOUSING"]`,
+ * ülkeyle birlikte, düz dize) Meta değeri kendi sıra numarasına çevirip
+ * `(#100) ... must be one of {...} - got "2"` ile reddediyor; kampanya
+ * TEK BAŞINA kategoriyle geçiyor. Gerçek kurulum `campaign_id` kullandığı
+ * için bu yoldan geçmiyor.
+ *
+ * Bu yüzden kategoriyi YALNIZ satır içi kampanyadan çıkarıyoruz: kampanya
+ * provası kategoriyi taşımaya devam ediyor ve kısıtlı kategori kuralları
+ * (yaş, cinsiyet, yarıçap) Meta'dan önce `hedeflemeUret` içinde zaten
+ * dayatılıyor. Meta'nın kendi konut denetimi kurulumda koşuyor; düşerse
+ * kurulum duraklatılmış kampanyada durur ve geri okuma kategoriyi
+ * karşılaştırır. Kategoriyi provanın TAMAMINDAN atmak, kampanyanın
+ * kategorili kabul edildiğini de kanıtlamayan yalancı bir prova olurdu.
+ */
+export const KATEGORI_PROVA_NOTU =
+  'Meta konut, iş ve kredi kurallarını yalnız kurulum sırasında denetleyebiliyor; yaş ve konum kısıtlarını biz uyguladık.';
+
+/** Satır içi kampanya: özel kategori ve ülkesi çıkarılmış hâl (bkz. üstteki not). */
+function kategorisizKampanya(spec: Record<string, unknown>): { spec: Record<string, unknown>; kategoriVar: boolean } {
+  const kategoriler = spec.special_ad_categories;
+  if (!Array.isArray(kategoriler) || kategoriler.length === 0) return { spec, kategoriVar: false };
+  const { special_ad_category_country: _u, ...kalan } = spec;
+  return { spec: { ...kalan, special_ad_categories: [] }, kategoriVar: true };
+}
+
+/** Parça notları tek cümlede; aynı not her reklamda tekrar ettiği için tekilleştirilir. */
+export function provaNotu(sonuclar: ReadonlyArray<{ not?: string | null }>): string | null {
+  const notlar = [...new Set(sonuclar.map((s) => s.not).filter((n): n is string => !!n))];
+  return notlar.length ? notlar.join(' ') : null;
 }
 
 const YER_TUTUCU = /^\{(?:medya|video):([0-9a-f-]+)\}$/;
@@ -75,11 +111,14 @@ export function provaGovdeleri(govdeler: MetaGovdesi[], hashler: ReadonlyMap<str
   };
   const kampanya = bul('kampanya').alanlar;
   const { adlabels: _k, status: _ks, ...kampanyaSpec } = kampanya;
+  const satirIci = kategorisizKampanya(kampanyaSpec);
+  const not = satirIci.kategoriVar ? { not: KATEGORI_PROVA_NOTU } : {};
   const { campaign_id: _c, adlabels: _a, ...setAlanlari } = bul('reklam_seti').alanlar;
-  const reklamSeti = { ...setAlanlari, campaign_spec: kampanyaSpec };
+  const reklamSeti = { ...setAlanlari, campaign_spec: satirIci.spec };
   const sonuc: ProvaGovdesi[] = [
+    // Kampanya kendi ucunda kategoriyle sınanıyor: orada Meta onu kabul ediyor.
     { nesne: 'kampanya', ad: 'kampanya', uc: 'campaigns', alanlar: { ...kampanya, execution_options: ['validate_only'] } },
-    { nesne: 'reklam_seti', ad: 'reklam_seti', uc: 'adsets', alanlar: { ...reklamSeti, execution_options: ['validate_only'] } },
+    { nesne: 'reklam_seti', ad: 'reklam_seti', uc: 'adsets', alanlar: { ...reklamSeti, execution_options: ['validate_only'] }, ...not },
   ];
   for (const g of govdeler.filter((x) => x.nesne === 'kreatif')) {
     const kreatif = medyaYerlestir(g.alanlar, hashler) as Record<string, unknown>;
@@ -97,6 +136,7 @@ export function provaGovdeleri(govdeler: MetaGovdesi[], hashler: ReadonlyMap<str
         creative: satirIciKreatif,
         execution_options: ['validate_only', 'synchronous_ad_review'],
       },
+      ...not,
     });
   }
   for (const p of sonuc) secenekleriDogrula(p.nesne, p.alanlar.execution_options as string[]);

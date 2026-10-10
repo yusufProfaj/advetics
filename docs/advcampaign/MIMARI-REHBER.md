@@ -140,7 +140,7 @@ Reklam Yöneticisi'nden Başlat ile açar (onaylı yol, geri okumalı).
 | Ö-4 | `geoTargetConstants:suggest` İzmir/İstanbul/Ankara tam eşleşme | dönen kaynak adları |
 | Ö-5 | Meta FORM (anlık form, yeni şablon) | Lead Ads koşulu olan sayfada |
 | Ö-6 | Google Talep Yaratma video (rehber yolundan) | Akıllı Boost'taki gibi PAUSED |
-| Ö-7 | Konut kategorisinde Meta provası (`special_ad_categories ... got "2"` sorunu, DEVAM.md) | çözülmeden konutlu rehber Meta'da provadan geçemez |
+| Ö-7 | Konut kategorisinde Meta provası (`special_ad_categories ... got "2"` sorunu) | **ÖLÇÜLDÜ 2026-10-10** (`meta-kategori-prova`): satır içi `campaign_spec`te kategori HİÇBİR biçimde kabul edilmiyor. Kampanya provası kategoriyi taşıyor, satır içi kampanya kategorisiz ve geçen parça `KATEGORI_PROVA_NOTU`nu ekranda gösteriyor (`meta/prova.ts`). Meta'nın kendi konut denetimi kurulumda. |
 
 **Canlı tur 1 sonuçları (2026-10-10, Ege Birlik Yapı, rehber "Siteme gelsinler", 500 ₺ %50/%50):**
 - Ö-1 Google Arama: **GEÇTİ** — kuruldu (PAUSED), geri okuma temiz, Google Ads'te gözle doğrulandı (CLAUDE.md).

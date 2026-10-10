@@ -19,6 +19,7 @@ import {
   kanonikJson,
   kararTablosu,
   platformAcilabilirMi,
+  provaNotu,
   rehberAlanlariSchema,
   rehberEksikleri,
   rehberdenGoogle,
@@ -479,7 +480,10 @@ export class RehberService {
     const durum = async (p: RehberPlatformu): Promise<PlatformProvaSonucu | null> => {
       if (!acik[p]) return null;
       const h = await this.provaHali(ctx, s, p);
-      return h.tur === 'gecti' ? { tur: 'gecti', zaman: new Date().toISOString(), not: null } : hal2sonuc(h);
+      if (h.tur !== 'gecti') return hal2sonuc(h);
+      // Meta parça notları (özel kategori kapsaması) sayfa yenilenince de görünmeli.
+      const not = p === 'meta' && s.meta_taslak_id ? provaNotu((await this.yayinSvc.provaOku(ctx, s.meta_taslak_id)).sonuclar) : null;
+      return { tur: 'gecti', zaman: new Date().toISOString(), not };
     };
     // `icerikOzeti` PROVANIN yapıldığı özet: güncel özetten ayrıysa panel
     // "rehber provadan sonra değişti" diyebilir.
@@ -530,7 +534,7 @@ export class RehberService {
       }
       await this.taslakSvc.surumYaz(ctx, taslakId, degisiklik);
       const p = await this.yayinSvc.provaIste(ctx, taslakId);
-      if (p.durum.tur === 'gecti') return { tur: 'gecti', zaman, not: null };
+      if (p.durum.tur === 'gecti') return { tur: 'gecti', zaman, not: provaNotu(p.sonuclar) };
       return hal2sonuc(p.durum);
     } catch (e) {
       if (e instanceof ConflictException || e instanceof BadRequestException) {

@@ -168,5 +168,5 @@ export class ReklamYayinService {
 
 export interface ProvaGorunumu {
   durum: ProvaDurumu;
-  sonuclar: Array<{ ad: string; sonuc: string; mesaj?: string }>;
+  sonuclar: Array<{ ad: string; sonuc: string; mesaj?: string; not?: string }>;
 }
