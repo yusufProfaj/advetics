@@ -1041,6 +1041,11 @@ okunup varsayılmadı — canlıda doğrulandı.
   şey daha görüldü: Meta her yerleşim kuralına `age_min: 13, age_max: 65`
   ekliyor (N-14) ve kreatif adının sonuna ` YYYY-MM-DD-<32 hex>` damgası
   koyuyor (N-15; tur 2'deki "yeniden kullanılan kreatif" adında da bu vardı).
+  **Önizlemeyle gözle kontrol edildi** (Meta `previews`, 11 yerleşim):
+  Hikâye/Reels'te 9:16, akışlarda 4:5, sağ sütunda 1.91:1, Audience
+  Network/IG arama/profilde 1:1 doğru; **Marketplace KARE kutu** ve akış
+  grubundaydı, 4:5 oraya kırpılarak gitti. Marketplace artık kendi grubunda
+  ve yalnız kare alıyor; kare yoksa kapanıyor.
 
 - **GERİ OKUMADA İKİ ŞEY DAHA — ölçüldü** (2026-10-10, canlı tur 2,
   konutlu duraklatılmış ağaç): (1) `adlabels` `{id, name}` ve TERS sırada

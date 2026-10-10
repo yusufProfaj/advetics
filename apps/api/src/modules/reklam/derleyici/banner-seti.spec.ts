@@ -96,13 +96,13 @@ describe('setlereAyir', () => {
 
 describe('setPlani / ortakPlan', () => {
   it('dört boyut → otomatik, hiçbir yer kapalı değil', () => {
-    expect(setPlani(['dikey', 'dik45', 'kare', 'yatay'])).toEqual({ otomatik: true, gruplar: { akis: 'dik45', yan: 'yatay', hikaye: 'dikey' }, kapanan: [] });
+    expect(setPlani(['dikey', 'dik45', 'kare', 'yatay'])).toEqual({ otomatik: true, gruplar: { akis: 'dik45', yan: 'yatay', pazar: 'kare', hikaye: 'dikey' }, kapanan: [] });
   });
   it('9:16 yok → Hikâye ve Reels kapalı; kare akışa ve sağ sütuna YEDEK (kırpılmadan oturur)', () => {
-    expect(setPlani(['kare'])).toEqual({ otomatik: false, gruplar: { akis: 'kare', yan: 'kare' }, kapanan: ['hikaye'] });
+    expect(setPlani(['kare'])).toEqual({ otomatik: false, gruplar: { akis: 'kare', yan: 'kare', pazar: 'kare' }, kapanan: ['hikaye'] });
   });
-  it('kare yoksa 4:5 akışa, 1.91:1 sağ sütuna; Hikâye yedeksiz', () => {
-    expect(setPlani(['dik45', 'yatay'])).toEqual({ otomatik: false, gruplar: { akis: 'dik45', yan: 'yatay' }, kapanan: ['hikaye'] });
+  it('kare yoksa 4:5 akışa, 1.91:1 sağ sütuna; Marketplace ve Hikâye yedeksiz kapanır', () => {
+    expect(setPlani(['dik45', 'yatay'])).toEqual({ otomatik: false, gruplar: { akis: 'dik45', yan: 'yatay' }, kapanan: ['pazar', 'hikaye'] });
   });
   it('ORTAK: bir sette 9:16 yoksa reklam setinde Hikâye kapalı, otomatik değil', () => {
     const p = ortakPlan([['dikey', 'dik45', 'kare', 'yatay'], ['kare', 'dik45']]);
@@ -131,13 +131,17 @@ describe('derleMeta — banner seti', () => {
     expect(kurallar.map((r) => [r.image_label.name, r.priority])).toEqual([
       ['adv_dik45', 1],
       ['adv_yatay', 2],
-      ['adv_dikey', 3],
-      ['adv_kare', 4],
+      ['adv_kare', 3],
+      ['adv_dikey', 4],
+      ['adv_kare', 5],
     ]);
-    expect(kurallar[2].customization_spec.instagram_positions).toEqual(['story', 'reels']);
+    expect(kurallar[3].customization_spec.instagram_positions).toEqual(['story', 'reels']);
+    // MARKETPLACE YALNIZ KARE (gözle görüldü: 4:5 orada kareye kırpılıyor).
+    const pazar = kurallar.filter((r) => r.customization_spec.facebook_positions?.includes('marketplace'));
+    expect(pazar.map((r) => r.image_label.name)).toEqual(['adv_kare']);
     // Meta varsayılanı BOŞ tanımla ve en sonda istiyor (gerçek prova reddetti, 2026-10-10).
-    expect(kurallar[3].customization_spec).toEqual({});
-    expect(kurallar.slice(0, 3).every((r) => Object.keys(r.customization_spec).length > 0)).toBe(true);
+    expect(kurallar[4].customization_spec).toEqual({});
+    expect(kurallar.slice(0, 4).every((r) => Object.keys(r.customization_spec).length > 0)).toBe(true);
     // Yerleşim özelleştirmesi AÇIKÇA; yoksa Meta kuralları segment kuralı sayıp
     // konum istiyor, konum yazınca "v22'den beri kaldırıldı" diyor (üç gerçek prova).
     expect(afs.optimization_type).toBe('PLACEMENT');
@@ -154,8 +158,8 @@ describe('derleMeta — banner seti', () => {
     expect(tumKonumlar(t)).toEqual(expect.arrayContaining(['feed', 'right_hand_column', 'stream']));
     for (const yasak of ['story', 'reels', 'facebook_reels']) expect(tumKonumlar(t)).not.toContain(yasak);
     const kurallar = bul(gv, 'kreatif:1').asset_feed_spec.asset_customization_rules as any[];
-    expect(kurallar.map((r) => r.image_label.name)).toEqual(['adv_dik45', 'adv_yatay', 'adv_dik45']);
-    expect(kurallar[2].customization_spec).toEqual({});
+    expect(kurallar.map((r) => r.image_label.name)).toEqual(['adv_dik45', 'adv_yatay', 'adv_kare', 'adv_dik45']);
+    expect(kurallar[3].customization_spec).toEqual({});
     expect(JSON.stringify(kurallar)).not.toContain('story');
   });
 
@@ -185,10 +189,10 @@ describe('derleMeta — banner seti', () => {
     });
     expect(tumKonumlar(bul(gv, 'reklam_seti').targeting)).not.toContain('story');
     const k2 = bul(gv, 'kreatif:2').asset_feed_spec.asset_customization_rules as any[];
-    expect(k2.map((r) => r.image_label.name)).toEqual(['adv_kare', 'adv_yatay', 'adv_kare']);
+    expect(k2.map((r) => r.image_label.name)).toEqual(['adv_kare', 'adv_yatay', 'adv_kare', 'adv_kare']);
     const k1 = bul(gv, 'kreatif:1').asset_feed_spec.asset_customization_rules as any[];
     // Ortak planda Hikâye kapalı: 9:16'lı sette de Hikâye kuralı YOK.
-    expect(k1.map((r) => r.image_label.name)).toEqual(['adv_dik45', 'adv_yatay', 'adv_dik45']);
+    expect(k1.map((r) => r.image_label.name)).toEqual(['adv_dik45', 'adv_yatay', 'adv_kare', 'adv_dik45']);
   });
 
   it('retler: set + video, set + form, aynı oran iki kez', () => {

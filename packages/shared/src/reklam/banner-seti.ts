@@ -67,7 +67,18 @@ export const YERLESIM_GRUPLARI = {
   akis: {
     etiket: 'Akış',
     oranlar: ['dik45', 'kare'],
-    meta: { publisher_platforms: ['facebook', 'instagram'], facebook_positions: ['feed', 'marketplace'], instagram_positions: ['stream', 'explore'] },
+    meta: { publisher_platforms: ['facebook', 'instagram'], facebook_positions: ['feed'], instagram_positions: ['stream', 'explore'] },
+  },
+  /*
+   * MARKETPLACE KARE KUTU — gözle görüldü (2026-10-10, yayın 3efebf54,
+   * Meta önizlemesi): akış grubunda olduğu için oraya 4:5 gitti ve Meta onu
+   * kareye kırptı; banner'ın üstündeki marka ve alttaki telefon şeridi
+   * kesildi. Yedeği yok: 4:5 orada her zaman kırpılıyor.
+   */
+  pazar: {
+    etiket: 'Marketplace',
+    oranlar: ['kare'],
+    meta: { publisher_platforms: ['facebook'], facebook_positions: ['marketplace'] },
   },
   yan: {
     etiket: 'Sağ sütun ve arama',
@@ -76,7 +87,7 @@ export const YERLESIM_GRUPLARI = {
   },
 } as const satisfies Record<string, { etiket: string; oranlar: readonly GorselOrani[]; meta: Record<string, readonly string[]> }>;
 export type YerlesimGrubu = keyof typeof YERLESIM_GRUPLARI;
-export const YERLESIM_SIRASI: readonly YerlesimGrubu[] = ['akis', 'yan', 'hikaye'];
+export const YERLESIM_SIRASI: readonly YerlesimGrubu[] = ['akis', 'yan', 'pazar', 'hikaye'];
 
 export interface SetPlani {
   /**
